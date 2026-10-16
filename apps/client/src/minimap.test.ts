@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { activeEliteMapTargets, clusterThreatMapTargets, discoveredMiniBossTargets, discoverMiniBosses, miniBossDiscoveryKey, mineralStatusLabel, discoverChampion, CHAMPION_WAYPOINT, ASHEN_SPIRE_WAYPOINT, MISTFEN_WAYPOINT, WARDEN_GATE_WAYPOINT, discoverAshenSpire, discoverMistfen, discoverRoadsideLandmarks, roadsideDiscoveryKey, isPathChampionName, mapMarkerLabelVisible, nearbyDiscoveredMiniBossTargets, nearbyThreatMapTarget, THREAT_GUIDANCE_RADIUS } from "./minimap.js";
 import { ROADSIDE_DISCOVERIES, SURFACE_HEIGHT } from "@blockcraft/voxel-world";
-import { HOME_WAYPOINT, MAP_DEPOSITS, MAP_SIZE, DISCOVERY_RADIUS, depositKey, discoverDeposits, dungeonMapPoints, dungeonPingAtMapClick, knownWaypoints, mapPoint, mapFacing, parseDiscoveries, surfaceMapColorAt, waypointAtMapPoint, waypointDirection } from "./minimap.js";
+import { HOME_WAYPOINT, MAP_DEPOSITS, MAP_SIZE, DISCOVERY_RADIUS, depositKey, discoverDeposits, dungeonMapPoints, dungeonPingAtMapClick, knownWaypoints, mapPoint, mapFacing, parseDiscoveries, parseVisitedSurfaceRegions, surfaceMapColorAt, surfaceMapRegionAt, waypointAtMapPoint, waypointDirection } from "./minimap.js";
 
 describe("north-up explorer minimap", () => {
   it("draws authored terrain and roads rather than only distance rings", () => {
@@ -13,6 +13,18 @@ describe("north-up explorer minimap", () => {
     expect(surfaceMapColorAt(21.5, -60.5)).toEqual([67, 81, 88]);
     expect(surfaceMapColorAt(97.5, 62.5)).toEqual([106, 65, 50]);
     expect(surfaceMapColorAt(-30.5, -26.5)).toEqual([176, 152, 96]);
+  });
+  it("remembers visited regions while keeping unseen terrain muted", () => {
+    expect(surfaceMapRegionAt(8.5, 8.5).id).toBe("town");
+    expect(surfaceMapRegionAt(20.5, 70.5).name).toBe("Sunfall Quarry");
+    expect(surfaceMapRegionAt(2.5, 101.5).id).toBe("redstone");
+    expect(surfaceMapRegionAt(21.5, -60.5).id).toBe("northwatch");
+    const visited = parseVisitedSurfaceRegions('["town","quarry","unknown",4]');
+    expect(visited).toEqual(new Set(["town", "quarry"]));
+    expect(parseVisitedSurfaceRegions("not json").size).toBe(0);
+    expect(surfaceMapColorAt(20.5, 70.5, visited)).toEqual(surfaceMapColorAt(20.5, 70.5));
+    expect(surfaceMapColorAt(2.5, 101.5, visited)).not.toEqual(surfaceMapColorAt(2.5, 101.5));
+    expect(surfaceMapColorAt(8.5, 100.5, visited)).not.toEqual(surfaceMapColorAt(8.5, 100.5));
   });
   it("reveals dynamic threat guidance only when nearby on the same floor", () => {
     const threat = { x: 20, y: 8, z: 0, name: "Realm Warden" };

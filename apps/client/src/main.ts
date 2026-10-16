@@ -641,7 +641,7 @@ firstStepsSkip.addEventListener("click", () => setFirstSteps(ONBOARDING_DONE));
 renderFirstSteps();
 const adminInvitation = consumeAdminInvitation();
 const minimapPanel = document.querySelector<HTMLDetailsElement>("#minimap")!;
-const minimap = createMinimap(document.querySelector<HTMLCanvasElement>("#minimap-canvas")!, document.querySelector<HTMLElement>("#minimap-detail")!, `blockcraft:minimap:v1:${profileToken}`);
+const minimap = createMinimap(document.querySelector<HTMLCanvasElement>("#minimap-canvas")!, document.querySelector<HTMLElement>("#minimap-detail")!, `blockcraft:minimap:v1:${profileToken}`, showRegionDiscovery);
 const mistfenMasteryPanel = document.querySelector<HTMLElement>("#mistfen-mastery")!;
 const mistfenMasteryRank = document.querySelector<HTMLElement>("#mistfen-mastery-rank")!;
 const mistfenMasteryFill = document.querySelector<HTMLElement>("#mistfen-mastery-fill")!;
@@ -6094,6 +6094,16 @@ function showLootNotice(message: string, warning = false): void {
   const detail = document.createElement("strong"); detail.textContent = message;
   toast.append(heading, detail);
   queueLootToast(toast, LOOT_FEED_EQUIPMENT_MS);
+}
+
+function showRegionDiscovery(name: string): void {
+  const toast = document.createElement("div");
+  toast.className = "resource-toast region-discovery";
+  const heading = document.createElement("small"); heading.textContent = "REGION DISCOVERED";
+  const title = document.createElement("strong"); title.textContent = name;
+  const hint = document.createElement("span"); hint.textContent = "Added to your explorer map";
+  toast.append(heading, title, hint);
+  queueLootToast(toast, 3_800);
 }
 
 function updateMining(now: number): void {
