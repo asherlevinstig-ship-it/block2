@@ -5,7 +5,7 @@ export const MAX_ACTIVE_WILDERNESS_ELITES = 2;
 export const ELITE_CHANCE_BY_TIER = { 2: .14, 3: .22 } as const;
 
 export function wildernessEliteKind(archetype: MobArchetypeId): WildernessEliteKind {
-  if (archetype === "cave_spitter") return "volatile";
+  if (archetype === "cave_spitter" || archetype === "shard_sentry") return "volatile";
   if (archetype === "stone_brute") return "siegebound";
   return "frenzied";
 }
@@ -33,6 +33,7 @@ export function wildernessEliteStats(stats: { maxHealth: number; damage: number;
 
 export function wildernessElitePattern(archetype: MobArchetypeId, sequence: number): string {
   if (archetype === "cave_spitter") return sequence % 2 === 0 ? "fan" : "pool";
+  if (archetype === "shard_sentry") return sequence % 3 === 2 ? "fan" : "aimed";
   if (archetype === "stone_brute") return sequence % 2 === 0 ? "rocks" : "slam";
   return "rush";
 }

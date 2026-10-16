@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Block, MINERAL_DEPOSITS, RENEWABLE_MINERAL_DEPOSITS, wildernessTerritoryAt, wildernessSurfaceBlock, authoredMineralAt, playerCollides } from "@blockcraft/voxel-world";
-import { WILDERNESS_ENCOUNTERS, ASHEN_SENTRY_IDS, ashenSentryAllows, ashenSentryPattern, isAshenSentry, isMistfenMob, isNorthwatchMob, northwatchAllows, isSouthernQuarryMob, southernQuarryAllows } from "../src/wilderness-encounters.js";
+import { WILDERNESS_ENCOUNTERS, ASHEN_SENTRY_IDS, ashenSentryAllows, ashenSentryPattern, isAshenSentry, isMistfenMob, isNorthwatchMob, northwatchAllows, northwatchShardPattern, isSouthernQuarryMob, southernQuarryAllows } from "../src/wilderness-encounters.js";
 import { WorldRoom } from "../src/game-room.js";
 import { WorldState } from "../src/schema.js";
 import { dangerBandAt, MOB_TOWN_MINIMUM_RADIUS, radiusFromSafeCenter } from "../src/radial-difficulty.js";
@@ -28,7 +28,9 @@ describe("distinct radial wilderness territories", () => {
       expect(mob.difficultyTier).toBe(dangerBandAt(spawn).tier);
       expect(radiusFromSafeCenter(mob)).toBeGreaterThanOrEqual(MOB_TOWN_MINIMUM_RADIUS - .001);
     }
-    expect(WILDERNESS_ENCOUNTERS.filter(e => e.archetype === "cave_spitter" && !isAshenSentry(e.id))).toHaveLength(12);
+    expect(WILDERNESS_ENCOUNTERS.filter(e => e.archetype === "cave_spitter" && !isAshenSentry(e.id))).toHaveLength(10);
+    expect(WILDERNESS_ENCOUNTERS.filter(e => e.archetype === "ridge_stalker")).toHaveLength(2);
+    expect(WILDERNESS_ENCOUNTERS.filter(e => e.archetype === "shard_sentry")).toHaveLength(2);
     expect(lootForArchetype("stone_brute", "", 0)).toContainEqual({ itemId: "stone_core_hammer", quantity: 1 });
     expect(lootForArchetype("stone_brute", "", .5)).not.toContainEqual({ itemId: "stone_core_hammer", quantity: 1 });
   });
@@ -78,6 +80,9 @@ describe("distinct radial wilderness territories", () => {
     expect(leaderForFollower("northwatch-briar")).toBe("northwatch-watchbreaker");
     expect(leaderForFollower("northwatch-guard")).toBe("northwatch-watchbreaker");
     expect(internal.roamingAllowed("northwatch-watchbreaker", { x: 8, y: 8, z: -20 })).toBe(false);
+    expect([0, 1, 2, 3, 4].map(northwatchShardPattern)).toEqual(["aimed", "aimed", "fan", "aimed", "aimed"]);
+    expect(lootForArchetype("ridge_stalker")).toContainEqual({ itemId: "crawler_fang", quantity: 1 });
+    expect(lootForArchetype("shard_sentry")).toContainEqual({ itemId: "stone_core", quantity: 1 });
   });
   it("patrols generated terrain smoothly without placing mobs in solid blocks or inside town", () => {
     vi.useFakeTimers(); vi.setSystemTime(10000);

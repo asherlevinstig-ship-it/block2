@@ -7,6 +7,7 @@ export const LOOT_PICKUP_RADIUS = 1.35;
 export const EQUIPMENT_DROP_CHANCES = {
   fang_dagger: .14,
   acid_gland_focus: .12,
+  forged_focus: .1,
   stone_core_hammer: .09,
   leather_armour: .08,
   iron_armour: .1,
@@ -31,7 +32,7 @@ export class NormalLootCadence {
 
 export function armourDropForMob(archetype: string, tier: number, roll: number): { itemId: ItemId; quantity: number }[] {
   if (!Number.isFinite(roll) || roll < 0 || roll >= 1) return [];
-  if ((archetype === "moss_crawler" || archetype === "briar_crawler") && roll < EQUIPMENT_DROP_CHANCES.leather_armour) return [{ itemId: "leather_armour", quantity: 1 }];
+  if ((archetype === "moss_crawler" || archetype === "briar_crawler" || archetype === "ridge_stalker") && roll < EQUIPMENT_DROP_CHANCES.leather_armour) return [{ itemId: "leather_armour", quantity: 1 }];
   if (archetype === "stone_brute" && tier >= 3 && roll < EQUIPMENT_DROP_CHANCES.iron_armour) return [{ itemId: "iron_armour", quantity: 1 }];
   return [];
 }
@@ -51,6 +52,13 @@ const MATERIAL_LOOT_BY_ARCHETYPE: Record<MobArchetypeId, readonly { itemId: Item
   cave_spitter: [
     { itemId: "acid_gland", quantity: 1 },
   ],
+  ridge_stalker: [
+    { itemId: "crawler_fang", quantity: 1 },
+    { itemId: "moss_fibre", quantity: 1 },
+  ],
+  shard_sentry: [
+    { itemId: "stone_core", quantity: 1 },
+  ],
 };
 
 export function lootForArchetype(archetypeId: MobArchetypeId, mobId = "", equipmentRoll = 1, threat: LootThreat = "normal", consumableRoll = 1, regionTier = 1): readonly { itemId: ItemId; quantity: number }[] {
@@ -67,9 +75,9 @@ export function lootForArchetype(archetypeId: MobArchetypeId, mobId = "", equipm
     ? [...normalMaterials.map(entry => ({ ...entry, quantity: entry.quantity * 2 })),
       ...(consumableRoll < .35 ? [{ itemId: "healing_potion" as const, quantity: 1 }] : [])]
     : normalMaterials;
-  const equipmentId = archetypeId === "moss_crawler" || archetypeId === "briar_crawler" ? "fang_dagger"
+  const equipmentId = archetypeId === "moss_crawler" || archetypeId === "briar_crawler" || archetypeId === "ridge_stalker" ? "fang_dagger"
     : archetypeId === "stone_brute" ? "stone_core_hammer"
-    : "acid_gland_focus";
+    : archetypeId === "shard_sentry" ? "forged_focus" : "acid_gland_focus";
   return equipmentRoll < equipmentChance(equipmentId, effectiveThreat)
     ? [...materials, { itemId: equipmentId, quantity: 1 }]
     : materials;

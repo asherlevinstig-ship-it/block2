@@ -8,7 +8,7 @@ export function championChargeOutline(yaw: number, distance: number = CHAMPION_C
     .map(([x, z]) => ({ x: x! * Math.cos(angle) + z! * Math.sin(angle), z: z! * Math.cos(angle) - x! * Math.sin(angle) }));
 }
 export const CRAWLER_RUSH_MS = 120;
-export const crawlerRushDistance = (archetype: string): number => archetype === "moss_crawler" ? .9 : archetype === "briar_crawler" ? 1.1 : 0;
+export const crawlerRushDistance = (archetype: string): number => archetype === "moss_crawler" ? .9 : archetype === "briar_crawler" ? 1.1 : archetype === "ridge_stalker" ? 1.75 : 0;
 export const BRUTE_SLAM = { radius: 2.2, forward: 1.4, verticalRange: 1.1, recoveryMs: 1400 } as const;
 export const FRONTIER_BRUTE = {
   halfWidth: .85, reach: 3.6, verticalRange: 1.1,
@@ -89,7 +89,7 @@ export function mobMeleeStrike(archetype: string): MeleeStrikeProfile {
 export const mobMeleeImpactMs = (archetype: string): number => archetype === "stone_brute" ? 280 : 150;
 export const mobAimCommitMs = (archetype: string): number => archetype === "stone_brute" ? 650
   : archetype === "moss_crawler" || archetype === "briar_crawler" ? 550
-    : archetype === "cave_spitter" ? 450 : 250;
+    : archetype === "ridge_stalker" ? 420 : archetype === "cave_spitter" || archetype === "shard_sentry" ? 450 : 250;
 
 /** Conservative XZ danger boundary, including the player's body contact margin. */
 export function mobStrikeGroundOutline(archetype: string, yaw: number): { x: number; z: number }[] {

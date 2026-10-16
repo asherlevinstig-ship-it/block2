@@ -1,5 +1,6 @@
 import { BRUTE_SLAM, SPITTER_PATTERN, crawlerRushDistance } from "@blockcraft/protocol";
-export type MobArchetypeId = "moss_crawler" | "briar_crawler" | "stone_brute" | "cave_spitter";
+export type MobArchetypeId = "moss_crawler" | "briar_crawler" | "stone_brute" | "cave_spitter" | "ridge_stalker" | "shard_sentry";
+export const isSpitterLike = (archetype: string): boolean => archetype === "cave_spitter" || archetype === "shard_sentry";
 
 export interface MobArchetypeDefinition {
   id: MobArchetypeId;
@@ -123,12 +124,32 @@ export const MOB_ARCHETYPES: Record<MobArchetypeId, MobArchetypeDefinition> = {
     rewardHealth: 0,
     rewardStamina: 22,
   },
+  ridge_stalker: {
+    id: "ridge_stalker", name: "Ridge Stalker", spawn: { x: 7.5, y: 8, z: -42.5 },
+    maxHealth: 9, armor: 0, attackKind: "melee", speed: 2.05,
+    stopDistance: 2.15, minimumAttackRange: 0, aggroRange: 10,
+    windupMs: 680, recoverMs: 850, cooldownMs: 1850, damage: 1,
+    lungeDistance: crawlerRushDistance("ridge_stalker"), hitRange: 2.25,
+    projectileTravelMs: 0, hazardDurationMs: 0, hazardRadius: 0,
+    respawnMs: 6500, rewardHealth: 0, rewardStamina: 18,
+  },
+  shard_sentry: {
+    id: "shard_sentry", name: "Shard Sentry", spawn: { x: 18.5, y: 8, z: -54.5 },
+    maxHealth: 8, armor: 0, attackKind: "projectile", speed: .9,
+    stopDistance: 8, minimumAttackRange: 5.2, aggroRange: 12,
+    windupMs: 1050, recoverMs: 1100, cooldownMs: 2500, damage: 1,
+    lungeDistance: 0, hitRange: .9, projectileTravelMs: SPITTER_PATTERN.travelMs,
+    hazardDurationMs: 0, hazardRadius: 0,
+    respawnMs: 7000, rewardHealth: 0, rewardStamina: 24,
+  },
 };
 
 export function mobArchetype(value: string): MobArchetypeDefinition {
   if (value === "briar_crawler") return MOB_ARCHETYPES.briar_crawler;
   if (value === "stone_brute") return MOB_ARCHETYPES.stone_brute;
   if (value === "cave_spitter") return MOB_ARCHETYPES.cave_spitter;
+  if (value === "ridge_stalker") return MOB_ARCHETYPES.ridge_stalker;
+  if (value === "shard_sentry") return MOB_ARCHETYPES.shard_sentry;
   return MOB_ARCHETYPES.moss_crawler;
 }
 

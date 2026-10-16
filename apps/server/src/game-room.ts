@@ -5,7 +5,7 @@ import { ShadowMoveInput, stepShadowMovement, type ShadowPose } from "./movement
 import { randomUUID } from "node:crypto";
 import { ADMIN_BOOTSTRAP_HASH, ADMIN_PROFILE_HASH, adminProfileKey, matchesAdminBootstrapPass } from "./admin-access.js";
 import { AttackCoordination, allyFireLaneClear } from "./attack-coordination.js";
-import { MIXED_FRONTIER_SPITTER, STONE_BRUTE_ESCORTS, isMixedFrontierMob, mixedFrontierAllows, isSilverGuard, silverGuardAllows, frontierBruteAllows, isFrontierBruteGroupMob, isStoneBruteGroupMob, isGreenwoodCampMob, greenwoodCampAllows, isAshenSentry, ashenSentryAllows, ashenSentryPattern, isMistfenMob, mistfenAllows, isSouthernQuarryMob, southernQuarryAllows, isNorthwatchMob, northwatchAllows } from "./wilderness-encounters.js";
+import { MIXED_FRONTIER_SPITTER, STONE_BRUTE_ESCORTS, isMixedFrontierMob, mixedFrontierAllows, isSilverGuard, silverGuardAllows, frontierBruteAllows, isFrontierBruteGroupMob, isStoneBruteGroupMob, isGreenwoodCampMob, greenwoodCampAllows, isAshenSentry, ashenSentryAllows, ashenSentryPattern, isMistfenMob, mistfenAllows, isSouthernQuarryMob, southernQuarryAllows, isNorthwatchMob, northwatchAllows, northwatchShardPattern } from "./wilderness-encounters.js";
 import { BRUTE_VOLLEY, bruteVolleyReady, bruteRockEndpoints } from "@blockcraft/protocol";
 import { CHAMPION_CHARGE, ChatSendSchema, PlayerNameSchema, AppearanceSchema, type NearbyChatMessage } from "@blockcraft/protocol";
 import { cleanChatText, hearsNearbyChat } from "./nearby-chat.js";
@@ -196,7 +196,7 @@ import { InventoryItemState, LootDropState, MobState, PlayerState, WorldState } 
 import { miningRejectionReason, movementRejectionReason, nextComboStep, selectAttackTarget } from "./action-rules.js";
 import { dodgeDirection, isInsideImpact, pursueTarget } from "./combat-rules.js";
 import { GUARD_MINIMUM_STAMINA, GUARD_STAMINA_DRAIN_PER_SECOND, PARRY_STAGGER_MS, isAttackInGuardArc, resolveDefense } from "./defense-rules.js";
-import { MOB_ARCHETYPES, damageAfterArmor, defeatReward, mobArchetype, type MobArchetypeId } from "./mob-archetypes.js";
+import { MOB_ARCHETYPES, damageAfterArmor, defeatReward, isSpitterLike, mobArchetype, type MobArchetypeId } from "./mob-archetypes.js";
 import { MOB_TOWN_MINIMUM_RADIUS, dangerBandAt, isInsideTownSafeZone, keepMobOutsideTown, radiusFromSafeCenter, scaledMobStats } from "./radial-difficulty.js";
 import { executionerDamageBonus, gainMomentum, guardStaminaCost, momentumAfterDefense, movementSpeedWithMomentum, parryStaminaRestore, staminaRecoveryWithMomentum } from "./trait-rules.js";
 import { compatiblePowerOrFallback, fracturedBlockResult, isGroundPowerTargetInRange, isPowerCompatible, isSeismicAftershockTarget, mobilityAdvanceDistance, powerDirection, powerEvadeDirection, seismicCleaveProfile, selectBurstPowerTargets, selectGroundPowerTargets, selectLinePowerTargets, selectMobilityPowerTarget, widenedLineFractureColumns } from "./power-rules.js";
@@ -5458,7 +5458,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const end = { x: aim.x, y: aim.y + .08, z: aim.z };
       this.pendingMobProjectiles.set(projectileId, { projectileId, mobId, archetype: mob.archetype, damage, hazardRadius, hazardDurationMs,
         start, end, position: start, startedAt: now, impactAt: now + travelMs });
-      this.broadcast("combat:mob-projectile", { projectileId, mobId, kind: mobId === CRYSTAL_MATRIARCH_ID || mobId === ASHGLASS_ORACLE_ID ? "crystal" : mob.archetype === "stone_brute" ? "rock" : "acid", ...origin, targetX: aim.x, targetY: aim.y, targetZ: aim.z, travelMs, releasedAt: now } satisfies MobProjectileReleased);
+      this.broadcast("combat:mob-projectile", { projectileId, mobId, kind: mobId === CRYSTAL_MATRIARCH_ID || mobId === ASHGLASS_ORACLE_ID || mob.archetype === "shard_sentry" ? "crystal" : mob.archetype === "stone_brute" ? "rock" : "acid", ...origin, targetX: aim.x, targetY: aim.y, targetZ: aim.z, travelMs, releasedAt: now } satisfies MobProjectileReleased);
     }
   }
 
@@ -5942,8 +5942,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         : mob.isMiniBoss && (this.miniBossOrbitPressure.get(mobId)?.counterUntil ?? 0) > now
           ? miniBossOrbitCounterPattern(mob.archetype) : championPattern(mob);
       else if (mobId === "frontier-brute" && mob.combatState === "idle") mob.attackPattern = frontierBrutePattern(mob.actionSequence);
-      else if (mob.archetype === "cave_spitter" && mob.combatState === "idle") mob.attackPattern = isAshenSentry(mobId)
-        ? ashenSentryPattern(mob.actionSequence) : spitterPattern(mob.actionSequence + (mobId === "frontier-spitter" ? 1 : 0));
+      else if (isSpitterLike(mob.archetype) && mob.combatState === "idle") mob.attackPattern = mob.archetype === "shard_sentry"
+        ? northwatchShardPattern(mob.actionSequence)
+        : isAshenSentry(mobId) ? ashenSentryPattern(mob.actionSequence)
+          : spitterPattern(mob.actionSequence + (mobId === "frontier-spitter" ? 1 : 0));
       if (mob.archetype === "stone_brute" && mob.combatState === "idle") {
         const eligible = [...this.state.players.values()].filter(player => player.health > 0 && !isInsideTownSafeZone(player)
           && Math.abs(player.y - mob.y) <= 1.75 && caveEncounterAllows(mobId, player) && this.roamingAllowed(mobId, player) && this.championAllowed(mobId, player));
@@ -6123,7 +6125,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           && hasCombatLineOfSight(mob, targetPlayer, this.readWorldBlock)) {
           const predicted = mob.isMiniBoss
             ? predictedMiniBossAim(mob, targetPlayer, activeMovementInput(this.movementInputs.get(mob.targetId), now, targetPlayer.yaw),
-              mob.archetype === "cave_spitter" ? .55 : mob.archetype === "stone_brute" ? .25 : .42)
+              isSpitterLike(mob.archetype) ? .55 : mob.archetype === "stone_brute" ? .25 : .42)
             : { x: targetPlayer.x, y: targetPlayer.y, z: targetPlayer.z, yaw: Math.atan2(targetPlayer.x - mob.x, targetPlayer.z - mob.z) * 180 / Math.PI };
           const desiredYaw = predicted.yaw;
           mob.yaw = mob.archetype === "stone_brute" ? turnBruteAim(mob.yaw, desiredYaw, deltaTime) : desiredYaw;
@@ -6153,7 +6155,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           continue;
         }
         if (definition.attackKind === "projectile") {
-          if (mob.archetype === "cave_spitter" && !allyFireLaneClear(mobId, mob, aim,
+          if (isSpitterLike(mob.archetype) && !allyFireLaneClear(mobId, mob, aim,
             [...this.state.mobs].map(([id, peer]) => ({ id, x: peer.x, y: peer.y, z: peer.z, alive: peer.alive, archetype: peer.archetype })))) {
             const positioning = this.spitterPositioning.get(mobId) ?? createSpitterPositioning();
             positioning.sidestepPending = true; this.spitterPositioning.set(mobId, positioning);
@@ -6284,7 +6286,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const movementSpeed = (mob.isMiniBoss && mob.archetype === "stone_brute"
         ? bruteLeaderPursuitSpeed(baseMovementSpeed, currentAreaLeaderPhase) : baseMovementSpeed)
         * (now < (rangerSlow?.until ?? 0) ? rangerSlow!.multiplier : 1);
-      const rangedPursuit = mob.archetype === "cave_spitter" && definition.attackKind === "projectile" && target.visible
+      const rangedPursuit = isSpitterLike(mob.archetype) && definition.attackKind === "projectile" && target.visible
         ? positionSpitter(mob, target, home, positioning, now, deltaTime, movementSpeed,
           this.readWorldBlock, pose => this.mobPositionAllowed(pose) && this.roamingAllowed(mobId, pose) && caveEncounterAllows(mobId, pose) && (isStoneBruteGroupMob(mobId) || !isInStoneBruteArena(pose.x, pose.z)),
           pose => allyFireLaneClear(mobId, pose, target, [...this.state.mobs].map(([id, peer]) => ({ id, x: peer.x, y: peer.y, z: peer.z, alive: peer.alive, archetype: peer.archetype }))))
@@ -6306,7 +6308,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const waiting = definition.attackKind === "melee" && target.visible && meleeSlotsFull(target.id, attackers());
       const waitingGoal = waiting ? meleeWaitingGoal(mobId, target, [...this.mobAwareness.entries()]
         .filter(([id, awareness]) => awareness.targetId === target.id && this.state.mobs.get(id)?.alive
-          && this.state.mobs.get(id)?.archetype !== "cave_spitter").map(([id]) => id), definition.stopDistance + 1.1) : null;
+          && !isSpitterLike(this.state.mobs.get(id)?.archetype ?? "")).map(([id]) => id), definition.stopDistance + 1.1) : null;
       const pursuit = waitingGoal ? pursueTarget(mob, waitingGoal, deltaTime, movementSpeed, .2)
         : circling ?? rangedPursuit ?? pursueTarget(mob, target, deltaTime, movementSpeed, target.visible ? definition.stopDistance : .3);
       const goal = waitingGoal ?? circling?.goal ?? rangedPursuit?.goal ?? target;
@@ -6333,7 +6335,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         ?? this.empoweredContractDifficulties.get(mobId) ?? "normal");
       const windupMs = Math.round((baseWindupMs + miniBossWindupDelay(mob.isMiniBoss, mob.actionSequence))
         * rematchTiming.windup * huntTiming.windup);
-      if (definition.attackKind === "projectile" && mob.archetype === "cave_spitter"
+      if (definition.attackKind === "projectile" && isSpitterLike(mob.archetype)
         && !allyFireLaneClear(mobId, mob, target, [...this.state.mobs].map(([id, peer]) => ({ id, x: peer.x, y: peer.y, z: peer.z, alive: peer.alive, archetype: peer.archetype })))) {
         positioning.sidestepPending = true;
         continue;
@@ -6364,7 +6366,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       mob.aimCommitted = false;
       const predicted = mob.isMiniBoss
         ? predictedMiniBossAim(mob, target, activeMovementInput(this.movementInputs.get(target.id), now),
-          mob.archetype === "cave_spitter" ? .55 : mob.archetype === "stone_brute" ? .25 : .42)
+          isSpitterLike(mob.archetype) ? .55 : mob.archetype === "stone_brute" ? .25 : .42)
         : { x: target.x, y: target.y, z: target.z, yaw: Math.atan2(target.x - mob.x, target.z - mob.z) * 180 / Math.PI };
       mob.yaw = predicted.yaw;
       this.mobCommittedAim.set(mobId, predicted);

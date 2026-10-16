@@ -4552,7 +4552,7 @@ function createHuntersMarkPayoff(mob: MobVisual): void {
 function updateStrikeWarningMesh(mesh: pc.Mesh, archetype: string, yaw: number, pattern = "slam", chargeLength: number = CHAMPION_CHARGE.distance,
   shotOrigin: { x: number; y: number; z: number; name?: string; actionSequence?: number } = { x: 0, y: 0, z: 0 }): void {
   const rockVolley = pattern === "rocks" || pattern === "falling-rocks" || pattern === "warden-barrage" || pattern === "fault-line";
-  if (rockVolley || archetype === "cave_spitter" && pattern !== "pool") {
+  if (rockVolley || (archetype === "cave_spitter" || archetype === "shard_sentry") && pattern !== "pool") {
     const offsets = rockVolley ? BRUTE_VOLLEY.offsets : spitterShotOffsets(pattern);
     const lengths = offsets.map(offset => enemyShotGuideLength({ x: shotOrigin.x, y: shotOrigin.y + 1.05, z: shotOrigin.z }, yaw + offset, readCollisionWorldBlock, rockVolley ? BRUTE_VOLLEY.range : SPITTER_PATTERN.range));
     const doubleVolley = pattern === "double-fan" || pattern === "teleport-burst" || pattern === "warden-barrage"
@@ -4688,23 +4688,27 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   const bodyRoot = new pc.Entity("mob-body");
   entity.addChild(bodyRoot);
   const isBrute = mob.archetype === "stone_brute";
-  const isSpitter = mob.archetype === "cave_spitter";
+  const isSpitter = mob.archetype === "cave_spitter" || mob.archetype === "shard_sentry";
+  const isWatchbreaker = mobId === "northwatch-watchbreaker";
   const isAshglass = mobId.startsWith("ashglass-sentry-");
   const isBriar = mob.archetype === "briar_crawler";
+  const isNorthwatch = mob.archetype === "ridge_stalker" || mob.archetype === "shard_sentry";
   const tierColor = mob.difficultyTier >= 3
     ? new pc.Color(1, 0.2, 0.08)
     : mob.difficultyTier === 2
       ? new pc.Color(1, 0.62, 0.08)
       : new pc.Color(0.35, 0.9, 0.28);
   const bodyMaterial = coloredMaterial(
-    isBrute ? new pc.Color(0.38, 0.43, 0.48) : isAshglass ? new pc.Color(0.31, 0.22, 0.2) : isSpitter ? new pc.Color(0.34, 0.29, 0.43) : isBriar ? new pc.Color(0.31, 0.19, 0.12) : new pc.Color(0.28, 0.42, 0.21),
+    isWatchbreaker ? new pc.Color(.25, .35, .42) : isBrute ? new pc.Color(0.38, 0.43, 0.48) : mob.archetype === "shard_sentry" ? new pc.Color(.25, .43, .52)
+      : mob.archetype === "ridge_stalker" ? new pc.Color(.44, .46, .39)
+        : isAshglass ? new pc.Color(0.31, 0.22, 0.2) : isSpitter ? new pc.Color(0.34, 0.29, 0.43) : isBriar ? new pc.Color(0.31, 0.19, 0.12) : new pc.Color(0.28, 0.42, 0.21),
   );
   bodyMaterial.shininess = 12;
   // Keep the emissive shader feature active while varying cue intensity.
   bodyMaterial.emissive.set(0.001, 0.001, 0.001);
   bodyMaterial.update();
   const healthBackMaterial = coloredMaterial(new pc.Color(0.16, 0.025, 0.02));
-  const healthMaterial = coloredMaterial(isAshglass ? new pc.Color(1, 0.63, 0.19) : mob.difficultyTier > 1 ? tierColor : isBrute ? new pc.Color(0.94, 0.48, 0.12) : isSpitter ? new pc.Color(0.58, 0.92, 0.12) : tierColor);
+  const healthMaterial = coloredMaterial(isNorthwatch || isWatchbreaker ? new pc.Color(.46, .88, 1) : isAshglass ? new pc.Color(1, 0.63, 0.19) : mob.difficultyTier > 1 ? tierColor : isBrute ? new pc.Color(0.94, 0.48, 0.12) : isSpitter ? new pc.Color(0.58, 0.92, 0.12) : tierColor);
   const warningMaterial = new pc.StandardMaterial();
   warningMaterial.diffuse = new pc.Color(0.9, 0.16, 0.06);
   warningMaterial.emissive = new pc.Color(0.7, 0.08, 0.02);
@@ -4724,6 +4728,18 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   const rootGuardian = mobId === "forest-guardian";
   if (rootGuardian) { bodyMaterial.diffuse.set(.28, .24, .16); bodyMaterial.update(); bodyRoot.setLocalScale(1.16, 1.16, 1.16); }
   const art = createMobArt(bodyRoot, mob.archetype, bodyMaterial, matriarch, rootGuardian);
+  if (isWatchbreaker) {
+    const ridgeStone = coloredMaterial(new pc.Color(.19, .27, .36));
+    const ridgeCrystal = coloredMaterial(new pc.Color(.49, .88, 1));
+    ridgeCrystal.emissive.set(.11, .38, .54); ridgeCrystal.update();
+    for (const side of [-1, 1]) {
+      addBox(bodyRoot, `watchbreaker-shoulder-fin-${side}`, ridgeStone, [.25, .82, .42], [side * .8, 1.68, -.13])
+        .setLocalEulerAngles(0, 0, side * -25);
+      addBox(bodyRoot, `watchbreaker-crystal-${side}`, ridgeCrystal, [.15, .4, .18], [side * .78, 1.98, -.12])
+        .setLocalEulerAngles(0, 0, side * -25);
+    }
+    addBox(bodyRoot, "watchbreaker-heart", ridgeCrystal, [.24, .35, .18], [0, 1.14, .52]).setLocalEulerAngles(0, 0, 45);
+  }
   if (isAshglass) {
     const glass = coloredMaterial(new pc.Color(0.95, 0.42, 0.11));
     glass.emissive.set(0.33, 0.08, 0.015); glass.update();
@@ -4733,16 +4749,16 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
       spike.setLocalEulerAngles(0, 0, side * -25);
     }
   }
-  if ((mob.isChampion || mob.isMiniBoss) && !matriarch && !rootGuardian) {
+  if ((mob.isChampion || mob.isMiniBoss) && !matriarch && !rootGuardian && !isWatchbreaker) {
     const crestMaterial = coloredMaterial(new pc.Color(.87, .58, .16));
-    const crestY = isSpitter ? 1.18 : 2.02;
+    const crestY = mob.archetype === "shard_sentry" ? 1.77 : isSpitter ? 1.18 : 2.02;
     addBox(bodyRoot, "champion-stone-crest", crestMaterial, [.75, .22, .28], [0, crestY, 0]);
     for (const x of [-.28, 0, .28]) addBox(bodyRoot, "champion-crest-point", crestMaterial, [.15, .23, .18], [x, crestY + .16, 0]);
   }
   const statusRoot = new pc.Entity("mob-status");
   entity.addChild(statusRoot);
   const healthWidth = isBrute ? 1.46 : isSpitter ? 1.12 : 0.96;
-  const healthBarY = matriarch ? 2.5 : mob.isChampion || mob.isMiniBoss ? isSpitter ? 1.9 : isBrute ? 3.08 : 1.72 : isBrute ? 2.32 : isSpitter ? 1.43 : 1.34;
+  const healthBarY = matriarch ? 2.5 : mob.isChampion || mob.isMiniBoss ? mob.archetype === "shard_sentry" ? 2.45 : isSpitter ? 1.9 : isBrute ? 3.08 : 1.72 : isBrute ? 2.32 : mob.archetype === "shard_sentry" ? 1.98 : isSpitter ? 1.43 : 1.34;
   addBox(statusRoot, "health-back", healthBackMaterial, [healthWidth + 0.06, 0.1, 0.08], [0, healthBarY, 0]);
   const healthFill = addBox(statusRoot, "health-fill", healthMaterial, [healthWidth, 0.065, 0.09], [0, healthBarY, 0.01]);
   const tierMaterial = coloredMaterial(tierColor);

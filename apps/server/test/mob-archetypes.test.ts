@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { MOB_ARCHETYPES, damageAfterArmor, defeatReward, mobArchetype } from "../src/mob-archetypes.js";
+import { MOB_ARCHETYPES, damageAfterArmor, defeatReward, isSpitterLike, mobArchetype } from "../src/mob-archetypes.js";
+import { crawlerRushDistance } from "@blockcraft/protocol";
 
 describe("mob archetypes", () => {
   it("gives the Stone Brute a slower, heavier and more readable attack", () => {
@@ -41,6 +42,17 @@ describe("mob archetypes", () => {
     expect(spitter.hazardDurationMs).toBe(0);
     expect(spitter.hazardRadius).toBe(0);
     expect(spitter.maxHealth).toBeLessThan(MOB_ARCHETYPES.moss_crawler.maxHealth);
+  });
+
+  it("gives Northwatch two genuinely different pursuit and attack profiles", () => {
+    const stalker = mobArchetype("ridge_stalker"), sentry = mobArchetype("shard_sentry");
+    expect(stalker.name).toBe("Ridge Stalker");
+    expect(stalker.speed).toBeGreaterThan(MOB_ARCHETYPES.briar_crawler.speed);
+    expect(crawlerRushDistance(stalker.id)).toBeGreaterThan(crawlerRushDistance("briar_crawler"));
+    expect(sentry.name).toBe("Shard Sentry");
+    expect(sentry.attackKind).toBe("projectile");
+    expect(sentry.stopDistance).toBeGreaterThan(MOB_ARCHETYPES.cave_spitter.stopDistance);
+    expect(isSpitterLike(sentry.id)).toBe(true);
   });
 
   it("caps Brute defeat rewards at the player's health and stamina maximums", () => {

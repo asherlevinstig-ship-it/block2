@@ -1,7 +1,7 @@
 import * as pc from "playcanvas";
 import { mobGaitTargets } from "./mob-motion.js";
 
-type MobKind = "stone_brute" | "cave_spitter" | "moss_crawler";
+type MobKind = "stone_brute" | "cave_spitter" | "moss_crawler" | "ridge_stalker" | "shard_sentry";
 type Triple = [number, number, number];
 
 interface Limb {
@@ -62,7 +62,12 @@ const guardianBark = material("guardian-heartwood", [.24, .13, .055]);
 const guardianMoss = material("guardian-ancient-moss", [.28, .48, .18]);
 const guardianCore = material("guardian-living-heart", [.45, 1, .24], [.18, .72, .055]);
 const guardianEnragedCore = material("guardian-broken-heart", [1, .48, .12], [.82, .16, .025]);
-const dimGlowMaterials = new Map<pc.StandardMaterial, pc.StandardMaterial>([core, acid, crawlerEye, matriarchVenom, matriarchEnragedVenom, guardianCore, guardianEnragedCore]
+const ridgeFur = material("ridge-stalker-fur", [.38, .42, .39]);
+const ridgeMane = material("ridge-stalker-mane", [.76, .79, .68]);
+const northwatchEye = material("northwatch-cold-eye", [.5, .9, 1], [.14, .42, .58]);
+const shardStone = material("shard-sentry-granite", [.22, .31, .4]);
+const shardCrystal = material("shard-sentry-crystal", [.48, .86, 1], [.16, .42, .62]);
+const dimGlowMaterials = new Map<pc.StandardMaterial, pc.StandardMaterial>([core, acid, crawlerEye, matriarchVenom, matriarchEnragedVenom, guardianCore, guardianEnragedCore, northwatchEye, shardCrystal]
   .map(live => [live, material(`defeated-${live.name}`, [live.diffuse.r * .5, live.diffuse.g * .5, live.diffuse.b * .5])]));
 
 function box(parent: pc.Entity, name: string, surface: pc.StandardMaterial, size: Triple, at: Triple, angle?: Triple): pc.Entity {
@@ -83,12 +88,56 @@ function pivot(parent: pc.Entity, name: string, at: Triple): pc.Entity {
 }
 
 export function createMobArt(parent: pc.Entity, archetype: string, body: pc.StandardMaterial, matriarch = false, rootGuardian = false): MobArtRig {
-  const kind: MobKind = archetype === "stone_brute" ? "stone_brute" : archetype === "cave_spitter" ? "cave_spitter" : "moss_crawler";
-  const head = pivot(parent, "head-joint", kind === "stone_brute" ? [0, 1.6, 0.06] : kind === "cave_spitter" ? [0, 0.56, 0.56] : [0, 0.53, 0.48]);
+  const kind: MobKind = archetype === "stone_brute" ? "stone_brute" : archetype === "cave_spitter" ? "cave_spitter"
+    : archetype === "ridge_stalker" ? "ridge_stalker" : archetype === "shard_sentry" ? "shard_sentry" : "moss_crawler";
+  const head = pivot(parent, "head-joint", kind === "stone_brute" ? [0, 1.6, 0.06] : kind === "shard_sentry" ? [0, 1.25, .08]
+    : kind === "ridge_stalker" ? [0, .69, .56] : kind === "cave_spitter" ? [0, 0.56, 0.56] : [0, 0.53, 0.48]);
   const jaw = pivot(head, "jaw-joint", kind === "stone_brute" ? [0, -0.2, 0.14] : [0, -0.11, 0.27]);
   const rig: MobArtRig = { kind, head, jaw, limbs: [], arms: [], sacs: [], phase: 0, walk: 0, pursuit: 0, matriarch, rootGuardian, phaseSurfaces: [], enraged: false, defeated: false, glowSurfaces: [] };
 
-  if (kind === "moss_crawler") {
+  if (kind === "ridge_stalker") {
+    box(parent, "lean-hound-torso", ridgeFur, [.57, .5, 1.2], [0, .62, -.14]);
+    box(parent, "shoulder-mane", ridgeMane, [.76, .57, .48], [0, .84, .23], [-13, 0, 0]);
+    box(parent, "spine", body, [.26, .15, .85], [0, .91, -.22]);
+    box(parent, "raised-tail", ridgeMane, [.16, .18, .68], [0, .9, -.95], [-28, 0, 0]);
+    box(head, "wolf-head", body, [.55, .39, .52], [0, 0, .05]);
+    box(head, "long-muzzle", ridgeFur, [.34, .21, .5], [0, -.1, .45]);
+    box(jaw, "lower-muzzle", ridgeMane, [.32, .1, .36], [0, -.08, .14]);
+    for (const side of [-1, 1]) {
+      box(head, `upright-ear-${side}`, ridgeMane, [.15, .38, .17], [side * .22, .35, -.11], [0, 0, side * -17]);
+      box(head, `cold-eye-${side}`, northwatchEye, [.11, .09, .07], [side * .2, .07, .28]);
+      box(head, `fang-${side}`, ivory, [.09, .19, .08], [side * .15, -.2, .49]);
+      for (let index = 0; index < 2; index++) {
+        const leg = pivot(parent, `hound-leg-${side}-${index}`, [side * .27, .5, index === 0 ? .36 : -.53]);
+        box(leg, "upper", body, [.18, .34, .24], [0, -.13, 0]);
+        const knee = pivot(leg, "hound-knee", [0, -.31, 0]);
+        box(knee, "lower", ridgeFur, [.14, .29, .17], [0, -.13, .04]);
+        box(knee, "paw", ridgeMane, [.19, .1, .3], [0, -.28, .12]);
+        rig.limbs.push({ pivot: leg, knee, side, offset: (index + (side > 0 ? 1 : 0)) * Math.PI });
+      }
+    }
+  } else if (kind === "shard_sentry") {
+    box(parent, "levitating-stone-core", shardStone, [.63, .82, .59], [0, 1.02, 0], [0, 45, 0]);
+    box(parent, "crystal-heart", shardCrystal, [.27, .41, .15], [0, 1.08, .39], [0, 0, 45]);
+    box(parent, "armoured-cap", body, [.79, .2, .78], [0, 1.51, 0], [0, 45, 0]);
+    box(head, "floating-crown", shardCrystal, [.49, .42, .43], [0, .18, 0], [0, 45, 0]);
+    box(head, "single-eye", northwatchEye, [.19, .16, .09], [0, .13, .32]);
+    for (const side of [-1, 1]) {
+      const crystal = pivot(parent, `orbiting-shard-${side}`, [side * .63, 1.16, -.16]);
+      box(crystal, "long-crystal", shardCrystal, [.19, .7, .2], [0, 0, 0], [0, 0, side * 22]);
+      rig.sacs.push(crystal);
+      const leg = pivot(parent, `tripod-leg-${side}`, [side * .31, .77, -.09]);
+      box(leg, "stone-strut", shardStone, [.2, .67, .22], [side * .18, -.25, -.08], [0, 0, side * 24]);
+      const knee = pivot(leg, "tripod-knee", [side * .27, -.55, -.08]);
+      box(knee, "crystal-foot", body, [.21, .3, .25], [0, -.12, .02]);
+      rig.limbs.push({ pivot: leg, knee, side, offset: side < 0 ? 0 : Math.PI });
+    }
+    const rear = pivot(parent, "rear-tripod-leg", [0, .75, -.36]);
+    box(rear, "rear-strut", shardStone, [.2, .66, .23], [0, -.24, -.2], [-22, 0, 0]);
+    const rearKnee = pivot(rear, "rear-knee", [0, -.53, -.36]);
+    box(rearKnee, "rear-foot", body, [.25, .27, .26], [0, -.12, 0]);
+    rig.limbs.push({ pivot: rear, knee: rearKnee, side: 1, offset: Math.PI / 2 });
+  } else if (kind === "moss_crawler") {
     box(parent, "bark-abdomen", shellDark, [0.82, 0.34, 1.04], [0, 0.4, -0.1]);
     box(parent, "shell-left", body, [0.45, 0.37, 0.95], [-0.22, 0.62, -0.12], [0, 0, -12]);
     box(parent, "shell-right", body, [0.45, 0.37, 0.95], [0.22, 0.62, -0.12], [0, 0, 12]);
