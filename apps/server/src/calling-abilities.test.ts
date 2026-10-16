@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CALLING_ABILITIES, CALLING_ABILITY_OPTIONS, type BuildPathId, type CallingAbilityId } from "@blockcraft/protocol";
+import { CALLING_ABILITIES, CALLING_ABILITY_OPTIONS, callingStarterAbility, type BuildPathId, type CallingAbilityId } from "@blockcraft/protocol";
 import { WorldRoom } from "./game-room.js";
 import { MobState, PlayerState, WorldState } from "./schema.js";
 import { chooseBuildPath, chooseBuildSpecialization, grantBuildPathXp, parseBuildPathState, serializeBuildPathState } from "./build-paths.js";
@@ -13,7 +13,7 @@ describe("hotbar Calling abilities", () => {
     const internal = room as any; internal.roomKind = "overworld";
     const broadcast = vi.spyOn(room, "broadcast").mockImplementation(() => {});
     const player = new PlayerState();
-    Object.assign(player, { x: 50, y: 8, z: 50, stamina: 25, maxStamina: 100,
+    Object.assign(player, { x: 50, y: 8, z: 50, level: 5, stamina: 25, maxStamina: 100,
       powerCooldownUntil: 99_000, specialCooldownUntil: 99_000 });
     player.huntLoadoutsJson = serializeBuildPathState(grantBuildPathXp(chooseBuildPath(parseBuildPathState("{}"), pathId), xp).state);
     room.state.players.set("hero", player);
@@ -58,6 +58,29 @@ describe("hotbar Calling abilities", () => {
     }
     if (pathId === "ranger") expect(internal.rangerCallingFocus.get("hero")).toEqual({ hits: 3, bonus: 1 });
     if (pathId === "healer") expect(player.health).toBe(4);
+  });
+
+  it.each(["tank", "mage", "assassin", "thief", "ranger", "healer"] as const)("unlocks %s Power at level 2 and Special at level 4", pathId => {
+    const { internal, player, client } = fixture(pathId);
+    player.health = 2;
+    player.level = 1;
+    internal.handleCallingAbility(client, { requestId: "early-power", slot: "power" });
+    expect(client.send).toHaveBeenCalledWith("chat:notice", expect.stringContaining("has not unlocked"));
+    client.send.mockClear();
+    player.level = 2;
+    internal.handleCallingAbility(client, { requestId: "first-power", slot: "power" });
+    expect(client.send).toHaveBeenCalledWith("calling:ability", expect.objectContaining({
+      slot: "power", abilityId: callingStarterAbility(pathId, "power").id,
+    }));
+    internal.handleCallingAbility(client, { requestId: "early-special", slot: "special" });
+    expect(client.send).toHaveBeenCalledWith("chat:notice", expect.stringContaining("Special has not unlocked"));
+    player.level = 4;
+    internal.handleCallingAbility(client, { requestId: "first-special", slot: "special" });
+    expect(client.send).toHaveBeenCalledWith("calling:ability", expect.objectContaining({
+      slot: "special", abilityId: callingStarterAbility(pathId, "special").id,
+    }));
+    expect(internal.callingAbilityReadyAt.has("hero")).toBe(true);
+    expect(internal.callingSpecialReadyAt.has("hero")).toBe(true);
   });
 
   it.each(CALLING_ABILITY_OPTIONS)("equips and activates $id when its rank is unlocked", option => {

@@ -847,6 +847,7 @@ const seismicMasteryButtons = [...document.querySelectorAll<HTMLButtonElement>("
 const specialSlot = document.querySelector<HTMLButtonElement>("#special-slot")!;
 const callingSlot = document.querySelector<HTMLButtonElement>("#calling-slot")!;
 const specialPickerButtons = [...document.querySelectorAll<HTMLButtonElement>("#special-picker [data-special]")];
+const callingSpecialPicker = document.querySelector<HTMLButtonElement>("#special-picker [data-calling-special]")!;
 const controlsHelp = document.querySelector<HTMLElement>("#controls-help")!;
 const combatReticle = document.querySelector<HTMLElement>("#combat-reticle")!;
 const combatFeedback = document.querySelector<HTMLElement>("#combat-feedback")!;
@@ -3057,6 +3058,9 @@ let localPowerStepApplied = false;
 let localPowerCooldownUntil = 0;
 let localSpecialCooldownUntil = 0;
 let localCallingCooldownUntil = 0;
+let localCallingSpecialCooldownUntil = 0;
+let localFieldSpecialSelected = false;
+let fieldSpecialSelectionBeforeEquip = false;
 let callingAbilityPendingUntil = 0;
 let localMainHandId: MainHandId = "longsword";
 let localArmourId: ArmourId = "none";
@@ -3400,8 +3404,8 @@ function updateSecondaryPowerLoadout(powerId: PowerId): void {
 }
 
 function activatePowerSlot(slot: "primary" | "secondary", announce = true): boolean {
-  if (slot === "secondary" && localCharacterProgression.level < 3) {
-    if (announce) status.textContent = "The second Power slot unlocks at character level 3.";
+  if (slot === "secondary" && localCharacterProgression.level < 5) {
+    if (announce) status.textContent = "Weapon techniques unlock at character level 5.";
     return false;
   }
   activePowerSlot = slot;
@@ -3433,42 +3437,47 @@ function requestSeismicMastery(masteryId: SeismicMasteryId): void {
 
 function updateControlsHelp(): void {
   const power = POWER_DEFINITIONS[localEquippedPower];
-  const special = SPECIAL_DEFINITIONS[localEquippedSpecial];
   const powerHint = power.castType === "tap" ? `R ${power.name}` : `Hold R ${power.core === "ground" ? "place" : "aim"} ${power.name}`;
-  const specialHint = special.castType === "tap" ? `F ${special.name}` : `Hold F place ${special.name}`;
   const fireHint = WEAPON_ATTACK_DEFINITIONS[localMainHandId].projectileTravelMs > 0 ? " · Mouse aim · Hold left-click fire" : "";
-  const secondaryHint = localCharacterProgression.level >= 3 ? ` · T ${POWER_DEFINITIONS[localSecondaryPower].name}` : "";
+  const secondaryHint = localCharacterProgression.level >= 5 ? ` · T ${POWER_DEFINITIONS[localSecondaryPower].name}` : "";
   const calling = CALLING_ABILITY_OPTIONS.find(option => option.id === localCallingAbilityId);
-  const callingHint = calling ? ` · G ${calling.name}` : "";
-  const unlockedPowerHint = localCharacterProgression.level >= 2 ? ` · ${powerHint}${secondaryHint}` : "";
-  const unlockedSpecialHint = localCharacterProgression.level >= 4 ? ` · ${specialHint}` : "";
+  const callingSpecial = CALLING_ABILITY_OPTIONS.find(option => option.pathId === localBuildPathId && option.category === "Utility");
+  const callingHint = localCharacterProgression.level >= 2 && calling ? ` · G ${calling.name}` : "";
+  const unlockedPowerHint = localCharacterProgression.level >= 5 ? ` · ${powerHint}${secondaryHint}` : "";
+  const unlockedSpecialHint = localCharacterProgression.level >= 4 && callingSpecial
+    ? ` · F ${localCharacterProgression.level >= 5 && (localFieldSpecialSelected || localEquippedSpecial === "venom_fan") ? SPECIAL_DEFINITIONS[localEquippedSpecial].name : callingSpecial.name}` : "";
   controlsHelp.textContent = `WASD move · Arrows camera · I inventory · H potion · Hold C/right-click Guard · Space dodge/cancel${unlockedPowerHint}${unlockedSpecialHint}${callingHint} · Q mode · E/click acts${fireHint}`;
 }
 
 function updateSpecialLoadout(specialId: SpecialId): void {
+  if (localEquippedSpecial === "venom_fan" && specialId !== "venom_fan") localFieldSpecialSelected = false;
+  if (specialId === "venom_fan") localFieldSpecialSelected = true;
   localEquippedSpecial = specialId;
   combatHud.setSpecial(specialId);
-  specialButton.textContent = localCharacterProgression.level < 4 ? "LV 4" : specialId === "venom_fan" ? "Fan" : specialId === "hunters_mark" ? "Mark" : "Snare";
+  combatHud.setFieldSpecialSelected(localFieldSpecialSelected);
+  specialButton.textContent = localCharacterProgression.level < 4 ? "LV 4" : specialId === "venom_fan" ? "Fan" : "Special";
   updateControlsHelp();
 }
 
-function requestCallingAbility(): void {
+function requestCallingAbility(slot: "power" | "special" = "power"): void {
   if (!room || !worldReady) return;
+  if (localCharacterProgression.level < (slot === "special" ? 4 : 2)) return;
   if (!localBuildPathId) {
     status.textContent = "Choose a Calling in Town to unlock this ability slot.";
     showCombatFeedback("CALLING UNBOUND", "hurt");
     return;
   }
   const now = Date.now();
-  if (now < localCallingCooldownUntil) {
-    const definition = CALLING_ABILITY_OPTIONS.find(option => option.id === localCallingAbilityId);
+  if (now < (slot === "special" ? localCallingSpecialCooldownUntil : localCallingCooldownUntil)) {
+    const definition = slot === "special" ? CALLING_ABILITY_OPTIONS.find(option => option.pathId === localBuildPathId && option.category === "Utility")
+      : CALLING_ABILITY_OPTIONS.find(option => option.id === localCallingAbilityId);
     showCombatFeedback(`${definition?.name.toUpperCase() ?? "CALLING"} RECHARGING`, "hurt");
     return;
   }
   if (performance.now() < callingAbilityPendingUntil) return;
   callingAbilityPendingUntil = performance.now() + 700;
   callingAbilitySequence += 1;
-  combatHud.setCallingPending(true);
+  if (slot === "power") combatHud.setCallingPending(true);
   createCallingAnticipation(localBuildPathId);
   const pendingSequence = callingAbilitySequence;
   window.setTimeout(() => {
@@ -3476,18 +3485,28 @@ function requestCallingAbility(): void {
       combatHud.setCallingPending(false);
     }
   }, 720);
-  room.send("calling:ability", { requestId: `calling-${callingAbilitySequence}`, yaw: cameraOrbit.yaw });
+  room.send("calling:ability", { requestId: `calling-${callingAbilitySequence}`, yaw: cameraOrbit.yaw, slot });
 }
 
 function requestSpecialEquip(specialId: SpecialId): void {
-  if (!room || !worldReady || specialId === localEquippedSpecial) return;
-  if (localCharacterProgression.level < 4) return;
+  if (!room || !worldReady) return;
+  if (localCharacterProgression.level < 5) return;
+  if (specialId === localEquippedSpecial) {
+    localFieldSpecialSelected = true;
+    combatHud.setFieldSpecialSelected(true);
+    updateControlsHelp();
+    return;
+  }
   if (specialAimActive || localPowerStartedAt !== null || localActionStartedAt !== null) {
     status.textContent = "Finish or cancel the current action before changing Special.";
     return;
   }
   specialEquipSequence += 1;
+  fieldSpecialSelectionBeforeEquip = localFieldSpecialSelected;
   room.send("special:equip", { requestId: `special-equip-${specialEquipSequence}`, specialId });
+  localFieldSpecialSelected = true;
+  combatHud.setFieldSpecialSelected(true);
+  updateControlsHelp();
   status.textContent = `Equipping ${SPECIAL_DEFINITIONS[specialId].name}...`;
 }
 
@@ -3502,7 +3521,7 @@ function updateMainHandLoadout(mainHandId: MainHandId): void {
 
 function requestPowerEquip(powerId: PowerId): void {
   if (!room || !worldReady || powerId === localEquippedPower) return;
-  if (localCharacterProgression.level < 2) return;
+  if (localCharacterProgression.level < 5) return;
   if (powerAimActive || localPowerStartedAt !== null) {
     status.textContent = "Finish or cancel the current Power before changing it.";
     return;
@@ -3588,9 +3607,9 @@ function renderCharacterProgression(update: ProgressionUpdate, maximumHealth = p
   const required = Math.max(0, update.experienceRequired);
   playerHud.setProgression(update.level, update.experience, required);
   combatHud.setPowerLoadout(localPrimaryPower, localSecondaryPower, activePowerSlot, update.level);
-  powerButton.disabled = update.level < 2;
-  specialButton.disabled = update.level < 4;
-  specialButton.textContent = update.level < 4 ? "LV 4" : localEquippedSpecial === "venom_fan" ? "Fan" : localEquippedSpecial === "hunters_mark" ? "Mark" : "Snare";
+  powerButton.disabled = update.level < 5;
+  specialButton.disabled = update.level < 4 || !localBuildPathId;
+  specialButton.textContent = update.level < 4 ? "LV 4" : localBuildPathId ? "Special" : "Choose Calling";
   updateControlsHelp();
   inventoryLevel.textContent = required > 0 ? `${update.level} · ${update.experience}/${required} XP` : `${update.level} · MAX`;
   characterPoints.textContent = update.unspentStatPoints > 0 ? `${update.unspentStatPoints} POINT${update.unspentStatPoints === 1 ? "" : "S"} AVAILABLE` : "NO POINTS AVAILABLE";
@@ -3626,6 +3645,7 @@ function renderBuildPath(update: BuildPathUpdate): void {
   localBuildPathRank = update.rank;
   combatHud.setCalling(update.selectedPathId, update.selectedCallingAbilityId, update.rank, update.selectedCallingAugmentId,
     update.callingAugmentProgress, update.masteredCallingAugments);
+  specialButton.disabled = localCharacterProgression.level < 4 || !update.selectedPathId;
   updateControlsHelp();
   if (trackedCodexItemId) setCodexHunt(trackedCodexItemId, false);
   const selected = update.selectedPathId ? BUILD_PATHS[update.selectedPathId] : null;
@@ -3636,12 +3656,11 @@ function renderBuildPath(update: BuildPathUpdate): void {
   const selectedSpecialization = update.selectedPathId && update.selectedSpecializationId
     ? BUILD_PATH_SPECIALIZATIONS[update.selectedPathId].find(option => option.id === update.selectedSpecializationId) : null;
   buildPathRank.textContent = selected ? `${rank.name.toUpperCase()} · RANK ${update.rank}${selectedSpecialization ? ` · ${selectedSpecialization.name.toUpperCase()}` : ""}`
-    : update.canChoose ? "A PATH IS FORMING" : "REVEALS AT LEVEL 5";
+    : "CHOOSE YOUR CALLING";
   const activeAbility = update.selectedCallingAbilityId
     ? CALLING_ABILITY_OPTIONS.find(option => option.id === update.selectedCallingAbilityId) : null;
-  buildPathMessage.textContent = selected && activeAbility ? `${activeAbility.name} is equipped to G. ${activeAbility.description}`
-    : update.canChoose ? "Choose one combat identity. You can change it later while in Town."
-      : "Keep exploring. Your Calling becomes available at level 5.";
+  buildPathMessage.textContent = selected && activeAbility ? `${activeAbility.name} ${localCharacterProgression.level >= 2 ? "is ready on G" : "unlocks on G at level 2"}. Your Calling Special ${localCharacterProgression.level >= 4 ? "is on F" : "unlocks on F at level 4"}.`
+    : "Choose one combat identity. You can change it later while in Town.";
   const previousThreshold = BUILD_PATH_RANKS.find(entry => entry.rank === update.rank)?.xp ?? 0;
   const span = Math.max(1, (update.nextRankXp ?? previousThreshold) - previousThreshold);
   const progress = update.nextRankXp === null ? 1 : Math.max(0, Math.min(1, (update.xp - previousThreshold) / span));
@@ -3651,7 +3670,7 @@ function renderBuildPath(update: BuildPathUpdate): void {
   const nextRank = BUILD_PATH_RANKS.find(entry => entry.rank > update.rank);
   buildPathNext.textContent = selected
     ? update.nextRankXp === null ? "Mastery complete" : `${update.xp}/${update.nextRankXp} mastery · Next: ${nextRank?.name ?? "Master"}`
-    : update.canChoose ? "Three paths are ready" : "Reveals at level 5";
+    : "Six Callings available";
   buildPathOpen.textContent = selected ? "VIEW CALLING" : update.canChoose ? "CHOOSE CALLING" : "LOCKED";
   buildPathOpen.disabled = !update.canChoose;
   buildPathCandidates.replaceChildren();
@@ -3680,7 +3699,7 @@ function renderBuildPath(update: BuildPathUpdate): void {
   callingIntroEyebrow.textContent = selected ? `${selected.name.toUpperCase()} · ${rank.name.toUpperCase()}` : "YOUR PLAYSTYLE HAS AWAKENED";
   callingIntroCopy.textContent = selected
     ? "Review gear-based paths, or choose Healer for team support. Changes are allowed only in Town."
-    : "Choose one clear combat identity. Your first ability is available immediately on G.";
+    : "Choose your combat style now. Its Power unlocks at level 2 and Special at level 4.";
   update.candidates.forEach((candidate, index) => {
     const definition = BUILD_PATHS[candidate.pathId];
     const starter = CALLING_ABILITY_OPTIONS.find(option => option.pathId === candidate.pathId && option.unlockRank === 0)!;
@@ -3689,7 +3708,7 @@ function renderBuildPath(update: BuildPathUpdate): void {
     button.dataset.active = String(candidate.pathId === update.selectedPathId);
     button.dataset.recommended = String(index === 0);
     const why = candidate.reasons.length ? candidate.reasons.join(" · ") : "a flexible starting loadout";
-    button.innerHTML = `<em>${candidate.pathId === update.selectedPathId ? "CURRENT" : index === 0 ? "RECOMMENDED" : "OPTION"}</em><span><strong>${definition.name}</strong><small>${definition.role}</small></span><p>Recommended by: ${why}</p><b>${starter.name} · Press G</b><small>${starter.description}</small>`;
+    button.innerHTML = `<em>${candidate.pathId === update.selectedPathId ? "CURRENT" : index === 0 ? "RECOMMENDED" : "OPTION"}</em><span><strong>${definition.name}</strong><small>${definition.role}</small></span><p>${index === 0 ? "Suggested by" : "Style clue"}: ${why}</p><b>${starter.name} · unlocks at LV 2</b><small>${starter.description}</small>`;
     button.disabled = !update.inTown;
     button.title = update.inTown ? `Choose ${definition.name}` : "Return to Town to change your Calling";
     button.addEventListener("click", () => {
@@ -3706,8 +3725,8 @@ function renderBuildPath(update: BuildPathUpdate): void {
   if (update.selectedPathId && previousPathId !== update.selectedPathId) {
     callingIntro.hidden = true;
     sessionStorage.setItem("calling-intro-seen-v1", "true");
-    status.textContent = `${selected!.name} Calling ready. Press G to use ${activeAbility?.name ?? "your Calling ability"}.`;
-    showCombatFeedback(`${selected!.name.toUpperCase()} · PRESS G`, "dodge");
+    status.textContent = `${selected!.name} Calling chosen. ${localCharacterProgression.level >= 2 ? `Press G to use ${activeAbility?.name ?? "your Power"}` : `${activeAbility?.name ?? "Your Power"} unlocks at level 2`}.`;
+    showCombatFeedback(`${selected!.name.toUpperCase()} · ${localCharacterProgression.level >= 2 ? "PRESS G" : "POWER AT LV 2"}`, "dodge");
   } else if (!update.selectedPathId && update.inTown && !sessionStorage.getItem("calling-intro-seen-v1") && levelUpPanel.hidden) {
     openCallingIntro();
   }
@@ -4014,7 +4033,7 @@ function createCallingImpact(effect: CallingAbilityEffect): void {
     assassin_vanish: new pc.Color(.44, .12, .72), assassin_death_mark: new pc.Color(1, .08, .18), assassin_blade_dance: new pc.Color(1, .64, .72),
     thief_smoke_bomb: new pc.Color(.18, .72, .42), thief_decoy: new pc.Color(.42, 1, .48), thief_escape_artist: new pc.Color(.76, 1, .22),
     ranger_volley_focus: new pc.Color(1, .7, .1), ranger_disengage: new pc.Color(.24, .9, .76), ranger_deadeye: new pc.Color(1, .9, .28),
-    healer_field_mend: new pc.Color(.25, 1, .72),
+    healer_field_mend: new pc.Color(.25, 1, .72), healer_renewal: new pc.Color(.55, 1, .85),
   };
   const abilityId = effect.abilityId;
   const style: CallingImpactVisual["style"] = abilityId === "tank_earthbreaker" ? "terrain"
@@ -4083,7 +4102,7 @@ function createCallingImpact(effect: CallingAbilityEffect): void {
       const banner = addBox(root, "challenge-banner", material, [.28, 1.25, .12], [Math.sin(angle) * 1.05, .78, Math.cos(angle) * 1.05]);
       banner.setLocalEulerAngles(0, angle * 180 / Math.PI, index % 2 ? 8 : -8);
     }
-  } else if (abilityId === "healer_field_mend") {
+  } else if (abilityId === "healer_field_mend" || abilityId === "healer_renewal") {
     addBox(root, "mend-cross-horizontal", material, [.88, .16, .16], [0, 1.05, 0]);
     addBox(root, "mend-cross-vertical", material, [.16, .88, .16], [0, 1.05, 0]);
     for (let index = 0; index < 8; index += 1) {
@@ -8621,7 +8640,7 @@ function updatePowerAimFromPointer(): void {
 function beginPowerAim(pointerId: number | null = null): void {
   if (!defeatScreen.hidden) return;
   if (!room || !worldReady) return;
-  if (localCharacterProgression.level < 2) return;
+  if (localCharacterProgression.level < 5) return;
   if (localDefending) requestDefense(false);
   if (!powerServerReady) {
     status.textContent = "Power server is updating · Powers will unlock automatically.";
@@ -8969,6 +8988,13 @@ for (const button of specialPickerButtons) {
     if (specialId && isSpecialId(specialId)) requestSpecialEquip(specialId);
   });
 }
+callingSpecialPicker.addEventListener("click", () => {
+  if (!localBuildPathId || localCharacterProgression.level < 4 || localEquippedSpecial === "venom_fan") return;
+  localFieldSpecialSelected = false;
+  combatHud.setFieldSpecialSelected(false);
+  updateControlsHelp();
+  status.textContent = `${BUILD_PATHS[localBuildPathId].name} Special equipped to F.`;
+});
 for (const button of mainHandPickerButtons) {
   button.addEventListener("click", () => {
     const mainHandId = button.dataset.mainHand;
@@ -9093,7 +9119,11 @@ window.addEventListener("keydown", event => {
     powerAimKey = "KeyT";
     beginPowerAim();
   }
-  if (event.code === "KeyF") beginSpecialAim();
+  if (event.code === "KeyF") {
+    event.preventDefault();
+    if (localCharacterProgression.level >= 5 && (localFieldSpecialSelected || localEquippedSpecial === "venom_fan")) beginSpecialAim();
+    else requestCallingAbility("special");
+  }
   if (event.code === "KeyG") { event.preventDefault(); requestCallingAbility(); }
   if (event.code === "Space") {
     event.preventDefault();
@@ -9148,13 +9178,19 @@ for (const button of [defenseButton, defenseSlot]) {
 }
 specialButton.addEventListener("pointerdown", event => {
   event.preventDefault();
-  specialButton.setPointerCapture(event.pointerId);
-  beginSpecialAim(event.pointerId);
+  if (localCharacterProgression.level >= 5 && (localFieldSpecialSelected || localEquippedSpecial === "venom_fan")) {
+    specialButton.setPointerCapture(event.pointerId);
+    beginSpecialAim(event.pointerId);
+  }
+  else requestCallingAbility("special");
 });
 specialSlot.addEventListener("pointerdown", event => {
   event.preventDefault();
-  specialSlot.setPointerCapture(event.pointerId);
-  beginSpecialAim(event.pointerId);
+  if (localCharacterProgression.level >= 5 && (localFieldSpecialSelected || localEquippedSpecial === "venom_fan")) {
+    specialSlot.setPointerCapture(event.pointerId);
+    beginSpecialAim(event.pointerId);
+  }
+  else requestCallingAbility("special");
 });
 specialButton.addEventListener("pointermove", event => {
   if (specialAimPointerId !== event.pointerId) return;
@@ -10050,14 +10086,15 @@ app.on("update", (dt: number) => {
   }
   const powerRemaining = Math.max(0, localPowerCooldownUntil - Date.now());
   const powerCompatible = isPowerCompatibleWithMainHand(POWER_DEFINITIONS[localEquippedPower], localMainHandId);
-  powerButton.textContent = localCharacterProgression.level < 2 ? "LV 2" : !powerServerReady ? "Wait" : !powerCompatible ? "Locked" : powerAimActive ? "Release" : powerRemaining > 0 ? `${Math.ceil(powerRemaining / 1000)}s` : "Power";
-  const specialRemaining = Math.max(0, localSpecialCooldownUntil - Date.now());
-  const specialDefinition = SPECIAL_DEFINITIONS[localEquippedSpecial];
+  powerButton.textContent = localCharacterProgression.level < 5 ? "LV 5" : !powerServerReady ? "Wait" : !powerCompatible ? "Locked" : powerAimActive ? "Release" : powerRemaining > 0 ? `${Math.ceil(powerRemaining / 1000)}s` : "Power";
+  const fieldSpecialActive = localCharacterProgression.level >= 5 && (localFieldSpecialSelected || localEquippedSpecial === "venom_fan");
+  const specialRemaining = Math.max(0, (fieldSpecialActive ? localSpecialCooldownUntil : localCallingSpecialCooldownUntil) - Date.now());
+  const specialDefinition = CALLING_ABILITY_OPTIONS.find(option => option.pathId === localBuildPathId && option.category === "Utility");
   const callingRemaining = Math.max(0, localCallingCooldownUntil - Date.now());
   combatHud.setCooldowns(
     cooldownState(powerRemaining, POWER_DEFINITIONS[localEquippedPower].cooldownMs, "READY · R",
       !powerServerReady ? "SERVER UPDATE" : !powerCompatible ? "INCOMPATIBLE" : powerAimActive ? "RELEASE TO CAST" : undefined),
-    cooldownState(specialRemaining, specialDefinition.cooldownMs, "READY · F", specialAimActive ? "RELEASE TO ARM" : undefined),
+    cooldownState(specialRemaining, fieldSpecialActive ? SPECIAL_DEFINITIONS[localEquippedSpecial].cooldownMs : specialDefinition?.cooldownMs ?? 1, "READY · F", !localBuildPathId ? "CHOOSE CALLING" : specialAimActive ? "RELEASE TO ARM" : undefined),
     localBuildPathId && localCallingAbilityId
       ? cooldownState(callingRemaining, CALLING_ABILITY_OPTIONS.find(option => option.id === localCallingAbilityId)?.cooldownMs ?? 1, "READY · G")
       : cooldownState(0, 1, "CHOOSE CALLING", "CHOOSE CALLING"),
@@ -10071,11 +10108,9 @@ app.on("update", (dt: number) => {
         ? `${Math.max(.1, (localCallingState.activeUntil - Date.now()) / 1_000).toFixed(1)}s`
         : "READY",
   } : null);
-  specialButton.textContent = specialAimActive
-    ? "Release"
-    : specialRemaining > 0
-      ? `${Math.ceil(specialRemaining / 1000)}s`
-      : localEquippedSpecial === "venom_fan" ? "Fan" : localEquippedSpecial === "hunters_mark" ? "Mark" : "Snare";
+  specialButton.textContent = localCharacterProgression.level < 4 ? "LV 4" : !localBuildPathId ? "Choose Calling"
+    : specialAimActive ? "Release" : specialRemaining > 0 ? `${Math.ceil(specialRemaining / 1000)}s`
+      : fieldSpecialActive ? SPECIAL_DEFINITIONS[localEquippedSpecial].name : specialDefinition?.name ?? "Special";
   cameraTarget.set(
     player.x + localPowerVisualOffset.x + localNetworkVisualOffset.x + localRecoveryVisualOffset.x + localDodgeVisualOffset.x,
     player.y + localVisualVerticalOffset,
@@ -10527,11 +10562,14 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   room.onMessage("calling:ability", (update: CallingAbilityUpdate) => {
     callingAbilityPendingUntil = 0;
     combatHud.setCallingPending(false);
-    localCallingCooldownUntil = update.cooldownUntil;
+    if (update.slot === "special") localCallingSpecialCooldownUntil = update.cooldownUntil;
+    else localCallingCooldownUntil = update.cooldownUntil;
     localBuildPathId = update.pathId;
-    localCallingAbilityId = update.abilityId;
-    combatHud.setCalling(update.pathId, update.abilityId, localBuildPathRank, localCallingAugmentId,
-      localCallingAugmentProgress, localMasteredCallingAugments);
+    if (update.slot !== "special") {
+      localCallingAbilityId = update.abilityId;
+      combatHud.setCalling(update.pathId, update.abilityId, localBuildPathRank, localCallingAugmentId,
+        localCallingAugmentProgress, localMasteredCallingAugments);
+    }
     status.textContent = `${update.ability} · ${update.detail.toLowerCase()}.`;
   });
   room.onMessage("calling:ability:effect", (effect: CallingAbilityEffect) => createCallingImpact(effect));
@@ -10908,7 +10946,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     authoritativeLocalPosition.set(spawn.x, spawn.y, spawn.z);
     cameraFocus.set(spawn.x, spawn.y, spawn.z);
     cameraFollow = { x: spawn.x, z: spawn.z };
-    localPowerCooldownUntil = 0; localSpecialCooldownUntil = 0; localCallingCooldownUntil = 0;
+    localPowerCooldownUntil = 0; localSpecialCooldownUntil = 0; localCallingCooldownUntil = 0; localCallingSpecialCooldownUntil = 0;
     cutawaySliceY = null;
     defeatScreen.hidden = true;
     worldReady = false;
@@ -11107,6 +11145,9 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
         if (message.reason !== "cooldown") localSpecialCooldownUntil = 0;
         showCombatFeedback(message.reason === "cooldown" ? "SPECIAL RECHARGING" : "SPECIAL BLOCKED", "hurt");
       } else {
+        localFieldSpecialSelected = fieldSpecialSelectionBeforeEquip;
+        combatHud.setFieldSpecialSelected(localFieldSpecialSelected);
+        updateControlsHelp();
         showCombatFeedback("LOADOUT BLOCKED", "hurt");
       }
     }
@@ -11147,6 +11188,9 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     powerServerReady = false;
     localSpecialCooldownUntil = 0;
     localCallingCooldownUntil = 0;
+    localCallingSpecialCooldownUntil = 0;
+    localFieldSpecialSelected = false;
+    combatHud.setFieldSpecialSelected(false);
     callingAbilityPendingUntil = 0;
     combatHud.setCallingPending(false);
     localSilverDepthsRunStage = 0;

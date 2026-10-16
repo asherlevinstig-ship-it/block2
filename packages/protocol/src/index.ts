@@ -167,9 +167,9 @@ export function experienceLevelMultiplier(playerLevel: number, enemyLevel: numbe
   return gap >= 5 ? 1.75 : gap >= 2 ? 1.4 : gap <= -6 ? .1 : gap <= -4 ? .25 : gap <= -2 ? .5 : 1;
 }
 export const CHARACTER_MILESTONES = [
-  { level: 2, id: "first_power", name: "First Power", detail: "Shockwave and the Power slot unlock; cast with R" },
-  { level: 3, id: "second_power", name: "Second Power Slot", detail: "Equip a second Power and cast it with T" },
-  { level: 4, id: "first_special", name: "First Special", detail: "Hunter's Mark and the Special slot unlock; cast with F" },
+  { level: 2, id: "first_power", name: "Calling Power", detail: "Your Calling's first ability unlocks; cast with G" },
+  { level: 4, id: "first_special", name: "Calling Special", detail: "Your Calling's special ability unlocks; cast with F" },
+  { level: 5, id: "second_power", name: "Weapon Techniques", detail: "Equip additional Power techniques for R and T" },
   { level: 5, id: "advanced_smithing", name: "Advanced Smithing", detail: "Forged weapons and iron armour become available" },
   { level: 7, id: "silver_depths", name: "The Silver Depths", detail: "Accept the second expedition from the blacksmith" },
   { level: 10, id: "frontier_contracts", name: "Frontier Contracts", detail: "Track elite Frontier encounters and bosses" },
@@ -206,7 +206,7 @@ export const BUILD_PATHS = {
 export type BuildPathId = keyof typeof BUILD_PATHS;
 export const CALLING_ABILITIES = {
   tank: { name: "Bulwark", cooldownMs: 18_000, description: "Brace for 5 seconds, reducing every incoming hit by 1." },
-  mage: { name: "Arcane Surge", cooldownMs: 16_000, description: "Immediately refresh Power and restore 30 stamina." },
+  mage: { name: "Arcane Surge", cooldownMs: 16_000, description: "Pulse nearby enemies, refresh a weapon technique, and restore stamina." },
   assassin: { name: "Vanish", cooldownMs: 14_000, description: "Break pursuit, conceal yourself, and empower your next strike." },
   thief: { name: "Smoke Bomb", cooldownMs: 18_000, description: "Divert nearby enemies, conceal yourself, and restore 20 stamina." },
   ranger: { name: "Volley Focus", cooldownMs: 12_000, description: "Empower your next 3 ranged hits with +1 damage." },
@@ -216,7 +216,7 @@ export const CALLING_ABILITY_OPTIONS = [
   { id: "tank_bulwark", pathId: "tank", name: "Bulwark", category: "Core", unlockRank: 0, cooldownMs: 18_000, description: "Brace and reduce every incoming hit." },
   { id: "tank_challenge", pathId: "tank", name: "Challenge", category: "Utility", unlockRank: 2, cooldownMs: 20_000, description: "Provoke nearby enemies and recover stamina." },
   { id: "tank_earthbreaker", pathId: "tank", name: "Earthbreaker", category: "Aggressive", unlockRank: 3, cooldownMs: 22_000, description: "Damage and stagger all nearby enemies." },
-  { id: "mage_arcane_surge", pathId: "mage", name: "Arcane Surge", category: "Core", unlockRank: 0, cooldownMs: 16_000, description: "Refresh Power and restore stamina." },
+  { id: "mage_arcane_surge", pathId: "mage", name: "Arcane Surge", category: "Core", unlockRank: 0, cooldownMs: 16_000, description: "Pulse nearby enemies and restore stamina; later refresh your weapon technique." },
   { id: "mage_mana_shield", pathId: "mage", name: "Mana Shield", category: "Utility", unlockRank: 2, cooldownMs: 18_000, description: "Reduce the next three incoming hits." },
   { id: "mage_overload", pathId: "mage", name: "Overload", category: "Aggressive", unlockRank: 3, cooldownMs: 20_000, description: "Empower the next Power with bonus damage." },
   { id: "assassin_vanish", pathId: "assassin", name: "Vanish", category: "Core", unlockRank: 0, cooldownMs: 14_000, description: "Break pursuit and empower your next strike." },
@@ -229,8 +229,12 @@ export const CALLING_ABILITY_OPTIONS = [
   { id: "ranger_disengage", pathId: "ranger", name: "Disengage", category: "Utility", unlockRank: 2, cooldownMs: 15_000, description: "Leap backward and empower your next two shots." },
   { id: "ranger_deadeye", pathId: "ranger", name: "Deadeye", category: "Aggressive", unlockRank: 3, cooldownMs: 18_000, description: "Greatly empower your next two ranged hits." },
   { id: "healer_field_mend", pathId: "healer", name: "Field Mend", category: "Core", unlockRank: 0, cooldownMs: 15_000, description: "Heal the most injured nearby ally; self-heal if no ally needs help." },
+  { id: "healer_renewal", pathId: "healer", name: "Renewal", category: "Utility", unlockRank: 2, cooldownMs: 24_000, description: "Restore health to yourself and injured allies nearby." },
 ] as const;
 export type CallingAbilityId = typeof CALLING_ABILITY_OPTIONS[number]["id"];
+export function callingStarterAbility(pathId: BuildPathId, slot: "power" | "special") {
+  return CALLING_ABILITY_OPTIONS.find(option => option.pathId === pathId && option.category === (slot === "power" ? "Core" : "Utility"))!;
+}
 export const CALLING_ABILITY_AUGMENTS = [
   { id: "bulwark_guardian_wall", abilityId: "tank_bulwark", name: "Guardian Wall", unlockRank: 2, description: "+2s duration." },
   { id: "bulwark_iron_skin", abilityId: "tank_bulwark", name: "Iron Skin", unlockRank: 2, description: "Reduce each hit by 2 instead of 1." },
@@ -299,16 +303,17 @@ export const CALLING_AUGMENT_TRIALS = {
 export const CallingAbilityEquipRequestSchema = z.object({
   abilityId: z.enum(["tank_bulwark", "tank_challenge", "tank_earthbreaker", "mage_arcane_surge", "mage_mana_shield", "mage_overload",
     "assassin_vanish", "assassin_death_mark", "assassin_blade_dance", "thief_smoke_bomb", "thief_decoy", "thief_escape_artist",
-    "ranger_volley_focus", "ranger_disengage", "ranger_deadeye", "healer_field_mend"]),
+    "ranger_volley_focus", "ranger_disengage", "ranger_deadeye", "healer_field_mend", "healer_renewal"]),
 }).strict();
 export const CallingAugmentEquipRequestSchema = z.object({
   augmentId: z.enum(CALLING_ABILITY_AUGMENTS.map(option => option.id) as [CallingAugmentId, ...CallingAugmentId[]]),
 }).strict();
-export const CallingAbilityRequestSchema = z.object({ requestId: z.string().min(1).max(80), yaw: z.number().finite().optional() }).strict();
+export const CallingAbilityRequestSchema = z.object({ requestId: z.string().min(1).max(80), yaw: z.number().finite().optional(), slot: z.enum(["power", "special"]).optional() }).strict();
 export type CallingAbilityUpdate = {
   requestId: string;
   pathId: BuildPathId;
   abilityId: CallingAbilityId;
+  slot?: "power" | "special";
   ability: string;
   detail: string;
   cooldownUntil: number;

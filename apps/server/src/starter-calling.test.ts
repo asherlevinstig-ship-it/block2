@@ -1,0 +1,29 @@
+import { describe, expect, it, vi } from "vitest";
+import { WorldRoom } from "./game-room.js";
+import { PlayerState, WorldState } from "./schema.js";
+import { WORLD_SAFE_CENTER } from "./radial-difficulty.js";
+import { parseBuildPathState } from "./build-paths.js";
+
+describe("starter Calling choice", () => {
+  it.each([
+    ["mage", "magic_focus"],
+    ["ranger", "bow"],
+    ["tank", "longsword"],
+  ] as const)("lets a level-1 player choose %s and equips the appropriate starter weapon", (pathId, handId) => {
+    const room = new WorldRoom(); room.setState(new WorldState());
+    const internal = room as any; internal.roomKind = "overworld";
+    vi.spyOn(internal, "persistPlayer").mockResolvedValue(undefined);
+    const player = new PlayerState();
+    Object.assign(player, { x: WORLD_SAFE_CENTER.x, z: WORLD_SAFE_CENTER.z, level: 1 });
+    room.state.players.set("newcomer", player);
+    const client = { sessionId: "newcomer", send: vi.fn() } as any;
+    internal.handleBuildPath(client, { action: "sync" });
+    const update = client.send.mock.calls.find(([name]: [string]) => name === "build:path")?.[1];
+    expect(update.canChoose).toBe(true);
+    expect(update.candidates.map((candidate: { pathId: string }) => candidate.pathId).sort())
+      .toEqual(["assassin", "healer", "mage", "ranger", "tank", "thief"]);
+    internal.handleBuildPath(client, { action: "choose", pathId });
+    expect(parseBuildPathState(player.huntLoadoutsJson).selectedPathId).toBe(pathId);
+    expect(player.mainHandId).toBe(handId);
+  });
+});

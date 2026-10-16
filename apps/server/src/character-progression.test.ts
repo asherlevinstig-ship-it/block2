@@ -42,7 +42,8 @@ describe("character progression", () => {
     expect(milestoneUnlocked(1, "first_power")).toBe(false);
     expect(milestoneUnlocked(2, "first_power")).toBe(true);
     expect(milestoneUnlocked(2, "second_power")).toBe(false);
-    expect(milestoneUnlocked(3, "second_power")).toBe(true);
+    expect(milestoneUnlocked(3, "second_power")).toBe(false);
+    expect(milestoneUnlocked(5, "second_power")).toBe(true);
     expect(milestoneUnlocked(3, "first_special")).toBe(false);
     expect(milestoneUnlocked(4, "first_special")).toBe(true);
     expect(milestoneUnlocked(9, "frontier_contracts")).toBe(false);

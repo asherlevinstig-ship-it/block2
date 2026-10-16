@@ -506,6 +506,7 @@ html.onboarding-active #hud #target, html.onboarding-active #hud #players { disp
   font-weight: 900;
   letter-spacing: .08em;
 }
+#special-picker [data-calling-special] { grid-column: 1 / -1; min-height: 30px; }
 #special-picker button[aria-pressed="true"] {
   border-color: rgb(191 126 255 / 58%);
   background: rgb(73 34 98 / 88%);

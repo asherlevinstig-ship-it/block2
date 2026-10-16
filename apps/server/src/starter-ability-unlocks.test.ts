@@ -21,11 +21,16 @@ describe("starter ability progression", () => {
     player.level = 2;
     client.send.mockClear();
     internal.handlePowerEquip(client, { requestId: "power-equip-2", powerId: "eruption" });
-    expect(player.equippedPower).toBe("eruption");
+    expect(player.equippedPower).toBe("shockwave");
     internal.handleSpecialEquip(client, { requestId: "special-equip-2", specialId: "bramble_snare" });
     expect(client.send).toHaveBeenCalledWith("action:rejected", expect.objectContaining({ reason: "missing" }));
     player.level = 4;
     internal.handleSpecialEquip(client, { requestId: "special-equip-4", specialId: "bramble_snare" });
+    expect(player.equippedSpecial).toBe("hunters_mark");
+    player.level = 5;
+    internal.handlePowerEquip(client, { requestId: "power-equip-5", powerId: "eruption" });
+    expect(player.equippedPower).toBe("eruption");
+    internal.handleSpecialEquip(client, { requestId: "special-equip-5", specialId: "bramble_snare" });
     expect(player.equippedSpecial).toBe("bramble_snare");
   });
 });

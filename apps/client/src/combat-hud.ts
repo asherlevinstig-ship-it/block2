@@ -9,6 +9,7 @@ import {
   CALLING_ABILITY_OPTIONS,
   CALLING_ABILITY_AUGMENTS,
   CALLING_AUGMENT_TRIALS,
+  callingStarterAbility,
   huntSetForLoadout,
   type ArmourId,
   type MainHandId,
@@ -36,6 +37,7 @@ const activePowerSlot = signal<PowerSlot>("primary");
 const characterLevel = signal(1);
 const seismicMastery = signal<SeismicMasteryId>("advancing_fault");
 const special = signal<SpecialId>("hunters_mark");
+const fieldSpecialSelected = signal(false);
 const powerAiming = signal(false);
 const specialAiming = signal(false);
 const calling = signal<BuildPathId | null>(null);
@@ -94,14 +96,14 @@ function MainHandLoadout() {
 function PowerLoadout() {
   const selectedHand = mainHand.value;
   const selectedPower = activePowerSlot.value === "primary" ? primaryPower.value : secondaryPower.value;
-  const secondaryLocked = characterLevel.value < 3;
+  const secondaryLocked = characterLevel.value < 5;
   const compatible = isPowerCompatibleWithMainHand(POWER_DEFINITIONS[selectedPower], selectedHand);
   const cooldown = powerCooldown.value;
-  const locked = characterLevel.value < 2;
+  const locked = characterLevel.value < 5;
   return h("button", { id: "power-slot", type: "button", disabled: locked,
-    "aria-label": locked ? "Power unlocks at level 2" : `Use ${POWER_DEFINITIONS[selectedPower].name}`,
+    "aria-label": locked ? "Weapon techniques unlock at level 5" : `Use ${POWER_DEFINITIONS[selectedPower].name}`,
     class: `${locked ? "locked" : compatible ? "" : "incompatible"} ${!locked && cooldown.ready && compatible && !powerAiming.value ? "ready" : ""} ${powerAiming.value ? "aiming" : ""}`.trim() },
-    h("span", null, "POWER"), h("strong", { id: "power-name" }, locked ? "Unlocks at LV 2" : POWER_DEFINITIONS[selectedPower].name),
+    h("span", null, "TECHNIQUE"), h("strong", { id: "power-name" }, locked ? "Unlocks at LV 5" : POWER_DEFINITIONS[selectedPower].name),
     h("em", { id: "power-cooldown-label" }, locked ? "KEEP FIGHTING" : cooldown.label), h("i", { id: "power-cooldown-fill", style: { width: `${locked ? 0 : cooldown.percent}%` } }),
   );
 }
@@ -109,7 +111,7 @@ function PowerLoadout() {
 function LoadoutDrawer() {
   const selectedHand = mainHand.value;
   const selectedPower = activePowerSlot.value === "primary" ? primaryPower.value : secondaryPower.value;
-  const secondaryLocked = characterLevel.value < 3;
+  const secondaryLocked = characterLevel.value < 5;
   return h("aside", { id: "combat-loadout-drawer", hidden: !loadoutOpen.value, "aria-label": "Combat loadout" },
     h("header", null,
       h("div", null, h("span", null, "FIELD LOADOUT"), h("strong", null, "Prepare your combat kit")),
@@ -122,15 +124,15 @@ function LoadoutDrawer() {
       ),
     ),
     h("section", { class: "loadout-group" },
-      h("p", null, h("span", null, "POWERS"), h("small", null, characterLevel.value < 2 ? "Unlocks at level 2" : "Choose slot, then technique")),
+      h("p", null, h("span", null, "WEAPON TECHNIQUES"), h("small", null, characterLevel.value < 5 ? "Unlocks at level 5" : "Choose slot, then technique")),
       h("div", { id: "power-loadout-slots", role: "group", "aria-label": "Power loadout slots" },
-        h("button", { type: "button", "data-power-slot": "primary", "aria-pressed": String(activePowerSlot.value === "primary"), disabled: characterLevel.value < 2 }, h("span", null, "R"), h("strong", null, characterLevel.value < 2 ? "LOCKED · LV 2" : POWER_DEFINITIONS[primaryPower.value].name.toUpperCase())),
-        h("button", { type: "button", "data-power-slot": "secondary", "aria-pressed": String(activePowerSlot.value === "secondary"), disabled: secondaryLocked }, h("span", null, "T"), h("strong", null, secondaryLocked ? "LOCKED · LV 3" : POWER_DEFINITIONS[secondaryPower.value].name.toUpperCase())),
+        h("button", { type: "button", "data-power-slot": "primary", "aria-pressed": String(activePowerSlot.value === "primary"), disabled: characterLevel.value < 5 }, h("span", null, "R"), h("strong", null, characterLevel.value < 5 ? "LOCKED · LV 5" : POWER_DEFINITIONS[primaryPower.value].name.toUpperCase())),
+        h("button", { type: "button", "data-power-slot": "secondary", "aria-pressed": String(activePowerSlot.value === "secondary"), disabled: secondaryLocked }, h("span", null, "T"), h("strong", null, secondaryLocked ? "LOCKED · LV 5" : POWER_DEFINITIONS[secondaryPower.value].name.toUpperCase())),
       ),
       h("div", { id: "power-picker", role: "group", "aria-label": "Equipped Power" }, POWER_IDS.map(id => {
         const allowed = isPowerCompatibleWithMainHand(POWER_DEFINITIONS[id], selectedHand);
-        return h("button", { type: "button", "data-power": id, "aria-pressed": String(id === selectedPower), disabled: characterLevel.value < 2 || !allowed,
-          title: characterLevel.value < 2 ? "Powers unlock at level 2" : allowed ? `${POWER_DEFINITIONS[id].name} is compatible with ${MAIN_HAND_DEFINITIONS[selectedHand].name}` : `${POWER_DEFINITIONS[id].name} requires a melee main hand` }, characterLevel.value < 2 ? "LOCKED" : POWER_LABELS[id]);
+        return h("button", { type: "button", "data-power": id, "aria-pressed": String(id === selectedPower), disabled: characterLevel.value < 5 || !allowed,
+          title: characterLevel.value < 5 ? "Weapon techniques unlock at level 5" : allowed ? `${POWER_DEFINITIONS[id].name} is compatible with ${MAIN_HAND_DEFINITIONS[selectedHand].name}` : `${POWER_DEFINITIONS[id].name} requires a melee main hand` }, characterLevel.value < 5 ? "LOCKED" : POWER_LABELS[id]);
       })),
       h("section", { id: "seismic-upgrades", hidden: selectedPower !== "seismic_cleave", "aria-label": "Seismic Cleave upgrades" },
         h("p", null, h("span", null, "ACTIVE AUGMENTS"), h("strong", null, "Fault Reach · Aftershock")),
@@ -141,10 +143,12 @@ function LoadoutDrawer() {
       ),
     ),
     h("section", { class: "loadout-group" },
-      h("p", null, h("span", null, "SPECIAL"), h("small", null, characterLevel.value < 4 ? "Unlocks at level 4" : SPECIAL_DEFINITIONS[special.value].name)),
-      h("div", { id: "special-picker", role: "group", "aria-label": "Equipped Special" },
-        h("button", { type: "button", "data-special": "hunters_mark", "aria-pressed": String(special.value === "hunters_mark"), disabled: characterLevel.value < 4 || special.value === "venom_fan" }, characterLevel.value < 4 ? "LOCKED · LV 4" : "MARK"),
-        h("button", { type: "button", "data-special": "bramble_snare", "aria-pressed": String(special.value === "bramble_snare"), disabled: characterLevel.value < 4 || special.value === "venom_fan" }, characterLevel.value < 4 ? "LOCKED · LV 4" : "SNARE"),
+      h("p", null, h("span", null, "SPECIAL"), h("small", null, characterLevel.value < 4 ? "Calling Special unlocks at level 4" : special.value === "venom_fan" ? "Venom Focus binds Venom Fan" : "Your Calling first; optional field techniques at level 5")),
+      h("div", { id: "special-picker", role: "group", "aria-label": "Special technique" },
+        h("button", { type: "button", "data-calling-special": "true", "aria-pressed": String(!fieldSpecialSelected.value && special.value !== "venom_fan"), disabled: !calling.value || characterLevel.value < 4 || special.value === "venom_fan" },
+          characterLevel.value < 4 ? "LOCKED · LV 4" : calling.value ? callingStarterAbility(calling.value, "special").name.toUpperCase() : "CHOOSE CALLING"),
+        h("button", { type: "button", "data-special": "hunters_mark", "aria-pressed": String(fieldSpecialSelected.value && special.value === "hunters_mark"), disabled: characterLevel.value < 5 || special.value === "venom_fan" }, characterLevel.value < 5 ? "LV 5 · MARK" : "MARK"),
+        h("button", { type: "button", "data-special": "bramble_snare", "aria-pressed": String(fieldSpecialSelected.value && special.value === "bramble_snare"), disabled: characterLevel.value < 5 || special.value === "venom_fan" }, characterLevel.value < 5 ? "LV 5 · SNARE" : "SNARE"),
       ),
     ),
     calling.value ? h("section", { class: "loadout-group" },
@@ -176,13 +180,15 @@ function LoadoutDrawer() {
 }
 
 function SpecialLoadout() {
-  const selected = special.value;
+  const selected = calling.value ? callingStarterAbility(calling.value, "special") : null;
   const cooldown = specialCooldown.value;
-  const locked = characterLevel.value < 4;
+  const fieldSpecial = characterLevel.value >= 5 && (fieldSpecialSelected.value || special.value === "venom_fan");
+  const name = fieldSpecial ? SPECIAL_DEFINITIONS[special.value].name : selected?.name;
+  const locked = characterLevel.value < 4 || !selected;
   return h("button", { id: "special-slot", type: "button", disabled: locked,
-      "aria-label": locked ? "Special unlocks at level 4" : `Use ${SPECIAL_DEFINITIONS[selected].name}`,
+      "aria-label": locked ? "Choose a Calling; Special unlocks at level 4" : `Use ${name}`,
       class: `${locked ? "locked" : cooldown.ready && !specialAiming.value ? "ready" : ""} ${specialAiming.value ? "aiming" : ""}`.trim() },
-      h("span", null, "SPECIAL"), h("strong", { id: "special-name" }, locked ? "Unlocks at LV 4" : SPECIAL_DEFINITIONS[selected].name),
+      h("span", null, fieldSpecial ? "FIELD TECHNIQUE" : "CALLING SPECIAL"), h("strong", { id: "special-name" }, locked ? "Unlocks at LV 4" : name),
       h("em", { id: "special-cooldown-label" }, locked ? "COMING LATER" : cooldown.label), h("i", { id: "special-cooldown-fill", style: { width: `${locked ? 0 : cooldown.percent}%` } }),
   );
 }
@@ -193,11 +199,12 @@ function CallingLoadout() {
     ?? CALLING_ABILITY_OPTIONS.find(option => option.pathId === selected && option.unlockRank === 0);
   const cooldown = callingCooldown.value;
   const state = callingState.value;
-  return h("button", { id: "calling-slot", type: "button", disabled: !selected,
-      "aria-label": definition ? `Use ${definition.name}` : "Choose a Calling to unlock its ability",
-      class: `${cooldown.ready && selected && !callingPending.value ? "ready" : ""} ${callingPending.value ? "anticipating" : ""} ${state ? "active-state" : ""}`.trim() },
-      h("span", null, "CALLING"),
-      h("strong", { id: "calling-name" }, definition?.name ?? "Unbound"),
+  const unlocked = Boolean(selected && characterLevel.value >= 2);
+  return h("button", { id: "calling-slot", type: "button", disabled: !unlocked,
+      "aria-label": unlocked && definition ? `Use ${definition.name}` : "Choose a Calling; Power unlocks at level 2",
+      class: `${cooldown.ready && unlocked && !callingPending.value ? "ready" : ""} ${callingPending.value ? "anticipating" : ""} ${state ? "active-state" : ""}`.trim() },
+      h("span", null, "CALLING POWER · G"),
+      h("strong", { id: "calling-name" }, unlocked ? definition?.name ?? "Unbound" : "Unlocks at LV 2"),
       h("em", { id: "calling-cooldown-label" }, callingPending.value ? "CAST" : cooldown.label),
       state ? h("b", { id: "calling-state-label" }, h("span", null, state.label), h("small", null, state.detail)) : null,
       h("i", { id: "calling-cooldown-fill", style: { width: `${cooldown.percent}%` } }),
@@ -231,6 +238,7 @@ export const combatHud = {
   },
   setSeismicMastery(value: SeismicMasteryId): void { setIfChanged(seismicMastery, value); },
   setSpecial(value: SpecialId): void { setIfChanged(special, value); },
+  setFieldSpecialSelected(value: boolean): void { setIfChanged(fieldSpecialSelected, value); },
   setCalling(value: BuildPathId | null, abilityId: CallingAbilityId | null, rank: number, augmentId: CallingAugmentId | null = null,
     progress: Partial<Record<CallingAugmentId, number>> = {}, mastered: CallingAugmentId[] = []): void {
     batch(() => {

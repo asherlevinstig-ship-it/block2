@@ -1,5 +1,6 @@
 import { Client, Room } from "@colyseus/core";
 import { GREENWOOD_MASTERY_CAP, MISTFEN_MASTERY_CAP, greenwoodMasteryRank, mistfenMasteryRank } from "@blockcraft/protocol";
+import { callingStarterAbility } from "@blockcraft/protocol";
 import type { SchemaType } from "@colyseus/schema";
 import { ShadowMoveInput, stepShadowMovement, type ShadowPose } from "./movement-shadow.js";
 import { randomUUID } from "node:crypto";
@@ -425,6 +426,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly rangerFieldFocusHits = new Map<string, number>();
   private readonly tankFieldWards = new Set<string>();
   private readonly callingAbilityReadyAt = new Map<string, number>();
+  private readonly callingSpecialReadyAt = new Map<string, number>();
   private readonly tankBulwarkUntil = new Map<string, number>();
   private readonly northwatchExposedUntil = new Map<string, number>();
   private readonly mageBarrierHits = new Map<string, number>();
@@ -989,6 +991,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.rangerFieldFocusHits.delete(client.sessionId);
     this.tankFieldWards.delete(client.sessionId);
     this.callingAbilityReadyAt.delete(client.sessionId);
+    this.callingSpecialReadyAt.delete(client.sessionId);
     this.tankBulwarkUntil.delete(client.sessionId);
     this.mageBarrierHits.delete(client.sessionId);
     this.mageOverloadReady.delete(client.sessionId);
@@ -4437,7 +4440,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (!player) return;
     const state = parseBuildPathState(player.huntLoadoutsJson);
     const xp = state.selectedPathId ? state.xp[state.selectedPathId] ?? 0 : 0;
-    const candidates = player.level >= 5 ? buildPathAffinities(player) : [];
+    const candidates = buildPathAffinities(player);
     const rank = state.selectedPathId ? effectiveBuildPathRank(state, state.selectedPathId) : 0;
     const specializationId = state.selectedPathId ? state.specializations[state.selectedPathId] ?? null : null;
     const specialization = state.selectedPathId && specializationId
@@ -4448,7 +4451,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       selectedCallingAugmentId: state.selectedPathId ? selectedCallingAugment(state, selectedCallingAbility(state, state.selectedPathId)) : null,
       callingAugmentProgress: state.callingAugmentProgress,
       masteredCallingAugments: state.masteredCallingAugments,
-      nextRankXp: nextBuildRankXp(xp), candidates, canChoose: player.level >= 5,
+      nextRankXp: nextBuildRankXp(xp), candidates, canChoose: true,
       selectedSpecializationId: specializationId,
       canSpecialize: Boolean(state.selectedPathId && rank >= 3 && !state.specializations[state.selectedPathId]),
       masterTrial: specialization ? { name: specialization.name, description: specialization.trial, progress: trialProgress,
@@ -4461,7 +4464,6 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const player = this.state.players.get(client.sessionId);
     if (!parsed.success || !player) return;
     if (parsed.data.action === "sync") { this.sendBuildPath(client); return; }
-    if (player.level < 5) { this.sendBuildPath(client, `Your Calling reveals itself at level 5. You are level ${player.level}.`); return; }
     if (this.roomKind !== "overworld" || !isInsideTownSafeZone(player)) {
       this.sendBuildPath(client, "Return to the safety of Town before committing to a Calling."); return;
     }
@@ -4481,10 +4483,16 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const pathId = parsed.data.pathId;
     const candidates = buildPathAffinities(player);
     if (!pathId || !candidates.some(candidate => candidate.pathId === pathId)) {
-      this.sendBuildPath(client, "Choose a recommended path or Healer for team support. Change gear to reveal other paths."); return;
+      this.sendBuildPath(client, "Choose one of the six Callings. You can change it in Town."); return;
     }
     const previous = parseBuildPathState(player.huntLoadoutsJson).selectedPathId;
     this.setPlayerBuildData(player, this.huntLoadouts(player), chooseBuildPath(parseBuildPathState(player.huntLoadoutsJson), pathId));
+    if (player.level <= 2 && player.mainHandId === "longsword" && (pathId === "mage" || pathId === "ranger")) {
+      const hand = MAIN_HAND_DEFINITIONS[pathId === "mage" ? "magic_focus" : "bow"];
+      player.mainHandId = hand.id; player.mainHandTag = hand.tag;
+      player.equippedPower = compatiblePowerOrFallback(player.equippedPower, hand.tag);
+      player.equippedPowerSecondary = compatiblePowerOrFallback(player.equippedPowerSecondary, hand.tag);
+    }
     void this.persistPlayer(client.sessionId, player, true);
     this.sendBuildPath(client, previous === pathId ? `${BUILD_PATHS[pathId].name} remains your active Calling.`
       : `${BUILD_PATHS[pathId].name.toUpperCase()} CALLING ACCEPTED · relevant victories now build Path Mastery.`);
@@ -4551,11 +4559,17 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       client.send("chat:notice", "Choose a Calling in Town before using a Calling ability.");
       return;
     }
-    const abilityId = selectedCallingAbility(state, pathId);
+    const slot = parsed.data.slot ?? "power";
+    if (!milestoneUnlocked(player.level, slot === "special" ? "first_special" : "first_power")) {
+      client.send("chat:notice", `${slot === "special" ? "Calling Special" : "Calling Power"} has not unlocked yet.`);
+      return;
+    }
+    const abilityId = slot === "special" ? callingStarterAbility(pathId, "special").id : selectedCallingAbility(state, pathId);
     const augmentId = selectedCallingAugment(state, abilityId);
     const definition = CALLING_ABILITY_OPTIONS.find(option => option.id === abilityId)!;
     const now = Date.now();
-    const readyAt = this.callingAbilityReadyAt.get(client.sessionId) ?? 0;
+    const cooldowns = slot === "special" ? this.callingSpecialReadyAt : this.callingAbilityReadyAt;
+    const readyAt = cooldowns.get(client.sessionId) ?? 0;
     if (now < readyAt) {
       client.send("chat:notice", `${definition.name.toUpperCase()} · recovers in ${Math.max(1, Math.ceil((readyAt - now) / 1_000))}s.`);
       return;
@@ -4571,9 +4585,17 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       client.send("chat:notice", "FIELD MEND · no injured ally within 8m and line of sight.");
       return;
     }
+    const renewalTargets = abilityId === "healer_renewal"
+      ? [...this.state.players.entries()].filter(([, target]) => target.health > 0 && target.health < target.maxHealth
+        && Math.abs(target.y - player.y) <= 2.5 && Math.hypot(target.x - player.x, target.z - player.z) <= 7
+        && hasCombatLineOfSight(player, target, this.readWorldBlock)) : [];
+    if (abilityId === "healer_renewal" && renewalTargets.length === 0) {
+      client.send("chat:notice", "RENEWAL · no injured allies nearby.");
+      return;
+    }
     const rank = this.buildPathRankFor(player, pathId);
     const cooldownUntil = now + definition.cooldownMs;
-    this.callingAbilityReadyAt.set(client.sessionId, cooldownUntil);
+    cooldowns.set(client.sessionId, cooldownUntil);
     let detail = "ACTIVATED";
     let durationMs: number | undefined;
     let effectTargetId: string | undefined;
@@ -4619,9 +4641,18 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const staminaBefore = player.stamina, specialRecovering = player.specialCooldownUntil > now;
       const stamina = 30 + rank * 5 + (augmentId === "surge_deep_reserves" ? 25 : 0);
       player.powerCooldownUntil = now;
+      const targets = nearbyMobs(4.5);
+      for (const [mobId, mob] of targets) {
+        const damage = damageAfterArmor(2, mob.armor, true);
+        this.combatContributions.record(mobId, client.sessionId, Math.min(mob.health, damage), now);
+        mob.health = Math.max(0, mob.health - damage); mob.hitSequence += 1;
+        this.alertHitMob(mobId, client.sessionId, now);
+        if (mob.health === 0) this.defeatMob(mobId, mob, client.sessionId, now);
+        else this.staggerMob(mobId, mob, now, 450, true);
+      }
       if (augmentId === "surge_temporal_flux") player.specialCooldownUntil = Math.max(now, player.specialCooldownUntil - 4_000);
       player.stamina = Math.min(player.maxStamina, player.stamina + stamina);
-      detail = `POWER REFRESHED · +${stamina} STAMINA`;
+      detail = `ARCANE PULSE · ${targets.length} HIT · +${stamina} STAMINA`;
       this.grantCallingTrial(client.sessionId, "surge_deep_reserves", player.stamina - staminaBefore);
       this.grantCallingTrial(client.sessionId, "surge_temporal_flux", specialRecovering ? 1 : 0);
     } else if (abilityId === "mage_mana_shield") {
@@ -4633,6 +4664,15 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const charges = augmentId === "overload_residual_charge" ? 2 : 1;
       this.mageOverloadCharges.set(client.sessionId, charges);
       detail = `NEXT ${charges > 1 ? `${charges} POWERS` : "POWER"} +${(rank >= 4 ? 4 : 3) + (augmentId === "overload_volatile_core" ? 2 : 0)} DAMAGE`;
+    } else if (abilityId === "healer_renewal") {
+      let healed = 0, allies = 0;
+      for (const [targetId, target] of renewalTargets) {
+        const restored = Math.min(2 + Number(rank >= 2), target.maxHealth - target.health);
+        target.health += restored; healed += restored; allies += 1;
+        if (targetId !== client.sessionId) this.clients.find(candidate => candidate.sessionId === targetId)
+          ?.send("chat:notice", `${player.name || "A HEALER"} used Renewal · +${restored} HP.`);
+      }
+      detail = `${allies} ALL${allies === 1 ? "Y" : "IES"} RESTORED · +${healed} HP`;
     } else if (abilityId === "healer_field_mend") {
       const [targetId, target] = healTarget!;
       const specialization = this.buildSpecializationFor(player, "healer");
@@ -4764,7 +4804,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const augment = augmentId ? CALLING_ABILITY_AUGMENTS.find(option => option.id === augmentId) : null;
     if (augment) detail += ` · ${augment.name.toUpperCase()}`;
     const update: CallingAbilityUpdate = {
-      requestId: parsed.data.requestId, pathId, abilityId, ability: definition.name, detail, cooldownUntil,
+      requestId: parsed.data.requestId, pathId, abilityId, ability: definition.name, detail, cooldownUntil, slot,
       ...(durationMs ? { durationMs } : {}),
     };
     client.send("calling:ability", update);
@@ -6556,7 +6596,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (!parsed.success) return this.reject(client, { action: "power", reason: "payload" });
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
-    if (!milestoneUnlocked(player.level, "first_power"))
+    if (!milestoneUnlocked(player.level, "second_power"))
       return this.reject(client, { requestId: parsed.data.requestId, action: "power", reason: "missing" });
     player.defending = false;
     const powerId = parsed.data.powerId as PowerId;
@@ -6641,7 +6681,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (!parsed.success) return this.reject(client, { action: "special", reason: "payload" });
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
-    if (!milestoneUnlocked(player.level, "first_special"))
+    if (!milestoneUnlocked(player.level, "second_power"))
       return this.reject(client, { requestId: parsed.data.requestId, action: "special", reason: "missing" });
     player.defending = false;
     if (parsed.data.specialId !== player.equippedSpecial) {
@@ -6720,7 +6760,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (!parsed.success) return this.reject(client, { action: "special", reason: "payload" });
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
-    if (!milestoneUnlocked(player.level, "first_special"))
+    if (!milestoneUnlocked(player.level, "second_power"))
       return this.reject(client, { requestId: parsed.data.requestId, action: "special", reason: "missing" });
     if (player.mainHandId === "venom_focus") return this.reject(client, { requestId: parsed.data.requestId, action: "loadout", reason: "compatibility" });
     if (this.pendingPowers.has(client.sessionId) || this.pendingAttacks.has(client.sessionId)) {
@@ -6742,7 +6782,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (!parsed.success) return this.reject(client, { action: "power", reason: "payload" });
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
-    if (!milestoneUnlocked(player.level, "first_power"))
+    if (!milestoneUnlocked(player.level, "second_power"))
       return this.reject(client, { requestId: parsed.data.requestId, action: "power", reason: "missing" });
     const definition = POWER_DEFINITIONS[parsed.data.powerId];
     if (!definition || !isPowerCompatible(definition, player.mainHandTag)) {

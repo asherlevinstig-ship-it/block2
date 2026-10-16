@@ -111,7 +111,7 @@ export function buildPathAffinities(source: BuildAffinitySource): BuildPathAffin
   if (source.equippedSpecial === "bramble_snare") add("ranger", 5, "Bramble Snare");
   const strongest = PATH_IDS.filter(pathId => pathId !== "healer")
     .map(pathId => ({ pathId, score: values[pathId].score, reasons: values[pathId].reasons }))
-    .sort((a, b) => b.score - a.score || PATH_IDS.indexOf(a.pathId) - PATH_IDS.indexOf(b.pathId)).slice(0, 3);
+    .sort((a, b) => b.score - a.score || PATH_IDS.indexOf(a.pathId) - PATH_IDS.indexOf(b.pathId));
   return [...strongest, { pathId: "healer", score: 0, reasons: ["team support"] }];
 }
 
