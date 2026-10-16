@@ -146,6 +146,48 @@ describe("distinct radial wilderness territories", () => {
     veteran.x = 200;
     expect(leader.leaderRematchTier).toBe(0);
   });
+  it("gives Assassins a fixed burst opening when a Northwatch escort falls", () => {
+    const { room, internal } = fixture();
+    const boss = room.state.mobs.get("northwatch-watchbreaker")!;
+    const assassin = new PlayerState();
+    assassin.huntLoadoutsJson = JSON.stringify({ buildPath: { selectedPathId: "assassin" } });
+    const tank = new PlayerState();
+    internal.openAreaLeaderAfterFollowerDefeat("northwatch-guard", 10_000);
+    expect(boss.combatState).toBe("recover");
+    expect(internal.northwatchAssassinOpening(assassin, "northwatch-watchbreaker", 10_001)).toBe(2);
+    expect(internal.northwatchAssassinOpening(tank, "northwatch-watchbreaker", 10_001)).toBe(0);
+    expect(internal.northwatchAssassinOpening(assassin, "northwatch-watchbreaker", 12_500)).toBe(0);
+  });
+  it("applies the Northwatch Assassin opening to a real weapon hit", () => {
+    const { room, internal } = fixture();
+    const boss = room.state.mobs.get("northwatch-watchbreaker")!;
+    boss.health = boss.maxHealth = 100; boss.armor = 0;
+    const assassin = new PlayerState(); Object.assign(assassin, { x: boss.x + 1, y: boss.y, z: boss.z });
+    assassin.huntLoadoutsJson = JSON.stringify({ buildPath: { selectedPathId: "assassin" } });
+    room.state.players.set("assassin", assassin);
+    internal.applyWeaponHit("assassin", { mainHandId: "longsword", step: 1 }, "northwatch-watchbreaker", 9_000);
+    const normalDamage = 100 - boss.health;
+    boss.health = 100; boss.combatState = "idle";
+    internal.openAreaLeaderAfterFollowerDefeat("northwatch-guard", 10_000);
+    internal.applyWeaponHit("assassin", { mainHandId: "longsword", step: 1 }, "northwatch-watchbreaker", 10_001);
+    expect(100 - boss.health).toBe(normalDamage + 2);
+  });
+  it("gives nearby Northwatch damage and defensive contributors personal loot after a long fight", () => {
+    vi.useFakeTimers(); vi.setSystemTime(90_000); vi.spyOn(Math, "random").mockReturnValue(.99);
+    const { room, internal } = fixture();
+    vi.spyOn(internal, "persistPlayer").mockResolvedValue(undefined);
+    const boss = room.state.mobs.get("northwatch-watchbreaker")!;
+    for (const id of ["tank", "assassin", "spectator"]) {
+      const player = new PlayerState(); Object.assign(player, { x: boss.x + 2, y: boss.y, z: boss.z });
+      room.state.players.set(id, player);
+    }
+    internal.combatContributions.recordSupport("northwatch-watchbreaker", "tank", 3);
+    internal.combatContributions.record("northwatch-watchbreaker", "assassin", 3, 10_000);
+    internal.defeatMob("northwatch-watchbreaker", boss, "assassin", 90_000);
+    const owners = [...room.state.lootDrops.values()].map(drop => drop.ownerId);
+    expect(owners).toContain("tank"); expect(owners).toContain("assassin");
+    expect(owners).not.toContain("spectator");
+  });
   it("resumes a patrol after loading, then collects its cache and reforges the cloak", () => {
     vi.useFakeTimers(); vi.setSystemTime(10_000);
     vi.spyOn(Math, "random").mockReturnValue(.99);

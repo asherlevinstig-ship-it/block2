@@ -425,6 +425,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly tankFieldWards = new Set<string>();
   private readonly callingAbilityReadyAt = new Map<string, number>();
   private readonly tankBulwarkUntil = new Map<string, number>();
+  private readonly northwatchExposedUntil = new Map<string, number>();
   private readonly mageBarrierHits = new Map<string, number>();
   private readonly mageOverloadReady = new Set<string>();
   private readonly mageOverloadCharges = new Map<string, number>();
@@ -2225,7 +2226,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const defeatedMistfenEvent = mobId === MISTFEN_EVENT_ID
       ? mistfenEventDefinition(this.realmEvents.mistfenVariant) : null;
     for (const key of this.venomBuildup.keys()) if (key.endsWith(`:${mobId}`)) this.venomBuildup.delete(key);
-    const credited = isRealmEventId(mobId)
+    const credited = isRealmEventId(mobId) || mobId === "northwatch-watchbreaker"
       ? this.combatContributions.eligiblePersistent(mobId, mob, this.state.players)
       : this.combatContributions.eligible(mobId, mob, this.state.players, now);
     // A long solo fight can age its early hits out of the contribution window.
@@ -2316,6 +2317,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
     mob.alive = false;
     if (mob.isMiniBoss) {
+      this.northwatchExposedUntil.delete(mobId);
       this.restoreMiniBossArena(mobId);
       this.areaLeaderPhases.delete(mobId);
       this.miniBossEngagedAt.delete(mobId);
@@ -2480,6 +2482,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const leaderId = leaderForFollower(followerId);
     const leader = leaderId ? this.state.mobs.get(leaderId) : undefined;
     if (!leaderId || !leader?.alive) return;
+    if (leaderId === "northwatch-watchbreaker") this.northwatchExposedUntil.set(leaderId, now + 2_500);
     leader.combatState = "recover";
     leader.stateUntil = Math.max(leader.stateUntil, now + 2_500);
     leader.targetId = "";
@@ -2498,6 +2501,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         || Math.hypot(player.x - leader.x, player.z - leader.z) > 28) continue;
       client.send("leader:exposed", { mobId: leaderId, durationMs: 2_500 } satisfies AreaLeaderExposed);
     }
+  }
+
+  private northwatchAssassinOpening(player: PlayerState, mobId: string, now: number): number {
+    return mobId === "northwatch-watchbreaker" && now < (this.northwatchExposedUntil.get(mobId) ?? 0)
+      && parseBuildPathState(player.huntLoadoutsJson).selectedPathId === "assassin" ? 2 : 0;
   }
 
   private enterAreaLeaderPhase(leaderId: string, leader: MobState, previous: AreaLeaderPhase, phase: AreaLeaderPhase, now: number): void {
@@ -3322,6 +3330,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         || parseBuildPathState(guard.huntLoadoutsJson).selectedPathId !== "tank" || this.buildPathRankFor(guard, "tank") < 2) continue;
       const beforeProtection = defense.damage;
       defense.damage = Math.max(0, defense.damage - (guardianMaster ? 3 : guardian ? 2 : 1) - (protectorTier >= 2 ? 1 : 0));
+      if (mobId === "northwatch-watchbreaker" && beforeProtection > defense.damage)
+        this.combatContributions.recordSupport(mobId, guardId, beforeProtection - defense.damage);
       if (guardian) this.grantMasterTrial(guardId, "guardian", beforeProtection - defense.damage);
       if (now - (this.fortressProcAt.get(guardId) ?? 0) >= 600) {
         this.fortressProcAt.set(guardId, now);
@@ -4565,8 +4575,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.grantCallingTrial(client.sessionId, "bulwark_guardian_wall", 1);
     } else if (abilityId === "tank_challenge") {
       const targets = nearbyMobs(8 + rank * .5 + (augmentId === "challenge_mass_provocation" ? 3 : 0));
-      for (const [mobId] of targets) {
+      for (const [mobId, mob] of targets) {
         const awareness = this.mobAwareness.get(mobId) ?? createMobAwareness();
+        if (mobId === "northwatch-watchbreaker" && awareness.targetId && awareness.targetId !== client.sessionId)
+          this.combatContributions.recordSupport(mobId, client.sessionId, Math.ceil(mob.maxHealth * .05));
         provokeMob(awareness, { id: client.sessionId, x: player.x, y: player.y, z: player.z, health: player.health }, now);
         this.mobAwareness.set(mobId, awareness);
       }
@@ -6901,7 +6913,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         const echoDamage = arcaneEcho ? damageAfterArmor(Math.max(1, Math.ceil(definition.damage * echoStrength)), mob.armor, true) : 0;
         arcaneEchoDamage = Math.max(arcaneEchoDamage, echoDamage);
         const damage = damageAfterArmor(definition.damage + payoff.bonusDamage + progressionAttackBonus(player) + mageOverloadBonus
-          + this.buildPathDamageBonus(player, mob, target.id, sessionId, now, "power") + shadowstepDamage, mob.armor, true)
+          + this.buildPathDamageBonus(player, mob, target.id, sessionId, now, "power") + shadowstepDamage
+          + this.northwatchAssassinOpening(player, target.id, now), mob.armor, true)
           + traitBonusDamage + echoDamage + (mageRank > 0 ? this.equipmentAffixTier(player, "volatile") : 0);
         const aftershock = pending.powerId === "seismic_cleave"
           && isSeismicAftershockTarget(impactCenter, pending.yaw, mob, resolvedRange);
@@ -7624,7 +7637,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         timing.damage + ironSwordDamageBonus(player.blacksmithUpgrades, pending.mainHandId)
           + reforgeWeaponDamageBonus(equipmentReforgeRank(player.reforgeRanksJson, pending.mainHandId))
           + progressionAttackBonus(player) + this.specialDamageBonus(sessionId, mobId, now) + perkBonusDamage + setBonusDamage
-          + this.buildPathDamageBonus(player, mob, mobId, sessionId, now, "weapon") + shadowstepDamage + pinBonusDamage,
+          + this.buildPathDamageBonus(player, mob, mobId, sessionId, now, "weapon") + shadowstepDamage + pinBonusDamage
+          + this.northwatchAssassinOpening(player, mobId, now),
         mob.armor,
       ) + traitBonusDamage + dodgeCounterBonus;
       this.combatContributions.record(mobId, sessionId, Math.min(mob.health, damage), now);

@@ -79,6 +79,30 @@ describe("hotbar Calling abilities", () => {
     }));
   });
 
+  it("credits a Tank who challenges Northwatch off an ally without dealing fake damage", () => {
+    const { room, internal, player, client } = fixture("tank", 70);
+    const ally = new PlayerState(); Object.assign(ally, { x: 51, y: 8, z: 50 }); room.state.players.set("ally", ally);
+    const boss = new MobState(); Object.assign(boss, { x: 52, y: 8, z: 50, alive: true, health: 52, maxHealth: 52 });
+    room.state.mobs.set("northwatch-watchbreaker", boss);
+    internal.mobAwareness.set("northwatch-watchbreaker", { targetId: "ally", lastSeen: { x: 51, y: 8, z: 50 }, seenAt: 10_000 });
+    internal.handleCallingAbilityEquip(client, { abilityId: "tank_challenge" });
+    internal.handleCallingAbility(client, { requestId: "northwatch-challenge" });
+    expect(internal.mobAwareness.get("northwatch-watchbreaker").targetId).toBe("hero");
+    expect(internal.combatContributions.eligiblePersistent("northwatch-watchbreaker", boss, room.state.players)).toContain("hero");
+    expect(internal.combatContributions.eligible("northwatch-watchbreaker", boss, room.state.players, 10_000)).toEqual([]);
+    expect(player.stamina).toBeGreaterThan(25);
+  });
+
+  it("credits Northwatch damage prevented by a Tank guarding an ally", () => {
+    const { room, internal, player } = fixture("tank", 70);
+    player.defending = true;
+    const ally = new PlayerState(); Object.assign(ally, { x: 51, y: 8, z: 50 }); room.state.players.set("ally", ally);
+    const boss = new MobState(); Object.assign(boss, { x: 52, y: 8, z: 50, alive: true, health: 20, maxHealth: 20 });
+    room.state.mobs.set("northwatch-watchbreaker", boss);
+    internal.damagePlayer("northwatch-watchbreaker", "ally", 2, 10_000, false);
+    expect(internal.combatContributions.eligiblePersistent("northwatch-watchbreaker", boss, room.state.players)).toContain("hero");
+  });
+
   it("publishes persistent charges and clears them as they are consumed", () => {
     const { internal, client, broadcast } = fixture("mage", 70);
     internal.handleCallingAbilityEquip(client, { abilityId: "mage_mana_shield" });

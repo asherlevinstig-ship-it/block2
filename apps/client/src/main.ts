@@ -5,7 +5,7 @@ import { nearestRoleFieldOpportunity, type RoleFieldPath } from "@blockcraft/vox
 import { confirmedRangedHit, projectileImpactCue } from "./ranged-feedback.js";
 import { heldFireStep } from "./held-fire.js";
 import { rangedAimYaw } from "./ranged-aim.js";
-import { activeCombatNearby, advanceBossHud, initialBossHud, leaderAttackLabel, leaderExposureLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
+import { activeCombatNearby, advanceBossHud, initialBossHud, leaderAttackLabel, leaderExposureLabel, leaderExposureRoleLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
 import { forestDungeonAtmosphere, forestDungeonNotice, portalNoticeFeedback } from "./forest-dungeon-presentation.js";
 import { objectiveGuidance, objectiveIcon } from "./objective-guidance.js";
 import { createSocialUI } from "./social-ui.js";
@@ -7791,7 +7791,7 @@ function updateBossHud(now: number): void {
   bossHud.dataset.enraged = String(bossHudState.enraged);
   bossHud.dataset.exposed = String(Boolean(exposedLabel));
   bossExposed.hidden = !exposedLabel;
-  bossExposed.textContent = exposedLabel;
+  bossExposed.textContent = leaderExposureRoleLabel(exposedLabel, nextBossId, localBuildPathId);
   bossRematch.hidden = !rematchLabel;
   bossRematch.textContent = pathChampion
     ? `${boss.leaderRematchTier >= 9 ? "ASCENDANT · TWO MECHANICS" : boss.leaderRematchTier >= 7 ? "VETERAN · ADVANCED ATTACK" : "NORMAL"} · ${boss.leaderRematchTier >= 9 ? "2× CACHE + FORGEMARK" : boss.leaderRematchTier >= 7 ? "1.5× CACHE" : "CHAMPION CACHE"}`

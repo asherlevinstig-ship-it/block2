@@ -15,6 +15,13 @@ export class CombatContributions {
     if (!totals) { totals = new Map(); this.totals.set(mobId, totals); }
     totals.set(playerId, (totals.get(playerId) ?? 0) + damage);
   }
+  /** Defensive actions count for persistent boss credit without pretending to deal damage. */
+  recordSupport(mobId: string, playerId: string, value: number): void {
+    if (!Number.isFinite(value) || value <= 0) return;
+    let totals = this.totals.get(mobId);
+    if (!totals) { totals = new Map(); this.totals.set(mobId, totals); }
+    totals.set(playerId, (totals.get(playerId) ?? 0) + value);
+  }
   eligible(mobId: string, mob: Pose & { maxHealth: number }, players: Iterable<[string, Pose & { health: number }]>, now: number): string[] {
     const contributors = this.mobs.get(mobId);
     const threshold = Math.max(1, Math.ceil(mob.maxHealth * .1));

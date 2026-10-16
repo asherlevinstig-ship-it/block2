@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeCombatNearby, advanceBossHud, initialBossHud, leaderAttackLabel, leaderAttackName, leaderExposureLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
+import { activeCombatNearby, advanceBossHud, initialBossHud, leaderAttackLabel, leaderAttackName, leaderExposureLabel, leaderExposureRoleLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
 const player = { x: 40, y: 8, z: 18, health: 5 };
 const boss = { x: 43, y: 8, z: 18, name: "Matriarch", alive: true, health: 24, maxHealth: 24, enraged: false };
 describe("boss HUD", () => {
@@ -89,6 +89,10 @@ describe("boss HUD", () => {
     expect(leaderExposureLabel(3500, 1000)).toBe("LEADER EXPOSED · 2.5s");
     expect(leaderExposureLabel(3500, 3499)).toBe("LEADER EXPOSED · 0.1s");
     expect(leaderExposureLabel(3500, 3500)).toBe("");
+    expect(leaderExposureRoleLabel("LEADER EXPOSED · 2.5s", "northwatch-watchbreaker", "assassin"))
+      .toBe("LEADER EXPOSED · 2.5s · STRIKE +2");
+    expect(leaderExposureRoleLabel("LEADER EXPOSED · 2.5s", "northwatch-watchbreaker", "tank"))
+      .toBe("LEADER EXPOSED · 2.5s");
   });
   it("keeps empowered rematch and reward information compact beside the health bar", () => {
     expect(leaderRematchLabel(0, "")).toBe("");

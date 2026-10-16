@@ -118,6 +118,10 @@ export function leaderExposureLabel(expiresAt: number, now: number): string {
   return remaining > 0 ? `LEADER EXPOSED · ${(Math.ceil(remaining / 100) / 10).toFixed(1)}s` : "";
 }
 
+export function leaderExposureRoleLabel(label: string, mobId: string, pathId: string | null): string {
+  return label && mobId === "northwatch-watchbreaker" && pathId === "assassin" ? `${label} · STRIKE +2` : label;
+}
+
 export function leaderRematchLabel(tier = 0, modifier = ""): string {
   if (modifier === "mirebreaker") return "MIREBREAKER REMATCH · LEGENDARY CACHE";
   if (modifier === "rootslayer") return "ROOTSLAYER REMATCH · LEGENDARY CACHE";
