@@ -11057,7 +11057,9 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       localPlayer.getPosition().clone(),
       authoritativeLocalPosition.clone(),
     );
-    if (message.action === "move") localPlayer.setPosition(authoritativeLocalPosition);
+    // A rate-limited movement packet is not a teleport. The next input can
+    // still be accepted, so let normal acknowledgement-based reconciliation
+    // settle the pose instead of snapping straight to an older server sample.
     if (message.action === "dodge") {
       const ownPlayer = room
         ? (room.state as { players?: { get(id: string): NetworkPlayer | undefined } }).players?.get(room.sessionId)

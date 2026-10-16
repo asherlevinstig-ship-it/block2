@@ -236,6 +236,7 @@ import {
 import {
   activeMovementInput,
   idleMovementInput,
+  isExplicitStopTransition,
   recordMovementMessage,
   requestedStopPosition,
   type MovementRateWindow,
@@ -5762,8 +5763,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const now = Date.now();
     const rate = recordMovementMessage(this.movementRateWindows.get(client.sessionId), now);
     this.movementRateWindows.set(client.sessionId, rate.window);
-    if (!rate.allowed) return this.reject(client, { action: "move", reason: "rate" });
     const previous = this.movementInputs.get(client.sessionId);
+    // Always let the first explicit stop through, even during a burst of
+    // direction changes. Rejecting it leaves the server moving until timeout.
+    if (!rate.allowed && !isExplicitStopTransition(previous, parsed.data))
+      return this.reject(client, { action: "move", reason: "rate" });
     if (previous && parsed.data.sequence <= previous.request.sequence) return;
     const rejection = movementRejectionReason(player, parsed.data);
     if (rejection) return this.reject(client, { action: "move", reason: rejection });
