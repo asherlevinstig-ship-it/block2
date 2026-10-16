@@ -176,6 +176,15 @@ button:disabled, button[aria-disabled="true"] { cursor: not-allowed; }
 
 #hud h1, #hud p { margin: 0; }
 #hud h1 { margin-bottom: 8px; font-size: 1.35rem; }
+#first-steps { margin: 8px 0; padding: 9px 10px; border: 1px solid #e6c76c80; border-radius: 8px; background: #302819e8; box-shadow: inset 3px 0 #e3bb58; }
+#first-steps[hidden] { display: none; }
+#first-steps header { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #f3d27e; font: 900 9px/1 system-ui; letter-spacing: .08em; }
+#first-steps header b { color: #bba975; }
+#first-steps button { padding: 3px 5px; border: 0; background: transparent; color: #aeb9a4; font: 800 9px system-ui; cursor: pointer; }
+#first-steps strong { display: block; margin-top: 7px; color: #fff1bd; font: 900 13px/1.1 system-ui; }
+#first-steps p { margin: 5px 0 0 !important; color: #d2d8c7; font: 600 10px/1.3 system-ui; }
+html.onboarding-active #world-objective { display: none !important; }
+html.onboarding-active #hud #target, html.onboarding-active #hud #players { display: none; }
 .eyebrow { color: #aede8e; font-size: .72rem; font-weight: 800; letter-spacing: .16em; }
 #status { color: #d2dfce; line-height: 1.45; }
 #target { margin-top: 9px !important; color: #f0cb67; font-size: .82rem; line-height: 1.4; }

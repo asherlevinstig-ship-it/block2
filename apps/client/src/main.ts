@@ -236,6 +236,9 @@ import {
   SURFACE_HEIGHT,
   TERMINAL_VELOCITY,
   TOWN_BUILDINGS,
+  TOWN_CENTER_X,
+  TOWN_CENTER_Z,
+  TOWN_SAFE_RADIUS,
   chunkIndex,
   isInGreenwoodRegion,
   isInGreenwoodCamp,
@@ -306,6 +309,8 @@ import {
 import { isPowerCompatibleWithMainHand } from "./power-loadout.js";
 import { characterCreationNeeded, createGuestProfileToken, finishCharacterCreation, getOrCreateProfileToken,
   profileBackups, restoreProfile, startNewAdventure } from "./player-profile.js";
+import { advanceOnboarding, ONBOARDING_DONE, ONBOARDING_STEPS, onboardingStorageKey,
+  parseOnboardingStep, type OnboardingEvent } from "./new-player-onboarding.js";
 import { CombatAudio, enemyCuePan, enemyCuesForTransition, type EnemyCue, type EnemyCueSnapshot } from "./combat-audio.js";
 import { SceneDressing } from "./scene-dressing.js";
 import { WARDEN_LOOT_BEAM_MS } from "./warden-victory-effects.js";
@@ -595,6 +600,38 @@ const characterCreationRequired = (() => {
   try { return characterCreationNeeded(window.localStorage); } catch { return true; }
 })();
 const profileToken = browserProfileToken();
+const firstSteps = document.querySelector<HTMLElement>("#first-steps")!;
+const firstStepsCount = document.querySelector<HTMLElement>("#first-steps-count")!;
+const firstStepsTitle = document.querySelector<HTMLElement>("#first-steps-title")!;
+const firstStepsDetail = document.querySelector<HTMLElement>("#first-steps-detail")!;
+const firstStepsSkip = document.querySelector<HTMLButtonElement>("#first-steps-skip")!;
+const firstStepsKey = onboardingStorageKey(profileToken);
+let firstStepsIndex = (() => { try { return parseOnboardingStep(window.localStorage.getItem(firstStepsKey)); } catch { return null; } })();
+function renderFirstSteps(): void {
+  const index = firstStepsIndex;
+  const active = index !== null && index < ONBOARDING_DONE;
+  firstSteps.hidden = !active;
+  document.documentElement.classList.toggle("onboarding-active", active);
+  if (index === null || index >= ONBOARDING_DONE) return;
+  const step = ONBOARDING_STEPS[index]!;
+  firstStepsCount.textContent = `${index + 1} / ${ONBOARDING_DONE}`;
+  firstStepsTitle.textContent = step.title;
+  firstStepsDetail.textContent = step.detail;
+}
+function setFirstSteps(index: number): void {
+  firstStepsIndex = index;
+  try { window.localStorage.setItem(firstStepsKey, String(index)); } catch { /* Private browsing can disable storage. */ }
+  renderFirstSteps();
+}
+function noteFirstStep(event: OnboardingEvent): void {
+  if (firstStepsIndex === null || firstStepsIndex >= ONBOARDING_DONE) return;
+  const next = advanceOnboarding(firstStepsIndex, event);
+  if (next === firstStepsIndex) return;
+  setFirstSteps(next);
+  if (next === ONBOARDING_DONE) status.textContent = "First steps complete · follow Realm Guidance or explore freely.";
+}
+firstStepsSkip.addEventListener("click", () => setFirstSteps(ONBOARDING_DONE));
+renderFirstSteps();
 const adminInvitation = consumeAdminInvitation();
 const minimapPanel = document.querySelector<HTMLDetailsElement>("#minimap")!;
 const minimap = createMinimap(document.querySelector<HTMLCanvasElement>("#minimap-canvas")!, document.querySelector<HTMLElement>("#minimap-detail")!, `blockcraft:minimap:v1:${profileToken}`);
@@ -5947,6 +5984,7 @@ function setInventoryOpen(open: boolean): void {
   document.querySelector<HTMLElement>("#personal-storage")!.hidden = true;
   inventoryToggle.setAttribute("aria-expanded", String(open));
   if (open) {
+    noteFirstStep("opened_pack");
     closeTavernDialogue();
     room?.send("build:path", { action: "sync" });
     inventoryPreviewDrawer.open = inventoryPanel.dataset.tab === "gear";
@@ -9425,6 +9463,10 @@ app.on("update", (dt: number) => {
   }
 
   const player = localPlayer.getPosition();
+  if (worldReady && firstStepsIndex === 0 && Math.hypot(player.x - TOWN_CENTER_X, player.z - TOWN_CENTER_Z) >= 3)
+    noteFirstStep("moved");
+  else if (worldReady && firstStepsIndex === 1 && Math.hypot(player.x - TOWN_CENTER_X, player.z - TOWN_CENTER_Z) > TOWN_SAFE_RADIUS + 1)
+    noteFirstStep("left_town");
   const renderAt = performance.now() - REMOTE_INTERPOLATION_DELAY_MS;
   for (const remote of remotePlayers.values()) {
     const pose = sampleRemotePose(remote.snapshots, renderAt);
@@ -10704,6 +10746,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     logMovementEvent(`PERFECT_DODGE counterUntil=${message.counterUntil}`);
   });
   room.onMessage("combat:hit", (message: CombatHit) => {
+    if (message.attackerId === room?.sessionId && message.damage > 0) noteFirstStep("landed_hit");
     const mob = mobVisuals.get(message.mobId);
     const rangedHit = confirmedRangedHit(message.mainHandId, message.damage, message.attackerId === room?.sessionId);
     if (rangedHit) {
@@ -10905,6 +10948,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   });
   room.onMessage("loot:picked-up", (message: LootPickedUp) => {
     if (message.playerId !== room?.sessionId || !isItemId(message.itemId)) return;
+    noteFirstStep("picked_loot");
     const completedTrackedHunt = message.itemId === trackedCodexItemId;
     updateInventoryItem(message.itemId, message.total);
     const item = ITEM_DEFINITIONS[message.itemId];
@@ -11185,6 +11229,7 @@ function showCharacterCreator(): void {
     try {
       await connect({ name: name.data, appearance });
       try { finishCharacterCreation(window.localStorage); } catch { /* Private browsing may prevent storage. */ }
+      setFirstSteps(0);
       portrait.destroy();
       panel.hidden = true;
     } catch (error) {
