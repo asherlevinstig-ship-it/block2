@@ -29,14 +29,26 @@ export function createSocialUI(send: (type: string, payload: unknown) => boolean
     open() { details.open = true; input.focus(); },
     notice(text: string) { add("Notice", text); },
     message(message: NearbyChatMessage) { add(message.name + ":", message.text); },
-    update(now: number, players: { id: string; name: string; x: number; y: number; visible: boolean; local: boolean }[]) {
+    update(now: number, players: { id: string; name: string; x: number; y: number; visible: boolean; local: boolean;
+      healHealth?: number; healMaxHealth?: number; healTarget?: boolean }[]) {
       if (now - lastUpdate < 100) return; lastUpdate = now;
       const ids = new Set(players.map(player => player.id));
       for (const [id, tag] of tags) if (!ids.has(id)) { tag.remove(); tags.delete(id); }
       for (const player of players) {
         let tag = tags.get(player.id);
         if (!tag) { tag = document.createElement("div"); tag.className = "player-nameplate"; document.body.append(tag); tags.set(player.id, tag); }
-        tag.textContent = player.name; tag.hidden = !player.visible; tag.dataset.local = String(player.local);
+        tag.replaceChildren(document.createTextNode(player.name));
+        if (player.healHealth !== undefined && player.healMaxHealth !== undefined) {
+          const meter = document.createElement("span"); meter.className = "player-heal-meter";
+          const fill = document.createElement("i");
+          fill.style.width = `${Math.max(0, Math.min(100, player.healHealth / Math.max(1, player.healMaxHealth) * 100))}%`;
+          meter.append(fill); tag.append(meter);
+        }
+        if (player.healTarget) {
+          const cue = document.createElement("span"); cue.className = "player-heal-cue"; cue.textContent = "G · HEAL"; tag.append(cue);
+        }
+        tag.hidden = !player.visible; tag.dataset.local = String(player.local);
+        tag.dataset.healTarget = String(Boolean(player.healTarget));
         tag.style.left = `${player.x}px`; tag.style.top = `${player.y}px`;
         if (player.local && !root.contains(document.activeElement)) nameInput.value = player.name;
       }

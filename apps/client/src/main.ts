@@ -9,6 +9,7 @@ import { activeCombatNearby, advanceBossHud, initialBossHud, leaderAttackLabel, 
 import { forestDungeonAtmosphere, forestDungeonNotice, portalNoticeFeedback } from "./forest-dungeon-presentation.js";
 import { objectiveGuidance, objectiveIcon } from "./objective-guidance.js";
 import { createSocialUI } from "./social-ui.js";
+import { fieldMendTarget, type HealCandidate } from "./healer-target.js";
 import { createPartyUI } from "./party-ui.js";
 import { createTradeUI } from "./trade-ui.js";
 import { createPlayerInteractionUI, type PlayerInteractionView } from "./player-interaction-ui.js";
@@ -10068,7 +10069,18 @@ app.on("update", (dt: number) => {
       isElite: visual.state.isElite, isMiniBoss: visual.state.isMiniBoss })));
     if (now - lastNameplateSampleAt >= 100) {
     lastNameplateSampleAt = now;
-    const nameplates: { id: string; name: string; x: number; y: number; visible: boolean; local: boolean }[] = [];
+    const nameplates: { id: string; name: string; x: number; y: number; visible: boolean; local: boolean;
+      healHealth?: number; healMaxHealth?: number; healTarget?: boolean }[] = [];
+    const healerActive = localCallingAbilityId === "healer_field_mend";
+    const healRoom = room;
+    const healCaster = localPlayer.getPosition();
+    const healCandidates: HealCandidate[] = healRoom ? [...healRoom.state.players as Map<string, NetworkPlayer>].map(([id, player]) =>
+      ({ id, x: player.x, y: player.y, z: player.z, health: player.health, maxHealth: player.maxHealth })) : [];
+    const healTargetId = healerActive && healRoom && Date.now() >= localCallingCooldownUntil
+      ? fieldMendTarget(healRoom.sessionId, healCaster, healCandidates, candidate =>
+      candidate.id === healRoom.sessionId || enemyCueLineClear(
+        { x: healCaster.x, y: healCaster.y + .72, z: healCaster.z },
+        { x: candidate.x, y: candidate.y + .72, z: candidate.z }, readCollisionWorldBlock)) : null;
     if (room && camera.camera) for (const [id, player] of room.state.players as Map<string, NetworkPlayer>) {
       const isLocal = id === room.sessionId;
       const pose = isLocal ? localPlayer.getPosition() : remotePlayers.get(id)?.entity.getPosition();
@@ -10078,7 +10090,11 @@ app.on("update", (dt: number) => {
       const visible = worldReady && defeatScreen.hidden && undergroundKnown(pose.x, pose.y, pose.z)
         && Math.hypot(pose.x - eye.x, pose.z - eye.z) <= 24 && screen.z > 0 && screen.x >= 0 && screen.x <= rect.width && screen.y >= 0 && screen.y <= rect.height
         && (isLocal || enemyCueLineClear({ x: eye.x, y: eye.y + .8, z: eye.z }, { x: pose.x, y: pose.y + .8, z: pose.z }, readCollisionWorldBlock));
-      nameplates.push({ id, name: player.name, x: rect.left + screen.x, y: rect.top + screen.y, visible: Boolean(visible), local: isLocal });
+      const inHealRange = healerActive && !isLocal && Math.abs(pose.y - eye.y) <= 2.5
+        && Math.hypot(pose.x - eye.x, pose.z - eye.z) <= 8;
+      nameplates.push({ id, name: player.name, x: rect.left + screen.x, y: rect.top + screen.y, visible: Boolean(visible), local: isLocal,
+        healHealth: inHealRange ? player.health : undefined, healMaxHealth: inHealRange ? player.maxHealth : undefined,
+        healTarget: id === healTargetId });
     }
     social.update(now, nameplates);
     }

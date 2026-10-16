@@ -2226,6 +2226,10 @@ html.boss-hud-active #world-objective { display: none !important; }
 .map-home { color: #abe3a0; } .map-smith { color: #ffd173; } .map-iron { color: #e3a76b; } .map-silver { color: #b4eaff; } .map-champion { color: #ffcf65; }
 .player-nameplate { position: fixed; z-index: 15; transform: translate(-50%, -100%); pointer-events: none; background: #081715bc; color: #f0edda; border: 1px solid #ffffff22; border-radius: 5px; padding: 3px 7px; font: 700 11px system-ui; text-shadow: 0 1px 2px #000; }
 .player-nameplate[data-local="true"] { color: #bde6a8; }
+.player-nameplate[data-heal-target="true"] { border-color: #8bffcc; box-shadow: 0 0 0 2px #49d6a455, 0 0 14px #49d6a488; color: #d8ffeb; }
+.player-heal-meter { display: block; width: 54px; height: 4px; margin: 3px auto 0; border-radius: 4px; overflow: hidden; background: #521e24; }
+.player-heal-meter i { display: block; height: 100%; background: #64df9d; }
+.player-heal-cue { display: block; margin-top: 2px; color: #a8ffd3; font-size: 9px; letter-spacing: .04em; }
 .player-nameplate[hidden] { display: none; }
 #nearby-chat { position: fixed; z-index: 25; bottom: max(16px, env(safe-area-inset-bottom)); left: max(16px, env(safe-area-inset-left)); width: min(300px, 80vw); padding: 10px; color: #dce6d8; background: #0b1916ed; border: 1px solid #afc99a55; border-radius: 10px; font: 12px system-ui; }
 #nearby-chat summary { cursor: pointer; font-weight: 800; letter-spacing: .05em; }
