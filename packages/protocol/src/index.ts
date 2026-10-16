@@ -461,16 +461,17 @@ export const ARMOUR_DEFINITIONS = {
   venomweave_mantle: { name: "Venomweave Mantle", reduction: 1, speed: .99, projectileReduction: 2, hazardReduction: 2 },
   mirebreaker_mantle: { name: "Mirebreaker Mantle", reduction: 2, speed: 1.02, projectileReduction: 2, hazardReduction: 3 },
   rootstalker_wrap: { name: "Rootstalker Wrap", reduction: 1, speed: 1.07, projectileReduction: 1, hazardReduction: 2 },
+  northwatch_cloak: { name: "Northwatch Cloak", reduction: 1, speed: 1.04, projectileReduction: 1, hazardReduction: 0 },
   worldsplitter_plate: { name: "Worldsplitter Plate", reduction: 3, speed: .9, projectileReduction: 1, hazardReduction: 2 },
 } as const;
 export type ArmourId = keyof typeof ARMOUR_DEFINITIONS;
 export function armourForItem(id: string): Exclude<ArmourId, "none"> | null {
   return id === "leather_armour" || id === "iron_armour" || id === "rootguard_armour" || id === "bastion_plate"
-    || id === "fangstalker_wrap" || id === "venomweave_mantle" || id === "mirebreaker_mantle" || id === "rootstalker_wrap" || id === "worldsplitter_plate" ? id : null;
+    || id === "fangstalker_wrap" || id === "venomweave_mantle" || id === "mirebreaker_mantle" || id === "rootstalker_wrap" || id === "northwatch_cloak" || id === "worldsplitter_plate" ? id : null;
 }
 export function utilityForItem(id: string): "miners_lantern" | "moonstone" | null { return id === "miners_lantern" || id === "moonstone" ? id : null; }
 export function isEquipmentItem(id: string): boolean { return equipmentForItem(id) !== null || armourForItem(id) !== null || utilityForItem(id) !== null; }
-export const ArmourEquipSchema = z.object({ armourId: z.enum(["none", "leather_armour", "iron_armour", "rootguard_armour", "bastion_plate", "fangstalker_wrap", "venomweave_mantle", "mirebreaker_mantle", "rootstalker_wrap", "worldsplitter_plate"]) });
+export const ArmourEquipSchema = z.object({ armourId: z.enum(["none", "leather_armour", "iron_armour", "rootguard_armour", "bastion_plate", "fangstalker_wrap", "venomweave_mantle", "mirebreaker_mantle", "rootstalker_wrap", "northwatch_cloak", "worldsplitter_plate"]) });
 export const BLACKSMITH_STOCK = { ...BLACKSMITH_WEAPONS, leather_armour: { price: 30 }, iron_armour: { price: 70 } } as const;
 export type BlacksmithStockId = keyof typeof BLACKSMITH_STOCK;
 export const BlacksmithBuySchema = z.object({ itemId: z.enum(["forged_sword", "forged_bow", "forged_focus", "leather_armour", "iron_armour"]) });
@@ -490,6 +491,7 @@ export const BLACKSMITH_DISMANTLE = {
   venomweave_mantle: { gold: 14, materialId: "acid_gland", materialQuantity: 2 },
   mirebreaker_mantle: { gold: 26, materialId: "acid_gland", materialQuantity: 3 },
   rootstalker_wrap: { gold: 24, materialId: "moss_fibre", materialQuantity: 3 },
+  northwatch_cloak: { gold: 15, materialId: "ridge_hide", materialQuantity: 2 },
   worldsplitter_plate: { gold: 18, materialId: "stone_core", materialQuantity: 2 },
 } as const satisfies Partial<Record<ItemId, { gold: number; materialId?: ItemId; materialQuantity?: number }>>;
 export type BlacksmithDismantleItemId = keyof typeof BLACKSMITH_DISMANTLE;
@@ -528,6 +530,7 @@ export const BLACKSMITH_REFORGE = {
   venomweave_mantle: { materialId: "acid_gland", costs: [{ gold: 18, material: 3 }, { gold: 38, material: 6 }, { gold: 74, material: 10 }] },
   mirebreaker_mantle: { materialId: "acid_gland", costs: [{ gold: 28, material: 4 }, { gold: 58, material: 7 }, { gold: 110, material: 12 }] },
   rootstalker_wrap: { materialId: "moss_fibre", costs: [{ gold: 26, material: 4 }, { gold: 54, material: 7 }, { gold: 105, material: 12 }] },
+  northwatch_cloak: { materialId: "ridge_hide", costs: [{ gold: 18, material: 2 }, { gold: 38, material: 4 }, { gold: 75, material: 7 }] },
   worldsplitter_plate: { materialId: "stone_core", costs: [{ gold: 24, material: 3 }, { gold: 52, material: 6 }, { gold: 98, material: 10 }] },
 } as const satisfies Partial<Record<ItemId, { materialId: ItemId; costs: readonly { gold: number; material: number }[] }>>;
 export type BlacksmithReforgeItemId = keyof typeof BLACKSMITH_REFORGE;
@@ -668,6 +671,7 @@ export const ITEM_DEFINITIONS = {
   venomweave_mantle: { id: "venomweave_mantle", name: "Venomweave Mantle", description: "Rare Venom Hunt armour · reduce damage by 1 · strong projectile and hazard protection" },
   mirebreaker_mantle: { id: "mirebreaker_mantle", name: "Mirebreaker Mantle", description: "Legendary Mistfen armour · swift movement · exceptional protection from venom pools and projectiles" },
   rootstalker_wrap: { id: "rootstalker_wrap", name: "Rootstalker Wrap", description: "Legendary Greenwood armour · rapid movement and stamina recovery · strong protection from root pressure" },
+  northwatch_cloak: { id: "northwatch_cloak", name: "Northwatch Cloak", description: "Watchbreaker reward · reduce damage by 1 · 4% faster movement · extra projectile protection · reforge with Ridge Hide" },
   worldsplitter_plate: { id: "worldsplitter_plate", name: "Worldsplitter Plate", description: "Rare Crusher Hunt armour · reduce damage by 3 · heavy projectile and hazard protection · 10% slower" },
   forged_sword: { id: "forged_sword", name: "Forged Sword", description: "Iron blade · 2 / 2 / 3 combo damage · equip from your pack" },
   forged_bow: { id: "forged_bow", name: "Forged Bow", description: "Steel-braced bow · 2 arrow damage · equip from your pack" },
@@ -682,6 +686,7 @@ export const ITEM_DEFINITIONS = {
   miners_lantern: { id: "miners_lantern", name: "Miner's Lantern", description: "Vault relic · auto-equipped · brighter, wider underground light" },
   moss_fibre: { id: "moss_fibre", name: "Moss Fibre", description: "Soft living fibre gathered from Moss Crawlers" },
   crawler_fang: { id: "crawler_fang", name: "Crawler Fang", description: "A sharp fang shed by a defeated crawler" },
+  ridge_hide: { id: "ridge_hide", name: "Ridge Hide", description: "Northwatch Stalker hide · reforge the Northwatch Cloak at the blacksmith" },
   stone_core: { id: "stone_core", name: "Stone Core", description: "A dense animated core from a Stone Brute" },
   acid_gland: { id: "acid_gland", name: "Acid Gland", description: "A volatile gland taken from a Cave Spitter" },
   mossback_fang_relic: { id: "mossback_fang_relic", name: "Mossback Alpha Fang", description: "Unique trophy claimed from the Mossback Alpha" },
@@ -791,6 +796,7 @@ export const EQUIPMENT_RARITY = {
   venomweave_mantle: "rare",
   mirebreaker_mantle: "legendary",
   rootstalker_wrap: "legendary",
+  northwatch_cloak: "rare",
   worldsplitter_plate: "rare",
   forged_sword: "uncommon",
   forged_bow: "uncommon",

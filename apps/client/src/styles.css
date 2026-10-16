@@ -1165,13 +1165,13 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 .inventory-grid article[data-item="fangstalker_wrap"] i { background: linear-gradient(135deg, #eed78d 0 18%, #843d20 20% 70%, #2f1b16 72%); box-shadow: 0 0 12px #e5c36b66; }
 .inventory-grid article[data-item="venomweave_mantle"] i { background: radial-gradient(circle, #b9f44c 0 20%, #477a28 22% 62%, #17291a 64%); box-shadow: 0 0 12px #a6e53c70; }
 .inventory-grid article[data-item="worldsplitter_plate"] i { background: linear-gradient(135deg, #e5a946 0 17%, #53606d 19% 68%, #222a31 70%); box-shadow: 0 0 12px #e1a34570; }
-.inventory-grid article:is([data-item="leather_armour"], [data-item="iron_armour"], [data-item="rootguard_armour"], [data-item="bastion_plate"], [data-item="fangstalker_wrap"], [data-item="venomweave_mantle"], [data-item="mirebreaker_mantle"], [data-item="rootstalker_wrap"], [data-item="worldsplitter_plate"]) i {
+.inventory-grid article:is([data-item="leather_armour"], [data-item="iron_armour"], [data-item="rootguard_armour"], [data-item="bastion_plate"], [data-item="fangstalker_wrap"], [data-item="venomweave_mantle"], [data-item="mirebreaker_mantle"], [data-item="rootstalker_wrap"], [data-item="northwatch_cloak"], [data-item="worldsplitter_plate"]) i {
   position: relative;
   border-radius: 3px;
   clip-path: polygon(20% 0, 38% 0, 44% 10%, 56% 10%, 62% 0, 80% 0, 100% 23%, 84% 42%, 78% 100%, 22% 100%, 16% 42%, 0 23%);
   transform: none;
 }
-.inventory-grid article:is([data-item="leather_armour"], [data-item="iron_armour"], [data-item="rootguard_armour"], [data-item="bastion_plate"], [data-item="fangstalker_wrap"], [data-item="venomweave_mantle"], [data-item="mirebreaker_mantle"], [data-item="rootstalker_wrap"], [data-item="worldsplitter_plate"]) i::after {
+.inventory-grid article:is([data-item="leather_armour"], [data-item="iron_armour"], [data-item="rootguard_armour"], [data-item="bastion_plate"], [data-item="fangstalker_wrap"], [data-item="venomweave_mantle"], [data-item="mirebreaker_mantle"], [data-item="rootstalker_wrap"], [data-item="northwatch_cloak"], [data-item="worldsplitter_plate"]) i::after {
   content: "";
   position: absolute;
   inset: 18% 42% 12%;
@@ -2216,6 +2216,7 @@ html.boss-hud-active #world-objective { display: none !important; }
 #greenwood-mastery-gain { display: block; margin-top: 4px; animation: mistfen-gain 1.8s ease both; }
 .inventory-grid article[data-item="mirebreaker_mantle"] i { background: radial-gradient(circle, #efff75 0 16%, #396b38 19% 52%, #17291a 55%); box-shadow: 0 0 15px #cbff6c90; }
 .inventory-grid article[data-item="rootstalker_wrap"] i { background: radial-gradient(circle, #f5df79 0 16%, #54752f 19% 52%, #2b1c12 55%); box-shadow: 0 0 15px #d8ec6990; }
+.inventory-grid article[data-item="northwatch_cloak"] i { background: radial-gradient(circle, #a6efff 0 16%, #425d68 19% 58%, #1d292e 61%); box-shadow: 0 0 14px #82dfff85; }
 #minimap-surface { width: 100%; padding: 8px; border: 1px solid #ffe08c88; border-radius: 6px; color: #ffe8a8; background: #352b15; font: 800 11px system-ui; cursor: pointer; }
 #minimap-surface[aria-pressed="true"] { color: #192418; background: #ffe08c; }
 #minimap-surface[hidden] { display: none; }

@@ -35,6 +35,7 @@ export const EQUIPMENT_COLLECTION: readonly EquipmentCollectionEntry[] = [
   { itemId: "venomweave_mantle", slot: "armour", source: "Complete a Veteran or Ascendant Venom Hunt" },
   { itemId: "mirebreaker_mantle", slot: "armour", source: "Defeat empowered Mireback as a Mirebreaker" },
   { itemId: "rootstalker_wrap", slot: "armour", source: "Defeat the empowered Broodmother as a Rootslayer" },
+  { itemId: "northwatch_cloak", slot: "armour", source: "Defeat the Northwatch Watchbreaker; reforge with Ridge Hide" },
   { itemId: "worldsplitter_plate", slot: "armour", source: "Complete a Veteran or Ascendant Crusher Hunt" },
   { itemId: "reinforced_pickaxe", slot: "tool", source: "Forge at the Town blacksmith" },
   { itemId: "miners_lantern", slot: "light", source: "Recover from a dungeon equipment cache" },

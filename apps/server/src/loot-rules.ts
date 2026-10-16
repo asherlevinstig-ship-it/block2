@@ -53,11 +53,12 @@ const MATERIAL_LOOT_BY_ARCHETYPE: Record<MobArchetypeId, readonly { itemId: Item
     { itemId: "acid_gland", quantity: 1 },
   ],
   ridge_stalker: [
+    { itemId: "ridge_hide", quantity: 1 },
     { itemId: "crawler_fang", quantity: 1 },
-    { itemId: "moss_fibre", quantity: 1 },
   ],
   shard_sentry: [
     { itemId: "stone_core", quantity: 1 },
+    { itemId: "silver_ore", quantity: 1 },
   ],
 };
 

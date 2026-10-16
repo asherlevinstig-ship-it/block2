@@ -2788,6 +2788,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       && !this.ownsOrHasPendingItem(ownerId, areaReward.rewardItemId));
     const areaRelicDrops: { itemId: ItemId; quantity: number }[] = rewardPlayer && areaReward
       ? [{ itemId: areaReward.rewardItemId, quantity: mob.leaderRematchTier >= 4 ? 2 : 1 }] : [];
+    const northwatchCloakDrop: { itemId: ItemId; quantity: number }[] = mobId === "northwatch-watchbreaker"
+      && rewardPlayer && !this.ownsOrHasPendingItem(ownerId, "northwatch_cloak")
+      ? [{ itemId: "northwatch_cloak", quantity: 1 }] : [];
     const rematchMaterialQuantity = areaReward ? leaderRematchMaterialBonus(mob.leaderRematchTier) : 0;
     const rematchMaterialId: ItemId = mob.archetype === "cave_spitter" ? "acid_gland"
       : mob.archetype === "stone_brute" ? "stone_core" : "crawler_fang";
@@ -2873,6 +2876,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         ? [{ itemId: "moonstone" as ItemId, quantity: 2 }, { itemId: "silver_ore" as ItemId, quantity: 6 }]
         : []),
       ...areaRelicDrops,
+      ...northwatchCloakDrop,
       ...rematchDrops,
       ...mistfenMasteryDrops,
       ...mistfenEventDrops,
@@ -2916,6 +2920,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     });
     if (areaRelicDrops.length) this.clients.find(client => client.sessionId === ownerId)?.send("chat:notice",
       `${firstLeaderVictory ? "FIRST LEADER VICTORY" : mob.leaderRematchTier > 0 ? `EMPOWERED REMATCH ${mob.leaderRematchTier}` : "SIGNATURE DROP"} · ${areaRelicDrops[0]!.quantity} ${ITEM_DEFINITIONS[areaRelicDrops[0]!.itemId].name}${rematchMaterialQuantity ? ` + ${rematchMaterialQuantity} bonus ${ITEM_DEFINITIONS[rematchMaterialId].name}` : ""} added to your personal cache.`);
+    if (northwatchCloakDrop.length) this.clients.find(client => client.sessionId === ownerId)?.send("chat:notice",
+      "FIRST NORTHWATCH CLOAK · your personal loot bag contains a rare cloak. Press E to collect it.");
   }
 
   private resolveLootPickups(now: number): void {

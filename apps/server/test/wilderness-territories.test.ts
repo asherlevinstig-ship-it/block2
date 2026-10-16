@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { Block, MINERAL_DEPOSITS, RENEWABLE_MINERAL_DEPOSITS, wildernessTerritoryAt, wildernessSurfaceBlock, authoredMineralAt, playerCollides } from "@blockcraft/voxel-world";
 import { WILDERNESS_ENCOUNTERS, ASHEN_SENTRY_IDS, ashenSentryAllows, ashenSentryPattern, isAshenSentry, isMistfenMob, isNorthwatchMob, northwatchAllows, northwatchShardPattern, isSouthernQuarryMob, southernQuarryAllows } from "../src/wilderness-encounters.js";
 import { WorldRoom } from "../src/game-room.js";
-import { WorldState } from "../src/schema.js";
+import { PlayerState, WorldState } from "../src/schema.js";
+import { decodeLootBagItems } from "@blockcraft/protocol";
 import { dangerBandAt, MOB_TOWN_MINIMUM_RADIUS, radiusFromSafeCenter } from "../src/radial-difficulty.js";
 import { lootForArchetype } from "../src/loot-rules.js";
 import { areaMiniBossDefinition, leaderForFollower } from "../src/area-mini-bosses.js";
@@ -83,6 +84,19 @@ describe("distinct radial wilderness territories", () => {
     expect([0, 1, 2, 3, 4].map(northwatchShardPattern)).toEqual(["aimed", "aimed", "fan", "aimed", "aimed"]);
     expect(lootForArchetype("ridge_stalker")).toContainEqual({ itemId: "crawler_fang", quantity: 1 });
     expect(lootForArchetype("shard_sentry")).toContainEqual({ itemId: "stone_core", quantity: 1 });
+  });
+  it("guarantees a personal Northwatch cloak once while its first bag is pending", () => {
+    vi.spyOn(Math, "random").mockReturnValue(.99);
+    const { room, internal } = fixture();
+    const player = new PlayerState();
+    room.state.players.set("player", player);
+    const leader = room.state.mobs.get("northwatch-watchbreaker")!;
+    internal.spawnLootDrops("northwatch-watchbreaker", leader, 10_000, "player");
+    internal.spawnLootDrops("northwatch-watchbreaker", leader, 10_001, "player");
+    const bags = [...room.state.lootDrops.values()].map(drop => decodeLootBagItems(drop.contentsJson));
+    expect(bags).toHaveLength(2);
+    expect(bags[0]).toContainEqual({ itemId: "northwatch_cloak", quantity: 1 });
+    expect(bags[1]).not.toContainEqual({ itemId: "northwatch_cloak", quantity: 1 });
   });
   it("patrols generated terrain smoothly without placing mobs in solid blocks or inside town", () => {
     vi.useFakeTimers(); vi.setSystemTime(10000);

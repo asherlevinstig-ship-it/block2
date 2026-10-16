@@ -1613,6 +1613,7 @@ const ARMOUR_OUTFIT_COLORS: Record<ArmourId, pc.Color> = {
   venomweave_mantle: new pc.Color(.19, .34, .1),
   mirebreaker_mantle: new pc.Color(.12, .28, .18),
   rootstalker_wrap: new pc.Color(.23, .32, .12),
+  northwatch_cloak: new pc.Color(.2, .31, .38),
   worldsplitter_plate: new pc.Color(.16, .19, .23),
 };
 
@@ -1870,19 +1871,20 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
     fangstalker_wrap: new pc.Entity("fangstalker-wrap"), venomweave_mantle: new pc.Entity("venomweave-mantle"),
     mirebreaker_mantle: new pc.Entity("mirebreaker-mantle"),
     rootstalker_wrap: new pc.Entity("rootstalker-wrap"),
+    northwatch_cloak: new pc.Entity("northwatch-cloak"),
     worldsplitter_plate: new pc.Entity("worldsplitter-plate"),
   };
   for (const [id, layer] of Object.entries(armour)) {
     const bastion = id === "bastion_plate", fang = id === "fangstalker_wrap";
     const venom = id === "venomweave_mantle" || id === "mirebreaker_mantle", worldsplitter = id === "worldsplitter_plate";
-    const mirebreaker = id === "mirebreaker_mantle", rootstalker = id === "rootstalker_wrap";
+    const mirebreaker = id === "mirebreaker_mantle", rootstalker = id === "rootstalker_wrap", northwatch = id === "northwatch_cloak";
     const iron = id === "iron_armour" || bastion || worldsplitter;
     const rootguard = id === "rootguard_armour";
-    const material = rootstalker ? coloredMaterial(new pc.Color(.32, .46, .18)) : mirebreaker ? coloredMaterial(new pc.Color(.2, .42, .22)) : worldsplitter ? coloredMaterial(new pc.Color(.23, .28, .33))
+    const material = northwatch ? coloredMaterial(new pc.Color(.25, .38, .46)) : rootstalker ? coloredMaterial(new pc.Color(.32, .46, .18)) : mirebreaker ? coloredMaterial(new pc.Color(.2, .42, .22)) : worldsplitter ? coloredMaterial(new pc.Color(.23, .28, .33))
       : venom ? coloredMaterial(new pc.Color(.26, .48, .12))
         : fang ? coloredMaterial(new pc.Color(.38, .18, .1))
           : iron ? bladeMaterial : rootguard ? coloredMaterial(new pc.Color(.16, .34, .18)) : weaponWoodMaterial;
-    const accent = rootstalker ? coloredMaterial(new pc.Color(.94, .78, .3)) : mirebreaker ? coloredMaterial(new pc.Color(.86, 1, .28)) : venom ? coloredMaterial(new pc.Color(.55, .95, .08))
+    const accent = northwatch ? coloredMaterial(new pc.Color(.63, .9, 1)) : rootstalker ? coloredMaterial(new pc.Color(.94, .78, .3)) : mirebreaker ? coloredMaterial(new pc.Color(.86, 1, .28)) : venom ? coloredMaterial(new pc.Color(.55, .95, .08))
       : fang ? coloredMaterial(new pc.Color(.92, .78, .46)) : brassMaterial;
     const reinforced = iron || rootguard || venom;
     torso.addChild(layer);
@@ -1917,6 +1919,10 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
         for (const x of [-.17, .17]) addBox(layer, "mirebreaker-mantle-tail", material, [.17, .38, .055], [x, -.36, -.2]).setLocalEulerAngles(8, 0, x < 0 ? -5 : 5);
         addBox(layer, "mirebreaker-jade-line", accent, [.35, .045, .035], [0, -.19, .265]);
       }
+    } else if (northwatch) {
+      addBox(layer, "northwatch-clasp", accent, [.15, .16, .045], [0, .08, .27]).setLocalEulerAngles(0, 0, 45);
+      addBox(layer, "northwatch-cowl", material, [.48, .14, .43], [0, .255, 0]);
+      for (const x of [-.2, .2]) addBox(layer, "northwatch-cloak-tail", material, [.18, .43, .055], [x, -.38, -.2]);
     } else if (rootstalker) {
       addBox(layer, "rootstalker-cowl", material, [.42, .14, .4], [0, .255, 0]);
       for (const x of [-.19, .19]) {
@@ -4900,6 +4906,7 @@ const lootMaterials: Partial<Record<ItemId, pc.StandardMaterial>> = {
   venomweave_mantle: coloredMaterial(new pc.Color(.38, .82, .12)),
   mirebreaker_mantle: coloredMaterial(new pc.Color(.55, .9, .22)),
   rootstalker_wrap: coloredMaterial(new pc.Color(.56, .68, .25)),
+  northwatch_cloak: coloredMaterial(new pc.Color(.5, .83, .9)),
   worldsplitter_plate: coloredMaterial(new pc.Color(.34, .4, .48)),
   forged_sword: coloredMaterial(new pc.Color(.76, .8, .85)),
   forged_bow: coloredMaterial(new pc.Color(.65, .45, .25)),

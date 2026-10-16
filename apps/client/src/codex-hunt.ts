@@ -2,6 +2,7 @@ import {
   FOREST_PORTAL_POSITION,
   GREENWOOD_CRAWLER_HOMES,
   MISTFEN_BEHEMOTH_HOME,
+  NORTHWATCH_LEADER_HOME,
   SILVER_GUARD_HOMES,
   STONE_BRUTE_ARENA_HOME,
   TOWN_BLACKSMITH_STALL_POSITION,
@@ -44,6 +45,7 @@ export const CODEX_HUNT_PLANS: Partial<Record<ItemId, CodexHuntPlan>> = {
   worldsplitter_plate: { itemId: "worldsplitter_plate", source: "Veteran Crusher Hunt", level: "LV 8+", protection: "Armour protection improves across repeated Crusher Hunts", target: huntBoard },
   mirebreaker_mantle: { itemId: "mirebreaker_mantle", source: "Empowered Mireback Behemoth", level: "LV 7–10", protection: "Regional mastery unlocks its Legendary drop chance", target: waypoint(MISTFEN_BEHEMOTH_HOME, "codex-mirebreaker", "Mireback Behemoth · Legendary mantle") },
   rootstalker_wrap: { itemId: "rootstalker_wrap", source: "Empowered Greenwood Broodmother", level: "LV 6–9", protection: "Regional mastery unlocks its Legendary drop chance", target: waypoint(GREENWOOD_CRAWLER_HOMES[1], "codex-rootstalker", "Greenwood Broodmother · Legendary wrap") },
+  northwatch_cloak: { itemId: "northwatch_cloak", source: "Northwatch Watchbreaker", level: "LV 8–12", protection: "First victory guarantees the cloak; Ridge Hide from Stalkers reforges it", target: waypoint(NORTHWATCH_LEADER_HOME, "codex-northwatch", "Northwatch Watchbreaker · Cloak") },
 };
 
 export function codexHuntPlan(itemId: ItemId): CodexHuntPlan | null {

@@ -43,6 +43,8 @@ describe("armour", () => {
     expect(armourStats("iron_armour").speed).toBe(.92);
     expect(armourStats("leather_armour").speed).toBe(1);
     expect(armourStats("fangstalker_wrap").speed).toBe(1.06);
+    expect(armourStats("northwatch_cloak").speed).toBe(1.04);
+    expect(armouredDamage(4, "northwatch_cloak", "projectile")).toBe(2);
     expect(armouredDamage(5, "venomweave_mantle", "projectile")).toBe(2);
     expect(armouredDamage(5, "venomweave_mantle", "hazard")).toBe(2);
     expect(armouredDamage(5, "worldsplitter_plate", "melee")).toBe(2);
@@ -68,7 +70,7 @@ describe("armour", () => {
     }
   });
   it("round-trips worn armour and safely loads legacy or unowned armour saves", () => {
-    for (const id of ["leather_armour", "iron_armour", "rootguard_armour", "bastion_plate", "fangstalker_wrap", "venomweave_mantle", "worldsplitter_plate"] as ArmourId[]) {
+    for (const id of ["leather_armour", "iron_armour", "rootguard_armour", "bastion_plate", "fangstalker_wrap", "venomweave_mantle", "worldsplitter_plate", "northwatch_cloak"] as ArmourId[]) {
       const { player, own, equip } = fixture(); own(id); equip(id);
       const restored = new PlayerState(); applyPlayerSave(restored, parsePlayerSave(serializePlayerSave(player))!);
       expect(restored.armourId).toBe(id);
