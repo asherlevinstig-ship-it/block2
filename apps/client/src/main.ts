@@ -34,6 +34,7 @@ import { playerHud } from "./player-hud.js";
 import { combatHud, cooldownState } from "./combat-hud.js";
 import { EQUIPMENT_COLLECTION, collectionProgress, equipmentCollectionLabel, equipmentProgressionText } from "./equipment-progression.js";
 import { blacksmithShopStock, shopGoldShortfall, type BlacksmithShopTab } from "./blacksmith-shop.js";
+import { FIELD_FORGE_RECIPES, type FieldForgeId } from "@blockcraft/protocol";
 import { haulUpgradeProgress, nextHaulRegion, nextHaulUpgrade, type HaulRegion } from "./blacksmith-haul.js";
 import { createStorageUI, type StorageUpdate } from "./storage-ui.js";
 import { lootVisibleToPlayer } from "./loot-ownership.js";
@@ -1675,6 +1676,8 @@ const NEUTRAL_OUTFIT_COLOR = new pc.Color(.16, .19, .17);
 const ARMOUR_OUTFIT_COLORS: Record<ArmourId, pc.Color> = {
   none: NEUTRAL_OUTFIT_COLOR,
   leather_armour: new pc.Color(.34, .2, .1),
+  forager_wrap: new pc.Color(.3, .37, .17),
+  fenwalker_mantle: new pc.Color(.24, .36, .3),
   iron_armour: new pc.Color(.34, .4, .48),
   rootguard_armour: new pc.Color(.13, .3, .15),
   bastion_plate: new pc.Color(.29, .35, .43),
@@ -1936,6 +1939,7 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
   }
   const armour: Record<Exclude<ArmourId, "none">, pc.Entity> = {
     leather_armour: new pc.Entity("leather-armour"), iron_armour: new pc.Entity("iron-armour"),
+    forager_wrap: new pc.Entity("forager-wrap"), fenwalker_mantle: new pc.Entity("fenwalker-mantle"),
     rootguard_armour: new pc.Entity("rootguard-armour"), bastion_plate: new pc.Entity("bastion-plate"),
     fangstalker_wrap: new pc.Entity("fangstalker-wrap"), venomweave_mantle: new pc.Entity("venomweave-mantle"),
     mirebreaker_mantle: new pc.Entity("mirebreaker-mantle"),
@@ -1945,11 +1949,11 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
   };
   for (const [id, layer] of Object.entries(armour)) {
     const bastion = id === "bastion_plate", fang = id === "fangstalker_wrap";
-    const venom = id === "venomweave_mantle" || id === "mirebreaker_mantle", worldsplitter = id === "worldsplitter_plate";
+    const venom = id === "venomweave_mantle" || id === "mirebreaker_mantle" || id === "fenwalker_mantle", worldsplitter = id === "worldsplitter_plate";
     const mirebreaker = id === "mirebreaker_mantle", rootstalker = id === "rootstalker_wrap", northwatch = id === "northwatch_cloak";
     const iron = id === "iron_armour" || bastion || worldsplitter;
     const rootguard = id === "rootguard_armour";
-    const material = northwatch ? coloredMaterial(new pc.Color(.25, .38, .46)) : rootstalker ? coloredMaterial(new pc.Color(.32, .46, .18)) : mirebreaker ? coloredMaterial(new pc.Color(.2, .42, .22)) : worldsplitter ? coloredMaterial(new pc.Color(.23, .28, .33))
+    const material = id === "forager_wrap" ? coloredMaterial(new pc.Color(.42, .5, .22)) : id === "fenwalker_mantle" ? coloredMaterial(new pc.Color(.27, .47, .38)) : northwatch ? coloredMaterial(new pc.Color(.25, .38, .46)) : rootstalker ? coloredMaterial(new pc.Color(.32, .46, .18)) : mirebreaker ? coloredMaterial(new pc.Color(.2, .42, .22)) : worldsplitter ? coloredMaterial(new pc.Color(.23, .28, .33))
       : venom ? coloredMaterial(new pc.Color(.26, .48, .12))
         : fang ? coloredMaterial(new pc.Color(.38, .18, .1))
           : iron ? bladeMaterial : rootguard ? coloredMaterial(new pc.Color(.16, .34, .18)) : weaponWoodMaterial;
@@ -5127,6 +5131,8 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
 
 const lootMaterials: Partial<Record<ItemId, pc.StandardMaterial>> = {
   leather_armour: coloredMaterial(new pc.Color(.44, .26, .12)),
+  forager_wrap: coloredMaterial(new pc.Color(.54, .65, .3)),
+  fenwalker_mantle: coloredMaterial(new pc.Color(.35, .58, .46)),
   iron_armour: coloredMaterial(new pc.Color(.76, .8, .85)),
   rootguard_armour: coloredMaterial(new pc.Color(.2, .55, .24)),
   bastion_plate: coloredMaterial(new pc.Color(.56, .63, .73)),
@@ -6877,6 +6883,30 @@ function renderWeaponShop(): void {
       room.send("blacksmith:buy", { itemId: id });
     });
     card.append(title, price, description, comparison, button); weaponShop.append(card);
+  }
+  if (blacksmithShopTab === "armour") for (const region of Object.keys(FIELD_FORGE_RECIPES) as FieldForgeId[]) {
+    const recipe = FIELD_FORGE_RECIPES[region];
+    const owned = inventoryCounts.get(recipe.itemId) ?? 0;
+    const foundMaterial = recipe.materials.some(cost => (inventoryCounts.get(cost.itemId) ?? 0) > 0);
+    if (!foundMaterial && owned === 0 && blacksmithEquippedArmourItem !== recipe.itemId) continue;
+    const card = document.createElement("article"); card.dataset.rarity = itemRarity(recipe.itemId);
+    const title = document.createElement("strong"); title.textContent = `${ITEM_DEFINITIONS[recipe.itemId].name} · FIELD GEAR`;
+    const description = document.createElement("p"); description.textContent = ITEM_DEFINITIONS[recipe.itemId].description;
+    const costs = document.createElement("small");
+    costs.textContent = `${recipe.gold} gold · ${recipe.materials.map(cost => `${inventoryCounts.get(cost.itemId) ?? 0}/${cost.quantity} ${ITEM_DEFINITIONS[cost.itemId].name}`).join(" · ")}`;
+    const missing = recipe.materials.find(cost => (inventoryCounts.get(cost.itemId) ?? 0) < cost.quantity);
+    const button = document.createElement("button"); button.type = "button";
+    button.textContent = blacksmithPending ? "PLEASE WAIT…" : missing ? `NEED ${missing.quantity - (inventoryCounts.get(missing.itemId) ?? 0)} ${ITEM_DEFINITIONS[missing.itemId].name.toUpperCase()}`
+      : tavernCoinBalance < recipe.gold ? `NEED ${recipe.gold - tavernCoinBalance} MORE GOLD` : "FORGE · ADD TO PACK";
+    button.disabled = !room || blacksmithPending || Boolean(missing) || tavernCoinBalance < recipe.gold;
+    button.addEventListener("click", () => {
+      if (!room || blacksmithPending || missing || tavernCoinBalance < recipe.gold) return;
+      lastShopPurchaseCategory = "gear";
+      blacksmithPending = true; renderWeaponShop();
+      blacksmithMessage.textContent = `Forging ${ITEM_DEFINITIONS[recipe.itemId].name}…`;
+      room.send("blacksmith:field-forge", { region });
+    });
+    card.append(title, description, costs, button); weaponShop.append(card);
   }
 }
 for (const tab of blacksmithPanel.querySelectorAll<HTMLButtonElement>("[data-smith-tab]")) {

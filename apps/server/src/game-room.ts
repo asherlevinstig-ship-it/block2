@@ -13,6 +13,7 @@ import { cleanChatText, hearsNearbyChat } from "./nearby-chat.js";
 import { PartyRequestSchema } from "@blockcraft/protocol";
 import { Parties } from "./parties.js";
 import { TradeRequestSchema } from "@blockcraft/protocol";
+import { FIELD_FORGE_RECIPES, FieldForgeSchema, type FieldForgeId } from "@blockcraft/protocol";
 import { Trading } from "./trading.js";
 import { BLACKSMITH_STOCK, BLACKSMITH_DISMANTLE, BLACKSMITH_REFORGE, REGIONAL_FORGE_RECIPES, BlacksmithBuySchema, BlacksmithDismantleSchema, BlacksmithHaulSchema, BlacksmithReforgeSchema, RegionalForgeSchema, AttunementForgeSchema, EquipmentAffixHuntSchema, EQUIPMENT_HUNT_REGIONS, ITEM_DEFINITIONS, EQUIPMENT_AFFIXES, HUNT_EQUIPMENT_SETS, BUILD_PATHS, BUILD_PATH_SPECIALIZATIONS, CALLING_ABILITY_OPTIONS, CALLING_ABILITY_AUGMENTS, CALLING_AUGMENT_TRIALS, CallingAbilityRequestSchema, CallingAbilityEquipRequestSchema, CallingAugmentEquipRequestSchema, HuntCollectionRequestSchema, BuildPathRequestSchema, ArmourEquipSchema, armourStats, armouredDamage, reforgeWeaponDamageBonus, equipmentPerkStats, equipmentAffixResonanceForLoadout, type EquipmentPerkId, type BlacksmithDismantleItemId, type BlacksmithReforgeItemId, type RegionalForgeId, type HuntCollectionUpdate, type HuntLoadoutSlot, type BuildPathId, type BuildPathUpdate, type BuildPathProc, type BuildPathSpecializationId, type CallingAbilityId, type CallingAugmentId, type CallingAbilityUpdate, type CallingAbilityEffect, type CallingStateUpdate, type EquipmentAffixId, type EquipmentAffixRoll, type EquipmentAffixOffers, type EquipmentAffixUpdate, type EquipmentHuntRegionId, type EquipmentHuntTarget } from "@blockcraft/protocol";
 import { AREA_LEADER_RELIC_IDS, LEADER_FORGE_MARKS, LEADER_FORGE_RECIPES, LeaderForgeSchema,
@@ -820,6 +821,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     aliveMessage("equipment:hunt", (client, payload) => this.handleEquipmentAffixHunt(client, payload));
     aliveMessage("blacksmith:leader-forge", (client, payload) => this.handleLeaderForge(client, payload));
     aliveMessage("blacksmith:regional-forge", (client, payload) => this.handleRegionalForge(client, payload));
+    aliveMessage("blacksmith:field-forge", (client, payload) => this.handleFieldForge(client, payload));
     aliveMessage("blacksmith:forge", (client, payload) => this.handleBlacksmithForge(client, payload));
     aliveMessage("blacksmith:buy", (client, payload) => this.handleBlacksmithBuy(client, payload));
     aliveMessage("blacksmith:depths-buy", (client, payload) => this.handleDepthsRewardBuy(client, payload));
@@ -1712,6 +1714,34 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (region === "greenwood") this.setGreenwoodProgress(player, progress); else this.setMistfenProgress(player, progress);
     void this.persistPlayer(client.sessionId, player, true).catch(() => {});
     this.sendBlacksmithState(client, `${ITEM_DEFINITIONS[recipe.itemId].name} forged. Five victories converted into a guaranteed legendary.`, "regional-forged");
+  }
+
+  private handleFieldForge(client: Client, payload: unknown): void {
+    const player = this.state.players.get(client.sessionId);
+    const parsed = FieldForgeSchema.safeParse(payload);
+    if (!player || !parsed.success) return this.sendBlacksmithState(client, "Choose a field armour recipe.", "error");
+    if (player.health <= 0 || !canTradeAtBlacksmith(player))
+      return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to forge field armour.", "error");
+    const region = parsed.data.region as FieldForgeId;
+    const recipe = FIELD_FORGE_RECIPES[region];
+    if (player.coins < recipe.gold) return this.sendBlacksmithState(client, `You need ${recipe.gold - player.coins} more gold.`, "error");
+    for (const cost of recipe.materials) {
+      const held = player.inventory.get(cost.itemId)?.quantity ?? 0;
+      if (held < cost.quantity) return this.sendBlacksmithState(client,
+        `You need ${cost.quantity - held} more ${ITEM_DEFINITIONS[cost.itemId].name}.`, "error");
+    }
+    const afterCosts = (id: ItemId) => (player.inventory.get(id)?.quantity ?? 0)
+      - (recipe.materials.find(cost => cost.itemId === id)?.quantity ?? 0);
+    if (backpackAddableQuantity(afterCosts, recipe.itemId, 1,
+      player.mainHandId as MainHandId, player.armourId as ArmourId, backpackCapacity(player.blacksmithUpgrades)) < 1)
+      return this.sendBlacksmithState(client, "PACK FULL · Make room before forging field armour.", "error");
+    player.coins -= recipe.gold;
+    for (const cost of recipe.materials) player.inventory.get(cost.itemId)!.quantity -= cost.quantity;
+    let item = player.inventory.get(recipe.itemId);
+    if (!item) { item = new InventoryItemState(); player.inventory.set(recipe.itemId, item); }
+    item.quantity += 1;
+    void this.persistPlayer(client.sessionId, player, true).catch(() => {});
+    this.sendBlacksmithState(client, `${ITEM_DEFINITIONS[recipe.itemId].name} forged from your regional finds. Press I to equip it.`, "purchased");
   }
 
   private handleBlacksmithForge(client: Client, payload: unknown): void {
