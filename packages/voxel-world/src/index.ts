@@ -225,7 +225,10 @@ export function isInMistfenMarsh(x: number, z: number): boolean {
 export function isMistfenBoardwalk(x: number, z: number): boolean {
   return (x === -30 || x === -29) && z >= MISTFEN_MARSH.minZ && z <= MISTFEN_MARSH.maxZ
     || (z === -27 || z === -26) && x >= MISTFEN_MARSH.minX && x <= MISTFEN_MARSH.maxX
-    || x >= -49 && x <= -46 && z >= -32 && z <= -30;
+    || x >= -49 && x <= -46 && z >= -32 && z <= -30
+    // A narrow, readable way off the leader island to the exposed silver seam.
+    || x === -52 && z === -36
+    || x >= -55 && x <= -53 && z === -37;
 }
 export function isMistfenApproachTrail(x: number, z: number): boolean {
   return (z === 8 || z === 9) && x >= -30 && x <= -14

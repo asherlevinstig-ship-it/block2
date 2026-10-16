@@ -455,6 +455,12 @@ describe("deterministic voxel world", () => {
       expect([Block.OakLog, Block.Stone]).toContain(read(x, SURFACE_HEIGHT, -27));
     }
     expect(read(Math.floor(MISTFEN_BEHEMOTH_HOME.x), SURFACE_HEIGHT, Math.floor(MISTFEN_BEHEMOTH_HOME.z))).toBe(Block.Stone);
+    for (const [x, z] of [[-52, -36], [-53, -37], [-54, -37], [-55, -37]] as const) {
+      expect(isMistfenBoardwalk(x, z)).toBe(true);
+      expect(isMistfenToxicPool(x, z)).toBe(false);
+      expect([Block.OakLog, Block.SilverOre]).toContain(read(x, SURFACE_HEIGHT, z));
+      expect(read(x, SURFACE_HEIGHT + 1, z)).toBe(Block.Air);
+    }
     for (const [x, z] of [[-18, 8], [-26, 8], [-30, -5]] as const) {
       expect(isMistfenApproachTrail(x, z)).toBe(true);
       expect(read(x, SURFACE_HEIGHT, z)).toBe(Block.Dirt);

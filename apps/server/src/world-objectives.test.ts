@@ -65,6 +65,23 @@ describe("world objective director", () => {
     expect(objective.progressLabel).toBe("MINI-BOSS · HIGHEST LOOT");
     expect(objective.targetMobId).toBe("mistfen-behemoth");
   });
+  it("offers an optional dry crossing to silver only after the Mistfen pack is cleared", () => {
+    const cleared = new Map([
+      ["mistfen-behemoth", mob(-47.5, -31.5, { alive: false })],
+      ["mistfen-briar-west", mob(-42.5, -25.5, { alive: false })],
+      ["mistfen-briar-east", mob(-51.5, -27.5, { alive: false })],
+      ["mistfen-spitter", mob(-45.5, -36.5, { alive: false })],
+    ]);
+    const pose = player(-48, -32);
+    const bag = { x: -47, y: 8, z: -32, ownerId: "tester", itemId: "acid_gland", expiresAt: 20_000 };
+    expect(nearbyObjective("tester", pose, cleared, [], [["mireback-bag", bag]], 10_000, null).objectiveId).toBe("loot-mireback-bag");
+    expect(nearbyObjective("tester", pose, cleared, [], [], 10_000, null)).toMatchObject({
+      objectiveId: "mistfen-seam", title: "Find the Silver on Safe Ground", progressLabel: "OPTIONAL · MISTFEN CROSSING",
+    });
+    pose.inventory.set("silver_ore", { quantity: 1 });
+    expect(nearbyObjective("tester", pose, cleared, [], [], 10_000, null).objectiveId).toBe("mistfen-return");
+    expect(nearbyObjective("tester", player(-20, 5), cleared, [], [], 10_000, null).objectiveId).not.toBe("mistfen-seam");
+  });
   it("reveals the southern patrols before guiding players to the Redstone Quarrymaster", () => {
     const mobs = new Map([
       ["south-causeway-crawler", mob(3.5, 44.5, { difficultyTier: 1, level: 2 })],

@@ -2,7 +2,7 @@ import { isEquipmentItem, ITEM_DEFINITIONS, worldLevelRange, type ForestPortal, 
 import { WILDERNESS_EVENT_ID, WILDERNESS_EVENT_POSITION, WILDERNESS_EVENT_TRACKING_RADIUS } from "./wilderness-event.js";
 import { REALM_BOSS_TRACKING_RADIUS, REALM_EVENT_DEFINITIONS, REALM_EVENT_TRACKING_RADIUS, realmEventDefinition, type RealmEventStatus } from "./realm-event-director.js";
 import { ASHEN_SENTRY_IDS, FRONTIER_BRUTE_GROUP_IDS, GREENWOOD_CAMP_IDS, MISTFEN_IDS, MIXED_FRONTIER_IDS, NORTHWATCH_IDS, SOUTHERN_QUARRY_IDS, STONE_BRUTE_GROUP_IDS } from "./wilderness-encounters.js";
-import { ASHEN_SPIRE_POSITION, FOREST_DUNGEON_MOBS, GREENWOOD_CAMP, GREENWOOD_IRON_SEAM, isInAshenReach, isInForestDungeon, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_SAFE_RADIUS, TOWN_BLACKSMITH_STALL_POSITION, TOWN_SILVER_DEPTHS_PORTAL_POSITION, SILVER_DEPTHS_EXIT_POSITION, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, SILVER_DEPTHS_CHECKPOINT_POSITION, CRYSTAL_MATRIARCH_HOME } from "@blockcraft/voxel-world";
+import { ASHEN_SPIRE_POSITION, FOREST_DUNGEON_MOBS, GREENWOOD_CAMP, GREENWOOD_IRON_SEAM, MISTFEN_BEHEMOTH_HOME, MISTFEN_SILVER_SEAM, isInAshenReach, isInForestDungeon, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_SAFE_RADIUS, TOWN_BLACKSMITH_STALL_POSITION, TOWN_SILVER_DEPTHS_PORTAL_POSITION, SILVER_DEPTHS_EXIT_POSITION, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, SILVER_DEPTHS_CHECKPOINT_POSITION, CRYSTAL_MATRIARCH_HOME } from "@blockcraft/voxel-world";
 import { SILVER_DEPTHS_ANTECHAMBER_IDS, SILVER_DEPTHS_ENCOUNTERS, silverDepthsStageSpawns } from "./silver-depths-encounters.js";
 import { areaMainMobDefinition } from "./area-mini-bosses.js";
 import { GREENWOOD_EVENT_FOLLOWER_PREFIX, greenwoodEventDefinition } from "./greenwood-events.js";
@@ -137,11 +137,26 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
       z: (GREENWOOD_CAMP.minZ + GREENWOOD_CAMP.maxZ) / 2 };
     const campCleared = sameFloor(greenwoodCampCenter) && distance(greenwoodCampCenter) <= 16
       && GREENWOOD_CAMP_IDS.every(id => mobs.get(id)?.alive === false);
+    const mistfenCleared = sameFloor(MISTFEN_BEHEMOTH_HOME) && distance(MISTFEN_BEHEMOTH_HOME) <= 17
+      && MISTFEN_IDS.every(id => mobs.get(id)?.alive === false);
     const loot = drops.filter(([, drop]) => (!drop.ownerId || drop.ownerId === playerId) && now < drop.expiresAt && sameFloor(drop) && distance(drop) <= 6
       && (isEquipmentItem(drop.itemId as ItemId) || drop.itemId === "miners_lantern"
-        || campCleared && drop.ownerId === playerId && distance(greenwoodCampCenter) <= 12))
+        || campCleared && drop.ownerId === playerId && distance(greenwoodCampCenter) <= 12
+        || mistfenCleared && drop.ownerId === playerId && distance(MISTFEN_BEHEMOTH_HOME) <= 13))
       .sort((a, b) => distance(a[1]) - distance(b[1]))[0];
     if (loot) return make(`loot-${loot[0]}`, "Collect Your Loot", "Approach your personal loot and press E to pick it up.", loot[1], "loot");
+    if (mistfenCleared) {
+      const hasSilver = (player.inventory.get("silver_ore")?.quantity ?? 0) > 0;
+      const update = hasSilver
+        ? make("mistfen-return", "Carry Silver to Town",
+          "The marsh is quiet. Take your silver to the blacksmith, or keep exploring freely.", TOWN_BLACKSMITH_STALL_POSITION, "hub")
+        : make("mistfen-seam", "Find the Silver on Safe Ground",
+          "The Behemoth is down. Follow the narrow dry crossing west to the silver seam, or keep exploring freely.",
+          { x: (MISTFEN_SILVER_SEAM.minX + MISTFEN_SILVER_SEAM.maxX) / 2 + .5, y: 8,
+            z: (MISTFEN_SILVER_SEAM.minZ + MISTFEN_SILVER_SEAM.maxZ) / 2 + .5 }, "explore", 2);
+      update.progressLabel = "OPTIONAL · MISTFEN CROSSING";
+      return update;
+    }
     if (campCleared) {
       const hasIron = (player.inventory.get("iron_ore")?.quantity ?? 0) > 0;
       const update = hasIron
