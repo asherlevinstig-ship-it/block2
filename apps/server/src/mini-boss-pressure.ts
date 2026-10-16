@@ -3,6 +3,12 @@ export const MINI_BOSS_ORBIT_TRIGGER_RADIANS = Math.PI * .28;
 export const MINI_BOSS_ORBIT_COUNTER_MS = 3_000;
 export const MINI_BOSS_FEINT_DELAY_MS = 240;
 
+/** Brute leaders close ground between tells; later phases increase pressure without shortening dodge windows. */
+export function bruteLeaderPursuitSpeed(baseSpeed: number, phase: 1 | 2 | 3): number {
+  const floor = phase === 3 ? 2.25 : phase === 2 ? 1.95 : 1.65;
+  return Math.min(2.8, Math.max(floor, baseSpeed * 1.6));
+}
+
 export interface OrbitPressureState {
   targetId: string;
   angle: number;

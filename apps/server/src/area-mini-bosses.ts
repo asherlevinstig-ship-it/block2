@@ -59,6 +59,9 @@ export function areaMainMobDefinition(id: string): AreaMiniBossDefinition | unde
 }
 
 export const AREA_LEADER_FOLLOWERS: Readonly<Record<string, readonly string[]>> = {
+  "stone-brute": ["stone-brute-crawler", "stone-brute-spitter"],
+  "frontier-brute": ["frontier-brute-crawler", "frontier-brute-spitter"],
+  "frontier-brute-west": ["frontier-brute-west-crawler", "frontier-brute-west-spitter"],
   "wild-crawler": ["greenwood-briar", "greenwood-briar-north"],
   "frontier-spitter": ["cave-spitter"],
   "frontier-brute-east": ["frontier-crawler", "frontier-support-spitter"],

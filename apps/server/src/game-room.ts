@@ -5,7 +5,7 @@ import { ShadowMoveInput, stepShadowMovement, type ShadowPose } from "./movement
 import { randomUUID } from "node:crypto";
 import { ADMIN_BOOTSTRAP_HASH, ADMIN_PROFILE_HASH, adminProfileKey, matchesAdminBootstrapPass } from "./admin-access.js";
 import { AttackCoordination, allyFireLaneClear } from "./attack-coordination.js";
-import { MIXED_FRONTIER_SPITTER, isMixedFrontierMob, mixedFrontierAllows, isSilverGuard, silverGuardAllows, frontierBruteAllows, isGreenwoodCampMob, greenwoodCampAllows, isAshenSentry, ashenSentryAllows, ashenSentryPattern, isMistfenMob, mistfenAllows, isSouthernQuarryMob, southernQuarryAllows } from "./wilderness-encounters.js";
+import { MIXED_FRONTIER_SPITTER, STONE_BRUTE_ESCORTS, isMixedFrontierMob, mixedFrontierAllows, isSilverGuard, silverGuardAllows, frontierBruteAllows, isFrontierBruteGroupMob, isStoneBruteGroupMob, isGreenwoodCampMob, greenwoodCampAllows, isAshenSentry, ashenSentryAllows, ashenSentryPattern, isMistfenMob, mistfenAllows, isSouthernQuarryMob, southernQuarryAllows } from "./wilderness-encounters.js";
 import { BRUTE_VOLLEY, bruteVolleyReady, bruteRockEndpoints } from "@blockcraft/protocol";
 import { CHAMPION_CHARGE, ChatSendSchema, PlayerNameSchema, AppearanceSchema, type NearbyChatMessage } from "@blockcraft/protocol";
 import { cleanChatText, hearsNearbyChat } from "./nearby-chat.js";
@@ -45,7 +45,7 @@ import { WILDERNESS_MATERIALIZE_MS, WILDERNESS_RESPAWN_RECHECK_MS,
 import { shouldBecomeWildernessElite, wildernessEliteKind,
   wildernessEliteName, wildernessElitePattern, wildernessEliteStats } from "./wilderness-elites.js";
 import { AREA_LEADER_FOLLOWERS, AREA_MAIN_MOBS, areaLeaderPattern, areaLeaderPhase, areaMainMobDefinition, areaMiniBossDefinition, isAreaMiniBoss, leaderForFollower, type AreaLeaderPhase } from "./area-mini-bosses.js";
-import { MINI_BOSS_ENRAGE_MS, miniBossDamage, miniBossOrbitCounterPattern, miniBossWindupDelay, predictedMiniBossAim, updateOrbitPressure, type OrbitPressureState } from "./mini-boss-pressure.js";
+import { MINI_BOSS_ENRAGE_MS, bruteLeaderPursuitSpeed, miniBossDamage, miniBossOrbitCounterPattern, miniBossWindupDelay, predictedMiniBossAim, updateOrbitPressure, type OrbitPressureState } from "./mini-boss-pressure.js";
 import { miniBossCoverSites, miniBossPressureSites } from "./mini-boss-arena.js";
 import { leaderRematch, leaderRematchMaterialBonus, leaderRematchPattern, leaderRematchPressureCadence,
   leaderRematchStats, leaderRematchTiming, leaderTerritory } from "./leader-rematches.js";
@@ -595,6 +595,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.registerMob("greenwood-briar", "briar_crawler", GREENWOOD_CRAWLER_HOMES[1]);
     this.registerMob("greenwood-briar-north", "briar_crawler", GREENWOOD_CRAWLER_HOMES[2]);
     this.registerMob("stone-brute", "stone_brute", STONE_BRUTE_ARENA_HOME);
+    for (const escort of STONE_BRUTE_ESCORTS) this.registerMob(escort.id, escort.archetype, escort);
     this.registerMob("shallow-cave-crawler", "moss_crawler", CAVE_SHALLOW_HOME);
     this.registerMob("deep-cave-spitter", "cave_spitter", CAVE_DEEP_HOME);
     this.registerMob("buried-vault-crawler", "moss_crawler", { x: 54.5, y: 1, z: 10.5 });
@@ -2040,7 +2041,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (isMistfenMob(id)) return mistfenAllows(pose);
     if (isMistfenEventFollower(id)) return mistfenAllows(pose);
     if (isSouthernQuarryMob(id)) return southernQuarryAllows(pose);
-    if (id === "frontier-brute") return frontierBruteAllows(pose);
+    if (isStoneBruteGroupMob(id)) return Math.abs(pose.y - 8) <= 1.5 && isInStoneBruteArena(pose.x, pose.z);
+    if (isFrontierBruteGroupMob(id)) return frontierBruteAllows(pose);
     if (isMixedFrontierMob(id)) return mixedFrontierAllows(pose);
     const forest = FOREST_DUNGEON_MOBS.find(mob => mob.id === id);
     if (forest) return pose.y >= 7 && pose.y <= 9 && pose.z > 156 && pose.z < 174
@@ -2082,7 +2084,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const next = navigateMob(mob, spaced, goal, navigation, now, this.readWorldBlock,
       pose => allowed(pose) && peers.every(peer => Math.hypot(pose.x - peer.x, pose.z - peer.z)
         >= Math.min(mobPersonalSpace(mob.archetype, peer.archetype), Math.hypot(mob.x - peer.x, mob.z - peer.z)) - .001)
-        && this.championAllowed(mobId, pose) && this.roamingAllowed(mobId, pose) && caveEncounterAllows(mobId, pose) && (mobId === "stone-brute" || !isInStoneBruteArena(pose.x, pose.z)));
+        && this.championAllowed(mobId, pose) && this.roamingAllowed(mobId, pose) && caveEncounterAllows(mobId, pose) && (isStoneBruteGroupMob(mobId) || !isInStoneBruteArena(pose.x, pose.z)));
     const dx = next.x - mob.x;
     const dz = next.z - mob.z;
     const progress = checkMobProgress(this.mobProgress.get(mobId), mob, next, now,
@@ -2135,7 +2137,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
 
   private displaceMob(mobId: string, mob: MobState, delta: { x: number; z: number }): void {
     const next = moveMobSafely(mob, delta, this.readWorldBlock,
-      pose => this.mobPositionAllowed(pose) && this.championAllowed(mobId, pose) && this.roamingAllowed(mobId, pose) && caveEncounterAllows(mobId, pose) && (mobId === "stone-brute" || !isInStoneBruteArena(pose.x, pose.z)));
+      pose => this.mobPositionAllowed(pose) && this.championAllowed(mobId, pose) && this.roamingAllowed(mobId, pose) && caveEncounterAllows(mobId, pose) && (isStoneBruteGroupMob(mobId) || !isInStoneBruteArena(pose.x, pose.z)));
     mob.x = next.x;
     mob.y = next.y;
     mob.z = next.z;
@@ -6090,7 +6092,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         if (mob.combatState === "recover" && crawlerRushDistance(mob.archetype) > 0 && mob.attackContactEndAt > 0) {
           const next = retreatCrawler(mob, mob.yaw, now, deltaTime, mob.attackContactEndAt, mob.attackRecoveryEndAt,
             this.readWorldBlock, pose => this.mobPositionAllowed(pose) && this.championAllowed(mobId, pose)
-              && this.roamingAllowed(mobId, pose) && caveEncounterAllows(mobId, pose) && !isInStoneBruteArena(pose.x, pose.z));
+              && this.roamingAllowed(mobId, pose) && caveEncounterAllows(mobId, pose) && (isStoneBruteGroupMob(mobId) || !isInStoneBruteArena(pose.x, pose.z)));
           mob.x = next.x; mob.z = next.z;
         }
         if (now < mob.stateUntil) continue;
@@ -6220,7 +6222,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         && caveEncounterAllows(mobId, player)
         && this.roamingAllowed(mobId, player)
         && this.championAllowed(mobId, player)
-        && (mobId === "stone-brute" || !isInStoneBruteArena(player.x, player.z)));
+        && (isStoneBruteGroupMob(mobId) || !isInStoneBruteArena(player.x, player.z)));
       const awareness = this.mobAwareness.get(mobId) ?? createMobAwareness();
       this.mobAwareness.set(mobId, awareness);
       const previousTarget = awareness.targetId;
@@ -6277,10 +6279,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const positioning = this.spitterPositioning.get(mobId) ?? createSpitterPositioning();
       if (definition.attackKind === "projectile") this.spitterPositioning.set(mobId, positioning);
       const rangerSlow = this.rangerSlows.get(mobId);
-      const movementSpeed = definition.speed * mob.speedMultiplier * (now < (rangerSlow?.until ?? 0) ? rangerSlow!.multiplier : 1);
+      const baseMovementSpeed = definition.speed * mob.speedMultiplier;
+      const movementSpeed = (mob.isMiniBoss && mob.archetype === "stone_brute"
+        ? bruteLeaderPursuitSpeed(baseMovementSpeed, currentAreaLeaderPhase) : baseMovementSpeed)
+        * (now < (rangerSlow?.until ?? 0) ? rangerSlow!.multiplier : 1);
       const rangedPursuit = mob.archetype === "cave_spitter" && definition.attackKind === "projectile" && target.visible
         ? positionSpitter(mob, target, home, positioning, now, deltaTime, movementSpeed,
-          this.readWorldBlock, pose => this.mobPositionAllowed(pose) && this.roamingAllowed(mobId, pose) && caveEncounterAllows(mobId, pose) && !isInStoneBruteArena(pose.x, pose.z),
+          this.readWorldBlock, pose => this.mobPositionAllowed(pose) && this.roamingAllowed(mobId, pose) && caveEncounterAllows(mobId, pose) && (isStoneBruteGroupMob(mobId) || !isInStoneBruteArena(pose.x, pose.z)),
           pose => allyFireLaneClear(mobId, pose, target, [...this.state.mobs].map(([id, peer]) => ({ id, x: peer.x, y: peer.y, z: peer.z, alive: peer.alive, archetype: peer.archetype }))))
         : null;
       let circling = null;
@@ -7288,7 +7293,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         if (cover) this.setGuardianCover(cover, true);
       }
       const next = moveChampionCharge(start, charge.yaw, travel, this.readWorldBlock,
-        pose => this.mobPositionAllowed(pose) && this.championAllowed(id, pose) && !isInStoneBruteArena(pose.x, pose.z));
+        pose => this.mobPositionAllowed(pose) && this.championAllowed(id, pose) && this.roamingAllowed(id, pose)
+          && (isStoneBruteGroupMob(id) || !isInStoneBruteArena(pose.x, pose.z)));
       mob.x = next.x; mob.y = next.y; mob.z = next.z; mob.yaw = charge.yaw;
       if (mob.isMiniBoss) this.damageMiniBossArenaCover(id, mob, .9);
       for (const [playerId, player] of this.state.players) {
@@ -7325,7 +7331,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const travel = rush.distance * (progress - rush.progress);
       const radians = rush.yaw * Math.PI / 180;
       const next = moveMobSafely(mob, { x: Math.sin(radians) * travel, z: Math.cos(radians) * travel }, this.readWorldBlock,
-        pose => this.mobPositionAllowed(pose) && this.roamingAllowed(mobId, pose) && caveEncounterAllows(mobId, pose) && !isInStoneBruteArena(pose.x, pose.z)
+        pose => this.mobPositionAllowed(pose) && this.roamingAllowed(mobId, pose) && caveEncounterAllows(mobId, pose)
+          && (isStoneBruteGroupMob(mobId) || !isInStoneBruteArena(pose.x, pose.z))
           && isPlayerSupported(this.readWorldBlock, pose.x, pose.y, pose.z));
       const moved = Math.hypot(next.x - mob.x, next.z - mob.z);
       mob.x = next.x; mob.y = next.y; mob.z = next.z; mob.yaw = rush.yaw;
@@ -7505,8 +7512,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         && Math.abs(peer.y - player.y) <= 1.75 && Math.hypot(peer.x - player.x, peer.z - player.z) <= 12
         && caveEncounterAllows(peer.id, player) && caveEncounterAllows(peer.id, mob) && caveEncounterAllows(mobId, peer)
         && this.championAllowed(peer.id, player)
-        && (peer.id === "stone-brute" || !isInStoneBruteArena(player.x, player.z))
-        && (peer.id !== "stone-brute" || isInStoneBruteArena(mob.x, mob.z))
+        && (isStoneBruteGroupMob(peer.id) || !isInStoneBruteArena(player.x, player.z))
+        && (!isStoneBruteGroupMob(peer.id) || isInStoneBruteArena(mob.x, mob.z))
         && hasCombatLineOfSight(peer, mob, this.readWorldBlock) && hasCombatLineOfSight(peer, player, this.readWorldBlock);
     });
     for (const helper of helpers) {

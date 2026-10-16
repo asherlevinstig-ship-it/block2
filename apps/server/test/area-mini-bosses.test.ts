@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { AREA_LEADER_RELIC_IDS, ITEM_DEFINITIONS } from "@blockcraft/protocol";
 import { AREA_LEADER_FOLLOWERS, AREA_MINI_BOSSES, areaLeaderPattern, areaLeaderPhase, areaMainMobDefinition, areaMiniBossDefinition, isAreaMiniBoss, leaderForFollower } from "../src/area-mini-bosses.js";
 import { spitterChampionShots } from "../src/frontier-champion.js";
+import { STONE_BRUTE_ARENA_HOME, isInStoneBruteArena } from "@blockcraft/voxel-world";
+import { STONE_BRUTE_ESCORTS, WILDERNESS_ENCOUNTERS, isFrontierBruteGroupMob, isStoneBruteGroupMob } from "../src/wilderness-encounters.js";
 
 describe("area mini-bosses", () => {
   it("assigns one unique persistent leader id per authored area", () => {
@@ -60,5 +62,28 @@ describe("area mini-bosses", () => {
     expect(leaderForFollower("south-pit-spitter")).toBe("south-quarrymaster");
     expect(leaderForFollower("not-a-follower")).toBeNull();
     expect(Object.values(AREA_LEADER_FOLLOWERS).flat().length).toBeGreaterThan(0);
+  });
+
+  it("gives each overworld brute leader nearby escorts with a clear exposed window", () => {
+    const homes = new Map(WILDERNESS_ENCOUNTERS.map(mob => [mob.id, mob]));
+    homes.set("stone-brute", { id: "stone-brute", archetype: "stone_brute", ...STONE_BRUTE_ARENA_HOME });
+    for (const escort of STONE_BRUTE_ESCORTS) homes.set(escort.id, escort);
+    homes.set("frontier-crawler", { id: "frontier-crawler", archetype: "moss_crawler", x: 63.5, y: 8, z: 35.5 });
+    homes.set("frontier-support-spitter", { id: "frontier-support-spitter", archetype: "cave_spitter", x: 68.5, y: 8, z: 36.5 });
+    for (const id of ["stone-brute", "frontier-brute", "frontier-brute-east", "frontier-brute-west", "mistfen-behemoth", "south-quarrymaster"]) {
+      const leader = homes.get(id)!;
+      const followers = AREA_LEADER_FOLLOWERS[id] ?? [];
+      expect(followers.length, id).toBeGreaterThanOrEqual(2);
+      for (const followerId of followers) {
+        const follower = homes.get(followerId)!;
+        expect(follower, followerId).toBeDefined();
+        expect(Math.hypot(follower.x - leader.x, follower.z - leader.z), followerId)
+          .toBeLessThanOrEqual(["stone-brute", "frontier-brute", "frontier-brute-west"].includes(id) ? 6 : 10);
+        expect(leaderForFollower(followerId)).toBe(id);
+        if (id === "stone-brute") expect(isInStoneBruteArena(follower.x, follower.z)).toBe(true);
+      }
+    }
+    expect(isStoneBruteGroupMob("stone-brute-spitter")).toBe(true);
+    expect(isFrontierBruteGroupMob("frontier-brute-crawler")).toBe(true);
   });
 });

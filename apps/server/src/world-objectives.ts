@@ -1,7 +1,7 @@
 import { isEquipmentItem, ITEM_DEFINITIONS, worldLevelRange, type ForestPortal, type ItemId, type WorldObjectiveUpdate } from "@blockcraft/protocol";
 import { WILDERNESS_EVENT_ID, WILDERNESS_EVENT_POSITION, WILDERNESS_EVENT_TRACKING_RADIUS } from "./wilderness-event.js";
 import { REALM_BOSS_TRACKING_RADIUS, REALM_EVENT_DEFINITIONS, REALM_EVENT_TRACKING_RADIUS, realmEventDefinition, type RealmEventStatus } from "./realm-event-director.js";
-import { ASHEN_SENTRY_IDS, MISTFEN_IDS, MIXED_FRONTIER_IDS, SOUTHERN_QUARRY_IDS } from "./wilderness-encounters.js";
+import { ASHEN_SENTRY_IDS, FRONTIER_BRUTE_GROUP_IDS, MISTFEN_IDS, MIXED_FRONTIER_IDS, SOUTHERN_QUARRY_IDS, STONE_BRUTE_GROUP_IDS } from "./wilderness-encounters.js";
 import { ASHEN_SPIRE_POSITION, FOREST_DUNGEON_MOBS, isInAshenReach, isInForestDungeon, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_SAFE_RADIUS, TOWN_BLACKSMITH_STALL_POSITION, TOWN_SILVER_DEPTHS_PORTAL_POSITION, SILVER_DEPTHS_EXIT_POSITION, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, SILVER_DEPTHS_CHECKPOINT_POSITION, CRYSTAL_MATRIARCH_HOME } from "@blockcraft/voxel-world";
 import { SILVER_DEPTHS_ANTECHAMBER_IDS, SILVER_DEPTHS_ENCOUNTERS, silverDepthsStageSpawns } from "./silver-depths-encounters.js";
 import { areaMainMobDefinition } from "./area-mini-bosses.js";
@@ -24,8 +24,9 @@ const GROUPS: ObjectiveGroup[] = [
     mainId: event.key === "greenwood" || event.key === "mistfen" ? event.id : undefined })),
   { id: "greenwood", title: "Greenwood Crawler Camp", detail: "Follow the dirt road, clear the three root nests, collect crawler items, then mine the exposed iron seam east of the camp.", ids: ["wild-crawler", "greenwood-briar", "greenwood-briar-north"], mainId: "wild-crawler" },
   { id: "silver-guards", title: "Silver Guard Clearing", detail: "Dodge aimed shots and fan gaps using the stone cover. Collect a focus and potion, mine silver, and clear both guards to open the Forest Dungeon portal.", ids: ["cave-spitter", "frontier-spitter"], mainId: "frontier-spitter" },
-  { id: "stone-clearing", title: "Stone Brute Clearing", detail: "Dodge the marked slam, then counter during recovery.", ids: ["stone-brute"], mainId: "stone-brute" },
-  { id: "frontier-ruins", title: "Frontier Brute Ruins", detail: "Use broken pillars against rock volleys, leave the slam circle, then counter during recovery. Collect the hammer and rich silver.", ids: ["frontier-brute"], mainId: "frontier-brute" },
+  { id: "stone-clearing", title: "Stone Brute Clearing", detail: "Clear the crawler and spitter to expose Stonehide Crusher, then counter its marked slam.", ids: [...STONE_BRUTE_GROUP_IDS], mainId: "stone-brute" },
+  { id: "frontier-ruins", title: "Frontier Brute Ruins", detail: "Use broken pillars against the spitter and rock volleys. Clear Ruinbreaker's escort to expose it, then counter during recovery.", ids: [...FRONTIER_BRUTE_GROUP_IDS], mainId: "frontier-brute" },
+  { id: "western-deposit", title: "Western Rich Deposit", detail: "Clear the crawler and spitter guarding the Champion, then dodge its charge and counter during recovery.", ids: ["frontier-brute-west", "frontier-brute-west-crawler", "frontier-brute-west-spitter"], mainId: "frontier-brute-west" },
   { id: "ashen-sentries", title: "Ashglass Sentries", detail: "Use the broken cover and dodge between sweeping fan volleys. Counter after their aimed shot.", ids: [...ASHEN_SENTRY_IDS], mainId: "ashglass-sentry-east" },
   { id: "mistfen", title: "Mistfen Marsh", detail: "Stay on the crossing boardwalks, draw the ambushers out of the toxic pools, then break the Mireback Behemoth during recovery.", ids: [...MISTFEN_IDS], mainId: "mistfen-behemoth" },
   { id: "southern-patrols", title: "Southern Quarry Patrols", detail: "Follow the southroad, use the quarry shelves as cover, and clear the crawler and spitter patrols guarding the mineral pockets.", ids: [...SOUTHERN_QUARRY_IDS.slice(0, 3)] },

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MINI_BOSS_ENRAGE_MS, MINI_BOSS_FEINT_DELAY_MS, miniBossDamage, miniBossOrbitCounterPattern, miniBossWindupDelay, predictedMiniBossAim, updateOrbitPressure } from "./mini-boss-pressure.js";
+import { MINI_BOSS_ENRAGE_MS, MINI_BOSS_FEINT_DELAY_MS, bruteLeaderPursuitSpeed, miniBossDamage, miniBossOrbitCounterPattern, miniBossWindupDelay, predictedMiniBossAim, updateOrbitPressure } from "./mini-boss-pressure.js";
 import { combatMobDefinition } from "./frontier-champion.js";
 
 describe("mini boss pressure", () => {
@@ -52,5 +52,10 @@ describe("mini boss pressure", () => {
     expect(miniBossWindupDelay(true, 2)).toBe(MINI_BOSS_FEINT_DELAY_MS);
     expect(miniBossWindupDelay(true, 3)).toBe(0);
     expect(miniBossWindupDelay(false, 2)).toBe(0);
+  });
+
+  it("lets brute leaders close distance between attacks without exceeding player speed", () => {
+    expect([1, 2, 3].map(phase => bruteLeaderPursuitSpeed(.9, phase as 1 | 2 | 3))).toEqual([1.65, 1.95, 2.25]);
+    expect(bruteLeaderPursuitSpeed(2, 3)).toBe(2.8);
   });
 });

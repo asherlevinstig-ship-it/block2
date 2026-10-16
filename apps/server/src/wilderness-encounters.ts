@@ -23,6 +23,14 @@ export const mixedFrontierAllows = (pose: { x: number; y: number; z: number }) =
   && Math.hypot(pose.x - MIXED_FRONTIER_CENTER.x, pose.z - MIXED_FRONTIER_CENTER.z) <= 14;
 export const frontierBruteAllows = (pose: { x: number; y: number; z: number }) => Math.abs(pose.y - 8) <= 1.5
   && pose.x >= 56 && pose.x <= 76 && pose.z >= 18 && pose.z <= 35;
+export const FRONTIER_BRUTE_GROUP_IDS = ["frontier-brute", "frontier-brute-crawler", "frontier-brute-spitter"] as const;
+export const isFrontierBruteGroupMob = (id: string) => FRONTIER_BRUTE_GROUP_IDS.some(member => member === id);
+export const STONE_BRUTE_ESCORTS = [
+  { id: "stone-brute-crawler", archetype: "briar_crawler", x: 39.5, y: 8, z: 40.5 },
+  { id: "stone-brute-spitter", archetype: "cave_spitter", x: 45.5, y: 8, z: 43.5 },
+] as const;
+export const STONE_BRUTE_GROUP_IDS = ["stone-brute", ...STONE_BRUTE_ESCORTS.map(escort => escort.id)] as const;
+export const isStoneBruteGroupMob = (id: string) => STONE_BRUTE_GROUP_IDS.some(member => member === id);
 export const MISTFEN_IDS = ["mistfen-behemoth", "mistfen-briar-west", "mistfen-briar-east", "mistfen-spitter"] as const;
 export const isMistfenMob = (id: string) => MISTFEN_IDS.some(member => member === id);
 export const mistfenAllows = (pose: { x: number; y: number; z: number }) => Math.abs(pose.y - 8) <= 1.5
@@ -42,8 +50,12 @@ export const WILDERNESS_ENCOUNTERS: readonly { id: string; archetype: MobArchety
   { id: "wild-spitter-west", archetype: "cave_spitter", x: -30.5, y: 8, z: 12.5 },
   { id: "wild-spitter-west-north", archetype: "cave_spitter", x: -30.5, y: 8, z: 3.5 },
   { id: "frontier-brute", archetype: "stone_brute", x: 65.5, y: 8, z: 23.5 },
+  { id: "frontier-brute-crawler", archetype: "briar_crawler", x: 62.5, y: 8, z: 25.5 },
+  { id: "frontier-brute-spitter", archetype: "cave_spitter", x: 68.5, y: 8, z: 24.5 },
   { id: "frontier-brute-east", archetype: "stone_brute", x: 70.5, y: 8, z: 32.5 },
   { id: "frontier-brute-west", archetype: "stone_brute", x: -48.5, y: 8, z: 12.5 },
+  { id: "frontier-brute-west-crawler", archetype: "briar_crawler", x: -46.5, y: 8, z: 10.5 },
+  { id: "frontier-brute-west-spitter", archetype: "cave_spitter", x: -51.5, y: 8, z: 11.5 },
   { id: "mistfen-behemoth", archetype: "stone_brute", ...MISTFEN_MOB_HOMES[0] },
   { id: "mistfen-briar-west", archetype: "briar_crawler", ...MISTFEN_MOB_HOMES[1] },
   { id: "mistfen-briar-east", archetype: "briar_crawler", ...MISTFEN_MOB_HOMES[2] },
