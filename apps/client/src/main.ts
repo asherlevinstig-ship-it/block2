@@ -47,6 +47,7 @@ import { TOWN_STORAGE_CHEST_POSITION, isAtTownStorage } from "@blockcraft/voxel-
 import { TOWN_EXPEDITION_BOARD_POSITION } from "@blockcraft/voxel-world";
 import { equipmentPickupCard, LOOT_FEED_EQUIPMENT_MS, LOOT_FEED_MATERIAL_MS, LOOT_FEED_MAX_ITEMS } from "./equipment-pickup.js";
 import { bossLootIdentity, equipmentCallingFit } from "./boss-loot-identity.js";
+import { codexHuntPlan, nextSetPiece } from "./codex-hunt.js";
 import { wildernessTerritoryAt } from "@blockcraft/voxel-world";
 import { createMinimap } from "./minimap.js";
 import { caveDepthBand, caveCellKey, discoverCave, caveFogRuns } from "./cave-discovery.js";
@@ -2829,12 +2830,36 @@ function equipmentAffixLabel(itemId: ItemId): string | null {
 }
 const rankLabel = (rank: number): string => rank <= 0 ? "UNFORGED" : `RANK ${["I", "II", "III"][Math.min(3, rank) - 1]}`;
 const equipmentCollectionGrid = document.querySelector<HTMLElement>("#equipment-collection-grid")!;
+const codexHuntSummary = document.querySelector<HTMLElement>("#codex-hunt-summary")!;
+const codexHuntName = document.querySelector<HTMLElement>("#codex-hunt-name")!;
+const codexHuntSource = document.querySelector<HTMLElement>("#codex-hunt-source")!;
+const codexHuntClear = document.querySelector<HTMLButtonElement>("#codex-hunt-clear")!;
+const CODEX_HUNT_STORAGE_KEY = "blockcraft.codex-hunt.v1";
+let trackedCodexItemId: ItemId | null = (() => {
+  try { const value = localStorage.getItem(CODEX_HUNT_STORAGE_KEY); return value && isItemId(value) ? value : null; }
+  catch { return null; }
+})();
+function setCodexHunt(itemId: ItemId | null, guide = true): void {
+  const previousPlan = trackedCodexItemId ? codexHuntPlan(trackedCodexItemId) : null;
+  trackedCodexItemId = itemId;
+  try { itemId ? localStorage.setItem(CODEX_HUNT_STORAGE_KEY, itemId) : localStorage.removeItem(CODEX_HUNT_STORAGE_KEY); } catch { /* storage unavailable */ }
+  const plan = itemId ? codexHuntPlan(itemId) : null;
+  codexHuntSummary.hidden = !plan;
+  if (plan) {
+    codexHuntName.textContent = ITEM_DEFINITIONS[plan.itemId].name;
+    codexHuntSource.textContent = `${plan.source} · ${plan.level} · ${plan.protection} · ${equipmentCallingFit(plan.itemId, localBuildPathId)}`;
+    if (guide) minimap.guideTo(plan.target);
+  } else if (guide && previousPlan) minimap.clearGuide(previousPlan.target.id);
+  refreshEquipmentProgression();
+}
+codexHuntClear.addEventListener("click", () => setCodexHunt(null));
 for (const entry of EQUIPMENT_COLLECTION) {
   const card = document.createElement("article");
   card.dataset.collectionItem = entry.itemId;
   card.dataset.slot = entry.slot;
-  card.innerHTML = `<i aria-hidden="true"></i><div class="collection-item-copy"><small class="collection-state">UNDISCOVERED</small><strong>${ITEM_DEFINITIONS[entry.itemId].name}</strong><span>${entry.source}</span><p class="collection-upgrade"></p></div><button type="button" disabled>COMPARE</button>`;
-  card.querySelector<HTMLButtonElement>("button")!.addEventListener("click", () => {
+  card.innerHTML = `<i aria-hidden="true"></i><div class="collection-item-copy"><small class="collection-state">UNDISCOVERED</small><strong>${ITEM_DEFINITIONS[entry.itemId].name}</strong><span>${entry.source}</span><p class="collection-upgrade"></p></div><div class="collection-actions"><button class="track" type="button">TRACK</button><button class="compare" type="button" disabled>COMPARE</button></div>`;
+  card.querySelector<HTMLButtonElement>(".track")!.addEventListener("click", () => setCodexHunt(entry.itemId));
+  card.querySelector<HTMLButtonElement>(".compare")!.addEventListener("click", () => {
     const hand = equipmentForItem(entry.itemId);
     const armour = armourForItem(entry.itemId);
     if (hand && isMainHandId(hand)) { previewHand = hand; previewSlot = "weapon"; selectedInventoryItem = entry.itemId; }
@@ -2845,6 +2870,7 @@ for (const entry of EQUIPMENT_COLLECTION) {
   });
   equipmentCollectionGrid.append(card);
 }
+setCodexHunt(trackedCodexItemId, false);
 const huntSetGrid = document.querySelector<HTMLElement>("#hunt-set-grid")!;
 const huntLoadoutList = document.querySelector<HTMLElement>("#hunt-loadout-list")!;
 const huntCollectionMessage = document.querySelector<HTMLElement>("#hunt-collection-message")!;
@@ -3493,6 +3519,7 @@ function renderBuildPath(update: BuildPathUpdate): void {
   combatHud.setCalling(update.selectedPathId, update.selectedCallingAbilityId, update.rank, update.selectedCallingAugmentId,
     update.callingAugmentProgress, update.masteredCallingAugments);
   updateControlsHelp();
+  if (trackedCodexItemId) setCodexHunt(trackedCodexItemId, false);
   const selected = update.selectedPathId ? BUILD_PATHS[update.selectedPathId] : null;
   const rank = BUILD_PATH_RANKS.find(entry => entry.rank === update.rank) ?? BUILD_PATH_RANKS[0];
   buildPathPanel.dataset.selected = update.selectedPathId ?? "unbound";
@@ -5198,6 +5225,11 @@ function refreshBackpackCapacity(): void {
 }
 
 function refreshEquipmentProgression(): void {
+  if (trackedCodexItemId && (inventoryCounts.get(trackedCodexItemId) ?? 0) > 0) {
+    trackedCodexItemId = null;
+    codexHuntSummary.hidden = true;
+    try { localStorage.removeItem(CODEX_HUNT_STORAGE_KEY); } catch { /* storage unavailable */ }
+  }
   const progress = collectionProgress(inventoryCounts);
   document.querySelector<HTMLElement>("#collection-progress")!.textContent = `${progress.found} / ${progress.total}`;
   for (const entry of EQUIPMENT_COLLECTION) {
@@ -5211,9 +5243,14 @@ function refreshEquipmentProgression(): void {
     card.querySelector<HTMLElement>(".collection-upgrade")!.textContent = owned
       ? `${equipmentProgressionText(entry.itemId, rank)}${affix ? ` · ${affix}` : ""}`
       : "Find this item to reveal its rarity and upgrade path.";
-    const button = card.querySelector<HTMLButtonElement>("button")!;
+    const button = card.querySelector<HTMLButtonElement>(".compare")!;
     button.disabled = !owned || (!equipmentForItem(entry.itemId) && !armourForItem(entry.itemId));
     button.textContent = button.disabled && owned ? "AUTO-EQUIPPED" : "COMPARE";
+    const track = card.querySelector<HTMLButtonElement>(".track")!;
+    const plan = codexHuntPlan(entry.itemId);
+    track.hidden = !plan || owned;
+    track.dataset.active = String(trackedCodexItemId === entry.itemId);
+    track.textContent = trackedCodexItemId === entry.itemId ? "TRACKING" : "TRACK HUNT";
   }
   if (latestHuntCollection) renderHuntCollection(latestHuntCollection);
 }
@@ -10755,12 +10792,22 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   });
   room.onMessage("loot:picked-up", (message: LootPickedUp) => {
     if (message.playerId !== room?.sessionId || !isItemId(message.itemId)) return;
+    const completedTrackedHunt = message.itemId === trackedCodexItemId;
     updateInventoryItem(message.itemId, message.total);
     const item = ITEM_DEFINITIONS[message.itemId];
     if (isEquipmentItem(message.itemId)) showEquipmentPickup(message.itemId, message.quantity, message.total);
     else showResourcePickup(item.name, message.quantity, message.itemId);
     status.textContent = `Picked up ${item.name} · ${message.total} total.`;
     logMovementEvent(`LOOT ${message.itemId} +${message.quantity} total=${message.total}`);
+    if (completedTrackedHunt) {
+      const completedItem = message.itemId;
+      const next = nextSetPiece(completedItem);
+      const completedPlan = codexHuntPlan(completedItem);
+      if (completedPlan) minimap.clearGuide(completedPlan.target.id);
+      window.setTimeout(() => showLootNotice(next
+        ? `Hunt complete · next build piece: ${ITEM_DEFINITIONS[next].name}`
+        : `Hunt complete · compare or equip ${ITEM_DEFINITIONS[completedItem].name} in your pack`), 650);
+    }
   });
   room.onMessage("resource:gathered", (message: ResourceGathered) => {
     pendingMine = null;

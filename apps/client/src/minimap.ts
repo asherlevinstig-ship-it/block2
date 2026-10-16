@@ -194,6 +194,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
   setDungeonPing(ping: SilverDepthsPing): void;
   setPingHandler(handler: (x: number, z: number) => void): void;
   guideTo(target: Waypoint): void;
+  clearGuide(expectedId?: string): void;
   surfaceGuideEnabled(): boolean;
   update(player: Position & { y: number }, yaw: number, now: number, visible: boolean, cameraYaw?: number, active?: boolean): void;
 } {
@@ -347,6 +348,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
     },
     setPingHandler(handler) { pingHandler = handler; },
     guideTo(target) { setWaypoint(target); },
+    clearGuide(expectedId) { if (!expectedId || waypoint?.id === expectedId) setWaypoint(null); },
     surfaceGuideEnabled() { return surfaceGuide; },
     setMineralStatus(values) {
       statuses.clear();

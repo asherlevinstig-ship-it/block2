@@ -25,7 +25,7 @@ export const EQUIPMENT_COLLECTION: readonly EquipmentCollectionEntry[] = [
   { itemId: "rootbound_hammer", slot: "weapon", source: "Defeat the Root Guardian" },
   { itemId: "matriarch_edge", slot: "weapon", source: "Defeat the Crystal Matriarch" },
   { itemId: "acid_gland_focus", slot: "weapon", source: "Hunt Cave Spitters in the Silver wilds" },
-  { itemId: "venom_focus", slot: "weapon", source: "Defeat the Crystal Matriarch" },
+  { itemId: "venom_focus", slot: "weapon", source: "Defeat the Venom Matriarch" },
   { itemId: "echo_prism", slot: "weapon", source: "Defeat the Silver Echo" },
   { itemId: "leather_armour", slot: "armour", source: "Buy from the Town blacksmith" },
   { itemId: "iron_armour", slot: "armour", source: "Buy from the Town blacksmith at level 5" },

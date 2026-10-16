@@ -1650,6 +1650,16 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 .collection-upgrade { margin: 5px 0 0; color: #d3b873; font-size: .52rem; line-height: 1.25; }
 #equipment-collection-grid button { min-width: 68px; padding: 7px 6px; border: 1px solid #7b956f; border-radius: 6px; background: #1c3022; color: #cce2c3; cursor: pointer; font-size: .52rem; font-weight: 900; }
 #equipment-collection-grid button:disabled { cursor: default; opacity: .45; }
+.collection-actions { display: grid; gap: 5px; }
+.collection-actions .track { border-color: #c99d45; background: #493616; color: #ffe19a; }
+.collection-actions .track[data-active="true"] { border-color: #77dfb7; background: #174739; color: #c9ffeb; box-shadow: 0 0 12px #58d4aa44; }
+#codex-hunt-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 8px 0 10px; padding: 10px 12px; border: 1px solid #c99d456b; border-radius: 9px; background: linear-gradient(120deg, #352811b8, #10251db8); }
+#codex-hunt-summary[hidden] { display: none; }
+#codex-hunt-summary div { display: grid; min-width: 0; gap: 3px; }
+#codex-hunt-summary small { color: #dbb85f; font-size: .48rem; font-weight: 1000; letter-spacing: .11em; }
+#codex-hunt-summary strong { color: #fff0ba; font-size: .72rem; }
+#codex-hunt-summary span { color: #aebcaf; font-size: .52rem; line-height: 1.35; }
+#codex-hunt-clear { flex: 0 0 auto; padding: 7px 9px; border: 1px solid #687a6d; border-radius: 6px; background: #17221b; color: #b9c7bd; font-size: .5rem; font-weight: 900; }
 @media (max-width: 540px) {
   .inventory-loadout { grid-template-columns: 150px minmax(0, 1fr); }
   .inventory-portrait { min-height: 190px; }
