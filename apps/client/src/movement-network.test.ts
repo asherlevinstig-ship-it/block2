@@ -6,6 +6,7 @@ import {
   localReconciliationRate,
   movementDirectionChanged,
   movementYaw,
+  preserveReconciledVisualOffset,
   quantizeMovementToEightDirections,
   reconciliationVerticalTarget,
   sampleRemotePose,
@@ -124,6 +125,17 @@ describe("movement networking", () => {
     expect(Math.abs(next.z - offset.z)).toBeLessThanOrEqual(7 * .0424 + .000001);
     for (let index = 0; index < 150; index += 1) offset = smoothRecoveryOffset(offset, 1 / 60);
     expect(Math.abs(offset.z)).toBeLessThan(.001);
+  });
+
+  it("keeps the rendered position fixed through a large idle reconciliation", () => {
+    const before = { x: -8.308, z: -23.081 };
+    const after = { x: -7.564, z: -24.223 };
+    const network = { x: -0.2, z: 0.1 };
+    const recovery = preserveReconciledVisualOffset({ x: 0, z: 0 }, network, before, after);
+    expect(after.x + recovery.x).toBeCloseTo(before.x + network.x);
+    expect(after.z + recovery.z).toBeCloseTo(before.z + network.z);
+    const next = smoothRecoveryOffset(recovery, 0.06);
+    expect(Math.hypot(next.x - recovery.x, next.z - recovery.z)).toBeLessThanOrEqual(0.35 + 1e-6);
   });
 
   it.each([[2.835, 5], [2.979, 6], [3.487, 9], [3.834, 12]])(

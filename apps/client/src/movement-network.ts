@@ -167,6 +167,19 @@ export function smoothRecoveryOffset(offset: MovementVector, deltaTime: number):
   return { x: offset.x * fraction, z: offset.z * fraction };
 }
 
+/** Transfer a network correction into the bounded visual recovery path. */
+export function preserveReconciledVisualOffset(
+  recovery: MovementVector,
+  network: MovementVector,
+  before: MovementVector,
+  after: MovementVector,
+): MovementVector {
+  return {
+    x: recovery.x + network.x + before.x - after.x,
+    z: recovery.z + network.z + before.z - after.z,
+  };
+}
+
 export function reconciliationVerticalTarget(
   localY: number,
   authoritativeY: number,

@@ -259,6 +259,7 @@ import {
   localReconciliationRate,
   movementDirectionChanged,
   movementYaw,
+  preserveReconciledVisualOffset,
   quantizeMovementToEightDirections,
   reconciliationVerticalTarget,
   sampleRemotePose,
@@ -9330,8 +9331,9 @@ function reconcileLocalPlayer(
     } else {
       // Preserve the rendered location on receipt, then recover at a bounded
       // speed. Collision and combat remain at the authoritative location.
-      localRecoveryVisualOffset.x += position.x - target.x + localNetworkVisualOffset.x;
-      localRecoveryVisualOffset.z += position.z - target.z + localNetworkVisualOffset.z;
+      localRecoveryVisualOffset = preserveReconciledVisualOffset(
+        localRecoveryVisualOffset, localNetworkVisualOffset, position, target,
+      );
     }
     localVisualVerticalOffset += position.y - target.y;
     localPlayer.setPosition(target);
@@ -9340,6 +9342,15 @@ function reconcileLocalPlayer(
     const previousY = position.y;
     position.lerp(position, target, Math.min(1, dt * reconciliationRate));
     localVisualVerticalOffset += previousY - position.y;
+    if (!moving) {
+      // The stop acknowledgement can arrive hundreds of milliseconds late.
+      // Keep the rendered pose planted while collision catches up, then let
+      // the bounded recovery offset carry it to the authoritative position.
+      localRecoveryVisualOffset = preserveReconciledVisualOffset(
+        localRecoveryVisualOffset, localNetworkVisualOffset, beforeCorrection, position,
+      );
+      localNetworkVisualOffset = { x: 0, z: 0 };
+    }
     localPlayer.setPosition(position);
   }
   const correctionDistance = beforeCorrection.distance(localPlayer.getPosition());
@@ -9483,7 +9494,7 @@ app.on("update", (dt: number) => {
   const reconciliation = movementPilotController
     ? { distance: localPlayer.getPosition().distance(authoritativeLocalPosition), rate: 0 }
     : reconcileLocalPlayer(dt, moving, sequenceLag, predicted.grounded || grounded, authoritativeInputReady);
-  if (!Number.isFinite(reconciliation.rate)) localNetworkVisualOffset = { x: 0, z: 0 };
+  if (!Number.isFinite(reconciliation.rate) || !moving) localNetworkVisualOffset = { x: 0, z: 0 };
   else {
     const reconciledPosition = localPlayer.getPosition();
     localNetworkVisualOffset = smoothNetworkVisualOffset(
