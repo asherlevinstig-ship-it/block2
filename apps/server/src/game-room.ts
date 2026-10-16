@@ -6556,6 +6556,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (!parsed.success) return this.reject(client, { action: "power", reason: "payload" });
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
+    if (!milestoneUnlocked(player.level, "first_power"))
+      return this.reject(client, { requestId: parsed.data.requestId, action: "power", reason: "missing" });
     player.defending = false;
     const powerId = parsed.data.powerId as PowerId;
     const definition = POWER_DEFINITIONS[powerId];
@@ -6639,6 +6641,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (!parsed.success) return this.reject(client, { action: "special", reason: "payload" });
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
+    if (!milestoneUnlocked(player.level, "first_special"))
+      return this.reject(client, { requestId: parsed.data.requestId, action: "special", reason: "missing" });
     player.defending = false;
     if (parsed.data.specialId !== player.equippedSpecial) {
       return this.reject(client, { requestId: parsed.data.requestId, action: "special", reason: "compatibility" });
@@ -6716,6 +6720,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (!parsed.success) return this.reject(client, { action: "special", reason: "payload" });
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
+    if (!milestoneUnlocked(player.level, "first_special"))
+      return this.reject(client, { requestId: parsed.data.requestId, action: "special", reason: "missing" });
     if (player.mainHandId === "venom_focus") return this.reject(client, { requestId: parsed.data.requestId, action: "loadout", reason: "compatibility" });
     if (this.pendingPowers.has(client.sessionId) || this.pendingAttacks.has(client.sessionId)) {
       return this.reject(client, { requestId: parsed.data.requestId, action: "special", reason: "rate" });
@@ -6736,6 +6742,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (!parsed.success) return this.reject(client, { action: "power", reason: "payload" });
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
+    if (!milestoneUnlocked(player.level, "first_power"))
+      return this.reject(client, { requestId: parsed.data.requestId, action: "power", reason: "missing" });
     const definition = POWER_DEFINITIONS[parsed.data.powerId];
     if (!definition || !isPowerCompatible(definition, player.mainHandTag)) {
       return this.reject(client, { requestId: parsed.data.requestId, action: "power", reason: "compatibility" });

@@ -97,10 +97,12 @@ function PowerLoadout() {
   const secondaryLocked = characterLevel.value < 3;
   const compatible = isPowerCompatibleWithMainHand(POWER_DEFINITIONS[selectedPower], selectedHand);
   const cooldown = powerCooldown.value;
-  return h("button", { id: "power-slot", type: "button", "aria-label": `Use ${POWER_DEFINITIONS[selectedPower].name}`,
-    class: `${compatible ? "" : "incompatible"} ${cooldown.ready && compatible && !powerAiming.value ? "ready" : ""} ${powerAiming.value ? "aiming" : ""}`.trim() },
-    h("span", null, "POWER"), h("strong", { id: "power-name" }, POWER_DEFINITIONS[selectedPower].name),
-    h("em", { id: "power-cooldown-label" }, cooldown.label), h("i", { id: "power-cooldown-fill", style: { width: `${cooldown.percent}%` } }),
+  const locked = characterLevel.value < 2;
+  return h("button", { id: "power-slot", type: "button", disabled: locked,
+    "aria-label": locked ? "Power unlocks at level 2" : `Use ${POWER_DEFINITIONS[selectedPower].name}`,
+    class: `${locked ? "locked" : compatible ? "" : "incompatible"} ${!locked && cooldown.ready && compatible && !powerAiming.value ? "ready" : ""} ${powerAiming.value ? "aiming" : ""}`.trim() },
+    h("span", null, "POWER"), h("strong", { id: "power-name" }, locked ? "Unlocks at LV 2" : POWER_DEFINITIONS[selectedPower].name),
+    h("em", { id: "power-cooldown-label" }, locked ? "KEEP FIGHTING" : cooldown.label), h("i", { id: "power-cooldown-fill", style: { width: `${locked ? 0 : cooldown.percent}%` } }),
   );
 }
 
@@ -120,15 +122,15 @@ function LoadoutDrawer() {
       ),
     ),
     h("section", { class: "loadout-group" },
-      h("p", null, h("span", null, "POWERS"), h("small", null, "Choose slot, then technique")),
+      h("p", null, h("span", null, "POWERS"), h("small", null, characterLevel.value < 2 ? "Unlocks at level 2" : "Choose slot, then technique")),
       h("div", { id: "power-loadout-slots", role: "group", "aria-label": "Power loadout slots" },
-        h("button", { type: "button", "data-power-slot": "primary", "aria-pressed": String(activePowerSlot.value === "primary") }, h("span", null, "R"), h("strong", null, POWER_DEFINITIONS[primaryPower.value].name.toUpperCase())),
+        h("button", { type: "button", "data-power-slot": "primary", "aria-pressed": String(activePowerSlot.value === "primary"), disabled: characterLevel.value < 2 }, h("span", null, "R"), h("strong", null, characterLevel.value < 2 ? "LOCKED · LV 2" : POWER_DEFINITIONS[primaryPower.value].name.toUpperCase())),
         h("button", { type: "button", "data-power-slot": "secondary", "aria-pressed": String(activePowerSlot.value === "secondary"), disabled: secondaryLocked }, h("span", null, "T"), h("strong", null, secondaryLocked ? "LOCKED · LV 3" : POWER_DEFINITIONS[secondaryPower.value].name.toUpperCase())),
       ),
       h("div", { id: "power-picker", role: "group", "aria-label": "Equipped Power" }, POWER_IDS.map(id => {
         const allowed = isPowerCompatibleWithMainHand(POWER_DEFINITIONS[id], selectedHand);
-        return h("button", { type: "button", "data-power": id, "aria-pressed": String(id === selectedPower), disabled: !allowed,
-          title: allowed ? `${POWER_DEFINITIONS[id].name} is compatible with ${MAIN_HAND_DEFINITIONS[selectedHand].name}` : `${POWER_DEFINITIONS[id].name} requires a melee main hand` }, POWER_LABELS[id]);
+        return h("button", { type: "button", "data-power": id, "aria-pressed": String(id === selectedPower), disabled: characterLevel.value < 2 || !allowed,
+          title: characterLevel.value < 2 ? "Powers unlock at level 2" : allowed ? `${POWER_DEFINITIONS[id].name} is compatible with ${MAIN_HAND_DEFINITIONS[selectedHand].name}` : `${POWER_DEFINITIONS[id].name} requires a melee main hand` }, characterLevel.value < 2 ? "LOCKED" : POWER_LABELS[id]);
       })),
       h("section", { id: "seismic-upgrades", hidden: selectedPower !== "seismic_cleave", "aria-label": "Seismic Cleave upgrades" },
         h("p", null, h("span", null, "ACTIVE AUGMENTS"), h("strong", null, "Fault Reach · Aftershock")),
@@ -139,10 +141,10 @@ function LoadoutDrawer() {
       ),
     ),
     h("section", { class: "loadout-group" },
-      h("p", null, h("span", null, "SPECIAL"), h("small", null, SPECIAL_DEFINITIONS[special.value].name)),
+      h("p", null, h("span", null, "SPECIAL"), h("small", null, characterLevel.value < 4 ? "Unlocks at level 4" : SPECIAL_DEFINITIONS[special.value].name)),
       h("div", { id: "special-picker", role: "group", "aria-label": "Equipped Special" },
-        h("button", { type: "button", "data-special": "hunters_mark", "aria-pressed": String(special.value === "hunters_mark"), disabled: special.value === "venom_fan" }, "MARK"),
-        h("button", { type: "button", "data-special": "bramble_snare", "aria-pressed": String(special.value === "bramble_snare"), disabled: special.value === "venom_fan" }, "SNARE"),
+        h("button", { type: "button", "data-special": "hunters_mark", "aria-pressed": String(special.value === "hunters_mark"), disabled: characterLevel.value < 4 || special.value === "venom_fan" }, characterLevel.value < 4 ? "LOCKED · LV 4" : "MARK"),
+        h("button", { type: "button", "data-special": "bramble_snare", "aria-pressed": String(special.value === "bramble_snare"), disabled: characterLevel.value < 4 || special.value === "venom_fan" }, characterLevel.value < 4 ? "LOCKED · LV 4" : "SNARE"),
       ),
     ),
     calling.value ? h("section", { class: "loadout-group" },
@@ -176,10 +178,12 @@ function LoadoutDrawer() {
 function SpecialLoadout() {
   const selected = special.value;
   const cooldown = specialCooldown.value;
-  return h("button", { id: "special-slot", type: "button", "aria-label": `Use ${SPECIAL_DEFINITIONS[selected].name}`,
-      class: `${cooldown.ready && !specialAiming.value ? "ready" : ""} ${specialAiming.value ? "aiming" : ""}`.trim() },
-      h("span", null, "SPECIAL"), h("strong", { id: "special-name" }, SPECIAL_DEFINITIONS[selected].name),
-      h("em", { id: "special-cooldown-label" }, cooldown.label), h("i", { id: "special-cooldown-fill", style: { width: `${cooldown.percent}%` } }),
+  const locked = characterLevel.value < 4;
+  return h("button", { id: "special-slot", type: "button", disabled: locked,
+      "aria-label": locked ? "Special unlocks at level 4" : `Use ${SPECIAL_DEFINITIONS[selected].name}`,
+      class: `${locked ? "locked" : cooldown.ready && !specialAiming.value ? "ready" : ""} ${specialAiming.value ? "aiming" : ""}`.trim() },
+      h("span", null, "SPECIAL"), h("strong", { id: "special-name" }, locked ? "Unlocks at LV 4" : SPECIAL_DEFINITIONS[selected].name),
+      h("em", { id: "special-cooldown-label" }, locked ? "COMING LATER" : cooldown.label), h("i", { id: "special-cooldown-fill", style: { width: `${locked ? 0 : cooldown.percent}%` } }),
   );
 }
 

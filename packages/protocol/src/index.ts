@@ -167,7 +167,9 @@ export function experienceLevelMultiplier(playerLevel: number, enemyLevel: numbe
   return gap >= 5 ? 1.75 : gap >= 2 ? 1.4 : gap <= -6 ? .1 : gap <= -4 ? .25 : gap <= -2 ? .5 : 1;
 }
 export const CHARACTER_MILESTONES = [
+  { level: 2, id: "first_power", name: "First Power", detail: "Shockwave and the Power slot unlock; cast with R" },
   { level: 3, id: "second_power", name: "Second Power Slot", detail: "Equip a second Power and cast it with T" },
+  { level: 4, id: "first_special", name: "First Special", detail: "Hunter's Mark and the Special slot unlock; cast with F" },
   { level: 5, id: "advanced_smithing", name: "Advanced Smithing", detail: "Forged weapons and iron armour become available" },
   { level: 7, id: "silver_depths", name: "The Silver Depths", detail: "Accept the second expedition from the blacksmith" },
   { level: 10, id: "frontier_contracts", name: "Frontier Contracts", detail: "Track elite Frontier encounters and bosses" },

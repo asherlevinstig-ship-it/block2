@@ -3440,13 +3440,15 @@ function updateControlsHelp(): void {
   const secondaryHint = localCharacterProgression.level >= 3 ? ` · T ${POWER_DEFINITIONS[localSecondaryPower].name}` : "";
   const calling = CALLING_ABILITY_OPTIONS.find(option => option.id === localCallingAbilityId);
   const callingHint = calling ? ` · G ${calling.name}` : "";
-  controlsHelp.textContent = `WASD move · Arrows camera · I inventory · H potion · Hold C/right-click Guard · Space dodge/cancel · ${powerHint}${secondaryHint} · ${specialHint}${callingHint} · Q mode · E/click acts${fireHint}`;
+  const unlockedPowerHint = localCharacterProgression.level >= 2 ? ` · ${powerHint}${secondaryHint}` : "";
+  const unlockedSpecialHint = localCharacterProgression.level >= 4 ? ` · ${specialHint}` : "";
+  controlsHelp.textContent = `WASD move · Arrows camera · I inventory · H potion · Hold C/right-click Guard · Space dodge/cancel${unlockedPowerHint}${unlockedSpecialHint}${callingHint} · Q mode · E/click acts${fireHint}`;
 }
 
 function updateSpecialLoadout(specialId: SpecialId): void {
   localEquippedSpecial = specialId;
   combatHud.setSpecial(specialId);
-  specialButton.textContent = specialId === "venom_fan" ? "Fan" : specialId === "hunters_mark" ? "Mark" : "Snare";
+  specialButton.textContent = localCharacterProgression.level < 4 ? "LV 4" : specialId === "venom_fan" ? "Fan" : specialId === "hunters_mark" ? "Mark" : "Snare";
   updateControlsHelp();
 }
 
@@ -3479,6 +3481,7 @@ function requestCallingAbility(): void {
 
 function requestSpecialEquip(specialId: SpecialId): void {
   if (!room || !worldReady || specialId === localEquippedSpecial) return;
+  if (localCharacterProgression.level < 4) return;
   if (specialAimActive || localPowerStartedAt !== null || localActionStartedAt !== null) {
     status.textContent = "Finish or cancel the current action before changing Special.";
     return;
@@ -3499,6 +3502,7 @@ function updateMainHandLoadout(mainHandId: MainHandId): void {
 
 function requestPowerEquip(powerId: PowerId): void {
   if (!room || !worldReady || powerId === localEquippedPower) return;
+  if (localCharacterProgression.level < 2) return;
   if (powerAimActive || localPowerStartedAt !== null) {
     status.textContent = "Finish or cancel the current Power before changing it.";
     return;
@@ -3584,6 +3588,10 @@ function renderCharacterProgression(update: ProgressionUpdate, maximumHealth = p
   const required = Math.max(0, update.experienceRequired);
   playerHud.setProgression(update.level, update.experience, required);
   combatHud.setPowerLoadout(localPrimaryPower, localSecondaryPower, activePowerSlot, update.level);
+  powerButton.disabled = update.level < 2;
+  specialButton.disabled = update.level < 4;
+  specialButton.textContent = update.level < 4 ? "LV 4" : localEquippedSpecial === "venom_fan" ? "Fan" : localEquippedSpecial === "hunters_mark" ? "Mark" : "Snare";
+  updateControlsHelp();
   inventoryLevel.textContent = required > 0 ? `${update.level} · ${update.experience}/${required} XP` : `${update.level} · MAX`;
   characterPoints.textContent = update.unspentStatPoints > 0 ? `${update.unspentStatPoints} POINT${update.unspentStatPoints === 1 ? "" : "S"} AVAILABLE` : "NO POINTS AVAILABLE";
   statPower.textContent = `${update.powerPoints} · +${characterPowerBonus(update.powerPoints)} damage`;
@@ -8613,6 +8621,7 @@ function updatePowerAimFromPointer(): void {
 function beginPowerAim(pointerId: number | null = null): void {
   if (!defeatScreen.hidden) return;
   if (!room || !worldReady) return;
+  if (localCharacterProgression.level < 2) return;
   if (localDefending) requestDefense(false);
   if (!powerServerReady) {
     status.textContent = "Power server is updating · Powers will unlock automatically.";
@@ -8794,6 +8803,7 @@ function updateSpecialAimFromPointer(): void {
 function beginSpecialAim(pointerId: number | null = null): void {
   if (!defeatScreen.hidden) return;
   if (!room || !worldReady || specialAimActive) return;
+  if (localCharacterProgression.level < 4) return;
   if (localDefending) requestDefense(false);
   const definition = SPECIAL_DEFINITIONS[localEquippedSpecial];
   const remaining = localSpecialCooldownUntil - Date.now();
@@ -10040,7 +10050,7 @@ app.on("update", (dt: number) => {
   }
   const powerRemaining = Math.max(0, localPowerCooldownUntil - Date.now());
   const powerCompatible = isPowerCompatibleWithMainHand(POWER_DEFINITIONS[localEquippedPower], localMainHandId);
-  powerButton.textContent = !powerServerReady ? "Wait" : !powerCompatible ? "Locked" : powerAimActive ? "Release" : powerRemaining > 0 ? `${Math.ceil(powerRemaining / 1000)}s` : "Power";
+  powerButton.textContent = localCharacterProgression.level < 2 ? "LV 2" : !powerServerReady ? "Wait" : !powerCompatible ? "Locked" : powerAimActive ? "Release" : powerRemaining > 0 ? `${Math.ceil(powerRemaining / 1000)}s` : "Power";
   const specialRemaining = Math.max(0, localSpecialCooldownUntil - Date.now());
   const specialDefinition = SPECIAL_DEFINITIONS[localEquippedSpecial];
   const callingRemaining = Math.max(0, localCallingCooldownUntil - Date.now());

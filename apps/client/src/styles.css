@@ -418,6 +418,7 @@ html.onboarding-active #hud #target, html.onboarding-active #hud #players { disp
   text-decoration: line-through;
 }
 #power-picker button:disabled::after { content: "  LOCKED"; color: #b4675b; font-size: .43rem; text-decoration: none; }
+#power-slot.locked, #special-slot.locked { opacity: .56; filter: saturate(.6); box-shadow: none; }
 #power-slot.incompatible {
   border-color: rgb(255 103 82 / 45%);
   background: rgb(67 27 22 / 82%);

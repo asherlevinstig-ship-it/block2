@@ -10,7 +10,7 @@ function setup(wall = false) {
   vi.spyOn(room, "broadcast").mockImplementation(() => {});
   vi.spyOn(internal, "persistPlayer").mockResolvedValue(undefined);
   vi.spyOn(Date, "now").mockReturnValue(10000);
-  const player = new PlayerState(); Object.assign(player, { x: 40, y: 8, z: 18 }); room.state.players.set("a", player);
+  const player = new PlayerState(); Object.assign(player, { x: 40, y: 8, z: 18, level: 4 }); room.state.players.set("a", player);
   const item = new InventoryItemState(); item.quantity = 1; player.inventory.set("venom_focus", item);
   const client = { sessionId: "a", send: vi.fn() } as any;
   internal.handleMainHandEquip(client, { requestId: "equip", mainHandId: "venom_focus" });
