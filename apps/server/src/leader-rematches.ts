@@ -61,9 +61,9 @@ export function leaderRematchPattern(base: string, archetype: string, sequence: 
   return base;
 }
 
-/** Northwatch's rematch adds a marked two-part rock attack to its usual rotation. */
-export function northwatchRematchPattern(base: string, sequence: number, tier: number): string {
-  return tier > 0 && sequence % 3 === 1 ? "fault-line" : base;
+/** The Watchbreaker's fixed rotation includes a marked two-part rock attack. */
+export function northwatchWatchbreakerPattern(base: string, sequence: number): string {
+  return sequence % 3 === 1 ? "fault-line" : base;
 }
 
 export function leaderRematchMaterialBonus(tier: number): number {

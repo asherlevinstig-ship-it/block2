@@ -25,10 +25,10 @@ describe("mini boss pressure", () => {
     expect(miniBossOrbitCounterPattern("moss_crawler")).toBe("alpha-rush");
   });
 
-  it("adds only one pressure damage when the player is under-levelled", () => {
-    expect(miniBossDamage(1, 8, 5)).toBe(2);
-    expect(miniBossDamage(2, 12, 1)).toBe(3);
-    expect(miniBossDamage(2, 8, 6)).toBe(2);
+  it("keeps mini-boss damage fixed regardless of player level", () => {
+    expect(miniBossDamage(1)).toBe(1);
+    expect(miniBossDamage(2)).toBe(2);
+    expect(miniBossDamage(2.4)).toBe(2);
     expect(MINI_BOSS_ENRAGE_MS).toBe(45_000);
   });
 

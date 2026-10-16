@@ -43,7 +43,7 @@ describe("frontier champion", () => {
     expect(mob.yaw).toBe(yaw); expect(internal.championCharges.size).toBe(1);
     expect(mob.attackRecoveryEndAt - mob.attackContactEndAt).toBe(CHAMPION_CHARGE.recoveryMs);
   });
-  it("respawns as an empowered rematch and restarts with a slam", () => {
+  it("respawns at the same fixed strength and restarts with a slam", () => {
     vi.useFakeTimers(); vi.setSystemTime(10000);
     const room = new WorldRoom(); room.setState(new WorldState()); const internal = room as any;
     vi.spyOn(room, "broadcast").mockImplementation(() => {});
@@ -53,8 +53,8 @@ describe("frontier champion", () => {
     internal.defeatMob(FRONTIER_CHAMPION_ID, mob, "absent", 10000);
     expect(mob.respawnAt).toBe(30000);
     vi.setSystemTime(30001); internal.simulatePlayers(.033);
-    expect(mob.alive).toBe(true); expect(mob.health).toBeGreaterThan(52);
-    expect(mob.leaderRematchTier).toBe(1); expect(mob.leaderModifier).not.toBe("");
+    expect(mob.alive).toBe(true); expect(mob.health).toBe(52);
+    expect(mob.leaderRematchTier).toBe(0); expect(mob.leaderModifier).toBe("");
     expect(mob.attackPattern).toBe("slam"); expect(mob.actionSequence).toBe(0);
   });
   it("sweeps actual travel and hits each player only once", () => {

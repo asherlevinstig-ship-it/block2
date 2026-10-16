@@ -47,7 +47,7 @@ import { shouldBecomeWildernessElite, wildernessEliteKind,
 import { AREA_LEADER_FOLLOWERS, AREA_MAIN_MOBS, areaLeaderPattern, areaLeaderPhase, areaMainMobDefinition, areaMiniBossDefinition, isAreaMiniBoss, leaderForFollower, type AreaLeaderPhase } from "./area-mini-bosses.js";
 import { MINI_BOSS_ENRAGE_MS, bruteLeaderPursuitSpeed, miniBossDamage, miniBossOrbitCounterPattern, miniBossWindupDelay, predictedMiniBossAim, updateOrbitPressure, type OrbitPressureState } from "./mini-boss-pressure.js";
 import { miniBossCoverSites, miniBossPressureSites } from "./mini-boss-arena.js";
-import { leaderRematch, leaderRematchMaterialBonus, leaderRematchPattern, northwatchRematchPattern, leaderRematchPressureCadence,
+import { leaderRematch, leaderRematchMaterialBonus, leaderRematchPattern, northwatchWatchbreakerPattern, leaderRematchPressureCadence,
   leaderRematchStats, leaderRematchTiming, leaderTerritory } from "./leader-rematches.js";
 import { RealmHuntBoardRequestSchema, type RealmHuntBoardUpdate, type RealmHuntContractStatus, type RealmHuntStatus } from "@blockcraft/protocol";
 import { HUNT_PATHS, advanceHuntContract, beginHuntContract, huntContractTier, isHuntPathId,
@@ -458,7 +458,6 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly miniBossEngagedAt = new Map<string, number>();
   private readonly miniBossOrbitPressure = new Map<string, OrbitPressureState>();
   private readonly miniBossArenaCover = new Map<string, Map<string, ActiveMiniBossCover>>();
-  private readonly leaderDefeats = new Map<string, number>();
   private readonly selectedRealmHunts = new Map<string, string>();
   private readonly huntContracts = new Map<string, HuntContractState>();
   private readonly huntContractCycles = new Map<string, Partial<Record<HuntPathId, number>>>();
@@ -2325,7 +2324,6 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (isRealmEventId(mobId)) this.realmBossPhases.delete(mobId);
     this.openAreaLeaderAfterFollowerDefeat(mobId, now);
     const areaMainMob = areaMainMobDefinition(mobId);
-    if (areaMainMob) this.leaderDefeats.set(mobId, Math.min(5, (this.leaderDefeats.get(mobId) ?? 0) + 1));
     if (mobId === "northwatch-watchbreaker") for (const playerId of recipients) {
       const player = this.state.players.get(playerId);
       if (!player) continue;
@@ -3252,7 +3250,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const leaderId = leaderForFollower(mobId);
     const leader = leaderId ? this.state.mobs.get(leaderId) : undefined;
     if (leader?.alive && (leader.archetype === "moss_crawler" || leader.archetype === "briar_crawler")) damage += 1;
-    if (mob?.isMiniBoss) damage = miniBossDamage(damage, mob.level, player.level);
+    if (mob?.isMiniBoss) damage = miniBossDamage(damage);
     const defense = blockable && mob
       ? resolveDefense(damage, player.defending, player.defenseStartedAt, now, isAttackInGuardArc(player, mob))
       : { damage, guarded: false, parried: false };
@@ -3963,17 +3961,15 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   }
 
   private spawnForestStage(stage: number): void {
-    const scalePlayers = this.forestDungeonRun?.scalePlayers ?? 1;
-    const healthScale = 1 + Math.max(0, scalePlayers - 1) * 0.45;
     for (const entry of FOREST_DUNGEON_MOBS.filter(mob => mob.stage === stage)) {
       if (this.state.mobs.has(entry.id)) continue;
       this.registerMob(entry.id, entry.archetype, entry);
       const mob = this.state.mobs.get(entry.id)!;
       mob.name = stage === 3 ? "Ancient Root Guardian" : stage === 2 ? "Thicket Guard" : "Forest Sentinel";
       const baseHealth = stage === 3 ? 28 : entry.archetype === "cave_spitter" ? 8 : 10;
-      mob.health = mob.maxHealth = Math.ceil(baseHealth * healthScale);
-      mob.attackDamage = (stage === 3 ? 2 : 1) + (scalePlayers >= 3 ? 1 : 0);
-      mob.speedMultiplier = 1 + Math.max(0, scalePlayers - 1) * 0.04; mob.rewardMultiplier = 1;
+      mob.health = mob.maxHealth = baseHealth;
+      mob.attackDamage = stage === 3 ? 2 : 1;
+      mob.speedMultiplier = 1; mob.rewardMultiplier = 1;
       if (stage === 2 && entry.id.endsWith("-b")) mob.actionSequence = 1;
       if (stage === 3) { mob.isChampion = true; mob.enraged = false; mob.attackPattern = "slam"; mob.rewardMultiplier = 1.5; }
       mob.level = stage === 3 ? 10 : stage === 2 ? 8 : 6;
@@ -4218,15 +4214,6 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (client) this.sendRealmHuntBoard(client, next.completed ? "Contract complete. Choose a path to begin a harder rotation." : "Contract advanced. Your next hunt is marked near its territory.");
   }
 
-  private northwatchActiveRematchTier(): number {
-    const home = this.mobHomes.get("northwatch-watchbreaker");
-    if (!home) return 0;
-    return Math.max(0, ...[...this.state.players.values()]
-      .filter(player => player.health > 0 && Math.abs(player.y - home.y) <= 2.5
-        && Math.hypot(player.x - home.x, player.z - home.z) <= 48)
-      .map(player => parseNorthwatchProgress(player.huntLoadoutsJson).clears));
-  }
-
   private sendRealmHuntBoard(client: Client, message = "Choose a path contract or track one leader. Guidance awakens only near its territory."): void {
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
@@ -4242,8 +4229,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const awakened = (player.inventory.get(recipe.markId)?.quantity ?? 0) + (player.storage.get(recipe.markId)?.quantity ?? 0) > 0;
       const pending = mob?.alive
         ? { tier: mob.leaderRematchTier, modifier: mob.leaderModifier }
-        : leaderRematch(definition.id, definition.id === "northwatch-watchbreaker"
-          ? parseNorthwatchProgress(player.huntLoadoutsJson).clears : this.leaderDefeats.get(definition.id) ?? 0);
+        : leaderRematch(definition.id, 0);
       return {
         mobId: definition.id, name: definition.name, territory: leaderTerritory(definition.id),
         status: !mob?.alive ? "recovering" : pending.tier > 0 ? "empowered" : "alive",
@@ -4894,16 +4880,6 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     player.huntLoadoutsJson = JSON.stringify({ ...raw, mistfen });
   }
 
-  private activeMistfenMasteryRank(): number {
-    let rank = 0;
-    for (const player of this.state.players.values()) {
-      if (player.health <= 0 || player.y < SURFACE_HEIGHT - 1 || !isInMistfenMarsh(player.x, player.z)) continue;
-      const progress = this.mistfenProgress(player);
-      rank = Math.max(rank, mistfenMasteryRank(progress.points, progress.discovered));
-    }
-    return rank;
-  }
-
   private greenwoodProgress(player: PlayerState): { points: number; discovered: boolean; marks: number } {
     try {
       const value = (JSON.parse(player.huntLoadoutsJson) as { greenwood?: { points?: unknown; discovered?: unknown; marks?: unknown } }).greenwood;
@@ -4932,16 +4908,6 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (this.roomKind !== "overworld" || progress.discovered || player.y < SURFACE_HEIGHT - 1 || !isInGreenwoodRegion(player.x, player.z)) return;
     progress.discovered = true; progress.points = Math.max(5, progress.points); this.setGreenwoodProgress(player, progress);
     void this.persistPlayer(playerId, player, true);
-  }
-
-  private activeGreenwoodMasteryRank(): number {
-    let rank = 0;
-    for (const player of this.state.players.values()) {
-      if (player.health <= 0 || player.y < SURFACE_HEIGHT - 1 || !isInGreenwoodRegion(player.x, player.z)) continue;
-      const progress = this.greenwoodProgress(player);
-      rank = Math.max(rank, greenwoodMasteryRank(progress.points, progress.discovered));
-    }
-    return rank;
   }
 
   private buildPathDamageBonus(player: PlayerState, mob: MobState, mobId: string, playerId: string, now: number, source: "weapon" | "power"): number {
@@ -5133,7 +5099,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     for (const playerId of run.entered) this.clients.find(client => client.sessionId === playerId)?.send("dungeon:run", {
       runId: run.id, phase: "started", partySize: run.scalePlayers,
     } satisfies DungeonRunUpdate);
-    this.sendDungeonLobby(`Expedition started · enemies scaled for ${run.scalePlayers} player${run.scalePlayers === 1 ? "" : "s"}.`);
+    this.sendDungeonLobby(`Expedition started · fixed enemy strength for ${run.scalePlayers} player${run.scalePlayers === 1 ? "" : "s"}.`);
   }
 
   private handleDungeonLobby(client: Client, payload: unknown): void {
@@ -5953,26 +5919,6 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (!mob.alive && FOREST_DUNGEON_MOBS.some(entry => entry.id === mobId)) continue;
       if (!mob.alive && this.roomKind === "silver-depths"
         && (SILVER_DEPTHS_ENEMY_IDS.includes(mobId) || SILVER_DEPTHS_CACHE_GUARD_IDS.includes(mobId))) continue;
-      if (mobId === "mistfen-behemoth" && mob.alive && mob.leaderRematchTier > 0
-        && mob.leaderModifier !== "mirebreaker" && this.activeMistfenMasteryRank() >= 3) {
-        const healthRatio = mob.health / Math.max(1, mob.maxHealth);
-        mob.leaderRematchTier = Math.max(5, mob.leaderRematchTier);
-        mob.leaderModifier = "mirebreaker";
-        mob.maxHealth = Math.min(120, Math.ceil(mob.maxHealth * 1.2));
-        mob.health = Math.max(1, Math.ceil(mob.maxHealth * healthRatio));
-        mob.attackDamage = Math.min(12, mob.attackDamage + 1);
-        mob.speedMultiplier = Math.min(1.65, mob.speedMultiplier * 1.08);
-        mob.rewardMultiplier *= 1.35;
-      }
-      if (mobId === "wild-crawler" && mob.alive && mob.leaderRematchTier > 0
-        && mob.leaderModifier !== "rootslayer" && this.activeGreenwoodMasteryRank() >= 3) {
-        const healthRatio = mob.health / Math.max(1, mob.maxHealth);
-        mob.leaderRematchTier = Math.max(5, mob.leaderRematchTier); mob.leaderModifier = "rootslayer";
-        mob.maxHealth = Math.min(120, Math.ceil(mob.maxHealth * 1.22));
-        mob.health = Math.max(1, Math.ceil(mob.maxHealth * healthRatio));
-        mob.attackDamage = Math.min(12, mob.attackDamage + 1); mob.speedMultiplier = Math.min(1.65, mob.speedMultiplier * 1.12);
-        mob.rewardMultiplier *= 1.35;
-      }
       let currentAreaLeaderPhase: AreaLeaderPhase = 1;
       if (mob.isMiniBoss && mob.alive) {
         currentAreaLeaderPhase = huntChampion
@@ -6048,9 +5994,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           : mobId === "frontier-brute" ? frontierBrutePattern(mob.actionSequence)
           : "slam");
       }
-      if (!huntChampion && mob.isMiniBoss && mob.combatState === "idle" && mob.leaderRematchTier > 0) {
-        mob.attackPattern = leaderRematchPattern(mob.attackPattern, mob.archetype, mob.actionSequence, mob.leaderModifier);
-        if (mobId === "northwatch-watchbreaker") mob.attackPattern = northwatchRematchPattern(mob.attackPattern, mob.actionSequence, mob.leaderRematchTier);
+      if (!huntChampion && mob.isMiniBoss && mob.combatState === "idle") {
+        if (mob.leaderRematchTier > 0)
+          mob.attackPattern = leaderRematchPattern(mob.attackPattern, mob.archetype, mob.actionSequence, mob.leaderModifier);
+        if (mobId === "northwatch-watchbreaker") mob.attackPattern = northwatchWatchbreakerPattern(mob.attackPattern, mob.actionSequence);
       }
       const definition = combatMobDefinition(mob);
       const home = this.mobHomes.get(mobId) ?? definition.spawn;
@@ -6075,18 +6022,14 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           const activeElites = [...this.state.mobs.entries()].filter(([id, candidate]) => id !== mobId && !isAreaMiniBoss(id) && candidate.isElite
             && (candidate.alive || candidate.materializeUntil > now)).length;
           const areaMiniBoss = areaMiniBossDefinition(mobId);
-          const pendingRematch = leaderRematch(mobId, mobId === "northwatch-watchbreaker"
-            ? this.northwatchActiveRematchTier() : this.leaderDefeats.get(mobId) ?? 0);
-          const mistfenRank = isMistfenMob(mobId) ? this.activeMistfenMasteryRank() : 0;
-          const greenwoodRank = isGreenwoodCampMob(mobId) ? this.activeGreenwoodMasteryRank() : 0;
-          mob.isElite = !areaMiniBoss && (mistfenRank >= 2 || greenwoodRank >= 2 || shouldBecomeWildernessElite(band.tier, activeElites, Math.random()));
+          mob.isElite = !areaMiniBoss && shouldBecomeWildernessElite(band.tier, activeElites, Math.random());
           const eliteKind = wildernessEliteKind(definition.id);
           mob.eliteKind = mob.isElite ? eliteKind : "";
           const baseName = this.mobBaseNames.get(mobId) ?? definition.name;
           mob.name = areaMiniBoss?.name ?? (mob.isElite ? wildernessEliteName(eliteKind, baseName) : baseName);
           if (areaMiniBoss) {
-            mob.leaderRematchTier = pendingRematch.tier;
-            mob.leaderModifier = pendingRematch.modifier;
+            mob.leaderRematchTier = 0;
+            mob.leaderModifier = "";
           }
           mob.actionSequence = 0;
           if (areaMiniBoss) mob.attackPattern = areaLeaderPattern(definition.id, 0, 1, mobId);
@@ -6130,8 +6073,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         if (mobId === "forge-colossus") { mob.health = mob.maxHealth = 38; mob.attackDamage = 3; mob.attackPattern = "rocks"; }
         const areaLeader = areaMainMobDefinition(mobId);
         if (areaLeader) {
-          const rematch = leaderRematch(mobId, mobId === "northwatch-watchbreaker"
-            ? this.northwatchActiveRematchTier() : this.leaderDefeats.get(mobId) ?? 0);
+          const rematch = leaderRematch(mobId, 0);
           const empowered = leaderRematchStats({ maxHealth: mob.maxHealth, damage: mob.attackDamage, armor: mob.armor,
             speedMultiplier: mob.speedMultiplier, rewardMultiplier: mob.rewardMultiplier }, rematch);
           mob.leaderRematchTier = rematch.tier;
@@ -6141,20 +6083,6 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           mob.armor = empowered.armor;
           mob.speedMultiplier = empowered.speedMultiplier;
           mob.rewardMultiplier = empowered.rewardMultiplier;
-          if (mobId === "mistfen-behemoth" && this.activeMistfenMasteryRank() >= 3 && rematch.tier > 0) {
-            mob.leaderRematchTier = Math.max(5, mob.leaderRematchTier);
-            mob.leaderModifier = "mirebreaker";
-            mob.health = mob.maxHealth = Math.min(120, Math.ceil(mob.maxHealth * 1.2));
-            mob.attackDamage = Math.min(12, mob.attackDamage + 1);
-            mob.speedMultiplier = Math.min(1.65, mob.speedMultiplier * 1.08);
-            mob.rewardMultiplier *= 1.35;
-          }
-          if (mobId === "wild-crawler" && this.activeGreenwoodMasteryRank() >= 3 && rematch.tier > 0) {
-            mob.leaderRematchTier = Math.max(5, mob.leaderRematchTier); mob.leaderModifier = "rootslayer";
-            mob.health = mob.maxHealth = Math.min(120, Math.ceil(mob.maxHealth * 1.22));
-            mob.attackDamage = Math.min(12, mob.attackDamage + 1); mob.speedMultiplier = Math.min(1.65, mob.speedMultiplier * 1.12);
-            mob.rewardMultiplier *= 1.35;
-          }
         }
         if (mobId === CRYSTAL_MATRIARCH_ID) this.restoreMatriarchCover();
         mob.alive = true;

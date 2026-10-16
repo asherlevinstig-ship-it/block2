@@ -231,7 +231,7 @@ describe("forest dungeon portal", () => {
     internal.useForestPortal(friendClient, { id: "forest-entry" });
     expect(room.state.mobs.has("forest-room1-a")).toBe(false);
     internal.handleDungeonLobby(client, { action: "ready" }); internal.handleDungeonLobby(friendClient, { action: "ready" });
-    expect(friend.x).toBe(FOREST_DUNGEON_ENTRY.x); expect(room.state.mobs.get("forest-room1-a")?.maxHealth).toBe(15);
+    expect(friend.x).toBe(FOREST_DUNGEON_ENTRY.x); expect(room.state.mobs.get("forest-room1-a")?.maxHealth).toBe(10);
     Object.assign(player, { x: 164.5, y: 8, z: 161.5 }); kill("forest-room1-a");
     expect(internal.forestReturns.size).toBe(2);
   });

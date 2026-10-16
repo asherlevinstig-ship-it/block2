@@ -129,7 +129,7 @@ describe("distinct radial wilderness territories", () => {
     internal.setEquipmentAttunements(player, {}, 0, {});
     expect(parseNorthwatchProgress(player.huntLoadoutsJson)).toEqual({ clears: 2, marks: 1 });
   });
-  it("uses nearby characters for shared boss difficulty but keeps rematch rewards personal", () => {
+  it("keeps Northwatch rewards personal without scaling its shared boss to nearby players", () => {
     vi.spyOn(Math, "random").mockReturnValue(.99);
     const { room, internal } = fixture();
     const leader = room.state.mobs.get("northwatch-watchbreaker")!;
@@ -137,14 +137,14 @@ describe("distinct radial wilderness territories", () => {
     veteran.huntLoadoutsJson = withNorthwatchProgress(veteran.huntLoadoutsJson, { clears: 3, marks: 3 });
     const newcomer = new PlayerState(); Object.assign(newcomer, { x: leader.x + 14, y: leader.y, z: leader.z });
     room.state.players.set("veteran", veteran); room.state.players.set("newcomer", newcomer);
-    expect(internal.northwatchActiveRematchTier()).toBe(3);
+    expect(leader.leaderRematchTier).toBe(0);
     internal.spawnLootDrops("northwatch-watchbreaker", leader, 10_000, "veteran");
     internal.spawnLootDrops("northwatch-watchbreaker", leader, 10_001, "newcomer");
     const drops = [...room.state.lootDrops.values()];
     expect(decodeLootBagItems(drops[0]!.contentsJson)).toContainEqual({ itemId: "ridge_hide", quantity: 4 });
     expect(decodeLootBagItems(drops[1]!.contentsJson).some(entry => entry.itemId === "ridge_hide")).toBe(false);
     veteran.x = 200;
-    expect(internal.northwatchActiveRematchTier()).toBe(0);
+    expect(leader.leaderRematchTier).toBe(0);
   });
   it("resumes a patrol after loading, then collects its cache and reforges the cloak", () => {
     vi.useFakeTimers(); vi.setSystemTime(10_000);

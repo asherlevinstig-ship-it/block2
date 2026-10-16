@@ -71,9 +71,9 @@ export function predictedMiniBossAim(
   return { x, y: target.y, z, yaw: Math.atan2(x - mob.x, z - mob.z) * 180 / Math.PI };
 }
 
-/** Being substantially under-levelled raises the cost of a mistake, without creating one-shot damage. */
-export function miniBossDamage(baseDamage: number, mobLevel: number, playerLevel: number): number {
-  return Math.max(1, Math.round(baseDamage) + (mobLevel - playerLevel >= 3 ? 1 : 0));
+/** Encounter damage is fixed; player level never changes an enemy's attack. */
+export function miniBossDamage(baseDamage: number): number {
+  return Math.max(1, Math.round(baseDamage));
 }
 
 /** A periodic held tell punishes dodge-on-animation while remaining fully readable. */
