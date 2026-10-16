@@ -31,6 +31,11 @@
     </section>
     <div id="mining-progress" hidden><span id="mining-progress-label">Mining</span><div><i id="mining-progress-fill"></i></div></div>
     <div id="resource-toasts" role="status" aria-live="polite" aria-label="Item pickups"></div>
+    <aside id="level-up-celebration" hidden role="status" aria-live="polite">
+      <small>✦ CHARACTER ADVANCEMENT ✦</small><strong id="level-celebration-title">LEVEL UP!</strong>
+      <span id="level-celebration-detail">Your adventure grows stronger.</span>
+      <button id="level-celebration-choose" type="button">CHOOSE A STAT · LATER IS OK</button>
+    </aside>
     <button id="loot-world-label" type="button" hidden aria-label="Interact with nearby loot">
       <em id="loot-world-verdict"></em><strong id="loot-world-name"></strong><small id="loot-world-stats"></small>
       <small id="loot-world-carry"></small><span id="loot-world-action"></span><i id="loot-world-hold" aria-hidden="true"><b></b></i>
@@ -533,6 +538,7 @@
           <button type="button" data-character-stat="mining"><strong>MINING</strong><small>+1 mineral yield every 2 points</small></button>
         </div>
         <small id="level-up-points">1 point available</small>
+        <button id="level-up-later" type="button">CHOOSE LATER</button>
       </div>
     </section>
     <section id="calling-intro" role="dialog" aria-modal="true" aria-labelledby="calling-intro-title" hidden>

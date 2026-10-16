@@ -25,8 +25,9 @@ body:has(#inventory-panel:not([hidden])) .forest-portal-label { display: none; }
 #loot-world-hold { display: none; height: 3px; margin-top: 5px; overflow: hidden; border-radius: 3px; background: #ffffff18; }
 #loot-world-hold b { display: block; width: 0; height: 100%; background: currentColor; }
 #loot-world-label[data-holding="true"] #loot-world-hold { display: block; }
-#loot-world-label[data-holding="true"] #loot-world-hold b { animation: loot-hold .55s linear forwards; }
-@keyframes loot-hold { to { width: 100%; } }
+#loot-world-label[data-holding="true"] { animation: none; filter: brightness(1.22); }
+#loot-world-label[data-holding="true"] #loot-world-hold { height: 5px; }
+#loot-world-label[data-holding="true"] #loot-world-hold b { background: linear-gradient(90deg, var(--rarity, #e8bf68), #fff7cf); box-shadow: 0 0 8px var(--rarity, #e8bf68); }
 #loot-world-label[data-near="false"] { border-color: #718579; color: #d5dfd4; cursor: default; box-shadow: 0 4px 12px #0007; }
 #loot-world-label[data-rarity="common"] { --rarity: #c3cbc5; }
 #loot-world-label[data-rarity="uncommon"] { --rarity: #68dc72; }
@@ -2206,6 +2207,20 @@ html.boss-hud-active #world-objective { display: none !important; }
 .level-up-choices strong, .level-up-choices small { display: block; }
 .level-up-choices small { margin-top: 5px; color: #9fb0a1; line-height: 1.35; }
 #level-up-points { color: #dfbd73; }
+#level-up-later { display: block; margin: 16px auto 0; padding: 6px 12px; border: 0; background: transparent; color: #c9b992; cursor: pointer; font: 800 11px system-ui; letter-spacing: .06em; }
+#level-up-later:hover, #level-up-later:focus-visible { color: #fff0b8; text-decoration: underline; }
+#level-up-celebration { position: fixed; z-index: 45; top: 17%; left: 50%; width: min(440px, calc(100vw - 32px)); padding: 22px 26px; transform: translateX(-50%); border: 2px solid #ffde83; border-radius: 16px; background: radial-gradient(circle at 50% -20%, #806026, #19251b 72%); color: #fff4c8; box-shadow: 0 16px 56px #000b, 0 0 52px #e9bb6177; text-align: center; pointer-events: auto; animation: level-reveal .55s cubic-bezier(.2,1.4,.35,1) both; }
+#level-up-celebration[hidden] { display: none; }
+#level-up-celebration small, #level-up-celebration strong, #level-up-celebration span { display: block; }
+#level-up-celebration small { color: #ffcf6e; font: 1000 11px system-ui; letter-spacing: .18em; }
+#level-up-celebration strong { margin: 5px 0; color: #fff8d3; font: 900 clamp(32px, 5vw, 51px) Georgia, serif; text-shadow: 0 0 20px #ffdb7eaa; }
+#level-up-celebration span { color: #e9e5c9; font: 700 13px system-ui; }
+#level-celebration-choose { margin-top: 16px; padding: 10px 16px; border: 1px solid #ffdf81; border-radius: 8px; background: #e1b754; color: #24170a; cursor: pointer; font: 1000 11px system-ui; letter-spacing: .08em; }
+#level-celebration-choose:hover, #level-celebration-choose:focus-visible { background: #ffe492; }
+@keyframes level-reveal { from { opacity: 0; transform: translateX(-50%) scale(.74); filter: brightness(1.7); } to { opacity: 1; transform: translateX(-50%) scale(1); filter: brightness(1); } }
+#player-level[data-points="true"] { border-color: #ffe186; box-shadow: 0 0 17px #e7b955bb; animation: level-ready 1.3s ease-in-out infinite; }
+@keyframes level-ready { 50% { box-shadow: 0 0 27px #ffe186dd; filter: brightness(1.28); } }
+@media (prefers-reduced-motion: reduce) { #level-up-celebration, #player-level[data-points="true"] { animation: none; } }
 @media (max-width: 520px) { .level-up-choices { grid-template-columns: 1fr; } }
 
 #minimap { position: fixed; z-index: 20; top: calc(94px + env(safe-area-inset-top)); right: max(14px, env(safe-area-inset-right)); width: 240px; box-sizing: border-box; border: 1px solid #afc99a55; border-radius: 13px; background: #0b1916ed; color: #d9e8ce; box-shadow: 0 8px 26px #0005; padding: 9px; }

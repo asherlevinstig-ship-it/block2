@@ -55,7 +55,8 @@ describe("enemy combat audio", () => {
   });
 
   it("escalates rare, epic, and legendary loot reveals", () => {
-    expect(Object.keys(LOOT_CUE_DEFINITIONS).sort()).toEqual(["lootEpic", "lootLegendary", "lootPickup", "lootRare"]);
+    expect(Object.keys(LOOT_CUE_DEFINITIONS).sort()).toEqual(["levelUp", "lootEpic", "lootLegendary", "lootPickup", "lootRare"]);
+    expect(LOOT_CUE_DEFINITIONS.levelUp.tones).toHaveLength(3);
     expect(LOOT_CUE_DEFINITIONS.lootRare.tones).toHaveLength(2);
     expect(LOOT_CUE_DEFINITIONS.lootEpic.tones).toHaveLength(3);
     expect(LOOT_CUE_DEFINITIONS.lootLegendary.tones).toHaveLength(4);

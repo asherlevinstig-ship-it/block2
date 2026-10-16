@@ -3037,9 +3037,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (areaRelicDrops.length) this.clients.find(client => client.sessionId === ownerId)?.send("chat:notice",
       `${firstLeaderVictory ? "FIRST LEADER VICTORY" : personalRematchTier > 0 ? `EMPOWERED REMATCH ${personalRematchTier}` : "SIGNATURE DROP"} · ${areaRelicDrops[0]!.quantity} ${ITEM_DEFINITIONS[areaRelicDrops[0]!.itemId].name}${rematchMaterialQuantity ? ` + ${rematchMaterialQuantity} bonus ${ITEM_DEFINITIONS[rematchMaterialId].name}` : ""} added to your personal cache.`);
     if (greenwoodFirstClearDrops.length) this.clients.find(client => client.sessionId === ownerId)?.send("chat:notice",
-      `GREENWOOD FIRST CLEAR · ${greenwoodFirstClearDrops[0]!.itemId === "healing_potion" ? "2 healing potions" : ITEM_DEFINITIONS[greenwoodFirstClearDrops[0]!.itemId].name} added to your personal loot bag. Press E to collect it.`);
+      `GREENWOOD FIRST CLEAR · ${greenwoodFirstClearDrops[0]!.itemId === "healing_potion" ? "2 healing potions" : ITEM_DEFINITIONS[greenwoodFirstClearDrops[0]!.itemId].name} added to your personal loot bag. Hold E to collect it.`);
     if (northwatchCloakDrop.length) this.clients.find(client => client.sessionId === ownerId)?.send("chat:notice",
-      "FIRST NORTHWATCH CLOAK · your personal loot bag contains a rare cloak. Press E to collect it.");
+      "FIRST NORTHWATCH CLOAK · your personal loot bag contains a rare cloak. Hold E to collect it.");
     if (northwatchPatrolBonus.length) this.clients.find(client => client.sessionId === ownerId)?.send("chat:notice",
       "NORTHWATCH PATROL CACHE · 2 bonus Ridge Hide added to your personal loot bag.");
   }

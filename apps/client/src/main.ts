@@ -37,6 +37,7 @@ import { blacksmithShopStock, shopGoldShortfall, type BlacksmithShopTab } from "
 import { haulUpgradeProgress, nextHaulRegion, nextHaulUpgrade, type HaulRegion } from "./blacksmith-haul.js";
 import { createStorageUI, type StorageUpdate } from "./storage-ui.js";
 import { lootVisibleToPlayer } from "./loot-ownership.js";
+import { lootHoldProgress, type LootHold } from "./loot-hold.js";
 import { incomingLootAdvice, swapCandidateReason, swapCandidateScore } from "./loot-recommendation.js";
 import { undergroundThreatVisible } from "./underground-threat-visibility.js";
 import { cavernRespawnIndicator } from "./cavern-respawn-indicator.js";
@@ -805,6 +806,18 @@ const levelUpPanel = document.querySelector<HTMLElement>("#level-up-panel")!;
 const levelUpTitle = document.querySelector<HTMLElement>("#level-up-title")!;
 const levelUpMessage = document.querySelector<HTMLElement>("#level-up-message")!;
 const levelUpPoints = document.querySelector<HTMLElement>("#level-up-points")!;
+const levelUpLater = document.querySelector<HTMLButtonElement>("#level-up-later")!;
+const levelCelebration = document.querySelector<HTMLElement>("#level-up-celebration")!;
+const levelCelebrationTitle = document.querySelector<HTMLElement>("#level-celebration-title")!;
+const levelCelebrationDetail = document.querySelector<HTMLElement>("#level-celebration-detail")!;
+const levelCelebrationChoose = document.querySelector<HTMLButtonElement>("#level-celebration-choose")!;
+let pendingLevelCelebration: { level: number; detail: string } | null = null;
+let levelCelebrationUntil = 0;
+levelCelebrationChoose.addEventListener("click", () => {
+  levelCelebration.hidden = true;
+  if (localCharacterProgression.unspentStatPoints > 0) levelUpPanel.hidden = false;
+});
+levelUpLater.addEventListener("click", () => { levelUpPanel.hidden = true; });
 const characterStatButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-character-stat]")];
 const defenseSlot = document.querySelector<HTMLButtonElement>("#defense-slot")!;
 const traitSlot = document.querySelector<HTMLElement>("#trait-slot")!;
@@ -2493,6 +2506,7 @@ const lootPanel = document.querySelector<HTMLElement>("#loot-panel")!;
 const lootWorldLabel = document.querySelector<HTMLButtonElement>("#loot-world-label")!;
 const lootWorldName = document.querySelector<HTMLElement>("#loot-world-name")!;
 const lootWorldAction = document.querySelector<HTMLElement>("#loot-world-action")!;
+const lootWorldHoldFill = document.querySelector<HTMLElement>("#loot-world-hold b")!;
 const lootWorldVerdict = document.querySelector<HTMLElement>("#loot-world-verdict")!;
 const lootWorldStats = document.querySelector<HTMLElement>("#loot-world-stats")!;
 const lootWorldCarry = document.querySelector<HTMLElement>("#loot-world-carry")!;
@@ -2518,7 +2532,44 @@ let lootPending = false;
 let selectedSwapItemId: ItemId | null = null;
 const pendingFloorLoot = new Map<string, number>();
 let lootWorldDetailKey = "";
+let lootHold: LootHold | null = null;
+function cancelLootHold(): void {
+  lootHold = null;
+  lootWorldLabel.dataset.holding = "false";
+  lootWorldHoldFill.style.width = "0%";
+}
+function releaseLootHold(source: LootHold["source"]): void {
+  if (!lootHold || lootHold.source !== source) return;
+  const dropId = lootHold.dropId;
+  const complete = lootHoldProgress(lootHold, performance.now(), nearestVisibleLootDrop(EQUIPMENT_LOOT_RANGE)?.id ?? null) >= 1;
+  cancelLootHold();
+  if (complete) interactWithLoot(dropId);
+}
+function beginLootHold(source: LootHold["source"]): void {
+  const nearby = nearestVisibleLootDrop(EQUIPMENT_LOOT_RANGE);
+  if (!nearby || !lootWorldLabel.hidden && lootWorldLabel.dataset.near === "false") return;
+  const drop = lootVisuals.get(nearby.id)?.state;
+  if (!drop || (pendingFloorLoot.get(nearby.id) ?? 0) > performance.now()) return;
+  if (lootWouldOverflow(nearby.id, drop)) { interactWithLoot(nearby.id); return; }
+  lootHold = { dropId: nearby.id, startedAt: performance.now(), source };
+  lootWorldLabel.dataset.holding = "true";
+}
+function updateLootHold(now: number): void {
+  if (!lootHold) return;
+  const nearby = nearestVisibleLootDrop(EQUIPMENT_LOOT_RANGE);
+  if (!room || !worldReady || !defeatScreen.hidden || !lootPanel.hidden || !lootPackDecision.hidden
+    || !inventoryPanel.hidden || !levelUpPanel.hidden || nearby?.id !== lootHold.dropId
+    || lootHold.source === "keyboard" && !keys.has("KeyE")) { cancelLootHold(); return; }
+  const progress = lootHoldProgress(lootHold, now, nearby.id);
+  lootWorldHoldFill.style.width = `${Math.round(progress * 100)}%`;
+  if (progress >= 1) {
+    const dropId = lootHold.dropId;
+    cancelLootHold();
+    interactWithLoot(dropId);
+  }
+}
 function closeLoot() {
+  cancelLootHold();
   lootPanel.hidden = true; lootPackDecision.hidden = true; inspectedDropId = null; selectedSwapItemId = null; lootPending = false;
   inventoryPanel.querySelectorAll<HTMLElement>('[data-swap-selected="true"]').forEach(card => delete card.dataset.swapSelected);
 }
@@ -2729,7 +2780,9 @@ function updateLootWorldLabel(): void {
   lootWorldName.textContent = bagTier
     ? LOOT_BAG_TIER_LABEL[bagTier]
     : `${drop.quantity > 1 ? `${drop.quantity}× ` : ""}${ITEM_DEFINITIONS[drop.itemId].name}${hasDetails || equippable ? ` · ${ITEM_RARITIES[rarity].label.toUpperCase()}` : ""}`;
-  lootWorldAction.textContent = `${near ? full ? "INVENTORY FULL" : "E · PICK UP" : `${nearest.distance.toFixed(1)}m · MOVE CLOSER`}${drop.expiresAt < Number.MAX_SAFE_INTEGER ? ` · ${seconds}s` : ""}`;
+  const holding = lootHold?.dropId === nearest.id;
+  const pending = (pendingFloorLoot.get(nearest.id) ?? 0) > performance.now();
+  lootWorldAction.textContent = `${near ? full ? "INVENTORY FULL" : pending ? "COLLECTING..." : holding ? "HOLDING · KEEP CLOSE" : "HOLD E / TOUCH · PICK UP" : `${nearest.distance.toFixed(1)}m · MOVE CLOSER`}${drop.expiresAt < Number.MAX_SAFE_INTEGER ? ` · ${seconds}s` : ""}`;
   lootWorldLabel.dataset.near = String(near);
   lootWorldLabel.dataset.full = String(full);
   lootWorldLabel.hidden = false;
@@ -2919,9 +2972,23 @@ lootPackClose.addEventListener("click", closeLoot);
 lootPackLeave.addEventListener("click", closeLoot);
 lootPackSwap.addEventListener("click", () => { if (selectedSwapItemId) collectInspectedLoot("swap", selectedSwapItemId); });
 lootPackSalvage.addEventListener("click", () => collectInspectedLoot("dismantle"));
-lootWorldLabel.addEventListener("click", () => {
-  const nearby = nearestVisibleLootDrop(EQUIPMENT_LOOT_RANGE);
-  if (nearby) interactWithLoot(nearby.id);
+lootWorldLabel.addEventListener("pointerdown", event => {
+  if (event.button !== 0) return;
+  event.preventDefault();
+  beginLootHold("pointer");
+});
+for (const name of ["pointerup", "pointercancel", "pointerleave"])
+  lootWorldLabel.addEventListener(name, () => {
+    if (name === "pointerup") releaseLootHold("pointer");
+    else if (lootHold?.source === "pointer") cancelLootHold();
+  });
+lootWorldLabel.addEventListener("keydown", event => {
+  if (event.repeat || event.code !== "Enter" && event.code !== "Space") return;
+  event.preventDefault(); event.stopPropagation(); beginLootHold("pointer");
+});
+lootWorldLabel.addEventListener("keyup", event => {
+  if (event.code !== "Enter" && event.code !== "Space") return;
+  event.preventDefault(); event.stopPropagation(); releaseLootHold("pointer");
 });
 const inventoryCounts = new Map<ItemId, number>(Object.keys(ITEM_DEFINITIONS).map(itemId => [itemId as ItemId, 0]));
 let blacksmithReforgeRanks: EquipmentReforgeRanks = {};
@@ -3637,11 +3704,27 @@ function renderCharacterProgression(update: ProgressionUpdate, maximumHealth = p
   levelUpTitle.textContent = `Level ${update.level}!`;
   levelUpMessage.textContent = update.reason === "level_up" ? `You earned ${update.experienceGranted ?? 0} XP from ${update.source ?? "adventuring"}. Choose one permanent improvement.` : "Choose one permanent improvement.";
   levelUpPoints.textContent = `${update.unspentStatPoints} point${update.unspentStatPoints === 1 ? "" : "s"} available`;
+  playerLevel.dataset.points = String(update.unspentStatPoints > 0);
   for (const button of characterStatButtons) {
     const stat = button.dataset.characterStat as CharacterStatId;
     button.disabled = update.unspentStatPoints <= 0 || update[`${stat}Points` as keyof ProgressionUpdate] as number >= MAX_CHARACTER_STAT_POINTS;
   }
-  levelUpPanel.hidden = update.unspentStatPoints <= 0;
+  if (update.unspentStatPoints <= 0) levelUpPanel.hidden = true;
+}
+
+function updateLevelCelebration(now: number): void {
+  if (pendingLevelCelebration && worldReady && defeatScreen.hidden && !localCombatActive()) {
+    const celebration = pendingLevelCelebration;
+    pendingLevelCelebration = null;
+    levelCelebrationTitle.textContent = `LEVEL ${celebration.level}!`;
+    levelCelebrationDetail.textContent = celebration.detail;
+    levelCelebrationChoose.hidden = localCharacterProgression.unspentStatPoints <= 0;
+    levelCelebration.hidden = false;
+    levelCelebrationUntil = now + 5_500;
+    combatAudio.play("levelUp");
+    levelUpBurst();
+  }
+  if (!levelCelebration.hidden && (now >= levelCelebrationUntil || localCombatActive())) levelCelebration.hidden = true;
 }
 
 function renderBuildPath(update: BuildPathUpdate): void {
@@ -5257,6 +5340,12 @@ function removeLootVisual(dropId: string, collectedHere: boolean): void {
   if (visual && collectedHere) {
     lootPickupBurst(visual.state);
     combatAudio.play("lootPickup");
+    const items = lootItems(visual.state);
+    const tier = isEnemyLootBag(visual.state) ? lootBagTierForItems(items) : null;
+    const rarity = tier ? LOOT_BAG_TIER_RARITY[tier] : isItemId(visual.state.itemId) ? itemRarity(visual.state.itemId) : "common";
+    if (rarity === "rare") combatAudio.play("lootRare");
+    if (rarity === "epic") combatAudio.play("lootEpic");
+    if (rarity === "legendary") combatAudio.play("lootLegendary");
   }
   visual?.root.destroy();
   lootVisuals.delete(dropId);
@@ -5849,6 +5938,7 @@ const miningChips: { entity: pc.Entity; origin: pc.Vec3; velocity: pc.Vec3; star
 const chipStoneMaterial = coloredMaterial(new pc.Color(0.45, 0.53, 0.56));
 const chipIronMaterial = coloredMaterial(new pc.Color(0.94, 0.56, 0.22));
 const chipSilverMaterial = coloredMaterial(new pc.Color(0.68, 0.9, 1));
+const levelGoldMaterial = coloredMaterial(new pc.Color(1, .82, .35));
 
 // One small draw call, updated only when a crack stage changes; never touches chunk meshes.
 const miningCracks = new pc.Entity("progressive-mining-cracks");
@@ -5922,7 +6012,8 @@ function lootPickupBurst(drop: NetworkLootDrop): void {
   const bagTier = isEnemyLootBag(drop) ? lootBagTierForItems(bagItems) : null;
   const origin = new pc.Vec3(drop.x, drop.y + .42, drop.z);
   const quantity = bagItems.reduce((total, entry) => total + entry.quantity, 0);
-  const count = Math.min(10, 5 + Math.ceil(Math.log2(Math.max(1, quantity))));
+  const count = Math.min(16, 7 + Math.ceil(Math.log2(Math.max(1, quantity)))
+    + (bagTier === "purple" || bagTier === "white" ? 4 : 0));
   for (let index = 0; index < count; index++) {
     if (miningChips.length >= 24) miningChips.shift()!.entity.destroy();
     const angle = index / count * Math.PI * 2;
@@ -5934,6 +6025,18 @@ function lootPickupBurst(drop: NetworkLootDrop): void {
       velocity: new pc.Vec3(Math.sin(angle) * 1.25, 1.45 + index % 3 * .22, Math.cos(angle) * 1.25),
       startedAt: performance.now(),
     });
+  }
+}
+
+function levelUpBurst(): void {
+  const player = localPlayer.getPosition();
+  for (let index = 0; index < 16; index++) {
+    if (miningChips.length >= 24) miningChips.shift()!.entity.destroy();
+    const angle = index / 16 * Math.PI * 2;
+    const origin = new pc.Vec3(player.x, player.y + .6, player.z);
+    const entity = addBox(app.root, "level-up-spark", levelGoldMaterial, [.1, .1, .1], [origin.x, origin.y, origin.z]);
+    if (entity.render) entity.render.castShadows = false;
+    miningChips.push({ entity, origin, velocity: new pc.Vec3(Math.sin(angle) * 2.2, 2.5 + index % 4 * .35, Math.cos(angle) * 2.2), startedAt: performance.now() });
   }
 }
 
@@ -7372,12 +7475,12 @@ function updateTarget(): void {
     const itemName = drop && isItemId(drop.itemId) ? ITEM_DEFINITIONS[drop.itemId].name : "Loot";
     const quantity = drop && drop.quantity > 1 ? `${drop.quantity}× ` : "";
     targetLabel.textContent = nearbyLoot.startsWith("forest-cache:")
-      ? "Personal Rootbound Cache · press E or Loot to claim"
+      ? "Personal Rootbound Cache · hold E or Loot to claim"
       : drop && isEnemyLootBag(drop)
-        ? `${LOOT_BAG_TIER_LABEL[lootBagTierForItems(lootItems(drop))]} · press E to collect everything that fits`
+        ? `${LOOT_BAG_TIER_LABEL[lootBagTierForItems(lootItems(drop))]} · hold E or Loot to collect everything that fits`
       : drop && lootWouldOverflow(nearbyLoot, drop)
         ? `${itemName} · inventory full`
-      : `${quantity}${itemName} · press E or Loot to pick up`;
+      : `${quantity}${itemName} · hold E or Loot to pick up`;
   }
   else if (nearbyForestPortal) targetLabel.textContent = "Glowing portal · press E or Portal to travel";
   else if (roleOpportunity) targetLabel.textContent = `${roleOpportunity.name} · ${roleOpportunity.prompt} · press E or ${roleOpportunity.action}`;
@@ -8969,7 +9072,7 @@ function requestPrimaryAction(): void {
   if (nearbyRecoveryBag) { recoverNearbyBag(); return; }
   if (sceneDressing.blacksmithVisible && isAtTownStorage(localPlayer.getPosition())) { openPersonalStorage(); return; }
   const nearbyLoot = nearestLootDrop();
-  if (nearbyLoot) { interactWithLoot(nearbyLoot); return; }
+  if (nearbyLoot) { beginLootHold("pointer"); return; }
   if (nearbyForestPortal) { useNearbyForestPortal(); return; }
   if (useNearbyRoleOpportunity()) return;
   const boardPosition = localPlayer.getPosition();
@@ -9093,7 +9196,10 @@ combatHudRoot.addEventListener("click", event => {
 
 window.addEventListener("keydown", event => {
   if (event.repeat) return;
-  if (!levelUpPanel.hidden) { event.preventDefault(); return; }
+  if (!levelUpPanel.hidden) {
+    if (event.code === "Escape") levelUpPanel.hidden = true;
+    event.preventDefault(); return;
+  }
   if (!callingIntro.hidden) {
     if (event.code === "Escape") closeCallingIntro();
     event.preventDefault(); return;
@@ -9161,6 +9267,8 @@ window.addEventListener("keydown", event => {
   if (event.code === "KeyE") {
     event.preventDefault();
     if (nearbyTradePlayerId) openNearbyPlayerInteraction();
+    else if (nearbyRecoveryBag || sceneDressing.blacksmithVisible && isAtTownStorage(localPlayer.getPosition())) requestPrimaryAction();
+    else if (nearestLootDrop()) beginLootHold("keyboard");
     else requestPrimaryAction();
   }
   if (event.code === "KeyC") requestDefense(true);
@@ -9185,10 +9293,12 @@ window.addEventListener("keydown", event => {
   }
 });
 window.addEventListener("keyup", event => {
+  if (event.code === "KeyE") releaseLootHold("keyboard");
   if (event.code === "KeyC") requestDefense(false);
   if (event.code === powerAimKey) commitPowerAim();
   if (event.code === "KeyF") commitSpecialAim();
 });
+window.addEventListener("blur", cancelLootHold);
 canvas.addEventListener("pointerdown", event => {
   if (!levelUpPanel.hidden || !callingIntro.hidden) return;
   if (event.button === 2) {
@@ -9200,11 +9310,18 @@ canvas.addEventListener("pointerdown", event => {
   if (event.button !== 0) return;
   updatePointerPosition(event);
   updateTarget();
+  const lootNearby = Boolean(nearestLootDrop());
   requestPrimaryAction();
-  if (event.pointerType === "mouse" && rangedFireAllowed()) rangedFirePointer = event.pointerId;
+  if (!lootNearby && event.pointerType === "mouse" && rangedFireAllowed()) rangedFirePointer = event.pointerId;
 });
-window.addEventListener("pointerup", event => { if (event.pointerId === rangedFirePointer) rangedFirePointer = null; });
-window.addEventListener("pointercancel", event => { if (event.pointerId === rangedFirePointer) rangedFirePointer = null; });
+window.addEventListener("pointerup", event => {
+  if (event.pointerId === rangedFirePointer) rangedFirePointer = null;
+  releaseLootHold("pointer");
+});
+window.addEventListener("pointercancel", event => {
+  if (event.pointerId === rangedFirePointer) rangedFirePointer = null;
+  if (lootHold?.source === "pointer") cancelLootHold();
+});
 canvas.addEventListener("pointerup", event => {
   if (event.button === 2) requestDefense(false);
 });
@@ -9704,7 +9821,9 @@ app.on("update", (dt: number) => {
       loot.marker.setLocalPosition(0, -.54 - bob, 0);
     }
   }
+  updateLootHold(animationNow);
   updateLootWorldLabel();
+  updateLevelCelebration(animationNow);
   for (const [mobId, mob] of mobVisuals) {
     if (mob.frameAlive !== mob.state.alive) {
       mob.defeatAt = mob.state.alive ? -Infinity : animationNow;
@@ -10730,7 +10849,9 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     renderCharacterProgression(update);
     if (update.reason === "level_up") {
       const milestone = CHARACTER_MILESTONES.find(entry => entry.level === update.level);
-      showCombatFeedback(milestone ? `LEVEL ${update.level} · ${milestone.name.toUpperCase()}` : `LEVEL ${update.level} · CHOOSE A STAT`, "dodge");
+      pendingLevelCelebration = { level: update.level, detail: milestone
+        ? `${milestone.name} unlocked · a permanent stat point is ready`
+        : `A permanent stat point is ready · +${update.experienceGranted ?? 0} XP` };
       status.textContent = milestone ? `Level ${update.level}! ${milestone.name} unlocked. Choose a permanent character improvement.` : `Level ${update.level}! Choose a permanent character improvement.`;
     } else if (update.reason === "experience" && update.experienceGranted) {
       status.textContent = `+${update.experienceGranted} XP · ${update.source ?? "adventuring"}`;

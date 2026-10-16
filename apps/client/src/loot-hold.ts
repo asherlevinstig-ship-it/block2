@@ -1,0 +1,8 @@
+export const LOOT_HOLD_MS = 500;
+
+export interface LootHold { dropId: string; startedAt: number; source: "keyboard" | "pointer" }
+
+export function lootHoldProgress(hold: LootHold | null, now: number, dropId: string | null): number {
+  if (!hold || hold.dropId !== dropId || !Number.isFinite(now)) return 0;
+  return Math.max(0, Math.min(1, (now - hold.startedAt) / LOOT_HOLD_MS));
+}

@@ -73,7 +73,7 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
       && now < drop.expiresAt && sameFloor(drop) && distance(drop) <= 10);
     if ((player.miningExpeditionStage ?? 0) === 6 && expeditionLantern) {
       return make(`loot-${expeditionLantern[0]}`, "Claim the Miner's Lantern",
-        "The Stone Warden is defeated. There are no more enemies required—approach your personal lantern and press E to pick it up.",
+        "The Stone Warden is defeated. There are no more enemies required—approach your personal lantern and hold E to pick it up.",
         expeditionLantern[1], "loot");
     }
     const groups: ObjectiveGroup[] = [...GROUPS, ...[...mobs].filter(([id]) => !GROUPS.some(group => group.ids.includes(id))).map(([id, mob]) => ({
@@ -144,7 +144,7 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
         || campCleared && drop.ownerId === playerId && distance(greenwoodCampCenter) <= 12
         || mistfenCleared && drop.ownerId === playerId && distance(MISTFEN_BEHEMOTH_HOME) <= 13))
       .sort((a, b) => distance(a[1]) - distance(b[1]))[0];
-    if (loot) return make(`loot-${loot[0]}`, "Collect Your Loot", "Approach your personal loot and press E to pick it up.", loot[1], "loot");
+    if (loot) return make(`loot-${loot[0]}`, "Collect Your Loot", "Approach your personal loot and hold E to pick it up.", loot[1], "loot");
     if (mistfenCleared) {
       const hasSilver = (player.inventory.get("silver_ore")?.quantity ?? 0) > 0;
       const update = hasSilver
