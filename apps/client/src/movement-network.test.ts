@@ -122,6 +122,15 @@ describe("movement networking", () => {
     expect(advanceBlockedAcknowledgements(second, 147, 147, { x: 0, z: 0 }, { x: 0, z: 0 })).toBe(2);
     expect(advanceBlockedAcknowledgements(second, 147, 148, { x: 0, z: 0 }, { x: 0, z: 0 })).toBe(0);
     expect(advanceBlockedAcknowledgements(second, 147, 148, { x: 0, z: 0.21 }, { x: 0, z: 0.14 })).toBe(0);
+    expect(advanceBlockedAcknowledgements(second, 148, 149, { x: -0.21, z: 0 }, { x: 0.25, z: 0 })).toBe(0);
+  });
+
+  it("waits for delayed steering acknowledgements instead of snapping toward an old heading", () => {
+    expect(localReconciliationRate(9.4, true, 4, true, 1, 1, 0, 756)).toBe(0);
+    expect(localReconciliationRate(9.4, true, 4, true, 1, 1, 2, 756)).toBe(8);
+    expect(localReconciliationRate(9.4, true, 4, true, 1, 1, 0, 80)).toBe(Infinity);
+    expect(localReconciliationRate(13, true, 4, true, 1, 1, 0, 756)).toBe(Infinity);
+    expect(localReconciliationRate(9.4, false, 4, true, 1, 1, 0, 756)).toBe(Infinity);
   });
 
   it("corrects the captured blocked path early without a 5.65m hard snap", () => {

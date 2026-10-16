@@ -9372,7 +9372,7 @@ function reconcileLocalPlayer(
   const distance = position.distance(target);
   const now = performance.now();
   const reconciliationRate = localReconciliationRate(distance, moving, sequenceLag, authoritativeInputReady,
-    now - lastAuthoritativeMovementAt, now - lastAcknowledgementAdvancedAt, blockedAcknowledgements);
+    now - lastAuthoritativeMovementAt, now - lastAcknowledgementAdvancedAt, blockedAcknowledgements, networkRttMs ?? 0);
   const blockedCorrection = moving && blockedAcknowledgements > 0 && reconciliationRate === 8;
   if (!Number.isFinite(reconciliationRate)) {
     const mobilityAdvance = localActivePower !== null

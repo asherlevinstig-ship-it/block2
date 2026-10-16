@@ -141,6 +141,7 @@ export function localReconciliationRate(
   authoritativeAgeMs = 0,
   acknowledgementAgeMs = 0,
   blockedAcknowledgements = 0,
+  roundTripMs = 0,
 ): number {
   if (!moving && !authoritativeInputReady) return 0;
   // Freshness must be checked before both soft and hard corrections. A large
@@ -154,7 +155,14 @@ export function localReconciliationRate(
     || (blockedAcknowledgements >= 1 && distance > 1.25))) return 8;
   const boundedLag = Math.max(0, Math.min(12, sequenceLag));
   const hardCorrectionDistance = moving ? 2.5 + boundedLag * 0.4 : 3;
-  if (distance > hardCorrectionDistance) return Number.POSITIVE_INFINITY;
+  if (distance > hardCorrectionDistance) {
+    // On a high-latency link, a fresh patch can still describe movement from
+    // an older direction. Wait for the outstanding inputs rather than pulling
+    // the player across several metres while they are actively steering.
+    if (moving && boundedLag > 0 && blockedAcknowledgements === 0
+      && roundTripMs >= 300 && distance <= 12) return 0;
+    return Number.POSITIVE_INFINITY;
+  }
   if (moving) {
     // Each outstanding 50 ms input represents about .21 m of normal travel.
     // Allow .25 m including speed bonuses; older snapshots must not act like
@@ -177,9 +185,10 @@ export function advanceBlockedAcknowledgements(
   if (nextSequence === previousSequence) return previous;
   const requested = Math.hypot(acknowledgedMotion.x, acknowledgedMotion.z);
   if (requested < 0.1) return 0;
-  const forwardProgress = (authoritativeMotion.x * acknowledgedMotion.x
-    + authoritativeMotion.z * acknowledgedMotion.z) / requested;
-  if (forwardProgress > 0.04) return 0;
+  // Opposite or sideways travel is not a blocked path: a delayed server can
+  // still be processing the previous steering direction when it acknowledges
+  // newer input. Only near-zero total movement is evidence of a wall.
+  if (Math.hypot(authoritativeMotion.x, authoritativeMotion.z) > Math.max(0.05, requested * 0.2)) return 0;
   return Math.min(8, previous + 1);
 }
 
