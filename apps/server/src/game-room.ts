@@ -67,7 +67,7 @@ import { HEALING_POTION, backpackAddableQuantity, backpackCapacity, backpackSlot
 import { canBuyPotionAtKeeper, potionBuyError, potionUseError } from "./healing-potions.js";
 import { MINERAL_REGROWTH_MS, type MineralDepositStatus } from "@blockcraft/protocol";
 import { RENEWABLE_MINERAL_DEPOSITS, authoredMineralAt, SURFACE_HEIGHT, CAVE_SHALLOW_HOME, CAVE_DEEP_HOME, CAVE_HIDDEN_HOME, SILVER_DEPTHS_SPITTER_HOMES, CRYSTAL_MATRIARCH_HOME, SILVER_DEPTHS_COVER, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, SILVER_DEPTHS_CHECKPOINT_POSITION, SILVER_DEPTHS_GALLERY_GATE, SILVER_DEPTHS_BOSS_GATE, SILVER_DEPTHS_IRON_GATE, SILVER_DEPTHS_SILVER_GATE, SILVER_DEPTHS_WING_CACHES, silverDepthsPingLocation, isMistfenToxicPool, isInMistfenMarsh } from "@blockcraft/voxel-world";
-import { ROLE_FIELD_OPPORTUNITIES, nearestRoleFieldOpportunity } from "@blockcraft/voxel-world";
+import { ROLE_FIELD_OPPORTUNITIES, nearestRoleFieldOpportunity, nearestRoadsideEncounter, parseRoadsideClaims, roadsideEncounterAt, withRoadsideClaim } from "@blockcraft/voxel-world";
 import { mineralCellOccupied } from "./mineral-regrowth.js";
 import { CAVE_ENCOUNTERS, caveEncounterAllows } from "./cave-encounters.js";
 import { miningDurationMs, miningLineClear } from "@blockcraft/voxel-world";
@@ -743,6 +743,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.onMessage("hunt:collection", (client, payload: unknown) => this.handleHuntCollection(client, payload));
     this.onMessage("build:path", (client, payload: unknown) => this.handleBuildPath(client, payload));
     aliveMessage("role:opportunity", (client, payload: unknown) => this.handleRoleOpportunity(client, payload));
+    aliveMessage("roadside:interact", (client, payload: unknown) => this.handleRoadsideEncounter(client, payload));
     this.onMessage("dungeon:lobby", (client, payload: unknown) => this.handleDungeonLobby(client, payload));
     this.onMessage("depths:lobby", (client, payload: unknown) => this.handleSilverDepthsLobby(client, payload));
     this.onMessage("portal:use", (client, payload: unknown) => {
@@ -4359,7 +4360,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const greenwood = this.greenwoodProgress(player);
     player.huntLoadoutsJson = JSON.stringify({ loadouts, buildPath, affixes: this.equipmentAffixes(player),
       dust: this.attunementDust(player), offers: this.attunementOffers(player), targetAffixId: this.equipmentAffixTarget(player),
-      mistfen, greenwood, northwatch: parseNorthwatchProgress(player.huntLoadoutsJson) });
+      mistfen, greenwood, northwatch: parseNorthwatchProgress(player.huntLoadoutsJson), roadsideClaims: [...parseRoadsideClaims(player.huntLoadoutsJson)] });
   }
 
   private equipmentAffixes(player: PlayerState): Partial<Record<ItemId, EquipmentAffixRoll>> {
@@ -4418,7 +4419,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const greenwood = this.greenwoodProgress(player);
     player.huntLoadoutsJson = JSON.stringify({ loadouts: this.huntLoadouts(player), buildPath: parseBuildPathState(player.huntLoadoutsJson),
       affixes, dust: Math.max(0, Math.min(65_535, Math.floor(dust))), offers, targetAffixId: this.equipmentAffixTarget(player),
-      mistfen, greenwood, northwatch: parseNorthwatchProgress(player.huntLoadoutsJson) });
+      mistfen, greenwood, northwatch: parseNorthwatchProgress(player.huntLoadoutsJson), roadsideClaims: [...parseRoadsideClaims(player.huntLoadoutsJson)] });
   }
 
   private sendEquipmentAffixes(client: Client, message = "Equipment attunements strengthen matching Calling mechanics."): void {
@@ -4627,6 +4628,55 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.buildPathProc(client.sessionId, activePathId, opportunity.action.toUpperCase(), `${detail} · MASTERY +2`, 2_400);
     client.send("chat:notice", `${opportunity.name.toUpperCase()} · ${detail}. Returns in 3 minutes.`);
     void this.persistPlayer(client.sessionId, player, true);
+  }
+
+  private handleRoadsideEncounter(client: Client, payload: unknown): void {
+    const player = this.state.players.get(client.sessionId);
+    const id = typeof payload === "object" && payload !== null && "id" in payload && typeof payload.id === "string" ? payload.id : "";
+    const choice = typeof payload === "object" && payload !== null && "choice" in payload && typeof payload.choice === "string" ? payload.choice : "";
+    const site = roadsideEncounterAt(id);
+    const reply = (ok: boolean, message: string, claimed = false) => client.send("roadside:result", { id, ok, message, claimed });
+    if (!player || !site || this.roomKind !== "overworld") return reply(false, "That discovery is unavailable here.");
+    if (player.y < SURFACE_HEIGHT - 1 || nearestRoadsideEncounter(player.x, player.z)?.id !== id)
+      return reply(false, `Move beside ${site.name} to investigate it.`);
+    const claims = parseRoadsideClaims(player.huntLoadoutsJson);
+    if (claims.has(id)) return reply(false, `${site.name} has already been explored by this character.`, true);
+    if (site.kind === "guarded" && "guardRadius" in site && [...this.state.mobs.values()].some(mob =>
+      mob.alive && Math.abs(mob.y - player.y) <= 2.5 && Math.hypot(mob.x - site.x, mob.z - site.z) <= site.guardRadius))
+      return reply(false, `Clear the enemies guarding ${site.name} first.`);
+    if (site.kind === "shrine" && [...this.state.mobs.values()].some(mob =>
+      mob.alive && Math.abs(mob.y - player.y) <= 2.5 && Math.hypot(mob.x - player.x, mob.z - player.z) <= 8))
+      return reply(false, "Enemies are too close to use this shrine.");
+    if (site.kind === "shrine" && choice !== "rest" && choice !== "supplies")
+      return reply(false, "Choose whether to rest or take the shrine supplies.");
+    if (site.kind === "shrine" && choice === "rest" && player.health >= player.maxHealth && player.stamina >= player.maxStamina)
+      return reply(false, "You are already rested. Take the supplies instead.");
+    const itemId = site.itemId as ItemId;
+    const takesItem = site.kind !== "shrine" || choice === "supplies";
+    const quantity = takesItem ? site.quantity : 0;
+    const before = player.inventory.get(itemId)?.quantity ?? 0;
+    if (quantity > 0 && Math.min(lootCarryCapacity(itemId, ironCapacity(player.blacksmithUpgrades)) - before,
+      backpackAddableQuantity(id => player.inventory.get(id)?.quantity ?? 0, itemId, quantity,
+        player.mainHandId as MainHandId, player.armourId as ArmourId, backpackCapacity(player.blacksmithUpgrades))) < quantity)
+      return reply(false, "PACK FULL · Make room before claiming these supplies.");
+    player.huntLoadoutsJson = withRoadsideClaim(player.huntLoadoutsJson, id);
+    const beforeGold = player.coins;
+    player.coins = Math.min(1_000_000, player.coins + site.gold);
+    if (quantity > 0) {
+      let item = player.inventory.get(itemId);
+      if (!item) { item = new InventoryItemState(); player.inventory.set(itemId, item); }
+      item.quantity = inventoryTotal(before, quantity);
+      this.broadcast("loot:picked-up", { playerId: client.sessionId, dropId: `roadside:${id}`, itemId,
+        quantity, total: item.quantity } satisfies LootPickedUp);
+    }
+    if (site.kind === "shrine" && choice === "rest") {
+      player.health = player.maxHealth;
+      player.stamina = player.maxStamina;
+    }
+    const message = site.kind === "shrine" && choice === "rest" ? `${site.name} · health and stamina restored.`
+      : `${site.name} explored · +${quantity} ${ITEM_DEFINITIONS[itemId].name}${player.coins > beforeGold ? ` · +${player.coins - beforeGold} gold` : ""}.`;
+    reply(true, message, true);
+    void this.persistPlayer(client.sessionId, player, true).catch(() => {});
   }
 
   private handleCallingAbility(client: Client, payload: unknown): void {

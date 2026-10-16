@@ -1,7 +1,7 @@
 import * as pc from "playcanvas";
 import { greenwoodMasteryStatus, mistfenMasteryStatus } from "@blockcraft/protocol";
 import { isInMistfenMarsh } from "@blockcraft/voxel-world";
-import { nearestRoleFieldOpportunity, type RoleFieldPath } from "@blockcraft/voxel-world";
+import { nearestRoleFieldOpportunity, nearestRoadsideEncounter, parseRoadsideClaims, type RoleFieldPath } from "@blockcraft/voxel-world";
 import { confirmedRangedHit, projectileImpactCue } from "./ranged-feedback.js";
 import { heldFireStep } from "./held-fire.js";
 import { rangedAimYaw } from "./ranged-aim.js";
@@ -5945,6 +5945,21 @@ const miningHud = document.querySelector<HTMLElement>("#mining-progress")!;
 const miningFill = document.querySelector<HTMLElement>("#mining-progress-fill")!;
 const miningCaption = document.querySelector<HTMLElement>("#mining-progress-label")!;
 const resourceToasts = document.querySelector<HTMLElement>("#resource-toasts")!;
+const roadsideChoice = document.querySelector<HTMLElement>("#roadside-choice")!;
+const roadsideChoiceName = document.querySelector<HTMLElement>("#roadside-choice-name")!;
+function closeRoadsideChoice(): void { roadsideChoice.hidden = true; delete roadsideChoice.dataset.id; }
+function openRoadsideChoice(id: string, name: string): void {
+  roadsideChoice.dataset.id = id;
+  roadsideChoiceName.textContent = name;
+  roadsideChoice.hidden = false;
+}
+for (const [buttonId, choice] of [["#roadside-rest", "rest"], ["#roadside-supplies", "supplies"]] as const)
+  document.querySelector<HTMLButtonElement>(buttonId)!.addEventListener("click", () => {
+    const id = roadsideChoice.dataset.id;
+    if (id && room) room.send("roadside:interact", { id, choice });
+    closeRoadsideChoice();
+  });
+document.querySelector<HTMLButtonElement>("#roadside-close")!.addEventListener("click", closeRoadsideChoice);
 const caveEntranceSign = document.querySelector<HTMLElement>("#cave-entrance")!;
 let miningSwing: { cell: MiningCell; startedAt: number; requestId: string; stage: number; origin: pc.Vec3 } | null = null;
 let pendingMine: { requestId: string; startedAt: number } | null = null;
@@ -6094,6 +6109,14 @@ function showLootNotice(message: string, warning = false): void {
   const detail = document.createElement("strong"); detail.textContent = message;
   toast.append(heading, detail);
   queueLootToast(toast, LOOT_FEED_EQUIPMENT_MS);
+}
+function showRoadsideNotice(message: string, warning = false): void {
+  const toast = document.createElement("div");
+  toast.className = `resource-toast loot-notice${warning ? " warning" : ""}`;
+  const heading = document.createElement("small"); heading.textContent = warning ? "DISCOVERY NOT READY" : "ROADSIDE DISCOVERY";
+  const detail = document.createElement("strong"); detail.textContent = message;
+  toast.append(heading, detail);
+  queueLootToast(toast, 4_000);
 }
 
 function showRegionDiscovery(name: string): void {
@@ -7304,6 +7327,21 @@ function nearbyRoleOpportunity() {
   const player = localPlayer.getPosition();
   return player.y >= SURFACE_HEIGHT - 1 ? nearestRoleFieldOpportunity(player.x, player.z, localBuildPathId) : null;
 }
+const localRoadsideClaims = new Set<string>();
+function nearbyRoadsideEncounter() {
+  if (!worldReady || !room) return null;
+  const player = localPlayer.getPosition();
+  if (player.y < SURFACE_HEIGHT - 1) return null;
+  const site = nearestRoadsideEncounter(player.x, player.z);
+  return site && !localRoadsideClaims.has(site.id) ? site : null;
+}
+function useNearbyRoadsideEncounter(): boolean {
+  const site = nearbyRoadsideEncounter();
+  if (!site || !room || !defeatScreen.hidden) return false;
+  if (site.kind === "shrine") { openRoadsideChoice(site.id, site.name); return true; }
+  room.send("roadside:interact", { id: site.id });
+  return true;
+}
 function useNearbyRoleOpportunity(): boolean {
   const opportunity = nearbyRoleOpportunity();
   if (!opportunity || !room || !defeatScreen.hidden) return false;
@@ -7484,8 +7522,10 @@ function updateTarget(): void {
   const chopping = currentTarget?.block === Block.OakLog || currentTarget?.block === Block.Leaves;
   const nearbyLoot = nearestLootDrop();
   const roleOpportunity = nearbyRoleOpportunity();
-  updatePlayerTradePrompt(Boolean(nearbyLoot || nearbyForestPortal || roleOpportunity || expeditionBoardNearby || blacksmithNearby || quizTableNearby || keeperNearby || chestNearby));
-  const nextKey = `${interactionMode}:${targetKey}:${currentTarget?.block ?? -1}:${availability}:${combatKey}:${keeperNearby}:${quizTableNearby}:${blacksmithNearby}:${expeditionBoardNearby}:${nearbyLoot}:${nearbyForestPortal}:${roleOpportunity?.id ?? "none"}`;
+  const roadsideEncounter = nearbyRoadsideEncounter();
+  if (!roadsideChoice.hidden && roadsideChoice.dataset.id !== roadsideEncounter?.id) closeRoadsideChoice();
+  updatePlayerTradePrompt(Boolean(nearbyLoot || nearbyForestPortal || roleOpportunity || roadsideEncounter || expeditionBoardNearby || blacksmithNearby || quizTableNearby || keeperNearby || chestNearby));
+  const nextKey = `${interactionMode}:${targetKey}:${currentTarget?.block ?? -1}:${availability}:${combatKey}:${keeperNearby}:${quizTableNearby}:${blacksmithNearby}:${expeditionBoardNearby}:${nearbyLoot}:${nearbyForestPortal}:${roleOpportunity?.id ?? "none"}:${roadsideEncounter?.id ?? "none"}`;
   if (nextKey === targetStateKey) return;
   targetStateKey = nextKey;
   const tint = availability === "ready" ? hit?.block === Block.SilverOre ? new pc.Color(0.55, 0.88, 1) : new pc.Color(1, 0.73, 0.25) : new pc.Color(1, 0.25, 0.2);
@@ -7493,7 +7533,7 @@ function updateTarget(): void {
   targetMaterial.emissive = tint.clone().mulScalar(0.3);
   targetMaterial.opacity = 0.2;
   targetMaterial.update();
-  mineButton.textContent = nearbyLoot ? "Loot" : nearbyForestPortal ? "Portal" : roleOpportunity ? roleOpportunity.action : expeditionBoardNearby ? "Board" : blacksmithNearby ? "Trade" : quizTableNearby ? "Play" : keeperNearby ? "Talk" : interactionMode === "build" ? chopping ? "Chop" : "Mine" : "Attack";
+  mineButton.textContent = nearbyLoot ? "Loot" : nearbyForestPortal ? "Portal" : roleOpportunity ? roleOpportunity.action : roadsideEncounter ? "Explore" : expeditionBoardNearby ? "Board" : blacksmithNearby ? "Trade" : quizTableNearby ? "Play" : keeperNearby ? "Talk" : interactionMode === "build" ? chopping ? "Chop" : "Mine" : "Attack";
   if (nearbyLoot) {
     const drop = lootVisuals.get(nearbyLoot)?.state;
     const itemName = drop && isItemId(drop.itemId) ? ITEM_DEFINITIONS[drop.itemId].name : "Loot";
@@ -7508,6 +7548,7 @@ function updateTarget(): void {
   }
   else if (nearbyForestPortal) targetLabel.textContent = "Glowing portal · press E or Portal to travel";
   else if (roleOpportunity) targetLabel.textContent = `${roleOpportunity.name} · ${roleOpportunity.prompt} · press E or ${roleOpportunity.action}`;
+  else if (roadsideEncounter) targetLabel.textContent = `${roadsideEncounter.name} · ${roadsideEncounter.kind === "guarded" ? "clear nearby enemies, then investigate" : roadsideEncounter.kind === "shrine" ? "choose a blessing or supplies" : "search for supplies"} · press E or Explore`;
   else if (expeditionBoardNearby) targetLabel.textContent = "Forest Dungeon Gate · press E to open a solo or party run";
   else if (blacksmithNearby) targetLabel.textContent = "Blacksmith stall · press E to trade ore or forge equipment";
   else if (quizTableNearby) targetLabel.textContent = "Double or Quit table · press E or Play";
@@ -9089,6 +9130,7 @@ function commitSpecialAim(): void {
 
 function requestPrimaryAction(): void {
   if (playerInteractionUI.isOpen()) return;
+  if (!roadsideChoice.hidden) return;
   if (!expeditionPanel.hidden || !realmHuntPanel.hidden) return;
   if (!inventoryPanel.hidden) return;
   if (!lootPanel.hidden) return;
@@ -9099,6 +9141,7 @@ function requestPrimaryAction(): void {
   if (nearbyLoot) { beginLootHold("pointer"); return; }
   if (nearbyForestPortal) { useNearbyForestPortal(); return; }
   if (useNearbyRoleOpportunity()) return;
+  if (useNearbyRoadsideEncounter()) return;
   const boardPosition = localPlayer.getPosition();
   if (Math.abs(boardPosition.y - TOWN_EXPEDITION_BOARD_POSITION.y) <= 1.6
     && Math.hypot(boardPosition.x - TOWN_EXPEDITION_BOARD_POSITION.x, boardPosition.z - TOWN_EXPEDITION_BOARD_POSITION.z) <= 3) {
@@ -9279,6 +9322,10 @@ window.addEventListener("keydown", event => {
   }
   if (event.code === "Escape" && !tavernDialogue.hidden) {
     closeTavernDialogue();
+    return;
+  }
+  if (event.code === "Escape" && !roadsideChoice.hidden) {
+    closeRoadsideChoice();
     return;
   }
   if (event.code === "KeyI") {
@@ -10492,6 +10539,10 @@ app.on("update", (dt: number) => {
   updatePerformanceMetrics(now);
   if (worldReady) {
     const localNetworkPlayer = (room?.state.players as Map<string, NetworkPlayer> | undefined)?.get(room?.sessionId ?? "");
+    if (localNetworkPlayer?.huntLoadoutsJson) {
+      for (const id of parseRoadsideClaims(localNetworkPlayer.huntLoadoutsJson)) localRoadsideClaims.add(id);
+      minimap.setRoadsideClaims(localNetworkPlayer.huntLoadoutsJson);
+    }
     updateSilverDepthsRoute(now);
     if (!visibleDepthsRoute) updateCaveNavigation(localPlayer.getPosition(), now);
     const dungeonRoute = visibleDepthsRoute;
@@ -11256,6 +11307,15 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     showCombatFeedback(rewards || "VICTORY", "dodge");
     status.textContent = `${defeatedName} reward${rewards ? ` · ${rewards}` : " claimed"}.`;
     logMovementEvent(`REWARD ${message.mobId} hp=${message.healthRestored} stamina=${message.staminaRestored}`);
+  });
+  room.onMessage("roadside:result", (message: { id: string; ok: boolean; message: string; claimed: boolean }) => {
+    if (message.claimed) {
+      localRoadsideClaims.add(message.id);
+      minimap.setRoadsideClaims(JSON.stringify([...localRoadsideClaims]));
+      closeRoadsideChoice();
+    }
+    status.textContent = message.message;
+    showRoadsideNotice(message.message, !message.ok);
   });
   room.onMessage("loot:result", (message: LootCollectResult) => {
     if (message.dropId !== inspectedDropId) {

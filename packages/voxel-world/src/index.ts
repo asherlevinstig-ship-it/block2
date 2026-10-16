@@ -514,6 +514,52 @@ export const ROADSIDE_DISCOVERIES = [
   { id: "northwatch-watchpost", name: "Ruined Northwatch Post", kind: "ruin", x: 20, z: -62 },
 ] as const satisfies readonly { id: string; name: string; kind: RoadsideDiscoveryKind; x: number; z: number }[];
 
+/** One personal, optional payoff at selected landmarks; Calling field sites stay separate. */
+export const ROADSIDE_ENCOUNTERS = [
+  { id: "greenwood-forager-camp", kind: "cache", itemId: "moss_fibre", quantity: 2, gold: 3 },
+  { id: "greenwood-hollow-shrine", kind: "shrine", itemId: "healing_potion", quantity: 1, gold: 0 },
+  { id: "mistfen-cart", kind: "cache", itemId: "crawler_fang", quantity: 1, gold: 5 },
+  { id: "mistfen-shrine", kind: "shrine", itemId: "healing_potion", quantity: 1, gold: 0 },
+  { id: "southgate-cart", kind: "guarded", itemId: "iron_ore", quantity: 2, gold: 6, guardRadius: 16 },
+  { id: "sunfall-survey", kind: "cache", itemId: "iron_ore", quantity: 2, gold: 5 },
+  { id: "collapsed-lift", kind: "guarded", itemId: "stone_core", quantity: 1, gold: 8, guardRadius: 12 },
+  { id: "northwatch-cart", kind: "cache", itemId: "iron_ore", quantity: 2, gold: 5 },
+  { id: "northwatch-watchpost", kind: "guarded", itemId: "silver_ore", quantity: 1, gold: 8, guardRadius: 11 },
+  { id: "ashen-pilgrims", kind: "shrine", itemId: "healing_potion", quantity: 1, gold: 0 },
+] as const satisfies readonly { id: string; kind: "cache" | "shrine" | "guarded"; itemId: string; quantity: number; gold: number; guardRadius?: number }[];
+export function roadsideEncounterAt(id: string) {
+  const encounter = ROADSIDE_ENCOUNTERS.find(entry => entry.id === id);
+  const landmark = encounter && ROADSIDE_DISCOVERIES.find(entry => entry.id === encounter.id);
+  return encounter && landmark ? { ...encounter, x: landmark.x, z: landmark.z, name: landmark.name } : null;
+}
+export function nearestRoadsideEncounter(x: number, z: number, radius = 3.2) {
+  let nearest: ReturnType<typeof roadsideEncounterAt> = null;
+  let distance = radius;
+  for (const encounter of ROADSIDE_ENCOUNTERS) {
+    const landmark = ROADSIDE_DISCOVERIES.find(entry => entry.id === encounter.id)!;
+    const next = Math.hypot(x - landmark.x, z - landmark.z);
+    if (next <= distance) { nearest = { ...encounter, x: landmark.x, z: landmark.z, name: landmark.name }; distance = next; }
+  }
+  return nearest;
+}
+export function parseRoadsideClaims(raw: string | null | undefined): Set<string> {
+  try {
+    const parsed: unknown = JSON.parse(raw ?? "[]");
+    const values = parsed && typeof parsed === "object" && !Array.isArray(parsed) && "roadsideClaims" in parsed
+      ? parsed.roadsideClaims : parsed;
+    const allowed = new Set<string>(ROADSIDE_ENCOUNTERS.map(entry => entry.id));
+    return new Set(Array.isArray(values) ? values.filter((value): value is string => typeof value === "string" && allowed.has(value)) : []);
+  } catch { return new Set(); }
+}
+export function withRoadsideClaim(source: string, id: string): string {
+  if (!ROADSIDE_ENCOUNTERS.some(entry => entry.id === id)) return source;
+  let parsed: unknown;
+  try { parsed = JSON.parse(source); } catch { parsed = {}; }
+  const base = Array.isArray(parsed) ? { loadouts: parsed }
+    : parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : {};
+  return JSON.stringify({ ...base, roadsideClaims: [...new Set([...parseRoadsideClaims(source), id])] });
+}
+
 export type RoleFieldPath = "tank" | "mage" | "assassin" | "thief" | "ranger" | "healer";
 export const ROLE_FIELD_OPPORTUNITIES = [
   { id: "tank-stonebreak", landmarkId: "stone-road-camp", pathId: "tank", x: 54, z: 38,

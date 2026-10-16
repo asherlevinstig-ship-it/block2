@@ -20,6 +20,7 @@ import {
   type EquipmentAffixRoll,
   type EquipmentAffixOffers,
 } from "@blockcraft/protocol";
+import { parseRoadsideClaims } from "@blockcraft/voxel-world";
 import { canEquipMainHand } from "./equipment-rules.js";
 import { ArmourEquipSchema, type ArmourId } from "@blockcraft/protocol";
 import { compatiblePowerOrFallback } from "./power-rules.js";
@@ -58,6 +59,7 @@ export interface PlayerSaveData {
   signaturePity?: SignaturePity;
   huntMastery?: HuntMasteryProgress;
   huntLoadouts?: HuntLoadoutSlot[];
+  roadsideClaims?: string[];
   huntCollectionRewardClaimed?: boolean;
   mistfenMastery?: number;
   mistfenDiscovered?: boolean;
@@ -169,6 +171,7 @@ export function snapshotPlayerSave(player: PlayerState, now = Date.now()): Playe
     signaturePity: parseSignaturePity(player.signaturePityJson),
     huntMastery: parseHuntMastery(player.huntMasteryJson),
     huntLoadouts: parseHuntLoadouts(player.huntLoadoutsJson),
+    roadsideClaims: [...parseRoadsideClaims(player.huntLoadoutsJson)],
     huntCollectionRewardClaimed: player.huntCollectionRewardClaimed,
     mistfenMastery: (() => { try { return Math.floor(finiteNumber((JSON.parse(player.huntLoadoutsJson) as { mistfen?: { points?: unknown } }).mistfen?.points, 0, 0, 150)); } catch { return 0; } })(),
     mistfenDiscovered: (() => { try { return (JSON.parse(player.huntLoadoutsJson) as { mistfen?: { discovered?: unknown } }).mistfen?.discovered === true; } catch { return false; } })(),
@@ -260,6 +263,7 @@ export function parsePlayerSave(raw: string | null): PlayerSaveData | null {
     signaturePity: parseSignaturePity(value.signaturePity),
     huntMastery: parseHuntMastery(value.huntMastery),
     huntLoadouts: parseHuntLoadouts(value.huntLoadouts),
+    roadsideClaims: [...parseRoadsideClaims(JSON.stringify(value.roadsideClaims ?? []))],
     huntCollectionRewardClaimed: value.huntCollectionRewardClaimed === true,
     mistfenMastery: Math.floor(finiteNumber(value.mistfenMastery, 0, 0, 150)),
     mistfenDiscovered: value.mistfenDiscovered === true,
@@ -323,6 +327,7 @@ export function applyPlayerSave(player: PlayerState, save: PlayerSaveData): void
     offers: parseEquipmentAffixOffers(save.attunementOffers), mistfen: { points: save.mistfenMastery ?? 0, discovered: save.mistfenDiscovered === true, marks: save.mistfenMarks ?? 0 },
     greenwood: { points: save.greenwoodMastery ?? 0, discovered: save.greenwoodDiscovered === true, marks: save.greenwoodMarks ?? 0 },
     northwatch: { clears: save.northwatchClears ?? 0, marks: save.northwatchPatrolMarks ?? 0 } });
+  player.huntLoadoutsJson = JSON.stringify({ ...JSON.parse(player.huntLoadoutsJson), roadsideClaims: save.roadsideClaims ?? [] });
   player.huntCollectionRewardClaimed = save.huntCollectionRewardClaimed === true;
   player.forestBestTimeMs = save.forestBestTimeMs ?? 0;
   player.silverDepthsBestTimeMs = save.silverDepthsBestTimeMs ?? 0;

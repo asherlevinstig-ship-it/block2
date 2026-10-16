@@ -1,4 +1,4 @@
-import { ASHEN_SPIRE_POSITION, Block, GREENWOOD_CRAWLER_HOMES, GREENWOOD_REGION, MISTFEN_BEHEMOTH_HOME, REALM_WARDEN_GATE_POSITION, RENEWABLE_MINERAL_DEPOSITS, ROADSIDE_DISCOVERIES, SILVER_DEPTHS_ROOMS, silverDepthsPingLocation, SURFACE_HEIGHT, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_BLACKSMITH_STALL_POSITION, TOWN_SAFE_RADIUS, isInAshenReach, isInMistfenMarsh, isInNorthwatchHighlands, isMistfenBoardwalk, isMistfenToxicPool, isRegionalRoad, southernQuarryTierAt, wildernessTerritoryAt } from "@blockcraft/voxel-world";
+import { ASHEN_SPIRE_POSITION, Block, GREENWOOD_CRAWLER_HOMES, GREENWOOD_REGION, MISTFEN_BEHEMOTH_HOME, REALM_WARDEN_GATE_POSITION, RENEWABLE_MINERAL_DEPOSITS, ROADSIDE_DISCOVERIES, ROADSIDE_ENCOUNTERS, SILVER_DEPTHS_ROOMS, silverDepthsPingLocation, SURFACE_HEIGHT, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_BLACKSMITH_STALL_POSITION, TOWN_SAFE_RADIUS, isInAshenReach, isInMistfenMarsh, isInNorthwatchHighlands, isMistfenBoardwalk, isMistfenToxicPool, isRegionalRoad, parseRoadsideClaims, southernQuarryTierAt, wildernessTerritoryAt } from "@blockcraft/voxel-world";
 import { ITEM_DEFINITIONS, type EquipmentHuntTarget, type MineralDepositStatus, type SilverDepthsCacheStatus, type SilverDepthsGateStatus, type SilverDepthsPing } from "@blockcraft/protocol";
 import { MINE_ENTRANCE, caveDepth, type CaveMapState } from "./cave-navigation.js";
 import { SILVER_DEPTHS_MAP_GATES, silverDepthsMapRoute, type DungeonMapRoute } from "./silver-depths-navigation.js";
@@ -242,6 +242,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
   setMistfenMastery(rank: number): void;
   setGreenwoodMastery(rank: number): void;
   setEquipmentHunt(target: EquipmentHuntTarget | null): void;
+  setRoadsideClaims(raw: string): void;
   setMineralStatus(statuses: MineralDepositStatus[]): void;
   setCaveState(state: CaveMapState): void;
   setDungeonState(state: DungeonMapState | null): void;
@@ -281,6 +282,8 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
   let elites: EliteMapTarget[] = [];
   let threat: ThreatMapTarget | null = null;
   let equipmentHunt: EquipmentHuntTarget | null = null;
+  let roadsideClaims = new Set<string>();
+  let roadsideClaimsRaw = "";
   let lastStatusSecond = 0;
   const homeButton = document.querySelector<HTMLButtonElement>("#minimap-home")!;
   const destinations = document.querySelector<HTMLSelectElement>("#minimap-destination")!;
@@ -388,6 +391,12 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
       if (target) setWaypoint({ x: target.x, y: target.y, z: target.z, id: "equipment-hunt",
         name: `${target.regionName} · ${target.chancePercent}% target odds` });
       else if (waypoint?.id === "equipment-hunt") setWaypoint(null);
+    },
+    setRoadsideClaims(raw) {
+      if (raw === roadsideClaimsRaw) return;
+      roadsideClaimsRaw = raw;
+      for (const id of parseRoadsideClaims(raw)) roadsideClaims.add(id);
+      lastUpdate = -Infinity;
     },
     setCaveState(state) { caveState = state; },
     setDungeonState(state) {
@@ -638,8 +647,10 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
           id: "equipment-hunt", name: equipmentHunt.regionName }, "AFFIX HUNT", "#e59cff", "◆", true);
         for (const landmark of ROADSIDE_DISCOVERIES) {
           if (!discovered.has(roadsideDiscoveryKey(landmark.id))) continue;
+          const encounter = ROADSIDE_ENCOUNTERS.some(site => site.id === landmark.id);
+          const claimed = roadsideClaims.has(landmark.id);
           marker(landmark, mapMarkerLabelVisible(player, landmark, false) ? landmark.name.toUpperCase() : "",
-            "#e4cd94", false, false, "·");
+            claimed ? "#93d6a7" : encounter ? "#f7d37e" : "#e4cd94", false, false, claimed ? "✓" : encounter ? "?" : "·");
         }
       }
       const nearbyCombatTargets = [...nearbyDiscoveredMiniBossTargets(player, elites, discovered), ...activeEliteMapTargets(player, elites)]

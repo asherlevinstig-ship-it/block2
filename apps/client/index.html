@@ -31,6 +31,12 @@
     </section>
     <div id="mining-progress" hidden><span id="mining-progress-label">Mining</span><div><i id="mining-progress-fill"></i></div></div>
     <div id="resource-toasts" role="status" aria-live="polite" aria-label="Item pickups"></div>
+    <div id="roadside-choice" role="dialog" aria-label="Roadside shrine" hidden>
+      <small>ROADSIDE SHRINE</small><strong id="roadside-choice-name"></strong>
+      <p>One blessing per character. Choose what helps you now.</p>
+      <div><button id="roadside-rest" type="button">Restore health & stamina</button><button id="roadside-supplies" type="button">Take a potion</button></div>
+      <button id="roadside-close" type="button">Leave it</button>
+    </div>
     <aside id="level-up-celebration" hidden role="status" aria-live="polite">
       <small>✦ CHARACTER ADVANCEMENT ✦</small><strong id="level-celebration-title">LEVEL UP!</strong>
       <span id="level-celebration-detail">Your adventure grows stronger.</span>

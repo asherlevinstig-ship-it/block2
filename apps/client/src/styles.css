@@ -2449,6 +2449,14 @@ body:has(#nearby-chat details[open]) #party-panel { bottom: 340px; }
 #mining-progress > div { height: 6px; margin-top: 8px; border-radius: 4px; background: #0a1512; overflow: hidden; }
 #mining-progress-fill { display: block; height: 100%; background: linear-gradient(90deg, #c28436, #ffdf86); }
 #resource-toasts { position: fixed; z-index: 23; left: max(14px, env(safe-area-inset-left)); bottom: max(110px, calc(18px + env(safe-area-inset-bottom))); width: min(330px, calc(100vw - 28px)); pointer-events: none; display: grid; justify-items: start; gap: 6px; }
+#roadside-choice:not([hidden]) { position: fixed; z-index: 24; left: max(14px, env(safe-area-inset-left)); bottom: max(215px, calc(120px + env(safe-area-inset-bottom))); width: min(310px, calc(100vw - 28px)); display: grid; gap: 8px; padding: 14px; border: 1px solid #a5cf9b; border-radius: 12px; color: #eaf7d7; background: #102b23f5; box-shadow: 0 12px 32px #000b; }
+#roadside-choice small { color: #a7dfa9; font: 900 10px system-ui; letter-spacing: .14em; }
+#roadside-choice strong { font: 900 16px system-ui; }
+#roadside-choice p { margin: 0; color: #c0cdb8; font: 12px system-ui; }
+#roadside-choice div { display: grid; gap: 6px; }
+#roadside-choice button { padding: 9px; border: 1px solid #729e77; border-radius: 7px; color: #edf7df; background: #234b38; font: 800 11px system-ui; cursor: pointer; }
+#roadside-choice button:hover { background: #326447; }
+#roadside-close { opacity: .75; }
 .resource-toast { max-width: 100%; padding: 9px 14px; border: 1px solid #cbdcaa88; border-radius: 10px; color: #f6edbc; background: #163026ed; font: 800 13px system-ui; text-align: left; animation: resource-pickup 4.5s both; }
 .material-pickup { display: grid; border-color: #829a7a80; background: #15251ced; }
 .material-pickup small { color: #91aa94; font-size: 8px; letter-spacing: .11em; }
