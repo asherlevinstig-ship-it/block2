@@ -2287,6 +2287,7 @@ interface LootVisual {
   phase: number;
   audioPlayed: boolean;
   landingPlayed: boolean;
+  pickupStartedAt: number | null;
 }
 
 interface MobVisual {
@@ -2531,6 +2532,7 @@ let inspectedDropId: string | null = null;
 let lootPending = false;
 let selectedSwapItemId: ItemId | null = null;
 const pendingFloorLoot = new Map<string, number>();
+const pendingLootDrops = new Map<string, NetworkLootDrop>();
 let lootWorldDetailKey = "";
 let lootHold: LootHold | null = null;
 function cancelLootHold(): void {
@@ -2689,7 +2691,11 @@ function interactWithLoot(dropId: string): void {
     return;
   }
   if ((pendingFloorLoot.get(dropId) ?? 0) > performance.now()) return;
-  pendingFloorLoot.set(dropId, performance.now() + 2_000);
+  const now = performance.now();
+  pendingFloorLoot.set(dropId, now + 5_000);
+  pendingLootDrops.set(dropId, { ...drop });
+  const visual = lootVisuals.get(dropId);
+  if (visual) visual.pickupStartedAt = now;
   room.send("loot:collect", { dropId, action: "keep" });
   status.textContent = isEnemyLootBag(drop)
     ? `Opening ${LOOT_BAG_TIER_LABEL[lootBagTierForItems(lootItems(drop))]}...`
@@ -5332,24 +5338,27 @@ function createLootVisual(dropId: string, drop: NetworkLootDrop, settled = false
   app.root.addChild(root);
   return { root, marker, beam, beamUntil: realmWardenDrop ? landedAt + WARDEN_LOOT_BEAM_MS : Infinity,
     revealAt, landedAt, tossFrom, state: drop, phase: [...dropId].reduce((total, character) => total + character.charCodeAt(0), 0) % 17,
-    audioPlayed: false, landingPlayed: false };
+    audioPlayed: false, landingPlayed: false, pickupStartedAt: null };
 }
 
+function celebrateLootPickup(drop: NetworkLootDrop): void {
+  const player = localPlayer.getPosition();
+  lootPickupBurst({ ...drop, x: player.x, y: player.y, z: player.z });
+  combatAudio.play("lootPickup");
+  const items = lootItems(drop);
+  const tier = isEnemyLootBag(drop) ? lootBagTierForItems(items) : null;
+  const rarity = tier ? LOOT_BAG_TIER_RARITY[tier] : isItemId(drop.itemId) ? itemRarity(drop.itemId) : "common";
+  if (rarity === "rare") combatAudio.play("lootRare");
+  if (rarity === "epic") combatAudio.play("lootEpic");
+  if (rarity === "legendary") combatAudio.play("lootLegendary");
+}
 function removeLootVisual(dropId: string, collectedHere: boolean): void {
   const visual = lootVisuals.get(dropId);
-  if (visual && collectedHere) {
-    lootPickupBurst(visual.state);
-    combatAudio.play("lootPickup");
-    const items = lootItems(visual.state);
-    const tier = isEnemyLootBag(visual.state) ? lootBagTierForItems(items) : null;
-    const rarity = tier ? LOOT_BAG_TIER_RARITY[tier] : isItemId(visual.state.itemId) ? itemRarity(visual.state.itemId) : "common";
-    if (rarity === "rare") combatAudio.play("lootRare");
-    if (rarity === "epic") combatAudio.play("lootEpic");
-    if (rarity === "legendary") combatAudio.play("lootLegendary");
-  }
+  if (visual && collectedHere) celebrateLootPickup(visual.state);
   visual?.root.destroy();
   lootVisuals.delete(dropId);
   pendingFloorLoot.delete(dropId);
+  pendingLootDrops.delete(dropId);
 }
 
 function updateRemainingLootBag(dropId: string, items: LootBagItem[]): void {
@@ -5385,8 +5394,13 @@ function bindLootDrops(joinedRoom: Room): void {
     showDrop(dropId, drop);
   }, true);
   drops.onRemove((_drop: NetworkLootDrop, dropId: string) => {
-    const collectedHere = pendingFloorLoot.has(dropId) || inspectedDropId === dropId && lootPending;
-    removeLootVisual(dropId, collectedHere);
+    const awaitingResult = (pendingFloorLoot.get(dropId) ?? 0) > performance.now();
+    const pendingDrop = awaitingResult ? pendingLootDrops.get(dropId) : undefined;
+    removeLootVisual(dropId, !awaitingResult && inspectedDropId === dropId && lootPending);
+    if (awaitingResult) {
+      pendingFloorLoot.set(dropId, performance.now() + 5_000);
+      if (pendingDrop) pendingLootDrops.set(dropId, pendingDrop);
+    }
     if (inspectedDropId === dropId && !lootPending) {
       lootMessage.textContent = "That bag was collected or expired.";
       lootEquip.disabled = lootKeep.disabled = true;
@@ -9771,6 +9785,14 @@ app.on("update", (dt: number) => {
     trimRemoteSnapshots(remote.snapshots, renderAt);
   }
   const highlightedLootId = nearestLootDrop();
+  for (const [dropId, expiresAt] of pendingFloorLoot) {
+    if (expiresAt > animationNow) continue;
+    pendingFloorLoot.delete(dropId);
+    pendingLootDrops.delete(dropId);
+    const visual = lootVisuals.get(dropId);
+    if (visual) visual.pickupStartedAt = null;
+    status.textContent = "Pickup is taking longer than expected. The bag is still available if it remains here.";
+  }
   for (const [lootId, loot] of lootVisuals) {
     const visible = animationNow >= loot.revealAt && undergroundKnown(loot.state.x, loot.state.y, loot.state.z)
       && !isCutawayHidden(Math.floor(loot.state.x), Math.floor(loot.state.y), Math.floor(loot.state.z));
@@ -9796,6 +9818,22 @@ app.on("update", (dt: number) => {
     const pileScale = bagTier ? 1 : isEquipmentItem(loot.state.itemId) ? 1 : 1 + Math.min(.28, Math.log2(Math.max(1, loot.state.quantity)) * .08);
     const focusPulse = lootId === highlightedLootId ? 1.08 + Math.sin(animationTime * 7) * .025 : 1;
     loot.root.setLocalScale(pileScale * focusPulse, pileScale * focusPulse, pileScale * focusPulse);
+    if (loot.pickupStartedAt !== null) {
+      const pull = Math.min(1, Math.max(0, (animationNow - loot.pickupStartedAt) / 320));
+      const eased = 1 - (1 - pull) ** 3;
+      const player = localPlayer.getPosition();
+      loot.root.setPosition(
+        loot.state.x + (player.x - loot.state.x) * eased,
+        targetY + bob + (player.y + 1.15 - targetY - bob) * eased + Math.sin(pull * Math.PI) * .45,
+        loot.state.z + (player.z - loot.state.z) * eased,
+      );
+      const scale = pileScale * focusPulse * Math.max(.02, 1 - eased * .98);
+      loot.root.setLocalScale(scale, scale, scale);
+      loot.root.enabled = pull < 1;
+      loot.marker.enabled = false;
+      loot.beam.enabled = false;
+      continue;
+    }
     loot.marker.enabled = animationNow >= loot.landedAt;
     loot.beam.enabled = animationNow >= loot.landedAt && animationNow < loot.beamUntil;
     if (loot.marker.render && isItemId(loot.state.itemId)) loot.marker.render.material = lootWouldOverflow(lootId, loot.state)
@@ -11212,15 +11250,21 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   room.onMessage("loot:result", (message: LootCollectResult) => {
     if (message.dropId !== inspectedDropId) {
       if (!pendingFloorLoot.delete(message.dropId)) return;
+      const pendingDrop = pendingLootDrops.get(message.dropId);
+      pendingLootDrops.delete(message.dropId);
+      const visual = lootVisuals.get(message.dropId);
+      if (visual) visual.pickupStartedAt = null;
       if (!message.ok) {
         status.textContent = message.message;
         showLootNotice(message.message, true);
       } else if (message.remainingItems?.length) {
+        if (pendingDrop) celebrateLootPickup(pendingDrop);
         updateRemainingLootBag(message.dropId, message.remainingItems);
         status.textContent = message.message;
         showLootNotice(message.message, true);
       } else {
-        removeLootVisual(message.dropId, true);
+        if (pendingDrop) celebrateLootPickup(pendingDrop);
+        removeLootVisual(message.dropId, false);
         status.textContent = message.message;
       }
       return;
