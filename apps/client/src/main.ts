@@ -256,6 +256,7 @@ import {
 } from "@blockcraft/voxel-world";
 import {
   REMOTE_INTERPOLATION_DELAY_MS,
+  advanceBlockedAcknowledgements,
   approachMovement,
   approachYaw,
   cameraRelativeMovement,
@@ -3108,6 +3109,7 @@ let cameraShakeUntil = 0;
 let cameraShakeStrength = 0;
 let lastProcessedInputSequence = 0;
 const pendingPredictionFrames: PredictionFrame[] = [];
+let blockedAcknowledgements = 0;
 let lastAuthoritativeDodgeSequence = 0;
 let lastAuthoritativeMovementAt = 0;
 let lastAcknowledgementAdvancedAt = 0;
@@ -5599,6 +5601,17 @@ function bindPlayers(joinedRoom: Room): void {
           if (!portalArrivalSnapshot(pendingPortalDestination, player)) return;
           pendingPortalDestination = null;
         }
+        const acknowledgedMotion = pendingPredictionFrames.reduce((motion, frame) =>
+          frame.kind !== "dodge" && frame.sequence > lastProcessedInputSequence
+            && frame.sequence <= player.lastProcessedInput
+            ? { x: motion.x + frame.x, z: motion.z + frame.z } : motion, { x: 0, z: 0 });
+        const previouslyBlocked = blockedAcknowledgements;
+        blockedAcknowledgements = advanceBlockedAcknowledgements(
+          blockedAcknowledgements, lastProcessedInputSequence, player.lastProcessedInput, acknowledgedMotion,
+          { x: player.x - authoritativeLocalPosition.x, z: player.z - authoritativeLocalPosition.z },
+        );
+        if (previouslyBlocked < 2 && blockedAcknowledgements >= 2)
+          logMovementEvent(`SERVER PATH BLOCKED ack=${player.lastProcessedInput}`);
         authoritativeLocalPosition.set(player.x, player.y, player.z);
         if (player.dodgeSequence > lastAuthoritativeDodgeSequence)
           confirmPredictedDodges(pendingPredictionFrames, player.dodgeSequence - lastAuthoritativeDodgeSequence);
@@ -7449,6 +7462,7 @@ function renderBootstrap(payload: WorldBootstrap): void {
   localDodgeChain = 0;
   localDodgeExhaustedUntil = 0;
   pendingPredictionFrames.length = 0;
+  blockedAcknowledgements = 0;
   lastAuthoritativeDodgeSequence = ownPlayer?.dodgeSequence ?? 0;
   smoothedMovement = { x: 0, z: 0 };
   lastSentMovement = { x: 0, z: 0 };
@@ -7538,6 +7552,7 @@ function clearDefeatCombat(): void {
   localHitPauseUntil = 0;
   localComboStep = 0; localComboExpiresAt = 0;
   pendingPredictionFrames.length = 0;
+  blockedAcknowledgements = 0;
   pendingStopInputSequence = null;
   cameraShakeUntil = 0; cameraShakeStrength = 0;
   localVerticalVelocity = 0;
@@ -7671,6 +7686,7 @@ function activateMovementPilot(joinedRoom: Room): void {
   localRecoveryVisualOffset = { x: 0, z: 0 };
   localDodgeVisualOffset = { x: 0, z: 0 };
   pendingPredictionFrames.length = 0;
+  blockedAcknowledgements = 0;
   logMovementEvent("COLYSEUS CONTROLLING MOVEMENT");
 }
 minimap.setPingHandler((x, z) => {
@@ -8086,7 +8102,7 @@ function recordSnapDiagnostic(cause: string, before: pc.Vec3, after: pc.Vec3): v
   const now = performance.now();
   const positionLabel = (value: pc.Vec3) => `${fixed(value.x)},${fixed(value.y)},${fixed(value.z)}`;
   const delta = before.distance(after);
-  const line = `${fixed(now / 1000, 2)}s ${cause} delta=${fixed(delta)} before=[${positionLabel(before)}] after=[${positionLabel(after)}] server=[${positionLabel(authoritativeLocalPosition)}] sent=${moveSequence} ack=${lastProcessedInputSequence} lag=${moveSequence - lastProcessedInputSequence} age=${fixed(now - lastAuthoritativeMovementAt, 0)}ms ack_age=${fixed(now - lastAcknowledgementAdvancedAt, 0)}ms input=[${movementVectorLabel(smoothedMovement)}] dt=${fixed(frameSamples.at(-1) ?? 0, 1)}ms rtt=${networkRttMs === null ? "unknown" : fixed(networkRttMs, 0)}ms chunk_build=${fixed(lastChunkBuildMs, 1)}ms slice=${cutawayStateKey}`;
+  const line = `${fixed(now / 1000, 2)}s ${cause} delta=${fixed(delta)} before=[${positionLabel(before)}] after=[${positionLabel(after)}] server=[${positionLabel(authoritativeLocalPosition)}] sent=${moveSequence} ack=${lastProcessedInputSequence} lag=${moveSequence - lastProcessedInputSequence} blocked_acks=${blockedAcknowledgements} age=${fixed(now - lastAuthoritativeMovementAt, 0)}ms ack_age=${fixed(now - lastAcknowledgementAdvancedAt, 0)}ms input=[${movementVectorLabel(smoothedMovement)}] dt=${fixed(frameSamples.at(-1) ?? 0, 1)}ms rtt=${networkRttMs === null ? "unknown" : fixed(networkRttMs, 0)}ms chunk_build=${fixed(lastChunkBuildMs, 1)}ms slice=${cutawayStateKey}`;
   snapDiagnosticEvents.push(line);
   if (snapDiagnosticEvents.length > 30) snapDiagnosticEvents.shift();
   if (!activeSnapTrace) {
@@ -9353,7 +9369,9 @@ function reconcileLocalPlayer(
   target.y = reconciliationVerticalTarget(position.y, target.y, grounded);
   const distance = position.distance(target);
   const now = performance.now();
-  const reconciliationRate = localReconciliationRate(distance, moving, sequenceLag, authoritativeInputReady, now - lastAuthoritativeMovementAt, now - lastAcknowledgementAdvancedAt);
+  const reconciliationRate = localReconciliationRate(distance, moving, sequenceLag, authoritativeInputReady,
+    now - lastAuthoritativeMovementAt, now - lastAcknowledgementAdvancedAt, blockedAcknowledgements);
+  const blockedCorrection = moving && blockedAcknowledgements > 0 && reconciliationRate === 8;
   if (!Number.isFinite(reconciliationRate)) {
     const mobilityAdvance = localActivePower !== null
       && POWER_DEFINITIONS[localActivePower].core === "mobility"
@@ -9376,10 +9394,10 @@ function reconcileLocalPlayer(
     const previousY = position.y;
     position.lerp(position, target, Math.min(1, dt * reconciliationRate));
     localVisualVerticalOffset += previousY - position.y;
-    if (!moving) {
+    if (!moving || blockedCorrection) {
       // The stop acknowledgement can arrive hundreds of milliseconds late.
-      // Keep the rendered pose planted while collision catches up, then let
-      // the bounded recovery offset carry it to the authoritative position.
+      // Likewise, a blocked server path should move collision back early
+      // without dragging the rendered pose in one frame.
       localRecoveryVisualOffset = preserveReconciledVisualOffset(
         localRecoveryVisualOffset, localNetworkVisualOffset, beforeCorrection, position,
       );
@@ -10404,7 +10422,7 @@ app.on("update", (dt: number) => {
       `trait      ${localTraitId} momentum=${localMomentumStacks}/${MOMENTUM_TRAIT.maxStacks} speed=${localMovementSpeed().toFixed(2)}`,
       `cutaway    ${cutawaySliceY === null ? "surface" : `slice=${cutawaySliceY}`} ref=${surfaceReferenceY?.toFixed(3) ?? "n/a"} underground=${undergroundClassification} excavation=${excavationClassification} return=${surfaceReturnClassification}`,
       `collision  grounded=${grounded} stepped=${predicted.stepped} hitY=${predicted.hitVertical}`,
-      `sequence   sent=${moveSequence} ack=${lastProcessedInputSequence} lag=${sequenceLag}`,
+      `sequence   sent=${moveSequence} ack=${lastProcessedInputSequence} lag=${sequenceLag} blocked_acks=${blockedAcknowledgements}`,
       `net age    ${Math.round(performance.now() - lastAuthoritativeMovementAt)}ms`,
       `ack age    ${Math.round(performance.now() - lastAcknowledgementAdvancedAt)}ms`,
       `snap log   ${snapDiagnosticEvents.length} events · ${activeSnapTrace ? "recording" : `${completedSnapTraces.length} saved traces`} · COPY LOG`,

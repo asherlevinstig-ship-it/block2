@@ -140,11 +140,18 @@ export function localReconciliationRate(
   authoritativeInputReady = true,
   authoritativeAgeMs = 0,
   acknowledgementAgeMs = 0,
+  blockedAcknowledgements = 0,
 ): number {
   if (!moving && !authoritativeInputReady) return 0;
   // Freshness must be checked before both soft and hard corrections. A large
   // distance from an old snapshot is not evidence of an invalid local position.
   if (authoritativeAgeMs > 200 || (moving && acknowledgementAgeMs > 350)) return 0;
+  // If the server has acknowledged moving inputs but its position remains
+  // blocked, the client and server have taken different collision paths.
+  // Correct this while the gap is still small instead of waiting for the
+  // lag-expanded hard-correction threshold.
+  if (moving && ((blockedAcknowledgements >= 2 && distance > 0.65)
+    || (blockedAcknowledgements >= 1 && distance > 1.25))) return 8;
   const boundedLag = Math.max(0, Math.min(12, sequenceLag));
   const hardCorrectionDistance = moving ? 2.5 + boundedLag * 0.4 : 3;
   if (distance > hardCorrectionDistance) return Number.POSITIVE_INFINITY;
@@ -155,6 +162,25 @@ export function localReconciliationRate(
     return distance > 1.75 + boundedLag * 0.25 ? 0.75 : 0;
   }
   return distance > 0.05 ? 8 : 0;
+}
+
+/** Count only fresh acknowledgements that processed actual movement but made
+ * no authoritative progress. A delayed or idle acknowledgement is not a wall. */
+export function advanceBlockedAcknowledgements(
+  previous: number,
+  previousSequence: number,
+  nextSequence: number,
+  acknowledgedMotion: MovementVector,
+  authoritativeMotion: MovementVector,
+): number {
+  if (nextSequence < previousSequence) return 0;
+  if (nextSequence === previousSequence) return previous;
+  const requested = Math.hypot(acknowledgedMotion.x, acknowledgedMotion.z);
+  if (requested < 0.1) return 0;
+  const forwardProgress = (authoritativeMotion.x * acknowledgedMotion.x
+    + authoritativeMotion.z * acknowledgedMotion.z) / requested;
+  if (forwardProgress > 0.04) return 0;
+  return Math.min(8, previous + 1);
 }
 
 /** Ease a visual recovery without moving its collision position off the server. */

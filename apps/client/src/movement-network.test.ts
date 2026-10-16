@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  advanceBlockedAcknowledgements,
   approachMovement,
   approachYaw,
   cameraRelativeMovement,
@@ -111,6 +112,29 @@ describe("movement networking", () => {
     expect(localReconciliationRate(2, true, 0, true, 30)).toBe(0.75);
     expect(localReconciliationRate(8, true, 6, true, 350)).toBe(0);
     expect(localReconciliationRate(0.3, false, 0, true, 350)).toBe(0);
+  });
+
+  it("recognizes processed movement repeatedly blocked by the server", () => {
+    const first = advanceBlockedAcknowledgements(0, 138, 139, { x: 0, z: 0.21 }, { x: 0, z: 0 });
+    const second = advanceBlockedAcknowledgements(first, 139, 147, { x: 0, z: 1.68 }, { x: 0.2, z: 0 });
+    expect(first).toBe(1);
+    expect(second).toBe(2);
+    expect(advanceBlockedAcknowledgements(second, 147, 147, { x: 0, z: 0 }, { x: 0, z: 0 })).toBe(2);
+    expect(advanceBlockedAcknowledgements(second, 147, 148, { x: 0, z: 0 }, { x: 0, z: 0 })).toBe(0);
+    expect(advanceBlockedAcknowledgements(second, 147, 148, { x: 0, z: 0.21 }, { x: 0, z: 0.14 })).toBe(0);
+  });
+
+  it("corrects the captured blocked path early without a 5.65m hard snap", () => {
+    expect(localReconciliationRate(1.27, true, 7, true, 4, 4, 0)).toBe(0);
+    expect(localReconciliationRate(1.27, true, 7, true, 4, 4, 1)).toBe(8);
+    expect(localReconciliationRate(0.9, true, 7, true, 4, 4, 2)).toBe(8);
+    expect(localReconciliationRate(5.648, true, 7, true, 4, 4, 3)).toBe(8);
+    expect(localReconciliationRate(5.648, true, 7, true, 350, 350, 3)).toBe(0);
+    const before = { x: 8.163, z: 29.61 };
+    const after = { x: 7.8, z: 29.625 };
+    const offset = preserveReconciledVisualOffset({ x: 0, z: 0 }, { x: 0, z: 0 }, before, after);
+    expect(after.x + offset.x).toBeCloseTo(before.x);
+    expect(after.z + offset.z).toBeCloseTo(before.z);
   });
 
   it("ignores the captured 7.33-block snap while acknowledgements are stalled", () => {
