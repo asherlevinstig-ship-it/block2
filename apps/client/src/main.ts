@@ -311,6 +311,7 @@ import { characterCreationNeeded, createGuestProfileToken, finishCharacterCreati
   profileBackups, restoreProfile, startNewAdventure } from "./player-profile.js";
 import { advanceOnboarding, ONBOARDING_DONE, ONBOARDING_STEPS, onboardingStorageKey,
   parseOnboardingStep, type OnboardingEvent } from "./new-player-onboarding.js";
+import { onboardingTrailRoute, sampleTrail } from "./onboarding-trail.js";
 import { CombatAudio, enemyCuePan, enemyCuesForTransition, type EnemyCue, type EnemyCueSnapshot } from "./combat-audio.js";
 import { SceneDressing } from "./scene-dressing.js";
 import { WARDEN_LOOT_BEAM_MS } from "./warden-victory-effects.js";
@@ -2438,6 +2439,50 @@ function updatePlayerTradePrompt(blocked: boolean): void {
 }
 const mobVisuals = new Map<string, MobVisual>();
 const lootVisuals = new Map<string, LootVisual>();
+const firstStepsTrail = new pc.Entity("first-steps-glow-trail");
+const firstStepsTrailMaterial = new pc.StandardMaterial();
+firstStepsTrailMaterial.diffuse = new pc.Color(1, .72, .25);
+firstStepsTrailMaterial.emissive = new pc.Color(1, .48, .08);
+firstStepsTrailMaterial.useLighting = false;
+firstStepsTrailMaterial.useFog = false;
+firstStepsTrailMaterial.opacity = .72;
+firstStepsTrailMaterial.blendType = pc.BLEND_NORMAL;
+firstStepsTrailMaterial.depthWrite = false;
+firstStepsTrailMaterial.update();
+const firstStepsTrailMarks = Array.from({ length: 18 }, (_, index) => {
+  const mark = new pc.Entity(`first-steps-wisp-${index}`);
+  mark.addComponent("render", { type: "box", material: firstStepsTrailMaterial,
+    castShadows: false, receiveShadows: false });
+  mark.setLocalEulerAngles(0, 45, 0);
+  mark.enabled = false;
+  firstStepsTrail.addChild(mark);
+  return mark;
+});
+app.root.addChild(firstStepsTrail);
+let firstStepsTrailPoints: ReturnType<typeof sampleTrail> = [];
+let firstStepsTrailUpdatedAt = -Infinity;
+function updateFirstStepsTrail(player: pc.Vec3, now: number): void {
+  const active = worldReady && firstStepsIndex !== null && firstStepsIndex < ONBOARDING_DONE
+    && defeatScreen.hidden === true && inventoryPanel.hidden === true;
+  firstStepsTrail.enabled = active;
+  if (!active) return;
+  if (now - firstStepsTrailUpdatedAt >= 150) {
+    firstStepsTrailUpdatedAt = now;
+    const route = onboardingTrailRoute(firstStepsIndex, player,
+      [...mobVisuals.values()].map(({ state }) => state),
+      [...lootVisuals.values()].filter(({ root }) => root.enabled).map(({ state }) => state));
+    firstStepsTrailPoints = sampleTrail(player, route);
+  }
+  for (let index = 0; index < firstStepsTrailMarks.length; index++) {
+    const mark = firstStepsTrailMarks[index]!;
+    const point = firstStepsTrailPoints[index];
+    mark.enabled = Boolean(point);
+    if (!point) continue;
+    const pulse = .75 + .25 * Math.sin(now * .006 - index * .55);
+    mark.setPosition(point.x, point.y + .065 + .07 * pulse, point.z);
+    mark.setLocalScale(.3 * pulse, .035, .3 * pulse);
+  }
+}
 const lootPanel = document.querySelector<HTMLElement>("#loot-panel")!;
 const lootWorldLabel = document.querySelector<HTMLButtonElement>("#loot-world-label")!;
 const lootWorldName = document.querySelector<HTMLElement>("#loot-world-name")!;
@@ -9467,6 +9512,7 @@ app.on("update", (dt: number) => {
     noteFirstStep("moved");
   else if (worldReady && firstStepsIndex === 1 && Math.hypot(player.x - TOWN_CENTER_X, player.z - TOWN_CENTER_Z) > TOWN_SAFE_RADIUS + 1)
     noteFirstStep("left_town");
+  updateFirstStepsTrail(player, animationNow);
   const renderAt = performance.now() - REMOTE_INTERPOLATION_DELAY_MS;
   for (const remote of remotePlayers.values()) {
     const pose = sampleRemotePose(remote.snapshots, renderAt);
