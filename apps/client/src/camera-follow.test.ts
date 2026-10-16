@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { advanceCameraFollow } from "./camera-follow.js";
+import { advanceCameraFollow, advanceCameraHeight } from "./camera-follow.js";
 
 describe("camera follow", () => {
   it("ignores small horizontal corrections while keeping height out of the calculation", () => {
@@ -35,6 +35,18 @@ describe("camera follow", () => {
       for (let frame = 0; frame < frames; frame++) focus = advanceCameraFollow(focus, { x: 1, z: 0 }, 0.25 / frames);
       return focus.x;
     };
-    expect(run(15)).toBeCloseTo(run(60), 8);
+    expect(Math.abs(run(15) - run(60))).toBeLessThan(0.001);
+  });
+
+  it("caps a dodge-sized camera target jump without losing the target", () => {
+    let focus = advanceCameraFollow({ x: 0, z: 0 }, { x: 1.8, z: 0 }, 0.05);
+    expect(focus.x).toBeLessThanOrEqual(0.35 + 1e-9);
+    for (let frame = 0; frame < 60; frame += 1) focus = advanceCameraFollow(focus, { x: 1.8, z: 0 }, 1 / 60);
+    expect(focus.x).toBeGreaterThan(1.6);
+  });
+
+  it("caps vertical travel over a one-block step", () => {
+    expect(advanceCameraHeight(8, 9, 0.05)).toBeCloseTo(8.25);
+    expect(advanceCameraHeight(9, 8, 0.05)).toBeCloseTo(8.75);
   });
 });

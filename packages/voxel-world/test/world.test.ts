@@ -604,6 +604,14 @@ describe("deterministic voxel world", () => {
     expect(playerCollides(wall, lunged.x, lunged.y, lunged.z)).toBe(false);
   });
 
+  it("sweeps a 1.8-block dodge instead of skipping a one-block wall", () => {
+    const wall = (x: number, y: number) => (y === 0 || (x === 2 && (y === 1 || y === 2)) ? Block.Stone : Block.Air);
+    const dodge = resolveSweptHorizontalMotion({ x: 1.5, y: 1, z: 0.5 }, { x: 1.8, z: 0 }, wall);
+    expect(dodge.x).toBeLessThan(2);
+    expect(dodge.y).toBe(1);
+    expect(playerCollides(wall, dodge.x, dodge.y, dodge.z)).toBe(false);
+  });
+
   it("keeps the complete underground entrance and chamber route supported", () => {
     const chunks = new Map<string, ReturnType<typeof generateChunk>>();
     const readWorld = (x: number, y: number, z: number) => {

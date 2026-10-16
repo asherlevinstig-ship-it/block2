@@ -68,7 +68,7 @@ import { createServerClock, sampleServerClock, enemyAttackPresentation } from ".
 import { bruteRecoveryPose, enemyAwarenessCue, enemyCombatCue, enemyCueLineClear, enemyShotGuideLength } from "./enemy-combat-cues.js";
 import { replayPendingMovement, type PredictionFrame } from "./prediction-replay.js";
 import { advanceCameraOrbit, cameraOrbitOffset, initialCameraOrbit } from "./camera-orbit.js";
-import { advanceCameraFollow } from "./camera-follow.js";
+import { advanceCameraFollow, advanceCameraHeight } from "./camera-follow.js";
 import {
   advanceDodgeVisualOffset,
   advancePredictedDodgeStamina,
@@ -246,6 +246,7 @@ import {
   isProtectedVoxel,
   isPlayerSupported,
   resolvePlayerMotion,
+  resolveSweptHorizontalMotion,
   voxelRaycast,
   worldToChunk,
   type BlockId,
@@ -8566,9 +8567,9 @@ function requestDodge(): void {
         z: Math.cos(localFacingYaw * Math.PI / 180),
       };
   const current = localPlayer.getPosition();
-  const predicted = resolvePlayerMotion(
+  const predicted = resolveSweptHorizontalMotion(
     { x: current.x, y: current.y, z: current.z },
-    { x: direction.x * 1.8, y: 0, z: direction.z * 1.8 },
+    { x: direction.x * 1.8, z: direction.z * 1.8 },
     readCollisionWorldBlock,
   );
   localDodgeVisualOffset = beginDodgeVisualOffset(
@@ -10129,7 +10130,7 @@ app.on("update", (dt: number) => {
   );
   indoorCameraBlend = advanceIndoorCameraBlend(indoorCameraBlend, indoorRoofBuilding !== null && !playerCutaway.active, frameTime);
   cameraFollow = advanceCameraFollow(cameraFollow, cameraTarget, frameTime);
-  cameraFocus.set(cameraFollow.x, cameraTarget.y, cameraFollow.z);
+  cameraFocus.set(cameraFollow.x, advanceCameraHeight(cameraFocus.y, cameraTarget.y, frameTime), cameraFollow.z);
   // A small, fixed room-center bias keeps the bar and tables in view without tracking furniture as the player walks.
   cameraFocus.x += (8.5 - cameraFocus.x) * indoorCameraBlend * 0.16;
   cameraFocus.z += (15 - cameraFocus.z) * indoorCameraBlend * 0.16;

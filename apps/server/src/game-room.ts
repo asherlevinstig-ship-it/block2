@@ -6534,9 +6534,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (player.stamina < cost) return this.reject(client, { requestId: parsed.data.requestId, action: "dodge", reason: "stamina" });
     this.cancelPendingPower(client.sessionId, "dodge");
     const direction = dodgeDirection(parsed.data.strafe, parsed.data.forward, parsed.data.yaw);
-    const next = resolvePlayerMotion(
+    const next = resolveSweptHorizontalMotion(
       { x: player.x, y: player.y, z: player.z },
-      { x: direction.x * 1.8, y: 0, z: direction.z * 1.8 },
+      { x: direction.x * 1.8, z: direction.z * 1.8 },
       this.readWorldBlock,
     );
     player.x = next.x;
