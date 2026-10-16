@@ -205,6 +205,7 @@ import { inventoryTotal, isLootInPickupRange, lootForArchetype, armourDropForMob
 import { findLootLanding } from "./loot-placement.js";
 import { canEquipMainHand } from "./equipment-rules.js";
 import { PLAYER_SAVE_HASH, applyPlayerSave, parsePlayerSave, serializePlayerSave } from "./player-save.js";
+import { parseNorthwatchProgress, withNorthwatchProgress } from "./northwatch-progress.js";
 import { buildPathAffinities, buildPathRank, chooseBuildPath, chooseBuildSpecialization, chooseCallingAbility, chooseCallingAugment, effectiveBuildPathRank, grantBuildPathXp, grantCallingAugmentProgress, grantMasterTrialProgress, nextBuildRankXp, parseBuildPathState, selectedCallingAbility, selectedCallingAugment } from "./build-paths.js";
 import { equipmentReforgeRank, parseReforgeRanks, withReforgeRank } from "./equipment-reforge.js";
 import { attunementDustCost, attunementDustYield, keepBetterAffix, parseEquipmentAffixes, parseEquipmentAffixOffers,
@@ -458,8 +459,6 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly miniBossOrbitPressure = new Map<string, OrbitPressureState>();
   private readonly miniBossArenaCover = new Map<string, Map<string, ActiveMiniBossCover>>();
   private readonly leaderDefeats = new Map<string, number>();
-  /** Per-player patrol marks for the optional Northwatch rematch cache. */
-  private readonly northwatchPatrolProgress = new Map<string, number>();
   private readonly selectedRealmHunts = new Map<string, string>();
   private readonly huntContracts = new Map<string, HuntContractState>();
   private readonly huntContractCycles = new Map<string, Partial<Record<HuntPathId, number>>>();
@@ -1001,7 +1000,6 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.quizRounds.delete(client.sessionId);
     this.objectiveProgress.delete(client.sessionId);
     this.selectedRealmHunts.delete(client.sessionId);
-    this.northwatchPatrolProgress.delete(client.sessionId);
     this.huntContracts.delete(client.sessionId);
     this.huntContractCycles.delete(client.sessionId);
     for (const [mobId, champion] of this.huntChampions) if (champion.ownerId === client.sessionId) {
@@ -2272,12 +2270,16 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       recipientsWithLoot.add(playerId);
     }
     if (mobId === "northwatch-scout" || mobId === "northwatch-spitter") for (const playerId of recipients) {
-      if ((this.leaderDefeats.get("northwatch-watchbreaker") ?? 0) === 0) continue;
+      const player = this.state.players.get(playerId);
+      if (!player) continue;
+      const northwatch = parseNorthwatchProgress(player.huntLoadoutsJson);
+      if (northwatch.clears === 0) continue;
       const mark = mobId === "northwatch-scout" ? 1 : 2;
-      const progress = this.northwatchPatrolProgress.get(playerId) ?? 0;
+      const progress = northwatch.marks;
       if (progress & mark) continue;
       const next = progress | mark;
-      this.northwatchPatrolProgress.set(playerId, next);
+      player.huntLoadoutsJson = withNorthwatchProgress(player.huntLoadoutsJson, { ...northwatch, marks: next });
+      void this.persistPlayer(playerId, player);
       this.clients.find(client => client.sessionId === playerId)?.send("chat:notice", next === 3
         ? "NORTHWATCH PATROL COMPLETE · return to the Watchbreaker for bonus Ridge Hide. Watch for FAULT LINE."
         : `NORTHWATCH PATROL 1/2 · defeat a ${mark === 1 ? "Shard Sentry" : "Ridge Stalker"} before the Watchbreaker rematch.`);
@@ -2325,7 +2327,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const areaMainMob = areaMainMobDefinition(mobId);
     if (areaMainMob) this.leaderDefeats.set(mobId, Math.min(5, (this.leaderDefeats.get(mobId) ?? 0) + 1));
     if (mobId === "northwatch-watchbreaker") for (const playerId of recipients) {
-      this.northwatchPatrolProgress.set(playerId, 0);
+      const player = this.state.players.get(playerId);
+      if (!player) continue;
+      const northwatch = parseNorthwatchProgress(player.huntLoadoutsJson);
+      player.huntLoadoutsJson = withNorthwatchProgress(player.huntLoadoutsJson,
+        { clears: Math.min(5, northwatch.clears + 1), marks: 0 });
+      void this.persistPlayer(playerId, player);
       this.clients.find(client => client.sessionId === playerId)?.send("chat:notice",
         "NORTHWATCH REMATCH · defeat one Ridge Stalker and one Shard Sentry, then return for bonus Ridge Hide.");
     }
@@ -2597,9 +2604,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       };
     }
     const northwatchLeader = this.state.mobs.get("northwatch-watchbreaker");
-    const northwatchProgress = this.northwatchPatrolProgress.get(client.sessionId) ?? 0;
-    if (this.roomKind === "overworld" && northwatchLeader?.alive && northwatchLeader.leaderRematchTier > 0
-      && (this.leaderDefeats.get("northwatch-watchbreaker") ?? 0) > 0
+    const northwatch = parseNorthwatchProgress(player.huntLoadoutsJson);
+    const northwatchProgress = northwatch.marks;
+    if (this.roomKind === "overworld" && northwatchLeader?.alive && northwatch.clears > 0
       && Math.abs(player.y - northwatchLeader.y) <= 2.5
       && Math.hypot(player.x - northwatchLeader.x, player.z - northwatchLeader.z) <= 36
       && northwatchLeader.combatState === "idle" && !northwatchLeader.targetId
@@ -2834,15 +2841,17 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           : [];
     const firstLeaderVictory = Boolean(rewardPlayer && areaReward
       && !this.ownsOrHasPendingItem(ownerId, areaReward.rewardItemId));
+    const personalRematchTier = mobId === "northwatch-watchbreaker"
+      ? parseNorthwatchProgress(rewardPlayer?.huntLoadoutsJson ?? "{}").clears : mob.leaderRematchTier;
     const areaRelicDrops: { itemId: ItemId; quantity: number }[] = rewardPlayer && areaReward
-      ? [{ itemId: areaReward.rewardItemId, quantity: mob.leaderRematchTier >= 4 ? 2 : 1 }] : [];
+      ? [{ itemId: areaReward.rewardItemId, quantity: personalRematchTier >= 4 ? 2 : 1 }] : [];
     const northwatchCloakDrop: { itemId: ItemId; quantity: number }[] = mobId === "northwatch-watchbreaker"
       && rewardPlayer && !this.ownsOrHasPendingItem(ownerId, "northwatch_cloak")
       ? [{ itemId: "northwatch_cloak", quantity: 1 }] : [];
     const northwatchPatrolBonus: { itemId: ItemId; quantity: number }[] = mobId === "northwatch-watchbreaker"
-      && mob.leaderRematchTier > 0 && this.northwatchPatrolProgress.get(ownerId) === 3
+      && personalRematchTier > 0 && parseNorthwatchProgress(rewardPlayer?.huntLoadoutsJson ?? "{}").marks === 3
       ? [{ itemId: "ridge_hide", quantity: 2 }] : [];
-    const rematchMaterialQuantity = areaReward ? leaderRematchMaterialBonus(mob.leaderRematchTier) : 0;
+    const rematchMaterialQuantity = areaReward ? leaderRematchMaterialBonus(personalRematchTier) : 0;
     const rematchMaterialId: ItemId = mobId === "northwatch-watchbreaker" ? "ridge_hide"
       : mob.archetype === "cave_spitter" ? "acid_gland"
       : mob.archetype === "stone_brute" ? "stone_core" : "crawler_fang";
@@ -2972,7 +2981,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       x: drop.x, y: drop.y, z: drop.z, expiresAt: drop.expiresAt,
     });
     if (areaRelicDrops.length) this.clients.find(client => client.sessionId === ownerId)?.send("chat:notice",
-      `${firstLeaderVictory ? "FIRST LEADER VICTORY" : mob.leaderRematchTier > 0 ? `EMPOWERED REMATCH ${mob.leaderRematchTier}` : "SIGNATURE DROP"} · ${areaRelicDrops[0]!.quantity} ${ITEM_DEFINITIONS[areaRelicDrops[0]!.itemId].name}${rematchMaterialQuantity ? ` + ${rematchMaterialQuantity} bonus ${ITEM_DEFINITIONS[rematchMaterialId].name}` : ""} added to your personal cache.`);
+      `${firstLeaderVictory ? "FIRST LEADER VICTORY" : personalRematchTier > 0 ? `EMPOWERED REMATCH ${personalRematchTier}` : "SIGNATURE DROP"} · ${areaRelicDrops[0]!.quantity} ${ITEM_DEFINITIONS[areaRelicDrops[0]!.itemId].name}${rematchMaterialQuantity ? ` + ${rematchMaterialQuantity} bonus ${ITEM_DEFINITIONS[rematchMaterialId].name}` : ""} added to your personal cache.`);
     if (northwatchCloakDrop.length) this.clients.find(client => client.sessionId === ownerId)?.send("chat:notice",
       "FIRST NORTHWATCH CLOAK · your personal loot bag contains a rare cloak. Press E to collect it.");
     if (northwatchPatrolBonus.length) this.clients.find(client => client.sessionId === ownerId)?.send("chat:notice",
@@ -4209,6 +4218,15 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (client) this.sendRealmHuntBoard(client, next.completed ? "Contract complete. Choose a path to begin a harder rotation." : "Contract advanced. Your next hunt is marked near its territory.");
   }
 
+  private northwatchActiveRematchTier(): number {
+    const home = this.mobHomes.get("northwatch-watchbreaker");
+    if (!home) return 0;
+    return Math.max(0, ...[...this.state.players.values()]
+      .filter(player => player.health > 0 && Math.abs(player.y - home.y) <= 2.5
+        && Math.hypot(player.x - home.x, player.z - home.z) <= 48)
+      .map(player => parseNorthwatchProgress(player.huntLoadoutsJson).clears));
+  }
+
   private sendRealmHuntBoard(client: Client, message = "Choose a path contract or track one leader. Guidance awakens only near its territory."): void {
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
@@ -4224,7 +4242,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const awakened = (player.inventory.get(recipe.markId)?.quantity ?? 0) + (player.storage.get(recipe.markId)?.quantity ?? 0) > 0;
       const pending = mob?.alive
         ? { tier: mob.leaderRematchTier, modifier: mob.leaderModifier }
-        : leaderRematch(definition.id, this.leaderDefeats.get(definition.id) ?? 0);
+        : leaderRematch(definition.id, definition.id === "northwatch-watchbreaker"
+          ? parseNorthwatchProgress(player.huntLoadoutsJson).clears : this.leaderDefeats.get(definition.id) ?? 0);
       return {
         mobId: definition.id, name: definition.name, territory: leaderTerritory(definition.id),
         status: !mob?.alive ? "recovering" : pending.tier > 0 ? "empowered" : "alive",
@@ -4260,7 +4279,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const mistfen = this.mistfenProgress(player);
     const greenwood = this.greenwoodProgress(player);
     player.huntLoadoutsJson = JSON.stringify({ loadouts, buildPath, affixes: this.equipmentAffixes(player),
-      dust: this.attunementDust(player), offers: this.attunementOffers(player), targetAffixId: this.equipmentAffixTarget(player), mistfen, greenwood });
+      dust: this.attunementDust(player), offers: this.attunementOffers(player), targetAffixId: this.equipmentAffixTarget(player),
+      mistfen, greenwood, northwatch: parseNorthwatchProgress(player.huntLoadoutsJson) });
   }
 
   private equipmentAffixes(player: PlayerState): Partial<Record<ItemId, EquipmentAffixRoll>> {
@@ -4318,7 +4338,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const mistfen = this.mistfenProgress(player);
     const greenwood = this.greenwoodProgress(player);
     player.huntLoadoutsJson = JSON.stringify({ loadouts: this.huntLoadouts(player), buildPath: parseBuildPathState(player.huntLoadoutsJson),
-      affixes, dust: Math.max(0, Math.min(65_535, Math.floor(dust))), offers, targetAffixId: this.equipmentAffixTarget(player), mistfen, greenwood });
+      affixes, dust: Math.max(0, Math.min(65_535, Math.floor(dust))), offers, targetAffixId: this.equipmentAffixTarget(player),
+      mistfen, greenwood, northwatch: parseNorthwatchProgress(player.huntLoadoutsJson) });
   }
 
   private sendEquipmentAffixes(client: Client, message = "Equipment attunements strengthen matching Calling mechanics."): void {
@@ -6054,7 +6075,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           const activeElites = [...this.state.mobs.entries()].filter(([id, candidate]) => id !== mobId && !isAreaMiniBoss(id) && candidate.isElite
             && (candidate.alive || candidate.materializeUntil > now)).length;
           const areaMiniBoss = areaMiniBossDefinition(mobId);
-          const pendingRematch = leaderRematch(mobId, this.leaderDefeats.get(mobId) ?? 0);
+          const pendingRematch = leaderRematch(mobId, mobId === "northwatch-watchbreaker"
+            ? this.northwatchActiveRematchTier() : this.leaderDefeats.get(mobId) ?? 0);
           const mistfenRank = isMistfenMob(mobId) ? this.activeMistfenMasteryRank() : 0;
           const greenwoodRank = isGreenwoodCampMob(mobId) ? this.activeGreenwoodMasteryRank() : 0;
           mob.isElite = !areaMiniBoss && (mistfenRank >= 2 || greenwoodRank >= 2 || shouldBecomeWildernessElite(band.tier, activeElites, Math.random()));
@@ -6108,7 +6130,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         if (mobId === "forge-colossus") { mob.health = mob.maxHealth = 38; mob.attackDamage = 3; mob.attackPattern = "rocks"; }
         const areaLeader = areaMainMobDefinition(mobId);
         if (areaLeader) {
-          const rematch = leaderRematch(mobId, this.leaderDefeats.get(mobId) ?? 0);
+          const rematch = leaderRematch(mobId, mobId === "northwatch-watchbreaker"
+            ? this.northwatchActiveRematchTier() : this.leaderDefeats.get(mobId) ?? 0);
           const empowered = leaderRematchStats({ maxHealth: mob.maxHealth, damage: mob.attackDamage, armor: mob.armor,
             speedMultiplier: mob.speedMultiplier, rewardMultiplier: mob.rewardMultiplier }, rematch);
           mob.leaderRematchTier = rematch.tier;

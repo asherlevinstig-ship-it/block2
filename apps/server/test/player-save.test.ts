@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { InventoryItemState, PlayerState } from "../src/schema.js";
 import { applyPlayerSave, parsePlayerSave, serializePlayerSave, snapshotPlayerSave } from "../src/player-save.js";
+import { parseNorthwatchProgress, withNorthwatchProgress } from "../src/northwatch-progress.js";
 
 describe("player saves", () => {
   it("round-trips inventory, health, and equipped progression", () => {
@@ -17,6 +18,7 @@ describe("player saves", () => {
     player.blacksmithUpgrades = 5 | 16 | 256 | 512 | 1024;
     player.silverDepthsBestTimeMs = 184_000;
     player.miningExpeditionStage = 6;
+    player.huntLoadoutsJson = withNorthwatchProgress(player.huntLoadoutsJson, { clears: 3, marks: 2 });
     Object.assign(player, { level: 6, experience: 31, unspentStatPoints: 1, powerPoints: 2, vitalityPoints: 1, agilityPoints: 1, miningPoints: 0 });
     player.mainHandId = "fang_dagger";
     player.mainHandTag = "melee";
@@ -38,6 +40,7 @@ describe("player saves", () => {
     expect(restored.blacksmithUpgrades).toBe(5 | 16 | 256 | 512 | 1024);
     expect(restored.silverDepthsBestTimeMs).toBe(184_000);
     expect(restored.miningExpeditionStage).toBe(6);
+    expect(parseNorthwatchProgress(restored.huntLoadoutsJson)).toEqual({ clears: 3, marks: 2 });
     expect([restored.level, restored.experience, restored.unspentStatPoints]).toEqual([6, 31, 1]);
     expect([restored.powerPoints, restored.vitalityPoints, restored.agilityPoints, restored.miningPoints]).toEqual([2, 1, 1, 0]);
     expect(restored.mainHandId).toBe("fang_dagger");
@@ -77,6 +80,14 @@ describe("player saves", () => {
   it("resumes legacy lantern owners at the return-to-blacksmith step", () => {
     const parsed = parsePlayerSave(JSON.stringify({ version: 1, inventory: { miners_lantern: 1 }, mainHandId: "longsword" }));
     expect(parsed?.miningExpeditionStage).toBe(7);
+  });
+
+  it("migrates existing Northwatch owners and clamps corrupt patrol progress", () => {
+    expect(parsePlayerSave(JSON.stringify({ version: 1, inventory: { northwatch_cloak: 1 } }))?.northwatchClears).toBe(1);
+    expect(parsePlayerSave(JSON.stringify({ version: 1, storage: { watchbreaker_crest: 1 } }))?.northwatchClears).toBe(1);
+    const parsed = parsePlayerSave(JSON.stringify({ version: 1, northwatchClears: 999, northwatchPatrolMarks: 255 }));
+    expect(parsed?.northwatchClears).toBe(5);
+    expect(parsed?.northwatchPatrolMarks).toBe(3);
   });
 
   it("persists validated hunt loadouts and the collection reward", () => {

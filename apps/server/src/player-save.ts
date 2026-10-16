@@ -30,6 +30,7 @@ import { parseSignaturePity, serializeSignaturePity, type SignaturePity } from "
 import { parseHuntMastery, serializeHuntMastery, type HuntMasteryProgress } from "./hunt-mastery.js";
 import { parseBuildPathState, type BuildPathState } from "./build-paths.js";
 import { parseEquipmentAffixes, parseEquipmentAffixOffers } from "./equipment-affixes.js";
+import { parseNorthwatchProgress } from "./northwatch-progress.js";
 
 export const PLAYER_SAVE_VERSION = 1;
 export const PLAYER_SAVE_HASH = "blockcraft:player-saves:v1";
@@ -73,6 +74,8 @@ export interface PlayerSaveData {
   miningExpeditionStage?: number;
   silverDepthsStage?: number;
   realmWardenCleared?: boolean;
+  northwatchClears?: number;
+  northwatchPatrolMarks?: number;
   inventory: Partial<Record<ItemId, number>>;
   storage?: Partial<Record<ItemId, number>>;
   recoveryBags?: RecoveryBagData[];
@@ -182,6 +185,8 @@ export function snapshotPlayerSave(player: PlayerState, now = Date.now()): Playe
     miningExpeditionStage: player.miningExpeditionStage,
     silverDepthsStage: player.silverDepthsStage,
     realmWardenCleared: player.realmWardenCleared,
+    northwatchClears: parseNorthwatchProgress(player.huntLoadoutsJson).clears,
+    northwatchPatrolMarks: parseNorthwatchProgress(player.huntLoadoutsJson).marks,
     inventory,
     storage,
     recoveryBags: snapshotRecoveryBags(player),
@@ -272,6 +277,10 @@ export function parsePlayerSave(raw: string | null): PlayerSaveData | null {
       (inventory.miners_lantern ?? 0) + (storage.miners_lantern ?? 0) > 0 ? 7 : 0, 0, 8)),
     silverDepthsStage: Math.floor(finiteNumber(value.silverDepthsStage, 0, 0, 7)),
     realmWardenCleared: value.realmWardenCleared === true,
+    northwatchClears: Math.floor(finiteNumber(value.northwatchClears,
+      (inventory.northwatch_cloak ?? 0) + (storage.northwatch_cloak ?? 0)
+      + (inventory.watchbreaker_crest ?? 0) + (storage.watchbreaker_crest ?? 0) > 0 ? 1 : 0, 0, 5)),
+    northwatchPatrolMarks: Math.floor(finiteNumber(value.northwatchPatrolMarks, 0, 0, 3)) & 3,
     inventory,
     storage,
     mainHandId,
@@ -312,7 +321,8 @@ export function applyPlayerSave(player: PlayerState, save: PlayerSaveData): void
   player.huntLoadoutsJson = JSON.stringify({ loadouts: save.huntLoadouts ?? [], buildPath: parseBuildPathState(save.buildPath),
     affixes: parseEquipmentAffixes(save.equipmentAffixes), dust: Math.floor(finiteNumber(save.attunementDust, 0, 0, 65_535)),
     offers: parseEquipmentAffixOffers(save.attunementOffers), mistfen: { points: save.mistfenMastery ?? 0, discovered: save.mistfenDiscovered === true, marks: save.mistfenMarks ?? 0 },
-    greenwood: { points: save.greenwoodMastery ?? 0, discovered: save.greenwoodDiscovered === true, marks: save.greenwoodMarks ?? 0 } });
+    greenwood: { points: save.greenwoodMastery ?? 0, discovered: save.greenwoodDiscovered === true, marks: save.greenwoodMarks ?? 0 },
+    northwatch: { clears: save.northwatchClears ?? 0, marks: save.northwatchPatrolMarks ?? 0 } });
   player.huntCollectionRewardClaimed = save.huntCollectionRewardClaimed === true;
   player.forestBestTimeMs = save.forestBestTimeMs ?? 0;
   player.silverDepthsBestTimeMs = save.silverDepthsBestTimeMs ?? 0;

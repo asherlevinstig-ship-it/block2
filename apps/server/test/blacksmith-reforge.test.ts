@@ -46,4 +46,16 @@ describe("blacksmith reforging", () => {
     expect(equipmentReforgeRank(player.reforgeRanksJson, "fang_dagger")).toBe(0);
     expect(client.send).toHaveBeenLastCalledWith("blacksmith:update", expect.objectContaining({ message: expect.stringContaining("Stand beside") }));
   });
+  it("reforges the Northwatch Cloak with Ridge Hide from its patrol loop", () => {
+    const { player, client, reforge } = fixture();
+    own(player, "northwatch_cloak", 1);
+    own(player, "ridge_hide", 2);
+    reforge({ itemId: "northwatch_cloak" });
+    expect(player.coins).toBe(82);
+    expect(player.inventory.get("ridge_hide")?.quantity).toBe(0);
+    expect(equipmentReforgeRank(player.reforgeRanksJson, "northwatch_cloak")).toBe(1);
+    expect(client.send).toHaveBeenLastCalledWith("blacksmith:update", expect.objectContaining({
+      phase: "reforged", reforgedItemId: "northwatch_cloak",
+    }));
+  });
 });

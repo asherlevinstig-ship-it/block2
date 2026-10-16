@@ -4,6 +4,7 @@ import { WILDERNESS_ENCOUNTERS, ASHEN_SENTRY_IDS, ashenSentryAllows, ashenSentry
 import { WorldRoom } from "../src/game-room.js";
 import { PlayerState, WorldState } from "../src/schema.js";
 import { decodeLootBagItems } from "@blockcraft/protocol";
+import { parseNorthwatchProgress, withNorthwatchProgress } from "../src/northwatch-progress.js";
 import { dangerBandAt, MOB_TOWN_MINIMUM_RADIUS, radiusFromSafeCenter } from "../src/radial-difficulty.js";
 import { lootForArchetype } from "../src/loot-rules.js";
 import { areaMiniBossDefinition, leaderForFollower } from "../src/area-mini-bosses.js";
@@ -103,19 +104,45 @@ describe("distinct radial wilderness territories", () => {
     const { room, internal } = fixture();
     const player = new PlayerState();
     room.state.players.set("player", player);
-    internal.leaderDefeats.set("northwatch-watchbreaker", 1);
+    player.huntLoadoutsJson = withNorthwatchProgress(player.huntLoadoutsJson, { clears: 1, marks: 0 });
     for (const id of ["northwatch-scout", "northwatch-spitter"]) {
       const mob = room.state.mobs.get(id)!;
       internal.defeatMob(id, mob, "player", 10_000);
     }
-    expect(internal.northwatchPatrolProgress.get("player")).toBe(3);
+    expect(parseNorthwatchProgress(player.huntLoadoutsJson).marks).toBe(3);
     const leader = room.state.mobs.get("northwatch-watchbreaker")!;
     leader.leaderRematchTier = 1;
     internal.spawnLootDrops("northwatch-watchbreaker", leader, 10_001, "player");
     const bag = [...room.state.lootDrops.values()].at(-1)!;
     expect(decodeLootBagItems(bag.contentsJson)).toContainEqual({ itemId: "ridge_hide", quantity: 3 });
     internal.defeatMob("northwatch-watchbreaker", leader, "player", 10_002);
-    expect(internal.northwatchPatrolProgress.get("player")).toBe(0);
+    expect(parseNorthwatchProgress(player.huntLoadoutsJson)).toEqual({ clears: 2, marks: 0 });
+  });
+  it("keeps Northwatch progress when loadouts and attunements are edited", () => {
+    const { internal } = fixture();
+    const player = new PlayerState();
+    player.huntLoadoutsJson = withNorthwatchProgress(player.huntLoadoutsJson, { clears: 2, marks: 1 });
+    internal.setPlayerBuildData(player, []);
+    expect(parseNorthwatchProgress(player.huntLoadoutsJson)).toEqual({ clears: 2, marks: 1 });
+    internal.setEquipmentAttunements(player, {}, 0, {});
+    expect(parseNorthwatchProgress(player.huntLoadoutsJson)).toEqual({ clears: 2, marks: 1 });
+  });
+  it("uses nearby characters for shared boss difficulty but keeps rematch rewards personal", () => {
+    vi.spyOn(Math, "random").mockReturnValue(.99);
+    const { room, internal } = fixture();
+    const leader = room.state.mobs.get("northwatch-watchbreaker")!;
+    const veteran = new PlayerState(); Object.assign(veteran, { x: leader.x + 12, y: leader.y, z: leader.z });
+    veteran.huntLoadoutsJson = withNorthwatchProgress(veteran.huntLoadoutsJson, { clears: 3, marks: 3 });
+    const newcomer = new PlayerState(); Object.assign(newcomer, { x: leader.x + 14, y: leader.y, z: leader.z });
+    room.state.players.set("veteran", veteran); room.state.players.set("newcomer", newcomer);
+    expect(internal.northwatchActiveRematchTier()).toBe(3);
+    internal.spawnLootDrops("northwatch-watchbreaker", leader, 10_000, "veteran");
+    internal.spawnLootDrops("northwatch-watchbreaker", leader, 10_001, "newcomer");
+    const drops = [...room.state.lootDrops.values()];
+    expect(decodeLootBagItems(drops[0]!.contentsJson)).toContainEqual({ itemId: "ridge_hide", quantity: 4 });
+    expect(decodeLootBagItems(drops[1]!.contentsJson).some(entry => entry.itemId === "ridge_hide")).toBe(false);
+    veteran.x = 200;
+    expect(internal.northwatchActiveRematchTier()).toBe(0);
   });
   it("patrols generated terrain smoothly without placing mobs in solid blocks or inside town", () => {
     vi.useFakeTimers(); vi.setSystemTime(10000);
