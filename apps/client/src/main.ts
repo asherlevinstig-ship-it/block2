@@ -7548,7 +7548,16 @@ function updateTarget(): void {
   }
   else if (nearbyForestPortal) targetLabel.textContent = "Glowing portal · press E or Portal to travel";
   else if (roleOpportunity) targetLabel.textContent = `${roleOpportunity.name} · ${roleOpportunity.prompt} · press E or ${roleOpportunity.action}`;
-  else if (roadsideEncounter) targetLabel.textContent = `${roadsideEncounter.name} · ${roadsideEncounter.kind === "guarded" ? "clear nearby enemies, then investigate" : roadsideEncounter.kind === "shrine" ? "choose a blessing or supplies" : "search for supplies"} · press E or Explore`;
+  else if (roadsideEncounter) {
+    const player = localPlayer.getPosition();
+    const atTrailStash = roadsideEncounter.kind === "trail"
+      && Math.hypot(player.x - roadsideEncounter.x - roadsideEncounter.stashDx,
+        player.z - roadsideEncounter.z - roadsideEncounter.stashDz) <= 3.2;
+    targetLabel.textContent = `${roadsideEncounter.name} · ${roadsideEncounter.kind === "guarded" ? "defeat its guards, then investigate"
+      : roadsideEncounter.kind === "shrine" ? "choose rest or supplies"
+      : roadsideEncounter.kind === "trail" ? atTrailStash ? "open the hidden crate" : "inspect the tracks"
+      : "search for supplies"} · press E or Explore`;
+  }
   else if (expeditionBoardNearby) targetLabel.textContent = "Forest Dungeon Gate · press E to open a solo or party run";
   else if (blacksmithNearby) targetLabel.textContent = "Blacksmith stall · press E to trade ore or forge equipment";
   else if (quizTableNearby) targetLabel.textContent = "Double or Quit table · press E or Play";

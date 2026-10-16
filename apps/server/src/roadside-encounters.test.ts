@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { ROADSIDE_ENCOUNTERS, ROLE_FIELD_OPPORTUNITIES, parseRoadsideClaims, roadsideEncounterAt } from "@blockcraft/voxel-world";
+import { Block, ROADSIDE_ENCOUNTERS, ROLE_FIELD_OPPORTUNITIES, SURFACE_HEIGHT, nearestRoadsideEncounter,
+  parseRoadsideClaims, roadsideDiscoveryBlock, roadsideEncounterAt } from "@blockcraft/voxel-world";
 import { WorldRoom } from "./game-room.js";
 import { InventoryItemState, MobState, PlayerState, WorldState } from "./schema.js";
 import { applyPlayerSave, parsePlayerSave, serializePlayerSave } from "./player-save.js";
+import { roadsideGuardsFor } from "./roadside-guards.js";
 
 function fixture(id: string) {
   const site = roadsideEncounterAt(id)!;
@@ -29,8 +31,25 @@ describe("personal roadside encounters", () => {
     }
   });
 
-  it("grants a cache once per character and persists its claim", () => {
+  it("places visible off-road stashes without turning them into separate map tasks", () => {
+    for (const entry of ROADSIDE_ENCOUNTERS) {
+      if (entry.kind !== "trail") continue;
+      const site = roadsideEncounterAt(entry.id)!;
+      const stashX = site.x + entry.stashDx, stashZ = site.z + entry.stashDz;
+      expect(Math.hypot(entry.stashDx, entry.stashDz)).toBeGreaterThan(5);
+      expect(nearestRoadsideEncounter(stashX + .5, stashZ + .5)?.id).toBe(entry.id);
+      expect(roadsideDiscoveryBlock(stashX, SURFACE_HEIGHT + 1, stashZ)).toBe(Block.OakLog);
+    }
+  });
+
+  it("makes a trail cache a short off-road search, then persists its one-time claim", () => {
     const { internal, player, client, room, site } = fixture("greenwood-forager-camp");
+    if (site.kind !== "trail") throw new Error("Expected a trail site");
+    internal.handleRoadsideEncounter(client, { id: site.id });
+    expect(client.send).toHaveBeenCalledWith("roadside:result", expect.objectContaining({ ok: true, claimed: false, message: site.clue }));
+    expect(player.inventory.get("moss_fibre")).toBeUndefined();
+    player.x = site.x + site.stashDx + .5;
+    player.z = site.z + site.stashDz + .5;
     internal.handleRoadsideEncounter(client, { id: site.id });
     expect(player.inventory.get("moss_fibre")?.quantity).toBe(2);
     expect(player.coins).toBe(3);
@@ -45,17 +64,39 @@ describe("personal roadside encounters", () => {
 
   it("requires guarded sites to be cleared and validates distance", () => {
     const { internal, player, client, room, site } = fixture("southgate-cart");
-    const guard = new MobState(); Object.assign(guard, { x: site.x + 2, y: 8, z: site.z + 2, alive: true });
-    room.state.mobs.set("guard", guard);
+    const guardIds = roadsideGuardsFor(site.id).map(guard => guard.id);
+    expect(guardIds).toHaveLength(2);
+    for (const id of guardIds) {
+      const guard = new MobState(); Object.assign(guard, { x: site.x + 2, y: 8, z: site.z + 2, alive: true });
+      room.state.mobs.set(id, guard);
+    }
     internal.handleRoadsideEncounter(client, { id: site.id });
     expect(parseRoadsideClaims(player.huntLoadoutsJson).has(site.id)).toBe(false);
-    guard.alive = false;
+    room.state.mobs.get(guardIds[0]!)!.alive = false;
+    internal.handleRoadsideEncounter(client, { id: site.id });
+    expect(parseRoadsideClaims(player.huntLoadoutsJson).has(site.id)).toBe(false);
+    room.state.mobs.get(guardIds[1]!)!.alive = false;
     player.x += 20;
     internal.handleRoadsideEncounter(client, { id: site.id });
     expect(player.inventory.get("iron_ore")).toBeUndefined();
     player.x = site.x + .5;
     internal.handleRoadsideEncounter(client, { id: site.id });
     expect(player.inventory.get("iron_ore")?.quantity).toBe(2);
+  });
+
+  it("activates authored guards only near their site and releases them after the area empties", () => {
+    const { room, internal, player, site } = fixture("northwatch-watchpost");
+    player.x = 8.5; player.z = 8.5;
+    internal.advanceRoadsideGuards(1_000);
+    expect(room.state.mobs.size).toBe(0);
+    player.x = site.x + .5; player.z = site.z + .5;
+    internal.advanceRoadsideGuards(2_000);
+    const guards = roadsideGuardsFor(site.id);
+    expect(guards).toHaveLength(2);
+    for (const guard of guards) expect(room.state.mobs.get(guard.id)?.name).toBe(guard.name);
+    player.x = 8.5; player.z = 8.5;
+    internal.advanceRoadsideGuards(32_001);
+    for (const guard of guards) expect(room.state.mobs.has(guard.id)).toBe(false);
   });
 
   it("lets a shrine restore health or give supplies, but never both", () => {

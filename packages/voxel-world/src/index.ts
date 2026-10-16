@@ -516,17 +516,17 @@ export const ROADSIDE_DISCOVERIES = [
 
 /** One personal, optional payoff at selected landmarks; Calling field sites stay separate. */
 export const ROADSIDE_ENCOUNTERS = [
-  { id: "greenwood-forager-camp", kind: "cache", itemId: "moss_fibre", quantity: 2, gold: 3 },
+  { id: "greenwood-forager-camp", kind: "trail", itemId: "moss_fibre", quantity: 2, gold: 3, stashDx: -2, stashDz: -6, clue: "Follow the broken branches northwest to a tucked-away bundle." },
   { id: "greenwood-hollow-shrine", kind: "shrine", itemId: "healing_potion", quantity: 1, gold: 0 },
-  { id: "mistfen-cart", kind: "cache", itemId: "crawler_fang", quantity: 1, gold: 5 },
+  { id: "mistfen-cart", kind: "trail", itemId: "crawler_fang", quantity: 1, gold: 5, stashDx: -5, stashDz: -4, clue: "Drag marks lead northwest off the causeway into the reeds." },
   { id: "mistfen-shrine", kind: "shrine", itemId: "healing_potion", quantity: 1, gold: 0 },
   { id: "southgate-cart", kind: "guarded", itemId: "iron_ore", quantity: 2, gold: 6, guardRadius: 16 },
-  { id: "sunfall-survey", kind: "cache", itemId: "iron_ore", quantity: 2, gold: 5 },
+  { id: "sunfall-survey", kind: "trail", itemId: "iron_ore", quantity: 2, gold: 5, stashDx: -5, stashDz: 4, clue: "Survey stakes point southwest towards a small buried crate." },
   { id: "collapsed-lift", kind: "guarded", itemId: "stone_core", quantity: 1, gold: 8, guardRadius: 12 },
-  { id: "northwatch-cart", kind: "cache", itemId: "iron_ore", quantity: 2, gold: 5 },
+  { id: "northwatch-cart", kind: "trail", itemId: "iron_ore", quantity: 2, gold: 5, stashDx: 5, stashDz: -4, clue: "Fresh tracks climb northeast behind the ridge to a hidden crate." },
   { id: "northwatch-watchpost", kind: "guarded", itemId: "silver_ore", quantity: 1, gold: 8, guardRadius: 11 },
   { id: "ashen-pilgrims", kind: "shrine", itemId: "healing_potion", quantity: 1, gold: 0 },
-] as const satisfies readonly { id: string; kind: "cache" | "shrine" | "guarded"; itemId: string; quantity: number; gold: number; guardRadius?: number }[];
+] as const satisfies readonly { id: string; kind: "cache" | "trail" | "shrine" | "guarded"; itemId: string; quantity: number; gold: number; guardRadius?: number; stashDx?: number; stashDz?: number; clue?: string }[];
 export function roadsideEncounterAt(id: string) {
   const encounter = ROADSIDE_ENCOUNTERS.find(entry => entry.id === id);
   const landmark = encounter && ROADSIDE_DISCOVERIES.find(entry => entry.id === encounter.id);
@@ -537,11 +537,17 @@ export function nearestRoadsideEncounter(x: number, z: number, radius = 3.2) {
   let distance = radius;
   for (const encounter of ROADSIDE_ENCOUNTERS) {
     const landmark = ROADSIDE_DISCOVERIES.find(entry => entry.id === encounter.id)!;
-    const next = Math.hypot(x - landmark.x, z - landmark.z);
+    const next = Math.min(Math.hypot(x - landmark.x, z - landmark.z), encounter.kind === "trail"
+      ? Math.hypot(x - landmark.x - encounter.stashDx, z - landmark.z - encounter.stashDz) : Infinity);
     if (next <= distance) { nearest = { ...encounter, x: landmark.x, z: landmark.z, name: landmark.name }; distance = next; }
   }
   return nearest;
 }
+const ROADSIDE_TRAIL_STASHES = ROADSIDE_ENCOUNTERS.flatMap(entry => {
+  if (entry.kind !== "trail") return [];
+  const landmark = ROADSIDE_DISCOVERIES.find(point => point.id === entry.id)!;
+  return [{ x: landmark.x + entry.stashDx, z: landmark.z + entry.stashDz }];
+});
 export function parseRoadsideClaims(raw: string | null | undefined): Set<string> {
   try {
     const parsed: unknown = JSON.parse(raw ?? "[]");
@@ -584,6 +590,14 @@ export function nearestRoleFieldOpportunity(x: number, z: number, pathId: RoleFi
 }
 
 export function roadsideDiscoveryBlock(x: number, y: number, z: number): BlockId | null {
+  // A low, visible crate and two scuffed ground tiles hint at the end of each short search.
+  const stash = y === SURFACE_HEIGHT || y === SURFACE_HEIGHT + 1
+    ? ROADSIDE_TRAIL_STASHES.find(point => Math.abs(x - point.x) <= 1 && Math.abs(z - point.z) <= 1) : undefined;
+  if (stash) {
+    const dx = x - stash.x, dz = z - stash.z;
+    if (y === SURFACE_HEIGHT) return Math.abs(dx) + Math.abs(dz) <= 1 ? Block.Dirt : null;
+    if (dx === 0 && dz === 0) return Block.OakLog;
+  }
   const site = ROADSIDE_DISCOVERIES.find(point => Math.abs(x - point.x) <= 3 && Math.abs(z - point.z) <= 3);
   if (!site || y < SURFACE_HEIGHT) return null;
   const dx = x - site.x, dz = z - site.z;

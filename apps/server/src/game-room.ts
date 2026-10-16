@@ -39,6 +39,7 @@ import { equipmentForItem, armourForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE,
   decodeLootBagItems, encodeLootBagItems, lootBagRepresentative, normalizeLootBagItems, huntSetForLoadout,
   type HuntSetId, type LootBagItem, type LootCollectResult } from "@blockcraft/protocol";
 import { WILDERNESS_ENCOUNTERS } from "./wilderness-encounters.js";
+import { ROADSIDE_GUARD_SITES, roadsideGuard, roadsideGuardsFor } from "./roadside-guards.js";
 import { ROAMING_PACKS, roamingMemberId, roamingMembership, roamingPackAllows, roamingGoal,
   createRoamingRouteState, advanceRoamingRoute, type RoamingRouteState } from "./roaming-packs.js";
 import { WILDERNESS_MATERIALIZE_MS, WILDERNESS_RESPAWN_RECHECK_MS,
@@ -527,6 +528,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly objectiveProgress = new Map<string, WorldObjectiveProgress>();
   private readonly normalLootCadence = new NormalLootCadence();
   private readonly mobBaseNames = new Map<string, string>();
+  private readonly roadsideGuardLastNearby = new Map<string, number>();
   private readonly worldDeltasByChunk = new Map<string, Map<string, WorldBlockDelta>>();
   private readonly pendingWorldDeltaWrites = new Map<string, string>();
   private readonly mineralRegrowth = new Map<string, WorldBlockDelta & { regrowAt: number }>();
@@ -2056,7 +2058,38 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly mobPositionAllowed = (position: { x: number; z: number }): boolean =>
     radiusFromSafeCenter(position) >= MOB_TOWN_MINIMUM_RADIUS - 0.001;
 
+  private advanceRoadsideGuards(now: number): void {
+    if (this.roomKind !== "overworld") return;
+    for (const siteId of ROADSIDE_GUARD_SITES) {
+      const site = roadsideEncounterAt(siteId)!;
+      const near = [...this.state.players.values()].some(player => player.health > 0 && player.y >= SURFACE_HEIGHT - 1
+        && Math.hypot(player.x - site.x, player.z - site.z) <= 17);
+      if (near) {
+        this.roadsideGuardLastNearby.set(siteId, now);
+        for (const guard of roadsideGuardsFor(siteId)) if (!this.state.mobs.has(guard.id)) {
+          this.registerMob(guard.id, guard.archetype, guard);
+          this.state.mobs.get(guard.id)!.name = guard.name;
+          this.mobBaseNames.set(guard.id, guard.name);
+        }
+      } else if (now - (this.roadsideGuardLastNearby.get(siteId) ?? now) >= 30_000) {
+        this.roadsideGuardLastNearby.delete(siteId);
+        for (const guard of roadsideGuardsFor(siteId)) {
+          this.state.mobs.delete(guard.id);
+          this.mobHomes.delete(guard.id);
+          this.mobNavigation.delete(guard.id);
+          this.mobAwareness.delete(guard.id);
+          this.mobPatrols.delete(guard.id);
+          this.mobProgress.delete(guard.id);
+          this.mobBaseNames.delete(guard.id);
+        }
+      }
+    }
+  }
+
   private roamingAllowed(id: string, pose: { x: number; y: number; z: number }): boolean {
+    const siteGuard = roadsideGuard(id);
+    if (siteGuard) return Math.abs(pose.y - siteGuard.y) <= 1.5
+      && Math.hypot(pose.x - siteGuard.x, pose.z - siteGuard.z) <= 14;
     if (id === REALM_WARDEN_ID) return pose.y >= 6.8 && pose.y <= 9.2 && isInRealmWardenArena(pose.x, pose.z);
     if (isInRealmWardenArena(pose.x, pose.z)) return false;
     if (SILVER_DEPTHS_CACHE_GUARD_IDS.includes(id)) {
@@ -4641,9 +4674,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       return reply(false, `Move beside ${site.name} to investigate it.`);
     const claims = parseRoadsideClaims(player.huntLoadoutsJson);
     if (claims.has(id)) return reply(false, `${site.name} has already been explored by this character.`, true);
-    if (site.kind === "guarded" && "guardRadius" in site && [...this.state.mobs.values()].some(mob =>
-      mob.alive && Math.abs(mob.y - player.y) <= 2.5 && Math.hypot(mob.x - site.x, mob.z - site.z) <= site.guardRadius))
-      return reply(false, `Clear the enemies guarding ${site.name} first.`);
+    if (site.kind === "trail") {
+      const stashDistance = Math.hypot(player.x - site.x - site.stashDx, player.z - site.z - site.stashDz);
+      if (stashDistance > 3.2) return reply(true, site.clue);
+    }
+    if (site.kind === "guarded" && roadsideGuardsFor(id).some(guard => this.state.mobs.get(guard.id)?.alive !== false))
+      return reply(false, `Defeat the guards at ${site.name} before opening it.`);
     if (site.kind === "shrine" && [...this.state.mobs.values()].some(mob =>
       mob.alive && Math.abs(mob.y - player.y) <= 2.5 && Math.hypot(mob.x - player.x, mob.z - player.z) <= 8))
       return reply(false, "Enemies are too close to use this shrine.");
@@ -6123,6 +6159,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.advanceSilverDepthsRouteHazards(now);
     if (this.roomKind === "overworld") {
       this.advanceRealmEvent(now);
+      this.advanceRoadsideGuards(now);
       this.advanceRealmBossAbandonment(now);
       for (const pack of ROAMING_PACKS) {
         const route = this.roamingRoutes.get(pack.id) ?? createRoamingRouteState(now);
