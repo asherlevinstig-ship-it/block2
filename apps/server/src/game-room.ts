@@ -203,6 +203,8 @@ import { GUARD_MINIMUM_STAMINA, GUARD_STAMINA_DRAIN_PER_SECOND, PARRY_STAGGER_MS
 import { MOB_ARCHETYPES, damageAfterArmor, defeatReward, isSpitterLike, mobArchetype, type MobArchetypeId } from "./mob-archetypes.js";
 import { MOB_TOWN_MINIMUM_RADIUS, dangerBandAt, isInsideTownSafeZone, keepMobOutsideTown, radiusFromSafeCenter, scaledMobStats } from "./radial-difficulty.js";
 import { executionerDamageBonus, gainMomentum, guardStaminaCost, momentumAfterDefense, movementSpeedWithMomentum, parryStaminaRestore, staminaRecoveryWithMomentum } from "./trait-rules.js";
+import { FENWALKER_POOL_WARD_COOLDOWN_MS, fenwalkerBlocksPoolPulse, foragerRecoveryBonus } from "./regional-armour.js";
+import type { RegionalArmourProc } from "@blockcraft/protocol";
 import { compatiblePowerOrFallback, fracturedBlockResult, isGroundPowerTargetInRange, isPowerCompatible, isSeismicAftershockTarget, mobilityAdvanceDistance, powerDirection, powerEvadeDirection, seismicCleaveProfile, selectBurstPowerTargets, selectGroundPowerTargets, selectLinePowerTargets, selectMobilityPowerTarget, widenedLineFractureColumns } from "./power-rules.js";
 import { huntersMarkDamageBonus, huntersMarkPowerPayoff, isBrambleSnareTargetInRange, isInsideBrambleSnare, progressHuntersMark, selectHuntersMarkTarget, type ActiveSpecialMark } from "./special-rules.js";
 import { inventoryTotal, isLootInPickupRange, lootForArchetype, armourDropForMob, LOOT_DESPAWN_MS, NormalLootCadence } from "./loot-rules.js";
@@ -475,6 +477,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly mobStaggerImmuneUntil = new Map<string, number>();
   private readonly mobHazards = new Map<string, ActiveMobHazard>();
   private readonly mistfenPoolDamageAt = new Map<string, number>();
+  private readonly fenwalkerWardReadyAt = new Map<string, number>();
+  private readonly foragerCueAt = new Map<string, number>();
   private readonly mobHomes = new Map<string, { x: number; y: number; z: number }>();
   private readonly mobVerticalVelocities = new Map<string, number>();
   private readonly mobNavigation = new Map<string, MobNavigationState>();
@@ -953,6 +957,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   }
 
   override async onLeave(client: Client): Promise<void> {
+    this.mistfenPoolDamageAt.delete(client.sessionId);
+    this.fenwalkerWardReadyAt.delete(client.sessionId);
+    this.foragerCueAt.delete(client.sessionId);
     this.silverDepthsReconnectInvulnerability.delete(client.sessionId);
     this.bastionWardReadyAt.delete(client.sessionId);
     this.crusherSetGuardUntil.delete(client.sessionId);
@@ -5912,6 +5919,14 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (player.health <= 0 || player.y < 7 || player.y > 9 || !isMistfenToxicPool(player.x, player.z)) continue;
       const lastDamageAt = this.mistfenPoolDamageAt.get(playerId) ?? 0;
       if (now - lastDamageAt < 1_250) continue;
+      if (fenwalkerBlocksPoolPulse(player.armourId, player.x, player.y, player.z, now,
+        this.fenwalkerWardReadyAt.get(playerId) ?? 0)) {
+        this.fenwalkerWardReadyAt.set(playerId, now + FENWALKER_POOL_WARD_COOLDOWN_MS);
+        this.mistfenPoolDamageAt.set(playerId, now);
+        this.clients.find(client => client.sessionId === playerId)?.send("armour:terrain-proc",
+          { armourId: "fenwalker_mantle" } satisfies RegionalArmourProc);
+        continue;
+      }
       if (this.damagePlayer("mistfen-pool", playerId, 1, now, false, "hazard")) this.mistfenPoolDamageAt.set(playerId, now);
     }
   }
@@ -6688,7 +6703,15 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         if (player.stamina <= 0) player.defending = false;
       } else if (now >= (this.dodgePressure.get(sessionId)?.exhaustedUntil ?? 0)) {
         const rootstalkerRecovery = player.armourId === "rootstalker_wrap" ? 5 : 0;
-        player.stamina = Math.min(player.maxStamina, player.stamina + (staminaRecoveryWithMomentum(18, player.momentumStacks, player.equippedTrait as TraitId) + rootstalkerRecovery) * deltaTime);
+        const foragerRecovery = this.roomKind === "overworld"
+          ? foragerRecoveryBonus(player.armourId, player.x, player.y, player.z) : 0;
+        const recovering = player.stamina < player.maxStamina;
+        player.stamina = Math.min(player.maxStamina, player.stamina + (staminaRecoveryWithMomentum(18, player.momentumStacks, player.equippedTrait as TraitId) + rootstalkerRecovery + foragerRecovery) * deltaTime);
+        if (recovering && foragerRecovery > 0 && now - (this.foragerCueAt.get(sessionId) ?? 0) >= 6_000) {
+          this.foragerCueAt.set(sessionId, now);
+          this.clients.find(client => client.sessionId === sessionId)?.send("armour:terrain-proc",
+            { armourId: "forager_wrap" } satisfies RegionalArmourProc);
+        }
       }
       if (this.movementPilotControllers.has(sessionId)) continue;
       const input = activeMovementInput(this.movementInputs.get(sessionId), now, player.yaw);

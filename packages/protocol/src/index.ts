@@ -386,6 +386,7 @@ export type BuildPathUpdate = { selectedPathId: BuildPathId | null; rank: number
   canSpecialize: boolean; masterTrial: { name: string; description: string; progress: number; target: number; complete: boolean; capstone: string } | null;
   inTown: boolean; message: string };
 export type BuildPathProc = { pathId: BuildPathId; ability: string; detail: string; durationMs?: number };
+export type RegionalArmourProc = { armourId: "forager_wrap" | "fenwalker_mantle" };
 
 export const EQUIPMENT_AFFIXES = {
   fortified: { name: "Fortified", pathId: "tank", effect: "Reduces incoming damage." },
@@ -691,8 +692,8 @@ export type TavernQuizUpdate = {
 
 export const ITEM_DEFINITIONS = {
   leather_armour: { id: "leather_armour", name: "Leather Armour", description: "Reduce damage by 1 (minimum hit 1) · full movement speed" },
-  forager_wrap: { id: "forager_wrap", name: "Forager Wrap", description: "Greenwood field armour · reduce damage by 1 · move 3% faster" },
-  fenwalker_mantle: { id: "fenwalker_mantle", name: "Fenwalker Mantle", description: "Mistfen field armour · reduce damage by 1 · 1% faster · extra protection from projectiles and hazards" },
+  forager_wrap: { id: "forager_wrap", name: "Forager Wrap", description: "Greenwood field armour · reduce damage by 1 · move 3% faster · recover stamina faster in Greenwood" },
+  fenwalker_mantle: { id: "fenwalker_mantle", name: "Fenwalker Mantle", description: "Mistfen field armour · reduce damage by 1 · 1% faster · extra projectile protection · wards off alternating marsh-pool pulses" },
   iron_armour: { id: "iron_armour", name: "Iron Armour", description: "Reduce damage by 2 (minimum hit 1) · 8% slower movement" },
   rootguard_armour: { id: "rootguard_armour", name: "Rootguard Armour", description: "Reduce damage by 1 · extra protection from projectiles and hazards · 2% slower" },
   bastion_plate: { id: "bastion_plate", name: "Bastion Plate", description: "Iron Bastion relic · reduce damage by 2 · extra protection from hazards · 6% slower" },

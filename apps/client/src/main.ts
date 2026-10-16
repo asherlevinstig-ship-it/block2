@@ -1,5 +1,6 @@
 import * as pc from "playcanvas";
 import { greenwoodMasteryStatus, mistfenMasteryStatus } from "@blockcraft/protocol";
+import type { RegionalArmourProc } from "@blockcraft/protocol";
 import { isInMistfenMarsh } from "@blockcraft/voxel-world";
 import { nearestRoleFieldOpportunity, nearestRoadsideEncounter, parseRoadsideClaims, type RoleFieldPath } from "@blockcraft/voxel-world";
 import { confirmedRangedHit, projectileImpactCue } from "./ranged-feedback.js";
@@ -5974,6 +5975,8 @@ const chipStoneMaterial = coloredMaterial(new pc.Color(0.45, 0.53, 0.56));
 const chipIronMaterial = coloredMaterial(new pc.Color(0.94, 0.56, 0.22));
 const chipSilverMaterial = coloredMaterial(new pc.Color(0.68, 0.9, 1));
 const levelGoldMaterial = coloredMaterial(new pc.Color(1, .82, .35));
+const foragerCueMaterial = coloredMaterial(new pc.Color(.6, .82, .28));
+const fenwalkerCueMaterial = coloredMaterial(new pc.Color(.28, .95, .7));
 
 // One small draw call, updated only when a crack stage changes; never touches chunk meshes.
 const miningCracks = new pc.Entity("progressive-mining-cracks");
@@ -6060,6 +6063,20 @@ function lootPickupBurst(drop: NetworkLootDrop): void {
       velocity: new pc.Vec3(Math.sin(angle) * 1.25, 1.45 + index % 3 * .22, Math.cos(angle) * 1.25),
       startedAt: performance.now(),
     });
+  }
+}
+
+function regionalArmourBurst(proc: RegionalArmourProc): void {
+  const player = localPlayer.getPosition();
+  const material = proc.armourId === "forager_wrap" ? foragerCueMaterial : fenwalkerCueMaterial;
+  for (let index = 0; index < 6; index++) {
+    if (miningChips.length >= 24) miningChips.shift()!.entity.destroy();
+    const angle = index / 6 * Math.PI * 2;
+    const origin = new pc.Vec3(player.x + Math.sin(angle) * .3, player.y + .15, player.z + Math.cos(angle) * .3);
+    const entity = addBox(app.root, "regional-armour-cue", material, [.055, .055, .055], [origin.x, origin.y, origin.z]);
+    if (entity.render) entity.render.castShadows = false;
+    miningChips.push({ entity, origin,
+      velocity: new pc.Vec3(Math.sin(angle) * .45, .85, Math.cos(angle) * .45), startedAt: performance.now() });
   }
 }
 
@@ -10935,6 +10952,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     buildPathProc.classList.remove("show"); void buildPathProc.offsetWidth; buildPathProc.classList.add("show");
     buildPathProcTimer = window.setTimeout(() => { buildPathProc.hidden = true; }, proc.durationMs ?? 1_400);
   });
+  room.onMessage("armour:terrain-proc", (proc: RegionalArmourProc) => regionalArmourBurst(proc));
   room.onMessage("dungeon:lobby", (update: DungeonLobbyUpdate) => renderDungeonLobby(update));
   room.onMessage("depths:lobby", (update: SilverDepthsLobbyUpdate) => renderSilverDepthsLobby(update));
   room.onMessage("mineral:status", (payload: MineralDepositStatus[]) => minimap.setMineralStatus(payload));
