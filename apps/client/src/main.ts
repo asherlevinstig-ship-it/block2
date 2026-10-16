@@ -66,7 +66,7 @@ import type { MineralDepositStatus } from "@blockcraft/protocol";
 import { advanceMobMotion, advanceMobTurnLean, trimMobSnapshots, visibleMobGaitSpeed } from "./mob-motion.js";
 import { createServerClock, sampleServerClock, enemyAttackPresentation } from "./enemy-timeline.js";
 import { bruteRecoveryPose, enemyAwarenessCue, enemyCombatCue, enemyCueLineClear, enemyShotGuideLength } from "./enemy-combat-cues.js";
-import { replayPendingMovement, type PredictionFrame } from "./prediction-replay.js";
+import { confirmPredictedDodges, removeRejectedDodge, replayPendingMovement, type PredictionFrame } from "./prediction-replay.js";
 import { advanceCameraOrbit, cameraOrbitOffset, initialCameraOrbit } from "./camera-orbit.js";
 import { advanceCameraFollow, advanceCameraHeight } from "./camera-follow.js";
 import { CombatSyncRecorder } from "./combat-sync.js";
@@ -3108,6 +3108,7 @@ let cameraShakeUntil = 0;
 let cameraShakeStrength = 0;
 let lastProcessedInputSequence = 0;
 const pendingPredictionFrames: PredictionFrame[] = [];
+let lastAuthoritativeDodgeSequence = 0;
 let lastAuthoritativeMovementAt = 0;
 let lastAcknowledgementAdvancedAt = 0;
 let pendingStopInputSequence: number | null = null;
@@ -5550,6 +5551,7 @@ function bindPlayers(joinedRoom: Room): void {
     const isLocal = sessionId === joinedRoom.sessionId;
     if (isLocal) {
       activateMovementPilot(joinedRoom);
+      lastAuthoritativeDodgeSequence = player.dodgeSequence;
       localSilverDepthsRunStage = player.silverDepthsRunStage;
       localSilverDepthsWing = player.silverDepthsWing === "iron" || player.silverDepthsWing === "silver" ? player.silverDepthsWing : null;
       updateLocalMistfenProgress(player.huntLoadoutsJson);
@@ -5598,6 +5600,9 @@ function bindPlayers(joinedRoom: Room): void {
           pendingPortalDestination = null;
         }
         authoritativeLocalPosition.set(player.x, player.y, player.z);
+        if (player.dodgeSequence > lastAuthoritativeDodgeSequence)
+          confirmPredictedDodges(pendingPredictionFrames, player.dodgeSequence - lastAuthoritativeDodgeSequence);
+        lastAuthoritativeDodgeSequence = player.dodgeSequence;
         if (player.lastProcessedInput > lastProcessedInputSequence) lastAcknowledgementAdvancedAt = performance.now();
         lastProcessedInputSequence = player.lastProcessedInput;
         lastAuthoritativeMovementAt = performance.now();
@@ -5640,6 +5645,9 @@ function bindPlayers(joinedRoom: Room): void {
       if (isLocal) {
         captureLocalSnapshot();
       }
+    }, true);
+    playerCallbacks.listen("dodgeSequence", () => {
+      if (isLocal) captureLocalSnapshot();
     }, true);
     playerCallbacks.listen("actionSequence", () => {
       if (!remote || player.actionSequence <= remote.lastActionSequence) return;
@@ -7441,6 +7449,7 @@ function renderBootstrap(payload: WorldBootstrap): void {
   localDodgeChain = 0;
   localDodgeExhaustedUntil = 0;
   pendingPredictionFrames.length = 0;
+  lastAuthoritativeDodgeSequence = ownPlayer?.dodgeSequence ?? 0;
   smoothedMovement = { x: 0, z: 0 };
   lastSentMovement = { x: 0, z: 0 };
   pendingStopInputSequence = null;
@@ -8187,7 +8196,7 @@ function logMovementEvent(message: string): void {
 movementDebugCopy.addEventListener("click", async () => {
   const trace = activeStopTrace ? formatStopTrace(activeStopTrace) : completedStopTrace;
   const snapTrace = activeSnapTrace ? formatStopTrace(activeSnapTrace, "SNAP") : "";
-  const text = `SNAP DIAGNOSTICS v1\nurl=${window.location.origin}${window.location.pathname} room=${activeRoomName}\n${movementDebugLive.textContent ?? ""}\n\nCOMBAT SYNC (owner-only timings; up/down estimated from clock sync)\n${combatSync.snapshot()}\n\nSNAP EVENTS (oldest first)\n${snapDiagnosticEvents.join("\n") || "No snap detected yet."}\n\nEVENTS\n${movementEventLog.join("\n")}\n\n${[...completedSnapTraces, snapTrace].filter(Boolean).join("\n\n")}\n\n${trace}`;
+  const text = `SNAP DIAGNOSTICS v1\nurl=${window.location.origin}${window.location.pathname} room=${activeRoomName}\n${movementDebugLive.textContent ?? ""}\n\nCOMBAT SYNC (owner-only; receive = local send-to-message, server = authoritative processing)\n${combatSync.snapshot()}\n\nSNAP EVENTS (oldest first)\n${snapDiagnosticEvents.join("\n") || "No snap detected yet."}\n\nEVENTS\n${movementEventLog.join("\n")}\n\n${[...completedSnapTraces, snapTrace].filter(Boolean).join("\n\n")}\n\n${trace}`;
   await navigator.clipboard.writeText(text);
   movementDebugCopy.textContent = "COPIED";
   window.setTimeout(() => { movementDebugCopy.textContent = "COPY LOG"; }, 1000);
@@ -8581,6 +8590,8 @@ function requestDodge(): void {
     { x: direction.x * 1.8, z: direction.z * 1.8 },
     readCollisionWorldBlock,
   );
+  const predictedDodgeX = predicted.x - current.x;
+  const predictedDodgeZ = predicted.z - current.z;
   localDodgeVisualOffset = beginDodgeVisualOffset(
     localDodgeVisualOffset,
     { x: current.x, z: current.z },
@@ -8591,6 +8602,10 @@ function requestDodge(): void {
   localDodgeStartedAt = now;
   dodgeSequence += 1;
   const requestId = `dodge-${dodgeSequence}`;
+  pendingPredictionFrames.push({
+    sequence: moveSequence + 1, kind: "dodge", requestId,
+    x: predictedDodgeX, z: predictedDodgeZ,
+  });
   combatSync.start("dodge", requestId, now);
   room.send("dodge", {
     requestId,
@@ -9331,11 +9346,10 @@ function reconcileLocalPlayer(
   const position = localPlayer.getPosition();
   const beforeCorrection = position.clone();
   const target = authoritativeLocalPosition.clone();
-  if (moving) {
-    const projected = replayPendingMovement(target, lastProcessedInputSequence, pendingPredictionFrames,
-      (pose, delta) => resolvePlayerMotion(pose, delta, readCollisionWorldBlock));
-    target.set(projected.x, projected.y, projected.z);
-  }
+  const projected = replayPendingMovement(target, lastProcessedInputSequence, pendingPredictionFrames,
+    (pose, delta) => resolvePlayerMotion(pose, delta, readCollisionWorldBlock),
+    (pose, delta) => resolveSweptHorizontalMotion(pose, delta, readCollisionWorldBlock));
+  target.set(projected.x, projected.y, projected.z);
   target.y = reconciliationVerticalTarget(position.y, target.y, grounded);
   const distance = position.distance(target);
   const now = performance.now();
@@ -9486,8 +9500,12 @@ app.on("update", (dt: number) => {
       x: smoothedMovement.x * localMovementSpeed() * frameTime,
       z: smoothedMovement.z * localMovementSpeed() * frameTime,
     });
-    while (pendingPredictionFrames.length > 240
-      || (pendingPredictionFrames[0]?.sequence ?? Infinity) <= lastProcessedInputSequence) pendingPredictionFrames.shift();
+    for (let i = pendingPredictionFrames.length - 1; i >= 0; i -= 1) {
+      const frame = pendingPredictionFrames[i];
+      if (frame && (frame.kind === "dodge" ? frame.confirmed : frame.sequence <= lastProcessedInputSequence))
+        pendingPredictionFrames.splice(i, 1);
+    }
+    while (pendingPredictionFrames.length > 240) pendingPredictionFrames.shift();
   }
   const collisionTravel = Math.hypot(predicted.x - current.x, predicted.z - current.z);
   if (predicted.hitVertical || predicted.grounded) localVerticalVelocity = 0;
@@ -9834,7 +9852,9 @@ app.on("update", (dt: number) => {
         if (warningScreen.z > 0 && warningScreen.x >= 0 && warningScreen.x <= bounds.width
           && warningScreen.y >= 0 && warningScreen.y <= bounds.height)
           combatSync.warning(mobId, mob.state.actionSequence, mob.state.attackStartedAt,
-            mob.state.attackContactAt, animationNow + serverClock.offset);
+            mob.state.attackContactAt, animationNow + serverClock.offset,
+            serverClock.synchronized && Number.isFinite(serverClock.bestRtt)
+              ? serverClock.bestRtt / 2 + (frameSamples.at(-1) ?? 0) : null);
       }
       if (mob.warningMesh) {
         const chargeLength = mob.isSpitter && mob.state.attackPattern !== "pool" ? spitterShotOffsets(mob.state.attackPattern).reduce((sum, offset, i) => sum + (i + 1) * enemyShotGuideLength({ x: mob.state.x, y: mob.state.y + 1.05, z: mob.state.z }, mob.state.yaw + offset, readCollisionWorldBlock, SPITTER_PATTERN.range), 0) : mob.state.attackPattern === "charge" ? Math.min(CHAMPION_CHARGE.distance, enemyShotGuideLength({ x: mob.state.attackStrikeX, y: mob.state.attackStrikeY + .8, z: mob.state.attackStrikeZ }, mob.state.yaw, readCollisionWorldBlock)) : CHAMPION_CHARGE.distance;
@@ -10714,7 +10734,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   });
   room.onMessage("block:changed", applyBlockChange);
   room.onMessage("combat:timing", (event: CombatTimingEvent) => {
-    combatSync.receive(event, performance.now(), serverClock.offset, serverClock.synchronized);
+    combatSync.receive(event, performance.now());
   });
   room.onMessage("combat:projectile", (message: WeaponAttackReleased) => {
     createWeaponProjectile(message);
@@ -11157,13 +11177,20 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
         ? (room.state as { players?: { get(id: string): NetworkPlayer | undefined } }).players?.get(room.sessionId)
         : undefined;
       if (ownPlayer) syncPredictedDodgeStamina(ownPlayer.stamina, ownPlayer.maxStamina);
-      const rejectedPosition = localPlayer.getPosition();
-      localRecoveryVisualOffset = {
-        x: localRecoveryVisualOffset.x + rejectedPosition.x - authoritativeLocalPosition.x + localNetworkVisualOffset.x,
-        z: localRecoveryVisualOffset.z + rejectedPosition.z - authoritativeLocalPosition.z + localNetworkVisualOffset.z,
-      };
-      localNetworkVisualOffset = { x: 0, z: 0 };
-      localPlayer.setPosition(authoritativeLocalPosition);
+      const rejectedDodge = removeRejectedDodge(pendingPredictionFrames, message.requestId);
+      if (rejectedDodge) {
+        const before = localPlayer.getPosition().clone();
+        const after = resolveSweptHorizontalMotion(before,
+          { x: -rejectedDodge.x, z: -rejectedDodge.z }, readCollisionWorldBlock);
+        localRecoveryVisualOffset = {
+          x: localRecoveryVisualOffset.x + localNetworkVisualOffset.x + localDodgeVisualOffset.x + before.x - after.x,
+          z: localRecoveryVisualOffset.z + localNetworkVisualOffset.z + localDodgeVisualOffset.z + before.z - after.z,
+        };
+        localNetworkVisualOffset = { x: 0, z: 0 };
+        localDodgeVisualOffset = { x: 0, z: 0 };
+        localPlayer.setPosition(after.x, after.y, after.z);
+        logMovementEvent(`DODGE REJECT undo=${Math.hypot(before.x - after.x, before.z - after.z).toFixed(2)}m`);
+      }
       localDodgeStartedAt = null;
       if (message.reason === "rate") localDodgeExhaustedUntil = Math.max(localDodgeExhaustedUntil, performance.now() + 500);
       if (message.reason === "stamina") localDodgeChain = 0;

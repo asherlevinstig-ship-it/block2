@@ -14,20 +14,16 @@ export class CombatSyncRecorder {
     while (this.pending.size > 64) this.pending.delete(this.pending.keys().next().value!);
   }
 
-  receive(event: CombatTimingEvent, receivedAt: number, serverOffset: number, clockSynced: boolean): void {
+  receive(event: CombatTimingEvent, receivedAt: number): void {
     const action = this.pending.get(event.requestId);
     const elapsed = action ? Math.max(0, receivedAt - action.sentAt) : null;
-    const uplink = action && event.phase === "accepted" && clockSynced
-      ? Math.round(event.serverTime - action.sentAt - serverOffset) : null;
-    const downlink = clockSynced ? Math.round(receivedAt + serverOffset - event.serverTime) : null;
     const serverElapsed = action?.acceptedAt === undefined ? null : Math.round(event.serverTime - action.acceptedAt);
     const scheduled = event.scheduledAt === undefined ? "" : ` due=${Math.round(event.scheduledAt - event.serverTime)}ms`;
     const outcome = event.outcome ? ` ${event.outcome.toUpperCase()}` : "";
     this.add(`${event.action.toUpperCase()} ${event.requestId} ${event.phase.toUpperCase()}${outcome}`
       + ` receive=${elapsed === null ? "untracked" : `${Math.round(elapsed)}ms`}`
-      + (event.phase === "accepted" ? ` up=${uplink === null ? "?" : `${uplink}ms`}`
-        : ` server=${serverElapsed === null ? "?" : `${serverElapsed}ms`}`)
-      + ` down=${downlink === null ? "?" : `${downlink}ms`}${scheduled}`);
+      + (event.phase === "accepted" ? "" : ` server=${serverElapsed === null ? "?" : `${serverElapsed}ms`}`)
+      + scheduled);
     if (action && event.phase === "accepted") action.acceptedAt = event.serverTime;
     if (event.phase === "resolved") this.pending.delete(event.requestId);
   }
@@ -39,14 +35,16 @@ export class CombatSyncRecorder {
     if (requestId) this.pending.delete(requestId);
   }
 
-  warning(mobId: string, sequence: number, startedAt: number, contactAt: number, visibleAt: number): void {
+  warning(mobId: string, sequence: number, startedAt: number, contactAt: number, visibleAt: number,
+    clockUncertaintyMs: number | null): void {
     if (startedAt <= 0 || contactAt <= 0) return;
     const key = `${mobId}:${sequence}:${startedAt}`;
     if (this.warnings.has(key)) return;
     this.warnings.add(key);
     while (this.warnings.size > 256) this.warnings.delete(this.warnings.values().next().value!);
-    this.add(`WARNING ${mobId} #${sequence} first-visible=${Math.round(visibleAt - startedAt)}ms`
-      + ` lead=${Math.round(contactAt - visibleAt)}ms`);
+    this.add(`WARNING ${mobId} #${sequence} first-visible≈${Math.round(visibleAt - startedAt)}ms`
+      + ` lead≈${Math.round(contactAt - visibleAt)}ms`
+      + ` clock-uncertainty≈${clockUncertaintyMs === null ? "unknown" : `±${Math.round(clockUncertaintyMs)}ms`}`);
   }
 
   snapshot(): string {
