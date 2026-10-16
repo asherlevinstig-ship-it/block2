@@ -150,6 +150,22 @@ describe("world objective director", () => {
     expect(objective.kind).toBe("encounter");
     expect(objective.targetMobId).toBe("cave-spitter");
   });
+  it("offers a local Greenwood seam and return loop only after the camp is clear", () => {
+    const camp = new Map([
+      ["wild-crawler", mob(42.5, 19.5, { alive: false })],
+      ["greenwood-briar", mob(39.5, 18.5, { alive: false })],
+      ["greenwood-briar-north", mob(43.5, 23.5, { alive: false })],
+    ]);
+    const pose = player(43, 19);
+    expect(nearbyObjective("tester", pose, camp, [], [], 10_000, null)).toMatchObject({
+      objectiveId: "greenwood-seam", title: "Explore the Exposed Iron Seam", progressLabel: "OPTIONAL · GREENWOOD TRAIL",
+    });
+    const bag = { x: 43.5, y: 8, z: 19.5, itemId: "moss_fibre", ownerId: "tester", expiresAt: 20_000 };
+    expect(nearbyObjective("tester", pose, camp, [], [["gear", bag]], 10_000, null).kind).toBe("loot");
+    pose.inventory.set("iron_ore", { quantity: 2 });
+    expect(nearbyObjective("tester", pose, camp, [], [], 10_000, null).objectiveId).toBe("greenwood-return");
+    expect(nearbyObjective("tester", player(80, 20), camp, [], [], 10_000, null).objectiveId).not.toBe("greenwood-seam");
+  });
 
   it("switches to a closer new encounter, but has a four-metre hysteresis margin", () => {
     const mobs = new Map([["a", mob(40, 0)], ["b", mob(50, 0)]]);

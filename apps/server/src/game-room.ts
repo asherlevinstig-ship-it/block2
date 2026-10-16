@@ -254,6 +254,7 @@ import { MOB_PATROL_RADIUS, patrolDestination, type MobPatrolState } from "./mob
 import { STAGGER_IMMUNITY_MS, basicStaggerDuration, bodyPoint, flightPoint, hasCombatLineOfSight, projectileImpact, meleeSweepImpact } from "./combat-impact.js";
 import { compensatedActionAt, MAX_COMBAT_LAG_COMPENSATION_MS } from "./combat-lag.js";
 import { FOREST_CACHE_DUPLICATE_GOLD, forestCacheFeaturedReward, forestCacheRewardLabel } from "./forest-dungeon-rewards.js";
+import { greenwoodFirstClearWeapon } from "./greenwood-first-clear.js";
 import { chooseCharacterStat, grantCharacterExperience, mobExperience, progressionAttackBonus, progressionMiningBonus, progressionSnapshot, progressionSpeedMultiplier } from "./character-progression.js";
 import { enemyLevelForTier } from "@blockcraft/protocol";
 
@@ -2911,8 +2912,25 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           ...(mistfenRank >= 3 && activeMistfenEvent && Math.random() < activeMistfenEvent.legendaryChance
             ? [{ itemId: "mirebreaker_mantle" as ItemId, quantity: 1 }] : [])]
       : [];
-    const greenwoodProgress = rewardPlayer ? this.greenwoodProgress(rewardPlayer) : { points: 0, discovered: false };
+    const greenwoodProgress = rewardPlayer ? this.greenwoodProgress(rewardPlayer)
+      : { points: 0, discovered: false, marks: 0, firstBossGearClaimed: false };
     const greenwoodRank = greenwoodMasteryRank(greenwoodProgress.points, greenwoodProgress.discovered);
+    const pendingGreenwoodFirstClear = [...this.state.lootDrops.keys()].some(dropId =>
+      dropId.startsWith("greenwood-first:") && this.state.lootDrops.get(dropId)?.ownerId === ownerId);
+    const firstGreenwoodClear = mobId === "wild-crawler" && rewardPlayer
+      && !greenwoodProgress.firstBossGearClaimed && !pendingGreenwoodFirstClear;
+    const firstGreenwoodWeapon = firstGreenwoodClear
+      ? greenwoodFirstClearWeapon(parseBuildPathState(rewardPlayer.huntLoadoutsJson).selectedPathId) : null;
+    const greenwoodFirstClearDrops: { itemId: ItemId; quantity: number }[] = firstGreenwoodWeapon
+      ? this.ownsOrHasPendingItem(ownerId, firstGreenwoodWeapon)
+        ? [{ itemId: "healing_potion", quantity: 2 }]
+        : [{ itemId: firstGreenwoodWeapon, quantity: 1 }]
+      : [];
+    if (firstGreenwoodClear && rewardPlayer && firstGreenwoodWeapon
+      && this.ownsOrHasPendingItem(ownerId, firstGreenwoodWeapon)) {
+      this.setGreenwoodProgress(rewardPlayer, { ...greenwoodProgress, firstBossGearClaimed: true });
+      void this.persistPlayer(ownerId, rewardPlayer, true);
+    }
     const greenwoodEventMob = mobId === WILDERNESS_EVENT_ID || isGreenwoodEventFollower(mobId);
     const activeGreenwoodEvent = greenwoodEventDefinition(this.realmEvents.greenwoodVariant);
     const greenwoodMasteryDrops: { itemId: ItemId; quantity: number }[] = isGreenwoodCampMob(mobId) && greenwoodRank >= 2
@@ -2977,6 +2995,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       ...mistfenEventDrops,
       ...greenwoodMasteryDrops,
       ...greenwoodEventDrops,
+      ...greenwoodFirstClearDrops,
       ...armourDropForMob(mob.archetype, mob.difficultyTier, Math.random()),
     ]);
     const representative = lootBagRepresentative(items);
@@ -3006,7 +3025,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       z: landing.z,
       expiresAt: now + LOOT_DESPAWN_MS,
     });
-    const dropId = `${mobId}:${now}:${++this.lootDropSequence}`;
+    const dropId = firstGreenwoodClear && firstGreenwoodWeapon && greenwoodFirstClearDrops[0]?.itemId === firstGreenwoodWeapon
+      ? `greenwood-first:${firstGreenwoodWeapon}:${ownerId}:${now}:${++this.lootDropSequence}`
+      : `${mobId}:${now}:${++this.lootDropSequence}`;
     this.state.lootDrops.set(dropId, drop);
     this.clients.find(client => client.sessionId === ownerId)?.send("loot:spawned", {
       dropId, ownerId, itemId: drop.itemId, quantity: drop.quantity, contentsJson: drop.contentsJson, affixTier: drop.affixTier,
@@ -3015,6 +3036,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     });
     if (areaRelicDrops.length) this.clients.find(client => client.sessionId === ownerId)?.send("chat:notice",
       `${firstLeaderVictory ? "FIRST LEADER VICTORY" : personalRematchTier > 0 ? `EMPOWERED REMATCH ${personalRematchTier}` : "SIGNATURE DROP"} · ${areaRelicDrops[0]!.quantity} ${ITEM_DEFINITIONS[areaRelicDrops[0]!.itemId].name}${rematchMaterialQuantity ? ` + ${rematchMaterialQuantity} bonus ${ITEM_DEFINITIONS[rematchMaterialId].name}` : ""} added to your personal cache.`);
+    if (greenwoodFirstClearDrops.length) this.clients.find(client => client.sessionId === ownerId)?.send("chat:notice",
+      `GREENWOOD FIRST CLEAR · ${greenwoodFirstClearDrops[0]!.itemId === "healing_potion" ? "2 healing potions" : ITEM_DEFINITIONS[greenwoodFirstClearDrops[0]!.itemId].name} added to your personal loot bag. Press E to collect it.`);
     if (northwatchCloakDrop.length) this.clients.find(client => client.sessionId === ownerId)?.send("chat:notice",
       "FIRST NORTHWATCH CLOAK · your personal loot bag contains a rare cloak. Press E to collect it.");
     if (northwatchPatrolBonus.length) this.clients.find(client => client.sessionId === ownerId)?.send("chat:notice",
@@ -3112,6 +3135,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (collected.length === 0) return reply(false, `PACK FULL · ${playerBackpackSlots(player)}/${backpackCapacity(player.blacksmithUpgrades)} slots used. The loot stays here.`, { remainingItems: remaining });
       for (const reward of collected) this.attuneEquipment(client, player, reward.itemId, drop.affixTier,
         Object.hasOwn(EQUIPMENT_HUNT_REGIONS, drop.affixRegion) ? drop.affixRegion as EquipmentHuntRegionId : null);
+      const firstGearId = parsed.data.dropId.startsWith("greenwood-first:") ? parsed.data.dropId.split(":")[1] : null;
+      if (firstGearId && collected.some(entry => entry.itemId === firstGearId)) {
+        this.setGreenwoodProgress(player, { ...this.greenwoodProgress(player), firstBossGearClaimed: true });
+      }
       if (remaining.length === 0) this.state.lootDrops.delete(parsed.data.dropId);
       else {
         const representative = lootBagRepresentative(remaining)!;
@@ -5024,20 +5051,23 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     player.huntLoadoutsJson = JSON.stringify({ ...raw, mistfen });
   }
 
-  private greenwoodProgress(player: PlayerState): { points: number; discovered: boolean; marks: number } {
+  private greenwoodProgress(player: PlayerState): { points: number; discovered: boolean; marks: number; firstBossGearClaimed: boolean } {
     try {
-      const value = (JSON.parse(player.huntLoadoutsJson) as { greenwood?: { points?: unknown; discovered?: unknown; marks?: unknown } }).greenwood;
+      const value = (JSON.parse(player.huntLoadoutsJson) as { greenwood?: { points?: unknown; discovered?: unknown; marks?: unknown; firstBossGearClaimed?: unknown } }).greenwood;
       return { points: typeof value?.points === "number" && Number.isFinite(value.points)
         ? Math.max(0, Math.min(GREENWOOD_MASTERY_CAP, Math.floor(value.points))) : 0, discovered: value?.discovered === true,
-        marks: typeof value?.marks === "number" && Number.isFinite(value.marks) ? Math.max(0, Math.min(65_535, Math.floor(value.marks))) : 0 };
-    } catch { return { points: 0, discovered: false, marks: 0 }; }
+        marks: typeof value?.marks === "number" && Number.isFinite(value.marks) ? Math.max(0, Math.min(65_535, Math.floor(value.marks))) : 0,
+        firstBossGearClaimed: value?.firstBossGearClaimed === true };
+    } catch { return { points: 0, discovered: false, marks: 0, firstBossGearClaimed: false }; }
   }
 
-  private setGreenwoodProgress(player: PlayerState, greenwood: { points: number; discovered: boolean; marks: number }): void {
+  private setGreenwoodProgress(player: PlayerState, greenwood: { points: number; discovered: boolean; marks: number; firstBossGearClaimed?: boolean }): void {
     let raw: Record<string, unknown> = {};
     try { const parsed = JSON.parse(player.huntLoadoutsJson); if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) raw = parsed; }
     catch { /* legacy */ }
-    player.huntLoadoutsJson = JSON.stringify({ ...raw, greenwood });
+    player.huntLoadoutsJson = JSON.stringify({ ...raw, greenwood: {
+      ...greenwood, firstBossGearClaimed: greenwood.firstBossGearClaimed ?? this.greenwoodProgress(player).firstBossGearClaimed,
+    } });
   }
 
   private grantGreenwoodMastery(playerId: string, amount: number): void {

@@ -126,7 +126,7 @@ describe("deterministic voxel world", () => {
       if (!cache.has(key)) cache.set(key, generateChunk("density-test", a.chunkX, a.chunkZ));
       return getBlock(cache.get(key)!, a.localX, y, a.localZ);
     };
-    expect(ROADSIDE_DISCOVERIES).toHaveLength(18);
+    expect(ROADSIDE_DISCOVERIES).toHaveLength(20);
     expect(new Set(ROADSIDE_DISCOVERIES.map(site => site.kind)).size).toBe(5);
     for (const site of ROADSIDE_DISCOVERIES) {
       expect(isRegionalRoad(site.x, site.z)).toBe(false);

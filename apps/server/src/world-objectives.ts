@@ -1,8 +1,8 @@
 import { isEquipmentItem, ITEM_DEFINITIONS, worldLevelRange, type ForestPortal, type ItemId, type WorldObjectiveUpdate } from "@blockcraft/protocol";
 import { WILDERNESS_EVENT_ID, WILDERNESS_EVENT_POSITION, WILDERNESS_EVENT_TRACKING_RADIUS } from "./wilderness-event.js";
 import { REALM_BOSS_TRACKING_RADIUS, REALM_EVENT_DEFINITIONS, REALM_EVENT_TRACKING_RADIUS, realmEventDefinition, type RealmEventStatus } from "./realm-event-director.js";
-import { ASHEN_SENTRY_IDS, FRONTIER_BRUTE_GROUP_IDS, MISTFEN_IDS, MIXED_FRONTIER_IDS, NORTHWATCH_IDS, SOUTHERN_QUARRY_IDS, STONE_BRUTE_GROUP_IDS } from "./wilderness-encounters.js";
-import { ASHEN_SPIRE_POSITION, FOREST_DUNGEON_MOBS, isInAshenReach, isInForestDungeon, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_SAFE_RADIUS, TOWN_BLACKSMITH_STALL_POSITION, TOWN_SILVER_DEPTHS_PORTAL_POSITION, SILVER_DEPTHS_EXIT_POSITION, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, SILVER_DEPTHS_CHECKPOINT_POSITION, CRYSTAL_MATRIARCH_HOME } from "@blockcraft/voxel-world";
+import { ASHEN_SENTRY_IDS, FRONTIER_BRUTE_GROUP_IDS, GREENWOOD_CAMP_IDS, MISTFEN_IDS, MIXED_FRONTIER_IDS, NORTHWATCH_IDS, SOUTHERN_QUARRY_IDS, STONE_BRUTE_GROUP_IDS } from "./wilderness-encounters.js";
+import { ASHEN_SPIRE_POSITION, FOREST_DUNGEON_MOBS, GREENWOOD_CAMP, GREENWOOD_IRON_SEAM, isInAshenReach, isInForestDungeon, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_SAFE_RADIUS, TOWN_BLACKSMITH_STALL_POSITION, TOWN_SILVER_DEPTHS_PORTAL_POSITION, SILVER_DEPTHS_EXIT_POSITION, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, SILVER_DEPTHS_CHECKPOINT_POSITION, CRYSTAL_MATRIARCH_HOME } from "@blockcraft/voxel-world";
 import { SILVER_DEPTHS_ANTECHAMBER_IDS, SILVER_DEPTHS_ENCOUNTERS, silverDepthsStageSpawns } from "./silver-depths-encounters.js";
 import { areaMainMobDefinition } from "./area-mini-bosses.js";
 import { GREENWOOD_EVENT_FOLLOWER_PREFIX, greenwoodEventDefinition } from "./greenwood-events.js";
@@ -22,7 +22,7 @@ const GROUPS: ObjectiveGroup[] = [
     ids: event.key === "greenwood" ? [event.id, ...Array.from({ length: 5 }, (_, index) => `${GREENWOOD_EVENT_FOLLOWER_PREFIX}${index}`)]
       : event.key === "mistfen" ? [event.id, ...Array.from({ length: 5 }, (_, index) => `${MISTFEN_EVENT_FOLLOWER_PREFIX}${index}`)] : [event.id],
     mainId: event.key === "greenwood" || event.key === "mistfen" ? event.id : undefined })),
-  { id: "greenwood", title: "Greenwood Crawler Camp", detail: "Follow the dirt road, clear the three root nests, collect crawler items, then mine the exposed iron seam east of the camp.", ids: ["wild-crawler", "greenwood-briar", "greenwood-briar-north"], mainId: "wild-crawler" },
+  { id: "greenwood", title: "Greenwood Crawler Camp", detail: "Follow the dirt road, clear the three root nests, collect crawler items, then mine the exposed iron seam east of the camp.", ids: [...GREENWOOD_CAMP_IDS], mainId: "wild-crawler" },
   { id: "silver-guards", title: "Silver Guard Clearing", detail: "Dodge aimed shots and fan gaps using the stone cover. Collect a focus and potion, mine silver, and clear both guards to open the Forest Dungeon portal.", ids: ["cave-spitter", "frontier-spitter"], mainId: "frontier-spitter" },
   { id: "stone-clearing", title: "Stone Brute Clearing", detail: "Clear the crawler and spitter to expose Stonehide Crusher, then counter its marked slam.", ids: [...STONE_BRUTE_GROUP_IDS], mainId: "stone-brute" },
   { id: "frontier-ruins", title: "Frontier Brute Ruins", detail: "Use broken pillars against the spitter and rock volleys. Clear Ruinbreaker's escort to expose it, then counter during recovery.", ids: [...FRONTIER_BRUTE_GROUP_IDS], mainId: "frontier-brute" },
@@ -133,9 +133,27 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
           ?? `REALM THREAT ${eventStatus.completed} / ${eventStatus.required}`;
       return event.update;
     }
+    const greenwoodCampCenter = { x: (GREENWOOD_CAMP.minX + GREENWOOD_CAMP.maxX) / 2, y: 8,
+      z: (GREENWOOD_CAMP.minZ + GREENWOOD_CAMP.maxZ) / 2 };
+    const campCleared = sameFloor(greenwoodCampCenter) && distance(greenwoodCampCenter) <= 16
+      && GREENWOOD_CAMP_IDS.every(id => mobs.get(id)?.alive === false);
     const loot = drops.filter(([, drop]) => (!drop.ownerId || drop.ownerId === playerId) && now < drop.expiresAt && sameFloor(drop) && distance(drop) <= 6
-      && (isEquipmentItem(drop.itemId as ItemId) || drop.itemId === "miners_lantern")).sort((a, b) => distance(a[1]) - distance(b[1]))[0];
+      && (isEquipmentItem(drop.itemId as ItemId) || drop.itemId === "miners_lantern"
+        || campCleared && drop.ownerId === playerId && distance(greenwoodCampCenter) <= 12))
+      .sort((a, b) => distance(a[1]) - distance(b[1]))[0];
     if (loot) return make(`loot-${loot[0]}`, "Collect Your Loot", "Approach your personal loot and press E to pick it up.", loot[1], "loot");
+    if (campCleared) {
+      const hasIron = (player.inventory.get("iron_ore")?.quantity ?? 0) > 0;
+      const update = hasIron
+        ? make("greenwood-return", "Bring Iron Back to Town",
+          "The camp is clear. Take your ore to the blacksmith, or keep exploring freely.", TOWN_BLACKSMITH_STALL_POSITION, "hub")
+        : make("greenwood-seam", "Explore the Exposed Iron Seam",
+          "The camp is clear. Mine a little iron east of the nests, or keep exploring freely.",
+          { x: (GREENWOOD_IRON_SEAM.minX + GREENWOOD_IRON_SEAM.maxX) / 2 + .5, y: 8,
+            z: (GREENWOOD_IRON_SEAM.minZ + GREENWOOD_IRON_SEAM.maxZ) / 2 + .5 }, "explore", 1);
+      update.progressLabel = "OPTIONAL · GREENWOOD TRAIL";
+      return update;
+    }
     const portal = portals.filter(([, point]) => (point.expiresAt === 0 || now < point.expiresAt) && sameFloor(point) && distance(point) <= 18
       && (!dungeon ? point.kind === "entry" : point.kind === "return" && candidates.length === 0)).sort((a, b) => distance(a[1]) - distance(b[1]))[0];
     if (portal) {

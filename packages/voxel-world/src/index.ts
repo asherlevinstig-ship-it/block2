@@ -489,7 +489,9 @@ export const REGIONAL_WAYSTONES = [
 export type RoadsideDiscoveryKind = "cart" | "shrine" | "camp" | "grove" | "ruin";
 /** Small optional landmarks sit beside every long road segment, never in its movement lane. */
 export const ROADSIDE_DISCOVERIES = [
+  { id: "greenwood-forager-camp", name: "Abandoned Forager Camp", kind: "camp", x: 31, z: -1 },
   { id: "greenwood-root-arch", name: "Rootbound Arch", kind: "grove", x: 43, z: 4 },
+  { id: "greenwood-hollow-shrine", name: "Hollow Root Shrine", kind: "shrine", x: 50, z: 12 },
   { id: "eastroad-cart", name: "Abandoned Eastroad Cart", kind: "cart", x: 56, z: 14 },
   { id: "silver-road-shrine", name: "Silver Road Shrine", kind: "shrine", x: 69, z: 14 },
   { id: "stone-road-camp", name: "Stonebreak Camp", kind: "camp", x: 54, z: 38 },

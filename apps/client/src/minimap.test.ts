@@ -163,8 +163,8 @@ describe("north-up explorer minimap", () => {
   });
   it("quietly records roadside landmarks as permanent map knowledge", () => {
     const discovered = new Set<string>();
-    const landmark = ROADSIDE_DISCOVERIES[0]!;
-    expect(discoverRoadsideLandmarks({ x: landmark.x + 9.1, y: SURFACE_HEIGHT + 1, z: landmark.z }, discovered)).toBe(false);
+    const landmark = ROADSIDE_DISCOVERIES.find(site => site.id === "greenwood-root-arch")!;
+    expect(discoverRoadsideLandmarks({ x: landmark.x, y: SURFACE_HEIGHT + 1, z: landmark.z - 9.1 }, discovered)).toBe(false);
     expect(discoverRoadsideLandmarks({ x: landmark.x, y: 3, z: landmark.z }, discovered)).toBe(false);
     expect(discoverRoadsideLandmarks({ x: landmark.x, y: SURFACE_HEIGHT + 1, z: landmark.z }, discovered)).toBe(true);
     expect(discovered).toEqual(new Set([roadsideDiscoveryKey(landmark.id)]));
