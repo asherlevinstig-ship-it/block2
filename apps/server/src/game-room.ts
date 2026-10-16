@@ -47,7 +47,7 @@ import { shouldBecomeWildernessElite, wildernessEliteKind,
 import { AREA_LEADER_FOLLOWERS, AREA_MAIN_MOBS, areaLeaderPattern, areaLeaderPhase, areaMainMobDefinition, areaMiniBossDefinition, isAreaMiniBoss, leaderForFollower, type AreaLeaderPhase } from "./area-mini-bosses.js";
 import { MINI_BOSS_ENRAGE_MS, bruteLeaderPursuitSpeed, miniBossDamage, miniBossOrbitCounterPattern, miniBossWindupDelay, predictedMiniBossAim, updateOrbitPressure, type OrbitPressureState } from "./mini-boss-pressure.js";
 import { miniBossCoverSites, miniBossPressureSites } from "./mini-boss-arena.js";
-import { leaderRematch, leaderRematchMaterialBonus, leaderRematchPattern, leaderRematchPressureCadence,
+import { leaderRematch, leaderRematchMaterialBonus, leaderRematchPattern, northwatchRematchPattern, leaderRematchPressureCadence,
   leaderRematchStats, leaderRematchTiming, leaderTerritory } from "./leader-rematches.js";
 import { RealmHuntBoardRequestSchema, type RealmHuntBoardUpdate, type RealmHuntContractStatus, type RealmHuntStatus } from "@blockcraft/protocol";
 import { HUNT_PATHS, advanceHuntContract, beginHuntContract, huntContractTier, isHuntPathId,
@@ -458,6 +458,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly miniBossOrbitPressure = new Map<string, OrbitPressureState>();
   private readonly miniBossArenaCover = new Map<string, Map<string, ActiveMiniBossCover>>();
   private readonly leaderDefeats = new Map<string, number>();
+  /** Per-player patrol marks for the optional Northwatch rematch cache. */
+  private readonly northwatchPatrolProgress = new Map<string, number>();
   private readonly selectedRealmHunts = new Map<string, string>();
   private readonly huntContracts = new Map<string, HuntContractState>();
   private readonly huntContractCycles = new Map<string, Partial<Record<HuntPathId, number>>>();
@@ -999,6 +1001,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.quizRounds.delete(client.sessionId);
     this.objectiveProgress.delete(client.sessionId);
     this.selectedRealmHunts.delete(client.sessionId);
+    this.northwatchPatrolProgress.delete(client.sessionId);
     this.huntContracts.delete(client.sessionId);
     this.huntContractCycles.delete(client.sessionId);
     for (const [mobId, champion] of this.huntChampions) if (champion.ownerId === client.sessionId) {
@@ -2268,6 +2271,17 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.spawnLootDrops(mobId, mob, now, playerId);
       recipientsWithLoot.add(playerId);
     }
+    if (mobId === "northwatch-scout" || mobId === "northwatch-spitter") for (const playerId of recipients) {
+      if ((this.leaderDefeats.get("northwatch-watchbreaker") ?? 0) === 0) continue;
+      const mark = mobId === "northwatch-scout" ? 1 : 2;
+      const progress = this.northwatchPatrolProgress.get(playerId) ?? 0;
+      if (progress & mark) continue;
+      const next = progress | mark;
+      this.northwatchPatrolProgress.set(playerId, next);
+      this.clients.find(client => client.sessionId === playerId)?.send("chat:notice", next === 3
+        ? "NORTHWATCH PATROL COMPLETE · return to the Watchbreaker for bonus Ridge Hide. Watch for FAULT LINE."
+        : `NORTHWATCH PATROL 1/2 · defeat a ${mark === 1 ? "Shard Sentry" : "Ridge Stalker"} before the Watchbreaker rematch.`);
+    }
     if (mobId === REALM_WARDEN_ID) for (const playerId of recipients) {
       const player = this.state.players.get(playerId);
       if (!player) continue;
@@ -2310,6 +2324,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.openAreaLeaderAfterFollowerDefeat(mobId, now);
     const areaMainMob = areaMainMobDefinition(mobId);
     if (areaMainMob) this.leaderDefeats.set(mobId, Math.min(5, (this.leaderDefeats.get(mobId) ?? 0) + 1));
+    if (mobId === "northwatch-watchbreaker") for (const playerId of recipients) {
+      this.northwatchPatrolProgress.set(playerId, 0);
+      this.clients.find(client => client.sessionId === playerId)?.send("chat:notice",
+        "NORTHWATCH REMATCH · defeat one Ridge Stalker and one Shard Sentry, then return for bonus Ridge Hide.");
+    }
     if (areaMainMob) for (const playerId of recipients) {
       const rematch = leaderRematch(mobId, mob.leaderRematchTier);
       this.clients.find(client => client.sessionId === playerId)?.send("objective:completed", {
@@ -2577,6 +2596,35 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         targetX: selectedHunt.x, targetY: selectedHunt.y, targetZ: selectedHunt.z,
       };
     }
+    const northwatchLeader = this.state.mobs.get("northwatch-watchbreaker");
+    const northwatchProgress = this.northwatchPatrolProgress.get(client.sessionId) ?? 0;
+    if (this.roomKind === "overworld" && northwatchLeader?.alive && northwatchLeader.leaderRematchTier > 0
+      && (this.leaderDefeats.get("northwatch-watchbreaker") ?? 0) > 0
+      && Math.abs(player.y - northwatchLeader.y) <= 2.5
+      && Math.hypot(player.x - northwatchLeader.x, player.z - northwatchLeader.z) <= 36
+      && northwatchLeader.combatState === "idle" && !northwatchLeader.targetId
+      && update.kind !== "loot" && update.kind !== "portal"
+      && (update.targetMobId === "northwatch-watchbreaker" || selectedHuntId === "northwatch-watchbreaker")) {
+      const patrolId = !(northwatchProgress & 1) ? "northwatch-scout"
+        : !(northwatchProgress & 2) ? "northwatch-spitter" : "northwatch-watchbreaker";
+      const target = this.state.mobs.get(patrolId) ?? northwatchLeader;
+      const complete = northwatchProgress === 3;
+      update = {
+        kind: "hunt", showMarker: true, objectiveId: `northwatch-patrol-${patrolId}`,
+        title: complete ? "Watchbreaker Rematch" : "Northwatch Patrol",
+        detail: complete ? "Patrol cleared · return to the Watchbreaker. Dodge its marked FAULT LINE."
+          : `Defeat one ${patrolId === "northwatch-scout" ? "Ridge Stalker" : "Shard Sentry"} for the rematch cache.`,
+        lootHint: complete ? "Watchbreaker relic + bonus Ridge Hide" : "Ridge Hide reforges the Northwatch Cloak",
+        tier: target.difficultyTier, recommendedLevel: `LV ${target.level}`,
+        targetMobId: patrolId, targetMobIds: ["northwatch-scout", "northwatch-spitter", "northwatch-watchbreaker"],
+        completedMobIds: [
+          ...(northwatchProgress & 1 ? ["northwatch-scout"] : []),
+          ...(northwatchProgress & 2 ? ["northwatch-spitter"] : []),
+        ],
+        progressLabel: complete ? "PATROL 2/2 · LEADER READY" : `NORTHWATCH PATROL · ${northwatchProgress ? "1" : "0"}/2`,
+        targetX: target.x, targetY: target.y, targetZ: target.z,
+      };
+    }
     const signatureItemId: SignatureItemId | null = update.objectiveId.includes("depths-matriarch") || update.objectiveId === "depths-recover"
       ? "matriarch_edge"
       : update.objectiveId === "greenwood-event" ? "venom_focus" : null;
@@ -2791,8 +2839,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const northwatchCloakDrop: { itemId: ItemId; quantity: number }[] = mobId === "northwatch-watchbreaker"
       && rewardPlayer && !this.ownsOrHasPendingItem(ownerId, "northwatch_cloak")
       ? [{ itemId: "northwatch_cloak", quantity: 1 }] : [];
+    const northwatchPatrolBonus: { itemId: ItemId; quantity: number }[] = mobId === "northwatch-watchbreaker"
+      && mob.leaderRematchTier > 0 && this.northwatchPatrolProgress.get(ownerId) === 3
+      ? [{ itemId: "ridge_hide", quantity: 2 }] : [];
     const rematchMaterialQuantity = areaReward ? leaderRematchMaterialBonus(mob.leaderRematchTier) : 0;
-    const rematchMaterialId: ItemId = mob.archetype === "cave_spitter" ? "acid_gland"
+    const rematchMaterialId: ItemId = mobId === "northwatch-watchbreaker" ? "ridge_hide"
+      : mob.archetype === "cave_spitter" ? "acid_gland"
       : mob.archetype === "stone_brute" ? "stone_core" : "crawler_fang";
     const rematchDrops: { itemId: ItemId; quantity: number }[] = rematchMaterialQuantity > 0
       ? [{ itemId: rematchMaterialId, quantity: rematchMaterialQuantity }] : [];
@@ -2877,6 +2929,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         : []),
       ...areaRelicDrops,
       ...northwatchCloakDrop,
+      ...northwatchPatrolBonus,
       ...rematchDrops,
       ...mistfenMasteryDrops,
       ...mistfenEventDrops,
@@ -2922,6 +2975,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       `${firstLeaderVictory ? "FIRST LEADER VICTORY" : mob.leaderRematchTier > 0 ? `EMPOWERED REMATCH ${mob.leaderRematchTier}` : "SIGNATURE DROP"} · ${areaRelicDrops[0]!.quantity} ${ITEM_DEFINITIONS[areaRelicDrops[0]!.itemId].name}${rematchMaterialQuantity ? ` + ${rematchMaterialQuantity} bonus ${ITEM_DEFINITIONS[rematchMaterialId].name}` : ""} added to your personal cache.`);
     if (northwatchCloakDrop.length) this.clients.find(client => client.sessionId === ownerId)?.send("chat:notice",
       "FIRST NORTHWATCH CLOAK · your personal loot bag contains a rare cloak. Press E to collect it.");
+    if (northwatchPatrolBonus.length) this.clients.find(client => client.sessionId === ownerId)?.send("chat:notice",
+      "NORTHWATCH PATROL CACHE · 2 bonus Ridge Hide added to your personal loot bag.");
   }
 
   private resolveLootPickups(now: number): void {
@@ -5974,6 +6029,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       }
       if (!huntChampion && mob.isMiniBoss && mob.combatState === "idle" && mob.leaderRematchTier > 0) {
         mob.attackPattern = leaderRematchPattern(mob.attackPattern, mob.archetype, mob.actionSequence, mob.leaderModifier);
+        if (mobId === "northwatch-watchbreaker") mob.attackPattern = northwatchRematchPattern(mob.attackPattern, mob.actionSequence, mob.leaderRematchTier);
       }
       const definition = combatMobDefinition(mob);
       const home = this.mobHomes.get(mobId) ?? definition.spawn;

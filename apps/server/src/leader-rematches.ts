@@ -61,6 +61,11 @@ export function leaderRematchPattern(base: string, archetype: string, sequence: 
   return base;
 }
 
+/** Northwatch's rematch adds a marked two-part rock attack to its usual rotation. */
+export function northwatchRematchPattern(base: string, sequence: number, tier: number): string {
+  return tier > 0 && sequence % 3 === 1 ? "fault-line" : base;
+}
+
 export function leaderRematchMaterialBonus(tier: number): number {
   return tier <= 0 ? 0 : Math.min(3, Math.ceil(tier / 2));
 }
@@ -85,6 +90,7 @@ const LEADER_TERRITORIES: Readonly<Record<string, string>> = {
   "buried-chamber-brute": "Buried Vault",
   "frontier-brute-west": "Western Rich Deposit",
   "mistfen-behemoth": "Mistfen Marsh",
+  "northwatch-watchbreaker": "Northwatch Ridge",
 };
 
 export function leaderTerritory(id: string): string {

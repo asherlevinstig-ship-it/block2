@@ -98,6 +98,25 @@ describe("distinct radial wilderness territories", () => {
     expect(bags[0]).toContainEqual({ itemId: "northwatch_cloak", quantity: 1 });
     expect(bags[1]).not.toContainEqual({ itemId: "northwatch_cloak", quantity: 1 });
   });
+  it("turns both Northwatch patrol kills into a one-clear Ridge Hide bonus", () => {
+    vi.spyOn(Math, "random").mockReturnValue(.99);
+    const { room, internal } = fixture();
+    const player = new PlayerState();
+    room.state.players.set("player", player);
+    internal.leaderDefeats.set("northwatch-watchbreaker", 1);
+    for (const id of ["northwatch-scout", "northwatch-spitter"]) {
+      const mob = room.state.mobs.get(id)!;
+      internal.defeatMob(id, mob, "player", 10_000);
+    }
+    expect(internal.northwatchPatrolProgress.get("player")).toBe(3);
+    const leader = room.state.mobs.get("northwatch-watchbreaker")!;
+    leader.leaderRematchTier = 1;
+    internal.spawnLootDrops("northwatch-watchbreaker", leader, 10_001, "player");
+    const bag = [...room.state.lootDrops.values()].at(-1)!;
+    expect(decodeLootBagItems(bag.contentsJson)).toContainEqual({ itemId: "ridge_hide", quantity: 3 });
+    internal.defeatMob("northwatch-watchbreaker", leader, "player", 10_002);
+    expect(internal.northwatchPatrolProgress.get("player")).toBe(0);
+  });
   it("patrols generated terrain smoothly without placing mobs in solid blocks or inside town", () => {
     vi.useFakeTimers(); vi.setSystemTime(10000);
     const { room, internal } = fixture();

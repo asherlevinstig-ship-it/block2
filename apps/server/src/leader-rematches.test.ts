@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { leaderRematch, leaderRematchMaterialBonus, leaderRematchPattern, leaderRematchPressureCadence, leaderRematchStats, leaderRematchTiming } from "./leader-rematches.js";
+import { leaderRematch, leaderRematchMaterialBonus, leaderRematchPattern, northwatchRematchPattern, leaderRematchPressureCadence, leaderRematchStats, leaderRematchTiming, leaderTerritory } from "./leader-rematches.js";
 
 describe("empowered leader rematches", () => {
   it("rotates deterministic modifiers and caps progression at five", () => {
@@ -27,5 +27,12 @@ describe("empowered leader rematches", () => {
     expect(leaderRematchMaterialBonus(5)).toBe(3);
     expect(leaderRematchPattern("slam", "stone_brute", 1, "mirebreaker")).toBe("mirestorm");
     expect(leaderRematchPattern("rush", "moss_crawler", 0, "rootslayer")).toBe("root-cage");
+  });
+  it("gives Northwatch rematches a clearly marked fault-line attack", () => {
+    expect(leaderTerritory("northwatch-watchbreaker")).toBe("Northwatch Ridge");
+    expect(northwatchRematchPattern("slam", 1, 0)).toBe("slam");
+    expect(northwatchRematchPattern("slam", 0, 1)).toBe("slam");
+    expect(northwatchRematchPattern("slam", 1, 1)).toBe("fault-line");
+    expect(northwatchRematchPattern("rocks", 4, 5)).toBe("fault-line");
   });
 });
