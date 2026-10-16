@@ -252,6 +252,7 @@ import { silverDepthsMoonstoneReward, silverDepthsRank } from "./silver-depths-r
 import { advanceMobGravity, createMobNavigationState, moveMobSafely, navigateMob, walkableMobSpawn, type MobNavigationState } from "./mob-navigation.js";
 import { MOB_PATROL_RADIUS, patrolDestination, type MobPatrolState } from "./mob-patrol.js";
 import { STAGGER_IMMUNITY_MS, basicStaggerDuration, bodyPoint, flightPoint, hasCombatLineOfSight, projectileImpact, meleeSweepImpact } from "./combat-impact.js";
+import { compensatedActionAt } from "./combat-lag.js";
 import { FOREST_CACHE_DUPLICATE_GOLD, forestCacheFeaturedReward, forestCacheRewardLabel } from "./forest-dungeon-rewards.js";
 import { chooseCharacterStat, grantCharacterExperience, mobExperience, progressionAttackBonus, progressionMiningBonus, progressionSnapshot, progressionSpeedMultiplier } from "./character-progression.js";
 import { enemyLevelForTier } from "@blockcraft/protocol";
@@ -6532,6 +6533,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
     const now = Date.now();
+    const actionAt = compensatedActionAt(now, parsed.data.actionAt);
     player.defending = false;
     const lastDodgeAt = this.lastDodgeAt.get(client.sessionId) ?? 0;
     if (now - lastDodgeAt < 350) return this.reject(client, { requestId: parsed.data.requestId, action: "dodge", reason: "rate" });
@@ -6552,10 +6554,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     player.z = next.z;
     player.yaw = parsed.data.yaw;
     player.stamina -= cost;
-    player.invulnerableUntil = now + 320;
+    // Keep the full dodge duration after receipt; transport delay must never shorten it.
+    player.invulnerableUntil = Math.max(player.invulnerableUntil, now + 320);
     const exhaustedUntil = chain >= 1 ? now + DODGE_EXHAUSTION_MS : 0;
     this.dodgePressure.set(client.sessionId, { chain, lastAt: now, exhaustedUntil });
-    this.activeDodgeWindows.set(client.sessionId, { startedAt: now, until: player.invulnerableUntil });
+    this.activeDodgeWindows.set(client.sessionId, { startedAt: actionAt, until: now + 320 });
     client.send("dodge:pressure", {
       phase: exhaustedUntil > now ? "exhausted" : "dodge", cost, chain, exhaustedUntil, counterUntil: 0, staminaRestored: 0,
     } satisfies DodgePressureUpdate);
@@ -7300,6 +7303,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       return this.reject(client, { requestId: parsed.data.requestId, action: "attack", reason: "rate" });
     }
     const now = Date.now();
+    const actionAt = compensatedActionAt(now, parsed.data.actionAt);
     const mainHandId = player.mainHandId as MainHandId;
     const attackDefinition = WEAPON_ATTACK_DEFINITIONS[mainHandId];
     if (!attackDefinition) {
@@ -7317,20 +7321,20 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.attackChains.set(client.sessionId, {
       step,
       mainHandId,
-      recoveryUntil: now + timing.durationMs,
-      comboExpiresAt: now + timing.durationMs + attackDefinition.comboWindowMs,
+      recoveryUntil: actionAt + timing.durationMs,
+      comboExpiresAt: actionAt + timing.durationMs + attackDefinition.comboWindowMs,
     });
     this.pendingAttacks.set(client.sessionId, {
       requestId: parsed.data.requestId,
       mainHandId,
       yaw: parsed.data.yaw,
       step,
-      impactAt: now + timing.impactMs,
+      impactAt: actionAt + timing.impactMs,
     });
     player.yaw = parsed.data.yaw;
     player.attackStep = step;
     player.actionSequence += 1;
-    this.sendCombatTiming(client.sessionId, { requestId: parsed.data.requestId, action: "attack", phase: "accepted", serverTime: now, scheduledAt: now + timing.impactMs });
+    this.sendCombatTiming(client.sessionId, { requestId: parsed.data.requestId, action: "attack", phase: "accepted", serverTime: now, scheduledAt: actionAt + timing.impactMs });
   }
 
   private clearMobAttackTimeline(mob: MobState): void {

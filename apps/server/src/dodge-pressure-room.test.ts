@@ -53,4 +53,12 @@ describe("authoritative dodge pressure", () => {
     expect(mob.health).toBe(6);
     expect((room as any).dodgeCounterUntil.has("hero")).toBe(false);
   });
+
+  it("does not shorten the dodge window when its request arrives late", () => {
+    const { room, player } = fixture();
+    const client = { sessionId: "hero", send: vi.fn() } as any;
+    (room as any).handleDodge(client, { requestId: "late", strafe: 1, forward: 0, yaw: 90, actionAt: 9_800 });
+    expect((room as any).activeDodgeWindows.get("hero")).toEqual({ startedAt: 9_900, until: 10_320 });
+    expect(player.invulnerableUntil).toBe(10_320);
+  });
 });

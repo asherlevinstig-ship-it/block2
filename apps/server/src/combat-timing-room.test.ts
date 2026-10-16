@@ -36,4 +36,19 @@ describe("owner-only combat timing", () => {
     expect(owner.send).toHaveBeenCalledOnce();
     expect(other.send).not.toHaveBeenCalled();
   });
+
+  it("uses only a capped part of a delayed attack message", () => {
+    const room = new WorldRoom(); room.setState(new WorldState());
+    const player = new PlayerState(); Object.assign(player, { x: 40.5, y: 8, z: 18.5 });
+    room.state.players.set("hero", player);
+    const client = { sessionId: "hero", send: vi.fn() } as any;
+    room.clients.push(client);
+    vi.spyOn(Date, "now").mockReturnValue(10_000);
+    (room as any).handleAttack(client, { requestId: "delayed", yaw: 90, actionAt: 9_800 });
+    expect((room as any).pendingAttacks.get("hero").impactAt).toBe(10_035);
+    expect((room as any).attackChains.get("hero").recoveryUntil).toBeLessThan(10_000 + 600);
+    expect(client.send).toHaveBeenCalledWith("combat:timing", expect.objectContaining({
+      requestId: "delayed", scheduledAt: 10_035,
+    }));
+  });
 });

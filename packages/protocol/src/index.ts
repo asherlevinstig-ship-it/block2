@@ -1375,6 +1375,7 @@ export const MineBlockRequestSchema = z.object({
 export const AttackRequestSchema = z.object({
   requestId: z.string().min(1).max(64),
   yaw: z.number().finite(),
+  actionAt: z.number().finite().optional(),
 });
 
 export const DodgeRequestSchema = z.object({
@@ -1382,6 +1383,7 @@ export const DodgeRequestSchema = z.object({
   strafe: z.number().finite().min(-1).max(1),
   forward: z.number().finite().min(-1).max(1),
   yaw: z.number().finite(),
+  actionAt: z.number().finite().optional(),
 });
 
 export const DefenseRequestSchema = z.object({

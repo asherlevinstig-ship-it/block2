@@ -8540,7 +8540,8 @@ function requestAttack(): void {
   attackSequence += 1;
   const requestId = `attack-${attackSequence}`;
   combatSync.start("attack", requestId, now);
-  room.send("attack", { requestId, yaw: localActionFacingYaw });
+  room.send("attack", { requestId, yaw: localActionFacingYaw,
+    ...(serverClock.synchronized ? { actionAt: now + serverClock.offset } : {}) });
   logMovementEvent(`ACTION ${localMainHandId} step=${comboStep} impact=${timing.impactMs}ms yaw=${localActionFacingYaw.toFixed(1)}`);
   const attackName = attackDefinition.combo
     ? `${MAIN_HAND_DEFINITIONS[localMainHandId].attackName} ${comboStep}`
@@ -8628,6 +8629,7 @@ function requestDodge(): void {
     strafe: direction.x,
     forward: direction.z,
     yaw: localFacingYaw,
+    ...(serverClock.synchronized ? { actionAt: now + serverClock.offset } : {}),
   });
   showCombatFeedback(dodgeChain >= 1 ? `DODGE −${dodgeCost} · EXHAUSTED` : `DODGE −${dodgeCost}`, "dodge");
   logMovementEvent(`DODGE ${direction.x.toFixed(2)}, ${direction.z.toFixed(2)}`);
