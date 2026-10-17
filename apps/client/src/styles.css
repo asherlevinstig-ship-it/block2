@@ -2210,6 +2210,19 @@ html.boss-hud-active #world-objective { display: none !important; }
 #level-up-later:hover, #level-up-later:focus-visible { color: #fff0b8; text-decoration: underline; }
 #level-up-celebration { position: fixed; z-index: 45; top: 17%; left: 50%; width: min(440px, calc(100vw - 32px)); padding: 22px 26px; transform: translateX(-50%); border: 2px solid #ffde83; border-radius: 16px; background: radial-gradient(circle at 50% -20%, #806026, #19251b 72%); color: #fff4c8; box-shadow: 0 16px 56px #000b, 0 0 52px #e9bb6177; text-align: center; pointer-events: auto; animation: level-reveal .55s cubic-bezier(.2,1.4,.35,1) both; }
 #level-up-celebration[hidden] { display: none; }
+#ability-reveal { position: fixed; inset: 0; z-index: 1150; display: grid; place-items: center; padding: 20px; background: #040a09dc; backdrop-filter: blur(7px); }
+#ability-reveal[hidden] { display: none; }
+.ability-reveal-card { width: min(490px, 100%); box-sizing: border-box; padding: clamp(24px, 5vw, 42px); border: 2px solid #d9b768; border-radius: 22px; background: radial-gradient(circle at 50% 13%, #4b3720 0, #17251f 55%, #0d1916 100%); box-shadow: 0 25px 90px #000d, 0 0 55px #e9b45755; color: #f5edce; text-align: center; animation: ability-reveal-in .45s ease-out both; }
+.ability-reveal-card > small { display: block; color: #d9c78b; font: 900 11px/1.4 system-ui, sans-serif; letter-spacing: .15em; }
+.ability-reveal-sigil { display: grid; place-items: center; width: 88px; height: 88px; margin: 22px auto 10px; border: 2px solid #e7c76e; border-radius: 22px; transform: rotate(45deg); background: linear-gradient(145deg, #745326, #1c513c); box-shadow: 0 0 35px #f1ce7066; color: #ffe69c; font-size: 45px; }
+.ability-reveal-sigil span { display: block; transform: rotate(-45deg); }
+.ability-reveal-card h2 { margin: 20px 0 12px; color: #fff0ac; font: 700 clamp(30px, 6vw, 44px)/1.1 Georgia, serif; }
+.ability-reveal-card p { margin: 0 auto 14px; max-width: 390px; color: #d6e2d6; font: 600 15px/1.5 system-ui, sans-serif; }
+#ability-reveal-use { color: #f1d48a; font-weight: 800; }
+#ability-reveal-continue { min-width: 190px; margin: 18px 0 20px; padding: 13px 22px; border: 1px solid #ffe394; border-radius: 10px; background: #e8bf61; color: #241a0e; cursor: pointer; font: 1000 13px system-ui, sans-serif; letter-spacing: .08em; }
+#ability-reveal-continue:hover, #ability-reveal-continue:focus-visible { background: #ffe19a; }
+.ability-reveal-card > .ability-reveal-place { color: #8fb7a7; font-size: 9px; }
+@keyframes ability-reveal-in { from { opacity: 0; transform: translateY(18px) scale(.94); } to { opacity: 1; transform: translateY(0) scale(1); } }
 #level-up-celebration small, #level-up-celebration strong, #level-up-celebration span { display: block; }
 #level-up-celebration small { color: #ffcf6e; font: 1000 11px system-ui; letter-spacing: .18em; }
 #level-up-celebration strong { margin: 5px 0; color: #fff8d3; font: 900 clamp(32px, 5vw, 51px) Georgia, serif; text-shadow: 0 0 20px #ffdb7eaa; }
@@ -2237,7 +2250,7 @@ html.boss-hud-active #world-objective { display: none !important; }
 @keyframes level-reveal { from { opacity: 0; transform: translateX(-50%) scale(.74); filter: brightness(1.7); } to { opacity: 1; transform: translateX(-50%) scale(1); filter: brightness(1); } }
 #player-level[data-points="true"] { border-color: #ffe186; box-shadow: 0 0 17px #e7b955bb; animation: level-ready 1.3s ease-in-out infinite; }
 @keyframes level-ready { 50% { box-shadow: 0 0 27px #ffe186dd; filter: brightness(1.28); } }
-@media (prefers-reduced-motion: reduce) { #level-up-celebration, #player-level[data-points="true"] { animation: none; } }
+@media (prefers-reduced-motion: reduce) { #level-up-celebration, #player-level[data-points="true"], .ability-reveal-card { animation: none; } }
 @media (max-width: 520px) { .level-up-choices { grid-template-columns: 1fr; } }
 
 #minimap { position: fixed; z-index: 20; top: calc(94px + env(safe-area-inset-top)); right: max(14px, env(safe-area-inset-right)); width: 240px; box-sizing: border-box; border: 1px solid #afc99a55; border-radius: 13px; background: #0b1916ed; color: #d9e8ce; box-shadow: 0 8px 26px #0005; padding: 9px; }

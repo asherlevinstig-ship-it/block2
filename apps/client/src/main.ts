@@ -7,6 +7,7 @@ import { confirmedRangedHit, projectileImpactCue } from "./ranged-feedback.js";
 import { heldFireStep } from "./held-fire.js";
 import { callingLevelGuide, statChoiceDisabled } from "./progression-guidance.js";
 import { progressionNotice as chooseProgressionNotice, type ProgressionNotice } from "./progression-notice.js";
+import { abilityRevealUse, canPresentAbilityReveal, earnedCallingAbilities } from "./ability-reveal.js";
 import { queueWorldNotice, type WorldNotice } from "./notification-lane.js";
 import { rangedAimYaw } from "./ranged-aim.js";
 import { activeCombatNearby, advanceBossHud, initialBossHud, leaderAttackLabel, leaderExposureLabel, leaderExposureRoleLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
@@ -834,6 +835,14 @@ const progressionNoticeTitle = document.querySelector<HTMLElement>("#progression
 const progressionNoticeDetail = document.querySelector<HTMLElement>("#progression-notice-detail")!;
 const progressionNoticeAction = document.querySelector<HTMLButtonElement>("#progression-notice-action")!;
 const progressionNoticeLater = document.querySelector<HTMLButtonElement>("#progression-notice-later")!;
+const abilityRevealPanel = document.querySelector<HTMLElement>("#ability-reveal")!;
+const abilityRevealPath = document.querySelector<HTMLElement>("#ability-reveal-path")!;
+const abilityRevealTitle = document.querySelector<HTMLElement>("#ability-reveal-title")!;
+const abilityRevealDescription = document.querySelector<HTMLElement>("#ability-reveal-description")!;
+const abilityRevealUseHint = document.querySelector<HTMLElement>("#ability-reveal-use")!;
+const abilityRevealContinue = document.querySelector<HTMLButtonElement>("#ability-reveal-continue")!;
+let activeAbilityRevealId: CallingAbilityId | null = null;
+const seenAbilityReveals = new Set<CallingAbilityId>();
 let currentProgressionNotice: ProgressionNotice | null = null;
 let dismissedStatLevel = -1;
 let dismissedCallingLevel = -1;
@@ -3887,20 +3896,57 @@ function updateLevelCelebration(now: number): void {
     levelCelebration.hidden = true;
 }
 
-function callingUnlockStorageKey(pathId: BuildPathId): string {
-  return `calling-ability-seen-v1:${profileToken}:${pathId}`;
+function abilityRevealStorageKey(abilityId: CallingAbilityId): string {
+  return `calling-ability-reveal-v1:${profileToken}:${abilityId}`;
 }
 
-function unseenCallingAbilityNames(): string[] {
+function unseenCallingAbilityIds(): CallingAbilityId[] {
   const update = lastBuildPathUpdate;
-  if (!update?.selectedPathId || localCharacterProgression.level < 2) return [];
-  let seenRank = -1;
-  try { seenRank = Number(window.localStorage.getItem(callingUnlockStorageKey(update.selectedPathId)) ?? -1); } catch { /* Private storage may be unavailable. */ }
-  return CALLING_ABILITY_OPTIONS.filter(option => option.pathId === update.selectedPathId
-    && option.unlockRank > seenRank && option.unlockRank <= update.rank
-    && option.id !== "assassin_death_mark" && option.id !== update.selectedCallingAbilityId)
-    .map(option => option.name);
+  if (!update?.selectedPathId) return [];
+  return earnedCallingAbilities(update.selectedPathId, update.rank, localCharacterProgression.level)
+    .filter(id => {
+      if (seenAbilityReveals.has(id)) return false;
+      try { return window.localStorage.getItem(abilityRevealStorageKey(id)) !== "1"; }
+      catch { return true; }
+    });
 }
+
+function isAtTownOfBeginnings(): boolean {
+  if (activeRoomName !== WORLD_ROOM || playerCutaway.active) return false;
+  const position = localPlayer.getPosition();
+  return Math.hypot(position.x - TOWN_CENTER_X, position.z - TOWN_CENTER_Z) < TOWN_SAFE_RADIUS;
+}
+
+function updateAbilityReveal(): void {
+  if (!abilityRevealPanel.hidden || !canPresentAbilityReveal({ worldReady, inTown: isAtTownOfBeginnings(),
+    defeated: !defeatScreen.hidden, levelCelebrating: !levelCelebration.hidden || pendingLevelCelebrations.length > 0,
+    otherDialogOpen: reportedProtectedDialog === true })) return;
+  const id = unseenCallingAbilityIds()[0];
+  if (!id) return;
+  const definition = CALLING_ABILITY_OPTIONS.find(option => option.id === id)!;
+  activeAbilityRevealId = id;
+  abilityRevealPath.textContent = `${BUILD_PATHS[definition.pathId].name.toUpperCase()} · ABILITY UNLOCKED`;
+  abilityRevealTitle.textContent = definition.name;
+  abilityRevealDescription.textContent = definition.description;
+  abilityRevealUseHint.textContent = abilityRevealUse(id, localBuildPathRank, localCharacterProgression.level);
+  abilityRevealPanel.hidden = false;
+  combatAudio.play("levelUp");
+  resetMovementControls();
+  abilityRevealContinue.focus();
+}
+
+abilityRevealContinue.addEventListener("click", () => {
+  const id = activeAbilityRevealId;
+  if (!id) return;
+  seenAbilityReveals.add(id);
+  try { window.localStorage.setItem(abilityRevealStorageKey(id), "1"); }
+  catch { /* Keep the one-session acknowledgement if storage is unavailable. */ }
+  if (id === localCallingAbilityId) dismissedUseAbilityId = id;
+  activeAbilityRevealId = null;
+  abilityRevealPanel.hidden = true;
+  refreshCallingUnlockNotice();
+  canvas.focus();
+});
 
 function callingPowerUsed(abilityId: CallingAbilityId): boolean {
   try { return window.localStorage.getItem(`calling-power-used-v1:${profileToken}:${abilityId}`) === "1"; }
@@ -3915,9 +3961,9 @@ function refreshProgressionNotice(): void {
     statDismissed: dismissedStatLevel === localCharacterProgression.level,
     hasCalling: Boolean(localBuildPathId), canChooseCalling: lastBuildPathUpdate?.canChoose === true,
     callingDismissed: dismissedCallingLevel === localCharacterProgression.level,
-    newAbilityNames: unseenCallingAbilityNames(),
+    newAbilityNames: [],
     equipDismissed: dismissedEquipKey === `${lastBuildPathUpdate?.selectedPathId}:${lastBuildPathUpdate?.rank}`,
-    equippedAbilityName: localCharacterProgression.level >= 2 ? selectedAbility?.name ?? null : null,
+    equippedAbilityName: isAtTownOfBeginnings() && localCharacterProgression.level >= 2 ? selectedAbility?.name ?? null : null,
     equippedAbilityUsed: !selectedAbility || callingPowerUsed(selectedAbility.id),
     useDismissed: dismissedUseAbilityId === selectedAbility?.id,
   });
@@ -3958,14 +4004,6 @@ function updateProgressionNoticeVisibility(now: number): void {
 }
 
 function refreshCallingUnlockNotice(): void {
-  combatHud.setNewCallingUnlock(unseenCallingAbilityNames().join(", ") || null);
-  refreshProgressionNotice();
-}
-
-function markCallingUnlockSeen(): void {
-  const update = lastBuildPathUpdate;
-  if (!update?.selectedPathId || localCharacterProgression.level < 2) return;
-  try { window.localStorage.setItem(callingUnlockStorageKey(update.selectedPathId), String(update.rank)); } catch { /* Private storage may be unavailable. */ }
   combatHud.setNewCallingUnlock(null);
   refreshProgressionNotice();
 }
@@ -9682,7 +9720,6 @@ for (const button of traitPickerButtons) {
   });
 }
 combatHudRoot.addEventListener("click", event => {
-  if ((event.target as HTMLElement).closest("#loadout-toggle")) markCallingUnlockSeen();
   const augmentButton = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-calling-augment]");
   const augmentId = augmentButton?.dataset.callingAugment as CallingAugmentId | undefined;
   if (augmentButton) {
@@ -10361,6 +10398,7 @@ app.on("update", (dt: number) => {
   updateLootHold(animationNow);
   updateLootWorldLabel();
   updateLevelCelebration(animationNow);
+  updateAbilityReveal();
   updateProgressionNoticeVisibility(animationNow);
   for (const [mobId, mob] of mobVisuals) {
     if (mob.frameAlive !== mob.state.alive) {
@@ -11425,17 +11463,12 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     if (update.reason === "level_up") {
       const milestone = CHARACTER_MILESTONES.find(entry => entry.level === update.level);
       const callingReminder = !localBuildPathId && update.level >= 2 ? " · choose a Calling in Town for abilities" : "";
-      const namedAbility = update.level === 2 && localBuildPathId
-        ? CALLING_ABILITY_OPTIONS.find(option => option.pathId === localBuildPathId && option.category === "Core")
-        : update.level === 4 && localBuildPathId
-          ? CALLING_ABILITY_OPTIONS.find(option => option.pathId === localBuildPathId && option.category === "Utility") : null;
-      pendingLevelCelebrations.push({ level: update.level, detail: namedAbility
-        ? `${namedAbility.name} unlocked · ${update.level === 2 ? "G" : "F"} to use · a stat point is ready`
-        : !localBuildPathId && (update.level === 2 || update.level === 4)
-          ? `Choose a Calling in Town for your ${update.level === 2 ? "Power (G)" : "Special (F)"} · a stat point is ready`
-        : milestone ? `${milestone.name} unlocked · a permanent stat point is ready${callingReminder}`
+      pendingLevelCelebrations.push({ level: update.level, detail: milestone && milestone.id !== "first_power" && milestone.id !== "first_special"
+        ? `${milestone.name} unlocked · a permanent stat point is ready${callingReminder}`
         : `A permanent stat point is ready · +${update.experienceGranted ?? 0} XP${callingReminder}` });
-      status.textContent = milestone ? `Level ${update.level}! ${milestone.name} unlocked. Choose a permanent character improvement.` : `Level ${update.level}! Choose a permanent character improvement.`;
+      status.textContent = milestone && milestone.id !== "first_power" && milestone.id !== "first_special"
+        ? `Level ${update.level}! ${milestone.name} unlocked. Choose a permanent character improvement.`
+        : `Level ${update.level}! Choose a permanent character improvement.`;
     } else if (update.reason === "experience" && update.experienceGranted) {
       status.textContent = `+${update.experienceGranted} XP · ${update.source ?? "adventuring"}`;
     } else if (update.reason === "choice") {
