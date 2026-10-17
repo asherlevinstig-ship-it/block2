@@ -72,7 +72,7 @@ import { createServerClock, sampleServerClock, enemyAttackPresentation } from ".
 import { bruteRecoveryPose, enemyAwarenessCue, enemyCombatCue, enemyCueLineClear, enemyShotGuideLength } from "./enemy-combat-cues.js";
 import { confirmPredictedDodges, removeRejectedDodge, replayPendingMovement, type PredictionFrame } from "./prediction-replay.js";
 import { advanceCameraOrbit, cameraOrbitOffset, initialCameraOrbit } from "./camera-orbit.js";
-import { advanceCameraFollow, advanceCameraHeight } from "./camera-follow.js";
+import { advanceCameraFollow, advanceCameraHeight, advanceCameraPosition } from "./camera-follow.js";
 import { CombatSyncRecorder } from "./combat-sync.js";
 import {
   advanceDodgeVisualOffset,
@@ -186,6 +186,7 @@ import {
   type TavernQuizUpdate,
   TAVERN_QUIZ_STARTING_COINS,
   type MainHandId,
+  type MoveRequest,
   type MobHazardPlaced,
   type MobProjectileReleased,
   type PlayerHit,
@@ -3214,6 +3215,7 @@ let cameraShakeUntil = 0;
 let cameraShakeStrength = 0;
 let lastProcessedInputSequence = 0;
 const pendingPredictionFrames: PredictionFrame[] = [];
+const unsentMovementSteps: NonNullable<MoveRequest["steps"]> = [];
 let blockedAcknowledgements = 0;
 let lastAuthoritativeDodgeSequence = 0;
 let lastAuthoritativeMovementAt = 0;
@@ -7822,6 +7824,7 @@ function renderBootstrap(payload: WorldBootstrap): void {
   localDodgeChain = 0;
   localDodgeExhaustedUntil = 0;
   pendingPredictionFrames.length = 0;
+  unsentMovementSteps.length = 0;
   blockedAcknowledgements = 0;
   lastAuthoritativeDodgeSequence = ownPlayer?.dodgeSequence ?? 0;
   smoothedMovement = { x: 0, z: 0 };
@@ -7912,6 +7915,7 @@ function clearDefeatCombat(): void {
   localHitPauseUntil = 0;
   localComboStep = 0; localComboExpiresAt = 0;
   pendingPredictionFrames.length = 0;
+  unsentMovementSteps.length = 0;
   blockedAcknowledgements = 0;
   pendingStopInputSequence = null;
   cameraShakeUntil = 0; cameraShakeStrength = 0;
@@ -8052,6 +8056,7 @@ function activateMovementPilot(joinedRoom: Room): void {
   localRecoveryVisualOffset = { x: 0, z: 0 };
   localDodgeVisualOffset = { x: 0, z: 0 };
   pendingPredictionFrames.length = 0;
+  unsentMovementSteps.length = 0;
   blockedAcknowledgements = 0;
   logMovementEvent("COLYSEUS CONTROLLING MOVEMENT");
 }
@@ -8578,7 +8583,7 @@ function logMovementEvent(message: string): void {
 movementDebugCopy.addEventListener("click", async () => {
   const trace = activeStopTrace ? formatStopTrace(activeStopTrace) : completedStopTrace;
   const snapTrace = activeSnapTrace ? formatStopTrace(activeSnapTrace, "SNAP") : "";
-  const text = `SNAP DIAGNOSTICS v1\nurl=${window.location.origin}${window.location.pathname} room=${activeRoomName}\n${movementDebugLive.textContent ?? ""}\n\nCOMBAT SYNC (owner-only; receive = local send-to-message, server = authoritative processing)\n${combatSync.snapshot()}\n\nSNAP EVENTS (oldest first)\n${snapDiagnosticEvents.join("\n") || "No snap detected yet."}\n\nEVENTS\n${movementEventLog.join("\n")}\n\n${[...completedSnapTraces, snapTrace].filter(Boolean).join("\n\n")}\n\n${trace}`;
+  const text = `SNAP DIAGNOSTICS v2\nurl=${window.location.origin}${window.location.pathname} room=${activeRoomName}\n${movementDebugLive.textContent ?? ""}\n\nCOMBAT SYNC (owner-only; receive = local send-to-message, server = authoritative processing)\n${combatSync.snapshot()}\n\nSNAP EVENTS (oldest first)\n${snapDiagnosticEvents.join("\n") || "No snap detected yet."}\n\nEVENTS\n${movementEventLog.join("\n")}\n\n${[...completedSnapTraces, snapTrace].filter(Boolean).join("\n\n")}\n\n${trace}`;
   await navigator.clipboard.writeText(text);
   movementDebugCopy.textContent = "COPIED";
   window.setTimeout(() => { movementDebugCopy.textContent = "COPY LOG"; }, 1000);
@@ -8592,9 +8597,13 @@ function resetMovementControls(): void {
   touchForward = 0;
   smoothedMovement = { x: 0, z: 0 };
   lastSentMovement = { x: 0, z: 0 };
-  if (!room || !worldReady || movementPilotController) return;
+  if (!room || !worldReady || movementPilotController) {
+    unsentMovementSteps.length = 0;
+    return;
+  }
   moveSequence += 1;
-  room.send("move", { sequence: moveSequence, strafe: 0, forward: 0, yaw: localFacingYaw });
+  room.send("move", { sequence: moveSequence, strafe: 0, forward: 0, yaw: localFacingYaw,
+    steps: unsentMovementSteps.splice(0) });
 }
 
 window.addEventListener("blur", resetMovementControls);
@@ -8967,6 +8976,15 @@ function requestDodge(): void {
         x: Math.sin(localFacingYaw * Math.PI / 180),
         z: Math.cos(localFacingYaw * Math.PI / 180),
       };
+  // A dodge is its own authoritative movement event. Send any earlier walking
+  // steps first so the server replays them before the dash, not after it.
+  if (!movementPilotController && unsentMovementSteps.length) {
+    moveSequence += 1;
+    lastMoveSentAt = now;
+    room.send("move", { sequence: moveSequence, strafe: smoothedMovement.x,
+      forward: smoothedMovement.z, yaw: localFacingYaw, steps: unsentMovementSteps.splice(0) });
+    lastSentMovement = { ...smoothedMovement };
+  }
   const current = localPlayer.getPosition();
   const predicted = resolveSweptHorizontalMotion(
     { x: current.x, y: current.y, z: current.z },
@@ -9892,10 +9910,11 @@ app.on("update", (dt: number) => {
   ) : { x: current.x, y: current.y, z: current.z, grounded, hitVertical: false, stepped: false };
   const requestedTravel = Math.hypot(smoothedMovement.x, smoothedMovement.z) * localMovementSpeed() * frameTime;
   const sendMovementThisFrame = movementDirectionChanged(lastSentMovement, smoothedMovement)
-    || performance.now() - lastMoveSentAt >= 50;
+    || performance.now() - lastMoveSentAt >= 50 || unsentMovementSteps.length >= 11;
   if (room && worldReady && !movementPilotController) {
+    unsentMovementSteps.push({ strafe: smoothedMovement.x, forward: smoothedMovement.z, dtMs: frameTime * 1_000 });
     pendingPredictionFrames.push({
-      sequence: moveSequence + Number(sendMovementThisFrame),
+      sequence: moveSequence + 1,
       x: smoothedMovement.x * localMovementSpeed() * frameTime,
       z: smoothedMovement.z * localMovementSpeed() * frameTime,
     });
@@ -10622,7 +10641,8 @@ app.on("update", (dt: number) => {
     desiredCamera.y += Math.cos(animationNow * 0.12) * amplitude * 0.55;
     desiredCamera.z += Math.sin(animationNow * 0.14 + 1.7) * amplitude;
   }
-  camera.setPosition(desiredCamera);
+  const smoothCamera = advanceCameraPosition(camera.getPosition(), desiredCamera, frameTime);
+  camera.setPosition(smoothCamera.x, smoothCamera.y, smoothCamera.z);
   camera.lookAt(cameraFocus.x, cameraFocus.y - 2, cameraFocus.z);
   updateNorthwatchPatrolCue(player);
   updateObjectiveGuidance();
@@ -10811,6 +10831,7 @@ app.on("update", (dt: number) => {
       strafe: smoothedMovement.x,
       forward: smoothedMovement.z,
       yaw: localFacingYaw,
+      steps: unsentMovementSteps.splice(0),
       ...(stopPosition ? { stopX: stopPosition.x, stopY: stopPosition.y, stopZ: stopPosition.z } : {}),
     });
     if (directionChanged) logMovementEvent(`DIR #${moveSequence} ${movementVectorLabel(lastSentMovement)} → ${movementVectorLabel(smoothedMovement)}`);
@@ -10827,6 +10848,7 @@ app.on("update", (dt: number) => {
       `local      ${player.x.toFixed(3)}, ${player.y.toFixed(3)}, ${player.z.toFixed(3)}`,
       `server     ${authoritativeLocalPosition.x.toFixed(3)}, ${authoritativeLocalPosition.y.toFixed(3)}, ${authoritativeLocalPosition.z.toFixed(3)}`,
       `A/B ${movementPilotController ? "COLYSEUS CONTROLS" : movementShadowInput ? "shadow only" : "off"} · diff=${movementShadowDifference?.toFixed(3) ?? "waiting"}m p50/p95=${percentile(movementShadowDifferences, 0.5).toFixed(3)}/${percentile(movementShadowDifferences, 0.95).toFixed(3)}m${movementShadowReset ? " reset" : ""}`,
+      `movement   ${movementPilotController ? "pilot" : "ordered replay"} · queued=${unsentMovementSteps.length} steps`,
       `pending    ${pendingPredictionFrames.length} prediction frames · raw d=${localPlayer.getPosition().distance(authoritativeLocalPosition).toFixed(3)}`,
       `loot       network=${room ? (room.state as any).lootDrops?.size ?? 0 : 0} · rendered=${lootVisuals.size}`,
       `reconcile  d=${reconciliation.distance.toFixed(3)} rate=${Number.isFinite(reconciliation.rate) ? reconciliation.rate.toFixed(1) : "HARD"}`,

@@ -1382,6 +1382,13 @@ export const MoveRequestSchema = z.object({
   strafe: z.number().finite().min(-1).max(1),
   forward: z.number().finite().min(-1).max(1),
   yaw: z.number().finite().default(0),
+  // Ordered client simulation steps. The server replays these against its own
+  // collision world instead of guessing the path from a held final direction.
+  steps: z.array(z.object({
+    strafe: z.number().finite().min(-1).max(1),
+    forward: z.number().finite().min(-1).max(1),
+    dtMs: z.number().finite().min(0).max(50),
+  })).max(12).optional(),
   stopX: z.number().finite().optional(),
   stopY: z.number().finite().optional(),
   stopZ: z.number().finite().optional(),

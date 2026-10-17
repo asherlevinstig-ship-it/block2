@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { advanceCameraFollow, advanceCameraHeight } from "./camera-follow.js";
+import { advanceCameraFollow, advanceCameraHeight, advanceCameraPosition } from "./camera-follow.js";
 
 describe("camera follow", () => {
   it("ignores small horizontal corrections while keeping height out of the calculation", () => {
@@ -48,5 +48,11 @@ describe("camera follow", () => {
   it("caps vertical travel over a one-block step", () => {
     expect(advanceCameraHeight(8, 9, 0.05)).toBeCloseTo(8.25);
     expect(advanceCameraHeight(9, 8, 0.05)).toBeCloseTo(8.75);
+  });
+
+  it("bounds a sudden indoor camera offset without slowing ordinary movement", () => {
+    const large = advanceCameraPosition({ x: 0, y: 0, z: 0 }, { x: 3, y: 2, z: 0 }, 0.05);
+    expect(Math.hypot(large.x, large.y, large.z)).toBeCloseTo(0.7);
+    expect(advanceCameraPosition({ x: 0, y: 0, z: 0 }, { x: .2, y: 0, z: 0 }, 0.05).x).toBe(.2);
   });
 });

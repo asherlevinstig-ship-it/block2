@@ -420,6 +420,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   override patchRate = 33;
   private readonly chunks = new Map<string, MutableChunk>();
   private readonly movementInputs = new Map<string, StoredMovementInput>();
+  private readonly orderedMovement = new Map<string, { lastAt: number; availableMs: number }>();
   private readonly movementShadows = new Map<string, ShadowPose>();
   private readonly movementPilotControllers = new Set<string>();
   private movementShadowEnabled = false;
@@ -1011,6 +1012,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.forestReturns.delete(client.sessionId);
     this.forestTravelAt.delete(client.sessionId);
     this.movementInputs.delete(client.sessionId);
+    this.orderedMovement.delete(client.sessionId);
     this.movementShadows.delete(client.sessionId);
     this.movementPilotControllers.delete(client.sessionId);
     this.movementRateWindows.delete(client.sessionId);
@@ -6160,11 +6162,50 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const previous = this.movementInputs.get(client.sessionId);
     // Always let the first explicit stop through, even during a burst of
     // direction changes. Rejecting it leaves the server moving until timeout.
-    if (!rate.allowed && !isExplicitStopTransition(previous, parsed.data))
+    if (!parsed.data.steps && !rate.allowed && !isExplicitStopTransition(previous, parsed.data))
+      return this.reject(client, { action: "move", reason: "rate" });
+    // Ordered packets can arrive in a legitimate burst after a delivery stall,
+    // but still cap empty or tiny packets independently of their time budget.
+    if (parsed.data.steps && rate.window.count > 120)
       return this.reject(client, { action: "move", reason: "rate" });
     if (previous && parsed.data.sequence <= previous.request.sequence) return;
     const rejection = movementRejectionReason(player, parsed.data);
     if (rejection) return this.reject(client, { action: "move", reason: rejection });
+    if (parsed.data.steps) {
+      const durationMs = parsed.data.steps.reduce((total, step) => total + step.dtMs, 0);
+      if (durationMs > 300) return this.reject(client, { action: "move", reason: "rate" });
+      const clock = this.orderedMovement.get(client.sessionId)
+        ?? { lastAt: now, availableMs: 400 };
+      // Bank elapsed real time while delivery stalls. A delayed packet burst
+      // can then replay its turns immediately, but the bounded bank prevents
+      // sustained faster-than-real-time movement.
+      const availableMs = Math.min(2_000, clock.availableMs + Math.max(0, now - clock.lastAt));
+      if (durationMs > availableMs)
+        return this.reject(client, { action: "move", reason: "rate" });
+      const speed = movementSpeedWithMomentum(player.defending ? 2.1 : 4.2,
+        player.momentumStacks, player.equippedTrait as TraitId)
+        * armourStats(player.armourId).speed * progressionSpeedMultiplier(player);
+      let pose = { x: player.x, y: player.y, z: player.z,
+        verticalVelocity: this.verticalVelocities.get(client.sessionId) ?? 0 };
+      for (const step of parsed.data.steps) pose = stepShadowMovement(pose, step,
+        speed, step.dtMs / 1_000, this.readWorldBlock);
+      player.x = pose.x; player.y = pose.y; player.z = pose.z;
+      this.verticalVelocities.set(client.sessionId, pose.verticalVelocity);
+      player.yaw = parsed.data.yaw;
+      player.lastProcessedInput = parsed.data.sequence;
+      clock.availableMs = availableMs - durationMs;
+      clock.lastAt = now;
+      this.orderedMovement.set(client.sessionId, clock);
+      this.movementInputs.set(client.sessionId, { request: parsed.data, receivedAt: now });
+      if (Math.hypot(parsed.data.strafe, parsed.data.forward) > 0.01) {
+        const mining = this.pendingMining.get(client.sessionId);
+        if (mining) {
+          this.pendingMining.delete(client.sessionId);
+          this.reject(client, { requestId: mining.request.requestId, action: "mine", reason: "moving" });
+        }
+      }
+      return;
+    }
     const requestedStop = requestedStopPosition(previous, parsed.data, player);
     if (requestedStop) {
       const correctedStop = resolvePlayerMotion(
@@ -6878,7 +6919,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
             { armourId: "forager_wrap" } satisfies RegionalArmourProc);
         }
       }
-      if (this.movementPilotControllers.has(sessionId)) continue;
+      if (this.movementPilotControllers.has(sessionId) || this.orderedMovement.has(sessionId)) continue;
       const input = activeMovementInput(this.movementInputs.get(sessionId), now, player.yaw);
       const inputLength = Math.hypot(input.strafe, input.forward);
       const scale = inputLength > 1 ? 1 / inputLength : 1;

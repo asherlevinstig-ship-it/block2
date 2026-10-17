@@ -3,6 +3,23 @@ export interface CameraFollowPoint {
   z: number;
 }
 
+export interface CameraPosition extends CameraFollowPoint { y: number }
+
+/** Indoor/outdoor offsets can change by several metres at a doorway. Keep
+ * the camera's world-space travel bounded even when its desired rig jumps. */
+export function advanceCameraPosition(
+  current: CameraPosition,
+  target: CameraPosition,
+  dt: number,
+  maximumSpeed = 14,
+): CameraPosition {
+  const dx = target.x - current.x, dy = target.y - current.y, dz = target.z - current.z;
+  const distance = Math.hypot(dx, dy, dz);
+  if (!Number.isFinite(distance) || distance === 0) return { ...target };
+  const fraction = Math.min(1, Math.max(0, dt) * maximumSpeed / distance);
+  return { x: current.x + dx * fraction, y: current.y + dy * fraction, z: current.z + dz * fraction };
+}
+
 /** Ignore tiny horizontal corrections, but never let the camera drift far
  * enough behind the player to feel floaty. Height is handled separately. */
 export function advanceCameraFollow(
