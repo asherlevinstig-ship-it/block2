@@ -1,14 +1,15 @@
 import { listen } from "@colyseus/tools";
 import { defineRoom, defineServer } from "@colyseus/core";
-import { SILVER_DEPTHS_ROOM, WORLD_ROOM } from "@blockcraft/protocol";
+import { PRACTICE_ROOM, SILVER_DEPTHS_ROOM, WORLD_ROOM } from "@blockcraft/protocol";
 import { WorldRoom } from "./game-room.js";
 
-const SERVER_BUILD = "colyseus-starter-kit-repair-v259";
+const SERVER_BUILD = "colyseus-calling-practice-v260";
 
 const gameServer = defineServer({
   rooms: {
     [WORLD_ROOM]: defineRoom(WorldRoom, { roomKind: "overworld" }),
     [SILVER_DEPTHS_ROOM]: defineRoom(WorldRoom, { roomKind: "silver-depths" }).filterBy(["instanceKey"]),
+    [PRACTICE_ROOM]: defineRoom(WorldRoom, { roomKind: "practice" }),
   },
   express: app => {
     app.get("/health", (_request, response) => response.json({

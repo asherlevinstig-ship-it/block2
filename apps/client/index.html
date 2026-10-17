@@ -345,7 +345,7 @@
     <section id="inventory-panel" role="dialog" aria-modal="true" aria-labelledby="inventory-title" data-tab="gear" hidden>
       <header class="inventory-header">
         <div><p class="eyebrow">EXPLORER'S PACK</p><h2 id="inventory-title">Inventory</h2></div>
-        <div class="inventory-header-actions"><button id="inventory-profile" type="button" aria-expanded="false" aria-controls="profile-controls">CHARACTER</button><button id="inventory-customize" type="button">CUSTOMIZE</button><button id="inventory-close" type="button" aria-label="Close inventory">×</button></div>
+        <div class="inventory-header-actions"><button id="ability-practice-open" type="button">TRY ABILITIES</button><button id="inventory-profile" type="button" aria-expanded="false" aria-controls="profile-controls">CHARACTER</button><button id="inventory-customize" type="button">CUSTOMIZE</button><button id="inventory-close" type="button" aria-label="Close inventory">×</button></div>
       </header>
       <section id="profile-controls" hidden aria-label="Character profiles">
         <strong>YOUR ADVENTURE</strong>
@@ -592,6 +592,15 @@
         <div id="build-path-candidates"></div>
         <footer><span id="calling-intro-status">Your recommended path reflects the gear and stats you use now.</span><button id="calling-intro-later" type="button">CHOOSE LATER</button></footer>
       </div>
+    </section>
+    <section id="ability-practice" aria-label="Ability practice" hidden>
+      <header><div><span>PRIVATE COMBAT ARENA</span><h2>Try every ability</h2></div><button id="ability-practice-close" type="button" aria-label="Close ability practice">×</button></header>
+      <p>Choose any Calling ability, then use <strong>G</strong> against the training enemies. <strong>F</strong> uses that Calling's Special. Nothing here changes your character or grants loot.</p>
+      <label for="ability-practice-calling">CALLING</label>
+      <select id="ability-practice-calling"></select>
+      <div id="ability-practice-list"></div>
+      <p id="ability-practice-status" role="status" aria-live="polite">Choose an ability to begin.</p>
+      <button id="ability-practice-return" type="button">RETURN TO TOWN</button>
     </section>
     <section id="loot-panel" class="loot-panel" hidden role="dialog" aria-modal="true" aria-labelledby="loot-title">
       <div class="loot-card">

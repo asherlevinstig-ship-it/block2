@@ -1,6 +1,7 @@
 import { Client, Room } from "@colyseus/core";
 import { GREENWOOD_MASTERY_CAP, MISTFEN_MASTERY_CAP, greenwoodMasteryRank, mistfenMasteryRank } from "@blockcraft/protocol";
 import { callingStarterAbility } from "@blockcraft/protocol";
+import { PRACTICE_ROOM } from "@blockcraft/protocol";
 import type { SchemaType } from "@colyseus/schema";
 import { ShadowMoveInput, stepShadowMovement, type ShadowPose } from "./movement-shadow.js";
 import { randomUUID } from "node:crypto";
@@ -314,7 +315,7 @@ interface SilverDepthsRunStats {
 }
 
 type WorldRoomOptions = {
-  roomKind?: "overworld" | "silver-depths";
+  roomKind?: "overworld" | "silver-depths" | "practice";
   instanceKey?: string;
   partySize?: number;
 };
@@ -561,7 +562,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private realmWardenRepeatActive = false;
   private realmWardenRepeatAvailableAt = 0;
   private worldSeed = "blockcraft-dev";
-  private roomKind: "overworld" | "silver-depths" = "overworld";
+  private roomKind: "overworld" | "silver-depths" | "practice" = "overworld";
+  private practiceReturnRoomId = new Map<string, string>();
   private silverInstanceKey = "";
   private instancePartySize = 1;
   private silverDepthsEncounterStage: SilverDepthsEncounterStage = 1;
@@ -588,7 +590,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly silverDepthsTransferPending = new Map<string, number>();
 
   override async onCreate(options: WorldRoomOptions = {}): Promise<void> {
-    this.roomKind = options.roomKind === "silver-depths" ? "silver-depths" : "overworld";
+    this.roomKind = options.roomKind === "silver-depths" ? "silver-depths" : options.roomKind === "practice" ? "practice" : "overworld";
     // The Colyseus input stream is the default. Keep an explicit server-side
     // rollback while older clients can still use the legacy "move" messages.
     this.movementShadowEnabled = process.env.MOVEMENT_NETCODE_LEGACY !== "1";
@@ -600,6 +602,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.silverInstanceKey = this.roomKind === "silver-depths" ? options.instanceKey ?? "" : "";
     this.instancePartySize = Math.max(1, Math.min(4, Math.floor(options.partySize ?? 1)));
     if (this.roomKind === "silver-depths") this.maxClients = 4;
+    if (this.roomKind === "practice") this.maxClients = 1;
     this.worldSeed = String(process.env.WORLD_SEED || "blockcraft-dev");
     this.worldDeltaStorageKey = worldDeltaHashKey(this.worldSeed);
     if (this.roomKind === "overworld") {
@@ -619,6 +622,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       }
     }
     this.setState(new WorldState());
+    if (this.roomKind === "practice") this.buildPracticeArena();
     const depthsEntry = new ForestPortalState();
     Object.assign(depthsEntry, TOWN_SILVER_DEPTHS_PORTAL_POSITION, { kind: "entry" });
     this.state.portals.set("depths-entry", depthsEntry);
@@ -663,6 +667,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.spawnSilverDepthsStage(1);
       this.state.portals.clear();
     }
+    if (this.roomKind === "practice") {
+      this.state.mobs.clear(); this.mobHomes.clear(); this.state.portals.clear();
+      this.registerMob("practice-crawler", "moss_crawler", { x: 105.5, y: 8, z: 104.5 });
+      this.registerMob("practice-spitter", "cave_spitter", { x: 105.5, y: 8, z: 108.5 });
+      for (const mob of this.state.mobs.values()) { mob.name = "Training " + mob.name; mob.attackDamage = 1; mob.maxHealth = mob.health = 28; }
+    }
     this.onMessage("world:ready", client => {
       client.send("world:bootstrap", this.bootstrapPayload(this.state.players.get(client.sessionId)));
       const starterPlayer = this.state.players.get(client.sessionId);
@@ -675,6 +685,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       }
       this.sendHuntCollection(client);
       this.sendBuildPath(client);
+      if (this.roomKind === "practice") client.send("practice:state", { active: true, message: "Training arena · select any ability, then use G. F uses your Calling Special. Your character will not be changed." });
       this.sendEquipmentAffixes(client);
       if (this.roomKind === "overworld") client.send("party:update", this.parties.snapshot(client.sessionId, this.state.players, Date.now()));
       if (this.roomKind === "overworld") for (const [key, lobby] of this.silverDepthsLobbies)
@@ -700,6 +711,26 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       }
     });
     this.onMessage("world:chunks", (client, payload) => this.handleChunkRegionRequest(client, payload));
+    this.onMessage("practice:enter", client => {
+      const player = this.state.players.get(client.sessionId);
+      if (this.roomKind !== "overworld" || !player || !isInsideTownSafeZone(player)) {
+        client.send("practice:state", { active: false, message: "Return to the Town of Beginnings to enter the training arena." }); return;
+      }
+      void this.persistPlayer(client.sessionId, player, true)
+        .then(() => client.send("room:transfer", { room: PRACTICE_ROOM, worldRoomId: this.roomId } satisfies RoomTransfer))
+        .catch(() => client.send("practice:state", { active: false, message: "Your character could not be saved. Please try the arena again shortly." }));
+    });
+    this.onMessage("practice:select", (client, payload: unknown) => this.selectPracticeAbility(client, payload));
+    this.onMessage("practice:menu", (client, payload: unknown) => {
+      if (this.roomKind !== "practice") return;
+      const player = this.state.players.get(client.sessionId);
+      if (player) player.invulnerableUntil = typeof payload === "object" && payload && "open" in payload && payload.open === true
+        ? Date.now() + 600_000 : 0;
+    });
+    this.onMessage("practice:leave", client => {
+      if (this.roomKind !== "practice") return;
+      client.send("room:transfer", { room: WORLD_ROOM, returnFrom: "practice", worldRoomId: this.practiceReturnRoomId.get(client.sessionId) } satisfies RoomTransfer);
+    });
     this.onMessage("chat:send", (client, payload: unknown) => this.handleNearbyChat(client, payload));
     this.onMessage("trade:request", (client, payload: unknown) => {
       const parsed = TradeRequestSchema.safeParse(payload); if (!parsed.success || !this.state.players.has(client.sessionId)) return;
@@ -913,10 +944,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       player.isAdmin = await this.resolveAdminAccess(profileToken, requestedAdminPass);
     }
     const requestedQaSpawn = typeof options === "object" && options && "qaSpawn" in options ? String(options.qaSpawn) : "";
+    if (this.roomKind === "practice" && typeof options === "object" && options && "worldRoomId" in options
+      && typeof options.worldRoomId === "string") this.practiceReturnRoomId.set(client.sessionId, options.worldRoomId);
     const returningFromDepths = typeof options === "object" && options && "returnFrom" in options && options.returnFrom === "silver-depths";
     const instanceSpawn = SILVER_DEPTHS_PARTY_SPAWNS.find(candidate => [...this.state.players.values()]
       .every(other => Math.hypot(other.x - candidate.x, other.z - candidate.z) >= 1.25)) ?? SILVER_DEPTHS_ENTRY_POSITION;
-    const spawn = this.roomKind === "silver-depths" ? instanceSpawn
+    const spawn = this.roomKind === "practice" ? { x: 99.5, y: 8, z: 106.5 }
+      : this.roomKind === "silver-depths" ? instanceSpawn
       : process.env.NODE_ENV !== "production" && requestedQaSpawn === "cave"
       ? { x: 37.5, y: 3, z: 8.5 }
       : process.env.NODE_ENV !== "production" && requestedQaSpawn === "spitter"
@@ -933,6 +967,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     player.x = spawn.x;
     player.y = spawn.y;
     player.z = spawn.z;
+    if (this.roomKind === "practice") {
+      player.level = Math.max(player.level, 10);
+      player.health = player.maxHealth;
+      player.stamina = player.maxStamina;
+      player.invulnerableUntil = Date.now() + 600_000;
+      this.setPracticeAbility(player, "assassin_vanish");
+    }
     if (process.env.NODE_ENV !== "production" && (requestedQaSpawn === "combat" || requestedQaSpawn === "spitter" || requestedQaSpawn === "greenwood" || requestedQaSpawn === "stream")) {
       player.invulnerableUntil = Date.now() + 60 * 60 * 1000;
     }
@@ -1023,6 +1064,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       // Always finish room cleanup even if external save storage is unavailable.
     }
     this.state.players.delete(client.sessionId);
+    this.practiceReturnRoomId.delete(client.sessionId);
     for (let index = this.pendingIncomingHits.length - 1; index >= 0; index--)
       if (this.pendingIncomingHits[index]!.playerId === client.sessionId) this.pendingIncomingHits.splice(index, 1);
     this.silverDepthsRuns.delete(client.sessionId);
@@ -1903,6 +1945,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   }
 
   private persistPlayer(sessionId: string, player: PlayerState, force = false): Promise<void> {
+    if (this.roomKind === "practice") return Promise.resolve();
     const profileToken = this.profileTokens.get(sessionId);
     if (!profileToken) return Promise.resolve();
     const fingerprint = serializePlayerSave(player, 0);
@@ -2077,6 +2120,60 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private spawnPoint(): { x: number; y: number; z: number } {
     const chunk = this.getChunk(0, 0).chunk;
     return { x: 8.5, y: highestSolidY(chunk, 8, 8) + 1, z: 8.5 };
+  }
+
+  private buildPracticeArena(): void {
+    // This room has its own generated chunks; no block edits reach the shared world.
+    for (let x = 94; x <= 112; x++) for (let z = 98; z <= 114; z++) {
+      const address = worldToChunk(x, z);
+      const stored = this.getChunk(address.chunkX, address.chunkZ);
+      setBlock(stored.chunk, address.localX, 7, address.localZ, Block.Stone);
+      for (let y = 8; y <= 15; y++) setBlock(stored.chunk, address.localX, y, address.localZ,
+        (x === 94 || x === 112 || z === 98 || z === 114) && y <= 10 ? Block.Stone : Block.Air);
+      stored.revision++;
+    }
+  }
+
+  private setPracticeAbility(player: PlayerState, abilityId: CallingAbilityId): void {
+    const ability = CALLING_ABILITY_OPTIONS.find(option => option.id === abilityId);
+    if (!ability) return;
+    const state = parseBuildPathState(player.huntLoadoutsJson);
+    state.selectedPathId = ability.pathId;
+    state.xp[ability.pathId] = 140;
+    const specialization = BUILD_PATH_SPECIALIZATIONS[ability.pathId][0];
+    state.specializations[ability.pathId] = specialization.id;
+    if (!state.mastered.includes(specialization.id)) state.mastered.push(specialization.id);
+    state.callingAbilities[ability.pathId] = abilityId;
+    this.setPlayerBuildData(player, this.huntLoadouts(player), state);
+    const practiceHand = ability.pathId === "ranger" ? "bow" : ability.pathId === "mage" || ability.pathId === "healer" ? "magic_focus" : "longsword";
+    player.mainHandId = practiceHand;
+    player.mainHandTag = practiceHand === "bow" ? "ranged" : practiceHand === "magic_focus" ? "focus" : "melee";
+  }
+
+  private selectPracticeAbility(client: Client, payload: unknown): void {
+    if (this.roomKind !== "practice") return;
+    const player = this.state.players.get(client.sessionId);
+    const abilityId = typeof payload === "object" && payload && "abilityId" in payload ? payload.abilityId : null;
+    const ability = CALLING_ABILITY_OPTIONS.find(option => option.id === abilityId);
+    if (!player || !ability) return;
+    this.setPracticeAbility(player, ability.id);
+    player.invulnerableUntil = 0;
+    this.callingAbilityReadyAt.delete(client.sessionId);
+    this.callingSpecialReadyAt.delete(client.sessionId);
+    this.state.players.delete("practice-ally");
+    this.resurrectionWindows.delete("practice-ally");
+    if (ability.id === "healer_resurrection") {
+      const ally = new PlayerState();
+      ally.name = "Fallen training ally";
+      ally.x = player.x + 1.5; ally.y = player.y; ally.z = player.z;
+      ally.health = 0;
+      this.state.players.set("practice-ally", ally);
+      this.resurrectionWindows.set("practice-ally", Date.now() + 600_000);
+    }
+    player.health = Math.min(player.maxHealth, Math.max(1, player.health));
+    this.sendBuildPath(client, `${ability.name.toUpperCase()} READY · press G to use it against the training targets${ability.id === "healer_resurrection" ? " or the fallen ally" : ""}.`);
+    client.send("practice:state", { active: true, abilityId: ability.id,
+      message: `${ability.name} equipped for practice. Press G to use it; F uses ${BUILD_PATHS[ability.pathId].name}'s Special. No progress is saved.` });
   }
 
   private reject(client: Client, rejection: ActionRejected): void {
@@ -2379,6 +2476,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
 
   private defeatMob(mobId: string, mob: MobState, attackerId: string, now: number): void {
     if (!mob.alive) return;
+    if (this.roomKind === "practice") {
+      mob.health = 0; mob.alive = false; mob.respawnAt = now + 3_000;
+      this.combatContributions.clear(mobId);
+      return;
+    }
     const masterTrialTag = this.masterTrialMobTags.get(mobId);
     this.masterTrialMobTags.delete(mobId);
     this.rangerSlows.delete(mobId);
@@ -2743,6 +2845,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   }
 
   private sendObjectiveState(client: Client, force = false): void {
+    if (this.roomKind === "practice") return;
     this.ensureFirstExpeditionReward(client, Date.now());
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
@@ -3590,7 +3693,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       defense.damage = Math.max(1, defense.damage - 1);
     }
     player.momentumStacks = momentumAfterDefense(player.momentumStacks, defense.damage, defense.parried, traitId);
-    player.health = Math.max(0, player.health - defense.damage);
+    player.health = Math.max(this.roomKind === "practice" ? 1 : 0, player.health - defense.damage);
     if (defense.damage > 0 && this.pendingResurrections.delete(playerId))
       this.clients.find(candidate => candidate.sessionId === playerId)?.send("chat:notice", "RESURRECTION INTERRUPTED · you took damage.");
     const depthsRun = this.silverDepthsRuns.get(playerId);
@@ -4732,7 +4835,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       ? BUILD_PATH_SPECIALIZATIONS[state.selectedPathId].find(option => option.id === specializationId) : null;
     const trialProgress = specializationId ? state.trials[specializationId] ?? 0 : 0;
     client.send("build:path", { selectedPathId: state.selectedPathId, rank, xp,
-      selectedCallingAbilityId: state.selectedPathId ? selectedCallingAbility(state, state.selectedPathId) : null,
+      selectedCallingAbilityId: state.selectedPathId ? this.roomKind === "practice"
+        ? state.callingAbilities[state.selectedPathId] ?? selectedCallingAbility(state, state.selectedPathId)
+        : selectedCallingAbility(state, state.selectedPathId) : null,
       selectedCallingAugmentId: state.selectedPathId ? selectedCallingAugment(state, selectedCallingAbility(state, state.selectedPathId)) : null,
       callingAugmentProgress: state.callingAugmentProgress,
       masteredCallingAugments: state.masteredCallingAugments,
@@ -4906,14 +5011,17 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       client.send("chat:notice", `${slot === "special" ? "Calling Special" : "Calling Power"} has not unlocked yet.`);
       return;
     }
-    const abilityId = slot === "special" ? callingStarterAbility(pathId, "special").id : selectedCallingAbility(state, pathId);
+    const abilityId = slot === "special" ? callingStarterAbility(pathId, "special").id
+      : this.roomKind === "practice" ? state.callingAbilities[pathId] ?? selectedCallingAbility(state, pathId)
+      : selectedCallingAbility(state, pathId);
     const augmentId = selectedCallingAugment(state, abilityId);
     const definition = CALLING_ABILITY_OPTIONS.find(option => option.id === abilityId)!;
     const now = Date.now();
     if (abilityId === "healer_resurrection") {
       if (this.buildPathRankFor(player, "healer") < 4) return;
       if (this.pendingResurrections.has(client.sessionId)) return;
-      const allies = this.roomKind === "silver-depths" ? [...this.silverDepthsRoster.keys()]
+      const allies = this.roomKind === "practice" ? ["practice-ally"]
+        : this.roomKind === "silver-depths" ? [...this.silverDepthsRoster.keys()]
         : this.parties.cohort(client.sessionId).members;
       const target = allies.filter(id => id !== client.sessionId && this.state.players.get(id)?.health === 0
         && now < (this.resurrectionWindows.get(id) ?? 0))
@@ -5998,7 +6106,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     for (const [casterId, cast] of this.pendingResurrections) {
       const caster = this.state.players.get(casterId);
       const target = this.state.players.get(cast.targetId);
-      const allies = this.roomKind === "silver-depths" ? [...this.silverDepthsRoster.keys()]
+      const allies = this.roomKind === "practice" ? ["practice-ally"]
+        : this.roomKind === "silver-depths" ? [...this.silverDepthsRoster.keys()]
         : this.parties.cohort(casterId).members;
       const valid = caster && target && caster.health > 0 && target.health === 0
         && caster.health >= cast.health && now < (this.resurrectionWindows.get(cast.targetId) ?? 0)

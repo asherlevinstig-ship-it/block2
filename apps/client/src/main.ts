@@ -158,6 +158,7 @@ import {
   WEAPON_ATTACK_DEFINITIONS,
   WORLD_ROOM,
   SILVER_DEPTHS_ROOM,
+  PRACTICE_ROOM,
   type RoomTransfer,
   type ActionRejected,
   type BlacksmithUpdate,
@@ -1032,6 +1033,13 @@ const inventoryCapacityLabel = document.querySelector<HTMLElement>("#inventory-c
 const inventoryCapacitySlots = document.querySelector<HTMLElement>("#inventory-capacity-slots")!;
 const inventoryToggle = document.querySelector<HTMLButtonElement>("#inventory-toggle")!;
 const inventoryClose = document.querySelector<HTMLButtonElement>("#inventory-close")!;
+const abilityPracticeOpen = document.querySelector<HTMLButtonElement>("#ability-practice-open")!;
+const abilityPractice = document.querySelector<HTMLElement>("#ability-practice")!;
+const abilityPracticeClose = document.querySelector<HTMLButtonElement>("#ability-practice-close")!;
+const abilityPracticeCalling = document.querySelector<HTMLSelectElement>("#ability-practice-calling")!;
+const abilityPracticeList = document.querySelector<HTMLElement>("#ability-practice-list")!;
+const abilityPracticeStatus = document.querySelector<HTMLElement>("#ability-practice-status")!;
+const abilityPracticeReturn = document.querySelector<HTMLButtonElement>("#ability-practice-return")!;
 const inventoryProfile = document.querySelector<HTMLButtonElement>("#inventory-profile")!;
 const profileControls = document.querySelector<HTMLElement>("#profile-controls")!;
 const adventureStart = document.querySelector<HTMLButtonElement>("#adventure-start")!;
@@ -6663,6 +6671,45 @@ function setInventoryOpen(open: boolean): void {
 
 inventoryToggle.addEventListener("click", () => setInventoryOpen(inventoryPanel.hasAttribute("hidden")));
 inventoryClose.addEventListener("click", () => setInventoryOpen(false));
+for (const [pathId, definition] of Object.entries(BUILD_PATHS)) {
+  const option = document.createElement("option");
+  option.value = pathId; option.textContent = definition.name;
+  abilityPracticeCalling.append(option);
+}
+function renderPracticeAbilities(): void {
+  abilityPracticeList.replaceChildren(...CALLING_ABILITY_OPTIONS.filter(option => option.pathId === abilityPracticeCalling.value)
+    .map(option => {
+      const card = document.createElement("article");
+      const title = document.createElement("strong"); title.textContent = option.name;
+      const category = document.createElement("small"); category.textContent = `${option.category} · rank ${option.unlockRank}`;
+      title.append(category);
+      const button = document.createElement("button"); button.type = "button"; button.textContent = "TRY";
+      button.addEventListener("click", () => {
+        if (activeRoomName !== PRACTICE_ROOM || !room) return;
+        room.send("practice:select", { abilityId: option.id });
+        abilityPractice.hidden = true;
+      });
+      const description = document.createElement("p"); description.textContent = option.description;
+      card.append(title, button, description); return card;
+    }));
+}
+abilityPracticeCalling.addEventListener("change", renderPracticeAbilities);
+abilityPracticeOpen.addEventListener("click", () => {
+  if (!room || !worldReady) return;
+  if (activeRoomName === PRACTICE_ROOM) {
+    setInventoryOpen(false);
+    abilityPractice.hidden = false;
+    room.send("practice:menu", { open: true });
+    abilityPracticeCalling.value = localBuildPathId ?? "assassin";
+    renderPracticeAbilities();
+  } else {
+    abilityPracticeOpen.disabled = true;
+    room.send("practice:enter");
+    status.textContent = "Opening the private practice arena…";
+  }
+});
+abilityPracticeClose.addEventListener("click", () => { abilityPractice.hidden = true; room?.send("practice:menu", { open: false }); });
+abilityPracticeReturn.addEventListener("click", () => { if (activeRoomName === PRACTICE_ROOM) room?.send("practice:leave"); });
 function currentProfileName(): string {
   return room ? (room.state.players as Map<string, NetworkPlayer>).get(room.sessionId)?.name || "Explorer" : "Explorer";
 }
@@ -8357,7 +8404,7 @@ function activateMovementPilot(joinedRoom: Room): void {
 minimap.setPingHandler((x, z) => {
   if (activeRoomName === SILVER_DEPTHS_ROOM && room) room.send("depths:ping", { x, z });
 });
-let activeRoomName: typeof WORLD_ROOM | typeof SILVER_DEPTHS_ROOM = WORLD_ROOM;
+let activeRoomName: typeof WORLD_ROOM | typeof SILVER_DEPTHS_ROOM | typeof PRACTICE_ROOM = WORLD_ROOM;
 let currentWorldObjective: WorldObjectiveUpdate | null = null;
 let worldReady = false;
 let lastMoveSentAt = 0;
@@ -9763,6 +9810,11 @@ combatHudRoot.addEventListener("click", event => {
 
 window.addEventListener("keydown", event => {
   if (event.repeat) return;
+  if (!abilityPractice.hidden) {
+    if (event.code === "Escape") { abilityPractice.hidden = true; room?.send("practice:menu", { open: false }); }
+    if (!(event.target instanceof HTMLSelectElement)) event.preventDefault();
+    return;
+  }
   if (!levelUpPanel.hidden) {
     if (event.code === "Escape") levelUpPanel.hidden = true;
     event.preventDefault(); return;
@@ -11219,7 +11271,8 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   // explicit diagnostics opt-in while it is hardened further.
   movementPilotRequested = useColyseusMovementPilot(query);
   const qaSpawn = import.meta.env.DEV ? query.get("qa") : null;
-  activeRoomName = query.get("room") === "silver-depths" ? SILVER_DEPTHS_ROOM : WORLD_ROOM;
+  activeRoomName = query.get("room") === "silver-depths" ? SILVER_DEPTHS_ROOM
+    : query.get("room") === "practice" ? PRACTICE_ROOM : WORLD_ROOM;
   const instanceKey = query.get("instanceKey");
   const partyTicket = query.get("partyTicket");
   const worldRoomId = query.get("worldRoomId");
@@ -11238,20 +11291,23 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     try { window.sessionStorage.removeItem(reconnectStorageKey); } catch { /* Storage may be disabled. */ }
   };
   const requestedPartySize = Number(query.get("partySize"));
-  const returnFrom = query.get("returnFrom") === "silver-depths" ? "silver-depths" : null;
+  const returnFrom = query.get("returnFrom") === "silver-depths" ? "silver-depths"
+    : query.get("returnFrom") === "practice" ? "practice" : null;
   const retryFromDepths = activeRoomName === WORLD_ROOM && returnFrom === "silver-depths" && query.get("retry") === "1";
   const joinOptions = { name: initialCharacter?.name ?? "Explorer", profileToken,
     ...(initialCharacter ? { appearance: initialCharacter.appearance } : {}),
     ...(adminInvitation ? { adminPass: adminInvitation } : {}), ...(qaSpawn ? { qaSpawn } : {}),
     ...(activeRoomName === SILVER_DEPTHS_ROOM && instanceKey ? { instanceKey, partySize: Number.isFinite(requestedPartySize) ? requestedPartySize : 1 } : {}),
     ...(activeRoomName === WORLD_ROOM && returnFrom ? { returnFrom } : {}),
-    ...(partyTicket ? { partyTicket } : {}) };
+    ...(partyTicket ? { partyTicket } : {}),
+    ...(activeRoomName === PRACTICE_ROOM && worldRoomId ? { worldRoomId } : {}) };
   room = await retryConnection(
     (signal, attempt) => {
       const client = new Client(endpoint, {
         fetchFn: (input, init) => fetch(input, { ...init, signal }),
       });
       if (storedReconnectToken) return client.reconnect(storedReconnectToken);
+      if (activeRoomName === PRACTICE_ROOM) return client.create(activeRoomName, joinOptions);
       if (activeRoomName === WORLD_ROOM && returnFrom && worldRoomId) {
         return client.joinById(worldRoomId, joinOptions).catch(() => client.joinOrCreate(activeRoomName, joinOptions));
       }
@@ -11331,6 +11387,11 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       url.searchParams.delete("worldRoomId");
       url.searchParams.delete("returnFrom");
       status.textContent = `Opening a private Silver Depths instance for ${transfer.partySize ?? 1} player${transfer.partySize === 1 ? "" : "s"}...`;
+    } else if (transfer.room === PRACTICE_ROOM) {
+      url.searchParams.set("room", "practice");
+      if (transfer.worldRoomId) url.searchParams.set("worldRoomId", transfer.worldRoomId);
+      url.searchParams.delete("returnFrom"); url.searchParams.delete("retry");
+      status.textContent = "Opening your private combat practice arena…";
     } else {
       clearReconnectToken();
       url.searchParams.delete("room");
@@ -11346,6 +11407,17 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       status.textContent = "Returning to the shared Town of Beginnings...";
     }
     window.setTimeout(() => window.location.replace(url), 180);
+  });
+  room.onMessage("practice:state", (update: { active: boolean; abilityId?: CallingAbilityId; message: string }) => {
+    abilityPracticeOpen.disabled = false;
+    abilityPracticeStatus.textContent = update.message;
+    status.textContent = update.message;
+    if (update.abilityId) { localCallingCooldownUntil = 0; localCallingSpecialCooldownUntil = 0; }
+    if (update.active && activeRoomName === PRACTICE_ROOM && !update.abilityId) {
+      abilityPracticeCalling.value = localBuildPathId ?? "assassin";
+      renderPracticeAbilities();
+      abilityPractice.hidden = false;
+    }
   });
   room.onMessage("player:portal", (spawn: { x: number; y: number; z: number; entering: boolean }) => {
     clearDefeatCombat(); closeLoot();
