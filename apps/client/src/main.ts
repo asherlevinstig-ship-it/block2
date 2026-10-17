@@ -7,6 +7,7 @@ import { confirmedRangedHit, projectileImpactCue } from "./ranged-feedback.js";
 import { heldFireStep } from "./held-fire.js";
 import { callingLevelGuide, statChoiceDisabled } from "./progression-guidance.js";
 import { progressionNotice as chooseProgressionNotice, type ProgressionNotice } from "./progression-notice.js";
+import { queueWorldNotice, type WorldNotice } from "./notification-lane.js";
 import { rangedAimYaw } from "./ranged-aim.js";
 import { activeCombatNearby, advanceBossHud, initialBossHud, leaderAttackLabel, leaderExposureLabel, leaderExposureRoleLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
 import { forestDungeonAtmosphere, forestDungeonNotice, portalNoticeFeedback } from "./forest-dungeon-presentation.js";
@@ -827,6 +828,7 @@ const levelCelebrationTitle = document.querySelector<HTMLElement>("#level-celebr
 const levelCelebrationDetail = document.querySelector<HTMLElement>("#level-celebration-detail")!;
 const levelCelebrationChoose = document.querySelector<HTMLButtonElement>("#level-celebration-choose")!;
 const progressionNoticePanel = document.querySelector<HTMLElement>("#progression-notice")!;
+const progressionNoticeHeading = document.querySelector<HTMLElement>("#progression-notice-heading")!;
 const progressionNoticeTitle = document.querySelector<HTMLElement>("#progression-notice-title")!;
 const progressionNoticeDetail = document.querySelector<HTMLElement>("#progression-notice-detail")!;
 const progressionNoticeAction = document.querySelector<HTMLButtonElement>("#progression-notice-action")!;
@@ -839,6 +841,15 @@ let dismissedUseAbilityId: CallingAbilityId | null = null;
 let progressionNoticeQuietUntil = 0;
 let progressionNoticeCombatCheckedAt = -Infinity;
 let progressionNoticeCombatActive = false;
+let pendingWorldNotices: WorldNotice[] = [];
+let activeWorldNotice: WorldNotice | null = null;
+let activeWorldNoticeRemainingMs = 0;
+let worldNoticeLastTick = 0;
+function announceWorldNotice(notice: WorldNotice): void {
+  if (activeWorldNotice?.kind === notice.kind && activeWorldNotice.title === notice.title && activeWorldNotice.detail === notice.detail) return;
+  pendingWorldNotices = queueWorldNotice(pendingWorldNotices, notice);
+  updateProgressionNoticeVisibility(performance.now());
+}
 const pendingLevelCelebrations: { level: number; detail: string }[] = [];
 let levelCelebrationUntil = 0;
 levelCelebrationChoose.addEventListener("click", () => {
@@ -957,9 +968,6 @@ const objectiveDistance = document.querySelector<HTMLElement>("#objective-distan
 const objectiveMarker = document.querySelector<HTMLElement>("#objective-marker")!;
 const objectiveMarkerDistance = document.querySelector<HTMLElement>("#objective-marker-distance")!;
 const objectiveMarkerLabel = document.querySelector<HTMLElement>("#objective-marker-label")!;
-const objectiveComplete = document.querySelector<HTMLElement>("#objective-complete")!;
-const objectiveCompleteTitle = document.querySelector<HTMLElement>("#objective-complete-title")!;
-const objectiveCompleteReward = document.querySelector<HTMLElement>("#objective-complete-reward")!;
 const depthsRouteMap = document.querySelector<HTMLElement>("#depths-route-map")!;
 const depthsRouteTitle = document.querySelector<HTMLElement>("#depths-route-title")!;
 const depthsRouteCount = document.querySelector<HTMLElement>("#depths-route-count")!;
@@ -1041,7 +1049,7 @@ if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine
 if ([quizTablePrompt, blacksmithPrompt, playerTradePrompt, playerTradeName, blacksmithPanel, blacksmithMessage, blacksmithOre, blacksmithGold, blacksmithPrice, blacksmithSell, blacksmithClose, haulEquipName, haulEquipDetail, haulEquip, haulSalvageCount, haulSalvageDetail, haulSalvage, haulStoreCount, haulStore, haulUpgradeName, haulUpgradeTrack, haulUpgradeDetail, haulRegionName, haulRegionDetail, haulTrackRegion, quizPanel, quizBalance, quizBalanceAmount, quizPotDisplay, quizPotLabel, quizWinToast, quizAnswerFeedback, quizFeedbackIcon, quizFeedbackTitle, quizFeedbackDetail, quizMessage, quizStakeHeading, quizStakes, quizQuestion, quizPot, quizPrompt, quizChoices, quizDecision, quizDouble, quizQuit, quizClose, tavernCoins].some(element => !element) || blacksmithUpgradeCards.length !== Object.keys(BLACKSMITH_UPGRADES).length) {
   throw new Error("Tavern quiz shell is missing required elements");
 }
-if ([worldObjective, objectiveTier, objectiveTitle, objectiveDetail, objectiveLoot, objectiveProgress, objectiveDistance, objectiveMarker, objectiveMarkerDistance, objectiveMarkerLabel, objectiveComplete, objectiveCompleteTitle, objectiveCompleteReward].some(element => !element)) {
+if ([worldObjective, objectiveTier, objectiveTitle, objectiveDetail, objectiveLoot, objectiveProgress, objectiveDistance, objectiveMarker, objectiveMarkerDistance, objectiveMarkerLabel, progressionNoticeHeading].some(element => !element)) {
   throw new Error("World objective shell is missing required elements");
 }
 if (
@@ -3912,23 +3920,38 @@ function refreshProgressionNotice(): void {
     useDismissed: dismissedUseAbilityId === selectedAbility?.id,
   });
   currentProgressionNotice = next;
-  if (next) {
-    if (progressionNoticeTitle.textContent !== next.title) progressionNoticeTitle.textContent = next.title;
-    if (progressionNoticeDetail.textContent !== next.detail) progressionNoticeDetail.textContent = next.detail;
-    if (progressionNoticeAction.textContent !== next.action) progressionNoticeAction.textContent = next.action;
-    progressionNoticePanel.dataset.kind = next.kind;
-  }
   updateProgressionNoticeVisibility(performance.now());
 }
 
 function updateProgressionNoticeVisibility(now: number): void {
-  if (currentProgressionNotice && now - progressionNoticeCombatCheckedAt >= 100) {
+  if ((currentProgressionNotice || activeWorldNotice || pendingWorldNotices.length) && now - progressionNoticeCombatCheckedAt >= 100) {
     progressionNoticeCombatCheckedAt = now;
     progressionNoticeCombatActive = localCombatActive();
   }
-  const hidden = !currentProgressionNotice || !worldReady || !defeatScreen.hidden
+  const blocked = !worldReady || !defeatScreen.hidden
     || !levelCelebration.hidden || pendingLevelCelebrations.length > 0
     || reportedProtectedDialog === true || now < progressionNoticeQuietUntil || progressionNoticeCombatActive;
+  if (activeWorldNotice && !blocked && worldNoticeLastTick > 0) activeWorldNoticeRemainingMs -= Math.max(0, now - worldNoticeLastTick);
+  worldNoticeLastTick = blocked ? 0 : now;
+  if (activeWorldNotice && activeWorldNoticeRemainingMs <= 0) activeWorldNotice = null;
+  if (!activeWorldNotice && pendingWorldNotices.length && !blocked) {
+    activeWorldNotice = pendingWorldNotices.shift()!;
+    activeWorldNoticeRemainingMs = activeWorldNotice.durationMs;
+  }
+  const notice = activeWorldNotice;
+  const next = notice ?? currentProgressionNotice;
+  const hidden = blocked || !next;
+  if (next) {
+    const heading = notice?.heading ?? "NEW FOR YOUR CHARACTER";
+    if (progressionNoticeHeading.textContent !== heading) progressionNoticeHeading.textContent = heading;
+    if (progressionNoticeTitle.textContent !== next.title) progressionNoticeTitle.textContent = next.title;
+    if (progressionNoticeDetail.textContent !== next.detail) progressionNoticeDetail.textContent = next.detail;
+    progressionNoticePanel.dataset.kind = notice?.kind ?? currentProgressionNotice!.kind;
+    if (!notice && currentProgressionNotice && progressionNoticeAction.textContent !== currentProgressionNotice.action)
+      progressionNoticeAction.textContent = currentProgressionNotice.action;
+  }
+  progressionNoticeAction.hidden = Boolean(notice);
+  progressionNoticeLater.hidden = Boolean(notice);
   if (progressionNoticePanel.hidden !== hidden) progressionNoticePanel.hidden = hidden;
 }
 
@@ -6430,22 +6453,13 @@ function showLootNotice(message: string, warning = false): void {
   queueLootToast(toast, LOOT_FEED_EQUIPMENT_MS);
 }
 function showRoadsideNotice(message: string, warning = false): void {
-  const toast = document.createElement("div");
-  toast.className = `resource-toast loot-notice${warning ? " warning" : ""}`;
-  const heading = document.createElement("small"); heading.textContent = warning ? "DISCOVERY NOT READY" : "ROADSIDE DISCOVERY";
-  const detail = document.createElement("strong"); detail.textContent = message;
-  toast.append(heading, detail);
-  queueLootToast(toast, 4_000);
+  announceWorldNotice({ kind: "roadside", heading: warning ? "DISCOVERY NOT READY" : "ROADSIDE DISCOVERY",
+    title: message, detail: "", durationMs: 4_000 });
 }
 
 function showRegionDiscovery(name: string): void {
-  const toast = document.createElement("div");
-  toast.className = "resource-toast region-discovery";
-  const heading = document.createElement("small"); heading.textContent = "REGION DISCOVERED";
-  const title = document.createElement("strong"); title.textContent = name;
-  const hint = document.createElement("span"); hint.textContent = "Added to your explorer map";
-  toast.append(heading, title, hint);
-  queueLootToast(toast, 3_800);
+  announceWorldNotice({ kind: "discovery", heading: "REGION DISCOVERED", title: name,
+    detail: "Added to your explorer map", durationMs: 3_800 });
 }
 
 function updateMining(now: number): void {
@@ -8270,7 +8284,6 @@ minimap.setPingHandler((x, z) => {
 });
 let activeRoomName: typeof WORLD_ROOM | typeof SILVER_DEPTHS_ROOM = WORLD_ROOM;
 let currentWorldObjective: WorldObjectiveUpdate | null = null;
-let objectiveCompleteTimer = 0;
 let worldReady = false;
 let lastMoveSentAt = 0;
 let moveSequence = 0;
@@ -8335,26 +8348,8 @@ function renderWorldObjective(update: WorldObjectiveUpdate): void {
 }
 
 function showObjectiveComplete(message: WorldObjectiveCompleted): void {
-  window.clearTimeout(objectiveCompleteTimer);
-  if (localCombatActive()) {
-    objectiveComplete.hidden = true;
-    const toast = document.createElement("div"); toast.className = "resource-toast combat-reward";
-    const cue = document.createElement("small"); cue.textContent = "OBJECTIVE COMPLETE";
-    const title = document.createElement("strong"); title.textContent = message.title;
-    const reward = document.createElement("span"); reward.textContent = message.rewardLabel;
-    toast.append(cue, title, reward);
-    queueLootToast(toast, LOOT_FEED_EQUIPMENT_MS);
-    return;
-  }
-  objectiveCompleteTitle.textContent = message.title;
-  objectiveCompleteReward.textContent = message.rewardLabel;
-  objectiveComplete.hidden = false;
-  objectiveComplete.animate(
-    [{ opacity: 0, transform: "translate(-50%, -40%) scale(.92)" }, { opacity: 1, transform: "translate(-50%, -50%) scale(1)" }],
-    { duration: 260, easing: "ease-out" },
-  );
-  objectiveCompleteTimer = window.setTimeout(() => { objectiveComplete.hidden = true; }, 2700);
-  showCombatFeedback(message.coinsGranted > 0 ? `+${message.coinsGranted} GOLD` : "REWARD SECURED", "dodge");
+  announceWorldNotice({ kind: "objective", heading: "OBJECTIVE COMPLETE", title: message.title,
+    detail: message.rewardLabel, durationMs: 4_500 });
 }
 
 function updateObjectiveGuidance(): void {
@@ -10872,7 +10867,6 @@ app.on("update", (dt: number) => {
     else if (fire.fire) requestAttack();
   }
   updateBossHud(animationNow);
-  if (!objectiveComplete.hidden && localCombatActive()) objectiveComplete.hidden = true;
   const bodyY = localPlayerRig.root.getLocalPosition().y;
   const renderedPlayerPosition = new pc.Vec3(player.x + localPowerVisualOffset.x + localNetworkVisualOffset.x + localRecoveryVisualOffset.x + localDodgeVisualOffset.x, player.y + localVisualVerticalOffset + bodyY, player.z + localPowerVisualOffset.z + localNetworkVisualOffset.z + localRecoveryVisualOffset.z + localDodgeVisualOffset.z);
   const playerScreen = camera.camera?.worldToScreen(renderedPlayerPosition);
@@ -12009,7 +12003,9 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     currentWorldObjective = null;
     worldObjective.hidden = true;
     objectiveMarker.hidden = true;
-    objectiveComplete.hidden = true;
+    activeWorldNotice = null;
+    pendingWorldNotices = [];
+    progressionNoticePanel.hidden = true;
     powerServerReady = false;
     localSpecialCooldownUntil = 0;
     localCallingCooldownUntil = 0;

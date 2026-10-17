@@ -2165,31 +2165,12 @@ html.boss-hud-active #world-objective { display: none !important; }
 #objective-marker[data-onscreen="true"]::before { display: none; }
 #objective-marker strong, #objective-marker small { display: block; font: 900 10px/1.2 system-ui, sans-serif; letter-spacing: .08em; }
 #objective-marker small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #fff; font-size: 8px; }
-#objective-complete {
-  position: fixed;
-  z-index: 40;
-  top: 43%;
-  left: 50%;
-  min-width: 330px;
-  padding: 18px 34px;
-  transform: translate(-50%, -50%);
-  color: #fff8ce;
-  text-align: center;
-  background: linear-gradient(90deg, transparent, rgba(50, 37, 9, .94) 15%, rgba(50, 37, 9, .94) 85%, transparent);
-  text-shadow: 0 2px 3px #000;
-  pointer-events: none;
-}
-#objective-complete span, #objective-complete strong, #objective-complete small { display: block; }
-#objective-complete span { color: #f4ce59; font: 900 11px/1 system-ui, sans-serif; letter-spacing: .25em; }
-#objective-complete strong { margin: 7px 0; font: 900 28px/1.05 system-ui, sans-serif; }
-#objective-complete small { color: #d8e4c9; font: 700 12px/1.2 system-ui, sans-serif; }
 @keyframes objective-pulse { 50% { transform: rotate(var(--marker-rotation, 0deg)) scale(1.22); color: #fff7b5; } }
 
 @media (max-width: 820px) {
   #world-objective { top: 42px; width: min(290px, calc(100vw - 110px)); padding: 9px 12px 8px; }
   #world-objective h2 { font-size: 15px; }
   #world-objective #objective-detail { display: none; }
-  #objective-complete { min-width: min(300px, calc(100vw - 28px)); padding-inline: 18px; }
   #depths-route-map { right: 8px; bottom: 118px; width: 250px; padding: 9px 10px 7px; }
   .depths-route-diagram { height: 92px; }
   .depths-route-diagram > i { width: 24px; height: 24px; }
@@ -2240,6 +2221,13 @@ html.boss-hud-active #world-objective { display: none !important; }
 #progression-notice > strong { display: block; margin-top: 4px; font: 900 17px/1.15 system-ui, sans-serif; }
 #progression-notice p { margin: 5px 0 10px; color: #d5e4d3; font: 600 11px/1.3 system-ui, sans-serif; }
 #progression-notice > div { display: flex; gap: 8px; align-items: center; }
+#progression-notice[data-kind="objective"], #progression-notice[data-kind="discovery"], #progression-notice[data-kind="roadside"] { border-color: #a8c8a0; background: linear-gradient(135deg, #1a3229f5, #10241df2); pointer-events: none; }
+#progression-notice[data-kind="objective"] { border-color: #e5bd67; background: linear-gradient(135deg, #382b18f5, #183025f2); }
+#progression-notice[data-kind="objective"] > small { color: #ffe092; }
+#progression-notice[data-kind="discovery"] > small { color: #9ce2c5; }
+#progression-notice[data-kind="roadside"] > small { color: #c7ddab; }
+#progression-notice[data-kind="objective"] > div, #progression-notice[data-kind="discovery"] > div, #progression-notice[data-kind="roadside"] > div { display: none; }
+#progression-notice[data-kind="roadside"] p:empty { display: none; }
 #progression-notice-action { flex: 1; min-height: 36px; padding: 8px 10px; border: 1px solid #ffe08c; border-radius: 7px; background: #edbb59; color: #241b0d; cursor: pointer; font: 1000 11px/1.1 system-ui, sans-serif; letter-spacing: .05em; }
 #progression-notice-action:hover, #progression-notice-action:focus-visible { background: #ffdb84; }
 #progression-notice-later { padding: 8px; border: 0; background: transparent; color: #c9bb9d; cursor: pointer; font: 800 10px system-ui, sans-serif; }
@@ -2490,19 +2478,11 @@ body:has(#nearby-chat details[open]) #party-panel { bottom: 340px; }
 .material-pickup small { color: #91aa94; font-size: 8px; letter-spacing: .11em; }
 .material-pickup strong { margin-top: 2px; color: #dce9d5; font-size: 12px; }
 .material-pickup span { color: #8fa196; font-size: 9px; font-weight: 600; }
-.resource-toast.combat-reward { display: grid; border-color: #dfbb55; color: #f8e7a0; background: #302711ed; }
-.resource-toast.combat-reward small { color: #dcbf68; font-size: 9px; letter-spacing: .12em; }
-.resource-toast.combat-reward strong { margin-top: 2px; color: #fff4c2; }
-.resource-toast.combat-reward span { margin-top: 2px; color: #d5ddc7; font-size: 10px; }
 .resource-toast.loot-notice { display: grid; max-width: 310px; border-color: #d7b85c; background: #2a2414ed; }
 .resource-toast.loot-notice small { color: #d7bd69; font-size: 9px; letter-spacing: .12em; }
 .resource-toast.loot-notice strong { margin-top: 3px; color: #fff0bb; font-size: 11px; line-height: 1.3; }
 .resource-toast.loot-notice.warning { border-color: #df715d; background: #351a17ed; }
 .resource-toast.loot-notice.warning small { color: #ff9683; }
-.resource-toast.region-discovery { display: grid; gap: 2px; border-color: #86c9ac; background: #163b35ed; box-shadow: 0 0 18px #5dd6a633; }
-.resource-toast.region-discovery small { color: #9ce2c5; font-size: 9px; letter-spacing: .13em; }
-.resource-toast.region-discovery strong { color: #f2ffdc; font-size: 14px; }
-.resource-toast.region-discovery span { color: #bad2c0; font-size: 10px; }
 .resource-toast[data-item="iron_ore"] { color: #ffd19e; border-color: #d89851; background: #352416ed; box-shadow: 0 0 18px #ce8b3a33; }
 .resource-toast[data-item="silver_ore"] { color: #d3f1ff; border-color: #9acfe6; background: #172d3ced; box-shadow: 0 0 18px #83c5e333; }
 .equipment-pickup { --rarity: #c6d3b4; width: min(330px, calc(100vw - 28px)); border-radius: 12px; border: 2px solid var(--rarity); background: linear-gradient(135deg, color-mix(in srgb, var(--rarity) 18%, #15271f), #101c23); padding: 12px 16px; animation-duration: 8s; box-shadow: 0 8px 24px #0006, 0 0 26px color-mix(in srgb, var(--rarity) 25%, transparent); }
