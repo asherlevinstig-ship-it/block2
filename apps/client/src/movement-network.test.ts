@@ -5,6 +5,7 @@ import {
   approachYaw,
   cameraRelativeMovement,
   localReconciliationRate,
+  locomotionFacingYaw,
   movementDirectionChanged,
   movementYaw,
   preserveReconciledVisualOffset,
@@ -30,6 +31,13 @@ describe("movement networking", () => {
     expect(movementYaw(1, 0, 12)).toBe(90);
     expect(movementYaw(0, -1, 12)).toBe(180);
     expect(movementYaw(0, 0, 12)).toBe(12);
+  });
+
+  it("faces movement with a ranged weapon until fire is held", () => {
+    expect(locomotionFacingYaw({ x: 1, z: 0 }, 12, null)).toBe(90);
+    expect(locomotionFacingYaw({ x: 0, z: -1 }, 12, null)).toBe(180);
+    expect(locomotionFacingYaw({ x: 0, z: 0 }, 12, null)).toBe(12);
+    expect(locomotionFacingYaw({ x: 1, z: 0 }, 12, 35)).toBe(35);
   });
 
   it("maps all eight keyboard directions relative to the angled camera", () => {

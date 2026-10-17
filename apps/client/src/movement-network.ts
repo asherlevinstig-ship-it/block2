@@ -118,6 +118,12 @@ export function movementYaw(strafe: number, forward: number, fallback: number): 
     : Math.atan2(strafe, forward) * 180 / Math.PI;
 }
 
+/** A ranged weapon follows locomotion unless its fire control is held. A
+ * hovering mouse can show a reticle without locking the character's body. */
+export function locomotionFacingYaw(direction: MovementVector, currentYaw: number, heldFireYaw: number | null): number {
+  return heldFireYaw === null ? movementYaw(direction.x, direction.z, currentYaw) : heldFireYaw;
+}
+
 export function approachYaw(current: number, target: number, deltaTime: number, turnSpeed = 720): number {
   const delta = ((target - current + 540) % 360) - 180;
   const maximumTurn = turnSpeed * deltaTime;

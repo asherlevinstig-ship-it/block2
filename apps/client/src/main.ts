@@ -268,6 +268,7 @@ import {
   approachYaw,
   cameraRelativeMovement,
   localReconciliationRate,
+  locomotionFacingYaw,
   movementDirectionChanged,
   movementYaw,
   preserveReconciledVisualOffset,
@@ -7905,6 +7906,7 @@ function renderDepthsPartyStatus(next: SilverDepthsPartyStatus | null): void {
 function clearDefeatCombat(): void {
   keys.clear(); touchStrafe = 0; touchForward = 0;
   smoothedMovement = { x: 0, z: 0 };
+  rangedFirePointer = null;
   cancelPowerAim(); cancelSpecialAim(); cancelLocalPowerPresentation();
   setDefensePresentation(false);
   localActionStartedAt = null;
@@ -9852,9 +9854,8 @@ app.on("update", (dt: number) => {
     ? powerAimActive ? powerAimYaw : localPowerFacingYaw!
     : actionFacingActive
     ? localActionFacingYaw!
-    : interactionMode === "combat" && rangedPointer.active && WEAPON_ATTACK_DEFINITIONS[localMainHandId].projectileTravelMs > 0
-    ? mouseRangedYaw(localFacingYaw)
-    : movementYaw(desiredMovement.x, desiredMovement.z, localFacingYaw);
+    : locomotionFacingYaw(desiredMovement, localFacingYaw,
+      rangedFirePointer !== null && rangedFireAllowed() ? mouseRangedYaw(localFacingYaw) : null);
   localFacingYaw = approachYaw(localFacingYaw, desiredFacingYaw, frameTime);
   if (movementShadowInput && room && worldReady) {
     const steps = movementPilotController ? movementPilotController.tick(performance.now()) : (() => {
