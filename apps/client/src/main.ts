@@ -3656,7 +3656,7 @@ function requestSeismicMastery(masteryId: SeismicMasteryId): void {
 function updateControlsHelp(): void {
   const power = POWER_DEFINITIONS[localEquippedPower];
   const powerHint = power.castType === "tap" ? `R ${power.name}` : `Hold R ${power.core === "ground" ? "place" : "aim"} ${power.name}`;
-  const fireHint = WEAPON_ATTACK_DEFINITIONS[localMainHandId].projectileTravelMs > 0 ? " · Mouse aim · Hold left-click fire" : "";
+  const fireHint = WEAPON_ATTACK_DEFINITIONS[localMainHandId].projectileTravelMs > 0 ? " · Hold J or left-click to fire · Mouse aim optional" : "";
   const secondaryHint = localCharacterProgression.level >= 5 ? ` · T ${POWER_DEFINITIONS[localSecondaryPower].name}` : "";
   const calling = CALLING_ABILITY_OPTIONS.find(option => option.id === localCallingAbilityId);
   const callingSpecial = CALLING_ABILITY_OPTIONS.find(option => option.pathId === localBuildPathId && option.category === "Utility");
@@ -3664,7 +3664,7 @@ function updateControlsHelp(): void {
   const unlockedPowerHint = WEAPON_TECHNIQUES_AVAILABLE && localCharacterProgression.level >= 5 ? ` · ${powerHint}${secondaryHint}` : "";
   const unlockedSpecialHint = localCharacterProgression.level >= 4 && callingSpecial
     ? ` · F ${callingSpecial.name}` : "";
-  controlsHelp.textContent = `WASD move · Arrows camera · I inventory · H potion · Hold C/right-click Guard · Space dodge/cancel${unlockedPowerHint}${unlockedSpecialHint}${callingHint} · Q mode · E/click acts${fireHint}`;
+  controlsHelp.textContent = `WASD move · Arrows camera · J main-hand attack · I inventory · H potion · Hold C/right-click Guard · Space dodge/cancel${unlockedPowerHint}${unlockedSpecialHint}${callingHint} · Q mode · E/click acts${fireHint}`;
 }
 
 function updateSpecialLoadout(specialId: SpecialId): void {
@@ -6235,9 +6235,11 @@ app.root.addChild(targetMarker);
 const pointer = { x: canvas.width / 2, y: canvas.height / 2 };
 const rangedPointer = { active: false, x: 0, y: 0 };
 let rangedFirePointer: number | null = null;
-function rangedFireAllowed(): boolean {
+let keyboardFireHeld = false;
+function rangedFireAllowed(requirePointerAim = true): boolean {
   const combatMenuPanels = [inventoryPanel, lootPanel, defeatScreen, quizPanel, blacksmithPanel, tavernDialogue];
-  return Boolean(room && worldReady && interactionMode === "combat" && rangedPointer.active && !document.hidden
+  return Boolean(room && worldReady && (interactionMode === "combat" || !requirePointerAim)
+    && (!requirePointerAim || rangedPointer.active) && !document.hidden
     && WEAPON_ATTACK_DEFINITIONS[localMainHandId].projectileTravelMs > 0
     && combatMenuPanels.every(panel => panel.hidden === true) && !tradeUI.isOpen() && !playerInteractionUI.isOpen()
     && !(document.activeElement instanceof HTMLInputElement || document.activeElement instanceof HTMLTextAreaElement)
@@ -9095,7 +9097,7 @@ function requestMine(): void {
   status.textContent = `Mining ${currentTarget.x}, ${currentTarget.y}, ${currentTarget.z}...`;
 }
 
-function requestAttack(): void {
+function requestAttack(aimWithPointer = true): void {
   if (!defeatScreen.hidden) return;
   if (reportedProtectedDialog === true) return;
   if (!room || !worldReady) return;
@@ -9111,7 +9113,7 @@ function requestAttack(): void {
   const attackDefinition = WEAPON_ATTACK_DEFINITIONS[localMainHandId];
   const player = localPlayer.getPosition();
   const targetMob = nearestLivingMob(player, attackDefinition.range);
-  localActionFacingYaw = attackDefinition.projectileTravelMs > 0 && rangedPointer.active ? mouseRangedYaw(localFacingYaw) : targetMob
+  localActionFacingYaw = attackDefinition.projectileTravelMs > 0 && aimWithPointer && rangedPointer.active ? mouseRangedYaw(localFacingYaw) : targetMob
     ? movementYaw(targetMob.visual.state.x - player.x, targetMob.visual.state.z - player.z, localFacingYaw)
     : currentTarget
       ? movementYaw(currentTarget.x + 0.5 - player.x, currentTarget.z + 0.5 - player.z, localFacingYaw)
@@ -9132,7 +9134,7 @@ function requestAttack(): void {
   const attackName = attackDefinition.combo
     ? `${MAIN_HAND_DEFINITIONS[localMainHandId].attackName} ${comboStep}`
     : MAIN_HAND_DEFINITIONS[localMainHandId].attackName;
-  status.textContent = attackDefinition.projectileTravelMs > 0 && rangedPointer.active ? `${attackName} · firing toward your reticle.` : targetMob
+  status.textContent = attackDefinition.projectileTravelMs > 0 && aimWithPointer && rangedPointer.active ? `${attackName} · firing toward your reticle.` : targetMob
     ? attackDefinition.combo && comboStep === 3
       ? `Heavy finisher aimed at ${targetMob.visual.state.name}...`
       : `${attackName} aimed at ${targetMob.visual.state.name}...`
@@ -9776,6 +9778,11 @@ window.addEventListener("keydown", event => {
     else requestPrimaryAction();
   }
   if (event.code === "KeyC") requestDefense(true);
+  if (event.code === "KeyJ") {
+    event.preventDefault();
+    keyboardFireHeld = WEAPON_ATTACK_DEFINITIONS[localMainHandId].projectileTravelMs > 0;
+    requestAttack(false);
+  }
   if (WEAPON_TECHNIQUES_AVAILABLE && event.code === "KeyR") {
     activatePowerSlot("primary", false);
     powerAimKey = "KeyR";
@@ -9796,12 +9803,13 @@ window.addEventListener("keydown", event => {
   }
 });
 window.addEventListener("keyup", event => {
+  if (event.code === "KeyJ") keyboardFireHeld = false;
   if (event.code === "KeyE") releaseLootHold("keyboard");
   if (event.code === "KeyC") requestDefense(false);
   if (event.code === powerAimKey) commitPowerAim();
   if (event.code === "KeyF") commitSpecialAim();
 });
-window.addEventListener("blur", cancelLootHold);
+window.addEventListener("blur", () => { cancelLootHold(); keyboardFireHeld = false; });
 canvas.addEventListener("pointerdown", event => {
   if (!levelUpPanel.hidden || !callingIntro.hidden) return;
   if (event.button === 2) {
@@ -10874,6 +10882,12 @@ app.on("update", (dt: number) => {
     const fire = heldFireStep(true, rangedFireAllowed(), performance.now(), readyAt);
     if (!fire.held) rangedFirePointer = null;
     else if (fire.fire) requestAttack();
+  }
+  if (keyboardFireHeld) {
+    const readyAt = localActionStartedAt === null ? 0 : localActionStartedAt + actionDuration(localActionStep);
+    const fire = heldFireStep(true, rangedFireAllowed(false), performance.now(), readyAt);
+    if (!fire.held) keyboardFireHeld = false;
+    else if (fire.fire) requestAttack(false);
   }
   updateBossHud(animationNow);
   const bodyY = localPlayerRig.root.getLocalPosition().y;

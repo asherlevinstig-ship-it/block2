@@ -92,7 +92,8 @@ function MainHandLoadout() {
   const name = selected === "longsword" && ironSwordOwned.value ? "Iron Sword · +1 DMG" : definition.name;
   const activeSet = huntSetForLoadout(selected, armour.value);
   return h("div", { id: "main-hand-loadout" },
-    h("p", null, h("span", null, "MAIN HAND"), h("strong", { id: "main-hand-name" }, name), h("em", { id: "main-hand-attack" }, definition.attackName)),
+    h("p", null, h("span", null, "MAIN HAND · ATTACK"), h("strong", { id: "main-hand-name" }, name), h("kbd", { title: "Press J to attack; hold J to fire ranged weapons" }, "J")),
+    h("em", { id: "main-hand-attack" }, definition.attackName),
     activeSet ? h("b", { id: "hunt-set-status", "data-set": activeSet }, `${HUNT_EQUIPMENT_SETS[activeSet].name.toUpperCase()} · SET ACTIVE`) : null,
   );
 }
