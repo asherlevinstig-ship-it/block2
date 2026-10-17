@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChatSendSchema, PlayerNameSchema } from "@blockcraft/protocol";
 import { WorldRoom } from "../src/game-room.js";
 import { PlayerState, WorldState } from "../src/schema.js";
-import { cleanChatText, hearsNearbyChat } from "../src/nearby-chat.js";
+import { hearsNearbyChat } from "../src/nearby-chat.js";
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 function fixture() {
   vi.useFakeTimers(); vi.setSystemTime(10000);
@@ -17,23 +17,23 @@ function fixture() {
 }
 describe("server-authoritative nearby chat", () => {
   it("delivers only to sender and nearby same-level players using authoritative names", () => {
-    const { sender, near, far, below, send } = fixture(); send({ text: "Hello!", name: "Administrator" });
+    const { sender, near, far, below, send } = fixture(); send({ phraseId: "hello" });
     expect(sender.send).toHaveBeenCalledWith("chat:message", { senderId: "sender", name: "sender", text: "Hello!" });
     expect(near.send).toHaveBeenCalledTimes(1); expect(far.send).not.toHaveBeenCalled(); expect(below.send).not.toHaveBeenCalled();
   });
   it("rate limits repeated sends and accepts the next message after the interval", () => {
-    const { near, sender, send } = fixture(); send({ text: "one" }); send({ text: "two" });
+    const { near, sender, send } = fixture(); send({ phraseId: "hello" }); send({ phraseId: "help" });
     expect(near.send).toHaveBeenCalledTimes(1); expect(sender.send).toHaveBeenCalledWith("chat:notice", expect.any(String));
-    vi.advanceTimersByTime(1200); send({ text: "three" }); expect(near.send).toHaveBeenCalledTimes(2);
+    vi.advanceTimersByTime(1200); send({ phraseId: "retreat" }); expect(near.send).toHaveBeenCalledTimes(2);
   });
   it("rejects invalid, oversized and empty messages", () => {
     const { near, send } = fixture();
-    for (const payload of [null, { text: 42 }, { text: "x".repeat(161) }, { text: "  \n " }]) send(payload);
+    for (const payload of [null, { text: "typed chat" }, { phraseId: "arbitrary" }, { phraseId: "hello", text: "injected" }]) send(payload);
     expect(near.send).not.toHaveBeenCalled();
   });
-  it("strips hidden control and direction markers while retaining normal Unicode", () => {
-    expect(cleanChatText("  Hello\n\u202e世界\u0000  ")).toBe("Hello世界");
-    expect(ChatSendSchema.safeParse({ text: "Hi" }).success).toBe(true);
+  it("accepts only preset callouts", () => {
+    expect(ChatSendSchema.safeParse({ phraseId: "hello" }).success).toBe(true);
+    expect(ChatSendSchema.safeParse({ text: "Hi" }).success).toBe(false);
   });
   it("bounds display names and prevents markup in names", () => {
     for (const name of ["A", "a".repeat(21), "<img src=x>", "\n"]) expect(PlayerNameSchema.safeParse(name).success).toBe(false);

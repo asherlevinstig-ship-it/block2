@@ -8,8 +8,8 @@ import { ADMIN_BOOTSTRAP_HASH, ADMIN_PROFILE_HASH, adminProfileKey, matchesAdmin
 import { AttackCoordination, allyFireLaneClear } from "./attack-coordination.js";
 import { MIXED_FRONTIER_SPITTER, STONE_BRUTE_ESCORTS, isMixedFrontierMob, mixedFrontierAllows, isSilverGuard, silverGuardAllows, frontierBruteAllows, isFrontierBruteGroupMob, isStoneBruteGroupMob, isGreenwoodCampMob, greenwoodCampAllows, isAshenSentry, ashenSentryAllows, ashenSentryPattern, isMistfenMob, mistfenAllows, isSouthernQuarryMob, southernQuarryAllows, isNorthwatchMob, northwatchAllows, northwatchShardPattern, northwatchPatrolPattern, northwatchPatrolInterruptDuration, northwatchPatrolShotDamage, NORTHWATCH_SHARD_PATROL_IDS, isNorthwatchShardPatrol, northwatchShardPatrolAllows } from "./wilderness-encounters.js";
 import { BRUTE_VOLLEY, bruteVolleyReady, bruteRockEndpoints } from "@blockcraft/protocol";
-import { CHAMPION_CHARGE, ChatSendSchema, PlayerNameSchema, AppearanceSchema, type NearbyChatMessage } from "@blockcraft/protocol";
-import { cleanChatText, hearsNearbyChat } from "./nearby-chat.js";
+import { CHAMPION_CHARGE, ChatSendSchema, QUICK_CHAT_PHRASES, PlayerNameSchema, AppearanceSchema, type NearbyChatMessage } from "@blockcraft/protocol";
+import { hearsNearbyChat } from "./nearby-chat.js";
 import { PartyRequestSchema } from "@blockcraft/protocol";
 import { Parties } from "./parties.js";
 import { TradeRequestSchema } from "@blockcraft/protocol";
@@ -1138,7 +1138,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (!parsed.success || !player) return;
     const now = Date.now();
     if (now - (this.lastChatAt.get(client.sessionId) ?? -Infinity) < 1200) { client.send("chat:notice", "Please wait a moment before sending again."); return; }
-    const text = cleanChatText(parsed.data.text); if (!text) return;
+    const text = QUICK_CHAT_PHRASES[parsed.data.phraseId];
     this.lastChatAt.set(client.sessionId, now);
     const message: NearbyChatMessage = { senderId: client.sessionId, name: player.name, text };
     for (const recipient of this.clients) {

@@ -43,7 +43,18 @@ export type RealmEventUpdate = {
   eliteRequired?: number;
   lootHint?: string;
 };
-export const ChatSendSchema = z.object({ text: z.string().min(1).max(160) });
+export const QUICK_CHAT_PHRASES = {
+  hello: "Hello!",
+  help: "Help me!",
+  follow: "Follow me!",
+  heal: "I need healing!",
+  attack: "Attack this target!",
+  retreat: "Retreat!",
+  ready: "I'm ready!",
+  thanks: "Thanks!",
+} as const;
+export type QuickChatId = keyof typeof QUICK_CHAT_PHRASES;
+export const ChatSendSchema = z.object({ phraseId: z.enum(["hello", "help", "follow", "heal", "attack", "retreat", "ready", "thanks"]) }).strict();
 export const PlayerNameSchema = z.string().trim().min(2).max(20).regex(/^[A-Za-z0-9 _-]+$/);
 export const APPEARANCE_PALETTE = {
   skin: [

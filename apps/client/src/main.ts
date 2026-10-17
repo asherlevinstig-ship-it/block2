@@ -2468,7 +2468,7 @@ interface MarkVisualState {
 const remotePlayers = new Map<string, RemotePlayerVisual>();
 const social = createSocialUI((type, payload) => { if (!room || !worldReady) return false; room.send(type, payload); return true; }, () => { resetMovementControls(); requestDefense(false); cancelPowerAim(); cancelSpecialAim(); });
 const tradeUI = createTradeUI(request => { if (!room || !worldReady) return false; room.send("trade:request", request); return true; }, () => { resetMovementControls(); requestDefense(false); cancelPowerAim(); cancelSpecialAim(); });
-const partyUI = createPartyUI(request => { if (!room || !worldReady) return false; room.send("party:request", request); return true; }, () => { resetMovementControls(); requestDefense(false); cancelPowerAim(); cancelSpecialAim(); }, id => tradeUI.invite(id), () => room?.sessionId ?? "");
+const partyUI = createPartyUI(request => { if (!room || !worldReady) return false; room.send("party:request", request); return true; }, () => { resetMovementControls(); requestDefense(false); cancelPowerAim(); cancelSpecialAim(); }, id => tradeUI.invite(id), () => room?.sessionId ?? "", name => { if (!room || !worldReady) return false; room.send("player:name", name); return true; });
 const playerInteractionUI = createPlayerInteractionUI({
   stop: () => { resetMovementControls(); requestDefense(false); cancelPowerAim(); cancelSpecialAim(); },
   trade: id => tradeUI.invite(id),
@@ -3938,6 +3938,7 @@ function updateAbilityReveal(): void {
 abilityRevealContinue.addEventListener("click", () => {
   const id = activeAbilityRevealId;
   if (!id) return;
+  social.event(`${CALLING_ABILITY_OPTIONS.find(option => option.id === id)!.name} unlocked.`);
   seenAbilityReveals.add(id);
   try { window.localStorage.setItem(abilityRevealStorageKey(id), "1"); }
   catch { /* Keep the one-session acknowledgement if storage is unavailable. */ }
@@ -8272,7 +8273,7 @@ joystickZone.addEventListener("pointercancel", event => releaseJoystick(event.po
 
 let room: Room | null = null;
 let reportedProtectedDialog: boolean | null = null;
-const protectedDialogSelector = '[role="dialog"], [aria-modal="true"], #loot-pack-decision, #combat-loadout-drawer, #performance-panel, #depths-retry-prompt, #nearby-chat details[open], #party-panel details[open]';
+const protectedDialogSelector = '[role="dialog"], [aria-modal="true"], #loot-pack-decision, #combat-loadout-drawer, #performance-panel, #depths-retry-prompt, #party-panel details[open]';
 function syncProtectedDialog(): void {
   if (!room) { reportedProtectedDialog = null; return; }
   const open = [...document.querySelectorAll<HTMLElement>(protectedDialogSelector)].some(dialog =>
@@ -8402,6 +8403,7 @@ function renderWorldObjective(update: WorldObjectiveUpdate): void {
 function showObjectiveComplete(message: WorldObjectiveCompleted): void {
   announceWorldNotice({ kind: "objective", heading: "OBJECTIVE COMPLETE", title: message.title,
     detail: message.rewardLabel, durationMs: 4_500 });
+  social.event(`Objective complete: ${message.title}${message.rewardLabel ? ` · ${message.rewardLabel}` : ""}`);
 }
 
 function updateObjectiveGuidance(): void {
@@ -11350,6 +11352,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     updateTavernCoins(reward.totalGold);
     showCombatFeedback(`CACHE CLAIMED · +${reward.goldGranted} GOLD`, "dodge");
     status.textContent = reward.message;
+    social.event(`Cache claimed · +${reward.goldGranted} gold.`);
   });
   room.onMessage("dungeon:board", (update: DungeonBoardUpdate) => renderDungeonBoard(update));
   room.onMessage("realm-hunt:board", (update: RealmHuntBoardUpdate) => renderRealmHuntBoard(update));
@@ -11469,6 +11472,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       status.textContent = milestone && milestone.id !== "first_power" && milestone.id !== "first_special"
         ? `Level ${update.level}! ${milestone.name} unlocked. Choose a permanent character improvement.`
         : `Level ${update.level}! Choose a permanent character improvement.`;
+      social.event(`Reached level ${update.level} · stat point ready.`);
     } else if (update.reason === "experience" && update.experienceGranted) {
       status.textContent = `+${update.experienceGranted} XP · ${update.source ?? "adventuring"}`;
     } else if (update.reason === "choice") {
@@ -11778,6 +11782,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     worldReady = false;
     room?.send("world:ready");
     status.textContent = "Back in the Town of Beginnings · follow your recovery marker to reclaim dropped items.";
+    social.event("Returned to the Town of Beginnings.");
   });
   room.onMessage("player:rescue-window", (message: { until: number }) => showRescueOption(message.until));
   room.onMessage("player:resurrected", (message: { health: number; maxHealth: number; casterName: string }) => {
@@ -11792,7 +11797,11 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   room.onMessage("combat:player-hit", (message: PlayerHit) => {
     if (message.playerId !== room?.sessionId) return;
     if (message.momentumStacks !== undefined) updateMomentum(message.momentumStacks);
-    if (message.defeated) showDefeat(mobVisuals.get(message.mobId)?.state.name ?? "An enemy");
+    if (message.defeated) {
+      const attacker = mobVisuals.get(message.mobId)?.state.name ?? "An enemy";
+      showDefeat(attacker);
+      social.event(`Defeated by ${attacker}. Your progress is safe.`);
+    }
     if (message.absorbed) {
       if (message.absorbedBy === "northwatch") {
         northwatchShardBurst();
@@ -11911,6 +11920,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     if (isEquipmentItem(message.itemId)) showEquipmentPickup(message.itemId, message.quantity, message.total);
     else showResourcePickup(item.name, message.quantity, message.itemId);
     status.textContent = `Picked up ${item.name} · ${message.total} total.`;
+    social.event(`Picked up ${item.name} ×${message.quantity}.`);
     logMovementEvent(`LOOT ${message.itemId} +${message.quantity} total=${message.total}`);
     if (completedTrackedHunt) {
       const completedItem = message.itemId;
@@ -11928,6 +11938,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     miningCracks.enabled = false;
     if (message.quantity > 0) showResourcePickup(message.itemId === "iron_ore" ? "Iron" : message.itemId === "silver_ore" ? "Silver" : ITEM_DEFINITIONS[message.itemId].name, message.quantity, message.itemId);
     updateInventoryItem(message.itemId, message.total);
+    if (message.quantity > 0) social.event(`Gathered ${ITEM_DEFINITIONS[message.itemId].name} ×${message.quantity}.`);
     if (message.itemId === "timber") {
       showCombatFeedback(`+${message.quantity} GREENWOOD TIMBER`, "dodge");
       status.textContent = `Chopped Greenwood oak · ${message.total} timber carried.`;
