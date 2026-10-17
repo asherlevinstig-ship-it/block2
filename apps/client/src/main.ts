@@ -6,6 +6,7 @@ import { nearestRoleFieldOpportunity, nearestRoadsideEncounter, parseRoadsideCla
 import { confirmedRangedHit, projectileImpactCue } from "./ranged-feedback.js";
 import { heldFireStep } from "./held-fire.js";
 import { callingLevelGuide, statChoiceDisabled } from "./progression-guidance.js";
+import { progressionNotice as chooseProgressionNotice, type ProgressionNotice } from "./progression-notice.js";
 import { rangedAimYaw } from "./ranged-aim.js";
 import { activeCombatNearby, advanceBossHud, initialBossHud, leaderAttackLabel, leaderExposureLabel, leaderExposureRoleLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
 import { forestDungeonAtmosphere, forestDungeonNotice, portalNoticeFeedback } from "./forest-dungeon-presentation.js";
@@ -825,13 +826,53 @@ const levelCelebration = document.querySelector<HTMLElement>("#level-up-celebrat
 const levelCelebrationTitle = document.querySelector<HTMLElement>("#level-celebration-title")!;
 const levelCelebrationDetail = document.querySelector<HTMLElement>("#level-celebration-detail")!;
 const levelCelebrationChoose = document.querySelector<HTMLButtonElement>("#level-celebration-choose")!;
+const progressionNoticePanel = document.querySelector<HTMLElement>("#progression-notice")!;
+const progressionNoticeTitle = document.querySelector<HTMLElement>("#progression-notice-title")!;
+const progressionNoticeDetail = document.querySelector<HTMLElement>("#progression-notice-detail")!;
+const progressionNoticeAction = document.querySelector<HTMLButtonElement>("#progression-notice-action")!;
+const progressionNoticeLater = document.querySelector<HTMLButtonElement>("#progression-notice-later")!;
+let currentProgressionNotice: ProgressionNotice | null = null;
+let dismissedStatLevel = -1;
+let dismissedCallingLevel = -1;
+let dismissedEquipKey = "";
+let dismissedUseAbilityId: CallingAbilityId | null = null;
+let progressionNoticeQuietUntil = 0;
+let progressionNoticeCombatCheckedAt = -Infinity;
+let progressionNoticeCombatActive = false;
 const pendingLevelCelebrations: { level: number; detail: string }[] = [];
 let levelCelebrationUntil = 0;
 levelCelebrationChoose.addEventListener("click", () => {
   levelCelebration.hidden = true;
   if (localCharacterProgression.unspentStatPoints > 0) levelUpPanel.hidden = false;
 });
-levelUpLater.addEventListener("click", () => { levelUpPanel.hidden = true; });
+levelUpLater.addEventListener("click", () => {
+  levelUpPanel.hidden = true;
+  dismissedStatLevel = localCharacterProgression.level;
+  progressionNoticeQuietUntil = performance.now() + 8_000;
+  refreshProgressionNotice();
+});
+progressionNoticeAction.addEventListener("click", () => {
+  switch (currentProgressionNotice?.kind) {
+    case "stat": levelUpPanel.hidden = false; break;
+    case "calling":
+      if (lastBuildPathUpdate?.inTown && lastBuildPathUpdate.canChoose) openCallingIntro();
+      else status.textContent = "Return to Town to choose your Calling.";
+      break;
+    case "equip": document.querySelector<HTMLButtonElement>("#loadout-toggle")?.click(); break;
+    case "use": requestCallingAbility(); break;
+  }
+  updateProgressionNoticeVisibility(performance.now());
+});
+progressionNoticeLater.addEventListener("click", () => {
+  switch (currentProgressionNotice?.kind) {
+    case "stat": dismissedStatLevel = localCharacterProgression.level; break;
+    case "calling": dismissedCallingLevel = localCharacterProgression.level; break;
+    case "equip": dismissedEquipKey = `${lastBuildPathUpdate?.selectedPathId}:${lastBuildPathUpdate?.rank}`; break;
+    case "use": dismissedUseAbilityId = localCallingAbilityId; break;
+  }
+  progressionNoticeQuietUntil = performance.now() + 8_000;
+  refreshProgressionNotice();
+});
 const characterStatButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-character-stat]")];
 let pendingStatChoice: { stat: CharacterStatId; checkTimer: number; recoveryTimer: number | null } | null = null;
 function clearPendingStatChoice(): void {
@@ -3840,18 +3881,60 @@ function callingUnlockStorageKey(pathId: BuildPathId): string {
   return `calling-ability-seen-v1:${profileToken}:${pathId}`;
 }
 
-function refreshCallingUnlockNotice(): void {
+function unseenCallingAbilityNames(): string[] {
   const update = lastBuildPathUpdate;
-  if (!update?.selectedPathId || localCharacterProgression.level < 2) {
-    combatHud.setNewCallingUnlock(null);
-    return;
-  }
+  if (!update?.selectedPathId || localCharacterProgression.level < 2) return [];
   let seenRank = -1;
   try { seenRank = Number(window.localStorage.getItem(callingUnlockStorageKey(update.selectedPathId)) ?? -1); } catch { /* Private storage may be unavailable. */ }
-  const unlocked = CALLING_ABILITY_OPTIONS.filter(option => option.pathId === update.selectedPathId
+  return CALLING_ABILITY_OPTIONS.filter(option => option.pathId === update.selectedPathId
     && option.unlockRank > seenRank && option.unlockRank <= update.rank
-    && option.id !== "assassin_death_mark");
-  combatHud.setNewCallingUnlock(unlocked.map(option => option.name).join(", ") || null);
+    && option.id !== "assassin_death_mark" && option.id !== update.selectedCallingAbilityId)
+    .map(option => option.name);
+}
+
+function callingPowerUsed(abilityId: CallingAbilityId): boolean {
+  try { return window.localStorage.getItem(`calling-power-used-v1:${profileToken}:${abilityId}`) === "1"; }
+  catch { return false; }
+}
+
+function refreshProgressionNotice(): void {
+  const selectedAbility = CALLING_ABILITY_OPTIONS.find(option => option.id === localCallingAbilityId);
+  const next = chooseProgressionNotice({
+    level: localCharacterProgression.level,
+    unspentPoints: localCharacterProgression.unspentStatPoints,
+    statDismissed: dismissedStatLevel === localCharacterProgression.level,
+    hasCalling: Boolean(localBuildPathId), inTown: lastBuildPathUpdate?.inTown === true,
+    callingDismissed: dismissedCallingLevel === localCharacterProgression.level,
+    newAbilityNames: unseenCallingAbilityNames(),
+    equipDismissed: dismissedEquipKey === `${lastBuildPathUpdate?.selectedPathId}:${lastBuildPathUpdate?.rank}`,
+    equippedAbilityName: localCharacterProgression.level >= 2 ? selectedAbility?.name ?? null : null,
+    equippedAbilityUsed: !selectedAbility || callingPowerUsed(selectedAbility.id),
+    useDismissed: dismissedUseAbilityId === selectedAbility?.id,
+  });
+  currentProgressionNotice = next;
+  if (next) {
+    if (progressionNoticeTitle.textContent !== next.title) progressionNoticeTitle.textContent = next.title;
+    if (progressionNoticeDetail.textContent !== next.detail) progressionNoticeDetail.textContent = next.detail;
+    if (progressionNoticeAction.textContent !== next.action) progressionNoticeAction.textContent = next.action;
+    progressionNoticePanel.dataset.kind = next.kind;
+  }
+  updateProgressionNoticeVisibility(performance.now());
+}
+
+function updateProgressionNoticeVisibility(now: number): void {
+  if (currentProgressionNotice && now - progressionNoticeCombatCheckedAt >= 100) {
+    progressionNoticeCombatCheckedAt = now;
+    progressionNoticeCombatActive = localCombatActive();
+  }
+  const hidden = !currentProgressionNotice || !worldReady || !defeatScreen.hidden
+    || !levelCelebration.hidden || pendingLevelCelebrations.length > 0
+    || reportedProtectedDialog === true || now < progressionNoticeQuietUntil || progressionNoticeCombatActive;
+  if (progressionNoticePanel.hidden !== hidden) progressionNoticePanel.hidden = hidden;
+}
+
+function refreshCallingUnlockNotice(): void {
+  combatHud.setNewCallingUnlock(unseenCallingAbilityNames().join(", ") || null);
+  refreshProgressionNotice();
 }
 
 function markCallingUnlockSeen(): void {
@@ -3859,6 +3942,7 @@ function markCallingUnlockSeen(): void {
   if (!update?.selectedPathId || localCharacterProgression.level < 2) return;
   try { window.localStorage.setItem(callingUnlockStorageKey(update.selectedPathId), String(update.rank)); } catch { /* Private storage may be unavailable. */ }
   combatHud.setNewCallingUnlock(null);
+  refreshProgressionNotice();
 }
 
 function renderAssassinJourney(update: BuildPathUpdate): void {
@@ -3989,6 +4073,11 @@ function openCallingIntro(): void {
 
 function closeCallingIntro(): void {
   callingIntro.hidden = true;
+  if (!localBuildPathId && localCharacterProgression.level >= 2) {
+    dismissedCallingLevel = localCharacterProgression.level;
+    progressionNoticeQuietUntil = performance.now() + 8_000;
+    refreshProgressionNotice();
+  }
   if (!inventoryPanel.hidden) buildPathOpen.focus(); else canvas.focus();
 }
 buildPathOpen.addEventListener("click", openCallingIntro);
@@ -10256,6 +10345,7 @@ app.on("update", (dt: number) => {
   updateLootHold(animationNow);
   updateLootWorldLabel();
   updateLevelCelebration(animationNow);
+  updateProgressionNoticeVisibility(animationNow);
   for (const [mobId, mob] of mobVisuals) {
     if (mob.frameAlive !== mob.state.alive) {
       mob.defeatAt = mob.state.alive ? -Infinity : animationNow;
@@ -11216,6 +11306,9 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       localCallingAbilityId = update.abilityId;
       combatHud.setCalling(update.pathId, update.abilityId, localBuildPathRank, localCallingAugmentId,
         localCallingAugmentProgress, localMasteredCallingAugments);
+      try { window.localStorage.setItem(`calling-power-used-v1:${profileToken}:${update.abilityId}`, "1"); }
+      catch { /* Private storage may be unavailable. */ }
+      refreshProgressionNotice();
     }
     status.textContent = `${update.ability} · ${update.detail.toLowerCase()}.`;
   });

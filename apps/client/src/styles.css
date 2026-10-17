@@ -2234,6 +2234,17 @@ html.boss-hud-active #world-objective { display: none !important; }
 #level-up-celebration span { color: #e9e5c9; font: 700 13px system-ui; }
 #level-celebration-choose { margin-top: 16px; padding: 10px 16px; border: 1px solid #ffdf81; border-radius: 8px; background: #e1b754; color: #24170a; cursor: pointer; font: 1000 11px system-ui; letter-spacing: .08em; }
 #level-celebration-choose:hover, #level-celebration-choose:focus-visible { background: #ffe492; }
+#progression-notice { position: fixed; z-index: 24; left: 50%; bottom: calc(166px + env(safe-area-inset-bottom)); width: min(410px, calc(100vw - 30px)); box-sizing: border-box; padding: 13px 15px; transform: translateX(-50%); border: 1px solid #e5bd67; border-radius: 11px; background: linear-gradient(135deg, #302517f5, #10261df2); color: #fff3c9; box-shadow: 0 12px 35px #0009, 0 0 18px #deb45a44; font-family: system-ui, sans-serif; }
+#progression-notice[hidden] { display: none; }
+#progression-notice > small { display: block; color: #e7bb65; font: 900 9px/1.2 system-ui, sans-serif; letter-spacing: .13em; }
+#progression-notice > strong { display: block; margin-top: 4px; font: 900 17px/1.15 system-ui, sans-serif; }
+#progression-notice p { margin: 5px 0 10px; color: #d5e4d3; font: 600 11px/1.3 system-ui, sans-serif; }
+#progression-notice > div { display: flex; gap: 8px; align-items: center; }
+#progression-notice-action { flex: 1; min-height: 36px; padding: 8px 10px; border: 1px solid #ffe08c; border-radius: 7px; background: #edbb59; color: #241b0d; cursor: pointer; font: 1000 11px/1.1 system-ui, sans-serif; letter-spacing: .05em; }
+#progression-notice-action:hover, #progression-notice-action:focus-visible { background: #ffdb84; }
+#progression-notice-later { padding: 8px; border: 0; background: transparent; color: #c9bb9d; cursor: pointer; font: 800 10px system-ui, sans-serif; }
+#progression-notice-later:hover, #progression-notice-later:focus-visible { color: #fff3c9; text-decoration: underline; }
+@media (max-width: 700px) { #progression-notice { bottom: calc(190px + env(safe-area-inset-bottom)); } }
 @keyframes level-reveal { from { opacity: 0; transform: translateX(-50%) scale(.74); filter: brightness(1.7); } to { opacity: 1; transform: translateX(-50%) scale(1); filter: brightness(1); } }
 #player-level[data-points="true"] { border-color: #ffe186; box-shadow: 0 0 17px #e7b955bb; animation: level-ready 1.3s ease-in-out infinite; }
 @keyframes level-ready { 50% { box-shadow: 0 0 27px #ffe186dd; filter: brightness(1.28); } }
