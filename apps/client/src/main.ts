@@ -795,9 +795,9 @@ const quizDouble = document.querySelector<HTMLButtonElement>("#tavern-quiz-doubl
 const quizQuit = document.querySelector<HTMLButtonElement>("#tavern-quiz-quit")!;
 const quizClose = document.querySelector<HTMLButtonElement>("#tavern-quiz-close")!;
 const tavernCoins = document.querySelector<HTMLElement>("#tavern-coins")!;
-const playerCount = document.querySelector<HTMLElement>("#players")!;
-const dangerZone = document.querySelector<HTMLElement>("#danger-zone")!;
+const dangerZone = document.querySelector<HTMLElement>("#location-readout")!;
 const dangerZoneName = document.querySelector<HTMLElement>("#danger-zone-name")!;
+const locationCoordinates = document.querySelector<HTMLElement>("#location-coordinates")!;
 const dangerZoneTier = document.querySelector<HTMLElement>("#danger-zone-tier")!;
 const dangerZoneDetail = document.querySelector<HTMLElement>("#danger-zone-detail")!;
 const exitGuide = document.querySelector<HTMLElement>("#exit-guide")!;
@@ -1054,7 +1054,7 @@ const specialButton = document.querySelector<HTMLButtonElement>("#special-button
 const touchModeButton = document.querySelector<HTMLButtonElement>("#touch-mode-button")!;
 const touchModeLabel = document.querySelector<HTMLElement>("#touch-mode-label")!;
 const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-toggle [data-mode]")];
-if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !playerCount || !dangerZone || !dangerZoneName || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !inventoryPanel || !inventoryTotal || !inventoryToggle || !inventoryClose || !inventoryBadge || !inventoryEquipped || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== requiredInventoryMainHands || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !controlsHelp || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
+if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !dangerZone || !dangerZoneName || !locationCoordinates || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !inventoryPanel || !inventoryTotal || !inventoryToggle || !inventoryClose || !inventoryBadge || !inventoryEquipped || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== requiredInventoryMainHands || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !controlsHelp || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
   throw new Error("Game shell is missing required elements");
 }
 if ([quizTablePrompt, blacksmithPrompt, playerTradePrompt, playerTradeName, blacksmithPanel, blacksmithMessage, blacksmithOre, blacksmithGold, blacksmithPrice, blacksmithSell, blacksmithClose, haulEquipName, haulEquipDetail, haulEquip, haulSalvageCount, haulSalvageDetail, haulSalvage, haulStoreCount, haulStore, haulUpgradeName, haulUpgradeTrack, haulUpgradeDetail, haulRegionName, haulRegionDetail, haulTrackRegion, quizPanel, quizBalance, quizBalanceAmount, quizPotDisplay, quizPotLabel, quizWinToast, quizAnswerFeedback, quizFeedbackIcon, quizFeedbackTitle, quizFeedbackDetail, quizMessage, quizStakeHeading, quizStakes, quizQuestion, quizPot, quizPrompt, quizChoices, quizDecision, quizDouble, quizQuit, quizClose, tavernCoins].some(element => !element) || blacksmithUpgradeCards.length !== Object.keys(BLACKSMITH_UPGRADES).length) {
@@ -4186,6 +4186,8 @@ let localDangerTier = 0;
 let dangerZoneKey = "";
 
 function updateDangerZone(tierValue: number, position = localPlayer.getPosition()): void {
+  const coordinates = `XYZ: ${Math.floor(position.x)} / ${Math.floor(position.y)} / ${Math.floor(position.z)}`;
+  if (locationCoordinates.textContent !== coordinates) locationCoordinates.textContent = coordinates;
   const tier = Math.max(0, Math.min(3, Math.floor(tierValue)));
   localDangerTier = tier;
   const greenwood = tier > 0 && isInGreenwoodRegion(position.x, position.z);
@@ -5206,7 +5208,7 @@ function createBruteSlamImpact(mob: MobVisual): void {
 
 function updatePlayerCount(): void {
   const count = room ? remotePlayers.size + 1 : 0;
-  playerCount.textContent = `${count} player${count === 1 ? "" : "s"} online`;
+  social.setOnlineCount(count);
 }
 
 function createRemotePlayer(sessionId: string, player: NetworkPlayer): RemotePlayerVisual {

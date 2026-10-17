@@ -1,9 +1,9 @@
 import { QUICK_CHAT_PHRASES, type NearbyChatMessage, type QuickChatId } from "@blockcraft/protocol";
 export function createSocialUI(send: (type: string, payload: unknown) => boolean, stopMovement: () => void) {
   const root = document.createElement("section"); root.id = "event-log"; root.setAttribute("aria-label", "World event log and quick chat");
-  root.innerHTML = '<header><strong>EVENT LOG</strong><small>NEARBY · 24m</small></header><ol role="log" aria-live="polite" aria-label="Recent world events and nearby calls"></ol><nav aria-label="Quick chat calls"></nav>';
+  root.innerHTML = '<header><strong>EVENT LOG</strong><small><span id="event-log-online">0 players online</span> · NEARBY 24m</small></header><ol role="log" aria-live="polite" aria-label="Recent world events and nearby calls"></ol><nav aria-label="Quick chat calls"></nav>';
   document.body.append(root);
-  const list = root.querySelector("ol")!, actions = root.querySelector("nav")!;
+  const list = root.querySelector("ol")!, actions = root.querySelector("nav")!, online = root.querySelector<HTMLElement>("#event-log-online")!;
   for (const [id, phrase] of Object.entries(QUICK_CHAT_PHRASES) as [QuickChatId, string][]) {
     const button = document.createElement("button"); button.type = "button"; button.textContent = phrase;
     button.setAttribute("aria-label", `Say nearby: ${phrase}`);
@@ -24,9 +24,10 @@ export function createSocialUI(send: (type: string, payload: unknown) => boolean
   root.addEventListener("focusin", stopMovement);
   root.addEventListener("keydown", event => { event.stopPropagation(); if (event.code === "Escape") { (document.activeElement as HTMLElement)?.blur(); event.preventDefault(); } });
   root.addEventListener("keyup", event => event.stopPropagation());
-  add("World", "Your journey begins. Nearby calls and milestones appear here.", "event");
+  add("World", "Your journey begins. Nearby calls and world events appear here.", "event");
   const tags = new Map<string, HTMLElement>(); let lastUpdate = -Infinity;
   return {
+    setOnlineCount(count: number) { online.textContent = `${count} player${count === 1 ? "" : "s"} online`; },
     clearNames() { for (const tag of tags.values()) tag.remove(); tags.clear(); },
     open() { actions.querySelector<HTMLButtonElement>("button")?.focus(); },
     notice(text: string) { add("System", text, "notice"); },

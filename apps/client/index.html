@@ -72,8 +72,12 @@
     </aside>
     <div id="cave-entrance" hidden>↓ EAST ORE MINE <small>Shallow iron pockets · deep silver · guarded chambers<br>Follow gold lanterns back up · sell minerals to the blacksmith</small></div>
     <section id="hud">
-      <p class="eyebrow">MILESTONE 01</p>
-      <h1>Diggable Depths</h1>
+      <aside id="location-readout" data-tier="0" aria-label="Current location and coordinates">
+        <strong id="danger-zone-name">TOWN OF BEGINNINGS</strong>
+        <span id="location-coordinates">XYZ: — / — / —</span>
+        <span id="danger-zone-tier" class="visually-hidden">SAFE</span>
+        <span id="danger-zone-detail" class="visually-hidden">Protected sanctuary · enemies cannot attack here</span>
+      </aside>
       <section id="first-steps" aria-label="First steps" aria-live="polite" hidden>
         <header><span>FIRST STEPS <b id="first-steps-count">1 / 5</b></span><button id="first-steps-skip" type="button">SKIP</button></header>
         <strong id="first-steps-title">Move around</strong>
@@ -81,11 +85,6 @@
       </section>
       <p id="status">Connecting to the authoritative world...</p>
       <p id="target">Target: waiting for world data</p>
-      <p id="players">0 players online</p>
-      <div id="danger-zone" data-tier="0" aria-live="polite">
-        <span id="danger-zone-name">TOWN OF BEGINNINGS</span><strong id="danger-zone-tier">SAFE</strong>
-        <small id="danger-zone-detail">Protected sanctuary · enemies cannot attack here</small>
-      </div>
       <div id="player-hud-root"></div>
       <div id="trait-slot" data-trait="momentum" aria-label="Momentum trait, zero of three stacks">
         <span>TRAIT</span><strong id="trait-name">Momentum</strong>

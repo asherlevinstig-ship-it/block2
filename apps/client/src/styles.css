@@ -3071,3 +3071,38 @@ body:has(#combat-hud-shell[data-loadout-open="true"]) #blacksmith-prompt { displ
   #combat-action-bar #potion-use { bottom: 178px; }
   #player-hud-root { bottom: calc(108px + env(safe-area-inset-bottom)); }
 }
+
+/* World information is a small Minecraft-like readout, not a milestone panel. */
+#hud { display: contents; }
+#hud #status, #hud #target, #hud #controls-help { display: none; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+#location-readout {
+  position: fixed;
+  z-index: 14;
+  top: calc(54px + env(safe-area-inset-top));
+  left: max(16px, env(safe-area-inset-left));
+  display: grid;
+  gap: 2px;
+  max-width: min(250px, calc(100vw - 32px));
+  padding: 6px 9px;
+  border-left: 2px solid #9bd7cb;
+  border-radius: 3px;
+  background: rgb(6 16 14 / 62%);
+  color: #e4f2ed;
+  text-shadow: 0 1px 2px #000;
+  pointer-events: none;
+}
+#location-readout strong { font: 800 11px/1.2 system-ui, sans-serif; letter-spacing: .05em; }
+#location-coordinates { color: #c0d9d4; font: 700 11px/1.2 ui-monospace, Consolas, monospace; font-variant-numeric: tabular-nums; }
+#location-readout[data-tier="2"] { border-left-color: #f2bf61; }
+#location-readout[data-tier="3"] { border-left-color: #ff786f; }
+#first-steps, #trait-slot, #exit-guide { position: fixed; z-index: 14; left: max(16px, env(safe-area-inset-left)); width: min(250px, calc(100vw - 32px)); box-sizing: border-box; margin: 0; }
+#first-steps { top: calc(113px + env(safe-area-inset-top)); }
+#trait-slot { top: calc(113px + env(safe-area-inset-top)); }
+html.onboarding-active #trait-slot { display: none; }
+#exit-guide { top: calc(204px + env(safe-area-inset-top)); }
+@media (max-width: 520px) {
+  #location-readout { top: calc(106px + env(safe-area-inset-top)); left: 10px; max-width: 190px; }
+  #first-steps, #trait-slot { top: calc(167px + env(safe-area-inset-top)); left: 10px; width: 190px; }
+  #exit-guide { top: calc(245px + env(safe-area-inset-top)); left: 10px; width: 190px; }
+}
