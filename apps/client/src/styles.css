@@ -13,39 +13,30 @@ body:has(#inventory-panel:not([hidden])) .forest-portal-label { display: none; }
 }
 .loot-panel { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 18px; background: #09120ddd; }
 .loot-panel[hidden] { display: none; }
-#loot-world-label { position: fixed; z-index: 26; right: max(18px, env(safe-area-inset-right)); bottom: max(170px, calc(18px + env(safe-area-inset-bottom))); width: min(270px, calc(100vw - 24px)); padding: 9px 12px; border: 1px solid #efd07a; border-radius: 9px; background: linear-gradient(180deg, #1c2d24f5, #09130ff8); color: #fff0bd; cursor: pointer; box-shadow: 0 4px 15px #0009, 0 0 18px #e7be5540; font: 800 11px/1.25 system-ui; text-align: left; }
+#loot-world-label { position: fixed; z-index: 26; left: 0; top: 0; transform: translate(-50%, calc(-100% - 12px)); box-sizing: border-box; width: min(210px, calc(100vw - 24px)); padding: 8px 10px; border: 1px solid var(--rarity, #efd07a); border-radius: 10px; background: linear-gradient(180deg, #1c2d24f5, #09130ff8); color: #fff0bd; cursor: pointer; box-shadow: 0 4px 15px #0009, 0 0 18px color-mix(in srgb, var(--rarity, #efd07a) 35%, transparent); font: 800 11px/1.25 system-ui; text-align: left; }
 #loot-world-label[hidden] { display: none; }
-#loot-world-label strong, #loot-world-label span, #loot-world-label small, #loot-world-label em { display: block; }
-#loot-world-label strong { margin-top: 2px; font-size: 13px; letter-spacing: .04em; }
-#loot-world-label em { float: right; margin-left: 8px; padding: 2px 5px; border: 1px solid currentColor; border-radius: 999px; font-size: 8px; font-style: normal; letter-spacing: .08em; }
-#loot-world-label small { margin-top: 3px; color: #c5d7cb; font-size: 9px; font-weight: 600; }
-#loot-world-label small [data-trend="better"] { color: #77ed87; }
-#loot-world-label small [data-trend="worse"] { color: #ff8a76; }
-#loot-world-label span { margin-top: 6px; color: #a9c5b1; font-size: 9px; letter-spacing: .06em; text-align: center; }
-#loot-world-hold { display: none; height: 3px; margin-top: 5px; overflow: hidden; border-radius: 3px; background: #ffffff18; }
-#loot-world-hold b { display: block; width: 0; height: 100%; background: currentColor; }
-#loot-world-label[data-holding="true"] #loot-world-hold { display: block; }
+#loot-world-label::after { content: ""; position: absolute; left: calc(50% + var(--tail-shift, 0px) - 6px); bottom: -7px; width: 12px; height: 12px; transform: rotate(45deg); border-right: 1px solid var(--rarity); border-bottom: 1px solid var(--rarity); background: #09130f; }
+#loot-world-label strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--rarity); font-size: 12px; letter-spacing: .02em; }
+#loot-world-label .loot-world-interact { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
+#loot-world-label small { color: #dbe9da; font-size: 9px; font-weight: 800; letter-spacing: .04em; }
+#loot-world-hold { --hold-progress: 0%; display: grid; place-items: center; flex: none; width: 31px; height: 31px; padding: 3px; border-radius: 8px; background: conic-gradient(var(--rarity) var(--hold-progress), #ffffff30 0); font-style: normal; }
+#loot-world-hold kbd { display: grid; place-items: center; width: 100%; height: 100%; border-radius: 5px; background: #111c16; color: #fff4ce; font: 900 14px/1 system-ui; }
 #loot-world-label[data-holding="true"] { animation: none; filter: brightness(1.22); }
-#loot-world-label[data-holding="true"] #loot-world-hold { height: 5px; }
-#loot-world-label[data-holding="true"] #loot-world-hold b { background: linear-gradient(90deg, var(--rarity, #e8bf68), #fff7cf); box-shadow: 0 0 8px var(--rarity, #e8bf68); }
-#loot-world-label[data-near="false"] { border-color: #718579; color: #d5dfd4; cursor: default; box-shadow: 0 4px 12px #0007; }
+#loot-world-label[data-holding="true"] #loot-world-hold { box-shadow: 0 0 11px var(--rarity); }
+#loot-world-label[data-near="false"] { opacity: .7; cursor: default; box-shadow: 0 4px 12px #0007; }
 #loot-world-label[data-rarity="common"] { --rarity: #c3cbc5; }
 #loot-world-label[data-rarity="uncommon"] { --rarity: #68dc72; }
 #loot-world-label[data-rarity="rare"] { --rarity: #63a5ff; }
 #loot-world-label[data-rarity="epic"] { --rarity: #c276ff; }
 #loot-world-label[data-rarity="legendary"] { --rarity: #ffb44f; }
-#loot-world-label[data-rarity] { border-color: var(--rarity); color: var(--rarity); box-shadow: 0 4px 15px #0009, 0 0 22px color-mix(in srgb, var(--rarity) 45%, transparent); }
 #loot-world-label[data-near="true"] { animation: loot-focus 1.35s ease-in-out infinite; }
-#loot-world-label[data-near="true"] span { color: #fff3c4; }
+#loot-world-label[data-near="true"][data-holding="true"] { animation: none; }
 #loot-world-label[data-full="true"] {
   --rarity: #ff5b45;
-  border-color: #ff5b45;
-  color: #ff8b78;
   cursor: not-allowed;
   background: linear-gradient(180deg, #32120ff7, #160706fa);
-  box-shadow: 0 4px 15px #0009, 0 0 22px #ff3d2f55;
 }
-#loot-world-label[data-full="true"] span { color: #ff8b78; }
+#loot-world-label[data-full="true"] small { color: #ff8b78; }
 #loot-pack-decision { position: fixed; z-index: 42; right: max(18px, env(safe-area-inset-right)); bottom: max(170px, calc(18px + env(safe-area-inset-bottom))); width: min(330px, calc(100vw - 24px)); padding: 14px; border: 2px solid var(--rarity, #e5c36c); border-radius: 12px; background: linear-gradient(150deg, #1a2a21f7, #090f0cfb); box-shadow: 0 14px 42px #000c, 0 0 22px color-mix(in srgb, var(--rarity, #e5c36c) 25%, transparent); color: #edf3e8; }
 #loot-pack-decision[hidden] { display: none; }
 #loot-pack-decision[data-rarity="common"] { --rarity: #c3cbc5; } #loot-pack-decision[data-rarity="uncommon"] { --rarity: #68dc72; } #loot-pack-decision[data-rarity="rare"] { --rarity: #63a5ff; } #loot-pack-decision[data-rarity="epic"] { --rarity: #c276ff; } #loot-pack-decision[data-rarity="legendary"] { --rarity: #ffb44f; }
@@ -73,7 +64,7 @@ body:has(#inventory-panel:not([hidden])) .forest-portal-label { display: none; }
 .loot-pack-actions button:disabled { opacity: .4; cursor: default; }
 @media (max-width: 820px) { #loot-pack-decision { right: 10px; bottom: max(278px, calc(18px + env(safe-area-inset-bottom))); } }
 @keyframes loot-focus { 0%, 100% { box-shadow: 0 4px 15px #0009, 0 0 12px color-mix(in srgb, var(--rarity) 25%, transparent); } 50% { box-shadow: 0 4px 15px #0009, 0 0 24px color-mix(in srgb, var(--rarity) 55%, transparent); } }
-@media (max-width: 820px) { #loot-world-label { right: 10px; bottom: max(280px, calc(18px + env(safe-area-inset-bottom))); width: min(240px, calc(100vw - 20px)); } }
+@media (max-width: 820px) { #loot-world-label { width: min(190px, calc(100vw - 20px)); } }
 body:has(#inventory-panel:not([hidden])) #loot-world-label, body:has(#loot-panel:not([hidden])) #loot-world-label { display: none; }
 .loot-card { width: min(560px, 100%); max-height: 85vh; overflow: auto; padding: 24px; border: 2px solid #cda750; border-radius: 16px; background: linear-gradient(145deg, #23342a, #101b16); box-shadow: 0 20px 70px #0009; }
 .loot-panel[data-rarity="common"] { --rarity: #c3cbc5; }

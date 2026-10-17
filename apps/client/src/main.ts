@@ -2633,10 +2633,7 @@ const lootPanel = document.querySelector<HTMLElement>("#loot-panel")!;
 const lootWorldLabel = document.querySelector<HTMLButtonElement>("#loot-world-label")!;
 const lootWorldName = document.querySelector<HTMLElement>("#loot-world-name")!;
 const lootWorldAction = document.querySelector<HTMLElement>("#loot-world-action")!;
-const lootWorldHoldFill = document.querySelector<HTMLElement>("#loot-world-hold b")!;
-const lootWorldVerdict = document.querySelector<HTMLElement>("#loot-world-verdict")!;
-const lootWorldStats = document.querySelector<HTMLElement>("#loot-world-stats")!;
-const lootWorldCarry = document.querySelector<HTMLElement>("#loot-world-carry")!;
+const lootWorldHold = document.querySelector<HTMLElement>("#loot-world-hold")!;
 const lootPackDecision = document.querySelector<HTMLElement>("#loot-pack-decision")!;
 const lootPackTitle = document.querySelector<HTMLElement>("#loot-pack-title")!;
 const lootPackVerdict = document.querySelector<HTMLElement>("#loot-pack-verdict")!;
@@ -2659,21 +2656,24 @@ let lootPending = false;
 let selectedSwapItemId: ItemId | null = null;
 const pendingFloorLoot = new Map<string, number>();
 const pendingLootDrops = new Map<string, NetworkLootDrop>();
-let lootWorldDetailKey = "";
 let lootHold: LootHold | null = null;
+let lootCombatCheckedAt = -Infinity;
+let lootCombatActive = false;
 function cancelLootHold(): void {
   lootHold = null;
   lootWorldLabel.dataset.holding = "false";
-  lootWorldHoldFill.style.width = "0%";
+  lootWorldHold.style.setProperty("--hold-progress", "0%");
 }
 function releaseLootHold(source: LootHold["source"]): void {
   if (!lootHold || lootHold.source !== source) return;
   const dropId = lootHold.dropId;
-  const complete = lootHoldProgress(lootHold, performance.now(), nearestVisibleLootDrop(EQUIPMENT_LOOT_RANGE)?.id ?? null) >= 1;
+  const complete = !localCombatActive()
+    && lootHoldProgress(lootHold, performance.now(), nearestVisibleLootDrop(EQUIPMENT_LOOT_RANGE)?.id ?? null) >= 1;
   cancelLootHold();
   if (complete) interactWithLoot(dropId);
 }
 function beginLootHold(source: LootHold["source"]): void {
+  if (localCombatActive()) return;
   const nearby = nearestVisibleLootDrop(EQUIPMENT_LOOT_RANGE);
   if (!nearby || !lootWorldLabel.hidden && lootWorldLabel.dataset.near === "false") return;
   const drop = lootVisuals.get(nearby.id)?.state;
@@ -2686,10 +2686,10 @@ function updateLootHold(now: number): void {
   if (!lootHold) return;
   const nearby = nearestVisibleLootDrop(EQUIPMENT_LOOT_RANGE);
   if (!room || !worldReady || !defeatScreen.hidden || !lootPanel.hidden || !lootPackDecision.hidden
-    || !inventoryPanel.hidden || !levelUpPanel.hidden || nearby?.id !== lootHold.dropId
+    || !inventoryPanel.hidden || !levelUpPanel.hidden || localCombatActive() || nearby?.id !== lootHold.dropId
     || lootHold.source === "keyboard" && !keys.has("KeyE")) { cancelLootHold(); return; }
   const progress = lootHoldProgress(lootHold, now, nearby.id);
-  lootWorldHoldFill.style.width = `${Math.round(progress * 100)}%`;
+  lootWorldHold.style.setProperty("--hold-progress", `${Math.round(progress * 100)}%`);
   if (progress >= 1) {
     const dropId = lootHold.dropId;
     cancelLootHold();
@@ -2796,10 +2796,6 @@ function nearestVisibleLootDrop(maxDistance: number): { id: string; distance: nu
 function nearestLootDrop(): string | null {
   return nearestVisibleLootDrop(EQUIPMENT_LOOT_RANGE)?.id ?? null;
 }
-function lootHasDetails(dropId: string, drop: NetworkLootDrop): boolean {
-  if (isEnemyLootBag(drop)) return false;
-  return dropId.startsWith("forest-cache:") || isEquipmentItem(drop.itemId) || Boolean(utilityForItem(drop.itemId));
-}
 function lootWouldOverflow(dropId: string, drop: NetworkLootDrop): boolean {
   if (dropId.startsWith("forest-cache:") || !isItemId(drop.itemId)) return false;
   if (isEnemyLootBag(drop)) return lootItems(drop).every(entry =>
@@ -2827,94 +2823,44 @@ function interactWithLoot(dropId: string): void {
     ? `Opening ${LOOT_BAG_TIER_LABEL[lootBagTierForItems(lootItems(drop))]}...`
     : `Picking up ${isItemId(drop.itemId) ? ITEM_DEFINITIONS[drop.itemId].name : "loot"}...`;
 }
-function appendWorldLootStat(label: string, value: string, trend: "better" | "worse" | "same" = "same"): void {
-  const stat = document.createElement("span");
-  stat.dataset.trend = trend;
-  stat.textContent = `${label} ${value}`;
-  lootWorldStats.append(stat, document.createTextNode(" · "));
-}
-function updateLootWorldDetails(dropId: string, drop: NetworkLootDrop): void {
-  if (!isItemId(drop.itemId)) return;
-  if (isEnemyLootBag(drop)) {
-    const items = lootItems(drop);
-    const detailKey = `${dropId}:${drop.contentsJson}`;
-    if (detailKey === lootWorldDetailKey) return;
-    lootWorldDetailKey = detailKey;
-    lootWorldStats.replaceChildren();
-    const blocked = items.filter(entry => localBackpackAddable(entry.itemId, entry.quantity) <= 0).length;
-    lootWorldVerdict.textContent = blocked === items.length ? "FULL" : blocked > 0 ? "PARTIAL" : "READY";
-    const attunement = (drop.affixTier ?? 0) > 0 && items.some(entry => equipmentForItem(entry.itemId) || armourForItem(entry.itemId))
-      ? ` · ATTUNEMENT T${drop.affixTier}` : "";
-    lootWorldCarry.textContent = `${items.length} STACK${items.length === 1 ? "" : "S"}${attunement} · DETAILS IN PACK`;
-    return;
-  }
-  const owned = inventoryCounts.get(drop.itemId) ?? 0;
-  const hand = equipmentForItem(drop.itemId);
-  const armour = armourForItem(drop.itemId);
-  const detailKey = `${dropId}:${drop.itemId}:${drop.quantity}:${owned}:${blacksmithIronCapacity}:${localMainHandId}:${localArmourId}:${localIronSwordOwned}:${equipmentRank(drop.itemId)}`;
-  if (detailKey === lootWorldDetailKey) return;
-  lootWorldDetailKey = detailKey;
-  lootWorldStats.replaceChildren();
-  let verdict = owned > 0 ? "DUPLICATE" : "NEW";
-  if (hand) {
-    const candidate = weaponComparison(hand, localIronSwordOwned || drop.itemId === "forged_sword", equipmentRank(drop.itemId));
-    const worn = weaponComparison(localMainHandId, localIronSwordOwned, equipmentRank(itemForMainHand(localMainHandId)));
-    const damageTrend = comparisonTrend(candidate.damageValue, worn.damageValue);
-    const rangeTrend = comparisonTrend(candidate.rangeValue, worn.rangeValue);
-    const speedTrend = comparisonTrend(candidate.speedValue, worn.speedValue, true);
-    const score = [damageTrend, rangeTrend, speedTrend].reduce((total, trend) => total + (trend === "better" ? 1 : trend === "worse" ? -1 : 0), 0);
-    if (owned === 0) verdict = score > 0 ? "UPGRADE" : "SIDEGRADE";
-    appendWorldLootStat("DMG", candidate.damage, damageTrend);
-    appendWorldLootStat("RANGE", candidate.range, rangeTrend);
-    appendWorldLootStat("SPEED", candidate.speed, speedTrend);
-  } else if (armour) {
-    const candidate = armourComparison(armour, equipmentRank(drop.itemId));
-    const worn = armourComparison(localArmourId, equipmentRank(localArmourId === "none" ? null : localArmourId));
-    const reductionTrend = comparisonTrend(candidate.reductionValue, worn.reductionValue);
-    const speedTrend = comparisonTrend(candidate.speedValue, worn.speedValue);
-    if (owned === 0 && localArmourId !== "none") verdict = reductionTrend === "better" && speedTrend !== "worse" ? "UPGRADE" : "SIDEGRADE";
-    appendWorldLootStat("ARMOUR", candidate.reduction, reductionTrend);
-    appendWorldLootStat("MOVE", candidate.speed, speedTrend);
-    appendWorldLootStat("RANGED", candidate.ranged, comparisonTrend(candidate.rangedValue, worn.rangedValue));
-  } else {
-    const description = document.createElement("span");
-    description.textContent = ITEM_DEFINITIONS[drop.itemId].description;
-    lootWorldStats.append(description);
-  }
-  if (lootWorldStats.lastChild?.nodeType === Node.TEXT_NODE) lootWorldStats.lastChild.remove();
-  const capacity = lootCarryCapacity(drop.itemId, blacksmithIronCapacity);
-  const full = lootWouldOverflow(dropId, drop);
-  lootWorldVerdict.textContent = full ? "FULL" : verdict;
-  lootWorldCarry.textContent = capacity < 65_535 && !dropId.startsWith("forest-cache:")
-    ? `DROP ×${drop.quantity}${(hand || armour) && (drop.affixTier ?? 0) > 0 ? ` · ATTUNEMENT T${drop.affixTier}` : ""} · PACK ${owned} / ${capacity}`
-    : `DROP ×${drop.quantity} · PACK ${owned} → ${owned + drop.quantity}`;
-}
 function updateLootWorldLabel(): void {
   lootWorldLabel.hidden = true;
-  if (!worldReady || !camera.camera || !lootPanel.hidden || !lootPackDecision.hidden || !inventoryPanel.hidden || !defeatScreen.hidden) { lootWorldDetailKey = ""; return; }
+  if (!worldReady || !camera.camera || !lootPanel.hidden || !lootPackDecision.hidden || !inventoryPanel.hidden || !defeatScreen.hidden) return;
+  const now = performance.now();
+  if (now - lootCombatCheckedAt >= 100) {
+    lootCombatCheckedAt = now;
+    lootCombatActive = localCombatActive();
+  }
+  if (lootCombatActive) { cancelLootHold(); return; }
   const nearest = nearestVisibleLootDrop(8);
   if (!nearest) return;
   const drop = lootVisuals.get(nearest.id)?.state;
   if (!drop || !isItemId(drop.itemId)) return;
   const rect = canvas.getBoundingClientRect();
-  const screen = camera.camera.worldToScreen(new pc.Vec3(drop.x, drop.y + 1.4, drop.z));
-  if (screen.z <= 0 || screen.x < 0 || screen.x > rect.width || screen.y < 0 || screen.y > rect.height) return;
+  const screen = camera.camera.worldToScreen(new pc.Vec3(drop.x, drop.y + 1.6, drop.z));
+  if (screen.z <= 0 || screen.x < 0 || screen.x > canvas.width || screen.y < 0 || screen.y > canvas.height) return;
+  const anchorX = rect.left + screen.x * rect.width / canvas.width;
+  const anchorY = rect.top + screen.y * rect.height / canvas.height;
+  if (anchorY < rect.top + 90) return;
+  const halfWidth = window.innerWidth <= 820 ? 95 : 105;
+  const labelX = Math.max(rect.left + halfWidth, Math.min(rect.right - halfWidth, anchorX));
   const seconds = Math.max(0, Math.ceil((drop.expiresAt - Date.now()) / 1000));
   const near = nearest.distance <= EQUIPMENT_LOOT_RANGE;
   const items = lootItems(drop);
   const bagTier = isEnemyLootBag(drop) ? lootBagTierForItems(items) : null;
   const rarity = bagTier ? LOOT_BAG_TIER_RARITY[bagTier] : itemRarity(drop.itemId);
-  const hasDetails = lootHasDetails(nearest.id, drop);
-  const equippable = Boolean(equipmentForItem(drop.itemId) || armourForItem(drop.itemId));
   const full = lootWouldOverflow(nearest.id, drop);
-  updateLootWorldDetails(nearest.id, drop);
   lootWorldLabel.dataset.rarity = rarity;
+  lootWorldLabel.style.left = `${labelX}px`;
+  lootWorldLabel.style.top = `${anchorY}px`;
+  lootWorldLabel.style.setProperty("--tail-shift", `${anchorX - labelX}px`);
   lootWorldName.textContent = bagTier
     ? nearest.id.startsWith("northwatch-shard-patrol-cache:") ? "Shard Patrol Cache" : LOOT_BAG_TIER_LABEL[bagTier]
-    : `${drop.quantity > 1 ? `${drop.quantity}× ` : ""}${ITEM_DEFINITIONS[drop.itemId].name}${hasDetails || equippable ? ` · ${ITEM_RARITIES[rarity].label.toUpperCase()}` : ""}`;
+    : `${drop.quantity > 1 ? `${drop.quantity}× ` : ""}${ITEM_DEFINITIONS[drop.itemId].name}`;
   const holding = lootHold?.dropId === nearest.id;
-  const pending = (pendingFloorLoot.get(nearest.id) ?? 0) > performance.now();
-  lootWorldAction.textContent = `${near ? full ? "INVENTORY FULL" : pending ? "COLLECTING..." : holding ? "HOLDING · KEEP CLOSE" : "HOLD E / TOUCH · PICK UP" : `${nearest.distance.toFixed(1)}m · MOVE CLOSER`}${drop.expiresAt < Number.MAX_SAFE_INTEGER ? ` · ${seconds}s` : ""}`;
+  const pending = (pendingFloorLoot.get(nearest.id) ?? 0) > now;
+  lootWorldAction.textContent = `${near ? full ? "PACK FULL" : pending ? "COLLECTING…" : holding ? "KEEP HOLDING" : "HOLD TO COLLECT" : `${nearest.distance.toFixed(1)}m · MOVE CLOSER`}${seconds < 20 ? ` · ${seconds}s` : ""}`;
+  lootWorldLabel.setAttribute("aria-label", `${lootWorldName.textContent}. ${lootWorldAction.textContent}`);
   lootWorldLabel.dataset.near = String(near);
   lootWorldLabel.dataset.full = String(full);
   lootWorldLabel.hidden = false;
@@ -3107,9 +3053,10 @@ lootPackSalvage.addEventListener("click", () => collectInspectedLoot("dismantle"
 lootWorldLabel.addEventListener("pointerdown", event => {
   if (event.button !== 0) return;
   event.preventDefault();
+  lootWorldLabel.setPointerCapture(event.pointerId);
   beginLootHold("pointer");
 });
-for (const name of ["pointerup", "pointercancel", "pointerleave"])
+for (const name of ["pointerup", "pointercancel"])
   lootWorldLabel.addEventListener(name, () => {
     if (name === "pointerup") releaseLootHold("pointer");
     else if (lootHold?.source === "pointer") cancelLootHold();
