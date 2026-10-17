@@ -1680,6 +1680,7 @@ const ARMOUR_OUTFIT_COLORS: Record<ArmourId, pc.Color> = {
   forager_wrap: new pc.Color(.3, .37, .17),
   fenwalker_mantle: new pc.Color(.24, .36, .3),
   quarry_hauberk: new pc.Color(.32, .27, .23),
+  ridgeguard_mantle: new pc.Color(.27, .31, .34),
   iron_armour: new pc.Color(.34, .4, .48),
   rootguard_armour: new pc.Color(.13, .3, .15),
   bastion_plate: new pc.Color(.29, .35, .43),
@@ -1943,6 +1944,7 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
     leather_armour: new pc.Entity("leather-armour"), iron_armour: new pc.Entity("iron-armour"),
     forager_wrap: new pc.Entity("forager-wrap"), fenwalker_mantle: new pc.Entity("fenwalker-mantle"),
     quarry_hauberk: new pc.Entity("quarry-hauberk"),
+    ridgeguard_mantle: new pc.Entity("ridgeguard-mantle"),
     rootguard_armour: new pc.Entity("rootguard-armour"), bastion_plate: new pc.Entity("bastion-plate"),
     fangstalker_wrap: new pc.Entity("fangstalker-wrap"), venomweave_mantle: new pc.Entity("venomweave-mantle"),
     mirebreaker_mantle: new pc.Entity("mirebreaker-mantle"),
@@ -1954,10 +1956,11 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
     const bastion = id === "bastion_plate", fang = id === "fangstalker_wrap";
     const venom = id === "venomweave_mantle" || id === "mirebreaker_mantle" || id === "fenwalker_mantle", worldsplitter = id === "worldsplitter_plate";
     const mirebreaker = id === "mirebreaker_mantle", rootstalker = id === "rootstalker_wrap", northwatch = id === "northwatch_cloak";
+    const ridgeguard = id === "ridgeguard_mantle";
     const quarry = id === "quarry_hauberk";
     const iron = id === "iron_armour" || quarry || bastion || worldsplitter;
     const rootguard = id === "rootguard_armour";
-    const material = id === "forager_wrap" ? coloredMaterial(new pc.Color(.42, .5, .22)) : id === "fenwalker_mantle" ? coloredMaterial(new pc.Color(.27, .47, .38)) : quarry ? coloredMaterial(new pc.Color(.45, .35, .27)) : northwatch ? coloredMaterial(new pc.Color(.25, .38, .46)) : rootstalker ? coloredMaterial(new pc.Color(.32, .46, .18)) : mirebreaker ? coloredMaterial(new pc.Color(.2, .42, .22)) : worldsplitter ? coloredMaterial(new pc.Color(.23, .28, .33))
+    const material = id === "forager_wrap" ? coloredMaterial(new pc.Color(.42, .5, .22)) : id === "fenwalker_mantle" ? coloredMaterial(new pc.Color(.27, .47, .38)) : quarry ? coloredMaterial(new pc.Color(.45, .35, .27)) : ridgeguard ? coloredMaterial(new pc.Color(.31, .37, .39)) : northwatch ? coloredMaterial(new pc.Color(.25, .38, .46)) : rootstalker ? coloredMaterial(new pc.Color(.32, .46, .18)) : mirebreaker ? coloredMaterial(new pc.Color(.2, .42, .22)) : worldsplitter ? coloredMaterial(new pc.Color(.23, .28, .33))
       : venom ? coloredMaterial(new pc.Color(.26, .48, .12))
         : fang ? coloredMaterial(new pc.Color(.38, .18, .1))
           : iron ? bladeMaterial : rootguard ? coloredMaterial(new pc.Color(.16, .34, .18)) : weaponWoodMaterial;
@@ -2004,6 +2007,12 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
       addBox(layer, "northwatch-clasp", accent, [.15, .16, .045], [0, .08, .27]).setLocalEulerAngles(0, 0, 45);
       addBox(layer, "northwatch-cowl", material, [.48, .14, .43], [0, .255, 0]);
       for (const x of [-.2, .2]) addBox(layer, "northwatch-cloak-tail", material, [.18, .43, .055], [x, -.38, -.2]);
+    } else if (ridgeguard) {
+      addBox(layer, "ridgeguard-collar", material, [.48, .11, .42], [0, .24, 0]);
+      for (const x of [-.19, .19]) {
+        addBox(layer, "ridgeguard-fur-rim", bootMaterial, [.13, .1, .38], [x, .29, 0]);
+        addBox(layer, "ridgeguard-tail", material, [.17, .32, .05], [x, -.34, -.2]);
+      }
     } else if (rootstalker) {
       addBox(layer, "rootstalker-cowl", material, [.42, .14, .4], [0, .255, 0]);
       for (const x of [-.19, .19]) {
@@ -5142,6 +5151,7 @@ const lootMaterials: Partial<Record<ItemId, pc.StandardMaterial>> = {
   forager_wrap: coloredMaterial(new pc.Color(.54, .65, .3)),
   fenwalker_mantle: coloredMaterial(new pc.Color(.35, .58, .46)),
   quarry_hauberk: coloredMaterial(new pc.Color(.57, .43, .31)),
+  ridgeguard_mantle: coloredMaterial(new pc.Color(.42, .52, .56)),
   iron_armour: coloredMaterial(new pc.Color(.76, .8, .85)),
   rootguard_armour: coloredMaterial(new pc.Color(.2, .55, .24)),
   bastion_plate: coloredMaterial(new pc.Color(.56, .63, .73)),
@@ -6913,6 +6923,7 @@ function renderWeaponShop(): void {
     const recipe = FIELD_FORGE_RECIPES[region];
     const owned = inventoryCounts.get(recipe.itemId) ?? 0;
     const foundMaterial = region === "quarry" ? (inventoryCounts.get("stone_core") ?? 0) > 0
+      : region === "northwatch" ? (inventoryCounts.get("ridge_hide") ?? 0) > 0
       : recipe.materials.some(cost => (inventoryCounts.get(cost.itemId) ?? 0) > 0);
     if (!foundMaterial && owned === 0 && blacksmithEquippedArmourItem !== recipe.itemId) continue;
     const card = document.createElement("article"); card.dataset.rarity = itemRarity(recipe.itemId);

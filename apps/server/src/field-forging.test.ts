@@ -4,6 +4,7 @@ import { ROADSIDE_ENCOUNTERS, TOWN_BLACKSMITH_STALL_POSITION } from "@blockcraft
 import { WorldRoom } from "./game-room.js";
 import { InventoryItemState, PlayerState, WorldState } from "./schema.js";
 import { playerBackpackSlots } from "./backpack.js";
+import { lootForArchetype } from "./loot-rules.js";
 
 function fixture() {
   const room = new WorldRoom(); room.setState(new WorldState());
@@ -21,8 +22,8 @@ function fixture() {
 }
 
 describe("regional field armour", () => {
-  it("has equippable regional gear and keeps the quarry boss plate superior", () => {
-    expect(Object.keys(FIELD_FORGE_RECIPES)).toEqual(["greenwood", "mistfen", "quarry"]);
+  it("has equippable regional gear and keeps boss rewards superior", () => {
+    expect(Object.keys(FIELD_FORGE_RECIPES)).toEqual(["greenwood", "mistfen", "quarry", "northwatch"]);
     for (const [region, recipe] of Object.entries(FIELD_FORGE_RECIPES)) {
       expect(FieldForgeSchema.safeParse({ region }).success).toBe(true);
       expect(armourForItem(recipe.itemId)).toBe(recipe.itemId);
@@ -31,6 +32,9 @@ describe("regional field armour", () => {
     expect(armourStats("quarry_hauberk").reduction).toBeLessThan(armourStats("worldsplitter_plate").reduction);
     expect(armourStats("quarry_hauberk").hazardReduction).toBeLessThan(armourStats("worldsplitter_plate").hazardReduction);
     expect(armourStats("quarry_hauberk").projectileReduction).toBe(1);
+    expect(armourStats("ridgeguard_mantle").reduction).toBe(armourStats("northwatch_cloak").reduction);
+    expect(armourStats("ridgeguard_mantle").projectileReduction).toBe(armourStats("northwatch_cloak").projectileReduction);
+    expect(armourStats("ridgeguard_mantle").speed).toBeLessThan(armourStats("northwatch_cloak").speed);
   });
 
   it("forges a Greenwood wrap from finds and grants a real pack item", () => {
@@ -60,6 +64,23 @@ describe("regional field armour", () => {
     expect(player.inventory.get("iron_ore")?.quantity).toBe(0);
     expect(player.inventory.get("stone_core")?.quantity).toBe(0);
     expect(player.coins).toBe(2);
+  });
+
+  it("forges a Ridgeguard Mantle from regular Northwatch encounters before the Watchbreaker", () => {
+    const { internal, player, client, give } = fixture();
+    expect(lootForArchetype("ridge_stalker")).toContainEqual({ itemId: "ridge_hide", quantity: 1 });
+    expect(ROADSIDE_ENCOUNTERS.find(site => site.id === "northwatch-cart"))
+      .toMatchObject({ itemId: "iron_ore", quantity: 2 });
+    give("ridge_hide", 1); give("iron_ore", 2);
+    internal.handleFieldForge(client, { region: "northwatch" });
+    expect(player.inventory.get("ridgeguard_mantle")).toBeUndefined();
+    expect(player.coins).toBe(30);
+    give("ridge_hide", 2);
+    internal.handleFieldForge(client, { region: "northwatch" });
+    expect(player.inventory.get("ridgeguard_mantle")?.quantity).toBe(1);
+    expect(player.inventory.get("ridge_hide")?.quantity).toBe(0);
+    expect(player.inventory.get("iron_ore")?.quantity).toBe(0);
+    expect(player.coins).toBe(6);
   });
 
   it("does not spend anything when materials are missing or the player is away", () => {

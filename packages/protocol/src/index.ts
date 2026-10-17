@@ -473,6 +473,7 @@ export const ARMOUR_DEFINITIONS = {
   forager_wrap: { name: "Forager Wrap", reduction: 1, speed: 1.03, projectileReduction: 0, hazardReduction: 0 },
   fenwalker_mantle: { name: "Fenwalker Mantle", reduction: 1, speed: 1.01, projectileReduction: 1, hazardReduction: 1 },
   quarry_hauberk: { name: "Quarry Hauberk", reduction: 2, speed: .9, projectileReduction: 1, hazardReduction: 0 },
+  ridgeguard_mantle: { name: "Ridgeguard Mantle", reduction: 1, speed: .98, projectileReduction: 1, hazardReduction: 0 },
   iron_armour: { name: "Iron Armour", reduction: 2, speed: .92, projectileReduction: 0, hazardReduction: 0 },
   rootguard_armour: { name: "Rootguard Armour", reduction: 1, speed: .98, projectileReduction: 2, hazardReduction: 2 },
   bastion_plate: { name: "Bastion Plate", reduction: 2, speed: .94, projectileReduction: 0, hazardReduction: 1 },
@@ -485,12 +486,12 @@ export const ARMOUR_DEFINITIONS = {
 } as const;
 export type ArmourId = keyof typeof ARMOUR_DEFINITIONS;
 export function armourForItem(id: string): Exclude<ArmourId, "none"> | null {
-  return id === "leather_armour" || id === "forager_wrap" || id === "fenwalker_mantle" || id === "quarry_hauberk" || id === "iron_armour" || id === "rootguard_armour" || id === "bastion_plate"
+  return id === "leather_armour" || id === "forager_wrap" || id === "fenwalker_mantle" || id === "quarry_hauberk" || id === "ridgeguard_mantle" || id === "iron_armour" || id === "rootguard_armour" || id === "bastion_plate"
     || id === "fangstalker_wrap" || id === "venomweave_mantle" || id === "mirebreaker_mantle" || id === "rootstalker_wrap" || id === "northwatch_cloak" || id === "worldsplitter_plate" ? id : null;
 }
 export function utilityForItem(id: string): "miners_lantern" | "moonstone" | null { return id === "miners_lantern" || id === "moonstone" ? id : null; }
 export function isEquipmentItem(id: string): boolean { return equipmentForItem(id) !== null || armourForItem(id) !== null || utilityForItem(id) !== null; }
-export const ArmourEquipSchema = z.object({ armourId: z.enum(["none", "leather_armour", "forager_wrap", "fenwalker_mantle", "quarry_hauberk", "iron_armour", "rootguard_armour", "bastion_plate", "fangstalker_wrap", "venomweave_mantle", "mirebreaker_mantle", "rootstalker_wrap", "northwatch_cloak", "worldsplitter_plate"]) });
+export const ArmourEquipSchema = z.object({ armourId: z.enum(["none", "leather_armour", "forager_wrap", "fenwalker_mantle", "quarry_hauberk", "ridgeguard_mantle", "iron_armour", "rootguard_armour", "bastion_plate", "fangstalker_wrap", "venomweave_mantle", "mirebreaker_mantle", "rootstalker_wrap", "northwatch_cloak", "worldsplitter_plate"]) });
 export const BLACKSMITH_STOCK = { ...BLACKSMITH_WEAPONS, leather_armour: { price: 30 }, iron_armour: { price: 70 } } as const;
 export type BlacksmithStockId = keyof typeof BLACKSMITH_STOCK;
 export const BlacksmithBuySchema = z.object({ itemId: z.enum(["forged_sword", "forged_bow", "forged_focus", "leather_armour", "iron_armour"]) });
@@ -499,6 +500,7 @@ export const BLACKSMITH_DISMANTLE = {
   leather_armour: { gold: 8 }, forager_wrap: { gold: 5, materialId: "moss_fibre", materialQuantity: 1 },
   fenwalker_mantle: { gold: 6, materialId: "acid_gland", materialQuantity: 1 }, iron_armour: { gold: 20 },
   quarry_hauberk: { gold: 10, materialId: "iron_ore", materialQuantity: 1 },
+  ridgeguard_mantle: { gold: 8, materialId: "ridge_hide", materialQuantity: 1 },
   fang_dagger: { gold: 3, materialId: "crawler_fang", materialQuantity: 1 },
   stone_core_hammer: { gold: 6, materialId: "stone_core", materialQuantity: 1 },
   rootbound_hammer: { gold: 16, materialId: "timber", materialQuantity: 2 },
@@ -540,9 +542,11 @@ export const FIELD_FORGE_RECIPES = {
     materials: [{ itemId: "crawler_fang", quantity: 1 }, { itemId: "acid_gland", quantity: 1 }] },
   quarry: { itemId: "quarry_hauberk", gold: 28,
     materials: [{ itemId: "iron_ore", quantity: 2 }, { itemId: "stone_core", quantity: 1 }] },
-} as const satisfies Record<"greenwood" | "mistfen" | "quarry", { itemId: ItemId; gold: number; materials: readonly { itemId: ItemId; quantity: number }[] }>;
+  northwatch: { itemId: "ridgeguard_mantle", gold: 24,
+    materials: [{ itemId: "ridge_hide", quantity: 2 }, { itemId: "iron_ore", quantity: 2 }] },
+} as const satisfies Record<"greenwood" | "mistfen" | "quarry" | "northwatch", { itemId: ItemId; gold: number; materials: readonly { itemId: ItemId; quantity: number }[] }>;
 export type FieldForgeId = keyof typeof FIELD_FORGE_RECIPES;
-export const FieldForgeSchema = z.object({ region: z.enum(["greenwood", "mistfen", "quarry"]) }).strict();
+export const FieldForgeSchema = z.object({ region: z.enum(["greenwood", "mistfen", "quarry", "northwatch"]) }).strict();
 export const BLACKSMITH_REFORGE = {
   forged_sword: { materialId: "iron_ore", costs: [{ gold: 18, material: 3 }, { gold: 36, material: 6 }, { gold: 70, material: 10 }] },
   forged_bow: { materialId: "iron_ore", costs: [{ gold: 20, material: 3 }, { gold: 40, material: 6 }, { gold: 75, material: 10 }] },
@@ -699,6 +703,7 @@ export const ITEM_DEFINITIONS = {
   forager_wrap: { id: "forager_wrap", name: "Forager Wrap", description: "Greenwood field armour · reduce damage by 1 · move 3% faster · recover stamina faster in Greenwood" },
   fenwalker_mantle: { id: "fenwalker_mantle", name: "Fenwalker Mantle", description: "Mistfen field armour · reduce damage by 1 · 1% faster · extra projectile protection · wards off alternating marsh-pool pulses" },
   quarry_hauberk: { id: "quarry_hauberk", name: "Quarry Hauberk", description: "Southern Quarry field armour · reduce damage by 2 · extra protection from rock volleys and other projectiles · 10% slower" },
+  ridgeguard_mantle: { id: "ridgeguard_mantle", name: "Ridgeguard Mantle", description: "Northwatch field armour · reduce damage by 1 · extra projectile protection · deflects one Shard Sentry shot every 8s in Northwatch · 2% slower" },
   iron_armour: { id: "iron_armour", name: "Iron Armour", description: "Reduce damage by 2 (minimum hit 1) · 8% slower movement" },
   rootguard_armour: { id: "rootguard_armour", name: "Rootguard Armour", description: "Reduce damage by 1 · extra protection from projectiles and hazards · 2% slower" },
   bastion_plate: { id: "bastion_plate", name: "Bastion Plate", description: "Iron Bastion relic · reduce damage by 2 · extra protection from hazards · 6% slower" },
@@ -706,7 +711,7 @@ export const ITEM_DEFINITIONS = {
   venomweave_mantle: { id: "venomweave_mantle", name: "Venomweave Mantle", description: "Rare Venom Hunt armour · reduce damage by 1 · strong projectile and hazard protection" },
   mirebreaker_mantle: { id: "mirebreaker_mantle", name: "Mirebreaker Mantle", description: "Legendary Mistfen armour · swift movement · exceptional protection from venom pools and projectiles" },
   rootstalker_wrap: { id: "rootstalker_wrap", name: "Rootstalker Wrap", description: "Legendary Greenwood armour · rapid movement and stamina recovery · strong protection from root pressure" },
-  northwatch_cloak: { id: "northwatch_cloak", name: "Northwatch Cloak", description: "Watchbreaker reward · reduce damage by 1 · 4% faster movement · extra projectile protection · reforge with Ridge Hide" },
+  northwatch_cloak: { id: "northwatch_cloak", name: "Northwatch Cloak", description: "Watchbreaker reward · reduce damage by 1 · 4% faster movement · extra projectile protection · deflects one Shard Sentry shot every 8s in Northwatch · reforge with Ridge Hide" },
   worldsplitter_plate: { id: "worldsplitter_plate", name: "Worldsplitter Plate", description: "Rare Crusher Hunt armour · reduce damage by 3 · heavy projectile and hazard protection · 10% slower" },
   forged_sword: { id: "forged_sword", name: "Forged Sword", description: "Iron blade · 2 / 2 / 3 combo damage · equip from your pack" },
   forged_bow: { id: "forged_bow", name: "Forged Bow", description: "Steel-braced bow · 2 arrow damage · equip from your pack" },
@@ -721,7 +726,7 @@ export const ITEM_DEFINITIONS = {
   miners_lantern: { id: "miners_lantern", name: "Miner's Lantern", description: "Vault relic · auto-equipped · brighter, wider underground light" },
   moss_fibre: { id: "moss_fibre", name: "Moss Fibre", description: "Soft living fibre · forge a Forager Wrap with Greenwood Timber" },
   crawler_fang: { id: "crawler_fang", name: "Crawler Fang", description: "A sharp fang · combine with an Acid Gland for a Fenwalker Mantle" },
-  ridge_hide: { id: "ridge_hide", name: "Ridge Hide", description: "Northwatch Stalker hide · reforge the Northwatch Cloak at the blacksmith" },
+  ridge_hide: { id: "ridge_hide", name: "Ridge Hide", description: "Northwatch Stalker hide · forge a Ridgeguard Mantle or reforge the Watchbreaker's cloak" },
   stone_core: { id: "stone_core", name: "Stone Core", description: "A dense animated core · forge a Quarry Hauberk or heavier gear at the blacksmith" },
   acid_gland: { id: "acid_gland", name: "Acid Gland", description: "A volatile spitter gland · forge a Fenwalker Mantle with a Crawler Fang" },
   mossback_fang_relic: { id: "mossback_fang_relic", name: "Mossback Alpha Fang", description: "Unique trophy claimed from the Mossback Alpha" },
@@ -827,6 +832,7 @@ export const EQUIPMENT_RARITY = {
   forager_wrap: "uncommon",
   fenwalker_mantle: "uncommon",
   quarry_hauberk: "uncommon",
+  ridgeguard_mantle: "uncommon",
   iron_armour: "uncommon",
   rootguard_armour: "epic",
   bastion_plate: "epic",

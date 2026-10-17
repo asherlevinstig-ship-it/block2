@@ -203,7 +203,7 @@ import { GUARD_MINIMUM_STAMINA, GUARD_STAMINA_DRAIN_PER_SECOND, PARRY_STAGGER_MS
 import { MOB_ARCHETYPES, damageAfterArmor, defeatReward, isSpitterLike, mobArchetype, type MobArchetypeId } from "./mob-archetypes.js";
 import { MOB_TOWN_MINIMUM_RADIUS, dangerBandAt, isInsideTownSafeZone, keepMobOutsideTown, radiusFromSafeCenter, scaledMobStats } from "./radial-difficulty.js";
 import { executionerDamageBonus, gainMomentum, guardStaminaCost, momentumAfterDefense, movementSpeedWithMomentum, parryStaminaRestore, staminaRecoveryWithMomentum } from "./trait-rules.js";
-import { FENWALKER_POOL_WARD_COOLDOWN_MS, fenwalkerBlocksPoolPulse, foragerRecoveryBonus } from "./regional-armour.js";
+import { FENWALKER_POOL_WARD_COOLDOWN_MS, NORTHWATCH_SHARD_WARD_COOLDOWN_MS, fenwalkerBlocksPoolPulse, foragerRecoveryBonus, northwatchShardWardReady } from "./regional-armour.js";
 import type { RegionalArmourProc } from "@blockcraft/protocol";
 import { compatiblePowerOrFallback, fracturedBlockResult, isGroundPowerTargetInRange, isPowerCompatible, isSeismicAftershockTarget, mobilityAdvanceDistance, powerDirection, powerEvadeDirection, seismicCleaveProfile, selectBurstPowerTargets, selectGroundPowerTargets, selectLinePowerTargets, selectMobilityPowerTarget, widenedLineFractureColumns } from "./power-rules.js";
 import { huntersMarkDamageBonus, huntersMarkPowerPayoff, isBrambleSnareTargetInRange, isInsideBrambleSnare, progressHuntersMark, selectHuntersMarkTarget, type ActiveSpecialMark } from "./special-rules.js";
@@ -478,6 +478,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly mobHazards = new Map<string, ActiveMobHazard>();
   private readonly mistfenPoolDamageAt = new Map<string, number>();
   private readonly fenwalkerWardReadyAt = new Map<string, number>();
+  private readonly northwatchShardWardReadyAt = new Map<string, number>();
   private readonly foragerCueAt = new Map<string, number>();
   private readonly mobHomes = new Map<string, { x: number; y: number; z: number }>();
   private readonly mobVerticalVelocities = new Map<string, number>();
@@ -959,6 +960,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   override async onLeave(client: Client): Promise<void> {
     this.mistfenPoolDamageAt.delete(client.sessionId);
     this.fenwalkerWardReadyAt.delete(client.sessionId);
+    this.northwatchShardWardReadyAt.delete(client.sessionId);
     this.foragerCueAt.delete(client.sessionId);
     this.silverDepthsReconnectInvulnerability.delete(client.sessionId);
     this.bastionWardReadyAt.delete(client.sessionId);
@@ -3415,6 +3417,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
     defense.damage = armouredDamage(defense.damage, player.armourId, kind,
       equipmentReforgeRank(player.reforgeRanksJson, player.armourId));
+    if (defense.damage > 0 && !defense.guarded && northwatchShardWardReady(player.armourId,
+      mob?.archetype, kind, player.x, player.y, player.z, now,
+      this.northwatchShardWardReadyAt.get(playerId) ?? 0)) {
+      this.northwatchShardWardReadyAt.set(playerId, now + NORTHWATCH_SHARD_WARD_COOLDOWN_MS);
+      defense.damage = 0;
+      absorbed = true;
+    }
     const bulwarkUntil = this.tankBulwarkUntil.get(playerId) ?? 0;
     if (defense.damage > 0 && now < bulwarkUntil) {
       const build = parseBuildPathState(player.huntLoadoutsJson);

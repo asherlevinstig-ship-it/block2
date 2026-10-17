@@ -3,7 +3,7 @@ import { armourForItem, isEquipmentItem, equipmentForItem, utilityForItem } from
 import { armourComparison } from "./loot-comparison.js";
 describe("armour loot comparisons", () => {
   it("recognizes armour as inspectable equipment, not a weapon", () => {
-    for (const id of ["leather_armour", "forager_wrap", "fenwalker_mantle", "quarry_hauberk", "iron_armour", "rootguard_armour"]) {
+    for (const id of ["leather_armour", "forager_wrap", "fenwalker_mantle", "quarry_hauberk", "ridgeguard_mantle", "iron_armour", "rootguard_armour"]) {
       expect(armourForItem(id)).toBe(id); expect(isEquipmentItem(id)).toBe(true); expect(equipmentForItem(id)).toBeNull();
     }
     expect(isEquipmentItem("fang_dagger")).toBe(true);

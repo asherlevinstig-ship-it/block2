@@ -70,7 +70,7 @@ describe("armour", () => {
     }
   });
   it("round-trips worn armour and safely loads legacy or unowned armour saves", () => {
-    for (const id of ["leather_armour", "forager_wrap", "fenwalker_mantle", "quarry_hauberk", "iron_armour", "rootguard_armour", "bastion_plate", "fangstalker_wrap", "venomweave_mantle", "worldsplitter_plate", "northwatch_cloak"] as ArmourId[]) {
+    for (const id of ["leather_armour", "forager_wrap", "fenwalker_mantle", "quarry_hauberk", "ridgeguard_mantle", "iron_armour", "rootguard_armour", "bastion_plate", "fangstalker_wrap", "venomweave_mantle", "worldsplitter_plate", "northwatch_cloak"] as ArmourId[]) {
       const { player, own, equip } = fixture(); own(id); equip(id);
       const restored = new PlayerState(); applyPlayerSave(restored, parsePlayerSave(serializePlayerSave(player))!);
       expect(restored.armourId).toBe(id);
