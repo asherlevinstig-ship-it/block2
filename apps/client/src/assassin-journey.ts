@@ -5,9 +5,9 @@ type AssassinJourney = { next: string; trial: string | null };
 export function assassinJourney(update: BuildPathUpdate, characterLevel: number): AssassinJourney {
   if (update.selectedPathId !== "assassin") return { next: "", trial: null };
 
-  const next = characterLevel < 2 ? "CHARACTER LV 2 · Vanish unlocks on G"
+  const next = characterLevel < 2 ? "CHARACTER LV 2 · Stealth unlocks on G"
     : characterLevel < 4 ? "CHARACTER LV 4 · Death Mark unlocks on F"
-    : update.rank < 2 ? "PATH RANK 2 · Shadowstep and Vanish upgrades"
+    : update.rank < 2 ? "PATH RANK 2 · Shadowstep and Stealth upgrades"
     : update.rank < 3 ? "PATH RANK 3 · Choose Executioner or Phantom; Blade Dance unlocks"
     : !update.selectedSpecializationId ? "CHOOSE A VETERAN PATH · Executioner or Phantom in Town"
     : update.rank < 4 ? "MASTER · Reach 140 mastery and finish your Veteran trial"

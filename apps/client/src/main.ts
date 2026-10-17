@@ -3984,7 +3984,7 @@ function renderAssassinJourney(update: BuildPathUpdate): void {
   assassinJourneyPanel.hidden = update.selectedPathId !== "assassin";
   if (assassinJourneyPanel.hidden) return;
   const journey = assassinJourney(update, localCharacterProgression.level);
-  const activeAbility = update.selectedCallingAbilityId === "assassin_blade_dance" ? "Blade Dance" : "Vanish";
+  const activeAbility = update.selectedCallingAbilityId === "assassin_blade_dance" ? "Blade Dance" : "Stealth";
   buildPathMessage.textContent = `G · ${activeAbility} ${localCharacterProgression.level >= 2 ? "ready" : "at character LV 2"}  ·  F · Death Mark ${localCharacterProgression.level >= 4 ? "ready" : "at character LV 4"}. Path Mastery unlocks build choices.`;
   assassinJourneyNext.textContent = `NEXT · ${journey.next}`;
   assassinJourneyTrial.hidden = !journey.trial;

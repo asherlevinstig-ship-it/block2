@@ -5078,7 +5078,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           this.mobAwareness.delete(mobId); mob.targetId = ""; mob.awarenessState = "search"; diverted += 1;
         }
       }
-      detail = `VANISHED · NEXT STRIKE EMPOWERED · ${(durationMs / 1_000).toFixed(1)}s`;
+      detail = `STEALTH ACTIVE · NEXT STRIKE EMPOWERED · ${(durationMs / 1_000).toFixed(1)}s`;
       this.grantCallingTrial(client.sessionId, "vanish_deep_cloak", diverted);
     } else if (abilityId === "assassin_death_mark") {
       const target = deathMarkTarget && this.state.mobs.get(deathMarkTarget.id);
@@ -5189,7 +5189,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     else if (abilityId === "mage_overload")
       this.callingState(client.sessionId, pathId, abilityId, "POWER CHARGED", { charges: this.mageOverloadCharges.get(client.sessionId) ?? 1 });
     else if (abilityId === "assassin_vanish")
-      this.callingState(client.sessionId, pathId, abilityId, "VANISHED · STRIKE READY", { activeUntil: now + (durationMs ?? 0) });
+      this.callingState(client.sessionId, pathId, abilityId, "STEALTH ACTIVE · STRIKE READY", { activeUntil: now + (durationMs ?? 0) });
     else if (abilityId === "assassin_death_mark" && effectTargetId)
       this.callingState(client.sessionId, pathId, abilityId, "TARGET EXPOSED", { activeUntil: now + (durationMs ?? 10_000), targetId: effectTargetId });
     else if (abilityId === "assassin_blade_dance")

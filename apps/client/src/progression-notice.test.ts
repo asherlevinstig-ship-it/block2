@@ -4,7 +4,7 @@ import { progressionNotice } from "./progression-notice.js";
 const base = {
   level: 4, unspentPoints: 0, statDismissed: false, hasCalling: true, canChooseCalling: true,
   callingDismissed: false, newAbilityNames: [] as string[], equipDismissed: false,
-  equippedAbilityName: "Vanish", equippedAbilityUsed: true, useDismissed: false,
+  equippedAbilityName: "Stealth", equippedAbilityUsed: true, useDismissed: false,
 };
 
 describe("progression notice priority", () => {
@@ -18,7 +18,7 @@ describe("progression notice priority", () => {
     expect(progressionNotice({ ...base, newAbilityNames: ["Blade Dance"] }))
       .toMatchObject({ kind: "equip", action: "OPEN KIT TO EQUIP", title: "Blade Dance unlocked" });
     expect(progressionNotice({ ...base, equippedAbilityUsed: false }))
-      .toMatchObject({ kind: "use", action: "PRESS G TO USE", title: "Vanish equipped" });
+      .toMatchObject({ kind: "use", action: "PRESS G TO USE", title: "Stealth equipped" });
   });
 
   it("offers the first Calling wherever the server permits it", () => {

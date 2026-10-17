@@ -217,7 +217,7 @@ export type BuildPathId = keyof typeof BUILD_PATHS;
 export const CALLING_ABILITIES = {
   tank: { name: "Bulwark", cooldownMs: 18_000, description: "Brace for 5 seconds, reducing every incoming hit by 1." },
   mage: { name: "Arcane Surge", cooldownMs: 16_000, description: "Pulse nearby enemies and restore stamina." },
-  assassin: { name: "Vanish", cooldownMs: 14_000, description: "Break pursuit, conceal yourself, and empower your next strike." },
+  assassin: { name: "Stealth", cooldownMs: 14_000, description: "Break pursuit, conceal yourself, and empower your next strike." },
   thief: { name: "Smoke Bomb", cooldownMs: 18_000, description: "Divert nearby enemies, conceal yourself, and restore 20 stamina." },
   ranger: { name: "Volley Focus", cooldownMs: 12_000, description: "Empower your next 3 ranged hits with +1 damage." },
   healer: { name: "Field Mend", cooldownMs: 15_000, description: "Restore 2 HP to a nearby injured ally (or yourself if alone)." },
@@ -229,7 +229,7 @@ export const CALLING_ABILITY_OPTIONS = [
   { id: "mage_arcane_surge", pathId: "mage", name: "Arcane Surge", category: "Core", unlockRank: 0, cooldownMs: 16_000, description: "Pulse nearby enemies and restore stamina." },
   { id: "mage_mana_shield", pathId: "mage", name: "Mana Shield", category: "Utility", unlockRank: 2, cooldownMs: 18_000, description: "Reduce the next three incoming hits." },
   { id: "mage_overload", pathId: "mage", name: "Overload", category: "Aggressive", unlockRank: 3, cooldownMs: 20_000, description: "Empower the next Power with bonus damage." },
-  { id: "assassin_vanish", pathId: "assassin", name: "Vanish", category: "Core", unlockRank: 0, cooldownMs: 14_000, description: "Break pursuit and empower your next strike." },
+  { id: "assassin_vanish", pathId: "assassin", name: "Stealth", category: "Core", unlockRank: 0, cooldownMs: 14_000, description: "Break pursuit and empower your next strike." },
   { id: "assassin_death_mark", pathId: "assassin", name: "Death Mark", category: "Utility", unlockRank: 2, cooldownMs: 16_000, description: "Fully mark the nearest enemy for execution." },
   { id: "assassin_blade_dance", pathId: "assassin", name: "Blade Dance", category: "Aggressive", unlockRank: 3, cooldownMs: 19_000, description: "Become briefly untouchable and empower your next strike." },
   { id: "thief_smoke_bomb", pathId: "thief", name: "Smoke Bomb", category: "Core", unlockRank: 0, cooldownMs: 18_000, description: "Divert nearby enemies, conceal, and recover stamina." },
@@ -292,8 +292,8 @@ export const CALLING_AUGMENT_TRIALS = {
   shield_reinforced_rune: { description: "Prevent 25 damage with Mana Shield.", target: 25 },
   overload_volatile_core: { description: "Deal 30 bonus damage through Overload.", target: 30 },
   overload_residual_charge: { description: "Land 10 Overloaded Powers.", target: 10 },
-  vanish_deep_cloak: { description: "Break pursuit from 15 enemies with Vanish.", target: 15 },
-  vanish_killing_intent: { description: "Land 12 Vanish-empowered strikes.", target: 12 },
+  vanish_deep_cloak: { description: "Break pursuit from 15 enemies with Stealth.", target: 15 },
+  vanish_killing_intent: { description: "Land 12 Stealth-empowered strikes.", target: 12 },
   mark_lingering_sentence: { description: "Expose 12 enemies with Death Mark.", target: 12 },
   mark_open_wound: { description: "Defeat 8 exposed enemies.", target: 8 },
   dance_long_step: { description: "Blade Dance near enemies 10 times.", target: 10 },
@@ -363,7 +363,7 @@ export const BUILD_PATH_SPECIALIZATIONS = {
   ],
   assassin: [
     { id: "executioner", name: "Executioner", role: "Commit to the kill", effect: "Shadowstep's empowered strike deals +4 damage.", trial: "Land 15 empowered killing blows.", trialTarget: 15, capstone: "DEATHBLOW · Empowered killing blows restore 20 stamina." },
-    { id: "phantom", name: "Phantom", role: "Disappear again", effect: "Shadowstep concealment lasts longer and hastens your Calling Power.", trial: "Strike from Shadowstep 20 times.", trialTarget: 20, capstone: "VANISH · Shadowstep fully refreshes Calling Power." },
+    { id: "phantom", name: "Phantom", role: "Disappear again", effect: "Shadowstep concealment lasts longer and hastens your Calling Power.", trial: "Strike from Shadowstep 20 times.", trialTarget: 20, capstone: "STEALTH · Shadowstep fully refreshes Calling Power." },
   ],
   thief: [
     { id: "trickster", name: "Trickster", role: "Control the pursuit", effect: "Smoke Decoy reaches farther and conceals you longer.", trial: "Divert 40 pursuing enemies.", trialTarget: 40, capstone: "GRAND ILLUSION · Smoke Decoy also staggers diverted enemies." },
