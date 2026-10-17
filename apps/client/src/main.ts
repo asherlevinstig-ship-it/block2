@@ -359,6 +359,8 @@ let latestDungeonBoard: DungeonBoardUpdate | null = null;
 const expeditionPanel = document.createElement("section");
 expeditionPanel.id = "expedition-board-panel";
 expeditionPanel.hidden = true;
+expeditionPanel.setAttribute("role", "dialog");
+expeditionPanel.setAttribute("aria-label", "Forest dungeon expedition board");
 expeditionPanel.innerHTML = '<button class="expedition-close" type="button" aria-label="Close">×</button><small>TOWN OF BEGINNINGS</small><h2>FOREST DUNGEON</h2><p class="expedition-message"></p><button class="realm-hunts-open" type="button"><b>REALM HUNTS</b><span>Track leaders · forge awakened weapons</span></button><ol><li data-stage="1">Breach the forest sentinels</li><li data-stage="2">Defeat the thicket guards</li><li data-stage="3">Slay the Ancient Root Guardian</li><li data-stage="4">Collect the Rootbound Cache and escape</li></ol><div class="expedition-stats"><span>GROUP <strong class="expedition-party">SOLO</strong></span><span>BEST <strong class="expedition-best">—</strong></span></div><div class="expedition-reward"><b>GUARANTEED PERSONAL REWARD</b><strong>Rootbound Hammer</strong><span>Heavy 3-hit combo · finisher roots groups</span></div><button class="expedition-launch" type="button">OPEN DUNGEON PORTAL</button>';
 document.body.append(expeditionPanel);
 const formatDungeonTime = (milliseconds: number) => milliseconds > 0
@@ -508,6 +510,8 @@ window.setInterval(() => {
 const dungeonLobbyPanel = document.createElement("section");
 dungeonLobbyPanel.id = "dungeon-lobby-panel";
 dungeonLobbyPanel.hidden = true;
+dungeonLobbyPanel.setAttribute("role", "dialog");
+dungeonLobbyPanel.setAttribute("aria-label", "Forest dungeon party ready check");
 dungeonLobbyPanel.innerHTML = '<small>FOREST DUNGEON</small><h2>EXPEDITION ASSEMBLY</h2><p class="dungeon-lobby-message"></p><ul class="dungeon-lobby-members"></ul><div class="dungeon-lobby-scaling"></div><div class="dungeon-lobby-actions"><button class="dungeon-ready" type="button">READY</button><button class="dungeon-start" type="button">START EXPEDITION</button></div>';
 document.body.append(dungeonLobbyPanel);
 function renderDungeonLobby(update: DungeonLobbyUpdate): void {
@@ -821,7 +825,7 @@ const levelCelebration = document.querySelector<HTMLElement>("#level-up-celebrat
 const levelCelebrationTitle = document.querySelector<HTMLElement>("#level-celebration-title")!;
 const levelCelebrationDetail = document.querySelector<HTMLElement>("#level-celebration-detail")!;
 const levelCelebrationChoose = document.querySelector<HTMLButtonElement>("#level-celebration-choose")!;
-let pendingLevelCelebration: { level: number; detail: string } | null = null;
+const pendingLevelCelebrations: { level: number; detail: string }[] = [];
 let levelCelebrationUntil = 0;
 levelCelebrationChoose.addEventListener("click", () => {
   levelCelebration.hidden = true;
@@ -3624,6 +3628,7 @@ function updateSpecialLoadout(specialId: SpecialId): void {
 }
 
 function requestCallingAbility(slot: "power" | "special" = "power"): void {
+  if (reportedProtectedDialog === true) return;
   if (!room || !worldReady) return;
   if (localCharacterProgression.level < (slot === "special" ? 4 : 2)) return;
   if (!localBuildPathId) {
@@ -3800,6 +3805,7 @@ function renderCharacterProgression(update: ProgressionUpdate, maximumHealth = p
   playerLevel.dataset.points = String(update.unspentStatPoints > 0);
   refreshStatChoiceButtons();
   updateLevelUpCallingGuide();
+  refreshCallingUnlockNotice();
   if (update.unspentStatPoints <= 0) levelUpPanel.hidden = true;
 }
 
@@ -3815,9 +3821,9 @@ function updateLevelUpCallingGuide(): void {
 }
 
 function updateLevelCelebration(now: number): void {
-  if (pendingLevelCelebration && worldReady && defeatScreen.hidden && !localCombatActive()) {
-    const celebration = pendingLevelCelebration;
-    pendingLevelCelebration = null;
+  if (pendingLevelCelebrations.length && levelCelebration.hidden && worldReady && defeatScreen.hidden
+    && reportedProtectedDialog !== true && !localCombatActive()) {
+    const celebration = pendingLevelCelebrations.shift()!;
     levelCelebrationTitle.textContent = `LEVEL ${celebration.level}!`;
     levelCelebrationDetail.textContent = celebration.detail;
     levelCelebrationChoose.hidden = localCharacterProgression.unspentStatPoints <= 0;
@@ -3826,7 +3832,33 @@ function updateLevelCelebration(now: number): void {
     combatAudio.play("levelUp");
     levelUpBurst();
   }
-  if (!levelCelebration.hidden && (now >= levelCelebrationUntil || localCombatActive())) levelCelebration.hidden = true;
+  if (!levelCelebration.hidden && (now >= levelCelebrationUntil || reportedProtectedDialog === true || localCombatActive()))
+    levelCelebration.hidden = true;
+}
+
+function callingUnlockStorageKey(pathId: BuildPathId): string {
+  return `calling-ability-seen-v1:${profileToken}:${pathId}`;
+}
+
+function refreshCallingUnlockNotice(): void {
+  const update = lastBuildPathUpdate;
+  if (!update?.selectedPathId || localCharacterProgression.level < 2) {
+    combatHud.setNewCallingUnlock(null);
+    return;
+  }
+  let seenRank = -1;
+  try { seenRank = Number(window.localStorage.getItem(callingUnlockStorageKey(update.selectedPathId)) ?? -1); } catch { /* Private storage may be unavailable. */ }
+  const unlocked = CALLING_ABILITY_OPTIONS.filter(option => option.pathId === update.selectedPathId
+    && option.unlockRank > seenRank && option.unlockRank <= update.rank
+    && option.id !== "assassin_death_mark");
+  combatHud.setNewCallingUnlock(unlocked.map(option => option.name).join(", ") || null);
+}
+
+function markCallingUnlockSeen(): void {
+  const update = lastBuildPathUpdate;
+  if (!update?.selectedPathId || localCharacterProgression.level < 2) return;
+  try { window.localStorage.setItem(callingUnlockStorageKey(update.selectedPathId), String(update.rank)); } catch { /* Private storage may be unavailable. */ }
+  combatHud.setNewCallingUnlock(null);
 }
 
 function renderAssassinJourney(update: BuildPathUpdate): void {
@@ -3853,6 +3885,7 @@ function renderBuildPath(update: BuildPathUpdate): void {
   updateLevelUpCallingGuide();
   combatHud.setCalling(update.selectedPathId, update.selectedCallingAbilityId, update.rank, update.selectedCallingAugmentId,
     update.callingAugmentProgress, update.masteredCallingAugments);
+  refreshCallingUnlockNotice();
   specialButton.disabled = localCharacterProgression.level < 4 || !update.selectedPathId;
   updateControlsHelp();
   if (trackedCodexItemId) setCodexHunt(trackedCodexItemId, false);
@@ -8083,6 +8116,30 @@ joystickZone.addEventListener("pointerup", event => releaseJoystick(event.pointe
 joystickZone.addEventListener("pointercancel", event => releaseJoystick(event.pointerId));
 
 let room: Room | null = null;
+let reportedProtectedDialog: boolean | null = null;
+const protectedDialogSelector = '[role="dialog"], [aria-modal="true"], #loot-pack-decision, #combat-loadout-drawer, #performance-panel, #depths-retry-prompt, #nearby-chat details[open], #party-panel details[open]';
+function syncProtectedDialog(): void {
+  if (!room) { reportedProtectedDialog = null; return; }
+  const open = [...document.querySelectorAll<HTMLElement>(protectedDialogSelector)].some(dialog =>
+    dialog.id !== "defeat-screen" && dialog.id !== "character-creator"
+    && !dialog.hidden && dialog.getClientRects().length > 0);
+  if (reportedProtectedDialog === open) return;
+  if (open) {
+    resetMovementControls();
+    setDefensePresentation(false);
+    cancelPowerAim();
+    cancelSpecialAim();
+  }
+  reportedProtectedDialog = open;
+  room.send("ui:dialog", { open });
+}
+let protectedDialogSyncQueued = false;
+new MutationObserver(() => {
+  if (protectedDialogSyncQueued) return;
+  protectedDialogSyncQueued = true;
+  queueMicrotask(() => { protectedDialogSyncQueued = false; syncProtectedDialog(); });
+}).observe(document.body, { subtree: true, childList: true, attributes: true,
+  attributeFilter: ["hidden", "style", "aria-hidden", "open"] });
 let movementShadowInput: InputHandle<{ strafe: number; forward: number; yaw: number }> | null = null;
 let movementPilotRequested = false;
 let movementPilotReady = false;
@@ -8551,6 +8608,7 @@ function setDefensePresentation(active: boolean): void {
 
 function requestDefense(active: boolean): void {
   if (!defeatScreen.hidden) return;
+  if (active && reportedProtectedDialog === true) return;
   if (!room || !worldReady || active === localDefending) return;
   if (active && (powerAimActive || specialAimActive || localPowerStartedAt !== null || localActionStartedAt !== null)) {
     status.textContent = "Finish or cancel the current action before guarding.";
@@ -8946,6 +9004,7 @@ function requestMine(): void {
 
 function requestAttack(): void {
   if (!defeatScreen.hidden) return;
+  if (reportedProtectedDialog === true) return;
   if (!room || !worldReady) return;
   const now = performance.now();
   if (powerAimActive || (localPowerStartedAt !== null && now - localPowerStartedAt < powerDuration(localActivePower))) {
@@ -8989,6 +9048,7 @@ function requestAttack(): void {
 
 function requestDodge(): void {
   if (!defeatScreen.hidden) return;
+  if (reportedProtectedDialog === true) return;
   if (!room || !worldReady) return;
   const now = performance.now();
   if (now < localDodgeExhaustedUntil) {
@@ -9129,6 +9189,7 @@ function updatePowerAimFromPointer(): void {
 function beginPowerAim(pointerId: number | null = null): void {
   if (!WEAPON_TECHNIQUES_AVAILABLE) return;
   if (!defeatScreen.hidden) return;
+  if (reportedProtectedDialog === true) return;
   if (!room || !worldReady) return;
   if (localCharacterProgression.level < 5) return;
   if (localDefending) requestDefense(false);
@@ -9316,6 +9377,7 @@ function updateSpecialAimFromPointer(): void {
 function beginSpecialAim(pointerId: number | null = null): void {
   if (!FIELD_TECHNIQUES_AVAILABLE) return;
   if (!defeatScreen.hidden) return;
+  if (reportedProtectedDialog === true) return;
   if (!room || !worldReady || specialAimActive) return;
   if (localCharacterProgression.level < 4) return;
   if (localDefending) requestDefense(false);
@@ -9522,6 +9584,7 @@ for (const button of traitPickerButtons) {
   });
 }
 combatHudRoot.addEventListener("click", event => {
+  if ((event.target as HTMLElement).closest("#loadout-toggle")) markCallingUnlockSeen();
   const augmentButton = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-calling-augment]");
   const augmentId = augmentButton?.dataset.callingAugment as CallingAugmentId | undefined;
   if (augmentButton) {
@@ -9720,6 +9783,11 @@ specialSlot.addEventListener("pointerup", event => {
 specialSlot.addEventListener("pointercancel", cancelSpecialAim);
 callingSlot.addEventListener("click", event => {
   event.preventDefault();
+  if (!localBuildPathId && localCharacterProgression.level >= 2) {
+    if (lastBuildPathUpdate?.inTown && lastBuildPathUpdate.canChoose) openCallingIntro();
+    else status.textContent = "Return to Town to choose your Calling and unlock your Power.";
+    return;
+  }
   requestCallingAbility();
 });
 powerButton.addEventListener("pointerdown", event => {
@@ -9884,7 +9952,8 @@ app.on("update", (dt: number) => {
   const keyboardStrafe = Number(keys.has("KeyD")) - Number(keys.has("KeyA"));
   const keyboardForward = Number(keys.has("KeyW")) - Number(keys.has("KeyS"));
   const modalMovementAllowed = lootPanel.hidden && defeatScreen.hidden && quizPanel.hidden && blacksmithPanel.hidden && inventoryPanel.hidden
-    && levelUpPanel.hidden && expeditionPanel.hidden && realmHuntPanel.hidden && !playerInteractionUI.isOpen();
+    && levelUpPanel.hidden && expeditionPanel.hidden && realmHuntPanel.hidden && !playerInteractionUI.isOpen()
+    && reportedProtectedDialog !== true;
   const strafe = modalMovementAllowed ? Math.max(-1, Math.min(1, keyboardStrafe + touchStrafe)) : 0;
   const forward = modalMovementAllowed ? Math.max(-1, Math.min(1, keyboardForward - touchForward)) : 0;
   const frameTime = Math.min(dt, 0.05);
@@ -9898,7 +9967,7 @@ app.on("update", (dt: number) => {
   const desiredMovement = quantizeMovementToEightDirections(
     cameraRelativeMovement(strafe, forward, cameraOffset.x, cameraOffset.z),
   );
-  smoothedMovement = worldReady ? approachMovement(smoothedMovement, desiredMovement, frameTime) : { x: 0, z: 0 };
+  smoothedMovement = worldReady && modalMovementAllowed ? approachMovement(smoothedMovement, desiredMovement, frameTime) : { x: 0, z: 0 };
   const powerFacingActive = powerAimActive || (localPowerStartedAt !== null
     && performance.now() - localPowerStartedAt < powerDuration(localActivePower)
     && localPowerFacingYaw !== null);
@@ -11020,8 +11089,12 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     throw error;
   });
   saveReconnectToken();
+  reportedProtectedDialog = null;
+  syncProtectedDialog();
   room.onReconnect(() => {
     saveReconnectToken();
+    reportedProtectedDialog = null;
+    syncProtectedDialog();
     room?.send("world:ready");
     room?.send("objective:sync");
     if (movementShadowInput) room?.send("movement:shadow:hello", { control: movementPilotRequested });
@@ -11238,9 +11311,16 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     if (update.reason === "level_up") {
       const milestone = CHARACTER_MILESTONES.find(entry => entry.level === update.level);
       const callingReminder = !localBuildPathId && update.level >= 2 ? " · choose a Calling in Town for abilities" : "";
-      pendingLevelCelebration = { level: update.level, detail: milestone
-        ? `${milestone.name} unlocked · a permanent stat point is ready${callingReminder}`
-        : `A permanent stat point is ready · +${update.experienceGranted ?? 0} XP${callingReminder}` };
+      const namedAbility = update.level === 2 && localBuildPathId
+        ? CALLING_ABILITY_OPTIONS.find(option => option.pathId === localBuildPathId && option.category === "Core")
+        : update.level === 4 && localBuildPathId
+          ? CALLING_ABILITY_OPTIONS.find(option => option.pathId === localBuildPathId && option.category === "Utility") : null;
+      pendingLevelCelebrations.push({ level: update.level, detail: namedAbility
+        ? `${namedAbility.name} unlocked · ${update.level === 2 ? "G" : "F"} to use · a stat point is ready`
+        : !localBuildPathId && (update.level === 2 || update.level === 4)
+          ? `Choose a Calling in Town for your ${update.level === 2 ? "Power (G)" : "Special (F)"} · a stat point is ready`
+        : milestone ? `${milestone.name} unlocked · a permanent stat point is ready${callingReminder}`
+        : `A permanent stat point is ready · +${update.experienceGranted ?? 0} XP${callingReminder}` });
       status.textContent = milestone ? `Level ${update.level}! ${milestone.name} unlocked. Choose a permanent character improvement.` : `Level ${update.level}! Choose a permanent character improvement.`;
     } else if (update.reason === "experience" && update.experienceGranted) {
       status.textContent = `+${update.experienceGranted} XP · ${update.source ?? "adventuring"}`;

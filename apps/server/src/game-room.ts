@@ -420,6 +420,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   override patchRate = 33;
   private readonly chunks = new Map<string, MutableChunk>();
   private readonly movementInputs = new Map<string, StoredMovementInput>();
+  private readonly protectedDialogs = new Set<string>();
   private readonly orderedMovement = new Map<string, { lastAt: number; availableMs: number }>();
   private readonly movementShadows = new Map<string, ShadowPose>();
   private readonly movementPilotControllers = new Set<string>();
@@ -749,9 +750,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     });
     const aliveMessage = (type: string, handler: (client: Client, payload: any) => void) => {
       this.onMessage(type, (client, payload) => {
-        if ((this.state.players.get(client.sessionId)?.health ?? 0) > 0) handler(client, payload);
+        if ((this.state.players.get(client.sessionId)?.health ?? 0) <= 0) return;
+        if (this.protectedDialogs.has(client.sessionId) && ["move", "mine", "attack", "dodge", "defense", "power", "special", "calling:ability", "role:opportunity"].includes(type)) return;
+        handler(client, payload);
       });
     };
+    this.onMessage("ui:dialog", (client, payload: unknown) => this.setProtectedDialog(client, payload));
     this.onMessage("player:return", client => void this.returnPlayerToTown(client));
     this.onMessage("dungeon:board", (client, payload: unknown) => this.handleDungeonBoard(client, payload));
     this.onMessage("realm-hunt:board", (client, payload: unknown) => this.handleRealmHuntBoard(client, payload));
@@ -969,6 +973,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   }
 
   override async onLeave(client: Client): Promise<void> {
+    this.protectedDialogs.delete(client.sessionId);
     this.northwatchPatrolContributors.delete(client.sessionId);
     this.mistfenPoolDamageAt.delete(client.sessionId);
     this.fenwalkerWardReadyAt.delete(client.sessionId);
@@ -1087,6 +1092,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   override onReconnect(client: Client): void {
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
+    this.protectedDialogs.delete(client.sessionId);
     this.inputs?.get(client.sessionId).clear();
     const previousInvulnerability = this.silverDepthsReconnectInvulnerability.get(client.sessionId);
     if (previousInvulnerability !== undefined) {
@@ -1104,6 +1110,27 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
 
   override async onDispose(): Promise<void> {
     await Promise.allSettled([...this.profileSaveQueues.values(), this.flushWorldDeltaWrites()]);
+  }
+
+  private setProtectedDialog(client: Client, payload: unknown): void {
+    if (!payload || typeof payload !== "object" || !("open" in payload) || typeof payload.open !== "boolean") return;
+    const id = client.sessionId;
+    const player = this.state.players.get(id);
+    if (!player || player.health <= 0) return;
+    if (!payload.open) { this.protectedDialogs.delete(id); return; }
+    if (this.protectedDialogs.has(id)) return;
+    this.protectedDialogs.add(id);
+    // A dialog is a pause, not a combat stance: no buffered attack or movement
+    // may resolve while the player is protected.
+    this.inputs?.get(id).clear();
+    this.movementInputs.set(id, { request: idleMovementInput(), receivedAt: Date.now() });
+    this.orderedMovement.delete(id);
+    this.pendingMining.delete(id);
+    this.pendingAttacks.delete(id);
+    this.pendingPowers.delete(id);
+    this.pendingResurrections.delete(id);
+    this.cancelWeaponProjectiles(id);
+    player.defending = false;
   }
 
   private handleNearbyChat(client: Client, payload: unknown): void {
@@ -3382,7 +3409,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private damagePlayer(mobId: string, playerId: string, damage: number, now: number, blockable = true,
     kind: IncomingDamageKind = "melee", contact?: PendingIncomingHit): boolean {
     const player = this.state.players.get(playerId);
-    if (!player || player.health <= 0 || isInsideTownSafeZone(player) || !caveEncounterAllows(mobId, player)) return false;
+    if (!player || player.health <= 0 || this.protectedDialogs.has(playerId) || isInsideTownSafeZone(player) || !caveEncounterAllows(mobId, player)) return false;
     const dodge = this.activeDodgeWindows.get(playerId);
     const lateDodgeCoversContact = !!contact && !!dodge && dodge.startedAt <= contact.contactAt && contact.contactAt <= dodge.until;
     if (contact ? lateDodgeCoversContact : now < player.invulnerableUntil) {
@@ -6314,6 +6341,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const player = this.state.players.get(client.sessionId);
       const shadow = this.movementShadows.get(client.sessionId);
       if (!player || player.health <= 0) continue;
+      if (this.protectedDialogs.has(client.sessionId)) {
+        this.inputs.get(client.sessionId).clear();
+        if (shadow) this.movementShadows.set(client.sessionId, { x: player.x, y: player.y, z: player.z, verticalVelocity: 0 });
+        continue;
+      }
       const command = this.inputs.get(client.sessionId).next();
       if (this.movementPilotControllers.has(client.sessionId)) {
         const direction = command ?? { strafe: 0, forward: 0, yaw: player.yaw };
@@ -6926,7 +6958,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
             { armourId: "forager_wrap" } satisfies RegionalArmourProc);
         }
       }
-      if (this.movementPilotControllers.has(sessionId) || this.orderedMovement.has(sessionId)) continue;
+      if (this.protectedDialogs.has(sessionId) || this.movementPilotControllers.has(sessionId) || this.orderedMovement.has(sessionId)) continue;
       const input = activeMovementInput(this.movementInputs.get(sessionId), now, player.yaw);
       const inputLength = Math.hypot(input.strafe, input.forward);
       const scale = inputLength > 1 ? 1 / inputLength : 1;

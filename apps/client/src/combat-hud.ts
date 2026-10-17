@@ -54,6 +54,7 @@ const powerCooldown = signal<CooldownState>({ percent: 0, label: "SERVER UPDATE"
 const specialCooldown = signal<CooldownState>({ percent: 0, label: "READY · F", ready: true });
 const callingCooldown = signal<CooldownState>({ percent: 0, label: "CHOOSE CALLING", ready: false });
 const loadoutOpen = signal(false);
+const newCallingUnlock = signal<string | null>(null);
 
 const POWER_IDS = ["shockwave", "seismic_cleave", "eruption", "lunge_strike"] as const;
 const POWER_LABELS: Record<PowerId, string> = { shockwave: "SHOCKWAVE", seismic_cleave: "SEISMIC", eruption: "ERUPTION", lunge_strike: "LUNGE" };
@@ -188,9 +189,9 @@ function SpecialLoadout() {
   const name = selected?.name;
   const locked = characterLevel.value < 4 || !selected;
   return h("button", { id: "special-slot", type: "button", disabled: locked,
-      "aria-label": locked ? "Choose a Calling; Special unlocks at level 4" : `Use ${name}`,
+      "aria-label": locked ? characterLevel.value < 4 ? "Calling Special unlocks at level 4" : "Choose a Calling to use your Special" : `Use ${name}`,
       class: `${locked ? "locked" : cooldown.ready && !specialAiming.value ? "ready" : ""} ${specialAiming.value ? "aiming" : ""}`.trim() },
-      h("span", null, "CALLING SPECIAL"), h("strong", { id: "special-name" }, locked ? "Unlocks at LV 4" : name),
+      h("span", null, "CALLING SPECIAL"), h("strong", { id: "special-name" }, locked ? characterLevel.value < 4 ? "Unlocks at LV 4" : "Choose Calling" : name),
       h("em", { id: "special-cooldown-label" }, locked ? "COMING LATER" : cooldown.label), h("i", { id: "special-cooldown-fill", style: { width: `${locked ? 0 : cooldown.percent}%` } }),
   );
 }
@@ -202,12 +203,12 @@ function CallingLoadout() {
   const cooldown = callingCooldown.value;
   const state = callingState.value;
   const unlocked = Boolean(selected && characterLevel.value >= 2);
-  return h("button", { id: "calling-slot", type: "button", disabled: !unlocked,
-      "aria-label": unlocked && definition ? `Use ${definition.name}` : "Choose a Calling; Power unlocks at level 2",
+  return h("button", { id: "calling-slot", type: "button", disabled: characterLevel.value < 2,
+      "aria-label": unlocked && definition ? `Use ${definition.name}` : characterLevel.value < 2 ? "Calling Power unlocks at level 2" : "Choose a Calling in Town to use your Power",
       class: `${cooldown.ready && unlocked && !callingPending.value ? "ready" : ""} ${callingPending.value ? "anticipating" : ""} ${state ? "active-state" : ""}`.trim() },
       h("span", null, "CALLING POWER · G"),
-      h("strong", { id: "calling-name" }, unlocked ? definition?.name ?? "Unbound" : "Unlocks at LV 2"),
-      h("em", { id: "calling-cooldown-label" }, callingPending.value ? "CAST" : cooldown.label),
+      h("strong", { id: "calling-name" }, unlocked ? definition?.name ?? "Unbound" : characterLevel.value < 2 ? "Unlocks at LV 2" : "Choose Calling"),
+      h("em", { id: "calling-cooldown-label" }, !selected && characterLevel.value >= 2 ? "IN TOWN" : callingPending.value ? "CAST" : cooldown.label),
       state ? h("b", { id: "calling-state-label" }, h("span", null, state.label), h("small", null, state.detail)) : null,
       h("i", { id: "calling-cooldown-fill", style: { width: `${cooldown.percent}%` } }),
   );
@@ -220,7 +221,11 @@ function CombatHud() {
     h(PowerLoadout, null),
     h(SpecialLoadout, null),
     h(CallingLoadout, null),
-    h("button", { id: "loadout-toggle", type: "button", "aria-expanded": String(loadoutOpen.value), "aria-controls": "combat-loadout-drawer", onClick: () => { loadoutOpen.value = !loadoutOpen.value; } },
+    h("button", { id: "loadout-toggle", type: "button", "aria-expanded": String(loadoutOpen.value), "aria-controls": "combat-loadout-drawer",
+      "data-new-ability": String(Boolean(newCallingUnlock.value)),
+      "aria-label": newCallingUnlock.value ? `New Calling ability: ${newCallingUnlock.value}. Open Kit to view` : "Open Kit",
+      title: newCallingUnlock.value ? `New Calling ability: ${newCallingUnlock.value}. Open Kit to view` : "Open Kit",
+      onClick: () => { loadoutOpen.value = !loadoutOpen.value; } },
       h("span", { "aria-hidden": "true" }, "⚙"), h("strong", null, "KIT")),
     h(LoadoutDrawer, null),
   );
@@ -250,6 +255,7 @@ export const combatHud = {
     });
   },
   setCallingPending(value: boolean): void { setIfChanged(callingPending, value); },
+  setNewCallingUnlock(value: string | null): void { setIfChanged(newCallingUnlock, value); },
   setCallingState(value: CallingState): void {
     if (JSON.stringify(callingState.value) !== JSON.stringify(value)) callingState.value = value;
   },
