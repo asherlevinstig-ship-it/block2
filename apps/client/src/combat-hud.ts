@@ -120,7 +120,8 @@ function MainHandLoadout() {
   const definition = MAIN_HAND_DEFINITIONS[selected];
   const name = selected === "longsword" && ironSwordOwned.value ? "Iron Sword · +1 DMG" : definition.name;
   const activeSet = huntSetForLoadout(selected, armour.value);
-  return h("div", { id: "main-hand-loadout", title: `${name} · Press J to attack`, "aria-label": `Main hand: ${name}. Press J to attack` },
+  return h("div", { id: "main-hand-loadout", title: `${name} · Press J to attack`, "aria-label": `Main hand: ${name}. Press J to attack`,
+    "data-icon": selected === "longsword" || selected === "forged_sword" ? "basic-sword" : undefined },
     h("span", { class: "action-art" }, h(ActionGlyph, { kind: "weapon", weapon: selected })),
     h("kbd", { title: "Press J to attack; hold J to fire ranged weapons" }, "J"),
     h("strong", { id: "main-hand-name" }, name),
@@ -237,7 +238,9 @@ function CallingLoadout() {
   const cooldown = callingCooldown.value;
   const state = callingState.value;
   const unlocked = Boolean(selected && characterLevel.value >= 2);
-  return h("button", { id: "calling-slot", type: "button", disabled: characterLevel.value < 2,
+  const artwork = unlocked && definition?.id === "assassin_vanish" ? "assassin-vanish"
+    : unlocked && definition?.id === "healer_field_mend" ? "healer-mend" : undefined;
+  return h("button", { id: "calling-slot", type: "button", disabled: characterLevel.value < 2, "data-icon": artwork,
       "aria-label": unlocked && definition ? `Use ${definition.name}` : characterLevel.value < 2 ? "Calling Power unlocks at level 2" : "Choose a Calling in Town to use your Power",
       class: `${cooldown.ready && unlocked && !callingPending.value ? "ready" : ""} ${callingPending.value ? "anticipating" : ""} ${state ? "active-state" : ""}`.trim() },
       h("span", { class: "action-art" }, !unlocked ? h(LockedGlyph, null) : h(ActionGlyph, { kind: "calling", path: selected })),

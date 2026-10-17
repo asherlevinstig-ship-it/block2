@@ -3184,3 +3184,51 @@ html.onboarding-active #trait-slot { display: none; }
   #first-steps, #trait-slot { top: calc(167px + env(safe-area-inset-top)); left: 10px; width: 190px; }
   #exit-guide { top: calc(245px + env(safe-area-inset-top)); left: 10px; width: 190px; }
 }
+
+/* Starter gear remains visually ordinary; dramatic art belongs to combat abilities. */
+#combat-action-bar #defense-slot .action-art,
+#combat-action-bar #dodge-hotbar .action-art,
+#combat-action-bar #potion-use .action-art,
+#combat-hud-shell #main-hand-loadout[data-icon] .action-art,
+#combat-hud-shell #calling-slot[data-icon] .action-art {
+  border: 0;
+  border-radius: 6px;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  box-shadow: none;
+}
+#combat-action-bar #defense-slot .action-art { background-image: url('/icons/guard.png'); }
+#combat-action-bar #dodge-hotbar .action-art { background-image: url('/icons/dodge.png'); }
+#combat-action-bar #potion-use .action-art { background-image: url('/icons/healing-potion.png'); }
+#combat-hud-shell #main-hand-loadout[data-icon="basic-sword"] .action-art { background-image: url('/icons/basic-sword.png'); }
+#combat-hud-shell #calling-slot[data-icon="assassin-vanish"] .action-art { background-image: url('/icons/assassin-vanish.png'); }
+#combat-hud-shell #calling-slot[data-icon="healer-mend"] .action-art { background-image: url('/icons/healer-mend.png'); }
+#combat-action-bar #defense-slot .action-art svg,
+#combat-action-bar #dodge-hotbar .action-art svg,
+#combat-action-bar #potion-use .action-art svg,
+#combat-hud-shell #main-hand-loadout[data-icon] .action-art svg,
+#combat-hud-shell #calling-slot[data-icon] .action-art svg { display: none; }
+
+.inventory-grid article[data-item="forged_sword"] > i,
+.inventory-grid article[data-item="wanderer_robes"] > i,
+.inventory-grid article[data-item="iron_ore"] > i,
+.potion-inventory[data-item="healing_potion"] > i {
+  display: block;
+  flex: 0 0 auto;
+  width: 46px;
+  height: 46px;
+  margin: 3px auto 7px;
+  border: 0;
+  border-radius: 6px;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  box-shadow: none;
+  clip-path: none;
+  transform: none;
+}
+.inventory-grid article[data-item="forged_sword"] > i { background-image: url('/icons/basic-sword.png'); }
+.inventory-grid article[data-item="wanderer_robes"] > i { background-image: url('/icons/wanderer-robes.png'); }
+.inventory-grid article[data-item="iron_ore"] > i { background-image: url('/icons/iron-ore.png'); }
+.potion-inventory[data-item="healing_potion"] > i { background-image: url('/icons/healing-potion.png'); }
