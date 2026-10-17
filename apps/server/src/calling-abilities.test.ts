@@ -40,11 +40,12 @@ describe("hotbar Calling abilities", () => {
       cooldownUntil: 10_000 + CALLING_ABILITIES[pathId].cooldownMs,
     }));
     expect(client.send).toHaveBeenCalledWith("build:path-proc", expect.objectContaining({ pathId }));
-    expect(broadcast).toHaveBeenCalledWith("calling:ability:effect", expect.objectContaining({
+    const effectRecipient = pathId === "assassin" ? client.send : broadcast;
+    expect(effectRecipient).toHaveBeenCalledWith("calling:ability:effect", expect.objectContaining({
       casterId: "hero", pathId, abilityId: `${pathId}_${pathId === "tank" ? "bulwark" : pathId === "mage" ? "arcane_surge" : pathId === "assassin" ? "vanish" : pathId === "thief" ? "smoke_bomb" : pathId === "healer" ? "field_mend" : "volley_focus"}`,
       x: 50, y: 8, z: 50,
     }));
-    if (pathId !== "mage" && pathId !== "healer") expect(broadcast).toHaveBeenCalledWith("calling:state", expect.objectContaining({
+    if (pathId !== "mage" && pathId !== "healer") expect(pathId === "assassin" ? client.send : broadcast).toHaveBeenCalledWith("calling:state", expect.objectContaining({
       playerId: "hero", pathId, phase: "active",
     }));
     if (pathId === "tank") {
@@ -55,7 +56,10 @@ describe("hotbar Calling abilities", () => {
     if (pathId === "mage") { expect(player.powerCooldownUntil).toBe(99_000); expect(player.stamina).toBe(55); }
     if (pathId === "assassin") {
       expect(internal.assassinShadowUntil.get("hero")).toBe(13_000);
+      expect(internal.stealthUntil.get("hero")).toBe(13_000);
       expect(internal.mobAwareness.has("pursuer")).toBe(false);
+      expect(broadcast).not.toHaveBeenCalledWith("calling:ability:effect", expect.objectContaining({ abilityId: "assassin_vanish" }));
+      expect(broadcast).not.toHaveBeenCalledWith("calling:state", expect.objectContaining({ abilityId: "assassin_vanish" }));
     }
     if (pathId === "thief") {
       expect(player.stamina).toBe(45);
@@ -63,6 +67,21 @@ describe("hotbar Calling abilities", () => {
     }
     if (pathId === "ranger") expect(internal.rangerCallingFocus.get("hero")).toEqual({ hits: 3, bonus: 1 });
     if (pathId === "healer") expect(player.health).toBe(4);
+  });
+
+  it("conceals from bosses for the whole Stealth window and reveals on attack", () => {
+    const { internal, player, client } = fixture("assassin");
+    const boss = new MobState(); Object.assign(boss, { x: 52, y: 8, z: 50, alive: true, isMiniBoss: true, targetId: "hero" });
+    internal.state.mobs.set("boss", boss);
+    internal.mobAwareness.set("boss", { targetId: "hero" });
+    internal.pendingMobMelee.set("boss", { targetId: "hero", yaw: 0, impactAt: 10_300 });
+    internal.handleCallingAbility(client, { requestId: "stealth" });
+    expect(internal.assassinBossConcealedUntil.get("hero")).toBe(13_000);
+    expect(boss.targetId).toBe("");
+    expect(internal.pendingMobMelee.has("boss")).toBe(false);
+    internal.handleAttack(client, { requestId: "reveal", yaw: 0 });
+    expect(internal.stealthUntil.has("hero")).toBe(false);
+    expect(internal.pathConcealedUntil.has("hero")).toBe(false);
   });
 
   it.each(["tank", "mage", "assassin", "thief", "ranger", "healer"] as const)("unlocks %s Power at level 2 and Special at level 4", pathId => {

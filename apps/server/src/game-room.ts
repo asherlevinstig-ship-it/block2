@@ -447,6 +447,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly dodgeCounterUntil = new Map<string, number>();
   private readonly magePowerCasts = new Map<string, number>();
   private readonly assassinShadowUntil = new Map<string, number>();
+  private readonly stealthUntil = new Map<string, number>();
   private readonly assassinShadowBonus = new Map<string, number>();
   private readonly pathConcealedUntil = new Map<string, number>();
   private readonly assassinBossConcealedUntil = new Map<string, number>();
@@ -950,6 +951,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     // discovery milestone rather than a blacksmith briefing quest.
     if (player.miningExpeditionStage === 0) player.miningExpeditionStage = 1;
     this.state.players.set(client.sessionId, player);
+    for (const [playerId, until] of this.stealthUntil)
+      if (until > Date.now()) client.send("player:stealth", { playerId, until });
     if (this.roomKind === "overworld") this.ensureStarterKit(client.sessionId, player, Date.now());
     if (player.miningExpeditionStage === 7 && (player.inventory.get("miners_lantern")?.quantity ?? 0) > 0) {
       this.advanceFirstExpedition(client, "returned_to_blacksmith");
@@ -1048,6 +1051,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.dodgeCounterUntil.delete(client.sessionId);
     this.magePowerCasts.delete(client.sessionId);
     this.assassinShadowUntil.delete(client.sessionId);
+    this.stealthUntil.delete(client.sessionId);
     this.assassinShadowBonus.delete(client.sessionId);
     this.pathConcealedUntil.delete(client.sessionId);
     this.assassinBossConcealedUntil.delete(client.sessionId);
@@ -4682,12 +4686,23 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
 
   private callingState(playerId: string, pathId: BuildPathId, abilityId: CallingAbilityId, label: string,
     options: { activeUntil?: number; charges?: number; targetId?: string; clear?: boolean } = {}): void {
-    this.broadcast("calling:state", {
+    const update: CallingStateUpdate = {
       playerId, pathId, abilityId, phase: options.clear ? "clear" : "active", label,
       ...(options.activeUntil ? { activeUntil: options.activeUntil } : {}),
       ...(options.charges !== undefined ? { charges: options.charges } : {}),
       ...(options.targetId ? { targetId: options.targetId } : {}),
-    } satisfies CallingStateUpdate);
+    };
+    if (abilityId === "assassin_vanish") this.clients.find(client => client.sessionId === playerId)?.send("calling:state", update);
+    else this.broadcast("calling:state", update);
+  }
+
+  private endStealth(playerId: string): void {
+    if (!this.stealthUntil.has(playerId)) return;
+    this.stealthUntil.delete(playerId);
+    this.broadcast("player:stealth", { playerId, until: 0 });
+    this.pathConcealedUntil.delete(playerId);
+    this.assassinBossConcealedUntil.delete(playerId);
+    this.callingState(playerId, "assassin", "assassin_vanish", "STEALTH ENDED", { clear: true });
   }
 
   private grantMasterTrial(playerId: string, specializationId: BuildPathSpecializationId, amount = 1): void {
@@ -4964,6 +4979,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const rank = this.buildPathRankFor(player, pathId);
     const cooldownUntil = now + definition.cooldownMs;
     cooldowns.set(client.sessionId, cooldownUntil);
+    if (abilityId !== "assassin_vanish") this.endStealth(client.sessionId);
     let detail = "ACTIVATED";
     let durationMs: number | undefined;
     let effectTargetId: string | undefined;
@@ -5067,17 +5083,27 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (targetId !== client.sessionId && specialization === "field_medic") this.grantMasterTrial(client.sessionId, "field_medic", staminaRestored);
     } else if (abilityId === "assassin_vanish") {
       durationMs = 3_000 + rank * 400 + (augmentId === "vanish_deep_cloak" ? 2_000 : 0);
+      this.stealthUntil.set(client.sessionId, now + durationMs);
+      this.broadcast("player:stealth", { playerId: client.sessionId, until: now + durationMs });
       this.assassinShadowUntil.set(client.sessionId, now + durationMs);
       this.assassinShadowBonus.set(client.sessionId, augmentId === "vanish_killing_intent" ? 2 : 0);
       this.pathConcealedUntil.set(client.sessionId, now + durationMs);
-      this.assassinBossConcealedUntil.set(client.sessionId, now + 1_200);
+      this.assassinBossConcealedUntil.set(client.sessionId, now + durationMs);
       let diverted = 0;
       for (const [mobId, awareness] of this.mobAwareness) if (awareness.targetId === client.sessionId) {
         const mob = this.state.mobs.get(mobId);
-        if (mob && !mob.isMiniBoss && Math.hypot(mob.x - player.x, mob.z - player.z) <= 8) {
-          this.mobAwareness.delete(mobId); mob.targetId = ""; mob.awarenessState = "search"; diverted += 1;
+        if (mob) {
+          if (!mob.isMiniBoss) this.mobAwareness.delete(mobId);
+          mob.targetId = ""; mob.awarenessState = "search"; diverted += 1;
+          this.pendingMobMelee.delete(mobId);
         }
       }
+      for (const [, mob] of this.state.mobs)
+        if (mob.targetId === client.sessionId) { mob.targetId = ""; mob.awarenessState = "search"; }
+      for (const [mobId, pending] of this.pendingMobMelee)
+        if (pending.targetId === client.sessionId) this.pendingMobMelee.delete(mobId);
+      for (let index = this.pendingIncomingHits.length - 1; index >= 0; index--)
+        if (this.pendingIncomingHits[index]!.playerId === client.sessionId) this.pendingIncomingHits.splice(index, 1);
       detail = `STEALTH ACTIVE · NEXT STRIKE EMPOWERED · ${(durationMs / 1_000).toFixed(1)}s`;
       this.grantCallingTrial(client.sessionId, "vanish_deep_cloak", diverted);
     } else if (abilityId === "assassin_death_mark") {
@@ -5177,11 +5203,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     client.send("calling:ability", update);
     this.sendCombatTiming(client.sessionId, { requestId: parsed.data.requestId, action: "calling", phase: "accepted", serverTime: now });
     this.sendCombatTiming(client.sessionId, { requestId: parsed.data.requestId, action: "calling", phase: "resolved", serverTime: now, outcome: "applied" });
-    this.broadcast("calling:ability:effect", {
+    const effect: CallingAbilityEffect = {
       casterId: client.sessionId, pathId, abilityId, x: effectPosition.x, y: effectPosition.y, z: effectPosition.z,
       yaw: parsed.data.yaw ?? player.yaw, ...(durationMs ? { durationMs } : {}), ...(effectTargetId ? { targetId: effectTargetId } : {}),
       ...(augmentId ? { augmentId } : {}),
-    } satisfies CallingAbilityEffect);
+    };
+    if (abilityId === "assassin_vanish") client.send("calling:ability:effect", effect);
+    else this.broadcast("calling:ability:effect", effect);
     if (abilityId === "tank_bulwark" || abilityId === "tank_challenge")
       this.callingState(client.sessionId, pathId, abilityId, "BRACED", { activeUntil: now + (durationMs ?? 3_000) });
     else if (abilityId === "mage_mana_shield")
@@ -6803,6 +6831,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         z: player.z,
         health: player.health,
       })).filter(player => !isInsideTownSafeZone(player)
+        && now >= (this.stealthUntil.get(player.id) ?? 0)
         && now >= (mob.isMiniBoss
           && parseBuildPathState(this.state.players.get(player.id)?.huntLoadoutsJson ?? "").selectedPathId === "assassin"
           && this.assassinBossConcealedUntil.has(player.id)
@@ -6819,7 +6848,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         player => hasCombatLineOfSight(mob, player, this.readWorldBlock));
       if (!target) {
         if (mob.isMiniBoss && previousTarget && now < (this.assassinBossConcealedUntil.get(previousTarget) ?? 0)) {
-          // Keep the encounter alive through the Assassin's brief vanish; the boss resumes pursuit on reacquisition.
+          // Keep the encounter alive during Stealth; the boss resumes pursuit after it ends.
           mob.awarenessState = "search";
           continue;
         }
@@ -7830,6 +7859,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       step,
       impactAt: actionAt + timing.impactMs,
     });
+    this.endStealth(client.sessionId);
     player.yaw = parsed.data.yaw;
     player.attackStep = step;
     player.actionSequence += 1;

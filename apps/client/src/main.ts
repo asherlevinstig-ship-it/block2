@@ -2261,6 +2261,51 @@ const localPlayerVisual = new pc.Entity("local-player-visual");
 localPlayer.addChild(localPlayerVisual);
 const localPlayerRig = createVoxelCharacter(localPlayerVisual, coloredMaterial(new pc.Color(0.12, 0.45, 0.46)), true);
 const localPlayerSilhouette = localPlayerRig.silhouette;
+// The owner sees a one-percent ghost with a readable outline during Stealth.
+const stealthGhostFill = new pc.StandardMaterial();
+stealthGhostFill.diffuse = new pc.Color(.55, .37, .9);
+stealthGhostFill.emissive = new pc.Color(.12, .06, .24);
+stealthGhostFill.opacity = .01;
+stealthGhostFill.blendType = pc.BLEND_NORMAL;
+stealthGhostFill.depthWrite = false;
+stealthGhostFill.update();
+const stealthGhostEdge = new pc.StandardMaterial();
+stealthGhostEdge.diffuse = new pc.Color(.45, .73, 1);
+stealthGhostEdge.emissive = new pc.Color(.25, .48, .8);
+stealthGhostEdge.opacity = .78;
+stealthGhostEdge.blendType = pc.BLEND_NORMAL;
+stealthGhostEdge.depthWrite = false;
+stealthGhostEdge.depthTest = false;
+stealthGhostEdge.update();
+const localStealthGhost = new pc.Entity("local-stealth-outline");
+localPlayerVisual.addChild(localStealthGhost);
+function addStealthGhostPart(name: string, x: number, y: number, z: number, width: number, height: number, depth: number): void {
+  const fill = addBox(localStealthGhost, `${name}-ghost`, stealthGhostFill, [width, height, depth], [x, y, z]);
+  if (fill.render) fill.render.castShadows = false;
+  const edge = .024;
+  for (const sideY of [-1, 1]) for (const sideZ of [-1, 1]) {
+    const line = addBox(localStealthGhost, `${name}-edge-x`, stealthGhostEdge, [width + edge, edge, edge],
+      [x, y + sideY * height / 2, z + sideZ * depth / 2]);
+    if (line.render) line.render.castShadows = false;
+  }
+  for (const sideX of [-1, 1]) for (const sideZ of [-1, 1]) {
+    const line = addBox(localStealthGhost, `${name}-edge-y`, stealthGhostEdge, [edge, height + edge, edge],
+      [x + sideX * width / 2, y, z + sideZ * depth / 2]);
+    if (line.render) line.render.castShadows = false;
+  }
+  for (const sideX of [-1, 1]) for (const sideY of [-1, 1]) {
+    const line = addBox(localStealthGhost, `${name}-edge-z`, stealthGhostEdge, [edge, edge, depth + edge],
+      [x + sideX * width / 2, y + sideY * height / 2, z]);
+    if (line.render) line.render.castShadows = false;
+  }
+}
+addStealthGhostPart("body", 0, .83, 0, .52, .57, .34);
+addStealthGhostPart("head", 0, 1.42, 0, .42, .43, .41);
+for (const side of [-1, 1]) {
+  addStealthGhostPart("arm", side * .38, .82, 0, .19, .53, .22);
+  addStealthGhostPart("leg", side * .15, .32, 0, .22, .6, .26);
+}
+localStealthGhost.enabled = false;
 localPlayer.setPosition(8.5, 11, 8.5);
 app.root.addChild(localPlayer);
 
@@ -2489,6 +2534,7 @@ interface MarkVisualState {
 }
 
 const remotePlayers = new Map<string, RemotePlayerVisual>();
+const playerStealthUntil = new Map<string, number>();
 const social = createSocialUI((type, payload) => { if (!room || !worldReady) return false; room.send(type, payload); return true; }, () => { resetMovementControls(); requestDefense(false); cancelPowerAim(); cancelSpecialAim(); });
 const tradeUI = createTradeUI(request => { if (!room || !worldReady) return false; room.send("trade:request", request); return true; }, () => { resetMovementControls(); requestDefense(false); cancelPowerAim(); cancelSpecialAim(); });
 const partyUI = createPartyUI(request => { if (!room || !worldReady) return false; room.send("party:request", request); return true; }, () => { resetMovementControls(); requestDefense(false); cancelPowerAim(); cancelSpecialAim(); }, id => tradeUI.invite(id), () => room?.sessionId ?? "", name => { if (!room || !worldReady) return false; room.send("player:name", name); return true; });
@@ -2506,7 +2552,7 @@ function playerInteractionView(id: string): PlayerInteractionView | null {
   if (!room) return null;
   const player = (room.state.players as Map<string, NetworkPlayer>).get(id);
   const remote = remotePlayers.get(id);
-  if (!player || !remote) return null;
+  if (!player || !remote || !remote.entity.enabled) return null;
   const appearance = resolveAppearance({
     skin: player.appearanceSkin,
     hair: player.appearanceHair,
@@ -6224,6 +6270,7 @@ function bindPlayers(joinedRoom: Room): void {
     }, true);
   }, true);
   players.onRemove((_player: NetworkPlayer, sessionId: string) => {
+    playerStealthUntil.delete(sessionId);
     const remote = remotePlayers.get(sessionId);
     if (!remote) return;
     if (playerInteractionUI.targetId() === sessionId) playerInteractionUI.close();
@@ -8992,7 +9039,7 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
   }
   updateDangerZone(localDangerTier, position);
   caveLight.enabled = undergroundLightingBlend > 0.001;
-  if (localPlayerSilhouette) localPlayerSilhouette.enabled = visibilityCutaway;
+  if (localPlayerSilhouette) localPlayerSilhouette.enabled = visibilityCutaway && !localStealthGhost.enabled;
   exitTrail.enabled = visibilityCutaway;
   exitGuide.hidden = !visibilityCutaway;
   caveLight.setPosition(position.x, position.y + 1.2, position.z);
@@ -10267,6 +10314,10 @@ app.on("update", (dt: number) => {
     localActivePower = null;
   }
 
+  const localStealthed = Date.now() < (playerStealthUntil.get(room?.sessionId ?? "") ?? 0);
+  localPlayerRig.root.enabled = !localStealthed;
+  localStealthGhost.enabled = localStealthed;
+
   const player = localPlayer.getPosition();
   if (worldReady && firstStepsIndex === 0 && Math.hypot(player.x - TOWN_CENTER_X, player.z - TOWN_CENTER_Z) >= 1.25)
     noteFirstStep("moved");
@@ -10276,10 +10327,11 @@ app.on("update", (dt: number) => {
   }
   updateFirstStepsTrail(player, animationNow);
   const renderAt = performance.now() - REMOTE_INTERPOLATION_DELAY_MS;
-  for (const remote of remotePlayers.values()) {
+  for (const [id, remote] of remotePlayers) {
     const pose = sampleRemotePose(remote.snapshots, renderAt);
     if (pose) {
-      remote.entity.enabled = undergroundKnown(pose.x, pose.y, pose.z);
+      remote.entity.enabled = undergroundKnown(pose.x, pose.y, pose.z)
+        && Date.now() >= (playerStealthUntil.get(id) ?? 0);
       const previousPosition = remote.entity.getPosition();
       const remoteTravel = Math.hypot(pose.x - previousPosition.x, pose.z - previousPosition.z);
       const remoteVerticalVelocity = (pose.y - previousPosition.y) / Math.max(frameTime, 0.001);
@@ -11022,8 +11074,9 @@ app.on("update", (dt: number) => {
     if (dungeonRoute) {
       const teammates = (latestDepthsPartyStatus?.members ?? []).flatMap(member => {
         if (member.id === room?.sessionId || member.state !== "fighting" && member.state !== "fallen") return [];
-        const position = remotePlayers.get(member.id)?.entity.getPosition()
-          ?? (room?.state.players as Map<string, NetworkPlayer> | undefined)?.get(member.id);
+        const teammate = (room?.state.players as Map<string, NetworkPlayer> | undefined)?.get(member.id);
+        if (Date.now() < (playerStealthUntil.get(member.id) ?? 0)) return [];
+        const position = remotePlayers.get(member.id)?.entity.getPosition() ?? teammate;
         return position ? [{ id: member.id, name: member.name, x: position.x, y: position.y, z: position.z,
           state: member.state as "fighting" | "fallen" }] : [];
       });
@@ -11056,6 +11109,7 @@ app.on("update", (dt: number) => {
       const eye = localPlayer.getPosition(); const rect = canvas.getBoundingClientRect();
       const screen = camera.camera.worldToScreen(new pc.Vec3(pose.x, pose.y + 1.95, pose.z));
       const visible = worldReady && defeatScreen.hidden && undergroundKnown(pose.x, pose.y, pose.z)
+        && (isLocal || Date.now() >= (playerStealthUntil.get(id) ?? 0))
         && Math.hypot(pose.x - eye.x, pose.z - eye.z) <= 24 && screen.z > 0 && screen.x >= 0 && screen.x <= rect.width && screen.y >= 0 && screen.y <= rect.height
         && (isLocal || enemyCueLineClear({ x: eye.x, y: eye.y + .8, z: eye.z }, { x: pose.x, y: pose.y + .8, z: pose.z }, readCollisionWorldBlock));
       const inHealRange = healerActive && !isLocal && Math.abs(pose.y - eye.y) <= 2.5
@@ -11353,6 +11407,10 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     status.textContent = `${update.ability} · ${update.detail.toLowerCase()}.`;
   });
   room.onMessage("calling:ability:effect", (effect: CallingAbilityEffect) => createCallingImpact(effect));
+  room.onMessage("player:stealth", (state: { playerId: string; until: number }) => {
+    if (state.until > Date.now()) playerStealthUntil.set(state.playerId, state.until);
+    else playerStealthUntil.delete(state.playerId);
+  });
   room.onMessage("assassin:mark-strike", (message: { casterId: string; mobId: string; bonusDamage: number; empowered: boolean; defeated: boolean }) => {
     const mob = mobVisuals.get(message.mobId);
     mob?.marks.delete(message.casterId);
@@ -12098,6 +12156,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     status.textContent = "Disconnected from the world.";
     for (const remote of remotePlayers.values()) remote.entity.destroy();
     remotePlayers.clear();
+    playerStealthUntil.clear();
     for (const mob of mobVisuals.values()) { mob.combatCue.remove(); mob.levelTag.remove(); mob.respawnTag.remove(); mob.entity.destroy(); mob.warningMesh?.destroy(); }
     mobVisuals.clear();
     for (const popup of rangedPopups) popup.element.remove(); rangedPopups.length = 0; rangedReticleHitUntil = 0;
