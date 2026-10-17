@@ -6455,6 +6455,7 @@ function showEquipmentPickup(itemId: ItemId, quantity: number, total: number): v
 }
 
 function showLootNotice(message: string, warning = false): void {
+  social.notice(message);
   const toast = document.createElement("div");
   toast.className = `resource-toast loot-notice${warning ? " warning" : ""}`;
   const heading = document.createElement("small"); heading.textContent = warning ? "PACK FULL" : "LOOT BAG";
@@ -11861,6 +11862,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
         const toast = document.createElement("div"); toast.className = "resource-toast equipment-pickup"; toast.dataset.rarity = itemRarity(message.itemId);
         toast.innerHTML = `<small>DISMANTLED · ${ITEM_RARITIES[itemRarity(message.itemId)].label.toUpperCase()}</small><strong>${ITEM_DEFINITIONS[message.itemId].name}</strong><span>+${message.goldGranted ?? 0} gold${message.materialGranted ? ` · +${message.materialQuantity ?? 0} ${ITEM_DEFINITIONS[message.materialGranted].name}` : ""}</span>`;
         queueLootToast(toast, LOOT_FEED_EQUIPMENT_MS);
+        social.event(message.message);
       }
       closeLoot(); status.textContent = message.message;
     } else if (!lootPackDecision.hidden) {
