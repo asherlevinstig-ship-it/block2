@@ -664,6 +664,14 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
     this.onMessage("world:ready", client => {
       client.send("world:bootstrap", this.bootstrapPayload(this.state.players.get(client.sessionId)));
+      const starterPlayer = this.state.players.get(client.sessionId);
+      if (this.roomKind === "overworld" && starterPlayer) {
+        this.ensureStarterKit(client.sessionId, starterPlayer, Date.now());
+        const starter = this.state.lootDrops.get(`starter-kit:${client.sessionId}`);
+        if (starter) client.send("loot:spawned", { dropId: `starter-kit:${client.sessionId}`,
+          ownerId: starter.ownerId, itemId: starter.itemId, quantity: starter.quantity,
+          contentsJson: starter.contentsJson, x: starter.x, y: starter.y, z: starter.z, expiresAt: starter.expiresAt });
+      }
       this.sendHuntCollection(client);
       this.sendBuildPath(client);
       this.sendEquipmentAffixes(client);
@@ -869,7 +877,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     player.equippedPowerSecondary = "eruption";
     player.activePower = "shockwave";
     player.seismicMastery = "advancing_fault";
-    player.mainHandId = "longsword";
+    player.mainHandId = "unarmed";
     player.mainHandTag = "melee";
     player.equippedSpecial = "hunters_mark";
     player.equippedTrait = "momentum";
@@ -2846,7 +2854,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const spawn = this.spawnPoint();
     const drop = new LootDropState();
     Object.assign(drop, { ownerId: playerId, itemId: "forged_sword", quantity: 1,
-      contentsJson: encodeLootBagItems([...STARTER_KIT_ITEMS]), x: spawn.x + 2, y: spawn.y + .22, z: spawn.z + 2,
+      contentsJson: encodeLootBagItems([...STARTER_KIT_ITEMS]), x: spawn.x, y: spawn.y + .22, z: spawn.z + 3,
       expiresAt: now + 30 * 60_000 });
     this.state.lootDrops.set(`starter-kit:${playerId}`, drop);
   }
@@ -4538,7 +4546,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private setPlayerBuildData(player: PlayerState, loadouts: HuntLoadoutSlot[], buildPath = parseBuildPathState(player.huntLoadoutsJson)): void {
     const mistfen = this.mistfenProgress(player);
     const greenwood = this.greenwoodProgress(player);
-    player.huntLoadoutsJson = JSON.stringify({ loadouts, buildPath, affixes: this.equipmentAffixes(player),
+    player.huntLoadoutsJson = JSON.stringify({ starterKitClaimed: starterKitClaimed(player.huntLoadoutsJson), loadouts, buildPath, affixes: this.equipmentAffixes(player),
       dust: this.attunementDust(player), offers: this.attunementOffers(player), targetAffixId: this.equipmentAffixTarget(player),
       mistfen, greenwood, northwatch: parseNorthwatchProgress(player.huntLoadoutsJson), roadsideClaims: [...parseRoadsideClaims(player.huntLoadoutsJson)] });
   }
@@ -4597,7 +4605,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     dust: number, offers: EquipmentAffixOffers): void {
     const mistfen = this.mistfenProgress(player);
     const greenwood = this.greenwoodProgress(player);
-    player.huntLoadoutsJson = JSON.stringify({ loadouts: this.huntLoadouts(player), buildPath: parseBuildPathState(player.huntLoadoutsJson),
+    player.huntLoadoutsJson = JSON.stringify({ starterKitClaimed: starterKitClaimed(player.huntLoadoutsJson),
+      loadouts: this.huntLoadouts(player), buildPath: parseBuildPathState(player.huntLoadoutsJson),
       affixes, dust: Math.max(0, Math.min(65_535, Math.floor(dust))), offers, targetAffixId: this.equipmentAffixTarget(player),
       mistfen, greenwood, northwatch: parseNorthwatchProgress(player.huntLoadoutsJson), roadsideClaims: [...parseRoadsideClaims(player.huntLoadoutsJson)] });
   }

@@ -1985,6 +1985,7 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
   addBox(echoPrism, "echo-prism-crystal", echoCrystal, [.25, .34, .25], [0, -.45, 0]).setLocalEulerAngles(0, 45, 0);
   echoPrism.enabled = false;
   const mainHands = {
+    unarmed: new pc.Entity("main-hand-unarmed"),
     echo_prism: echoPrism,
     venom_focus: venomFocus,
     forged_sword: forgedSword,
@@ -3265,7 +3266,7 @@ let localCallingSpecialCooldownUntil = 0;
 let localFieldSpecialSelected = false;
 let fieldSpecialSelectionBeforeEquip = false;
 let callingAbilityPendingUntil = 0;
-let localMainHandId: MainHandId = "longsword";
+let localMainHandId: MainHandId = "unarmed";
 let localArmourId: ArmourId = "none";
 let northwatchWardReadyAt = 0;
 let northwatchWardRefreshTimer: number | null = null;
@@ -10304,7 +10305,7 @@ app.on("update", (dt: number) => {
   const player = localPlayer.getPosition();
   if (worldReady && firstStepsIndex === 0 && Math.hypot(player.x - TOWN_CENTER_X, player.z - TOWN_CENTER_Z) >= 1.25)
     noteFirstStep("moved");
-  else if (worldReady && firstStepsIndex === 1 && Math.hypot(player.x - TOWN_CENTER_X, player.z - TOWN_CENTER_Z) > TOWN_SAFE_RADIUS + 1)
+  else if (worldReady && firstStepsIndex === 3 && Math.hypot(player.x - TOWN_CENTER_X, player.z - TOWN_CENTER_Z) > TOWN_SAFE_RADIUS + 1)
     noteFirstStep("left_town");
   updateFirstStepsTrail(player, animationNow);
   const renderAt = performance.now() - REMOTE_INTERPOLATION_DELAY_MS;
@@ -12191,7 +12192,7 @@ function showCharacterCreator(): void {
   let appearance: Appearance = { ...DEFAULT_APPEARANCE };
   const refresh = () => {
     updateLocalAppearance(appearance);
-    portrait.refresh("longsword", "none", Object.values(appearance).join(":"));
+    portrait.refresh("unarmed", "none", Object.values(appearance).join(":"));
     for (const button of options.querySelectorAll<HTMLButtonElement>("button[data-appearance-group]")) {
       const group = button.dataset.appearanceGroup as keyof Appearance;
       button.setAttribute("aria-pressed", String(appearance[group] === button.dataset.appearanceId));

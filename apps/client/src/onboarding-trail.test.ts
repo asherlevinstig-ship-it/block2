@@ -8,6 +8,7 @@ describe("onboarding glow trail", () => {
     const drop = { x: 10.5, y: 8.22, z: 10.5, starter: true };
     expect(onboardingTrailRoute(0, player, [], [drop])).toEqual([drop]);
     expect(onboardingTrailRoute(1, player, [], [drop])).toEqual([drop]);
+    expect(onboardingTrailRoute(1, player, [], [])).toEqual([{ x: 8.5, y: 8.22, z: 11.5 }]);
     expect(onboardingTrailRoute(2, player, [], [drop])).toEqual([]);
   });
 

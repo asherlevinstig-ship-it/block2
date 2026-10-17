@@ -3,7 +3,7 @@ import { ONBOARDING_DONE } from "./new-player-onboarding.js";
 export interface TrailPoint { x: number; y: number; z: number; starter?: boolean }
 export interface TrailMob extends TrailPoint { alive: boolean; level: number; isMiniBoss: boolean; isElite: boolean }
 
-const STARTER_BAG: TrailPoint = { x: 10.5, y: 8.22, z: 10.5 };
+const STARTER_BAG: TrailPoint = { x: 8.5, y: 8.22, z: 11.5 };
 const SOUTH_GATE: TrailPoint = { x: 8.5, y: 8, z: 33.5 };
 
 export function onboardingTrailRoute(

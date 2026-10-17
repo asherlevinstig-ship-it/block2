@@ -234,7 +234,17 @@ export function parsePlayerSave(raw: string | null): PlayerSaveData | null {
     }
   }
   const maxStamina = finiteNumber(value.maxStamina, 100, 1, 10_000);
-  const mainHandId = isKeyOf(value.mainHandId, MAIN_HAND_DEFINITIONS) ? value.mainHandId : "longsword";
+  // A character who has not earned XP or carried any gear is still at the
+  // starting line, including profiles created just before the starter bag was
+  // introduced. Repair that save rather than making the player start over.
+  const untouchedStarter = value.starterKitClaimed !== true
+    && finiteNumber(value.level, 1, 1, 255) === 1
+    && finiteNumber(value.experience, 0, 0, 1_000_000_000) === 0
+    && finiteNumber(value.blacksmithUpgrades, 0, 0, 65_535) === 0
+    && Object.keys(inventory).length === 0 && Object.keys(storage).length === 0
+    && (value.mainHandId === "longsword" || value.mainHandId === "unarmed");
+  const mainHandId = untouchedStarter ? "unarmed"
+    : isKeyOf(value.mainHandId, MAIN_HAND_DEFINITIONS) ? value.mainHandId : "longsword";
   const mainHand = MAIN_HAND_DEFINITIONS[mainHandId];
   const equippedPower = isKeyOf(value.equippedPower, POWER_DEFINITIONS)
     ? compatiblePowerOrFallback(value.equippedPower, mainHand.tag)
@@ -282,8 +292,7 @@ export function parsePlayerSave(raw: string | null): PlayerSaveData | null {
     silverDepthsBestTimeMs: Math.floor(finiteNumber(value.silverDepthsBestTimeMs, 0, 0, 86_400_000)),
     miningExpeditionStage: Math.floor(finiteNumber(value.miningExpeditionStage,
       (inventory.miners_lantern ?? 0) + (storage.miners_lantern ?? 0) > 0 ? 7 : 0, 0, 8)),
-    // Saves made before starter supplies existed must not receive a retroactive new-character bag.
-    starterKitClaimed: value.starterKitClaimed !== false,
+    starterKitClaimed: untouchedStarter ? false : value.starterKitClaimed !== false,
     silverDepthsStage: Math.floor(finiteNumber(value.silverDepthsStage, 0, 0, 7)),
     realmWardenCleared: value.realmWardenCleared === true,
     northwatchClears: Math.floor(finiteNumber(value.northwatchClears,

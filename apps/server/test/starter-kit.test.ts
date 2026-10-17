@@ -20,18 +20,22 @@ describe("new-character starter supplies", () => {
     internal.ensureStarterKit("new-player", player, 10_000);
     const id = "starter-kit:new-player";
     const first = room.state.lootDrops.get(id)!;
-    expect({ x: first.x, z: first.z, ownerId: first.ownerId }).toEqual({ x: 10.5, z: 10.5, ownerId: "new-player" });
+    expect({ x: first.x, z: first.z, ownerId: first.ownerId }).toEqual({ x: 8.5, z: 11.5, ownerId: "new-player" });
     expect(decodeLootBagItems(first.contentsJson)).toEqual([...STARTER_KIT_ITEMS]);
     internal.ensureStarterKit("new-player", player, 10_001);
     expect(room.state.lootDrops.size).toBe(1);
 
     internal.resolveLootPickups(first.expiresAt);
     expect(room.state.lootDrops.has(id)).toBe(true);
-    player.x = 10.5; player.z = 10.5;
+    player.x = 8.5; player.z = 11.5;
     vi.setSystemTime(first.expiresAt + 1);
     internal.handleLootCollect({ sessionId: "new-player", send: vi.fn() }, { dropId: id, action: "keep" });
     expect(player.inventory.get("forged_sword")?.quantity).toBe(1);
     expect(player.inventory.get("wanderer_robes")?.quantity).toBe(1);
+    expect(starterKitClaimed(player.huntLoadoutsJson)).toBe(true);
+    internal.setPlayerBuildData(player, []);
+    expect(starterKitClaimed(player.huntLoadoutsJson)).toBe(true);
+    internal.setEquipmentAttunements(player, {}, 0, {});
     expect(starterKitClaimed(player.huntLoadoutsJson)).toBe(true);
     internal.ensureStarterKit("new-player", player, first.expiresAt + 2);
     expect(room.state.lootDrops.has(id)).toBe(false);

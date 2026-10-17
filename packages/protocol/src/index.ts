@@ -1064,6 +1064,7 @@ export interface MainHandDefinition {
 }
 
 export const MAIN_HAND_DEFINITIONS = {
+  unarmed: { id: "unarmed", name: "Bare Hands", tag: "melee", attackName: "Punch" },
   forged_sword: { id: "forged_sword", name: "Forged Sword", tag: "melee", attackName: "Sword Combo", requiredItemId: "forged_sword" },
   forged_bow: { id: "forged_bow", name: "Forged Bow", tag: "ranged", attackName: "Bow Shot", requiredItemId: "forged_bow" },
   forged_focus: { id: "forged_focus", name: "Forged Focus", tag: "focus", attackName: "Arcane Bolt", requiredItemId: "forged_focus" },
@@ -1147,6 +1148,8 @@ export interface WeaponAttackDefinition {
 }
 
 export const WEAPON_ATTACK_DEFINITIONS = {
+  unarmed: { combo: false, comboWindowMs: 0, range: 1.2, minimumFacingDot: .5, projectileTravelMs: 0,
+    attacks: [{ step: 1, durationMs: 600, impactMs: 280, damage: 1, knockback: .05 }] },
   forged_sword: { combo: true, comboWindowMs: COMBO_CHAIN_WINDOW_MS, range: 2.1, minimumFacingDot: .35, projectileTravelMs: 0,
     attacks: COMBAT_ATTACKS.map(step => ({ ...step, damage: step.damage + 1 })) },
   forged_bow: { combo: false, comboWindowMs: 0, range: 9, minimumFacingDot: .92, projectileTravelMs: 160,
@@ -1490,7 +1493,7 @@ export const SpecialEquipRequestSchema = z.object({
 
 export const MainHandEquipRequestSchema = z.object({
   requestId: z.string().min(1).max(64),
-  mainHandId: z.enum(["longsword", "bow", "magic_focus", "fang_dagger", "stone_core_hammer", "rootbound_hammer", "matriarch_edge", "acid_gland_focus", "venom_focus", "echo_prism", "forged_sword", "forged_bow", "forged_focus"]),
+  mainHandId: z.enum(["unarmed", "longsword", "bow", "magic_focus", "fang_dagger", "stone_core_hammer", "rootbound_hammer", "matriarch_edge", "acid_gland_focus", "venom_focus", "echo_prism", "forged_sword", "forged_bow", "forged_focus"]),
 });
 
 export const TraitEquipRequestSchema = z.object({

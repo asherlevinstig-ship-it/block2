@@ -5,7 +5,7 @@ import { parseNorthwatchProgress, withNorthwatchProgress } from "../src/northwat
 import { starterKitClaimed, withStarterKitClaimed } from "../src/starter-kit.js";
 
 describe("player saves", () => {
-  it("keeps starter supplies pending for new characters but excludes legacy saves", () => {
+  it("keeps starter supplies pending for new and untouched legacy characters", () => {
     const player = new PlayerState();
     expect(parsePlayerSave(serializePlayerSave(player))?.starterKitClaimed).toBe(false);
     const restored = new PlayerState();
@@ -14,9 +14,10 @@ describe("player saves", () => {
     player.huntLoadoutsJson = withStarterKitClaimed(player.huntLoadoutsJson);
     expect(parsePlayerSave(serializePlayerSave(player))?.starterKitClaimed).toBe(true);
     const legacy = parsePlayerSave(JSON.stringify({ version: 1, inventory: {}, mainHandId: "longsword" }))!;
-    expect(legacy.starterKitClaimed).toBe(true);
+    expect(legacy.starterKitClaimed).toBe(false);
+    expect(legacy.mainHandId).toBe("unarmed");
     applyPlayerSave(restored, legacy);
-    expect(starterKitClaimed(restored.huntLoadoutsJson)).toBe(true);
+    expect(starterKitClaimed(restored.huntLoadoutsJson)).toBe(false);
   });
   it("round-trips inventory, health, and equipped progression", () => {
     const player = new PlayerState();
