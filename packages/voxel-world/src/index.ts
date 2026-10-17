@@ -175,6 +175,8 @@ export function northwatchHighlandsBlock(x: number, y: number, z: number): Block
     return z < -58 ? scar < 7 ? Block.Stone : Block.Grass : scar < 4 ? Block.Stone : Block.Grass;
   }
   if (road || clearing) return y <= SURFACE_HEIGHT + 4 ? Block.Air : null;
+  // The patrol cairn is real two-block cover, not a decoration that shots pass through.
+  if ((x === 23 || x === 24) && z === -49 && y <= SURFACE_HEIGHT + 2) return Block.Stone;
   const ridge = (x === -5 || x === 26) && z <= -47 && z >= -80 && Math.abs(z) % 9 < 6;
   const brokenSpur = (z === -57 || z === -63) && (x >= -3 && x <= 3 || x >= 22 && x <= 27);
   if ((ridge || brokenSpur) && y <= SURFACE_HEIGHT + (z < -64 ? 3 : 2)) return Block.Stone;

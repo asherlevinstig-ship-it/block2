@@ -52,6 +52,15 @@ export const northwatchAllows = (pose: { x: number; y: number; z: number }) => M
   && isInNorthwatchHighlands(pose.x, pose.z);
 /** Two focused shots invite a dodge; the third fires a readable three-lane spread. */
 export const northwatchShardPattern = (sequence: number): "aimed" | "fan" => sequence % 3 === 2 ? "fan" : "aimed";
+/** A full patrol opens with a committed shot; removing either flanker breaks that rotation. */
+export const northwatchPatrolPattern = (sequence: number, flankersAlive: number): "patrol-lance" | "aimed" | "fan" =>
+  flankersAlive === 2 && sequence % 3 === 0 ? "patrol-lance" : northwatchShardPattern(sequence);
+/** A timed combo or control ability interrupts the lance and opens a longer counter window. */
+export const northwatchPatrolInterruptDuration = (mobId: string, pattern: string, normalDurationMs: number): number =>
+  mobId === "northwatch-spitter" && pattern === "patrol-lance" && normalDurationMs > 0
+    ? Math.max(1_200, normalDurationMs) : normalDurationMs;
+export const northwatchPatrolShotDamage = (pattern: string, baseDamage: number): number =>
+  baseDamage + (pattern === "patrol-lance" ? 1 : 0);
 /** Existing encounter IDs remain stable for objective tracking and saved worlds. */
 export const WILDERNESS_ENCOUNTERS: readonly { id: string; archetype: MobArchetypeId; x: number; y: number; z: number }[] = [
   { id: "moss-crawler", archetype: "moss_crawler", x: 35.5, y: 8, z: -8.5 },

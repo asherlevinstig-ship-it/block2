@@ -266,12 +266,12 @@ export class SceneDressing {
 
     const campVisible = read(GREENWOOD_CAMP.minX, SURFACE_HEIGHT, GREENWOOD_CAMP.minZ) === Block.Dirt;
     const shardSite = NORTHWATCH_SHARD_PATROL_SITE;
-    if (read(Math.floor(shardSite.x), SURFACE_HEIGHT, Math.floor(shardSite.z)) !== Block.Air) {
-      // A broken, low crystal cairn identifies the patrol without blocking its lanes.
+    if (read(Math.floor(shardSite.x), SURFACE_HEIGHT + 2, Math.floor(shardSite.z)) === Block.Stone) {
+      // Crystal fragments crown the solid two-block cairn; collision comes from the world voxels.
       const { x, z } = shardSite;
       for (const [dx, dz, height] of [[0, 0, .58], [-.68, .27, .36], [.61, -.31, .42]] as const) {
-        solid.box(x + dx, surface + height / 2, z + dz, .48, height, .43, SLATE);
-        solid.box(x + dx, surface + height + .13, z + dz, .2, .27, .2, [.48, .84, 1]);
+        solid.box(x + dx, surface + 2 + height / 2, z + dz, .48, height, .43, SLATE);
+        solid.box(x + dx, surface + 2 + height + .13, z + dz, .2, .27, .2, [.48, .84, 1]);
       }
       for (const [dx, dz] of [[-1.15, -.72], [.95, .72], [.12, 1.06]] as const)
         solid.box(x + dx, surface + .07, z + dz, .36, .14, .27, IRON);

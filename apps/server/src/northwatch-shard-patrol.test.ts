@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { decodeLootBagItems } from "@blockcraft/protocol";
-import { NORTHWATCH_MOB_HOMES, NORTHWATCH_SHARD_PATROL_SITE, SURFACE_HEIGHT, northwatchHighlandsBlock } from "@blockcraft/voxel-world";
+import { Block, NORTHWATCH_MOB_HOMES, NORTHWATCH_SHARD_PATROL_SITE, SURFACE_HEIGHT, northwatchHighlandsBlock } from "@blockcraft/voxel-world";
 import { WorldRoom } from "./game-room.js";
+import { hasCombatLineOfSight } from "./combat-impact.js";
+import { circleCrawler, createCrawlerPositioning } from "./crawler-positioning.js";
 import { PlayerState, WorldState } from "./schema.js";
-import { NORTHWATCH_SHARD_PATROL_IDS, WILDERNESS_ENCOUNTERS, isNorthwatchShardPatrol, northwatchShardPatrolAllows } from "./wilderness-encounters.js";
+import { NORTHWATCH_SHARD_PATROL_IDS, WILDERNESS_ENCOUNTERS, isNorthwatchShardPatrol, northwatchPatrolInterruptDuration, northwatchPatrolPattern, northwatchPatrolShotDamage, northwatchShardPatrolAllows } from "./wilderness-encounters.js";
 
 function patrolFixture(playerIds: readonly string[] = ["a", "b"]) {
   const room = new WorldRoom(); room.setState(new WorldState());
@@ -31,7 +33,7 @@ describe("Northwatch shard patrol", () => {
     expect(northwatchShardPatrolAllows({ x: 18.5, y: 8, z: -54.5 })).toBe(true);
     expect(northwatchShardPatrolAllows({ x: 15.5, y: 8, z: -72.5 })).toBe(false);
     expect(northwatchHighlandsBlock(Math.floor(NORTHWATCH_SHARD_PATROL_SITE.x), SURFACE_HEIGHT + 1,
-      Math.floor(NORTHWATCH_SHARD_PATROL_SITE.z))).toBeNull();
+      Math.floor(NORTHWATCH_SHARD_PATROL_SITE.z))).toBe(Block.Stone);
     expect(Math.hypot(NORTHWATCH_MOB_HOMES[1]!.x - NORTHWATCH_MOB_HOMES[5]!.x,
       NORTHWATCH_MOB_HOMES[1]!.z - NORTHWATCH_MOB_HOMES[5]!.z)).toBeLessThan(7);
     const { room } = patrolFixture();
@@ -44,6 +46,31 @@ describe("Northwatch shard patrol", () => {
       expect([teamMob.maxHealth, teamMob.attackDamage, teamMob.speedMultiplier])
         .toEqual([soloMob.maxHealth, soloMob.attackDamage, soloMob.speedMultiplier]);
     }
+  });
+
+  it("makes the cairn genuine shot cover while leaving an open approach", () => {
+    const read = (x: number, y: number, z: number) => northwatchHighlandsBlock(x, y, z) ?? Block.Air;
+    const sentry = { x: 18.5, y: 8, z: -54.5 };
+    expect(hasCombatLineOfSight(sentry, { x: 25.5, y: 8, z: -46.5 }, read)).toBe(false);
+    expect(hasCombatLineOfSight(sentry, { x: 18.5, y: 8, z: -46.5 }, read)).toBe(true);
+  });
+
+  it("charges a readable lance only with both flankers, and rewards a timed interrupt", () => {
+    expect(northwatchPatrolPattern(0, 2)).toBe("patrol-lance");
+    expect(northwatchPatrolPattern(1, 2)).toBe("aimed");
+    expect(northwatchPatrolPattern(2, 2)).toBe("fan");
+    expect(northwatchPatrolPattern(3, 1)).toBe("aimed");
+    expect(northwatchPatrolShotDamage("patrol-lance", 1)).toBe(2);
+    expect(northwatchPatrolShotDamage("aimed", 1)).toBe(1);
+    expect(northwatchPatrolInterruptDuration("northwatch-spitter", "patrol-lance", 650)).toBe(1_200);
+    expect(northwatchPatrolInterruptDuration("northwatch-spitter", "patrol-lance", 0)).toBe(0);
+    expect(northwatchPatrolInterruptDuration("northwatch-spitter", "aimed", 650)).toBe(650);
+    const flank = createCrawlerPositioning("northwatch-patrol-stalker-west", "a",
+      ["northwatch-patrol-stalker-west", "northwatch-patrol-stalker-east"]);
+    const mob = { x: 0, y: 8, z: 3.1 }, target = { x: 0, y: 8, z: 0 };
+    expect(circleCrawler(mob, target, flank, 1_000, .05, 2.05, 2.15)).not.toBeNull();
+    expect(circleCrawler(mob, target, flank, 1_700, .05, 2.05, 2.15)).toBeNull();
+    expect(circleCrawler(mob, target, flank, 1_700, .05, 2.05, 2.15, 1_400)).not.toBeNull();
   });
 
   it("rallies nearby companions to an engaged target without changing their stats", () => {

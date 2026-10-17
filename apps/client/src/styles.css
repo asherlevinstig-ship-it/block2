@@ -2519,6 +2519,7 @@ body:has(#nearby-chat details[open]) #party-panel { bottom: 340px; }
 }
 .enemy-combat-cue[hidden] { display: none; }
 .enemy-combat-cue[data-kind="shot"] { color: #beff65; }
+.enemy-combat-cue[data-kind="shard lance"] { color: #7de3ff; box-shadow: 0 0 14px #61cfff66; }
 .enemy-combat-cue[data-kind="slam"] { color: #ff9167; }
 .enemy-combat-cue[data-kind="recovery"] { color: #73efff; }
 .enemy-combat-cue[data-kind="alert"] { color: #ffe48a; }

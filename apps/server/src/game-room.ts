@@ -6,7 +6,7 @@ import { ShadowMoveInput, stepShadowMovement, type ShadowPose } from "./movement
 import { randomUUID } from "node:crypto";
 import { ADMIN_BOOTSTRAP_HASH, ADMIN_PROFILE_HASH, adminProfileKey, matchesAdminBootstrapPass } from "./admin-access.js";
 import { AttackCoordination, allyFireLaneClear } from "./attack-coordination.js";
-import { MIXED_FRONTIER_SPITTER, STONE_BRUTE_ESCORTS, isMixedFrontierMob, mixedFrontierAllows, isSilverGuard, silverGuardAllows, frontierBruteAllows, isFrontierBruteGroupMob, isStoneBruteGroupMob, isGreenwoodCampMob, greenwoodCampAllows, isAshenSentry, ashenSentryAllows, ashenSentryPattern, isMistfenMob, mistfenAllows, isSouthernQuarryMob, southernQuarryAllows, isNorthwatchMob, northwatchAllows, northwatchShardPattern, NORTHWATCH_SHARD_PATROL_IDS, isNorthwatchShardPatrol, northwatchShardPatrolAllows } from "./wilderness-encounters.js";
+import { MIXED_FRONTIER_SPITTER, STONE_BRUTE_ESCORTS, isMixedFrontierMob, mixedFrontierAllows, isSilverGuard, silverGuardAllows, frontierBruteAllows, isFrontierBruteGroupMob, isStoneBruteGroupMob, isGreenwoodCampMob, greenwoodCampAllows, isAshenSentry, ashenSentryAllows, ashenSentryPattern, isMistfenMob, mistfenAllows, isSouthernQuarryMob, southernQuarryAllows, isNorthwatchMob, northwatchAllows, northwatchShardPattern, northwatchPatrolPattern, northwatchPatrolInterruptDuration, northwatchPatrolShotDamage, NORTHWATCH_SHARD_PATROL_IDS, isNorthwatchShardPatrol, northwatchShardPatrolAllows } from "./wilderness-encounters.js";
 import { BRUTE_VOLLEY, bruteVolleyReady, bruteRockEndpoints } from "@blockcraft/protocol";
 import { CHAMPION_CHARGE, ChatSendSchema, PlayerNameSchema, AppearanceSchema, type NearbyChatMessage } from "@blockcraft/protocol";
 import { cleanChatText, hearsNearbyChat } from "./nearby-chat.js";
@@ -6314,8 +6314,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         : mob.isMiniBoss && (this.miniBossOrbitPressure.get(mobId)?.counterUntil ?? 0) > now
           ? miniBossOrbitCounterPattern(mob.archetype) : championPattern(mob);
       else if (mobId === "frontier-brute" && mob.combatState === "idle") mob.attackPattern = frontierBrutePattern(mob.actionSequence);
-      else if (isSpitterLike(mob.archetype) && mob.combatState === "idle") mob.attackPattern = mob.archetype === "shard_sentry"
-        ? northwatchShardPattern(mob.actionSequence)
+      else if (isSpitterLike(mob.archetype) && mob.combatState === "idle") mob.attackPattern = mobId === "northwatch-spitter"
+        ? northwatchPatrolPattern(mob.actionSequence, NORTHWATCH_SHARD_PATROL_IDS.slice(1)
+          .filter(id => this.state.mobs.get(id)?.alive).length)
+        : mob.archetype === "shard_sentry" ? northwatchShardPattern(mob.actionSequence)
         : isAshenSentry(mobId) ? ashenSentryPattern(mob.actionSequence)
           : spitterPattern(mob.actionSequence + (mobId === "frontier-spitter" ? 1 : 0));
       if (mob.archetype === "stone_brute" && mob.combatState === "idle") {
@@ -6528,7 +6530,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           const venomPools = mobId === GREENWOOD_MATRIARCH_ID && (mob.attackPattern === "double-fan" || mob.attackPattern === "venom-ring");
           const mistfenEruption = (mobId === "mistfen-behemoth" || mobId === MISTFEN_EVENT_ID)
             && mob.attackPattern === "toxic-eruption";
-          this.releaseMobVolley(mobId, mob, origin, shots, now, definition.projectileTravelMs, mob.attackDamage,
+          this.releaseMobVolley(mobId, mob, origin, shots, now, definition.projectileTravelMs,
+            mobId === "northwatch-spitter" ? northwatchPatrolShotDamage(mob.attackPattern, mob.attackDamage) : mob.attackDamage,
             championVenom?.radius ?? (mistfenEruption ? 1.15 : venomPools ? .82 : definition.hazardRadius),
             championVenom?.durationMs ?? (mistfenEruption ? 4_500 : venomPools ? 3_600 : definition.hazardDurationMs));
           if (usesFallingRockZones(mob.attackPattern)) this.scheduleRealmFallingRocks(mobId, aim, now, mob.attackDamage,
@@ -6662,7 +6665,16 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
               && Math.hypot(peer.x - target.x, peer.z - target.z) <= 8).map(([id]) => id));
           this.crawlerPositioning.set(mobId, flank);
         }
-        circling = circleCrawler(mob, target, flank, now, deltaTime, movementSpeed, definition.stopDistance);
+        const sentry = isNorthwatchShardPatrol(mobId) && mobId !== "northwatch-spitter"
+          ? this.state.mobs.get("northwatch-spitter") : undefined;
+        const patrolCharge = sentry?.alive && sentry.combatState === "windup"
+          && sentry.attackPattern === "patrol-lance" && sentry.targetId === target.id;
+        if (patrolCharge && flank.patrolChargeAt !== sentry.attackStartedAt) {
+          flank.startedAt = now;
+          flank.patrolChargeAt = sentry.attackStartedAt;
+        }
+        circling = circleCrawler(mob, target, flank, now, deltaTime, movementSpeed, definition.stopDistance,
+          patrolCharge ? 1_400 : undefined);
       } else this.crawlerPositioning.delete(mobId);
       const attackers = () => [...this.state.mobs.entries()].map(([id, peer]) => ({
         id, alive: peer.alive, health: peer.health, archetype: peer.archetype, combatState: peer.combatState, targetId: peer.targetId,
@@ -6688,7 +6700,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         mob.yaw = waiting ? Math.atan2(target.x - mob.x, target.z - mob.z) * 180 / Math.PI : pursuit.yaw;
       }
       const lastAttackAt = this.lastMobAttackAt.get(mobId) ?? 0;
-      const baseWindupMs = (mobId === CRYSTAL_MATRIARCH_ID || mobId === ASHGLASS_ORACLE_ID) && (mob.attackPattern === "crystal-burst" || mob.attackPattern === "teleport-burst")
+      const baseWindupMs = mobId === "northwatch-spitter" && mob.attackPattern === "patrol-lance" ? 1_400
+        : (mobId === CRYSTAL_MATRIARCH_ID || mobId === ASHGLASS_ORACLE_ID) && (mob.attackPattern === "crystal-burst" || mob.attackPattern === "teleport-burst")
         ? MATRIARCH_PHASE.crystalBurstWindupMs
         : (mobId === "frontier-brute" || isAreaMiniBoss(mobId) && mob.archetype === "stone_brute") && mob.attackPattern === "smash"
           ? FRONTIER_BRUTE.smash.windupMs : definition.windupMs;
@@ -8062,7 +8075,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.alertHitMob(mobId, sessionId, now, source);
       mob.hitSequence += 1;
       player.momentumStacks = gainMomentum(player.momentumStacks, player.equippedTrait as TraitId);
-      const staggerDuration = basicStaggerDuration(pending.mainHandId, pending.step, mob.archetype, mob.combatState, mob.isChampion);
+      const staggerDuration = northwatchPatrolInterruptDuration(mobId, mob.attackPattern,
+        basicStaggerDuration(pending.mainHandId, pending.step, mob.archetype, mob.combatState, mob.isChampion));
       if (this.staggerMob(mobId, mob, now, staggerDuration)) {
         const stagger: CombatStagger = { attackerId: sessionId, mobId, durationMs: staggerDuration };
         this.broadcast("combat:stagger", stagger);

@@ -42,6 +42,12 @@ describe("readable enemy combat cues", () => {
     expect(enemyCombatCue({ ...crystal, aimCommitted: true }, 2200).label).toBe("CRYSTAL BURST · LOCKED");
     expect(enemyCombatCue({ ...crystal, combatState: "recover" }, 2600).label).toBe("RECOVER · COUNTER");
   });
+  it("names the shard patrol's committed shot and its interruptible windup", () => {
+    const lance = { ...mob, archetype: "shard_sentry", attackPattern: "patrol-lance", attackReleaseAt: 2_400 };
+    expect(enemyCombatCue(lance, 1_200)).toMatchObject({ kind: "shard lance", label: "SHARD LANCE · AIMING", visible: true });
+    expect(enemyCombatCue({ ...lance, aimCommitted: true }, 2_100).label).toBe("SHARD LANCE · LOCKED");
+    expect(enemyCombatCue({ ...lance, combatState: "stagger" }, 2_100).visible).toBe(false);
+  });
   it("shows a brief spotted cue without replaying expired alerts", () => {
     const state = { alive: true, combatState: "idle", awarenessState: "engaged", alertUntil: 1900 };
     expect(enemyAwarenessCue(state, 1000)).toMatchObject({ visible: true, label: "! SPOTTED", kind: "alert" });

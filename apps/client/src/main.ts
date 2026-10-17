@@ -10262,7 +10262,7 @@ app.on("update", (dt: number) => {
         mob.warning.setLocalScale(1, 1, length / 6.9);
         mob.warning.setEulerAngles(0, mob.state.yaw, 0);
       }
-      const crystalWarning = mob.state.attackPattern === "crystal-burst";
+      const crystalWarning = mob.state.attackPattern === "crystal-burst" || mob.state.attackPattern === "patrol-lance";
       const fanWarning = mob.state.attackPattern === "fan" || mob.state.attackPattern === "double-fan" || mob.state.attackPattern === "venom-ring" || mob.state.attackPattern === "cross-volley";
       mob.warningMaterial.diffuse.set(crystalWarning ? .72 : mob.isSpitter ? fanWarning ? .35 : .85 : 1,
         crystalWarning ? .32 : mob.isSpitter ? fanWarning ? .62 : 1 : mob.isBrute ? .25 : .72,
