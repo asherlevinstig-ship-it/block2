@@ -1,4 +1,6 @@
 import * as pc from "playcanvas";
+import { addCallingParticleLayers } from "./calling-particles.js";
+import { CALLING_ANTICIPATION_PARTICLES, CALLING_IMPACT_PARTICLES, CALLING_SUSTAIN_PARTICLES, callingParticleLifetime } from "./calling-vfx-presets.js";
 import { greenwoodMasteryStatus, mistfenMasteryStatus } from "@blockcraft/protocol";
 import type { RegionalArmourProc } from "@blockcraft/protocol";
 import { isInMistfenMarsh, NORTHWATCH_SHARD_PATROL_SITE } from "@blockcraft/voxel-world";
@@ -4399,21 +4401,13 @@ interface DepthsHazardVisual {
 
 const powerTelegraphs = new Map<string, PowerTelegraphVisual>();
 const powerImpactVisuals: PowerImpactVisual[] = [];
-interface CallingAnticipationVisual { root: pc.Entity; material: pc.StandardMaterial; startedAt: number }
+interface CallingAnticipationVisual { root: pc.Entity; expiresAt: number }
 const callingAnticipationVisuals: CallingAnticipationVisual[] = [];
-interface CallingImpactVisual {
-  root: pc.Entity;
-  material: pc.StandardMaterial;
-  startedAt: number;
-  durationMs: number;
-  style: "aura" | "shield" | "terrain" | "smoke" | "motion";
-}
+interface CallingImpactVisual { root: pc.Entity; expiresAt: number }
 const callingImpactVisuals: CallingImpactVisual[] = [];
 interface CallingPersistentVisual {
   root: pc.Entity;
-  material: pc.StandardMaterial;
   expiresAt: number;
-  abilityId: CallingAbilityId;
 }
 const callingPersistentVisuals = new Map<string, CallingPersistentVisual>();
 const powerDebrisVisuals: PowerDebrisVisual[] = [];
@@ -4440,32 +4434,13 @@ function powerMaterial(color: pc.Color, opacity: number): pc.StandardMaterial {
 }
 
 function createCallingAnticipation(pathId: RoleFieldPath): void {
-  const colors: Record<RoleFieldPath, pc.Color> = {
-    tank: new pc.Color(.3, .75, 1),
-    mage: new pc.Color(.67, .36, 1),
-    assassin: new pc.Color(1, .22, .42),
-    thief: new pc.Color(.38, 1, .57),
-    ranger: new pc.Color(1, .76, .2),
-    healer: new pc.Color(.34, 1, .78),
-  };
+  const layers = CALLING_ANTICIPATION_PARTICLES[pathId];
   const root = new pc.Entity(`calling-anticipation:${pathId}`);
-  const material = powerMaterial(colors[pathId], .86);
-  for (let index = 0; index < 12; index += 1) {
-    const angle = index / 12 * Math.PI * 2;
-    const segment = addBox(root, "calling-ring", material, [.28, .055, .1], [Math.sin(angle) * .72, .08, Math.cos(angle) * .72]);
-    segment.setLocalEulerAngles(0, angle * 180 / Math.PI, 0);
-    if (segment.render) segment.render.castShadows = false;
-  }
-  for (let index = 0; index < 4; index += 1) {
-    const angle = index / 4 * Math.PI * 2 + Math.PI / 4;
-    const spark = addBox(root, "calling-spark", material, [.07, .42, .07], [Math.sin(angle) * .42, .3, Math.cos(angle) * .42]);
-    spark.setLocalEulerAngles(0, angle * 180 / Math.PI, index % 2 ? 22 : -22);
-    if (spark.render) spark.render.castShadows = false;
-  }
   const position = localPlayer.getPosition();
   root.setPosition(position.x, position.y + .03, position.z);
   app.root.addChild(root);
-  callingAnticipationVisuals.push({ root, material, startedAt: performance.now() });
+  addCallingParticleLayers(app, root, layers);
+  callingAnticipationVisuals.push({ root, expiresAt: performance.now() + callingParticleLifetime(layers) * 1000 });
 }
 
 function createCallingImpact(effect: CallingAbilityEffect): void {
@@ -4474,139 +4449,13 @@ function createCallingImpact(effect: CallingAbilityEffect): void {
       expiresAt: Date.now() + (effect.durationMs ?? 10_000), stacks: 3, maxStacks: 3, kind: "assassin",
     });
   }
-  const colors: Record<CallingAbilityId, pc.Color> = {
-    tank_bulwark: new pc.Color(.22, .78, 1), tank_challenge: new pc.Color(1, .66, .14), tank_earthbreaker: new pc.Color(1, .36, .08),
-    mage_arcane_surge: new pc.Color(.62, .32, 1), mage_mana_shield: new pc.Color(.26, .58, 1), mage_overload: new pc.Color(1, .18, .84),
-    assassin_vanish: new pc.Color(.44, .12, .72), assassin_death_mark: new pc.Color(1, .08, .18), assassin_blade_dance: new pc.Color(1, .64, .72),
-    thief_smoke_bomb: new pc.Color(.18, .72, .42), thief_decoy: new pc.Color(.42, 1, .48), thief_escape_artist: new pc.Color(.76, 1, .22),
-    ranger_volley_focus: new pc.Color(1, .7, .1), ranger_disengage: new pc.Color(.24, .9, .76), ranger_deadeye: new pc.Color(1, .9, .28),
-    healer_field_mend: new pc.Color(.25, 1, .72), healer_renewal: new pc.Color(.55, 1, .85),
-    healer_resurrection: new pc.Color(.95, 1, .45),
-  };
   const abilityId = effect.abilityId;
-  const style: CallingImpactVisual["style"] = abilityId === "tank_earthbreaker" ? "terrain"
-    : abilityId === "tank_bulwark" || abilityId === "mage_mana_shield" ? "shield"
-    : abilityId === "thief_smoke_bomb" || abilityId === "thief_decoy" ? "smoke"
-    : abilityId === "assassin_vanish" || abilityId === "assassin_blade_dance" || abilityId === "thief_escape_artist" || abilityId === "ranger_disengage" ? "motion"
-    : "aura";
-  const material = powerMaterial(colors[abilityId], style === "smoke" ? .48 : .9);
+  const layers = CALLING_IMPACT_PARTICLES[abilityId];
   const root = new pc.Entity(`calling-impact:${abilityId}`);
-  const ringRadius = style === "terrain" ? 2.65 : style === "smoke" ? 2.1 : style === "shield" ? .95 : 1.25;
-  const segments = style === "terrain" ? 24 : 16;
-  for (let index = 0; index < segments; index += 1) {
-    const angle = index / segments * Math.PI * 2;
-    const segment = addBox(root, "calling-impact-ring", material,
-      [style === "terrain" ? .5 : .3, style === "shield" ? .12 : .07, style === "terrain" ? .16 : .1],
-      [Math.sin(angle) * ringRadius, .09, Math.cos(angle) * ringRadius]);
-    segment.setLocalEulerAngles(0, angle * 180 / Math.PI, 0);
-    if (segment.render) segment.render.castShadows = false;
-  }
-  if (style === "shield") {
-    for (let index = 0; index < 12; index += 1) {
-      const angle = index / 12 * Math.PI * 2;
-      const plate = addBox(root, "calling-shield-plate", material, [.34, .72, .08], [Math.sin(angle) * .84, .82, Math.cos(angle) * .84]);
-      plate.setLocalEulerAngles(0, angle * 180 / Math.PI, 0);
-      if (plate.render) plate.render.castShadows = false;
-    }
-  } else if (style === "terrain") {
-    for (let index = 0; index < 18; index += 1) {
-      const angle = index / 18 * Math.PI * 2 + (index % 2) * .08;
-      const distance = .45 + (index % 6) * .42;
-      const crack = addBox(root, "calling-terrain-fracture", material, [.12, .025, .5 + index % 3 * .16],
-        [Math.sin(angle) * distance, .055, Math.cos(angle) * distance]);
-      crack.setLocalEulerAngles(0, angle * 180 / Math.PI, 0);
-      const rubble = addBox(root, "calling-terrain-rubble", material, [.13 + index % 3 * .04, .12, .13],
-        [Math.sin(angle) * (distance + .2), .16 + index % 2 * .08, Math.cos(angle) * (distance + .2)]);
-      rubble.setLocalEulerAngles(index * 17, index * 31, index * 13);
-    }
-  } else if (style === "smoke") {
-    for (let index = 0; index < 18; index += 1) {
-      const angle = index / 18 * Math.PI * 2;
-      const radius = .45 + index % 4 * .38;
-      const cloud = addBox(root, "calling-smoke-cloud", material, [.38 + index % 3 * .14, .35 + index % 2 * .18, .38 + (index + 1) % 3 * .12],
-        [Math.sin(angle) * radius, .25 + index % 4 * .25, Math.cos(angle) * radius]);
-      cloud.setLocalEulerAngles(index * 11, index * 23, index * 7);
-      if (cloud.render) cloud.render.castShadows = false;
-    }
-  } else if (style === "motion") {
-    for (let index = 0; index < 14; index += 1) {
-      const side = index % 2 ? -1 : 1;
-      const streak = addBox(root, "calling-motion-streak", material, [.06, .08, .5 + index % 4 * .18],
-        [side * (.18 + index % 4 * .16), .25 + index % 3 * .22, .35 + Math.floor(index / 2) * .25]);
-      streak.setLocalEulerAngles(0, side * (8 + index), side * 12);
-      if (streak.render) streak.render.castShadows = false;
-    }
-  } else {
-    for (let index = 0; index < 10; index += 1) {
-      const angle = index / 10 * Math.PI * 2;
-      const shard = addBox(root, "calling-aura-shard", material, [.09, .52 + index % 3 * .18, .09],
-        [Math.sin(angle) * .72, .45 + index % 3 * .24, Math.cos(angle) * .72]);
-      shard.setLocalEulerAngles(index % 2 ? 20 : -20, angle * 180 / Math.PI, 35);
-    }
-  }
-  if (abilityId === "tank_challenge") {
-    for (let index = 0; index < 4; index += 1) {
-      const angle = index * Math.PI / 2;
-      const banner = addBox(root, "challenge-banner", material, [.28, 1.25, .12], [Math.sin(angle) * 1.05, .78, Math.cos(angle) * 1.05]);
-      banner.setLocalEulerAngles(0, angle * 180 / Math.PI, index % 2 ? 8 : -8);
-    }
-  } else if (abilityId === "healer_field_mend" || abilityId === "healer_renewal" || abilityId === "healer_resurrection") {
-    addBox(root, "mend-cross-horizontal", material, [.88, .16, .16], [0, 1.05, 0]);
-    addBox(root, "mend-cross-vertical", material, [.16, .88, .16], [0, 1.05, 0]);
-    for (let index = 0; index < 8; index += 1) {
-      const angle = index / 8 * Math.PI * 2;
-      addBox(root, "mend-light", material, [.09, .48, .09], [Math.sin(angle) * .7, .6 + index % 3 * .22, Math.cos(angle) * .7]);
-    }
-  } else if (abilityId === "mage_arcane_surge") {
-    addBox(root, "arcane-surge-core", material, [.3, 2.2, .3], [0, 1.1, 0]);
-    for (let index = 0; index < 6; index += 1) {
-      const angle = index / 6 * Math.PI * 2;
-      addBox(root, "arcane-surge-ray", material, [.08, 1.2, .08], [Math.sin(angle) * .48, .85, Math.cos(angle) * .48])
-        .setLocalEulerAngles(index % 2 ? 24 : -24, angle * 180 / Math.PI, 35);
-    }
-  } else if (abilityId === "mage_overload") {
-    for (let index = 0; index < 8; index += 1) {
-      const angle = index / 8 * Math.PI * 2;
-      const arc = addBox(root, "overload-arc", material, [.07, .07, .82], [Math.sin(angle) * .78, .65 + index % 2 * .38, Math.cos(angle) * .78]);
-      arc.setLocalEulerAngles(index % 2 ? 28 : -28, angle * 180 / Math.PI, index % 2 ? 32 : -32);
-    }
-  } else if (abilityId === "assassin_death_mark") {
-    for (let index = 0; index < 4; index += 1) {
-      const angle = Math.PI / 4 + index * Math.PI / 2;
-      const fang = addBox(root, "death-mark-fang", material, [.12, .75, .12], [Math.sin(angle) * .72, 1.15, Math.cos(angle) * .72]);
-      fang.setLocalEulerAngles(index % 2 ? 42 : -42, angle * 180 / Math.PI, 45);
-    }
-  } else if (abilityId === "assassin_blade_dance") {
-    for (let index = 0; index < 8; index += 1) {
-      const angle = index / 8 * Math.PI * 2;
-      const blade = addBox(root, "blade-dance-blade", material, [.08, .12, .92], [Math.sin(angle) * .92, .65, Math.cos(angle) * .92]);
-      blade.setLocalEulerAngles(0, angle * 180 / Math.PI, index % 2 ? 22 : -22);
-    }
-  } else if (abilityId === "thief_decoy") {
-    addBox(root, "decoy-body", material, [.48, .78, .3], [0, .88, .62]);
-    addBox(root, "decoy-head", material, [.38, .38, .38], [0, 1.48, .62]);
-    addBox(root, "decoy-left", material, [.18, .7, .18], [-.34, .88, .62]).setLocalEulerAngles(0, 0, -18);
-    addBox(root, "decoy-right", material, [.18, .7, .18], [.34, .88, .62]).setLocalEulerAngles(0, 0, 18);
-  } else if (abilityId.startsWith("ranger_")) {
-    const arrowCount = abilityId === "ranger_deadeye" ? 1 : abilityId === "ranger_disengage" ? 3 : 5;
-    for (let index = 0; index < arrowCount; index += 1) {
-      const spread = (index - (arrowCount - 1) / 2) * .24;
-      const arrow = addBox(root, "ranger-focus-arrow", material, [.055, .055, 1.25], [spread, .9 + Math.abs(spread) * .25, .82]);
-      arrow.setLocalEulerAngles(0, spread * 34, 0);
-    }
-    if (abilityId === "ranger_deadeye") {
-      addBox(root, "deadeye-horizontal", material, [1.5, .055, .055], [0, .9, 1.7]);
-      addBox(root, "deadeye-vertical", material, [.055, 1.5, .055], [0, .9, 1.7]);
-    }
-  }
-  if (effect.augmentId) {
-    for (const side of [-1, 1]) {
-      const sigil = addBox(root, "calling-augment-sigil", material, [.09, .62, .09], [side * 1.05, 1.05, 0]);
-      sigil.setLocalEulerAngles(0, side * 24, side * 42);
-    }
-  }
-  const followsPlayer = style === "shield" || abilityId === "mage_overload" || abilityId === "ranger_volley_focus" || abilityId === "ranger_deadeye";
-  const targetAnchor = abilityId === "assassin_death_mark" && effect.targetId ? mobVisuals.get(effect.targetId)?.entity : undefined;
+  const followsPlayer = abilityId === "tank_bulwark" || abilityId === "mage_mana_shield"
+    || abilityId === "mage_overload" || abilityId === "ranger_volley_focus" || abilityId === "ranger_deadeye";
+  const targetAnchor = abilityId === "assassin_death_mark" && effect.targetId
+    ? mobVisuals.get(effect.targetId)?.entity : undefined;
   const casterAnchor = effect.casterId === room?.sessionId ? localPlayer : remotePlayers.get(effect.casterId)?.entity;
   if (targetAnchor) {
     root.setLocalPosition(0, .03, 0); targetAnchor.addChild(root);
@@ -4615,49 +4464,34 @@ function createCallingImpact(effect: CallingAbilityEffect): void {
   } else {
     root.setPosition(effect.x, effect.y + .03, effect.z); app.root.addChild(root);
   }
-  if (root.parent === app.root) root.setEulerAngles(0, effect.yaw, 0); else root.setLocalEulerAngles(0, effect.yaw, 0);
-  const durationMs = style === "shield" ? Math.min(effect.durationMs ?? 2_500, 5_500)
-    : style === "smoke" ? Math.min(effect.durationMs ?? 2_200, 3_500)
-    : style === "motion" ? 650 : style === "terrain" ? 1_150 : 950;
-  callingImpactVisuals.push({ root, material, startedAt: performance.now(), durationMs, style });
+  if (root.parent === app.root) root.setEulerAngles(0, effect.yaw, 0);
+  else root.setLocalEulerAngles(0, effect.yaw, 0);
+  addCallingParticleLayers(app, root, layers);
+  callingImpactVisuals.push({ root, expiresAt: performance.now() + callingParticleLifetime(layers) * 1000 });
   const local = localPlayer.getPosition(), pan = enemyCuePan(effect.x, local.x, 14);
   combatAudio.play(effect.pathId === "tank" ? "callingTank" : effect.pathId === "mage" || effect.pathId === "healer" ? "callingMage"
     : effect.pathId === "assassin" ? "callingShadow" : effect.pathId === "thief" ? "callingThief" : "callingRanger", pan);
-  if (style === "terrain") combatAudio.play("seismicImpact");
+  if (abilityId === "tank_earthbreaker") combatAudio.play("seismicImpact");
 }
 
 function updateCallingPersistentState(state: CallingStateUpdate): void {
   const existing = callingPersistentVisuals.get(state.playerId);
   if (existing) {
-    existing.root.destroy(); existing.material.destroy(); callingPersistentVisuals.delete(state.playerId);
+    existing.root.destroy(); callingPersistentVisuals.delete(state.playerId);
   }
   if (state.playerId === room?.sessionId) localCallingState = state.phase === "clear" ? null : state;
   if (state.phase === "clear") return;
   const casterAnchor = state.playerId === room?.sessionId ? localPlayer : remotePlayers.get(state.playerId)?.entity;
-  const targetAnchor = state.targetId ? mobVisuals.get(state.targetId)?.entity : undefined;
+  const targetAnchor = state.targetId
+    ? mobVisuals.get(state.targetId)?.entity ?? remotePlayers.get(state.targetId)?.entity : undefined;
   const anchor = targetAnchor ?? casterAnchor;
   if (!anchor) return;
-  const colors: Record<RoleFieldPath, pc.Color> = {
-    tank: new pc.Color(.25, .76, 1), mage: new pc.Color(.72, .34, 1), assassin: new pc.Color(1, .16, .38),
-    thief: new pc.Color(.3, 1, .55), ranger: new pc.Color(1, .76, .16), healer: new pc.Color(.25, 1, .72),
-  };
-  const material = powerMaterial(colors[state.pathId], .68);
   const root = new pc.Entity(`calling-state:${state.abilityId}`);
-  const count = Math.max(1, state.charges ?? (state.abilityId === "assassin_death_mark" ? 4 : 6));
-  for (let index = 0; index < count; index += 1) {
-    const angle = index / count * Math.PI * 2;
-    const ranger = state.pathId === "ranger";
-    const marked = state.abilityId === "assassin_death_mark";
-    const plate = addBox(root, ranger ? "ready-shot" : marked ? "exposed-rune" : "active-ward", material,
-      ranger ? [.045, .045, .72] : marked ? [.1, .62, .1] : [.17, .46, .07],
-      [Math.sin(angle) * (marked ? .68 : .76), marked ? 1.2 : .65 + index % 2 * .22, Math.cos(angle) * (marked ? .68 : .76)]);
-    plate.setLocalEulerAngles(marked ? (index % 2 ? 38 : -38) : 0, angle * 180 / Math.PI, ranger ? 18 : 0);
-    if (plate.render) plate.render.castShadows = false;
-  }
-  if (state.abilityId === "mage_overload") addBox(root, "overload-core", material, [.2, 1.2, .2], [0, .82, 0]);
-  root.setLocalPosition(0, .03, 0); anchor.addChild(root);
+  root.setLocalPosition(0, .03, 0);
+  anchor.addChild(root);
+  addCallingParticleLayers(app, root, CALLING_SUSTAIN_PARTICLES[state.pathId], true);
   callingPersistentVisuals.set(state.playerId, {
-    root, material, expiresAt: state.activeUntil ?? Number.POSITIVE_INFINITY, abilityId: state.abilityId,
+    root, expiresAt: state.activeUntil ?? Number.POSITIVE_INFINITY,
   });
 }
 
@@ -10768,43 +10602,21 @@ app.on("update", (dt: number) => {
   }
   for (let index = callingAnticipationVisuals.length - 1; index >= 0; index -= 1) {
     const visual = callingAnticipationVisuals[index]!;
-    const progress = (animationNow - visual.startedAt) / 430;
-    if (progress >= 1) {
-      visual.root.destroy(); visual.material.destroy(); callingAnticipationVisuals.splice(index, 1); continue;
+    if (animationNow >= visual.expiresAt) {
+      visual.root.destroy(); callingAnticipationVisuals.splice(index, 1);
     }
-    const eased = 1 - (1 - Math.max(0, progress)) ** 3;
-    const scale = .45 + eased * 1.2;
-    visual.root.setLocalScale(scale, .65 + Math.sin(progress * Math.PI) * .8, scale);
-    visual.root.rotate(0, frameTime * 150, 0);
-    visual.material.opacity = Math.max(0, (1 - progress) * .86); visual.material.update();
   }
   for (let index = callingImpactVisuals.length - 1; index >= 0; index -= 1) {
     const visual = callingImpactVisuals[index]!;
-    const progress = (animationNow - visual.startedAt) / visual.durationMs;
-    if (progress >= 1) {
-      visual.root.destroy(); visual.material.destroy(); callingImpactVisuals.splice(index, 1); continue;
+    if (animationNow >= visual.expiresAt) {
+      visual.root.destroy(); callingImpactVisuals.splice(index, 1);
     }
-    const eased = 1 - (1 - Math.max(0, progress)) ** 3;
-    if (visual.style === "terrain") visual.root.setLocalScale(.68 + eased * .42, .7 + Math.sin(progress * Math.PI) * .9, .68 + eased * .42);
-    else if (visual.style === "smoke") { const scale = .72 + eased * .62; visual.root.setLocalScale(scale, .82 + eased * .38, scale); visual.root.rotate(0, frameTime * 28, 0); }
-    else if (visual.style === "shield") { const pulse = 1 + Math.sin(animationTime * 8) * .035; visual.root.setLocalScale(pulse, pulse, pulse); visual.root.rotate(0, frameTime * 18, 0); }
-    else if (visual.style === "motion") visual.root.setLocalScale(1 + eased * .45, 1 - eased * .35, 1 + eased * 1.25);
-    else { const pulse = .72 + eased * .48; visual.root.setLocalScale(pulse, .8 + Math.sin(progress * Math.PI) * .55, pulse); visual.root.rotate(0, frameTime * 80, 0); }
-    const fadeStart = visual.style === "shield" ? .76 : visual.style === "smoke" ? .58 : .42;
-    visual.material.opacity = Math.max(0, Math.min(.9, (1 - progress) / Math.max(.01, 1 - fadeStart) * .9));
-    visual.material.update();
   }
   for (const [playerId, visual] of callingPersistentVisuals) {
     if (Date.now() >= visual.expiresAt) {
-      visual.root.destroy(); visual.material.destroy(); callingPersistentVisuals.delete(playerId);
+      visual.root.destroy(); callingPersistentVisuals.delete(playerId);
       if (playerId === room?.sessionId) localCallingState = null;
-      continue;
     }
-    const pulse = 1 + Math.sin(animationTime * 5.5) * .04;
-    visual.root.setLocalScale(pulse, pulse, pulse);
-    visual.root.rotate(0, frameTime * (visual.abilityId === "assassin_death_mark" ? -34 : 26), 0);
-    visual.material.opacity = .58 + Math.sin(animationTime * 6) * .1;
-    visual.material.update();
   }
   for (let index = powerImpactVisuals.length - 1; index >= 0; index -= 1) {
     const impact = powerImpactVisuals[index]!;
@@ -12210,11 +12022,11 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     forestPortalVisuals.clear(); nearbyForestPortal = null;
     for (const burst of dungeonBurstVisuals) { burst.root.destroy(); burst.material.destroy(); }
     dungeonBurstVisuals.length = 0;
-    for (const visual of callingAnticipationVisuals) { visual.root.destroy(); visual.material.destroy(); }
+    for (const visual of callingAnticipationVisuals) visual.root.destroy();
     callingAnticipationVisuals.length = 0;
-    for (const visual of callingImpactVisuals) { visual.root.destroy(); visual.material.destroy(); }
+    for (const visual of callingImpactVisuals) visual.root.destroy();
     callingImpactVisuals.length = 0;
-    for (const visual of callingPersistentVisuals.values()) { visual.root.destroy(); visual.material.destroy(); }
+    for (const visual of callingPersistentVisuals.values()) visual.root.destroy();
     callingPersistentVisuals.clear(); localCallingState = null; combatHud.setCallingState(null);
     pendingPortalDestination = null;
     social.clearNames();
