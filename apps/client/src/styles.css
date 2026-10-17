@@ -3064,6 +3064,92 @@ body:has(#combat-hud-shell[data-loadout-open="true"]) #blacksmith-prompt { displ
   #player-hud-root { bottom: calc(108px + env(safe-area-inset-bottom)); }
 }
 
+/* Compact desktop action cluster: status and hotkeys share one visual footprint. */
+@media (min-width: 821px) and (pointer: fine) {
+  #combat-action-bar {
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    grid-template-columns: 62px 62px minmax(0, 1fr) 62px;
+    gap: 5px;
+    width: min(640px, calc(100vw - 28px));
+    height: 77px;
+    padding: 6px;
+    border-radius: 0 0 14px 14px;
+    border-top-color: transparent;
+    background: linear-gradient(180deg, #0b1b16ee, #07110bed);
+  }
+  #combat-hud-shell { grid-template-columns: 45px repeat(3, minmax(0, 1fr)) 45px; gap: 5px; }
+  #mode-toggle, #main-hand-loadout, #calling-slot, #special-slot, #loadout-toggle,
+  #combat-action-bar #defense-slot, #combat-action-bar #dodge-hotbar, #combat-action-bar #potion-use {
+    height: 63px;
+    grid-template-rows: 1fr;
+    padding: 4px;
+    border-radius: 9px;
+  }
+  #main-hand-loadout, #calling-slot, #special-slot,
+  #combat-action-bar #defense-slot, #combat-action-bar #dodge-hotbar, #combat-action-bar #potion-use { overflow: visible; }
+  #combat-action-bar .action-art, #combat-hud-shell .action-art {
+    width: 42px;
+    height: 42px;
+    border: 0;
+    background: none;
+    box-shadow: none;
+  }
+  #combat-action-bar .action-art svg, #combat-hud-shell .action-art svg { width: 34px; height: 34px; }
+  #combat-action-bar kbd, #combat-hud-shell #main-hand-loadout kbd,
+  #combat-hud-shell #calling-slot kbd, #combat-hud-shell #special-slot kbd {
+    top: auto;
+    bottom: -4px;
+    left: 50%;
+    height: 17px;
+    min-width: 18px;
+    font-size: 10px;
+  }
+  #main-hand-loadout > strong, #calling-slot > strong, #special-slot > strong,
+  #combat-action-bar #defense-slot > strong, #combat-action-bar #dodge-hotbar > strong,
+  #combat-action-bar #potion-use > strong,
+  #main-hand-loadout > small, #calling-slot > em, #special-slot > em,
+  #combat-action-bar #defense-slot > small, #combat-action-bar #dodge-hotbar > small,
+  #combat-action-bar #potion-use > small { display: none; }
+  #combat-action-bar #potion-use #potion-count {
+    position: absolute;
+    top: 2px;
+    right: 3px;
+    display: block;
+    grid-row: auto;
+    padding: 2px 3px;
+    border-radius: 5px;
+    background: #0a1712df;
+    color: #fff3df;
+    font-size: 9px;
+  }
+  #mode-toggle { grid-template-rows: 1fr 1fr; gap: 2px; }
+  #mode-toggle button { padding: 1px; font-size: 8px; }
+  #loadout-toggle { gap: 0; }
+  #loadout-toggle span { font-size: 1.45rem; }
+  #loadout-toggle strong { font-size: .42rem; }
+  #player-hud-root {
+    bottom: calc(88px + env(safe-area-inset-bottom));
+    width: min(640px, calc(100vw - 28px));
+    box-sizing: border-box;
+    grid-template-columns: 92px minmax(0, 1fr);
+    gap: 3px 12px;
+    padding: 7px 10px 5px;
+    border-color: #b99b5866;
+    border-bottom: 0;
+    border-radius: 14px 14px 0 0;
+    background: linear-gradient(180deg, #0b1b16ee, #0b1b16ee);
+    box-shadow: 0 -8px 32px #0008;
+  }
+  #player-health, #player-stamina { grid-template-columns: 23px minmax(0, 1fr) 52px; gap: 6px; }
+  #player-health > div { height: 11px; }
+  #player-stamina > div { height: 8px; }
+  #player-level { border: 0; background: transparent; box-shadow: none; }
+  #player-level > span { font-size: .9rem; }
+  #player-level em { font-size: .55rem; }
+  #player-level > div { width: 100%; }
+  #build-path-proc { bottom: calc(152px + env(safe-area-inset-bottom)); }
+}
+
 /* World information is a small Minecraft-like readout, not a milestone panel. */
 #hud { display: contents; }
 #hud #status, #hud #target, #hud #controls-help { display: none; }
