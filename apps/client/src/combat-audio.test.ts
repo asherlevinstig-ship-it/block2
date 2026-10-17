@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DUNGEON_CUE_DEFINITIONS, ENEMY_CUE_DEFINITIONS, LOOT_CUE_DEFINITIONS, POWER_CUE_DEFINITIONS, WEAPON_CUE_DEFINITIONS, enemyCuePan, enemyCuesForTransition, type EnemyCueSnapshot } from "./combat-audio.js";
+import { ARMOUR_CUE_DEFINITIONS, DUNGEON_CUE_DEFINITIONS, ENEMY_CUE_DEFINITIONS, LOOT_CUE_DEFINITIONS, POWER_CUE_DEFINITIONS, WEAPON_CUE_DEFINITIONS, enemyCuePan, enemyCuesForTransition, type EnemyCueSnapshot } from "./combat-audio.js";
 
 const idle: EnemyCueSnapshot = {
   alive: true,
@@ -10,6 +10,13 @@ const idle: EnemyCueSnapshot = {
 };
 
 describe("enemy combat audio", () => {
+  it("gives shard deflection a short, restrained cue distinct from taking damage", () => {
+    const cue = ARMOUR_CUE_DEFINITIONS.shardDeflect;
+    expect(cue.minimumIntervalMs).toBeGreaterThanOrEqual(600);
+    expect(cue.tones).toHaveLength(2);
+    expect(cue.tones.every(tone => tone.gain <= .035 && tone.durationMs <= 145)).toBe(true);
+    expect(cue.tones[0]!.startHz).toBeGreaterThan(ENEMY_CUE_DEFINITIONS.hurt.tones[0]!.startHz);
+  });
   it("keeps close-miss whooshes quiet, brief and spaced apart", () => {
     const cue = WEAPON_CUE_DEFINITIONS.nearMiss;
     expect(cue.minimumIntervalMs).toBeGreaterThanOrEqual(350);

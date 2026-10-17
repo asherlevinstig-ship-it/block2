@@ -3408,12 +3408,14 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
     if (player.stamina <= 0) player.defending = false;
     let absorbed = false;
+    let absorbedBy: "bastion" | "northwatch" | undefined;
     if (!defense.guarded && defense.damage >= 3 && player.armourId === "bastion_plate"
       && now >= (this.bastionWardReadyAt.get(playerId) ?? 0)) {
       const perk = equipmentPerkStats("bastion_plate", equipmentReforgeRank(player.reforgeRanksJson, "bastion_plate"));
       this.bastionWardReadyAt.set(playerId, now + (perk?.cooldownMs ?? 14_000));
       defense.damage = 0;
       absorbed = true;
+      absorbedBy = "bastion";
     }
     defense.damage = armouredDamage(defense.damage, player.armourId, kind,
       equipmentReforgeRank(player.reforgeRanksJson, player.armourId));
@@ -3423,6 +3425,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.northwatchShardWardReadyAt.set(playerId, now + NORTHWATCH_SHARD_WARD_COOLDOWN_MS);
       defense.damage = 0;
       absorbed = true;
+      absorbedBy = "northwatch";
     }
     const bulwarkUntil = this.tankBulwarkUntil.get(playerId) ?? 0;
     if (defense.damage > 0 && now < bulwarkUntil) {
@@ -3507,6 +3510,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       parried: defense.parried,
       momentumStacks: player.momentumStacks,
       absorbed,
+      absorbedBy,
+      wardCooldownMs: absorbedBy === "northwatch" ? NORTHWATCH_SHARD_WARD_COOLDOWN_MS : undefined,
     } satisfies PlayerHit);
     if (defense.guarded) {
       this.broadcast("combat:defense", {

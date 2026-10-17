@@ -3163,6 +3163,8 @@ let fieldSpecialSelectionBeforeEquip = false;
 let callingAbilityPendingUntil = 0;
 let localMainHandId: MainHandId = "longsword";
 let localArmourId: ArmourId = "none";
+let northwatchWardReadyAt = 0;
+let northwatchWardRefreshTimer: number | null = null;
 let localIronSwordOwned = false;
 let localDepthsRewardFlags = 0;
 let localIsAdmin = false;
@@ -3259,6 +3261,32 @@ function refreshPowerCompatibility(): void {
 }
 
 let lastInventoryLoadoutKey = "";
+function refreshNorthwatchWardSlot(): void {
+  const slot = document.querySelector<HTMLButtonElement>('[data-loadout-slot="armour"]');
+  if (!slot) return;
+  if (localArmourId !== "ridgeguard_mantle" && localArmourId !== "northwatch_cloak") {
+    delete slot.dataset.wardLabel;
+    delete slot.dataset.wardState;
+    slot.removeAttribute("title");
+    return;
+  }
+  const remaining = Math.max(0, northwatchWardReadyAt - performance.now());
+  slot.dataset.wardState = remaining > 0 ? "charging" : "ready";
+  slot.dataset.wardLabel = remaining > 0 ? `SHARD WARD · ${Math.ceil(remaining / 1000)}S` : "SHARD WARD · READY";
+  slot.title = `${armourStats(localArmourId).name} · ${slot.dataset.wardLabel.toLowerCase()}`;
+}
+function startNorthwatchWardRecharge(cooldownMs: number): void {
+  northwatchWardReadyAt = performance.now() + cooldownMs;
+  refreshNorthwatchWardSlot();
+  if (northwatchWardRefreshTimer !== null) window.clearInterval(northwatchWardRefreshTimer);
+  northwatchWardRefreshTimer = window.setInterval(() => {
+    refreshNorthwatchWardSlot();
+    if (performance.now() >= northwatchWardReadyAt) {
+      window.clearInterval(northwatchWardRefreshTimer!);
+      northwatchWardRefreshTimer = null;
+    }
+  }, 250);
+}
 function refreshInventoryEquipped(): void {
   combatHud.setArmour(localArmourId);
   const tool = (inventoryCounts.get("reinforced_pickaxe") ?? 0) > 0 ? "Reinforced Pickaxe" : "Starter Pickaxe";
@@ -3289,6 +3317,7 @@ function refreshInventoryEquipped(): void {
     button.querySelector("span")!.textContent = value.detail;
     if (value.rarity) button.dataset.rarity = value.rarity; else delete button.dataset.rarity;
   }
+  refreshNorthwatchWardSlot();
   const slot = document.querySelector<HTMLElement>("#inventory-armour-slot");
   if (slot) {
     slot.querySelector("span")!.textContent = "Armour";
@@ -5995,6 +6024,7 @@ const chipSilverMaterial = coloredMaterial(new pc.Color(0.68, 0.9, 1));
 const levelGoldMaterial = coloredMaterial(new pc.Color(1, .82, .35));
 const foragerCueMaterial = coloredMaterial(new pc.Color(.6, .82, .28));
 const fenwalkerCueMaterial = coloredMaterial(new pc.Color(.28, .95, .7));
+const northwatchCueMaterial = coloredMaterial(new pc.Color(.56, .87, 1));
 
 // One small draw call, updated only when a crack stage changes; never touches chunk meshes.
 const miningCracks = new pc.Entity("progressive-mining-cracks");
@@ -6095,6 +6125,22 @@ function regionalArmourBurst(proc: RegionalArmourProc): void {
     if (entity.render) entity.render.castShadows = false;
     miningChips.push({ entity, origin,
       velocity: new pc.Vec3(Math.sin(angle) * .45, .85, Math.cos(angle) * .45), startedAt: performance.now() });
+  }
+}
+
+function northwatchShardBurst(): void {
+  const player = localPlayer.getPosition();
+  for (let index = 0; index < 10; index++) {
+    if (miningChips.length >= 24) miningChips.shift()!.entity.destroy();
+    const angle = index / 10 * Math.PI * 2;
+    const origin = new pc.Vec3(player.x + Math.sin(angle) * .28, player.y + .72,
+      player.z + Math.cos(angle) * .28);
+    const entity = addBox(app.root, "northwatch-shard-deflect", northwatchCueMaterial,
+      [.07, .11, .05], [origin.x, origin.y, origin.z]);
+    if (entity.render) entity.render.castShadows = false;
+    miningChips.push({ entity, origin,
+      velocity: new pc.Vec3(Math.sin(angle) * 1.35, 1.05 + index % 3 * .18,
+        Math.cos(angle) * 1.35), startedAt: performance.now() });
   }
 }
 
@@ -11337,6 +11383,17 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     if (message.momentumStacks !== undefined) updateMomentum(message.momentumStacks);
     if (message.defeated) showDefeat(mobVisuals.get(message.mobId)?.state.name ?? "An enemy");
     if (message.absorbed) {
+      if (message.absorbedBy === "northwatch") {
+        northwatchShardBurst();
+        combatAudio.play("shardDeflect");
+        startNorthwatchWardRecharge(message.wardCooldownMs ?? 8_000);
+        const position = localPlayer.getPosition().clone();
+        position.y += 1.55;
+        createRangedPopup(position, "SHARD DEFLECT", "stagger", false, [.62, .9, 1]);
+        status.textContent = `Shard ward deflected the shot · recharging for ${((message.wardCooldownMs ?? 8_000) / 1_000).toFixed(0)} seconds.`;
+        logMovementEvent(`SHARD WARD ${message.mobId}`);
+        return;
+      }
       showCombatFeedback("BASTION WARD", "block");
       status.textContent = "Bastion Ward absorbed the heavy hit · the ward is recharging.";
       logMovementEvent(`BASTION WARD ${message.mobId}`);
@@ -11564,6 +11621,10 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     }
   });
   room.onLeave(() => {
+    if (northwatchWardRefreshTimer !== null) window.clearInterval(northwatchWardRefreshTimer);
+    northwatchWardRefreshTimer = null;
+    northwatchWardReadyAt = 0;
+    refreshNorthwatchWardSlot();
     combatSync.clear();
     movementShadowInput = null;
     movementPilotReady = false;

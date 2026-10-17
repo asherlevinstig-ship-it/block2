@@ -1778,6 +1778,8 @@ export interface PlayerHit {
   parried?: boolean;
   momentumStacks?: number;
   absorbed?: boolean;
+  absorbedBy?: "bastion" | "northwatch";
+  wardCooldownMs?: number;
 }
 
 export interface DefenseResolved {

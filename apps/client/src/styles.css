@@ -1555,6 +1555,9 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 .equipment-slot-ring button[data-rarity="rare"] { --item-rarity: #68aefa; }
 .equipment-slot-ring button[data-rarity="epic"] { --item-rarity: #c080f2; }
 .equipment-slot-ring button[data-rarity="legendary"] { --item-rarity: #ffb84d; }
+.equipment-slot-ring button[data-ward-state]::after { content: attr(data-ward-label); display: block; margin-top: 2px; color: #99e5ff; font-size: .41rem; font-weight: 1000; letter-spacing: .02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.equipment-slot-ring button[data-ward-state="charging"]::after { color: #9aaeb5; }
+.equipment-slot-ring button[data-ward-state="ready"] { border-color: #78d6f0; }
 #character-creator { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; overflow: auto; padding: 28px 16px; background: radial-gradient(circle at 50% 35%, #244638ed, #07110ff7 75%); color: #f1e9cf; font-family: system-ui, sans-serif; }
 #character-creator[hidden] { display: none; }
 .creator-card { width: min(850px, 100%); max-height: calc(100dvh - 56px); overflow: auto; border: 1px solid #b99954; border-radius: 16px; background: #0e1d17; box-shadow: 0 24px 80px #000a, inset 0 1px #eacb7b55; }
