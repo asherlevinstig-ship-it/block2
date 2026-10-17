@@ -480,6 +480,7 @@ export const BLACKSMITH_WEAPONS = { forged_sword: { price: 45 }, forged_bow: { p
 export type BlacksmithWeaponId = keyof typeof BLACKSMITH_WEAPONS;
 export const ARMOUR_DEFINITIONS = {
   none: { name: "No armour", reduction: 0, speed: 1, projectileReduction: 0, hazardReduction: 0 },
+  wanderer_robes: { name: "Wanderer's Robes", reduction: 0, speed: 1.03, projectileReduction: 0, hazardReduction: 0 },
   leather_armour: { name: "Leather Armour", reduction: 1, speed: 1, projectileReduction: 0, hazardReduction: 0 },
   forager_wrap: { name: "Forager Wrap", reduction: 1, speed: 1.03, projectileReduction: 0, hazardReduction: 0 },
   fenwalker_mantle: { name: "Fenwalker Mantle", reduction: 1, speed: 1.01, projectileReduction: 1, hazardReduction: 1 },
@@ -497,12 +498,12 @@ export const ARMOUR_DEFINITIONS = {
 } as const;
 export type ArmourId = keyof typeof ARMOUR_DEFINITIONS;
 export function armourForItem(id: string): Exclude<ArmourId, "none"> | null {
-  return id === "leather_armour" || id === "forager_wrap" || id === "fenwalker_mantle" || id === "quarry_hauberk" || id === "ridgeguard_mantle" || id === "iron_armour" || id === "rootguard_armour" || id === "bastion_plate"
+  return id === "wanderer_robes" || id === "leather_armour" || id === "forager_wrap" || id === "fenwalker_mantle" || id === "quarry_hauberk" || id === "ridgeguard_mantle" || id === "iron_armour" || id === "rootguard_armour" || id === "bastion_plate"
     || id === "fangstalker_wrap" || id === "venomweave_mantle" || id === "mirebreaker_mantle" || id === "rootstalker_wrap" || id === "northwatch_cloak" || id === "worldsplitter_plate" ? id : null;
 }
 export function utilityForItem(id: string): "miners_lantern" | "moonstone" | null { return id === "miners_lantern" || id === "moonstone" ? id : null; }
 export function isEquipmentItem(id: string): boolean { return equipmentForItem(id) !== null || armourForItem(id) !== null || utilityForItem(id) !== null; }
-export const ArmourEquipSchema = z.object({ armourId: z.enum(["none", "leather_armour", "forager_wrap", "fenwalker_mantle", "quarry_hauberk", "ridgeguard_mantle", "iron_armour", "rootguard_armour", "bastion_plate", "fangstalker_wrap", "venomweave_mantle", "mirebreaker_mantle", "rootstalker_wrap", "northwatch_cloak", "worldsplitter_plate"]) });
+export const ArmourEquipSchema = z.object({ armourId: z.enum(["none", "wanderer_robes", "leather_armour", "forager_wrap", "fenwalker_mantle", "quarry_hauberk", "ridgeguard_mantle", "iron_armour", "rootguard_armour", "bastion_plate", "fangstalker_wrap", "venomweave_mantle", "mirebreaker_mantle", "rootstalker_wrap", "northwatch_cloak", "worldsplitter_plate"]) });
 export const BLACKSMITH_STOCK = { ...BLACKSMITH_WEAPONS, leather_armour: { price: 30 }, iron_armour: { price: 70 } } as const;
 export type BlacksmithStockId = keyof typeof BLACKSMITH_STOCK;
 export const BlacksmithBuySchema = z.object({ itemId: z.enum(["forged_sword", "forged_bow", "forged_focus", "leather_armour", "iron_armour"]) });
@@ -710,6 +711,7 @@ export type TavernQuizUpdate = {
 };
 
 export const ITEM_DEFINITIONS = {
+  wanderer_robes: { id: "wanderer_robes", name: "Wanderer's Robes", description: "Light starter robes · move 3% faster · equip from your pack" },
   leather_armour: { id: "leather_armour", name: "Leather Armour", description: "Reduce damage by 1 (minimum hit 1) · full movement speed" },
   forager_wrap: { id: "forager_wrap", name: "Forager Wrap", description: "Greenwood field armour · reduce damage by 1 · move 3% faster · recover stamina faster in Greenwood" },
   fenwalker_mantle: { id: "fenwalker_mantle", name: "Fenwalker Mantle", description: "Mistfen field armour · reduce damage by 1 · 1% faster · extra projectile protection · wards off alternating marsh-pool pulses" },
@@ -839,6 +841,7 @@ export const ITEM_RARITIES = {
 } as const;
 export type ItemRarity = keyof typeof ITEM_RARITIES;
 export const EQUIPMENT_RARITY = {
+  wanderer_robes: "common",
   leather_armour: "common",
   forager_wrap: "uncommon",
   fenwalker_mantle: "uncommon",

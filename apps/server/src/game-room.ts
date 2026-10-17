@@ -199,6 +199,7 @@ import {
   type GeneratedChunk,
 } from "@blockcraft/voxel-world";
 import { InventoryItemState, LootDropState, MobState, PlayerState, WorldState } from "./schema.js";
+import { STARTER_KIT_ITEMS, starterKitClaimed, withStarterKitClaimed } from "./starter-kit.js";
 import { miningRejectionReason, movementRejectionReason, nextComboStep, selectAttackTarget } from "./action-rules.js";
 import { dodgeDirection, isInsideImpact, pursueTarget } from "./combat-rules.js";
 import { GUARD_MINIMUM_STAMINA, GUARD_STAMINA_DRAIN_PER_SECOND, PARRY_STAGGER_MS, isAttackInGuardArc, resolveDefense } from "./defense-rules.js";
@@ -941,6 +942,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     // discovery milestone rather than a blacksmith briefing quest.
     if (player.miningExpeditionStage === 0) player.miningExpeditionStage = 1;
     this.state.players.set(client.sessionId, player);
+    if (this.roomKind === "overworld") this.ensureStarterKit(client.sessionId, player, Date.now());
     if (player.miningExpeditionStage === 7 && (player.inventory.get("miners_lantern")?.quantity ?? 0) > 0) {
       this.advanceFirstExpedition(client, "returned_to_blacksmith");
     }
@@ -2839,6 +2841,16 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     client.send("chat:notice", "Stone Warden reward restored · collect your personal Miner's Lantern in the buried chamber.");
   }
 
+  private ensureStarterKit(playerId: string, player: PlayerState, now: number): void {
+    if (starterKitClaimed(player.huntLoadoutsJson) || this.state.lootDrops.has(`starter-kit:${playerId}`)) return;
+    const spawn = this.spawnPoint();
+    const drop = new LootDropState();
+    Object.assign(drop, { ownerId: playerId, itemId: "forged_sword", quantity: 1,
+      contentsJson: encodeLootBagItems([...STARTER_KIT_ITEMS]), x: spawn.x + 2, y: spawn.y + .22, z: spawn.z + 2,
+      expiresAt: now + 30 * 60_000 });
+    this.state.lootDrops.set(`starter-kit:${playerId}`, drop);
+  }
+
   private refreshNearbyObjectives(): void {
     // Guidance is local context, not a quest chain with extra completion bonuses.
     for (const client of this.clients) this.sendObjectiveState(client);
@@ -3184,6 +3196,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     for (const [dropId, drop] of this.state.lootDrops) {
       if (now >= drop.expiresAt) {
         this.state.lootDrops.delete(dropId);
+        if (dropId.startsWith("starter-kit:")) {
+          const player = this.state.players.get(drop.ownerId);
+          if (player) this.ensureStarterKit(drop.ownerId, player, now);
+        }
       }
     }
   }
@@ -3275,7 +3291,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (firstGearId && collected.some(entry => entry.itemId === firstGearId)) {
         this.setGreenwoodProgress(player, { ...this.greenwoodProgress(player), firstBossGearClaimed: true });
       }
-      if (remaining.length === 0) this.state.lootDrops.delete(parsed.data.dropId);
+      if (remaining.length === 0) {
+        this.state.lootDrops.delete(parsed.data.dropId);
+        if (parsed.data.dropId === `starter-kit:${client.sessionId}`)
+          player.huntLoadoutsJson = withStarterKitClaimed(player.huntLoadoutsJson);
+      }
       else {
         const representative = lootBagRepresentative(remaining)!;
         drop.itemId = representative.itemId;

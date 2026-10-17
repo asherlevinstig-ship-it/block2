@@ -1771,6 +1771,7 @@ depthsCheckpointReady.addEventListener("click", () => {
 const NEUTRAL_OUTFIT_COLOR = new pc.Color(.16, .19, .17);
 const ARMOUR_OUTFIT_COLORS: Record<ArmourId, pc.Color> = {
   none: NEUTRAL_OUTFIT_COLOR,
+  wanderer_robes: new pc.Color(.23, .31, .42),
   leather_armour: new pc.Color(.34, .2, .1),
   forager_wrap: new pc.Color(.3, .37, .17),
   fenwalker_mantle: new pc.Color(.24, .36, .3),
@@ -2036,6 +2037,7 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
     root.addChild(silhouette);
   }
   const armour: Record<Exclude<ArmourId, "none">, pc.Entity> = {
+    wanderer_robes: new pc.Entity("wanderer-robes"),
     leather_armour: new pc.Entity("leather-armour"), iron_armour: new pc.Entity("iron-armour"),
     forager_wrap: new pc.Entity("forager-wrap"), fenwalker_mantle: new pc.Entity("fenwalker-mantle"),
     quarry_hauberk: new pc.Entity("quarry-hauberk"),
@@ -2055,7 +2057,7 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
     const quarry = id === "quarry_hauberk";
     const iron = id === "iron_armour" || quarry || bastion || worldsplitter;
     const rootguard = id === "rootguard_armour";
-    const material = id === "forager_wrap" ? coloredMaterial(new pc.Color(.42, .5, .22)) : id === "fenwalker_mantle" ? coloredMaterial(new pc.Color(.27, .47, .38)) : quarry ? coloredMaterial(new pc.Color(.45, .35, .27)) : ridgeguard ? coloredMaterial(new pc.Color(.31, .37, .39)) : northwatch ? coloredMaterial(new pc.Color(.25, .38, .46)) : rootstalker ? coloredMaterial(new pc.Color(.32, .46, .18)) : mirebreaker ? coloredMaterial(new pc.Color(.2, .42, .22)) : worldsplitter ? coloredMaterial(new pc.Color(.23, .28, .33))
+    const material = id === "wanderer_robes" ? coloredMaterial(new pc.Color(.31, .4, .56)) : id === "forager_wrap" ? coloredMaterial(new pc.Color(.42, .5, .22)) : id === "fenwalker_mantle" ? coloredMaterial(new pc.Color(.27, .47, .38)) : quarry ? coloredMaterial(new pc.Color(.45, .35, .27)) : ridgeguard ? coloredMaterial(new pc.Color(.31, .37, .39)) : northwatch ? coloredMaterial(new pc.Color(.25, .38, .46)) : rootstalker ? coloredMaterial(new pc.Color(.32, .46, .18)) : mirebreaker ? coloredMaterial(new pc.Color(.2, .42, .22)) : worldsplitter ? coloredMaterial(new pc.Color(.23, .28, .33))
       : venom ? coloredMaterial(new pc.Color(.26, .48, .12))
         : fang ? coloredMaterial(new pc.Color(.38, .18, .1))
           : iron ? bladeMaterial : rootguard ? coloredMaterial(new pc.Color(.16, .34, .18)) : weaponWoodMaterial;
@@ -2086,6 +2088,10 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
         addBox(layer, "worldsplitter-core", coreGlowMaterial, [.18, .18, .04], [0, .015, .292]);
         for (const x of [-.31, .31]) addBox(layer, "worldsplitter-spike", brassMaterial, [.1, .18, .48], [x, .31, 0]).setLocalEulerAngles(0, 0, x < 0 ? -12 : 12);
       }
+    } else if (id === "wanderer_robes") {
+      addBox(layer, "robe-front", material, [.58, .32, .065], [0, -.38, .215]);
+      addBox(layer, "robe-hem", brassMaterial, [.59, .04, .075], [0, -.55, .225]);
+      addBox(layer, "robe-sash", brassMaterial, [.56, .055, .08], [0, -.2, .24]);
     } else if (rootguard) {
       addBox(layer, "rootguard-heart", coreGlowMaterial, [.16, .18, .04], [0, .02, .253]).setLocalEulerAngles(0, 0, 45);
       addBox(layer, "rootguard-collar", weaponWoodMaterial, [.43, .11, .4], [0, .225, 0]);
@@ -2608,7 +2614,8 @@ function updateFirstStepsTrail(player: pc.Vec3, now: number): void {
     firstStepsTrailUpdatedAt = now;
     const route = onboardingTrailRoute(firstStepsIndex, player,
       [...mobVisuals.values()].map(({ state }) => state),
-      [...lootVisuals.values()].filter(({ root }) => root.enabled).map(({ state }) => state));
+      [...lootVisuals.entries()].filter(([, { root }]) => root.enabled)
+        .map(([id, { state }]) => ({ ...state, starter: id.startsWith("starter-kit:") })));
     firstStepsTrailPoints = sampleTrail(player, route);
   }
   for (let index = 0; index < firstStepsTrailMarks.length; index++) {
@@ -5469,6 +5476,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
 }
 
 const lootMaterials: Partial<Record<ItemId, pc.StandardMaterial>> = {
+  wanderer_robes: coloredMaterial(new pc.Color(.45, .56, .75)),
   leather_armour: coloredMaterial(new pc.Color(.44, .26, .12)),
   forager_wrap: coloredMaterial(new pc.Color(.54, .65, .3)),
   fenwalker_mantle: coloredMaterial(new pc.Color(.35, .58, .46)),
@@ -8115,7 +8123,7 @@ function renderBootstrap(payload: WorldBootstrap): void {
   worldReady = true;
   status.textContent = isInGreenwoodRegion(initialPosition.x, initialPosition.z)
     ? "Greenwood Outskirts · harvest oak timber and investigate the abandoned forester camp."
-    : "Welcome to the Town of Beginnings. The mine road leaves through the east gate.";
+    : "Welcome to the Town of Beginnings. Starter supplies are nearby; follow the south road when ready.";
 }
 
 const keys = new Set<string>();
@@ -10294,7 +10302,7 @@ app.on("update", (dt: number) => {
   }
 
   const player = localPlayer.getPosition();
-  if (worldReady && firstStepsIndex === 0 && Math.hypot(player.x - TOWN_CENTER_X, player.z - TOWN_CENTER_Z) >= 3)
+  if (worldReady && firstStepsIndex === 0 && Math.hypot(player.x - TOWN_CENTER_X, player.z - TOWN_CENTER_Z) >= 1.25)
     noteFirstStep("moved");
   else if (worldReady && firstStepsIndex === 1 && Math.hypot(player.x - TOWN_CENTER_X, player.z - TOWN_CENTER_Z) > TOWN_SAFE_RADIUS + 1)
     noteFirstStep("left_town");

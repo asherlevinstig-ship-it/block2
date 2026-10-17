@@ -2,8 +2,22 @@ import { describe, expect, it } from "vitest";
 import { InventoryItemState, PlayerState } from "../src/schema.js";
 import { applyPlayerSave, parsePlayerSave, serializePlayerSave, snapshotPlayerSave } from "../src/player-save.js";
 import { parseNorthwatchProgress, withNorthwatchProgress } from "../src/northwatch-progress.js";
+import { starterKitClaimed, withStarterKitClaimed } from "../src/starter-kit.js";
 
 describe("player saves", () => {
+  it("keeps starter supplies pending for new characters but excludes legacy saves", () => {
+    const player = new PlayerState();
+    expect(parsePlayerSave(serializePlayerSave(player))?.starterKitClaimed).toBe(false);
+    const restored = new PlayerState();
+    applyPlayerSave(restored, parsePlayerSave(serializePlayerSave(player))!);
+    expect(starterKitClaimed(restored.huntLoadoutsJson)).toBe(false);
+    player.huntLoadoutsJson = withStarterKitClaimed(player.huntLoadoutsJson);
+    expect(parsePlayerSave(serializePlayerSave(player))?.starterKitClaimed).toBe(true);
+    const legacy = parsePlayerSave(JSON.stringify({ version: 1, inventory: {}, mainHandId: "longsword" }))!;
+    expect(legacy.starterKitClaimed).toBe(true);
+    applyPlayerSave(restored, legacy);
+    expect(starterKitClaimed(restored.huntLoadoutsJson)).toBe(true);
+  });
   it("round-trips inventory, health, and equipped progression", () => {
     const player = new PlayerState();
     const dagger = new InventoryItemState();

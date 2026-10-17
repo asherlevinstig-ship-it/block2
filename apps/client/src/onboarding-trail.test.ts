@@ -4,22 +4,28 @@ import { onboardingTrailRoute, sampleTrail } from "./onboarding-trail.js";
 const player = { x: 8.5, y: 8, z: 8.5 };
 
 describe("onboarding glow trail", () => {
-  it("leads the opening steps along the east-gate road", () => {
-    expect(onboardingTrailRoute(0, player, [], []).at(-1)).toEqual({ x: 33.5, y: 8, z: 8.5 });
-    expect(sampleTrail(player, onboardingTrailRoute(1, player, [], []))).toHaveLength(18);
+  it("leads the opening steps to the personal starter drop", () => {
+    const drop = { x: 10.5, y: 8.22, z: 10.5, starter: true };
+    expect(onboardingTrailRoute(0, player, [], [drop])).toEqual([drop]);
+    expect(onboardingTrailRoute(1, player, [], [drop])).toEqual([drop]);
+    expect(onboardingTrailRoute(2, player, [], [drop])).toEqual([]);
   });
 
-  it("selects a nearby ordinary first enemy, not a mini-boss", () => {
+  it("goes around the tavern to the south gate, never toward the cavern", () => {
+    const route = onboardingTrailRoute(3, player, [], []);
+    expect(route).toEqual([
+      { x: 18.5, y: 8, z: 15.5 }, { x: 18.5, y: 8, z: 27.5 },
+      { x: 8.5, y: 8, z: 28.5 }, { x: 8.5, y: 8, z: 33.5 },
+    ]);
+    expect(route.every(point => point.x < 30)).toBe(true);
+    expect(sampleTrail(player, route)).toHaveLength(18);
+  });
+
+  it("selects a nearby southern ordinary enemy, not an eastern mini-boss", () => {
     const boss = { x: 30, y: 8, z: 8, alive: true, level: 2, isMiniBoss: true, isElite: false };
-    const crawler = { x: 35, y: 8, z: 9, alive: true, level: 2, isMiniBoss: false, isElite: false };
-    expect(onboardingTrailRoute(2, player, [boss, crawler], [])).toEqual([crawler]);
-  });
-
-  it("follows a nearby drop and vanishes after the tutorial", () => {
-    const drop = { x: 36, y: 8, z: 9 };
-    expect(onboardingTrailRoute(3, player, [], [drop])).toEqual([drop]);
-    expect(onboardingTrailRoute(4, player, [], [drop])).toEqual([]);
-    expect(onboardingTrailRoute(5, player, [], [drop])).toEqual([]);
-    expect(onboardingTrailRoute(null, player, [], [drop])).toEqual([]);
+    const crawler = { x: 3.5, y: 8, z: 44.5, alive: true, level: 2, isMiniBoss: false, isElite: false };
+    expect(onboardingTrailRoute(4, { x: 8.5, y: 8, z: 33.5 }, [boss, crawler], [])).toEqual([crawler]);
+    expect(onboardingTrailRoute(5, player, [], [])).toEqual([]);
+    expect(onboardingTrailRoute(null, player, [], [])).toEqual([]);
   });
 });

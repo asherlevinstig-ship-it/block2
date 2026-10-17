@@ -26,7 +26,7 @@ export function createInventoryPortrait(canvas: HTMLCanvasElement) {
       box("#0e1713", 0, 0, 240, 280); box("#213329", 52, 248, 136, 8);
       box("#182c2c", 92, 182, 24, 57); box("#223a3a", 124, 182, 24, 57);
       box("#34291f", 88, 227, 29, 18); box("#34291f", 123, 227, 29, 18);
-      const coat = armour === "forager_wrap" ? "#667c38" : armour === "fenwalker_mantle" ? "#426f60" : armour === "quarry_hauberk" ? "#74563f" : armour === "ridgeguard_mantle" ? "#4a5a60" : armour === "worldsplitter_plate" ? "#3e4a56" : armour === "northwatch_cloak" ? "#425d68" : armour === "rootstalker_wrap" ? "#54752f" : armour === "mirebreaker_mantle" ? "#396b38" : armour === "venomweave_mantle" ? "#477a28"
+      const coat = armour === "wanderer_robes" ? "#536b91" : armour === "forager_wrap" ? "#667c38" : armour === "fenwalker_mantle" ? "#426f60" : armour === "quarry_hauberk" ? "#74563f" : armour === "ridgeguard_mantle" ? "#4a5a60" : armour === "worldsplitter_plate" ? "#3e4a56" : armour === "northwatch_cloak" ? "#425d68" : armour === "rootstalker_wrap" ? "#54752f" : armour === "mirebreaker_mantle" ? "#396b38" : armour === "venomweave_mantle" ? "#477a28"
         : armour === "fangstalker_wrap" ? "#71351f" : armour === "bastion_plate" ? "#8192a5"
           : armour === "iron_armour" ? "#a7bac5" : armour === "rootguard_armour" ? "#315d39"
             : armour === "leather_armour" ? "#95633c" : appearanceHex("coat", appearance.coat);
@@ -70,6 +70,9 @@ export function createInventoryPortrait(canvas: HTMLCanvasElement) {
       } else if (armour === "northwatch_cloak") {
         box("#a6efff", 112, 116, 16, 16); box("#8ab4be", 92, 110, 13, 46); box("#8ab4be", 135, 110, 13, 46);
         box("#2b414b", 83, 180, 28, 33); box("#2b414b", 129, 180, 28, 33);
+      } else if (armour === "wanderer_robes") {
+        box("#536b91", 85, 174, 70, 40); box("#d4b570", 85, 207, 70, 5);
+        box("#d4b570", 87, 157, 66, 6); box("#7d97b7", 89, 110, 12, 45);
       } else if (armour === "leather_armour" || armour === "forager_wrap" || armour === "fangstalker_wrap" || armour === "rootstalker_wrap") {
         for (let i = 0; i < 5; i++) box("#4d3627", 100 + i * 7, 113 + i * 8, 10, 12);
         if (armour === "fangstalker_wrap" || armour === "rootstalker_wrap") for (let i = 0; i < 3; i++) box(armour === "rootstalker_wrap" ? "#d8e269" : "#e8cc7c", 102 + i * 17, 169, 7, 13);
