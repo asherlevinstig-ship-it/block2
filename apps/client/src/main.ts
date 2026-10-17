@@ -146,6 +146,7 @@ import {
   type PotionUpdate,
   POWER_DEFINITIONS,
   WEAPON_TECHNIQUES_AVAILABLE,
+  FIELD_TECHNIQUES_AVAILABLE,
   ROOTBOUND_FINISHER,
   SEISMIC_CLEAVE_UPGRADES,
   SPECIAL_DEFINITIONS,
@@ -3577,17 +3578,16 @@ function updateControlsHelp(): void {
   const callingHint = localCharacterProgression.level >= 2 && calling ? ` · G ${calling.name}` : "";
   const unlockedPowerHint = WEAPON_TECHNIQUES_AVAILABLE && localCharacterProgression.level >= 5 ? ` · ${powerHint}${secondaryHint}` : "";
   const unlockedSpecialHint = localCharacterProgression.level >= 4 && callingSpecial
-    ? ` · F ${localCharacterProgression.level >= 5 && (localFieldSpecialSelected || localEquippedSpecial === "venom_fan") ? SPECIAL_DEFINITIONS[localEquippedSpecial].name : callingSpecial.name}` : "";
+    ? ` · F ${callingSpecial.name}` : "";
   controlsHelp.textContent = `WASD move · Arrows camera · I inventory · H potion · Hold C/right-click Guard · Space dodge/cancel${unlockedPowerHint}${unlockedSpecialHint}${callingHint} · Q mode · E/click acts${fireHint}`;
 }
 
 function updateSpecialLoadout(specialId: SpecialId): void {
-  if (localEquippedSpecial === "venom_fan" && specialId !== "venom_fan") localFieldSpecialSelected = false;
-  if (specialId === "venom_fan") localFieldSpecialSelected = true;
+  localFieldSpecialSelected = false;
   localEquippedSpecial = specialId;
   combatHud.setSpecial(specialId);
-  combatHud.setFieldSpecialSelected(localFieldSpecialSelected);
-  specialButton.textContent = localCharacterProgression.level < 4 ? "LV 4" : specialId === "venom_fan" ? "Fan" : "Special";
+  combatHud.setFieldSpecialSelected(false);
+  specialButton.textContent = localCharacterProgression.level < 4 ? "LV 4" : "Special";
   updateControlsHelp();
 }
 
@@ -3623,6 +3623,7 @@ function requestCallingAbility(slot: "power" | "special" = "power"): void {
 }
 
 function requestSpecialEquip(specialId: SpecialId): void {
+  if (!FIELD_TECHNIQUES_AVAILABLE) return;
   if (!room || !worldReady) return;
   if (localCharacterProgression.level < 5) return;
   if (specialId === localEquippedSpecial) {
@@ -9204,6 +9205,7 @@ function updateSpecialAimFromPointer(): void {
 }
 
 function beginSpecialAim(pointerId: number | null = null): void {
+  if (!FIELD_TECHNIQUES_AVAILABLE) return;
   if (!defeatScreen.hidden) return;
   if (!room || !worldReady || specialAimActive) return;
   if (localCharacterProgression.level < 4) return;
@@ -9379,7 +9381,7 @@ for (const button of specialPickerButtons) {
   });
 }
 callingSpecialPicker.addEventListener("click", () => {
-  if (!localBuildPathId || localCharacterProgression.level < 4 || localEquippedSpecial === "venom_fan") return;
+  if (!FIELD_TECHNIQUES_AVAILABLE || !localBuildPathId || localCharacterProgression.level < 4) return;
   localFieldSpecialSelected = false;
   combatHud.setFieldSpecialSelected(false);
   updateControlsHelp();
@@ -9520,8 +9522,7 @@ window.addEventListener("keydown", event => {
   }
   if (event.code === "KeyF") {
     event.preventDefault();
-    if (localCharacterProgression.level >= 5 && (localFieldSpecialSelected || localEquippedSpecial === "venom_fan")) beginSpecialAim();
-    else requestCallingAbility("special");
+    requestCallingAbility("special");
   }
   if (event.code === "KeyG") { event.preventDefault(); requestCallingAbility(); }
   if (event.code === "Space") {
@@ -9586,19 +9587,11 @@ for (const button of [defenseButton, defenseSlot]) {
 }
 specialButton.addEventListener("pointerdown", event => {
   event.preventDefault();
-  if (localCharacterProgression.level >= 5 && (localFieldSpecialSelected || localEquippedSpecial === "venom_fan")) {
-    specialButton.setPointerCapture(event.pointerId);
-    beginSpecialAim(event.pointerId);
-  }
-  else requestCallingAbility("special");
+  requestCallingAbility("special");
 });
 specialSlot.addEventListener("pointerdown", event => {
   event.preventDefault();
-  if (localCharacterProgression.level >= 5 && (localFieldSpecialSelected || localEquippedSpecial === "venom_fan")) {
-    specialSlot.setPointerCapture(event.pointerId);
-    beginSpecialAim(event.pointerId);
-  }
-  else requestCallingAbility("special");
+  requestCallingAbility("special");
 });
 specialButton.addEventListener("pointermove", event => {
   if (specialAimPointerId !== event.pointerId) return;
@@ -10546,14 +10539,13 @@ app.on("update", (dt: number) => {
   const powerRemaining = Math.max(0, localPowerCooldownUntil - Date.now());
   const powerCompatible = isPowerCompatibleWithMainHand(POWER_DEFINITIONS[localEquippedPower], localMainHandId);
   powerButton.textContent = localCharacterProgression.level < 5 ? "LV 5" : !powerServerReady ? "Wait" : !powerCompatible ? "Locked" : powerAimActive ? "Release" : powerRemaining > 0 ? `${Math.ceil(powerRemaining / 1000)}s` : "Power";
-  const fieldSpecialActive = localCharacterProgression.level >= 5 && (localFieldSpecialSelected || localEquippedSpecial === "venom_fan");
-  const specialRemaining = Math.max(0, (fieldSpecialActive ? localSpecialCooldownUntil : localCallingSpecialCooldownUntil) - Date.now());
+  const specialRemaining = Math.max(0, localCallingSpecialCooldownUntil - Date.now());
   const specialDefinition = CALLING_ABILITY_OPTIONS.find(option => option.pathId === localBuildPathId && option.category === "Utility");
   const callingRemaining = Math.max(0, localCallingCooldownUntil - Date.now());
   combatHud.setCooldowns(
     cooldownState(powerRemaining, POWER_DEFINITIONS[localEquippedPower].cooldownMs, "READY · R",
       !powerServerReady ? "SERVER UPDATE" : !powerCompatible ? "INCOMPATIBLE" : powerAimActive ? "RELEASE TO CAST" : undefined),
-    cooldownState(specialRemaining, fieldSpecialActive ? SPECIAL_DEFINITIONS[localEquippedSpecial].cooldownMs : specialDefinition?.cooldownMs ?? 1, "READY · F", !localBuildPathId ? "CHOOSE CALLING" : specialAimActive ? "RELEASE TO ARM" : undefined),
+    cooldownState(specialRemaining, specialDefinition?.cooldownMs ?? 1, "READY · F", !localBuildPathId ? "CHOOSE CALLING" : undefined),
     localBuildPathId && localCallingAbilityId
       ? cooldownState(callingRemaining, CALLING_ABILITY_OPTIONS.find(option => option.id === localCallingAbilityId)?.cooldownMs ?? 1, "READY · G")
       : cooldownState(0, 1, "CHOOSE CALLING", "CHOOSE CALLING"),
@@ -10568,8 +10560,7 @@ app.on("update", (dt: number) => {
         : "READY",
   } : null);
   specialButton.textContent = localCharacterProgression.level < 4 ? "LV 4" : !localBuildPathId ? "Choose Calling"
-    : specialAimActive ? "Release" : specialRemaining > 0 ? `${Math.ceil(specialRemaining / 1000)}s`
-      : fieldSpecialActive ? SPECIAL_DEFINITIONS[localEquippedSpecial].name : specialDefinition?.name ?? "Special";
+    : specialRemaining > 0 ? `${Math.ceil(specialRemaining / 1000)}s` : specialDefinition?.name ?? "Special";
   cameraTarget.set(
     player.x + localPowerVisualOffset.x + localNetworkVisualOffset.x + localRecoveryVisualOffset.x + localDodgeVisualOffset.x,
     player.y + localVisualVerticalOffset,

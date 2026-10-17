@@ -36,6 +36,9 @@ describe("starter ability progression", () => {
     expect(client.send).toHaveBeenCalledWith("action:rejected", expect.objectContaining({ requestId: "power-cast-5", reason: "missing" }));
     expect(client.send).toHaveBeenCalledWith("action:rejected", expect.objectContaining({ requestId: "mastery-5", reason: "missing" }));
     internal.handleSpecialEquip(client, { requestId: "special-equip-5", specialId: "bramble_snare" });
-    expect(player.equippedSpecial).toBe("bramble_snare");
+    expect(player.equippedSpecial).toBe("hunters_mark");
+    internal.handleSpecial(client, { requestId: "special-cast-5", specialId: "hunters_mark", yaw: 0 });
+    expect(client.send).toHaveBeenCalledWith("action:rejected", expect.objectContaining({ requestId: "special-equip-5", reason: "missing" }));
+    expect(client.send).toHaveBeenCalledWith("action:rejected", expect.objectContaining({ requestId: "special-cast-5", reason: "missing" }));
   });
 });

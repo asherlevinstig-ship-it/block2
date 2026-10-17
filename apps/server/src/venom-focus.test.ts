@@ -3,6 +3,7 @@ import { Block } from "@blockcraft/voxel-world";
 import { WorldRoom } from "./game-room.js";
 import { InventoryItemState, PlayerState, WorldState } from "./schema.js";
 import { equipmentForItem, WEAPON_ATTACK_DEFINITIONS } from "@blockcraft/protocol";
+import { chooseBuildPath, parseBuildPathState, serializeBuildPathState } from "./build-paths.js";
 afterEach(() => vi.restoreAllMocks());
 function setup(wall = false) {
   const room = new WorldRoom(); room.setState(new WorldState()); const internal = room as any;
@@ -31,39 +32,40 @@ describe("Venom Focus", () => {
     internal.resolveWeaponProjectiles(10220);
     expect(mob.health).toBe(before);
   });
-  it("is owned equipment with familiar basic damage and an automatically bound special", () => {
+  it("keeps its basic damage without taking over the Calling Special slot", () => {
     const { internal, player, client } = setup();
     expect(equipmentForItem("venom_focus")).toBe("venom_focus");
     expect(WEAPON_ATTACK_DEFINITIONS.venom_focus.attacks[0].damage).toBe(WEAPON_ATTACK_DEFINITIONS.acid_gland_focus.attacks[0].damage);
     expect(WEAPON_ATTACK_DEFINITIONS.venom_focus.attacks[0].durationMs).toBeLessThan(WEAPON_ATTACK_DEFINITIONS.acid_gland_focus.attacks[0].durationMs);
-    expect(player.equippedSpecial).toBe("venom_fan");
+    expect(player.equippedSpecial).toBe("");
     internal.handleSpecialEquip(client, { requestId: "special", specialId: "bramble_snare" });
-    expect(player.equippedSpecial).toBe("venom_fan");
+    expect(player.equippedSpecial).toBe("");
     internal.handleMainHandEquip(client, { requestId: "unequip", mainHandId: "longsword" });
-    expect(player.equippedSpecial).toBe("hunters_mark");
+    expect(player.equippedSpecial).toBe("");
   });
-  it("launches three diverging shots and deals damage only on actual impact", () => {
+  it("lets an Assassin use Death Mark on F while Venom Focus is equipped", () => {
+    const { internal, player, client } = setup();
+    player.huntLoadoutsJson = serializeBuildPathState(chooseBuildPath(parseBuildPathState("{}"), "assassin"));
+    internal.handleCallingAbility(client, { requestId: "assassin-special", slot: "special" });
+    expect(client.send).toHaveBeenCalledWith("calling:ability", expect.objectContaining({ abilityId: "assassin_death_mark", slot: "special" }));
+  });
+  it("keeps Venom Fan dormant even with the weapon equipped", () => {
     const { internal, player, client, mob } = setup(); const before = mob.health;
+    player.equippedSpecial = "venom_fan";
     internal.handleSpecial(client, { requestId: "fan", specialId: "venom_fan", yaw: 90 });
-    expect(internal.pendingWeaponProjectiles.size).toBe(3);
+    expect(internal.pendingWeaponProjectiles.size).toBe(0);
     expect(mob.health).toBe(before);
-    expect(player.specialCooldownUntil).toBe(18000);
-    const shots = [...internal.pendingWeaponProjectiles.values()] as any[];
-    expect(shots[0].end.z).not.toBe(shots[1].end.z);
-    expect(shots[2].end.z).not.toBe(shots[1].end.z);
-    internal.handleSpecial(client, { requestId: "spam", specialId: "venom_fan", yaw: 90 });
-    expect(internal.pendingWeaponProjectiles.size).toBe(3);
-    expect(client.send).toHaveBeenCalledWith("action:rejected", expect.objectContaining({ reason: "cooldown" }));
-    internal.resolveWeaponProjectiles(10450);
-    expect(mob.health).toBeLessThan(before);
+    expect(player.specialCooldownUntil).toBe(0);
+    expect(client.send).toHaveBeenCalledWith("action:rejected", expect.objectContaining({ requestId: "fan", reason: "missing" }));
   });
-  it("blocks fan damage through walls and rejects casting without the owned weapon", () => {
+  it("rejects an old saved Venom Fan selection without creating projectiles", () => {
     const { internal, player, client, mob } = setup(true); const before = mob.health;
+    player.equippedSpecial = "venom_fan";
     internal.handleSpecial(client, { requestId: "fan", specialId: "venom_fan", yaw: 90 });
     internal.resolveWeaponProjectiles(10450); expect(mob.health).toBe(before);
-    player.specialCooldownUntil = 0; player.inventory.delete("venom_focus");
+    player.inventory.delete("venom_focus");
     internal.handleSpecial(client, { requestId: "invalid", specialId: "venom_fan", yaw: 90 });
     expect(internal.pendingWeaponProjectiles.size).toBe(0);
-    expect(client.send).toHaveBeenCalledWith("action:rejected", expect.objectContaining({ reason: "compatibility" }));
+    expect(client.send).toHaveBeenCalledWith("action:rejected", expect.objectContaining({ reason: "missing" }));
   });
 });

@@ -4,6 +4,7 @@ import {
   MAIN_HAND_DEFINITIONS,
   POWER_DEFINITIONS,
   WEAPON_TECHNIQUES_AVAILABLE,
+  FIELD_TECHNIQUES_AVAILABLE,
   SEISMIC_CLEAVE_UPGRADES,
   SPECIAL_DEFINITIONS,
   HUNT_EQUIPMENT_SETS,
@@ -143,7 +144,7 @@ function LoadoutDrawer() {
         ),
       ),
     ),
-    h("section", { class: "loadout-group" },
+    h("section", { class: "loadout-group", hidden: !FIELD_TECHNIQUES_AVAILABLE },
       h("p", null, h("span", null, "SPECIAL"), h("small", null, characterLevel.value < 4 ? "Calling Special unlocks at level 4" : special.value === "venom_fan" ? "Venom Focus binds Venom Fan" : "Your Calling first; optional field techniques at level 5")),
       h("div", { id: "special-picker", role: "group", "aria-label": "Special technique" },
         h("button", { type: "button", "data-calling-special": "true", "aria-pressed": String(!fieldSpecialSelected.value && special.value !== "venom_fan"), disabled: !calling.value || characterLevel.value < 4 || special.value === "venom_fan" },
@@ -183,13 +184,12 @@ function LoadoutDrawer() {
 function SpecialLoadout() {
   const selected = calling.value ? callingStarterAbility(calling.value, "special") : null;
   const cooldown = specialCooldown.value;
-  const fieldSpecial = characterLevel.value >= 5 && (fieldSpecialSelected.value || special.value === "venom_fan");
-  const name = fieldSpecial ? SPECIAL_DEFINITIONS[special.value].name : selected?.name;
+  const name = selected?.name;
   const locked = characterLevel.value < 4 || !selected;
   return h("button", { id: "special-slot", type: "button", disabled: locked,
       "aria-label": locked ? "Choose a Calling; Special unlocks at level 4" : `Use ${name}`,
       class: `${locked ? "locked" : cooldown.ready && !specialAiming.value ? "ready" : ""} ${specialAiming.value ? "aiming" : ""}`.trim() },
-      h("span", null, fieldSpecial ? "FIELD TECHNIQUE" : "CALLING SPECIAL"), h("strong", { id: "special-name" }, locked ? "Unlocks at LV 4" : name),
+      h("span", null, "CALLING SPECIAL"), h("strong", { id: "special-name" }, locked ? "Unlocks at LV 4" : name),
       h("em", { id: "special-cooldown-label" }, locked ? "COMING LATER" : cooldown.label), h("i", { id: "special-cooldown-fill", style: { width: `${locked ? 0 : cooldown.percent}%` } }),
   );
 }

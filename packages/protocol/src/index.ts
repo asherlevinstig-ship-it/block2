@@ -169,7 +169,6 @@ export function experienceLevelMultiplier(playerLevel: number, enemyLevel: numbe
 export const CHARACTER_MILESTONES = [
   { level: 2, id: "first_power", name: "Calling Power", detail: "Your Calling's first ability unlocks; cast with G" },
   { level: 4, id: "first_special", name: "Calling Special", detail: "Your Calling's special ability unlocks; cast with F" },
-  { level: 5, id: "second_power", name: "Field Techniques", detail: "Optional field techniques become available for your Special slot" },
   { level: 5, id: "advanced_smithing", name: "Advanced Smithing", detail: "Forged weapons and iron armour become available" },
   { level: 7, id: "silver_depths", name: "The Silver Depths", detail: "Accept the second expedition from the blacksmith" },
   { level: 10, id: "frontier_contracts", name: "Frontier Contracts", detail: "Track elite Frontier encounters and bosses" },
@@ -1368,6 +1367,8 @@ export const BRAMBLE_SNARE = {
   rootMs: 2000,
 } as const;
 
+// Reserved for a later item-driven system; F currently belongs to the Calling.
+export const FIELD_TECHNIQUES_AVAILABLE = false;
 export const SPECIAL_DEFINITIONS = {
   venom_fan: { id: "venom_fan", name: "Venom Fan", core: "volley", castType: "tap", cooldownMs: 8000, range: 6, travelMs: 450, offsets: [-18, 0, 18] },
   hunters_mark: HUNTERS_MARK,

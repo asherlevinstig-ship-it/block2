@@ -97,6 +97,7 @@ import {
   MoveRequestSchema,
   POWER_DEFINITIONS,
   WEAPON_TECHNIQUES_AVAILABLE,
+  FIELD_TECHNIQUES_AVAILABLE,
   PlayerProfileTokenSchema,
   ProgressionChooseSchema,
   WEAPON_ATTACK_DEFINITIONS,
@@ -6972,12 +6973,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (!parsed.success) return this.reject(client, { action: "power", reason: "payload" });
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
-    if (!WEAPON_TECHNIQUES_AVAILABLE || !milestoneUnlocked(player.level, "second_power"))
+    if (!WEAPON_TECHNIQUES_AVAILABLE || player.level < 5)
       return this.reject(client, { requestId: parsed.data.requestId, action: "power", reason: "missing" });
     player.defending = false;
     const powerId = parsed.data.powerId as PowerId;
     const definition = POWER_DEFINITIONS[powerId];
-    const equipped = player.equippedPower === powerId || milestoneUnlocked(player.level, "second_power") && player.equippedPowerSecondary === powerId;
+    const equipped = player.equippedPower === powerId || player.level >= 5 && player.equippedPowerSecondary === powerId;
     if (!definition || !equipped) {
       return this.reject(client, { requestId: parsed.data.requestId, action: "power", reason: "missing" });
     }
@@ -7058,7 +7059,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (!parsed.success) return this.reject(client, { action: "special", reason: "payload" });
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
-    if (!milestoneUnlocked(player.level, "second_power"))
+    if (!FIELD_TECHNIQUES_AVAILABLE || player.level < 5)
       return this.reject(client, { requestId: parsed.data.requestId, action: "special", reason: "missing" });
     player.defending = false;
     if (parsed.data.specialId !== player.equippedSpecial) {
@@ -7143,7 +7144,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (!parsed.success) return this.reject(client, { action: "special", reason: "payload" });
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
-    if (!milestoneUnlocked(player.level, "second_power"))
+    if (!FIELD_TECHNIQUES_AVAILABLE || player.level < 5)
       return this.reject(client, { requestId: parsed.data.requestId, action: "special", reason: "missing" });
     if (player.mainHandId === "venom_focus") return this.reject(client, { requestId: parsed.data.requestId, action: "loadout", reason: "compatibility" });
     if (this.pendingPowers.has(client.sessionId) || this.pendingAttacks.has(client.sessionId)) {
@@ -7165,7 +7166,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (!parsed.success) return this.reject(client, { action: "power", reason: "payload" });
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
-    if (!WEAPON_TECHNIQUES_AVAILABLE || !milestoneUnlocked(player.level, "second_power"))
+    if (!WEAPON_TECHNIQUES_AVAILABLE || player.level < 5)
       return this.reject(client, { requestId: parsed.data.requestId, action: "power", reason: "missing" });
     const definition = POWER_DEFINITIONS[parsed.data.powerId];
     if (!definition || !isPowerCompatible(definition, player.mainHandTag)) {
@@ -7175,7 +7176,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       return this.reject(client, { requestId: parsed.data.requestId, action: "power", reason: "rate" });
     }
     const slot = parsed.data.slot ?? "primary";
-    if (slot === "secondary" && !milestoneUnlocked(player.level, "second_power")) {
+    if (slot === "secondary" && player.level < 5) {
       return this.reject(client, { requestId: parsed.data.requestId, action: "power", reason: "missing" });
     }
     if (slot === "secondary") player.equippedPowerSecondary = parsed.data.powerId;
@@ -7213,8 +7214,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
     player.mainHandId = mainHand.id;
     player.mainHandTag = mainHand.tag;
-    if (mainHand.id === "venom_focus") player.equippedSpecial = "venom_fan";
-    else if (player.equippedSpecial === "venom_fan") player.equippedSpecial = "hunters_mark";
+    if (FIELD_TECHNIQUES_AVAILABLE) {
+      if (mainHand.id === "venom_focus") player.equippedSpecial = "venom_fan";
+      else if (player.equippedSpecial === "venom_fan") player.equippedSpecial = "hunters_mark";
+    }
     this.attackChains.delete(client.sessionId);
     player.equippedPower = compatiblePowerOrFallback(player.equippedPower, mainHand.tag);
     player.equippedPowerSecondary = compatiblePowerOrFallback(player.equippedPowerSecondary, mainHand.tag);
