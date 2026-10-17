@@ -30,6 +30,7 @@ export const EQUIPMENT_COLLECTION: readonly EquipmentCollectionEntry[] = [
   { itemId: "leather_armour", slot: "armour", source: "Buy from the Town blacksmith" },
   { itemId: "forager_wrap", slot: "armour", source: "Forge from Greenwood finds at the blacksmith" },
   { itemId: "fenwalker_mantle", slot: "armour", source: "Forge from Mistfen finds at the blacksmith" },
+  { itemId: "quarry_hauberk", slot: "armour", source: "Forge from Southern Quarry finds at the blacksmith" },
   { itemId: "iron_armour", slot: "armour", source: "Buy from the Town blacksmith at level 5" },
   { itemId: "rootguard_armour", slot: "armour", source: "Defeat the Root Guardian" },
   { itemId: "bastion_plate", slot: "armour", source: "Defeat the Iron Bastion" },

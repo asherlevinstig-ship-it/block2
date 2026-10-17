@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { ArmourEquipSchema, FIELD_FORGE_RECIPES, FieldForgeSchema, armourForItem, armourStats } from "@blockcraft/protocol";
-import { TOWN_BLACKSMITH_STALL_POSITION } from "@blockcraft/voxel-world";
+import { ROADSIDE_ENCOUNTERS, TOWN_BLACKSMITH_STALL_POSITION } from "@blockcraft/voxel-world";
 import { WorldRoom } from "./game-room.js";
 import { InventoryItemState, PlayerState, WorldState } from "./schema.js";
 import { playerBackpackSlots } from "./backpack.js";
@@ -20,16 +20,17 @@ function fixture() {
   return { room, internal, player, client, give };
 }
 
-describe("early regional field armour", () => {
-  it("has modest, equippable regional gear below the legendary recipes", () => {
-    expect(Object.keys(FIELD_FORGE_RECIPES)).toEqual(["greenwood", "mistfen"]);
-    for (const recipe of Object.values(FIELD_FORGE_RECIPES)) {
-      expect(FieldForgeSchema.safeParse({ region: recipe === FIELD_FORGE_RECIPES.greenwood ? "greenwood" : "mistfen" }).success).toBe(true);
+describe("regional field armour", () => {
+  it("has equippable regional gear and keeps the quarry boss plate superior", () => {
+    expect(Object.keys(FIELD_FORGE_RECIPES)).toEqual(["greenwood", "mistfen", "quarry"]);
+    for (const [region, recipe] of Object.entries(FIELD_FORGE_RECIPES)) {
+      expect(FieldForgeSchema.safeParse({ region }).success).toBe(true);
       expect(armourForItem(recipe.itemId)).toBe(recipe.itemId);
       expect(ArmourEquipSchema.safeParse({ armourId: recipe.itemId }).success).toBe(true);
-      expect(armourStats(recipe.itemId).reduction).toBe(1);
-      expect(recipe.gold).toBeLessThan(20);
     }
+    expect(armourStats("quarry_hauberk").reduction).toBeLessThan(armourStats("worldsplitter_plate").reduction);
+    expect(armourStats("quarry_hauberk").hazardReduction).toBeLessThan(armourStats("worldsplitter_plate").hazardReduction);
+    expect(armourStats("quarry_hauberk").projectileReduction).toBe(1);
   });
 
   it("forges a Greenwood wrap from finds and grants a real pack item", () => {
@@ -41,6 +42,24 @@ describe("early regional field armour", () => {
     expect(player.inventory.get("timber")?.quantity).toBe(0);
     expect(player.coins).toBe(18);
     expect(internal.sendBlacksmithState).toHaveBeenCalledWith(client, expect.stringContaining("Forager Wrap forged"), "purchased");
+  });
+
+  it("forges a Quarry Hauberk from obtainable pre-boss roadside finds", () => {
+    const { internal, player, client, give } = fixture();
+    const ore = ROADSIDE_ENCOUNTERS.find(site => site.id === "sunfall-survey");
+    const core = ROADSIDE_ENCOUNTERS.find(site => site.id === "collapsed-lift");
+    expect(ore).toMatchObject({ itemId: "iron_ore", quantity: 2 });
+    expect(core).toMatchObject({ itemId: "stone_core", quantity: 1 });
+    give("iron_ore", 2);
+    internal.handleFieldForge(client, { region: "quarry" });
+    expect(player.inventory.get("quarry_hauberk")).toBeUndefined();
+    expect(player.coins).toBe(30);
+    give("stone_core", 1);
+    internal.handleFieldForge(client, { region: "quarry" });
+    expect(player.inventory.get("quarry_hauberk")?.quantity).toBe(1);
+    expect(player.inventory.get("iron_ore")?.quantity).toBe(0);
+    expect(player.inventory.get("stone_core")?.quantity).toBe(0);
+    expect(player.coins).toBe(2);
   });
 
   it("does not spend anything when materials are missing or the player is away", () => {
