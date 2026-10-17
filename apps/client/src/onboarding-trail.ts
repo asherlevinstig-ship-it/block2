@@ -12,7 +12,7 @@ export function onboardingTrailRoute(
   mobs: readonly TrailMob[],
   drops: readonly TrailPoint[],
 ): TrailPoint[] {
-  if (step === null || step >= ONBOARDING_DONE || step === 2 || player.y < 7) return [];
+  if (step === null || step >= ONBOARDING_DONE || step === 2 || step === 4 || player.y < 7) return [];
   if (step <= 1) {
     return [drops.find(drop => drop.starter) ?? STARTER_BAG];
   }
@@ -27,7 +27,7 @@ export function onboardingTrailRoute(
     route.push(SOUTH_GATE);
     return route;
   }
-  if (step === 4) {
+  if (step === 5) {
     const mob = mobs.filter(candidate => candidate.alive && !candidate.isMiniBoss && !candidate.isElite
       && candidate.level <= 3 && Math.abs(candidate.y - player.y) < 2
       && candidate.z >= 33 && candidate.z <= 53 && candidate.x >= -12 && candidate.x <= 29

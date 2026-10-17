@@ -326,7 +326,8 @@ import {
 import { isPowerCompatibleWithMainHand } from "./power-loadout.js";
 import { characterCreationNeeded, createGuestProfileToken, finishCharacterCreation, getOrCreateProfileToken,
   profileBackups, restoreProfile, startNewAdventure } from "./player-profile.js";
-import { advanceOnboarding, ONBOARDING_DONE, ONBOARDING_STEPS, onboardingStorageKey,
+import { advanceOnboarding, ONBOARDING_DONE, ONBOARDING_STEPS, onboardingStorageKey, legacyOnboardingStorageKey,
+  migrateLegacyOnboardingStep,
   parseOnboardingStep, type OnboardingEvent } from "./new-player-onboarding.js";
 import { onboardingTrailRoute, sampleTrail } from "./onboarding-trail.js";
 import { CombatAudio, enemyCuePan, enemyCuesForTransition, type EnemyCue, type EnemyCueSnapshot } from "./combat-audio.js";
@@ -627,13 +628,27 @@ const firstStepsCount = document.querySelector<HTMLElement>("#first-steps-count"
 const firstStepsTitle = document.querySelector<HTMLElement>("#first-steps-title")!;
 const firstStepsDetail = document.querySelector<HTMLElement>("#first-steps-detail")!;
 const firstStepsSkip = document.querySelector<HTMLButtonElement>("#first-steps-skip")!;
+const modeSwitchTutorial = document.querySelector<HTMLElement>("#mode-switch-tutorial")!;
+const modeSwitchTutorialAction = document.querySelector<HTMLButtonElement>("#mode-switch-tutorial-action")!;
 const firstStepsKey = onboardingStorageKey(profileToken);
-let firstStepsIndex = (() => { try { return parseOnboardingStep(window.localStorage.getItem(firstStepsKey)); } catch { return null; } })();
+let firstStepsIndex = (() => {
+  try {
+    const current = parseOnboardingStep(window.localStorage.getItem(firstStepsKey));
+    if (current !== null) return current;
+    const previous = migrateLegacyOnboardingStep(window.localStorage.getItem(legacyOnboardingStorageKey(profileToken)));
+    if (previous !== null) window.localStorage.setItem(firstStepsKey, String(previous));
+    return previous;
+  } catch { return null; }
+})();
 function renderFirstSteps(): void {
   const index = firstStepsIndex;
   const active = index !== null && index < ONBOARDING_DONE;
+  const modeLesson = index === 4;
   firstSteps.hidden = !active;
+  firstStepsSkip.hidden = modeLesson;
+  modeSwitchTutorial.hidden = !modeLesson;
   document.documentElement.classList.toggle("onboarding-active", active);
+  document.documentElement.classList.toggle("onboarding-mode-lesson", modeLesson);
   if (index === null || index >= ONBOARDING_DONE) return;
   const step = ONBOARDING_STEPS[index]!;
   firstStepsCount.textContent = `${index + 1} / ${ONBOARDING_DONE}`;
@@ -653,6 +668,7 @@ function noteFirstStep(event: OnboardingEvent): void {
   if (next === ONBOARDING_DONE) status.textContent = "First steps complete · follow Realm Guidance or explore freely.";
 }
 firstStepsSkip.addEventListener("click", () => setFirstSteps(ONBOARDING_DONE));
+modeSwitchTutorialAction.addEventListener("click", () => setInteractionMode("combat"));
 renderFirstSteps();
 const adminInvitation = consumeAdminInvitation();
 const minimapPanel = document.querySelector<HTMLDetailsElement>("#minimap")!;
@@ -8232,7 +8248,7 @@ joystickZone.addEventListener("pointercancel", event => releaseJoystick(event.po
 
 let room: Room | null = null;
 let reportedProtectedDialog: boolean | null = null;
-const protectedDialogSelector = '[role="dialog"], [aria-modal="true"], #loot-pack-decision, #combat-loadout-drawer, #performance-panel, #depths-retry-prompt, #party-panel details[open]';
+const protectedDialogSelector = '[role="dialog"], [aria-modal="true"], #loot-pack-decision, #combat-loadout-drawer, #performance-panel, #depths-retry-prompt, #mode-switch-tutorial, #party-panel details[open]';
 function syncProtectedDialog(): void {
   if (!room) { reportedProtectedDialog = null; return; }
   const open = [...document.querySelectorAll<HTMLElement>(protectedDialogSelector)].some(dialog =>
@@ -9619,6 +9635,7 @@ function setInteractionMode(mode: InteractionMode): void {
   status.textContent = mode === "build"
     ? "Build mode · clicks mine nearby targeted blocks."
     : cancelledMining ? miningMessage("mode") : `Combat mode · clicks use the ${MAIN_HAND_DEFINITIONS[localMainHandId].name} Attack without changing blocks.`;
+  if (mode === "combat") noteFirstStep("switched_combat");
 }
 
 for (const button of modeButtons) {
@@ -10253,8 +10270,10 @@ app.on("update", (dt: number) => {
   const player = localPlayer.getPosition();
   if (worldReady && firstStepsIndex === 0 && Math.hypot(player.x - TOWN_CENTER_X, player.z - TOWN_CENTER_Z) >= 1.25)
     noteFirstStep("moved");
-  else if (worldReady && firstStepsIndex === 3 && Math.hypot(player.x - TOWN_CENTER_X, player.z - TOWN_CENTER_Z) > TOWN_SAFE_RADIUS + 1)
+  else if (worldReady && firstStepsIndex === 3 && Math.hypot(player.x - TOWN_CENTER_X, player.z - TOWN_CENTER_Z) > TOWN_SAFE_RADIUS + 1) {
     noteFirstStep("left_town");
+    if (interactionMode === "combat") setInteractionMode("build");
+  }
   updateFirstStepsTrail(player, animationNow);
   const renderAt = performance.now() - REMOTE_INTERPOLATION_DELAY_MS;
   for (const remote of remotePlayers.values()) {
