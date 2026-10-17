@@ -26,4 +26,25 @@ describe("starter Calling choice", () => {
     expect(parseBuildPathState(player.huntLoadoutsJson).selectedPathId).toBe(pathId);
     expect(player.mainHandId).toBe(handId);
   });
+
+  it("lets an unbound player choose Assassin in the wilderness but requires Town to switch", () => {
+    const room = new WorldRoom(); room.setState(new WorldState());
+    const internal = room as any; internal.roomKind = "overworld";
+    vi.spyOn(internal, "persistPlayer").mockResolvedValue(undefined);
+    const player = new PlayerState();
+    Object.assign(player, { x: WORLD_SAFE_CENTER.x + 100, z: WORLD_SAFE_CENTER.z, level: 2 });
+    room.state.players.set("newcomer", player);
+    const client = { sessionId: "newcomer", send: vi.fn() } as any;
+    internal.handleBuildPath(client, { action: "sync" });
+    expect(client.send.mock.lastCall?.[1].canChoose).toBe(true);
+    expect(client.send.mock.lastCall?.[1].inTown).toBe(false);
+    internal.handleBuildPath(client, { action: "choose", pathId: "assassin" });
+    expect(parseBuildPathState(player.huntLoadoutsJson).selectedPathId).toBe("assassin");
+    expect(client.send.mock.lastCall?.[1].canChoose).toBe(false);
+    internal.handleBuildPath(client, { action: "choose", pathId: "mage" });
+    expect(parseBuildPathState(player.huntLoadoutsJson).selectedPathId).toBe("assassin");
+    Object.assign(player, { x: WORLD_SAFE_CENTER.x, z: WORLD_SAFE_CENTER.z });
+    internal.handleBuildPath(client, { action: "choose", pathId: "mage" });
+    expect(parseBuildPathState(player.huntLoadoutsJson).selectedPathId).toBe("mage");
+  });
 });

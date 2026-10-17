@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { progressionNotice } from "./progression-notice.js";
 
 const base = {
-  level: 4, unspentPoints: 0, statDismissed: false, hasCalling: true, inTown: true,
+  level: 4, unspentPoints: 0, statDismissed: false, hasCalling: true, canChooseCalling: true,
   callingDismissed: false, newAbilityNames: [] as string[], equipDismissed: false,
   equippedAbilityName: "Vanish", equippedAbilityUsed: true, useDismissed: false,
 };
@@ -21,8 +21,8 @@ describe("progression notice priority", () => {
       .toMatchObject({ kind: "use", action: "PRESS G TO USE", title: "Vanish equipped" });
   });
 
-  it("reminds an unbound player to choose a Calling in Town", () => {
-    expect(progressionNotice({ ...base, hasCalling: false, inTown: false })?.action).toBe("RETURN TO TOWN");
-    expect(progressionNotice({ ...base, hasCalling: false, inTown: true })?.action).toBe("CHOOSE CALLING");
+  it("offers the first Calling wherever the server permits it", () => {
+    expect(progressionNotice({ ...base, hasCalling: false, canChooseCalling: true })?.action).toBe("CHOOSE CALLING");
+    expect(progressionNotice({ ...base, hasCalling: false, canChooseCalling: false })?.action).toBe("RETURN TO SURFACE");
   });
 });

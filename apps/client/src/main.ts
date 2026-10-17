@@ -866,8 +866,8 @@ progressionNoticeAction.addEventListener("click", () => {
   switch (currentProgressionNotice?.kind) {
     case "stat": levelUpPanel.hidden = false; break;
     case "calling":
-      if (lastBuildPathUpdate?.inTown && lastBuildPathUpdate.canChoose) openCallingIntro();
-      else status.textContent = "Return to Town to choose your Calling.";
+      if (lastBuildPathUpdate?.canChoose) openCallingIntro();
+      else status.textContent = "Return to the surface to choose your Calling.";
       break;
     case "equip": document.querySelector<HTMLButtonElement>("#loadout-toggle")?.click(); break;
     case "use": requestCallingAbility(); break;
@@ -900,7 +900,7 @@ function refreshStatChoiceButtons(): void {
   }
 }
 levelUpCallingAction.addEventListener("click", () => {
-  if (!lastBuildPathUpdate?.inTown || !lastBuildPathUpdate.canChoose) return;
+  if (!lastBuildPathUpdate?.canChoose) return;
   levelUpPanel.hidden = true;
   openCallingIntro();
 });
@@ -3862,11 +3862,11 @@ function updateLevelUpCallingGuide(): void {
   const active = localBuildPathId ? BUILD_PATHS[localBuildPathId] : null;
   const power = localCallingAbilityId ? CALLING_ABILITY_OPTIONS.find(option => option.id === localCallingAbilityId) : null;
   const special = localBuildPathId ? CALLING_ABILITY_OPTIONS.find(option => option.pathId === localBuildPathId && option.category === "Utility") : null;
-  const inTown = lastBuildPathUpdate?.inTown === true;
+  const canChooseCalling = lastBuildPathUpdate?.canChoose === true;
   levelUpCallingNote.textContent = callingLevelGuide(localCharacterProgression.level,
     active ? { name: active.name, power: power?.name ?? "Calling power", special: special?.name ?? "Calling special" } : null,
-    inTown);
-  levelUpCallingAction.hidden = Boolean(active) || !inTown || !lastBuildPathUpdate?.canChoose;
+    canChooseCalling);
+  levelUpCallingAction.hidden = Boolean(active) || !canChooseCalling;
 }
 
 function updateLevelCelebration(now: number): void {
@@ -3911,7 +3911,7 @@ function refreshProgressionNotice(): void {
     level: localCharacterProgression.level,
     unspentPoints: localCharacterProgression.unspentStatPoints,
     statDismissed: dismissedStatLevel === localCharacterProgression.level,
-    hasCalling: Boolean(localBuildPathId), inTown: lastBuildPathUpdate?.inTown === true,
+    hasCalling: Boolean(localBuildPathId), canChooseCalling: lastBuildPathUpdate?.canChoose === true,
     callingDismissed: dismissedCallingLevel === localCharacterProgression.level,
     newAbilityNames: unseenCallingAbilityNames(),
     equipDismissed: dismissedEquipKey === `${lastBuildPathUpdate?.selectedPathId}:${lastBuildPathUpdate?.rank}`,
@@ -4020,7 +4020,8 @@ function renderBuildPath(update: BuildPathUpdate): void {
   buildPathNext.textContent = selected
     ? update.nextRankXp === null ? "Mastery complete" : `${update.xp}/${update.nextRankXp} mastery · Next: ${nextRank?.name ?? "Master"}`
     : "Six Callings available";
-  buildPathOpen.textContent = selected ? "VIEW CALLING" : update.canChoose ? "CHOOSE CALLING" : "LOCKED";
+  buildPathOpen.textContent = selected ? update.canChoose ? "VIEW CALLING" : "CHANGE IN TOWN"
+    : update.canChoose ? "CHOOSE CALLING" : "CHOOSE ON SURFACE";
   buildPathOpen.disabled = !update.canChoose;
   buildPathCandidates.replaceChildren();
   const specializationList = buildPathSpecializations.querySelector<HTMLElement>("div")!;
@@ -4043,12 +4044,20 @@ function renderBuildPath(update: BuildPathUpdate): void {
     buildPathMasterTrial.querySelector<HTMLElement>("i")!.style.width = `${Math.round(update.masterTrial.progress / update.masterTrial.target * 100)}%`;
     buildPathMasterTrial.querySelector("small")!.textContent = update.masterTrial.complete ? update.masterTrial.capstone : `CAPSTONE · ${update.masterTrial.capstone}`;
   }
-  if (!update.canChoose) { callingIntro.hidden = true; return; }
+  if (!update.canChoose) {
+    callingIntro.hidden = true;
+    if (update.selectedPathId && previousPathId !== update.selectedPathId) {
+      sessionStorage.setItem("calling-intro-seen-v1", "true");
+      status.textContent = `${selected!.name} Calling chosen. ${localCharacterProgression.level >= 2 ? `Press G to use ${activeAbility?.name ?? "your Power"}` : `${activeAbility?.name ?? "Your Power"} unlocks at level 2`}.`;
+      showCombatFeedback(`${selected!.name.toUpperCase()} · ${localCharacterProgression.level >= 2 ? "PRESS G" : "POWER AT LV 2"}`, "dodge");
+    }
+    return;
+  }
   callingIntroTitle.textContent = selected ? "Your Calling" : "Choose your Calling";
   callingIntroEyebrow.textContent = selected ? `${selected.name.toUpperCase()} · ${rank.name.toUpperCase()}` : "YOUR PLAYSTYLE HAS AWAKENED";
   callingIntroCopy.textContent = selected
     ? "Review gear-based paths, or choose Healer for team support. Changes are allowed only in Town."
-    : "Choose your combat style now. Its Power unlocks at level 2 and Special at level 4.";
+    : "Choose your first combat style here. Its Power unlocks at level 2 and Special at level 4. Changes later require Town.";
   update.candidates.forEach((candidate, index) => {
     const definition = BUILD_PATHS[candidate.pathId];
     const starter = CALLING_ABILITY_OPTIONS.find(option => option.pathId === candidate.pathId && option.unlockRank === 0)!;
@@ -4058,19 +4067,19 @@ function renderBuildPath(update: BuildPathUpdate): void {
     button.dataset.recommended = String(index === 0);
     const why = candidate.reasons.length ? candidate.reasons.join(" · ") : "a flexible starting loadout";
     button.innerHTML = `<em>${candidate.pathId === update.selectedPathId ? "CURRENT" : index === 0 ? "RECOMMENDED" : "OPTION"}</em><span><strong>${definition.name}</strong><small>${definition.role}</small></span><p>${index === 0 ? "Suggested by" : "Style clue"}: ${why}</p><b>${starter.name} · unlocks at LV 2</b><small>${starter.description}</small>`;
-    button.disabled = !update.inTown;
-    button.title = update.inTown ? `Choose ${definition.name}` : "Return to Town to change your Calling";
+    button.disabled = !update.canChoose || Boolean(update.selectedPathId && !update.inTown);
+    button.title = button.disabled ? "Return to Town to change your Calling" : `Choose ${definition.name}`;
     button.addEventListener("click", () => {
-      if (!room || !update.inTown) return;
+      if (!room || !update.canChoose || (update.selectedPathId && !update.inTown)) return;
       for (const candidateButton of buildPathCandidates.querySelectorAll<HTMLButtonElement>("button")) candidateButton.disabled = true;
       callingIntroStatus.textContent = `Accepting the ${definition.name} Calling…`;
       room.send("build:path", { action: "choose", pathId: candidate.pathId as BuildPathId });
     });
     buildPathCandidates.append(button);
   });
-  callingIntroStatus.textContent = update.inTown
-    ? "Recommended reflects the gear and stats you use now. You can change later in Town."
-    : "Return to Town before changing your Calling.";
+  callingIntroStatus.textContent = !update.selectedPathId
+    ? "Choose your first Calling now. Future changes are made in Town."
+    : "Recommended reflects the gear and stats you use now. You can change later in Town.";
   if (update.selectedPathId && previousPathId !== update.selectedPathId) {
     callingIntro.hidden = true;
     sessionStorage.setItem("calling-intro-seen-v1", "true");
@@ -9868,8 +9877,8 @@ specialSlot.addEventListener("pointercancel", cancelSpecialAim);
 callingSlot.addEventListener("click", event => {
   event.preventDefault();
   if (!localBuildPathId && localCharacterProgression.level >= 2) {
-    if (lastBuildPathUpdate?.inTown && lastBuildPathUpdate.canChoose) openCallingIntro();
-    else status.textContent = "Return to Town to choose your Calling and unlock your Power.";
+    if (lastBuildPathUpdate?.canChoose) openCallingIntro();
+    else status.textContent = "Return to the surface to choose your Calling and unlock your Power.";
     return;
   }
   requestCallingAbility();

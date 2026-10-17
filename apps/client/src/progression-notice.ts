@@ -10,7 +10,7 @@ export function progressionNotice(input: {
   unspentPoints: number;
   statDismissed: boolean;
   hasCalling: boolean;
-  inTown: boolean;
+  canChooseCalling: boolean;
   callingDismissed: boolean;
   newAbilityNames: string[];
   equipDismissed: boolean;
@@ -20,7 +20,7 @@ export function progressionNotice(input: {
 }): ProgressionNotice | null {
   if (input.level >= 2 && !input.hasCalling && !input.callingDismissed) return {
     kind: "calling", title: "Choose your Calling", detail: "Your first Power is waiting for a playstyle.",
-    action: input.inTown ? "CHOOSE CALLING" : "RETURN TO TOWN",
+    action: input.canChooseCalling ? "CHOOSE CALLING" : "RETURN TO SURFACE",
   };
   if (input.newAbilityNames.length && !input.equipDismissed) return {
     kind: "equip", title: `${input.newAbilityNames.join(" + ")} unlocked`,

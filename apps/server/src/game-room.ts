@@ -4692,7 +4692,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       selectedCallingAugmentId: state.selectedPathId ? selectedCallingAugment(state, selectedCallingAbility(state, state.selectedPathId)) : null,
       callingAugmentProgress: state.callingAugmentProgress,
       masteredCallingAugments: state.masteredCallingAugments,
-      nextRankXp: nextBuildRankXp(xp), candidates, canChoose: true,
+      nextRankXp: nextBuildRankXp(xp), candidates,
+      canChoose: this.roomKind === "overworld" && (isInsideTownSafeZone(player) || !state.selectedPathId),
       selectedSpecializationId: specializationId,
       canSpecialize: Boolean(state.selectedPathId && rank >= 3 && !state.specializations[state.selectedPathId]),
       masterTrial: specialization ? { name: specialization.name, description: specialization.trial, progress: trialProgress,
@@ -4705,8 +4706,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const player = this.state.players.get(client.sessionId);
     if (!parsed.success || !player) return;
     if (parsed.data.action === "sync") { this.sendBuildPath(client); return; }
-    if (this.roomKind !== "overworld" || !isInsideTownSafeZone(player)) {
-      this.sendBuildPath(client, "Return to the safety of Town before committing to a Calling."); return;
+    const currentPathId = parseBuildPathState(player.huntLoadoutsJson).selectedPathId;
+    if (this.roomKind !== "overworld" || (!isInsideTownSafeZone(player)
+      && (parsed.data.action !== "choose" || currentPathId !== null))) {
+      this.sendBuildPath(client, currentPathId
+        ? "Return to Town before changing your Calling."
+        : "Return to the surface before choosing your first Calling."); return;
     }
     if (parsed.data.action === "specialize") {
       const state = parseBuildPathState(player.huntLoadoutsJson), pathId = state.selectedPathId;

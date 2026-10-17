@@ -11,7 +11,7 @@ describe("level-up guidance", () => {
 
   it("explains that level six abilities require a Calling, not a stat point", () => {
     expect(callingLevelGuide(6, null, true)).toContain("Choose a Calling below");
-    expect(callingLevelGuide(6, null, false)).toContain("Choose a Calling in Town");
+    expect(callingLevelGuide(6, null, false)).toContain("Return to the surface");
     expect(callingLevelGuide(6, { name: "Mage", power: "Arcane Surge", special: "Mana Shield" }, true))
       .toContain("G: Arcane Surge · F: Mana Shield");
   });
