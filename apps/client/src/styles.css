@@ -2220,6 +2220,10 @@ html.boss-hud-active #world-objective { display: none !important; }
 .level-up-choices strong, .level-up-choices small { display: block; }
 .level-up-choices small { margin-top: 5px; color: #9fb0a1; line-height: 1.35; }
 #level-up-points { color: #dfbd73; }
+.level-up-calling-note { margin: 13px 0 0; color: #d9e8d1; font-size: 12px; line-height: 1.45; }
+#level-up-calling-action { margin: 10px auto 0; padding: 9px 14px; border: 1px solid #f1d58a; border-radius: 8px; background: #594524; color: #fff0b8; cursor: pointer; font: 800 11px system-ui; letter-spacing: .06em; }
+#level-up-calling-action[hidden] { display: none; }
+#level-up-calling-action:hover, #level-up-calling-action:focus-visible { background: #80652d; }
 #level-up-later { display: block; margin: 16px auto 0; padding: 6px 12px; border: 0; background: transparent; color: #c9b992; cursor: pointer; font: 800 11px system-ui; letter-spacing: .06em; }
 #level-up-later:hover, #level-up-later:focus-visible { color: #fff0b8; text-decoration: underline; }
 #level-up-celebration { position: fixed; z-index: 45; top: 17%; left: 50%; width: min(440px, calc(100vw - 32px)); padding: 22px 26px; transform: translateX(-50%); border: 2px solid #ffde83; border-radius: 16px; background: radial-gradient(circle at 50% -20%, #806026, #19251b 72%); color: #fff4c8; box-shadow: 0 16px 56px #000b, 0 0 52px #e9bb6177; text-align: center; pointer-events: auto; animation: level-reveal .55s cubic-bezier(.2,1.4,.35,1) both; }

@@ -51,7 +51,9 @@ describe("defeat and return to town", () => {
     expect(player.mainHandId).toBe("stone_core_hammer");
     expect(player.invulnerableUntil).toBe(11_500);
     await internal.returnPlayerToTown(client);
-    expect(client.send).toHaveBeenCalledTimes(1);
+    expect(client.send).toHaveBeenCalledTimes(2);
+    expect(client.send).toHaveBeenCalledWith("player:returned", { x: 8.5, y: 8, z: 8.5 });
+    expect(client.send).toHaveBeenCalledWith("build:path", expect.objectContaining({ inTown: true }));
   });
   it("does not allow living players to use return as a free teleport or heal", async () => {
     const { player, client, internal } = fixture();

@@ -812,6 +812,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.onMessage("loot:collect", (client, payload) => this.handleLootCollect(client, payload));
     aliveMessage("trait:equip", (client, payload) => this.handleTraitEquip(client, payload));
     aliveMessage("progression:choose", (client, payload) => this.handleProgressionChoice(client, payload));
+    this.onMessage("progression:sync", client => {
+      const player = this.state.players.get(client.sessionId);
+      if (player) client.send("progression:update", progressionSnapshot(player));
+    });
     this.onMessage("quiz:sync", client => this.sendQuizState(client));
     aliveMessage("quiz:start", (client, payload) => this.handleQuizStart(client, payload));
     aliveMessage("quiz:answer", (client, payload) => this.handleQuizAnswer(client, payload));
@@ -5895,7 +5899,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       client.send("portal:notice", "Expedition failed · returning to the Town of Beginnings.");
       client.send("room:transfer", { room: WORLD_ROOM, returnFrom: "silver-depths", retry: true,
         ...await this.expeditionReturnTicket(client.sessionId) } satisfies RoomTransfer);
-    } else client.send("player:returned", spawn);
+    } else {
+      client.send("player:returned", spawn);
+      this.sendBuildPath(client);
+    }
   }
 
   private resolvePendingResurrections(now: number): void {

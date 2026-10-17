@@ -5,6 +5,7 @@ import { isInMistfenMarsh, NORTHWATCH_SHARD_PATROL_SITE } from "@blockcraft/voxe
 import { nearestRoleFieldOpportunity, nearestRoadsideEncounter, parseRoadsideClaims, type RoleFieldPath } from "@blockcraft/voxel-world";
 import { confirmedRangedHit, projectileImpactCue } from "./ranged-feedback.js";
 import { heldFireStep } from "./held-fire.js";
+import { callingLevelGuide, statChoiceDisabled } from "./progression-guidance.js";
 import { rangedAimYaw } from "./ranged-aim.js";
 import { activeCombatNearby, advanceBossHud, initialBossHud, leaderAttackLabel, leaderExposureLabel, leaderExposureRoleLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
 import { forestDungeonAtmosphere, forestDungeonNotice, portalNoticeFeedback } from "./forest-dungeon-presentation.js";
@@ -813,6 +814,8 @@ const levelUpPanel = document.querySelector<HTMLElement>("#level-up-panel")!;
 const levelUpTitle = document.querySelector<HTMLElement>("#level-up-title")!;
 const levelUpMessage = document.querySelector<HTMLElement>("#level-up-message")!;
 const levelUpPoints = document.querySelector<HTMLElement>("#level-up-points")!;
+const levelUpCallingNote = document.querySelector<HTMLElement>("#level-up-calling-note")!;
+const levelUpCallingAction = document.querySelector<HTMLButtonElement>("#level-up-calling-action")!;
 const levelUpLater = document.querySelector<HTMLButtonElement>("#level-up-later")!;
 const levelCelebration = document.querySelector<HTMLElement>("#level-up-celebration")!;
 const levelCelebrationTitle = document.querySelector<HTMLElement>("#level-celebration-title")!;
@@ -826,6 +829,25 @@ levelCelebrationChoose.addEventListener("click", () => {
 });
 levelUpLater.addEventListener("click", () => { levelUpPanel.hidden = true; });
 const characterStatButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-character-stat]")];
+let pendingStatChoice: { stat: CharacterStatId; checkTimer: number; recoveryTimer: number | null } | null = null;
+function clearPendingStatChoice(): void {
+  if (!pendingStatChoice) return;
+  window.clearTimeout(pendingStatChoice.checkTimer);
+  if (pendingStatChoice.recoveryTimer !== null) window.clearTimeout(pendingStatChoice.recoveryTimer);
+  pendingStatChoice = null;
+}
+function refreshStatChoiceButtons(): void {
+  for (const button of characterStatButtons) {
+    const stat = button.dataset.characterStat as CharacterStatId;
+    button.disabled = statChoiceDisabled(localCharacterProgression.unspentStatPoints,
+      localCharacterProgression[`${stat}Points`], pendingStatChoice !== null, MAX_CHARACTER_STAT_POINTS);
+  }
+}
+levelUpCallingAction.addEventListener("click", () => {
+  if (!lastBuildPathUpdate?.inTown || !lastBuildPathUpdate.canChoose) return;
+  levelUpPanel.hidden = true;
+  openCallingIntro();
+});
 const defenseSlot = document.querySelector<HTMLButtonElement>("#defense-slot")!;
 const traitSlot = document.querySelector<HTMLElement>("#trait-slot")!;
 const traitName = document.querySelector<HTMLElement>("#trait-name")!;
@@ -3773,14 +3795,23 @@ function renderCharacterProgression(update: ProgressionUpdate, maximumHealth = p
   }));
   activatePowerSlot(activePowerSlot, false);
   levelUpTitle.textContent = `Level ${update.level}!`;
-  levelUpMessage.textContent = update.reason === "level_up" ? `You earned ${update.experienceGranted ?? 0} XP from ${update.source ?? "adventuring"}. Choose one permanent improvement.` : "Choose one permanent improvement.";
+  levelUpMessage.textContent = update.reason === "level_up" ? `You earned ${update.experienceGranted ?? 0} XP from ${update.source ?? "adventuring"}. Spend a permanent stat point below.` : "Spend your permanent stat points below.";
   levelUpPoints.textContent = `${update.unspentStatPoints} point${update.unspentStatPoints === 1 ? "" : "s"} available`;
   playerLevel.dataset.points = String(update.unspentStatPoints > 0);
-  for (const button of characterStatButtons) {
-    const stat = button.dataset.characterStat as CharacterStatId;
-    button.disabled = update.unspentStatPoints <= 0 || update[`${stat}Points` as keyof ProgressionUpdate] as number >= MAX_CHARACTER_STAT_POINTS;
-  }
+  refreshStatChoiceButtons();
+  updateLevelUpCallingGuide();
   if (update.unspentStatPoints <= 0) levelUpPanel.hidden = true;
+}
+
+function updateLevelUpCallingGuide(): void {
+  const active = localBuildPathId ? BUILD_PATHS[localBuildPathId] : null;
+  const power = localCallingAbilityId ? CALLING_ABILITY_OPTIONS.find(option => option.id === localCallingAbilityId) : null;
+  const special = localBuildPathId ? CALLING_ABILITY_OPTIONS.find(option => option.pathId === localBuildPathId && option.category === "Utility") : null;
+  const inTown = lastBuildPathUpdate?.inTown === true;
+  levelUpCallingNote.textContent = callingLevelGuide(localCharacterProgression.level,
+    active ? { name: active.name, power: power?.name ?? "Calling power", special: special?.name ?? "Calling special" } : null,
+    inTown);
+  levelUpCallingAction.hidden = Boolean(active) || !inTown || !lastBuildPathUpdate?.canChoose;
 }
 
 function updateLevelCelebration(now: number): void {
@@ -3819,6 +3850,7 @@ function renderBuildPath(update: BuildPathUpdate): void {
   localCallingAugmentProgress = update.callingAugmentProgress;
   localMasteredCallingAugments = update.masteredCallingAugments;
   localBuildPathRank = update.rank;
+  updateLevelUpCallingGuide();
   combatHud.setCalling(update.selectedPathId, update.selectedCallingAbilityId, update.rank, update.selectedCallingAugmentId,
     update.callingAugmentProgress, update.masteredCallingAugments);
   specialButton.disabled = localCharacterProgression.level < 4 || !update.selectedPathId;
@@ -5854,6 +5886,11 @@ function bindPlayers(joinedRoom: Room): void {
     const playerCallbacks = callbacks(player);
     const updateLocalProgression = () => {
       if (!isLocal) return;
+      if (pendingStatChoice) {
+        const stat = pendingStatChoice.stat;
+        if (player.unspentStatPoints < localCharacterProgression.unspentStatPoints
+          || player[`${stat}Points`] > localCharacterProgression[`${stat}Points`]) clearPendingStatChoice();
+      }
       renderCharacterProgression({ reason: "sync", level: player.level, experience: player.experience,
         experienceRequired: experienceToNextLevel(player.level), unspentStatPoints: player.unspentStatPoints,
         powerPoints: player.powerPoints, vitalityPoints: player.vitalityPoints,
@@ -6472,9 +6509,28 @@ playerLevel.addEventListener("click", () => {
 });
 for (const button of characterStatButtons) button.addEventListener("click", () => {
   const stat = button.dataset.characterStat as CharacterStatId;
-  if (!room || localCharacterProgression.unspentStatPoints <= 0) return;
-  characterStatButtons.forEach(choice => { choice.disabled = true; });
-  room.send("progression:choose", { stat });
+  if (pendingStatChoice || localCharacterProgression.unspentStatPoints <= 0) return;
+  if (!room || !worldReady || !defeatScreen.hidden) {
+    levelUpMessage.textContent = "Wait until your return to town finishes, then choose a stat.";
+    return;
+  }
+  const choiceRoom = room;
+  const pending = { stat, checkTimer: 0, recoveryTimer: null as number | null };
+  pendingStatChoice = pending;
+  refreshStatChoiceButtons();
+  levelUpMessage.textContent = `Applying ${stat.toUpperCase()}…`;
+  pending.checkTimer = window.setTimeout(() => {
+    if (pendingStatChoice !== pending) return;
+    levelUpMessage.textContent = "Checking your saved points…";
+    choiceRoom.send("progression:sync");
+    pending.recoveryTimer = window.setTimeout(() => {
+      if (pendingStatChoice !== pending) return;
+      clearPendingStatChoice();
+      refreshStatChoiceButtons();
+      levelUpMessage.textContent = "The server did not confirm your choice. Reconnect to verify your points before trying again.";
+    }, 3_000);
+  }, 2_500);
+  choiceRoom.send("progression:choose", { stat });
 });
 const storageUI = createStorageUI(document.querySelector<HTMLElement>("#storage-content")!, (type, payload) => room?.send(type, payload));
 const storagePrompt = document.createElement("button"); storagePrompt.id = "storage-prompt"; storagePrompt.type = "button";
@@ -7783,6 +7839,7 @@ let worldPayloadBytes = 0;
 let networkRttMs: number | null = null;
 
 function renderBootstrap(payload: WorldBootstrap): void {
+  clearPendingStatChoice();
   caveDiscoverySampleKey = "";
   caveFogViewKey = "";
   caveDiscoveryRevision++;
@@ -11174,12 +11231,16 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     bossHudFingerprint = "";
   });
   room.onMessage("progression:update", (update: ProgressionUpdate) => {
+    if (pendingStatChoice && (update.reason === "choice" || update.reason === "sync")) clearPendingStatChoice();
     renderCharacterProgression(update);
+    if (update.reason === "sync" && levelUpPanel.hidden === false && update.unspentStatPoints > 0)
+      levelUpMessage.textContent = "Your points are up to date. Choose a permanent stat improvement.";
     if (update.reason === "level_up") {
       const milestone = CHARACTER_MILESTONES.find(entry => entry.level === update.level);
+      const callingReminder = !localBuildPathId && update.level >= 2 ? " · choose a Calling in Town for abilities" : "";
       pendingLevelCelebration = { level: update.level, detail: milestone
-        ? `${milestone.name} unlocked · a permanent stat point is ready`
-        : `A permanent stat point is ready · +${update.experienceGranted ?? 0} XP` };
+        ? `${milestone.name} unlocked · a permanent stat point is ready${callingReminder}`
+        : `A permanent stat point is ready · +${update.experienceGranted ?? 0} XP${callingReminder}` };
       status.textContent = milestone ? `Level ${update.level}! ${milestone.name} unlocked. Choose a permanent character improvement.` : `Level ${update.level}! Choose a permanent character improvement.`;
     } else if (update.reason === "experience" && update.experienceGranted) {
       status.textContent = `+${update.experienceGranted} XP · ${update.source ?? "adventuring"}`;
@@ -11744,6 +11805,9 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     }
   });
   room.onLeave(() => {
+    clearPendingStatChoice();
+    refreshStatChoiceButtons();
+    if (!levelUpPanel.hidden) levelUpMessage.textContent = "Disconnected. Reload before spending a stat point.";
     if (northwatchWardRefreshTimer !== null) window.clearInterval(northwatchWardRefreshTimer);
     northwatchWardRefreshTimer = null;
     northwatchWardReadyAt = 0;
