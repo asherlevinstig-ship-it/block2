@@ -150,6 +150,7 @@ export const NORTHWATCH_LEADER_HOME = { x: 15.5, y: 8, z: -72.5 } as const;
 export const NORTHWATCH_MOB_HOMES = [
   { x: 7.5, y: 8, z: -42.5 }, { x: 18.5, y: 8, z: -54.5 },
   { x: 14.5, y: 8, z: -68.5 }, { x: 21.5, y: 8, z: -70.5 }, NORTHWATCH_LEADER_HOME,
+  { x: 14.5, y: 8, z: -56.5 }, { x: 21.5, y: 8, z: -52.5 },
 ] as const;
 export function isInNorthwatchHighlands(x: number, z: number): boolean {
   return x >= NORTHWATCH_HIGHLANDS.minX && x <= NORTHWATCH_HIGHLANDS.maxX

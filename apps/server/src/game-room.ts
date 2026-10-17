@@ -6,7 +6,7 @@ import { ShadowMoveInput, stepShadowMovement, type ShadowPose } from "./movement
 import { randomUUID } from "node:crypto";
 import { ADMIN_BOOTSTRAP_HASH, ADMIN_PROFILE_HASH, adminProfileKey, matchesAdminBootstrapPass } from "./admin-access.js";
 import { AttackCoordination, allyFireLaneClear } from "./attack-coordination.js";
-import { MIXED_FRONTIER_SPITTER, STONE_BRUTE_ESCORTS, isMixedFrontierMob, mixedFrontierAllows, isSilverGuard, silverGuardAllows, frontierBruteAllows, isFrontierBruteGroupMob, isStoneBruteGroupMob, isGreenwoodCampMob, greenwoodCampAllows, isAshenSentry, ashenSentryAllows, ashenSentryPattern, isMistfenMob, mistfenAllows, isSouthernQuarryMob, southernQuarryAllows, isNorthwatchMob, northwatchAllows, northwatchShardPattern } from "./wilderness-encounters.js";
+import { MIXED_FRONTIER_SPITTER, STONE_BRUTE_ESCORTS, isMixedFrontierMob, mixedFrontierAllows, isSilverGuard, silverGuardAllows, frontierBruteAllows, isFrontierBruteGroupMob, isStoneBruteGroupMob, isGreenwoodCampMob, greenwoodCampAllows, isAshenSentry, ashenSentryAllows, ashenSentryPattern, isMistfenMob, mistfenAllows, isSouthernQuarryMob, southernQuarryAllows, isNorthwatchMob, northwatchAllows, northwatchShardPattern, NORTHWATCH_SHARD_PATROL_IDS, isNorthwatchShardPatrol, northwatchShardPatrolAllows } from "./wilderness-encounters.js";
 import { BRUTE_VOLLEY, bruteVolleyReady, bruteRockEndpoints } from "@blockcraft/protocol";
 import { CHAMPION_CHARGE, ChatSendSchema, PlayerNameSchema, AppearanceSchema, type NearbyChatMessage } from "@blockcraft/protocol";
 import { cleanChatText, hearsNearbyChat } from "./nearby-chat.js";
@@ -452,6 +452,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly callingSpecialReadyAt = new Map<string, number>();
   private readonly tankBulwarkUntil = new Map<string, number>();
   private readonly northwatchExposedUntil = new Map<string, number>();
+  private readonly northwatchPatrolContributors = new Set<string>();
   private readonly mageBarrierHits = new Map<string, number>();
   private readonly mageOverloadReady = new Set<string>();
   private readonly mageOverloadCharges = new Map<string, number>();
@@ -958,6 +959,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   }
 
   override async onLeave(client: Client): Promise<void> {
+    this.northwatchPatrolContributors.delete(client.sessionId);
     this.mistfenPoolDamageAt.delete(client.sessionId);
     this.fenwalkerWardReadyAt.delete(client.sessionId);
     this.northwatchShardWardReadyAt.delete(client.sessionId);
@@ -2088,6 +2090,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (mob.isChampion) mob.name = combatMobDefinition(mob).name;
     if (mobId === "frontier-brute") mob.name = "Frontier Stone Brute";
     if (isAshenSentry(mobId)) mob.name = "Ashglass Sentry";
+    if (mobId === "northwatch-spitter") mob.name = "Patrol Shard Sentry";
+    if (mobId === "northwatch-patrol-stalker-west" || mobId === "northwatch-patrol-stalker-east") mob.name = "Ridge Patrol Stalker";
     if (areaMiniBoss) mob.name = areaMiniBoss.name;
     this.mobBaseNames.set(mobId, mob.name);
     mob.level = enemyLevelForTier(mob.difficultyTier, mob.isChampion || mob.isElite || Boolean(areaMiniBoss), mobId === CRYSTAL_MATRIARCH_ID || mobId === "forest-guardian" || mobId === "forge-colossus");
@@ -2144,6 +2148,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (isMistfenMob(id)) return mistfenAllows(pose);
     if (isMistfenEventFollower(id)) return mistfenAllows(pose);
     if (isSouthernQuarryMob(id)) return southernQuarryAllows(pose);
+    if (isNorthwatchShardPatrol(id)) return northwatchShardPatrolAllows(pose);
     if (isNorthwatchMob(id)) return northwatchAllows(pose);
     if (isStoneBruteGroupMob(id)) return Math.abs(pose.y - 8) <= 1.5 && isInStoneBruteArena(pose.x, pose.z);
     if (isFrontierBruteGroupMob(id)) return frontierBruteAllows(pose);
@@ -2343,6 +2348,16 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const recipients = huntChampion && huntOwner?.health && Math.abs(huntOwner.y - mob.y) <= 2.5
       && Math.hypot(huntOwner.x - mob.x, huntOwner.z - mob.z) <= 45
       ? [...new Set([...baseRecipients, huntChampion.ownerId])] : baseRecipients;
+    if (isNorthwatchShardPatrol(mobId)) for (const playerId of recipients) this.northwatchPatrolContributors.add(playerId);
+    const northwatchPatrolClear = isNorthwatchShardPatrol(mobId)
+      && NORTHWATCH_SHARD_PATROL_IDS.every(id => id === mobId || !this.state.mobs.get(id)?.alive);
+    const lootRecipients = northwatchPatrolClear
+      ? [...new Set([...recipients, ...this.northwatchPatrolContributors])].filter(id => {
+        const player = this.state.players.get(id);
+        return player && player.health > 0 && Math.abs(player.y - mob.y) <= 2.5
+          && Math.hypot(player.x - mob.x, player.z - mob.z) <= 28;
+      }) : recipients;
+    if (northwatchPatrolClear) this.northwatchPatrolContributors.clear();
     this.combatContributions.clear(mobId);
     if ((SILVER_DEPTHS_GUARDS as readonly string[]).includes(mobId) || mobId === CRYSTAL_MATRIARCH_ID) {
       for (const playerId of recipients) {
@@ -2362,12 +2377,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
     const definition = combatMobDefinition(mob);
     const recipientsWithLoot = new Set<string>();
-    if (!SILVER_DEPTHS_CACHE_GUARD_IDS.includes(mobId)) for (const playerId of recipients) {
+    if (!SILVER_DEPTHS_CACHE_GUARD_IDS.includes(mobId)) for (const playerId of lootRecipients) {
       const fixedReward = mob.isChampion || mob.isElite || isAreaMiniBoss(mobId) || isSilverGuard(mobId) || mobId === "buried-chamber-brute"
-        || mobId === CRYSTAL_MATRIARCH_ID || mobId === "forge-colossus" || isRealmEventId(mobId);
+        || mobId === CRYSTAL_MATRIARCH_ID || mobId === "forge-colossus" || isRealmEventId(mobId) || northwatchPatrolClear;
       const cadenceId = this.profileTokens.get(playerId) ?? playerId;
       if (!fixedReward && !this.normalLootCadence.record(cadenceId, Math.random())) continue;
-      this.spawnLootDrops(mobId, mob, now, playerId);
+      this.spawnLootDrops(mobId, mob, now, playerId, northwatchPatrolClear);
       recipientsWithLoot.add(playerId);
     }
     if (mobId === "northwatch-scout" || mobId === "northwatch-spitter") for (const playerId of recipients) {
@@ -2930,7 +2945,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.refreshNearbyObjectives();
   }
 
-  private spawnLootDrops(mobId: string, mob: MobState, now: number, ownerId = ""): void {
+  private spawnLootDrops(mobId: string, mob: MobState, now: number, ownerId = "", northwatchPatrolClear = false): void {
     if (mobId === "forest-guardian") return;
     const rewardPlayer = ownerId ? this.state.players.get(ownerId) : undefined;
     const areaReward = areaMainMobDefinition(mobId);
@@ -3063,6 +3078,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       ...areaRelicDrops,
       ...northwatchCloakDrop,
       ...northwatchPatrolBonus,
+      ...(northwatchPatrolClear ? [{ itemId: "ridge_hide" as ItemId, quantity: 1 },
+        { itemId: "iron_ore" as ItemId, quantity: 1 }] : []),
       ...rematchDrops,
       ...mistfenMasteryDrops,
       ...mistfenEventDrops,
@@ -3115,6 +3132,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       "FIRST NORTHWATCH CLOAK · your personal loot bag contains a rare cloak. Hold E to collect it.");
     if (northwatchPatrolBonus.length) this.clients.find(client => client.sessionId === ownerId)?.send("chat:notice",
       "NORTHWATCH PATROL CACHE · 2 bonus Ridge Hide added to your personal loot bag.");
+    if (northwatchPatrolClear) this.clients.find(client => client.sessionId === ownerId)?.send("chat:notice",
+      "SHARD PATROL CLEARED · Ridge Hide and Iron Ore added to your personal loot bag. Hold E to collect it.");
   }
 
   private resolveLootPickups(now: number): void {
@@ -6326,6 +6345,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const definition = combatMobDefinition(mob);
       const home = this.mobHomes.get(mobId) ?? definition.spawn;
       if (!mob.alive && now >= mob.respawnAt) {
+        if (isNorthwatchShardPatrol(mobId) && mob.materializeUntil === 0)
+          this.northwatchPatrolContributors.clear();
         const isWildernessEnemy = this.roomKind === "overworld" && !mob.isChampion
           && (WILDERNESS_ENCOUNTERS.some(encounter => encounter.id === mobId) || roamingMembership(mobId) !== null);
         const materializing = isWildernessEnemy && mob.materializeUntil > 0;
@@ -6346,7 +6367,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           const activeElites = [...this.state.mobs.entries()].filter(([id, candidate]) => id !== mobId && !isAreaMiniBoss(id) && candidate.isElite
             && (candidate.alive || candidate.materializeUntil > now)).length;
           const areaMiniBoss = areaMiniBossDefinition(mobId);
-          mob.isElite = !areaMiniBoss && shouldBecomeWildernessElite(band.tier, activeElites, Math.random());
+          mob.isElite = !areaMiniBoss && !isNorthwatchShardPatrol(mobId)
+            && shouldBecomeWildernessElite(band.tier, activeElites, Math.random());
           const eliteKind = wildernessEliteKind(definition.id);
           mob.eliteKind = mob.isElite ? eliteKind : "";
           const baseName = this.mobBaseNames.get(mobId) ?? definition.name;
@@ -6614,6 +6636,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       }
       if (target.visible && previousTarget !== target.id) mob.alertUntil = now + 900;
       mob.awarenessState = target.visible ? "engaged" : "search";
+      if (target.visible && previousTarget !== target.id && isNorthwatchShardPatrol(mobId))
+        this.rallyNorthwatchShardPatrol(mobId, target.id, now);
       if (roamingMembership(mobId)) this.roamingEngaged.add(mobId);
       if (this.mobPatrols.delete(mobId)) this.mobNavigation.set(mobId, createMobNavigationState());
       const positioning = this.spitterPositioning.get(mobId) ?? createSpitterPositioning();
@@ -7864,6 +7888,26 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       } satisfies CombatMiss);
       if (!collision?.targetId && projectile.requestId.startsWith("attack-"))
         this.sendCombatTiming(projectile.attackerId, { requestId: projectile.requestId, action: "attack", phase: "resolved", serverTime: now, outcome: "miss" });
+    }
+  }
+
+  private rallyNorthwatchShardPatrol(mobId: string, playerId: string, now: number): void {
+    const caller = this.state.mobs.get(mobId);
+    const player = this.state.players.get(playerId);
+    if (!caller || !player || player.health <= 0 || now < (this.pathConcealedUntil.get(playerId) ?? 0)) return;
+    for (const allyId of NORTHWATCH_SHARD_PATROL_IDS) {
+      if (allyId === mobId) continue;
+      const ally = this.state.mobs.get(allyId);
+      if (!ally?.alive || ally.combatState !== "idle" || Math.abs(ally.y - player.y) > 1.75
+        || Math.hypot(ally.x - caller.x, ally.z - caller.z) > 12
+        || Math.hypot(ally.x - player.x, ally.z - player.z) > 14
+        || !hasCombatLineOfSight(ally, player, this.readWorldBlock)) continue;
+      const awareness = this.mobAwareness.get(allyId) ?? createMobAwareness();
+      if (awareness.targetId && awareness.targetId !== playerId) continue;
+      provokeMob(awareness, { id: playerId, x: player.x, y: player.y, z: player.z, health: player.health }, now);
+      this.mobAwareness.set(allyId, awareness);
+      ally.alertUntil = now + 900;
+      ally.awarenessState = "engaged";
     }
   }
 

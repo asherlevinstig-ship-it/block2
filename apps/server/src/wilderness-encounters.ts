@@ -40,8 +40,14 @@ export const SOUTHERN_QUARRY_IDS = ["south-causeway-crawler", "south-quarry-spit
 export const isSouthernQuarryMob = (id: string) => SOUTHERN_QUARRY_IDS.some(member => member === id);
 export const southernQuarryAllows = (pose: { x: number; y: number; z: number }) => Math.abs(pose.y - 8) <= 1.5
   && isInSouthernQuarry(pose.x, pose.z);
-export const NORTHWATCH_IDS = ["northwatch-scout", "northwatch-spitter", "northwatch-briar", "northwatch-guard", "northwatch-watchbreaker"] as const;
+export const NORTHWATCH_IDS = ["northwatch-scout", "northwatch-spitter", "northwatch-briar", "northwatch-guard", "northwatch-watchbreaker",
+  "northwatch-patrol-stalker-west", "northwatch-patrol-stalker-east"] as const;
 export const isNorthwatchMob = (id: string) => NORTHWATCH_IDS.some(member => member === id);
+export const NORTHWATCH_SHARD_PATROL_IDS = ["northwatch-spitter", "northwatch-patrol-stalker-west", "northwatch-patrol-stalker-east"] as const;
+export const isNorthwatchShardPatrol = (id: string): boolean => NORTHWATCH_SHARD_PATROL_IDS.some(member => member === id);
+export const northwatchShardPatrolAllows = (pose: { x: number; y: number; z: number }): boolean =>
+  northwatchAllows(pose) && Math.hypot(pose.x - NORTHWATCH_MOB_HOMES[1]!.x,
+    pose.z - NORTHWATCH_MOB_HOMES[1]!.z) <= 15;
 export const northwatchAllows = (pose: { x: number; y: number; z: number }) => Math.abs(pose.y - 8) <= 1.5
   && isInNorthwatchHighlands(pose.x, pose.z);
 /** Two focused shots invite a dodge; the third fires a readable three-lane spread. */
@@ -78,4 +84,6 @@ export const WILDERNESS_ENCOUNTERS: readonly { id: string; archetype: MobArchety
   { id: NORTHWATCH_IDS[2], archetype: "ridge_stalker", ...NORTHWATCH_MOB_HOMES[2] },
   { id: NORTHWATCH_IDS[3], archetype: "shard_sentry", ...NORTHWATCH_MOB_HOMES[3] },
   { id: NORTHWATCH_IDS[4], archetype: "stone_brute", ...NORTHWATCH_MOB_HOMES[4] },
+  { id: NORTHWATCH_IDS[5], archetype: "ridge_stalker", ...NORTHWATCH_MOB_HOMES[5] },
+  { id: NORTHWATCH_IDS[6], archetype: "ridge_stalker", ...NORTHWATCH_MOB_HOMES[6] },
 ];
