@@ -450,6 +450,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly tankFieldWards = new Set<string>();
   private readonly callingAbilityReadyAt = new Map<string, number>();
   private readonly callingSpecialReadyAt = new Map<string, number>();
+  private readonly resurrectionWindows = new Map<string, number>();
+  private readonly pendingResurrections = new Map<string, { targetId: string; completesAt: number; x: number; y: number; z: number; health: number }>();
   private readonly tankBulwarkUntil = new Map<string, number>();
   private readonly northwatchExposedUntil = new Map<string, number>();
   private readonly northwatchPatrolContributors = new Set<string>();
@@ -1029,6 +1031,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.tankFieldWards.delete(client.sessionId);
     this.callingAbilityReadyAt.delete(client.sessionId);
     this.callingSpecialReadyAt.delete(client.sessionId);
+    this.resurrectionWindows.delete(client.sessionId);
+    this.pendingResurrections.delete(client.sessionId);
+    for (const [casterId, cast] of this.pendingResurrections)
+      if (cast.targetId === client.sessionId) this.pendingResurrections.delete(casterId);
     this.tankBulwarkUntil.delete(client.sessionId);
     this.mageBarrierHits.delete(client.sessionId);
     this.mageOverloadReady.delete(client.sessionId);
@@ -3515,6 +3521,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
     player.momentumStacks = momentumAfterDefense(player.momentumStacks, defense.damage, defense.parried, traitId);
     player.health = Math.max(0, player.health - defense.damage);
+    if (defense.damage > 0 && this.pendingResurrections.delete(playerId))
+      this.clients.find(candidate => candidate.sessionId === playerId)?.send("chat:notice", "RESURRECTION INTERRUPTED · you took damage.");
     const depthsRun = this.silverDepthsRuns.get(playerId);
     if (depthsRun && depthsRun.completedAt === 0) depthsRun.damageTaken += defense.damage;
     const emberRun = this.emberVaultRuns.get(playerId);
@@ -3571,6 +3579,16 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.attackChains.delete(playerId);
     this.movementInputs.set(playerId, { request: idleMovementInput(), receivedAt: now });
     this.verticalVelocities.set(playerId, 0);
+    const rescuers = this.roomKind === "silver-depths" ? [...this.silverDepthsRoster.keys()]
+      : this.parties.cohort(playerId).members;
+    if (rescuers.some(id => id !== playerId && this.state.players.get(id)?.health! > 0
+      && parseBuildPathState(this.state.players.get(id)!.huntLoadoutsJson).selectedPathId === "healer"
+      && selectedCallingAbility(parseBuildPathState(this.state.players.get(id)!.huntLoadoutsJson), "healer") === "healer_resurrection"
+      && this.buildPathRankFor(this.state.players.get(id)!, "healer") >= 4)) {
+      const until = now + 12_000;
+      this.resurrectionWindows.set(playerId, until);
+      this.clients.find(candidate => candidate.sessionId === playerId)?.send("player:rescue-window", { until });
+    }
     if (mob) {
       const definition = mobArchetype(mob.archetype);
       const home = this.mobHomes.get(mobId) ?? definition.spawn;
@@ -4805,6 +4823,39 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const augmentId = selectedCallingAugment(state, abilityId);
     const definition = CALLING_ABILITY_OPTIONS.find(option => option.id === abilityId)!;
     const now = Date.now();
+    if (abilityId === "healer_resurrection") {
+      if (this.buildPathRankFor(player, "healer") < 4) return;
+      if (this.pendingResurrections.has(client.sessionId)) return;
+      const allies = this.roomKind === "silver-depths" ? [...this.silverDepthsRoster.keys()]
+        : this.parties.cohort(client.sessionId).members;
+      const target = allies.filter(id => id !== client.sessionId && this.state.players.get(id)?.health === 0
+        && now < (this.resurrectionWindows.get(id) ?? 0))
+        .map(id => [id, this.state.players.get(id)!] as const)
+        .filter(([, fallen]) => Math.abs(fallen.y - player.y) <= 2.5
+          && Math.hypot(fallen.x - player.x, fallen.z - player.z) <= 3.5
+          && hasCombatLineOfSight(player, fallen, this.readWorldBlock))
+        .sort((a, b) => Math.hypot(a[1].x - player.x, a[1].z - player.z)
+          - Math.hypot(b[1].x - player.x, b[1].z - player.z))[0];
+      if (!target) {
+        client.send("chat:notice", "RESURRECTION · no fallen party member within 3.5m and line of sight.");
+        return;
+      }
+      const readyAt = this.callingAbilityReadyAt.get(client.sessionId) ?? 0;
+      if (now < readyAt) {
+        client.send("chat:notice", `RESURRECTION · recovers in ${Math.ceil((readyAt - now) / 1_000)}s.`);
+        return;
+      }
+      const cooldownUntil = now + definition.cooldownMs;
+      this.callingAbilityReadyAt.set(client.sessionId, cooldownUntil);
+      this.pendingResurrections.set(client.sessionId, { targetId: target[0], completesAt: now + 2_500,
+        x: player.x, y: player.y, z: player.z, health: player.health });
+      client.send("calling:ability", { requestId: parsed.data.requestId, pathId, abilityId,
+        ability: definition.name, detail: `CHANNELING · ${target[1].name || "ALLY"} · 2.5s`, cooldownUntil,
+        durationMs: 2_500, slot } satisfies CallingAbilityUpdate);
+      this.sendCombatTiming(client.sessionId, { requestId: parsed.data.requestId, action: "calling", phase: "accepted", serverTime: now });
+      this.callingState(client.sessionId, pathId, abilityId, "RESURRECTING · 2.5s", { activeUntil: now + 2_500, targetId: target[0] });
+      return;
+    }
     const cooldowns = slot === "special" ? this.callingSpecialReadyAt : this.callingAbilityReadyAt;
     const readyAt = cooldowns.get(client.sessionId) ?? 0;
     if (now < readyAt) {
@@ -5808,6 +5859,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private async returnPlayerToTown(client: Client): Promise<void> {
     const player = this.state.players.get(client.sessionId);
     if (!player || player.health > 0) return;
+    this.resurrectionWindows.delete(client.sessionId);
+    for (const [casterId, cast] of this.pendingResurrections)
+      if (cast.targetId === client.sessionId) this.pendingResurrections.delete(casterId);
     const now = Date.now();
     const returningFromSilverDepths = this.roomKind === "silver-depths";
     const spawn = returningFromSilverDepths ? TOWN_SILVER_DEPTHS_PORTAL_POSITION : this.spawnPoint();
@@ -5828,6 +5882,44 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       client.send("room:transfer", { room: WORLD_ROOM, returnFrom: "silver-depths", retry: true,
         ...await this.expeditionReturnTicket(client.sessionId) } satisfies RoomTransfer);
     } else client.send("player:returned", spawn);
+  }
+
+  private resolvePendingResurrections(now: number): void {
+    for (const [casterId, cast] of this.pendingResurrections) {
+      const caster = this.state.players.get(casterId);
+      const target = this.state.players.get(cast.targetId);
+      const allies = this.roomKind === "silver-depths" ? [...this.silverDepthsRoster.keys()]
+        : this.parties.cohort(casterId).members;
+      const valid = caster && target && caster.health > 0 && target.health === 0
+        && caster.health >= cast.health && now < (this.resurrectionWindows.get(cast.targetId) ?? 0)
+        && allies.includes(cast.targetId) && Math.abs(caster.y - cast.y) <= .45
+        && Math.hypot(caster.x - cast.x, caster.z - cast.z) <= .75
+        && Math.abs(target.y - caster.y) <= 2.5
+        && Math.hypot(target.x - caster.x, target.z - caster.z) <= 3.5
+        && hasCombatLineOfSight(caster, target, this.readWorldBlock);
+      if (!valid) {
+        this.pendingResurrections.delete(casterId);
+        this.clients.find(client => client.sessionId === casterId)?.send("chat:notice", "RESURRECTION INTERRUPTED · stay close and avoid damage.");
+        this.callingState(casterId, "healer", "healer_resurrection", "", { clear: true });
+        continue;
+      }
+      if (now < cast.completesAt) continue;
+      this.pendingResurrections.delete(casterId);
+      this.resurrectionWindows.delete(cast.targetId);
+      target.health = Math.max(1, Math.ceil(target.maxHealth * .25));
+      target.stamina = Math.min(target.maxStamina, Math.max(target.stamina, 25));
+      target.invulnerableUntil = now + 1_500;
+      this.silverDepthsFallen.delete(cast.targetId);
+      if (this.roomKind === "silver-depths") this.broadcastSilverDepthsPartyStatus();
+      this.clients.find(client => client.sessionId === cast.targetId)?.send("player:resurrected", { health: target.health, maxHealth: target.maxHealth,
+        casterName: caster.name || "A Healer" });
+      this.clients.find(client => client.sessionId === casterId)?.send("chat:notice", `${target.name || "Ally"} resurrected with ${target.health} HP.`);
+      this.broadcast("calling:ability:effect", { casterId, pathId: "healer", abilityId: "healer_resurrection",
+        x: target.x, y: target.y, z: target.z, yaw: caster.yaw, targetId: cast.targetId } satisfies CallingAbilityEffect);
+      this.callingState(casterId, "healer", "healer_resurrection", "", { clear: true });
+      void this.persistPlayer(cast.targetId, target);
+    }
+    for (const [id, until] of this.resurrectionWindows) if (now >= until) this.resurrectionWindows.delete(id);
   }
 
   private releaseMobVolley(mobId: string, mob: MobState, origin: { x: number; y: number; z: number }, shots: { x: number; y: number; z: number }[], now: number, travelMs: number, damage: number, hazardRadius: number, hazardDurationMs: number): void {
@@ -6225,6 +6317,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       void this.flushWorldDeltaWrites();
     }
     this.resolvePendingPowers(now);
+    this.resolvePendingResurrections(now);
     this.resolvePendingAttacks(now);
     this.advanceCrawlerRushes(now);
     this.advanceChampionCharges(now);

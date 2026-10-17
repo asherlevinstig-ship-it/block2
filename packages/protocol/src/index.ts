@@ -230,6 +230,7 @@ export const CALLING_ABILITY_OPTIONS = [
   { id: "ranger_deadeye", pathId: "ranger", name: "Deadeye", category: "Aggressive", unlockRank: 3, cooldownMs: 18_000, description: "Greatly empower your next two ranged hits." },
   { id: "healer_field_mend", pathId: "healer", name: "Field Mend", category: "Core", unlockRank: 0, cooldownMs: 15_000, description: "Heal the most injured nearby ally; self-heal if no ally needs help." },
   { id: "healer_renewal", pathId: "healer", name: "Renewal", category: "Utility", unlockRank: 2, cooldownMs: 24_000, description: "Restore health to yourself and injured allies nearby." },
+  { id: "healer_resurrection", pathId: "healer", name: "Resurrection", category: "Master", unlockRank: 4, cooldownMs: 90_000, description: "Channel for 2.5s beside a fallen party member to revive them with low health. Moving or taking damage interrupts the cast." },
 ] as const;
 export type CallingAbilityId = typeof CALLING_ABILITY_OPTIONS[number]["id"];
 export function callingStarterAbility(pathId: BuildPathId, slot: "power" | "special") {
@@ -303,7 +304,7 @@ export const CALLING_AUGMENT_TRIALS = {
 export const CallingAbilityEquipRequestSchema = z.object({
   abilityId: z.enum(["tank_bulwark", "tank_challenge", "tank_earthbreaker", "mage_arcane_surge", "mage_mana_shield", "mage_overload",
     "assassin_vanish", "assassin_death_mark", "assassin_blade_dance", "thief_smoke_bomb", "thief_decoy", "thief_escape_artist",
-    "ranger_volley_focus", "ranger_disengage", "ranger_deadeye", "healer_field_mend", "healer_renewal"]),
+    "ranger_volley_focus", "ranger_disengage", "ranger_deadeye", "healer_field_mend", "healer_renewal", "healer_resurrection"]),
 }).strict();
 export const CallingAugmentEquipRequestSchema = z.object({
   augmentId: z.enum(CALLING_ABILITY_AUGMENTS.map(option => option.id) as [CallingAugmentId, ...CallingAugmentId[]]),

@@ -4193,6 +4193,7 @@ function createCallingImpact(effect: CallingAbilityEffect): void {
     thief_smoke_bomb: new pc.Color(.18, .72, .42), thief_decoy: new pc.Color(.42, 1, .48), thief_escape_artist: new pc.Color(.76, 1, .22),
     ranger_volley_focus: new pc.Color(1, .7, .1), ranger_disengage: new pc.Color(.24, .9, .76), ranger_deadeye: new pc.Color(1, .9, .28),
     healer_field_mend: new pc.Color(.25, 1, .72), healer_renewal: new pc.Color(.55, 1, .85),
+    healer_resurrection: new pc.Color(.95, 1, .45),
   };
   const abilityId = effect.abilityId;
   const style: CallingImpactVisual["style"] = abilityId === "tank_earthbreaker" ? "terrain"
@@ -4261,7 +4262,7 @@ function createCallingImpact(effect: CallingAbilityEffect): void {
       const banner = addBox(root, "challenge-banner", material, [.28, 1.25, .12], [Math.sin(angle) * 1.05, .78, Math.cos(angle) * 1.05]);
       banner.setLocalEulerAngles(0, angle * 180 / Math.PI, index % 2 ? 8 : -8);
     }
-  } else if (abilityId === "healer_field_mend" || abilityId === "healer_renewal") {
+  } else if (abilityId === "healer_field_mend" || abilityId === "healer_renewal" || abilityId === "healer_resurrection") {
     addBox(root, "mend-cross-horizontal", material, [.88, .16, .16], [0, 1.05, 0]);
     addBox(root, "mend-cross-vertical", material, [.16, .88, .16], [0, 1.05, 0]);
     for (let index = 0; index < 8; index += 1) {
@@ -7904,6 +7905,12 @@ function showDefeat(attackerName: string): void {
   if (activeRoomName === SILVER_DEPTHS_ROOM && latestDepthsPartyStatus) renderDepthsPartyStatus(latestDepthsPartyStatus);
   returnToTownButton.focus();
 }
+let rescueUntil = 0;
+function showRescueOption(until: number): void {
+  rescueUntil = until;
+  if (defeatScreen.hidden) showDefeat("An enemy");
+  defeatDetail.textContent = `A party Healer can resurrect you for ${Math.max(1, Math.ceil((until - Date.now()) / 1_000))} seconds. You can still return to town now. Carried minerals remain in your recovery bag.`;
+}
 returnToTownButton.addEventListener("click", () => {
   if (!room) return;
   returnToTownButton.disabled = true;
@@ -11398,6 +11405,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     logMovementEvent(`STAGGER ${message.mobId} ${message.durationMs}ms`);
   });
   room.onMessage("player:returned", (spawn: { x: number; y: number; z: number }) => {
+    rescueUntil = 0;
     awaitingReturnState = true;
     townReturnPosition = spawn;
     clearDefeatCombat();
@@ -11411,6 +11419,16 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     worldReady = false;
     room?.send("world:ready");
     status.textContent = "Back in the Town of Beginnings · follow your recovery marker to reclaim dropped items.";
+  });
+  room.onMessage("player:rescue-window", (message: { until: number }) => showRescueOption(message.until));
+  room.onMessage("player:resurrected", (message: { health: number; maxHealth: number; casterName: string }) => {
+    rescueUntil = 0;
+    defeatScreen.hidden = true;
+    returnToTownButton.disabled = false;
+    awaitingReturnState = false;
+    worldReady = true;
+    updatePlayerHealth(message.health, message.maxHealth);
+    status.textContent = `${message.casterName} resurrected you with ${message.health} HP. Stay close to your party!`;
   });
   room.onMessage("combat:player-hit", (message: PlayerHit) => {
     if (message.playerId !== room?.sessionId) return;

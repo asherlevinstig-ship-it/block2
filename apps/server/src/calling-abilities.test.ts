@@ -16,6 +16,11 @@ describe("hotbar Calling abilities", () => {
     Object.assign(player, { x: 50, y: 8, z: 50, level: 5, stamina: 25, maxStamina: 100,
       powerCooldownUntil: 99_000, specialCooldownUntil: 99_000 });
     player.huntLoadoutsJson = serializeBuildPathState(grantBuildPathXp(chooseBuildPath(parseBuildPathState("{}"), pathId), xp).state);
+    if (pathId === "healer" && xp >= 140) {
+      const mastered = chooseBuildSpecialization(parseBuildPathState(player.huntLoadoutsJson), "healer", "lifebinder");
+      mastered.mastered.push("lifebinder");
+      player.huntLoadoutsJson = serializeBuildPathState(mastered);
+    }
     room.state.players.set("hero", player);
     const client = { sessionId: "hero", send: vi.fn() };
     internal.clients.push(client);
@@ -84,15 +89,75 @@ describe("hotbar Calling abilities", () => {
   });
 
   it.each(CALLING_ABILITY_OPTIONS)("equips and activates $id when its rank is unlocked", option => {
-    const { internal, player, client } = fixture(option.pathId, 70);
+    const { internal, player, client } = fixture(option.pathId, option.unlockRank >= 4 ? 140 : 70);
     const mob = new MobState(); Object.assign(mob, { x: 52, y: 8, z: 50, alive: true, health: 20, maxHealth: 20, name: "Target", targetId: "hero" });
     internal.state.mobs.set("target", mob);
     internal.mobAwareness.set("target", { targetId: "hero" });
     internal.handleCallingAbilityEquip(client, { abilityId: option.id as CallingAbilityId });
     expect(parseBuildPathState(player.huntLoadoutsJson).callingAbilities[option.pathId]).toBe(option.id);
+    if (option.id === "healer_resurrection") {
+      const ally = new PlayerState(); Object.assign(ally, { x: 52, y: 8, z: 50, health: 0 });
+      internal.state.players.set("ally", ally);
+      internal.parties.restore(["hero", "ally"]);
+      internal.resurrectionWindows.set("ally", 22_000);
+    }
     if (option.pathId === "healer") player.health = 2;
     internal.handleCallingAbility(client, { requestId: `activate-${option.id}`, yaw: 0 });
     expect(client.send).toHaveBeenCalledWith("calling:ability", expect.objectContaining({ abilityId: option.id }));
+  });
+
+  it("revives only a fallen party member after a full channel, then consumes the rescue window", () => {
+    const { room, internal, player, client, broadcast } = fixture("healer", 140);
+    vi.spyOn(internal, "persistPlayer").mockResolvedValue(undefined);
+    const ally = new PlayerState(); Object.assign(ally, { x: 52, y: 8, z: 50, health: 0, maxHealth: 8, stamina: 0 });
+    room.state.players.set("ally", ally);
+    const allyClient = { sessionId: "ally", send: vi.fn() }; internal.clients.push(allyClient);
+    internal.parties.restore(["hero", "ally"]);
+    internal.resurrectionWindows.set("ally", 22_000);
+    internal.handleCallingAbilityEquip(client, { abilityId: "healer_resurrection" });
+    internal.handleCallingAbility(client, { requestId: "rescue" });
+    expect(ally.health).toBe(0);
+    internal.resolvePendingResurrections(12_499);
+    expect(ally.health).toBe(0);
+    internal.resolvePendingResurrections(12_500);
+    expect(ally.health).toBe(2);
+    expect(internal.resurrectionWindows.has("ally")).toBe(false);
+    expect(allyClient.send).toHaveBeenCalledWith("player:resurrected", expect.objectContaining({ health: 2 }));
+    expect(broadcast).toHaveBeenCalledWith("calling:ability:effect", expect.objectContaining({ abilityId: "healer_resurrection", targetId: "ally" }));
+    expect(player.health).toBeGreaterThan(0);
+  });
+
+  it("interrupts Resurrection on movement and never revives an outsider", () => {
+    const { room, internal, player, client } = fixture("healer", 140);
+    const ally = new PlayerState(); Object.assign(ally, { x: 52, y: 8, z: 50, health: 0 });
+    room.state.players.set("ally", ally);
+    internal.resurrectionWindows.set("ally", 22_000);
+    internal.handleCallingAbilityEquip(client, { abilityId: "healer_resurrection" });
+    internal.handleCallingAbility(client, { requestId: "stranger" });
+    expect(internal.pendingResurrections.size).toBe(0);
+    internal.parties.restore(["hero", "ally"]);
+    internal.handleCallingAbility(client, { requestId: "party" });
+    player.x += 1;
+    internal.resolvePendingResurrections(11_000);
+    expect(internal.pendingResurrections.size).toBe(0);
+    internal.resolvePendingResurrections(13_000);
+    expect(ally.health).toBe(0);
+  });
+
+  it("offers a rescue window only when a living Master Healer in the party has Resurrection equipped", () => {
+    const { room, internal, client } = fixture("healer", 140);
+    vi.spyOn(internal, "persistPlayer").mockResolvedValue(undefined);
+    const ally = new PlayerState(); Object.assign(ally, { x: 52, y: 8, z: 50, health: 1 });
+    room.state.players.set("ally", ally);
+    const allyClient = { sessionId: "ally", send: vi.fn() }; internal.clients.push(allyClient);
+    internal.handleCallingAbilityEquip(client, { abilityId: "healer_resurrection" });
+    internal.damagePlayer("pursuer", "ally", 5, 10_000, false);
+    expect(internal.resurrectionWindows.has("ally")).toBe(false);
+    ally.health = 1;
+    internal.parties.restore(["hero", "ally"]);
+    internal.damagePlayer("pursuer", "ally", 5, 10_100, false);
+    expect(internal.resurrectionWindows.get("ally")).toBe(22_100);
+    expect(allyClient.send).toHaveBeenCalledWith("player:rescue-window", { until: 22_100 });
   });
 
   it("keeps locked abilities out of the slot", () => {
