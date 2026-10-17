@@ -14,8 +14,8 @@ describe("reactive combat HUD", () => {
 
   it("progressively reveals Calling choices instead of showing future locked systems", () => {
     expect(visibleCallingAbilities("assassin", 0).map(option => option.name)).toEqual(["Vanish"]);
-    expect(visibleCallingAbilities("assassin", 2).map(option => option.name)).toEqual(["Vanish", "Death Mark"]);
-    expect(visibleCallingAbilities("assassin", 3).map(option => option.name)).toEqual(["Vanish", "Death Mark", "Blade Dance"]);
+    expect(visibleCallingAbilities("assassin", 2).map(option => option.name)).toEqual(["Vanish"]);
+    expect(visibleCallingAbilities("assassin", 3).map(option => option.name)).toEqual(["Vanish", "Blade Dance"]);
     expect(visibleCallingAugments("assassin_vanish", 1)).toHaveLength(0);
     expect(visibleCallingAugments("assassin_vanish", 2)).toHaveLength(2);
   });

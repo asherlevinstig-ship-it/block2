@@ -70,7 +70,8 @@ export function cooldownState(remainingMs: number, cooldownMs: number, readyLabe
 }
 
 export function visibleCallingAbilities(pathId: BuildPathId, rank: number) {
-  return CALLING_ABILITY_OPTIONS.filter(option => option.pathId === pathId && option.unlockRank <= rank);
+  return CALLING_ABILITY_OPTIONS.filter(option => option.pathId === pathId && option.unlockRank <= rank
+    && !(pathId === "assassin" && option.id === "assassin_death_mark"));
 }
 
 export function visibleCallingAugments(abilityId: CallingAbilityId, rank: number) {

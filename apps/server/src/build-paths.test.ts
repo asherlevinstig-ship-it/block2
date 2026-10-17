@@ -33,6 +33,12 @@ describe("hidden build paths", () => {
     expect(parseBuildPathState(JSON.stringify(state)).callingAbilities.tank).toBe("tank_challenge");
     expect(chooseCallingAbility(state, "tank", "tank_earthbreaker")).toBe(state);
   });
+  it("keeps Death Mark on F instead of allowing a duplicate Assassin G ability", () => {
+    const adept = grantBuildPathXp(chooseBuildPath(parseBuildPathState("{}"), "assassin"), 30).state;
+    expect(chooseCallingAbility(adept, "assassin", "assassin_death_mark")).toBe(adept);
+    expect(selectedCallingAbility({ ...adept, callingAbilities: { assassin: "assassin_death_mark" } }, "assassin"))
+      .toBe("assassin_vanish");
+  });
   it("binds one matching specialization after Veteran rank", () => {
     const veteran = grantBuildPathXp(chooseBuildPath(parseBuildPathState("{}"), "ranger"), 70).state;
     const specialized = chooseBuildSpecialization(veteran, "ranger", "trapper");

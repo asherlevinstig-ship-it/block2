@@ -120,13 +120,14 @@ export function chooseBuildPath(state: BuildPathState, pathId: BuildPathId): Bui
 }
 
 export function selectedCallingAbility(state: BuildPathState, pathId: BuildPathId): CallingAbilityId {
-  return state.callingAbilities[pathId]
+  return (pathId === "assassin" && state.callingAbilities[pathId] === "assassin_death_mark" ? null : state.callingAbilities[pathId])
     ?? CALLING_ABILITY_OPTIONS.find(option => option.pathId === pathId && option.unlockRank === 0)!.id;
 }
 
 export function chooseCallingAbility(state: BuildPathState, pathId: BuildPathId, abilityId: CallingAbilityId): BuildPathState {
   const definition = CALLING_ABILITY_OPTIONS.find(option => option.id === abilityId);
   if (state.selectedPathId !== pathId || !definition || definition.pathId !== pathId
+    || (pathId === "assassin" && abilityId === "assassin_death_mark")
     || effectiveBuildPathRank(state, pathId) < definition.unlockRank) return state;
   return { ...state, callingAbilities: { ...state.callingAbilities, [pathId]: abilityId } };
 }

@@ -1441,6 +1441,10 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 #build-path-panel header strong { margin-top: 2px; color: #f0d182; font-size: .8rem; }
 #build-path-panel header b { color: #bfa66a; font-size: .5rem; letter-spacing: .07em; }
 #build-path-message { margin: 6px 0 7px; color: #91a096; font-size: .55rem; line-height: 1.35; }
+#assassin-journey { display: grid; gap: 4px; margin: 7px 0 9px; }
+#assassin-journey[hidden], #assassin-journey-trial[hidden] { display: none; }
+#assassin-journey p { margin: 0; padding: 6px 8px; border: 1px solid #9c5a634d; border-radius: 6px; background: #28191ba8; color: #f3c1bf; font-size: .52rem; line-height: 1.35; }
+#assassin-journey-trial { border-color: #7f69504d !important; background: #221e16a8 !important; color: #e4c99b !important; }
 #build-path-progress { height: 5px; overflow: hidden; margin-bottom: 8px; border-radius: 5px; background: #050b07; }
 #build-path-progress i { display: block; width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #887039, #e8c668); transition: width .25s ease; }
 .build-path-summary-action { display: flex; align-items: center; justify-content: space-between; gap: 10px; }

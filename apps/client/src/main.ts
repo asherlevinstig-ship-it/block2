@@ -33,6 +33,7 @@ import { nextInventoryTab, type InventoryTab } from "./inventory-tabs.js";
 import { inventoryItemVisible } from "./inventory-ownership.js";
 import { playerHud } from "./player-hud.js";
 import { combatHud, cooldownState } from "./combat-hud.js";
+import { assassinJourney } from "./assassin-journey.js";
 import { EQUIPMENT_COLLECTION, collectionProgress, equipmentCollectionLabel, equipmentProgressionText } from "./equipment-progression.js";
 import { blacksmithShopStock, shopGoldShortfall, type BlacksmithShopTab } from "./blacksmith-shop.js";
 import { FIELD_FORGE_RECIPES, type FieldForgeId } from "@blockcraft/protocol";
@@ -842,6 +843,7 @@ let localCallingAugmentProgress: Partial<Record<CallingAugmentId, number>> = {};
 let localMasteredCallingAugments: CallingAugmentId[] = [];
 let localCallingState: CallingStateUpdate | null = null;
 let localBuildPathRank = 0;
+let lastBuildPathUpdate: BuildPathUpdate | null = null;
 const powerSlot = document.querySelector<HTMLButtonElement>("#power-slot")!;
 const powerPickerButtons = [...document.querySelectorAll<HTMLButtonElement>("#power-picker [data-power]")];
 const powerLoadoutButtons = [...document.querySelectorAll<HTMLButtonElement>("#power-loadout-slots [data-power-slot]")];
@@ -850,6 +852,9 @@ const buildPathPanel = document.querySelector<HTMLElement>("#build-path-panel")!
 const buildPathName = document.querySelector<HTMLElement>("#build-path-name")!;
 const buildPathRank = document.querySelector<HTMLElement>("#build-path-rank")!;
 const buildPathMessage = document.querySelector<HTMLElement>("#build-path-message")!;
+const assassinJourneyPanel = document.querySelector<HTMLElement>("#assassin-journey")!;
+const assassinJourneyNext = document.querySelector<HTMLElement>("#assassin-journey-next")!;
+const assassinJourneyTrial = document.querySelector<HTMLElement>("#assassin-journey-trial")!;
 const buildPathProgress = document.querySelector<HTMLElement>("#build-path-progress")!;
 const buildPathCandidates = document.querySelector<HTMLElement>("#build-path-candidates")!;
 const buildPathNext = document.querySelector<HTMLElement>("#build-path-next")!;
@@ -3740,6 +3745,7 @@ function syncPredictedDodgeStamina(stamina: number, maximumStamina: number): voi
 
 function renderCharacterProgression(update: ProgressionUpdate, maximumHealth = potionMaxHealth): void {
   localCharacterProgression = update;
+  if (lastBuildPathUpdate) renderAssassinJourney(lastBuildPathUpdate);
   const required = Math.max(0, update.experienceRequired);
   playerHud.setProgression(update.level, update.experience, required);
   combatHud.setPowerLoadout(localPrimaryPower, localSecondaryPower, activePowerSlot, update.level);
@@ -3787,7 +3793,20 @@ function updateLevelCelebration(now: number): void {
   if (!levelCelebration.hidden && (now >= levelCelebrationUntil || localCombatActive())) levelCelebration.hidden = true;
 }
 
+function renderAssassinJourney(update: BuildPathUpdate): void {
+  assassinJourneyPanel.hidden = update.selectedPathId !== "assassin";
+  if (assassinJourneyPanel.hidden) return;
+  const journey = assassinJourney(update, localCharacterProgression.level);
+  const activeAbility = update.selectedCallingAbilityId === "assassin_blade_dance" ? "Blade Dance" : "Vanish";
+  buildPathMessage.textContent = `G · ${activeAbility} ${localCharacterProgression.level >= 2 ? "ready" : "at character LV 2"}  ·  F · Death Mark ${localCharacterProgression.level >= 4 ? "ready" : "at character LV 4"}. Path Mastery unlocks build choices.`;
+  assassinJourneyNext.textContent = `NEXT · ${journey.next}`;
+  assassinJourneyTrial.hidden = !journey.trial;
+  assassinJourneyTrial.textContent = journey.trial ? `ACTIVE TRIAL · ${journey.trial}` : "";
+}
+
 function renderBuildPath(update: BuildPathUpdate): void {
+  lastBuildPathUpdate = update;
+  renderAssassinJourney(update);
   const previousPathId = localBuildPathId;
   localBuildPathId = update.selectedPathId;
   localCallingAbilityId = update.selectedCallingAbilityId;
@@ -3811,7 +3830,8 @@ function renderBuildPath(update: BuildPathUpdate): void {
     : "CHOOSE YOUR CALLING";
   const activeAbility = update.selectedCallingAbilityId
     ? CALLING_ABILITY_OPTIONS.find(option => option.id === update.selectedCallingAbilityId) : null;
-  buildPathMessage.textContent = selected && activeAbility ? `${activeAbility.name} ${localCharacterProgression.level >= 2 ? "is ready on G" : "unlocks on G at level 2"}. Your Calling Special ${localCharacterProgression.level >= 4 ? "is on F" : "unlocks on F at level 4"}.`
+  if (update.selectedPathId !== "assassin") buildPathMessage.textContent = selected && activeAbility
+    ? `${activeAbility.name} ${localCharacterProgression.level >= 2 ? "is ready on G" : "unlocks on G at level 2"}. Your Calling Special ${localCharacterProgression.level >= 4 ? "is on F" : "unlocks on F at level 4"}.`
     : "Choose one combat identity. You can change it later while in Town.";
   const previousThreshold = BUILD_PATH_RANKS.find(entry => entry.rank === update.rank)?.xp ?? 0;
   const span = Math.max(1, (update.nextRankXp ?? previousThreshold) - previousThreshold);
