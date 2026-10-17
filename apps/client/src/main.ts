@@ -145,6 +145,7 @@ import {
   HEALING_POTION,
   type PotionUpdate,
   POWER_DEFINITIONS,
+  WEAPON_TECHNIQUES_AVAILABLE,
   ROOTBOUND_FINISHER,
   SEISMIC_CLEAVE_UPGRADES,
   SPECIAL_DEFINITIONS,
@@ -3534,6 +3535,7 @@ function updateSecondaryPowerLoadout(powerId: PowerId): void {
 }
 
 function activatePowerSlot(slot: "primary" | "secondary", announce = true): boolean {
+  if (!WEAPON_TECHNIQUES_AVAILABLE) return false;
   if (slot === "secondary" && localCharacterProgression.level < 5) {
     if (announce) status.textContent = "Weapon techniques unlock at character level 5.";
     return false;
@@ -3573,7 +3575,7 @@ function updateControlsHelp(): void {
   const calling = CALLING_ABILITY_OPTIONS.find(option => option.id === localCallingAbilityId);
   const callingSpecial = CALLING_ABILITY_OPTIONS.find(option => option.pathId === localBuildPathId && option.category === "Utility");
   const callingHint = localCharacterProgression.level >= 2 && calling ? ` · G ${calling.name}` : "";
-  const unlockedPowerHint = localCharacterProgression.level >= 5 ? ` · ${powerHint}${secondaryHint}` : "";
+  const unlockedPowerHint = WEAPON_TECHNIQUES_AVAILABLE && localCharacterProgression.level >= 5 ? ` · ${powerHint}${secondaryHint}` : "";
   const unlockedSpecialHint = localCharacterProgression.level >= 4 && callingSpecial
     ? ` · F ${localCharacterProgression.level >= 5 && (localFieldSpecialSelected || localEquippedSpecial === "venom_fan") ? SPECIAL_DEFINITIONS[localEquippedSpecial].name : callingSpecial.name}` : "";
   controlsHelp.textContent = `WASD move · Arrows camera · I inventory · H potion · Hold C/right-click Guard · Space dodge/cancel${unlockedPowerHint}${unlockedSpecialHint}${callingHint} · Q mode · E/click acts${fireHint}`;
@@ -3652,6 +3654,7 @@ function updateMainHandLoadout(mainHandId: MainHandId): void {
 }
 
 function requestPowerEquip(powerId: PowerId): void {
+  if (!WEAPON_TECHNIQUES_AVAILABLE) return;
   if (!room || !worldReady || powerId === localEquippedPower) return;
   if (localCharacterProgression.level < 5) return;
   if (powerAimActive || localPowerStartedAt !== null) {
@@ -3739,7 +3742,7 @@ function renderCharacterProgression(update: ProgressionUpdate, maximumHealth = p
   const required = Math.max(0, update.experienceRequired);
   playerHud.setProgression(update.level, update.experience, required);
   combatHud.setPowerLoadout(localPrimaryPower, localSecondaryPower, activePowerSlot, update.level);
-  powerButton.disabled = update.level < 5;
+  powerButton.disabled = !WEAPON_TECHNIQUES_AVAILABLE || update.level < 5;
   specialButton.disabled = update.level < 4 || !localBuildPathId;
   specialButton.textContent = update.level < 4 ? "LV 4" : localBuildPathId ? "Special" : "Choose Calling";
   updateControlsHelp();
@@ -9014,6 +9017,7 @@ function updatePowerAimFromPointer(): void {
 }
 
 function beginPowerAim(pointerId: number | null = null): void {
+  if (!WEAPON_TECHNIQUES_AVAILABLE) return;
   if (!defeatScreen.hidden) return;
   if (!room || !worldReady) return;
   if (localCharacterProgression.level < 5) return;
@@ -9505,12 +9509,12 @@ window.addEventListener("keydown", event => {
     else requestPrimaryAction();
   }
   if (event.code === "KeyC") requestDefense(true);
-  if (event.code === "KeyR") {
+  if (WEAPON_TECHNIQUES_AVAILABLE && event.code === "KeyR") {
     activatePowerSlot("primary", false);
     powerAimKey = "KeyR";
     beginPowerAim();
   }
-  if (event.code === "KeyT" && activatePowerSlot("secondary")) {
+  if (WEAPON_TECHNIQUES_AVAILABLE && event.code === "KeyT" && activatePowerSlot("secondary")) {
     powerAimKey = "KeyT";
     beginPowerAim();
   }

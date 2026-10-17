@@ -52,7 +52,7 @@ describe("hotbar Calling abilities", () => {
       internal.damagePlayer("field-test", "hero", 3, 10_000, false);
       expect(player.health).toBe(3);
     }
-    if (pathId === "mage") { expect(player.powerCooldownUntil).toBe(10_000); expect(player.stamina).toBe(55); }
+    if (pathId === "mage") { expect(player.powerCooldownUntil).toBe(99_000); expect(player.stamina).toBe(55); }
     if (pathId === "assassin") {
       expect(internal.assassinShadowUntil.get("hero")).toBe(13_000);
       expect(internal.mobAwareness.has("pursuer")).toBe(false);

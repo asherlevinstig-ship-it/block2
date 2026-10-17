@@ -34,7 +34,7 @@ describe("role field opportunities", () => {
       expect(player.health).toBe(4);
       expect(internal.tankFieldWards.has("hero")).toBe(false);
     }
-    if (pathId === "mage") { expect(player.powerCooldownUntil).toBe(0); expect(player.stamina).toBe(60); }
+    if (pathId === "mage") { expect(player.powerCooldownUntil).toBe(99_000); expect(internal.callingSpecialReadyAt.get("hero")).toBe(10_000); expect(player.stamina).toBe(60); }
     if (pathId === "assassin") expect(internal.assassinShadowUntil.get("hero")).toBe(18_000);
     if (pathId === "thief") expect(player.coins).toBe(8);
     if (pathId === "ranger") {

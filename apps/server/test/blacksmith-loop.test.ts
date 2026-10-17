@@ -6,7 +6,7 @@ import { InventoryItemState, MobState, PlayerState, WorldState } from "../src/sc
 
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 describe("ore to forged sword to item loot", () => {
-  it("enforces level-gated Power slots and advanced stock without creating a dungeon quest", () => {
+  it("keeps weapon techniques unavailable while advanced stock remains level-gated", () => {
     const room = new WorldRoom(); room.setState(new WorldState()); const internal = room as any;
     vi.spyOn(internal, "persistPlayer").mockResolvedValue(undefined);
     const player = new PlayerState(); Object.assign(player, TOWN_BLACKSMITH_STALL_POSITION, { coins: 100, miningExpeditionStage: 8 });
@@ -19,7 +19,8 @@ describe("ore to forged sword to item loot", () => {
     internal.handleBlacksmithSync(client); expect(player.silverDepthsStage).toBe(0);
     player.level = 7;
     internal.handlePowerEquip(client, { requestId: "secondary-open", powerId: "eruption", slot: "secondary" });
-    expect(player.equippedPowerSecondary).toBe("eruption");
+    expect(player.equippedPowerSecondary).toBe("");
+    expect(client.send).toHaveBeenCalledWith("action:rejected", expect.objectContaining({ requestId: "secondary-open", reason: "missing" }));
     internal.handleBlacksmithBuy(client, { itemId: "forged_sword" });
     expect(player.inventory.get("forged_sword")?.quantity).toBe(1);
     internal.handleBlacksmithSync(client); expect(player.silverDepthsStage).toBe(0);

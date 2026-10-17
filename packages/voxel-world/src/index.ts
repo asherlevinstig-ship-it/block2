@@ -576,7 +576,7 @@ export const ROLE_FIELD_OPPORTUNITIES = [
   { id: "tank-stonebreak", landmarkId: "stone-road-camp", pathId: "tank", x: 54, z: 38,
     name: "Broken Stonebreak Barricade", action: "Fortify", prompt: "Brace the camp and prepare a ward for the next incoming hit." },
   { id: "mage-silver-shrine", landmarkId: "silver-road-shrine", pathId: "mage", x: 69, z: 14,
-    name: "Dormant Silver Shrine", action: "Attune", prompt: "Channel the shrine to refresh Power and restore stamina." },
+    name: "Dormant Silver Shrine", action: "Attune", prompt: "Channel the shrine to refresh your Calling Special and restore stamina." },
   { id: "assassin-scorched-gate", landmarkId: "scorched-gate", pathId: "assassin", x: 93, z: 53,
     name: "Scorched Hunter's Gate", action: "Stalk", prompt: "Study the kill route to conceal and empower your next strike." },
   { id: "thief-eastroad-cart", landmarkId: "eastroad-cart", pathId: "thief", x: 56, z: 14,

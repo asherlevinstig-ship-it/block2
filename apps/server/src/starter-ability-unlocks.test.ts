@@ -29,7 +29,12 @@ describe("starter ability progression", () => {
     expect(player.equippedSpecial).toBe("hunters_mark");
     player.level = 5;
     internal.handlePowerEquip(client, { requestId: "power-equip-5", powerId: "eruption" });
-    expect(player.equippedPower).toBe("eruption");
+    internal.handlePower(client, { requestId: "power-cast-5", powerId: "shockwave", yaw: 0 });
+    internal.handleSeismicMasteryEquip(client, { requestId: "mastery-5", masteryId: "tectonic_stand" });
+    expect(player.equippedPower).toBe("shockwave");
+    expect(client.send).toHaveBeenCalledWith("action:rejected", expect.objectContaining({ requestId: "power-equip-5", reason: "missing" }));
+    expect(client.send).toHaveBeenCalledWith("action:rejected", expect.objectContaining({ requestId: "power-cast-5", reason: "missing" }));
+    expect(client.send).toHaveBeenCalledWith("action:rejected", expect.objectContaining({ requestId: "mastery-5", reason: "missing" }));
     internal.handleSpecialEquip(client, { requestId: "special-equip-5", specialId: "bramble_snare" });
     expect(player.equippedSpecial).toBe("bramble_snare");
   });

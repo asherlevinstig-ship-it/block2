@@ -3,6 +3,7 @@ import { h, render } from "preact";
 import {
   MAIN_HAND_DEFINITIONS,
   POWER_DEFINITIONS,
+  WEAPON_TECHNIQUES_AVAILABLE,
   SEISMIC_CLEAVE_UPGRADES,
   SPECIAL_DEFINITIONS,
   HUNT_EQUIPMENT_SETS,
@@ -100,7 +101,7 @@ function PowerLoadout() {
   const compatible = isPowerCompatibleWithMainHand(POWER_DEFINITIONS[selectedPower], selectedHand);
   const cooldown = powerCooldown.value;
   const locked = characterLevel.value < 5;
-  return h("button", { id: "power-slot", type: "button", disabled: locked,
+  return h("button", { id: "power-slot", type: "button", hidden: !WEAPON_TECHNIQUES_AVAILABLE, disabled: locked || !WEAPON_TECHNIQUES_AVAILABLE,
     "aria-label": locked ? "Weapon techniques unlock at level 5" : `Use ${POWER_DEFINITIONS[selectedPower].name}`,
     class: `${locked ? "locked" : compatible ? "" : "incompatible"} ${!locked && cooldown.ready && compatible && !powerAiming.value ? "ready" : ""} ${powerAiming.value ? "aiming" : ""}`.trim() },
     h("span", null, "TECHNIQUE"), h("strong", { id: "power-name" }, locked ? "Unlocks at LV 5" : POWER_DEFINITIONS[selectedPower].name),
@@ -123,7 +124,7 @@ function LoadoutDrawer() {
         (["longsword", "bow", "magic_focus"] as const).map(id => h("button", { type: "button", "data-main-hand": id, "aria-pressed": String(id === selectedHand) }, MAIN_HAND_LABELS[id])),
       ),
     ),
-    h("section", { class: "loadout-group" },
+    h("section", { class: "loadout-group", hidden: !WEAPON_TECHNIQUES_AVAILABLE },
       h("p", null, h("span", null, "WEAPON TECHNIQUES"), h("small", null, characterLevel.value < 5 ? "Unlocks at level 5" : "Choose slot, then technique")),
       h("div", { id: "power-loadout-slots", role: "group", "aria-label": "Power loadout slots" },
         h("button", { type: "button", "data-power-slot": "primary", "aria-pressed": String(activePowerSlot.value === "primary"), disabled: characterLevel.value < 5 }, h("span", null, "R"), h("strong", null, characterLevel.value < 5 ? "LOCKED · LV 5" : POWER_DEFINITIONS[primaryPower.value].name.toUpperCase())),

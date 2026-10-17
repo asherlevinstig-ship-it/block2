@@ -96,6 +96,7 @@ import {
   MineBlockRequestSchema,
   MoveRequestSchema,
   POWER_DEFINITIONS,
+  WEAPON_TECHNIQUES_AVAILABLE,
   PlayerProfileTokenSchema,
   ProgressionChooseSchema,
   WEAPON_ATTACK_DEFINITIONS,
@@ -3389,8 +3390,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           this.assassinShadowUntil.set(playerId, now + (phantom ? 3_000 : 2_000) + veiledMs);
           this.assassinShadowBonus.set(playerId, 0);
           this.pathConcealedUntil.set(playerId, now + (phantom ? 2_000 : 1_250) + veiledMs);
-          if (phantom) player.powerCooldownUntil = this.buildSpecializationMastered(player, "phantom")
-            ? now : Math.max(now, player.powerCooldownUntil - 1_500);
+          if (phantom) this.callingAbilityReadyAt.set(playerId, this.buildSpecializationMastered(player, "phantom")
+            ? now : Math.max(now, (this.callingAbilityReadyAt.get(playerId) ?? now) - 1_500));
           for (const [targetMobId, awareness] of this.mobAwareness) if (awareness.targetId === playerId) {
             const targetMob = this.state.mobs.get(targetMobId);
             if (targetMob && Math.hypot(targetMob.x - player.x, targetMob.z - player.z) <= 7) {
@@ -3398,7 +3399,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
             }
           }
           this.buildPathProc(playerId, "assassin", "SHADOWSTEP", phantom
-            ? "PHANTOM · CONCEALED · POWER REFRESHED" : "CONCEALED · NEXT STRIKE +2", phantom ? 3_000 : 2_000);
+            ? "PHANTOM · CONCEALED · CALLING QUICKENED" : "CONCEALED · NEXT STRIKE +2", phantom ? 3_000 : 2_000);
         }
         player.stamina = Math.min(player.maxStamina, player.stamina + PERFECT_DODGE_STAMINA_RESTORE + thiefRecovery);
         this.clients.find(client => client.sessionId === playerId)?.send("dodge:pressure", {
@@ -4730,9 +4731,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       player.stamina = player.maxStamina;
       detail = "FIELD WARD READY · NEXT HIT −2";
     } else if (activePathId === "mage") {
-      player.powerCooldownUntil = 0;
+      this.callingSpecialReadyAt.set(client.sessionId, now);
       player.stamina = Math.min(player.maxStamina, player.stamina + 35);
-      detail = "POWER REFRESHED · +35 STAMINA";
+      detail = "CALLING SPECIAL REFRESHED · +35 STAMINA";
     } else if (activePathId === "assassin") {
       this.assassinShadowUntil.set(client.sessionId, now + 8_000);
       this.assassinShadowBonus.set(client.sessionId, 0);
@@ -4928,7 +4929,6 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     } else if (abilityId === "mage_arcane_surge") {
       const staminaBefore = player.stamina, specialRecovering = player.specialCooldownUntil > now;
       const stamina = 30 + rank * 5 + (augmentId === "surge_deep_reserves" ? 25 : 0);
-      player.powerCooldownUntil = now;
       const targets = nearbyMobs(4.5);
       for (const [mobId, mob] of targets) {
         const damage = damageAfterArmor(2, mob.armor, true);
@@ -6972,7 +6972,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (!parsed.success) return this.reject(client, { action: "power", reason: "payload" });
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
-    if (!milestoneUnlocked(player.level, "second_power"))
+    if (!WEAPON_TECHNIQUES_AVAILABLE || !milestoneUnlocked(player.level, "second_power"))
       return this.reject(client, { requestId: parsed.data.requestId, action: "power", reason: "missing" });
     player.defending = false;
     const powerId = parsed.data.powerId as PowerId;
@@ -7165,7 +7165,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (!parsed.success) return this.reject(client, { action: "power", reason: "payload" });
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
-    if (!milestoneUnlocked(player.level, "second_power"))
+    if (!WEAPON_TECHNIQUES_AVAILABLE || !milestoneUnlocked(player.level, "second_power"))
       return this.reject(client, { requestId: parsed.data.requestId, action: "power", reason: "missing" });
     const definition = POWER_DEFINITIONS[parsed.data.powerId];
     if (!definition || !isPowerCompatible(definition, player.mainHandTag)) {
@@ -7186,6 +7186,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private handleSeismicMasteryEquip(client: Client, payload: unknown): void {
     const parsed = SeismicMasteryEquipRequestSchema.safeParse(payload);
     if (!parsed.success) return this.reject(client, { action: "power", reason: "payload" });
+    if (!WEAPON_TECHNIQUES_AVAILABLE) return this.reject(client, { requestId: parsed.data.requestId, action: "power", reason: "missing" });
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
     if (this.pendingPowers.has(client.sessionId)) {
