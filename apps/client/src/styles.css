@@ -2900,3 +2900,155 @@ body:has(#combat-hud-shell[data-loadout-open="true"]) #blacksmith-prompt { displ
   #player-hud-root { bottom: calc(108px + env(safe-area-inset-bottom)); grid-template-columns: 54px minmax(160px, 1fr); padding: 6px 8px; }
   #player-health, #player-stamina { font-size: .58rem; }
 }
+
+/* Icon-first combat bar: actions stay recognisable without reading a paragraph. */
+#combat-action-bar {
+  position: fixed;
+  z-index: 18;
+  bottom: max(12px, env(safe-area-inset-bottom));
+  left: 50%;
+  display: grid;
+  grid-template-columns: 94px 94px minmax(0, 1fr) 94px;
+  align-items: stretch;
+  gap: 8px;
+  width: min(870px, calc(100vw - 32px));
+  padding: 8px;
+  border: 1px solid #b99b5866;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #07130fd9, #07110bea);
+  box-shadow: 0 16px 45px #000b, inset 0 1px #e6d39122;
+  backdrop-filter: blur(9px);
+  transform: translateX(-50%);
+}
+#combat-hud-root { position: relative; z-index: auto; bottom: auto; left: auto; width: auto; min-width: 0; pointer-events: auto; transform: none; }
+#combat-hud-shell { height: 100%; grid-template-columns: 56px repeat(3, minmax(0, 1fr)) 52px; gap: 8px; }
+#mode-toggle, #main-hand-loadout, #calling-slot, #special-slot, #loadout-toggle,
+#combat-action-bar #defense-slot, #combat-action-bar #dodge-hotbar, #combat-action-bar #potion-use { height: 96px; min-width: 0; box-sizing: border-box; margin: 0; }
+#mode-toggle { grid-column: 1; grid-row: 1; grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; gap: 3px; padding: 5px; border-color: #bc9b5840; background: #0a1712eb; }
+#mode-toggle button { padding: 3px 2px; font-size: .5rem; letter-spacing: 0; }
+#main-hand-loadout { grid-column: 2; grid-row: 1; }
+#calling-slot { grid-column: 3; grid-row: 1; }
+#special-slot { grid-column: 4; grid-row: 1; }
+#loadout-toggle { grid-column: 5; grid-row: 1; }
+#main-hand-loadout, #calling-slot, #special-slot,
+#combat-action-bar #defense-slot, #combat-action-bar #dodge-hotbar, #combat-action-bar #potion-use {
+  position: relative;
+  inset: auto;
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: 54px 16px 12px;
+  align-items: center;
+  justify-items: center;
+  gap: 1px;
+  width: 100%;
+  padding: 5px 5px 4px;
+  border: 1px solid var(--slot-edge, #a8c5af88);
+  border-radius: 12px;
+  background: radial-gradient(circle at 50% 25%, var(--slot-glow, #375044) 0, #101b18 75%);
+  color: #ecf5e7;
+  box-shadow: inset 0 0 0 2px #101d18, 0 4px 12px #0008;
+  text-align: center;
+  overflow: hidden;
+}
+#combat-action-bar #defense-slot { --slot-edge: #6bb6df; --slot-glow: #174b67; }
+#combat-action-bar #dodge-hotbar { --slot-edge: #e4bd76; --slot-glow: #5c4520; }
+#main-hand-loadout { --slot-edge: #e19d57; --slot-glow: #66331b; }
+#calling-slot { --slot-edge: #64dabb; --slot-glow: #18594c; }
+#special-slot { --slot-edge: #bb8cee; --slot-glow: #493061; }
+#combat-action-bar #potion-use { --slot-edge: #d9828c; --slot-glow: #5c2630; }
+#combat-action-bar .action-art, #combat-hud-shell .action-art {
+  position: relative;
+  z-index: 1;
+  grid-row: 1;
+  grid-column: 1;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  margin: 0;
+  border: 1px solid color-mix(in srgb, var(--slot-edge, #9bd1b4) 60%, transparent);
+  border-radius: 10px;
+  background: linear-gradient(145deg, #ffffff10, #0007);
+  color: var(--slot-edge, #9bd1b4);
+  box-shadow: inset 0 1px #ffffff20, 0 0 18px color-mix(in srgb, var(--slot-edge, #9bd1b4) 30%, transparent);
+}
+#combat-action-bar .action-art svg, #combat-hud-shell .action-art svg { width: 38px; height: 38px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2.8; filter: drop-shadow(0 0 5px currentColor); }
+#combat-action-bar kbd, #combat-hud-shell > kbd,
+#combat-hud-shell #main-hand-loadout kbd, #combat-hud-shell #calling-slot kbd, #combat-hud-shell #special-slot kbd {
+  position: absolute;
+  z-index: 3;
+  top: 48px;
+  left: 50%;
+  display: grid;
+  place-items: center;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 3px;
+  border: 1px solid #f0ddb0;
+  border-radius: 5px;
+  background: #1d261e;
+  color: #fff0c5;
+  box-shadow: 0 2px 4px #000b;
+  font: 900 11px/1 system-ui;
+  transform: translateX(-50%);
+}
+#main-hand-loadout > strong, #calling-slot > strong, #special-slot > strong,
+#combat-action-bar #defense-slot > strong, #combat-action-bar #dodge-hotbar > strong, #combat-action-bar #potion-use > strong {
+  position: relative;
+  z-index: 2;
+  grid-row: 2;
+  grid-column: 1;
+  max-width: 100%;
+  overflow: hidden;
+  color: #f1f4e7;
+  font: 900 10px/1.1 system-ui;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#main-hand-loadout > small, #calling-slot > em, #special-slot > em,
+#combat-action-bar #defense-slot > small, #combat-action-bar #dodge-hotbar > small, #combat-action-bar #potion-use > small {
+  position: relative;
+  z-index: 2;
+  grid-row: 3;
+  grid-column: 1;
+  max-width: 100%;
+  overflow: hidden;
+  color: #c1cdbf;
+  font: 750 8px/1 system-ui;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#calling-slot > i, #special-slot > i { z-index: 1; }
+#calling-slot:disabled, #special-slot:disabled { opacity: 1; filter: none; --slot-edge: #65746e; --slot-glow: #1b2924; color: #8a9b92; }
+#calling-slot:disabled .action-art, #special-slot:disabled .action-art { color: #72867b; filter: grayscale(1); }
+#calling-slot:disabled .action-art::after, #special-slot:disabled .action-art::after { position: absolute; inset: auto 0 0; padding: 2px; background: #07120dcc; color: #d1d9ce; font: 900 8px/1 system-ui; content: "LV 2"; }
+#special-slot:disabled .action-art::after { content: "LV 4"; }
+#calling-slot:disabled > strong, #special-slot:disabled > strong { color: #a9b7ad; }
+#calling-slot.active-state { position: relative; z-index: auto; width: 100%; margin: 0; text-align: center; filter: none; pointer-events: auto; }
+#calling-state-label { z-index: 4; }
+#combat-action-bar #potion-use:disabled { opacity: .7; }
+#combat-action-bar #potion-use[data-cooldown="true"] .action-art { filter: grayscale(.7); }
+#loadout-toggle { border-radius: 11px; border-color: #b1bca777; background: #13221aed; }
+#loadout-toggle span { font-size: 1.25rem; }
+#loadout-toggle strong { font-size: .52rem; }
+#player-hud-root { bottom: calc(132px + env(safe-area-inset-bottom)); }
+#build-path-proc { bottom: calc(198px + env(safe-area-inset-bottom)); left: 50%; }
+@media (max-width: 900px) and (pointer: fine) {
+  #combat-action-bar { width: min(820px, calc(100vw - 24px)); grid-template-columns: 80px 80px minmax(0, 1fr) 80px; gap: 5px; }
+  #combat-hud-root { width: auto; }
+  #combat-hud-shell { grid-template-columns: 48px repeat(3, minmax(0, 1fr)) 44px; gap: 5px; }
+}
+@media (pointer: coarse), (max-width: 820px) {
+  #combat-action-bar { display: contents; }
+  #combat-hud-root, #defense-slot, #dodge-hotbar { display: none; }
+  #combat-action-bar #potion-use { position: fixed; z-index: 12; right: 14px; bottom: 210px; left: auto; width: 72px; height: 76px; padding: 4px; }
+  #combat-action-bar #potion-use .action-art { width: 33px; height: 33px; }
+  #combat-action-bar #potion-use .action-art svg { width: 27px; height: 27px; }
+  #combat-action-bar #potion-use kbd { top: 27px; }
+  #player-hud-root { bottom: calc(142px + env(safe-area-inset-bottom)); }
+}
+@media (max-width: 520px) {
+  #combat-action-bar #potion-use { bottom: 178px; }
+  #player-hud-root { bottom: calc(108px + env(safe-area-inset-bottom)); }
+}

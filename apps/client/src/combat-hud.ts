@@ -60,6 +60,30 @@ const POWER_IDS = ["shockwave", "seismic_cleave", "eruption", "lunge_strike"] as
 const POWER_LABELS: Record<PowerId, string> = { shockwave: "SHOCKWAVE", seismic_cleave: "SEISMIC", eruption: "ERUPTION", lunge_strike: "LUNGE" };
 const MAIN_HAND_LABELS = { longsword: "SWORD", bow: "BOW", magic_focus: "FOCUS" } as const;
 
+function ActionGlyph({ kind, weapon, path }: { kind: "weapon" | "calling" | "special"; weapon?: MainHandId; path?: BuildPathId | null }) {
+  const drawing = kind === "weapon" && weapon === "bow"
+    ? ["M20 8C49 19 49 45 20 56", "M20 8v48", "M21 32h35", "m49 26 7 6-7 6"]
+    : kind === "weapon" && weapon === "magic_focus"
+      ? ["M32 4 48 22 32 40 16 22Z", "M32 40v20", "M24 53h16", "M32 11v22M21 22h22"]
+      : kind === "weapon"
+        ? ["m45 6 10 10-29 29-10-10Z", "M13 34 27 48", "M14 49 8 55", "m9 55-2 2"]
+        : kind === "special"
+          ? ["M32 7v50M7 32h50M14 14l36 36M50 14 14 50", "M32 18 45 32 32 46 19 32Z"]
+          : path === "tank"
+            ? ["M32 5 52 13v17c0 14-9 23-20 29C21 53 12 44 12 30V13Z", "M32 12v38"]
+            : path === "healer"
+              ? ["M26 8h12v18h18v12H38v18H26V38H8V26h18Z"]
+              : path === "ranger"
+                ? ["M15 16c25 3 32 21 34 34", "m16 16 33 34", "m33 41 16 9-9-16"]
+                : path === "mage"
+                  ? ["M32 6 39 25l19 7-19 7-7 19-7-19-19-7 19-7Z", "M32 20v24M20 32h24"]
+                  : path === "thief"
+                    ? ["M12 42c9-22 31-22 40 0", "M17 43c9 10 21 10 30 0", "M24 30h1m14 0h1"]
+                    : ["M18 52 46 13", "m39 9 12 9-9 12", "M15 50h16", "M23 42l8 8"];
+  return h("svg", { viewBox: "0 0 64 64", "aria-hidden": "true" },
+    drawing.map(d => h("path", { d, key: d })));
+}
+
 export function cooldownState(remainingMs: number, cooldownMs: number, readyLabel: string, blockedLabel?: string): CooldownState {
   const remaining = Math.max(0, remainingMs);
   const percent = Math.round(Math.max(0, Math.min(1, remaining / Math.max(1, cooldownMs))) * 100);
@@ -92,8 +116,10 @@ function MainHandLoadout() {
   const name = selected === "longsword" && ironSwordOwned.value ? "Iron Sword · +1 DMG" : definition.name;
   const activeSet = huntSetForLoadout(selected, armour.value);
   return h("div", { id: "main-hand-loadout" },
-    h("p", null, h("span", null, "MAIN HAND · ATTACK"), h("strong", { id: "main-hand-name" }, name), h("kbd", { title: "Press J to attack; hold J to fire ranged weapons" }, "J")),
-    h("em", { id: "main-hand-attack" }, definition.attackName),
+    h("span", { class: "action-art" }, h(ActionGlyph, { kind: "weapon", weapon: selected })),
+    h("kbd", { title: "Press J to attack; hold J to fire ranged weapons" }, "J"),
+    h("strong", { id: "main-hand-name" }, name),
+    h("small", { id: "main-hand-attack" }, definition.attackName),
     activeSet ? h("b", { id: "hunt-set-status", "data-set": activeSet }, `${HUNT_EQUIPMENT_SETS[activeSet].name.toUpperCase()} · SET ACTIVE`) : null,
   );
 }
@@ -192,7 +218,9 @@ function SpecialLoadout() {
   return h("button", { id: "special-slot", type: "button", disabled: locked,
       "aria-label": locked ? characterLevel.value < 4 ? "Calling Special unlocks at level 4" : "Choose a Calling to use your Special" : `Use ${name}`,
       class: `${locked ? "locked" : cooldown.ready && !specialAiming.value ? "ready" : ""} ${specialAiming.value ? "aiming" : ""}`.trim() },
-      h("span", null, "CALLING SPECIAL"), h("strong", { id: "special-name" }, locked ? characterLevel.value < 4 ? "Unlocks at LV 4" : "Choose Calling" : name),
+      h("span", { class: "action-art" }, h(ActionGlyph, { kind: "special", path: selected?.pathId })),
+      h("kbd", null, "F"),
+      h("strong", { id: "special-name" }, locked ? characterLevel.value < 4 ? "Unlocks at LV 4" : "Choose Calling" : name),
       h("em", { id: "special-cooldown-label" }, locked ? "COMING LATER" : cooldown.label), h("i", { id: "special-cooldown-fill", style: { width: `${locked ? 0 : cooldown.percent}%` } }),
   );
 }
@@ -207,7 +235,8 @@ function CallingLoadout() {
   return h("button", { id: "calling-slot", type: "button", disabled: characterLevel.value < 2,
       "aria-label": unlocked && definition ? `Use ${definition.name}` : characterLevel.value < 2 ? "Calling Power unlocks at level 2" : "Choose a Calling in Town to use your Power",
       class: `${cooldown.ready && unlocked && !callingPending.value ? "ready" : ""} ${callingPending.value ? "anticipating" : ""} ${state ? "active-state" : ""}`.trim() },
-      h("span", null, "CALLING POWER · G"),
+      h("span", { class: "action-art" }, h(ActionGlyph, { kind: "calling", path: selected })),
+      h("kbd", null, "G"),
       h("strong", { id: "calling-name" }, unlocked ? definition?.name ?? "Unbound" : characterLevel.value < 2 ? "Unlocks at LV 2" : "Choose Calling"),
       h("em", { id: "calling-cooldown-label" }, !selected && characterLevel.value >= 2 ? "IN TOWN" : callingPending.value ? "CAST" : cooldown.label),
       state ? h("b", { id: "calling-state-label" }, h("span", null, state.label), h("small", null, state.detail)) : null,

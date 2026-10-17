@@ -76,7 +76,6 @@
         <small id="danger-zone-detail">Protected sanctuary · enemies cannot attack here</small>
       </div>
       <div id="player-hud-root"></div>
-      <button id="defense-slot" type="button" aria-pressed="false"><span>DEFENSE</span><strong>Guard / Parry</strong><em>HOLD C</em></button>
       <div id="trait-slot" data-trait="momentum" aria-label="Momentum trait, zero of three stacks">
         <span>TRAIT</span><strong id="trait-name">Momentum</strong>
         <div id="momentum-pips" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -89,10 +88,24 @@
         <small id="trait-detail">Hits build movement speed and stamina recovery</small>
       </div>
       <p id="exit-guide" hidden>EXIT ↑ · FOLLOW THE GOLD BLOCKS</p>
-      <div id="combat-hud-root"></div>
       <div id="build-path-proc" role="status" aria-live="polite" hidden><strong></strong><span></span></div>
       <p id="controls-help" class="controls">WASD move · Arrows camera · I inventory · Space dodge/cancel · R Power · F Special · G Calling · Q mode · E/click acts</p>
     </section>
+    <nav id="combat-action-bar" aria-label="Combat actions">
+      <button id="defense-slot" type="button" aria-pressed="false" title="Hold C to guard and parry">
+        <span class="action-art" aria-hidden="true"><svg viewBox="0 0 64 64"><path d="M32 5 52 13v17c0 14-9 23-20 29C21 53 12 44 12 30V13Z"/><path d="M32 12v38M19 19v11c0 8 4 14 13 20"/></svg></span>
+        <kbd>C</kbd><strong>Guard / Parry</strong><small>HOLD</small>
+      </button>
+      <button id="dodge-hotbar" type="button" title="Press Space to dodge">
+        <span class="action-art" aria-hidden="true"><svg viewBox="0 0 64 64"><path d="M12 45c12 0 15-12 23-13l9 7"/><path d="m37 20 8 7-8 7M23 53l7-8M45 39l8 10"/><circle cx="27" cy="17" r="6"/></svg></span>
+        <kbd>SPACE</kbd><strong>Dodge</strong><small>STAMINA</small>
+      </button>
+      <div id="combat-hud-root"></div>
+      <button id="potion-use" type="button" aria-label="Drink healing potion" title="Press H to drink a healing potion">
+        <span class="action-art" aria-hidden="true"><svg viewBox="0 0 64 64"><path d="M25 7h14v9H25zM22 17h20v7l5 7v20c0 4-3 7-7 7H24c-4 0-7-3-7-7V31l5-7z"/><path d="M18 38h28M27 45h10"/></svg></span>
+        <kbd>H</kbd><strong>Potion</strong><small id="potion-count">0 / 3</small>
+      </button>
+    </nav>
     <aside id="world-objective" aria-live="polite" hidden>
       <header><span>REALM GUIDANCE</span><strong id="objective-tier">EXPLORE</strong></header>
       <h2 id="objective-title">Explore the Wilderness</h2>
@@ -162,7 +175,6 @@
       <small><kbd>E</kbd> INTERACT</small>
     </button>
     <div id="combat-feedback" aria-live="polite"></div>
-    <button id="potion-use" type="button" aria-label="Drink healing potion">POTION 0 / 3 · H</button>
     <section id="tavern-dialogue" role="dialog" aria-label="Mara the Tavernkeeper" hidden>
       <p class="eyebrow">HEARTH & HAMMER</p>
       <h2>Mara <small>Tavernkeeper</small></h2>

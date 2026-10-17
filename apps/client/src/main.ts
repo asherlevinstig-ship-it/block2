@@ -740,6 +740,7 @@ const targetLabel = document.querySelector<HTMLElement>("#target")!;
 const tavernDialogue = document.querySelector<HTMLElement>("#tavern-dialogue")!;
 const potionBuy = document.querySelector<HTMLButtonElement>("#potion-buy")!;
 const potionUse = document.querySelector<HTMLButtonElement>("#potion-use")!;
+const potionCount = document.querySelector<HTMLElement>("#potion-count")!;
 const potionShopStatus = document.querySelector<HTMLElement>("#potion-shop-status")!;
 const quizTablePrompt = document.querySelector<HTMLElement>("#quiz-table-prompt")!;
 const blacksmithPrompt = document.querySelector<HTMLElement>("#blacksmith-prompt")!;
@@ -905,6 +906,7 @@ levelUpCallingAction.addEventListener("click", () => {
   openCallingIntro();
 });
 const defenseSlot = document.querySelector<HTMLButtonElement>("#defense-slot")!;
+const dodgeHotbar = document.querySelector<HTMLButtonElement>("#dodge-hotbar")!;
 const traitSlot = document.querySelector<HTMLElement>("#trait-slot")!;
 const traitName = document.querySelector<HTMLElement>("#trait-name")!;
 const traitDetail = document.querySelector<HTMLElement>("#trait-detail")!;
@@ -6532,7 +6534,8 @@ function refreshPotionUi(): void {
   potionBuy.disabled = !room || pending || !nearby || quantity >= HEALING_POTION.capacity || tavernCoinBalance < HEALING_POTION.price;
   potionBuy.textContent = quantity >= HEALING_POTION.capacity ? "POUCH FULL" : "BUY · 5 GOLD";
   potionUse.disabled = !room || pending || quantity === 0 || potionHealth <= 0 || potionHealth >= potionMaxHealth || remaining > 0;
-  potionUse.textContent = `POTION ${quantity} / 3 · ${remaining > 0 ? `${Math.ceil(remaining / 1000)}s` : "H"}`;
+  potionCount.textContent = remaining > 0 ? `${Math.ceil(remaining / 1000)}s` : `${quantity} / 3`;
+  potionUse.dataset.cooldown = String(remaining > 0);
   potionUse.title = `Restore 2 HP · ${quantity} potions · 5 second cooldown`;
   if (!pending) potionShopStatus.textContent = `${quantity} / 3 potions · ${tavernCoinBalance} gold`;
 }
@@ -9846,6 +9849,7 @@ dodgeButton.addEventListener("pointerdown", event => {
   event.preventDefault();
   requestDodge();
 });
+dodgeHotbar.addEventListener("click", () => requestDodge());
 for (const button of [defenseButton, defenseSlot]) {
   button.addEventListener("pointerdown", event => {
     event.preventDefault();
