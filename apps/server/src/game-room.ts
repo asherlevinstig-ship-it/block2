@@ -3117,7 +3117,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     });
     const dropId = firstGreenwoodClear && firstGreenwoodWeapon && greenwoodFirstClearDrops[0]?.itemId === firstGreenwoodWeapon
       ? `greenwood-first:${firstGreenwoodWeapon}:${ownerId}:${now}:${++this.lootDropSequence}`
-      : `${mobId}:${now}:${++this.lootDropSequence}`;
+      : northwatchPatrolClear ? `northwatch-shard-patrol-cache:${now}:${++this.lootDropSequence}`
+        : `${mobId}:${now}:${++this.lootDropSequence}`;
     this.state.lootDrops.set(dropId, drop);
     this.clients.find(client => client.sessionId === ownerId)?.send("loot:spawned", {
       dropId, ownerId, itemId: drop.itemId, quantity: drop.quantity, contentsJson: drop.contentsJson, affixTier: drop.affixTier,

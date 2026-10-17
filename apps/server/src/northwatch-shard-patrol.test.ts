@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { decodeLootBagItems } from "@blockcraft/protocol";
-import { NORTHWATCH_MOB_HOMES } from "@blockcraft/voxel-world";
+import { NORTHWATCH_MOB_HOMES, NORTHWATCH_SHARD_PATROL_SITE, SURFACE_HEIGHT, northwatchHighlandsBlock } from "@blockcraft/voxel-world";
 import { WorldRoom } from "./game-room.js";
 import { PlayerState, WorldState } from "./schema.js";
 import { NORTHWATCH_SHARD_PATROL_IDS, WILDERNESS_ENCOUNTERS, isNorthwatchShardPatrol, northwatchShardPatrolAllows } from "./wilderness-encounters.js";
@@ -30,6 +30,8 @@ describe("Northwatch shard patrol", () => {
     expect(isNorthwatchShardPatrol("northwatch-watchbreaker")).toBe(false);
     expect(northwatchShardPatrolAllows({ x: 18.5, y: 8, z: -54.5 })).toBe(true);
     expect(northwatchShardPatrolAllows({ x: 15.5, y: 8, z: -72.5 })).toBe(false);
+    expect(northwatchHighlandsBlock(Math.floor(NORTHWATCH_SHARD_PATROL_SITE.x), SURFACE_HEIGHT + 1,
+      Math.floor(NORTHWATCH_SHARD_PATROL_SITE.z))).toBeNull();
     expect(Math.hypot(NORTHWATCH_MOB_HOMES[1]!.x - NORTHWATCH_MOB_HOMES[5]!.x,
       NORTHWATCH_MOB_HOMES[1]!.z - NORTHWATCH_MOB_HOMES[5]!.z)).toBeLessThan(7);
     const { room } = patrolFixture();
@@ -66,7 +68,8 @@ describe("Northwatch shard patrol", () => {
     internal.defeatMob(west, room.state.mobs.get(west)!, "a", 11_000);
     expect([...room.state.lootDrops.values()].some(drop => drop.contentsJson.includes("iron_ore"))).toBe(false);
     internal.defeatMob(east, room.state.mobs.get(east)!, "b", 12_000);
-    const cache = [...room.state.lootDrops.values()].filter(drop => drop.contentsJson.includes("iron_ore"));
+    const cache = [...room.state.lootDrops.entries()].filter(([id]) => id.startsWith("northwatch-shard-patrol-cache:"))
+      .map(([, drop]) => drop);
     expect(cache.map(drop => drop.ownerId).sort()).toEqual(["a", "b"]);
     for (const drop of cache) {
       const contents = decodeLootBagItems(drop.contentsJson);

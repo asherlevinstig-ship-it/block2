@@ -1,7 +1,7 @@
 import * as pc from "playcanvas";
 import { greenwoodMasteryStatus, mistfenMasteryStatus } from "@blockcraft/protocol";
 import type { RegionalArmourProc } from "@blockcraft/protocol";
-import { isInMistfenMarsh } from "@blockcraft/voxel-world";
+import { isInMistfenMarsh, NORTHWATCH_SHARD_PATROL_SITE } from "@blockcraft/voxel-world";
 import { nearestRoleFieldOpportunity, nearestRoadsideEncounter, parseRoadsideClaims, type RoleFieldPath } from "@blockcraft/voxel-world";
 import { confirmedRangedHit, projectileImpactCue } from "./ranged-feedback.js";
 import { heldFireStep } from "./held-fire.js";
@@ -2805,7 +2805,7 @@ function updateLootWorldLabel(): void {
   updateLootWorldDetails(nearest.id, drop);
   lootWorldLabel.dataset.rarity = rarity;
   lootWorldName.textContent = bagTier
-    ? LOOT_BAG_TIER_LABEL[bagTier]
+    ? nearest.id.startsWith("northwatch-shard-patrol-cache:") ? "Shard Patrol Cache" : LOOT_BAG_TIER_LABEL[bagTier]
     : `${drop.quantity > 1 ? `${drop.quantity}× ` : ""}${ITEM_DEFINITIONS[drop.itemId].name}${hasDetails || equippable ? ` · ${ITEM_RARITIES[rarity].label.toUpperCase()}` : ""}`;
   const holding = lootHold?.dropId === nearest.id;
   const pending = (pendingFloorLoot.get(nearest.id) ?? 0) > performance.now();
@@ -3996,14 +3996,25 @@ function showCombatFeedback(text: string, style: "hit" | "hurt" | "dodge" | "mis
 let rangedReticleHitUntil = 0;
 let rangedPopupSequence = 0;
 const rangedPopups: { element: HTMLElement; position: pc.Vec3; startedAt: number; duration: number; damage: boolean; offset: number }[] = [];
-function createRangedPopup(position: pc.Vec3, text: string, kind: "damage" | "melee" | "stagger" | "enemy" | "terrain" | "near-miss", defeated = false, color?: readonly number[]): void {
+let northwatchPatrolCueArmed = true;
+function updateNorthwatchPatrolCue(player: pc.Vec3): void {
+  const site = NORTHWATCH_SHARD_PATROL_SITE;
+  const distance = Math.hypot(player.x - site.x, player.z - site.z);
+  if (player.y < SURFACE_HEIGHT || distance > 24) { northwatchPatrolCueArmed = true; return; }
+  if (!northwatchPatrolCueArmed || distance > 14 || ![
+    "northwatch-spitter", "northwatch-patrol-stalker-west", "northwatch-patrol-stalker-east",
+  ].some(id => mobVisuals.get(id)?.state.alive)) return;
+  northwatchPatrolCueArmed = false;
+  createRangedPopup(new pc.Vec3(site.x, site.y + 1.8, site.z), "SHARD PATROL · CLEAR ALL THREE", "landmark");
+}
+function createRangedPopup(position: pc.Vec3, text: string, kind: "damage" | "melee" | "stagger" | "enemy" | "terrain" | "near-miss" | "landmark", defeated = false, color?: readonly number[]): void {
   const element = document.createElement("span");
   element.className = `ranged-popup ranged-popup-${kind}${defeated ? " defeated" : ""}`;
   element.textContent = text; element.setAttribute("aria-hidden", "true");
   if (color) element.style.color = `rgb(${color.map(channel => Math.round(channel * 255)).join(",")})`;
   document.body.append(element);
   const combatCue = kind === "damage" || kind === "melee" || kind === "stagger";
-  rangedPopups.push({ element, position: position.clone(), startedAt: performance.now(), duration: combatCue ? 800 : kind === "near-miss" ? 160 : 240,
+  rangedPopups.push({ element, position: position.clone(), startedAt: performance.now(), duration: kind === "landmark" ? 2_000 : combatCue ? 800 : kind === "near-miss" ? 160 : 240,
     damage: combatCue, offset: combatCue ? (++rangedPopupSequence % 3 - 1) * 14 : 0 });
   while (rangedPopups.length > 32) rangedPopups.shift()!.element.remove();
 }
@@ -5012,6 +5023,19 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   const rootGuardian = mobId === "forest-guardian";
   if (rootGuardian) { bodyMaterial.diffuse.set(.28, .24, .16); bodyMaterial.update(); bodyRoot.setLocalScale(1.16, 1.16, 1.16); }
   const art = createMobArt(bodyRoot, mob.archetype, bodyMaterial, matriarch, rootGuardian);
+  if (mobId === "northwatch-spitter" || mobId === "northwatch-patrol-stalker-west" || mobId === "northwatch-patrol-stalker-east") {
+    const patrolShard = coloredMaterial(new pc.Color(.5, .86, 1));
+    patrolShard.emissive.set(.1, .27, .38); patrolShard.update();
+    if (mob.archetype === "shard_sentry") {
+      for (const side of [-1, 1])
+        addBox(bodyRoot, `patrol-shoulder-shard-${side}`, patrolShard, [.14, .34, .17], [side * .49, 1.32, .17])
+          .setLocalEulerAngles(0, 0, side * 27);
+    } else {
+      addBox(bodyRoot, "patrol-mane-shard", patrolShard, [.2, .23, .19], [0, 1.03, .17]).setLocalEulerAngles(0, 0, 45);
+      for (const side of [-1, 1])
+        addBox(bodyRoot, `patrol-flank-shard-${side}`, patrolShard, [.13, .2, .13], [side * .36, .73, -.18]);
+    }
+  }
   if (isWatchbreaker) {
     const ridgeStone = coloredMaterial(new pc.Color(.19, .27, .36));
     const ridgeCrystal = coloredMaterial(new pc.Color(.49, .88, 1));
@@ -5287,12 +5311,13 @@ function addDroppedEquipmentModel(root: pc.Entity, itemId: ItemId, material: pc.
 
 function createLootVisual(dropId: string, drop: NetworkLootDrop, settled = false): LootVisual {
   const root = new pc.Entity(`loot:${dropId}`);
+  const patrolCache = dropId.startsWith("northwatch-shard-patrol-cache:");
   const itemId = isItemId(drop.itemId) ? drop.itemId : "moss_fibre";
   const bagItems = lootItems(drop);
   const groupedBag = isEnemyLootBag(drop);
   const bagTier = groupedBag ? lootBagTierForItems(bagItems) : null;
   const rarity = bagTier ? LOOT_BAG_TIER_RARITY[bagTier] : itemRarity(itemId);
-  const presentationMaterial = bagTier ? lootBagMaterials[bagTier] : rarityLootMaterials[rarity];
+  const presentationMaterial = patrolCache ? lootBagMaterials.blue : bagTier ? lootBagMaterials[bagTier] : rarityLootMaterials[rarity];
   const material = lootMaterials[itemId] ?? rarityLootMaterials[rarity];
   const sourceId = lootSourceMob(dropId);
   const realmWardenDrop = sourceId === "realm-stone-warden";
@@ -5304,6 +5329,12 @@ function createLootVisual(dropId: string, drop: NetworkLootDrop, settled = false
     addBox(root, "loot-bag-fold", presentationMaterial, [.62, .18, .5], [0, .2, .01]).setLocalEulerAngles(0, 0, 4);
     addBox(root, "loot-bag-clasp", brassMaterial, [.18, .14, .06], [0, -.02, -.31]);
     addBox(root, "loot-bag-emblem", material, [.28, .22, .065], [0, -.02, -.35]);
+    if (patrolCache) {
+      addBox(root, "patrol-cache-shard", northwatchCueMaterial, [.27, .45, .18], [0, .48, 0]).setLocalEulerAngles(0, 0, 45);
+      for (const side of [-1, 1])
+        addBox(root, `patrol-cache-fragment-${side}`, northwatchCueMaterial, [.14, .25, .12], [side * .38, .31, 0])
+          .setLocalEulerAngles(0, 0, side * 24);
+    }
   } else if (!rewardCache && !isEquipmentItem(itemId)) {
     addBox(root, `${rarity}-personal-loot-bag`, rarityLootMaterials[rarity], [.64, .2, .52], [0, -.4, 0]);
     addBox(root, "loot-bag-clasp", brassMaterial, [.15, .11, .05], [0, -.36, -.27]);
@@ -5365,23 +5396,23 @@ function createLootVisual(dropId: string, drop: NetworkLootDrop, settled = false
   const miniBossDrop = source?.state.isMiniBoss === true;
   const beam = new pc.Entity(`loot-${rarity}-beam`);
   beam.addComponent("render", { type: "cylinder", material: presentationMaterial, castShadows: false, receiveShadows: false });
-  const beamHeight = realmWardenDrop ? 5.5 : miniBossDrop ? 2.65 : equipmentDrop ? legendaryDrop ? 2.4 : 1.8 : legendaryDrop ? 1.7 : 1.35;
-  const beamWidth = realmWardenDrop ? .11 : miniBossDrop ? .072 : equipmentDrop ? legendaryDrop ? .065 : .05 : .04;
+  const beamHeight = realmWardenDrop ? 5.5 : patrolCache ? 2.8 : miniBossDrop ? 2.65 : equipmentDrop ? legendaryDrop ? 2.4 : 1.8 : legendaryDrop ? 1.7 : 1.35;
+  const beamWidth = realmWardenDrop ? .11 : patrolCache ? .075 : miniBossDrop ? .072 : equipmentDrop ? legendaryDrop ? .065 : .05 : .04;
   beam.setLocalScale(beamWidth, beamHeight, beamWidth);
   beam.setLocalPosition(0, beamHeight * .52, 0); root.addChild(beam);
-  if (miniBossDrop || ITEM_RARITIES[rarity].order >= ITEM_RARITIES.rare.order) {
+  if (patrolCache || miniBossDrop || ITEM_RARITIES[rarity].order >= ITEM_RARITIES.rare.order) {
     const halo = new pc.Entity(`loot-${rarity}-halo`);
     halo.addComponent("render", { type: "cylinder", material: presentationMaterial, castShadows: false, receiveShadows: false });
-    halo.setLocalScale(miniBossDrop ? 1.38 : legendaryDrop ? 1.25 : .95, .018, miniBossDrop ? 1.38 : legendaryDrop ? 1.25 : .95);
+    halo.setLocalScale(patrolCache || miniBossDrop ? 1.38 : legendaryDrop ? 1.25 : .95, .018, patrolCache || miniBossDrop ? 1.38 : legendaryDrop ? 1.25 : .95);
     halo.setLocalPosition(0, -.42, 0); root.addChild(halo);
   }
   const glow = new pc.Entity(`loot-${rarity}-light`);
-  const tint = miniBossDrop ? new pc.Color(1, .62, .12) : bagTier === "white" ? new pc.Color(1, 1, 1) : bagTier === "purple" ? new pc.Color(.7, .25, 1)
+  const tint = patrolCache ? new pc.Color(.46, .86, 1) : miniBossDrop ? new pc.Color(1, .62, .12) : bagTier === "white" ? new pc.Color(1, 1, 1) : bagTier === "purple" ? new pc.Color(.7, .25, 1)
     : bagTier === "blue" ? new pc.Color(.2, .55, 1) : bagTier === "pink" ? new pc.Color(1, .28, .56) : bagTier === "brown" ? new pc.Color(.55, .3, .12)
       : legendaryDrop ? new pc.Color(1, .52, .12) : rarity === "epic" ? new pc.Color(.7, .25, 1)
         : rarity === "rare" ? new pc.Color(.25, .55, 1) : rarity === "uncommon" ? new pc.Color(.28, .88, .4) : new pc.Color(.72, .76, .72);
-  glow.addComponent("light", { type: "omni", color: tint, intensity: realmWardenDrop ? 2.2 : miniBossDrop ? 1.8 : legendaryDrop ? 1.6 : equipmentDrop ? .85 : .45,
-    range: realmWardenDrop ? 8 : miniBossDrop ? 6 : legendaryDrop ? 5.5 : equipmentDrop ? 3.5 : 2.8, castShadows: false });
+  glow.addComponent("light", { type: "omni", color: tint, intensity: realmWardenDrop ? 2.2 : patrolCache ? 1.8 : miniBossDrop ? 1.8 : legendaryDrop ? 1.6 : equipmentDrop ? .85 : .45,
+    range: realmWardenDrop ? 8 : patrolCache ? 6 : miniBossDrop ? 6 : legendaryDrop ? 5.5 : equipmentDrop ? 3.5 : 2.8, castShadows: false });
   glow.setLocalPosition(0, .45, 0); root.addChild(glow);
   const now = performance.now();
   const revealAt = settled ? now : source ? Math.max(now, Number.isFinite(source.defeatAt) ? source.defeatAt : now) + defeatDuration(source.art.rootGuardian ? "root_guardian" : source.state.archetype) : now + 180;
@@ -5441,6 +5472,8 @@ function bindLootDrops(joinedRoom: Room): void {
   joinedRoom.onMessage("loot:spawned", (message: NetworkLootDrop & { dropId: string }) => {
     const { dropId, ...drop } = message;
     showDrop(dropId, drop);
+    if (dropId.startsWith("northwatch-shard-patrol-cache:"))
+      createRangedPopup(new pc.Vec3(drop.x, drop.y + 2.2, drop.z), "PATROL CLEARED · YOUR CACHE", "landmark");
   });
   if (!state.lootDrops) return;
   const drops = callbacks(joinedRoom.state).lootDrops;
@@ -10550,6 +10583,7 @@ app.on("update", (dt: number) => {
   }
   camera.setPosition(desiredCamera);
   camera.lookAt(cameraFocus.x, cameraFocus.y - 2, cameraFocus.z);
+  updateNorthwatchPatrolCue(player);
   updateObjectiveGuidance();
   updateRangedReticle();
   updateRangedFeedback(animationNow);

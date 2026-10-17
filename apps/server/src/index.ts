@@ -3,7 +3,7 @@ import { defineRoom, defineServer } from "@colyseus/core";
 import { SILVER_DEPTHS_ROOM, WORLD_ROOM } from "@blockcraft/protocol";
 import { WorldRoom } from "./game-room.js";
 
-const SERVER_BUILD = "colyseus-northwatch-shard-patrol-v251";
+const SERVER_BUILD = "colyseus-shard-patrol-identity-v252";
 
 const gameServer = defineServer({
   rooms: {

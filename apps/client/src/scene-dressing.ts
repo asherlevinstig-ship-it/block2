@@ -1,5 +1,5 @@
 import * as pc from "playcanvas";
-import { MINERAL_DEPOSITS, WILDERNESS_CAMPS } from "@blockcraft/voxel-world";
+import { MINERAL_DEPOSITS, NORTHWATCH_SHARD_PATROL_SITE, WILDERNESS_CAMPS } from "@blockcraft/voxel-world";
 import { REALM_WARDEN_ARENA, REALM_WARDEN_HOME, STONE_BRUTE_ARENA, STONE_BRUTE_ARENA_HOME } from "@blockcraft/voxel-world";
 import { Block, CHUNK_SIZE, GREENWOOD_CAMP, SURFACE_HEIGHT, TOWN_BEACON_POSITION, TOWN_BLACKSMITH_STALL_POSITION, TOWN_EXPEDITION_BOARD_POSITION, TOWN_GATE_POSTS, TOWN_TAVERN, TOWN_TAVERN_Z_OFFSET, TOWN_TAVERN_QUIZ_TABLE_POSITION, TOWN_TAVERN_TABLE_CENTERS, type WorldBlockReader } from "@blockcraft/voxel-world";
 import { TAVERN_KEEPER } from "./tavern-keeper.js";
@@ -265,6 +265,17 @@ export class SceneDressing {
     }
 
     const campVisible = read(GREENWOOD_CAMP.minX, SURFACE_HEIGHT, GREENWOOD_CAMP.minZ) === Block.Dirt;
+    const shardSite = NORTHWATCH_SHARD_PATROL_SITE;
+    if (read(Math.floor(shardSite.x), SURFACE_HEIGHT, Math.floor(shardSite.z)) !== Block.Air) {
+      // A broken, low crystal cairn identifies the patrol without blocking its lanes.
+      const { x, z } = shardSite;
+      for (const [dx, dz, height] of [[0, 0, .58], [-.68, .27, .36], [.61, -.31, .42]] as const) {
+        solid.box(x + dx, surface + height / 2, z + dz, .48, height, .43, SLATE);
+        solid.box(x + dx, surface + height + .13, z + dz, .2, .27, .2, [.48, .84, 1]);
+      }
+      for (const [dx, dz] of [[-1.15, -.72], [.95, .72], [.12, 1.06]] as const)
+        solid.box(x + dx, surface + .07, z + dz, .36, .14, .27, IRON);
+    }
     if (campVisible) {
       const centerX = (GREENWOOD_CAMP.minX + GREENWOOD_CAMP.maxX) / 2 + 0.5;
       const centerZ = (GREENWOOD_CAMP.minZ + GREENWOOD_CAMP.maxZ) / 2 + 0.5;

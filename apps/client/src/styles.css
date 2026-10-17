@@ -683,6 +683,7 @@ html.onboarding-active #hud #target, html.onboarding-active #hud #players { disp
 .ranged-popup-stagger { color: #e2b8ff; font-size: 18px; letter-spacing: .08em; text-shadow: 0 2px 2px #000, 0 0 12px #a657dd; }
 .ranged-popup-enemy { color: #ffe9a3; font-size: 28px; }
 .ranged-popup-terrain { color: #b8c2c3; font-size: 36px; }
+.ranged-popup-landmark { color: #a9eaff; font-size: 14px; letter-spacing: .08em; white-space: nowrap; text-shadow: 0 2px 3px #07151c, 0 0 12px #54bcff; }
 canvas.ranged-aim { cursor: none; }
 
 #realm-event-meter {

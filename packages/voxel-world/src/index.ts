@@ -147,6 +147,8 @@ export const SOUTHERN_QUARRY_COVER = [
 ] as const;
 export const NORTHWATCH_HIGHLANDS = { minX: -9, maxX: 29, minZ: -84, maxZ: -34 } as const;
 export const NORTHWATCH_LEADER_HOME = { x: 15.5, y: 8, z: -72.5 } as const;
+/** Non-colliding visual landmark for the sentry-and-stalker patrol. */
+export const NORTHWATCH_SHARD_PATROL_SITE = { x: 23.5, y: 8, z: -48.5 } as const;
 export const NORTHWATCH_MOB_HOMES = [
   { x: 7.5, y: 8, z: -42.5 }, { x: 18.5, y: 8, z: -54.5 },
   { x: 14.5, y: 8, z: -68.5 }, { x: 21.5, y: 8, z: -70.5 }, NORTHWATCH_LEADER_HOME,
