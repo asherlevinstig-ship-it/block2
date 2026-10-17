@@ -208,7 +208,7 @@ import { executionerDamageBonus, gainMomentum, guardStaminaCost, momentumAfterDe
 import { FENWALKER_POOL_WARD_COOLDOWN_MS, NORTHWATCH_SHARD_WARD_COOLDOWN_MS, fenwalkerBlocksPoolPulse, foragerRecoveryBonus, northwatchShardWardReady } from "./regional-armour.js";
 import type { RegionalArmourProc } from "@blockcraft/protocol";
 import { compatiblePowerOrFallback, fracturedBlockResult, isGroundPowerTargetInRange, isPowerCompatible, isSeismicAftershockTarget, mobilityAdvanceDistance, powerDirection, powerEvadeDirection, seismicCleaveProfile, selectBurstPowerTargets, selectGroundPowerTargets, selectLinePowerTargets, selectMobilityPowerTarget, widenedLineFractureColumns } from "./power-rules.js";
-import { huntersMarkDamageBonus, huntersMarkPowerPayoff, isBrambleSnareTargetInRange, isInsideBrambleSnare, progressHuntersMark, selectHuntersMarkTarget, type ActiveSpecialMark } from "./special-rules.js";
+import { assassinMarkStrikeBonus, huntersMarkDamageBonus, huntersMarkPowerPayoff, isBrambleSnareTargetInRange, isInsideBrambleSnare, progressHuntersMark, selectDeathMarkTarget, selectHuntersMarkTarget, type ActiveSpecialMark } from "./special-rules.js";
 import { inventoryTotal, isLootInPickupRange, lootForArchetype, armourDropForMob, LOOT_DESPAWN_MS, NormalLootCadence } from "./loot-rules.js";
 import { findLootLanding } from "./loot-placement.js";
 import { canEquipMainHand } from "./equipment-rules.js";
@@ -446,6 +446,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly assassinShadowUntil = new Map<string, number>();
   private readonly assassinShadowBonus = new Map<string, number>();
   private readonly pathConcealedUntil = new Map<string, number>();
+  private readonly assassinBossConcealedUntil = new Map<string, number>();
   private readonly rangerPinning = new Map<string, { mobId: string; stacks: number; expiresAt: number }>();
   private readonly rangerSlows = new Map<string, { until: number; multiplier: number }>();
   private readonly rangerFieldFocusHits = new Map<string, number>();
@@ -1028,6 +1029,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.assassinShadowUntil.delete(client.sessionId);
     this.assassinShadowBonus.delete(client.sessionId);
     this.pathConcealedUntil.delete(client.sessionId);
+    this.assassinBossConcealedUntil.delete(client.sessionId);
     this.rangerPinning.delete(client.sessionId);
     this.rangerFieldFocusHits.delete(client.sessionId);
     this.tankFieldWards.delete(client.sessionId);
@@ -3391,11 +3393,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           this.assassinShadowUntil.set(playerId, now + (phantom ? 3_000 : 2_000) + veiledMs);
           this.assassinShadowBonus.set(playerId, 0);
           this.pathConcealedUntil.set(playerId, now + (phantom ? 2_000 : 1_250) + veiledMs);
+          this.assassinBossConcealedUntil.set(playerId, now + 500);
           if (phantom) this.callingAbilityReadyAt.set(playerId, this.buildSpecializationMastered(player, "phantom")
             ? now : Math.max(now, (this.callingAbilityReadyAt.get(playerId) ?? now) - 1_500));
           for (const [targetMobId, awareness] of this.mobAwareness) if (awareness.targetId === playerId) {
             const targetMob = this.state.mobs.get(targetMobId);
-            if (targetMob && Math.hypot(targetMob.x - player.x, targetMob.z - player.z) <= 7) {
+            if (targetMob && !targetMob.isMiniBoss && Math.hypot(targetMob.x - player.x, targetMob.z - player.z) <= 7) {
               this.mobAwareness.delete(targetMobId); targetMob.targetId = ""; targetMob.awarenessState = "search";
             }
           }
@@ -4883,6 +4886,14 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       client.send("chat:notice", "RENEWAL · no injured allies nearby.");
       return;
     }
+    const deathMarkTarget = abilityId === "assassin_death_mark"
+      ? selectDeathMarkTarget(player, parsed.data.yaw ?? player.yaw,
+        [...this.state.mobs.entries()].filter(([, mob]) => hasCombatLineOfSight(player, mob, this.readWorldBlock))
+          .map(([id, mob]) => ({ id, x: mob.x, y: mob.y, z: mob.z, alive: mob.alive }))) : null;
+    if (abilityId === "assassin_death_mark" && !deathMarkTarget) {
+      client.send("chat:notice", "DEATH MARK · aim at a visible enemy within 8m.");
+      return;
+    }
     const rank = this.buildPathRankFor(player, pathId);
     const cooldownUntil = now + definition.cooldownMs;
     cooldowns.set(client.sessionId, cooldownUntil);
@@ -4992,31 +5003,31 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.assassinShadowUntil.set(client.sessionId, now + durationMs);
       this.assassinShadowBonus.set(client.sessionId, augmentId === "vanish_killing_intent" ? 2 : 0);
       this.pathConcealedUntil.set(client.sessionId, now + durationMs);
+      this.assassinBossConcealedUntil.set(client.sessionId, now + 1_200);
       let diverted = 0;
       for (const [mobId, awareness] of this.mobAwareness) if (awareness.targetId === client.sessionId) {
         const mob = this.state.mobs.get(mobId);
-        if (mob && Math.hypot(mob.x - player.x, mob.z - player.z) <= 8) {
+        if (mob && !mob.isMiniBoss && Math.hypot(mob.x - player.x, mob.z - player.z) <= 8) {
           this.mobAwareness.delete(mobId); mob.targetId = ""; mob.awarenessState = "search"; diverted += 1;
         }
       }
       detail = `VANISHED · NEXT STRIKE EMPOWERED · ${(durationMs / 1_000).toFixed(1)}s`;
       this.grantCallingTrial(client.sessionId, "vanish_deep_cloak", diverted);
     } else if (abilityId === "assassin_death_mark") {
-      const target = nearbyMobs(8).sort((a, b) => Math.hypot(a[1].x - player.x, a[1].z - player.z)
-        - Math.hypot(b[1].x - player.x, b[1].z - player.z))[0];
+      const target = deathMarkTarget && this.state.mobs.get(deathMarkTarget.id);
       if (target) {
-        effectTargetId = target[0];
+        effectTargetId = deathMarkTarget!.id;
         const markMs = 10_000 + (augmentId === "mark_lingering_sentence" ? 5_000 : 0);
-        this.specialMarks.set(client.sessionId, { mobId: target[0], expiresAt: now + markMs, stacks: HUNTERS_MARK.maxStacks });
+        this.specialMarks.set(client.sessionId, { mobId: deathMarkTarget!.id, expiresAt: now + markMs, stacks: HUNTERS_MARK.maxStacks });
         if (augmentId === "mark_open_wound") {
-          this.combatContributions.record(target[0], client.sessionId, Math.min(target[1].health, 2), now);
-          target[1].health = Math.max(0, target[1].health - 2); target[1].hitSequence += 1;
-          if (target[1].health === 0) this.defeatMob(target[0], target[1], client.sessionId, now);
+          this.combatContributions.record(deathMarkTarget!.id, client.sessionId, Math.min(target.health, 2), now);
+          target.health = Math.max(0, target.health - 2); target.hitSequence += 1;
+          if (target.health === 0) this.defeatMob(deathMarkTarget!.id, target, client.sessionId, now);
         }
         durationMs = markMs;
-        detail = `${target[1].name.toUpperCase()} EXPOSED · ${(markMs / 1_000).toFixed(1)}s`;
+        detail = `${target.name.toUpperCase()} EXPOSED · ${(markMs / 1_000).toFixed(1)}s`;
         this.grantCallingTrial(client.sessionId, "mark_lingering_sentence", 1);
-      } else detail = "NO TARGET IN RANGE";
+      }
     } else if (abilityId === "assassin_blade_dance") {
       durationMs = 1_000 + rank * 100 + (augmentId === "dance_long_step" ? 600 : 0);
       player.invulnerableUntil = Math.max(player.invulnerableUntil, now + durationMs);
@@ -6678,7 +6689,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         z: player.z,
         health: player.health,
       })).filter(player => !isInsideTownSafeZone(player)
-        && now >= (this.pathConcealedUntil.get(player.id) ?? 0)
+        && now >= (mob.isMiniBoss
+          && parseBuildPathState(this.state.players.get(player.id)?.huntLoadoutsJson ?? "").selectedPathId === "assassin"
+          && this.assassinBossConcealedUntil.has(player.id)
+          ? this.assassinBossConcealedUntil.get(player.id)! : this.pathConcealedUntil.get(player.id) ?? 0)
         && caveEncounterAllows(mobId, player)
         && this.roamingAllowed(mobId, player)
         && this.championAllowed(mobId, player)
@@ -6690,6 +6704,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         ? null : awareMobTarget(mob, players, awareness, now, definition.aggroRange,
         player => hasCombatLineOfSight(mob, player, this.readWorldBlock));
       if (!target) {
+        if (mob.isMiniBoss && previousTarget && now < (this.assassinBossConcealedUntil.get(previousTarget) ?? 0)) {
+          // Keep the encounter alive through the Assassin's brief vanish; the boss resumes pursuit on reacquisition.
+          mob.awarenessState = "search";
+          continue;
+        }
         if (mob.isMiniBoss) {
           this.restoreMiniBossArena(mobId);
           this.miniBossEngagedAt.delete(mobId);
@@ -8136,6 +8155,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         ? (assassinSpecialization === "executioner" ? 4 : 2)
           + (this.assassinShadowBonus.get(sessionId) ?? 0)
           + this.equipmentAffixTier(player, "executioner") : 0;
+      const deathMark = this.specialMarks.get(sessionId);
+      const assassinMark = parseBuildPathState(player.huntLoadoutsJson).selectedPathId === "assassin"
+        && deathMark?.mobId === mobId && now < deathMark.expiresAt;
+      const markStrikeBonus = assassinMarkStrikeBonus(deathMark, mobId, now, shadowstepDamage > 0, mob.isMiniBoss);
       if (shadowstepDamage > 0) {
         this.assassinShadowUntil.delete(sessionId); this.assassinShadowBonus.delete(sessionId);
         const activeAbility = selectedCallingAbility(parseBuildPathState(player.huntLoadoutsJson), "assassin");
@@ -8153,12 +8176,17 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         timing.damage + ironSwordDamageBonus(player.blacksmithUpgrades, pending.mainHandId)
           + reforgeWeaponDamageBonus(equipmentReforgeRank(player.reforgeRanksJson, pending.mainHandId))
           + progressionAttackBonus(player) + this.specialDamageBonus(sessionId, mobId, now) + perkBonusDamage + setBonusDamage
-          + this.buildPathDamageBonus(player, mob, mobId, sessionId, now, "weapon") + shadowstepDamage + pinBonusDamage
+          + this.buildPathDamageBonus(player, mob, mobId, sessionId, now, "weapon") + shadowstepDamage + markStrikeBonus + pinBonusDamage
           + this.northwatchAssassinOpening(player, mobId, now),
         mob.armor,
       ) + traitBonusDamage + dodgeCounterBonus;
       this.combatContributions.record(mobId, sessionId, Math.min(mob.health, damage), now);
       mob.health = Math.max(0, mob.health - damage);
+      if (assassinMark) {
+        this.specialMarks.delete(sessionId);
+        this.broadcast("assassin:mark-strike", { casterId: sessionId, mobId, bonusDamage: markStrikeBonus,
+          empowered: shadowstepDamage > 0, defeated: mob.health === 0 });
+      }
       if (shadowstepDamage > 0 && assassinSpecialization === "phantom") this.grantMasterTrial(sessionId, "phantom");
       if (mob.health === 0 && shadowstepDamage > 0 && assassinSpecialization === "executioner") {
         this.grantMasterTrial(sessionId, "executioner");
@@ -8237,7 +8265,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         this.applyEquipmentAreaDamage(sessionId, mobId, mob, now, pending.mainHandId, pending.step,
           huntSetPerk?.radius ?? 2.6, huntSetPerk?.damage ?? 1, "crusher_set");
       }
-      if (mob.alive) this.progressSpecialMark(sessionId, mobId, now);
+      if (mob.alive && !assassinMark) this.progressSpecialMark(sessionId, mobId, now);
       const equipmentRank = equipmentReforgeRank(player.reforgeRanksJson, pending.mainHandId);
       if (pending.mainHandId === "stone_core_hammer") {
         const quake = equipmentPerkStats("stone_core_hammer", equipmentRank)!;

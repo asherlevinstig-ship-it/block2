@@ -80,7 +80,11 @@ describe("hotbar Calling abilities", () => {
     internal.handleCallingAbility(client, { requestId: "early-special", slot: "special" });
     expect(client.send).toHaveBeenCalledWith("chat:notice", expect.stringContaining("Special has not unlocked"));
     player.level = 4;
-    internal.handleCallingAbility(client, { requestId: "first-special", slot: "special" });
+    if (pathId === "assassin") {
+      const target = new MobState(); Object.assign(target, { x: 50, y: 8, z: 53, alive: true, health: 20 });
+      internal.state.mobs.set("mark-target", target);
+    }
+    internal.handleCallingAbility(client, { requestId: "first-special", slot: "special", yaw: 0 });
     expect(client.send).toHaveBeenCalledWith("calling:ability", expect.objectContaining({
       slot: "special", abilityId: callingStarterAbility(pathId, "special").id,
     }));
@@ -93,8 +97,12 @@ describe("hotbar Calling abilities", () => {
     const mob = new MobState(); Object.assign(mob, { x: 52, y: 8, z: 50, alive: true, health: 20, maxHealth: 20, name: "Target", targetId: "hero" });
     internal.state.mobs.set("target", mob);
     internal.mobAwareness.set("target", { targetId: "hero" });
-    internal.handleCallingAbilityEquip(client, { abilityId: option.id as CallingAbilityId });
-    expect(parseBuildPathState(player.huntLoadoutsJson).callingAbilities[option.pathId]).toBe(option.id);
+    if (option.id !== "assassin_death_mark") {
+      internal.handleCallingAbilityEquip(client, { abilityId: option.id as CallingAbilityId });
+      expect(parseBuildPathState(player.huntLoadoutsJson).callingAbilities[option.pathId]).toBe(option.id);
+    } else {
+      mob.x = 50; mob.z = 52;
+    }
     if (option.id === "healer_resurrection") {
       const ally = new PlayerState(); Object.assign(ally, { x: 52, y: 8, z: 50, health: 0 });
       internal.state.players.set("ally", ally);
@@ -102,8 +110,18 @@ describe("hotbar Calling abilities", () => {
       internal.resurrectionWindows.set("ally", 22_000);
     }
     if (option.pathId === "healer") player.health = 2;
-    internal.handleCallingAbility(client, { requestId: `activate-${option.id}`, yaw: 0 });
+    internal.handleCallingAbility(client, { requestId: `activate-${option.id}`, yaw: 0,
+      ...(option.id === "assassin_death_mark" ? { slot: "special" } : {}) });
     expect(client.send).toHaveBeenCalledWith("calling:ability", expect.objectContaining({ abilityId: option.id }));
+  });
+
+  it("does not spend Death Mark's cooldown when no enemy is under the aim", () => {
+    const { internal, client } = fixture("assassin");
+    const offAxis = new MobState(); Object.assign(offAxis, { x: 53, y: 8, z: 50, alive: true });
+    internal.state.mobs.set("off-axis", offAxis);
+    internal.handleCallingAbility(client, { requestId: "missed-mark", slot: "special", yaw: 0 });
+    expect(client.send).toHaveBeenCalledWith("chat:notice", expect.stringContaining("aim at a visible enemy"));
+    expect(internal.callingSpecialReadyAt.has("hero")).toBe(false);
   });
 
   it("revives only a fallen party member after a full channel, then consumes the rescue window", () => {

@@ -38,6 +38,33 @@ export function selectHuntersMarkTarget(
   );
 }
 
+// A Calling mark follows the centre of the player's aim, not the closest body in range.
+export function selectDeathMarkTarget(
+  origin: SpecialPosition,
+  yaw: number,
+  targets: readonly SpecialTarget[],
+): SpecialTarget | null {
+  const radians = yaw * Math.PI / 180;
+  const facingX = Math.sin(radians), facingZ = Math.cos(radians);
+  return targets.map(target => {
+    const dx = target.x - origin.x, dz = target.z - origin.z;
+    const distance = Math.hypot(dx, dz);
+    return { target, distance, alignment: distance > 0 ? (dx * facingX + dz * facingZ) / distance : 1 };
+  }).filter(candidate => candidate.target.alive && candidate.distance <= 8
+    && Math.abs(candidate.target.y - origin.y) <= 2.5 && candidate.alignment >= .65)
+    .sort((a, b) => b.alignment - a.alignment || a.distance - b.distance)[0]?.target ?? null;
+}
+
+export function assassinMarkStrikeBonus(
+  mark: ActiveSpecialMark | undefined,
+  mobId: string,
+  now: number,
+  empowered: boolean,
+  miniBoss: boolean,
+): number {
+  return mark?.mobId === mobId && now < mark.expiresAt && empowered ? (miniBoss ? 1 : 2) : 0;
+}
+
 export function huntersMarkDamageBonus(mark: ActiveSpecialMark | undefined, mobId: string, now: number): number {
   return mark?.mobId === mobId && now < mark.expiresAt ? HUNTERS_MARK.bonusDamage : 0;
 }

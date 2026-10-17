@@ -2356,6 +2356,7 @@ interface MobVisual {
   mark: pc.Entity;
   markMaterial: pc.StandardMaterial;
   markPips: pc.Entity[];
+  assassinMarker: pc.Entity;
   marks: Map<string, MarkVisualState>;
   state: NetworkMob;
   lastHitSequence: number;
@@ -2373,6 +2374,7 @@ interface MarkVisualState {
   expiresAt: number;
   stacks: number;
   maxStacks: number;
+  kind?: "assassin";
 }
 
 const remotePlayers = new Map<string, RemotePlayerVisual>();
@@ -4210,6 +4212,11 @@ function createCallingAnticipation(pathId: RoleFieldPath): void {
 }
 
 function createCallingImpact(effect: CallingAbilityEffect): void {
+  if (effect.abilityId === "assassin_death_mark" && effect.targetId) {
+    mobVisuals.get(effect.targetId)?.marks.set(effect.casterId, {
+      expiresAt: Date.now() + (effect.durationMs ?? 10_000), stacks: 3, maxStacks: 3, kind: "assassin",
+    });
+  }
   const colors: Record<CallingAbilityId, pc.Color> = {
     tank_bulwark: new pc.Color(.22, .78, 1), tank_challenge: new pc.Color(1, .66, .14), tank_earthbreaker: new pc.Color(1, .36, .08),
     mage_arcane_surge: new pc.Color(.62, .32, 1), mage_mana_shield: new pc.Color(.26, .58, 1), mage_overload: new pc.Color(1, .18, .84),
@@ -5179,6 +5186,10 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     pip.enabled = false;
     return pip;
   });
+  const assassinMarker = addBox(statusRoot, "assassin-death-mark", markMaterial,
+    [.3, .3, .3], [0, healthBarY + .55, 0]);
+  assassinMarker.setLocalEulerAngles(0, 45, 45);
+  assassinMarker.enabled = false;
   entity.setPosition(mob.x, mob.y, mob.z);
   app.root.addChild(entity);
   return {
@@ -5207,6 +5218,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     mark,
     markMaterial,
     markPips,
+    assassinMarker,
     marks: new Map(),
     state: mob,
     locomotionSpeed: 0,
@@ -10190,11 +10202,18 @@ app.on("update", (dt: number) => {
       : 0;
     const markState = visibleMarkState(mob);
     const exposed = Boolean(markState && markState.stacks >= markState.maxStacks);
+    mob.assassinMarker.enabled = mob.state.alive && markState?.kind === "assassin";
+    if (mob.assassinMarker.enabled) {
+      const pulse = 1 + Math.sin(animationTime * 10) * .12;
+      mob.assassinMarker.setLocalScale(.3 * pulse, .3 * pulse, .3 * pulse);
+    }
     mob.mark.enabled = mob.state.alive && Boolean(markState);
     if (mob.mark.enabled) {
       const markPulse = 1 + Math.sin(animationTime * (exposed ? 14 : 8)) * (exposed ? 0.15 : 0.08);
       mob.mark.setLocalScale(1.55 * markPulse, 0.022, 1.55 * markPulse);
-      mob.markMaterial.emissive.set(exposed ? 0.78 : 0.42, exposed ? 0.16 : 0.08, exposed ? 1 : 0.74);
+      mob.markMaterial.emissive.set(markState?.kind === "assassin" ? 1 : exposed ? 0.78 : 0.42,
+        markState?.kind === "assassin" ? .06 : exposed ? 0.16 : 0.08,
+        markState?.kind === "assassin" ? .16 : exposed ? 1 : 0.74);
       mob.markMaterial.opacity = (exposed ? 0.58 : 0.38) + Math.sin(animationTime * (exposed ? 14 : 8)) * 0.1;
       mob.markMaterial.update();
     }
@@ -11048,6 +11067,14 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     status.textContent = `${update.ability} · ${update.detail.toLowerCase()}.`;
   });
   room.onMessage("calling:ability:effect", (effect: CallingAbilityEffect) => createCallingImpact(effect));
+  room.onMessage("assassin:mark-strike", (message: { casterId: string; mobId: string; bonusDamage: number; empowered: boolean; defeated: boolean }) => {
+    const mob = mobVisuals.get(message.mobId);
+    mob?.marks.delete(message.casterId);
+    if (!mob) return;
+    if (message.empowered) createHuntersMarkPayoff(mob);
+    createRangedPopup(new pc.Vec3(mob.state.x, mob.state.y + mob.healthBarY + .75, mob.state.z),
+      message.empowered ? `MARK STRUCK · +${message.bonusDamage}` : "MARK BROKEN", "melee", message.defeated, [1, .22, .32]);
+  });
   room.onMessage("calling:state", (state: CallingStateUpdate) => updateCallingPersistentState(state));
   room.onMessage("equipment:affixes", (update: EquipmentAffixUpdate) => {
     equipmentAffixes = update.affixes ?? {};
@@ -11286,8 +11313,14 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   });
   room.onMessage("special:consumed", (message: SpecialConsumed) => {
     const mob = mobVisuals.get(message.mobId);
+    const assassinMark = mob?.marks.get(message.casterId)?.kind === "assassin";
     mob?.marks.delete(message.casterId);
     if (mob) createHuntersMarkPayoff(mob);
+    if (assassinMark) {
+      if (mob) createRangedPopup(new pc.Vec3(mob.state.x, mob.state.y + mob.healthBarY + .75, mob.state.z),
+        `MARK STRUCK · +${message.bonusDamage}`, "melee", false, [1, .22, .32]);
+      return;
+    }
     if (message.casterId === room?.sessionId) {
       const name = mob?.state.name ?? "Enemy";
       showCombatFeedback(`MARK CASHED IN  +${message.bonusDamage}`, "dodge");

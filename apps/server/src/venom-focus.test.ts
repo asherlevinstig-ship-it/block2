@@ -46,7 +46,7 @@ describe("Venom Focus", () => {
   it("lets an Assassin use Death Mark on F while Venom Focus is equipped", () => {
     const { internal, player, client } = setup();
     player.huntLoadoutsJson = serializeBuildPathState(chooseBuildPath(parseBuildPathState("{}"), "assassin"));
-    internal.handleCallingAbility(client, { requestId: "assassin-special", slot: "special" });
+    internal.handleCallingAbility(client, { requestId: "assassin-special", slot: "special", yaw: 90 });
     expect(client.send).toHaveBeenCalledWith("calling:ability", expect.objectContaining({ abilityId: "assassin_death_mark", slot: "special" }));
   });
   it("keeps Venom Fan dormant even with the weapon equipped", () => {
