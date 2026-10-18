@@ -119,6 +119,7 @@ export const REALM_WARDEN_COVER = [
 ] as const;
 export const ASHEN_REACH = { x: 97, z: 62, radius: 21 } as const;
 export const ASHEN_SPIRE_POSITION = { x: 97.5, y: 8, z: 62.5 } as const;
+export const ASHEN_RELIQUARY_POSITION = { x: 97.5, y: 8, z: 57.5 } as const;
 export const ASHEN_SENTRY_HOMES = [
   { x: 88.5, y: 8, z: 57.5 }, { x: 106.5, y: 8, z: 67.5 },
 ] as const;

@@ -41,6 +41,7 @@ import { equipmentForItem, armourForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE,
   decodeLootBagItems, encodeLootBagItems, lootBagRepresentative, normalizeLootBagItems, huntSetForLoadout,
   type HuntSetId, type LootBagItem, type LootCollectResult } from "@blockcraft/protocol";
 import { WILDERNESS_ENCOUNTERS } from "./wilderness-encounters.js";
+import { ASHEN_RELIQUARY_REWARDS, AshenReliquaryCycle } from "./ashen-reliquary.js";
 import { ROADSIDE_GUARD_SITES, roadsideGuard, roadsideGuardsFor } from "./roadside-guards.js";
 import { ROAMING_PACKS, roamingMemberId, roamingMembership, roamingPackAllows, roamingGoal,
   createRoamingRouteState, advanceRoamingRoute, type RoamingRouteState } from "./roaming-packs.js";
@@ -242,6 +243,8 @@ import { ROOT_LANE_DURATION_MS, ROOT_LANE_RADIUS, guardianCoverHit, rootLaneHaza
 import { canStartTavernQuiz, doubledPayout, drawQuizQuestion, mustSettleQuiz, type QuizRound } from "./tavern-quiz.js";
 import { blacksmithNextStep, buyDepthsReward, canTradeAtBlacksmith, forgeBlacksmithUpgrade, ironCapacity, mineralSale, ironSwordDamageBonus, minedIronQuantity, minedMineral, ownedBlacksmithUpgrades, ownedDepthsRewards, ownsBlacksmithUpgrade, ownsDepthsReward } from "./blacksmith.js";
 import { GREENWOOD_CRAWLER_HOMES, REALM_WARDEN_GATE_POSITION, REALM_WARDEN_HOME, STONE_BRUTE_ARENA_HOME, isInGreenwoodRegion, isInRealmWardenArena, isInStoneBruteArena, isInAshenReach, isInSouthernQuarry, wildernessTerritoryAt } from "@blockcraft/voxel-world";
+import { ASHEN_RELIQUARY_POSITION } from "@blockcraft/voxel-world";
+import type { AshenReliquaryChoice, AshenReliquaryResult, AshenReliquaryState } from "@blockcraft/protocol";
 import {
   applyWorldDeltasToChunk,
   parseWorldDeltas,
@@ -575,6 +578,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly quizRounds = new Map<string, QuizRound>();
   private readonly objectiveProgress = new Map<string, WorldObjectiveProgress>();
   private readonly normalLootCadence = new NormalLootCadence();
+  private readonly ashenReliquary = new AshenReliquaryCycle();
+  private ashenReliquaryPhaseKey = "";
   private readonly mobBaseNames = new Map<string, string>();
   private readonly roadsideGuardLastNearby = new Map<string, number>();
   private readonly worldDeltasByChunk = new Map<string, Map<string, WorldBlockDelta>>();
@@ -714,6 +719,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           ownerId: starter.ownerId, itemId: starter.itemId, quantity: starter.quantity,
           contentsJson: starter.contentsJson, x: starter.x, y: starter.y, z: starter.z, expiresAt: starter.expiresAt });
       }
+      if (this.roomKind === "overworld") this.sendAshenReliquaryState(client, Date.now());
       this.sendHuntCollection(client);
       this.sendBuildPath(client);
       if (this.roomKind === "practice") client.send("practice:state", { active: true, message: "Training arena · select any ability, then use G. F uses your Calling Special. Your character will not be changed." });
@@ -835,6 +841,17 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.onMessage("build:path", (client, payload: unknown) => this.handleBuildPath(client, payload));
     aliveMessage("role:opportunity", (client, payload: unknown) => this.handleRoleOpportunity(client, payload));
     aliveMessage("roadside:interact", (client, payload: unknown) => this.handleRoadsideEncounter(client, payload));
+    aliveMessage("ashen:claim", (client, payload: unknown) => this.handleAshenReliquaryClaim(client, payload));
+    this.onMessage("ashen:menu", (client, payload: unknown) => {
+      const player = this.state.players.get(client.sessionId);
+      const open = typeof payload === "object" && payload !== null && "open" in payload && payload.open === true;
+      if (!player || !open) { if (player) player.invulnerableUntil = 0; return; }
+      const state = this.ashenReliquary.snapshot(client.sessionId, Date.now());
+      const besideReliquary = this.roomKind === "overworld" && state.phase === "unlocked" && state.eligible && !state.claimed
+        && Math.abs(player.y - ASHEN_RELIQUARY_POSITION.y) <= 2.5
+        && Math.hypot(player.x - ASHEN_RELIQUARY_POSITION.x, player.z - ASHEN_RELIQUARY_POSITION.z) <= 3.6;
+      if (besideReliquary) player.invulnerableUntil = Date.now() + 30_000;
+    });
     this.onMessage("dungeon:lobby", (client, payload: unknown) => this.handleDungeonLobby(client, payload));
     this.onMessage("depths:lobby", (client, payload: unknown) => this.handleSilverDepthsLobby(client, payload));
     this.onMessage("portal:use", (client, payload: unknown) => {
@@ -2863,6 +2880,14 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           && Math.hypot(player.x - mob.x, player.z - mob.z) <= 28;
       }) : recipients;
     if (northwatchPatrolClear) this.northwatchPatrolContributors.clear();
+    if (this.roomKind === "overworld" && isAshenMob(mobId)) {
+      const reliquaryProgress = this.ashenReliquary.recordDefeat(mobId, recipients, now);
+      this.sendAshenReliquaryStates(now);
+      if (reliquaryProgress.unlocked) for (const playerId of recipients) {
+        this.clients.find(candidate => candidate.sessionId === playerId)?.send("chat:notice",
+          "SCORCHED RELIQUARY AWAKENED · return to the burning chest and choose one personal reward.");
+      }
+    }
     this.combatContributions.clear(mobId);
     if ((SILVER_DEPTHS_GUARDS as readonly string[]).includes(mobId) || mobId === CRYSTAL_MATRIARCH_ID) {
       for (const playerId of recipients) {
@@ -5465,6 +5490,62 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     void this.persistPlayer(client.sessionId, player, true).catch(() => {});
   }
 
+  private sendAshenReliquaryState(client: Client, now: number): void {
+    client.send("ashen:reliquary", {
+      ...this.ashenReliquary.snapshot(client.sessionId, now),
+      ...ASHEN_RELIQUARY_POSITION,
+    } satisfies AshenReliquaryState);
+  }
+
+  private sendAshenReliquaryStates(now: number): void {
+    for (const client of this.clients) this.sendAshenReliquaryState(client, now);
+  }
+
+  private handleAshenReliquaryClaim(client: Client, payload: unknown): void {
+    const choice = typeof payload === "object" && payload !== null && "choice" in payload
+      && (payload.choice === "weapon" || payload.choice === "armour" || payload.choice === "gold")
+      ? payload.choice as AshenReliquaryChoice : null;
+    const reply = (ok: boolean, message: string) => client.send("ashen:reliquary-result",
+      { ok, message, ...(choice ? { choice } : {}) } satisfies AshenReliquaryResult);
+    const player = this.state.players.get(client.sessionId);
+    const now = Date.now();
+    if (!choice || !player || player.health <= 0 || this.roomKind !== "overworld")
+      return reply(false, "The Scorched Reliquary cannot be claimed right now.");
+    const state = this.ashenReliquary.snapshot(client.sessionId, now);
+    if (state.phase !== "unlocked") return reply(false, "The Scorched Reliquary is sealed.");
+    if (!state.eligible) return reply(false, "Help defeat the Ashen warpack before claiming its reliquary.");
+    if (state.claimed) return reply(false, "You already claimed this reliquary cycle.");
+    if (Math.abs(player.y - ASHEN_RELIQUARY_POSITION.y) > 2.5
+      || Math.hypot(player.x - ASHEN_RELIQUARY_POSITION.x, player.z - ASHEN_RELIQUARY_POSITION.z) > 3.6)
+      return reply(false, "Move beside the Scorched Reliquary to choose your reward.");
+    const reward = ASHEN_RELIQUARY_REWARDS[choice];
+    const simulated = new Map<ItemId, number>();
+    for (const entry of reward.items) {
+      const before = simulated.get(entry.itemId) ?? player.inventory.get(entry.itemId)?.quantity ?? 0;
+      const addable = Math.min(lootCarryCapacity(entry.itemId, ironCapacity(player.blacksmithUpgrades)) - before,
+        backpackAddableQuantity(id => simulated.get(id) ?? player.inventory.get(id)?.quantity ?? 0,
+          entry.itemId, entry.quantity, player.mainHandId as MainHandId, player.armourId as ArmourId,
+          backpackCapacity(player.blacksmithUpgrades)));
+      if (addable < entry.quantity) return reply(false, "PACK FULL · Make room before choosing these materials.");
+      simulated.set(entry.itemId, before + entry.quantity);
+    }
+    if (!this.ashenReliquary.markClaimed(client.sessionId, now)) return reply(false, "That reward is no longer available.");
+    for (const entry of reward.items) {
+      let item = player.inventory.get(entry.itemId);
+      const before = item?.quantity ?? 0;
+      if (!item) { item = new InventoryItemState(); player.inventory.set(entry.itemId, item); }
+      item.quantity = inventoryTotal(before, entry.quantity);
+      this.broadcast("loot:picked-up", { playerId: client.sessionId, dropId: "ashen-reliquary",
+        itemId: entry.itemId, quantity: entry.quantity, total: item.quantity } satisfies LootPickedUp);
+    }
+    if (reward.gold > 0) player.coins = Math.min(1_000_000, player.coins + reward.gold);
+    const message = `SCORCHED RELIQUARY CLAIMED · ${reward.label}.`;
+    reply(true, message);
+    client.send("chat:notice", message);
+    this.sendAshenReliquaryState(client, now);
+    void this.persistPlayer(client.sessionId, player, true).catch(() => {});
+  }
+
   private handleCallingAbility(client: Client, payload: unknown): void {
     const parsed = CallingAbilityRequestSchema.safeParse(payload);
     const player = this.state.players.get(client.sessionId);
@@ -7368,6 +7449,14 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (this.roomKind === "overworld") this.sendPartyUpdates(Date.now());
       else this.lastPartyUpdateAt = Date.now();
       for (const client of this.clients) this.sendObjectiveState(client);
+      if (this.roomKind === "overworld") {
+        const reliquary = this.ashenReliquary.snapshot("", Date.now());
+        const phaseKey = `${reliquary.phase}:${reliquary.defeated}:${reliquary.expiresAt}:${reliquary.cooldownUntil}`;
+        if (phaseKey !== this.ashenReliquaryPhaseKey) {
+          this.ashenReliquaryPhaseKey = phaseKey;
+          this.sendAshenReliquaryStates(Date.now());
+        }
+      }
     }
     const now = Date.now();
     if (this.roomKind === "overworld" && this.silverDepthsLobbies.size) this.validateSilverDepthsLobbies(now);

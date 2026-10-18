@@ -37,6 +37,15 @@
       <div><button id="roadside-rest" type="button">Restore health & stamina</button><button id="roadside-supplies" type="button">Take a potion</button></div>
       <button id="roadside-close" type="button">Leave it</button>
     </div>
+    <button id="ashen-reliquary-status" type="button" hidden aria-label="Scorched Reliquary status">
+      <small>ASHEN PACK</small><strong id="ashen-reliquary-count">0 / 5</strong><span id="ashen-reliquary-detail">RELIQUARY SEALED</span>
+    </button>
+    <div id="ashen-reliquary-choice" role="dialog" aria-label="Choose a Scorched Reliquary reward" hidden>
+      <small>SCORCHED RELIQUARY</small><strong>Choose one personal reward</strong>
+      <p>Your choice is permanent for this regional clear.</p>
+      <div><button type="button" data-ashen-choice="weapon">WEAPON MATERIALS<small>3 Ember Ore · 2 Stone Core</small></button><button type="button" data-ashen-choice="armour">ARMOUR MATERIALS<small>2 Ember Ore · 4 Iron Ore</small></button><button type="button" data-ashen-choice="gold">45 GOLD<small>Immediate coin reward</small></button></div>
+      <button id="ashen-reliquary-close" type="button">Leave it</button>
+    </div>
     <aside id="level-up-celebration" hidden role="status" aria-live="polite">
       <small>✦ CHARACTER ADVANCEMENT ✦</small><strong id="level-celebration-title">LEVEL UP!</strong>
       <span id="level-celebration-detail">Your adventure grows stronger.</span>

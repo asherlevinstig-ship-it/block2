@@ -238,6 +238,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
   setChampionState(champion: (Position & { y: number; alive: boolean }) | null): void;
   setEliteStates(elites: EliteMapTarget[]): void;
   setThreatState(threat: ThreatMapTarget | null): void;
+  setReliquaryState(reliquary: ThreatMapTarget | null): void;
   setWardenGateUnlocked(unlocked: boolean): void;
   setMistfenMastery(rank: number): void;
   setGreenwoodMastery(rank: number): void;
@@ -281,6 +282,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
   let champion: (Position & { y: number; alive: boolean }) | null = null;
   let elites: EliteMapTarget[] = [];
   let threat: ThreatMapTarget | null = null;
+  let reliquary: ThreatMapTarget | null = null;
   let equipmentHunt: EquipmentHuntTarget | null = null;
   let roadsideClaims = new Set<string>();
   let roadsideClaimsRaw = "";
@@ -355,6 +357,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
     setChampionState(value) { champion = value; },
     setEliteStates(values) { elites = values; },
     setThreatState(value) { threat = value; lastUpdate = -Infinity; },
+    setReliquaryState(value) { reliquary = value; lastUpdate = -Infinity; },
     setWardenGateUnlocked(unlocked) {
       if (wardenGateUnlocked === unlocked) return;
       wardenGateUnlocked = unlocked; refreshDestinations(); lastUpdate = -Infinity;
@@ -645,6 +648,8 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
         if (wardenGateUnlocked) staticMarker(WARDEN_GATE_WAYPOINT, "WARDEN GATE", "#ffe06f", "W", true);
         if (equipmentHunt) staticMarker({ x: equipmentHunt.x, y: equipmentHunt.y, z: equipmentHunt.z,
           id: "equipment-hunt", name: equipmentHunt.regionName }, "AFFIX HUNT", "#e59cff", "◆", true);
+        if (reliquary) marker(reliquary, mapMarkerLabelVisible(player, reliquary, false) ? "RELIQUARY" : "",
+          "#ff9a55", true, false, "R");
         for (const landmark of ROADSIDE_DISCOVERIES) {
           if (!discovered.has(roadsideDiscoveryKey(landmark.id))) continue;
           const encounter = ROADSIDE_ENCOUNTERS.some(site => site.id === landmark.id);

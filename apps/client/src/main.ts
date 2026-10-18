@@ -5,6 +5,8 @@ import { mageCastDuration, mageCastPose, type MageAbilityId } from "./mage-casti
 import { greenwoodMasteryStatus, mistfenMasteryStatus } from "@blockcraft/protocol";
 import type { RegionalArmourProc } from "@blockcraft/protocol";
 import { isInMistfenMarsh, NORTHWATCH_SHARD_PATROL_SITE } from "@blockcraft/voxel-world";
+import { ASHEN_RELIQUARY_POSITION } from "@blockcraft/voxel-world";
+import type { AshenReliquaryChoice, AshenReliquaryResult, AshenReliquaryState } from "@blockcraft/protocol";
 import { nearestRoleFieldOpportunity, nearestRoadsideEncounter, parseRoadsideClaims, type RoleFieldPath } from "@blockcraft/voxel-world";
 import { confirmedRangedHit, projectileImpactCue } from "./ranged-feedback.js";
 import { heldFireStep } from "./held-fire.js";
@@ -7355,6 +7357,34 @@ for (const [buttonId, choice] of [["#roadside-rest", "rest"], ["#roadside-suppli
     closeRoadsideChoice();
   });
 document.querySelector<HTMLButtonElement>("#roadside-close")!.addEventListener("click", closeRoadsideChoice);
+const ashenReliquaryStatus = document.querySelector<HTMLButtonElement>("#ashen-reliquary-status")!;
+const ashenReliquaryCount = document.querySelector<HTMLElement>("#ashen-reliquary-count")!;
+const ashenReliquaryDetail = document.querySelector<HTMLElement>("#ashen-reliquary-detail")!;
+const ashenReliquaryChoice = document.querySelector<HTMLElement>("#ashen-reliquary-choice")!;
+let ashenReliquaryState: AshenReliquaryState | null = null;
+function nearAshenReliquary(range = 3.6): boolean {
+  const player = localPlayer.getPosition();
+  return Boolean(ashenReliquaryState && Math.abs(player.y - ASHEN_RELIQUARY_POSITION.y) <= 2.5
+    && Math.hypot(player.x - ASHEN_RELIQUARY_POSITION.x, player.z - ASHEN_RELIQUARY_POSITION.z) <= range);
+}
+function canClaimAshenReliquary(): boolean {
+  return Boolean(ashenReliquaryState?.phase === "unlocked" && ashenReliquaryState.eligible
+    && !ashenReliquaryState.claimed && nearAshenReliquary());
+}
+function closeAshenReliquaryChoice(): void {
+  if (ashenReliquaryChoice.hidden) return;
+  ashenReliquaryChoice.hidden = true;
+  room?.send("ashen:menu", { open: false });
+}
+function openAshenReliquaryChoice(): void {
+  ashenReliquaryChoice.hidden = false;
+  room?.send("ashen:menu", { open: true });
+}
+document.querySelector<HTMLButtonElement>("#ashen-reliquary-close")!.addEventListener("click", closeAshenReliquaryChoice);
+for (const button of document.querySelectorAll<HTMLButtonElement>("[data-ashen-choice]")) button.addEventListener("click", () => {
+  const choice = button.dataset.ashenChoice as AshenReliquaryChoice;
+  if (room && canClaimAshenReliquary()) room.send("ashen:claim", { choice });
+});
 const caveEntranceSign = document.querySelector<HTMLElement>("#cave-entrance")!;
 let miningSwing: { cell: MiningCell; startedAt: number; requestId: string; stage: number; origin: pc.Vec3 } | null = null;
 let pendingMine: { requestId: string; startedAt: number } | null = null;
@@ -7366,6 +7396,39 @@ const levelGoldMaterial = coloredMaterial(new pc.Color(1, .82, .35));
 const foragerCueMaterial = coloredMaterial(new pc.Color(.6, .82, .28));
 const fenwalkerCueMaterial = coloredMaterial(new pc.Color(.28, .95, .7));
 const northwatchCueMaterial = coloredMaterial(new pc.Color(.56, .87, 1));
+const reliquaryStoneMaterial = coloredMaterial(new pc.Color(.18, .11, .09));
+const reliquaryMetalMaterial = coloredMaterial(new pc.Color(.34, .16, .09));
+const reliquaryEmberMaterial = powerMaterial(new pc.Color(1, .23, .035), .56);
+const ashenReliquaryVisual = new pc.Entity("scorched-reliquary");
+ashenReliquaryVisual.setPosition(ASHEN_RELIQUARY_POSITION.x, ASHEN_RELIQUARY_POSITION.y, ASHEN_RELIQUARY_POSITION.z);
+app.root.addChild(ashenReliquaryVisual);
+addBox(ashenReliquaryVisual, "reliquary-plinth", reliquaryStoneMaterial, [1.5, .28, 1.08], [0, .14, 0]);
+addBox(ashenReliquaryVisual, "reliquary-chest", reliquaryMetalMaterial, [1.12, .62, .72], [0, .53, 0]);
+addBox(ashenReliquaryVisual, "reliquary-lid", reliquaryStoneMaterial, [1.2, .2, .8], [0, .91, 0]);
+const reliquaryRune = addBox(ashenReliquaryVisual, "reliquary-rune", reliquaryEmberMaterial, [.16, .38, .05], [0, .57, -.39]);
+for (const x of [-.45, .45]) addBox(ashenReliquaryVisual, "reliquary-seam", reliquaryEmberMaterial, [.06, .5, .05], [x, .55, -.39]);
+
+function updateAshenReliquaryPresentation(now = Date.now()): void {
+  const state = ashenReliquaryState;
+  if (!state || !camera.camera) { ashenReliquaryStatus.hidden = true; return; }
+  const player = localPlayer.getPosition();
+  const distance = Math.hypot(player.x - state.x, player.z - state.z);
+  const nearby = Math.abs(player.y - state.y) <= 2.5 && distance <= 25;
+  const screen = camera.camera.worldToScreen(new pc.Vec3(state.x, state.y + 1.75, state.z));
+  ashenReliquaryStatus.hidden = !nearby || screen.z < 0;
+  minimap.setReliquaryState(nearby ? { ...state, name: "Scorched Reliquary" } : null);
+  const unlocked = state.phase === "unlocked";
+  reliquaryRune.setLocalScale(.16 * (unlocked ? 1 + Math.sin(now / 140) * .25 : .55), .38, .05);
+  if (ashenReliquaryStatus.hidden) return;
+  const rect = canvas.getBoundingClientRect();
+  ashenReliquaryStatus.style.left = `${rect.left + screen.x * rect.width / canvas.width}px`;
+  ashenReliquaryStatus.style.top = `${rect.top + screen.y * rect.height / canvas.height}px`;
+  ashenReliquaryStatus.dataset.phase = state.phase;
+  ashenReliquaryCount.textContent = `${state.defeated} / ${state.required}`;
+  ashenReliquaryDetail.textContent = state.claimed ? "PERSONAL REWARD CLAIMED"
+    : unlocked ? state.eligible ? `AWAKENED · ${Math.max(0, Math.ceil((state.expiresAt - now) / 1000))}s · E TO CHOOSE` : "AWAKENED · ASSIST THE PACK CLEAR"
+    : state.phase === "cooldown" ? `DORMANT · ${Math.max(0, Math.ceil((state.cooldownUntil - now) / 1000))}s` : "RELIQUARY SEALED";
+}
 
 // One small draw call, updated only when a crack stage changes; never touches chunk meshes.
 const miningCracks = new pc.Entity("progressive-mining-cracks");
@@ -8971,6 +9034,7 @@ function updateForestPortals(): void {
 function updateTarget(): void {
   updateForestPortals();
   updateRecoveryMarker();
+  updateAshenReliquaryPresentation();
   if (!camera.camera) return;
   const start = camera.camera.screenToWorld(pointer.x, pointer.y, camera.camera.nearClip);
   const end = camera.camera.screenToWorld(pointer.x, pointer.y, camera.camera.farClip);
@@ -9028,9 +9092,10 @@ function updateTarget(): void {
   const nearbyLoot = nearestLootDrop();
   const roleOpportunity = nearbyRoleOpportunity();
   const roadsideEncounter = nearbyRoadsideEncounter();
+  const ashenReliquaryNearby = canClaimAshenReliquary();
   if (!roadsideChoice.hidden && roadsideChoice.dataset.id !== roadsideEncounter?.id) closeRoadsideChoice();
-  updatePlayerTradePrompt(Boolean(nearbyLoot || nearbyForestPortal || roleOpportunity || roadsideEncounter || expeditionBoardNearby || blacksmithNearby || quizTableNearby || keeperNearby || chestNearby));
-  const nextKey = `${interactionMode}:${targetKey}:${currentTarget?.block ?? -1}:${availability}:${combatKey}:${keeperNearby}:${quizTableNearby}:${blacksmithNearby}:${expeditionBoardNearby}:${nearbyLoot}:${nearbyForestPortal}:${roleOpportunity?.id ?? "none"}:${roadsideEncounter?.id ?? "none"}`;
+  updatePlayerTradePrompt(Boolean(nearbyLoot || ashenReliquaryNearby || nearbyForestPortal || roleOpportunity || roadsideEncounter || expeditionBoardNearby || blacksmithNearby || quizTableNearby || keeperNearby || chestNearby));
+  const nextKey = `${interactionMode}:${targetKey}:${currentTarget?.block ?? -1}:${availability}:${combatKey}:${keeperNearby}:${quizTableNearby}:${blacksmithNearby}:${expeditionBoardNearby}:${nearbyLoot}:${ashenReliquaryNearby}:${nearbyForestPortal}:${roleOpportunity?.id ?? "none"}:${roadsideEncounter?.id ?? "none"}`;
   if (nextKey === targetStateKey) return;
   targetStateKey = nextKey;
   const tint = availability === "ready" ? hit?.block === Block.SilverOre ? new pc.Color(0.55, 0.88, 1) : new pc.Color(1, 0.73, 0.25) : new pc.Color(1, 0.25, 0.2);
@@ -9038,7 +9103,7 @@ function updateTarget(): void {
   targetMaterial.emissive = tint.clone().mulScalar(0.3);
   targetMaterial.opacity = 0.2;
   targetMaterial.update();
-  mineButton.textContent = nearbyLoot ? "Loot" : nearbyForestPortal ? "Portal" : roleOpportunity ? roleOpportunity.action : roadsideEncounter ? "Explore" : expeditionBoardNearby ? "Board" : blacksmithNearby ? "Trade" : quizTableNearby ? "Play" : keeperNearby ? "Talk" : interactionMode === "build" ? chopping ? "Chop" : "Mine" : "Attack";
+  mineButton.textContent = nearbyLoot ? "Loot" : ashenReliquaryNearby ? "Choose" : nearbyForestPortal ? "Portal" : roleOpportunity ? roleOpportunity.action : roadsideEncounter ? "Explore" : expeditionBoardNearby ? "Board" : blacksmithNearby ? "Trade" : quizTableNearby ? "Play" : keeperNearby ? "Talk" : interactionMode === "build" ? chopping ? "Chop" : "Mine" : "Attack";
   if (nearbyLoot) {
     const drop = lootVisuals.get(nearbyLoot)?.state;
     const itemName = drop && isItemId(drop.itemId) ? ITEM_DEFINITIONS[drop.itemId].name : "Loot";
@@ -9051,6 +9116,7 @@ function updateTarget(): void {
         ? `${itemName} · inventory full`
       : `${quantity}${itemName} · hold E or Loot to pick up`;
   }
+  else if (ashenReliquaryNearby) targetLabel.textContent = "Scorched Reliquary · press E or Choose for one personal reward";
   else if (nearbyForestPortal) targetLabel.textContent = "Glowing portal · press E or Portal to travel";
   else if (roleOpportunity) targetLabel.textContent = `${roleOpportunity.name} · ${roleOpportunity.prompt} · press E or ${roleOpportunity.action}`;
   else if (roadsideEncounter) {
@@ -10734,6 +10800,7 @@ function commitSpecialAim(): void {
 function requestPrimaryAction(): void {
   if (playerInteractionUI.isOpen()) return;
   if (!roadsideChoice.hidden) return;
+  if (!ashenReliquaryChoice.hidden) return;
   if (!expeditionPanel.hidden || !realmHuntPanel.hidden) return;
   if (!inventoryPanel.hidden) return;
   if (!lootPanel.hidden) return;
@@ -10742,6 +10809,7 @@ function requestPrimaryAction(): void {
   if (sceneDressing.blacksmithVisible && isAtTownStorage(localPlayer.getPosition())) { openPersonalStorage(); return; }
   const nearbyLoot = nearestLootDrop();
   if (nearbyLoot) { beginLootHold("pointer"); return; }
+  if (canClaimAshenReliquary()) { openAshenReliquaryChoice(); return; }
   if (nearbyForestPortal) { useNearbyForestPortal(); return; }
   if (useNearbyRoleOpportunity()) return;
   if (useNearbyRoadsideEncounter()) return;
@@ -10867,6 +10935,10 @@ combatHudRoot.addEventListener("click", event => {
 
 window.addEventListener("keydown", event => {
   if (event.repeat) return;
+  if (!ashenReliquaryChoice.hidden) {
+    if (event.code === "Escape") closeAshenReliquaryChoice();
+    event.preventDefault(); return;
+  }
   if (!abilityPractice.hidden) {
     if (event.code === "Escape") { abilityPractice.hidden = true; room?.send("practice:menu", { open: false }); }
     if (!(event.target instanceof HTMLSelectElement)) event.preventDefault();
@@ -13225,6 +13297,17 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       minimap.setRoadsideClaims(JSON.stringify([...localRoadsideClaims]));
       closeRoadsideChoice();
     }
+    status.textContent = message.message;
+    showRoadsideNotice(message.message, !message.ok);
+  });
+  room.onMessage("ashen:reliquary", (message: AshenReliquaryState) => {
+    ashenReliquaryState = message;
+    if (message.phase !== "unlocked" || message.claimed || !message.eligible) closeAshenReliquaryChoice();
+    targetStateKey = "";
+    updateAshenReliquaryPresentation();
+  });
+  room.onMessage("ashen:reliquary-result", (message: AshenReliquaryResult) => {
+    if (message.ok) closeAshenReliquaryChoice();
     status.textContent = message.message;
     showRoadsideNotice(message.message, !message.ok);
   });

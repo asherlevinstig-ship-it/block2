@@ -2492,6 +2492,20 @@ html.boss-hud-active #world-objective { display: none !important; }
 #roadside-choice div { display: grid; gap: 6px; }
 #roadside-choice button { padding: 9px; border: 1px solid #729e77; border-radius: 7px; color: #edf7df; background: #234b38; font: 800 11px system-ui; cursor: pointer; }
 #roadside-choice button:hover { background: #326447; }
+#ashen-reliquary-status:not([hidden]) { position: fixed; z-index: 13; display: grid; gap: 1px; min-width: 146px; padding: 9px 12px; border: 1px solid #c96835; border-radius: 9px; color: #ffe1a0; background: #21130ee8; box-shadow: 0 6px 22px #000a, inset 0 0 18px #d04b1826; pointer-events: none; transform: translate(-50%, -100%); }
+#ashen-reliquary-status small { color: #ff9c60; font: 900 9px system-ui; letter-spacing: .16em; }
+#ashen-reliquary-status strong { font: 900 15px system-ui; }
+#ashen-reliquary-status span { color: #e6b78e; font: 800 9px system-ui; }
+#ashen-reliquary-status[data-phase="unlocked"] { border-color: #ffbd54; box-shadow: 0 0 24px #ff7a286b, inset 0 0 18px #ef672533; }
+#ashen-reliquary-choice:not([hidden]) { position: fixed; z-index: 24; left: max(14px, env(safe-area-inset-left)); bottom: max(215px, calc(120px + env(safe-area-inset-bottom))); width: min(360px, calc(100vw - 28px)); display: grid; gap: 9px; padding: 15px; border: 1px solid #d9783c; border-radius: 12px; color: #ffe7bd; background: #21130ef7; box-shadow: 0 12px 36px #000c, inset 0 0 28px #c84c1828; }
+#ashen-reliquary-choice > small { color: #ff9958; font: 900 10px system-ui; letter-spacing: .15em; }
+#ashen-reliquary-choice > strong { font: 900 17px system-ui; }
+#ashen-reliquary-choice p { margin: 0; color: #ceb9a6; font: 12px system-ui; }
+#ashen-reliquary-choice div { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+#ashen-reliquary-choice button { padding: 10px 7px; border: 1px solid #925a38; border-radius: 7px; color: #fff0cf; background: #4a291a; font: 900 10px system-ui; cursor: pointer; }
+#ashen-reliquary-choice button small { display: block; margin-top: 4px; color: #d0aa88; font: 8px system-ui; }
+#ashen-reliquary-choice button:hover { background: #6a371d; border-color: #ee9550; }
+@media (max-width: 620px) { #ashen-reliquary-choice div { grid-template-columns: 1fr; } }
 #roadside-close { opacity: .75; }
 .resource-toast { max-width: 100%; padding: 9px 14px; border: 1px solid #cbdcaa88; border-radius: 10px; color: #f6edbc; background: #163026ed; font: 800 13px system-ui; text-align: left; animation: resource-pickup 4.5s both; }
 .material-pickup { display: grid; border-color: #829a7a80; background: #15251ced; }
