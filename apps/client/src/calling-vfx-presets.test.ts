@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BUILD_PATHS, CALLING_ABILITY_OPTIONS, type BuildPathId } from "@blockcraft/protocol";
-import { CALLING_ANTICIPATION_PARTICLES, CALLING_IMPACT_PARTICLES, CALLING_SUSTAIN_PARTICLES, callingParticleLifetime } from "./calling-vfx-presets.js";
+import { CALLING_ABILITY_SUSTAIN_PARTICLES, CALLING_ANTICIPATION_PARTICLES, CALLING_IMPACT_PARTICLES, CALLING_SUSTAIN_PARTICLES, callingParticleLifetime } from "./calling-vfx-presets.js";
 
 describe("calling particle identity and budget", () => {
   it("covers every ability and build phase with bounded layers", () => {
@@ -27,5 +27,7 @@ describe("calling particle identity and budget", () => {
     expect(CALLING_IMPACT_PARTICLES.assassin_vanish.some(layer => layer.kind === "smoke")).toBe(true);
     expect(CALLING_IMPACT_PARTICLES.tank_earthbreaker.some(layer => layer.kind === "dust")).toBe(true);
     expect(CALLING_IMPACT_PARTICLES.healer_resurrection.some(layer => layer.kind === "glow")).toBe(true);
+    expect(CALLING_ABILITY_SUSTAIN_PARTICLES.thief_smoke_bomb?.filter(layer => layer.kind === "smoke")
+      .reduce((sum, layer) => sum + layer.count, 0)).toBeGreaterThanOrEqual(80);
   });
 });

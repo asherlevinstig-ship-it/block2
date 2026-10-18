@@ -43,7 +43,9 @@ export function addCallingParticleLayers(app: pc.Application, root: pc.Entity,
       autoPlay: true,
       numParticles: layer.count,
       lifetime: layer.life,
-      rate: loop ? Math.max(.04, layer.life / layer.count) : .012,
+      // Impact layers should arrive as one readable beat. The old fixed 12ms rate
+      // smeared large effects across almost a second and made the impact look absent.
+      rate: loop ? Math.max(.025, layer.life / layer.count) : Math.max(.0025, .24 / layer.count),
       loop,
       emitterShape: pc.EMITTERSHAPE_SPHERE,
       emitterRadius: layer.radius,
@@ -68,6 +70,7 @@ export function addCallingParticleLayers(app: pc.Application, root: pc.Entity,
       depthWrite: false,
       lighting: false,
       noFog: true,
+      intensity: smoky ? 1.15 : 1.65,
       alignToMotion: layer.kind === "streak",
       stretch: layer.kind === "streak" ? .09 : 0,
     });

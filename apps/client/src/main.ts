@@ -1,6 +1,6 @@
 import * as pc from "playcanvas";
 import { addCallingParticleLayers } from "./calling-particles.js";
-import { CALLING_ANTICIPATION_PARTICLES, CALLING_IMPACT_PARTICLES, CALLING_SUSTAIN_PARTICLES, callingParticleLifetime } from "./calling-vfx-presets.js";
+import { CALLING_ABILITY_SUSTAIN_PARTICLES, CALLING_ANTICIPATION_PARTICLES, CALLING_IMPACT_PARTICLES, CALLING_SUSTAIN_PARTICLES, callingParticleLifetime } from "./calling-vfx-presets.js";
 import { greenwoodMasteryStatus, mistfenMasteryStatus } from "@blockcraft/protocol";
 import type { RegionalArmourProc } from "@blockcraft/protocol";
 import { isInMistfenMarsh, NORTHWATCH_SHARD_PATROL_SITE } from "@blockcraft/voxel-world";
@@ -4489,7 +4489,8 @@ function updateCallingPersistentState(state: CallingStateUpdate): void {
   const root = new pc.Entity(`calling-state:${state.abilityId}`);
   root.setLocalPosition(0, .03, 0);
   anchor.addChild(root);
-  addCallingParticleLayers(app, root, CALLING_SUSTAIN_PARTICLES[state.pathId], true);
+  addCallingParticleLayers(app, root,
+    CALLING_ABILITY_SUSTAIN_PARTICLES[state.abilityId] ?? CALLING_SUSTAIN_PARTICLES[state.pathId], true);
   callingPersistentVisuals.set(state.playerId, {
     root, expiresAt: state.activeUntil ?? Number.POSITIVE_INFINITY,
   });

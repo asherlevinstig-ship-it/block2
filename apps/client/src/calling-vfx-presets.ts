@@ -137,5 +137,34 @@ export const CALLING_SUSTAIN_PARTICLES: Record<BuildPathId, readonly ParticleLay
   healer: [layer("glow", mint, 16, 1.2, .3, .6, .2, .9, .42, .7)],
 };
 
+/** Long-lived effects need to communicate the actual mechanic, not only the Calling colour. */
+export const CALLING_ABILITY_SUSTAIN_PARTICLES: Partial<Record<CallingAbilityId, readonly ParticleLayer[]>> = {
+  tank_bulwark: [
+    layer("glow", steel, 22, .85, .34, .88, .3, .55, .5, .75),
+    layer("spark", silver, 12, .62, .11, .92, .45, .55, .52, .85),
+  ],
+  mage_mana_shield: [
+    layer("glow", azure, 24, 1.05, .38, .92, .28, .65, .48, .75),
+    layer("spark", silver, 12, .7, .12, .9, .55, .8, .52, .95),
+  ],
+  assassin_vanish: [
+    layer("smoke", shadow, 28, 1.2, .62, .68, .42, .72, .44, .42),
+    layer("streak", violet, 9, .52, .22, .45, .65, .32, .4, .8),
+  ],
+  thief_smoke_bomb: [
+    layer("smoke", [.18, .22, .21], 52, 1.45, 1.18, 1.75, .42, .42, .82, .42),
+    layer("smoke", [.35, .4, .38], 30, 1.15, .86, 1.45, .34, .62, .68, .78),
+    layer("glow", green, 9, .72, .19, .95, .38, .45, .4, .38),
+  ],
+  thief_decoy: [
+    layer("smoke", [.22, .34, .27], 34, 1.1, .72, .72, .32, .48, .58, .7),
+    layer("glow", green, 18, .86, .28, .48, .24, .42, .44, 1.05),
+  ],
+  healer_resurrection: [
+    layer("glow", warmWhite, 38, 1.35, .42, .78, .25, 1.5, .67, .5),
+    layer("streak", gold, 14, .85, .3, .6, .3, 1.8, .72, .45),
+  ],
+};
+
 export const callingParticleLifetime = (layers: readonly ParticleLayer[]): number =>
   Math.max(...layers.map(entry => entry.life + entry.count * .012 + .2));
