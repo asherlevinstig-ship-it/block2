@@ -192,6 +192,9 @@ describe("hotbar Calling abilities", () => {
     internal.resurrectionWindows.set("ally", 22_000);
     internal.handleCallingAbilityEquip(client, { abilityId: "healer_resurrection" });
     internal.handleCallingAbility(client, { requestId: "rescue" });
+    expect(broadcast).toHaveBeenCalledWith("healer:resurrection-channel", {
+      casterId: "hero", targetId: "ally", until: 12_500,
+    });
     expect(ally.health).toBe(0);
     internal.resolvePendingResurrections(12_499);
     expect(ally.health).toBe(0);
@@ -204,7 +207,7 @@ describe("hotbar Calling abilities", () => {
   });
 
   it("interrupts Resurrection on movement and never revives an outsider", () => {
-    const { room, internal, player, client } = fixture("healer", 140);
+    const { room, internal, player, client, broadcast } = fixture("healer", 140);
     const ally = new PlayerState(); Object.assign(ally, { x: 52, y: 8, z: 50, health: 0 });
     room.state.players.set("ally", ally);
     internal.resurrectionWindows.set("ally", 22_000);
@@ -216,6 +219,7 @@ describe("hotbar Calling abilities", () => {
     player.x += 1;
     internal.resolvePendingResurrections(11_000);
     expect(internal.pendingResurrections.size).toBe(0);
+    expect(broadcast).toHaveBeenCalledWith("healer:resurrection-interrupted", { casterId: "hero", targetId: "ally" });
     internal.resolvePendingResurrections(13_000);
     expect(ally.health).toBe(0);
   });
@@ -285,6 +289,9 @@ describe("hotbar Calling abilities", () => {
     internal.handleCallingAbility(client, { requestId: "heal-ally" });
     expect(ally.health).toBe(4); expect(player.health).toBe(2);
     expect(client.send).toHaveBeenCalledWith("calling:ability", expect.objectContaining({ abilityId: "healer_field_mend", detail: expect.stringContaining("+3 HP") }));
+    expect(broadcast).toHaveBeenCalledWith("healer:field-mend", {
+      casterId: "hero", targetId: "ally", restored: 3, staminaRestored: 0,
+    });
     expect(broadcast).toHaveBeenCalledWith("calling:ability:effect", expect.objectContaining({ targetId: "ally", x: ally.x, z: ally.z }));
     expect(internal.combatContributions.eligiblePersistent("northwatch-watchbreaker", boss, room.state.players)).toEqual(["hero"]);
     internal.defeatMob("northwatch-watchbreaker", boss, "ally", 10_100);
@@ -299,6 +306,18 @@ describe("hotbar Calling abilities", () => {
     internal.handleCallingAbility(client, { requestId: "self-heal" });
     expect(player.health).toBe(5);
     expect(internal.callingAbilityReadyAt.get("hero")).toBe(25_000);
+  });
+
+  it("reports every Renewal recipient with the actual health restored", () => {
+    const { room, internal, player, client, broadcast } = fixture("healer", 70);
+    player.health = 3;
+    const ally = new PlayerState(); Object.assign(ally, { x: 52, y: 8, z: 50, health: 1, maxHealth: 5 });
+    room.state.players.set("ally", ally);
+    internal.handleCallingAbilityEquip(client, { abilityId: "healer_renewal" });
+    internal.handleCallingAbility(client, { requestId: "renew-party" });
+    expect(broadcast).toHaveBeenCalledWith("healer:renewal-targets", {
+      casterId: "hero", targets: [{ targetId: "hero", restored: 2 }, { targetId: "ally", restored: 3 }],
+    });
   });
 
   it("Field Medic restores stamina to an injured ally", () => {

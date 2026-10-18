@@ -5054,6 +5054,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.callingAbilityReadyAt.set(client.sessionId, cooldownUntil);
       this.pendingResurrections.set(client.sessionId, { targetId: target[0], completesAt: now + 2_500,
         x: player.x, y: player.y, z: player.z, health: player.health });
+      this.broadcast("healer:resurrection-channel", { casterId: client.sessionId, targetId: target[0], until: now + 2_500 });
       client.send("calling:ability", { requestId: parsed.data.requestId, pathId, abilityId,
         ability: definition.name, detail: `CHANNELING · ${target[1].name || "ALLY"} · 2.5s`, cooldownUntil,
         durationMs: 2_500, slot } satisfies CallingAbilityUpdate);
@@ -5172,13 +5173,16 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       detail = `NEXT ${charges > 1 ? `${charges} POWERS` : "POWER"} +${(rank >= 4 ? 4 : 3) + (augmentId === "overload_volatile_core" ? 2 : 0)} DAMAGE`;
     } else if (abilityId === "healer_renewal") {
       let healed = 0, allies = 0;
+      const renewed: { targetId: string; restored: number }[] = [];
       for (const [targetId, target] of renewalTargets) {
         const restored = Math.min(2 + Number(rank >= 2), target.maxHealth - target.health);
         target.health += restored; healed += restored; allies += 1;
+        renewed.push({ targetId, restored });
         if (targetId !== client.sessionId) this.clients.find(candidate => candidate.sessionId === targetId)
           ?.send("chat:notice", `${player.name || "A HEALER"} used Renewal · +${restored} HP.`);
       }
       detail = `${allies} ALL${allies === 1 ? "Y" : "IES"} RESTORED · +${healed} HP`;
+      this.broadcast("healer:renewal-targets", { casterId: client.sessionId, targets: renewed });
     } else if (abilityId === "healer_field_mend") {
       const [targetId, target] = healTarget!;
       const specialization = this.buildSpecializationFor(player, "healer");
@@ -5192,6 +5196,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const staminaRestored = Math.round(target.stamina - staminaBefore);
       effectTargetId = targetId; effectPosition = target;
       detail = `${targetId === client.sessionId ? "SELF" : target.name || "ALLY"} +${restored} HP${staminaRestored ? ` · +${staminaRestored} STAMINA` : ""}`;
+      this.broadcast("healer:field-mend", { casterId: client.sessionId, targetId, restored, staminaRestored });
       if (targetId !== client.sessionId) this.clients.find(candidate => candidate.sessionId === targetId)
         ?.send("chat:notice", `${player.name || "A HEALER"} used Field Mend · +${restored} HP${staminaRestored ? ` · +${staminaRestored} stamina` : ""}.`);
       let engagedBoss = false;
@@ -6158,6 +6163,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (!valid) {
         this.pendingResurrections.delete(casterId);
         this.clients.find(client => client.sessionId === casterId)?.send("chat:notice", "RESURRECTION INTERRUPTED · stay close and avoid damage.");
+        this.broadcast("healer:resurrection-interrupted", { casterId, targetId: cast.targetId });
         this.callingState(casterId, "healer", "healer_resurrection", "", { clear: true });
         continue;
       }

@@ -4417,6 +4417,7 @@ interface CallingPersistentVisual {
   abilityId: CallingAbilityId;
 }
 const callingPersistentVisuals = new Map<string, CallingPersistentVisual>();
+const healerAllyCues = new Map<string, { root: pc.Entity; materials: pc.StandardMaterial[]; fallen: boolean }>();
 const powerDebrisVisuals: PowerDebrisVisual[] = [];
 const markPayoffVisuals: MarkPayoffVisual[] = [];
 const brambleSnareVisuals = new Map<string, BrambleSnareVisual>();
@@ -5027,6 +5028,87 @@ function createMageOverloadImpact(message: { powerId: string; x: number; y: numb
       `OVERLOADED · +${message.bonusDamage}`, "damage", false, [1, .34, .86]);
   }
   combatAudio.play("seismicImpact");
+}
+
+function createHealerLink(casterId: string, targetId: string, abilityId: "healer_field_mend" | "healer_resurrection", lifetimeMs: number): void {
+  const caster = casterId === room?.sessionId ? localPlayer : remotePlayers.get(casterId)?.entity;
+  const target = targetId === room?.sessionId ? localPlayer : remotePlayers.get(targetId)?.entity;
+  if (!caster || !target) return;
+  const start = caster.getPosition(), end = target.getPosition();
+  const dx = end.x - start.x, dz = end.z - start.z, yaw = Math.atan2(dx, dz) * 180 / Math.PI;
+  const root = new pc.Entity(abilityId === "healer_resurrection" ? "resurrection-life-link" : "field-mend-life-link"); app.root.addChild(root);
+  const life = callingSignatureMaterial(new pc.Color(.28, 1, .66), .82, 1.08);
+  const blessing = callingSignatureMaterial(new pc.Color(1, .9, .45), .92, 1.22);
+  for (let index = 1; index <= 9; index += 1) {
+    const progress = index / 10;
+    addCallingSignaturePrimitive(root, abilityId === "healer_resurrection" ? "resurrection-link-segment" : "mend-link-segment",
+      "box", index % 3 === 0 ? blessing : life, [.035, .035, .14],
+      [start.x + dx * progress, start.y + .85 + (end.y - start.y) * progress + Math.sin(progress * Math.PI) * .34,
+        start.z + dz * progress], [0, yaw, 0]);
+  }
+  callingImpactVisuals.push({ root, expiresAt: performance.now() + lifetimeMs, materials: [life, blessing], abilityId });
+}
+
+function createFieldMendFeedback(message: { casterId: string; targetId: string; restored: number; staminaRestored: number }): void {
+  createHealerLink(message.casterId, message.targetId, "healer_field_mend", 850);
+  const target = message.targetId === room?.sessionId ? localPlayer : remotePlayers.get(message.targetId)?.entity;
+  if (!target) return;
+  const position = target.getPosition();
+  createRangedPopup(new pc.Vec3(position.x, position.y + 2.05, position.z),
+    `MENDED · +${message.restored} HP${message.staminaRestored ? ` · +${message.staminaRestored} ST` : ""}`, "landmark", false, [.42, 1, .7]);
+}
+
+function createRenewalFeedback(targets: { targetId: string; restored: number }[]): void {
+  for (const entry of targets) {
+    const target = entry.targetId === room?.sessionId ? localPlayer : remotePlayers.get(entry.targetId)?.entity;
+    if (!target) continue;
+    const root = new pc.Entity("renewal-ally-pulse"); root.setLocalPosition(0, .03, 0); target.addChild(root);
+    const life = callingSignatureMaterial(new pc.Color(.3, 1, .62), .72, .9);
+    const gold = callingSignatureMaterial(new pc.Color(1, .86, .38), .88, 1.15);
+    for (let index = 0; index < 10; index += 1) {
+      const angle = index / 10 * Math.PI * 2;
+      addCallingSignaturePrimitive(root, "renewal-recipient-ring", "box", index % 3 === 0 ? gold : life,
+        [.045, .03, .2], [Math.sin(angle) * .7, .08, Math.cos(angle) * .7], [0, angle * 180 / Math.PI, 0]);
+    }
+    callingImpactVisuals.push({ root, expiresAt: performance.now() + 820, materials: [life, gold], abilityId: "healer_renewal" });
+    const position = target.getPosition();
+    createRangedPopup(new pc.Vec3(position.x, position.y + 2, position.z), `RENEWED · +${entry.restored} HP`, "landmark", false, [.46, 1, .68]);
+  }
+}
+
+function createResurrectionInterrupted(casterId: string, targetId: string): void {
+  const caster = casterId === room?.sessionId ? localPlayer : remotePlayers.get(casterId)?.entity;
+  const target = targetId === room?.sessionId ? localPlayer : remotePlayers.get(targetId)?.entity;
+  const anchor = caster ?? target; if (!anchor) return;
+  const position = anchor.getPosition();
+  createRangedPopup(new pc.Vec3(position.x, position.y + 2.1, position.z), "RESURRECTION · INTERRUPTED", "enemy", false, [1, .38, .38]);
+  combatAudio.play("warning");
+}
+
+function updateHealerAllyCues(players: Map<string, NetworkPlayer>): void {
+  const active = localBuildPathId === "healer";
+  const keep = new Set<string>();
+  if (active && room) for (const [id, player] of players) {
+    if (id === room.sessionId || player.maxHealth <= 0) continue;
+    const fallen = player.health <= 0, critical = !fallen && player.health / player.maxHealth <= .4;
+    const remote = remotePlayers.get(id);
+    if ((!fallen && !critical) || !remote) continue;
+    keep.add(id);
+    const existing = healerAllyCues.get(id);
+    if (existing?.fallen === fallen) continue;
+    if (existing) { existing.root.destroy(); existing.materials.forEach(material => material.destroy()); healerAllyCues.delete(id); }
+    const root = new pc.Entity(fallen ? "healer-fallen-ally-cue" : "healer-critical-ally-cue");
+    root.setLocalPosition(0, 2.25, 0); remote.entity.addChild(root);
+    const material = callingSignatureMaterial(fallen ? new pc.Color(1, .72, .25) : new pc.Color(1, .28, .28), .9, 1.2);
+    addCallingSignaturePrimitive(root, fallen ? "fallen-ally-beacon-vertical" : "critical-ally-cross-vertical", "box", material,
+      fallen ? [.055, .32, .055] : [.055, .24, .045], [0, .08, 0]);
+    addCallingSignaturePrimitive(root, fallen ? "fallen-ally-beacon-diamond" : "critical-ally-cross-horizontal",
+      fallen ? "sphere" : "box", material, fallen ? [.14, .14, .08] : [.2, .055, .045], [0, fallen ? .45 : .08, 0]);
+    healerAllyCues.set(id, { root, materials: [material], fallen });
+  }
+  for (const [id, cue] of healerAllyCues) if (!keep.has(id)) {
+    cue.root.destroy(); cue.materials.forEach(material => material.destroy()); healerAllyCues.delete(id);
+  }
 }
 
 function createCallingImpact(effect: CallingAbilityEffect): void {
@@ -11577,12 +11659,14 @@ app.on("update", (dt: number) => {
     lastNameplateSampleAt = now;
     const nameplates: { id: string; name: string; x: number; y: number; visible: boolean; local: boolean;
       healHealth?: number; healMaxHealth?: number; healTarget?: boolean }[] = [];
-    const healerActive = localCallingAbilityId === "healer_field_mend";
+    const healerActive = localBuildPathId === "healer";
+    const fieldMendReady = localCallingAbilityId === "healer_field_mend";
     const healRoom = room;
     const healCaster = localPlayer.getPosition();
     const healCandidates: HealCandidate[] = healRoom ? [...healRoom.state.players as Map<string, NetworkPlayer>].map(([id, player]) =>
       ({ id, x: player.x, y: player.y, z: player.z, health: player.health, maxHealth: player.maxHealth })) : [];
-    const healTargetId = healerActive && healRoom && Date.now() >= localCallingCooldownUntil
+    if (healRoom) updateHealerAllyCues(healRoom.state.players as Map<string, NetworkPlayer>);
+    const healTargetId = fieldMendReady && healRoom && Date.now() >= localCallingCooldownUntil
       ? fieldMendTarget(healRoom.sessionId, healCaster, healCandidates, candidate =>
       candidate.id === healRoom.sessionId || enemyCueLineClear(
         { x: healCaster.x, y: healCaster.y + .72, z: healCaster.z },
@@ -11598,7 +11682,8 @@ app.on("update", (dt: number) => {
         && Math.hypot(pose.x - eye.x, pose.z - eye.z) <= 24 && screen.z > 0 && screen.x >= 0 && screen.x <= rect.width && screen.y >= 0 && screen.y <= rect.height
         && (isLocal || enemyCueLineClear({ x: eye.x, y: eye.y + .8, z: eye.z }, { x: pose.x, y: pose.y + .8, z: pose.z }, readCollisionWorldBlock));
       const inHealRange = healerActive && !isLocal && Math.abs(pose.y - eye.y) <= 2.5
-        && Math.hypot(pose.x - eye.x, pose.z - eye.z) <= 8;
+        && Math.hypot(pose.x - eye.x, pose.z - eye.z) <= 8
+        && (player.health <= 0 || player.health / Math.max(1, player.maxHealth) <= .4 || id === healTargetId);
       nameplates.push({ id, name: player.name, x: rect.left + screen.x, y: rect.top + screen.y, visible: Boolean(visible), local: isLocal,
         healHealth: inHealRange ? player.health : undefined, healMaxHealth: inHealRange ? player.maxHealth : undefined,
         healTarget: id === healTargetId });
@@ -11978,6 +12063,18 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   });
   room.onMessage("mage:overload-impact", (message: { casterId: string; powerId: string; x: number; y: number; z: number; bonusDamage: number; targetIds: string[] }) => {
     createMageOverloadImpact(message);
+  });
+  room.onMessage("healer:field-mend", (message: { casterId: string; targetId: string; restored: number; staminaRestored: number }) => {
+    createFieldMendFeedback(message);
+  });
+  room.onMessage("healer:renewal-targets", (message: { casterId: string; targets: { targetId: string; restored: number }[] }) => {
+    createRenewalFeedback(message.targets);
+  });
+  room.onMessage("healer:resurrection-channel", (message: { casterId: string; targetId: string; until: number }) => {
+    createHealerLink(message.casterId, message.targetId, "healer_resurrection", Math.max(300, message.until - Date.now()));
+  });
+  room.onMessage("healer:resurrection-interrupted", (message: { casterId: string; targetId: string }) => {
+    createResurrectionInterrupted(message.casterId, message.targetId);
   });
   room.onMessage("assassin:mark-strike", (message: { casterId: string; mobId: string; bonusDamage: number; empowered: boolean; defeated: boolean }) => {
     const mob = mobVisuals.get(message.mobId);
@@ -12727,6 +12824,8 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     pendingPings.clear();
     serverClock = createServerClock(performance.now(), Date.now());
     status.textContent = "Disconnected from the world.";
+    for (const cue of healerAllyCues.values()) { cue.root.destroy(); cue.materials.forEach(material => material.destroy()); }
+    healerAllyCues.clear();
     for (const remote of remotePlayers.values()) remote.entity.destroy();
     remotePlayers.clear();
     playerStealthUntil.clear();
