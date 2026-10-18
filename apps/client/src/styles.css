@@ -3360,10 +3360,22 @@ html.onboarding-mode-lesson #touch-mode-button { border-color: #ffe59a; box-shad
 #minimap[data-expanded="true"] .minimap-legend,
 #minimap[data-expanded="true"] .minimap-dungeon-legend,
 #minimap[data-expanded="true"] .minimap-danger { max-width: 520px; margin-right: auto; margin-left: auto; }
+.world-map-toolbar { display: none; }
+#minimap[data-expanded="true"] .world-map-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; max-width: 520px; margin: 7px auto 2px; }
+.world-map-filters, .world-map-zoom { display: flex; gap: 5px; flex-wrap: wrap; }
+.world-map-toolbar button { padding: 6px 8px; border: 1px solid #a8b99a55; border-radius: 6px; background: #13231d; color: #91a499; font: 800 9px system-ui; cursor: pointer; }
+.world-map-toolbar button[aria-pressed="true"] { border-color: #d9c76f99; background: #293421; color: #fff0a9; }
+.world-map-toolbar button:hover, .world-map-toolbar button:focus-visible { border-color: #ffe28e; color: #fff4c4; }
+#minimap[data-expanded="true"] .minimap-viewport { border-radius: 10px; cursor: grab; touch-action: none; }
+#minimap[data-expanded="true"] .minimap-viewport:active { cursor: grabbing; }
+#minimap[data-expanded="true"] #minimap-canvas { border-radius: 8px; }
+#minimap[data-expanded="true"] .minimap-viewport::after { border-radius: 8px; box-shadow: inset 0 0 18px 2px #0208078f; }
 @media (max-width: 760px) {
   #minimap:not([data-expanded="true"]) { width: 194px; }
   #minimap:not([data-expanded="true"]) .minimap-viewport { width: 168px; height: 168px; }
   #minimap:not([data-expanded="true"]) #minimap-canvas { width: 168px; height: 168px; }
   #minimap[data-expanded="true"] { width: calc(100vw - 16px); max-height: calc(100vh - 16px); padding: 11px; }
   #minimap[data-expanded="true"] .minimap-viewport { width: min(calc(100vw - 52px), calc(100vh - 285px)); height: min(calc(100vw - 52px), calc(100vh - 285px)); }
+  #minimap[data-expanded="true"] .world-map-toolbar { align-items: stretch; flex-direction: column; }
+  .world-map-filters, .world-map-zoom { justify-content: center; }
 }

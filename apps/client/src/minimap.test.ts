@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { activeEliteMapTargets, clusterThreatMapTargets, discoveredMiniBossTargets, discoverMiniBosses, miniBossDiscoveryKey, mineralStatusLabel, discoverChampion, CHAMPION_WAYPOINT, ASHEN_SPIRE_WAYPOINT, MISTFEN_WAYPOINT, WARDEN_GATE_WAYPOINT, discoverAshenSpire, discoverMistfen, discoverRoadsideLandmarks, roadsideDiscoveryKey, isPathChampionName, mapMarkerLabelVisible, nearbyDiscoveredMiniBossTargets, nearbyThreatMapTarget, THREAT_GUIDANCE_RADIUS } from "./minimap.js";
 import { ROADSIDE_DISCOVERIES, SURFACE_HEIGHT } from "@blockcraft/voxel-world";
-import { HOME_WAYPOINT, MAP_DEPOSITS, MAP_SIZE, DISCOVERY_RADIUS, depositKey, discoverDeposits, dungeonMapPoints, dungeonPingAtMapClick, knownWaypoints, mapPoint, mapFacing, parseDiscoveries, parseExploredSurfaceCells, parseVisitedSurfaceRegions, revealSurfaceCells, surfaceCellExplored, surfaceMapColorAt, surfaceMapRegionAt, waypointAtMapPoint, waypointDirection } from "./minimap.js";
+import { HOME_WAYPOINT, MAP_DEPOSITS, MAP_SIZE, DISCOVERY_RADIUS, clampWorldMapRange, depositKey, discoverDeposits, dungeonMapPoints, dungeonPingAtMapClick, knownWaypoints, mapPoint, mapFacing, panWorldMapCenter, parseDiscoveries, parseExploredSurfaceCells, parseVisitedSurfaceRegions, revealSurfaceCells, surfaceCellExplored, surfaceMapColorAt, surfaceMapRegionAt, waypointAtMapPoint, waypointDirection } from "./minimap.js";
 
 describe("north-up explorer minimap", () => {
   it("draws authored terrain and roads rather than only distance rings", () => {
@@ -156,6 +156,16 @@ describe("north-up explorer minimap", () => {
     expect(mapFacing(180).y).toBeCloseTo(-1);
     expect(mapFacing(-90).x).toBeCloseTo(-1);
     expect(mapFacing(450).x).toBeCloseTo(mapFacing(90).x);
+  });
+  it("pans and zooms the expanded world map without following the player", () => {
+    expect(clampWorldMapRange(20)).toBe(55);
+    expect(clampWorldMapRange(150)).toBe(150);
+    expect(clampWorldMapRange(500)).toBe(220);
+    expect(panWorldMapCenter({ x: 20, z: 30 }, { x: 100, z: -50 }, 110, 220))
+      .toEqual({ x: -80, z: 80 });
+    const fixedCenter = { x: 20, z: 30 };
+    expect(mapPoint(fixedCenter, { x: 20, z: 30 }, 150)).toEqual({ x: MAP_SIZE / 2, y: MAP_SIZE / 2, offscreen: false });
+    expect(mapPoint(fixedCenter, { x: 30, z: 30 }, 150).x).toBeGreaterThan(MAP_SIZE / 2);
   });
   it("keeps distant town markers on the map edge without reversing their bearing", () => {
     const point = mapPoint({ x: 200, z: 200 }, { x: 8.5, z: 8.5 });

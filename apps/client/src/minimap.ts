@@ -186,6 +186,16 @@ export const ASHEN_SPIRE_WAYPOINT: Waypoint = { ...ASHEN_SPIRE_POSITION, id: "as
 export const WARDEN_GATE_WAYPOINT: Waypoint = { ...REALM_WARDEN_GATE_POSITION, id: "warden-gate", name: "Warden Gate · Ascendant Challenge" };
 export const MISTFEN_WAYPOINT: Waypoint = { ...MISTFEN_BEHEMOTH_HOME, id: "mistfen-marsh", name: "Mistfen Marsh · LV 5–9" };
 export const GREENWOOD_WAYPOINT: Waypoint = { ...GREENWOOD_CRAWLER_HOMES[0], id: "greenwood-camp", name: "Greenwood Camp · LV 2–5" };
+const SURFACE_REGION_LABELS: readonly (Position & { id: string; name: string })[] = [
+  { ...HOME_WAYPOINT, id: "town", name: "TOWN OF BEGINNINGS" },
+  { ...GREENWOOD_WAYPOINT, id: "greenwood", name: "GREENWOOD" },
+  { ...MISTFEN_WAYPOINT, id: "mistfen", name: "MISTFEN MARSH" },
+  { ...ASHEN_SPIRE_WAYPOINT, id: "ashen", name: "ASHEN REACH" },
+  { x: 8.5, z: 52.5, id: "causeway", name: "SOUTHERN CAUSEWAY" },
+  { x: 20.5, z: 70.5, id: "quarry", name: "SUNFALL QUARRY" },
+  { x: 2.5, z: 101.5, id: "redstone", name: "REDSTONE PIT" },
+  { x: 21.5, z: -60.5, id: "northwatch", name: "NORTHWATCH HIGHLANDS" },
+];
 export function discoverMistfen(player: Position & { y: number }, discovered: Set<string>): boolean {
   if (discovered.has(MISTFEN_WAYPOINT.id) || player.y < SURFACE_HEIGHT - 1
     || Math.hypot(player.x - MISTFEN_WAYPOINT.x, player.z - MISTFEN_WAYPOINT.z) > 22) return false;
@@ -236,6 +246,13 @@ export function mapPoint(player: Position, point: Position, range = MAP_RANGE): 
   const limit = MAP_SIZE / 2 - 14;
   const factor = Math.min(1, limit / Math.max(Math.abs(dx), Math.abs(dz), 0.001));
   return { x: MAP_SIZE / 2 + dx * factor, y: MAP_SIZE / 2 + dz * factor, offscreen: factor < 1 };
+}
+export function clampWorldMapRange(range: number): number {
+  return Math.max(55, Math.min(220, range));
+}
+export function panWorldMapCenter(center: Position, deltaPixels: Position, range: number, viewportPixels: number): Position {
+  const worldPerPixel = range * 2 / Math.max(1, viewportPixels);
+  return { x: center.x - deltaPixels.x * worldPerPixel, z: center.z - deltaPixels.z * worldPerPixel };
 }
 
 export function parseDiscoveries(raw: string | null): Set<string> {
@@ -328,8 +345,21 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
   const guideDistance = document.querySelector<HTMLElement>("#waypoint-distance")!;
   const guideArrow = document.querySelector<HTMLElement>("#waypoint-arrow")!;
   const tooltip = document.querySelector<HTMLElement>("#minimap-tooltip")!;
+  type MapFilter = "towns" | "resources" | "discoveries" | "threats";
+  const mapFilters = new Map<MapFilter, boolean>([["towns", true], ["resources", true], ["discoveries", true], ["threats", true]]);
+  let worldMapCenter: Position | null = null;
+  let worldMapRange = 150;
+  let wasExpanded = false;
+  let dragStart: { clientX: number; clientY: number; center: Position } | null = null;
+  let dragged = false;
+  const worldMapExpanded = () => panel?.dataset.expanded === "true" && !dungeonState
+    && lastPlayer !== null && caveDepth(lastPlayer.y) <= 0;
   const currentMapRange = () => panel?.dataset.expanded === "true" && !dungeonState
-    && lastPlayer && caveDepth(lastPlayer.y) <= 0 ? 150 : MAP_RANGE;
+    && lastPlayer && caveDepth(lastPlayer.y) <= 0 ? worldMapRange : MAP_RANGE;
+  const currentMapCenter = (): Position | null => worldMapExpanded() ? worldMapCenter ?? lastPlayer : lastPlayer;
+  const filterEnabled = (filter: MapFilter) => !worldMapExpanded() || mapFilters.get(filter) !== false;
+  const waypointFilter = (target: Waypoint): MapFilter => target.id === "home" || target.id === "smith" ? "towns"
+    : target.id.includes(",") ? "resources" : target.id === "equipment-hunt" ? "threats" : "discoveries";
   const setWaypoint = (target: Waypoint | null) => {
     surfaceGuide = false;
     surfaceButton.setAttribute("aria-pressed", "false");
@@ -368,26 +398,42 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
     destinations.blur();
   });
   document.querySelector<HTMLButtonElement>("#waypoint-clear")!.addEventListener("click", () => setWaypoint(null));
+  for (const button of panel?.querySelectorAll<HTMLButtonElement>("[data-map-filter]") ?? []) button.addEventListener("click", () => {
+    const filter = button.dataset.mapFilter as MapFilter;
+    const enabled = !(mapFilters.get(filter) ?? true);
+    mapFilters.set(filter, enabled); button.setAttribute("aria-pressed", String(enabled)); lastUpdate = -Infinity;
+  });
+  const changeWorldMapZoom = (factor: number) => {
+    worldMapRange = clampWorldMapRange(worldMapRange * factor); lastUpdate = -Infinity; tooltip.hidden = true;
+  };
+  document.querySelector<HTMLButtonElement>("#world-map-zoom-in")!.addEventListener("click", () => changeWorldMapZoom(.78));
+  document.querySelector<HTMLButtonElement>("#world-map-zoom-out")!.addEventListener("click", () => changeWorldMapZoom(1.28));
+  document.querySelector<HTMLButtonElement>("#world-map-center")!.addEventListener("click", () => {
+    if (lastPlayer) worldMapCenter = { x: lastPlayer.x, z: lastPlayer.z };
+    lastUpdate = -Infinity;
+  });
   const inspectableTargets = () => {
-    if (!lastPlayer) return [] as { point: Position; name: string; kind: string }[];
+    if (!lastPlayer) return [] as { point: Position; name: string; kind: string; filter: MapFilter }[];
     const nearbyThreat = nearbyThreatMapTarget(lastPlayer, threat);
     const combatTargets = [...nearbyDiscoveredMiniBossTargets(lastPlayer, elites, discovered), ...activeEliteMapTargets(lastPlayer, elites)]
       .filter((target, index, values) => values.findIndex(candidate => candidate.id === target.id) === index);
     return [
-      ...navigationTargets().map(target => ({ point: target, name: target.name, kind: target.id === "home" ? "SAFE TOWN" : target.id === "smith" ? "BLACKSMITH" : target.id.includes(",") ? "RESOURCE DEPOSIT" : "DESTINATION" })),
+      ...navigationTargets().map(target => ({ point: target, name: target.name, kind: target.id === "home" ? "SAFE TOWN" : target.id === "smith" ? "BLACKSMITH" : target.id.includes(",") ? "RESOURCE DEPOSIT" : "DESTINATION", filter: waypointFilter(target) })),
       ...ROADSIDE_DISCOVERIES.filter(target => discovered.has(roadsideDiscoveryKey(target.id)))
-        .map(target => ({ point: target, name: target.name, kind: roadsideClaims.has(target.id) ? "DISCOVERY · COMPLETE" : "ROADSIDE DISCOVERY" })),
-      ...combatTargets.map(target => ({ point: target, name: target.name, kind: target.isMiniBoss ? "AREA LEADER" : "NEARBY ELITE" })),
-      ...(nearbyThreat ? [{ point: nearbyThreat, name: nearbyThreat.name, kind: "REALM THREAT" }] : []),
-      ...(reliquary ? [{ point: reliquary, name: reliquary.name, kind: "ASHEN RELIQUARY" }] : []),
-    ];
+        .map(target => ({ point: target, name: target.name, kind: roadsideClaims.has(target.id) ? "DISCOVERY · COMPLETE" : "ROADSIDE DISCOVERY", filter: "discoveries" as const })),
+      ...combatTargets.map(target => ({ point: target, name: target.name, kind: target.isMiniBoss ? "AREA LEADER" : "NEARBY ELITE", filter: "threats" as const })),
+      ...(nearbyThreat ? [{ point: nearbyThreat, name: nearbyThreat.name, kind: "REALM THREAT", filter: "threats" as const }] : []),
+      ...(reliquary ? [{ point: reliquary, name: reliquary.name, kind: "ASHEN RELIQUARY", filter: "discoveries" as const }] : []),
+    ].filter(target => filterEnabled(target.filter));
   };
   const inspectAt = (clientX: number, clientY: number) => {
     if (!lastPlayer) { tooltip.hidden = true; return; }
     const bounds = canvas.getBoundingClientRect();
     const x = (clientX - bounds.left) * MAP_SIZE / bounds.width;
     const y = (clientY - bounds.top) * MAP_SIZE / bounds.height;
-    const target = inspectableTargets().map(entry => ({ entry, mapped: mapPoint(lastPlayer!, entry.point, currentMapRange()) }))
+    const center = currentMapCenter();
+    if (!center) { tooltip.hidden = true; return; }
+    const target = inspectableTargets().map(entry => ({ entry, mapped: mapPoint(center, entry.point, currentMapRange()) }))
       .filter(candidate => !candidate.mapped.offscreen && Math.hypot(candidate.mapped.x - x, candidate.mapped.y - y) <= 13)
       .sort((a, b) => Math.hypot(a.mapped.x - x, a.mapped.y - y) - Math.hypot(b.mapped.x - x, b.mapped.y - y))[0];
     if (!target) { tooltip.hidden = true; return; }
@@ -398,9 +444,31 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
     tooltip.style.left = `${Math.min(bounds.width - 155, Math.max(4, clientX - bounds.left))}px`;
     tooltip.style.top = `${Math.max(34, clientY - bounds.top)}px`;
   };
-  canvas.addEventListener("pointermove", event => inspectAt(event.clientX, event.clientY));
+  canvas.addEventListener("pointerdown", event => {
+    if (!worldMapExpanded()) return;
+    worldMapCenter ??= lastPlayer ? { x: lastPlayer.x, z: lastPlayer.z } : null;
+    if (!worldMapCenter) return;
+    dragStart = { clientX: event.clientX, clientY: event.clientY, center: { ...worldMapCenter } };
+    dragged = false; canvas.setPointerCapture(event.pointerId); tooltip.hidden = true;
+  });
+  canvas.addEventListener("pointermove", event => {
+    if (dragStart && worldMapExpanded()) {
+      const dx = event.clientX - dragStart.clientX, dz = event.clientY - dragStart.clientY;
+      if (Math.hypot(dx, dz) > 3) dragged = true;
+      worldMapCenter = panWorldMapCenter(dragStart.center, { x: dx, z: dz }, worldMapRange, canvas.getBoundingClientRect().width);
+      lastUpdate = -Infinity; tooltip.hidden = true; return;
+    }
+    inspectAt(event.clientX, event.clientY);
+  });
+  canvas.addEventListener("pointerup", event => { dragStart = null; if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId); });
+  canvas.addEventListener("pointercancel", () => { dragStart = null; });
   canvas.addEventListener("pointerleave", () => { tooltip.hidden = true; });
+  canvas.addEventListener("wheel", event => {
+    if (!worldMapExpanded()) return;
+    event.preventDefault(); changeWorldMapZoom(event.deltaY < 0 ? .86 : 1.16);
+  }, { passive: false });
   canvas.addEventListener("click", event => {
+    if (dragged) { dragged = false; return; }
     inspectAt(event.clientX, event.clientY);
     if (!lastPlayer) return;
     const bounds = canvas.getBoundingClientRect();
@@ -411,11 +479,12 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
       if (point) pingHandler?.(point.x, point.z);
       return;
     }
-    const huntWaypoint = equipmentHunt ? navigationTargets().find(target => target.id === "equipment-hunt") ?? null : null;
     const range = currentMapRange();
-    const huntPoint = huntWaypoint ? mapPoint(lastPlayer, huntWaypoint, range) : null;
-    const target = huntWaypoint && huntPoint && Math.hypot(huntPoint.x - x, huntPoint.y - y) <= 14
-      ? huntWaypoint : waypointAtMapPoint(lastPlayer, x, y, discovered, wardenGateUnlocked, range);
+    const center = currentMapCenter() ?? lastPlayer;
+    const visibleTargets = navigationTargets().filter(target => filterEnabled(waypointFilter(target)));
+    const target = visibleTargets.map(target => ({ target, point: mapPoint(center, target, range) }))
+      .filter(entry => !entry.point.offscreen && Math.hypot(entry.point.x - x, entry.point.y - y) <= 14)
+      .sort((a, b) => Math.hypot(a.point.x - x, a.point.y - y) - Math.hypot(b.point.x - x, b.point.y - y))[0]?.target ?? null;
     if (target) setWaypoint(target);
   });
   const ratio = Math.min(2, window.devicePixelRatio || 1);
@@ -605,6 +674,12 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
         return;
       }
       const underground = caveDepth(player.y) > 0;
+      const expanded = panel?.dataset.expanded === "true" && !underground;
+      if (expanded !== wasExpanded) {
+        wasExpanded = expanded;
+        worldMapCenter = expanded ? { x: player.x, z: player.z } : null;
+        worldMapRange = 150; tooltip.hidden = true;
+      }
       const nearbyThreat = nearbyThreatMapTarget(player, threat);
       if (!underground) {
         const region = surfaceMapRegionAt(player.x, player.z);
@@ -617,7 +692,8 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
           try { localStorage.setItem(exploredSurfaceKey, JSON.stringify([...exploredSurface])); } catch { /* Private browsing can disable storage. */ }
         }
       }
-      depthLabel.textContent = underground ? `UNDERGROUND · DEPTH ${caveDepth(player.y)} BLOCKS` : "SURFACE";
+      depthLabel.textContent = underground ? `UNDERGROUND · DEPTH ${caveDepth(player.y)} BLOCKS`
+        : expanded ? `WORLD MAP · ${Math.round(worldMapRange * 2)}M VIEW · DRAG TO PAN` : "SURFACE";
       surfaceButton.hidden = !underground;
       if (!underground && surfaceGuide) setWaypoint(null);
       const second = Math.floor(Date.now() / 1000);
@@ -662,14 +738,15 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
       ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
       ctx.clearRect(0, 0, MAP_SIZE, MAP_SIZE);
       ctx.fillStyle = underground ? "#071310" : "#482329"; ctx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
-      const mapRange = panel?.dataset.expanded === "true" && !underground ? 150 : MAP_RANGE;
+      const mapRange = expanded ? worldMapRange : MAP_RANGE;
+      const mapCenter = expanded ? worldMapCenter ?? player : player;
       const scale = MAP_SIZE / (mapRange * 2);
       if (!underground && surfaceTerrainContext && surfaceTerrainPixels) {
         const pixels = surfaceTerrainPixels.data;
         for (let py = 0; py < SURFACE_TERRAIN_SIZE; py++) {
-          const worldZ = player.z + (py * 2 + 1 - MAP_SIZE / 2) / scale;
+          const worldZ = mapCenter.z + (py * 2 + 1 - MAP_SIZE / 2) / scale;
           for (let px = 0; px < SURFACE_TERRAIN_SIZE; px++) {
-            const worldX = player.x + (px * 2 + 1 - MAP_SIZE / 2) / scale;
+            const worldX = mapCenter.x + (px * 2 + 1 - MAP_SIZE / 2) / scale;
             const color = surfaceCellExplored(worldX, worldZ, exploredSurface)
               ? surfaceMapColorAt(worldX, worldZ) : SURFACE_FOG_COLOR;
             const offset = (py * SURFACE_TERRAIN_SIZE + px) * 4;
@@ -679,6 +756,14 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
         surfaceTerrainContext.putImageData(surfaceTerrainPixels, 0, 0);
         ctx.imageSmoothingEnabled = false;
         ctx.drawImage(surfaceTerrainCanvas, 0, 0, MAP_SIZE, MAP_SIZE);
+        if (expanded && filterEnabled("discoveries")) for (const region of SURFACE_REGION_LABELS) {
+          if (!visitedRegions.has(region.id) || !surfaceCellExplored(region.x, region.z, exploredSurface)) continue;
+          const point = mapPoint(mapCenter, region, mapRange);
+          if (point.offscreen) continue;
+          ctx.font = "900 8px system-ui"; ctx.textAlign = "center"; ctx.lineWidth = 3;
+          ctx.strokeStyle = "#07110fcc"; ctx.fillStyle = "#f0e8b7cc";
+          ctx.strokeText(region.name, point.x, point.y - 12); ctx.fillText(region.name, point.x, point.y - 12);
+        }
       }
       if (underground) {
         ctx.fillStyle = "#354a49";
@@ -693,7 +778,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
         ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, MAP_SIZE); ctx.moveTo(0, i); ctx.lineTo(MAP_SIZE, i); ctx.stroke();
       }
       const marker = (point: Position, label: string, color: string, square: boolean, showAtEdge = false, glyph = "") => {
-        const p = mapPoint(player, point, mapRange);
+        const p = mapPoint(mapCenter, point, mapRange);
         if (p.offscreen && !showAtEdge) return;
         ctx.fillStyle = color; ctx.strokeStyle = "#071514"; ctx.lineWidth = 2;
         ctx.beginPath();
@@ -713,20 +798,22 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
       if (!underground) {
         const staticMarker = (target: Waypoint, shortLabel: string, color: string, glyph: string, edge = false) =>
           marker(target, mapMarkerLabelVisible(player, target, waypoint?.id === target.id) ? shortLabel : "", color, true, edge, glyph);
-        staticMarker(HOME_WAYPOINT, "HOME", "#75ee8a", "⌂", true);
-        staticMarker({ ...TOWN_BLACKSMITH_STALL_POSITION, id: "smith", name: "Blacksmith" }, "SMITH", "#ffd052", "⚒");
-        if (discovered.has(CHAMPION_WAYPOINT.id) && (waypoint?.id === CHAMPION_WAYPOINT.id
+        if (filterEnabled("towns")) {
+          staticMarker(HOME_WAYPOINT, "HOME", "#75ee8a", "⌂", !expanded);
+          staticMarker({ ...TOWN_BLACKSMITH_STALL_POSITION, id: "smith", name: "Blacksmith" }, "SMITH", "#ffd052", "⚒");
+        }
+        if (filterEnabled("threats") && discovered.has(CHAMPION_WAYPOINT.id) && (waypoint?.id === CHAMPION_WAYPOINT.id
           || Math.hypot(player.x - CHAMPION_WAYPOINT.x, player.z - CHAMPION_WAYPOINT.z) <= MAP_THREAT_DISPLAY_RADIUS))
           staticMarker(CHAMPION_WAYPOINT, "CHAMPION", "#ffcf65", "♛");
-        if (discovered.has(ASHEN_SPIRE_WAYPOINT.id)) staticMarker(ASHEN_SPIRE_WAYPOINT, "ASH SPIRE", "#ff8b58", "♜");
-        if (discovered.has(MISTFEN_WAYPOINT.id)) staticMarker(MISTFEN_WAYPOINT, "MISTFEN", "#8fe0bd", "≈");
-        if (discovered.has(GREENWOOD_WAYPOINT.id)) staticMarker(GREENWOOD_WAYPOINT, "GREENWOOD", "#bfea72", "♣");
-        if (wardenGateUnlocked) staticMarker(WARDEN_GATE_WAYPOINT, "WARDEN GATE", "#ffe06f", "◆", true);
-        if (equipmentHunt) staticMarker({ x: equipmentHunt.x, y: equipmentHunt.y, z: equipmentHunt.z,
+        if (filterEnabled("discoveries") && discovered.has(ASHEN_SPIRE_WAYPOINT.id)) staticMarker(ASHEN_SPIRE_WAYPOINT, "ASH SPIRE", "#ff8b58", "♜");
+        if (filterEnabled("discoveries") && discovered.has(MISTFEN_WAYPOINT.id)) staticMarker(MISTFEN_WAYPOINT, "MISTFEN", "#8fe0bd", "≈");
+        if (filterEnabled("discoveries") && discovered.has(GREENWOOD_WAYPOINT.id)) staticMarker(GREENWOOD_WAYPOINT, "GREENWOOD", "#bfea72", "♣");
+        if (filterEnabled("discoveries") && wardenGateUnlocked) staticMarker(WARDEN_GATE_WAYPOINT, "WARDEN GATE", "#ffe06f", "◆", !expanded);
+        if (filterEnabled("threats") && equipmentHunt) staticMarker({ x: equipmentHunt.x, y: equipmentHunt.y, z: equipmentHunt.z,
           id: "equipment-hunt", name: equipmentHunt.regionName }, "AFFIX HUNT", "#e59cff", "◆", true);
-        if (reliquary) marker(reliquary, mapMarkerLabelVisible(player, reliquary, false) ? "RELIQUARY" : "",
+        if (filterEnabled("discoveries") && reliquary) marker(reliquary, mapMarkerLabelVisible(player, reliquary, false) ? "RELIQUARY" : "",
           "#ff9a55", true, false, "R");
-        for (const landmark of ROADSIDE_DISCOVERIES) {
+        if (filterEnabled("discoveries")) for (const landmark of ROADSIDE_DISCOVERIES) {
           if (!discovered.has(roadsideDiscoveryKey(landmark.id))) continue;
           const encounter = ROADSIDE_ENCOUNTERS.some(site => site.id === landmark.id);
           const claimed = roadsideClaims.has(landmark.id);
@@ -737,7 +824,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
       const nearbyCombatTargets = [...nearbyDiscoveredMiniBossTargets(player, elites, discovered), ...activeEliteMapTargets(player, elites)]
         .filter((target, index, values) => values.findIndex(candidate => candidate.id === target.id) === index)
         .filter(target => !nearbyThreat || Math.hypot(target.x - nearbyThreat.x, target.z - nearbyThreat.z) > 1.5);
-      for (const cluster of clusterThreatMapTargets(nearbyCombatTargets)) {
+      if (filterEnabled("threats")) for (const cluster of clusterThreatMapTargets(nearbyCombatTargets)) {
         if (cluster.members.length > 1) marker(cluster, "", "#ffc95f", false, false, String(cluster.members.length));
         else {
           const target = cluster.members[0]!;
@@ -746,18 +833,18 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
             leader ? "#ffc95f" : "#e890ff", leader, false, leader ? "♛" : "★");
         }
       }
-      if (nearbyThreat) {
-        const p = mapPoint(player, nearbyThreat);
+      if (nearbyThreat && filterEnabled("threats")) {
+        const p = mapPoint(mapCenter, nearbyThreat, mapRange);
         const pulse = 9 + Math.sin(now / 150) * 2;
         ctx.beginPath(); ctx.arc(p.x, p.y, pulse, 0, Math.PI * 2); ctx.strokeStyle = "#ff806f"; ctx.lineWidth = 2; ctx.stroke();
         const championTarget = isPathChampionName(nearbyThreat.name);
           marker(nearbyThreat, nearbyThreat.name.slice(0, 20).toUpperCase(), championTarget ? "#ffd55f" : "#ff625f", championTarget, false, championTarget ? "♛" : "☠");
       }
       const mineTarget = { ...MINE_ENTRANCE, id: "mine", name: "Mine" };
-      marker(mineTarget, mapMarkerLabelVisible(player, mineTarget, waypoint?.id === "mine") ? "MINE" : "", "#ffe08c", true, false, "⛏");
+      if (underground || filterEnabled("discoveries")) marker(mineTarget, mapMarkerLabelVisible(player, mineTarget, waypoint?.id === "mine") ? "MINE" : "", "#ffe08c", true, false, "⛏");
       for (const chamber of caveState.chambers) marker(chamber,
         mapMarkerLabelVisible(player, chamber, false) ? `${chamber.label} · D${caveDepth(chamber.y)}` : "", "#a3dfeb", false, false, "○");
-      for (const deposit of underground ? [] : MAP_DEPOSITS) {
+      for (const deposit of underground || !filterEnabled("resources") ? [] : MAP_DEPOSITS) {
         if (!discovered.has(depositKey(deposit))) continue;
         const silver = deposit.block === Block.SilverOre;
         const recovering = statuses.get(depositKey(deposit))?.available === 0;
@@ -774,18 +861,20 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
         ctx.strokeStyle = "#ffe08c"; ctx.lineWidth = 2; ctx.stroke();
       }
       if (waypoint && !underground) {
-        const p = mapPoint(player, waypoint, mapRange);
-        ctx.beginPath(); ctx.moveTo(MAP_SIZE / 2, MAP_SIZE / 2); ctx.lineTo(p.x, p.y);
+        const p = mapPoint(mapCenter, waypoint, mapRange);
+        const playerPoint = mapPoint(mapCenter, player, mapRange);
+        ctx.beginPath(); ctx.moveTo(playerPoint.x, playerPoint.y); ctx.lineTo(p.x, p.y);
         ctx.strokeStyle = "#fff4ad88"; ctx.setLineDash([3, 4]); ctx.stroke(); ctx.setLineDash([]);
         ctx.beginPath(); ctx.arc(p.x, p.y, 10, 0, Math.PI * 2); ctx.strokeStyle = "#fff4ad"; ctx.lineWidth = 2; ctx.stroke();
       }
-      const x = MAP_SIZE / 2, y = MAP_SIZE / 2;
+      const playerPoint = mapPoint(mapCenter, player, mapRange);
+      const x = playerPoint.x, y = playerPoint.y;
       const facing = mapFacing(yaw), fx = facing.x, fy = facing.y;
       ctx.beginPath(); ctx.moveTo(x + fx * 9, y + fy * 9);
       ctx.lineTo(x - fx * 5 + fy * 5, y - fy * 5 - fx * 5);
       ctx.lineTo(x - fx * 5 - fy * 5, y - fy * 5 + fx * 5); ctx.closePath();
       ctx.fillStyle = "#fff8da"; ctx.strokeStyle = "#111b17"; ctx.lineWidth = 2; ctx.fill(); ctx.stroke();
-      ctx.fillStyle = "#fff8da"; ctx.textAlign = "center"; ctx.font = "bold 11px system-ui"; ctx.fillText("N", x, 13);
+      ctx.fillStyle = "#fff8da"; ctx.textAlign = "center"; ctx.font = "bold 11px system-ui"; ctx.fillText("N", MAP_SIZE / 2, 13);
       const distance = Math.round(Math.hypot(player.x - TOWN_CENTER_X, player.z - TOWN_CENTER_Z));
       const depositCount = MAP_DEPOSITS.filter(point => discovered.has(depositKey(point))).length;
       const threatDetail = nearbyThreat ? ` · Nearby threat: ${nearbyThreat.name}` : "";

@@ -323,6 +323,15 @@
     <details id="minimap" data-expanded="false" open>
       <summary><span id="minimap-title">EXPLORER MAP</span><span class="minimap-summary-actions"><button id="minimap-expand" type="button" aria-label="Expand world map" aria-pressed="false">↗</button><kbd>M</kbd></span></summary>
       <div class="minimap-viewport"><canvas id="minimap-canvas" width="220" height="220" role="img" aria-label="Explorer map loading"></canvas><div id="minimap-tooltip" role="status" hidden></div></div>
+      <div class="world-map-toolbar" aria-label="World map controls">
+        <div class="world-map-filters" aria-label="Map marker filters">
+          <button type="button" data-map-filter="towns" aria-pressed="true">⌂ Towns</button>
+          <button type="button" data-map-filter="resources" aria-pressed="true">◆ Resources</button>
+          <button type="button" data-map-filter="discoveries" aria-pressed="true">● Discoveries</button>
+          <button type="button" data-map-filter="threats" aria-pressed="true">☠ Threats</button>
+        </div>
+        <div class="world-map-zoom"><button id="world-map-center" type="button">◎ My position</button><button id="world-map-zoom-out" type="button" aria-label="Zoom out">−</button><button id="world-map-zoom-in" type="button" aria-label="Zoom in">+</button></div>
+      </div>
       <p id="minimap-detail">Waiting for the world…</p>
       <p id="minimap-depth">SURFACE</p>
       <section id="mistfen-mastery" hidden aria-label="Mistfen regional mastery">
