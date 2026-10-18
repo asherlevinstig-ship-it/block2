@@ -2758,16 +2758,18 @@ app.root.addChild(firstStepsTrail);
 let firstStepsTrailPoints: ReturnType<typeof sampleTrail> = [];
 let firstStepsTrailUpdatedAt = -Infinity;
 function updateFirstStepsTrail(player: pc.Vec3, now: number): void {
-  const active = worldReady && firstStepsIndex !== null && firstStepsIndex < ONBOARDING_DONE
-    && defeatScreen.hidden === true && inventoryPanel.hidden === true;
+  const tutorialActive = firstStepsIndex !== null && firstStepsIndex < ONBOARDING_DONE;
+  const navigationRoute = minimap.activeSurfaceRoute();
+  const active = worldReady && (tutorialActive || navigationRoute.length > 0)
+    && player.y >= 7 && defeatScreen.hidden === true && inventoryPanel.hidden === true;
   firstStepsTrail.enabled = active;
   if (!active) return;
   if (now - firstStepsTrailUpdatedAt >= 150) {
     firstStepsTrailUpdatedAt = now;
-    const route = onboardingTrailRoute(firstStepsIndex, player,
+    const route = tutorialActive ? onboardingTrailRoute(firstStepsIndex, player,
       [...mobVisuals.values()].map(({ state }) => state),
       [...lootVisuals.entries()].filter(([, { root }]) => root.enabled)
-        .map(([id, { state }]) => ({ ...state, starter: id.startsWith("starter-kit:") })));
+        .map(([id, { state }]) => ({ ...state, starter: id.startsWith("starter-kit:") }))) : navigationRoute;
     firstStepsTrailPoints = sampleTrail(player, route);
   }
   for (let index = 0; index < firstStepsTrailMarks.length; index++) {

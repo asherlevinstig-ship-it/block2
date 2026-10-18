@@ -2,6 +2,7 @@ import { ASHEN_SPIRE_POSITION, Block, GREENWOOD_CRAWLER_HOMES, GREENWOOD_REGION,
 import { ITEM_DEFINITIONS, type EquipmentHuntTarget, type MineralDepositStatus, type SilverDepthsCacheStatus, type SilverDepthsGateStatus, type SilverDepthsPing } from "@blockcraft/protocol";
 import { MINE_ENTRANCE, caveDepth, type CaveMapState } from "./cave-navigation.js";
 import { SILVER_DEPTHS_MAP_GATES, silverDepthsMapRoute, type DungeonMapRoute } from "./silver-depths-navigation.js";
+import { planWorldRoute, remainingWorldRoute, routeDeviationDistance, worldRouteDistance, type WorldRoutePoint } from "./world-route.js";
 
 export const MAP_SIZE = 220;
 export const MAP_RANGE = 72;
@@ -301,6 +302,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
   setPingHandler(handler: (x: number, z: number) => void): void;
   guideTo(target: Waypoint): void;
   clearGuide(expectedId?: string): void;
+  activeSurfaceRoute(): WorldRoutePoint[];
   surfaceGuideEnabled(): boolean;
   update(player: Position & { y: number }, yaw: number, now: number, visible: boolean, cameraYaw?: number, active?: boolean): void;
 } {
@@ -316,6 +318,8 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
   let lastUpdate = -Infinity;
   let lastPlayer: (Position & { y: number }) | null = null;
   let waypoint: Waypoint | null = null;
+  let surfaceRoute: WorldRoutePoint[] = [];
+  let lastSurfaceRoutePlanAt = -Infinity;
   let surfaceGuide = false;
   let caveState: CaveMapState = { known: new Set(), chambers: [], route: [] };
   let dungeonState: DungeonMapState | null = null;
@@ -363,7 +367,9 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
   const setWaypoint = (target: Waypoint | null) => {
     surfaceGuide = false;
     surfaceButton.setAttribute("aria-pressed", "false");
-    waypoint = target; lastUpdate = -Infinity;
+    waypoint = target; surfaceRoute = []; lastSurfaceRoutePlanAt = -Infinity; lastUpdate = -Infinity;
+    if (target && lastPlayer && caveDepth(lastPlayer.y) <= 0)
+      surfaceRoute = planWorldRoute(lastPlayer, target);
     destinations.value = target?.id ?? "";
     guide.hidden = target === null;
     if (target) { guideName.textContent = target.name; guideDistance.textContent = "Guiding…"; }
@@ -564,6 +570,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
     setPingHandler(handler) { pingHandler = handler; },
     guideTo(target) { setWaypoint(target); },
     clearGuide(expectedId) { if (!expectedId || waypoint?.id === expectedId) setWaypoint(null); },
+    activeSurfaceRoute() { return lastPlayer && caveDepth(lastPlayer.y) <= 0 ? remainingWorldRoute(lastPlayer, surfaceRoute) : []; },
     surfaceGuideEnabled() { return surfaceGuide; },
     setMineralStatus(values) {
       statuses.clear();
@@ -692,6 +699,11 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
           try { localStorage.setItem(exploredSurfaceKey, JSON.stringify([...exploredSurface])); } catch { /* Private browsing can disable storage. */ }
         }
       }
+      if (waypoint && !underground && (!surfaceRoute.length
+        || routeDeviationDistance(player, surfaceRoute) > 5.5 && now - lastSurfaceRoutePlanAt >= 800)) {
+        surfaceRoute = planWorldRoute(player, waypoint);
+        lastSurfaceRoutePlanAt = now;
+      }
       depthLabel.textContent = underground ? `UNDERGROUND · DEPTH ${caveDepth(player.y)} BLOCKS`
         : expanded ? `WORLD MAP · ${Math.round(worldMapRange * 2)}M VIEW · DRAG TO PAN` : "SURFACE";
       surfaceButton.hidden = !underground;
@@ -717,8 +729,12 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
         } else {
           guide.hidden = !active;
           guideArrow.hidden = underground;
-          guideArrow.style.transform = `rotate(${direction.angle}deg)`;
-          guideDistance.textContent = underground ? "Use Guide to surface first" : `${Math.ceil(direction.distance)}m`;
+          const nextRoutePoint = !underground ? remainingWorldRoute(player, surfaceRoute)[0] : null;
+          const routeDirection = nextRoutePoint ? waypointDirection(player,
+            { ...nextRoutePoint, id: "route-step", name: waypoint.name }, cameraYaw) : direction;
+          guideArrow.style.transform = `rotate(${routeDirection.angle}deg)`;
+          guideDistance.textContent = underground ? "Use Guide to surface first"
+            : `${Math.ceil(worldRouteDistance(player, surfaceRoute) || direction.distance)}m · follow the gold trail`;
         }
       }
       if (surfaceGuide) {
@@ -861,10 +877,17 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
         ctx.strokeStyle = "#ffe08c"; ctx.lineWidth = 2; ctx.stroke();
       }
       if (waypoint && !underground) {
+        const route = remainingWorldRoute(player, surfaceRoute);
+        if (route.length) {
+          const playerPoint = mapPoint(mapCenter, player, mapRange);
+          ctx.beginPath(); ctx.moveTo(playerPoint.x, playerPoint.y);
+          for (const step of route) {
+            const point = mapPoint(mapCenter, step, mapRange);
+            ctx.lineTo(point.x, point.y);
+          }
+          ctx.strokeStyle = "#ffe17b"; ctx.lineWidth = 2.5; ctx.setLineDash([5, 4]); ctx.stroke(); ctx.setLineDash([]);
+        }
         const p = mapPoint(mapCenter, waypoint, mapRange);
-        const playerPoint = mapPoint(mapCenter, player, mapRange);
-        ctx.beginPath(); ctx.moveTo(playerPoint.x, playerPoint.y); ctx.lineTo(p.x, p.y);
-        ctx.strokeStyle = "#fff4ad88"; ctx.setLineDash([3, 4]); ctx.stroke(); ctx.setLineDash([]);
         ctx.beginPath(); ctx.arc(p.x, p.y, 10, 0, Math.PI * 2); ctx.strokeStyle = "#fff4ad"; ctx.lineWidth = 2; ctx.stroke();
       }
       const playerPoint = mapPoint(mapCenter, player, mapRange);
