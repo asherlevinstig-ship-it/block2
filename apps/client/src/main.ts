@@ -4415,6 +4415,7 @@ const markPayoffVisuals: MarkPayoffVisual[] = [];
 const brambleSnareVisuals = new Map<string, BrambleSnareVisual>();
 const weaponProjectileVisuals: WeaponProjectileVisual[] = [];
 let nextNearMissAt = 0;
+let lastLocalCallingImpact: { abilityId: CallingAbilityId; at: number } | null = null;
 // Retain impact style after the short-lived mesh ends, until server confirmation arrives.
 const projectileWeapons = new Map<string, MainHandId>();
 const mobHazardVisuals = new Map<string, MobHazardVisual>();
@@ -11346,8 +11347,25 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       refreshProgressionNotice();
     }
     status.textContent = `${update.ability} · ${update.detail.toLowerCase()}.`;
+    const position = localPlayer.getPosition();
+    createCallingImpact({
+      casterId: room!.sessionId,
+      pathId: update.pathId,
+      abilityId: update.abilityId,
+      x: position.x,
+      y: position.y,
+      z: position.z,
+      yaw: cameraOrbit.yaw,
+      ...(update.durationMs ? { durationMs: update.durationMs } : {}),
+    });
+    lastLocalCallingImpact = { abilityId: update.abilityId, at: performance.now() };
   });
-  room.onMessage("calling:ability:effect", (effect: CallingAbilityEffect) => createCallingImpact(effect));
+  room.onMessage("calling:ability:effect", (effect: CallingAbilityEffect) => {
+    const duplicateLocal = effect.casterId === room?.sessionId
+      && lastLocalCallingImpact?.abilityId === effect.abilityId
+      && performance.now() - lastLocalCallingImpact.at < 700;
+    if (!duplicateLocal) createCallingImpact(effect);
+  });
   room.onMessage("player:stealth", (state: { playerId: string; until: number }) => {
     if (state.until > Date.now()) playerStealthUntil.set(state.playerId, state.until);
     else playerStealthUntil.delete(state.playerId);
