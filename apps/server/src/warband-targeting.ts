@@ -13,6 +13,14 @@ export type WarbandTargetPlan = {
   spitter: WarbandTargetCandidate;
 };
 
+export type WarbandChallengeCandidate = { id: string; leaderId?: string | null; isLeader?: boolean };
+
+/** Challenge keeps ordinary enemies, but a formed warband's escorts retain their specialist assignments. */
+export function warbandChallengeTargets<T extends WarbandChallengeCandidate>(candidates: readonly T[]): T[] {
+  const nearbyLeaders = new Set(candidates.filter(candidate => candidate.isLeader).map(candidate => candidate.id));
+  return candidates.filter(candidate => !candidate.leaderId || !nearbyLeaders.has(candidate.leaderId));
+}
+
 function nearestAllyDistance(candidate: WarbandTargetCandidate, candidates: readonly WarbandTargetCandidate[]): number {
   const distances = candidates.filter(peer => peer.id !== candidate.id)
     .map(peer => Math.hypot(peer.x - candidate.x, peer.z - candidate.z));

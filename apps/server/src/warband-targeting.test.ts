@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { selectWarbandTargets } from "./warband-targeting.js";
+import { selectWarbandTargets, warbandChallengeTargets } from "./warband-targeting.js";
 
 describe("mixed warband role targeting", () => {
   const party = [
@@ -22,5 +22,19 @@ describe("mixed warband role targeting", () => {
   it("keeps the fixed solo encounter intact", () => {
     const plan = selectWarbandTargets([party[0]!], "tank")!;
     expect(new Set([plan.brute.id, plan.crawler.id, plan.spitter.id])).toEqual(new Set(["tank"]));
+  });
+
+  it("lets Challenge pull a nearby brute without collapsing specialist escort roles", () => {
+    const targets = warbandChallengeTargets([
+      { id: "brute", isLeader: true },
+      { id: "crawler", leaderId: "brute" },
+      { id: "spitter", leaderId: "brute" },
+      { id: "stray" },
+    ]);
+    expect(targets.map(target => target.id)).toEqual(["brute", "stray"]);
+  });
+
+  it("still challenges an escort when its leader is outside the ability radius", () => {
+    expect(warbandChallengeTargets([{ id: "crawler", leaderId: "distant-brute" }])).toHaveLength(1);
   });
 });

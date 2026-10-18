@@ -111,4 +111,52 @@ describe("mixed frontier warband", () => {
     expect(leader.combatState).toBe("recover");
     expect(leader.stateUntil).toBeGreaterThanOrEqual(22_700);
   });
+
+  it("lets Stealth, Decoy or Disengage break a crawler committed to that player", () => {
+    const room = new WorldRoom(); room.setState(new WorldState());
+    const internal = room as any; const events: { type: string; payload: any }[] = [];
+    vi.spyOn(room, "broadcast").mockImplementation((type, payload) => { events.push({ type, payload }); });
+    internal.registerMob("frontier-crawler", "moss_crawler", { x: 65.5, y: 8, z: 34.5 });
+    internal.registerMob("frontier-brute-east", "stone_brute", { x: 72.5, y: 8, z: 34.5 });
+    const pose = { id: "hero", x: 68.5, y: 8, z: 34.5, yaw: 0 };
+    internal.warbandFormationUntil.set("frontier-brute-east", 11_500);
+    internal.warbandTargetPlans.set("frontier-brute-east", {
+      expiresAt: 11_000, brute: pose, crawler: pose, spitter: pose,
+    });
+    expect(internal.counterWarbandCrawlerCommitment("hero", 10_000)).toBe(true);
+    expect(room.state.mobs.get("frontier-crawler")!.combatState).toBe("stagger");
+    expect(events).toContainEqual({ type: "leader:formation", payload: expect.objectContaining({
+      mobId: "frontier-brute-east", state: "broken",
+    }) });
+  });
+
+  it("also breaks the crawler after its committed rush has launched", () => {
+    const room = new WorldRoom(); room.setState(new WorldState());
+    const internal = room as any;
+    vi.spyOn(room, "broadcast").mockImplementation(() => {});
+    internal.registerMob("frontier-crawler", "moss_crawler", { x: 65.5, y: 8, z: 34.5 });
+    internal.registerMob("frontier-brute-east", "stone_brute", { x: 72.5, y: 8, z: 34.5 });
+    const crawler = room.state.mobs.get("frontier-crawler")!;
+    Object.assign(crawler, { combatState: "strike", targetId: "hero" });
+    internal.pendingMobMelee.set("frontier-crawler", { targetId: "hero", yaw: 0, impactAt: 10_500 });
+    internal.warbandFormationUntil.set("frontier-brute-east", 12_000);
+    expect(internal.counterWarbandCrawlerCommitment("hero", 10_000)).toBe(true);
+    expect(crawler.combatState).toBe("stagger");
+    expect(internal.pendingMobMelee.has("frontier-crawler")).toBe(false);
+  });
+
+  it("cancels a support spitter projectile when magic staggers it", () => {
+    const room = new WorldRoom(); room.setState(new WorldState());
+    const internal = room as any; const events: { type: string; payload: any }[] = [];
+    vi.spyOn(room, "broadcast").mockImplementation((type, payload) => { events.push({ type, payload }); });
+    internal.registerMob("frontier-support-spitter", "cave_spitter", { x: 66.5, y: 8, z: 40.5 });
+    const spitter = room.state.mobs.get("frontier-support-spitter")!;
+    internal.pendingMobProjectiles.set("acid-shot", { projectileId: "acid-shot", mobId: "frontier-support-spitter",
+      position: { x: 67, y: 9, z: 39 } });
+    internal.staggerMob("frontier-support-spitter", spitter, 10_000, 900, true);
+    expect(internal.pendingMobProjectiles.has("acid-shot")).toBe(false);
+    expect(events).toContainEqual({ type: "combat:projectile-resolved", payload: expect.objectContaining({
+      projectileId: "acid-shot", reason: "miss",
+    }) });
+  });
 });

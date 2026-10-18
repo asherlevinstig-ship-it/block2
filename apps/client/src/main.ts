@@ -6051,6 +6051,12 @@ function createFormationTelegraph(message: AreaLeaderFormation): void {
         [point.x, point.y, point.z]);
       marker.setLocalEulerAngles(0, index / points.length * 360, 0);
     }
+    if (localBuildPathId === "healer" && id !== room?.sessionId) {
+      const protect = powerMaterial(new pc.Color(.55, 1, .92), .92);
+      targetMaterials.push(protect);
+      addBox(markerRoot, `healer-protect-vertical:${id}`, protect, [.075, .34, .075], [0, 1.45, 0]);
+      addBox(markerRoot, `healer-protect-horizontal:${id}`, protect, [.3, .075, .075], [0, 1.45, 0]);
+    }
   };
   const addLane = (name: string, origin: { x: number; y: number; z: number }, yaw: number,
     distance: number, material: pc.StandardMaterial, width: number): void => {
@@ -12693,7 +12699,13 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     leaderFormation.set(message.mobId, { state: message.state, tactic: message.tactic,
       until: performance.now() + Math.min(5_000, message.durationMs) });
     if (message.state === "forming") createFormationTelegraph(message);
-    else if (message.state === "broken" || message.state === "full") destroyFormationTelegraph(message.mobId);
+    else if (message.state === "broken" || message.state === "full") {
+      destroyFormationTelegraph(message.mobId);
+      const leader = mobVisuals.get(message.mobId);
+      if (message.state === "broken" && leader) createRangedPopup(
+        new pc.Vec3(leader.state.x, leader.state.y + leader.healthBarY + .85, leader.state.z),
+        "FORMATION BROKEN", "melee", false, [1, .82, .22]);
+    }
     bossHudFingerprint = "";
   });
   room.onMessage("progression:update", (update: ProgressionUpdate) => {
