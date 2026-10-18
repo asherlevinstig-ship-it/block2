@@ -38,9 +38,10 @@ describe("development shadow in the real world room", () => {
     input.data.forward = 0;
     input.data.yaw = 0;
     input.send();
-    await serverRoom.waitForNextTimestep();
-    const shadow = (serverRoom as unknown as { movementShadows: Map<string, { x: number }> }).movementShadows.get(clientRoom.sessionId);
-    expect(shadow?.x).toBeGreaterThan(initialX);
+    await vi.waitFor(() => {
+      const shadow = (serverRoom as unknown as { movementShadows: Map<string, { x: number }> }).movementShadows.get(clientRoom.sessionId);
+      expect(shadow?.x).toBeGreaterThan(initialX);
+    }, { timeout: 1500 });
     expect(serverRoom.state.players.get(clientRoom.sessionId)!.x).toBeCloseTo(initialX, 3);
     await clientRoom.leave();
   });

@@ -32,7 +32,7 @@ export function mobGaitTargets(kind: string, awareness: string, speed: number, w
   return {
     walking,
     pursuit: urgent ? activity : 0,
-    cadence: Math.min(Math.max(0, speed), 6) * (kind === "stone_brute" ? 3.5 : kind === "cave_spitter" || kind === "shard_sentry" ? 6.5 : kind === "ridge_stalker" ? 9 : 8) * activity * (urgent ? 1.08 : 1),
+    cadence: Math.min(Math.max(0, speed), 6) * (kind === "stone_brute" ? 3.5 : kind === "thornbinder" ? 5.2 : kind === "cave_spitter" || kind === "shard_sentry" ? 6.5 : kind === "ridge_stalker" ? 9 : 8) * activity * (urgent ? 1.08 : 1),
   };
 }
 

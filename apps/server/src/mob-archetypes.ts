@@ -1,6 +1,7 @@
 import { BRUTE_SLAM, SPITTER_PATTERN, crawlerRushDistance } from "@blockcraft/protocol";
-export type MobArchetypeId = "moss_crawler" | "briar_crawler" | "stone_brute" | "cave_spitter" | "ridge_stalker" | "shard_sentry";
+export type MobArchetypeId = "moss_crawler" | "briar_crawler" | "stone_brute" | "cave_spitter" | "ridge_stalker" | "shard_sentry" | "thornbinder";
 export const isSpitterLike = (archetype: string): boolean => archetype === "cave_spitter" || archetype === "shard_sentry";
+export const isThornbinder = (archetype: string): boolean => archetype === "thornbinder";
 
 export interface MobArchetypeDefinition {
   id: MobArchetypeId;
@@ -142,6 +143,15 @@ export const MOB_ARCHETYPES: Record<MobArchetypeId, MobArchetypeDefinition> = {
     hazardDurationMs: 0, hazardRadius: 0,
     respawnMs: 7000, rewardHealth: 0, rewardStamina: 24,
   },
+  thornbinder: {
+    id: "thornbinder", name: "Greenwood Thornbinder", spawn: { x: 47.5, y: 8, z: 17.5 },
+    maxHealth: 9, armor: 0, attackKind: "projectile", speed: .92,
+    stopDistance: 7.5, minimumAttackRange: 4.2, aggroRange: 11,
+    windupMs: 1_150, recoverMs: 1_050, cooldownMs: 3_250, damage: 0,
+    lungeDistance: 0, hitRange: .9, projectileTravelMs: 900,
+    hazardDurationMs: 0, hazardRadius: 0,
+    respawnMs: 45_000, rewardHealth: 0, rewardStamina: 24,
+  },
 };
 
 export function mobArchetype(value: string): MobArchetypeDefinition {
@@ -150,6 +160,7 @@ export function mobArchetype(value: string): MobArchetypeDefinition {
   if (value === "cave_spitter") return MOB_ARCHETYPES.cave_spitter;
   if (value === "ridge_stalker") return MOB_ARCHETYPES.ridge_stalker;
   if (value === "shard_sentry") return MOB_ARCHETYPES.shard_sentry;
+  if (value === "thornbinder") return MOB_ARCHETYPES.thornbinder;
   return MOB_ARCHETYPES.moss_crawler;
 }
 

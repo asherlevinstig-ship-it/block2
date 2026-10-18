@@ -8,7 +8,7 @@ export const ashenSentryAllows = (pose: { x: number; y: number; z: number }) => 
 export const ashenSentryPattern = (sequence: number): "fan" | "aimed" => sequence % 3 === 2 ? "aimed" : "fan";
 export const SILVER_GUARD_IDS = ["cave-spitter", "frontier-spitter"] as const;
 export const GREENWOOD_CAMP_IDS = ["wild-crawler", "greenwood-briar", "greenwood-briar-north"] as const;
-export const isGreenwoodCampMob = (id: string) => GREENWOOD_CAMP_IDS.some(member => member === id);
+export const isGreenwoodCampMob = (id: string) => id === "greenwood-thornbinder" || GREENWOOD_CAMP_IDS.some(member => member === id);
 export const greenwoodCampAllows = (pose: { x: number; y: number; z: number }) => Math.abs(pose.y - 8) <= 1.5
   && pose.x >= 33 && pose.x <= 52 && pose.z >= 11 && pose.z <= 28;
 export const isSilverGuard = (id: string) => SILVER_GUARD_IDS.some(guard => guard === id);
@@ -63,6 +63,7 @@ export const northwatchPatrolShotDamage = (pattern: string, baseDamage: number):
   baseDamage + (pattern === "patrol-lance" ? 1 : 0);
 /** Existing encounter IDs remain stable for objective tracking and saved worlds. */
 export const WILDERNESS_ENCOUNTERS: readonly { id: string; archetype: MobArchetypeId; x: number; y: number; z: number }[] = [
+  { id: "greenwood-thornbinder", archetype: "thornbinder", x: 47.5, y: 8, z: 17.5 },
   { id: "moss-crawler", archetype: "moss_crawler", x: 35.5, y: 8, z: -8.5 },
   { id: "outskirts-crawler-west", archetype: "moss_crawler", x: -23.5, y: 8, z: 11.5 },
   { id: "outskirts-crawler-north", archetype: "moss_crawler", x: 11.5, y: 8, z: -23.5 },

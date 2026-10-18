@@ -1,7 +1,7 @@
 import * as pc from "playcanvas";
 import { mobGaitTargets } from "./mob-motion.js";
 
-type MobKind = "stone_brute" | "cave_spitter" | "moss_crawler" | "ridge_stalker" | "shard_sentry";
+type MobKind = "stone_brute" | "cave_spitter" | "moss_crawler" | "ridge_stalker" | "shard_sentry" | "thornbinder";
 type Triple = [number, number, number];
 
 interface Limb {
@@ -67,7 +67,10 @@ const ridgeMane = material("ridge-stalker-mane", [.76, .79, .68]);
 const northwatchEye = material("northwatch-cold-eye", [.5, .9, 1], [.14, .42, .58]);
 const shardStone = material("shard-sentry-granite", [.22, .31, .4]);
 const shardCrystal = material("shard-sentry-crystal", [.48, .86, 1], [.16, .42, .62]);
-const dimGlowMaterials = new Map<pc.StandardMaterial, pc.StandardMaterial>([core, acid, crawlerEye, matriarchVenom, matriarchEnragedVenom, guardianCore, guardianEnragedCore, northwatchEye, shardCrystal]
+const thornBark = material("thornbinder-heartwood", [.2, .12, .05]);
+const thornMoss = material("thornbinder-moss", [.24, .48, .14]);
+const thornSap = material("thornbinder-living-sap", [.55, 1, .2], [.16, .58, .035]);
+const dimGlowMaterials = new Map<pc.StandardMaterial, pc.StandardMaterial>([core, acid, crawlerEye, matriarchVenom, matriarchEnragedVenom, guardianCore, guardianEnragedCore, northwatchEye, shardCrystal, thornSap]
   .map(live => [live, material(`defeated-${live.name}`, [live.diffuse.r * .5, live.diffuse.g * .5, live.diffuse.b * .5])]));
 
 function box(parent: pc.Entity, name: string, surface: pc.StandardMaterial, size: Triple, at: Triple, angle?: Triple): pc.Entity {
@@ -89,13 +92,37 @@ function pivot(parent: pc.Entity, name: string, at: Triple): pc.Entity {
 
 export function createMobArt(parent: pc.Entity, archetype: string, body: pc.StandardMaterial, matriarch = false, rootGuardian = false): MobArtRig {
   const kind: MobKind = archetype === "stone_brute" ? "stone_brute" : archetype === "cave_spitter" ? "cave_spitter"
-    : archetype === "ridge_stalker" ? "ridge_stalker" : archetype === "shard_sentry" ? "shard_sentry" : "moss_crawler";
+    : archetype === "ridge_stalker" ? "ridge_stalker" : archetype === "shard_sentry" ? "shard_sentry"
+      : archetype === "thornbinder" ? "thornbinder" : "moss_crawler";
   const head = pivot(parent, "head-joint", kind === "stone_brute" ? [0, 1.6, 0.06] : kind === "shard_sentry" ? [0, 1.25, .08]
-    : kind === "ridge_stalker" ? [0, .69, .56] : kind === "cave_spitter" ? [0, 0.56, 0.56] : [0, 0.53, 0.48]);
+    : kind === "thornbinder" ? [0, 1.72, .04] : kind === "ridge_stalker" ? [0, .69, .56] : kind === "cave_spitter" ? [0, 0.56, 0.56] : [0, 0.53, 0.48]);
   const jaw = pivot(head, "jaw-joint", kind === "stone_brute" ? [0, -0.2, 0.14] : [0, -0.11, 0.27]);
   const rig: MobArtRig = { kind, head, jaw, limbs: [], arms: [], sacs: [], phase: 0, walk: 0, pursuit: 0, matriarch, rootGuardian, phaseSurfaces: [], enraged: false, defeated: false, glowSurfaces: [] };
 
-  if (kind === "ridge_stalker") {
+  if (kind === "thornbinder") {
+    box(parent, "twisted-trunk", thornBark, [.66, 1.25, .52], [0, 1.02, 0], [0, 0, -4]);
+    box(parent, "moss-mantle", thornMoss, [.88, .28, .68], [0, 1.5, -.04], [-8, 0, 0]);
+    box(parent, "sap-heart", thornSap, [.24, .36, .13], [0, 1.15, .31], [0, 0, 45]);
+    box(head, "wood-mask", body, [.55, .54, .43], [0, 0, .04]);
+    box(head, "mask-ridge", thornBark, [.62, .13, .19], [0, .14, .25], [0, 0, -5]);
+    box(jaw, "root-jaw", thornBark, [.41, .15, .35], [0, -.02, .08]);
+    for (const side of [-1, 1]) {
+      box(head, `sap-eye-${side}`, thornSap, [.1, .09, .065], [side * .17, .04, .27]);
+      box(head, `branch-antler-${side}`, thornBark, [.13, .76, .14], [side * .25, .55, -.04], [0, 0, side * -23]);
+      box(head, `branch-tine-${side}`, thornBark, [.42, .11, .12], [side * .43, .72, -.03], [0, 0, side * -28]);
+      const arm = pivot(parent, `vine-arm-${side}`, [side * .48, 1.48, 0]);
+      box(arm, "upper-vine", thornBark, [.15, .72, .17], [side * .08, -.27, .02], [0, 0, side * 12]);
+      const elbow = pivot(arm, "vine-elbow", [side * .14, -.57, .02]);
+      box(elbow, "casting-vine", thornMoss, [.12, .68, .13], [0, -.28, .12], [-12, 0, side * -7]);
+      box(elbow, "thorn-hand", thornSap, [.17, .17, .19], [0, -.61, .22]);
+      rig.arms.push({ pivot: arm, knee: elbow, side, offset: side < 0 ? 0 : Math.PI });
+      const leg = pivot(parent, `root-leg-${side}`, [side * .25, .54, 0]);
+      box(leg, "root-shank", thornBark, [.24, .66, .27], [side * .05, -.24, .03], [0, 0, side * -9]);
+      const knee = pivot(leg, "root-knee", [side * .09, -.55, .03]);
+      box(knee, "root-foot", thornMoss, [.34, .19, .56], [side * .06, -.08, .16]);
+      rig.limbs.push({ pivot: leg, knee, side, offset: side < 0 ? 0 : Math.PI });
+    }
+  } else if (kind === "ridge_stalker") {
     box(parent, "lean-hound-torso", ridgeFur, [.57, .5, 1.2], [0, .62, -.14]);
     box(parent, "shoulder-mane", ridgeMane, [.76, .57, .48], [0, .84, .23], [-13, 0, 0]);
     box(parent, "spine", body, [.26, .15, .85], [0, .91, -.22]);
@@ -263,7 +290,7 @@ export function setMobArtDefeated(rig: MobArtRig, defeated: boolean): void {
 /** No per-frame geometry/material creation; only transform the prebuilt joints. */
 export function animateMobArt(rig: MobArtRig, dt: number, time: number, speed: number, awareness: string, windup: number, attack: number, hurt: number, stagger: number, defeat: number): void {
   const brute = rig.kind === "stone_brute";
-  const spitter = rig.kind === "cave_spitter";
+  const spitter = rig.kind === "cave_spitter" || rig.kind === "thornbinder";
   const targets = mobGaitTargets(rig.kind, awareness, speed, windup, stagger, defeat);
   const elapsed = Math.max(0, Math.min(dt, 0.1));
   rig.walk += (targets.walking - rig.walk) * (1 - Math.exp(-16 * elapsed));

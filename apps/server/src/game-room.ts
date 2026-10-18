@@ -144,6 +144,7 @@ import {
   type MainHandId,
   type MobHazardPlaced,
   type MobProjectileReleased,
+  type ThornBindingUpdate,
   type PlayerHit,
   type ProjectileResolved,
   type PowerCast,
@@ -207,7 +208,7 @@ import { STARTER_KIT_ITEMS, starterKitClaimed, withStarterKitClaimed } from "./s
 import { miningRejectionReason, movementRejectionReason, nextComboStep, selectAttackTarget } from "./action-rules.js";
 import { dodgeDirection, isInsideImpact, pursueTarget } from "./combat-rules.js";
 import { GUARD_MINIMUM_STAMINA, GUARD_STAMINA_DRAIN_PER_SECOND, PARRY_STAGGER_MS, isAttackInGuardArc, resolveDefense } from "./defense-rules.js";
-import { MOB_ARCHETYPES, damageAfterArmor, defeatReward, isSpitterLike, mobArchetype, type MobArchetypeId } from "./mob-archetypes.js";
+import { MOB_ARCHETYPES, damageAfterArmor, defeatReward, isSpitterLike, isThornbinder, mobArchetype, type MobArchetypeId } from "./mob-archetypes.js";
 import { MOB_TOWN_MINIMUM_RADIUS, dangerBandAt, isInsideTownSafeZone, keepMobOutsideTown, radiusFromSafeCenter, scaledMobStats } from "./radial-difficulty.js";
 import { executionerDamageBonus, gainMomentum, guardStaminaCost, momentumAfterDefense, movementSpeedWithMomentum, parryStaminaRestore, staminaRecoveryWithMomentum } from "./trait-rules.js";
 import { FENWALKER_POOL_WARD_COOLDOWN_MS, NORTHWATCH_SHARD_WARD_COOLDOWN_MS, fenwalkerBlocksPoolPulse, foragerRecoveryBonus, northwatchShardWardReady } from "./regional-armour.js";
@@ -354,6 +355,15 @@ interface ActiveBrambleSnare {
   expiresAt: number;
 }
 
+interface ActiveThornBinding {
+  bindingId: string;
+  mobId: string;
+  targetId: string;
+  health: number;
+  maxHealth: number;
+  expiresAt: number;
+}
+
 interface PendingPower {
   requestId: string;
   powerId: PowerId;
@@ -451,6 +461,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly pendingPowers = new Map<string, PendingPower>();
   private readonly specialMarks = new Map<string, ActiveSpecialMark>();
   private readonly brambleSnares = new Map<string, ActiveBrambleSnare>();
+  private readonly thornBindings = new Map<string, ActiveThornBinding>();
   private readonly lastMobAttackAt = new Map<string, number>();
   private readonly lastDodgeAt = new Map<string, number>();
   private readonly dodgePressure = new Map<string, { chain: number; lastAt: number; exhaustedUntil: number }>();
@@ -6753,7 +6764,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const end = { x: aim.x, y: aim.y + .08, z: aim.z };
       this.pendingMobProjectiles.set(projectileId, { projectileId, mobId, archetype: mob.archetype, damage, hazardRadius, hazardDurationMs,
         start, end, position: start, startedAt: now, impactAt: now + travelMs });
-      this.broadcast("combat:mob-projectile", { projectileId, mobId, kind: mobId === CRYSTAL_MATRIARCH_ID || mobId === ASHGLASS_ORACLE_ID || mob.archetype === "shard_sentry" ? "crystal" : mob.archetype === "stone_brute" ? "rock" : "acid", ...origin, targetX: aim.x, targetY: aim.y, targetZ: aim.z, travelMs, releasedAt: now } satisfies MobProjectileReleased);
+      this.broadcast("combat:mob-projectile", { projectileId, mobId, kind: isThornbinder(mob.archetype) ? "vine" : mobId === CRYSTAL_MATRIARCH_ID || mobId === ASHGLASS_ORACLE_ID || mob.archetype === "shard_sentry" ? "crystal" : mob.archetype === "stone_brute" ? "rock" : "acid", ...origin, targetX: aim.x, targetY: aim.y, targetZ: aim.z, travelMs, releasedAt: now } satisfies MobProjectileReleased);
     }
   }
 
@@ -6825,7 +6836,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const definition = mobArchetype(projectile.archetype);
       const target = collision?.targetId ? this.state.players.get(collision.targetId) : undefined;
       if (target && collision?.targetId) {
-        this.queueIncomingHit(projectile.mobId, collision.targetId, projectile.damage, now, "projectile");
+        if (isThornbinder(projectile.archetype)) this.applyThornBinding(projectile.mobId, collision.targetId, now);
+        else this.queueIncomingHit(projectile.mobId, collision.targetId, projectile.damage, now, "projectile");
       } else if (collision?.targetId && this.thiefDecoys.has(collision.targetId))
         this.damageThiefDecoy(collision.targetId, projectile.mobId, projectile.damage, now);
       const hazardDurationMs = projectile.hazardDurationMs ?? definition.hazardDurationMs;
@@ -6852,6 +6864,51 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         radius: hazardRadius,
         expiresAt,
       } satisfies MobHazardPlaced);
+    }
+  }
+
+  private thornBindingMessage(binding: ActiveThornBinding, phase: ThornBindingUpdate["phase"], breakerId?: string): ThornBindingUpdate | null {
+    const target = this.state.players.get(binding.targetId);
+    if (!target) return null;
+    return { ...binding, x: target.x, y: target.y, z: target.z, phase, breakerId };
+  }
+
+  private applyThornBinding(mobId: string, targetId: string, now: number): void {
+    const target = this.state.players.get(targetId);
+    if (!target || target.health <= 0 || isInsideTownSafeZone(target)) return;
+    const existing = this.thornBindings.get(targetId);
+    if (existing) {
+      existing.expiresAt = Math.max(existing.expiresAt, now + 3_500);
+      existing.health = existing.maxHealth;
+      const refreshed = this.thornBindingMessage(existing, "applied");
+      if (refreshed) this.broadcast("combat:thorn-binding", refreshed);
+      return;
+    }
+    const binding: ActiveThornBinding = { bindingId: `thorn:${mobId}:${targetId}:${now}`, mobId, targetId, health: 2, maxHealth: 2, expiresAt: now + 3_500 };
+    this.thornBindings.set(targetId, binding);
+    const message = this.thornBindingMessage(binding, "applied");
+    if (message) this.broadcast("combat:thorn-binding", message);
+    this.clients.find(client => client.sessionId === targetId)?.send("chat:notice", "Vines bind your feet — attack to cut free.");
+  }
+
+  private damageThornBinding(targetId: string, breakerId: string): boolean {
+    const binding = this.thornBindings.get(targetId);
+    if (!binding) return false;
+    binding.health = Math.max(0, binding.health - 1);
+    const phase = binding.health === 0 ? "broken" : "damaged";
+    const message = this.thornBindingMessage(binding, phase, breakerId);
+    if (message) this.broadcast("combat:thorn-binding", message);
+    if (binding.health === 0) this.thornBindings.delete(targetId);
+    return true;
+  }
+
+  private resolveThornBindings(now: number): void {
+    for (const [targetId, binding] of this.thornBindings) {
+      const target = this.state.players.get(targetId);
+      if (target && target.health > 0 && !isInsideTownSafeZone(target) && now < binding.expiresAt) continue;
+      const message = this.thornBindingMessage(binding, "expired");
+      if (message) this.broadcast("combat:thorn-binding", message);
+      this.thornBindings.delete(targetId);
     }
   }
 
@@ -7253,6 +7310,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       void this.flushWorldDeltaWrites();
     }
     this.resolvePendingPowers(now);
+    this.resolveThornBindings(now);
     this.resolvePendingResurrections(now);
     this.resolvePendingAttacks(now);
     this.advanceCrawlerRushes(now);
@@ -7830,7 +7888,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         }
       }
       if (this.protectedDialogs.has(sessionId) || this.movementPilotControllers.has(sessionId) || this.orderedMovement.has(sessionId)) continue;
-      const input = activeMovementInput(this.movementInputs.get(sessionId), now, player.yaw);
+      const liveInput = activeMovementInput(this.movementInputs.get(sessionId), now, player.yaw);
+      const input = this.thornBindings.has(sessionId) ? { ...liveInput, strafe: 0, forward: 0 } : liveInput;
       const inputLength = Math.hypot(input.strafe, input.forward);
       const scale = inputLength > 1 ? 1 / inputLength : 1;
       const speed = movementSpeedWithMomentum(player.defending ? 2.1 : 4.2, player.momentumStacks, player.equippedTrait as TraitId)
@@ -7866,6 +7925,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
     const now = Date.now();
+    if (this.thornBindings.has(client.sessionId)) {
+      client.send("chat:notice", "Vines prevent dodging — attack to cut free.");
+      return this.reject(client, { requestId: parsed.data.requestId, action: "dodge", reason: "rate" });
+    }
     const actionAt = compensatedActionAt(now, parsed.data.actionAt);
     player.defending = false;
     const lastDodgeAt = this.lastDodgeAt.get(client.sessionId) ?? 0;
@@ -8903,6 +8966,25 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         }
         const player = this.state.players.get(sessionId);
         if (!player) { this.pendingAttacks.delete(sessionId); continue; }
+        if (this.thornBindings.has(sessionId)) {
+          this.pendingAttacks.delete(sessionId);
+          this.damageThornBinding(sessionId, sessionId);
+          this.sendCombatTiming(sessionId, { requestId: pending.requestId, action: "attack", phase: "resolved", serverTime: now, outcome: "hit" });
+          continue;
+        }
+        const bindingTargets = [...this.thornBindings.keys()].filter(id => id !== sessionId).flatMap(id => {
+          const target = this.state.players.get(id);
+          return target ? [{ id: `thorn-binding:${id}`, x: target.x, y: target.y, z: target.z, radius: .55 }] : [];
+        });
+        const bindingHit = meleeSweepImpact(player, pending.yaw, strike,
+          (Math.max(start, pending.lastSweepAt ?? start) - start) / (end - start),
+          (Math.min(now, end) - start) / (end - start), bindingTargets, this.readWorldBlock);
+        if (bindingHit?.startsWith("thorn-binding:")) {
+          this.pendingAttacks.delete(sessionId);
+          this.damageThornBinding(bindingHit.slice("thorn-binding:".length), sessionId);
+          this.sendCombatTiming(sessionId, { requestId: pending.requestId, action: "attack", phase: "resolved", serverTime: now, outcome: "hit" });
+          continue;
+        }
         const targets = [...this.state.mobs.entries()].filter(([, mob]) => mob.alive)
           .map(([id, mob]) => ({ id, x: mob.x, y: mob.y, z: mob.z, radius: mob.archetype === "stone_brute" ? 0.55 : 0.38 }));
         const hit = meleeSweepImpact(player, pending.yaw, strike,
@@ -8924,6 +9006,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.sendCombatTiming(sessionId, { requestId: pending.requestId, action: "attack", phase: "released", serverTime: now });
       const player = this.state.players.get(sessionId);
       if (!player) continue;
+      if (this.thornBindings.has(sessionId)) {
+        this.damageThornBinding(sessionId, sessionId);
+        this.sendCombatTiming(sessionId, { requestId: pending.requestId, action: "attack", phase: "resolved", serverTime: now, outcome: "hit" });
+        continue;
+      }
       const attackDefinition = WEAPON_ATTACK_DEFINITIONS[pending.mainHandId];
       const timing = attackDefinition.attacks[pending.step - 1] ?? attackDefinition.attacks[0];
       if (!timing) continue;
@@ -8991,6 +9078,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const next = flightPoint(projectile.start, projectile.end, progress);
       const targets = [...this.state.mobs.entries()].filter(([, mob]) => mob.alive)
         .map(([id, mob]) => ({ id, x: mob.x, y: mob.y, z: mob.z, radius: mob.archetype === "stone_brute" ? 0.55 : 0.38 }));
+      for (const [targetId] of this.thornBindings) {
+        const target = this.state.players.get(targetId);
+        if (target) targets.push({ id: `thorn-binding:${targetId}`, x: target.x, y: target.y, z: target.z, radius: .55 });
+      }
       const collision = projectileImpact(projectile.position, next, targets, this.readWorldBlock);
       projectile.position = next;
       if (!collision && progress < 1) continue;
@@ -8998,7 +9089,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const point = collision?.point ?? next;
       this.resolveProjectileVisual(projectileId, point, collision?.kind === "terrain" ? "terrain" : collision ? "hit" : "miss");
       if (collision?.kind === "entity" && collision.targetId) {
-        this.applyWeaponHit(projectile.attackerId, projectile, collision.targetId, now, projectile.start);
+        if (collision.targetId.startsWith("thorn-binding:")) this.damageThornBinding(collision.targetId.slice("thorn-binding:".length), projectile.attackerId);
+        else this.applyWeaponHit(projectile.attackerId, projectile, collision.targetId, now, projectile.start);
       } else this.broadcast("combat:miss", {
         attackerId: projectile.attackerId, mainHandId: projectile.mainHandId, comboStep: projectile.step,
       } satisfies CombatMiss);

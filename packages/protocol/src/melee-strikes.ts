@@ -89,7 +89,8 @@ export function mobMeleeStrike(archetype: string): MeleeStrikeProfile {
 export const mobMeleeImpactMs = (archetype: string): number => archetype === "stone_brute" ? 280 : 150;
 export const mobAimCommitMs = (archetype: string): number => archetype === "stone_brute" ? 650
   : archetype === "moss_crawler" || archetype === "briar_crawler" ? 550
-    : archetype === "ridge_stalker" ? 420 : archetype === "cave_spitter" || archetype === "shard_sentry" ? 450 : 250;
+    : archetype === "ridge_stalker" ? 420 : archetype === "thornbinder" ? 500
+      : archetype === "cave_spitter" || archetype === "shard_sentry" ? 450 : 250;
 
 /** Conservative XZ danger boundary, including the player's body contact margin. */
 export function mobStrikeGroundOutline(archetype: string, yaw: number): { x: number; z: number }[] {

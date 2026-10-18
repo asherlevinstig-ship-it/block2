@@ -199,6 +199,7 @@ import {
   type MoveRequest,
   type MobHazardPlaced,
   type MobProjectileReleased,
+  type ThornBindingUpdate,
   type PlayerHit,
   type ProjectileResolved,
   type PowerCast,
@@ -4398,6 +4399,15 @@ interface MobHazardVisual {
   expiresAt: number;
 }
 
+interface ThornBindingVisual {
+  root: pc.Entity;
+  material: pc.StandardMaterial;
+  targetId: string;
+  expiresAt: number;
+  health: number;
+  hitAt: number;
+}
+
 interface DepthsHazardVisual {
   root: pc.Entity;
   material: pc.StandardMaterial;
@@ -4444,6 +4454,8 @@ let lastLocalCallingImpact: { abilityId: CallingAbilityId; at: number } | null =
 // Retain impact style after the short-lived mesh ends, until server confirmation arrives.
 const projectileWeapons = new Map<string, MainHandId>();
 const mobHazardVisuals = new Map<string, MobHazardVisual>();
+const thornBindingVisuals = new Map<string, ThornBindingVisual>();
+let localThornBoundUntil = 0;
 const depthsHazardVisuals = new Map<string, DepthsHazardVisual>();
 let powerAimVisual: PowerAimVisual | null = null;
 let specialAimVisual: PowerAimVisual | null = null;
@@ -5495,14 +5507,16 @@ function createMobProjectile(message: MobProjectileReleased): void {
   if (flight.expired) return;
   const rock = message.kind === "rock";
   const crystal = message.kind === "crystal";
-  const entity = new pc.Entity(rock ? "rock-projectile" : crystal ? "crystal-projectile" : "acid-projectile");
-  entity.addComponent("render", { type: rock || crystal ? "box" : "sphere" });
-  const material = powerMaterial(rock ? new pc.Color(.72, .57, .38) : crystal ? new pc.Color(.75, .42, 1) : new pc.Color(0.54, 1, 0.08), 0.94);
+  const vine = message.kind === "vine";
+  const entity = new pc.Entity(rock ? "rock-projectile" : crystal ? "crystal-projectile" : vine ? "vine-projectile" : "acid-projectile");
+  entity.addComponent("render", { type: rock || crystal || vine ? "box" : "sphere" });
+  const material = powerMaterial(rock ? new pc.Color(.72, .57, .38) : crystal ? new pc.Color(.75, .42, 1) : vine ? new pc.Color(.34, .78, .12) : new pc.Color(0.54, 1, 0.08), 0.94);
   if (entity.render) entity.render.material = material;
-  entity.setLocalScale(0.3, 0.3, 0.3);
+  entity.setLocalScale(vine ? .14 : 0.3, vine ? .14 : 0.3, vine ? .78 : 0.3);
   if (rock || crystal) entity.setEulerAngles(28, 35, 18);
   const start = new pc.Vec3(message.x, message.y + 1.05, message.z);
   const end = new pc.Vec3(message.targetX, message.targetY + 0.08, message.targetZ);
+  if (vine) entity.lookAt(end);
   entity.setPosition(start);
   app.root.addChild(entity);
   weaponProjectileVisuals.push({
@@ -5515,6 +5529,44 @@ function createMobProjectile(message: MobProjectileReleased): void {
     startedAt: flight.startedAt,
     durationMs: flight.durationMs,
   });
+}
+
+function updateThornBinding(message: ThornBindingUpdate): void {
+  if (message.targetId === room?.sessionId) {
+    localThornBoundUntil = message.phase === "applied" || message.phase === "damaged" ? message.expiresAt : 0;
+    if (localThornBoundUntil > Date.now()) {
+      smoothedMovement = { x: 0, z: 0 };
+      unsentMovementSteps.length = 0;
+      pendingPredictionFrames.length = 0;
+    }
+  }
+  const current = thornBindingVisuals.get(message.bindingId);
+  if (message.phase === "broken" || message.phase === "expired") {
+    if (current) {
+      const point = current.root.getPosition().clone().add(new pc.Vec3(0, .8, 0));
+      if (message.phase === "broken") createRangedPopup(point, "✦", "enemy", false, [.48, .9, .22]);
+      current.root.destroy(); current.material.destroy(); thornBindingVisuals.delete(message.bindingId);
+    }
+    return;
+  }
+  if (current) {
+    current.health = message.health; current.expiresAt = message.expiresAt; current.hitAt = performance.now();
+    return;
+  }
+  const root = new pc.Entity(`thorn-binding:${message.targetId}`);
+  const material = powerMaterial(new pc.Color(.29, .55, .1), .9);
+  for (let index = 0; index < 7; index += 1) {
+    const angle = index / 7 * Math.PI * 2;
+    const vine = addBox(root, `binding-vine-${index}`, material, [.13, .72 + index % 2 * .2, .14],
+      [Math.sin(angle) * .42, .34, Math.cos(angle) * .42]);
+    vine.setLocalEulerAngles(Math.sin(angle) * 18, angle * 180 / Math.PI, -Math.cos(angle) * 24);
+    addBox(root, `binding-thorn-${index}`, material, [.24, .1, .11],
+      [Math.sin(angle) * .32, .42 + index % 2 * .16, Math.cos(angle) * .32]).setLocalEulerAngles(0, angle * 180 / Math.PI, 28);
+  }
+  root.setPosition(message.x, message.y + .02, message.z);
+  app.root.addChild(root);
+  thornBindingVisuals.set(message.bindingId, { root, material, targetId: message.targetId,
+    expiresAt: message.expiresAt, health: message.health, hitAt: performance.now() });
 }
 
 function createMobHazard(message: MobHazardPlaced): void {
@@ -5944,7 +5996,7 @@ function createHuntersMarkPayoff(mob: MobVisual, assassin = false): void {
 function updateStrikeWarningMesh(mesh: pc.Mesh, archetype: string, yaw: number, pattern = "slam", chargeLength: number = CHAMPION_CHARGE.distance,
   shotOrigin: { x: number; y: number; z: number; name?: string; actionSequence?: number } = { x: 0, y: 0, z: 0 }, safeGap = false): void {
   const rockVolley = pattern === "rocks" || pattern === "falling-rocks" || pattern === "warden-barrage" || pattern === "fault-line";
-  if (rockVolley || (archetype === "cave_spitter" || archetype === "shard_sentry") && pattern !== "pool") {
+  if (rockVolley || (archetype === "cave_spitter" || archetype === "shard_sentry" || archetype === "thornbinder") && pattern !== "pool") {
     const offsets = rockVolley ? BRUTE_VOLLEY.offsets : spitterShotOffsets(pattern);
     const lengths = offsets.map(offset => enemyShotGuideLength({ x: shotOrigin.x, y: shotOrigin.y + 1.05, z: shotOrigin.z }, yaw + offset, readCollisionWorldBlock, rockVolley ? BRUTE_VOLLEY.range : SPITTER_PATTERN.range));
     const doubleVolley = pattern === "double-fan" || pattern === "teleport-burst" || pattern === "warden-barrage"
@@ -6199,6 +6251,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   entity.addChild(bodyRoot);
   const isBrute = mob.archetype === "stone_brute";
   const isSpitter = mob.archetype === "cave_spitter" || mob.archetype === "shard_sentry";
+  const isThornbinder = mob.archetype === "thornbinder";
   const isWatchbreaker = mobId === "northwatch-watchbreaker";
   const isAshglass = mobId.startsWith("ashglass-sentry-");
   const isBriar = mob.archetype === "briar_crawler";
@@ -6211,7 +6264,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   const bodyMaterial = coloredMaterial(
     isWatchbreaker ? new pc.Color(.25, .35, .42) : isBrute ? new pc.Color(0.38, 0.43, 0.48) : mob.archetype === "shard_sentry" ? new pc.Color(.25, .43, .52)
       : mob.archetype === "ridge_stalker" ? new pc.Color(.44, .46, .39)
-        : isAshglass ? new pc.Color(0.31, 0.22, 0.2) : isSpitter ? new pc.Color(0.34, 0.29, 0.43) : isBriar ? new pc.Color(0.31, 0.19, 0.12) : new pc.Color(0.28, 0.42, 0.21),
+        : isAshglass ? new pc.Color(0.31, 0.22, 0.2) : isThornbinder ? new pc.Color(.3, .24, .1) : isSpitter ? new pc.Color(0.34, 0.29, 0.43) : isBriar ? new pc.Color(0.31, 0.19, 0.12) : new pc.Color(0.28, 0.42, 0.21),
   );
   bodyMaterial.shininess = 12;
   // Keep the emissive shader feature active while varying cue intensity.
@@ -6280,8 +6333,8 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   }
   const statusRoot = new pc.Entity("mob-status");
   entity.addChild(statusRoot);
-  const healthWidth = isBrute ? 1.46 : isSpitter ? 1.12 : 0.96;
-  const healthBarY = matriarch ? 2.5 : mob.isChampion || mob.isMiniBoss ? mob.archetype === "shard_sentry" ? 2.45 : isSpitter ? 1.9 : isBrute ? 3.08 : 1.72 : isBrute ? 2.32 : mob.archetype === "shard_sentry" ? 1.98 : isSpitter ? 1.43 : 1.34;
+  const healthWidth = isBrute ? 1.46 : isThornbinder ? 1.2 : isSpitter ? 1.12 : 0.96;
+  const healthBarY = matriarch ? 2.5 : isThornbinder ? 2.58 : mob.isChampion || mob.isMiniBoss ? mob.archetype === "shard_sentry" ? 2.45 : isSpitter ? 1.9 : isBrute ? 3.08 : 1.72 : isBrute ? 2.32 : mob.archetype === "shard_sentry" ? 1.98 : isSpitter ? 1.43 : 1.34;
   addBox(statusRoot, "health-back", healthBackMaterial, [healthWidth + 0.06, 0.1, 0.08], [0, healthBarY, 0]);
   const healthFill = addBox(statusRoot, "health-fill", healthMaterial, [healthWidth, 0.065, 0.09], [0, healthBarY, 0.01]);
   const tierMaterial = coloredMaterial(tierColor);
@@ -10240,6 +10293,10 @@ function requestDodge(): void {
   if (!defeatScreen.hidden) return;
   if (reportedProtectedDialog === true) return;
   if (!room || !worldReady) return;
+  if (Date.now() < localThornBoundUntil) {
+    status.textContent = "Rooted by vines · attack to cut free.";
+    return;
+  }
   const now = performance.now();
   if (now < localDodgeExhaustedUntil) {
     showCombatFeedback("EXHAUSTED", "hurt");
@@ -11169,7 +11226,8 @@ app.on("update", (dt: number) => {
   const desiredMovement = quantizeMovementToEightDirections(
     cameraRelativeMovement(strafe, forward, cameraOffset.x, cameraOffset.z),
   );
-  smoothedMovement = worldReady && modalMovementAllowed ? approachMovement(smoothedMovement, desiredMovement, frameTime) : { x: 0, z: 0 };
+  smoothedMovement = worldReady && modalMovementAllowed && Date.now() >= localThornBoundUntil
+    ? approachMovement(smoothedMovement, desiredMovement, frameTime) : { x: 0, z: 0 };
   const powerFacingActive = powerAimActive || (localPowerStartedAt !== null
     && performance.now() - localPowerStartedAt < powerDuration(localActivePower)
     && localPowerFacingYaw !== null);
@@ -11941,6 +11999,19 @@ app.on("update", (dt: number) => {
     hazard.root.setLocalScale(pulse, 1 + Math.sin(animationTime * 11) * 0.12, pulse);
     hazard.material.opacity = 0.5 + Math.sin(animationTime * 9) * 0.1;
     hazard.material.update();
+  }
+  for (const [bindingId, binding] of thornBindingVisuals) {
+    if (Date.now() >= binding.expiresAt) {
+      binding.root.destroy(); binding.material.destroy(); thornBindingVisuals.delete(bindingId); continue;
+    }
+    const target = binding.targetId === room?.sessionId ? localPlayer : remotePlayers.get(binding.targetId)?.entity;
+    if (target) {
+      const point = target.getPosition(); binding.root.setPosition(point.x, point.y + .02, point.z);
+    }
+    const hit = Math.max(0, 1 - (performance.now() - binding.hitAt) / 180);
+    const pulse = 1 + Math.sin(animationTime * 11) * .035 + hit * .18;
+    binding.root.setLocalScale(pulse, 1 + hit * .35, pulse);
+    binding.root.rotate(0, frameTime * (binding.health === 1 ? 32 : 18), 0);
   }
   for (const [hazardId, hazard] of depthsHazardVisuals) {
     const now = Date.now();
@@ -12771,6 +12842,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     createMobProjectile(message);
     logMovementEvent(`${(message.kind ?? "acid").toUpperCase()} SHOT ${message.mobId}`);
   });
+  room.onMessage("combat:thorn-binding", (message: ThornBindingUpdate) => updateThornBinding(message));
   room.onMessage("combat:mob-hazard", (message: MobHazardPlaced) => {
     createMobHazard(message);
     logMovementEvent(`${message.kind === "pressure" ? "ARENA PRESSURE" : message.kind === "root" ? "ROOT HAZARD" : "ACID POOL"} ${message.hazardId}`);
@@ -13416,6 +13488,9 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     projectileWeapons.clear();
     for (const hazard of mobHazardVisuals.values()) hazard.root.destroy();
     mobHazardVisuals.clear();
+    for (const binding of thornBindingVisuals.values()) { binding.root.destroy(); binding.material.destroy(); }
+    thornBindingVisuals.clear();
+    localThornBoundUntil = 0;
     for (const hazard of depthsHazardVisuals.values()) { hazard.root.destroy(); hazard.material.destroy(); }
     depthsHazardVisuals.clear();
     updatePlayerCount();

@@ -1803,7 +1803,7 @@ export interface ProjectileResolved {
 }
 
 export interface MobProjectileReleased {
-  kind?: "rock" | "acid" | "crystal";
+  kind?: "rock" | "acid" | "crystal" | "vine";
   releasedAt?: number;
   projectileId: string;
   mobId: string;
@@ -1814,6 +1814,20 @@ export interface MobProjectileReleased {
   targetY: number;
   targetZ: number;
   travelMs: number;
+}
+
+export interface ThornBindingUpdate {
+  bindingId: string;
+  mobId: string;
+  targetId: string;
+  x: number;
+  y: number;
+  z: number;
+  health: number;
+  maxHealth: number;
+  expiresAt: number;
+  phase: "applied" | "damaged" | "broken" | "expired";
+  breakerId?: string;
 }
 
 export interface MobHazardPlaced {

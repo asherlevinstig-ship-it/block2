@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Block, MINERAL_DEPOSITS, RENEWABLE_MINERAL_DEPOSITS, TOWN_BLACKSMITH_STALL_POSITION, wildernessTerritoryAt, wildernessSurfaceBlock, authoredMineralAt, playerCollides } from "@blockcraft/voxel-world";
-import { WILDERNESS_ENCOUNTERS, ASHEN_SENTRY_IDS, ashenSentryAllows, ashenSentryPattern, isAshenSentry, isMistfenMob, isNorthwatchMob, northwatchAllows, northwatchShardPattern, isSouthernQuarryMob, southernQuarryAllows } from "../src/wilderness-encounters.js";
+import { WILDERNESS_ENCOUNTERS, ASHEN_SENTRY_IDS, ashenSentryAllows, ashenSentryPattern, isAshenSentry, isGreenwoodCampMob, isMistfenMob, isNorthwatchMob, northwatchAllows, northwatchShardPattern, isSouthernQuarryMob, southernQuarryAllows } from "../src/wilderness-encounters.js";
 import { WorldRoom } from "../src/game-room.js";
 import { PlayerState, WorldState } from "../src/schema.js";
 import { decodeLootBagItems } from "@blockcraft/protocol";
@@ -51,7 +51,7 @@ describe("distinct radial wilderness territories", () => {
   });
   it("places every guard near the appropriate mineral site", () => {
     for (const spawn of WILDERNESS_ENCOUNTERS) {
-      if (isAshenSentry(spawn.id) || isMistfenMob(spawn.id) || isSouthernQuarryMob(spawn.id) || isNorthwatchMob(spawn.id)) continue;
+      if (isAshenSentry(spawn.id) || isGreenwoodCampMob(spawn.id) || isMistfenMob(spawn.id) || isSouthernQuarryMob(spawn.id) || isNorthwatchMob(spawn.id)) continue;
       const block = spawn.archetype === "moss_crawler" ? Block.IronOre : Block.SilverOre;
       const nearest = Math.min(...MINERAL_DEPOSITS.filter(d => d.block === block && (spawn.archetype !== "stone_brute" || d.radius === 2))
         .map(d => Math.hypot(spawn.x - d.x, spawn.z - d.z)));
