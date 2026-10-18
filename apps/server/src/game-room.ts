@@ -5317,7 +5317,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       ...(augmentId ? { augmentId } : {}),
     };
     if (abilityId === "assassin_vanish") client.send("calling:ability:effect", effect);
-    else this.broadcast("calling:ability:effect", effect);
+    else {
+      this.broadcast("calling:ability:effect", effect);
+      client.send("calling:ability:effect", effect);
+    }
     if (abilityId === "tank_bulwark" || abilityId === "tank_challenge")
       this.callingState(client.sessionId, pathId, abilityId, "BRACED", { activeUntil: now + (durationMs ?? 3_000) });
     else if (abilityId === "mage_mana_shield")
@@ -6133,8 +6136,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.clients.find(client => client.sessionId === cast.targetId)?.send("player:resurrected", { health: target.health, maxHealth: target.maxHealth,
         casterName: caster.name || "A Healer" });
       this.clients.find(client => client.sessionId === casterId)?.send("chat:notice", `${target.name || "Ally"} resurrected with ${target.health} HP.`);
-      this.broadcast("calling:ability:effect", { casterId, pathId: "healer", abilityId: "healer_resurrection",
-        x: target.x, y: target.y, z: target.z, yaw: caster.yaw, targetId: cast.targetId } satisfies CallingAbilityEffect);
+      const effect = { casterId, pathId: "healer", abilityId: "healer_resurrection",
+        x: target.x, y: target.y, z: target.z, yaw: caster.yaw, targetId: cast.targetId } satisfies CallingAbilityEffect;
+      this.broadcast("calling:ability:effect", effect);
+      this.clients.find(client => client.sessionId === casterId)?.send("calling:ability:effect", effect);
       this.callingState(casterId, "healer", "healer_resurrection", "", { clear: true });
       void this.persistPlayer(cast.targetId, target);
     }

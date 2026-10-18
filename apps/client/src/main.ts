@@ -11505,7 +11505,11 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     const duplicateLocal = effect.casterId === room?.sessionId
       && lastLocalCallingImpact?.abilityId === effect.abilityId
       && performance.now() - lastLocalCallingImpact.at < 700;
-    if (!duplicateLocal) createCallingImpact(effect);
+    if (!duplicateLocal) {
+      createCallingImpact(effect);
+      if (effect.casterId === room?.sessionId)
+        lastLocalCallingImpact = { abilityId: effect.abilityId, at: performance.now() };
+    }
   });
   room.onMessage("player:stealth", (state: { playerId: string; until: number }) => {
     if (state.until > Date.now()) playerStealthUntil.set(state.playerId, state.until);

@@ -45,6 +45,9 @@ describe("hotbar Calling abilities", () => {
       casterId: "hero", pathId, abilityId: `${pathId}_${pathId === "tank" ? "bulwark" : pathId === "mage" ? "arcane_surge" : pathId === "assassin" ? "vanish" : pathId === "thief" ? "smoke_bomb" : pathId === "healer" ? "field_mend" : "volley_focus"}`,
       x: 50, y: 8, z: 50,
     }));
+    if (pathId !== "assassin") expect(client.send).toHaveBeenCalledWith("calling:ability:effect", expect.objectContaining({
+      casterId: "hero", pathId,
+    }));
     if (pathId !== "mage" && pathId !== "healer") expect(pathId === "assassin" ? client.send : broadcast).toHaveBeenCalledWith("calling:state", expect.objectContaining({
       playerId: "hero", pathId, phase: "active",
     }));
