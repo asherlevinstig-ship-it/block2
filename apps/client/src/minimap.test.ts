@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { activeEliteMapTargets, clusterThreatMapTargets, discoveredMiniBossTargets, discoverMiniBosses, miniBossDiscoveryKey, mineralStatusLabel, discoverChampion, CHAMPION_WAYPOINT, ASHEN_SPIRE_WAYPOINT, MISTFEN_WAYPOINT, WARDEN_GATE_WAYPOINT, discoverAshenSpire, discoverMistfen, discoverRoadsideLandmarks, roadsideDiscoveryKey, isPathChampionName, mapMarkerLabelVisible, nearbyDiscoveredMiniBossTargets, nearbyThreatMapTarget, THREAT_GUIDANCE_RADIUS } from "./minimap.js";
 import { ROADSIDE_DISCOVERIES, SURFACE_HEIGHT } from "@blockcraft/voxel-world";
-import { HOME_WAYPOINT, MAP_DEPOSITS, MAP_SIZE, DISCOVERY_RADIUS, depositKey, discoverDeposits, dungeonMapPoints, dungeonPingAtMapClick, knownWaypoints, mapPoint, mapFacing, parseDiscoveries, parseVisitedSurfaceRegions, surfaceMapColorAt, surfaceMapRegionAt, waypointAtMapPoint, waypointDirection } from "./minimap.js";
+import { HOME_WAYPOINT, MAP_DEPOSITS, MAP_SIZE, DISCOVERY_RADIUS, depositKey, discoverDeposits, dungeonMapPoints, dungeonPingAtMapClick, knownWaypoints, mapPoint, mapFacing, parseDiscoveries, parseExploredSurfaceCells, parseVisitedSurfaceRegions, revealSurfaceCells, surfaceCellExplored, surfaceMapColorAt, surfaceMapRegionAt, waypointAtMapPoint, waypointDirection } from "./minimap.js";
 
 describe("north-up explorer minimap", () => {
   it("draws authored terrain and roads rather than only distance rings", () => {
@@ -25,6 +25,17 @@ describe("north-up explorer minimap", () => {
     expect(surfaceMapColorAt(20.5, 70.5, visited)).toEqual(surfaceMapColorAt(20.5, 70.5));
     expect(surfaceMapColorAt(2.5, 101.5, visited)).not.toEqual(surfaceMapColorAt(2.5, 101.5));
     expect(surfaceMapColorAt(8.5, 100.5, visited)).not.toEqual(surfaceMapColorAt(8.5, 100.5));
+  });
+  it("reveals and permanently remembers a trail through surface fog", () => {
+    const explored = parseExploredSurfaceCells('["1,1","bad","2.5,4",7]');
+    expect(explored).toEqual(new Set(["1,1"]));
+    expect(surfaceCellExplored(8.5, 8.5, explored)).toBe(true);
+    expect(surfaceCellExplored(40.5, 40.5, explored)).toBe(false);
+    expect(revealSurfaceCells({ x: 40.5, z: 40.5 }, explored)).toBe(true);
+    expect(surfaceCellExplored(40.5, 40.5, explored)).toBe(true);
+    expect(revealSurfaceCells({ x: 40.5, z: 40.5 }, explored)).toBe(false);
+    expect(parseExploredSurfaceCells(JSON.stringify([...explored]))).toEqual(explored);
+    expect(parseExploredSurfaceCells("not json").size).toBe(0);
   });
   it("reveals dynamic threat guidance only when nearby on the same floor", () => {
     const threat = { x: 20, y: 8, z: 0, name: "Realm Warden" };

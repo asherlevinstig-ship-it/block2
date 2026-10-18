@@ -9,6 +9,9 @@ const SURFACE_TERRAIN_SIZE = MAP_SIZE / 2;
 export const DISCOVERY_RADIUS = 10;
 export const THREAT_GUIDANCE_RADIUS = 28;
 export const MAP_THREAT_DISPLAY_RADIUS = 24;
+export const SURFACE_FOG_CELL_SIZE = 8;
+export const SURFACE_REVEAL_RADIUS = 18;
+const SURFACE_FOG_COLOR: MapColor = [5, 13, 16];
 type MapColor = readonly [number, number, number];
 type SurfaceMapRegion = { readonly id: string; readonly name: string };
 const SURFACE_MAP_REGIONS = {
@@ -38,6 +41,33 @@ export function parseVisitedSurfaceRegions(raw: string | null): Set<string> {
     const values: unknown = JSON.parse(raw ?? "[]");
     return new Set(Array.isArray(values) ? values.filter((value): value is string => typeof value === "string" && VALID_SURFACE_REGIONS.has(value)) : []);
   } catch { return new Set(); }
+}
+const surfaceFogCell = (x: number, z: number): string =>
+  `${Math.floor(x / SURFACE_FOG_CELL_SIZE)},${Math.floor(z / SURFACE_FOG_CELL_SIZE)}`;
+export function parseExploredSurfaceCells(raw: string | null): Set<string> {
+  try {
+    const values: unknown = JSON.parse(raw ?? "[]");
+    return new Set(Array.isArray(values) ? values.filter((value): value is string =>
+      typeof value === "string" && /^-?\d+,-?\d+$/.test(value)) : []);
+  } catch { return new Set(); }
+}
+export function revealSurfaceCells(player: Position, explored: Set<string>, radius = SURFACE_REVEAL_RADIUS): boolean {
+  let changed = false;
+  const minCellX = Math.floor((player.x - radius) / SURFACE_FOG_CELL_SIZE);
+  const maxCellX = Math.floor((player.x + radius) / SURFACE_FOG_CELL_SIZE);
+  const minCellZ = Math.floor((player.z - radius) / SURFACE_FOG_CELL_SIZE);
+  const maxCellZ = Math.floor((player.z + radius) / SURFACE_FOG_CELL_SIZE);
+  for (let cellZ = minCellZ; cellZ <= maxCellZ; cellZ++) for (let cellX = minCellX; cellX <= maxCellX; cellX++) {
+    const centerX = (cellX + .5) * SURFACE_FOG_CELL_SIZE;
+    const centerZ = (cellZ + .5) * SURFACE_FOG_CELL_SIZE;
+    if (Math.hypot(centerX - player.x, centerZ - player.z) > radius + SURFACE_FOG_CELL_SIZE * .7) continue;
+    const key = `${cellX},${cellZ}`;
+    if (!explored.has(key)) { explored.add(key); changed = true; }
+  }
+  return changed;
+}
+export function surfaceCellExplored(x: number, z: number, explored: ReadonlySet<string>): boolean {
+  return explored.has(surfaceFogCell(x, z));
 }
 export function surfaceMapRegionAt(x: number, z: number): SurfaceMapRegion {
   const cellX = Math.floor(x), cellZ = Math.floor(z);
@@ -263,6 +293,9 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
   const visitedRegionsKey = `${storageKey}:visited-regions:v1`;
   let visitedRegions: Set<string>;
   try { visitedRegions = parseVisitedSurfaceRegions(localStorage.getItem(visitedRegionsKey)); } catch { visitedRegions = new Set(); }
+  const exploredSurfaceKey = `${storageKey}:surface-fog:v1`;
+  let exploredSurface: Set<string>;
+  try { exploredSurface = parseExploredSurfaceCells(localStorage.getItem(exploredSurfaceKey)); } catch { exploredSurface = new Set(); }
   let lastUpdate = -Infinity;
   let lastPlayer: (Position & { y: number }) | null = null;
   let waypoint: Waypoint | null = null;
@@ -580,6 +613,9 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
           try { localStorage.setItem(visitedRegionsKey, JSON.stringify([...visitedRegions])); } catch { /* Private browsing can disable storage. */ }
           if (region.id !== "town") onRegionDiscovered?.(region.name);
         }
+        if (revealSurfaceCells(player, exploredSurface)) {
+          try { localStorage.setItem(exploredSurfaceKey, JSON.stringify([...exploredSurface])); } catch { /* Private browsing can disable storage. */ }
+        }
       }
       depthLabel.textContent = underground ? `UNDERGROUND · DEPTH ${caveDepth(player.y)} BLOCKS` : "SURFACE";
       surfaceButton.hidden = !underground;
@@ -634,7 +670,8 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
           const worldZ = player.z + (py * 2 + 1 - MAP_SIZE / 2) / scale;
           for (let px = 0; px < SURFACE_TERRAIN_SIZE; px++) {
             const worldX = player.x + (px * 2 + 1 - MAP_SIZE / 2) / scale;
-            const color = surfaceMapColorAt(worldX, worldZ, visitedRegions);
+            const color = surfaceCellExplored(worldX, worldZ, exploredSurface)
+              ? surfaceMapColorAt(worldX, worldZ) : SURFACE_FOG_COLOR;
             const offset = (py * SURFACE_TERRAIN_SIZE + px) * 4;
             pixels[offset] = color[0]; pixels[offset + 1] = color[1]; pixels[offset + 2] = color[2]; pixels[offset + 3] = 255;
           }
