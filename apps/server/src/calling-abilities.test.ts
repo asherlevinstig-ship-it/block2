@@ -187,13 +187,33 @@ describe("hotbar Calling abilities", () => {
     internal.handleCallingAbilityEquip(client, { abilityId: "thief_decoy" });
     internal.handleCallingAbility(client, { requestId: "throw-decoy" });
     const decoyId = "thief-decoy:hero";
-    expect(internal.thiefDecoys.get(decoyId)).toEqual({ x: player.x, y: player.y, z: player.z, until: 14_250 });
+    expect(internal.thiefDecoys.get(decoyId)).toEqual({ ownerId: "hero", x: player.x, y: player.y, z: player.z,
+      yaw: player.yaw, until: 14_250, health: 5, maxHealth: 5 });
     expect(internal.mobAwareness.get("pursuer").targetId).toBe(decoyId);
     expect(mob.awarenessState).toBe("search");
     expect(client.send).toHaveBeenCalledWith("thief:diverted-targets", {
       casterId: "hero", abilityId: "thief_decoy", targetIds: ["pursuer"],
     });
     expect(broadcast).toHaveBeenCalledWith("thief:diverted-targets", expect.objectContaining({ abilityId: "thief_decoy" }));
+  });
+
+  it("lets enemies damage and shatter the Decoy without harming its owner", () => {
+    const { internal, player, client, broadcast } = fixture("thief", 70);
+    const mob = new MobState(); Object.assign(mob, { x: 52, y: 8, z: 50, alive: true, health: 12, targetId: "hero" });
+    internal.state.mobs.set("pursuer", mob);
+    internal.mobAwareness.set("pursuer", { targetId: "hero", lastSeen: { x: 50, y: 8, z: 50 }, seenAt: 10_000 });
+    internal.handleCallingAbilityEquip(client, { abilityId: "thief_decoy" });
+    internal.handleCallingAbility(client, { requestId: "bait" });
+    const decoyId = "thief-decoy:hero";
+    internal.damageThiefDecoy(decoyId, "pursuer", 3, 10_100);
+    expect(internal.thiefDecoys.get(decoyId).health).toBe(2);
+    expect(player.health).toBe(5);
+    internal.damageThiefDecoy(decoyId, "pursuer", 3, 10_200);
+    expect(internal.thiefDecoys.has(decoyId)).toBe(false);
+    expect(mob.targetId).toBe("");
+    expect(broadcast).toHaveBeenCalledWith("thief:decoy-hit", expect.objectContaining({
+      decoyId, health: 0, destroyed: true, reason: "destroyed",
+    }));
   });
 
   it("publishes Ranger empowered-shot identity and remaining charges", () => {

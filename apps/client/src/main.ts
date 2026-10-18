@@ -4419,6 +4419,7 @@ interface CallingPersistentVisual {
 }
 const callingPersistentVisuals = new Map<string, CallingPersistentVisual>();
 const mageCastAnimations = new Map<string, { abilityId: MageAbilityId; startedAt: number; endsAt: number }>();
+const thiefDecoyVisuals = new Map<string, { root: pc.Entity; materials: pc.StandardMaterial[]; expiresAt: number; baseY: number }>();
 const healerAllyCues = new Map<string, { root: pc.Entity; materials: pc.StandardMaterial[]; fallen: boolean }>();
 const powerDebrisVisuals: PowerDebrisVisual[] = [];
 const markPayoffVisuals: MarkPayoffVisual[] = [];
@@ -5189,6 +5190,7 @@ function createCallingImpact(effect: CallingAbilityEffect): void {
   }
   const abilityId = effect.abilityId;
   if (effect.pathId === "mage") createMageHandCast(effect.casterId, abilityId as MageAbilityId);
+  if (abilityId === "thief_decoy") createThiefDecoyImitation(effect);
   const layers = CALLING_IMPACT_PARTICLES[abilityId];
   const root = new pc.Entity(`calling-impact:${abilityId}`);
   const followsPlayer = abilityId === "tank_bulwark" || abilityId === "mage_mana_shield"
@@ -5215,6 +5217,43 @@ function createCallingImpact(effect: CallingAbilityEffect): void {
   combatAudio.play(effect.pathId === "tank" ? "callingTank" : effect.pathId === "mage" || effect.pathId === "healer" ? "callingMage"
     : effect.pathId === "assassin" ? "callingShadow" : effect.pathId === "thief" ? "callingThief" : "callingRanger", pan);
   if (abilityId === "tank_earthbreaker") combatAudio.play("seismicImpact");
+}
+
+function createThiefDecoyImitation(effect: CallingAbilityEffect): void {
+  const decoyId = `thief-decoy:${effect.casterId}`;
+  const existing = thiefDecoyVisuals.get(decoyId);
+  if (existing) { existing.root.destroy(); existing.materials.forEach(material => material.destroy()); }
+  const rig = effect.casterId === room?.sessionId ? localPlayerRig : remotePlayers.get(effect.casterId)?.rig;
+  if (!rig) return;
+  const root = new pc.Entity("thief-player-decoy"); root.setPosition(effect.x, effect.y, effect.z); root.setEulerAngles(0, effect.yaw, 0); app.root.addChild(root);
+  const imitation = rig.root.clone(); imitation.name = "decoy-player-imitation"; imitation.setLocalPosition(0, 0, 0); root.addChild(imitation);
+  const lure = callingSignatureMaterial(new pc.Color(.26, 1, .58), .38, .78);
+  const edge = callingSignatureMaterial(new pc.Color(.72, 1, .86), .82, 1.18);
+  for (let index = 0; index < 14; index += 1) {
+    const angle = index / 14 * Math.PI * 2;
+    addCallingSignaturePrimitive(root, "decoy-imitation-ring", "box", index % 3 === 0 ? edge : lure,
+      [.04, .025, .22], [Math.sin(angle) * .68, .06, Math.cos(angle) * .68], [0, angle * 180 / Math.PI, 0]);
+  }
+  const expiresAt = performance.now() + (effect.durationMs ?? 4_000);
+  thiefDecoyVisuals.set(decoyId, { root, materials: [lure, edge], expiresAt, baseY: effect.y });
+}
+
+function destroyThiefDecoyImitation(decoyId: string, shattered: boolean): void {
+  const visual = thiefDecoyVisuals.get(decoyId); if (!visual) return;
+  const position = visual.root.getPosition().clone();
+  if (shattered) {
+    const burst = new pc.Entity("decoy-shatter"); burst.setPosition(position); app.root.addChild(burst);
+    const shard = callingSignatureMaterial(new pc.Color(.38, 1, .65), .86, 1.25);
+    for (let index = 0; index < 14; index += 1) {
+      const angle = index / 14 * Math.PI * 2;
+      addCallingSignaturePrimitive(burst, "decoy-shard", "box", shard, [.035, .12 + index % 3 * .06, .035],
+        [Math.sin(angle) * (.25 + index % 4 * .14), .4 + index % 5 * .2, Math.cos(angle) * (.25 + index % 4 * .14)],
+        [index % 2 ? 35 : -35, angle * 180 / Math.PI, index % 3 ? 28 : -28]);
+    }
+    callingImpactVisuals.push({ root: burst, expiresAt: performance.now() + 720, materials: [shard], abilityId: "thief_decoy" });
+    createRangedPopup(new pc.Vec3(position.x, position.y + 2, position.z), "DECOY SHATTERED", "stagger", false, [.4, 1, .66]);
+  }
+  visual.root.destroy(); visual.materials.forEach(material => material.destroy()); thiefDecoyVisuals.delete(decoyId);
 }
 
 function createMageHandCast(playerId: string, abilityId: MageAbilityId): void {
@@ -5280,13 +5319,14 @@ function updateCallingPersistentState(state: CallingStateUpdate): void {
   }
   if (state.playerId === room?.sessionId) localCallingState = state.phase === "clear" ? null : state;
   if (state.phase === "clear") return;
+  if (state.abilityId === "thief_decoy") return;
   const casterAnchor = state.playerId === room?.sessionId ? localPlayer : remotePlayers.get(state.playerId)?.entity;
   const targetAnchor = state.targetId
     ? mobVisuals.get(state.targetId)?.entity ?? remotePlayers.get(state.targetId)?.entity : undefined;
   const anchor = targetAnchor ?? casterAnchor;
   if (!anchor) return;
   const root = new pc.Entity(`calling-state:${state.abilityId}`);
-  const worldAnchored = state.abilityId === "thief_smoke_bomb" || state.abilityId === "thief_decoy";
+  const worldAnchored = state.abilityId === "thief_smoke_bomb";
   if (worldAnchored) {
     const position = anchor.getPosition(); root.setPosition(position.x, position.y + .03, position.z); app.root.addChild(root);
   } else { root.setLocalPosition(0, .03, 0); anchor.addChild(root); }
@@ -11450,6 +11490,10 @@ app.on("update", (dt: number) => {
       if (playerId === room?.sessionId) localCallingState = null;
     }
   }
+  for (const [decoyId, visual] of thiefDecoyVisuals) {
+    visual.root.setPosition(visual.root.getPosition().x, visual.baseY + Math.sin(animationTime * 4.5) * .035, visual.root.getPosition().z);
+    if (animationNow >= visual.expiresAt) destroyThiefDecoyImitation(decoyId, false);
+  }
   for (let index = powerImpactVisuals.length - 1; index >= 0; index -= 1) {
     const impact = powerImpactVisuals[index]!;
     const elapsed = animationNow - impact.startedAt;
@@ -12183,6 +12227,15 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   });
   room.onMessage("thief:diverted-targets", (message: { casterId: string; abilityId: CallingAbilityId; targetIds: string[] }) => {
     createThiefDivertedTargets(message.abilityId, message.targetIds);
+  });
+  room.onMessage("thief:decoy-hit", (message: { decoyId: string; damage: number; health: number; maxHealth: number; destroyed: boolean; reason: string }) => {
+    const visual = thiefDecoyVisuals.get(message.decoyId);
+    if (visual && !message.destroyed) {
+      const position = visual.root.getPosition();
+      createRangedPopup(new pc.Vec3(position.x, position.y + 1.9, position.z),
+        `DECOY · ${message.health}/${message.maxHealth}`, "melee", false, [.52, 1, .7]);
+    }
+    if (message.destroyed) destroyThiefDecoyImitation(message.decoyId, message.reason === "destroyed");
   });
   room.onMessage("ranger:disengage-path", (message: { casterId: string; x: number; y: number; z: number; targetX: number; targetY: number; targetZ: number; yaw: number }) => {
     createRangerDisengagePath(message);
@@ -12953,6 +13006,8 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     }
     callingPersistentVisuals.clear(); localCallingState = null; combatHud.setCallingState(null);
     mageCastAnimations.clear();
+    for (const visual of thiefDecoyVisuals.values()) { visual.root.destroy(); visual.materials.forEach(material => material.destroy()); }
+    thiefDecoyVisuals.clear();
     pendingPortalDestination = null;
     social.clearNames();
     partyUI.reset();

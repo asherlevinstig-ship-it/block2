@@ -451,7 +451,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly stealthUntil = new Map<string, number>();
   private readonly assassinShadowBonus = new Map<string, number>();
   private readonly pathConcealedUntil = new Map<string, number>();
-  private readonly thiefDecoys = new Map<string, { x: number; y: number; z: number; until: number }>();
+  private readonly thiefDecoys = new Map<string, { ownerId: string; x: number; y: number; z: number; yaw: number; until: number; health: number; maxHealth: number }>();
   private readonly assassinBossConcealedUntil = new Map<string, number>();
   private readonly rangerPinning = new Map<string, { mobId: string; stacks: number; expiresAt: number }>();
   private readonly rangerSlows = new Map<string, { until: number; multiplier: number }>();
@@ -5349,7 +5349,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       durationMs = 3_500 + rank * 250;
       const targets = nearbyMobs(8 + rank * .5 + (augmentId === "decoy_wide_stage" ? 3 : 0));
       const decoyId = `thief-decoy:${client.sessionId}`;
-      this.thiefDecoys.set(decoyId, { x: player.x, y: player.y, z: player.z, until: now + durationMs });
+      const decoyHealth = 2 + rank;
+      this.thiefDecoys.set(decoyId, { ownerId: client.sessionId, x: player.x, y: player.y, z: player.z,
+        yaw: parsed.data.yaw ?? player.yaw, until: now + durationMs, health: decoyHealth, maxHealth: decoyHealth });
       for (const [mobId, mob] of targets) {
         const awareness = createMobAwareness();
         provokeMob(awareness, { id: decoyId, x: player.x, y: player.y, z: player.z, health: 1 }, now);
@@ -6312,6 +6314,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const targets = [...this.state.players.entries()]
         .filter(([, player]) => player.health > 0 && !isInsideTownSafeZone(player) && caveEncounterAllows(projectile.mobId, player))
         .map(([id, player]) => ({ id, x: player.x, y: player.y, z: player.z }));
+      for (const [id, decoy] of this.thiefDecoys)
+        if (now < decoy.until && decoy.health > 0 && caveEncounterAllows(projectile.mobId, decoy))
+          targets.push({ id, x: decoy.x, y: decoy.y, z: decoy.z });
       const collision = projectileImpact(projectile.position, next, targets, this.readWorldBlock);
       projectile.position = next;
       if (!collision && progress < 1) continue;
@@ -6327,7 +6332,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const target = collision?.targetId ? this.state.players.get(collision.targetId) : undefined;
       if (target && collision?.targetId) {
         this.queueIncomingHit(projectile.mobId, collision.targetId, projectile.damage, now, "projectile");
-      }
+      } else if (collision?.targetId && this.thiefDecoys.has(collision.targetId))
+        this.damageThiefDecoy(collision.targetId, projectile.mobId, projectile.damage, now);
       const hazardDurationMs = projectile.hazardDurationMs ?? definition.hazardDurationMs;
       const hazardRadius = projectile.hazardRadius ?? definition.hazardRadius;
       if (hazardDurationMs <= 0 || hazardRadius <= 0) continue;
@@ -6938,7 +6944,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       }
       if (mob.combatState === "windup") {
         const targetPlayer = this.state.players.get(mob.targetId);
-        if ((CAVE_ENCOUNTERS[mobId] || roamingMembership(mobId) || mob.isChampion) && (!targetPlayer || targetPlayer.health <= 0 || !caveEncounterAllows(mobId, targetPlayer) || !this.roamingAllowed(mobId, targetPlayer) || !this.championAllowed(mobId, targetPlayer))) {
+        const targetDecoy = this.thiefDecoys.get(mob.targetId);
+        const targetCombatant = targetPlayer ?? targetDecoy;
+        if ((CAVE_ENCOUNTERS[mobId] || roamingMembership(mobId) || mob.isChampion) && (!targetCombatant || targetCombatant.health <= 0 || !caveEncounterAllows(mobId, targetCombatant) || !this.roamingAllowed(mobId, targetCombatant) || !this.championAllowed(mobId, targetCombatant))) {
           mob.targetId = "";
           mob.aimCommitted = false;
           mob.combatState = "recover";
@@ -6948,12 +6956,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           this.clearMobAttackTimeline(mob);
           continue;
         }
-        if (targetPlayer && now < mob.stateUntil - mobAimCommitMs(mob.archetype)
-          && hasCombatLineOfSight(mob, targetPlayer, this.readWorldBlock)) {
-          const predicted = mob.isMiniBoss
+        if (targetCombatant && now < mob.stateUntil - mobAimCommitMs(mob.archetype)
+          && hasCombatLineOfSight(mob, targetCombatant, this.readWorldBlock)) {
+          const predicted = mob.isMiniBoss && targetPlayer
             ? predictedMiniBossAim(mob, targetPlayer, activeMovementInput(this.movementInputs.get(mob.targetId), now, targetPlayer.yaw),
               isSpitterLike(mob.archetype) ? .55 : mob.archetype === "stone_brute" ? .25 : .42)
-            : { x: targetPlayer.x, y: targetPlayer.y, z: targetPlayer.z, yaw: Math.atan2(targetPlayer.x - mob.x, targetPlayer.z - mob.z) * 180 / Math.PI };
+            : { x: targetCombatant.x, y: targetCombatant.y, z: targetCombatant.z,
+              yaw: Math.atan2(targetCombatant.x - mob.x, targetCombatant.z - mob.z) * 180 / Math.PI };
           const desiredYaw = predicted.yaw;
           mob.yaw = mob.archetype === "stone_brute" ? turnBruteAim(mob.yaw, desiredYaw, deltaTime) : desiredYaw;
           this.mobCommittedAim.set(mobId, { x: predicted.x, y: predicted.y, z: predicted.z, yaw: mob.yaw });
@@ -6974,7 +6983,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           && mob.actionSequence % leaderRematchPressureCadence(mob.leaderRematchTier, mob.leaderModifier) === 0) {
           this.placeMiniBossArenaPressure(mobId, mob, currentAreaLeaderPhase, now);
         }
-        if (!targetPlayer && mob.archetype !== "stone_brute") {
+        if (!targetCombatant && mob.archetype !== "stone_brute") {
           mob.combatState = "recover";
           mob.stateUntil = now + definition.recoverMs;
           mob.aimCommitted = false;
@@ -7059,8 +7068,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         && this.championAllowed(mobId, player)
         && (isStoneBruteGroupMob(mobId) || !isInStoneBruteArena(player.x, player.z)));
       for (const [id, decoy] of this.thiefDecoys) {
-        if (now >= decoy.until) { this.thiefDecoys.delete(id); continue; }
-        if (Math.abs(decoy.y - mob.y) <= 1.75) players.push({ id, x: decoy.x, y: decoy.y, z: decoy.z, health: 1 });
+        if (now >= decoy.until) { this.destroyThiefDecoy(id, "expired"); continue; }
+        if (decoy.health > 0 && Math.abs(decoy.y - mob.y) <= 1.75)
+          players.push({ id, x: decoy.x, y: decoy.y, z: decoy.z, health: decoy.health });
       }
       const awareness = this.mobAwareness.get(mobId) ?? createMobAwareness();
       this.mobAwareness.set(mobId, awareness);
@@ -8246,6 +8256,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     for (const [mobId, pending] of this.pendingMobMelee) {
       const mob = this.state.mobs.get(mobId);
       const player = this.state.players.get(pending.targetId);
+      const decoy = this.thiefDecoys.get(pending.targetId);
       if (!mob?.alive || mob.combatState !== "strike") { this.pendingMobMelee.delete(mobId); continue; }
       if (mob.archetype === "stone_brute") {
         if (now < pending.impactAt) continue;
@@ -8259,22 +8270,58 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
             || !hasCombatLineOfSight(center, target, this.readWorldBlock)) continue;
           this.queueIncomingHit(mobId, id, mob.attackDamage, now);
         }
+        for (const [id, target] of this.thiefDecoys) {
+          if (target.health <= 0 || !caveEncounterAllows(mobId, target)
+            || (mob.attackPattern === "smash" ? !bruteSmashHits(center, pending.yaw, target)
+              : Math.abs(target.y - center.y) > BRUTE_SLAM.verticalRange || Math.hypot(target.x - center.x, target.z - center.z) > BRUTE_SLAM.radius)
+            || !hasCombatLineOfSight(mob, target, this.readWorldBlock)) continue;
+          this.damageThiefDecoy(id, mobId, mob.attackDamage, now);
+        }
         if (mob.isMiniBoss) this.damageMiniBossArenaCover(mobId, center,
           mob.attackPattern === "smash" ? 2.25 : BRUTE_SLAM.radius);
         if (mobId === "forest-guardian" && mob.attackPattern === "slam") this.placeGuardianRootLanes(mob, now);
         continue;
       }
-      if (!player) { this.pendingMobMelee.delete(mobId); continue; }
+      const target = player ?? decoy;
+      if (!target) { this.pendingMobMelee.delete(mobId); continue; }
       const strike = mobMeleeStrike(mob.archetype);
       const start = pending.impactAt - strike.beforeImpactMs;
       const end = pending.impactAt + strike.afterImpactMs;
       if (now < start) continue;
       const hit = meleeSweepImpact(mob, pending.yaw, strike,
         (Math.max(start, pending.lastSweepAt ?? start) - start) / (end - start),
-        (Math.min(now, end) - start) / (end - start), [{ id: pending.targetId, x: player.x, y: player.y, z: player.z }], this.readWorldBlock);
+        (Math.min(now, end) - start) / (end - start), [{ id: pending.targetId, x: target.x, y: target.y, z: target.z }], this.readWorldBlock);
       pending.lastSweepAt = Math.min(now, end);
       if (hit || now >= end) this.pendingMobMelee.delete(mobId);
-      if (hit) this.queueIncomingHit(mobId, hit, mob.attackDamage, now);
+      if (hit) {
+        if (this.thiefDecoys.has(hit)) this.damageThiefDecoy(hit, mobId, mob.attackDamage, now);
+        else this.queueIncomingHit(mobId, hit, mob.attackDamage, now);
+      }
+    }
+  }
+
+  private damageThiefDecoy(decoyId: string, mobId: string, damage: number, now: number): boolean {
+    const decoy = this.thiefDecoys.get(decoyId);
+    if (!decoy || now >= decoy.until || decoy.health <= 0) return false;
+    const applied = Math.max(1, Math.floor(damage));
+    decoy.health = Math.max(0, decoy.health - applied);
+    const destroyed = decoy.health === 0;
+    this.broadcast("thief:decoy-hit", { decoyId, ownerId: decoy.ownerId, mobId, damage: applied,
+      health: decoy.health, maxHealth: decoy.maxHealth, destroyed, reason: destroyed ? "destroyed" : "hit" });
+    if (destroyed) this.destroyThiefDecoy(decoyId, "destroyed", false);
+    return true;
+  }
+
+  private destroyThiefDecoy(decoyId: string, reason: "destroyed" | "expired", announce = true): void {
+    const decoy = this.thiefDecoys.get(decoyId);
+    if (!decoy) return;
+    this.thiefDecoys.delete(decoyId);
+    if (announce) this.broadcast("thief:decoy-hit", { decoyId, ownerId: decoy.ownerId, mobId: "", damage: 0,
+      health: 0, maxHealth: decoy.maxHealth, destroyed: true, reason });
+    for (const [mobId, mob] of this.state.mobs) if (mob.targetId === decoyId || this.mobAwareness.get(mobId)?.targetId === decoyId) {
+      mob.targetId = ""; mob.awarenessState = "search";
+      this.mobAwareness.delete(mobId);
+      if (this.pendingMobMelee.get(mobId)?.targetId === decoyId) this.pendingMobMelee.delete(mobId);
     }
   }
 
