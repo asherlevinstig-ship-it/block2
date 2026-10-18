@@ -455,6 +455,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly assassinBossConcealedUntil = new Map<string, number>();
   private readonly rangerPinning = new Map<string, { mobId: string; stacks: number; expiresAt: number }>();
   private readonly rangerSlows = new Map<string, { until: number; multiplier: number }>();
+  private readonly rangerRootedUntil = new Map<string, number>();
   private readonly rangerFieldFocusHits = new Map<string, number>();
   private readonly tankFieldWards = new Set<string>();
   private readonly callingAbilityReadyAt = new Map<string, number>();
@@ -2487,6 +2488,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const masterTrialTag = this.masterTrialMobTags.get(mobId);
     this.masterTrialMobTags.delete(mobId);
     this.rangerSlows.delete(mobId);
+    this.rangerRootedUntil.delete(mobId);
     const wasElite = mob.isElite;
     const huntChampion = this.huntChampions.get(mobId);
     const realmRepeatVictory = mobId === REALM_WARDEN_ID && this.realmWardenRepeatActive;
@@ -5227,9 +5229,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const targets = nearbyMobs(4.2 + rank * .2 + (augmentId === "earthbreaker_faultline" ? 1.8 : 0));
       const baseDamage = 2 + (rank >= 4 ? 1 : 0) + (augmentId === "earthbreaker_crushing_force" ? 2 : 0);
       const interruptedTargetIds: string[] = [];
+      const shatteredTargetIds: string[] = [];
       for (const [mobId, mob] of targets) {
         const interrupted = mob.combatState === "windup";
-        const rawDamage = baseDamage + (interrupted ? 2 : 0);
+        const rooted = now < (this.rangerRootedUntil.get(mobId) ?? 0);
+        const rawDamage = baseDamage + (interrupted ? 2 : 0) + (rooted ? 3 : 0);
+        if (rooted) { this.rangerRootedUntil.delete(mobId); shatteredTargetIds.push(mobId); }
         const damage = damageAfterArmor(rawDamage, mob.armor, true);
         this.combatContributions.record(mobId, client.sessionId, Math.min(mob.health, damage), now);
         mob.health = Math.max(0, mob.health - damage); mob.hitSequence += 1;
@@ -5238,7 +5243,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         else this.staggerMob(mobId, mob, now, interrupted ? 2_200 + rank * 150 : 1_200 + rank * 100, true);
         if (interrupted) interruptedTargetIds.push(mobId);
       }
-      detail = interruptedTargetIds.length > 0
+      detail = shatteredTargetIds.length > 0
+        ? `${shatteredTargetIds.length} ROOT${shatteredTargetIds.length === 1 ? "" : "S"} SHATTERED · +3 COMBO DAMAGE`
+        : interruptedTargetIds.length > 0
         ? `${interruptedTargetIds.length} ATTACK${interruptedTargetIds.length === 1 ? "" : "S"} BROKEN · +2 INTERRUPT DAMAGE`
         : `${targets.length} ENEM${targets.length === 1 ? "Y" : "IES"} HIT · ${baseDamage} DAMAGE`;
       this.grantCallingTrial(client.sessionId, "earthbreaker_faultline", targets.length);
@@ -5246,6 +5253,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (interruptedTargetIds.length > 0) this.broadcast("tank:earthbreaker-interrupt", {
         casterId: client.sessionId, targetIds: interruptedTargetIds, bonusDamage: 2,
       });
+      if (shatteredTargetIds.length > 0) this.broadcast("calling:combo", { comboId: "root_shatter",
+        label: "ROOT SHATTER", casterId: client.sessionId, targetIds: shatteredTargetIds,
+        x: player.x, y: player.y, z: player.z, bonus: 3 });
     } else if (abilityId === "mage_arcane_surge") {
       const staminaBefore = player.stamina, specialRecovering = player.specialCooldownUntil > now;
       const stamina = 30 + rank * 5 + (augmentId === "surge_deep_reserves" ? 25 : 0);
@@ -5450,7 +5460,16 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const [mobId, mob] = deadeyeTarget!;
       const distance = Math.hypot(mob.x - player.x, mob.z - player.z);
       const longShot = distance >= 8;
-      const rawDamage = 5 + Number(rank >= 4) + (longShot ? 3 : 0) + (augmentId === "deadeye_execution_rounds" ? 2 : 0);
+      const markedBy = [...this.specialMarks.entries()].find(([, mark]) => mark.mobId === mobId
+        && mark.stacks >= HUNTERS_MARK.maxStacks && now < mark.expiresAt)?.[0];
+      if (markedBy) {
+        this.specialMarks.delete(markedBy);
+        const marker = this.state.players.get(markedBy);
+        if (marker && selectedCallingAbility(parseBuildPathState(marker.huntLoadoutsJson), "assassin") === "assassin_death_mark")
+          this.callingState(markedBy, "assassin", "assassin_death_mark", "TARGET EXPOSED", { clear: true });
+      }
+      const rawDamage = 5 + Number(rank >= 4) + (longShot ? 3 : 0) + (augmentId === "deadeye_execution_rounds" ? 2 : 0)
+        + (markedBy ? 3 : 0);
       const damage = damageAfterArmor(rawDamage, mob.armor, true);
       this.combatContributions.record(mobId, client.sessionId, Math.min(mob.health, damage), now);
       mob.health = Math.max(0, mob.health - damage); mob.hitSequence += 1;
@@ -5463,6 +5482,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.grantCallingTrial(client.sessionId, "deadeye_execution_rounds", damage);
       this.broadcast("ranger:deadeye-shot", { casterId: client.sessionId, mobId, damage, distance,
         longShot, x: player.x, y: player.y, z: player.z });
+      if (markedBy) this.broadcast("calling:combo", { comboId: "marked_deadeye", label: "MARKED DEADEYE",
+        casterId: client.sessionId, partnerId: markedBy, targetIds: [mobId], x: mob.x, y: mob.y, z: mob.z, bonus: 3 });
     } else {
       const hits = (rank >= 4 ? 4 : 3) + (augmentId === "volley_deep_quiver" ? 2 : 0);
       const bonus = 1 + (augmentId === "volley_heavy_arrows" ? 1 : 0);
@@ -6521,14 +6542,20 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (now >= field.expiresAt) { this.renewalFields.delete(fieldId); continue; }
       if (now < field.nextPulseAt) continue;
       field.nextPulseAt = now + 1_000;
-      const targets: { targetId: string; restored: number }[] = [];
+      const targets: { targetId: string; restored: number; staminaRestored?: number; bulwark?: true }[] = [];
       for (const [targetId, target] of this.state.players) {
-        if (target.health <= 0 || target.health >= target.maxHealth || Math.abs(target.y - field.y) > 2.5
+        const bulwark = now < (this.tankBulwarkUntil.get(targetId) ?? 0);
+        if (target.health <= 0 || (target.health >= target.maxHealth && (!bulwark || target.stamina >= target.maxStamina)) || Math.abs(target.y - field.y) > 2.5
           || Math.hypot(target.x - field.x, target.z - field.z) > field.radius
           || !hasCombatLineOfSight(field, target, this.readWorldBlock)) continue;
-        const restored = Math.min(field.heal, target.maxHealth - target.health);
+        const restored = Math.min(field.heal + Number(bulwark), target.maxHealth - target.health);
+        const staminaRestored = bulwark ? Math.min(8, target.maxStamina - target.stamina) : 0;
         target.health += restored;
-        targets.push({ targetId, restored });
+        target.stamina += staminaRestored;
+        targets.push(bulwark ? { targetId, restored, staminaRestored, bulwark: true } : { targetId, restored });
+        if (bulwark) this.broadcast("calling:combo", { comboId: "sanctuary_bastion", label: "SANCTUARY BASTION",
+          casterId: field.ownerId, partnerId: targetId, targetIds: [targetId], x: target.x, y: target.y, z: target.z,
+          bonus: restored + staminaRestored });
       }
       if (targets.length > 0) this.broadcast("healer:renewal-targets", { fieldId, casterId: field.ownerId, targets });
     }
@@ -6540,13 +6567,19 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const owner = this.state.players.get(overload.ownerId);
       if (!owner) { this.pendingMageOverloads.delete(overloadId); continue; }
       const aftershock = overload.pulseIndex > 0;
-      const rawDamage = aftershock ? Math.max(2, Math.ceil(overload.damage / 2)) : overload.damage;
+      const pulseDamage = aftershock ? Math.max(2, Math.ceil(overload.damage / 2)) : overload.damage;
       const targets: string[] = [];
+      const reactedTargets: string[] = [];
       let totalDamage = 0;
       for (const [mobId, mob] of this.state.mobs) {
         if (!mob.alive || Math.abs(mob.y - overload.y) > 2.5 || Math.hypot(mob.x - overload.x, mob.z - overload.z) > overload.radius
           || !hasCombatLineOfSight(overload, mob, this.readWorldBlock)) continue;
-        const damage = damageAfterArmor(rawDamage, mob.armor, true);
+        const venomKeys = [...this.venomBuildup.entries()].filter(([key, buildup]) => key.endsWith(`:${mobId}`) && now < buildup.expiresAt)
+          .map(([key]) => key);
+        const reacted = venomKeys.length > 0;
+        for (const key of venomKeys) this.venomBuildup.delete(key);
+        if (reacted) reactedTargets.push(mobId);
+        const damage = damageAfterArmor(pulseDamage + (reacted ? 2 : 0), mob.armor, true);
         this.combatContributions.record(mobId, overload.ownerId, Math.min(mob.health, damage), now);
         mob.health = Math.max(0, mob.health - damage); mob.hitSequence += 1; targets.push(mobId); totalDamage += damage;
         this.alertHitMob(mobId, overload.ownerId, now, overload);
@@ -6556,7 +6589,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.grantCallingTrial(overload.ownerId, "overload_volatile_core", totalDamage);
       if (aftershock) this.grantCallingTrial(overload.ownerId, "overload_residual_charge", targets.length);
       this.broadcast("mage:overload-impact", { casterId: overload.ownerId, powerId: "mage_overload",
-        x: overload.x, y: overload.y, z: overload.z, bonusDamage: rawDamage, targetIds: targets, aftershock });
+        x: overload.x, y: overload.y, z: overload.z, bonusDamage: pulseDamage, targetIds: targets, aftershock });
+      if (reactedTargets.length > 0) this.broadcast("calling:combo", { comboId: "volatile_reaction",
+        label: "VOLATILE REACTION", casterId: overload.ownerId, targetIds: reactedTargets,
+        x: overload.x, y: overload.y, z: overload.z, bonus: 2 });
       overload.pulses -= 1; overload.pulseIndex += 1;
       if (overload.pulses <= 0) {
         this.pendingMageOverloads.delete(overloadId);
@@ -8754,6 +8790,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           const rootMs = rangerSpecialization === "trapper"
             ? (this.buildSpecializationMastered(player, "trapper") ? 2_500 : 1_800) + this.equipmentAffixTier(player, "snaring") * 200 : 1_000;
           this.rangerPinning.delete(sessionId); this.rangerSlows.delete(mobId);
+          this.rangerRootedUntil.set(mobId, now + rootMs);
           this.staggerMob(mobId, mob, now, rootMs, true);
           if (rangerSpecialization === "trapper") this.masterTrialMobTags.set(mobId,
             { playerId: sessionId, specializationId: "trapper", until: now + rootMs });

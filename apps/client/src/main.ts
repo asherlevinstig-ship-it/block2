@@ -5201,7 +5201,7 @@ function createFieldMendFeedback(message: { casterId: string; targetId: string; 
     `MENDED · +${message.restored} HP${message.staminaRestored ? ` · +${message.staminaRestored} ST` : ""}`, "landmark", false, [.42, 1, .7]);
 }
 
-function createRenewalFeedback(targets: { targetId: string; restored: number }[]): void {
+function createRenewalFeedback(targets: { targetId: string; restored: number; staminaRestored?: number; bulwark?: true }[]): void {
   for (const entry of targets) {
     const target = entry.targetId === room?.sessionId ? localPlayer : remotePlayers.get(entry.targetId)?.entity;
     if (!target) continue;
@@ -5215,8 +5215,29 @@ function createRenewalFeedback(targets: { targetId: string; restored: number }[]
     }
     callingImpactVisuals.push({ root, expiresAt: performance.now() + 820, materials: [life, gold], abilityId: "healer_renewal" });
     const position = target.getPosition();
-    createRangedPopup(new pc.Vec3(position.x, position.y + 2, position.z), `RENEWED · +${entry.restored} HP`, "landmark", false, [.46, 1, .68]);
+    createRangedPopup(new pc.Vec3(position.x, position.y + 2, position.z), entry.bulwark
+      ? `BASTION RENEWED · +${entry.restored} HP · +${entry.staminaRestored ?? 0} ST`
+      : `RENEWED · +${entry.restored} HP`, "landmark", false, entry.bulwark ? [1, .84, .34] : [.46, 1, .68]);
   }
+}
+
+function createCallingComboFeedback(message: { comboId: string; label: string; x: number; y: number; z: number; bonus: number }): void {
+  const root = new pc.Entity(`calling-combo:${message.comboId}`); root.setPosition(message.x, message.y + .05, message.z); app.root.addChild(root);
+  const primaryColor = message.comboId === "volatile_reaction" ? new pc.Color(.66, 1, .18)
+    : message.comboId === "root_shatter" ? new pc.Color(.42, .9, 1)
+      : message.comboId === "marked_deadeye" ? new pc.Color(1, .3, .32) : new pc.Color(1, .86, .36);
+  const primary = callingSignatureMaterial(primaryColor, .88, 1.3);
+  const white = callingSignatureMaterial(new pc.Color(1, .98, .86), .96, 1.42);
+  for (let ring = 1; ring <= 2; ring += 1) for (let index = 0; index < 16; index += 1) {
+    const angle = index / 16 * Math.PI * 2, radius = ring * 1.1;
+    addCallingSignaturePrimitive(root, "calling-combo-ring", "box", index % 4 === 0 ? white : primary,
+      [.04, .04, .3], [Math.sin(angle) * radius, .18 + ring * .12, Math.cos(angle) * radius], [0, angle * 180 / Math.PI, 0]);
+  }
+  callingImpactVisuals.push({ root, expiresAt: performance.now() + 950, materials: [primary, white], abilityId: "mage_arcane_surge" });
+  createRangedPopup(new pc.Vec3(message.x, message.y + 2.4, message.z),
+    `${message.label} · COMBO${message.bonus ? ` +${message.bonus}` : ""}`, "landmark", false,
+    [primaryColor.r, primaryColor.g, primaryColor.b]);
+  combatAudio.play("seismicImpact");
 }
 
 function createRenewalField(message: { fieldId: string; casterId: string; x: number; y: number; z: number; radius: number; expiresAt: number }): void {
@@ -12359,8 +12380,11 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   room.onMessage("healer:field-mend", (message: { casterId: string; targetId: string; restored: number; staminaRestored: number }) => {
     createFieldMendFeedback(message);
   });
-  room.onMessage("healer:renewal-targets", (message: { casterId: string; targets: { targetId: string; restored: number }[] }) => {
+  room.onMessage("healer:renewal-targets", (message: { casterId: string; targets: { targetId: string; restored: number; staminaRestored?: number; bulwark?: true }[] }) => {
     createRenewalFeedback(message.targets);
+  });
+  room.onMessage("calling:combo", (message: { comboId: string; label: string; casterId: string; partnerId?: string; targetIds: string[]; x: number; y: number; z: number; bonus: number }) => {
+    createCallingComboFeedback(message);
   });
   room.onMessage("healer:renewal-field", (message: { fieldId: string; casterId: string; x: number; y: number; z: number; radius: number; expiresAt: number }) => {
     createRenewalField(message);

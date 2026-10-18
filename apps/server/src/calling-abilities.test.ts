@@ -243,6 +243,20 @@ describe("hotbar Calling abilities", () => {
     expect(client.send).toHaveBeenCalledWith("chat:notice", expect.stringContaining("aim precisely"));
   });
 
+  it("lets Deadeye consume another player's exposed mark for combo damage", () => {
+    const { internal, client, broadcast } = fixture("ranger", 70);
+    const assassin = new PlayerState(); internal.state.players.set("assassin", assassin);
+    const mob = new MobState(); Object.assign(mob, { x: 50, y: 8, z: 60, alive: true, health: 30, maxHealth: 30 });
+    internal.state.mobs.set("marked", mob);
+    internal.specialMarks.set("assassin", { mobId: "marked", expiresAt: 20_000, stacks: 3 });
+    internal.handleCallingAbilityEquip(client, { abilityId: "ranger_deadeye" });
+    internal.handleCallingAbility(client, { requestId: "marked-shot", yaw: 0 });
+    expect(internal.specialMarks.has("assassin")).toBe(false);
+    expect(broadcast).toHaveBeenCalledWith("calling:combo", expect.objectContaining({
+      comboId: "marked_deadeye", casterId: "hero", partnerId: "assassin", targetIds: ["marked"], bonus: 3,
+    }));
+  });
+
   it("makes Volley Focus split ranged attacks into nearby targets", () => {
     const { internal, player, client, broadcast } = fixture("ranger", 70);
     player.mainHandTag = "ranged";
@@ -391,6 +405,19 @@ describe("hotbar Calling abilities", () => {
     }));
   });
 
+  it("lets Earthbreaker shatter an enemy rooted by a Ranger", () => {
+    const { internal, client, broadcast } = fixture("tank", 70);
+    const mob = new MobState(); Object.assign(mob, { x: 52, y: 8, z: 50, alive: true, health: 20, maxHealth: 20 });
+    internal.state.mobs.set("rooted", mob);
+    internal.rangerRootedUntil.set("rooted", 12_000);
+    internal.handleCallingAbilityEquip(client, { abilityId: "tank_earthbreaker" });
+    internal.handleCallingAbility(client, { requestId: "shatter-root" });
+    expect(internal.rangerRootedUntil.has("rooted")).toBe(false);
+    expect(broadcast).toHaveBeenCalledWith("calling:combo", expect.objectContaining({
+      comboId: "root_shatter", casterId: "hero", targetIds: ["rooted"], bonus: 3,
+    }));
+  });
+
   it("heals an injured ally before self and credits actual boss-fight healing", () => {
     const { room, internal, player, client, broadcast } = fixture("healer", 70);
     vi.spyOn(internal, "persistPlayer").mockResolvedValue(undefined);
@@ -459,6 +486,20 @@ describe("hotbar Calling abilities", () => {
     }));
   });
 
+  it("makes Renewal reinforce an ally actively holding Bulwark", () => {
+    const { room, internal, player, client, broadcast } = fixture("healer", 70);
+    player.health = 3;
+    const tank = new PlayerState(); Object.assign(tank, { x: 52, y: 8, z: 50, health: 1, maxHealth: 5, stamina: 40, maxStamina: 100 });
+    room.state.players.set("tank", tank); internal.tankBulwarkUntil.set("tank", 15_000);
+    internal.handleCallingAbilityEquip(client, { abilityId: "healer_renewal" });
+    internal.handleCallingAbility(client, { requestId: "renew-bulwark" });
+    internal.resolveRenewalFields(10_500);
+    expect(tank.health).toBe(3); expect(tank.stamina).toBe(48);
+    expect(broadcast).toHaveBeenCalledWith("calling:combo", expect.objectContaining({
+      comboId: "sanctuary_bastion", casterId: "hero", partnerId: "tank", targetIds: ["tank"],
+    }));
+  });
+
   it("Field Medic restores stamina to an injured ally", () => {
     const { room, internal, player, client } = fixture("healer", 70);
     player.huntLoadoutsJson = serializeBuildPathState(chooseBuildSpecialization(parseBuildPathState(player.huntLoadoutsJson), "healer", "field_medic"));
@@ -511,6 +552,20 @@ describe("hotbar Calling abilities", () => {
     expect(primary.health).toBeLessThan(20); expect(nearby.health).toBeLessThan(20);
     expect(broadcast).toHaveBeenCalledWith("mage:overload-impact", expect.objectContaining({
       casterId: "hero", targetIds: expect.arrayContaining(["primary", "nearby"]), aftershock: false,
+    }));
+  });
+
+  it("makes Overload consume active venom buildup for a volatile reaction", () => {
+    const { internal, client, broadcast } = fixture("mage", 70);
+    const mob = new MobState(); Object.assign(mob, { x: 50, y: 8, z: 58, alive: true, health: 30, maxHealth: 30 });
+    internal.state.mobs.set("poisoned", mob);
+    internal.venomBuildup.set("venom-player:poisoned", { stacks: 2, expiresAt: 14_000 });
+    internal.handleCallingAbilityEquip(client, { abilityId: "mage_overload" });
+    internal.handleCallingAbility(client, { requestId: "react", yaw: 0 });
+    internal.resolveMageOverloads(10_850);
+    expect(internal.venomBuildup.has("venom-player:poisoned")).toBe(false);
+    expect(broadcast).toHaveBeenCalledWith("calling:combo", expect.objectContaining({
+      comboId: "volatile_reaction", casterId: "hero", targetIds: ["poisoned"], bonus: 2,
     }));
   });
 
