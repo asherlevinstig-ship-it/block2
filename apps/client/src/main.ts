@@ -5180,6 +5180,24 @@ function createRenewalFeedback(targets: { targetId: string; restored: number }[]
   }
 }
 
+function createRenewalField(message: { fieldId: string; casterId: string; x: number; y: number; z: number; radius: number; expiresAt: number }): void {
+  const root = new pc.Entity(`renewal-field:${message.fieldId}`); root.setPosition(message.x, message.y + .035, message.z); app.root.addChild(root);
+  const life = callingSignatureMaterial(new pc.Color(.22, .95, .5), .38, .7);
+  const gold = callingSignatureMaterial(new pc.Color(1, .84, .32), .82, 1.12);
+  addCallingSignaturePrimitive(root, "renewal-healing-ground", "cylinder", life, [message.radius * .72, .018, message.radius * .72], [0, .01, 0]);
+  for (let index = 0; index < 28; index += 1) {
+    const angle = index / 28 * Math.PI * 2;
+    addCallingSignaturePrimitive(root, "renewal-boundary", "box", index % 4 === 0 ? gold : life,
+      [index % 4 === 0 ? .12 : .06, .025, .34], [Math.sin(angle) * message.radius, .05, Math.cos(angle) * message.radius], [0, angle * 180 / Math.PI, 0]);
+  }
+  for (let ring = 1; ring <= 3; ring += 1) for (let index = 0; index < 8; index += 1) {
+    const angle = index / 8 * Math.PI * 2 + ring * .35, distance = message.radius * ring / 4;
+    addCallingSignaturePrimitive(root, "renewal-ground-rune", "box", ring === 3 ? gold : life,
+      [.045, .025, .22], [Math.sin(angle) * distance, .04, Math.cos(angle) * distance], [0, angle * 180 / Math.PI, 0]);
+  }
+  callingImpactVisuals.push({ root, expiresAt: performance.now() + Math.max(300, message.expiresAt - Date.now()), materials: [life, gold], abilityId: "healer_renewal" });
+}
+
 function createResurrectionInterrupted(casterId: string, targetId: string): void {
   const caster = casterId === room?.sessionId ? localPlayer : remotePlayers.get(casterId)?.entity;
   const target = targetId === room?.sessionId ? localPlayer : remotePlayers.get(targetId)?.entity;
@@ -12299,6 +12317,9 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   });
   room.onMessage("healer:renewal-targets", (message: { casterId: string; targets: { targetId: string; restored: number }[] }) => {
     createRenewalFeedback(message.targets);
+  });
+  room.onMessage("healer:renewal-field", (message: { fieldId: string; casterId: string; x: number; y: number; z: number; radius: number; expiresAt: number }) => {
+    createRenewalField(message);
   });
   room.onMessage("healer:resurrection-channel", (message: { casterId: string; targetId: string; until: number }) => {
     createHealerLink(message.casterId, message.targetId, "healer_resurrection", Math.max(300, message.until - Date.now()));

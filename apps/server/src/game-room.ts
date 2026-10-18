@@ -461,6 +461,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly callingSpecialReadyAt = new Map<string, number>();
   private readonly resurrectionWindows = new Map<string, number>();
   private readonly pendingResurrections = new Map<string, { targetId: string; completesAt: number; x: number; y: number; z: number; health: number }>();
+  private readonly renewalFields = new Map<string, { ownerId: string; x: number; y: number; z: number; radius: number; heal: number; expiresAt: number; nextPulseAt: number }>();
+  private renewalFieldSequence = 0;
   private readonly tankBulwarkUntil = new Map<string, number>();
   private readonly northwatchExposedUntil = new Map<string, number>();
   private readonly northwatchPatrolContributors = new Set<string>();
@@ -5112,10 +5114,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
     const renewalTargets = abilityId === "healer_renewal"
       ? [...this.state.players.entries()].filter(([, target]) => target.health > 0 && target.health < target.maxHealth
-        && Math.abs(target.y - player.y) <= 2.5 && Math.hypot(target.x - player.x, target.z - player.z) <= 7
+        && Math.abs(target.y - player.y) <= 2.5 && Math.hypot(target.x - player.x, target.z - player.z) <= 4.5
         && hasCombatLineOfSight(player, target, this.readWorldBlock)) : [];
     if (abilityId === "healer_renewal" && renewalTargets.length === 0) {
-      client.send("chat:notice", "RENEWAL · no injured allies nearby.");
+      client.send("chat:notice", "RENEWAL · no injured allies inside the 4.5m sanctuary area.");
       return;
     }
     const deathMarkTarget = abilityId === "assassin_death_mark"
@@ -5244,17 +5246,14 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.mageOverloadCharges.set(client.sessionId, charges);
       detail = `NEXT ${charges > 1 ? `${charges} POWERS` : "POWER"} +${(rank >= 4 ? 4 : 3) + (augmentId === "overload_volatile_core" ? 2 : 0)} DAMAGE`;
     } else if (abilityId === "healer_renewal") {
-      let healed = 0, allies = 0;
-      const renewed: { targetId: string; restored: number }[] = [];
-      for (const [targetId, target] of renewalTargets) {
-        const restored = Math.min(2 + Number(rank >= 2), target.maxHealth - target.health);
-        target.health += restored; healed += restored; allies += 1;
-        renewed.push({ targetId, restored });
-        if (targetId !== client.sessionId) this.clients.find(candidate => candidate.sessionId === targetId)
-          ?.send("chat:notice", `${player.name || "A HEALER"} used Renewal · +${restored} HP.`);
-      }
-      detail = `${allies} ALL${allies === 1 ? "Y" : "IES"} RESTORED · +${healed} HP`;
-      this.broadcast("healer:renewal-targets", { casterId: client.sessionId, targets: renewed });
+      const fieldId = `renewal:${client.sessionId}:${++this.renewalFieldSequence}`;
+      const radius = 4.5, durationMsValue = 6_000;
+      durationMs = durationMsValue;
+      this.renewalFields.set(fieldId, { ownerId: client.sessionId, x: player.x, y: player.y, z: player.z,
+        radius, heal: 1, expiresAt: now + durationMsValue, nextPulseAt: now + 500 });
+      detail = `SANCTUARY PLACED · ${radius}m · 6 HEALING PULSES`;
+      this.broadcast("healer:renewal-field", { fieldId, casterId: client.sessionId, x: player.x, y: player.y,
+        z: player.z, radius, expiresAt: now + durationMsValue });
     } else if (abilityId === "healer_field_mend") {
       const [targetId, target] = healTarget!;
       const specialization = this.buildSpecializationFor(player, "healer");
@@ -5471,6 +5470,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.callingState(client.sessionId, pathId, abilityId, "CONCEALED", { activeUntil: now + (durationMs ?? 0) });
     else if (abilityId === "thief_escape_artist")
       this.callingState(client.sessionId, pathId, abilityId, "EVADING", { activeUntil: now + (durationMs ?? 0) });
+    else if (abilityId === "healer_renewal")
+      this.callingState(client.sessionId, pathId, abilityId, "SANCTUARY ACTIVE", { activeUntil: now + (durationMs ?? 0) });
     else if (abilityId === "ranger_deadeye")
       this.callingState(client.sessionId, pathId, abilityId, "PRECISION SHOT", { clear: true, targetId: effectTargetId });
     else if (abilityId.startsWith("ranger_"))
@@ -6476,6 +6477,24 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
   }
 
+  private resolveRenewalFields(now: number): void {
+    for (const [fieldId, field] of this.renewalFields) {
+      if (now >= field.expiresAt) { this.renewalFields.delete(fieldId); continue; }
+      if (now < field.nextPulseAt) continue;
+      field.nextPulseAt = now + 1_000;
+      const targets: { targetId: string; restored: number }[] = [];
+      for (const [targetId, target] of this.state.players) {
+        if (target.health <= 0 || target.health >= target.maxHealth || Math.abs(target.y - field.y) > 2.5
+          || Math.hypot(target.x - field.x, target.z - field.z) > field.radius
+          || !hasCombatLineOfSight(field, target, this.readWorldBlock)) continue;
+        const restored = Math.min(field.heal, target.maxHealth - target.health);
+        target.health += restored;
+        targets.push({ targetId, restored });
+      }
+      if (targets.length > 0) this.broadcast("healer:renewal-targets", { fieldId, casterId: field.ownerId, targets });
+    }
+  }
+
   private advanceSilverDepthsRouteHazards(now: number): void {
     if (this.roomKind !== "silver-depths" || this.silverDepthsEncounterStage !== 2 || !this.silverDepthsWing) return;
     const wing = this.silverDepthsWing;
@@ -6752,6 +6771,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.resolveMobProjectiles(now);
     this.resolveMobHazards(now);
     this.resolveVenomSetPools(now);
+    this.resolveRenewalFields(now);
     this.advanceRealmBossHazards(now);
     this.advanceSilverDepthsRouteHazards(now);
     if (this.roomKind === "overworld") {

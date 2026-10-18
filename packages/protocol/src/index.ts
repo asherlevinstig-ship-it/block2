@@ -240,7 +240,7 @@ export const CALLING_ABILITY_OPTIONS = [
   { id: "ranger_disengage", pathId: "ranger", name: "Disengage", category: "Utility", unlockRank: 2, cooldownMs: 15_000, description: "Leap backward and empower your next two shots." },
   { id: "ranger_deadeye", pathId: "ranger", name: "Deadeye", category: "Aggressive", unlockRank: 3, cooldownMs: 18_000, description: "Fire one precise shot at the enemy under your aim. Long shots deal more damage." },
   { id: "healer_field_mend", pathId: "healer", name: "Field Mend", category: "Core", unlockRank: 0, cooldownMs: 15_000, description: "Heal the most injured nearby ally; self-heal if no ally needs help." },
-  { id: "healer_renewal", pathId: "healer", name: "Renewal", category: "Utility", unlockRank: 2, cooldownMs: 24_000, description: "Restore health to yourself and injured allies nearby." },
+  { id: "healer_renewal", pathId: "healer", name: "Renewal", category: "Utility", unlockRank: 2, cooldownMs: 24_000, description: "Create a healing sanctuary that restores allies who hold their ground inside it." },
   { id: "healer_resurrection", pathId: "healer", name: "Resurrection", category: "Master", unlockRank: 4, cooldownMs: 90_000, description: "Channel for 2.5s beside a fallen party member to revive them with low health. Moving or taking damage interrupts the cast." },
 ] as const;
 export type CallingAbilityId = typeof CALLING_ABILITY_OPTIONS[number]["id"];

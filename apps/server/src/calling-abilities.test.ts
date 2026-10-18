@@ -421,16 +421,41 @@ describe("hotbar Calling abilities", () => {
     expect(internal.callingAbilityReadyAt.get("hero")).toBe(25_000);
   });
 
-  it("reports every Renewal recipient with the actual health restored", () => {
+  it("turns Renewal into a fixed sanctuary that heals allies who hold its ground", () => {
     const { room, internal, player, client, broadcast } = fixture("healer", 70);
     player.health = 3;
     const ally = new PlayerState(); Object.assign(ally, { x: 52, y: 8, z: 50, health: 1, maxHealth: 5 });
     room.state.players.set("ally", ally);
     internal.handleCallingAbilityEquip(client, { abilityId: "healer_renewal" });
     internal.handleCallingAbility(client, { requestId: "renew-party" });
+    expect(player.health).toBe(3); expect(ally.health).toBe(1);
+    expect(broadcast).toHaveBeenCalledWith("healer:renewal-field", expect.objectContaining({
+      fieldId: "renewal:hero:1", casterId: "hero", x: 50, z: 50, radius: 4.5, expiresAt: 16_000,
+    }));
+    internal.resolveRenewalFields(10_500);
+    expect(player.health).toBe(4); expect(ally.health).toBe(2);
     expect(broadcast).toHaveBeenCalledWith("healer:renewal-targets", {
-      casterId: "hero", targets: [{ targetId: "hero", restored: 2 }, { targetId: "ally", restored: 3 }],
+      fieldId: "renewal:hero:1", casterId: "hero",
+      targets: [{ targetId: "hero", restored: 1 }, { targetId: "ally", restored: 1 }],
     });
+    ally.x = 56;
+    internal.resolveRenewalFields(11_500);
+    expect(player.health).toBe(5); expect(ally.health).toBe(2);
+  });
+
+  it("lets an injured ally enter an active Renewal sanctuary after it is placed", () => {
+    const { room, internal, player, client, broadcast } = fixture("healer", 70);
+    player.health = 3;
+    const ally = new PlayerState(); Object.assign(ally, { x: 57, y: 8, z: 50, health: 1, maxHealth: 5 });
+    room.state.players.set("ally", ally);
+    internal.handleCallingAbilityEquip(client, { abilityId: "healer_renewal" });
+    internal.handleCallingAbility(client, { requestId: "place-sanctuary" });
+    ally.x = 53;
+    internal.resolveRenewalFields(10_500);
+    expect(ally.health).toBe(2);
+    expect(broadcast).toHaveBeenCalledWith("healer:renewal-targets", expect.objectContaining({
+      targets: expect.arrayContaining([expect.objectContaining({ targetId: "ally", restored: 1 })]),
+    }));
   });
 
   it("Field Medic restores stamina to an injured ally", () => {
