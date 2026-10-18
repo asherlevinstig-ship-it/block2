@@ -150,7 +150,10 @@ export function leaderChargeGuidance(pattern: string, combatState: string, targe
 }
 
 export function leaderFormationLabel(state: "forming" | "full" | "pin" | "crossfire" | "broken" | "",
-  tactic: "surround" | "venom-lock" | "breach" = "surround"): string {
+  tactic: "surround" | "venom-lock" | "breach" | "ram-advance" | "ashglass-crossfire" | "pack-collapse" = "surround"): string {
+  if (tactic === "ram-advance") return "RAM ADVANCE · HOUNDS FLANKING";
+  if (tactic === "ashglass-crossfire") return "ASHGLASS CROSSFIRE · LANES INTERSECTING";
+  if (tactic === "pack-collapse") return "PACK COLLAPSE · PROTECTING THE RAM";
   return state === "forming" ? tactic === "venom-lock" ? "FORMATION INCOMING · VENOM LOCK"
     : tactic === "breach" ? "FORMATION INCOMING · BREACH"
       : "FORMATION INCOMING · SURROUND"

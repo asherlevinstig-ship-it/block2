@@ -7,6 +7,9 @@ describe("boss HUD", () => {
     expect(leaderFormationLabel("forming", "surround")).toBe("FORMATION INCOMING · SURROUND");
     expect(leaderFormationLabel("forming", "venom-lock")).toContain("VENOM LOCK");
     expect(leaderFormationLabel("forming", "breach")).toContain("BREACH");
+    expect(leaderFormationLabel("full", "ram-advance")).toContain("HOUNDS FLANKING");
+    expect(leaderFormationLabel("crossfire", "ashglass-crossfire")).toContain("LANES INTERSECTING");
+    expect(leaderFormationLabel("pin", "pack-collapse")).toContain("PROTECTING THE RAM");
     expect(leaderFormationLabel("full")).toBe("CROSSFIRE · FLANKS CLOSING");
     expect(leaderFormationLabel("pin")).toContain("PINNED");
     expect(leaderFormationLabel("crossfire")).toContain("ESCAPE LANE");

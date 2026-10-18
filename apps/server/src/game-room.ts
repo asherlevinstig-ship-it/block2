@@ -7,7 +7,10 @@ import { ShadowMoveInput, stepShadowMovement, type ShadowPose } from "./movement
 import { randomUUID } from "node:crypto";
 import { ADMIN_BOOTSTRAP_HASH, ADMIN_PROFILE_HASH, adminProfileKey, matchesAdminBootstrapPass } from "./admin-access.js";
 import { AttackCoordination, allyFireLaneClear } from "./attack-coordination.js";
-import { MIXED_FRONTIER_SPITTER, STONE_BRUTE_ESCORTS, isMixedFrontierMob, mixedFrontierAllows, isSilverGuard, silverGuardAllows, frontierBruteAllows, isFrontierBruteGroupMob, isStoneBruteGroupMob, isGreenwoodCampMob, greenwoodCampAllows, ASHEN_COMBAT_GROUP_IDS, isAshenSentry, isAshenMob, ashenSentryAllows, ashenSentryPattern, isMistfenMob, mistfenAllows, isSouthernQuarryMob, southernQuarryAllows, isNorthwatchMob, northwatchAllows, northwatchShardPattern, northwatchPatrolPattern, northwatchPatrolInterruptDuration, northwatchPatrolShotDamage, NORTHWATCH_SHARD_PATROL_IDS, isNorthwatchShardPatrol, northwatchShardPatrolAllows } from "./wilderness-encounters.js";
+import { MIXED_FRONTIER_SPITTER, STONE_BRUTE_ESCORTS, isMixedFrontierMob, mixedFrontierAllows, isSilverGuard, silverGuardAllows, frontierBruteAllows, isFrontierBruteGroupMob, isStoneBruteGroupMob, isGreenwoodCampMob, greenwoodCampAllows, ASHEN_COMBAT_GROUP_IDS, isAshenSentry, isAshenMob, ashenSentryAllows, isMistfenMob, mistfenAllows, isSouthernQuarryMob, southernQuarryAllows, isNorthwatchMob, northwatchAllows, northwatchShardPattern, northwatchPatrolPattern, northwatchPatrolInterruptDuration, northwatchPatrolShotDamage, NORTHWATCH_SHARD_PATROL_IDS, isNorthwatchShardPatrol, northwatchShardPatrolAllows } from "./wilderness-encounters.js";
+import { ASHEN_HOUND_IDS, ASHEN_SENTRY_IDS } from "./wilderness-encounters.js";
+import { ashenSentryTacticalPattern, ashenWarpackCooldownMultiplier, ashenWarpackGoal, ashenWarpackSpeedMultiplier,
+  ashenWarpackTactic, type AshenWarpackTactic } from "./ashen-warpack.js";
 import { BRUTE_VOLLEY, bruteVolleyReady, bruteRockEndpoints } from "@blockcraft/protocol";
 import { CHAMPION_CHARGE, CINDER_RAM_CHARGE, ChatSendSchema, QUICK_CHAT_PHRASES, PlayerNameSchema, AppearanceSchema, type NearbyChatMessage } from "@blockcraft/protocol";
 import { hearsNearbyChat } from "./nearby-chat.js";
@@ -580,6 +583,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly normalLootCadence = new NormalLootCadence();
   private readonly ashenReliquary = new AshenReliquaryCycle();
   private ashenReliquaryPhaseKey = "";
+  private ashenWarpackEngagedAt = 0;
+  private ashenWarpackActiveTactic: AshenWarpackTactic = "ram-advance";
+  private ashenWarpackAnnouncedTactic: AshenWarpackTactic | null = null;
   private readonly mobBaseNames = new Map<string, string>();
   private readonly roadsideGuardLastNearby = new Map<string, number>();
   private readonly worldDeltasByChunk = new Map<string, Map<string, WorldBlockDelta>>();
@@ -7498,6 +7504,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.advanceRealmEvent(now);
       this.advanceRoadsideGuards(now);
       this.advanceRealmBossAbandonment(now);
+      this.updateAshenWarpackTactic(now);
       for (const pack of ROAMING_PACKS) {
         const route = this.roamingRoutes.get(pack.id) ?? createRoamingRouteState(now);
         this.roamingRoutes.set(pack.id, route);
@@ -7581,7 +7588,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         ? northwatchPatrolPattern(mob.actionSequence, NORTHWATCH_SHARD_PATROL_IDS.slice(1)
           .filter(id => this.state.mobs.get(id)?.alive).length)
         : mob.archetype === "shard_sentry" ? northwatchShardPattern(mob.actionSequence)
-        : isAshenSentry(mobId) ? ashenSentryPattern(mob.actionSequence)
+        : isAshenSentry(mobId) ? ashenSentryTacticalPattern(mob.actionSequence, this.ashenWarpackActiveTactic)
           : spitterPattern(mob.actionSequence + (mobId === "frontier-spitter" ? 1 : 0));
       if (mob.archetype === "stone_brute" && mob.combatState === "idle") {
         const eligible = [...this.state.players.values()].filter(player => player.health > 0 && !isInsideTownSafeZone(player)
@@ -7955,7 +7962,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const positioning = this.spitterPositioning.get(mobId) ?? createSpitterPositioning();
       if (definition.attackKind === "projectile") this.spitterPositioning.set(mobId, positioning);
       const rangerSlow = this.rangerSlows.get(mobId);
-      const baseMovementSpeed = definition.speed * mob.speedMultiplier;
+      const baseMovementSpeed = definition.speed * mob.speedMultiplier
+        * (isAshenMob(mobId) ? ashenWarpackSpeedMultiplier(mobId, this.ashenWarpackActiveTactic) : 1);
       const movementSpeed = (mob.isMiniBoss && mob.archetype === "stone_brute"
         ? bruteLeaderPursuitSpeed(baseMovementSpeed, currentAreaLeaderPhase) : baseMovementSpeed)
         * (now < (rangerSlow?.until ?? 0) ? rangerSlow!.multiplier : 1);
@@ -7985,6 +7993,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           patrolCharge ? 1_400 : (isCoordinatedCrawlerLeader(mobId)
             || isCoordinatedCrawlerLeader(leaderForFollower(mobId) ?? "")) ? 1_150 : undefined);
       } else this.crawlerPositioning.delete(mobId);
+      const ashenRam = this.state.mobs.get("ashen-cinder-ram");
+      const ashenGoal = target.visible && isAshenMob(mobId)
+        ? ashenWarpackGoal(mobId, this.ashenWarpackActiveTactic, target,
+          ashenRam?.alive ? { x: ashenRam.x, y: ashenRam.y, z: ashenRam.z } : null) : null;
+      const ashenPursuit = ashenGoal ? pursueTarget(mob, ashenGoal, deltaTime, movementSpeed, .22) : null;
       const attackers = () => [...this.state.mobs.entries()].map(([id, peer]) => ({
         id, alive: peer.alive, health: peer.health, archetype: peer.archetype, combatState: peer.combatState, targetId: peer.targetId,
       }));
@@ -7992,9 +8005,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const waitingGoal = waiting ? meleeWaitingGoal(mobId, target, [...this.mobAwareness.entries()]
         .filter(([id, awareness]) => awareness.targetId === target.id && this.state.mobs.get(id)?.alive
           && !isSpitterLike(this.state.mobs.get(id)?.archetype ?? "")).map(([id]) => id), definition.stopDistance + 1.1) : null;
-      const pursuit = waitingGoal ? pursueTarget(mob, waitingGoal, deltaTime, movementSpeed, .2)
-        : circling ?? rangedPursuit ?? pursueTarget(mob, target, deltaTime, movementSpeed, target.visible ? definition.stopDistance : .3);
-      const goal = waitingGoal ?? circling?.goal ?? rangedPursuit?.goal ?? target;
+      const pursuit = ashenPursuit ?? (waitingGoal ? pursueTarget(mob, waitingGoal, deltaTime, movementSpeed, .2)
+        : circling ?? rangedPursuit ?? pursueTarget(mob, target, deltaTime, movementSpeed, target.visible ? definition.stopDistance : .3));
+      const goal = ashenGoal ?? waitingGoal ?? circling?.goal ?? rangedPursuit?.goal ?? target;
       const stuck = this.moveNavigatingMob(mobId, mob, pursuit, goal, now, pose => this.mobPositionAllowed(pose)
         && (!rangedPursuit?.retreating || Math.hypot(pose.x - home.x, pose.z - home.z) <= 6), !waiting);
       if (stuck) {
@@ -8036,7 +8049,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           const peer = this.state.mobs.get(id);
           return Boolean(peer?.alive && peer.attackStartedAt === startedAt && ["windup", "strike", "recover"].includes(peer.combatState));
         })
-        || circling || rangedPursuit?.repositioning || !target.visible || !inAttackRange || Math.abs(target.y - mob.y) > 1.75 || now - lastAttackAt < definition.cooldownMs * rematchTiming.cooldown * huntTiming.cooldown
+        || (circling && !ashenPursuit) || (rangedPursuit?.repositioning && !ashenPursuit) || !target.visible || !inAttackRange || Math.abs(target.y - mob.y) > 1.75 || now - lastAttackAt < definition.cooldownMs * rematchTiming.cooldown * huntTiming.cooldown
+          * (isAshenMob(mobId) ? ashenWarpackCooldownMultiplier(mobId, this.ashenWarpackActiveTactic) : 1)
         || (definition.attackKind === "projectile" && [...this.pendingMobProjectiles.values()].some(shot => shot.mobId === mobId))
         || !hasCombatLineOfSight(mob, target, this.readWorldBlock)) continue;
       if (mobId === "frontier-brute" && !mob.isMiniBoss && mob.attackPattern !== "rocks") mob.attackPattern = frontierBrutePattern(mob.actionSequence);
@@ -9328,10 +9342,39 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
   }
 
+  private updateAshenWarpackTactic(now: number): void {
+    const active = ASHEN_COMBAT_GROUP_IDS.some(id => {
+      const mob = this.state.mobs.get(id);
+      return Boolean(mob?.alive && this.mobAwareness.get(id)?.targetId);
+    });
+    if (!active) {
+      this.ashenWarpackEngagedAt = 0;
+      this.ashenWarpackActiveTactic = "ram-advance";
+      this.ashenWarpackAnnouncedTactic = null;
+      return;
+    }
+    if (!this.ashenWarpackEngagedAt) this.ashenWarpackEngagedAt = now;
+    const ram = this.state.mobs.get("ashen-cinder-ram");
+    const tactic = ashenWarpackTactic(this.ashenWarpackEngagedAt, now, ram?.alive === true,
+      (this.cinderRamExposedUntil.get("ashen-cinder-ram") ?? 0) > now,
+      ASHEN_HOUND_IDS.filter(id => this.state.mobs.get(id)?.alive).length,
+      ASHEN_SENTRY_IDS.filter(id => this.state.mobs.get(id)?.alive).length);
+    this.ashenWarpackActiveTactic = tactic;
+    if (tactic === this.ashenWarpackAnnouncedTactic) return;
+    this.ashenWarpackAnnouncedTactic = tactic;
+    this.broadcast("leader:formation", {
+      mobId: "ashen-cinder-ram",
+      state: tactic === "ashglass-crossfire" ? "crossfire" : tactic === "pack-collapse" ? "pin" : "full",
+      tactic,
+      durationMs: 2_800,
+    } satisfies AreaLeaderFormation);
+  }
+
   private rallyAshenCombatGroup(mobId: string, playerId: string, now: number): void {
     const caller = this.state.mobs.get(mobId);
     const player = this.state.players.get(playerId);
     if (!caller || !player || player.health <= 0 || now < (this.pathConcealedUntil.get(playerId) ?? 0)) return;
+    if (!this.ashenWarpackEngagedAt) this.ashenWarpackEngagedAt = now;
     for (const allyId of ASHEN_COMBAT_GROUP_IDS) {
       if (allyId === mobId) continue;
       const ally = this.state.mobs.get(allyId);

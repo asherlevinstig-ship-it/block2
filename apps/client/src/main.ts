@@ -11830,7 +11830,16 @@ app.on("update", (dt: number) => {
       }
     }
     const combatCue = enemyCombatCue(mob.state, animationNow + serverClock.offset);
-    const cue = combatCue.visible ? combatCue : enemyAwarenessCue(mob.state, animationNow + serverClock.offset);
+    const warpackFormation = leaderFormation.get("ashen-cinder-ram");
+    const warpackTactic = warpackFormation && animationNow < warpackFormation.until
+      && ["ashen-cinder-ram", "ashen-ember-hound-west", "ashen-ember-hound-east", "ashglass-sentry-west", "ashglass-sentry-east"].includes(mobId)
+      ? warpackFormation.tactic : undefined;
+    const warpackLabel = !warpackTactic ? "" : mobId === "ashen-cinder-ram"
+      ? leaderFormationLabel(warpackFormation!.state, warpackTactic)
+      : mobId.includes("hound") ? warpackTactic === "pack-collapse" ? "PACK COLLAPSE · GUARDING RAM" : "RAM ADVANCE · FLANKING"
+      : warpackTactic === "ashglass-crossfire" ? "ASHGLASS CROSSFIRE · TAKING LANE" : warpackTactic === "pack-collapse" ? "PACK COLLAPSE · COVERING RAM" : "RAM ADVANCE · COVERING FIRE";
+    const tacticCue = warpackLabel ? { kind: "formation", recovery: false, visible: true, label: warpackLabel, progress: 1 } : null;
+    const cue = combatCue.visible ? combatCue : tacticCue ?? enemyAwarenessCue(mob.state, animationNow + serverClock.offset);
     const playerEye = localPlayer.getPosition();
     const mobDistance = Math.hypot(sampled.x - playerEye.x, sampled.y - playerEye.y, sampled.z - playerEye.z);
     if (respawnIndicator && mobDistance <= 24 && camera.camera
