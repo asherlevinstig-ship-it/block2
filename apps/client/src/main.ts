@@ -1,6 +1,7 @@
 import * as pc from "playcanvas";
 import { addCallingParticleLayers } from "./calling-particles.js";
 import { CALLING_ABILITY_SUSTAIN_PARTICLES, CALLING_ANTICIPATION_PARTICLES, CALLING_IMPACT_PARTICLES, CALLING_SUSTAIN_PARTICLES, callingParticleLifetime } from "./calling-vfx-presets.js";
+import { mageCastDuration, mageCastPose, type MageAbilityId } from "./mage-casting.js";
 import { greenwoodMasteryStatus, mistfenMasteryStatus } from "@blockcraft/protocol";
 import type { RegionalArmourProc } from "@blockcraft/protocol";
 import { isInMistfenMarsh, NORTHWATCH_SHARD_PATROL_SITE } from "@blockcraft/voxel-world";
@@ -4417,6 +4418,7 @@ interface CallingPersistentVisual {
   abilityId: CallingAbilityId;
 }
 const callingPersistentVisuals = new Map<string, CallingPersistentVisual>();
+const mageCastAnimations = new Map<string, { abilityId: MageAbilityId; startedAt: number; endsAt: number }>();
 const healerAllyCues = new Map<string, { root: pc.Entity; materials: pc.StandardMaterial[]; fallen: boolean }>();
 const powerDebrisVisuals: PowerDebrisVisual[] = [];
 const markPayoffVisuals: MarkPayoffVisual[] = [];
@@ -5155,6 +5157,7 @@ function createCallingImpact(effect: CallingAbilityEffect): void {
     });
   }
   const abilityId = effect.abilityId;
+  if (effect.pathId === "mage") createMageHandCast(effect.casterId, abilityId as MageAbilityId);
   const layers = CALLING_IMPACT_PARTICLES[abilityId];
   const root = new pc.Entity(`calling-impact:${abilityId}`);
   const followsPlayer = abilityId === "tank_bulwark" || abilityId === "mage_mana_shield"
@@ -5181,6 +5184,62 @@ function createCallingImpact(effect: CallingAbilityEffect): void {
   combatAudio.play(effect.pathId === "tank" ? "callingTank" : effect.pathId === "mage" || effect.pathId === "healer" ? "callingMage"
     : effect.pathId === "assassin" ? "callingShadow" : effect.pathId === "thief" ? "callingThief" : "callingRanger", pan);
   if (abilityId === "tank_earthbreaker") combatAudio.play("seismicImpact");
+}
+
+function createMageHandCast(playerId: string, abilityId: MageAbilityId): void {
+  const rig = playerId === room?.sessionId ? localPlayerRig : remotePlayers.get(playerId)?.rig;
+  if (!rig) return;
+  const startedAt = performance.now(), durationMs = mageCastDuration(abilityId);
+  mageCastAnimations.set(playerId, { abilityId, startedAt, endsAt: startedAt + durationMs });
+  const palette: readonly [pc.Color, pc.Color] = abilityId === "mage_mana_shield"
+    ? [new pc.Color(.2, .58, 1), new pc.Color(.76, .92, 1)]
+    : abilityId === "mage_overload"
+      ? [new pc.Color(.92, .18, 1), new pc.Color(1, .62, .96)]
+      : [new pc.Color(.5, .26, 1), new pc.Color(.66, .9, 1)];
+  for (const [side, elbow] of [[-1, rig.leftElbow], [1, rig.rightElbow]] as const) {
+    const root = new pc.Entity(`mage-hand-cast:${abilityId}`); root.setLocalPosition(0, -.29, 0); elbow.addChild(root);
+    const core = callingSignatureMaterial(palette[0], .78, 1.24);
+    const edge = callingSignatureMaterial(palette[1], .94, 1.38);
+    addCallingSignaturePrimitive(root, "spell-palm-core", "sphere", core, [.18, .18, .18], [0, 0, 0]);
+    for (let index = 0; index < 6; index += 1) {
+      const angle = index / 6 * Math.PI * 2;
+      addCallingSignaturePrimitive(root, "spell-palm-rune", "box", index % 2 ? core : edge,
+        [.035, .035, .14], [Math.sin(angle) * .28, 0, Math.cos(angle) * .28], [0, angle * 180 / Math.PI, angle * 180 / Math.PI]);
+    }
+    if (abilityId === "mage_arcane_surge")
+      addCallingSignaturePrimitive(root, "surge-hand-release", "box", edge, [.07, .62, .07], [0, -.58, 0]);
+    else if (abilityId === "mage_mana_shield") for (let index = 0; index < 3; index += 1)
+      addCallingSignaturePrimitive(root, "shield-hand-arc", "box", index === 1 ? edge : core,
+        [.035, .16 + index * .08, .18], [side * (.18 + index * .1), -.1, 0], [0, 0, side * (28 + index * 12)]);
+    else for (let index = 0; index < 4; index += 1)
+      addCallingSignaturePrimitive(root, "overload-hand-prong", "box", index % 2 ? edge : core,
+        [.035, .22 + index * .06, .035], [side * (.08 + index * .05), -.18 - index * .07, 0], [side * (18 + index * 8), 0, side * 22]);
+    callingImpactVisuals.push({ root, expiresAt: startedAt + durationMs, materials: [core, edge], abilityId });
+  }
+  if (abilityId === "mage_overload") {
+    const root = new pc.Entity("overload-between-hands"); root.setLocalPosition(0, .02, -.52); rig.torso.addChild(root);
+    const core = callingSignatureMaterial(new pc.Color(.8, .08, 1), .8, 1.4);
+    const edge = callingSignatureMaterial(new pc.Color(1, .72, 1), .94, 1.5);
+    addCallingSignaturePrimitive(root, "overload-gathered-core", "sphere", core, [.27, .27, .27], [0, 0, 0]);
+    for (let index = 0; index < 8; index += 1) {
+      const angle = index / 8 * Math.PI * 2;
+      addCallingSignaturePrimitive(root, "overload-orbit", "box", index % 2 ? edge : core,
+        [.035, .035, .2], [Math.sin(angle) * .42, Math.cos(angle) * .42, 0], [0, 0, angle * 180 / Math.PI]);
+    }
+    callingImpactVisuals.push({ root, expiresAt: startedAt + durationMs, materials: [core, edge], abilityId });
+  }
+}
+
+function applyMageCastAnimation(playerId: string, rig: VoxelCharacterRig, now: number): void {
+  const cast = mageCastAnimations.get(playerId);
+  if (!cast) return;
+  if (now >= cast.endsAt) { mageCastAnimations.delete(playerId); return; }
+  const pose = mageCastPose(cast.abilityId, now - cast.startedAt);
+  rig.torso.setLocalEulerAngles(pose.torsoPitch, pose.torsoYaw, 0);
+  rig.leftArm.setLocalEulerAngles(pose.leftArmPitch, 0, pose.leftArmRoll);
+  rig.rightArm.setLocalEulerAngles(pose.rightArmPitch, 0, pose.rightArmRoll);
+  rig.leftElbow.setLocalEulerAngles(pose.leftElbowPitch, 0, 0);
+  rig.rightElbow.setLocalEulerAngles(pose.rightElbowPitch, 0, 0);
 }
 
 function updateCallingPersistentState(state: CallingStateUpdate): void {
@@ -10905,6 +10964,7 @@ app.on("update", (dt: number) => {
   if (animationNow >= localHitPauseUntil) {
     animateVoxelCharacter(localPlayerRig, animationTime, frameTime, localVerticalVelocity, predicted.grounded || grounded, localActionElapsed, localActionStep, localActionMainHandId, localPowerElapsed, localActivePower, localActionFacingYaw, moving ? collisionTravel : 0, localFacingYaw);
     if (localDefending) applyDefensePose(localPlayerRig);
+    if (room) applyMageCastAnimation(room.sessionId, localPlayerRig, animationNow);
   }
   const dodgeElapsed = localDodgeStartedAt === null ? null : animationNow - localDodgeStartedAt;
   if (dodgeElapsed !== null && dodgeElapsed < 320) {
@@ -10960,6 +11020,7 @@ app.on("update", (dt: number) => {
       const remotePowerElapsed = remote.powerStartedAt === null ? null : animationNow - remote.powerStartedAt;
       animateVoxelCharacter(remote.rig, animationTime, frameTime, remoteVerticalVelocity, true, remoteActionElapsed, remote.actionStep, remote.actionMainHandId, remotePowerElapsed, remote.powerId, remote.entity.getEulerAngles().y, remoteTravel, pose.yaw);
       if (remote.defending) applyDefensePose(remote.rig);
+      applyMageCastAnimation(id, remote.rig, animationNow);
       if (remoteActionElapsed !== null && remoteActionElapsed >= remoteActionDuration(remote.actionMainHandId, remote.actionStep)) {
         remote.actionStartedAt = null;
         remote.actionMainHandId = null;
@@ -12857,6 +12918,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       visual.root.destroy(); visual.materials.forEach(material => material.destroy());
     }
     callingPersistentVisuals.clear(); localCallingState = null; combatHud.setCallingState(null);
+    mageCastAnimations.clear();
     pendingPortalDestination = null;
     social.clearNames();
     partyUI.reset();
