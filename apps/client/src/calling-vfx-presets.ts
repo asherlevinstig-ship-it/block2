@@ -57,18 +57,18 @@ export const CALLING_IMPACT_PARTICLES: Record<CallingAbilityId, readonly Particl
     layer("smoke", [.42, .39, .34], 24, 1.92, .98, 2.55, 1.42, .52, .4, .16),
   ],
   mage_arcane_surge: [
-    layer("glow", violet, 58, 1.2, .46, 1.75, 3.1, 1.15, .88, .22),
-    layer("streak", [.84, .72, 1], 32, .68, .38, 1.05, 4.2, 1.9, .88, .42),
-    layer("spark", silver, 18, .5, .12, 1.45, 4.8, 1.4, .92, .18),
+    layer("glow", violet, 64, 1.28, .5, 1.95, 3.25, 1.22, .9, .22),
+    layer("streak", [.84, .72, 1], 38, .72, .4, 1.2, 4.45, 2, .9, .44),
+    layer("spark", silver, 22, .54, .12, 1.55, 5, 1.5, .94, .2),
   ],
   mage_mana_shield: [
-    layer("glow", azure, 38, 1.35, .48, 1.05, 1.35, .8, .72, .68),
-    layer("spark", silver, 24, .92, .14, 1.08, 2.1, 1.1, .84, .82),
+    layer("glow", azure, 46, 1.42, .52, 1.12, 1.42, .86, .76, .7),
+    layer("spark", silver, 30, .96, .14, 1.16, 2.25, 1.18, .88, .84),
   ],
   mage_overload: [
-    layer("streak", magenta, 52, 1.05, .45, 1.05, 3.8, 1.45, .92, .48),
-    layer("glow", violet, 30, 1.38, .48, .72, 1.2, 1.18, .76, .82),
-    layer("spark", silver, 18, .6, .11, .9, 3.4, 1.5, .86, .72),
+    layer("streak", magenta, 62, 1.1, .48, 1.14, 4.2, 1.55, .96, .5),
+    layer("glow", violet, 38, 1.44, .5, .8, 1.3, 1.26, .8, .84),
+    layer("spark", silver, 24, .65, .11, .98, 3.65, 1.6, .9, .74),
   ],
   assassin_vanish: [
     layer("smoke", shadow, 54, 1.55, .74, .78, 1.45, 1.05, .62, .68),

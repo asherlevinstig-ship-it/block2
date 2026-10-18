@@ -32,9 +32,10 @@ describe("calling particle identity and budget", () => {
   });
 
   it("gives every Mage ability a distinct high-energy signature", () => {
-    expect(CALLING_IMPACT_PARTICLES.mage_arcane_surge.reduce((sum, entry) => sum + entry.count, 0)).toBeGreaterThanOrEqual(100);
+    expect(CALLING_IMPACT_PARTICLES.mage_arcane_surge.reduce((sum, entry) => sum + entry.count, 0)).toBeGreaterThanOrEqual(120);
     expect(CALLING_IMPACT_PARTICLES.mage_mana_shield.some(layer => layer.color[2] === 1)).toBe(true);
-    expect(CALLING_IMPACT_PARTICLES.mage_overload.some(layer => layer.kind === "streak")).toBe(true);
+    expect(CALLING_IMPACT_PARTICLES.mage_overload.filter(layer => layer.kind === "streak" || layer.kind === "spark")
+      .reduce((sum, layer) => sum + layer.count, 0)).toBeGreaterThanOrEqual(80);
     expect(CALLING_ABILITY_SUSTAIN_PARTICLES.mage_mana_shield?.length).toBeGreaterThanOrEqual(2);
     expect(CALLING_ABILITY_SUSTAIN_PARTICLES.mage_overload?.some(layer => layer.kind === "streak")).toBe(true);
   });

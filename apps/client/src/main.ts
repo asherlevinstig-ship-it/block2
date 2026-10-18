@@ -4966,6 +4966,69 @@ function createRangerPinUpdate(message: { mobId: string; stacks: number; rooted:
     message.rooted ? "PINNED · ROOTED" : `PIN ${message.stacks}/3 · SLOWED`, "stagger", false, message.rooted ? [1, .78, .26] : [.38, .9, .58]);
 }
 
+function createMageSurgeTargets(targetIds: string[], damage: number): void {
+  for (const targetId of targetIds) {
+    const mob = mobVisuals.get(targetId); if (!mob) continue;
+    const root = new pc.Entity("mage-surge-target"); root.setLocalPosition(0, .04, 0); mob.entity.addChild(root);
+    const force = callingSignatureMaterial(new pc.Color(.64, .28, 1), .78, 1.04);
+    const edge = callingSignatureMaterial(new pc.Color(.9, .72, 1), .92, 1.22);
+    for (let index = 0; index < 10; index += 1) {
+      const angle = index / 10 * Math.PI * 2;
+      addCallingSignaturePrimitive(root, "arcane-force-hit", "box", index % 3 === 0 ? edge : force,
+        [.045, .045, .32], [Math.sin(angle) * .72, .42 + index % 2 * .3, Math.cos(angle) * .72],
+        [index % 2 ? 18 : -18, angle * 180 / Math.PI, 0]);
+    }
+    callingImpactVisuals.push({ root, expiresAt: performance.now() + 620, materials: [force, edge], abilityId: "mage_arcane_surge" });
+    createRangedPopup(new pc.Vec3(mob.state.x, mob.state.y + mob.healthBarY + .86, mob.state.z),
+      `ARCANE FORCE · −${damage}`, "stagger", false, [.76, .5, 1]);
+  }
+}
+
+function createMageShieldImpact(message: { playerId: string; mobId: string; prevented: number; remaining: number; shattered: boolean }): void {
+  const anchor = message.playerId === room?.sessionId ? localPlayer : remotePlayers.get(message.playerId)?.entity;
+  if (!anchor) return;
+  const root = new pc.Entity("mage-shield-rune-break"); root.setLocalPosition(0, .03, 0); anchor.addChild(root);
+  const shard = callingSignatureMaterial(new pc.Color(.38, .7, 1), .74, 1.02);
+  const flash = callingSignatureMaterial(new pc.Color(.82, .95, 1), .94, 1.28);
+  for (let index = 0; index < (message.shattered ? 16 : 9); index += 1) {
+    const angle = index / (message.shattered ? 16 : 9) * Math.PI * 2;
+    const distance = .72 + index % 3 * .25;
+    addCallingSignaturePrimitive(root, message.shattered ? "mana-shield-shatter" : "mana-rune-break", "box", index % 3 === 0 ? flash : shard,
+      [.045, .13 + index % 3 * .06, .035], [Math.sin(angle) * distance, .55 + index % 4 * .24, Math.cos(angle) * distance],
+      [index % 2 ? 34 : -34, angle * 180 / Math.PI, index % 3 ? 28 : -28]);
+  }
+  callingImpactVisuals.push({ root, expiresAt: performance.now() + (message.shattered ? 820 : 540), materials: [shard, flash], abilityId: "mage_mana_shield" });
+  const position = anchor.getPosition();
+  createRangedPopup(new pc.Vec3(position.x, position.y + 2, position.z),
+    message.shattered ? "MANA SHIELD · SHATTERED" : `RUNE BROKE · ${message.remaining} LEFT`, "stagger", false, [.58, .82, 1]);
+  combatAudio.play("shardDeflect", enemyCuePan(position.x, localPlayer.getPosition().x, 12));
+}
+
+function createMageOverloadImpact(message: { powerId: string; x: number; y: number; z: number; bonusDamage: number; targetIds: string[] }): void {
+  const root = new pc.Entity("mage-overload-transformed-impact"); root.setPosition(message.x, message.y + .03, message.z); app.root.addChild(root);
+  const arcane = callingSignatureMaterial(new pc.Color(.72, .12, 1), .78, 1.18);
+  const hot = callingSignatureMaterial(new pc.Color(1, .28, .78), .9, 1.3);
+  for (let index = 0; index < 18; index += 1) {
+    const angle = index / 18 * Math.PI * 2 + (index % 2) * .1;
+    const length = .55 + index % 4 * .28;
+    addCallingSignaturePrimitive(root, "overload-ground-fracture", "box", index % 4 === 0 ? hot : arcane,
+      [.035, .025, length], [Math.sin(angle) * 1.15, .045, Math.cos(angle) * 1.15], [0, angle * 180 / Math.PI, 0]);
+  }
+  for (let index = 0; index < 10; index += 1) {
+    const angle = index / 10 * Math.PI * 2;
+    addCallingSignaturePrimitive(root, "overload-lightning-spire", "box", index % 3 === 0 ? hot : arcane,
+      [.035, .35 + index % 3 * .2, .035], [Math.sin(angle) * (.45 + index % 2 * .35), .42 + index % 4 * .28, Math.cos(angle) * (.45 + index % 2 * .35)],
+      [index % 2 ? 32 : -32, angle * 180 / Math.PI, index % 3 ? 22 : -22]);
+  }
+  callingImpactVisuals.push({ root, expiresAt: performance.now() + 980, materials: [arcane, hot], abilityId: "mage_overload" });
+  for (const targetId of message.targetIds) {
+    const mob = mobVisuals.get(targetId); if (!mob) continue;
+    createRangedPopup(new pc.Vec3(mob.state.x, mob.state.y + mob.healthBarY + .9, mob.state.z),
+      `OVERLOADED · +${message.bonusDamage}`, "damage", false, [1, .34, .86]);
+  }
+  combatAudio.play("seismicImpact");
+}
+
 function createCallingImpact(effect: CallingAbilityEffect): void {
   if (effect.abilityId === "assassin_death_mark" && effect.targetId) {
     mobVisuals.get(effect.targetId)?.marks.set(effect.casterId, {
@@ -11906,6 +11969,15 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   });
   room.onMessage("ranger:pin-update", (message: { casterId: string; mobId: string; stacks: number; rooted: boolean; durationMs: number }) => {
     createRangerPinUpdate(message);
+  });
+  room.onMessage("mage:surge-targets", (message: { casterId: string; targetIds: string[]; damage: number }) => {
+    createMageSurgeTargets(message.targetIds, message.damage);
+  });
+  room.onMessage("mage:shield-impact", (message: { playerId: string; mobId: string; prevented: number; remaining: number; shattered: boolean }) => {
+    createMageShieldImpact(message);
+  });
+  room.onMessage("mage:overload-impact", (message: { casterId: string; powerId: string; x: number; y: number; z: number; bonusDamage: number; targetIds: string[] }) => {
+    createMageOverloadImpact(message);
   });
   room.onMessage("assassin:mark-strike", (message: { casterId: string; mobId: string; bonusDamage: number; empowered: boolean; defeated: boolean }) => {
     const mob = mobVisuals.get(message.mobId);

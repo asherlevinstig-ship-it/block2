@@ -57,7 +57,12 @@ describe("hotbar Calling abilities", () => {
       expect(player.health).toBe(3);
       expect(client.send).toHaveBeenCalledWith("tank:block-impact", { playerId: "hero", mobId: "field-test", prevented: 1 });
     }
-    if (pathId === "mage") { expect(player.powerCooldownUntil).toBe(99_000); expect(player.stamina).toBe(55); }
+    if (pathId === "mage") {
+      expect(player.powerCooldownUntil).toBe(99_000); expect(player.stamina).toBe(55);
+      expect(broadcast).toHaveBeenCalledWith("mage:surge-targets", {
+        casterId: "hero", targetIds: ["pursuer"], damage: 2,
+      });
+    }
     if (pathId === "assassin") {
       expect(internal.assassinShadowUntil.get("hero")).toBe(13_000);
       expect(internal.stealthUntil.get("hero")).toBe(13_000);
@@ -317,6 +322,9 @@ describe("hotbar Calling abilities", () => {
     expect(broadcast).toHaveBeenCalledWith("calling:state", expect.objectContaining({
       abilityId: "mage_mana_shield", charges: 2, phase: "active",
     }));
+    expect(broadcast).toHaveBeenCalledWith("mage:shield-impact", {
+      playerId: "hero", mobId: "attacker", prevented: 1, remaining: 2, shattered: false,
+    });
   });
 
   it("equips a town-only branch and applies its authoritative effect", () => {

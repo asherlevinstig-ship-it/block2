@@ -3651,6 +3651,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.callingState(playerId, "mage", "mage_mana_shield", "BARRIER", {
         charges: Math.max(0, barrierHits - 1), clear: barrierHits === 1,
       });
+      this.broadcast("mage:shield-impact", { playerId, mobId, prevented: beforeBarrier - defense.damage,
+        remaining: Math.max(0, barrierHits - 1), shattered: barrierHits === 1 });
       this.buildPathProc(playerId, "mage", "MANA SHIELD", barrierHits === 1 ? "SHATTERED" : `${barrierHits - 1} CHARGES REMAIN`);
     }
     if (defense.damage > 0 && parseBuildPathState(player.huntLoadoutsJson).selectedPathId === "tank") {
@@ -5156,6 +5158,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       detail = `ARCANE PULSE · ${targets.length} HIT · +${stamina} STAMINA`;
       this.grantCallingTrial(client.sessionId, "surge_deep_reserves", player.stamina - staminaBefore);
       this.grantCallingTrial(client.sessionId, "surge_temporal_flux", specialRecovering ? 1 : 0);
+      if (targets.length > 0) this.broadcast("mage:surge-targets", {
+        casterId: client.sessionId, targetIds: targets.map(([mobId]) => mobId), damage: 2,
+      });
     } else if (abilityId === "mage_mana_shield") {
       const hits = (rank >= 4 ? 4 : 3) + (augmentId === "shield_prismatic_layers" ? 2 : 0);
       this.mageBarrierHits.set(client.sessionId, hits);
@@ -7763,6 +7768,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           this.mageOverloadCharges.set(sessionId, charges - 1);
           this.callingState(sessionId, "mage", "mage_overload", "POWER CHARGED", { charges: charges - 1 });
         }
+        this.broadcast("mage:overload-impact", { casterId: sessionId, powerId: pending.powerId,
+          x: impactCenter.x, y: impactCenter.y, z: impactCenter.z, bonusDamage: mageOverloadBonus,
+          targetIds: targets.map(target => target.id) });
         this.buildPathProc(sessionId, "mage", "OVERLOAD", `POWER AMPLIFIED · +${mageOverloadBonus} DAMAGE`);
       }
       if (shadowstepActive && !shadowstepReady)
