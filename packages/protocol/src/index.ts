@@ -6,7 +6,7 @@ export { DODGE_STAMINA_COST, DODGE_CHAIN_COST_STEP, DODGE_MAX_STAMINA_COST, DODG
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-warden-gate-v140";
+export const WORLD_ROOM = "world-warden-gate-v141";
 export const SILVER_DEPTHS_ROOM = "silver-depths-instance-v3";
 export const PRACTICE_ROOM = "calling-practice-v1";
 export type RoomTransfer = { room: typeof WORLD_ROOM | typeof SILVER_DEPTHS_ROOM | typeof PRACTICE_ROOM; instanceKey?: string; partySize?: number; returnFrom?: "silver-depths" | "practice"; retry?: boolean; partyTicket?: string; worldRoomId?: string };
@@ -497,15 +497,16 @@ export const ARMOUR_DEFINITIONS = {
   rootstalker_wrap: { name: "Rootstalker Wrap", reduction: 1, speed: 1.07, projectileReduction: 1, hazardReduction: 2 },
   northwatch_cloak: { name: "Northwatch Cloak", reduction: 1, speed: 1.04, projectileReduction: 1, hazardReduction: 0 },
   worldsplitter_plate: { name: "Worldsplitter Plate", reduction: 3, speed: .9, projectileReduction: 1, hazardReduction: 2 },
+  ashguard_mantle: { name: "Ashguard Mantle", reduction: 2, speed: 1.02, projectileReduction: 2, hazardReduction: 3 },
 } as const;
 export type ArmourId = keyof typeof ARMOUR_DEFINITIONS;
 export function armourForItem(id: string): Exclude<ArmourId, "none"> | null {
   return id === "wanderer_robes" || id === "leather_armour" || id === "forager_wrap" || id === "fenwalker_mantle" || id === "quarry_hauberk" || id === "ridgeguard_mantle" || id === "iron_armour" || id === "rootguard_armour" || id === "bastion_plate"
-    || id === "fangstalker_wrap" || id === "venomweave_mantle" || id === "mirebreaker_mantle" || id === "rootstalker_wrap" || id === "northwatch_cloak" || id === "worldsplitter_plate" ? id : null;
+    || id === "fangstalker_wrap" || id === "venomweave_mantle" || id === "mirebreaker_mantle" || id === "rootstalker_wrap" || id === "northwatch_cloak" || id === "worldsplitter_plate" || id === "ashguard_mantle" ? id : null;
 }
 export function utilityForItem(id: string): "miners_lantern" | "moonstone" | null { return id === "miners_lantern" || id === "moonstone" ? id : null; }
 export function isEquipmentItem(id: string): boolean { return equipmentForItem(id) !== null || armourForItem(id) !== null || utilityForItem(id) !== null; }
-export const ArmourEquipSchema = z.object({ armourId: z.enum(["none", "wanderer_robes", "leather_armour", "forager_wrap", "fenwalker_mantle", "quarry_hauberk", "ridgeguard_mantle", "iron_armour", "rootguard_armour", "bastion_plate", "fangstalker_wrap", "venomweave_mantle", "mirebreaker_mantle", "rootstalker_wrap", "northwatch_cloak", "worldsplitter_plate"]) });
+export const ArmourEquipSchema = z.object({ armourId: z.enum(["none", "wanderer_robes", "leather_armour", "forager_wrap", "fenwalker_mantle", "quarry_hauberk", "ridgeguard_mantle", "iron_armour", "rootguard_armour", "bastion_plate", "fangstalker_wrap", "venomweave_mantle", "mirebreaker_mantle", "rootstalker_wrap", "northwatch_cloak", "worldsplitter_plate", "ashguard_mantle"]) });
 export const BLACKSMITH_STOCK = { ...BLACKSMITH_WEAPONS, leather_armour: { price: 30 }, iron_armour: { price: 70 } } as const;
 export type BlacksmithStockId = keyof typeof BLACKSMITH_STOCK;
 export const BlacksmithBuySchema = z.object({ itemId: z.enum(["forged_sword", "forged_bow", "forged_focus", "leather_armour", "iron_armour"]) });
@@ -530,6 +531,9 @@ export const BLACKSMITH_DISMANTLE = {
   rootstalker_wrap: { gold: 24, materialId: "moss_fibre", materialQuantity: 3 },
   northwatch_cloak: { gold: 15, materialId: "ridge_hide", materialQuantity: 2 },
   worldsplitter_plate: { gold: 18, materialId: "stone_core", materialQuantity: 2 },
+  cinderfang_blade: { gold: 28, materialId: "ember_ore", materialQuantity: 2 },
+  ashguard_mantle: { gold: 28, materialId: "ember_ore", materialQuantity: 2 },
+  emberheart_focus: { gold: 28, materialId: "ember_ore", materialQuantity: 2 },
 } as const satisfies Partial<Record<ItemId, { gold: number; materialId?: ItemId; materialQuantity?: number }>>;
 export type BlacksmithDismantleItemId = keyof typeof BLACKSMITH_DISMANTLE;
 export const BlacksmithDismantleSchema = z.object({ itemId: z.enum(Object.keys(BLACKSMITH_DISMANTLE) as [BlacksmithDismantleItemId, ...BlacksmithDismantleItemId[]]) });
@@ -548,6 +552,16 @@ export const REGIONAL_FORGE_RECIPES = {
 export type RegionalForgeId = keyof typeof REGIONAL_FORGE_RECIPES;
 export type RegionalMarkCounts = Record<RegionalForgeId, number>;
 export const RegionalForgeSchema = z.object({ region: z.enum(["greenwood", "mistfen"]) }).strict();
+export const ASHEN_FORGE_RECIPES = {
+  cinderfang: { blueprint: "cinderfang", itemId: "cinderfang_blade", name: "Cinderfang Blade", gold: 85,
+    materials: [{ itemId: "ember_ore", quantity: 8 }, { itemId: "stone_core", quantity: 4 }] },
+  ashguard: { blueprint: "ashguard", itemId: "ashguard_mantle", name: "Ashguard Mantle", gold: 85,
+    materials: [{ itemId: "ember_ore", quantity: 7 }, { itemId: "iron_ore", quantity: 6 }] },
+  emberheart: { blueprint: "emberheart", itemId: "emberheart_focus", name: "Emberheart Focus", gold: 85,
+    materials: [{ itemId: "ember_ore", quantity: 8 }, { itemId: "silver_ore", quantity: 4 }] },
+} as const;
+export type AshenBlueprintId = keyof typeof ASHEN_FORGE_RECIPES;
+export const AshenForgeSchema = z.object({ blueprint: z.enum(["cinderfang", "ashguard", "emberheart"]) }).strict();
 /** Short, optional exploration-to-gear bridge before mastery-gated legendary forging. */
 export const FIELD_FORGE_RECIPES = {
   greenwood: { itemId: "forager_wrap", gold: 12,
@@ -582,6 +596,9 @@ export const BLACKSMITH_REFORGE = {
   rootstalker_wrap: { materialId: "moss_fibre", costs: [{ gold: 26, material: 4 }, { gold: 54, material: 7 }, { gold: 105, material: 12 }] },
   northwatch_cloak: { materialId: "ridge_hide", costs: [{ gold: 18, material: 2 }, { gold: 38, material: 4 }, { gold: 75, material: 7 }] },
   worldsplitter_plate: { materialId: "stone_core", costs: [{ gold: 24, material: 3 }, { gold: 52, material: 6 }, { gold: 98, material: 10 }] },
+  cinderfang_blade: { materialId: "ember_ore", costs: [{ gold: 28, material: 3 }, { gold: 58, material: 6 }, { gold: 110, material: 10 }] },
+  ashguard_mantle: { materialId: "ember_ore", costs: [{ gold: 28, material: 3 }, { gold: 58, material: 6 }, { gold: 110, material: 10 }] },
+  emberheart_focus: { materialId: "ember_ore", costs: [{ gold: 28, material: 3 }, { gold: 58, material: 6 }, { gold: 110, material: 10 }] },
 } as const satisfies Partial<Record<ItemId, { materialId: ItemId; costs: readonly { gold: number; material: number }[] }>>;
 export type BlacksmithReforgeItemId = keyof typeof BLACKSMITH_REFORGE;
 export type EquipmentReforgeRanks = Partial<Record<BlacksmithReforgeItemId, number>>;
@@ -634,6 +651,7 @@ export type BlacksmithUpdate = {
   leaderMarks?: Partial<Record<LeaderForgemarkId, number>>;
   regionalMarks?: RegionalMarkCounts;
   regionalMasteryRanks?: RegionalMarkCounts;
+  ashenBlueprints?: AshenBlueprintId[];
   materialGranted?: ItemId;
   materialQuantity?: number;
   sold?: number;
@@ -728,6 +746,9 @@ export const ITEM_DEFINITIONS = {
   rootstalker_wrap: { id: "rootstalker_wrap", name: "Rootstalker Wrap", description: "Legendary Greenwood armour · rapid movement and stamina recovery · strong protection from root pressure" },
   northwatch_cloak: { id: "northwatch_cloak", name: "Northwatch Cloak", description: "Watchbreaker reward · reduce damage by 1 · 4% faster movement · extra projectile protection · deflects one Shard Sentry shot every 8s in Northwatch · reforge with Ridge Hide" },
   worldsplitter_plate: { id: "worldsplitter_plate", name: "Worldsplitter Plate", description: "Rare Crusher Hunt armour · reduce damage by 3 · heavy projectile and hazard protection · 10% slower" },
+  cinderfang_blade: { id: "cinderfang_blade", name: "Cinderfang Blade", description: "Ashen regional blade · strikes against staggered enemies ignite for bonus damage" },
+  ashguard_mantle: { id: "ashguard_mantle", name: "Ashguard Mantle", description: "Ashen regional armour · a perfect dodge grants brief fire, hazard and projectile protection" },
+  emberheart_focus: { id: "emberheart_focus", name: "Emberheart Focus", description: "Ashen regional focus · Calling abilities empower nearby allies inside an ember field" },
   forged_sword: { id: "forged_sword", name: "Forged Sword", description: "Iron blade · 2 / 2 / 3 combo damage · equip from your pack" },
   forged_bow: { id: "forged_bow", name: "Forged Bow", description: "Steel-braced bow · 2 arrow damage · equip from your pack" },
   forged_focus: { id: "forged_focus", name: "Forged Focus", description: "Smith-made focus · 2 bolt damage · equip from your pack" },
@@ -859,6 +880,9 @@ export const EQUIPMENT_RARITY = {
   rootstalker_wrap: "legendary",
   northwatch_cloak: "rare",
   worldsplitter_plate: "rare",
+  cinderfang_blade: "legendary",
+  ashguard_mantle: "legendary",
+  emberheart_focus: "legendary",
   forged_sword: "uncommon",
   forged_bow: "uncommon",
   forged_focus: "uncommon",
@@ -956,7 +980,7 @@ export function lootBagRepresentative(items: readonly LootBagItem[]): LootBagIte
   })[0] ?? null;
 }
 
-export type EquipmentPerkId = "core_quake" | "rootfall" | "moon_arc" | "living_guard" | "bastion_ward" | "venom_bloom" | "echo_chain"
+export type EquipmentPerkId = "core_quake" | "rootfall" | "moon_arc" | "living_guard" | "bastion_ward" | "venom_bloom" | "echo_chain" | "cinder_ignite" | "emberheart_field"
   | "alpha_finish" | "venom_surge" | "crusher_break" | "fang_set" | "venom_set" | "crusher_set";
 export const EQUIPMENT_PERK_ITEMS = {
   stone_core_hammer: "core_quake",
@@ -969,6 +993,8 @@ export const EQUIPMENT_PERK_ITEMS = {
   fangstalker_wrap: "fang_set",
   venomweave_mantle: "venom_set",
   worldsplitter_plate: "crusher_set",
+  cinderfang_blade: "cinder_ignite",
+  emberheart_focus: "emberheart_field",
 } as const satisfies Partial<Record<ItemId, EquipmentPerkId>>;
 export function equipmentPerkStats(itemId: string, rank = 0): { id: EquipmentPerkId; name: string; detail: string; damage?: number; radius?: number; durationMs?: number; stamina?: number; cooldownMs?: number; stacks?: number; windowMs?: number } | null {
   const safeRank = Math.max(0, Math.min(3, Math.floor(rank)));
@@ -1000,6 +1026,15 @@ export function equipmentPerkStats(itemId: string, rank = 0): { id: EquipmentPer
     case "echo_chain": {
       const radius = 3.5 + safeRank * .25, damage = 1 + Math.ceil(safeRank / 2);
       return { id: "echo_chain", name: "Echo Chain", damage, radius, detail: `Bolts ricochet once for ${damage} damage within ${radius.toFixed(2)}m` };
+    }
+    case "cinder_ignite": {
+      const damage = 2 + Math.floor(safeRank / 2);
+      return { id: "cinder_ignite", name: "Cinder Ignite", damage, detail: `Hits against staggered enemies ignite for ${damage} bonus damage` };
+    }
+    case "emberheart_field": {
+      const durationMs = 4_000 + safeRank * 500, radius = 3.5 + safeRank * .25;
+      return { id: "emberheart_field", name: "Emberheart Field", damage: 1, radius, durationMs,
+        detail: `Calling abilities create a ${(durationMs / 1000).toFixed(1)}s field; allies inside deal +1 damage` };
     }
     case "fang_set": return { id: "fang_set", name: "Fangstalker Set", detail: HUNT_EQUIPMENT_SETS.fang.bonus, stamina: 12, damage: 2 };
     case "venom_set": return { id: "venom_set", name: "Venomweave Set", detail: HUNT_EQUIPMENT_SETS.venom.bonus, damage: 1, radius: 2.1, durationMs: 3_000, cooldownMs: 1_500 };
@@ -1081,6 +1116,8 @@ export const MAIN_HAND_DEFINITIONS = {
   acid_gland_focus: { id: "acid_gland_focus", name: "Acid Gland Focus", tag: "focus", attackName: "Corrosive Bolt", requiredItemId: "acid_gland_focus" },
   venom_focus: { id: "venom_focus", name: "Venom Focus", tag: "focus", attackName: "Venom Bolt", requiredItemId: "venom_focus" },
   echo_prism: { id: "echo_prism", name: "Echo Prism", tag: "focus", attackName: "Crystal Bolt", requiredItemId: "echo_prism" },
+  cinderfang_blade: { id: "cinderfang_blade", name: "Cinderfang Blade", tag: "melee", attackName: "Cinder Combo", requiredItemId: "cinderfang_blade" },
+  emberheart_focus: { id: "emberheart_focus", name: "Emberheart Focus", tag: "focus", attackName: "Ember Bolt", requiredItemId: "emberheart_focus" },
 } as const satisfies Record<string, MainHandDefinition>;
 
 export type MainHandId = keyof typeof MAIN_HAND_DEFINITIONS;
@@ -1233,6 +1270,14 @@ export const WEAPON_ATTACK_DEFINITIONS = {
     attacks: [{ step: 1, durationMs: 560, impactMs: 235, damage: 2, knockback: .22 }] },
   echo_prism: { combo: false, comboWindowMs: 0, range: 7.5, minimumFacingDot: .58, projectileTravelMs: 250,
     attacks: [{ step: 1, durationMs: 430, impactMs: 175, damage: 2, knockback: .24 }] },
+  cinderfang_blade: { combo: true, comboWindowMs: 480, range: 2.15, minimumFacingDot: .32, projectileTravelMs: 0,
+    attacks: [
+      { step: 1, durationMs: 330, impactMs: 115, damage: 2, knockback: .26 },
+      { step: 2, durationMs: 360, impactMs: 135, damage: 2, knockback: .38 },
+      { step: 3, durationMs: 500, impactMs: 190, damage: 3, knockback: .82 },
+    ] },
+  emberheart_focus: { combo: false, comboWindowMs: 0, range: 8, minimumFacingDot: .58, projectileTravelMs: 260,
+    attacks: [{ step: 1, durationMs: 460, impactMs: 185, damage: 2, knockback: .3 }] },
 } as const satisfies Record<MainHandId, WeaponAttackDefinition>;
 
 export interface PowerDefinition {
@@ -1850,13 +1895,15 @@ export interface CinderRamImpact {
   durationMs: number;
 }
 
-export type AshenReliquaryChoice = "weapon" | "armour" | "gold";
+export type AshenReliquaryChoice = "weapon" | "armour" | "focus" | "gold";
 export interface AshenReliquaryState {
   phase: "sealed" | "unlocked" | "cooldown";
   defeated: number;
   required: number;
   eligible: boolean;
   claimed: boolean;
+  blueprintChoiceRequired: boolean;
+  blueprints: AshenBlueprintId[];
   expiresAt: number;
   cooldownUntil: number;
   x: number;

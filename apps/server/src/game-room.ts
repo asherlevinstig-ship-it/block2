@@ -19,7 +19,7 @@ import { Parties } from "./parties.js";
 import { TradeRequestSchema } from "@blockcraft/protocol";
 import { FIELD_FORGE_RECIPES, FieldForgeSchema, type FieldForgeId } from "@blockcraft/protocol";
 import { Trading } from "./trading.js";
-import { BLACKSMITH_STOCK, BLACKSMITH_DISMANTLE, BLACKSMITH_REFORGE, REGIONAL_FORGE_RECIPES, BlacksmithBuySchema, BlacksmithDismantleSchema, BlacksmithHaulSchema, BlacksmithReforgeSchema, RegionalForgeSchema, AttunementForgeSchema, EquipmentAffixHuntSchema, EQUIPMENT_HUNT_REGIONS, ITEM_DEFINITIONS, EQUIPMENT_AFFIXES, HUNT_EQUIPMENT_SETS, BUILD_PATHS, BUILD_PATH_SPECIALIZATIONS, CALLING_ABILITY_OPTIONS, CALLING_ABILITY_AUGMENTS, CALLING_AUGMENT_TRIALS, CallingAbilityRequestSchema, CallingAbilityEquipRequestSchema, CallingAugmentEquipRequestSchema, HuntCollectionRequestSchema, BuildPathRequestSchema, ArmourEquipSchema, armourStats, armouredDamage, reforgeWeaponDamageBonus, equipmentPerkStats, equipmentAffixResonanceForLoadout, type EquipmentPerkId, type BlacksmithDismantleItemId, type BlacksmithReforgeItemId, type RegionalForgeId, type HuntCollectionUpdate, type HuntLoadoutSlot, type BuildPathId, type BuildPathUpdate, type BuildPathProc, type BuildPathSpecializationId, type CallingAbilityId, type CallingAugmentId, type CallingAbilityUpdate, type CallingAbilityEffect, type CallingStateUpdate, type EquipmentAffixId, type EquipmentAffixRoll, type EquipmentAffixOffers, type EquipmentAffixUpdate, type EquipmentHuntRegionId, type EquipmentHuntTarget } from "@blockcraft/protocol";
+import { BLACKSMITH_STOCK, BLACKSMITH_DISMANTLE, BLACKSMITH_REFORGE, REGIONAL_FORGE_RECIPES, ASHEN_FORGE_RECIPES, AshenForgeSchema, BlacksmithBuySchema, BlacksmithDismantleSchema, BlacksmithHaulSchema, BlacksmithReforgeSchema, RegionalForgeSchema, AttunementForgeSchema, EquipmentAffixHuntSchema, EQUIPMENT_HUNT_REGIONS, ITEM_DEFINITIONS, EQUIPMENT_AFFIXES, HUNT_EQUIPMENT_SETS, BUILD_PATHS, BUILD_PATH_SPECIALIZATIONS, CALLING_ABILITY_OPTIONS, CALLING_ABILITY_AUGMENTS, CALLING_AUGMENT_TRIALS, CallingAbilityRequestSchema, CallingAbilityEquipRequestSchema, CallingAugmentEquipRequestSchema, HuntCollectionRequestSchema, BuildPathRequestSchema, ArmourEquipSchema, armourStats, armouredDamage, reforgeWeaponDamageBonus, equipmentPerkStats, equipmentAffixResonanceForLoadout, type EquipmentPerkId, type BlacksmithDismantleItemId, type BlacksmithReforgeItemId, type RegionalForgeId, type AshenBlueprintId, type HuntCollectionUpdate, type HuntLoadoutSlot, type BuildPathId, type BuildPathUpdate, type BuildPathProc, type BuildPathSpecializationId, type CallingAbilityId, type CallingAugmentId, type CallingAbilityUpdate, type CallingAbilityEffect, type CallingStateUpdate, type EquipmentAffixId, type EquipmentAffixRoll, type EquipmentAffixOffers, type EquipmentAffixUpdate, type EquipmentHuntRegionId, type EquipmentHuntTarget } from "@blockcraft/protocol";
 import { AREA_LEADER_RELIC_IDS, LEADER_FORGE_MARKS, LEADER_FORGE_RECIPES, LeaderForgeSchema,
   type AreaLeaderRelicId, type LeaderForgemarkId } from "@blockcraft/protocol";
 import { emberOreSale, weaponPurchase } from "./blacksmith.js";
@@ -44,7 +44,7 @@ import { equipmentForItem, armourForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE,
   decodeLootBagItems, encodeLootBagItems, lootBagRepresentative, normalizeLootBagItems, huntSetForLoadout,
   type HuntSetId, type LootBagItem, type LootCollectResult } from "@blockcraft/protocol";
 import { WILDERNESS_ENCOUNTERS } from "./wilderness-encounters.js";
-import { ASHEN_RELIQUARY_REWARDS, AshenReliquaryCycle } from "./ashen-reliquary.js";
+import { ASHEN_RELIQUARY_REWARDS, AshenReliquaryCycle, ashenBlueprints, blueprintForReliquaryChoice, withAshenBlueprint } from "./ashen-reliquary.js";
 import { ROADSIDE_GUARD_SITES, roadsideGuard, roadsideGuardsFor } from "./roadside-guards.js";
 import { ROAMING_PACKS, roamingMemberId, roamingMembership, roamingPackAllows, roamingGoal,
   createRoamingRouteState, advanceRoamingRoute, type RoamingRouteState } from "./roaming-packs.js";
@@ -527,6 +527,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly mistfenPoolDamageAt = new Map<string, number>();
   private readonly fenwalkerWardReadyAt = new Map<string, number>();
   private readonly northwatchShardWardReadyAt = new Map<string, number>();
+  private readonly ashguardWardUntil = new Map<string, number>();
+  private readonly emberheartFields = new Map<string, { x: number; y: number; z: number; radius: number; until: number }>();
   private readonly foragerCueAt = new Map<string, number>();
   private readonly mobHomes = new Map<string, { x: number; y: number; z: number }>();
   private readonly mobVerticalVelocities = new Map<string, number>();
@@ -936,6 +938,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     aliveMessage("equipment:hunt", (client, payload) => this.handleEquipmentAffixHunt(client, payload));
     aliveMessage("blacksmith:leader-forge", (client, payload) => this.handleLeaderForge(client, payload));
     aliveMessage("blacksmith:regional-forge", (client, payload) => this.handleRegionalForge(client, payload));
+    aliveMessage("blacksmith:ashen-forge", (client, payload) => this.handleAshenForge(client, payload));
     aliveMessage("blacksmith:field-forge", (client, payload) => this.handleFieldForge(client, payload));
     aliveMessage("blacksmith:forge", (client, payload) => this.handleBlacksmithForge(client, payload));
     aliveMessage("blacksmith:buy", (client, payload) => this.handleBlacksmithBuy(client, payload));
@@ -1465,6 +1468,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         greenwood: greenwoodMasteryRank(this.greenwoodProgress(player).points, this.greenwoodProgress(player).discovered),
         mistfen: mistfenMasteryRank(this.mistfenProgress(player).points, this.mistfenProgress(player).discovered),
       },
+      ashenBlueprints: ashenBlueprints(player.huntLoadoutsJson),
       haulDuplicateItems,
       haulDuplicateGold,
       haulMaterialItems,
@@ -1881,6 +1885,34 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (region === "greenwood") this.setGreenwoodProgress(player, progress); else this.setMistfenProgress(player, progress);
     void this.persistPlayer(client.sessionId, player, true).catch(() => {});
     this.sendBlacksmithState(client, `${ITEM_DEFINITIONS[recipe.itemId].name} forged. Five victories converted into a guaranteed legendary.`, "regional-forged");
+  }
+
+  private handleAshenForge(client: Client, payload: unknown): void {
+    const player = this.state.players.get(client.sessionId);
+    const parsed = AshenForgeSchema.safeParse(payload);
+    if (!player || !parsed.success) return this.sendBlacksmithState(client, "Choose an unlocked Ashen blueprint.", "error");
+    if (!canTradeAtBlacksmith(player)) return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to use the Ashen Forge.", "error");
+    const blueprint = parsed.data.blueprint as AshenBlueprintId;
+    const recipe = ASHEN_FORGE_RECIPES[blueprint];
+    if (!ashenBlueprints(player.huntLoadoutsJson).includes(blueprint))
+      return this.sendBlacksmithState(client, `Defeat the Ashen warpack and choose the ${recipe.name} blueprint first.`, "error");
+    if (player.coins < recipe.gold) return this.sendBlacksmithState(client, `You need ${recipe.gold - player.coins} more gold.`, "error");
+    for (const cost of recipe.materials) {
+      const held = player.inventory.get(cost.itemId)?.quantity ?? 0;
+      if (held < cost.quantity) return this.sendBlacksmithState(client, `You need ${cost.quantity - held} more ${ITEM_DEFINITIONS[cost.itemId].name}.`, "error");
+    }
+    const afterCosts = (id: ItemId) => (player.inventory.get(id)?.quantity ?? 0)
+      - (recipe.materials.find(cost => cost.itemId === id)?.quantity ?? 0);
+    if (backpackAddableQuantity(afterCosts, recipe.itemId, 1, player.mainHandId as MainHandId,
+      player.armourId as ArmourId, backpackCapacity(player.blacksmithUpgrades)) < 1)
+      return this.sendBlacksmithState(client, "PACK FULL · Make room before forging Ashen equipment.", "error");
+    player.coins -= recipe.gold;
+    for (const cost of recipe.materials) player.inventory.get(cost.itemId)!.quantity -= cost.quantity;
+    let item = player.inventory.get(recipe.itemId);
+    if (!item) { item = new InventoryItemState(); player.inventory.set(recipe.itemId, item); }
+    item.quantity += 1;
+    void this.persistPlayer(client.sessionId, player, true).catch(() => {});
+    this.sendBlacksmithState(client, `${recipe.name} forged · open your pack to equip its Ashen perk.`, "regional-forged");
   }
 
   private handleFieldForge(client: Client, payload: unknown): void {
@@ -3995,6 +4027,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         this.dodgePressure.set(playerId, { chain: 0, lastAt: Number.NEGATIVE_INFINITY, exhaustedUntil: 0 });
         const counterUntil = now + PERFECT_DODGE_COUNTER_MS;
         this.dodgeCounterUntil.set(playerId, counterUntil);
+        if (player.armourId === "ashguard_mantle") {
+          this.ashguardWardUntil.set(playerId, now + 2_500);
+          this.clients.find(client => client.sessionId === playerId)?.send("chat:notice",
+            "ASHGUARD · perfect dodge · fire and projectile ward active for 2.5s.");
+        }
         const thiefActive = parseBuildPathState(player.huntLoadoutsJson).selectedPathId === "thief";
         const thiefRecovery = thiefActive ? this.buildPathRankFor(player, "thief") * 2 + this.equipmentAffixTier(player, "elusive") * 2 : 0;
         if (parseBuildPathState(player.huntLoadoutsJson).selectedPathId === "assassin" && this.buildPathRankFor(player, "assassin") >= 2) {
@@ -4058,6 +4095,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       absorbed = true;
       absorbedBy = "bastion";
     }
+    if (now < (this.ashguardWardUntil.get(playerId) ?? 0) && (kind === "projectile" || kind === "hazard"))
+      defense.damage = Math.max(0, defense.damage - 2);
     defense.damage = armouredDamage(defense.damage, player.armourId, kind,
       equipmentReforgeRank(player.reforgeRanksJson, player.armourId));
     if (defense.damage > 0 && !defense.guarded && northwatchShardWardReady(player.armourId,
@@ -5497,8 +5536,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   }
 
   private sendAshenReliquaryState(client: Client, now: number): void {
+    const player = this.state.players.get(client.sessionId);
+    const blueprints = player ? ashenBlueprints(player.huntLoadoutsJson) : [];
     client.send("ashen:reliquary", {
       ...this.ashenReliquary.snapshot(client.sessionId, now),
+      blueprintChoiceRequired: blueprints.length === 0,
+      blueprints,
       ...ASHEN_RELIQUARY_POSITION,
     } satisfies AshenReliquaryState);
   }
@@ -5509,7 +5552,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
 
   private handleAshenReliquaryClaim(client: Client, payload: unknown): void {
     const choice = typeof payload === "object" && payload !== null && "choice" in payload
-      && (payload.choice === "weapon" || payload.choice === "armour" || payload.choice === "gold")
+      && (payload.choice === "weapon" || payload.choice === "armour" || payload.choice === "focus" || payload.choice === "gold")
       ? payload.choice as AshenReliquaryChoice : null;
     const reply = (ok: boolean, message: string) => client.send("ashen:reliquary-result",
       { ok, message, ...(choice ? { choice } : {}) } satisfies AshenReliquaryResult);
@@ -5524,6 +5567,19 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (Math.abs(player.y - ASHEN_RELIQUARY_POSITION.y) > 2.5
       || Math.hypot(player.x - ASHEN_RELIQUARY_POSITION.x, player.z - ASHEN_RELIQUARY_POSITION.z) > 3.6)
       return reply(false, "Move beside the Scorched Reliquary to choose your reward.");
+    const ownedBlueprints = ashenBlueprints(player.huntLoadoutsJson);
+    const blueprintChoice = blueprintForReliquaryChoice(choice);
+    if (ownedBlueprints.length === 0) {
+      if (!blueprintChoice) return reply(false, "Your first clear must unlock an Ashen equipment blueprint.");
+      if (!this.ashenReliquary.markClaimed(client.sessionId, now)) return reply(false, "That reward is no longer available.");
+      player.huntLoadoutsJson = withAshenBlueprint(player.huntLoadoutsJson, blueprintChoice);
+      const recipe = ASHEN_FORGE_RECIPES[blueprintChoice];
+      const message = `${recipe.name.toUpperCase()} BLUEPRINT UNLOCKED · the Town blacksmith can now forge it.`;
+      reply(true, message); client.send("chat:notice", message); this.sendAshenReliquaryState(client, now);
+      void this.persistPlayer(client.sessionId, player, true).catch(() => {});
+      return;
+    }
+    if (choice === "focus") return reply(false, "Choose materials or gold on repeat clears.");
     const reward = ASHEN_RELIQUARY_REWARDS[choice];
     const simulated = new Map<ItemId, number>();
     for (const entry of reward.items) {
@@ -6005,6 +6061,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       yaw: parsed.data.yaw ?? player.yaw, ...(durationMs ? { durationMs } : {}), ...(effectTargetId ? { targetId: effectTargetId } : {}),
       ...(augmentId ? { augmentId } : {}),
     };
+    if (player.mainHandId === "emberheart_focus") {
+      const emberheart = equipmentPerkStats("emberheart_focus", equipmentReforgeRank(player.reforgeRanksJson, "emberheart_focus"))!;
+      this.emberheartFields.set(client.sessionId, { x: player.x, y: player.y, z: player.z,
+        radius: emberheart.radius ?? 3.5, until: now + (emberheart.durationMs ?? 4_000) });
+      client.send("chat:notice", `EMBERHEART FIELD · nearby allies deal +1 damage for ${((emberheart.durationMs ?? 4_000) / 1_000).toFixed(1)}s.`);
+    }
     if (abilityId === "assassin_vanish") client.send("calling:ability:effect", effect);
     else {
       this.broadcast("calling:ability:effect", effect);
@@ -9484,6 +9546,15 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         perk = "crusher_break"; perkBonusDamage += 1;
       }
       const struckStaggered = mob.combatState === "stagger";
+      if (pending.mainHandId === "cinderfang_blade" && struckStaggered) {
+        const cinderfang = equipmentPerkStats("cinderfang_blade", equipmentReforgeRank(player.reforgeRanksJson, "cinderfang_blade"))!;
+        perk = "cinder_ignite";
+        perkBonusDamage += cinderfang.damage ?? 2;
+      }
+      const emberField = [...this.emberheartFields.entries()].find(([ownerId, field]) => now < field.until
+        && Math.abs(player.y - field.y) <= 2.5 && Math.hypot(player.x - field.x, player.z - field.z) <= field.radius
+        && (ownerId === sessionId || this.parties.cohort(ownerId).members.includes(sessionId)));
+      if (emberField) { perk = "emberheart_field"; perkBonusDamage += 1; }
       if (huntSet === "fang" && pending.step === 3) {
         setBonus = "fang";
         staminaRestored = Math.min(huntSetPerk?.stamina ?? 12, player.maxStamina - player.stamina);

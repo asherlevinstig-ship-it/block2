@@ -1,4 +1,4 @@
-import type { AshenReliquaryChoice, ItemId } from "@blockcraft/protocol";
+import { ASHEN_FORGE_RECIPES, type AshenBlueprintId, type AshenReliquaryChoice, type ItemId } from "@blockcraft/protocol";
 import { ASHEN_COMBAT_GROUP_IDS } from "./wilderness-encounters.js";
 
 export const ASHEN_CLEAR_WINDOW_MS = 120_000;
@@ -11,8 +11,30 @@ export const ASHEN_RELIQUARY_REWARDS: Record<AshenReliquaryChoice,
     label: "Weapon materials" },
   armour: { items: [{ itemId: "ember_ore", quantity: 2 }, { itemId: "iron_ore", quantity: 4 }], gold: 0,
     label: "Armour materials" },
+  focus: { items: [{ itemId: "ember_ore", quantity: 3 }, { itemId: "silver_ore", quantity: 2 }], gold: 0,
+    label: "Focus materials" },
   gold: { items: [], gold: 45, label: "45 gold" },
 };
+
+export function ashenBlueprints(json: string): AshenBlueprintId[] {
+  try {
+    const value = JSON.parse(json) as { ashenBlueprints?: unknown };
+    return Array.isArray(value.ashenBlueprints)
+      ? value.ashenBlueprints.filter((id): id is AshenBlueprintId => typeof id === "string" && Object.hasOwn(ASHEN_FORGE_RECIPES, id))
+      : [];
+  } catch { return []; }
+}
+
+export function withAshenBlueprint(json: string, blueprint: AshenBlueprintId): string {
+  let value: Record<string, unknown> = {};
+  try { const parsed = JSON.parse(json) as unknown; if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) value = parsed as Record<string, unknown>; } catch { /* repair malformed legacy data */ }
+  value.ashenBlueprints = [...new Set([...ashenBlueprints(json), blueprint])];
+  return JSON.stringify(value);
+}
+
+export function blueprintForReliquaryChoice(choice: AshenReliquaryChoice): AshenBlueprintId | null {
+  return choice === "weapon" ? "cinderfang" : choice === "armour" ? "ashguard" : choice === "focus" ? "emberheart" : null;
+}
 
 export class AshenReliquaryCycle {
   private startedAt = 0;

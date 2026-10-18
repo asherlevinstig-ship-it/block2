@@ -119,12 +119,14 @@ import {
   LEADER_FORGE_MARKS,
   LEADER_FORGE_RECIPES,
   REGIONAL_FORGE_RECIPES,
+  ASHEN_FORGE_RECIPES,
   type BlacksmithStockId,
   type BlacksmithDismantleItemId,
   type BlacksmithReforgeItemId,
   type AreaLeaderRelicId,
   type LeaderForgemarkId,
   type RegionalForgeId,
+  type AshenBlueprintId,
   type EquipmentReforgeRanks,
   reforgeWeaponDamageBonus,
   reforgeArmourReduction,
@@ -1823,6 +1825,7 @@ const ARMOUR_OUTFIT_COLORS: Record<ArmourId, pc.Color> = {
   rootstalker_wrap: new pc.Color(.23, .32, .12),
   northwatch_cloak: new pc.Color(.2, .31, .38),
   worldsplitter_plate: new pc.Color(.16, .19, .23),
+  ashguard_mantle: new pc.Color(.36, .16, .08),
 };
 
 function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, withSilhouette = false, appearance: Appearance = DEFAULT_APPEARANCE): VoxelCharacterRig {
@@ -2021,6 +2024,18 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
   addBox(echoPrism, "echo-prism-cage", echoFrame, [.36, .12, .36], [0, -.34, 0]);
   addBox(echoPrism, "echo-prism-crystal", echoCrystal, [.25, .34, .25], [0, -.45, 0]).setLocalEulerAngles(0, 45, 0);
   echoPrism.enabled = false;
+  const cinderfangBlade = longsword.clone();
+  cinderfangBlade.name = "main-hand-cinderfang-blade"; rightElbow.addChild(cinderfangBlade);
+  const emberMetal = coloredMaterial(new pc.Color(.42, .13, .045));
+  const emberGlow = powerMaterial(new pc.Color(1, .25, .035), .72);
+  addBox(cinderfangBlade, "cinderfang-spine", emberGlow, [.05, .42, .025], [0, -.34, .05]);
+  addBox(cinderfangBlade, "cinderfang-guard", emberMetal, [.4, .09, .13], [0, -.12, 0]);
+  cinderfangBlade.enabled = false;
+  const emberheartFocus = magicFocus.clone();
+  emberheartFocus.name = "main-hand-emberheart-focus"; rightElbow.addChild(emberheartFocus);
+  addBox(emberheartFocus, "emberheart-cage", emberMetal, [.38, .1, .38], [0, -.34, 0]);
+  addBox(emberheartFocus, "emberheart-core", emberGlow, [.2, .31, .2], [0, -.43, 0]).setLocalEulerAngles(0, 45, 0);
+  emberheartFocus.enabled = false;
   const mainHands = {
     unarmed: new pc.Entity("main-hand-unarmed"),
     echo_prism: echoPrism,
@@ -2036,6 +2051,8 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
     rootbound_hammer: rootboundHammer,
     matriarch_edge: matriarchEdge,
     acid_gland_focus: acidGlandFocus,
+    cinderfang_blade: cinderfangBlade,
+    emberheart_focus: emberheartFocus,
   };
   bow.enabled = false;
   magicFocus.enabled = false;
@@ -2086,16 +2103,17 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
     rootstalker_wrap: new pc.Entity("rootstalker-wrap"),
     northwatch_cloak: new pc.Entity("northwatch-cloak"),
     worldsplitter_plate: new pc.Entity("worldsplitter-plate"),
+    ashguard_mantle: new pc.Entity("ashguard-mantle"),
   };
   for (const [id, layer] of Object.entries(armour)) {
-    const bastion = id === "bastion_plate", fang = id === "fangstalker_wrap";
+    const bastion = id === "bastion_plate", fang = id === "fangstalker_wrap", ashguard = id === "ashguard_mantle";
     const venom = id === "venomweave_mantle" || id === "mirebreaker_mantle" || id === "fenwalker_mantle", worldsplitter = id === "worldsplitter_plate";
     const mirebreaker = id === "mirebreaker_mantle", rootstalker = id === "rootstalker_wrap", northwatch = id === "northwatch_cloak";
     const ridgeguard = id === "ridgeguard_mantle";
     const quarry = id === "quarry_hauberk";
-    const iron = id === "iron_armour" || quarry || bastion || worldsplitter;
+    const iron = id === "iron_armour" || quarry || bastion || worldsplitter || ashguard;
     const rootguard = id === "rootguard_armour";
-    const material = id === "wanderer_robes" ? coloredMaterial(new pc.Color(.31, .4, .56)) : id === "forager_wrap" ? coloredMaterial(new pc.Color(.42, .5, .22)) : id === "fenwalker_mantle" ? coloredMaterial(new pc.Color(.27, .47, .38)) : quarry ? coloredMaterial(new pc.Color(.45, .35, .27)) : ridgeguard ? coloredMaterial(new pc.Color(.31, .37, .39)) : northwatch ? coloredMaterial(new pc.Color(.25, .38, .46)) : rootstalker ? coloredMaterial(new pc.Color(.32, .46, .18)) : mirebreaker ? coloredMaterial(new pc.Color(.2, .42, .22)) : worldsplitter ? coloredMaterial(new pc.Color(.23, .28, .33))
+    const material = id === "wanderer_robes" ? coloredMaterial(new pc.Color(.31, .4, .56)) : id === "forager_wrap" ? coloredMaterial(new pc.Color(.42, .5, .22)) : id === "fenwalker_mantle" ? coloredMaterial(new pc.Color(.27, .47, .38)) : quarry ? coloredMaterial(new pc.Color(.45, .35, .27)) : ridgeguard ? coloredMaterial(new pc.Color(.31, .37, .39)) : northwatch ? coloredMaterial(new pc.Color(.25, .38, .46)) : rootstalker ? coloredMaterial(new pc.Color(.32, .46, .18)) : mirebreaker ? coloredMaterial(new pc.Color(.2, .42, .22)) : worldsplitter ? coloredMaterial(new pc.Color(.23, .28, .33)) : ashguard ? emberMetal
       : venom ? coloredMaterial(new pc.Color(.26, .48, .12))
         : fang ? coloredMaterial(new pc.Color(.38, .18, .1))
           : iron ? bladeMaterial : rootguard ? coloredMaterial(new pc.Color(.16, .34, .18)) : weaponWoodMaterial;
@@ -2125,6 +2143,10 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
       if (worldsplitter) {
         addBox(layer, "worldsplitter-core", coreGlowMaterial, [.18, .18, .04], [0, .015, .292]);
         for (const x of [-.31, .31]) addBox(layer, "worldsplitter-spike", brassMaterial, [.1, .18, .48], [x, .31, 0]).setLocalEulerAngles(0, 0, x < 0 ? -12 : 12);
+      }
+      if (ashguard) {
+        addBox(layer, "ashguard-heart", emberGlow, [.18, .2, .045], [0, .015, .295]);
+        for (const x of [-.3, .3]) addBox(layer, "ashguard-ember-plate", emberMetal, [.12, .2, .46], [x, .3, 0]);
       }
     } else if (id === "wanderer_robes") {
       addBox(layer, "robe-front", material, [.58, .32, .065], [0, -.38, .215]);
@@ -7377,6 +7399,20 @@ function closeAshenReliquaryChoice(): void {
   room?.send("ashen:menu", { open: false });
 }
 function openAshenReliquaryChoice(): void {
+  const firstClear = Boolean(ashenReliquaryState?.blueprintChoiceRequired);
+  ashenReliquaryChoice.querySelector<HTMLElement>("strong")!.textContent = firstClear ? "Choose your first Ashen blueprint" : "Choose one personal reward";
+  ashenReliquaryChoice.querySelector<HTMLElement>("p")!.textContent = firstClear
+    ? "Permanent unlock · forge this equipment at the Town blacksmith."
+    : "Repeat clears supply materials for forging and upgrades.";
+  for (const button of ashenReliquaryChoice.querySelectorAll<HTMLButtonElement>("[data-ashen-choice]")) {
+    const choice = button.dataset.ashenChoice;
+    button.hidden = firstClear ? choice === "gold" : choice === "focus";
+    if (firstClear && choice === "weapon") button.innerHTML = "CINDERFANG BLUEPRINT<small>Blade · ignite staggered enemies</small>";
+    else if (firstClear && choice === "armour") button.innerHTML = "ASHGUARD BLUEPRINT<small>Mantle · perfect-dodge ward</small>";
+    else if (firstClear && choice === "focus") button.innerHTML = "EMBERHEART BLUEPRINT<small>Focus · Calling empowerment field</small>";
+    else if (!firstClear && choice === "weapon") button.innerHTML = "WEAPON MATERIALS<small>3 Ember Ore · 2 Stone Core</small>";
+    else if (!firstClear && choice === "armour") button.innerHTML = "ARMOUR MATERIALS<small>2 Ember Ore · 4 Iron Ore</small>";
+  }
   ashenReliquaryChoice.hidden = false;
   room?.send("ashen:menu", { open: true });
 }
@@ -7430,6 +7466,10 @@ const goldRelic = new pc.Entity("gold-reward-relic");
 for (const [x, y] of [[-.16, -.1], [.16, -.1], [0, .16]] as const)
   addBox(goldRelic, "reliquary-gold", reliquaryGoldMaterial, [.24, .24, .1], [x, y, 0]);
 reliquaryRewards.addChild(goldRelic);
+const focusRelic = new pc.Entity("emberheart-blueprint-relic");
+addBox(focusRelic, "emberheart-relic-cage", reliquaryMetalMaterial, [.42, .12, .42], [0, 0, 0]);
+addBox(focusRelic, "emberheart-relic-core", reliquaryEmberMaterial, [.25, .25, .25], [0, 0, 0]).setLocalEulerAngles(0, 45, 0);
+reliquaryRewards.addChild(focusRelic); focusRelic.enabled = false;
 const reliquaryParticles: { entity: pc.Entity; origin: pc.Vec3; velocity: pc.Vec3; startedAt: number; smoke: boolean }[] = [];
 let reliquaryPreviousPhase: AshenReliquaryState["phase"] | null = null;
 let reliquaryOpenedAt = -Infinity;
@@ -7452,7 +7492,8 @@ function burstOpenAshenReliquary(now: number): void {
 function pullAshenRewardToPlayer(choice: AshenReliquaryChoice): void {
   const origin = new pc.Vec3(ASHEN_RELIQUARY_POSITION.x, ASHEN_RELIQUARY_POSITION.y + 1.55, ASHEN_RELIQUARY_POSITION.z);
   const player = localPlayer.getPosition().clone(); player.y += .9;
-  const material = choice === "gold" ? reliquaryGoldMaterial : choice === "weapon" ? bladeMaterial : reliquaryMetalMaterial;
+  const material = choice === "gold" ? reliquaryGoldMaterial : choice === "weapon" ? bladeMaterial
+    : choice === "focus" ? reliquaryEmberMaterial : reliquaryMetalMaterial;
   for (let index = 0; index < 12; index++) {
     if (miningChips.length >= 24) miningChips.shift()!.entity.destroy();
     const angle = index / 12 * Math.PI * 2;
@@ -7476,7 +7517,9 @@ function animateAshenReliquary(now: number, unlocked: boolean, rewardVisible: bo
   reliquaryLight.enabled = unlocked;
   if (reliquaryLight.light) reliquaryLight.light.intensity = unlocked ? 1.7 + Math.sin(now / 130) * .35 : 0;
   if (reliquaryBeam.enabled) reliquaryBeam.setLocalScale(.22 + Math.sin(now / 180) * .045, 4.4, .22 + Math.sin(now / 180) * .045);
-  for (const [index, relic] of [weaponRelic, armourRelic, goldRelic].entries()) {
+  goldRelic.enabled = !Boolean(ashenReliquaryState?.blueprintChoiceRequired);
+  focusRelic.enabled = Boolean(ashenReliquaryState?.blueprintChoiceRequired);
+  for (const [index, relic] of [weaponRelic, armourRelic, ashenReliquaryState?.blueprintChoiceRequired ? focusRelic : goldRelic].entries()) {
     const angle = now / 850 + index * Math.PI * 2 / 3;
     relic.setLocalPosition(Math.sin(angle) * .68, 1.55 + Math.sin(now / 230 + index) * .09, Math.cos(angle) * .38);
     relic.setLocalEulerAngles(relic === weaponRelic ? 0 : Math.sin(now / 420 + index) * 8, now / 12 + index * 120, relic === weaponRelic ? -32 : 0);
@@ -8139,6 +8182,7 @@ let blacksmithEquippedHandItem: ItemId | null = null;
 let blacksmithEquippedArmourItem: ItemId | null = null;
 let regionalMarks: Record<RegionalForgeId, number> = { greenwood: 0, mistfen: 0 };
 let regionalMasteryRanks: Record<RegionalForgeId, number> = { greenwood: 0, mistfen: 0 };
+let unlockedAshenBlueprints: AshenBlueprintId[] = [];
 const attunementCost = (action: "reroll" | "focus" | "upgrade", tier: 1 | 2 | 3, roll?: EquipmentAffixRoll): number => {
   const base = action === "reroll" ? ATTUNEMENT_REROLL_COST[tier]
     : action === "focus" ? ATTUNEMENT_FOCUS_COST[tier] : ATTUNEMENT_UPGRADE_COST[Math.min(2, tier) as 1 | 2];
@@ -8364,6 +8408,35 @@ function renderRegionalForgeShop(): void {
       blacksmithPending = true; renderRegionalForgeShop();
       blacksmithMessage.textContent = `Forging ${ITEM_DEFINITIONS[recipe.itemId].name}…`;
       room.send("blacksmith:regional-forge", { region });
+    });
+    card.append(title, effect, costs, button); regionalForgeShop.append(card);
+  }
+  const ashenHeading = document.createElement("h3"); ashenHeading.className = "blacksmith-shop-heading";
+  ashenHeading.textContent = "ASHEN BLUEPRINTS · WARPACK EQUIPMENT";
+  regionalForgeShop.append(ashenHeading);
+  if (unlockedAshenBlueprints.length === 0) {
+    const locked = document.createElement("p"); locked.className = "blacksmith-leader-empty";
+    locked.textContent = "Defeat the full Ashen Reach warpack and open its Scorched Reliquary to choose your first blueprint.";
+    regionalForgeShop.append(locked);
+  }
+  for (const blueprint of unlockedAshenBlueprints) {
+    const recipe = ASHEN_FORGE_RECIPES[blueprint];
+    const materialLines = recipe.materials.map(cost => `${inventoryCounts.get(cost.itemId) ?? 0}/${cost.quantity} ${ITEM_DEFINITIONS[cost.itemId].name}`);
+    const materialsReady = recipe.materials.every(cost => (inventoryCounts.get(cost.itemId) ?? 0) >= cost.quantity);
+    const ready = materialsReady && tavernCoinBalance >= recipe.gold;
+    const card = document.createElement("article"); card.dataset.rarity = "legendary";
+    const title = document.createElement("header"); title.innerHTML = `<strong>${recipe.name}</strong><b>ASHEN BLUEPRINT</b>`;
+    const effect = document.createElement("p"); effect.textContent = ITEM_DEFINITIONS[recipe.itemId].description;
+    const costs = document.createElement("small"); costs.textContent = `${recipe.gold} gold · ${materialLines.join(" · ")}`;
+    const button = document.createElement("button"); button.type = "button";
+    button.textContent = blacksmithPending ? "PLEASE WAIT…" : !materialsReady ? "GATHER ASHEN MATERIALS"
+      : tavernCoinBalance < recipe.gold ? `NEED ${recipe.gold - tavernCoinBalance} GOLD` : `FORGE ${recipe.name.toUpperCase()}`;
+    button.disabled = blacksmithPending || !room || !ready;
+    button.addEventListener("click", () => {
+      if (!room || blacksmithPending || !ready) return;
+      blacksmithPending = true; renderRegionalForgeShop();
+      blacksmithMessage.textContent = `Forging ${recipe.name}…`;
+      room.send("blacksmith:ashen-forge", { blueprint });
     });
     card.append(title, effect, costs, button); regionalForgeShop.append(card);
   }
@@ -8649,6 +8722,7 @@ function renderBlacksmith(update: BlacksmithUpdate): void {
   blacksmithEquippedArmourItem = update.equippedArmourItemId ?? null;
   regionalMarks = update.regionalMarks ?? regionalMarks;
   regionalMasteryRanks = update.regionalMasteryRanks ?? regionalMasteryRanks;
+  unlockedAshenBlueprints = update.ashenBlueprints ?? unlockedAshenBlueprints;
   refreshEquipmentProgression();
   refreshInventoryEquipped();
   renderBlacksmithHaul(update);
@@ -13255,6 +13329,10 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
             ? `VENOM SURGE!  −${message.damage}`
           : message.perk === "crusher_break"
             ? `CRUSHER BREAK!  −${message.damage}`
+          : message.perk === "cinder_ignite"
+            ? `CINDER IGNITE!  −${message.damage}`
+          : message.perk === "emberheart_field"
+            ? `EMBERHEART!  −${message.damage}`
           : (message.traitBonusDamage ?? 0) > 0
             ? `EXECUTION!  −${message.damage}`
           : hitLabel,
@@ -13266,6 +13344,8 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       else if (message.perk === "alpha_finish") status.textContent += " · Alpha Fang awakened finisher +1 damage.";
       else if (message.perk === "venom_surge") status.textContent += " · Venom Surge awakened bolt +1 damage.";
       else if (message.perk === "crusher_break") status.textContent += " · Crusher Break exploited stagger +1 damage.";
+      else if (message.perk === "cinder_ignite") status.textContent += " · Cinderfang ignited the staggered target.";
+      else if (message.perk === "emberheart_field") status.textContent += " · Emberheart field empowered this strike +1 damage.";
       if (message.setBonus === "fang") status.textContent += ` · Fangstalker finisher${(message.setBonusDamage ?? 0) > 0 ? " executed a weakened enemy" : ""} · +${message.staminaRestored ?? 0} stamina.`;
       else if (message.setBonus === "venom") status.textContent += ` · Venomweave poison pool armed${(message.cooldownReducedMs ?? 0) > 0 ? ` · Special −${((message.cooldownReducedMs ?? 0) / 1000).toFixed(1)}s` : ""}.`;
       else if (message.setBonus === "crusher") status.textContent += " · Worldsplitter shockwave · +1 armour for 3s.";

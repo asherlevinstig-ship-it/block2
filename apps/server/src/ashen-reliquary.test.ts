@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ASHEN_COMBAT_GROUP_IDS } from "./wilderness-encounters.js";
-import { ASHEN_CLEAR_WINDOW_MS, ASHEN_RELIQUARY_COOLDOWN_MS, ASHEN_RELIQUARY_OPEN_MS, ASHEN_RELIQUARY_REWARDS, AshenReliquaryCycle } from "./ashen-reliquary.js";
+import { ASHEN_CLEAR_WINDOW_MS, ASHEN_RELIQUARY_COOLDOWN_MS, ASHEN_RELIQUARY_OPEN_MS, ASHEN_RELIQUARY_REWARDS, AshenReliquaryCycle, ashenBlueprints, blueprintForReliquaryChoice, withAshenBlueprint } from "./ashen-reliquary.js";
 
 describe("Scorched Reliquary cycle", () => {
   it("opens only after all five distinct Ashen enemies fall inside one clear window", () => {
@@ -30,5 +30,14 @@ describe("Scorched Reliquary cycle", () => {
     expect(ASHEN_RELIQUARY_REWARDS.weapon.items).toEqual([{ itemId: "ember_ore", quantity: 3 }, { itemId: "stone_core", quantity: 2 }]);
     expect(ASHEN_RELIQUARY_REWARDS.armour.items).toEqual([{ itemId: "ember_ore", quantity: 2 }, { itemId: "iron_ore", quantity: 4 }]);
     expect(ASHEN_RELIQUARY_REWARDS.gold.gold).toBe(45);
+  });
+
+  it("persists one of the three first-clear blueprints without losing other character data", () => {
+    const initial = JSON.stringify({ selectedPathId: "mage", xp: { mage: 12 } });
+    const weapon = withAshenBlueprint(initial, blueprintForReliquaryChoice("weapon")!);
+    const all = withAshenBlueprint(withAshenBlueprint(weapon, "ashguard"), "emberheart");
+    expect(ashenBlueprints(all)).toEqual(["cinderfang", "ashguard", "emberheart"]);
+    expect(JSON.parse(all)).toMatchObject({ selectedPathId: "mage", xp: { mage: 12 } });
+    expect(blueprintForReliquaryChoice("gold")).toBeNull();
   });
 });
