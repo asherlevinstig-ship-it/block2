@@ -3332,3 +3332,38 @@ html.onboarding-mode-lesson #touch-mode-button { border-color: #ffe59a; box-shad
 .ashen-mastery-choices button strong, .ashen-mastery-choices button small { display: block; }
 .ashen-mastery-choices button small { margin-top: 4px; color: #f3d8aa; font-size: .66rem; line-height: 1.3; }
 @media (max-width: 560px) { .ashen-mastery-choices { grid-template-columns: 1fr; } }
+
+/* Explorer map: compact circular radar and an M-key world-map view. */
+#minimap { width: 264px; padding: 10px 12px 12px; border-color: #c9b56866; border-radius: 15px; background: linear-gradient(150deg, #091813f5, #0b1714f0); box-shadow: 0 12px 34px #0008, inset 0 0 0 1px #a6c78b13; transition: width .18s ease, max-height .18s ease, transform .18s ease; }
+#minimap summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: #f1eed8; }
+.minimap-summary-actions { display: flex; align-items: center; gap: 7px; }
+#minimap summary kbd { float: none; }
+#minimap-expand { width: 25px; height: 25px; padding: 0; border: 1px solid #d7d3a566; border-radius: 6px; background: #14251f; color: #f6f2d6; font: 900 15px/1 system-ui; cursor: pointer; }
+#minimap-expand:hover, #minimap-expand:focus-visible { border-color: #ffe28e; color: #ffe28e; }
+.minimap-viewport { position: relative; width: 238px; height: 238px; margin: 0 auto 9px; border: 2px solid #bda95c88; border-radius: 50%; background: #07110f; box-shadow: 0 0 0 5px #101e19, 0 0 0 6px #ffffff12, inset 0 0 22px #000c; overflow: hidden; }
+#minimap-canvas { width: 238px; height: 238px; border-radius: 50%; cursor: pointer; image-rendering: pixelated; }
+.minimap-viewport::after { content: ""; position: absolute; inset: 0; border-radius: 50%; box-shadow: inset 0 0 28px 7px #020807d9; pointer-events: none; }
+#minimap-tooltip { position: absolute; z-index: 4; max-width: 175px; padding: 8px 10px; border: 1px solid #d4c77a88; border-radius: 8px; background: #08130ff2; color: #f4efd5; box-shadow: 0 8px 22px #000a; font: 700 10px/1.35 system-ui; pointer-events: none; transform: translate(8px, calc(-100% - 8px)); }
+#minimap-tooltip[hidden] { display: none; }
+#minimap-tooltip strong { display: block; color: #fff1b5; font-size: 11px; }
+#minimap-tooltip small { display: block; margin-top: 2px; color: #b8cbc0; }
+#minimap-detail { min-height: 25px; margin: 7px 1px 5px; line-height: 1.3; }
+#minimap-depth { margin: 4px 1px 7px; }
+#minimap[data-expanded="true"] { z-index: 115; top: 50%; right: auto; left: 50%; width: min(720px, calc(100vw - 36px)); max-height: calc(100vh - 36px); overflow-y: auto; padding: 14px 18px 17px; border-color: #e3c96b99; transform: translate(-50%, -50%); box-shadow: 0 0 0 100vmax #020705d9, 0 22px 80px #000, inset 0 0 0 1px #f4df8d18; }
+#minimap[data-expanded="true"] summary { font-size: 14px; }
+#minimap[data-expanded="true"] #minimap-expand { transform: rotate(180deg); }
+#minimap[data-expanded="true"] .minimap-viewport { width: min(520px, calc(100vw - 80px), calc(100vh - 260px)); height: min(520px, calc(100vw - 80px), calc(100vh - 260px)); }
+#minimap[data-expanded="true"] #minimap-canvas { width: 100%; height: 100%; }
+#minimap[data-expanded="true"] #minimap-detail { text-align: center; font-size: 12px; }
+#minimap[data-expanded="true"] #minimap-depth { text-align: center; font-size: 11px; }
+#minimap[data-expanded="true"] .minimap-navigation { max-width: 520px; margin: 8px auto; }
+#minimap[data-expanded="true"] .minimap-legend,
+#minimap[data-expanded="true"] .minimap-dungeon-legend,
+#minimap[data-expanded="true"] .minimap-danger { max-width: 520px; margin-right: auto; margin-left: auto; }
+@media (max-width: 760px) {
+  #minimap:not([data-expanded="true"]) { width: 194px; }
+  #minimap:not([data-expanded="true"]) .minimap-viewport { width: 168px; height: 168px; }
+  #minimap:not([data-expanded="true"]) #minimap-canvas { width: 168px; height: 168px; }
+  #minimap[data-expanded="true"] { width: calc(100vw - 16px); max-height: calc(100vh - 16px); padding: 11px; }
+  #minimap[data-expanded="true"] .minimap-viewport { width: min(calc(100vw - 52px), calc(100vh - 285px)); height: min(calc(100vw - 52px), calc(100vh - 285px)); }
+}

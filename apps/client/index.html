@@ -320,9 +320,9 @@
     </section>
     <button id="inventory-toggle" type="button" aria-controls="inventory-panel" aria-expanded="false"><span>▣</span> PACK <strong id="inventory-badge">0</strong><kbd>I</kbd></button>
     <button id="performance-toggle" type="button" aria-controls="performance-panel" aria-expanded="false">PERF</button>
-    <details id="minimap" open>
-      <summary><span id="minimap-title">EXPLORER MAP</span> <kbd>M</kbd></summary>
-      <canvas id="minimap-canvas" width="220" height="220" role="img" aria-label="Explorer map loading"></canvas>
+    <details id="minimap" data-expanded="false" open>
+      <summary><span id="minimap-title">EXPLORER MAP</span><span class="minimap-summary-actions"><button id="minimap-expand" type="button" aria-label="Expand world map" aria-pressed="false">↗</button><kbd>M</kbd></span></summary>
+      <div class="minimap-viewport"><canvas id="minimap-canvas" width="220" height="220" role="img" aria-label="Explorer map loading"></canvas><div id="minimap-tooltip" role="status" hidden></div></div>
       <p id="minimap-detail">Waiting for the world…</p>
       <p id="minimap-depth">SURFACE</p>
       <section id="mistfen-mastery" hidden aria-label="Mistfen regional mastery">

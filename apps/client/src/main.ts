@@ -692,6 +692,18 @@ modeSwitchTutorialAction.addEventListener("click", () => setInteractionMode("com
 renderFirstSteps();
 const adminInvitation = consumeAdminInvitation();
 const minimapPanel = document.querySelector<HTMLDetailsElement>("#minimap")!;
+const minimapExpand = document.querySelector<HTMLButtonElement>("#minimap-expand")!;
+function setMinimapExpanded(expanded: boolean): void {
+  minimapPanel.dataset.expanded = String(expanded);
+  minimapExpand.setAttribute("aria-pressed", String(expanded));
+  minimapExpand.setAttribute("aria-label", expanded ? "Collapse world map" : "Expand world map");
+  if (expanded) minimapPanel.open = true;
+}
+minimapExpand.addEventListener("click", event => {
+  event.preventDefault(); event.stopPropagation();
+  setMinimapExpanded(minimapPanel.dataset.expanded !== "true");
+});
+minimapPanel.addEventListener("toggle", () => { if (!minimapPanel.open) setMinimapExpanded(false); });
 const minimap = createMinimap(document.querySelector<HTMLCanvasElement>("#minimap-canvas")!, document.querySelector<HTMLElement>("#minimap-detail")!, `blockcraft:minimap:v1:${profileToken}`, showRegionDiscovery);
 const mistfenMasteryPanel = document.querySelector<HTMLElement>("#mistfen-mastery")!;
 const mistfenMasteryRank = document.querySelector<HTMLElement>("#mistfen-mastery-rank")!;
@@ -9672,7 +9684,7 @@ window.addEventListener("keydown", event => {
 window.addEventListener("keydown", event => {
   if (event.code !== "KeyM" || event.repeat || event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
   event.preventDefault();
-  minimapPanel.open = !minimapPanel.open;
+  setMinimapExpanded(minimapPanel.dataset.expanded !== "true");
 });
 
 let touchStrafe = 0;
@@ -11238,6 +11250,9 @@ combatHudRoot.addEventListener("click", event => {
 
 window.addEventListener("keydown", event => {
   if (event.repeat) return;
+  if (event.code === "Escape" && minimapPanel.dataset.expanded === "true") {
+    setMinimapExpanded(false); event.preventDefault(); return;
+  }
   if (!ashenReliquaryChoice.hidden) {
     if (event.code === "Escape") closeAshenReliquaryChoice();
     event.preventDefault(); return;

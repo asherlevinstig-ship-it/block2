@@ -180,10 +180,11 @@ export function knownWaypoints(discovered: Set<string>, wardenGateUnlocked = fal
     ...(wardenGateUnlocked ? [WARDEN_GATE_WAYPOINT] : []),
     ...MAP_DEPOSITS.filter(point => discovered.has(depositKey(point))).map(point => ({ ...point, y: SURFACE_HEIGHT + 1, id: depositKey(point), name: `${point.block === Block.SilverOre ? "Silver" : "Iron"} deposit (${point.x}, ${point.z})` }))];
 }
-export function waypointAtMapPoint(player: Position, x: number, y: number, discovered: Set<string>, wardenGateUnlocked = false): Waypoint | null {
+export function waypointAtMapPoint(player: Position, x: number, y: number, discovered: Set<string>, wardenGateUnlocked = false,
+  range = MAP_RANGE): Waypoint | null {
   let closest: Waypoint | null = null, distance = 14;
   for (const target of knownWaypoints(discovered, wardenGateUnlocked)) {
-    const p = mapPoint(player, target);
+    const p = mapPoint(player, target, range);
     if (target.id !== "home" && p.offscreen) continue;
     const delta = Math.hypot(p.x - x, p.y - y);
     if (delta <= distance) { closest = target; distance = delta; }
@@ -198,8 +199,8 @@ export function waypointDirection(player: Position & { y: number }, target: Wayp
   return { distance, angle: Math.atan2(right, -down) * 180 / Math.PI, arrived: distance <= 2.5 && Math.abs(player.y - target.y) <= 1.6 };
 }
 
-export function mapPoint(player: Position, point: Position): { x: number; y: number; offscreen: boolean } {
-  const scale = MAP_SIZE / (MAP_RANGE * 2);
+export function mapPoint(player: Position, point: Position, range = MAP_RANGE): { x: number; y: number; offscreen: boolean } {
+  const scale = MAP_SIZE / (range * 2);
   const dx = (point.x - player.x) * scale;
   const dz = (point.z - player.z) * scale;
   const limit = MAP_SIZE / 2 - 14;
@@ -293,6 +294,9 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
   const guideName = document.querySelector<HTMLElement>("#waypoint-name")!;
   const guideDistance = document.querySelector<HTMLElement>("#waypoint-distance")!;
   const guideArrow = document.querySelector<HTMLElement>("#waypoint-arrow")!;
+  const tooltip = document.querySelector<HTMLElement>("#minimap-tooltip")!;
+  const currentMapRange = () => panel?.dataset.expanded === "true" && !dungeonState
+    && lastPlayer && caveDepth(lastPlayer.y) <= 0 ? 150 : MAP_RANGE;
   const setWaypoint = (target: Waypoint | null) => {
     surfaceGuide = false;
     surfaceButton.setAttribute("aria-pressed", "false");
@@ -331,7 +335,40 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
     destinations.blur();
   });
   document.querySelector<HTMLButtonElement>("#waypoint-clear")!.addEventListener("click", () => setWaypoint(null));
+  const inspectableTargets = () => {
+    if (!lastPlayer) return [] as { point: Position; name: string; kind: string }[];
+    const nearbyThreat = nearbyThreatMapTarget(lastPlayer, threat);
+    const combatTargets = [...nearbyDiscoveredMiniBossTargets(lastPlayer, elites, discovered), ...activeEliteMapTargets(lastPlayer, elites)]
+      .filter((target, index, values) => values.findIndex(candidate => candidate.id === target.id) === index);
+    return [
+      ...navigationTargets().map(target => ({ point: target, name: target.name, kind: target.id === "home" ? "SAFE TOWN" : target.id === "smith" ? "BLACKSMITH" : target.id.includes(",") ? "RESOURCE DEPOSIT" : "DESTINATION" })),
+      ...ROADSIDE_DISCOVERIES.filter(target => discovered.has(roadsideDiscoveryKey(target.id)))
+        .map(target => ({ point: target, name: target.name, kind: roadsideClaims.has(target.id) ? "DISCOVERY · COMPLETE" : "ROADSIDE DISCOVERY" })),
+      ...combatTargets.map(target => ({ point: target, name: target.name, kind: target.isMiniBoss ? "AREA LEADER" : "NEARBY ELITE" })),
+      ...(nearbyThreat ? [{ point: nearbyThreat, name: nearbyThreat.name, kind: "REALM THREAT" }] : []),
+      ...(reliquary ? [{ point: reliquary, name: reliquary.name, kind: "ASHEN RELIQUARY" }] : []),
+    ];
+  };
+  const inspectAt = (clientX: number, clientY: number) => {
+    if (!lastPlayer) { tooltip.hidden = true; return; }
+    const bounds = canvas.getBoundingClientRect();
+    const x = (clientX - bounds.left) * MAP_SIZE / bounds.width;
+    const y = (clientY - bounds.top) * MAP_SIZE / bounds.height;
+    const target = inspectableTargets().map(entry => ({ entry, mapped: mapPoint(lastPlayer!, entry.point, currentMapRange()) }))
+      .filter(candidate => !candidate.mapped.offscreen && Math.hypot(candidate.mapped.x - x, candidate.mapped.y - y) <= 13)
+      .sort((a, b) => Math.hypot(a.mapped.x - x, a.mapped.y - y) - Math.hypot(b.mapped.x - x, b.mapped.y - y))[0];
+    if (!target) { tooltip.hidden = true; return; }
+    const distance = Math.round(Math.hypot(target.entry.point.x - lastPlayer.x, target.entry.point.z - lastPlayer.z));
+    const heading = document.createElement("strong"); heading.textContent = target.entry.name;
+    const meta = document.createElement("small"); meta.textContent = `${target.entry.kind} · ${distance}m`;
+    tooltip.replaceChildren(heading, meta); tooltip.hidden = false;
+    tooltip.style.left = `${Math.min(bounds.width - 155, Math.max(4, clientX - bounds.left))}px`;
+    tooltip.style.top = `${Math.max(34, clientY - bounds.top)}px`;
+  };
+  canvas.addEventListener("pointermove", event => inspectAt(event.clientX, event.clientY));
+  canvas.addEventListener("pointerleave", () => { tooltip.hidden = true; });
   canvas.addEventListener("click", event => {
+    inspectAt(event.clientX, event.clientY);
     if (!lastPlayer) return;
     const bounds = canvas.getBoundingClientRect();
     const x = (event.clientX - bounds.left) * MAP_SIZE / bounds.width;
@@ -342,9 +379,10 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
       return;
     }
     const huntWaypoint = equipmentHunt ? navigationTargets().find(target => target.id === "equipment-hunt") ?? null : null;
-    const huntPoint = huntWaypoint ? mapPoint(lastPlayer, huntWaypoint) : null;
+    const range = currentMapRange();
+    const huntPoint = huntWaypoint ? mapPoint(lastPlayer, huntWaypoint, range) : null;
     const target = huntWaypoint && huntPoint && Math.hypot(huntPoint.x - x, huntPoint.y - y) <= 14
-      ? huntWaypoint : waypointAtMapPoint(lastPlayer, x, y, discovered, wardenGateUnlocked);
+      ? huntWaypoint : waypointAtMapPoint(lastPlayer, x, y, discovered, wardenGateUnlocked, range);
     if (target) setWaypoint(target);
   });
   const ratio = Math.min(2, window.devicePixelRatio || 1);
@@ -588,7 +626,8 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
       ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
       ctx.clearRect(0, 0, MAP_SIZE, MAP_SIZE);
       ctx.fillStyle = underground ? "#071310" : "#482329"; ctx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
-      const scale = MAP_SIZE / (MAP_RANGE * 2);
+      const mapRange = panel?.dataset.expanded === "true" && !underground ? 150 : MAP_RANGE;
+      const scale = MAP_SIZE / (mapRange * 2);
       if (!underground && surfaceTerrainContext && surfaceTerrainPixels) {
         const pixels = surfaceTerrainPixels.data;
         for (let py = 0; py < SURFACE_TERRAIN_SIZE; py++) {
@@ -617,15 +656,15 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
         ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, MAP_SIZE); ctx.moveTo(0, i); ctx.lineTo(MAP_SIZE, i); ctx.stroke();
       }
       const marker = (point: Position, label: string, color: string, square: boolean, showAtEdge = false, glyph = "") => {
-        const p = mapPoint(player, point);
+        const p = mapPoint(player, point, mapRange);
         if (p.offscreen && !showAtEdge) return;
         ctx.fillStyle = color; ctx.strokeStyle = "#071514"; ctx.lineWidth = 2;
         ctx.beginPath();
         if (square) ctx.rect(p.x - 5, p.y - 5, 10, 10); else ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
         ctx.fill(); ctx.stroke();
         if (glyph) {
-          ctx.fillStyle = "#111b17"; ctx.font = "bold 8px system-ui"; ctx.textAlign = "center";
-          ctx.fillText(glyph, p.x, p.y + 3);
+          ctx.fillStyle = "#111b17"; ctx.font = "bold 10px 'Segoe UI Symbol', system-ui"; ctx.textAlign = "center";
+          ctx.fillText(glyph, p.x, p.y + 3.5);
         }
         if (label) {
           ctx.fillStyle = color; ctx.strokeStyle = "#071514"; ctx.lineWidth = 3;
@@ -637,15 +676,15 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
       if (!underground) {
         const staticMarker = (target: Waypoint, shortLabel: string, color: string, glyph: string, edge = false) =>
           marker(target, mapMarkerLabelVisible(player, target, waypoint?.id === target.id) ? shortLabel : "", color, true, edge, glyph);
-        staticMarker(HOME_WAYPOINT, "HOME", "#abe3a0", "H", true);
-        staticMarker({ ...TOWN_BLACKSMITH_STALL_POSITION, id: "smith", name: "Blacksmith" }, "SMITH", "#ffd173", "S");
+        staticMarker(HOME_WAYPOINT, "HOME", "#75ee8a", "⌂", true);
+        staticMarker({ ...TOWN_BLACKSMITH_STALL_POSITION, id: "smith", name: "Blacksmith" }, "SMITH", "#ffd052", "⚒");
         if (discovered.has(CHAMPION_WAYPOINT.id) && (waypoint?.id === CHAMPION_WAYPOINT.id
           || Math.hypot(player.x - CHAMPION_WAYPOINT.x, player.z - CHAMPION_WAYPOINT.z) <= MAP_THREAT_DISPLAY_RADIUS))
           staticMarker(CHAMPION_WAYPOINT, "CHAMPION", "#ffcf65", "♛");
-        if (discovered.has(ASHEN_SPIRE_WAYPOINT.id)) staticMarker(ASHEN_SPIRE_WAYPOINT, "ASH SPIRE", "#ff8b58", "A");
-        if (discovered.has(MISTFEN_WAYPOINT.id)) staticMarker(MISTFEN_WAYPOINT, "MISTFEN", "#a8d789", "M");
-        if (discovered.has(GREENWOOD_WAYPOINT.id)) staticMarker(GREENWOOD_WAYPOINT, "GREENWOOD", "#c6d977", "G");
-        if (wardenGateUnlocked) staticMarker(WARDEN_GATE_WAYPOINT, "WARDEN GATE", "#ffe06f", "W", true);
+        if (discovered.has(ASHEN_SPIRE_WAYPOINT.id)) staticMarker(ASHEN_SPIRE_WAYPOINT, "ASH SPIRE", "#ff8b58", "♜");
+        if (discovered.has(MISTFEN_WAYPOINT.id)) staticMarker(MISTFEN_WAYPOINT, "MISTFEN", "#8fe0bd", "≈");
+        if (discovered.has(GREENWOOD_WAYPOINT.id)) staticMarker(GREENWOOD_WAYPOINT, "GREENWOOD", "#bfea72", "♣");
+        if (wardenGateUnlocked) staticMarker(WARDEN_GATE_WAYPOINT, "WARDEN GATE", "#ffe06f", "◆", true);
         if (equipmentHunt) staticMarker({ x: equipmentHunt.x, y: equipmentHunt.y, z: equipmentHunt.z,
           id: "equipment-hunt", name: equipmentHunt.regionName }, "AFFIX HUNT", "#e59cff", "◆", true);
         if (reliquary) marker(reliquary, mapMarkerLabelVisible(player, reliquary, false) ? "RELIQUARY" : "",
@@ -675,10 +714,10 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
         const pulse = 9 + Math.sin(now / 150) * 2;
         ctx.beginPath(); ctx.arc(p.x, p.y, pulse, 0, Math.PI * 2); ctx.strokeStyle = "#ff806f"; ctx.lineWidth = 2; ctx.stroke();
         const championTarget = isPathChampionName(nearbyThreat.name);
-        marker(nearbyThreat, nearbyThreat.name.slice(0, 20).toUpperCase(), championTarget ? "#ffd55f" : "#ff806f", championTarget, false, championTarget ? "♛" : "!");
+          marker(nearbyThreat, nearbyThreat.name.slice(0, 20).toUpperCase(), championTarget ? "#ffd55f" : "#ff625f", championTarget, false, championTarget ? "♛" : "☠");
       }
       const mineTarget = { ...MINE_ENTRANCE, id: "mine", name: "Mine" };
-      marker(mineTarget, mapMarkerLabelVisible(player, mineTarget, waypoint?.id === "mine") ? "MINE" : "", "#ffe08c", true, false, "M");
+      marker(mineTarget, mapMarkerLabelVisible(player, mineTarget, waypoint?.id === "mine") ? "MINE" : "", "#ffe08c", true, false, "⛏");
       for (const chamber of caveState.chambers) marker(chamber,
         mapMarkerLabelVisible(player, chamber, false) ? `${chamber.label} · D${caveDepth(chamber.y)}` : "", "#a3dfeb", false, false, "○");
       for (const deposit of underground ? [] : MAP_DEPOSITS) {
@@ -698,7 +737,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
         ctx.strokeStyle = "#ffe08c"; ctx.lineWidth = 2; ctx.stroke();
       }
       if (waypoint && !underground) {
-        const p = mapPoint(player, waypoint);
+        const p = mapPoint(player, waypoint, mapRange);
         ctx.beginPath(); ctx.moveTo(MAP_SIZE / 2, MAP_SIZE / 2); ctx.lineTo(p.x, p.y);
         ctx.strokeStyle = "#fff4ad88"; ctx.setLineDash([3, 4]); ctx.stroke(); ctx.setLineDash([]);
         ctx.beginPath(); ctx.arc(p.x, p.y, 10, 0, Math.PI * 2); ctx.strokeStyle = "#fff4ad"; ctx.lineWidth = 2; ctx.stroke();
