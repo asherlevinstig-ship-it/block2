@@ -56,6 +56,9 @@ const MATERIAL_LOOT_BY_ARCHETYPE: Record<MobArchetypeId, readonly { itemId: Item
     { itemId: "ridge_hide", quantity: 1 },
     { itemId: "crawler_fang", quantity: 1 },
   ],
+  ember_hound: [
+    { itemId: "ember_ore", quantity: 1 },
+  ],
   shard_sentry: [
     { itemId: "stone_core", quantity: 1 },
     { itemId: "silver_ore", quantity: 1 },
@@ -87,7 +90,7 @@ export function lootForArchetype(archetypeId: MobArchetypeId, mobId = "", equipm
     ? [...normalMaterials.map(entry => ({ ...entry, quantity: entry.quantity * 2 })),
       ...(consumableRoll < .35 ? [{ itemId: "healing_potion" as const, quantity: 1 }] : [])]
     : normalMaterials;
-  const equipmentId = archetypeId === "moss_crawler" || archetypeId === "briar_crawler" || archetypeId === "ridge_stalker" ? "fang_dagger"
+  const equipmentId = archetypeId === "moss_crawler" || archetypeId === "briar_crawler" || archetypeId === "ridge_stalker" || archetypeId === "ember_hound" ? "fang_dagger"
     : archetypeId === "stone_brute" || archetypeId === "cinder_ram" ? "stone_core_hammer"
     : archetypeId === "shard_sentry" || archetypeId === "thornbinder" ? "forged_focus" : "acid_gland_focus";
   return equipmentRoll < equipmentChance(equipmentId, effectiveThreat)

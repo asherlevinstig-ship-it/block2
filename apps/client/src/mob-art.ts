@@ -1,7 +1,7 @@
 import * as pc from "playcanvas";
 import { mobGaitTargets } from "./mob-motion.js";
 
-type MobKind = "stone_brute" | "cave_spitter" | "moss_crawler" | "ridge_stalker" | "shard_sentry" | "thornbinder" | "fen_bloater" | "cinder_ram";
+type MobKind = "stone_brute" | "cave_spitter" | "moss_crawler" | "ridge_stalker" | "ember_hound" | "shard_sentry" | "thornbinder" | "fen_bloater" | "cinder_ram";
 type Triple = [number, number, number];
 
 interface Limb {
@@ -76,7 +76,10 @@ const fenGland = material("fen-bloater-toxic-gland", [.62, 1, .12], [.22, .68, .
 const cinderHide = material("cinder-ram-hide", [.2, .13, .1]);
 const cinderArmour = material("cinder-ram-ash-armour", [.34, .31, .29]);
 const cinderEmber = material("cinder-ram-ember-vents", [1, .29, .035], [.85, .09, .015]);
-const dimGlowMaterials = new Map<pc.StandardMaterial, pc.StandardMaterial>([core, acid, crawlerEye, matriarchVenom, matriarchEnragedVenom, guardianCore, guardianEnragedCore, northwatchEye, shardCrystal, thornSap, fenGland, cinderEmber]
+const emberHoundHide = material("ember-hound-charred-hide", [.19, .095, .055]);
+const emberHoundMane = material("ember-hound-cinder-mane", [.42, .24, .14]);
+const emberHoundFlame = material("ember-hound-flame", [1, .34, .045], [.9, .12, .012]);
+const dimGlowMaterials = new Map<pc.StandardMaterial, pc.StandardMaterial>([core, acid, crawlerEye, matriarchVenom, matriarchEnragedVenom, guardianCore, guardianEnragedCore, northwatchEye, shardCrystal, thornSap, fenGland, cinderEmber, emberHoundFlame]
   .map(live => [live, material(`defeated-${live.name}`, [live.diffuse.r * .5, live.diffuse.g * .5, live.diffuse.b * .5])]));
 
 function box(parent: pc.Entity, name: string, surface: pc.StandardMaterial, size: Triple, at: Triple, angle?: Triple): pc.Entity {
@@ -98,12 +101,12 @@ function pivot(parent: pc.Entity, name: string, at: Triple): pc.Entity {
 
 export function createMobArt(parent: pc.Entity, archetype: string, body: pc.StandardMaterial, matriarch = false, rootGuardian = false): MobArtRig {
   const kind: MobKind = archetype === "stone_brute" ? "stone_brute" : archetype === "cave_spitter" ? "cave_spitter"
-    : archetype === "ridge_stalker" ? "ridge_stalker" : archetype === "shard_sentry" ? "shard_sentry"
+    : archetype === "ridge_stalker" ? "ridge_stalker" : archetype === "ember_hound" ? "ember_hound" : archetype === "shard_sentry" ? "shard_sentry"
       : archetype === "thornbinder" ? "thornbinder" : archetype === "fen_bloater" ? "fen_bloater"
         : archetype === "cinder_ram" ? "cinder_ram" : "moss_crawler";
   const head = pivot(parent, "head-joint", kind === "stone_brute" ? [0, 1.6, 0.06] : kind === "shard_sentry" ? [0, 1.25, .08]
     : kind === "thornbinder" ? [0, 1.72, .04] : kind === "fen_bloater" ? [0, .76, .58]
-      : kind === "cinder_ram" ? [0, .95, .88] : kind === "ridge_stalker" ? [0, .69, .56] : kind === "cave_spitter" ? [0, 0.56, 0.56] : [0, 0.53, 0.48]);
+      : kind === "cinder_ram" ? [0, .95, .88] : kind === "ridge_stalker" || kind === "ember_hound" ? [0, .69, .56] : kind === "cave_spitter" ? [0, 0.56, 0.56] : [0, 0.53, 0.48]);
   const jaw = pivot(head, "jaw-joint", kind === "stone_brute" ? [0, -0.2, 0.14] : [0, -0.11, 0.27]);
   const rig: MobArtRig = { kind, head, jaw, limbs: [], arms: [], sacs: [], phase: 0, walk: 0, pursuit: 0, matriarch, rootGuardian, phaseSurfaces: [], enraged: false, defeated: false, glowSurfaces: [] };
 
@@ -174,6 +177,31 @@ export function createMobArt(parent: pc.Entity, archetype: string, body: pc.Stan
       const knee = pivot(leg, "root-knee", [side * .09, -.55, .03]);
       box(knee, "root-foot", thornMoss, [.34, .19, .56], [side * .06, -.08, .16]);
       rig.limbs.push({ pivot: leg, knee, side, offset: side < 0 ? 0 : Math.PI });
+    }
+  } else if (kind === "ember_hound") {
+    box(parent, "charred-hound-torso", emberHoundHide, [.61, .52, 1.24], [0, .62, -.14]);
+    box(parent, "burning-shoulder-mane", emberHoundMane, [.8, .6, .5], [0, .85, .23], [-13, 0, 0]);
+    box(parent, "ember-spine", emberHoundFlame, [.23, .13, .78], [0, .95, -.25]);
+    const tail = pivot(parent, "flame-tail", [0, .87, -.91]);
+    box(tail, "tail-coal", emberHoundMane, [.17, .18, .74], [0, 0, -.28], [-31, 0, 0]);
+    box(tail, "tail-ember", emberHoundFlame, [.12, .14, .28], [0, .18, -.62], [-31, 0, 0]);
+    rig.sacs.push(tail);
+    box(head, "cinder-hound-head", emberHoundHide, [.57, .4, .54], [0, 0, .05]);
+    box(head, "ash-brow", emberHoundMane, [.6, .16, .3], [0, .17, .21]);
+    box(head, "coal-muzzle", emberHoundHide, [.35, .22, .51], [0, -.1, .45]);
+    box(jaw, "ember-jaw", emberHoundMane, [.33, .11, .37], [0, -.08, .14]);
+    for (const side of [-1, 1]) {
+      box(head, `scorched-ear-${side}`, emberHoundMane, [.16, .4, .18], [side * .22, .36, -.11], [0, 0, side * -17]);
+      box(head, `ember-eye-${side}`, emberHoundFlame, [.12, .1, .075], [side * .2, .07, .29]);
+      box(head, `black-fang-${side}`, ivory, [.09, .19, .08], [side * .15, -.2, .49]);
+      for (let index = 0; index < 2; index++) {
+        const leg = pivot(parent, `ember-leg-${side}-${index}`, [side * .28, .5, index === 0 ? .36 : -.53]);
+        box(leg, "coal-upper", emberHoundHide, [.19, .35, .25], [0, -.13, 0]);
+        const knee = pivot(leg, "ember-knee", [0, -.31, 0]);
+        box(knee, "cinder-lower", emberHoundMane, [.15, .3, .18], [0, -.13, .04]);
+        box(knee, "hot-paw", emberHoundFlame, [.2, .1, .31], [0, -.28, .12]);
+        rig.limbs.push({ pivot: leg, knee, side, offset: (index + (side > 0 ? 1 : 0)) * Math.PI });
+      }
     }
   } else if (kind === "ridge_stalker") {
     box(parent, "lean-hound-torso", ridgeFur, [.57, .5, 1.2], [0, .62, -.14]);

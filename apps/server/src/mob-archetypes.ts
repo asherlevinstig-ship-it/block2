@@ -1,5 +1,5 @@
 import { BRUTE_SLAM, SPITTER_PATTERN, crawlerRushDistance } from "@blockcraft/protocol";
-export type MobArchetypeId = "moss_crawler" | "briar_crawler" | "stone_brute" | "cave_spitter" | "ridge_stalker" | "shard_sentry" | "thornbinder" | "fen_bloater" | "cinder_ram";
+export type MobArchetypeId = "moss_crawler" | "briar_crawler" | "stone_brute" | "cave_spitter" | "ridge_stalker" | "ember_hound" | "shard_sentry" | "thornbinder" | "fen_bloater" | "cinder_ram";
 export const isSpitterLike = (archetype: string): boolean => archetype === "cave_spitter" || archetype === "shard_sentry";
 export const isThornbinder = (archetype: string): boolean => archetype === "thornbinder";
 
@@ -134,6 +134,15 @@ export const MOB_ARCHETYPES: Record<MobArchetypeId, MobArchetypeDefinition> = {
     projectileTravelMs: 0, hazardDurationMs: 0, hazardRadius: 0,
     respawnMs: 6500, rewardHealth: 0, rewardStamina: 18,
   },
+  ember_hound: {
+    id: "ember_hound", name: "Ember Hound", spawn: { x: 100.5, y: 8, z: 56.5 },
+    maxHealth: 8, armor: 0, attackKind: "melee", speed: 2.25,
+    stopDistance: 2.05, minimumAttackRange: 0, aggroRange: 11,
+    windupMs: 620, recoverMs: 900, cooldownMs: 1_900, damage: 1,
+    lungeDistance: crawlerRushDistance("ember_hound"), hitRange: 2.3,
+    projectileTravelMs: 0, hazardDurationMs: 0, hazardRadius: 0,
+    respawnMs: 45_000, rewardHealth: 0, rewardStamina: 18,
+  },
   shard_sentry: {
     id: "shard_sentry", name: "Shard Sentry", spawn: { x: 18.5, y: 8, z: -54.5 },
     maxHealth: 8, armor: 0, attackKind: "projectile", speed: .9,
@@ -177,6 +186,7 @@ export function mobArchetype(value: string): MobArchetypeDefinition {
   if (value === "stone_brute") return MOB_ARCHETYPES.stone_brute;
   if (value === "cave_spitter") return MOB_ARCHETYPES.cave_spitter;
   if (value === "ridge_stalker") return MOB_ARCHETYPES.ridge_stalker;
+  if (value === "ember_hound") return MOB_ARCHETYPES.ember_hound;
   if (value === "shard_sentry") return MOB_ARCHETYPES.shard_sentry;
   if (value === "thornbinder") return MOB_ARCHETYPES.thornbinder;
   if (value === "fen_bloater") return MOB_ARCHETYPES.fen_bloater;

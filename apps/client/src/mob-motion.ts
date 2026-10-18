@@ -28,11 +28,11 @@ export function visibleMobGaitSpeed(authoritativeSpeed: number, visibleTravel: n
 export function mobGaitTargets(kind: string, awareness: string, speed: number, windup: number, stagger: number, defeat: number) {
   const activity = (1 - Math.min(1, windup + stagger)) * (1 - defeat);
   const urgent = awareness === "engaged" || awareness === "search";
-  const walking = Math.min(1, Math.max(0, speed) / (kind === "stone_brute" ? 0.85 : kind === "cinder_ram" ? 1.05 : 1.4)) * activity;
+  const walking = Math.min(1, Math.max(0, speed) / (kind === "stone_brute" ? 0.85 : kind === "cinder_ram" ? 1.05 : kind === "ember_hound" ? 2.25 : 1.4)) * activity;
   return {
     walking,
     pursuit: urgent ? activity : 0,
-    cadence: Math.min(Math.max(0, speed), 6) * (kind === "stone_brute" ? 3.5 : kind === "cinder_ram" ? 5.8 : kind === "fen_bloater" ? 4.2 : kind === "thornbinder" ? 5.2 : kind === "cave_spitter" || kind === "shard_sentry" ? 6.5 : kind === "ridge_stalker" ? 9 : 8) * activity * (urgent ? 1.08 : 1),
+    cadence: Math.min(Math.max(0, speed), 6) * (kind === "stone_brute" ? 3.5 : kind === "cinder_ram" ? 5.8 : kind === "fen_bloater" ? 4.2 : kind === "thornbinder" ? 5.2 : kind === "cave_spitter" || kind === "shard_sentry" ? 6.5 : kind === "ridge_stalker" || kind === "ember_hound" ? 9 : 8) * activity * (urgent ? 1.08 : 1),
   };
 }
 

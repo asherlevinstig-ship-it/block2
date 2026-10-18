@@ -6267,6 +6267,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   const isThornbinder = mob.archetype === "thornbinder";
   const isFenBloater = mob.archetype === "fen_bloater";
   const isCinderRam = mob.archetype === "cinder_ram";
+  const isEmberHound = mob.archetype === "ember_hound";
   const isWatchbreaker = mobId === "northwatch-watchbreaker";
   const isAshglass = mobId.startsWith("ashglass-sentry-");
   const isBriar = mob.archetype === "briar_crawler";
@@ -6279,7 +6280,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   const bodyMaterial = coloredMaterial(
     isWatchbreaker ? new pc.Color(.25, .35, .42) : isBrute ? new pc.Color(0.38, 0.43, 0.48) : mob.archetype === "shard_sentry" ? new pc.Color(.25, .43, .52)
       : mob.archetype === "ridge_stalker" ? new pc.Color(.44, .46, .39)
-        : isAshglass ? new pc.Color(0.31, 0.22, 0.2) : isCinderRam ? new pc.Color(.27, .22, .19) : isFenBloater ? new pc.Color(.24, .34, .12) : isThornbinder ? new pc.Color(.3, .24, .1) : isSpitter ? new pc.Color(0.34, 0.29, 0.43) : isBriar ? new pc.Color(0.31, 0.19, 0.12) : new pc.Color(0.28, 0.42, 0.21),
+        : isAshglass ? new pc.Color(0.31, 0.22, 0.2) : isCinderRam ? new pc.Color(.27, .22, .19) : isEmberHound ? new pc.Color(.3, .13, .075) : isFenBloater ? new pc.Color(.24, .34, .12) : isThornbinder ? new pc.Color(.3, .24, .1) : isSpitter ? new pc.Color(0.34, 0.29, 0.43) : isBriar ? new pc.Color(0.31, 0.19, 0.12) : new pc.Color(0.28, 0.42, 0.21),
   );
   bodyMaterial.shininess = 12;
   // Keep the emissive shader feature active while varying cue intensity.

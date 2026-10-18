@@ -27,6 +27,11 @@ describe("readable enemy combat cues", () => {
     expect(enemyCombatCue({ ...charge, aimCommitted: true }, 2_400).label).toBe("FURNACE CHARGE · LOCKED");
     expect(enemyCombatCue({ ...charge, combatState: "recover", attackContactEndAt: 3_000 }, 3_200).label).toBe("RECOVER · COUNTER");
   });
+  it("names the Ember Hound's fast pounce before it commits", () => {
+    const pounce = { ...mob, archetype: "ember_hound", attackPattern: "ember-pounce",
+      attackReleaseAt: 1_620, attackContactAt: 1_620, attackContactEndAt: 1_740, attackRecoveryEndAt: 2_640 };
+    expect(enemyCombatCue(pounce, 1_200)).toMatchObject({ kind: "ember pounce", label: "EMBER POUNCE · AIMING" });
+  });
   it("labels rock aim, commitment and the full recovery window", () => {
     const rocks = { ...mob, attackPattern: "rocks", attackContactAt: 2000, attackContactEndAt: 2000, attackRecoveryEndAt: 4400 };
     expect(enemyCombatCue(rocks, 1200).label).toBe("ROCK VOLLEY · AIMING");

@@ -7,7 +7,7 @@ import { ShadowMoveInput, stepShadowMovement, type ShadowPose } from "./movement
 import { randomUUID } from "node:crypto";
 import { ADMIN_BOOTSTRAP_HASH, ADMIN_PROFILE_HASH, adminProfileKey, matchesAdminBootstrapPass } from "./admin-access.js";
 import { AttackCoordination, allyFireLaneClear } from "./attack-coordination.js";
-import { MIXED_FRONTIER_SPITTER, STONE_BRUTE_ESCORTS, isMixedFrontierMob, mixedFrontierAllows, isSilverGuard, silverGuardAllows, frontierBruteAllows, isFrontierBruteGroupMob, isStoneBruteGroupMob, isGreenwoodCampMob, greenwoodCampAllows, isAshenSentry, isAshenMob, ashenSentryAllows, ashenSentryPattern, isMistfenMob, mistfenAllows, isSouthernQuarryMob, southernQuarryAllows, isNorthwatchMob, northwatchAllows, northwatchShardPattern, northwatchPatrolPattern, northwatchPatrolInterruptDuration, northwatchPatrolShotDamage, NORTHWATCH_SHARD_PATROL_IDS, isNorthwatchShardPatrol, northwatchShardPatrolAllows } from "./wilderness-encounters.js";
+import { MIXED_FRONTIER_SPITTER, STONE_BRUTE_ESCORTS, isMixedFrontierMob, mixedFrontierAllows, isSilverGuard, silverGuardAllows, frontierBruteAllows, isFrontierBruteGroupMob, isStoneBruteGroupMob, isGreenwoodCampMob, greenwoodCampAllows, ASHEN_COMBAT_GROUP_IDS, isAshenSentry, isAshenMob, ashenSentryAllows, ashenSentryPattern, isMistfenMob, mistfenAllows, isSouthernQuarryMob, southernQuarryAllows, isNorthwatchMob, northwatchAllows, northwatchShardPattern, northwatchPatrolPattern, northwatchPatrolInterruptDuration, northwatchPatrolShotDamage, NORTHWATCH_SHARD_PATROL_IDS, isNorthwatchShardPatrol, northwatchShardPatrolAllows } from "./wilderness-encounters.js";
 import { BRUTE_VOLLEY, bruteVolleyReady, bruteRockEndpoints } from "@blockcraft/protocol";
 import { CHAMPION_CHARGE, CINDER_RAM_CHARGE, ChatSendSchema, QUICK_CHAT_PHRASES, PlayerNameSchema, AppearanceSchema, type NearbyChatMessage } from "@blockcraft/protocol";
 import { hearsNearbyChat } from "./nearby-chat.js";
@@ -2282,6 +2282,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (mobId === "northwatch-patrol-stalker-west" || mobId === "northwatch-patrol-stalker-east") mob.name = "Ridge Patrol Stalker";
     if (archetypeId === "fen_bloater") mob.attackPattern = "toxic-bloom";
     if (archetypeId === "cinder_ram") mob.attackPattern = "furnace-charge";
+    if (archetypeId === "ember_hound") mob.attackPattern = "ember-pounce";
     if (areaMiniBoss) mob.name = areaMiniBoss.name;
     this.mobBaseNames.set(mobId, mob.name);
     mob.level = enemyLevelForTier(mob.difficultyTier, mob.isChampion || mob.isElite || Boolean(areaMiniBoss), mobId === CRYSTAL_MATRIARCH_ID || mobId === "forest-guardian" || mobId === "forge-colossus");
@@ -7478,6 +7479,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         mob.attackPattern = isCoordinatedCrawlerLeader(mobId) ? crawlerPackPattern(basePattern, aliveFollowers) : basePattern;
       }
       else if (mob.archetype === "cinder_ram" && mob.combatState === "idle") mob.attackPattern = "furnace-charge";
+      else if (mob.archetype === "ember_hound" && mob.combatState === "idle") mob.attackPattern = "ember-pounce";
       else if (mob.isElite && mob.combatState === "idle") mob.attackPattern = isMistfenEventFollower(mobId)
         && this.realmEvents.mistfenVariant === "mireback-stampede" ? "bog-charge"
         : wildernessElitePattern(mob.archetype as MobArchetypeId, mob.actionSequence);
@@ -7542,7 +7544,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           const activeElites = [...this.state.mobs.entries()].filter(([id, candidate]) => id !== mobId && !isAreaMiniBoss(id) && candidate.isElite
             && (candidate.alive || candidate.materializeUntil > now)).length;
           const areaMiniBoss = areaMiniBossDefinition(mobId);
-          mob.isElite = mob.archetype !== "cinder_ram" && !areaMiniBoss && !isNorthwatchShardPatrol(mobId)
+          mob.isElite = mob.archetype !== "cinder_ram" && mob.archetype !== "ember_hound" && !areaMiniBoss && !isNorthwatchShardPatrol(mobId)
             && shouldBecomeWildernessElite(band.tier, activeElites, Math.random());
           const eliteKind = wildernessEliteKind(definition.id);
           mob.eliteKind = mob.isElite ? eliteKind : "";
@@ -7554,6 +7556,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           }
           mob.actionSequence = 0;
           if (mob.archetype === "cinder_ram") mob.attackPattern = "furnace-charge";
+          else if (mob.archetype === "ember_hound") mob.attackPattern = "ember-pounce";
           else if (areaMiniBoss) mob.attackPattern = areaLeaderPattern(definition.id, 0, 1, mobId);
           else if (mob.isElite) mob.attackPattern = wildernessElitePattern(definition.id, 0);
           mob.x = spawn.x; mob.y = spawn.y; mob.z = spawn.z;
@@ -7856,6 +7859,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       mob.awarenessState = target.visible ? "engaged" : "search";
       if (target.visible && previousTarget !== target.id && isNorthwatchShardPatrol(mobId))
         this.rallyNorthwatchShardPatrol(mobId, target.id, now);
+      if (target.visible && previousTarget !== target.id && isAshenMob(mobId))
+        this.rallyAshenCombatGroup(mobId, target.id, now);
       if (roamingMembership(mobId)) this.roamingEngaged.add(mobId);
       if (this.mobPatrols.delete(mobId)) this.mobNavigation.set(mobId, createMobNavigationState());
       const positioning = this.spitterPositioning.get(mobId) ?? createSpitterPositioning();
@@ -9234,6 +9239,26 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
   }
 
+  private rallyAshenCombatGroup(mobId: string, playerId: string, now: number): void {
+    const caller = this.state.mobs.get(mobId);
+    const player = this.state.players.get(playerId);
+    if (!caller || !player || player.health <= 0 || now < (this.pathConcealedUntil.get(playerId) ?? 0)) return;
+    for (const allyId of ASHEN_COMBAT_GROUP_IDS) {
+      if (allyId === mobId) continue;
+      const ally = this.state.mobs.get(allyId);
+      if (!ally?.alive || ally.combatState !== "idle" || Math.abs(ally.y - player.y) > 1.75
+        || Math.hypot(ally.x - caller.x, ally.z - caller.z) > 22
+        || Math.hypot(ally.x - player.x, ally.z - player.z) > 21
+        || !hasCombatLineOfSight(ally, player, this.readWorldBlock)) continue;
+      const awareness = this.mobAwareness.get(allyId) ?? createMobAwareness();
+      if (awareness.targetId && awareness.targetId !== playerId) continue;
+      provokeMob(awareness, { id: playerId, x: player.x, y: player.y, z: player.z, health: player.health }, now);
+      this.mobAwareness.set(allyId, awareness);
+      ally.alertUntil = now + 900;
+      ally.awarenessState = "engaged";
+    }
+  }
+
   private alertHitMob(mobId: string, sessionId: string, now: number, source?: { x: number; y?: number; z: number }): void {
     const player = this.state.players.get(sessionId);
     if (!player || player.health <= 0 || isInsideTownSafeZone(player)) return;
@@ -9248,6 +9273,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (mob) { mob.alertUntil = now + 900; mob.awarenessState = visible ? "engaged" : "search"; }
     this.mobUnreachableUntil.delete(mobId); this.mobReturning.delete(mobId);
     this.roamingReturning.delete(mobId);
+    if (isAshenMob(mobId)) this.rallyAshenCombatGroup(mobId, sessionId, now);
     if (!mob || now - (this.mobAssistAt.get(mobId) ?? -Infinity) < MOB_ASSIST_COOLDOWN_MS) return;
     this.mobAssistAt.set(mobId, now);
     const victimPack = roamingMembership(mobId);
