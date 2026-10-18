@@ -4403,7 +4403,7 @@ const powerTelegraphs = new Map<string, PowerTelegraphVisual>();
 const powerImpactVisuals: PowerImpactVisual[] = [];
 interface CallingAnticipationVisual { root: pc.Entity; expiresAt: number }
 const callingAnticipationVisuals: CallingAnticipationVisual[] = [];
-interface CallingImpactVisual { root: pc.Entity; expiresAt: number }
+interface CallingImpactVisual { root: pc.Entity; expiresAt: number; materials: pc.StandardMaterial[] }
 const callingImpactVisuals: CallingImpactVisual[] = [];
 interface CallingPersistentVisual {
   root: pc.Entity;
@@ -4443,6 +4443,56 @@ function createCallingAnticipation(pathId: RoleFieldPath): void {
   callingAnticipationVisuals.push({ root, expiresAt: performance.now() + callingParticleLifetime(layers) * 1000 });
 }
 
+function callingSignatureMaterial(color: pc.Color, opacity: number, emissive = .1): pc.StandardMaterial {
+  const material = new pc.StandardMaterial();
+  material.diffuse = color;
+  material.emissive = color.clone().mulScalar(emissive);
+  material.opacity = opacity;
+  material.blendType = pc.BLEND_NORMAL;
+  material.depthWrite = false;
+  material.update();
+  return material;
+}
+
+function addCallingSignaturePrimitive(root: pc.Entity, name: string, type: "sphere" | "cylinder",
+  material: pc.StandardMaterial, scale: readonly [number, number, number], position: readonly [number, number, number]): void {
+  const entity = new pc.Entity(name);
+  entity.addComponent("render", { type });
+  if (entity.render) { entity.render.material = material; entity.render.castShadows = false; }
+  entity.setLocalScale(scale[0], scale[1], scale[2]);
+  entity.setLocalPosition(position[0], position[1], position[2]);
+  root.addChild(entity);
+}
+
+/** A few shared-material primitives guarantee silhouette readability while particles supply motion. */
+function addCallingSignature(root: pc.Entity, abilityId: CallingAbilityId): pc.StandardMaterial[] {
+  if (abilityId === "thief_smoke_bomb") {
+    const dark = callingSignatureMaterial(new pc.Color(.12, .16, .15), .28);
+    const rim = callingSignatureMaterial(new pc.Color(.3, .4, .36), .2, .16);
+    for (let index = 0; index < 12; index += 1) {
+      const angle = index / 12 * Math.PI * 2 + (index % 3) * .16;
+      const distance = .52 + index % 4 * .31;
+      const size = .52 + index % 3 * .15;
+      addCallingSignaturePrimitive(root, "smoke-volume", "sphere", index % 3 ? dark : rim,
+        [size * 1.25, size, size * 1.25], [Math.sin(angle) * distance, .34 + index % 4 * .18, Math.cos(angle) * distance]);
+    }
+    return [dark, rim];
+  }
+  if (abilityId === "tank_earthbreaker") {
+    const rock = callingSignatureMaterial(new pc.Color(.31, .22, .15), .9, .12);
+    const hot = callingSignatureMaterial(new pc.Color(.95, .38, .08), .72, .9);
+    for (let index = 0; index < 18; index += 1) {
+      const angle = index / 18 * Math.PI * 2 + (index % 2) * .1;
+      const distance = .7 + index % 4 * .48;
+      const size = .11 + index % 3 * .045;
+      addCallingSignaturePrimitive(root, "earthbreaker-debris", "sphere", index % 5 === 0 ? hot : rock,
+        [size * 1.4, size * (1 + index % 2), size], [Math.sin(angle) * distance, .1 + index % 3 * .12, Math.cos(angle) * distance]);
+    }
+    return [rock, hot];
+  }
+  return [];
+}
+
 function createCallingImpact(effect: CallingAbilityEffect): void {
   if (effect.abilityId === "assassin_death_mark" && effect.targetId) {
     mobVisuals.get(effect.targetId)?.marks.set(effect.casterId, {
@@ -4467,7 +4517,8 @@ function createCallingImpact(effect: CallingAbilityEffect): void {
   if (root.parent === app.root) root.setEulerAngles(0, effect.yaw, 0);
   else root.setLocalEulerAngles(0, effect.yaw, 0);
   addCallingParticleLayers(app, root, layers);
-  callingImpactVisuals.push({ root, expiresAt: performance.now() + callingParticleLifetime(layers) * 1000 });
+  const materials = addCallingSignature(root, abilityId);
+  callingImpactVisuals.push({ root, expiresAt: performance.now() + callingParticleLifetime(layers) * 1000, materials });
   const local = localPlayer.getPosition(), pan = enemyCuePan(effect.x, local.x, 14);
   combatAudio.play(effect.pathId === "tank" ? "callingTank" : effect.pathId === "mage" || effect.pathId === "healer" ? "callingMage"
     : effect.pathId === "assassin" ? "callingShadow" : effect.pathId === "thief" ? "callingThief" : "callingRanger", pan);
@@ -10610,7 +10661,9 @@ app.on("update", (dt: number) => {
   for (let index = callingImpactVisuals.length - 1; index >= 0; index -= 1) {
     const visual = callingImpactVisuals[index]!;
     if (animationNow >= visual.expiresAt) {
-      visual.root.destroy(); callingImpactVisuals.splice(index, 1);
+      visual.root.destroy();
+      for (const material of visual.materials) material.destroy();
+      callingImpactVisuals.splice(index, 1);
     }
   }
   for (const [playerId, visual] of callingPersistentVisuals) {
@@ -12025,7 +12078,10 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     dungeonBurstVisuals.length = 0;
     for (const visual of callingAnticipationVisuals) visual.root.destroy();
     callingAnticipationVisuals.length = 0;
-    for (const visual of callingImpactVisuals) visual.root.destroy();
+    for (const visual of callingImpactVisuals) {
+      visual.root.destroy();
+      for (const material of visual.materials) material.destroy();
+    }
     callingImpactVisuals.length = 0;
     for (const visual of callingPersistentVisuals.values()) visual.root.destroy();
     callingPersistentVisuals.clear(); localCallingState = null; combatHud.setCallingState(null);
