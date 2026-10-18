@@ -48,7 +48,7 @@ import { WILDERNESS_MATERIALIZE_MS, WILDERNESS_RESPAWN_RECHECK_MS,
   usesOverworldRespawnRhythm, wildernessRespawnDelay, wildernessSpawnClear } from "./wilderness-respawn.js";
 import { shouldBecomeWildernessElite, wildernessEliteKind,
   wildernessEliteName, wildernessElitePattern, wildernessEliteStats } from "./wilderness-elites.js";
-import { AREA_LEADER_FOLLOWERS, AREA_MAIN_MOBS, areaLeaderPattern, areaLeaderPhase, areaMainMobDefinition, areaMiniBossDefinition, bruteLeaderArmourSegments, bruteLeaderExposureMs, crawlerPackPattern, crawlerPackRushYawOffsets, isAreaMiniBoss, isCoordinatedBruteLeader, isCoordinatedCrawlerLeader, leaderForFollower, type AreaLeaderPhase } from "./area-mini-bosses.js";
+import { AREA_LEADER_FOLLOWERS, AREA_MAIN_MOBS, areaLeaderPattern, areaLeaderPhase, areaMainMobDefinition, areaMiniBossDefinition, bruteLeaderArmourSegments, bruteLeaderExposureMs, crawlerPackPattern, crawlerPackRushYawOffsets, isAreaMiniBoss, isCoordinatedBruteLeader, isCoordinatedCrawlerLeader, isCoordinatedSpitterLeader, leaderForFollower, spitterPackPoolSites, spitterRingWithSafeGap, type AreaLeaderPhase } from "./area-mini-bosses.js";
 import { MINI_BOSS_ENRAGE_MS, bruteLeaderPursuitSpeed, miniBossDamage, miniBossOrbitCounterPattern, miniBossWindupDelay, predictedMiniBossAim, updateOrbitPressure, type OrbitPressureState } from "./mini-boss-pressure.js";
 import { miniBossCoverSites, miniBossPressureSites } from "./mini-boss-arena.js";
 import { leaderRematch, leaderRematchMaterialBonus, leaderRematchPattern, northwatchWatchbreakerPattern, leaderRematchPressureCadence,
@@ -2437,7 +2437,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (!mob.alive || mob.health <= 0 || duration <= 0 || (!force && now < (this.mobStaggerImmuneUntil.get(mobId) ?? 0))) return false;
     const brokePackRush = isCoordinatedCrawlerLeader(mobId) && mob.combatState === "windup"
       && (mob.attackPattern === "pack-rush" || mob.attackPattern === "alpha-rush");
-    const staggerDuration = brokePackRush ? Math.max(duration, 3_000) : duration;
+    const brokeVenomRing = isCoordinatedSpitterLeader(mobId) && mob.combatState === "windup"
+      && mob.attackPattern === "venom-ring";
+    const staggerDuration = brokePackRush || brokeVenomRing ? Math.max(duration, 3_000) : duration;
     this.delayedMatriarchVolleys.delete(mobId);
     mob.combatState = "stagger";
     mob.stateUntil = now + staggerDuration;
@@ -2451,7 +2453,34 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.crawlerRushes.delete(mobId);
     this.championCharges.delete(mobId);
     if (brokePackRush) this.breakCrawlerPackFormation(mobId, now, staggerDuration);
+    if (brokeVenomRing) this.breakSpitterPackFormation(mobId, now, staggerDuration);
     return true;
+  }
+
+  private breakSpitterPackFormation(leaderId: string, now: number, durationMs: number): void {
+    const group = new Set([leaderId, ...(AREA_LEADER_FOLLOWERS[leaderId] ?? [])]);
+    for (const followerId of AREA_LEADER_FOLLOWERS[leaderId] ?? []) {
+      const follower = this.state.mobs.get(followerId);
+      if (!follower?.alive || !isSpitterLike(follower.archetype)) continue;
+      follower.combatState = "stagger";
+      follower.stateUntil = now + 1_500;
+      follower.targetId = "";
+      follower.aimCommitted = false;
+      follower.staggerSequence += 1;
+      this.clearMobAttackTimeline(follower);
+      this.mobCommittedAim.delete(followerId);
+    }
+    for (const [projectileId, projectile] of this.pendingMobProjectiles) if (group.has(projectile.mobId)) {
+      this.pendingMobProjectiles.delete(projectileId);
+      this.resolveProjectileVisual(projectileId, projectile.position, "miss");
+    }
+    for (const client of this.clients) {
+      const player = this.state.players.get(client.sessionId);
+      const leader = this.state.mobs.get(leaderId);
+      if (player?.health && leader && Math.abs(player.y - leader.y) <= 2.5
+        && Math.hypot(player.x - leader.x, player.z - leader.z) <= 28)
+        client.send("leader:exposed", { mobId: leaderId, durationMs, reason: "volley-interrupt" } satisfies AreaLeaderExposed);
+    }
   }
 
   private breakCrawlerPackFormation(leaderId: string, now: number, durationMs: number): void {
@@ -2506,6 +2535,29 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.mobCommittedAim.delete(followerId);
       follower.stateUntil = Math.max(follower.stateUntil, now + definition.recoverMs);
     }
+  }
+
+  private launchSpitterPackCrossfire(leaderId: string, leader: MobState,
+    target: { x: number; y: number; z: number; yaw: number }, now: number, travelMs: number): void {
+    if (!isCoordinatedSpitterLeader(leaderId) || leader.attackPattern !== "venom-ring") return;
+    const follower = (AREA_LEADER_FOLLOWERS[leaderId] ?? []).map(id => [id, this.state.mobs.get(id)] as const)
+      .find((entry): entry is readonly [string, MobState] => Boolean(entry[1]?.alive && isSpitterLike(entry[1].archetype)
+        && Math.abs(entry[1].y - leader.y) <= 2.5 && Math.hypot(entry[1].x - leader.x, entry[1].z - leader.z) <= 18));
+    if (!follower) return;
+    const [followerId, escort] = follower;
+    const sites = spitterPackPoolSites(target, target.yaw, leader.actionSequence);
+    escort.attackPattern = "pool";
+    escort.combatState = "recover";
+    escort.stateUntil = now + 1_500;
+    escort.targetId = "";
+    escort.actionSequence += 1;
+    escort.aimCommitted = false;
+    this.clearMobAttackTimeline(escort);
+    this.mobCommittedAim.delete(followerId);
+    this.releaseMobVolley(followerId, escort, escort, sites, now, travelMs, Math.max(1, escort.attackDamage), 1.05, 4_000);
+    const positioning = this.spitterPositioning.get(followerId) ?? createSpitterPositioning();
+    positioning.sidestepPending = true;
+    this.spitterPositioning.set(followerId, positioning);
   }
 
   private resolveProjectileVisual(projectileId: string, point: { x: number; y: number; z: number }, reason: ProjectileResolved["reason"]): void {
@@ -7286,8 +7338,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
             positioning.sidestepPending = true; this.spitterPositioning.set(mobId, positioning);
             mob.targetId = ""; continue;
           }
-          const shots = usesRockVolley(mob.attackPattern) ? bruteRockEndpoints(mob, aim.yaw)
+          let shots = usesRockVolley(mob.attackPattern) ? bruteRockEndpoints(mob, aim.yaw)
             : (mob.isChampion || mob.isElite || mob.isMiniBoss) && mobId !== WILDERNESS_EVENT_ID && mobId !== CRYSTAL_MATRIARCH_ID && !isRealmSpitterBoss(mobId) ? spitterChampionShots(mob, aim, mob.attackPattern) : spitterShotEndpoints(mob, aim.yaw, mob.attackPattern);
+          if (isCoordinatedSpitterLeader(mobId) && mob.attackPattern === "venom-ring") {
+            const followerIds = AREA_LEADER_FOLLOWERS[mobId] ?? [];
+            const aliveFollowers = followerIds.filter(id => this.state.mobs.get(id)?.alive).length;
+            shots = spitterRingWithSafeGap(shots, aliveFollowers, followerIds.length);
+          }
           const origin = { x: mob.x, y: mob.y, z: mob.z };
           const championVenom = huntChampion?.pathId === "venom" ? huntChampionVenomHazard(mob.attackPattern) : null;
           const venomPools = mobId === GREENWOOD_MATRIARCH_ID && (mob.attackPattern === "double-fan" || mob.attackPattern === "venom-ring");
@@ -7297,6 +7354,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
             mobId === "northwatch-spitter" ? northwatchPatrolShotDamage(mob.attackPattern, mob.attackDamage) : mob.attackDamage,
             championVenom?.radius ?? (mistfenEruption ? 1.15 : venomPools ? .82 : definition.hazardRadius),
             championVenom?.durationMs ?? (mistfenEruption ? 4_500 : venomPools ? 3_600 : definition.hazardDurationMs));
+          this.launchSpitterPackCrossfire(mobId, mob, aim, now, definition.projectileTravelMs);
           if (usesFallingRockZones(mob.attackPattern)) this.scheduleRealmFallingRocks(mobId, aim, now, mob.attackDamage,
             mob.attackPattern === "warden-barrage" || mob.attackPattern === "fault-line" && huntChampion?.difficulty === "ascendant");
           if ((usesDoubleVolley(mob.attackPattern) && (mobId === WILDERNESS_EVENT_ID || mobId === CRYSTAL_MATRIARCH_ID || isRealmEventId(mobId) || isAreaMiniBoss(mobId)))

@@ -86,12 +86,20 @@ const COORDINATED_CRAWLER_LEADERS = new Set([
   "wild-crawler", "outskirts-west-pack:0", "outskirts-north-pack:0",
 ]);
 
+const COORDINATED_SPITTER_LEADERS = new Set([
+  "frontier-spitter", "wilds-west-pack:0", "wilds-east-pack:0",
+]);
+
 export function isCoordinatedBruteLeader(id: string): boolean {
   return COORDINATED_BRUTE_LEADERS.has(id);
 }
 
 export function isCoordinatedCrawlerLeader(id: string): boolean {
   return COORDINATED_CRAWLER_LEADERS.has(id);
+}
+
+export function isCoordinatedSpitterLeader(id: string): boolean {
+  return COORDINATED_SPITTER_LEADERS.has(id);
 }
 
 /** Pack attacks lose lanes as escorts fall; a lone alpha can only make a direct rush. */
@@ -107,6 +115,20 @@ export function crawlerPackRushYawOffsets(count: number): number[] {
   if (count === 1) return [0];
   const spread = count === 2 ? 30 : 42;
   return Array.from({ length: count }, (_, index) => -spread + spread * 2 * index / (count - 1));
+}
+
+/** A defeated escort opens the two forward lanes players were shown during the windup. */
+export function spitterRingWithSafeGap<T>(lanes: readonly T[], aliveFollowers: number, totalFollowers: number): T[] {
+  if (totalFollowers <= 0 || aliveFollowers >= totalFollowers || lanes.length < 4) return [...lanes];
+  const left = Math.floor(lanes.length / 2) - 1;
+  return lanes.filter((_lane, index) => index !== left && index !== left + 1);
+}
+
+/** One pool punishes standing still; the second alternates between likely lateral escapes. */
+export function spitterPackPoolSites(target: { x: number; y: number; z: number }, yaw: number, sequence: number) {
+  const side = sequence % 2 === 0 ? 1 : -1;
+  const radians = (yaw + 90 * side) * Math.PI / 180;
+  return [target, { x: target.x + Math.sin(radians) * 2.6, y: target.y, z: target.z + Math.cos(radians) * 2.6 }];
 }
 
 export function leaderForFollower(id: string): string | null {

@@ -62,4 +62,26 @@ describe("readable spitter patterns", () => {
     internal.resolveMobProjectiles(releaseAt + 150); expect(player.health).toBe(5);
     player.x += 3; internal.resolveMobProjectiles(releaseAt + SPITTER_PATTERN.travelMs); expect(player.health).toBe(5);
   });
+
+  it("coordinates a venom ring with escort pools and cancels the whole volley when interrupted", () => {
+    const { internal, mob: leader } = fixture();
+    internal.state.mobs.delete("test");
+    Object.assign(leader, { x: 100.5, y: 1, z: 100.5, archetype: "cave_spitter", isMiniBoss: true,
+      alive: true, attackPattern: "venom-ring", combatState: "strike", attackDamage: 2 });
+    internal.state.mobs.set("frontier-spitter", leader);
+    const escort = new MobState();
+    Object.assign(escort, { x: 96.5, y: 1, z: 100.5, archetype: "cave_spitter", alive: true, attackDamage: 1 });
+    internal.state.mobs.set("cave-spitter", escort);
+    internal.launchSpitterPackCrossfire("frontier-spitter", leader,
+      { x: 100.5, y: 1, z: 106.5, yaw: 0 }, 10_000, SPITTER_PATTERN.travelMs);
+    const escortShots = [...internal.pendingMobProjectiles.values()].filter((shot: any) => shot.mobId === "cave-spitter");
+    expect(escortShots).toHaveLength(2);
+    expect(escortShots.every((shot: any) => shot.hazardRadius === 1.05 && shot.hazardDurationMs === 4_000)).toBe(true);
+    expect(escort.combatState).toBe("recover");
+    leader.combatState = "windup";
+    expect(internal.staggerMob("frontier-spitter", leader, 10_100, 650, true)).toBe(true);
+    expect(leader.stateUntil).toBe(13_100);
+    expect(escort.combatState).toBe("stagger");
+    expect(internal.pendingMobProjectiles.size).toBe(0);
+  });
 });

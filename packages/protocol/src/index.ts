@@ -1677,7 +1677,7 @@ export type WorldObjectiveCompleted = {
 export type AreaLeaderExposed = {
   mobId: string;
   durationMs: number;
-  reason?: "follower" | "charge" | "pack-interrupt";
+  reason?: "follower" | "charge" | "pack-interrupt" | "volley-interrupt";
   armourSegments?: number;
 };
 

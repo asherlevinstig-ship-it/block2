@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AREA_LEADER_RELIC_IDS, ITEM_DEFINITIONS } from "@blockcraft/protocol";
-import { AREA_LEADER_FOLLOWERS, AREA_MINI_BOSSES, areaLeaderPattern, areaLeaderPhase, areaMainMobDefinition, areaMiniBossDefinition, bruteLeaderArmourSegments, bruteLeaderExposureMs, crawlerPackPattern, crawlerPackRushYawOffsets, isAreaMiniBoss, isCoordinatedBruteLeader, isCoordinatedCrawlerLeader, leaderForFollower } from "../src/area-mini-bosses.js";
+import { AREA_LEADER_FOLLOWERS, AREA_MINI_BOSSES, areaLeaderPattern, areaLeaderPhase, areaMainMobDefinition, areaMiniBossDefinition, bruteLeaderArmourSegments, bruteLeaderExposureMs, crawlerPackPattern, crawlerPackRushYawOffsets, isAreaMiniBoss, isCoordinatedBruteLeader, isCoordinatedCrawlerLeader, isCoordinatedSpitterLeader, leaderForFollower, spitterPackPoolSites, spitterRingWithSafeGap } from "../src/area-mini-bosses.js";
 import { spitterChampionShots } from "../src/frontier-champion.js";
 import { STONE_BRUTE_ARENA_HOME, isInStoneBruteArena } from "@blockcraft/voxel-world";
 import { STONE_BRUTE_ESCORTS, WILDERNESS_ENCOUNTERS, isFrontierBruteGroupMob, isStoneBruteGroupMob } from "../src/wilderness-encounters.js";
@@ -83,6 +83,15 @@ describe("area mini-bosses", () => {
     expect(crawlerPackPattern("pack-rush", 0)).toBe("rush");
     expect(crawlerPackRushYawOffsets(2)).toEqual([-30, 30]);
     expect(crawlerPackRushYawOffsets(3)).toEqual([-42, 0, 42]);
+  });
+
+  it("opens a visible venom-ring gap and alternates escape-cutting pools when the escort falls", () => {
+    expect(isCoordinatedSpitterLeader("frontier-spitter")).toBe(true);
+    expect(isCoordinatedSpitterLeader("wild-spitter-west-north")).toBe(false);
+    expect(spitterRingWithSafeGap([0, 1, 2, 3, 4, 5, 6, 7], 1, 1)).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+    expect(spitterRingWithSafeGap([0, 1, 2, 3, 4, 5, 6, 7], 0, 1)).toEqual([0, 1, 2, 5, 6, 7]);
+    expect(spitterPackPoolSites({ x: 0, y: 1, z: 0 }, 0, 0)[1]!.x).toBeCloseTo(2.6);
+    expect(spitterPackPoolSites({ x: 0, y: 1, z: 0 }, 0, 1)[1]!.x).toBeCloseTo(-2.6);
   });
 
   it("gives each overworld brute leader nearby escorts with a clear exposed window", () => {

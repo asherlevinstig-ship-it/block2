@@ -13,7 +13,7 @@ import { progressionNotice as chooseProgressionNotice, type ProgressionNotice } 
 import { abilityRevealUse, canPresentAbilityReveal, earnedCallingAbilities } from "./ability-reveal.js";
 import { queueWorldNotice, type WorldNotice } from "./notification-lane.js";
 import { rangedAimYaw } from "./ranged-aim.js";
-import { COORDINATED_BRUTE_FOLLOWERS, activeCombatNearby, advanceBossHud, initialBossHud, leaderArmourSegments, leaderChargeGuidance, leaderExposureLabel, leaderExposureRoleLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
+import { COORDINATED_BRUTE_FOLLOWERS, COORDINATED_SPITTER_FOLLOWERS, activeCombatNearby, advanceBossHud, initialBossHud, leaderArmourSegments, leaderChargeGuidance, leaderExposureLabel, leaderExposureRoleLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
 import { forestDungeonAtmosphere, forestDungeonNotice, portalNoticeFeedback } from "./forest-dungeon-presentation.js";
 import { objectiveGuidance, objectiveIcon } from "./objective-guidance.js";
 import { createSocialUI } from "./social-ui.js";
@@ -2505,6 +2505,7 @@ interface MobVisual {
   warningYaw: number;
   warningPattern: string;
   warningChargeLength: number;
+  warningFollowerCount: number;
   warningSequence: number;
   combatCue: HTMLDivElement;
   combatCueLabel: HTMLSpanElement;
@@ -5929,7 +5930,7 @@ function createHuntersMarkPayoff(mob: MobVisual, assassin = false): void {
 }
 
 function updateStrikeWarningMesh(mesh: pc.Mesh, archetype: string, yaw: number, pattern = "slam", chargeLength: number = CHAMPION_CHARGE.distance,
-  shotOrigin: { x: number; y: number; z: number; name?: string; actionSequence?: number } = { x: 0, y: 0, z: 0 }): void {
+  shotOrigin: { x: number; y: number; z: number; name?: string; actionSequence?: number } = { x: 0, y: 0, z: 0 }, safeGap = false): void {
   const rockVolley = pattern === "rocks" || pattern === "falling-rocks" || pattern === "warden-barrage" || pattern === "fault-line";
   if (rockVolley || (archetype === "cave_spitter" || archetype === "shard_sentry") && pattern !== "pool") {
     const offsets = rockVolley ? BRUTE_VOLLEY.offsets : spitterShotOffsets(pattern);
@@ -5939,9 +5940,13 @@ function updateStrikeWarningMesh(mesh: pc.Mesh, archetype: string, yaw: number, 
     const secondYaw = matriarchSecondVolleyYaw(yaw, Math.max(0, (shotOrigin.actionSequence ?? 1) - 1));
     const secondLengths = doubleVolley ? offsets.map(offset => enemyShotGuideLength(
       { x: shotOrigin.x, y: shotOrigin.y + 1.05, z: shotOrigin.z }, secondYaw + offset, readCollisionWorldBlock, rockVolley ? BRUTE_VOLLEY.range : SPITTER_PATTERN.range)) : undefined;
-    const lanes = rockVolley ? [...bruteRockLanes(yaw, lengths), ...(doubleVolley ? bruteRockLanes(secondYaw, secondLengths) : [])]
+    let lanes = rockVolley ? [...bruteRockLanes(yaw, lengths), ...(doubleVolley ? bruteRockLanes(secondYaw, secondLengths) : [])]
       : doubleVolley ? [...spitterWarningLanes(yaw, pattern, lengths), ...spitterWarningLanes(secondYaw, pattern, secondLengths)]
       : spitterWarningLanes(yaw, pattern, lengths);
+    if (safeGap && pattern === "venom-ring" && lanes.length >= 4) {
+      const left = Math.floor(lanes.length / 2) - 1;
+      lanes = lanes.filter((_lane, index) => index !== left && index !== left + 1);
+    }
     mesh.setPositions(lanes.flatMap(lane => lane.flatMap(point => [point.x, 0, point.z])));
     mesh.setNormals(lanes.flatMap(lane => lane.flatMap(() => [0, 1, 0])));
     mesh.setIndices(lanes.flatMap((_lane, index) => { const i = index * 4; return [i, i + 1, i + 2, i, i + 2, i + 3]; }));
@@ -6290,6 +6295,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     warningYaw: mob.yaw,
     warningPattern: mob.attackPattern,
     warningChargeLength: CHAMPION_CHARGE.distance,
+    warningFollowerCount: -1,
     warningSequence: mob.actionSequence,
     combatCue, combatCueLabel, combatCueFill, levelTag, respawnTag, recovery, respawnCue, respawnCueMaterial, eliteAura, eliteAuraMaterial,
     healthFill,
@@ -11542,12 +11548,18 @@ app.on("update", (dt: number) => {
               ? serverClock.bestRtt / 2 + (frameSamples.at(-1) ?? 0) : null);
       }
       if (mob.warningMesh) {
+        const spitterFollowers = COORDINATED_SPITTER_FOLLOWERS[mobId] ?? [];
+        const livingSpitterFollowers = spitterFollowers.filter(id => mobVisuals.get(id)?.state.alive).length;
+        const safeVenomGap = mob.state.attackPattern === "venom-ring" && spitterFollowers.length > 0
+          && livingSpitterFollowers < spitterFollowers.length;
         const chargeLength = mob.isSpitter && mob.state.attackPattern !== "pool" ? spitterShotOffsets(mob.state.attackPattern).reduce((sum, offset, i) => sum + (i + 1) * enemyShotGuideLength({ x: mob.state.x, y: mob.state.y + 1.05, z: mob.state.z }, mob.state.yaw + offset, readCollisionWorldBlock, SPITTER_PATTERN.range), 0) : mob.state.attackPattern === "charge" ? Math.min(CHAMPION_CHARGE.distance, enemyShotGuideLength({ x: mob.state.attackStrikeX, y: mob.state.attackStrikeY + .8, z: mob.state.attackStrikeZ }, mob.state.yaw, readCollisionWorldBlock)) : CHAMPION_CHARGE.distance;
         const warningLength = ["rocks", "falling-rocks", "warden-barrage", "fault-line"].includes(mob.state.attackPattern) ? BRUTE_VOLLEY.offsets.reduce<number>((sum, offset, index) => sum + (index + 1) * enemyShotGuideLength({ x: mob.state.x, y: mob.state.y + 1.05, z: mob.state.z }, mob.state.yaw + offset, readCollisionWorldBlock, BRUTE_VOLLEY.range), 0) : chargeLength;
-        if (Math.abs(mob.warningYaw - mob.state.yaw) > 0.25 || mob.warningPattern !== mob.state.attackPattern || mob.warningSequence !== mob.state.actionSequence || Math.abs(warningLength - mob.warningChargeLength) > .05) {
-          updateStrikeWarningMesh(mob.warningMesh, mob.state.archetype, mob.state.yaw, mob.state.attackPattern, warningLength, mob.state);
+        if (Math.abs(mob.warningYaw - mob.state.yaw) > 0.25 || mob.warningPattern !== mob.state.attackPattern || mob.warningSequence !== mob.state.actionSequence || Math.abs(warningLength - mob.warningChargeLength) > .05
+          || mob.warningFollowerCount !== livingSpitterFollowers) {
+          updateStrikeWarningMesh(mob.warningMesh, mob.state.archetype, mob.state.yaw, mob.state.attackPattern, warningLength, mob.state, safeVenomGap);
           mob.warningYaw = mob.state.yaw;
           mob.warningPattern = mob.state.attackPattern; mob.warningChargeLength = warningLength; mob.warningSequence = mob.state.actionSequence;
+          mob.warningFollowerCount = livingSpitterFollowers;
         }
         mob.warning.setPosition(mob.state.attackStrikeX, mob.state.attackStrikeY + 0.04, mob.state.attackStrikeZ);
         // The marked danger area must always match the eventual damage radius.

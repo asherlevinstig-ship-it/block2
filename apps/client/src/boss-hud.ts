@@ -132,6 +132,12 @@ export const COORDINATED_BRUTE_FOLLOWERS: Readonly<Record<string, readonly strin
   "buried-chamber-brute": ["buried-vault-crawler"],
 };
 
+export const COORDINATED_SPITTER_FOLLOWERS: Readonly<Record<string, readonly string[]>> = {
+  "frontier-spitter": ["cave-spitter"],
+  "wilds-west-pack:0": ["wilds-west-pack:1"],
+  "wilds-east-pack:0": ["wilds-east-pack:1"],
+};
+
 export function leaderArmourSegments(leaderId: string, mobs: ReadonlyMap<string, { alive: boolean }>): { active: number; maximum: number } {
   const followers = COORDINATED_BRUTE_FOLLOWERS[leaderId] ?? [];
   const maximum = Math.min(2, followers.length);
