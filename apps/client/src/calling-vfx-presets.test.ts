@@ -56,6 +56,17 @@ describe("calling particle identity and budget", () => {
     expect(CALLING_ABILITY_SUSTAIN_PARTICLES.assassin_blade_dance?.some(layer => layer.kind === "streak")).toBe(true);
   });
 
+  it("separates Thief concealment, deception, and escape signatures", () => {
+    expect(CALLING_IMPACT_PARTICLES.thief_smoke_bomb.filter(layer => layer.kind === "smoke")
+      .reduce((sum, layer) => sum + layer.count, 0)).toBeGreaterThanOrEqual(70);
+    expect(CALLING_IMPACT_PARTICLES.thief_decoy.some(layer => layer.kind === "glow")).toBe(true);
+    expect(CALLING_IMPACT_PARTICLES.thief_decoy.some(layer => layer.kind === "streak")).toBe(true);
+    expect(CALLING_IMPACT_PARTICLES.thief_escape_artist.filter(layer => layer.kind === "streak" || layer.kind === "spark")
+      .reduce((sum, layer) => sum + layer.count, 0)).toBeGreaterThanOrEqual(80);
+    expect(CALLING_ABILITY_SUSTAIN_PARTICLES.thief_decoy?.length).toBeGreaterThanOrEqual(3);
+    expect(CALLING_ABILITY_SUSTAIN_PARTICLES.thief_escape_artist?.some(layer => layer.kind === "streak")).toBe(true);
+  });
+
   it("separates focused healing, area renewal, and resurrection", () => {
     expect(CALLING_IMPACT_PARTICLES.healer_field_mend.some(layer => layer.kind === "streak")).toBe(true);
     expect(Math.max(...CALLING_IMPACT_PARTICLES.healer_renewal.map(layer => layer.radius))).toBeGreaterThanOrEqual(2);

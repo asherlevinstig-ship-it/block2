@@ -4640,6 +4640,38 @@ function addCallingSignature(root: pc.Entity, abilityId: CallingAbilityId): pc.S
     }
     return [dark, rim];
   }
+  if (abilityId === "thief_decoy") {
+    const ghost = callingSignatureMaterial(new pc.Color(.22, .9, .55), .42, .72);
+    const edge = callingSignatureMaterial(new pc.Color(.72, 1, .82), .82, 1.16);
+    addCallingSignaturePrimitive(root, "decoy-head", "sphere", edge, [.2, .2, .2], [0, 1.72, 0]);
+    addCallingSignaturePrimitive(root, "decoy-body", "box", ghost, [.28, .45, .16], [0, 1.15, 0]);
+    addCallingSignaturePrimitive(root, "decoy-arms", "box", edge, [.58, .065, .08], [0, 1.35, 0]);
+    addCallingSignaturePrimitive(root, "decoy-leg-left", "box", ghost, [.08, .38, .09], [-.13, .55, 0], [0, 0, -8]);
+    addCallingSignaturePrimitive(root, "decoy-leg-right", "box", ghost, [.08, .38, .09], [.13, .55, 0], [0, 0, 8]);
+    for (let index = 0; index < 12; index += 1) {
+      const angle = index / 12 * Math.PI * 2;
+      addCallingSignaturePrimitive(root, "decoy-bait-ring", "box", index % 3 === 0 ? edge : ghost,
+        [.05, .025, .24], [Math.sin(angle) * .78, .07, Math.cos(angle) * .78], [0, angle * 180 / Math.PI, 0]);
+    }
+    return [ghost, edge];
+  }
+  if (abilityId === "thief_escape_artist") {
+    const steel = callingSignatureMaterial(new pc.Color(.5, .62, .58), .72, .52);
+    const freedom = callingSignatureMaterial(new pc.Color(.38, 1, .62), .88, 1.2);
+    for (let index = 0; index < 8; index += 1) {
+      const side = index % 2 ? -1 : 1;
+      addCallingSignaturePrimitive(root, "escape-afterimage", "box", freedom,
+        [.035, .08, .48 + index % 3 * .18], [side * (.18 + index * .12), .28 + index % 4 * .3, .18 + index * .08],
+        [side * 18, side * (24 + index * 7), side * 28]);
+    }
+    for (let index = 0; index < 6; index += 1) {
+      const angle = index / 6 * Math.PI * 2;
+      addCallingSignaturePrimitive(root, "broken-restraint", "box", steel, [.07, .045, .16],
+        [Math.sin(angle) * (.5 + index % 2 * .24), .55 + index % 3 * .25, Math.cos(angle) * (.5 + index % 2 * .24)],
+        [index % 2 ? 38 : -38, angle * 180 / Math.PI, index % 2 ? 26 : -26]);
+    }
+    return [steel, freedom];
+  }
   if (abilityId === "tank_earthbreaker") {
     const rock = callingSignatureMaterial(new pc.Color(.31, .22, .15), .9, .12);
     const hot = callingSignatureMaterial(new pc.Color(.95, .38, .08), .72, .9);
@@ -4723,6 +4755,36 @@ function addCallingPersistentSignature(root: pc.Entity, state: CallingStateUpdat
     }
     return [shadowEdge];
   }
+  if (state.abilityId === "thief_smoke_bomb") {
+    const boundary = callingSignatureMaterial(new pc.Color(.28, .58, .43), .48, .48);
+    const fog = callingSignatureMaterial(new pc.Color(.12, .17, .15), .72, .08);
+    for (let index = 0; index < 20; index += 1) {
+      const angle = index / 20 * Math.PI * 2;
+      addCallingSignaturePrimitive(root, "smoke-safe-boundary", "box", index % 4 === 0 ? boundary : fog,
+        [index % 4 === 0 ? .08 : .045, .035, .3], [Math.sin(angle) * 2.25, .08, Math.cos(angle) * 2.25],
+        [0, angle * 180 / Math.PI, 0]);
+    }
+    return [boundary, fog];
+  }
+  if (state.abilityId === "thief_decoy") {
+    const ghost = callingSignatureMaterial(new pc.Color(.18, .72, .42), .55, .6);
+    const edge = callingSignatureMaterial(new pc.Color(.65, 1, .76), .82, 1.08);
+    addCallingSignaturePrimitive(root, "decoy-lure-head", "sphere", edge, [.18, .18, .18], [0, 1.68, 0]);
+    addCallingSignaturePrimitive(root, "decoy-lure-body", "box", ghost, [.26, .44, .15], [0, 1.12, 0]);
+    addCallingSignaturePrimitive(root, "decoy-lure-arms", "box", edge, [.55, .06, .075], [0, 1.32, 0]);
+    addCallingSignaturePrimitive(root, "decoy-lure-left-leg", "box", ghost, [.075, .36, .08], [-.12, .53, 0], [0, 0, -7]);
+    addCallingSignaturePrimitive(root, "decoy-lure-right-leg", "box", ghost, [.075, .36, .08], [.12, .53, 0], [0, 0, 7]);
+    return [ghost, edge];
+  }
+  if (state.abilityId === "thief_escape_artist") {
+    const evade = callingSignatureMaterial(new pc.Color(.3, 1, .58), .72, .9);
+    for (let index = 0; index < 10; index += 1) {
+      const angle = index / 10 * Math.PI * 2;
+      addCallingSignaturePrimitive(root, "escape-motion-ring", "box", evade, [.04, .03, .28],
+        [Math.sin(angle) * .75, .08, Math.cos(angle) * .75], [0, angle * 180 / Math.PI, 0]);
+    }
+    return [evade];
+  }
   return [];
 }
 
@@ -4783,6 +4845,22 @@ function createTankChallengeTargets(targetIds: string[]): void {
   }
 }
 
+function createThiefDivertedTargets(abilityId: CallingAbilityId, targetIds: string[]): void {
+  for (const targetId of targetIds) {
+    const mob = mobVisuals.get(targetId);
+    if (!mob) continue;
+    const signal = callingSignatureMaterial(new pc.Color(.38, 1, .62), .88, 1.16);
+    const root = new pc.Entity("thief-diverted-target");
+    root.setLocalPosition(0, mob.healthBarY + .7, 0); mob.entity.addChild(root);
+    addCallingSignaturePrimitive(root, "diverted-question-stem", "box", signal, [.055, .2, .055], [0, .1, 0], [0, 0, 18]);
+    addCallingSignaturePrimitive(root, "diverted-question-hook", "sphere", signal, [.13, .13, .08], [.08, .34, 0]);
+    addCallingSignaturePrimitive(root, "diverted-question-dot", "sphere", signal, [.055, .055, .045], [-.04, -.18, 0]);
+    callingImpactVisuals.push({ root, expiresAt: performance.now() + 950, materials: [signal], abilityId });
+    createRangedPopup(new pc.Vec3(mob.state.x, mob.state.y + mob.healthBarY + .9, mob.state.z),
+      abilityId === "thief_decoy" ? "FOOLED" : "LOST IN SMOKE", "melee", false, [.4, 1, .64]);
+  }
+}
+
 function createCallingImpact(effect: CallingAbilityEffect): void {
   if (effect.abilityId === "assassin_death_mark" && effect.targetId) {
     mobVisuals.get(effect.targetId)?.marks.set(effect.casterId, {
@@ -4831,8 +4909,10 @@ function updateCallingPersistentState(state: CallingStateUpdate): void {
   const anchor = targetAnchor ?? casterAnchor;
   if (!anchor) return;
   const root = new pc.Entity(`calling-state:${state.abilityId}`);
-  root.setLocalPosition(0, .03, 0);
-  anchor.addChild(root);
+  const worldAnchored = state.abilityId === "thief_smoke_bomb" || state.abilityId === "thief_decoy";
+  if (worldAnchored) {
+    const position = anchor.getPosition(); root.setPosition(position.x, position.y + .03, position.z); app.root.addChild(root);
+  } else { root.setLocalPosition(0, .03, 0); anchor.addChild(root); }
   addCallingParticleLayers(app, root,
     CALLING_ABILITY_SUSTAIN_PARTICLES[state.abilityId] ?? CALLING_SUSTAIN_PARTICLES[state.pathId], true);
   const materials = addCallingPersistentSignature(root, state);
@@ -11709,6 +11789,9 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   });
   room.onMessage("tank:challenge-targets", (message: { casterId: string; targetIds: string[] }) => {
     createTankChallengeTargets(message.targetIds);
+  });
+  room.onMessage("thief:diverted-targets", (message: { casterId: string; abilityId: CallingAbilityId; targetIds: string[] }) => {
+    createThiefDivertedTargets(message.abilityId, message.targetIds);
   });
   room.onMessage("assassin:mark-strike", (message: { casterId: string; mobId: string; bonusDamage: number; empowered: boolean; defeated: boolean }) => {
     const mob = mobVisuals.get(message.mobId);

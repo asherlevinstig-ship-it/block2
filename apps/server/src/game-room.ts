@@ -451,6 +451,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly stealthUntil = new Map<string, number>();
   private readonly assassinShadowBonus = new Map<string, number>();
   private readonly pathConcealedUntil = new Map<string, number>();
+  private readonly thiefDecoys = new Map<string, { x: number; y: number; z: number; until: number }>();
   private readonly assassinBossConcealedUntil = new Map<string, number>();
   private readonly rangerPinning = new Map<string, { mobId: string; stacks: number; expiresAt: number }>();
   private readonly rangerSlows = new Map<string, { until: number; multiplier: number }>();
@@ -5255,32 +5256,43 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     } else if (abilityId === "thief_smoke_bomb") {
       durationMs = 2_500 + rank * 350 + (augmentId === "smoke_dense_cloud" ? 2_000 : 0);
       const radius = 6 + rank;
-      let diverted = 0;
+      const divertedMobIds: string[] = [];
       for (const [mobId, awareness] of this.mobAwareness) if (awareness.targetId === client.sessionId) {
         const mob = this.state.mobs.get(mobId);
         if (mob && Math.hypot(mob.x - player.x, mob.z - player.z) <= radius) {
-          this.mobAwareness.delete(mobId); mob.targetId = ""; mob.awarenessState = "search"; diverted += 1;
+          this.mobAwareness.delete(mobId); mob.targetId = ""; mob.awarenessState = "search"; divertedMobIds.push(mobId);
         }
       }
       this.pathConcealedUntil.set(client.sessionId, now + durationMs);
       const stamina = 20 + rank * 3 + (augmentId === "smoke_second_wind" ? 20 : 0), staminaBefore = player.stamina;
       player.stamina = Math.min(player.maxStamina, player.stamina + stamina);
-      detail = `${diverted} ENEM${diverted === 1 ? "Y" : "IES"} DIVERTED · +${stamina} STAMINA`;
-      this.grantCallingTrial(client.sessionId, "smoke_dense_cloud", diverted);
+      detail = `${divertedMobIds.length} ENEM${divertedMobIds.length === 1 ? "Y" : "IES"} DIVERTED · +${stamina} STAMINA`;
+      this.grantCallingTrial(client.sessionId, "smoke_dense_cloud", divertedMobIds.length);
       this.grantCallingTrial(client.sessionId, "smoke_second_wind", player.stamina - staminaBefore);
+      if (divertedMobIds.length > 0) {
+        const diverted = { casterId: client.sessionId, abilityId, targetIds: divertedMobIds };
+        this.broadcast("thief:diverted-targets", diverted); client.send("thief:diverted-targets", diverted);
+      }
     } else if (abilityId === "thief_decoy") {
       durationMs = 3_500 + rank * 250;
       const targets = nearbyMobs(8 + rank * .5 + (augmentId === "decoy_wide_stage" ? 3 : 0));
+      const decoyId = `thief-decoy:${client.sessionId}`;
+      this.thiefDecoys.set(decoyId, { x: player.x, y: player.y, z: player.z, until: now + durationMs });
       for (const [mobId, mob] of targets) {
-        const awareness = this.mobAwareness.get(mobId);
-        if (awareness?.targetId === client.sessionId) this.mobAwareness.delete(mobId);
-        mob.targetId = ""; mob.awarenessState = "search";
+        const awareness = createMobAwareness();
+        provokeMob(awareness, { id: decoyId, x: player.x, y: player.y, z: player.z, health: 1 }, now);
+        this.mobAwareness.set(mobId, awareness);
+        mob.targetId = decoyId; mob.awarenessState = "search";
         this.staggerMob(mobId, mob, now, 700 + rank * 100 + (augmentId === "decoy_flash_charge" ? 800 : 0), true);
       }
       this.pathConcealedUntil.set(client.sessionId, now + durationMs);
       detail = `${targets.length} ENEM${targets.length === 1 ? "Y" : "IES"} DECOYED · CONCEALED`;
       this.grantCallingTrial(client.sessionId, "decoy_wide_stage", targets.length);
       this.grantCallingTrial(client.sessionId, "decoy_flash_charge", targets.length);
+      if (targets.length > 0) {
+        const diverted = { casterId: client.sessionId, abilityId, targetIds: targets.map(([mobId]) => mobId) };
+        this.broadcast("thief:diverted-targets", diverted); client.send("thief:diverted-targets", diverted);
+      }
     } else if (abilityId === "thief_escape_artist") {
       const staminaBefore = player.stamina, healthBefore = player.health;
       durationMs = 700 + rank * 80 + (augmentId === "escape_extended_window" ? 500 : 0);
@@ -6968,6 +6980,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         && this.roamingAllowed(mobId, player)
         && this.championAllowed(mobId, player)
         && (isStoneBruteGroupMob(mobId) || !isInStoneBruteArena(player.x, player.z)));
+      for (const [id, decoy] of this.thiefDecoys) {
+        if (now >= decoy.until) { this.thiefDecoys.delete(id); continue; }
+        if (Math.abs(decoy.y - mob.y) <= 1.75) players.push({ id, x: decoy.x, y: decoy.y, z: decoy.z, health: 1 });
+      }
       const awareness = this.mobAwareness.get(mobId) ?? createMobAwareness();
       this.mobAwareness.set(mobId, awareness);
       const previousTarget = awareness.targetId;

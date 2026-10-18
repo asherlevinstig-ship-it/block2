@@ -147,6 +147,23 @@ describe("hotbar Calling abilities", () => {
     expect(internal.callingSpecialReadyAt.has("hero")).toBe(false);
   });
 
+  it("makes Decoy a real temporary enemy target and reports fooled mobs", () => {
+    const { internal, player, client, broadcast } = fixture("thief", 70);
+    const mob = new MobState(); Object.assign(mob, { x: 52, y: 8, z: 50, alive: true, health: 12, targetId: "hero" });
+    internal.state.mobs.set("pursuer", mob);
+    internal.mobAwareness.set("pursuer", { targetId: "hero", lastSeen: { x: 50, y: 8, z: 50 }, seenAt: 10_000 });
+    internal.handleCallingAbilityEquip(client, { abilityId: "thief_decoy" });
+    internal.handleCallingAbility(client, { requestId: "throw-decoy" });
+    const decoyId = "thief-decoy:hero";
+    expect(internal.thiefDecoys.get(decoyId)).toEqual({ x: player.x, y: player.y, z: player.z, until: 14_250 });
+    expect(internal.mobAwareness.get("pursuer").targetId).toBe(decoyId);
+    expect(mob.awarenessState).toBe("search");
+    expect(client.send).toHaveBeenCalledWith("thief:diverted-targets", {
+      casterId: "hero", abilityId: "thief_decoy", targetIds: ["pursuer"],
+    });
+    expect(broadcast).toHaveBeenCalledWith("thief:diverted-targets", expect.objectContaining({ abilityId: "thief_decoy" }));
+  });
+
   it("revives only a fallen party member after a full channel, then consumes the rescue window", () => {
     const { room, internal, player, client, broadcast } = fixture("healer", 140);
     vi.spyOn(internal, "persistPlayer").mockResolvedValue(undefined);

@@ -91,13 +91,14 @@ export const CALLING_IMPACT_PARTICLES: Record<CallingAbilityId, readonly Particl
     layer("glow", green, 12, 1, .24, .8, 1.2, .7, .38, .5),
   ],
   thief_decoy: [
-    layer("smoke", [.29, .43, .34], 39, 1.9, .64, .55, .75, .35, .6, .85),
-    layer("glow", green, 25, 1.55, .28, .36, .5, .35, .54, 1.15),
-    layer("smoke", smoke, 22, 1.4, .44, .22, .45, .25, .56, 1.65),
+    layer("smoke", [.29, .43, .34], 34, 1.75, .6, .62, .82, .35, .58, .82),
+    layer("glow", green, 32, 1.65, .3, .42, .58, .82, .62, 1.08),
+    layer("streak", lime, 20, .76, .24, .48, 1.55, .72, .7, .88),
   ],
   thief_escape_artist: [
-    layer("streak", lime, 43, .67, .43, .56, 4.5, .55, .75, .75, true),
-    layer("dust", smoke, 18, 1, .5, .65, 2.1, .28, .35, .08),
+    layer("streak", lime, 58, .72, .46, .62, 5.2, .58, .82, .78, true),
+    layer("spark", warmWhite, 24, .62, .12, .8, 2.8, .9, .64, .74),
+    layer("dust", smoke, 20, 1, .5, .7, 2.2, .3, .35, .08),
   ],
   ranger_volley_focus: [
     layer("streak", gold, 31, .8, .38, .42, 3.3, .35, .8, .95, true),
@@ -178,8 +179,13 @@ export const CALLING_ABILITY_SUSTAIN_PARTICLES: Partial<Record<CallingAbilityId,
     layer("glow", green, 9, .72, .19, .95, .38, .45, .4, .38),
   ],
   thief_decoy: [
-    layer("smoke", [.22, .34, .27], 34, 1.1, .72, .72, .32, .48, .58, .7),
-    layer("glow", green, 18, .86, .28, .48, .24, .42, .44, 1.05),
+    layer("smoke", [.22, .34, .27], 28, 1.15, .68, .7, .3, .46, .52, .68),
+    layer("glow", green, 26, .95, .3, .52, .3, .7, .52, 1.02),
+    layer("streak", lime, 10, .62, .18, .42, .62, .68, .5, .82),
+  ],
+  thief_escape_artist: [
+    layer("streak", lime, 30, .58, .3, .5, 2.8, .45, .7, .78, true),
+    layer("spark", warmWhite, 12, .48, .09, .55, 1.2, .65, .46, .78),
   ],
   healer_resurrection: [
     layer("glow", mint, 32, 1.2, .38, .92, .28, 1.15, .58, .3),
