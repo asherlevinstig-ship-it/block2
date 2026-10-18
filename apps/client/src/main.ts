@@ -4672,6 +4672,36 @@ function addCallingSignature(root: pc.Entity, abilityId: CallingAbilityId): pc.S
     }
     return [steel, freedom];
   }
+  if (abilityId === "ranger_volley_focus") {
+    const shaft = callingSignatureMaterial(new pc.Color(.86, .64, .2), .82, .78);
+    const head = callingSignatureMaterial(new pc.Color(1, .94, .68), .94, 1.18);
+    for (let index = 0; index < 5; index += 1) {
+      const x = (index - 2) * .22;
+      addCallingSignaturePrimitive(root, "volley-loaded-shaft", "box", shaft, [.025, .025, .58], [x, .65 + Math.abs(index - 2) * .08, -.15], [-10, 0, 0]);
+      addCallingSignaturePrimitive(root, "volley-loaded-head", "box", head, [.07, .04, .11], [x, .7 + Math.abs(index - 2) * .08, -.76], [35, 45, 35]);
+    }
+    return [shaft, head];
+  }
+  if (abilityId === "ranger_disengage") {
+    const trail = callingSignatureMaterial(new pc.Color(.12, .82, .78), .72, .92);
+    const landing = callingSignatureMaterial(new pc.Color(1, .76, .28), .9, 1.08);
+    for (let index = 0; index < 8; index += 1)
+      addCallingSignaturePrimitive(root, "disengage-kick-trail", "box", index % 3 === 0 ? landing : trail,
+        [.04, .045, .34 + index * .08], [(index % 2 ? -1 : 1) * (.16 + index * .06), .12 + index % 3 * .12, .2 + index * .2],
+        [index % 2 ? 16 : -16, index % 2 ? 12 : -12, 0]);
+    return [trail, landing];
+  }
+  if (abilityId === "ranger_deadeye") {
+    const sight = callingSignatureMaterial(new pc.Color(1, .74, .18), .88, 1.18);
+    const focus = callingSignatureMaterial(new pc.Color(.72, 1, .96), .9, 1.12);
+    for (let index = 0; index < 12; index += 1) {
+      const angle = index / 12 * Math.PI * 2;
+      addCallingSignaturePrimitive(root, "deadeye-lock-ring", "box", index % 3 === 0 ? focus : sight,
+        [.045, .045, .2], [Math.sin(angle) * .65, 1.15 + Math.cos(angle) * .65, -.65], [0, angle * 180 / Math.PI, angle * 180 / Math.PI]);
+    }
+    addCallingSignaturePrimitive(root, "deadeye-aim-line", "box", focus, [.025, .025, 1.8], [0, 1.15, -1.8]);
+    return [sight, focus];
+  }
   if (abilityId === "tank_earthbreaker") {
     const rock = callingSignatureMaterial(new pc.Color(.31, .22, .15), .9, .12);
     const hot = callingSignatureMaterial(new pc.Color(.95, .38, .08), .72, .9);
@@ -4785,6 +4815,29 @@ function addCallingPersistentSignature(root: pc.Entity, state: CallingStateUpdat
     }
     return [evade];
   }
+  if (state.abilityId === "ranger_volley_focus" || state.abilityId === "ranger_disengage") {
+    const arrow = callingSignatureMaterial(new pc.Color(1, .75, .24), .86, 1.04);
+    const charges = Math.max(1, Math.min(6, state.charges ?? 1));
+    for (let index = 0; index < charges; index += 1) {
+      const x = (index - (charges - 1) / 2) * .2;
+      addCallingSignaturePrimitive(root, "ranger-charged-arrow", "box", arrow, [.025, .025, .48], [x, 1.22 + Math.abs(x) * .2, -.5], [-8, 0, 0]);
+      addCallingSignaturePrimitive(root, "ranger-charged-arrowhead", "box", arrow, [.065, .04, .1], [x, 1.26 + Math.abs(x) * .2, -1.02], [35, 45, 35]);
+    }
+    return [arrow];
+  }
+  if (state.abilityId === "ranger_deadeye") {
+    const sight = callingSignatureMaterial(new pc.Color(1, .7, .12), .9, 1.18);
+    const precision = callingSignatureMaterial(new pc.Color(.7, 1, .96), .88, 1.1);
+    const charges = Math.max(1, Math.min(3, state.charges ?? 1));
+    for (let index = 0; index < 16; index += 1) {
+      const angle = index / 16 * Math.PI * 2;
+      addCallingSignaturePrimitive(root, "deadeye-active-sight", "box", index % 4 === 0 ? precision : sight,
+        [.035, .035, .16], [Math.sin(angle) * .62, 1.18 + Math.cos(angle) * .62, -.78], [0, angle * 180 / Math.PI, angle * 180 / Math.PI]);
+    }
+    for (let index = 0; index < charges; index += 1)
+      addCallingSignaturePrimitive(root, "deadeye-round", "sphere", precision, [.065, .065, .065], [(index - (charges - 1) / 2) * .22, .22, -.52]);
+    return [sight, precision];
+  }
   return [];
 }
 
@@ -4859,6 +4912,58 @@ function createThiefDivertedTargets(abilityId: CallingAbilityId, targetIds: stri
     createRangedPopup(new pc.Vec3(mob.state.x, mob.state.y + mob.healthBarY + .9, mob.state.z),
       abilityId === "thief_decoy" ? "FOOLED" : "LOST IN SMOKE", "melee", false, [.4, 1, .64]);
   }
+}
+
+function createRangerDisengagePath(message: { x: number; y: number; z: number; targetX: number; targetY: number; targetZ: number }): void {
+  const root = new pc.Entity("ranger-disengage-path"); app.root.addChild(root);
+  const trail = callingSignatureMaterial(new pc.Color(.12, .86, .82), .76, 1.02);
+  const landing = callingSignatureMaterial(new pc.Color(1, .72, .2), .9, 1.16);
+  const dx = message.targetX - message.x, dy = message.targetY - message.y, dz = message.targetZ - message.z;
+  const yaw = Math.atan2(dx, dz) * 180 / Math.PI;
+  for (let index = 0; index < 9; index += 1) {
+    const progress = index / 8;
+    addCallingSignaturePrimitive(root, "disengage-afterimage", "box", index === 8 ? landing : trail,
+      [.055, .04, .24], [message.x + dx * progress, message.y + .08 + dy * progress, message.z + dz * progress], [0, yaw, 0]);
+  }
+  for (let index = 0; index < 12; index += 1) {
+    const angle = index / 12 * Math.PI * 2;
+    addCallingSignaturePrimitive(root, "disengage-landing-ring", "box", index % 3 === 0 ? landing : trail,
+      [.045, .025, .22], [message.targetX + Math.sin(angle) * .72, message.targetY + .07, message.targetZ + Math.cos(angle) * .72], [0, angle * 180 / Math.PI, 0]);
+  }
+  callingImpactVisuals.push({ root, expiresAt: performance.now() + 720, materials: [trail, landing], abilityId: "ranger_disengage" });
+}
+
+function createRangerFocusedHit(message: { mobId: string; abilityId: CallingAbilityId; bonusDamage: number; remaining: number }): void {
+  const mob = mobVisuals.get(message.mobId); if (!mob) return;
+  const root = new pc.Entity("ranger-focused-hit"); root.setLocalPosition(0, mob.healthBarY * .55, 0); mob.entity.addChild(root);
+  const primary = callingSignatureMaterial(new pc.Color(1, .72, .14), .92, 1.24);
+  const edge = callingSignatureMaterial(new pc.Color(.78, 1, .94), .94, 1.2);
+  const segments = message.abilityId === "ranger_deadeye" ? 12 : 8;
+  for (let index = 0; index < segments; index += 1) {
+    const angle = index / segments * Math.PI * 2;
+    addCallingSignaturePrimitive(root, "focused-impact-lock", "box", index % 3 === 0 ? edge : primary,
+      [.04, .04, .22], [Math.sin(angle) * .72, .72 + Math.cos(angle) * .72, 0], [0, 0, angle * 180 / Math.PI]);
+  }
+  callingImpactVisuals.push({ root, expiresAt: performance.now() + 620, materials: [primary, edge], abilityId: message.abilityId });
+  createRangedPopup(new pc.Vec3(mob.state.x, mob.state.y + mob.healthBarY + .95, mob.state.z),
+    `${message.abilityId === "ranger_deadeye" ? "DEADEYE" : "FOCUSED"} · +${message.bonusDamage}`, "damage", false, [1, .78, .28]);
+}
+
+function createRangerPinUpdate(message: { mobId: string; stacks: number; rooted: boolean; durationMs: number }): void {
+  const mob = mobVisuals.get(message.mobId); if (!mob) return;
+  const root = new pc.Entity("ranger-pin-state"); root.setLocalPosition(0, .03, 0); mob.entity.addChild(root);
+  const snare = callingSignatureMaterial(new pc.Color(.26, .86, .56), .82, .92);
+  const lock = callingSignatureMaterial(new pc.Color(1, .76, .22), .9, 1.16);
+  const segments = message.rooted ? 12 : Math.max(3, message.stacks * 3);
+  for (let index = 0; index < segments; index += 1) {
+    const angle = index / segments * Math.PI * 2;
+    addCallingSignaturePrimitive(root, message.rooted ? "pin-root-cage" : "pin-slow-marker", "box", message.rooted && index % 3 === 0 ? lock : snare,
+      message.rooted ? [.045, .36, .045] : [.04, .15, .04],
+      [Math.sin(angle) * .7, message.rooted ? .45 : .14, Math.cos(angle) * .7], [message.rooted ? (index % 2 ? 18 : -18) : 0, angle * 180 / Math.PI, 0]);
+  }
+  callingImpactVisuals.push({ root, expiresAt: performance.now() + message.durationMs, materials: [snare, lock], abilityId: "ranger_volley_focus" });
+  createRangedPopup(new pc.Vec3(mob.state.x, mob.state.y + mob.healthBarY + .8, mob.state.z),
+    message.rooted ? "PINNED · ROOTED" : `PIN ${message.stacks}/3 · SLOWED`, "stagger", false, message.rooted ? [1, .78, .26] : [.38, .9, .58]);
 }
 
 function createCallingImpact(effect: CallingAbilityEffect): void {
@@ -11792,6 +11897,15 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   });
   room.onMessage("thief:diverted-targets", (message: { casterId: string; abilityId: CallingAbilityId; targetIds: string[] }) => {
     createThiefDivertedTargets(message.abilityId, message.targetIds);
+  });
+  room.onMessage("ranger:disengage-path", (message: { casterId: string; x: number; y: number; z: number; targetX: number; targetY: number; targetZ: number; yaw: number }) => {
+    createRangerDisengagePath(message);
+  });
+  room.onMessage("ranger:focused-shot", (message: { casterId: string; mobId: string; abilityId: CallingAbilityId; bonusDamage: number; remaining: number }) => {
+    createRangerFocusedHit(message);
+  });
+  room.onMessage("ranger:pin-update", (message: { casterId: string; mobId: string; stacks: number; rooted: boolean; durationMs: number }) => {
+    createRangerPinUpdate(message);
   });
   room.onMessage("assassin:mark-strike", (message: { casterId: string; mobId: string; bonusDamage: number; empowered: boolean; defeated: boolean }) => {
     const mob = mobVisuals.get(message.mobId);

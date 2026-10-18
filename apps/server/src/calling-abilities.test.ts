@@ -164,6 +164,19 @@ describe("hotbar Calling abilities", () => {
     expect(broadcast).toHaveBeenCalledWith("thief:diverted-targets", expect.objectContaining({ abilityId: "thief_decoy" }));
   });
 
+  it("publishes Ranger empowered-shot identity and remaining charges", () => {
+    const { internal, player, client, broadcast } = fixture("ranger", 70);
+    player.mainHandTag = "ranged";
+    const mob = new MobState(); Object.assign(mob, { x: 50, y: 8, z: 53, alive: true, health: 20, maxHealth: 20 });
+    internal.state.mobs.set("target", mob);
+    internal.handleCallingAbilityEquip(client, { abilityId: "ranger_deadeye" });
+    internal.handleCallingAbility(client, { requestId: "deadeye" });
+    expect(internal.buildPathDamageBonus(player, mob, "target", "hero", 10_001, "weapon")).toBeGreaterThanOrEqual(4);
+    expect(broadcast).toHaveBeenCalledWith("ranger:focused-shot", expect.objectContaining({
+      casterId: "hero", mobId: "target", abilityId: "ranger_deadeye", remaining: 1,
+    }));
+  });
+
   it("revives only a fallen party member after a full channel, then consumes the rescue window", () => {
     const { room, internal, player, client, broadcast } = fixture("healer", 140);
     vi.spyOn(internal, "persistPlayer").mockResolvedValue(undefined);

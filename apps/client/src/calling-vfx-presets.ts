@@ -101,16 +101,19 @@ export const CALLING_IMPACT_PARTICLES: Record<CallingAbilityId, readonly Particl
     layer("dust", smoke, 20, 1, .5, .7, 2.2, .3, .35, .08),
   ],
   ranger_volley_focus: [
-    layer("streak", gold, 31, .8, .38, .42, 3.3, .35, .8, .95, true),
-    layer("glow", warmWhite, 16, 1, .3, .45, .7, .65, .5, 1),
+    layer("streak", gold, 46, .88, .4, .5, 3.8, .42, .86, .94, true),
+    layer("glow", warmWhite, 24, 1.05, .3, .5, .8, .72, .56, 1),
+    layer("spark", teal, 14, .62, .1, .55, 1.6, .52, .46, .82),
   ],
   ranger_disengage: [
-    layer("streak", teal, 44, .75, .38, .62, 4.2, .5, .8, .75, true),
-    layer("dust", smoke, 25, 1.1, .54, .8, 2.1, .32, .42, .1),
+    layer("streak", teal, 58, .82, .42, .72, 5.1, .56, .86, .78, true),
+    layer("dust", smoke, 32, 1.2, .58, .95, 2.5, .35, .48, .1),
+    layer("spark", gold, 14, .58, .1, .65, 1.7, .48, .5, .8),
   ],
   ranger_deadeye: [
-    layer("streak", gold, 17, .8, .31, .18, 3.4, .15, .83, 1.1, true),
-    layer("glow", warmWhite, 23, 1.35, .29, .36, .5, .4, .64, 1.05),
+    layer("streak", gold, 34, .92, .34, .22, 4.4, .18, .9, 1.08, true),
+    layer("glow", warmWhite, 34, 1.4, .3, .42, .58, .46, .72, 1.05),
+    layer("spark", teal, 18, .7, .1, .36, 1.2, .3, .54, .92),
   ],
   healer_field_mend: [
     layer("glow", mint, 46, 1.5, .42, .68, .82, 1.7, .8, .32),
@@ -186,6 +189,18 @@ export const CALLING_ABILITY_SUSTAIN_PARTICLES: Partial<Record<CallingAbilityId,
   thief_escape_artist: [
     layer("streak", lime, 30, .58, .3, .5, 2.8, .45, .7, .78, true),
     layer("spark", warmWhite, 12, .48, .09, .55, 1.2, .65, .46, .78),
+  ],
+  ranger_volley_focus: [
+    layer("streak", gold, 24, .7, .28, .48, 1.8, .28, .62, .9, true),
+    layer("spark", warmWhite, 12, .58, .08, .52, .72, .38, .46, .86),
+  ],
+  ranger_disengage: [
+    layer("streak", teal, 18, .6, .28, .44, 1.8, .35, .62, .82, true),
+    layer("dust", smoke, 12, .75, .34, .52, .65, .18, .28, .08),
+  ],
+  ranger_deadeye: [
+    layer("streak", gold, 18, .72, .26, .3, 2.1, .2, .68, 1.02, true),
+    layer("glow", warmWhite, 16, .82, .2, .36, .34, .28, .54, 1),
   ],
   healer_resurrection: [
     layer("glow", mint, 32, 1.2, .38, .92, .28, 1.15, .58, .3),

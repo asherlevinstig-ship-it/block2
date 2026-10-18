@@ -67,6 +67,16 @@ describe("calling particle identity and budget", () => {
     expect(CALLING_ABILITY_SUSTAIN_PARTICLES.thief_escape_artist?.some(layer => layer.kind === "streak")).toBe(true);
   });
 
+  it("separates Ranger volleys, retreat movement, and precision aiming", () => {
+    expect(CALLING_IMPACT_PARTICLES.ranger_volley_focus.filter(layer => layer.kind === "streak")
+      .reduce((sum, layer) => sum + layer.count, 0)).toBeGreaterThanOrEqual(40);
+    expect(CALLING_IMPACT_PARTICLES.ranger_disengage.some(layer => layer.kind === "dust")).toBe(true);
+    expect(CALLING_IMPACT_PARTICLES.ranger_deadeye.some(layer => layer.kind === "glow")).toBe(true);
+    expect(CALLING_ABILITY_SUSTAIN_PARTICLES.ranger_volley_focus?.some(layer => layer.kind === "streak")).toBe(true);
+    expect(CALLING_ABILITY_SUSTAIN_PARTICLES.ranger_disengage?.some(layer => layer.kind === "dust")).toBe(true);
+    expect(CALLING_ABILITY_SUSTAIN_PARTICLES.ranger_deadeye?.length).toBeGreaterThanOrEqual(2);
+  });
+
   it("separates focused healing, area renewal, and resurrection", () => {
     expect(CALLING_IMPACT_PARTICLES.healer_field_mend.some(layer => layer.kind === "streak")).toBe(true);
     expect(Math.max(...CALLING_IMPACT_PARTICLES.healer_renewal.map(layer => layer.radius))).toBeGreaterThanOrEqual(2);

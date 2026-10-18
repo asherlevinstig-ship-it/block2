@@ -5304,6 +5304,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.grantCallingTrial(client.sessionId, "escape_extended_window", staminaBefore < 25 ? 1 : 0);
       this.grantCallingTrial(client.sessionId, "escape_clean_getaway", healthBefore < player.maxHealth ? 1 : 0);
     } else if (abilityId === "ranger_disengage") {
+      const origin = { x: player.x, y: player.y, z: player.z };
       const radians = (parsed.data.yaw ?? player.yaw) * Math.PI / 180;
       const leap = 3 + (augmentId === "disengage_long_leap" ? 2 : 0);
       const moved = resolvePlayerMotion({ x: player.x, y: player.y, z: player.z },
@@ -5312,6 +5313,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.rangerCallingFocus.set(client.sessionId, { hits: 2, bonus: 1 });
       detail = `DISENGAGED · NEXT 2 SHOTS +1`;
       this.grantCallingTrial(client.sessionId, "disengage_long_leap", nearbyMobs(8).length > 0 ? 1 : 0);
+      this.broadcast("ranger:disengage-path", { casterId: client.sessionId, ...origin,
+        targetX: player.x, targetY: player.y, targetZ: player.z, yaw: parsed.data.yaw ?? player.yaw });
     } else if (abilityId === "ranger_deadeye") {
       const hits = 2 + (augmentId === "deadeye_eagle_eye" ? 1 : 0);
       const bonus = (rank >= 4 ? 4 : 3) + (augmentId === "deadeye_execution_rounds" ? 2 : 0);
@@ -5563,6 +5566,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         this.callingState(playerId, "ranger", callingAbility, "EMPOWERED SHOTS", {
           charges: Math.max(0, callingFocus.hits - 1), clear: callingFocus.hits <= 1,
         });
+        this.broadcast("ranger:focused-shot", { casterId: playerId, mobId, abilityId: callingAbility,
+          bonusDamage: callingFocus.bonus, remaining: Math.max(0, callingFocus.hits - 1) });
         this.buildPathProc(playerId, "ranger", "FOCUSED SHOT", `+${callingFocus.bonus} DAMAGE · ${callingFocus.hits - 1} SHOTS REMAIN`);
       }
       return (rank > 0 ? rank >= 4 ? 2 : 1 : 0) + Math.ceil(this.equipmentAffixTier(player, "piercing") / 2)
@@ -8512,12 +8517,15 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
             { playerId: sessionId, specializationId: "trapper", until: now + rootMs });
           this.buildPathProc(sessionId, "ranger", rangerSpecialization === "trapper" ? "TRAPPER" : "PINNING SHOT",
             `ROOTED · ${(rootMs / 1_000).toFixed(1)}s${pinBonusDamage ? " · +2 DAMAGE" : ""}`);
+          this.broadcast("ranger:pin-update", { casterId: sessionId, mobId, stacks: 3, rooted: true, durationMs: rootMs });
         } else {
           this.rangerPinning.set(sessionId, { mobId, stacks: pinStacks, expiresAt: now + 4_000 });
           const snaringTier = this.equipmentAffixTier(player, "snaring");
           this.rangerSlows.set(mobId, { until: now + 1_800 + snaringTier * 200,
             multiplier: Math.max(.5, (rangerSpecialization === "trapper" ? .58 : .72) - snaringTier * .04) });
           this.buildPathProc(sessionId, "ranger", "PINNING SHOT", `${pinStacks} / 3 · TARGET SLOWED`);
+          this.broadcast("ranger:pin-update", { casterId: sessionId, mobId, stacks: pinStacks, rooted: false,
+            durationMs: 1_800 + snaringTier * 200 });
         }
       }
       const rootShockwave = pending.mainHandId === "rootbound_hammer" && pending.step === 3;
