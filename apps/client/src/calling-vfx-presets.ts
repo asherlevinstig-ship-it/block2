@@ -55,16 +55,18 @@ export const CALLING_IMPACT_PARTICLES: Record<CallingAbilityId, readonly Particl
     layer("smoke", [.42, .39, .34], 20, 1.9, .95, 2.3, 1.3, .48, .38, .18),
   ],
   mage_arcane_surge: [
-    layer("glow", violet, 48, 1.15, .42, 1.5, 2.6, 1.4, .82, .35),
-    layer("streak", [.84, .72, 1], 27, .65, .36, .8, 3.6, 2.1, .8, .55),
+    layer("glow", violet, 58, 1.2, .46, 1.75, 3.1, 1.15, .88, .22),
+    layer("streak", [.84, .72, 1], 32, .68, .38, 1.05, 4.2, 1.9, .88, .42),
+    layer("spark", silver, 18, .5, .12, 1.45, 4.8, 1.4, .92, .18),
   ],
   mage_mana_shield: [
-    layer("glow", azure, 28, 1.3, .45, .9, 1.1, .9, .68, .8),
-    layer("spark", silver, 16, .9, .14, .9, 1.7, 1.2, .76, 1),
+    layer("glow", azure, 38, 1.35, .48, 1.05, 1.35, .8, .72, .68),
+    layer("spark", silver, 24, .92, .14, 1.08, 2.1, 1.1, .84, .82),
   ],
   mage_overload: [
-    layer("streak", magenta, 42, 1, .42, .85, 3.1, 1.6, .85, .65),
-    layer("glow", violet, 24, 1.3, .43, .6, 1, 1.25, .7, .95),
+    layer("streak", magenta, 52, 1.05, .45, 1.05, 3.8, 1.45, .92, .48),
+    layer("glow", violet, 30, 1.38, .48, .72, 1.2, 1.18, .76, .82),
+    layer("spark", silver, 18, .6, .11, .9, 3.4, 1.5, .86, .72),
   ],
   assassin_vanish: [
     layer("smoke", shadow, 46, 1.45, .7, .7, 1.4, 1.0, .6, .7),
@@ -144,8 +146,12 @@ export const CALLING_ABILITY_SUSTAIN_PARTICLES: Partial<Record<CallingAbilityId,
     layer("spark", silver, 12, .62, .11, .92, .45, .55, .52, .85),
   ],
   mage_mana_shield: [
-    layer("glow", azure, 24, 1.05, .38, .92, .28, .65, .48, .75),
-    layer("spark", silver, 12, .7, .12, .9, .55, .8, .52, .95),
+    layer("glow", azure, 32, 1.08, .4, 1.02, .3, .58, .52, .68),
+    layer("spark", silver, 16, .72, .12, 1, .62, .72, .58, .86),
+  ],
+  mage_overload: [
+    layer("streak", magenta, 28, .72, .32, .82, .82, .78, .68, .7),
+    layer("glow", violet, 22, .9, .3, .68, .38, .7, .5, .88),
   ],
   assassin_vanish: [
     layer("smoke", shadow, 28, 1.2, .62, .68, .42, .72, .44, .42),

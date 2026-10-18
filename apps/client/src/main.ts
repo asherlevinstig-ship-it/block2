@@ -4403,11 +4403,18 @@ const powerTelegraphs = new Map<string, PowerTelegraphVisual>();
 const powerImpactVisuals: PowerImpactVisual[] = [];
 interface CallingAnticipationVisual { root: pc.Entity; expiresAt: number }
 const callingAnticipationVisuals: CallingAnticipationVisual[] = [];
-interface CallingImpactVisual { root: pc.Entity; expiresAt: number; materials: pc.StandardMaterial[] }
+interface CallingImpactVisual {
+  root: pc.Entity;
+  expiresAt: number;
+  materials: pc.StandardMaterial[];
+  abilityId: CallingAbilityId;
+}
 const callingImpactVisuals: CallingImpactVisual[] = [];
 interface CallingPersistentVisual {
   root: pc.Entity;
   expiresAt: number;
+  materials: pc.StandardMaterial[];
+  abilityId: CallingAbilityId;
 }
 const callingPersistentVisuals = new Map<string, CallingPersistentVisual>();
 const powerDebrisVisuals: PowerDebrisVisual[] = [];
@@ -4455,18 +4462,61 @@ function callingSignatureMaterial(color: pc.Color, opacity: number, emissive = .
   return material;
 }
 
-function addCallingSignaturePrimitive(root: pc.Entity, name: string, type: "sphere" | "cylinder",
-  material: pc.StandardMaterial, scale: readonly [number, number, number], position: readonly [number, number, number]): void {
+function addCallingSignaturePrimitive(root: pc.Entity, name: string, type: "sphere" | "cylinder" | "box",
+  material: pc.StandardMaterial, scale: readonly [number, number, number], position: readonly [number, number, number],
+  rotation: readonly [number, number, number] = [0, 0, 0]): void {
   const entity = new pc.Entity(name);
   entity.addComponent("render", { type });
   if (entity.render) { entity.render.material = material; entity.render.castShadows = false; }
   entity.setLocalScale(scale[0], scale[1], scale[2]);
   entity.setLocalPosition(position[0], position[1], position[2]);
+  entity.setLocalEulerAngles(rotation[0], rotation[1], rotation[2]);
   root.addChild(entity);
 }
 
 /** A few shared-material primitives guarantee silhouette readability while particles supply motion. */
 function addCallingSignature(root: pc.Entity, abilityId: CallingAbilityId): pc.StandardMaterial[] {
+  if (abilityId === "mage_arcane_surge") {
+    const rune = callingSignatureMaterial(new pc.Color(.35, .12, .9), .68, .75);
+    const flare = callingSignatureMaterial(new pc.Color(.78, .62, 1), .82, 1.1);
+    addCallingSignaturePrimitive(root, "arcane-field", "cylinder", rune, [1.05, .025, 1.05], [0, .055, 0]);
+    for (let index = 0; index < 16; index += 1) {
+      const angle = index / 16 * Math.PI * 2;
+      const degrees = angle * 180 / Math.PI;
+      addCallingSignaturePrimitive(root, "arcane-rune", "box", index % 4 === 0 ? flare : rune,
+        [index % 4 === 0 ? .11 : .065, .035, index % 4 === 0 ? .38 : .24],
+        [Math.sin(angle) * 1.38, .09, Math.cos(angle) * 1.38], [0, degrees, 0]);
+    }
+    for (let index = 0; index < 4; index += 1) {
+      addCallingSignaturePrimitive(root, "arcane-spire", "box", flare, [.06, .56, .06],
+        [Math.sin(index * Math.PI / 2) * .48, .62, Math.cos(index * Math.PI / 2) * .48], [0, index * 45, index % 2 ? 28 : -28]);
+    }
+    return [rune, flare];
+  }
+  if (abilityId === "mage_mana_shield") {
+    const shell = callingSignatureMaterial(new pc.Color(.16, .46, 1), .16, .55);
+    const seam = callingSignatureMaterial(new pc.Color(.66, .87, 1), .7, 1.05);
+    addCallingSignaturePrimitive(root, "mana-shell", "sphere", shell, [1.15, 1.42, 1.15], [0, .92, 0]);
+    for (let index = 0; index < 8; index += 1) {
+      const angle = index / 8 * Math.PI * 2;
+      addCallingSignaturePrimitive(root, "mana-seam", "box", seam, [.035, .54, .08],
+        [Math.sin(angle) * 1.08, .92, Math.cos(angle) * 1.08], [0, angle * 180 / Math.PI, index % 2 ? 18 : -18]);
+    }
+    return [shell, seam];
+  }
+  if (abilityId === "mage_overload") {
+    const core = callingSignatureMaterial(new pc.Color(.68, .12, 1), .58, .9);
+    const lightning = callingSignatureMaterial(new pc.Color(1, .36, .88), .88, 1.25);
+    addCallingSignaturePrimitive(root, "overload-core", "sphere", core, [.48, .7, .48], [0, .92, 0]);
+    for (let index = 0; index < 10; index += 1) {
+      const angle = index / 10 * Math.PI * 2;
+      addCallingSignaturePrimitive(root, "overload-arc", index % 3 === 0 ? "box" : "sphere", index % 3 === 0 ? lightning : core,
+        index % 3 === 0 ? [.045, .42, .045] : [.12, .12, .12],
+        [Math.sin(angle) * (.55 + index % 2 * .24), .45 + index % 4 * .32, Math.cos(angle) * (.55 + index % 2 * .24)],
+        [index % 2 ? 32 : -32, angle * 180 / Math.PI, index % 3 ? 20 : -20]);
+    }
+    return [core, lightning];
+  }
   if (abilityId === "thief_smoke_bomb") {
     const dark = callingSignatureMaterial(new pc.Color(.1, .13, .12), .58);
     const rim = callingSignatureMaterial(new pc.Color(.28, .38, .34), .4, .2);
@@ -4497,6 +4547,33 @@ function addCallingSignature(root: pc.Entity, abilityId: CallingAbilityId): pc.S
   return [];
 }
 
+function addCallingPersistentSignature(root: pc.Entity, state: CallingStateUpdate): pc.StandardMaterial[] {
+  if (state.abilityId === "mage_mana_shield") {
+    const shell = callingSignatureMaterial(new pc.Color(.12, .38, .96), .12, .46);
+    const edge = callingSignatureMaterial(new pc.Color(.58, .82, 1), .62, 1);
+    addCallingSignaturePrimitive(root, "mana-barrier", "sphere", shell, [1.08, 1.36, 1.08], [0, .9, 0]);
+    const segments = Math.max(3, Math.min(9, (state.charges ?? 3) * 3));
+    for (let index = 0; index < segments; index += 1) {
+      const angle = index / segments * Math.PI * 2;
+      addCallingSignaturePrimitive(root, "mana-barrier-segment", "box", edge, [.04, .42, .075],
+        [Math.sin(angle) * 1.02, .88 + (index % 2 ? .2 : -.2), Math.cos(angle) * 1.02],
+        [0, angle * 180 / Math.PI, index % 2 ? 24 : -24]);
+    }
+    return [shell, edge];
+  }
+  if (state.abilityId === "mage_overload") {
+    const charged = callingSignatureMaterial(new pc.Color(.94, .23, 1), .82, 1.25);
+    for (let index = 0; index < 6; index += 1) {
+      const angle = index / 6 * Math.PI * 2;
+      addCallingSignaturePrimitive(root, "overload-charge", "box", charged, [.035, .34, .035],
+        [Math.sin(angle) * .72, .62 + index % 3 * .34, Math.cos(angle) * .72],
+        [index % 2 ? 34 : -34, angle * 180 / Math.PI, index % 2 ? 24 : -24]);
+    }
+    return [charged];
+  }
+  return [];
+}
+
 function createCallingImpact(effect: CallingAbilityEffect): void {
   if (effect.abilityId === "assassin_death_mark" && effect.targetId) {
     mobVisuals.get(effect.targetId)?.marks.set(effect.casterId, {
@@ -4522,7 +4599,7 @@ function createCallingImpact(effect: CallingAbilityEffect): void {
   else root.setLocalEulerAngles(0, effect.yaw, 0);
   addCallingParticleLayers(app, root, layers);
   const materials = addCallingSignature(root, abilityId);
-  callingImpactVisuals.push({ root, expiresAt: performance.now() + callingParticleLifetime(layers) * 1000, materials });
+  callingImpactVisuals.push({ root, expiresAt: performance.now() + callingParticleLifetime(layers) * 1000, materials, abilityId });
   const local = localPlayer.getPosition(), pan = enemyCuePan(effect.x, local.x, 14);
   combatAudio.play(effect.pathId === "tank" ? "callingTank" : effect.pathId === "mage" || effect.pathId === "healer" ? "callingMage"
     : effect.pathId === "assassin" ? "callingShadow" : effect.pathId === "thief" ? "callingThief" : "callingRanger", pan);
@@ -4532,7 +4609,7 @@ function createCallingImpact(effect: CallingAbilityEffect): void {
 function updateCallingPersistentState(state: CallingStateUpdate): void {
   const existing = callingPersistentVisuals.get(state.playerId);
   if (existing) {
-    existing.root.destroy(); callingPersistentVisuals.delete(state.playerId);
+    existing.root.destroy(); existing.materials.forEach(material => material.destroy()); callingPersistentVisuals.delete(state.playerId);
   }
   if (state.playerId === room?.sessionId) localCallingState = state.phase === "clear" ? null : state;
   if (state.phase === "clear") return;
@@ -4546,8 +4623,9 @@ function updateCallingPersistentState(state: CallingStateUpdate): void {
   anchor.addChild(root);
   addCallingParticleLayers(app, root,
     CALLING_ABILITY_SUSTAIN_PARTICLES[state.abilityId] ?? CALLING_SUSTAIN_PARTICLES[state.pathId], true);
+  const materials = addCallingPersistentSignature(root, state);
   callingPersistentVisuals.set(state.playerId, {
-    root, expiresAt: state.activeUntil ?? Number.POSITIVE_INFINITY,
+    root, expiresAt: state.activeUntil ?? Number.POSITIVE_INFINITY, materials, abilityId: state.abilityId,
   });
 }
 
@@ -10664,6 +10742,8 @@ app.on("update", (dt: number) => {
   }
   for (let index = callingImpactVisuals.length - 1; index >= 0; index -= 1) {
     const visual = callingImpactVisuals[index]!;
+    if (visual.abilityId === "mage_arcane_surge") visual.root.rotateLocal(0, frameTime * 105, 0);
+    else if (visual.abilityId === "mage_overload") visual.root.rotateLocal(0, frameTime * 165, 0);
     if (animationNow >= visual.expiresAt) {
       visual.root.destroy();
       for (const material of visual.materials) material.destroy();
@@ -10671,8 +10751,10 @@ app.on("update", (dt: number) => {
     }
   }
   for (const [playerId, visual] of callingPersistentVisuals) {
+    if (visual.abilityId === "mage_mana_shield") visual.root.rotateLocal(0, frameTime * 24, 0);
+    else if (visual.abilityId === "mage_overload") visual.root.rotateLocal(0, frameTime * 92, 0);
     if (Date.now() >= visual.expiresAt) {
-      visual.root.destroy(); callingPersistentVisuals.delete(playerId);
+      visual.root.destroy(); visual.materials.forEach(material => material.destroy()); callingPersistentVisuals.delete(playerId);
       if (playerId === room?.sessionId) localCallingState = null;
     }
   }
@@ -12104,7 +12186,9 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       for (const material of visual.materials) material.destroy();
     }
     callingImpactVisuals.length = 0;
-    for (const visual of callingPersistentVisuals.values()) visual.root.destroy();
+    for (const visual of callingPersistentVisuals.values()) {
+      visual.root.destroy(); visual.materials.forEach(material => material.destroy());
+    }
     callingPersistentVisuals.clear(); localCallingState = null; combatHud.setCallingState(null);
     pendingPortalDestination = null;
     social.clearNames();
