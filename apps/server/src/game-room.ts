@@ -48,7 +48,7 @@ import { WILDERNESS_MATERIALIZE_MS, WILDERNESS_RESPAWN_RECHECK_MS,
   usesOverworldRespawnRhythm, wildernessRespawnDelay, wildernessSpawnClear } from "./wilderness-respawn.js";
 import { shouldBecomeWildernessElite, wildernessEliteKind,
   wildernessEliteName, wildernessElitePattern, wildernessEliteStats } from "./wilderness-elites.js";
-import { AREA_LEADER_FOLLOWERS, AREA_MAIN_MOBS, areaLeaderPattern, areaLeaderPhase, areaMainMobDefinition, areaMiniBossDefinition, isAreaMiniBoss, leaderForFollower, type AreaLeaderPhase } from "./area-mini-bosses.js";
+import { AREA_LEADER_FOLLOWERS, AREA_MAIN_MOBS, areaLeaderPattern, areaLeaderPhase, areaMainMobDefinition, areaMiniBossDefinition, bruteLeaderArmourSegments, bruteLeaderExposureMs, isAreaMiniBoss, isCoordinatedBruteLeader, leaderForFollower, type AreaLeaderPhase } from "./area-mini-bosses.js";
 import { MINI_BOSS_ENRAGE_MS, bruteLeaderPursuitSpeed, miniBossDamage, miniBossOrbitCounterPattern, miniBossWindupDelay, predictedMiniBossAim, updateOrbitPressure, type OrbitPressureState } from "./mini-boss-pressure.js";
 import { miniBossCoverSites, miniBossPressureSites } from "./mini-boss-arena.js";
 import { leaderRematch, leaderRematchMaterialBonus, leaderRematchPattern, northwatchWatchbreakerPattern, leaderRematchPressureCadence,
@@ -438,6 +438,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly pendingIncomingHits: PendingIncomingHit[] = [];
   private readonly crawlerRushes = new Map<string, { yaw: number; distance: number; startedAt: number; progress: number }>();
   private readonly championCharges = new Map<string, { yaw: number; startedAt: number; progress: number; hit: Set<string> }>();
+  private readonly bruteLeaderArmourBonus = new Map<string, number>();
   private readonly pendingPowers = new Map<string, PendingPower>();
   private readonly specialMarks = new Map<string, ActiveSpecialMark>();
   private readonly brambleSnares = new Map<string, ActiveBrambleSnare>();
@@ -2598,6 +2599,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     mob.alive = false;
     if (mob.isMiniBoss) {
       this.northwatchExposedUntil.delete(mobId);
+      this.bruteLeaderArmourBonus.delete(mobId);
       this.restoreMiniBossArena(mobId);
       this.areaLeaderPhases.delete(mobId);
       this.miniBossEngagedAt.delete(mobId);
@@ -2762,9 +2764,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const leaderId = leaderForFollower(followerId);
     const leader = leaderId ? this.state.mobs.get(leaderId) : undefined;
     if (!leaderId || !leader?.alive) return;
-    if (leaderId === "northwatch-watchbreaker") this.northwatchExposedUntil.set(leaderId, now + 2_500);
+    const followersAlive = (AREA_LEADER_FOLLOWERS[leaderId] ?? [])
+      .filter(id => this.state.mobs.get(id)?.alive).length;
+    const durationMs = isCoordinatedBruteLeader(leaderId) ? bruteLeaderExposureMs(followersAlive) : 2_500;
+    if (isCoordinatedBruteLeader(leaderId)) this.syncBruteLeaderArmour(leaderId, leader);
+    if (leaderId === "northwatch-watchbreaker") this.northwatchExposedUntil.set(leaderId, now + durationMs);
     leader.combatState = "recover";
-    leader.stateUntil = Math.max(leader.stateUntil, now + 2_500);
+    leader.stateUntil = Math.max(leader.stateUntil, now + durationMs);
     leader.targetId = "";
     leader.aimCommitted = false;
     this.pendingMobMelee.delete(leaderId);
@@ -2779,7 +2785,50 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const player = this.state.players.get(client.sessionId);
       if (!player || player.health <= 0 || Math.abs(player.y - leader.y) > 2.5
         || Math.hypot(player.x - leader.x, player.z - leader.z) > 28) continue;
-      client.send("leader:exposed", { mobId: leaderId, durationMs: 2_500 } satisfies AreaLeaderExposed);
+      client.send("leader:exposed", { mobId: leaderId, durationMs } satisfies AreaLeaderExposed);
+    }
+  }
+
+  private syncBruteLeaderArmour(leaderId: string, leader: MobState): number {
+    const followerIds = AREA_LEADER_FOLLOWERS[leaderId] ?? [];
+    if (!leader.isMiniBoss || !isCoordinatedBruteLeader(leaderId) || leader.archetype !== "stone_brute" || followerIds.length === 0) return 0;
+    const alive = followerIds.filter(id => this.state.mobs.get(id)?.alive).length;
+    const desired = bruteLeaderArmourSegments(alive, followerIds.length);
+    const current = this.bruteLeaderArmourBonus.get(leaderId) ?? 0;
+    if (desired !== current) {
+      leader.armor = Math.max(0, leader.armor - current + desired);
+      this.bruteLeaderArmourBonus.set(leaderId, desired);
+    }
+    return desired;
+  }
+
+  private reinforceBruteLeader(leaderId: string, leader: MobState, phase: AreaLeaderPhase, now: number): void {
+    if (!isCoordinatedBruteLeader(leaderId) || leader.archetype !== "stone_brute") return;
+    const dead = (AREA_LEADER_FOLLOWERS[leaderId] ?? [])
+      .map(id => [id, this.state.mobs.get(id)] as const)
+      .filter((entry): entry is readonly [string, MobState] => Boolean(entry[1] && !entry[1].alive));
+    const count = phase === 2 ? Math.min(1, dead.length) : dead.length;
+    for (const [followerId, follower] of dead.slice(0, count)) {
+      const home = this.mobHomes.get(followerId);
+      if (home) { follower.x = home.x; follower.y = home.y; follower.z = home.z; }
+      follower.health = follower.maxHealth;
+      follower.alive = true;
+      follower.respawnAt = 0;
+      follower.materializeUntil = now + 1_200;
+      follower.combatState = "recover";
+      follower.stateUntil = now + 1_200;
+      follower.targetId = "";
+      follower.aimCommitted = false;
+      this.mobAwareness.delete(followerId);
+    }
+    if (count > 0) {
+      this.syncBruteLeaderArmour(leaderId, leader);
+      for (const client of this.clients) {
+        const player = this.state.players.get(client.sessionId);
+        if (player?.health && Math.abs(player.y - leader.y) <= 2.5
+          && Math.hypot(player.x - leader.x, player.z - leader.z) <= 28)
+          client.send("chat:notice", `REINFORCEMENTS · ${count} escort${count === 1 ? "" : "s"} restored the brute's armour.`);
+      }
     }
   }
 
@@ -2808,6 +2857,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
     this.erodeMiniBossArenaCover(leaderId, phase);
     this.placeMiniBossArenaPressure(leaderId, leader, phase, now);
+    this.reinforceBruteLeader(leaderId, leader, phase, now);
     if (leaderId === "wild-crawler" && leader.leaderModifier === "rootslayer") {
       for (const followerId of AREA_LEADER_FOLLOWERS[leaderId] ?? []) {
         const follower = this.state.mobs.get(followerId);
@@ -6896,6 +6946,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       }
     }
     for (const [mobId, mob] of this.state.mobs) {
+      if (mob.alive && mob.isMiniBoss && isCoordinatedBruteLeader(mobId)) this.syncBruteLeaderArmour(mobId, mob);
       const huntChampion = this.huntChampions.get(mobId);
       if (isRealmEventId(mobId) && !mob.alive) continue;
       if (!mob.alive && this.huntChampions.has(mobId)) {
@@ -7214,7 +7265,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
             x: Math.sin(aim.yaw * Math.PI / 180) * lungeDistance, z: Math.cos(aim.yaw * Math.PI / 180) * lungeDistance,
           });
         }
-        if (mob.isChampion && mob.attackPattern === "charge"
+        if ((mob.isChampion || mob.isMiniBoss && mob.archetype === "stone_brute") && mob.attackPattern === "charge"
           || (mobId === "mistfen-behemoth" || mobId === MISTFEN_EVENT_ID || isMistfenEventFollower(mobId)) && mob.attackPattern === "bog-charge") {
           this.championCharges.set(mobId, { yaw: aim.yaw, startedAt: now, progress: 0, hit: new Set() });
         } else {
@@ -7365,6 +7416,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const baseWindupMs = mobId === "northwatch-spitter" && mob.attackPattern === "patrol-lance" ? 1_400
         : (mobId === CRYSTAL_MATRIARCH_ID || mobId === ASHGLASS_ORACLE_ID) && (mob.attackPattern === "crystal-burst" || mob.attackPattern === "teleport-burst")
         ? MATRIARCH_PHASE.crystalBurstWindupMs
+        : mob.attackPattern === "charge" ? CHAMPION_CHARGE.windupMs
         : (mobId === "frontier-brute" || isAreaMiniBoss(mobId) && mob.archetype === "stone_brute") && mob.attackPattern === "smash"
           ? FRONTIER_BRUTE.smash.windupMs : definition.windupMs;
       const rematchTiming = leaderRematchTiming(mob.leaderModifier);
@@ -8278,7 +8330,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       mob.attackStrikeZ = mob.attackPattern === "pool" ? aim?.z ?? mob.z : mob.z;
       return;
     }
-    if (mob.isChampion && mob.attackPattern === "charge"
+    if ((mob.isChampion || mob.isMiniBoss && mob.archetype === "stone_brute") && mob.attackPattern === "charge"
       || (mobId === "mistfen-behemoth" || mobId === MISTFEN_EVENT_ID || isMistfenEventFollower(mobId)) && mob.attackPattern === "bog-charge") {
       if (mob.aimCommitted) return;
       mob.attackStrikeX = mob.x; mob.attackStrikeY = mob.y; mob.attackStrikeZ = mob.z;
@@ -8328,7 +8380,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       mob.attackRecoveryEndAt = mob.attackContactEndAt + MATRIARCH_PHASE.recoveryMs;
       return;
     }
-    if (mob.isChampion && mob.attackPattern === "charge"
+    if ((mob.isChampion || mob.isMiniBoss && mob.archetype === "stone_brute") && mob.attackPattern === "charge"
       || (mobId === "mistfen-behemoth" || mobId === MISTFEN_EVENT_ID || isMistfenEventFollower(mobId)) && mob.attackPattern === "bog-charge") {
       mob.attackContactAt = releaseAt;
       mob.attackContactEndAt = releaseAt + CHAMPION_CHARGE.durationMs;
@@ -8363,18 +8415,26 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           && (isStoneBruteGroupMob(id) || !isInStoneBruteArena(pose.x, pose.z)));
       mob.x = next.x; mob.y = next.y; mob.z = next.z; mob.yaw = charge.yaw;
       if (mob.isMiniBoss) this.damageMiniBossArenaCover(id, mob, .9);
+      let intercepted = false;
       for (const [playerId, player] of this.state.players) {
         if (charge.hit.has(playerId) || player.health <= 0 || Math.abs(player.y - mob.y) > 1.1
           || !hasCombatLineOfSight(start, player, this.readWorldBlock)) continue;
-        if (championChargeHits(start, next, player)) { charge.hit.add(playerId); this.queueIncomingHit(id, playerId, mob.attackDamage, now); }
+        if (championChargeHits(start, next, player)) {
+          charge.hit.add(playerId);
+          this.queueIncomingHit(id, playerId, mob.attackDamage, now);
+          if (player.defending && player.stamina >= 10) { intercepted = true; break; }
+        }
         if (mob.combatState !== "strike") break;
       }
       charge.progress = progress;
-      if (progress >= 1 || Math.hypot(next.x - start.x, next.z - start.z) < travel * .8) {
+      const obstructed = Math.hypot(next.x - start.x, next.z - start.z) < travel * .8;
+      if (intercepted || progress >= 1 || obstructed) {
         this.championCharges.delete(id);
-        if ((id === "mistfen-behemoth" || id === MISTFEN_EVENT_ID) && charge.hit.size === 0) {
+        const redirectedBrute = mob.isMiniBoss && mob.archetype === "stone_brute" && (intercepted || charge.hit.size === 0);
+        if (redirectedBrute || (id === "mistfen-behemoth" || id === MISTFEN_EVENT_ID) && charge.hit.size === 0) {
+          const durationMs = intercepted ? 3_500 : 2_500;
           mob.combatState = "recover";
-          mob.stateUntil = Math.max(mob.stateUntil, now + 2_500);
+          mob.stateUntil = Math.max(mob.stateUntil, now + durationMs);
           mob.targetId = "";
           mob.aimCommitted = false;
           this.clearMobAttackTimeline(mob);
@@ -8382,7 +8442,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
             const player = this.state.players.get(client.sessionId);
             if (player?.health && Math.abs(player.y - mob.y) <= 2.5
               && Math.hypot(player.x - mob.x, player.z - mob.z) <= 28)
-              client.send("leader:exposed", { mobId: id, durationMs: 2_500 } satisfies AreaLeaderExposed);
+              client.send("leader:exposed", { mobId: id, durationMs } satisfies AreaLeaderExposed);
           }
         }
       }

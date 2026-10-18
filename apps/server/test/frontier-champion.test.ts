@@ -98,4 +98,31 @@ describe("frontier champion", () => {
     internal.advanceChampionCharges(10600); expect(mob.x).toBe(100.5); expect(player.health).toBe(5);
     mob.combatState = "strike"; player.invulnerableUntil = 12000; arm(); internal.advanceChampionCharges(10600); expect(player.health).toBe(5);
   });
+
+  it("lets any guarding player intercept a mini-boss charge and create a punish window", () => {
+    const { internal, mob, player, arm } = fixture();
+    mob.isMiniBoss = true; player.defending = true; player.stamina = 100; arm();
+    internal.advanceChampionCharges(10300);
+    expect(internal.championCharges.size).toBe(0);
+    expect(mob.combatState).toBe("recover");
+    expect(mob.stateUntil).toBe(13_800);
+  });
+
+  it("breaks escort armour and restores one reinforcement at the second phase", () => {
+    const { room, internal, mob } = fixture();
+    room.state.mobs.delete("champion");
+    mob.isMiniBoss = true; mob.armor = 1; room.state.mobs.set("stone-brute", mob);
+    for (const id of ["stone-brute-crawler", "stone-brute-spitter"]) {
+      const follower = new MobState(); Object.assign(follower, { alive: true, health: 3, maxHealth: 3 });
+      room.state.mobs.set(id, follower);
+    }
+    expect(internal.syncBruteLeaderArmour("stone-brute", mob)).toBe(2);
+    expect(mob.armor).toBe(3);
+    room.state.mobs.get("stone-brute-crawler")!.alive = false;
+    internal.openAreaLeaderAfterFollowerDefeat("stone-brute-crawler", 10_000);
+    expect(mob.armor).toBe(2);
+    internal.reinforceBruteLeader("stone-brute", mob, 2, 11_000);
+    expect(room.state.mobs.get("stone-brute-crawler")!.alive).toBe(true);
+    expect(mob.armor).toBe(3);
+  });
 });

@@ -77,8 +77,27 @@ export const AREA_LEADER_FOLLOWERS: Readonly<Record<string, readonly string[]>> 
   "buried-chamber-brute": ["buried-vault-crawler"],
 };
 
+const COORDINATED_BRUTE_LEADERS = new Set([
+  "stone-brute", "frontier-brute", "frontier-brute-west", "frontier-brute-east",
+  "mistfen-behemoth", "south-quarrymaster", "buried-chamber-brute",
+]);
+
+export function isCoordinatedBruteLeader(id: string): boolean {
+  return COORDINATED_BRUTE_LEADERS.has(id);
+}
+
 export function leaderForFollower(id: string): string | null {
   return Object.entries(AREA_LEADER_FOLLOWERS).find(([, followers]) => followers.includes(id))?.[0] ?? null;
+}
+
+/** Escorts contribute at most two points of breakable armour, independent of party size or level. */
+export function bruteLeaderArmourSegments(aliveFollowers: number, totalFollowers: number): number {
+  return Math.min(2, Math.max(0, Math.min(aliveFollowers, totalFollowers)));
+}
+
+/** Clearing the whole escort earns a longer punish window than picking off one follower. */
+export function bruteLeaderExposureMs(aliveFollowers: number): number {
+  return aliveFollowers <= 0 ? 4_000 : 2_500;
 }
 
 export function areaLeaderPattern(archetype: string, sequence: number, phase: AreaLeaderPhase = 1, leaderId = ""): string {
@@ -95,7 +114,7 @@ export function areaLeaderPattern(archetype: string, sequence: number, phase: Ar
       return rotation[sequence % rotation.length]!;
     }
     const rotation = phase === 1 ? leaderId === "frontier-brute" ? ["smash", "slam"] : ["rocks", "slam"]
-      : phase === 2 ? ["rocks", "smash", "slam"] : ["warden-barrage", "smash", "rocks"];
+      : phase === 2 ? ["charge", "rocks", "smash", "slam"] : ["warden-barrage", "charge", "smash", "rocks"];
     return rotation[sequence % rotation.length]!;
   }
   const rotation = phase === 1 ? ["rush"] : phase === 2 ? ["rush", "pack-rush"] : ["alpha-rush", "pack-rush"];

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AREA_LEADER_RELIC_IDS, ITEM_DEFINITIONS } from "@blockcraft/protocol";
-import { AREA_LEADER_FOLLOWERS, AREA_MINI_BOSSES, areaLeaderPattern, areaLeaderPhase, areaMainMobDefinition, areaMiniBossDefinition, isAreaMiniBoss, leaderForFollower } from "../src/area-mini-bosses.js";
+import { AREA_LEADER_FOLLOWERS, AREA_MINI_BOSSES, areaLeaderPattern, areaLeaderPhase, areaMainMobDefinition, areaMiniBossDefinition, bruteLeaderArmourSegments, bruteLeaderExposureMs, isAreaMiniBoss, isCoordinatedBruteLeader, leaderForFollower } from "../src/area-mini-bosses.js";
 import { spitterChampionShots } from "../src/frontier-champion.js";
 import { STONE_BRUTE_ARENA_HOME, isInStoneBruteArena } from "@blockcraft/voxel-world";
 import { STONE_BRUTE_ESCORTS, WILDERNESS_ENCOUNTERS, isFrontierBruteGroupMob, isStoneBruteGroupMob } from "../src/wilderness-encounters.js";
@@ -34,7 +34,8 @@ describe("area mini-bosses", () => {
     expect([0, 1, 2, 3].map(sequence => areaLeaderPattern("cave_spitter", sequence))).toEqual(["aimed", "fan", "aimed", "fan"]);
     expect([0, 1, 2].map(sequence => areaLeaderPattern("stone_brute", sequence))).toEqual(["rocks", "slam", "rocks"]);
     expect([0, 1, 2].map(sequence => areaLeaderPattern("cave_spitter", sequence, 3))).toEqual(["venom-ring", "fan", "pool"]);
-    expect([0, 1, 2].map(sequence => areaLeaderPattern("stone_brute", sequence, 3))).toEqual(["warden-barrage", "smash", "rocks"]);
+    expect([0, 1, 2, 3].map(sequence => areaLeaderPattern("stone_brute", sequence, 2))).toEqual(["charge", "rocks", "smash", "slam"]);
+    expect([0, 1, 2, 3].map(sequence => areaLeaderPattern("stone_brute", sequence, 3))).toEqual(["warden-barrage", "charge", "smash", "rocks"]);
     expect([0, 1].map(sequence => areaLeaderPattern("moss_crawler", sequence, 3))).toEqual(["alpha-rush", "pack-rush"]);
     expect([0, 1].map(sequence => areaLeaderPattern("stone_brute", sequence, 1, "mistfen-behemoth"))).toEqual(["bog-charge", "slam"]);
     expect([0, 1, 2].map(sequence => areaLeaderPattern("stone_brute", sequence, 2, "mistfen-behemoth"))).toEqual(["toxic-eruption", "bog-charge", "smash"]);
@@ -62,6 +63,16 @@ describe("area mini-bosses", () => {
     expect(leaderForFollower("south-pit-spitter")).toBe("south-quarrymaster");
     expect(leaderForFollower("not-a-follower")).toBeNull();
     expect(Object.values(AREA_LEADER_FOLLOWERS).flat().length).toBeGreaterThan(0);
+  });
+
+  it("turns brute escorts into static breakable armour and rewards a full clear", () => {
+    expect(bruteLeaderArmourSegments(3, 3)).toBe(2);
+    expect(bruteLeaderArmourSegments(1, 3)).toBe(1);
+    expect(bruteLeaderArmourSegments(0, 3)).toBe(0);
+    expect(bruteLeaderExposureMs(1)).toBe(2_500);
+    expect(bruteLeaderExposureMs(0)).toBe(4_000);
+    expect(isCoordinatedBruteLeader("stone-brute")).toBe(true);
+    expect(isCoordinatedBruteLeader("northwatch-watchbreaker")).toBe(false);
   });
 
   it("gives each overworld brute leader nearby escorts with a clear exposed window", () => {
