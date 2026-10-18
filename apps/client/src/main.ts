@@ -7399,14 +7399,101 @@ const northwatchCueMaterial = coloredMaterial(new pc.Color(.56, .87, 1));
 const reliquaryStoneMaterial = coloredMaterial(new pc.Color(.18, .11, .09));
 const reliquaryMetalMaterial = coloredMaterial(new pc.Color(.34, .16, .09));
 const reliquaryEmberMaterial = powerMaterial(new pc.Color(1, .23, .035), .56);
+const reliquarySmokeMaterial = powerMaterial(new pc.Color(.16, .13, .12), .3);
+const reliquaryGoldMaterial = powerMaterial(new pc.Color(1, .67, .08), .92);
 const ashenReliquaryVisual = new pc.Entity("scorched-reliquary");
 ashenReliquaryVisual.setPosition(ASHEN_RELIQUARY_POSITION.x, ASHEN_RELIQUARY_POSITION.y, ASHEN_RELIQUARY_POSITION.z);
 app.root.addChild(ashenReliquaryVisual);
 addBox(ashenReliquaryVisual, "reliquary-plinth", reliquaryStoneMaterial, [1.5, .28, 1.08], [0, .14, 0]);
 addBox(ashenReliquaryVisual, "reliquary-chest", reliquaryMetalMaterial, [1.12, .62, .72], [0, .53, 0]);
-addBox(ashenReliquaryVisual, "reliquary-lid", reliquaryStoneMaterial, [1.2, .2, .8], [0, .91, 0]);
+const reliquaryLid = addBox(ashenReliquaryVisual, "reliquary-lid", reliquaryStoneMaterial, [1.2, .2, .8], [0, .91, .22]);
 const reliquaryRune = addBox(ashenReliquaryVisual, "reliquary-rune", reliquaryEmberMaterial, [.16, .38, .05], [0, .57, -.39]);
 for (const x of [-.45, .45]) addBox(ashenReliquaryVisual, "reliquary-seam", reliquaryEmberMaterial, [.06, .5, .05], [x, .55, -.39]);
+const reliquaryBeam = addBox(ashenReliquaryVisual, "reliquary-light-column", reliquaryEmberMaterial, [.26, 4.4, .26], [0, 2.9, 0]);
+reliquaryBeam.enabled = false;
+const reliquaryLight = new pc.Entity("reliquary-ember-light");
+reliquaryLight.addComponent("light", { type: "omni", color: new pc.Color(1, .24, .035), range: 9, intensity: 0, castShadows: false });
+reliquaryLight.setLocalPosition(0, 1.55, 0); ashenReliquaryVisual.addChild(reliquaryLight);
+reliquaryLight.enabled = false;
+const reliquaryRewards = new pc.Entity("reliquary-reward-relics");
+ashenReliquaryVisual.addChild(reliquaryRewards);
+reliquaryRewards.enabled = false;
+const weaponRelic = new pc.Entity("weapon-material-relic");
+addBox(weaponRelic, "ember-blade", bladeMaterial, [.11, .76, .08], [0, .12, 0]);
+addBox(weaponRelic, "ember-hilt", reliquaryGoldMaterial, [.42, .08, .1], [0, -.25, 0]);
+weaponRelic.setLocalEulerAngles(0, 0, -32); reliquaryRewards.addChild(weaponRelic);
+const armourRelic = new pc.Entity("armour-material-relic");
+addBox(armourRelic, "ember-shield", reliquaryMetalMaterial, [.54, .62, .12], [0, 0, 0]);
+addBox(armourRelic, "shield-rune", reliquaryEmberMaterial, [.12, .35, .14], [0, 0, -.08]);
+reliquaryRewards.addChild(armourRelic);
+const goldRelic = new pc.Entity("gold-reward-relic");
+for (const [x, y] of [[-.16, -.1], [.16, -.1], [0, .16]] as const)
+  addBox(goldRelic, "reliquary-gold", reliquaryGoldMaterial, [.24, .24, .1], [x, y, 0]);
+reliquaryRewards.addChild(goldRelic);
+const reliquaryParticles: { entity: pc.Entity; origin: pc.Vec3; velocity: pc.Vec3; startedAt: number; smoke: boolean }[] = [];
+let reliquaryPreviousPhase: AshenReliquaryState["phase"] | null = null;
+let reliquaryOpenedAt = -Infinity;
+
+function burstOpenAshenReliquary(now: number): void {
+  reliquaryOpenedAt = now;
+  for (let index = 0; index < 24; index++) {
+    const smoke = index >= 15;
+    const angle = index / 15 * Math.PI * 2 + (index % 3) * .22;
+    const origin = new pc.Vec3(ASHEN_RELIQUARY_POSITION.x, ASHEN_RELIQUARY_POSITION.y + .9, ASHEN_RELIQUARY_POSITION.z);
+    const entity = addBox(app.root, smoke ? "reliquary-smoke" : "reliquary-spark",
+      smoke ? reliquarySmokeMaterial : reliquaryEmberMaterial, smoke ? [.2, .2, .2] : [.055, .14, .055], [origin.x, origin.y, origin.z]);
+    if (entity.render) entity.render.castShadows = false;
+    reliquaryParticles.push({ entity, origin, smoke, startedAt: now,
+      velocity: new pc.Vec3(Math.sin(angle) * (smoke ? .55 : 2.1), smoke ? 1.1 + index % 3 * .2 : 2.4 + index % 4 * .35,
+        Math.cos(angle) * (smoke ? .55 : 2.1)) });
+  }
+}
+
+function pullAshenRewardToPlayer(choice: AshenReliquaryChoice): void {
+  const origin = new pc.Vec3(ASHEN_RELIQUARY_POSITION.x, ASHEN_RELIQUARY_POSITION.y + 1.55, ASHEN_RELIQUARY_POSITION.z);
+  const player = localPlayer.getPosition().clone(); player.y += .9;
+  const material = choice === "gold" ? reliquaryGoldMaterial : choice === "weapon" ? bladeMaterial : reliquaryMetalMaterial;
+  for (let index = 0; index < 12; index++) {
+    if (miningChips.length >= 24) miningChips.shift()!.entity.destroy();
+    const angle = index / 12 * Math.PI * 2;
+    const entity = addBox(app.root, `reliquary-${choice}-claim`, material, [.08, .08, .08], [origin.x, origin.y, origin.z]);
+    if (entity.render) entity.render.castShadows = false;
+    miningChips.push({ entity, origin, startedAt: performance.now(), velocity: new pc.Vec3(
+      (player.x - origin.x) * 2 + Math.sin(angle) * .8,
+      (player.y - origin.y) * 2 + 1.7 + index % 3 * .18,
+      (player.z - origin.z) * 2 + Math.cos(angle) * .8,
+    ) });
+  }
+}
+
+function animateAshenReliquary(now: number, unlocked: boolean, rewardVisible: boolean): void {
+  const opening = Math.max(0, Math.min(1, (now - reliquaryOpenedAt) / 720));
+  const openAmount = unlocked ? 1 - Math.pow(1 - opening, 3) : 0;
+  reliquaryLid.setLocalPosition(0, .91 + Math.sin(openAmount * Math.PI) * .22, .22 + openAmount * .28);
+  reliquaryLid.setLocalEulerAngles(-74 * openAmount, 0, 0);
+  reliquaryBeam.enabled = unlocked && !ashenReliquaryState?.claimed;
+  reliquaryRewards.enabled = rewardVisible;
+  reliquaryLight.enabled = unlocked;
+  if (reliquaryLight.light) reliquaryLight.light.intensity = unlocked ? 1.7 + Math.sin(now / 130) * .35 : 0;
+  if (reliquaryBeam.enabled) reliquaryBeam.setLocalScale(.22 + Math.sin(now / 180) * .045, 4.4, .22 + Math.sin(now / 180) * .045);
+  for (const [index, relic] of [weaponRelic, armourRelic, goldRelic].entries()) {
+    const angle = now / 850 + index * Math.PI * 2 / 3;
+    relic.setLocalPosition(Math.sin(angle) * .68, 1.55 + Math.sin(now / 230 + index) * .09, Math.cos(angle) * .38);
+    relic.setLocalEulerAngles(relic === weaponRelic ? 0 : Math.sin(now / 420 + index) * 8, now / 12 + index * 120, relic === weaponRelic ? -32 : 0);
+  }
+  for (let index = reliquaryParticles.length - 1; index >= 0; index--) {
+    const particle = reliquaryParticles[index]!;
+    const elapsed = (now - particle.startedAt) / 1000;
+    const lifetime = particle.smoke ? 1.55 : .9;
+    if (elapsed >= lifetime) { particle.entity.destroy(); reliquaryParticles.splice(index, 1); continue; }
+    particle.entity.setPosition(particle.origin.x + particle.velocity.x * elapsed,
+      particle.origin.y + particle.velocity.y * elapsed - (particle.smoke ? .08 : 2.7) * elapsed * elapsed,
+      particle.origin.z + particle.velocity.z * elapsed);
+    const size = particle.smoke ? .2 + elapsed * .34 : Math.max(.015, .075 * (1 - elapsed / lifetime));
+    particle.entity.setLocalScale(size, particle.smoke ? size : size * 2.2, size);
+    particle.entity.setLocalEulerAngles(90 * elapsed, 160 * elapsed, 35 * elapsed);
+  }
+}
 
 function updateAshenReliquaryPresentation(now = Date.now()): void {
   const state = ashenReliquaryState;
@@ -7418,6 +7505,10 @@ function updateAshenReliquaryPresentation(now = Date.now()): void {
   ashenReliquaryStatus.hidden = !nearby || screen.z < 0;
   minimap.setReliquaryState(nearby ? { ...state, name: "Scorched Reliquary" } : null);
   const unlocked = state.phase === "unlocked";
+  if (reliquaryPreviousPhase !== null && reliquaryPreviousPhase !== "unlocked" && unlocked && nearby) burstOpenAshenReliquary(now);
+  if (reliquaryPreviousPhase === null && unlocked) reliquaryOpenedAt = now - 1_000;
+  reliquaryPreviousPhase = state.phase;
+  animateAshenReliquary(now, unlocked, unlocked && state.eligible && !state.claimed);
   reliquaryRune.setLocalScale(.16 * (unlocked ? 1 + Math.sin(now / 140) * .25 : .55), .38, .05);
   if (ashenReliquaryStatus.hidden) return;
   const rect = canvas.getBoundingClientRect();
@@ -13307,7 +13398,10 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     updateAshenReliquaryPresentation();
   });
   room.onMessage("ashen:reliquary-result", (message: AshenReliquaryResult) => {
-    if (message.ok) closeAshenReliquaryChoice();
+    if (message.ok) {
+      if (message.choice) pullAshenRewardToPlayer(message.choice);
+      closeAshenReliquaryChoice();
+    }
     status.textContent = message.message;
     showRoadsideNotice(message.message, !message.ok);
   });
