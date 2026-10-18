@@ -4,8 +4,18 @@ import { WorldRoom } from "../src/game-room.js";
 import { PlayerState, WorldState } from "../src/schema.js";
 import { ATTACK_START_GAP_MS, ATTACK_RELEASE_GAP_MS } from "../src/attack-coordination.js";
 import { MIXED_FRONTIER_IDS, MIXED_FRONTIER_SPITTER, mixedFrontierAllows } from "../src/wilderness-encounters.js";
+import { isMixedWarbandLeader, warbandCrawlerYaw, warbandCrossfireSite, warbandFormationState } from "../src/mixed-warband.js";
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 describe("mixed frontier warband", () => {
+  it("assigns opposite fixed flank and crossfire lanes without dynamic scaling", () => {
+    expect(isMixedWarbandLeader("frontier-brute-east")).toBe(true);
+    expect(isMixedWarbandLeader("wild-crawler")).toBe(false);
+    expect(warbandCrawlerYaw(0, 0)).toBe(38);
+    expect(warbandCrossfireSite({ x: 0, y: 8, z: 0 }, 0, 0).x).toBeCloseTo(-2.8);
+    expect(warbandFormationState(true, true)).toBe("full");
+    expect(warbandFormationState(true, false)).toBe("pin");
+    expect(warbandFormationState(false, true)).toBe("crossfire");
+  });
   it("places only one support spitter alongside existing crawler and brute, on walkable frontier ground", () => {
     const room = new WorldRoom(); room.setState(new WorldState());
     const internal = room as any;
@@ -51,5 +61,31 @@ describe("mixed frontier warband", () => {
     for (let i = 1; i < starts.length; i++) expect(starts[i]!.at - starts[i - 1]!.at).toBeGreaterThanOrEqual(ATTACK_START_GAP_MS);
     const releases = starts.map(start => start.release).sort((a, b) => a - b);
     for (let i = 1; i < releases.length; i++) expect(releases[i]! - releases[i - 1]!).toBeGreaterThanOrEqual(ATTACK_RELEASE_GAP_MS);
+  });
+
+  it("turns a leader charge into centre pressure, a crawler pin and opposite-side crossfire", () => {
+    vi.useFakeTimers(); vi.setSystemTime(10_000);
+    const room = new WorldRoom(); room.setState(new WorldState());
+    const internal = room as any; const events: { type: string; payload: any }[] = [];
+    Object.defineProperty(room, "readWorldBlock", { value: (_x: number, y: number) => y < 8 ? Block.Stone : Block.Air });
+    vi.spyOn(room, "broadcast").mockImplementation((type, payload) => { events.push({ type, payload }); });
+    internal.registerMob("frontier-crawler", "moss_crawler", { x: 65.5, y: 8, z: 34.5 });
+    internal.registerMob("frontier-support-spitter", "cave_spitter", { x: 66.5, y: 8, z: 40.5 });
+    internal.registerMob("frontier-brute-east", "stone_brute", { x: 72.5, y: 8, z: 34.5 });
+    const leader = room.state.mobs.get("frontier-brute-east")!;
+    Object.assign(leader, { attackPattern: "charge", combatState: "strike", actionSequence: 2, alive: true });
+    internal.launchMixedWarbandPush("frontier-brute-east", leader, "p",
+      { x: 68.5, y: 8, z: 34.5, yaw: 0 }, 10_000);
+    expect(internal.crawlerRushes.get("frontier-crawler").yaw).toBe(38);
+    expect(internal.pendingMobMelee.has("frontier-crawler")).toBe(true);
+    const crossfire = [...internal.pendingMobProjectiles.values()].filter((shot: any) => shot.mobId === "frontier-support-spitter");
+    expect(crossfire).toHaveLength(1);
+    expect(crossfire[0].hazardDurationMs).toBe(3_500);
+    expect(events).toContainEqual({ type: "leader:formation",
+      payload: expect.objectContaining({ mobId: "frontier-brute-east", state: "full" }) });
+    const crawler = room.state.mobs.get("frontier-crawler")!;
+    internal.staggerMob("frontier-crawler", crawler, 10_100, 800, true);
+    expect(events).toContainEqual({ type: "leader:formation",
+      payload: { mobId: "frontier-brute-east", state: "broken", durationMs: 1_800 } });
   });
 });

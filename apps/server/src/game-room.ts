@@ -50,6 +50,7 @@ import { shouldBecomeWildernessElite, wildernessEliteKind,
   wildernessEliteName, wildernessElitePattern, wildernessEliteStats } from "./wilderness-elites.js";
 import { AREA_LEADER_FOLLOWERS, AREA_MAIN_MOBS, areaLeaderPattern, areaLeaderPhase, areaMainMobDefinition, areaMiniBossDefinition, bruteLeaderArmourSegments, bruteLeaderExposureMs, crawlerPackPattern, crawlerPackRushYawOffsets, isAreaMiniBoss, isCoordinatedBruteLeader, isCoordinatedCrawlerLeader, isCoordinatedSpitterLeader, leaderForFollower, spitterPackPoolSites, spitterRingWithSafeGap, type AreaLeaderPhase } from "./area-mini-bosses.js";
 import { MINI_BOSS_ENRAGE_MS, bruteLeaderPursuitSpeed, miniBossDamage, miniBossOrbitCounterPattern, miniBossWindupDelay, predictedMiniBossAim, updateOrbitPressure, type OrbitPressureState } from "./mini-boss-pressure.js";
+import { isMixedWarbandLeader, warbandCrawlerYaw, warbandCrossfireSite, warbandFormationState } from "./mixed-warband.js";
 import { miniBossCoverSites, miniBossPressureSites } from "./mini-boss-arena.js";
 import { leaderRematch, leaderRematchMaterialBonus, leaderRematchPattern, northwatchWatchbreakerPattern, leaderRematchPressureCadence,
   leaderRematchStats, leaderRematchTiming, leaderTerritory } from "./leader-rematches.js";
@@ -164,6 +165,7 @@ import {
   type TraitId,
   type WorldBootstrap,
   type AreaLeaderExposed,
+  type AreaLeaderFormation,
   type WorldObjectiveCompleted,
   type WorldObjectiveUpdate,
   type WeaponAttackReleased,
@@ -439,6 +441,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly crawlerRushes = new Map<string, { yaw: number; distance: number; startedAt: number; progress: number }>();
   private readonly championCharges = new Map<string, { yaw: number; startedAt: number; progress: number; hit: Set<string> }>();
   private readonly bruteLeaderArmourBonus = new Map<string, number>();
+  private readonly warbandFormationUntil = new Map<string, number>();
   private readonly pendingPowers = new Map<string, PendingPower>();
   private readonly specialMarks = new Map<string, ActiveSpecialMark>();
   private readonly brambleSnares = new Map<string, ActiveBrambleSnare>();
@@ -2454,7 +2457,17 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.championCharges.delete(mobId);
     if (brokePackRush) this.breakCrawlerPackFormation(mobId, now, staggerDuration);
     if (brokeVenomRing) this.breakSpitterPackFormation(mobId, now, staggerDuration);
+    const warbandLeaderId = isMixedWarbandLeader(mobId) ? mobId : leaderForFollower(mobId);
+    if (warbandLeaderId && isMixedWarbandLeader(warbandLeaderId)
+      && now < (this.warbandFormationUntil.get(warbandLeaderId) ?? 0)) {
+      this.announceWarbandFormation(warbandLeaderId, "broken", 1_800);
+      this.warbandFormationUntil.delete(warbandLeaderId);
+    }
     return true;
+  }
+
+  private announceWarbandFormation(mobId: string, state: AreaLeaderFormation["state"], durationMs: number): void {
+    this.broadcast("leader:formation", { mobId, state, durationMs } satisfies AreaLeaderFormation);
   }
 
   private breakSpitterPackFormation(leaderId: string, now: number, durationMs: number): void {
@@ -2558,6 +2571,57 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const positioning = this.spitterPositioning.get(followerId) ?? createSpitterPositioning();
     positioning.sidestepPending = true;
     this.spitterPositioning.set(followerId, positioning);
+  }
+
+  private launchMixedWarbandPush(leaderId: string, leader: MobState, targetId: string,
+    target: { x: number; y: number; z: number; yaw: number }, now: number): void {
+    if (!isMixedWarbandLeader(leaderId) || (leader.attackPattern !== "charge" && leader.attackPattern !== "bog-charge")) return;
+    const followers = (AREA_LEADER_FOLLOWERS[leaderId] ?? []).map(id => [id, this.state.mobs.get(id)] as const)
+      .filter((entry): entry is readonly [string, MobState] => Boolean(entry[1]?.alive && entry[1].health > 0
+        && entry[1].combatState !== "stagger" && Math.abs(entry[1].y - leader.y) <= 2.5
+        && Math.hypot(entry[1].x - leader.x, entry[1].z - leader.z) <= 18));
+    const crawler = followers.find(([, mob]) => crawlerRushDistance(mob.archetype) > 0);
+    const spitter = followers.find(([, mob]) => isSpitterLike(mob.archetype));
+    if (crawler) {
+      const [crawlerId, flank] = crawler;
+      const yaw = warbandCrawlerYaw(target.yaw, leader.actionSequence);
+      flank.attackPattern = "pack-rush";
+      flank.combatState = "strike";
+      flank.targetId = targetId;
+      flank.yaw = yaw;
+      flank.aimCommitted = true;
+      flank.actionSequence += 1;
+      this.setMobAttackTimeline(flank, now, now, crawlerId);
+      flank.stateUntil = flank.attackContactEndAt;
+      flank.attackStrikeX = flank.x; flank.attackStrikeY = flank.y; flank.attackStrikeZ = flank.z;
+      this.crawlerRushes.set(crawlerId, { yaw, distance: crawlerRushDistance(flank.archetype) * 1.25,
+        startedAt: now, progress: 0 });
+      this.pendingMobMelee.set(crawlerId, { targetId, yaw, impactAt: flank.attackContactAt });
+      this.lastMobAttackAt.set(crawlerId, now);
+      this.crawlerPositioning.delete(crawlerId);
+      this.mobCommittedAim.delete(crawlerId);
+    }
+    if (spitter) {
+      const [spitterId, support] = spitter;
+      const site = warbandCrossfireSite(target, target.yaw, leader.actionSequence);
+      support.attackPattern = "pool";
+      support.combatState = "recover";
+      support.stateUntil = now + 1_500;
+      support.targetId = "";
+      support.aimCommitted = false;
+      support.actionSequence += 1;
+      this.clearMobAttackTimeline(support);
+      this.mobCommittedAim.delete(spitterId);
+      this.releaseMobVolley(spitterId, support, support, [site], now, 1_050,
+        Math.max(1, support.attackDamage), 1.1, 3_500);
+      this.lastMobAttackAt.set(spitterId, now);
+    }
+    const state = warbandFormationState(Boolean(crawler), Boolean(spitter));
+    if (state) {
+      const durationMs = CHAMPION_CHARGE.durationMs + 1_000;
+      this.warbandFormationUntil.set(leaderId, now + durationMs);
+      this.announceWarbandFormation(leaderId, state, durationMs);
+    }
   }
 
   private resolveProjectileVisual(projectileId: string, point: { x: number; y: number; z: number }, reason: ProjectileResolved["reason"]): void {
@@ -2878,6 +2942,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       .filter(id => this.state.mobs.get(id)?.alive).length;
     const durationMs = isCoordinatedBruteLeader(leaderId) ? bruteLeaderExposureMs(followersAlive) : 2_500;
     if (isCoordinatedBruteLeader(leaderId)) this.syncBruteLeaderArmour(leaderId, leader);
+    if (isMixedWarbandLeader(leaderId)) {
+      this.warbandFormationUntil.delete(leaderId);
+      this.announceWarbandFormation(leaderId, "broken", durationMs);
+    }
     if (leaderId === "northwatch-watchbreaker") this.northwatchExposedUntil.set(leaderId, now + durationMs);
     leader.combatState = "recover";
     leader.stateUntil = Math.max(leader.stateUntil, now + durationMs);
@@ -7390,6 +7458,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         }
         if ((mob.isChampion || mob.isMiniBoss && mob.archetype === "stone_brute") && mob.attackPattern === "charge"
           || (mobId === "mistfen-behemoth" || mobId === MISTFEN_EVENT_ID || isMistfenEventFollower(mobId)) && mob.attackPattern === "bog-charge") {
+          this.launchMixedWarbandPush(mobId, mob, mob.targetId, aim, now);
           this.championCharges.set(mobId, { yaw: aim.yaw, startedAt: now, progress: 0, hit: new Set() });
         } else {
           this.pendingMobMelee.set(mobId, { targetId: mob.targetId, yaw: aim.yaw, impactAt: mob.attackContactAt });

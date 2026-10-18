@@ -1687,6 +1687,12 @@ export type AreaLeaderReinforcements = {
   durationMs: number;
 };
 
+export type AreaLeaderFormation = {
+  mobId: string;
+  state: "full" | "pin" | "crossfire" | "broken";
+  durationMs: number;
+};
+
 export interface ChunkRegion {
   chunks: ChunkSnapshot[];
 }

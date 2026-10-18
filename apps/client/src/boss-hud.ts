@@ -149,6 +149,13 @@ export function leaderChargeGuidance(pattern: string, combatState: string, targe
     ? "CHARGE · HOLD C TO INTERCEPT" : leaderAttackLabel(pattern, combatState);
 }
 
+export function leaderFormationLabel(state: "full" | "pin" | "crossfire" | "broken" | ""): string {
+  return state === "full" ? "CROSSFIRE · FLANKS CLOSING"
+    : state === "pin" ? "PINNED · CRAWLER FLANK"
+    : state === "crossfire" ? "CROSSFIRE · ESCAPE LANE TARGETED"
+    : state === "broken" ? "FORMATION BROKEN · COUNTER" : "";
+}
+
 export function leaderRematchLabel(tier = 0, modifier = ""): string {
   if (modifier === "mirebreaker") return "MIREBREAKER REMATCH · LEGENDARY CACHE";
   if (modifier === "rootslayer") return "ROOTSLAYER REMATCH · LEGENDARY CACHE";

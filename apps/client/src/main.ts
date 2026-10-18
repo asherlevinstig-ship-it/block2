@@ -13,7 +13,7 @@ import { progressionNotice as chooseProgressionNotice, type ProgressionNotice } 
 import { abilityRevealUse, canPresentAbilityReveal, earnedCallingAbilities } from "./ability-reveal.js";
 import { queueWorldNotice, type WorldNotice } from "./notification-lane.js";
 import { rangedAimYaw } from "./ranged-aim.js";
-import { COORDINATED_BRUTE_FOLLOWERS, COORDINATED_SPITTER_FOLLOWERS, activeCombatNearby, advanceBossHud, initialBossHud, leaderArmourSegments, leaderChargeGuidance, leaderExposureLabel, leaderExposureRoleLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
+import { COORDINATED_BRUTE_FOLLOWERS, COORDINATED_SPITTER_FOLLOWERS, activeCombatNearby, advanceBossHud, initialBossHud, leaderArmourSegments, leaderChargeGuidance, leaderExposureLabel, leaderExposureRoleLabel, leaderFormationLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
 import { forestDungeonAtmosphere, forestDungeonNotice, portalNoticeFeedback } from "./forest-dungeon-presentation.js";
 import { objectiveGuidance, objectiveIcon } from "./objective-guidance.js";
 import { createSocialUI } from "./social-ui.js";
@@ -235,6 +235,7 @@ import {
   type TraitId,
   type WorldBootstrap,
   type AreaLeaderExposed,
+  type AreaLeaderFormation,
   type AreaLeaderReinforcements,
   type WorldObjectiveCompleted,
   type WorldObjectiveUpdate,
@@ -9440,6 +9441,7 @@ const bossLootName = document.querySelector<HTMLElement>("#boss-loot-name")!;
 const bossLootFit = document.querySelector<HTMLElement>("#boss-loot-fit")!;
 const leaderExposedUntil = new Map<string, number>();
 const leaderReinforcementUntil = new Map<string, number>();
+const leaderFormation = new Map<string, { state: AreaLeaderFormation["state"]; until: number }>();
 const escortLinkVisuals = new Map<string, pc.Entity>();
 let escortLinkMaterial: pc.StandardMaterial | null = null;
 let bossHudState = initialBossHud();
@@ -9512,10 +9514,12 @@ function updateBossHud(now: number): void {
     .map(id => [id, { alive: mobVisuals.get(id)?.state.alive === true }] as const));
   const armour = leaderArmourSegments(nextBossId, followerStates);
   const reinforcementsIncoming = now < (leaderReinforcementUntil.get(nextBossId) ?? 0);
+  const formation = leaderFormation.get(nextBossId);
+  const formationLabel = formation && now < formation.until ? leaderFormationLabel(formation.state) : "";
   const rematchLabel = boss?.isMiniBoss ? leaderRematchLabel(boss.leaderRematchTier, boss.leaderModifier) : "";
   // Keep combat hierarchy stable even when a fresh objective update renders behind the boss card.
   document.documentElement.classList.toggle("boss-hud-active", bossHudState.visible);
-  const fingerprint = JSON.stringify([bossHudState.visible, boss?.name, boss?.health, boss?.maxHealth, boss?.combatState, boss?.attackPattern, boss?.targetId, bossHudState.enraged, bossHudState.message, exposedLabel, rematchLabel, localBuildPathId, armour.active, armour.maximum, reinforcementsIncoming]);
+  const fingerprint = JSON.stringify([bossHudState.visible, boss?.name, boss?.health, boss?.maxHealth, boss?.combatState, boss?.attackPattern, boss?.targetId, bossHudState.enraged, bossHudState.message, exposedLabel, rematchLabel, formationLabel, localBuildPathId, armour.active, armour.maximum, reinforcementsIncoming]);
   if (fingerprint === bossHudFingerprint) return;
   bossHudFingerprint = fingerprint;
   bossHud.hidden = !bossHudState.visible;
@@ -9533,7 +9537,7 @@ function updateBossHud(now: number): void {
   const leaderPhase = leaderHealthPhase(boss.health, boss.maxHealth);
   const championPhase = realmBossHealthPhase(boss.health, boss.maxHealth);
   bossPhase.textContent = !boss.alive ? "DEFEATED" : pathChampion ? pathChampionPhaseLabel(boss.name, championPhase, boss.combatState === "recover")
-    : boss.isMiniBoss ? `PHASE ${leaderPhase} · ${reinforcementsIncoming ? "REINFORCEMENTS INCOMING" : exposedLabel ? armour.maximum > 0 && armour.active === 0 ? "ESCORT ARMOUR BROKEN" : "FOLLOWER BREAK" : boss.combatState === "recover" ? "COUNTER WINDOW" : leaderPhase === 3 ? "FINAL ASSAULT" : leaderPhase === 2 ? "FOLLOWERS RALLIED" : "OPENING"}`
+    : boss.isMiniBoss ? `PHASE ${leaderPhase} · ${formationLabel || (reinforcementsIncoming ? "REINFORCEMENTS INCOMING" : exposedLabel ? armour.maximum > 0 && armour.active === 0 ? "ESCORT ARMOUR BROKEN" : "FOLLOWER BREAK" : boss.combatState === "recover" ? "COUNTER WINDOW" : leaderPhase === 3 ? "FINAL ASSAULT" : leaderPhase === 2 ? "FOLLOWERS RALLIED" : "OPENING")}`
     : realmBoss ? `PHASE ${realmPhase} · ${boss.combatState === "recover" ? "SHIFTING" : realmPhase === 3 ? "WARDEN BARRAGE" : realmPhase === 2 ? "FALLING ROCKS" : "STONE VOLLEYS"}`
     : bossHudState.enraged ? `PHASE 2 · ${crystal ? "ROTATING CRYSTAL WAVES" : guardian ? "HEARTWOOD CHARGE" : bruteEvent ? "ENRAGED VOLLEYS" : "ENRAGED"}` : `PHASE 1 · ${crystal ? "AIMED SHOT / FAN" : guardian ? "ROOT VOLLEY" : bruteEvent ? "ROCK VOLLEY / SLAM" : "AIMED SHOT / FAN"}`;
   bossHud.dataset.encounter = boss.isMiniBoss ? "miniboss" : crystal ? "crystal" : guardian ? "dungeon" : realmBoss ? "realm" : "wilderness";
@@ -9553,7 +9557,7 @@ function updateBossHud(now: number): void {
     : rematchLabel;
   bossRematch.dataset.modifier = boss.leaderModifier || "";
   bossAttackLabel.textContent = boss.alive
-    ? leaderChargeGuidance(boss.attackPattern, boss.combatState, boss.targetId, room?.sessionId ?? "")
+    ? formationLabel || leaderChargeGuidance(boss.attackPattern, boss.combatState, boss.targetId, room?.sessionId ?? "")
     : "ENCOUNTER COMPLETE";
   bossAttackLabel.dataset.state = boss.combatState;
   bossHealthFill.style.transform = `scaleX(${Math.max(0, Math.min(1, boss.health / Math.max(1, boss.maxHealth)))})`;
@@ -12567,6 +12571,12 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     leaderReinforcementUntil.set(message.mobId, performance.now() + Math.min(3_000, message.durationMs));
     bossHudFingerprint = "";
   });
+  room.onMessage("leader:formation", (message: AreaLeaderFormation) => {
+    if (!message?.mobId || !Number.isFinite(message.durationMs) || message.durationMs <= 0) return;
+    leaderFormation.set(message.mobId, { state: message.state,
+      until: performance.now() + Math.min(5_000, message.durationMs) });
+    bossHudFingerprint = "";
+  });
   room.onMessage("progression:update", (update: ProgressionUpdate) => {
     if (pendingStatChoice && (update.reason === "choice" || update.reason === "sync")) clearPendingStatChoice();
     renderCharacterProgression(update);
@@ -13244,7 +13254,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     mobVisuals.clear();
     for (const popup of rangedPopups) popup.element.remove(); rangedPopups.length = 0; rangedReticleHitUntil = 0;
     bossHudState = initialBossHud(); bossHudFingerprint = ""; activeBossId = ""; bossHud.hidden = true;
-    leaderExposedUntil.clear(); leaderReinforcementUntil.clear();
+    leaderExposedUntil.clear(); leaderReinforcementUntil.clear(); leaderFormation.clear();
     for (const link of escortLinkVisuals.values()) link.destroy(); escortLinkVisuals.clear(); escortLinkMaterial?.destroy(); escortLinkMaterial = null;
     for (const loot of lootVisuals.values()) loot.root.destroy();
     lootVisuals.clear();

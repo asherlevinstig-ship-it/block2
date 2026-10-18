@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { activeCombatNearby, advanceBossHud, initialBossHud, leaderArmourSegments, leaderAttackLabel, leaderAttackName, leaderChargeGuidance, leaderExposureLabel, leaderExposureRoleLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
+import { activeCombatNearby, advanceBossHud, initialBossHud, leaderArmourSegments, leaderAttackLabel, leaderAttackName, leaderChargeGuidance, leaderExposureLabel, leaderExposureRoleLabel, leaderFormationLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
 const player = { x: 40, y: 8, z: 18, health: 5 };
 const boss = { x: 43, y: 8, z: 18, name: "Matriarch", alive: true, health: 24, maxHealth: 24, enraged: false };
 describe("boss HUD", () => {
+  it("uses compact formation labels without opening a central overlay", () => {
+    expect(leaderFormationLabel("full")).toBe("CROSSFIRE · FLANKS CLOSING");
+    expect(leaderFormationLabel("pin")).toContain("PINNED");
+    expect(leaderFormationLabel("crossfire")).toContain("ESCAPE LANE");
+    expect(leaderFormationLabel("broken")).toBe("FORMATION BROKEN · COUNTER");
+  });
   it("announces arrival once without extending its message every frame", () => {
     const first = advanceBossHud(initialBossHud(), boss, player, 1000);
     expect(first.visible).toBe(true); expect(first.message).toContain("ARRIVED");
