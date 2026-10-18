@@ -4517,6 +4517,47 @@ function addCallingSignature(root: pc.Entity, abilityId: CallingAbilityId): pc.S
     }
     return [core, lightning];
   }
+  if (abilityId === "healer_field_mend") {
+    const life = callingSignatureMaterial(new pc.Color(.35, 1, .7), .5, .75);
+    const blessing = callingSignatureMaterial(new pc.Color(1, .93, .58), .88, 1.15);
+    addCallingSignaturePrimitive(root, "mend-halo", "cylinder", life, [.68, .025, .68], [0, .06, 0]);
+    for (let index = 0; index < 3; index += 1) {
+      const angle = index / 3 * Math.PI * 2;
+      const x = Math.sin(angle) * .58, z = Math.cos(angle) * .58;
+      addCallingSignaturePrimitive(root, "mend-cross-vertical", "box", blessing, [.06, .28, .045], [x, .72 + index * .22, z]);
+      addCallingSignaturePrimitive(root, "mend-cross-horizontal", "box", blessing, [.2, .055, .045], [x, .72 + index * .22, z]);
+    }
+    return [life, blessing];
+  }
+  if (abilityId === "healer_renewal") {
+    const sanctuary = callingSignatureMaterial(new pc.Color(.25, .9, .55), .42, .58);
+    const goldEdge = callingSignatureMaterial(new pc.Color(1, .82, .34), .78, 1.05);
+    addCallingSignaturePrimitive(root, "renewal-sanctuary", "cylinder", sanctuary, [1.45, .022, 1.45], [0, .055, 0]);
+    for (let index = 0; index < 20; index += 1) {
+      const angle = index / 20 * Math.PI * 2;
+      addCallingSignaturePrimitive(root, "renewal-ring", "box", index % 5 === 0 ? goldEdge : sanctuary,
+        [index % 5 === 0 ? .12 : .065, .03, index % 5 === 0 ? .44 : .3],
+        [Math.sin(angle) * 2.15, .08, Math.cos(angle) * 2.15], [0, angle * 180 / Math.PI, 0]);
+    }
+    addCallingSignaturePrimitive(root, "renewal-cross-vertical", "box", goldEdge, [.11, .035, .62], [0, .1, 0]);
+    addCallingSignaturePrimitive(root, "renewal-cross-horizontal", "box", goldEdge, [.62, .035, .11], [0, .1, 0]);
+    return [sanctuary, goldEdge];
+  }
+  if (abilityId === "healer_resurrection") {
+    const pillar = callingSignatureMaterial(new pc.Color(1, .89, .48), .22, .72);
+    const soul = callingSignatureMaterial(new pc.Color(1, .98, .8), .9, 1.3);
+    addCallingSignaturePrimitive(root, "resurrection-pillar", "cylinder", pillar, [.72, 2.3, .72], [0, 2.28, 0]);
+    addCallingSignaturePrimitive(root, "resurrection-halo-low", "cylinder", soul, [1.08, .025, 1.08], [0, .08, 0]);
+    addCallingSignaturePrimitive(root, "resurrection-halo-high", "cylinder", soul, [.62, .018, .62], [0, 2.55, 0]);
+    for (let index = 0; index < 12; index += 1) {
+      const angle = index / 12 * Math.PI * 2;
+      addCallingSignaturePrimitive(root, "resurrection-ray", "box", index % 3 === 0 ? soul : pillar,
+        [.035, .5 + index % 3 * .18, .035],
+        [Math.sin(angle) * (.52 + index % 2 * .28), .75 + index % 4 * .42, Math.cos(angle) * (.52 + index % 2 * .28)],
+        [index % 2 ? 14 : -14, angle * 180 / Math.PI, index % 3 ? 8 : -8]);
+    }
+    return [pillar, soul];
+  }
   if (abilityId === "thief_smoke_bomb") {
     const dark = callingSignatureMaterial(new pc.Color(.1, .13, .12), .58);
     const rim = callingSignatureMaterial(new pc.Color(.28, .38, .34), .4, .2);
@@ -4571,6 +4612,17 @@ function addCallingPersistentSignature(root: pc.Entity, state: CallingStateUpdat
     }
     return [charged];
   }
+  if (state.abilityId === "healer_resurrection") {
+    const channel = callingSignatureMaterial(new pc.Color(.4, 1, .72), .38, .72);
+    const promise = callingSignatureMaterial(new pc.Color(1, .88, .45), .72, 1.08);
+    addCallingSignaturePrimitive(root, "resurrection-channel", "cylinder", channel, [.82, .025, .82], [0, .07, 0]);
+    for (let index = 0; index < 8; index += 1) {
+      const angle = index / 8 * Math.PI * 2;
+      addCallingSignaturePrimitive(root, "resurrection-channel-rune", "box", index % 2 ? channel : promise,
+        [.06, .03, .28], [Math.sin(angle) * 1.05, .1, Math.cos(angle) * 1.05], [0, angle * 180 / Math.PI, 0]);
+    }
+    return [channel, promise];
+  }
   return [];
 }
 
@@ -4586,7 +4638,10 @@ function createCallingImpact(effect: CallingAbilityEffect): void {
   const followsPlayer = abilityId === "tank_bulwark" || abilityId === "mage_mana_shield"
     || abilityId === "mage_overload" || abilityId === "ranger_volley_focus" || abilityId === "ranger_deadeye";
   const targetAnchor = abilityId === "assassin_death_mark" && effect.targetId
-    ? mobVisuals.get(effect.targetId)?.entity : undefined;
+    ? mobVisuals.get(effect.targetId)?.entity
+    : (abilityId === "healer_field_mend" || abilityId === "healer_resurrection") && effect.targetId
+      ? effect.targetId === room?.sessionId ? localPlayer : remotePlayers.get(effect.targetId)?.entity
+      : undefined;
   const casterAnchor = effect.casterId === room?.sessionId ? localPlayer : remotePlayers.get(effect.casterId)?.entity;
   if (targetAnchor) {
     root.setLocalPosition(0, .03, 0); targetAnchor.addChild(root);
@@ -10742,7 +10797,7 @@ app.on("update", (dt: number) => {
   }
   for (let index = callingImpactVisuals.length - 1; index >= 0; index -= 1) {
     const visual = callingImpactVisuals[index]!;
-    if (visual.abilityId === "mage_arcane_surge") visual.root.rotateLocal(0, frameTime * 105, 0);
+    if (visual.abilityId === "mage_arcane_surge" || visual.abilityId === "healer_renewal") visual.root.rotateLocal(0, frameTime * 105, 0);
     else if (visual.abilityId === "mage_overload") visual.root.rotateLocal(0, frameTime * 165, 0);
     if (animationNow >= visual.expiresAt) {
       visual.root.destroy();
@@ -10751,7 +10806,7 @@ app.on("update", (dt: number) => {
     }
   }
   for (const [playerId, visual] of callingPersistentVisuals) {
-    if (visual.abilityId === "mage_mana_shield") visual.root.rotateLocal(0, frameTime * 24, 0);
+    if (visual.abilityId === "mage_mana_shield" || visual.abilityId === "healer_resurrection") visual.root.rotateLocal(0, frameTime * 24, 0);
     else if (visual.abilityId === "mage_overload") visual.root.rotateLocal(0, frameTime * 92, 0);
     if (Date.now() >= visual.expiresAt) {
       visual.root.destroy(); visual.materials.forEach(material => material.destroy()); callingPersistentVisuals.delete(playerId);
@@ -11429,18 +11484,22 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       refreshProgressionNotice();
     }
     status.textContent = `${update.ability} · ${update.detail.toLowerCase()}.`;
-    const position = localPlayer.getPosition();
-    createCallingImpact({
-      casterId: room!.sessionId,
-      pathId: update.pathId,
-      abilityId: update.abilityId,
-      x: position.x,
-      y: position.y,
-      z: position.z,
-      yaw: cameraOrbit.yaw,
-      ...(update.durationMs ? { durationMs: update.durationMs } : {}),
-    });
-    lastLocalCallingImpact = { abilityId: update.abilityId, at: performance.now() };
+    const serverAnchored = update.abilityId === "assassin_death_mark" || update.abilityId === "healer_field_mend"
+      || update.abilityId === "healer_resurrection";
+    if (!serverAnchored) {
+      const position = localPlayer.getPosition();
+      createCallingImpact({
+        casterId: room!.sessionId,
+        pathId: update.pathId,
+        abilityId: update.abilityId,
+        x: position.x,
+        y: position.y,
+        z: position.z,
+        yaw: cameraOrbit.yaw,
+        ...(update.durationMs ? { durationMs: update.durationMs } : {}),
+      });
+      lastLocalCallingImpact = { abilityId: update.abilityId, at: performance.now() };
+    }
   });
   room.onMessage("calling:ability:effect", (effect: CallingAbilityEffect) => {
     const duplicateLocal = effect.casterId === room?.sessionId

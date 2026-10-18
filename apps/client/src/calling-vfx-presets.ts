@@ -107,17 +107,19 @@ export const CALLING_IMPACT_PARTICLES: Record<CallingAbilityId, readonly Particl
     layer("glow", warmWhite, 23, 1.35, .29, .36, .5, .4, .64, 1.05),
   ],
   healer_field_mend: [
-    layer("glow", mint, 40, 1.5, .41, .55, .7, 1.6, .75, .45),
-    layer("spark", warmWhite, 17, 1.1, .13, .42, .85, 1.4, .66, .65),
+    layer("glow", mint, 46, 1.5, .42, .68, .82, 1.7, .8, .32),
+    layer("spark", warmWhite, 19, 1.05, .14, .52, 1.05, 1.55, .74, .48),
+    layer("streak", gold, 12, .82, .25, .42, .68, 1.8, .7, .35),
   ],
   healer_renewal: [
-    layer("glow", mint, 70, 1.65, .48, 2.1, 1.5, 1.45, .72, .3),
-    layer("spark", warmWhite, 25, 1.15, .15, 1.7, 1.7, 1.1, .68, .65),
+    layer("glow", mint, 68, 1.72, .5, 2.25, 1.75, 1.3, .76, .2),
+    layer("spark", warmWhite, 24, 1.12, .15, 1.85, 1.9, 1.05, .72, .48),
+    layer("streak", gold, 18, .88, .28, 1.6, 1.45, 1.25, .72, .28),
   ],
   healer_resurrection: [
-    layer("glow", warmWhite, 76, 2.35, .49, .85, .45, 2.7, .82, .6),
-    layer("streak", gold, 35, 1.5, .42, .62, .7, 2.8, .9, .55),
-    layer("smoke", [.64, .64, .5], 28, 2, .8, .82, .5, 1.15, .28, .12),
+    layer("glow", warmWhite, 72, 2.35, .52, .95, .52, 2.9, .88, .45),
+    layer("streak", gold, 39, 1.55, .44, .72, .82, 3.1, .94, .38),
+    layer("smoke", [.64, .64, .5], 26, 2, .82, .92, .52, 1.25, .3, .08),
   ],
 };
 
@@ -167,8 +169,8 @@ export const CALLING_ABILITY_SUSTAIN_PARTICLES: Partial<Record<CallingAbilityId,
     layer("glow", green, 18, .86, .28, .48, .24, .42, .44, 1.05),
   ],
   healer_resurrection: [
-    layer("glow", warmWhite, 38, 1.35, .42, .78, .25, 1.5, .67, .5),
-    layer("streak", gold, 14, .85, .3, .6, .3, 1.8, .72, .45),
+    layer("glow", mint, 32, 1.2, .38, .92, .28, 1.15, .58, .3),
+    layer("streak", gold, 18, .82, .28, .78, .36, 1.65, .76, .32),
   ],
 };
 

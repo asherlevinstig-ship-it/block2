@@ -38,4 +38,11 @@ describe("calling particle identity and budget", () => {
     expect(CALLING_ABILITY_SUSTAIN_PARTICLES.mage_mana_shield?.length).toBeGreaterThanOrEqual(2);
     expect(CALLING_ABILITY_SUSTAIN_PARTICLES.mage_overload?.some(layer => layer.kind === "streak")).toBe(true);
   });
+
+  it("separates focused healing, area renewal, and resurrection", () => {
+    expect(CALLING_IMPACT_PARTICLES.healer_field_mend.some(layer => layer.kind === "streak")).toBe(true);
+    expect(Math.max(...CALLING_IMPACT_PARTICLES.healer_renewal.map(layer => layer.radius))).toBeGreaterThanOrEqual(2);
+    expect(CALLING_IMPACT_PARTICLES.healer_resurrection.reduce((sum, layer) => sum + layer.count, 0)).toBeGreaterThanOrEqual(130);
+    expect(CALLING_ABILITY_SUSTAIN_PARTICLES.healer_resurrection?.some(layer => layer.color[1] === 1)).toBe(true);
+  });
 });
