@@ -149,8 +149,12 @@ export function leaderChargeGuidance(pattern: string, combatState: string, targe
     ? "CHARGE · HOLD C TO INTERCEPT" : leaderAttackLabel(pattern, combatState);
 }
 
-export function leaderFormationLabel(state: "full" | "pin" | "crossfire" | "broken" | ""): string {
-  return state === "full" ? "CROSSFIRE · FLANKS CLOSING"
+export function leaderFormationLabel(state: "forming" | "full" | "pin" | "crossfire" | "broken" | "",
+  tactic: "surround" | "venom-lock" | "breach" = "surround"): string {
+  return state === "forming" ? tactic === "venom-lock" ? "FORMATION INCOMING · VENOM LOCK"
+    : tactic === "breach" ? "FORMATION INCOMING · BREACH"
+      : "FORMATION INCOMING · SURROUND"
+    : state === "full" ? "CROSSFIRE · FLANKS CLOSING"
     : state === "pin" ? "PINNED · CRAWLER FLANK"
     : state === "crossfire" ? "CROSSFIRE · ESCAPE LANE TARGETED"
     : state === "broken" ? "FORMATION BROKEN · COUNTER" : "";

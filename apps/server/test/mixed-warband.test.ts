@@ -80,12 +80,32 @@ describe("mixed frontier warband", () => {
     expect(internal.pendingMobMelee.has("frontier-crawler")).toBe(true);
     const crossfire = [...internal.pendingMobProjectiles.values()].filter((shot: any) => shot.mobId === "frontier-support-spitter");
     expect(crossfire).toHaveLength(1);
-    expect(crossfire[0].hazardDurationMs).toBe(3_500);
+    expect(crossfire[0].hazardDurationMs).toBe(2_500);
     expect(events).toContainEqual({ type: "leader:formation",
       payload: expect.objectContaining({ mobId: "frontier-brute-east", state: "full" }) });
     const crawler = room.state.mobs.get("frontier-crawler")!;
     internal.staggerMob("frontier-crawler", crawler, 10_100, 800, true);
     expect(events).toContainEqual({ type: "leader:formation",
-      payload: { mobId: "frontier-brute-east", state: "broken", durationMs: 1_800 } });
+      payload: { mobId: "frontier-brute-east", state: "broken", tactic: "breach", durationMs: 2_500 } });
+    expect(leader.combatState).toBe("recover");
+    expect(internal.warbandDisrupted.has("frontier-brute-east")).toBe(true);
+  });
+
+  it("warns during the wind-up and exposes the brute when a role is interrupted", () => {
+    vi.useFakeTimers(); vi.setSystemTime(20_000);
+    const room = new WorldRoom(); room.setState(new WorldState());
+    const internal = room as any; const events: { type: string; payload: any }[] = [];
+    vi.spyOn(room, "broadcast").mockImplementation((type, payload) => { events.push({ type, payload }); });
+    internal.registerMob("frontier-crawler", "moss_crawler", { x: 65.5, y: 8, z: 34.5 });
+    internal.registerMob("frontier-support-spitter", "cave_spitter", { x: 66.5, y: 8, z: 40.5 });
+    internal.registerMob("frontier-brute-east", "stone_brute", { x: 72.5, y: 8, z: 34.5 });
+    const leader = room.state.mobs.get("frontier-brute-east")!;
+    Object.assign(leader, { attackPattern: "charge", combatState: "windup", stateUntil: 21_000, alive: true });
+    internal.prepareMixedWarbandPush("frontier-brute-east", leader, 20_000, 1_000);
+    expect(events).toContainEqual({ type: "leader:formation", payload: {
+      mobId: "frontier-brute-east", state: "forming", tactic: "breach", durationMs: 1_000 } });
+    internal.staggerMob("frontier-crawler", room.state.mobs.get("frontier-crawler")!, 20_200, 600, true);
+    expect(leader.combatState).toBe("recover");
+    expect(leader.stateUntil).toBeGreaterThanOrEqual(22_700);
   });
 });

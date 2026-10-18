@@ -9441,7 +9441,7 @@ const bossLootName = document.querySelector<HTMLElement>("#boss-loot-name")!;
 const bossLootFit = document.querySelector<HTMLElement>("#boss-loot-fit")!;
 const leaderExposedUntil = new Map<string, number>();
 const leaderReinforcementUntil = new Map<string, number>();
-const leaderFormation = new Map<string, { state: AreaLeaderFormation["state"]; until: number }>();
+const leaderFormation = new Map<string, { state: AreaLeaderFormation["state"]; tactic?: AreaLeaderFormation["tactic"]; until: number }>();
 const escortLinkVisuals = new Map<string, pc.Entity>();
 let escortLinkMaterial: pc.StandardMaterial | null = null;
 let bossHudState = initialBossHud();
@@ -9515,7 +9515,7 @@ function updateBossHud(now: number): void {
   const armour = leaderArmourSegments(nextBossId, followerStates);
   const reinforcementsIncoming = now < (leaderReinforcementUntil.get(nextBossId) ?? 0);
   const formation = leaderFormation.get(nextBossId);
-  const formationLabel = formation && now < formation.until ? leaderFormationLabel(formation.state) : "";
+  const formationLabel = formation && now < formation.until ? leaderFormationLabel(formation.state, formation.tactic) : "";
   const rematchLabel = boss?.isMiniBoss ? leaderRematchLabel(boss.leaderRematchTier, boss.leaderModifier) : "";
   // Keep combat hierarchy stable even when a fresh objective update renders behind the boss card.
   document.documentElement.classList.toggle("boss-hud-active", bossHudState.visible);
@@ -12573,7 +12573,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   });
   room.onMessage("leader:formation", (message: AreaLeaderFormation) => {
     if (!message?.mobId || !Number.isFinite(message.durationMs) || message.durationMs <= 0) return;
-    leaderFormation.set(message.mobId, { state: message.state,
+    leaderFormation.set(message.mobId, { state: message.state, tactic: message.tactic,
       until: performance.now() + Math.min(5_000, message.durationMs) });
     bossHudFingerprint = "";
   });

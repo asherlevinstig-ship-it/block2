@@ -1677,7 +1677,7 @@ export type WorldObjectiveCompleted = {
 export type AreaLeaderExposed = {
   mobId: string;
   durationMs: number;
-  reason?: "follower" | "charge" | "pack-interrupt" | "volley-interrupt";
+  reason?: "follower" | "charge" | "pack-interrupt" | "volley-interrupt" | "formation-interrupt";
   armourSegments?: number;
 };
 
@@ -1689,7 +1689,8 @@ export type AreaLeaderReinforcements = {
 
 export type AreaLeaderFormation = {
   mobId: string;
-  state: "full" | "pin" | "crossfire" | "broken";
+  state: "forming" | "full" | "pin" | "crossfire" | "broken";
+  tactic?: "surround" | "venom-lock" | "breach";
   durationMs: number;
 };
 

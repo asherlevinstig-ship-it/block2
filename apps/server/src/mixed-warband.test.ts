@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { warbandCrawlerYaw, warbandCrossfireSite, warbandFormationState } from "./mixed-warband.js";
+import { warbandCrawlerYaw, warbandCrossfireSite, warbandFormationState, warbandTactic, warbandTacticStats } from "./mixed-warband.js";
 
 describe("mixed warband formation", () => {
   it("alternates its two escape lanes while preserving fixed distances", () => {
@@ -10,5 +10,14 @@ describe("mixed warband formation", () => {
     expect(Math.hypot(first.x - 5, first.z - 5)).toBeCloseTo(2.8);
     expect((first.z - 5) * (second.z - 5)).toBeLessThan(0);
     expect(warbandFormationState(false, false)).toBeNull();
+  });
+
+  it("gives regions fixed tactics rather than scaling them from the party", () => {
+    expect(warbandTactic("stone-brute")).toBe("surround");
+    expect(warbandTactic("mistfen-behemoth")).toBe("venom-lock");
+    expect(warbandTactic("south-quarrymaster")).toBe("breach");
+    expect(warbandTacticStats("mistfen-behemoth").poolDurationMs).toBe(4_500);
+    expect(warbandTacticStats("stone-brute").crawlerDistance).toBe(1.4);
+    expect(warbandTacticStats("south-quarrymaster").poolTravelMs).toBe(850);
   });
 });

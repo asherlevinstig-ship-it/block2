@@ -4,6 +4,9 @@ const player = { x: 40, y: 8, z: 18, health: 5 };
 const boss = { x: 43, y: 8, z: 18, name: "Matriarch", alive: true, health: 24, maxHealth: 24, enraged: false };
 describe("boss HUD", () => {
   it("uses compact formation labels without opening a central overlay", () => {
+    expect(leaderFormationLabel("forming", "surround")).toBe("FORMATION INCOMING · SURROUND");
+    expect(leaderFormationLabel("forming", "venom-lock")).toContain("VENOM LOCK");
+    expect(leaderFormationLabel("forming", "breach")).toContain("BREACH");
     expect(leaderFormationLabel("full")).toBe("CROSSFIRE · FLANKS CLOSING");
     expect(leaderFormationLabel("pin")).toContain("PINNED");
     expect(leaderFormationLabel("crossfire")).toContain("ESCAPE LANE");
