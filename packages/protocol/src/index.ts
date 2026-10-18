@@ -1833,12 +1833,21 @@ export interface ThornBindingUpdate {
 export interface MobHazardPlaced {
   hazardId: string;
   mobId: string;
-  kind?: "acid" | "root" | "pressure";
+  kind?: "acid" | "root" | "pressure" | "toxic-cloud";
   x: number;
   y: number;
   z: number;
   radius: number;
   expiresAt: number;
+}
+
+export interface FenBloaterGlandHit {
+  mobId: string;
+  attackerId: string;
+  hits: number;
+  required: number;
+  interrupted: boolean;
+  staggerMs: number;
 }
 
 export interface DepthsRouteHazard {

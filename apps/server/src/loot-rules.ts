@@ -63,6 +63,10 @@ const MATERIAL_LOOT_BY_ARCHETYPE: Record<MobArchetypeId, readonly { itemId: Item
   thornbinder: [
     { itemId: "moss_fibre", quantity: 2 },
   ],
+  fen_bloater: [
+    { itemId: "acid_gland", quantity: 2 },
+    { itemId: "moss_fibre", quantity: 1 },
+  ],
 };
 
 export function lootForArchetype(archetypeId: MobArchetypeId, mobId = "", equipmentRoll = 1, threat: LootThreat = "normal", consumableRoll = 1, regionTier = 1): readonly { itemId: ItemId; quantity: number }[] {

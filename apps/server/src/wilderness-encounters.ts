@@ -32,7 +32,7 @@ export const STONE_BRUTE_ESCORTS = [
 export const STONE_BRUTE_GROUP_IDS = ["stone-brute", ...STONE_BRUTE_ESCORTS.map(escort => escort.id)] as const;
 export const isStoneBruteGroupMob = (id: string) => STONE_BRUTE_GROUP_IDS.some(member => member === id);
 export const MISTFEN_IDS = ["mistfen-behemoth", "mistfen-briar-west", "mistfen-briar-east", "mistfen-spitter"] as const;
-export const isMistfenMob = (id: string) => MISTFEN_IDS.some(member => member === id);
+export const isMistfenMob = (id: string) => id === "mistfen-bloater" || MISTFEN_IDS.some(member => member === id);
 export const mistfenAllows = (pose: { x: number; y: number; z: number }) => Math.abs(pose.y - 8) <= 1.5
   && isInMistfenMarsh(pose.x, pose.z);
 export const SOUTHERN_QUARRY_IDS = ["south-causeway-crawler", "south-quarry-spitter-west", "south-quarry-spitter-east",
@@ -82,6 +82,7 @@ export const WILDERNESS_ENCOUNTERS: readonly { id: string; archetype: MobArchety
   { id: "mistfen-briar-west", archetype: "briar_crawler", ...MISTFEN_MOB_HOMES[1] },
   { id: "mistfen-briar-east", archetype: "briar_crawler", ...MISTFEN_MOB_HOMES[2] },
   { id: "mistfen-spitter", archetype: "cave_spitter", ...MISTFEN_MOB_HOMES[3] },
+  { id: "mistfen-bloater", archetype: "fen_bloater", x: -36.5, y: 8, z: -34.5 },
   ...ASHEN_SENTRY_IDS.map((id, index) => ({ id, archetype: "cave_spitter" as const, ...ASHEN_SENTRY_HOMES[index]! })),
   { id: SOUTHERN_QUARRY_IDS[0], archetype: "moss_crawler", ...SOUTHERN_MOB_HOMES[0] },
   { id: SOUTHERN_QUARRY_IDS[1], archetype: "cave_spitter", ...SOUTHERN_MOB_HOMES[1] },

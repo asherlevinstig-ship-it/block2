@@ -181,6 +181,7 @@ import {
   type CombatStagger,
   type DefenseResolved,
   type DepthsRouteHazard,
+  type FenBloaterGlandHit,
   type DungeonRunUpdate,
   type DungeonRewardClaimed,
   type DungeonBoardUpdate,
@@ -4397,6 +4398,7 @@ interface MobHazardVisual {
   root: pc.Entity;
   material: pc.StandardMaterial;
   expiresAt: number;
+  toxicCloud: boolean;
 }
 
 interface ThornBindingVisual {
@@ -5574,23 +5576,27 @@ function createMobHazard(message: MobHazardPlaced): void {
   const root = new pc.Entity(`mob-hazard:${message.hazardId}`);
   const rootHazard = message.kind === "root";
   const pressureHazard = message.kind === "pressure";
-  const material = powerMaterial(rootHazard ? new pc.Color(.52, .3, .08) : pressureHazard ? new pc.Color(1, .31, .08) : new pc.Color(0.4, 0.9, 0.06), rootHazard ? .74 : pressureHazard ? .68 : .58);
-  const pieces = rootHazard ? 7 : 18;
+  const toxicCloud = message.kind === "toxic-cloud";
+  const material = powerMaterial(rootHazard ? new pc.Color(.52, .3, .08) : pressureHazard ? new pc.Color(1, .31, .08)
+    : toxicCloud ? new pc.Color(.46, .82, .08) : new pc.Color(0.4, 0.9, 0.06), rootHazard ? .74 : pressureHazard ? .68 : toxicCloud ? .32 : .58);
+  const pieces = rootHazard ? 7 : toxicCloud ? 22 : 18;
   for (let index = 0; index < pieces; index += 1) {
     const angle = index / pieces * Math.PI * 2;
     const radius = message.radius * (0.38 + (index % 3) * 0.22);
     const blob = addBox(
       root,
-      rootHazard ? "root-spike" : pressureHazard ? "arena-pressure" : "acid-puddle",
+      rootHazard ? "root-spike" : pressureHazard ? "arena-pressure" : toxicCloud ? "toxic-vapour" : "acid-puddle",
       material,
-      rootHazard ? [.13, .1 + index % 2 * .08, .58] : pressureHazard ? [.34, .045, .1] : [0.32 + index % 2 * 0.16, 0.035, 0.3 + (index + 1) % 2 * 0.16],
-      [Math.sin(angle) * radius, rootHazard ? .08 : .035, Math.cos(angle) * radius],
+      rootHazard ? [.13, .1 + index % 2 * .08, .58] : pressureHazard ? [.34, .045, .1]
+        : toxicCloud ? [.34 + index % 3 * .14, .28 + index % 4 * .18, .34 + (index + 1) % 3 * .12]
+          : [0.32 + index % 2 * 0.16, 0.035, 0.3 + (index + 1) % 2 * 0.16],
+      [Math.sin(angle) * radius, rootHazard ? .08 : toxicCloud ? .22 + index % 5 * .24 : .035, Math.cos(angle) * radius],
     );
     blob.setLocalEulerAngles(0, angle * 180 / Math.PI, 0);
   }
   root.setPosition(message.x, message.y + 0.015, message.z);
   app.root.addChild(root);
-  mobHazardVisuals.set(message.hazardId, { root, material, expiresAt: message.expiresAt });
+  mobHazardVisuals.set(message.hazardId, { root, material, expiresAt: message.expiresAt, toxicCloud });
 }
 
 function createDepthsHazard(message: DepthsRouteHazard): void {
@@ -6017,7 +6023,8 @@ function updateStrikeWarningMesh(mesh: pc.Mesh, archetype: string, yaw: number, 
     mesh.update(pc.PRIMITIVE_TRIANGLES); return;
   }
   const angle = yaw * Math.PI / 180;
-  const outline = pattern === "pool" ? Array.from({ length: 48 }, (_, i) => ({ x: Math.cos(i * Math.PI / 24) * 1.6, z: Math.sin(i * Math.PI / 24) * 1.6 }))
+  const outline = pattern === "toxic-bloom" ? Array.from({ length: 48 }, (_, i) => ({ x: Math.cos(i * Math.PI / 24) * 3.4, z: Math.sin(i * Math.PI / 24) * 3.4 }))
+    : pattern === "pool" ? Array.from({ length: 48 }, (_, i) => ({ x: Math.cos(i * Math.PI / 24) * 1.6, z: Math.sin(i * Math.PI / 24) * 1.6 }))
     : pattern === "fan" ? [{ x: 0, z: 0 }, { x: Math.sin(angle + 22 * Math.PI / 180) * 7, z: Math.cos(angle + 22 * Math.PI / 180) * 7 }, { x: Math.sin(angle - 22 * Math.PI / 180) * 7, z: Math.cos(angle - 22 * Math.PI / 180) * 7 }]
     : pattern === "charge" ? championChargeOutline(yaw, chargeLength) : archetype === "stone_brute"
     ? pattern === "smash" ? bruteSmashOutline(yaw) : bruteSlamOutline()
@@ -6252,6 +6259,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   const isBrute = mob.archetype === "stone_brute";
   const isSpitter = mob.archetype === "cave_spitter" || mob.archetype === "shard_sentry";
   const isThornbinder = mob.archetype === "thornbinder";
+  const isFenBloater = mob.archetype === "fen_bloater";
   const isWatchbreaker = mobId === "northwatch-watchbreaker";
   const isAshglass = mobId.startsWith("ashglass-sentry-");
   const isBriar = mob.archetype === "briar_crawler";
@@ -6264,7 +6272,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   const bodyMaterial = coloredMaterial(
     isWatchbreaker ? new pc.Color(.25, .35, .42) : isBrute ? new pc.Color(0.38, 0.43, 0.48) : mob.archetype === "shard_sentry" ? new pc.Color(.25, .43, .52)
       : mob.archetype === "ridge_stalker" ? new pc.Color(.44, .46, .39)
-        : isAshglass ? new pc.Color(0.31, 0.22, 0.2) : isThornbinder ? new pc.Color(.3, .24, .1) : isSpitter ? new pc.Color(0.34, 0.29, 0.43) : isBriar ? new pc.Color(0.31, 0.19, 0.12) : new pc.Color(0.28, 0.42, 0.21),
+        : isAshglass ? new pc.Color(0.31, 0.22, 0.2) : isFenBloater ? new pc.Color(.24, .34, .12) : isThornbinder ? new pc.Color(.3, .24, .1) : isSpitter ? new pc.Color(0.34, 0.29, 0.43) : isBriar ? new pc.Color(0.31, 0.19, 0.12) : new pc.Color(0.28, 0.42, 0.21),
   );
   bodyMaterial.shininess = 12;
   // Keep the emissive shader feature active while varying cue intensity.
@@ -6333,8 +6341,8 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   }
   const statusRoot = new pc.Entity("mob-status");
   entity.addChild(statusRoot);
-  const healthWidth = isBrute ? 1.46 : isThornbinder ? 1.2 : isSpitter ? 1.12 : 0.96;
-  const healthBarY = matriarch ? 2.5 : isThornbinder ? 2.58 : mob.isChampion || mob.isMiniBoss ? mob.archetype === "shard_sentry" ? 2.45 : isSpitter ? 1.9 : isBrute ? 3.08 : 1.72 : isBrute ? 2.32 : mob.archetype === "shard_sentry" ? 1.98 : isSpitter ? 1.43 : 1.34;
+  const healthWidth = isBrute ? 1.46 : isFenBloater ? 1.36 : isThornbinder ? 1.2 : isSpitter ? 1.12 : 0.96;
+  const healthBarY = matriarch ? 2.5 : isThornbinder ? 2.58 : isFenBloater ? 1.72 : mob.isChampion || mob.isMiniBoss ? mob.archetype === "shard_sentry" ? 2.45 : isSpitter ? 1.9 : isBrute ? 3.08 : 1.72 : isBrute ? 2.32 : mob.archetype === "shard_sentry" ? 1.98 : isSpitter ? 1.43 : 1.34;
   addBox(statusRoot, "health-back", healthBackMaterial, [healthWidth + 0.06, 0.1, 0.08], [0, healthBarY, 0]);
   const healthFill = addBox(statusRoot, "health-fill", healthMaterial, [healthWidth, 0.065, 0.09], [0, healthBarY, 0.01]);
   const tierMaterial = coloredMaterial(tierColor);
@@ -11997,7 +12005,8 @@ app.on("update", (dt: number) => {
     }
     const pulse = 1 + Math.sin(animationTime * 8) * 0.07;
     hazard.root.setLocalScale(pulse, 1 + Math.sin(animationTime * 11) * 0.12, pulse);
-    hazard.material.opacity = 0.5 + Math.sin(animationTime * 9) * 0.1;
+    if (hazard.toxicCloud) hazard.root.rotate(0, frameTime * 9, 0);
+    hazard.material.opacity = (hazard.toxicCloud ? .26 : .5) + Math.sin(animationTime * 9) * (hazard.toxicCloud ? .06 : .1);
     hazard.material.update();
   }
   for (const [bindingId, binding] of thornBindingVisuals) {
@@ -12843,9 +12852,16 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     logMovementEvent(`${(message.kind ?? "acid").toUpperCase()} SHOT ${message.mobId}`);
   });
   room.onMessage("combat:thorn-binding", (message: ThornBindingUpdate) => updateThornBinding(message));
+  room.onMessage("combat:bloater-gland", (message: FenBloaterGlandHit) => {
+    const mob = mobVisuals.get(message.mobId);
+    if (!mob) return;
+    createRangedPopup(new pc.Vec3(mob.state.x, mob.state.y + mob.healthBarY + .55, mob.state.z),
+      message.interrupted ? "BLOOM INTERRUPTED" : `GLANDS ${message.hits} / ${message.required}`,
+      message.interrupted ? "melee" : "enemy", false, message.interrupted ? [1, .86, .24] : [.65, 1, .2]);
+  });
   room.onMessage("combat:mob-hazard", (message: MobHazardPlaced) => {
     createMobHazard(message);
-    logMovementEvent(`${message.kind === "pressure" ? "ARENA PRESSURE" : message.kind === "root" ? "ROOT HAZARD" : "ACID POOL"} ${message.hazardId}`);
+    logMovementEvent(`${message.kind === "pressure" ? "ARENA PRESSURE" : message.kind === "root" ? "ROOT HAZARD" : message.kind === "toxic-cloud" ? "TOXIC CLOUD" : "ACID POOL"} ${message.hazardId}`);
   });
   room.onMessage("depths:hazard", (message: DepthsRouteHazard) => createDepthsHazard(message));
   room.onMessage("depths:hazard-impact", (message: DepthsRouteHazard) => {

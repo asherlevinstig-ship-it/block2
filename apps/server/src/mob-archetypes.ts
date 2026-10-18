@@ -1,5 +1,5 @@
 import { BRUTE_SLAM, SPITTER_PATTERN, crawlerRushDistance } from "@blockcraft/protocol";
-export type MobArchetypeId = "moss_crawler" | "briar_crawler" | "stone_brute" | "cave_spitter" | "ridge_stalker" | "shard_sentry" | "thornbinder";
+export type MobArchetypeId = "moss_crawler" | "briar_crawler" | "stone_brute" | "cave_spitter" | "ridge_stalker" | "shard_sentry" | "thornbinder" | "fen_bloater";
 export const isSpitterLike = (archetype: string): boolean => archetype === "cave_spitter" || archetype === "shard_sentry";
 export const isThornbinder = (archetype: string): boolean => archetype === "thornbinder";
 
@@ -152,6 +152,15 @@ export const MOB_ARCHETYPES: Record<MobArchetypeId, MobArchetypeDefinition> = {
     hazardDurationMs: 0, hazardRadius: 0,
     respawnMs: 45_000, rewardHealth: 0, rewardStamina: 24,
   },
+  fen_bloater: {
+    id: "fen_bloater", name: "Fen Bloater", spawn: { x: -36.5, y: 8, z: -34.5 },
+    maxHealth: 14, armor: 0, attackKind: "melee", speed: .68,
+    stopDistance: 3.2, minimumAttackRange: 0, aggroRange: 9,
+    windupMs: 2_000, recoverMs: 2_500, cooldownMs: 5_200, damage: 1,
+    lungeDistance: 0, hitRange: 3.4, projectileTravelMs: 0,
+    hazardDurationMs: 5_500, hazardRadius: 3.4,
+    respawnMs: 45_000, rewardHealth: 0, rewardStamina: 28,
+  },
 };
 
 export function mobArchetype(value: string): MobArchetypeDefinition {
@@ -161,6 +170,7 @@ export function mobArchetype(value: string): MobArchetypeDefinition {
   if (value === "ridge_stalker") return MOB_ARCHETYPES.ridge_stalker;
   if (value === "shard_sentry") return MOB_ARCHETYPES.shard_sentry;
   if (value === "thornbinder") return MOB_ARCHETYPES.thornbinder;
+  if (value === "fen_bloater") return MOB_ARCHETYPES.fen_bloater;
   return MOB_ARCHETYPES.moss_crawler;
 }
 

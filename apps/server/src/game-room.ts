@@ -141,6 +141,7 @@ import {
   type CombatStagger,
   type DefenseResolved,
   type DepthsRouteHazard,
+  type FenBloaterGlandHit,
   type MainHandId,
   type MobHazardPlaced,
   type MobProjectileReleased,
@@ -513,6 +514,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly mobCommittedAim = new Map<string, { x: number; y: number; z: number; yaw: number }>();
   private readonly mobStaggerImmuneUntil = new Map<string, number>();
   private readonly mobHazards = new Map<string, ActiveMobHazard>();
+  private readonly fenBloaterGlandHits = new Map<string, { hits: number; expiresAt: number }>();
   private readonly mistfenPoolDamageAt = new Map<string, number>();
   private readonly fenwalkerWardReadyAt = new Map<string, number>();
   private readonly northwatchShardWardReadyAt = new Map<string, number>();
@@ -2271,6 +2273,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (isAshenSentry(mobId)) mob.name = "Ashglass Sentry";
     if (mobId === "northwatch-spitter") mob.name = "Patrol Shard Sentry";
     if (mobId === "northwatch-patrol-stalker-west" || mobId === "northwatch-patrol-stalker-east") mob.name = "Ridge Patrol Stalker";
+    if (archetypeId === "fen_bloater") mob.attackPattern = "toxic-bloom";
     if (areaMiniBoss) mob.name = areaMiniBoss.name;
     this.mobBaseNames.set(mobId, mob.name);
     mob.level = enemyLevelForTier(mob.difficultyTier, mob.isChampion || mob.isElite || Boolean(areaMiniBoss), mobId === CRYSTAL_MATRIARCH_ID || mobId === "forest-guardian" || mobId === "forge-colossus");
@@ -2472,6 +2475,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.pendingMobMelee.delete(mobId);
     this.crawlerRushes.delete(mobId);
     this.championCharges.delete(mobId);
+    this.fenBloaterGlandHits.delete(mobId);
     if (isSpitterLike(mob.archetype)) for (const [projectileId, projectile] of this.pendingMobProjectiles) {
       if (projectile.mobId !== mobId) continue;
       this.pendingMobProjectiles.delete(projectileId);
@@ -2812,6 +2816,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.masterTrialMobTags.delete(mobId);
     this.rangerSlows.delete(mobId);
     this.rangerRootedUntil.delete(mobId);
+    this.fenBloaterGlandHits.delete(mobId);
     const wasElite = mob.isElite;
     const huntChampion = this.huntChampions.get(mobId);
     const realmRepeatVictory = mobId === REALM_WARDEN_ID && this.realmWardenRepeatActive;
@@ -6942,6 +6947,36 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
   }
 
+  private placeFenBloaterCloud(mobId: string, mob: MobState, now: number): void {
+    const definition = mobArchetype(mob.archetype);
+    const hazardId = `toxic-bloom:${mobId}:${mob.actionSequence}`;
+    const expiresAt = now + definition.hazardDurationMs;
+    this.mobHazards.set(hazardId, {
+      hazardId, mobId, x: mob.x, y: mob.y, z: mob.z,
+      radius: definition.hazardRadius, damage: Math.max(1, mob.attackDamage), expiresAt,
+      nextDamageAt: now + 650, lastDamageAt: new Map(),
+    });
+    this.broadcast("combat:mob-hazard", {
+      hazardId, mobId, kind: "toxic-cloud", x: mob.x, y: mob.y, z: mob.z,
+      radius: definition.hazardRadius, expiresAt,
+    } satisfies MobHazardPlaced);
+  }
+
+  private strikeFenBloaterGland(mobId: string, mob: MobState, attackerId: string, now: number): boolean {
+    if (mob.archetype !== "fen_bloater" || mob.combatState !== "windup" || mob.attackPattern !== "toxic-bloom") return false;
+    const required = 2;
+    const previous = this.fenBloaterGlandHits.get(mobId);
+    const hits = now <= (previous?.expiresAt ?? 0) ? previous!.hits + 1 : 1;
+    const interrupted = hits >= required;
+    const staggerMs = interrupted ? 2_600 : 0;
+    if (interrupted) this.fenBloaterGlandHits.delete(mobId);
+    else this.fenBloaterGlandHits.set(mobId, { hits, expiresAt: mob.stateUntil });
+    this.broadcast("combat:bloater-gland", { mobId, attackerId, hits, required, interrupted, staggerMs } satisfies FenBloaterGlandHit);
+    if (interrupted && this.staggerMob(mobId, mob, now, staggerMs, true))
+      this.broadcast("combat:stagger", { attackerId, mobId, durationMs: staggerMs } satisfies CombatStagger);
+    return true;
+  }
+
   private createVenomSetPool(sessionId: string, origin: MobState, now: number): void {
     const player = this.state.players.get(sessionId);
     if (!player) return;
@@ -7534,6 +7569,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         mob.targetId = "";
         this.warbandDisrupted.delete(mobId);
         this.warbandFormationUntil.delete(mobId);
+        this.fenBloaterGlandHits.delete(mobId);
         if (mob.isMiniBoss) this.areaLeaderPhases.set(mobId, 1);
       }
       if (!mob.alive) continue;
@@ -7648,6 +7684,16 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           }
           if (mobId === ASHGLASS_ORACLE_ID && mob.attackPattern === "teleport-burst") this.teleportAshglassOracle(mob, aim, mob.actionSequence);
           mob.targetId = "";
+          continue;
+        }
+        if (mob.archetype === "fen_bloater") {
+          this.pendingMobMelee.delete(mobId);
+          this.fenBloaterGlandHits.delete(mobId);
+          this.placeFenBloaterCloud(mobId, mob, now);
+          mob.combatState = "recover";
+          mob.stateUntil = mob.attackRecoveryEndAt;
+          mob.targetId = "";
+          mob.aimCommitted = false;
           continue;
         }
         const deltaX = aim.x - mob.x;
@@ -7851,6 +7897,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         || !hasCombatLineOfSight(mob, target, this.readWorldBlock)) continue;
       if (mobId === "frontier-brute" && !mob.isMiniBoss && mob.attackPattern !== "rocks") mob.attackPattern = frontierBrutePattern(mob.actionSequence);
       mob.combatState = "windup";
+      if (mob.archetype === "fen_bloater") this.fenBloaterGlandHits.set(mobId, { hits: 0, expiresAt: now + windupMs });
       this.silverGuardVolley.started(mobId, now + windupMs);
       this.crawlerPositioning.delete(mobId);
       if (definition.attackKind !== "projectile") this.spitterPositioning.delete(mobId);
@@ -9283,7 +9330,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       player.momentumStacks = gainMomentum(player.momentumStacks, player.equippedTrait as TraitId);
       const staggerDuration = northwatchPatrolInterruptDuration(mobId, mob.attackPattern,
         basicStaggerDuration(pending.mainHandId, pending.step, mob.archetype, mob.combatState, mob.isChampion));
-      if (this.staggerMob(mobId, mob, now, staggerDuration)) {
+      const struckBloaterGland = mob.health > 0 && this.strikeFenBloaterGland(mobId, mob, sessionId, now);
+      if (!struckBloaterGland && this.staggerMob(mobId, mob, now, staggerDuration)) {
         const stagger: CombatStagger = { attackerId: sessionId, mobId, durationMs: staggerDuration };
         this.broadcast("combat:stagger", stagger);
       }

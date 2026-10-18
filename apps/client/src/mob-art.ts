@@ -1,7 +1,7 @@
 import * as pc from "playcanvas";
 import { mobGaitTargets } from "./mob-motion.js";
 
-type MobKind = "stone_brute" | "cave_spitter" | "moss_crawler" | "ridge_stalker" | "shard_sentry" | "thornbinder";
+type MobKind = "stone_brute" | "cave_spitter" | "moss_crawler" | "ridge_stalker" | "shard_sentry" | "thornbinder" | "fen_bloater";
 type Triple = [number, number, number];
 
 interface Limb {
@@ -70,7 +70,10 @@ const shardCrystal = material("shard-sentry-crystal", [.48, .86, 1], [.16, .42, 
 const thornBark = material("thornbinder-heartwood", [.2, .12, .05]);
 const thornMoss = material("thornbinder-moss", [.24, .48, .14]);
 const thornSap = material("thornbinder-living-sap", [.55, 1, .2], [.16, .58, .035]);
-const dimGlowMaterials = new Map<pc.StandardMaterial, pc.StandardMaterial>([core, acid, crawlerEye, matriarchVenom, matriarchEnragedVenom, guardianCore, guardianEnragedCore, northwatchEye, shardCrystal, thornSap]
+const fenHide = material("fen-bloater-hide", [.22, .31, .12]);
+const fenBelly = material("fen-bloater-belly", [.42, .46, .18]);
+const fenGland = material("fen-bloater-toxic-gland", [.62, 1, .12], [.22, .68, .025]);
+const dimGlowMaterials = new Map<pc.StandardMaterial, pc.StandardMaterial>([core, acid, crawlerEye, matriarchVenom, matriarchEnragedVenom, guardianCore, guardianEnragedCore, northwatchEye, shardCrystal, thornSap, fenGland]
   .map(live => [live, material(`defeated-${live.name}`, [live.diffuse.r * .5, live.diffuse.g * .5, live.diffuse.b * .5])]));
 
 function box(parent: pc.Entity, name: string, surface: pc.StandardMaterial, size: Triple, at: Triple, angle?: Triple): pc.Entity {
@@ -93,13 +96,33 @@ function pivot(parent: pc.Entity, name: string, at: Triple): pc.Entity {
 export function createMobArt(parent: pc.Entity, archetype: string, body: pc.StandardMaterial, matriarch = false, rootGuardian = false): MobArtRig {
   const kind: MobKind = archetype === "stone_brute" ? "stone_brute" : archetype === "cave_spitter" ? "cave_spitter"
     : archetype === "ridge_stalker" ? "ridge_stalker" : archetype === "shard_sentry" ? "shard_sentry"
-      : archetype === "thornbinder" ? "thornbinder" : "moss_crawler";
+      : archetype === "thornbinder" ? "thornbinder" : archetype === "fen_bloater" ? "fen_bloater" : "moss_crawler";
   const head = pivot(parent, "head-joint", kind === "stone_brute" ? [0, 1.6, 0.06] : kind === "shard_sentry" ? [0, 1.25, .08]
-    : kind === "thornbinder" ? [0, 1.72, .04] : kind === "ridge_stalker" ? [0, .69, .56] : kind === "cave_spitter" ? [0, 0.56, 0.56] : [0, 0.53, 0.48]);
+    : kind === "thornbinder" ? [0, 1.72, .04] : kind === "fen_bloater" ? [0, .76, .58] : kind === "ridge_stalker" ? [0, .69, .56] : kind === "cave_spitter" ? [0, 0.56, 0.56] : [0, 0.53, 0.48]);
   const jaw = pivot(head, "jaw-joint", kind === "stone_brute" ? [0, -0.2, 0.14] : [0, -0.11, 0.27]);
   const rig: MobArtRig = { kind, head, jaw, limbs: [], arms: [], sacs: [], phase: 0, walk: 0, pursuit: 0, matriarch, rootGuardian, phaseSurfaces: [], enraged: false, defeated: false, glowSurfaces: [] };
 
-  if (kind === "thornbinder") {
+  if (kind === "fen_bloater") {
+    box(parent, "bloated-body", fenHide, [1.28, .82, 1.34], [0, .72, -.08]);
+    box(parent, "low-belly", fenBelly, [1.02, .42, 1.05], [0, .39, .12]);
+    box(parent, "mud-armour", body, [.92, .19, .78], [0, 1.13, -.18], [-5, 0, 0]);
+    box(head, "broad-toad-head", fenHide, [1.02, .48, .69], [0, 0, .08]);
+    box(head, "heavy-brow", body, [1.08, .17, .36], [0, .2, .24]);
+    box(jaw, "pale-jaw", fenBelly, [.78, .18, .48], [0, -.06, .14]);
+    for (const side of [-1, 1]) {
+      box(head, `bloater-eye-${side}`, fenGland, [.14, .13, .09], [side * .34, .12, .4]);
+      for (let index = 0; index < 2; index++) {
+        const gland = pivot(parent, `toxic-gland-${side}-${index}`, [side * (.49 + index * .14), .92, .12 - index * .46]);
+        box(gland, "swelling-sac", fenGland, [.42 - index * .07, .47 - index * .05, .44], [0, 0, 0]);
+        rig.sacs.push(gland);
+        const leg = pivot(parent, `bloater-leg-${side}-${index}`, [side * .55, .52, .36 - index * .72]);
+        box(leg, "thick-thigh", fenHide, [.48, .31, .43], [side * .16, -.08, 0], [0, 0, side * -14]);
+        const knee = pivot(leg, "bloater-knee", [side * .35, -.19, .02]);
+        box(knee, "webbed-foot", fenBelly, [.38, .14, .55], [side * .08, -.09, .14]);
+        rig.limbs.push({ pivot: leg, knee, side, offset: (index + (side > 0 ? 1 : 0)) * Math.PI });
+      }
+    }
+  } else if (kind === "thornbinder") {
     box(parent, "twisted-trunk", thornBark, [.66, 1.25, .52], [0, 1.02, 0], [0, 0, -4]);
     box(parent, "moss-mantle", thornMoss, [.88, .28, .68], [0, 1.5, -.04], [-8, 0, 0]);
     box(parent, "sap-heart", thornSap, [.24, .36, .13], [0, 1.15, .31], [0, 0, 45]);
@@ -290,7 +313,7 @@ export function setMobArtDefeated(rig: MobArtRig, defeated: boolean): void {
 /** No per-frame geometry/material creation; only transform the prebuilt joints. */
 export function animateMobArt(rig: MobArtRig, dt: number, time: number, speed: number, awareness: string, windup: number, attack: number, hurt: number, stagger: number, defeat: number): void {
   const brute = rig.kind === "stone_brute";
-  const spitter = rig.kind === "cave_spitter" || rig.kind === "thornbinder";
+  const spitter = rig.kind === "cave_spitter" || rig.kind === "thornbinder" || rig.kind === "fen_bloater";
   const targets = mobGaitTargets(rig.kind, awareness, speed, windup, stagger, defeat);
   const elapsed = Math.max(0, Math.min(dt, 0.1));
   rig.walk += (targets.walking - rig.walk) * (1 - Math.exp(-16 * elapsed));

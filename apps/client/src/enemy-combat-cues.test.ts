@@ -13,6 +13,13 @@ describe("readable enemy combat cues", () => {
     expect(enemyCombatCue({ ...mob, attackPattern: "bog-charge" }, 1_100).label).toBe("BOG CHARGE · AIMING");
     expect(enemyCombatCue({ ...mob, attackPattern: "toxic-eruption" }, 1_100).label).toBe("TOXIC ERUPTION · AIMING");
   });
+  it("makes the Fen Bloater swell and counter window readable", () => {
+    const bloom = { ...mob, archetype: "fen_bloater", attackPattern: "toxic-bloom",
+      attackReleaseAt: 3_000, attackContactAt: 3_000, attackContactEndAt: 3_000, attackRecoveryEndAt: 5_500 };
+    expect(enemyCombatCue(bloom, 1_200)).toMatchObject({ kind: "toxic bloom", label: "TOXIC BLOOM · AIMING", visible: true });
+    expect(enemyCombatCue({ ...bloom, aimCommitted: true }, 2_500).label).toBe("TOXIC BLOOM · LOCKED");
+    expect(enemyCombatCue({ ...bloom, combatState: "recover" }, 3_200).label).toBe("RECOVER · COUNTER");
+  });
   it("labels rock aim, commitment and the full recovery window", () => {
     const rocks = { ...mob, attackPattern: "rocks", attackContactAt: 2000, attackContactEndAt: 2000, attackRecoveryEndAt: 4400 };
     expect(enemyCombatCue(rocks, 1200).label).toBe("ROCK VOLLEY · AIMING");
