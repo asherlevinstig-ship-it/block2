@@ -5021,6 +5021,39 @@ function createRangerFocusedHit(message: { mobId: string; abilityId: CallingAbil
     `${message.abilityId === "ranger_deadeye" ? "DEADEYE" : "FOCUSED"} · +${message.bonusDamage}`, "damage", false, [1, .78, .28]);
 }
 
+function createRangerVolleySplit(message: { casterId: string; primaryMobId: string; targets: { mobId: string; damage: number }[] }): void {
+  const caster = message.casterId === room?.sessionId ? localPlayer : remotePlayers.get(message.casterId)?.entity;
+  const primary = mobVisuals.get(message.primaryMobId);
+  const origin = caster?.getPosition() ?? primary?.entity.getPosition(); if (!origin) return;
+  for (const target of message.targets) {
+    const mob = mobVisuals.get(target.mobId); if (!mob) continue;
+    const destination = mob.entity.getPosition(), root = new pc.Entity("ranger-volley-split"); app.root.addChild(root);
+    const arrow = callingSignatureMaterial(new pc.Color(.42, 1, .58), .94, 1.2);
+    const dx = destination.x - origin.x, dy = destination.y + .8 - (origin.y + .8), dz = destination.z - origin.z;
+    const yaw = Math.atan2(dx, dz) * 180 / Math.PI, length = Math.hypot(dx, dy, dz);
+    for (let index = 1; index <= 7; index += 1) addCallingSignaturePrimitive(root, "split-arrow-trail", "box", arrow,
+      [.025, .025, Math.max(.08, length / 18)], [origin.x + dx * index / 8, origin.y + .8 + dy * index / 8, origin.z + dz * index / 8], [0, yaw, 0]);
+    callingImpactVisuals.push({ root, expiresAt: performance.now() + 420, materials: [arrow], abilityId: "ranger_volley_focus" });
+    createRangedPopup(new pc.Vec3(mob.state.x, mob.state.y + mob.healthBarY + .8, mob.state.z),
+      `VOLLEY · −${target.damage}`, "damage", false, [.42, 1, .58]);
+  }
+}
+
+function createRangerDeadeyeShot(message: { casterId: string; mobId: string; damage: number; distance: number; longShot: boolean; x: number; y: number; z: number }): void {
+  const mob = mobVisuals.get(message.mobId); if (!mob) return;
+  const root = new pc.Entity("ranger-deadeye-shot"); app.root.addChild(root);
+  const tracer = callingSignatureMaterial(new pc.Color(1, .74, .18), .98, 1.45);
+  const precision = callingSignatureMaterial(new pc.Color(.88, 1, .96), .98, 1.34);
+  const dx = mob.state.x - message.x, dy = mob.state.y + .85 - (message.y + .85), dz = mob.state.z - message.z;
+  const yaw = Math.atan2(dx, dz) * 180 / Math.PI, length = Math.hypot(dx, dy, dz);
+  for (let index = 1; index <= 16; index += 1) addCallingSignaturePrimitive(root, "deadeye-tracer", "box", index % 4 === 0 ? precision : tracer,
+    [.022, .022, Math.max(.1, length / 36)], [message.x + dx * index / 17, message.y + .85 + dy * index / 17, message.z + dz * index / 17], [0, yaw, 0]);
+  callingImpactVisuals.push({ root, expiresAt: performance.now() + 560, materials: [tracer, precision], abilityId: "ranger_deadeye" });
+  createRangerFocusedHit({ mobId: message.mobId, abilityId: "ranger_deadeye", bonusDamage: message.damage, remaining: 0 });
+  createRangedPopup(new pc.Vec3(mob.state.x, mob.state.y + mob.healthBarY + 1.25, mob.state.z),
+    `${message.longShot ? "LONG SHOT" : "PRECISION"} · ${message.distance.toFixed(1)}m · −${message.damage}`, "damage", false, [1, .82, .3]);
+}
+
 function createRangerPinUpdate(message: { mobId: string; stacks: number; rooted: boolean; durationMs: number }): void {
   const mob = mobVisuals.get(message.mobId); if (!mob) return;
   const root = new pc.Entity("ranger-pin-state"); root.setLocalPosition(0, .03, 0); mob.entity.addChild(root);
@@ -12242,6 +12275,12 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   });
   room.onMessage("ranger:focused-shot", (message: { casterId: string; mobId: string; abilityId: CallingAbilityId; bonusDamage: number; remaining: number }) => {
     createRangerFocusedHit(message);
+  });
+  room.onMessage("ranger:volley-split", (message: { casterId: string; primaryMobId: string; targets: { mobId: string; damage: number }[] }) => {
+    createRangerVolleySplit(message);
+  });
+  room.onMessage("ranger:deadeye-shot", (message: { casterId: string; mobId: string; damage: number; distance: number; longShot: boolean; x: number; y: number; z: number }) => {
+    createRangerDeadeyeShot(message);
   });
   room.onMessage("ranger:pin-update", (message: { casterId: string; mobId: string; stacks: number; rooted: boolean; durationMs: number }) => {
     createRangerPinUpdate(message);

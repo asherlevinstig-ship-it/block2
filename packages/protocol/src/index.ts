@@ -236,9 +236,9 @@ export const CALLING_ABILITY_OPTIONS = [
   { id: "thief_smoke_bomb", pathId: "thief", name: "Smoke Bomb", category: "Core", unlockRank: 0, cooldownMs: 18_000, description: "Divert nearby enemies, conceal, and recover stamina." },
   { id: "thief_decoy", pathId: "thief", name: "Decoy", category: "Utility", unlockRank: 2, cooldownMs: 20_000, description: "Divert and stagger enemies in a wide area." },
   { id: "thief_escape_artist", pathId: "thief", name: "Escape Artist", category: "Aggressive", unlockRank: 3, cooldownMs: 16_000, description: "Reset dodge exhaustion and briefly evade all damage." },
-  { id: "ranger_volley_focus", pathId: "ranger", name: "Volley Focus", category: "Core", unlockRank: 0, cooldownMs: 12_000, description: "Empower your next three ranged hits." },
+  { id: "ranger_volley_focus", pathId: "ranger", name: "Volley Focus", category: "Core", unlockRank: 0, cooldownMs: 12_000, description: "Your next three bow attacks split toward nearby enemies." },
   { id: "ranger_disengage", pathId: "ranger", name: "Disengage", category: "Utility", unlockRank: 2, cooldownMs: 15_000, description: "Leap backward and empower your next two shots." },
-  { id: "ranger_deadeye", pathId: "ranger", name: "Deadeye", category: "Aggressive", unlockRank: 3, cooldownMs: 18_000, description: "Greatly empower your next two ranged hits." },
+  { id: "ranger_deadeye", pathId: "ranger", name: "Deadeye", category: "Aggressive", unlockRank: 3, cooldownMs: 18_000, description: "Fire one precise shot at the enemy under your aim. Long shots deal more damage." },
   { id: "healer_field_mend", pathId: "healer", name: "Field Mend", category: "Core", unlockRank: 0, cooldownMs: 15_000, description: "Heal the most injured nearby ally; self-heal if no ally needs help." },
   { id: "healer_renewal", pathId: "healer", name: "Renewal", category: "Utility", unlockRank: 2, cooldownMs: 24_000, description: "Restore health to yourself and injured allies nearby." },
   { id: "healer_resurrection", pathId: "healer", name: "Resurrection", category: "Master", unlockRank: 4, cooldownMs: 90_000, description: "Channel for 2.5s beside a fallen party member to revive them with low health. Moving or taking damage interrupts the cast." },
@@ -272,12 +272,12 @@ export const CALLING_ABILITY_AUGMENTS = [
   { id: "decoy_flash_charge", abilityId: "thief_decoy", name: "Flash Charge", unlockRank: 3, description: "+0.8s stagger." },
   { id: "escape_extended_window", abilityId: "thief_escape_artist", name: "Extended Window", unlockRank: 4, description: "+0.5s evasion." },
   { id: "escape_clean_getaway", abilityId: "thief_escape_artist", name: "Clean Getaway", unlockRank: 4, description: "Recover 1 health." },
-  { id: "volley_deep_quiver", abilityId: "ranger_volley_focus", name: "Deep Quiver", unlockRank: 2, description: "+2 empowered shots." },
-  { id: "volley_heavy_arrows", abilityId: "ranger_volley_focus", name: "Heavy Arrows", unlockRank: 2, description: "+1 additional damage per shot." },
+  { id: "volley_deep_quiver", abilityId: "ranger_volley_focus", name: "Deep Quiver", unlockRank: 2, description: "+2 split volleys." },
+  { id: "volley_heavy_arrows", abilityId: "ranger_volley_focus", name: "Heavy Arrows", unlockRank: 2, description: "+1 damage to every arrow in the volley." },
   { id: "disengage_long_leap", abilityId: "ranger_disengage", name: "Long Leap", unlockRank: 3, description: "Leap 2m farther." },
   { id: "disengage_evasive_roll", abilityId: "ranger_disengage", name: "Evasive Roll", unlockRank: 3, description: "+0.45s invulnerability." },
-  { id: "deadeye_eagle_eye", abilityId: "ranger_deadeye", name: "Eagle Eye", unlockRank: 4, description: "+1 empowered shot." },
-  { id: "deadeye_execution_rounds", abilityId: "ranger_deadeye", name: "Execution Rounds", unlockRank: 4, description: "+2 additional damage per shot." },
+  { id: "deadeye_eagle_eye", abilityId: "ranger_deadeye", name: "Eagle Eye", unlockRank: 4, description: "+4m range and a wider precision aim." },
+  { id: "deadeye_execution_rounds", abilityId: "ranger_deadeye", name: "Execution Rounds", unlockRank: 4, description: "+2 damage to the precision shot." },
 ] as const satisfies readonly { id: string; abilityId: CallingAbilityId; name: string; unlockRank: number; description: string }[];
 export type CallingAugmentId = typeof CALLING_ABILITY_AUGMENTS[number]["id"];
 export const CALLING_AUGMENT_TRIALS = {

@@ -158,6 +158,7 @@ describe("hotbar Calling abilities", () => {
     } else {
       mob.x = 50; mob.z = 52;
     }
+    if (option.id === "ranger_deadeye") { mob.x = 50; mob.z = 60; }
     if (option.id === "healer_resurrection") {
       const ally = new PlayerState(); Object.assign(ally, { x: 52, y: 8, z: 50, health: 0 });
       internal.state.players.set("ally", ally);
@@ -216,16 +217,45 @@ describe("hotbar Calling abilities", () => {
     }));
   });
 
-  it("publishes Ranger empowered-shot identity and remaining charges", () => {
+  it("makes Deadeye an immediate aimed shot with a distance reward", () => {
     const { internal, player, client, broadcast } = fixture("ranger", 70);
     player.mainHandTag = "ranged";
-    const mob = new MobState(); Object.assign(mob, { x: 50, y: 8, z: 53, alive: true, health: 20, maxHealth: 20 });
+    const mob = new MobState(); Object.assign(mob, { x: 50, y: 8, z: 60, alive: true, health: 20, maxHealth: 20 });
     internal.state.mobs.set("target", mob);
     internal.handleCallingAbilityEquip(client, { abilityId: "ranger_deadeye" });
-    internal.handleCallingAbility(client, { requestId: "deadeye" });
-    expect(internal.buildPathDamageBonus(player, mob, "target", "hero", 10_001, "weapon")).toBeGreaterThanOrEqual(4);
-    expect(broadcast).toHaveBeenCalledWith("ranger:focused-shot", expect.objectContaining({
-      casterId: "hero", mobId: "target", abilityId: "ranger_deadeye", remaining: 1,
+    internal.handleCallingAbility(client, { requestId: "deadeye", yaw: 0 });
+    expect(mob.health).toBeLessThan(20);
+    expect(internal.rangerCallingFocus.has("hero")).toBe(false);
+    expect(broadcast).toHaveBeenCalledWith("ranger:deadeye-shot", expect.objectContaining({
+      casterId: "hero", mobId: "target", longShot: true, distance: 10,
+    }));
+    expect(client.send).toHaveBeenCalledWith("calling:ability", expect.objectContaining({ detail: expect.stringContaining("LONG SHOT") }));
+  });
+
+  it("does not spend Deadeye when no enemy is precisely under the aim", () => {
+    const { internal, client } = fixture("ranger", 70);
+    const offAxis = new MobState(); Object.assign(offAxis, { x: 56, y: 8, z: 50, alive: true, health: 20 });
+    internal.state.mobs.set("off-axis", offAxis);
+    internal.handleCallingAbilityEquip(client, { abilityId: "ranger_deadeye" });
+    internal.handleCallingAbility(client, { requestId: "miss", yaw: 0 });
+    expect(internal.callingAbilityReadyAt.has("hero")).toBe(false);
+    expect(client.send).toHaveBeenCalledWith("chat:notice", expect.stringContaining("aim precisely"));
+  });
+
+  it("makes Volley Focus split ranged attacks into nearby targets", () => {
+    const { internal, player, client, broadcast } = fixture("ranger", 70);
+    player.mainHandTag = "ranged";
+    const primary = new MobState(); Object.assign(primary, { x: 50, y: 8, z: 56, alive: true, health: 20, maxHealth: 20 });
+    const left = new MobState(); Object.assign(left, { x: 48, y: 8, z: 57, alive: true, health: 20, maxHealth: 20 });
+    const right = new MobState(); Object.assign(right, { x: 52, y: 8, z: 57, alive: true, health: 20, maxHealth: 20 });
+    internal.state.mobs.set("primary", primary); internal.state.mobs.set("left", left); internal.state.mobs.set("right", right);
+    internal.handleCallingAbility(client, { requestId: "volley", yaw: 0 });
+    internal.buildPathDamageBonus(player, primary, "primary", "hero", 10_001, "weapon");
+    expect(left.health).toBeLessThan(20); expect(right.health).toBeLessThan(20);
+    expect(broadcast).toHaveBeenCalledWith("ranger:volley-split", expect.objectContaining({
+      casterId: "hero", primaryMobId: "primary", targets: expect.arrayContaining([
+        expect.objectContaining({ mobId: "left" }), expect.objectContaining({ mobId: "right" }),
+      ]),
     }));
   });
 

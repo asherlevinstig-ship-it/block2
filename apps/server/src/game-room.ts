@@ -5139,6 +5139,25 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       client.send("chat:notice", `BLADE DANCE · aim toward an enemy within ${augmentId === "dance_long_step" ? 8 : 6}m.`);
       return;
     }
+    const deadeyeTarget = abilityId === "ranger_deadeye"
+      ? [...this.state.mobs.entries()].filter(([, mob]) => {
+        if (!mob.alive || Math.abs(mob.y - player.y) > 3 || !hasCombatLineOfSight(player, mob, this.readWorldBlock)) return false;
+        const dx = mob.x - player.x, dz = mob.z - player.z, distance = Math.hypot(dx, dz);
+        if (distance < .001 || distance > (augmentId === "deadeye_eagle_eye" ? 22 : 18)) return false;
+        const radians = (parsed.data.yaw ?? player.yaw) * Math.PI / 180;
+        return (Math.sin(radians) * dx + Math.cos(radians) * dz) / distance >= (augmentId === "deadeye_eagle_eye" ? .94 : .97);
+      }).sort(([, a], [, b]) => {
+        const radians = (parsed.data.yaw ?? player.yaw) * Math.PI / 180;
+        const aim = (mob: MobState) => {
+          const dx = mob.x - player.x, dz = mob.z - player.z, distance = Math.hypot(dx, dz);
+          return (Math.sin(radians) * dx + Math.cos(radians) * dz) / Math.max(.001, distance);
+        };
+        return aim(b) - aim(a) || Math.hypot(a.x - player.x, a.z - player.z) - Math.hypot(b.x - player.x, b.z - player.z);
+      })[0] : undefined;
+    if (abilityId === "ranger_deadeye" && !deadeyeTarget) {
+      client.send("chat:notice", `DEADEYE · aim precisely at a visible enemy within ${augmentId === "deadeye_eagle_eye" ? 22 : 18}m.`);
+      return;
+    }
     const rank = this.buildPathRankFor(player, pathId);
     const cooldownUntil = now + definition.cooldownMs;
     cooldowns.set(client.sessionId, cooldownUntil);
@@ -5147,7 +5166,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     let durationMs: number | undefined;
     let effectTargetId: string | undefined;
     let challengedTargetIds: string[] = [];
-    let effectPosition = player;
+    let effectPosition: { x: number; y: number; z: number } = player;
     const nearbyMobs = (radius: number) => [...this.state.mobs.entries()].filter(([, mob]) => mob.alive
       && Math.abs(mob.y - player.y) <= 2.5 && Math.hypot(mob.x - player.x, mob.z - player.z) <= radius);
     if (abilityId === "tank_bulwark") {
@@ -5390,10 +5409,22 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.broadcast("ranger:disengage-path", { casterId: client.sessionId, ...origin,
         targetX: player.x, targetY: player.y, targetZ: player.z, yaw: parsed.data.yaw ?? player.yaw });
     } else if (abilityId === "ranger_deadeye") {
-      const hits = 2 + (augmentId === "deadeye_eagle_eye" ? 1 : 0);
-      const bonus = (rank >= 4 ? 4 : 3) + (augmentId === "deadeye_execution_rounds" ? 2 : 0);
-      this.rangerCallingFocus.set(client.sessionId, { hits, bonus });
-      detail = `NEXT ${hits} RANGED HITS +${bonus}`;
+      const [mobId, mob] = deadeyeTarget!;
+      const distance = Math.hypot(mob.x - player.x, mob.z - player.z);
+      const longShot = distance >= 8;
+      const rawDamage = 5 + Number(rank >= 4) + (longShot ? 3 : 0) + (augmentId === "deadeye_execution_rounds" ? 2 : 0);
+      const damage = damageAfterArmor(rawDamage, mob.armor, true);
+      this.combatContributions.record(mobId, client.sessionId, Math.min(mob.health, damage), now);
+      mob.health = Math.max(0, mob.health - damage); mob.hitSequence += 1;
+      this.alertHitMob(mobId, client.sessionId, now);
+      if (mob.health === 0) this.defeatMob(mobId, mob, client.sessionId, now);
+      else this.staggerMob(mobId, mob, now, longShot ? 1_000 : 550, true);
+      effectTargetId = mobId; effectPosition = mob;
+      detail = `${longShot ? "LONG SHOT" : "PRECISION HIT"} · ${distance.toFixed(1)}m · ${damage} DAMAGE`;
+      this.grantCallingTrial(client.sessionId, "deadeye_eagle_eye", distance > 18 ? 1 : 0);
+      this.grantCallingTrial(client.sessionId, "deadeye_execution_rounds", damage);
+      this.broadcast("ranger:deadeye-shot", { casterId: client.sessionId, mobId, damage, distance,
+        longShot, x: player.x, y: player.y, z: player.z });
     } else {
       const hits = (rank >= 4 ? 4 : 3) + (augmentId === "volley_deep_quiver" ? 2 : 0);
       const bonus = 1 + (augmentId === "volley_heavy_arrows" ? 1 : 0);
@@ -5440,6 +5471,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.callingState(client.sessionId, pathId, abilityId, "CONCEALED", { activeUntil: now + (durationMs ?? 0) });
     else if (abilityId === "thief_escape_artist")
       this.callingState(client.sessionId, pathId, abilityId, "EVADING", { activeUntil: now + (durationMs ?? 0) });
+    else if (abilityId === "ranger_deadeye")
+      this.callingState(client.sessionId, pathId, abilityId, "PRECISION SHOT", { clear: true, targetId: effectTargetId });
     else if (abilityId.startsWith("ranger_"))
       this.callingState(client.sessionId, pathId, abilityId, "EMPOWERED SHOTS", { charges: this.rangerCallingFocus.get(client.sessionId)?.hits ?? 0 });
     this.buildPathProc(client.sessionId, pathId, definition.name.toUpperCase(), detail, durationMs ?? 2_000);
@@ -5629,6 +5662,20 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         if (callingAbility === "ranger_volley_focus") {
           this.grantCallingTrial(playerId, "volley_deep_quiver", 1);
           this.grantCallingTrial(playerId, "volley_heavy_arrows", callingFocus.bonus);
+          const splitTargets = [...this.state.mobs.entries()].filter(([otherId, other]) => otherId !== mobId && other.alive
+            && Math.abs(other.y - mob.y) <= 2.5 && Math.hypot(other.x - mob.x, other.z - mob.z) <= 5
+            && hasCombatLineOfSight(player, other, this.readWorldBlock))
+            .sort(([, a], [, b]) => Math.hypot(a.x - mob.x, a.z - mob.z) - Math.hypot(b.x - mob.x, b.z - mob.z)).slice(0, 2);
+          const splits: { mobId: string; damage: number }[] = [];
+          for (const [otherId, other] of splitTargets) {
+            const splitDamage = damageAfterArmor(2 + callingFocus.bonus, other.armor, true);
+            this.combatContributions.record(otherId, playerId, Math.min(other.health, splitDamage), now);
+            other.health = Math.max(0, other.health - splitDamage); other.hitSequence += 1;
+            this.alertHitMob(otherId, playerId, now);
+            splits.push({ mobId: otherId, damage: splitDamage });
+            if (other.health === 0) this.defeatMob(otherId, other, playerId, now);
+          }
+          this.broadcast("ranger:volley-split", { casterId: playerId, primaryMobId: mobId, targets: splits });
         } else if (callingAbility === "ranger_disengage") {
           this.grantCallingTrial(playerId, "disengage_evasive_roll", 1);
         } else if (callingAbility === "ranger_deadeye") {
