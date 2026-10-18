@@ -51,6 +51,7 @@ import { shouldBecomeWildernessElite, wildernessEliteKind,
 import { AREA_LEADER_FOLLOWERS, AREA_MAIN_MOBS, areaLeaderPattern, areaLeaderPhase, areaMainMobDefinition, areaMiniBossDefinition, bruteLeaderArmourSegments, bruteLeaderExposureMs, crawlerPackPattern, crawlerPackRushYawOffsets, isAreaMiniBoss, isCoordinatedBruteLeader, isCoordinatedCrawlerLeader, isCoordinatedSpitterLeader, leaderForFollower, spitterPackPoolSites, spitterRingWithSafeGap, type AreaLeaderPhase } from "./area-mini-bosses.js";
 import { MINI_BOSS_ENRAGE_MS, bruteLeaderPursuitSpeed, miniBossDamage, miniBossOrbitCounterPattern, miniBossWindupDelay, predictedMiniBossAim, updateOrbitPressure, type OrbitPressureState } from "./mini-boss-pressure.js";
 import { isMixedWarbandLeader, warbandCrawlerYaw, warbandCrossfireSite, warbandFormationState, warbandTactic, warbandTacticStats } from "./mixed-warband.js";
+import { selectWarbandTargets, type WarbandTargetCandidate } from "./warband-targeting.js";
 import { miniBossCoverSites, miniBossPressureSites } from "./mini-boss-arena.js";
 import { leaderRematch, leaderRematchMaterialBonus, leaderRematchPattern, northwatchWatchbreakerPattern, leaderRematchPressureCadence,
   leaderRematchStats, leaderRematchTiming, leaderTerritory } from "./leader-rematches.js";
@@ -443,6 +444,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly bruteLeaderArmourBonus = new Map<string, number>();
   private readonly warbandFormationUntil = new Map<string, number>();
   private readonly warbandDisrupted = new Set<string>();
+  private readonly warbandTargetPlans = new Map<string, { expiresAt: number;
+    brute: WarbandTargetCandidate & { y: number; yaw: number };
+    crawler: WarbandTargetCandidate & { y: number; yaw: number };
+    spitter: WarbandTargetCandidate & { y: number; yaw: number } }>();
   private readonly pendingPowers = new Map<string, PendingPower>();
   private readonly specialMarks = new Map<string, ActiveSpecialMark>();
   private readonly brambleSnares = new Map<string, ActiveBrambleSnare>();
@@ -2472,28 +2477,75 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       ...geometry } satisfies AreaLeaderFormation);
   }
 
+  private mixedWarbandCandidates(leaderId: string, leader: MobState, now: number):
+    (WarbandTargetCandidate & { y: number; yaw: number })[] {
+    const candidates: (WarbandTargetCandidate & { y: number; yaw: number })[] = [...this.state.players.entries()].filter(([id, player]) => player.health > 0
+      && !isInsideTownSafeZone(player) && Math.abs(player.y - leader.y) <= 2.5
+      && Math.hypot(player.x - leader.x, player.z - leader.z) <= 26
+      && now >= (this.stealthUntil.get(id) ?? 0)
+      && now >= (parseBuildPathState(player.huntLoadoutsJson).selectedPathId === "assassin"
+        ? this.assassinBossConcealedUntil.get(id) ?? this.pathConcealedUntil.get(id) ?? 0
+        : this.pathConcealedUntil.get(id) ?? 0)
+      && caveEncounterAllows(leaderId, player) && this.roamingAllowed(leaderId, player)
+      && this.championAllowed(leaderId, player) && hasCombatLineOfSight(leader, player, this.readWorldBlock))
+      .map(([id, player]) => {
+        const input = activeMovementInput(this.movementInputs.get(id), now, player.yaw);
+        const awayX = player.x - leader.x, awayZ = player.z - leader.z;
+        const retreating = Math.hypot(input.strafe, input.forward) > .2
+          && input.strafe * awayX + input.forward * awayZ > .2;
+        return { id, x: player.x, y: player.y, z: player.z, yaw: player.yaw,
+          mainHandId: player.mainHandId, retreating };
+      });
+    for (const [id, decoy] of this.thiefDecoys) if (decoy.health > 0 && now < decoy.until
+      && Math.abs(decoy.y - leader.y) <= 2.5 && Math.hypot(decoy.x - leader.x, decoy.z - leader.z) <= 26)
+      candidates.push({ id, x: decoy.x, y: decoy.y, z: decoy.z, yaw: decoy.yaw });
+    return candidates;
+  }
+
   private prepareMixedWarbandPush(leaderId: string, leader: MobState, now: number, windupMs: number): void {
     if (!isMixedWarbandLeader(leaderId) || (leader.attackPattern !== "charge" && leader.attackPattern !== "bog-charge")) return;
-    const active = (AREA_LEADER_FOLLOWERS[leaderId] ?? []).map(id => this.state.mobs.get(id))
-      .filter((mob): mob is MobState => Boolean(mob?.alive && mob.health > 0 && mob.combatState !== "stagger"
-        && Math.abs(mob.y - leader.y) <= 2.5 && Math.hypot(mob.x - leader.x, mob.z - leader.z) <= 18));
-    const crawler = active.find(mob => crawlerRushDistance(mob.archetype) > 0);
-    const spitter = active.find(mob => isSpitterLike(mob.archetype));
+    const active = (AREA_LEADER_FOLLOWERS[leaderId] ?? []).map(id => [id, this.state.mobs.get(id)] as const)
+      .filter((entry): entry is readonly [string, MobState] => Boolean(entry[1]?.alive && entry[1].health > 0
+        && entry[1].combatState !== "stagger" && Math.abs(entry[1].y - leader.y) <= 2.5
+        && Math.hypot(entry[1].x - leader.x, entry[1].z - leader.z) <= 18));
+    const crawler = active.find(([, mob]) => crawlerRushDistance(mob.archetype) > 0);
+    const spitter = active.find(([, mob]) => isSpitterLike(mob.archetype));
     if (!warbandFormationState(Boolean(crawler), Boolean(spitter))) return;
     const aim = this.mobCommittedAim.get(leaderId);
     if (!aim) return;
+    const candidates = this.mixedWarbandCandidates(leaderId, leader, now);
+    if (!candidates.length) candidates.push({ id: leader.targetId || "formation-target",
+      x: aim.x, y: aim.y, z: aim.z, yaw: aim.yaw });
+    const crawlerAwareness = crawler ? this.mobAwareness.get(crawler[0]) : undefined;
+    const forcedCrawlerId = crawlerAwareness && now < (crawlerAwareness.provokedUntil ?? 0)
+      ? crawlerAwareness.targetId : undefined;
+    const selected = selectWarbandTargets(candidates, leader.targetId, forcedCrawlerId);
+    if (!selected) return;
+    const bruteTarget = candidates.find(candidate => candidate.id === selected.brute.id)!;
+    const crawlerTarget = candidates.find(candidate => candidate.id === selected.crawler.id)!;
+    const spitterTarget = candidates.find(candidate => candidate.id === selected.spitter.id)!;
     const sequence = leader.actionSequence + 1;
     const tactic = warbandTacticStats(leaderId);
-    const crossfire = warbandCrossfireSite(aim, aim.yaw, sequence);
+    const crawlerYaw = crawler ? Math.atan2(crawlerTarget.x - crawler[1].x, crawlerTarget.z - crawler[1].z) * 180 / Math.PI : undefined;
+    const crossfire = warbandCrossfireSite(spitterTarget, spitterTarget.yaw, sequence);
     this.warbandFormationUntil.set(leaderId, now + windupMs + CHAMPION_CHARGE.durationMs + 1_000);
+    this.warbandTargetPlans.set(leaderId, { expiresAt: now + windupMs + 1_000,
+      brute: bruteTarget, crawler: crawlerTarget, spitter: spitterTarget });
     this.announceWarbandFormation(leaderId, "forming", windupMs, {
       originX: leader.x, originY: leader.y, originZ: leader.z, chargeYaw: aim.yaw,
       chargeDistance: CHAMPION_CHARGE.distance,
-      crawlerX: crawler?.x, crawlerY: crawler?.y, crawlerZ: crawler?.z,
-      crawlerYaw: crawler ? warbandCrawlerYaw(aim.yaw, sequence) : undefined,
-      crawlerDistance: crawler ? crawlerRushDistance(crawler.archetype) * tactic.crawlerDistance : undefined,
+      crawlerX: crawler?.[1].x, crawlerY: crawler?.[1].y, crawlerZ: crawler?.[1].z,
+      crawlerYaw,
+      crawlerDistance: crawler ? crawlerRushDistance(crawler[1].archetype) * tactic.crawlerDistance : undefined,
       crossfireX: spitter ? crossfire.x : undefined, crossfireY: spitter ? crossfire.y : undefined,
       crossfireZ: spitter ? crossfire.z : undefined, crossfireRadius: spitter ? tactic.poolRadius : undefined,
+      bruteTargetId: bruteTarget.id, bruteTargetX: bruteTarget.x, bruteTargetY: bruteTarget.y, bruteTargetZ: bruteTarget.z,
+      crawlerTargetId: crawler ? crawlerTarget.id : undefined,
+      crawlerTargetX: crawler ? crawlerTarget.x : undefined, crawlerTargetY: crawler ? crawlerTarget.y : undefined,
+      crawlerTargetZ: crawler ? crawlerTarget.z : undefined,
+      spitterTargetId: spitter ? spitterTarget.id : undefined,
+      spitterTargetX: spitter ? spitterTarget.x : undefined, spitterTargetY: spitter ? spitterTarget.y : undefined,
+      spitterTargetZ: spitter ? spitterTarget.z : undefined,
     });
   }
 
@@ -2502,6 +2554,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (!leader?.alive) return;
     this.warbandDisrupted.add(leaderId);
     this.warbandFormationUntil.delete(leaderId);
+    this.warbandTargetPlans.delete(leaderId);
     this.announceWarbandFormation(leaderId, "broken", durationMs);
     if (leader.combatState !== "stagger") {
       leader.combatState = "recover";
@@ -2635,12 +2688,18 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const crawler = followers.find(([, mob]) => crawlerRushDistance(mob.archetype) > 0);
     const spitter = followers.find(([, mob]) => isSpitterLike(mob.archetype));
     const tactic = warbandTacticStats(leaderId);
+    const plan = this.warbandTargetPlans.get(leaderId);
+    this.warbandTargetPlans.delete(leaderId);
+    const planned = plan && now <= plan.expiresAt;
+    const crawlerTarget = planned ? plan.crawler : { id: targetId, ...target };
+    const spitterTarget = planned ? plan.spitter : { id: targetId, ...target };
     if (crawler) {
       const [crawlerId, flank] = crawler;
-      const yaw = warbandCrawlerYaw(target.yaw, leader.actionSequence);
+      const yaw = planned ? Math.atan2(crawlerTarget.x - flank.x, crawlerTarget.z - flank.z) * 180 / Math.PI
+        : warbandCrawlerYaw(target.yaw, leader.actionSequence);
       flank.attackPattern = "pack-rush";
       flank.combatState = "strike";
-      flank.targetId = targetId;
+      flank.targetId = crawlerTarget.id;
       flank.yaw = yaw;
       flank.aimCommitted = true;
       flank.actionSequence += 1;
@@ -2649,14 +2708,14 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       flank.attackStrikeX = flank.x; flank.attackStrikeY = flank.y; flank.attackStrikeZ = flank.z;
       this.crawlerRushes.set(crawlerId, { yaw, distance: crawlerRushDistance(flank.archetype) * tactic.crawlerDistance,
         startedAt: now, progress: 0 });
-      this.pendingMobMelee.set(crawlerId, { targetId, yaw, impactAt: flank.attackContactAt });
+      this.pendingMobMelee.set(crawlerId, { targetId: crawlerTarget.id, yaw, impactAt: flank.attackContactAt });
       this.lastMobAttackAt.set(crawlerId, now);
       this.crawlerPositioning.delete(crawlerId);
       this.mobCommittedAim.delete(crawlerId);
     }
     if (spitter) {
       const [spitterId, support] = spitter;
-      const site = warbandCrossfireSite(target, target.yaw, leader.actionSequence);
+      const site = warbandCrossfireSite(spitterTarget, spitterTarget.yaw, leader.actionSequence);
       support.attackPattern = "pool";
       support.combatState = "recover";
       support.stateUntil = now + 1_500;

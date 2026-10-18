@@ -10,6 +10,14 @@ export type FormationVfxStyle = {
 
 export type GroundPoint = { x: number; y: number; z: number };
 
+export type FormationTargetRole = "brute" | "crawler" | "spitter";
+
+export function formationTargetStyle(role: FormationTargetRole) {
+  if (role === "brute") return { color: [1, .42, .08] as const, scale: .46, sides: 4 };
+  if (role === "crawler") return { color: [.9, .18, .78] as const, scale: .38, sides: 3 };
+  return { color: [.2, .92, .25] as const, scale: .42, sides: 8 };
+}
+
 export function formationVfxStyle(tactic: FormationTactic): FormationVfxStyle {
   if (tactic === "venom-lock") return {
     primary: [.36, .95, .08], edge: [.78, 1, .2], laneWidth: .18, pulseHz: 6.5, motif: "bubbles",
@@ -34,6 +42,15 @@ export function formationLanePoints(origin: GroundPoint, yaw: number, distance: 
 
 export function formationRingPoints(center: GroundPoint, radius: number, count = 16): GroundPoint[] {
   const total = Math.max(8, count);
+  return Array.from({ length: total }, (_, index) => {
+    const radians = index / total * Math.PI * 2;
+    return { x: center.x + Math.sin(radians) * radius, y: center.y,
+      z: center.z + Math.cos(radians) * radius };
+  });
+}
+
+export function formationMarkerPoints(center: GroundPoint, radius: number, sides: number): GroundPoint[] {
+  const total = Math.max(3, sides);
   return Array.from({ length: total }, (_, index) => {
     const radians = index / total * Math.PI * 2;
     return { x: center.x + Math.sin(radians) * radius, y: center.y,

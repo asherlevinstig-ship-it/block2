@@ -1706,6 +1706,18 @@ export type AreaLeaderFormation = {
   crossfireY?: number;
   crossfireZ?: number;
   crossfireRadius?: number;
+  bruteTargetId?: string;
+  bruteTargetX?: number;
+  bruteTargetY?: number;
+  bruteTargetZ?: number;
+  crawlerTargetId?: string;
+  crawlerTargetX?: number;
+  crawlerTargetY?: number;
+  crawlerTargetZ?: number;
+  spitterTargetId?: string;
+  spitterTargetX?: number;
+  spitterTargetY?: number;
+  spitterTargetZ?: number;
 };
 
 export interface ChunkRegion {

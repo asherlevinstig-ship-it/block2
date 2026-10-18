@@ -14,7 +14,8 @@ import { abilityRevealUse, canPresentAbilityReveal, earnedCallingAbilities } fro
 import { queueWorldNotice, type WorldNotice } from "./notification-lane.js";
 import { rangedAimYaw } from "./ranged-aim.js";
 import { COORDINATED_BRUTE_FOLLOWERS, COORDINATED_SPITTER_FOLLOWERS, activeCombatNearby, advanceBossHud, initialBossHud, leaderArmourSegments, leaderChargeGuidance, leaderExposureLabel, leaderExposureRoleLabel, leaderFormationLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
-import { formationLanePoints, formationRingPoints, formationVfxStyle, type FormationTactic } from "./formation-vfx.js";
+import { formationLanePoints, formationMarkerPoints, formationRingPoints, formationTargetStyle, formationVfxStyle,
+  type FormationTactic, type FormationTargetRole } from "./formation-vfx.js";
 import { forestDungeonAtmosphere, forestDungeonNotice, portalNoticeFeedback } from "./forest-dungeon-presentation.js";
 import { objectiveGuidance, objectiveIcon } from "./objective-guidance.js";
 import { createSocialUI } from "./social-ui.js";
@@ -4428,6 +4429,7 @@ interface FormationTelegraphVisual {
   startedAt: number;
   expiresAt: number;
   pulseHz: number;
+  targets: { id: string; root: pc.Entity }[];
 }
 const formationTelegraphs = new Map<string, FormationTelegraphVisual>();
 const mageCastAnimations = new Map<string, { abilityId: MageAbilityId; startedAt: number; endsAt: number }>();
@@ -6031,6 +6033,25 @@ function createFormationTelegraph(message: AreaLeaderFormation): void {
   const primary = powerMaterial(new pc.Color(...style.primary), .38);
   const edge = powerMaterial(new pc.Color(...style.edge), .68);
   const root = new pc.Entity(`formation-telegraph:${message.mobId}`);
+  const targetMaterials: pc.StandardMaterial[] = [];
+  const targets: { id: string; root: pc.Entity }[] = [];
+  const addTargetMarker = (role: FormationTargetRole, id: string | undefined,
+    x: number | undefined, y: number | undefined, z: number | undefined): void => {
+    if (!id || ![x, y, z].every(Number.isFinite)) return;
+    const markerStyle = formationTargetStyle(role);
+    const material = powerMaterial(new pc.Color(...markerStyle.color), .88);
+    targetMaterials.push(material);
+    const markerRoot = new pc.Entity(`${role}-target:${id}`);
+    markerRoot.setLocalPosition(x!, y! + .075, z!);
+    root.addChild(markerRoot);
+    targets.push({ id, root: markerRoot });
+    const points = formationMarkerPoints({ x: 0, y: 0, z: 0 }, markerStyle.scale, markerStyle.sides);
+    for (const [index, point] of points.entries()) {
+      const marker = addBox(markerRoot, `${role}-target-${id}-${index}`, material, [.1, .035, .22],
+        [point.x, point.y, point.z]);
+      marker.setLocalEulerAngles(0, index / points.length * 360, 0);
+    }
+  };
   const addLane = (name: string, origin: { x: number; y: number; z: number }, yaw: number,
     distance: number, material: pc.StandardMaterial, width: number): void => {
     const points = formationLanePoints(origin, yaw, distance);
@@ -6071,10 +6092,13 @@ function createFormationTelegraph(message: AreaLeaderFormation): void {
       [center.x, center.y + .032, center.z]);
     core.setLocalEulerAngles(0, 45, 0);
   }
+  addTargetMarker("brute", message.bruteTargetId, message.bruteTargetX, message.bruteTargetY, message.bruteTargetZ);
+  addTargetMarker("crawler", message.crawlerTargetId, message.crawlerTargetX, message.crawlerTargetY, message.crawlerTargetZ);
+  addTargetMarker("spitter", message.spitterTargetId, message.spitterTargetX, message.spitterTargetY, message.spitterTargetZ);
   app.root.addChild(root);
   const startedAt = performance.now();
-  formationTelegraphs.set(message.mobId, { root, materials: [primary, edge], startedAt,
-    expiresAt: startedAt + Math.min(5_000, message.durationMs + 250), pulseHz: style.pulseHz });
+  formationTelegraphs.set(message.mobId, { root, materials: [primary, edge, ...targetMaterials], startedAt,
+    expiresAt: startedAt + Math.min(5_000, message.durationMs + 250), pulseHz: style.pulseHz, targets });
 }
 
 function createRootboundShockwave(mob: MobVisual): void {
@@ -11716,6 +11740,13 @@ app.on("update", (dt: number) => {
     const progress = Math.max(0, Math.min(1, (animationNow - visual.startedAt)
       / Math.max(1, visual.expiresAt - visual.startedAt)));
     const pulse = Math.sin(animationTime * visual.pulseHz * Math.PI * 2);
+    for (const target of visual.targets) {
+      const tracked = target.id === room?.sessionId ? localPlayer
+        : remotePlayers.get(target.id)?.entity ?? thiefDecoyVisuals.get(target.id)?.root;
+      if (!tracked) continue;
+      const position = tracked.getPosition();
+      target.root.setLocalPosition(position.x, position.y + .075, position.z);
+    }
     visual.materials[0]!.opacity = .28 + progress * .18 + pulse * .05;
     visual.materials[1]!.opacity = .58 + progress * .16 + pulse * .08;
     visual.materials.forEach(material => material.update());
