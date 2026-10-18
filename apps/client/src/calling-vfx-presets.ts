@@ -69,16 +69,19 @@ export const CALLING_IMPACT_PARTICLES: Record<CallingAbilityId, readonly Particl
     layer("spark", silver, 18, .6, .11, .9, 3.4, 1.5, .86, .72),
   ],
   assassin_vanish: [
-    layer("smoke", shadow, 46, 1.45, .7, .7, 1.4, 1.0, .6, .7),
-    layer("streak", violet, 15, .55, .25, .5, 2.7, .45, .55, .9),
+    layer("smoke", shadow, 54, 1.55, .74, .78, 1.45, 1.05, .62, .68),
+    layer("streak", violet, 20, .62, .27, .58, 3.1, .5, .62, .88),
+    layer("spark", [.48, .7, 1], 14, .48, .1, .46, 2.6, .72, .78, .7),
   ],
   assassin_death_mark: [
-    layer("glow", crimson, 25, 1.1, .28, .48, .8, .8, .83, 1.15),
-    layer("streak", paleBlade, 12, .65, .35, .35, 2, 1.2, .78, 1.15),
+    layer("glow", crimson, 32, 1.18, .31, .54, .92, .9, .86, 1.12),
+    layer("streak", paleBlade, 18, .7, .36, .42, 2.35, 1.28, .82, 1.08),
+    layer("spark", [1, .16, .24], 12, .52, .1, .48, 2.8, 1.05, .84, .72),
   ],
   assassin_blade_dance: [
-    layer("streak", paleBlade, 48, .73, .42, .95, 4.1, .4, .86, .85),
-    layer("spark", crimson, 26, .85, .16, .72, 3, 1.4, .8, .8),
+    layer("streak", paleBlade, 58, .78, .44, 1.08, 4.5, .48, .9, .82),
+    layer("spark", crimson, 30, .9, .17, .82, 3.35, 1.5, .84, .76),
+    layer("glow", violet, 12, .66, .22, .72, 1.4, .72, .72, .68),
   ],
   thief_smoke_bomb: [
     layer("smoke", smoke, 74, 2.2, 1.1, 1.45, 1.35, .8, .72, .35),
@@ -156,8 +159,12 @@ export const CALLING_ABILITY_SUSTAIN_PARTICLES: Partial<Record<CallingAbilityId,
     layer("glow", violet, 22, .9, .3, .68, .38, .7, .5, .88),
   ],
   assassin_vanish: [
-    layer("smoke", shadow, 28, 1.2, .62, .68, .42, .72, .44, .42),
-    layer("streak", violet, 9, .52, .22, .45, .65, .32, .4, .8),
+    layer("smoke", shadow, 34, 1.25, .64, .72, .46, .76, .46, .4),
+    layer("streak", violet, 12, .56, .23, .5, .72, .38, .46, .78),
+  ],
+  assassin_blade_dance: [
+    layer("streak", paleBlade, 26, .62, .3, .78, 1.35, .42, .72, .76),
+    layer("spark", crimson, 14, .65, .11, .62, 1.25, .82, .66, .7),
   ],
   thief_smoke_bomb: [
     layer("smoke", [.18, .22, .21], 52, 1.45, 1.18, 1.75, .42, .42, .82, .42),

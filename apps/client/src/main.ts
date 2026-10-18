@@ -4563,6 +4563,40 @@ function addCallingSignature(root: pc.Entity, abilityId: CallingAbilityId): pc.S
     }
     return [pillar, soul];
   }
+  if (abilityId === "assassin_vanish") {
+    const voidMaterial = callingSignatureMaterial(new pc.Color(.08, .035, .14), .62, .18);
+    const edge = callingSignatureMaterial(new pc.Color(.48, .32, 1), .78, 1.08);
+    for (let index = 0; index < 10; index += 1) {
+      const angle = index / 10 * Math.PI * 2;
+      addCallingSignaturePrimitive(root, "stealth-collapse", "box", index % 3 === 0 ? edge : voidMaterial,
+        [.055, .42 + index % 3 * .18, .055],
+        [Math.sin(angle) * (.34 + index % 2 * .28), .48 + index % 4 * .27, Math.cos(angle) * (.34 + index % 2 * .28)],
+        [index % 2 ? 20 : -20, angle * 180 / Math.PI, index % 3 ? 28 : -28]);
+    }
+    return [voidMaterial, edge];
+  }
+  if (abilityId === "assassin_death_mark") {
+    const sentence = callingSignatureMaterial(new pc.Color(1, .055, .12), .88, 1.2);
+    const blade = callingSignatureMaterial(new pc.Color(1, .78, .82), .9, 1.18);
+    for (let index = 0; index < 8; index += 1) {
+      const angle = index / 8 * Math.PI * 2;
+      addCallingSignaturePrimitive(root, "death-mark-lock", "box", index % 2 ? sentence : blade,
+        [.055, .34, .055], [Math.sin(angle) * .58, 1.05 + index % 2 * .28, Math.cos(angle) * .58],
+        [index % 2 ? 32 : -32, angle * 180 / Math.PI, 45]);
+    }
+    return [sentence, blade];
+  }
+  if (abilityId === "assassin_blade_dance") {
+    const blade = callingSignatureMaterial(new pc.Color(1, .84, .9), .92, 1.2);
+    const wound = callingSignatureMaterial(new pc.Color(1, .06, .18), .78, 1.05);
+    for (let index = 0; index < 7; index += 1) {
+      const side = index % 2 ? -1 : 1;
+      addCallingSignaturePrimitive(root, "blade-dance-trail", "box", index % 3 === 0 ? wound : blade,
+        [.045, .06, .72 + index % 3 * .2], [side * (.22 + index * .08), .48 + index % 3 * .3, .18 - index * .13],
+        [side * (24 + index * 4), side * (18 + index * 11), side * 38]);
+    }
+    return [blade, wound];
+  }
   if (abilityId === "thief_smoke_bomb") {
     const dark = callingSignatureMaterial(new pc.Color(.1, .13, .12), .58);
     const rim = callingSignatureMaterial(new pc.Color(.28, .38, .34), .4, .2);
@@ -4628,7 +4662,36 @@ function addCallingPersistentSignature(root: pc.Entity, state: CallingStateUpdat
     }
     return [channel, promise];
   }
+  if (state.abilityId === "assassin_vanish" || state.abilityId === "assassin_blade_dance") {
+    const shadowEdge = callingSignatureMaterial(new pc.Color(.37, .22, .82), .48, .72);
+    for (let index = 0; index < 6; index += 1) {
+      const angle = index / 6 * Math.PI * 2;
+      addCallingSignaturePrimitive(root, "shadowstep-orbit", "box", shadowEdge, [.035, .22, .035],
+        [Math.sin(angle) * .56, .42 + index % 3 * .34, Math.cos(angle) * .56], [18, angle * 180 / Math.PI, 28]);
+    }
+    return [shadowEdge];
+  }
   return [];
+}
+
+function createStealthReappearance(playerId: string): void {
+  const anchor = playerId === room?.sessionId ? localPlayer : remotePlayers.get(playerId)?.entity;
+  if (!anchor) return;
+  const root = new pc.Entity("stealth-reappearance");
+  const position = anchor.getPosition();
+  root.setPosition(position.x, position.y + .03, position.z);
+  app.root.addChild(root);
+  const ripple = callingSignatureMaterial(new pc.Color(.42, .68, 1), .68, 1.05);
+  const shadow = callingSignatureMaterial(new pc.Color(.28, .12, .48), .46, .58);
+  for (let index = 0; index < 12; index += 1) {
+    const angle = index / 12 * Math.PI * 2;
+    addCallingSignaturePrimitive(root, "stealth-return-ring", "box", index % 3 === 0 ? ripple : shadow,
+      [.055, .035, .34], [Math.sin(angle) * .9, .08, Math.cos(angle) * .9], [0, angle * 180 / Math.PI, 0]);
+  }
+  for (let index = 0; index < 5; index += 1)
+    addCallingSignaturePrimitive(root, "stealth-return-line", "box", ripple, [.035, .38, .035],
+      [Math.sin(index * 1.7) * .42, .45 + index * .18, Math.cos(index * 1.7) * .42], [index % 2 ? 20 : -20, 0, 0]);
+  callingImpactVisuals.push({ root, expiresAt: performance.now() + 650, materials: [ripple, shadow], abilityId: "assassin_vanish" });
 }
 
 function createCallingImpact(effect: CallingAbilityEffect): void {
@@ -5135,9 +5198,9 @@ function createPowerImpact(message: PowerResolved): void {
   }
 }
 
-function createHuntersMarkPayoff(mob: MobVisual): void {
+function createHuntersMarkPayoff(mob: MobVisual, assassin = false): void {
   const root = new pc.Entity("hunters-mark-payoff");
-  const material = powerMaterial(new pc.Color(0.72, 0.16, 1), 0.92);
+  const material = powerMaterial(assassin ? new pc.Color(1, .08, .16) : new pc.Color(0.72, 0.16, 1), 0.92);
   for (let index = 0; index < 18; index += 1) {
     const angle = index / 18 * Math.PI * 2;
     const radius = index % 2 === 0 ? 0.78 : 1.08;
@@ -5153,6 +5216,12 @@ function createHuntersMarkPayoff(mob: MobVisual): void {
   for (let index = 0; index < HUNTERS_MARK.maxStacks; index += 1) {
     const angle = index / HUNTERS_MARK.maxStacks * Math.PI * 2;
     addBox(root, "mark-payoff-core", material, [0.28, 0.28, 0.28], [Math.sin(angle) * 0.42, 1.18, Math.cos(angle) * 0.42]);
+  }
+  if (assassin) {
+    const execution = addBox(root, "execution-flash-a", material, [.08, 1.25, .08], [0, 1.05, 0]);
+    execution.setLocalEulerAngles(0, 0, 48);
+    const counter = addBox(root, "execution-flash-b", material, [.08, 1.25, .08], [0, 1.05, 0]);
+    counter.setLocalEulerAngles(0, 0, -48);
   }
   root.setPosition(mob.state.x, mob.state.y + 0.04, mob.state.z);
   app.root.addChild(root);
@@ -5471,9 +5540,17 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     pip.enabled = false;
     return pip;
   });
-  const assassinMarker = addBox(statusRoot, "assassin-death-mark", markMaterial,
-    [.3, .3, .3], [0, healthBarY + .55, 0]);
-  assassinMarker.setLocalEulerAngles(0, 45, 45);
+  const assassinMarker = new pc.Entity("assassin-death-mark");
+  assassinMarker.setLocalPosition(0, healthBarY + .6, 0);
+  statusRoot.addChild(assassinMarker);
+  const markCore = addBox(assassinMarker, "death-mark-core", markMaterial, [.26, .26, .12], [0, 0, 0]);
+  markCore.setLocalEulerAngles(0, 45, 45);
+  for (let index = 0; index < 4; index += 1) {
+    const angle = index * Math.PI / 2;
+    const dagger = addBox(assassinMarker, "death-mark-dagger", markMaterial, [.055, .28, .07],
+      [Math.sin(angle) * .42, Math.cos(angle) * .42, 0]);
+    dagger.setLocalEulerAngles(0, 0, -index * 90);
+  }
   assassinMarker.enabled = false;
   entity.setPosition(mob.x, mob.y, mob.z);
   app.root.addChild(entity);
@@ -10394,7 +10471,13 @@ app.on("update", (dt: number) => {
     localActivePower = null;
   }
 
-  const localStealthed = Date.now() < (playerStealthUntil.get(room?.sessionId ?? "") ?? 0);
+  const visibilityNow = Date.now();
+  for (const [playerId, until] of playerStealthUntil) {
+    if (visibilityNow < until) continue;
+    playerStealthUntil.delete(playerId);
+    createStealthReappearance(playerId);
+  }
+  const localStealthed = visibilityNow < (playerStealthUntil.get(room?.sessionId ?? "") ?? 0);
   localPlayerRig.root.enabled = !localStealthed;
   localStealthGhost.enabled = localStealthed;
 
@@ -10411,7 +10494,7 @@ app.on("update", (dt: number) => {
     const pose = sampleRemotePose(remote.snapshots, renderAt);
     if (pose) {
       remote.entity.enabled = undergroundKnown(pose.x, pose.y, pose.z)
-        && Date.now() >= (playerStealthUntil.get(id) ?? 0);
+        && visibilityNow >= (playerStealthUntil.get(id) ?? 0);
       const previousPosition = remote.entity.getPosition();
       const remoteTravel = Math.hypot(pose.x - previousPosition.x, pose.z - previousPosition.z);
       const remoteVerticalVelocity = (pose.y - previousPosition.y) / Math.max(frameTime, 0.001);
@@ -10607,7 +10690,8 @@ app.on("update", (dt: number) => {
     mob.assassinMarker.enabled = mob.state.alive && markState?.kind === "assassin";
     if (mob.assassinMarker.enabled) {
       const pulse = 1 + Math.sin(animationTime * 10) * .12;
-      mob.assassinMarker.setLocalScale(.3 * pulse, .3 * pulse, .3 * pulse);
+      mob.assassinMarker.setLocalScale(pulse, pulse, pulse);
+      mob.assassinMarker.rotateLocal(0, 0, frameTime * 28);
     }
     mob.mark.enabled = mob.state.alive && Boolean(markState);
     if (mob.mark.enabled) {
@@ -11518,13 +11602,24 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   });
   room.onMessage("player:stealth", (state: { playerId: string; until: number }) => {
     if (state.until > Date.now()) playerStealthUntil.set(state.playerId, state.until);
-    else playerStealthUntil.delete(state.playerId);
+    else {
+      const wasStealthed = playerStealthUntil.has(state.playerId);
+      playerStealthUntil.delete(state.playerId);
+      if (wasStealthed) createStealthReappearance(state.playerId);
+    }
+  });
+  room.onMessage("assassin:empowered-strike", (message: { casterId: string; mobId: string; bonusDamage: number }) => {
+    const mob = mobVisuals.get(message.mobId);
+    if (!mob) return;
+    createHuntersMarkPayoff(mob, true);
+    createRangedPopup(new pc.Vec3(mob.state.x, mob.state.y + mob.healthBarY + .75, mob.state.z),
+      `EMPOWERED · +${message.bonusDamage}`, "melee", false, [1, .22, .32]);
   });
   room.onMessage("assassin:mark-strike", (message: { casterId: string; mobId: string; bonusDamage: number; empowered: boolean; defeated: boolean }) => {
     const mob = mobVisuals.get(message.mobId);
     mob?.marks.delete(message.casterId);
     if (!mob) return;
-    if (message.empowered) createHuntersMarkPayoff(mob);
+    if (message.empowered) createHuntersMarkPayoff(mob, true);
     createRangedPopup(new pc.Vec3(mob.state.x, mob.state.y + mob.healthBarY + .75, mob.state.z),
       message.empowered ? `MARK STRUCK · +${message.bonusDamage}` : "MARK BROKEN", "melee", message.defeated, [1, .22, .32]);
   });
@@ -11775,7 +11870,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     const mob = mobVisuals.get(message.mobId);
     const assassinMark = mob?.marks.get(message.casterId)?.kind === "assassin";
     mob?.marks.delete(message.casterId);
-    if (mob) createHuntersMarkPayoff(mob);
+    if (mob) createHuntersMarkPayoff(mob, assassinMark);
     if (assassinMark) {
       if (mob) createRangedPopup(new pc.Vec3(mob.state.x, mob.state.y + mob.healthBarY + .75, mob.state.z),
         `MARK STRUCK · +${message.bonusDamage}`, "melee", false, [1, .22, .32]);

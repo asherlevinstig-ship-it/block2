@@ -39,6 +39,14 @@ describe("calling particle identity and budget", () => {
     expect(CALLING_ABILITY_SUSTAIN_PARTICLES.mage_overload?.some(layer => layer.kind === "streak")).toBe(true);
   });
 
+  it("gives Assassin abilities distinct concealment, execution, and flurry signatures", () => {
+    expect(CALLING_IMPACT_PARTICLES.assassin_vanish.some(layer => layer.kind === "smoke")).toBe(true);
+    expect(CALLING_IMPACT_PARTICLES.assassin_death_mark.some(layer => layer.kind === "glow" && layer.color[0] === 1)).toBe(true);
+    expect(CALLING_IMPACT_PARTICLES.assassin_blade_dance.reduce((sum, layer) => sum + layer.count, 0)).toBeGreaterThanOrEqual(90);
+    expect(CALLING_ABILITY_SUSTAIN_PARTICLES.assassin_vanish?.some(layer => layer.kind === "smoke")).toBe(true);
+    expect(CALLING_ABILITY_SUSTAIN_PARTICLES.assassin_blade_dance?.some(layer => layer.kind === "streak")).toBe(true);
+  });
+
   it("separates focused healing, area renewal, and resurrection", () => {
     expect(CALLING_IMPACT_PARTICLES.healer_field_mend.some(layer => layer.kind === "streak")).toBe(true);
     expect(Math.max(...CALLING_IMPACT_PARTICLES.healer_renewal.map(layer => layer.radius))).toBeGreaterThanOrEqual(2);

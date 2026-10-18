@@ -7626,6 +7626,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const assassinSpecialization = this.buildSpecializationFor(player, "assassin");
       let shadowstepReady = shadowstepActive;
       let shadowstepAppliedDamage = 0;
+      let shadowstepTargetId = "";
       let arcaneEchoDamage = 0;
       const rootbound = player.mainHandId === "rootbound_hammer" && definition.core === "line";
       const rootDurationMs = rootbound ? 700 : 0;
@@ -7653,6 +7654,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           + (this.assassinShadowBonus.get(sessionId) ?? 0)
           + this.equipmentAffixTier(player, "executioner") : 0;
         shadowstepAppliedDamage = Math.max(shadowstepAppliedDamage, shadowstepDamage);
+        if (shadowstepDamage > 0 && !payoff.consumed) shadowstepTargetId = target.id;
         if (shadowstepReady) {
           shadowstepReady = false; this.assassinShadowUntil.delete(sessionId); this.assassinShadowBonus.delete(sessionId);
           const activeAbility = selectedCallingAbility(parseBuildPathState(player.huntLoadoutsJson), "assassin");
@@ -7731,6 +7733,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (shadowstepActive && !shadowstepReady)
         this.buildPathProc(sessionId, "assassin", assassinSpecialization === "executioner" ? "EXECUTIONER" : "SHADOWSTEP",
           `EMPOWERED STRIKE · +${shadowstepAppliedDamage} DAMAGE`);
+      if (shadowstepTargetId)
+        this.clients.find(client => client.sessionId === sessionId)?.send("assassin:empowered-strike",
+          { casterId: sessionId, mobId: shadowstepTargetId, bonusDamage: shadowstepAppliedDamage });
       if (shadowstepActive && !shadowstepReady && selectedCallingAbility(buildState, "assassin") === "assassin_vanish")
         this.grantCallingTrial(sessionId, "vanish_killing_intent", 1);
       if (shadowstepActive && !shadowstepReady && assassinSpecialization === "phantom") this.grantMasterTrial(sessionId, "phantom");
@@ -8445,6 +8450,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         this.broadcast("assassin:mark-strike", { casterId: sessionId, mobId, bonusDamage: markStrikeBonus,
           empowered: shadowstepDamage > 0, defeated: mob.health === 0 });
       }
+      if (shadowstepDamage > 0 && !assassinMark)
+        this.clients.find(client => client.sessionId === sessionId)?.send("assassin:empowered-strike",
+          { casterId: sessionId, mobId, bonusDamage: shadowstepDamage });
       if (shadowstepDamage > 0 && assassinSpecialization === "phantom") this.grantMasterTrial(sessionId, "phantom");
       if (mob.health === 0 && shadowstepDamage > 0 && assassinSpecialization === "executioner") {
         this.grantMasterTrial(sessionId, "executioner");
