@@ -20,6 +20,13 @@ describe("readable enemy combat cues", () => {
     expect(enemyCombatCue({ ...bloom, aimCommitted: true }, 2_500).label).toBe("TOXIC BLOOM · LOCKED");
     expect(enemyCombatCue({ ...bloom, combatState: "recover" }, 3_200).label).toBe("RECOVER · COUNTER");
   });
+  it("distinguishes the Cinder Ram's committed furnace charge and exposed recovery", () => {
+    const charge = { ...mob, archetype: "cinder_ram", attackPattern: "furnace-charge",
+      attackReleaseAt: 2_600, attackContactAt: 2_600, attackContactEndAt: 3_550, attackRecoveryEndAt: 6_550 };
+    expect(enemyCombatCue(charge, 1_200)).toMatchObject({ kind: "furnace charge", label: "FURNACE CHARGE · AIMING" });
+    expect(enemyCombatCue({ ...charge, aimCommitted: true }, 2_400).label).toBe("FURNACE CHARGE · LOCKED");
+    expect(enemyCombatCue({ ...charge, combatState: "recover", attackContactEndAt: 3_000 }, 3_200).label).toBe("RECOVER · COUNTER");
+  });
   it("labels rock aim, commitment and the full recovery window", () => {
     const rocks = { ...mob, attackPattern: "rocks", attackContactAt: 2000, attackContactEndAt: 2000, attackRecoveryEndAt: 4400 };
     expect(enemyCombatCue(rocks, 1200).label).toBe("ROCK VOLLEY · AIMING");

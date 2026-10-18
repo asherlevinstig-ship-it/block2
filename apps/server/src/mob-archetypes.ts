@@ -1,5 +1,5 @@
 import { BRUTE_SLAM, SPITTER_PATTERN, crawlerRushDistance } from "@blockcraft/protocol";
-export type MobArchetypeId = "moss_crawler" | "briar_crawler" | "stone_brute" | "cave_spitter" | "ridge_stalker" | "shard_sentry" | "thornbinder" | "fen_bloater";
+export type MobArchetypeId = "moss_crawler" | "briar_crawler" | "stone_brute" | "cave_spitter" | "ridge_stalker" | "shard_sentry" | "thornbinder" | "fen_bloater" | "cinder_ram";
 export const isSpitterLike = (archetype: string): boolean => archetype === "cave_spitter" || archetype === "shard_sentry";
 export const isThornbinder = (archetype: string): boolean => archetype === "thornbinder";
 
@@ -161,6 +161,15 @@ export const MOB_ARCHETYPES: Record<MobArchetypeId, MobArchetypeDefinition> = {
     hazardDurationMs: 5_500, hazardRadius: 3.4,
     respawnMs: 45_000, rewardHealth: 0, rewardStamina: 28,
   },
+  cinder_ram: {
+    id: "cinder_ram", name: "Cinder Ram", spawn: { x: 103.5, y: 8, z: 52.5 },
+    maxHealth: 18, armor: 1, attackKind: "melee", speed: 1.05,
+    stopDistance: 6.4, minimumAttackRange: 0, aggroRange: 12,
+    windupMs: 1_600, recoverMs: 2_100, cooldownMs: 4_800, damage: 2,
+    lungeDistance: 0, hitRange: 1.2, projectileTravelMs: 0,
+    hazardDurationMs: 3_800, hazardRadius: .72,
+    respawnMs: 50_000, rewardHealth: 0, rewardStamina: 34,
+  },
 };
 
 export function mobArchetype(value: string): MobArchetypeDefinition {
@@ -171,6 +180,7 @@ export function mobArchetype(value: string): MobArchetypeDefinition {
   if (value === "shard_sentry") return MOB_ARCHETYPES.shard_sentry;
   if (value === "thornbinder") return MOB_ARCHETYPES.thornbinder;
   if (value === "fen_bloater") return MOB_ARCHETYPES.fen_bloater;
+  if (value === "cinder_ram") return MOB_ARCHETYPES.cinder_ram;
   return MOB_ARCHETYPES.moss_crawler;
 }
 

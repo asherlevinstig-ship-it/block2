@@ -2,6 +2,7 @@ import type { MobArchetypeId } from "./mob-archetypes.js";
 import { ASHEN_REACH, ASHEN_SENTRY_HOMES, MISTFEN_MOB_HOMES, NORTHWATCH_MOB_HOMES, SILVER_GUARD_HOMES, SOUTHERN_MOB_HOMES, isInAshenReach, isInMistfenMarsh, isInNorthwatchHighlands, isInSouthernQuarry } from "@blockcraft/voxel-world";
 export const ASHEN_SENTRY_IDS = ["ashglass-sentry-west", "ashglass-sentry-east"] as const;
 export const isAshenSentry = (id: string) => ASHEN_SENTRY_IDS.some(member => member === id);
+export const isAshenMob = (id: string) => id === "ashen-cinder-ram" || isAshenSentry(id);
 export const ashenSentryAllows = (pose: { x: number; y: number; z: number }) => Math.abs(pose.y - 8) <= 1.5
   && isInAshenReach(pose.x, pose.z) && Math.hypot(pose.x - ASHEN_REACH.x, pose.z - ASHEN_REACH.z) <= ASHEN_REACH.radius - 1;
 /** Two sweeping fans before a committed aimed shot leave readable gaps. */
@@ -84,6 +85,7 @@ export const WILDERNESS_ENCOUNTERS: readonly { id: string; archetype: MobArchety
   { id: "mistfen-spitter", archetype: "cave_spitter", ...MISTFEN_MOB_HOMES[3] },
   { id: "mistfen-bloater", archetype: "fen_bloater", x: -36.5, y: 8, z: -34.5 },
   ...ASHEN_SENTRY_IDS.map((id, index) => ({ id, archetype: "cave_spitter" as const, ...ASHEN_SENTRY_HOMES[index]! })),
+  { id: "ashen-cinder-ram", archetype: "cinder_ram", x: 103.5, y: 8, z: 52.5 },
   { id: SOUTHERN_QUARRY_IDS[0], archetype: "moss_crawler", ...SOUTHERN_MOB_HOMES[0] },
   { id: SOUTHERN_QUARRY_IDS[1], archetype: "cave_spitter", ...SOUTHERN_MOB_HOMES[1] },
   { id: SOUTHERN_QUARRY_IDS[2], archetype: "cave_spitter", ...SOUTHERN_MOB_HOMES[2] },

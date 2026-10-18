@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Block } from "@blockcraft/voxel-world";
-import { blacksmithNextStep, BASE_IRON_CAPACITY, UPGRADED_IRON_CAPACITY, buyDepthsReward, canTradeAtBlacksmith, forgeBlacksmithUpgrade, ironCapacity, ironOreSale, mineralSale, ironSwordDamageBonus, minedIronQuantity, minedMineral, ownedBlacksmithUpgrades, ownedDepthsRewards } from "./blacksmith.js";
+import { blacksmithNextStep, BASE_IRON_CAPACITY, UPGRADED_IRON_CAPACITY, buyDepthsReward, canTradeAtBlacksmith, emberOreSale, forgeBlacksmithUpgrade, ironCapacity, ironOreSale, mineralSale, ironSwordDamageBonus, minedIronQuantity, minedMineral, ownedBlacksmithUpgrades, ownedDepthsRewards } from "./blacksmith.js";
 
 describe("blacksmith trading", () => {
   it("spends Moonstone once and applies permanent Depths reward effects", () => {
@@ -51,6 +51,12 @@ describe("blacksmith trading", () => {
     expect(ironOreSale(4, 10)).toEqual({ sold: 4, goldGranted: 12 });
     expect(ironOreSale(4, 999_995)).toEqual({ sold: 1, goldGranted: 3 });
     expect(ironOreSale(4, 1_000_000)).toEqual({ sold: 0, goldGranted: 0 });
+  });
+
+  it("sells the Cinder Ram's Ember Ore without consuming Ember Vault currency", () => {
+    expect(emberOreSale(3, 10)).toEqual({ sold: 3, goldGranted: 30 });
+    expect(emberOreSale(3, 999_985)).toEqual({ sold: 1, goldGranted: 10 });
+    expect(emberOreSale(3, 1_000_000)).toEqual({ sold: 0, goldGranted: 0 });
   });
 
   it("buys the reinforced pickaxe for gold only exactly once without consuming minerals", () => {

@@ -1,4 +1,4 @@
-import { BLACKSMITH_UPGRADES, IRON_ORE_GOLD_PRICE, SILVER_DEPTHS_REWARDS, SILVER_ORE_GOLD_PRICE, type BlacksmithUpgradeId, type MainHandId, type SilverDepthsRewardId } from "@blockcraft/protocol";
+import { BLACKSMITH_UPGRADES, EMBER_ORE_GOLD_PRICE, IRON_ORE_GOLD_PRICE, SILVER_DEPTHS_REWARDS, SILVER_ORE_GOLD_PRICE, type BlacksmithUpgradeId, type MainHandId, type SilverDepthsRewardId } from "@blockcraft/protocol";
 import { Block, TOWN_BLACKSMITH_STALL_POSITION, type BlockId } from "@blockcraft/voxel-world";
 import { BLACKSMITH_STOCK, type BlacksmithStockId } from "@blockcraft/protocol";
 
@@ -111,6 +111,11 @@ export function canTradeAtBlacksmith(player: { x: number; y: number; z: number }
 export function ironOreSale(available: number, gold: number): { sold: number; goldGranted: number } {
   const sold = Math.max(0, Math.min(Math.floor(available), Math.floor((MAX_GOLD - gold) / IRON_ORE_GOLD_PRICE)));
   return { sold, goldGranted: sold * IRON_ORE_GOLD_PRICE };
+}
+
+export function emberOreSale(available: number, gold: number): { sold: number; goldGranted: number } {
+  const sold = Math.max(0, Math.min(Math.floor(available), Math.floor((MAX_GOLD - gold) / EMBER_ORE_GOLD_PRICE)));
+  return { sold, goldGranted: sold * EMBER_ORE_GOLD_PRICE };
 }
 
 export function mineralSale(iron: number, silver: number, gold: number): { ironSold: number; silverSold: number; goldGranted: number } {

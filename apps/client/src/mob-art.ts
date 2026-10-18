@@ -1,7 +1,7 @@
 import * as pc from "playcanvas";
 import { mobGaitTargets } from "./mob-motion.js";
 
-type MobKind = "stone_brute" | "cave_spitter" | "moss_crawler" | "ridge_stalker" | "shard_sentry" | "thornbinder" | "fen_bloater";
+type MobKind = "stone_brute" | "cave_spitter" | "moss_crawler" | "ridge_stalker" | "shard_sentry" | "thornbinder" | "fen_bloater" | "cinder_ram";
 type Triple = [number, number, number];
 
 interface Limb {
@@ -73,7 +73,10 @@ const thornSap = material("thornbinder-living-sap", [.55, 1, .2], [.16, .58, .03
 const fenHide = material("fen-bloater-hide", [.22, .31, .12]);
 const fenBelly = material("fen-bloater-belly", [.42, .46, .18]);
 const fenGland = material("fen-bloater-toxic-gland", [.62, 1, .12], [.22, .68, .025]);
-const dimGlowMaterials = new Map<pc.StandardMaterial, pc.StandardMaterial>([core, acid, crawlerEye, matriarchVenom, matriarchEnragedVenom, guardianCore, guardianEnragedCore, northwatchEye, shardCrystal, thornSap, fenGland]
+const cinderHide = material("cinder-ram-hide", [.2, .13, .1]);
+const cinderArmour = material("cinder-ram-ash-armour", [.34, .31, .29]);
+const cinderEmber = material("cinder-ram-ember-vents", [1, .29, .035], [.85, .09, .015]);
+const dimGlowMaterials = new Map<pc.StandardMaterial, pc.StandardMaterial>([core, acid, crawlerEye, matriarchVenom, matriarchEnragedVenom, guardianCore, guardianEnragedCore, northwatchEye, shardCrystal, thornSap, fenGland, cinderEmber]
   .map(live => [live, material(`defeated-${live.name}`, [live.diffuse.r * .5, live.diffuse.g * .5, live.diffuse.b * .5])]));
 
 function box(parent: pc.Entity, name: string, surface: pc.StandardMaterial, size: Triple, at: Triple, angle?: Triple): pc.Entity {
@@ -96,13 +99,40 @@ function pivot(parent: pc.Entity, name: string, at: Triple): pc.Entity {
 export function createMobArt(parent: pc.Entity, archetype: string, body: pc.StandardMaterial, matriarch = false, rootGuardian = false): MobArtRig {
   const kind: MobKind = archetype === "stone_brute" ? "stone_brute" : archetype === "cave_spitter" ? "cave_spitter"
     : archetype === "ridge_stalker" ? "ridge_stalker" : archetype === "shard_sentry" ? "shard_sentry"
-      : archetype === "thornbinder" ? "thornbinder" : archetype === "fen_bloater" ? "fen_bloater" : "moss_crawler";
+      : archetype === "thornbinder" ? "thornbinder" : archetype === "fen_bloater" ? "fen_bloater"
+        : archetype === "cinder_ram" ? "cinder_ram" : "moss_crawler";
   const head = pivot(parent, "head-joint", kind === "stone_brute" ? [0, 1.6, 0.06] : kind === "shard_sentry" ? [0, 1.25, .08]
-    : kind === "thornbinder" ? [0, 1.72, .04] : kind === "fen_bloater" ? [0, .76, .58] : kind === "ridge_stalker" ? [0, .69, .56] : kind === "cave_spitter" ? [0, 0.56, 0.56] : [0, 0.53, 0.48]);
+    : kind === "thornbinder" ? [0, 1.72, .04] : kind === "fen_bloater" ? [0, .76, .58]
+      : kind === "cinder_ram" ? [0, .95, .88] : kind === "ridge_stalker" ? [0, .69, .56] : kind === "cave_spitter" ? [0, 0.56, 0.56] : [0, 0.53, 0.48]);
   const jaw = pivot(head, "jaw-joint", kind === "stone_brute" ? [0, -0.2, 0.14] : [0, -0.11, 0.27]);
   const rig: MobArtRig = { kind, head, jaw, limbs: [], arms: [], sacs: [], phase: 0, walk: 0, pursuit: 0, matriarch, rootGuardian, phaseSurfaces: [], enraged: false, defeated: false, glowSurfaces: [] };
 
-  if (kind === "fen_bloater") {
+  if (kind === "cinder_ram") {
+    box(parent, "furnace-torso", cinderHide, [1.16, .78, 1.72], [0, .82, -.18]);
+    box(parent, "armoured-shoulders", cinderArmour, [1.38, .64, .72], [0, 1.02, .44], [-8, 0, 0]);
+    box(parent, "ash-spine", body, [.78, .26, 1.34], [0, 1.28, -.25]);
+    box(parent, "charred-tail", cinderHide, [.18, .19, .72], [0, .86, -1.22], [-28, 0, 0]);
+    box(head, "ram-skull", cinderArmour, [.92, .57, .74], [0, 0, .08]);
+    box(head, "furnace-brow", body, [1.02, .2, .38], [0, .22, .28]);
+    box(jaw, "ember-muzzle", cinderHide, [.64, .25, .54], [0, -.04, .2]);
+    for (const side of [-1, 1]) {
+      box(head, `ember-eye-${side}`, cinderEmber, [.13, .1, .075], [side * .29, .08, .47]);
+      box(head, `swept-horn-${side}`, ivory, [.18, .75, .2], [side * .55, .34, -.02], [-20, 0, side * -46]);
+      box(head, `horn-tip-${side}`, ivory, [.16, .48, .17], [side * .78, .05, .03], [32, 0, side * 24]);
+      const vent = pivot(parent, `back-vent-${side}`, [side * .31, 1.48, -.42]);
+      box(vent, "glowing-vent", cinderEmber, [.25, .34, .42], [0, 0, 0], [0, 0, side * 12]);
+      box(vent, "vent-rim", cinderArmour, [.38, .1, .49], [0, -.08, -.02]);
+      rig.sacs.push(vent);
+      for (let index = 0; index < 2; index++) {
+        const leg = pivot(parent, `ram-leg-${side}-${index}`, [side * .44, .69, index === 0 ? .5 : -.66]);
+        box(leg, "armoured-thigh", cinderArmour, [.34, .48, .42], [0, -.17, 0], [0, 0, side * -8]);
+        const knee = pivot(leg, "ram-knee", [0, -.42, .03]);
+        box(knee, "charred-shin", cinderHide, [.25, .39, .27], [0, -.17, .04]);
+        box(knee, "split-hoof", body, [.34, .16, .44], [0, -.38, .14]);
+        rig.limbs.push({ pivot: leg, knee, side, offset: (index + (side > 0 ? 1 : 0)) * Math.PI });
+      }
+    }
+  } else if (kind === "fen_bloater") {
     box(parent, "bloated-body", fenHide, [1.28, .82, 1.34], [0, .72, -.08]);
     box(parent, "low-belly", fenBelly, [1.02, .42, 1.05], [0, .39, .12]);
     box(parent, "mud-armour", body, [.92, .19, .78], [0, 1.13, -.18], [-5, 0, 0]);

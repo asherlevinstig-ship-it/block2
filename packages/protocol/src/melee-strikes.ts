@@ -2,8 +2,9 @@ import type { MainHandId } from "./index.js";
 
 export interface StrikePoint { x: number; y: number; z: number }
 export const CHAMPION_CHARGE = { distance: 3.6, durationMs: 600, windupMs: 1300, recoveryMs: 1800, halfWidth: .95 } as const;
-export function championChargeOutline(yaw: number, distance: number = CHAMPION_CHARGE.distance) {
-  const angle = yaw * Math.PI / 180; const width = CHAMPION_CHARGE.halfWidth;
+export const CINDER_RAM_CHARGE = { distance: 7.2, durationMs: 950, windupMs: 1_600, recoveryMs: 3_000, halfWidth: 1.05 } as const;
+export function championChargeOutline(yaw: number, distance: number = CHAMPION_CHARGE.distance, width: number = CHAMPION_CHARGE.halfWidth) {
+  const angle = yaw * Math.PI / 180;
   return [[-width, -width], [width, -width], [width, distance + width], [-width, distance + width]]
     .map(([x, z]) => ({ x: x! * Math.cos(angle) + z! * Math.sin(angle), z: z! * Math.cos(angle) - x! * Math.sin(angle) }));
 }
@@ -89,7 +90,7 @@ export function mobMeleeStrike(archetype: string): MeleeStrikeProfile {
 export const mobMeleeImpactMs = (archetype: string): number => archetype === "stone_brute" ? 280 : 150;
 export const mobAimCommitMs = (archetype: string): number => archetype === "stone_brute" ? 650
   : archetype === "moss_crawler" || archetype === "briar_crawler" ? 550
-    : archetype === "ridge_stalker" ? 420 : archetype === "fen_bloater" ? 700 : archetype === "thornbinder" ? 500
+    : archetype === "ridge_stalker" ? 420 : archetype === "cinder_ram" ? 750 : archetype === "fen_bloater" ? 700 : archetype === "thornbinder" ? 500
       : archetype === "cave_spitter" || archetype === "shard_sentry" ? 450 : 250;
 
 /** Conservative XZ danger boundary, including the player's body contact margin. */

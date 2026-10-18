@@ -7,9 +7,9 @@ import { ShadowMoveInput, stepShadowMovement, type ShadowPose } from "./movement
 import { randomUUID } from "node:crypto";
 import { ADMIN_BOOTSTRAP_HASH, ADMIN_PROFILE_HASH, adminProfileKey, matchesAdminBootstrapPass } from "./admin-access.js";
 import { AttackCoordination, allyFireLaneClear } from "./attack-coordination.js";
-import { MIXED_FRONTIER_SPITTER, STONE_BRUTE_ESCORTS, isMixedFrontierMob, mixedFrontierAllows, isSilverGuard, silverGuardAllows, frontierBruteAllows, isFrontierBruteGroupMob, isStoneBruteGroupMob, isGreenwoodCampMob, greenwoodCampAllows, isAshenSentry, ashenSentryAllows, ashenSentryPattern, isMistfenMob, mistfenAllows, isSouthernQuarryMob, southernQuarryAllows, isNorthwatchMob, northwatchAllows, northwatchShardPattern, northwatchPatrolPattern, northwatchPatrolInterruptDuration, northwatchPatrolShotDamage, NORTHWATCH_SHARD_PATROL_IDS, isNorthwatchShardPatrol, northwatchShardPatrolAllows } from "./wilderness-encounters.js";
+import { MIXED_FRONTIER_SPITTER, STONE_BRUTE_ESCORTS, isMixedFrontierMob, mixedFrontierAllows, isSilverGuard, silverGuardAllows, frontierBruteAllows, isFrontierBruteGroupMob, isStoneBruteGroupMob, isGreenwoodCampMob, greenwoodCampAllows, isAshenSentry, isAshenMob, ashenSentryAllows, ashenSentryPattern, isMistfenMob, mistfenAllows, isSouthernQuarryMob, southernQuarryAllows, isNorthwatchMob, northwatchAllows, northwatchShardPattern, northwatchPatrolPattern, northwatchPatrolInterruptDuration, northwatchPatrolShotDamage, NORTHWATCH_SHARD_PATROL_IDS, isNorthwatchShardPatrol, northwatchShardPatrolAllows } from "./wilderness-encounters.js";
 import { BRUTE_VOLLEY, bruteVolleyReady, bruteRockEndpoints } from "@blockcraft/protocol";
-import { CHAMPION_CHARGE, ChatSendSchema, QUICK_CHAT_PHRASES, PlayerNameSchema, AppearanceSchema, type NearbyChatMessage } from "@blockcraft/protocol";
+import { CHAMPION_CHARGE, CINDER_RAM_CHARGE, ChatSendSchema, QUICK_CHAT_PHRASES, PlayerNameSchema, AppearanceSchema, type NearbyChatMessage } from "@blockcraft/protocol";
 import { hearsNearbyChat } from "./nearby-chat.js";
 import { PartyRequestSchema } from "@blockcraft/protocol";
 import { Parties } from "./parties.js";
@@ -19,7 +19,7 @@ import { Trading } from "./trading.js";
 import { BLACKSMITH_STOCK, BLACKSMITH_DISMANTLE, BLACKSMITH_REFORGE, REGIONAL_FORGE_RECIPES, BlacksmithBuySchema, BlacksmithDismantleSchema, BlacksmithHaulSchema, BlacksmithReforgeSchema, RegionalForgeSchema, AttunementForgeSchema, EquipmentAffixHuntSchema, EQUIPMENT_HUNT_REGIONS, ITEM_DEFINITIONS, EQUIPMENT_AFFIXES, HUNT_EQUIPMENT_SETS, BUILD_PATHS, BUILD_PATH_SPECIALIZATIONS, CALLING_ABILITY_OPTIONS, CALLING_ABILITY_AUGMENTS, CALLING_AUGMENT_TRIALS, CallingAbilityRequestSchema, CallingAbilityEquipRequestSchema, CallingAugmentEquipRequestSchema, HuntCollectionRequestSchema, BuildPathRequestSchema, ArmourEquipSchema, armourStats, armouredDamage, reforgeWeaponDamageBonus, equipmentPerkStats, equipmentAffixResonanceForLoadout, type EquipmentPerkId, type BlacksmithDismantleItemId, type BlacksmithReforgeItemId, type RegionalForgeId, type HuntCollectionUpdate, type HuntLoadoutSlot, type BuildPathId, type BuildPathUpdate, type BuildPathProc, type BuildPathSpecializationId, type CallingAbilityId, type CallingAugmentId, type CallingAbilityUpdate, type CallingAbilityEffect, type CallingStateUpdate, type EquipmentAffixId, type EquipmentAffixRoll, type EquipmentAffixOffers, type EquipmentAffixUpdate, type EquipmentHuntRegionId, type EquipmentHuntTarget } from "@blockcraft/protocol";
 import { AREA_LEADER_RELIC_IDS, LEADER_FORGE_MARKS, LEADER_FORGE_RECIPES, LeaderForgeSchema,
   type AreaLeaderRelicId, type LeaderForgemarkId } from "@blockcraft/protocol";
-import { weaponPurchase } from "./blacksmith.js";
+import { emberOreSale, weaponPurchase } from "./blacksmith.js";
 import { awareMobTarget, createMobAwareness, provokeMob, type MobAwareness } from "./mob-awareness.js";
 import { spacedMobDesired, mobPersonalSpace } from "./mob-spacing.js";
 import { turnBruteAim } from "./brute-aim.js";
@@ -139,6 +139,7 @@ import {
   type CombatTimingEvent,
   type CombatReward,
   type CombatStagger,
+  type CinderRamImpact,
   type DefenseResolved,
   type DepthsRouteHazard,
   type FenBloaterGlandHit,
@@ -515,6 +516,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly mobStaggerImmuneUntil = new Map<string, number>();
   private readonly mobHazards = new Map<string, ActiveMobHazard>();
   private readonly fenBloaterGlandHits = new Map<string, { hits: number; expiresAt: number }>();
+  private readonly cinderRamExposedUntil = new Map<string, number>();
+  private readonly cinderRamTrailLast = new Map<string, { x: number; z: number }>();
   private readonly mistfenPoolDamageAt = new Map<string, number>();
   private readonly fenwalkerWardReadyAt = new Map<string, number>();
   private readonly northwatchShardWardReadyAt = new Map<string, number>();
@@ -1578,16 +1581,20 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (!canTradeAtBlacksmith(player)) return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to trade.", "error");
     const ore = player.inventory.get("iron_ore");
     const silver = player.inventory.get("silver_ore");
-    if (!ore?.quantity && !silver?.quantity) return this.sendBlacksmithState(client, "No minerals to sell. Look for exposed iron beyond the east gate; silver lies farther into the wilderness.", "error");
+    const ember = player.inventory.get("ember_ore");
+    if (!ore?.quantity && !silver?.quantity && !ember?.quantity) return this.sendBlacksmithState(client, "No minerals to sell. Look for exposed iron, silver, or Ember Ore in the wilderness.", "error");
     const { ironSold, silverSold, goldGranted } = mineralSale(ore?.quantity ?? 0, silver?.quantity ?? 0, player.coins);
-    const sold = ironSold + silverSold;
+    const emberSale = emberOreSale(ember?.quantity ?? 0, player.coins + goldGranted);
+    const sold = ironSold + silverSold + emberSale.sold;
     if (sold === 0) return this.sendBlacksmithState(client, "Your gold purse is full.", "error");
     if (ore) ore.quantity -= ironSold;
     if (silver) silver.quantity -= silverSold;
-    player.coins += goldGranted;
+    if (ember) ember.quantity -= emberSale.sold;
+    player.coins += goldGranted + emberSale.goldGranted;
     void this.persistPlayer(client.sessionId, player);
-    const minerals = [ironSold ? `${ironSold} iron ore` : "", silverSold ? `${silverSold} silver ore` : ""].filter(Boolean).join(" + ");
-    this.sendBlacksmithState(client, `Sold ${minerals} for ${goldGranted} gold.`, "traded", sold, goldGranted);
+    const minerals = [ironSold ? `${ironSold} iron ore` : "", silverSold ? `${silverSold} silver ore` : "", emberSale.sold ? `${emberSale.sold} Ember Ore` : ""].filter(Boolean).join(" + ");
+    const totalGold = goldGranted + emberSale.goldGranted;
+    this.sendBlacksmithState(client, `Sold ${minerals} for ${totalGold} gold.`, "traded", sold, totalGold);
   }
 
   private handleBlacksmithDismantle(client: Client, payload: unknown): void {
@@ -2274,6 +2281,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (mobId === "northwatch-spitter") mob.name = "Patrol Shard Sentry";
     if (mobId === "northwatch-patrol-stalker-west" || mobId === "northwatch-patrol-stalker-east") mob.name = "Ridge Patrol Stalker";
     if (archetypeId === "fen_bloater") mob.attackPattern = "toxic-bloom";
+    if (archetypeId === "cinder_ram") mob.attackPattern = "furnace-charge";
     if (areaMiniBoss) mob.name = areaMiniBoss.name;
     this.mobBaseNames.set(mobId, mob.name);
     mob.level = enemyLevelForTier(mob.difficultyTier, mob.isChampion || mob.isElite || Boolean(areaMiniBoss), mobId === CRYSTAL_MATRIARCH_ID || mobId === "forest-guardian" || mobId === "forge-colossus");
@@ -2326,7 +2334,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (isGreenwoodCampMob(id)) return greenwoodCampAllows(pose);
     if (isGreenwoodEventFollower(id)) return isInGreenwoodRegion(pose.x, pose.z) && Math.abs(pose.y - 8) <= 1.5;
     if (isSilverGuard(id)) return silverGuardAllows(pose);
-    if (isAshenSentry(id)) return ashenSentryAllows(pose);
+    if (isAshenMob(id)) return ashenSentryAllows(pose);
     if (isMistfenMob(id)) return mistfenAllows(pose);
     if (isMistfenEventFollower(id)) return mistfenAllows(pose);
     if (isSouthernQuarryMob(id)) return southernQuarryAllows(pose);
@@ -2476,6 +2484,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.crawlerRushes.delete(mobId);
     this.championCharges.delete(mobId);
     this.fenBloaterGlandHits.delete(mobId);
+    this.cinderRamTrailLast.delete(mobId);
     if (isSpitterLike(mob.archetype)) for (const [projectileId, projectile] of this.pendingMobProjectiles) {
       if (projectile.mobId !== mobId) continue;
       this.pendingMobProjectiles.delete(projectileId);
@@ -2817,6 +2826,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.rangerSlows.delete(mobId);
     this.rangerRootedUntil.delete(mobId);
     this.fenBloaterGlandHits.delete(mobId);
+    this.cinderRamExposedUntil.delete(mobId);
+    this.cinderRamTrailLast.delete(mobId);
     const wasElite = mob.isElite;
     const huntChampion = this.huntChampions.get(mobId);
     const realmRepeatVictory = mobId === REALM_WARDEN_ID && this.realmWardenRepeatActive;
@@ -6977,6 +6988,39 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     return true;
   }
 
+  private placeCinderRamTrail(mobId: string, mob: MobState, now: number): void {
+    const previous = this.cinderRamTrailLast.get(mobId);
+    if (previous && Math.hypot(mob.x - previous.x, mob.z - previous.z) < .82) return;
+    this.cinderRamTrailLast.set(mobId, { x: mob.x, z: mob.z });
+    const definition = mobArchetype(mob.archetype);
+    const hazardId = `cinder-trail:${mobId}:${now}:${Math.round(mob.x * 10)}:${Math.round(mob.z * 10)}`;
+    const expiresAt = now + definition.hazardDurationMs;
+    this.mobHazards.set(hazardId, {
+      hazardId, mobId, x: mob.x, y: mob.y, z: mob.z,
+      radius: definition.hazardRadius, damage: 1, expiresAt,
+      nextDamageAt: now + 420, lastDamageAt: new Map(),
+    });
+    this.broadcast("combat:mob-hazard", {
+      hazardId, mobId, kind: "fire-trail", x: mob.x, y: mob.y, z: mob.z,
+      radius: definition.hazardRadius, expiresAt,
+    } satisfies MobHazardPlaced);
+  }
+
+  private exposeCinderRam(mobId: string, mob: MobState, now: number): void {
+    const durationMs = CINDER_RAM_CHARGE.recoveryMs;
+    const exposedUntil = now + durationMs;
+    this.cinderRamExposedUntil.set(mobId, exposedUntil);
+    mob.combatState = "recover";
+    mob.stateUntil = exposedUntil;
+    mob.targetId = "";
+    mob.aimCommitted = false;
+    mob.attackContactEndAt = now;
+    mob.attackRecoveryEndAt = exposedUntil;
+    this.broadcast("combat:cinder-impact", {
+      mobId, phase: "impact", exposedUntil, durationMs,
+    } satisfies CinderRamImpact);
+  }
+
   private createVenomSetPool(sessionId: string, origin: MobState, now: number): void {
     const player = this.state.players.get(sessionId);
     if (!player) return;
@@ -7433,6 +7477,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         const aliveFollowers = (AREA_LEADER_FOLLOWERS[mobId] ?? []).filter(id => this.state.mobs.get(id)?.alive).length;
         mob.attackPattern = isCoordinatedCrawlerLeader(mobId) ? crawlerPackPattern(basePattern, aliveFollowers) : basePattern;
       }
+      else if (mob.archetype === "cinder_ram" && mob.combatState === "idle") mob.attackPattern = "furnace-charge";
       else if (mob.isElite && mob.combatState === "idle") mob.attackPattern = isMistfenEventFollower(mobId)
         && this.realmEvents.mistfenVariant === "mireback-stampede" ? "bog-charge"
         : wildernessElitePattern(mob.archetype as MobArchetypeId, mob.actionSequence);
@@ -7497,7 +7542,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           const activeElites = [...this.state.mobs.entries()].filter(([id, candidate]) => id !== mobId && !isAreaMiniBoss(id) && candidate.isElite
             && (candidate.alive || candidate.materializeUntil > now)).length;
           const areaMiniBoss = areaMiniBossDefinition(mobId);
-          mob.isElite = !areaMiniBoss && !isNorthwatchShardPatrol(mobId)
+          mob.isElite = mob.archetype !== "cinder_ram" && !areaMiniBoss && !isNorthwatchShardPatrol(mobId)
             && shouldBecomeWildernessElite(band.tier, activeElites, Math.random());
           const eliteKind = wildernessEliteKind(definition.id);
           mob.eliteKind = mob.isElite ? eliteKind : "";
@@ -7508,7 +7553,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
             mob.leaderModifier = "";
           }
           mob.actionSequence = 0;
-          if (areaMiniBoss) mob.attackPattern = areaLeaderPattern(definition.id, 0, 1, mobId);
+          if (mob.archetype === "cinder_ram") mob.attackPattern = "furnace-charge";
+          else if (areaMiniBoss) mob.attackPattern = areaLeaderPattern(definition.id, 0, 1, mobId);
           else if (mob.isElite) mob.attackPattern = wildernessElitePattern(definition.id, 0);
           mob.x = spawn.x; mob.y = spawn.y; mob.z = spawn.z;
           mob.materializeUntil = now + WILDERNESS_MATERIALIZE_MS;
@@ -7570,6 +7616,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         this.warbandDisrupted.delete(mobId);
         this.warbandFormationUntil.delete(mobId);
         this.fenBloaterGlandHits.delete(mobId);
+        this.cinderRamExposedUntil.delete(mobId);
+        this.cinderRamTrailLast.delete(mobId);
         if (mob.isMiniBoss) this.areaLeaderPhases.set(mobId, 1);
       }
       if (!mob.alive) continue;
@@ -7716,7 +7764,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
             x: Math.sin(aim.yaw * Math.PI / 180) * lungeDistance, z: Math.cos(aim.yaw * Math.PI / 180) * lungeDistance,
           });
         }
-        if ((mob.isChampion || mob.isMiniBoss && mob.archetype === "stone_brute") && mob.attackPattern === "charge"
+        if (mob.archetype === "cinder_ram" && mob.attackPattern === "furnace-charge"
+          || (mob.isChampion || mob.isMiniBoss && mob.archetype === "stone_brute") && mob.attackPattern === "charge"
           || (mobId === "mistfen-behemoth" || mobId === MISTFEN_EVENT_ID || isMistfenEventFollower(mobId)) && mob.attackPattern === "bog-charge") {
           this.launchMixedWarbandPush(mobId, mob, mob.targetId, aim, now);
           this.championCharges.set(mobId, { yaw: aim.yaw, startedAt: now, progress: 0, hit: new Set() });
@@ -7869,6 +7918,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const baseWindupMs = mobId === "northwatch-spitter" && mob.attackPattern === "patrol-lance" ? 1_400
         : (mobId === CRYSTAL_MATRIARCH_ID || mobId === ASHGLASS_ORACLE_ID) && (mob.attackPattern === "crystal-burst" || mob.attackPattern === "teleport-burst")
         ? MATRIARCH_PHASE.crystalBurstWindupMs
+        : mob.attackPattern === "furnace-charge" ? CINDER_RAM_CHARGE.windupMs
         : mob.attackPattern === "charge" ? CHAMPION_CHARGE.windupMs
         : (mobId === "frontier-brute" || isAreaMiniBoss(mobId) && mob.archetype === "stone_brute") && mob.attackPattern === "smash"
           ? FRONTIER_BRUTE.smash.windupMs : definition.windupMs;
@@ -8790,7 +8840,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       mob.attackStrikeZ = mob.attackPattern === "pool" ? aim?.z ?? mob.z : mob.z;
       return;
     }
-    if ((mob.isChampion || mob.isMiniBoss && mob.archetype === "stone_brute") && mob.attackPattern === "charge"
+    if (mob.archetype === "cinder_ram" && mob.attackPattern === "furnace-charge"
+      || (mob.isChampion || mob.isMiniBoss && mob.archetype === "stone_brute") && mob.attackPattern === "charge"
       || (mobId === "mistfen-behemoth" || mobId === MISTFEN_EVENT_ID || isMistfenEventFollower(mobId)) && mob.attackPattern === "bog-charge") {
       if (mob.aimCommitted) return;
       mob.attackStrikeX = mob.x; mob.attackStrikeY = mob.y; mob.attackStrikeZ = mob.z;
@@ -8840,6 +8891,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       mob.attackRecoveryEndAt = mob.attackContactEndAt + MATRIARCH_PHASE.recoveryMs;
       return;
     }
+    if (mob.archetype === "cinder_ram" && mob.attackPattern === "furnace-charge") {
+      mob.attackContactAt = releaseAt;
+      mob.attackContactEndAt = releaseAt + CINDER_RAM_CHARGE.durationMs;
+      mob.attackRecoveryEndAt = mob.attackContactEndAt + mobArchetype(mob.archetype).recoverMs;
+      return;
+    }
     if ((mob.isChampion || mob.isMiniBoss && mob.archetype === "stone_brute") && mob.attackPattern === "charge"
       || (mobId === "mistfen-behemoth" || mobId === MISTFEN_EVENT_ID || isMistfenEventFollower(mobId)) && mob.attackPattern === "bog-charge") {
       mob.attackContactAt = releaseAt;
@@ -8862,9 +8919,14 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private advanceChampionCharges(now: number): void {
     for (const [id, charge] of this.championCharges) {
       const mob = this.state.mobs.get(id);
-      if (!mob?.alive || mob.combatState !== "strike") { this.championCharges.delete(id); continue; }
-      const progress = Math.max(charge.progress, Math.min(1, Math.max(0, (now - charge.startedAt) / CHAMPION_CHARGE.durationMs)));
-      const travel = CHAMPION_CHARGE.distance * (progress - charge.progress);
+      if (!mob?.alive || mob.combatState !== "strike") {
+        this.championCharges.delete(id); this.cinderRamTrailLast.delete(id); continue;
+      }
+      const cinderRam = mob.archetype === "cinder_ram";
+      const durationMs = cinderRam ? CINDER_RAM_CHARGE.durationMs : CHAMPION_CHARGE.durationMs;
+      const distance = cinderRam ? CINDER_RAM_CHARGE.distance : CHAMPION_CHARGE.distance;
+      const progress = Math.max(charge.progress, Math.min(1, Math.max(0, (now - charge.startedAt) / durationMs)));
+      const travel = distance * (progress - charge.progress);
       const start = { x: mob.x, y: mob.y, z: mob.z };
       if (id === "forest-guardian") {
         const cover = guardianCoverHit(start, charge.yaw, Math.max(travel, 1.5));
@@ -8874,12 +8936,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         pose => this.mobPositionAllowed(pose) && this.championAllowed(id, pose) && this.roamingAllowed(id, pose)
           && (isStoneBruteGroupMob(id) || !isInStoneBruteArena(pose.x, pose.z)));
       mob.x = next.x; mob.y = next.y; mob.z = next.z; mob.yaw = charge.yaw;
+      if (cinderRam) this.placeCinderRamTrail(id, mob, now);
       if (mob.isMiniBoss) this.damageMiniBossArenaCover(id, mob, .9);
       let intercepted = false;
       for (const [playerId, player] of this.state.players) {
         if (charge.hit.has(playerId) || player.health <= 0 || Math.abs(player.y - mob.y) > 1.1
           || !hasCombatLineOfSight(start, player, this.readWorldBlock)) continue;
-        if (championChargeHits(start, next, player)) {
+        if (championChargeHits(start, next, player, cinderRam ? CINDER_RAM_CHARGE.halfWidth : CHAMPION_CHARGE.halfWidth)) {
           charge.hit.add(playerId);
           this.queueIncomingHit(id, playerId, mob.attackDamage, now);
           if (player.defending && player.stamina >= 10) { intercepted = true; break; }
@@ -8890,6 +8953,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const obstructed = Math.hypot(next.x - start.x, next.z - start.z) < travel * .8;
       if (intercepted || progress >= 1 || obstructed) {
         this.championCharges.delete(id);
+        this.cinderRamTrailLast.delete(id);
+        if (cinderRam && (intercepted || obstructed)) {
+          this.exposeCinderRam(id, mob, now);
+          continue;
+        }
         const redirectedBrute = mob.isMiniBoss && mob.archetype === "stone_brute" && (intercepted || charge.hit.size === 0);
         if (redirectedBrute || (id === "mistfen-behemoth" || id === MISTFEN_EVENT_ID) && charge.hit.size === 0) {
           const durationMs = intercepted ? 3_500 : 2_500;
@@ -9297,7 +9365,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const rangerSpecialization = this.buildSpecializationFor(player, "ranger");
       const pinBonusDamage = pinStacks >= 3 && rangerSpecialization === "marksman"
         ? (this.buildSpecializationMastered(player, "marksman") ? 4 : 2) + this.equipmentAffixTier(player, "precise") : 0;
-      const damage = damageAfterArmor(
+      let damage = damageAfterArmor(
         timing.damage + ironSwordDamageBonus(player.blacksmithUpgrades, pending.mainHandId)
           + reforgeWeaponDamageBonus(equipmentReforgeRank(player.reforgeRanksJson, pending.mainHandId))
           + progressionAttackBonus(player) + this.specialDamageBonus(sessionId, mobId, now) + perkBonusDamage + setBonusDamage
@@ -9305,8 +9373,23 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           + this.northwatchAssassinOpening(player, mobId, now),
         mob.armor,
       ) + traitBonusDamage + dodgeCounterBonus;
+      const cinderExposedUntil = this.cinderRamExposedUntil.get(mobId) ?? 0;
+      const cinderExposed = mob.archetype === "cinder_ram" && now < cinderExposedUntil;
+      const sourceX = source?.x ?? player.x, sourceZ = source?.z ?? player.z;
+      const sourceDistance = Math.hypot(sourceX - mob.x, sourceZ - mob.z);
+      const facingRadians = mob.yaw * Math.PI / 180;
+      const sourceInFront = sourceDistance > .001
+        && ((sourceX - mob.x) / sourceDistance * Math.sin(facingRadians)
+          + (sourceZ - mob.z) / sourceDistance * Math.cos(facingRadians)) >= -.05;
+      const cinderArmoured = mob.archetype === "cinder_ram" && !cinderExposed;
+      if (cinderArmoured && sourceInFront) damage = Math.max(1, Math.ceil(damage * .3));
+      if (cinderExposed) damage += 2;
       this.combatContributions.record(mobId, sessionId, Math.min(mob.health, damage), now);
       mob.health = Math.max(0, mob.health - damage);
+      if (cinderExposed) this.broadcast("combat:cinder-impact", {
+        mobId, phase: "weakspot", exposedUntil: cinderExposedUntil,
+        durationMs: Math.max(0, cinderExposedUntil - now),
+      } satisfies CinderRamImpact);
       if (assassinMark) {
         this.specialMarks.delete(sessionId);
         this.broadcast("assassin:mark-strike", { casterId: sessionId, mobId, bonusDamage: markStrikeBonus,
@@ -9331,7 +9414,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const staggerDuration = northwatchPatrolInterruptDuration(mobId, mob.attackPattern,
         basicStaggerDuration(pending.mainHandId, pending.step, mob.archetype, mob.combatState, mob.isChampion));
       const struckBloaterGland = mob.health > 0 && this.strikeFenBloaterGland(mobId, mob, sessionId, now);
-      if (!struckBloaterGland && this.staggerMob(mobId, mob, now, staggerDuration)) {
+      if (!struckBloaterGland && !cinderArmoured && this.staggerMob(mobId, mob, now, staggerDuration)) {
         const stagger: CombatStagger = { attackerId: sessionId, mobId, durationMs: staggerDuration };
         this.broadcast("combat:stagger", stagger);
       }

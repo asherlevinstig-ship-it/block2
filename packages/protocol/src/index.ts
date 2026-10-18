@@ -6,7 +6,7 @@ export { DODGE_STAMINA_COST, DODGE_CHAIN_COST_STEP, DODGE_MAX_STAMINA_COST, DODG
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-warden-gate-v136";
+export const WORLD_ROOM = "world-warden-gate-v137";
 export const SILVER_DEPTHS_ROOM = "silver-depths-instance-v3";
 export const PRACTICE_ROOM = "calling-practice-v1";
 export type RoomTransfer = { room: typeof WORLD_ROOM | typeof SILVER_DEPTHS_ROOM | typeof PRACTICE_ROOM; instanceKey?: string; partySize?: number; returnFrom?: "silver-depths" | "practice"; retry?: boolean; partyTicket?: string; worldRoomId?: string };
@@ -458,6 +458,7 @@ export const TAVERN_QUIZ_MAX_STAKE = 10;
 export const TAVERN_QUIZ_MAX_PAYOUT = 1024;
 export const IRON_ORE_GOLD_PRICE = 3;
 export const SILVER_ORE_GOLD_PRICE = 8;
+export const EMBER_ORE_GOLD_PRICE = 10;
 export const BLACKSMITH_UPGRADES = {
   reinforced_pickaxe: { id: "reinforced_pickaxe", name: "Reinforced Pickaxe", price: 12, ironOre: 0, description: "Auto-equipped tool · extract 2 minerals from every ore block" },
   iron_sword: { id: "iron_sword", name: "Iron Sword", price: 45, ironOre: 0, description: "Upgrades and equips your longsword · +1 sword damage" },
@@ -733,6 +734,7 @@ export const ITEM_DEFINITIONS = {
   healing_potion: { id: "healing_potion", name: "Healing Potion", description: "Restore 2 HP · H to drink · carry up to 3" },
   iron_ore: { id: "iron_ore", name: "Iron Ore", description: "Mined iron ore that can be sold to the town blacksmith" },
   silver_ore: { id: "silver_ore", name: "Silver Ore", description: "Wilderness mineral · sell to the blacksmith for 8 gold each" },
+  ember_ore: { id: "ember_ore", name: "Ember Ore", description: "Ashen Reach mineral · sell to the blacksmith for 10 gold each" },
   moonstone: { id: "moonstone", name: "Moonstone", description: "Silver Depths reward mineral used for permanent attunements" },
   ember_core: { id: "ember_core", name: "Ember Core", description: "Forge Colossus currency · earned from ranked Ember Vault clears" },
   timber: { id: "timber", name: "Greenwood Timber", description: "Fresh oak timber · combine with Moss Fibre for a Forager Wrap at the blacksmith" },
@@ -830,7 +832,7 @@ export const LeaderForgeSchema = z.object({ relicId: z.enum(AREA_LEADER_RELIC_ID
 /** Capacity used when collecting a floor drop into the carried inventory. */
 export function lootCarryCapacity(itemId: ItemId, mineralCapacity: number): number {
   if (itemId === "healing_potion") return HEALING_POTION.capacity;
-  if (itemId === "iron_ore" || itemId === "silver_ore") return mineralCapacity;
+  if (itemId === "iron_ore" || itemId === "silver_ore" || itemId === "ember_ore") return mineralCapacity;
   return 65_535;
 }
 export const ITEM_RARITIES = {
@@ -1833,12 +1835,19 @@ export interface ThornBindingUpdate {
 export interface MobHazardPlaced {
   hazardId: string;
   mobId: string;
-  kind?: "acid" | "root" | "pressure" | "toxic-cloud";
+  kind?: "acid" | "root" | "pressure" | "toxic-cloud" | "fire-trail";
   x: number;
   y: number;
   z: number;
   radius: number;
   expiresAt: number;
+}
+
+export interface CinderRamImpact {
+  mobId: string;
+  phase: "impact" | "weakspot";
+  exposedUntil: number;
+  durationMs: number;
 }
 
 export interface FenBloaterGlandHit {

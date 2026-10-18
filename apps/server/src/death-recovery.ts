@@ -10,7 +10,7 @@ export function leaveRecoveryBag(player: PlayerState, id: string): number {
   for (const itemId of Object.keys(ITEM_DEFINITIONS) as ItemId[]) {
     // Character progression and equipment are permanent. Only carried minerals
     // become a recoverable world risk; storage and every other item stay safe.
-    if (itemId !== "iron_ore" && itemId !== "silver_ore" && itemId !== "moonstone") continue;
+    if (itemId !== "iron_ore" && itemId !== "silver_ore" && itemId !== "ember_ore" && itemId !== "moonstone") continue;
     const item = player.inventory.get(itemId); if (!item) continue;
     const quantity = item.quantity; if (!quantity) continue;
     const dropped = new InventoryItemState(); dropped.quantity = quantity;
@@ -29,7 +29,7 @@ export function collectRecoveryBag(player: PlayerState, id: string, clearPath: (
   for (const itemId of Object.keys(ITEM_DEFINITIONS) as ItemId[]) {
     const item = bag.items.get(itemId); if (!item || item.quantity <= 0) continue;
     const capacity = itemId === "healing_potion" ? HEALING_POTION.capacity
-      : itemId === "iron_ore" || itemId === "silver_ore" || itemId === "moonstone" ? ironCapacity(player.blacksmithUpgrades) : 65535;
+      : itemId === "iron_ore" || itemId === "silver_ore" || itemId === "ember_ore" || itemId === "moonstone" ? ironCapacity(player.blacksmithUpgrades) : 65535;
     let carried = player.inventory.get(itemId);
     const quantity = Math.max(0, Math.min(item.quantity, capacity - (carried?.quantity ?? 0)));
     if (quantity) {

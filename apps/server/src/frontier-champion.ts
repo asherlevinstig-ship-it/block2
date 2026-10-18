@@ -14,12 +14,12 @@ export function spitterChampionShots(start: Position, aim: Position, pattern: st
     Math.atan2(aim.x - start.x, aim.z - start.z) * 180 / Math.PI, pattern === "cross-volley" ? "double-fan" : pattern);
   return [aim];
 }
-export function championChargeHits(start: Position, end: Position, target: Position): boolean {
+export function championChargeHits(start: Position, end: Position, target: Position, halfWidth: number = CHAMPION_CHARGE.halfWidth): boolean {
   const dx = end.x - start.x; const dz = end.z - start.z;
   const lengthSquared = dx * dx + dz * dz;
   const fraction = lengthSquared < .000001 ? 0 : Math.max(0, Math.min(1, ((target.x - start.x) * dx + (target.z - start.z) * dz) / lengthSquared));
   return Math.abs(target.y - start.y) <= 1.1
-    && Math.hypot(target.x - start.x - dx * fraction, target.z - start.z - dz * fraction) <= CHAMPION_CHARGE.halfWidth;
+    && Math.hypot(target.x - start.x - dx * fraction, target.z - start.z - dz * fraction) <= halfWidth;
 }
 export function combatMobDefinition(mob: { archetype: string; isChampion?: boolean; isElite?: boolean; isMiniBoss?: boolean; enraged?: boolean; attackPattern?: string; health?: number; maxHealth?: number }) {
   const base = mobArchetype(mob.archetype);
