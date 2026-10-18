@@ -93,6 +93,33 @@ describe("hotbar Calling abilities", () => {
     expect(internal.pathConcealedUntil.has("hero")).toBe(false);
   });
 
+  it("makes Blade Dance an aimed multi-cut attack instead of a next-hit buff", () => {
+    const { room, internal, player, client, broadcast } = fixture("assassin", 70);
+    Object.assign(player, { yaw: 0, x: 50, z: 50 });
+    const first = new MobState(); Object.assign(first, { x: 50, y: 8, z: 53, alive: true, health: 12, maxHealth: 12 });
+    const second = new MobState(); Object.assign(second, { x: 52, y: 8, z: 54, alive: true, health: 12, maxHealth: 12 });
+    const behind = new MobState(); Object.assign(behind, { x: 50, y: 8, z: 47, alive: true, health: 12, maxHealth: 12 });
+    room.state.mobs.set("first", first); room.state.mobs.set("second", second); room.state.mobs.set("behind", behind);
+    internal.handleCallingAbilityEquip(client, { abilityId: "assassin_blade_dance" });
+    internal.handleCallingAbility(client, { requestId: "dance", yaw: 0 });
+    const event = broadcast.mock.calls.find((call: unknown[]) => call[0] === "assassin:blade-dance")?.[1] as any;
+    expect(event.cuts).toHaveLength(4);
+    expect(new Set(event.cuts.map((cut: any) => cut.mobId))).toEqual(new Set(["first", "second"]));
+    expect(first.health).toBeLessThan(12); expect(second.health).toBeLessThan(12); expect(behind.health).toBe(12);
+    expect(internal.assassinShadowUntil.has("hero")).toBe(false);
+    expect(client.send).toHaveBeenCalledWith("calling:ability", expect.objectContaining({ detail: expect.stringContaining("RAPID CUTS") }));
+  });
+
+  it("does not spend Blade Dance when no enemy is inside its aimed arc", () => {
+    const { room, internal, client } = fixture("assassin", 70);
+    const behind = new MobState(); Object.assign(behind, { x: 50, y: 8, z: 46, alive: true, health: 12 });
+    room.state.mobs.set("behind", behind);
+    internal.handleCallingAbilityEquip(client, { abilityId: "assassin_blade_dance" });
+    internal.handleCallingAbility(client, { requestId: "miss", yaw: 0 });
+    expect(internal.callingAbilityReadyAt.has("hero")).toBe(false);
+    expect(client.send).toHaveBeenCalledWith("chat:notice", expect.stringContaining("aim toward an enemy"));
+  });
+
   it.each(["tank", "mage", "assassin", "thief", "ranger", "healer"] as const)("unlocks %s Power at level 2 and Special at level 4", pathId => {
     const { internal, player, client } = fixture(pathId);
     player.health = 2;

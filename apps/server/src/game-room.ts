@@ -5126,6 +5126,19 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       client.send("chat:notice", "DEATH MARK · aim at a visible enemy within 8m.");
       return;
     }
+    const bladeDanceTargets = abilityId === "assassin_blade_dance"
+      ? [...this.state.mobs.entries()].filter(([, mob]) => {
+        if (!mob.alive || Math.abs(mob.y - player.y) > 2.5 || !hasCombatLineOfSight(player, mob, this.readWorldBlock)) return false;
+        const dx = mob.x - player.x, dz = mob.z - player.z, distance = Math.hypot(dx, dz);
+        if (distance > 6 + (augmentId === "dance_long_step" ? 2 : 0) || distance < .001) return false;
+        const radians = (parsed.data.yaw ?? player.yaw) * Math.PI / 180;
+        return (Math.sin(radians) * dx + Math.cos(radians) * dz) / distance >= -.15;
+      }).sort(([, a], [, b]) => Math.hypot(a.x - player.x, a.z - player.z) - Math.hypot(b.x - player.x, b.z - player.z))
+        .slice(0, 4) : [];
+    if (abilityId === "assassin_blade_dance" && bladeDanceTargets.length === 0) {
+      client.send("chat:notice", `BLADE DANCE · aim toward an enemy within ${augmentId === "dance_long_step" ? 8 : 6}m.`);
+      return;
+    }
     const rank = this.buildPathRankFor(player, pathId);
     const cooldownUntil = now + definition.cooldownMs;
     cooldowns.set(client.sessionId, cooldownUntil);
@@ -5290,19 +5303,28 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         this.grantCallingTrial(client.sessionId, "mark_lingering_sentence", 1);
       }
     } else if (abilityId === "assassin_blade_dance") {
-      durationMs = 1_000 + rank * 100 + (augmentId === "dance_long_step" ? 600 : 0);
+      durationMs = 650 + rank * 50;
       player.invulnerableUntil = Math.max(player.invulnerableUntil, now + durationMs);
-      this.assassinShadowUntil.set(client.sessionId, now + 4_000 + rank * 250);
-      this.assassinShadowBonus.set(client.sessionId, 0);
-      const danceTargets = nearbyMobs(3.5);
-      this.grantCallingTrial(client.sessionId, "dance_long_step", danceTargets.length > 0 ? 1 : 0);
-      this.grantCallingTrial(client.sessionId, "dance_blade_storm", danceTargets.length);
-      if (augmentId === "dance_blade_storm") for (const [mobId, mob] of danceTargets) {
-        this.combatContributions.record(mobId, client.sessionId, Math.min(mob.health, 2), now);
-        mob.health = Math.max(0, mob.health - 2); mob.hitSequence += 1;
+      const cutCount = 4 + (augmentId === "dance_blade_storm" ? 2 : 0);
+      const cuts: { mobId: string; damage: number; sequence: number }[] = [];
+      for (let sequence = 0; sequence < cutCount; sequence += 1) {
+        const living = bladeDanceTargets.filter(([, mob]) => mob.alive && mob.health > 0);
+        if (living.length === 0) break;
+        const [mobId, mob] = living[sequence % living.length]!;
+        const damage = damageAfterArmor(2 + Number(rank >= 4), mob.armor);
+        this.combatContributions.record(mobId, client.sessionId, Math.min(mob.health, damage), now);
+        mob.health = Math.max(0, mob.health - damage); mob.hitSequence += 1;
+        this.alertHitMob(mobId, client.sessionId, now);
+        cuts.push({ mobId, damage, sequence });
         if (mob.health === 0) this.defeatMob(mobId, mob, client.sessionId, now);
       }
-      detail = `UNTARGETABLE · NEXT STRIKE EMPOWERED`;
+      for (const [mobId, mob] of bladeDanceTargets) if (mob.alive && cuts.some(cut => cut.mobId === mobId)) {
+        this.staggerMob(mobId, mob, now, 700 + rank * 75, true);
+      }
+      detail = `${cuts.length} RAPID CUT${cuts.length === 1 ? "" : "S"} · ${new Set(cuts.map(cut => cut.mobId)).size} TARGET${new Set(cuts.map(cut => cut.mobId)).size === 1 ? "" : "S"}`;
+      this.grantCallingTrial(client.sessionId, "dance_long_step", 1);
+      this.grantCallingTrial(client.sessionId, "dance_blade_storm", cuts.length);
+      this.broadcast("assassin:blade-dance", { casterId: client.sessionId, cuts, durationMs });
     } else if (abilityId === "thief_smoke_bomb") {
       durationMs = 2_500 + rank * 350 + (augmentId === "smoke_dense_cloud" ? 2_000 : 0);
       const radius = 6 + rank;
@@ -5411,7 +5433,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     else if (abilityId === "assassin_death_mark" && effectTargetId)
       this.callingState(client.sessionId, pathId, abilityId, "TARGET EXPOSED", { activeUntil: now + (durationMs ?? 10_000), targetId: effectTargetId });
     else if (abilityId === "assassin_blade_dance")
-      this.callingState(client.sessionId, pathId, abilityId, "UNTARGETABLE", { activeUntil: now + (durationMs ?? 0) });
+      this.callingState(client.sessionId, pathId, abilityId, "RAPID FLURRY", { activeUntil: now + (durationMs ?? 0) });
     else if (abilityId === "thief_smoke_bomb" || abilityId === "thief_decoy")
       this.callingState(client.sessionId, pathId, abilityId, "CONCEALED", { activeUntil: now + (durationMs ?? 0) });
     else if (abilityId === "thief_escape_artist")
