@@ -4467,12 +4467,15 @@ function addCallingSignaturePrimitive(root: pc.Entity, name: string, type: "sphe
 /** A few shared-material primitives guarantee silhouette readability while particles supply motion. */
 function addCallingSignature(root: pc.Entity, abilityId: CallingAbilityId): pc.StandardMaterial[] {
   if (abilityId === "thief_smoke_bomb") {
-    const dark = callingSignatureMaterial(new pc.Color(.12, .16, .15), .28);
-    const rim = callingSignatureMaterial(new pc.Color(.3, .4, .36), .2, .16);
+    const dark = callingSignatureMaterial(new pc.Color(.1, .13, .12), .58);
+    const rim = callingSignatureMaterial(new pc.Color(.28, .38, .34), .4, .2);
+    addCallingSignaturePrimitive(root, "smoke-core-low", "sphere", dark, [1.35, .72, 1.35], [0, .38, 0]);
+    addCallingSignaturePrimitive(root, "smoke-core-high", "sphere", rim, [.94, .9, .94], [.12, .92, -.08]);
+    addCallingSignaturePrimitive(root, "smoke-core-side", "sphere", dark, [.88, .68, .88], [-.42, .62, .28]);
     for (let index = 0; index < 12; index += 1) {
       const angle = index / 12 * Math.PI * 2 + (index % 3) * .16;
       const distance = .52 + index % 4 * .31;
-      const size = .52 + index % 3 * .15;
+      const size = .62 + index % 3 * .18;
       addCallingSignaturePrimitive(root, "smoke-volume", "sphere", index % 3 ? dark : rim,
         [size * 1.25, size, size * 1.25], [Math.sin(angle) * distance, .34 + index % 4 * .18, Math.cos(angle) * distance]);
     }
