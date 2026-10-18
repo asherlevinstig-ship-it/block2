@@ -2785,7 +2785,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const player = this.state.players.get(client.sessionId);
       if (!player || player.health <= 0 || Math.abs(player.y - leader.y) > 2.5
         || Math.hypot(player.x - leader.x, player.z - leader.z) > 28) continue;
-      client.send("leader:exposed", { mobId: leaderId, durationMs } satisfies AreaLeaderExposed);
+      client.send("leader:exposed", { mobId: leaderId, durationMs, reason: "follower",
+        armourSegments: isCoordinatedBruteLeader(leaderId) ? bruteLeaderArmourSegments(followersAlive,
+          (AREA_LEADER_FOLLOWERS[leaderId] ?? []).length) : undefined } satisfies AreaLeaderExposed);
     }
   }
 
@@ -2826,8 +2828,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       for (const client of this.clients) {
         const player = this.state.players.get(client.sessionId);
         if (player?.health && Math.abs(player.y - leader.y) <= 2.5
-          && Math.hypot(player.x - leader.x, player.z - leader.z) <= 28)
+          && Math.hypot(player.x - leader.x, player.z - leader.z) <= 28) {
           client.send("chat:notice", `REINFORCEMENTS · ${count} escort${count === 1 ? "" : "s"} restored the brute's armour.`);
+          client.send("leader:reinforcements", { mobId: leaderId, count, durationMs: 1_200 });
+        }
       }
     }
   }
@@ -8442,7 +8446,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
             const player = this.state.players.get(client.sessionId);
             if (player?.health && Math.abs(player.y - mob.y) <= 2.5
               && Math.hypot(player.x - mob.x, player.z - mob.z) <= 28)
-              client.send("leader:exposed", { mobId: id, durationMs } satisfies AreaLeaderExposed);
+              client.send("leader:exposed", { mobId: id, durationMs, reason: "charge" } satisfies AreaLeaderExposed);
           }
         }
       }

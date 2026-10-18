@@ -1677,6 +1677,14 @@ export type WorldObjectiveCompleted = {
 export type AreaLeaderExposed = {
   mobId: string;
   durationMs: number;
+  reason?: "follower" | "charge";
+  armourSegments?: number;
+};
+
+export type AreaLeaderReinforcements = {
+  mobId: string;
+  count: number;
+  durationMs: number;
 };
 
 export interface ChunkRegion {

@@ -13,7 +13,7 @@ import { progressionNotice as chooseProgressionNotice, type ProgressionNotice } 
 import { abilityRevealUse, canPresentAbilityReveal, earnedCallingAbilities } from "./ability-reveal.js";
 import { queueWorldNotice, type WorldNotice } from "./notification-lane.js";
 import { rangedAimYaw } from "./ranged-aim.js";
-import { activeCombatNearby, advanceBossHud, initialBossHud, leaderAttackLabel, leaderExposureLabel, leaderExposureRoleLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
+import { COORDINATED_BRUTE_FOLLOWERS, activeCombatNearby, advanceBossHud, initialBossHud, leaderArmourSegments, leaderChargeGuidance, leaderExposureLabel, leaderExposureRoleLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
 import { forestDungeonAtmosphere, forestDungeonNotice, portalNoticeFeedback } from "./forest-dungeon-presentation.js";
 import { objectiveGuidance, objectiveIcon } from "./objective-guidance.js";
 import { createSocialUI } from "./social-ui.js";
@@ -235,6 +235,7 @@ import {
   type TraitId,
   type WorldBootstrap,
   type AreaLeaderExposed,
+  type AreaLeaderReinforcements,
   type WorldObjectiveCompleted,
   type WorldObjectiveUpdate,
   type SilverDepthsWingRewardStatus,
@@ -5975,6 +5976,28 @@ function createHammerHitImpact(mob: MobVisual): void {
   combatAudio.play("hammerImpact", enemyCuePan(position.x, localPlayer.getPosition().x));
 }
 
+function createBruteArmourBreak(mob: MobVisual, fullBreak: boolean, intercepted = false): void {
+  const root = new pc.Entity(intercepted ? "brute-charge-intercept" : "brute-armour-break");
+  const colour = intercepted ? new pc.Color(.35, .85, 1) : fullBreak ? new pc.Color(.88, 1, .36) : new pc.Color(1, .64, .2);
+  const material = powerMaterial(colour, .94);
+  const count = fullBreak || intercepted ? 18 : 11;
+  for (let index = 0; index < count; index++) {
+    const angle = index / count * Math.PI * 2;
+    const radius = .42 + index % 4 * .18;
+    const shard = addBox(root, "brute-armour-shard", material,
+      [.08 + index % 3 * .035, .18 + index % 4 * .055, .08 + (index + 1) % 3 * .03],
+      [Math.sin(angle) * radius, .38 + index % 5 * .2, Math.cos(angle) * radius]);
+    shard.setLocalEulerAngles(index * 29, angle * 180 / Math.PI, 32 + index * 17);
+  }
+  const position = mob.entity.getPosition();
+  root.setPosition(position.x, position.y + .08, position.z);
+  app.root.addChild(root);
+  markPayoffVisuals.push({ root, material, startedAt: performance.now(), durationMs: fullBreak || intercepted ? 720 : 480 });
+  combatAudio.play("hammerImpact", enemyCuePan(position.x, localPlayer.getPosition().x));
+  cameraShakeStrength = Math.max(cameraShakeStrength, fullBreak || intercepted ? .2 : .1);
+  cameraShakeUntil = performance.now() + (fullBreak || intercepted ? 300 : 180);
+}
+
 function createRootboundShockwave(mob: MobVisual): void {
   const root = new pc.Entity("rootbound-finisher-wave");
   const material = powerMaterial(new pc.Color(0.28, 0.92, 0.24), 0.92);
@@ -9401,6 +9424,7 @@ const bossPhase = document.querySelector<HTMLElement>("#boss-phase")!;
 const bossHealth = document.querySelector<HTMLElement>("#boss-health")!;
 const bossHealthFill = document.querySelector<HTMLElement>("#boss-health-fill")!;
 const bossHealthText = document.querySelector<HTMLElement>("#boss-health-text")!;
+const bossArmour = document.querySelector<HTMLElement>("#boss-armour")!;
 const bossRematch = document.querySelector<HTMLElement>("#boss-rematch")!;
 const bossExposed = document.querySelector<HTMLElement>("#boss-exposed")!;
 const bossAttackLabel = document.querySelector<HTMLElement>("#boss-attack-label")!;
@@ -9409,6 +9433,9 @@ const bossLootPreview = document.querySelector<HTMLElement>("#boss-loot-preview"
 const bossLootName = document.querySelector<HTMLElement>("#boss-loot-name")!;
 const bossLootFit = document.querySelector<HTMLElement>("#boss-loot-fit")!;
 const leaderExposedUntil = new Map<string, number>();
+const leaderReinforcementUntil = new Map<string, number>();
+const escortLinkVisuals = new Map<string, pc.Entity>();
+let escortLinkMaterial: pc.StandardMaterial | null = null;
 let bossHudState = initialBossHud();
 let bossHudFingerprint = "";
 let activeBossId = "";
@@ -9475,10 +9502,14 @@ function updateBossHud(now: number): void {
     combatAudio.play("dungeonVictory"); createDungeonBurst(boss.x, boss.z, "victory", boss.y + .08);
   }
   const exposedLabel = boss?.isMiniBoss ? leaderExposureLabel(leaderExposedUntil.get(nextBossId) ?? 0, now) : "";
+  const followerStates = new Map((COORDINATED_BRUTE_FOLLOWERS[nextBossId] ?? [])
+    .map(id => [id, { alive: mobVisuals.get(id)?.state.alive === true }] as const));
+  const armour = leaderArmourSegments(nextBossId, followerStates);
+  const reinforcementsIncoming = now < (leaderReinforcementUntil.get(nextBossId) ?? 0);
   const rematchLabel = boss?.isMiniBoss ? leaderRematchLabel(boss.leaderRematchTier, boss.leaderModifier) : "";
   // Keep combat hierarchy stable even when a fresh objective update renders behind the boss card.
   document.documentElement.classList.toggle("boss-hud-active", bossHudState.visible);
-  const fingerprint = JSON.stringify([bossHudState.visible, boss?.name, boss?.health, boss?.maxHealth, boss?.combatState, boss?.attackPattern, bossHudState.enraged, bossHudState.message, exposedLabel, rematchLabel, localBuildPathId]);
+  const fingerprint = JSON.stringify([bossHudState.visible, boss?.name, boss?.health, boss?.maxHealth, boss?.combatState, boss?.attackPattern, boss?.targetId, bossHudState.enraged, bossHudState.message, exposedLabel, rematchLabel, localBuildPathId, armour.active, armour.maximum, reinforcementsIncoming]);
   if (fingerprint === bossHudFingerprint) return;
   bossHudFingerprint = fingerprint;
   bossHud.hidden = !bossHudState.visible;
@@ -9496,12 +9527,18 @@ function updateBossHud(now: number): void {
   const leaderPhase = leaderHealthPhase(boss.health, boss.maxHealth);
   const championPhase = realmBossHealthPhase(boss.health, boss.maxHealth);
   bossPhase.textContent = !boss.alive ? "DEFEATED" : pathChampion ? pathChampionPhaseLabel(boss.name, championPhase, boss.combatState === "recover")
-    : boss.isMiniBoss ? `PHASE ${leaderPhase} · ${exposedLabel ? "FOLLOWER BREAK" : boss.combatState === "recover" ? "COUNTER WINDOW" : leaderPhase === 3 ? "FINAL ASSAULT" : leaderPhase === 2 ? "FOLLOWERS RALLIED" : "OPENING"}`
+    : boss.isMiniBoss ? `PHASE ${leaderPhase} · ${reinforcementsIncoming ? "REINFORCEMENTS INCOMING" : exposedLabel ? armour.maximum > 0 && armour.active === 0 ? "ESCORT ARMOUR BROKEN" : "FOLLOWER BREAK" : boss.combatState === "recover" ? "COUNTER WINDOW" : leaderPhase === 3 ? "FINAL ASSAULT" : leaderPhase === 2 ? "FOLLOWERS RALLIED" : "OPENING"}`
     : realmBoss ? `PHASE ${realmPhase} · ${boss.combatState === "recover" ? "SHIFTING" : realmPhase === 3 ? "WARDEN BARRAGE" : realmPhase === 2 ? "FALLING ROCKS" : "STONE VOLLEYS"}`
     : bossHudState.enraged ? `PHASE 2 · ${crystal ? "ROTATING CRYSTAL WAVES" : guardian ? "HEARTWOOD CHARGE" : bruteEvent ? "ENRAGED VOLLEYS" : "ENRAGED"}` : `PHASE 1 · ${crystal ? "AIMED SHOT / FAN" : guardian ? "ROOT VOLLEY" : bruteEvent ? "ROCK VOLLEY / SLAM" : "AIMED SHOT / FAN"}`;
   bossHud.dataset.encounter = boss.isMiniBoss ? "miniboss" : crystal ? "crystal" : guardian ? "dungeon" : realmBoss ? "realm" : "wilderness";
   bossHud.dataset.enraged = String(bossHudState.enraged);
   bossHud.dataset.exposed = String(Boolean(exposedLabel));
+  bossArmour.hidden = armour.maximum === 0;
+  bossArmour.dataset.breaking = String(Boolean(exposedLabel));
+  [...bossArmour.querySelectorAll<HTMLElement>("i")].forEach((pip, index) => {
+    pip.hidden = index >= armour.maximum;
+    pip.dataset.active = String(index < armour.active);
+  });
   bossExposed.hidden = !exposedLabel;
   bossExposed.textContent = leaderExposureRoleLabel(exposedLabel, nextBossId, localBuildPathId);
   bossRematch.hidden = !rematchLabel;
@@ -9509,7 +9546,9 @@ function updateBossHud(now: number): void {
     ? `${boss.leaderRematchTier >= 9 ? "ASCENDANT · TWO MECHANICS" : boss.leaderRematchTier >= 7 ? "VETERAN · ADVANCED ATTACK" : "NORMAL"} · ${boss.leaderRematchTier >= 9 ? "2× CACHE + FORGEMARK" : boss.leaderRematchTier >= 7 ? "1.5× CACHE" : "CHAMPION CACHE"}`
     : rematchLabel;
   bossRematch.dataset.modifier = boss.leaderModifier || "";
-  bossAttackLabel.textContent = boss.alive ? leaderAttackLabel(boss.attackPattern, boss.combatState) : "ENCOUNTER COMPLETE";
+  bossAttackLabel.textContent = boss.alive
+    ? leaderChargeGuidance(boss.attackPattern, boss.combatState, boss.targetId, room?.sessionId ?? "")
+    : "ENCOUNTER COMPLETE";
   bossAttackLabel.dataset.state = boss.combatState;
   bossHealthFill.style.transform = `scaleX(${Math.max(0, Math.min(1, boss.health / Math.max(1, boss.maxHealth)))})`;
   bossHealthText.textContent = `${Math.max(0, boss.health)} / ${boss.maxHealth}`;
@@ -9518,6 +9557,35 @@ function updateBossHud(now: number): void {
   bossHealth.dataset.phased = String(boss.isMiniBoss || realmBoss);
   bossHealth.dataset.phaseModel = realmBoss || pathChampion ? "thirds" : boss.isMiniBoss ? "leader" : "none";
   bossNotice.textContent = bossHudState.message;
+}
+
+function updateEscortLinks(now: number): void {
+  const leader = mobVisuals.get(activeBossId);
+  const followers = COORDINATED_BRUTE_FOLLOWERS[activeBossId] ?? [];
+  const visible = Boolean(leader?.state.alive && bossHudState.visible);
+  const desired = new Set<string>();
+  if (visible) for (const followerId of followers) {
+    const follower = mobVisuals.get(followerId);
+    if (!follower?.state.alive) continue;
+    const key = `${activeBossId}:${followerId}`;
+    desired.add(key);
+    let link = escortLinkVisuals.get(key);
+    if (!link) {
+      escortLinkMaterial ??= powerMaterial(new pc.Color(1, .67, .18), .7);
+      link = new pc.Entity(`escort-link:${key}`);
+      link.addComponent("render", { type: "box", material: escortLinkMaterial, castShadows: false, receiveShadows: false });
+      app.root.addChild(link); escortLinkVisuals.set(key, link);
+    }
+    const from = follower.entity.getPosition(), to = leader!.entity.getPosition();
+    const fromY = from.y + .82, toY = to.y + 1.05;
+    const length = Math.hypot(to.x - from.x, toY - fromY, to.z - from.z);
+    const pulse = .035 + Math.sin(now * .009 + followerId.length) * .009;
+    link.enabled = true;
+    link.setPosition((from.x + to.x) / 2, (fromY + toY) / 2, (from.z + to.z) / 2);
+    link.setLocalScale(pulse, pulse, Math.max(.01, length));
+    link.lookAt(to.x, toY, to.z);
+  }
+  for (const [key, link] of escortLinkVisuals) if (!desired.has(key)) link.enabled = false;
 }
 
 function localCombatActive(): boolean {
@@ -11814,6 +11882,7 @@ app.on("update", (dt: number) => {
     else if (fire.fire) requestAttack(false);
   }
   updateBossHud(animationNow);
+  updateEscortLinks(animationNow);
   const bodyY = localPlayerRig.root.getLocalPosition().y;
   const renderedPlayerPosition = new pc.Vec3(player.x + localPowerVisualOffset.x + localNetworkVisualOffset.x + localRecoveryVisualOffset.x + localDodgeVisualOffset.x, player.y + localVisualVerticalOffset + bodyY, player.z + localPowerVisualOffset.z + localNetworkVisualOffset.z + localRecoveryVisualOffset.z + localDodgeVisualOffset.z);
   const playerScreen = camera.camera?.worldToScreen(renderedPlayerPosition);
@@ -12476,6 +12545,14 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   room.onMessage("leader:exposed", (message: AreaLeaderExposed) => {
     if (!message?.mobId || !Number.isFinite(message.durationMs) || message.durationMs <= 0) return;
     leaderExposedUntil.set(message.mobId, performance.now() + Math.min(5_000, message.durationMs));
+    const visual = mobVisuals.get(message.mobId);
+    if (visual && COORDINATED_BRUTE_FOLLOWERS[message.mobId])
+      createBruteArmourBreak(visual, message.armourSegments === 0, message.reason === "charge");
+    bossHudFingerprint = "";
+  });
+  room.onMessage("leader:reinforcements", (message: AreaLeaderReinforcements) => {
+    if (!message?.mobId || !Number.isFinite(message.durationMs) || message.durationMs <= 0) return;
+    leaderReinforcementUntil.set(message.mobId, performance.now() + Math.min(3_000, message.durationMs));
     bossHudFingerprint = "";
   });
   room.onMessage("progression:update", (update: ProgressionUpdate) => {
@@ -13154,7 +13231,9 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     for (const mob of mobVisuals.values()) { mob.combatCue.remove(); mob.levelTag.remove(); mob.respawnTag.remove(); mob.entity.destroy(); mob.warningMesh?.destroy(); }
     mobVisuals.clear();
     for (const popup of rangedPopups) popup.element.remove(); rangedPopups.length = 0; rangedReticleHitUntil = 0;
-    bossHudState = initialBossHud(); bossHudFingerprint = ""; activeBossId = ""; bossHud.hidden = true; leaderExposedUntil.clear();
+    bossHudState = initialBossHud(); bossHudFingerprint = ""; activeBossId = ""; bossHud.hidden = true;
+    leaderExposedUntil.clear(); leaderReinforcementUntil.clear();
+    for (const link of escortLinkVisuals.values()) link.destroy(); escortLinkVisuals.clear(); escortLinkMaterial?.destroy(); escortLinkMaterial = null;
     for (const loot of lootVisuals.values()) loot.root.destroy();
     lootVisuals.clear();
     for (const visual of recoveryVisuals.values()) visual.destroy();

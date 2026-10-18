@@ -122,6 +122,27 @@ export function leaderExposureRoleLabel(label: string, mobId: string, pathId: st
   return label && mobId === "northwatch-watchbreaker" && pathId === "assassin" ? `${label} · STRIKE +2` : label;
 }
 
+export const COORDINATED_BRUTE_FOLLOWERS: Readonly<Record<string, readonly string[]>> = {
+  "stone-brute": ["stone-brute-crawler", "stone-brute-spitter"],
+  "frontier-brute": ["frontier-brute-crawler", "frontier-brute-spitter"],
+  "frontier-brute-west": ["frontier-brute-west-crawler", "frontier-brute-west-spitter"],
+  "frontier-brute-east": ["frontier-crawler", "frontier-support-spitter"],
+  "mistfen-behemoth": ["mistfen-briar-west", "mistfen-briar-east", "mistfen-spitter"],
+  "south-quarrymaster": ["south-pit-crawler", "south-pit-spitter"],
+  "buried-chamber-brute": ["buried-vault-crawler"],
+};
+
+export function leaderArmourSegments(leaderId: string, mobs: ReadonlyMap<string, { alive: boolean }>): { active: number; maximum: number } {
+  const followers = COORDINATED_BRUTE_FOLLOWERS[leaderId] ?? [];
+  const maximum = Math.min(2, followers.length);
+  return { active: Math.min(maximum, followers.filter(id => mobs.get(id)?.alive).length), maximum };
+}
+
+export function leaderChargeGuidance(pattern: string, combatState: string, targetId: string, playerId: string): string {
+  return pattern === "charge" && combatState === "windup" && targetId === playerId
+    ? "CHARGE · HOLD C TO INTERCEPT" : leaderAttackLabel(pattern, combatState);
+}
+
 export function leaderRematchLabel(tier = 0, modifier = ""): string {
   if (modifier === "mirebreaker") return "MIREBREAKER REMATCH · LEGENDARY CACHE";
   if (modifier === "rootslayer") return "ROOTSLAYER REMATCH · LEGENDARY CACHE";

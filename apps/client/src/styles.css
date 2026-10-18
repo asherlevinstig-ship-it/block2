@@ -2103,6 +2103,12 @@ html.boss-hud-active #world-objective { display: none !important; }
 #boss-hud header { display: flex; justify-content: space-between; gap: 8px; font: 800 9px/1.4 system-ui, sans-serif; letter-spacing: .1em; color: #c8b17d; }
 #boss-hud h2 { margin: 5px 0 9px; font: 800 18px/1.2 system-ui, sans-serif; }
 .boss-health-row { display: flex; align-items: stretch; gap: 8px; }
+#boss-armour { flex: 0 0 auto; min-width: 76px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; align-content: center; padding: 2px 6px; border: 1px solid #84683b; border-radius: 5px; background: #171813e8; }
+#boss-armour[hidden] { display: none; }
+#boss-armour span { grid-column: 1 / -1; color: #d9c391; font: 800 7px/1 system-ui, sans-serif; letter-spacing: .08em; text-align: center; }
+#boss-armour i { display: block; height: 7px; border: 1px solid #665b46; border-radius: 2px; background: #29271f; transform: skewX(-12deg); transition: background 180ms, box-shadow 180ms, opacity 180ms; }
+#boss-armour i[data-active="true"] { border-color: #e2bd67; background: linear-gradient(90deg, #9c7136, #f0ce79); box-shadow: 0 0 8px #f1b94b88; }
+#boss-armour[data-breaking="true"] { border-color: #d8f169; box-shadow: 0 0 12px #c9f15044; }
 #boss-rematch { display: grid; place-items: center; flex: 0 0 auto; max-width: 135px; padding: 0 8px; border: 1px solid #dc984e; border-radius: 5px; color: #ffe0a1; background: #4b2916; font: 950 8px/1.15 system-ui, sans-serif; letter-spacing: .035em; text-align: center; }
 #boss-rematch[hidden] { display: none; }
 #boss-rematch[data-modifier="armoured"] { border-color: #b8c8d4; color: #edf7ff; background: #33404a; }
@@ -2147,6 +2153,7 @@ html.boss-hud-active #world-objective { display: none !important; }
 #boss-hud[data-encounter="miniboss"] header span { color: #ffd477; }
 #boss-hud[data-encounter="miniboss"] #boss-health { background: #38240f; }
 #boss-hud[data-encounter="miniboss"] #boss-health-fill { background: linear-gradient(90deg, #d56c20, #ffd45e); }
+@media (max-width: 540px) { #boss-armour { min-width: 58px; padding-inline: 4px; } #boss-armour span { font-size: 6px; } }
 @media (min-width: 821px) { #boss-hud { left: max(50%, 610px); width: min(430px, calc(100vw - 440px)); } }
 @media (max-width: 520px) { #boss-exposed { padding-inline: 6px; font-size: 8px; letter-spacing: 0; } #boss-rematch { max-width: 100px; padding-inline: 5px; font-size: 7px; letter-spacing: 0; } }
 #objective-marker i { display: block; color: var(--objective-color, #f5c846); font-style: normal; font-size: 23px; line-height: 24px; }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeCombatNearby, advanceBossHud, initialBossHud, leaderAttackLabel, leaderAttackName, leaderExposureLabel, leaderExposureRoleLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
+import { activeCombatNearby, advanceBossHud, initialBossHud, leaderArmourSegments, leaderAttackLabel, leaderAttackName, leaderChargeGuidance, leaderExposureLabel, leaderExposureRoleLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
 const player = { x: 40, y: 8, z: 18, health: 5 };
 const boss = { x: 43, y: 8, z: 18, name: "Matriarch", alive: true, health: 24, maxHealth: 24, enraged: false };
 describe("boss HUD", () => {
@@ -93,6 +93,16 @@ describe("boss HUD", () => {
       .toBe("LEADER EXPOSED · 2.5s · STRIKE +2");
     expect(leaderExposureRoleLabel("LEADER EXPOSED · 2.5s", "northwatch-watchbreaker", "tank"))
       .toBe("LEADER EXPOSED · 2.5s");
+  });
+  it("shows escort armour and contextual charge interception without requiring a class", () => {
+    const mobs = new Map([
+      ["stone-brute-crawler", { alive: true }],
+      ["stone-brute-spitter", { alive: false }],
+    ]);
+    expect(leaderArmourSegments("stone-brute", mobs)).toEqual({ active: 1, maximum: 2 });
+    expect(leaderArmourSegments("northwatch-watchbreaker", mobs)).toEqual({ active: 0, maximum: 0 });
+    expect(leaderChargeGuidance("charge", "windup", "player", "player")).toBe("CHARGE · HOLD C TO INTERCEPT");
+    expect(leaderChargeGuidance("charge", "windup", "ally", "player")).toBe("CHARGE · INCOMING");
   });
   it("keeps empowered rematch and reward information compact beside the health bar", () => {
     expect(leaderRematchLabel(0, "")).toBe("");
