@@ -467,8 +467,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly northwatchExposedUntil = new Map<string, number>();
   private readonly northwatchPatrolContributors = new Set<string>();
   private readonly mageBarrierHits = new Map<string, number>();
-  private readonly mageOverloadReady = new Set<string>();
-  private readonly mageOverloadCharges = new Map<string, number>();
+  private readonly mageBarrierEnergy = new Map<string, number>();
+  private readonly pendingMageOverloads = new Map<string, { ownerId: string; x: number; y: number; z: number; radius: number; damage: number; pulses: number; pulseIndex: number; nextPulseAt: number }>();
+  private mageOverloadSequence = 0;
   private readonly rangerCallingFocus = new Map<string, { hits: number; bonus: number }>();
   private readonly roleOpportunityReadyAt = new Map<string, number>();
   private readonly fortressProcAt = new Map<string, number>();
@@ -1111,8 +1112,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (cast.targetId === client.sessionId) this.pendingResurrections.delete(casterId);
     this.tankBulwarkUntil.delete(client.sessionId);
     this.mageBarrierHits.delete(client.sessionId);
-    this.mageOverloadReady.delete(client.sessionId);
-    this.mageOverloadCharges.delete(client.sessionId);
+    this.mageBarrierEnergy.delete(client.sessionId);
     this.rangerCallingFocus.delete(client.sessionId);
     for (const key of this.roleOpportunityReadyAt.keys()) if (key.startsWith(`${client.sessionId}:`)) this.roleOpportunityReadyAt.delete(key);
     this.fortressProcAt.delete(client.sessionId);
@@ -3677,9 +3677,27 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const build = parseBuildPathState(player.huntLoadoutsJson);
       const beforeBarrier = defense.damage;
       defense.damage = Math.max(0, defense.damage - (selectedCallingAugment(build, "mage_mana_shield") === "shield_reinforced_rune" ? 2 : 1));
+      const prevented = beforeBarrier - defense.damage;
+      const barrierEnergy = Math.min(4, (this.mageBarrierEnergy.get(playerId) ?? 0) + prevented);
+      this.mageBarrierEnergy.set(playerId, barrierEnergy);
       this.grantCallingTrial(playerId, "shield_prismatic_layers", 1);
-      this.grantCallingTrial(playerId, "shield_reinforced_rune", beforeBarrier - defense.damage);
-      if (barrierHits === 1) this.mageBarrierHits.delete(playerId);
+      this.grantCallingTrial(playerId, "shield_reinforced_rune", prevented);
+      if (barrierHits === 1) {
+        this.mageBarrierHits.delete(playerId); this.mageBarrierEnergy.delete(playerId);
+        const targets: string[] = [];
+        const shatterDamage = 2 + barrierEnergy;
+        for (const [targetId, target] of this.state.mobs) {
+          if (!target.alive || Math.abs(target.y - player.y) > 2.5 || Math.hypot(target.x - player.x, target.z - player.z) > 3.5
+            || !hasCombatLineOfSight(player, target, this.readWorldBlock)) continue;
+          const dealt = damageAfterArmor(shatterDamage, target.armor, true);
+          this.combatContributions.record(targetId, playerId, Math.min(target.health, dealt), now);
+          target.health = Math.max(0, target.health - dealt); target.hitSequence += 1; targets.push(targetId);
+          this.alertHitMob(targetId, playerId, now);
+          if (target.health === 0) this.defeatMob(targetId, target, playerId, now);
+          else this.staggerMob(targetId, target, now, 900, true);
+        }
+        this.broadcast("mage:shield-shatter", { playerId, targetIds: targets, damage: shatterDamage, energy: barrierEnergy });
+      }
       else this.mageBarrierHits.set(playerId, barrierHits - 1);
       this.callingState(playerId, "mage", "mage_mana_shield", "BARRIER", {
         charges: Math.max(0, barrierHits - 1), clear: barrierHits === 1,
@@ -5160,6 +5178,18 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       client.send("chat:notice", `DEADEYE · aim precisely at a visible enemy within ${augmentId === "deadeye_eagle_eye" ? 22 : 18}m.`);
       return;
     }
+    const overloadTarget = abilityId === "mage_overload"
+      ? [...this.state.mobs.entries()].filter(([, mob]) => {
+        if (!mob.alive || Math.abs(mob.y - player.y) > 3 || !hasCombatLineOfSight(player, mob, this.readWorldBlock)) return false;
+        const dx = mob.x - player.x, dz = mob.z - player.z, distance = Math.hypot(dx, dz);
+        if (distance < .001 || distance > 14) return false;
+        const radians = (parsed.data.yaw ?? player.yaw) * Math.PI / 180;
+        return (Math.sin(radians) * dx + Math.cos(radians) * dz) / distance >= .9;
+      }).sort(([, a], [, b]) => Math.hypot(a.x - player.x, a.z - player.z) - Math.hypot(b.x - player.x, b.z - player.z))[0] : undefined;
+    if (abilityId === "mage_overload" && !overloadTarget) {
+      client.send("chat:notice", "OVERLOAD · aim toward a visible enemy within 14m.");
+      return;
+    }
     const rank = this.buildPathRankFor(player, pathId);
     const cooldownUntil = now + definition.cooldownMs;
     cooldowns.set(client.sessionId, cooldownUntil);
@@ -5239,12 +5269,21 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     } else if (abilityId === "mage_mana_shield") {
       const hits = (rank >= 4 ? 4 : 3) + (augmentId === "shield_prismatic_layers" ? 2 : 0);
       this.mageBarrierHits.set(client.sessionId, hits);
-      detail = `${hits} BARRIER CHARGES · −${augmentId === "shield_reinforced_rune" ? 2 : 1} DAMAGE PER HIT`;
+      this.mageBarrierEnergy.set(client.sessionId, 0);
+      detail = `${hits} BARRIER CHARGES · ABSORB TO CHARGE SHATTER`;
     } else if (abilityId === "mage_overload") {
-      this.mageOverloadReady.add(client.sessionId);
-      const charges = augmentId === "overload_residual_charge" ? 2 : 1;
-      this.mageOverloadCharges.set(client.sessionId, charges);
-      detail = `NEXT ${charges > 1 ? `${charges} POWERS` : "POWER"} +${(rank >= 4 ? 4 : 3) + (augmentId === "overload_volatile_core" ? 2 : 0)} DAMAGE`;
+      const [mobId, target] = overloadTarget!;
+      const overloadId = `overload:${client.sessionId}:${++this.mageOverloadSequence}`;
+      const radius = 3 + (augmentId === "overload_volatile_core" ? 1 : 0);
+      const damage = 5 + Number(rank >= 4) + (augmentId === "overload_volatile_core" ? 2 : 0);
+      const pulses = augmentId === "overload_residual_charge" ? 2 : 1;
+      this.pendingMageOverloads.set(overloadId, { ownerId: client.sessionId, x: target.x, y: target.y, z: target.z,
+        radius, damage, pulses, pulseIndex: 0, nextPulseAt: now + 850 });
+      effectTargetId = mobId; effectPosition = target;
+      durationMs = 850 + (pulses > 1 ? 750 : 0);
+      detail = `ARCANE FAULT PRIMED · ${radius}m BLAST · 0.85s`;
+      this.broadcast("mage:overload-telegraph", { overloadId, casterId: client.sessionId, x: target.x, y: target.y,
+        z: target.z, radius, detonatesAt: now + 850, pulses });
     } else if (abilityId === "healer_renewal") {
       const fieldId = `renewal:${client.sessionId}:${++this.renewalFieldSequence}`;
       const radius = 4.5, durationMsValue = 6_000;
@@ -5459,7 +5498,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     else if (abilityId === "mage_mana_shield")
       this.callingState(client.sessionId, pathId, abilityId, "BARRIER", { charges: this.mageBarrierHits.get(client.sessionId) ?? 0 });
     else if (abilityId === "mage_overload")
-      this.callingState(client.sessionId, pathId, abilityId, "POWER CHARGED", { charges: this.mageOverloadCharges.get(client.sessionId) ?? 1 });
+      this.callingState(client.sessionId, pathId, abilityId, "DETONATION PRIMED", { activeUntil: now + (durationMs ?? 850), targetId: effectTargetId });
     else if (abilityId === "assassin_vanish")
       this.callingState(client.sessionId, pathId, abilityId, "STEALTH ACTIVE · STRIKE READY", { activeUntil: now + (durationMs ?? 0) });
     else if (abilityId === "assassin_death_mark" && effectTargetId)
@@ -6495,6 +6534,37 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
   }
 
+  private resolveMageOverloads(now: number): void {
+    for (const [overloadId, overload] of this.pendingMageOverloads) {
+      if (now < overload.nextPulseAt) continue;
+      const owner = this.state.players.get(overload.ownerId);
+      if (!owner) { this.pendingMageOverloads.delete(overloadId); continue; }
+      const aftershock = overload.pulseIndex > 0;
+      const rawDamage = aftershock ? Math.max(2, Math.ceil(overload.damage / 2)) : overload.damage;
+      const targets: string[] = [];
+      let totalDamage = 0;
+      for (const [mobId, mob] of this.state.mobs) {
+        if (!mob.alive || Math.abs(mob.y - overload.y) > 2.5 || Math.hypot(mob.x - overload.x, mob.z - overload.z) > overload.radius
+          || !hasCombatLineOfSight(overload, mob, this.readWorldBlock)) continue;
+        const damage = damageAfterArmor(rawDamage, mob.armor, true);
+        this.combatContributions.record(mobId, overload.ownerId, Math.min(mob.health, damage), now);
+        mob.health = Math.max(0, mob.health - damage); mob.hitSequence += 1; targets.push(mobId); totalDamage += damage;
+        this.alertHitMob(mobId, overload.ownerId, now, overload);
+        if (mob.health === 0) this.defeatMob(mobId, mob, overload.ownerId, now);
+        else this.staggerMob(mobId, mob, now, aftershock ? 550 : 1_050, true);
+      }
+      this.grantCallingTrial(overload.ownerId, "overload_volatile_core", totalDamage);
+      if (aftershock) this.grantCallingTrial(overload.ownerId, "overload_residual_charge", targets.length);
+      this.broadcast("mage:overload-impact", { casterId: overload.ownerId, powerId: "mage_overload",
+        x: overload.x, y: overload.y, z: overload.z, bonusDamage: rawDamage, targetIds: targets, aftershock });
+      overload.pulses -= 1; overload.pulseIndex += 1;
+      if (overload.pulses <= 0) {
+        this.pendingMageOverloads.delete(overloadId);
+        this.callingState(overload.ownerId, "mage", "mage_overload", "DETONATION PRIMED", { clear: true });
+      } else overload.nextPulseAt = now + 750;
+    }
+  }
+
   private advanceSilverDepthsRouteHazards(now: number): void {
     if (this.roomKind !== "silver-depths" || this.silverDepthsEncounterStage !== 2 || !this.silverDepthsWing) return;
     const wing = this.silverDepthsWing;
@@ -6772,6 +6842,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.resolveMobHazards(now);
     this.resolveVenomSetPools(now);
     this.resolveRenewalFields(now);
+    this.resolveMageOverloads(now);
     this.advanceRealmBossHazards(now);
     this.advanceSilverDepthsRouteHazards(now);
     if (this.roomKind === "overworld") {
@@ -7800,9 +7871,6 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       let traitBonusHitCount = 0;
       const mageRank = parseBuildPathState(player.huntLoadoutsJson).selectedPathId === "mage" ? this.buildPathRankFor(player, "mage") : 0;
       const buildState = parseBuildPathState(player.huntLoadoutsJson);
-      const mageOverloadAugment = selectedCallingAugment(buildState, "mage_overload");
-      const mageOverloadBonus = this.mageOverloadReady.has(sessionId)
-        ? (mageRank >= 4 ? 4 : 3) + (mageOverloadAugment === "overload_volatile_core" ? 2 : 0) : 0;
       const mageCastCount = mageRank >= 2 ? (this.magePowerCasts.get(sessionId) ?? 0) + 1 : 0;
       if (mageRank >= 2) this.magePowerCasts.set(sessionId, mageCastCount % 3);
       const arcaneEcho = mageRank >= 2 && mageCastCount % 3 === 0;
@@ -7851,7 +7919,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           + this.equipmentAffixTier(player, "echoing") * .08);
         const echoDamage = arcaneEcho ? damageAfterArmor(Math.max(1, Math.ceil(definition.damage * echoStrength)), mob.armor, true) : 0;
         arcaneEchoDamage = Math.max(arcaneEchoDamage, echoDamage);
-        const damage = damageAfterArmor(definition.damage + payoff.bonusDamage + progressionAttackBonus(player) + mageOverloadBonus
+        const damage = damageAfterArmor(definition.damage + payoff.bonusDamage + progressionAttackBonus(player)
           + this.buildPathDamageBonus(player, mob, target.id, sessionId, now, "power") + shadowstepDamage
           + this.northwatchAssassinOpening(player, target.id, now), mob.armor, true)
           + traitBonusDamage + echoDamage + (mageRank > 0 ? this.equipmentAffixTier(player, "volatile") : 0);
@@ -7901,22 +7969,6 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (arcaneEcho && targets.length > 0) {
         this.buildPathProc(sessionId, "mage", "ARCANE ECHO", `REPEATED · +${arcaneEchoDamage} DAMAGE`);
         if (mageSpecialization === "arcanist") this.grantMasterTrial(sessionId, "arcanist");
-      }
-      if (mageOverloadBonus > 0 && targets.length > 0) {
-        this.grantCallingTrial(sessionId, "overload_volatile_core", mageOverloadBonus);
-        this.grantCallingTrial(sessionId, "overload_residual_charge", 1);
-        const charges = this.mageOverloadCharges.get(sessionId) ?? 1;
-        if (charges <= 1) {
-          this.mageOverloadReady.delete(sessionId); this.mageOverloadCharges.delete(sessionId);
-          this.callingState(sessionId, "mage", "mage_overload", "POWER CHARGED", { clear: true });
-        } else {
-          this.mageOverloadCharges.set(sessionId, charges - 1);
-          this.callingState(sessionId, "mage", "mage_overload", "POWER CHARGED", { charges: charges - 1 });
-        }
-        this.broadcast("mage:overload-impact", { casterId: sessionId, powerId: pending.powerId,
-          x: impactCenter.x, y: impactCenter.y, z: impactCenter.z, bonusDamage: mageOverloadBonus,
-          targetIds: targets.map(target => target.id) });
-        this.buildPathProc(sessionId, "mage", "OVERLOAD", `POWER AMPLIFIED · +${mageOverloadBonus} DAMAGE`);
       }
       if (shadowstepActive && !shadowstepReady)
         this.buildPathProc(sessionId, "assassin", assassinSpecialization === "executioner" ? "EXECUTIONER" : "SHADOWSTEP",

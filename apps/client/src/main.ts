@@ -5109,7 +5109,46 @@ function createMageShieldImpact(message: { playerId: string; mobId: string; prev
   combatAudio.play("shardDeflect", enemyCuePan(position.x, localPlayer.getPosition().x, 12));
 }
 
-function createMageOverloadImpact(message: { powerId: string; x: number; y: number; z: number; bonusDamage: number; targetIds: string[] }): void {
+function createMageShieldShatter(message: { playerId: string; targetIds: string[]; damage: number; energy: number }): void {
+  const anchor = message.playerId === room?.sessionId ? localPlayer : remotePlayers.get(message.playerId)?.entity;
+  if (!anchor) return;
+  const position = anchor.getPosition(), root = new pc.Entity("mage-shield-retaliation"); root.setPosition(position); app.root.addChild(root);
+  const force = callingSignatureMaterial(new pc.Color(.3, .72, 1), .78, 1.14);
+  const core = callingSignatureMaterial(new pc.Color(.88, .98, 1), .96, 1.38);
+  for (let ring = 1; ring <= 3; ring += 1) for (let index = 0; index < 16; index += 1) {
+    const angle = index / 16 * Math.PI * 2, radius = ring * 1.15;
+    addCallingSignaturePrimitive(root, "mana-retaliation-wave", "box", ring === 3 || index % 5 === 0 ? core : force,
+      [.04, .035, .28], [Math.sin(angle) * radius, .18 + ring * .08, Math.cos(angle) * radius], [0, angle * 180 / Math.PI, 0]);
+  }
+  callingImpactVisuals.push({ root, expiresAt: performance.now() + 780, materials: [force, core], abilityId: "mage_mana_shield" });
+  for (const targetId of message.targetIds) {
+    const mob = mobVisuals.get(targetId); if (!mob) continue;
+    createRangedPopup(new pc.Vec3(mob.state.x, mob.state.y + mob.healthBarY + .9, mob.state.z),
+      `ARCANE SHATTER · −${message.damage}`, "damage", false, [.5, .84, 1]);
+  }
+  createRangedPopup(new pc.Vec3(position.x, position.y + 2.15, position.z),
+    `SHATTER RELEASED · ${message.energy} CHARGE`, "stagger", false, [.72, .92, 1]);
+  combatAudio.play("seismicImpact");
+}
+
+function createMageOverloadTelegraph(message: { overloadId: string; x: number; y: number; z: number; radius: number; detonatesAt: number; pulses: number }): void {
+  const root = new pc.Entity(`mage-overload-telegraph:${message.overloadId}`); root.setPosition(message.x, message.y + .035, message.z); app.root.addChild(root);
+  const warning = callingSignatureMaterial(new pc.Color(.72, .12, 1), .46, .78);
+  const core = callingSignatureMaterial(new pc.Color(1, .25, .78), .9, 1.25);
+  for (let index = 0; index < 24; index += 1) {
+    const angle = index / 24 * Math.PI * 2;
+    addCallingSignaturePrimitive(root, "overload-warning-ring", "box", index % 4 === 0 ? core : warning,
+      [.055, .025, .34], [Math.sin(angle) * message.radius, .04, Math.cos(angle) * message.radius], [0, angle * 180 / Math.PI, 0]);
+  }
+  for (let index = 0; index < 10; index += 1) {
+    const angle = index / 10 * Math.PI * 2;
+    addCallingSignaturePrimitive(root, "overload-converging-rune", "box", index % 2 ? warning : core,
+      [.04, .025, .5], [Math.sin(angle) * message.radius * .52, .055, Math.cos(angle) * message.radius * .52], [0, angle * 180 / Math.PI, 0]);
+  }
+  callingImpactVisuals.push({ root, expiresAt: performance.now() + Math.max(250, message.detonatesAt - Date.now()), materials: [warning, core], abilityId: "mage_overload" });
+}
+
+function createMageOverloadImpact(message: { powerId: string; x: number; y: number; z: number; bonusDamage: number; targetIds: string[]; aftershock?: boolean }): void {
   const root = new pc.Entity("mage-overload-transformed-impact"); root.setPosition(message.x, message.y + .03, message.z); app.root.addChild(root);
   const arcane = callingSignatureMaterial(new pc.Color(.72, .12, 1), .78, 1.18);
   const hot = callingSignatureMaterial(new pc.Color(1, .28, .78), .9, 1.3);
@@ -5129,7 +5168,7 @@ function createMageOverloadImpact(message: { powerId: string; x: number; y: numb
   for (const targetId of message.targetIds) {
     const mob = mobVisuals.get(targetId); if (!mob) continue;
     createRangedPopup(new pc.Vec3(mob.state.x, mob.state.y + mob.healthBarY + .9, mob.state.z),
-      `OVERLOADED · +${message.bonusDamage}`, "damage", false, [1, .34, .86]);
+      `${message.aftershock ? "ARCANE AFTERSHOCK" : "OVERLOADED"} · −${message.bonusDamage}`, "damage", false, [1, .34, .86]);
   }
   combatAudio.play("seismicImpact");
 }
@@ -11525,8 +11564,7 @@ app.on("update", (dt: number) => {
   }
   for (let index = callingImpactVisuals.length - 1; index >= 0; index -= 1) {
     const visual = callingImpactVisuals[index]!;
-    if (visual.abilityId === "mage_arcane_surge" || visual.abilityId === "healer_renewal") visual.root.rotateLocal(0, frameTime * 105, 0);
-    else if (visual.abilityId === "mage_overload") visual.root.rotateLocal(0, frameTime * 165, 0);
+    if (visual.abilityId === "mage_arcane_surge" || visual.abilityId === "mage_overload" || visual.abilityId === "healer_renewal") visual.root.rotateLocal(0, frameTime * 105, 0);
     if (animationNow >= visual.expiresAt) {
       visual.root.destroy();
       for (const material of visual.materials) material.destroy();
@@ -12309,7 +12347,13 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   room.onMessage("mage:shield-impact", (message: { playerId: string; mobId: string; prevented: number; remaining: number; shattered: boolean }) => {
     createMageShieldImpact(message);
   });
-  room.onMessage("mage:overload-impact", (message: { casterId: string; powerId: string; x: number; y: number; z: number; bonusDamage: number; targetIds: string[] }) => {
+  room.onMessage("mage:shield-shatter", (message: { playerId: string; targetIds: string[]; damage: number; energy: number }) => {
+    createMageShieldShatter(message);
+  });
+  room.onMessage("mage:overload-telegraph", (message: { overloadId: string; casterId: string; x: number; y: number; z: number; radius: number; detonatesAt: number; pulses: number }) => {
+    createMageOverloadTelegraph(message);
+  });
+  room.onMessage("mage:overload-impact", (message: { casterId: string; powerId: string; x: number; y: number; z: number; bonusDamage: number; targetIds: string[]; aftershock?: boolean }) => {
     createMageOverloadImpact(message);
   });
   room.onMessage("healer:field-mend", (message: { casterId: string; targetId: string; restored: number; staminaRestored: number }) => {

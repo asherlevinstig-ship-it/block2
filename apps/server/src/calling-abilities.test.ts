@@ -159,6 +159,7 @@ describe("hotbar Calling abilities", () => {
       mob.x = 50; mob.z = 52;
     }
     if (option.id === "ranger_deadeye") { mob.x = 50; mob.z = 60; }
+    if (option.id === "mage_overload") { mob.x = 50; mob.z = 56; }
     if (option.id === "healer_resurrection") {
       const ally = new PlayerState(); Object.assign(ally, { x: 52, y: 8, z: 50, health: 0 });
       internal.state.players.set("ally", ally);
@@ -469,7 +470,10 @@ describe("hotbar Calling abilities", () => {
   });
 
   it("publishes persistent charges and clears them as they are consumed", () => {
-    const { internal, client, broadcast } = fixture("mage", 70);
+    const { internal, player, client, broadcast } = fixture("mage", 70);
+    player.health = 20; player.maxHealth = 20;
+    const attacker = new MobState(); Object.assign(attacker, { x: 52, y: 8, z: 50, alive: true, health: 20, maxHealth: 20 });
+    internal.state.mobs.set("attacker", attacker);
     internal.handleCallingAbilityEquip(client, { abilityId: "mage_mana_shield" });
     internal.handleCallingAbility(client, { requestId: "shield" });
     expect(broadcast).toHaveBeenCalledWith("calling:state", expect.objectContaining({
@@ -482,6 +486,42 @@ describe("hotbar Calling abilities", () => {
     expect(broadcast).toHaveBeenCalledWith("mage:shield-impact", {
       playerId: "hero", mobId: "attacker", prevented: 1, remaining: 2, shattered: false,
     });
+    internal.damagePlayer("attacker", "hero", 3, 10_002, false);
+    internal.damagePlayer("attacker", "hero", 3, 10_003, false);
+    expect(attacker.health).toBeLessThan(20);
+    expect(broadcast).toHaveBeenCalledWith("mage:shield-shatter", expect.objectContaining({
+      playerId: "hero", targetIds: ["attacker"], energy: 3,
+    }));
+  });
+
+  it("makes Overload an aimed delayed area detonation instead of a Power buff", () => {
+    const { internal, client, broadcast } = fixture("mage", 70);
+    const primary = new MobState(); Object.assign(primary, { x: 50, y: 8, z: 58, alive: true, health: 20, maxHealth: 20 });
+    const nearby = new MobState(); Object.assign(nearby, { x: 52, y: 8, z: 58, alive: true, health: 20, maxHealth: 20 });
+    internal.state.mobs.set("primary", primary); internal.state.mobs.set("nearby", nearby);
+    internal.handleCallingAbilityEquip(client, { abilityId: "mage_overload" });
+    internal.handleCallingAbility(client, { requestId: "prime", yaw: 0 });
+    expect(primary.health).toBe(20); expect(nearby.health).toBe(20);
+    expect(broadcast).toHaveBeenCalledWith("mage:overload-telegraph", expect.objectContaining({
+      casterId: "hero", x: 50, z: 58, detonatesAt: 10_850,
+    }));
+    internal.resolveMageOverloads(10_849);
+    expect(primary.health).toBe(20);
+    internal.resolveMageOverloads(10_850);
+    expect(primary.health).toBeLessThan(20); expect(nearby.health).toBeLessThan(20);
+    expect(broadcast).toHaveBeenCalledWith("mage:overload-impact", expect.objectContaining({
+      casterId: "hero", targetIds: expect.arrayContaining(["primary", "nearby"]), aftershock: false,
+    }));
+  });
+
+  it("does not spend Overload when no enemy is inside its aimed cone", () => {
+    const { internal, client } = fixture("mage", 70);
+    const offAxis = new MobState(); Object.assign(offAxis, { x: 58, y: 8, z: 50, alive: true, health: 20 });
+    internal.state.mobs.set("off-axis", offAxis);
+    internal.handleCallingAbilityEquip(client, { abilityId: "mage_overload" });
+    internal.handleCallingAbility(client, { requestId: "miss", yaw: 0 });
+    expect(internal.callingAbilityReadyAt.has("hero")).toBe(false);
+    expect(client.send).toHaveBeenCalledWith("chat:notice", expect.stringContaining("aim toward"));
   });
 
   it("equips a town-only branch and applies its authoritative effect", () => {
