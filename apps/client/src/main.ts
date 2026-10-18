@@ -4544,9 +4544,14 @@ function addCallingSignature(root: pc.Entity, abilityId: CallingAbilityId): pc.S
     return [sanctuary, goldEdge];
   }
   if (abilityId === "healer_resurrection") {
-    const pillar = callingSignatureMaterial(new pc.Color(1, .89, .48), .22, .72);
+    const pillar = callingSignatureMaterial(new pc.Color(1, .89, .48), .42, .82);
     const soul = callingSignatureMaterial(new pc.Color(1, .98, .8), .9, 1.3);
     addCallingSignaturePrimitive(root, "resurrection-pillar", "cylinder", pillar, [.72, 2.3, .72], [0, 2.28, 0]);
+    addCallingSignaturePrimitive(root, "resurrection-soul-head", "sphere", soul, [.2, .2, .2], [0, 1.78, 0]);
+    addCallingSignaturePrimitive(root, "resurrection-soul-body", "box", soul, [.24, .48, .14], [0, 1.2, 0]);
+    addCallingSignaturePrimitive(root, "resurrection-soul-arms", "box", soul, [.58, .075, .09], [0, 1.35, 0]);
+    addCallingSignaturePrimitive(root, "resurrection-soul-leg-left", "box", soul, [.075, .38, .08], [-.12, .62, 0], [0, 0, -8]);
+    addCallingSignaturePrimitive(root, "resurrection-soul-leg-right", "box", soul, [.075, .38, .08], [.12, .62, 0], [0, 0, 8]);
     addCallingSignaturePrimitive(root, "resurrection-halo-low", "cylinder", soul, [1.08, .025, 1.08], [0, .08, 0]);
     addCallingSignaturePrimitive(root, "resurrection-halo-high", "cylinder", soul, [.62, .018, .62], [0, 2.55, 0]);
     for (let index = 0; index < 12; index += 1) {
