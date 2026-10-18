@@ -3627,11 +3627,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       absorbedBy = "northwatch";
     }
     const bulwarkUntil = this.tankBulwarkUntil.get(playerId) ?? 0;
+    let bulwarkPrevented = 0;
     if (defense.damage > 0 && now < bulwarkUntil) {
       const build = parseBuildPathState(player.huntLoadoutsJson);
       const bulwarkAbility = selectedCallingAbility(build, "tank");
       const beforeBulwark = defense.damage;
       defense.damage = Math.max(0, defense.damage - (selectedCallingAugment(build, bulwarkAbility) === "bulwark_iron_skin" ? 2 : 1));
+      bulwarkPrevented = beforeBulwark - defense.damage;
       this.grantCallingTrial(playerId, "bulwark_iron_skin", beforeBulwark - defense.damage);
     } else if (bulwarkUntil > 0) {
       this.tankBulwarkUntil.delete(playerId);
@@ -3714,6 +3716,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       absorbedBy,
       wardCooldownMs: absorbedBy === "northwatch" ? NORTHWATCH_SHARD_WARD_COOLDOWN_MS : undefined,
     } satisfies PlayerHit);
+    if (bulwarkPrevented > 0) {
+      const impact = { playerId, mobId, prevented: bulwarkPrevented };
+      this.broadcast("tank:block-impact", impact);
+      this.clients.find(client => client.sessionId === playerId)?.send("tank:block-impact", impact);
+    }
     if (defense.guarded) {
       this.broadcast("combat:defense", {
         playerId,
@@ -5091,6 +5098,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     let detail = "ACTIVATED";
     let durationMs: number | undefined;
     let effectTargetId: string | undefined;
+    let challengedTargetIds: string[] = [];
     let effectPosition = player;
     const nearbyMobs = (radius: number) => [...this.state.mobs.entries()].filter(([, mob]) => mob.alive
       && Math.abs(mob.y - player.y) <= 2.5 && Math.hypot(mob.x - player.x, mob.z - player.z) <= radius);
@@ -5101,6 +5109,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.grantCallingTrial(client.sessionId, "bulwark_guardian_wall", 1);
     } else if (abilityId === "tank_challenge") {
       const targets = nearbyMobs(8 + rank * .5 + (augmentId === "challenge_mass_provocation" ? 3 : 0));
+      challengedTargetIds = targets.map(([mobId]) => mobId);
       for (const [mobId, mob] of targets) {
         const awareness = this.mobAwareness.get(mobId) ?? createMobAwareness();
         if (mobId === "northwatch-watchbreaker" && awareness.targetId && awareness.targetId !== client.sessionId)
@@ -5320,6 +5329,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     else {
       this.broadcast("calling:ability:effect", effect);
       client.send("calling:ability:effect", effect);
+    }
+    if (challengedTargetIds.length > 0) {
+      const challenged = { casterId: client.sessionId, targetIds: challengedTargetIds };
+      this.broadcast("tank:challenge-targets", challenged);
+      client.send("tank:challenge-targets", challenged);
     }
     if (abilityId === "tank_bulwark" || abilityId === "tank_challenge")
       this.callingState(client.sessionId, pathId, abilityId, "BRACED", { activeUntil: now + (durationMs ?? 3_000) });

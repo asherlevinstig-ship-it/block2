@@ -39,6 +39,15 @@ describe("calling particle identity and budget", () => {
     expect(CALLING_ABILITY_SUSTAIN_PARTICLES.mage_overload?.some(layer => layer.kind === "streak")).toBe(true);
   });
 
+  it("separates Tank bracing, provocation, and terrain-breaking impacts", () => {
+    expect(CALLING_IMPACT_PARTICLES.tank_bulwark.some(layer => layer.kind === "glow")).toBe(true);
+    expect(CALLING_IMPACT_PARTICLES.tank_challenge.some(layer => layer.kind === "streak")).toBe(true);
+    expect(CALLING_IMPACT_PARTICLES.tank_earthbreaker.filter(layer => layer.kind === "dust" || layer.kind === "smoke")
+      .reduce((sum, layer) => sum + layer.count, 0)).toBeGreaterThanOrEqual(90);
+    expect(CALLING_ABILITY_SUSTAIN_PARTICLES.tank_bulwark?.some(layer => layer.kind === "glow")).toBe(true);
+    expect(CALLING_ABILITY_SUSTAIN_PARTICLES.tank_challenge?.some(layer => layer.kind === "dust")).toBe(true);
+  });
+
   it("gives Assassin abilities distinct concealment, execution, and flurry signatures", () => {
     expect(CALLING_IMPACT_PARTICLES.assassin_vanish.some(layer => layer.kind === "smoke")).toBe(true);
     expect(CALLING_IMPACT_PARTICLES.assassin_death_mark.some(layer => layer.kind === "glow" && layer.color[0] === 1)).toBe(true);

@@ -4476,6 +4476,34 @@ function addCallingSignaturePrimitive(root: pc.Entity, name: string, type: "sphe
 
 /** A few shared-material primitives guarantee silhouette readability while particles supply motion. */
 function addCallingSignature(root: pc.Entity, abilityId: CallingAbilityId): pc.StandardMaterial[] {
+  if (abilityId === "tank_bulwark") {
+    const plate = callingSignatureMaterial(new pc.Color(.24, .57, .8), .42, .48);
+    const edge = callingSignatureMaterial(new pc.Color(.74, .92, 1), .86, 1.12);
+    for (let row = 0; row < 3; row += 1) for (let column = 0; column < 3; column += 1) {
+      const outer = row === 0 || row === 2 || column === 0 || column === 2;
+      addCallingSignaturePrimitive(root, "bulwark-plate", "box", outer ? edge : plate,
+        [.16, .15, .045], [(column - 1) * .35, .48 + row * .32, -.76],
+        [0, (column - 1) * -6, (column - 1) * 4]);
+    }
+    addCallingSignaturePrimitive(root, "bulwark-boss", "sphere", edge, [.17, .17, .08], [0, .8, -.84]);
+    return [plate, edge];
+  }
+  if (abilityId === "tank_challenge") {
+    const threat = callingSignatureMaterial(new pc.Color(1, .46, .08), .84, 1.05);
+    const iron = callingSignatureMaterial(new pc.Color(.58, .78, .9), .7, .78);
+    for (let index = 0; index < 16; index += 1) {
+      const angle = index / 16 * Math.PI * 2;
+      addCallingSignaturePrimitive(root, "challenge-wave", "box", index % 4 === 0 ? threat : iron,
+        [index % 4 === 0 ? .1 : .055, .04, .34],
+        [Math.sin(angle) * 1.48, .09, Math.cos(angle) * 1.48], [0, angle * 180 / Math.PI, 0]);
+    }
+    for (let index = 0; index < 6; index += 1) {
+      const angle = index / 6 * Math.PI * 2;
+      addCallingSignaturePrimitive(root, "challenge-spike", "box", threat, [.055, .38, .055],
+        [Math.sin(angle) * .7, .48, Math.cos(angle) * .7], [index % 2 ? 26 : -26, angle * 180 / Math.PI, 0]);
+    }
+    return [threat, iron];
+  }
   if (abilityId === "mage_arcane_surge") {
     const rune = callingSignatureMaterial(new pc.Color(.35, .12, .9), .68, .75);
     const flare = callingSignatureMaterial(new pc.Color(.78, .62, 1), .82, 1.1);
@@ -4622,12 +4650,36 @@ function addCallingSignature(root: pc.Entity, abilityId: CallingAbilityId): pc.S
       addCallingSignaturePrimitive(root, "earthbreaker-debris", "sphere", index % 5 === 0 ? hot : rock,
         [size * 1.4, size * (1 + index % 2), size], [Math.sin(angle) * distance, .1 + index % 3 * .12, Math.cos(angle) * distance]);
     }
+    for (let index = 0; index < 12; index += 1) {
+      const angle = index / 12 * Math.PI * 2 + (index % 2) * .12;
+      const length = .72 + index % 4 * .24;
+      addCallingSignaturePrimitive(root, "earthbreaker-fault", "box", index % 3 === 0 ? hot : rock,
+        [.035, .025, length], [Math.sin(angle) * 1.12, .045, Math.cos(angle) * 1.12], [0, angle * 180 / Math.PI, 0]);
+    }
     return [rock, hot];
   }
   return [];
 }
 
 function addCallingPersistentSignature(root: pc.Entity, state: CallingStateUpdate): pc.StandardMaterial[] {
+  if (state.abilityId === "tank_bulwark") {
+    const plate = callingSignatureMaterial(new pc.Color(.2, .52, .78), .22, .35);
+    const edge = callingSignatureMaterial(new pc.Color(.65, .88, 1), .68, .95);
+    for (let row = 0; row < 3; row += 1) for (let column = 0; column < 3; column += 1)
+      addCallingSignaturePrimitive(root, "bulwark-wall", "box", row === 1 && column === 1 ? plate : edge,
+        [.17, .16, .035], [(column - 1) * .37, .45 + row * .34, -.82], [0, (column - 1) * -5, 0]);
+    return [plate, edge];
+  }
+  if (state.abilityId === "tank_challenge") {
+    const threat = callingSignatureMaterial(new pc.Color(1, .42, .06), .62, .82);
+    const brace = callingSignatureMaterial(new pc.Color(.48, .75, .92), .46, .58);
+    for (let index = 0; index < 12; index += 1) {
+      const angle = index / 12 * Math.PI * 2;
+      addCallingSignaturePrimitive(root, "challenge-brace-ring", "box", index % 3 === 0 ? threat : brace,
+        [.06, .035, .28], [Math.sin(angle) * .88, .08, Math.cos(angle) * .88], [0, angle * 180 / Math.PI, 0]);
+    }
+    return [threat, brace];
+  }
   if (state.abilityId === "mage_mana_shield") {
     const shell = callingSignatureMaterial(new pc.Color(.12, .38, .96), .12, .46);
     const edge = callingSignatureMaterial(new pc.Color(.58, .82, 1), .62, 1);
@@ -4692,6 +4744,43 @@ function createStealthReappearance(playerId: string): void {
     addCallingSignaturePrimitive(root, "stealth-return-line", "box", ripple, [.035, .38, .035],
       [Math.sin(index * 1.7) * .42, .45 + index * .18, Math.cos(index * 1.7) * .42], [index % 2 ? 20 : -20, 0, 0]);
   callingImpactVisuals.push({ root, expiresAt: performance.now() + 650, materials: [ripple, shadow], abilityId: "assassin_vanish" });
+}
+
+function createTankBlockImpact(playerId: string, mobId: string, prevented: number): void {
+  const anchor = playerId === room?.sessionId ? localPlayer : remotePlayers.get(playerId)?.entity;
+  if (!anchor) return;
+  const root = new pc.Entity("tank-block-impact");
+  const position = anchor.getPosition();
+  root.setPosition(position.x, position.y + .02, position.z);
+  const attacker = mobVisuals.get(mobId)?.entity;
+  if (attacker) root.lookAt(attacker.getPosition());
+  app.root.addChild(root);
+  const plate = callingSignatureMaterial(new pc.Color(.28, .66, .94), .5, .7);
+  const edge = callingSignatureMaterial(new pc.Color(.82, .96, 1), .92, 1.28);
+  for (let index = 0; index < 7; index += 1) {
+    const column = index % 3 - 1, row = Math.floor(index / 3);
+    addCallingSignaturePrimitive(root, "block-flash-plate", "box", index === 3 ? plate : edge,
+      [.16, .13, .035], [column * .34, .58 + row * .27, -.72], [0, column * -7, column * 5]);
+  }
+  callingImpactVisuals.push({ root, expiresAt: performance.now() + 480, materials: [plate, edge], abilityId: "tank_bulwark" });
+  combatAudio.play("shardDeflect", enemyCuePan(position.x, localPlayer.getPosition().x, 12));
+  createRangedPopup(new pc.Vec3(position.x, position.y + 1.85, position.z), `BULWARK · −${prevented}`, "melee", false, [.48, .86, 1]);
+}
+
+function createTankChallengeTargets(targetIds: string[]): void {
+  for (const targetId of targetIds) {
+    const mob = mobVisuals.get(targetId);
+    if (!mob) continue;
+    const threat = callingSignatureMaterial(new pc.Color(1, .34, .05), .88, 1.15);
+    const root = new pc.Entity("tank-challenge-target");
+    root.setLocalPosition(0, mob.healthBarY + .72, 0);
+    mob.entity.addChild(root);
+    for (let index = 0; index < 3; index += 1)
+      addCallingSignaturePrimitive(root, "challenge-chevron", "box", threat, [.055, .24, .055],
+        [(index - 1) * .22, index === 1 ? .18 : 0, 0], [0, 0, index === 0 ? -35 : index === 2 ? 35 : 0]);
+    callingImpactVisuals.push({ root, expiresAt: performance.now() + 900, materials: [threat], abilityId: "tank_challenge" });
+    createRangedPopup(new pc.Vec3(mob.state.x, mob.state.y + mob.healthBarY + .9, mob.state.z), "PROVOKED", "melee", false, [1, .48, .12]);
+  }
 }
 
 function createCallingImpact(effect: CallingAbilityEffect): void {
@@ -11614,6 +11703,12 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     createHuntersMarkPayoff(mob, true);
     createRangedPopup(new pc.Vec3(mob.state.x, mob.state.y + mob.healthBarY + .75, mob.state.z),
       `EMPOWERED · +${message.bonusDamage}`, "melee", false, [1, .22, .32]);
+  });
+  room.onMessage("tank:block-impact", (message: { playerId: string; mobId: string; prevented: number }) => {
+    createTankBlockImpact(message.playerId, message.mobId, message.prevented);
+  });
+  room.onMessage("tank:challenge-targets", (message: { casterId: string; targetIds: string[] }) => {
+    createTankChallengeTargets(message.targetIds);
   });
   room.onMessage("assassin:mark-strike", (message: { casterId: string; mobId: string; bonusDamage: number; empowered: boolean; defeated: boolean }) => {
     const mob = mobVisuals.get(message.mobId);

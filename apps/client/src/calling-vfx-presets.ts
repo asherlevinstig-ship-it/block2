@@ -42,17 +42,19 @@ const warmWhite: ParticleColor = [1, .97, .75];
 /** A small, bounded particle budget for each real ability impact. */
 export const CALLING_IMPACT_PARTICLES: Record<CallingAbilityId, readonly ParticleLayer[]> = {
   tank_bulwark: [
-    layer("spark", steel, 20, .8, .19, .76, 1.4, 1.0, .8, .85),
-    layer("glow", silver, 12, 1.1, .42, .7, .65, .55, .5, .9),
+    layer("spark", steel, 32, .82, .18, .92, 1.65, 1.05, .86, .8),
+    layer("glow", silver, 20, 1.12, .4, .84, .72, .62, .56, .86),
+    layer("streak", [.42, .72, 1], 12, .58, .22, .72, 2.3, .5, .78, .72),
   ],
   tank_challenge: [
-    layer("dust", earth, 30, 1.15, .6, 1.2, 2.1, .3, .4, .1),
-    layer("spark", amber, 21, .75, .18, 1, 2.5, 1.2, .85, .8),
+    layer("dust", earth, 36, 1.18, .58, 1.5, 2.4, .34, .44, .08),
+    layer("spark", amber, 32, .78, .18, 1.42, 2.9, 1.28, .9, .72),
+    layer("streak", silver, 16, .62, .24, 1.18, 2.35, .65, .76, .62),
   ],
   tank_earthbreaker: [
-    layer("dust", earth, 62, 1.7, .85, 1.9, 3.2, .85, .62, .08),
-    layer("spark", amber, 32, .85, .17, 1.1, 4, 2.4, .92, .1),
-    layer("smoke", [.42, .39, .34], 20, 1.9, .95, 2.3, 1.3, .48, .38, .18),
+    layer("dust", earth, 68, 1.72, .88, 2.15, 3.45, .9, .66, .06),
+    layer("spark", amber, 36, .88, .18, 1.36, 4.25, 2.5, .94, .08),
+    layer("smoke", [.42, .39, .34], 24, 1.92, .98, 2.55, 1.42, .52, .4, .16),
   ],
   mage_arcane_surge: [
     layer("glow", violet, 58, 1.2, .46, 1.75, 3.1, 1.15, .88, .22),
@@ -147,8 +149,12 @@ export const CALLING_SUSTAIN_PARTICLES: Record<BuildPathId, readonly ParticleLay
 /** Long-lived effects need to communicate the actual mechanic, not only the Calling colour. */
 export const CALLING_ABILITY_SUSTAIN_PARTICLES: Partial<Record<CallingAbilityId, readonly ParticleLayer[]>> = {
   tank_bulwark: [
-    layer("glow", steel, 22, .85, .34, .88, .3, .55, .5, .75),
-    layer("spark", silver, 12, .62, .11, .92, .45, .55, .52, .85),
+    layer("glow", steel, 28, .9, .34, .98, .34, .58, .54, .72),
+    layer("spark", silver, 16, .65, .11, 1.02, .5, .58, .56, .82),
+  ],
+  tank_challenge: [
+    layer("spark", amber, 22, .68, .12, 1.18, .7, .46, .66, .72),
+    layer("dust", earth, 14, .88, .42, 1.08, .44, .2, .3, .04),
   ],
   mage_mana_shield: [
     layer("glow", azure, 32, 1.08, .4, 1.02, .3, .58, .52, .68),

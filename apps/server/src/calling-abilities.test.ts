@@ -55,6 +55,7 @@ describe("hotbar Calling abilities", () => {
       expect(internal.tankBulwarkUntil.get("hero")).toBe(15_000);
       internal.damagePlayer("field-test", "hero", 3, 10_000, false);
       expect(player.health).toBe(3);
+      expect(client.send).toHaveBeenCalledWith("tank:block-impact", { playerId: "hero", mobId: "field-test", prevented: 1 });
     }
     if (pathId === "mage") { expect(player.powerCooldownUntil).toBe(99_000); expect(player.stamina).toBe(55); }
     if (pathId === "assassin") {
@@ -222,6 +223,9 @@ describe("hotbar Calling abilities", () => {
     expect(internal.combatContributions.eligiblePersistent("northwatch-watchbreaker", boss, room.state.players)).toContain("hero");
     expect(internal.combatContributions.eligible("northwatch-watchbreaker", boss, room.state.players, 10_000)).toEqual([]);
     expect(player.stamina).toBeGreaterThan(25);
+    expect(client.send).toHaveBeenCalledWith("tank:challenge-targets", {
+      casterId: "hero", targetIds: ["northwatch-watchbreaker"],
+    });
   });
 
   it("credits Northwatch damage prevented by a Tank guarding an ally", () => {
