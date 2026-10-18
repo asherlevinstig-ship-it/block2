@@ -277,6 +277,42 @@ describe("hotbar Calling abilities", () => {
     expect(internal.combatContributions.eligiblePersistent("northwatch-watchbreaker", boss, room.state.players)).toContain("hero");
   });
 
+  it("turns Bulwark into a directional wall that protects an ally behind the Tank", () => {
+    const { room, internal, player, client, broadcast } = fixture("tank", 70);
+    Object.assign(player, { yaw: 0, x: 50, z: 50 });
+    const ally = new PlayerState(); Object.assign(ally, { x: 50, y: 8, z: 48, health: 5, maxHealth: 5 });
+    room.state.players.set("ally", ally);
+    const attacker = new MobState(); Object.assign(attacker, { x: 50, y: 8, z: 53, alive: true });
+    room.state.mobs.set("attacker", attacker);
+    internal.handleCallingAbility(client, { requestId: "raise-wall" });
+    internal.damagePlayer("attacker", "ally", 3, 10_001, false);
+    expect(ally.health).toBe(3);
+    expect(broadcast).toHaveBeenCalledWith("tank:ally-block-impact", {
+      guardId: "hero", allyId: "ally", mobId: "attacker", prevented: 1,
+    });
+
+    ally.health = 5; ally.x = 53; ally.z = 50;
+    internal.damagePlayer("attacker", "ally", 3, 10_002, false);
+    expect(ally.health).toBe(2);
+  });
+
+  it("rewards Earthbreaker for interrupting an enemy wind-up", () => {
+    const { room, internal, client, broadcast } = fixture("tank", 70);
+    const mob = new MobState(); Object.assign(mob, { x: 52, y: 8, z: 50, alive: true,
+      health: 20, maxHealth: 20, combatState: "windup", stateUntil: 12_000 });
+    room.state.mobs.set("brute", mob);
+    internal.handleCallingAbilityEquip(client, { abilityId: "tank_earthbreaker" });
+    internal.handleCallingAbility(client, { requestId: "break-windup" });
+    expect(mob.combatState).toBe("stagger");
+    expect(mob.health).toBeLessThanOrEqual(16);
+    expect(broadcast).toHaveBeenCalledWith("tank:earthbreaker-interrupt", {
+      casterId: "hero", targetIds: ["brute"], bonusDamage: 2,
+    });
+    expect(client.send).toHaveBeenCalledWith("calling:ability", expect.objectContaining({
+      abilityId: "tank_earthbreaker", detail: expect.stringContaining("ATTACK BROKEN"),
+    }));
+  });
+
   it("heals an injured ally before self and credits actual boss-fight healing", () => {
     const { room, internal, player, client, broadcast } = fixture("healer", 70);
     vi.spyOn(internal, "persistPlayer").mockResolvedValue(undefined);

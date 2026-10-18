@@ -4899,6 +4899,43 @@ function createTankChallengeTargets(targetIds: string[]): void {
   }
 }
 
+function createTankAllyBlockImpact(guardId: string, allyId: string, mobId: string, prevented: number): void {
+  const guard = guardId === room?.sessionId ? localPlayer : remotePlayers.get(guardId)?.entity;
+  const ally = allyId === room?.sessionId ? localPlayer : remotePlayers.get(allyId)?.entity;
+  if (!guard || !ally) return;
+  const start = guard.getPosition(), end = ally.getPosition();
+  const root = new pc.Entity("bulwark-ally-guard"); app.root.addChild(root);
+  const wall = callingSignatureMaterial(new pc.Color(.22, .62, .94), .42, .72);
+  const edge = callingSignatureMaterial(new pc.Color(.78, .95, 1), .9, 1.22);
+  const dx = end.x - start.x, dz = end.z - start.z;
+  const yaw = Math.atan2(dx, dz) * 180 / Math.PI;
+  for (let index = 0; index < 7; index += 1) {
+    const progress = (index + 1) / 8;
+    addCallingSignaturePrimitive(root, "bulwark-guard-link", "box", index % 2 ? wall : edge,
+      [.05, .08, .24], [start.x + dx * progress, start.y + .75, start.z + dz * progress], [0, yaw, 0]);
+  }
+  callingImpactVisuals.push({ root, expiresAt: performance.now() + 620, materials: [wall, edge], abilityId: "tank_bulwark" });
+  createTankBlockImpact(allyId, mobId, prevented);
+  createRangedPopup(new pc.Vec3(end.x, end.y + 2.18, end.z), "ALLY GUARDED", "landmark", false, [.54, .9, 1]);
+}
+
+function createEarthbreakerInterrupts(targetIds: string[], bonusDamage: number): void {
+  for (const targetId of targetIds) {
+    const mob = mobVisuals.get(targetId); if (!mob) continue;
+    const root = new pc.Entity("earthbreaker-interrupt"); root.setLocalPosition(0, mob.healthBarY * .45, 0); mob.entity.addChild(root);
+    const fault = callingSignatureMaterial(new pc.Color(1, .34, .06), .88, 1.2);
+    const shock = callingSignatureMaterial(new pc.Color(1, .88, .42), .94, 1.3);
+    for (let index = 0; index < 8; index += 1) {
+      const angle = index / 8 * Math.PI * 2;
+      addCallingSignaturePrimitive(root, "interrupt-shock", "box", index % 2 ? fault : shock,
+        [.045, .045, .28], [Math.sin(angle) * .72, .72 + Math.cos(angle) * .72, 0], [0, 0, angle * 180 / Math.PI]);
+    }
+    callingImpactVisuals.push({ root, expiresAt: performance.now() + 720, materials: [fault, shock], abilityId: "tank_earthbreaker" });
+    createRangedPopup(new pc.Vec3(mob.state.x, mob.state.y + mob.healthBarY + .95, mob.state.z),
+      `ATTACK BROKEN · +${bonusDamage}`, "stagger", false, [1, .58, .18]);
+  }
+}
+
 function createThiefDivertedTargets(abilityId: CallingAbilityId, targetIds: string[]): void {
   for (const targetId of targetIds) {
     const mob = mobVisuals.get(targetId);
@@ -12042,6 +12079,12 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   });
   room.onMessage("tank:challenge-targets", (message: { casterId: string; targetIds: string[] }) => {
     createTankChallengeTargets(message.targetIds);
+  });
+  room.onMessage("tank:ally-block-impact", (message: { guardId: string; allyId: string; mobId: string; prevented: number }) => {
+    createTankAllyBlockImpact(message.guardId, message.allyId, message.mobId, message.prevented);
+  });
+  room.onMessage("tank:earthbreaker-interrupt", (message: { casterId: string; targetIds: string[]; bonusDamage: number }) => {
+    createEarthbreakerInterrupts(message.targetIds, message.bonusDamage);
   });
   room.onMessage("thief:diverted-targets", (message: { casterId: string; abilityId: CallingAbilityId; targetIds: string[] }) => {
     createThiefDivertedTargets(message.abilityId, message.targetIds);

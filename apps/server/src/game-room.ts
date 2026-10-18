@@ -3639,6 +3639,37 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     } else if (bulwarkUntil > 0) {
       this.tankBulwarkUntil.delete(playerId);
     }
+    let allyBulwarkGuardId: string | null = null;
+    if (defense.damage > 0 && mob) for (const [guardId, guard] of this.state.players) {
+      if (guardId === playerId || guard.health <= 0 || now >= (this.tankBulwarkUntil.get(guardId) ?? 0)
+        || Math.abs(guard.y - player.y) > 2 || Math.hypot(guard.x - player.x, guard.z - player.z) > 5
+        || !hasCombatLineOfSight(guard, player, this.readWorldBlock)
+        || !hasCombatLineOfSight(guard, mob, this.readWorldBlock)) continue;
+      const radians = guard.yaw * Math.PI / 180;
+      const facingX = Math.sin(radians), facingZ = Math.cos(radians);
+      const attackerX = mob.x - guard.x, attackerZ = mob.z - guard.z;
+      const attackerDistance = Math.hypot(attackerX, attackerZ);
+      const allyX = player.x - guard.x, allyZ = player.z - guard.z;
+      const allyDistance = Math.hypot(allyX, allyZ);
+      if (attackerDistance < .001 || allyDistance < .001
+        || (facingX * attackerX + facingZ * attackerZ) / attackerDistance < .25
+        || (facingX * allyX + facingZ * allyZ) / allyDistance > -.1
+        || Math.abs(facingX * allyZ - facingZ * allyX) > 2.25) continue;
+      const build = parseBuildPathState(guard.huntLoadoutsJson);
+      const ability = selectedCallingAbility(build, "tank");
+      const beforeProtection = defense.damage;
+      defense.damage = Math.max(0, defense.damage - (selectedCallingAugment(build, ability) === "bulwark_iron_skin" ? 2 : 1));
+      const prevented = beforeProtection - defense.damage;
+      if (prevented <= 0) continue;
+      allyBulwarkGuardId = guardId;
+      this.grantCallingTrial(guardId, "bulwark_iron_skin", prevented);
+      if (mobId === "northwatch-watchbreaker") this.combatContributions.recordSupport(mobId, guardId, prevented, now);
+      const impact = { guardId, allyId: playerId, mobId, prevented };
+      this.broadcast("tank:ally-block-impact", impact);
+      this.clients.find(client => client.sessionId === guardId)?.send("tank:ally-block-impact", impact);
+      this.buildPathProc(guardId, "tank", "BULWARK", `ALLY GUARDED · ${player.name || "EXPLORER"} · ${prevented} DAMAGE BLOCKED`);
+      break;
+    }
     const barrierHits = this.mageBarrierHits.get(playerId) ?? 0;
     if (defense.damage > 0 && barrierHits > 0) {
       const build = parseBuildPathState(player.huntLoadoutsJson);
@@ -3664,7 +3695,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       defense.damage -= absorbedByWard;
       this.buildPathProc(playerId, "tank", "FIELD WARD", `${absorbedByWard} DAMAGE PREVENTED`);
     }
-    if (defense.damage > 0) for (const [guardId, guard] of this.state.players) {
+    if (defense.damage > 0 && !allyBulwarkGuardId) for (const [guardId, guard] of this.state.players) {
       const guardian = this.buildSpecializationFor(guard, "tank") === "guardian";
       const guardianMaster = guardian && this.buildSpecializationMastered(guard, "guardian");
       const protectorTier = this.equipmentAffixTier(guard, "protector");
@@ -5131,17 +5162,26 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     } else if (abilityId === "tank_earthbreaker") {
       const targets = nearbyMobs(4.2 + rank * .2 + (augmentId === "earthbreaker_faultline" ? 1.8 : 0));
       const baseDamage = 2 + (rank >= 4 ? 1 : 0) + (augmentId === "earthbreaker_crushing_force" ? 2 : 0);
+      const interruptedTargetIds: string[] = [];
       for (const [mobId, mob] of targets) {
-        const damage = damageAfterArmor(baseDamage, mob.armor, true);
+        const interrupted = mob.combatState === "windup";
+        const rawDamage = baseDamage + (interrupted ? 2 : 0);
+        const damage = damageAfterArmor(rawDamage, mob.armor, true);
         this.combatContributions.record(mobId, client.sessionId, Math.min(mob.health, damage), now);
         mob.health = Math.max(0, mob.health - damage); mob.hitSequence += 1;
         this.alertHitMob(mobId, client.sessionId, now);
         if (mob.health === 0) this.defeatMob(mobId, mob, client.sessionId, now);
-        else this.staggerMob(mobId, mob, now, 1_200 + rank * 100, true);
+        else this.staggerMob(mobId, mob, now, interrupted ? 2_200 + rank * 150 : 1_200 + rank * 100, true);
+        if (interrupted) interruptedTargetIds.push(mobId);
       }
-      detail = `${targets.length} ENEM${targets.length === 1 ? "Y" : "IES"} HIT · ${baseDamage} DAMAGE`;
+      detail = interruptedTargetIds.length > 0
+        ? `${interruptedTargetIds.length} ATTACK${interruptedTargetIds.length === 1 ? "" : "S"} BROKEN · +2 INTERRUPT DAMAGE`
+        : `${targets.length} ENEM${targets.length === 1 ? "Y" : "IES"} HIT · ${baseDamage} DAMAGE`;
       this.grantCallingTrial(client.sessionId, "earthbreaker_faultline", targets.length);
-      this.grantCallingTrial(client.sessionId, "earthbreaker_crushing_force", targets.length * baseDamage);
+      this.grantCallingTrial(client.sessionId, "earthbreaker_crushing_force", targets.length * baseDamage + interruptedTargetIds.length * 2);
+      if (interruptedTargetIds.length > 0) this.broadcast("tank:earthbreaker-interrupt", {
+        casterId: client.sessionId, targetIds: interruptedTargetIds, bonusDamage: 2,
+      });
     } else if (abilityId === "mage_arcane_surge") {
       const staminaBefore = player.stamina, specialRecovering = player.specialCooldownUntil > now;
       const stamina = 30 + rank * 5 + (augmentId === "surge_deep_reserves" ? 25 : 0);
