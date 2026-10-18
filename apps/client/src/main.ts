@@ -6,7 +6,7 @@ import { greenwoodMasteryStatus, mistfenMasteryStatus } from "@blockcraft/protoc
 import type { RegionalArmourProc } from "@blockcraft/protocol";
 import { isInMistfenMarsh, NORTHWATCH_SHARD_PATROL_SITE } from "@blockcraft/voxel-world";
 import { ASHEN_RELIQUARY_POSITION } from "@blockcraft/voxel-world";
-import type { AshenReliquaryChoice, AshenReliquaryResult, AshenReliquaryState } from "@blockcraft/protocol";
+import type { AshenEquipmentForged, AshenReliquaryChoice, AshenReliquaryResult, AshenReliquaryState } from "@blockcraft/protocol";
 import { nearestRoleFieldOpportunity, nearestRoadsideEncounter, parseRoadsideClaims, type RoleFieldPath } from "@blockcraft/voxel-world";
 import { confirmedRangedHit, projectileImpactCue } from "./ranged-feedback.js";
 import { heldFireStep } from "./held-fire.js";
@@ -873,6 +873,12 @@ const abilityRevealTitle = document.querySelector<HTMLElement>("#ability-reveal-
 const abilityRevealDescription = document.querySelector<HTMLElement>("#ability-reveal-description")!;
 const abilityRevealUseHint = document.querySelector<HTMLElement>("#ability-reveal-use")!;
 const abilityRevealContinue = document.querySelector<HTMLButtonElement>("#ability-reveal-continue")!;
+const ashenEquipmentRevealPanel = document.querySelector<HTMLElement>("#ashen-equipment-reveal")!;
+const ashenEquipmentRevealIcon = document.querySelector<HTMLElement>("#ashen-equipment-reveal-icon")!;
+const ashenEquipmentRevealTitle = document.querySelector<HTMLElement>("#ashen-equipment-reveal-title")!;
+const ashenEquipmentRevealDescription = document.querySelector<HTMLElement>("#ashen-equipment-reveal-description")!;
+const ashenEquipmentRevealContinue = document.querySelector<HTMLButtonElement>("#ashen-equipment-reveal-continue")!;
+let pendingAshenEquipmentReveal: AshenEquipmentForged | null = null;
 let activeAbilityRevealId: CallingAbilityId | null = null;
 const seenAbilityReveals = new Set<CallingAbilityId>();
 let currentProgressionNotice: ProgressionNotice | null = null;
@@ -4008,6 +4014,25 @@ abilityRevealContinue.addEventListener("click", () => {
   abilityRevealPanel.hidden = true;
   refreshCallingUnlockNotice();
   canvas.focus();
+});
+
+function updateAshenEquipmentReveal(): void {
+  if (!pendingAshenEquipmentReveal || !ashenEquipmentRevealPanel.hidden || !isAtTownOfBeginnings()
+    || localCombatActive() || !defeatScreen.hidden || reportedProtectedDialog === true) return;
+  const forged = pendingAshenEquipmentReveal;
+  ashenEquipmentRevealTitle.textContent = forged.name;
+  ashenEquipmentRevealDescription.textContent = forged.description;
+  ashenEquipmentRevealIcon.textContent = forged.blueprint === "cinderfang" ? "⚔" : forged.blueprint === "ashguard" ? "◆" : "✦";
+  blacksmithPanel.hidden = true;
+  ashenEquipmentRevealPanel.hidden = false;
+  combatAudio.play("levelUp"); levelUpBurst(); resetMovementControls();
+  ashenEquipmentRevealContinue.focus();
+}
+
+ashenEquipmentRevealContinue.addEventListener("click", () => {
+  pendingAshenEquipmentReveal = null;
+  ashenEquipmentRevealPanel.hidden = true;
+  document.querySelector<HTMLButtonElement>("#inventory-toggle")?.click();
 });
 
 function callingPowerUsed(abilityId: CallingAbilityId): boolean {
@@ -7393,29 +7418,51 @@ function canClaimAshenReliquary(): boolean {
   return Boolean(ashenReliquaryState?.phase === "unlocked" && ashenReliquaryState.eligible
     && !ashenReliquaryState.claimed && nearAshenReliquary());
 }
+function canPreviewAshenReliquary(): boolean {
+  return Boolean(ashenReliquaryState?.blueprintChoiceRequired && !ashenReliquaryState.claimed && nearAshenReliquary());
+}
+function recommendedAshenBlueprint(): AshenBlueprintId {
+  return localBuildPathId === "mage" || localBuildPathId === "healer" ? "emberheart"
+    : localBuildPathId === "tank" || localBuildPathId === "ranger" ? "ashguard" : "cinderfang";
+}
 function closeAshenReliquaryChoice(): void {
   if (ashenReliquaryChoice.hidden) return;
   ashenReliquaryChoice.hidden = true;
   room?.send("ashen:menu", { open: false });
 }
-function openAshenReliquaryChoice(): void {
+function openAshenReliquaryChoice(preview = false): void {
+  if (localCombatActive()) { status.textContent = "Finish the fight before inspecting the Scorched Reliquary."; return; }
   const firstClear = Boolean(ashenReliquaryState?.blueprintChoiceRequired);
-  ashenReliquaryChoice.querySelector<HTMLElement>("strong")!.textContent = firstClear ? "Choose your first Ashen blueprint" : "Choose one personal reward";
+  ashenReliquaryChoice.dataset.preview = String(preview);
+  ashenReliquaryChoice.querySelector<HTMLElement>("strong")!.textContent = preview ? "Ashen equipment blueprints"
+    : firstClear ? "Choose your first Ashen blueprint" : "Choose one personal reward";
   ashenReliquaryChoice.querySelector<HTMLElement>("p")!.textContent = firstClear
-    ? "Permanent unlock · forge this equipment at the Town blacksmith."
+    ? preview ? "Defeat the full warpack to choose one. Your Calling recommendation is marked below."
+      : "Permanent unlock · forge this equipment at the Town blacksmith."
     : "Repeat clears supply materials for forging and upgrades.";
+  const recommended = recommendedAshenBlueprint();
   for (const button of ashenReliquaryChoice.querySelectorAll<HTMLButtonElement>("[data-ashen-choice]")) {
     const choice = button.dataset.ashenChoice;
     button.hidden = firstClear ? choice === "gold" : choice === "focus";
-    if (firstClear && choice === "weapon") button.innerHTML = "CINDERFANG BLUEPRINT<small>Blade · ignite staggered enemies</small>";
-    else if (firstClear && choice === "armour") button.innerHTML = "ASHGUARD BLUEPRINT<small>Mantle · perfect-dodge ward</small>";
-    else if (firstClear && choice === "focus") button.innerHTML = "EMBERHEART BLUEPRINT<small>Focus · Calling empowerment field</small>";
+    const blueprint = choice === "weapon" ? "cinderfang" : choice === "armour" ? "ashguard" : choice === "focus" ? "emberheart" : null;
+    button.dataset.recommended = String(firstClear && blueprint === recommended);
+    button.disabled = preview;
+    if (firstClear && blueprint) {
+      const recipe = ASHEN_FORGE_RECIPES[blueprint];
+      const label = blueprint === "cinderfang" ? "Blade · ignite staggered enemies" : blueprint === "ashguard"
+        ? "Mantle · perfect-dodge ward" : "Focus · Calling empowerment field";
+      button.innerHTML = `${blueprint === recommended ? "★ RECOMMENDED · " : ""}${recipe.name.toUpperCase()}<small>${label}<br>${recipe.gold} gold · ${recipe.materials.map(cost => `${cost.quantity} ${ITEM_DEFINITIONS[cost.itemId].name}`).join(" · ")}</small>`;
+    }
     else if (!firstClear && choice === "weapon") button.innerHTML = "WEAPON MATERIALS<small>3 Ember Ore · 2 Stone Core</small>";
     else if (!firstClear && choice === "armour") button.innerHTML = "ARMOUR MATERIALS<small>2 Ember Ore · 4 Iron Ore</small>";
   }
   ashenReliquaryChoice.hidden = false;
   room?.send("ashen:menu", { open: true });
 }
+ashenReliquaryStatus.addEventListener("click", () => {
+  if (canClaimAshenReliquary()) openAshenReliquaryChoice(false);
+  else if (canPreviewAshenReliquary()) openAshenReliquaryChoice(true);
+});
 document.querySelector<HTMLButtonElement>("#ashen-reliquary-close")!.addEventListener("click", closeAshenReliquaryChoice);
 for (const button of document.querySelectorAll<HTMLButtonElement>("[data-ashen-choice]")) button.addEventListener("click", () => {
   const choice = button.dataset.ashenChoice as AshenReliquaryChoice;
@@ -7561,7 +7608,8 @@ function updateAshenReliquaryPresentation(now = Date.now()): void {
   ashenReliquaryCount.textContent = `${state.defeated} / ${state.required}`;
   ashenReliquaryDetail.textContent = state.claimed ? "PERSONAL REWARD CLAIMED"
     : unlocked ? state.eligible ? `AWAKENED · ${Math.max(0, Math.ceil((state.expiresAt - now) / 1000))}s · E TO CHOOSE` : "AWAKENED · ASSIST THE PACK CLEAR"
-    : state.phase === "cooldown" ? `DORMANT · ${Math.max(0, Math.ceil((state.cooldownUntil - now) / 1000))}s` : "RELIQUARY SEALED";
+    : state.phase === "cooldown" ? `DORMANT · ${Math.max(0, Math.ceil((state.cooldownUntil - now) / 1000))}s`
+      : state.blueprintChoiceRequired ? "SEALED · E TO PREVIEW BLUEPRINTS" : "RELIQUARY SEALED";
 }
 
 // One small draw call, updated only when a crack stage changes; never touches chunk meshes.
@@ -9257,7 +9305,9 @@ function updateTarget(): void {
   const nearbyLoot = nearestLootDrop();
   const roleOpportunity = nearbyRoleOpportunity();
   const roadsideEncounter = nearbyRoadsideEncounter();
-  const ashenReliquaryNearby = canClaimAshenReliquary();
+  const ashenReliquaryClaimNearby = canClaimAshenReliquary();
+  const ashenReliquaryPreviewNearby = canPreviewAshenReliquary();
+  const ashenReliquaryNearby = ashenReliquaryClaimNearby || ashenReliquaryPreviewNearby;
   if (!roadsideChoice.hidden && roadsideChoice.dataset.id !== roadsideEncounter?.id) closeRoadsideChoice();
   updatePlayerTradePrompt(Boolean(nearbyLoot || ashenReliquaryNearby || nearbyForestPortal || roleOpportunity || roadsideEncounter || expeditionBoardNearby || blacksmithNearby || quizTableNearby || keeperNearby || chestNearby));
   const nextKey = `${interactionMode}:${targetKey}:${currentTarget?.block ?? -1}:${availability}:${combatKey}:${keeperNearby}:${quizTableNearby}:${blacksmithNearby}:${expeditionBoardNearby}:${nearbyLoot}:${ashenReliquaryNearby}:${nearbyForestPortal}:${roleOpportunity?.id ?? "none"}:${roadsideEncounter?.id ?? "none"}`;
@@ -9268,7 +9318,7 @@ function updateTarget(): void {
   targetMaterial.emissive = tint.clone().mulScalar(0.3);
   targetMaterial.opacity = 0.2;
   targetMaterial.update();
-  mineButton.textContent = nearbyLoot ? "Loot" : ashenReliquaryNearby ? "Choose" : nearbyForestPortal ? "Portal" : roleOpportunity ? roleOpportunity.action : roadsideEncounter ? "Explore" : expeditionBoardNearby ? "Board" : blacksmithNearby ? "Trade" : quizTableNearby ? "Play" : keeperNearby ? "Talk" : interactionMode === "build" ? chopping ? "Chop" : "Mine" : "Attack";
+  mineButton.textContent = nearbyLoot ? "Loot" : ashenReliquaryClaimNearby ? "Choose" : ashenReliquaryPreviewNearby ? "Preview" : nearbyForestPortal ? "Portal" : roleOpportunity ? roleOpportunity.action : roadsideEncounter ? "Explore" : expeditionBoardNearby ? "Board" : blacksmithNearby ? "Trade" : quizTableNearby ? "Play" : keeperNearby ? "Talk" : interactionMode === "build" ? chopping ? "Chop" : "Mine" : "Attack";
   if (nearbyLoot) {
     const drop = lootVisuals.get(nearbyLoot)?.state;
     const itemName = drop && isItemId(drop.itemId) ? ITEM_DEFINITIONS[drop.itemId].name : "Loot";
@@ -9281,7 +9331,9 @@ function updateTarget(): void {
         ? `${itemName} · inventory full`
       : `${quantity}${itemName} · hold E or Loot to pick up`;
   }
-  else if (ashenReliquaryNearby) targetLabel.textContent = "Scorched Reliquary · press E or Choose for one personal reward";
+  else if (ashenReliquaryNearby) targetLabel.textContent = ashenReliquaryClaimNearby
+    ? "Scorched Reliquary · press E or Choose for one personal reward"
+    : "Scorched Reliquary · press E or Preview to inspect all three blueprints";
   else if (nearbyForestPortal) targetLabel.textContent = "Glowing portal · press E or Portal to travel";
   else if (roleOpportunity) targetLabel.textContent = `${roleOpportunity.name} · ${roleOpportunity.prompt} · press E or ${roleOpportunity.action}`;
   else if (roadsideEncounter) {
@@ -10974,7 +11026,8 @@ function requestPrimaryAction(): void {
   if (sceneDressing.blacksmithVisible && isAtTownStorage(localPlayer.getPosition())) { openPersonalStorage(); return; }
   const nearbyLoot = nearestLootDrop();
   if (nearbyLoot) { beginLootHold("pointer"); return; }
-  if (canClaimAshenReliquary()) { openAshenReliquaryChoice(); return; }
+  if (canClaimAshenReliquary()) { openAshenReliquaryChoice(false); return; }
+  if (canPreviewAshenReliquary()) { openAshenReliquaryChoice(true); return; }
   if (nearbyForestPortal) { useNearbyForestPortal(); return; }
   if (useNearbyRoleOpportunity()) return;
   if (useNearbyRoadsideEncounter()) return;
@@ -11465,6 +11518,7 @@ app.on("update", (dt: number) => {
   const keyboardStrafe = Number(keys.has("KeyD")) - Number(keys.has("KeyA"));
   const keyboardForward = Number(keys.has("KeyW")) - Number(keys.has("KeyS"));
   const modalMovementAllowed = lootPanel.hidden && defeatScreen.hidden && quizPanel.hidden && blacksmithPanel.hidden && inventoryPanel.hidden
+    && ashenEquipmentRevealPanel.hidden
     && levelUpPanel.hidden && expeditionPanel.hidden && realmHuntPanel.hidden && !playerInteractionUI.isOpen()
     && reportedProtectedDialog !== true;
   const strafe = modalMovementAllowed ? Math.max(-1, Math.min(1, keyboardStrafe + touchStrafe)) : 0;
@@ -11786,6 +11840,7 @@ app.on("update", (dt: number) => {
   updateLootWorldLabel();
   updateLevelCelebration(animationNow);
   updateAbilityReveal();
+  updateAshenEquipmentReveal();
   updateProgressionNoticeVisibility(animationNow);
   for (const [mobId, mob] of mobVisuals) {
     if (mob.frameAlive !== mob.state.alive) {
@@ -13482,7 +13537,8 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   });
   room.onMessage("ashen:reliquary", (message: AshenReliquaryState) => {
     ashenReliquaryState = message;
-    if (message.phase !== "unlocked" || message.claimed || !message.eligible) closeAshenReliquaryChoice();
+    const previewOpen = ashenReliquaryChoice.dataset.preview === "true" && message.blueprintChoiceRequired && !message.claimed;
+    if (!previewOpen && (message.phase !== "unlocked" || message.claimed || !message.eligible)) closeAshenReliquaryChoice();
     targetStateKey = "";
     updateAshenReliquaryPresentation();
   });
@@ -13493,6 +13549,10 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     }
     status.textContent = message.message;
     showRoadsideNotice(message.message, !message.ok);
+  });
+  room.onMessage("ashen:forged", (message: AshenEquipmentForged) => {
+    pendingAshenEquipmentReveal = message;
+    updateAshenEquipmentReveal();
   });
   room.onMessage("loot:result", (message: LootCollectResult) => {
     if (message.dropId !== inspectedDropId) {
@@ -13701,6 +13761,8 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     activeWorldNotice = null;
     pendingWorldNotices = [];
     progressionNoticePanel.hidden = true;
+    ashenEquipmentRevealPanel.hidden = true;
+    pendingAshenEquipmentReveal = null;
     powerServerReady = false;
     localSpecialCooldownUntil = 0;
     localCallingCooldownUntil = 0;

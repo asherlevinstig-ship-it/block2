@@ -75,7 +75,7 @@ import { HEALING_POTION, backpackAddableQuantity, backpackCapacity, backpackSlot
   type ArmourId, type PotionUpdate } from "@blockcraft/protocol";
 import { canBuyPotionAtKeeper, potionBuyError, potionUseError } from "./healing-potions.js";
 import { MINERAL_REGROWTH_MS, type MineralDepositStatus } from "@blockcraft/protocol";
-import { RENEWABLE_MINERAL_DEPOSITS, authoredMineralAt, SURFACE_HEIGHT, CAVE_SHALLOW_HOME, CAVE_DEEP_HOME, CAVE_HIDDEN_HOME, SILVER_DEPTHS_SPITTER_HOMES, CRYSTAL_MATRIARCH_HOME, SILVER_DEPTHS_COVER, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, SILVER_DEPTHS_CHECKPOINT_POSITION, SILVER_DEPTHS_GALLERY_GATE, SILVER_DEPTHS_BOSS_GATE, SILVER_DEPTHS_IRON_GATE, SILVER_DEPTHS_SILVER_GATE, SILVER_DEPTHS_WING_CACHES, silverDepthsPingLocation, isMistfenToxicPool, isInMistfenMarsh } from "@blockcraft/voxel-world";
+import { RENEWABLE_MINERAL_DEPOSITS, authoredMineralAt, SURFACE_HEIGHT, CAVE_SHALLOW_HOME, CAVE_DEEP_HOME, CAVE_HIDDEN_HOME, SILVER_DEPTHS_SPITTER_HOMES, CRYSTAL_MATRIARCH_HOME, SILVER_DEPTHS_COVER, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, SILVER_DEPTHS_CHECKPOINT_POSITION, SILVER_DEPTHS_GALLERY_GATE, SILVER_DEPTHS_BOSS_GATE, SILVER_DEPTHS_IRON_GATE, SILVER_DEPTHS_SILVER_GATE, SILVER_DEPTHS_WING_CACHES, TOWN_BLACKSMITH_STALL_POSITION, silverDepthsPingLocation, isMistfenToxicPool, isInMistfenMarsh } from "@blockcraft/voxel-world";
 import { ROLE_FIELD_OPPORTUNITIES, nearestRoleFieldOpportunity, nearestRoadsideEncounter, parseRoadsideClaims, roadsideEncounterAt, withRoadsideClaim } from "@blockcraft/voxel-world";
 import { mineralCellOccupied } from "./mineral-regrowth.js";
 import { CAVE_ENCOUNTERS, caveEncounterAllows } from "./cave-encounters.js";
@@ -247,7 +247,7 @@ import { canStartTavernQuiz, doubledPayout, drawQuizQuestion, mustSettleQuiz, ty
 import { blacksmithNextStep, buyDepthsReward, canTradeAtBlacksmith, forgeBlacksmithUpgrade, ironCapacity, mineralSale, ironSwordDamageBonus, minedIronQuantity, minedMineral, ownedBlacksmithUpgrades, ownedDepthsRewards, ownsBlacksmithUpgrade, ownsDepthsReward } from "./blacksmith.js";
 import { GREENWOOD_CRAWLER_HOMES, REALM_WARDEN_GATE_POSITION, REALM_WARDEN_HOME, STONE_BRUTE_ARENA_HOME, isInGreenwoodRegion, isInRealmWardenArena, isInStoneBruteArena, isInAshenReach, isInSouthernQuarry, wildernessTerritoryAt } from "@blockcraft/voxel-world";
 import { ASHEN_RELIQUARY_POSITION } from "@blockcraft/voxel-world";
-import type { AshenReliquaryChoice, AshenReliquaryResult, AshenReliquaryState } from "@blockcraft/protocol";
+import type { AshenEquipmentForged, AshenReliquaryChoice, AshenReliquaryResult, AshenReliquaryState } from "@blockcraft/protocol";
 import {
   applyWorldDeltasToChunk,
   parseWorldDeltas,
@@ -855,7 +855,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const open = typeof payload === "object" && payload !== null && "open" in payload && payload.open === true;
       if (!player || !open) { if (player) player.invulnerableUntil = 0; return; }
       const state = this.ashenReliquary.snapshot(client.sessionId, Date.now());
-      const besideReliquary = this.roomKind === "overworld" && state.phase === "unlocked" && state.eligible && !state.claimed
+      const blueprintPreview = ashenBlueprints(player.huntLoadoutsJson).length === 0;
+      const besideReliquary = this.roomKind === "overworld" && !state.claimed
+        && ((state.phase === "unlocked" && state.eligible) || blueprintPreview)
         && Math.abs(player.y - ASHEN_RELIQUARY_POSITION.y) <= 2.5
         && Math.hypot(player.x - ASHEN_RELIQUARY_POSITION.x, player.z - ASHEN_RELIQUARY_POSITION.z) <= 3.6;
       if (besideReliquary) player.invulnerableUntil = Date.now() + 30_000;
@@ -1913,6 +1915,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     item.quantity += 1;
     void this.persistPlayer(client.sessionId, player, true).catch(() => {});
     this.sendBlacksmithState(client, `${recipe.name} forged · open your pack to equip its Ashen perk.`, "regional-forged");
+    client.send("ashen:forged", { blueprint, itemId: recipe.itemId, name: recipe.name,
+      description: ITEM_DEFINITIONS[recipe.itemId].description } satisfies AshenEquipmentForged);
+    this.sendObjectiveState(client, true);
   }
 
   private handleFieldForge(client: Client, payload: unknown): void {
@@ -3403,6 +3408,27 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const signatureDrop = [...this.state.lootDrops.values()].find(drop => drop.ownerId === client.sessionId
         && (drop.itemId === "matriarch_edge" || drop.itemId === "venom_focus") && Date.now() < drop.expiresAt);
       if (signatureDrop) update.lootHint = "LEGENDARY · Guaranteed personal drop ready to claim";
+    }
+    const pendingAshenBlueprint = ashenBlueprints(player.huntLoadoutsJson).find(blueprint => {
+      const itemId = ASHEN_FORGE_RECIPES[blueprint].itemId;
+      return (player.inventory.get(itemId)?.quantity ?? 0) + (player.storage.get(itemId)?.quantity ?? 0) <= 0;
+    });
+    if (this.roomKind === "overworld" && pendingAshenBlueprint) {
+      const recipe = ASHEN_FORGE_RECIPES[pendingAshenBlueprint];
+      const missing = recipe.materials.map(cost => {
+        const held = player.inventory.get(cost.itemId)?.quantity ?? 0;
+        return `${held}/${cost.quantity} ${ITEM_DEFINITIONS[cost.itemId].name}`;
+      }).join(" · ");
+      update = {
+        kind: "hub", showMarker: true, objectiveId: `ashen-forge-${pendingAshenBlueprint}`,
+        title: `Forge ${recipe.name}`,
+        detail: `Return to the Town blacksmith to inspect your blueprint. ${missing} · ${player.coins}/${recipe.gold} gold.`,
+        lootHint: ITEM_DEFINITIONS[recipe.itemId].description,
+        tier: 0, recommendedLevel: "ASHEN BLUEPRINT", targetMobId: "", targetMobIds: [], completedMobIds: [],
+        progressLabel: "BLUEPRINT READY · TOWN FORGE",
+        targetX: TOWN_BLACKSMITH_STALL_POSITION.x, targetY: TOWN_BLACKSMITH_STALL_POSITION.y,
+        targetZ: TOWN_BLACKSMITH_STALL_POSITION.z,
+      };
     }
     const fingerprint = JSON.stringify({ ...update, targetX: Math.round(update.targetX), targetY: Math.round(update.targetY), targetZ: Math.round(update.targetZ) });
     if (!force && fingerprint === progress.fingerprint) return;
@@ -5576,6 +5602,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const recipe = ASHEN_FORGE_RECIPES[blueprintChoice];
       const message = `${recipe.name.toUpperCase()} BLUEPRINT UNLOCKED · the Town blacksmith can now forge it.`;
       reply(true, message); client.send("chat:notice", message); this.sendAshenReliquaryState(client, now);
+      this.sendObjectiveState(client, true);
       void this.persistPlayer(client.sessionId, player, true).catch(() => {});
       return;
     }

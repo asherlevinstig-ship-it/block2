@@ -2210,8 +2210,8 @@ html.boss-hud-active #world-objective { display: none !important; }
 #level-up-later:hover, #level-up-later:focus-visible { color: #fff0b8; text-decoration: underline; }
 #level-up-celebration { position: fixed; z-index: 45; top: 17%; left: 50%; width: min(440px, calc(100vw - 32px)); padding: 22px 26px; transform: translateX(-50%); border: 2px solid #ffde83; border-radius: 16px; background: radial-gradient(circle at 50% -20%, #806026, #19251b 72%); color: #fff4c8; box-shadow: 0 16px 56px #000b, 0 0 52px #e9bb6177; text-align: center; pointer-events: auto; animation: level-reveal .55s cubic-bezier(.2,1.4,.35,1) both; }
 #level-up-celebration[hidden] { display: none; }
-#ability-reveal { position: fixed; inset: 0; z-index: 1150; display: grid; place-items: center; padding: 20px; background: #040a09dc; backdrop-filter: blur(7px); }
-#ability-reveal[hidden] { display: none; }
+#ability-reveal, #ashen-equipment-reveal { position: fixed; inset: 0; z-index: 1150; display: grid; place-items: center; padding: 20px; background: #040a09dc; backdrop-filter: blur(7px); }
+#ability-reveal[hidden], #ashen-equipment-reveal[hidden] { display: none; }
 .ability-reveal-card { width: min(490px, 100%); box-sizing: border-box; padding: clamp(24px, 5vw, 42px); border: 2px solid #d9b768; border-radius: 22px; background: radial-gradient(circle at 50% 13%, #4b3720 0, #17251f 55%, #0d1916 100%); box-shadow: 0 25px 90px #000d, 0 0 55px #e9b45755; color: #f5edce; text-align: center; animation: ability-reveal-in .45s ease-out both; }
 .ability-reveal-card > small { display: block; color: #d9c78b; font: 900 11px/1.4 system-ui, sans-serif; letter-spacing: .15em; }
 .ability-reveal-sigil { display: grid; place-items: center; width: 88px; height: 88px; margin: 22px auto 10px; border: 2px solid #e7c76e; border-radius: 22px; transform: rotate(45deg); background: linear-gradient(145deg, #745326, #1c513c); box-shadow: 0 0 35px #f1ce7066; color: #ffe69c; font-size: 45px; }
@@ -2221,6 +2221,11 @@ html.boss-hud-active #world-objective { display: none !important; }
 #ability-reveal-use { color: #f1d48a; font-weight: 800; }
 #ability-reveal-continue { min-width: 190px; margin: 18px 0 20px; padding: 13px 22px; border: 1px solid #ffe394; border-radius: 10px; background: #e8bf61; color: #241a0e; cursor: pointer; font: 1000 13px system-ui, sans-serif; letter-spacing: .08em; }
 #ability-reveal-continue:hover, #ability-reveal-continue:focus-visible { background: #ffe19a; }
+.ashen-equipment-reveal-card { border-color: #ff8b42; background: radial-gradient(circle at 50% 13%, #682e18 0, #251b16 55%, #0d1715 100%); box-shadow: 0 25px 90px #000d, 0 0 70px #ff5c285e; }
+.ashen-equipment-reveal-card .ability-reveal-sigil { border-color: #ff9a50; background: linear-gradient(145deg, #8e3518, #321812); box-shadow: 0 0 42px #ff5a2a77; color: #ffd29c; }
+#ashen-equipment-reveal-use { color: #ffc07b; font-weight: 800; }
+#ashen-equipment-reveal-continue { min-width: 210px; margin: 18px 0 20px; padding: 13px 22px; border: 1px solid #ffd093; border-radius: 10px; background: #ef8744; color: #25130b; cursor: pointer; font: 1000 13px system-ui, sans-serif; letter-spacing: .08em; }
+#ashen-equipment-reveal-continue:hover, #ashen-equipment-reveal-continue:focus-visible { background: #ffad6f; }
 .ability-reveal-card > .ability-reveal-place { color: #8fb7a7; font-size: 9px; }
 @keyframes ability-reveal-in { from { opacity: 0; transform: translateY(18px) scale(.94); } to { opacity: 1; transform: translateY(0) scale(1); } }
 #level-up-celebration small, #level-up-celebration strong, #level-up-celebration span { display: block; }
@@ -2505,6 +2510,8 @@ html.boss-hud-active #world-objective { display: none !important; }
 #ashen-reliquary-choice button { padding: 10px 7px; border: 1px solid #925a38; border-radius: 7px; color: #fff0cf; background: #4a291a; font: 900 10px system-ui; cursor: pointer; }
 #ashen-reliquary-choice button small { display: block; margin-top: 4px; color: #d0aa88; font: 8px system-ui; }
 #ashen-reliquary-choice button:hover { background: #6a371d; border-color: #ee9550; }
+#ashen-reliquary-choice button[data-recommended="true"] { border-color: #ffd16c; background: #593315; box-shadow: inset 0 0 18px #ffb13b25, 0 0 12px #ffc15b2c; }
+#ashen-reliquary-choice[data-preview="true"] button:disabled { opacity: 1; cursor: default; }
 @media (max-width: 620px) { #ashen-reliquary-choice div { grid-template-columns: 1fr; } }
 #roadside-close { opacity: .75; }
 .resource-toast { max-width: 100%; padding: 9px 14px; border: 1px solid #cbdcaa88; border-radius: 10px; color: #f6edbc; background: #163026ed; font: 800 13px system-ui; text-align: left; animation: resource-pickup 4.5s both; }
