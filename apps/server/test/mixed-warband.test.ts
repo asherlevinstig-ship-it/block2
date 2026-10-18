@@ -101,9 +101,12 @@ describe("mixed frontier warband", () => {
     internal.registerMob("frontier-brute-east", "stone_brute", { x: 72.5, y: 8, z: 34.5 });
     const leader = room.state.mobs.get("frontier-brute-east")!;
     Object.assign(leader, { attackPattern: "charge", combatState: "windup", stateUntil: 21_000, alive: true });
+    internal.mobCommittedAim.set("frontier-brute-east", { x: 68.5, y: 8, z: 34.5, yaw: 0 });
     internal.prepareMixedWarbandPush("frontier-brute-east", leader, 20_000, 1_000);
-    expect(events).toContainEqual({ type: "leader:formation", payload: {
-      mobId: "frontier-brute-east", state: "forming", tactic: "breach", durationMs: 1_000 } });
+    expect(events).toContainEqual({ type: "leader:formation", payload: expect.objectContaining({
+      mobId: "frontier-brute-east", state: "forming", tactic: "breach", durationMs: 1_000,
+      chargeYaw: expect.any(Number), crawlerYaw: expect.any(Number), crossfireX: expect.any(Number),
+    }) });
     internal.staggerMob("frontier-crawler", room.state.mobs.get("frontier-crawler")!, 20_200, 600, true);
     expect(leader.combatState).toBe("recover");
     expect(leader.stateUntil).toBeGreaterThanOrEqual(22_700);

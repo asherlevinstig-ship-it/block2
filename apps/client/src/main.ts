@@ -14,6 +14,7 @@ import { abilityRevealUse, canPresentAbilityReveal, earnedCallingAbilities } fro
 import { queueWorldNotice, type WorldNotice } from "./notification-lane.js";
 import { rangedAimYaw } from "./ranged-aim.js";
 import { COORDINATED_BRUTE_FOLLOWERS, COORDINATED_SPITTER_FOLLOWERS, activeCombatNearby, advanceBossHud, initialBossHud, leaderArmourSegments, leaderChargeGuidance, leaderExposureLabel, leaderExposureRoleLabel, leaderFormationLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
+import { formationLanePoints, formationRingPoints, formationVfxStyle, type FormationTactic } from "./formation-vfx.js";
 import { forestDungeonAtmosphere, forestDungeonNotice, portalNoticeFeedback } from "./forest-dungeon-presentation.js";
 import { objectiveGuidance, objectiveIcon } from "./objective-guidance.js";
 import { createSocialUI } from "./social-ui.js";
@@ -4421,6 +4422,14 @@ interface CallingPersistentVisual {
   abilityId: CallingAbilityId;
 }
 const callingPersistentVisuals = new Map<string, CallingPersistentVisual>();
+interface FormationTelegraphVisual {
+  root: pc.Entity;
+  materials: pc.StandardMaterial[];
+  startedAt: number;
+  expiresAt: number;
+  pulseHz: number;
+}
+const formationTelegraphs = new Map<string, FormationTelegraphVisual>();
 const mageCastAnimations = new Map<string, { abilityId: MageAbilityId; startedAt: number; endsAt: number }>();
 const thiefDecoyVisuals = new Map<string, { root: pc.Entity; materials: pc.StandardMaterial[]; expiresAt: number; baseY: number }>();
 const healerAllyCues = new Map<string, { root: pc.Entity; materials: pc.StandardMaterial[]; fallen: boolean }>();
@@ -6002,6 +6011,70 @@ function createBruteArmourBreak(mob: MobVisual, fullBreak: boolean, intercepted 
   combatAudio.play("hammerImpact", enemyCuePan(position.x, localPlayer.getPosition().x));
   cameraShakeStrength = Math.max(cameraShakeStrength, fullBreak || intercepted ? .2 : .1);
   cameraShakeUntil = performance.now() + (fullBreak || intercepted ? 300 : 180);
+}
+
+function destroyFormationTelegraph(mobId: string): void {
+  const visual = formationTelegraphs.get(mobId);
+  if (!visual) return;
+  visual.root.destroy();
+  visual.materials.forEach(material => material.destroy());
+  formationTelegraphs.delete(mobId);
+}
+
+function createFormationTelegraph(message: AreaLeaderFormation): void {
+  destroyFormationTelegraph(message.mobId);
+  const required = [message.originX, message.originY, message.originZ, message.chargeYaw, message.chargeDistance];
+  if (message.state !== "forming" || required.some(value => !Number.isFinite(value))) return;
+  const tactic: FormationTactic = message.tactic === "venom-lock" || message.tactic === "breach"
+    ? message.tactic : "surround";
+  const style = formationVfxStyle(tactic);
+  const primary = powerMaterial(new pc.Color(...style.primary), .38);
+  const edge = powerMaterial(new pc.Color(...style.edge), .68);
+  const root = new pc.Entity(`formation-telegraph:${message.mobId}`);
+  const addLane = (name: string, origin: { x: number; y: number; z: number }, yaw: number,
+    distance: number, material: pc.StandardMaterial, width: number): void => {
+    const points = formationLanePoints(origin, yaw, distance);
+    for (const [index, point] of points.entries()) {
+      const segment = addBox(root, `${name}-${style.motif}-${index}`, index % 3 === 0 ? edge : material,
+        [width * (index % 2 ? .72 : 1), .025, .38 + index % 3 * .08], [point.x, point.y + .045, point.z]);
+      segment.setLocalEulerAngles(0, yaw + (style.motif === "roots" ? (index % 2 ? 13 : -13)
+        : style.motif === "cracks" ? (index % 3 - 1) * 9 : 0), 0);
+      if (style.motif === "roots" && index % 2 === 0) {
+        const branch = addBox(root, `${name}-root-branch-${index}`, edge, [width * .55, .018, .26],
+          [point.x, point.y + .038, point.z]);
+        branch.setLocalEulerAngles(0, yaw + (index % 4 ? 52 : -52), 0);
+      } else if (style.motif === "cracks" && index % 2 === 0) {
+        const chip = addBox(root, `${name}-dust-chip-${index}`, edge, [.08, .08, .1],
+          [point.x, point.y + .1, point.z]);
+        chip.setLocalEulerAngles(index * 17, yaw + index * 21, 34);
+      }
+    }
+  };
+  addLane("brute-breach-lane", { x: message.originX!, y: message.originY!, z: message.originZ! },
+    message.chargeYaw!, message.chargeDistance!, primary, style.laneWidth);
+  if ([message.crawlerX, message.crawlerY, message.crawlerZ, message.crawlerYaw, message.crawlerDistance]
+    .every(Number.isFinite))
+    addLane("crawler-flank-trail", { x: message.crawlerX!, y: message.crawlerY!, z: message.crawlerZ! },
+      message.crawlerYaw!, message.crawlerDistance!, edge, style.laneWidth * 1.2);
+  if ([message.crossfireX, message.crossfireY, message.crossfireZ, message.crossfireRadius].every(Number.isFinite)) {
+    const center = { x: message.crossfireX!, y: message.crossfireY!, z: message.crossfireZ! };
+    const ring = formationRingPoints(center, message.crossfireRadius!, tactic === "venom-lock" ? 20 : 16);
+    for (const [index, point] of ring.entries()) {
+      const marker = addBox(root, `crossfire-${style.motif}-${index}`, index % 2 ? primary : edge,
+        [style.laneWidth * 1.25, style.motif === "bubbles" ? .07 + index % 3 * .035 : .025, .22],
+        [point.x, point.y + (style.motif === "bubbles" ? .09 : .045), point.z]);
+      marker.setLocalEulerAngles(style.motif === "bubbles" ? index % 2 ? 18 : -18 : 0,
+        index / ring.length * 360, style.motif === "bubbles" ? index * 23 : 0);
+    }
+    const core = addBox(root, "crossfire-impact-core", primary,
+      [message.crossfireRadius! * .36, .018, message.crossfireRadius! * .36],
+      [center.x, center.y + .032, center.z]);
+    core.setLocalEulerAngles(0, 45, 0);
+  }
+  app.root.addChild(root);
+  const startedAt = performance.now();
+  formationTelegraphs.set(message.mobId, { root, materials: [primary, edge], startedAt,
+    expiresAt: startedAt + Math.min(5_000, message.durationMs + 250), pulseHz: style.pulseHz });
 }
 
 function createRootboundShockwave(mob: MobVisual): void {
@@ -11635,6 +11708,18 @@ app.on("update", (dt: number) => {
     );
     mob.bodyMaterial.update();
   }
+  for (const [mobId, visual] of formationTelegraphs) {
+    if (animationNow >= visual.expiresAt) {
+      destroyFormationTelegraph(mobId);
+      continue;
+    }
+    const progress = Math.max(0, Math.min(1, (animationNow - visual.startedAt)
+      / Math.max(1, visual.expiresAt - visual.startedAt)));
+    const pulse = Math.sin(animationTime * visual.pulseHz * Math.PI * 2);
+    visual.materials[0]!.opacity = .28 + progress * .18 + pulse * .05;
+    visual.materials[1]!.opacity = .58 + progress * .16 + pulse * .08;
+    visual.materials.forEach(material => material.update());
+  }
   for (const [casterId, telegraph] of powerTelegraphs) {
     const elapsed = animationNow - telegraph.startedAt;
     if (elapsed > telegraph.windupMs + 900) {
@@ -12563,7 +12648,8 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     leaderExposedUntil.set(message.mobId, performance.now() + Math.min(5_000, message.durationMs));
     const visual = mobVisuals.get(message.mobId);
     if (visual && COORDINATED_BRUTE_FOLLOWERS[message.mobId])
-      createBruteArmourBreak(visual, message.armourSegments === 0, message.reason === "charge");
+      createBruteArmourBreak(visual, message.armourSegments === 0,
+        message.reason === "charge" || message.reason === "formation-interrupt");
     bossHudFingerprint = "";
   });
   room.onMessage("leader:reinforcements", (message: AreaLeaderReinforcements) => {
@@ -12575,6 +12661,8 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     if (!message?.mobId || !Number.isFinite(message.durationMs) || message.durationMs <= 0) return;
     leaderFormation.set(message.mobId, { state: message.state, tactic: message.tactic,
       until: performance.now() + Math.min(5_000, message.durationMs) });
+    if (message.state === "forming") createFormationTelegraph(message);
+    else if (message.state === "broken" || message.state === "full") destroyFormationTelegraph(message.mobId);
     bossHudFingerprint = "";
   });
   room.onMessage("progression:update", (update: ProgressionUpdate) => {
@@ -13232,6 +13320,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       visual.root.destroy(); visual.materials.forEach(material => material.destroy());
     }
     callingPersistentVisuals.clear(); localCallingState = null; combatHud.setCallingState(null);
+    for (const mobId of [...formationTelegraphs.keys()]) destroyFormationTelegraph(mobId);
     mageCastAnimations.clear();
     for (const visual of thiefDecoyVisuals.values()) { visual.root.destroy(); visual.materials.forEach(material => material.destroy()); }
     thiefDecoyVisuals.clear();

@@ -1692,6 +1692,20 @@ export type AreaLeaderFormation = {
   state: "forming" | "full" | "pin" | "crossfire" | "broken";
   tactic?: "surround" | "venom-lock" | "breach";
   durationMs: number;
+  originX?: number;
+  originY?: number;
+  originZ?: number;
+  chargeYaw?: number;
+  chargeDistance?: number;
+  crawlerX?: number;
+  crawlerY?: number;
+  crawlerZ?: number;
+  crawlerYaw?: number;
+  crawlerDistance?: number;
+  crossfireX?: number;
+  crossfireY?: number;
+  crossfireZ?: number;
+  crossfireRadius?: number;
 };
 
 export interface ChunkRegion {

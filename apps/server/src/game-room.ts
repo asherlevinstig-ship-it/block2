@@ -2466,8 +2466,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     return true;
   }
 
-  private announceWarbandFormation(mobId: string, state: AreaLeaderFormation["state"], durationMs: number): void {
-    this.broadcast("leader:formation", { mobId, state, tactic: warbandTactic(mobId), durationMs } satisfies AreaLeaderFormation);
+  private announceWarbandFormation(mobId: string, state: AreaLeaderFormation["state"], durationMs: number,
+    geometry: Partial<AreaLeaderFormation> = {}): void {
+    this.broadcast("leader:formation", { mobId, state, tactic: warbandTactic(mobId), durationMs,
+      ...geometry } satisfies AreaLeaderFormation);
   }
 
   private prepareMixedWarbandPush(leaderId: string, leader: MobState, now: number, windupMs: number): void {
@@ -2475,10 +2477,24 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const active = (AREA_LEADER_FOLLOWERS[leaderId] ?? []).map(id => this.state.mobs.get(id))
       .filter((mob): mob is MobState => Boolean(mob?.alive && mob.health > 0 && mob.combatState !== "stagger"
         && Math.abs(mob.y - leader.y) <= 2.5 && Math.hypot(mob.x - leader.x, mob.z - leader.z) <= 18));
-    if (!warbandFormationState(active.some(mob => crawlerRushDistance(mob.archetype) > 0),
-      active.some(mob => isSpitterLike(mob.archetype)))) return;
+    const crawler = active.find(mob => crawlerRushDistance(mob.archetype) > 0);
+    const spitter = active.find(mob => isSpitterLike(mob.archetype));
+    if (!warbandFormationState(Boolean(crawler), Boolean(spitter))) return;
+    const aim = this.mobCommittedAim.get(leaderId);
+    if (!aim) return;
+    const sequence = leader.actionSequence + 1;
+    const tactic = warbandTacticStats(leaderId);
+    const crossfire = warbandCrossfireSite(aim, aim.yaw, sequence);
     this.warbandFormationUntil.set(leaderId, now + windupMs + CHAMPION_CHARGE.durationMs + 1_000);
-    this.announceWarbandFormation(leaderId, "forming", windupMs);
+    this.announceWarbandFormation(leaderId, "forming", windupMs, {
+      originX: leader.x, originY: leader.y, originZ: leader.z, chargeYaw: aim.yaw,
+      chargeDistance: CHAMPION_CHARGE.distance,
+      crawlerX: crawler?.x, crawlerY: crawler?.y, crawlerZ: crawler?.z,
+      crawlerYaw: crawler ? warbandCrawlerYaw(aim.yaw, sequence) : undefined,
+      crawlerDistance: crawler ? crawlerRushDistance(crawler.archetype) * tactic.crawlerDistance : undefined,
+      crossfireX: spitter ? crossfire.x : undefined, crossfireY: spitter ? crossfire.y : undefined,
+      crossfireZ: spitter ? crossfire.z : undefined, crossfireRadius: spitter ? tactic.poolRadius : undefined,
+    });
   }
 
   private breakMixedWarbandFormation(leaderId: string, now: number, durationMs = 2_500): void {
