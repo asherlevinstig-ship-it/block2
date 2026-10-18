@@ -82,8 +82,31 @@ const COORDINATED_BRUTE_LEADERS = new Set([
   "mistfen-behemoth", "south-quarrymaster", "buried-chamber-brute",
 ]);
 
+const COORDINATED_CRAWLER_LEADERS = new Set([
+  "wild-crawler", "outskirts-west-pack:0", "outskirts-north-pack:0",
+]);
+
 export function isCoordinatedBruteLeader(id: string): boolean {
   return COORDINATED_BRUTE_LEADERS.has(id);
+}
+
+export function isCoordinatedCrawlerLeader(id: string): boolean {
+  return COORDINATED_CRAWLER_LEADERS.has(id);
+}
+
+/** Pack attacks lose lanes as escorts fall; a lone alpha can only make a direct rush. */
+export function crawlerPackPattern(pattern: string, aliveFollowers: number): string {
+  if (aliveFollowers <= 0) return pattern === "pack-rush" || pattern === "alpha-rush" ? "rush" : pattern;
+  if (aliveFollowers === 1 && pattern === "alpha-rush") return "pack-rush";
+  return pattern;
+}
+
+/** Stable fan lanes leave a narrow centre dodge and make circling the leader unsafe. */
+export function crawlerPackRushYawOffsets(count: number): number[] {
+  if (count <= 0) return [];
+  if (count === 1) return [0];
+  const spread = count === 2 ? 30 : 42;
+  return Array.from({ length: count }, (_, index) => -spread + spread * 2 * index / (count - 1));
 }
 
 export function leaderForFollower(id: string): string | null {

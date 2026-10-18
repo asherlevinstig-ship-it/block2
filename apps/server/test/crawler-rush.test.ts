@@ -74,4 +74,28 @@ describe("committed crawler rush", () => {
     expect(Math.max(...outline.map(p => p.x))).toBeGreaterThan(2.9);
     expect(Math.min(...outline.map(p => p.x))).toBeLessThan(0);
   });
+
+  it("fans a leader rush across its living pack and cancels the formation when interrupted", () => {
+    const { mob: leader, player, internal } = fixture();
+    internal.state.mobs.delete("crawler");
+    Object.assign(leader, { archetype: "moss_crawler", attackPattern: "pack-rush", combatState: "strike",
+      x: 100.5, y: 1, z: 100.5, alive: true });
+    internal.state.mobs.set("wild-crawler", leader);
+    for (const [id, z] of [["greenwood-briar", 99.5], ["greenwood-briar-north", 101.5]] as const) {
+      const follower = new MobState();
+      Object.assign(follower, { archetype: "briar_crawler", combatState: "idle", x: 99.5, y: 1, z, alive: true });
+      internal.state.mobs.set(id, follower);
+    }
+    internal.launchCrawlerPackRush("wild-crawler", leader, "player", 90, 10_000);
+    expect([...internal.crawlerRushes.keys()].sort()).toEqual(["greenwood-briar", "greenwood-briar-north"]);
+    expect(internal.crawlerRushes.get("greenwood-briar").yaw).toBe(60);
+    expect(internal.crawlerRushes.get("greenwood-briar-north").yaw).toBe(120);
+    expect(internal.state.mobs.get("greenwood-briar").combatState).toBe("strike");
+    leader.combatState = "windup"; leader.attackPattern = "pack-rush";
+    expect(internal.staggerMob("wild-crawler", leader, 10_100, 650, true)).toBe(true);
+    expect(leader.stateUntil).toBe(13_100);
+    expect(internal.state.mobs.get("greenwood-briar").combatState).toBe("stagger");
+    expect(internal.crawlerRushes.size).toBe(0);
+    expect(player.health).toBeGreaterThan(0);
+  });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AREA_LEADER_RELIC_IDS, ITEM_DEFINITIONS } from "@blockcraft/protocol";
-import { AREA_LEADER_FOLLOWERS, AREA_MINI_BOSSES, areaLeaderPattern, areaLeaderPhase, areaMainMobDefinition, areaMiniBossDefinition, bruteLeaderArmourSegments, bruteLeaderExposureMs, isAreaMiniBoss, isCoordinatedBruteLeader, leaderForFollower } from "../src/area-mini-bosses.js";
+import { AREA_LEADER_FOLLOWERS, AREA_MINI_BOSSES, areaLeaderPattern, areaLeaderPhase, areaMainMobDefinition, areaMiniBossDefinition, bruteLeaderArmourSegments, bruteLeaderExposureMs, crawlerPackPattern, crawlerPackRushYawOffsets, isAreaMiniBoss, isCoordinatedBruteLeader, isCoordinatedCrawlerLeader, leaderForFollower } from "../src/area-mini-bosses.js";
 import { spitterChampionShots } from "../src/frontier-champion.js";
 import { STONE_BRUTE_ARENA_HOME, isInStoneBruteArena } from "@blockcraft/voxel-world";
 import { STONE_BRUTE_ESCORTS, WILDERNESS_ENCOUNTERS, isFrontierBruteGroupMob, isStoneBruteGroupMob } from "../src/wilderness-encounters.js";
@@ -73,6 +73,16 @@ describe("area mini-bosses", () => {
     expect(bruteLeaderExposureMs(0)).toBe(4_000);
     expect(isCoordinatedBruteLeader("stone-brute")).toBe(true);
     expect(isCoordinatedBruteLeader("northwatch-watchbreaker")).toBe(false);
+  });
+
+  it("turns crawler escorts into attack lanes that disappear as the pack is defeated", () => {
+    expect(isCoordinatedCrawlerLeader("wild-crawler")).toBe(true);
+    expect(isCoordinatedCrawlerLeader("moss-crawler")).toBe(false);
+    expect(crawlerPackPattern("alpha-rush", 2)).toBe("alpha-rush");
+    expect(crawlerPackPattern("alpha-rush", 1)).toBe("pack-rush");
+    expect(crawlerPackPattern("pack-rush", 0)).toBe("rush");
+    expect(crawlerPackRushYawOffsets(2)).toEqual([-30, 30]);
+    expect(crawlerPackRushYawOffsets(3)).toEqual([-42, 0, 42]);
   });
 
   it("gives each overworld brute leader nearby escorts with a clear exposed window", () => {

@@ -48,7 +48,7 @@ import { WILDERNESS_MATERIALIZE_MS, WILDERNESS_RESPAWN_RECHECK_MS,
   usesOverworldRespawnRhythm, wildernessRespawnDelay, wildernessSpawnClear } from "./wilderness-respawn.js";
 import { shouldBecomeWildernessElite, wildernessEliteKind,
   wildernessEliteName, wildernessElitePattern, wildernessEliteStats } from "./wilderness-elites.js";
-import { AREA_LEADER_FOLLOWERS, AREA_MAIN_MOBS, areaLeaderPattern, areaLeaderPhase, areaMainMobDefinition, areaMiniBossDefinition, bruteLeaderArmourSegments, bruteLeaderExposureMs, isAreaMiniBoss, isCoordinatedBruteLeader, leaderForFollower, type AreaLeaderPhase } from "./area-mini-bosses.js";
+import { AREA_LEADER_FOLLOWERS, AREA_MAIN_MOBS, areaLeaderPattern, areaLeaderPhase, areaMainMobDefinition, areaMiniBossDefinition, bruteLeaderArmourSegments, bruteLeaderExposureMs, crawlerPackPattern, crawlerPackRushYawOffsets, isAreaMiniBoss, isCoordinatedBruteLeader, isCoordinatedCrawlerLeader, leaderForFollower, type AreaLeaderPhase } from "./area-mini-bosses.js";
 import { MINI_BOSS_ENRAGE_MS, bruteLeaderPursuitSpeed, miniBossDamage, miniBossOrbitCounterPattern, miniBossWindupDelay, predictedMiniBossAim, updateOrbitPressure, type OrbitPressureState } from "./mini-boss-pressure.js";
 import { miniBossCoverSites, miniBossPressureSites } from "./mini-boss-arena.js";
 import { leaderRematch, leaderRematchMaterialBonus, leaderRematchPattern, northwatchWatchbreakerPattern, leaderRematchPressureCadence,
@@ -2435,9 +2435,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
 
   private staggerMob(mobId: string, mob: MobState, now: number, duration: number, force = false): boolean {
     if (!mob.alive || mob.health <= 0 || duration <= 0 || (!force && now < (this.mobStaggerImmuneUntil.get(mobId) ?? 0))) return false;
+    const brokePackRush = isCoordinatedCrawlerLeader(mobId) && mob.combatState === "windup"
+      && (mob.attackPattern === "pack-rush" || mob.attackPattern === "alpha-rush");
+    const staggerDuration = brokePackRush ? Math.max(duration, 3_000) : duration;
     this.delayedMatriarchVolleys.delete(mobId);
     mob.combatState = "stagger";
-    mob.stateUntil = now + duration;
+    mob.stateUntil = now + staggerDuration;
     mob.targetId = "";
     mob.aimCommitted = false;
     this.clearMobAttackTimeline(mob);
@@ -2447,7 +2450,62 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.pendingMobMelee.delete(mobId);
     this.crawlerRushes.delete(mobId);
     this.championCharges.delete(mobId);
+    if (brokePackRush) this.breakCrawlerPackFormation(mobId, now, staggerDuration);
     return true;
+  }
+
+  private breakCrawlerPackFormation(leaderId: string, now: number, durationMs: number): void {
+    for (const followerId of AREA_LEADER_FOLLOWERS[leaderId] ?? []) {
+      const follower = this.state.mobs.get(followerId);
+      if (!follower?.alive || crawlerRushDistance(follower.archetype) <= 0) continue;
+      follower.combatState = "stagger";
+      follower.stateUntil = now + 1_500;
+      follower.targetId = "";
+      follower.aimCommitted = false;
+      follower.staggerSequence += 1;
+      this.clearMobAttackTimeline(follower);
+      this.pendingMobMelee.delete(followerId);
+      this.crawlerRushes.delete(followerId);
+      this.mobCommittedAim.delete(followerId);
+    }
+    for (const client of this.clients) {
+      const player = this.state.players.get(client.sessionId);
+      const leader = this.state.mobs.get(leaderId);
+      if (player?.health && leader && Math.abs(player.y - leader.y) <= 2.5
+        && Math.hypot(player.x - leader.x, player.z - leader.z) <= 28)
+        client.send("leader:exposed", { mobId: leaderId, durationMs, reason: "pack-interrupt" } satisfies AreaLeaderExposed);
+    }
+  }
+
+  private launchCrawlerPackRush(leaderId: string, leader: MobState, targetId: string, yaw: number, now: number): void {
+    if (!isCoordinatedCrawlerLeader(leaderId)
+      || (leader.attackPattern !== "pack-rush" && leader.attackPattern !== "alpha-rush")) return;
+    const followers = (AREA_LEADER_FOLLOWERS[leaderId] ?? []).map(id => [id, this.state.mobs.get(id)] as const)
+      .filter((entry): entry is readonly [string, MobState] => Boolean(entry[1]?.alive
+        && crawlerRushDistance(entry[1].archetype) > 0 && Math.abs(entry[1].y - leader.y) <= 2.5
+        && Math.hypot(entry[1].x - leader.x, entry[1].z - leader.z) <= 16));
+    const offsets = crawlerPackRushYawOffsets(followers.length);
+    for (const [index, [followerId, follower]] of followers.entries()) {
+      const followerYaw = yaw + offsets[index]!;
+      const definition = combatMobDefinition(follower);
+      follower.attackPattern = "pack-rush";
+      follower.combatState = "strike";
+      follower.targetId = targetId;
+      follower.yaw = followerYaw;
+      follower.aimCommitted = true;
+      follower.actionSequence += 1;
+      this.setMobAttackTimeline(follower, now, now, followerId);
+      follower.stateUntil = follower.attackContactEndAt;
+      follower.attackStrikeX = follower.x; follower.attackStrikeY = follower.y; follower.attackStrikeZ = follower.z;
+      this.crawlerRushes.set(followerId, { yaw: followerYaw,
+        distance: crawlerRushDistance(follower.archetype) * (leader.attackPattern === "alpha-rush" ? 1.45 : 1.3),
+        startedAt: now, progress: 0 });
+      this.pendingMobMelee.set(followerId, { targetId, yaw: followerYaw, impactAt: follower.attackContactAt });
+      this.lastMobAttackAt.set(followerId, now);
+      this.crawlerPositioning.delete(followerId);
+      this.mobCommittedAim.delete(followerId);
+      follower.stateUntil = Math.max(follower.stateUntil, now + definition.recoverMs);
+    }
   }
 
   private resolveProjectileVisual(projectileId: string, point: { x: number; y: number; z: number }, reason: ProjectileResolved["reason"]): void {
@@ -7003,8 +7061,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       }
       else if (isAreaMiniBoss(mobId) && mob.combatState === "idle") {
         const orbitCounter = (this.miniBossOrbitPressure.get(mobId)?.counterUntil ?? 0) > now;
-        mob.attackPattern = orbitCounter ? miniBossOrbitCounterPattern(mob.archetype)
+        const basePattern = orbitCounter ? miniBossOrbitCounterPattern(mob.archetype)
           : areaLeaderPattern(mob.archetype, mob.actionSequence, currentAreaLeaderPhase, mobId);
+        const aliveFollowers = (AREA_LEADER_FOLLOWERS[mobId] ?? []).filter(id => this.state.mobs.get(id)?.alive).length;
+        mob.attackPattern = isCoordinatedCrawlerLeader(mobId) ? crawlerPackPattern(basePattern, aliveFollowers) : basePattern;
       }
       else if (mob.isElite && mob.combatState === "idle") mob.attackPattern = isMistfenEventFollower(mobId)
         && this.realmEvents.mistfenVariant === "mireback-stampede" ? "bog-charge"
@@ -7263,6 +7323,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           const championRushMultiplier = huntChampion?.pathId === "fang" ? huntChampionRushMultiplier(mob.attackPattern) : 1;
           this.crawlerRushes.set(mobId, { yaw: aim.yaw, distance: crawlerRushDistance(mob.archetype)
             * (mob.isElite ? 1.3 : leaderRushMultiplier) * championRushMultiplier, startedAt: now, progress: 0 });
+          this.launchCrawlerPackRush(mobId, mob, mob.targetId, aim.yaw, now);
         } else if (distance > 0.001) {
           const lungeDistance = Math.min(definition.lungeDistance, Math.max(0, distance - definition.stopDistance * 0.6));
           this.displaceMob(mobId, mob, {
@@ -7391,7 +7452,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           flank.patrolChargeAt = sentry.attackStartedAt;
         }
         circling = circleCrawler(mob, target, flank, now, deltaTime, movementSpeed, definition.stopDistance,
-          patrolCharge ? 1_400 : undefined);
+          patrolCharge ? 1_400 : (isCoordinatedCrawlerLeader(mobId)
+            || isCoordinatedCrawlerLeader(leaderForFollower(mobId) ?? "")) ? 1_150 : undefined);
       } else this.crawlerPositioning.delete(mobId);
       const attackers = () => [...this.state.mobs.entries()].map(([id, peer]) => ({
         id, alive: peer.alive, health: peer.health, archetype: peer.archetype, combatState: peer.combatState, targetId: peer.targetId,
