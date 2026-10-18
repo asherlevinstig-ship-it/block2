@@ -3315,3 +3315,20 @@ html.onboarding-mode-lesson #touch-mode-button { border-color: #ffe59a; box-shad
 #ability-practice #ability-practice-status { position: sticky; bottom: -18px; margin: 16px -18px -18px; padding: 12px 18px; border-top: 1px solid #557980; background: #102526; color: #f2d484; font-weight: 800; }
 #ability-practice-return { display: block; width: 100%; margin-top: 28px; padding: 10px; border: 1px solid #9fb5b6; border-radius: 9px; background: #263633; color: #eaf5ee; font-weight: 900; cursor: pointer; }
 @media (max-width: 600px) { #ability-practice { top: 56px; right: 8px; max-height: calc(100vh - 70px); } }
+
+.ashen-item-mastery { display: grid; gap: 4px; margin-top: 8px; padding-top: 7px; border-top: 1px solid #d98a3c55; }
+.ashen-item-mastery[hidden] { display: none; }
+.ashen-item-mastery span { color: #ffc36b; font: 900 9px/1.2 system-ui; letter-spacing: .06em; }
+.ashen-item-mastery i, .ashen-mastery-track i { display: block; height: 5px; overflow: hidden; border-radius: 4px; background: #160e0a; box-shadow: inset 0 0 0 1px #9a572755; }
+.ashen-item-mastery i b, .ashen-mastery-track i b { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #d35a22, #ffc557); box-shadow: 0 0 8px #ff8a36aa; }
+.ashen-item-mastery small { color: #bfc9bf; font: 600 9px/1.3 system-ui; }
+.ashen-mastery-forge { display: grid; gap: 9px; margin-top: 10px; padding: 10px; border: 1px solid #c8783855; border-radius: 9px; background: #2a150b77; }
+.ashen-mastery-track { display: grid; grid-template-columns: 1fr auto; gap: 5px 10px; color: #ffd28a; font: 900 10px/1.2 system-ui; letter-spacing: .06em; }
+.ashen-mastery-track i { grid-column: 1 / -1; }
+.ashen-mastery-guide, .ashen-mastery-chosen { margin: 0 !important; color: #d9c7aa; font-size: .74rem; line-height: 1.35; }
+.ashen-mastery-chosen { color: #ffd890; font-weight: 800; }
+.ashen-mastery-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.ashen-mastery-choices button { min-height: 72px; padding: 9px !important; border-color: #f0a64d !important; background: linear-gradient(145deg, #6b3518, #3b2113) !important; text-align: left; }
+.ashen-mastery-choices button strong, .ashen-mastery-choices button small { display: block; }
+.ashen-mastery-choices button small { margin-top: 4px; color: #f3d8aa; font-size: .66rem; line-height: 1.3; }
+@media (max-width: 560px) { .ashen-mastery-choices { grid-template-columns: 1fr; } }

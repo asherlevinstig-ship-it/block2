@@ -120,6 +120,8 @@ import {
   LEADER_FORGE_RECIPES,
   REGIONAL_FORGE_RECIPES,
   ASHEN_FORGE_RECIPES,
+  ASHEN_MASTERY_BRANCHES,
+  ASHEN_MASTERY_MAX,
   type BlacksmithStockId,
   type BlacksmithDismantleItemId,
   type BlacksmithReforgeItemId,
@@ -127,6 +129,8 @@ import {
   type LeaderForgemarkId,
   type RegionalForgeId,
   type AshenBlueprintId,
+  type AshenMasteryBranchId,
+  type AshenMasteryProgress,
   type EquipmentReforgeRanks,
   reforgeWeaponDamageBonus,
   reforgeArmourReduction,
@@ -704,16 +708,37 @@ const greenwoodMasteryFill = document.querySelector<HTMLElement>("#greenwood-mas
 const greenwoodMasteryDetail = document.querySelector<HTMLElement>("#greenwood-mastery-detail")!;
 const greenwoodMasteryGain = document.querySelector<HTMLElement>("#greenwood-mastery-gain")!;
 let localGreenwoodMastery = 0, localGreenwoodDiscovered = false, lastGreenwoodMasteryView = "", greenwoodGainTimer = 0;
+let localAshenMastery: AshenMasteryProgress = {};
+
+function parseLocalAshenMastery(raw: unknown): AshenMasteryProgress {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const result: AshenMasteryProgress = {};
+  for (const blueprint of Object.keys(ASHEN_MASTERY_BRANCHES) as AshenBlueprintId[]) {
+    const entry = (raw as Record<string, unknown>)[blueprint];
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+    const value = entry as { xp?: unknown; branch?: unknown };
+    const xp = typeof value.xp === "number" && Number.isFinite(value.xp)
+      ? Math.max(0, Math.min(ASHEN_MASTERY_MAX, Math.floor(value.xp))) : 0;
+    const branches = ASHEN_MASTERY_BRANCHES[blueprint] as Record<string, unknown>;
+    const branch = typeof value.branch === "string" && Object.hasOwn(branches, value.branch)
+      ? value.branch as AshenMasteryBranchId : undefined;
+    result[blueprint] = { xp, ...(branch ? { branch } : {}) };
+  }
+  return result;
+}
 
 function updateLocalMistfenProgress(raw: string): void {
   const previous = localMistfenMastery;
   try {
-    const mistfen = (JSON.parse(raw) as { mistfen?: { points?: unknown; discovered?: unknown } }).mistfen;
+    const envelope = JSON.parse(raw) as { mistfen?: { points?: unknown; discovered?: unknown }; ashenMastery?: unknown };
+    const mistfen = envelope.mistfen;
     localMistfenMastery = typeof mistfen?.points === "number" && Number.isFinite(mistfen.points) ? mistfen.points : 0;
     localMistfenDiscovered = mistfen?.discovered === true;
+    localAshenMastery = parseLocalAshenMastery(envelope.ashenMastery);
   } catch {
     localMistfenMastery = 0;
     localMistfenDiscovered = false;
+    localAshenMastery = {};
   }
   const rank = mistfenMasteryStatus(localMistfenMastery, localMistfenDiscovered).rank;
   minimap.setMistfenMastery(rank);
@@ -725,6 +750,8 @@ function updateLocalMistfenProgress(raw: string): void {
   }
   lastMistfenMasteryView = "";
   updateLocalGreenwoodProgress(raw);
+  refreshOwnedInventory();
+  if (!blacksmithPanel.hidden && blacksmithShopTab === "regional") renderRegionalForgeShop();
 }
 
 function updateLocalGreenwoodProgress(raw: string): void {
@@ -6878,6 +6905,27 @@ function refreshOwnedInventory(): void {
         decisionBadge.textContent = inventoryDecisionLabel[decision];
       }
     }
+    const ashenBlueprint = (Object.keys(ASHEN_FORGE_RECIPES) as AshenBlueprintId[])
+      .find(blueprint => ASHEN_FORGE_RECIPES[blueprint].itemId === itemId);
+    let mastery = card.querySelector<HTMLElement>(".ashen-item-mastery");
+    if (ashenBlueprint && !mastery) {
+      mastery = document.createElement("div"); mastery.className = "ashen-item-mastery";
+      mastery.innerHTML = "<span></span><i><b></b></i><small></small>";
+      card.querySelector("div")?.append(mastery);
+    }
+    if (mastery) {
+      mastery.hidden = !ashenBlueprint;
+      if (ashenBlueprint) {
+        const progress = localAshenMastery[ashenBlueprint] ?? { xp: 0 };
+        const branch = progress.branch
+          ? (ASHEN_MASTERY_BRANCHES[ashenBlueprint] as Record<string, { name: string; detail: string }>)[progress.branch] : null;
+        mastery.querySelector("span")!.textContent = branch ? branch.name.toUpperCase()
+          : progress.xp >= ASHEN_MASTERY_MAX ? "MASTERY READY · VISIT BLACKSMITH" : `MASTERY ${progress.xp}/${ASHEN_MASTERY_MAX}`;
+        mastery.querySelector<HTMLElement>("b")!.style.width = `${progress.xp / ASHEN_MASTERY_MAX * 100}%`;
+        mastery.querySelector("small")!.textContent = branch?.detail ?? (ashenBlueprint === "cinderfang"
+          ? "Ignite staggered enemies" : ashenBlueprint === "ashguard" ? "Perfect-dodge incoming attacks" : "Cast Calling abilities");
+      }
+    }
   }
   for (const section of inventoryPanel.querySelectorAll<HTMLElement>("[data-inventory-category]")) {
     if (section.dataset.inventoryCategory === "collection") continue;
@@ -8469,6 +8517,8 @@ function renderRegionalForgeShop(): void {
   }
   for (const blueprint of unlockedAshenBlueprints) {
     const recipe = ASHEN_FORGE_RECIPES[blueprint];
+    const owned = (inventoryCounts.get(recipe.itemId) ?? 0) > 0;
+    const mastery = localAshenMastery[blueprint] ?? { xp: 0 };
     const materialLines = recipe.materials.map(cost => `${inventoryCounts.get(cost.itemId) ?? 0}/${cost.quantity} ${ITEM_DEFINITIONS[cost.itemId].name}`);
     const materialsReady = recipe.materials.every(cost => (inventoryCounts.get(cost.itemId) ?? 0) >= cost.quantity);
     const ready = materialsReady && tavernCoinBalance >= recipe.gold;
@@ -8477,16 +8527,50 @@ function renderRegionalForgeShop(): void {
     const effect = document.createElement("p"); effect.textContent = ITEM_DEFINITIONS[recipe.itemId].description;
     const costs = document.createElement("small"); costs.textContent = `${recipe.gold} gold · ${materialLines.join(" · ")}`;
     const button = document.createElement("button"); button.type = "button";
-    button.textContent = blacksmithPending ? "PLEASE WAIT…" : !materialsReady ? "GATHER ASHEN MATERIALS"
+    button.textContent = owned ? "FORGED · EQUIP FROM PACK" : blacksmithPending ? "PLEASE WAIT…" : !materialsReady ? "GATHER ASHEN MATERIALS"
       : tavernCoinBalance < recipe.gold ? `NEED ${recipe.gold - tavernCoinBalance} GOLD` : `FORGE ${recipe.name.toUpperCase()}`;
-    button.disabled = blacksmithPending || !room || !ready;
+    button.disabled = owned || blacksmithPending || !room || !ready;
     button.addEventListener("click", () => {
       if (!room || blacksmithPending || !ready) return;
       blacksmithPending = true; renderRegionalForgeShop();
       blacksmithMessage.textContent = `Forging ${recipe.name}…`;
       room.send("blacksmith:ashen-forge", { blueprint });
     });
-    card.append(title, effect, costs, button); regionalForgeShop.append(card);
+    card.append(title, effect, costs, button);
+    if (owned) {
+      const masteryPanel = document.createElement("section"); masteryPanel.className = "ashen-mastery-forge";
+      const progress = document.createElement("div"); progress.className = "ashen-mastery-track";
+      progress.innerHTML = `<strong>${mastery.branch ? "MASTERED" : mastery.xp >= ASHEN_MASTERY_MAX ? "EVOLUTION READY" : "EQUIPMENT MASTERY"}</strong><span>${mastery.xp}/${ASHEN_MASTERY_MAX}</span><i><b style="width:${mastery.xp / ASHEN_MASTERY_MAX * 100}%"></b></i>`;
+      masteryPanel.append(progress);
+      if (mastery.branch) {
+        const chosen = (ASHEN_MASTERY_BRANCHES[blueprint] as Record<string, { name: string; detail: string }>)[mastery.branch]!;
+        const result = document.createElement("p"); result.className = "ashen-mastery-chosen";
+        result.textContent = `${chosen.name} · ${chosen.detail}`; masteryPanel.append(result);
+      } else if (mastery.xp >= ASHEN_MASTERY_MAX) {
+        const choices = document.createElement("div"); choices.className = "ashen-mastery-choices";
+        for (const [branch, definition] of Object.entries(ASHEN_MASTERY_BRANCHES[blueprint])) {
+          const choice = document.createElement("button"); choice.type = "button";
+          choice.innerHTML = `<strong>${definition.name}</strong><small>${definition.detail}</small>`;
+          choice.disabled = blacksmithPending || !room;
+          choice.addEventListener("click", () => {
+            if (!room || blacksmithPending) return;
+            blacksmithPending = true; renderRegionalForgeShop();
+            blacksmithMessage.textContent = `Binding ${definition.name} to ${recipe.name}…`;
+            room.send("blacksmith:ashen-mastery", { blueprint, branch });
+          });
+          choices.append(choice);
+        }
+        masteryPanel.append(choices);
+      } else {
+        const guide = document.createElement("p"); guide.className = "ashen-mastery-guide";
+        guide.textContent = blueprint === "cinderfang" ? "Strike staggered enemies to master this blade."
+          : blueprint === "ashguard" ? "Perfect-dodge incoming attacks to master this mantle."
+            : "Cast Calling abilities while wielding this focus to master it.";
+        masteryPanel.append(guide);
+      }
+      card.append(masteryPanel);
+    }
+    regionalForgeShop.append(card);
   }
 }
 function renderReforgeShop(): void {
@@ -8771,6 +8855,7 @@ function renderBlacksmith(update: BlacksmithUpdate): void {
   regionalMarks = update.regionalMarks ?? regionalMarks;
   regionalMasteryRanks = update.regionalMasteryRanks ?? regionalMasteryRanks;
   unlockedAshenBlueprints = update.ashenBlueprints ?? unlockedAshenBlueprints;
+  localAshenMastery = update.ashenMastery ? parseLocalAshenMastery(update.ashenMastery) : localAshenMastery;
   refreshEquipmentProgression();
   refreshInventoryEquipped();
   renderBlacksmithHaul(update);

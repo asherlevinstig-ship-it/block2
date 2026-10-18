@@ -6,7 +6,7 @@ export { DODGE_STAMINA_COST, DODGE_CHAIN_COST_STEP, DODGE_MAX_STAMINA_COST, DODG
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-warden-gate-v142";
+export const WORLD_ROOM = "world-warden-gate-v143";
 export const SILVER_DEPTHS_ROOM = "silver-depths-instance-v3";
 export const PRACTICE_ROOM = "calling-practice-v1";
 export type RoomTransfer = { room: typeof WORLD_ROOM | typeof SILVER_DEPTHS_ROOM | typeof PRACTICE_ROOM; instanceKey?: string; partySize?: number; returnFrom?: "silver-depths" | "practice"; retry?: boolean; partyTicket?: string; worldRoomId?: string };
@@ -562,6 +562,28 @@ export const ASHEN_FORGE_RECIPES = {
 } as const;
 export type AshenBlueprintId = keyof typeof ASHEN_FORGE_RECIPES;
 export const AshenForgeSchema = z.object({ blueprint: z.enum(["cinderfang", "ashguard", "emberheart"]) }).strict();
+export const ASHEN_MASTERY_MAX = 60;
+export const ASHEN_MASTERY_BRANCHES = {
+  cinderfang: {
+    wildfire: { name: "Wildfire Edge", detail: "Cinder Ignite splashes fire into nearby enemies." },
+    execution: { name: "Execution Flame", detail: "Cinder Ignite deals +2 damage to enemies below 35% health." },
+  },
+  ashguard: {
+    phoenix: { name: "Phoenix Ward", detail: "Perfect dodges extend the ward to 4s and restore 15 stamina." },
+    shelter: { name: "Sheltering Embers", detail: "Perfect dodges also ward nearby party members." },
+  },
+  emberheart: {
+    inferno: { name: "Inferno Heart", detail: "Your Emberheart field grants +2 damage instead of +1." },
+    hearth: { name: "Hearthfire", detail: "Emberheart fields are 1.5m wider and last 2s longer." },
+  },
+} as const;
+export type AshenMasteryBranchId = keyof typeof ASHEN_MASTERY_BRANCHES.cinderfang
+  | keyof typeof ASHEN_MASTERY_BRANCHES.ashguard | keyof typeof ASHEN_MASTERY_BRANCHES.emberheart;
+export type AshenMasteryProgress = Partial<Record<AshenBlueprintId, { xp: number; branch?: AshenMasteryBranchId }>>;
+export const AshenMasteryChooseSchema = z.object({
+  blueprint: z.enum(["cinderfang", "ashguard", "emberheart"]),
+  branch: z.enum(["wildfire", "execution", "phoenix", "shelter", "inferno", "hearth"]),
+}).strict();
 /** Short, optional exploration-to-gear bridge before mastery-gated legendary forging. */
 export const FIELD_FORGE_RECIPES = {
   greenwood: { itemId: "forager_wrap", gold: 12,
@@ -652,6 +674,7 @@ export type BlacksmithUpdate = {
   regionalMarks?: RegionalMarkCounts;
   regionalMasteryRanks?: RegionalMarkCounts;
   ashenBlueprints?: AshenBlueprintId[];
+  ashenMastery?: AshenMasteryProgress;
   materialGranted?: ItemId;
   materialQuantity?: number;
   sold?: number;
