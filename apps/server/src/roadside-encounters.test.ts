@@ -99,6 +99,51 @@ describe("personal roadside encounters", () => {
     for (const guard of guards) expect(room.state.mobs.has(guard.id)).toBe(false);
   });
 
+  it("turns the Ashglass cache into a fixed ambush before granting its reward", () => {
+    const { room, internal, player, client, site } = fixture("ashglass-survey");
+    expect(site.kind).toBe("ambush");
+    internal.advanceRoadsideGuards(1_000);
+    expect(roadsideGuardsFor(site.id).every(guard => !room.state.mobs.has(guard.id))).toBe(true);
+    internal.handleRoadsideEncounter(client, { id: site.id });
+    const guards = roadsideGuardsFor(site.id);
+    expect(guards).toHaveLength(3);
+    expect(guards.every(guard => room.state.mobs.get(guard.id)?.alive)).toBe(true);
+    expect(player.inventory.get("silver_ore")).toBeUndefined();
+    for (const guard of guards) room.state.mobs.get(guard.id)!.alive = false;
+    internal.handleRoadsideEncounter(client, { id: site.id });
+    expect(player.inventory.get("silver_ore")?.quantity).toBe(2);
+  });
+
+  it("requires players to hold the broken winch before its patrol-cleared crate rises", () => {
+    const { room, internal, player, client, site } = fixture("broken-winch-camp");
+    if (site.kind !== "repair") throw new Error("Expected a repair site");
+    vi.spyOn(Date, "now").mockReturnValue(1_000);
+    internal.handleRoadsideEncounter(client, { id: site.id });
+    for (let now = 1_250; now <= 6_000; now += 250) internal.advanceRoadsideGuards(now);
+    internal.handleRoadsideEncounter(client, { id: site.id });
+    expect(player.inventory.get("silver_ore")).toBeUndefined();
+    for (let now = 6_250; now <= 11_000; now += 250) internal.advanceRoadsideGuards(now);
+    for (const guard of roadsideGuardsFor(site.id)) room.state.mobs.get(guard.id)!.alive = false;
+    internal.handleRoadsideEncounter(client, { id: site.id });
+    expect(player.inventory.get("silver_ore")?.quantity).toBe(2);
+    vi.restoreAllMocks();
+  });
+
+  it("makes the Wilds blind lead to a fixed wounded elite hunt", () => {
+    const { room, internal, player, client, site } = fixture("wilds-hunter-blind");
+    if (site.kind !== "hunt") throw new Error("Expected a hunt site");
+    internal.handleRoadsideEncounter(client, { id: site.id });
+    expect(room.state.mobs.size).toBe(0);
+    player.x = site.x + site.stashDx + .5; player.z = site.z + site.stashDz + .5;
+    internal.handleRoadsideEncounter(client, { id: site.id });
+    const guards = roadsideGuardsFor(site.id);
+    expect(guards).toHaveLength(3);
+    expect(room.state.mobs.get("roadside-wilds-stalker")?.isElite).toBe(true);
+    for (const guard of guards) room.state.mobs.get(guard.id)!.alive = false;
+    internal.handleRoadsideEncounter(client, { id: site.id });
+    expect(player.inventory.get("crawler_fang")?.quantity).toBe(2);
+  });
+
   it("lets a shrine restore health or give supplies, but never both", () => {
     const rest = fixture("mistfen-shrine");
     rest.internal.handleRoadsideEncounter(rest.client, { id: rest.site.id, choice: "rest" });

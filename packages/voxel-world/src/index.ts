@@ -541,14 +541,15 @@ export const ROADSIDE_ENCOUNTERS = [
   { id: "northwatch-watchpost", kind: "guarded", itemId: "silver_ore", quantity: 1, gold: 8, guardRadius: 11 },
   { id: "ashen-pilgrims", kind: "shrine", itemId: "healing_potion", quantity: 1, gold: 0 },
   { id: "emberfall-shrine", kind: "shrine", itemId: "healing_potion", quantity: 1, gold: 0 },
-  { id: "ashglass-survey", kind: "cache", itemId: "silver_ore", quantity: 1, gold: 6 },
+  { id: "ashglass-survey", kind: "ambush", itemId: "silver_ore", quantity: 2, gold: 8, guardRadius: 14 },
   { id: "cindergrave-camp", kind: "trail", itemId: "acid_gland", quantity: 1, gold: 7, stashDx: 5, stashDz: -4, clue: "A scorched drag trail bends northeast towards a half-buried field case." },
   { id: "western-shelf-cache", kind: "cache", itemId: "iron_ore", quantity: 2, gold: 4 },
-  { id: "broken-winch-camp", kind: "trail", itemId: "silver_ore", quantity: 1, gold: 5, stashDx: -6, stashDz: 2, clue: "A snapped hauling cable leads southwest beneath the quarry shelf." },
+  { id: "broken-winch-camp", kind: "repair", itemId: "silver_ore", quantity: 2, gold: 8, guardRadius: 16, holdMs: 10_000 },
   { id: "redstone-prospector", kind: "cache", itemId: "stone_core", quantity: 1, gold: 6 },
-  { id: "wilds-hunter-blind", kind: "cache", itemId: "crawler_fang", quantity: 2, gold: 4 },
+  { id: "wilds-hunter-blind", kind: "hunt", itemId: "crawler_fang", quantity: 2, gold: 7, guardRadius: 15,
+    stashDx: -6, stashDz: 4, clue: "Blood and snapped reeds lead northwest. The wounded stalker is still moving." },
   { id: "outskirts-pilgrim-shrine", kind: "shrine", itemId: "healing_potion", quantity: 1, gold: 0 },
-] as const satisfies readonly { id: string; kind: "cache" | "trail" | "shrine" | "guarded"; itemId: string; quantity: number; gold: number; guardRadius?: number; stashDx?: number; stashDz?: number; clue?: string }[];
+] as const satisfies readonly { id: string; kind: "cache" | "trail" | "shrine" | "guarded" | "repair" | "ambush" | "hunt"; itemId: string; quantity: number; gold: number; guardRadius?: number; holdMs?: number; stashDx?: number; stashDz?: number; clue?: string }[];
 export function roadsideEncounterAt(id: string) {
   const encounter = ROADSIDE_ENCOUNTERS.find(entry => entry.id === id);
   const landmark = encounter && ROADSIDE_DISCOVERIES.find(entry => entry.id === encounter.id);
@@ -559,14 +560,14 @@ export function nearestRoadsideEncounter(x: number, z: number, radius = 3.2) {
   let distance = radius;
   for (const encounter of ROADSIDE_ENCOUNTERS) {
     const landmark = ROADSIDE_DISCOVERIES.find(entry => entry.id === encounter.id)!;
-    const next = Math.min(Math.hypot(x - landmark.x, z - landmark.z), encounter.kind === "trail"
+    const next = Math.min(Math.hypot(x - landmark.x, z - landmark.z), encounter.kind === "trail" || encounter.kind === "hunt"
       ? Math.hypot(x - landmark.x - encounter.stashDx, z - landmark.z - encounter.stashDz) : Infinity);
     if (next <= distance) { nearest = { ...encounter, x: landmark.x, z: landmark.z, name: landmark.name }; distance = next; }
   }
   return nearest;
 }
 const ROADSIDE_TRAIL_STASHES = ROADSIDE_ENCOUNTERS.flatMap(entry => {
-  if (entry.kind !== "trail") return [];
+  if (entry.kind !== "trail" && entry.kind !== "hunt") return [];
   const landmark = ROADSIDE_DISCOVERIES.find(point => point.id === entry.id)!;
   return [{ x: landmark.x + entry.stashDx, z: landmark.z + entry.stashDz }];
 });

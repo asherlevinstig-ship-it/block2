@@ -9442,12 +9442,15 @@ function updateTarget(): void {
   else if (roleOpportunity) targetLabel.textContent = `${roleOpportunity.name} · ${roleOpportunity.prompt} · press E or ${roleOpportunity.action}`;
   else if (roadsideEncounter) {
     const player = localPlayer.getPosition();
-    const atTrailStash = roadsideEncounter.kind === "trail"
+    const atTrailStash = (roadsideEncounter.kind === "trail" || roadsideEncounter.kind === "hunt")
       && Math.hypot(player.x - roadsideEncounter.x - roadsideEncounter.stashDx,
         player.z - roadsideEncounter.z - roadsideEncounter.stashDz) <= 3.2;
     targetLabel.textContent = `${roadsideEncounter.name} · ${roadsideEncounter.kind === "guarded" ? "defeat its guards, then investigate"
       : roadsideEncounter.kind === "shrine" ? "choose rest or supplies"
       : roadsideEncounter.kind === "trail" ? atTrailStash ? "open the hidden crate" : "inspect the tracks"
+      : roadsideEncounter.kind === "hunt" ? atTrailStash ? "confront the wounded elite" : "inspect the blood trail"
+      : roadsideEncounter.kind === "repair" ? "repair the winch and hold the ground"
+      : roadsideEncounter.kind === "ambush" ? "open the survey case carefully"
       : "search for supplies"} · press E or Explore`;
   }
   else if (expeditionBoardNearby) targetLabel.textContent = "Forest Dungeon Gate · press E to open a solo or party run";

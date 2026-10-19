@@ -593,6 +593,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private ashenWarpackAnnouncedTactic: AshenWarpackTactic | null = null;
   private readonly mobBaseNames = new Map<string, string>();
   private readonly roadsideGuardLastNearby = new Map<string, number>();
+  private readonly roadsideChallengeActive = new Set<string>();
+  private readonly roadsideRepair = new Map<string, { progressMs: number; lastAt: number; ready: boolean }>();
   private readonly worldDeltasByChunk = new Map<string, Map<string, WorldBlockDelta>>();
   private readonly pendingWorldDeltaWrites = new Map<string, string>();
   private readonly mineralRegrowth = new Map<string, WorldBlockDelta & { regrowAt: number }>();
@@ -2398,14 +2400,44 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (this.roomKind !== "overworld") return;
     for (const siteId of ROADSIDE_GUARD_SITES) {
       const site = roadsideEncounterAt(siteId)!;
+      const activatedChallenge = site.kind !== "repair" && site.kind !== "ambush" && site.kind !== "hunt"
+        || this.roadsideChallengeActive.has(siteId);
+      if (!activatedChallenge) continue;
       const near = [...this.state.players.values()].some(player => player.health > 0 && player.y >= SURFACE_HEIGHT - 1
         && Math.hypot(player.x - site.x, player.z - site.z) <= 17);
       if (near) {
         this.roadsideGuardLastNearby.set(siteId, now);
         for (const guard of roadsideGuardsFor(siteId)) if (!this.state.mobs.has(guard.id)) {
           this.registerMob(guard.id, guard.archetype, guard);
-          this.state.mobs.get(guard.id)!.name = guard.name;
+          const mob = this.state.mobs.get(guard.id)!;
+          mob.name = guard.name;
+          if (guard.elite) {
+            mob.isElite = true;
+            mob.maxHealth = Math.ceil(mob.maxHealth * 1.75);
+            mob.health = mob.maxHealth;
+            mob.attackDamage += 1;
+            mob.speedMultiplier *= 1.12;
+            mob.rewardMultiplier *= 1.5;
+          }
           this.mobBaseNames.set(guard.id, guard.name);
+        }
+        if (site.kind === "repair") {
+          const repair = this.roadsideRepair.get(siteId);
+          if (repair && !repair.ready) {
+            const holding = [...this.state.players.values()].some(player => player.health > 0
+              && Math.abs(player.y - SURFACE_HEIGHT) <= 2.5 && Math.hypot(player.x - site.x, player.z - site.z) <= 4.5);
+            if (holding) repair.progressMs = Math.min(site.holdMs, repair.progressMs + Math.max(0, Math.min(250, now - repair.lastAt)));
+            repair.lastAt = now;
+            if (repair.progressMs >= site.holdMs) {
+              repair.ready = true;
+              for (const client of this.clients) {
+                const player = this.state.players.get(client.sessionId);
+                if (player && Math.hypot(player.x - site.x, player.z - site.z) <= 20)
+                  client.send("roadside:result", { id: siteId, ok: true,
+                    message: "WINCH REPAIRED · Defeat the quarry patrol and raise the resource crate.", claimed: false });
+              }
+            }
+          }
         }
       } else if (now - (this.roadsideGuardLastNearby.get(siteId) ?? now) >= 30_000) {
         this.roadsideGuardLastNearby.delete(siteId);
@@ -5597,7 +5629,33 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const stashDistance = Math.hypot(player.x - site.x - site.stashDx, player.z - site.z - site.stashDz);
       if (stashDistance > 3.2) return reply(true, site.clue);
     }
-    if (site.kind === "guarded" && roadsideGuardsFor(id).some(guard => this.state.mobs.get(guard.id)?.alive !== false))
+    if (site.kind === "hunt") {
+      const stashDistance = Math.hypot(player.x - site.x - site.stashDx, player.z - site.z - site.stashDz);
+      if (stashDistance > 3.2) return reply(true, site.clue);
+      if (!this.roadsideChallengeActive.has(id)) {
+        this.roadsideChallengeActive.add(id);
+        this.advanceRoadsideGuards(Date.now());
+        return reply(true, "TRACKS FOUND · The wounded stalker calls nearby creatures to its defence.");
+      }
+    }
+    if (site.kind === "ambush" && !this.roadsideChallengeActive.has(id)) {
+      this.roadsideChallengeActive.add(id);
+      this.advanceRoadsideGuards(Date.now());
+      return reply(true, "ASHGLASS AMBUSH · Breaker ahead; hounds are closing from both sides.");
+    }
+    if (site.kind === "repair" && !this.roadsideChallengeActive.has(id)) {
+      const now = Date.now();
+      this.roadsideChallengeActive.add(id);
+      this.roadsideRepair.set(id, { progressMs: 0, lastAt: now, ready: false });
+      this.advanceRoadsideGuards(now);
+      return reply(true, `REPAIR STARTED · Hold the winch area for ${Math.ceil(site.holdMs / 1_000)}s while the quarry patrol approaches.`);
+    }
+    if (site.kind === "repair") {
+      const repair = this.roadsideRepair.get(id);
+      if (!repair?.ready) return reply(true, `WINCH REPAIR · Hold this ground for ${Math.max(1, Math.ceil((site.holdMs - (repair?.progressMs ?? 0)) / 1_000))}s more.`);
+    }
+    if ((site.kind === "guarded" || site.kind === "repair" || site.kind === "ambush" || site.kind === "hunt")
+      && roadsideGuardsFor(id).some(guard => this.state.mobs.get(guard.id)?.alive !== false))
       return reply(false, `Defeat the guards at ${site.name} before opening it.`);
     if (site.kind === "shrine" && [...this.state.mobs.values()].some(mob =>
       mob.alive && Math.abs(mob.y - player.y) <= 2.5 && Math.hypot(mob.x - player.x, mob.z - player.z) <= 8))
