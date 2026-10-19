@@ -43,9 +43,9 @@ import { inventoryRenderDue } from "./inventory-render-budget.js";
 import { nextInventoryTab, type InventoryTab } from "./inventory-tabs.js";
 import { inventoryItemVisible } from "./inventory-ownership.js";
 import { playerHud } from "./player-hud.js";
-import { greenwoodChainRoute, greenwoodChainStage, mistfenChainRoute, mistfenChainStage, northwatchChainRoute, northwatchChainStage, quarryChainRoute, quarryChainStage, regionalChainBreadcrumbs,
+import { ashenChainRoute, ashenChainStage, greenwoodChainRoute, greenwoodChainStage, mistfenChainRoute, mistfenChainStage, northwatchChainRoute, northwatchChainStage, quarryChainRoute, quarryChainStage, regionalChainBreadcrumbs,
   regionalChainTrailVisible, regionalPolylineBreadcrumbs, regionalPolylineTrailVisible,
-  type GreenwoodChainStage, type MistfenChainStage, type NorthwatchChainStage, type QuarryChainStage } from "./regional-encounter-chain.js";
+  type AshenChainStage, type GreenwoodChainStage, type MistfenChainStage, type NorthwatchChainStage, type QuarryChainStage } from "./regional-encounter-chain.js";
 import { combatHud, cooldownState } from "./combat-hud.js";
 import { assassinJourney } from "./assassin-journey.js";
 import { EQUIPMENT_COLLECTION, collectionProgress, equipmentCollectionLabel, equipmentProgressionText } from "./equipment-progression.js";
@@ -2008,6 +2008,54 @@ function updateNorthwatchEncounterChain(raw: string, now: number): void {
     mote.setPosition(point.x, SURFACE_HEIGHT + .78 + Math.sin(now * .004 + index) * .14, point.z);
     mote.setLocalScale(pulse * 1.6, pulse, pulse * .7);
     mote.rotate(.15, 1.1, .22);
+  });
+}
+const ashenChainEmberMaterial = new pc.StandardMaterial();
+ashenChainEmberMaterial.diffuse = new pc.Color(1, .36, .045);
+ashenChainEmberMaterial.emissive = new pc.Color(1, .16, .015);
+ashenChainEmberMaterial.opacity = .92;
+ashenChainEmberMaterial.blendType = pc.BLEND_ADDITIVE;
+ashenChainEmberMaterial.update();
+const ashenChainSmokeMaterial = new pc.StandardMaterial();
+ashenChainSmokeMaterial.diffuse = new pc.Color(.17, .13, .11);
+ashenChainSmokeMaterial.opacity = .38;
+ashenChainSmokeMaterial.blendType = pc.BLEND_NORMAL;
+ashenChainSmokeMaterial.update();
+const ashenChainTrailRoot = new pc.Entity("ashen-reach-chain-trail");
+const ashenChainTrail = Array.from({ length: 16 }, (_, index) => {
+  const smoke = index % 4 === 3;
+  const particle = addBox(ashenChainTrailRoot, smoke ? "ashen-route-smoke" : "ashen-route-ember",
+    smoke ? ashenChainSmokeMaterial : ashenChainEmberMaterial, smoke ? [.2, .2, .2] : [.07, .16, .07], [0, 0, 0]);
+  particle.setLocalEulerAngles(index * 13, index * 37, smoke ? 0 : 42); return { particle, smoke };
+});
+ashenChainTrailRoot.enabled = false;
+app.root.addChild(ashenChainTrailRoot);
+let ashenChainStageView: AshenChainStage = "find-pilgrims";
+let ashenChainRaw = "";
+function updateAshenEncounterChain(raw: string, now: number): void {
+  if (raw !== ashenChainRaw) {
+    ashenChainRaw = raw;
+    ashenChainStageView = ashenChainStage(raw);
+    if (ashenChainStageView === "clear-warpack" || ashenChainStageView === "complete")
+      minimap.revealMiniBoss("ashglass-sentry-east");
+    if (ashenChainStageView === "complete") minimap.revealAshenRewards();
+  }
+  const effectiveStage: AshenChainStage = ashenChainStageView === "clear-warpack"
+    && ashenReliquaryState?.phase === "unlocked" ? "claim-reliquary" : ashenChainStageView;
+  const route = ashenChainRoute(effectiveStage);
+  const player = localPlayer.getPosition();
+  ashenChainTrailRoot.enabled = regionalPolylineTrailVisible(player, route, 15);
+  if (!ashenChainTrailRoot.enabled) return;
+  const points = regionalPolylineBreadcrumbs(route, ashenChainTrail.length);
+  ashenChainTrail.forEach(({ particle, smoke }, index) => {
+    const point = points[index]; particle.enabled = Boolean(point);
+    if (!point) return;
+    const drift = Math.sin(now * .0018 + index * 1.3) * (smoke ? .28 : .1);
+    const pulse = .72 + Math.sin(now * .0065 + index) * .24;
+    particle.setPosition(point.x + drift, SURFACE_HEIGHT + (smoke ? 1.05 : .5)
+      + Math.sin(now * .003 + index * .7) * (smoke ? .28 : .12), point.z - drift * .5);
+    particle.setLocalScale(smoke ? pulse * 1.3 : pulse, smoke ? pulse * 1.6 : pulse * 1.8, smoke ? pulse * 1.3 : pulse);
+    particle.rotate(smoke ? .08 : .4, smoke ? .25 : 1.4, smoke ? .04 : .55);
   });
 }
 let localSilverDepthsRunStage = 0;
@@ -12824,6 +12872,7 @@ app.on("update", (dt: number) => {
       updateMistfenEncounterChain(localNetworkPlayer.huntLoadoutsJson, now);
       updateQuarryEncounterChain(localNetworkPlayer.huntLoadoutsJson, now);
       updateNorthwatchEncounterChain(localNetworkPlayer.huntLoadoutsJson, now);
+      updateAshenEncounterChain(localNetworkPlayer.huntLoadoutsJson, now);
     }
     updateSilverDepthsRoute(now);
     if (!visibleDepthsRoute) updateCaveNavigation(localPlayer.getPosition(), now);

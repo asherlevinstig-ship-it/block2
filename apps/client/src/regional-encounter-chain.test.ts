@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { greenwoodChainRoute, greenwoodChainStage, mistfenChainRoute, mistfenChainStage, northwatchChainRoute, northwatchChainStage, quarryChainRoute, quarryChainStage, regionalChainBreadcrumbs,
+import { ashenChainRoute, ashenChainStage, greenwoodChainRoute, greenwoodChainStage, mistfenChainRoute, mistfenChainStage, northwatchChainRoute, northwatchChainStage, quarryChainRoute, quarryChainStage, regionalChainBreadcrumbs,
   regionalChainTrailVisible, regionalPolylineBreadcrumbs, regionalPolylineTrailVisible } from "./regional-encounter-chain.js";
 
 describe("regional encounter chains", () => {
@@ -71,5 +71,22 @@ describe("regional encounter chains", () => {
     expect(route).toContainEqual({ x: 9, z: -46 });
     expect(route).toContainEqual({ x: 9, z: -54 });
     expect(regionalPolylineTrailVisible({ x: 9, y: 8, z: -50 }, route)).toBe(true);
+  });
+
+  it("turns the Ashen landmarks into one first-clear journey", () => {
+    expect(ashenChainStage("{}")).toBe("find-pilgrims");
+    expect(ashenChainStage(JSON.stringify({ roadsideClaims: ["ashen-pilgrims"] }))).toBe("follow-to-shrine");
+    expect(ashenChainStage(JSON.stringify({ roadsideClaims: ["ashen-pilgrims", "emberfall-shrine"] }))).toBe("follow-to-survey");
+    expect(ashenChainStage(JSON.stringify({ roadsideClaims: ["ashen-pilgrims", "emberfall-shrine", "ashglass-survey"] }))).toBe("follow-to-camp");
+    expect(ashenChainStage(JSON.stringify({ roadsideClaims: ["ashen-pilgrims", "emberfall-shrine", "ashglass-survey", "cindergrave-camp"] }))).toBe("clear-warpack");
+    expect(ashenChainStage(JSON.stringify({ roadsideClaims: ["ashen-pilgrims", "emberfall-shrine", "ashglass-survey", "cindergrave-camp"],
+      ashenBlueprints: ["cinderfang"] }))).toBe("complete");
+  });
+
+  it("takes the Ashen trail through the Scorched Gate and around the basin", () => {
+    expect(ashenChainRoute("follow-to-shrine")).toContainEqual({ x: 93, z: 53 });
+    const route = ashenChainRoute("follow-to-camp")!;
+    expect(route).toContainEqual({ x: 103, z: 73 });
+    expect(regionalPolylineTrailVisible({ x: 103, y: 8, z: 73 }, route)).toBe(true);
   });
 });

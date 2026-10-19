@@ -79,7 +79,7 @@ import { HEALING_POTION, backpackAddableQuantity, backpackCapacity, backpackSlot
 import { canBuyPotionAtKeeper, potionBuyError, potionUseError } from "./healing-potions.js";
 import { MINERAL_REGROWTH_MS, type MineralDepositStatus } from "@blockcraft/protocol";
 import { RENEWABLE_MINERAL_DEPOSITS, authoredMineralAt, SURFACE_HEIGHT, CAVE_SHALLOW_HOME, CAVE_DEEP_HOME, CAVE_HIDDEN_HOME, SILVER_DEPTHS_SPITTER_HOMES, CRYSTAL_MATRIARCH_HOME, SILVER_DEPTHS_COVER, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, SILVER_DEPTHS_CHECKPOINT_POSITION, SILVER_DEPTHS_GALLERY_GATE, SILVER_DEPTHS_BOSS_GATE, SILVER_DEPTHS_IRON_GATE, SILVER_DEPTHS_SILVER_GATE, SILVER_DEPTHS_WING_CACHES, TOWN_BLACKSMITH_STALL_POSITION, silverDepthsPingLocation, isMistfenToxicPool, isInMistfenMarsh } from "@blockcraft/voxel-world";
-import { GREENWOOD_ENCOUNTER_CHAIN, MISTFEN_ENCOUNTER_CHAIN, NORTHWATCH_ENCOUNTER_CHAIN, SOUTHERN_QUARRY_ENCOUNTER_CHAIN, ROLE_FIELD_OPPORTUNITIES, nearestRoleFieldOpportunity, nearestRoadsideEncounter, parseRoadsideClaims, roadsideEncounterAt, withRoadsideClaim } from "@blockcraft/voxel-world";
+import { ASHEN_REACH_ENCOUNTER_CHAIN, GREENWOOD_ENCOUNTER_CHAIN, MISTFEN_ENCOUNTER_CHAIN, NORTHWATCH_ENCOUNTER_CHAIN, SOUTHERN_QUARRY_ENCOUNTER_CHAIN, ROLE_FIELD_OPPORTUNITIES, nearestRoleFieldOpportunity, nearestRoadsideEncounter, parseRoadsideClaims, roadsideEncounterAt, withRoadsideClaim } from "@blockcraft/voxel-world";
 import { mineralCellOccupied } from "./mineral-regrowth.js";
 import { CAVE_ENCOUNTERS, caveEncounterAllows } from "./cave-encounters.js";
 import { miningDurationMs, miningLineClear } from "@blockcraft/voxel-world";
@@ -3067,9 +3067,15 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       }) : recipients;
     if (northwatchPatrolClear) this.northwatchPatrolContributors.clear();
     if (this.roomKind === "overworld" && isAshenMob(mobId)) {
-      const reliquaryProgress = this.ashenReliquary.recordDefeat(mobId, recipients, now);
+      const ashenReadyRecipients = recipients.filter(playerId => {
+        const player = this.state.players.get(playerId);
+        return player && parseRoadsideClaims(player.huntLoadoutsJson).has(ASHEN_REACH_ENCOUNTER_CHAIN.campId);
+      });
+      const reliquaryProgress = ashenReadyRecipients.length > 0
+        ? this.ashenReliquary.recordDefeat(mobId, ashenReadyRecipients, now)
+        : { unlocked: false, defeated: this.ashenReliquary.snapshot("", now).defeated };
       this.sendAshenReliquaryStates(now);
-      if (reliquaryProgress.unlocked) for (const playerId of recipients) {
+      if (reliquaryProgress.unlocked) for (const playerId of ashenReadyRecipients) {
         this.clients.find(candidate => candidate.sessionId === playerId)?.send("chat:notice",
           "SCORCHED RELIQUARY AWAKENED · return to the burning chest and choose one personal reward.");
       }
@@ -4040,7 +4046,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.broadcast("loot:picked-up", { playerId: client.sessionId, dropId: parsed.data.dropId, itemId: reward.itemId,
         quantity: reward.quantity, total: item.quantity } satisfies LootPickedUp);
       const chainMessage = reward.firstClear && reward.siteId === SOUTHERN_QUARRY_ENCOUNTER_CHAIN.winchId
-        ? " LIFT POWER RESTORED · follow the amber sparks to the Collapsed Quarry Lift." : "";
+        ? " LIFT POWER RESTORED · follow the amber sparks to the Collapsed Quarry Lift."
+        : reward.firstClear && reward.siteId === ASHEN_REACH_ENCOUNTER_CHAIN.surveyId
+          ? " CINDERGRAVE ROUTE FOUND · follow the ember trail west around the burning basin." : "";
       client.send("roadside:result", { id: reward.siteId, ok: true,
         message: `${reward.variantTitle} cache opened · +${reward.quantity} ${ITEM_DEFINITIONS[reward.itemId].name} · +${player.coins - beforeGold} gold.${chainMessage}`,
         claimed: reward.firstClear, phase: "claimed", progress: 1, holders: 0, readyAt: reward.readyAt,
@@ -5771,6 +5779,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       return reply(false, "The watchpost approach is hidden · light both Windworn Shrine signals first.");
     if (id === NORTHWATCH_ENCOUNTER_CHAIN.watchpostId && NORTHWATCH_SHARD_PATROL_IDS.some(mobId => this.state.mobs.get(mobId)?.alive !== false))
       return reply(false, "SHARD PATROL HOLDS THE RIDGE · break its crossfire before entering the watchpost.");
+    if (id === ASHEN_REACH_ENCOUNTER_CHAIN.shrineId && !claims.has(ASHEN_REACH_ENCOUNTER_CHAIN.pilgrimsId))
+      return reply(false, "The Emberfall Shrine is cold · search the Ashen Pilgrim Camp and cross the Scorched Gate first.");
+    if (id === ASHEN_REACH_ENCOUNTER_CHAIN.surveyId && !claims.has(ASHEN_REACH_ENCOUNTER_CHAIN.shrineId))
+      return reply(false, "Ashglass smoke hides the survey cache · rekindle Emberfall Shrine first.");
+    if (id === ASHEN_REACH_ENCOUNTER_CHAIN.campId && !claims.has(ASHEN_REACH_ENCOUNTER_CHAIN.surveyId))
+      return reply(false, "The Cindergrave trail is lost in the ash · clear and open the Ashglass Survey cache first.");
     if (claims.has(id) && !repeatable) return reply(false, `${site.name} has already been explored by this character.`, true);
     const cycleReadyAt = this.roadsideCycleReadyAt.get(id);
     if (repeatable && cycleReadyAt !== undefined)
@@ -5897,7 +5911,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
                     : id === NORTHWATCH_ENCOUNTER_CHAIN.signalId
                       ? " BOTH SIGNALS BURN · the Shard Patrol is exposed along the ridge."
                       : id === NORTHWATCH_ENCOUNTER_CHAIN.watchpostId
-                        ? ` WATCHPOST CLEARED · ${NORTHWATCH_ENCOUNTER_CHAIN.leaderName.toUpperCase()} EXPOSED beyond the final ridge.` : "";
+                        ? ` WATCHPOST CLEARED · ${NORTHWATCH_ENCOUNTER_CHAIN.leaderName.toUpperCase()} EXPOSED beyond the final ridge.`
+                        : id === ASHEN_REACH_ENCOUNTER_CHAIN.pilgrimsId
+                          ? " SCORCHED GATE ROUTE FOUND · ember sparks now mark the safe road to Emberfall Shrine."
+                          : id === ASHEN_REACH_ENCOUNTER_CHAIN.shrineId
+                            ? " EMBERFALL REKINDLED · the flame reveals an Ashglass survey cache beyond the basin."
+                            : id === ASHEN_REACH_ENCOUNTER_CHAIN.campId
+                              ? " WARPACK EXPOSED · follow the smoke column and defeat all five Ashen hunters." : "";
     const message = site.kind === "shrine" && choice === "rest" ? `${site.name} · health and stamina restored.`
       : `${site.name} explored · +${quantity} ${ITEM_DEFINITIONS[itemId].name}${player.coins > beforeGold ? ` · +${player.coins - beforeGold} gold` : ""}.`;
     reply(true, `${message}${chainMessage}`, true, { phase: "claimed", progress: 1, holders: 0 });
@@ -6016,6 +6036,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (!choice || !player || player.health <= 0 || this.roomKind !== "overworld")
       return reply(false, "The Scorched Reliquary cannot be claimed right now.");
     const state = this.ashenReliquary.snapshot(client.sessionId, now);
+    if (!parseRoadsideClaims(player.huntLoadoutsJson).has(ASHEN_REACH_ENCOUNTER_CHAIN.campId))
+      return reply(false, "Trace the Ashen route through Cindergrave Camp before claiming the Reliquary.");
     if (state.phase !== "unlocked") return reply(false, "The Scorched Reliquary is sealed.");
     if (!state.eligible) return reply(false, "Help defeat the Ashen warpack before claiming its reliquary.");
     if (state.claimed) return reply(false, "You already claimed this reliquary cycle.");

@@ -14,6 +14,9 @@ function fixture(id: string) {
   vi.spyOn(room, "broadcast").mockImplementation(() => {});
   const player = new PlayerState();
   Object.assign(player, { x: site.x + .5, y: 8, z: site.z + .5, coins: 0, health: 3, maxHealth: 5, stamina: 25, maxStamina: 100 });
+  if (id === "ashglass-survey") player.huntLoadoutsJson = JSON.stringify({
+    roadsideClaims: ["ashen-pilgrims", "emberfall-shrine"],
+  });
   room.state.players.set("hero", player);
   const client = { sessionId: "hero", send: vi.fn() };
   Object.defineProperty(room, "clients", { value: [client], configurable: true });
@@ -95,6 +98,23 @@ describe("personal roadside encounters", () => {
     expect(player.inventory.get("ridge_hide")?.quantity).toBe(1);
     expect(client.send).toHaveBeenLastCalledWith("roadside:result", expect.objectContaining({ claimed: true,
       message: expect.stringContaining("Shard Patrol") }));
+  });
+
+  it("keeps Ashen discoveries ordered from the pilgrim camp to Cindergrave", () => {
+    const { internal, player, client, site } = fixture("emberfall-shrine");
+    internal.handleRoadsideEncounter(client, { id: site.id, choice: "supplies" });
+    expect(client.send).toHaveBeenLastCalledWith("roadside:result", expect.objectContaining({ ok: false,
+      message: expect.stringContaining("Ashen Pilgrim Camp") }));
+    player.huntLoadoutsJson = JSON.stringify({ roadsideClaims: ["ashen-pilgrims"] });
+    internal.handleRoadsideEncounter(client, { id: site.id, choice: "supplies" });
+    expect(parseRoadsideClaims(player.huntLoadoutsJson).has("emberfall-shrine")).toBe(true);
+
+    const camp = roadsideEncounterAt("cindergrave-camp")!;
+    if (camp.kind !== "trail") throw new Error("Expected the Cindergrave trail");
+    Object.assign(player, { x: camp.x + camp.stashDx, z: camp.z + camp.stashDz });
+    internal.handleRoadsideEncounter(client, { id: camp.id });
+    expect(client.send).toHaveBeenLastCalledWith("roadside:result", expect.objectContaining({ ok: false,
+      message: expect.stringContaining("Ashglass Survey") }));
   });
 
   it("chains the Greenwood discovery into a guarded camp that exposes the regional leader", () => {

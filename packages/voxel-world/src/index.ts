@@ -546,6 +546,21 @@ export const NORTHWATCH_ENCOUNTER_CHAIN = {
   watchpost: { x: 20, z: -62 },
   leader: { x: 15.5, z: -72.5 },
 } as const;
+export const ASHEN_REACH_ENCOUNTER_CHAIN = {
+  id: "ashen-reach-chain",
+  pilgrimsId: "ashen-pilgrims",
+  shrineId: "emberfall-shrine",
+  surveyId: "ashglass-survey",
+  campId: "cindergrave-camp",
+  warpackIds: ["ashglass-sentry-west", "ashglass-sentry-east", "ashen-cinder-ram", "ashen-ember-hound-west", "ashen-ember-hound-east"],
+  pilgrims: { x: 82, z: 54 },
+  gate: { x: 93, z: 53 },
+  shrine: { x: 109, z: 48 },
+  survey: { x: 112, z: 70 },
+  camp: { x: 90, z: 69 },
+  warpack: { x: 103.5, z: 55 },
+  reliquary: { x: 97.5, z: 57.5 },
+} as const;
 /** Small optional landmarks sit beside every long road segment, never in its movement lane. */
 export const ROADSIDE_DISCOVERIES = [
   { id: "greenwood-forager-camp", name: "Abandoned Forager Camp", kind: "camp", x: 31, z: -1 },
@@ -596,7 +611,7 @@ export const ROADSIDE_ENCOUNTERS = [
   { id: "ashen-pilgrims", kind: "shrine", itemId: "healing_potion", quantity: 1, gold: 0 },
   { id: "emberfall-shrine", kind: "shrine", itemId: "healing_potion", quantity: 1, gold: 0 },
   { id: "ashglass-survey", kind: "ambush", itemId: "silver_ore", quantity: 2, gold: 8, guardRadius: 14 },
-  { id: "cindergrave-camp", kind: "trail", itemId: "acid_gland", quantity: 1, gold: 7, stashDx: 5, stashDz: -4, clue: "A scorched drag trail bends northeast towards a half-buried field case." },
+  { id: "cindergrave-camp", kind: "trail", itemId: "ember_ore", quantity: 1, gold: 7, stashDx: 5, stashDz: -4, clue: "A scorched drag trail bends northeast towards a half-buried field case." },
   { id: "western-shelf-cache", kind: "cache", itemId: "iron_ore", quantity: 2, gold: 4 },
   { id: "broken-winch-camp", kind: "repair", itemId: "silver_ore", quantity: 2, gold: 8, guardRadius: 16, holdMs: 10_000 },
   { id: "redstone-prospector", kind: "cache", itemId: "stone_core", quantity: 1, gold: 6 },

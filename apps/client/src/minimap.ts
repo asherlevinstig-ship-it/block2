@@ -294,6 +294,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
   revealMiniBoss(id: string): void;
   revealQuarryRewards(): void;
   revealNorthwatchRewards(): void;
+  revealAshenRewards(): void;
   setEquipmentHunt(target: EquipmentHuntTarget | null): void;
   setRoadsideClaims(raw: string): void;
   setRoadsideActivity(ids: readonly string[]): void;
@@ -558,6 +559,17 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
       let changed = false;
       for (const deposit of MAP_DEPOSITS) {
         if (!isInNorthwatchHighlands(deposit.x, deposit.z)) continue;
+        const key = depositKey(deposit);
+        if (!discovered.has(key)) { discovered.add(key); changed = true; }
+      }
+      if (!changed) return;
+      refreshDestinations(); lastUpdate = -Infinity;
+      try { localStorage.setItem(storageKey, JSON.stringify([...discovered])); } catch { /* Private browsing can disable storage. */ }
+    },
+    revealAshenRewards() {
+      let changed = false;
+      for (const deposit of MAP_DEPOSITS) {
+        if (!isInAshenReach(deposit.x, deposit.z)) continue;
         const key = depositKey(deposit);
         if (!discovered.has(key)) { discovered.add(key); changed = true; }
       }

@@ -1,4 +1,4 @@
-import { GREENWOOD_ENCOUNTER_CHAIN, MISTFEN_ENCOUNTER_CHAIN, NORTHWATCH_ENCOUNTER_CHAIN, SOUTHERN_QUARRY_ENCOUNTER_CHAIN, parseRoadsideClaims } from "@blockcraft/voxel-world";
+import { ASHEN_REACH_ENCOUNTER_CHAIN, GREENWOOD_ENCOUNTER_CHAIN, MISTFEN_ENCOUNTER_CHAIN, NORTHWATCH_ENCOUNTER_CHAIN, SOUTHERN_QUARRY_ENCOUNTER_CHAIN, parseRoadsideClaims } from "@blockcraft/voxel-world";
 
 export type GreenwoodChainStage = "find-discovery" | "follow-to-camp" | "follow-to-leader" | "complete";
 export type ChainPoint = { x: number; z: number };
@@ -6,6 +6,7 @@ export type ChainRoute = { from: ChainPoint; to: ChainPoint };
 export type MistfenChainStage = "find-discovery" | "follow-to-shrine" | "follow-to-leader" | "complete";
 export type QuarryChainStage = "find-cart" | "follow-to-survey" | "follow-to-winch" | "follow-to-lift" | "follow-to-leader" | "complete";
 export type NorthwatchChainStage = "find-cart" | "follow-to-signals" | "clear-patrol" | "follow-to-watchpost" | "follow-to-leader" | "complete";
+export type AshenChainStage = "find-pilgrims" | "follow-to-shrine" | "follow-to-survey" | "follow-to-camp" | "clear-warpack" | "claim-reliquary" | "complete";
 
 export function greenwoodChainStage(raw: string | null | undefined): GreenwoodChainStage {
   const claims = parseRoadsideClaims(raw);
@@ -101,6 +102,37 @@ export function northwatchChainRoute(stage: NorthwatchChainStage): ChainPoint[] 
   if (stage === "follow-to-leader") return [
     NORTHWATCH_ENCOUNTER_CHAIN.watchpost, { x: 9, z: -70 }, NORTHWATCH_ENCOUNTER_CHAIN.leader,
   ];
+  return null;
+}
+
+export function ashenChainStage(raw: string | null | undefined): AshenChainStage {
+  const claims = parseRoadsideClaims(raw);
+  if (!claims.has(ASHEN_REACH_ENCOUNTER_CHAIN.pilgrimsId)) return "find-pilgrims";
+  if (!claims.has(ASHEN_REACH_ENCOUNTER_CHAIN.shrineId)) return "follow-to-shrine";
+  if (!claims.has(ASHEN_REACH_ENCOUNTER_CHAIN.surveyId)) return "follow-to-survey";
+  if (!claims.has(ASHEN_REACH_ENCOUNTER_CHAIN.campId)) return "follow-to-camp";
+  try {
+    const parsed = JSON.parse(raw ?? "{}") as { ashenBlueprints?: unknown };
+    if (Array.isArray(parsed.ashenBlueprints) && parsed.ashenBlueprints.length > 0) return "complete";
+  } catch { /* Malformed legacy state still keeps its validated roadside claims. */ }
+  return "clear-warpack";
+}
+
+/** The ember trail crosses the gate, skirts the hottest basin and ends at the Scorched Reliquary. */
+export function ashenChainRoute(stage: AshenChainStage): ChainPoint[] | null {
+  if (stage === "follow-to-shrine") return [
+    ASHEN_REACH_ENCOUNTER_CHAIN.pilgrims, ASHEN_REACH_ENCOUNTER_CHAIN.gate, ASHEN_REACH_ENCOUNTER_CHAIN.shrine,
+  ];
+  if (stage === "follow-to-survey") return [
+    ASHEN_REACH_ENCOUNTER_CHAIN.shrine, { x: 114, z: 57 }, ASHEN_REACH_ENCOUNTER_CHAIN.survey,
+  ];
+  if (stage === "follow-to-camp") return [
+    ASHEN_REACH_ENCOUNTER_CHAIN.survey, { x: 103, z: 73 }, ASHEN_REACH_ENCOUNTER_CHAIN.camp,
+  ];
+  if (stage === "clear-warpack") return [
+    ASHEN_REACH_ENCOUNTER_CHAIN.camp, { x: 92, z: 62 }, ASHEN_REACH_ENCOUNTER_CHAIN.warpack,
+  ];
+  if (stage === "claim-reliquary") return [ASHEN_REACH_ENCOUNTER_CHAIN.warpack, ASHEN_REACH_ENCOUNTER_CHAIN.reliquary];
   return null;
 }
 
