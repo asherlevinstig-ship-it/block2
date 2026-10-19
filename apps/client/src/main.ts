@@ -688,6 +688,7 @@ function renderFirstSteps(): void {
   const active = index !== null && index < ONBOARDING_DONE;
   const modeLesson = index === 4;
   firstSteps.hidden = !active;
+  firstSteps.dataset.guidance = index === 3 ? "south-gate" : "";
   const starterLesson = starterInventoryLesson(index, starterInventoryOpenedWithKeyboard, forcedStarterEquipment);
   firstStepsSkip.hidden = modeLesson || starterLesson !== "hidden";
   const showModeChoice = townDeparturePromptOpen || modeLesson && !modeLessonAcknowledged;
@@ -721,6 +722,15 @@ function noteFirstStep(event: OnboardingEvent): void {
   const next = advanceOnboarding(firstStepsIndex, event);
   if (next === firstStepsIndex) return;
   setFirstSteps(next);
+  if (next === 3) {
+    firstStepsTrailUpdatedAt = -Infinity;
+    firstSteps.classList.remove("route-started");
+    void firstSteps.offsetWidth;
+    firstSteps.classList.add("route-started");
+    window.setTimeout(() => firstSteps.classList.remove("route-started"), 1_100);
+    status.textContent = "Starter gear equipped · follow the gold trail to the SOUTH GATE.";
+    social.event("Starter gear equipped · follow the gold trail to the South Gate.");
+  }
   if (next === ONBOARDING_DONE) status.textContent = "First steps complete · follow Realm Guidance or explore freely.";
 }
 function nudgeStarterInventoryTutorial(): void {
