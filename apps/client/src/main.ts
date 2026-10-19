@@ -352,7 +352,7 @@ import { characterCreationNeeded, createGuestProfileToken, finishCharacterCreati
   profileBackups, restoreProfile, startNewAdventure } from "./player-profile.js";
 import { advanceOnboarding, ONBOARDING_DONE, ONBOARDING_STEPS, onboardingStorageKey, legacyOnboardingStorageKey,
   migrateLegacyOnboardingStep,
-  parseOnboardingStep, shouldPromptTownDeparture, type OnboardingEvent } from "./new-player-onboarding.js";
+  parseOnboardingStep, shouldPromptTownDeparture, starterInventoryLesson, type OnboardingEvent } from "./new-player-onboarding.js";
 import { onboardingTrailRoute, sampleTrail } from "./onboarding-trail.js";
 import { CombatAudio, enemyCuePan, enemyCuesForTransition, type EnemyCue, type EnemyCueSnapshot } from "./combat-audio.js";
 import { SceneDressing } from "./scene-dressing.js";
@@ -652,6 +652,9 @@ const firstStepsCount = document.querySelector<HTMLElement>("#first-steps-count"
 const firstStepsTitle = document.querySelector<HTMLElement>("#first-steps-title")!;
 const firstStepsDetail = document.querySelector<HTMLElement>("#first-steps-detail")!;
 const firstStepsSkip = document.querySelector<HTMLButtonElement>("#first-steps-skip")!;
+const starterInventoryTutorial = document.querySelector<HTMLElement>("#starter-inventory-tutorial")!;
+const starterInventoryTitle = document.querySelector<HTMLElement>("#starter-inventory-title")!;
+const starterInventoryCopy = document.querySelector<HTMLElement>("#starter-inventory-copy")!;
 const modeSwitchTutorial = document.querySelector<HTMLElement>("#mode-switch-tutorial")!;
 const modeSwitchTutorialAction = document.querySelector<HTMLButtonElement>("#mode-switch-tutorial-action")!;
 const modeSwitchTutorialBuild = document.querySelector<HTMLButtonElement>("#mode-switch-tutorial-build")!;
@@ -661,6 +664,7 @@ let townDeparturePromptOpen = false;
 let modeLessonAcknowledged = false;
 let lowLevelWasInsideTown = false;
 let lowLevelTownStateReady = false;
+let starterInventoryOpenedWithKeyboard = false;
 const firstStepsKey = onboardingStorageKey(profileToken);
 let firstStepsIndex = (() => {
   try {
@@ -676,13 +680,22 @@ function renderFirstSteps(): void {
   const active = index !== null && index < ONBOARDING_DONE;
   const modeLesson = index === 4;
   firstSteps.hidden = !active;
-  firstStepsSkip.hidden = modeLesson;
+  const starterLesson = starterInventoryLesson(index, starterInventoryOpenedWithKeyboard);
+  firstStepsSkip.hidden = modeLesson || starterLesson !== "hidden";
   const showModeChoice = townDeparturePromptOpen || modeLesson && !modeLessonAcknowledged;
   modeSwitchTutorial.hidden = !showModeChoice;
   modeSwitchTutorialTitle.textContent = "Choose how to leave Town";
   modeSwitchTutorialCopy.innerHTML = "<b>BUILD</b> gathers resources. <b>COMBAT</b> attacks enemies. Press <kbd>Q</kbd> at any time to switch.";
   document.documentElement.classList.toggle("onboarding-active", active);
   document.documentElement.classList.toggle("onboarding-mode-lesson", modeLesson);
+  starterInventoryTutorial.hidden = starterLesson === "hidden";
+  starterInventoryTutorial.dataset.phase = starterLesson;
+  starterInventoryTitle.textContent = starterLesson === "equip_sword" ? "Equip the Forged Sword" : "Open your inventory";
+  starterInventoryCopy.textContent = starterLesson === "equip_sword"
+    ? "Select the glowing sword, then choose EQUIP. This lesson completes only when the sword is equipped."
+    : "Press I to see the sword you collected. Other controls are paused until your pack is open.";
+  const starterCard = document.querySelector<HTMLElement>('[data-item="forged_sword"]');
+  if (starterCard) starterCard.dataset.starterTutorial = starterLesson === "equip_sword" ? "true" : "false";
   if (index === null || index >= ONBOARDING_DONE) return;
   const step = ONBOARDING_STEPS[index]!;
   firstStepsCount.textContent = `${index + 1} / ${ONBOARDING_DONE}`;
@@ -700,6 +713,12 @@ function noteFirstStep(event: OnboardingEvent): void {
   if (next === firstStepsIndex) return;
   setFirstSteps(next);
   if (next === ONBOARDING_DONE) status.textContent = "First steps complete · follow Realm Guidance or explore freely.";
+}
+function nudgeStarterInventoryTutorial(): void {
+  starterInventoryTutorial.classList.remove("nudge");
+  void starterInventoryTutorial.offsetWidth;
+  starterInventoryTutorial.classList.add("nudge");
+  window.setTimeout(() => starterInventoryTutorial.classList.remove("nudge"), 420);
 }
 firstStepsSkip.addEventListener("click", () => setFirstSteps(ONBOARDING_DONE));
 modeSwitchTutorialAction.addEventListener("click", () => {
@@ -4105,6 +4124,11 @@ function updateMainHandLoadout(mainHandId: MainHandId): void {
   targetStateKey = "";
   refreshPowerCompatibility();
   refreshBackpackCapacity();
+  if (mainHandId === "forged_sword" && firstStepsIndex === 2) {
+    noteFirstStep("equipped_starter");
+    showCombatFeedback("FORGED SWORD EQUIPPED", "dodge");
+    status.textContent = "Forged Sword equipped · your first loadout is ready.";
+  }
 }
 
 function requestPowerEquip(powerId: PowerId): void {
@@ -8284,6 +8308,18 @@ tavernDialogueNext.addEventListener("click", advanceTavernDialogue);
 tavernDialogueClose.addEventListener("click", closeTavernDialogue);
 
 function setInventoryOpen(open: boolean): void {
+  const starterLesson = starterInventoryLesson(firstStepsIndex, starterInventoryOpenedWithKeyboard);
+  if (open && starterLesson === "open_pack") {
+    status.textContent = "Press I to open your inventory and equip the starter sword.";
+    nudgeStarterInventoryTutorial();
+    return;
+  }
+  if (!open && starterLesson === "equip_sword") {
+    status.textContent = "Equip the Forged Sword before closing your inventory.";
+    nudgeStarterInventoryTutorial();
+    inventoryPanel.querySelector<HTMLButtonElement>('[data-item="forged_sword"] [data-equip-main-hand]')?.focus();
+    return;
+  }
   if (open) closeLoot();
   profileControls.hidden = true;
   adventureConfirm.hidden = true;
@@ -8294,7 +8330,6 @@ function setInventoryOpen(open: boolean): void {
   document.querySelector<HTMLElement>("#personal-storage")!.hidden = true;
   inventoryToggle.setAttribute("aria-expanded", String(open));
   if (open) {
-    noteFirstStep("opened_pack");
     closeTavernDialogue();
     room?.send("build:path", { action: "sync" });
     inventoryPreviewDrawer.open = inventoryPanel.dataset.tab === "gear";
@@ -8306,7 +8341,14 @@ function setInventoryOpen(open: boolean): void {
     performancePanel.hidden = true;
     performanceToggle.setAttribute("aria-expanded", "false");
     resetMovementControls();
-    inventoryClose.focus();
+    if (starterLesson === "equip_sword") {
+      selectInventoryCategory("gear");
+      window.setTimeout(() => {
+        const card = inventoryPanel.querySelector<HTMLElement>('[data-item="forged_sword"]');
+        card?.click();
+        card?.querySelector<HTMLButtonElement>("[data-equip-main-hand]")?.focus();
+      }, 0);
+    } else inventoryClose.focus();
   } else {
     inventoryPortrait?.hide();
     app.autoRender = true;
@@ -11590,6 +11632,18 @@ combatHudRoot.addEventListener("click", event => {
 
 window.addEventListener("keydown", event => {
   if (event.repeat) return;
+  if (starterInventoryLesson(firstStepsIndex, starterInventoryOpenedWithKeyboard) === "open_pack") {
+    if (event.code === "KeyI") {
+      starterInventoryOpenedWithKeyboard = true;
+      renderFirstSteps();
+      setInventoryOpen(true);
+    } else {
+      status.textContent = "Press I to open your inventory.";
+      nudgeStarterInventoryTutorial();
+    }
+    event.preventDefault();
+    return;
+  }
   if (event.code === "Escape" && minimapPanel.dataset.expanded === "true") {
     setMinimapExpanded(false); event.preventDefault(); return;
   }
@@ -11650,6 +11704,8 @@ window.addEventListener("keydown", event => {
   }
   if (!inventoryPanel.hidden) {
     if (event.code === "Escape" || event.code === "KeyI") setInventoryOpen(false);
+    if ((event.code === "Enter" || event.code === "Space")
+      && (event.target as HTMLElement).closest("button, [role=button], input, select")) return;
     event.preventDefault();
     return;
   }

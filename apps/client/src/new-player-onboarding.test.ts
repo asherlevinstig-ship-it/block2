@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { advanceOnboarding, ONBOARDING_DONE, ONBOARDING_STEPS, onboardingStorageKey,
-  legacyOnboardingStorageKey, migrateLegacyOnboardingStep, parseOnboardingStep, shouldPromptTownDeparture } from "./new-player-onboarding.js";
+  legacyOnboardingStorageKey, migrateLegacyOnboardingStep, parseOnboardingStep, shouldPromptTownDeparture,
+  starterInventoryLesson } from "./new-player-onboarding.js";
 
 describe("first-play onboarding", () => {
   it("advances only on the current real-world action", () => {
@@ -8,7 +9,15 @@ describe("first-play onboarding", () => {
     let step = 0;
     for (const action of ONBOARDING_STEPS) step = advanceOnboarding(step, action.event);
     expect(step).toBe(ONBOARDING_DONE);
-    expect(advanceOnboarding(step, "opened_pack")).toBe(ONBOARDING_DONE);
+    expect(advanceOnboarding(step, "equipped_starter")).toBe(ONBOARDING_DONE);
+  });
+
+  it("requires the I-key lesson and the actual starter sword equip", () => {
+    expect(starterInventoryLesson(2, false)).toBe("open_pack");
+    expect(starterInventoryLesson(2, true)).toBe("equip_sword");
+    expect(starterInventoryLesson(3, true)).toBe("hidden");
+    expect(advanceOnboarding(2, "picked_loot")).toBe(2);
+    expect(advanceOnboarding(2, "equipped_starter")).toBe(3);
   });
 
   it("requires a Combat switch after leaving town before the first fight counts", () => {
