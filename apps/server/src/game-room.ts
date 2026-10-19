@@ -599,6 +599,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly roadsideVariantIndex = new Map<string, number>();
   private readonly roadsideParticipation = new Map<string, Map<string, number>>();
   private readonly roadsideParticipationTickAt = new Map<string, number>();
+  private readonly roadsideCacheRewards = new Map<string, { siteId: string; itemId: ItemId; quantity: number; gold: number;
+    firstClear: boolean; variantId: string; variantTitle: string; readyAt: number }>();
   private readonly worldDeltasByChunk = new Map<string, Map<string, WorldBlockDelta>>();
   private readonly pendingWorldDeltaWrites = new Map<string, string>();
   private readonly mineralRegrowth = new Map<string, WorldBlockDelta & { regrowAt: number }>();
@@ -1110,7 +1112,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     for (const [id, pool] of this.venomSetPools) if (pool.ownerId === client.sessionId) this.venomSetPools.delete(id);
     for (const key of this.venomBuildup.keys()) if (key.startsWith(`${client.sessionId}:`)) this.venomBuildup.delete(key);
     this.combatContributions.disconnect(client.sessionId);
-    for (const [id, drop] of this.state.lootDrops) if (drop.ownerId === client.sessionId) this.state.lootDrops.delete(id);
+    for (const [id, drop] of this.state.lootDrops) if (drop.ownerId === client.sessionId) {
+      this.state.lootDrops.delete(id);
+      this.roadsideCacheRewards.delete(id);
+    }
     this.trading.disconnect(client.sessionId); this.lastTradeRequestAt.delete(client.sessionId);
     this.parties.disconnect(client.sessionId);
     for (const [key, lobby] of this.silverDepthsLobbies) if (lobby.members.includes(client.sessionId))
@@ -2417,6 +2422,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const readyAt = this.roadsideCycleReadyAt.get(siteId);
       if (repeatable && readyAt !== undefined && now >= readyAt) {
         this.roadsideCycleReadyAt.delete(siteId);
+        for (const [dropId, reward] of this.roadsideCacheRewards) if (reward.siteId === siteId) {
+          this.roadsideCacheRewards.delete(dropId);
+          this.state.lootDrops.delete(dropId);
+        }
         for (const guard of this.activeRoadsideGuards(siteId)) {
           this.state.mobs.delete(guard.id);
           this.mobHomes.delete(guard.id);
@@ -3959,6 +3968,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     for (const [dropId, drop] of this.state.lootDrops) {
       if (now >= drop.expiresAt) {
         this.state.lootDrops.delete(dropId);
+        this.roadsideCacheRewards.delete(dropId);
         if (dropId.startsWith("starter-kit:")) {
           const player = this.state.players.get(drop.ownerId);
           if (player) this.ensureStarterKit(drop.ownerId, player, now);
@@ -3979,6 +3989,35 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (!drop || Date.now() >= drop.expiresAt) return reply(false, "That bag is no longer available.");
     if (drop.ownerId && drop.ownerId !== client.sessionId) return reply(false, "That is another player's personal loot.");
     const action = parsed.data.action ?? (parsed.data.equip ? "equip" : "keep");
+    if (parsed.data.dropId.startsWith("roadside-cache:")) {
+      if (action !== "keep") return reply(false, "Open the victory cache before managing its reward.");
+      const reward = this.roadsideCacheRewards.get(parsed.data.dropId);
+      if (!reward) return reply(false, "That victory cache is no longer available.");
+      if (!isLootInPickupRange(player, drop, EQUIPMENT_LOOT_RANGE))
+        return reply(false, "Move beside your victory cache.");
+      const before = player.inventory.get(reward.itemId)?.quantity ?? 0;
+      const capacity = lootCarryCapacity(reward.itemId, ironCapacity(player.blacksmithUpgrades));
+      if (before + reward.quantity > capacity || playerBackpackAddable(player, reward.itemId, reward.quantity) < reward.quantity)
+        return reply(false, `PACK FULL · ${playerBackpackSlots(player)}/${backpackCapacity(player.blacksmithUpgrades)} slots used. Your victory cache stays here.`);
+      let item = player.inventory.get(reward.itemId);
+      if (!item) { item = new InventoryItemState(); player.inventory.set(reward.itemId, item); }
+      item.quantity = inventoryTotal(before, reward.quantity);
+      const beforeGold = player.coins;
+      player.coins = Math.min(1_000_000, player.coins + reward.gold);
+      if (reward.firstClear) player.huntLoadoutsJson = withRoadsideClaim(player.huntLoadoutsJson, reward.siteId);
+      this.state.lootDrops.delete(parsed.data.dropId);
+      this.roadsideCacheRewards.delete(parsed.data.dropId);
+      this.broadcast("loot:picked-up", { playerId: client.sessionId, dropId: parsed.data.dropId, itemId: reward.itemId,
+        quantity: reward.quantity, total: item.quantity } satisfies LootPickedUp);
+      client.send("roadside:result", { id: reward.siteId, ok: true,
+        message: `${reward.variantTitle} cache opened · +${reward.quantity} ${ITEM_DEFINITIONS[reward.itemId].name} · +${player.coins - beforeGold} gold.`,
+        claimed: reward.firstClear, phase: "claimed", progress: 1, holders: 0, readyAt: reward.readyAt,
+        variant: reward.variantId, variantTitle: reward.variantTitle });
+      void this.persistPlayer(client.sessionId, player, true).catch(() => {});
+      return reply(true, `${reward.variantTitle} cache opened · +${reward.quantity} ${ITEM_DEFINITIONS[reward.itemId].name} · +${player.coins - beforeGold} gold.`, {
+        action, itemId: reward.itemId, goldGranted: player.coins - beforeGold,
+      });
+    }
     if (parsed.data.dropId.startsWith("forest-cache:")) {
       if (action !== "keep") return reply(false, "Claim the cache before managing its contents.");
       const run = this.forestDungeonRun;
@@ -5792,27 +5831,22 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (!player || !client) continue;
       const firstClear = !parseRoadsideClaims(player.huntLoadoutsJson).has(id);
       const itemId = firstClear ? site.itemId as ItemId : encounterVariant?.rewardItemId ?? site.itemId as ItemId;
-      const wanted = firstClear ? site.quantity : 1;
-      const before = player.inventory.get(itemId)?.quantity ?? 0;
-      const granted = Math.max(0, Math.min(wanted, lootCarryCapacity(itemId, ironCapacity(player.blacksmithUpgrades)) - before,
-        backpackAddableQuantity(nextId => player.inventory.get(nextId)?.quantity ?? 0, itemId, wanted,
-          player.mainHandId as MainHandId, player.armourId as ArmourId, backpackCapacity(player.blacksmithUpgrades))));
-      if (granted > 0) {
-        let item = player.inventory.get(itemId);
-        if (!item) { item = new InventoryItemState(); player.inventory.set(itemId, item); }
-        item.quantity = inventoryTotal(before, granted);
-        this.broadcast("loot:picked-up", { playerId: sessionId, dropId: `roadside:${id}:${now}`, itemId,
-          quantity: granted, total: item.quantity } satisfies LootPickedUp);
-      }
+      const quantity = firstClear ? site.quantity : 1;
       const gold = firstClear ? site.gold : Math.max(2, Math.ceil(site.gold / 2));
-      player.coins = Math.min(1_000_000, player.coins + gold);
-      if (firstClear) player.huntLoadoutsJson = withRoadsideClaim(player.huntLoadoutsJson, id);
-      const packNote = granted < wanted ? " · pack full: some materials left behind" : "";
+      const dropId = `roadside-cache:${id}:${sessionId}:${now}`;
+      const drop = new LootDropState();
+      Object.assign(drop, { ownerId: sessionId, itemId, quantity, contentsJson: "", x: site.x + .5,
+        y: SURFACE_HEIGHT + 1.22, z: site.z + .5, expiresAt: readyAt });
+      this.state.lootDrops.set(dropId, drop);
+      this.roadsideCacheRewards.set(dropId, { siteId: id, itemId, quantity, gold, firstClear,
+        variantId: encounterVariant?.id ?? "", variantTitle: encounterVariant?.title ?? site.name, readyAt });
+      client.send("loot:spawned", { dropId, ownerId: drop.ownerId, itemId: drop.itemId, quantity: drop.quantity,
+        contentsJson: drop.contentsJson, affixTier: drop.affixTier, affixRegion: drop.affixRegion,
+        x: drop.x, y: drop.y, z: drop.z, expiresAt: drop.expiresAt });
       client.send("roadside:result", { id, ok: true,
-        message: `${encounterVariant?.title ?? site.name} cleared · +${granted} ${ITEM_DEFINITIONS[itemId].name} · +${gold} gold${packNote}.`,
-        claimed: firstClear, phase: "cleared", progress: 1, holders: 0, readyAt,
+        message: `${encounterVariant?.title ?? site.name} cleared · your personal victory cache is ready · hold E to open.`,
+        claimed: false, phase: "cleared", progress: 1, holders: 0, readyAt,
         variant: encounterVariant?.id, variantTitle: encounterVariant?.title });
-      void this.persistPlayer(sessionId, player, true).catch(() => {});
     }
     this.roadsideParticipation.delete(id);
     this.roadsideParticipationTickAt.delete(id);

@@ -20,6 +20,22 @@ function fixture(id: string) {
   return { site, room, internal, player, client };
 }
 
+function personalRoadsideCache(room: WorldRoom, ownerId: string): string {
+  const entry = [...room.state.lootDrops].find(([dropId, drop]) =>
+    dropId.startsWith("roadside-cache:") && drop.ownerId === ownerId);
+  if (!entry) throw new Error(`Missing roadside cache for ${ownerId}`);
+  return entry[0];
+}
+
+function collectRoadsideCache(room: WorldRoom, internal: any, client: { sessionId: string; send: ReturnType<typeof vi.fn> }): string {
+  const dropId = personalRoadsideCache(room, client.sessionId);
+  const player = room.state.players.get(client.sessionId)!;
+  const drop = room.state.lootDrops.get(dropId)!;
+  Object.assign(player, { x: drop.x, y: SURFACE_HEIGHT + 1, z: drop.z });
+  internal.handleLootCollect(client, { dropId, action: "keep" });
+  return dropId;
+}
+
 describe("personal roadside encounters", () => {
   it("uses landmarks separate from Calling sites and keeps rewards small", () => {
     const fieldIds = new Set<string>(ROLE_FIELD_OPPORTUNITIES.map(site => site.landmarkId));
@@ -115,6 +131,8 @@ describe("personal roadside encounters", () => {
     for (let elapsed = 250; elapsed <= 2_250; elapsed += 250) internal.advanceRoadsideGuards(ambushStartedAt + elapsed);
     for (const guard of guards) room.state.mobs.get(guard.id)!.alive = false;
     internal.handleRoadsideEncounter(client, { id: site.id });
+    expect(player.inventory.get("silver_ore")).toBeUndefined();
+    collectRoadsideCache(room, internal, client);
     expect(player.inventory.get("silver_ore")?.quantity).toBe(2);
   });
 
@@ -131,6 +149,8 @@ describe("personal roadside encounters", () => {
     for (const guard of roadsideGuardsFor(site.id)) room.state.mobs.get(guard.id)!.alive = false;
     internal.handleRoadsideEncounter(client, { id: site.id });
     expect(client.send).toHaveBeenCalledWith("roadside:result", expect.objectContaining({ phase: "cleared" }));
+    expect(player.inventory.get("silver_ore")).toBeUndefined();
+    collectRoadsideCache(room, internal, client);
     expect(player.inventory.get("silver_ore")?.quantity).toBe(2);
     vi.restoreAllMocks();
   });
@@ -150,6 +170,7 @@ describe("personal roadside encounters", () => {
     for (let elapsed = 250; elapsed <= 2_250; elapsed += 250) internal.advanceRoadsideGuards(huntStartedAt + elapsed);
     for (const guard of guards) room.state.mobs.get(guard.id)!.alive = false;
     internal.handleRoadsideEncounter(client, { id: site.id });
+    collectRoadsideCache(room, internal, client);
     expect(player.inventory.get("crawler_fang")?.quantity).toBe(2);
   });
 
@@ -161,6 +182,7 @@ describe("personal roadside encounters", () => {
       for (let elapsed = 250; elapsed <= 2_250; elapsed += 250) internal.advanceRoadsideGuards(now + elapsed);
       for (const guard of internal.activeRoadsideGuards(site.id)) room.state.mobs.get(guard.id)!.alive = false;
       now += 2_500; internal.handleRoadsideEncounter(client, { id: site.id });
+      collectRoadsideCache(room, internal, client);
     };
     clearCycle();
     expect(player.inventory.get("silver_ore")?.quantity).toBe(2);
@@ -208,9 +230,29 @@ describe("personal roadside encounters", () => {
     for (let elapsed = 250; elapsed <= 2_250; elapsed += 250) internal.advanceRoadsideGuards(startedAt + elapsed);
     for (const guard of roadsideGuardsFor(site.id)) room.state.mobs.get(guard.id)!.alive = false;
     internal.handleRoadsideEncounter(client, { id: site.id });
+    expect(player.inventory.get("crawler_fang")).toBeUndefined();
+    collectRoadsideCache(room, internal, client);
+    collectRoadsideCache(room, internal, allyClient);
     expect(player.inventory.get("crawler_fang")?.quantity).toBe(2);
     expect(ally.inventory.get("crawler_fang")?.quantity).toBe(2);
     expect(allyClient.send).toHaveBeenCalledWith("roadside:result", expect.objectContaining({ phase: "cleared" }));
+  });
+
+  it("keeps a personal victory cache unopened when the backpack is full", () => {
+    const { room, internal, player, client, site } = fixture("ashglass-survey");
+    const fullStack = new InventoryItemState(); fullStack.quantity = 255; player.inventory.set("silver_ore", fullStack);
+    internal.handleRoadsideEncounter(client, { id: site.id });
+    const startedAt = Date.now();
+    for (let elapsed = 250; elapsed <= 2_250; elapsed += 250) internal.advanceRoadsideGuards(startedAt + elapsed);
+    for (const guard of roadsideGuardsFor(site.id)) room.state.mobs.get(guard.id)!.alive = false;
+    internal.handleRoadsideEncounter(client, { id: site.id });
+    const dropId = personalRoadsideCache(room, client.sessionId);
+    internal.handleLootCollect(client, { dropId, action: "keep" });
+    expect(room.state.lootDrops.has(dropId)).toBe(true);
+    expect(internal.roadsideCacheRewards.has(dropId)).toBe(true);
+    expect(player.coins).toBe(0);
+    expect(parseRoadsideClaims(player.huntLoadoutsJson).has(site.id)).toBe(false);
+    expect(client.send).toHaveBeenCalledWith("loot:result", expect.objectContaining({ ok: false, message: expect.stringContaining("PACK FULL") }));
   });
 
   it("syncs a rotated world state to everyone but announces it only nearby", () => {

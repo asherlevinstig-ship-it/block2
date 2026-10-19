@@ -2972,7 +2972,9 @@ function interactWithLoot(dropId: string): void {
   const visual = lootVisuals.get(dropId);
   if (visual) visual.pickupStartedAt = now;
   room.send("loot:collect", { dropId, action: "keep" });
-  status.textContent = isEnemyLootBag(drop)
+  status.textContent = dropId.startsWith("roadside-cache:")
+    ? "Opening your victory cache..."
+    : isEnemyLootBag(drop)
     ? `Opening ${LOOT_BAG_TIER_LABEL[lootBagTierForItems(lootItems(drop))]}...`
     : `Picking up ${isItemId(drop.itemId) ? ITEM_DEFINITIONS[drop.itemId].name : "loot"}...`;
 }
@@ -3007,7 +3009,7 @@ function updateLootWorldLabel(): void {
   lootWorldLabel.style.left = `${labelX}px`;
   lootWorldLabel.style.top = `${anchorY}px`;
   lootWorldLabel.style.setProperty("--tail-shift", `${anchorX - labelX}px`);
-  lootWorldName.textContent = bagTier
+  lootWorldName.textContent = nearest.id.startsWith("roadside-cache:") ? "Regional Victory Cache" : bagTier
     ? nearest.id.startsWith("northwatch-shard-patrol-cache:") ? "Shard Patrol Cache" : LOOT_BAG_TIER_LABEL[bagTier]
     : `${drop.quantity > 1 ? `${drop.quantity}× ` : ""}${ITEM_DEFINITIONS[drop.itemId].name}`;
   const holding = lootHold?.dropId === nearest.id;
@@ -6701,6 +6703,17 @@ function addDroppedEquipmentModel(root: pc.Entity, itemId: ItemId, material: pc.
 
 function createLootVisual(dropId: string, drop: NetworkLootDrop, settled = false): LootVisual {
   const root = new pc.Entity(`loot:${dropId}`);
+  if (dropId.startsWith("roadside-cache:")) {
+    root.setPosition(drop.x, drop.y + .36, drop.z);
+    const marker = new pc.Entity("roadside-cache-interaction-marker");
+    const beam = new pc.Entity("roadside-cache-interaction-beam");
+    root.addChild(marker); root.addChild(beam); app.root.addChild(root);
+    const now = performance.now();
+    return { root, marker, beam, beamUntil: 0, revealAt: now, landedAt: now,
+      tossFrom: new pc.Vec3(drop.x, drop.y + .36, drop.z), state: drop,
+      phase: [...dropId].reduce((total, character) => total + character.charCodeAt(0), 0) % 17,
+      audioPlayed: true, landingPlayed: true, pickupStartedAt: null };
+  }
   const patrolCache = dropId.startsWith("northwatch-shard-patrol-cache:");
   const itemId = isItemId(drop.itemId) ? drop.itemId : "moss_fibre";
   const bagItems = lootItems(drop);

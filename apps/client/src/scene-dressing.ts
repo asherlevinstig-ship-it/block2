@@ -38,6 +38,7 @@ type RoadsidePresentationVisual = {
   root: pc.Entity;
   wheel: pc.Entity | null;
   chest: pc.Entity;
+  chestLid: pc.Entity;
   progress: pc.Entity[];
   holders: pc.Entity[];
   lock: pc.Entity[];
@@ -263,10 +264,13 @@ export class SceneDressing {
       visual.holders.forEach((pip, index) => { pip.enabled = state.phase === "repair" && index < state.holders; });
       visual.lock.forEach(lock => { lock.enabled = active && state.phase !== "ready" && state.phase !== "claimed"; });
       const revealed = state.phase === "ready" || state.phase === "claimed" || state.phase === "cleared";
+      const opened = state.phase === "claimed";
       const rise = Math.min(1, Math.max(0, (timeMilliseconds - state.changedAt) / 650));
       visual.chest.setLocalPosition(0, revealed ? -.42 + rise * .92 : -.42, 0);
+      visual.chestLid.setLocalPosition(0, opened ? .79 : .69, opened ? .28 : 0);
+      visual.chestLid.setLocalEulerAngles(opened ? -55 : 0, 0, 0);
       visual.rewardLight.enabled = revealed;
-      if (visual.rewardLight.light) visual.rewardLight.light.intensity = .7 + Math.sin(time * 4.4) * .18;
+      if (visual.rewardLight.light) visual.rewardLight.light.intensity = (opened ? .35 : .7) + Math.sin(time * 4.4) * .12;
     }
     for (let index = this.roadsideBursts.length - 1; index >= 0; index--) {
       const burst = this.roadsideBursts[index]!;
@@ -426,7 +430,7 @@ export class SceneDressing {
     }
     const chest = new pc.Entity(`${id}-reward-crate`); root.addChild(chest);
     this.keeperBox(chest, "crate-body", [1.05, .62, .78], [0, .31, 0], kind === "ambush" ? SOOT : DARK_OAK);
-    this.keeperBox(chest, "crate-lid", [1.12, .16, .84], [0, .69, 0], kind === "ambush" ? IRON : OAK);
+    const chestLid = this.keeperBox(chest, "crate-lid", [1.12, .16, .84], [0, .69, 0], kind === "ambush" ? IRON : OAK);
     this.keeperBox(chest, "crate-clasp", [.18, .22, .08], [0, .48, .43], kind === "hunt" ? EMBER : GOLD);
     const progress: pc.Entity[] = [];
     const lock: pc.Entity[] = [];
@@ -451,7 +455,7 @@ export class SceneDressing {
       intensity: .8, range: 5.5, castShadows: false });
     rewardLight.setLocalPosition(0, 1.15, 0); rewardLight.enabled = false; root.addChild(rewardLight);
     const staging = this.createRoadsideVariantStaging(id, root);
-    this.roadsideVisuals.set(id, { kind, root, wheel, chest, progress, holders, lock, rewardLight,
+    this.roadsideVisuals.set(id, { kind, root, wheel, chest, chestLid, progress, holders, lock, rewardLight,
       variantRoots: staging.roots, variantCues: staging.cues });
   }
 
