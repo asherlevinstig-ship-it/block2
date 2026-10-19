@@ -4,7 +4,7 @@ export type DiscoverySignalKind = "smoke" | "beacon" | "omens" | "glint" | "trai
 
 export function discoverySignalKind(site: RoadsideDiscoveryKind, encounter?: string): DiscoverySignalKind {
   if (encounter === "cache") return "glint";
-  if (encounter === "trail") return "trail";
+  if (encounter === "trail" || encounter === "hunt") return "trail";
   if (site === "shrine") return "beacon";
   if (site === "camp") return "smoke";
   if (site === "ruin" || site === "grove") return "omens";

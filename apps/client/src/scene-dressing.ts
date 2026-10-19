@@ -24,6 +24,18 @@ const FORGE_STONE: Color = [0.29, 0.30, 0.29];
 const CANVAS: Color = [0.53, 0.15, 0.10];
 const CANVAS_LIGHT: Color = [0.74, 0.27, 0.14];
 
+type RoadsidePresentationPhase = "idle" | "repair" | "activated" | "ready" | "claimed";
+type RoadsidePresentationState = { phase: RoadsidePresentationPhase; progress: number; holders: number; changedAt: number };
+type RoadsidePresentationVisual = {
+  kind: "winch" | "ambush" | "hunt";
+  root: pc.Entity;
+  wheel: pc.Entity | null;
+  chest: pc.Entity;
+  progress: pc.Entity[];
+  holders: pc.Entity[];
+  lock: pc.Entity[];
+};
+
 const TAVERN_PATRONS = [
   { x: 3.8, z: 12.6, facing: 1, skin: [0.65, 0.38, 0.23], shirt: [0.20, 0.31, 0.52], hair: [0.11, 0.08, 0.06], phase: 0 },
   { x: 5.2, z: 14.4, facing: -1, skin: [0.83, 0.57, 0.39], shirt: [0.54, 0.26, 0.18], hair: [0.36, 0.19, 0.08], phase: 1.7 },
@@ -87,6 +99,9 @@ export class SceneDressing {
   private readonly keeperMaterials = new Map<string, pc.StandardMaterial>();
   private readonly patronHeads: Array<{ entity: pc.Entity; baseYaw: number; phase: number }> = [];
   private readonly discoverySignals: Array<{ entity: pc.Entity; kind: DiscoverySignalKind; x: number; z: number; index: number; phase: number }> = [];
+  private readonly roadsidePresentation = new Map<string, RoadsidePresentationState>();
+  private readonly roadsideVisuals = new Map<string, RoadsidePresentationVisual>();
+  private readonly roadsideBursts: Array<{ root: pc.Entity; particles: pc.Entity[]; startedAt: number }> = [];
 
   constructor(private readonly app: pc.Application) {
     this.material.diffuse.set(1, 1, 1);
@@ -192,6 +207,103 @@ export class SceneDressing {
         signal.entity.setLocalScale(pulse, pulse * 2.8, pulse);
       }
     }
+    for (const [id, visual] of this.roadsideVisuals) {
+      const state = this.roadsidePresentation.get(id) ?? { phase: "idle", progress: 0, holders: 0, changedAt: 0 };
+      const active = state.phase === "repair" || state.phase === "activated" || state.phase === "ready";
+      if (visual.wheel) visual.wheel.setLocalEulerAngles(0, 0,
+        state.phase === "repair" ? time * 210 : state.progress * 360);
+      visual.progress.forEach((segment, index) => {
+        segment.enabled = visual.kind !== "winch" ? active : index < Math.ceil(state.progress * visual.progress.length);
+        if (segment.enabled) {
+          const pulse = .88 + Math.sin(time * 5 + index) * .12;
+          segment.setLocalScale(.42 * pulse, .045, .13);
+        }
+      });
+      visual.holders.forEach((pip, index) => { pip.enabled = state.phase === "repair" && index < state.holders; });
+      visual.lock.forEach(lock => { lock.enabled = active && state.phase !== "ready" && state.phase !== "claimed"; });
+      const revealed = state.phase === "ready" || state.phase === "claimed";
+      const rise = Math.min(1, Math.max(0, (timeMilliseconds - state.changedAt) / 650));
+      visual.chest.setLocalPosition(0, revealed ? -.42 + rise * .92 : -.42, 0);
+    }
+    for (let index = this.roadsideBursts.length - 1; index >= 0; index--) {
+      const burst = this.roadsideBursts[index]!;
+      const age = (timeMilliseconds - burst.startedAt) / 1_000;
+      if (age >= 1.1) { burst.root.destroy(); this.roadsideBursts.splice(index, 1); continue; }
+      for (const [particleIndex, particle] of burst.particles.entries()) {
+        const angle = particleIndex / burst.particles.length * Math.PI * 2;
+        const radius = .35 + age * (1.8 + particleIndex % 3 * .28);
+        particle.setLocalPosition(Math.sin(angle) * radius, .12 + age * (.55 + particleIndex % 2 * .25), Math.cos(angle) * radius);
+        const scale = Math.max(.04, .34 * (1 - age / 1.1));
+        particle.setLocalScale(scale, scale * .7, scale);
+      }
+    }
+  }
+
+  setRoadsideEncounterState(id: string, update: { phase?: string; progress?: number; holders?: number }, now = performance.now()): void {
+    if (id !== "broken-winch-camp" && id !== "ashglass-survey" && id !== "wilds-hunter-blind") return;
+    const previous = this.roadsidePresentation.get(id) ?? { phase: "idle" as const, progress: 0, holders: 0, changedAt: now };
+    const phase = update.phase === "repair" || update.phase === "activated" || update.phase === "ready" || update.phase === "claimed"
+      ? update.phase : previous.phase;
+    const next = { phase, progress: Math.min(1, Math.max(0, update.progress ?? previous.progress)),
+      holders: Math.max(0, Math.floor(update.holders ?? previous.holders)), changedAt: phase === previous.phase ? previous.changedAt : now };
+    this.roadsidePresentation.set(id, next);
+    if (phase === "activated" && previous.phase !== "activated") this.createRoadsideBurst(id, now);
+  }
+
+  private createRoadsideBurst(id: string, now: number): void {
+    const site = ROADSIDE_DISCOVERIES.find(entry => entry.id === id);
+    if (!site || !this.roadsideVisuals.has(id)) return;
+    const root = new pc.Entity(`roadside-${id}-burst`);
+    root.setPosition(site.x + .5, SURFACE_HEIGHT + 1.05, site.z + .5);
+    this.root.addChild(root);
+    const particles = Array.from({ length: 12 }, (_, index) => {
+      const particle = this.discoverySignalEntity(`roadside-dust-${index}`, "sphere", id === "ashglass-survey" ? this.goldSignal : this.darkSignal);
+      this.root.removeChild(particle); root.addChild(particle);
+      return particle;
+    });
+    this.roadsideBursts.push({ root, particles, startedAt: now });
+  }
+
+  private createRoadsidePresentation(id: string, x: number, z: number): void {
+    const kind = id === "broken-winch-camp" ? "winch" : id === "ashglass-survey" ? "ambush" : "hunt";
+    const root = new pc.Entity(`roadside-presentation-${id}`);
+    root.setPosition(x + .5, SURFACE_HEIGHT + 1.02, z + .5);
+    this.root.addChild(root);
+    let wheel: pc.Entity | null = null;
+    if (kind === "winch") {
+      this.keeperBox(root, "winch-base", [1.25, .22, .85], [0, .11, 0], DARK_OAK);
+      this.keeperBox(root, "winch-left-post", [.18, 1.35, .18], [-.62, .72, 0], OAK);
+      this.keeperBox(root, "winch-right-post", [.18, 1.35, .18], [.62, .72, 0], OAK);
+      this.keeperBox(root, "winch-axle", [1.55, .16, .16], [0, 1.05, 0], IRON);
+      wheel = new pc.Entity("winch-wheel"); wheel.setLocalPosition(.78, 1.05, 0); root.addChild(wheel);
+      for (let index = 0; index < 8; index++) {
+        const spoke = this.keeperBox(wheel, `winch-spoke-${index}`, [.08, .88, .08], [0, 0, 0], COPPER);
+        spoke.setLocalEulerAngles(0, 0, index * 22.5);
+      }
+    }
+    const chest = new pc.Entity(`${id}-reward-crate`); root.addChild(chest);
+    this.keeperBox(chest, "crate-body", [1.05, .62, .78], [0, .31, 0], kind === "ambush" ? SOOT : DARK_OAK);
+    this.keeperBox(chest, "crate-lid", [1.12, .16, .84], [0, .69, 0], kind === "ambush" ? IRON : OAK);
+    this.keeperBox(chest, "crate-clasp", [.18, .22, .08], [0, .48, .43], kind === "hunt" ? EMBER : GOLD);
+    const progress: pc.Entity[] = [];
+    const lock: pc.Entity[] = [];
+    for (let index = 0; index < 12; index++) {
+      const angle = index / 12 * Math.PI * 2;
+      const segment = this.keeperBox(root, `encounter-ring-${index}`, [.42, .045, .13],
+        [Math.sin(angle) * 2.05, .055, Math.cos(angle) * 2.05], kind === "ambush" ? EMBER : GOLD);
+      segment.setLocalEulerAngles(0, angle * 180 / Math.PI, 0); segment.enabled = false; progress.push(segment);
+      if (kind !== "winch" && index % 3 === 0) lock.push(segment);
+    }
+    if (kind !== "winch") {
+      const barA = this.keeperBox(root, "encounter-lock-a", [.12, 1.35, .12], [0, .78, .44], EMBER);
+      const barB = this.keeperBox(root, "encounter-lock-b", [.12, 1.35, .12], [0, .78, .44], EMBER);
+      barA.setLocalEulerAngles(0, 0, 45); barB.setLocalEulerAngles(0, 0, -45); lock.push(barA, barB);
+    }
+    const holders = Array.from({ length: 4 }, (_, index) => {
+      const pip = this.keeperBox(root, `holder-${index + 1}`, [.2, .2, .2], [-.45 + index * .3, .25, -1.05], GOLD);
+      pip.setLocalEulerAngles(0, 45, 0); pip.enabled = false; return pip;
+    });
+    this.roadsideVisuals.set(id, { kind, root, wheel, chest, progress, holders, lock });
   }
 
   activateRealmWardenVictory(now = performance.now()): void {
@@ -306,6 +418,8 @@ export class SceneDressing {
     this.blacksmithBuilt = false;
     this.patronHeads.length = 0;
     this.discoverySignals.length = 0;
+    this.roadsideVisuals.clear();
+    this.roadsideBursts.length = 0;
     const solid = new BoxBatch();
     const glow = new BoxBatch();
     const wardenVictory = new BoxBatch();
@@ -476,13 +590,17 @@ export class SceneDressing {
       if (!loadedChunks.has(`${chunkX},${chunkZ}`) || read(site.x, SURFACE_HEIGHT, site.z) === Block.Air) continue;
       const encounter = roadsideEncounterAt(site.id);
       const kind = discoverySignalKind(site.kind, encounter?.kind);
-      if (encounter?.kind === "trail") {
-        for (const [index, mark] of discoveryBreadcrumbs(site.x, site.z, encounter.stashDx, encounter.stashDz).entries()) {
-          solid.box(mark.x, surface + .025, mark.z, .42, .05, .13, index % 2 ? DARK_OAK : SOOT);
-          glow.box(mark.x, surface + .055, mark.z, .12, .025, .055, site.id.includes("cinder") ? EMBER : GOLD);
+      if (encounter?.kind === "trail" || encounter?.kind === "hunt") {
+        const hunting = encounter.kind === "hunt";
+        for (const [index, mark] of discoveryBreadcrumbs(site.x, site.z, encounter.stashDx, encounter.stashDz, hunting ? 7 : 4).entries()) {
+          solid.box(mark.x, surface + .025, mark.z, hunting ? .32 : .42, .05, hunting ? .18 : .13,
+            hunting ? [0.22, .025, .02] : index % 2 ? DARK_OAK : SOOT);
+          glow.box(mark.x, surface + .055, mark.z, .12, .025, .055, hunting || site.id.includes("cinder") ? EMBER : GOLD);
           void mark.yaw;
         }
       }
+      if (site.id === "broken-winch-camp" || site.id === "ashglass-survey" || site.id === "wilds-hunter-blind")
+        this.createRoadsidePresentation(site.id, site.x, site.z);
       const count = kind === "beacon" ? 5 : kind === "omens" ? 3 : 4;
       for (let index = 0; index < count; index++) {
         const material = kind === "smoke" || kind === "trail" ? this.smokeSignal

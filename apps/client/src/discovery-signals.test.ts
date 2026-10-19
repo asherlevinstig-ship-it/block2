@@ -8,6 +8,7 @@ describe("world discovery signals", () => {
     expect(discoverySignalKind("ruin")).toBe("omens");
     expect(discoverySignalKind("cart")).toBe("glint");
     expect(discoverySignalKind("camp", "trail")).toBe("trail");
+    expect(discoverySignalKind("camp", "hunt")).toBe("trail");
     expect(discoverySignalKind("ruin", "cache")).toBe("glint");
   });
 

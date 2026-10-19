@@ -594,7 +594,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly mobBaseNames = new Map<string, string>();
   private readonly roadsideGuardLastNearby = new Map<string, number>();
   private readonly roadsideChallengeActive = new Set<string>();
-  private readonly roadsideRepair = new Map<string, { progressMs: number; lastAt: number; ready: boolean }>();
+  private readonly roadsideRepair = new Map<string, { progressMs: number; lastAt: number; lastBroadcastAt: number; ready: boolean }>();
   private readonly worldDeltasByChunk = new Map<string, Map<string, WorldBlockDelta>>();
   private readonly pendingWorldDeltaWrites = new Map<string, string>();
   private readonly mineralRegrowth = new Map<string, WorldBlockDelta & { regrowAt: number }>();
@@ -2424,17 +2424,27 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         if (site.kind === "repair") {
           const repair = this.roadsideRepair.get(siteId);
           if (repair && !repair.ready) {
-            const holding = [...this.state.players.values()].some(player => player.health > 0
+            const holders = [...this.state.players.values()].filter(player => player.health > 0
               && Math.abs(player.y - SURFACE_HEIGHT) <= 2.5 && Math.hypot(player.x - site.x, player.z - site.z) <= 4.5);
-            if (holding) repair.progressMs = Math.min(site.holdMs, repair.progressMs + Math.max(0, Math.min(250, now - repair.lastAt)));
+            if (holders.length > 0) repair.progressMs = Math.min(site.holdMs, repair.progressMs + Math.max(0, Math.min(250, now - repair.lastAt)));
             repair.lastAt = now;
+            if (now - repair.lastBroadcastAt >= 500) {
+              repair.lastBroadcastAt = now;
+              for (const client of this.clients) {
+                const player = this.state.players.get(client.sessionId);
+                if (player && Math.hypot(player.x - site.x, player.z - site.z) <= 20)
+                  client.send("roadside:progress", { id: siteId, phase: "repair", progress: repair.progressMs / site.holdMs,
+                    holders: holders.length });
+              }
+            }
             if (repair.progressMs >= site.holdMs) {
               repair.ready = true;
               for (const client of this.clients) {
                 const player = this.state.players.get(client.sessionId);
                 if (player && Math.hypot(player.x - site.x, player.z - site.z) <= 20)
                   client.send("roadside:result", { id: siteId, ok: true,
-                    message: "WINCH REPAIRED · Defeat the quarry patrol and raise the resource crate.", claimed: false });
+                    message: "WINCH REPAIRED · Defeat the quarry patrol and raise the resource crate.", claimed: false,
+                    phase: "ready", progress: 1, holders: holders.length });
               }
             }
           }
@@ -5619,7 +5629,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const id = typeof payload === "object" && payload !== null && "id" in payload && typeof payload.id === "string" ? payload.id : "";
     const choice = typeof payload === "object" && payload !== null && "choice" in payload && typeof payload.choice === "string" ? payload.choice : "";
     const site = roadsideEncounterAt(id);
-    const reply = (ok: boolean, message: string, claimed = false) => client.send("roadside:result", { id, ok, message, claimed });
+    const reply = (ok: boolean, message: string, claimed = false, details: Record<string, unknown> = {}) =>
+      client.send("roadside:result", { id, ok, message, claimed, ...details });
     if (!player || !site || this.roomKind !== "overworld") return reply(false, "That discovery is unavailable here.");
     if (player.y < SURFACE_HEIGHT - 1 || nearestRoadsideEncounter(player.x, player.z)?.id !== id)
       return reply(false, `Move beside ${site.name} to investigate it.`);
@@ -5635,20 +5646,25 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (!this.roadsideChallengeActive.has(id)) {
         this.roadsideChallengeActive.add(id);
         this.advanceRoadsideGuards(Date.now());
-        return reply(true, "TRACKS FOUND · The wounded stalker calls nearby creatures to its defence.");
+        this.broadcastRoadsidePresentation(id, "activated");
+        return reply(true, "TRACKS FOUND · The wounded stalker calls nearby creatures to its defence.", false,
+          { phase: "activated" });
       }
     }
     if (site.kind === "ambush" && !this.roadsideChallengeActive.has(id)) {
       this.roadsideChallengeActive.add(id);
       this.advanceRoadsideGuards(Date.now());
-      return reply(true, "ASHGLASS AMBUSH · Breaker ahead; hounds are closing from both sides.");
+      this.broadcastRoadsidePresentation(id, "activated");
+      return reply(true, "ASHGLASS AMBUSH · Breaker ahead; hounds are closing from both sides.", false,
+        { phase: "activated" });
     }
     if (site.kind === "repair" && !this.roadsideChallengeActive.has(id)) {
       const now = Date.now();
       this.roadsideChallengeActive.add(id);
-      this.roadsideRepair.set(id, { progressMs: 0, lastAt: now, ready: false });
+      this.roadsideRepair.set(id, { progressMs: 0, lastAt: now, lastBroadcastAt: now - 500, ready: false });
       this.advanceRoadsideGuards(now);
-      return reply(true, `REPAIR STARTED · Hold the winch area for ${Math.ceil(site.holdMs / 1_000)}s while the quarry patrol approaches.`);
+      return reply(true, `REPAIR STARTED · Hold the winch area for ${Math.ceil(site.holdMs / 1_000)}s while the quarry patrol approaches.`, false,
+        { phase: "repair", progress: 0, holders: 1 });
     }
     if (site.kind === "repair") {
       const repair = this.roadsideRepair.get(id);
@@ -5688,8 +5704,18 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
     const message = site.kind === "shrine" && choice === "rest" ? `${site.name} · health and stamina restored.`
       : `${site.name} explored · +${quantity} ${ITEM_DEFINITIONS[itemId].name}${player.coins > beforeGold ? ` · +${player.coins - beforeGold} gold` : ""}.`;
-    reply(true, message, true);
+    reply(true, message, true, { phase: "claimed", progress: 1, holders: 0 });
     void this.persistPlayer(client.sessionId, player, true).catch(() => {});
+  }
+
+  private broadcastRoadsidePresentation(id: string, phase: string): void {
+    const site = roadsideEncounterAt(id);
+    if (!site) return;
+    for (const client of this.clients) {
+      const player = this.state.players.get(client.sessionId);
+      if (player && Math.hypot(player.x - site.x, player.z - site.z) <= 20)
+        client.send("roadside:progress", { id, phase, progress: 0, holders: 0 });
+    }
   }
 
   private sendAshenReliquaryState(client: Client, now: number): void {

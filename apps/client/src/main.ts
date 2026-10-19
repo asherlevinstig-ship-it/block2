@@ -12191,18 +12191,20 @@ app.on("update", (dt: number) => {
       ? Math.sin(Math.PI * Math.min(1, Math.max(0, (animationNow + serverClock.offset - mob.state.attackContactEndAt)
         / Math.max(1, mob.state.attackRecoveryEndAt - mob.state.attackContactEndAt)))) : 0;
     const gaitBob = Math.abs(Math.sin(mob.art.phase)) * mob.art.walk * (mob.isBrute ? 0.026 : 0.018);
+    const woundedLimp = mob.state.name === "Wounded Wilds Stalker" ? Math.max(0, Math.sin(mob.art.phase)) * mob.art.walk : 0;
     const bruteRecovery = bruteRecoveryPose(mob.state, animationNow + serverClock.offset);
     const bodySize = mob.art.rootGuardian ? 1.38 : mob.state.isChampion ? 1.25 : mob.state.isMiniBoss ? 1.18 : mob.state.isElite ? 1.12 : 1;
     mob.bodyRoot.setLocalScale(bodySize * (1 + defeat * 0.13), bodySize * (1 - defeat * (mob.isBrute ? 0.42 : 0.58)), bodySize * (1 + defeat * 0.1));
     mob.bodyRoot.setLocalPosition(
       0,
-      gaitBob - hitStrength * 0.035 - attackStrength * (mob.isBrute ? 0.07 : 0) - crawlerRecovery * 0.06 - bruteRecovery * .1,
+      gaitBob - woundedLimp * .075 - hitStrength * 0.035 - attackStrength * (mob.isBrute ? 0.07 : 0) - crawlerRecovery * 0.06 - bruteRecovery * .1,
       attackStrength * (mob.isBrute ? 0.42 : mob.isSpitter ? -0.3 : 0.24) - windupStrength * (mob.isBrute ? 0.25 : mob.isSpitter ? -0.18 : 0.16),
     );
     mob.bodyRoot.setLocalEulerAngles(
       (mob.isBrute ? windupStrength * -11 + attackStrength * 18 + bruteRecovery * 14 : mob.isSpitter ? windupStrength * 12 - attackStrength * 20 : windupStrength * -7 + attackStrength * 9 + crawlerRecovery * 8) + defeat * (mob.isBrute ? 17 : 5) - mob.art.pursuit * mob.art.walk * (mob.isBrute ? 2 : 4),
       0,
-      Math.sin(animationTime * 35) * staggerStrength * (mob.isBrute ? 7 : 12) + Math.sin(mob.art.phase) * mob.art.walk * (mob.isBrute ? 2.5 : 1.3) + mob.turnLean * 4 + defeat * (mob.isBrute ? 7 : 12),
+      Math.sin(animationTime * 35) * staggerStrength * (mob.isBrute ? 7 : 12) + Math.sin(mob.art.phase) * mob.art.walk * (mob.isBrute ? 2.5 : 1.3)
+        + woundedLimp * 7 + mob.turnLean * 4 + defeat * (mob.isBrute ? 7 : 12),
     );
     if (mob.art.matriarch) {
       const pose = matriarchBodyPose(defeat, attackStrength);
@@ -12625,7 +12627,12 @@ app.on("update", (dt: number) => {
   if (worldReady) {
     const localNetworkPlayer = (room?.state.players as Map<string, NetworkPlayer> | undefined)?.get(room?.sessionId ?? "");
     if (localNetworkPlayer?.huntLoadoutsJson) {
-      for (const id of parseRoadsideClaims(localNetworkPlayer.huntLoadoutsJson)) localRoadsideClaims.add(id);
+      for (const id of parseRoadsideClaims(localNetworkPlayer.huntLoadoutsJson)) {
+        if (!localRoadsideClaims.has(id)) {
+          localRoadsideClaims.add(id);
+          sceneDressing.setRoadsideEncounterState(id, { phase: "claimed", progress: 1, holders: 0 });
+        }
+      }
       minimap.setRoadsideClaims(localNetworkPlayer.huntLoadoutsJson);
     }
     updateSilverDepthsRoute(now);
@@ -13636,7 +13643,12 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     status.textContent = `${defeatedName} reward${rewards ? ` · ${rewards}` : " claimed"}.`;
     logMovementEvent(`REWARD ${message.mobId} hp=${message.healthRestored} stamina=${message.staminaRestored}`);
   });
-  room.onMessage("roadside:result", (message: { id: string; ok: boolean; message: string; claimed: boolean }) => {
+  room.onMessage("roadside:progress", (message: { id: string; phase: string; progress: number; holders: number }) => {
+    sceneDressing.setRoadsideEncounterState(message.id, message);
+  });
+  room.onMessage("roadside:result", (message: { id: string; ok: boolean; message: string; claimed: boolean;
+    phase?: string; progress?: number; holders?: number }) => {
+    sceneDressing.setRoadsideEncounterState(message.id, message);
     if (message.claimed) {
       localRoadsideClaims.add(message.id);
       minimap.setRoadsideClaims(JSON.stringify([...localRoadsideClaims]));

@@ -105,6 +105,7 @@ describe("personal roadside encounters", () => {
     internal.advanceRoadsideGuards(1_000);
     expect(roadsideGuardsFor(site.id).every(guard => !room.state.mobs.has(guard.id))).toBe(true);
     internal.handleRoadsideEncounter(client, { id: site.id });
+    expect(client.send).toHaveBeenCalledWith("roadside:result", expect.objectContaining({ phase: "activated" }));
     const guards = roadsideGuardsFor(site.id);
     expect(guards).toHaveLength(3);
     expect(guards.every(guard => room.state.mobs.get(guard.id)?.alive)).toBe(true);
@@ -119,12 +120,14 @@ describe("personal roadside encounters", () => {
     if (site.kind !== "repair") throw new Error("Expected a repair site");
     vi.spyOn(Date, "now").mockReturnValue(1_000);
     internal.handleRoadsideEncounter(client, { id: site.id });
+    expect(client.send).toHaveBeenCalledWith("roadside:result", expect.objectContaining({ phase: "repair", progress: 0, holders: 1 }));
     for (let now = 1_250; now <= 6_000; now += 250) internal.advanceRoadsideGuards(now);
     internal.handleRoadsideEncounter(client, { id: site.id });
     expect(player.inventory.get("silver_ore")).toBeUndefined();
     for (let now = 6_250; now <= 11_000; now += 250) internal.advanceRoadsideGuards(now);
     for (const guard of roadsideGuardsFor(site.id)) room.state.mobs.get(guard.id)!.alive = false;
     internal.handleRoadsideEncounter(client, { id: site.id });
+    expect(client.send).toHaveBeenCalledWith("roadside:result", expect.objectContaining({ phase: "claimed" }));
     expect(player.inventory.get("silver_ore")?.quantity).toBe(2);
     vi.restoreAllMocks();
   });
@@ -136,6 +139,7 @@ describe("personal roadside encounters", () => {
     expect(room.state.mobs.size).toBe(0);
     player.x = site.x + site.stashDx + .5; player.z = site.z + site.stashDz + .5;
     internal.handleRoadsideEncounter(client, { id: site.id });
+    expect(client.send).toHaveBeenCalledWith("roadside:result", expect.objectContaining({ phase: "activated" }));
     const guards = roadsideGuardsFor(site.id);
     expect(guards).toHaveLength(3);
     expect(room.state.mobs.get("roadside-wilds-stalker")?.isElite).toBe(true);
