@@ -1,9 +1,11 @@
 import { Client, Room } from "@colyseus/core";
 import { GREENWOOD_MASTERY_CAP, MISTFEN_MASTERY_CAP, greenwoodMasteryRank, mistfenMasteryRank } from "@blockcraft/protocol";
 import { callingStarterAbility } from "@blockcraft/protocol";
+import { experienceToNextLevel } from "@blockcraft/protocol";
 import { PRACTICE_ROOM } from "@blockcraft/protocol";
 import type { SchemaType } from "@colyseus/schema";
 import { ShadowMoveInput, stepShadowMovement, type ShadowPose } from "./movement-shadow.js";
+import { FIRST_COMBAT_MOB_ID, firstCombatExperience, firstCombatHealthAfterHit } from "./first-combat-training.js";
 import { randomUUID } from "node:crypto";
 import { ADMIN_BOOTSTRAP_HASH, ADMIN_PROFILE_HASH, adminProfileKey, matchesAdminBootstrapPass } from "./admin-access.js";
 import { AttackCoordination, allyFireLaneClear } from "./attack-coordination.js";
@@ -461,6 +463,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly pendingMobMelee = new Map<string, { targetId: string; yaw: number; impactAt: number; lastSweepAt?: number }>();
   private readonly pendingIncomingHits: PendingIncomingHit[] = [];
   private readonly crawlerRushes = new Map<string, { yaw: number; distance: number; startedAt: number; progress: number }>();
+  private readonly firstCombatPerfectDodges = new Set<string>();
   private readonly championCharges = new Map<string, { yaw: number; startedAt: number; progress: number; hit: Set<string> }>();
   private readonly bruteLeaderArmourBonus = new Map<string, number>();
   private readonly warbandFormationUntil = new Map<string, number>();
@@ -1100,6 +1103,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   }
 
   override async onLeave(client: Client): Promise<void> {
+    this.firstCombatPerfectDodges.delete(client.sessionId);
     this.protectedDialogs.delete(client.sessionId);
     this.northwatchPatrolContributors.delete(client.sessionId);
     this.mistfenPoolDamageAt.delete(client.sessionId);
@@ -3290,7 +3294,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       player.coins = Math.min(1_000_000, player.coins + coinsGranted);
       if (plundererGold > 0) this.grantMasterTrial(playerId, "plunderer", plundererGold);
       const earnedExperience = mobExperience(mob.archetype, mob.rewardMultiplier, mob.isChampion || wasElite, player.level, mob.level);
-      this.grantProgression(playerId, disruptedWarband ? Math.ceil(earnedExperience * 1.25) : earnedExperience, mob.name);
+      const rewardedExperience = firstCombatExperience(mobId, player.level, player.experience,
+        experienceToNextLevel(player.level), disruptedWarband ? Math.ceil(earnedExperience * 1.25) : earnedExperience);
+      this.grantProgression(playerId, rewardedExperience, mob.name);
       this.grantBuildProgress(playerId, mobId === "mistfen-behemoth" ? 5 : Boolean(areaMainMob) || mob.isChampion || wasElite ? 3 : 1);
       if (isMistfenMob(mobId)) {
         this.grantMistfenMastery(playerId, mobId === "mistfen-behemoth" ? 18 : 3);
@@ -4281,6 +4287,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         this.dodgePressure.set(playerId, { chain: 0, lastAt: Number.NEGATIVE_INFINITY, exhaustedUntil: 0 });
         const counterUntil = now + PERFECT_DODGE_COUNTER_MS;
         this.dodgeCounterUntil.set(playerId, counterUntil);
+        if (mobId === FIRST_COMBAT_MOB_ID) this.firstCombatPerfectDodges.add(playerId);
         if (player.armourId === "ashguard_mantle") {
           const branch = parseAshenMastery(player.huntLoadoutsJson).ashguard?.branch;
           const durationMs = branch === "phoenix" ? 4_000 : 2_500;
@@ -4322,6 +4329,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         this.clients.find(client => client.sessionId === playerId)?.send("dodge:pressure", {
           phase: "perfect", cost: 0, chain: 0, exhaustedUntil: 0, counterUntil,
           staminaRestored: PERFECT_DODGE_STAMINA_RESTORE + thiefRecovery,
+          mobId,
         } satisfies DodgePressureUpdate);
       }
       return false;
@@ -10123,7 +10131,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (cinderArmoured && sourceInFront) damage = Math.max(1, Math.ceil(damage * .3));
       if (cinderExposed) damage += 2;
       this.combatContributions.record(mobId, sessionId, Math.min(mob.health, damage), now);
-      mob.health = Math.max(0, mob.health - damage);
+      mob.health = firstCombatHealthAfterHit(mobId, player.level,
+        this.firstCombatPerfectDodges.has(sessionId), mob.health, damage);
       if (cinderExposed) this.broadcast("combat:cinder-impact", {
         mobId, phase: "weakspot", exposedUntil: cinderExposedUntil,
         durationMs: Math.max(0, cinderExposedUntil - now),

@@ -1,6 +1,8 @@
 import type { BuildPathId } from "@blockcraft/protocol";
 
 export const FIRST_COMBAT_MOB_ID = "south-causeway-crawler";
+export type FirstCombatPhase = "attack" | "dodge" | "finish";
+export type FirstCombatEvent = "hit" | "perfect_dodge";
 
 export interface FirstCombatLesson {
   title: string;
@@ -39,10 +41,28 @@ const DEFAULT_LESSON: FirstCombatLesson = {
   detail: "Read its marked strike. Click or press J to attack, Space to dodge, and hold C to guard. Defeat it to finish training.",
 };
 
-export function firstCombatLesson(pathId: BuildPathId | null): FirstCombatLesson {
-  return pathId ? CALLING_LESSONS[pathId] : DEFAULT_LESSON;
+export function firstCombatLesson(pathId: BuildPathId | null, phase: FirstCombatPhase = "attack"): FirstCombatLesson {
+  const calling = pathId ? CALLING_LESSONS[pathId] : DEFAULT_LESSON;
+  const callingName = pathId ? calling.title.split(" · ")[0] : "Combat lesson";
+  if (phase === "attack") return {
+    title: `${callingName} · 1/3 STRIKE`,
+    detail: "Face the Southroad Crawler and press J (or click) to land your first weapon hit.",
+  };
+  if (phase === "finish") return {
+    title: `${callingName} · 3/3 FINISH`,
+    detail: "Perfect dodge! The Southroad Crawler is vulnerable. Press J (or click) to finish it.",
+  };
+  return { title: `${callingName} · 2/3 DODGE`, detail: calling.detail };
 }
 
-export function completesFirstCombatLesson(attackerIsLocal: boolean, mobId: string, defeated: boolean): boolean {
-  return attackerIsLocal && defeated && mobId === FIRST_COMBAT_MOB_ID;
+export function advanceFirstCombatPhase(phase: FirstCombatPhase, event: FirstCombatEvent, mobId: string): FirstCombatPhase {
+  if (mobId !== FIRST_COMBAT_MOB_ID) return phase;
+  if (phase === "attack" && event === "hit") return "dodge";
+  if (phase === "dodge" && event === "perfect_dodge") return "finish";
+  return phase;
+}
+
+export function completesFirstCombatLesson(attackerIsLocal: boolean, mobId: string, defeated: boolean,
+  phase: FirstCombatPhase = "finish"): boolean {
+  return attackerIsLocal && defeated && phase === "finish" && mobId === FIRST_COMBAT_MOB_ID;
 }

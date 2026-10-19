@@ -21,4 +21,6 @@ export interface DodgePressureUpdate {
   exhaustedUntil: number;
   counterUntil: number;
   staminaRestored: number;
+  /** Enemy whose committed hit was avoided when phase is perfect. */
+  mobId?: string;
 }

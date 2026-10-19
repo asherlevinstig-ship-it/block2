@@ -49,7 +49,8 @@ import { ashenChainRoute, ashenChainStage, greenwoodChainRoute, greenwoodChainSt
 import { combatHud, cooldownState } from "./combat-hud.js";
 import { assassinJourney } from "./assassin-journey.js";
 import { CALLING_AWAKENING_MINIMUM_MS, callingAwakening, callingPreviewMarkup } from "./calling-awakening.js";
-import { completesFirstCombatLesson, firstCombatLesson } from "./first-combat-lesson.js";
+import { advanceFirstCombatPhase, completesFirstCombatLesson, firstCombatLesson,
+  type FirstCombatPhase } from "./first-combat-lesson.js";
 import { EQUIPMENT_COLLECTION, collectionProgress, equipmentCollectionLabel, equipmentProgressionText } from "./equipment-progression.js";
 import { blacksmithShopStock, shopGoldShortfall, type BlacksmithShopTab } from "./blacksmith-shop.js";
 import { FIELD_FORGE_RECIPES, type FieldForgeId } from "@blockcraft/protocol";
@@ -673,6 +674,7 @@ let forcedStarterEquipment = (() => {
   catch { return false; }
 })();
 let tutorialCallingId: BuildPathId | null = null;
+let firstCombatPhase: FirstCombatPhase = "attack";
 const firstStepsKey = onboardingStorageKey(profileToken);
 let firstStepsIndex = (() => {
   try {
@@ -697,6 +699,9 @@ function renderFirstSteps(): void {
   modeSwitchTutorialCopy.innerHTML = "<b>BUILD</b> gathers resources. <b>COMBAT</b> attacks enemies. Press <kbd>Q</kbd> at any time to switch.";
   document.documentElement.classList.toggle("onboarding-active", active);
   document.documentElement.classList.toggle("onboarding-mode-lesson", modeLesson);
+  document.documentElement.classList.toggle("first-combat-attack", index === 5 && firstCombatPhase === "attack");
+  document.documentElement.classList.toggle("first-combat-dodge", index === 5 && firstCombatPhase === "dodge");
+  document.documentElement.classList.toggle("first-combat-finish", index === 5 && firstCombatPhase === "finish");
   starterInventoryTutorial.hidden = starterLesson === "hidden";
   starterInventoryTutorial.dataset.phase = starterLesson;
   starterInventoryTitle.textContent = starterLesson === "equip_sword" ? "Equip the Forged Sword" : "Open your inventory";
@@ -708,7 +713,7 @@ function renderFirstSteps(): void {
   if (index === null || index >= ONBOARDING_DONE) return;
   const step = ONBOARDING_STEPS[index]!;
   firstStepsCount.textContent = `${index + 1} / ${ONBOARDING_DONE}`;
-  const combatLesson = index === 5 ? firstCombatLesson(tutorialCallingId) : null;
+  const combatLesson = index === 5 ? firstCombatLesson(tutorialCallingId, firstCombatPhase) : null;
   firstStepsTitle.textContent = combatLesson?.title ?? step.title;
   firstStepsDetail.textContent = combatLesson?.detail ?? step.detail;
 }
@@ -721,6 +726,7 @@ function noteFirstStep(event: OnboardingEvent): void {
   if (firstStepsIndex === null || firstStepsIndex >= ONBOARDING_DONE) return;
   const next = advanceOnboarding(firstStepsIndex, event);
   if (next === firstStepsIndex) return;
+  if (next === 5) firstCombatPhase = "attack";
   setFirstSteps(next);
   if (next === 3) {
     firstStepsTrailUpdatedAt = -Infinity;
@@ -13897,11 +13903,31 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     localDodgeExhaustedUntil = 0;
     showCombatFeedback("PERFECT DODGE · COUNTER +1", "dodge");
     status.textContent = `Perfect dodge · +${message.staminaRestored} stamina · your next hit gains +1 damage.`;
+    if (firstStepsIndex === 5 && message.mobId) {
+      const nextPhase = advanceFirstCombatPhase(firstCombatPhase, "perfect_dodge", message.mobId);
+      if (nextPhase !== firstCombatPhase) {
+        firstCombatPhase = nextPhase;
+        renderFirstSteps();
+        status.textContent = "Perfect dodge · the Southroad Crawler is exposed. Press J to finish it.";
+        social.event("Perfect dodge complete · finish the Southroad Crawler with J.");
+      }
+    }
     logMovementEvent(`PERFECT_DODGE counterUntil=${message.counterUntil}`);
   });
   room.onMessage("combat:hit", (message: CombatHit) => {
-    if (completesFirstCombatLesson(message.attackerId === room?.sessionId, message.mobId, message.defeated))
+    const localTutorialHit = firstStepsIndex === 5 && message.attackerId === room?.sessionId;
+    if (localTutorialHit && !message.defeated) {
+      const nextPhase = advanceFirstCombatPhase(firstCombatPhase, "hit", message.mobId);
+      if (nextPhase !== firstCombatPhase) {
+        firstCombatPhase = nextPhase;
+        renderFirstSteps();
+        status.textContent = "Good strike · watch the crawler's marked charge, then dodge with Space.";
+      }
+    }
+    if (completesFirstCombatLesson(message.attackerId === room?.sessionId, message.mobId, message.defeated, firstCombatPhase)) {
       noteFirstStep("defeated_first_enemy");
+      social.event("First combat lesson complete · Level 2 unlocks your Calling Power. Return to Town to review it.");
+    }
     const mob = mobVisuals.get(message.mobId);
     const rangedHit = confirmedRangedHit(message.mainHandId, message.damage, message.attackerId === room?.sessionId);
     if (rangedHit) {

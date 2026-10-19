@@ -3113,6 +3113,12 @@ body:has(#combat-hud-shell[data-loadout-open="true"]) #blacksmith-prompt { displ
 #combat-action-bar #defense-slot { --slot-edge: #6bb6df; --slot-glow: #174b67; }
 #combat-action-bar #dodge-hotbar { --slot-edge: #e4bd76; --slot-glow: #5c4520; }
 #main-hand-loadout { --slot-edge: #e19d57; --slot-glow: #66331b; }
+#main-hand-loadout,
+#combat-action-bar #dodge-hotbar { transition: border-color .16s ease, box-shadow .16s ease, filter .16s ease; }
+html.first-combat-attack #main-hand-loadout,
+html.first-combat-finish #main-hand-loadout { border-color: #ffd66a; box-shadow: 0 0 0 2px #ffd66a55, 0 0 24px #ffb53d99; animation: tutorial-action-slot 1s ease-in-out infinite; }
+html.first-combat-dodge #combat-action-bar #dodge-hotbar { border-color: #ffe17b; box-shadow: 0 0 0 2px #ffe17b55, 0 0 24px #eab94c99; animation: tutorial-action-slot 1s ease-in-out infinite; }
+@keyframes tutorial-action-slot { 0%,100% { filter: brightness(1); } 50% { filter: brightness(1.35); } }
 #calling-slot { --slot-edge: #64dabb; --slot-glow: #18594c; }
 #special-slot { --slot-edge: #bb8cee; --slot-glow: #493061; }
 #combat-action-bar #potion-use { --slot-edge: #d9828c; --slot-glow: #5c2630; }
