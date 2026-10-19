@@ -508,6 +508,9 @@ export const ROADSIDE_DISCOVERIES = [
   { id: "warden-cairn", name: "Warden Cairn", kind: "shrine", x: 78, z: 42 },
   { id: "ashen-pilgrims", name: "Ashen Pilgrim Camp", kind: "camp", x: 82, z: 54 },
   { id: "scorched-gate", name: "Scorched Gate", kind: "ruin", x: 93, z: 53 },
+  { id: "emberfall-shrine", name: "Emberfall Shrine", kind: "shrine", x: 109, z: 48 },
+  { id: "ashglass-survey", name: "Ashglass Survey Cache", kind: "ruin", x: 112, z: 70 },
+  { id: "cindergrave-camp", name: "Cindergrave Camp", kind: "camp", x: 85, z: 73 },
   { id: "mistfen-cart", name: "Sunkroad Cart", kind: "cart", x: -16, z: 5 },
   { id: "mistfen-shrine", name: "Mossbound Shrine", kind: "shrine", x: -39, z: -15 },
   { id: "mistfen-camp", name: "Drowned Survey Camp", kind: "camp", x: -42, z: -23 },
@@ -515,9 +518,14 @@ export const ROADSIDE_DISCOVERIES = [
   { id: "sunfall-survey", name: "Sunfall Survey Camp", kind: "camp", x: -4, z: 55 },
   { id: "quarry-shrine", name: "Quarryworker Shrine", kind: "shrine", x: 18, z: 72 },
   { id: "collapsed-lift", name: "Collapsed Quarry Lift", kind: "ruin", x: -4, z: 89 },
+  { id: "western-shelf-cache", name: "Western Shelf Cache", kind: "ruin", x: -8, z: 63 },
+  { id: "broken-winch-camp", name: "Broken Winch Camp", kind: "camp", x: 24, z: 59 },
+  { id: "redstone-prospector", name: "Redstone Prospector Camp", kind: "camp", x: -8, z: 103 },
   { id: "northwatch-cart", name: "Abandoned Northwatch Cart", kind: "cart", x: 15, z: -40 },
   { id: "windworn-shrine", name: "Windworn Shrine", kind: "shrine", x: 2, z: -54 },
   { id: "northwatch-watchpost", name: "Ruined Northwatch Post", kind: "ruin", x: 20, z: -62 },
+  { id: "wilds-hunter-blind", name: "Wilds Hunter Blind", kind: "camp", x: -25, z: 22 },
+  { id: "outskirts-pilgrim-shrine", name: "Outskirts Pilgrim Shrine", kind: "shrine", x: 27, z: 24 },
 ] as const satisfies readonly { id: string; name: string; kind: RoadsideDiscoveryKind; x: number; z: number }[];
 
 /** One personal, optional payoff at selected landmarks; Calling field sites stay separate. */
@@ -532,6 +540,14 @@ export const ROADSIDE_ENCOUNTERS = [
   { id: "northwatch-cart", kind: "trail", itemId: "iron_ore", quantity: 2, gold: 5, stashDx: 5, stashDz: -4, clue: "Fresh tracks climb northeast behind the ridge to a hidden crate." },
   { id: "northwatch-watchpost", kind: "guarded", itemId: "silver_ore", quantity: 1, gold: 8, guardRadius: 11 },
   { id: "ashen-pilgrims", kind: "shrine", itemId: "healing_potion", quantity: 1, gold: 0 },
+  { id: "emberfall-shrine", kind: "shrine", itemId: "healing_potion", quantity: 1, gold: 0 },
+  { id: "ashglass-survey", kind: "cache", itemId: "silver_ore", quantity: 1, gold: 6 },
+  { id: "cindergrave-camp", kind: "trail", itemId: "acid_gland", quantity: 1, gold: 7, stashDx: 5, stashDz: -4, clue: "A scorched drag trail bends northeast towards a half-buried field case." },
+  { id: "western-shelf-cache", kind: "cache", itemId: "iron_ore", quantity: 2, gold: 4 },
+  { id: "broken-winch-camp", kind: "trail", itemId: "silver_ore", quantity: 1, gold: 5, stashDx: -6, stashDz: 2, clue: "A snapped hauling cable leads southwest beneath the quarry shelf." },
+  { id: "redstone-prospector", kind: "cache", itemId: "stone_core", quantity: 1, gold: 6 },
+  { id: "wilds-hunter-blind", kind: "cache", itemId: "crawler_fang", quantity: 2, gold: 4 },
+  { id: "outskirts-pilgrim-shrine", kind: "shrine", itemId: "healing_potion", quantity: 1, gold: 0 },
 ] as const satisfies readonly { id: string; kind: "cache" | "trail" | "shrine" | "guarded"; itemId: string; quantity: number; gold: number; guardRadius?: number; stashDx?: number; stashDz?: number; clue?: string }[];
 export function roadsideEncounterAt(id: string) {
   const encounter = ROADSIDE_ENCOUNTERS.find(entry => entry.id === id);

@@ -22,7 +22,7 @@ function fixture(id: string) {
 describe("personal roadside encounters", () => {
   it("uses landmarks separate from Calling sites and keeps rewards small", () => {
     const fieldIds = new Set<string>(ROLE_FIELD_OPPORTUNITIES.map(site => site.landmarkId));
-    expect(ROADSIDE_ENCOUNTERS).toHaveLength(10);
+    expect(ROADSIDE_ENCOUNTERS).toHaveLength(18);
     for (const entry of ROADSIDE_ENCOUNTERS) {
       expect(roadsideEncounterAt(entry.id)).not.toBeNull();
       expect(fieldIds.has(entry.id)).toBe(false);

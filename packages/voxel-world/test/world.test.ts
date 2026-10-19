@@ -27,6 +27,7 @@ import {
   isSouthernRoad,
   southernQuarryTierAt,
   ROADSIDE_DISCOVERIES,
+  ROADSIDE_ENCOUNTERS,
   ROLE_FIELD_OPPORTUNITIES,
   nearestRoleFieldOpportunity,
   roadsideDiscoveryBlock,
@@ -126,7 +127,7 @@ describe("deterministic voxel world", () => {
       if (!cache.has(key)) cache.set(key, generateChunk("density-test", a.chunkX, a.chunkZ));
       return getBlock(cache.get(key)!, a.localX, y, a.localZ);
     };
-    expect(ROADSIDE_DISCOVERIES).toHaveLength(20);
+    expect(ROADSIDE_DISCOVERIES).toHaveLength(28);
     expect(new Set(ROADSIDE_DISCOVERIES.map(site => site.kind)).size).toBe(5);
     for (const site of ROADSIDE_DISCOVERIES) {
       expect(isRegionalRoad(site.x, site.z)).toBe(false);
@@ -141,6 +142,21 @@ describe("deterministic voxel world", () => {
     for (const [x, z] of [[70, 9], [42, 29], [70, 32], [87, 50], [-30, -20]] as const) {
       expect(read(x, SURFACE_HEIGHT + 1, z)).toBe(Block.Air);
       expect(isRegionalRoad(x, z)).toBe(true);
+    }
+  });
+
+  it("places the density-pass discoveries well away from the road rather than extending the roadside strip", () => {
+    const offRoadIds = ["emberfall-shrine", "ashglass-survey", "cindergrave-camp", "western-shelf-cache",
+      "broken-winch-camp", "redstone-prospector", "wilds-hunter-blind", "outskirts-pilgrim-shrine"];
+    for (const id of offRoadIds) {
+      const site = ROADSIDE_DISCOVERIES.find(entry => entry.id === id)!;
+      expect(site).toBeDefined();
+      let nearestRoad = Infinity;
+      for (let x = site.x - 24; x <= site.x + 24; x++) for (let z = site.z - 24; z <= site.z + 24; z++) {
+        if (isRegionalRoad(x, z)) nearestRoad = Math.min(nearestRoad, Math.hypot(x - site.x, z - site.z));
+      }
+      expect(nearestRoad).toBeGreaterThanOrEqual(5);
+      expect(ROADSIDE_ENCOUNTERS.some(encounter => encounter.id === id)).toBe(true);
     }
   });
 
