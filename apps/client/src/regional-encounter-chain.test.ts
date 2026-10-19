@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { greenwoodChainRoute, greenwoodChainStage, mistfenChainRoute, mistfenChainStage, regionalChainBreadcrumbs,
+import { greenwoodChainRoute, greenwoodChainStage, mistfenChainRoute, mistfenChainStage, quarryChainRoute, quarryChainStage, regionalChainBreadcrumbs,
   regionalChainTrailVisible, regionalPolylineBreadcrumbs, regionalPolylineTrailVisible } from "./regional-encounter-chain.js";
 
 describe("regional encounter chains", () => {
@@ -37,5 +37,23 @@ describe("regional encounter chains", () => {
     expect(regionalPolylineBreadcrumbs(route, 12)).toHaveLength(12);
     expect(regionalPolylineTrailVisible({ x: -35, y: 8, z: -26.5 }, route)).toBe(true);
     expect(regionalPolylineTrailVisible({ x: 20, y: 8, z: 20 }, route)).toBe(false);
+  });
+
+  it("joins every southern quarry discovery into one staged route", () => {
+    expect(quarryChainStage("{}")).toBe("find-cart");
+    expect(quarryChainStage(JSON.stringify({ roadsideClaims: ["southgate-cart"] }))).toBe("follow-to-survey");
+    expect(quarryChainStage(JSON.stringify({ roadsideClaims: ["southgate-cart", "sunfall-survey"] }))).toBe("follow-to-winch");
+    expect(quarryChainStage(JSON.stringify({ roadsideClaims: ["southgate-cart", "sunfall-survey", "broken-winch-camp"] }))).toBe("follow-to-lift");
+    expect(quarryChainStage(JSON.stringify({ roadsideClaims: ["southgate-cart", "sunfall-survey", "broken-winch-camp", "collapsed-lift"] }))).toBe("follow-to-leader");
+    expect(quarryChainStage(JSON.stringify({ roadsideClaims: ["southgate-cart", "sunfall-survey", "broken-winch-camp", "collapsed-lift"],
+      quarry: { firstBossDefeated: true } }))).toBe("complete");
+  });
+
+  it("keeps the quarry route on authored road turns", () => {
+    const route = quarryChainRoute("follow-to-lift")!;
+    expect(route).toContainEqual({ x: 9, z: 69 });
+    expect(route).toContainEqual({ x: 9, z: 88 });
+    expect(regionalPolylineBreadcrumbs(route, 14)).toHaveLength(14);
+    expect(regionalPolylineTrailVisible({ x: 9, y: 8, z: 77 }, route)).toBe(true);
   });
 });

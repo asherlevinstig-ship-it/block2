@@ -79,7 +79,7 @@ import { HEALING_POTION, backpackAddableQuantity, backpackCapacity, backpackSlot
 import { canBuyPotionAtKeeper, potionBuyError, potionUseError } from "./healing-potions.js";
 import { MINERAL_REGROWTH_MS, type MineralDepositStatus } from "@blockcraft/protocol";
 import { RENEWABLE_MINERAL_DEPOSITS, authoredMineralAt, SURFACE_HEIGHT, CAVE_SHALLOW_HOME, CAVE_DEEP_HOME, CAVE_HIDDEN_HOME, SILVER_DEPTHS_SPITTER_HOMES, CRYSTAL_MATRIARCH_HOME, SILVER_DEPTHS_COVER, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, SILVER_DEPTHS_CHECKPOINT_POSITION, SILVER_DEPTHS_GALLERY_GATE, SILVER_DEPTHS_BOSS_GATE, SILVER_DEPTHS_IRON_GATE, SILVER_DEPTHS_SILVER_GATE, SILVER_DEPTHS_WING_CACHES, TOWN_BLACKSMITH_STALL_POSITION, silverDepthsPingLocation, isMistfenToxicPool, isInMistfenMarsh } from "@blockcraft/voxel-world";
-import { GREENWOOD_ENCOUNTER_CHAIN, MISTFEN_ENCOUNTER_CHAIN, ROLE_FIELD_OPPORTUNITIES, nearestRoleFieldOpportunity, nearestRoadsideEncounter, parseRoadsideClaims, roadsideEncounterAt, withRoadsideClaim } from "@blockcraft/voxel-world";
+import { GREENWOOD_ENCOUNTER_CHAIN, MISTFEN_ENCOUNTER_CHAIN, SOUTHERN_QUARRY_ENCOUNTER_CHAIN, ROLE_FIELD_OPPORTUNITIES, nearestRoleFieldOpportunity, nearestRoadsideEncounter, parseRoadsideClaims, roadsideEncounterAt, withRoadsideClaim } from "@blockcraft/voxel-world";
 import { mineralCellOccupied } from "./mineral-regrowth.js";
 import { CAVE_ENCOUNTERS, caveEncounterAllows } from "./cave-encounters.js";
 import { miningDurationMs, miningLineClear } from "@blockcraft/voxel-world";
@@ -3301,6 +3301,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         defeatedGreenwoodEvent?.masteryReward ?? 14);
       if (mobId === MISTFEN_EVENT_ID) this.grantRegionalMark(playerId, "mistfen");
       if (mobId === WILDERNESS_EVENT_ID) this.grantRegionalMark(playerId, "greenwood");
+      if (mobId === SOUTHERN_QUARRY_ENCOUNTER_CHAIN.leaderId) {
+        const quarry = this.quarryProgress(player);
+        quarry.firstBossDefeated = true;
+        this.setQuarryProgress(player, quarry);
+      }
       void this.persistPlayer(playerId, player);
       this.broadcast("combat:reward", {
         playerId,
@@ -3871,6 +3876,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           ...(greenwoodRank >= 3 && activeGreenwoodEvent && Math.random() < activeGreenwoodEvent.legendaryChance
             ? [{ itemId: "rootstalker_wrap" as ItemId, quantity: 1 }] : [])]
       : [];
+    const firstQuarryClear = mobId === SOUTHERN_QUARRY_ENCOUNTER_CHAIN.leaderId && rewardPlayer
+      && !this.quarryProgress(rewardPlayer).firstBossDefeated;
+    const quarryFirstClearDrops: { itemId: ItemId; quantity: number }[] = firstQuarryClear
+      ? [{ itemId: "stone_core", quantity: 2 }, { itemId: "iron_ore", quantity: 3 },
+        { itemId: "healing_potion", quantity: 1 }] : [];
     const ownsLantern = (rewardPlayer?.inventory.get("miners_lantern")?.quantity ?? 0)
       + (rewardPlayer?.storage.get("miners_lantern")?.quantity ?? 0) > 0;
     const signatureDrops = (itemId: SignatureItemId): { itemId: ItemId; quantity: number }[] => {
@@ -3921,6 +3931,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       ...greenwoodMasteryDrops,
       ...greenwoodEventDrops,
       ...greenwoodFirstClearDrops,
+      ...quarryFirstClearDrops,
       ...armourDropForMob(mob.archetype, mob.difficultyTier, Math.random()),
     ]);
     const representative = lootBagRepresentative(items);
@@ -3965,6 +3976,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       `${firstLeaderVictory ? "FIRST LEADER VICTORY" : personalRematchTier > 0 ? `EMPOWERED REMATCH ${personalRematchTier}` : "SIGNATURE DROP"} · ${areaRelicDrops[0]!.quantity} ${ITEM_DEFINITIONS[areaRelicDrops[0]!.itemId].name}${rematchMaterialQuantity ? ` + ${rematchMaterialQuantity} bonus ${ITEM_DEFINITIONS[rematchMaterialId].name}` : ""} added to your personal cache.`);
     if (greenwoodFirstClearDrops.length) this.clients.find(client => client.sessionId === ownerId)?.send("chat:notice",
       `GREENWOOD FIRST CLEAR · ${greenwoodFirstClearDrops[0]!.itemId === "healing_potion" ? "2 healing potions" : ITEM_DEFINITIONS[greenwoodFirstClearDrops[0]!.itemId].name} added to your personal loot bag. Hold E to collect it.`);
+    if (quarryFirstClearDrops.length) this.clients.find(client => client.sessionId === ownerId)?.send("chat:notice",
+      "QUARRYMASTER VAULT · 2 Stone Core · 3 Iron Ore · 1 Healing Potion added to your personal loot bag. Hold E to collect it.");
     if (northwatchCloakDrop.length) this.clients.find(client => client.sessionId === ownerId)?.send("chat:notice",
       "FIRST NORTHWATCH CLOAK · your personal loot bag contains a rare cloak. Hold E to collect it.");
     if (northwatchPatrolBonus.length) this.clients.find(client => client.sessionId === ownerId)?.send("chat:notice",
@@ -4018,12 +4031,14 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.roadsideCacheRewards.delete(parsed.data.dropId);
       this.broadcast("loot:picked-up", { playerId: client.sessionId, dropId: parsed.data.dropId, itemId: reward.itemId,
         quantity: reward.quantity, total: item.quantity } satisfies LootPickedUp);
+      const chainMessage = reward.firstClear && reward.siteId === SOUTHERN_QUARRY_ENCOUNTER_CHAIN.winchId
+        ? " LIFT POWER RESTORED · follow the amber sparks to the Collapsed Quarry Lift." : "";
       client.send("roadside:result", { id: reward.siteId, ok: true,
-        message: `${reward.variantTitle} cache opened · +${reward.quantity} ${ITEM_DEFINITIONS[reward.itemId].name} · +${player.coins - beforeGold} gold.`,
+        message: `${reward.variantTitle} cache opened · +${reward.quantity} ${ITEM_DEFINITIONS[reward.itemId].name} · +${player.coins - beforeGold} gold.${chainMessage}`,
         claimed: reward.firstClear, phase: "claimed", progress: 1, holders: 0, readyAt: reward.readyAt,
         variant: reward.variantId, variantTitle: reward.variantTitle });
       void this.persistPlayer(client.sessionId, player, true).catch(() => {});
-      return reply(true, `${reward.variantTitle} cache opened · +${reward.quantity} ${ITEM_DEFINITIONS[reward.itemId].name} · +${player.coins - beforeGold} gold.`, {
+      return reply(true, `${reward.variantTitle} cache opened · +${reward.quantity} ${ITEM_DEFINITIONS[reward.itemId].name} · +${player.coins - beforeGold} gold.${chainMessage}`, {
         action, itemId: reward.itemId, goldGranted: player.coins - beforeGold,
       });
     }
@@ -5736,6 +5751,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       return reply(false, "The roots are tangled shut · search the Abandoned Forager Camp for another approach.");
     if (id === MISTFEN_ENCOUNTER_CHAIN.shrineId && !claims.has(MISTFEN_ENCOUNTER_CHAIN.discoveryId))
       return reply(false, "The shrine is dormant · search the Sunkroad Cart and follow its drag marks first.");
+    if (id === SOUTHERN_QUARRY_ENCOUNTER_CHAIN.surveyId && !claims.has(SOUTHERN_QUARRY_ENCOUNTER_CHAIN.cartId))
+      return reply(false, "The survey trail is unreadable · clear and search the Southgate Supply Cart first.");
+    if (id === SOUTHERN_QUARRY_ENCOUNTER_CHAIN.winchId && !claims.has(SOUTHERN_QUARRY_ENCOUNTER_CHAIN.surveyId))
+      return reply(false, "The winch mechanism is missing its survey plan · search Sunfall Survey Camp first.");
+    if (id === SOUTHERN_QUARRY_ENCOUNTER_CHAIN.liftId && !claims.has(SOUTHERN_QUARRY_ENCOUNTER_CHAIN.winchId))
+      return reply(false, "The collapsed lift has no power · repair the Broken Winch Camp first.");
     if (claims.has(id) && !repeatable) return reply(false, `${site.name} has already been explored by this character.`, true);
     const cycleReadyAt = this.roadsideCycleReadyAt.get(id);
     if (repeatable && cycleReadyAt !== undefined)
@@ -5831,7 +5852,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         : id === MISTFEN_ENCOUNTER_CHAIN.discoveryId
           ? " Drowned lantern wisps now trace the safe ground to Mossbound Shrine."
           : id === MISTFEN_ENCOUNTER_CHAIN.shrineId
-            ? ` ${MISTFEN_ENCOUNTER_CHAIN.leaderName.toUpperCase()} EXPOSED · follow the lantern wisps deeper into the marsh.` : "";
+            ? ` ${MISTFEN_ENCOUNTER_CHAIN.leaderName.toUpperCase()} EXPOSED · follow the lantern wisps deeper into the marsh.`
+            : id === SOUTHERN_QUARRY_ENCOUNTER_CHAIN.cartId
+              ? " SURVEY ROUTE FOUND · amber sparks now mark the road to Sunfall Survey Camp."
+              : id === SOUTHERN_QUARRY_ENCOUNTER_CHAIN.surveyId
+                ? " WINCH PLAN RECOVERED · follow the amber sparks east to Broken Winch Camp."
+                : id === SOUTHERN_QUARRY_ENCOUNTER_CHAIN.liftId
+                  ? ` LOWER SHELF OPEN · ${SOUTHERN_QUARRY_ENCOUNTER_CHAIN.leaderName.toUpperCase()} EXPOSED beyond the Redstone Pit.` : "";
     const message = site.kind === "shrine" && choice === "rest" ? `${site.name} · health and stamina restored.`
       : `${site.name} explored · +${quantity} ${ITEM_DEFINITIONS[itemId].name}${player.coins > beforeGold ? ` · +${player.coins - beforeGold} gold` : ""}.`;
     reply(true, `${message}${chainMessage}`, true, { phase: "claimed", progress: 1, holders: 0 });
@@ -6629,6 +6656,20 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     try { const parsed = JSON.parse(player.huntLoadoutsJson); if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) raw = parsed; }
     catch { /* legacy */ }
     player.huntLoadoutsJson = JSON.stringify({ ...raw, mistfen });
+  }
+
+  private quarryProgress(player: PlayerState): { firstBossDefeated: boolean } {
+    try {
+      const value = (JSON.parse(player.huntLoadoutsJson) as { quarry?: { firstBossDefeated?: unknown } }).quarry;
+      return { firstBossDefeated: value?.firstBossDefeated === true };
+    } catch { return { firstBossDefeated: false }; }
+  }
+
+  private setQuarryProgress(player: PlayerState, quarry: { firstBossDefeated: boolean }): void {
+    let raw: Record<string, unknown> = {};
+    try { const parsed = JSON.parse(player.huntLoadoutsJson); if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) raw = parsed; }
+    catch { /* legacy */ }
+    player.huntLoadoutsJson = JSON.stringify({ ...raw, quarry });
   }
 
   private greenwoodProgress(player: PlayerState): { points: number; discovered: boolean; marks: number; firstBossGearClaimed: boolean } {

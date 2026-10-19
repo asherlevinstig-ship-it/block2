@@ -125,6 +125,28 @@ describe("personal roadside encounters", () => {
     player.x = site.x + .5;
     internal.handleRoadsideEncounter(client, { id: site.id });
     expect(player.inventory.get("iron_ore")?.quantity).toBe(2);
+    expect(client.send).toHaveBeenCalledWith("roadside:result", expect.objectContaining({
+      message: expect.stringContaining("SURVEY ROUTE FOUND") }));
+  });
+
+  it("locks each southern quarry stage behind the previous discovery", () => {
+    const { internal, player, client } = fixture("sunfall-survey");
+    const survey = roadsideEncounterAt("sunfall-survey")!;
+    if (survey.kind !== "trail") throw new Error("Expected the Sunfall survey trail");
+    internal.handleRoadsideEncounter(client, { id: survey.id });
+    expect(client.send).toHaveBeenCalledWith("roadside:result", expect.objectContaining({ ok: false,
+      message: expect.stringContaining("Southgate Supply Cart") }));
+
+    player.huntLoadoutsJson = JSON.stringify({ roadsideClaims: ["southgate-cart"] });
+    Object.assign(player, { x: survey.x + survey.stashDx + .5, z: survey.z + survey.stashDz + .5 });
+    internal.handleRoadsideEncounter(client, { id: survey.id });
+    expect(parseRoadsideClaims(player.huntLoadoutsJson).has(survey.id)).toBe(true);
+
+    const lift = roadsideEncounterAt("collapsed-lift")!;
+    Object.assign(player, { x: lift.x + .5, z: lift.z + .5 });
+    internal.handleRoadsideEncounter(client, { id: lift.id });
+    expect(client.send).toHaveBeenCalledWith("roadside:result", expect.objectContaining({ ok: false,
+      message: expect.stringContaining("Broken Winch Camp") }));
   });
 
   it("activates authored guards only near their site and releases them after the area empties", () => {
@@ -165,6 +187,7 @@ describe("personal roadside encounters", () => {
   it("requires players to hold the broken winch before its patrol-cleared crate rises", () => {
     const { room, internal, player, client, site } = fixture("broken-winch-camp");
     if (site.kind !== "repair") throw new Error("Expected a repair site");
+    player.huntLoadoutsJson = JSON.stringify({ roadsideClaims: ["southgate-cart", "sunfall-survey"] });
     vi.spyOn(Date, "now").mockReturnValue(1_000);
     internal.handleRoadsideEncounter(client, { id: site.id });
     expect(client.send).toHaveBeenCalledWith("roadside:result", expect.objectContaining({ phase: "repair", progress: 0, holders: 1 }));

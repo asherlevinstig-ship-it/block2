@@ -516,6 +516,20 @@ export const MISTFEN_ENCOUNTER_CHAIN = {
   shrine: { x: -39, z: -15 },
   leader: { x: -47.5, z: -31.5 },
 } as const;
+export const SOUTHERN_QUARRY_ENCOUNTER_CHAIN = {
+  id: "southern-quarry-chain",
+  cartId: "southgate-cart",
+  surveyId: "sunfall-survey",
+  winchId: "broken-winch-camp",
+  liftId: "collapsed-lift",
+  leaderId: "south-quarrymaster",
+  leaderName: "Redstone Quarrymaster",
+  cart: { x: 15, z: 36 },
+  survey: { x: -4, z: 55 },
+  winch: { x: 24, z: 59 },
+  lift: { x: -4, z: 89 },
+  leader: SOUTHERN_QUARRYMASTER_HOME,
+} as const;
 /** Small optional landmarks sit beside every long road segment, never in its movement lane. */
 export const ROADSIDE_DISCOVERIES = [
   { id: "greenwood-forager-camp", name: "Abandoned Forager Camp", kind: "camp", x: 31, z: -1 },

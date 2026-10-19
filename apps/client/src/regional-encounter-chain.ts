@@ -1,9 +1,10 @@
-import { GREENWOOD_ENCOUNTER_CHAIN, MISTFEN_ENCOUNTER_CHAIN, parseRoadsideClaims } from "@blockcraft/voxel-world";
+import { GREENWOOD_ENCOUNTER_CHAIN, MISTFEN_ENCOUNTER_CHAIN, SOUTHERN_QUARRY_ENCOUNTER_CHAIN, parseRoadsideClaims } from "@blockcraft/voxel-world";
 
 export type GreenwoodChainStage = "find-discovery" | "follow-to-camp" | "follow-to-leader" | "complete";
 export type ChainPoint = { x: number; z: number };
 export type ChainRoute = { from: ChainPoint; to: ChainPoint };
 export type MistfenChainStage = "find-discovery" | "follow-to-shrine" | "follow-to-leader" | "complete";
+export type QuarryChainStage = "find-cart" | "follow-to-survey" | "follow-to-winch" | "follow-to-lift" | "follow-to-leader" | "complete";
 
 export function greenwoodChainStage(raw: string | null | undefined): GreenwoodChainStage {
   const claims = parseRoadsideClaims(raw);
@@ -41,6 +42,36 @@ export function mistfenChainRoute(stage: MistfenChainStage): ChainPoint[] | null
   if (stage === "follow-to-leader") return [
     MISTFEN_ENCOUNTER_CHAIN.shrine, { x: -29.5, z: -15 }, { x: -29.5, z: -26.5 },
     { x: -47.5, z: -26.5 }, MISTFEN_ENCOUNTER_CHAIN.leader,
+  ];
+  return null;
+}
+
+export function quarryChainStage(raw: string | null | undefined): QuarryChainStage {
+  const claims = parseRoadsideClaims(raw);
+  if (!claims.has(SOUTHERN_QUARRY_ENCOUNTER_CHAIN.cartId)) return "find-cart";
+  if (!claims.has(SOUTHERN_QUARRY_ENCOUNTER_CHAIN.surveyId)) return "follow-to-survey";
+  if (!claims.has(SOUTHERN_QUARRY_ENCOUNTER_CHAIN.winchId)) return "follow-to-winch";
+  if (!claims.has(SOUTHERN_QUARRY_ENCOUNTER_CHAIN.liftId)) return "follow-to-lift";
+  try {
+    const parsed = JSON.parse(raw ?? "{}") as { quarry?: { firstBossDefeated?: unknown } };
+    if (parsed.quarry?.firstBossDefeated === true) return "complete";
+  } catch { /* Malformed legacy state still keeps its validated roadside claims. */ }
+  return "follow-to-leader";
+}
+
+/** Quarry sparks stay on the broad authored roads and turn at the shelf gaps. */
+export function quarryChainRoute(stage: QuarryChainStage): ChainPoint[] | null {
+  if (stage === "follow-to-survey") return [
+    SOUTHERN_QUARRY_ENCOUNTER_CHAIN.cart, { x: 9, z: 45 }, { x: 9, z: 54 }, SOUTHERN_QUARRY_ENCOUNTER_CHAIN.survey,
+  ];
+  if (stage === "follow-to-winch") return [
+    SOUTHERN_QUARRY_ENCOUNTER_CHAIN.survey, { x: 9, z: 55 }, SOUTHERN_QUARRY_ENCOUNTER_CHAIN.winch,
+  ];
+  if (stage === "follow-to-lift") return [
+    SOUTHERN_QUARRY_ENCOUNTER_CHAIN.winch, { x: 9, z: 69 }, { x: 9, z: 88 }, SOUTHERN_QUARRY_ENCOUNTER_CHAIN.lift,
+  ];
+  if (stage === "follow-to-leader") return [
+    SOUTHERN_QUARRY_ENCOUNTER_CHAIN.lift, { x: 9, z: 89 }, SOUTHERN_QUARRY_ENCOUNTER_CHAIN.leader,
   ];
   return null;
 }

@@ -43,9 +43,9 @@ import { inventoryRenderDue } from "./inventory-render-budget.js";
 import { nextInventoryTab, type InventoryTab } from "./inventory-tabs.js";
 import { inventoryItemVisible } from "./inventory-ownership.js";
 import { playerHud } from "./player-hud.js";
-import { greenwoodChainRoute, greenwoodChainStage, mistfenChainRoute, mistfenChainStage, regionalChainBreadcrumbs,
+import { greenwoodChainRoute, greenwoodChainStage, mistfenChainRoute, mistfenChainStage, quarryChainRoute, quarryChainStage, regionalChainBreadcrumbs,
   regionalChainTrailVisible, regionalPolylineBreadcrumbs, regionalPolylineTrailVisible,
-  type GreenwoodChainStage, type MistfenChainStage } from "./regional-encounter-chain.js";
+  type GreenwoodChainStage, type MistfenChainStage, type QuarryChainStage } from "./regional-encounter-chain.js";
 import { combatHud, cooldownState } from "./combat-hud.js";
 import { assassinJourney } from "./assassin-journey.js";
 import { EQUIPMENT_COLLECTION, collectionProgress, equipmentCollectionLabel, equipmentProgressionText } from "./equipment-progression.js";
@@ -1914,6 +1914,44 @@ function updateMistfenEncounterChain(raw: string, now: number): void {
     wisp.setPosition(point.x, SURFACE_HEIGHT + 1.35 + Math.sin(now * .003 + index * .9) * .18, point.z);
     wisp.setLocalScale(pulse, pulse * 1.6, pulse);
     wisp.rotate(.12, .9, .18);
+  });
+}
+const quarryChainTrailMaterial = new pc.StandardMaterial();
+quarryChainTrailMaterial.diffuse = new pc.Color(1, .63, .12);
+quarryChainTrailMaterial.emissive = new pc.Color(.92, .34, .025);
+quarryChainTrailMaterial.opacity = .92;
+quarryChainTrailMaterial.blendType = pc.BLEND_ADDITIVE;
+quarryChainTrailMaterial.update();
+const quarryChainTrailRoot = new pc.Entity("southern-quarry-chain-trail");
+const quarryChainTrail = Array.from({ length: 14 }, (_, index) => {
+  const spark = addBox(quarryChainTrailRoot, "quarry-survey-spark", quarryChainTrailMaterial,
+    [.09, .09, .2], [0, 0, 0]);
+  spark.setLocalEulerAngles(28, index * 43, 55); return spark;
+});
+quarryChainTrailRoot.enabled = false;
+app.root.addChild(quarryChainTrailRoot);
+let quarryChainStageView: QuarryChainStage = "find-cart";
+let quarryChainRaw = "";
+function updateQuarryEncounterChain(raw: string, now: number): void {
+  if (raw !== quarryChainRaw) {
+    quarryChainRaw = raw;
+    quarryChainStageView = quarryChainStage(raw);
+    if (quarryChainStageView === "follow-to-leader" || quarryChainStageView === "complete")
+      minimap.revealMiniBoss("south-quarrymaster");
+    if (quarryChainStageView === "complete") minimap.revealQuarryRewards();
+  }
+  const route = quarryChainRoute(quarryChainStageView);
+  const player = localPlayer.getPosition();
+  quarryChainTrailRoot.enabled = regionalPolylineTrailVisible(player, route, 14);
+  if (!quarryChainTrailRoot.enabled) return;
+  const points = regionalPolylineBreadcrumbs(route, quarryChainTrail.length);
+  quarryChainTrail.forEach((spark, index) => {
+    const point = points[index]; spark.enabled = Boolean(point);
+    if (!point) return;
+    const pulse = .68 + Math.sin(now * .007 + index * .95) * .25;
+    spark.setPosition(point.x, SURFACE_HEIGHT + .45 + Math.sin(now * .004 + index) * .08, point.z);
+    spark.setLocalScale(pulse, pulse, pulse * 1.8);
+    spark.rotate(.45, 1.35, .65);
   });
 }
 let localSilverDepthsRunStage = 0;
@@ -12728,6 +12766,7 @@ app.on("update", (dt: number) => {
       minimap.setRoadsideClaims(localNetworkPlayer.huntLoadoutsJson);
       updateGreenwoodEncounterChain(localNetworkPlayer.huntLoadoutsJson, now);
       updateMistfenEncounterChain(localNetworkPlayer.huntLoadoutsJson, now);
+      updateQuarryEncounterChain(localNetworkPlayer.huntLoadoutsJson, now);
     }
     updateSilverDepthsRoute(now);
     if (!visibleDepthsRoute) updateCaveNavigation(localPlayer.getPosition(), now);
