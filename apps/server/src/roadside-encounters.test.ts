@@ -291,30 +291,37 @@ describe("personal roadside encounters", () => {
     expect(distantClient.send).toHaveBeenCalledWith("roadside:cycle", expect.objectContaining({ message: "", variant: "breaker-squad" }));
   });
 
-  it("lets a shrine restore health or give supplies, but never both", () => {
-    const rest = fixture("mistfen-shrine");
-    rest.internal.handleRoadsideEncounter(rest.client, { id: rest.site.id, choice: "rest" });
-    expect(rest.player.health).toBe(5);
-    expect(rest.player.stamina).toBe(100);
-    expect(rest.player.inventory.get("healing_potion")).toBeUndefined();
-    rest.internal.handleRoadsideEncounter(rest.client, { id: rest.site.id, choice: "supplies" });
-    expect(rest.player.inventory.get("healing_potion")).toBeUndefined();
-    const supplies = fixture("mistfen-shrine");
-    supplies.internal.handleRoadsideEncounter(supplies.client, { id: supplies.site.id, choice: "supplies" });
-    expect(supplies.player.inventory.get("healing_potion")?.quantity).toBe(1);
-    expect(supplies.player.health).toBe(3);
+  it("keeps the Mossbound Shrine dormant until the Sunkroad Cart is explored", () => {
+    const { internal, player, client, site } = fixture("mistfen-shrine");
+    internal.handleRoadsideEncounter(client, { id: site.id });
+    expect(parseRoadsideClaims(player.huntLoadoutsJson).has(site.id)).toBe(false);
+    expect(client.send).toHaveBeenCalledWith("roadside:result", expect.objectContaining({ ok: false,
+      message: expect.stringContaining("Sunkroad Cart") }));
   });
 
-  it("keeps shrine rewards unclaimed when enemies are close or the potion stack is full", () => {
+  it("purifies the Mossbound Shrine under attack and exposes Mireback", () => {
     const { internal, player, client, room, site } = fixture("mistfen-shrine");
-    const enemy = new MobState(); Object.assign(enemy, { x: player.x + 2, y: 8, z: player.z, alive: true });
-    room.state.mobs.set("enemy", enemy);
-    internal.handleRoadsideEncounter(client, { id: site.id, choice: "rest" });
-    expect(player.health).toBe(3);
-    enemy.alive = false;
-    const potion = new InventoryItemState(); potion.quantity = 3; player.inventory.set("healing_potion", potion);
-    internal.handleRoadsideEncounter(client, { id: site.id, choice: "supplies" });
-    expect(parseRoadsideClaims(player.huntLoadoutsJson).has(site.id)).toBe(false);
-    expect(player.inventory.get("healing_potion")?.quantity).toBe(3);
+    const cart = roadsideEncounterAt("mistfen-cart")!;
+    if (cart.kind !== "trail" || site.kind !== "ward") throw new Error("Expected Mistfen encounter chain");
+    Object.assign(player, { x: cart.x + cart.stashDx + .5, z: cart.z + cart.stashDz + .5 });
+    internal.handleRoadsideEncounter(client, { id: cart.id });
+    expect(parseRoadsideClaims(player.huntLoadoutsJson).has(cart.id)).toBe(true);
+
+    Object.assign(player, { x: site.x + .5, z: site.z + .5 });
+    internal.handleRoadsideEncounter(client, { id: site.id });
+    expect(client.send).toHaveBeenCalledWith("roadside:result", expect.objectContaining({ ok: true, phase: "repair",
+      message: expect.stringContaining("PURIFICATION STARTED") }));
+    const guards = roadsideGuardsFor(site.id);
+    expect(guards).toHaveLength(3);
+    expect(guards.filter(guard => guard.elite)).toHaveLength(1);
+    internal.roadsideRepair.get(site.id).lastAt = 0;
+    for (let elapsed = 250; elapsed <= site.holdMs; elapsed += 250) internal.advanceRoadsideGuards(elapsed);
+    expect(internal.roadsideRepair.get(site.id).ready).toBe(true);
+    for (const guard of guards) room.state.mobs.get(guard.id)!.alive = false;
+    internal.handleRoadsideEncounter(client, { id: site.id });
+    expect(parseRoadsideClaims(player.huntLoadoutsJson).has(site.id)).toBe(true);
+    expect(player.inventory.get("healing_potion")?.quantity).toBe(1);
+    expect(client.send).toHaveBeenCalledWith("roadside:result", expect.objectContaining({ ok: true, claimed: true,
+      message: expect.stringContaining("MIREBACK BEHEMOTH EXPOSED") }));
   });
 });

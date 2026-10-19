@@ -43,8 +43,9 @@ import { inventoryRenderDue } from "./inventory-render-budget.js";
 import { nextInventoryTab, type InventoryTab } from "./inventory-tabs.js";
 import { inventoryItemVisible } from "./inventory-ownership.js";
 import { playerHud } from "./player-hud.js";
-import { greenwoodChainRoute, greenwoodChainStage, regionalChainBreadcrumbs, regionalChainTrailVisible,
-  type GreenwoodChainStage } from "./regional-encounter-chain.js";
+import { greenwoodChainRoute, greenwoodChainStage, mistfenChainRoute, mistfenChainStage, regionalChainBreadcrumbs,
+  regionalChainTrailVisible, regionalPolylineBreadcrumbs, regionalPolylineTrailVisible,
+  type GreenwoodChainStage, type MistfenChainStage } from "./regional-encounter-chain.js";
 import { combatHud, cooldownState } from "./combat-hud.js";
 import { assassinJourney } from "./assassin-journey.js";
 import { EQUIPMENT_COLLECTION, collectionProgress, equipmentCollectionLabel, equipmentProgressionText } from "./equipment-progression.js";
@@ -1876,6 +1877,43 @@ function updateGreenwoodEncounterChain(raw: string, now: number): void {
     spore.setPosition(point.x, SURFACE_HEIGHT + 1.16 + Math.sin(now * .0035 + index) * .13, point.z);
     spore.setLocalScale(pulse, pulse * 1.7, pulse);
     spore.rotate(.25, 1.15, .4);
+  });
+}
+const mistfenChainTrailMaterial = new pc.StandardMaterial();
+mistfenChainTrailMaterial.diffuse = new pc.Color(.18, .9, .74);
+mistfenChainTrailMaterial.emissive = new pc.Color(.05, .72, .58);
+mistfenChainTrailMaterial.opacity = .9;
+mistfenChainTrailMaterial.blendType = pc.BLEND_ADDITIVE;
+mistfenChainTrailMaterial.update();
+const mistfenChainTrailRoot = new pc.Entity("mistfen-regional-chain-trail");
+const mistfenChainTrail = Array.from({ length: 14 }, (_, index) => {
+  const wisp = addBox(mistfenChainTrailRoot, "drowned-lantern-wisp", mistfenChainTrailMaterial,
+    [.1, .16, .1], [0, 0, 0]);
+  wisp.setLocalEulerAngles(0, index * 31, 45); return wisp;
+});
+mistfenChainTrailRoot.enabled = false;
+app.root.addChild(mistfenChainTrailRoot);
+let mistfenChainStageView: MistfenChainStage = "find-discovery";
+let mistfenChainRaw = "";
+function updateMistfenEncounterChain(raw: string, now: number): void {
+  if (raw !== mistfenChainRaw) {
+    mistfenChainRaw = raw;
+    mistfenChainStageView = mistfenChainStage(raw);
+    if (mistfenChainStageView === "follow-to-leader" || mistfenChainStageView === "complete")
+      minimap.revealMiniBoss("mistfen-behemoth");
+  }
+  const route = mistfenChainRoute(mistfenChainStageView);
+  const player = localPlayer.getPosition();
+  mistfenChainTrailRoot.enabled = regionalPolylineTrailVisible(player, route);
+  if (!mistfenChainTrailRoot.enabled) return;
+  const points = regionalPolylineBreadcrumbs(route, mistfenChainTrail.length);
+  mistfenChainTrail.forEach((wisp, index) => {
+    const point = points[index]; wisp.enabled = Boolean(point);
+    if (!point) return;
+    const pulse = .75 + Math.sin(now * .0055 + index * .8) * .25;
+    wisp.setPosition(point.x, SURFACE_HEIGHT + 1.35 + Math.sin(now * .003 + index * .9) * .18, point.z);
+    wisp.setLocalScale(pulse, pulse * 1.6, pulse);
+    wisp.rotate(.12, .9, .18);
   });
 }
 let localSilverDepthsRunStage = 0;
@@ -12689,6 +12727,7 @@ app.on("update", (dt: number) => {
       }
       minimap.setRoadsideClaims(localNetworkPlayer.huntLoadoutsJson);
       updateGreenwoodEncounterChain(localNetworkPlayer.huntLoadoutsJson, now);
+      updateMistfenEncounterChain(localNetworkPlayer.huntLoadoutsJson, now);
     }
     updateSilverDepthsRoute(now);
     if (!visibleDepthsRoute) updateCaveNavigation(localPlayer.getPosition(), now);

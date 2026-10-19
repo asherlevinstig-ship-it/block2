@@ -506,6 +506,16 @@ export const GREENWOOD_ENCOUNTER_CHAIN = {
   camp: { x: 51, z: -10 },
   leader: { x: 39.5, z: 16.5 },
 } as const;
+export const MISTFEN_ENCOUNTER_CHAIN = {
+  id: "mistfen-purification-chain",
+  discoveryId: "mistfen-cart",
+  shrineId: "mistfen-shrine",
+  leaderId: "mistfen-behemoth",
+  leaderName: "Mireback Behemoth",
+  discovery: { x: -21, z: 1 },
+  shrine: { x: -39, z: -15 },
+  leader: { x: -47.5, z: -31.5 },
+} as const;
 /** Small optional landmarks sit beside every long road segment, never in its movement lane. */
 export const ROADSIDE_DISCOVERIES = [
   { id: "greenwood-forager-camp", name: "Abandoned Forager Camp", kind: "camp", x: 31, z: -1 },
@@ -545,7 +555,7 @@ export const ROADSIDE_ENCOUNTERS = [
   { id: "greenwood-rootwatch-camp", kind: "guarded", itemId: "crawler_fang", quantity: 2, gold: 7, guardRadius: 14 },
   { id: "greenwood-hollow-shrine", kind: "shrine", itemId: "healing_potion", quantity: 1, gold: 0 },
   { id: "mistfen-cart", kind: "trail", itemId: "crawler_fang", quantity: 1, gold: 5, stashDx: -5, stashDz: -4, clue: "Drag marks lead northwest off the causeway into the reeds." },
-  { id: "mistfen-shrine", kind: "shrine", itemId: "healing_potion", quantity: 1, gold: 0 },
+  { id: "mistfen-shrine", kind: "ward", itemId: "healing_potion", quantity: 1, gold: 8, guardRadius: 14, holdMs: 8_000 },
   { id: "southgate-cart", kind: "guarded", itemId: "iron_ore", quantity: 2, gold: 6, guardRadius: 16 },
   { id: "sunfall-survey", kind: "trail", itemId: "iron_ore", quantity: 2, gold: 5, stashDx: -5, stashDz: 4, clue: "Survey stakes point southwest towards a small buried crate." },
   { id: "collapsed-lift", kind: "guarded", itemId: "stone_core", quantity: 1, gold: 8, guardRadius: 12 },
@@ -561,7 +571,7 @@ export const ROADSIDE_ENCOUNTERS = [
   { id: "wilds-hunter-blind", kind: "hunt", itemId: "crawler_fang", quantity: 2, gold: 7, guardRadius: 15,
     stashDx: -6, stashDz: 4, clue: "Blood and snapped reeds lead northwest. The wounded stalker is still moving." },
   { id: "outskirts-pilgrim-shrine", kind: "shrine", itemId: "healing_potion", quantity: 1, gold: 0 },
-] as const satisfies readonly { id: string; kind: "cache" | "trail" | "shrine" | "guarded" | "repair" | "ambush" | "hunt"; itemId: string; quantity: number; gold: number; guardRadius?: number; holdMs?: number; stashDx?: number; stashDz?: number; clue?: string }[];
+] as const satisfies readonly { id: string; kind: "cache" | "trail" | "shrine" | "guarded" | "repair" | "ward" | "ambush" | "hunt"; itemId: string; quantity: number; gold: number; guardRadius?: number; holdMs?: number; stashDx?: number; stashDz?: number; clue?: string }[];
 export function roadsideEncounterAt(id: string) {
   const encounter = ROADSIDE_ENCOUNTERS.find(entry => entry.id === id);
   const landmark = encounter && ROADSIDE_DISCOVERIES.find(entry => entry.id === encounter.id);

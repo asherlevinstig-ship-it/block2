@@ -79,7 +79,7 @@ import { HEALING_POTION, backpackAddableQuantity, backpackCapacity, backpackSlot
 import { canBuyPotionAtKeeper, potionBuyError, potionUseError } from "./healing-potions.js";
 import { MINERAL_REGROWTH_MS, type MineralDepositStatus } from "@blockcraft/protocol";
 import { RENEWABLE_MINERAL_DEPOSITS, authoredMineralAt, SURFACE_HEIGHT, CAVE_SHALLOW_HOME, CAVE_DEEP_HOME, CAVE_HIDDEN_HOME, SILVER_DEPTHS_SPITTER_HOMES, CRYSTAL_MATRIARCH_HOME, SILVER_DEPTHS_COVER, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, SILVER_DEPTHS_CHECKPOINT_POSITION, SILVER_DEPTHS_GALLERY_GATE, SILVER_DEPTHS_BOSS_GATE, SILVER_DEPTHS_IRON_GATE, SILVER_DEPTHS_SILVER_GATE, SILVER_DEPTHS_WING_CACHES, TOWN_BLACKSMITH_STALL_POSITION, silverDepthsPingLocation, isMistfenToxicPool, isInMistfenMarsh } from "@blockcraft/voxel-world";
-import { GREENWOOD_ENCOUNTER_CHAIN, ROLE_FIELD_OPPORTUNITIES, nearestRoleFieldOpportunity, nearestRoadsideEncounter, parseRoadsideClaims, roadsideEncounterAt, withRoadsideClaim } from "@blockcraft/voxel-world";
+import { GREENWOOD_ENCOUNTER_CHAIN, MISTFEN_ENCOUNTER_CHAIN, ROLE_FIELD_OPPORTUNITIES, nearestRoleFieldOpportunity, nearestRoadsideEncounter, parseRoadsideClaims, roadsideEncounterAt, withRoadsideClaim } from "@blockcraft/voxel-world";
 import { mineralCellOccupied } from "./mineral-regrowth.js";
 import { CAVE_ENCOUNTERS, caveEncounterAllows } from "./cave-encounters.js";
 import { miningDurationMs, miningLineClear } from "@blockcraft/voxel-world";
@@ -2442,7 +2442,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         this.broadcastRoadsideCycle(siteId, "available",
           `${site.name} is active again${nextVariant ? ` · ${nextVariant.title}` : ""}.`);
       }
-      const activatedChallenge = site.kind !== "repair" && site.kind !== "ambush" && site.kind !== "hunt"
+      const activatedChallenge = site.kind !== "repair" && site.kind !== "ward" && site.kind !== "ambush" && site.kind !== "hunt"
         || this.roadsideChallengeActive.has(siteId);
       if (!activatedChallenge) continue;
       if (repeatable) {
@@ -2473,7 +2473,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           }
           this.mobBaseNames.set(guard.id, guard.name);
         }
-        if (site.kind === "repair") {
+        if (site.kind === "repair" || site.kind === "ward") {
           const repair = this.roadsideRepair.get(siteId);
           if (repair && !repair.ready) {
             const holders = [...this.state.players.values()].filter(player => player.health > 0
@@ -2495,7 +2495,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
                 const player = this.state.players.get(client.sessionId);
                 if (player && Math.hypot(player.x - site.x, player.z - site.z) <= 20)
                   client.send("roadside:result", { id: siteId, ok: true,
-                    message: "WINCH REPAIRED · Defeat the quarry patrol and raise the resource crate.", claimed: false,
+                    message: site.kind === "ward"
+                      ? "SHRINE PURIFIED · Defeat the remaining marsh attackers."
+                      : "WINCH REPAIRED · Defeat the quarry patrol and raise the resource crate.", claimed: false,
                     phase: "ready", progress: 1, holders: holders.length });
               }
             }
@@ -3282,7 +3284,14 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const earnedExperience = mobExperience(mob.archetype, mob.rewardMultiplier, mob.isChampion || wasElite, player.level, mob.level);
       this.grantProgression(playerId, disruptedWarband ? Math.ceil(earnedExperience * 1.25) : earnedExperience, mob.name);
       this.grantBuildProgress(playerId, mobId === "mistfen-behemoth" ? 5 : Boolean(areaMainMob) || mob.isChampion || wasElite ? 3 : 1);
-      if (isMistfenMob(mobId)) this.grantMistfenMastery(playerId, mobId === "mistfen-behemoth" ? 18 : 3);
+      if (isMistfenMob(mobId)) {
+        this.grantMistfenMastery(playerId, mobId === "mistfen-behemoth" ? 18 : 3);
+        if (mobId === "mistfen-behemoth") {
+          const mistfen = this.mistfenProgress(player);
+          mistfen.firstBossDefeated = true;
+          this.setMistfenProgress(player, mistfen);
+        }
+      }
       else if (isMistfenEventFollower(mobId)) this.grantMistfenMastery(playerId, 4);
       else if (mobId === MISTFEN_EVENT_ID) this.grantMistfenMastery(playerId,
         defeatedMistfenEvent?.masteryReward ?? 15);
@@ -5725,6 +5734,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const claims = parseRoadsideClaims(player.huntLoadoutsJson);
     if (id === GREENWOOD_ENCOUNTER_CHAIN.campId && !claims.has(GREENWOOD_ENCOUNTER_CHAIN.discoveryId))
       return reply(false, "The roots are tangled shut · search the Abandoned Forager Camp for another approach.");
+    if (id === MISTFEN_ENCOUNTER_CHAIN.shrineId && !claims.has(MISTFEN_ENCOUNTER_CHAIN.discoveryId))
+      return reply(false, "The shrine is dormant · search the Sunkroad Cart and follow its drag marks first.");
     if (claims.has(id) && !repeatable) return reply(false, `${site.name} has already been explored by this character.`, true);
     const cycleReadyAt = this.roadsideCycleReadyAt.get(id);
     if (repeatable && cycleReadyAt !== undefined)
@@ -5760,11 +5771,24 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       return reply(true, `${encounterVariant?.title.toUpperCase() ?? "REPAIR STARTED"} · Hold the winch for ${Math.ceil(site.holdMs / 1_000)}s. ${encounterVariant?.activation ?? ""}`, false,
         { phase: "repair", progress: 0, holders: 1, variant: encounterVariant?.id, variantTitle: encounterVariant?.title });
     }
+    if (site.kind === "ward" && !this.roadsideChallengeActive.has(id)) {
+      const now = Date.now();
+      this.roadsideChallengeActive.add(id);
+      this.roadsideRepair.set(id, { progressMs: 0, lastAt: now, lastBroadcastAt: now - 500, ready: false });
+      this.advanceRoadsideGuards(now);
+      return reply(true, `PURIFICATION STARTED · Hold the Mossbound Shrine for ${Math.ceil(site.holdMs / 1_000)}s while the marsh pack attacks.`, false,
+        { phase: "repair", progress: 0, holders: 1 });
+    }
     if (site.kind === "repair") {
       const repair = this.roadsideRepair.get(id);
       if (!repair?.ready) return reply(true, `WINCH REPAIR · Hold this ground for ${Math.max(1, Math.ceil((site.holdMs - (repair?.progressMs ?? 0)) / 1_000))}s more.`);
     }
-    if ((site.kind === "guarded" || site.kind === "repair" || site.kind === "ambush" || site.kind === "hunt")
+    if (site.kind === "ward") {
+      const purification = this.roadsideRepair.get(id);
+      if (!purification?.ready) return reply(true,
+        `SHRINE PURIFICATION · Hold this ground for ${Math.max(1, Math.ceil((site.holdMs - (purification?.progressMs ?? 0)) / 1_000))}s more.`);
+    }
+    if ((site.kind === "guarded" || site.kind === "repair" || site.kind === "ward" || site.kind === "ambush" || site.kind === "hunt")
       && this.activeRoadsideGuards(id).some(guard => this.state.mobs.get(guard.id)?.alive !== false))
       return reply(false, `Defeat the guards at ${site.name} before opening it.`);
     if (repeatable) {
@@ -5803,10 +5827,18 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const chainMessage = id === GREENWOOD_ENCOUNTER_CHAIN.discoveryId
       ? " Broken branches now glow east toward Rootwatch Camp."
       : id === GREENWOOD_ENCOUNTER_CHAIN.campId
-        ? ` ${GREENWOOD_ENCOUNTER_CHAIN.leaderName.toUpperCase()} EXPOSED · follow the awakened spores south.` : "";
+        ? ` ${GREENWOOD_ENCOUNTER_CHAIN.leaderName.toUpperCase()} EXPOSED · follow the awakened spores south.`
+        : id === MISTFEN_ENCOUNTER_CHAIN.discoveryId
+          ? " Drowned lantern wisps now trace the safe ground to Mossbound Shrine."
+          : id === MISTFEN_ENCOUNTER_CHAIN.shrineId
+            ? ` ${MISTFEN_ENCOUNTER_CHAIN.leaderName.toUpperCase()} EXPOSED · follow the lantern wisps deeper into the marsh.` : "";
     const message = site.kind === "shrine" && choice === "rest" ? `${site.name} · health and stamina restored.`
       : `${site.name} explored · +${quantity} ${ITEM_DEFINITIONS[itemId].name}${player.coins > beforeGold ? ` · +${player.coins - beforeGold} gold` : ""}.`;
     reply(true, `${message}${chainMessage}`, true, { phase: "claimed", progress: 1, holders: 0 });
+    if (site.kind === "ward") {
+      this.roadsideChallengeActive.delete(id);
+      this.roadsideRepair.delete(id);
+    }
     void this.persistPlayer(client.sessionId, player, true).catch(() => {});
   }
 
@@ -6582,16 +6614,17 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     void this.persistPlayer(playerId, player, true);
   }
 
-  private mistfenProgress(player: PlayerState): { points: number; discovered: boolean; marks: number } {
+  private mistfenProgress(player: PlayerState): { points: number; discovered: boolean; marks: number; firstBossDefeated: boolean } {
     try {
-      const value = (JSON.parse(player.huntLoadoutsJson) as { mistfen?: { points?: unknown; discovered?: unknown; marks?: unknown } }).mistfen;
+      const value = (JSON.parse(player.huntLoadoutsJson) as { mistfen?: { points?: unknown; discovered?: unknown; marks?: unknown; firstBossDefeated?: unknown } }).mistfen;
       return { points: typeof value?.points === "number" && Number.isFinite(value.points)
         ? Math.max(0, Math.min(MISTFEN_MASTERY_CAP, Math.floor(value.points))) : 0, discovered: value?.discovered === true,
-        marks: typeof value?.marks === "number" && Number.isFinite(value.marks) ? Math.max(0, Math.min(65_535, Math.floor(value.marks))) : 0 };
-    } catch { return { points: 0, discovered: false, marks: 0 }; }
+        marks: typeof value?.marks === "number" && Number.isFinite(value.marks) ? Math.max(0, Math.min(65_535, Math.floor(value.marks))) : 0,
+        firstBossDefeated: value?.firstBossDefeated === true };
+    } catch { return { points: 0, discovered: false, marks: 0, firstBossDefeated: false }; }
   }
 
-  private setMistfenProgress(player: PlayerState, mistfen: { points: number; discovered: boolean; marks: number }): void {
+  private setMistfenProgress(player: PlayerState, mistfen: { points: number; discovered: boolean; marks: number; firstBossDefeated?: boolean }): void {
     let raw: Record<string, unknown> = {};
     try { const parsed = JSON.parse(player.huntLoadoutsJson); if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) raw = parsed; }
     catch { /* legacy */ }
