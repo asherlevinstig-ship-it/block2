@@ -18,6 +18,8 @@ describe("first-play onboarding", () => {
     expect(starterInventoryLesson(3, true)).toBe("hidden");
     expect(starterInventoryLesson(ONBOARDING_DONE, false, true)).toBe("open_pack");
     expect(starterInventoryLesson(ONBOARDING_DONE, true, true)).toBe("equip_sword");
+    expect(starterInventoryLesson(2, true, true, "forged_sword")).toBe("hidden");
+    expect(starterInventoryLesson(ONBOARDING_DONE, false, true, "forged_sword")).toBe("hidden");
     expect(advanceOnboarding(2, "picked_loot")).toBe(2);
     expect(advanceOnboarding(2, "equipped_starter")).toBe(3);
   });

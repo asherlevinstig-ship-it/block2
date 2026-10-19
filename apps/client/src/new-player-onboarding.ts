@@ -33,7 +33,13 @@ export function advanceOnboarding(step: number, event: OnboardingEvent): number 
 
 export type StarterInventoryLesson = "hidden" | "open_pack" | "equip_sword";
 
-export function starterInventoryLesson(step: number | null, packOpenedWithKeyboard: boolean, equipmentRequired = false): StarterInventoryLesson {
+export function starterInventoryLesson(
+  step: number | null,
+  packOpenedWithKeyboard: boolean,
+  equipmentRequired = false,
+  mainHandId = "unarmed",
+): StarterInventoryLesson {
+  if (mainHandId === "forged_sword") return "hidden";
   if (step !== 2 && !equipmentRequired) return "hidden";
   return packOpenedWithKeyboard ? "equip_sword" : "open_pack";
 }

@@ -691,7 +691,7 @@ function renderFirstSteps(): void {
   const modeLesson = index === 4;
   firstSteps.hidden = !active;
   firstSteps.dataset.guidance = index === 3 ? "south-gate" : "";
-  const starterLesson = starterInventoryLesson(index, starterInventoryOpenedWithKeyboard, forcedStarterEquipment);
+  const starterLesson = starterInventoryLesson(index, starterInventoryOpenedWithKeyboard, forcedStarterEquipment, localMainHandId);
   firstStepsSkip.hidden = modeLesson || starterLesson !== "hidden";
   const showModeChoice = townDeparturePromptOpen || modeLesson && !modeLessonAcknowledged;
   modeSwitchTutorial.hidden = !showModeChoice;
@@ -8354,7 +8354,16 @@ tavernDialogueNext.addEventListener("click", advanceTavernDialogue);
 tavernDialogueClose.addEventListener("click", closeTavernDialogue);
 
 function setInventoryOpen(open: boolean): void {
-  const starterLesson = starterInventoryLesson(firstStepsIndex, starterInventoryOpenedWithKeyboard, forcedStarterEquipment);
+  if (!open && localMainHandId === "forged_sword") {
+    if (forcedStarterEquipment) completeStarterEquipment();
+    if (firstStepsIndex === 2) noteFirstStep("equipped_starter");
+  }
+  const starterLesson = starterInventoryLesson(
+    firstStepsIndex,
+    starterInventoryOpenedWithKeyboard,
+    forcedStarterEquipment,
+    localMainHandId,
+  );
   if (open && starterLesson === "open_pack") {
     status.textContent = "Press I to open your inventory and equip the starter sword.";
     nudgeStarterInventoryTutorial();
@@ -11678,7 +11687,12 @@ combatHudRoot.addEventListener("click", event => {
 
 window.addEventListener("keydown", event => {
   if (event.repeat) return;
-  if (starterInventoryLesson(firstStepsIndex, starterInventoryOpenedWithKeyboard, forcedStarterEquipment) === "open_pack") {
+  if (starterInventoryLesson(
+    firstStepsIndex,
+    starterInventoryOpenedWithKeyboard,
+    forcedStarterEquipment,
+    localMainHandId,
+  ) === "open_pack") {
     if (event.code === "KeyI") {
       starterInventoryOpenedWithKeyboard = true;
       renderFirstSteps();
