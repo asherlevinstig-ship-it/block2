@@ -1489,18 +1489,112 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 #calling-intro-close { width: 36px; height: 36px; border: 1px solid #ffffff20; border-radius: 8px; background: #ffffff09; color: #b9c4bb; font-size: 1.35rem; cursor: pointer; }
 #calling-intro-copy { margin: 9px 0 15px; color: #b4c1b8; font-size: .78rem; line-height: 1.45; }
 #calling-intro #build-path-candidates { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-#calling-intro #build-path-candidates button { display: flex; flex-direction: column; min-height: 220px; padding: 15px; border-color: #66806d88; background: linear-gradient(150deg, #14251b, #0c1712); }
+#calling-intro #build-path-candidates button { display: flex; flex-direction: column; min-height: 300px; padding: 13px; overflow: hidden; border-color: #66806d88; background: linear-gradient(150deg, #14251b, #0c1712); transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease; }
+#calling-intro #build-path-candidates button[data-previewing="true"] { z-index: 1; border-color: var(--calling-colour, #d7b65f); box-shadow: inset 0 0 30px color-mix(in srgb, var(--calling-colour, #d7b65f) 13%, transparent), 0 10px 28px #0008; transform: translateY(-2px); }
 #calling-intro #build-path-candidates button[data-recommended="true"] { border-color: #d7b65f; box-shadow: inset 0 0 24px #d2a94a18, 0 0 18px #0007; }
 #calling-intro #build-path-candidates button[data-active="true"] { border-color: #7edbb4; }
 #calling-intro #build-path-candidates em { align-self: flex-start; margin-bottom: 10px; padding: 4px 7px; border-radius: 999px; background: #635025; color: #ffe19a; font-size: .5rem; letter-spacing: .09em; }
 #calling-intro #build-path-candidates strong { font-size: 1rem; }
 #calling-intro #build-path-candidates small { color: #a6b6ab; font-size: .62rem; line-height: 1.4; }
-#calling-intro #build-path-candidates p { flex: 1; margin: 13px 0; color: #9fb0a4; font-size: .65rem; line-height: 1.45; }
+#calling-intro #build-path-candidates p { margin: 8px 0; color: #9fb0a4; font-size: .6rem; line-height: 1.35; }
+#calling-intro #build-path-candidates .calling-preview-caption { min-height: 2.7em; color: #c5d1c8; }
 #calling-intro #build-path-candidates b { margin-bottom: 5px; padding-top: 10px; border-top: 1px solid #ffffff16; color: #83dfc3; font-size: .7rem; }
 .calling-intro-card > footer { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 14px; }
 .calling-intro-card > footer span { color: #91a198; font-size: .62rem; }
 .calling-intro-card > footer button { min-height: 34px; padding: 6px 12px; border: 1px solid #6e8075; border-radius: 7px; background: #18231d; color: #c5d0c8; font-size: .56rem; font-weight: 900; }
 @media (max-width: 720px) { #calling-intro { padding: 10px; }.calling-intro-card { max-height: 94vh; overflow-y: auto; padding: 15px; }#calling-intro #build-path-candidates { grid-template-columns: 1fr; }#calling-intro #build-path-candidates button { min-height: 150px; }.calling-intro-card > footer { align-items: stretch; flex-direction: column; } }
+
+/* Calling cards show the action before the player commits to a path. */
+.calling-preview { --calling-colour: #83dfc3; --calling-accent: #ecfff8; position: relative; display: block; flex: 0 0 auto; width: 100%; height: 82px; margin: 0 0 9px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--calling-colour) 35%, #2d4438); border-radius: 10px; background: radial-gradient(circle at 50% 70%, color-mix(in srgb, var(--calling-colour) 16%, transparent), transparent 50%), linear-gradient(#07110e, #111b16); box-shadow: inset 0 -18px 30px #0007; }
+.calling-preview > span, .calling-preview i { position: absolute; display: block; box-sizing: border-box; }
+.calling-preview-ground { left: 15%; right: 15%; bottom: 10px; height: 7px; border-radius: 50%; border: 1px solid color-mix(in srgb, var(--calling-colour) 45%, transparent); background: #0008; transform: perspective(60px) rotateX(58deg); }
+.calling-preview-hero { left: calc(43% - 8px); bottom: 17px; width: 16px; height: 38px; filter: drop-shadow(0 0 5px var(--calling-colour)); transform-origin: 50% 100%; }
+.calling-preview-head { left: 4px; top: 0; width: 9px; height: 9px; border-radius: 3px; background: var(--calling-accent); }
+.calling-preview-body { left: 2px; top: 9px; width: 13px; height: 20px; border-radius: 3px 3px 2px 2px; background: linear-gradient(90deg, color-mix(in srgb, var(--calling-colour) 65%, #18231e), var(--calling-colour)); }
+.calling-preview-arm { top: 12px; width: 4px; height: 17px; border-radius: 2px; background: var(--calling-accent); transform-origin: 50% 2px; }
+.calling-preview-arm-a { left: -1px; transform: rotate(10deg); }.calling-preview-arm-b { right: -1px; transform: rotate(-10deg); }
+.calling-preview-target { right: 17%; bottom: 17px; width: 14px; height: 31px; opacity: .72; }
+.calling-preview-target::before { content: ""; position: absolute; left: 3px; top: 0; width: 8px; height: 8px; border-radius: 50%; background: #f5a091; }
+.calling-preview-target i { left: 1px; top: 8px; width: 12px; height: 20px; border-radius: 3px; background: #863d40; }
+.calling-preview-decoy { display: none !important; left: 43%; bottom: 17px; width: 12px; height: 31px; border-radius: 5px 5px 2px 2px; border: 1px dashed var(--calling-accent); background: color-mix(in srgb, var(--calling-colour) 25%, transparent); }
+.calling-preview-prop, .calling-preview-effect { opacity: 0; pointer-events: none; }
+.calling-preview *, #calling-awakening[hidden] .calling-preview * { animation-play-state: paused !important; }
+button[data-previewing="true"] .calling-preview *, #calling-awakening:not([hidden]) .calling-preview * { animation-play-state: running !important; }
+
+/* Tank: the shield becomes a wall between the hero and the threat. */
+.calling-preview[data-calling="tank"] .calling-preview-prop { left: 51%; bottom: 18px; width: 14px; height: 29px; opacity: 1; border: 2px solid var(--calling-accent); border-radius: 7px 7px 5px 5px; background: color-mix(in srgb, var(--calling-colour) 36%, transparent); transform-origin: 50% 100%; animation: preview-tank-shield 2.4s ease-in-out infinite; }
+.calling-preview[data-calling="tank"] .calling-preview-effect-a { left: 49%; bottom: 12px; width: 42%; height: 53px; border: 2px solid var(--calling-colour); border-radius: 50% 50% 12px 12px; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--calling-colour) 18%, transparent), transparent); animation: preview-tank-wall 2.4s ease-out infinite; }
+.calling-preview[data-calling="tank"] .calling-preview-hero { animation: preview-tank-brace 2.4s ease-in-out infinite; }
+@keyframes preview-tank-shield { 0%,18% { transform: translateX(-8px) scale(.7); } 35%,78% { transform: translateX(0) scale(1.15); } 100% { transform: scale(.75); } }
+@keyframes preview-tank-wall { 0%,25% { opacity: 0; transform: scaleX(.25); } 42%,78% { opacity: .75; transform: scaleX(1); } 100% { opacity: 0; transform: scaleX(1.08); } }
+@keyframes preview-tank-brace { 0%,20%,100% { transform: rotate(0); } 34%,76% { transform: translateX(3px) rotate(6deg) scaleY(.92); } }
+
+/* Mage: power gathers in both hands before the pulse is released. */
+.calling-preview[data-calling="mage"] .calling-preview-arm-a { animation: preview-mage-arm-a 2.3s ease-in-out infinite; }.calling-preview[data-calling="mage"] .calling-preview-arm-b { animation: preview-mage-arm-b 2.3s ease-in-out infinite; }
+.calling-preview[data-calling="mage"] .calling-preview-effect-a, .calling-preview[data-calling="mage"] .calling-preview-effect-b { top: 33px; width: 10px; height: 10px; opacity: 1; border-radius: 50%; background: var(--calling-accent); box-shadow: 0 0 8px 3px var(--calling-colour); animation: preview-mage-orb 2.3s ease-in-out infinite; }
+.calling-preview[data-calling="mage"] .calling-preview-effect-a { left: 34%; }.calling-preview[data-calling="mage"] .calling-preview-effect-b { left: 52%; animation-delay: -.12s; }
+.calling-preview[data-calling="mage"] .calling-preview-effect-c { left: calc(43% - 24px); bottom: 8px; width: 64px; height: 64px; border: 2px solid var(--calling-colour); border-radius: 50%; animation: preview-mage-pulse 2.3s ease-out infinite; }
+@keyframes preview-mage-arm-a { 0%,100% { transform: rotate(10deg); } 25%,68% { transform: rotate(105deg); } } @keyframes preview-mage-arm-b { 0%,100% { transform: rotate(-10deg); } 25%,68% { transform: rotate(-105deg); } }
+@keyframes preview-mage-orb { 0%,15%,100% { opacity: 0; transform: scale(.2); } 35%,66% { opacity: 1; transform: translateY(-7px) scale(1); } 78% { opacity: 0; transform: translateY(-7px) scale(2.2); } }
+@keyframes preview-mage-pulse { 0%,60% { opacity: 0; transform: scale(.08); } 64% { opacity: .95; } 92%,100% { opacity: 0; transform: scale(1.8); } }
+
+/* Assassin: vanish, cross the target, then leave a blade afterimage. */
+.calling-preview[data-calling="assassin"] .calling-preview-hero { animation: preview-assassin-step 2.35s ease-in-out infinite; }
+.calling-preview[data-calling="assassin"] .calling-preview-prop { left: 63%; top: 20px; width: 4px; height: 49px; border-radius: 4px; background: var(--calling-accent); box-shadow: 0 0 9px var(--calling-colour); transform: rotate(54deg); animation: preview-assassin-cut 2.35s ease-out infinite; }
+.calling-preview[data-calling="assassin"] .calling-preview-effect-a { left: 32%; bottom: 12px; width: 28px; height: 45px; border-radius: 50%; background: radial-gradient(circle, #71717b99, #2b263580 55%, transparent 70%); animation: preview-assassin-smoke 2.35s ease-out infinite; }
+@keyframes preview-assassin-step { 0%,14%,100% { opacity: 1; transform: translateX(0); } 25%,48% { opacity: .04; transform: translateX(5px); } 61% { opacity: .14; transform: translateX(72px); } 69%,88% { opacity: 1; transform: translateX(79px); } }
+@keyframes preview-assassin-smoke { 0%,8%,100% { opacity: 0; transform: scale(.25); } 20% { opacity: .9; transform: scale(1); } 47% { opacity: 0; transform: scale(1.55); } }
+@keyframes preview-assassin-cut { 0%,60%,100% { opacity: 0; transform: rotate(54deg) scaleY(.1); } 67% { opacity: 1; transform: rotate(54deg) scaleY(1); } 80% { opacity: 0; transform: rotate(54deg) translateY(-8px) scaleY(1.2); } }
+
+/* Thief: a visible decoy holds the pursuit while the real hero slips away. */
+.calling-preview[data-calling="thief"] .calling-preview-decoy { display: block !important; animation: preview-thief-decoy 2.5s ease-out infinite; }
+.calling-preview[data-calling="thief"] .calling-preview-hero { animation: preview-thief-slip 2.5s ease-in-out infinite; }
+.calling-preview[data-calling="thief"] .calling-preview-effect-a, .calling-preview[data-calling="thief"] .calling-preview-effect-b { bottom: 10px; width: 36px; height: 36px; border-radius: 50%; background: radial-gradient(circle, #d5c9a0aa, #746c6177 48%, transparent 70%); animation: preview-thief-smoke 2.5s ease-out infinite; }
+.calling-preview[data-calling="thief"] .calling-preview-effect-a { left: 34%; }.calling-preview[data-calling="thief"] .calling-preview-effect-b { left: 46%; animation-delay: .12s; }
+@keyframes preview-thief-slip { 0%,18%,100% { opacity: 1; transform: translateX(0); } 42% { opacity: .2; transform: translateX(-23px); } 64%,86% { opacity: 1; transform: translateX(-49px); } }
+@keyframes preview-thief-decoy { 0%,22%,100% { opacity: 0; transform: scale(.65); } 38%,78% { opacity: .85; transform: scale(1); } 90% { opacity: 0; transform: scale(1.1); } }
+@keyframes preview-thief-smoke { 0%,17%,100% { opacity: 0; transform: scale(.2); } 37% { opacity: .9; transform: scale(1); } 76% { opacity: 0; transform: translateY(-9px) scale(1.5); } }
+
+/* Ranger: draw, disengage and send a bright line through the target. */
+.calling-preview[data-calling="ranger"] .calling-preview-hero { animation: preview-ranger-step 2.35s ease-in-out infinite; }
+.calling-preview[data-calling="ranger"] .calling-preview-prop { left: 50%; top: 26px; width: 19px; height: 31px; opacity: 1; border-right: 3px solid var(--calling-accent); border-radius: 50%; transform: rotate(-12deg); animation: preview-ranger-draw 2.35s ease-in-out infinite; }
+.calling-preview[data-calling="ranger"] .calling-preview-effect-a { left: 50%; top: 40px; width: 45%; height: 3px; border-radius: 3px; background: linear-gradient(90deg, var(--calling-accent), var(--calling-colour), transparent); box-shadow: 0 0 6px var(--calling-colour); transform-origin: left; animation: preview-ranger-arrow 2.35s ease-out infinite; }
+@keyframes preview-ranger-step { 0%,15%,100% { transform: translateX(0); } 31%,84% { transform: translateX(-18px); } }
+@keyframes preview-ranger-draw { 0%,28%,100% { transform: rotate(-12deg) scale(.65); } 45%,70% { transform: rotate(-12deg) scale(1); } }
+@keyframes preview-ranger-arrow { 0%,56%,100% { opacity: 0; transform: scaleX(.05); } 63% { opacity: 1; transform: scaleX(.2); } 78% { opacity: 1; transform: scaleX(1); } 88% { opacity: 0; transform: translateX(36px) scaleX(.25); } }
+
+/* Healer: the ground becomes a sanctuary and the ally visibly recovers. */
+.calling-preview[data-calling="healer"] .calling-preview-ground { animation: preview-healer-field 2.5s ease-out infinite; }
+.calling-preview[data-calling="healer"] .calling-preview-effect-a { right: calc(17% - 9px); bottom: 9px; width: 32px; height: 44px; border: 2px solid var(--calling-colour); border-radius: 50%; animation: preview-healer-aura 2.5s ease-out infinite; }
+.calling-preview[data-calling="healer"] .calling-preview-effect-b, .calling-preview[data-calling="healer"] .calling-preview-effect-c { right: calc(22% - 1px); top: 25px; width: 3px; height: 17px; opacity: 1; border-radius: 3px; background: var(--calling-accent); box-shadow: 0 0 7px var(--calling-colour); animation: preview-healer-cross 2.5s ease-out infinite; }
+.calling-preview[data-calling="healer"] .calling-preview-effect-c { transform: rotate(90deg); }
+@keyframes preview-healer-field { 0%,12%,100% { opacity: .2; transform: perspective(60px) rotateX(58deg) scale(.35); } 38%,78% { opacity: 1; border-color: var(--calling-accent); box-shadow: 0 0 14px var(--calling-colour); transform: perspective(60px) rotateX(58deg) scale(1.15); } }
+@keyframes preview-healer-aura { 0%,25%,100% { opacity: 0; transform: scale(.4); } 44%,78% { opacity: .85; transform: scale(1); } 90% { opacity: 0; transform: translateY(-7px) scale(1.15); } }
+@keyframes preview-healer-cross { 0%,30%,100% { opacity: 0; transform: scale(.2); } 48%,79% { opacity: 1; transform: scale(1); } 90% { opacity: 0; transform: translateY(-8px) scale(1.2); } }
+.calling-preview[data-calling="healer"] .calling-preview-effect-c { animation-name: preview-healer-cross-rotated; }
+@keyframes preview-healer-cross-rotated { 0%,30%,100% { opacity: 0; transform: rotate(90deg) scale(.2); } 48%,79% { opacity: 1; transform: rotate(90deg) scale(1); } 90% { opacity: 0; transform: translateY(-8px) rotate(90deg) scale(1.2); } }
+
+#calling-awakening { position: fixed; inset: 0; z-index: 74; display: grid; place-items: center; padding: 20px; overflow: hidden; background: radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--calling-colour) 18%, transparent), #020605ed 62%); backdrop-filter: blur(9px); }
+#calling-awakening[hidden] { display: none; }
+#calling-awakening::before, #calling-awakening::after { content: ""; position: absolute; left: 50%; top: 50%; width: min(72vw, 720px); aspect-ratio: 1; border: 1px solid color-mix(in srgb, var(--calling-colour) 50%, transparent); border-radius: 50%; transform: translate(-50%, -50%); animation: calling-awakening-ring 2.2s ease-out infinite; pointer-events: none; }
+#calling-awakening::after { animation-delay: .45s; }
+@keyframes calling-awakening-ring { from { opacity: .7; transform: translate(-50%, -50%) scale(.15); } to { opacity: 0; transform: translate(-50%, -50%) scale(1); } }
+.calling-awakening-card { position: relative; z-index: 1; width: min(610px, 94vw); padding: 25px; border: 2px solid var(--calling-colour); border-radius: 20px; background: linear-gradient(155deg, #17231deF, #070d0bef); box-shadow: 0 30px 100px #000, inset 0 0 45px color-mix(in srgb, var(--calling-colour) 10%, transparent); color: #e9f1ec; text-align: center; animation: calling-awakening-arrive .45s cubic-bezier(.2,.85,.25,1.15); }
+@keyframes calling-awakening-arrive { from { opacity: 0; transform: translateY(22px) scale(.9); } to { opacity: 1; transform: none; } }
+.calling-awakening-eyebrow { color: var(--calling-colour); font-size: .62rem; font-weight: 1000; letter-spacing: .24em; }
+#calling-awakening-preview .calling-preview { width: min(440px, 90%); height: 170px; margin: 18px auto; border-color: color-mix(in srgb, var(--calling-colour) 65%, transparent); }
+#calling-awakening-preview .calling-preview-hero { left: calc(43% - 16px); bottom: 32px; width: 32px; height: 76px; transform: scale(1.65); transform-origin: 50% 100%; }
+#calling-awakening-preview .calling-preview-target { right: 16%; bottom: 30px; transform: scale(1.7); transform-origin: 50% 100%; }
+#calling-awakening-preview .calling-preview-ground { bottom: 18px; }
+.calling-awakening-card h2 { margin: 5px 0 8px; color: var(--calling-accent); font: 800 1.65rem Georgia, serif; letter-spacing: .03em; text-shadow: 0 0 18px color-mix(in srgb, var(--calling-colour) 55%, transparent); }
+#calling-awakening-identity { margin: 0 auto 17px; color: #bdcbc2; font-size: .8rem; line-height: 1.5; }
+.calling-awakening-power { display: grid; gap: 3px; padding: 12px; border: 1px solid color-mix(in srgb, var(--calling-colour) 48%, transparent); border-radius: 10px; background: #07110dd4; text-align: left; }
+.calling-awakening-power span { color: var(--calling-colour); font-size: .5rem; font-weight: 1000; letter-spacing: .14em; }.calling-awakening-power strong { color: #f1e1af; font-size: .72rem; }.calling-awakening-power small { color: #91a49a; font-size: .55rem; }
+#calling-awakening-continue { min-width: 190px; min-height: 42px; margin-top: 17px; border: 1px solid var(--calling-colour); border-radius: 8px; background: color-mix(in srgb, var(--calling-colour) 22%, #132019); color: var(--calling-accent); font-size: .65rem; font-weight: 1000; letter-spacing: .08em; cursor: pointer; }
+#calling-awakening-continue:disabled { opacity: .55; cursor: wait; }
+
+@media (prefers-reduced-motion: reduce) { .calling-preview *, #calling-awakening::before, #calling-awakening::after, .calling-awakening-card { animation-duration: 1ms !important; animation-iteration-count: 1 !important; } }
+@media (max-width: 720px) { .calling-preview { height: 72px; }.calling-awakening-card { max-height: 94vh; overflow-y: auto; padding: 17px; }#calling-awakening-preview .calling-preview { height: 130px; margin: 12px auto; }.calling-awakening-card h2 { font-size: 1.25rem; } }
 .inventory-section[hidden] { display: none; }
 .inventory-grid article[hidden], .potion-inventory[hidden], .inventory-empty[hidden] { display: none; }
 .inventory-empty { margin: 12px 0; padding: 22px 16px; border: 1px dashed #70876866; border-radius: 9px; color: #92a68e; font-size: .8rem; text-align: center; }

@@ -48,6 +48,7 @@ import { ashenChainRoute, ashenChainStage, greenwoodChainRoute, greenwoodChainSt
   type AshenChainStage, type GreenwoodChainStage, type MistfenChainStage, type NorthwatchChainStage, type QuarryChainStage } from "./regional-encounter-chain.js";
 import { combatHud, cooldownState } from "./combat-hud.js";
 import { assassinJourney } from "./assassin-journey.js";
+import { CALLING_AWAKENING_MINIMUM_MS, callingAwakening, callingPreviewMarkup } from "./calling-awakening.js";
 import { EQUIPMENT_COLLECTION, collectionProgress, equipmentCollectionLabel, equipmentProgressionText } from "./equipment-progression.js";
 import { blacksmithShopStock, shopGoldShortfall, type BlacksmithShopTab } from "./blacksmith-shop.js";
 import { FIELD_FORGE_RECIPES, type FieldForgeId } from "@blockcraft/protocol";
@@ -1056,6 +1057,15 @@ const callingIntroCopy = document.querySelector<HTMLElement>("#calling-intro-cop
 const callingIntroStatus = document.querySelector<HTMLElement>("#calling-intro-status")!;
 const callingIntroClose = document.querySelector<HTMLButtonElement>("#calling-intro-close")!;
 const callingIntroLater = document.querySelector<HTMLButtonElement>("#calling-intro-later")!;
+const callingAwakeningPanel = document.querySelector<HTMLElement>("#calling-awakening")!;
+const callingAwakeningPreview = document.querySelector<HTMLElement>("#calling-awakening-preview")!;
+const callingAwakeningTitle = document.querySelector<HTMLElement>("#calling-awakening-title")!;
+const callingAwakeningIdentity = document.querySelector<HTMLElement>("#calling-awakening-identity")!;
+const callingAwakeningPower = document.querySelector<HTMLElement>("#calling-awakening-power")!;
+const callingAwakeningUnlock = document.querySelector<HTMLElement>("#calling-awakening-unlock")!;
+const callingAwakeningContinue = document.querySelector<HTMLButtonElement>("#calling-awakening-continue")!;
+let pendingCallingChoicePathId: BuildPathId | null = null;
+let callingAwakeningTimer = 0;
 const mainHandPickerButtons = [...document.querySelectorAll<HTMLButtonElement>("#main-hand-picker [data-main-hand]")];
 const seismicUpgrades = document.querySelector<HTMLElement>("#seismic-upgrades")!;
 const seismicMasteryButtons = [...document.querySelectorAll<HTMLButtonElement>("#seismic-mastery-picker [data-seismic-mastery]")];
@@ -4385,6 +4395,49 @@ function renderAssassinJourney(update: BuildPathUpdate): void {
   assassinJourneyTrial.textContent = journey.trial ? `ACTIVE TRIAL · ${journey.trial}` : "";
 }
 
+function focusCallingPreview(button: HTMLButtonElement): void {
+  for (const candidate of buildPathCandidates.querySelectorAll<HTMLButtonElement>("button"))
+    candidate.dataset.previewing = String(candidate === button);
+}
+
+function closeCallingAwakening(): void {
+  if (callingAwakeningContinue.disabled) return;
+  callingAwakeningPanel.hidden = true;
+  window.clearTimeout(callingAwakeningTimer);
+  canvas.focus();
+}
+
+function beginCallingAwakening(pathId: BuildPathId, powerName: string): void {
+  const definition = BUILD_PATHS[pathId];
+  const awakening = callingAwakening(pathId);
+  callingIntro.hidden = true;
+  callingAwakeningPanel.dataset.calling = pathId;
+  callingAwakeningPanel.style.setProperty("--calling-colour", awakening.colour);
+  callingAwakeningPanel.style.setProperty("--calling-accent", awakening.accent);
+  callingAwakeningPreview.innerHTML = callingPreviewMarkup(pathId, definition.name);
+  callingAwakeningTitle.textContent = `${definition.name.toUpperCase()} CALLING AWAKENED`;
+  callingAwakeningIdentity.textContent = awakening.identity;
+  callingAwakeningPower.textContent = `${powerName} · ${awakening.action}`;
+  callingAwakeningUnlock.textContent = localCharacterProgression.level >= 2
+    ? "Ready now · Press G to use"
+    : "Unlocks at character level 2 · Press G to use";
+  callingAwakeningContinue.disabled = true;
+  callingAwakeningContinue.textContent = "AWAKENING…";
+  callingAwakeningPanel.hidden = false;
+  createCallingAnticipation(pathId);
+  levelUpBurst();
+  combatAudio.play("levelUp");
+  resetMovementControls();
+  window.clearTimeout(callingAwakeningTimer);
+  callingAwakeningTimer = window.setTimeout(() => {
+    callingAwakeningContinue.disabled = false;
+    callingAwakeningContinue.textContent = "BEGIN THIS PATH";
+    callingAwakeningContinue.focus();
+  }, CALLING_AWAKENING_MINIMUM_MS);
+}
+
+callingAwakeningContinue.addEventListener("click", closeCallingAwakening);
+
 function renderBuildPath(update: BuildPathUpdate): void {
   lastBuildPathUpdate = update;
   renderAssassinJourney(update);
@@ -4458,7 +4511,9 @@ function renderBuildPath(update: BuildPathUpdate): void {
     if (update.selectedPathId && previousPathId !== update.selectedPathId) {
       sessionStorage.setItem("calling-intro-seen-v1", "true");
       status.textContent = `${selected!.name} Calling chosen. ${localCharacterProgression.level >= 2 ? `Press G to use ${activeAbility?.name ?? "your Power"}` : `${activeAbility?.name ?? "Your Power"} unlocks at level 2`}.`;
-      showCombatFeedback(`${selected!.name.toUpperCase()} · ${localCharacterProgression.level >= 2 ? "PRESS G" : "POWER AT LV 2"}`, "dodge");
+      if (pendingCallingChoicePathId === update.selectedPathId) beginCallingAwakening(update.selectedPathId, activeAbility?.name ?? "Calling Power");
+      else showCombatFeedback(`${selected!.name.toUpperCase()} · ${localCharacterProgression.level >= 2 ? "PRESS G" : "POWER AT LV 2"}`, "dodge");
+      pendingCallingChoicePathId = null;
     }
     return;
   }
@@ -4475,13 +4530,20 @@ function renderBuildPath(update: BuildPathUpdate): void {
     button.dataset.active = String(candidate.pathId === update.selectedPathId);
     button.dataset.recommended = String(index === 0);
     const why = candidate.reasons.length ? candidate.reasons.join(" · ") : "a flexible starting loadout";
-    button.innerHTML = `<em>${candidate.pathId === update.selectedPathId ? "CURRENT" : index === 0 ? "RECOMMENDED" : "OPTION"}</em><span><strong>${definition.name}</strong><small>${definition.role}</small></span><p>${index === 0 ? "Suggested by" : "Style clue"}: ${why}</p><b>${starter.name} · unlocks at LV 2</b><small>${starter.description}</small>`;
+    const awakening = callingAwakening(candidate.pathId);
+    button.innerHTML = `<em>${candidate.pathId === update.selectedPathId ? "CURRENT" : index === 0 ? "RECOMMENDED" : "OPTION"}</em>${callingPreviewMarkup(candidate.pathId, definition.name)}<span><strong>${definition.name}</strong><small>${definition.role}</small></span><p class="calling-preview-caption">${awakening.action}</p><b>${starter.name} · unlocks at LV 2</b><small>${starter.description}</small>`;
+    button.style.setProperty("--calling-colour", awakening.colour);
+    button.style.setProperty("--calling-accent", awakening.accent);
+    button.dataset.previewing = String(index === 0);
     button.disabled = !update.canChoose || Boolean(update.selectedPathId && !update.inTown);
     button.title = button.disabled ? "Return to Town to change your Calling" : `Choose ${definition.name}`;
+    button.addEventListener("pointerenter", () => focusCallingPreview(button));
+    button.addEventListener("focus", () => focusCallingPreview(button));
     button.addEventListener("click", () => {
       if (!room || !update.canChoose || (update.selectedPathId && !update.inTown)) return;
       for (const candidateButton of buildPathCandidates.querySelectorAll<HTMLButtonElement>("button")) candidateButton.disabled = true;
       callingIntroStatus.textContent = `Accepting the ${definition.name} Calling…`;
+      pendingCallingChoicePathId = candidate.pathId;
       room.send("build:path", { action: "choose", pathId: candidate.pathId as BuildPathId });
     });
     buildPathCandidates.append(button);
@@ -4493,7 +4555,9 @@ function renderBuildPath(update: BuildPathUpdate): void {
     callingIntro.hidden = true;
     sessionStorage.setItem("calling-intro-seen-v1", "true");
     status.textContent = `${selected!.name} Calling chosen. ${localCharacterProgression.level >= 2 ? `Press G to use ${activeAbility?.name ?? "your Power"}` : `${activeAbility?.name ?? "Your Power"} unlocks at level 2`}.`;
-    showCombatFeedback(`${selected!.name.toUpperCase()} · ${localCharacterProgression.level >= 2 ? "PRESS G" : "POWER AT LV 2"}`, "dodge");
+    if (pendingCallingChoicePathId === update.selectedPathId) beginCallingAwakening(update.selectedPathId, activeAbility?.name ?? "Calling Power");
+    else showCombatFeedback(`${selected!.name.toUpperCase()} · ${localCharacterProgression.level >= 2 ? "PRESS G" : "POWER AT LV 2"}`, "dodge");
+    pendingCallingChoicePathId = null;
   } else if (!update.selectedPathId && update.canChoose && levelUpPanel.hidden) {
     openCallingIntro();
   }
@@ -4525,6 +4589,17 @@ function closeCallingIntro(): void {
 buildPathOpen.addEventListener("click", openCallingIntro);
 callingIntroClose.addEventListener("click", closeCallingIntro);
 callingIntroLater.addEventListener("click", closeCallingIntro);
+buildPathCandidates.addEventListener("keydown", event => {
+  if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.code)) return;
+  const buttons = [...buildPathCandidates.querySelectorAll<HTMLButtonElement>("button:not(:disabled)")];
+  const current = buttons.indexOf(document.activeElement as HTMLButtonElement);
+  if (current < 0 || buttons.length < 2) return;
+  const columns = window.matchMedia("(max-width: 720px)").matches ? 1 : 3;
+  const offset = event.code === "ArrowLeft" ? -1 : event.code === "ArrowRight" ? 1
+    : event.code === "ArrowUp" ? -columns : columns;
+  buttons[(current + offset + buttons.length) % buttons.length]?.focus();
+  event.preventDefault();
+});
 
 function updateMomentum(stacksValue: number): void {
   const safeStacks = Number.isFinite(stacksValue) ? stacksValue : 0;
@@ -11535,6 +11610,10 @@ window.addEventListener("keydown", event => {
     if (event.code === "Escape") closeCallingIntro();
     event.preventDefault(); return;
   }
+  if (!callingAwakeningPanel.hidden) {
+    if ((event.code === "Escape" || event.code === "Enter") && !callingAwakeningContinue.disabled) closeCallingAwakening();
+    event.preventDefault(); return;
+  }
   if (playerInteractionUI.isOpen()) {
     if (event.code === "Escape") playerInteractionUI.close();
     event.preventDefault();
@@ -11640,7 +11719,7 @@ window.addEventListener("keyup", event => {
 });
 window.addEventListener("blur", () => { cancelLootHold(); keyboardFireHeld = false; });
 canvas.addEventListener("pointerdown", event => {
-  if (!levelUpPanel.hidden || !callingIntro.hidden) return;
+  if (!levelUpPanel.hidden || !callingIntro.hidden || !callingAwakeningPanel.hidden) return;
   if (event.button === 2) {
     rangedFirePointer = null;
     event.preventDefault();
