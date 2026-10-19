@@ -24,9 +24,10 @@ describe("onboarding glow trail", () => {
 
   it("selects a nearby southern ordinary enemy, not an eastern mini-boss", () => {
     const boss = { x: 30, y: 8, z: 8, alive: true, level: 2, isMiniBoss: true, isElite: false };
-    const crawler = { x: 3.5, y: 8, z: 44.5, alive: true, level: 2, isMiniBoss: false, isElite: false };
+    const crawler = { id: "south-causeway-crawler", x: 3.5, y: 8, z: 44.5, alive: true, level: 2, isMiniBoss: false, isElite: false };
+    const closer = { id: "other-crawler", x: 8.5, y: 8, z: 36.5, alive: true, level: 2, isMiniBoss: false, isElite: false };
     expect(onboardingTrailRoute(4, { x: 8.5, y: 8, z: 33.5 }, [boss, crawler], [])).toEqual([]);
-    expect(onboardingTrailRoute(5, { x: 8.5, y: 8, z: 33.5 }, [boss, crawler], [])).toEqual([crawler]);
+    expect(onboardingTrailRoute(5, { x: 8.5, y: 8, z: 33.5 }, [boss, closer, crawler], [])).toEqual([crawler]);
     expect(onboardingTrailRoute(6, player, [], [])).toEqual([]);
     expect(onboardingTrailRoute(null, player, [], [])).toEqual([]);
   });

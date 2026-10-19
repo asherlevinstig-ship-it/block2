@@ -2392,6 +2392,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     mob.name = CAVE_ENCOUNTERS[mobId]?.name ?? (roamingMembership(mobId) ? `Roaming ${mob.name}` : mob.name);
     if (mob.isChampion) mob.name = combatMobDefinition(mob).name;
     if (mobId === "frontier-brute") mob.name = "Frontier Stone Brute";
+    if (mobId === "south-causeway-crawler") mob.name = "Southroad Crawler";
     if (isAshenSentry(mobId)) mob.name = "Ashglass Sentry";
     if (mobId === "northwatch-spitter") mob.name = "Patrol Shard Sentry";
     if (mobId === "northwatch-patrol-stalker-west" || mobId === "northwatch-patrol-stalker-east") mob.name = "Ridge Patrol Stalker";

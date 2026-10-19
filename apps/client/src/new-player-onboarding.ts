@@ -1,4 +1,4 @@
-export type OnboardingEvent = "moved" | "left_town" | "switched_combat" | "landed_hit" | "picked_loot" | "equipped_starter";
+export type OnboardingEvent = "moved" | "left_town" | "switched_combat" | "defeated_first_enemy" | "picked_loot" | "equipped_starter";
 
 export const ONBOARDING_STEPS = [
   { title: "Move around", detail: "WASD or left stick to walk. Drag or use arrows to look around.", event: "moved" },
@@ -6,7 +6,7 @@ export const ONBOARDING_STEPS = [
   { title: "Equip your first sword", detail: "Press I to open your inventory, select the Forged Sword, then choose EQUIP.", event: "equipped_starter" },
   { title: "Head south", detail: "Follow the gold dots around the tavern and through the south gate. Stay on the road.", event: "left_town" },
   { title: "Switch to Combat", detail: "Press Q or select COMBAT in the hotbar. Q switches between Build and Combat.", event: "switched_combat" },
-  { title: "Try your first fight", detail: "Click or press J to attack. Space dodges danger; Q returns to Build when you need to mine.", event: "landed_hit" },
+  { title: "Defeat your first enemy", detail: "Follow the gold trail to the Southroad Crawler. Defeat it to complete your combat lesson.", event: "defeated_first_enemy" },
 ] as const satisfies readonly { title: string; detail: string; event: OnboardingEvent }[];
 
 export const ONBOARDING_DONE = ONBOARDING_STEPS.length;

@@ -49,6 +49,7 @@ import { ashenChainRoute, ashenChainStage, greenwoodChainRoute, greenwoodChainSt
 import { combatHud, cooldownState } from "./combat-hud.js";
 import { assassinJourney } from "./assassin-journey.js";
 import { CALLING_AWAKENING_MINIMUM_MS, callingAwakening, callingPreviewMarkup } from "./calling-awakening.js";
+import { completesFirstCombatLesson, firstCombatLesson } from "./first-combat-lesson.js";
 import { EQUIPMENT_COLLECTION, collectionProgress, equipmentCollectionLabel, equipmentProgressionText } from "./equipment-progression.js";
 import { blacksmithShopStock, shopGoldShortfall, type BlacksmithShopTab } from "./blacksmith-shop.js";
 import { FIELD_FORGE_RECIPES, type FieldForgeId } from "@blockcraft/protocol";
@@ -665,6 +666,7 @@ let modeLessonAcknowledged = false;
 let lowLevelWasInsideTown = false;
 let lowLevelTownStateReady = false;
 let starterInventoryOpenedWithKeyboard = false;
+let tutorialCallingId: BuildPathId | null = null;
 const firstStepsKey = onboardingStorageKey(profileToken);
 let firstStepsIndex = (() => {
   try {
@@ -699,8 +701,9 @@ function renderFirstSteps(): void {
   if (index === null || index >= ONBOARDING_DONE) return;
   const step = ONBOARDING_STEPS[index]!;
   firstStepsCount.textContent = `${index + 1} / ${ONBOARDING_DONE}`;
-  firstStepsTitle.textContent = step.title;
-  firstStepsDetail.textContent = step.detail;
+  const combatLesson = index === 5 ? firstCombatLesson(tutorialCallingId) : null;
+  firstStepsTitle.textContent = combatLesson?.title ?? step.title;
+  firstStepsDetail.textContent = combatLesson?.detail ?? step.detail;
 }
 function setFirstSteps(index: number): void {
   firstStepsIndex = index;
@@ -4467,6 +4470,8 @@ function renderBuildPath(update: BuildPathUpdate): void {
   renderAssassinJourney(update);
   const previousPathId = localBuildPathId;
   localBuildPathId = update.selectedPathId;
+  tutorialCallingId = update.selectedPathId;
+  renderFirstSteps();
   localCallingAbilityId = update.selectedCallingAbilityId;
   localCallingAugmentId = update.selectedCallingAugmentId;
   localCallingAugmentProgress = update.callingAugmentProgress;
@@ -13854,7 +13859,8 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     logMovementEvent(`PERFECT_DODGE counterUntil=${message.counterUntil}`);
   });
   room.onMessage("combat:hit", (message: CombatHit) => {
-    if (message.attackerId === room?.sessionId && message.damage > 0) noteFirstStep("landed_hit");
+    if (completesFirstCombatLesson(message.attackerId === room?.sessionId, message.mobId, message.defeated))
+      noteFirstStep("defeated_first_enemy");
     const mob = mobVisuals.get(message.mobId);
     const rangedHit = confirmedRangedHit(message.mainHandId, message.damage, message.attackerId === room?.sessionId);
     if (rangedHit) {

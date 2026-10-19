@@ -5,7 +5,7 @@ import { advanceOnboarding, ONBOARDING_DONE, ONBOARDING_STEPS, onboardingStorage
 
 describe("first-play onboarding", () => {
   it("advances only on the current real-world action", () => {
-    expect(advanceOnboarding(0, "landed_hit")).toBe(0);
+    expect(advanceOnboarding(0, "defeated_first_enemy")).toBe(0);
     let step = 0;
     for (const action of ONBOARDING_STEPS) step = advanceOnboarding(step, action.event);
     expect(step).toBe(ONBOARDING_DONE);
@@ -22,9 +22,9 @@ describe("first-play onboarding", () => {
 
   it("requires a Combat switch after leaving town before the first fight counts", () => {
     expect(advanceOnboarding(3, "left_town")).toBe(4);
-    expect(advanceOnboarding(4, "landed_hit")).toBe(4);
+    expect(advanceOnboarding(4, "defeated_first_enemy")).toBe(4);
     expect(advanceOnboarding(4, "switched_combat")).toBe(5);
-    expect(advanceOnboarding(5, "landed_hit")).toBe(ONBOARDING_DONE);
+    expect(advanceOnboarding(5, "defeated_first_enemy")).toBe(ONBOARDING_DONE);
   });
 
   it("persists separately for each character and ignores invalid saved state", () => {
