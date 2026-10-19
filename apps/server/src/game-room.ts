@@ -595,6 +595,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly roadsideGuardLastNearby = new Map<string, number>();
   private readonly roadsideChallengeActive = new Set<string>();
   private readonly roadsideRepair = new Map<string, { progressMs: number; lastAt: number; lastBroadcastAt: number; ready: boolean }>();
+  private readonly roadsideCycleReadyAt = new Map<string, number>();
+  private readonly roadsideParticipation = new Map<string, Map<string, number>>();
+  private readonly roadsideParticipationTickAt = new Map<string, number>();
   private readonly worldDeltasByChunk = new Map<string, Map<string, WorldBlockDelta>>();
   private readonly pendingWorldDeltaWrites = new Map<string, string>();
   private readonly mineralRegrowth = new Map<string, WorldBlockDelta & { regrowAt: number }>();
@@ -854,6 +857,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.onMessage("build:path", (client, payload: unknown) => this.handleBuildPath(client, payload));
     aliveMessage("role:opportunity", (client, payload: unknown) => this.handleRoleOpportunity(client, payload));
     aliveMessage("roadside:interact", (client, payload: unknown) => this.handleRoadsideEncounter(client, payload));
+    this.onMessage("roadside:sync", client => this.sendRoadsideCycles(client));
     aliveMessage("ashen:claim", (client, payload: unknown) => this.handleAshenReliquaryClaim(client, payload));
     this.onMessage("ashen:menu", (client, payload: unknown) => {
       const player = this.state.players.get(client.sessionId);
@@ -2400,9 +2404,34 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (this.roomKind !== "overworld") return;
     for (const siteId of ROADSIDE_GUARD_SITES) {
       const site = roadsideEncounterAt(siteId)!;
+      const repeatable = site.kind === "repair" || site.kind === "ambush" || site.kind === "hunt";
+      const readyAt = this.roadsideCycleReadyAt.get(siteId);
+      if (repeatable && readyAt !== undefined && now >= readyAt) {
+        this.roadsideCycleReadyAt.delete(siteId);
+        for (const guard of roadsideGuardsFor(siteId)) {
+          this.state.mobs.delete(guard.id);
+          this.mobHomes.delete(guard.id);
+          this.mobNavigation.delete(guard.id);
+          this.mobAwareness.delete(guard.id);
+          this.mobPatrols.delete(guard.id);
+          this.mobProgress.delete(guard.id);
+          this.mobBaseNames.delete(guard.id);
+        }
+        this.broadcastRoadsideCycle(siteId, "available", `${site.name} is active again.`);
+      }
       const activatedChallenge = site.kind !== "repair" && site.kind !== "ambush" && site.kind !== "hunt"
         || this.roadsideChallengeActive.has(siteId);
       if (!activatedChallenge) continue;
+      if (repeatable) {
+        const previousTick = this.roadsideParticipationTickAt.get(siteId) ?? now;
+        const elapsed = Math.max(0, Math.min(250, now - previousTick));
+        this.roadsideParticipationTickAt.set(siteId, now);
+        const participation = this.roadsideParticipation.get(siteId) ?? new Map<string, number>();
+        for (const [sessionId, player] of this.state.players) if (player.health > 0 && Math.abs(player.y - SURFACE_HEIGHT) <= 2.5
+          && Math.hypot(player.x - site.x, player.z - site.z) <= 18)
+          participation.set(sessionId, (participation.get(sessionId) ?? 0) + elapsed);
+        this.roadsideParticipation.set(siteId, participation);
+      }
       const near = [...this.state.players.values()].some(player => player.health > 0 && player.y >= SURFACE_HEIGHT - 1
         && Math.hypot(player.x - site.x, player.z - site.z) <= 17);
       if (near) {
@@ -2449,6 +2478,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
             }
           }
         }
+        if (repeatable && roadsideGuardsFor(siteId).length > 0
+          && roadsideGuardsFor(siteId).every(guard => this.state.mobs.get(guard.id)?.alive === false)
+          && (site.kind !== "repair" || this.roadsideRepair.get(siteId)?.ready === true))
+          this.completeRoadsideChallenge(siteId, now);
       } else if (now - (this.roadsideGuardLastNearby.get(siteId) ?? now) >= 30_000) {
         this.roadsideGuardLastNearby.delete(siteId);
         for (const guard of roadsideGuardsFor(siteId)) {
@@ -5629,13 +5662,18 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const id = typeof payload === "object" && payload !== null && "id" in payload && typeof payload.id === "string" ? payload.id : "";
     const choice = typeof payload === "object" && payload !== null && "choice" in payload && typeof payload.choice === "string" ? payload.choice : "";
     const site = roadsideEncounterAt(id);
+    const repeatable = site?.kind === "repair" || site?.kind === "ambush" || site?.kind === "hunt";
     const reply = (ok: boolean, message: string, claimed = false, details: Record<string, unknown> = {}) =>
       client.send("roadside:result", { id, ok, message, claimed, ...details });
     if (!player || !site || this.roomKind !== "overworld") return reply(false, "That discovery is unavailable here.");
     if (player.y < SURFACE_HEIGHT - 1 || nearestRoadsideEncounter(player.x, player.z)?.id !== id)
       return reply(false, `Move beside ${site.name} to investigate it.`);
     const claims = parseRoadsideClaims(player.huntLoadoutsJson);
-    if (claims.has(id)) return reply(false, `${site.name} has already been explored by this character.`, true);
+    if (claims.has(id) && !repeatable) return reply(false, `${site.name} has already been explored by this character.`, true);
+    const cycleReadyAt = this.roadsideCycleReadyAt.get(id);
+    if (repeatable && cycleReadyAt !== undefined)
+      return reply(false, `${site.name} returns in ${Math.max(1, Math.ceil((cycleReadyAt - Date.now()) / 60_000))} minutes.`, true,
+        { phase: "cleared", readyAt: cycleReadyAt });
     if (site.kind === "trail") {
       const stashDistance = Math.hypot(player.x - site.x - site.stashDx, player.z - site.z - site.stashDz);
       if (stashDistance > 3.2) return reply(true, site.clue);
@@ -5673,6 +5711,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if ((site.kind === "guarded" || site.kind === "repair" || site.kind === "ambush" || site.kind === "hunt")
       && roadsideGuardsFor(id).some(guard => this.state.mobs.get(guard.id)?.alive !== false))
       return reply(false, `Defeat the guards at ${site.name} before opening it.`);
+    if (repeatable) {
+      this.completeRoadsideChallenge(id, Date.now());
+      return;
+    }
     if (site.kind === "shrine" && [...this.state.mobs.values()].some(mob =>
       mob.alive && Math.abs(mob.y - player.y) <= 2.5 && Math.hypot(mob.x - player.x, mob.z - player.z) <= 8))
       return reply(false, "Enemies are too close to use this shrine.");
@@ -5715,6 +5757,75 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const player = this.state.players.get(client.sessionId);
       if (player && Math.hypot(player.x - site.x, player.z - site.z) <= 20)
         client.send("roadside:progress", { id, phase, progress: 0, holders: 0 });
+    }
+  }
+
+  private completeRoadsideChallenge(id: string, now: number): void {
+    if (!this.roadsideChallengeActive.delete(id)) return;
+    const site = roadsideEncounterAt(id);
+    if (!site || site.kind !== "repair" && site.kind !== "ambush" && site.kind !== "hunt") return;
+    const cooldownMs = id === "broken-winch-camp" ? 10 * 60_000 : id === "wilds-hunter-blind" ? 12 * 60_000 : 15 * 60_000;
+    const readyAt = now + cooldownMs;
+    this.roadsideCycleReadyAt.set(id, readyAt);
+    const participation = this.roadsideParticipation.get(id) ?? new Map<string, number>();
+    for (const [sessionId, progressMs] of participation) {
+      if (progressMs < 2_000) continue;
+      const player = this.state.players.get(sessionId);
+      const client = this.clients.find(candidate => candidate.sessionId === sessionId);
+      if (!player || !client) continue;
+      const firstClear = !parseRoadsideClaims(player.huntLoadoutsJson).has(id);
+      const itemId = site.itemId as ItemId;
+      const wanted = firstClear ? site.quantity : 1;
+      const before = player.inventory.get(itemId)?.quantity ?? 0;
+      const granted = Math.max(0, Math.min(wanted, lootCarryCapacity(itemId, ironCapacity(player.blacksmithUpgrades)) - before,
+        backpackAddableQuantity(nextId => player.inventory.get(nextId)?.quantity ?? 0, itemId, wanted,
+          player.mainHandId as MainHandId, player.armourId as ArmourId, backpackCapacity(player.blacksmithUpgrades))));
+      if (granted > 0) {
+        let item = player.inventory.get(itemId);
+        if (!item) { item = new InventoryItemState(); player.inventory.set(itemId, item); }
+        item.quantity = inventoryTotal(before, granted);
+        this.broadcast("loot:picked-up", { playerId: sessionId, dropId: `roadside:${id}:${now}`, itemId,
+          quantity: granted, total: item.quantity } satisfies LootPickedUp);
+      }
+      const gold = firstClear ? site.gold : Math.max(2, Math.ceil(site.gold / 2));
+      player.coins = Math.min(1_000_000, player.coins + gold);
+      if (firstClear) player.huntLoadoutsJson = withRoadsideClaim(player.huntLoadoutsJson, id);
+      const packNote = granted < wanted ? " · pack full: some materials left behind" : "";
+      client.send("roadside:result", { id, ok: true,
+        message: `${site.name} cleared · +${granted} ${ITEM_DEFINITIONS[itemId].name} · +${gold} gold${packNote}.`,
+        claimed: firstClear, phase: "cleared", progress: 1, holders: 0, readyAt });
+      void this.persistPlayer(sessionId, player, true).catch(() => {});
+    }
+    this.roadsideParticipation.delete(id);
+    this.roadsideParticipationTickAt.delete(id);
+    this.roadsideRepair.delete(id);
+    this.broadcastRoadsideCycle(id, "cleared", `${site.name} cleared.`, readyAt);
+  }
+
+  private broadcastRoadsideCycle(id: string, phase: "available" | "cleared", message: string, readyAt?: number): void {
+    const site = roadsideEncounterAt(id);
+    if (!site) return;
+    for (const client of this.clients) {
+      const player = this.state.players.get(client.sessionId);
+      if (player && Math.hypot(player.x - site.x, player.z - site.z) <= 40)
+        client.send("roadside:cycle", { id, phase, message, readyAt: readyAt ?? 0 });
+    }
+  }
+
+  private sendRoadsideCycles(client: Client): void {
+    for (const id of ["broken-winch-camp", "ashglass-survey", "wilds-hunter-blind"]) {
+      const readyAt = this.roadsideCycleReadyAt.get(id);
+      client.send("roadside:cycle", { id, phase: readyAt === undefined ? "available" : "cleared",
+        message: "", readyAt: readyAt ?? 0 });
+      if (!this.roadsideChallengeActive.has(id)) continue;
+      const site = roadsideEncounterAt(id);
+      const repair = this.roadsideRepair.get(id);
+      client.send("roadside:progress", {
+        id,
+        phase: site?.kind === "repair" ? repair?.ready ? "ready" : "repair" : "activated",
+        progress: site?.kind === "repair" && site.holdMs > 0 ? Math.min(1, (repair?.progressMs ?? 0) / site.holdMs) : 0,
+        holders: 0,
+      });
     }
   }
 

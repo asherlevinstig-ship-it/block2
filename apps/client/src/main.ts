@@ -9213,12 +9213,14 @@ function nearbyRoleOpportunity() {
   return player.y >= SURFACE_HEIGHT - 1 ? nearestRoleFieldOpportunity(player.x, player.z, localBuildPathId) : null;
 }
 const localRoadsideClaims = new Set<string>();
+const repeatableRoadsideActivity = new Set<string>(["broken-winch-camp", "ashglass-survey", "wilds-hunter-blind"]);
+minimap.setRoadsideActivity([...repeatableRoadsideActivity]);
 function nearbyRoadsideEncounter() {
   if (!worldReady || !room) return null;
   const player = localPlayer.getPosition();
   if (player.y < SURFACE_HEIGHT - 1) return null;
   const site = nearestRoadsideEncounter(player.x, player.z);
-  return site && !localRoadsideClaims.has(site.id) ? site : null;
+  return site && (!localRoadsideClaims.has(site.id) || repeatableRoadsideActivity.has(site.id)) ? site : null;
 }
 function useNearbyRoadsideEncounter(): boolean {
   const site = nearbyRoadsideEncounter();
@@ -13646,9 +13648,22 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   room.onMessage("roadside:progress", (message: { id: string; phase: string; progress: number; holders: number }) => {
     sceneDressing.setRoadsideEncounterState(message.id, message);
   });
+  room.onMessage("roadside:cycle", (message: { id: string; phase: "available" | "cleared"; message: string; readyAt: number }) => {
+    if (message.phase === "available") repeatableRoadsideActivity.add(message.id);
+    else repeatableRoadsideActivity.delete(message.id);
+    minimap.setRoadsideActivity([...repeatableRoadsideActivity]);
+    sceneDressing.setRoadsideEncounterState(message.id,
+      { phase: message.phase === "available" ? "idle" : "cleared", progress: message.phase === "available" ? 0 : 1, holders: 0 });
+    if (message.message) social.notice(message.message);
+    targetStateKey = "";
+  });
   room.onMessage("roadside:result", (message: { id: string; ok: boolean; message: string; claimed: boolean;
     phase?: string; progress?: number; holders?: number }) => {
     sceneDressing.setRoadsideEncounterState(message.id, message);
+    if (message.phase === "cleared") {
+      repeatableRoadsideActivity.delete(message.id);
+      minimap.setRoadsideActivity([...repeatableRoadsideActivity]);
+    }
     if (message.claimed) {
       localRoadsideClaims.add(message.id);
       minimap.setRoadsideClaims(JSON.stringify([...localRoadsideClaims]));
@@ -13657,6 +13672,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     status.textContent = message.message;
     showRoadsideNotice(message.message, !message.ok);
   });
+  room.send("roadside:sync");
   room.onMessage("ashen:reliquary", (message: AshenReliquaryState) => {
     ashenReliquaryState = message;
     const previewOpen = ashenReliquaryChoice.dataset.preview === "true" && message.blueprintChoiceRequired && !message.claimed;

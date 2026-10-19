@@ -16,6 +16,7 @@ function fixture(id: string) {
   Object.assign(player, { x: site.x + .5, y: 8, z: site.z + .5, coins: 0, health: 3, maxHealth: 5, stamina: 25, maxStamina: 100 });
   room.state.players.set("hero", player);
   const client = { sessionId: "hero", send: vi.fn() };
+  Object.defineProperty(room, "clients", { value: [client], configurable: true });
   return { site, room, internal, player, client };
 }
 
@@ -110,6 +111,8 @@ describe("personal roadside encounters", () => {
     expect(guards).toHaveLength(3);
     expect(guards.every(guard => room.state.mobs.get(guard.id)?.alive)).toBe(true);
     expect(player.inventory.get("silver_ore")).toBeUndefined();
+    const ambushStartedAt = Date.now();
+    for (let elapsed = 250; elapsed <= 2_250; elapsed += 250) internal.advanceRoadsideGuards(ambushStartedAt + elapsed);
     for (const guard of guards) room.state.mobs.get(guard.id)!.alive = false;
     internal.handleRoadsideEncounter(client, { id: site.id });
     expect(player.inventory.get("silver_ore")?.quantity).toBe(2);
@@ -127,7 +130,7 @@ describe("personal roadside encounters", () => {
     for (let now = 6_250; now <= 11_000; now += 250) internal.advanceRoadsideGuards(now);
     for (const guard of roadsideGuardsFor(site.id)) room.state.mobs.get(guard.id)!.alive = false;
     internal.handleRoadsideEncounter(client, { id: site.id });
-    expect(client.send).toHaveBeenCalledWith("roadside:result", expect.objectContaining({ phase: "claimed" }));
+    expect(client.send).toHaveBeenCalledWith("roadside:result", expect.objectContaining({ phase: "cleared" }));
     expect(player.inventory.get("silver_ore")?.quantity).toBe(2);
     vi.restoreAllMocks();
   });
@@ -143,9 +146,52 @@ describe("personal roadside encounters", () => {
     const guards = roadsideGuardsFor(site.id);
     expect(guards).toHaveLength(3);
     expect(room.state.mobs.get("roadside-wilds-stalker")?.isElite).toBe(true);
+    const huntStartedAt = Date.now();
+    for (let elapsed = 250; elapsed <= 2_250; elapsed += 250) internal.advanceRoadsideGuards(huntStartedAt + elapsed);
     for (const guard of guards) room.state.mobs.get(guard.id)!.alive = false;
     internal.handleRoadsideEncounter(client, { id: site.id });
     expect(player.inventory.get("crawler_fang")?.quantity).toBe(2);
+  });
+
+  it("reopens completed encounters on staggered cycles with reduced repeat rewards", () => {
+    const { room, internal, player, client, site } = fixture("ashglass-survey");
+    let now = 10_000; vi.spyOn(Date, "now").mockImplementation(() => now);
+    const clearCycle = () => {
+      internal.handleRoadsideEncounter(client, { id: site.id });
+      for (let elapsed = 250; elapsed <= 2_250; elapsed += 250) internal.advanceRoadsideGuards(now + elapsed);
+      for (const guard of roadsideGuardsFor(site.id)) room.state.mobs.get(guard.id)!.alive = false;
+      now += 2_500; internal.handleRoadsideEncounter(client, { id: site.id });
+    };
+    clearCycle();
+    expect(player.inventory.get("silver_ore")?.quantity).toBe(2);
+    expect(player.coins).toBe(8);
+    const readyAt = internal.roadsideCycleReadyAt.get(site.id);
+    expect(readyAt - now).toBe(15 * 60_000);
+    now = readyAt; internal.advanceRoadsideGuards(now);
+    expect(client.send).toHaveBeenCalledWith("roadside:cycle", expect.objectContaining({ phase: "available" }));
+    clearCycle();
+    expect(player.inventory.get("silver_ore")?.quantity).toBe(3);
+    expect(player.coins).toBe(12);
+    vi.restoreAllMocks();
+  });
+
+  it("credits every nearby player who meaningfully participates", () => {
+    const { room, internal, player, client, site } = fixture("wilds-hunter-blind");
+    if (site.kind !== "hunt") throw new Error("Expected a hunt site");
+    const ally = new PlayerState();
+    Object.assign(ally, { x: site.x + site.stashDx + 1, y: 8, z: site.z + site.stashDz + 1,
+      coins: 0, health: 5, maxHealth: 5, stamina: 100, maxStamina: 100 });
+    const allyClient = { sessionId: "ally", send: vi.fn() };
+    room.state.players.set("ally", ally); (room.clients as any[]).push(allyClient);
+    player.x = site.x + site.stashDx + .5; player.z = site.z + site.stashDz + .5;
+    internal.handleRoadsideEncounter(client, { id: site.id });
+    const startedAt = Date.now();
+    for (let elapsed = 250; elapsed <= 2_250; elapsed += 250) internal.advanceRoadsideGuards(startedAt + elapsed);
+    for (const guard of roadsideGuardsFor(site.id)) room.state.mobs.get(guard.id)!.alive = false;
+    internal.handleRoadsideEncounter(client, { id: site.id });
+    expect(player.inventory.get("crawler_fang")?.quantity).toBe(2);
+    expect(ally.inventory.get("crawler_fang")?.quantity).toBe(2);
+    expect(allyClient.send).toHaveBeenCalledWith("roadside:result", expect.objectContaining({ phase: "cleared" }));
   });
 
   it("lets a shrine restore health or give supplies, but never both", () => {

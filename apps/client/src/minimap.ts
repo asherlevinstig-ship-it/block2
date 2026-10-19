@@ -293,6 +293,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
   setGreenwoodMastery(rank: number): void;
   setEquipmentHunt(target: EquipmentHuntTarget | null): void;
   setRoadsideClaims(raw: string): void;
+  setRoadsideActivity(ids: readonly string[]): void;
   setMineralStatus(statuses: MineralDepositStatus[]): void;
   setCaveState(state: CaveMapState): void;
   setDungeonState(state: DungeonMapState | null): void;
@@ -341,6 +342,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
   let equipmentHunt: EquipmentHuntTarget | null = null;
   let roadsideClaims = new Set<string>();
   let roadsideClaimsRaw = "";
+  let roadsideActivity = new Set<string>();
   let lastStatusSecond = 0;
   const homeButton = document.querySelector<HTMLButtonElement>("#minimap-home")!;
   const destinations = document.querySelector<HTMLSelectElement>("#minimap-destination")!;
@@ -545,6 +547,10 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
       if (raw === roadsideClaimsRaw) return;
       roadsideClaimsRaw = raw;
       for (const id of parseRoadsideClaims(raw)) roadsideClaims.add(id);
+      lastUpdate = -Infinity;
+    },
+    setRoadsideActivity(ids) {
+      roadsideActivity = new Set(ids);
       lastUpdate = -Infinity;
     },
     setCaveState(state) { caveState = state; },
@@ -839,7 +845,14 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
           const encounter = ROADSIDE_ENCOUNTERS.some(site => site.id === landmark.id);
           const claimed = roadsideClaims.has(landmark.id);
           marker(landmark, mapMarkerLabelVisible(player, landmark, false) ? landmark.name.toUpperCase() : "",
-            claimed ? "#93d6a7" : encounter ? "#f7d37e" : "#e4cd94", false, false, claimed ? "✓" : encounter ? "?" : "·");
+            roadsideActivity.has(landmark.id) ? "#ffd45e" : claimed ? "#93d6a7" : encounter ? "#f7d37e" : "#e4cd94",
+            roadsideActivity.has(landmark.id), false, roadsideActivity.has(landmark.id) ? "!" : claimed ? "✓" : encounter ? "?" : "·");
+          if (roadsideActivity.has(landmark.id)) {
+            const point = mapPoint(mapCenter, landmark, mapRange);
+            const pulse = 8 + Math.sin(now / 170) * 2;
+            ctx.beginPath(); ctx.arc(point.x, point.y, pulse, 0, Math.PI * 2);
+            ctx.strokeStyle = "#ffd45e"; ctx.lineWidth = 1.5; ctx.stroke();
+          }
         }
       }
       const nearbyCombatTargets = [...nearbyDiscoveredMiniBossTargets(player, elites, discovered), ...activeEliteMapTargets(player, elites)]

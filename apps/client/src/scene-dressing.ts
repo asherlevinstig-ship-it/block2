@@ -24,7 +24,7 @@ const FORGE_STONE: Color = [0.29, 0.30, 0.29];
 const CANVAS: Color = [0.53, 0.15, 0.10];
 const CANVAS_LIGHT: Color = [0.74, 0.27, 0.14];
 
-type RoadsidePresentationPhase = "idle" | "repair" | "activated" | "ready" | "claimed";
+type RoadsidePresentationPhase = "idle" | "repair" | "activated" | "ready" | "claimed" | "cleared";
 type RoadsidePresentationState = { phase: RoadsidePresentationPhase; progress: number; holders: number; changedAt: number };
 type RoadsidePresentationVisual = {
   kind: "winch" | "ambush" | "hunt";
@@ -221,7 +221,7 @@ export class SceneDressing {
       });
       visual.holders.forEach((pip, index) => { pip.enabled = state.phase === "repair" && index < state.holders; });
       visual.lock.forEach(lock => { lock.enabled = active && state.phase !== "ready" && state.phase !== "claimed"; });
-      const revealed = state.phase === "ready" || state.phase === "claimed";
+      const revealed = state.phase === "ready" || state.phase === "claimed" || state.phase === "cleared";
       const rise = Math.min(1, Math.max(0, (timeMilliseconds - state.changedAt) / 650));
       visual.chest.setLocalPosition(0, revealed ? -.42 + rise * .92 : -.42, 0);
     }
@@ -242,7 +242,7 @@ export class SceneDressing {
   setRoadsideEncounterState(id: string, update: { phase?: string; progress?: number; holders?: number }, now = performance.now()): void {
     if (id !== "broken-winch-camp" && id !== "ashglass-survey" && id !== "wilds-hunter-blind") return;
     const previous = this.roadsidePresentation.get(id) ?? { phase: "idle" as const, progress: 0, holders: 0, changedAt: now };
-    const phase = update.phase === "repair" || update.phase === "activated" || update.phase === "ready" || update.phase === "claimed"
+    const phase = update.phase === "repair" || update.phase === "activated" || update.phase === "ready" || update.phase === "claimed" || update.phase === "cleared"
       ? update.phase : previous.phase;
     const next = { phase, progress: Math.min(1, Math.max(0, update.progress ?? previous.progress)),
       holders: Math.max(0, Math.floor(update.holders ?? previous.holders)), changedAt: phase === previous.phase ? previous.changedAt : now };
