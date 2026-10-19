@@ -176,7 +176,7 @@ button:disabled, button[aria-disabled="true"] { cursor: not-allowed; }
 #first-steps button[hidden] { display: none; }
 #first-steps strong { display: block; margin-top: 7px; color: #fff1bd; font: 900 13px/1.1 system-ui; }
 #first-steps p { margin: 5px 0 0 !important; color: #d2d8c7; font: 600 10px/1.3 system-ui; }
-#starter-inventory-tutorial { position: fixed; z-index: 40; left: 50%; top: 43%; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 14px; width: min(430px, calc(100vw - 28px)); box-sizing: border-box; padding: 16px 18px; border: 2px solid #f0c35b; border-radius: 14px; background: linear-gradient(145deg, #2d2818f5, #0d1711f5); box-shadow: 0 20px 70px #000d, inset 0 0 24px #e6b6431c; color: #f6edd2; transform: translate(-50%, -50%); pointer-events: none; }
+#starter-inventory-tutorial { position: fixed; z-index: 2001; left: 50%; top: 43%; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 14px; width: min(430px, calc(100vw - 28px)); box-sizing: border-box; padding: 16px 18px; border: 2px solid #f0c35b; border-radius: 14px; background: linear-gradient(145deg, #2d2818f5, #0d1711f5); box-shadow: 0 20px 70px #000d, inset 0 0 24px #e6b6431c; color: #f6edd2; transform: translate(-50%, -50%); pointer-events: none; }
 #starter-inventory-tutorial[hidden] { display: none; }
 #starter-inventory-tutorial[data-phase="open_pack"] { box-shadow: 0 0 0 100vmax #020604aa, 0 20px 70px #000d, inset 0 0 24px #e6b6431c; }
 #starter-inventory-tutorial > small { grid-column: 1 / -1; color: #f2c969; font: 950 10px/1 system-ui; letter-spacing: .16em; }
@@ -951,7 +951,9 @@ body:has(#combat-hud-shell[data-loadout-open="true"]) #player-trade-prompt { dis
 }
 #tavern-quiz[hidden], #tavern-quiz-question[hidden], #tavern-quiz-decision[hidden], #tavern-quiz-stakes[hidden] { display: none; }
 body:has(#tavern-quiz:not([hidden]))::before { content: ""; position: fixed; inset: 0; z-index: 23; background: rgb(4 10 8 / 67%); backdrop-filter: blur(2px); pointer-events: none; }
-body:has(#blacksmith-panel:not([hidden]))::before, body:has(#inventory-panel:not([hidden]))::before { content: ""; position: fixed; inset: 0; z-index: 23; background: rgb(4 10 8 / 67%); pointer-events: none; }
+body:has(#blacksmith-panel:not([hidden]))::before { content: ""; position: fixed; inset: 0; z-index: 23; background: rgb(4 10 8 / 67%); pointer-events: none; }
+body:has(#inventory-panel:not([hidden])) { overflow: hidden; }
+body:has(#inventory-panel:not([hidden]))::before { content: ""; position: fixed; inset: 0; z-index: 1999; background: rgb(2 7 5 / 94%); pointer-events: auto; }
 body:has(#blacksmith-panel:not([hidden])):not(:has(#inventory-panel:not([hidden])))::before { backdrop-filter: blur(3px); }
 body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel:not([hidden])) #touch-controls, body:has(#inventory-panel:not([hidden])) #touch-controls { opacity: 0; pointer-events: none; }
 #tavern-quiz .eyebrow { margin: 0 0 3px; color: #b9d8c0; font-size: .59rem; letter-spacing: .14em; }
@@ -1347,7 +1349,8 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 
 #inventory-panel {
   position: fixed;
-  z-index: 24;
+  z-index: 2000;
+  isolation: isolate;
   top: 50%;
   left: 50%;
   width: min(1080px, calc(100vw - 32px));
