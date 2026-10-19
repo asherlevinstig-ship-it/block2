@@ -34,6 +34,10 @@ describe("Venom Focus", () => {
   });
   it("keeps its basic damage without taking over the Calling Special slot", () => {
     const { internal, player, client } = setup();
+    expect(client.send).toHaveBeenCalledWith("main-hand:equipped", {
+      requestId: "equip",
+      mainHandId: "venom_focus",
+    });
     expect(equipmentForItem("venom_focus")).toBe("venom_focus");
     expect(WEAPON_ATTACK_DEFINITIONS.venom_focus.attacks[0].damage).toBe(WEAPON_ATTACK_DEFINITIONS.acid_gland_focus.attacks[0].damage);
     expect(WEAPON_ATTACK_DEFINITIONS.venom_focus.attacks[0].durationMs).toBeLessThan(WEAPON_ATTACK_DEFINITIONS.acid_gland_focus.attacks[0].durationMs);

@@ -9019,6 +9019,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.attackChains.delete(client.sessionId);
     player.equippedPower = compatiblePowerOrFallback(player.equippedPower, mainHand.tag);
     player.equippedPowerSecondary = compatiblePowerOrFallback(player.equippedPowerSecondary, mainHand.tag);
+    client.send("main-hand:equipped", {
+      requestId: parsed.data.requestId,
+      mainHandId: mainHand.id,
+    });
     void this.persistPlayer(client.sessionId, player);
   }
 

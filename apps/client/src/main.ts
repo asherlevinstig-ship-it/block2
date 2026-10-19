@@ -4151,6 +4151,7 @@ function updateMainHandLoadout(mainHandId: MainHandId): void {
     if (firstStepsIndex === 2) noteFirstStep("equipped_starter");
     showCombatFeedback("FORGED SWORD EQUIPPED", "dodge");
     status.textContent = "Forged Sword equipped · your first loadout is ready.";
+    if (!inventoryPanel.hidden) setInventoryOpen(false);
   }
 }
 
@@ -13677,6 +13678,12 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     } else if (update.reason === "choice") {
       showCombatFeedback(`${String(update.source ?? "STAT").toUpperCase()} IMPROVED`, "dodge");
     }
+  });
+  room.onMessage("main-hand:equipped", (message: { requestId: string; mainHandId: string }) => {
+    if (!isMainHandId(message.mainHandId)) return;
+    updateMainHandLoadout(message.mainHandId);
+    const mainHand = MAIN_HAND_DEFINITIONS[message.mainHandId];
+    status.textContent = `${mainHand.name} equipped · Attack: ${mainHand.attackName}.`;
   });
   room.onMessage("quiz:update", (update: TavernQuizUpdate) => renderTavernQuiz(update));
   room.onMessage("blacksmith:update", (update: BlacksmithUpdate) => {
