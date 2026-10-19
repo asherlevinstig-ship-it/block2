@@ -3237,7 +3237,9 @@ html.onboarding-active #trait-slot { display: none; }
 #mode-switch-tutorial strong { display: block; margin-top: 5px; font: 900 17px/1.2 system-ui; }
 #mode-switch-tutorial p { margin: 7px 0 10px !important; color: #d8e2d9; font: 600 12px/1.35 system-ui; }
 #mode-switch-tutorial kbd { padding: 2px 5px; border: 1px solid #f4d799; border-radius: 4px; background: #2d2b1e; color: #fff1c6; font: 900 12px system-ui; }
+#mode-switch-tutorial > div { display: flex; justify-content: center; gap: 8px; }
 #mode-switch-tutorial button { min-height: 36px; padding: 7px 16px; border: 1px solid #f5ce7c; border-radius: 7px; background: #9b6025; color: #fff2cb; font: 900 11px system-ui; letter-spacing: .06em; cursor: pointer; }
+#mode-switch-tutorial-build { background: #234d3f !important; border-color: #72c5a5 !important; }
 html.onboarding-mode-lesson #mode-toggle { border-color: #ffe59a; box-shadow: 0 0 0 2px #ffe59a77, 0 0 22px #ffce69aa; }
 html.onboarding-mode-lesson #mode-toggle button[data-mode="combat"] { color: #fff1ba; }
 html.onboarding-mode-lesson #touch-mode-button { border-color: #ffe59a; box-shadow: 0 0 0 2px #ffe59a77, 0 0 22px #ffce69aa; }

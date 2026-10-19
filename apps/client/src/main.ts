@@ -351,7 +351,7 @@ import { characterCreationNeeded, createGuestProfileToken, finishCharacterCreati
   profileBackups, restoreProfile, startNewAdventure } from "./player-profile.js";
 import { advanceOnboarding, ONBOARDING_DONE, ONBOARDING_STEPS, onboardingStorageKey, legacyOnboardingStorageKey,
   migrateLegacyOnboardingStep,
-  parseOnboardingStep, type OnboardingEvent } from "./new-player-onboarding.js";
+  parseOnboardingStep, shouldPromptTownDeparture, type OnboardingEvent } from "./new-player-onboarding.js";
 import { onboardingTrailRoute, sampleTrail } from "./onboarding-trail.js";
 import { CombatAudio, enemyCuePan, enemyCuesForTransition, type EnemyCue, type EnemyCueSnapshot } from "./combat-audio.js";
 import { SceneDressing } from "./scene-dressing.js";
@@ -653,6 +653,13 @@ const firstStepsDetail = document.querySelector<HTMLElement>("#first-steps-detai
 const firstStepsSkip = document.querySelector<HTMLButtonElement>("#first-steps-skip")!;
 const modeSwitchTutorial = document.querySelector<HTMLElement>("#mode-switch-tutorial")!;
 const modeSwitchTutorialAction = document.querySelector<HTMLButtonElement>("#mode-switch-tutorial-action")!;
+const modeSwitchTutorialBuild = document.querySelector<HTMLButtonElement>("#mode-switch-tutorial-build")!;
+const modeSwitchTutorialTitle = document.querySelector<HTMLElement>("#mode-switch-tutorial-title")!;
+const modeSwitchTutorialCopy = document.querySelector<HTMLElement>("#mode-switch-tutorial-copy")!;
+let townDeparturePromptOpen = false;
+let modeLessonAcknowledged = false;
+let lowLevelWasInsideTown = false;
+let lowLevelTownStateReady = false;
 const firstStepsKey = onboardingStorageKey(profileToken);
 let firstStepsIndex = (() => {
   try {
@@ -669,7 +676,10 @@ function renderFirstSteps(): void {
   const modeLesson = index === 4;
   firstSteps.hidden = !active;
   firstStepsSkip.hidden = modeLesson;
-  modeSwitchTutorial.hidden = !modeLesson;
+  const showModeChoice = townDeparturePromptOpen || modeLesson && !modeLessonAcknowledged;
+  modeSwitchTutorial.hidden = !showModeChoice;
+  modeSwitchTutorialTitle.textContent = "Choose how to leave Town";
+  modeSwitchTutorialCopy.innerHTML = "<b>BUILD</b> gathers resources. <b>COMBAT</b> attacks enemies. Press <kbd>Q</kbd> at any time to switch.";
   document.documentElement.classList.toggle("onboarding-active", active);
   document.documentElement.classList.toggle("onboarding-mode-lesson", modeLesson);
   if (index === null || index >= ONBOARDING_DONE) return;
@@ -691,7 +701,14 @@ function noteFirstStep(event: OnboardingEvent): void {
   if (next === ONBOARDING_DONE) status.textContent = "First steps complete · follow Realm Guidance or explore freely.";
 }
 firstStepsSkip.addEventListener("click", () => setFirstSteps(ONBOARDING_DONE));
-modeSwitchTutorialAction.addEventListener("click", () => setInteractionMode("combat"));
+modeSwitchTutorialAction.addEventListener("click", () => {
+  townDeparturePromptOpen = false; modeLessonAcknowledged = true;
+  setInteractionMode("combat"); renderFirstSteps();
+});
+modeSwitchTutorialBuild.addEventListener("click", () => {
+  townDeparturePromptOpen = false; modeLessonAcknowledged = true;
+  setInteractionMode("build"); renderFirstSteps();
+});
 renderFirstSteps();
 const adminInvitation = consumeAdminInvitation();
 const minimapPanel = document.querySelector<HTMLDetailsElement>("#minimap")!;
@@ -4412,6 +4429,9 @@ function renderBuildPath(update: BuildPathUpdate): void {
   buildPathOpen.textContent = selected ? update.canChoose ? "VIEW CALLING" : "CHANGE IN TOWN"
     : update.canChoose ? "CHOOSE CALLING" : "CHOOSE ON SURFACE";
   buildPathOpen.disabled = !update.canChoose;
+  const callingRequired = !update.selectedPathId;
+  callingIntroClose.hidden = callingRequired;
+  callingIntroLater.hidden = callingRequired;
   buildPathCandidates.replaceChildren();
   const specializationList = buildPathSpecializations.querySelector<HTMLElement>("div")!;
   specializationList.replaceChildren();
@@ -4474,7 +4494,7 @@ function renderBuildPath(update: BuildPathUpdate): void {
     sessionStorage.setItem("calling-intro-seen-v1", "true");
     status.textContent = `${selected!.name} Calling chosen. ${localCharacterProgression.level >= 2 ? `Press G to use ${activeAbility?.name ?? "your Power"}` : `${activeAbility?.name ?? "Your Power"} unlocks at level 2`}.`;
     showCombatFeedback(`${selected!.name.toUpperCase()} · ${localCharacterProgression.level >= 2 ? "PRESS G" : "POWER AT LV 2"}`, "dodge");
-  } else if (!update.selectedPathId && update.inTown && !sessionStorage.getItem("calling-intro-seen-v1") && levelUpPanel.hidden) {
+  } else if (!update.selectedPathId && update.canChoose && levelUpPanel.hidden) {
     openCallingIntro();
   }
   if (!inventoryPanel.hidden && selectedInventoryItem) {
@@ -4493,6 +4513,7 @@ function openCallingIntro(): void {
 }
 
 function closeCallingIntro(): void {
+  if (!localBuildPathId) return;
   callingIntro.hidden = true;
   if (!localBuildPathId && localCharacterProgression.level >= 2) {
     dismissedCallingLevel = localCharacterProgression.level;
@@ -12076,6 +12097,21 @@ app.on("update", (dt: number) => {
   else if (worldReady && firstStepsIndex === 3 && Math.hypot(player.x - TOWN_CENTER_X, player.z - TOWN_CENTER_Z) > TOWN_SAFE_RADIUS + 1) {
     noteFirstStep("left_town");
     if (interactionMode === "combat") setInteractionMode("build");
+  }
+  if (worldReady) {
+    const townDistance = Math.hypot(player.x - TOWN_CENTER_X, player.z - TOWN_CENTER_Z);
+    if (townDistance <= TOWN_SAFE_RADIUS - .75) {
+      lowLevelWasInsideTown = true;
+      lowLevelTownStateReady = true;
+    } else if (townDistance > TOWN_SAFE_RADIUS + 1 && lowLevelTownStateReady && lowLevelWasInsideTown) {
+      if (shouldPromptTownDeparture(lowLevelWasInsideTown, true, localCharacterProgression.level)) {
+        townDeparturePromptOpen = true;
+        modeLessonAcknowledged = false;
+        resetMovementControls();
+        renderFirstSteps();
+      }
+      lowLevelWasInsideTown = false;
+    }
   }
   updateFirstStepsTrail(player, animationNow);
   const renderAt = performance.now() - REMOTE_INTERPOLATION_DELAY_MS;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { advanceOnboarding, ONBOARDING_DONE, ONBOARDING_STEPS, onboardingStorageKey,
-  legacyOnboardingStorageKey, migrateLegacyOnboardingStep, parseOnboardingStep } from "./new-player-onboarding.js";
+  legacyOnboardingStorageKey, migrateLegacyOnboardingStep, parseOnboardingStep, shouldPromptTownDeparture } from "./new-player-onboarding.js";
 
 describe("first-play onboarding", () => {
   it("advances only on the current real-world action", () => {
@@ -29,5 +29,13 @@ describe("first-play onboarding", () => {
     expect(migrateLegacyOnboardingStep("4")).toBe(4);
     expect(migrateLegacyOnboardingStep("5")).toBe(ONBOARDING_DONE);
     expect(migrateLegacyOnboardingStep("not-a-step")).toBeNull();
+  });
+
+  it("prompts every genuine low-level departure, but not an outside spawn or veteran", () => {
+    expect(shouldPromptTownDeparture(true, true, 1)).toBe(true);
+    expect(shouldPromptTownDeparture(true, true, 2)).toBe(true);
+    expect(shouldPromptTownDeparture(false, true, 1)).toBe(false);
+    expect(shouldPromptTownDeparture(true, false, 1)).toBe(false);
+    expect(shouldPromptTownDeparture(true, true, 3)).toBe(false);
   });
 });

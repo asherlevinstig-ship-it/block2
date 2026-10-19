@@ -29,3 +29,7 @@ export function parseOnboardingStep(value: string | null): number | null {
 export function advanceOnboarding(step: number, event: OnboardingEvent): number {
   return ONBOARDING_STEPS[step]?.event === event ? step + 1 : step;
 }
+
+export function shouldPromptTownDeparture(wasInsideTown: boolean, isBeyondTown: boolean, level: number): boolean {
+  return wasInsideTown && isBeyondTown && level >= 1 && level <= 2;
+}
