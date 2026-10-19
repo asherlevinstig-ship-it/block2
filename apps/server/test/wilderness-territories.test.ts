@@ -142,7 +142,7 @@ describe("distinct radial wilderness territories", () => {
     internal.spawnLootDrops("northwatch-watchbreaker", leader, 10_001, "newcomer");
     const drops = [...room.state.lootDrops.values()];
     expect(decodeLootBagItems(drops[0]!.contentsJson)).toContainEqual({ itemId: "ridge_hide", quantity: 4 });
-    expect(decodeLootBagItems(drops[1]!.contentsJson).some(entry => entry.itemId === "ridge_hide")).toBe(false);
+    expect(decodeLootBagItems(drops[1]!.contentsJson)).toContainEqual({ itemId: "ridge_hide", quantity: 3 });
     veteran.x = 200;
     expect(leader.leaderRematchTier).toBe(0);
   });

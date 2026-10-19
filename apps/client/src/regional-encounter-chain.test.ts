@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { greenwoodChainRoute, greenwoodChainStage, mistfenChainRoute, mistfenChainStage, quarryChainRoute, quarryChainStage, regionalChainBreadcrumbs,
+import { greenwoodChainRoute, greenwoodChainStage, mistfenChainRoute, mistfenChainStage, northwatchChainRoute, northwatchChainStage, quarryChainRoute, quarryChainStage, regionalChainBreadcrumbs,
   regionalChainTrailVisible, regionalPolylineBreadcrumbs, regionalPolylineTrailVisible } from "./regional-encounter-chain.js";
 
 describe("regional encounter chains", () => {
@@ -55,5 +55,21 @@ describe("regional encounter chains", () => {
     expect(route).toContainEqual({ x: 9, z: 88 });
     expect(regionalPolylineBreadcrumbs(route, 14)).toHaveLength(14);
     expect(regionalPolylineTrailVisible({ x: 9, y: 8, z: 77 }, route)).toBe(true);
+  });
+
+  it("opens Northwatch through its paired signals, patrol and watchpost", () => {
+    expect(northwatchChainStage("{}")).toBe("find-cart");
+    expect(northwatchChainStage(JSON.stringify({ roadsideClaims: ["northwatch-cart"] }))).toBe("follow-to-signals");
+    expect(northwatchChainStage(JSON.stringify({ roadsideClaims: ["northwatch-cart", "windworn-shrine"] }))).toBe("clear-patrol");
+    expect(northwatchChainStage(JSON.stringify({ roadsideClaims: ["northwatch-cart", "windworn-shrine", "northwatch-watchpost"] }))).toBe("follow-to-leader");
+    expect(northwatchChainStage(JSON.stringify({ roadsideClaims: ["northwatch-cart", "windworn-shrine", "northwatch-watchpost"],
+      northwatch: { clears: 1 } }))).toBe("complete");
+  });
+
+  it("routes Northwatch wind motes along the ridge road", () => {
+    const route = northwatchChainRoute("follow-to-signals")!;
+    expect(route).toContainEqual({ x: 9, z: -46 });
+    expect(route).toContainEqual({ x: 9, z: -54 });
+    expect(regionalPolylineTrailVisible({ x: 9, y: 8, z: -50 }, route)).toBe(true);
   });
 });

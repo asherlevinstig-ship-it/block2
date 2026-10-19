@@ -79,7 +79,7 @@ import { HEALING_POTION, backpackAddableQuantity, backpackCapacity, backpackSlot
 import { canBuyPotionAtKeeper, potionBuyError, potionUseError } from "./healing-potions.js";
 import { MINERAL_REGROWTH_MS, type MineralDepositStatus } from "@blockcraft/protocol";
 import { RENEWABLE_MINERAL_DEPOSITS, authoredMineralAt, SURFACE_HEIGHT, CAVE_SHALLOW_HOME, CAVE_DEEP_HOME, CAVE_HIDDEN_HOME, SILVER_DEPTHS_SPITTER_HOMES, CRYSTAL_MATRIARCH_HOME, SILVER_DEPTHS_COVER, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, SILVER_DEPTHS_CHECKPOINT_POSITION, SILVER_DEPTHS_GALLERY_GATE, SILVER_DEPTHS_BOSS_GATE, SILVER_DEPTHS_IRON_GATE, SILVER_DEPTHS_SILVER_GATE, SILVER_DEPTHS_WING_CACHES, TOWN_BLACKSMITH_STALL_POSITION, silverDepthsPingLocation, isMistfenToxicPool, isInMistfenMarsh } from "@blockcraft/voxel-world";
-import { GREENWOOD_ENCOUNTER_CHAIN, MISTFEN_ENCOUNTER_CHAIN, SOUTHERN_QUARRY_ENCOUNTER_CHAIN, ROLE_FIELD_OPPORTUNITIES, nearestRoleFieldOpportunity, nearestRoadsideEncounter, parseRoadsideClaims, roadsideEncounterAt, withRoadsideClaim } from "@blockcraft/voxel-world";
+import { GREENWOOD_ENCOUNTER_CHAIN, MISTFEN_ENCOUNTER_CHAIN, NORTHWATCH_ENCOUNTER_CHAIN, SOUTHERN_QUARRY_ENCOUNTER_CHAIN, ROLE_FIELD_OPPORTUNITIES, nearestRoleFieldOpportunity, nearestRoadsideEncounter, parseRoadsideClaims, roadsideEncounterAt, withRoadsideClaim } from "@blockcraft/voxel-world";
 import { mineralCellOccupied } from "./mineral-regrowth.js";
 import { CAVE_ENCOUNTERS, caveEncounterAllows } from "./cave-encounters.js";
 import { miningDurationMs, miningLineClear } from "@blockcraft/voxel-world";
@@ -595,6 +595,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly roadsideGuardLastNearby = new Map<string, number>();
   private readonly roadsideChallengeActive = new Set<string>();
   private readonly roadsideRepair = new Map<string, { progressMs: number; lastAt: number; lastBroadcastAt: number; ready: boolean }>();
+  private readonly roadsideSignals = new Map<string, { aAt: number; bAt: number }>();
   private readonly roadsideCycleReadyAt = new Map<string, number>();
   private readonly roadsideVariantIndex = new Map<string, number>();
   private readonly roadsideParticipation = new Map<string, Map<string, number>>();
@@ -3813,6 +3814,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const northwatchPatrolBonus: { itemId: ItemId; quantity: number }[] = mobId === "northwatch-watchbreaker"
       && personalRematchTier > 0 && parseNorthwatchProgress(rewardPlayer?.huntLoadoutsJson ?? "{}").marks === 3
       ? [{ itemId: "ridge_hide", quantity: 2 }] : [];
+    const northwatchFirstClearDrops: { itemId: ItemId; quantity: number }[] = mobId === NORTHWATCH_ENCOUNTER_CHAIN.leaderId
+      && rewardPlayer && personalRematchTier === 0
+      ? [{ itemId: "ridge_hide", quantity: 3 }, { itemId: "iron_ore", quantity: 2 },
+        { itemId: "healing_potion", quantity: 1 }] : [];
     const rematchMaterialQuantity = areaReward ? leaderRematchMaterialBonus(personalRematchTier) : 0;
     const rematchMaterialId: ItemId = mobId === "northwatch-watchbreaker" ? "ridge_hide"
       : mob.archetype === "cave_spitter" ? "acid_gland"
@@ -3923,6 +3928,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       ...areaRelicDrops,
       ...northwatchCloakDrop,
       ...northwatchPatrolBonus,
+      ...northwatchFirstClearDrops,
       ...(northwatchPatrolClear ? [{ itemId: "ridge_hide" as ItemId, quantity: 1 },
         { itemId: "iron_ore" as ItemId, quantity: 1 }] : []),
       ...rematchDrops,
@@ -3980,6 +3986,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       "QUARRYMASTER VAULT · 2 Stone Core · 3 Iron Ore · 1 Healing Potion added to your personal loot bag. Hold E to collect it.");
     if (northwatchCloakDrop.length) this.clients.find(client => client.sessionId === ownerId)?.send("chat:notice",
       "FIRST NORTHWATCH CLOAK · your personal loot bag contains a rare cloak. Hold E to collect it.");
+    if (northwatchFirstClearDrops.length) this.clients.find(client => client.sessionId === ownerId)?.send("chat:notice",
+      "NORTHWATCH FIRST CLEAR · 3 Ridge Hide · 2 Iron Ore · 1 Healing Potion added to your personal loot bag.");
     if (northwatchPatrolBonus.length) this.clients.find(client => client.sessionId === ownerId)?.send("chat:notice",
       "NORTHWATCH PATROL CACHE · 2 bonus Ridge Hide added to your personal loot bag.");
     if (northwatchPatrolClear) this.clients.find(client => client.sessionId === ownerId)?.send("chat:notice",
@@ -5757,6 +5765,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       return reply(false, "The winch mechanism is missing its survey plan · search Sunfall Survey Camp first.");
     if (id === SOUTHERN_QUARRY_ENCOUNTER_CHAIN.liftId && !claims.has(SOUTHERN_QUARRY_ENCOUNTER_CHAIN.winchId))
       return reply(false, "The collapsed lift has no power · repair the Broken Winch Camp first.");
+    if (id === NORTHWATCH_ENCOUNTER_CHAIN.signalId && !claims.has(NORTHWATCH_ENCOUNTER_CHAIN.cartId))
+      return reply(false, "The Windworn Shrine is silent · search the Abandoned Northwatch Cart and follow its tracks first.");
+    if (id === NORTHWATCH_ENCOUNTER_CHAIN.watchpostId && !claims.has(NORTHWATCH_ENCOUNTER_CHAIN.signalId))
+      return reply(false, "The watchpost approach is hidden · light both Windworn Shrine signals first.");
+    if (id === NORTHWATCH_ENCOUNTER_CHAIN.watchpostId && NORTHWATCH_SHARD_PATROL_IDS.some(mobId => this.state.mobs.get(mobId)?.alive !== false))
+      return reply(false, "SHARD PATROL HOLDS THE RIDGE · break its crossfire before entering the watchpost.");
     if (claims.has(id) && !repeatable) return reply(false, `${site.name} has already been explored by this character.`, true);
     const cycleReadyAt = this.roadsideCycleReadyAt.get(id);
     if (repeatable && cycleReadyAt !== undefined)
@@ -5765,6 +5779,25 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (site.kind === "trail") {
       const stashDistance = Math.hypot(player.x - site.x - site.stashDx, player.z - site.z - site.stashDz);
       if (stashDistance > 3.2) return reply(true, site.clue);
+    }
+    if (site.kind === "signals") {
+      const now = Date.now();
+      const signalA = { x: site.x + site.signalADx, z: site.z + site.signalADz };
+      const signalB = { x: site.x + site.signalBDx, z: site.z + site.signalBDz };
+      const atA = Math.hypot(player.x - signalA.x, player.z - signalA.z) <= 3.2;
+      const atB = Math.hypot(player.x - signalB.x, player.z - signalB.z) <= 3.2;
+      if (!atA && !atB) return reply(false, "Stand beside one of the two signal braziers.");
+      const prior = this.roadsideSignals.get(id) ?? { aAt: 0, bAt: 0 };
+      const next = {
+        aAt: atA ? now : now - prior.aAt <= site.windowMs ? prior.aAt : 0,
+        bAt: atB ? now : now - prior.bAt <= site.windowMs ? prior.bAt : 0,
+      };
+      this.roadsideSignals.set(id, next);
+      if (!next.aAt || !next.bAt || Math.abs(next.aAt - next.bAt) > site.windowMs) {
+        const remaining = Math.max(1, Math.ceil(site.windowMs / 1_000));
+        return reply(true, `${atA ? "WEST" : "EAST"} SIGNAL LIT · ignite the other brazier within ${remaining}s.`, false,
+          { phase: "activated", progress: .5, holders: 1 });
+      }
     }
     if (site.kind === "hunt") {
       const stashDistance = Math.hypot(player.x - site.x - site.stashDx, player.z - site.z - site.stashDz);
@@ -5858,7 +5891,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
               : id === SOUTHERN_QUARRY_ENCOUNTER_CHAIN.surveyId
                 ? " WINCH PLAN RECOVERED · follow the amber sparks east to Broken Winch Camp."
                 : id === SOUTHERN_QUARRY_ENCOUNTER_CHAIN.liftId
-                  ? ` LOWER SHELF OPEN · ${SOUTHERN_QUARRY_ENCOUNTER_CHAIN.leaderName.toUpperCase()} EXPOSED beyond the Redstone Pit.` : "";
+                  ? ` LOWER SHELF OPEN · ${SOUTHERN_QUARRY_ENCOUNTER_CHAIN.leaderName.toUpperCase()} EXPOSED beyond the Redstone Pit.`
+                  : id === NORTHWATCH_ENCOUNTER_CHAIN.cartId
+                    ? " NORTHWATCH TRACKS FOUND · cold motes now mark the ridge road to the Windworn Shrine."
+                    : id === NORTHWATCH_ENCOUNTER_CHAIN.signalId
+                      ? " BOTH SIGNALS BURN · the Shard Patrol is exposed along the ridge."
+                      : id === NORTHWATCH_ENCOUNTER_CHAIN.watchpostId
+                        ? ` WATCHPOST CLEARED · ${NORTHWATCH_ENCOUNTER_CHAIN.leaderName.toUpperCase()} EXPOSED beyond the final ridge.` : "";
     const message = site.kind === "shrine" && choice === "rest" ? `${site.name} · health and stamina restored.`
       : `${site.name} explored · +${quantity} ${ITEM_DEFINITIONS[itemId].name}${player.coins > beforeGold ? ` · +${player.coins - beforeGold} gold` : ""}.`;
     reply(true, `${message}${chainMessage}`, true, { phase: "claimed", progress: 1, holders: 0 });
@@ -5866,6 +5905,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.roadsideChallengeActive.delete(id);
       this.roadsideRepair.delete(id);
     }
+    if (site.kind === "signals") this.roadsideSignals.delete(id);
     void this.persistPlayer(client.sessionId, player, true).catch(() => {});
   }
 

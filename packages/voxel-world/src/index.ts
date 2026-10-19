@@ -530,6 +530,22 @@ export const SOUTHERN_QUARRY_ENCOUNTER_CHAIN = {
   lift: { x: -4, z: 89 },
   leader: SOUTHERN_QUARRYMASTER_HOME,
 } as const;
+export const NORTHWATCH_ENCOUNTER_CHAIN = {
+  id: "northwatch-signal-chain",
+  cartId: "northwatch-cart",
+  signalId: "windworn-shrine",
+  watchpostId: "northwatch-watchpost",
+  leaderId: "northwatch-watchbreaker",
+  leaderName: "Northwatch Watchbreaker",
+  patrolIds: ["northwatch-spitter", "northwatch-patrol-stalker-west", "northwatch-patrol-stalker-east"],
+  cart: { x: 20, z: -44 },
+  shrine: { x: 2, z: -54 },
+  signalWest: { x: -3, z: -54 },
+  signalEast: { x: 7, z: -54 },
+  patrol: { x: 18.5, z: -54.5 },
+  watchpost: { x: 20, z: -62 },
+  leader: { x: 15.5, z: -72.5 },
+} as const;
 /** Small optional landmarks sit beside every long road segment, never in its movement lane. */
 export const ROADSIDE_DISCOVERIES = [
   { id: "greenwood-forager-camp", name: "Abandoned Forager Camp", kind: "camp", x: 31, z: -1 },
@@ -574,6 +590,8 @@ export const ROADSIDE_ENCOUNTERS = [
   { id: "sunfall-survey", kind: "trail", itemId: "iron_ore", quantity: 2, gold: 5, stashDx: -5, stashDz: 4, clue: "Survey stakes point southwest towards a small buried crate." },
   { id: "collapsed-lift", kind: "guarded", itemId: "stone_core", quantity: 1, gold: 8, guardRadius: 12 },
   { id: "northwatch-cart", kind: "trail", itemId: "iron_ore", quantity: 2, gold: 5, stashDx: 5, stashDz: -4, clue: "Fresh tracks climb northeast behind the ridge to a hidden crate." },
+  { id: "windworn-shrine", kind: "signals", itemId: "ridge_hide", quantity: 1, gold: 6,
+    signalADx: -5, signalADz: 0, signalBDx: 5, signalBDz: 0, windowMs: 12_000 },
   { id: "northwatch-watchpost", kind: "guarded", itemId: "silver_ore", quantity: 1, gold: 8, guardRadius: 11 },
   { id: "ashen-pilgrims", kind: "shrine", itemId: "healing_potion", quantity: 1, gold: 0 },
   { id: "emberfall-shrine", kind: "shrine", itemId: "healing_potion", quantity: 1, gold: 0 },
@@ -585,7 +603,7 @@ export const ROADSIDE_ENCOUNTERS = [
   { id: "wilds-hunter-blind", kind: "hunt", itemId: "crawler_fang", quantity: 2, gold: 7, guardRadius: 15,
     stashDx: -6, stashDz: 4, clue: "Blood and snapped reeds lead northwest. The wounded stalker is still moving." },
   { id: "outskirts-pilgrim-shrine", kind: "shrine", itemId: "healing_potion", quantity: 1, gold: 0 },
-] as const satisfies readonly { id: string; kind: "cache" | "trail" | "shrine" | "guarded" | "repair" | "ward" | "ambush" | "hunt"; itemId: string; quantity: number; gold: number; guardRadius?: number; holdMs?: number; stashDx?: number; stashDz?: number; clue?: string }[];
+] as const satisfies readonly { id: string; kind: "cache" | "trail" | "shrine" | "guarded" | "repair" | "ward" | "ambush" | "hunt" | "signals"; itemId: string; quantity: number; gold: number; guardRadius?: number; holdMs?: number; stashDx?: number; stashDz?: number; clue?: string; signalADx?: number; signalADz?: number; signalBDx?: number; signalBDz?: number; windowMs?: number }[];
 export function roadsideEncounterAt(id: string) {
   const encounter = ROADSIDE_ENCOUNTERS.find(entry => entry.id === id);
   const landmark = encounter && ROADSIDE_DISCOVERIES.find(entry => entry.id === encounter.id);
@@ -597,7 +615,10 @@ export function nearestRoadsideEncounter(x: number, z: number, radius = 3.2) {
   for (const encounter of ROADSIDE_ENCOUNTERS) {
     const landmark = ROADSIDE_DISCOVERIES.find(entry => entry.id === encounter.id)!;
     const next = Math.min(Math.hypot(x - landmark.x, z - landmark.z), encounter.kind === "trail" || encounter.kind === "hunt"
-      ? Math.hypot(x - landmark.x - encounter.stashDx, z - landmark.z - encounter.stashDz) : Infinity);
+      ? Math.hypot(x - landmark.x - encounter.stashDx, z - landmark.z - encounter.stashDz)
+      : encounter.kind === "signals" ? Math.min(
+        Math.hypot(x - landmark.x - encounter.signalADx, z - landmark.z - encounter.signalADz),
+        Math.hypot(x - landmark.x - encounter.signalBDx, z - landmark.z - encounter.signalBDz)) : Infinity);
     if (next <= distance) { nearest = { ...encounter, x: landmark.x, z: landmark.z, name: landmark.name }; distance = next; }
   }
   return nearest;

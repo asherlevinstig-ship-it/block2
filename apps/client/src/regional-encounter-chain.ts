@@ -1,10 +1,11 @@
-import { GREENWOOD_ENCOUNTER_CHAIN, MISTFEN_ENCOUNTER_CHAIN, SOUTHERN_QUARRY_ENCOUNTER_CHAIN, parseRoadsideClaims } from "@blockcraft/voxel-world";
+import { GREENWOOD_ENCOUNTER_CHAIN, MISTFEN_ENCOUNTER_CHAIN, NORTHWATCH_ENCOUNTER_CHAIN, SOUTHERN_QUARRY_ENCOUNTER_CHAIN, parseRoadsideClaims } from "@blockcraft/voxel-world";
 
 export type GreenwoodChainStage = "find-discovery" | "follow-to-camp" | "follow-to-leader" | "complete";
 export type ChainPoint = { x: number; z: number };
 export type ChainRoute = { from: ChainPoint; to: ChainPoint };
 export type MistfenChainStage = "find-discovery" | "follow-to-shrine" | "follow-to-leader" | "complete";
 export type QuarryChainStage = "find-cart" | "follow-to-survey" | "follow-to-winch" | "follow-to-lift" | "follow-to-leader" | "complete";
+export type NorthwatchChainStage = "find-cart" | "follow-to-signals" | "clear-patrol" | "follow-to-watchpost" | "follow-to-leader" | "complete";
 
 export function greenwoodChainStage(raw: string | null | undefined): GreenwoodChainStage {
   const claims = parseRoadsideClaims(raw);
@@ -72,6 +73,33 @@ export function quarryChainRoute(stage: QuarryChainStage): ChainPoint[] | null {
   ];
   if (stage === "follow-to-leader") return [
     SOUTHERN_QUARRY_ENCOUNTER_CHAIN.lift, { x: 9, z: 89 }, SOUTHERN_QUARRY_ENCOUNTER_CHAIN.leader,
+  ];
+  return null;
+}
+
+export function northwatchChainStage(raw: string | null | undefined): NorthwatchChainStage {
+  const claims = parseRoadsideClaims(raw);
+  if (!claims.has(NORTHWATCH_ENCOUNTER_CHAIN.cartId)) return "find-cart";
+  if (!claims.has(NORTHWATCH_ENCOUNTER_CHAIN.signalId)) return "follow-to-signals";
+  if (!claims.has(NORTHWATCH_ENCOUNTER_CHAIN.watchpostId)) return "clear-patrol";
+  try {
+    const parsed = JSON.parse(raw ?? "{}") as { northwatch?: { clears?: unknown } };
+    if (typeof parsed.northwatch?.clears === "number" && parsed.northwatch.clears > 0) return "complete";
+  } catch { /* Malformed legacy state still keeps its validated roadside claims. */ }
+  return "follow-to-leader";
+}
+
+/** Northwatch motes follow the ridge road and shift from the patrol to the post once its crossfire breaks. */
+export function northwatchChainRoute(stage: NorthwatchChainStage): ChainPoint[] | null {
+  if (stage === "follow-to-signals") return [
+    NORTHWATCH_ENCOUNTER_CHAIN.cart, { x: 9, z: -46 }, { x: 9, z: -54 }, NORTHWATCH_ENCOUNTER_CHAIN.shrine,
+  ];
+  if (stage === "clear-patrol") return [
+    NORTHWATCH_ENCOUNTER_CHAIN.shrine, { x: 9, z: -54 }, NORTHWATCH_ENCOUNTER_CHAIN.patrol,
+  ];
+  if (stage === "follow-to-watchpost") return [NORTHWATCH_ENCOUNTER_CHAIN.patrol, NORTHWATCH_ENCOUNTER_CHAIN.watchpost];
+  if (stage === "follow-to-leader") return [
+    NORTHWATCH_ENCOUNTER_CHAIN.watchpost, { x: 9, z: -70 }, NORTHWATCH_ENCOUNTER_CHAIN.leader,
   ];
   return null;
 }

@@ -39,7 +39,7 @@ function collectRoadsideCache(room: WorldRoom, internal: any, client: { sessionI
 describe("personal roadside encounters", () => {
   it("uses landmarks separate from Calling sites and keeps rewards small", () => {
     const fieldIds = new Set<string>(ROLE_FIELD_OPPORTUNITIES.map(site => site.landmarkId));
-    expect(ROADSIDE_ENCOUNTERS).toHaveLength(19);
+    expect(ROADSIDE_ENCOUNTERS).toHaveLength(20);
     for (const entry of ROADSIDE_ENCOUNTERS) {
       expect(roadsideEncounterAt(entry.id)).not.toBeNull();
       expect(fieldIds.has(entry.id)).toBe(false);
@@ -77,6 +77,24 @@ describe("personal roadside encounters", () => {
     const restored = new PlayerState();
     applyPlayerSave(restored, parsePlayerSave(serializePlayerSave(player))!);
     expect(parseRoadsideClaims(restored.huntLoadoutsJson).has(site.id)).toBe(true);
+  });
+
+  it("requires both Northwatch signals inside one coordination window", () => {
+    const { internal, player, client, site } = fixture("windworn-shrine");
+    if (site.kind !== "signals") throw new Error("Expected paired signals");
+    player.huntLoadoutsJson = JSON.stringify({ roadsideClaims: ["northwatch-cart"] });
+    const clock = vi.spyOn(Date, "now").mockReturnValue(10_000);
+    Object.assign(player, { x: site.x + site.signalADx, z: site.z + site.signalADz });
+    internal.handleRoadsideEncounter(client, { id: site.id });
+    expect(client.send).toHaveBeenLastCalledWith("roadside:result", expect.objectContaining({ claimed: false,
+      message: expect.stringContaining("WEST SIGNAL LIT") }));
+    clock.mockReturnValue(18_000);
+    Object.assign(player, { x: site.x + site.signalBDx, z: site.z + site.signalBDz });
+    internal.handleRoadsideEncounter(client, { id: site.id });
+    expect(parseRoadsideClaims(player.huntLoadoutsJson).has(site.id)).toBe(true);
+    expect(player.inventory.get("ridge_hide")?.quantity).toBe(1);
+    expect(client.send).toHaveBeenLastCalledWith("roadside:result", expect.objectContaining({ claimed: true,
+      message: expect.stringContaining("Shard Patrol") }));
   });
 
   it("chains the Greenwood discovery into a guarded camp that exposes the regional leader", () => {

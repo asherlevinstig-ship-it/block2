@@ -43,9 +43,9 @@ import { inventoryRenderDue } from "./inventory-render-budget.js";
 import { nextInventoryTab, type InventoryTab } from "./inventory-tabs.js";
 import { inventoryItemVisible } from "./inventory-ownership.js";
 import { playerHud } from "./player-hud.js";
-import { greenwoodChainRoute, greenwoodChainStage, mistfenChainRoute, mistfenChainStage, quarryChainRoute, quarryChainStage, regionalChainBreadcrumbs,
+import { greenwoodChainRoute, greenwoodChainStage, mistfenChainRoute, mistfenChainStage, northwatchChainRoute, northwatchChainStage, quarryChainRoute, quarryChainStage, regionalChainBreadcrumbs,
   regionalChainTrailVisible, regionalPolylineBreadcrumbs, regionalPolylineTrailVisible,
-  type GreenwoodChainStage, type MistfenChainStage, type QuarryChainStage } from "./regional-encounter-chain.js";
+  type GreenwoodChainStage, type MistfenChainStage, type NorthwatchChainStage, type QuarryChainStage } from "./regional-encounter-chain.js";
 import { combatHud, cooldownState } from "./combat-hud.js";
 import { assassinJourney } from "./assassin-journey.js";
 import { EQUIPMENT_COLLECTION, collectionProgress, equipmentCollectionLabel, equipmentProgressionText } from "./equipment-progression.js";
@@ -1952,6 +1952,62 @@ function updateQuarryEncounterChain(raw: string, now: number): void {
     spark.setPosition(point.x, SURFACE_HEIGHT + .45 + Math.sin(now * .004 + index) * .08, point.z);
     spark.setLocalScale(pulse, pulse, pulse * 1.8);
     spark.rotate(.45, 1.35, .65);
+  });
+}
+const northwatchChainTrailMaterial = new pc.StandardMaterial();
+northwatchChainTrailMaterial.diffuse = new pc.Color(.55, .86, 1);
+northwatchChainTrailMaterial.emissive = new pc.Color(.22, .66, 1);
+northwatchChainTrailMaterial.opacity = .88;
+northwatchChainTrailMaterial.blendType = pc.BLEND_ADDITIVE;
+northwatchChainTrailMaterial.update();
+const northwatchChainTrailRoot = new pc.Entity("northwatch-chain-trail");
+const northwatchChainTrail = Array.from({ length: 14 }, (_, index) => {
+  const mote = addBox(northwatchChainTrailRoot, "northwatch-wind-mote", northwatchChainTrailMaterial,
+    [.12, .055, .28], [0, 0, 0]);
+  mote.setLocalEulerAngles(12, index * 29, 18); return mote;
+});
+northwatchChainTrailRoot.enabled = false;
+app.root.addChild(northwatchChainTrailRoot);
+const northwatchSignalMaterial = new pc.StandardMaterial();
+northwatchSignalMaterial.diffuse = new pc.Color(.35, .78, 1);
+northwatchSignalMaterial.emissive = new pc.Color(.1, .7, 1);
+northwatchSignalMaterial.update();
+const northwatchSignalPostMaterial = new pc.StandardMaterial();
+northwatchSignalPostMaterial.diffuse = new pc.Color(.17, .2, .24);
+northwatchSignalPostMaterial.update();
+const northwatchSignalRoot = new pc.Entity("northwatch-signal-braziers");
+for (const point of [{ x: -3, z: -54 }, { x: 7, z: -54 }]) {
+  addBox(northwatchSignalRoot, "signal-brazier-post", northwatchSignalPostMaterial, [.42, 1.15, .42], [point.x, SURFACE_HEIGHT + .58, point.z]);
+  addBox(northwatchSignalRoot, "signal-brazier-flame", northwatchSignalMaterial, [.25, .46, .25], [point.x, SURFACE_HEIGHT + 1.62, point.z]);
+}
+app.root.addChild(northwatchSignalRoot);
+let northwatchChainStageView: NorthwatchChainStage = "find-cart";
+let northwatchChainRaw = "";
+function updateNorthwatchEncounterChain(raw: string, now: number): void {
+  if (raw !== northwatchChainRaw) {
+    northwatchChainRaw = raw;
+    northwatchChainStageView = northwatchChainStage(raw);
+    if (northwatchChainStageView === "follow-to-leader" || northwatchChainStageView === "complete")
+      minimap.revealMiniBoss("northwatch-watchbreaker");
+    if (northwatchChainStageView === "complete") minimap.revealNorthwatchRewards();
+  }
+  const patrolBroken = northwatchChainStageView === "clear-patrol"
+    && ["northwatch-spitter", "northwatch-patrol-stalker-west", "northwatch-patrol-stalker-east"]
+      .every(id => mobVisuals.get(id)?.frameAlive === false);
+  const effectiveStage: NorthwatchChainStage = patrolBroken ? "follow-to-watchpost" : northwatchChainStageView;
+  const route = northwatchChainRoute(effectiveStage);
+  const player = localPlayer.getPosition();
+  northwatchSignalRoot.enabled = effectiveStage === "follow-to-signals" || effectiveStage === "clear-patrol";
+  northwatchChainTrailRoot.enabled = regionalPolylineTrailVisible(player, route, 14);
+  if (!northwatchChainTrailRoot.enabled) return;
+  const points = regionalPolylineBreadcrumbs(route, northwatchChainTrail.length);
+  northwatchChainTrail.forEach((mote, index) => {
+    const point = points[index]; mote.enabled = Boolean(point);
+    if (!point) return;
+    const pulse = .7 + Math.sin(now * .006 + index * .88) * .24;
+    mote.setPosition(point.x, SURFACE_HEIGHT + .78 + Math.sin(now * .004 + index) * .14, point.z);
+    mote.setLocalScale(pulse * 1.6, pulse, pulse * .7);
+    mote.rotate(.15, 1.1, .22);
   });
 }
 let localSilverDepthsRunStage = 0;
@@ -12767,6 +12823,7 @@ app.on("update", (dt: number) => {
       updateGreenwoodEncounterChain(localNetworkPlayer.huntLoadoutsJson, now);
       updateMistfenEncounterChain(localNetworkPlayer.huntLoadoutsJson, now);
       updateQuarryEncounterChain(localNetworkPlayer.huntLoadoutsJson, now);
+      updateNorthwatchEncounterChain(localNetworkPlayer.huntLoadoutsJson, now);
     }
     updateSilverDepthsRoute(now);
     if (!visibleDepthsRoute) updateCaveNavigation(localPlayer.getPosition(), now);
