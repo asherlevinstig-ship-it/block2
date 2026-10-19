@@ -496,10 +496,21 @@ export const REGIONAL_WAYSTONES = [
 ] as const;
 
 export type RoadsideDiscoveryKind = "cart" | "shrine" | "camp" | "grove" | "ruin";
+export const GREENWOOD_ENCOUNTER_CHAIN = {
+  id: "greenwood-root-chain",
+  discoveryId: "greenwood-forager-camp",
+  campId: "greenwood-rootwatch-camp",
+  leaderId: "wild-crawler",
+  leaderName: "Greenwood Broodmother",
+  discovery: { x: 29, z: -7 },
+  camp: { x: 51, z: -10 },
+  leader: { x: 39.5, z: 16.5 },
+} as const;
 /** Small optional landmarks sit beside every long road segment, never in its movement lane. */
 export const ROADSIDE_DISCOVERIES = [
   { id: "greenwood-forager-camp", name: "Abandoned Forager Camp", kind: "camp", x: 31, z: -1 },
   { id: "greenwood-root-arch", name: "Rootbound Arch", kind: "grove", x: 43, z: 4 },
+  { id: "greenwood-rootwatch-camp", name: "Rootwatch Camp", kind: "camp", x: 51, z: -10 },
   { id: "greenwood-hollow-shrine", name: "Hollow Root Shrine", kind: "shrine", x: 50, z: 12 },
   { id: "eastroad-cart", name: "Abandoned Eastroad Cart", kind: "cart", x: 56, z: 14 },
   { id: "silver-road-shrine", name: "Silver Road Shrine", kind: "shrine", x: 69, z: 14 },
@@ -531,6 +542,7 @@ export const ROADSIDE_DISCOVERIES = [
 /** One personal, optional payoff at selected landmarks; Calling field sites stay separate. */
 export const ROADSIDE_ENCOUNTERS = [
   { id: "greenwood-forager-camp", kind: "trail", itemId: "moss_fibre", quantity: 2, gold: 3, stashDx: -2, stashDz: -6, clue: "Follow the broken branches northwest to a tucked-away bundle." },
+  { id: "greenwood-rootwatch-camp", kind: "guarded", itemId: "crawler_fang", quantity: 2, gold: 7, guardRadius: 14 },
   { id: "greenwood-hollow-shrine", kind: "shrine", itemId: "healing_potion", quantity: 1, gold: 0 },
   { id: "mistfen-cart", kind: "trail", itemId: "crawler_fang", quantity: 1, gold: 5, stashDx: -5, stashDz: -4, clue: "Drag marks lead northwest off the causeway into the reeds." },
   { id: "mistfen-shrine", kind: "shrine", itemId: "healing_potion", quantity: 1, gold: 0 },

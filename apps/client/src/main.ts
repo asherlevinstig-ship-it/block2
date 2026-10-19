@@ -43,6 +43,8 @@ import { inventoryRenderDue } from "./inventory-render-budget.js";
 import { nextInventoryTab, type InventoryTab } from "./inventory-tabs.js";
 import { inventoryItemVisible } from "./inventory-ownership.js";
 import { playerHud } from "./player-hud.js";
+import { greenwoodChainRoute, greenwoodChainStage, regionalChainBreadcrumbs, regionalChainTrailVisible,
+  type GreenwoodChainStage } from "./regional-encounter-chain.js";
 import { combatHud, cooldownState } from "./combat-hud.js";
 import { assassinJourney } from "./assassin-journey.js";
 import { EQUIPMENT_COLLECTION, collectionProgress, equipmentCollectionLabel, equipmentProgressionText } from "./equipment-progression.js";
@@ -1839,6 +1841,43 @@ const depthsBreadcrumbs = Array.from({ length: 6 }, (_, index) => {
 });
 depthsBreadcrumbRoot.enabled = false;
 app.root.addChild(depthsBreadcrumbRoot);
+const greenwoodChainTrailMaterial = new pc.StandardMaterial();
+greenwoodChainTrailMaterial.diffuse = new pc.Color(.36, .88, .2);
+greenwoodChainTrailMaterial.emissive = new pc.Color(.12, .62, .06);
+greenwoodChainTrailMaterial.opacity = .88;
+greenwoodChainTrailMaterial.blendType = pc.BLEND_ADDITIVE;
+greenwoodChainTrailMaterial.update();
+const greenwoodChainTrailRoot = new pc.Entity("greenwood-regional-chain-trail");
+const greenwoodChainTrail = Array.from({ length: 10 }, (_, index) => {
+  const spore = addBox(greenwoodChainTrailRoot, "awakened-root-spore", greenwoodChainTrailMaterial,
+    [.11, .11, .11], [0, 0, 0]);
+  spore.setLocalEulerAngles(45, index * 37, 45); return spore;
+});
+greenwoodChainTrailRoot.enabled = false;
+app.root.addChild(greenwoodChainTrailRoot);
+let greenwoodChainStageView: GreenwoodChainStage = "find-discovery";
+let greenwoodChainRaw = "";
+function updateGreenwoodEncounterChain(raw: string, now: number): void {
+  if (raw !== greenwoodChainRaw) {
+    greenwoodChainRaw = raw;
+    greenwoodChainStageView = greenwoodChainStage(raw);
+    if (greenwoodChainStageView === "follow-to-leader" || greenwoodChainStageView === "complete")
+      minimap.revealMiniBoss("wild-crawler");
+  }
+  const route = greenwoodChainRoute(greenwoodChainStageView);
+  const player = localPlayer.getPosition();
+  greenwoodChainTrailRoot.enabled = regionalChainTrailVisible(player, route);
+  if (!greenwoodChainTrailRoot.enabled) return;
+  const points = regionalChainBreadcrumbs(route, greenwoodChainTrail.length);
+  greenwoodChainTrail.forEach((spore, index) => {
+    const point = points[index]; spore.enabled = Boolean(point);
+    if (!point) return;
+    const pulse = .72 + Math.sin(now * .006 + index * .85) * .22;
+    spore.setPosition(point.x, SURFACE_HEIGHT + 1.16 + Math.sin(now * .0035 + index) * .13, point.z);
+    spore.setLocalScale(pulse, pulse * 1.7, pulse);
+    spore.rotate(.25, 1.15, .4);
+  });
+}
 let localSilverDepthsRunStage = 0;
 let localSilverDepthsWing: SilverDepthsWing | null = null;
 for (const button of depthsWingButtons) {
@@ -12649,6 +12688,7 @@ app.on("update", (dt: number) => {
         }
       }
       minimap.setRoadsideClaims(localNetworkPlayer.huntLoadoutsJson);
+      updateGreenwoodEncounterChain(localNetworkPlayer.huntLoadoutsJson, now);
     }
     updateSilverDepthsRoute(now);
     if (!visibleDepthsRoute) updateCaveNavigation(localPlayer.getPosition(), now);

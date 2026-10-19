@@ -79,7 +79,7 @@ import { HEALING_POTION, backpackAddableQuantity, backpackCapacity, backpackSlot
 import { canBuyPotionAtKeeper, potionBuyError, potionUseError } from "./healing-potions.js";
 import { MINERAL_REGROWTH_MS, type MineralDepositStatus } from "@blockcraft/protocol";
 import { RENEWABLE_MINERAL_DEPOSITS, authoredMineralAt, SURFACE_HEIGHT, CAVE_SHALLOW_HOME, CAVE_DEEP_HOME, CAVE_HIDDEN_HOME, SILVER_DEPTHS_SPITTER_HOMES, CRYSTAL_MATRIARCH_HOME, SILVER_DEPTHS_COVER, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, SILVER_DEPTHS_CHECKPOINT_POSITION, SILVER_DEPTHS_GALLERY_GATE, SILVER_DEPTHS_BOSS_GATE, SILVER_DEPTHS_IRON_GATE, SILVER_DEPTHS_SILVER_GATE, SILVER_DEPTHS_WING_CACHES, TOWN_BLACKSMITH_STALL_POSITION, silverDepthsPingLocation, isMistfenToxicPool, isInMistfenMarsh } from "@blockcraft/voxel-world";
-import { ROLE_FIELD_OPPORTUNITIES, nearestRoleFieldOpportunity, nearestRoadsideEncounter, parseRoadsideClaims, roadsideEncounterAt, withRoadsideClaim } from "@blockcraft/voxel-world";
+import { GREENWOOD_ENCOUNTER_CHAIN, ROLE_FIELD_OPPORTUNITIES, nearestRoleFieldOpportunity, nearestRoadsideEncounter, parseRoadsideClaims, roadsideEncounterAt, withRoadsideClaim } from "@blockcraft/voxel-world";
 import { mineralCellOccupied } from "./mineral-regrowth.js";
 import { CAVE_ENCOUNTERS, caveEncounterAllows } from "./cave-encounters.js";
 import { miningDurationMs, miningLineClear } from "@blockcraft/voxel-world";
@@ -5723,6 +5723,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (player.y < SURFACE_HEIGHT - 1 || nearestRoadsideEncounter(player.x, player.z)?.id !== id)
       return reply(false, `Move beside ${site.name} to investigate it.`);
     const claims = parseRoadsideClaims(player.huntLoadoutsJson);
+    if (id === GREENWOOD_ENCOUNTER_CHAIN.campId && !claims.has(GREENWOOD_ENCOUNTER_CHAIN.discoveryId))
+      return reply(false, "The roots are tangled shut · search the Abandoned Forager Camp for another approach.");
     if (claims.has(id) && !repeatable) return reply(false, `${site.name} has already been explored by this character.`, true);
     const cycleReadyAt = this.roadsideCycleReadyAt.get(id);
     if (repeatable && cycleReadyAt !== undefined)
@@ -5798,9 +5800,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       player.health = player.maxHealth;
       player.stamina = player.maxStamina;
     }
+    const chainMessage = id === GREENWOOD_ENCOUNTER_CHAIN.discoveryId
+      ? " Broken branches now glow east toward Rootwatch Camp."
+      : id === GREENWOOD_ENCOUNTER_CHAIN.campId
+        ? ` ${GREENWOOD_ENCOUNTER_CHAIN.leaderName.toUpperCase()} EXPOSED · follow the awakened spores south.` : "";
     const message = site.kind === "shrine" && choice === "rest" ? `${site.name} · health and stamina restored.`
       : `${site.name} explored · +${quantity} ${ITEM_DEFINITIONS[itemId].name}${player.coins > beforeGold ? ` · +${player.coins - beforeGold} gold` : ""}.`;
-    reply(true, message, true, { phase: "claimed", progress: 1, holders: 0 });
+    reply(true, `${message}${chainMessage}`, true, { phase: "claimed", progress: 1, holders: 0 });
     void this.persistPlayer(client.sessionId, player, true).catch(() => {});
   }
 

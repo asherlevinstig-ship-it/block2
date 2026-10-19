@@ -39,7 +39,7 @@ function collectRoadsideCache(room: WorldRoom, internal: any, client: { sessionI
 describe("personal roadside encounters", () => {
   it("uses landmarks separate from Calling sites and keeps rewards small", () => {
     const fieldIds = new Set<string>(ROLE_FIELD_OPPORTUNITIES.map(site => site.landmarkId));
-    expect(ROADSIDE_ENCOUNTERS).toHaveLength(18);
+    expect(ROADSIDE_ENCOUNTERS).toHaveLength(19);
     for (const entry of ROADSIDE_ENCOUNTERS) {
       expect(roadsideEncounterAt(entry.id)).not.toBeNull();
       expect(fieldIds.has(entry.id)).toBe(false);
@@ -77,6 +77,32 @@ describe("personal roadside encounters", () => {
     const restored = new PlayerState();
     applyPlayerSave(restored, parsePlayerSave(serializePlayerSave(player))!);
     expect(parseRoadsideClaims(restored.huntLoadoutsJson).has(site.id)).toBe(true);
+  });
+
+  it("chains the Greenwood discovery into a guarded camp that exposes the regional leader", () => {
+    const { internal, player, client, room } = fixture("greenwood-rootwatch-camp");
+    internal.handleRoadsideEncounter(client, { id: "greenwood-rootwatch-camp" });
+    expect(client.send).toHaveBeenCalledWith("roadside:result", expect.objectContaining({ ok: false,
+      message: expect.stringContaining("Abandoned Forager Camp") }));
+
+    const discovery = roadsideEncounterAt("greenwood-forager-camp")!;
+    if (discovery.kind !== "trail") throw new Error("Expected Greenwood trail discovery");
+    Object.assign(player, { x: discovery.x + discovery.stashDx + .5, z: discovery.z + discovery.stashDz + .5 });
+    internal.handleRoadsideEncounter(client, { id: discovery.id });
+    expect(parseRoadsideClaims(player.huntLoadoutsJson).has(discovery.id)).toBe(true);
+
+    const camp = roadsideEncounterAt("greenwood-rootwatch-camp")!;
+    Object.assign(player, { x: camp.x + .5, z: camp.z + .5 });
+    internal.advanceRoadsideGuards(2_000);
+    const guards = roadsideGuardsFor(camp.id);
+    expect(guards).toHaveLength(3);
+    expect(guards.filter(guard => guard.elite)).toHaveLength(1);
+    for (const guard of guards) room.state.mobs.get(guard.id)!.alive = false;
+    internal.handleRoadsideEncounter(client, { id: camp.id });
+    expect(parseRoadsideClaims(player.huntLoadoutsJson).has(camp.id)).toBe(true);
+    expect(player.inventory.get("crawler_fang")?.quantity).toBe(2);
+    expect(client.send).toHaveBeenCalledWith("roadside:result", expect.objectContaining({ ok: true,
+      message: expect.stringContaining("GREENWOOD BROODMOTHER EXPOSED") }));
   });
 
   it("requires guarded sites to be cleared and validates distance", () => {

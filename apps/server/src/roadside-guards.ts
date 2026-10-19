@@ -22,6 +22,9 @@ export type RoadsideEncounterVariant = {
 
 /** One-time guarded discoveries retain a single authored formation. */
 const FIXED_ROADSIDE_GUARDS: readonly RoadsideGuard[] = [
+  { id: "roadside-rootwatch-keeper", siteId: "greenwood-rootwatch-camp", archetype: "thornbinder", name: "Rootwatch Keeper", x: 51.5, y: 8, z: -5.5, elite: true },
+  { id: "roadside-rootwatch-briar-west", siteId: "greenwood-rootwatch-camp", archetype: "briar_crawler", name: "Rootwatch Briar", x: 47.5, y: 8, z: -8.5 },
+  { id: "roadside-rootwatch-briar-east", siteId: "greenwood-rootwatch-camp", archetype: "briar_crawler", name: "Rootwatch Briar", x: 55.5, y: 8, z: -8.5 },
   { id: "roadside-southgate-raider", siteId: "southgate-cart", archetype: "briar_crawler", name: "Southgate Raider", x: 12.5, y: 8, z: 39.5 },
   { id: "roadside-southgate-spitter", siteId: "southgate-cart", archetype: "cave_spitter", name: "Cart Lookout", x: 19.5, y: 8, z: 38.5 },
   { id: "roadside-lift-crawler", siteId: "collapsed-lift", archetype: "briar_crawler", name: "Lift Scavenger", x: -8.5, y: 8, z: 87.5 },

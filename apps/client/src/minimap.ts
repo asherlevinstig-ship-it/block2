@@ -291,6 +291,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
   setWardenGateUnlocked(unlocked: boolean): void;
   setMistfenMastery(rank: number): void;
   setGreenwoodMastery(rank: number): void;
+  revealMiniBoss(id: string): void;
   setEquipmentHunt(target: EquipmentHuntTarget | null): void;
   setRoadsideClaims(raw: string): void;
   setRoadsideActivity(ids: readonly string[]): void;
@@ -532,6 +533,12 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
       }
       if (!changed) return;
       refreshDestinations(); lastUpdate = -Infinity;
+      try { localStorage.setItem(storageKey, JSON.stringify([...discovered])); } catch { /* Private browsing can disable storage. */ }
+    },
+    revealMiniBoss(id) {
+      const key = miniBossDiscoveryKey(id);
+      if (discovered.has(key)) return;
+      discovered.add(key); refreshDestinations(); lastUpdate = -Infinity;
       try { localStorage.setItem(storageKey, JSON.stringify([...discovered])); } catch { /* Private browsing can disable storage. */ }
     },
     setEquipmentHunt(target) {
