@@ -4,7 +4,7 @@ import { Block, ROADSIDE_ENCOUNTERS, ROLE_FIELD_OPPORTUNITIES, SURFACE_HEIGHT, n
 import { WorldRoom } from "./game-room.js";
 import { InventoryItemState, MobState, PlayerState, WorldState } from "./schema.js";
 import { applyPlayerSave, parsePlayerSave, serializePlayerSave } from "./player-save.js";
-import { roadsideGuardsFor } from "./roadside-guards.js";
+import { roadsideGuardsFor, roadsideVariantsFor } from "./roadside-guards.js";
 
 function fixture(id: string) {
   const site = roadsideEncounterAt(id)!;
@@ -159,7 +159,7 @@ describe("personal roadside encounters", () => {
     const clearCycle = () => {
       internal.handleRoadsideEncounter(client, { id: site.id });
       for (let elapsed = 250; elapsed <= 2_250; elapsed += 250) internal.advanceRoadsideGuards(now + elapsed);
-      for (const guard of roadsideGuardsFor(site.id)) room.state.mobs.get(guard.id)!.alive = false;
+      for (const guard of internal.activeRoadsideGuards(site.id)) room.state.mobs.get(guard.id)!.alive = false;
       now += 2_500; internal.handleRoadsideEncounter(client, { id: site.id });
     };
     clearCycle();
@@ -169,10 +169,29 @@ describe("personal roadside encounters", () => {
     expect(readyAt - now).toBe(15 * 60_000);
     now = readyAt; internal.advanceRoadsideGuards(now);
     expect(client.send).toHaveBeenCalledWith("roadside:cycle", expect.objectContaining({ phase: "available" }));
+    expect(internal.activeRoadsideVariant(site.id)?.id).toBe("survey-fireline");
     clearCycle();
-    expect(player.inventory.get("silver_ore")?.quantity).toBe(3);
+    expect(player.inventory.get("silver_ore")?.quantity).toBe(2);
+    expect(player.inventory.get("ember_ore")?.quantity).toBe(1);
     expect(player.coins).toBe(12);
     vi.restoreAllMocks();
+  });
+
+  it("authors three fixed tactical formations for every repeatable region", () => {
+    const expected = {
+      "broken-winch-camp": ["quarry-patrol", "saboteur-rush", "foreman-reclamation"],
+      "wilds-hunter-blind": ["blood-trail", "pack-ambush", "alpha-hunt"],
+      "ashglass-survey": ["breaker-squad", "survey-fireline", "duststorm-patrol"],
+    } as const;
+    for (const [siteId, ids] of Object.entries(expected)) {
+      const variants = roadsideVariantsFor(siteId);
+      expect(variants.map(entry => entry.id)).toEqual(ids);
+      expect(new Set(variants.map(entry => entry.rewardItemId)).size).toBe(3);
+      for (const entry of variants) {
+        expect(entry.guards).toHaveLength(3);
+        expect(entry.guards.filter(guard => guard.elite)).toHaveLength(1);
+      }
+    }
   });
 
   it("credits every nearby player who meaningfully participates", () => {
