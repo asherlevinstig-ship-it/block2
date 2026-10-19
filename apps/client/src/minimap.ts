@@ -283,7 +283,7 @@ export function discoverDeposits(player: Position & { y: number }, discovered: S
 }
 
 export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, storageKey: string,
-  onRegionDiscovered?: (name: string) => void): {
+  onRegionDiscovered?: (name: string) => void, onLandmarkDiscovered?: (name: string) => void): {
   setChampionState(champion: (Position & { y: number; alive: boolean }) | null): void;
   setEliteStates(elites: EliteMapTarget[]): void;
   setThreatState(threat: ThreatMapTarget | null): void;
@@ -715,7 +715,12 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
       const miniBossesChanged = discoverMiniBosses(player, elites, discovered);
       const spireChanged = discoverAshenSpire(player, discovered);
       const mistfenChanged = discoverMistfen(player, discovered);
+      const landmarksBefore = onLandmarkDiscovered ? new Set(discovered) : null;
       const landmarksChanged = discoverRoadsideLandmarks(player, discovered);
+      if (landmarksChanged && landmarksBefore) for (const landmark of ROADSIDE_DISCOVERIES) {
+        const key = roadsideDiscoveryKey(landmark.id);
+        if (!landmarksBefore.has(key) && discovered.has(key)) onLandmarkDiscovered?.(landmark.name);
+      }
       if (depositsChanged || championChanged || miniBossesChanged || spireChanged || mistfenChanged || landmarksChanged) {
         refreshDestinations();
         try { localStorage.setItem(storageKey, JSON.stringify([...discovered])); } catch { /* Private browsing can disable storage. */ }

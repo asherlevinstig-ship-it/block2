@@ -704,7 +704,7 @@ minimapExpand.addEventListener("click", event => {
   setMinimapExpanded(minimapPanel.dataset.expanded !== "true");
 });
 minimapPanel.addEventListener("toggle", () => { if (!minimapPanel.open) setMinimapExpanded(false); });
-const minimap = createMinimap(document.querySelector<HTMLCanvasElement>("#minimap-canvas")!, document.querySelector<HTMLElement>("#minimap-detail")!, `blockcraft:minimap:v1:${profileToken}`, showRegionDiscovery);
+const minimap = createMinimap(document.querySelector<HTMLCanvasElement>("#minimap-canvas")!, document.querySelector<HTMLElement>("#minimap-detail")!, `blockcraft:minimap:v1:${profileToken}`, showRegionDiscovery, showLandmarkDiscovery);
 const mistfenMasteryPanel = document.querySelector<HTMLElement>("#mistfen-mastery")!;
 const mistfenMasteryRank = document.querySelector<HTMLElement>("#mistfen-mastery-rank")!;
 const mistfenMasteryFill = document.querySelector<HTMLElement>("#mistfen-mastery-fill")!;
@@ -7854,6 +7854,11 @@ function showRoadsideNotice(message: string, warning = false): void {
 function showRegionDiscovery(name: string): void {
   announceWorldNotice({ kind: "discovery", heading: "REGION DISCOVERED", title: name,
     detail: "Added to your explorer map", durationMs: 3_800 });
+}
+
+function showLandmarkDiscovery(name: string): void {
+  combatAudio.play("discovery");
+  social.notice(`${name} discovered · added to your explorer map.`);
 }
 
 function updateMining(now: number): void {

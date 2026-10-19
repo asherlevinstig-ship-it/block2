@@ -4,7 +4,7 @@ export type CallingCue = "callingTank" | "callingMage" | "callingShadow" | "call
 export type WeaponCue = "hammerImpact" | "rangedHit" | "acidHit" | "venomHit" | "nearMiss";
 export type MiningCue = "miningStone" | "miningIron" | "miningSilver" | "miningBreak";
 export type DungeonCue = "dungeonGate" | "guardianPhase" | "dungeonVictory" | "depthsEntrance" | "depthsWing" | "depthsArena";
-export type LootCue = "lootPickup" | "lootRare" | "lootEpic" | "lootLegendary" | "levelUp";
+export type LootCue = "lootPickup" | "lootRare" | "lootEpic" | "lootLegendary" | "levelUp" | "discovery";
 export type ArmourCue = "shardDeflect";
 type CombatCue = EnemyCue | PowerCue | CallingCue | WeaponCue | MiningCue | DungeonCue | LootCue | ArmourCue;
 
@@ -152,6 +152,10 @@ export const DUNGEON_CUE_DEFINITIONS: Record<DungeonCue, EnemyCueDefinition> = {
 };
 
 export const LOOT_CUE_DEFINITIONS: Record<LootCue, EnemyCueDefinition> = {
+  discovery: { minimumIntervalMs: 900, tones: [
+    { wave: "sine", startHz: 392, endHz: 523, gain: .022, delayMs: 0, durationMs: 190 },
+    { wave: "triangle", startHz: 523, endHz: 784, gain: .018, delayMs: 125, durationMs: 260 },
+  ] },
   levelUp: { minimumIntervalMs: 700, tones: [
     { wave: "triangle", startHz: 392, endHz: 588, gain: .035, delayMs: 0, durationMs: 180 },
     { wave: "sine", startHz: 523, endHz: 784, gain: .04, delayMs: 140, durationMs: 220 },

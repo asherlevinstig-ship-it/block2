@@ -1,10 +1,11 @@
 import * as pc from "playcanvas";
-import { MINERAL_DEPOSITS, NORTHWATCH_SHARD_PATROL_SITE, WILDERNESS_CAMPS } from "@blockcraft/voxel-world";
+import { MINERAL_DEPOSITS, NORTHWATCH_SHARD_PATROL_SITE, ROADSIDE_DISCOVERIES, WILDERNESS_CAMPS, roadsideEncounterAt } from "@blockcraft/voxel-world";
 import { REALM_WARDEN_ARENA, REALM_WARDEN_HOME, STONE_BRUTE_ARENA, STONE_BRUTE_ARENA_HOME } from "@blockcraft/voxel-world";
 import { Block, CHUNK_SIZE, GREENWOOD_CAMP, SURFACE_HEIGHT, TOWN_BEACON_POSITION, TOWN_BLACKSMITH_STALL_POSITION, TOWN_EXPEDITION_BOARD_POSITION, TOWN_GATE_POSTS, TOWN_TAVERN, TOWN_TAVERN_Z_OFFSET, TOWN_TAVERN_QUIZ_TABLE_POSITION, TOWN_TAVERN_TABLE_CENTERS, type WorldBlockReader } from "@blockcraft/voxel-world";
 import { TAVERN_KEEPER } from "./tavern-keeper.js";
 import { TOWN_STORAGE_CHEST_POSITION } from "@blockcraft/voxel-world";
 import { WARDEN_VICTORY_TRANSFORM_MS, wardenVictoryActive, wardenVictoryPulse } from "./warden-victory-effects.js";
+import { discoveryBreadcrumbs, discoverySignalKind, type DiscoverySignalKind } from "./discovery-signals.js";
 
 type Color = readonly [number, number, number];
 const WOOD: Color = [0.24, 0.17, 0.12];
@@ -68,6 +69,10 @@ export class SceneDressing {
   private readonly root = new pc.Entity("world-art-details");
   private readonly material = new pc.StandardMaterial();
   private readonly glow = new pc.StandardMaterial();
+  private readonly smokeSignal: pc.StandardMaterial;
+  private readonly goldSignal: pc.StandardMaterial;
+  private readonly darkSignal: pc.StandardMaterial;
+  private readonly cacheSignal: pc.StandardMaterial;
   private meshes: pc.Mesh[] = [];
   private fireLight: pc.Entity | null = null;
   private forgeLight: pc.Entity | null = null;
@@ -81,6 +86,7 @@ export class SceneDressing {
   private blacksmithBuilt = false;
   private readonly keeperMaterials = new Map<string, pc.StandardMaterial>();
   private readonly patronHeads: Array<{ entity: pc.Entity; baseYaw: number; phase: number }> = [];
+  private readonly discoverySignals: Array<{ entity: pc.Entity; kind: DiscoverySignalKind; x: number; z: number; index: number; phase: number }> = [];
 
   constructor(private readonly app: pc.Application) {
     this.material.diffuse.set(1, 1, 1);
@@ -93,7 +99,31 @@ export class SceneDressing {
     this.glow.emissive.set(0.62, 0.4, 0.15);
     this.glow.emissiveVertexColor = true;
     this.glow.update();
+    this.smokeSignal = this.signalMaterial([.2, .23, .22], .28, [.035, .04, .035]);
+    this.goldSignal = this.signalMaterial([1, .75, .26], .28, [.85, .48, .08]);
+    this.darkSignal = this.signalMaterial([.055, .065, .07], .82, [.012, .014, .015]);
+    this.cacheSignal = this.signalMaterial([.55, .92, 1], .72, [.28, .78, 1]);
     app.root.addChild(this.root);
+  }
+
+  private signalMaterial(diffuse: Color, opacity: number, emissive: Color): pc.StandardMaterial {
+    const material = new pc.StandardMaterial();
+    material.diffuse.set(...diffuse);
+    material.emissive.set(...emissive);
+    material.opacity = opacity;
+    material.blendType = pc.BLEND_NORMAL;
+    material.depthWrite = false;
+    material.useFog = true;
+    material.update();
+    return material;
+  }
+
+  private discoverySignalEntity(name: string, type: "box" | "sphere", material: pc.Material): pc.Entity {
+    const entity = new pc.Entity(name);
+    entity.addComponent("render", { type, castShadows: false, receiveShadows: false });
+    if (entity.render) entity.render.material = material;
+    this.root.addChild(entity);
+    return entity;
   }
 
   setSurfaceVisible(visible: boolean): void {
@@ -124,6 +154,43 @@ export class SceneDressing {
     if (this.keeperArm) this.keeperArm.setLocalEulerAngles(Math.sin(time * 1.65) * 8 - 8, 0, -6);
     for (const patron of this.patronHeads) {
       patron.entity.setEulerAngles(0, patron.baseYaw + Math.sin(time * 0.47 + patron.phase) * 9, 0);
+    }
+    for (const signal of this.discoverySignals) {
+      const cycle = (time * (signal.kind === "smoke" || signal.kind === "trail" ? .16 : .28) + signal.phase) % 1;
+      if (signal.kind === "smoke" || signal.kind === "trail") {
+        const rise = cycle * 7.2;
+        const spread = .2 + cycle * .75;
+        signal.entity.setPosition(signal.x + Math.sin(time * .72 + signal.index) * spread,
+          SURFACE_HEIGHT + 1.1 + rise, signal.z + Math.cos(time * .57 + signal.index * 1.7) * spread);
+        const size = .22 + cycle * 1.05;
+        signal.entity.setLocalScale(size, size * .72, size);
+      } else if (signal.kind === "beacon") {
+        if (signal.index === 0) {
+          const pulse = .88 + Math.sin(time * 2.1 + signal.phase * 6) * .12;
+          signal.entity.setPosition(signal.x, SURFACE_HEIGHT + 4.6, signal.z);
+          signal.entity.setLocalScale(.2 * pulse, 7.2, .2 * pulse);
+        } else {
+          const angle = time * .75 + signal.index * 1.57;
+          signal.entity.setPosition(signal.x + Math.sin(angle) * 1.05, SURFACE_HEIGHT + 1.2 + cycle * 4.2,
+            signal.z + Math.cos(angle) * 1.05);
+          signal.entity.setLocalScale(.09, .22, .09);
+        }
+      } else if (signal.kind === "omens") {
+        const angle = time * (.38 + signal.index * .035) + signal.phase * Math.PI * 2;
+        const radius = 1.8 + signal.index * .48;
+        signal.entity.setPosition(signal.x + Math.sin(angle) * radius, SURFACE_HEIGHT + 4.1 + Math.sin(angle * 2) * .5,
+          signal.z + Math.cos(angle) * radius);
+        signal.entity.setLocalEulerAngles(0, angle * 180 / Math.PI + 90, Math.sin(angle * 3) * 14);
+        signal.entity.setLocalScale(.38, .055, .17);
+      } else {
+        const angle = time * 1.15 + signal.index * 1.7;
+        const radius = .55 + signal.index * .13;
+        const pulse = .055 + Math.max(0, Math.sin(time * 3.2 + signal.index)) * .075;
+        signal.entity.setPosition(signal.x + Math.sin(angle) * radius, SURFACE_HEIGHT + .85 + Math.sin(angle * 1.6) * .45,
+          signal.z + Math.cos(angle) * radius);
+        signal.entity.setLocalEulerAngles(time * 75, time * 115, 45);
+        signal.entity.setLocalScale(pulse, pulse * 2.8, pulse);
+      }
     }
   }
 
@@ -238,10 +305,12 @@ export class SceneDressing {
     this.keeperArm = null;
     this.blacksmithBuilt = false;
     this.patronHeads.length = 0;
+    this.discoverySignals.length = 0;
     const solid = new BoxBatch();
     const glow = new BoxBatch();
     const wardenVictory = new BoxBatch();
     const surface = SURFACE_HEIGHT + 1;
+    const loadedChunks = new Set(chunks.map(chunk => `${chunk.chunkX},${chunk.chunkZ}`));
     const tavernRead = (x: number, y: number, z: number) => read(x, y, z + TOWN_TAVERN_Z_OFFSET);
 
     for (const chunk of chunks) {
@@ -398,6 +467,36 @@ export class SceneDressing {
           solid.box(x + .5, 8.055, z + .5, .75, .11, .65, SLATE);
           glow.box(x + .5, 8.12, z + .5, .35, .035, .08, [.65, .27, .1]);
         }
+      }
+    }
+
+    // Distant motion invites exploration without revealing a map marker. Trail clues remain physical and low to the ground.
+    for (const site of ROADSIDE_DISCOVERIES) {
+      const chunkX = Math.floor(site.x / CHUNK_SIZE), chunkZ = Math.floor(site.z / CHUNK_SIZE);
+      if (!loadedChunks.has(`${chunkX},${chunkZ}`) || read(site.x, SURFACE_HEIGHT, site.z) === Block.Air) continue;
+      const encounter = roadsideEncounterAt(site.id);
+      const kind = discoverySignalKind(site.kind, encounter?.kind);
+      if (encounter?.kind === "trail") {
+        for (const [index, mark] of discoveryBreadcrumbs(site.x, site.z, encounter.stashDx, encounter.stashDz).entries()) {
+          solid.box(mark.x, surface + .025, mark.z, .42, .05, .13, index % 2 ? DARK_OAK : SOOT);
+          glow.box(mark.x, surface + .055, mark.z, .12, .025, .055, site.id.includes("cinder") ? EMBER : GOLD);
+          void mark.yaw;
+        }
+      }
+      const count = kind === "beacon" ? 5 : kind === "omens" ? 3 : 4;
+      for (let index = 0; index < count; index++) {
+        const material = kind === "smoke" || kind === "trail" ? this.smokeSignal
+          : kind === "beacon" ? this.goldSignal : kind === "omens" ? this.darkSignal : this.cacheSignal;
+        const type = kind === "omens" || kind === "beacon" && index === 0 ? "box" : "sphere";
+        const entity = this.discoverySignalEntity(`discovery-${site.id}-${index}`, type, material);
+        this.discoverySignals.push({ entity, kind, x: site.x + .5, z: site.z + .5, index, phase: ((site.x * 17 + site.z * 31 + index * 13) & 255) / 256 });
+      }
+      if (kind === "beacon" || kind === "smoke" || kind === "trail") {
+        const light = new pc.Entity(`discovery-${site.id}-light`);
+        light.addComponent("light", { type: "omni", color: kind === "beacon" ? new pc.Color(1, .72, .24) : new pc.Color(1, .36, .1),
+          intensity: kind === "beacon" ? .48 : .3, range: kind === "beacon" ? 7 : 4.5, castShadows: false });
+        light.setPosition(site.x + .5, surface + .8, site.z + .5);
+        this.root.addChild(light);
       }
     }
 
