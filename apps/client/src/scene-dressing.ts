@@ -25,7 +25,14 @@ const CANVAS: Color = [0.53, 0.15, 0.10];
 const CANVAS_LIGHT: Color = [0.74, 0.27, 0.14];
 
 type RoadsidePresentationPhase = "idle" | "repair" | "activated" | "ready" | "claimed" | "cleared";
-type RoadsidePresentationState = { phase: RoadsidePresentationPhase; progress: number; holders: number; changedAt: number };
+type RoadsidePresentationState = { phase: RoadsidePresentationPhase; progress: number; holders: number; changedAt: number; variant: string };
+type RoadsideVariantCue = {
+  root: pc.Entity;
+  entity: pc.Entity;
+  kind: "spark" | "bush" | "ash" | "beam" | "banner";
+  origin: readonly [number, number, number];
+  phase: number;
+};
 type RoadsidePresentationVisual = {
   kind: "winch" | "ambush" | "hunt";
   root: pc.Entity;
@@ -34,6 +41,15 @@ type RoadsidePresentationVisual = {
   progress: pc.Entity[];
   holders: pc.Entity[];
   lock: pc.Entity[];
+  rewardLight: pc.Entity;
+  variantRoots: Map<string, pc.Entity>;
+  variantCues: RoadsideVariantCue[];
+};
+
+const DEFAULT_ROADSIDE_VARIANT: Readonly<Record<string, string>> = {
+  "broken-winch-camp": "quarry-patrol",
+  "wilds-hunter-blind": "blood-trail",
+  "ashglass-survey": "breaker-squad",
 };
 
 const TAVERN_PATRONS = [
@@ -208,8 +224,33 @@ export class SceneDressing {
       }
     }
     for (const [id, visual] of this.roadsideVisuals) {
-      const state = this.roadsidePresentation.get(id) ?? { phase: "idle", progress: 0, holders: 0, changedAt: 0 };
+      const state = this.roadsidePresentation.get(id) ?? { phase: "idle", progress: 0, holders: 0, changedAt: 0,
+        variant: DEFAULT_ROADSIDE_VARIANT[id] ?? "" };
       const active = state.phase === "repair" || state.phase === "activated" || state.phase === "ready";
+      for (const [variant, variantRoot] of visual.variantRoots) variantRoot.enabled = variant === state.variant;
+      for (const cue of visual.variantCues) {
+        if (!cue.root.enabled) continue;
+        const [x, y, z] = cue.origin;
+        if (cue.kind === "spark") {
+          const angle = time * 4.8 + cue.phase;
+          const pulse = .7 + Math.max(0, Math.sin(angle * 1.7)) * .55;
+          cue.entity.setLocalPosition(x + Math.sin(angle) * .12, y + Math.cos(angle * 1.3) * .16, z + Math.cos(angle) * .1);
+          cue.entity.setLocalScale(.075 * pulse, .075 * pulse, .075 * pulse);
+        } else if (cue.kind === "bush") {
+          cue.entity.setLocalPosition(x, y + Math.max(0, Math.sin(time * 1.8 + cue.phase)) * .07, z);
+          cue.entity.setLocalEulerAngles(0, Math.sin(time * 1.25 + cue.phase) * 8, Math.sin(time * 1.7 + cue.phase) * 3);
+        } else if (cue.kind === "ash") {
+          const cycle = (time * .18 + cue.phase) % 1;
+          cue.entity.setLocalPosition(x + Math.sin(time * .45 + cue.phase * 9) * cycle * .8,
+            y + cycle * 3.6, z + Math.cos(time * .38 + cue.phase * 11) * cycle * .8);
+          const size = .11 + cycle * .3; cue.entity.setLocalScale(size, size * .65, size);
+        } else if (cue.kind === "beam") {
+          const pulse = .82 + Math.sin(time * 3.5 + cue.phase) * .18;
+          cue.entity.setLocalScale(.06 * pulse, .025, 5.8);
+        } else {
+          cue.entity.setLocalEulerAngles(0, Math.sin(time * .9 + cue.phase) * 5, Math.sin(time * 1.15 + cue.phase) * 4);
+        }
+      }
       if (visual.wheel) visual.wheel.setLocalEulerAngles(0, 0,
         state.phase === "repair" ? time * 210 : state.progress * 360);
       visual.progress.forEach((segment, index) => {
@@ -224,6 +265,8 @@ export class SceneDressing {
       const revealed = state.phase === "ready" || state.phase === "claimed" || state.phase === "cleared";
       const rise = Math.min(1, Math.max(0, (timeMilliseconds - state.changedAt) / 650));
       visual.chest.setLocalPosition(0, revealed ? -.42 + rise * .92 : -.42, 0);
+      visual.rewardLight.enabled = revealed;
+      if (visual.rewardLight.light) visual.rewardLight.light.intensity = .7 + Math.sin(time * 4.4) * .18;
     }
     for (let index = this.roadsideBursts.length - 1; index >= 0; index--) {
       const burst = this.roadsideBursts[index]!;
@@ -239,13 +282,15 @@ export class SceneDressing {
     }
   }
 
-  setRoadsideEncounterState(id: string, update: { phase?: string; progress?: number; holders?: number }, now = performance.now()): void {
+  setRoadsideEncounterState(id: string, update: { phase?: string; progress?: number; holders?: number; variant?: string }, now = performance.now()): void {
     if (id !== "broken-winch-camp" && id !== "ashglass-survey" && id !== "wilds-hunter-blind") return;
-    const previous = this.roadsidePresentation.get(id) ?? { phase: "idle" as const, progress: 0, holders: 0, changedAt: now };
+    const previous = this.roadsidePresentation.get(id) ?? { phase: "idle" as const, progress: 0, holders: 0, changedAt: now,
+      variant: DEFAULT_ROADSIDE_VARIANT[id] ?? "" };
     const phase = update.phase === "repair" || update.phase === "activated" || update.phase === "ready" || update.phase === "claimed" || update.phase === "cleared"
       ? update.phase : previous.phase;
     const next = { phase, progress: Math.min(1, Math.max(0, update.progress ?? previous.progress)),
-      holders: Math.max(0, Math.floor(update.holders ?? previous.holders)), changedAt: phase === previous.phase ? previous.changedAt : now };
+      holders: Math.max(0, Math.floor(update.holders ?? previous.holders)), changedAt: phase === previous.phase ? previous.changedAt : now,
+      variant: update.variant ?? previous.variant };
     this.roadsidePresentation.set(id, next);
     if (phase === "activated" && previous.phase !== "activated") this.createRoadsideBurst(id, now);
   }
@@ -262,6 +307,104 @@ export class SceneDressing {
       return particle;
     });
     this.roadsideBursts.push({ root, particles, startedAt: now });
+  }
+
+  private roadsideCue(parent: pc.Entity, name: string, type: "box" | "sphere", material: pc.Material,
+    scale: readonly [number, number, number], position: readonly [number, number, number], kind: RoadsideVariantCue["kind"],
+    phase: number, cues: RoadsideVariantCue[]): pc.Entity {
+    const entity = new pc.Entity(name);
+    entity.addComponent("render", { type, castShadows: false, receiveShadows: false });
+    if (entity.render) entity.render.material = material;
+    entity.setLocalScale(...scale); entity.setLocalPosition(...position); parent.addChild(entity);
+    cues.push({ root: parent, entity, kind, origin: position, phase });
+    return entity;
+  }
+
+  private createRoadsideVariantStaging(id: string, parent: pc.Entity): { roots: Map<string, pc.Entity>; cues: RoadsideVariantCue[] } {
+    const roots = new Map<string, pc.Entity>();
+    const cues: RoadsideVariantCue[] = [];
+    const group = (variant: string) => {
+      const root = new pc.Entity(`${id}-${variant}-staging`); parent.addChild(root); roots.set(variant, root); return root;
+    };
+    const footprint = (root: pc.Entity, name: string, x: number, z: number, scale = 1, color: Color = RUG) => {
+      const print = this.keeperBox(root, name, [.3 * scale, .025, .16 * scale], [x, .035, z], color);
+      print.setLocalEulerAngles(0, 18 + x * 14, 0);
+    };
+
+    if (id === "broken-winch-camp") {
+      const patrol = group("quarry-patrol");
+      this.keeperBox(patrol, "patrol-tool-handle", [.11, .11, 1.25], [-1.65, .11, .35], OAK).setLocalEulerAngles(0, 28, 0);
+      this.keeperBox(patrol, "patrol-tool-head", [.52, .14, .22], [-1.94, .18, -.12], IRON).setLocalEulerAngles(0, 28, 0);
+      this.keeperBox(patrol, "patrol-ore-crate", [.72, .52, .7], [1.65, .26, .65], DARK_OAK);
+
+      const sabotage = group("saboteur-rush");
+      for (const [index, angle] of [25, -32, 58].entries()) {
+        const rope = this.keeperBox(sabotage, `cut-rope-${index}`, [.055, .055, 1.65], [-1 + index, .12, -.2 + index * .28], COPPER);
+        rope.setLocalEulerAngles(0, angle, 12);
+      }
+      for (let index = 0; index < 7; index++) this.roadsideCue(sabotage, `sabotage-spark-${index}`, "sphere", this.goldSignal,
+        [.08, .08, .08], [-.38 + index % 3 * .36, .45 + index % 2 * .22, -.35 + Math.floor(index / 3) * .28], "spark", index * .8, cues);
+
+      const foreman = group("foreman-reclamation");
+      for (const side of [-1, 1]) {
+        this.keeperBox(foreman, `foreman-banner-post-${side}`, [.12, 2.15, .12], [side * 2.1, 1.08, -.85], OAK);
+        const banner = this.keeperBox(foreman, `foreman-banner-${side}`, [.78, 1.05, .08], [side * 2.1, 1.55, -.78], CANVAS);
+        cues.push({ root: foreman, entity: banner, kind: "banner", origin: [side * 2.1, 1.55, -.78], phase: side });
+      }
+      footprint(foreman, "foreman-print-a", -1.3, 1.45, 1.4, SOOT);
+      footprint(foreman, "foreman-print-b", -.45, 1.9, 1.4, SOOT);
+      footprint(foreman, "foreman-print-c", .45, 2.25, 1.4, SOOT);
+    } else if (id === "wilds-hunter-blind") {
+      const blood = group("blood-trail");
+      for (let index = 0; index < 7; index++) footprint(blood, `blood-track-${index}`, -2.2 + index * .65,
+        1.55 + Math.sin(index * 1.7) * .36, index % 3 === 0 ? 1.3 : .82, index % 2 ? RUG : [0.25, .025, .02]);
+
+      const pack = group("pack-ambush");
+      for (const [index, point] of [[-2.45, -.3], [-2.1, 1.35], [2.35, -.55], [2.05, 1.45]].entries()) {
+        const bush = this.keeperBox(pack, `ambush-bush-${index}`, [1.2, .82, 1.05], [point[0]!, .42, point[1]!], index % 2 ? [0.1, .29, .08] : [0.13, .36, .1]);
+        cues.push({ root: pack, entity: bush, kind: "bush", origin: [point[0]!, .42, point[1]!], phase: index * 1.4 });
+        this.roadsideCue(pack, `watching-eyes-${index}`, "sphere", this.goldSignal, [.055, .055, .055],
+          [point[0]! + .12, .55, point[1]! - .42], "spark", index * 1.2, cues);
+      }
+
+      const alpha = group("alpha-hunt");
+      for (let index = 0; index < 5; index++) footprint(alpha, `alpha-track-${index}`, -1.8 + index * .78,
+        1.15 + Math.sin(index) * .28, 1.65, SOOT);
+      for (const side of [-1, 1]) {
+        this.keeperBox(alpha, `alpha-bone-${side}`, [.12, .12, 1.15], [side * 1.65, .16, -.9], CREAM).setLocalEulerAngles(0, side * 38, 18);
+        this.keeperBox(alpha, `alpha-claw-${side}`, [.12, .07, .72], [side * 1.35, .07, 1.75], CREAM).setLocalEulerAngles(0, side * 24, 0);
+      }
+    } else {
+      const breaker = group("breaker-squad");
+      for (let index = 0; index < 6; index++) {
+        const angle = index / 6 * Math.PI * 2;
+        this.keeperBox(breaker, `breaker-scorch-${index}`, [.65, .025, .24], [Math.sin(angle) * 2.15, .025, Math.cos(angle) * 2.15], SOOT)
+          .setLocalEulerAngles(0, angle * 180 / Math.PI, 0);
+      }
+
+      const fireline = group("survey-fireline");
+      for (const [index, x] of [-1.65, 0, 1.65].entries()) {
+        this.keeperBox(fireline, `survey-crystal-${index}`, [.3, 1.15, .3], [x, .58, 2.55], IRON).setLocalEulerAngles(0, 45, 0);
+        const beam = this.roadsideCue(fireline, `survey-line-${index}`, "box", this.goldSignal, [.06, .025, 5.8],
+          [x, .08, -.3], "beam", index * 1.2, cues);
+        beam.setLocalEulerAngles(0, index === 0 ? -9 : index === 2 ? 9 : 0, 0);
+      }
+
+      const dust = group("duststorm-patrol");
+      for (let index = 0; index < 14; index++) {
+        const angle = index / 14 * Math.PI * 2;
+        this.roadsideCue(dust, `dust-mote-${index}`, "sphere", this.darkSignal, [.16, .1, .16],
+          [Math.sin(angle) * (1.2 + index % 3 * .55), .12 + index % 4 * .18, Math.cos(angle) * (1.2 + index % 3 * .55)],
+          "ash", index / 14, cues);
+      }
+      this.keeperBox(dust, "dust-patrol-standard", [.16, 2.3, .16], [2.25, 1.15, -1.25], OAK);
+      const banner = this.keeperBox(dust, "dust-patrol-banner", [1.05, .85, .09], [2.25, 1.72, -1.18], CANVAS_LIGHT);
+      cues.push({ root: dust, entity: banner, kind: "banner", origin: [2.25, 1.72, -1.18], phase: 2.2 });
+    }
+
+    const initial = DEFAULT_ROADSIDE_VARIANT[id];
+    for (const [variant, root] of roots) root.enabled = variant === initial;
+    return { roots, cues };
   }
 
   private createRoadsidePresentation(id: string, x: number, z: number): void {
@@ -303,7 +446,13 @@ export class SceneDressing {
       const pip = this.keeperBox(root, `holder-${index + 1}`, [.2, .2, .2], [-.45 + index * .3, .25, -1.05], GOLD);
       pip.setLocalEulerAngles(0, 45, 0); pip.enabled = false; return pip;
     });
-    this.roadsideVisuals.set(id, { kind, root, wheel, chest, progress, holders, lock });
+    const rewardLight = new pc.Entity(`${id}-reward-light`);
+    rewardLight.addComponent("light", { type: "omni", color: kind === "ambush" ? new pc.Color(1, .35, .08) : new pc.Color(1, .78, .32),
+      intensity: .8, range: 5.5, castShadows: false });
+    rewardLight.setLocalPosition(0, 1.15, 0); rewardLight.enabled = false; root.addChild(rewardLight);
+    const staging = this.createRoadsideVariantStaging(id, root);
+    this.roadsideVisuals.set(id, { kind, root, wheel, chest, progress, holders, lock, rewardLight,
+      variantRoots: staging.roots, variantCues: staging.cues });
   }
 
   activateRealmWardenVictory(now = performance.now()): void {

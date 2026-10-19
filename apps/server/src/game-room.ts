@@ -5768,10 +5768,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private broadcastRoadsidePresentation(id: string, phase: string): void {
     const site = roadsideEncounterAt(id);
     if (!site) return;
+    const encounterVariant = this.activeRoadsideVariant(id);
     for (const client of this.clients) {
       const player = this.state.players.get(client.sessionId);
       if (player && Math.hypot(player.x - site.x, player.z - site.z) <= 20)
-        client.send("roadside:progress", { id, phase, progress: 0, holders: 0 });
+        client.send("roadside:progress", { id, phase, progress: 0, holders: 0, variant: encounterVariant?.id });
     }
   }
 
@@ -5825,9 +5826,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const encounterVariant = this.activeRoadsideVariant(id);
     for (const client of this.clients) {
       const player = this.state.players.get(client.sessionId);
-      if (player && Math.hypot(player.x - site.x, player.z - site.z) <= 40)
-        client.send("roadside:cycle", { id, phase, message, readyAt: readyAt ?? 0,
-          variant: encounterVariant?.id, variantTitle: encounterVariant?.title });
+      if (!player) continue;
+      const nearby = Math.hypot(player.x - site.x, player.z - site.z) <= 40;
+      client.send("roadside:cycle", { id, phase, message: nearby ? message : "", readyAt: readyAt ?? 0,
+        variant: encounterVariant?.id, variantTitle: encounterVariant?.title });
     }
   }
 

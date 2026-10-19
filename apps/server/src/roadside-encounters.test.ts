@@ -213,6 +213,16 @@ describe("personal roadside encounters", () => {
     expect(allyClient.send).toHaveBeenCalledWith("roadside:result", expect.objectContaining({ phase: "cleared" }));
   });
 
+  it("syncs a rotated world state to everyone but announces it only nearby", () => {
+    const { room, internal, client, site } = fixture("ashglass-survey");
+    const distant = new PlayerState(); Object.assign(distant, { x: site.x + 100, y: 8, z: site.z + 100, health: 5 });
+    const distantClient = { sessionId: "distant", send: vi.fn() };
+    room.state.players.set("distant", distant); (room.clients as any[]).push(distantClient);
+    internal.broadcastRoadsideCycle(site.id, "available", "Survey Fireline is active again.");
+    expect(client.send).toHaveBeenCalledWith("roadside:cycle", expect.objectContaining({ message: "Survey Fireline is active again." }));
+    expect(distantClient.send).toHaveBeenCalledWith("roadside:cycle", expect.objectContaining({ message: "", variant: "breaker-squad" }));
+  });
+
   it("lets a shrine restore health or give supplies, but never both", () => {
     const rest = fixture("mistfen-shrine");
     rest.internal.handleRoadsideEncounter(rest.client, { id: rest.site.id, choice: "rest" });

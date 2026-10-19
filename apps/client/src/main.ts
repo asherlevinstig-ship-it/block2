@@ -13645,20 +13645,22 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     status.textContent = `${defeatedName} reward${rewards ? ` · ${rewards}` : " claimed"}.`;
     logMovementEvent(`REWARD ${message.mobId} hp=${message.healthRestored} stamina=${message.staminaRestored}`);
   });
-  room.onMessage("roadside:progress", (message: { id: string; phase: string; progress: number; holders: number }) => {
+  room.onMessage("roadside:progress", (message: { id: string; phase: string; progress: number; holders: number; variant?: string }) => {
     sceneDressing.setRoadsideEncounterState(message.id, message);
   });
-  room.onMessage("roadside:cycle", (message: { id: string; phase: "available" | "cleared"; message: string; readyAt: number }) => {
+  room.onMessage("roadside:cycle", (message: { id: string; phase: "available" | "cleared"; message: string; readyAt: number;
+    variant?: string; variantTitle?: string }) => {
     if (message.phase === "available") repeatableRoadsideActivity.add(message.id);
     else repeatableRoadsideActivity.delete(message.id);
     minimap.setRoadsideActivity([...repeatableRoadsideActivity]);
     sceneDressing.setRoadsideEncounterState(message.id,
-      { phase: message.phase === "available" ? "idle" : "cleared", progress: message.phase === "available" ? 0 : 1, holders: 0 });
+      { phase: message.phase === "available" ? "idle" : "cleared", progress: message.phase === "available" ? 0 : 1,
+        holders: 0, variant: message.variant });
     if (message.message) social.notice(message.message);
     targetStateKey = "";
   });
   room.onMessage("roadside:result", (message: { id: string; ok: boolean; message: string; claimed: boolean;
-    phase?: string; progress?: number; holders?: number }) => {
+    phase?: string; progress?: number; holders?: number; variant?: string; variantTitle?: string }) => {
     sceneDressing.setRoadsideEncounterState(message.id, message);
     if (message.phase === "cleared") {
       repeatableRoadsideActivity.delete(message.id);
