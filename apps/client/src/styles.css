@@ -178,6 +178,7 @@ button:disabled, button[aria-disabled="true"] { cursor: not-allowed; }
 #first-steps p { margin: 5px 0 0 !important; color: #d2d8c7; font: 600 10px/1.3 system-ui; }
 #starter-inventory-tutorial { position: fixed; z-index: 40; left: 50%; top: 43%; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 14px; width: min(430px, calc(100vw - 28px)); box-sizing: border-box; padding: 16px 18px; border: 2px solid #f0c35b; border-radius: 14px; background: linear-gradient(145deg, #2d2818f5, #0d1711f5); box-shadow: 0 20px 70px #000d, inset 0 0 24px #e6b6431c; color: #f6edd2; transform: translate(-50%, -50%); pointer-events: none; }
 #starter-inventory-tutorial[hidden] { display: none; }
+#starter-inventory-tutorial[data-phase="open_pack"] { box-shadow: 0 0 0 100vmax #020604aa, 0 20px 70px #000d, inset 0 0 24px #e6b6431c; }
 #starter-inventory-tutorial > small { grid-column: 1 / -1; color: #f2c969; font: 950 10px/1 system-ui; letter-spacing: .16em; }
 #starter-inventory-tutorial > kbd { display: grid; place-items: center; width: 62px; height: 62px; border: 2px solid #fff0bc; border-radius: 11px; background: linear-gradient(#705422, #302514); box-shadow: 0 5px 0 #171108, 0 0 22px #f5c2535c; color: #fff5d2; font: 1000 28px/1 system-ui; animation: starter-i-key 1.2s ease-in-out infinite; }
 #starter-inventory-tutorial strong { display: block; color: #fff1bb; font: 950 17px/1.15 system-ui; }

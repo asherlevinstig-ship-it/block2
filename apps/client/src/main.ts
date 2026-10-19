@@ -353,7 +353,8 @@ import { characterCreationNeeded, createGuestProfileToken, finishCharacterCreati
   profileBackups, restoreProfile, startNewAdventure } from "./player-profile.js";
 import { advanceOnboarding, ONBOARDING_DONE, ONBOARDING_STEPS, onboardingStorageKey, legacyOnboardingStorageKey,
   migrateLegacyOnboardingStep,
-  parseOnboardingStep, shouldPromptTownDeparture, starterInventoryLesson, type OnboardingEvent } from "./new-player-onboarding.js";
+  parseOnboardingStep, shouldPromptTownDeparture, starterEquipmentRequired, starterEquipmentStorageKey,
+  starterInventoryLesson, type OnboardingEvent } from "./new-player-onboarding.js";
 import { onboardingTrailRoute, sampleTrail } from "./onboarding-trail.js";
 import { CombatAudio, enemyCuePan, enemyCuesForTransition, type EnemyCue, type EnemyCueSnapshot } from "./combat-audio.js";
 import { SceneDressing } from "./scene-dressing.js";
@@ -666,6 +667,11 @@ let modeLessonAcknowledged = false;
 let lowLevelWasInsideTown = false;
 let lowLevelTownStateReady = false;
 let starterInventoryOpenedWithKeyboard = false;
+const starterEquipmentKey = starterEquipmentStorageKey(profileToken);
+let forcedStarterEquipment = (() => {
+  try { return window.localStorage.getItem(starterEquipmentKey) === "required"; }
+  catch { return false; }
+})();
 let tutorialCallingId: BuildPathId | null = null;
 const firstStepsKey = onboardingStorageKey(profileToken);
 let firstStepsIndex = (() => {
@@ -682,7 +688,7 @@ function renderFirstSteps(): void {
   const active = index !== null && index < ONBOARDING_DONE;
   const modeLesson = index === 4;
   firstSteps.hidden = !active;
-  const starterLesson = starterInventoryLesson(index, starterInventoryOpenedWithKeyboard);
+  const starterLesson = starterInventoryLesson(index, starterInventoryOpenedWithKeyboard, forcedStarterEquipment);
   firstStepsSkip.hidden = modeLesson || starterLesson !== "hidden";
   const showModeChoice = townDeparturePromptOpen || modeLesson && !modeLessonAcknowledged;
   modeSwitchTutorial.hidden = !showModeChoice;
@@ -722,6 +728,19 @@ function nudgeStarterInventoryTutorial(): void {
   void starterInventoryTutorial.offsetWidth;
   starterInventoryTutorial.classList.add("nudge");
   window.setTimeout(() => starterInventoryTutorial.classList.remove("nudge"), 420);
+}
+function requireStarterEquipment(): void {
+  if (localMainHandId === "forged_sword") return;
+  forcedStarterEquipment = true;
+  starterInventoryOpenedWithKeyboard = false;
+  try { window.localStorage.setItem(starterEquipmentKey, "required"); } catch { /* Storage may be unavailable. */ }
+  resetMovementControls();
+  renderFirstSteps();
+}
+function completeStarterEquipment(): void {
+  forcedStarterEquipment = false;
+  try { window.localStorage.setItem(starterEquipmentKey, "complete"); } catch { /* Storage may be unavailable. */ }
+  renderFirstSteps();
 }
 firstStepsSkip.addEventListener("click", () => setFirstSteps(ONBOARDING_DONE));
 modeSwitchTutorialAction.addEventListener("click", () => {
@@ -4127,8 +4146,9 @@ function updateMainHandLoadout(mainHandId: MainHandId): void {
   targetStateKey = "";
   refreshPowerCompatibility();
   refreshBackpackCapacity();
-  if (mainHandId === "forged_sword" && firstStepsIndex === 2) {
-    noteFirstStep("equipped_starter");
+  if (mainHandId === "forged_sword" && (firstStepsIndex === 2 || forcedStarterEquipment)) {
+    completeStarterEquipment();
+    if (firstStepsIndex === 2) noteFirstStep("equipped_starter");
     showCombatFeedback("FORGED SWORD EQUIPPED", "dodge");
     status.textContent = "Forged Sword equipped · your first loadout is ready.";
   }
@@ -7377,6 +7397,10 @@ function refreshEquipmentProgression(): void {
 
 function updateInventoryItem(itemId: ItemId, total: number): void {
   inventoryCounts.set(itemId, total);
+  if (itemId === "forged_sword" && starterEquipmentRequired(
+    (() => { try { return window.localStorage.getItem(starterEquipmentKey); } catch { return null; } })(),
+    localCharacterProgression.level, total, localMainHandId,
+  )) requireStarterEquipment();
   if (itemId === "miners_lantern") localPlayerRig.minersLantern.enabled = total > 0;
   refreshOwnedInventory();
   if (itemId === "iron_ore" || itemId === "silver_ore") {
@@ -8313,7 +8337,7 @@ tavernDialogueNext.addEventListener("click", advanceTavernDialogue);
 tavernDialogueClose.addEventListener("click", closeTavernDialogue);
 
 function setInventoryOpen(open: boolean): void {
-  const starterLesson = starterInventoryLesson(firstStepsIndex, starterInventoryOpenedWithKeyboard);
+  const starterLesson = starterInventoryLesson(firstStepsIndex, starterInventoryOpenedWithKeyboard, forcedStarterEquipment);
   if (open && starterLesson === "open_pack") {
     status.textContent = "Press I to open your inventory and equip the starter sword.";
     nudgeStarterInventoryTutorial();
@@ -11637,7 +11661,7 @@ combatHudRoot.addEventListener("click", event => {
 
 window.addEventListener("keydown", event => {
   if (event.repeat) return;
-  if (starterInventoryLesson(firstStepsIndex, starterInventoryOpenedWithKeyboard) === "open_pack") {
+  if (starterInventoryLesson(firstStepsIndex, starterInventoryOpenedWithKeyboard, forcedStarterEquipment) === "open_pack") {
     if (event.code === "KeyI") {
       starterInventoryOpenedWithKeyboard = true;
       renderFirstSteps();
@@ -14151,6 +14175,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   });
   room.onMessage("loot:picked-up", (message: LootPickedUp) => {
     if (message.playerId !== room?.sessionId || !isItemId(message.itemId)) return;
+    if (message.dropId.startsWith("starter-kit:")) requireStarterEquipment();
     noteFirstStep("picked_loot");
     const completedTrackedHunt = message.itemId === trackedCodexItemId;
     updateInventoryItem(message.itemId, message.total);

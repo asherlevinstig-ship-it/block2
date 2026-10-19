@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { advanceOnboarding, ONBOARDING_DONE, ONBOARDING_STEPS, onboardingStorageKey,
   legacyOnboardingStorageKey, migrateLegacyOnboardingStep, parseOnboardingStep, shouldPromptTownDeparture,
-  starterInventoryLesson } from "./new-player-onboarding.js";
+  starterEquipmentRequired, starterEquipmentStorageKey, starterInventoryLesson } from "./new-player-onboarding.js";
 
 describe("first-play onboarding", () => {
   it("advances only on the current real-world action", () => {
@@ -16,8 +16,20 @@ describe("first-play onboarding", () => {
     expect(starterInventoryLesson(2, false)).toBe("open_pack");
     expect(starterInventoryLesson(2, true)).toBe("equip_sword");
     expect(starterInventoryLesson(3, true)).toBe("hidden");
+    expect(starterInventoryLesson(ONBOARDING_DONE, false, true)).toBe("open_pack");
+    expect(starterInventoryLesson(ONBOARDING_DONE, true, true)).toBe("equip_sword");
     expect(advanceOnboarding(2, "picked_loot")).toBe(2);
     expect(advanceOnboarding(2, "equipped_starter")).toBe(3);
+  });
+
+  it("ties the forced equipment lesson to the starter sword, even when numbered onboarding drifted", () => {
+    expect(starterEquipmentRequired("required", 10, 0, "unarmed")).toBe(true);
+    expect(starterEquipmentRequired(null, 1, 1, "unarmed")).toBe(true);
+    expect(starterEquipmentRequired(null, 2, 1, "unarmed")).toBe(true);
+    expect(starterEquipmentRequired(null, 3, 1, "unarmed")).toBe(false);
+    expect(starterEquipmentRequired("complete", 1, 1, "unarmed")).toBe(false);
+    expect(starterEquipmentRequired("required", 1, 1, "forged_sword")).toBe(false);
+    expect(starterEquipmentStorageKey("guest_a")).not.toBe(starterEquipmentStorageKey("guest_b"));
   });
 
   it("requires a Combat switch after leaving town before the first fight counts", () => {

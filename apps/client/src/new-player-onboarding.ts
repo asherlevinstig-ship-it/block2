@@ -12,6 +12,7 @@ export const ONBOARDING_STEPS = [
 export const ONBOARDING_DONE = ONBOARDING_STEPS.length;
 export const onboardingStorageKey = (profileToken: string): string => `blockcraft.onboarding.v3:${profileToken}`;
 export const legacyOnboardingStorageKey = (profileToken: string): string => `blockcraft.onboarding.v2:${profileToken}`;
+export const starterEquipmentStorageKey = (profileToken: string): string => `blockcraft.starter-equipment.v1:${profileToken}`;
 
 export function migrateLegacyOnboardingStep(value: string | null): number | null {
   if (value === null) return null;
@@ -32,9 +33,14 @@ export function advanceOnboarding(step: number, event: OnboardingEvent): number 
 
 export type StarterInventoryLesson = "hidden" | "open_pack" | "equip_sword";
 
-export function starterInventoryLesson(step: number | null, packOpenedWithKeyboard: boolean): StarterInventoryLesson {
-  if (step !== 2) return "hidden";
+export function starterInventoryLesson(step: number | null, packOpenedWithKeyboard: boolean, equipmentRequired = false): StarterInventoryLesson {
+  if (step !== 2 && !equipmentRequired) return "hidden";
   return packOpenedWithKeyboard ? "equip_sword" : "open_pack";
+}
+
+export function starterEquipmentRequired(savedState: string | null, level: number, swordOwned: number, mainHandId: string): boolean {
+  if (savedState === "complete" || mainHandId === "forged_sword") return false;
+  return savedState === "required" || level <= 2 && swordOwned > 0;
 }
 
 export function shouldPromptTownDeparture(wasInsideTown: boolean, isBeyondTown: boolean, level: number): boolean {
