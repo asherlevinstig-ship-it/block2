@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { ashenChainRoute, ashenChainStage, greenwoodChainRoute, greenwoodChainStage, mistfenChainRoute, mistfenChainStage, northwatchChainRoute, northwatchChainStage, quarryChainRoute, quarryChainStage, regionalChainBreadcrumbs,
+import { ashenChainRoute, ashenChainStage, greenwoodChainRoute, greenwoodChainStage, mistfenChainRoute, mistfenChainStage, northwatchChainRoute, northwatchChainStage, quarryChainRoute, quarryChainStage, regionalChainBreadcrumbs, regionalFreeRoamPresentation,
   regionalChainTrailVisible, regionalPolylineBreadcrumbs, regionalPolylineTrailVisible } from "./regional-encounter-chain.js";
 
 describe("regional encounter chains", () => {
+  it("keeps authored chain state hidden behind Realm-style free exploration", () => {
+    expect(regionalFreeRoamPresentation("follow-to-leader")).toEqual({ showTrail: false, revealLeader: false, complete: false });
+    expect(regionalFreeRoamPresentation("complete")).toEqual({ showTrail: false, revealLeader: false, complete: true });
+  });
   it("advances Greenwood from discovery to camp to leader without a quest state", () => {
     expect(greenwoodChainStage("{}")).toBe("find-discovery");
     expect(greenwoodChainStage(JSON.stringify({ roadsideClaims: ["greenwood-forager-camp"] }))).toBe("follow-to-camp");

@@ -30,6 +30,8 @@ export type RealmEventDefinition = {
 
 export const REALM_EVENT_REQUIRED = 3;
 export const REALM_EVENT_TRACKING_RADIUS = 160;
+/** Regional calls are discovered in the field; only the realm boss is announced globally. */
+export const REGIONAL_EVENT_DISCOVERY_RADIUS = 42;
 export const REALM_BOSS_TRACKING_RADIUS = 64;
 export const REALM_EVENT_SCALING_RADIUS = 30;
 export const REALM_EVENT_MAX_PLAYERS = 6;

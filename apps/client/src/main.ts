@@ -45,7 +45,7 @@ import { inventoryRenderDue } from "./inventory-render-budget.js";
 import { nextInventoryTab, type InventoryTab } from "./inventory-tabs.js";
 import { inventoryItemVisible } from "./inventory-ownership.js";
 import { playerHud } from "./player-hud.js";
-import { ashenChainRoute, ashenChainStage, greenwoodChainRoute, greenwoodChainStage, mistfenChainRoute, mistfenChainStage, northwatchChainRoute, northwatchChainStage, quarryChainRoute, quarryChainStage, regionalChainBreadcrumbs,
+import { ashenChainRoute, ashenChainStage, greenwoodChainRoute, greenwoodChainStage, mistfenChainRoute, mistfenChainStage, northwatchChainRoute, northwatchChainStage, quarryChainRoute, quarryChainStage, regionalChainBreadcrumbs, regionalFreeRoamPresentation,
   regionalChainTrailVisible, regionalPolylineBreadcrumbs, regionalPolylineTrailVisible,
   type AshenChainStage, type GreenwoodChainStage, type MistfenChainStage, type NorthwatchChainStage, type QuarryChainStage } from "./regional-encounter-chain.js";
 import { combatHud, cooldownState } from "./combat-hud.js";
@@ -2083,9 +2083,9 @@ function updateGreenwoodEncounterChain(raw: string, now: number): void {
   if (raw !== greenwoodChainRaw) {
     greenwoodChainRaw = raw;
     greenwoodChainStageView = greenwoodChainStage(raw);
-    if (greenwoodChainStageView === "follow-to-leader" || greenwoodChainStageView === "complete")
-      minimap.revealMiniBoss("wild-crawler");
   }
+  const presentation = regionalFreeRoamPresentation(greenwoodChainStageView);
+  if (!presentation.showTrail) { greenwoodChainTrailRoot.enabled = false; return; }
   const route = greenwoodChainRoute(greenwoodChainStageView);
   const player = localPlayer.getPosition();
   greenwoodChainTrailRoot.enabled = regionalChainTrailVisible(player, route);
@@ -2120,9 +2120,9 @@ function updateMistfenEncounterChain(raw: string, now: number): void {
   if (raw !== mistfenChainRaw) {
     mistfenChainRaw = raw;
     mistfenChainStageView = mistfenChainStage(raw);
-    if (mistfenChainStageView === "follow-to-leader" || mistfenChainStageView === "complete")
-      minimap.revealMiniBoss("mistfen-behemoth");
   }
+  const presentation = regionalFreeRoamPresentation(mistfenChainStageView);
+  if (!presentation.showTrail) { mistfenChainTrailRoot.enabled = false; return; }
   const route = mistfenChainRoute(mistfenChainStageView);
   const player = localPlayer.getPosition();
   mistfenChainTrailRoot.enabled = regionalPolylineTrailVisible(player, route);
@@ -2157,10 +2157,10 @@ function updateQuarryEncounterChain(raw: string, now: number): void {
   if (raw !== quarryChainRaw) {
     quarryChainRaw = raw;
     quarryChainStageView = quarryChainStage(raw);
-    if (quarryChainStageView === "follow-to-leader" || quarryChainStageView === "complete")
-      minimap.revealMiniBoss("south-quarrymaster");
-    if (quarryChainStageView === "complete") minimap.revealQuarryRewards();
+    if (regionalFreeRoamPresentation(quarryChainStageView).complete) minimap.revealQuarryRewards();
   }
+  const presentation = regionalFreeRoamPresentation(quarryChainStageView);
+  if (!presentation.showTrail) { quarryChainTrailRoot.enabled = false; return; }
   const route = quarryChainRoute(quarryChainStageView);
   const player = localPlayer.getPosition();
   quarryChainTrailRoot.enabled = regionalPolylineTrailVisible(player, route, 14);
@@ -2208,14 +2208,18 @@ function updateNorthwatchEncounterChain(raw: string, now: number): void {
   if (raw !== northwatchChainRaw) {
     northwatchChainRaw = raw;
     northwatchChainStageView = northwatchChainStage(raw);
-    if (northwatchChainStageView === "follow-to-leader" || northwatchChainStageView === "complete")
-      minimap.revealMiniBoss("northwatch-watchbreaker");
-    if (northwatchChainStageView === "complete") minimap.revealNorthwatchRewards();
+    if (regionalFreeRoamPresentation(northwatchChainStageView).complete) minimap.revealNorthwatchRewards();
   }
   const patrolBroken = northwatchChainStageView === "clear-patrol"
     && ["northwatch-spitter", "northwatch-patrol-stalker-west", "northwatch-patrol-stalker-east"]
       .every(id => mobVisuals.get(id)?.frameAlive === false);
   const effectiveStage: NorthwatchChainStage = patrolBroken ? "follow-to-watchpost" : northwatchChainStageView;
+  const presentation = regionalFreeRoamPresentation(effectiveStage);
+  if (!presentation.showTrail) {
+    northwatchChainTrailRoot.enabled = false;
+    northwatchSignalRoot.enabled = effectiveStage === "follow-to-signals" || effectiveStage === "clear-patrol";
+    return;
+  }
   const route = northwatchChainRoute(effectiveStage);
   const player = localPlayer.getPosition();
   northwatchSignalRoot.enabled = effectiveStage === "follow-to-signals" || effectiveStage === "clear-patrol";
@@ -2257,12 +2261,12 @@ function updateAshenEncounterChain(raw: string, now: number): void {
   if (raw !== ashenChainRaw) {
     ashenChainRaw = raw;
     ashenChainStageView = ashenChainStage(raw);
-    if (ashenChainStageView === "clear-warpack" || ashenChainStageView === "complete")
-      minimap.revealMiniBoss("ashglass-sentry-east");
-    if (ashenChainStageView === "complete") minimap.revealAshenRewards();
+    if (regionalFreeRoamPresentation(ashenChainStageView).complete) minimap.revealAshenRewards();
   }
   const effectiveStage: AshenChainStage = ashenChainStageView === "clear-warpack"
     && ashenReliquaryState?.phase === "unlocked" ? "claim-reliquary" : ashenChainStageView;
+  const presentation = regionalFreeRoamPresentation(effectiveStage);
+  if (!presentation.showTrail) { ashenChainTrailRoot.enabled = false; return; }
   const route = ashenChainRoute(effectiveStage);
   const player = localPlayer.getPosition();
   ashenChainTrailRoot.enabled = regionalPolylineTrailVisible(player, route, 15);

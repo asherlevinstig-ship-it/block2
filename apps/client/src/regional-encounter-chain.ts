@@ -8,6 +8,15 @@ export type QuarryChainStage = "find-cart" | "follow-to-survey" | "follow-to-win
 export type NorthwatchChainStage = "find-cart" | "follow-to-signals" | "clear-patrol" | "follow-to-watchpost" | "follow-to-leader" | "complete";
 export type AshenChainStage = "find-pilgrims" | "follow-to-shrine" | "follow-to-survey" | "follow-to-camp" | "clear-warpack" | "claim-reliquary" | "complete";
 
+/**
+ * Regional progression is deliberately not presented as a quest route. The
+ * chain state still gates authored rewards, but leaders and discoveries enter
+ * the player's map through proximity instead of an always-on breadcrumb line.
+ */
+export function regionalFreeRoamPresentation(stage: string): { showTrail: false; revealLeader: false; complete: boolean } {
+  return { showTrail: false, revealLeader: false, complete: stage === "complete" };
+}
+
 export function greenwoodChainStage(raw: string | null | undefined): GreenwoodChainStage {
   const claims = parseRoadsideClaims(raw);
   if (!claims.has(GREENWOOD_ENCOUNTER_CHAIN.discoveryId)) return "find-discovery";

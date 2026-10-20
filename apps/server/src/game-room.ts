@@ -34,7 +34,7 @@ import { mobAssistants, MOB_ASSIST_COOLDOWN_MS } from "./mob-assist.js";
 import { circleCrawler, createCrawlerPositioning, retreatCrawler, type CrawlerPositioning } from "./crawler-positioning.js";
 import { FRONTIER_CHAMPION_ID, SILVER_CHAMPION_ID, championPattern, spitterChampionShots, combatMobDefinition, moveChampionCharge, championChargeHits } from "./frontier-champion.js";
 import { WILDERNESS_EVENT_ID } from "./wilderness-event.js";
-import { RealmEventDirector, REALM_BOSS_TRACKING_RADIUS, REALM_EVENT_TRACKING_RADIUS, REALM_EVENT_SCALING_RADIUS, isRealmEventId, realmEventDefinition, realmEventScale } from "./realm-event-director.js";
+import { RealmEventDirector, REALM_BOSS_TRACKING_RADIUS, REALM_EVENT_TRACKING_RADIUS, REALM_EVENT_SCALING_RADIUS, REGIONAL_EVENT_DISCOVERY_RADIUS, isRealmEventId, realmEventDefinition, realmEventScale } from "./realm-event-director.js";
 import { GREENWOOD_EVENT_TRACKING_RADIUS, greenwoodEventDefinition, greenwoodEventFollowers,
   greenwoodEventScale, isGreenwoodEventFollower, type GreenwoodEventKind } from "./greenwood-events.js";
 import { MISTFEN_EVENT_ID, MISTFEN_EVENT_TRACKING_RADIUS, mistfenEventDefinition, mistfenEventFollowers,
@@ -1307,8 +1307,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const update = this.realmEvents.status(now) satisfies RealmEventUpdate;
     const definition = realmEventDefinition(update.eventId);
     const player = this.state.players.get(client.sessionId);
-    const localEventRadius = definition?.key === "greenwood" ? GREENWOOD_EVENT_TRACKING_RADIUS
-      : definition?.key === "mistfen" ? MISTFEN_EVENT_TRACKING_RADIUS : null;
+    const localEventRadius = definition && !definition.realmBoss
+      ? Math.min(REGIONAL_EVENT_DISCOVERY_RADIUS, definition.key === "greenwood" ? GREENWOOD_EVENT_TRACKING_RADIUS
+        : definition.key === "mistfen" ? MISTFEN_EVENT_TRACKING_RADIUS : REGIONAL_EVENT_DISCOVERY_RADIUS)
+      : null;
     if (localEventRadius && player
       && (Math.abs(player.y - update.targetY) > 2.5
         || Math.hypot(player.x - update.targetX, player.z - update.targetZ) > localEventRadius)) {
