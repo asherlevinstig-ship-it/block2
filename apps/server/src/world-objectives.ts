@@ -33,8 +33,9 @@ const GROUPS: ObjectiveGroup[] = [
   { id: "southern-quarry", title: "Redstone Quarrymaster", detail: "Clear the pit escorts, use the broken pillars against volleys, then punish the Quarrymaster during recovery.", ids: [...SOUTHERN_QUARRY_IDS.slice(3)], mainId: "south-quarrymaster" },
   { id: "northwatch-approach", title: "Northwatch Ridge Patrol", detail: "Follow the north road past the abandoned cart and shrine. Split the crawler and spitter patrol before the watchpost.", ids: [...NORTHWATCH_IDS.slice(0, 2)] },
   { id: "northwatch-watchpost", title: "Northwatch Watchbreaker", detail: "Clear the ridge escorts to expose the Watchbreaker. Use the ruined post against its rocks, then counter after the slam.", ids: [...NORTHWATCH_IDS.slice(2)], mainId: "northwatch-watchbreaker" },
-  ...ROAMING_PACKS.map(pack => ({ id: pack.id, title: `${pack.id.includes("outskirts") ? "Outskirts" : "Wilds"} Roaming Pack`,
-    detail: "Hunt the roaming packleader for the area's richest loot, then clear its followers.",
+  ...ROAMING_PACKS.map(pack => ({ id: pack.id, title: pack.name,
+    detail: pack.eliteIndex === undefined ? "Break the roaming pack and collect its materials."
+      : "Break the roaming veteran first, then clear its followers for improved personal loot.",
     ids: pack.offsets.map((_, index) => roamingMemberId(pack, index)), mainId: roamingMemberId(pack, 0) })),
   ...[1, 2, 3].map(stage => ({ id: `forest-stage-${stage}`, title: stage === 3 ? "Ancient Root Guardian" : `Forest Dungeon · Room ${stage}`,
     detail: stage === 3 ? "Use roots against phase-one rock volleys. Below half health, sidestep committed charges and counter during recovery. Collect your equipment bag, then return."

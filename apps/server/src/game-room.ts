@@ -51,7 +51,7 @@ import { chooseAshenMastery, grantAshenMastery, parseAshenMastery } from "./ashe
 import { ASHEN_MASTERY_BRANCHES, ASHEN_MASTERY_MAX, AshenMasteryChooseSchema,
   type AshenMasteryBranchId, type AshenMasteryProgress } from "@blockcraft/protocol";
 import { ROADSIDE_GUARD_SITES, roadsideGuard, roadsideGuardsFor, roadsideVariantFor, roadsideVariantsFor } from "./roadside-guards.js";
-import { ROAMING_PACKS, roamingMemberId, roamingMembership, roamingPackAllows, roamingGoal,
+import { ROAMING_PACKS, roamingMemberArchetype, roamingMemberId, roamingMembership, roamingPackAllows, roamingGoal,
   createRoamingRouteState, advanceRoamingRoute, type RoamingRouteState } from "./roaming-packs.js";
 import { WILDERNESS_MATERIALIZE_MS, WILDERNESS_RESPAWN_RECHECK_MS,
   usesOverworldRespawnRhythm, wildernessRespawnDelay, wildernessSpawnClear } from "./wilderness-respawn.js";
@@ -694,7 +694,20 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (this.pendingWorldDeltaWrites.size) void this.flushWorldDeltaWrites();
     for (const spawn of WILDERNESS_ENCOUNTERS) this.registerMob(spawn.id, spawn.archetype, spawn);
     for (const pack of ROAMING_PACKS) for (let index = 0; index < pack.offsets.length; index++) {
-      this.registerMob(roamingMemberId(pack, index), pack.archetype, roamingGoal(pack, index, 0));
+      const id = roamingMemberId(pack, index);
+      const archetype = roamingMemberArchetype(pack, index);
+      this.registerMob(id, archetype, roamingGoal(pack, index, 0));
+      const mob = this.state.mobs.get(id)!;
+      if (pack.eliteIndex === index) {
+        const stats = wildernessEliteStats({ maxHealth: mob.maxHealth, damage: mob.attackDamage, armor: mob.armor,
+          speedMultiplier: mob.speedMultiplier, rewardMultiplier: mob.rewardMultiplier });
+        mob.isElite = true; mob.health = mob.maxHealth = stats.maxHealth; mob.attackDamage = stats.damage;
+        mob.armor = stats.armor; mob.speedMultiplier = stats.speedMultiplier; mob.rewardMultiplier = stats.rewardMultiplier;
+        mob.level = enemyLevelForTier(mob.difficultyTier, true);
+        mob.attackPattern = wildernessElitePattern(archetype, 0);
+        mob.name = `${pack.name} Veteran`;
+        this.mobBaseNames.set(id, mob.name);
+      }
     }
     this.registerMob("greenwood-briar", "briar_crawler", GREENWOOD_CRAWLER_HOMES[1]);
     this.registerMob("greenwood-briar-north", "briar_crawler", GREENWOOD_CRAWLER_HOMES[2]);

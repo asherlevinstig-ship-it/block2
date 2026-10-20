@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Block, playerCollides, wildernessTerritoryAt, type WorldBlockReader } from "@blockcraft/voxel-world";
-import { ROAMING_PACKS, roamingMemberId, roamingGoal, roamingPackAllows, createRoamingRouteState, advanceRoamingRoute } from "../src/roaming-packs.js";
+import { ROAMING_PACKS, roamingMemberArchetype, roamingMemberId, roamingGoal, roamingPackAllows, createRoamingRouteState, advanceRoamingRoute } from "../src/roaming-packs.js";
 import { WorldRoom } from "../src/game-room.js";
 import { PlayerState, WorldState } from "../src/schema.js";
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
@@ -10,15 +10,22 @@ function fixture(flat = false) {
   if (flat) Object.defineProperty(room, "readWorldBlock", { value: ((_x, y) => y <= 7 ? Block.Stone : Block.Air) satisfies WorldBlockReader });
   vi.spyOn(room, "broadcast").mockImplementation(() => {});
   const internal = room as any;
-  for (const pack of ROAMING_PACKS) for (let index = 0; index < pack.offsets.length; index++) internal.registerMob(roamingMemberId(pack, index), pack.archetype, roamingGoal(pack, index, 0));
+  for (const pack of ROAMING_PACKS) for (let index = 0; index < pack.offsets.length; index++) internal.registerMob(roamingMemberId(pack, index), roamingMemberArchetype(pack, index), roamingGoal(pack, index, 0));
   return { room, internal };
 }
 describe("bounded roaming enemy packs", () => {
-  it("adds six outskirts crawlers and four wilds spitters with correct bands and spacing", () => {
-    const { room } = fixture(); expect(room.state.mobs.size).toBe(10);
+  it("adds two fixed roaming packs to every major region with correct bands and spacing", () => {
+    const { room } = fixture(); expect(room.state.mobs.size).toBe(34);
+    expect(ROAMING_PACKS.filter(pack => pack.id.startsWith("greenwood-")).length).toBe(2);
+    expect(ROAMING_PACKS.filter(pack => pack.id.startsWith("mistfen-")).length).toBe(2);
+    expect(ROAMING_PACKS.filter(pack => pack.id.startsWith("stoneheart-")).length).toBe(2);
+    expect(ROAMING_PACKS.filter(pack => pack.id.startsWith("ashen-")).length).toBe(2);
+    expect(ROAMING_PACKS.filter(pack => /^(greenwood|mistfen|stoneheart|ashen)-/.test(pack.id))
+      .every(pack => pack.eliteIndex === 0)).toBe(true);
     for (const pack of ROAMING_PACKS) for (let index = 0; index < pack.offsets.length; index++) {
       const mob = room.state.mobs.get(roamingMemberId(pack, index))!;
       expect(mob.difficultyTier).toBe(pack.tier); expect(mob.name).toContain("Roaming");
+      expect(mob.archetype).toBe(roamingMemberArchetype(pack, index));
       expect(roamingPackAllows(pack, mob)).toBe(true);
       for (let route = 0; route < pack.route.length; route++) expect(roamingPackAllows(pack, roamingGoal(pack, index, route))).toBe(true);
     }
@@ -56,7 +63,8 @@ describe("bounded roaming enemy packs", () => {
         expect(Math.hypot(mob.x - before.get(id)!.x, mob.z - before.get(id)!.z)).toBeLessThanOrEqual(.111);
       }
     }
-    for (const [id, mob] of room.state.mobs) expect(Math.hypot(mob.x - starts.get(id)!.x, mob.z - starts.get(id)!.z)).toBeGreaterThan(1);
+    for (const [id, mob] of room.state.mobs)
+      expect(Math.hypot(mob.x - starts.get(id)!.x, mob.z - starts.get(id)!.z), id).toBeGreaterThan(1);
   });
   it("drops an out-of-band target and returns to its route instead of endless pursuit", () => {
     const { room, internal } = fixture(true); const pack = ROAMING_PACKS[0]!; const id = roamingMemberId(pack, 0);
