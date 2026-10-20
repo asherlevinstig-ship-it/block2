@@ -1324,6 +1324,7 @@ const performanceFields = {
   pacing: document.querySelector<HTMLElement>("#perf-pacing")!,
   resolution: document.querySelector<HTMLElement>("#perf-resolution")!,
   longTask: document.querySelector<HTMLElement>("#perf-long-task")!,
+  longFrame: document.querySelector<HTMLElement>("#perf-long-frame")!,
   cadence: document.querySelector<HTMLElement>("#perf-cadence")!,
   frameBuckets: document.querySelector<HTMLElement>("#perf-frame-buckets")!,
   subsystems: document.querySelector<HTMLElement>("#perf-subsystems")!,
@@ -3096,6 +3097,7 @@ interface MobVisual {
   bodyRoot: pc.Entity;
   lodBody: pc.Entity;
   nextPresentationAt: number;
+  nextLabelPresentationAt: number;
   bodyMaterial: pc.StandardMaterial;
   art: MobArtRig;
   statusRoot: pc.Entity;
@@ -3147,6 +3149,15 @@ interface MarkVisualState {
   stacks: number;
   maxStacks: number;
   kind?: "assassin";
+}
+
+function setElementHidden(element: HTMLElement, hidden: boolean): void {
+  if (element.hidden !== hidden) element.hidden = hidden;
+}
+
+function setWorldOverlayPosition(element: HTMLElement, x: number, y: number): void {
+  const transform = `translate3d(${Math.round(x)}px,${Math.round(y)}px,0) translate(-50%,-100%)`;
+  if (element.style.transform !== transform) element.style.transform = transform;
 }
 
 const remotePlayers = new Map<string, RemotePlayerVisual>();
@@ -7308,6 +7319,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     bodyRoot,
     lodBody,
     nextPresentationAt: 0,
+    nextLabelPresentationAt: 0,
     bodyMaterial,
     art,
     statusRoot,
@@ -10337,7 +10349,7 @@ let incomingBytesPerSecond = 0;
 let incomingPatchesPerSecond = 0;
 let incomingWindowStartedAt = performance.now();
 const instrumentedSockets = new WeakSet<WebSocket>();
-const PERFORMANCE_LOG_STORAGE_KEY = "blockcraft:performance-log:v5";
+const PERFORMANCE_LOG_STORAGE_KEY = "blockcraft:performance-log:v6";
 let lastPerformanceLogAt = 0;
 let lastCustomUpdateMs = 0;
 let lastEngineUpdateMs = 0;
@@ -10349,6 +10361,10 @@ let lastWorldUiMs = 0;
 let lastGpuMs: number | null = null;
 let lastPresentationWaitMs = 0;
 let recentLongTaskPeakMs = 0;
+let recentLoafDurationMs = 0;
+let recentLoafBlockingMs = 0;
+let recentLoafRenderDelayMs = 0;
+let recentLoafStyleLayoutMs = 0;
 let visibleMobCount = 0;
 let fullDetailMobCount = 0;
 let lodMobCount = 0;
@@ -10386,6 +10402,27 @@ try {
   });
   longTaskObserver.observe({ entryTypes: ["longtask"] });
 } catch { /* Long Task API is not available in every browser. */ }
+
+try {
+  type LongAnimationFrameEntry = PerformanceEntry & {
+    blockingDuration?: number;
+    renderStart?: number;
+    styleAndLayoutStart?: number;
+  };
+  const longFrameObserver = new PerformanceObserver(entries => {
+    for (const rawEntry of entries.getEntries()) {
+      const entry = rawEntry as LongAnimationFrameEntry;
+      const frameEnd = entry.startTime + entry.duration;
+      recentLoafDurationMs = Math.max(recentLoafDurationMs, entry.duration);
+      recentLoafBlockingMs = Math.max(recentLoafBlockingMs, entry.blockingDuration ?? 0);
+      if (entry.renderStart !== undefined)
+        recentLoafRenderDelayMs = Math.max(recentLoafRenderDelayMs, entry.renderStart - entry.startTime);
+      if (entry.styleAndLayoutStart !== undefined)
+        recentLoafStyleLayoutMs = Math.max(recentLoafStyleLayoutMs, frameEnd - entry.styleAndLayoutStart);
+    }
+  });
+  longFrameObserver.observe({ entryTypes: ["long-animation-frame"] });
+} catch { /* Long Animation Frame API is Chromium-only and may be disabled. */ }
 
 updatePerformanceLogStatus();
 
@@ -12586,6 +12623,10 @@ function updatePerformanceMetrics(now: number): void {
   const chunkBuildPeakMs = Math.max(lastChunkBuildMs, recentChunkBuildPeakMs);
   const observedPeaks = { ...performancePeaks };
   const observedLongTaskPeakMs = recentLongTaskPeakMs;
+  const observedLoafDurationMs = recentLoafDurationMs;
+  const observedLoafBlockingMs = recentLoafBlockingMs;
+  const observedLoafRenderDelayMs = recentLoafRenderDelayMs;
+  const observedLoafStyleLayoutMs = recentLoafStyleLayoutMs;
   const cadenceWindowMs = Math.max(1, now - cadenceWindowStartedAt);
   const observedCadence = { ...frameCadenceBuckets };
   const observedBrowserRafCount = browserRafCount;
@@ -12642,6 +12683,10 @@ function updatePerformanceMetrics(now: number): void {
       gpuMs: observedPeaks.gpuMs > 0 ? observedPeaks.gpuMs : null,
       presentationWaitMs: observedPeaks.presentationWaitMs,
       longTaskMs: observedLongTaskPeakMs,
+      loafDurationMs: observedLoafDurationMs,
+      loafBlockingMs: observedLoafBlockingMs,
+      loafRenderDelayMs: observedLoafRenderDelayMs,
+      loafStyleLayoutMs: observedLoafStyleLayoutMs,
       renderScale: GRAPHICS_QUALITY_PROFILES[appliedGraphicsQualityTier].renderScale,
       canvasWidth: canvas.width,
       canvasHeight: canvas.height,
@@ -12663,6 +12708,10 @@ function updatePerformanceMetrics(now: number): void {
     performanceLogSamples = appendPerformanceSample(performanceLogSamples, sample);
     for (const key of Object.keys(performancePeaks) as (keyof typeof performancePeaks)[]) performancePeaks[key] = 0;
     recentLongTaskPeakMs = 0;
+    recentLoafDurationMs = 0;
+    recentLoafBlockingMs = 0;
+    recentLoafRenderDelayMs = 0;
+    recentLoafStyleLayoutMs = 0;
     frameCadenceBuckets.under20 = 0;
     frameCadenceBuckets.under42 = 0;
     frameCadenceBuckets.under58 = 0;
@@ -12682,6 +12731,9 @@ function updatePerformanceMetrics(now: number): void {
   performanceFields.pacing.textContent = `${lastGpuMs === null ? "GPU unavailable" : `${lastGpuMs.toFixed(1)} ms GPU`} · ${lastPresentationWaitMs.toFixed(1)} ms wait`;
   performanceFields.resolution.textContent = `${canvas.width}×${canvas.height} · scale ${GRAPHICS_QUALITY_PROFILES[appliedGraphicsQualityTier].renderScale.toFixed(2)} · ${document.hidden ? "hidden" : document.hasFocus() ? "focused" : "unfocused"}`;
   performanceFields.longTask.textContent = observedLongTaskPeakMs > 0 ? `${observedLongTaskPeakMs.toFixed(1)} ms` : "None";
+  performanceFields.longFrame.textContent = observedLoafDurationMs > 0
+    ? `${observedLoafDurationMs.toFixed(1)} / ${observedLoafBlockingMs.toFixed(1)} / ${observedLoafRenderDelayMs.toFixed(1)} / ${observedLoafStyleLayoutMs.toFixed(1)} ms`
+    : "Unavailable / none";
   performanceFields.cadence.textContent = `${appCadenceFps.toFixed(1)} app · ${browserCadenceFps.toFixed(1)} browser · RAF ${browserRafP50Ms.toFixed(1)}/${browserRafP95Ms.toFixed(1)} ms`;
   performanceFields.frameBuckets.textContent = `${observedCadence.under20} / ${observedCadence.under42} / ${observedCadence.under58} / ${observedCadence.slower}`;
   performanceFields.subsystems.textContent = `${lastTerrainUpdateMs.toFixed(1)} / ${lastSceneDressingMs.toFixed(1)} / ${lastMobPresentationMs.toFixed(1)} / ${lastWorldUiMs.toFixed(1)} ms`;
@@ -12766,6 +12818,10 @@ function updatePerformanceMetrics(now: number): void {
     gpuMs: observedPeaks.gpuMs > 0 ? observedPeaks.gpuMs : null,
     presentationWaitMs: observedPeaks.presentationWaitMs,
     longTaskMs: observedLongTaskPeakMs,
+    loafDurationMs: observedLoafDurationMs,
+    loafBlockingMs: observedLoafBlockingMs,
+    loafRenderDelayMs: observedLoafRenderDelayMs,
+    loafStyleLayoutMs: observedLoafStyleLayoutMs,
     renderScale: GRAPHICS_QUALITY_PROFILES[appliedGraphicsQualityTier].renderScale,
     canvasWidth: canvas.width,
     canvasHeight: canvas.height,
@@ -13251,6 +13307,8 @@ app.on("update", (dt: number) => {
   const playerEye = localPlayer.getPosition();
   let canvasBounds: DOMRect | null = null;
   for (const [mobId, mob] of mobVisuals) {
+    const refreshLabels = animationNow >= mob.nextLabelPresentationAt;
+    if (refreshLabels) mob.nextLabelPresentationAt = animationNow + 100;
     if (mob.frameAlive !== mob.state.alive) {
       mob.defeatAt = mob.state.alive ? -Infinity : animationNow;
       mob.frameAlive = mob.state.alive;
@@ -13277,10 +13335,12 @@ app.on("update", (dt: number) => {
     const visible = presentationDetail !== "hidden"
       && (mob.state.alive || deathPose.visible || materializing || Boolean(respawnIndicator));
     mob.entity.enabled = visible;
-    mob.combatCue.hidden = true;
-    mob.levelTag.hidden = true;
-    mob.respawnTag.hidden = true;
-    if (!visible) continue;
+    if (!visible) {
+      setElementHidden(mob.combatCue, true);
+      setElementHidden(mob.levelTag, true);
+      setElementHidden(mob.respawnTag, true);
+      continue;
+    }
     visibleMobCount += 1;
     const useLod = presentationDetail === "lod" && mob.state.alive && !realmArrival;
     if (useLod) lodMobCount += 1;
@@ -13290,6 +13350,9 @@ app.on("update", (dt: number) => {
     mob.lodBody.enabled = useLod;
     mob.respawnCue.enabled = materializing || respawnIndicator?.phase === "warning";
     if (useLod) {
+      setElementHidden(mob.combatCue, true);
+      setElementHidden(mob.levelTag, true);
+      setElementHidden(mob.respawnTag, true);
       mob.warning.enabled = false;
       mob.recovery.enabled = false;
       mob.respawnCue.enabled = false;
@@ -13413,53 +13476,62 @@ app.on("update", (dt: number) => {
     const tacticCue = warpackLabel ? { kind: "formation", recovery: false, visible: true, label: warpackLabel, progress: 1 } : null;
     const cue = combatCue.visible ? combatCue : tacticCue ?? enemyAwarenessCue(mob.state, animationNow + serverClock.offset);
     const sampledMobDistance = Math.hypot(sampled.x - playerEye.x, sampled.y - playerEye.y, sampled.z - playerEye.z);
-    if (respawnIndicator && sampledMobDistance <= 24 && camera.camera
+    if (refreshLabels) setElementHidden(mob.respawnTag, true);
+    if (refreshLabels && respawnIndicator && sampledMobDistance <= 24 && camera.camera
       && enemyCueLineClear({ x: playerEye.x, y: playerEye.y + .8, z: playerEye.z },
         { x: mob.state.x, y: mob.state.y + .35, z: mob.state.z }, readCollisionWorldBlock)) {
       const screen = camera.camera.worldToScreen(new pc.Vec3(mob.state.x, mob.state.y + .48, mob.state.z));
       const rect = canvasBounds ??= canvas.getBoundingClientRect();
       const onScreen = screen.z > 0 && screen.x >= 0 && screen.x <= rect.width && screen.y >= 0 && screen.y <= rect.height;
-      mob.respawnTag.hidden = !onScreen;
+      setElementHidden(mob.respawnTag, !onScreen);
       if (onScreen) {
-        mob.respawnTag.dataset.phase = respawnIndicator.phase;
-        mob.respawnTag.textContent = respawnIndicator.phase === "warning"
+        if (mob.respawnTag.dataset.phase !== respawnIndicator.phase) mob.respawnTag.dataset.phase = respawnIndicator.phase;
+        const label = respawnIndicator.phase === "warning"
           ? `DANGER · RETURNING IN ${respawnIndicator.seconds}s`
           : `AREA CLEAR · RETURNS IN ${respawnIndicator.seconds}s`;
-        mob.respawnTag.style.left = `${rect.left + screen.x}px`;
-        mob.respawnTag.style.top = `${rect.top + screen.y}px`;
+        if (mob.respawnTag.textContent !== label) mob.respawnTag.textContent = label;
+        setWorldOverlayPosition(mob.respawnTag, rect.left + screen.x, rect.top + screen.y);
       }
     }
-    if (mob.state.alive && sampledMobDistance <= 28 && camera.camera) {
+    if (refreshLabels) setElementHidden(mob.levelTag, true);
+    if (refreshLabels && mob.state.alive && sampledMobDistance <= 28 && camera.camera) {
       const screen = camera.camera.worldToScreen(new pc.Vec3(sampled.x, sampled.y + mob.healthBarY + .27, sampled.z));
       const rect = canvasBounds ??= canvas.getBoundingClientRect();
       const onScreen = screen.z > 0 && screen.x >= 0 && screen.x <= rect.width && screen.y >= 0 && screen.y <= rect.height;
-      mob.levelTag.hidden = !onScreen;
+      setElementHidden(mob.levelTag, !onScreen);
       if (onScreen) {
         const threat = enemyThreat(localCharacterProgression.level, mob.state.level);
         const skulls = threat === "deadly" ? "☠☠ " : threat === "dangerous" ? "☠ " : "";
-        mob.levelTag.dataset.threat = threat;
-        mob.levelTag.dataset.miniboss = String(mob.state.isMiniBoss);
-        mob.levelTag.textContent = `${mob.state.isMiniBoss ? "★ MINI-BOSS · " : skulls}LV ${mob.state.level} · ${mob.state.name}`;
-        mob.levelTag.style.left = `${rect.left + screen.x}px`;
-        mob.levelTag.style.top = `${rect.top + screen.y}px`;
+        const miniboss = String(mob.state.isMiniBoss);
+        const label = `${mob.state.isMiniBoss ? "★ MINI-BOSS · " : skulls}LV ${mob.state.level} · ${mob.state.name}`;
+        if (mob.levelTag.dataset.threat !== threat) mob.levelTag.dataset.threat = threat;
+        if (mob.levelTag.dataset.miniboss !== miniboss) mob.levelTag.dataset.miniboss = miniboss;
+        if (mob.levelTag.textContent !== label) mob.levelTag.textContent = label;
+        setWorldOverlayPosition(mob.levelTag, rect.left + screen.x, rect.top + screen.y);
       }
     }
     const cueVisible = cue.visible && Math.hypot(sampled.x - playerEye.x, sampled.y - playerEye.y, sampled.z - playerEye.z) <= 14
       && enemyCueLineClear({ x: playerEye.x, y: playerEye.y + .8, z: playerEye.z },
         { x: sampled.x, y: sampled.y + .8, z: sampled.z }, readCollisionWorldBlock);
     mob.recovery.enabled = cueVisible && cue.recovery;
+    let combatCueOnScreen = false;
     if (cueVisible && camera.camera) {
       const screen = camera.camera.worldToScreen(new pc.Vec3(sampled.x, sampled.y + mob.healthBarY + .65, sampled.z));
       const rect = canvasBounds ??= canvas.getBoundingClientRect();
       // PlayCanvas projects into CSS pixels, not the high-DPI backing buffer.
-      mob.combatCue.hidden = screen.z <= 0 || screen.x < 0 || screen.x > rect.width || screen.y < 0 || screen.y > rect.height;
-      mob.combatCue.style.left = `${rect.left + screen.x}px`;
-      mob.combatCue.style.top = `${rect.top + screen.y}px`;
-      mob.combatCue.dataset.kind = cue.recovery ? "recovery" : cue.kind;
-      mob.combatCue.dataset.miniboss = String(mob.state.isMiniBoss);
-      mob.combatCueLabel.textContent = cue.label;
-      mob.combatCueFill.style.transform = `scaleX(${cue.progress})`;
+      combatCueOnScreen = screen.z > 0 && screen.x >= 0 && screen.x <= rect.width && screen.y >= 0 && screen.y <= rect.height;
+      if (combatCueOnScreen) {
+        const kind = cue.recovery ? "recovery" : cue.kind;
+        const miniboss = String(mob.state.isMiniBoss);
+        const fill = `scaleX(${cue.progress.toFixed(3)})`;
+        setWorldOverlayPosition(mob.combatCue, rect.left + screen.x, rect.top + screen.y);
+        if (mob.combatCue.dataset.kind !== kind) mob.combatCue.dataset.kind = kind;
+        if (mob.combatCue.dataset.miniboss !== miniboss) mob.combatCue.dataset.miniboss = miniboss;
+        if (mob.combatCueLabel.textContent !== cue.label) mob.combatCueLabel.textContent = cue.label;
+        if (mob.combatCueFill.style.transform !== fill) mob.combatCueFill.style.transform = fill;
+      }
     }
+    setElementHidden(mob.combatCue, !combatCueOnScreen);
     mob.warning.enabled = presentation.warning && cueVisible;
     if (mob.warning.enabled) {
       if (camera.camera) {

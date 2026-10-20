@@ -2766,7 +2766,14 @@ body:has(#progression-notice:not([hidden])) #resource-toasts { display: none; }
   box-shadow: 0 0 12px #ff3e2f4d;
   animation: cavern-respawn-warning .65s ease-in-out infinite alternate;
 }
-@keyframes cavern-respawn-warning { to { transform: translate(-50%, -100%) scale(1.06); } }
+@keyframes cavern-respawn-warning { to { opacity: .72; } }
+.enemy-combat-cue, .enemy-level-tag, .enemy-respawn-tag {
+  left: 0;
+  top: 0;
+  contain: layout paint style;
+  backface-visibility: hidden;
+  will-change: transform;
+}
 #recovery-marker { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); z-index: 15; max-width: min(90vw, 540px); padding: 10px 16px; border: 1px solid #d9b65d; border-radius: 10px; background: #182218ee; color: #ffe6a1; font: 700 12px system-ui; box-shadow: 0 3px 12px #0006; }
 #recovery-marker:disabled { opacity: .9; cursor: default; }
 #recovery-marker[hidden] { display: none; }

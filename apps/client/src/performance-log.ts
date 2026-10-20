@@ -41,6 +41,10 @@ export type PerformanceLogSample = {
   gpuMs: number | null;
   presentationWaitMs: number;
   longTaskMs: number;
+  loafDurationMs: number;
+  loafBlockingMs: number;
+  loafRenderDelayMs: number;
+  loafStyleLayoutMs: number;
   renderScale: number;
   canvasWidth: number;
   canvasHeight: number;
@@ -66,6 +70,8 @@ export function automaticPerformanceAnomalies(sample: PerformanceLogSample): str
     sample.presentationWaitMs > 40 && sample.appFrameCount > 0
       && (sample.frame42To58Ms + sample.frameOver58Ms) / sample.appFrameCount > .1 ? "PRESENTATION_WAIT" : "",
     sample.longTaskMs > 50 ? "MAIN_THREAD_LONG_TASK" : "",
+    sample.loafDurationMs > 50 ? "LONG_ANIMATION_FRAME" : "",
+    sample.loafStyleLayoutMs > 12 ? "STYLE_LAYOUT_COST" : "",
     sample.engineUpdateMs > 20 || sample.customUpdateMs > 20 ? "UPDATE_COST" : "",
     sample.terrainUpdateMs > 16.7 ? "TERRAIN_COST" : "",
     sample.sceneDressingMs > 10 ? "SCENE_DRESSING_COST" : "",
@@ -105,7 +111,7 @@ export function formatPerformanceLog(
   context: { path: string; room: string; userAgent: string },
 ): string {
   const header = [
-    "BLOCKCRAFT PERFORMANCE LOG v5",
+    "BLOCKCRAFT PERFORMANCE LOG v6",
     `captured=${new Date().toISOString()}`,
     `path=${context.path}`,
     `room=${context.room}`,
