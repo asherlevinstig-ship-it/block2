@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { abilityRevealUse, canPresentAbilityReveal, earnedCallingAbilities } from "./ability-reveal.js";
+import { abilityRevealUse, canPresentAbilityReveal, earnedCallingAbilities, firstCallingUseInstruction, shouldGuideFirstCallingUse } from "./ability-reveal.js";
 
 describe("town ability reveals", () => {
   it("does not reveal a Calling before its Power unlocks", () => {
@@ -27,5 +27,13 @@ describe("town ability reveals", () => {
     expect(canPresentAbilityReveal({ ...ready, defeated: true })).toBe(false);
     expect(canPresentAbilityReveal({ ...ready, worldReady: false })).toBe(false);
     expect(canPresentAbilityReveal(ready)).toBe(true);
+  });
+
+  it("guides the first use of the equipped core Power but never repeats it", () => {
+    expect(shouldGuideFirstCallingUse("assassin_vanish", "assassin_vanish", false)).toBe(true);
+    expect(shouldGuideFirstCallingUse("assassin_vanish", "assassin_vanish", true)).toBe(false);
+    expect(shouldGuideFirstCallingUse("assassin_death_mark", "assassin_death_mark", false)).toBe(false);
+    expect(firstCallingUseInstruction(7.6)).toContain("8m");
+    expect(firstCallingUseInstruction(3.9)).toContain("Press G");
   });
 });

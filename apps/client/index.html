@@ -59,7 +59,7 @@
     <section id="ability-reveal" hidden role="dialog" aria-modal="true" aria-labelledby="ability-reveal-title" aria-describedby="ability-reveal-description">
       <div class="ability-reveal-card">
         <small id="ability-reveal-path">CALLING ABILITY UNLOCKED</small>
-        <div class="ability-reveal-sigil" aria-hidden="true"><span>✦</span></div>
+        <div id="ability-reveal-preview" class="ability-reveal-preview" aria-hidden="true"></div>
         <h2 id="ability-reveal-title"></h2>
         <p id="ability-reveal-description"></p>
         <p id="ability-reveal-use"></p>
@@ -67,6 +67,12 @@
         <small class="ability-reveal-place">DISCOVERED IN THE TOWN OF BEGINNINGS</small>
       </div>
     </section>
+    <aside id="calling-first-use" hidden role="status" aria-live="polite">
+      <small>FIRST POWER PRACTICE</small>
+      <strong id="calling-first-use-title">Try your new ability</strong>
+      <p id="calling-first-use-detail">Approach the Calling Effigy in the plaza.</p>
+      <div><kbd>G</kbd><span id="calling-first-use-action">USE YOUR POWER</span></div>
+    </aside>
     <section id="ashen-equipment-reveal" hidden role="dialog" aria-modal="true" aria-labelledby="ashen-equipment-reveal-title" aria-describedby="ashen-equipment-reveal-description">
       <div class="ability-reveal-card ashen-equipment-reveal-card">
         <small>ASHEN EQUIPMENT FORGED</small>

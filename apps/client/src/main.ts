@@ -12,7 +12,7 @@ import { confirmedRangedHit, projectileImpactCue } from "./ranged-feedback.js";
 import { heldFireStep } from "./held-fire.js";
 import { callingLevelGuide, statChoiceDisabled } from "./progression-guidance.js";
 import { progressionNotice as chooseProgressionNotice, type ProgressionNotice } from "./progression-notice.js";
-import { abilityRevealUse, canPresentAbilityReveal, earnedCallingAbilities } from "./ability-reveal.js";
+import { abilityRevealUse, canPresentAbilityReveal, earnedCallingAbilities, firstCallingUseInstruction, shouldGuideFirstCallingUse } from "./ability-reveal.js";
 import { queueWorldNotice, type WorldNotice } from "./notification-lane.js";
 import { rangedAimYaw } from "./ranged-aim.js";
 import { COORDINATED_BRUTE_FOLLOWERS, COORDINATED_SPITTER_FOLLOWERS, activeCombatNearby, advanceBossHud, initialBossHud, leaderArmourSegments, leaderChargeGuidance, leaderExposureLabel, leaderExposureRoleLabel, leaderFormationLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
@@ -1000,10 +1000,15 @@ const progressionNoticeAction = document.querySelector<HTMLButtonElement>("#prog
 const progressionNoticeLater = document.querySelector<HTMLButtonElement>("#progression-notice-later")!;
 const abilityRevealPanel = document.querySelector<HTMLElement>("#ability-reveal")!;
 const abilityRevealPath = document.querySelector<HTMLElement>("#ability-reveal-path")!;
+const abilityRevealPreview = document.querySelector<HTMLElement>("#ability-reveal-preview")!;
 const abilityRevealTitle = document.querySelector<HTMLElement>("#ability-reveal-title")!;
 const abilityRevealDescription = document.querySelector<HTMLElement>("#ability-reveal-description")!;
 const abilityRevealUseHint = document.querySelector<HTMLElement>("#ability-reveal-use")!;
 const abilityRevealContinue = document.querySelector<HTMLButtonElement>("#ability-reveal-continue")!;
+const callingFirstUse = document.querySelector<HTMLElement>("#calling-first-use")!;
+const callingFirstUseTitle = document.querySelector<HTMLElement>("#calling-first-use-title")!;
+const callingFirstUseDetail = document.querySelector<HTMLElement>("#calling-first-use-detail")!;
+const callingFirstUseAction = document.querySelector<HTMLElement>("#calling-first-use-action")!;
 const ashenEquipmentRevealPanel = document.querySelector<HTMLElement>("#ashen-equipment-reveal")!;
 const ashenEquipmentRevealIcon = document.querySelector<HTMLElement>("#ashen-equipment-reveal-icon")!;
 const ashenEquipmentRevealTitle = document.querySelector<HTMLElement>("#ashen-equipment-reveal-title")!;
@@ -1011,6 +1016,7 @@ const ashenEquipmentRevealDescription = document.querySelector<HTMLElement>("#as
 const ashenEquipmentRevealContinue = document.querySelector<HTMLButtonElement>("#ashen-equipment-reveal-continue")!;
 let pendingAshenEquipmentReveal: AshenEquipmentForged | null = null;
 let activeAbilityRevealId: CallingAbilityId | null = null;
+let guidedAbilityPracticeId: CallingAbilityId | null = null;
 const seenAbilityReveals = new Set<CallingAbilityId>();
 let currentProgressionNotice: ProgressionNotice | null = null;
 let dismissedStatLevel = -1;
@@ -1833,6 +1839,27 @@ const lanternGlow = new pc.StandardMaterial();
 lanternGlow.diffuse = new pc.Color(1, 0.7, 0.24);
 lanternGlow.emissive = new pc.Color(1, 0.5, 0.12);
 lanternGlow.update();
+const CALLING_EFFIGY_POSITION = new pc.Vec3(12.5, SURFACE_HEIGHT + 1, 12.5);
+const callingEffigy = new pc.Entity("calling-practice-effigy");
+const callingEffigyStone = coloredMaterial(new pc.Color(.16, .22, .24));
+const callingEffigyTrim = new pc.StandardMaterial();
+callingEffigyTrim.diffuse = new pc.Color(.22, .92, .72);
+callingEffigyTrim.emissive = new pc.Color(.05, .65, .42);
+callingEffigyTrim.update();
+addBox(callingEffigy, "effigy-plinth", callingEffigyStone, [1.2, .28, 1.2], [0, .14, 0]);
+addBox(callingEffigy, "effigy-body", callingEffigyStone, [.65, 1.08, .42], [0, 1.03, 0]);
+addBox(callingEffigy, "effigy-head", callingEffigyTrim, [.48, .48, .48], [0, 1.82, 0]);
+addBox(callingEffigy, "effigy-left-arm", callingEffigyTrim, [.2, .86, .2], [-.49, 1.1, 0]);
+addBox(callingEffigy, "effigy-right-arm", callingEffigyTrim, [.2, .86, .2], [.49, 1.1, 0]);
+const callingEffigyRune = addBox(callingEffigy, "effigy-rune", callingEffigyTrim, [.78, .035, .78], [0, .32, 0]);
+callingEffigyRune.setLocalEulerAngles(0, 45, 0);
+const callingEffigyLight = new pc.Entity("effigy-light");
+callingEffigyLight.addComponent("light", { type: "omni", color: new pc.Color(.2, 1, .72), intensity: 1.2, range: 5, castShadows: false });
+callingEffigyLight.setLocalPosition(0, 1.25, 0);
+callingEffigy.addChild(callingEffigyLight);
+callingEffigy.setPosition(CALLING_EFFIGY_POSITION);
+callingEffigy.enabled = false;
+app.root.addChild(callingEffigy);
 // Entrance supports flank the stairs, never obstructing the three-block-wide route.
 const mineGate = new pc.Entity("east-ore-mine-gateway");
 const mineTimber = coloredMaterial(new pc.Color(.29, .19, .10));
@@ -4334,6 +4361,10 @@ function abilityRevealStorageKey(abilityId: CallingAbilityId): string {
   return `calling-ability-reveal-v1:${profileToken}:${abilityId}`;
 }
 
+function abilityPracticeStorageKey(abilityId: CallingAbilityId): string {
+  return `calling-ability-practice-v1:${profileToken}:${abilityId}`;
+}
+
 function unseenCallingAbilityIds(): CallingAbilityId[] {
   const update = lastBuildPathUpdate;
   if (!update?.selectedPathId) return [];
@@ -4359,10 +4390,17 @@ function updateAbilityReveal(): void {
   if (!id) return;
   const definition = CALLING_ABILITY_OPTIONS.find(option => option.id === id)!;
   activeAbilityRevealId = id;
+  const awakening = callingAwakening(definition.pathId);
+  abilityRevealPanel.dataset.calling = definition.pathId;
+  abilityRevealPanel.style.setProperty("--calling-colour", awakening.colour);
+  abilityRevealPanel.style.setProperty("--calling-accent", awakening.accent);
   abilityRevealPath.textContent = `${BUILD_PATHS[definition.pathId].name.toUpperCase()} · ABILITY UNLOCKED`;
+  abilityRevealPreview.innerHTML = callingPreviewMarkup(definition.pathId, `${definition.name} preview`);
   abilityRevealTitle.textContent = definition.name;
   abilityRevealDescription.textContent = definition.description;
   abilityRevealUseHint.textContent = abilityRevealUse(id, localBuildPathRank, localCharacterProgression.level);
+  abilityRevealContinue.textContent = shouldGuideFirstCallingUse(id, localCallingAbilityId, callingPowerUsed(id))
+    ? "PRACTICE ON THE EFFIGY" : "CONTINUE";
   abilityRevealPanel.hidden = false;
   combatAudio.play("levelUp");
   resetMovementControls();
@@ -4376,7 +4414,7 @@ abilityRevealContinue.addEventListener("click", () => {
   seenAbilityReveals.add(id);
   try { window.localStorage.setItem(abilityRevealStorageKey(id), "1"); }
   catch { /* Keep the one-session acknowledgement if storage is unavailable. */ }
-  if (id === localCallingAbilityId) dismissedUseAbilityId = id;
+  if (shouldGuideFirstCallingUse(id, localCallingAbilityId, callingPowerUsed(id))) startGuidedAbilityPractice(id);
   activeAbilityRevealId = null;
   abilityRevealPanel.hidden = true;
   refreshCallingUnlockNotice();
@@ -4407,7 +4445,62 @@ function callingPowerUsed(abilityId: CallingAbilityId): boolean {
   catch { return false; }
 }
 
+function startGuidedAbilityPractice(abilityId: CallingAbilityId): void {
+  guidedAbilityPracticeId = abilityId;
+  dismissedUseAbilityId = null;
+  try { window.localStorage.setItem(abilityPracticeStorageKey(abilityId), "1"); }
+  catch { /* The current session still keeps the practice active. */ }
+  updateGuidedAbilityPractice(performance.now());
+}
+
+function completeGuidedAbilityPractice(abilityId: CallingAbilityId): void {
+  if (guidedAbilityPracticeId !== abilityId) return;
+  if (localPlayer.getPosition().distance(CALLING_EFFIGY_POSITION) > 4) {
+    status.textContent = "Use your new Power beside the glowing Calling Effigy in Town to finish practice.";
+    return;
+  }
+  guidedAbilityPracticeId = null;
+  try { window.localStorage.removeItem(abilityPracticeStorageKey(abilityId)); }
+  catch { /* Completion is still retained by the existing used-Power key. */ }
+  callingEffigy.enabled = false;
+  callingFirstUse.hidden = true;
+  callingSlot.dataset.firstUse = "false";
+  showCombatFeedback("POWER MASTERED · EXPLORATION READY", "dodge");
+  social.event(`${CALLING_ABILITY_OPTIONS.find(option => option.id === abilityId)?.name ?? "Calling Power"} practiced at the Town effigy.`);
+}
+
+function resumeGuidedAbilityPractice(): void {
+  if (guidedAbilityPracticeId || !localCallingAbilityId) return;
+  try {
+    if (window.localStorage.getItem(abilityPracticeStorageKey(localCallingAbilityId)) === "1")
+      guidedAbilityPracticeId = localCallingAbilityId;
+  } catch { /* Nothing to resume when storage is unavailable. */ }
+}
+
+function updateGuidedAbilityPractice(now: number): void {
+  resumeGuidedAbilityPractice();
+  const abilityId = guidedAbilityPracticeId;
+  const active = Boolean(abilityId && worldReady && activeRoomName === WORLD_ROOM && defeatScreen.hidden);
+  callingEffigy.enabled = active;
+  callingFirstUse.hidden = !active;
+  callingSlot.dataset.firstUse = String(active);
+  if (!active || !abilityId) return;
+  const definition = CALLING_ABILITY_OPTIONS.find(option => option.id === abilityId)!;
+  const distance = localPlayer.getPosition().distance(CALLING_EFFIGY_POSITION);
+  callingFirstUseTitle.textContent = `${definition.name} · training effigy`;
+  callingFirstUseDetail.textContent = firstCallingUseInstruction(distance);
+  callingFirstUseAction.textContent = distance <= 4 ? `USE ${definition.name.toUpperCase()}` : "APPROACH THE EFFIGY";
+  const pulse = 1 + Math.sin(now * .005) * .045;
+  callingEffigy.setLocalScale(pulse, pulse, pulse);
+  callingEffigy.rotateLocal(0, .18, 0);
+}
+
 function refreshProgressionNotice(): void {
+  if (guidedAbilityPracticeId) {
+    currentProgressionNotice = null;
+    updateProgressionNoticeVisibility(performance.now());
+    return;
+  }
   const selectedAbility = CALLING_ABILITY_OPTIONS.find(option => option.id === localCallingAbilityId);
   const next = chooseProgressionNotice({
     level: localCharacterProgression.level,
@@ -12432,6 +12525,7 @@ app.on("update", (dt: number) => {
   updateLootWorldLabel();
   updateLevelCelebration(animationNow);
   updateAbilityReveal();
+  updateGuidedAbilityPractice(animationNow);
   updateAshenEquipmentReveal();
   updateProgressionNoticeVisibility(animationNow);
   for (const [mobId, mob] of mobVisuals) {
@@ -13479,6 +13573,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
         localCallingAugmentProgress, localMasteredCallingAugments);
       try { window.localStorage.setItem(`calling-power-used-v1:${profileToken}:${update.abilityId}`, "1"); }
       catch { /* Private storage may be unavailable. */ }
+      completeGuidedAbilityPractice(update.abilityId);
       refreshProgressionNotice();
     }
     status.textContent = `${update.ability} · ${update.detail.toLowerCase()}.`;

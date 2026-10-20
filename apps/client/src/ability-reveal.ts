@@ -18,6 +18,21 @@ export function abilityRevealUse(abilityId: CallingAbilityId, rank: number, leve
   return "Open your Kit to equip it to G, then press G to use it.";
 }
 
+export function shouldGuideFirstCallingUse(
+  abilityId: CallingAbilityId,
+  equippedAbilityId: CallingAbilityId | null,
+  alreadyUsed: boolean,
+): boolean {
+  const ability = CALLING_ABILITY_OPTIONS.find(option => option.id === abilityId);
+  return ability?.category === "Core" && abilityId === equippedAbilityId && !alreadyUsed;
+}
+
+export function firstCallingUseInstruction(distance: number): string {
+  return distance <= 4
+    ? "The effigy is in range. Press G to use your Power."
+    : `Calling Effigy · ${Math.max(1, Math.round(distance))}m · move closer`;
+}
+
 export function canPresentAbilityReveal(state: {
   worldReady: boolean;
   inTown: boolean;
