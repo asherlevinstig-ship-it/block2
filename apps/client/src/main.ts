@@ -62,7 +62,7 @@ import { lootVisibleToPlayer } from "./loot-ownership.js";
 import { lootHoldProgress, type LootHold } from "./loot-hold.js";
 import { incomingLootAdvice, swapCandidateReason, swapCandidateScore } from "./loot-recommendation.js";
 import { undergroundThreatVisible } from "./underground-threat-visibility.js";
-import { mobPresentationVisible } from "./mob-presentation-budget.js";
+import { mobPresentationDetail, mobPresentationIntervalMs } from "./mob-presentation-budget.js";
 import { nearestQueuedChunkKey } from "./chunk-rebuild-queue.js";
 import { advanceAutoQuality, GRAPHICS_QUALITY_PROFILES, initialAutoQualityTier, parseGraphicsQualityMode,
   type AutoQualityState, type GraphicsQualityMode, type GraphicsQualityTier } from "./graphics-quality.js";
@@ -1323,6 +1323,7 @@ const performanceFields = {
   engine: document.querySelector<HTMLElement>("#perf-engine")!,
   subsystems: document.querySelector<HTMLElement>("#perf-subsystems")!,
   render: document.querySelector<HTMLElement>("#perf-render")!,
+  clientMobs: document.querySelector<HTMLElement>("#perf-client-mobs")!,
   anomaly: document.querySelector<HTMLElement>("#perf-anomaly")!,
   rtt: document.querySelector<HTMLElement>("#perf-rtt")!,
   inputAck: document.querySelector<HTMLElement>("#perf-input-ack")!,
@@ -1420,7 +1421,7 @@ let indoorCameraBlend = 0;
 const light = new pc.Entity("sun");
 light.addComponent("light", {
   type: "directional", color: new pc.Color(1, 0.93, 0.82), intensity: 1.45,
-  castShadows: true, shadowResolution: GRAPHICS_QUALITY_PROFILES[initialGraphicsTier].shadowResolution, shadowType: pc.SHADOW_PCF3_32F,
+  castShadows: initialGraphicsTier !== "low", shadowResolution: GRAPHICS_QUALITY_PROFILES[initialGraphicsTier].shadowResolution, shadowType: pc.SHADOW_PCF3_32F,
   shadowDistance: 55, normalOffsetBias: 0.06, shadowBias: 0.2, numCascades: 1,
 });
 light.setEulerAngles(52, -28, 0);
@@ -3086,6 +3087,8 @@ interface MobVisual {
   entity: pc.Entity;
   snapshots: RemoteSnapshot[];
   bodyRoot: pc.Entity;
+  lodBody: pc.Entity;
+  nextPresentationAt: number;
   bodyMaterial: pc.StandardMaterial;
   art: MobArtRig;
   statusRoot: pc.Entity;
@@ -7117,6 +7120,15 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   // Keep the emissive shader feature active while varying cue intensity.
   bodyMaterial.emissive.set(0.001, 0.001, 0.001);
   bodyMaterial.update();
+  const lodBody = new pc.Entity("mob-distant-silhouette");
+  lodBody.addComponent("render", { type: "box", material: bodyMaterial, castShadows: false, receiveShadows: true });
+  const lodSize = isBrute ? [1.25, 2.15, 1.05] : isCinderRam ? [1.25, 1.35, 1.7]
+    : isFenBloater ? [1.25, 1.05, 1.35] : isThornbinder ? [.9, 1.9, .8]
+      : isSpitter ? [1.05, .9, 1.15] : [.72, .9, 1.15];
+  lodBody.setLocalPosition(0, lodSize[1]! * .5, 0);
+  lodBody.setLocalScale(lodSize[0]!, lodSize[1]!, lodSize[2]!);
+  lodBody.enabled = false;
+  entity.addChild(lodBody);
   const healthBackMaterial = coloredMaterial(new pc.Color(0.16, 0.025, 0.02));
   const healthMaterial = coloredMaterial(isNorthwatch || isWatchbreaker ? new pc.Color(.46, .88, 1) : isAshglass ? new pc.Color(1, 0.63, 0.19) : mob.difficultyTier > 1 ? tierColor : isBrute ? new pc.Color(0.94, 0.48, 0.12) : isSpitter ? new pc.Color(0.58, 0.92, 0.12) : tierColor);
   const warningMaterial = new pc.StandardMaterial();
@@ -7287,6 +7299,8 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     entity,
     snapshots: [{ receivedAt: performance.now(), x: mob.x, y: mob.y, z: mob.z, yaw: mob.yaw }],
     bodyRoot,
+    lodBody,
+    nextPresentationAt: 0,
     bodyMaterial,
     art,
     statusRoot,
@@ -10316,7 +10330,7 @@ let incomingBytesPerSecond = 0;
 let incomingPatchesPerSecond = 0;
 let incomingWindowStartedAt = performance.now();
 const instrumentedSockets = new WeakSet<WebSocket>();
-const PERFORMANCE_LOG_STORAGE_KEY = "blockcraft:performance-log:v2";
+const PERFORMANCE_LOG_STORAGE_KEY = "blockcraft:performance-log:v3";
 let lastPerformanceLogAt = 0;
 let lastCustomUpdateMs = 0;
 let lastEngineUpdateMs = 0;
@@ -10325,6 +10339,9 @@ let lastTerrainUpdateMs = 0;
 let lastSceneDressingMs = 0;
 let lastMobPresentationMs = 0;
 let lastWorldUiMs = 0;
+let visibleMobCount = 0;
+let fullDetailMobCount = 0;
+let lodMobCount = 0;
 const performancePeaks = {
   engineUpdateMs: 0, renderMs: 0, customUpdateMs: 0, terrainUpdateMs: 0,
   sceneDressingMs: 0, mobPresentationMs: 0, worldUiMs: 0,
@@ -10740,7 +10757,10 @@ function applyGraphicsQualityTier(tier: GraphicsQualityTier): void {
   const profile = GRAPHICS_QUALITY_PROFILES[tier];
   appliedGraphicsQualityTier = tier;
   callingParticleDensity = profile.particleScale;
-  if (light.light) light.light.shadowResolution = profile.shadowResolution;
+  if (light.light) {
+    light.light.shadowResolution = profile.shadowResolution;
+    light.light.castShadows = tier !== "low";
+  }
   sceneDressing.setAmbientDetailModulo(profile.ambientDetailModulo);
   app.graphicsDevice.maxPixelRatio = profile.renderScale;
   app.resizeCanvas();
@@ -12571,6 +12591,9 @@ function updatePerformanceMetrics(now: number): void {
       shadowMapUpdates: app.stats.frame.shadowMapUpdates,
       shadowMapMs: app.stats.frame.shadowMapTime,
       particleMs: app.stats.particles.frameTime,
+      visibleMobs: visibleMobCount,
+      fullDetailMobs: fullDetailMobCount,
+      lodMobs: lodMobCount,
       anomalies: [],
     };
     sample.anomalies = [...new Set([...automaticPerformanceAnomalies(sample), ...pendingPerformanceMarkers])];
@@ -12587,6 +12610,7 @@ function updatePerformanceMetrics(now: number): void {
   performanceFields.engine.textContent = `${lastEngineUpdateMs.toFixed(1)} / ${lastRenderMs.toFixed(1)} ms`;
   performanceFields.subsystems.textContent = `${lastTerrainUpdateMs.toFixed(1)} / ${lastSceneDressingMs.toFixed(1)} / ${lastMobPresentationMs.toFixed(1)} / ${lastWorldUiMs.toFixed(1)} ms`;
   performanceFields.render.textContent = `${app.stats.drawCalls.total.toLocaleString()} / ${app.stats.frame.triangles.toLocaleString()} / ${app.stats.frame.shadowMapUpdates}`;
+  performanceFields.clientMobs.textContent = `${visibleMobCount} / ${fullDetailMobCount} / ${lodMobCount}`;
   performanceFields.anomaly.textContent = lastPerformanceAnomalies.join(" · ") || "None";
   performanceFields.rtt.textContent = networkRttMs === null ? "Waiting…" : `${networkRttMs.toFixed(0)} ms`;
   performanceFields.inputAck.textContent = movementPilotController ? "SDK stream" : inputAcknowledgementMs === null ? "Waiting…" : `${inputAcknowledgementMs.toFixed(0)} ms`;
@@ -12658,6 +12682,9 @@ function updatePerformanceMetrics(now: number): void {
     shadowMapUpdates: app.stats.frame.shadowMapUpdates,
     shadowMapMs: app.stats.frame.shadowMapTime,
     particleMs: app.stats.particles.frameTime,
+    visibleMobs: visibleMobCount,
+    fullDetailMobs: fullDetailMobCount,
+    lodMobs: lodMobCount,
     anomalies: lastPerformanceAnomalies.join(","),
   };
   if (selectedGraphicsQualityMode === "auto" && stable) {
@@ -12731,12 +12758,25 @@ function reconcileLocalPlayer(
   return { distance, rate: reconciliationRate };
 }
 
+let updatePhaseStartedAt = 0;
+let renderPhaseStartedAt = 0;
+app.on("prerender", () => {
+  const now = performance.now();
+  if (updatePhaseStartedAt > 0) {
+    lastEngineUpdateMs = now - updatePhaseStartedAt;
+    capturePerformancePeak("engineUpdateMs", lastEngineUpdateMs);
+  }
+  renderPhaseStartedAt = now;
+});
+app.on("postrender", () => {
+  if (renderPhaseStartedAt <= 0) return;
+  lastRenderMs = performance.now() - renderPhaseStartedAt;
+  capturePerformancePeak("renderMs", lastRenderMs);
+});
+
 app.on("update", (dt: number) => {
   const customUpdateStartedAt = performance.now();
-  lastEngineUpdateMs = app.stats.frame.updateTime;
-  lastRenderMs = app.stats.frame.renderTime;
-  capturePerformancePeak("engineUpdateMs", lastEngineUpdateMs);
-  capturePerformancePeak("renderMs", lastRenderMs);
+  updatePhaseStartedAt = customUpdateStartedAt;
   app.autoRender = Boolean(inventoryPanel.hidden);
   if (!app.autoRender && inventoryRenderDue(performance.now(), inventoryBackgroundFrameAt)) {
     inventoryBackgroundFrameAt = performance.now();
@@ -13098,6 +13138,9 @@ app.on("update", (dt: number) => {
   updateAshenEquipmentReveal();
   updateProgressionNoticeVisibility(animationNow);
   const mobPresentationStartedAt = performance.now();
+  visibleMobCount = 0;
+  fullDetailMobCount = 0;
+  lodMobCount = 0;
   for (const [mobId, mob] of mobVisuals) {
     if (mob.frameAlive !== mob.state.alive) {
       mob.defeatAt = mob.state.alive ? -Infinity : animationNow;
@@ -13121,16 +13164,46 @@ app.on("update", (dt: number) => {
     const defeat = mob.state.alive ? 0 : deathPose.collapse;
     const playerEye = localPlayer.getPosition();
     const mobDistance = Math.hypot(mob.state.x - playerEye.x, mob.state.y - playerEye.y, mob.state.z - playerEye.z);
-    const visible = mobPresentationVisible(undergroundMobVisible(mob.state.x, mob.state.y, mob.state.z), mobDistance)
+    const presentationDetail = mobPresentationDetail(
+      undergroundMobVisible(mob.state.x, mob.state.y, mob.state.z), mobDistance,
+    );
+    const visible = presentationDetail !== "hidden"
       && (mob.state.alive || deathPose.visible || materializing || Boolean(respawnIndicator));
     mob.entity.enabled = visible;
     mob.combatCue.hidden = true;
     mob.levelTag.hidden = true;
     mob.respawnTag.hidden = true;
     if (!visible) continue;
-    mob.statusRoot.enabled = mob.state.alive && !realmArrival;
-    mob.bodyRoot.enabled = mob.state.alive && !realmArrival || deathPose.visible;
+    visibleMobCount += 1;
+    const useLod = presentationDetail === "lod" && mob.state.alive && !realmArrival;
+    if (useLod) lodMobCount += 1;
+    else fullDetailMobCount += 1;
+    mob.statusRoot.enabled = mob.state.alive && !realmArrival && !useLod;
+    mob.bodyRoot.enabled = (mob.state.alive && !realmArrival || deathPose.visible) && !useLod;
+    mob.lodBody.enabled = useLod;
     mob.respawnCue.enabled = materializing || respawnIndicator?.phase === "warning";
+    if (useLod) {
+      mob.warning.enabled = false;
+      mob.recovery.enabled = false;
+      mob.respawnCue.enabled = false;
+      mob.eliteAura.enabled = false;
+      mob.mark.enabled = false;
+      mob.assassinMarker.enabled = false;
+      const intervalMs = mobPresentationIntervalMs(presentationDetail, mobDistance);
+      if (animationNow < mob.nextPresentationAt) continue;
+      mob.nextPresentationAt = animationNow + intervalMs;
+      const currentMobPosition = mob.entity.getPosition();
+      const motion = advanceMobMotion({ x: currentMobPosition.x, y: currentMobPosition.y,
+        z: currentMobPosition.z, yaw: mob.renderYaw }, mob.locomotionSpeed,
+        mob.snapshots, animationNow, Math.max(frameTime, intervalMs / 1_000),
+        mob.state.alive && mob.state.combatState === "idle", false);
+      mob.locomotionSpeed = motion.gaitSpeed;
+      mob.entity.setPosition(motion.pose.x, motion.pose.y, motion.pose.z);
+      mob.renderYaw = motion.pose.yaw;
+      mob.entity.setEulerAngles(0, mob.renderYaw, 0);
+      trimMobSnapshots(mob.snapshots, animationNow);
+      continue;
+    }
     if (materializing) {
       const progress = Math.max(0, Math.min(1, 1 - (mob.state.materializeUntil - serverNow) / (realmArrival ? 2_500 : 1_500)));
       const pulse = 1 + Math.sin(animationTime * 13) * .08;
@@ -13740,7 +13813,8 @@ app.on("update", (dt: number) => {
     const worldDelta = Math.hypot(player.x - previousSnapFrame.localX, player.y - previousSnapFrame.localY, player.z - previousSnapFrame.localZ);
     const cameraDelta = Math.hypot(cameraWorldPosition.x - previousSnapFrame.cameraX, cameraWorldPosition.y - previousSnapFrame.cameraY, cameraWorldPosition.z - previousSnapFrame.cameraZ);
     const jumpThreshold = Math.max(0.65, requestedTravel * 3);
-    if (worldDelta > jumpThreshold || cameraDelta > jumpThreshold) recordSnapDiagnostic(
+    const expectedDodgeMovement = localDodgeStartedAt !== null;
+    if (!expectedDodgeMovement && (worldDelta > jumpThreshold || cameraDelta > jumpThreshold)) recordSnapDiagnostic(
       `FRAME_JUMP world=${fixed(worldDelta)} camera=${fixed(cameraDelta)} dodge=${localDodgeStartedAt !== null} power=${localActivePower ?? "none"}`,
       new pc.Vec3(previousSnapFrame.localX, previousSnapFrame.localY, previousSnapFrame.localZ),
       player.clone(),

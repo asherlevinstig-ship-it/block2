@@ -33,6 +33,9 @@ export type PerformanceLogSample = {
   shadowMapUpdates: number;
   shadowMapMs: number;
   particleMs: number;
+  visibleMobs: number;
+  fullDetailMobs: number;
+  lodMobs: number;
   anomalies: string[];
 };
 
@@ -79,7 +82,7 @@ export function formatPerformanceLog(
   context: { path: string; room: string; userAgent: string },
 ): string {
   const header = [
-    "BLOCKCRAFT PERFORMANCE LOG v2",
+    "BLOCKCRAFT PERFORMANCE LOG v3",
     `captured=${new Date().toISOString()}`,
     `path=${context.path}`,
     `room=${context.room}`,
