@@ -320,7 +320,7 @@ export const CallingAbilityEquipRequestSchema = z.object({
 export const CallingAugmentEquipRequestSchema = z.object({
   augmentId: z.enum(CALLING_ABILITY_AUGMENTS.map(option => option.id) as [CallingAugmentId, ...CallingAugmentId[]]),
 }).strict();
-export const CallingAbilityRequestSchema = z.object({ requestId: z.string().min(1).max(80), yaw: z.number().finite().optional(), slot: z.enum(["power", "special"]).optional() }).strict();
+export const CallingAbilityRequestSchema = z.object({ requestId: z.string().min(1).max(80), yaw: z.number().finite().optional(), slot: z.enum(["power", "special"]).optional(), training: z.boolean().optional() }).strict();
 export type CallingAbilityUpdate = {
   requestId: string;
   pathId: BuildPathId;
@@ -330,6 +330,7 @@ export type CallingAbilityUpdate = {
   detail: string;
   cooldownUntil: number;
   durationMs?: number;
+  training?: boolean;
 };
 export type CallingAbilityEffect = {
   casterId: string;

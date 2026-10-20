@@ -6134,6 +6134,25 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const augmentId = selectedCallingAugment(state, abilityId);
     const definition = CALLING_ABILITY_OPTIONS.find(option => option.id === abilityId)!;
     const now = Date.now();
+    const trainingAtEffigy = parsed.data.training === true && this.roomKind === "overworld" && slot === "power"
+      && definition.category === "Core" && player.y >= SURFACE_HEIGHT - 1
+      && Math.hypot(player.x - 12.5, player.z - 12.5) <= 4;
+    if (trainingAtEffigy) {
+      const detail = pathId === "tank" ? "BRACED · TEST STRIKE INCOMING"
+        : pathId === "mage" ? "3 TARGET PROJECTIONS HIT · +30 STAMINA"
+          : pathId === "assassin" ? "STEALTH ACTIVE · EMPOWERED STRIKE READY"
+            : pathId === "thief" ? "3 PURSUERS DIVERTED · CONCEALED"
+              : pathId === "ranger" ? "3 EMPOWERED SHOTS READY"
+                : "TRAINING ALLY +3 HP";
+      const durationMs = pathId === "tank" ? 1_100 : pathId === "assassin" ? 4_000 : pathId === "ranger" ? 6_000 : 1_600;
+      client.send("calling:ability", { requestId: parsed.data.requestId, pathId, abilityId,
+        ability: definition.name, detail, cooldownUntil: now, durationMs, slot, training: true } satisfies CallingAbilityUpdate);
+      client.send("calling:ability:effect", { casterId: client.sessionId, pathId, abilityId,
+        x: 12.5, y: SURFACE_HEIGHT + 1, z: 12.5, yaw: parsed.data.yaw ?? player.yaw, durationMs } satisfies CallingAbilityEffect);
+      this.sendCombatTiming(client.sessionId, { requestId: parsed.data.requestId, action: "calling", phase: "accepted", serverTime: now });
+      this.sendCombatTiming(client.sessionId, { requestId: parsed.data.requestId, action: "calling", phase: "resolved", serverTime: now, outcome: "applied" });
+      return;
+    }
     if (abilityId === "healer_resurrection") {
       if (this.buildPathRankFor(player, "healer") < 4) return;
       if (this.pendingResurrections.has(client.sessionId)) return;

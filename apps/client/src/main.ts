@@ -13,6 +13,8 @@ import { heldFireStep } from "./held-fire.js";
 import { callingLevelGuide, statChoiceDisabled } from "./progression-guidance.js";
 import { progressionNotice as chooseProgressionNotice, type ProgressionNotice } from "./progression-notice.js";
 import { abilityRevealUse, canPresentAbilityReveal, earnedCallingAbilities, firstCallingUseInstruction, shouldGuideFirstCallingUse } from "./ability-reveal.js";
+import { abilityPracticeChallenge, practiceFollowUpProgress, practicePhaseAfterCast,
+  type AbilityPracticePhase } from "./ability-practice.js";
 import { queueWorldNotice, type WorldNotice } from "./notification-lane.js";
 import { rangedAimYaw } from "./ranged-aim.js";
 import { COORDINATED_BRUTE_FOLLOWERS, COORDINATED_SPITTER_FOLLOWERS, activeCombatNearby, advanceBossHud, initialBossHud, leaderArmourSegments, leaderChargeGuidance, leaderExposureLabel, leaderExposureRoleLabel, leaderFormationLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
@@ -1083,6 +1085,7 @@ const callingFirstUse = document.querySelector<HTMLElement>("#calling-first-use"
 const callingFirstUseTitle = document.querySelector<HTMLElement>("#calling-first-use-title")!;
 const callingFirstUseDetail = document.querySelector<HTMLElement>("#calling-first-use-detail")!;
 const callingFirstUseAction = document.querySelector<HTMLElement>("#calling-first-use-action")!;
+const callingFirstUseKey = document.querySelector<HTMLElement>("#calling-first-use-key")!;
 const ashenEquipmentRevealPanel = document.querySelector<HTMLElement>("#ashen-equipment-reveal")!;
 const ashenEquipmentRevealIcon = document.querySelector<HTMLElement>("#ashen-equipment-reveal-icon")!;
 const ashenEquipmentRevealTitle = document.querySelector<HTMLElement>("#ashen-equipment-reveal-title")!;
@@ -1091,6 +1094,9 @@ const ashenEquipmentRevealContinue = document.querySelector<HTMLButtonElement>("
 let pendingAshenEquipmentReveal: AshenEquipmentForged | null = null;
 let activeAbilityRevealId: CallingAbilityId | null = null;
 let guidedAbilityPracticeId: CallingAbilityId | null = null;
+let guidedAbilityPracticePhase: AbilityPracticePhase = "cast";
+let guidedAbilityPracticeHits = 0;
+let guidedTankImpactTimer = 0;
 const seenAbilityReveals = new Set<CallingAbilityId>();
 let currentProgressionNotice: ProgressionNotice | null = null;
 let dismissedStatLevel = -1;
@@ -1931,6 +1937,22 @@ const callingEffigyLight = new pc.Entity("effigy-light");
 callingEffigyLight.addComponent("light", { type: "omni", color: new pc.Color(.2, 1, .72), intensity: 1.2, range: 5, castShadows: false });
 callingEffigyLight.setLocalPosition(0, 1.25, 0);
 callingEffigy.addChild(callingEffigyLight);
+const callingProjectionMaterial = new pc.StandardMaterial();
+callingProjectionMaterial.diffuse = new pc.Color(.16, .8, .66);
+callingProjectionMaterial.emissive = new pc.Color(.08, .72, .55);
+callingProjectionMaterial.opacity = .48;
+callingProjectionMaterial.blendType = pc.BLEND_NORMAL;
+callingProjectionMaterial.depthWrite = false;
+callingProjectionMaterial.update();
+const callingPracticeProjections = [[-1.7, 0], [1.7, 0], [0, 1.65]].map(([x, z], index) => {
+  const projection = new pc.Entity(`calling-training-projection-${index + 1}`);
+  addBox(projection, "projection-body", callingProjectionMaterial, [.34, .72, .24], [0, .58, 0]);
+  addBox(projection, "projection-head", callingProjectionMaterial, [.28, .28, .28], [0, 1.12, 0]);
+  projection.setLocalPosition(x!, .28, z!);
+  projection.enabled = false;
+  callingEffigy.addChild(projection);
+  return projection;
+});
 callingEffigy.setPosition(CALLING_EFFIGY_POSITION);
 callingEffigy.enabled = false;
 app.root.addChild(callingEffigy);
@@ -4251,7 +4273,9 @@ function requestCallingAbility(slot: "power" | "special" = "power"): void {
   }, 720);
   const requestId = `calling-${callingAbilitySequence}`;
   combatSync.start("calling", requestId, performance.now());
-  room.send("calling:ability", { requestId, yaw: cameraOrbit.yaw, slot });
+  const training = slot === "power" && guidedAbilityPracticeId === localCallingAbilityId
+    && guidedAbilityPracticePhase === "cast" && localPlayer.getPosition().distance(CALLING_EFFIGY_POSITION) <= 4;
+  room.send("calling:ability", { requestId, yaw: cameraOrbit.yaw, slot, ...(training ? { training: true } : {}) });
 }
 
 function requestSpecialEquip(specialId: SpecialId): void {
@@ -4531,6 +4555,9 @@ function callingPowerUsed(abilityId: CallingAbilityId): boolean {
 
 function startGuidedAbilityPractice(abilityId: CallingAbilityId): void {
   guidedAbilityPracticeId = abilityId;
+  guidedAbilityPracticePhase = "cast";
+  guidedAbilityPracticeHits = 0;
+  window.clearTimeout(guidedTankImpactTimer);
   dismissedUseAbilityId = null;
   try { window.localStorage.setItem(abilityPracticeStorageKey(abilityId), "1"); }
   catch { /* The current session still keeps the practice active. */ }
@@ -4540,17 +4567,61 @@ function startGuidedAbilityPractice(abilityId: CallingAbilityId): void {
 function completeGuidedAbilityPractice(abilityId: CallingAbilityId): void {
   if (guidedAbilityPracticeId !== abilityId) return;
   if (localPlayer.getPosition().distance(CALLING_EFFIGY_POSITION) > 4) {
+    guidedAbilityPracticePhase = "cast";
+    guidedAbilityPracticeHits = 0;
     status.textContent = "Use your new Power beside the glowing Calling Effigy in Town to finish practice.";
+    updateGuidedAbilityPractice(performance.now());
     return;
   }
   guidedAbilityPracticeId = null;
+  guidedAbilityPracticePhase = "complete";
+  guidedAbilityPracticeHits = 0;
+  window.clearTimeout(guidedTankImpactTimer);
   try { window.localStorage.removeItem(abilityPracticeStorageKey(abilityId)); }
   catch { /* Completion is still retained by the existing used-Power key. */ }
   callingEffigy.enabled = false;
   callingFirstUse.hidden = true;
   callingSlot.dataset.firstUse = "false";
   showCombatFeedback("POWER MASTERED · EXPLORATION READY", "dodge");
+  combatAudio.play("levelUp");
+  levelUpBurst();
+  status.textContent = "Ability mastered · follow Realm Guidance or explore beyond Town.";
   social.event(`${CALLING_ABILITY_OPTIONS.find(option => option.id === abilityId)?.name ?? "Calling Power"} practiced at the Town effigy.`);
+}
+
+function acceptGuidedAbilityPractice(abilityId: CallingAbilityId): void {
+  if (guidedAbilityPracticeId !== abilityId || !localBuildPathId) return;
+  guidedAbilityPracticePhase = practicePhaseAfterCast(localBuildPathId);
+  if (guidedAbilityPracticePhase === "complete") {
+    completeGuidedAbilityPractice(abilityId);
+    return;
+  }
+  if (localBuildPathId === "tank") {
+    guidedTankImpactTimer = window.setTimeout(() => {
+      if (guidedAbilityPracticeId !== abilityId || guidedAbilityPracticePhase !== "follow_up") return;
+      createRangedPopup(CALLING_EFFIGY_POSITION.clone().add(new pc.Vec3(0, 2.5, 0)), "BLOCKED", "melee", false, [.35, 1, .76]);
+      showCombatFeedback("BULWARK HELD · TEST STRIKE BLOCKED", "dodge");
+      completeGuidedAbilityPractice(abilityId);
+    }, 1_050);
+  }
+  updateGuidedAbilityPractice(performance.now());
+}
+
+function noteGuidedAbilityPracticeAttack(): void {
+  if (!guidedAbilityPracticeId || guidedAbilityPracticePhase !== "follow_up" || !localBuildPathId
+    || (localBuildPathId !== "assassin" && localBuildPathId !== "ranger")
+    || localPlayer.getPosition().distance(CALLING_EFFIGY_POSITION) > 4) return;
+  const progress = practiceFollowUpProgress(localBuildPathId, guidedAbilityPracticeHits);
+  guidedAbilityPracticeHits = progress.hits;
+  const remaining = abilityPracticeChallenge(localBuildPathId).followUpHits - progress.hits;
+  createRangedPopup(CALLING_EFFIGY_POSITION.clone().add(new pc.Vec3(0, 2.3, 0)),
+    localBuildPathId === "assassin" ? "EMPOWERED STRIKE" : `FOCUSED SHOT ${progress.hits} / 3`,
+    "melee", false, localBuildPathId === "assassin" ? [.72, .45, 1] : [.45, 1, .62]);
+  if (progress.complete) completeGuidedAbilityPractice(guidedAbilityPracticeId);
+  else {
+    status.textContent = `${remaining} empowered shot${remaining === 1 ? "" : "s"} remaining.`;
+    updateGuidedAbilityPractice(performance.now());
+  }
 }
 
 function resumeGuidedAbilityPractice(): void {
@@ -4571,9 +4642,25 @@ function updateGuidedAbilityPractice(now: number): void {
   if (!active || !abilityId) return;
   const definition = CALLING_ABILITY_OPTIONS.find(option => option.id === abilityId)!;
   const distance = localPlayer.getPosition().distance(CALLING_EFFIGY_POSITION);
-  callingFirstUseTitle.textContent = `${definition.name} · training effigy`;
-  callingFirstUseDetail.textContent = firstCallingUseInstruction(distance);
-  callingFirstUseAction.textContent = distance <= 4 ? `USE ${definition.name.toUpperCase()}` : "APPROACH THE EFFIGY";
+  const challenge = abilityPracticeChallenge(definition.pathId);
+  const projectionCount = definition.pathId === "mage" || definition.pathId === "thief" || definition.pathId === "ranger" ? 3 : 1;
+  for (let index = 0; index < callingPracticeProjections.length; index++) {
+    const projection = callingPracticeProjections[index]!;
+    projection.enabled = index < projectionCount;
+    projection.setLocalEulerAngles(0, now * .035 + index * 120, 0);
+    const base = index === 0 ? [-1.7, 0] : index === 1 ? [1.7, 0] : [0, 1.65];
+    projection.setLocalPosition(base[0]!, .28 + Math.sin(now * .004 + index) * .08, base[1]!);
+  }
+  callingFirstUseTitle.textContent = `${definition.name} · ${challenge.title}`;
+  callingFirstUseDetail.textContent = distance > 4 ? firstCallingUseInstruction(distance)
+    : guidedAbilityPracticePhase === "cast" ? challenge.castInstruction : challenge.followUpInstruction;
+  callingFirstUseKey.textContent = guidedAbilityPracticePhase === "follow_up"
+    && (definition.pathId === "assassin" || definition.pathId === "ranger") ? "J" : "G";
+  callingFirstUseAction.textContent = distance > 4 ? "APPROACH THE EFFIGY"
+    : guidedAbilityPracticePhase === "cast" ? `USE ${definition.name.toUpperCase()}`
+      : definition.pathId === "tank" ? "TEST STRIKE INCOMING"
+        : definition.pathId === "assassin" ? "J · EMPOWERED STRIKE"
+          : `J · FOCUSED SHOT ${guidedAbilityPracticeHits} / ${challenge.followUpHits}`;
   const pulse = 1 + Math.sin(now * .005) * .045;
   callingEffigy.setLocalScale(pulse, pulse, pulse);
   callingEffigy.rotateLocal(0, .18, 0);
@@ -11312,7 +11399,12 @@ function requestAttack(aimWithPointer = true): void {
   const attackDefinition = WEAPON_ATTACK_DEFINITIONS[localMainHandId];
   const player = localPlayer.getPosition();
   const targetMob = nearestLivingMob(player, attackDefinition.range);
-  localActionFacingYaw = attackDefinition.projectileTravelMs > 0 && aimWithPointer && rangedPointer.active ? mouseRangedYaw(localFacingYaw) : targetMob
+  const practisingFollowUp = guidedAbilityPracticePhase === "follow_up" && guidedAbilityPracticeId
+    && (localBuildPathId === "assassin" || localBuildPathId === "ranger")
+    && player.distance(CALLING_EFFIGY_POSITION) <= 4;
+  localActionFacingYaw = practisingFollowUp
+    ? movementYaw(CALLING_EFFIGY_POSITION.x - player.x, CALLING_EFFIGY_POSITION.z - player.z, localFacingYaw)
+    : attackDefinition.projectileTravelMs > 0 && aimWithPointer && rangedPointer.active ? mouseRangedYaw(localFacingYaw) : targetMob
     ? movementYaw(targetMob.visual.state.x - player.x, targetMob.visual.state.z - player.z, localFacingYaw)
     : currentTarget
       ? movementYaw(currentTarget.x + 0.5 - player.x, currentTarget.z + 0.5 - player.z, localFacingYaw)
@@ -11329,6 +11421,7 @@ function requestAttack(aimWithPointer = true): void {
   combatSync.start("attack", requestId, now);
   room.send("attack", { requestId, yaw: localActionFacingYaw,
     ...(serverClock.synchronized ? { actionAt: now + serverClock.offset } : {}) });
+  if (practisingFollowUp) noteGuidedAbilityPracticeAttack();
   logMovementEvent(`ACTION ${localMainHandId} step=${comboStep} impact=${timing.impactMs}ms yaw=${localActionFacingYaw.toFixed(1)}`);
   const attackName = attackDefinition.combo
     ? `${MAIN_HAND_DEFINITIONS[localMainHandId].attackName} ${comboStep}`
@@ -13693,10 +13786,12 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
         localCallingAugmentProgress, localMasteredCallingAugments);
       try { window.localStorage.setItem(`calling-power-used-v1:${profileToken}:${update.abilityId}`, "1"); }
       catch { /* Private storage may be unavailable. */ }
-      completeGuidedAbilityPractice(update.abilityId);
+      status.textContent = `${update.ability} · ${update.detail.toLowerCase()}.`;
+      if (update.training) acceptGuidedAbilityPractice(update.abilityId);
+      else completeGuidedAbilityPractice(update.abilityId);
       refreshProgressionNotice();
     }
-    status.textContent = `${update.ability} · ${update.detail.toLowerCase()}.`;
+    if (update.slot === "special") status.textContent = `${update.ability} · ${update.detail.toLowerCase()}.`;
     const serverAnchored = update.abilityId === "assassin_death_mark" || update.abilityId === "healer_field_mend"
       || update.abilityId === "healer_resurrection";
     if (!serverAnchored) {

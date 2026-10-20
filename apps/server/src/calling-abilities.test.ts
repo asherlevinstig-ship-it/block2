@@ -78,6 +78,27 @@ describe("hotbar Calling abilities", () => {
     if (pathId === "healer") expect(player.health).toBe(4);
   });
 
+  it.each(["tank", "mage", "assassin", "thief", "ranger", "healer"] as const)("runs a safe %s lesson at the Town effigy", pathId => {
+    const { internal, player, client } = fixture(pathId);
+    Object.assign(player, { x: 12.5, y: 8, z: 12.5, health: 5, maxHealth: 5 });
+    internal.handleCallingAbility(client, { requestId: `train-${pathId}`, training: true });
+    expect(client.send).toHaveBeenCalledWith("calling:ability", expect.objectContaining({
+      requestId: `train-${pathId}`, pathId, training: true, cooldownUntil: 10_000,
+    }));
+    expect(client.send).toHaveBeenCalledWith("calling:ability:effect", expect.objectContaining({
+      casterId: "hero", pathId, x: 12.5, z: 12.5,
+    }));
+    expect(internal.callingAbilityReadyAt.has("hero")).toBe(false);
+  });
+
+  it("does not fake Field Mend training away from the Town effigy", () => {
+    const { internal, player, client } = fixture("healer");
+    Object.assign(player, { health: 5, maxHealth: 5 });
+    internal.handleCallingAbility(client, { requestId: "remote-training", training: true });
+    expect(client.send).not.toHaveBeenCalledWith("calling:ability", expect.anything());
+    expect(client.send).toHaveBeenCalledWith("chat:notice", expect.stringContaining("no injured ally"));
+  });
+
   it("conceals from bosses for the whole Stealth window and reveals on attack", () => {
     const { internal, player, client } = fixture("assassin");
     const boss = new MobState(); Object.assign(boss, { x: 52, y: 8, z: 50, alive: true, isMiniBoss: true, targetId: "hero" });
