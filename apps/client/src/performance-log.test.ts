@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PERFORMANCE_LOG_MAX_SAMPLES, PERFORMANCE_LOG_RETENTION_MS,
   appendPerformanceSample, automaticPerformanceAnomalies, formatPerformanceLog, parsePerformanceLog,
+  residualDrawCalls,
   type PerformanceLogSample } from "./performance-log.js";
 
 function sample(at: number): PerformanceLogSample {
@@ -56,5 +57,10 @@ describe("performance log", () => {
   it("flags excessive draw submission independently of update cost", () => {
     expect(automaticPerformanceAnomalies({ ...sample(5_000), drawCalls: 260 }))
       .toContain("DRAW_SUBMISSION_COST");
+  });
+
+  it("derives the uncategorized draw calls from one completed frame", () => {
+    expect(residualDrawCalls(120, 92, 4, 8)).toBe(16);
+    expect(residualDrawCalls(80, 92, 4, 8)).toBe(0);
   });
 });

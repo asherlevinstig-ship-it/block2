@@ -2,6 +2,10 @@ export const PERFORMANCE_LOG_INTERVAL_MS = 2_000;
 export const PERFORMANCE_LOG_RETENTION_MS = 10 * 60_000;
 export const PERFORMANCE_LOG_MAX_SAMPLES = PERFORMANCE_LOG_RETENTION_MS / PERFORMANCE_LOG_INTERVAL_MS;
 
+export function residualDrawCalls(total: number, forward: number, depth: number, shadow: number): number {
+  return Math.max(0, total - forward - depth - shadow);
+}
+
 export type PerformanceLogSample = {
   at: number;
   frameP50Ms: number;

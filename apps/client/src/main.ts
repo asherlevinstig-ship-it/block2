@@ -68,7 +68,7 @@ import { nearestQueuedChunkKey } from "./chunk-rebuild-queue.js";
 import { advanceAutoQuality, GRAPHICS_QUALITY_PROFILES, initialAutoQualityTier, parseGraphicsQualityMode,
   type AutoQualityState, type GraphicsQualityMode, type GraphicsQualityTier } from "./graphics-quality.js";
 import { PERFORMANCE_LOG_INTERVAL_MS, appendPerformanceSample, automaticPerformanceAnomalies,
-  formatPerformanceLog, parsePerformanceLog,
+  formatPerformanceLog, parsePerformanceLog, residualDrawCalls,
   type PerformanceLogSample } from "./performance-log.js";
 import { cavernRespawnIndicator } from "./cavern-respawn-indicator.js";
 import { SILVER_DEPTHS, SILVER_DEPTHS_CHECKPOINT_POSITION, isInSilverGuardClearing, isInFrontierBruteArena, isInRealmWardenArena, isInForestDungeon, isInEmberVault } from "@blockcraft/voxel-world";
@@ -1426,6 +1426,7 @@ app.scene.fog.start = 34;
 app.scene.fog.end = 58;
 app.start();
 const distantMobBatchGroup = app.batcher.addGroup("distant-mob-silhouettes", true, 96);
+const closeMobBatchGroup = app.batcher.addGroup("close-mob-rigs", true, 48);
 const gpuProfiler = app.graphicsDevice.gpuProfiler as unknown as { enabled: boolean; _frameTime?: number } | null;
 if (gpuProfiler) gpuProfiler.enabled = true;
 
@@ -1978,6 +1979,19 @@ function createMidDetailMob(archetype: string, color: pc.Color, scale: number): 
   root.setLocalScale(scale, scale, scale);
   root.enabled = false;
   return root;
+}
+
+function batchCloseMobArt(root: pc.Entity, rig: MobArtRig): void {
+  // Materials on these pieces are swapped at runtime to communicate enraged and defeated states.
+  // Keep them independent while batching all other articulated rig surfaces dynamically.
+  const independent = new Set<pc.Entity>([
+    ...rig.phaseSurfaces,
+    ...rig.glowSurfaces.map(surface => surface.part),
+  ]);
+  for (const component of root.findComponents("render")) {
+    const render = component as pc.RenderComponent;
+    if (!independent.has(render.entity as pc.Entity)) render.batchGroupId = closeMobBatchGroup.id;
+  }
 }
 
 interface VoxelCharacterRig {
@@ -7242,6 +7256,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     addBox(bodyRoot, "champion-stone-crest", crestMaterial, [.75, .22, .28], [0, crestY, 0]);
     for (const x of [-.28, 0, .28]) addBox(bodyRoot, "champion-crest-point", crestMaterial, [.15, .23, .18], [x, crestY + .16, 0]);
   }
+  batchCloseMobArt(bodyRoot, art);
   const statusRoot = new pc.Entity("mob-status");
   entity.addChild(statusRoot);
   const healthWidth = isBrute ? 1.46 : isCinderRam ? 1.4 : isFenBloater ? 1.36 : isThornbinder ? 1.2 : isSpitter ? 1.12 : 0.96;
@@ -12977,9 +12992,16 @@ app.on("postrender", () => {
   if (renderPhaseStartedAt <= 0) return;
   lastRenderMs = performance.now() - renderPhaseStartedAt;
   capturePerformancePeak("renderMs", lastRenderMs);
-  // Production builds only populate the aggregate counter automatically.
-  // Capture the completed frame's renderer categories for the next update.
+  // Production builds update the aggregate at frame start and the categories at frame end.
+  // Read the renderer's just-completed aggregate first so every value describes one frame.
+  const drawDevice = app.graphicsDevice as pc.GraphicsDevice & { _drawCallsPerFrame?: number };
+  const completedDrawCalls = drawDevice._drawCallsPerFrame;
   app.stats.updateDetailed(app.renderer, app.graphicsDevice);
+  if (typeof completedDrawCalls === "number" && Number.isFinite(completedDrawCalls)) {
+    const drawCalls = app.stats.drawCalls;
+    drawCalls.total = completedDrawCalls;
+    drawCalls.misc = residualDrawCalls(completedDrawCalls, drawCalls.forward, drawCalls.depth, drawCalls.shadow);
+  }
 });
 
 app.on("update", (dt: number) => {
