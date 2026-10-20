@@ -260,6 +260,7 @@ import {
   type SpecialId,
   type TraitId,
   type WorldBootstrap,
+  type ServerPerformanceUpdate,
   type AreaLeaderExposed,
   type AreaLeaderFormation,
   type AreaLeaderReinforcements,
@@ -1314,9 +1315,14 @@ const performanceFields = {
   frame: document.querySelector<HTMLElement>("#perf-frame")!,
   fps: document.querySelector<HTMLElement>("#perf-fps")!,
   rtt: document.querySelector<HTMLElement>("#perf-rtt")!,
+  inputAck: document.querySelector<HTMLElement>("#perf-input-ack")!,
+  networkRate: document.querySelector<HTMLElement>("#perf-network-rate")!,
+  serverTick: document.querySelector<HTMLElement>("#perf-server-tick")!,
+  serverMobs: document.querySelector<HTMLElement>("#perf-server-mobs")!,
   voxels: document.querySelector<HTMLElement>("#perf-voxels")!,
   geometry: document.querySelector<HTMLElement>("#perf-geometry")!,
   chunks: document.querySelector<HTMLElement>("#perf-chunks")!,
+  chunkStream: document.querySelector<HTMLElement>("#perf-chunk-stream")!,
   payload: document.querySelector<HTMLElement>("#perf-payload")!,
   memory: document.querySelector<HTMLElement>("#perf-memory")!,
   budget: document.querySelector<HTMLElement>("#perf-budget")!,
@@ -1846,8 +1852,13 @@ function updateActiveChunkMeshes(position: { x: number; z: number }): void {
 }
 
 function applyChunkRegion(payload: ChunkRegion): void {
-  if (payload.chunks.length === 0) return;
   const buildStartedAt = performance.now();
+  lastChunkStreamPayloadBytes = new Blob([JSON.stringify(payload)]).size;
+  lastChunkStreamCount = payload.chunks.length;
+  if (payload.chunks.length === 0) {
+    lastChunkStreamSetupMs = performance.now() - buildStartedAt;
+    return;
+  }
   payload.chunks.forEach(installChunk);
   const position = localPlayer.getPosition();
   const center = worldToChunk(position.x, position.z);
@@ -1864,6 +1875,7 @@ function applyChunkRegion(payload: ChunkRegion): void {
   sceneDressing.rebuild(readWorldBlock, [...chunks.values()], indoorRoofBuilding);
   sceneDressing.setSurfaceVisible(!playerCutaway.active);
   const streamSetupMs = performance.now() - buildStartedAt;
+  lastChunkStreamSetupMs = streamSetupMs;
   logMovementEvent(`CHUNK STREAM count=${payload.chunks.length} setup=${streamSetupMs.toFixed(1)}ms queued=${queuedChunkRebuilds.size}`);
 }
 
@@ -7951,7 +7963,11 @@ function bindPlayers(joinedRoom: Room): void {
         if (player.dodgeSequence > lastAuthoritativeDodgeSequence)
           confirmPredictedDodges(pendingPredictionFrames, player.dodgeSequence - lastAuthoritativeDodgeSequence);
         lastAuthoritativeDodgeSequence = player.dodgeSequence;
-        if (player.lastProcessedInput > lastProcessedInputSequence) lastAcknowledgementAdvancedAt = performance.now();
+        if (player.lastProcessedInput > lastProcessedInputSequence) {
+          const acknowledgedAt = performance.now();
+          lastAcknowledgementAdvancedAt = acknowledgedAt;
+          recordMovementAcknowledgement(player.lastProcessedInput, acknowledgedAt);
+        }
         lastProcessedInputSequence = player.lastProcessedInput;
         lastAuthoritativeMovementAt = performance.now();
       });
@@ -10276,7 +10292,57 @@ function updateTarget(): void {
 let lastChunkBuildMs = 0;
 let recentChunkBuildPeakMs = 0;
 let worldPayloadBytes = 0;
+let lastChunkStreamPayloadBytes = 0;
+let lastChunkStreamSetupMs = 0;
+let lastChunkStreamCount = 0;
 let networkRttMs: number | null = null;
+let serverPerformance: ServerPerformanceUpdate | null = null;
+let serverPerformanceReceivedAt = 0;
+let inputAcknowledgementMs: number | null = null;
+const movementSentAt = new Map<number, number>();
+let incomingBytesWindow = 0;
+let incomingPatchWindow = 0;
+let incomingBytesPerSecond = 0;
+let incomingPatchesPerSecond = 0;
+let incomingWindowStartedAt = performance.now();
+const instrumentedSockets = new WeakSet<WebSocket>();
+
+function trackMovementInput(sequence: number, now = performance.now()): void {
+  movementSentAt.set(sequence, now);
+  while (movementSentAt.size > 180) movementSentAt.delete(movementSentAt.keys().next().value!);
+}
+
+function recordMovementAcknowledgement(sequence: number, now = performance.now()): void {
+  const sentAt = movementSentAt.get(sequence);
+  if (sentAt !== undefined) inputAcknowledgementMs = now - sentAt;
+  for (const pending of movementSentAt.keys()) if (pending <= sequence) movementSentAt.delete(pending);
+}
+
+function incomingMessageBytes(data: unknown): number {
+  if (typeof data === "string") return new TextEncoder().encode(data).byteLength;
+  if (data instanceof ArrayBuffer) return data.byteLength;
+  if (ArrayBuffer.isView(data)) return data.byteLength;
+  if (typeof Blob !== "undefined" && data instanceof Blob) return data.size;
+  return 0;
+}
+
+function bindNetworkPerformance(joinedRoom: Room): void {
+  const transport = joinedRoom.connection.transport as unknown as { ws?: WebSocket };
+  const socket = transport.ws;
+  if (!socket?.addEventListener || instrumentedSockets.has(socket)) return;
+  instrumentedSockets.add(socket);
+  socket.addEventListener("message", event => {
+    const data = event.data;
+    incomingBytesWindow += incomingMessageBytes(data);
+    if (data instanceof ArrayBuffer && data.byteLength > 0 && (new Uint8Array(data)[0]! & 0x1f) === 15) incomingPatchWindow++;
+    else if (ArrayBuffer.isView(data) && data.byteLength > 0
+      && (new Uint8Array(data.buffer, data.byteOffset, data.byteLength)[0]! & 0x1f) === 15) incomingPatchWindow++;
+    else if (typeof Blob !== "undefined" && data instanceof Blob && data.size > 0)
+      void data.slice(0, 1).arrayBuffer().then(buffer => {
+        if ((new Uint8Array(buffer)[0]! & 0x1f) === 15) incomingPatchWindow++;
+      });
+  });
+}
 
 function renderBootstrap(payload: WorldBootstrap): void {
   clearPendingStatChoice();
@@ -10476,6 +10542,7 @@ performanceToggle.addEventListener("click", () => {
   const opening = performancePanel.hidden;
   performancePanel.hidden = !opening;
   performanceToggle.setAttribute("aria-expanded", String(opening));
+  room?.send("performance:subscribe", { enabled: opening });
 });
 
 window.addEventListener("keydown", event => {
@@ -10528,7 +10595,7 @@ joystickZone.addEventListener("pointercancel", event => releaseJoystick(event.po
 
 let room: Room | null = null;
 let reportedProtectedDialog: boolean | null = null;
-const protectedDialogSelector = '[role="dialog"], [aria-modal="true"], #loot-pack-decision, #combat-loadout-drawer, #performance-panel, #depths-retry-prompt, #mode-switch-tutorial, #party-panel details[open]';
+const protectedDialogSelector = '[role="dialog"], [aria-modal="true"], #loot-pack-decision, #combat-loadout-drawer, #depths-retry-prompt, #mode-switch-tutorial, #party-panel details[open]';
 function syncProtectedDialog(): void {
   if (!room) { reportedProtectedDialog = null; return; }
   const open = callingFirstOnboardingPending || [...document.querySelectorAll<HTMLElement>(protectedDialogSelector)].some(dialog =>
@@ -11191,6 +11258,7 @@ function resetMovementControls(): void {
     return;
   }
   moveSequence += 1;
+  trackMovementInput(moveSequence);
   room.send("move", { sequence: moveSequence, strafe: 0, forward: 0, yaw: localFacingYaw,
     steps: unsentMovementSteps.splice(0) });
 }
@@ -11582,6 +11650,7 @@ function requestDodge(): void {
   if (!movementPilotController && unsentMovementSteps.length) {
     moveSequence += 1;
     lastMoveSentAt = now;
+    trackMovementInput(moveSequence, now);
     room.send("move", { sequence: moveSequence, strafe: smoothedMovement.x,
       forward: smoothedMovement.z, yaw: localFacingYaw, steps: unsentMovementSteps.splice(0) });
     lastSentMovement = { ...smoothedMovement };
@@ -12375,6 +12444,14 @@ function formatBytes(bytes: number): string {
 function updatePerformanceMetrics(now: number): void {
   if (now - lastPerformanceUpdateAt < 500 || frameSamples.length < 10) return;
   lastPerformanceUpdateAt = now;
+  const networkWindowMs = now - incomingWindowStartedAt;
+  if (networkWindowMs >= 1_000) {
+    incomingBytesPerSecond = incomingBytesWindow * 1_000 / networkWindowMs;
+    incomingPatchesPerSecond = incomingPatchWindow * 1_000 / networkWindowMs;
+    incomingBytesWindow = 0;
+    incomingPatchWindow = 0;
+    incomingWindowStartedAt = now;
+  }
   const p50 = percentile(frameSamples, 0.5);
   const p95 = percentile(frameSamples, 0.95);
   const fps = p50 > 0 ? 1000 / p50 : 0;
@@ -12384,34 +12461,70 @@ function updatePerformanceMetrics(now: number): void {
   const memory = (performance as Performance & { memory?: { usedJSHeapSize: number } }).memory?.usedJSHeapSize;
   const stable = frameSamples.length >= 120;
   const chunkBuildPeakMs = Math.max(lastChunkBuildMs, recentChunkBuildPeakMs);
-  const withinBudget = stable && p95 <= 33.3 && (networkRttMs === null || networkRttMs <= 150) && chunkBuildPeakMs <= 250;
+  const serverFresh = serverPerformance !== null && now - serverPerformanceReceivedAt <= 2_500;
+  const currentServerPerformance = serverFresh ? serverPerformance : null;
+  const serverWithinBudget = currentServerPerformance === null
+    || currentServerPerformance.tickP95Ms <= currentServerPerformance.tickBudgetMs;
+  const acknowledgementWithinBudget = inputAcknowledgementMs === null || inputAcknowledgementMs <= 200;
+  const trafficWithinBudget = incomingPatchesPerSecond <= 35 && incomingBytesPerSecond <= 256 * 1024;
+  const withinBudget = stable && p95 <= 33.3 && (networkRttMs === null || networkRttMs <= 150)
+    && chunkBuildPeakMs <= 250 && serverWithinBudget && acknowledgementWithinBudget && trafficWithinBudget;
 
   performanceFields.frame.textContent = `${p50.toFixed(1)} / ${p95.toFixed(1)} ms`;
   performanceFields.fps.textContent = `${Math.round(fps)}`;
   performanceFields.rtt.textContent = networkRttMs === null ? "Waiting…" : `${networkRttMs.toFixed(0)} ms`;
+  performanceFields.inputAck.textContent = movementPilotController ? "SDK stream" : inputAcknowledgementMs === null ? "Waiting…" : `${inputAcknowledgementMs.toFixed(0)} ms`;
+  performanceFields.networkRate.textContent = `${incomingPatchesPerSecond.toFixed(1)}/s · ${formatBytes(incomingBytesPerSecond)}/s`;
+  performanceFields.serverTick.textContent = currentServerPerformance
+    ? `${currentServerPerformance.tickP50Ms.toFixed(1)} / ${currentServerPerformance.tickP95Ms.toFixed(1)} ms`
+    : "Waiting…";
+  performanceFields.serverMobs.textContent = currentServerPerformance
+    ? `${currentServerPerformance.activeMobs} / ${currentServerPerformance.sleepingMobs}`
+    : "Waiting…";
   performanceFields.voxels.textContent = visibleVoxels.toLocaleString();
   performanceFields.geometry.textContent = `${meshes} / ${triangles.toLocaleString()}`;
   performanceFields.chunks.textContent = `${lastChunkBuildMs.toFixed(1)} ms · peak ${chunkBuildPeakMs.toFixed(1)} · queue ${queuedChunkRebuilds.size}`;
+  performanceFields.chunkStream.textContent = lastChunkStreamPayloadBytes === 0
+    ? "None yet"
+    : `${lastChunkStreamCount} chunks · ${formatBytes(lastChunkStreamPayloadBytes)} · ${lastChunkStreamSetupMs.toFixed(1)} ms`;
   performanceFields.payload.textContent = formatBytes(worldPayloadBytes);
   performanceFields.memory.textContent = memory ? formatBytes(memory) : "Unavailable";
   performanceFields.budget.className = stable ? (withinBudget ? "pass" : "fail") : "";
+  const warnings = [
+    p95 > 33.3 ? "client frame" : "",
+    networkRttMs !== null && networkRttMs > 150 ? "RTT" : "",
+    chunkBuildPeakMs > 250 ? "chunk build" : "",
+    !serverWithinBudget ? "server tick" : "",
+    !acknowledgementWithinBudget ? "input ack" : "",
+    !trafficWithinBudget ? "network traffic" : "",
+  ].filter(Boolean);
   performanceFields.budget.textContent = !stable
     ? `Collecting sample ${frameSamples.length}/120…`
     : withinBudget
-      ? "PASS · p95 ≤ 33.3 ms · RTT ≤ 150 ms"
-      : "CHECK · one or more provisional budgets exceeded";
+      ? "PASS · client, server and network within budget"
+      : `CHECK · ${warnings.join(" · ")} over budget`;
 
   (window as Window & { __BLOCKCRAFT_PERF__?: Record<string, number | boolean | string | null> }).__BLOCKCRAFT_PERF__ = {
     p50,
     p95,
     fps,
     networkRttMs,
+    inputAcknowledgementMs,
+    incomingPatchesPerSecond,
+    incomingBytesPerSecond,
+    serverTickP50Ms: currentServerPerformance?.tickP50Ms ?? null,
+    serverTickP95Ms: currentServerPerformance?.tickP95Ms ?? null,
+    activeMobs: currentServerPerformance?.activeMobs ?? null,
+    sleepingMobs: currentServerPerformance?.sleepingMobs ?? null,
     visibleVoxels,
     meshes,
     triangles,
     lastChunkBuildMs,
     chunkBuildPeakMs,
     queuedChunkRebuilds: queuedChunkRebuilds.size,
+    lastChunkStreamPayloadBytes,
+    lastChunkStreamSetupMs,
+    lastChunkStreamCount,
     graphicsQualityMode: selectedGraphicsQualityMode,
     graphicsQualityTier: appliedGraphicsQualityTier,
     worldPayloadBytes,
@@ -13602,6 +13715,7 @@ app.on("update", (dt: number) => {
   if (room && worldReady && sendMovementThisFrame && !movementPilotController) {
     lastMoveSentAt = now;
     moveSequence += 1;
+    trackMovementInput(moveSequence, now);
     const stopPosition = Math.hypot(smoothedMovement.x, smoothedMovement.z) <= 0.01
       ? localPlayer.getPosition()
       : null;
@@ -13743,15 +13857,19 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     throw error;
   });
   saveReconnectToken();
+  bindNetworkPerformance(room);
+  if (!performancePanel.hidden) room.send("performance:subscribe", { enabled: true });
   reportedProtectedDialog = null;
   syncProtectedDialog();
   room.onReconnect(() => {
     saveReconnectToken();
+    if (room) bindNetworkPerformance(room);
     reportedProtectedDialog = null;
     syncProtectedDialog();
     room?.send("world:ready");
     room?.send("objective:sync");
     if (movementShadowInput) room?.send("movement:shadow:hello", { control: movementPilotRequested });
+    if (!performancePanel.hidden) room?.send("performance:subscribe", { enabled: true });
     status.textContent = "Reconnected to your dungeon run.";
   });
   room.onDrop(() => { status.textContent = activeRoomName === SILVER_DEPTHS_ROOM
@@ -14712,6 +14830,10 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       showCombatFeedback(`${ITEM_DEFINITIONS[message.itemId].name.toUpperCase()} PACK FULL`, "hurt");
       status.textContent = `Your ${ITEM_DEFINITIONS[message.itemId].name} capacity is full. Sell minerals at the blacksmith. The block was not removed.`;
     }
+  });
+  room.onMessage("performance:server", (update: ServerPerformanceUpdate) => {
+    serverPerformance = update;
+    serverPerformanceReceivedAt = performance.now();
   });
   room.onMessage("pong", (message: { id?: unknown; serverTime?: unknown }) => {
     if (typeof message.id !== "string") return;

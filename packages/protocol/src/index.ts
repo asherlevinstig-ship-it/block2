@@ -136,6 +136,15 @@ export interface MineralDepositStatus { id: string; available: number; total: nu
 export const WORLD_BOOTSTRAP_CHUNK_RADIUS = 3;
 export const WORLD_STREAM_CHUNK_RADIUS = 3;
 
+export type ServerPerformanceUpdate = {
+  tickP50Ms: number;
+  tickP95Ms: number;
+  activeMobs: number;
+  sleepingMobs: number;
+  sampleCount: number;
+  tickBudgetMs: number;
+};
+
 export const PlayerProfileTokenSchema = z.string().regex(/^guest_[a-f0-9]{32}$/);
 export type PlayerProfileToken = z.infer<typeof PlayerProfileTokenSchema>;
 

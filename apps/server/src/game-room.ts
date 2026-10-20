@@ -56,6 +56,8 @@ import { ROAMING_PACKS, roamingMemberArchetype, roamingMemberId, roamingMembersh
 import { REGIONAL_PACK_DISRUPTION_MS, regionalPackCooldownMultiplier, regionalPackCue, regionalPackGoal,
   regionalPackSpeedMultiplier } from "./regional-pack-tactics.js";
 import { mobSimulationActive } from "./mob-activation.js";
+import { SERVER_TICK_BUDGET_MS, appendTickSample, samplePercentile } from "./performance-metrics.js";
+import type { ServerPerformanceUpdate } from "@blockcraft/protocol";
 import { regionalPackRewardDefeat, regionalPackRewardItems, regionalPackRewardNotice,
   type RegionalPackRewardCycle, type RegionalPackRewardKind } from "./regional-pack-rewards.js";
 import { WILDERNESS_MATERIALIZE_MS, WILDERNESS_RESPAWN_RECHECK_MS,
@@ -454,6 +456,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly chunks = new Map<string, MutableChunk>();
   private readonly movementInputs = new Map<string, StoredMovementInput>();
   private readonly protectedDialogs = new Set<string>();
+  private readonly performanceSubscribers = new Set<string>();
+  private readonly simulationTickSamples: number[] = [];
+  private lastPerformanceReportAt = 0;
   private readonly orderedMovement = new Map<string, { lastAt: number; availableMs: number }>();
   private readonly movementShadows = new Map<string, ShadowPose>();
   private readonly movementPilotControllers = new Set<string>();
@@ -792,6 +797,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       }
     });
     this.onMessage("world:chunks", (client, payload) => this.handleChunkRegionRequest(client, payload));
+    this.onMessage("performance:subscribe", (client, payload: unknown) => {
+      const enabled = typeof payload === "object" && payload !== null && "enabled" in payload && payload.enabled === true;
+      if (enabled) this.performanceSubscribers.add(client.sessionId);
+      else this.performanceSubscribers.delete(client.sessionId);
+    });
     this.onMessage("practice:enter", client => {
       const player = this.state.players.get(client.sessionId);
       if (this.roomKind !== "overworld" || !player || !isInsideTownSafeZone(player)) {
@@ -989,12 +999,41 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       // Colyseus owns one simulation timer per room. Pilot and legacy clients
       // advance on this same fixed tick while older clients remain connected.
       this.setFixedTimestep(ctx => {
+        const startedAt = performance.now();
         this.simulateMovementShadows(ctx.dt);
         this.simulatePlayers(ctx.dt);
+        this.recordSimulationTick(performance.now() - startedAt);
       }, 30);
     } else {
-      this.setSimulationInterval(deltaTime => this.simulatePlayers(Math.min(deltaTime / 1000, 0.1)), 33);
+      this.setSimulationInterval(deltaTime => {
+        const startedAt = performance.now();
+        this.simulatePlayers(Math.min(deltaTime / 1000, 0.1));
+        this.recordSimulationTick(performance.now() - startedAt);
+      }, 33);
     }
+  }
+
+  private recordSimulationTick(durationMs: number): void {
+    appendTickSample(this.simulationTickSamples, durationMs);
+    const now = Date.now();
+    if (this.performanceSubscribers.size === 0 || now - this.lastPerformanceReportAt < 1_000) return;
+    this.lastPerformanceReportAt = now;
+    let activeMobs = 0, sleepingMobs = 0;
+    for (const mob of this.state.mobs.values()) {
+      if (!mob.alive) continue;
+      if (mobSimulationActive(mob, this.state.players.values())) activeMobs++;
+      else sleepingMobs++;
+    }
+    const update: ServerPerformanceUpdate = {
+      tickP50Ms: samplePercentile(this.simulationTickSamples, 0.5),
+      tickP95Ms: samplePercentile(this.simulationTickSamples, 0.95),
+      activeMobs,
+      sleepingMobs,
+      sampleCount: this.simulationTickSamples.length,
+      tickBudgetMs: SERVER_TICK_BUDGET_MS,
+    };
+    for (const client of this.clients)
+      if (this.performanceSubscribers.has(client.sessionId)) client.send("performance:server", update);
   }
 
   override async onJoin(client: Client, options: unknown): Promise<void> {
@@ -1124,6 +1163,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   }
 
   override async onLeave(client: Client): Promise<void> {
+    this.performanceSubscribers.delete(client.sessionId);
     this.firstCombatPerfectDodges.delete(client.sessionId);
     this.protectedDialogs.delete(client.sessionId);
     this.northwatchPatrolContributors.delete(client.sessionId);
