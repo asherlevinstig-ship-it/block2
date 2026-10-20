@@ -178,6 +178,8 @@ button:disabled, button[aria-disabled="true"] { cursor: not-allowed; }
 #first-steps p { margin: 5px 0 0 !important; color: #d2d8c7; font: 600 10px/1.3 system-ui; }
 #first-steps[data-guidance="south-gate"] { border-color: #f4cb55; box-shadow: inset 3px 0 #f4cb55, 0 0 20px #eab93b40; }
 #first-steps[data-guidance="south-gate"]::after { display: block; margin-top: 8px; color: #ffd96a; content: "●  GOLD TRAIL ACTIVE · SOUTH GATE"; font: 900 9px/1 system-ui; letter-spacing: .06em; }
+#first-steps[data-guidance="return-town"] { border-color: #7ee7b6; box-shadow: inset 3px 0 #4fd49a, 0 0 20px #3fcf8a38; }
+#first-steps[data-guidance="return-town"]::after { display: block; margin-top: 8px; color: #8ff0c1; content: "●  GOLD TRAIL ACTIVE · RETURN TO TOWN"; font: 900 9px/1 system-ui; letter-spacing: .06em; }
 #first-steps.route-started { animation: south-gate-guidance 1.05s ease-out; }
 @keyframes south-gate-guidance { 0% { transform: scale(.96); filter: brightness(1); } 35% { transform: scale(1.035); filter: brightness(1.35); } 100% { transform: scale(1); filter: brightness(1); } }
 #starter-inventory-tutorial { position: fixed; z-index: 2001; left: 50%; top: 43%; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 14px; width: min(430px, calc(100vw - 28px)); box-sizing: border-box; padding: 16px 18px; border: 2px solid #f0c35b; border-radius: 14px; background: linear-gradient(145deg, #2d2818f5, #0d1711f5); box-shadow: 0 20px 70px #000d, inset 0 0 24px #e6b6431c; color: #f6edd2; transform: translate(-50%, -50%); pointer-events: none; }
@@ -1904,6 +1906,10 @@ button[data-previewing="true"] .calling-preview *, #calling-awakening:not([hidde
 #inventory-panel[data-tab="gear"] .inventory-grid article.equipment .inventory-item-actions button { min-height: 27px; padding: 4px 2px; font-size: .46rem; }
 #inventory-panel article[data-item="forged_sword"][data-starter-tutorial="true"] { z-index: 2; border-color: #ffe083 !important; box-shadow: 0 0 0 3px #f7c95d44, 0 0 28px #f7bd3b8c, inset 0 0 22px #f7c95d26 !important; animation: starter-sword-card 1.25s ease-in-out infinite; }
 #inventory-panel article[data-item="forged_sword"][data-starter-tutorial="true"] [data-equip-main-hand] { border-color: #fff0a8; background: #8b5d16; color: #fff5c9; box-shadow: 0 0 15px #ffc64a99; font-size: .56rem; }
+#inventory-panel article[data-first-victory-reward="true"] { z-index: 3; border-color: #7ff2bd !important; box-shadow: 0 0 0 3px #53db9b44, 0 0 30px #42da9299, inset 0 0 24px #5be6a12b !important; animation: first-victory-reward-card 1.15s ease-in-out infinite; }
+#inventory-panel article[data-first-victory-reward="true"] .inventory-item-actions button { border-color: #b5ffda; background: #176846; color: #effff7; box-shadow: 0 0 16px #4ce1a099; }
+#inventory-panel:has(article[data-first-victory-reward="true"]) #inventory-decision-panel { border-color: #61e6a5; box-shadow: 0 0 26px #3dd99050; }
+@keyframes first-victory-reward-card { 0%,100% { transform: translateY(0); filter: brightness(1); } 50% { transform: translateY(-4px); filter: brightness(1.18); } }
 @keyframes starter-sword-card { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
 #inventory-panel[data-tab="gear"] .inventory-vacant-slot { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 148px; border-style: dashed; border-color: #7180773b; background: #07100c66; color: #607068; }
 #inventory-panel[data-tab="gear"] .inventory-vacant-slot i { width: 42px; height: 42px; margin-bottom: 10px; border: 2px dashed #71807755; border-radius: 9px; background: transparent; transform: none; box-shadow: none; }

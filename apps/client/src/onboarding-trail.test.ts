@@ -1,9 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { onboardingTrailRoute, sampleTrail } from "./onboarding-trail.js";
+import { firstVictoryTownRoute, onboardingTrailRoute, sampleTrail } from "./onboarding-trail.js";
 
 const player = { x: 8.5, y: 8, z: 8.5 };
 
 describe("onboarding glow trail", () => {
+  it("guides a first victor back through the south gate and around the tavern", () => {
+    expect(firstVictoryTownRoute({ x: 3.5, y: 8, z: 45 })).toEqual([
+      { x: 8.5, y: 8, z: 33.5 }, { x: 8.5, y: 8, z: 28.5 },
+      { x: 18.5, y: 8, z: 27.5 }, { x: 18.5, y: 8, z: 15.5 },
+      { x: 8.5, y: 8.22, z: 11.5 },
+    ]);
+  });
   it("leads the opening steps to the personal starter drop", () => {
     const drop = { x: 10.5, y: 8.22, z: 10.5, starter: true };
     expect(onboardingTrailRoute(0, player, [], [drop])).toEqual([drop]);

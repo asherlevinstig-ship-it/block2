@@ -3995,7 +3995,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       z: landing.z,
       expiresAt: now + LOOT_DESPAWN_MS,
     });
-    const dropId = firstGreenwoodClear && firstGreenwoodWeapon && greenwoodFirstClearDrops[0]?.itemId === firstGreenwoodWeapon
+    const dropId = firstCombatDrops[0]
+      ? `first-victory:${firstCombatDrops[0].itemId}:${ownerId}:${now}:${++this.lootDropSequence}`
+      : firstGreenwoodClear && firstGreenwoodWeapon && greenwoodFirstClearDrops[0]?.itemId === firstGreenwoodWeapon
       ? `greenwood-first:${firstGreenwoodWeapon}:${ownerId}:${now}:${++this.lootDropSequence}`
       : northwatchPatrolClear ? `northwatch-shard-patrol-cache:${now}:${++this.lootDropSequence}`
         : `${mobId}:${now}:${++this.lootDropSequence}`;

@@ -356,7 +356,9 @@ import { advanceOnboarding, ONBOARDING_DONE, ONBOARDING_STEPS, onboardingStorage
   callingFirstOnboardingStorageKey, migrateLegacyOnboardingStep,
   parseOnboardingStep, shouldPromptTownDeparture, starterEquipmentRequired, starterEquipmentStorageKey,
   starterInventoryLesson, shouldDeferOnboardingForCalling, type OnboardingEvent } from "./new-player-onboarding.js";
-import { onboardingTrailRoute, sampleTrail } from "./onboarding-trail.js";
+import { firstVictoryTownRoute, onboardingTrailRoute, sampleTrail } from "./onboarding-trail.js";
+import { firstVictoryCallingFit, firstVictoryItemFromDrop, firstVictoryRewardStorageKey,
+  parseFirstVictoryReward, type FirstVictoryRewardState } from "./first-victory-reward.js";
 import { CombatAudio, enemyCuePan, enemyCuesForTransition, type EnemyCue, type EnemyCueSnapshot } from "./combat-audio.js";
 import { SceneDressing } from "./scene-dressing.js";
 import { WARDEN_LOOT_BEAM_MS } from "./warden-victory-effects.js";
@@ -656,6 +658,7 @@ const firstStepsTitle = document.querySelector<HTMLElement>("#first-steps-title"
 const firstStepsDetail = document.querySelector<HTMLElement>("#first-steps-detail")!;
 const firstStepsSkip = document.querySelector<HTMLButtonElement>("#first-steps-skip")!;
 const starterInventoryTutorial = document.querySelector<HTMLElement>("#starter-inventory-tutorial")!;
+const starterInventoryEyebrow = document.querySelector<HTMLElement>("#starter-inventory-eyebrow")!;
 const starterInventoryTitle = document.querySelector<HTMLElement>("#starter-inventory-title")!;
 const starterInventoryCopy = document.querySelector<HTMLElement>("#starter-inventory-copy")!;
 const modeSwitchTutorial = document.querySelector<HTMLElement>("#mode-switch-tutorial")!;
@@ -692,14 +695,57 @@ let callingFirstOnboardingPending = shouldDeferOnboardingForCalling(
   (() => { try { return window.localStorage.getItem(callingFirstOnboardingKey); } catch { return null; } })(),
   firstStepsIndex,
 );
+const firstVictoryRewardKey = firstVictoryRewardStorageKey(profileToken);
+let firstVictoryReward: FirstVictoryRewardState | null = (() => {
+  try {
+    const saved = parseFirstVictoryReward(window.localStorage.getItem(firstVictoryRewardKey));
+    return saved && isItemId(saved.itemId) ? saved : null;
+  } catch { return null; }
+})();
+function saveFirstVictoryReward(next: FirstVictoryRewardState): void {
+  firstVictoryReward = next;
+  try { window.localStorage.setItem(firstVictoryRewardKey, JSON.stringify(next)); }
+  catch { /* Private browsing can disable storage. */ }
+  renderFirstSteps();
+}
+function firstVictoryRewardLessonReady(): boolean {
+  return firstStepsIndex !== null && firstStepsIndex >= ONBOARDING_DONE;
+}
+function beginFirstVictoryReward(itemId: ItemId): void {
+  if (firstVictoryReward?.stage === "complete" || firstVictoryReward?.stage === "return_town") return;
+  saveFirstVictoryReward({ stage: "open_pack", itemId });
+  status.textContent = firstVictoryRewardLessonReady()
+    ? `Calling-matched reward collected · press I to compare ${ITEM_DEFINITIONS[itemId].name}.`
+    : `${ITEM_DEFINITIONS[itemId].name} secured · finish the remaining enemies, then inspect your reward.`;
+}
+function completeFirstVictoryDecision(choice: "equipped" | "kept"): void {
+  if (!firstVictoryReward || firstVictoryReward.stage !== "choose") return;
+  const itemName = ITEM_DEFINITIONS[firstVictoryReward.itemId as ItemId]?.name ?? "Your reward";
+  saveFirstVictoryReward({ ...firstVictoryReward, stage: "return_town" });
+  firstStepsTrailUpdatedAt = -Infinity;
+  if (!inventoryPanel.hidden) setInventoryOpen(false);
+  status.textContent = `${itemName} ${choice} · follow the gold trail back to Town.`;
+  social.event(`${itemName} ${choice} · return to Town to awaken your first ability.`);
+}
+function completeFirstVictoryReturn(): void {
+  if (!firstVictoryReward || firstVictoryReward.stage !== "return_town") return;
+  saveFirstVictoryReward({ ...firstVictoryReward, stage: "complete" });
+  status.textContent = "Returned to Town · your first Calling ability is ready to reveal.";
+  social.event("Returned to Town · Calling ability ready.");
+}
 function renderFirstSteps(): void {
   const index = firstStepsIndex;
-  const active = !callingFirstOnboardingPending && index !== null && index < ONBOARDING_DONE;
+  const onboardingActive = !callingFirstOnboardingPending && index !== null && index < ONBOARDING_DONE;
+  const rewardActive = firstVictoryRewardLessonReady()
+    && Boolean(firstVictoryReward && firstVictoryReward.stage !== "complete");
+  const active = onboardingActive || rewardActive;
   const modeLesson = index === 4;
   firstSteps.hidden = !active;
-  firstSteps.dataset.guidance = index === 3 ? "south-gate" : "";
+  firstSteps.dataset.guidance = firstVictoryReward?.stage === "return_town" ? "return-town" : index === 3 ? "south-gate" : "";
   const starterLesson = starterInventoryLesson(index, starterInventoryOpenedWithKeyboard, forcedStarterEquipment, localMainHandId);
-  firstStepsSkip.hidden = modeLesson || starterLesson !== "hidden";
+  const rewardInventoryLesson = rewardActive && (firstVictoryReward?.stage === "open_pack" || firstVictoryReward?.stage === "choose")
+    ? firstVictoryReward.stage : null;
+  firstStepsSkip.hidden = rewardActive || modeLesson || starterLesson !== "hidden";
   const showModeChoice = townDeparturePromptOpen || modeLesson && !modeLessonAcknowledged;
   modeSwitchTutorial.hidden = !showModeChoice;
   modeSwitchTutorialTitle.textContent = "Choose how to leave Town";
@@ -709,14 +755,38 @@ function renderFirstSteps(): void {
   document.documentElement.classList.toggle("first-combat-attack", index === 5 && firstCombatPhase === "attack");
   document.documentElement.classList.toggle("first-combat-dodge", index === 5 && firstCombatPhase === "dodge");
   document.documentElement.classList.toggle("first-combat-finish", index === 5 && firstCombatPhase === "finish");
-  starterInventoryTutorial.hidden = starterLesson === "hidden";
-  starterInventoryTutorial.dataset.phase = starterLesson;
-  starterInventoryTitle.textContent = starterLesson === "equip_sword" ? "Equip the Forged Sword" : "Open your inventory";
-  starterInventoryCopy.textContent = starterLesson === "equip_sword"
-    ? "Select the glowing sword, then choose EQUIP. This lesson completes only when the sword is equipped."
-    : "Press I to see the sword you collected. Other controls are paused until your pack is open.";
+  starterInventoryTutorial.hidden = starterLesson === "hidden" && rewardInventoryLesson === null;
+  starterInventoryTutorial.dataset.phase = rewardInventoryLesson === "choose" || starterLesson === "equip_sword" ? "equip_sword" : "open_pack";
+  starterInventoryEyebrow.textContent = rewardInventoryLesson ? "FIRST VICTORY REWARD" : "STARTER EQUIPMENT";
+  const rewardName = firstVictoryReward && isItemId(firstVictoryReward.itemId)
+    ? ITEM_DEFINITIONS[firstVictoryReward.itemId].name : "Calling upgrade";
+  starterInventoryTitle.textContent = rewardInventoryLesson === "choose" ? `Choose what to do with ${rewardName}`
+    : rewardInventoryLesson === "open_pack" ? "Open your pack"
+      : starterLesson === "equip_sword" ? "Equip the Forged Sword" : "Open your inventory";
+  starterInventoryCopy.textContent = rewardInventoryLesson === "choose"
+    ? "Compare the glowing reward, then choose EQUIP UPGRADE or KEEP FOR LATER. Either choice completes this lesson."
+    : rewardInventoryLesson === "open_pack" ? `Press I to compare ${rewardName}, your first Calling-matched reward.`
+      : starterLesson === "equip_sword"
+        ? "Select the glowing sword, then choose EQUIP. This lesson completes only when the sword is equipped."
+        : "Press I to see the sword you collected. Other controls are paused until your pack is open.";
   const starterCard = document.querySelector<HTMLElement>('[data-item="forged_sword"]');
   if (starterCard) starterCard.dataset.starterTutorial = starterLesson === "equip_sword" ? "true" : "false";
+  for (const card of document.querySelectorAll<HTMLElement>("#inventory-panel article.equipment[data-item]"))
+    card.dataset.firstVictoryReward = String(rewardInventoryLesson === "choose" && card.dataset.item === firstVictoryReward?.itemId);
+  if (rewardActive && firstVictoryReward) {
+    firstStepsCount.textContent = "REWARD";
+    if (firstVictoryReward.stage === "open_pack") {
+      firstStepsTitle.textContent = "Inspect your first victory reward";
+      firstStepsDetail.textContent = `Press I to compare ${rewardName}. It was selected for your Calling.`;
+    } else if (firstVictoryReward.stage === "choose") {
+      firstStepsTitle.textContent = `Equip or keep ${rewardName}`;
+      firstStepsDetail.textContent = "Choose EQUIP UPGRADE or KEEP FOR LATER in the comparison panel.";
+    } else {
+      firstStepsTitle.textContent = "Return to Town";
+      firstStepsDetail.textContent = "Follow the gold trail back to the Town of Beginnings to reveal your new ability.";
+    }
+    return;
+  }
   if (index === null || index >= ONBOARDING_DONE) return;
   const step = ONBOARDING_STEPS[index]!;
   firstStepsCount.textContent = `${index + 1} / ${ONBOARDING_DONE}`;
@@ -3107,8 +3177,9 @@ let firstStepsTrailPoints: ReturnType<typeof sampleTrail> = [];
 let firstStepsTrailUpdatedAt = -Infinity;
 function updateFirstStepsTrail(player: pc.Vec3, now: number): void {
   const tutorialActive = firstStepsIndex !== null && firstStepsIndex < ONBOARDING_DONE;
+  const returningFromFirstVictory = firstVictoryReward?.stage === "return_town";
   const navigationRoute = minimap.activeSurfaceRoute();
-  const active = worldReady && (tutorialActive || navigationRoute.length > 0)
+  const active = worldReady && (tutorialActive || returningFromFirstVictory || navigationRoute.length > 0)
     && player.y >= 7 && defeatScreen.hidden === true && inventoryPanel.hidden === true;
   firstStepsTrail.enabled = active;
   if (!active) return;
@@ -3117,7 +3188,8 @@ function updateFirstStepsTrail(player: pc.Vec3, now: number): void {
     const route = tutorialActive ? onboardingTrailRoute(firstStepsIndex, player,
       [...mobVisuals.values()].map(({ state }) => state),
       [...lootVisuals.entries()].filter(([, { root }]) => root.enabled)
-        .map(([id, { state }]) => ({ ...state, starter: id.startsWith("starter-kit:") }))) : navigationRoute;
+        .map(([id, { state }]) => ({ ...state, starter: id.startsWith("starter-kit:") })))
+      : returningFromFirstVictory ? firstVictoryTownRoute(player) : navigationRoute;
     firstStepsTrailPoints = sampleTrail(player, route);
   }
   for (let index = 0; index < firstStepsTrailMarks.length; index++) {
@@ -4013,8 +4085,11 @@ function refreshInventorySelectionActions(): void {
   if (inventorySelectionActions.hidden) return;
   const equipped = hand ? hand === localMainHandId : armour === localArmourId;
   const canUnequip = Boolean(armour && armour === localArmourId);
+  const firstVictoryChoice = firstVictoryReward?.stage === "choose" && itemId === firstVictoryReward.itemId;
   inventorySelectedEquip.disabled = equipped && !canUnequip;
-  inventorySelectedEquip.textContent = canUnequip ? "UNEQUIP" : equipped ? "EQUIPPED" : "EQUIP NOW";
+  inventorySelectedEquip.textContent = canUnequip ? "UNEQUIP" : equipped ? "EQUIPPED"
+    : firstVictoryChoice ? "EQUIP UPGRADE" : "EQUIP NOW";
+  inventorySelectedKeep.textContent = firstVictoryChoice ? "KEEP FOR LATER" : "CLEAR";
   const recipe = Object.hasOwn(BLACKSMITH_DISMANTLE, itemId!)
     ? BLACKSMITH_DISMANTLE[itemId! as BlacksmithDismantleItemId] : null;
   inventorySelectedDismantle.hidden = !recipe;
@@ -4065,7 +4140,9 @@ function refreshInventoryPreview(): void {
   inventoryDecisionVerdict.textContent = inventoryDecisionLabel[decision];
   inventoryDecisionPanel.dataset.verdict = decision;
   const roll = equipmentAffixes[selectedInventoryItem];
-  if (!localBuildPathId) inventoryCallingFit.textContent = "No combat style chosen yet. This item still works normally.";
+  if (firstVictoryReward?.stage === "choose" && selectedInventoryItem === firstVictoryReward.itemId)
+    inventoryCallingFit.textContent = firstVictoryCallingFit(localBuildPathId, ITEM_DEFINITIONS[selectedInventoryItem].name);
+  else if (!localBuildPathId) inventoryCallingFit.textContent = "No combat style chosen yet. This item still works normally.";
   else if (!roll) inventoryCallingFit.textContent = `Works normally with your ${BUILD_PATHS[localBuildPathId].name} style.`;
   else {
     const itemPath = EQUIPMENT_AFFIXES[roll.affixId].pathId;
@@ -4214,6 +4291,9 @@ function updateMainHandLoadout(mainHandId: MainHandId): void {
     status.textContent = "Forged Sword equipped · your first loadout is ready.";
     if (!inventoryPanel.hidden) setInventoryOpen(false);
   }
+  if (firstVictoryReward?.stage === "choose" && isItemId(firstVictoryReward.itemId)
+    && equipmentForItem(firstVictoryReward.itemId) === mainHandId)
+    completeFirstVictoryDecision("equipped");
 }
 
 function requestPowerEquip(powerId: PowerId): void {
@@ -7856,6 +7936,9 @@ function bindPlayers(joinedRoom: Room): void {
       if (isLocal) {
         localArmourId = Object.hasOwn(ARMOUR_DEFINITIONS, player.armourId) ? player.armourId as ArmourId : "none";
         setRigArmour(localPlayerRig, localArmourId); refreshInventoryEquipped(); refreshBackpackCapacity();
+        if (firstVictoryReward?.stage === "choose" && isItemId(firstVictoryReward.itemId)
+          && armourForItem(firstVictoryReward.itemId) === localArmourId)
+          completeFirstVictoryDecision("equipped");
       } else if (remote) setRigArmour(remote.rig, player.armourId);
     }, true);
     for (const field of ["appearanceSkin", "appearanceHair", "appearanceCoat", "appearanceHairStyle", "appearanceCoatStyle"] as const) {
@@ -8468,6 +8551,11 @@ tavernDialogueNext.addEventListener("click", advanceTavernDialogue);
 tavernDialogueClose.addEventListener("click", closeTavernDialogue);
 
 function setInventoryOpen(open: boolean): void {
+  if (firstVictoryRewardLessonReady() && !open && firstVictoryReward?.stage === "choose") {
+    status.textContent = "Choose EQUIP UPGRADE or KEEP FOR LATER before closing your pack.";
+    nudgeStarterInventoryTutorial();
+    return;
+  }
   if (!open && localMainHandId === "forged_sword") {
     if (forcedStarterEquipment) completeStarterEquipment();
     if (firstStepsIndex === 2) noteFirstStep("equipped_starter");
@@ -8480,6 +8568,11 @@ function setInventoryOpen(open: boolean): void {
   );
   if (open && starterLesson === "open_pack") {
     status.textContent = "Press I to open your inventory and equip the starter sword.";
+    nudgeStarterInventoryTutorial();
+    return;
+  }
+  if (firstVictoryRewardLessonReady() && open && firstVictoryReward?.stage === "open_pack") {
+    status.textContent = "Press I to open your pack and inspect your Calling-matched reward.";
     nudgeStarterInventoryTutorial();
     return;
   }
@@ -8510,7 +8603,15 @@ function setInventoryOpen(open: boolean): void {
     performancePanel.hidden = true;
     performanceToggle.setAttribute("aria-expanded", "false");
     resetMovementControls();
-    if (starterLesson === "equip_sword") {
+    if (firstVictoryReward?.stage === "choose" && isItemId(firstVictoryReward.itemId)) {
+      selectInventoryCategory("gear");
+      window.setTimeout(() => {
+        const card = inventoryPanel.querySelector<HTMLElement>(`[data-item="${firstVictoryReward?.itemId}"]`);
+        card?.click();
+        inventorySelectedEquip.focus();
+        inventoryDecisionPanel.scrollIntoView({ block: "nearest" });
+      }, 0);
+    } else if (starterLesson === "equip_sword") {
       selectInventoryCategory("gear");
       window.setTimeout(() => {
         const card = inventoryPanel.querySelector<HTMLElement>('[data-item="forged_sword"]');
@@ -8771,8 +8872,10 @@ inventorySelectedEquip.addEventListener("click", () => {
   else if (armour && room && worldReady) room.send("armour:equip", { armourId: armour === localArmourId ? "none" : armour });
 });
 inventorySelectedKeep.addEventListener("click", () => {
+  const completesFirstVictory = firstVictoryReward?.stage === "choose" && selectedInventoryItem === firstVictoryReward.itemId;
   previewHand = undefined; previewArmour = undefined; selectedInventoryItem = undefined;
   inventoryComparisonKey = ""; refreshInventoryPreview();
+  if (completesFirstVictory) completeFirstVictoryDecision("kept");
 });
 inventorySelectedDismantle.addEventListener("click", () => {
   if (!selectedInventoryItem || inventorySelectedDismantle.disabled) return;
@@ -11801,6 +11904,17 @@ combatHudRoot.addEventListener("click", event => {
 
 window.addEventListener("keydown", event => {
   if (event.repeat) return;
+  if (firstVictoryRewardLessonReady() && firstVictoryReward?.stage === "open_pack") {
+    if (event.code === "KeyI") {
+      saveFirstVictoryReward({ ...firstVictoryReward, stage: "choose" });
+      setInventoryOpen(true);
+    } else {
+      status.textContent = "Press I to inspect your first victory reward.";
+      nudgeStarterInventoryTutorial();
+    }
+    event.preventDefault();
+    return;
+  }
   if (starterInventoryLesson(
     firstStepsIndex,
     starterInventoryOpenedWithKeyboard,
@@ -12409,6 +12523,8 @@ app.on("update", (dt: number) => {
   }
   if (worldReady) {
     const townDistance = Math.hypot(player.x - TOWN_CENTER_X, player.z - TOWN_CENTER_Z);
+    if (firstVictoryReward?.stage === "return_town" && townDistance < TOWN_SAFE_RADIUS)
+      completeFirstVictoryReturn();
     if (townDistance <= TOWN_SAFE_RADIUS - .75) {
       lowLevelWasInsideTown = true;
       lowLevelTownStateReady = true;
@@ -14351,6 +14467,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   room.onMessage("loot:picked-up", (message: LootPickedUp) => {
     if (message.playerId !== room?.sessionId || !isItemId(message.itemId)) return;
     if (message.dropId.startsWith("starter-kit:")) requireStarterEquipment();
+    if (firstVictoryItemFromDrop(message.dropId) === message.itemId) beginFirstVictoryReward(message.itemId);
     noteFirstStep("picked_loot");
     const completedTrackedHunt = message.itemId === trackedCodexItemId;
     updateInventoryItem(message.itemId, message.total);

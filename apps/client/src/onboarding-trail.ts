@@ -40,6 +40,16 @@ export function onboardingTrailRoute(
   return [];
 }
 
+export function firstVictoryTownRoute(player: TrailPoint): TrailPoint[] {
+  if (player.y < 7) return [];
+  const route: TrailPoint[] = [];
+  if (player.z > 31) route.push(SOUTH_GATE);
+  if (player.z > 26) route.push({ x: 8.5, y: player.y, z: 28.5 });
+  if (player.z > 16) route.push({ x: 18.5, y: player.y, z: 27.5 });
+  route.push({ x: 18.5, y: player.y, z: 15.5 }, STARTER_BAG);
+  return route;
+}
+
 export function sampleTrail(player: TrailPoint, route: readonly TrailPoint[], spacing = 1.25, limit = 18): TrailPoint[] {
   const points: TrailPoint[] = [];
   let from = player;
