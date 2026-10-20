@@ -64,8 +64,8 @@ import { incomingLootAdvice, swapCandidateReason, swapCandidateScore } from "./l
 import { undergroundThreatVisible } from "./underground-threat-visibility.js";
 import { mobPresentationDetail, mobPresentationIntervalMs } from "./mob-presentation-budget.js";
 import { nearestQueuedChunkKey } from "./chunk-rebuild-queue.js";
-import { advanceAutoQuality, GRAPHICS_QUALITY_PROFILES, initialAutoQualityTier, parseGraphicsQualityMode,
-  type AutoQualityState, type GraphicsQualityMode, type GraphicsQualityTier } from "./graphics-quality.js";
+import { advanceAdaptiveResolution, advanceAutoQuality, GRAPHICS_QUALITY_PROFILES, initialAutoQualityTier, parseGraphicsQualityMode,
+  type AdaptiveResolutionState, type AutoQualityState, type GraphicsQualityMode, type GraphicsQualityTier } from "./graphics-quality.js";
 import { PERFORMANCE_LOG_INTERVAL_MS, appendPerformanceSample, automaticPerformanceAnomalies,
   formatPerformanceLog, parsePerformanceLog,
   type PerformanceLogSample } from "./performance-log.js";
@@ -1321,6 +1321,9 @@ const performanceFields = {
   frame: document.querySelector<HTMLElement>("#perf-frame")!,
   fps: document.querySelector<HTMLElement>("#perf-fps")!,
   engine: document.querySelector<HTMLElement>("#perf-engine")!,
+  pacing: document.querySelector<HTMLElement>("#perf-pacing")!,
+  resolution: document.querySelector<HTMLElement>("#perf-resolution")!,
+  longTask: document.querySelector<HTMLElement>("#perf-long-task")!,
   subsystems: document.querySelector<HTMLElement>("#perf-subsystems")!,
   render: document.querySelector<HTMLElement>("#perf-render")!,
   clientMobs: document.querySelector<HTMLElement>("#perf-client-mobs")!,
@@ -1392,6 +1395,12 @@ const initialGraphicsTier = graphicsQualityMode === "auto"
   : graphicsQualityMode;
 let appliedGraphicsQualityTier: GraphicsQualityTier = initialGraphicsTier;
 let autoQualityState: AutoQualityState = { tier: initialGraphicsTier, slowSamples: 0, fastSamples: 0, changedAt: performance.now() };
+let adaptiveResolutionState: AdaptiveResolutionState = {
+  scale: GRAPHICS_QUALITY_PROFILES[initialGraphicsTier].renderScale,
+  slowSamples: 0,
+  fastSamples: 0,
+  changedAt: performance.now(),
+};
 let callingParticleDensity = GRAPHICS_QUALITY_PROFILES[initialGraphicsTier].particleScale;
 
 const app = new pc.Application(canvas, {
@@ -1408,6 +1417,8 @@ app.scene.fog.color = new pc.Color(0.21, 0.3, 0.32);
 app.scene.fog.start = 34;
 app.scene.fog.end = 58;
 app.start();
+const gpuProfiler = app.graphicsDevice.gpuProfiler as unknown as { enabled: boolean; _frameTime?: number } | null;
+if (gpuProfiler) gpuProfiler.enabled = true;
 
 const camera = new pc.Entity("camera");
 camera.addComponent("camera", {
@@ -10330,7 +10341,7 @@ let incomingBytesPerSecond = 0;
 let incomingPatchesPerSecond = 0;
 let incomingWindowStartedAt = performance.now();
 const instrumentedSockets = new WeakSet<WebSocket>();
-const PERFORMANCE_LOG_STORAGE_KEY = "blockcraft:performance-log:v3";
+const PERFORMANCE_LOG_STORAGE_KEY = "blockcraft:performance-log:v4";
 let lastPerformanceLogAt = 0;
 let lastCustomUpdateMs = 0;
 let lastEngineUpdateMs = 0;
@@ -10339,12 +10350,15 @@ let lastTerrainUpdateMs = 0;
 let lastSceneDressingMs = 0;
 let lastMobPresentationMs = 0;
 let lastWorldUiMs = 0;
+let lastGpuMs: number | null = null;
+let lastPresentationWaitMs = 0;
+let recentLongTaskPeakMs = 0;
 let visibleMobCount = 0;
 let fullDetailMobCount = 0;
 let lodMobCount = 0;
 const performancePeaks = {
   engineUpdateMs: 0, renderMs: 0, customUpdateMs: 0, terrainUpdateMs: 0,
-  sceneDressingMs: 0, mobPresentationMs: 0, worldUiMs: 0,
+  sceneDressingMs: 0, mobPresentationMs: 0, worldUiMs: 0, gpuMs: 0, presentationWaitMs: 0,
 };
 const pendingPerformanceMarkers = new Set<string>();
 let lastPerformanceAnomalies: string[] = [];
@@ -10369,6 +10383,13 @@ function markPerformanceAnomaly(marker: string): void {
 function capturePerformancePeak(key: keyof typeof performancePeaks, value: number): void {
   if (Number.isFinite(value)) performancePeaks[key] = Math.max(performancePeaks[key], value);
 }
+
+try {
+  const longTaskObserver = new PerformanceObserver(entries => {
+    for (const entry of entries.getEntries()) recentLongTaskPeakMs = Math.max(recentLongTaskPeakMs, entry.duration);
+  });
+  longTaskObserver.observe({ entryTypes: ["longtask"] });
+} catch { /* Long Task API is not available in every browser. */ }
 
 updatePerformanceLogStatus();
 
@@ -10497,6 +10518,8 @@ function renderBootstrap(payload: WorldBootstrap): void {
     `WORLD REFRESH ${previousSliceY === null ? "surface" : `slice:${previousSliceY}`} → ${cutawayStateKey} y=${initialPosition.y.toFixed(3)} surface=${surfaceReferenceY.toFixed(3)} stateGap=${statePoseGap?.toFixed(3) ?? "missing"} chunks=${payload.chunks.length} setup=${bootstrapSetupMs.toFixed(1)}ms queued=${queuedChunkRebuilds.size}`,
   );
   worldReady = true;
+  lastWorldBootstrapAt = performance.now();
+  snapFrameHistory.length = 0;
   status.textContent = isInGreenwoodRegion(initialPosition.x, initialPosition.z)
     ? "Greenwood Outskirts · harvest oak timber and investigate the abandoned forester camp."
     : "Welcome to the Town of Beginnings. Starter supplies are nearby; follow the south road when ready.";
@@ -10744,6 +10767,7 @@ minimap.setPingHandler((x, z) => {
 let activeRoomName: typeof WORLD_ROOM | typeof SILVER_DEPTHS_ROOM | typeof PRACTICE_ROOM = WORLD_ROOM;
 let currentWorldObjective: WorldObjectiveUpdate | null = null;
 let worldReady = false;
+let lastWorldBootstrapAt = Number.NEGATIVE_INFINITY;
 
 function renderGraphicsQualityStatus(): void {
   graphicsQualitySelect.value = selectedGraphicsQualityMode;
@@ -10756,6 +10780,7 @@ function renderGraphicsQualityStatus(): void {
 function applyGraphicsQualityTier(tier: GraphicsQualityTier): void {
   const profile = GRAPHICS_QUALITY_PROFILES[tier];
   appliedGraphicsQualityTier = tier;
+  adaptiveResolutionState = { scale: profile.renderScale, slowSamples: 0, fastSamples: 0, changedAt: performance.now() };
   callingParticleDensity = profile.particleScale;
   if (light.light) {
     light.light.shadowResolution = profile.shadowResolution;
@@ -11213,6 +11238,7 @@ const combatSync = new CombatSyncRecorder();
 function recordSnapDiagnostic(cause: string, before: pc.Vec3, after: pc.Vec3): void {
   if (!worldReady) return;
   const now = performance.now();
+  if (now - lastWorldBootstrapAt < 2_000) return;
   const positionLabel = (value: pc.Vec3) => `${fixed(value.x)},${fixed(value.y)},${fixed(value.z)}`;
   const delta = before.distance(after);
   const line = `${fixed(now / 1000, 2)}s ${cause} delta=${fixed(delta)} before=[${positionLabel(before)}] after=[${positionLabel(after)}] server=[${positionLabel(authoritativeLocalPosition)}] sent=${moveSequence} ack=${lastProcessedInputSequence} lag=${moveSequence - lastProcessedInputSequence} blocked_acks=${blockedAcknowledgements} age=${fixed(now - lastAuthoritativeMovementAt, 0)}ms ack_age=${fixed(now - lastAcknowledgementAdvancedAt, 0)}ms input=[${movementVectorLabel(smoothedMovement)}] dt=${fixed(frameSamples.at(-1) ?? 0, 1)}ms rtt=${networkRttMs === null ? "unknown" : fixed(networkRttMs, 0)}ms chunk_build=${fixed(lastChunkBuildMs, 1)}ms slice=${cutawayStateKey}`;
@@ -12550,6 +12576,7 @@ function updatePerformanceMetrics(now: number): void {
   const stable = frameSamples.length >= 120;
   const chunkBuildPeakMs = Math.max(lastChunkBuildMs, recentChunkBuildPeakMs);
   const observedPeaks = { ...performancePeaks };
+  const observedLongTaskPeakMs = recentLongTaskPeakMs;
   const serverFresh = serverPerformance !== null && now - serverPerformanceReceivedAt <= 2_500;
   const currentServerPerformance = serverFresh ? serverPerformance : null;
   const serverWithinBudget = currentServerPerformance === null
@@ -12594,12 +12621,22 @@ function updatePerformanceMetrics(now: number): void {
       visibleMobs: visibleMobCount,
       fullDetailMobs: fullDetailMobCount,
       lodMobs: lodMobCount,
+      gpuMs: observedPeaks.gpuMs > 0 ? observedPeaks.gpuMs : null,
+      presentationWaitMs: observedPeaks.presentationWaitMs,
+      longTaskMs: observedLongTaskPeakMs,
+      renderScale: adaptiveResolutionState.scale,
+      canvasWidth: canvas.width,
+      canvasHeight: canvas.height,
+      devicePixelRatio: window.devicePixelRatio,
+      documentVisible: !document.hidden,
+      windowFocused: document.hasFocus(),
       anomalies: [],
     };
     sample.anomalies = [...new Set([...automaticPerformanceAnomalies(sample), ...pendingPerformanceMarkers])];
     lastPerformanceAnomalies = sample.anomalies;
     performanceLogSamples = appendPerformanceSample(performanceLogSamples, sample);
     for (const key of Object.keys(performancePeaks) as (keyof typeof performancePeaks)[]) performancePeaks[key] = 0;
+    recentLongTaskPeakMs = 0;
     pendingPerformanceMarkers.clear();
     persistPerformanceLog();
     updatePerformanceLogStatus();
@@ -12608,6 +12645,9 @@ function updatePerformanceMetrics(now: number): void {
   performanceFields.frame.textContent = `${p50.toFixed(1)} / ${p95.toFixed(1)} ms`;
   performanceFields.fps.textContent = `${Math.round(fps)}`;
   performanceFields.engine.textContent = `${lastEngineUpdateMs.toFixed(1)} / ${lastRenderMs.toFixed(1)} ms`;
+  performanceFields.pacing.textContent = `${lastGpuMs === null ? "GPU unavailable" : `${lastGpuMs.toFixed(1)} ms GPU`} · ${lastPresentationWaitMs.toFixed(1)} ms wait`;
+  performanceFields.resolution.textContent = `${canvas.width}×${canvas.height} · scale ${adaptiveResolutionState.scale.toFixed(2)} · ${document.hidden ? "hidden" : document.hasFocus() ? "focused" : "unfocused"}`;
+  performanceFields.longTask.textContent = observedLongTaskPeakMs > 0 ? `${observedLongTaskPeakMs.toFixed(1)} ms` : "None";
   performanceFields.subsystems.textContent = `${lastTerrainUpdateMs.toFixed(1)} / ${lastSceneDressingMs.toFixed(1)} / ${lastMobPresentationMs.toFixed(1)} / ${lastWorldUiMs.toFixed(1)} ms`;
   performanceFields.render.textContent = `${app.stats.drawCalls.total.toLocaleString()} / ${app.stats.frame.triangles.toLocaleString()} / ${app.stats.frame.shadowMapUpdates}`;
   performanceFields.clientMobs.textContent = `${visibleMobCount} / ${fullDetailMobCount} / ${lodMobCount}`;
@@ -12685,12 +12725,29 @@ function updatePerformanceMetrics(now: number): void {
     visibleMobs: visibleMobCount,
     fullDetailMobs: fullDetailMobCount,
     lodMobs: lodMobCount,
+    gpuMs: observedPeaks.gpuMs > 0 ? observedPeaks.gpuMs : null,
+    presentationWaitMs: observedPeaks.presentationWaitMs,
+    longTaskMs: observedLongTaskPeakMs,
+    renderScale: adaptiveResolutionState.scale,
+    canvasWidth: canvas.width,
+    canvasHeight: canvas.height,
+    devicePixelRatio: window.devicePixelRatio,
+    documentVisible: !document.hidden,
+    windowFocused: document.hasFocus(),
     anomalies: lastPerformanceAnomalies.join(","),
   };
   if (selectedGraphicsQualityMode === "auto" && stable) {
     const nextAutoQuality = advanceAutoQuality(autoQualityState, p95, now);
     autoQualityState = nextAutoQuality;
     if (nextAutoQuality.tier !== appliedGraphicsQualityTier) applyGraphicsQualityTier(nextAutoQuality.tier);
+    if (appliedGraphicsQualityTier === "low") {
+      const nextResolution = advanceAdaptiveResolution(adaptiveResolutionState, p50, observedPeaks.engineUpdateMs, now);
+      if (nextResolution.scale !== adaptiveResolutionState.scale) {
+        app.graphicsDevice.maxPixelRatio = nextResolution.scale;
+        app.resizeCanvas();
+      }
+      adaptiveResolutionState = nextResolution;
+    }
   }
   recentChunkBuildPeakMs = 0;
 }
@@ -12776,6 +12833,11 @@ app.on("postrender", () => {
 
 app.on("update", (dt: number) => {
   const customUpdateStartedAt = performance.now();
+  lastPresentationWaitMs = Math.max(0, dt * 1000 - lastEngineUpdateMs - lastRenderMs);
+  capturePerformancePeak("presentationWaitMs", lastPresentationWaitMs);
+  const gpuFrameMs = gpuProfiler?._frameTime;
+  lastGpuMs = typeof gpuFrameMs === "number" && Number.isFinite(gpuFrameMs) && gpuFrameMs > 0 ? gpuFrameMs : null;
+  if (lastGpuMs !== null) capturePerformancePeak("gpuMs", lastGpuMs);
   updatePhaseStartedAt = customUpdateStartedAt;
   app.autoRender = Boolean(inventoryPanel.hidden);
   if (!app.autoRender && inventoryRenderDue(performance.now(), inventoryBackgroundFrameAt)) {
@@ -13814,7 +13876,8 @@ app.on("update", (dt: number) => {
     const cameraDelta = Math.hypot(cameraWorldPosition.x - previousSnapFrame.cameraX, cameraWorldPosition.y - previousSnapFrame.cameraY, cameraWorldPosition.z - previousSnapFrame.cameraZ);
     const jumpThreshold = Math.max(0.65, requestedTravel * 3);
     const expectedDodgeMovement = localDodgeStartedAt !== null;
-    if (!expectedDodgeMovement && (worldDelta > jumpThreshold || cameraDelta > jumpThreshold)) recordSnapDiagnostic(
+    const worldTransitionSettling = now - lastWorldBootstrapAt < 2_000;
+    if (!expectedDodgeMovement && !worldTransitionSettling && worldDelta > jumpThreshold) recordSnapDiagnostic(
       `FRAME_JUMP world=${fixed(worldDelta)} camera=${fixed(cameraDelta)} dodge=${localDodgeStartedAt !== null} power=${localActivePower ?? "none"}`,
       new pc.Vec3(previousSnapFrame.localX, previousSnapFrame.localY, previousSnapFrame.localZ),
       player.clone(),
@@ -14841,6 +14904,8 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     returnToTownButton.disabled = false;
     awaitingReturnState = false;
     worldReady = true;
+    lastWorldBootstrapAt = performance.now();
+    snapFrameHistory.length = 0;
     updatePlayerHealth(message.health, message.maxHealth);
     status.textContent = `${message.casterName} resurrected you with ${message.health} HP. Stay close to your party!`;
   });

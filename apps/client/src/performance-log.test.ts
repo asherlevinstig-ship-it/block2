@@ -11,7 +11,9 @@ function sample(at: number): PerformanceLogSample {
     engineUpdateMs: 8, renderMs: 7, customUpdateMs: 5, terrainUpdateMs: 0, sceneDressingMs: 1,
     mobPresentationMs: 2, worldUiMs: 1, drawCalls: 100, renderedTriangles: 10_000,
     shadowMapUpdates: 0, shadowMapMs: 0, particleMs: 0,
-    visibleMobs: 8, fullDetailMobs: 5, lodMobs: 3, anomalies: [] };
+    visibleMobs: 8, fullDetailMobs: 5, lodMobs: 3, gpuMs: 6, presentationWaitMs: 2,
+    longTaskMs: 0, renderScale: 1, canvasWidth: 1280, canvasHeight: 720, devicePixelRatio: 1,
+    documentVisible: true, windowFocused: true, anomalies: [] };
 }
 
 describe("performance log", () => {
@@ -32,7 +34,7 @@ describe("performance log", () => {
 
   it("formats a portable report without player data", () => {
     const report = formatPerformanceLog([sample(5_000)], { path: "/", room: "world", userAgent: "test" });
-    expect(report).toContain("BLOCKCRAFT PERFORMANCE LOG v3");
+    expect(report).toContain("BLOCKCRAFT PERFORMANCE LOG v4");
     expect(report).toContain('"frameP95Ms":18');
     expect(report).toContain("room=world");
   });
