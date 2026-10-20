@@ -17,6 +17,7 @@ import { abilityPracticeChallenge, practiceFollowUpProgress, practicePhaseAfterC
   type AbilityPracticePhase } from "./ability-practice.js";
 import { queueWorldNotice, type WorldNotice } from "./notification-lane.js";
 import { attackAimYaw, rangedAimYaw } from "./ranged-aim.js";
+import { ExclusivePopupQueue } from "./popup-queue.js";
 import { COORDINATED_BRUTE_FOLLOWERS, COORDINATED_SPITTER_FOLLOWERS, activeCombatNearby, advanceBossHud, initialBossHud, leaderArmourSegments, leaderChargeGuidance, leaderExposureLabel, leaderExposureRoleLabel, leaderFormationLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
 import { formationLanePoints, formationMarkerPoints, formationRingPoints, formationTargetStyle, formationVfxStyle,
   type FormationTactic, type FormationTargetRole } from "./formation-vfx.js";
@@ -10764,6 +10765,45 @@ joystickZone.addEventListener("pointercancel", event => releaseJoystick(event.po
 let room: Room | null = null;
 let reportedProtectedDialog: boolean | null = null;
 const protectedDialogSelector = '[role="dialog"], [aria-modal="true"], #loot-pack-decision, #combat-loadout-drawer, #depths-retry-prompt, #mode-switch-tutorial, #party-panel details[open]';
+const exclusivePopupSelector = '[role="dialog"]:not(#starter-inventory-tutorial), [aria-modal="true"]:not(#starter-inventory-tutorial), #loot-pack-decision, #combat-loadout-drawer, #depths-retry-prompt, #mode-switch-tutorial, #ability-practice';
+const popupQueue = new ExclusivePopupQueue();
+const popupPriority = (popup: HTMLElement) => popup.id === "defeat-screen" || popup.id === "character-creator";
+function popupById(id: string): HTMLElement | null {
+  return document.getElementById(id);
+}
+function focusQueuedPopup(popup: HTMLElement): void {
+  window.setTimeout(() => {
+    if (popup.hidden) return;
+    popup.querySelector<HTMLElement>('[autofocus], button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex="-1"])')?.focus();
+  }, 0);
+}
+function hidePopupForQueue(popup: HTMLElement): void {
+  popup.dataset.popupQueued = "true";
+}
+function showPopupFromQueue(id: string | null): void {
+  if (!id) return;
+  const popup = popupById(id);
+  if (!popup) { showPopupFromQueue(popupQueue.close(id).show); return; }
+  delete popup.dataset.popupQueued;
+  if (popup.hidden) { showPopupFromQueue(popupQueue.close(id).show); return; }
+  resetMovementControls();
+  focusQueuedPopup(popup);
+}
+function registerPopupOpen(popup: HTMLElement): void {
+  const result = popupQueue.open(popup.id, popupPriority(popup));
+  for (const id of result.hide) {
+    const hidden = popupById(id);
+    if (hidden) hidePopupForQueue(hidden);
+  }
+}
+function registerPopupClose(popup: HTMLElement): void {
+  showPopupFromQueue(popupQueue.close(popup.id).show);
+}
+function popupElementsIn(node: Node): HTMLElement[] {
+  if (!(node instanceof HTMLElement)) return [];
+  return [node, ...node.querySelectorAll<HTMLElement>(exclusivePopupSelector)]
+    .filter(popup => popup.matches(exclusivePopupSelector) && Boolean(popup.id));
+}
 function syncProtectedDialog(): void {
   if (!room) { reportedProtectedDialog = null; return; }
   const open = callingFirstOnboardingPending || [...document.querySelectorAll<HTMLElement>(protectedDialogSelector)].some(dialog =>
@@ -10780,7 +10820,21 @@ function syncProtectedDialog(): void {
   room.send("ui:dialog", { open });
 }
 let protectedDialogSyncQueued = false;
-new MutationObserver(() => {
+new MutationObserver(records => {
+  for (const record of records) {
+    if (record.type === "attributes" && record.attributeName === "hidden" && record.target instanceof HTMLElement) {
+      const popup = record.target;
+      if (!popup.matches(exclusivePopupSelector) || !popup.id) continue;
+      if (popup.hidden) {
+        delete popup.dataset.popupQueued;
+        registerPopupClose(popup);
+      } else registerPopupOpen(popup);
+    } else if (record.type === "childList") {
+      for (const node of record.removedNodes) for (const popup of popupElementsIn(node)) registerPopupClose(popup);
+      for (const node of record.addedNodes) for (const popup of popupElementsIn(node))
+        if (!popup.hidden) registerPopupOpen(popup);
+    }
+  }
   if (protectedDialogSyncQueued) return;
   protectedDialogSyncQueued = true;
   queueMicrotask(() => { protectedDialogSyncQueued = false; syncProtectedDialog(); });
