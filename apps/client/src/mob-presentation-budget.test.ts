@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MOB_FULL_DETAIL_RANGE, MOB_PRESENTATION_RANGE, mobPresentationDetail,
+import { MOB_COMBAT_DETAIL_RANGE, MOB_FULL_DETAIL_RANGE, MOB_MID_DETAIL_RANGE, MOB_PRESENTATION_RANGE, mobPresentationDetail,
   mobPresentationInitialDelay, mobPresentationIntervalMs, mobPresentationVisible } from "./mob-presentation-budget.js";
 
 describe("mob presentation budget", () => {
@@ -12,15 +12,22 @@ describe("mob presentation budget", () => {
     expect(mobPresentationVisible(false, 1)).toBe(false);
   });
 
-  it("uses articulated models nearby and a cheap silhouette at distance", () => {
+  it("uses articulated, middle and far models by distance", () => {
     expect(mobPresentationDetail(true, MOB_FULL_DETAIL_RANGE)).toBe("full");
-    expect(mobPresentationDetail(true, MOB_FULL_DETAIL_RANGE + .01)).toBe("lod");
+    expect(mobPresentationDetail(true, MOB_FULL_DETAIL_RANGE + .01)).toBe("mid");
+    expect(mobPresentationDetail(true, MOB_MID_DETAIL_RANGE + .01)).toBe("lod");
     expect(mobPresentationDetail(true, MOB_PRESENTATION_RANGE + .01)).toBe("hidden");
+  });
+
+  it("retains full attack tells for active combat beyond the normal close range", () => {
+    expect(mobPresentationDetail(true, MOB_COMBAT_DETAIL_RANGE, true)).toBe("full");
+    expect(mobPresentationDetail(true, MOB_COMBAT_DETAIL_RANGE + .01, true)).toBe("mid");
   });
 
   it("reduces only the visual sampling rate for distant enemies", () => {
     expect(mobPresentationIntervalMs("full", 20)).toBe(0);
-    expect(mobPresentationIntervalMs("lod", 40)).toBe(100);
+    expect(mobPresentationIntervalMs("mid", 30)).toBe(50);
+    expect(mobPresentationIntervalMs("lod", 48)).toBe(100);
     expect(mobPresentationIntervalMs("lod", 60)).toBe(200);
   });
 

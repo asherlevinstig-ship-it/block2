@@ -63,6 +63,7 @@ import { lootHoldProgress, type LootHold } from "./loot-hold.js";
 import { incomingLootAdvice, swapCandidateReason, swapCandidateScore } from "./loot-recommendation.js";
 import { undergroundThreatVisible } from "./underground-threat-visibility.js";
 import { mobPresentationDetail, mobPresentationInitialDelay, mobPresentationIntervalMs } from "./mob-presentation-budget.js";
+import { mobMidDetailParts } from "./mob-mid-detail.js";
 import { nearestQueuedChunkKey } from "./chunk-rebuild-queue.js";
 import { advanceAutoQuality, GRAPHICS_QUALITY_PROFILES, initialAutoQualityTier, parseGraphicsQualityMode,
   type AutoQualityState, type GraphicsQualityMode, type GraphicsQualityTier } from "./graphics-quality.js";
@@ -1960,6 +1961,25 @@ function distantMobMaterial(color: pc.Color): pc.StandardMaterial {
   return material;
 }
 
+function createMidDetailMob(archetype: string, color: pc.Color, scale: number): pc.Entity {
+  const root = new pc.Entity("mob-middle-detail");
+  const material = distantMobMaterial(color);
+  for (const part of mobMidDetailParts(archetype)) {
+    const entity = new pc.Entity(part.name);
+    entity.addComponent("render", {
+      type: "box", material, castShadows: false, receiveShadows: true,
+      batchGroupId: distantMobBatchGroup.id,
+    });
+    entity.setLocalPosition(...part.at);
+    entity.setLocalScale(...part.size);
+    if (part.angle) entity.setLocalEulerAngles(...part.angle);
+    root.addChild(entity);
+  }
+  root.setLocalScale(scale, scale, scale);
+  root.enabled = false;
+  return root;
+}
+
 interface VoxelCharacterRig {
   appearanceMaterials: { skin: pc.StandardMaterial; hair: pc.StandardMaterial; coat: pc.StandardMaterial };
   hairStyles: Record<Appearance["hairStyle"], pc.Entity>;
@@ -3102,6 +3122,7 @@ interface MobVisual {
   entity: pc.Entity;
   snapshots: RemoteSnapshot[];
   bodyRoot: pc.Entity;
+  midBody: pc.Entity;
   lodBody: pc.Entity;
   nextPresentationAt: number;
   nextLabelPresentationAt: number;
@@ -7147,6 +7168,9 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   // Keep the emissive shader feature active while varying cue intensity.
   bodyMaterial.emissive.set(0.001, 0.001, 0.001);
   bodyMaterial.update();
+  const midScale = rootGuardian ? 1.2 : mob.isMiniBoss ? 1.14 : mob.isChampion ? 1.08 : 1;
+  const midBody = createMidDetailMob(mob.archetype, bodyColor, midScale);
+  entity.addChild(midBody);
   const lodBody = new pc.Entity("mob-distant-silhouette");
   lodBody.addComponent("render", {
     type: "box", material: distantMobMaterial(bodyColor), castShadows: false, receiveShadows: true,
@@ -7327,6 +7351,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     entity,
     snapshots: [{ receivedAt: performance.now(), x: mob.x, y: mob.y, z: mob.z, yaw: mob.yaw }],
     bodyRoot,
+    midBody,
     lodBody,
     nextPresentationAt: 0,
     nextLabelPresentationAt: 0,
@@ -10377,6 +10402,7 @@ let recentLoafRenderDelayMs = 0;
 let recentLoafStyleLayoutMs = 0;
 let visibleMobCount = 0;
 let fullDetailMobCount = 0;
+let midDetailMobCount = 0;
 let lodMobCount = 0;
 const performancePeaks = {
   engineUpdateMs: 0, renderMs: 0, customUpdateMs: 0, terrainUpdateMs: 0,
@@ -12696,6 +12722,7 @@ function updatePerformanceMetrics(now: number): void {
       particleMs: app.stats.particles.frameTime,
       visibleMobs: visibleMobCount,
       fullDetailMobs: fullDetailMobCount,
+      midDetailMobs: midDetailMobCount,
       lodMobs: lodMobCount,
       gpuMs: observedPeaks.gpuMs > 0 ? observedPeaks.gpuMs : null,
       presentationWaitMs: observedPeaks.presentationWaitMs,
@@ -12757,7 +12784,7 @@ function updatePerformanceMetrics(now: number): void {
   performanceFields.render.textContent = `${app.stats.drawCalls.total.toLocaleString()} / ${app.stats.frame.triangles.toLocaleString()} / ${app.stats.frame.shadowMapUpdates}`;
   performanceFields.drawBreakdown.textContent = `${app.stats.drawCalls.forward} / ${app.stats.drawCalls.depth} / ${app.stats.drawCalls.shadow} / ${app.stats.drawCalls.misc}`;
   performanceFields.renderState.textContent = `${app.stats.frame.materials} / ${app.stats.frame.shaders} / ${app.stats.scene.meshInstances}`;
-  performanceFields.clientMobs.textContent = `${visibleMobCount} / ${fullDetailMobCount} / ${lodMobCount}`;
+  performanceFields.clientMobs.textContent = `${visibleMobCount} / ${fullDetailMobCount} / ${midDetailMobCount} / ${lodMobCount}`;
   performanceFields.anomaly.textContent = lastPerformanceAnomalies.join(" · ") || "None";
   performanceFields.rtt.textContent = networkRttMs === null ? "Waiting…" : `${networkRttMs.toFixed(0)} ms`;
   performanceFields.inputAck.textContent = movementPilotController ? "SDK stream" : inputAcknowledgementMs === null ? "Waiting…" : `${inputAcknowledgementMs.toFixed(0)} ms`;
@@ -12840,6 +12867,7 @@ function updatePerformanceMetrics(now: number): void {
     particleMs: app.stats.particles.frameTime,
     visibleMobs: visibleMobCount,
     fullDetailMobs: fullDetailMobCount,
+    midDetailMobs: midDetailMobCount,
     lodMobs: lodMobCount,
     gpuMs: observedPeaks.gpuMs > 0 ? observedPeaks.gpuMs : null,
     presentationWaitMs: observedPeaks.presentationWaitMs,
@@ -13331,9 +13359,13 @@ app.on("update", (dt: number) => {
   const mobPresentationStartedAt = performance.now();
   visibleMobCount = 0;
   fullDetailMobCount = 0;
+  midDetailMobCount = 0;
   lodMobCount = 0;
   const serverNow = animationNow + serverClock.offset;
   const playerEye = localPlayer.getPosition();
+  const healthBarTargetId = interactionMode === "combat"
+    ? nearestLivingMob(playerEye, WEAPON_ATTACK_DEFINITIONS[localMainHandId].range)?.id ?? null
+    : null;
   let canvasBounds: DOMRect | null = null;
   for (const [mobId, mob] of mobVisuals) {
     const refreshLabels = animationNow >= mob.nextLabelPresentationAt;
@@ -13358,8 +13390,9 @@ app.on("update", (dt: number) => {
     const deathPose = mobDefeatPose(mob.art.rootGuardian ? "root_guardian" : mob.state.archetype, mob.state.alive ? 0 : animationNow - mob.defeatAt);
     const defeat = mob.state.alive ? 0 : deathPose.collapse;
     const mobDistance = Math.hypot(mob.state.x - playerEye.x, mob.state.y - playerEye.y, mob.state.z - playerEye.z);
+    const combatActive = mob.state.alive && mob.state.combatState !== "idle";
     const presentationDetail = mobPresentationDetail(
-      undergroundMobVisible(mob.state.x, mob.state.y, mob.state.z), mobDistance,
+      undergroundMobVisible(mob.state.x, mob.state.y, mob.state.z), mobDistance, combatActive,
     );
     const visible = presentationDetail !== "hidden"
       && (mob.state.alive || deathPose.visible || materializing || Boolean(respawnIndicator));
@@ -13371,14 +13404,19 @@ app.on("update", (dt: number) => {
       continue;
     }
     visibleMobCount += 1;
+    const useMid = presentationDetail === "mid" && mob.state.alive && !realmArrival;
     const useLod = presentationDetail === "lod" && mob.state.alive && !realmArrival;
-    if (useLod) lodMobCount += 1;
+    const useReducedDetail = useMid || useLod;
+    if (useMid) midDetailMobCount += 1;
+    else if (useLod) lodMobCount += 1;
     else fullDetailMobCount += 1;
-    mob.statusRoot.enabled = mob.state.alive && !realmArrival && !useLod;
-    mob.bodyRoot.enabled = (mob.state.alive && !realmArrival || deathPose.visible) && !useLod;
+    const showWorldHealth = mob.state.health < mob.state.maxHealth || combatActive || healthBarTargetId === mobId;
+    mob.statusRoot.enabled = mob.state.alive && !realmArrival && !useReducedDetail && showWorldHealth;
+    mob.bodyRoot.enabled = (mob.state.alive && !realmArrival || deathPose.visible) && !useReducedDetail;
+    mob.midBody.enabled = useMid;
     mob.lodBody.enabled = useLod;
     mob.respawnCue.enabled = materializing || respawnIndicator?.phase === "warning";
-    if (useLod) {
+    if (useReducedDetail) {
       setElementHidden(mob.combatCue, true);
       setElementHidden(mob.levelTag, true);
       setElementHidden(mob.respawnTag, true);
@@ -13404,6 +13442,11 @@ app.on("update", (dt: number) => {
       mob.entity.setPosition(motion.pose.x, motion.pose.y, motion.pose.z);
       mob.renderYaw = motion.pose.yaw;
       mob.entity.setEulerAngles(0, mob.renderYaw, 0);
+      if (useMid) {
+        const stride = animationTime * (3.5 + Math.min(4, motion.gaitSpeed));
+        mob.midBody.setLocalPosition(0, Math.abs(Math.sin(stride)) * .045, 0);
+        mob.midBody.setLocalEulerAngles(0, 0, Math.sin(stride * .5) * 1.8);
+      }
       trimMobSnapshots(mob.snapshots, animationNow);
       continue;
     }

@@ -44,6 +44,7 @@ export type PerformanceLogSample = {
   particleMs: number;
   visibleMobs: number;
   fullDetailMobs: number;
+  midDetailMobs: number;
   lodMobs: number;
   gpuMs: number | null;
   presentationWaitMs: number;

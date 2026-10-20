@@ -14,7 +14,7 @@ function sample(at: number): PerformanceLogSample {
     shadowDrawCalls: 4, miscDrawCalls: 4, materialSwitches: 28, shaderSwitches: 7,
     sceneMeshInstances: 240, renderedTriangles: 10_000,
     shadowMapUpdates: 0, shadowMapMs: 0, particleMs: 0,
-    visibleMobs: 8, fullDetailMobs: 5, lodMobs: 3, gpuMs: 6, presentationWaitMs: 2,
+    visibleMobs: 8, fullDetailMobs: 3, midDetailMobs: 2, lodMobs: 3, gpuMs: 6, presentationWaitMs: 2,
     longTaskMs: 0, loafDurationMs: 0, loafBlockingMs: 0, loafRenderDelayMs: 0, loafStyleLayoutMs: 0,
     renderScale: 1, canvasWidth: 1280, canvasHeight: 720, devicePixelRatio: 1,
     documentVisible: true, windowFocused: true, appFrameCount: 120, browserRafCount: 120,
