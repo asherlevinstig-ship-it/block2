@@ -55,6 +55,8 @@ import { ROAMING_PACKS, roamingMemberArchetype, roamingMemberId, roamingMembersh
   createRoamingRouteState, advanceRoamingRoute, type RoamingRouteState } from "./roaming-packs.js";
 import { REGIONAL_PACK_DISRUPTION_MS, regionalPackCooldownMultiplier, regionalPackCue, regionalPackGoal,
   regionalPackSpeedMultiplier } from "./regional-pack-tactics.js";
+import { regionalPackRewardDefeat, regionalPackRewardItems, regionalPackRewardNotice,
+  type RegionalPackRewardCycle, type RegionalPackRewardKind } from "./regional-pack-rewards.js";
 import { WILDERNESS_MATERIALIZE_MS, WILDERNESS_RESPAWN_RECHECK_MS,
   usesOverworldRespawnRhythm, wildernessRespawnDelay, wildernessSpawnClear } from "./wilderness-respawn.js";
 import { shouldBecomeWildernessElite, wildernessEliteKind,
@@ -564,6 +566,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly roamingEngaged = new Set<string>();
   private readonly roamingReturning = new Set<string>();
   private readonly roamingPackDisruptedUntil = new Map<string, number>();
+  private readonly roamingPackRewardCycles = new Map<string, RegionalPackRewardCycle>();
   private readonly spitterPositioning = new Map<string, SpitterPositioning>();
   private readonly profileTokens = new Map<string, string>();
   private readonly lastChatAt = new Map<string, number>();
@@ -3133,15 +3136,35 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       }
     }
     const definition = combatMobDefinition(mob);
+    const regionalPack = roamingMembership(mobId);
+    const regionalReward = regionalPack?.pack.eliteIndex !== undefined ? (() => {
+      const otherMembersAlive = regionalPack.pack.offsets.reduce((count, _offset, index) =>
+        index !== regionalPack.index && this.state.mobs.get(roamingMemberId(regionalPack.pack, index))?.alive
+          ? count + 1 : count, 0);
+      const result = regionalPackRewardDefeat(regionalPack.pack.id,
+        regionalPack.index === regionalPack.pack.eliteIndex, otherMembersAlive, now,
+        otherMembersAlive === regionalPack.pack.offsets.length - 1
+          ? undefined : this.roamingPackRewardCycles.get(regionalPack.pack.id));
+      if (result.cycle) this.roamingPackRewardCycles.set(regionalPack.pack.id, result.cycle);
+      else this.roamingPackRewardCycles.delete(regionalPack.pack.id);
+      return result;
+    })() : { rewards: [] as readonly RegionalPackRewardKind[] };
+    const regionalRewardDrops = regionalPack
+      ? regionalPackRewardItems(regionalPack.pack.id, regionalReward.rewards) : [];
     const recipientsWithLoot = new Set<string>();
     if (!SILVER_DEPTHS_CACHE_GUARD_IDS.includes(mobId) && !isFirstCombatSupport(mobId)) for (const playerId of lootRecipients) {
       const fixedReward = mob.isChampion || mob.isElite || isAreaMiniBoss(mobId) || isSilverGuard(mobId) || mobId === "buried-chamber-brute"
-        || mobId === CRYSTAL_MATRIARCH_ID || mobId === "forge-colossus" || isRealmEventId(mobId) || northwatchPatrolClear;
+        || mobId === CRYSTAL_MATRIARCH_ID || mobId === "forge-colossus" || isRealmEventId(mobId) || northwatchPatrolClear
+        || regionalRewardDrops.length > 0;
       const cadenceId = this.profileTokens.get(playerId) ?? playerId;
       if (!fixedReward && !this.normalLootCadence.record(cadenceId, Math.random())) continue;
-      this.spawnLootDrops(mobId, mob, now, playerId, northwatchPatrolClear);
+      this.spawnLootDrops(mobId, mob, now, playerId, northwatchPatrolClear, regionalRewardDrops);
       recipientsWithLoot.add(playerId);
     }
+    const regionalNotice = regionalPack
+      ? regionalPackRewardNotice(regionalPack.pack.name, regionalReward.rewards) : null;
+    if (regionalNotice) for (const playerId of recipientsWithLoot)
+      this.clients.find(client => client.sessionId === playerId)?.send("chat:notice", regionalNotice);
     if (mobId === "northwatch-scout" || mobId === "northwatch-spitter") for (const playerId of recipients) {
       const player = this.state.players.get(playerId);
       if (!player) continue;
@@ -3844,7 +3867,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.refreshNearbyObjectives();
   }
 
-  private spawnLootDrops(mobId: string, mob: MobState, now: number, ownerId = "", northwatchPatrolClear = false): void {
+  private spawnLootDrops(mobId: string, mob: MobState, now: number, ownerId = "", northwatchPatrolClear = false,
+    regionalRewardDrops: readonly { itemId: ItemId; quantity: number }[] = []): void {
     if (mobId === "forest-guardian") return;
     const rewardPlayer = ownerId ? this.state.players.get(ownerId) : undefined;
     const firstCombatDrops: { itemId: ItemId; quantity: number }[] = mobId === FIRST_COMBAT_MOB_ID
@@ -4001,6 +4025,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       ...greenwoodFirstClearDrops,
       ...quarryFirstClearDrops,
       ...firstCombatDrops,
+      ...regionalRewardDrops,
       ...armourDropForMob(mob.archetype, mob.difficultyTier, Math.random()),
     ]);
     const representative = lootBagRepresentative(items);

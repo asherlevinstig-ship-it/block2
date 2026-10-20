@@ -3,6 +3,7 @@ import { Block, playerCollides, wildernessTerritoryAt, type WorldBlockReader } f
 import { ROAMING_PACKS, roamingMemberArchetype, roamingMemberId, roamingGoal, roamingPackAllows, createRoamingRouteState, advanceRoamingRoute } from "../src/roaming-packs.js";
 import { WorldRoom } from "../src/game-room.js";
 import { PlayerState, WorldState } from "../src/schema.js";
+import { decodeLootBagItems } from "@blockcraft/protocol";
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 function fixture(flat = false) {
   vi.useFakeTimers(); vi.setSystemTime(10000);
@@ -109,6 +110,29 @@ describe("bounded roaming enemy packs", () => {
       expect(follower.alertUntil).toBe(13_500);
       expect(follower.combatState).toBe("stagger");
     }
+  });
+  it("adds personal regional loot and a swift-clear reward to the existing bags", () => {
+    const { room, internal } = fixture();
+    const pack = ROAMING_PACKS.find(candidate => candidate.id === "ashen-east-pack")!;
+    const player = new PlayerState(); Object.assign(player, pack.route[0], { health: 5 });
+    room.state.players.set("player", player);
+    const defeat = (index: number, now: number) => {
+      const mob = room.state.mobs.get(roamingMemberId(pack, index))!;
+      internal.defeatMob(roamingMemberId(pack, index), mob, "player", now);
+    };
+    defeat(pack.eliteIndex!, 10_000);
+    const veteranBag = [...room.state.lootDrops.values()].at(-1)!;
+    expect(veteranBag.ownerId).toBe("player");
+    const veteranItems = decodeLootBagItems(veteranBag.contentsJson);
+    expect(veteranItems.find(item => item.itemId === "ember_ore")?.quantity).toBeGreaterThanOrEqual(3);
+    expect(veteranItems.find(item => item.itemId === "stone_core")?.quantity).toBeGreaterThanOrEqual(1);
+    defeat(1, 15_000); defeat(2, 18_000);
+    const clearBag = [...room.state.lootDrops.values()].at(-1)!;
+    expect(clearBag.ownerId).toBe("player");
+    const clearItems = decodeLootBagItems(clearBag.contentsJson);
+    expect(clearItems.find(item => item.itemId === "ember_ore")?.quantity).toBeGreaterThanOrEqual(2);
+    expect(clearItems.find(item => item.itemId === "healing_potion")?.quantity).toBe(1);
+    expect(internal.roamingPackRewardCycles.has(pack.id)).toBe(false);
   });
   it("restores an authored veteran instead of replacing it with a random respawn roll", () => {
     const { room, internal } = fixture();
