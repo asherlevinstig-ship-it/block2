@@ -139,6 +139,8 @@ export const WORLD_STREAM_CHUNK_RADIUS = 3;
 export type ServerPerformanceUpdate = {
   tickP50Ms: number;
   tickP95Ms: number;
+  tickMaxMs: number;
+  overBudgetPercent: number;
   activeMobs: number;
   sleepingMobs: number;
   sampleCount: number;

@@ -21,36 +21,6 @@ export interface AutoQualityState {
   changedAt: number;
 }
 
-export interface AdaptiveResolutionState {
-  scale: number;
-  slowSamples: number;
-  fastSamples: number;
-  changedAt: number;
-}
-
-export const AUTO_LOW_RENDER_SCALES = [0.72, 0.62, 0.55] as const;
-
-export function advanceAdaptiveResolution(
-  state: AdaptiveResolutionState,
-  frameP50Ms: number,
-  updatePeakMs: number,
-  now: number,
-): AdaptiveResolutionState {
-  const cooldownComplete = now - state.changedAt >= 8_000;
-  const index = Math.max(0, AUTO_LOW_RENDER_SCALES.findIndex(scale => Math.abs(scale - state.scale) < .001));
-  const pacingSlow = frameP50Ms > 28 && updatePeakMs < 20;
-  const pacingFast = frameP50Ms < 20;
-  const slowSamples = pacingSlow ? state.slowSamples + 1 : 0;
-  const fastSamples = pacingFast ? state.fastSamples + 1 : 0;
-  if (cooldownComplete && slowSamples >= 8 && index < AUTO_LOW_RENDER_SCALES.length - 1) {
-    return { scale: AUTO_LOW_RENDER_SCALES[index + 1]!, slowSamples: 0, fastSamples: 0, changedAt: now };
-  }
-  if (cooldownComplete && fastSamples >= 30 && index > 0) {
-    return { scale: AUTO_LOW_RENDER_SCALES[index - 1]!, slowSamples: 0, fastSamples: 0, changedAt: now };
-  }
-  return { ...state, slowSamples, fastSamples };
-}
-
 export function parseGraphicsQualityMode(value: string | null): GraphicsQualityMode {
   return value === "high" || value === "medium" || value === "low" ? value : "auto";
 }

@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { advanceAdaptiveResolution, advanceAutoQuality, initialAutoQualityTier, parseGraphicsQualityMode,
-  type AdaptiveResolutionState, type AutoQualityState } from "./graphics-quality.js";
+import { advanceAutoQuality, initialAutoQualityTier, parseGraphicsQualityMode, type AutoQualityState } from "./graphics-quality.js";
 
 describe("graphics quality", () => {
   it("defaults unknown saved values to automatic quality", () => {
@@ -37,17 +36,4 @@ describe("graphics quality", () => {
     expect(state.tier).toBe("high");
   });
 
-  it("lowers automatic render resolution only after sustained pacing stalls with spare update budget", () => {
-    let state: AdaptiveResolutionState = { scale: .72, slowSamples: 0, fastSamples: 0, changedAt: 0 };
-    for (let sample = 1; sample <= 7; sample++) state = advanceAdaptiveResolution(state, 33.3, 14, 9_000 + sample * 500);
-    expect(state.scale).toBe(.72);
-    state = advanceAdaptiveResolution(state, 33.3, 14, 13_000);
-    expect(state.scale).toBe(.62);
-  });
-
-  it("does not trade resolution for a CPU-bound update loop", () => {
-    let state: AdaptiveResolutionState = { scale: .72, slowSamples: 0, fastSamples: 0, changedAt: 0 };
-    for (let sample = 1; sample <= 12; sample++) state = advanceAdaptiveResolution(state, 33.3, 24, 9_000 + sample * 500);
-    expect(state.scale).toBe(.72);
-  });
 });

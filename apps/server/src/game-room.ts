@@ -1027,6 +1027,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const update: ServerPerformanceUpdate = {
       tickP50Ms: samplePercentile(this.simulationTickSamples, 0.5),
       tickP95Ms: samplePercentile(this.simulationTickSamples, 0.95),
+      tickMaxMs: Math.max(0, ...this.simulationTickSamples),
+      overBudgetPercent: this.simulationTickSamples.length === 0 ? 0
+        : this.simulationTickSamples.filter(sample => sample > SERVER_TICK_BUDGET_MS).length * 100 / this.simulationTickSamples.length,
       activeMobs,
       sleepingMobs,
       sampleCount: this.simulationTickSamples.length,

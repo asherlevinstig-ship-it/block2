@@ -6,6 +6,7 @@ import { PERFORMANCE_LOG_MAX_SAMPLES, PERFORMANCE_LOG_RETENTION_MS,
 function sample(at: number): PerformanceLogSample {
   return { at, frameP50Ms: 10, frameP95Ms: 18, fps: 60, rttMs: 40, inputAckMs: 50,
     patchesPerSecond: 30, bytesPerSecond: 10_000, serverTickP50Ms: 2, serverTickP95Ms: 5,
+    serverTickMaxMs: 9, serverTickOverBudgetPercent: 0,
     activeMobs: 8, sleepingMobs: 70, chunkBuildMs: 0, chunkBuildPeakMs: 4, chunkQueue: 0,
     graphicsMode: "auto", graphicsTier: "high", withinBudget: true,
     engineUpdateMs: 8, renderMs: 7, customUpdateMs: 5, terrainUpdateMs: 0, sceneDressingMs: 1,
@@ -13,7 +14,9 @@ function sample(at: number): PerformanceLogSample {
     shadowMapUpdates: 0, shadowMapMs: 0, particleMs: 0,
     visibleMobs: 8, fullDetailMobs: 5, lodMobs: 3, gpuMs: 6, presentationWaitMs: 2,
     longTaskMs: 0, renderScale: 1, canvasWidth: 1280, canvasHeight: 720, devicePixelRatio: 1,
-    documentVisible: true, windowFocused: true, anomalies: [] };
+    documentVisible: true, windowFocused: true, appFrameCount: 120, browserRafCount: 120,
+    browserRafP50Ms: 16.7, browserRafP95Ms: 16.8, frameUnder20Ms: 118, frame20To42Ms: 2,
+    frame42To58Ms: 0, frameOver58Ms: 0, anomalies: [] };
 }
 
 describe("performance log", () => {
@@ -34,7 +37,7 @@ describe("performance log", () => {
 
   it("formats a portable report without player data", () => {
     const report = formatPerformanceLog([sample(5_000)], { path: "/", room: "world", userAgent: "test" });
-    expect(report).toContain("BLOCKCRAFT PERFORMANCE LOG v4");
+    expect(report).toContain("BLOCKCRAFT PERFORMANCE LOG v5");
     expect(report).toContain('"frameP95Ms":18');
     expect(report).toContain("room=world");
   });

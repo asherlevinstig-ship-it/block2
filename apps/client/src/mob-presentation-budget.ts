@@ -19,3 +19,14 @@ export function mobPresentationIntervalMs(detail: MobPresentationDetail, distanc
   if (detail !== "lod") return 0;
   return distance <= 48 ? 100 : 200;
 }
+
+/** Spread distant visual work across frames instead of updating every LOD mob in one synchronized burst. */
+export function mobPresentationInitialDelay(id: string, intervalMs: number): number {
+  if (intervalMs <= 0) return 0;
+  let hash = 2166136261;
+  for (let index = 0; index < id.length; index += 1) {
+    hash ^= id.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0) % intervalMs;
+}

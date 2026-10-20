@@ -13,6 +13,8 @@ export type PerformanceLogSample = {
   bytesPerSecond: number;
   serverTickP50Ms: number | null;
   serverTickP95Ms: number | null;
+  serverTickMaxMs: number | null;
+  serverTickOverBudgetPercent: number | null;
   activeMobs: number | null;
   sleepingMobs: number | null;
   chunkBuildMs: number;
@@ -45,6 +47,14 @@ export type PerformanceLogSample = {
   devicePixelRatio: number;
   documentVisible: boolean;
   windowFocused: boolean;
+  appFrameCount: number;
+  browserRafCount: number;
+  browserRafP50Ms: number;
+  browserRafP95Ms: number;
+  frameUnder20Ms: number;
+  frame20To42Ms: number;
+  frame42To58Ms: number;
+  frameOver58Ms: number;
   anomalies: string[];
 };
 
@@ -53,7 +63,8 @@ export function automaticPerformanceAnomalies(sample: PerformanceLogSample): str
     sample.frameP95Ms > 50 ? "FRAME_BUDGET" : "",
     sample.renderMs > 20 ? "RENDER_COST" : "",
     sample.gpuMs !== null && sample.gpuMs > 16.7 ? "GPU_COST" : "",
-    sample.presentationWaitMs > 20 ? "PRESENTATION_WAIT" : "",
+    sample.presentationWaitMs > 40 && sample.appFrameCount > 0
+      && (sample.frame42To58Ms + sample.frameOver58Ms) / sample.appFrameCount > .1 ? "PRESENTATION_WAIT" : "",
     sample.longTaskMs > 50 ? "MAIN_THREAD_LONG_TASK" : "",
     sample.engineUpdateMs > 20 || sample.customUpdateMs > 20 ? "UPDATE_COST" : "",
     sample.terrainUpdateMs > 16.7 ? "TERRAIN_COST" : "",
@@ -94,7 +105,7 @@ export function formatPerformanceLog(
   context: { path: string; room: string; userAgent: string },
 ): string {
   const header = [
-    "BLOCKCRAFT PERFORMANCE LOG v4",
+    "BLOCKCRAFT PERFORMANCE LOG v5",
     `captured=${new Date().toISOString()}`,
     `path=${context.path}`,
     `room=${context.room}`,

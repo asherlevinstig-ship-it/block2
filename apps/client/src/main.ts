@@ -62,10 +62,10 @@ import { lootVisibleToPlayer } from "./loot-ownership.js";
 import { lootHoldProgress, type LootHold } from "./loot-hold.js";
 import { incomingLootAdvice, swapCandidateReason, swapCandidateScore } from "./loot-recommendation.js";
 import { undergroundThreatVisible } from "./underground-threat-visibility.js";
-import { mobPresentationDetail, mobPresentationIntervalMs } from "./mob-presentation-budget.js";
+import { mobPresentationDetail, mobPresentationInitialDelay, mobPresentationIntervalMs } from "./mob-presentation-budget.js";
 import { nearestQueuedChunkKey } from "./chunk-rebuild-queue.js";
-import { advanceAdaptiveResolution, advanceAutoQuality, GRAPHICS_QUALITY_PROFILES, initialAutoQualityTier, parseGraphicsQualityMode,
-  type AdaptiveResolutionState, type AutoQualityState, type GraphicsQualityMode, type GraphicsQualityTier } from "./graphics-quality.js";
+import { advanceAutoQuality, GRAPHICS_QUALITY_PROFILES, initialAutoQualityTier, parseGraphicsQualityMode,
+  type AutoQualityState, type GraphicsQualityMode, type GraphicsQualityTier } from "./graphics-quality.js";
 import { PERFORMANCE_LOG_INTERVAL_MS, appendPerformanceSample, automaticPerformanceAnomalies,
   formatPerformanceLog, parsePerformanceLog,
   type PerformanceLogSample } from "./performance-log.js";
@@ -1324,6 +1324,8 @@ const performanceFields = {
   pacing: document.querySelector<HTMLElement>("#perf-pacing")!,
   resolution: document.querySelector<HTMLElement>("#perf-resolution")!,
   longTask: document.querySelector<HTMLElement>("#perf-long-task")!,
+  cadence: document.querySelector<HTMLElement>("#perf-cadence")!,
+  frameBuckets: document.querySelector<HTMLElement>("#perf-frame-buckets")!,
   subsystems: document.querySelector<HTMLElement>("#perf-subsystems")!,
   render: document.querySelector<HTMLElement>("#perf-render")!,
   clientMobs: document.querySelector<HTMLElement>("#perf-client-mobs")!,
@@ -1395,12 +1397,6 @@ const initialGraphicsTier = graphicsQualityMode === "auto"
   : graphicsQualityMode;
 let appliedGraphicsQualityTier: GraphicsQualityTier = initialGraphicsTier;
 let autoQualityState: AutoQualityState = { tier: initialGraphicsTier, slowSamples: 0, fastSamples: 0, changedAt: performance.now() };
-let adaptiveResolutionState: AdaptiveResolutionState = {
-  scale: GRAPHICS_QUALITY_PROFILES[initialGraphicsTier].renderScale,
-  slowSamples: 0,
-  fastSamples: 0,
-  changedAt: performance.now(),
-};
 let callingParticleDensity = GRAPHICS_QUALITY_PROFILES[initialGraphicsTier].particleScale;
 
 const app = new pc.Application(canvas, {
@@ -10341,7 +10337,7 @@ let incomingBytesPerSecond = 0;
 let incomingPatchesPerSecond = 0;
 let incomingWindowStartedAt = performance.now();
 const instrumentedSockets = new WeakSet<WebSocket>();
-const PERFORMANCE_LOG_STORAGE_KEY = "blockcraft:performance-log:v4";
+const PERFORMANCE_LOG_STORAGE_KEY = "blockcraft:performance-log:v5";
 let lastPerformanceLogAt = 0;
 let lastCustomUpdateMs = 0;
 let lastEngineUpdateMs = 0;
@@ -10780,7 +10776,6 @@ function renderGraphicsQualityStatus(): void {
 function applyGraphicsQualityTier(tier: GraphicsQualityTier): void {
   const profile = GRAPHICS_QUALITY_PROFILES[tier];
   appliedGraphicsQualityTier = tier;
-  adaptiveResolutionState = { scale: profile.renderScale, slowSamples: 0, fastSamples: 0, changedAt: performance.now() };
   callingParticleDensity = profile.particleScale;
   if (light.light) {
     light.light.shadowResolution = profile.shadowResolution;
@@ -12539,6 +12534,20 @@ powerSlot.addEventListener("pointerup", event => {
 powerSlot.addEventListener("pointercancel", cancelPowerAim);
 
 const frameSamples: number[] = [];
+const browserRafSamples: number[] = [];
+let browserRafCount = 0;
+let lastBrowserRafAt = 0;
+let cadenceWindowStartedAt = performance.now();
+const frameCadenceBuckets = { under20: 0, under42: 0, under58: 0, slower: 0, total: 0 };
+function sampleBrowserRaf(now: number): void {
+  if (lastBrowserRafAt > 0) {
+    browserRafSamples.push(now - lastBrowserRafAt);
+    browserRafCount += 1;
+  }
+  lastBrowserRafAt = now;
+  window.requestAnimationFrame(sampleBrowserRaf);
+}
+window.requestAnimationFrame(sampleBrowserRaf);
 const pendingPings = new Map<string, number>();
 let serverClock = createServerClock(performance.now(), Date.now());
 let pingSequence = 0;
@@ -12577,6 +12586,13 @@ function updatePerformanceMetrics(now: number): void {
   const chunkBuildPeakMs = Math.max(lastChunkBuildMs, recentChunkBuildPeakMs);
   const observedPeaks = { ...performancePeaks };
   const observedLongTaskPeakMs = recentLongTaskPeakMs;
+  const cadenceWindowMs = Math.max(1, now - cadenceWindowStartedAt);
+  const observedCadence = { ...frameCadenceBuckets };
+  const observedBrowserRafCount = browserRafCount;
+  const browserRafP50Ms = percentile(browserRafSamples, .5);
+  const browserRafP95Ms = percentile(browserRafSamples, .95);
+  const appCadenceFps = observedCadence.total * 1_000 / cadenceWindowMs;
+  const browserCadenceFps = observedBrowserRafCount * 1_000 / cadenceWindowMs;
   const serverFresh = serverPerformance !== null && now - serverPerformanceReceivedAt <= 2_500;
   const currentServerPerformance = serverFresh ? serverPerformance : null;
   const serverWithinBudget = currentServerPerformance === null
@@ -12598,6 +12614,8 @@ function updatePerformanceMetrics(now: number): void {
       bytesPerSecond: incomingBytesPerSecond,
       serverTickP50Ms: currentServerPerformance?.tickP50Ms ?? null,
       serverTickP95Ms: currentServerPerformance?.tickP95Ms ?? null,
+      serverTickMaxMs: currentServerPerformance?.tickMaxMs ?? null,
+      serverTickOverBudgetPercent: currentServerPerformance?.overBudgetPercent ?? null,
       activeMobs: currentServerPerformance?.activeMobs ?? null,
       sleepingMobs: currentServerPerformance?.sleepingMobs ?? null,
       chunkBuildMs: lastChunkBuildMs,
@@ -12624,12 +12642,20 @@ function updatePerformanceMetrics(now: number): void {
       gpuMs: observedPeaks.gpuMs > 0 ? observedPeaks.gpuMs : null,
       presentationWaitMs: observedPeaks.presentationWaitMs,
       longTaskMs: observedLongTaskPeakMs,
-      renderScale: adaptiveResolutionState.scale,
+      renderScale: GRAPHICS_QUALITY_PROFILES[appliedGraphicsQualityTier].renderScale,
       canvasWidth: canvas.width,
       canvasHeight: canvas.height,
       devicePixelRatio: window.devicePixelRatio,
       documentVisible: !document.hidden,
       windowFocused: document.hasFocus(),
+      appFrameCount: observedCadence.total,
+      browserRafCount: observedBrowserRafCount,
+      browserRafP50Ms,
+      browserRafP95Ms,
+      frameUnder20Ms: observedCadence.under20,
+      frame20To42Ms: observedCadence.under42,
+      frame42To58Ms: observedCadence.under58,
+      frameOver58Ms: observedCadence.slower,
       anomalies: [],
     };
     sample.anomalies = [...new Set([...automaticPerformanceAnomalies(sample), ...pendingPerformanceMarkers])];
@@ -12637,6 +12663,14 @@ function updatePerformanceMetrics(now: number): void {
     performanceLogSamples = appendPerformanceSample(performanceLogSamples, sample);
     for (const key of Object.keys(performancePeaks) as (keyof typeof performancePeaks)[]) performancePeaks[key] = 0;
     recentLongTaskPeakMs = 0;
+    frameCadenceBuckets.under20 = 0;
+    frameCadenceBuckets.under42 = 0;
+    frameCadenceBuckets.under58 = 0;
+    frameCadenceBuckets.slower = 0;
+    frameCadenceBuckets.total = 0;
+    browserRafSamples.length = 0;
+    browserRafCount = 0;
+    cadenceWindowStartedAt = now;
     pendingPerformanceMarkers.clear();
     persistPerformanceLog();
     updatePerformanceLogStatus();
@@ -12646,8 +12680,10 @@ function updatePerformanceMetrics(now: number): void {
   performanceFields.fps.textContent = `${Math.round(fps)}`;
   performanceFields.engine.textContent = `${lastEngineUpdateMs.toFixed(1)} / ${lastRenderMs.toFixed(1)} ms`;
   performanceFields.pacing.textContent = `${lastGpuMs === null ? "GPU unavailable" : `${lastGpuMs.toFixed(1)} ms GPU`} · ${lastPresentationWaitMs.toFixed(1)} ms wait`;
-  performanceFields.resolution.textContent = `${canvas.width}×${canvas.height} · scale ${adaptiveResolutionState.scale.toFixed(2)} · ${document.hidden ? "hidden" : document.hasFocus() ? "focused" : "unfocused"}`;
+  performanceFields.resolution.textContent = `${canvas.width}×${canvas.height} · scale ${GRAPHICS_QUALITY_PROFILES[appliedGraphicsQualityTier].renderScale.toFixed(2)} · ${document.hidden ? "hidden" : document.hasFocus() ? "focused" : "unfocused"}`;
   performanceFields.longTask.textContent = observedLongTaskPeakMs > 0 ? `${observedLongTaskPeakMs.toFixed(1)} ms` : "None";
+  performanceFields.cadence.textContent = `${appCadenceFps.toFixed(1)} app · ${browserCadenceFps.toFixed(1)} browser · RAF ${browserRafP50Ms.toFixed(1)}/${browserRafP95Ms.toFixed(1)} ms`;
+  performanceFields.frameBuckets.textContent = `${observedCadence.under20} / ${observedCadence.under42} / ${observedCadence.under58} / ${observedCadence.slower}`;
   performanceFields.subsystems.textContent = `${lastTerrainUpdateMs.toFixed(1)} / ${lastSceneDressingMs.toFixed(1)} / ${lastMobPresentationMs.toFixed(1)} / ${lastWorldUiMs.toFixed(1)} ms`;
   performanceFields.render.textContent = `${app.stats.drawCalls.total.toLocaleString()} / ${app.stats.frame.triangles.toLocaleString()} / ${app.stats.frame.shadowMapUpdates}`;
   performanceFields.clientMobs.textContent = `${visibleMobCount} / ${fullDetailMobCount} / ${lodMobCount}`;
@@ -12656,7 +12692,7 @@ function updatePerformanceMetrics(now: number): void {
   performanceFields.inputAck.textContent = movementPilotController ? "SDK stream" : inputAcknowledgementMs === null ? "Waiting…" : `${inputAcknowledgementMs.toFixed(0)} ms`;
   performanceFields.networkRate.textContent = `${incomingPatchesPerSecond.toFixed(1)}/s · ${formatBytes(incomingBytesPerSecond)}/s`;
   performanceFields.serverTick.textContent = currentServerPerformance
-    ? `${currentServerPerformance.tickP50Ms.toFixed(1)} / ${currentServerPerformance.tickP95Ms.toFixed(1)} ms`
+    ? `${currentServerPerformance.tickP50Ms.toFixed(1)} / ${currentServerPerformance.tickP95Ms.toFixed(1)} ms · max ${currentServerPerformance.tickMaxMs.toFixed(1)} · ${currentServerPerformance.overBudgetPercent.toFixed(0)}% slow`
     : "Waiting…";
   performanceFields.serverMobs.textContent = currentServerPerformance
     ? `${currentServerPerformance.activeMobs} / ${currentServerPerformance.sleepingMobs}`
@@ -12694,6 +12730,8 @@ function updatePerformanceMetrics(now: number): void {
     incomingBytesPerSecond,
     serverTickP50Ms: currentServerPerformance?.tickP50Ms ?? null,
     serverTickP95Ms: currentServerPerformance?.tickP95Ms ?? null,
+    serverTickMaxMs: currentServerPerformance?.tickMaxMs ?? null,
+    serverTickOverBudgetPercent: currentServerPerformance?.overBudgetPercent ?? null,
     activeMobs: currentServerPerformance?.activeMobs ?? null,
     sleepingMobs: currentServerPerformance?.sleepingMobs ?? null,
     visibleVoxels,
@@ -12728,26 +12766,26 @@ function updatePerformanceMetrics(now: number): void {
     gpuMs: observedPeaks.gpuMs > 0 ? observedPeaks.gpuMs : null,
     presentationWaitMs: observedPeaks.presentationWaitMs,
     longTaskMs: observedLongTaskPeakMs,
-    renderScale: adaptiveResolutionState.scale,
+    renderScale: GRAPHICS_QUALITY_PROFILES[appliedGraphicsQualityTier].renderScale,
     canvasWidth: canvas.width,
     canvasHeight: canvas.height,
     devicePixelRatio: window.devicePixelRatio,
     documentVisible: !document.hidden,
     windowFocused: document.hasFocus(),
+    appFrameCount: observedCadence.total,
+    browserRafCount: observedBrowserRafCount,
+    browserRafP50Ms,
+    browserRafP95Ms,
+    frameUnder20Ms: observedCadence.under20,
+    frame20To42Ms: observedCadence.under42,
+    frame42To58Ms: observedCadence.under58,
+    frameOver58Ms: observedCadence.slower,
     anomalies: lastPerformanceAnomalies.join(","),
   };
   if (selectedGraphicsQualityMode === "auto" && stable) {
     const nextAutoQuality = advanceAutoQuality(autoQualityState, p95, now);
     autoQualityState = nextAutoQuality;
     if (nextAutoQuality.tier !== appliedGraphicsQualityTier) applyGraphicsQualityTier(nextAutoQuality.tier);
-    if (appliedGraphicsQualityTier === "low") {
-      const nextResolution = advanceAdaptiveResolution(adaptiveResolutionState, p50, observedPeaks.engineUpdateMs, now);
-      if (nextResolution.scale !== adaptiveResolutionState.scale) {
-        app.graphicsDevice.maxPixelRatio = nextResolution.scale;
-        app.resizeCanvas();
-      }
-      adaptiveResolutionState = nextResolution;
-    }
   }
   recentChunkBuildPeakMs = 0;
 }
@@ -12845,8 +12883,14 @@ app.on("update", (dt: number) => {
     app.renderNextFrame = true;
   }
   refreshPotionUi();
-  frameSamples.push(dt * 1000);
+  const frameDurationMs = dt * 1000;
+  frameSamples.push(frameDurationMs);
   if (frameSamples.length > 240) frameSamples.shift();
+  frameCadenceBuckets.total += 1;
+  if (frameDurationMs <= 20) frameCadenceBuckets.under20 += 1;
+  else if (frameDurationMs <= 42) frameCadenceBuckets.under42 += 1;
+  else if (frameDurationMs <= 58) frameCadenceBuckets.under58 += 1;
+  else frameCadenceBuckets.slower += 1;
   const keyboardStrafe = Number(keys.has("KeyD")) - Number(keys.has("KeyA"));
   const keyboardForward = Number(keys.has("KeyW")) - Number(keys.has("KeyS"));
   const modalMovementAllowed = lootPanel.hidden && defeatScreen.hidden && quizPanel.hidden && blacksmithPanel.hidden && inventoryPanel.hidden
@@ -13203,6 +13247,9 @@ app.on("update", (dt: number) => {
   visibleMobCount = 0;
   fullDetailMobCount = 0;
   lodMobCount = 0;
+  const serverNow = animationNow + serverClock.offset;
+  const playerEye = localPlayer.getPosition();
+  let canvasBounds: DOMRect | null = null;
   for (const [mobId, mob] of mobVisuals) {
     if (mob.frameAlive !== mob.state.alive) {
       mob.defeatAt = mob.state.alive ? -Infinity : animationNow;
@@ -13218,13 +13265,11 @@ app.on("update", (dt: number) => {
         mob.renderYaw = mob.state.yaw;
       }
     }
-    const serverNow = animationNow + serverClock.offset;
     const realmArrival = mobId === "realm-stone-warden" && mob.state.alive && mob.state.materializeUntil > serverNow;
     const materializing = (!mob.state.alive || realmArrival) && mob.state.materializeUntil > serverNow;
     const respawnIndicator = cavernRespawnIndicator(mobId, mob.state.alive, mob.state.respawnAt, serverNow);
     const deathPose = mobDefeatPose(mob.art.rootGuardian ? "root_guardian" : mob.state.archetype, mob.state.alive ? 0 : animationNow - mob.defeatAt);
     const defeat = mob.state.alive ? 0 : deathPose.collapse;
-    const playerEye = localPlayer.getPosition();
     const mobDistance = Math.hypot(mob.state.x - playerEye.x, mob.state.y - playerEye.y, mob.state.z - playerEye.z);
     const presentationDetail = mobPresentationDetail(
       undergroundMobVisible(mob.state.x, mob.state.y, mob.state.z), mobDistance,
@@ -13252,6 +13297,10 @@ app.on("update", (dt: number) => {
       mob.mark.enabled = false;
       mob.assassinMarker.enabled = false;
       const intervalMs = mobPresentationIntervalMs(presentationDetail, mobDistance);
+      if (mob.nextPresentationAt <= 0) {
+        mob.nextPresentationAt = animationNow + mobPresentationInitialDelay(mobId, intervalMs);
+        continue;
+      }
       if (animationNow < mob.nextPresentationAt) continue;
       mob.nextPresentationAt = animationNow + intervalMs;
       const currentMobPosition = mob.entity.getPosition();
@@ -13368,7 +13417,7 @@ app.on("update", (dt: number) => {
       && enemyCueLineClear({ x: playerEye.x, y: playerEye.y + .8, z: playerEye.z },
         { x: mob.state.x, y: mob.state.y + .35, z: mob.state.z }, readCollisionWorldBlock)) {
       const screen = camera.camera.worldToScreen(new pc.Vec3(mob.state.x, mob.state.y + .48, mob.state.z));
-      const rect = canvas.getBoundingClientRect();
+      const rect = canvasBounds ??= canvas.getBoundingClientRect();
       const onScreen = screen.z > 0 && screen.x >= 0 && screen.x <= rect.width && screen.y >= 0 && screen.y <= rect.height;
       mob.respawnTag.hidden = !onScreen;
       if (onScreen) {
@@ -13382,7 +13431,7 @@ app.on("update", (dt: number) => {
     }
     if (mob.state.alive && sampledMobDistance <= 28 && camera.camera) {
       const screen = camera.camera.worldToScreen(new pc.Vec3(sampled.x, sampled.y + mob.healthBarY + .27, sampled.z));
-      const rect = canvas.getBoundingClientRect();
+      const rect = canvasBounds ??= canvas.getBoundingClientRect();
       const onScreen = screen.z > 0 && screen.x >= 0 && screen.x <= rect.width && screen.y >= 0 && screen.y <= rect.height;
       mob.levelTag.hidden = !onScreen;
       if (onScreen) {
@@ -13401,7 +13450,7 @@ app.on("update", (dt: number) => {
     mob.recovery.enabled = cueVisible && cue.recovery;
     if (cueVisible && camera.camera) {
       const screen = camera.camera.worldToScreen(new pc.Vec3(sampled.x, sampled.y + mob.healthBarY + .65, sampled.z));
-      const rect = canvas.getBoundingClientRect();
+      const rect = canvasBounds ??= canvas.getBoundingClientRect();
       // PlayCanvas projects into CSS pixels, not the high-DPI backing buffer.
       mob.combatCue.hidden = screen.z <= 0 || screen.x < 0 || screen.x > rect.width || screen.y < 0 || screen.y > rect.height;
       mob.combatCue.style.left = `${rect.left + screen.x}px`;
@@ -13415,7 +13464,7 @@ app.on("update", (dt: number) => {
     if (mob.warning.enabled) {
       if (camera.camera) {
         const warningScreen = camera.camera.worldToScreen(new pc.Vec3(mob.state.attackStrikeX, mob.state.attackStrikeY, mob.state.attackStrikeZ));
-        const bounds = canvas.getBoundingClientRect();
+        const bounds = canvasBounds ??= canvas.getBoundingClientRect();
         if (warningScreen.z > 0 && warningScreen.x >= 0 && warningScreen.x <= bounds.width
           && warningScreen.y >= 0 && warningScreen.y <= bounds.height)
           combatSync.warning(mobId, mob.state.actionSequence, mob.state.attackStartedAt,
