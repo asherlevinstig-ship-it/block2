@@ -59,7 +59,7 @@ import { FIELD_FORGE_RECIPES, type FieldForgeId } from "@blockcraft/protocol";
 import { haulUpgradeProgress, nextHaulRegion, nextHaulUpgrade, type HaulRegion } from "./blacksmith-haul.js";
 import { createStorageUI, type StorageUpdate } from "./storage-ui.js";
 import { lootVisibleToPlayer } from "./loot-ownership.js";
-import { lootHoldProgress, type LootHold } from "./loot-hold.js";
+import { lootHoldProgress, lootHoldSourceForPointer, type LootHold } from "./loot-hold.js";
 import { incomingLootAdvice, swapCandidateReason, swapCandidateScore } from "./loot-recommendation.js";
 import { undergroundThreatVisible } from "./underground-threat-visibility.js";
 import { mobPresentationDetail, mobPresentationInitialDelay, mobPresentationIntervalMs, mobRigNeedsAnimation } from "./mob-presentation-budget.js";
@@ -3369,7 +3369,7 @@ function updateFirstStepsTrail(player: pc.Vec3, now: number): void {
   }
 }
 const lootPanel = document.querySelector<HTMLElement>("#loot-panel")!;
-const lootWorldLabel = document.querySelector<HTMLButtonElement>("#loot-world-label")!;
+const lootWorldLabel = document.querySelector<HTMLElement>("#loot-world-label")!;
 const lootWorldName = document.querySelector<HTMLElement>("#loot-world-name")!;
 const lootWorldAction = document.querySelector<HTMLElement>("#loot-world-action")!;
 const lootWorldHold = document.querySelector<HTMLElement>("#loot-world-hold")!;
@@ -3791,25 +3791,6 @@ lootPackClose.addEventListener("click", closeLoot);
 lootPackLeave.addEventListener("click", closeLoot);
 lootPackSwap.addEventListener("click", () => { if (selectedSwapItemId) collectInspectedLoot("swap", selectedSwapItemId); });
 lootPackSalvage.addEventListener("click", () => collectInspectedLoot("dismantle"));
-lootWorldLabel.addEventListener("pointerdown", event => {
-  if (event.button !== 0) return;
-  event.preventDefault();
-  lootWorldLabel.setPointerCapture(event.pointerId);
-  beginLootHold("pointer");
-});
-for (const name of ["pointerup", "pointercancel"])
-  lootWorldLabel.addEventListener(name, () => {
-    if (name === "pointerup") releaseLootHold("pointer");
-    else if (lootHold?.source === "pointer") cancelLootHold();
-  });
-lootWorldLabel.addEventListener("keydown", event => {
-  if (event.repeat || event.code !== "Enter" && event.code !== "Space") return;
-  event.preventDefault(); event.stopPropagation(); beginLootHold("pointer");
-});
-lootWorldLabel.addEventListener("keyup", event => {
-  if (event.code !== "Enter" && event.code !== "Space") return;
-  event.preventDefault(); event.stopPropagation(); releaseLootHold("pointer");
-});
 const inventoryCounts = new Map<ItemId, number>(Object.keys(ITEM_DEFINITIONS).map(itemId => [itemId as ItemId, 0]));
 let blacksmithReforgeRanks: EquipmentReforgeRanks = {};
 let equipmentAffixes: Partial<Record<ItemId, EquipmentAffixRoll>> = {};
@@ -12211,7 +12192,7 @@ function commitSpecialAim(): void {
   logMovementEvent(`SPECIAL ${BRAMBLE_SNARE.id} ${target.x.toFixed(1)},${target.z.toFixed(1)}`);
 }
 
-function requestPrimaryAction(): void {
+function requestPrimaryAction(lootSource?: LootHold["source"]): void {
   if (playerInteractionUI.isOpen()) return;
   if (!roadsideChoice.hidden) return;
   if (!ashenReliquaryChoice.hidden) return;
@@ -12221,8 +12202,8 @@ function requestPrimaryAction(): void {
   if (!defeatScreen.hidden) return;
   if (nearbyRecoveryBag) { recoverNearbyBag(); return; }
   if (sceneDressing.blacksmithVisible && isAtTownStorage(localPlayer.getPosition())) { openPersonalStorage(); return; }
-  const nearbyLoot = nearestLootDrop();
-  if (nearbyLoot) { beginLootHold("pointer"); return; }
+  const nearbyLoot = lootSource ? nearestLootDrop() : null;
+  if (lootSource && nearbyLoot) { beginLootHold(lootSource); return; }
   if (canClaimAshenReliquary()) { openAshenReliquaryChoice(false); return; }
   if (canPreviewAshenReliquary()) { openAshenReliquaryChoice(true); return; }
   if (nearbyForestPortal) { useNearbyForestPortal(); return; }
@@ -12519,17 +12500,16 @@ canvas.addEventListener("pointerdown", event => {
   if (event.button !== 0) return;
   updatePointerPosition(event);
   updateTarget();
-  const lootNearby = Boolean(nearestLootDrop());
   requestPrimaryAction();
-  if (!lootNearby && event.pointerType === "mouse" && rangedFireAllowed()) rangedFirePointer = event.pointerId;
+  if (event.pointerType === "mouse" && rangedFireAllowed()) rangedFirePointer = event.pointerId;
 });
 window.addEventListener("pointerup", event => {
   if (event.pointerId === rangedFirePointer) rangedFirePointer = null;
-  releaseLootHold("pointer");
+  releaseLootHold("touch");
 });
 window.addEventListener("pointercancel", event => {
   if (event.pointerId === rangedFirePointer) rangedFirePointer = null;
-  if (lootHold?.source === "pointer") cancelLootHold();
+  if (lootHold?.source === "touch") cancelLootHold();
 });
 canvas.addEventListener("pointerup", event => {
   if (event.button === 2) requestDefense(false);
@@ -12538,7 +12518,7 @@ canvas.addEventListener("pointercancel", () => requestDefense(false));
 canvas.addEventListener("contextmenu", event => event.preventDefault());
 mineButton.addEventListener("pointerdown", event => {
   event.preventDefault();
-  requestPrimaryAction();
+  requestPrimaryAction(lootHoldSourceForPointer(event.pointerType) ?? undefined);
 });
 dodgeButton.addEventListener("pointerdown", event => {
   event.preventDefault();

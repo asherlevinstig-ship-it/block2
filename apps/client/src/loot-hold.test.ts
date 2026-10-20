@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LOOT_HOLD_MS, lootHoldProgress } from "./loot-hold.js";
+import { LOOT_HOLD_MS, lootHoldProgress, lootHoldSourceForPointer } from "./loot-hold.js";
 
 describe("hold to collect loot", () => {
   it("requires a deliberate short hold and resets when the target changes", () => {
@@ -9,5 +9,11 @@ describe("hold to collect loot", () => {
     expect(lootHoldProgress(hold, 1_500, "bag-a")).toBe(1);
     expect(lootHoldProgress(hold, 1_600, "bag-b")).toBe(0);
     expect(lootHoldProgress(null, 1_600, "bag-a")).toBe(0);
+  });
+
+  it("never starts collection from a mouse or pen click", () => {
+    expect(lootHoldSourceForPointer("mouse")).toBeNull();
+    expect(lootHoldSourceForPointer("pen")).toBeNull();
+    expect(lootHoldSourceForPointer("touch")).toBe("touch");
   });
 });

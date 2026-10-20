@@ -1,6 +1,10 @@
 export const LOOT_HOLD_MS = 500;
 
-export interface LootHold { dropId: string; startedAt: number; source: "keyboard" | "pointer" }
+export interface LootHold { dropId: string; startedAt: number; source: "keyboard" | "touch" }
+
+export function lootHoldSourceForPointer(pointerType: string): LootHold["source"] | null {
+  return pointerType === "touch" ? "touch" : null;
+}
 
 export function lootHoldProgress(hold: LootHold | null, now: number, dropId: string | null): number {
   if (!hold || hold.dropId !== dropId || !Number.isFinite(now)) return 0;
