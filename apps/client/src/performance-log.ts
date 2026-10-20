@@ -31,6 +31,13 @@ export type PerformanceLogSample = {
   mobPresentationMs: number;
   worldUiMs: number;
   drawCalls: number;
+  forwardDrawCalls: number;
+  depthDrawCalls: number;
+  shadowDrawCalls: number;
+  miscDrawCalls: number;
+  materialSwitches: number;
+  shaderSwitches: number;
+  sceneMeshInstances: number;
   renderedTriangles: number;
   shadowMapUpdates: number;
   shadowMapMs: number;
@@ -77,6 +84,7 @@ export function automaticPerformanceAnomalies(sample: PerformanceLogSample): str
     sample.sceneDressingMs > 10 ? "SCENE_DRESSING_COST" : "",
     sample.mobPresentationMs > 12 ? "MOB_PRESENTATION_COST" : "",
     sample.worldUiMs > 10 ? "WORLD_UI_COST" : "",
+    sample.drawCalls > 220 ? "DRAW_SUBMISSION_COST" : "",
     sample.rttMs !== null && sample.rttMs > 500 ? "NETWORK_RTT" : "",
     sample.inputAckMs !== null && sample.inputAckMs > 500 ? "INPUT_ACK" : "",
     sample.serverTickP95Ms !== null && sample.serverTickP95Ms > 33.3 ? "SERVER_TICK" : "",
@@ -111,7 +119,7 @@ export function formatPerformanceLog(
   context: { path: string; room: string; userAgent: string },
 ): string {
   const header = [
-    "BLOCKCRAFT PERFORMANCE LOG v6",
+    "BLOCKCRAFT PERFORMANCE LOG v7",
     `captured=${new Date().toISOString()}`,
     `path=${context.path}`,
     `room=${context.room}`,

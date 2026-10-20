@@ -1337,6 +1337,8 @@ const performanceFields = {
   frameBuckets: document.querySelector<HTMLElement>("#perf-frame-buckets")!,
   subsystems: document.querySelector<HTMLElement>("#perf-subsystems")!,
   render: document.querySelector<HTMLElement>("#perf-render")!,
+  drawBreakdown: document.querySelector<HTMLElement>("#perf-draw-breakdown")!,
+  renderState: document.querySelector<HTMLElement>("#perf-render-state")!,
   clientMobs: document.querySelector<HTMLElement>("#perf-client-mobs")!,
   anomaly: document.querySelector<HTMLElement>("#perf-anomaly")!,
   rtt: document.querySelector<HTMLElement>("#perf-rtt")!,
@@ -1422,6 +1424,7 @@ app.scene.fog.color = new pc.Color(0.21, 0.3, 0.32);
 app.scene.fog.start = 34;
 app.scene.fog.end = 58;
 app.start();
+const distantMobBatchGroup = app.batcher.addGroup("distant-mob-silhouettes", true, 96);
 const gpuProfiler = app.graphicsDevice.gpuProfiler as unknown as { enabled: boolean; _frameTime?: number } | null;
 if (gpuProfiler) gpuProfiler.enabled = true;
 
@@ -1942,6 +1945,18 @@ function coloredMaterial(color: pc.Color): pc.StandardMaterial {
   const material = new pc.StandardMaterial();
   material.diffuse = color;
   material.update();
+  return material;
+}
+
+const distantMobMaterials = new Map<string, pc.StandardMaterial>();
+function distantMobMaterial(color: pc.Color): pc.StandardMaterial {
+  const key = `${color.r.toFixed(3)}:${color.g.toFixed(3)}:${color.b.toFixed(3)}`;
+  const existing = distantMobMaterials.get(key);
+  if (existing) return existing;
+  const material = coloredMaterial(color.clone());
+  material.shininess = 8;
+  material.update();
+  distantMobMaterials.set(key, material);
   return material;
 }
 
@@ -7116,22 +7131,27 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   const isAshglass = mobId.startsWith("ashglass-sentry-");
   const isBriar = mob.archetype === "briar_crawler";
   const isNorthwatch = mob.archetype === "ridge_stalker" || mob.archetype === "shard_sentry";
+  const matriarch = mobId === "greenwood-venom-matriarch" || mobId === "crystal-matriarch";
+  const rootGuardian = mobId === "forest-guardian";
   const tierColor = mob.difficultyTier >= 3
     ? new pc.Color(1, 0.2, 0.08)
     : mob.difficultyTier === 2
       ? new pc.Color(1, 0.62, 0.08)
       : new pc.Color(0.35, 0.9, 0.28);
-  const bodyMaterial = coloredMaterial(
-    isWatchbreaker ? new pc.Color(.25, .35, .42) : isBrute ? new pc.Color(0.38, 0.43, 0.48) : mob.archetype === "shard_sentry" ? new pc.Color(.25, .43, .52)
+  const bodyColor = rootGuardian ? new pc.Color(.28, .24, .16)
+    : isWatchbreaker ? new pc.Color(.25, .35, .42) : isBrute ? new pc.Color(0.38, 0.43, 0.48) : mob.archetype === "shard_sentry" ? new pc.Color(.25, .43, .52)
       : mob.archetype === "ridge_stalker" ? new pc.Color(.44, .46, .39)
-        : isAshglass ? new pc.Color(0.31, 0.22, 0.2) : isCinderRam ? new pc.Color(.27, .22, .19) : isEmberHound ? new pc.Color(.3, .13, .075) : isFenBloater ? new pc.Color(.24, .34, .12) : isThornbinder ? new pc.Color(.3, .24, .1) : isSpitter ? new pc.Color(0.34, 0.29, 0.43) : isBriar ? new pc.Color(0.31, 0.19, 0.12) : new pc.Color(0.28, 0.42, 0.21),
-  );
+        : isAshglass ? new pc.Color(0.31, 0.22, 0.2) : isCinderRam ? new pc.Color(.27, .22, .19) : isEmberHound ? new pc.Color(.3, .13, .075) : isFenBloater ? new pc.Color(.24, .34, .12) : isThornbinder ? new pc.Color(.3, .24, .1) : isSpitter ? new pc.Color(0.34, 0.29, 0.43) : isBriar ? new pc.Color(0.31, 0.19, 0.12) : new pc.Color(0.28, 0.42, 0.21);
+  const bodyMaterial = coloredMaterial(bodyColor);
   bodyMaterial.shininess = 12;
   // Keep the emissive shader feature active while varying cue intensity.
   bodyMaterial.emissive.set(0.001, 0.001, 0.001);
   bodyMaterial.update();
   const lodBody = new pc.Entity("mob-distant-silhouette");
-  lodBody.addComponent("render", { type: "box", material: bodyMaterial, castShadows: false, receiveShadows: true });
+  lodBody.addComponent("render", {
+    type: "box", material: distantMobMaterial(bodyColor), castShadows: false, receiveShadows: true,
+    batchGroupId: distantMobBatchGroup.id,
+  });
   const lodSize = isBrute ? [1.25, 2.15, 1.05] : isCinderRam ? [1.25, 1.35, 1.7]
     : isFenBloater ? [1.25, 1.05, 1.35] : isThornbinder ? [.9, 1.9, .8]
       : isSpitter ? [1.05, .9, 1.15] : [.72, .9, 1.15];
@@ -7156,9 +7176,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   markMaterial.blendType = pc.BLEND_NORMAL;
   markMaterial.depthWrite = false;
   markMaterial.update();
-  const matriarch = mobId === "greenwood-venom-matriarch" || mobId === "crystal-matriarch";
-  const rootGuardian = mobId === "forest-guardian";
-  if (rootGuardian) { bodyMaterial.diffuse.set(.28, .24, .16); bodyMaterial.update(); bodyRoot.setLocalScale(1.16, 1.16, 1.16); }
+  if (rootGuardian) bodyRoot.setLocalScale(1.16, 1.16, 1.16);
   const art = createMobArt(bodyRoot, mob.archetype, bodyMaterial, matriarch, rootGuardian);
   if (mobId === "northwatch-spitter" || mobId === "northwatch-patrol-stalker-west" || mobId === "northwatch-patrol-stalker-east") {
     const patrolShard = coloredMaterial(new pc.Color(.5, .86, 1));
@@ -10341,7 +10359,7 @@ let incomingBytesPerSecond = 0;
 let incomingPatchesPerSecond = 0;
 let incomingWindowStartedAt = performance.now();
 const instrumentedSockets = new WeakSet<WebSocket>();
-const PERFORMANCE_LOG_STORAGE_KEY = "blockcraft:performance-log:v6";
+const PERFORMANCE_LOG_STORAGE_KEY = "blockcraft:performance-log:v7";
 let lastPerformanceLogAt = 0;
 let lastCustomUpdateMs = 0;
 let lastEngineUpdateMs = 0;
@@ -12665,6 +12683,13 @@ function updatePerformanceMetrics(now: number): void {
       mobPresentationMs: observedPeaks.mobPresentationMs,
       worldUiMs: observedPeaks.worldUiMs,
       drawCalls: app.stats.drawCalls.total,
+      forwardDrawCalls: app.stats.drawCalls.forward,
+      depthDrawCalls: app.stats.drawCalls.depth,
+      shadowDrawCalls: app.stats.drawCalls.shadow,
+      miscDrawCalls: app.stats.drawCalls.misc,
+      materialSwitches: app.stats.frame.materials,
+      shaderSwitches: app.stats.frame.shaders,
+      sceneMeshInstances: app.stats.scene.meshInstances,
       renderedTriangles: app.stats.frame.triangles,
       shadowMapUpdates: app.stats.frame.shadowMapUpdates,
       shadowMapMs: app.stats.frame.shadowMapTime,
@@ -12730,6 +12755,8 @@ function updatePerformanceMetrics(now: number): void {
   performanceFields.frameBuckets.textContent = `${observedCadence.under20} / ${observedCadence.under42} / ${observedCadence.under58} / ${observedCadence.slower}`;
   performanceFields.subsystems.textContent = `${lastTerrainUpdateMs.toFixed(1)} / ${lastSceneDressingMs.toFixed(1)} / ${lastMobPresentationMs.toFixed(1)} / ${lastWorldUiMs.toFixed(1)} ms`;
   performanceFields.render.textContent = `${app.stats.drawCalls.total.toLocaleString()} / ${app.stats.frame.triangles.toLocaleString()} / ${app.stats.frame.shadowMapUpdates}`;
+  performanceFields.drawBreakdown.textContent = `${app.stats.drawCalls.forward} / ${app.stats.drawCalls.depth} / ${app.stats.drawCalls.shadow} / ${app.stats.drawCalls.misc}`;
+  performanceFields.renderState.textContent = `${app.stats.frame.materials} / ${app.stats.frame.shaders} / ${app.stats.scene.meshInstances}`;
   performanceFields.clientMobs.textContent = `${visibleMobCount} / ${fullDetailMobCount} / ${lodMobCount}`;
   performanceFields.anomaly.textContent = lastPerformanceAnomalies.join(" · ") || "None";
   performanceFields.rtt.textContent = networkRttMs === null ? "Waiting…" : `${networkRttMs.toFixed(0)} ms`;
@@ -12800,6 +12827,13 @@ function updatePerformanceMetrics(now: number): void {
     mobPresentationMs: observedPeaks.mobPresentationMs,
     worldUiMs: observedPeaks.worldUiMs,
     drawCalls: app.stats.drawCalls.total,
+    forwardDrawCalls: app.stats.drawCalls.forward,
+    depthDrawCalls: app.stats.drawCalls.depth,
+    shadowDrawCalls: app.stats.drawCalls.shadow,
+    miscDrawCalls: app.stats.drawCalls.misc,
+    materialSwitches: app.stats.frame.materials,
+    shaderSwitches: app.stats.frame.shaders,
+    sceneMeshInstances: app.stats.scene.meshInstances,
     renderedTriangles: app.stats.frame.triangles,
     shadowMapUpdates: app.stats.frame.shadowMapUpdates,
     shadowMapMs: app.stats.frame.shadowMapTime,
@@ -12915,6 +12949,9 @@ app.on("postrender", () => {
   if (renderPhaseStartedAt <= 0) return;
   lastRenderMs = performance.now() - renderPhaseStartedAt;
   capturePerformancePeak("renderMs", lastRenderMs);
+  // Production builds only populate the aggregate counter automatically.
+  // Capture the completed frame's renderer categories for the next update.
+  app.stats.updateDetailed(app.renderer, app.graphicsDevice);
 });
 
 app.on("update", (dt: number) => {

@@ -10,7 +10,9 @@ function sample(at: number): PerformanceLogSample {
     activeMobs: 8, sleepingMobs: 70, chunkBuildMs: 0, chunkBuildPeakMs: 4, chunkQueue: 0,
     graphicsMode: "auto", graphicsTier: "high", withinBudget: true,
     engineUpdateMs: 8, renderMs: 7, customUpdateMs: 5, terrainUpdateMs: 0, sceneDressingMs: 1,
-    mobPresentationMs: 2, worldUiMs: 1, drawCalls: 100, renderedTriangles: 10_000,
+    mobPresentationMs: 2, worldUiMs: 1, drawCalls: 100, forwardDrawCalls: 92, depthDrawCalls: 0,
+    shadowDrawCalls: 4, miscDrawCalls: 4, materialSwitches: 28, shaderSwitches: 7,
+    sceneMeshInstances: 240, renderedTriangles: 10_000,
     shadowMapUpdates: 0, shadowMapMs: 0, particleMs: 0,
     visibleMobs: 8, fullDetailMobs: 5, lodMobs: 3, gpuMs: 6, presentationWaitMs: 2,
     longTaskMs: 0, loafDurationMs: 0, loafBlockingMs: 0, loafRenderDelayMs: 0, loafStyleLayoutMs: 0,
@@ -38,7 +40,7 @@ describe("performance log", () => {
 
   it("formats a portable report without player data", () => {
     const report = formatPerformanceLog([sample(5_000)], { path: "/", room: "world", userAgent: "test" });
-    expect(report).toContain("BLOCKCRAFT PERFORMANCE LOG v6");
+    expect(report).toContain("BLOCKCRAFT PERFORMANCE LOG v7");
     expect(report).toContain('"frameP95Ms":18');
     expect(report).toContain("room=world");
   });
@@ -49,5 +51,10 @@ describe("performance log", () => {
     expect(automaticPerformanceAnomalies(slow)).toEqual([
       "FRAME_BUDGET", "RENDER_COST", "MOB_PRESENTATION_COST", "NETWORK_RTT", "TRAFFIC_BURST",
     ]);
+  });
+
+  it("flags excessive draw submission independently of update cost", () => {
+    expect(automaticPerformanceAnomalies({ ...sample(5_000), drawCalls: 260 }))
+      .toContain("DRAW_SUBMISSION_COST");
   });
 });
