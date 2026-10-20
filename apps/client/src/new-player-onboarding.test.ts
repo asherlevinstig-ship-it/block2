@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { advanceOnboarding, ONBOARDING_DONE, ONBOARDING_STEPS, onboardingStorageKey,
-  legacyOnboardingStorageKey, migrateLegacyOnboardingStep, parseOnboardingStep, shouldPromptTownDeparture,
+  callingFirstOnboardingStorageKey, legacyOnboardingStorageKey, migrateLegacyOnboardingStep, parseOnboardingStep,
+  shouldDeferOnboardingForCalling, shouldPromptTownDeparture,
   starterEquipmentRequired, starterEquipmentStorageKey, starterInventoryLesson } from "./new-player-onboarding.js";
 
 describe("first-play onboarding", () => {
@@ -22,6 +23,14 @@ describe("first-play onboarding", () => {
     expect(starterInventoryLesson(ONBOARDING_DONE, false, true, "forged_sword")).toBe("hidden");
     expect(advanceOnboarding(2, "picked_loot")).toBe(2);
     expect(advanceOnboarding(2, "equipped_starter")).toBe(3);
+  });
+
+  it("holds brand-new and interrupted characters at Calling selection before movement lessons", () => {
+    expect(shouldDeferOnboardingForCalling(true, null, null)).toBe(true);
+    expect(shouldDeferOnboardingForCalling(false, "pending", null)).toBe(true);
+    expect(shouldDeferOnboardingForCalling(false, null, null)).toBe(false);
+    expect(shouldDeferOnboardingForCalling(true, "pending", 0)).toBe(false);
+    expect(callingFirstOnboardingStorageKey("guest_a")).not.toBe(callingFirstOnboardingStorageKey("guest_b"));
   });
 
   it("ties the forced equipment lesson to the starter sword, even when numbered onboarding drifted", () => {

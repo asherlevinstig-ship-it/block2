@@ -353,9 +353,9 @@ import { isPowerCompatibleWithMainHand } from "./power-loadout.js";
 import { characterCreationNeeded, createGuestProfileToken, finishCharacterCreation, getOrCreateProfileToken,
   profileBackups, restoreProfile, startNewAdventure } from "./player-profile.js";
 import { advanceOnboarding, ONBOARDING_DONE, ONBOARDING_STEPS, onboardingStorageKey, legacyOnboardingStorageKey,
-  migrateLegacyOnboardingStep,
+  callingFirstOnboardingStorageKey, migrateLegacyOnboardingStep,
   parseOnboardingStep, shouldPromptTownDeparture, starterEquipmentRequired, starterEquipmentStorageKey,
-  starterInventoryLesson, type OnboardingEvent } from "./new-player-onboarding.js";
+  starterInventoryLesson, shouldDeferOnboardingForCalling, type OnboardingEvent } from "./new-player-onboarding.js";
 import { onboardingTrailRoute, sampleTrail } from "./onboarding-trail.js";
 import { CombatAudio, enemyCuePan, enemyCuesForTransition, type EnemyCue, type EnemyCueSnapshot } from "./combat-audio.js";
 import { SceneDressing } from "./scene-dressing.js";
@@ -685,9 +685,15 @@ let firstStepsIndex = (() => {
     return previous;
   } catch { return null; }
 })();
+const callingFirstOnboardingKey = callingFirstOnboardingStorageKey(profileToken);
+let callingFirstOnboardingPending = shouldDeferOnboardingForCalling(
+  characterCreationRequired,
+  (() => { try { return window.localStorage.getItem(callingFirstOnboardingKey); } catch { return null; } })(),
+  firstStepsIndex,
+);
 function renderFirstSteps(): void {
   const index = firstStepsIndex;
-  const active = index !== null && index < ONBOARDING_DONE;
+  const active = !callingFirstOnboardingPending && index !== null && index < ONBOARDING_DONE;
   const modeLesson = index === 4;
   firstSteps.hidden = !active;
   firstSteps.dataset.guidance = index === 3 ? "south-gate" : "";
@@ -721,6 +727,14 @@ function setFirstSteps(index: number): void {
   firstStepsIndex = index;
   try { window.localStorage.setItem(firstStepsKey, String(index)); } catch { /* Private browsing can disable storage. */ }
   renderFirstSteps();
+}
+function beginFirstStepsAfterCalling(): void {
+  if (!callingFirstOnboardingPending) return;
+  callingFirstOnboardingPending = false;
+  try { window.localStorage.removeItem(callingFirstOnboardingKey); } catch { /* Storage may be unavailable. */ }
+  setFirstSteps(0);
+  status.textContent = "Calling chosen · move around, then follow the gold trail to your starter gear.";
+  syncProtectedDialog();
 }
 function noteFirstStep(event: OnboardingEvent): void {
   if (firstStepsIndex === null || firstStepsIndex >= ONBOARDING_DONE) return;
@@ -4468,6 +4482,7 @@ function closeCallingAwakening(): void {
   if (callingAwakeningContinue.disabled) return;
   callingAwakeningPanel.hidden = true;
   window.clearTimeout(callingAwakeningTimer);
+  beginFirstStepsAfterCalling();
   canvas.focus();
 }
 
@@ -4577,7 +4592,8 @@ function renderBuildPath(update: BuildPathUpdate): void {
     if (update.selectedPathId && previousPathId !== update.selectedPathId) {
       sessionStorage.setItem("calling-intro-seen-v1", "true");
       status.textContent = `${selected!.name} Calling chosen. ${localCharacterProgression.level >= 2 ? `Press G to use ${activeAbility?.name ?? "your Power"}` : `${activeAbility?.name ?? "Your Power"} unlocks at level 2`}.`;
-      if (pendingCallingChoicePathId === update.selectedPathId) beginCallingAwakening(update.selectedPathId, activeAbility?.name ?? "Calling Power");
+      if (pendingCallingChoicePathId === update.selectedPathId || callingFirstOnboardingPending)
+        beginCallingAwakening(update.selectedPathId, activeAbility?.name ?? "Calling Power");
       else showCombatFeedback(`${selected!.name.toUpperCase()} · ${localCharacterProgression.level >= 2 ? "PRESS G" : "POWER AT LV 2"}`, "dodge");
       pendingCallingChoicePathId = null;
     }
@@ -4621,7 +4637,8 @@ function renderBuildPath(update: BuildPathUpdate): void {
     callingIntro.hidden = true;
     sessionStorage.setItem("calling-intro-seen-v1", "true");
     status.textContent = `${selected!.name} Calling chosen. ${localCharacterProgression.level >= 2 ? `Press G to use ${activeAbility?.name ?? "your Power"}` : `${activeAbility?.name ?? "Your Power"} unlocks at level 2`}.`;
-    if (pendingCallingChoicePathId === update.selectedPathId) beginCallingAwakening(update.selectedPathId, activeAbility?.name ?? "Calling Power");
+    if (pendingCallingChoicePathId === update.selectedPathId || callingFirstOnboardingPending)
+      beginCallingAwakening(update.selectedPathId, activeAbility?.name ?? "Calling Power");
     else showCombatFeedback(`${selected!.name.toUpperCase()} · ${localCharacterProgression.level >= 2 ? "PRESS G" : "POWER AT LV 2"}`, "dodge");
     pendingCallingChoicePathId = null;
   } else if (!update.selectedPathId && update.canChoose && levelUpPanel.hidden) {
@@ -10167,7 +10184,7 @@ let reportedProtectedDialog: boolean | null = null;
 const protectedDialogSelector = '[role="dialog"], [aria-modal="true"], #loot-pack-decision, #combat-loadout-drawer, #performance-panel, #depths-retry-prompt, #mode-switch-tutorial, #party-panel details[open]';
 function syncProtectedDialog(): void {
   if (!room) { reportedProtectedDialog = null; return; }
-  const open = [...document.querySelectorAll<HTMLElement>(protectedDialogSelector)].some(dialog =>
+  const open = callingFirstOnboardingPending || [...document.querySelectorAll<HTMLElement>(protectedDialogSelector)].some(dialog =>
     dialog.id !== "defeat-screen" && dialog.id !== "character-creator"
     && !dialog.hidden && dialog.getClientRects().length > 0);
   if (reportedProtectedDialog === open) return;
@@ -14562,9 +14579,19 @@ function showCharacterCreator(): void {
     try {
       await connect({ name: name.data, appearance });
       try { finishCharacterCreation(window.localStorage); } catch { /* Private browsing may prevent storage. */ }
-      setFirstSteps(0);
+      callingFirstOnboardingPending = true;
+      firstStepsIndex = null;
+      try { window.localStorage.setItem(callingFirstOnboardingKey, "pending"); } catch { /* Storage may be unavailable. */ }
+      renderFirstSteps();
       portrait.destroy();
       panel.hidden = true;
+      syncProtectedDialog();
+      if (lastBuildPathUpdate?.selectedPathId && callingAwakeningPanel.hidden) {
+        const ability = lastBuildPathUpdate.selectedCallingAbilityId
+          ? CALLING_ABILITY_OPTIONS.find(option => option.id === lastBuildPathUpdate!.selectedCallingAbilityId) : null;
+        beginCallingAwakening(lastBuildPathUpdate.selectedPathId, ability?.name ?? "Calling Power");
+      } else if (lastBuildPathUpdate?.canChoose) openCallingIntro();
+      room?.send("build:path", { action: "sync" });
     } catch (error) {
       errorLabel.textContent = `Could not enter the world: ${error instanceof Error ? error.message : String(error)}`;
       enterButton.disabled = false;

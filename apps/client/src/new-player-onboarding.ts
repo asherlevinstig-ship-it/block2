@@ -13,6 +13,15 @@ export const ONBOARDING_DONE = ONBOARDING_STEPS.length;
 export const onboardingStorageKey = (profileToken: string): string => `blockcraft.onboarding.v3:${profileToken}`;
 export const legacyOnboardingStorageKey = (profileToken: string): string => `blockcraft.onboarding.v2:${profileToken}`;
 export const starterEquipmentStorageKey = (profileToken: string): string => `blockcraft.starter-equipment.v1:${profileToken}`;
+export const callingFirstOnboardingStorageKey = (profileToken: string): string => `blockcraft.calling-first.v1:${profileToken}`;
+
+export function shouldDeferOnboardingForCalling(
+  characterCreationRequired: boolean,
+  savedState: string | null,
+  onboardingStep: number | null,
+): boolean {
+  return onboardingStep === null && (characterCreationRequired || savedState === "pending");
+}
 
 export function migrateLegacyOnboardingStep(value: string | null): number | null {
   if (value === null) return null;
