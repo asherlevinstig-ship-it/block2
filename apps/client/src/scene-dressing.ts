@@ -119,6 +119,7 @@ export class SceneDressing {
   private readonly roadsidePresentation = new Map<string, RoadsidePresentationState>();
   private readonly roadsideVisuals = new Map<string, RoadsidePresentationVisual>();
   private readonly roadsideBursts: Array<{ root: pc.Entity; particles: pc.Entity[]; startedAt: number }> = [];
+  private ambientDetailModulo = 13;
 
   constructor(private readonly app: pc.Application) {
     this.material.diffuse.set(1, 1, 1);
@@ -160,6 +161,10 @@ export class SceneDressing {
 
   setSurfaceVisible(visible: boolean): void {
     this.root.enabled = visible;
+  }
+
+  setAmbientDetailModulo(modulo: number): void {
+    this.ambientDetailModulo = Math.max(13, Math.round(modulo));
   }
 
   get keeperVisible(): boolean {
@@ -586,7 +591,7 @@ export class SceneDressing {
           if (read(x, SURFACE_HEIGHT, z) !== Block.Grass || read(x, surface, z) !== Block.Air) continue;
           // Stable sparse clusters: no movement-dependent generation or noise.
           const hash = (Math.imul(x + 211, 73856093) ^ Math.imul(z + 97, 19349663)) >>> 0;
-          if (hash % 13 !== 0) continue;
+          if (hash % this.ambientDetailModulo !== 0) continue;
           const px = x + 0.22 + (hash % 53) / 100;
           const pz = z + 0.22 + (hash % 47) / 100;
           const height = 0.12 + (hash % 9) * 0.01;

@@ -1310,6 +1310,9 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 
 #performance-panel[hidden] { display: none; }
 #performance-panel p { margin: 0; }
+.graphics-quality-control { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; color: #9fc9df; font-size: .7rem; font-weight: 900; letter-spacing: .1em; }
+.graphics-quality-control select { min-width: 108px; padding: 6px 28px 6px 9px; border: 1px solid rgb(126 201 244 / 35%); border-radius: 8px; background: #10221e; color: #e7f4e2; font: 800 .72rem/1 system-ui, sans-serif; }
+#graphics-quality-status { margin-top: 6px !important; color: #91a69a; font-size: .68rem; }
 #performance-panel dl { margin: 9px 0 10px; }
 #performance-panel dl div { display: flex; justify-content: space-between; gap: 14px; padding: 3px 0; }
 #performance-panel dt { color: #91a69a; font-size: .74rem; }

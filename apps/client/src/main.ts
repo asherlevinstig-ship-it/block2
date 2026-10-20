@@ -64,6 +64,8 @@ import { incomingLootAdvice, swapCandidateReason, swapCandidateScore } from "./l
 import { undergroundThreatVisible } from "./underground-threat-visibility.js";
 import { mobPresentationVisible } from "./mob-presentation-budget.js";
 import { nearestQueuedChunkKey } from "./chunk-rebuild-queue.js";
+import { advanceAutoQuality, GRAPHICS_QUALITY_PROFILES, initialAutoQualityTier, parseGraphicsQualityMode,
+  type AutoQualityState, type GraphicsQualityMode, type GraphicsQualityTier } from "./graphics-quality.js";
 import { cavernRespawnIndicator } from "./cavern-respawn-indicator.js";
 import { SILVER_DEPTHS, SILVER_DEPTHS_CHECKPOINT_POSITION, isInSilverGuardClearing, isInFrontierBruteArena, isInRealmWardenArena, isInForestDungeon, isInEmberVault } from "@blockcraft/voxel-world";
 import { canUseForestPortal, type ForestPortal, type SilverDepthsWing } from "@blockcraft/protocol";
@@ -1044,6 +1046,8 @@ const dangerZoneDetail = document.querySelector<HTMLElement>("#danger-zone-detai
 const exitGuide = document.querySelector<HTMLElement>("#exit-guide")!;
 const performanceToggle = document.querySelector<HTMLButtonElement>("#performance-toggle")!;
 const performancePanel = document.querySelector<HTMLElement>("#performance-panel")!;
+const graphicsQualitySelect = document.querySelector<HTMLSelectElement>("#graphics-quality")!;
+const graphicsQualityStatus = document.querySelector<HTMLElement>("#graphics-quality-status")!;
 const movementDebug = document.querySelector<HTMLDetailsElement>("#movement-debug")!;
 const movementDebugLive = document.querySelector<HTMLElement>("#movement-debug-live")!;
 const movementDebugEvents = document.querySelector<HTMLOListElement>("#movement-debug-events")!;
@@ -1327,7 +1331,7 @@ const specialButton = document.querySelector<HTMLButtonElement>("#special-button
 const touchModeButton = document.querySelector<HTMLButtonElement>("#touch-mode-button")!;
 const touchModeLabel = document.querySelector<HTMLElement>("#touch-mode-label")!;
 const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-toggle [data-mode]")];
-if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !dangerZone || !dangerZoneName || !locationCoordinates || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !inventoryPanel || !inventoryTotal || !inventoryToggle || !inventoryClose || !inventoryBadge || !inventoryEquipped || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== requiredInventoryMainHands || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !controlsHelp || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
+if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !dangerZone || !dangerZoneName || !locationCoordinates || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !graphicsQualitySelect || !graphicsQualityStatus || !inventoryPanel || !inventoryTotal || !inventoryToggle || !inventoryClose || !inventoryBadge || !inventoryEquipped || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== requiredInventoryMainHands || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !controlsHelp || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
   throw new Error("Game shell is missing required elements");
 }
 if ([quizTablePrompt, blacksmithPrompt, playerTradePrompt, playerTradeName, blacksmithPanel, blacksmithMessage, blacksmithOre, blacksmithGold, blacksmithPrice, blacksmithSell, blacksmithClose, haulEquipName, haulEquipDetail, haulEquip, haulSalvageCount, haulSalvageDetail, haulSalvage, haulStoreCount, haulStore, haulUpgradeName, haulUpgradeTrack, haulUpgradeDetail, haulRegionName, haulRegionDetail, haulTrackRegion, quizPanel, quizBalance, quizBalanceAmount, quizPotDisplay, quizPotLabel, quizWinToast, quizAnswerFeedback, quizFeedbackIcon, quizFeedbackTitle, quizFeedbackDetail, quizMessage, quizStakeHeading, quizStakes, quizQuestion, quizPot, quizPrompt, quizChoices, quizDecision, quizDouble, quizQuit, quizClose, tavernCoins].some(element => !element) || blacksmithUpgradeCards.length !== Object.keys(BLACKSMITH_UPGRADES).length) {
@@ -1361,13 +1365,26 @@ if (window.matchMedia("(pointer: coarse), (max-width: 820px)").matches) {
   movementDebug.open = false;
 }
 
+const GRAPHICS_QUALITY_STORAGE_KEY = "blockcraft-graphics-quality-v1";
+const graphicsQualityMode: GraphicsQualityMode = (() => {
+  try { return parseGraphicsQualityMode(localStorage.getItem(GRAPHICS_QUALITY_STORAGE_KEY)); } catch { return "auto"; }
+})();
+let selectedGraphicsQualityMode = graphicsQualityMode;
+const initialGraphicsTier = graphicsQualityMode === "auto"
+  ? initialAutoQualityTier(window.matchMedia("(pointer: coarse)").matches, window.innerWidth * window.innerHeight)
+  : graphicsQualityMode;
+let appliedGraphicsQualityTier: GraphicsQualityTier = initialGraphicsTier;
+let autoQualityState: AutoQualityState = { tier: initialGraphicsTier, slowSamples: 0, fastSamples: 0, changedAt: performance.now() };
+let callingParticleDensity = GRAPHICS_QUALITY_PROFILES[initialGraphicsTier].particleScale;
+
 const app = new pc.Application(canvas, {
-  graphicsDeviceOptions: { antialias: true, alpha: false },
+  graphicsDeviceOptions: { antialias: graphicsQualityMode !== "low", alpha: false },
   mouse: new pc.Mouse(canvas),
   touch: new pc.TouchDevice(canvas),
 });
 app.setCanvasFillMode(pc.FILLMODE_FILL_WINDOW);
 app.setCanvasResolution(pc.RESOLUTION_AUTO);
+app.graphicsDevice.maxPixelRatio = GRAPHICS_QUALITY_PROFILES[initialGraphicsTier].renderScale;
 app.scene.ambientLight = new pc.Color(0.43, 0.48, 0.54);
 app.scene.fog.type = pc.FOG_LINEAR;
 app.scene.fog.color = new pc.Color(0.21, 0.3, 0.32);
@@ -1387,7 +1404,7 @@ let indoorCameraBlend = 0;
 const light = new pc.Entity("sun");
 light.addComponent("light", {
   type: "directional", color: new pc.Color(1, 0.93, 0.82), intensity: 1.45,
-  castShadows: true, shadowResolution: 2048, shadowType: pc.SHADOW_PCF3_32F,
+  castShadows: true, shadowResolution: GRAPHICS_QUALITY_PROFILES[initialGraphicsTier].shadowResolution, shadowType: pc.SHADOW_PCF3_32F,
   shadowDistance: 55, normalOffsetBias: 0.06, shadowBias: 0.2, numCascades: 1,
 });
 light.setEulerAngles(52, -28, 0);
@@ -1513,6 +1530,7 @@ function updateCaveDiscovery(position: pc.Vec3, now: number): void {
   caveFogRoot.addChild(entity);
 }
 const sceneDressing = new SceneDressing(app);
+sceneDressing.setAmbientDetailModulo(GRAPHICS_QUALITY_PROFILES[initialGraphicsTier].ambientDetailModulo);
 
 const exitTrail = new pc.Entity("exit-trail");
 const exitTrailMaterial = new pc.StandardMaterial();
@@ -5273,7 +5291,7 @@ function createCallingAnticipation(pathId: RoleFieldPath): void {
   const position = localPlayer.getPosition();
   root.setPosition(position.x, position.y + .03, position.z);
   app.root.addChild(root);
-  addCallingParticleLayers(app, root, layers);
+  addCallingParticleLayers(app, root, layers, false, callingParticleDensity);
   callingAnticipationVisuals.push({ root, expiresAt: performance.now() + callingParticleLifetime(layers) * 1000 });
 }
 
@@ -6143,7 +6161,7 @@ function createCallingImpact(effect: CallingAbilityEffect): void {
   }
   if (root.parent === app.root) root.setEulerAngles(0, effect.yaw, 0);
   else root.setLocalEulerAngles(0, effect.yaw, 0);
-  addCallingParticleLayers(app, root, layers);
+  addCallingParticleLayers(app, root, layers, false, callingParticleDensity);
   const materials = addCallingSignature(root, abilityId);
   callingImpactVisuals.push({ root, expiresAt: performance.now() + callingParticleLifetime(layers) * 1000, materials, abilityId });
   const local = localPlayer.getPosition(), pan = enemyCuePan(effect.x, local.x, 14);
@@ -6264,7 +6282,7 @@ function updateCallingPersistentState(state: CallingStateUpdate): void {
     const position = anchor.getPosition(); root.setPosition(position.x, position.y + .03, position.z); app.root.addChild(root);
   } else { root.setLocalPosition(0, .03, 0); anchor.addChild(root); }
   addCallingParticleLayers(app, root,
-    CALLING_ABILITY_SUSTAIN_PARTICLES[state.abilityId] ?? CALLING_SUSTAIN_PARTICLES[state.pathId], true);
+    CALLING_ABILITY_SUSTAIN_PARTICLES[state.abilityId] ?? CALLING_SUSTAIN_PARTICLES[state.pathId], true, callingParticleDensity);
   const materials = addCallingPersistentSignature(root, state);
   callingPersistentVisuals.set(state.playerId, {
     root, expiresAt: state.activeUntil ?? Number.POSITIVE_INFINITY, materials, abilityId: state.abilityId,
@@ -10575,6 +10593,37 @@ minimap.setPingHandler((x, z) => {
 let activeRoomName: typeof WORLD_ROOM | typeof SILVER_DEPTHS_ROOM | typeof PRACTICE_ROOM = WORLD_ROOM;
 let currentWorldObjective: WorldObjectiveUpdate | null = null;
 let worldReady = false;
+
+function renderGraphicsQualityStatus(): void {
+  graphicsQualitySelect.value = selectedGraphicsQualityMode;
+  const tier = appliedGraphicsQualityTier.toUpperCase();
+  graphicsQualityStatus.textContent = selectedGraphicsQualityMode === "auto"
+    ? `Auto · currently ${tier} · adjusts slowly from frame pacing`
+    : `${tier} · fixed until you change it`;
+}
+
+function applyGraphicsQualityTier(tier: GraphicsQualityTier): void {
+  const profile = GRAPHICS_QUALITY_PROFILES[tier];
+  appliedGraphicsQualityTier = tier;
+  callingParticleDensity = profile.particleScale;
+  if (light.light) light.light.shadowResolution = profile.shadowResolution;
+  sceneDressing.setAmbientDetailModulo(profile.ambientDetailModulo);
+  app.graphicsDevice.maxPixelRatio = profile.renderScale;
+  app.resizeCanvas();
+  renderGraphicsQualityStatus();
+}
+
+graphicsQualitySelect.addEventListener("change", () => {
+  selectedGraphicsQualityMode = parseGraphicsQualityMode(graphicsQualitySelect.value);
+  try { localStorage.setItem(GRAPHICS_QUALITY_STORAGE_KEY, selectedGraphicsQualityMode); } catch { /* Storage may be unavailable. */ }
+  const tier = selectedGraphicsQualityMode === "auto"
+    ? initialAutoQualityTier(window.matchMedia("(pointer: coarse)").matches, window.innerWidth * window.innerHeight)
+    : selectedGraphicsQualityMode;
+  autoQualityState = { tier, slowSamples: 0, fastSamples: 0, changedAt: performance.now() };
+  applyGraphicsQualityTier(tier);
+});
+renderGraphicsQualityStatus();
+
 let lastMoveSentAt = 0;
 let moveSequence = 0;
 let mineSequence = 0;
@@ -12352,7 +12401,7 @@ function updatePerformanceMetrics(now: number): void {
       ? "PASS · p95 ≤ 33.3 ms · RTT ≤ 150 ms"
       : "CHECK · one or more provisional budgets exceeded";
 
-  (window as Window & { __BLOCKCRAFT_PERF__?: Record<string, number | boolean | null> }).__BLOCKCRAFT_PERF__ = {
+  (window as Window & { __BLOCKCRAFT_PERF__?: Record<string, number | boolean | string | null> }).__BLOCKCRAFT_PERF__ = {
     p50,
     p95,
     fps,
@@ -12363,10 +12412,17 @@ function updatePerformanceMetrics(now: number): void {
     lastChunkBuildMs,
     chunkBuildPeakMs,
     queuedChunkRebuilds: queuedChunkRebuilds.size,
+    graphicsQualityMode: selectedGraphicsQualityMode,
+    graphicsQualityTier: appliedGraphicsQualityTier,
     worldPayloadBytes,
     stable,
     withinBudget,
   };
+  if (selectedGraphicsQualityMode === "auto" && stable) {
+    const nextAutoQuality = advanceAutoQuality(autoQualityState, p95, now);
+    autoQualityState = nextAutoQuality;
+    if (nextAutoQuality.tier !== appliedGraphicsQualityTier) applyGraphicsQualityTier(nextAutoQuality.tier);
+  }
   recentChunkBuildPeakMs = 0;
 }
 

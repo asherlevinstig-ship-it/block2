@@ -32,20 +32,21 @@ function textureFor(app: pc.Application, kind: ParticleKind): pc.Texture {
 
 /** Texture-backed, GPU-batched particles. No per-frame CPU mesh animation. */
 export function addCallingParticleLayers(app: pc.Application, root: pc.Entity,
-  layers: readonly ParticleLayer[], loop = false): void {
+  layers: readonly ParticleLayer[], loop = false, density = 1): void {
   for (const layer of layers) {
     const emitter = new pc.Entity(`calling-${layer.kind}`);
     emitter.setLocalPosition(0, layer.offsetY ?? 0, 0);
     root.addChild(emitter);
     const smoky = layer.kind === "smoke" || layer.kind === "dust";
     const particleSpeed = layer.forward ? 0 : layer.speed;
+    const particleCount = Math.max(4, Math.round(layer.count * density));
     emitter.addComponent("particlesystem", {
       autoPlay: true,
-      numParticles: layer.count,
+      numParticles: particleCount,
       lifetime: layer.life,
       // Impact layers should arrive as one readable beat. The old fixed 12ms rate
       // smeared large effects across almost a second and made the impact look absent.
-      rate: loop ? Math.max(.025, layer.life / layer.count) : Math.max(.0025, .24 / layer.count),
+      rate: loop ? Math.max(.025, layer.life / particleCount) : Math.max(.0025, .24 / particleCount),
       loop,
       emitterShape: pc.EMITTERSHAPE_SPHERE,
       emitterRadius: layer.radius,
