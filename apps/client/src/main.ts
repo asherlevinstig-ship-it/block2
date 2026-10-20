@@ -337,7 +337,15 @@ import {
 } from "./player-visibility.js";
 import { hidesTownRoof, hidesTownUpperWall, roofCutawayBuilding } from "./town-roof-visibility.js";
 import { MILESTONE_EXIT_STEPS } from "./exit-guidance.js";
-import { createVoxelTexturePixels, voxelCornerLight, voxelTextureKind, voxelTint, type VoxelTextureKind } from "./voxel-textures.js";
+import {
+  VOXEL_ATLAS_HEIGHT,
+  VOXEL_ATLAS_WIDTH,
+  createVoxelTextureAtlasPixels,
+  voxelCornerLight,
+  voxelTextureAtlasUv,
+  voxelTextureKind,
+  voxelTint,
+} from "./voxel-textures.js";
 import { retryConnection } from "./connection-retry.js";
 import {
   alternateInteractionMode,
@@ -1576,47 +1584,34 @@ for (const step of MILESTONE_EXIT_STEPS) {
 exitTrail.enabled = false;
 app.root.addChild(exitTrail);
 
-const materials = new Map<VoxelTextureKind, pc.StandardMaterial>();
-
-function createVoxelTexture(kind: VoxelTextureKind): pc.Texture {
-  const size = 32;
+function createVoxelAtlasTexture(): pc.Texture {
   const canvasTexture = document.createElement("canvas");
-  canvasTexture.width = size;
-  canvasTexture.height = size;
+  canvasTexture.width = VOXEL_ATLAS_WIDTH;
+  canvasTexture.height = VOXEL_ATLAS_HEIGHT;
   const context = canvasTexture.getContext("2d")!;
-  const imageData = context.createImageData(size, size);
-  imageData.data.set(createVoxelTexturePixels(kind, size));
+  const imageData = context.createImageData(VOXEL_ATLAS_WIDTH, VOXEL_ATLAS_HEIGHT);
+  imageData.data.set(createVoxelTextureAtlasPixels());
   context.putImageData(imageData, 0, 0);
   const texture = new pc.Texture(app.graphicsDevice, {
-    width: size,
-    height: size,
+    width: VOXEL_ATLAS_WIDTH,
+    height: VOXEL_ATLAS_HEIGHT,
     mipmaps: true,
     minFilter: pc.FILTER_LINEAR_MIPMAP_LINEAR,
     magFilter: pc.FILTER_NEAREST,
-    addressU: pc.ADDRESS_REPEAT,
-    addressV: pc.ADDRESS_REPEAT,
+    addressU: pc.ADDRESS_CLAMP_TO_EDGE,
+    addressV: pc.ADDRESS_CLAMP_TO_EDGE,
   });
   texture.setSource(canvasTexture);
   return texture;
 }
 
-function materialFor(kind: VoxelTextureKind): pc.StandardMaterial {
-  let material = materials.get(kind);
-  if (!material) {
-    material = new pc.StandardMaterial();
-    material.diffuse = new pc.Color(1, 1, 1);
-    material.diffuseMap = createVoxelTexture(kind);
-    material.diffuseVertexColor = true;
-    const metal = kind === "bronze" || kind === "iron" || kind === "silver" || kind === "moonstone";
-    material.specular = new pc.Color(metal ? 0.26 : 0.035, metal ? 0.2 : 0.035, metal ? 0.12 : 0.035);
-    material.gloss = metal ? 0.28 : 0.06;
-    if (kind === "bronze") material.emissive = new pc.Color(0.05, 0.029, 0.008);
-    if (kind === "moonstone") { material.emissive = new pc.Color(.2, .045, .32); material.gloss = .48; }
-    material.update();
-    materials.set(kind, material);
-  }
-  return material;
-}
+const voxelAtlasMaterial = new pc.StandardMaterial();
+voxelAtlasMaterial.diffuse = new pc.Color(1, 1, 1);
+voxelAtlasMaterial.diffuseMap = createVoxelAtlasTexture();
+voxelAtlasMaterial.diffuseVertexColor = true;
+voxelAtlasMaterial.specular = new pc.Color(.055, .05, .045);
+voxelAtlasMaterial.gloss = .08;
+voxelAtlasMaterial.update();
 
 const faces = [
   { normal: [1, 0, 0], tangentAxes: [1, 2], corners: [[1, 0, 0], [1, 1, 0], [1, 1, 1], [1, 0, 1]] },
@@ -1688,7 +1683,7 @@ function rebuildChunk(chunk: ClientChunk): void {
   const nextMeshes: pc.Mesh[] = [];
   let nextVisibleBlocks = 0;
   let nextVisibleFaces = 0;
-  const buffers = new Map<VoxelTextureKind, { positions: number[]; normals: number[]; uvs: number[]; colors: number[]; indices: number[] }>();
+  const buffer = { positions: [] as number[], normals: [] as number[], uvs: [] as number[], colors: [] as number[], indices: [] as number[] };
   // One padded snapshot amortizes AO lookups and includes adjacent chunks. Hidden
   // roof blocks must not leave dark shadows floating on the player's depth slice.
   const span = CHUNK_SIZE + 2;
@@ -1719,11 +1714,6 @@ function rebuildChunk(chunk: ClientChunk): void {
           const neighbor = visible[outsideIndex];
           if (neighbor !== Block.Air) continue;
           const textureKind = voxelTextureKind(block, face.normal[1], x, y, z);
-          let buffer = buffers.get(textureKind);
-          if (!buffer) {
-            buffer = { positions: [], normals: [], uvs: [], colors: [], indices: [] };
-            buffers.set(textureKind, buffer);
-          }
           nextVisibleFaces += 1;
           const base = buffer.positions.length / 3;
           const tint = voxelTint(x, y, z, textureKind);
@@ -1743,7 +1733,10 @@ function rebuildChunk(chunk: ClientChunk): void {
           }
           const rotate = face.normal[1] > 0 && (textureKind === "grass-top" || textureKind === "dirt" || textureKind === "stone")
             ? (Math.imul(x, 73856093) ^ Math.imul(z, 19349663)) & 3 : 0;
-          for (let i = 0; i < 4; i += 1) buffer.uvs.push(...faceUvCorners[(i + rotate) % 4]!);
+          for (let i = 0; i < 4; i += 1) {
+            const faceUv = faceUvCorners[(i + rotate) % 4]!;
+            buffer.uvs.push(...voxelTextureAtlasUv(textureKind, faceUv[0], faceUv[1]));
+          }
           // The less-occluded diagonal avoids a bright triangle through dark corners.
           if (buffer.colors[base * 4]! + buffer.colors[(base + 2) * 4]!
             > buffer.colors[(base + 1) * 4]! + buffer.colors[(base + 3) * 4]!) {
@@ -1754,8 +1747,7 @@ function rebuildChunk(chunk: ClientChunk): void {
     }
   }
   const meshInstances: pc.MeshInstance[] = [];
-  for (const [textureKind, buffer] of buffers) {
-    if (buffer.indices.length === 0) continue;
+  if (buffer.indices.length > 0) {
     const geometry = new pc.Geometry();
     geometry.positions = buffer.positions;
     geometry.normals = buffer.normals;
@@ -1764,7 +1756,7 @@ function rebuildChunk(chunk: ClientChunk): void {
     geometry.indices = buffer.indices;
     const mesh = pc.Mesh.fromGeometry(app.graphicsDevice, geometry);
     nextMeshes.push(mesh);
-    meshInstances.push(new pc.MeshInstance(mesh, materialFor(textureKind)));
+    meshInstances.push(new pc.MeshInstance(mesh, voxelAtlasMaterial));
   }
   const entity = meshInstances.length === 0 ? null : new pc.Entity(`chunk-mesh:${chunk.chunkX},${chunk.chunkZ}`);
   entity?.addComponent("render", { meshInstances, castShadows: true, receiveShadows: true });

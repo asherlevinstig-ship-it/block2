@@ -1,9 +1,21 @@
 import { Block, SURFACE_HEIGHT, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_SAFE_RADIUS, isInGreenwoodRegion, isInMistfenMarsh, townOfBeginningsBlock, townTavernBlock, townWallBlock } from "@blockcraft/voxel-world";
 
-export type VoxelTextureKind = "bedrock" | "stone" | "dirt" | "grass-top" | "grass-side" | "iron" | "silver" | "moonstone"
-  | "forest-grass-top" | "forest-grass-side" | "oak-bark" | "oak-rings" | "leaves"
-  | "mist-grass-top" | "mist-grass-side" | "bog-water"
-  | "timber" | "slate-roof" | "paving" | "path" | "dressed-stone" | "bronze";
+export const VOXEL_TEXTURE_KINDS = [
+  "bedrock", "stone", "dirt", "grass-top", "grass-side", "iron", "silver", "moonstone",
+  "forest-grass-top", "forest-grass-side", "oak-bark", "oak-rings", "leaves",
+  "mist-grass-top", "mist-grass-side", "bog-water",
+  "timber", "slate-roof", "paving", "path", "dressed-stone", "bronze",
+] as const;
+
+export type VoxelTextureKind = (typeof VOXEL_TEXTURE_KINDS)[number];
+
+export const VOXEL_ATLAS_TILE_SIZE = 32;
+export const VOXEL_ATLAS_PADDING = 2;
+export const VOXEL_ATLAS_COLUMNS = 8;
+export const VOXEL_ATLAS_STRIDE = VOXEL_ATLAS_TILE_SIZE + VOXEL_ATLAS_PADDING * 2;
+export const VOXEL_ATLAS_ROWS = Math.ceil(VOXEL_TEXTURE_KINDS.length / VOXEL_ATLAS_COLUMNS);
+export const VOXEL_ATLAS_WIDTH = VOXEL_ATLAS_COLUMNS * VOXEL_ATLAS_STRIDE;
+export const VOXEL_ATLAS_HEIGHT = VOXEL_ATLAS_ROWS * VOXEL_ATLAS_STRIDE;
 
 type Rgb = readonly [number, number, number];
 
@@ -240,4 +252,46 @@ export function createVoxelTexturePixels(kind: VoxelTextureKind, size = 32): Uin
     }
   }
   return pixels;
+}
+
+/**
+ * Packs every procedural block texture into a single padded atlas. Chunk meshes
+ * can consequently use one material and one draw call instead of one draw per
+ * texture kind. Duplicated edge texels prevent neighbouring tiles bleeding
+ * into one another when the atlas is minified.
+ */
+export function createVoxelTextureAtlasPixels(): Uint8ClampedArray {
+  const atlas = new Uint8ClampedArray(VOXEL_ATLAS_WIDTH * VOXEL_ATLAS_HEIGHT * 4);
+  for (let kindIndex = 0; kindIndex < VOXEL_TEXTURE_KINDS.length; kindIndex += 1) {
+    const source = createVoxelTexturePixels(VOXEL_TEXTURE_KINDS[kindIndex]!, VOXEL_ATLAS_TILE_SIZE);
+    const tileX = kindIndex % VOXEL_ATLAS_COLUMNS * VOXEL_ATLAS_STRIDE;
+    const tileY = Math.floor(kindIndex / VOXEL_ATLAS_COLUMNS) * VOXEL_ATLAS_STRIDE;
+    for (let y = -VOXEL_ATLAS_PADDING; y < VOXEL_ATLAS_TILE_SIZE + VOXEL_ATLAS_PADDING; y += 1) {
+      const sourceY = Math.max(0, Math.min(VOXEL_ATLAS_TILE_SIZE - 1, y));
+      for (let x = -VOXEL_ATLAS_PADDING; x < VOXEL_ATLAS_TILE_SIZE + VOXEL_ATLAS_PADDING; x += 1) {
+        const sourceX = Math.max(0, Math.min(VOXEL_ATLAS_TILE_SIZE - 1, x));
+        const sourceOffset = (sourceY * VOXEL_ATLAS_TILE_SIZE + sourceX) * 4;
+        const atlasOffset = ((tileY + y + VOXEL_ATLAS_PADDING) * VOXEL_ATLAS_WIDTH
+          + tileX + x + VOXEL_ATLAS_PADDING) * 4;
+        atlas[atlasOffset] = source[sourceOffset]!;
+        atlas[atlasOffset + 1] = source[sourceOffset + 1]!;
+        atlas[atlasOffset + 2] = source[sourceOffset + 2]!;
+        atlas[atlasOffset + 3] = source[sourceOffset + 3]!;
+      }
+    }
+  }
+  return atlas;
+}
+
+/** Maps a face-local UV onto texel centres inside its padded atlas tile. */
+export function voxelTextureAtlasUv(kind: VoxelTextureKind, u: number, v: number): readonly [number, number] {
+  const kindIndex = VOXEL_TEXTURE_KINDS.indexOf(kind);
+  const tileX = kindIndex % VOXEL_ATLAS_COLUMNS * VOXEL_ATLAS_STRIDE + VOXEL_ATLAS_PADDING;
+  const tileY = Math.floor(kindIndex / VOXEL_ATLAS_COLUMNS) * VOXEL_ATLAS_STRIDE + VOXEL_ATLAS_PADDING;
+  const safeU = Math.max(0, Math.min(1, u));
+  const safeV = Math.max(0, Math.min(1, v));
+  return [
+    (tileX + 0.5 + safeU * (VOXEL_ATLAS_TILE_SIZE - 1)) / VOXEL_ATLAS_WIDTH,
+    (tileY + 0.5 + safeV * (VOXEL_ATLAS_TILE_SIZE - 1)) / VOXEL_ATLAS_HEIGHT,
+  ];
 }

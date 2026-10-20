@@ -1,6 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { Block, CHUNK_HEIGHT, townOfBeginningsBlock } from "@blockcraft/voxel-world";
-import { createVoxelTexturePixels, voxelCornerLight, voxelTextureKind, type VoxelTextureKind } from "./voxel-textures.js";
+import {
+  VOXEL_ATLAS_COLUMNS,
+  VOXEL_ATLAS_HEIGHT,
+  VOXEL_ATLAS_PADDING,
+  VOXEL_ATLAS_STRIDE,
+  VOXEL_ATLAS_TILE_SIZE,
+  VOXEL_ATLAS_WIDTH,
+  VOXEL_TEXTURE_KINDS,
+  createVoxelTextureAtlasPixels,
+  createVoxelTexturePixels,
+  voxelCornerLight,
+  voxelTextureAtlasUv,
+  voxelTextureKind,
+  type VoxelTextureKind,
+} from "./voxel-textures.js";
 
 const kinds: VoxelTextureKind[] = ["bedrock", "stone", "dirt", "grass-top", "grass-side", "forest-grass-top", "forest-grass-side", "mist-grass-top", "mist-grass-side", "bog-water", "oak-bark", "oak-rings", "leaves", "iron", "silver", "moonstone", "timber", "slate-roof", "paving", "path", "dressed-stone", "bronze"];
 
@@ -18,6 +32,44 @@ describe("procedural voxel textures", () => {
       expect(first).toHaveLength(32 * 32 * 4);
       expect(new Set(Array.from(first).filter((_, index) => index % 4 !== 3)).size).toBeGreaterThan(4);
       for (let index = 3; index < first.length; index += 4) expect(first[index]).toBe(255);
+    }
+  });
+
+  it("packs every texture into one padded atlas without changing its pixels", () => {
+    const atlas = createVoxelTextureAtlasPixels();
+    expect(atlas).toHaveLength(VOXEL_ATLAS_WIDTH * VOXEL_ATLAS_HEIGHT * 4);
+    for (const [kindIndex, kind] of VOXEL_TEXTURE_KINDS.entries()) {
+      const source = createVoxelTexturePixels(kind);
+      const tileX = kindIndex % VOXEL_ATLAS_COLUMNS * VOXEL_ATLAS_STRIDE + VOXEL_ATLAS_PADDING;
+      const tileY = Math.floor(kindIndex / VOXEL_ATLAS_COLUMNS) * VOXEL_ATLAS_STRIDE + VOXEL_ATLAS_PADDING;
+      for (const [x, y] of [[0, 0], [15, 15], [31, 31]] as const) {
+        const sourceOffset = (y * VOXEL_ATLAS_TILE_SIZE + x) * 4;
+        const atlasOffset = ((tileY + y) * VOXEL_ATLAS_WIDTH + tileX + x) * 4;
+        expect(Array.from(atlas.slice(atlasOffset, atlasOffset + 4)))
+          .toEqual(Array.from(source.slice(sourceOffset, sourceOffset + 4)));
+      }
+      const firstCorePixel = ((tileY * VOXEL_ATLAS_WIDTH + tileX) * 4);
+      const paddedCorner = (((tileY - VOXEL_ATLAS_PADDING) * VOXEL_ATLAS_WIDTH
+        + tileX - VOXEL_ATLAS_PADDING) * 4);
+      expect(Array.from(atlas.slice(paddedCorner, paddedCorner + 4)))
+        .toEqual(Array.from(atlas.slice(firstCorePixel, firstCorePixel + 4)));
+    }
+  });
+
+  it("maps face UVs inside unique atlas tiles", () => {
+    const seen = new Set<string>();
+    for (const kind of VOXEL_TEXTURE_KINDS) {
+      const lower = voxelTextureAtlasUv(kind, 0, 0);
+      const upper = voxelTextureAtlasUv(kind, 1, 1);
+      expect(lower[0]).toBeGreaterThan(0);
+      expect(lower[1]).toBeGreaterThan(0);
+      expect(upper[0]).toBeLessThan(1);
+      expect(upper[1]).toBeLessThan(1);
+      expect(upper[0]).toBeGreaterThan(lower[0]);
+      expect(upper[1]).toBeGreaterThan(lower[1]);
+      const key = `${lower[0]},${lower[1]}`;
+      expect(seen.has(key)).toBe(false);
+      seen.add(key);
     }
   });
 
