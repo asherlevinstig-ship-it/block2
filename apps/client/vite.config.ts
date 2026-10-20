@@ -30,6 +30,11 @@ export default defineConfig({
         entryFileNames: "assets/game.js",
         chunkFileNames: "assets/[name].js",
         assetFileNames: "assets/[name][extname]",
+        manualChunks(id) {
+          if (id.includes("/node_modules/playcanvas/") || id.includes("\\node_modules\\playcanvas\\")) return "engine";
+          if (id.includes("/node_modules/@colyseus/") || id.includes("\\node_modules\\@colyseus\\")) return "network";
+          return undefined;
+        },
       },
     },
   },

@@ -1,6 +1,6 @@
 import type * as pc from "playcanvas";
 import type { ArmourId, MainHandId } from "@blockcraft/protocol";
-import { createCharacterPortrait } from "./character-portrait.js";
+import { createLazyCharacterPortrait } from "./lazy-character-portrait.js";
 
 export type PlayerInteractionView = {
   id: string;
@@ -59,7 +59,7 @@ export function createPlayerInteractionUI(actions: {
   const trade = root.querySelector<HTMLButtonElement>(".player-interaction-trade")!;
   const closeButtons = [...root.querySelectorAll<HTMLButtonElement>(".player-interaction-close, .player-interaction-dismiss")];
   let current: PlayerInteractionView | null = null;
-  let portrait: ReturnType<typeof createCharacterPortrait> | null = null;
+  let portrait: ReturnType<typeof createLazyCharacterPortrait> | null = null;
   let portraitTarget = "";
 
   const close = () => {
@@ -108,7 +108,7 @@ export function createPlayerInteractionUI(actions: {
     trade.textContent = view.health <= 0 ? "PLAYER DEFEATED" : view.distance > 4 ? "MOVE CLOSER TO TRADE" : "TRADE";
     if (!portrait || portraitTarget !== view.id) {
       portrait?.destroy();
-      portrait = createCharacterPortrait(canvas, view.characterRoot, () => () => {});
+      portrait = createLazyCharacterPortrait(canvas, view.characterRoot, () => () => {});
       portraitTarget = view.id;
     }
     portrait.refresh(view.handId, view.armourId, view.appearanceKey);

@@ -36,7 +36,7 @@ import { equipmentForItem, armourForItem, utilityForItem, isEquipmentItem, EQUIP
   decodeLootBagItems, encodeLootBagItems, lootBagRepresentative, lootBagTierForItems,
   type LootBagItem, type LootBagTier, type LootCollectAction, type LootCollectResult } from "@blockcraft/protocol";
 import { weaponComparison, armourComparison, comparisonTrend } from "./loot-comparison.js";
-import { createCharacterPortrait } from "./character-portrait.js";
+import { createLazyCharacterPortrait } from "./lazy-character-portrait.js";
 import { rangedStyle } from "./ranged-style.js";
 import { projectileNearMiss } from "./projectile-near-miss.js";
 import { BRUTE_VOLLEY, bruteRockLanes } from "@blockcraft/protocol";
@@ -77,7 +77,7 @@ import { equipmentPickupCard, LOOT_FEED_EQUIPMENT_MS, LOOT_FEED_MATERIAL_MS, LOO
 import { bossLootIdentity, equipmentCallingFit } from "./boss-loot-identity.js";
 import { codexHuntPlan, nextSetPiece } from "./codex-hunt.js";
 import { wildernessTerritoryAt } from "@blockcraft/voxel-world";
-import { createMinimap } from "./minimap.js";
+import { createLazyMinimap } from "./lazy-minimap.js";
 import { caveDepthBand, caveCellKey, discoverCave, caveFogRuns } from "./cave-discovery.js";
 import {
   DEPTHS_ROUTE_NODES,
@@ -366,7 +366,7 @@ import { firstVictoryTownRoute, onboardingTrailRoute, sampleTrail } from "./onbo
 import { firstVictoryCallingFit, firstVictoryItemFromDrop, firstVictoryRewardStorageKey,
   parseFirstVictoryReward, type FirstVictoryRewardState } from "./first-victory-reward.js";
 import { CombatAudio, enemyCuePan, enemyCuesForTransition, type EnemyCue, type EnemyCueSnapshot } from "./combat-audio.js";
-import { SceneDressing } from "./scene-dressing.js";
+import { LazySceneDressing } from "./lazy-scene-dressing.js";
 import { WARDEN_LOOT_BEAM_MS } from "./warden-victory-effects.js";
 import { advanceIndoorCameraBlend, indoorCameraOffset } from "./indoor-camera.js";
 import { canPlayAtTavernTable, canTalkToTavernKeeper, TAVERN_KEEPER, TAVERN_KEEPER_LINES, TAVERN_QUIZ_TABLE } from "./tavern-keeper.js";
@@ -876,7 +876,7 @@ minimapExpand.addEventListener("click", event => {
   setMinimapExpanded(minimapPanel.dataset.expanded !== "true");
 });
 minimapPanel.addEventListener("toggle", () => { if (!minimapPanel.open) setMinimapExpanded(false); });
-const minimap = createMinimap(document.querySelector<HTMLCanvasElement>("#minimap-canvas")!, document.querySelector<HTMLElement>("#minimap-detail")!, `blockcraft:minimap:v1:${profileToken}`, showRegionDiscovery, showLandmarkDiscovery);
+const minimap = createLazyMinimap(document.querySelector<HTMLCanvasElement>("#minimap-canvas")!, document.querySelector<HTMLElement>("#minimap-detail")!, `blockcraft:minimap:v1:${profileToken}`, showRegionDiscovery, showLandmarkDiscovery);
 const mistfenMasteryPanel = document.querySelector<HTMLElement>("#mistfen-mastery")!;
 const mistfenMasteryRank = document.querySelector<HTMLElement>("#mistfen-mastery-rank")!;
 const mistfenMasteryFill = document.querySelector<HTMLElement>("#mistfen-mastery-fill")!;
@@ -1529,7 +1529,7 @@ function updateCaveDiscovery(position: pc.Vec3, now: number): void {
   entity.addComponent("render", { meshInstances: [new pc.MeshInstance(caveFogMesh, caveFogMaterial)], castShadows: false, receiveShadows: false });
   caveFogRoot.addChild(entity);
 }
-const sceneDressing = new SceneDressing(app);
+const sceneDressing = new LazySceneDressing(app);
 sceneDressing.setAmbientDetailModulo(GRAPHICS_QUALITY_PROFILES[initialGraphicsTier].ambientDetailModulo);
 
 const exitTrail = new pc.Entity("exit-trail");
@@ -4051,7 +4051,7 @@ function refreshInventoryEquipped(): void {
   if (!inventoryPanel.hidden) refreshInventoryPreview();
 }
 
-let inventoryPortrait: ReturnType<typeof createCharacterPortrait> | undefined;
+let inventoryPortrait: ReturnType<typeof createLazyCharacterPortrait> | undefined;
 let localAppearance: Appearance = { ...DEFAULT_APPEARANCE };
 const appearanceOptions = document.querySelector<HTMLElement>("#appearance-options")!;
 function updateLocalAppearance(appearance: Appearance): void {
@@ -4180,7 +4180,7 @@ function refreshInventoryPreview(): void {
   if (inventoryPanel.hidden) return;
   const previewOpen = document.querySelector<HTMLDetailsElement>("#inventory-preview-drawer")!.open;
   if (previewOpen && !inventoryPortrait) {
-    inventoryPortrait = createCharacterPortrait(document.querySelector<HTMLCanvasElement>("#inventory-portrait")!, localPlayerRig.root,
+    inventoryPortrait = createLazyCharacterPortrait(document.querySelector<HTMLCanvasElement>("#inventory-portrait")!, localPlayerRig.root,
       (hand, armour) => {
         setRigMainHand(localPlayerRig, hand);
         setRigArmour(localPlayerRig, armour);
@@ -14948,7 +14948,7 @@ function showCharacterCreator(): void {
   const errorLabel = document.querySelector<HTMLElement>("#creator-error")!;
   const enterButton = document.querySelector<HTMLButtonElement>("#creator-enter")!;
   const options = document.querySelector<HTMLElement>("#creator-appearance-options")!;
-  const portrait = createCharacterPortrait(document.querySelector<HTMLCanvasElement>("#creator-portrait")!, localPlayerRig.root,
+  const portrait = createLazyCharacterPortrait(document.querySelector<HTMLCanvasElement>("#creator-portrait")!, localPlayerRig.root,
     () => () => {});
   let appearance: Appearance = { ...DEFAULT_APPEARANCE };
   const refresh = () => {
