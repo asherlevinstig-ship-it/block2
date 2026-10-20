@@ -62,19 +62,18 @@ export function isMistfenEventFollower(id: string): boolean {
   return id.startsWith(MISTFEN_EVENT_FOLLOWER_PREFIX);
 }
 
-export function mistfenEventScale(kind: MistfenEventKind, nearbyPlayers: number, highestLevel: number) {
-  const players = Math.max(1, Math.min(6, Math.floor(nearbyPlayers)));
-  const level = Math.max(1, Math.min(20, Math.floor(highestLevel)));
-  const levelPressure = Math.max(0, level - 5);
+export function mistfenEventScale(kind: MistfenEventKind) {
+  const players = 3;
+  const level = 7;
   const event = mistfenEventDefinition(kind)!;
   return {
     players,
     level,
-    followerCount: event.followerCount + (players >= 4 ? 1 : 0),
-    healthMultiplier: 1 + levelPressure * .05,
-    damageBonus: (level >= 9 ? 1 : 0) + (players >= 4 ? 1 : 0),
+    followerCount: event.followerCount,
+    healthMultiplier: 1,
+    damageBonus: 0,
     speedMultiplier: kind === "mireback-stampede" ? 1.12 : 1,
-    rewardMultiplier: 1 + levelPressure * .04,
+    rewardMultiplier: 1,
   };
 }
 

@@ -11,12 +11,11 @@ describe("Mistfen dynamic regional events", () => {
     ]);
   });
 
-  it("scales with level and party size while capping both", () => {
-    const solo = mistfenEventScale("toxic-bloom", 1, 5);
-    const party = mistfenEventScale("toxic-bloom", 20, 30);
-    expect(solo).toMatchObject({ players: 1, level: 5, followerCount: 3, damageBonus: 0 });
-    expect(party).toMatchObject({ players: 6, level: 20, followerCount: 4, damageBonus: 2 });
-    expect(party.healthMultiplier).toBeGreaterThan(solo.healthMultiplier);
+  it("uses a fixed Mistfen profile instead of scaling to the arriving party", () => {
+    expect(mistfenEventScale("toxic-bloom")).toMatchObject({
+      players: 3, level: 7, followerCount: 3, healthMultiplier: 1, damageBonus: 0, rewardMultiplier: 1,
+    });
+    expect(mistfenEventScale("bog-hunt").followerCount).toBe(4);
   });
 
   it("gives every variant a distinct pressure pattern and formation", () => {

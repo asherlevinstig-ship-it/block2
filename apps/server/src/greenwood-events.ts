@@ -61,19 +61,18 @@ export function isGreenwoodEventFollower(id: string): boolean {
   return id.startsWith(GREENWOOD_EVENT_FOLLOWER_PREFIX);
 }
 
-export function greenwoodEventScale(kind: GreenwoodEventKind, nearbyPlayers: number, highestLevel: number) {
-  const players = Math.max(1, Math.min(6, Math.floor(nearbyPlayers)));
-  const level = Math.max(1, Math.min(20, Math.floor(highestLevel)));
-  const levelPressure = Math.max(0, level - 3);
+export function greenwoodEventScale(kind: GreenwoodEventKind) {
+  const players = 2;
+  const level = 4;
   const event = greenwoodEventDefinition(kind)!;
   return {
     players,
     level,
-    followerCount: event.followerCount + (players >= 4 ? 1 : 0),
-    healthMultiplier: 1 + levelPressure * .055,
-    damageBonus: (level >= 7 ? 1 : 0) + (players >= 4 ? 1 : 0),
+    followerCount: event.followerCount,
+    healthMultiplier: 1,
+    damageBonus: 0,
     speedMultiplier: kind === "crawler-migration" ? 1.18 : kind === "alpha-ambush" ? 1.1 : 1,
-    rewardMultiplier: 1 + levelPressure * .035,
+    rewardMultiplier: 1,
   };
 }
 

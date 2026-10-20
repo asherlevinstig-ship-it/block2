@@ -8,15 +8,11 @@ describe("Greenwood dynamic regional events", () => {
     ]);
   });
 
-  it("scales pressure with level and party size without uncapped mobs", () => {
-    const solo = greenwoodEventScale("crawler-migration", 1, 3);
-    const party = greenwoodEventScale("crawler-migration", 12, 20);
-    expect(solo).toMatchObject({ players: 1, level: 3, followerCount: 2, damageBonus: 0 });
-    expect(party.players).toBe(6);
-    expect(party.level).toBe(20);
-    expect(party.followerCount).toBe(3);
-    expect(party.healthMultiplier).toBeGreaterThan(solo.healthMultiplier);
-    expect(party.rewardMultiplier).toBeGreaterThan(solo.rewardMultiplier);
+  it("uses a fixed Greenwood profile instead of scaling to the arriving party", () => {
+    expect(greenwoodEventScale("crawler-migration")).toMatchObject({
+      players: 2, level: 4, followerCount: 2, healthMultiplier: 1, damageBonus: 0, rewardMultiplier: 1,
+    });
+    expect(greenwoodEventScale("alpha-ambush").followerCount).toBe(4);
   });
 
   it("surrounds the event with the configured elite followers", () => {

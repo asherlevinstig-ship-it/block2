@@ -18,6 +18,8 @@ export type RealmEventDefinition = {
   position: { x: number; y: number; z: number };
   triggerIds: readonly string[];
   tier: number;
+  designedPlayers: number;
+  fixedLevel: number;
   baseHealth: number;
   healthPerPlayer: number;
   baseDamage: number;
@@ -33,8 +35,6 @@ export const REALM_EVENT_TRACKING_RADIUS = 160;
 /** Regional calls are discovered in the field; only the realm boss is announced globally. */
 export const REGIONAL_EVENT_DISCOVERY_RADIUS = 42;
 export const REALM_BOSS_TRACKING_RADIUS = 64;
-export const REALM_EVENT_SCALING_RADIUS = 30;
-export const REALM_EVENT_MAX_PLAYERS = 6;
 export const REALM_EVENT_WARNING_MS = 8_000;
 export const REALM_EVENT_COOLDOWN_MS = 45_000;
 export const REALM_BOSS_RETRY_MS = 15_000;
@@ -47,7 +47,7 @@ export const REALM_EVENT_DEFINITIONS: readonly RealmEventDefinition[] = [
     title: "Venom Matriarch · Public Event",
     detail: "Dodge aimed shots and fan gaps. Deal damage to qualify for personal loot and open the Forest Dungeon.",
     archetype: "cave_spitter", position: { x: 43.5, y: 8, z: 18.5 },
-    triggerIds: ["wild-crawler", "greenwood-briar", "greenwood-briar-north"], tier: 1,
+    triggerIds: ["wild-crawler", "greenwood-briar", "greenwood-briar-north"], tier: 1, designedPlayers: 2, fixedLevel: 4,
     baseHealth: 24, healthPerPlayer: 12, baseDamage: 1, rewardMultiplier: 1.5,
     rewards: [{ itemId: "acid_gland", quantity: 3 }], signatureRewards: ["venom_focus"], opensForestPortal: true,
   },
@@ -56,7 +56,7 @@ export const REALM_EVENT_DEFINITIONS: readonly RealmEventDefinition[] = [
     title: "Mistfen Mireheart · Regional Event",
     detail: "Read the marsh hazards, break its escort, and claim survival-focused personal loot.",
     archetype: "stone_brute", position: MISTFEN_BEHEMOTH_HOME,
-    triggerIds: ["mistfen-behemoth", "mistfen-briar-west", "mistfen-briar-east", "mistfen-spitter"], tier: 2,
+    triggerIds: ["mistfen-behemoth", "mistfen-briar-west", "mistfen-briar-east", "mistfen-spitter"], tier: 2, designedPlayers: 3, fixedLevel: 7,
     baseHealth: 34, healthPerPlayer: 14, baseDamage: 2, rewardMultiplier: 1.8,
     rewards: [{ itemId: "acid_gland", quantity: 4 }, { itemId: "healing_potion", quantity: 1 }], signatureRewards: [],
   },
@@ -65,7 +65,7 @@ export const REALM_EVENT_DEFINITIONS: readonly RealmEventDefinition[] = [
     title: "Stoneheart Siege · Public Event",
     detail: "Use the arena pillars against rock volleys, escape the marked slam, then punish its recovery.",
     archetype: "stone_brute", position: STONE_BRUTE_ARENA_HOME,
-    triggerIds: ["stone-brute", "frontier-brute"], tier: 2,
+    triggerIds: ["stone-brute", "frontier-brute"], tier: 2, designedPlayers: 3, fixedLevel: 8,
     baseHealth: 32, healthPerPlayer: 14, baseDamage: 2, rewardMultiplier: 1.75,
     rewards: [{ itemId: "stone_core", quantity: 4 }], signatureRewards: ["stone_core_hammer"],
   },
@@ -74,7 +74,7 @@ export const REALM_EVENT_DEFINITIONS: readonly RealmEventDefinition[] = [
     title: "Ashglass Oracle · Public Event",
     detail: "Cross the fan-fire gaps, break the Oracle's firing rhythm, and claim its crystal equipment.",
     archetype: "cave_spitter", position: ASHEN_SPIRE_POSITION,
-    triggerIds: ["ashglass-sentry-west", "ashglass-sentry-east"], tier: 3,
+    triggerIds: ["ashglass-sentry-west", "ashglass-sentry-east"], tier: 3, designedPlayers: 4, fixedLevel: 11,
     baseHealth: 36, healthPerPlayer: 16, baseDamage: 2, rewardMultiplier: 2,
     rewards: [{ itemId: "silver_ore", quantity: 5 }], signatureRewards: ["echo_prism"],
   },
@@ -83,7 +83,7 @@ export const REALM_EVENT_DEFINITIONS: readonly RealmEventDefinition[] = [
     title: "Realm Stone Warden · Realm Boss",
     detail: "The realm threat has peaked. Rally nearby players, survive the Warden's volleys and slams, and reset the realm cycle.",
     archetype: "stone_brute", position: REALM_WARDEN_HOME,
-    triggerIds: [], tier: 3,
+    triggerIds: [], tier: 3, designedPlayers: 5, fixedLevel: 14,
     baseHealth: 54, healthPerPlayer: 22, baseDamage: 3, rewardMultiplier: 2.5,
     rewards: [{ itemId: "moonstone", quantity: 1 }, { itemId: "healing_potion", quantity: 2 }],
     signatureRewards: ["rootbound_hammer", "rootguard_armour"],
@@ -120,13 +120,13 @@ export function isRealmEventId(id: string): boolean {
   return REALM_EVENT_IDS.includes(id);
 }
 
-export function realmEventScale(nearbyPlayers: number, definition: RealmEventDefinition): { players: number; maxHealth: number; attackDamage: number; rewardMultiplier: number } {
-  const players = Math.max(1, Math.min(REALM_EVENT_MAX_PLAYERS, Math.floor(nearbyPlayers)));
+export function realmEventScale(definition: RealmEventDefinition): { players: number; maxHealth: number; attackDamage: number; rewardMultiplier: number } {
+  const players = definition.designedPlayers;
   return {
     players,
     maxHealth: definition.baseHealth + (players - 1) * definition.healthPerPlayer,
-    attackDamage: Math.max(definition.baseDamage, players >= 4 ? 2 : 1),
-    rewardMultiplier: definition.rewardMultiplier + (players - 1) * .25,
+    attackDamage: definition.baseDamage,
+    rewardMultiplier: definition.rewardMultiplier,
   };
 }
 

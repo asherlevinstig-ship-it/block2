@@ -34,7 +34,7 @@ import { mobAssistants, MOB_ASSIST_COOLDOWN_MS } from "./mob-assist.js";
 import { circleCrawler, createCrawlerPositioning, retreatCrawler, type CrawlerPositioning } from "./crawler-positioning.js";
 import { FRONTIER_CHAMPION_ID, SILVER_CHAMPION_ID, championPattern, spitterChampionShots, combatMobDefinition, moveChampionCharge, championChargeHits } from "./frontier-champion.js";
 import { WILDERNESS_EVENT_ID } from "./wilderness-event.js";
-import { RealmEventDirector, REALM_BOSS_TRACKING_RADIUS, REALM_EVENT_TRACKING_RADIUS, REALM_EVENT_SCALING_RADIUS, REGIONAL_EVENT_DISCOVERY_RADIUS, isRealmEventId, realmEventDefinition, realmEventScale } from "./realm-event-director.js";
+import { RealmEventDirector, REALM_BOSS_TRACKING_RADIUS, REALM_EVENT_TRACKING_RADIUS, REGIONAL_EVENT_DISCOVERY_RADIUS, isRealmEventId, realmEventDefinition, realmEventScale } from "./realm-event-director.js";
 import { GREENWOOD_EVENT_TRACKING_RADIUS, greenwoodEventDefinition, greenwoodEventFollowers,
   greenwoodEventScale, isGreenwoodEventFollower, type GreenwoodEventKind } from "./greenwood-events.js";
 import { MISTFEN_EVENT_ID, MISTFEN_EVENT_TRACKING_RADIUS, mistfenEventDefinition, mistfenEventFollowers,
@@ -3669,16 +3669,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private advanceRealmEvent(now: number): void {
     const definition = this.realmEvents.release(now);
     if (!definition) return;
-    const nearby = [...this.state.players.values()].filter(player => player.health > 0
-      && Math.abs(player.y - definition.position.y) <= 2.5
-      && Math.hypot(player.x - definition.position.x, player.z - definition.position.z) <= REALM_EVENT_SCALING_RADIUS);
-    const scale = realmEventScale(nearby.length, definition);
+    const scale = realmEventScale(definition);
     const greenwoodVariant = definition.key === "greenwood" ? this.realmEvents.greenwoodVariant : null;
     const greenwoodScale = greenwoodVariant
-      ? greenwoodEventScale(greenwoodVariant, nearby.length, Math.max(1, ...nearby.map(player => player.level))) : null;
+      ? greenwoodEventScale(greenwoodVariant) : null;
     const mistfenVariant = definition.key === "mistfen" ? this.realmEvents.mistfenVariant : null;
     const mistfenScale = mistfenVariant
-      ? mistfenEventScale(mistfenVariant, nearby.length, Math.max(1, ...nearby.map(player => player.level))) : null;
+      ? mistfenEventScale(mistfenVariant) : null;
     const regionalScale = greenwoodScale ?? mistfenScale;
     this.registerMob(definition.id, definition.archetype, definition.position);
     const mob = this.state.mobs.get(definition.id)!;
@@ -3694,7 +3691,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     mob.attackDamage = Math.max(mob.attackDamage, scale.attackDamage + (regionalScale?.damageBonus ?? 0));
     mob.speedMultiplier *= regionalScale?.speedMultiplier ?? 1;
     mob.rewardMultiplier *= scale.rewardMultiplier * (regionalScale?.rewardMultiplier ?? 1);
-    mob.level = Math.max(enemyLevelForTier(mob.difficultyTier, true, true), regionalScale?.level ?? 1);
+    mob.level = definition.fixedLevel;
     if (greenwoodVariant && greenwoodScale) this.spawnGreenwoodEventFollowers(greenwoodVariant, greenwoodScale, definition.position, now);
     if (mistfenVariant && mistfenScale) this.spawnMistfenEventFollowers(mistfenVariant, mistfenScale, definition.position, now);
     if (definition.realmBoss) {
@@ -3711,7 +3708,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         : definition.realmBoss ? REALM_BOSS_TRACKING_RADIUS : REALM_EVENT_TRACKING_RADIUS;
       if (player && Math.abs(player.y - definition.position.y) <= 2.5
         && Math.hypot(player.x - definition.position.x, player.z - definition.position.z) <= trackingRadius)
-        if (definition.realmBoss) client.send("chat:notice", `REALM BOSS live · ${definition.name} scaled for ${scale.players} adventurer${scale.players === 1 ? "" : "s"}. Deal damage to qualify for personal loot.`);
+        if (definition.realmBoss) client.send("chat:notice", `REALM BOSS live · ${definition.name} is a fixed ${scale.players}-adventurer challenge. Deal damage to qualify for personal loot.`);
     }
     this.broadcastRealmEvent(now);
     this.refreshNearbyObjectives();
@@ -7310,10 +7307,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       return;
     }
     const definition = realmEventDefinition(REALM_WARDEN_ID)!;
-    const nearbyPlayers = [...this.state.players.values()].filter(candidate => candidate.health > 0
-      && Math.abs(candidate.y - REALM_WARDEN_HOME.y) <= 2.5
-      && Math.hypot(candidate.x - REALM_WARDEN_HOME.x, candidate.z - REALM_WARDEN_HOME.z) <= REALM_EVENT_SCALING_RADIUS).length;
-    const scale = realmEventScale(nearbyPlayers, definition);
+    const scale = realmEventScale(definition);
     this.registerMob(definition.id, definition.archetype, definition.position);
     const mob = this.state.mobs.get(definition.id)!;
     mob.name = "Ascendant Realm Stone Warden";

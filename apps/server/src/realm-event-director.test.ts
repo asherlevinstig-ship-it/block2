@@ -45,9 +45,12 @@ describe("Realm-style encounter director", () => {
     expect(director.status(warning.warningUntil + 1)).toMatchObject({ phase: "cooldown", completed: 0, realmBoss: false });
   });
 
-  it("caps multiplayer scaling", () => {
+  it("keeps every event at its authored difficulty regardless of attendance", () => {
     const boss = REALM_EVENT_DEFINITIONS.find(event => event.realmBoss)!;
-    expect(realmEventScale(20, boss)).toEqual({ players: 6, maxHealth: 164, attackDamage: 3, rewardMultiplier: 3.75 });
+    expect(realmEventScale(boss)).toEqual({ players: 5, maxHealth: 142, attackDamage: 3, rewardMultiplier: 2.5 });
+    expect(REALM_EVENT_DEFINITIONS.map(event => [event.key, event.designedPlayers, event.fixedLevel])).toEqual([
+      ["greenwood", 2, 4], ["mistfen", 3, 7], ["stoneheart", 3, 8], ["ashglass", 4, 11], ["realm-warden", 5, 14],
+    ]);
   });
 
   it("turns every two elite victories into one Realm Threat pip", () => {
