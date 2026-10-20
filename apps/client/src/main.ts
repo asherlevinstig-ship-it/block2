@@ -66,6 +66,8 @@ import { mobPresentationVisible } from "./mob-presentation-budget.js";
 import { nearestQueuedChunkKey } from "./chunk-rebuild-queue.js";
 import { advanceAutoQuality, GRAPHICS_QUALITY_PROFILES, initialAutoQualityTier, parseGraphicsQualityMode,
   type AutoQualityState, type GraphicsQualityMode, type GraphicsQualityTier } from "./graphics-quality.js";
+import { PERFORMANCE_LOG_INTERVAL_MS, appendPerformanceSample, formatPerformanceLog, parsePerformanceLog,
+  type PerformanceLogSample } from "./performance-log.js";
 import { cavernRespawnIndicator } from "./cavern-respawn-indicator.js";
 import { SILVER_DEPTHS, SILVER_DEPTHS_CHECKPOINT_POSITION, isInSilverGuardClearing, isInFrontierBruteArena, isInRealmWardenArena, isInForestDungeon, isInEmberVault } from "@blockcraft/voxel-world";
 import { canUseForestPortal, type ForestPortal, type SilverDepthsWing } from "@blockcraft/protocol";
@@ -1049,6 +1051,9 @@ const performanceToggle = document.querySelector<HTMLButtonElement>("#performanc
 const performancePanel = document.querySelector<HTMLElement>("#performance-panel")!;
 const graphicsQualitySelect = document.querySelector<HTMLSelectElement>("#graphics-quality")!;
 const graphicsQualityStatus = document.querySelector<HTMLElement>("#graphics-quality-status")!;
+const performanceCopyLog = document.querySelector<HTMLButtonElement>("#performance-copy-log")!;
+const performanceClearLog = document.querySelector<HTMLButtonElement>("#performance-clear-log")!;
+const performanceLogStatus = document.querySelector<HTMLElement>("#performance-log-status")!;
 const movementDebug = document.querySelector<HTMLDetailsElement>("#movement-debug")!;
 const movementDebugLive = document.querySelector<HTMLElement>("#movement-debug-live")!;
 const movementDebugEvents = document.querySelector<HTMLOListElement>("#movement-debug-events")!;
@@ -1337,7 +1342,7 @@ const specialButton = document.querySelector<HTMLButtonElement>("#special-button
 const touchModeButton = document.querySelector<HTMLButtonElement>("#touch-mode-button")!;
 const touchModeLabel = document.querySelector<HTMLElement>("#touch-mode-label")!;
 const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-toggle [data-mode]")];
-if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !dangerZone || !dangerZoneName || !locationCoordinates || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !graphicsQualitySelect || !graphicsQualityStatus || !inventoryPanel || !inventoryTotal || !inventoryToggle || !inventoryClose || !inventoryBadge || !inventoryEquipped || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== requiredInventoryMainHands || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !controlsHelp || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
+if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !dangerZone || !dangerZoneName || !locationCoordinates || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !graphicsQualitySelect || !graphicsQualityStatus || !performanceCopyLog || !performanceClearLog || !performanceLogStatus || !inventoryPanel || !inventoryTotal || !inventoryToggle || !inventoryClose || !inventoryBadge || !inventoryEquipped || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== requiredInventoryMainHands || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !controlsHelp || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
   throw new Error("Game shell is missing required elements");
 }
 if ([quizTablePrompt, blacksmithPrompt, playerTradePrompt, playerTradeName, blacksmithPanel, blacksmithMessage, blacksmithOre, blacksmithGold, blacksmithPrice, blacksmithSell, blacksmithClose, haulEquipName, haulEquipDetail, haulEquip, haulSalvageCount, haulSalvageDetail, haulSalvage, haulStoreCount, haulStore, haulUpgradeName, haulUpgradeTrack, haulUpgradeDetail, haulRegionName, haulRegionDetail, haulTrackRegion, quizPanel, quizBalance, quizBalanceAmount, quizPotDisplay, quizPotLabel, quizWinToast, quizAnswerFeedback, quizFeedbackIcon, quizFeedbackTitle, quizFeedbackDetail, quizMessage, quizStakeHeading, quizStakes, quizQuestion, quizPot, quizPrompt, quizChoices, quizDecision, quizDouble, quizQuit, quizClose, tavernCoins].some(element => !element) || blacksmithUpgradeCards.length !== Object.keys(BLACKSMITH_UPGRADES).length) {
@@ -10306,6 +10311,23 @@ let incomingBytesPerSecond = 0;
 let incomingPatchesPerSecond = 0;
 let incomingWindowStartedAt = performance.now();
 const instrumentedSockets = new WeakSet<WebSocket>();
+const PERFORMANCE_LOG_STORAGE_KEY = "blockcraft:performance-log:v1";
+let lastPerformanceLogAt = 0;
+let performanceLogSamples: PerformanceLogSample[] = (() => {
+  try { return parsePerformanceLog(window.localStorage.getItem(PERFORMANCE_LOG_STORAGE_KEY)); }
+  catch { return []; }
+})();
+
+function updatePerformanceLogStatus(message?: string): void {
+  performanceLogStatus.textContent = message ?? `Logging locally · ${performanceLogSamples.length} samples · rolling 10 minutes`;
+}
+
+function persistPerformanceLog(): void {
+  try { window.localStorage.setItem(PERFORMANCE_LOG_STORAGE_KEY, JSON.stringify(performanceLogSamples)); }
+  catch { updatePerformanceLogStatus("Local logging unavailable in this browser"); }
+}
+
+updatePerformanceLogStatus();
 
 function trackMovementInput(sequence: number, now = performance.now()): void {
   movementSentAt.set(sequence, now);
@@ -10542,7 +10564,26 @@ performanceToggle.addEventListener("click", () => {
   const opening = performancePanel.hidden;
   performancePanel.hidden = !opening;
   performanceToggle.setAttribute("aria-expanded", String(opening));
-  room?.send("performance:subscribe", { enabled: opening });
+});
+performanceCopyLog.addEventListener("click", async () => {
+  const report = formatPerformanceLog(performanceLogSamples, {
+    path: `${window.location.origin}${window.location.pathname}`,
+    room: activeRoomName,
+    userAgent: navigator.userAgent,
+  });
+  try {
+    await navigator.clipboard.writeText(report);
+    updatePerformanceLogStatus(`Copied ${performanceLogSamples.length} samples`);
+    window.setTimeout(() => updatePerformanceLogStatus(), 1_500);
+  } catch {
+    updatePerformanceLogStatus("Could not access the clipboard");
+  }
+});
+performanceClearLog.addEventListener("click", () => {
+  performanceLogSamples = [];
+  try { window.localStorage.removeItem(PERFORMANCE_LOG_STORAGE_KEY); } catch { /* Storage may be disabled. */ }
+  updatePerformanceLogStatus("Log cleared · new samples will continue automatically");
+  window.setTimeout(() => updatePerformanceLogStatus(), 1_500);
 });
 
 window.addEventListener("keydown", event => {
@@ -12469,6 +12510,31 @@ function updatePerformanceMetrics(now: number): void {
   const trafficWithinBudget = incomingPatchesPerSecond <= 35 && incomingBytesPerSecond <= 256 * 1024;
   const withinBudget = stable && p95 <= 33.3 && (networkRttMs === null || networkRttMs <= 150)
     && chunkBuildPeakMs <= 250 && serverWithinBudget && acknowledgementWithinBudget && trafficWithinBudget;
+  if (now - lastPerformanceLogAt >= PERFORMANCE_LOG_INTERVAL_MS) {
+    lastPerformanceLogAt = now;
+    performanceLogSamples = appendPerformanceSample(performanceLogSamples, {
+      at: Date.now(),
+      frameP50Ms: p50,
+      frameP95Ms: p95,
+      fps,
+      rttMs: networkRttMs,
+      inputAckMs: movementPilotController ? null : inputAcknowledgementMs,
+      patchesPerSecond: incomingPatchesPerSecond,
+      bytesPerSecond: incomingBytesPerSecond,
+      serverTickP50Ms: currentServerPerformance?.tickP50Ms ?? null,
+      serverTickP95Ms: currentServerPerformance?.tickP95Ms ?? null,
+      activeMobs: currentServerPerformance?.activeMobs ?? null,
+      sleepingMobs: currentServerPerformance?.sleepingMobs ?? null,
+      chunkBuildMs: lastChunkBuildMs,
+      chunkBuildPeakMs,
+      chunkQueue: queuedChunkRebuilds.size,
+      graphicsMode: selectedGraphicsQualityMode,
+      graphicsTier: appliedGraphicsQualityTier,
+      withinBudget,
+    });
+    persistPerformanceLog();
+    updatePerformanceLogStatus();
+  }
 
   performanceFields.frame.textContent = `${p50.toFixed(1)} / ${p95.toFixed(1)} ms`;
   performanceFields.fps.textContent = `${Math.round(fps)}`;
@@ -13858,7 +13924,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   });
   saveReconnectToken();
   bindNetworkPerformance(room);
-  if (!performancePanel.hidden) room.send("performance:subscribe", { enabled: true });
+  room.send("performance:subscribe", { enabled: true });
   reportedProtectedDialog = null;
   syncProtectedDialog();
   room.onReconnect(() => {
@@ -13869,7 +13935,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     room?.send("world:ready");
     room?.send("objective:sync");
     if (movementShadowInput) room?.send("movement:shadow:hello", { control: movementPilotRequested });
-    if (!performancePanel.hidden) room?.send("performance:subscribe", { enabled: true });
+    room?.send("performance:subscribe", { enabled: true });
     status.textContent = "Reconnected to your dungeon run.";
   });
   room.onDrop(() => { status.textContent = activeRoomName === SILVER_DEPTHS_ROOM
