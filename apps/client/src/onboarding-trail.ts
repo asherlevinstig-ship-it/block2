@@ -5,6 +5,7 @@ export interface TrailMob extends TrailPoint { id?: string; alive: boolean; leve
 
 const STARTER_BAG: TrailPoint = { x: 8.5, y: 8.22, z: 11.5 };
 const SOUTH_GATE: TrailPoint = { x: 8.5, y: 8, z: 33.5 };
+const FIRST_COMBAT_GROUP_IDS = ["south-causeway-crawler", "south-causeway-scavenger-west", "south-causeway-scavenger-east"] as const;
 
 export function onboardingTrailRoute(
   step: number | null,
@@ -32,7 +33,7 @@ export function onboardingTrailRoute(
       && candidate.level <= 3 && Math.abs(candidate.y - player.y) < 2
       && candidate.z >= 33 && candidate.z <= 53 && candidate.x >= -12 && candidate.x <= 29
       && Math.hypot(candidate.x - player.x, candidate.z - player.z) < 38);
-    const mob = eligible.find(candidate => candidate.id === "south-causeway-crawler")
+    const mob = FIRST_COMBAT_GROUP_IDS.map(id => eligible.find(candidate => candidate.id === id)).find(Boolean)
       ?? eligible.sort((a, b) => Math.hypot(a.x - player.x, a.z - player.z) - Math.hypot(b.x - player.x, b.z - player.z))[0];
     return mob ? [mob] : [{ x: 3.5, y: 8, z: 44.5 }];
   }

@@ -1,6 +1,8 @@
 import type { BuildPathId } from "@blockcraft/protocol";
 
 export const FIRST_COMBAT_MOB_ID = "south-causeway-crawler";
+export const FIRST_COMBAT_SUPPORT_IDS = ["south-causeway-scavenger-west", "south-causeway-scavenger-east"] as const;
+export const FIRST_COMBAT_GROUP_IDS = [FIRST_COMBAT_MOB_ID, ...FIRST_COMBAT_SUPPORT_IDS] as const;
 export type FirstCombatPhase = "attack" | "dodge" | "finish";
 export type FirstCombatEvent = "hit" | "perfect_dodge";
 
@@ -50,7 +52,7 @@ export function firstCombatLesson(pathId: BuildPathId | null, phase: FirstCombat
   };
   if (phase === "finish") return {
     title: `${callingName} · 3/3 FINISH`,
-    detail: "Perfect dodge! The Southroad Crawler is vulnerable. Press J (or click) to finish it.",
+    detail: "Perfect dodge! Finish the exposed crawler and its two weakened scavengers with J (or click).",
   };
   return { title: `${callingName} · 2/3 DODGE`, detail: calling.detail };
 }
@@ -62,7 +64,7 @@ export function advanceFirstCombatPhase(phase: FirstCombatPhase, event: FirstCom
   return phase;
 }
 
-export function completesFirstCombatLesson(attackerIsLocal: boolean, mobId: string, defeated: boolean,
+export function completesFirstCombatLesson(defeatedMobIds: ReadonlySet<string>,
   phase: FirstCombatPhase = "finish"): boolean {
-  return attackerIsLocal && defeated && phase === "finish" && mobId === FIRST_COMBAT_MOB_ID;
+  return phase === "finish" && FIRST_COMBAT_GROUP_IDS.every(id => defeatedMobIds.has(id));
 }

@@ -5,7 +5,7 @@ import { experienceToNextLevel } from "@blockcraft/protocol";
 import { PRACTICE_ROOM } from "@blockcraft/protocol";
 import type { SchemaType } from "@colyseus/schema";
 import { ShadowMoveInput, stepShadowMovement, type ShadowPose } from "./movement-shadow.js";
-import { FIRST_COMBAT_MOB_ID, firstCombatExperience, firstCombatHealthAfterHit } from "./first-combat-training.js";
+import { FIRST_COMBAT_MOB_ID, firstCombatExperience, firstCombatHealthAfterHit, firstCombatReward, isFirstCombatSupport } from "./first-combat-training.js";
 import { randomUUID } from "node:crypto";
 import { ADMIN_BOOTSTRAP_HASH, ADMIN_PROFILE_HASH, adminProfileKey, matchesAdminBootstrapPass } from "./admin-access.js";
 import { AttackCoordination, allyFireLaneClear } from "./attack-coordination.js";
@@ -2397,6 +2397,14 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (mob.isChampion) mob.name = combatMobDefinition(mob).name;
     if (mobId === "frontier-brute") mob.name = "Frontier Stone Brute";
     if (mobId === "south-causeway-crawler") mob.name = "Southroad Crawler";
+    if (isFirstCombatSupport(mobId)) {
+      mob.name = "Southroad Scavenger";
+      mob.health = mob.maxHealth = 2;
+      mob.attackDamage = 1;
+      mob.speedMultiplier = Math.min(.72, mob.speedMultiplier);
+      mob.rewardMultiplier = .25;
+      mob.level = 1;
+    }
     if (isAshenSentry(mobId)) mob.name = "Ashglass Sentry";
     if (mobId === "northwatch-spitter") mob.name = "Patrol Shard Sentry";
     if (mobId === "northwatch-patrol-stalker-west" || mobId === "northwatch-patrol-stalker-east") mob.name = "Ridge Patrol Stalker";
@@ -2405,7 +2413,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (archetypeId === "ember_hound") mob.attackPattern = "ember-pounce";
     if (areaMiniBoss) mob.name = areaMiniBoss.name;
     this.mobBaseNames.set(mobId, mob.name);
-    mob.level = enemyLevelForTier(mob.difficultyTier, mob.isChampion || mob.isElite || Boolean(areaMiniBoss), mobId === CRYSTAL_MATRIARCH_ID || mobId === "forest-guardian" || mobId === "forge-colossus");
+    mob.level = isFirstCombatSupport(mobId) ? 1
+      : enemyLevelForTier(mob.difficultyTier, mob.isChampion || mob.isElite || Boolean(areaMiniBoss), mobId === CRYSTAL_MATRIARCH_ID || mobId === "forest-guardian" || mobId === "forge-colossus");
     this.state.mobs.set(mobId, mob);
   }
 
@@ -3104,7 +3113,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
     const definition = combatMobDefinition(mob);
     const recipientsWithLoot = new Set<string>();
-    if (!SILVER_DEPTHS_CACHE_GUARD_IDS.includes(mobId)) for (const playerId of lootRecipients) {
+    if (!SILVER_DEPTHS_CACHE_GUARD_IDS.includes(mobId) && !isFirstCombatSupport(mobId)) for (const playerId of lootRecipients) {
       const fixedReward = mob.isChampion || mob.isElite || isAreaMiniBoss(mobId) || isSilverGuard(mobId) || mobId === "buried-chamber-brute"
         || mobId === CRYSTAL_MATRIARCH_ID || mobId === "forge-colossus" || isRealmEventId(mobId) || northwatchPatrolClear;
       const cadenceId = this.profileTokens.get(playerId) ?? playerId;
@@ -3802,6 +3811,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private spawnLootDrops(mobId: string, mob: MobState, now: number, ownerId = "", northwatchPatrolClear = false): void {
     if (mobId === "forest-guardian") return;
     const rewardPlayer = ownerId ? this.state.players.get(ownerId) : undefined;
+    const firstCombatDrops: { itemId: ItemId; quantity: number }[] = mobId === FIRST_COMBAT_MOB_ID
+      && rewardPlayer?.level === 1
+      ? [{ itemId: firstCombatReward(parseBuildPathState(rewardPlayer.huntLoadoutsJson).selectedPathId), quantity: 1 }]
+      : [];
     const areaReward = areaMainMobDefinition(mobId);
     const huntChampion = this.huntChampions.get(mobId);
     const championMultiplier = huntDifficultyRewardMultiplier(huntChampion?.difficulty ?? "normal");
@@ -3951,6 +3964,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       ...greenwoodEventDrops,
       ...greenwoodFirstClearDrops,
       ...quarryFirstClearDrops,
+      ...firstCombatDrops,
       ...armourDropForMob(mob.archetype, mob.difficultyTier, Math.random()),
     ]);
     const representative = lootBagRepresentative(items);
@@ -3997,6 +4011,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       `GREENWOOD FIRST CLEAR · ${greenwoodFirstClearDrops[0]!.itemId === "healing_potion" ? "2 healing potions" : ITEM_DEFINITIONS[greenwoodFirstClearDrops[0]!.itemId].name} added to your personal loot bag. Hold E to collect it.`);
     if (quarryFirstClearDrops.length) this.clients.find(client => client.sessionId === ownerId)?.send("chat:notice",
       "QUARRYMASTER VAULT · 2 Stone Core · 3 Iron Ore · 1 Healing Potion added to your personal loot bag. Hold E to collect it.");
+    if (firstCombatDrops.length) this.clients.find(client => client.sessionId === ownerId)?.send("chat:notice",
+      `FIRST VICTORY · ${ITEM_DEFINITIONS[firstCombatDrops[0]!.itemId].name} added to your personal loot bag. Hold E to collect it.`);
     if (northwatchCloakDrop.length) this.clients.find(client => client.sessionId === ownerId)?.send("chat:notice",
       "FIRST NORTHWATCH CLOAK · your personal loot bag contains a rare cloak. Hold E to collect it.");
     if (northwatchFirstClearDrops.length) this.clients.find(client => client.sessionId === ownerId)?.send("chat:notice",

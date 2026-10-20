@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { advanceFirstCombatPhase, completesFirstCombatLesson, FIRST_COMBAT_MOB_ID, firstCombatLesson } from "./first-combat-lesson.js";
+import { advanceFirstCombatPhase, completesFirstCombatLesson, FIRST_COMBAT_GROUP_IDS, FIRST_COMBAT_MOB_ID, firstCombatLesson } from "./first-combat-lesson.js";
 
 describe("first combat lesson", () => {
   it("gives every Calling a distinct tactical lesson", () => {
@@ -19,11 +19,10 @@ describe("first combat lesson", () => {
     expect(advanceFirstCombatPhase("dodge", "perfect_dodge", "stone-brute")).toBe("dodge");
   });
 
-  it("finishes only when the local player defeats the fixed southroad opponent", () => {
-    expect(completesFirstCombatLesson(true, FIRST_COMBAT_MOB_ID, true)).toBe(true);
-    expect(completesFirstCombatLesson(true, FIRST_COMBAT_MOB_ID, true, "dodge")).toBe(false);
-    expect(completesFirstCombatLesson(true, FIRST_COMBAT_MOB_ID, false)).toBe(false);
-    expect(completesFirstCombatLesson(false, FIRST_COMBAT_MOB_ID, true)).toBe(false);
-    expect(completesFirstCombatLesson(true, "stone-brute", true)).toBe(false);
+  it("finishes only after the full controlled southroad pack is cleared", () => {
+    const defeated = new Set(FIRST_COMBAT_GROUP_IDS);
+    expect(completesFirstCombatLesson(defeated)).toBe(true);
+    expect(completesFirstCombatLesson(defeated, "dodge")).toBe(false);
+    expect(completesFirstCombatLesson(new Set([FIRST_COMBAT_MOB_ID]))).toBe(false);
   });
 });

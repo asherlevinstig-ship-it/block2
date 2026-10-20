@@ -49,7 +49,7 @@ import { ashenChainRoute, ashenChainStage, greenwoodChainRoute, greenwoodChainSt
 import { combatHud, cooldownState } from "./combat-hud.js";
 import { assassinJourney } from "./assassin-journey.js";
 import { CALLING_AWAKENING_MINIMUM_MS, callingAwakening, callingPreviewMarkup } from "./calling-awakening.js";
-import { advanceFirstCombatPhase, completesFirstCombatLesson, firstCombatLesson,
+import { advanceFirstCombatPhase, completesFirstCombatLesson, FIRST_COMBAT_GROUP_IDS, firstCombatLesson,
   type FirstCombatPhase } from "./first-combat-lesson.js";
 import { EQUIPMENT_COLLECTION, collectionProgress, equipmentCollectionLabel, equipmentProgressionText } from "./equipment-progression.js";
 import { blacksmithShopStock, shopGoldShortfall, type BlacksmithShopTab } from "./blacksmith-shop.js";
@@ -675,6 +675,7 @@ let forcedStarterEquipment = (() => {
 })();
 let tutorialCallingId: BuildPathId | null = null;
 let firstCombatPhase: FirstCombatPhase = "attack";
+const defeatedFirstCombatMobs = new Set<string>();
 const firstStepsKey = onboardingStorageKey(profileToken);
 let firstStepsIndex = (() => {
   try {
@@ -740,7 +741,10 @@ function noteFirstStep(event: OnboardingEvent): void {
   if (firstStepsIndex === null || firstStepsIndex >= ONBOARDING_DONE) return;
   const next = advanceOnboarding(firstStepsIndex, event);
   if (next === firstStepsIndex) return;
-  if (next === 5) firstCombatPhase = "attack";
+  if (next === 5) {
+    firstCombatPhase = "attack";
+    defeatedFirstCombatMobs.clear();
+  }
   setFirstSteps(next);
   if (next === 3) {
     firstStepsTrailUpdatedAt = -Infinity;
@@ -14050,9 +14054,11 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
         status.textContent = "Good strike · watch the crawler's marked charge, then dodge with Space.";
       }
     }
-    if (completesFirstCombatLesson(message.attackerId === room?.sessionId, message.mobId, message.defeated, firstCombatPhase)) {
+    if (firstStepsIndex === 5 && message.defeated && FIRST_COMBAT_GROUP_IDS.some(id => id === message.mobId))
+      defeatedFirstCombatMobs.add(message.mobId);
+    if (firstStepsIndex === 5 && completesFirstCombatLesson(defeatedFirstCombatMobs, firstCombatPhase)) {
       noteFirstStep("defeated_first_enemy");
-      social.event("First combat lesson complete · Level 2 unlocks your Calling Power. Return to Town to review it.");
+      social.event("Southroad pack cleared · collect your Calling-matched upgrade, then return to Town to awaken your Power.");
     }
     const mob = mobVisuals.get(message.mobId);
     const rangedHit = confirmedRangedHit(message.mainHandId, message.damage, message.attackerId === room?.sessionId);

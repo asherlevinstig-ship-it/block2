@@ -28,6 +28,8 @@ describe("onboarding glow trail", () => {
     const closer = { id: "other-crawler", x: 8.5, y: 8, z: 36.5, alive: true, level: 2, isMiniBoss: false, isElite: false };
     expect(onboardingTrailRoute(4, { x: 8.5, y: 8, z: 33.5 }, [boss, crawler], [])).toEqual([]);
     expect(onboardingTrailRoute(5, { x: 8.5, y: 8, z: 33.5 }, [boss, closer, crawler], [])).toEqual([crawler]);
+    const scavenger = { id: "south-causeway-scavenger-west", x: .5, y: 8, z: 47.5, alive: true, level: 1, isMiniBoss: false, isElite: false };
+    expect(onboardingTrailRoute(5, { x: 8.5, y: 8, z: 33.5 }, [{ ...crawler, alive: false }, scavenger], [])).toEqual([scavenger]);
     expect(onboardingTrailRoute(6, player, [], [])).toEqual([]);
     expect(onboardingTrailRoute(null, player, [], [])).toEqual([]);
   });
