@@ -63,6 +63,7 @@ import { lootHoldProgress, type LootHold } from "./loot-hold.js";
 import { incomingLootAdvice, swapCandidateReason, swapCandidateScore } from "./loot-recommendation.js";
 import { undergroundThreatVisible } from "./underground-threat-visibility.js";
 import { mobPresentationVisible } from "./mob-presentation-budget.js";
+import { nearestQueuedChunkKey } from "./chunk-rebuild-queue.js";
 import { cavernRespawnIndicator } from "./cavern-respawn-indicator.js";
 import { SILVER_DEPTHS, SILVER_DEPTHS_CHECKPOINT_POSITION, isInSilverGuardClearing, isInFrontierBruteArena, isInRealmWardenArena, isInForestDungeon, isInEmberVault } from "@blockcraft/voxel-world";
 import { canUseForestPortal, type ForestPortal, type SilverDepthsWing } from "@blockcraft/protocol";
@@ -1598,6 +1599,7 @@ interface ClientChunk {
 }
 
 const chunks = new Map<string, ClientChunk>();
+const queuedChunkRebuilds = new Map<string, ClientChunk>();
 let activeChunkViewKey: string | null = null;
 let requestedChunkRegionKey: string | null = null;
 const ACTIVE_CHUNK_RENDER_RADIUS = 3;
@@ -1640,12 +1642,9 @@ function readVisibleWorldBlock(x: number, y: number, z: number): BlockId {
 }
 
 function rebuildChunk(chunk: ClientChunk): void {
-  for (const mesh of chunk.meshes) mesh.destroy();
-  chunk.meshes = [];
-  for (const child of [...chunk.root.children]) child.destroy();
-  chunk.visibleBlocks = 0;
-  chunk.visibleFaces = 0;
-  chunk.renderedSliceKey = cutawayStateKey;
+  const nextMeshes: pc.Mesh[] = [];
+  let nextVisibleBlocks = 0;
+  let nextVisibleFaces = 0;
   const buffers = new Map<VoxelTextureKind, { positions: number[]; normals: number[]; uvs: number[]; colors: number[]; indices: number[] }>();
   // One padded snapshot amortizes AO lookups and includes adjacent chunks. Hidden
   // roof blocks must not leave dark shadows floating on the player's depth slice.
@@ -1670,7 +1669,7 @@ function rebuildChunk(chunk: ClientChunk): void {
         const x = chunk.chunkX * CHUNK_SIZE + localX;
         const z = chunk.chunkZ * CHUNK_SIZE + localZ;
         if (isCutawayHidden(x, y, z)) continue;
-        chunk.visibleBlocks += 1;
+        nextVisibleBlocks += 1;
         for (const face of faces) {
           const outsideIndex = (y + face.normal[1] + 1) * plane
             + (localZ + face.normal[2] + 1) * span + localX + face.normal[0] + 1;
@@ -1682,7 +1681,7 @@ function rebuildChunk(chunk: ClientChunk): void {
             buffer = { positions: [], normals: [], uvs: [], colors: [], indices: [] };
             buffers.set(textureKind, buffer);
           }
-          chunk.visibleFaces += 1;
+          nextVisibleFaces += 1;
           const base = buffer.positions.length / 3;
           const tint = voxelTint(x, y, z, textureKind);
           for (const corner of face.corners) {
@@ -1721,21 +1720,52 @@ function rebuildChunk(chunk: ClientChunk): void {
     geometry.colors = buffer.colors;
     geometry.indices = buffer.indices;
     const mesh = pc.Mesh.fromGeometry(app.graphicsDevice, geometry);
-    chunk.meshes.push(mesh);
+    nextMeshes.push(mesh);
     meshInstances.push(new pc.MeshInstance(mesh, materialFor(textureKind)));
   }
-  if (meshInstances.length === 0) return;
-  const entity = new pc.Entity(`chunk-mesh:${chunk.chunkX},${chunk.chunkZ}`);
-  entity.addComponent("render", { meshInstances, castShadows: true, receiveShadows: true });
-  chunk.root.addChild(entity);
+  const entity = meshInstances.length === 0 ? null : new pc.Entity(`chunk-mesh:${chunk.chunkX},${chunk.chunkZ}`);
+  entity?.addComponent("render", { meshInstances, castShadows: true, receiveShadows: true });
+
+  // Build the replacement completely before swapping it in. This prevents a
+  // streamed revision or cutaway change from flashing an empty terrain chunk.
+  for (const mesh of chunk.meshes) mesh.destroy();
+  for (const child of [...chunk.root.children]) child.destroy();
+  chunk.meshes = nextMeshes;
+  chunk.visibleBlocks = nextVisibleBlocks;
+  chunk.visibleFaces = nextVisibleFaces;
+  chunk.renderedSliceKey = cutawayStateKey;
+  if (entity) chunk.root.addChild(entity);
+}
+
+function queueChunkRebuild(chunk: ClientChunk): void {
+  queuedChunkRebuilds.set(chunkKey(chunk.chunkX, chunk.chunkZ), chunk);
+}
+
+function processNextChunkRebuild(position: { x: number; z: number }): void {
+  if (queuedChunkRebuilds.size === 0) return;
+  const center = worldToChunk(position.x, position.z);
+  const key = nearestQueuedChunkKey(queuedChunkRebuilds, center);
+  if (!key) return;
+  const chunk = queuedChunkRebuilds.get(key);
+  queuedChunkRebuilds.delete(key);
+  if (!chunk || chunks.get(key) !== chunk || !chunk.root.enabled) return;
+  const startedAt = performance.now();
+  rebuildChunk(chunk);
+  lastChunkBuildMs = performance.now() - startedAt;
+  recentChunkBuildPeakMs = Math.max(recentChunkBuildPeakMs, lastChunkBuildMs);
 }
 
 function installChunk(snapshot: ChunkSnapshot): ClientChunk {
   const key = chunkKey(snapshot.chunkX, snapshot.chunkZ);
   const previous = chunks.get(key);
   if (previous && previous.revision >= snapshot.revision) return previous;
-  for (const mesh of previous?.meshes ?? []) mesh.destroy();
-  previous?.root.destroy();
+  if (previous) {
+    previous.revision = snapshot.revision;
+    previous.blocks = Uint8Array.from(snapshot.blocks);
+    previous.renderedSliceKey = null;
+    if (previous.root.enabled) queueChunkRebuild(previous);
+    return previous;
+  }
   const root = new pc.Entity(`chunk:${key}`);
   worldRoot.addChild(root);
   const chunk = {
@@ -1754,7 +1784,7 @@ function installChunk(snapshot: ChunkSnapshot): ClientChunk {
 }
 
 function rebuildChunkAndNeighbors(chunk: ClientChunk, x: number, z: number): void {
-  if (chunk.root.enabled) rebuildChunk(chunk);
+  if (chunk.root.enabled) queueChunkRebuild(chunk);
   else chunk.renderedSliceKey = null;
   const address = worldToChunk(x, z);
   const neighborKeys = new Set<string>();
@@ -1768,7 +1798,7 @@ function rebuildChunkAndNeighbors(chunk: ClientChunk, x: number, z: number): voi
   if (edgeX && edgeZ) neighborKeys.add(chunkKey(address.chunkX + edgeX, address.chunkZ + edgeZ));
   for (const key of neighborKeys) {
     const neighbor = chunks.get(key);
-    if (neighbor?.root.enabled) rebuildChunk(neighbor);
+    if (neighbor?.root.enabled) queueChunkRebuild(neighbor);
     else if (neighbor) neighbor.renderedSliceKey = null;
   }
 }
@@ -1792,7 +1822,8 @@ function updateActiveChunkMeshes(position: { x: number; z: number }): void {
     const nearby = Math.abs(chunk.chunkX - address.chunkX) <= ACTIVE_CHUNK_RENDER_RADIUS
       && Math.abs(chunk.chunkZ - address.chunkZ) <= ACTIVE_CHUNK_RENDER_RADIUS;
     chunk.root.enabled = nearby;
-    if (nearby && chunk.renderedSliceKey !== cutawayStateKey) rebuildChunk(chunk);
+    if (!nearby) queuedChunkRebuilds.delete(chunkKey(chunk.chunkX, chunk.chunkZ));
+    if (nearby && chunk.renderedSliceKey !== cutawayStateKey) queueChunkRebuild(chunk);
   }
 }
 
@@ -1807,14 +1838,15 @@ function applyChunkRegion(payload: ChunkRegion): void {
       && Math.abs(chunk.chunkZ - center.chunkZ) <= CACHED_CHUNK_RADIUS) continue;
     for (const mesh of chunk.meshes) mesh.destroy();
     chunk.root.destroy();
+    queuedChunkRebuilds.delete(key);
     chunks.delete(key);
   }
   activeChunkViewKey = null;
   updateActiveChunkMeshes(position);
   sceneDressing.rebuild(readWorldBlock, [...chunks.values()], indoorRoofBuilding);
   sceneDressing.setSurfaceVisible(!playerCutaway.active);
-  lastChunkBuildMs = performance.now() - buildStartedAt;
-  logMovementEvent(`CHUNK STREAM count=${payload.chunks.length} build=${lastChunkBuildMs.toFixed(1)}ms`);
+  const streamSetupMs = performance.now() - buildStartedAt;
+  logMovementEvent(`CHUNK STREAM count=${payload.chunks.length} setup=${streamSetupMs.toFixed(1)}ms queued=${queuedChunkRebuilds.size}`);
 }
 
 const localPlayer = new pc.Entity("local-player");
@@ -10224,6 +10256,7 @@ function updateTarget(): void {
 }
 
 let lastChunkBuildMs = 0;
+let recentChunkBuildPeakMs = 0;
 let worldPayloadBytes = 0;
 let networkRttMs: number | null = null;
 
@@ -10245,6 +10278,7 @@ function renderBootstrap(payload: WorldBootstrap): void {
   for (const chunk of chunks.values()) for (const mesh of chunk.meshes) mesh.destroy();
   for (const child of [...worldRoot.children]) child.destroy();
   chunks.clear();
+  queuedChunkRebuilds.clear();
   payload.chunks.forEach(installChunk);
   const ownPlayer = room ? (room.state as { players?: { get(id: string): NetworkPlayer | undefined } }).players?.get(room.sessionId) : undefined;
   // The bootstrap is the authoritative arrival snapshot. The schema player can
@@ -10301,14 +10335,17 @@ function renderBootstrap(payload: WorldBootstrap): void {
   exitGuide.hidden = !playerCutaway.active;
   activeChunkViewKey = null;
   updateActiveChunkMeshes(initialPosition);
+  // Make the arrival tile available immediately; the remaining visible area
+  // fills nearest-first over subsequent frames.
+  processNextChunkRebuild(initialPosition);
   const initialChunk = worldToChunk(initialPosition.x, initialPosition.z);
   const initialChunkKey = chunkKey(initialChunk.chunkX, initialChunk.chunkZ);
   requestedChunkRegionKey = chunks.has(initialChunkKey) ? initialChunkKey : null;
   sceneDressing.rebuild(readWorldBlock, payload.chunks, indoorRoofBuilding);
   sceneDressing.setSurfaceVisible(!playerCutaway.active);
-  lastChunkBuildMs = performance.now() - buildStartedAt;
+  const bootstrapSetupMs = performance.now() - buildStartedAt;
   logMovementEvent(
-    `WORLD REFRESH ${previousSliceY === null ? "surface" : `slice:${previousSliceY}`} → ${cutawayStateKey} y=${initialPosition.y.toFixed(3)} surface=${surfaceReferenceY.toFixed(3)} stateGap=${statePoseGap?.toFixed(3) ?? "missing"} chunks=${payload.chunks.length} build=${lastChunkBuildMs.toFixed(1)}ms`,
+    `WORLD REFRESH ${previousSliceY === null ? "surface" : `slice:${previousSliceY}`} → ${cutawayStateKey} y=${initialPosition.y.toFixed(3)} surface=${surfaceReferenceY.toFixed(3)} stateGap=${statePoseGap?.toFixed(3) ?? "missing"} chunks=${payload.chunks.length} setup=${bootstrapSetupMs.toFixed(1)}ms queued=${queuedChunkRebuilds.size}`,
   );
   worldReady = true;
   status.textContent = isInGreenwoodRegion(initialPosition.x, initialPosition.z)
@@ -11130,7 +11167,7 @@ function updateIndoorRoof(position: pc.Vec3): void {
   indoorRoofBuilding = next;
   for (const chunk of chunks.values()) {
     chunk.renderedSliceKey = null;
-    if (chunk.root.enabled) rebuildChunk(chunk);
+    if (chunk.root.enabled) queueChunkRebuild(chunk);
   }
   sceneDressing.rebuild(readWorldBlock, [...chunks.values()], indoorRoofBuilding);
   sceneDressing.setSurfaceVisible(!playerCutaway.active);
@@ -12297,14 +12334,15 @@ function updatePerformanceMetrics(now: number): void {
   const triangles = [...chunks.values()].reduce((total, chunk) => total + chunk.visibleFaces * 2, 0);
   const memory = (performance as Performance & { memory?: { usedJSHeapSize: number } }).memory?.usedJSHeapSize;
   const stable = frameSamples.length >= 120;
-  const withinBudget = stable && p95 <= 33.3 && (networkRttMs === null || networkRttMs <= 150) && lastChunkBuildMs <= 250;
+  const chunkBuildPeakMs = Math.max(lastChunkBuildMs, recentChunkBuildPeakMs);
+  const withinBudget = stable && p95 <= 33.3 && (networkRttMs === null || networkRttMs <= 150) && chunkBuildPeakMs <= 250;
 
   performanceFields.frame.textContent = `${p50.toFixed(1)} / ${p95.toFixed(1)} ms`;
   performanceFields.fps.textContent = `${Math.round(fps)}`;
   performanceFields.rtt.textContent = networkRttMs === null ? "Waiting…" : `${networkRttMs.toFixed(0)} ms`;
   performanceFields.voxels.textContent = visibleVoxels.toLocaleString();
   performanceFields.geometry.textContent = `${meshes} / ${triangles.toLocaleString()}`;
-  performanceFields.chunks.textContent = `${lastChunkBuildMs.toFixed(1)} ms`;
+  performanceFields.chunks.textContent = `${lastChunkBuildMs.toFixed(1)} ms · peak ${chunkBuildPeakMs.toFixed(1)} · queue ${queuedChunkRebuilds.size}`;
   performanceFields.payload.textContent = formatBytes(worldPayloadBytes);
   performanceFields.memory.textContent = memory ? formatBytes(memory) : "Unavailable";
   performanceFields.budget.className = stable ? (withinBudget ? "pass" : "fail") : "";
@@ -12323,10 +12361,13 @@ function updatePerformanceMetrics(now: number): void {
     meshes,
     triangles,
     lastChunkBuildMs,
+    chunkBuildPeakMs,
+    queuedChunkRebuilds: queuedChunkRebuilds.size,
     worldPayloadBytes,
     stable,
     withinBudget,
   };
+  recentChunkBuildPeakMs = 0;
 }
 
 function reconcileLocalPlayer(
@@ -12542,6 +12583,7 @@ app.on("update", (dt: number) => {
     );
   }
   updateActiveChunkMeshes(localPlayer.getPosition());
+  processNextChunkRebuild(localPlayer.getPosition());
   localVisualVerticalOffset = smoothVerticalOffset(localVisualVerticalOffset, frameTime);
   localPowerVisualOffset.mulScalar(Math.max(0, 1 - frameTime * 11));
   localRecoveryVisualOffset = smoothRecoveryOffset(localRecoveryVisualOffset, frameTime);
@@ -13573,10 +13615,8 @@ function applyBlockChange(message: BlockChanged): void {
   }
   chunk.blocks[chunkIndex(address.localX, message.y, address.localZ)] = message.block;
   chunk.revision = message.revision;
-  const buildStartedAt = performance.now();
   rebuildChunkAndNeighbors(chunk, message.x, message.z);
   if (message.y >= SURFACE_HEIGHT) sceneDressing.rebuild(readWorldBlock, [...chunks.values()], indoorRoofBuilding);
-  lastChunkBuildMs = performance.now() - buildStartedAt;
   if (message.block === Block.Air) status.textContent = "Block broken.";
 }
 
