@@ -1,6 +1,16 @@
 export interface PopupOpenResult { hide: string[] }
 export interface PopupCloseResult { show: string | null }
 
+export interface PopupPresentationState {
+  hidden: unknown;
+  dataset: { popupQueued?: string };
+}
+
+/** True only when a popup is genuinely on screen, not merely waiting in the queue. */
+export function popupIsPresented(popup: PopupPresentationState): boolean {
+  return popup.hidden === false && popup.dataset.popupQueued !== "true";
+}
+
 /** Serialises blocking UI without coupling the individual feature systems. */
 export class ExclusivePopupQueue {
   private current: string | null = null;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ExclusivePopupQueue } from "./popup-queue.js";
+import { ExclusivePopupQueue, popupIsPresented } from "./popup-queue.js";
 
 describe("exclusive popup queue", () => {
   it("shows one popup and queues later requests in order", () => {
@@ -28,5 +28,16 @@ describe("exclusive popup queue", () => {
     expect(queue.open("defeat", true)).toEqual({ hide: ["inventory"] });
     expect(queue.active()).toBe("defeat");
     expect(queue.close("defeat")).toEqual({ show: "inventory" });
+  });
+});
+
+describe("popup presentation state", () => {
+  it("does not treat an invisible queued popup as presented", () => {
+    expect(popupIsPresented({ hidden: false, dataset: { popupQueued: "true" } })).toBe(false);
+  });
+
+  it("only presents an open popup that is not queued", () => {
+    expect(popupIsPresented({ hidden: false, dataset: {} })).toBe(true);
+    expect(popupIsPresented({ hidden: true, dataset: {} })).toBe(false);
   });
 });

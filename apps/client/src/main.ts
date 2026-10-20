@@ -17,7 +17,7 @@ import { abilityPracticeChallenge, practiceFollowUpProgress, practicePhaseAfterC
   type AbilityPracticePhase } from "./ability-practice.js";
 import { queueWorldNotice, type WorldNotice } from "./notification-lane.js";
 import { attackAimYaw, rangedAimYaw } from "./ranged-aim.js";
-import { ExclusivePopupQueue } from "./popup-queue.js";
+import { ExclusivePopupQueue, popupIsPresented } from "./popup-queue.js";
 import { COORDINATED_BRUTE_FOLLOWERS, COORDINATED_SPITTER_FOLLOWERS, activeCombatNearby, advanceBossHud, initialBossHud, leaderArmourSegments, leaderChargeGuidance, leaderExposureLabel, leaderExposureRoleLabel, leaderFormationLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
 import { formationLanePoints, formationMarkerPoints, formationRingPoints, formationTargetStyle, formationVfxStyle,
   type FormationTactic, type FormationTargetRole } from "./formation-vfx.js";
@@ -10773,7 +10773,7 @@ function popupById(id: string): HTMLElement | null {
 }
 function focusQueuedPopup(popup: HTMLElement): void {
   window.setTimeout(() => {
-    if (popup.hidden) return;
+    if (!popupIsPresented(popup) || popupQueue.active() !== popup.id) return;
     popup.querySelector<HTMLElement>('[autofocus], button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex="-1"])')?.focus();
   }, 0);
 }
@@ -12393,7 +12393,7 @@ combatHudRoot.addEventListener("click", event => {
 
 window.addEventListener("keydown", event => {
   if (event.repeat) return;
-  if (firstVictoryRewardLessonReady() && firstVictoryReward?.stage === "open_pack") {
+  if (popupQueue.active() === null && firstVictoryRewardLessonReady() && firstVictoryReward?.stage === "open_pack") {
     if (event.code === "KeyI") {
       saveFirstVictoryReward({ ...firstVictoryReward, stage: "choose" });
       setInventoryOpen(true);
@@ -12404,7 +12404,7 @@ window.addEventListener("keydown", event => {
     event.preventDefault();
     return;
   }
-  if (starterInventoryLesson(
+  if (popupQueue.active() === null && starterInventoryLesson(
     firstStepsIndex,
     starterInventoryOpenedWithKeyboard,
     forcedStarterEquipment,
@@ -12421,54 +12421,54 @@ window.addEventListener("keydown", event => {
     event.preventDefault();
     return;
   }
-  if (event.code === "Escape" && minimapPanel.dataset.expanded === "true") {
+  if (popupQueue.active() === null && event.code === "Escape" && minimapPanel.dataset.expanded === "true") {
     setMinimapExpanded(false); event.preventDefault(); return;
   }
-  if (!ashenReliquaryChoice.hidden) {
+  if (popupIsPresented(ashenReliquaryChoice)) {
     if (event.code === "Escape") closeAshenReliquaryChoice();
     event.preventDefault(); return;
   }
-  if (!abilityPractice.hidden) {
+  if (popupIsPresented(abilityPractice)) {
     if (event.code === "Escape") { abilityPractice.hidden = true; room?.send("practice:menu", { open: false }); }
     if (!(event.target instanceof HTMLSelectElement)) event.preventDefault();
     return;
   }
-  if (!levelUpPanel.hidden) {
+  if (popupIsPresented(levelUpPanel)) {
     if (event.code === "Escape") levelUpPanel.hidden = true;
     event.preventDefault(); return;
   }
-  if (!callingIntro.hidden) {
+  if (popupIsPresented(callingIntro)) {
     if (event.code === "Escape") closeCallingIntro();
     event.preventDefault(); return;
   }
-  if (!callingAwakeningPanel.hidden) {
+  if (popupIsPresented(callingAwakeningPanel)) {
     if ((event.code === "Escape" || event.code === "Enter") && !callingAwakeningContinue.disabled) closeCallingAwakening();
     event.preventDefault(); return;
   }
-  if (playerInteractionUI.isOpen()) {
+  if (popupIsPresented(document.querySelector<HTMLElement>("#player-interaction")!)) {
     if (event.code === "Escape") playerInteractionUI.close();
     event.preventDefault();
     return;
   }
-  if (tradeUI.isOpen()) { if (event.code === "Escape") tradeUI.cancel(); return; }
+  if (popupIsPresented(document.querySelector<HTMLElement>("#trade-modal")!)) { if (event.code === "Escape") tradeUI.cancel(); return; }
   if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
-  if (!realmHuntPanel.hidden) {
+  if (popupIsPresented(realmHuntPanel)) {
     if (event.code === "Escape") realmHuntPanel.hidden = true;
     event.preventDefault(); return;
   }
-  if (!expeditionPanel.hidden) {
+  if (popupIsPresented(expeditionPanel)) {
     if (event.code === "Escape") expeditionPanel.hidden = true;
     event.preventDefault(); return;
   }
-  if (event.code === "Enter" && lootPanel.hidden && inventoryPanel.hidden && quizPanel.hidden && blacksmithPanel.hidden) { event.preventDefault(); social.open(); return; }
-  if (!defeatScreen.hidden) return;
-  if (!lootPackDecision.hidden) {
+  if (popupQueue.active() === null && event.code === "Enter" && lootPanel.hidden && inventoryPanel.hidden && quizPanel.hidden && blacksmithPanel.hidden) { event.preventDefault(); social.open(); return; }
+  if (popupIsPresented(defeatScreen)) return;
+  if (popupIsPresented(lootPackDecision)) {
     if (event.code === "Escape") { closeLoot(); event.preventDefault(); return; }
     if (event.code === "Enter" && selectedSwapItemId) {
       collectInspectedLoot("swap", selectedSwapItemId); event.preventDefault(); return;
     }
   }
-  if (!lootPanel.hidden) {
+  if (popupIsPresented(lootPanel)) {
     if (event.code === "Escape") closeLoot();
     if (event.code === "Tab") {
       const buttons = [lootClose, lootEquip, lootKeep, lootDismantle].filter(button => !button.disabled && !button.hidden);
@@ -12479,29 +12479,35 @@ window.addEventListener("keydown", event => {
     if (event.code !== "Tab") event.preventDefault();
     return;
   }
-  if (!inventoryPanel.hidden) {
+  if (popupIsPresented(inventoryPanel)) {
     if (event.code === "Escape" || event.code === "KeyI") setInventoryOpen(false);
     if ((event.code === "Enter" || event.code === "Space")
       && (event.target as HTMLElement).closest("button, [role=button], input, select")) return;
     event.preventDefault();
     return;
   }
-  if (!blacksmithPanel.hidden) {
+  if (popupIsPresented(blacksmithPanel)) {
     if (event.code === "Escape") blacksmithPanel.hidden = true;
     if (["Escape", "Space", "KeyE", "KeyQ", "KeyR", "KeyF", "KeyG", "KeyC"].includes(event.code)) event.preventDefault();
     return;
   }
-  if (!quizPanel.hidden) {
+  if (popupIsPresented(quizPanel)) {
     if (event.code === "Escape") quizPanel.hidden = true;
     if (["Escape", "Space", "KeyE", "KeyQ", "KeyR", "KeyF", "KeyG", "KeyC"].includes(event.code)) event.preventDefault();
     return;
   }
-  if (event.code === "Escape" && !tavernDialogue.hidden) {
+  if (event.code === "Escape" && popupIsPresented(tavernDialogue)) {
     closeTavernDialogue();
     return;
   }
-  if (event.code === "Escape" && !roadsideChoice.hidden) {
+  if (event.code === "Escape" && popupIsPresented(roadsideChoice)) {
     closeRoadsideChoice();
+    return;
+  }
+  // Some progression screens deliberately have no Escape action. They must still
+  // own input while visible instead of allowing movement or combat underneath.
+  if (popupQueue.active() !== null) {
+    event.preventDefault();
     return;
   }
   if (event.code === "KeyI") {
@@ -12547,12 +12553,17 @@ window.addEventListener("keyup", event => {
   if (event.code === "KeyJ") keyboardFireHeld = false;
   if (event.code === "KeyE") releaseLootHold("keyboard");
   if (event.code === "KeyC") requestDefense(false);
+  if (popupQueue.active() !== null) {
+    cancelPowerAim();
+    cancelSpecialAim();
+    return;
+  }
   if (event.code === powerAimKey) commitPowerAim();
   if (event.code === "KeyF") commitSpecialAim();
 });
 window.addEventListener("blur", () => { cancelLootHold(); keyboardFireHeld = false; });
 canvas.addEventListener("pointerdown", event => {
-  if (!levelUpPanel.hidden || !callingIntro.hidden || !callingAwakeningPanel.hidden) return;
+  if (popupQueue.active() !== null) return;
   if (event.button === 2) {
     rangedFirePointer = null;
     event.preventDefault();
