@@ -16,7 +16,7 @@ import { abilityRevealUse, canPresentAbilityReveal, earnedCallingAbilities, firs
 import { abilityPracticeChallenge, practiceFollowUpProgress, practicePhaseAfterCast,
   type AbilityPracticePhase } from "./ability-practice.js";
 import { queueWorldNotice, type WorldNotice } from "./notification-lane.js";
-import { rangedAimYaw } from "./ranged-aim.js";
+import { attackAimYaw, rangedAimYaw } from "./ranged-aim.js";
 import { COORDINATED_BRUTE_FOLLOWERS, COORDINATED_SPITTER_FOLLOWERS, activeCombatNearby, advanceBossHud, initialBossHud, leaderArmourSegments, leaderChargeGuidance, leaderExposureLabel, leaderExposureRoleLabel, leaderFormationLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
 import { formationLanePoints, formationMarkerPoints, formationRingPoints, formationTargetStyle, formationVfxStyle,
   type FormationTactic, type FormationTargetRole } from "./formation-vfx.js";
@@ -11735,13 +11735,19 @@ function requestAttack(aimWithPointer = true): void {
   const practisingFollowUp = guidedAbilityPracticePhase === "follow_up" && guidedAbilityPracticeId
     && (localBuildPathId === "assassin" || localBuildPathId === "ranger")
     && player.distance(CALLING_EFFIGY_POSITION) <= 4;
+  const pointerAimed = aimWithPointer && rangedPointer.active;
   localActionFacingYaw = practisingFollowUp
     ? movementYaw(CALLING_EFFIGY_POSITION.x - player.x, CALLING_EFFIGY_POSITION.z - player.z, localFacingYaw)
-    : attackDefinition.projectileTravelMs > 0 && aimWithPointer && rangedPointer.active ? mouseRangedYaw(localFacingYaw) : targetMob
-    ? movementYaw(targetMob.visual.state.x - player.x, targetMob.visual.state.z - player.z, localFacingYaw)
-    : currentTarget
-      ? movementYaw(currentTarget.x + 0.5 - player.x, currentTarget.z + 0.5 - player.z, localFacingYaw)
-      : localFacingYaw;
+    : attackAimYaw(
+      pointerAimed ? mouseRangedYaw(localFacingYaw) : null,
+      targetMob ? movementYaw(targetMob.visual.state.x - player.x, targetMob.visual.state.z - player.z, localFacingYaw) : null,
+      currentTarget ? movementYaw(currentTarget.x + 0.5 - player.x, currentTarget.z + 0.5 - player.z, localFacingYaw) : null,
+      localFacingYaw,
+    );
+  // Attacks commit to one direction. Match the visible body, blade arc, and
+  // authoritative hit yaw immediately instead of easing the body after release.
+  localFacingYaw = localActionFacingYaw;
+  localPlayer.setEulerAngles(0, localFacingYaw, 0);
   const comboStep = attackDefinition.combo && now <= localComboExpiresAt ? localComboStep % 3 + 1 : 1;
   const timing = attackDefinition.attacks[comboStep - 1] ?? attackDefinition.attacks[0]!;
   localActionStartedAt = now;
@@ -11759,7 +11765,9 @@ function requestAttack(aimWithPointer = true): void {
   const attackName = attackDefinition.combo
     ? `${MAIN_HAND_DEFINITIONS[localMainHandId].attackName} ${comboStep}`
     : MAIN_HAND_DEFINITIONS[localMainHandId].attackName;
-  status.textContent = attackDefinition.projectileTravelMs > 0 && aimWithPointer && rangedPointer.active ? `${attackName} · firing toward your reticle.` : targetMob
+  status.textContent = pointerAimed
+    ? attackDefinition.projectileTravelMs > 0 ? `${attackName} · firing toward your reticle.` : `${attackName} · swinging toward your pointer.`
+    : targetMob
     ? attackDefinition.combo && comboStep === 3
       ? `Heavy finisher aimed at ${targetMob.visual.state.name}...`
       : `${attackName} aimed at ${targetMob.visual.state.name}...`

@@ -9,3 +9,8 @@ export function rangedAimYaw(start: Point, end: Point, player: Point, fallback: 
   const dz = start.z + (end.z - start.z) * t - player.z;
   return Math.hypot(dx, dz) < .05 ? fallback : Math.atan2(dx, dz) * 180 / Math.PI;
 }
+
+/** Mouse aim is deliberate and must win over nearby-target assistance. */
+export function attackAimYaw(pointerYaw: number | null, targetYaw: number | null, terrainYaw: number | null, fallback: number): number {
+  return pointerYaw ?? targetYaw ?? terrainYaw ?? fallback;
+}

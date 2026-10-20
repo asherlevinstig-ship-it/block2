@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { rangedAimYaw } from "./ranged-aim.js";
+import { attackAimYaw, rangedAimYaw } from "./ranged-aim.js";
 describe("ranged mouse aim", () => {
   const player = { x: 0, y: 8, z: 0 };
   it("projects pointer rays independently of movement or nearby enemies", () => {
@@ -14,5 +14,11 @@ describe("ranged mouse aim", () => {
     expect(rangedAimYaw({ x: 0, y: 20, z: 0 }, { x: 5, y: 20, z: 5 }, player, 33)).toBe(33);
     expect(rangedAimYaw({ x: 0, y: 20, z: 0 }, { x: 5, y: 30, z: 5 }, player, 33)).toBe(33);
     expect(rangedAimYaw({ x: 0, y: 20, z: 0 }, { x: 0, y: 0, z: 0 }, player, 33)).toBe(33);
+  });
+  it("gives an intentional click priority over nearby-target assistance", () => {
+    expect(attackAimYaw(-90, 45, 20, 0)).toBe(-90);
+    expect(attackAimYaw(null, 45, 20, 0)).toBe(45);
+    expect(attackAimYaw(null, null, 20, 0)).toBe(20);
+    expect(attackAimYaw(null, null, null, 15)).toBe(15);
   });
 });
