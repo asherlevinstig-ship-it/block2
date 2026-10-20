@@ -8807,11 +8807,6 @@ tavernDialogueNext.addEventListener("click", advanceTavernDialogue);
 tavernDialogueClose.addEventListener("click", closeTavernDialogue);
 
 function setInventoryOpen(open: boolean): void {
-  if (firstVictoryRewardLessonReady() && !open && firstVictoryReward?.stage === "choose") {
-    status.textContent = "Choose EQUIP UPGRADE or KEEP FOR LATER before closing your pack.";
-    nudgeStarterInventoryTutorial();
-    return;
-  }
   if (!open && localMainHandId === "forged_sword") {
     if (forcedStarterEquipment) completeStarterEquipment();
     if (firstStepsIndex === 2) noteFirstStep("equipped_starter");
@@ -8830,12 +8825,6 @@ function setInventoryOpen(open: boolean): void {
   if (firstVictoryRewardLessonReady() && open && firstVictoryReward?.stage === "open_pack") {
     status.textContent = "Press I to open your pack and inspect your Calling-matched reward.";
     nudgeStarterInventoryTutorial();
-    return;
-  }
-  if (!open && starterLesson === "equip_sword") {
-    status.textContent = "Equip the Forged Sword before closing your inventory.";
-    nudgeStarterInventoryTutorial();
-    inventoryPanel.querySelector<HTMLButtonElement>('[data-item="forged_sword"] [data-equip-main-hand]')?.focus();
     return;
   }
   if (open) closeLoot();
