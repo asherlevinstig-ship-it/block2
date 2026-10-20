@@ -8,6 +8,16 @@ export function advanceMobYaw(current: number, target: number, dt: number): numb
   return current + Math.max(-360 * elapsed, Math.min(360 * elapsed, turn));
 }
 
+export function mobRootPositionChanged(current: { x: number; y: number; z: number },
+  target: { x: number; y: number; z: number }, epsilon = .0005): boolean {
+  return Math.abs(current.x - target.x) > epsilon || Math.abs(current.y - target.y) > epsilon
+    || Math.abs(current.z - target.z) > epsilon;
+}
+
+export function mobRootYawChanged(current: number, target: number, epsilon = .05): boolean {
+  return Math.abs(((target - current + 540) % 360) - 180) > epsilon;
+}
+
 export function mobLocomotionSpeed(snapshots: readonly RemoteSnapshot[], moving: boolean): number {
   if (!moving || snapshots.length < 2) return 0;
   const last = snapshots[snapshots.length - 1]!;

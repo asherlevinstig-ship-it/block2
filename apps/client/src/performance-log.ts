@@ -6,6 +6,10 @@ export function residualDrawCalls(total: number, forward: number, depth: number,
   return Math.max(0, total - forward - depth - shadow);
 }
 
+export function alignedDrawCallTotal(total: number, forward: number, depth: number, shadow: number): number {
+  return Math.max(total, forward + depth + shadow);
+}
+
 export type PerformanceLogSample = {
   at: number;
   frameP50Ms: number;
@@ -50,6 +54,8 @@ export type PerformanceLogSample = {
   fullDetailMobs: number;
   midDetailMobs: number;
   lodMobs: number;
+  animatedRigMobs: number;
+  settledRigMobs: number;
   gpuMs: number | null;
   presentationWaitMs: number;
   longTaskMs: number;
@@ -124,7 +130,7 @@ export function formatPerformanceLog(
   context: { path: string; room: string; userAgent: string },
 ): string {
   const header = [
-    "BLOCKCRAFT PERFORMANCE LOG v7",
+    "BLOCKCRAFT PERFORMANCE LOG v8",
     `captured=${new Date().toISOString()}`,
     `path=${context.path}`,
     `room=${context.room}`,

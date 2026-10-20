@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { advanceMobMotion, advanceMobTurnLean, advanceMobYaw, mobGaitTargets, mobLocomotionSpeed, trimMobSnapshots, visibleMobGaitSpeed } from "./mob-motion.js";
+import { advanceMobMotion, advanceMobTurnLean, advanceMobYaw, mobGaitTargets, mobLocomotionSpeed, mobRootPositionChanged, mobRootYawChanged, trimMobSnapshots, visibleMobGaitSpeed } from "./mob-motion.js";
 import type { RemoteSnapshot } from "./movement-network.js";
 
 const sample = (receivedAt: number, x: number): RemoteSnapshot => ({ receivedAt, x, y: 8, z: 0, yaw: 90 });
@@ -86,5 +86,11 @@ describe("mob movement presentation", () => {
     expect(turning).toBeLessThan(1);
     expect(advanceMobTurnLean(turning, 5, 5, 1 / 60, false)).toBeLessThan(turning);
     expect(advanceMobTurnLean(turning, 5, 45, 1 / 60, true)).toBe(0);
+  });
+  it("does not dirty a rendered mob root for an unchanged network pose", () => {
+    expect(mobRootPositionChanged({ x: 1, y: 8, z: 2 }, { x: 1.0001, y: 8, z: 2 })).toBe(false);
+    expect(mobRootPositionChanged({ x: 1, y: 8, z: 2 }, { x: 1.01, y: 8, z: 2 })).toBe(true);
+    expect(mobRootYawChanged(359.99, 0)).toBe(false);
+    expect(mobRootYawChanged(359, 1)).toBe(true);
   });
 });

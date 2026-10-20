@@ -2,8 +2,17 @@ export const MOB_PRESENTATION_RANGE = 72;
 export const MOB_FULL_DETAIL_RANGE = 18;
 export const MOB_MID_DETAIL_RANGE = 40;
 export const MOB_COMBAT_DETAIL_RANGE = 34;
+export const MOB_IDLE_ANIMATION_RANGE = 8;
 
 export type MobPresentationDetail = "hidden" | "lod" | "mid" | "full";
+
+/** Preserve breathing motion at intimate range, but let unchanged idle rigs settle so
+ * their dynamic render batches do not need rebuilding every frame. */
+export function mobRigNeedsAnimation(distance: number, combatActive: boolean, gaitSpeed: number,
+  hit: number, stagger: number, alive: boolean, defeatProgress: number): boolean {
+  return distance <= MOB_IDLE_ANIMATION_RANGE || combatActive || gaitSpeed > .02 || hit > .001 || stagger > .001
+    || !alive && defeatProgress < 1;
+}
 
 /** Terrain outside the streamed play window cannot support a useful mob render. */
 export function mobPresentationVisible(worldVisible: boolean, distance: number): boolean {

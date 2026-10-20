@@ -62,12 +62,12 @@ import { lootVisibleToPlayer } from "./loot-ownership.js";
 import { lootHoldProgress, type LootHold } from "./loot-hold.js";
 import { incomingLootAdvice, swapCandidateReason, swapCandidateScore } from "./loot-recommendation.js";
 import { undergroundThreatVisible } from "./underground-threat-visibility.js";
-import { mobPresentationDetail, mobPresentationInitialDelay, mobPresentationIntervalMs } from "./mob-presentation-budget.js";
+import { mobPresentationDetail, mobPresentationInitialDelay, mobPresentationIntervalMs, mobRigNeedsAnimation } from "./mob-presentation-budget.js";
 import { mobMidDetailParts } from "./mob-mid-detail.js";
 import { nearestQueuedChunkKey } from "./chunk-rebuild-queue.js";
 import { advanceAutoQuality, GRAPHICS_QUALITY_PROFILES, initialAutoQualityTier, parseGraphicsQualityMode,
   type AutoQualityState, type GraphicsQualityMode, type GraphicsQualityTier } from "./graphics-quality.js";
-import { PERFORMANCE_LOG_INTERVAL_MS, appendPerformanceSample, automaticPerformanceAnomalies,
+import { PERFORMANCE_LOG_INTERVAL_MS, alignedDrawCallTotal, appendPerformanceSample, automaticPerformanceAnomalies,
   formatPerformanceLog, parsePerformanceLog, residualDrawCalls,
   type PerformanceLogSample } from "./performance-log.js";
 import { cavernRespawnIndicator } from "./cavern-respawn-indicator.js";
@@ -94,7 +94,7 @@ import { SILVER_DEPTHS_ATMOSPHERES, silverDepthsLightColour, silverDepthsZone, t
 import { CAVE_CHAMBERS, caveReturnPath, discoverChambers, type CavePosition } from "./cave-navigation.js";
 import { miningAvailability, miningReach, miningProgress, miningDurationMs, miningLineClear, miningMessage, type MiningCell } from "./mining-feedback.js";
 import type { MineralDepositStatus } from "@blockcraft/protocol";
-import { advanceMobMotion, advanceMobTurnLean, trimMobSnapshots, visibleMobGaitSpeed } from "./mob-motion.js";
+import { advanceMobMotion, advanceMobTurnLean, mobRootPositionChanged, mobRootYawChanged, trimMobSnapshots, visibleMobGaitSpeed } from "./mob-motion.js";
 import { createServerClock, sampleServerClock, enemyAttackPresentation } from "./enemy-timeline.js";
 import { bruteRecoveryPose, enemyAwarenessCue, enemyCombatCue, enemyCueLineClear, enemyShotGuideLength } from "./enemy-combat-cues.js";
 import { confirmPredictedDodges, removeRejectedDodge, replayPendingMovement, type PredictionFrame } from "./prediction-replay.js";
@@ -3142,6 +3142,7 @@ interface MobVisual {
   nextLabelPresentationAt: number;
   bodyMaterial: pc.StandardMaterial;
   art: MobArtRig;
+  rigSettled: boolean;
   statusRoot: pc.Entity;
   frameAlive: boolean;
   defeatAt: number;
@@ -7372,6 +7373,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     nextLabelPresentationAt: 0,
     bodyMaterial,
     art,
+    rigSettled: false,
     statusRoot,
     frameAlive: mob.alive,
     defeatAt: -Infinity,
@@ -10399,7 +10401,7 @@ let incomingBytesPerSecond = 0;
 let incomingPatchesPerSecond = 0;
 let incomingWindowStartedAt = performance.now();
 const instrumentedSockets = new WeakSet<WebSocket>();
-const PERFORMANCE_LOG_STORAGE_KEY = "blockcraft:performance-log:v7";
+const PERFORMANCE_LOG_STORAGE_KEY = "blockcraft:performance-log:v8";
 let lastPerformanceLogAt = 0;
 let lastCustomUpdateMs = 0;
 let lastEngineUpdateMs = 0;
@@ -10419,6 +10421,8 @@ let visibleMobCount = 0;
 let fullDetailMobCount = 0;
 let midDetailMobCount = 0;
 let lodMobCount = 0;
+let animatedRigMobCount = 0;
+let settledRigMobCount = 0;
 const performancePeaks = {
   engineUpdateMs: 0, renderMs: 0, customUpdateMs: 0, terrainUpdateMs: 0,
   sceneDressingMs: 0, mobPresentationMs: 0, worldUiMs: 0, gpuMs: 0, presentationWaitMs: 0,
@@ -12739,6 +12743,8 @@ function updatePerformanceMetrics(now: number): void {
       fullDetailMobs: fullDetailMobCount,
       midDetailMobs: midDetailMobCount,
       lodMobs: lodMobCount,
+      animatedRigMobs: animatedRigMobCount,
+      settledRigMobs: settledRigMobCount,
       gpuMs: observedPeaks.gpuMs > 0 ? observedPeaks.gpuMs : null,
       presentationWaitMs: observedPeaks.presentationWaitMs,
       longTaskMs: observedLongTaskPeakMs,
@@ -12799,7 +12805,7 @@ function updatePerformanceMetrics(now: number): void {
   performanceFields.render.textContent = `${app.stats.drawCalls.total.toLocaleString()} / ${app.stats.frame.triangles.toLocaleString()} / ${app.stats.frame.shadowMapUpdates}`;
   performanceFields.drawBreakdown.textContent = `${app.stats.drawCalls.forward} / ${app.stats.drawCalls.depth} / ${app.stats.drawCalls.shadow} / ${app.stats.drawCalls.misc}`;
   performanceFields.renderState.textContent = `${app.stats.frame.materials} / ${app.stats.frame.shaders} / ${app.stats.scene.meshInstances}`;
-  performanceFields.clientMobs.textContent = `${visibleMobCount} / ${fullDetailMobCount} / ${midDetailMobCount} / ${lodMobCount}`;
+  performanceFields.clientMobs.textContent = `${visibleMobCount} / ${fullDetailMobCount} / ${midDetailMobCount} / ${lodMobCount} · rigs ${animatedRigMobCount}/${settledRigMobCount}`;
   performanceFields.anomaly.textContent = lastPerformanceAnomalies.join(" · ") || "None";
   performanceFields.rtt.textContent = networkRttMs === null ? "Waiting…" : `${networkRttMs.toFixed(0)} ms`;
   performanceFields.inputAck.textContent = movementPilotController ? "SDK stream" : inputAcknowledgementMs === null ? "Waiting…" : `${inputAcknowledgementMs.toFixed(0)} ms`;
@@ -12884,6 +12890,8 @@ function updatePerformanceMetrics(now: number): void {
     fullDetailMobs: fullDetailMobCount,
     midDetailMobs: midDetailMobCount,
     lodMobs: lodMobCount,
+    animatedRigMobs: animatedRigMobCount,
+    settledRigMobs: settledRigMobCount,
     gpuMs: observedPeaks.gpuMs > 0 ? observedPeaks.gpuMs : null,
     presentationWaitMs: observedPeaks.presentationWaitMs,
     longTaskMs: observedLongTaskPeakMs,
@@ -12999,8 +13007,9 @@ app.on("postrender", () => {
   app.stats.updateDetailed(app.renderer, app.graphicsDevice);
   if (typeof completedDrawCalls === "number" && Number.isFinite(completedDrawCalls)) {
     const drawCalls = app.stats.drawCalls;
-    drawCalls.total = completedDrawCalls;
-    drawCalls.misc = residualDrawCalls(completedDrawCalls, drawCalls.forward, drawCalls.depth, drawCalls.shadow);
+    const alignedTotal = alignedDrawCallTotal(completedDrawCalls, drawCalls.forward, drawCalls.depth, drawCalls.shadow);
+    drawCalls.total = alignedTotal;
+    drawCalls.misc = residualDrawCalls(alignedTotal, drawCalls.forward, drawCalls.depth, drawCalls.shadow);
   }
 });
 
@@ -13383,6 +13392,8 @@ app.on("update", (dt: number) => {
   fullDetailMobCount = 0;
   midDetailMobCount = 0;
   lodMobCount = 0;
+  animatedRigMobCount = 0;
+  settledRigMobCount = 0;
   const serverNow = animationNow + serverClock.offset;
   const playerEye = localPlayer.getPosition();
   const healthBarTargetId = interactionMode === "combat"
@@ -13405,6 +13416,7 @@ app.on("update", (dt: number) => {
         mob.entity.setPosition(mob.state.x, mob.state.y, mob.state.z);
         mob.renderYaw = mob.state.yaw;
       }
+      mob.rigSettled = false;
     }
     const realmArrival = mobId === "realm-stone-warden" && mob.state.alive && mob.state.materializeUntil > serverNow;
     const materializing = (!mob.state.alive || realmArrival) && mob.state.materializeUntil > serverNow;
@@ -13461,9 +13473,11 @@ app.on("update", (dt: number) => {
         mob.snapshots, animationNow, Math.max(frameTime, intervalMs / 1_000),
         mob.state.alive && mob.state.combatState === "idle", false);
       mob.locomotionSpeed = motion.gaitSpeed;
-      mob.entity.setPosition(motion.pose.x, motion.pose.y, motion.pose.z);
+      if (mobRootPositionChanged(currentMobPosition, motion.pose))
+        mob.entity.setPosition(motion.pose.x, motion.pose.y, motion.pose.z);
+      const previousRenderYaw = mob.renderYaw;
       mob.renderYaw = motion.pose.yaw;
-      mob.entity.setEulerAngles(0, mob.renderYaw, 0);
+      if (mobRootYawChanged(previousRenderYaw, mob.renderYaw)) mob.entity.setEulerAngles(0, mob.renderYaw, 0);
       if (useMid) {
         const stride = animationTime * (3.5 + Math.min(4, motion.gaitSpeed));
         mob.midBody.setLocalPosition(0, Math.abs(Math.sin(stride)) * .045, 0);
@@ -13499,7 +13513,7 @@ app.on("update", (dt: number) => {
     mob.locomotionSpeed = motion.gaitSpeed;
     const moveSpeed = visibleMobGaitSpeed(motion.gaitSpeed,
       Math.hypot(sampled.x - currentMobPosition.x, sampled.z - currentMobPosition.z), frameTime);
-    mob.entity.setPosition(sampled.x, sampled.y, sampled.z);
+    if (mobRootPositionChanged(currentMobPosition, sampled)) mob.entity.setPosition(sampled.x, sampled.y, sampled.z);
     mob.renderYaw = sampled.yaw;
     trimMobSnapshots(mob.snapshots, animationNow);
     const hitStrength = mob.hitAt > 0 ? Math.max(0, 1 - (animationNow - mob.hitAt) / 180) : 0;
@@ -13508,7 +13522,7 @@ app.on("update", (dt: number) => {
     // the scalar in sync so recovery never resumes from an aliased Euler Y.
     if (presentation.aimLocked) mob.renderYaw = mob.state.yaw;
     mob.turnLean = advanceMobTurnLean(mob.turnLean, previousYaw, mob.renderYaw, frameTime, presentation.aimLocked);
-    mob.entity.setEulerAngles(0, mob.renderYaw, 0);
+    if (mobRootYawChanged(previousYaw, mob.renderYaw)) mob.entity.setEulerAngles(0, mob.renderYaw, 0);
     const attackElapsed = presentation.elapsed;
     const attackDuration = mob.isBrute ? 760 : mob.isSpitter ? 520 : 460;
     const attackPeak = ["rocks", "falling-rocks", "warden-barrage", "fault-line"].includes(mob.state.attackPattern) ? 180 : mob.isSpitter ? attackDuration / 2 : mobMeleeImpactMs(mob.state.archetype);
@@ -13682,9 +13696,22 @@ app.on("update", (dt: number) => {
       mob.eliteAuraMaterial.opacity = (mob.state.isMiniBoss ? .5 : .38) + Math.sin(animationTime * 6.5) * .12;
       mob.eliteAuraMaterial.update();
     }
-    animateMobArt(mob.art, frameTime, animationTime, moveSpeed, mob.state.awarenessState, windupStrength, attackStrength, hitStrength, staggerStrength, defeat);
     setMobArtEnraged(mob.art, mob.state.enraged === true);
     setMobArtDefeated(mob.art, !mob.state.alive && deathPose.progress >= .3);
+    const rigActive = mobRigNeedsAnimation(mobDistance, combatActive, moveSpeed, hitStrength,
+      staggerStrength, mob.state.alive, deathPose.progress);
+    if (rigActive) animatedRigMobCount += 1;
+    else settledRigMobCount += 1;
+    if (rigActive || !mob.rigSettled) {
+      if (!rigActive) {
+        mob.art.walk = 0;
+        mob.art.pursuit = 0;
+        mob.turnLean = 0;
+      }
+      animateMobArt(mob.art, frameTime, rigActive ? animationTime : 0, rigActive ? moveSpeed : 0,
+        rigActive ? mob.state.awarenessState : "patrol", rigActive ? windupStrength : 0,
+        rigActive ? attackStrength : 0, rigActive ? hitStrength : 0, rigActive ? staggerStrength : 0,
+        rigActive ? defeat : 0);
     const crawlerRecovery = !mob.isBrute && !mob.isSpitter && presentation.phase === "recover"
       ? Math.sin(Math.PI * Math.min(1, Math.max(0, (animationNow + serverClock.offset - mob.state.attackContactEndAt)
         / Math.max(1, mob.state.attackRecoveryEndAt - mob.state.attackContactEndAt)))) : 0;
@@ -13723,6 +13750,8 @@ app.on("update", (dt: number) => {
       0.001 + (mob.state.isMiniBoss ? .01 : mob.state.isElite ? .18 : 0) + 0.04 * hitStrength + 0.08 * windupStrength + 0.48 * staggerStrength,
     );
     mob.bodyMaterial.update();
+      mob.rigSettled = !rigActive;
+    }
   }
   lastMobPresentationMs = performance.now() - mobPresentationStartedAt;
   capturePerformancePeak("mobPresentationMs", lastMobPresentationMs);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { MOB_COMBAT_DETAIL_RANGE, MOB_FULL_DETAIL_RANGE, MOB_MID_DETAIL_RANGE, MOB_PRESENTATION_RANGE, mobPresentationDetail,
-  mobPresentationInitialDelay, mobPresentationIntervalMs, mobPresentationVisible } from "./mob-presentation-budget.js";
+import { MOB_COMBAT_DETAIL_RANGE, MOB_FULL_DETAIL_RANGE, MOB_IDLE_ANIMATION_RANGE, MOB_MID_DETAIL_RANGE, MOB_PRESENTATION_RANGE, mobPresentationDetail,
+  mobPresentationInitialDelay, mobPresentationIntervalMs, mobPresentationVisible, mobRigNeedsAnimation } from "./mob-presentation-budget.js";
 
 describe("mob presentation budget", () => {
   it("renders enemies throughout the active streamed play area", () => {
@@ -36,5 +36,13 @@ describe("mob presentation budget", () => {
     expect(delays.every(delay => delay >= 0 && delay < 200)).toBe(true);
     expect(new Set(delays).size).toBeGreaterThan(1);
     expect(mobPresentationInitialDelay("mob-a", 0)).toBe(0);
+  });
+
+  it("settles unchanged idle rigs outside intimate viewing range", () => {
+    expect(mobRigNeedsAnimation(MOB_IDLE_ANIMATION_RANGE, false, 0, 0, 0, true, 0)).toBe(true);
+    expect(mobRigNeedsAnimation(MOB_IDLE_ANIMATION_RANGE + .01, false, 0, 0, 0, true, 0)).toBe(false);
+    expect(mobRigNeedsAnimation(16, true, 0, 0, 0, true, 0)).toBe(true);
+    expect(mobRigNeedsAnimation(16, false, .1, 0, 0, true, 0)).toBe(true);
+    expect(mobRigNeedsAnimation(16, false, 0, 0, 0, false, .8)).toBe(true);
   });
 });

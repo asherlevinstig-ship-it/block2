@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PERFORMANCE_LOG_MAX_SAMPLES, PERFORMANCE_LOG_RETENTION_MS,
-  appendPerformanceSample, automaticPerformanceAnomalies, formatPerformanceLog, parsePerformanceLog,
+  alignedDrawCallTotal, appendPerformanceSample, automaticPerformanceAnomalies, formatPerformanceLog, parsePerformanceLog,
   residualDrawCalls,
   type PerformanceLogSample } from "./performance-log.js";
 
@@ -15,7 +15,8 @@ function sample(at: number): PerformanceLogSample {
     shadowDrawCalls: 4, miscDrawCalls: 4, materialSwitches: 28, shaderSwitches: 7,
     sceneMeshInstances: 240, renderedTriangles: 10_000,
     shadowMapUpdates: 0, shadowMapMs: 0, particleMs: 0,
-    visibleMobs: 8, fullDetailMobs: 3, midDetailMobs: 2, lodMobs: 3, gpuMs: 6, presentationWaitMs: 2,
+    visibleMobs: 8, fullDetailMobs: 3, midDetailMobs: 2, lodMobs: 3, animatedRigMobs: 1, settledRigMobs: 2,
+    gpuMs: 6, presentationWaitMs: 2,
     longTaskMs: 0, loafDurationMs: 0, loafBlockingMs: 0, loafRenderDelayMs: 0, loafStyleLayoutMs: 0,
     renderScale: 1, canvasWidth: 1280, canvasHeight: 720, devicePixelRatio: 1,
     documentVisible: true, windowFocused: true, appFrameCount: 120, browserRafCount: 120,
@@ -41,7 +42,7 @@ describe("performance log", () => {
 
   it("formats a portable report without player data", () => {
     const report = formatPerformanceLog([sample(5_000)], { path: "/", room: "world", userAgent: "test" });
-    expect(report).toContain("BLOCKCRAFT PERFORMANCE LOG v7");
+    expect(report).toContain("BLOCKCRAFT PERFORMANCE LOG v8");
     expect(report).toContain('"frameP95Ms":18');
     expect(report).toContain("room=world");
   });
@@ -62,5 +63,7 @@ describe("performance log", () => {
   it("derives the uncategorized draw calls from one completed frame", () => {
     expect(residualDrawCalls(120, 92, 4, 8)).toBe(16);
     expect(residualDrawCalls(80, 92, 4, 8)).toBe(0);
+    expect(alignedDrawCallTotal(0, 92, 4, 8)).toBe(104);
+    expect(alignedDrawCallTotal(120, 92, 4, 8)).toBe(120);
   });
 });
