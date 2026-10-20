@@ -66,7 +66,8 @@ import { mobPresentationVisible } from "./mob-presentation-budget.js";
 import { nearestQueuedChunkKey } from "./chunk-rebuild-queue.js";
 import { advanceAutoQuality, GRAPHICS_QUALITY_PROFILES, initialAutoQualityTier, parseGraphicsQualityMode,
   type AutoQualityState, type GraphicsQualityMode, type GraphicsQualityTier } from "./graphics-quality.js";
-import { PERFORMANCE_LOG_INTERVAL_MS, appendPerformanceSample, formatPerformanceLog, parsePerformanceLog,
+import { PERFORMANCE_LOG_INTERVAL_MS, appendPerformanceSample, automaticPerformanceAnomalies,
+  formatPerformanceLog, parsePerformanceLog,
   type PerformanceLogSample } from "./performance-log.js";
 import { cavernRespawnIndicator } from "./cavern-respawn-indicator.js";
 import { SILVER_DEPTHS, SILVER_DEPTHS_CHECKPOINT_POSITION, isInSilverGuardClearing, isInFrontierBruteArena, isInRealmWardenArena, isInForestDungeon, isInEmberVault } from "@blockcraft/voxel-world";
@@ -1319,6 +1320,10 @@ const requiredInventoryMainHands = Object.values(MAIN_HAND_DEFINITIONS).filter(d
 const performanceFields = {
   frame: document.querySelector<HTMLElement>("#perf-frame")!,
   fps: document.querySelector<HTMLElement>("#perf-fps")!,
+  engine: document.querySelector<HTMLElement>("#perf-engine")!,
+  subsystems: document.querySelector<HTMLElement>("#perf-subsystems")!,
+  render: document.querySelector<HTMLElement>("#perf-render")!,
+  anomaly: document.querySelector<HTMLElement>("#perf-anomaly")!,
   rtt: document.querySelector<HTMLElement>("#perf-rtt")!,
   inputAck: document.querySelector<HTMLElement>("#perf-input-ack")!,
   networkRate: document.querySelector<HTMLElement>("#perf-network-rate")!,
@@ -10311,8 +10316,21 @@ let incomingBytesPerSecond = 0;
 let incomingPatchesPerSecond = 0;
 let incomingWindowStartedAt = performance.now();
 const instrumentedSockets = new WeakSet<WebSocket>();
-const PERFORMANCE_LOG_STORAGE_KEY = "blockcraft:performance-log:v1";
+const PERFORMANCE_LOG_STORAGE_KEY = "blockcraft:performance-log:v2";
 let lastPerformanceLogAt = 0;
+let lastCustomUpdateMs = 0;
+let lastEngineUpdateMs = 0;
+let lastRenderMs = 0;
+let lastTerrainUpdateMs = 0;
+let lastSceneDressingMs = 0;
+let lastMobPresentationMs = 0;
+let lastWorldUiMs = 0;
+const performancePeaks = {
+  engineUpdateMs: 0, renderMs: 0, customUpdateMs: 0, terrainUpdateMs: 0,
+  sceneDressingMs: 0, mobPresentationMs: 0, worldUiMs: 0,
+};
+const pendingPerformanceMarkers = new Set<string>();
+let lastPerformanceAnomalies: string[] = [];
 let performanceLogSamples: PerformanceLogSample[] = (() => {
   try { return parsePerformanceLog(window.localStorage.getItem(PERFORMANCE_LOG_STORAGE_KEY)); }
   catch { return []; }
@@ -10325,6 +10343,14 @@ function updatePerformanceLogStatus(message?: string): void {
 function persistPerformanceLog(): void {
   try { window.localStorage.setItem(PERFORMANCE_LOG_STORAGE_KEY, JSON.stringify(performanceLogSamples)); }
   catch { updatePerformanceLogStatus("Local logging unavailable in this browser"); }
+}
+
+function markPerformanceAnomaly(marker: string): void {
+  pendingPerformanceMarkers.add(marker);
+}
+
+function capturePerformancePeak(key: keyof typeof performancePeaks, value: number): void {
+  if (Number.isFinite(value)) performancePeaks[key] = Math.max(performancePeaks[key], value);
 }
 
 updatePerformanceLogStatus();
@@ -11171,6 +11197,7 @@ function recordSnapDiagnostic(cause: string, before: pc.Vec3, after: pc.Vec3): v
   const delta = before.distance(after);
   const line = `${fixed(now / 1000, 2)}s ${cause} delta=${fixed(delta)} before=[${positionLabel(before)}] after=[${positionLabel(after)}] server=[${positionLabel(authoritativeLocalPosition)}] sent=${moveSequence} ack=${lastProcessedInputSequence} lag=${moveSequence - lastProcessedInputSequence} blocked_acks=${blockedAcknowledgements} age=${fixed(now - lastAuthoritativeMovementAt, 0)}ms ack_age=${fixed(now - lastAcknowledgementAdvancedAt, 0)}ms input=[${movementVectorLabel(smoothedMovement)}] dt=${fixed(frameSamples.at(-1) ?? 0, 1)}ms rtt=${networkRttMs === null ? "unknown" : fixed(networkRttMs, 0)}ms chunk_build=${fixed(lastChunkBuildMs, 1)}ms slice=${cutawayStateKey}`;
   snapDiagnosticEvents.push(line);
+  markPerformanceAnomaly(`SNAP:${cause}`);
   if (snapDiagnosticEvents.length > 30) snapDiagnosticEvents.shift();
   if (!activeSnapTrace) {
     snapSequence += 1;
@@ -12502,6 +12529,7 @@ function updatePerformanceMetrics(now: number): void {
   const memory = (performance as Performance & { memory?: { usedJSHeapSize: number } }).memory?.usedJSHeapSize;
   const stable = frameSamples.length >= 120;
   const chunkBuildPeakMs = Math.max(lastChunkBuildMs, recentChunkBuildPeakMs);
+  const observedPeaks = { ...performancePeaks };
   const serverFresh = serverPerformance !== null && now - serverPerformanceReceivedAt <= 2_500;
   const currentServerPerformance = serverFresh ? serverPerformance : null;
   const serverWithinBudget = currentServerPerformance === null
@@ -12512,7 +12540,7 @@ function updatePerformanceMetrics(now: number): void {
     && chunkBuildPeakMs <= 250 && serverWithinBudget && acknowledgementWithinBudget && trafficWithinBudget;
   if (now - lastPerformanceLogAt >= PERFORMANCE_LOG_INTERVAL_MS) {
     lastPerformanceLogAt = now;
-    performanceLogSamples = appendPerformanceSample(performanceLogSamples, {
+    const sample: PerformanceLogSample = {
       at: Date.now(),
       frameP50Ms: p50,
       frameP95Ms: p95,
@@ -12531,13 +12559,35 @@ function updatePerformanceMetrics(now: number): void {
       graphicsMode: selectedGraphicsQualityMode,
       graphicsTier: appliedGraphicsQualityTier,
       withinBudget,
-    });
+      engineUpdateMs: observedPeaks.engineUpdateMs,
+      renderMs: observedPeaks.renderMs,
+      customUpdateMs: observedPeaks.customUpdateMs,
+      terrainUpdateMs: observedPeaks.terrainUpdateMs,
+      sceneDressingMs: observedPeaks.sceneDressingMs,
+      mobPresentationMs: observedPeaks.mobPresentationMs,
+      worldUiMs: observedPeaks.worldUiMs,
+      drawCalls: app.stats.drawCalls.total,
+      renderedTriangles: app.stats.frame.triangles,
+      shadowMapUpdates: app.stats.frame.shadowMapUpdates,
+      shadowMapMs: app.stats.frame.shadowMapTime,
+      particleMs: app.stats.particles.frameTime,
+      anomalies: [],
+    };
+    sample.anomalies = [...new Set([...automaticPerformanceAnomalies(sample), ...pendingPerformanceMarkers])];
+    lastPerformanceAnomalies = sample.anomalies;
+    performanceLogSamples = appendPerformanceSample(performanceLogSamples, sample);
+    for (const key of Object.keys(performancePeaks) as (keyof typeof performancePeaks)[]) performancePeaks[key] = 0;
+    pendingPerformanceMarkers.clear();
     persistPerformanceLog();
     updatePerformanceLogStatus();
   }
 
   performanceFields.frame.textContent = `${p50.toFixed(1)} / ${p95.toFixed(1)} ms`;
   performanceFields.fps.textContent = `${Math.round(fps)}`;
+  performanceFields.engine.textContent = `${lastEngineUpdateMs.toFixed(1)} / ${lastRenderMs.toFixed(1)} ms`;
+  performanceFields.subsystems.textContent = `${lastTerrainUpdateMs.toFixed(1)} / ${lastSceneDressingMs.toFixed(1)} / ${lastMobPresentationMs.toFixed(1)} / ${lastWorldUiMs.toFixed(1)} ms`;
+  performanceFields.render.textContent = `${app.stats.drawCalls.total.toLocaleString()} / ${app.stats.frame.triangles.toLocaleString()} / ${app.stats.frame.shadowMapUpdates}`;
+  performanceFields.anomaly.textContent = lastPerformanceAnomalies.join(" · ") || "None";
   performanceFields.rtt.textContent = networkRttMs === null ? "Waiting…" : `${networkRttMs.toFixed(0)} ms`;
   performanceFields.inputAck.textContent = movementPilotController ? "SDK stream" : inputAcknowledgementMs === null ? "Waiting…" : `${inputAcknowledgementMs.toFixed(0)} ms`;
   performanceFields.networkRate.textContent = `${incomingPatchesPerSecond.toFixed(1)}/s · ${formatBytes(incomingBytesPerSecond)}/s`;
@@ -12596,6 +12646,19 @@ function updatePerformanceMetrics(now: number): void {
     worldPayloadBytes,
     stable,
     withinBudget,
+    engineUpdateMs: observedPeaks.engineUpdateMs,
+    renderMs: observedPeaks.renderMs,
+    customUpdateMs: observedPeaks.customUpdateMs,
+    terrainUpdateMs: observedPeaks.terrainUpdateMs,
+    sceneDressingMs: observedPeaks.sceneDressingMs,
+    mobPresentationMs: observedPeaks.mobPresentationMs,
+    worldUiMs: observedPeaks.worldUiMs,
+    drawCalls: app.stats.drawCalls.total,
+    renderedTriangles: app.stats.frame.triangles,
+    shadowMapUpdates: app.stats.frame.shadowMapUpdates,
+    shadowMapMs: app.stats.frame.shadowMapTime,
+    particleMs: app.stats.particles.frameTime,
+    anomalies: lastPerformanceAnomalies.join(","),
   };
   if (selectedGraphicsQualityMode === "auto" && stable) {
     const nextAutoQuality = advanceAutoQuality(autoQualityState, p95, now);
@@ -12669,6 +12732,11 @@ function reconcileLocalPlayer(
 }
 
 app.on("update", (dt: number) => {
+  const customUpdateStartedAt = performance.now();
+  lastEngineUpdateMs = app.stats.frame.updateTime;
+  lastRenderMs = app.stats.frame.renderTime;
+  capturePerformancePeak("engineUpdateMs", lastEngineUpdateMs);
+  capturePerformancePeak("renderMs", lastRenderMs);
   app.autoRender = Boolean(inventoryPanel.hidden);
   if (!app.autoRender && inventoryRenderDue(performance.now(), inventoryBackgroundFrameAt)) {
     inventoryBackgroundFrameAt = performance.now();
@@ -12817,15 +12885,21 @@ app.on("update", (dt: number) => {
       frameTime,
     );
   }
+  const terrainUpdateStartedAt = performance.now();
   updateActiveChunkMeshes(localPlayer.getPosition());
   processNextChunkRebuild(localPlayer.getPosition());
+  lastTerrainUpdateMs = performance.now() - terrainUpdateStartedAt;
+  capturePerformancePeak("terrainUpdateMs", lastTerrainUpdateMs);
   localVisualVerticalOffset = smoothVerticalOffset(localVisualVerticalOffset, frameTime);
   localPowerVisualOffset.mulScalar(Math.max(0, 1 - frameTime * 11));
   localRecoveryVisualOffset = smoothRecoveryOffset(localRecoveryVisualOffset, frameTime);
   localDodgeVisualOffset = advanceDodgeVisualOffset(localDodgeVisualOffset, frameTime);
   localPlayerVisual.setLocalPosition(localPowerVisualOffset.x + localNetworkVisualOffset.x + localRecoveryVisualOffset.x + localDodgeVisualOffset.x, localVisualVerticalOffset, localPowerVisualOffset.z + localNetworkVisualOffset.z + localRecoveryVisualOffset.z + localDodgeVisualOffset.z);
   const animationNow = performance.now();
+  const sceneDressingStartedAt = performance.now();
   sceneDressing.update(animationNow);
+  lastSceneDressingMs = performance.now() - sceneDressingStartedAt;
+  capturePerformancePeak("sceneDressingMs", lastSceneDressingMs);
   const animationTime = animationNow / 1000;
   if (silverDepthsRoot.enabled) for (const mote of silverDepthsMotes) {
     mote.entity.setLocalPosition(mote.entity.getLocalPosition().x, mote.baseY + Math.sin(animationTime * 1.35 + mote.phase) * .16, mote.entity.getLocalPosition().z);
@@ -13023,6 +13097,7 @@ app.on("update", (dt: number) => {
   updateGuidedAbilityPractice(animationNow);
   updateAshenEquipmentReveal();
   updateProgressionNoticeVisibility(animationNow);
+  const mobPresentationStartedAt = performance.now();
   for (const [mobId, mob] of mobVisuals) {
     if (mob.frameAlive !== mob.state.alive) {
       mob.defeatAt = mob.state.alive ? -Infinity : animationNow;
@@ -13299,6 +13374,8 @@ app.on("update", (dt: number) => {
     );
     mob.bodyMaterial.update();
   }
+  lastMobPresentationMs = performance.now() - mobPresentationStartedAt;
+  capturePerformancePeak("mobPresentationMs", lastMobPresentationMs);
   for (const [mobId, visual] of formationTelegraphs) {
     if (animationNow >= visual.expiresAt) {
       destroyFormationTelegraph(mobId);
@@ -13697,6 +13774,7 @@ app.on("update", (dt: number) => {
   if (activeStopTrace && now >= activeStopTrace.captureUntil) finishStopTrace();
 
   updatePerformanceMetrics(now);
+  const worldUiStartedAt = performance.now();
   if (worldReady) {
     const localNetworkPlayer = (room?.state.players as Map<string, NetworkPlayer> | undefined)?.get(room?.sessionId ?? "");
     if (localNetworkPlayer?.huntLoadoutsJson) {
@@ -13770,6 +13848,8 @@ app.on("update", (dt: number) => {
     }
     minimap.update(localPlayer.getPosition(), localFacingYaw, now, minimapPanel.open && Boolean(performancePanel.hidden) && Boolean(defeatScreen.hidden), cameraOrbit.yaw, Boolean(defeatScreen.hidden));
   }
+  lastWorldUiMs = performance.now() - worldUiStartedAt;
+  capturePerformancePeak("worldUiMs", lastWorldUiMs);
   if (room && worldReady && now - lastPingSentAt >= 2000) {
     lastPingSentAt = now;
     pingSequence += 1;
@@ -13828,6 +13908,8 @@ app.on("update", (dt: number) => {
       `stop ack   ${pendingStopInputSequence === null ? "ready" : `waiting for #${pendingStopInputSequence}`}`,
     ].join("\n");
   }
+  lastCustomUpdateMs = performance.now() - customUpdateStartedAt;
+  capturePerformancePeak("customUpdateMs", lastCustomUpdateMs);
 });
 
 function applyBlockChange(message: BlockChanged): void {

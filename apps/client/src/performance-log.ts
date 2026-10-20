@@ -21,7 +21,37 @@ export type PerformanceLogSample = {
   graphicsMode: string;
   graphicsTier: string;
   withinBudget: boolean;
+  engineUpdateMs: number;
+  renderMs: number;
+  customUpdateMs: number;
+  terrainUpdateMs: number;
+  sceneDressingMs: number;
+  mobPresentationMs: number;
+  worldUiMs: number;
+  drawCalls: number;
+  renderedTriangles: number;
+  shadowMapUpdates: number;
+  shadowMapMs: number;
+  particleMs: number;
+  anomalies: string[];
 };
+
+export function automaticPerformanceAnomalies(sample: PerformanceLogSample): string[] {
+  return [
+    sample.frameP95Ms > 50 ? "FRAME_BUDGET" : "",
+    sample.renderMs > 20 ? "RENDER_COST" : "",
+    sample.engineUpdateMs > 20 || sample.customUpdateMs > 20 ? "UPDATE_COST" : "",
+    sample.terrainUpdateMs > 16.7 ? "TERRAIN_COST" : "",
+    sample.sceneDressingMs > 10 ? "SCENE_DRESSING_COST" : "",
+    sample.mobPresentationMs > 12 ? "MOB_PRESENTATION_COST" : "",
+    sample.worldUiMs > 10 ? "WORLD_UI_COST" : "",
+    sample.rttMs !== null && sample.rttMs > 500 ? "NETWORK_RTT" : "",
+    sample.inputAckMs !== null && sample.inputAckMs > 500 ? "INPUT_ACK" : "",
+    sample.serverTickP95Ms !== null && sample.serverTickP95Ms > 33.3 ? "SERVER_TICK" : "",
+    sample.bytesPerSecond > 256 * 1024 ? "TRAFFIC_BURST" : "",
+    sample.chunkBuildPeakMs > 16.7 ? "CHUNK_BUILD" : "",
+  ].filter(Boolean);
+}
 
 export function appendPerformanceSample(
   samples: readonly PerformanceLogSample[],
@@ -49,7 +79,7 @@ export function formatPerformanceLog(
   context: { path: string; room: string; userAgent: string },
 ): string {
   const header = [
-    "BLOCKCRAFT PERFORMANCE LOG v1",
+    "BLOCKCRAFT PERFORMANCE LOG v2",
     `captured=${new Date().toISOString()}`,
     `path=${context.path}`,
     `room=${context.room}`,

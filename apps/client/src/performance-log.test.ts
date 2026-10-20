@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { PERFORMANCE_LOG_MAX_SAMPLES, PERFORMANCE_LOG_RETENTION_MS,
-  appendPerformanceSample, formatPerformanceLog, parsePerformanceLog, type PerformanceLogSample } from "./performance-log.js";
+  appendPerformanceSample, automaticPerformanceAnomalies, formatPerformanceLog, parsePerformanceLog,
+  type PerformanceLogSample } from "./performance-log.js";
 
 function sample(at: number): PerformanceLogSample {
   return { at, frameP50Ms: 10, frameP95Ms: 18, fps: 60, rttMs: 40, inputAckMs: 50,
     patchesPerSecond: 30, bytesPerSecond: 10_000, serverTickP50Ms: 2, serverTickP95Ms: 5,
     activeMobs: 8, sleepingMobs: 70, chunkBuildMs: 0, chunkBuildPeakMs: 4, chunkQueue: 0,
-    graphicsMode: "auto", graphicsTier: "high", withinBudget: true };
+    graphicsMode: "auto", graphicsTier: "high", withinBudget: true,
+    engineUpdateMs: 8, renderMs: 7, customUpdateMs: 5, terrainUpdateMs: 0, sceneDressingMs: 1,
+    mobPresentationMs: 2, worldUiMs: 1, drawCalls: 100, renderedTriangles: 10_000,
+    shadowMapUpdates: 0, shadowMapMs: 0, particleMs: 0, anomalies: [] };
 }
 
 describe("performance log", () => {
@@ -27,8 +31,16 @@ describe("performance log", () => {
 
   it("formats a portable report without player data", () => {
     const report = formatPerformanceLog([sample(5_000)], { path: "/", room: "world", userAgent: "test" });
-    expect(report).toContain("BLOCKCRAFT PERFORMANCE LOG v1");
+    expect(report).toContain("BLOCKCRAFT PERFORMANCE LOG v2");
     expect(report).toContain('"frameP95Ms":18');
     expect(report).toContain("room=world");
+  });
+
+  it("labels the subsystem responsible for a slow frame", () => {
+    const slow = { ...sample(5_000), frameP95Ms: 83, renderMs: 31, mobPresentationMs: 18,
+      rttMs: 620, bytesPerSecond: 300 * 1024 };
+    expect(automaticPerformanceAnomalies(slow)).toEqual([
+      "FRAME_BUDGET", "RENDER_COST", "MOB_PRESENTATION_COST", "NETWORK_RTT", "TRAFFIC_BURST",
+    ]);
   });
 });
