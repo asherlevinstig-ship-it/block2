@@ -64,6 +64,7 @@ import { incomingLootAdvice, swapCandidateReason, swapCandidateScore } from "./l
 import { undergroundThreatVisible } from "./underground-threat-visibility.js";
 import { mobPresentationDetail, mobPresentationInitialDelay, mobPresentationIntervalMs, mobRigNeedsAnimation } from "./mob-presentation-budget.js";
 import { mobMidDetailParts } from "./mob-mid-detail.js";
+import { advanceWorldUiSchedule } from "./world-ui-budget.js";
 import { nearestQueuedChunkKey } from "./chunk-rebuild-queue.js";
 import { advanceAutoQuality, GRAPHICS_QUALITY_PROFILES, initialAutoQualityTier, parseGraphicsQualityMode,
   type AutoQualityState, type GraphicsQualityMode, type GraphicsQualityTier } from "./graphics-quality.js";
@@ -3216,6 +3217,8 @@ const playerInteractionUI = createPlayerInteractionUI({
 let activeRealmEventId = "";
 let realmEventDisplayUntil = 0;
 let lastNameplateSampleAt = -Infinity;
+let lastWorldUiSliceAt = -Infinity;
+let currentWorldUiSlice = -1;
 let nearbyTradePlayerId: string | null = null;
 
 function playerInteractionView(id: string): PlayerInteractionView | null {
@@ -14158,6 +14161,10 @@ app.on("update", (dt: number) => {
   const worldUiStartedAt = performance.now();
   if (worldReady) {
     const localNetworkPlayer = (room?.state.players as Map<string, NetworkPlayer> | undefined)?.get(room?.sessionId ?? "");
+    const worldUiSchedule = advanceWorldUiSchedule(now, lastWorldUiSliceAt, currentWorldUiSlice);
+    lastWorldUiSliceAt = worldUiSchedule.lastAt;
+    currentWorldUiSlice = worldUiSchedule.current;
+    if (worldUiSchedule.due === 0) {
     if (localNetworkPlayer?.huntLoadoutsJson) {
       for (const id of parseRoadsideClaims(localNetworkPlayer.huntLoadoutsJson)) {
         if (!localRoadsideClaims.has(id)) {
@@ -14172,6 +14179,8 @@ app.on("update", (dt: number) => {
       updateNorthwatchEncounterChain(localNetworkPlayer.huntLoadoutsJson, now);
       updateAshenEncounterChain(localNetworkPlayer.huntLoadoutsJson, now);
     }
+    }
+    if (worldUiSchedule.due === 1) {
     updateSilverDepthsRoute(now);
     if (!visibleDepthsRoute) updateCaveNavigation(localPlayer.getPosition(), now);
     const dungeonRoute = visibleDepthsRoute;
@@ -14208,24 +14217,29 @@ app.on("update", (dt: number) => {
       candidate.id === healRoom.sessionId || enemyCueLineClear(
         { x: healCaster.x, y: healCaster.y + .72, z: healCaster.z },
         { x: candidate.x, y: candidate.y + .72, z: candidate.z }, readCollisionWorldBlock)) : null;
-    if (room && camera.camera) for (const [id, player] of room.state.players as Map<string, NetworkPlayer>) {
-      const isLocal = id === room.sessionId;
-      const pose = isLocal ? localPlayer.getPosition() : remotePlayers.get(id)?.entity.getPosition();
-      if (!pose) continue;
-      const eye = localPlayer.getPosition(); const rect = canvas.getBoundingClientRect();
-      const screen = camera.camera.worldToScreen(new pc.Vec3(pose.x, pose.y + 1.95, pose.z));
-      const visible = worldReady && defeatScreen.hidden && undergroundKnown(pose.x, pose.y, pose.z)
-        && (isLocal || Date.now() >= (playerStealthUntil.get(id) ?? 0))
-        && Math.hypot(pose.x - eye.x, pose.z - eye.z) <= 24 && screen.z > 0 && screen.x >= 0 && screen.x <= rect.width && screen.y >= 0 && screen.y <= rect.height
-        && (isLocal || enemyCueLineClear({ x: eye.x, y: eye.y + .8, z: eye.z }, { x: pose.x, y: pose.y + .8, z: pose.z }, readCollisionWorldBlock));
-      const inHealRange = healerActive && !isLocal && Math.abs(pose.y - eye.y) <= 2.5
-        && Math.hypot(pose.x - eye.x, pose.z - eye.z) <= 8
-        && (player.health <= 0 || player.health / Math.max(1, player.maxHealth) <= .4 || id === healTargetId);
-      nameplates.push({ id, name: player.name, x: rect.left + screen.x, y: rect.top + screen.y, visible: Boolean(visible), local: isLocal,
-        healHealth: inHealRange ? player.health : undefined, healMaxHealth: inHealRange ? player.maxHealth : undefined,
-        healTarget: id === healTargetId });
+    if (room && camera.camera) {
+      const eye = localPlayer.getPosition();
+      const rect = canvas.getBoundingClientRect();
+      const stealthNow = Date.now();
+      for (const [id, player] of room.state.players as Map<string, NetworkPlayer>) {
+        const isLocal = id === room.sessionId;
+        const pose = isLocal ? eye : remotePlayers.get(id)?.entity.getPosition();
+        if (!pose) continue;
+        const screen = camera.camera.worldToScreen(new pc.Vec3(pose.x, pose.y + 1.95, pose.z));
+        const visible = worldReady && defeatScreen.hidden && undergroundKnown(pose.x, pose.y, pose.z)
+          && (isLocal || stealthNow >= (playerStealthUntil.get(id) ?? 0))
+          && Math.hypot(pose.x - eye.x, pose.z - eye.z) <= 24 && screen.z > 0 && screen.x >= 0 && screen.x <= rect.width && screen.y >= 0 && screen.y <= rect.height
+          && (isLocal || enemyCueLineClear({ x: eye.x, y: eye.y + .8, z: eye.z }, { x: pose.x, y: pose.y + .8, z: pose.z }, readCollisionWorldBlock));
+        const inHealRange = healerActive && !isLocal && Math.abs(pose.y - eye.y) <= 2.5
+          && Math.hypot(pose.x - eye.x, pose.z - eye.z) <= 8
+          && (player.health <= 0 || player.health / Math.max(1, player.maxHealth) <= .4 || id === healTargetId);
+        nameplates.push({ id, name: player.name, x: rect.left + screen.x, y: rect.top + screen.y, visible: Boolean(visible), local: isLocal,
+          healHealth: inHealRange ? player.health : undefined, healMaxHealth: inHealRange ? player.maxHealth : undefined,
+          healTarget: id === healTargetId });
+      }
     }
     social.update(now, nameplates);
+    }
     }
     minimap.update(localPlayer.getPosition(), localFacingYaw, now, minimapPanel.open && Boolean(performancePanel.hidden) && Boolean(defeatScreen.hidden), cameraOrbit.yaw, Boolean(defeatScreen.hidden));
   }
