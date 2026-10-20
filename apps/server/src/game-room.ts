@@ -55,6 +55,7 @@ import { ROAMING_PACKS, roamingMemberArchetype, roamingMemberId, roamingMembersh
   createRoamingRouteState, advanceRoamingRoute, type RoamingRouteState } from "./roaming-packs.js";
 import { REGIONAL_PACK_DISRUPTION_MS, regionalPackCooldownMultiplier, regionalPackCue, regionalPackGoal,
   regionalPackSpeedMultiplier } from "./regional-pack-tactics.js";
+import { mobSimulationActive } from "./mob-activation.js";
 import { regionalPackRewardDefeat, regionalPackRewardItems, regionalPackRewardNotice,
   type RegionalPackRewardCycle, type RegionalPackRewardKind } from "./regional-pack-rewards.js";
 import { WILDERNESS_MATERIALIZE_MS, WILDERNESS_RESPAWN_RECHECK_MS,
@@ -8192,6 +8193,16 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (!mob.alive && FOREST_DUNGEON_MOBS.some(entry => entry.id === mobId)) continue;
       if (!mob.alive && this.roomKind === "silver-depths"
         && (SILVER_DEPTHS_ENEMY_IDS.includes(mobId) || SILVER_DEPTHS_CACHE_GUARD_IDS.includes(mobId))) continue;
+      if (mob.alive && this.state.players.size > 0 && !mobSimulationActive(mob, this.state.players.values())) {
+        if (mob.combatState !== "idle" || mob.targetId) {
+          mob.combatState = "idle"; mob.stateUntil = 0; mob.targetId = ""; mob.aimCommitted = false;
+          mob.attackStartedAt = 0; mob.attackReleaseAt = 0; mob.attackContactAt = 0;
+          mob.attackContactEndAt = 0; mob.attackRecoveryEndAt = 0;
+          this.pendingMobMelee.delete(mobId); this.mobAwareness.delete(mobId);
+          this.roamingEngaged.delete(mobId); this.roamingReturning.delete(mobId); this.mobReturning.delete(mobId);
+        }
+        continue;
+      }
       let currentAreaLeaderPhase: AreaLeaderPhase = 1;
       if (mob.isMiniBoss && mob.alive) {
         currentAreaLeaderPhase = huntChampion

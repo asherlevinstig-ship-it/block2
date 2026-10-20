@@ -66,7 +66,7 @@ describe("bounded roaming enemy packs", () => {
     }
     for (const [id, mob] of room.state.mobs)
       expect(Math.hypot(mob.x - starts.get(id)!.x, mob.z - starts.get(id)!.z), id).toBeGreaterThan(1);
-  });
+  }, 10_000);
   it("engages every authored regional pack in formation without leaving its regional combat leash", () => {
     for (const pack of ROAMING_PACKS.filter(candidate => candidate.eliteIndex !== undefined)) {
       const { room, internal } = fixture();

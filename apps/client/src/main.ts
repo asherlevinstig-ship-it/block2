@@ -62,6 +62,7 @@ import { lootVisibleToPlayer } from "./loot-ownership.js";
 import { lootHoldProgress, type LootHold } from "./loot-hold.js";
 import { incomingLootAdvice, swapCandidateReason, swapCandidateScore } from "./loot-recommendation.js";
 import { undergroundThreatVisible } from "./underground-threat-visibility.js";
+import { mobPresentationVisible } from "./mob-presentation-budget.js";
 import { cavernRespawnIndicator } from "./cavern-respawn-indicator.js";
 import { SILVER_DEPTHS, SILVER_DEPTHS_CHECKPOINT_POSITION, isInSilverGuardClearing, isInFrontierBruteArena, isInRealmWardenArena, isInForestDungeon, isInEmberVault } from "@blockcraft/voxel-world";
 import { canUseForestPortal, type ForestPortal, type SilverDepthsWing } from "@blockcraft/protocol";
@@ -12766,7 +12767,10 @@ app.on("update", (dt: number) => {
     const respawnIndicator = cavernRespawnIndicator(mobId, mob.state.alive, mob.state.respawnAt, serverNow);
     const deathPose = mobDefeatPose(mob.art.rootGuardian ? "root_guardian" : mob.state.archetype, mob.state.alive ? 0 : animationNow - mob.defeatAt);
     const defeat = mob.state.alive ? 0 : deathPose.collapse;
-    const visible = undergroundMobVisible(mob.state.x, mob.state.y, mob.state.z) && (mob.state.alive || deathPose.visible || materializing || Boolean(respawnIndicator));
+    const playerEye = localPlayer.getPosition();
+    const mobDistance = Math.hypot(mob.state.x - playerEye.x, mob.state.y - playerEye.y, mob.state.z - playerEye.z);
+    const visible = mobPresentationVisible(undergroundMobVisible(mob.state.x, mob.state.y, mob.state.z), mobDistance)
+      && (mob.state.alive || deathPose.visible || materializing || Boolean(respawnIndicator));
     mob.entity.enabled = visible;
     mob.combatCue.hidden = true;
     mob.levelTag.hidden = true;
@@ -12872,9 +12876,8 @@ app.on("update", (dt: number) => {
       : warpackTactic === "ashglass-crossfire" ? "ASHGLASS CROSSFIRE · TAKING LANE" : warpackTactic === "pack-collapse" ? "PACK COLLAPSE · COVERING RAM" : "RAM ADVANCE · COVERING FIRE";
     const tacticCue = warpackLabel ? { kind: "formation", recovery: false, visible: true, label: warpackLabel, progress: 1 } : null;
     const cue = combatCue.visible ? combatCue : tacticCue ?? enemyAwarenessCue(mob.state, animationNow + serverClock.offset);
-    const playerEye = localPlayer.getPosition();
-    const mobDistance = Math.hypot(sampled.x - playerEye.x, sampled.y - playerEye.y, sampled.z - playerEye.z);
-    if (respawnIndicator && mobDistance <= 24 && camera.camera
+    const sampledMobDistance = Math.hypot(sampled.x - playerEye.x, sampled.y - playerEye.y, sampled.z - playerEye.z);
+    if (respawnIndicator && sampledMobDistance <= 24 && camera.camera
       && enemyCueLineClear({ x: playerEye.x, y: playerEye.y + .8, z: playerEye.z },
         { x: mob.state.x, y: mob.state.y + .35, z: mob.state.z }, readCollisionWorldBlock)) {
       const screen = camera.camera.worldToScreen(new pc.Vec3(mob.state.x, mob.state.y + .48, mob.state.z));
@@ -12890,7 +12893,7 @@ app.on("update", (dt: number) => {
         mob.respawnTag.style.top = `${rect.top + screen.y}px`;
       }
     }
-    if (mob.state.alive && mobDistance <= 28 && camera.camera) {
+    if (mob.state.alive && sampledMobDistance <= 28 && camera.camera) {
       const screen = camera.camera.worldToScreen(new pc.Vec3(sampled.x, sampled.y + mob.healthBarY + .27, sampled.z));
       const rect = canvas.getBoundingClientRect();
       const onScreen = screen.z > 0 && screen.x >= 0 && screen.x <= rect.width && screen.y >= 0 && screen.y <= rect.height;

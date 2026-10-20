@@ -15,6 +15,20 @@ function fixture(read: WorldBlockReader) {
 }
 
 describe("mob navigation in the authoritative room", () => {
+  it("sleeps and safely cancels stale attacks when every living player is in another region", () => {
+    const { room, mob, tick } = fixture((_x, y) => y <= 0 ? Block.Stone : Block.Air);
+    const player = new PlayerState(); Object.assign(player, { x: 0.5, y: 1, z: 0.5, health: 5 });
+    room.state.players.set("player", player);
+    Object.assign(mob, { combatState: "windup", targetId: "player", aimCommitted: true,
+      attackStartedAt: 1, attackReleaseAt: 2, attackContactAt: 3, attackContactEndAt: 4, attackRecoveryEndAt: 5 });
+    tick();
+    expect(mob.combatState).toBe("idle");
+    expect(mob.targetId).toBe("");
+    expect(mob.aimCommitted).toBe(false);
+    expect([mob.attackStartedAt, mob.attackReleaseAt, mob.attackContactAt,
+      mob.attackContactEndAt, mob.attackRecoveryEndAt]).toEqual([0, 0, 0, 0, 0]);
+  });
+
   it("abandons blocked pursuit without teleporting and does not immediately reacquire", () => {
     vi.useFakeTimers(); vi.setSystemTime(10000);
     try {
