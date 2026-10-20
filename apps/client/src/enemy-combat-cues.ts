@@ -39,6 +39,11 @@ export function bruteRecoveryPose(mob: EnemyTimeline, now: number): number {
 }
 
 export function enemyAwarenessCue(mob: { alive: boolean; combatState: string; awarenessState?: string; alertUntil?: number }, now: number) {
+  if (mob.awarenessState === "disrupted") return { kind: "disrupted", visible: mob.alive && now < (mob.alertUntil ?? 0),
+    recovery: false, progress: 1, label: "FORMATION BROKEN · WEAKENED" };
+  const tactic = mob.awarenessState?.startsWith("pack:") ? mob.awarenessState.slice(5) : "";
+  if (tactic) return { kind: "formation", visible: mob.alive && mob.combatState === "idle" && now < (mob.alertUntil ?? 0),
+    recovery: false, progress: 1, label: tactic };
   const kind = mob.awarenessState === "search" ? "search" : mob.awarenessState === "return" ? "return" : "alert";
   const visible = mob.alive && mob.combatState === "idle" && (kind !== "alert"
     || (mob.awarenessState === "engaged" && now < (mob.alertUntil ?? 0)));

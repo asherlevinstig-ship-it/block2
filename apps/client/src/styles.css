@@ -2705,10 +2705,14 @@ body:has(#progression-notice:not([hidden])) #resource-toasts { display: none; }
 .enemy-combat-cue[data-kind="alert"] { color: #ffe48a; }
 .enemy-combat-cue[data-kind="search"] { color: #d6bcff; }
 .enemy-combat-cue[data-kind="return"] { color: #a8bcc4; opacity: .8; }
+.enemy-combat-cue[data-kind="formation"] { color: #ffd067; border-color: #d59032aa; box-shadow: 0 0 12px #e8a33c44; }
+.enemy-combat-cue[data-kind="disrupted"] { color: #8ff3ff; border-color: #52c6d9aa; box-shadow: 0 0 14px #42d9e855; }
 .enemy-combat-cue[data-miniboss="true"] { padding: 6px 9px; color: #ffd067; border: 1px solid #e99a35aa; background: #261609e8; box-shadow: 0 0 18px #ed8d2855; }
 .enemy-combat-cue[data-kind="alert"] .enemy-combat-cue-track,
 .enemy-combat-cue[data-kind="search"] .enemy-combat-cue-track,
-.enemy-combat-cue[data-kind="return"] .enemy-combat-cue-track { display: none; }
+.enemy-combat-cue[data-kind="return"] .enemy-combat-cue-track,
+.enemy-combat-cue[data-kind="formation"] .enemy-combat-cue-track,
+.enemy-combat-cue[data-kind="disrupted"] .enemy-combat-cue-track { display: none; }
 .enemy-combat-cue-track { display: block; height: 3px; margin-top: 4px; background: #ffffff20; }
 .enemy-combat-cue-track > span { display: block; height: 100%; background: currentColor; transform-origin: left; }
 .enemy-level-tag {

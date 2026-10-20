@@ -72,6 +72,14 @@ describe("readable enemy combat cues", () => {
     expect(enemyAwarenessCue(state, 1000)).toMatchObject({ visible: true, label: "! SPOTTED", kind: "alert" });
     expect(enemyAwarenessCue(state, 1900).visible).toBe(false);
   });
+  it("uses compact in-world labels for pack tactics and veteran disruption", () => {
+    const state = { alive: true, combatState: "idle", alertUntil: 4500 };
+    expect(enemyAwarenessCue({ ...state, awarenessState: "pack:FLANKING" }, 2000))
+      .toMatchObject({ visible: true, label: "FLANKING", kind: "formation" });
+    expect(enemyAwarenessCue({ ...state, awarenessState: "disrupted" }, 2000))
+      .toMatchObject({ visible: true, label: "FORMATION BROKEN · WEAKENED", kind: "disrupted" });
+    expect(enemyAwarenessCue({ ...state, awarenessState: "disrupted" }, 4500).visible).toBe(false);
+  });
   it("distinguishes searching and returning without a combat countdown", () => {
     const state = { alive: true, combatState: "idle" };
     expect(enemyAwarenessCue({ ...state, awarenessState: "search" }, 1000)).toMatchObject({ visible: true, label: "? SEARCHING", kind: "search", recovery: false });

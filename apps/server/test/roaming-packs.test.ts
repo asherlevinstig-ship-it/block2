@@ -66,6 +66,61 @@ describe("bounded roaming enemy packs", () => {
     for (const [id, mob] of room.state.mobs)
       expect(Math.hypot(mob.x - starts.get(id)!.x, mob.z - starts.get(id)!.z), id).toBeGreaterThan(1);
   });
+  it("engages every authored regional pack in formation without leaving its regional combat leash", () => {
+    for (const pack of ROAMING_PACKS.filter(candidate => candidate.eliteIndex !== undefined)) {
+      const { room, internal } = fixture();
+      const player = new PlayerState();
+      Object.assign(player, pack.route[1], { health: 100, maxHealth: 100, invulnerableUntil: 120_000 });
+      room.state.players.set("player", player);
+      const starts = pack.offsets.map((_, index) => {
+        const mob = room.state.mobs.get(roamingMemberId(pack, index))!;
+        return { x: mob.x, z: mob.z };
+      });
+      internal.alertHitMob(roamingMemberId(pack, pack.eliteIndex!), "player", 10_000);
+      vi.setSystemTime(10_100); internal.simulatePlayers(.1);
+      expect(room.state.mobs.get(roamingMemberId(pack, pack.eliteIndex!))!.awarenessState, pack.id).toMatch(/^pack:/);
+      for (let tick = 2; tick < 62; tick++) {
+        vi.setSystemTime(10_000 + tick * 100); internal.simulatePlayers(.1);
+      }
+      let moved = 0;
+      for (let index = 0; index < pack.offsets.length; index++) {
+        const mob = room.state.mobs.get(roamingMemberId(pack, index))!;
+        expect(playerCollides(internal.readWorldBlock, mob.x, mob.y, mob.z), `${pack.id}:${index}`).toBe(false);
+        expect(wildernessTerritoryAt(mob.x, mob.z)?.tier, `${pack.id}:${index}:tier`).toBe(pack.tier);
+        expect(pack.route.some(point => Math.hypot(point.x - mob.x, point.z - mob.z) <= 12),
+          `${pack.id}:${index}@${mob.x.toFixed(2)},${mob.y.toFixed(2)},${mob.z.toFixed(2)}`).toBe(true);
+        if (Math.hypot(mob.x - starts[index]!.x, mob.z - starts[index]!.z) > .5) moved++;
+      }
+      expect(moved, pack.id).toBeGreaterThanOrEqual(1);
+    }
+  });
+  it("breaks the formation for 3.5 seconds when its veteran falls", () => {
+    const { room, internal } = fixture();
+    const pack = ROAMING_PACKS.find(candidate => candidate.id === "greenwood-south-pack")!;
+    const player = new PlayerState(); Object.assign(player, pack.route[0], { health: 5 });
+    room.state.players.set("player", player);
+    const leader = room.state.mobs.get(roamingMemberId(pack, pack.eliteIndex!))!;
+    leader.isElite = true;
+    internal.defeatMob(roamingMemberId(pack, pack.eliteIndex!), leader, "player", 10_000);
+    expect(internal.roamingPackDisruptedUntil.get(pack.id)).toBe(13_500);
+    for (let index = 1; index < pack.offsets.length; index++) {
+      const follower = room.state.mobs.get(roamingMemberId(pack, index))!;
+      expect(follower.awarenessState).toBe("disrupted");
+      expect(follower.alertUntil).toBe(13_500);
+      expect(follower.combatState).toBe("stagger");
+    }
+  });
+  it("restores an authored veteran instead of replacing it with a random respawn roll", () => {
+    const { room, internal } = fixture();
+    const pack = ROAMING_PACKS.find(candidate => candidate.id === "ashen-east-pack")!;
+    const leader = room.state.mobs.get(roamingMemberId(pack, pack.eliteIndex!))!;
+    Object.assign(leader, { alive: false, isElite: false, eliteKind: "", respawnAt: 10_000, materializeUntil: 0 });
+    vi.spyOn(Math, "random").mockReturnValue(.99);
+    internal.simulatePlayers(.1);
+    expect(leader.isElite).toBe(true);
+    expect(leader.name).toBe(`${pack.name} Veteran`);
+    expect(leader.materializeUntil).toBeGreaterThan(10_000);
+  });
   it("drops an out-of-band target and returns to its route instead of endless pursuit", () => {
     const { room, internal } = fixture(true); const pack = ROAMING_PACKS[0]!; const id = roamingMemberId(pack, 0);
     const mob = room.state.mobs.get(id)!;

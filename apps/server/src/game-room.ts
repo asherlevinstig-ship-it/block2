@@ -53,6 +53,8 @@ import { ASHEN_MASTERY_BRANCHES, ASHEN_MASTERY_MAX, AshenMasteryChooseSchema,
 import { ROADSIDE_GUARD_SITES, roadsideGuard, roadsideGuardsFor, roadsideVariantFor, roadsideVariantsFor } from "./roadside-guards.js";
 import { ROAMING_PACKS, roamingMemberArchetype, roamingMemberId, roamingMembership, roamingPackAllows, roamingGoal,
   createRoamingRouteState, advanceRoamingRoute, type RoamingRouteState } from "./roaming-packs.js";
+import { REGIONAL_PACK_DISRUPTION_MS, regionalPackCooldownMultiplier, regionalPackCue, regionalPackGoal,
+  regionalPackSpeedMultiplier } from "./regional-pack-tactics.js";
 import { WILDERNESS_MATERIALIZE_MS, WILDERNESS_RESPAWN_RECHECK_MS,
   usesOverworldRespawnRhythm, wildernessRespawnDelay, wildernessSpawnClear } from "./wilderness-respawn.js";
 import { shouldBecomeWildernessElite, wildernessEliteKind,
@@ -561,6 +563,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly roamingRoutes = new Map<string, RoamingRouteState>();
   private readonly roamingEngaged = new Set<string>();
   private readonly roamingReturning = new Set<string>();
+  private readonly roamingPackDisruptedUntil = new Map<string, number>();
   private readonly spitterPositioning = new Map<string, SpitterPositioning>();
   private readonly profileTokens = new Map<string, string>();
   private readonly lastChatAt = new Map<string, number>();
@@ -703,6 +706,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           speedMultiplier: mob.speedMultiplier, rewardMultiplier: mob.rewardMultiplier });
         mob.isElite = true; mob.health = mob.maxHealth = stats.maxHealth; mob.attackDamage = stats.damage;
         mob.armor = stats.armor; mob.speedMultiplier = stats.speedMultiplier; mob.rewardMultiplier = stats.rewardMultiplier;
+        mob.eliteKind = wildernessEliteKind(archetype);
         mob.level = enemyLevelForTier(mob.difficultyTier, true);
         mob.attackPattern = wildernessElitePattern(archetype, 0);
         mob.name = `${pack.name} Veteran`;
@@ -2583,6 +2587,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     // A hit can pull a pack beyond its passive patrol corridor, but never into town.
     if (membership && Date.now() < (this.mobAwareness.get(id)?.provokedUntil ?? 0)) {
       return !isInsideTownSafeZone(pose) && pose.y >= 6.8 && pose.y <= 9.2
+        && (membership.pack.eliteIndex === undefined
+          || wildernessTerritoryAt(pose.x, pose.z)?.tier === membership.pack.tier)
         && membership.pack.route.some(point => Math.hypot(point.x - pose.x, point.z - pose.z) <= 12);
     }
     return !membership || roamingPackAllows(membership.pack, pose);
@@ -3183,6 +3189,24 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.state.portals.set("ember-return", returnPortal);
     }
     mob.alive = false;
+    const roamingVeteran = roamingMembership(mobId);
+    if (roamingVeteran && roamingVeteran.pack.eliteIndex === roamingVeteran.index) {
+      const pack = roamingVeteran.pack;
+      const disruptedUntil = now + REGIONAL_PACK_DISRUPTION_MS;
+      this.roamingPackDisruptedUntil.set(pack.id, disruptedUntil);
+      for (let index = 0; index < pack.offsets.length; index++) {
+        if (index === roamingVeteran.index) continue;
+        const follower = this.state.mobs.get(roamingMemberId(pack, index));
+        if (!follower?.alive) continue;
+        follower.awarenessState = "disrupted";
+        follower.alertUntil = disruptedUntil;
+        if (follower.combatState === "idle") {
+          follower.combatState = "stagger";
+          follower.stateUntil = now + 650;
+          follower.staggerSequence += 1;
+        }
+      }
+    }
     if (mob.isMiniBoss) {
       this.northwatchExposedUntil.delete(mobId);
       this.bruteLeaderArmourBonus.delete(mobId);
@@ -8254,12 +8278,16 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           const activeElites = [...this.state.mobs.entries()].filter(([id, candidate]) => id !== mobId && !isAreaMiniBoss(id) && candidate.isElite
             && (candidate.alive || candidate.materializeUntil > now)).length;
           const areaMiniBoss = areaMiniBossDefinition(mobId);
-          mob.isElite = mob.archetype !== "cinder_ram" && mob.archetype !== "ember_hound" && !areaMiniBoss && !isNorthwatchShardPatrol(mobId)
-            && shouldBecomeWildernessElite(band.tier, activeElites, Math.random());
-          const eliteKind = wildernessEliteKind(definition.id);
+          const roaming = roamingMembership(mobId);
+          const authoredVeteran = Boolean(roaming && roaming.pack.eliteIndex === roaming.index);
+          mob.isElite = authoredVeteran || (mob.archetype !== "cinder_ram" && mob.archetype !== "ember_hound"
+            && !areaMiniBoss && !isNorthwatchShardPatrol(mobId)
+            && shouldBecomeWildernessElite(band.tier, activeElites, Math.random()));
+          const eliteKind = wildernessEliteKind(mob.archetype as MobArchetypeId);
           mob.eliteKind = mob.isElite ? eliteKind : "";
           const baseName = this.mobBaseNames.get(mobId) ?? definition.name;
-          mob.name = areaMiniBoss?.name ?? (mob.isElite ? wildernessEliteName(eliteKind, baseName) : baseName);
+          mob.name = areaMiniBoss?.name ?? (authoredVeteran ? `${roaming!.pack.name} Veteran`
+            : mob.isElite ? wildernessEliteName(eliteKind, baseName) : baseName);
           if (areaMiniBoss) {
             mob.leaderRematchTier = 0;
             mob.leaderModifier = "";
@@ -8517,6 +8545,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const target = this.roamingReturning.has(mobId) || this.mobReturning.has(mobId) || now < (this.mobUnreachableUntil.get(mobId) ?? 0)
         ? null : awareMobTarget(mob, players, awareness, now, definition.aggroRange,
         player => hasCombatLineOfSight(mob, player, this.readWorldBlock));
+      const roaming = roamingMembership(mobId);
+      const packDisruptedUntil = roaming ? this.roamingPackDisruptedUntil.get(roaming.pack.id) ?? 0 : 0;
+      const packDisrupted = Boolean(roaming && roaming.index !== roaming.pack.eliteIndex && now < packDisruptedUntil);
+      if (roaming && packDisruptedUntil > 0 && now >= packDisruptedUntil)
+        this.roamingPackDisruptedUntil.delete(roaming.pack.id);
       if (!target) {
         if (mob.isMiniBoss && previousTarget && now < (this.assassinBossConcealedUntil.get(previousTarget) ?? 0)) {
           // Keep the encounter alive during Stealth; the boss resumes pursuit after it ends.
@@ -8567,6 +8600,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       }
       if (target.visible && previousTarget !== target.id) mob.alertUntil = now + 900;
       mob.awarenessState = target.visible ? "engaged" : "search";
+      if (packDisrupted) {
+        mob.awarenessState = "disrupted";
+        mob.alertUntil = packDisruptedUntil;
+      } else if (target.visible && now < mob.alertUntil && roaming) {
+        const cue = regionalPackCue(roaming.pack.id, mob.archetype as MobArchetypeId, roaming.index);
+        if (cue) mob.awarenessState = `pack:${cue}`;
+      }
       if (target.visible && previousTarget !== target.id && isNorthwatchShardPatrol(mobId))
         this.rallyNorthwatchShardPatrol(mobId, target.id, now);
       if (target.visible && previousTarget !== target.id && isAshenMob(mobId))
@@ -8577,7 +8617,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (definition.attackKind === "projectile") this.spitterPositioning.set(mobId, positioning);
       const rangerSlow = this.rangerSlows.get(mobId);
       const baseMovementSpeed = definition.speed * mob.speedMultiplier
-        * (isAshenMob(mobId) ? ashenWarpackSpeedMultiplier(mobId, this.ashenWarpackActiveTactic) : 1);
+        * (isAshenMob(mobId) ? ashenWarpackSpeedMultiplier(mobId, this.ashenWarpackActiveTactic) : 1)
+        * (roaming ? regionalPackSpeedMultiplier(roaming.pack.id, mob.archetype as MobArchetypeId, packDisrupted) : 1);
       const movementSpeed = (mob.isMiniBoss && mob.archetype === "stone_brute"
         ? bruteLeaderPursuitSpeed(baseMovementSpeed, currentAreaLeaderPhase) : baseMovementSpeed)
         * (now < (rangerSlow?.until ?? 0) ? rangerSlow!.multiplier : 1);
@@ -8612,6 +8653,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         ? ashenWarpackGoal(mobId, this.ashenWarpackActiveTactic, target,
           ashenRam?.alive ? { x: ashenRam.x, y: ashenRam.y, z: ashenRam.z } : null) : null;
       const ashenPursuit = ashenGoal ? pursueTarget(mob, ashenGoal, deltaTime, movementSpeed, .22) : null;
+      const packLeader = roaming && roaming.pack.eliteIndex !== undefined
+        ? this.state.mobs.get(roamingMemberId(roaming.pack, roaming.pack.eliteIndex)) : undefined;
+      const regionalGoal = target.visible && roaming && !packDisrupted && packLeader?.alive
+        ? regionalPackGoal(roaming.pack.id, mob.archetype as MobArchetypeId, roaming.index, target, packLeader) : null;
+      const regionalPursuit = regionalGoal ? pursueTarget(mob, regionalGoal, deltaTime, movementSpeed, .22) : null;
       const attackers = () => [...this.state.mobs.entries()].map(([id, peer]) => ({
         id, alive: peer.alive, health: peer.health, archetype: peer.archetype, combatState: peer.combatState, targetId: peer.targetId,
       }));
@@ -8619,10 +8665,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const waitingGoal = waiting ? meleeWaitingGoal(mobId, target, [...this.mobAwareness.entries()]
         .filter(([id, awareness]) => awareness.targetId === target.id && this.state.mobs.get(id)?.alive
           && !isSpitterLike(this.state.mobs.get(id)?.archetype ?? "")).map(([id]) => id), definition.stopDistance + 1.1) : null;
-      const pursuit = ashenPursuit ?? (waitingGoal ? pursueTarget(mob, waitingGoal, deltaTime, movementSpeed, .2)
+      const pursuit = ashenPursuit ?? regionalPursuit ?? (waitingGoal ? pursueTarget(mob, waitingGoal, deltaTime, movementSpeed, .2)
         : circling ?? rangedPursuit ?? pursueTarget(mob, target, deltaTime, movementSpeed, target.visible ? definition.stopDistance : .3));
-      const goal = ashenGoal ?? waitingGoal ?? circling?.goal ?? rangedPursuit?.goal ?? target;
+      const goal = ashenGoal ?? regionalGoal ?? waitingGoal ?? circling?.goal ?? rangedPursuit?.goal ?? target;
       const stuck = this.moveNavigatingMob(mobId, mob, pursuit, goal, now, pose => this.mobPositionAllowed(pose)
+        && this.roamingAllowed(mobId, pose) && caveEncounterAllows(mobId, pose)
         && (!rangedPursuit?.retreating || Math.hypot(pose.x - home.x, pose.z - home.z) <= 6), !waiting);
       if (stuck) {
         this.mobAwareness.delete(mobId); this.crawlerPositioning.delete(mobId); this.spitterPositioning.delete(mobId);
@@ -8663,7 +8710,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           const peer = this.state.mobs.get(id);
           return Boolean(peer?.alive && peer.attackStartedAt === startedAt && ["windup", "strike", "recover"].includes(peer.combatState));
         })
-        || (circling && !ashenPursuit) || (rangedPursuit?.repositioning && !ashenPursuit) || !target.visible || !inAttackRange || Math.abs(target.y - mob.y) > 1.75 || now - lastAttackAt < definition.cooldownMs * rematchTiming.cooldown * huntTiming.cooldown
+        || (circling && !ashenPursuit && !regionalPursuit) || (rangedPursuit?.repositioning && !ashenPursuit && !regionalPursuit) || !target.visible || !inAttackRange || Math.abs(target.y - mob.y) > 1.75 || now - lastAttackAt < definition.cooldownMs * rematchTiming.cooldown * huntTiming.cooldown
+          * regionalPackCooldownMultiplier(packDisrupted)
           * (isAshenMob(mobId) ? ashenWarpackCooldownMultiplier(mobId, this.ashenWarpackActiveTactic) : 1)
         || (definition.attackKind === "projectile" && [...this.pendingMobProjectiles.values()].some(shot => shot.mobId === mobId))
         || !hasCombatLineOfSight(mob, target, this.readWorldBlock)) continue;
