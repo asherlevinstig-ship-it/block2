@@ -17,6 +17,7 @@ import { abilityPracticeChallenge, practiceFollowUpProgress, practicePhaseAfterC
   type AbilityPracticePhase } from "./ability-practice.js";
 import { queueWorldNotice, type WorldNotice } from "./notification-lane.js";
 import { attackAimYaw, rangedAimYaw } from "./ranged-aim.js";
+import { canvasScreenPoint } from "./screen-pointer.js";
 import { ExclusivePopupQueue, popupFocusIndex, popupIsPresented } from "./popup-queue.js";
 import { COORDINATED_BRUTE_FOLLOWERS, COORDINATED_SPITTER_FOLLOWERS, activeCombatNearby, advanceBossHud, initialBossHud, leaderArmourSegments, leaderChargeGuidance, leaderExposureLabel, leaderExposureRoleLabel, leaderFormationLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
 import { formationLanePoints, formationMarkerPoints, formationRingPoints, formationTargetStyle, formationVfxStyle,
@@ -8294,7 +8295,8 @@ targetMarker.setLocalScale(1.04, 1.04, 1.04);
 targetMarker.enabled = false;
 app.root.addChild(targetMarker);
 
-const pointer = { x: canvas.width / 2, y: canvas.height / 2 };
+const initialCanvasBounds = canvas.getBoundingClientRect();
+const pointer = { x: initialCanvasBounds.width / 2, y: initialCanvasBounds.height / 2 };
 const rangedPointer = { active: false, x: 0, y: 0 };
 let rangedFirePointer: number | null = null;
 let keyboardFireHeld = false;
@@ -10066,9 +10068,9 @@ for (const [button, decision] of [[quizDouble, "double"], [quizQuit, "quit"]] as
 function updatePointerPosition(event: PointerEvent): void {
   rangedPointer.active = event.pointerType === "mouse";
   rangedPointer.x = event.clientX; rangedPointer.y = event.clientY;
-  const rect = canvas.getBoundingClientRect();
-  pointer.x = (event.clientX - rect.left) * (canvas.width / rect.width);
-  pointer.y = (event.clientY - rect.top) * (canvas.height / rect.height);
+  const point = canvasScreenPoint(event.clientX, event.clientY, canvas.getBoundingClientRect());
+  pointer.x = point.x;
+  pointer.y = point.y;
   if (powerAimActive) updatePowerAimFromPointer();
   if (specialAimActive) updateSpecialAimFromPointer();
 }
