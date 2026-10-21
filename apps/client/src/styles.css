@@ -4027,3 +4027,31 @@ body:has(#loot-pack-decision:not([hidden])) #waypoint-guide { display: none; }
 @media (prefers-reduced-motion: reduce) {
   #tablet-camera-hint { animation: none; }
 }
+
+/* Measured tablet clearances: social history, vitals, map and thumb zones never share pixels. */
+@media (pointer: coarse) and (orientation: landscape) {
+  #event-log {
+    bottom: calc(min(38vh, 260px) + 28px + env(safe-area-inset-bottom));
+  }
+  #player-hud-root {
+    bottom: calc(186px + env(safe-area-inset-bottom));
+  }
+}
+
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 620px) {
+  #event-log {
+    bottom: calc(228px + env(safe-area-inset-bottom));
+  }
+  #player-hud-root {
+    bottom: calc(162px + env(safe-area-inset-bottom));
+  }
+  #minimap:not([data-expanded="true"]) {
+    width: auto;
+    min-width: 154px;
+    padding: 7px 9px;
+    opacity: .82;
+    background: #071612e8;
+  }
+  #minimap:not([data-expanded="true"]) > :not(summary) { display: none !important; }
+  #minimap:not([data-expanded="true"]) summary { margin: 0; border: 0; }
+}

@@ -15,11 +15,13 @@
     "build:packages": "npm run build -w @blockcraft/protocol && npm run build -w @blockcraft/voxel-world",
     "build": "npm run build:packages && npm run build -w @blockcraft/client && npm run build -w @blockcraft/server",
     "test": "npm run test --workspaces --if-present",
+    "test:tablet": "playwright test --config=playwright.tablet.config.ts",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "check": "npm run build:packages && npm run typecheck && npm test && npm run build",
     "deploy:cloudflare": "npm run build && wrangler deploy"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "concurrently": "latest",
     "typescript": "latest",
     "vitest": "latest",
