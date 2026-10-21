@@ -697,6 +697,28 @@ html.onboarding-active #hud #target, html.onboarding-active #hud #players { disp
 #combat-reticle[hidden] { display: none; }
 #combat-reticle[data-hit="true"] { border-color: #fff6c4; box-shadow: 0 0 0 4px #ffd86b55, 0 0 12px #ffd86b88; }
 #combat-reticle[data-hit="true"] span, #combat-reticle[data-hit="true"] span::before { background: #fff6c4; }
+#tablet-aim-guide {
+  position: fixed;
+  z-index: 17;
+  height: 3px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, rgb(255 223 112 / 18%), rgb(255 223 112 / 88%));
+  box-shadow: 0 0 10px rgb(255 196 62 / 42%);
+  pointer-events: none;
+  transform-origin: 0 50%;
+}
+#tablet-aim-guide[hidden] { display: none; }
+#tablet-aim-guide span {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  width: 24px;
+  height: 24px;
+  border: 2px solid #ffe79b;
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px rgb(255 190 48 / 18%), 0 0 14px rgb(255 190 48 / 55%);
+  transform: translate(50%, -50%);
+}
 .ranged-popup { position: fixed; z-index: 18; pointer-events: none; font: 900 24px/1 system-ui, sans-serif; text-shadow: 0 2px 2px #000, 1px 0 #000, -1px 0 #000; }
 .ranged-popup-damage { color: #fff3c5; }
 .ranged-popup-damage.defeated { color: #ffb56d; }
@@ -2804,6 +2826,12 @@ body:has(#progression-notice:not([hidden])) #resource-toasts { display: none; }
 .enemy-level-tag[data-threat="dangerous"] { color: #ffd268; border-color: #e3a637bb; box-shadow: 0 0 8px #e3a63733; }
 .enemy-level-tag[data-threat="deadly"] { color: #ff7968; border-color: #ff4d3dcc; box-shadow: 0 0 10px #ff382b55; }
 .enemy-level-tag[data-miniboss="true"] { color: #ffd36b; border-color: #e89a32cc; background: #24160bea; box-shadow: 0 0 14px #e8902f66; }
+.enemy-level-tag[data-soft-target="true"] {
+  border-color: #fff0a8;
+  outline: 2px solid rgb(255 214 73 / 44%);
+  outline-offset: 2px;
+  box-shadow: 0 0 18px rgb(255 199 57 / 72%);
+}
 .enemy-respawn-tag {
   position: fixed;
   z-index: 3;

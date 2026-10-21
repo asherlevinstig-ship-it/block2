@@ -20,6 +20,7 @@ import { attackAimYaw, rangedAimYaw } from "./ranged-aim.js";
 import { canvasScreenPoint } from "./screen-pointer.js";
 import { tabletJoystickSample, touchDragStarted } from "./tablet-input.js";
 import { tabletContextAction } from "./tablet-context-action.js";
+import { tabletDragAimYaw, tabletSoftTarget } from "./tablet-combat-aim.js";
 import { ExclusivePopupQueue, popupFocusIndex, popupIsPresented } from "./popup-queue.js";
 import { COORDINATED_BRUTE_FOLLOWERS, COORDINATED_SPITTER_FOLLOWERS, activeCombatNearby, advanceBossHud, initialBossHud, leaderArmourSegments, leaderChargeGuidance, leaderExposureLabel, leaderExposureRoleLabel, leaderFormationLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
 import { formationLanePoints, formationMarkerPoints, formationRingPoints, formationTargetStyle, formationVfxStyle,
@@ -1266,6 +1267,7 @@ const specialPickerButtons = [...document.querySelectorAll<HTMLButtonElement>("#
 const callingSpecialPicker = document.querySelector<HTMLButtonElement>("#special-picker [data-calling-special]")!;
 const controlsHelp = document.querySelector<HTMLElement>("#controls-help")!;
 const combatReticle = document.querySelector<HTMLElement>("#combat-reticle")!;
+const tabletAimGuide = document.querySelector<HTMLElement>("#tablet-aim-guide")!;
 const combatFeedback = document.querySelector<HTMLElement>("#combat-feedback")!;
 const worldObjective = document.querySelector<HTMLElement>("#world-objective")!;
 const objectiveTier = document.querySelector<HTMLElement>("#objective-tier")!;
@@ -1381,7 +1383,7 @@ const contextButtonHint = contextButton.querySelector<HTMLElement>("small")!;
 const touchModeButton = document.querySelector<HTMLButtonElement>("#touch-mode-button")!;
 const touchModeLabel = document.querySelector<HTMLElement>("#touch-mode-label")!;
 const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-toggle [data-mode]")];
-if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !dangerZone || !dangerZoneName || !locationCoordinates || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !graphicsQualitySelect || !graphicsQualityStatus || !performanceCopyLog || !performanceClearLog || !performanceLogStatus || !inventoryPanel || !inventoryTotal || !inventoryToggle || !inventoryClose || !inventoryBadge || !inventoryEquipped || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== requiredInventoryMainHands || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !callingButton || !contextButton || !contextButtonLabel || !contextButtonHint || !touchModeButton || !touchModeLabel || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !controlsHelp || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
+if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !dangerZone || !dangerZoneName || !locationCoordinates || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !graphicsQualitySelect || !graphicsQualityStatus || !performanceCopyLog || !performanceClearLog || !performanceLogStatus || !inventoryPanel || !inventoryTotal || !inventoryToggle || !inventoryClose || !inventoryBadge || !inventoryEquipped || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== requiredInventoryMainHands || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !callingButton || !contextButton || !contextButtonLabel || !contextButtonHint || !touchModeButton || !touchModeLabel || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !controlsHelp || !combatReticle || !tabletAimGuide || !combatFeedback || modeButtons.length !== 2) {
   throw new Error("Game shell is missing required elements");
 }
 if ([quizTablePrompt, blacksmithPrompt, playerTradePrompt, playerTradeName, blacksmithPanel, blacksmithMessage, blacksmithOre, blacksmithGold, blacksmithPrice, blacksmithSell, blacksmithClose, haulEquipName, haulEquipDetail, haulEquip, haulSalvageCount, haulSalvageDetail, haulSalvage, haulStoreCount, haulStore, haulUpgradeName, haulUpgradeTrack, haulUpgradeDetail, haulRegionName, haulRegionDetail, haulTrackRegion, quizPanel, quizBalance, quizBalanceAmount, quizPotDisplay, quizPotLabel, quizWinToast, quizAnswerFeedback, quizFeedbackIcon, quizFeedbackTitle, quizFeedbackDetail, quizMessage, quizStakeHeading, quizStakes, quizQuestion, quizPot, quizPrompt, quizChoices, quizDecision, quizDouble, quizQuit, quizClose, tavernCoins].some(element => !element) || blacksmithUpgradeCards.length !== Object.keys(BLACKSMITH_UPGRADES).length) {
@@ -1411,7 +1413,8 @@ function applyDefensePose(rig: VoxelCharacterRig): void {
   rig.rightArm.setLocalEulerAngles(-68, 0, 28);
 }
 
-if (window.matchMedia("(pointer: coarse), (max-width: 820px)").matches) {
+const tabletControlsQuery = window.matchMedia("(pointer: coarse), (max-width: 820px)");
+if (tabletControlsQuery.matches) {
   movementDebug.open = false;
 }
 
@@ -8034,6 +8037,36 @@ function nearestLivingMob(position: pc.Vec3, maximumRange: number): { id: string
   return nearest;
 }
 
+let tabletSoftTargetCache: { id: string | null; checkedAt: number; maximumRange: number } = {
+  id: null, checkedAt: Number.NEGATIVE_INFINITY, maximumRange: 0,
+};
+function tabletSoftTargetMob(position: pc.Vec3, maximumRange: number, force = false): { id: string; visual: MobVisual; distance: number } | null {
+  if (!tabletControlsQuery.matches || interactionMode !== "combat") return null;
+  const now = performance.now();
+  if (!force && now - tabletSoftTargetCache.checkedAt < 80 && tabletSoftTargetCache.maximumRange === maximumRange) {
+    const cached = tabletSoftTargetCache.id ? mobVisuals.get(tabletSoftTargetCache.id) : null;
+    if (!cached?.state.alive) return null;
+    return { id: tabletSoftTargetCache.id!, visual: cached,
+      distance: Math.hypot(cached.state.x - position.x, cached.state.y - position.y, cached.state.z - position.z) };
+  }
+  const candidates = [...mobVisuals.entries()].map(([id, visual]) => {
+    const distance = Math.hypot(visual.state.x - position.x, visual.state.y - position.y, visual.state.z - position.z);
+    const visible = visual.state.alive && distance <= maximumRange
+      && undergroundMobVisible(visual.state.x, visual.state.y, visual.state.z)
+      && enemyCueLineClear(
+        { x: position.x, y: position.y + .8, z: position.z },
+        { x: visual.state.x, y: visual.state.y + .8, z: visual.state.z },
+        readCollisionWorldBlock,
+      );
+    return { id, x: visual.state.x, z: visual.state.z, visible };
+  });
+  const selected = tabletSoftTarget(position, localFacingYaw, maximumRange, candidates);
+  tabletSoftTargetCache = { id: selected?.id ?? null, checkedAt: now, maximumRange };
+  if (!selected) return null;
+  const visual = mobVisuals.get(selected.id);
+  return visual ? { id: selected.id, visual, distance: selected.distance } : null;
+}
+
 function bindPlayers(joinedRoom: Room): void {
   const callbacks = getStateCallbacks(joinedRoom as Room<any, any>) as any;
   const players = callbacks(joinedRoom.state).players;
@@ -10725,6 +10758,7 @@ function clearDefeatCombat(): void {
   keys.clear(); touchStrafe = 0; touchForward = 0;
   smoothedMovement = { x: 0, z: 0 };
   rangedFirePointer = null;
+  clearTabletAttackAim();
   cancelPowerAim(); cancelSpecialAim(); cancelLocalPowerPresentation();
   setDefensePresentation(false);
   localActionStartedAt = null;
@@ -11633,6 +11667,7 @@ movementDebugCopy.addEventListener("click", async () => {
 
 function resetMovementControls(): void {
   rangedFirePointer = null;
+  clearTabletAttackAim();
   touchCameraPointerId = null;
   touchCameraDragged = false;
   keys.clear();
@@ -11930,7 +11965,7 @@ function requestMine(): void {
   status.textContent = `Mining ${currentTarget.x}, ${currentTarget.y}, ${currentTarget.z}...`;
 }
 
-function requestAttack(aimWithPointer = true): void {
+function requestAttack(aimWithPointer = true, tabletAim?: { yaw: number; targetId: string | null }): void {
   if (!defeatScreen.hidden) return;
   if (reportedProtectedDialog === true) return;
   if (!room || !worldReady) return;
@@ -11945,14 +11980,18 @@ function requestAttack(aimWithPointer = true): void {
   }
   const attackDefinition = WEAPON_ATTACK_DEFINITIONS[localMainHandId];
   const player = localPlayer.getPosition();
-  const targetMob = nearestLivingMob(player, attackDefinition.range);
+  const selectedTabletVisual = tabletAim?.targetId ? mobVisuals.get(tabletAim.targetId) : null;
+  const targetMob = selectedTabletVisual
+    ? { id: tabletAim!.targetId!, visual: selectedTabletVisual,
+      distance: Math.hypot(selectedTabletVisual.state.x - player.x, selectedTabletVisual.state.y - player.y, selectedTabletVisual.state.z - player.z) }
+    : tabletAim ? null : nearestLivingMob(player, attackDefinition.range);
   const practisingFollowUp = guidedAbilityPracticePhase === "follow_up" && guidedAbilityPracticeId
     && (localBuildPathId === "assassin" || localBuildPathId === "ranger")
     && player.distance(CALLING_EFFIGY_POSITION) <= 4;
   const pointerAimed = aimWithPointer && rangedPointer.active;
   localActionFacingYaw = practisingFollowUp
     ? movementYaw(CALLING_EFFIGY_POSITION.x - player.x, CALLING_EFFIGY_POSITION.z - player.z, localFacingYaw)
-    : attackAimYaw(
+    : tabletAim?.yaw ?? attackAimYaw(
       pointerAimed ? mouseRangedYaw(localFacingYaw) : null,
       targetMob ? movementYaw(targetMob.visual.state.x - player.x, targetMob.visual.state.z - player.z, localFacingYaw) : null,
       currentTarget ? movementYaw(currentTarget.x + 0.5 - player.x, currentTarget.z + 0.5 - player.z, localFacingYaw) : null,
@@ -12463,6 +12502,7 @@ function requestContextAction(source: LootHold["source"]): void {
 
 function setInteractionMode(mode: InteractionMode): void {
   rangedFirePointer = null;
+  clearTabletAttackAim();
   if (interactionMode === mode && targetStateKey.startsWith(`${mode}:`)) return;
   const cancelledMining = mode !== "build" && Boolean(miningSwing || pendingMine);
   interactionMode = mode;
@@ -12876,10 +12916,64 @@ canvas.addEventListener("pointercancel", event => {
   requestDefense(false);
 });
 canvas.addEventListener("contextmenu", event => event.preventDefault());
+
+let tabletAttackPointerId: number | null = null;
+let tabletAttackStart = { x: 0, y: 0 };
+let tabletAttackYaw: number | null = null;
+
+function clearTabletAttackAim(): void {
+  tabletAttackPointerId = null;
+  tabletAttackYaw = null;
+  mineButton.dataset.aiming = "false";
+  tabletAimGuide.hidden = true;
+}
+
+function updateTabletAttackAim(event: PointerEvent): void {
+  if (event.pointerId !== tabletAttackPointerId) return;
+  const deltaX = event.clientX - tabletAttackStart.x;
+  const deltaY = event.clientY - tabletAttackStart.y;
+  if (Math.hypot(deltaX, deltaY) < 12) return;
+  const cameraOffset = cameraOrbitOffset(cameraOrbit);
+  tabletAttackYaw = tabletDragAimYaw(deltaX, deltaY, cameraOffset.x, cameraOffset.z, localFacingYaw);
+  mineButton.dataset.aiming = "true";
+  if (!camera.camera) return;
+  const player = localPlayer.getPosition();
+  const projected = camera.camera.worldToScreen(new pc.Vec3(player.x, player.y + .8, player.z));
+  const bounds = canvas.getBoundingClientRect();
+  const startX = bounds.left + projected.x;
+  const startY = bounds.top + projected.y;
+  const guideX = event.clientX - startX;
+  const guideY = event.clientY - startY;
+  tabletAimGuide.style.left = `${startX}px`;
+  tabletAimGuide.style.top = `${startY}px`;
+  tabletAimGuide.style.width = `${Math.hypot(guideX, guideY)}px`;
+  tabletAimGuide.style.transform = `rotate(${Math.atan2(guideY, guideX) * 180 / Math.PI}deg)`;
+  tabletAimGuide.hidden = false;
+}
+
 mineButton.addEventListener("pointerdown", event => {
   event.preventDefault();
-  requestModePrimaryAction();
+  if (interactionMode !== "combat" || event.pointerType === "mouse") { requestModePrimaryAction(); return; }
+  tabletAttackPointerId = event.pointerId;
+  tabletAttackStart = { x: event.clientX, y: event.clientY };
+  tabletAttackYaw = null;
+  mineButton.setPointerCapture(event.pointerId);
 });
+mineButton.addEventListener("pointermove", updateTabletAttackAim);
+mineButton.addEventListener("pointerup", event => {
+  if (event.pointerId !== tabletAttackPointerId) return;
+  if (mineButton.hasPointerCapture(event.pointerId)) mineButton.releasePointerCapture(event.pointerId);
+  const manualYaw = tabletAttackYaw;
+  const target = manualYaw === null
+    ? tabletSoftTargetMob(localPlayer.getPosition(), WEAPON_ATTACK_DEFINITIONS[localMainHandId].range, true)
+    : null;
+  const yaw = manualYaw ?? (target
+    ? movementYaw(target.visual.state.x - localPlayer.getPosition().x, target.visual.state.z - localPlayer.getPosition().z, localFacingYaw)
+    : localFacingYaw);
+  clearTabletAttackAim();
+  requestAttack(false, { yaw, targetId: target?.id ?? null });
+});
+mineButton.addEventListener("pointercancel", clearTabletAttackAim);
 contextButton.addEventListener("pointerdown", event => {
   event.preventDefault();
   requestContextAction(lootHoldSourceForPointer(event.pointerType) ?? "touch");
@@ -13735,11 +13829,13 @@ app.on("update", (dt: number) => {
   settledRigMobCount = 0;
   const serverNow = animationNow + serverClock.offset;
   const playerEye = localPlayer.getPosition();
+  const tabletTargetId = tabletSoftTargetMob(playerEye, WEAPON_ATTACK_DEFINITIONS[localMainHandId].range)?.id ?? null;
   const healthBarTargetId = interactionMode === "combat"
-    ? nearestLivingMob(playerEye, WEAPON_ATTACK_DEFINITIONS[localMainHandId].range)?.id ?? null
+    ? tabletControlsQuery.matches ? tabletTargetId : nearestLivingMob(playerEye, WEAPON_ATTACK_DEFINITIONS[localMainHandId].range)?.id ?? null
     : null;
   let canvasBounds: DOMRect | null = null;
   for (const [mobId, mob] of mobVisuals) {
+    mob.levelTag.dataset.softTarget = String(tabletTargetId === mobId);
     const refreshLabels = animationNow >= mob.nextLabelPresentationAt;
     if (refreshLabels) mob.nextLabelPresentationAt = animationNow + 100;
     if (mob.frameAlive !== mob.state.alive) {
