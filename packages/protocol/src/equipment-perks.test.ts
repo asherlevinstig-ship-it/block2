@@ -28,7 +28,7 @@ describe("fixed equipment perks", () => {
   });
 
   it("exposes regional hunt affinities and validates a reversible target", () => {
-    expect(EQUIPMENT_HUNT_REGIONS.greenwood.paths).toEqual(["assassin", "ranger"]);
+    expect(EQUIPMENT_HUNT_REGIONS.greenwood.paths).toEqual(["assassin", "ranger", "healer"]);
     expect(EQUIPMENT_HUNT_REGIONS.quarry.paths).toContain("tank");
     expect(EquipmentAffixHuntSchema.safeParse({ affixId: "precise" }).success).toBe(true);
     expect(EquipmentAffixHuntSchema.safeParse({ affixId: null }).success).toBe(true);

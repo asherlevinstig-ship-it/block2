@@ -7,6 +7,7 @@ import { PlayerState } from "./schema.js";
 describe("equipment affixes", () => {
   it("favours the active Calling while retaining off-build possibilities", () => {
     expect(rollEquipmentAffix("ranger", 2, () => 0)).toEqual({ affixId: "piercing", tier: 2 });
+    expect(rollEquipmentAffix("healer", 2, () => 0)).toEqual({ affixId: "mending", tier: 2 });
     expect(rollEquipmentAffix("tank", 9, () => .99).tier).toBe(3);
   });
   it("keeps stronger existing rolls and sanitizes saved data", () => {
@@ -57,5 +58,12 @@ describe("equipment affixes", () => {
     expect(room.equipmentHuntTarget(player)).toMatchObject({ affixId: "precise", regionId: "greenwood", chancePercent: 45 });
     room.setEquipmentAttunements(player, {}, 3, {});
     expect(room.equipmentAffixTarget(player)).toBe("precise");
+  });
+
+  it("gives Healer attunements reachable hunt regions", () => {
+    const room = new WorldRoom() as any;
+    const player = new PlayerState(); player.x = 8.5; player.z = 8.5;
+    room.setEquipmentAffixTarget(player, "mending");
+    expect(room.equipmentHuntTarget(player)).toMatchObject({ affixId: "mending", regionId: "greenwood" });
   });
 });

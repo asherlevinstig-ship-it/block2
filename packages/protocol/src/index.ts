@@ -428,13 +428,16 @@ export const EQUIPMENT_AFFIXES = {
   piercing: { name: "Piercing", pathId: "ranger", effect: "Adds ranged damage." },
   snaring: { name: "Snaring", pathId: "ranger", effect: "Strengthens Pinning Shot control." },
   precise: { name: "Precise", pathId: "ranger", effect: "Strengthens every third Pinning Shot." },
+  mending: { name: "Mending", pathId: "healer", effect: "Field Mend restores additional health." },
+  consecrated: { name: "Consecrated", pathId: "healer", effect: "Renewal creates a wider, longer-lasting sanctuary." },
+  soulbound: { name: "Soulbound", pathId: "healer", effect: "Resurrection channels faster and returns allies stronger." },
 } as const;
 export type EquipmentAffixId = keyof typeof EQUIPMENT_AFFIXES;
 export type EquipmentAffixRoll = { affixId: EquipmentAffixId; tier: 1 | 2 | 3 };
 export type EquipmentAffixOffers = Partial<Record<ItemId, EquipmentAffixId[]>>;
 export const EQUIPMENT_HUNT_REGIONS = {
-  greenwood: { name: "Greenwood", x: 42.5, y: 8, z: 19.5, tier: 1, paths: ["assassin", "ranger"] },
-  mistfen: { name: "Mistfen Marsh", x: -47.5, y: 8, z: -31.5, tier: 2, paths: ["mage", "thief"] },
+  greenwood: { name: "Greenwood", x: 42.5, y: 8, z: 19.5, tier: 1, paths: ["assassin", "ranger", "healer"] },
+  mistfen: { name: "Mistfen Marsh", x: -47.5, y: 8, z: -31.5, tier: 2, paths: ["mage", "thief", "healer"] },
   frontier: { name: "Stone Frontier", x: 68.5, y: 8, z: 34.5, tier: 3, paths: ["tank", "ranger"] },
   ashen: { name: "Ashen Reach", x: 97.5, y: 8, z: 62.5, tier: 3, paths: ["mage", "assassin"] },
   quarry: { name: "Redstone Pit", x: 8.5, y: 8, z: 101.5, tier: 3, paths: ["tank", "thief"] },

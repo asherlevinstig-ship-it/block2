@@ -319,6 +319,23 @@ describe("hotbar Calling abilities", () => {
     expect(player.health).toBeGreaterThan(0);
   });
 
+  it("lets Soulbound equipment shorten Resurrection and improve the revived state", () => {
+    const { room, internal, player, client, broadcast } = fixture("healer", 140);
+    vi.spyOn(internal, "persistPlayer").mockResolvedValue(undefined);
+    const state = JSON.parse(player.huntLoadoutsJson); player.mainHandId = "forged_focus";
+    player.huntLoadoutsJson = JSON.stringify({ ...state, affixes: { forged_focus: { affixId: "soulbound", tier: 3 } } });
+    const ally = new PlayerState(); Object.assign(ally, { x: 52, y: 8, z: 50, health: 0, maxHealth: 10, stamina: 0, maxStamina: 100 });
+    room.state.players.set("ally", ally);
+    const allyClient = { sessionId: "ally", send: vi.fn() }; internal.clients.push(allyClient);
+    internal.parties.restore(["hero", "ally"]); internal.resurrectionWindows.set("ally", 22_000);
+    internal.handleCallingAbilityEquip(client, { abilityId: "healer_resurrection" });
+    internal.handleCallingAbility(client, { requestId: "soulbound-gear" });
+    expect(broadcast).toHaveBeenCalledWith("healer:resurrection-channel", { casterId: "hero", targetId: "ally", until: 12_050 });
+    internal.resolvePendingResurrections(12_049); expect(ally.health).toBe(0);
+    internal.resolvePendingResurrections(12_050);
+    expect(ally.health).toBe(4); expect(ally.stamina).toBe(40); expect(ally.invulnerableUntil).toBe(14_300);
+  });
+
   it("interrupts Resurrection on movement and never revives an outsider", () => {
     const { room, internal, player, client, broadcast } = fixture("healer", 140);
     const ally = new PlayerState(); Object.assign(ally, { x: 52, y: 8, z: 50, health: 0 });
@@ -470,6 +487,17 @@ describe("hotbar Calling abilities", () => {
     expect(internal.callingAbilityReadyAt.get("hero")).toBe(25_000);
   });
 
+  it("lets Mending equipment strengthen Field Mend", () => {
+    const { room, internal, player, client } = fixture("healer", 70);
+    const state = JSON.parse(player.huntLoadoutsJson); player.mainHandId = "forged_focus";
+    player.huntLoadoutsJson = JSON.stringify({ ...state, affixes: { forged_focus: { affixId: "mending", tier: 3 } } });
+    const ally = new PlayerState(); Object.assign(ally, { x: 52, y: 8, z: 50, health: 1, maxHealth: 10 });
+    room.state.players.set("ally", ally);
+    internal.handleCallingAbility(client, { requestId: "mending-gear" });
+    expect(ally.health).toBe(6);
+    expect(client.send).toHaveBeenCalledWith("calling:ability", expect.objectContaining({ detail: expect.stringContaining("+5 HP") }));
+  });
+
   it("turns Renewal into a fixed sanctuary that heals allies who hold its ground", () => {
     const { room, internal, player, client, broadcast } = fixture("healer", 70);
     player.health = 3;
@@ -490,6 +518,15 @@ describe("hotbar Calling abilities", () => {
     ally.x = 56;
     internal.resolveRenewalFields(11_500);
     expect(player.health).toBe(5); expect(ally.health).toBe(2);
+  });
+
+  it("lets Consecrated equipment widen and extend Renewal", () => {
+    const { internal, player, client, broadcast } = fixture("healer", 70);
+    const state = JSON.parse(player.huntLoadoutsJson); player.armourId = "wanderer_robes"; player.health = 3;
+    player.huntLoadoutsJson = JSON.stringify({ ...state, affixes: { wanderer_robes: { affixId: "consecrated", tier: 2 } } });
+    internal.handleCallingAbilityEquip(client, { abilityId: "healer_renewal" });
+    internal.handleCallingAbility(client, { requestId: "consecrated-gear" });
+    expect(broadcast).toHaveBeenCalledWith("healer:renewal-field", expect.objectContaining({ radius: 5.2, expiresAt: 17_000 }));
   });
 
   it("lets an injured ally enter an active Renewal sanctuary after it is placed", () => {

@@ -6281,16 +6281,18 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         client.send("chat:notice", `RESURRECTION · recovers in ${Math.ceil((readyAt - now) / 1_000)}s.`);
         return;
       }
+      const soulboundTier = this.equipmentAffixTier(player, "soulbound");
+      const channelMs = Math.max(1_700, 2_500 - soulboundTier * 150);
       const cooldownUntil = now + definition.cooldownMs;
       this.callingAbilityReadyAt.set(client.sessionId, cooldownUntil);
-      this.pendingResurrections.set(client.sessionId, { targetId: target[0], completesAt: now + 2_500,
+      this.pendingResurrections.set(client.sessionId, { targetId: target[0], completesAt: now + channelMs,
         x: player.x, y: player.y, z: player.z, health: player.health });
-      this.broadcast("healer:resurrection-channel", { casterId: client.sessionId, targetId: target[0], until: now + 2_500 });
+      this.broadcast("healer:resurrection-channel", { casterId: client.sessionId, targetId: target[0], until: now + channelMs });
       client.send("calling:ability", { requestId: parsed.data.requestId, pathId, abilityId,
-        ability: definition.name, detail: `CHANNELING · ${target[1].name || "ALLY"} · 2.5s`, cooldownUntil,
-        durationMs: 2_500, slot } satisfies CallingAbilityUpdate);
+        ability: definition.name, detail: `CHANNELING · ${target[1].name || "ALLY"} · ${(channelMs / 1_000).toFixed(2)}s`, cooldownUntil,
+        durationMs: channelMs, slot } satisfies CallingAbilityUpdate);
       this.sendCombatTiming(client.sessionId, { requestId: parsed.data.requestId, action: "calling", phase: "accepted", serverTime: now });
-      this.callingState(client.sessionId, pathId, abilityId, "RESURRECTING · 2.5s", { activeUntil: now + 2_500, targetId: target[0] });
+      this.callingState(client.sessionId, pathId, abilityId, `RESURRECTING · ${(channelMs / 1_000).toFixed(2)}s`, { activeUntil: now + channelMs, targetId: target[0] });
       return;
     }
     const cooldowns = slot === "special" ? this.callingSpecialReadyAt : this.callingAbilityReadyAt;
@@ -6310,12 +6312,14 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       client.send("chat:notice", "FIELD MEND · no injured ally within 8m and line of sight.");
       return;
     }
+    const consecratedTier = abilityId === "healer_renewal" ? this.equipmentAffixTier(player, "consecrated") : 0;
+    const renewalRadius = 4.5 + consecratedTier * .35;
     const renewalTargets = abilityId === "healer_renewal"
       ? [...this.state.players.entries()].filter(([, target]) => target.health > 0 && target.health < target.maxHealth
-        && Math.abs(target.y - player.y) <= 2.5 && Math.hypot(target.x - player.x, target.z - player.z) <= 4.5
+        && Math.abs(target.y - player.y) <= 2.5 && Math.hypot(target.x - player.x, target.z - player.z) <= renewalRadius
         && hasCombatLineOfSight(player, target, this.readWorldBlock)) : [];
     if (abilityId === "healer_renewal" && renewalTargets.length === 0) {
-      client.send("chat:notice", "RENEWAL · no injured allies inside the 4.5m sanctuary area.");
+      client.send("chat:notice", `RENEWAL · no injured allies inside the ${renewalRadius.toFixed(1)}m sanctuary area.`);
       return;
     }
     const deathMarkTarget = abilityId === "assassin_death_mark"
@@ -6478,18 +6482,20 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         z: target.z, radius, detonatesAt: now + 850, pulses });
     } else if (abilityId === "healer_renewal") {
       const fieldId = `renewal:${client.sessionId}:${++this.renewalFieldSequence}`;
-      const radius = 4.5, durationMsValue = 6_000;
+      const radius = renewalRadius, durationMsValue = 6_000 + consecratedTier * 500;
       durationMs = durationMsValue;
       this.renewalFields.set(fieldId, { ownerId: client.sessionId, x: player.x, y: player.y, z: player.z,
         radius, heal: 1, expiresAt: now + durationMsValue, nextPulseAt: now + 500 });
-      detail = `SANCTUARY PLACED · ${radius}m · 6 HEALING PULSES`;
+      detail = `SANCTUARY PLACED · ${radius.toFixed(1)}m · ${Math.floor(durationMsValue / 1_000)} HEALING PULSES`;
       this.broadcast("healer:renewal-field", { fieldId, casterId: client.sessionId, x: player.x, y: player.y,
         z: player.z, radius, expiresAt: now + durationMsValue });
     } else if (abilityId === "healer_field_mend") {
       const [targetId, target] = healTarget!;
       const specialization = this.buildSpecializationFor(player, "healer");
+      const mendingTier = this.equipmentAffixTier(player, "mending");
       const heal = 2 + (rank >= 2 ? 1 : 0) + (rank >= 4 ? 1 : 0)
-        + (specialization === "lifebinder" ? 1 + Number(this.buildSpecializationMastered(player, "lifebinder")) : 0);
+        + (specialization === "lifebinder" ? 1 + Number(this.buildSpecializationMastered(player, "lifebinder")) : 0)
+        + Math.ceil(mendingTier / 2);
       const restored = Math.min(heal, target.maxHealth - target.health);
       target.health += restored;
       const staminaBefore = target.stamina;
@@ -7550,9 +7556,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (now < cast.completesAt) continue;
       this.pendingResurrections.delete(casterId);
       this.resurrectionWindows.delete(cast.targetId);
-      target.health = Math.max(1, Math.ceil(target.maxHealth * .25));
-      target.stamina = Math.min(target.maxStamina, Math.max(target.stamina, 25));
-      target.invulnerableUntil = now + 1_500;
+      const soulboundTier = this.equipmentAffixTier(caster, "soulbound");
+      target.health = Math.max(1, Math.ceil(target.maxHealth * (.25 + soulboundTier * .05)));
+      target.stamina = Math.min(target.maxStamina, Math.max(target.stamina, 25 + soulboundTier * 5));
+      target.invulnerableUntil = now + 1_500 + soulboundTier * 250;
       this.silverDepthsFallen.delete(cast.targetId);
       if (this.roomKind === "silver-depths") this.broadcastSilverDepthsPartyStatus();
       this.clients.find(client => client.sessionId === cast.targetId)?.send("player:resurrected", { health: target.health, maxHealth: target.maxHealth,
