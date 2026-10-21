@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ExclusivePopupQueue, popupIsPresented } from "./popup-queue.js";
+import { ExclusivePopupQueue, popupFocusIndex, popupIsPresented } from "./popup-queue.js";
 
 describe("exclusive popup queue", () => {
   it("shows one popup and queues later requests in order", () => {
@@ -39,5 +39,18 @@ describe("popup presentation state", () => {
   it("only presents an open popup that is not queued", () => {
     expect(popupIsPresented({ hidden: false, dataset: {} })).toBe(true);
     expect(popupIsPresented({ hidden: true, dataset: {} })).toBe(false);
+  });
+});
+
+describe("popup focus wrapping", () => {
+  it("wraps forward and backward within the active popup", () => {
+    expect(popupFocusIndex(2, 3, false)).toBe(0);
+    expect(popupFocusIndex(0, 3, true)).toBe(2);
+  });
+
+  it("enters from the correct edge and handles an empty popup", () => {
+    expect(popupFocusIndex(-1, 3, false)).toBe(0);
+    expect(popupFocusIndex(-1, 3, true)).toBe(2);
+    expect(popupFocusIndex(-1, 0, false)).toBe(-1);
   });
 });

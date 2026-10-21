@@ -17,7 +17,7 @@ import { abilityPracticeChallenge, practiceFollowUpProgress, practicePhaseAfterC
   type AbilityPracticePhase } from "./ability-practice.js";
 import { queueWorldNotice, type WorldNotice } from "./notification-lane.js";
 import { attackAimYaw, rangedAimYaw } from "./ranged-aim.js";
-import { ExclusivePopupQueue, popupIsPresented } from "./popup-queue.js";
+import { ExclusivePopupQueue, popupFocusIndex, popupIsPresented } from "./popup-queue.js";
 import { COORDINATED_BRUTE_FOLLOWERS, COORDINATED_SPITTER_FOLLOWERS, activeCombatNearby, advanceBossHud, initialBossHud, leaderArmourSegments, leaderChargeGuidance, leaderExposureLabel, leaderExposureRoleLabel, leaderFormationLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
 import { formationLanePoints, formationMarkerPoints, formationRingPoints, formationTargetStyle, formationVfxStyle,
   type FormationTactic, type FormationTargetRole } from "./formation-vfx.js";
@@ -10765,9 +10765,15 @@ joystickZone.addEventListener("pointercancel", event => releaseJoystick(event.po
 
 let room: Room | null = null;
 let reportedProtectedDialog: boolean | null = null;
-const protectedDialogSelector = '[role="dialog"], [aria-modal="true"], #loot-pack-decision, #combat-loadout-drawer, #depths-retry-prompt, #mode-switch-tutorial, #party-panel details[open]';
-const exclusivePopupSelector = '[role="dialog"]:not(#starter-inventory-tutorial), [aria-modal="true"]:not(#starter-inventory-tutorial), #loot-pack-decision, #combat-loadout-drawer, #depths-retry-prompt, #mode-switch-tutorial, #ability-practice';
+const protectedDialogSelector = '[role="dialog"], [aria-modal="true"], #loot-pack-decision, #combat-loadout-drawer, #depths-retry-prompt, #mode-switch-tutorial, #minimap[data-expanded="true"], #party-panel details[open]';
+const exclusivePopupSelector = '[role="dialog"]:not(#starter-inventory-tutorial), [aria-modal="true"]:not(#starter-inventory-tutorial), #loot-pack-decision, #combat-loadout-drawer, #depths-retry-prompt, #mode-switch-tutorial, #ability-practice, #minimap[data-expanded="true"]';
 const popupQueue = new ExclusivePopupQueue();
+const popupFocusOrigins = new Map<string, HTMLElement>();
+let lastNonPopupFocus: HTMLElement = canvas;
+document.addEventListener("focusin", event => {
+  const target = event.target instanceof HTMLElement ? event.target : null;
+  if (target && !target.closest(exclusivePopupSelector)) lastNonPopupFocus = target;
+}, true);
 const popupPriority = (popup: HTMLElement) => popup.id === "defeat-screen" || popup.id === "character-creator";
 function popupById(id: string): HTMLElement | null {
   return document.getElementById(id);
@@ -10778,27 +10784,72 @@ function focusQueuedPopup(popup: HTMLElement): void {
     popup.querySelector<HTMLElement>('[autofocus], button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex="-1"])')?.focus();
   }, 0);
 }
+function restorePopupFocus(id: string): void {
+  const origin = popupFocusOrigins.get(id);
+  popupFocusOrigins.delete(id);
+  window.setTimeout(() => {
+    if (popupQueue.active() !== null) return;
+    if (origin?.isConnected && !origin.closest("[hidden], [inert]")) origin.focus();
+    else canvas.focus();
+  }, 0);
+}
 function hidePopupForQueue(popup: HTMLElement): void {
   popup.dataset.popupQueued = "true";
+  popup.inert = true;
+  if (!popup.hasAttribute("aria-hidden")) {
+    popup.dataset.popupQueueAriaOwned = "true";
+    popup.setAttribute("aria-hidden", "true");
+  }
 }
 function showPopupFromQueue(id: string | null): void {
   if (!id) return;
   const popup = popupById(id);
-  if (!popup) { showPopupFromQueue(popupQueue.close(id).show); return; }
+  if (!popup) {
+    popupFocusOrigins.delete(id);
+    showPopupFromQueue(popupQueue.close(id).show);
+    return;
+  }
   delete popup.dataset.popupQueued;
-  if (popup.hidden) { showPopupFromQueue(popupQueue.close(id).show); return; }
+  popup.inert = false;
+  if (popup.dataset.popupQueueAriaOwned === "true") {
+    delete popup.dataset.popupQueueAriaOwned;
+    popup.removeAttribute("aria-hidden");
+  }
+  if (popup.hidden) {
+    popupFocusOrigins.delete(id);
+    showPopupFromQueue(popupQueue.close(id).show);
+    return;
+  }
   resetMovementControls();
   focusQueuedPopup(popup);
 }
 function registerPopupOpen(popup: HTMLElement): void {
+  if (!popupFocusOrigins.has(popup.id)) {
+    const active = document.activeElement instanceof HTMLElement && !popup.contains(document.activeElement)
+      ? document.activeElement : lastNonPopupFocus;
+    popupFocusOrigins.set(popup.id, active);
+  }
   const result = popupQueue.open(popup.id, popupPriority(popup));
   for (const id of result.hide) {
     const hidden = popupById(id);
     if (hidden) hidePopupForQueue(hidden);
   }
+  if (popupQueue.active() === popup.id) {
+    resetMovementControls();
+    focusQueuedPopup(popup);
+  }
 }
 function registerPopupClose(popup: HTMLElement): void {
-  showPopupFromQueue(popupQueue.close(popup.id).show);
+  const wasActive = popupQueue.active() === popup.id;
+  popup.inert = false;
+  if (popup.dataset.popupQueueAriaOwned === "true") {
+    delete popup.dataset.popupQueueAriaOwned;
+    popup.removeAttribute("aria-hidden");
+  }
+  const next = popupQueue.close(popup.id).show;
+  showPopupFromQueue(next);
+  if (wasActive && !next) restorePopupFocus(popup.id);
+  else popupFocusOrigins.delete(popup.id);
 }
 function popupElementsIn(node: Node): HTMLElement[] {
   if (!(node instanceof HTMLElement)) return [];
@@ -10823,7 +10874,10 @@ function syncProtectedDialog(): void {
 let protectedDialogSyncQueued = false;
 new MutationObserver(records => {
   for (const record of records) {
-    if (record.type === "attributes" && record.attributeName === "hidden" && record.target instanceof HTMLElement) {
+    if (record.type === "attributes" && record.attributeName === "data-expanded" && record.target === minimapPanel) {
+      if (minimapPanel.dataset.expanded === "true") registerPopupOpen(minimapPanel);
+      else registerPopupClose(minimapPanel);
+    } else if (record.type === "attributes" && record.attributeName === "hidden" && record.target instanceof HTMLElement) {
       const popup = record.target;
       if (!popup.matches(exclusivePopupSelector) || !popup.id) continue;
       if (popup.hidden) {
@@ -10840,7 +10894,7 @@ new MutationObserver(records => {
   protectedDialogSyncQueued = true;
   queueMicrotask(() => { protectedDialogSyncQueued = false; syncProtectedDialog(); });
 }).observe(document.body, { subtree: true, childList: true, attributes: true,
-  attributeFilter: ["hidden", "style", "aria-hidden", "open"] });
+  attributeFilter: ["hidden", "style", "aria-hidden", "open", "data-expanded"] });
 let movementShadowInput: InputHandle<{ strafe: number; forward: number; yaw: number }> | null = null;
 let movementPilotRequested = false;
 let movementPilotReady = false;
@@ -12392,16 +12446,117 @@ combatHudRoot.addEventListener("click", event => {
   status.textContent = `Equipping ${CALLING_ABILITY_OPTIONS.find(option => option.id === abilityId)?.name ?? "Calling ability"}...`;
 });
 
+const popupFocusableSelector = 'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
+let requiredPopupCueTimer = 0;
+function activePopupElement(): HTMLElement | null {
+  const id = popupQueue.active();
+  const popup = id ? popupById(id) : null;
+  return popup && popupIsPresented(popup) ? popup : null;
+}
+function popupFocusableElements(popup: HTMLElement): HTMLElement[] {
+  return [...popup.querySelectorAll<HTMLElement>(popupFocusableSelector)]
+    .filter(element => !element.closest("[hidden], [inert]") && element.getClientRects().length > 0);
+}
+function trapPopupFocus(event: KeyboardEvent, popup: HTMLElement): void {
+  const focusable = popupFocusableElements(popup);
+  const current = focusable.indexOf(document.activeElement as HTMLElement);
+  const index = popupFocusIndex(current, focusable.length, event.shiftKey);
+  if (index >= 0) focusable[index]?.focus();
+  else {
+    popup.tabIndex = -1;
+    popup.focus();
+  }
+  event.preventDefault();
+}
+function requiredPopup(id: string): boolean {
+  if (id === "calling-intro") return !localBuildPathId;
+  return new Set([
+    "character-creator", "ability-reveal", "ashen-equipment-reveal", "calling-awakening",
+    "defeat-screen", "mode-switch-tutorial", "dungeon-lobby-panel",
+  ]).has(id);
+}
+function explainRequiredPopup(popup: HTMLElement): void {
+  let cue = document.querySelector<HTMLElement>("#required-popup-cue");
+  if (!cue) {
+    cue = document.createElement("div");
+    cue.id = "required-popup-cue";
+    cue.setAttribute("role", "status");
+    cue.setAttribute("aria-live", "assertive");
+    document.body.append(cue);
+  }
+  cue.textContent = "CHOOSE AN OPTION TO CONTINUE";
+  cue.hidden = false;
+  popup.dataset.choiceRequired = "true";
+  const focusable = popupFocusableElements(popup);
+  focusable.find(element => !(element as HTMLButtonElement).disabled)?.focus();
+  window.clearTimeout(requiredPopupCueTimer);
+  requiredPopupCueTimer = window.setTimeout(() => {
+    cue!.hidden = true;
+    delete popup.dataset.choiceRequired;
+  }, 2_200);
+}
+function closePopupFromEscape(popup: HTMLElement): boolean {
+  if (requiredPopup(popup.id)) { explainRequiredPopup(popup); return true; }
+  switch (popup.id) {
+    case "minimap": setMinimapExpanded(false); break;
+    case "ashen-reliquary-choice": closeAshenReliquaryChoice(); break;
+    case "ability-practice": popup.hidden = true; room?.send("practice:menu", { open: false }); break;
+    case "level-up-panel": levelUpLater.click(); break;
+    case "calling-intro": closeCallingIntro(); break;
+    case "player-interaction": playerInteractionUI.close(); break;
+    case "trade-modal": tradeUI.cancel(); break;
+    case "realm-hunt-board-panel": popup.hidden = true; break;
+    case "expedition-board-panel": popup.hidden = true; break;
+    case "loot-pack-decision":
+    case "loot-panel": closeLoot(); break;
+    case "inventory-panel": setInventoryOpen(false); break;
+    case "blacksmith-panel": popup.hidden = true; break;
+    case "tavern-quiz": popup.hidden = true; break;
+    case "tavern-dialogue": closeTavernDialogue(); break;
+    case "roadside-choice": closeRoadsideChoice(); break;
+    case "silver-depths-lobby-panel": popup.querySelector<HTMLButtonElement>(".depths-lobby-cancel")?.click(); break;
+    case "dungeon-completion": popup.querySelector<HTMLButtonElement>(".dungeon-return")?.click(); break;
+    case "depths-retry-prompt": popup.querySelector<HTMLButtonElement>("#depths-retry-dismiss")?.click(); break;
+    case "combat-loadout-drawer": popup.querySelector<HTMLButtonElement>(".loadout-close")?.click(); break;
+    default: {
+      const close = popup.querySelector<HTMLButtonElement>('button[aria-label="Close"], button[aria-label^="Close "]');
+      if (!close) return false;
+      close.click();
+    }
+  }
+  return true;
+}
+const tutorialGameplayKeys = new Set([
+  "KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
+  "Space", "KeyE", "KeyJ", "KeyQ", "KeyC", "KeyR", "KeyF", "KeyG", "KeyH", "Enter",
+]);
+
 window.addEventListener("keydown", event => {
   if (event.repeat) return;
+  const activePopup = activePopupElement();
+  if (activePopup && event.code === "Tab") {
+    trapPopupFocus(event, activePopup);
+    return;
+  }
+  if (activePopup && event.code === "Escape") {
+    if (!closePopupFromEscape(activePopup)) explainRequiredPopup(activePopup);
+    event.preventDefault();
+    event.stopPropagation();
+    return;
+  }
+  if (activePopup && (event.code === "Enter" || event.code === "Space")
+    && (event.target as HTMLElement).closest("button, [role=button]")) return;
+  if (activePopup && (event.target instanceof HTMLInputElement
+    || event.target instanceof HTMLTextAreaElement
+    || event.target instanceof HTMLSelectElement)) return;
   if (popupQueue.active() === null && firstVictoryRewardLessonReady() && firstVictoryReward?.stage === "open_pack") {
     if (event.code === "KeyI") {
       saveFirstVictoryReward({ ...firstVictoryReward, stage: "choose" });
       setInventoryOpen(true);
-    } else {
-      status.textContent = "Press I to inspect your first victory reward.";
+    } else if (tutorialGameplayKeys.has(event.code)) {
+      status.textContent = "Tutorial paused · press I to inspect your reward. Movement and combat resume afterwards.";
       nudgeStarterInventoryTutorial();
-    }
+    } else return;
     event.preventDefault();
     return;
   }
@@ -12415,10 +12570,10 @@ window.addEventListener("keydown", event => {
       starterInventoryOpenedWithKeyboard = true;
       renderFirstSteps();
       setInventoryOpen(true);
-    } else {
-      status.textContent = "Press I to open your inventory.";
+    } else if (tutorialGameplayKeys.has(event.code)) {
+      status.textContent = "Tutorial paused · press I to equip your sword. Movement and combat resume afterwards.";
       nudgeStarterInventoryTutorial();
-    }
+    } else return;
     event.preventDefault();
     return;
   }

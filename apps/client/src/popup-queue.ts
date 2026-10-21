@@ -11,6 +11,13 @@ export function popupIsPresented(popup: PopupPresentationState): boolean {
   return popup.hidden === false && popup.dataset.popupQueued !== "true";
 }
 
+/** Wrap keyboard focus within the active popup. A missing current item starts at an edge. */
+export function popupFocusIndex(current: number, count: number, backwards: boolean): number {
+  if (count <= 0) return -1;
+  if (current < 0 || current >= count) return backwards ? count - 1 : 0;
+  return (current + (backwards ? -1 : 1) + count) % count;
+}
+
 /** Serialises blocking UI without coupling the individual feature systems. */
 export class ExclusivePopupQueue {
   private current: string | null = null;
