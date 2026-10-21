@@ -1,10 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { abilityRevealUse, canPresentAbilityReveal, earnedCallingAbilities, firstCallingUseInstruction, shouldGuideFirstCallingUse } from "./ability-reveal.js";
+import { abilityRevealUse, callingUnlockAnnouncement, canPresentAbilityReveal, earnedCallingAbilities, firstCallingUseInstruction, shouldGuideFirstCallingUse } from "./ability-reveal.js";
 
 describe("town ability reveals", () => {
   it("does not reveal a Calling before its Power unlocks", () => {
     expect(earnedCallingAbilities("assassin", 0, 1)).toEqual([]);
     expect(earnedCallingAbilities("assassin", 0, 2)).toEqual(["assassin_vanish"]);
+  });
+
+  it("always announces the level-two Power even if Calling state arrives later", () => {
+    expect(callingUnlockAnnouncement(2, "assassin")).toEqual({
+      title: "Stealth unlocked",
+      detail: "Assassin Power · G to use. The full introduction waits for Town.",
+    });
+    expect(callingUnlockAnnouncement(2, null)?.title).toBe("Calling Power unlocked");
+    expect(callingUnlockAnnouncement(3, "assassin")).toBeNull();
   });
 
   it("reveals the Special at level four and rank choices as they are earned", () => {

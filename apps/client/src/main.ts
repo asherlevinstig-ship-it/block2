@@ -12,7 +12,7 @@ import { confirmedRangedHit, projectileImpactCue } from "./ranged-feedback.js";
 import { heldFireStep } from "./held-fire.js";
 import { callingLevelGuide, statChoiceDisabled } from "./progression-guidance.js";
 import { progressionNotice as chooseProgressionNotice, type ProgressionNotice } from "./progression-notice.js";
-import { abilityRevealUse, canPresentAbilityReveal, earnedCallingAbilities, firstCallingUseInstruction, shouldGuideFirstCallingUse } from "./ability-reveal.js";
+import { abilityRevealUse, callingUnlockAnnouncement, canPresentAbilityReveal, earnedCallingAbilities, firstCallingUseInstruction, shouldGuideFirstCallingUse } from "./ability-reveal.js";
 import { abilityPracticeChallenge, practiceFollowUpProgress, practicePhaseAfterCast,
   type AbilityPracticePhase } from "./ability-practice.js";
 import { queueWorldNotice, type WorldNotice } from "./notification-lane.js";
@@ -1143,10 +1143,13 @@ function announceWorldNotice(notice: WorldNotice): void {
   pendingWorldNotices = queueWorldNotice(pendingWorldNotices, notice);
   updateProgressionNoticeVisibility(performance.now());
 }
-const pendingLevelCelebrations: { level: number; detail: string }[] = [];
+type PendingLevelCelebration = { level: number; experienceGranted: number };
+const pendingLevelCelebrations: PendingLevelCelebration[] = [];
+let activeLevelCelebration: PendingLevelCelebration | null = null;
 let levelCelebrationUntil = 0;
 levelCelebrationChoose.addEventListener("click", () => {
   levelCelebration.hidden = true;
+  activeLevelCelebration = null;
   if (localCharacterProgression.unspentStatPoints > 0) levelUpPanel.hidden = false;
 });
 levelUpLater.addEventListener("click", () => {
@@ -4583,16 +4586,25 @@ function updateLevelCelebration(now: number): void {
   if (pendingLevelCelebrations.length && levelCelebration.hidden && worldReady && defeatScreen.hidden
     && reportedProtectedDialog !== true && !localCombatActive()) {
     const celebration = pendingLevelCelebrations.shift()!;
+    activeLevelCelebration = celebration;
     levelCelebrationTitle.textContent = `LEVEL ${celebration.level}!`;
-    levelCelebrationDetail.textContent = celebration.detail;
     levelCelebrationChoose.hidden = localCharacterProgression.unspentStatPoints <= 0;
     levelCelebration.hidden = false;
     levelCelebrationUntil = now + 5_500;
     combatAudio.play("levelUp");
     levelUpBurst();
   }
+  if (!levelCelebration.hidden && activeLevelCelebration) {
+    const celebration = activeLevelCelebration;
+    const calling = callingUnlockAnnouncement(celebration.level, localBuildPathId);
+    const milestone = CHARACTER_MILESTONES.find(entry => entry.level === celebration.level);
+    levelCelebrationDetail.textContent = calling
+      ? `${calling.title} · ${calling.detail} A permanent stat point is also ready.`
+      : milestone ? `${milestone.name} unlocked · a permanent stat point is ready.`
+        : `A permanent stat point is ready · +${celebration.experienceGranted} XP.`;
+  }
   if (!levelCelebration.hidden && (now >= levelCelebrationUntil || reportedProtectedDialog === true || localCombatActive()))
-    levelCelebration.hidden = true;
+    { levelCelebration.hidden = true; activeLevelCelebration = null; }
 }
 
 function abilityRevealStorageKey(abilityId: CallingAbilityId): string {
@@ -14992,14 +15004,15 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       levelUpMessage.textContent = "Your points are up to date. Choose a permanent stat improvement.";
     if (update.reason === "level_up") {
       const milestone = CHARACTER_MILESTONES.find(entry => entry.level === update.level);
+      const calling = callingUnlockAnnouncement(update.level, localBuildPathId);
       const callingReminder = !localBuildPathId && update.level >= 2 ? " · choose a Calling in Town for abilities" : "";
-      pendingLevelCelebrations.push({ level: update.level, detail: milestone && milestone.id !== "first_power" && milestone.id !== "first_special"
-        ? `${milestone.name} unlocked · a permanent stat point is ready${callingReminder}`
-        : `A permanent stat point is ready · +${update.experienceGranted ?? 0} XP${callingReminder}` });
-      status.textContent = milestone && milestone.id !== "first_power" && milestone.id !== "first_special"
+      pendingLevelCelebrations.push({ level: update.level, experienceGranted: update.experienceGranted ?? 0 });
+      status.textContent = calling
+        ? `Level ${update.level}! ${calling.title}. ${calling.detail}`
+        : milestone && milestone.id !== "first_power" && milestone.id !== "first_special"
         ? `Level ${update.level}! ${milestone.name} unlocked. Choose a permanent character improvement.`
-        : `Level ${update.level}! Choose a permanent character improvement.`;
-      social.event(`Reached level ${update.level} · stat point ready.`);
+        : `Level ${update.level}! Choose a permanent character improvement${callingReminder}.`;
+      social.event(`Reached level ${update.level} · ${calling?.title ?? "stat point ready"}.`);
     } else if (update.reason === "experience" && update.experienceGranted) {
       status.textContent = `+${update.experienceGranted} XP · ${update.source ?? "adventuring"}`;
     } else if (update.reason === "choice") {
