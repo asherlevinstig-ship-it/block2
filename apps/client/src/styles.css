@@ -390,7 +390,7 @@ html.onboarding-active #hud #target, html.onboarding-active #hud #players { disp
   box-shadow: inset 0 0 12px rgb(83 196 255 / 12%);
 }
 
-#power-slot[hidden], #power-button[hidden], .loadout-group[hidden] { display: none !important; }
+#power-slot[hidden], #power-button[hidden], #calling-button[hidden], #special-button[hidden], #context-button[hidden], .loadout-group[hidden] { display: none !important; }
 #power-slot {
   position: relative;
   display: grid;
@@ -1982,9 +1982,9 @@ button[data-previewing="true"] .calling-preview *, #calling-awakening:not([hidde
 
   #touch-actions {
     display: grid;
-    grid-template: 64px 84px / 62px 68px 68px 96px;
+    grid-template: 64px 84px / 62px 68px 76px 96px;
     grid-template-areas:
-      "special power defense primary"
+      "special calling context primary"
       "mode dodge defense primary";
     align-items: center;
     gap: 8px;
@@ -1996,6 +1996,8 @@ button[data-previewing="true"] .calling-preview *, #calling-awakening:not([hidde
   #dodge-button,
   #defense-button,
   #power-button,
+  #calling-button,
+  #context-button,
   #touch-mode-button,
   #special-button { pointer-events: auto; touch-action: none; user-select: none; }
 
@@ -2042,6 +2044,8 @@ button[data-previewing="true"] .calling-preview *, #calling-awakening:not([hidde
   #dodge-button,
   #defense-button,
   #power-button,
+  #calling-button,
+  #context-button,
   #touch-mode-button,
   #special-button {
     width: 92px;
@@ -2060,10 +2064,27 @@ button[data-previewing="true"] .calling-preview *, #calling-awakening:not([hidde
 
   #dodge-button,
   #power-button,
+  #calling-button,
   #special-button { width: 72px; height: 72px; font-size: .76rem; }
 
   #mine-button { grid-area: primary; width: 96px; height: 96px; }
   #power-button { grid-area: power; }
+  #calling-button { grid-area: calling; border-color: rgb(91 227 179 / 68%); background: rgb(20 91 70 / 90%); color: #caffed; }
+  #context-button {
+    grid-area: context;
+    position: relative;
+    width: 76px;
+    height: 76px;
+    --context-progress: 0%;
+    border-color: rgb(255 221 106 / 78%);
+    background: conic-gradient(from -90deg, rgb(255 202 61 / 92%) var(--context-progress), rgb(67 57 23 / 88%) 0) !important;
+    color: #fff5c2;
+    font-size: .58rem;
+  }
+  #context-button span,
+  #context-button small { position: relative; z-index: 1; display: block; pointer-events: none; }
+  #context-button small { margin-top: 3px; color: #ffde73; font-size: .46rem; letter-spacing: .12em; }
+  #context-button[data-hold="true"] { box-shadow: 0 0 0 3px rgb(255 207 69 / 16%), 0 12px 30px rgb(0 0 0 / 38%); }
   #special-button { grid-area: special; width: 68px; height: 68px; font-size: .64rem; }
   #dodge-button { grid-area: dodge; }
   #defense-button { grid-area: defense; width: 68px; height: 68px; border-color: rgb(111 211 255 / 62%); background: rgb(18 79 107 / 86%); font-size: .64rem; }
@@ -2090,6 +2111,8 @@ button[data-previewing="true"] .calling-preview *, #calling-awakening:not([hidde
   #dodge-button:active { transform: scale(.94); background: rgb(23 111 143 / 92%) !important; }
   #defense-button[aria-pressed="true"] { transform: scale(.94); background: rgb(30 137 179 / 96%) !important; box-shadow: 0 0 22px rgb(91 213 255 / 34%); }
   #power-button:active { transform: scale(.94); background: rgb(144 77 17 / 94%) !important; }
+  #calling-button:active { transform: scale(.94); background: rgb(25 126 93 / 96%) !important; }
+  #context-button:active { transform: scale(.94); }
   #special-button:active { transform: scale(.94); background: rgb(101 45 137 / 96%) !important; }
   #touch-mode-button:active { transform: scale(.94); }
   #mine-button[data-mode="combat"] {
@@ -2113,11 +2136,13 @@ button[data-previewing="true"] .calling-preview *, #calling-awakening:not([hidde
   #mine-button,
   #dodge-button,
   #defense-button,
-  #power-button { width: 66px; height: 66px; font-size: .7rem; }
+  #power-button,
+  #calling-button,
+  #context-button { width: 66px; height: 66px; font-size: .7rem; }
   #special-button { width: 58px; height: 58px; font-size: .56rem; }
   #touch-actions {
     grid-template-rows: 56px 70px;
-    grid-template-columns: 52px 58px 58px 78px;
+    grid-template-columns: 52px 58px 66px 78px;
     gap: 6px;
   }
   #mine-button { width: 78px; height: 78px; font-size: .78rem; }
@@ -2170,7 +2195,9 @@ button[data-previewing="true"] .calling-preview *, #calling-awakening:not([hidde
   }
   #mine-button { width: 68px; height: 68px; font-size: .68rem; }
   #dodge-button,
-  #power-button { width: 58px; height: 58px; font-size: .61rem; }
+  #power-button,
+  #calling-button { width: 58px; height: 58px; font-size: .61rem; }
+  #context-button { width: 58px; height: 58px; font-size: .5rem; }
   #special-button { width: 52px; height: 52px; font-size: .52rem; }
   #touch-mode-button { width: 52px; height: 52px; font-size: .48rem; }
   #defense-button { width: 52px; height: 52px; font-size: .48rem; }

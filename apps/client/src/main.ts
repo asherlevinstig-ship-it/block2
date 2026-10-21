@@ -19,6 +19,7 @@ import { queueWorldNotice, type WorldNotice } from "./notification-lane.js";
 import { attackAimYaw, rangedAimYaw } from "./ranged-aim.js";
 import { canvasScreenPoint } from "./screen-pointer.js";
 import { tabletJoystickSample, touchDragStarted } from "./tablet-input.js";
+import { tabletContextAction } from "./tablet-context-action.js";
 import { ExclusivePopupQueue, popupFocusIndex, popupIsPresented } from "./popup-queue.js";
 import { COORDINATED_BRUTE_FOLLOWERS, COORDINATED_SPITTER_FOLLOWERS, activeCombatNearby, advanceBossHud, initialBossHud, leaderArmourSegments, leaderChargeGuidance, leaderExposureLabel, leaderExposureRoleLabel, leaderFormationLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
 import { formationLanePoints, formationMarkerPoints, formationRingPoints, formationTargetStyle, formationVfxStyle,
@@ -1373,10 +1374,14 @@ const dodgeButton = document.querySelector<HTMLButtonElement>("#dodge-button")!;
 const defenseButton = document.querySelector<HTMLButtonElement>("#defense-button")!;
 const powerButton = document.querySelector<HTMLButtonElement>("#power-button")!;
 const specialButton = document.querySelector<HTMLButtonElement>("#special-button")!;
+const callingButton = document.querySelector<HTMLButtonElement>("#calling-button")!;
+const contextButton = document.querySelector<HTMLButtonElement>("#context-button")!;
+const contextButtonLabel = contextButton.querySelector<HTMLElement>("span")!;
+const contextButtonHint = contextButton.querySelector<HTMLElement>("small")!;
 const touchModeButton = document.querySelector<HTMLButtonElement>("#touch-mode-button")!;
 const touchModeLabel = document.querySelector<HTMLElement>("#touch-mode-label")!;
 const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-toggle [data-mode]")];
-if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !dangerZone || !dangerZoneName || !locationCoordinates || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !graphicsQualitySelect || !graphicsQualityStatus || !performanceCopyLog || !performanceClearLog || !performanceLogStatus || !inventoryPanel || !inventoryTotal || !inventoryToggle || !inventoryClose || !inventoryBadge || !inventoryEquipped || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== requiredInventoryMainHands || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !controlsHelp || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
+if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !dangerZone || !dangerZoneName || !locationCoordinates || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !graphicsQualitySelect || !graphicsQualityStatus || !performanceCopyLog || !performanceClearLog || !performanceLogStatus || !inventoryPanel || !inventoryTotal || !inventoryToggle || !inventoryClose || !inventoryBadge || !inventoryEquipped || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== requiredInventoryMainHands || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !callingButton || !contextButton || !contextButtonLabel || !contextButtonHint || !touchModeButton || !touchModeLabel || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !controlsHelp || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
   throw new Error("Game shell is missing required elements");
 }
 if ([quizTablePrompt, blacksmithPrompt, playerTradePrompt, playerTradeName, blacksmithPanel, blacksmithMessage, blacksmithOre, blacksmithGold, blacksmithPrice, blacksmithSell, blacksmithClose, haulEquipName, haulEquipDetail, haulEquip, haulSalvageCount, haulSalvageDetail, haulSalvage, haulStoreCount, haulStore, haulUpgradeName, haulUpgradeTrack, haulUpgradeDetail, haulRegionName, haulRegionDetail, haulTrackRegion, quizPanel, quizBalance, quizBalanceAmount, quizPotDisplay, quizPotLabel, quizWinToast, quizAnswerFeedback, quizFeedbackIcon, quizFeedbackTitle, quizFeedbackDetail, quizMessage, quizStakeHeading, quizStakes, quizQuestion, quizPot, quizPrompt, quizChoices, quizDecision, quizDouble, quizQuit, quizClose, tavernCoins].some(element => !element) || blacksmithUpgradeCards.length !== Object.keys(BLACKSMITH_UPGRADES).length) {
@@ -3412,6 +3417,7 @@ function cancelLootHold(): void {
   lootHold = null;
   lootWorldLabel.dataset.holding = "false";
   lootWorldHold.style.setProperty("--hold-progress", "0%");
+  contextButton.style.setProperty("--context-progress", "0%");
 }
 function releaseLootHold(source: LootHold["source"]): void {
   if (!lootHold || lootHold.source !== source) return;
@@ -3439,6 +3445,7 @@ function updateLootHold(now: number): void {
     || lootHold.source === "keyboard" && !keys.has("KeyE")) { cancelLootHold(); return; }
   const progress = lootHoldProgress(lootHold, now, nearby.id);
   lootWorldHold.style.setProperty("--hold-progress", `${Math.round(progress * 100)}%`);
+  contextButton.style.setProperty("--context-progress", `${Math.round(progress * 100)}%`);
   if (progress >= 1) {
     const dropId = lootHold.dropId;
     cancelLootHold();
@@ -4370,6 +4377,16 @@ function updateControlsHelp(): void {
   controlsHelp.textContent = `WASD move · Arrows camera · J main-hand attack · I inventory · H potion · Hold C/right-click Guard · Space dodge/cancel${unlockedPowerHint}${unlockedSpecialHint}${callingHint} · Q mode · E/click acts${fireHint}`;
 }
 
+function updateTouchAbilityVisibility(): void {
+  const callingUnlocked = localCharacterProgression.level >= 2 && Boolean(localBuildPathId && localCallingAbilityId);
+  const specialUnlocked = localCharacterProgression.level >= 4 && Boolean(localBuildPathId);
+  callingButton.hidden = !callingUnlocked;
+  callingButton.disabled = !callingUnlocked;
+  specialButton.hidden = !specialUnlocked;
+  specialButton.disabled = !specialUnlocked;
+  powerButton.hidden = !WEAPON_TECHNIQUES_AVAILABLE || localCharacterProgression.level < 5;
+}
+
 function updateSpecialLoadout(specialId: SpecialId): void {
   localFieldSpecialSelected = false;
   localEquippedSpecial = specialId;
@@ -4546,8 +4563,7 @@ function renderCharacterProgression(update: ProgressionUpdate, maximumHealth = p
   playerHud.setProgression(update.level, update.experience, required);
   combatHud.setPowerLoadout(localPrimaryPower, localSecondaryPower, activePowerSlot, update.level);
   powerButton.disabled = !WEAPON_TECHNIQUES_AVAILABLE || update.level < 5;
-  specialButton.disabled = update.level < 4 || !localBuildPathId;
-  specialButton.textContent = update.level < 4 ? "LV 4" : localBuildPathId ? "Special" : "Choose Calling";
+  updateTouchAbilityVisibility();
   updateControlsHelp();
   inventoryLevel.textContent = required > 0 ? `${update.level} · ${update.experience}/${required} XP` : `${update.level} · MAX`;
   characterPoints.textContent = update.unspentStatPoints > 0 ? `${update.unspentStatPoints} POINT${update.unspentStatPoints === 1 ? "" : "S"} AVAILABLE` : "NO POINTS AVAILABLE";
@@ -4968,7 +4984,7 @@ function renderBuildPath(update: BuildPathUpdate): void {
   combatHud.setCalling(update.selectedPathId, update.selectedCallingAbilityId, update.rank, update.selectedCallingAugmentId,
     update.callingAugmentProgress, update.masteredCallingAugments);
   refreshCallingUnlockNotice();
-  specialButton.disabled = localCharacterProgression.level < 4 || !update.selectedPathId;
+  updateTouchAbilityVisibility();
   updateControlsHelp();
   if (trackedCodexItemId) setCodexHunt(trackedCodexItemId, false);
   const selected = update.selectedPathId ? BUILD_PATHS[update.selectedPathId] : null;
@@ -10345,7 +10361,32 @@ function updateTarget(): void {
   const ashenReliquaryNearby = ashenReliquaryClaimNearby || ashenReliquaryPreviewNearby;
   if (!roadsideChoice.hidden && roadsideChoice.dataset.id !== roadsideEncounter?.id) closeRoadsideChoice();
   updatePlayerTradePrompt(Boolean(nearbyLoot || ashenReliquaryNearby || nearbyForestPortal || roleOpportunity || roadsideEncounter || expeditionBoardNearby || blacksmithNearby || quizTableNearby || keeperNearby || chestNearby));
-  const nextKey = `${interactionMode}:${targetKey}:${currentTarget?.block ?? -1}:${availability}:${combatKey}:${keeperNearby}:${quizTableNearby}:${blacksmithNearby}:${expeditionBoardNearby}:${nearbyLoot}:${ashenReliquaryNearby}:${nearbyForestPortal}:${roleOpportunity?.id ?? "none"}:${roadsideEncounter?.id ?? "none"}`;
+  const contextAction = tabletContextAction({
+    tradePlayer: Boolean(nearbyTradePlayerId),
+    recoveryBag: Boolean(nearbyRecoveryBag),
+    storage: chestNearby,
+    loot: Boolean(nearbyLoot),
+    reliquaryClaim: ashenReliquaryClaimNearby,
+    reliquaryPreview: ashenReliquaryPreviewNearby,
+    portal: Boolean(nearbyForestPortal),
+    roleAction: roleOpportunity?.action,
+    roadside: Boolean(roadsideEncounter),
+    expeditionBoard: expeditionBoardNearby,
+    blacksmith: blacksmithNearby,
+    quiz: quizTableNearby,
+    keeper: keeperNearby,
+  });
+  contextButton.hidden = contextAction === null;
+  if (contextAction) {
+    contextButtonLabel.textContent = contextAction.label;
+    contextButtonHint.textContent = contextAction.hold ? "Hold" : "Tap";
+    contextButton.dataset.hold = String(contextAction.hold);
+    contextButton.setAttribute("aria-label", `${contextAction.hold ? "Hold to" : "Tap to"} ${contextAction.label}`);
+  } else {
+    contextButton.style.setProperty("--context-progress", "0%");
+    delete contextButton.dataset.hold;
+  }
+  const nextKey = `${interactionMode}:${targetKey}:${currentTarget?.block ?? -1}:${availability}:${combatKey}:${keeperNearby}:${quizTableNearby}:${blacksmithNearby}:${expeditionBoardNearby}:${chestNearby}:${nearbyLoot}:${ashenReliquaryNearby}:${nearbyForestPortal}:${nearbyRecoveryBag}:${nearbyTradePlayerId}:${roleOpportunity?.id ?? "none"}:${roadsideEncounter?.id ?? "none"}`;
   if (nextKey === targetStateKey) return;
   targetStateKey = nextKey;
   const tint = availability === "ready" ? hit?.block === Block.SilverOre ? new pc.Color(0.55, 0.88, 1) : new pc.Color(1, 0.73, 0.25) : new pc.Color(1, 0.25, 0.2);
@@ -10353,7 +10394,7 @@ function updateTarget(): void {
   targetMaterial.emissive = tint.clone().mulScalar(0.3);
   targetMaterial.opacity = 0.2;
   targetMaterial.update();
-  mineButton.textContent = nearbyLoot ? "Loot" : ashenReliquaryClaimNearby ? "Choose" : ashenReliquaryPreviewNearby ? "Preview" : nearbyForestPortal ? "Portal" : roleOpportunity ? roleOpportunity.action : roadsideEncounter ? "Explore" : expeditionBoardNearby ? "Board" : blacksmithNearby ? "Trade" : quizTableNearby ? "Play" : keeperNearby ? "Talk" : interactionMode === "build" ? chopping ? "Chop" : "Mine" : "Attack";
+  mineButton.textContent = interactionMode === "build" ? chopping ? "Chop" : "Mine" : "Attack";
   if (nearbyLoot) {
     const drop = lootVisuals.get(nearbyLoot)?.state;
     const itemName = drop && isItemId(drop.itemId) ? ITEM_DEFINITIONS[drop.itemId].name : "Loot";
@@ -12373,7 +12414,13 @@ function commitSpecialAim(): void {
   logMovementEvent(`SPECIAL ${BRAMBLE_SNARE.id} ${target.x.toFixed(1)},${target.z.toFixed(1)}`);
 }
 
-function requestPrimaryAction(lootSource?: LootHold["source"]): void {
+function requestModePrimaryAction(): void {
+  if (localDefending) requestDefense(false);
+  if (primaryActionForMode(interactionMode) === "mine") requestMine();
+  else requestAttack();
+}
+
+function requestPrimaryAction(): void {
   if (playerInteractionUI.isOpen()) return;
   if (!roadsideChoice.hidden) return;
   if (!ashenReliquaryChoice.hidden) return;
@@ -12383,8 +12430,6 @@ function requestPrimaryAction(lootSource?: LootHold["source"]): void {
   if (!defeatScreen.hidden) return;
   if (nearbyRecoveryBag) { recoverNearbyBag(); return; }
   if (sceneDressing.blacksmithVisible && isAtTownStorage(localPlayer.getPosition())) { openPersonalStorage(); return; }
-  const nearbyLoot = lootSource ? nearestLootDrop() : null;
-  if (lootSource && nearbyLoot) { beginLootHold(lootSource); return; }
   if (canClaimAshenReliquary()) { openAshenReliquaryChoice(false); return; }
   if (canPreviewAshenReliquary()) { openAshenReliquaryChoice(true); return; }
   if (nearbyForestPortal) { useNearbyForestPortal(); return; }
@@ -12407,9 +12452,13 @@ function requestPrimaryAction(lootSource?: LootHold["source"]): void {
     advanceTavernDialogue();
     return;
   }
-  if (localDefending) requestDefense(false);
-  if (primaryActionForMode(interactionMode) === "mine") requestMine();
-  else requestAttack();
+  requestModePrimaryAction();
+}
+
+function requestContextAction(source: LootHold["source"]): void {
+  if (nearbyTradePlayerId) { openNearbyPlayerInteraction(); return; }
+  if (nearestLootDrop()) { beginLootHold(source); return; }
+  requestPrimaryAction();
 }
 
 function setInteractionMode(mode: InteractionMode): void {
@@ -12739,10 +12788,7 @@ window.addEventListener("keydown", event => {
   if (event.code === "KeyH") { event.preventDefault(); requestPotion(); }
   if (event.code === "KeyE") {
     event.preventDefault();
-    if (nearbyTradePlayerId) openNearbyPlayerInteraction();
-    else if (nearbyRecoveryBag || sceneDressing.blacksmithVisible && isAtTownStorage(localPlayer.getPosition())) requestPrimaryAction();
-    else if (nearestLootDrop()) beginLootHold("keyboard");
-    else requestPrimaryAction();
+    requestContextAction("keyboard");
   }
   if (event.code === "KeyC") requestDefense(true);
   if (event.code === "KeyJ") {
@@ -12832,7 +12878,11 @@ canvas.addEventListener("pointercancel", event => {
 canvas.addEventListener("contextmenu", event => event.preventDefault());
 mineButton.addEventListener("pointerdown", event => {
   event.preventDefault();
-  requestPrimaryAction(lootHoldSourceForPointer(event.pointerType) ?? undefined);
+  requestModePrimaryAction();
+});
+contextButton.addEventListener("pointerdown", event => {
+  event.preventDefault();
+  requestContextAction(lootHoldSourceForPointer(event.pointerType) ?? "touch");
 });
 dodgeButton.addEventListener("pointerdown", event => {
   event.preventDefault();
@@ -12882,6 +12932,10 @@ callingSlot.addEventListener("click", event => {
     else status.textContent = "Return to the surface to choose your Calling and unlock your Power.";
     return;
   }
+  requestCallingAbility();
+});
+callingButton.addEventListener("pointerdown", event => {
+  event.preventDefault();
   requestCallingAbility();
 });
 powerButton.addEventListener("pointerdown", event => {
@@ -14278,6 +14332,9 @@ app.on("update", (dt: number) => {
   const specialRemaining = Math.max(0, localCallingSpecialCooldownUntil - Date.now());
   const specialDefinition = CALLING_ABILITY_OPTIONS.find(option => option.pathId === localBuildPathId && option.category === "Utility");
   const callingRemaining = Math.max(0, localCallingCooldownUntil - Date.now());
+  const callingDefinition = CALLING_ABILITY_OPTIONS.find(option => option.id === localCallingAbilityId);
+  updateTouchAbilityVisibility();
+  callingButton.textContent = callingRemaining > 0 ? `${Math.ceil(callingRemaining / 1000)}s` : callingDefinition?.name ?? "Power";
   combatHud.setCooldowns(
     cooldownState(powerRemaining, POWER_DEFINITIONS[localEquippedPower].cooldownMs, "READY · R",
       !powerServerReady ? "SERVER UPDATE" : !powerCompatible ? "INCOMPATIBLE" : powerAimActive ? "RELEASE TO CAST" : undefined),
@@ -14295,8 +14352,7 @@ app.on("update", (dt: number) => {
         ? `${Math.max(.1, (localCallingState.activeUntil - Date.now()) / 1_000).toFixed(1)}s`
         : "READY",
   } : null);
-  specialButton.textContent = localCharacterProgression.level < 4 ? "LV 4" : !localBuildPathId ? "Choose Calling"
-    : specialRemaining > 0 ? `${Math.ceil(specialRemaining / 1000)}s` : specialDefinition?.name ?? "Special";
+  specialButton.textContent = specialRemaining > 0 ? `${Math.ceil(specialRemaining / 1000)}s` : specialDefinition?.name ?? "Special";
   cameraTarget.set(
     player.x + localPowerVisualOffset.x + localNetworkVisualOffset.x + localRecoveryVisualOffset.x + localDodgeVisualOffset.x,
     player.y + localVisualVerticalOffset,
