@@ -1417,6 +1417,8 @@ const tabletControlsQuery = window.matchMedia("(pointer: coarse), (max-width: 82
 if (tabletControlsQuery.matches) {
   movementDebug.open = false;
 }
+let tabletHudCombatActive = false;
+let tabletHudCombatCheckedAt = -Infinity;
 
 const GRAPHICS_QUALITY_STORAGE_KEY = "blockcraft-graphics-quality-v1";
 const graphicsQualityMode: GraphicsQualityMode = (() => {
@@ -11473,6 +11475,15 @@ function localCombatActive(): boolean {
   return activeCombatNearby(room.sessionId, localPlayer.getPosition(), [...mobVisuals.values()].map(visual => visual.state));
 }
 
+function updateTabletHudCombatState(now: number): void {
+  if (now - tabletHudCombatCheckedAt < 120) return;
+  tabletHudCombatCheckedAt = now;
+  const active = tabletControlsQuery.matches && localCombatActive();
+  if (active === tabletHudCombatActive) return;
+  tabletHudCombatActive = active;
+  document.documentElement.classList.toggle("tablet-combat-active", active);
+}
+
 interface StopTraceFrame {
   at: number;
   dtMs: number;
@@ -13620,6 +13631,7 @@ app.on("update", (dt: number) => {
   localDodgeVisualOffset = advanceDodgeVisualOffset(localDodgeVisualOffset, frameTime);
   localPlayerVisual.setLocalPosition(localPowerVisualOffset.x + localNetworkVisualOffset.x + localRecoveryVisualOffset.x + localDodgeVisualOffset.x, localVisualVerticalOffset, localPowerVisualOffset.z + localNetworkVisualOffset.z + localRecoveryVisualOffset.z + localDodgeVisualOffset.z);
   const animationNow = performance.now();
+  updateTabletHudCombatState(animationNow);
   const sceneDressingStartedAt = performance.now();
   sceneDressing.update(animationNow);
   lastSceneDressingMs = performance.now() - sceneDressingStartedAt;

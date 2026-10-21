@@ -2481,6 +2481,166 @@ html.boss-hud-active #world-objective { display: none !important; }
 #progression-notice-later:hover, #progression-notice-later:focus-visible { color: #fff3c9; text-decoration: underline; }
 @media (max-width: 700px) { #progression-notice { bottom: calc(190px + env(safe-area-inset-bottom)); } }
 @keyframes level-reveal { from { opacity: 0; transform: translateX(-50%) scale(.74); filter: brightness(1.7); } to { opacity: 1; transform: translateX(-50%) scale(1); filter: brightness(1); } }
+
+/* Tablet HUD: gameplay stays in the thumb zones while menus own the screen. */
+#tablet-orientation-prompt { display: none; }
+
+@media (pointer: coarse), (max-width: 820px) {
+  #inventory-panel,
+  .calling-intro-card,
+  .calling-awakening-card,
+  .level-up-card,
+  .ability-reveal-card,
+  .defeat-card {
+    box-sizing: border-box;
+    max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 16px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+
+  #inventory-panel {
+    inset: calc(env(safe-area-inset-top) + 8px) calc(env(safe-area-inset-right) + 8px) calc(env(safe-area-inset-bottom) + 8px) calc(env(safe-area-inset-left) + 8px);
+    width: auto;
+    max-height: none;
+    transform: none;
+    border-radius: 14px;
+    scroll-padding: 78px 0 96px;
+  }
+  .inventory-header {
+    position: sticky;
+    z-index: 30;
+    top: -16px;
+    margin: -16px -16px 10px;
+    padding: 16px 16px 12px;
+    background: linear-gradient(180deg, #102319 82%, #102319ed);
+    box-shadow: 0 8px 18px #06100bbd;
+  }
+  .inventory-header-actions { flex-wrap: wrap; justify-content: flex-end; }
+  .inventory-header-actions button,
+  .inventory-tabs button,
+  .inventory-selection-actions button,
+  #inventory-preview-reset,
+  #inventory-turn-left,
+  #inventory-turn-right,
+  #level-up-panel button,
+  #calling-intro button,
+  #calling-awakening button,
+  #ability-reveal button,
+  .defeat-card button,
+  #minimap[data-expanded="true"] button,
+  #minimap[data-expanded="true"] select {
+    min-height: 48px;
+    touch-action: manipulation;
+  }
+  #inventory-close,
+  #calling-intro-close { min-width: 48px; min-height: 48px; }
+
+  html.tablet-combat-active #world-objective,
+  html.tablet-combat-active #party-panel,
+  html.tablet-combat-active #resource-toasts,
+  html.tablet-combat-active #progression-notice,
+  html.tablet-combat-active #calling-first-use { display: none !important; }
+
+  html.tablet-combat-active #event-log {
+    width: min(270px, calc(100vw - 420px));
+    height: 43px;
+    min-width: 190px;
+    padding: 7px 9px;
+    overflow: hidden;
+    opacity: .72;
+    background: #081510c7;
+    transition: height .16s ease, opacity .16s ease;
+  }
+  html.tablet-combat-active #event-log ol,
+  html.tablet-combat-active #event-log nav { display: none; }
+
+  html.tablet-combat-active #minimap:not([data-expanded="true"]) {
+    width: auto;
+    min-width: 154px;
+    padding: 7px 9px;
+    opacity: .78;
+    background: #071612d9;
+  }
+  html.tablet-combat-active #minimap:not([data-expanded="true"]) > :not(summary) { display: none !important; }
+  html.tablet-combat-active #minimap:not([data-expanded="true"]) summary { margin: 0; border: 0; }
+
+  body:has(#inventory-panel:not([hidden]), #calling-intro:not([hidden]), #calling-awakening:not([hidden]), #level-up-panel:not([hidden]), #ability-reveal:not([hidden]), #ashen-equipment-reveal:not([hidden]), #defeat-screen:not([hidden]))
+    :is(#touch-controls, #event-log, #party-panel, #resource-toasts, #minimap, #world-objective, #location-readout, #waypoint-guide, #progression-notice, #calling-first-use, #combat-action-bar, #player-hud-root) {
+    visibility: hidden;
+    pointer-events: none;
+  }
+}
+
+@media (pointer: coarse) and (orientation: landscape) {
+  #event-log {
+    width: min(310px, 31vw);
+    height: min(132px, calc(100dvh - 350px));
+  }
+  #event-log nav { flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; }
+  #event-log button { min-height: 42px; padding-inline: 10px; }
+  #party-panel { max-width: 250px; }
+
+  .calling-intro-card { width: min(980px, calc(100vw - 24px)); padding: 16px; }
+  #calling-intro #build-path-candidates { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  #calling-intro #build-path-candidates button { min-height: 215px; padding: 10px; }
+  #calling-intro #build-path-candidates .calling-preview { height: 72px; }
+  .calling-intro-card > footer { margin-top: 9px; }
+
+  #inventory-panel:not([data-storage="true"]) .inventory-workspace {
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 33%);
+    align-items: start;
+  }
+  #inventory-panel:not([data-storage="true"]) #inventory-decision-panel {
+    position: sticky;
+    top: 78px;
+    order: initial;
+    max-height: calc(100dvh - 112px);
+    overflow-y: auto;
+  }
+}
+
+@media (pointer: coarse) and (orientation: portrait) {
+  #tablet-orientation-prompt {
+    position: fixed;
+    z-index: 1900;
+    top: calc(12px + env(safe-area-inset-top));
+    left: 50%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: min(330px, calc(100vw - 24px));
+    box-sizing: border-box;
+    padding: 10px 13px;
+    transform: translateX(-50%);
+    border: 1px solid #e5c477aa;
+    border-radius: 12px;
+    background: #102019ee;
+    box-shadow: 0 8px 28px #0009;
+    color: #f7dda0;
+    pointer-events: none;
+  }
+  #tablet-orientation-prompt > span { font-size: 28px; line-height: 1; }
+  #tablet-orientation-prompt strong,
+  #tablet-orientation-prompt small { display: block; }
+  #tablet-orientation-prompt strong { font: 900 11px/1.2 system-ui; letter-spacing: .08em; }
+  #tablet-orientation-prompt small { margin-top: 3px; color: #bad0c0; font: 600 10px/1.25 system-ui; }
+  body:has([role="dialog"]:not([hidden]), #minimap[data-expanded="true"]) #tablet-orientation-prompt { display: none; }
+
+  #event-log { display: none; }
+  #party-panel { bottom: calc(256px + env(safe-area-inset-bottom)); }
+  #world-objective { display: none; }
+  #inventory-panel { padding: 14px; }
+  .inventory-header { top: -14px; margin: -14px -14px 10px; padding: 14px; }
+  .inventory-header h2 { font-size: 1.35rem; }
+  .inventory-header-actions button:not(#inventory-close) { font-size: .52rem; padding-inline: 8px; }
+  .inventory-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .inventory-tabs button { grid-template-columns: 1fr; justify-items: center; text-align: center; }
+  .inventory-tabs button > span { grid-row: auto; }
+  .inventory-tabs button > small { display: none; }
+  .level-up-card { padding: 18px; }
+  .level-up-choices { grid-template-columns: 1fr; }
+}
 #player-level[data-points="true"] { border-color: #ffe186; box-shadow: 0 0 17px #e7b955bb; animation: level-ready 1.3s ease-in-out infinite; }
 @keyframes level-ready { 50% { box-shadow: 0 0 27px #ffe186dd; filter: brightness(1.28); } }
 @media (prefers-reduced-motion: reduce) { #level-up-celebration, #player-level[data-points="true"], .ability-reveal-card, #calling-first-use kbd, #calling-slot[data-first-use="true"] { animation: none; } }
@@ -3782,4 +3942,19 @@ body:has(#loot-pack-decision:not([hidden])) #waypoint-guide { display: none; }
   #exit-guide { top: calc(245px + env(safe-area-inset-top)); left: var(--hud-lane-edge); width: 150px; }
   #progression-notice,
   #calling-first-use { bottom: calc(218px + env(safe-area-inset-bottom)); }
+}
+
+/* Keep device-orientation layout rules last so the shared desktop HUD cannot override them. */
+@media (pointer: coarse) and (orientation: landscape) {
+  #event-log {
+    width: min(310px, 31vw);
+    height: clamp(74px, calc(100dvh - 350px), 132px);
+  }
+  #event-log nav { flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; }
+  #event-log button { min-height: 42px; padding-inline: 10px; }
+}
+
+@media (pointer: coarse) and (orientation: portrait) {
+  #event-log,
+  #world-objective { display: none; }
 }
