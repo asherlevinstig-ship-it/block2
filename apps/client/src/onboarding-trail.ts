@@ -1,4 +1,4 @@
-import { ONBOARDING_DONE } from "./new-player-onboarding.js";
+import { ONBOARDING_DONE, ONBOARDING_STAGE } from "./new-player-onboarding.js";
 
 export interface TrailPoint { x: number; y: number; z: number; starter?: boolean }
 export interface TrailMob extends TrailPoint { id?: string; alive: boolean; level: number; isMiniBoss: boolean; isElite: boolean }
@@ -13,11 +13,12 @@ export function onboardingTrailRoute(
   mobs: readonly TrailMob[],
   drops: readonly TrailPoint[],
 ): TrailPoint[] {
-  if (step === null || step >= ONBOARDING_DONE || step === 2 || step === 4 || player.y < 7) return [];
-  if (step <= 1) {
+  if (step === null || step >= ONBOARDING_DONE || step === ONBOARDING_STAGE.equipSword
+    || step === ONBOARDING_STAGE.chooseMode || player.y < 7) return [];
+  if (step === ONBOARDING_STAGE.collectGear) {
     return [drops.find(drop => drop.starter) ?? STARTER_BAG];
   }
-  if (step === 3) {
+  if (step === ONBOARDING_STAGE.headSouth) {
     const route: TrailPoint[] = [];
     // The tavern blocks the direct town-centre-to-south-gate line. Guide around its east wall.
     if (player.z < 26) {
@@ -28,7 +29,7 @@ export function onboardingTrailRoute(
     route.push(SOUTH_GATE);
     return route;
   }
-  if (step === 5) {
+  if (step === ONBOARDING_STAGE.firstCombat) {
     const eligible = mobs.filter(candidate => candidate.alive && !candidate.isMiniBoss && !candidate.isElite
       && candidate.level <= 3 && Math.abs(candidate.y - player.y) < 2
       && candidate.z >= 33 && candidate.z <= 53 && candidate.x >= -12 && candidate.x <= 29

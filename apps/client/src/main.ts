@@ -373,10 +373,10 @@ import {
 import { isPowerCompatibleWithMainHand } from "./power-loadout.js";
 import { characterCreationNeeded, createGuestProfileToken, finishCharacterCreation, getOrCreateProfileToken,
   profileBackups, restoreProfile, startNewAdventure } from "./player-profile.js";
-import { advanceOnboarding, ONBOARDING_DONE, ONBOARDING_STEPS, onboardingStorageKey, legacyOnboardingStorageKey,
-  callingFirstOnboardingStorageKey, migrateLegacyOnboardingStep,
+import { advanceOnboarding, ONBOARDING_DONE, ONBOARDING_STAGE, ONBOARDING_STEPS, onboardingStorageKey, legacyOnboardingStorageKey,
+  callingFirstOnboardingStorageKey, migrateLegacyOnboardingStep, migrateOldestOnboardingStep, oldestOnboardingStorageKey,
   parseOnboardingStep, shouldPromptTownDeparture, starterEquipmentRequired, starterEquipmentStorageKey,
-  starterInventoryLesson, shouldDeferOnboardingForCalling, type OnboardingEvent } from "./new-player-onboarding.js";
+  starterInventoryLesson, shouldDeferOnboardingForCalling, shouldStartCallingFirstJourney, type OnboardingEvent } from "./new-player-onboarding.js";
 import { firstVictoryTownRoute, onboardingTrailRoute, sampleTrail } from "./onboarding-trail.js";
 import { firstVictoryCallingFit, firstVictoryItemFromDrop, firstVictoryRewardStorageKey,
   parseFirstVictoryReward, type FirstVictoryRewardState } from "./first-victory-reward.js";
@@ -707,7 +707,10 @@ let firstStepsIndex = (() => {
     if (current !== null) return current;
     const previous = migrateLegacyOnboardingStep(window.localStorage.getItem(legacyOnboardingStorageKey(profileToken)));
     if (previous !== null) window.localStorage.setItem(firstStepsKey, String(previous));
-    return previous;
+    if (previous !== null) return previous;
+    const oldest = migrateOldestOnboardingStep(window.localStorage.getItem(oldestOnboardingStorageKey(profileToken)));
+    if (oldest !== null) window.localStorage.setItem(firstStepsKey, String(oldest));
+    return oldest;
   } catch { return null; }
 })();
 const callingFirstOnboardingKey = callingFirstOnboardingStorageKey(profileToken);
@@ -760,9 +763,10 @@ function renderFirstSteps(): void {
   const rewardActive = firstVictoryRewardLessonReady()
     && Boolean(firstVictoryReward && firstVictoryReward.stage !== "complete");
   const active = onboardingActive || rewardActive;
-  const modeLesson = index === 4;
+  const modeLesson = index === ONBOARDING_STAGE.chooseMode;
   firstSteps.hidden = !active;
-  firstSteps.dataset.guidance = firstVictoryReward?.stage === "return_town" ? "return-town" : index === 3 ? "south-gate" : "";
+  firstSteps.dataset.guidance = firstVictoryReward?.stage === "return_town" ? "return-town"
+    : index === ONBOARDING_STAGE.headSouth ? "south-gate" : "";
   const starterLesson = starterInventoryLesson(index, starterInventoryOpenedWithKeyboard, forcedStarterEquipment, localMainHandId);
   const rewardInventoryLesson = rewardActive && (firstVictoryReward?.stage === "open_pack" || firstVictoryReward?.stage === "choose")
     ? firstVictoryReward.stage : null;
@@ -773,9 +777,9 @@ function renderFirstSteps(): void {
   modeSwitchTutorialCopy.innerHTML = "<b>BUILD</b> gathers resources. <b>COMBAT</b> attacks enemies. Press <kbd>Q</kbd> at any time to switch.";
   document.documentElement.classList.toggle("onboarding-active", active);
   document.documentElement.classList.toggle("onboarding-mode-lesson", modeLesson);
-  document.documentElement.classList.toggle("first-combat-attack", index === 5 && firstCombatPhase === "attack");
-  document.documentElement.classList.toggle("first-combat-dodge", index === 5 && firstCombatPhase === "dodge");
-  document.documentElement.classList.toggle("first-combat-finish", index === 5 && firstCombatPhase === "finish");
+  document.documentElement.classList.toggle("first-combat-attack", index === ONBOARDING_STAGE.firstCombat && firstCombatPhase === "attack");
+  document.documentElement.classList.toggle("first-combat-dodge", index === ONBOARDING_STAGE.firstCombat && firstCombatPhase === "dodge");
+  document.documentElement.classList.toggle("first-combat-finish", index === ONBOARDING_STAGE.firstCombat && firstCombatPhase === "finish");
   starterInventoryTutorial.hidden = starterLesson === "hidden" && rewardInventoryLesson === null;
   starterInventoryTutorial.dataset.phase = rewardInventoryLesson === "choose" || starterLesson === "equip_sword" ? "equip_sword" : "open_pack";
   starterInventoryEyebrow.textContent = rewardInventoryLesson ? "FIRST VICTORY REWARD" : "STARTER EQUIPMENT";
@@ -811,7 +815,7 @@ function renderFirstSteps(): void {
   if (index === null || index >= ONBOARDING_DONE) return;
   const step = ONBOARDING_STEPS[index]!;
   firstStepsCount.textContent = `${index + 1} / ${ONBOARDING_DONE}`;
-  const combatLesson = index === 5 ? firstCombatLesson(tutorialCallingId, firstCombatPhase) : null;
+  const combatLesson = index === ONBOARDING_STAGE.firstCombat ? firstCombatLesson(tutorialCallingId, firstCombatPhase) : null;
   firstStepsTitle.textContent = combatLesson?.title ?? step.title;
   firstStepsDetail.textContent = combatLesson?.detail ?? step.detail;
 }
@@ -825,19 +829,19 @@ function beginFirstStepsAfterCalling(): void {
   callingFirstOnboardingPending = false;
   try { window.localStorage.removeItem(callingFirstOnboardingKey); } catch { /* Storage may be unavailable. */ }
   setFirstSteps(0);
-  status.textContent = "Calling chosen · move around, then follow the gold trail to your starter gear.";
+  status.textContent = "Calling chosen · follow the gold trail to your personal starter bag.";
   syncProtectedDialog();
 }
 function noteFirstStep(event: OnboardingEvent): void {
   if (firstStepsIndex === null || firstStepsIndex >= ONBOARDING_DONE) return;
   const next = advanceOnboarding(firstStepsIndex, event);
   if (next === firstStepsIndex) return;
-  if (next === 5) {
+  if (next === ONBOARDING_STAGE.firstCombat) {
     firstCombatPhase = "attack";
     defeatedFirstCombatMobs.clear();
   }
   setFirstSteps(next);
-  if (next === 3) {
+  if (next === ONBOARDING_STAGE.headSouth) {
     firstStepsTrailUpdatedAt = -Infinity;
     firstSteps.classList.remove("route-started");
     void firstSteps.offsetWidth;
@@ -4434,9 +4438,9 @@ function updateMainHandLoadout(mainHandId: MainHandId): void {
   targetStateKey = "";
   refreshPowerCompatibility();
   refreshBackpackCapacity();
-  if (mainHandId === "forged_sword" && (firstStepsIndex === 2 || forcedStarterEquipment)) {
+  if (mainHandId === "forged_sword" && (firstStepsIndex === ONBOARDING_STAGE.equipSword || forcedStarterEquipment)) {
     completeStarterEquipment();
-    if (firstStepsIndex === 2) noteFirstStep("equipped_starter");
+    if (firstStepsIndex === ONBOARDING_STAGE.equipSword) noteFirstStep("equipped_starter");
     showCombatFeedback("FORGED SWORD EQUIPPED", "dodge");
     status.textContent = "Forged Sword equipped · your first loadout is ready.";
     if (!inventoryPanel.hidden) setInventoryOpen(false);
@@ -4910,6 +4914,11 @@ callingAwakeningContinue.addEventListener("click", closeCallingAwakening);
 
 function renderBuildPath(update: BuildPathUpdate): void {
   lastBuildPathUpdate = update;
+  if (!callingFirstOnboardingPending
+    && shouldStartCallingFirstJourney(firstStepsIndex, localCharacterProgression.level)) {
+    callingFirstOnboardingPending = true;
+    try { window.localStorage.setItem(callingFirstOnboardingKey, "pending"); } catch { /* Storage may be unavailable. */ }
+  }
   renderAssassinJourney(update);
   const previousPathId = localBuildPathId;
   localBuildPathId = update.selectedPathId;
@@ -8792,7 +8801,7 @@ tavernDialogueClose.addEventListener("click", closeTavernDialogue);
 function setInventoryOpen(open: boolean): void {
   if (!open && localMainHandId === "forged_sword") {
     if (forcedStarterEquipment) completeStarterEquipment();
-    if (firstStepsIndex === 2) noteFirstStep("equipped_starter");
+    if (firstStepsIndex === ONBOARDING_STAGE.equipSword) noteFirstStep("equipped_starter");
   }
   const starterLesson = starterInventoryLesson(
     firstStepsIndex,
@@ -13455,9 +13464,8 @@ app.on("update", (dt: number) => {
   localStealthGhost.enabled = localStealthed;
 
   const player = localPlayer.getPosition();
-  if (worldReady && firstStepsIndex === 0 && Math.hypot(player.x - TOWN_CENTER_X, player.z - TOWN_CENTER_Z) >= 1.25)
-    noteFirstStep("moved");
-  else if (worldReady && firstStepsIndex === 3 && Math.hypot(player.x - TOWN_CENTER_X, player.z - TOWN_CENTER_Z) > TOWN_SAFE_RADIUS + 1) {
+  if (worldReady && firstStepsIndex === ONBOARDING_STAGE.headSouth
+    && Math.hypot(player.x - TOWN_CENTER_X, player.z - TOWN_CENTER_Z) > TOWN_SAFE_RADIUS + 1) {
     noteFirstStep("left_town");
     if (interactionMode === "combat") setInteractionMode("build");
   }
@@ -15206,7 +15214,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     localDodgeExhaustedUntil = 0;
     showCombatFeedback("PERFECT DODGE · COUNTER +1", "dodge");
     status.textContent = `Perfect dodge · +${message.staminaRestored} stamina · your next hit gains +1 damage.`;
-    if (firstStepsIndex === 5 && message.mobId) {
+    if (firstStepsIndex === ONBOARDING_STAGE.firstCombat && message.mobId) {
       const nextPhase = advanceFirstCombatPhase(firstCombatPhase, "perfect_dodge", message.mobId);
       if (nextPhase !== firstCombatPhase) {
         firstCombatPhase = nextPhase;
@@ -15218,7 +15226,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     logMovementEvent(`PERFECT_DODGE counterUntil=${message.counterUntil}`);
   });
   room.onMessage("combat:hit", (message: CombatHit) => {
-    const localTutorialHit = firstStepsIndex === 5 && message.attackerId === room?.sessionId;
+    const localTutorialHit = firstStepsIndex === ONBOARDING_STAGE.firstCombat && message.attackerId === room?.sessionId;
     if (localTutorialHit && !message.defeated) {
       const nextPhase = advanceFirstCombatPhase(firstCombatPhase, "hit", message.mobId);
       if (nextPhase !== firstCombatPhase) {
@@ -15227,9 +15235,9 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
         status.textContent = "Good strike · watch the crawler's marked charge, then dodge with Space.";
       }
     }
-    if (firstStepsIndex === 5 && message.defeated && FIRST_COMBAT_GROUP_IDS.some(id => id === message.mobId))
+    if (firstStepsIndex === ONBOARDING_STAGE.firstCombat && message.defeated && FIRST_COMBAT_GROUP_IDS.some(id => id === message.mobId))
       defeatedFirstCombatMobs.add(message.mobId);
-    if (firstStepsIndex === 5 && completesFirstCombatLesson(defeatedFirstCombatMobs, firstCombatPhase)) {
+    if (firstStepsIndex === ONBOARDING_STAGE.firstCombat && completesFirstCombatLesson(defeatedFirstCombatMobs, firstCombatPhase)) {
       noteFirstStep("defeated_first_enemy");
       social.event("Southroad pack cleared · collect your Calling-matched upgrade, then return to Town to awaken your Power.");
     }
