@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { abilityPracticeChallenge, isStarterPracticeAbility, practiceFollowUpProgress, practicePhaseAfterCast } from "./ability-practice.js";
+import { abilityPracticeChallenge, isStarterPracticeAbility, practiceFollowUpProgress, practicePhaseAfterCast,
+  shouldDismissOptionalPractice } from "./ability-practice.js";
 
 describe("class-specific first ability practice", () => {
   it("gives every Calling a mechanic-specific instruction", () => {
@@ -27,5 +28,11 @@ describe("class-specific first ability practice", () => {
   it("only treats each Calling's starter Power as an onboarding trial", () => {
     expect(isStarterPracticeAbility("healer_field_mend")).toBe(true);
     expect(isStarterPracticeAbility("healer_resurrection")).toBe(false);
+  });
+
+  it("dismisses optional practice when the player leaves town", () => {
+    expect(shouldDismissOptionalPractice(true, true)).toBe(false);
+    expect(shouldDismissOptionalPractice(true, false)).toBe(true);
+    expect(shouldDismissOptionalPractice(false, false)).toBe(false);
   });
 });

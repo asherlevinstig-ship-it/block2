@@ -13,7 +13,7 @@ import { heldFireStep } from "./held-fire.js";
 import { callingLevelGuide, statChoiceDisabled } from "./progression-guidance.js";
 import { progressionNotice as chooseProgressionNotice, type ProgressionNotice } from "./progression-notice.js";
 import { abilityRevealUse, callingUnlockAnnouncement, canPresentAbilityReveal, earnedCallingAbilities, firstCallingUseInstruction, shouldGuideFirstCallingUse } from "./ability-reveal.js";
-import { abilityPracticeChallenge, practiceFollowUpProgress, practicePhaseAfterCast,
+import { abilityPracticeChallenge, practiceFollowUpProgress, practicePhaseAfterCast, shouldDismissOptionalPractice,
   type AbilityPracticePhase } from "./ability-practice.js";
 import { queueWorldNotice, type WorldNotice } from "./notification-lane.js";
 import { attackAimYaw, rangedAimYaw } from "./ranged-aim.js";
@@ -4648,9 +4648,9 @@ function updateAbilityReveal(): void {
   abilityRevealPreview.innerHTML = callingPreviewMarkup(definition.pathId, `${definition.name} preview`);
   abilityRevealTitle.textContent = definition.name;
   abilityRevealDescription.textContent = definition.description;
-  abilityRevealUseHint.textContent = abilityRevealUse(id, localBuildPathRank, localCharacterProgression.level);
+  abilityRevealUseHint.textContent = `${abilityRevealUse(id, localBuildPathRank, localCharacterProgression.level)} Town practice is optional.`;
   abilityRevealContinue.textContent = shouldGuideFirstCallingUse(id, localCallingAbilityId, callingPowerUsed(id))
-    ? "PRACTICE ON THE EFFIGY" : "CONTINUE";
+    ? "CONTINUE · PRACTICE OPTIONAL" : "CONTINUE";
   abilityRevealPanel.hidden = false;
   combatAudio.play("levelUp");
   resetMovementControls();
@@ -4704,6 +4704,22 @@ function startGuidedAbilityPractice(abilityId: CallingAbilityId): void {
   try { window.localStorage.setItem(abilityPracticeStorageKey(abilityId), "1"); }
   catch { /* The current session still keeps the practice active. */ }
   updateGuidedAbilityPractice(performance.now());
+}
+
+function dismissGuidedAbilityPractice(): void {
+  const abilityId = guidedAbilityPracticeId;
+  guidedAbilityPracticeId = null;
+  guidedAbilityPracticePhase = "cast";
+  guidedAbilityPracticeHits = 0;
+  window.clearTimeout(guidedTankImpactTimer);
+  if (abilityId) {
+    try { window.localStorage.removeItem(abilityPracticeStorageKey(abilityId)); }
+    catch { /* Leaving Town still dismisses practice for the current session. */ }
+  }
+  callingEffigy.enabled = false;
+  callingPracticeProjections.forEach(projection => { projection.enabled = false; });
+  callingFirstUse.hidden = true;
+  callingSlot.dataset.firstUse = "false";
 }
 
 function completeGuidedAbilityPractice(abilityId: CallingAbilityId): void {
@@ -4776,8 +4792,13 @@ function resumeGuidedAbilityPractice(): void {
 
 function updateGuidedAbilityPractice(now: number): void {
   resumeGuidedAbilityPractice();
+  if (shouldDismissOptionalPractice(Boolean(guidedAbilityPracticeId), isAtTownOfBeginnings())) {
+    dismissGuidedAbilityPractice();
+    refreshProgressionNotice();
+    return;
+  }
   const abilityId = guidedAbilityPracticeId;
-  const active = Boolean(abilityId && worldReady && activeRoomName === WORLD_ROOM && defeatScreen.hidden);
+  const active = Boolean(abilityId && worldReady && isAtTownOfBeginnings() && defeatScreen.hidden);
   callingEffigy.enabled = active;
   callingFirstUse.hidden = !active;
   callingSlot.dataset.firstUse = String(active);
@@ -4793,12 +4814,12 @@ function updateGuidedAbilityPractice(now: number): void {
     const base = index === 0 ? [-1.7, 0] : index === 1 ? [1.7, 0] : [0, 1.65];
     projection.setLocalPosition(base[0]!, .28 + Math.sin(now * .004 + index) * .08, base[1]!);
   }
-  callingFirstUseTitle.textContent = `${definition.name} · ${challenge.title}`;
+  callingFirstUseTitle.textContent = `${definition.name} · optional practice`;
   callingFirstUseDetail.textContent = distance > 4 ? firstCallingUseInstruction(distance)
     : guidedAbilityPracticePhase === "cast" ? challenge.castInstruction : challenge.followUpInstruction;
   callingFirstUseKey.textContent = guidedAbilityPracticePhase === "follow_up"
     && (definition.pathId === "assassin" || definition.pathId === "ranger") ? "J" : "G";
-  callingFirstUseAction.textContent = distance > 4 ? "APPROACH THE EFFIGY"
+  callingFirstUseAction.textContent = distance > 4 ? "OPTIONAL · APPROACH THE EFFIGY"
     : guidedAbilityPracticePhase === "cast" ? `USE ${definition.name.toUpperCase()}`
       : definition.pathId === "tank" ? "TEST STRIKE INCOMING"
         : definition.pathId === "assassin" ? "J · EMPOWERED STRIKE"

@@ -42,3 +42,7 @@ export function isStarterPracticeAbility(abilityId: CallingAbilityId): boolean {
   return abilityId === "tank_bulwark" || abilityId === "mage_arcane_surge" || abilityId === "assassin_vanish"
     || abilityId === "thief_smoke_bomb" || abilityId === "ranger_volley_focus" || abilityId === "healer_field_mend";
 }
+
+export function shouldDismissOptionalPractice(practiceActive: boolean, inTown: boolean): boolean {
+  return practiceActive && !inTown;
+}
