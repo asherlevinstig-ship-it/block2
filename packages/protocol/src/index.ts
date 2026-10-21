@@ -435,6 +435,29 @@ export const EQUIPMENT_AFFIXES = {
 export type EquipmentAffixId = keyof typeof EQUIPMENT_AFFIXES;
 export type EquipmentAffixRoll = { affixId: EquipmentAffixId; tier: 1 | 2 | 3 };
 export type EquipmentAffixOffers = Partial<Record<ItemId, EquipmentAffixId[]>>;
+export function equipmentAffixEffect(affixId: EquipmentAffixId, tier: number): string {
+  const value = Math.max(1, Math.min(4, Math.floor(tier)));
+  switch (affixId) {
+    case "fortified": return `Reduces incoming damage by ${value >= 3 ? 2 : 1}.`;
+    case "retaliating": return `Guard counters stagger attackers ${value * 120}ms longer.`;
+    case "protector": return `Ally guard radius +${(value * .3).toFixed(1)}m${value >= 2 ? " and prevents +1 damage" : ""}.`;
+    case "echoing": return `Arcane Echo repeats at +${value * 8}% strength.`;
+    case "volatile": return `Calling Power deals +${value} damage.`;
+    case "elemental": return `Power slows last +${value * .25}s and are ${value * 5}% stronger.`;
+    case "lethal": return `Deal +${value} damage to marked or weakened enemies.`;
+    case "veiled": return `Shadowstep concealment lasts +${(value * .25).toFixed(2)}s.`;
+    case "executioner": return `Empowered strikes deal +${value} damage.`;
+    case "elusive": return `Perfect dodges restore +${value * 2} stamina.`;
+    case "prosperous": return `Leader and elite victories grant +${value} gold.`;
+    case "deceptive": return `Smoke Decoy concealment lasts +${(value * .2).toFixed(1)}s.`;
+    case "piercing": return `Ranged attacks deal +${Math.ceil(value / 2)} damage.`;
+    case "snaring": return `Pinning Shot control lasts +${(value * .2).toFixed(1)}s and is ${value * 4}% stronger.`;
+    case "precise": return `Every third Pinning Shot deals +${value} damage.`;
+    case "mending": return `Field Mend restores +${Math.ceil(value / 2)} health.`;
+    case "consecrated": return `Renewal sanctuary gains +${(value * .35).toFixed(2)}m radius and +${(value * .5).toFixed(1)}s duration.`;
+    case "soulbound": return `Resurrection channels ${(value * .15).toFixed(2)}s faster, revives with +${value * 5}% health and stamina, and grants +${(value * .25).toFixed(2)}s protection.`;
+  }
+}
 export const EQUIPMENT_HUNT_REGIONS = {
   greenwood: { name: "Greenwood", x: 42.5, y: 8, z: 19.5, tier: 1, paths: ["assassin", "ranger", "healer"] },
   mistfen: { name: "Mistfen Marsh", x: -47.5, y: 8, z: -31.5, tier: 2, paths: ["mage", "thief", "healer"] },

@@ -4050,7 +4050,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         .map(entry => isEquipmentItem(entry.itemId) ? entry : { ...entry, quantity: 3 })
       : mob.isElite ? [...lootForArchetype(mob.archetype as MobArchetypeId, mobId, Math.random(), "elite", Math.random())]
       : [...lootForArchetype(mob.archetype as MobArchetypeId, mobId, Math.random(), "normal", isSilverGuard(mobId) ? Math.random() : 1)];
-    const items = normalizeLootBagItems([
+    const selectedCalling = rewardPlayer ? parseBuildPathState(rewardPlayer.huntLoadoutsJson).selectedPathId : null;
+    const callingGear: Record<BuildPathId, ItemId> = {
+      tank: "stone_core_hammer", mage: "forged_focus", assassin: "fang_dagger",
+      thief: "fang_dagger", ranger: "forged_bow", healer: "wanderer_robes",
+    };
+    const leaderReward = isAreaMiniBoss(mobId) || mob.isChampion || Boolean(huntChampion);
+    const combinedDrops: { itemId: ItemId; quantity: number }[] = [
       ...baseDrops,
       ...(mobId === REALM_WARDEN_ID && this.realmWardenRepeatActive
         ? [{ itemId: "moonstone" as ItemId, quantity: 2 }, { itemId: "silver_ore" as ItemId, quantity: 6 }]
@@ -4071,7 +4077,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       ...firstCombatDrops,
       ...regionalRewardDrops,
       ...armourDropForMob(mob.archetype, mob.difficultyTier, Math.random()),
-    ]);
+    ];
+    if (leaderReward && selectedCalling && !combinedDrops.some(entry => isEquipmentItem(entry.itemId)))
+      combinedDrops.push({ itemId: callingGear[selectedCalling], quantity: 1 });
+    const items = normalizeLootBagItems(combinedDrops);
     const representative = lootBagRepresentative(items);
     if (!representative) return;
     const realmReward = mobId === REALM_WARDEN_ID;
@@ -4088,12 +4097,19 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       ? 3 : isAreaMiniBoss(mobId) || mob.isChampion || mob.isElite || huntChampion ? 2 : Math.random() < .2 ? 1 : 0;
     const affixTier = Math.min(3, baseAffixTier + (this.warbandDisrupted.has(mobId) ? 1 : 0));
     const affixRegion = this.equipmentHuntRegionAt(mob.x, mob.z) ?? "";
+    const affixItemId = items.find(entry => isEquipmentItem(entry.itemId))?.itemId ?? "";
+    const callingAffixes = selectedCalling ? (Object.keys(EQUIPMENT_AFFIXES) as EquipmentAffixId[])
+      .filter(id => EQUIPMENT_AFFIXES[id].pathId === selectedCalling) : [];
+    const affixId = affixTier > 0 && affixItemId && callingAffixes.length > 0
+      ? callingAffixes[Math.min(callingAffixes.length - 1, Math.floor(Math.random() * callingAffixes.length))]! : "";
     Object.assign(drop, {
       ownerId,
       itemId: representative.itemId,
       quantity: Math.min(255, representative.quantity),
       affixTier,
       affixRegion,
+      affixId,
+      affixItemId,
       contentsJson: encodeLootBagItems(items),
       x: landing.x,
       y: landing.y + .22,
@@ -4109,7 +4125,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.state.lootDrops.set(dropId, drop);
     this.clients.find(client => client.sessionId === ownerId)?.send("loot:spawned", {
       dropId, ownerId, itemId: drop.itemId, quantity: drop.quantity, contentsJson: drop.contentsJson, affixTier: drop.affixTier,
-      affixRegion: drop.affixRegion,
+      affixRegion: drop.affixRegion, affixId: drop.affixId, affixItemId: drop.affixItemId,
       x: drop.x, y: drop.y, z: drop.z, expiresAt: drop.expiresAt,
     });
     if (areaRelicDrops.length) this.clients.find(client => client.sessionId === ownerId)?.send("chat:notice",
@@ -4258,7 +4274,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       }
       if (collected.length === 0) return reply(false, `PACK FULL · ${playerBackpackSlots(player)}/${backpackCapacity(player.blacksmithUpgrades)} slots used. The loot stays here.`, { remainingItems: remaining });
       for (const reward of collected) this.attuneEquipment(client, player, reward.itemId, drop.affixTier,
-        Object.hasOwn(EQUIPMENT_HUNT_REGIONS, drop.affixRegion) ? drop.affixRegion as EquipmentHuntRegionId : null);
+        Object.hasOwn(EQUIPMENT_HUNT_REGIONS, drop.affixRegion) ? drop.affixRegion as EquipmentHuntRegionId : null,
+        reward.itemId === drop.affixItemId && Object.hasOwn(EQUIPMENT_AFFIXES, drop.affixId)
+          ? drop.affixId as EquipmentAffixId : null);
+      if (collected.some(entry => entry.itemId === drop.affixItemId)) {
+        drop.affixId = ""; drop.affixItemId = ""; drop.affixTier = 0;
+      }
       const firstGearId = parsed.data.dropId.startsWith("greenwood-first:") ? parsed.data.dropId.split(":")[1] : null;
       if (firstGearId && collected.some(entry => entry.itemId === firstGearId)) {
         this.setGreenwoodProgress(player, { ...this.greenwoodProgress(player), firstBossGearClaimed: true });
@@ -4317,9 +4338,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (!collected) { collected = new InventoryItemState(); player.inventory.set(itemId, collected); }
       collected.quantity = inventoryTotal(before, drop.quantity);
       this.attuneEquipment(client, player, itemId, drop.affixTier,
-        Object.hasOwn(EQUIPMENT_HUNT_REGIONS, drop.affixRegion) ? drop.affixRegion as EquipmentHuntRegionId : null);
+        Object.hasOwn(EQUIPMENT_HUNT_REGIONS, drop.affixRegion) ? drop.affixRegion as EquipmentHuntRegionId : null,
+        itemId === drop.affixItemId && Object.hasOwn(EQUIPMENT_AFFIXES, drop.affixId)
+          ? drop.affixId as EquipmentAffixId : null);
       const collectedQuantity = drop.quantity;
       drop.itemId = carriedItemId; drop.quantity = 1; drop.contentsJson = ""; drop.affixTier = 0; drop.affixRegion = "";
+      drop.affixId = ""; drop.affixItemId = "";
       void this.persistPlayer(client.sessionId, player);
       this.broadcast("loot:picked-up", { playerId: client.sessionId, dropId: parsed.data.dropId, itemId,
         quantity: collectedQuantity, total: collected.quantity } satisfies LootPickedUp);
@@ -4369,7 +4393,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (!item) { item = new InventoryItemState(); player.inventory.set(itemId, item); }
     item.quantity = inventoryTotal(before, drop.quantity);
     const affix = this.attuneEquipment(client, player, itemId, drop.affixTier,
-      Object.hasOwn(EQUIPMENT_HUNT_REGIONS, drop.affixRegion) ? drop.affixRegion as EquipmentHuntRegionId : null);
+      Object.hasOwn(EQUIPMENT_HUNT_REGIONS, drop.affixRegion) ? drop.affixRegion as EquipmentHuntRegionId : null,
+      itemId === drop.affixItemId && Object.hasOwn(EQUIPMENT_AFFIXES, drop.affixId)
+        ? drop.affixId as EquipmentAffixId : null);
     // Synchronous removal makes competing and replayed requests collect at most once.
     this.state.lootDrops.delete(parsed.data.dropId);
     if (action === "equip" && mainHandId) this.handleMainHandEquip(client, { requestId: `loot-equip-${Date.now()}`, mainHandId });
@@ -5681,7 +5707,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   }
 
   private attuneEquipment(client: Client, player: PlayerState, itemId: ItemId, tier: number,
-    regionId: EquipmentHuntRegionId | null = null): EquipmentAffixRoll | null {
+    regionId: EquipmentHuntRegionId | null = null, forcedAffixId: EquipmentAffixId | null = null): EquipmentAffixRoll | null {
     if (tier <= 0 || (!equipmentForItem(itemId) && !armourForItem(itemId))) return null;
     const buildPath = parseBuildPathState(player.huntLoadoutsJson).selectedPathId;
     const targetAffixId = this.equipmentAffixTarget(player);
@@ -5691,12 +5717,15 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (tier >= 3) {
       const offers = this.attunementOffers(player);
       offers[itemId] = rollEquipmentAffixOptions(buildPath, 3, 3, Math.random,
-        regionMatchesTarget ? targetAffixId : null).map(choice => choice.affixId);
+        forcedAffixId ?? (regionMatchesTarget ? targetAffixId : null)).map(choice => choice.affixId);
       this.setEquipmentAttunements(player, this.equipmentAffixes(player), this.attunementDust(player), offers);
       this.sendEquipmentAffixes(client, `${ITEM_DEFINITIONS[itemId].name} unlocked three Tier 3 attunements at the blacksmith.`);
       return null;
     }
-    const candidate = rollTargetedEquipmentAffix(buildPath, tier, targetAffixId, regionMatchesTarget), affixes = this.equipmentAffixes(player);
+    const candidate = forcedAffixId
+      ? { affixId: forcedAffixId, tier: Math.max(1, Math.min(3, Math.floor(tier))) as 1 | 2 | 3 }
+      : rollTargetedEquipmentAffix(buildPath, tier, targetAffixId, regionMatchesTarget);
+    const affixes = this.equipmentAffixes(player);
     const kept = keepBetterAffix(affixes[itemId], candidate);
     if (kept === affixes[itemId]) return kept;
     affixes[itemId] = kept; this.setEquipmentAffixes(player, affixes);

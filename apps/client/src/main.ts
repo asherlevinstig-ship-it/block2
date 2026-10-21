@@ -35,8 +35,8 @@ import { createTradeUI } from "./trade-ui.js";
 import { createPlayerInteractionUI, type PlayerInteractionView } from "./player-interaction-ui.js";
 import type { RealmEventUpdate } from "@blockcraft/protocol";
 import { ATTUNEMENT_FOCUS_COST, ATTUNEMENT_REROLL_COST, ATTUNEMENT_UPGRADE_COST, EQUIPMENT_AFFIXES, EQUIPMENT_AFFIX_RESONANCE,
-  equipmentAffixResonanceForLoadout,
-  type EquipmentAffixOffers, type EquipmentAffixRoll, type EquipmentAffixUpdate, type EquipmentHuntTarget } from "@blockcraft/protocol";
+  equipmentAffixEffect, equipmentAffixResonanceForLoadout,
+  type EquipmentAffixId, type EquipmentAffixOffers, type EquipmentAffixRoll, type EquipmentAffixUpdate, type EquipmentHuntTarget } from "@blockcraft/protocol";
 import { DODGE_EXHAUSTION_MS, dodgeChainStaminaCost, nextDodgeChain, type DodgePressureUpdate } from "@blockcraft/protocol";
 import { equipmentForItem, armourForItem, utilityForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE,
   decodeLootBagItems, encodeLootBagItems, lootBagRepresentative, lootBagTierForItems,
@@ -3121,6 +3121,8 @@ interface NetworkLootDrop {
   expiresAt: number;
   affixTier?: number;
   affixRegion?: string;
+  affixId?: string;
+  affixItemId?: string;
 }
 
 const LOOT_BAG_TIER_LABEL: Record<LootBagTier, string> = {
@@ -3400,6 +3402,7 @@ function updateFirstStepsTrail(player: pc.Vec3, now: number): void {
 const lootPanel = document.querySelector<HTMLElement>("#loot-panel")!;
 const lootWorldLabel = document.querySelector<HTMLElement>("#loot-world-label")!;
 const lootWorldName = document.querySelector<HTMLElement>("#loot-world-name")!;
+const lootWorldAttunement = document.querySelector<HTMLElement>("#loot-world-attunement")!;
 const lootWorldAction = document.querySelector<HTMLElement>("#loot-world-action")!;
 const lootWorldHold = document.querySelector<HTMLElement>("#loot-world-hold")!;
 const lootPackDecision = document.querySelector<HTMLElement>("#loot-pack-decision")!;
@@ -3629,6 +3632,11 @@ function updateLootWorldLabel(): void {
   lootWorldName.textContent = nearest.id.startsWith("roadside-cache:") ? "Regional Victory Cache" : bagTier
     ? nearest.id.startsWith("northwatch-shard-patrol-cache:") ? "Shard Patrol Cache" : LOOT_BAG_TIER_LABEL[bagTier]
     : `${drop.quantity > 1 ? `${drop.quantity}× ` : ""}${ITEM_DEFINITIONS[drop.itemId].name}`;
+  const previewAffix = typeof drop.affixId === "string" && Object.hasOwn(EQUIPMENT_AFFIXES, drop.affixId)
+    ? drop.affixId as EquipmentAffixId : null;
+  lootWorldAttunement.hidden = !previewAffix || !drop.affixTier;
+  lootWorldAttunement.textContent = previewAffix && drop.affixTier
+    ? `${drop.affixItemId && isItemId(drop.affixItemId) ? `${ITEM_DEFINITIONS[drop.affixItemId].name} · ` : ""}${EQUIPMENT_AFFIXES[previewAffix].name.toUpperCase()} T${drop.affixTier} · ${equipmentAffixEffect(previewAffix, drop.affixTier)}` : "";
   const holding = lootHold?.dropId === nearest.id;
   const pending = (pendingFloorLoot.get(nearest.id) ?? 0) > now;
   lootWorldAction.textContent = `${near ? full ? "PACK FULL" : pending ? "COLLECTING…" : holding ? "KEEP HOLDING" : "HOLD TO COLLECT" : `${nearest.distance.toFixed(1)}m · MOVE CLOSER`}${seconds < 20 ? ` · ${seconds}s` : ""}`;
@@ -3682,7 +3690,7 @@ function appendEquipmentIdentity(element: HTMLElement, itemId: ItemId | null, ra
   if (affix) {
     const affixNode = document.createElement("p"); affixNode.className = "inventory-affix";
     const affixName = document.createElement("strong"); affixName.textContent = `${EQUIPMENT_AFFIXES[affix.affixId].name.toUpperCase()} · TIER ${affix.tier}`;
-    affixNode.append(affixName, document.createTextNode(EQUIPMENT_AFFIXES[affix.affixId].effect)); element.append(affixNode);
+    affixNode.append(affixName, document.createTextNode(equipmentAffixEffect(affix.affixId, affix.tier))); element.append(affixNode);
     appendEquipmentBuildFit(element, itemId);
   }
   const perk = equipmentPerkStats(itemId, rank);
@@ -7652,6 +7660,7 @@ function createLootVisual(dropId: string, drop: NetworkLootDrop, settled = false
   const rewardCache = dropId.startsWith("forest-cache:");
   const vaultCache = sourceId === "buried-chamber-brute" && itemId === "miners_lantern";
   const guardianDrop = rewardCache || vaultCache || sourceId === "forest-guardian" && isEquipmentItem(itemId);
+  const attunedDrop = Boolean(drop.affixId && drop.affixTier && drop.affixItemId);
   if (groupedBag) {
     addBox(root, `${bagTier}-personal-loot-bag`, presentationMaterial, [.72, .46, .58], [0, -.12, 0]);
     addBox(root, "loot-bag-fold", presentationMaterial, [.62, .18, .5], [0, .2, .01]).setLocalEulerAngles(0, 0, 4);
@@ -7724,14 +7733,14 @@ function createLootVisual(dropId: string, drop: NetworkLootDrop, settled = false
   const miniBossDrop = source?.state.isMiniBoss === true;
   const beam = new pc.Entity(`loot-${rarity}-beam`);
   beam.addComponent("render", { type: "cylinder", material: presentationMaterial, castShadows: false, receiveShadows: false });
-  const beamHeight = realmWardenDrop ? 5.5 : patrolCache ? 2.8 : miniBossDrop ? 2.65 : equipmentDrop ? legendaryDrop ? 2.4 : 1.8 : legendaryDrop ? 1.7 : 1.35;
-  const beamWidth = realmWardenDrop ? .11 : patrolCache ? .075 : miniBossDrop ? .072 : equipmentDrop ? legendaryDrop ? .065 : .05 : .04;
+  const beamHeight = realmWardenDrop ? 5.5 : patrolCache ? 2.8 : miniBossDrop || attunedDrop ? 2.65 : equipmentDrop ? legendaryDrop ? 2.4 : 1.8 : legendaryDrop ? 1.7 : 1.35;
+  const beamWidth = realmWardenDrop ? .11 : patrolCache ? .075 : miniBossDrop || attunedDrop ? .072 : equipmentDrop ? legendaryDrop ? .065 : .05 : .04;
   beam.setLocalScale(beamWidth, beamHeight, beamWidth);
   beam.setLocalPosition(0, beamHeight * .52, 0); root.addChild(beam);
-  if (patrolCache || miniBossDrop || ITEM_RARITIES[rarity].order >= ITEM_RARITIES.rare.order) {
+  if (patrolCache || miniBossDrop || attunedDrop || ITEM_RARITIES[rarity].order >= ITEM_RARITIES.rare.order) {
     const halo = new pc.Entity(`loot-${rarity}-halo`);
     halo.addComponent("render", { type: "cylinder", material: presentationMaterial, castShadows: false, receiveShadows: false });
-    halo.setLocalScale(patrolCache || miniBossDrop ? 1.38 : legendaryDrop ? 1.25 : .95, .018, patrolCache || miniBossDrop ? 1.38 : legendaryDrop ? 1.25 : .95);
+    halo.setLocalScale(patrolCache || miniBossDrop || attunedDrop ? 1.38 : legendaryDrop ? 1.25 : .95, .018, patrolCache || miniBossDrop || attunedDrop ? 1.38 : legendaryDrop ? 1.25 : .95);
     halo.setLocalPosition(0, -.42, 0); root.addChild(halo);
   }
   const glow = new pc.Entity(`loot-${rarity}-light`);
@@ -7739,8 +7748,8 @@ function createLootVisual(dropId: string, drop: NetworkLootDrop, settled = false
     : bagTier === "blue" ? new pc.Color(.2, .55, 1) : bagTier === "pink" ? new pc.Color(1, .28, .56) : bagTier === "brown" ? new pc.Color(.55, .3, .12)
       : legendaryDrop ? new pc.Color(1, .52, .12) : rarity === "epic" ? new pc.Color(.7, .25, 1)
         : rarity === "rare" ? new pc.Color(.25, .55, 1) : rarity === "uncommon" ? new pc.Color(.28, .88, .4) : new pc.Color(.72, .76, .72);
-  glow.addComponent("light", { type: "omni", color: tint, intensity: realmWardenDrop ? 2.2 : patrolCache ? 1.8 : miniBossDrop ? 1.8 : legendaryDrop ? 1.6 : equipmentDrop ? .85 : .45,
-    range: realmWardenDrop ? 8 : patrolCache ? 6 : miniBossDrop ? 6 : legendaryDrop ? 5.5 : equipmentDrop ? 3.5 : 2.8, castShadows: false });
+  glow.addComponent("light", { type: "omni", color: tint, intensity: realmWardenDrop ? 2.2 : patrolCache ? 1.8 : miniBossDrop || attunedDrop ? 1.8 : legendaryDrop ? 1.6 : equipmentDrop ? .85 : .45,
+    range: realmWardenDrop ? 8 : patrolCache ? 6 : miniBossDrop || attunedDrop ? 6 : legendaryDrop ? 5.5 : equipmentDrop ? 3.5 : 2.8, castShadows: false });
   glow.setLocalPosition(0, .45, 0); root.addChild(glow);
   const now = performance.now();
   const revealAt = settled ? now : source ? Math.max(now, Number.isFinite(source.defeatAt) ? source.defeatAt : now) + defeatDuration(source.art.rootGuardian ? "root_guardian" : source.state.archetype) : now + 180;
@@ -7802,6 +7811,10 @@ function bindLootDrops(joinedRoom: Room): void {
     showDrop(dropId, drop);
     if (dropId.startsWith("northwatch-shard-patrol-cache:"))
       createRangedPopup(new pc.Vec3(drop.x, drop.y + 2.2, drop.z), "PATROL CLEARED · YOUR CACHE", "landmark");
+    if (drop.affixId && Object.hasOwn(EQUIPMENT_AFFIXES, drop.affixId) && drop.affixTier && drop.affixItemId && isItemId(drop.affixItemId)) {
+      const affixId = drop.affixId as EquipmentAffixId;
+      social.event(`ATTUNED LOOT · ${ITEM_DEFINITIONS[drop.affixItemId].name} · ${EQUIPMENT_AFFIXES[affixId].name} T${drop.affixTier}`);
+    }
   });
   if (!state.lootDrops) return;
   const drops = callbacks(joinedRoom.state).lootDrops;
@@ -14110,7 +14123,8 @@ app.on("update", (dt: number) => {
       ? fullLootMarkerMaterial : bagTier ? lootBagMaterials[bagTier] : rarityLootMaterials[itemRarity(loot.state.itemId)];
     if (!loot.audioPlayed && loot.marker.enabled && (bagTier !== null || isEquipmentItem(loot.state.itemId))) {
       loot.audioPlayed = true;
-      const rarity = bagTier ? LOOT_BAG_TIER_RARITY[bagTier] : itemRarity(loot.state.itemId);
+      const baseRarity = bagTier ? LOOT_BAG_TIER_RARITY[bagTier] : itemRarity(loot.state.itemId);
+      const rarity = loot.state.affixId && ITEM_RARITIES[baseRarity].order < ITEM_RARITIES.rare.order ? "rare" : baseRarity;
       const player = localPlayer.getPosition();
       if (Math.hypot(loot.state.x - player.x, loot.state.z - player.z) <= 18) {
         if (!loot.landingPlayed && ITEM_RARITIES[rarity].order >= ITEM_RARITIES.rare.order) {

@@ -18,7 +18,7 @@ describe("Greenwood first clear", () => {
     expect(greenwoodFirstClearWeapon("thief")).toBe("fang_dagger");
   });
 
-  it("puts the path weapon in the first Broodmother bag but not repeat bags", () => {
+  it("puts the path weapon in the first bag and keeps an attuned Calling opportunity on repeat leaders", () => {
     vi.useFakeTimers(); vi.setSystemTime(10_000);
     const room = new WorldRoom(); room.setState(new WorldState());
     Object.defineProperty(room, "readWorldBlock", { value: (_x: number, y: number) => y <= 7 ? Block.Stone : Block.Air });
@@ -34,10 +34,13 @@ describe("Greenwood first clear", () => {
     expect(firstId).toContain("greenwood-first:forged_bow:");
     expect(decodeLootBagItems(first.contentsJson)).toContainEqual({ itemId: "forged_bow", quantity: 1 });
     expect(JSON.parse(player.huntLoadoutsJson).greenwood?.firstBossGearClaimed ?? false).toBe(false);
-    // Another kill while the reward bag is pending must not duplicate the weapon.
+    // A repeat leader still offers Calling-relevant gear, but it is a normal attuned reward.
     internal.spawnLootDrops("wild-crawler", mob, 11_000, "hero");
     const repeat = [...room.state.lootDrops.values()][1]!;
-    expect(decodeLootBagItems(repeat.contentsJson).some(item => item.itemId === "forged_bow")).toBe(false);
+    expect(decodeLootBagItems(repeat.contentsJson)).toContainEqual({ itemId: "forged_bow", quantity: 1 });
+    expect(repeat.affixItemId).toBe("forged_bow");
+    expect(repeat.affixTier).toBe(2);
+    expect(["piercing", "snaring", "precise"]).toContain(repeat.affixId);
     internal.handleLootCollect({ sessionId: "hero", send: vi.fn() }, { dropId: firstId, action: "keep" });
     expect(player.inventory.get("forged_bow")?.quantity).toBe(1);
     expect(JSON.parse(player.huntLoadoutsJson).greenwood.firstBossGearClaimed).toBe(true);
@@ -45,7 +48,7 @@ describe("Greenwood first clear", () => {
     expect(JSON.parse(player.huntLoadoutsJson).greenwood.firstBossGearClaimed).toBe(true);
     internal.spawnLootDrops("wild-crawler", mob, 12_000, "hero");
     const third = [...room.state.lootDrops.values()].at(-1)!;
-    expect(decodeLootBagItems(third.contentsJson).some(item => item.itemId === "forged_bow")).toBe(false);
+    expect(decodeLootBagItems(third.contentsJson).some(item => item.itemId === "forged_bow")).toBe(true);
   });
 
   it("reoffers an uncollected weapon after its bag expires", () => {

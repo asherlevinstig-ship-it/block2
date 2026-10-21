@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AttunementForgeSchema, EQUIPMENT_AFFIX_RESONANCE, EQUIPMENT_HUNT_REGIONS, EquipmentAffixHuntSchema, equipmentAffixResonanceForLoadout, equipmentPerkStats } from "./index.js";
+import { AttunementForgeSchema, EQUIPMENT_AFFIX_RESONANCE, EQUIPMENT_HUNT_REGIONS, EquipmentAffixHuntSchema, equipmentAffixEffect, equipmentAffixResonanceForLoadout, equipmentPerkStats } from "./index.js";
 
 describe("fixed equipment perks", () => {
   it("scales weapon identity with reforge rank", () => {
@@ -34,5 +34,11 @@ describe("fixed equipment perks", () => {
     expect(EquipmentAffixHuntSchema.safeParse({ affixId: null }).success).toBe(true);
     expect(EquipmentAffixHuntSchema.safeParse({ affixId: "cheat" }).success).toBe(false);
     expect(AttunementForgeSchema.safeParse({ action: "focus", itemId: "fang_dagger" }).success).toBe(true);
+  });
+
+  it("describes the exact mechanical gain at each attunement tier", () => {
+    expect(equipmentAffixEffect("mending", 2)).toBe("Field Mend restores +1 health.");
+    expect(equipmentAffixEffect("lethal", 3)).toBe("Deal +3 damage to marked or weakened enemies.");
+    expect(equipmentAffixEffect("soulbound", 4)).toContain("0.60s faster");
   });
 });

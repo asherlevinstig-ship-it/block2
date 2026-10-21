@@ -17,6 +17,8 @@ body:has(#inventory-panel:not([hidden])) .forest-portal-label { display: none; }
 #loot-world-label[hidden] { display: none; }
 #loot-world-label::after { content: ""; position: absolute; left: calc(50% + var(--tail-shift, 0px) - 6px); bottom: -7px; width: 12px; height: 12px; transform: rotate(45deg); border-right: 1px solid var(--rarity); border-bottom: 1px solid var(--rarity); background: #09130f; }
 #loot-world-label strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--rarity); font-size: 12px; letter-spacing: .02em; }
+#loot-world-attunement { display: block; margin-top: 4px; color: #fff0bd !important; line-height: 1.35; }
+#loot-world-attunement[hidden] { display: none; }
 #loot-world-label .loot-world-interact { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
 #loot-world-label small { color: #dbe9da; font-size: 9px; font-weight: 800; letter-spacing: .04em; }
 #loot-world-hold { --hold-progress: 0%; display: grid; place-items: center; flex: none; width: 31px; height: 31px; padding: 3px; border-radius: 8px; background: conic-gradient(var(--rarity) var(--hold-progress), #ffffff30 0); font-style: normal; }
