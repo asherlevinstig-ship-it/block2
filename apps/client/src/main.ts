@@ -21,6 +21,7 @@ import { canvasScreenPoint } from "./screen-pointer.js";
 import { tabletJoystickSample, touchDragStarted } from "./tablet-input.js";
 import { tabletContextAction } from "./tablet-context-action.js";
 import { tabletDragAimYaw, tabletSoftTarget } from "./tablet-combat-aim.js";
+import { callingAimReleaseCancels, callingTouchAimProfile, type CallingTouchAimProfile } from "./calling-touch-aim.js";
 import { ExclusivePopupQueue, popupFocusIndex, popupIsPresented } from "./popup-queue.js";
 import { COORDINATED_BRUTE_FOLLOWERS, COORDINATED_SPITTER_FOLLOWERS, activeCombatNearby, advanceBossHud, initialBossHud, leaderArmourSegments, leaderChargeGuidance, leaderExposureLabel, leaderExposureRoleLabel, leaderFormationLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
 import { formationLanePoints, formationMarkerPoints, formationRingPoints, formationTargetStyle, formationVfxStyle,
@@ -4406,7 +4407,7 @@ function updateSpecialLoadout(specialId: SpecialId): void {
   updateControlsHelp();
 }
 
-function requestCallingAbility(slot: "power" | "special" = "power"): void {
+function requestCallingAbility(slot: "power" | "special" = "power", aimedYaw?: number): void {
   if (reportedProtectedDialog === true) return;
   if (!room || !worldReady) return;
   if (localCharacterProgression.level < (slot === "special" ? 4 : 2)) return;
@@ -4437,7 +4438,7 @@ function requestCallingAbility(slot: "power" | "special" = "power"): void {
   combatSync.start("calling", requestId, performance.now());
   const training = slot === "power" && guidedAbilityPracticeId === localCallingAbilityId
     && guidedAbilityPracticePhase === "cast" && localPlayer.getPosition().distance(CALLING_EFFIGY_POSITION) <= 4;
-  room.send("calling:ability", { requestId, yaw: cameraOrbit.yaw, slot, ...(training ? { training: true } : {}) });
+  room.send("calling:ability", { requestId, yaw: aimedYaw ?? cameraOrbit.yaw, slot, ...(training ? { training: true } : {}) });
 }
 
 function requestSpecialEquip(specialId: SpecialId): void {
@@ -5312,6 +5313,14 @@ interface PowerAimVisual {
   kind: "line" | "ground";
 }
 
+interface CallingTouchAimVisual {
+  root: pc.Entity;
+  targetRing: pc.Entity;
+  validMaterial: pc.StandardMaterial;
+  blockedMaterial: pc.StandardMaterial;
+  segments: pc.Entity[];
+}
+
 interface PowerDebrisVisual {
   entity: pc.Entity;
   velocity: pc.Vec3;
@@ -5415,6 +5424,7 @@ let localThornBoundUntil = 0;
 const depthsHazardVisuals = new Map<string, DepthsHazardVisual>();
 let powerAimVisual: PowerAimVisual | null = null;
 let specialAimVisual: PowerAimVisual | null = null;
+let callingTouchAimVisual: CallingTouchAimVisual | null = null;
 
 function powerMaterial(color: pc.Color, opacity: number): pc.StandardMaterial {
   const material = new pc.StandardMaterial();
@@ -6699,6 +6709,38 @@ function updatePowerAimVisual(): void {
       segment.entity.render.material = pathBlocked ? powerAimVisual.blockedMaterial : powerAimVisual.validMaterial;
     }
   }
+}
+
+function destroyCallingTouchAimVisual(): void {
+  callingTouchAimVisual?.root.destroy();
+  callingTouchAimVisual?.targetRing.destroy();
+  callingTouchAimVisual = null;
+}
+
+function createCallingTouchAimVisual(profile: CallingTouchAimProfile): void {
+  destroyCallingTouchAimVisual();
+  const root = new pc.Entity("calling-touch-aim-preview");
+  const targetRing = new pc.Entity("calling-touch-aim-target");
+  const validMaterial = powerMaterial(new pc.Color(.22, .95, .72), .48);
+  const blockedMaterial = powerMaterial(new pc.Color(1, .22, .13), .52);
+  const segments: pc.Entity[] = [];
+  for (let distance = .7; distance <= profile.range; distance += .7) {
+    const fraction = distance / profile.range;
+    const width = profile.kind === "cone" ? Math.max(.22, profile.width * fraction)
+      : profile.kind === "ground" ? .18 : profile.width;
+    segments.push(addBox(root, "calling-aim-segment", validMaterial, [width, .026, .27], [0, .045, distance]));
+  }
+  const ringRadius = profile.kind === "ground" ? profile.width : .72;
+  for (let index = 0; index < 20; index += 1) {
+    const angle = index / 20 * Math.PI * 2;
+    const marker = addBox(targetRing, "calling-aim-target-ring", validMaterial, [.22, .03, .08],
+      [Math.sin(angle) * ringRadius, .05, Math.cos(angle) * ringRadius]);
+    marker.setLocalEulerAngles(0, angle * 180 / Math.PI, 0);
+  }
+  targetRing.enabled = false;
+  app.root.addChild(root);
+  app.root.addChild(targetRing);
+  callingTouchAimVisual = { root, targetRing, validMaterial, blockedMaterial, segments };
 }
 
 function destroySpecialAimVisual(): void {
@@ -8044,13 +8086,15 @@ function nearestLivingMob(position: pc.Vec3, maximumRange: number): { id: string
   return nearest;
 }
 
-let tabletSoftTargetCache: { id: string | null; checkedAt: number; maximumRange: number } = {
-  id: null, checkedAt: Number.NEGATIVE_INFINITY, maximumRange: 0,
+let tabletSoftTargetCache: { id: string | null; checkedAt: number; maximumRange: number; facingYaw: number; halfConeDegrees: number } = {
+  id: null, checkedAt: Number.NEGATIVE_INFINITY, maximumRange: 0, facingYaw: 0, halfConeDegrees: 58,
 };
-function tabletSoftTargetMob(position: pc.Vec3, maximumRange: number, force = false): { id: string; visual: MobVisual; distance: number } | null {
+function tabletSoftTargetMob(position: pc.Vec3, maximumRange: number, force = false, facingYaw = localFacingYaw,
+  halfConeDegrees = 58): { id: string; visual: MobVisual; distance: number } | null {
   if (!tabletControlsQuery.matches || interactionMode !== "combat") return null;
   const now = performance.now();
-  if (!force && now - tabletSoftTargetCache.checkedAt < 80 && tabletSoftTargetCache.maximumRange === maximumRange) {
+  if (!force && now - tabletSoftTargetCache.checkedAt < 80 && tabletSoftTargetCache.maximumRange === maximumRange
+    && Math.abs(tabletSoftTargetCache.facingYaw - facingYaw) < .5 && tabletSoftTargetCache.halfConeDegrees === halfConeDegrees) {
     const cached = tabletSoftTargetCache.id ? mobVisuals.get(tabletSoftTargetCache.id) : null;
     if (!cached?.state.alive) return null;
     return { id: tabletSoftTargetCache.id!, visual: cached,
@@ -8067,8 +8111,8 @@ function tabletSoftTargetMob(position: pc.Vec3, maximumRange: number, force = fa
       );
     return { id, x: visual.state.x, z: visual.state.z, visible };
   });
-  const selected = tabletSoftTarget(position, localFacingYaw, maximumRange, candidates);
-  tabletSoftTargetCache = { id: selected?.id ?? null, checkedAt: now, maximumRange };
+  const selected = tabletSoftTarget(position, facingYaw, maximumRange, candidates, halfConeDegrees);
+  tabletSoftTargetCache = { id: selected?.id ?? null, checkedAt: now, maximumRange, facingYaw, halfConeDegrees };
   if (!selected) return null;
   const visual = mobVisuals.get(selected.id);
   return visual ? { id: selected.id, visual, distance: selected.distance } : null;
@@ -11728,6 +11772,7 @@ movementDebugCopy.addEventListener("click", async () => {
 function resetMovementControls(): void {
   rangedFirePointer = null;
   clearTabletAttackAim();
+  clearCallingTouchAim();
   touchCameraPointerId = null;
   touchCameraDragged = false;
   touchCameraPinched = false;
@@ -12091,6 +12136,7 @@ function requestAttack(aimWithPointer = true, tabletAim?: { yaw: number; targetI
 }
 
 function requestDodge(): void {
+  clearCallingTouchAim();
   if (!defeatScreen.hidden) return;
   if (reportedProtectedDialog === true) return;
   if (!room || !worldReady) return;
@@ -12933,6 +12979,10 @@ window.addEventListener("keyup", event => {
 window.addEventListener("blur", () => { cancelLootHold(); keyboardFireHeld = false; });
 canvas.addEventListener("pointerdown", event => {
   if (popupQueue.active() !== null) return;
+  if (event.pointerType === "touch" && callingTouchAimPointerId !== null) {
+    event.preventDefault();
+    return;
+  }
   if (event.button === 2) {
     rangedFirePointer = null;
     event.preventDefault();
@@ -13028,6 +13078,156 @@ canvas.addEventListener("pointercancel", event => {
 });
 canvas.addEventListener("contextmenu", event => event.preventDefault());
 
+type CallingTouchSlot = "power" | "special";
+let callingTouchAimPointerId: number | null = null;
+let callingTouchAimSlot: CallingTouchSlot | null = null;
+let callingTouchAimProfileState: CallingTouchAimProfile | null = null;
+let callingTouchAimButton: HTMLButtonElement | null = null;
+let callingTouchAimStart = { x: 0, y: 0 };
+let callingTouchAimYaw = 0;
+let callingTouchAimDragged = false;
+let callingTouchAimTargetId: string | null = null;
+
+function callingAbilityForSlot(slot: CallingTouchSlot): CallingAbilityId | null {
+  if (slot === "power") return localCallingAbilityId;
+  return CALLING_ABILITY_OPTIONS.find(option => option.pathId === localBuildPathId && option.category === "Utility")?.id ?? null;
+}
+
+function activeCallingTouchAimProfile(abilityId: CallingAbilityId | null): CallingTouchAimProfile | null {
+  const base = callingTouchAimProfile(abilityId);
+  if (!base || abilityId !== localCallingAbilityId) return base;
+  if (abilityId === "assassin_blade_dance" && localCallingAugmentId === "dance_long_step") return { ...base, range: 8 };
+  if (abilityId === "ranger_disengage" && localCallingAugmentId === "disengage_long_leap") return { ...base, range: 5 };
+  if (abilityId === "ranger_deadeye" && localCallingAugmentId === "deadeye_eagle_eye") {
+    return { ...base, range: 22, halfConeDegrees: 20 };
+  }
+  return base;
+}
+
+function tabletHaptic(duration = 16): void {
+  if (tabletControlsQuery.matches && navigator.vibrate) navigator.vibrate(duration);
+}
+
+function renderTabletAimGuide(event: PointerEvent): void {
+  if (!camera.camera) return;
+  const player = localPlayer.getPosition();
+  const projected = camera.camera.worldToScreen(new pc.Vec3(player.x, player.y + .8, player.z));
+  const bounds = canvas.getBoundingClientRect();
+  const startX = bounds.left + projected.x;
+  const startY = bounds.top + projected.y;
+  const guideX = event.clientX - startX;
+  const guideY = event.clientY - startY;
+  tabletAimGuide.style.left = `${startX}px`;
+  tabletAimGuide.style.top = `${startY}px`;
+  tabletAimGuide.style.width = `${Math.hypot(guideX, guideY)}px`;
+  tabletAimGuide.style.transform = `rotate(${Math.atan2(guideY, guideX) * 180 / Math.PI}deg)`;
+  tabletAimGuide.hidden = false;
+}
+
+function updateCallingTouchAimVisual(): void {
+  if (!callingTouchAimVisual || !callingTouchAimProfileState) return;
+  const player = localPlayer.getPosition();
+  callingTouchAimVisual.root.setPosition(player.x, player.y + .02, player.z);
+  callingTouchAimVisual.root.setEulerAngles(0, callingTouchAimYaw, 0);
+  const target = callingTouchAimTargetId ? mobVisuals.get(callingTouchAimTargetId) : null;
+  const valid = !callingTouchAimProfileState.needsEnemy || Boolean(target?.state.alive);
+  for (const segment of callingTouchAimVisual.segments) {
+    if (segment.render) segment.render.material = valid ? callingTouchAimVisual.validMaterial : callingTouchAimVisual.blockedMaterial;
+  }
+  callingTouchAimVisual.targetRing.enabled = Boolean(target?.state.alive);
+  if (target?.state.alive) callingTouchAimVisual.targetRing.setPosition(target.state.x, target.state.y + .04, target.state.z);
+}
+
+function selectCallingTouchAimTarget(): void {
+  const profile = callingTouchAimProfileState;
+  if (!profile?.needsEnemy) {
+    callingTouchAimTargetId = null;
+    updateCallingTouchAimVisual();
+    return;
+  }
+  callingTouchAimTargetId = tabletSoftTargetMob(localPlayer.getPosition(), profile.range, true, callingTouchAimYaw,
+    profile.halfConeDegrees)?.id ?? null;
+  updateCallingTouchAimVisual();
+}
+
+function clearCallingTouchAim(): void {
+  if (callingTouchAimButton) {
+    callingTouchAimButton.dataset.aiming = "false";
+    callingTouchAimButton.dataset.cancel = "false";
+  }
+  callingTouchAimPointerId = null;
+  callingTouchAimSlot = null;
+  callingTouchAimProfileState = null;
+  callingTouchAimButton = null;
+  callingTouchAimDragged = false;
+  callingTouchAimTargetId = null;
+  tabletAimGuide.dataset.mode = "";
+  tabletAimGuide.hidden = true;
+  destroyCallingTouchAimVisual();
+}
+
+function beginCallingTouchAim(button: HTMLButtonElement, event: PointerEvent, slot: CallingTouchSlot): void {
+  event.preventDefault();
+  const abilityId = callingAbilityForSlot(slot);
+  const profile = activeCallingTouchAimProfile(abilityId);
+  const cooldownUntil = slot === "special" ? localCallingSpecialCooldownUntil : localCallingCooldownUntil;
+  if (event.pointerType === "mouse" || !profile || !abilityId || !room || !worldReady
+    || Date.now() < cooldownUntil || performance.now() < callingAbilityPendingUntil) {
+    requestCallingAbility(slot);
+    return;
+  }
+  callingTouchAimPointerId = event.pointerId;
+  callingTouchAimSlot = slot;
+  callingTouchAimProfileState = profile;
+  callingTouchAimButton = button;
+  callingTouchAimStart = { x: event.clientX, y: event.clientY };
+  callingTouchAimDragged = false;
+  const softTarget = profile.needsEnemy
+    ? tabletSoftTargetMob(localPlayer.getPosition(), profile.range, true, localFacingYaw, profile.halfConeDegrees) : null;
+  callingTouchAimYaw = softTarget
+    ? movementYaw(softTarget.visual.state.x - localPlayer.getPosition().x, softTarget.visual.state.z - localPlayer.getPosition().z, localFacingYaw)
+    : localFacingYaw;
+  callingTouchAimTargetId = softTarget?.id ?? null;
+  button.dataset.aiming = "true";
+  button.dataset.cancel = "false";
+  button.setPointerCapture(event.pointerId);
+  tabletAimGuide.dataset.mode = "ability";
+  createCallingTouchAimVisual(profile);
+  updateCallingTouchAimVisual();
+}
+
+function updateCallingTouchAim(event: PointerEvent): void {
+  if (event.pointerId !== callingTouchAimPointerId || !callingTouchAimButton) return;
+  const deltaX = event.clientX - callingTouchAimStart.x;
+  const deltaY = event.clientY - callingTouchAimStart.y;
+  if (Math.hypot(deltaX, deltaY) < 12) return;
+  callingTouchAimDragged = true;
+  const cameraOffset = cameraOrbitOffset(cameraOrbit);
+  callingTouchAimYaw = tabletDragAimYaw(deltaX, deltaY, cameraOffset.x, cameraOffset.z, callingTouchAimYaw);
+  const cancelling = callingAimReleaseCancels(true, { x: event.clientX, y: event.clientY }, callingTouchAimButton.getBoundingClientRect());
+  callingTouchAimButton.dataset.cancel = String(cancelling);
+  selectCallingTouchAimTarget();
+  renderTabletAimGuide(event);
+}
+
+function finishCallingTouchAim(event: PointerEvent, cancelled = false): void {
+  if (event.pointerId !== callingTouchAimPointerId || !callingTouchAimButton || !callingTouchAimSlot) return;
+  if (callingTouchAimButton.hasPointerCapture(event.pointerId)) callingTouchAimButton.releasePointerCapture(event.pointerId);
+  const releaseCancelled = cancelled || callingAimReleaseCancels(callingTouchAimDragged,
+    { x: event.clientX, y: event.clientY }, callingTouchAimButton.getBoundingClientRect());
+  const slot = callingTouchAimSlot;
+  const yaw = callingTouchAimYaw;
+  clearCallingTouchAim();
+  if (releaseCancelled) {
+    status.textContent = "Ability aim cancelled.";
+    return;
+  }
+  localFacingYaw = yaw;
+  localPlayer.setEulerAngles(0, localFacingYaw, 0);
+  tabletHaptic();
+  requestCallingAbility(slot, yaw);
+}
+
 let tabletAttackPointerId: number | null = null;
 let tabletAttackStart = { x: 0, y: 0 };
 let tabletAttackYaw: number | null = null;
@@ -13047,19 +13247,7 @@ function updateTabletAttackAim(event: PointerEvent): void {
   const cameraOffset = cameraOrbitOffset(cameraOrbit);
   tabletAttackYaw = tabletDragAimYaw(deltaX, deltaY, cameraOffset.x, cameraOffset.z, localFacingYaw);
   mineButton.dataset.aiming = "true";
-  if (!camera.camera) return;
-  const player = localPlayer.getPosition();
-  const projected = camera.camera.worldToScreen(new pc.Vec3(player.x, player.y + .8, player.z));
-  const bounds = canvas.getBoundingClientRect();
-  const startX = bounds.left + projected.x;
-  const startY = bounds.top + projected.y;
-  const guideX = event.clientX - startX;
-  const guideY = event.clientY - startY;
-  tabletAimGuide.style.left = `${startX}px`;
-  tabletAimGuide.style.top = `${startY}px`;
-  tabletAimGuide.style.width = `${Math.hypot(guideX, guideY)}px`;
-  tabletAimGuide.style.transform = `rotate(${Math.atan2(guideY, guideX) * 180 / Math.PI}deg)`;
-  tabletAimGuide.hidden = false;
+  renderTabletAimGuide(event);
 }
 
 mineButton.addEventListener("pointerdown", event => {
@@ -13107,21 +13295,19 @@ for (const button of [defenseButton, defenseSlot]) {
   button.addEventListener("pointercancel", () => requestDefense(false));
 }
 specialButton.addEventListener("pointerdown", event => {
-  event.preventDefault();
-  requestCallingAbility("special");
+  beginCallingTouchAim(specialButton, event, "special");
 });
 specialSlot.addEventListener("pointerdown", event => {
   event.preventDefault();
   requestCallingAbility("special");
 });
 specialButton.addEventListener("pointermove", event => {
-  if (specialAimPointerId !== event.pointerId) return;
-  updatePointerPosition(event);
+  updateCallingTouchAim(event);
 });
 specialButton.addEventListener("pointerup", event => {
-  if (specialAimPointerId === event.pointerId) commitSpecialAim();
+  finishCallingTouchAim(event);
 });
-specialButton.addEventListener("pointercancel", cancelSpecialAim);
+specialButton.addEventListener("pointercancel", event => finishCallingTouchAim(event, true));
 specialSlot.addEventListener("pointermove", event => {
   if (specialAimPointerId !== event.pointerId) return;
   updatePointerPosition(event);
@@ -13140,9 +13326,11 @@ callingSlot.addEventListener("click", event => {
   requestCallingAbility();
 });
 callingButton.addEventListener("pointerdown", event => {
-  event.preventDefault();
-  requestCallingAbility();
+  beginCallingTouchAim(callingButton, event, "power");
 });
+callingButton.addEventListener("pointermove", updateCallingTouchAim);
+callingButton.addEventListener("pointerup", event => finishCallingTouchAim(event));
+callingButton.addEventListener("pointercancel", event => finishCallingTouchAim(event, true));
 powerButton.addEventListener("pointerdown", event => {
   event.preventDefault();
   powerButton.setPointerCapture(event.pointerId);
@@ -13948,6 +14136,7 @@ app.on("update", (dt: number) => {
   let canvasBounds: DOMRect | null = null;
   for (const [mobId, mob] of mobVisuals) {
     mob.levelTag.dataset.softTarget = String(tabletTargetId === mobId);
+    mob.levelTag.dataset.abilityTarget = String(callingTouchAimTargetId === mobId);
     const refreshLabels = animationNow >= mob.nextLabelPresentationAt;
     if (refreshLabels) mob.nextLabelPresentationAt = animationNow + 100;
     if (mob.frameAlive !== mob.state.alive) {
@@ -14334,6 +14523,7 @@ app.on("update", (dt: number) => {
   }
   updatePowerAimVisual();
   updateSpecialAimVisual();
+  updateCallingTouchAimVisual();
   for (let index = dungeonBurstVisuals.length - 1; index >= 0; index -= 1) {
     const burst = dungeonBurstVisuals[index]!;
     const duration = burst.kind === "victory" ? 1450 : 900;
@@ -14542,7 +14732,9 @@ app.on("update", (dt: number) => {
   const callingRemaining = Math.max(0, localCallingCooldownUntil - Date.now());
   const callingDefinition = CALLING_ABILITY_OPTIONS.find(option => option.id === localCallingAbilityId);
   updateTouchAbilityVisibility();
-  callingButton.textContent = callingRemaining > 0 ? `${Math.ceil(callingRemaining / 1000)}s` : callingDefinition?.name ?? "Power";
+  callingButton.textContent = callingTouchAimSlot === "power"
+    ? callingButton.dataset.cancel === "true" ? "Cancel" : "Release"
+    : callingRemaining > 0 ? `${Math.ceil(callingRemaining / 1000)}s` : callingDefinition?.name ?? "Power";
   combatHud.setCooldowns(
     cooldownState(powerRemaining, POWER_DEFINITIONS[localEquippedPower].cooldownMs, "READY · R",
       !powerServerReady ? "SERVER UPDATE" : !powerCompatible ? "INCOMPATIBLE" : powerAimActive ? "RELEASE TO CAST" : undefined),
@@ -14560,7 +14752,9 @@ app.on("update", (dt: number) => {
         ? `${Math.max(.1, (localCallingState.activeUntil - Date.now()) / 1_000).toFixed(1)}s`
         : "READY",
   } : null);
-  specialButton.textContent = specialRemaining > 0 ? `${Math.ceil(specialRemaining / 1000)}s` : specialDefinition?.name ?? "Special";
+  specialButton.textContent = callingTouchAimSlot === "special"
+    ? specialButton.dataset.cancel === "true" ? "Cancel" : "Release"
+    : specialRemaining > 0 ? `${Math.ceil(specialRemaining / 1000)}s` : specialDefinition?.name ?? "Special";
   cameraTarget.set(
     player.x + localPowerVisualOffset.x + localNetworkVisualOffset.x + localRecoveryVisualOffset.x + localDodgeVisualOffset.x,
     player.y + localVisualVerticalOffset,

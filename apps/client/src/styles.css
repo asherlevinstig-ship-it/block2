@@ -719,6 +719,14 @@ html.onboarding-active #hud #target, html.onboarding-active #hud #players { disp
   box-shadow: 0 0 0 4px rgb(255 190 48 / 18%), 0 0 14px rgb(255 190 48 / 55%);
   transform: translate(50%, -50%);
 }
+#tablet-aim-guide[data-mode="ability"] {
+  background: linear-gradient(90deg, rgb(66 242 187 / 16%), rgb(92 255 204 / 92%));
+  box-shadow: 0 0 12px rgb(47 236 178 / 52%);
+}
+#tablet-aim-guide[data-mode="ability"] span {
+  border-color: #8fffdc;
+  box-shadow: 0 0 0 4px rgb(55 235 180 / 18%), 0 0 16px rgb(55 235 180 / 62%);
+}
 .ranged-popup { position: fixed; z-index: 18; pointer-events: none; font: 900 24px/1 system-ui, sans-serif; text-shadow: 0 2px 2px #000, 1px 0 #000, -1px 0 #000; }
 .ranged-popup-damage { color: #fff3c5; }
 .ranged-popup-damage.defeated { color: #ffb56d; }
@@ -2134,6 +2142,17 @@ button[data-previewing="true"] .calling-preview *, #calling-awakening:not([hidde
   #defense-button[aria-pressed="true"] { transform: scale(.94); background: rgb(30 137 179 / 96%) !important; box-shadow: 0 0 22px rgb(91 213 255 / 34%); }
   #power-button:active { transform: scale(.94); background: rgb(144 77 17 / 94%) !important; }
   #calling-button:active { transform: scale(.94); background: rgb(25 126 93 / 96%) !important; }
+  #calling-button[data-aiming="true"],
+  #special-button[data-aiming="true"] {
+    transform: scale(.94);
+    box-shadow: 0 0 0 4px rgb(74 241 190 / 24%), 0 0 28px rgb(42 231 174 / 54%);
+  }
+  #calling-button[data-cancel="true"],
+  #special-button[data-cancel="true"] {
+    border-color: #ff7868;
+    background: rgb(114 31 25 / 94%) !important;
+    color: #ffd8d1;
+  }
   #context-button:active { transform: scale(.94); }
   #special-button:active { transform: scale(.94); background: rgb(101 45 137 / 96%) !important; }
   #touch-mode-button:active { transform: scale(.94); }
@@ -2991,6 +3010,13 @@ body:has(#progression-notice:not([hidden])) #resource-toasts { display: none; }
   outline: 2px solid rgb(255 214 73 / 44%);
   outline-offset: 2px;
   box-shadow: 0 0 18px rgb(255 199 57 / 72%);
+}
+.enemy-level-tag[data-ability-target="true"] {
+  color: #baffea;
+  border-color: #55efbd;
+  outline: 2px solid rgb(68 242 186 / 48%);
+  outline-offset: 3px;
+  box-shadow: 0 0 22px rgb(47 236 178 / 76%);
 }
 .enemy-respawn-tag {
   position: fixed;
