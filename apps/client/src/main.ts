@@ -4822,6 +4822,7 @@ function updateProgressionNoticeVisibility(now: number): void {
   }
   const blocked = !worldReady || !defeatScreen.hidden
     || !levelCelebration.hidden || pendingLevelCelebrations.length > 0
+    || !callingFirstUse.hidden
     || reportedProtectedDialog === true || now < progressionNoticeQuietUntil || progressionNoticeCombatActive;
   if (activeWorldNotice && !blocked && worldNoticeLastTick > 0) activeWorldNoticeRemainingMs -= Math.max(0, now - worldNoticeLastTick);
   worldNoticeLastTick = blocked ? 0 : now;

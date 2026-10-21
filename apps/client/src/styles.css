@@ -2577,6 +2577,7 @@ html.boss-hud-active #world-objective { display: none !important; }
   .trade-actions { position: sticky; bottom: -12px; padding: 8px 0 12px; background: #081712f2; }
   .trade-actions button { min-width: 0; flex: 1; padding: 10px 6px; font-size: 9px; }
 }
+
 .party-help, .party-status { font-size: 10px; color: #b1c2ad; line-height: 1.4; }
 .party-members { padding: 0; margin: 8px 0; list-style: none; }
 .party-members li { display: grid; grid-template-columns: 1fr auto; gap: 5px; margin: 8px 0; }
@@ -3543,4 +3544,154 @@ html.onboarding-mode-lesson #touch-mode-button { border-color: #ffe59a; box-shad
   #minimap[data-expanded="true"] .minimap-viewport { width: min(calc(100vw - 52px), calc(100vh - 285px)); height: min(calc(100vw - 52px), calc(100vh - 285px)); }
   #minimap[data-expanded="true"] .world-map-toolbar { align-items: stretch; flex-direction: column; }
   .world-map-filters, .world-map-zoom { justify-content: center; }
+}
+
+/* HUD screen lanes: each persistent system owns one predictable edge of the view. */
+:root {
+  --hud-lane-edge: max(14px, env(safe-area-inset-left));
+  --hud-lane-edge-right: max(14px, env(safe-area-inset-right));
+  --hud-lane-top: calc(54px + env(safe-area-inset-top));
+  --hud-lane-controls-bottom: calc(94px + env(safe-area-inset-top));
+  --hud-lane-action-clearance: calc(104px + env(safe-area-inset-bottom));
+}
+
+/* Top centre is reserved for exactly one encounter readout. */
+#boss-hud,
+#realm-event-meter {
+  top: var(--hud-lane-top);
+  left: 50%;
+  z-index: 30;
+  transform: translateX(-50%);
+}
+html.boss-hud-active #realm-event-meter { display: none !important; }
+
+/* Top left: location, then guidance, then secondary character context. */
+#location-readout {
+  top: var(--hud-lane-top);
+  left: var(--hud-lane-edge);
+  z-index: 20;
+}
+#world-objective {
+  top: calc(112px + env(safe-area-inset-top));
+  left: var(--hud-lane-edge);
+  z-index: 19;
+  width: min(286px, calc(100vw - 32px));
+  padding: 10px 13px 9px;
+  transform: none;
+}
+#world-objective h2 { font-size: 16px; }
+#world-objective p { font-size: 11px; }
+html:not(.boss-hud-active):has(#world-objective:not([hidden])) #trait-slot {
+  top: calc(264px + env(safe-area-inset-top));
+}
+html:not(.boss-hud-active):has(#world-objective:not([hidden])) #exit-guide {
+  top: calc(350px + env(safe-area-inset-top));
+}
+
+/* Top right: controls followed by the map; neither shares the encounter lane. */
+#inventory-toggle,
+#performance-toggle { z-index: 31; }
+#minimap:not([data-expanded="true"]) {
+  top: var(--hud-lane-controls-bottom);
+  right: var(--hud-lane-edge-right);
+  z-index: 20;
+}
+
+/* Bottom centre: one notification above vitals and the action bar. */
+#progression-notice,
+#calling-first-use {
+  bottom: calc(166px + env(safe-area-inset-bottom));
+  z-index: 28;
+}
+#mode-switch-tutorial { z-index: 29; }
+#combat-action-bar { z-index: 24; }
+#player-hud-root { z-index: 23; }
+
+/* Bottom left: social history, party, then passive pickup messages. */
+#event-log {
+  left: var(--hud-lane-edge);
+  bottom: max(12px, env(safe-area-inset-bottom));
+  z-index: 21;
+}
+#party-panel {
+  left: var(--hud-lane-edge);
+  bottom: calc(210px + env(safe-area-inset-bottom));
+  z-index: 22;
+}
+#resource-toasts {
+  left: var(--hud-lane-edge);
+  bottom: calc(270px + env(safe-area-inset-bottom));
+  width: min(365px, calc(100vw - 28px));
+  z-index: 23;
+}
+body:has(#party-panel[open]) #resource-toasts {
+  bottom: min(calc(64vh + env(safe-area-inset-bottom)), 560px);
+}
+
+/* Bottom right: contextual navigation and decisions, never both at once. */
+#waypoint-guide,
+#depths-route-map,
+#loot-pack-decision {
+  right: var(--hud-lane-edge-right);
+  bottom: var(--hud-lane-action-clearance);
+}
+body:has(#loot-pack-decision:not([hidden])) #waypoint-guide { display: none; }
+
+/* Medium laptop widths cannot fit social UI beside the centred action rail. */
+@media (min-width: 821px) and (max-width: 1440px) {
+  #event-log { bottom: calc(190px + env(safe-area-inset-bottom)); }
+  #party-panel { bottom: calc(388px + env(safe-area-inset-bottom)); }
+  #resource-toasts { bottom: calc(450px + env(safe-area-inset-bottom)); }
+}
+
+@media (max-width: 820px) {
+  :root {
+    --hud-lane-edge: max(10px, env(safe-area-inset-left));
+    --hud-lane-edge-right: max(8px, env(safe-area-inset-right));
+    --hud-lane-action-clearance: calc(205px + env(safe-area-inset-bottom));
+  }
+  #world-objective {
+    top: calc(155px + env(safe-area-inset-top));
+    width: min(210px, calc(100vw - 178px));
+  }
+  #world-objective #objective-detail { display: none; }
+  #event-log { bottom: calc(170px + env(safe-area-inset-bottom)); }
+  #party-panel { bottom: calc(332px + env(safe-area-inset-bottom)); }
+  #progression-notice,
+  #calling-first-use { bottom: calc(254px + env(safe-area-inset-bottom)); }
+}
+
+@media (max-width: 520px) {
+  #location-readout {
+    top: calc(94px + env(safe-area-inset-top));
+    left: var(--hud-lane-edge);
+    max-width: 150px;
+  }
+  #minimap:not([data-expanded="true"]) {
+    top: calc(94px + env(safe-area-inset-top));
+    width: 160px;
+    padding: 7px;
+  }
+  #minimap:not([data-expanded="true"]) .minimap-viewport,
+  #minimap:not([data-expanded="true"]) #minimap-canvas {
+    width: 134px;
+    height: 134px;
+  }
+  #world-objective,
+  #first-steps,
+  #trait-slot {
+    top: calc(153px + env(safe-area-inset-top));
+    left: var(--hud-lane-edge);
+    width: 150px;
+  }
+  #world-objective { padding: 8px; }
+  #world-objective header span { font-size: 8px; }
+  #world-objective h2 { font-size: 13px; }
+  #world-objective footer { font-size: 9px; }
+  html:not(.boss-hud-active):has(#world-objective:not([hidden])) #trait-slot {
+    top: calc(260px + env(safe-area-inset-top));
+  }
+  #exit-guide { top: calc(245px + env(safe-area-inset-top)); left: var(--hud-lane-edge); width: 150px; }
+  #progression-notice,
+  #calling-first-use { bottom: calc(218px + env(safe-area-inset-bottom)); }
 }
