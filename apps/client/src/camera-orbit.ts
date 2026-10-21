@@ -9,6 +9,8 @@ const MIN_PITCH = Math.PI / 9;
 const MAX_PITCH = Math.PI * 0.4;
 const TURN_SPEED = Math.PI * 0.55;
 const TILT_SPEED = Math.PI * 0.3;
+const TOUCH_YAW_RADIANS_PER_PIXEL = 0.006;
+const TOUCH_PITCH_RADIANS_PER_PIXEL = 0.004;
 
 export const CAMERA_DISTANCE = Math.hypot(16, 20, 16);
 
@@ -31,6 +33,15 @@ export function advanceCameraOrbit(orbit: CameraOrbit, turn: number, tilt: numbe
     pitch,
     yawSpeed,
     pitchSpeed: (pitch === MIN_PITCH && pitchSpeed < 0) || (pitch === MAX_PITCH && pitchSpeed > 0) ? 0 : pitchSpeed,
+  };
+}
+
+export function dragCameraOrbit(orbit: CameraOrbit, deltaX: number, deltaY: number): CameraOrbit {
+  return {
+    yaw: orbit.yaw - deltaX * TOUCH_YAW_RADIANS_PER_PIXEL,
+    pitch: Math.max(MIN_PITCH, Math.min(MAX_PITCH, orbit.pitch + deltaY * TOUCH_PITCH_RADIANS_PER_PIXEL)),
+    yawSpeed: 0,
+    pitchSpeed: 0,
   };
 }
 

@@ -2001,19 +2001,34 @@ button[data-previewing="true"] .calling-preview *, #calling-awakening:not([hidde
 
   #joystick-zone {
     position: relative;
+    width: min(38vw, 300px);
+    height: min(38vh, 260px);
+    --joystick-origin-x: 72px;
+    --joystick-origin-y: calc(100% - 72px);
+  }
+
+  #joystick-zone::before {
+    position: absolute;
+    top: var(--joystick-origin-y);
+    left: var(--joystick-origin-x);
     width: 118px;
     height: 118px;
     border: 2px solid rgb(255 255 255 / 28%);
     border-radius: 50%;
-    background: rgb(6 14 12 / 48%);
+    background: rgb(6 14 12 / 42%);
     box-shadow: inset 0 0 28px rgb(0 0 0 / 30%);
-    backdrop-filter: blur(6px);
+    content: "";
+    opacity: .62;
+    transform: translate(-50%, -50%);
+    transition: opacity .12s ease;
   }
+
+  #joystick-zone[data-active="true"]::before { opacity: 1; }
 
   #joystick-knob {
     position: absolute;
-    top: 50%;
-    left: 50%;
+    top: var(--joystick-origin-y);
+    left: var(--joystick-origin-x);
     width: 52px;
     height: 52px;
     border: 2px solid rgb(255 255 255 / 55%);
@@ -2088,7 +2103,13 @@ button[data-previewing="true"] .calling-preview *, #calling-awakening:not([hidde
   #hud { max-width: 300px; padding: 10px 13px; }
   #hud h1 { margin-bottom: 4px; font-size: 1rem; }
   #target { margin-top: 5px !important; }
-  #joystick-zone { width: 96px; height: 96px; }
+  #joystick-zone {
+    width: min(34vw, 250px);
+    height: min(34vh, 200px);
+    --joystick-origin-x: 54px;
+    --joystick-origin-y: calc(100% - 54px);
+  }
+  #joystick-zone::before { width: 96px; height: 96px; }
   #mine-button,
   #dodge-button,
   #defense-button,
@@ -2134,7 +2155,13 @@ button[data-previewing="true"] .calling-preview *, #calling-awakening:not([hidde
     left: max(10px, env(safe-area-inset-left));
   }
   #movement-debug { bottom: calc(108px + env(safe-area-inset-bottom)); }
-  #joystick-zone { width: 88px; height: 88px; }
+  #joystick-zone {
+    width: 34vw;
+    height: 34vh;
+    --joystick-origin-x: 50px;
+    --joystick-origin-y: calc(100% - 50px);
+  }
+  #joystick-zone::before { width: 88px; height: 88px; }
   #joystick-knob { width: 40px; height: 40px; }
   #touch-actions {
     grid-template-rows: 48px 62px;

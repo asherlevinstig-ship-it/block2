@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { advanceCameraOrbit, cameraOrbitOffset, initialCameraOrbit } from "./camera-orbit.js";
+import { advanceCameraOrbit, cameraOrbitOffset, dragCameraOrbit, initialCameraOrbit } from "./camera-orbit.js";
 
 describe("camera orbit", () => {
   it("preserves the existing starting camera view", () => {
@@ -25,5 +25,13 @@ describe("camera orbit", () => {
     expect(orbit.pitch).toBeCloseTo(Math.PI * 0.4);
     for (let frame = 0; frame < 600; frame++) orbit = advanceCameraOrbit(orbit, 0, -1, 1 / 60);
     expect(orbit.pitch).toBeCloseTo(Math.PI / 9);
+  });
+
+  it("turns directly from a tablet camera drag and clamps vertical orbit", () => {
+    const initial = initialCameraOrbit();
+    const dragged = dragCameraOrbit(initial, 50, -10_000);
+    expect(dragged.yaw).toBeLessThan(initial.yaw);
+    expect(dragged.pitch).toBeCloseTo(Math.PI / 9);
+    expect(dragged.yawSpeed).toBe(0);
   });
 });

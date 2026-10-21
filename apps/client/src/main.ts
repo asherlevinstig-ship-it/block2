@@ -18,6 +18,7 @@ import { abilityPracticeChallenge, practiceFollowUpProgress, practicePhaseAfterC
 import { queueWorldNotice, type WorldNotice } from "./notification-lane.js";
 import { attackAimYaw, rangedAimYaw } from "./ranged-aim.js";
 import { canvasScreenPoint } from "./screen-pointer.js";
+import { tabletJoystickSample, touchDragStarted } from "./tablet-input.js";
 import { ExclusivePopupQueue, popupFocusIndex, popupIsPresented } from "./popup-queue.js";
 import { COORDINATED_BRUTE_FOLLOWERS, COORDINATED_SPITTER_FOLLOWERS, activeCombatNearby, advanceBossHud, initialBossHud, leaderArmourSegments, leaderChargeGuidance, leaderExposureLabel, leaderExposureRoleLabel, leaderFormationLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
 import { formationLanePoints, formationMarkerPoints, formationRingPoints, formationTargetStyle, formationVfxStyle,
@@ -101,7 +102,7 @@ import { advanceMobMotion, advanceMobTurnLean, mobRootPositionChanged, mobRootYa
 import { createServerClock, sampleServerClock, enemyAttackPresentation } from "./enemy-timeline.js";
 import { bruteRecoveryPose, enemyAwarenessCue, enemyCombatCue, enemyCueLineClear, enemyShotGuideLength } from "./enemy-combat-cues.js";
 import { confirmPredictedDodges, removeRejectedDodge, replayPendingMovement, type PredictionFrame } from "./prediction-replay.js";
-import { advanceCameraOrbit, cameraOrbitOffset, initialCameraOrbit } from "./camera-orbit.js";
+import { advanceCameraOrbit, cameraOrbitOffset, dragCameraOrbit, initialCameraOrbit } from "./camera-orbit.js";
 import { advanceCameraFollow, advanceCameraHeight, advanceCameraPosition } from "./camera-follow.js";
 import { CombatSyncRecorder } from "./combat-sync.js";
 import {
@@ -8299,6 +8300,10 @@ const initialCanvasBounds = canvas.getBoundingClientRect();
 const pointer = { x: initialCanvasBounds.width / 2, y: initialCanvasBounds.height / 2 };
 const rangedPointer = { active: false, x: 0, y: 0 };
 let rangedFirePointer: number | null = null;
+let touchCameraPointerId: number | null = null;
+let touchCameraStart = { x: 0, y: 0 };
+let touchCameraLast = { x: 0, y: 0 };
+let touchCameraDragged = false;
 let keyboardFireHeld = false;
 function rangedFireAllowed(requirePointerAim = true): boolean {
   const combatMenuPanels = [inventoryPanel, lootPanel, defeatScreen, quizPanel, blacksmithPanel, tavernDialogue];
@@ -10075,7 +10080,17 @@ function updatePointerPosition(event: PointerEvent): void {
   if (specialAimActive) updateSpecialAimFromPointer();
 }
 
-canvas.addEventListener("pointermove", updatePointerPosition);
+canvas.addEventListener("pointermove", event => {
+  updatePointerPosition(event);
+  if (event.pointerType !== "touch" || event.pointerId !== touchCameraPointerId) return;
+  if (!touchCameraDragged)
+    touchCameraDragged = touchDragStarted(touchCameraStart.x, touchCameraStart.y, event.clientX, event.clientY);
+  if (touchCameraDragged) {
+    cameraOrbit = dragCameraOrbit(cameraOrbit, event.clientX - touchCameraLast.x, event.clientY - touchCameraLast.y);
+    event.preventDefault();
+  }
+  touchCameraLast = { x: event.clientX, y: event.clientY };
+});
 canvas.addEventListener("pointerleave", () => { rangedFirePointer = null; rangedPointer.active = false; updateRangedReticle(); });
 
 function visibleMarkState(mob: MobVisual, now = Date.now()): MarkVisualState | null {
@@ -10772,20 +10787,13 @@ window.addEventListener("keydown", event => {
 let touchStrafe = 0;
 let touchForward = 0;
 let joystickPointerId: number | null = null;
+let joystickOrigin = { x: 0, y: 0 };
 
 function updateJoystick(clientX: number, clientY: number): void {
-  const bounds = joystickZone.getBoundingClientRect();
-  const radius = bounds.width * 0.34;
-  let offsetX = clientX - (bounds.left + bounds.width / 2);
-  let offsetY = clientY - (bounds.top + bounds.height / 2);
-  const distance = Math.hypot(offsetX, offsetY);
-  if (distance > radius) {
-    offsetX = offsetX / distance * radius;
-    offsetY = offsetY / distance * radius;
-  }
-  touchStrafe = offsetX / radius;
-  touchForward = offsetY / radius;
-  joystickKnob.style.transform = `translate(calc(-50% + ${offsetX}px), calc(-50% + ${offsetY}px))`;
+  const sample = tabletJoystickSample(clientX, clientY, joystickOrigin.x, joystickOrigin.y);
+  touchStrafe = sample.x;
+  touchForward = sample.y;
+  joystickKnob.style.transform = `translate(calc(-50% + ${sample.offsetX}px), calc(-50% + ${sample.offsetY}px))`;
 }
 
 function releaseJoystick(pointerId: number): void {
@@ -10794,11 +10802,21 @@ function releaseJoystick(pointerId: number): void {
   touchStrafe = 0;
   touchForward = 0;
   joystickKnob.style.transform = "translate(-50%, -50%)";
+  joystickZone.dataset.active = "false";
 }
 
 joystickZone.addEventListener("pointerdown", event => {
+  event.preventDefault();
   joystickPointerId = event.pointerId;
   joystickZone.setPointerCapture(event.pointerId);
+  const bounds = joystickZone.getBoundingClientRect();
+  const inset = Math.min(60, bounds.width / 2, bounds.height / 2);
+  const localX = Math.max(inset, Math.min(bounds.width - inset, event.clientX - bounds.left));
+  const localY = Math.max(inset, Math.min(bounds.height - inset, event.clientY - bounds.top));
+  joystickOrigin = { x: bounds.left + localX, y: bounds.top + localY };
+  joystickZone.style.setProperty("--joystick-origin-x", `${localX}px`);
+  joystickZone.style.setProperty("--joystick-origin-y", `${localY}px`);
+  joystickZone.dataset.active = "true";
   updateJoystick(event.clientX, event.clientY);
 });
 joystickZone.addEventListener("pointermove", event => {
@@ -11574,6 +11592,8 @@ movementDebugCopy.addEventListener("click", async () => {
 
 function resetMovementControls(): void {
   rangedFirePointer = null;
+  touchCameraPointerId = null;
+  touchCameraDragged = false;
   keys.clear();
   if (joystickPointerId !== null) releaseJoystick(joystickPointerId);
   touchStrafe = 0;
@@ -12772,6 +12792,14 @@ canvas.addEventListener("pointerdown", event => {
   }
   if (event.button !== 0) return;
   updatePointerPosition(event);
+  if (event.pointerType === "touch") {
+    touchCameraPointerId = event.pointerId;
+    touchCameraStart = touchCameraLast = { x: event.clientX, y: event.clientY };
+    touchCameraDragged = false;
+    canvas.setPointerCapture(event.pointerId);
+    event.preventDefault();
+    return;
+  }
   updateTarget();
   requestPrimaryAction();
   if (event.pointerType === "mouse" && rangedFireAllowed()) rangedFirePointer = event.pointerId;
@@ -12785,9 +12813,22 @@ window.addEventListener("pointercancel", event => {
   if (lootHold?.source === "touch") cancelLootHold();
 });
 canvas.addEventListener("pointerup", event => {
+  if (event.pointerType === "touch" && event.pointerId === touchCameraPointerId) {
+    const wasDrag = touchCameraDragged;
+    touchCameraPointerId = null;
+    touchCameraDragged = false;
+    if (!wasDrag) {
+      updatePointerPosition(event);
+      updateTarget();
+      requestPrimaryAction();
+    }
+  }
   if (event.button === 2) requestDefense(false);
 });
-canvas.addEventListener("pointercancel", () => requestDefense(false));
+canvas.addEventListener("pointercancel", event => {
+  if (event.pointerId === touchCameraPointerId) { touchCameraPointerId = null; touchCameraDragged = false; }
+  requestDefense(false);
+});
 canvas.addEventListener("contextmenu", event => event.preventDefault());
 mineButton.addEventListener("pointerdown", event => {
   event.preventDefault();
