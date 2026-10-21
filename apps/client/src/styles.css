@@ -3958,3 +3958,46 @@ body:has(#loot-pack-decision:not([hidden])) #waypoint-guide { display: none; }
   #event-log,
   #world-objective { display: none; }
 }
+
+#tablet-camera-hint { display: none; }
+#tablet-camera-hint[hidden] { display: none !important; }
+
+@media (pointer: coarse) and (orientation: landscape) {
+  #tablet-camera-hint {
+    position: fixed;
+    z-index: 34;
+    top: calc(92px + env(safe-area-inset-top));
+    left: 50%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-sizing: border-box;
+    width: min(330px, calc(100vw - 460px));
+    min-width: 250px;
+    padding: 10px 14px;
+    transform: translateX(-50%);
+    border: 1px solid #82d7c0a8;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #102920ee, #071510ee);
+    box-shadow: 0 10px 32px #000a, inset 0 0 20px #69d2ad14;
+    color: #eafff7;
+    pointer-events: none;
+    animation: tablet-camera-hint-in .3s ease-out both;
+  }
+  #tablet-camera-hint > span { color: #82e3c5; font-size: 28px; line-height: 1; }
+  #tablet-camera-hint strong,
+  #tablet-camera-hint small { display: block; }
+  #tablet-camera-hint strong { font: 950 11px/1.2 system-ui; letter-spacing: .12em; }
+  #tablet-camera-hint small { margin-top: 3px; color: #b9d4ca; font: 650 10px/1.3 system-ui; }
+  html.tablet-combat-active #tablet-camera-hint { display: none; }
+  body:has([role="dialog"]:not([hidden]), #minimap[data-expanded="true"]) #tablet-camera-hint { display: none; }
+}
+
+@keyframes tablet-camera-hint-in {
+  from { opacity: 0; transform: translate(-50%, -8px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #tablet-camera-hint { animation: none; }
+}

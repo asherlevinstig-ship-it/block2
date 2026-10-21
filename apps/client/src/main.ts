@@ -104,7 +104,7 @@ import { advanceMobMotion, advanceMobTurnLean, mobRootPositionChanged, mobRootYa
 import { createServerClock, sampleServerClock, enemyAttackPresentation } from "./enemy-timeline.js";
 import { bruteRecoveryPose, enemyAwarenessCue, enemyCombatCue, enemyCueLineClear, enemyShotGuideLength } from "./enemy-combat-cues.js";
 import { confirmPredictedDodges, removeRejectedDodge, replayPendingMovement, type PredictionFrame } from "./prediction-replay.js";
-import { advanceCameraOrbit, cameraOrbitOffset, dragCameraOrbit, initialCameraOrbit } from "./camera-orbit.js";
+import { advanceCameraOrbit, cameraOrbitOffset, dragCameraOrbit, initialCameraOrbit, pinchCameraOrbit } from "./camera-orbit.js";
 import { advanceCameraFollow, advanceCameraHeight, advanceCameraPosition } from "./camera-follow.js";
 import { CombatSyncRecorder } from "./combat-sync.js";
 import {
@@ -1382,8 +1382,9 @@ const contextButtonLabel = contextButton.querySelector<HTMLElement>("span")!;
 const contextButtonHint = contextButton.querySelector<HTMLElement>("small")!;
 const touchModeButton = document.querySelector<HTMLButtonElement>("#touch-mode-button")!;
 const touchModeLabel = document.querySelector<HTMLElement>("#touch-mode-label")!;
+const tabletCameraHint = document.querySelector<HTMLElement>("#tablet-camera-hint")!;
 const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-toggle [data-mode]")];
-if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !dangerZone || !dangerZoneName || !locationCoordinates || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !graphicsQualitySelect || !graphicsQualityStatus || !performanceCopyLog || !performanceClearLog || !performanceLogStatus || !inventoryPanel || !inventoryTotal || !inventoryToggle || !inventoryClose || !inventoryBadge || !inventoryEquipped || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== requiredInventoryMainHands || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !callingButton || !contextButton || !contextButtonLabel || !contextButtonHint || !touchModeButton || !touchModeLabel || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !controlsHelp || !combatReticle || !tabletAimGuide || !combatFeedback || modeButtons.length !== 2) {
+if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !dangerZone || !dangerZoneName || !locationCoordinates || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !graphicsQualitySelect || !graphicsQualityStatus || !performanceCopyLog || !performanceClearLog || !performanceLogStatus || !inventoryPanel || !inventoryTotal || !inventoryToggle || !inventoryClose || !inventoryBadge || !inventoryEquipped || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== requiredInventoryMainHands || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !callingButton || !contextButton || !contextButtonLabel || !contextButtonHint || !touchModeButton || !touchModeLabel || !tabletCameraHint || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !controlsHelp || !combatReticle || !tabletAimGuide || !combatFeedback || modeButtons.length !== 2) {
   throw new Error("Game shell is missing required elements");
 }
 if ([quizTablePrompt, blacksmithPrompt, playerTradePrompt, playerTradeName, blacksmithPanel, blacksmithMessage, blacksmithOre, blacksmithGold, blacksmithPrice, blacksmithSell, blacksmithClose, haulEquipName, haulEquipDetail, haulEquip, haulSalvageCount, haulSalvageDetail, haulSalvage, haulStoreCount, haulStore, haulUpgradeName, haulUpgradeTrack, haulUpgradeDetail, haulRegionName, haulRegionDetail, haulTrackRegion, quizPanel, quizBalance, quizBalanceAmount, quizPotDisplay, quizPotLabel, quizWinToast, quizAnswerFeedback, quizFeedbackIcon, quizFeedbackTitle, quizFeedbackDetail, quizMessage, quizStakeHeading, quizStakes, quizQuestion, quizPot, quizPrompt, quizChoices, quizDecision, quizDouble, quizQuit, quizClose, tavernCoins].some(element => !element) || blacksmithUpgradeCards.length !== Object.keys(BLACKSMITH_UPGRADES).length) {
@@ -1457,7 +1458,11 @@ camera.addComponent("camera", {
   toneMapping: pc.TONEMAP_ACES, gammaCorrection: pc.GAMMA_SRGB,
 });
 app.root.addChild(camera);
-let cameraOrbit = initialCameraOrbit();
+const CAMERA_ZOOM_STORAGE_KEY = "blockcraft-tablet-camera-zoom-v1";
+const storedCameraDistance = (() => {
+  try { return Number(window.localStorage.getItem(CAMERA_ZOOM_STORAGE_KEY)) || undefined; } catch { return undefined; }
+})();
+let cameraOrbit = initialCameraOrbit(storedCameraDistance);
 let indoorCameraBlend = 0;
 
 const light = new pc.Entity("sun");
@@ -8354,8 +8359,33 @@ let rangedFirePointer: number | null = null;
 let touchCameraPointerId: number | null = null;
 let touchCameraStart = { x: 0, y: 0 };
 let touchCameraLast = { x: 0, y: 0 };
+let touchCameraLastAt = 0;
 let touchCameraDragged = false;
+let touchCameraPinched = false;
+let touchCameraPinchSpan: number | null = null;
+const touchCameraPoints = new Map<number, { x: number; y: number }>();
+const TABLET_CAMERA_HINT_STORAGE_KEY = "blockcraft-tablet-camera-hint-v1";
+let tabletCameraHintSeen = (() => {
+  try { return window.localStorage.getItem(TABLET_CAMERA_HINT_STORAGE_KEY) === "seen"; } catch { return false; }
+})();
+const tabletCameraHintEligibleAt = performance.now() + 1_800;
 let keyboardFireHeld = false;
+
+function completeTabletCameraHint(): void {
+  if (tabletCameraHintSeen) return;
+  tabletCameraHintSeen = true;
+  tabletCameraHint.hidden = true;
+  try { window.localStorage.setItem(TABLET_CAMERA_HINT_STORAGE_KEY, "seen"); } catch { /* Storage may be disabled. */ }
+}
+
+function updateTabletCameraHint(now = performance.now()): void {
+  tabletCameraHint.hidden = tabletCameraHintSeen || !tabletControlsQuery.matches || !worldReady
+    || now < tabletCameraHintEligibleAt || tabletHudCombatActive || popupQueue.active() !== null;
+}
+
+function saveTabletCameraZoom(): void {
+  try { window.localStorage.setItem(CAMERA_ZOOM_STORAGE_KEY, cameraOrbit.distance.toFixed(3)); } catch { /* Storage may be disabled. */ }
+}
 function rangedFireAllowed(requirePointerAim = true): boolean {
   const combatMenuPanels = [inventoryPanel, lootPanel, defeatScreen, quizPanel, blacksmithPanel, tavernDialogue];
   return Boolean(room && worldReady && (interactionMode === "combat" || !requirePointerAim)
@@ -10132,15 +10162,32 @@ function updatePointerPosition(event: PointerEvent): void {
 }
 
 canvas.addEventListener("pointermove", event => {
-  updatePointerPosition(event);
-  if (event.pointerType !== "touch" || event.pointerId !== touchCameraPointerId) return;
+  if (event.pointerType !== "touch") { updatePointerPosition(event); return; }
+  if (!touchCameraPoints.has(event.pointerId)) return;
+  touchCameraPoints.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  if (touchCameraPoints.size >= 2) {
+    const points = [...touchCameraPoints.values()];
+    const first = points[0]!;
+    const second = points[1]!;
+    const span = Math.hypot(second.x - first.x, second.y - first.y);
+    if (touchCameraPinchSpan !== null) cameraOrbit = pinchCameraOrbit(cameraOrbit, touchCameraPinchSpan, span);
+    touchCameraPinchSpan = span;
+    touchCameraPinched = true;
+    touchCameraDragged = true;
+    completeTabletCameraHint();
+    event.preventDefault();
+    return;
+  }
+  if (event.pointerId !== touchCameraPointerId) return;
   if (!touchCameraDragged)
     touchCameraDragged = touchDragStarted(touchCameraStart.x, touchCameraStart.y, event.clientX, event.clientY);
   if (touchCameraDragged) {
-    cameraOrbit = dragCameraOrbit(cameraOrbit, event.clientX - touchCameraLast.x, event.clientY - touchCameraLast.y);
+    cameraOrbit = dragCameraOrbit(cameraOrbit, event.clientX - touchCameraLast.x, event.clientY - touchCameraLast.y, event.timeStamp - touchCameraLastAt);
+    completeTabletCameraHint();
     event.preventDefault();
   }
   touchCameraLast = { x: event.clientX, y: event.clientY };
+  touchCameraLastAt = event.timeStamp;
 });
 canvas.addEventListener("pointerleave", () => { rangedFirePointer = null; rangedPointer.active = false; updateRangedReticle(); });
 
@@ -11479,9 +11526,11 @@ function updateTabletHudCombatState(now: number): void {
   if (now - tabletHudCombatCheckedAt < 120) return;
   tabletHudCombatCheckedAt = now;
   const active = tabletControlsQuery.matches && localCombatActive();
-  if (active === tabletHudCombatActive) return;
-  tabletHudCombatActive = active;
-  document.documentElement.classList.toggle("tablet-combat-active", active);
+  if (active !== tabletHudCombatActive) {
+    tabletHudCombatActive = active;
+    document.documentElement.classList.toggle("tablet-combat-active", active);
+  }
+  updateTabletCameraHint(now);
 }
 
 interface StopTraceFrame {
@@ -11681,6 +11730,9 @@ function resetMovementControls(): void {
   clearTabletAttackAim();
   touchCameraPointerId = null;
   touchCameraDragged = false;
+  touchCameraPinched = false;
+  touchCameraPinchSpan = null;
+  touchCameraPoints.clear();
   keys.clear();
   if (joystickPointerId !== null) releaseJoystick(joystickPointerId);
   touchStrafe = 0;
@@ -12890,10 +12942,25 @@ canvas.addEventListener("pointerdown", event => {
   if (event.button !== 0) return;
   updatePointerPosition(event);
   if (event.pointerType === "touch") {
-    touchCameraPointerId = event.pointerId;
-    touchCameraStart = touchCameraLast = { x: event.clientX, y: event.clientY };
-    touchCameraDragged = false;
+    const point = { x: event.clientX, y: event.clientY };
+    touchCameraPoints.set(event.pointerId, point);
     canvas.setPointerCapture(event.pointerId);
+    if (touchCameraPoints.size === 1) {
+      touchCameraPointerId = event.pointerId;
+      touchCameraStart = touchCameraLast = point;
+      touchCameraLastAt = event.timeStamp;
+      touchCameraDragged = false;
+      touchCameraPinched = false;
+      touchCameraPinchSpan = null;
+    } else {
+      const points = [...touchCameraPoints.values()];
+      const first = points[0]!;
+      const second = points[1]!;
+      touchCameraPinchSpan = Math.hypot(second.x - first.x, second.y - first.y);
+      touchCameraPinched = true;
+      touchCameraDragged = true;
+      completeTabletCameraHint();
+    }
     event.preventDefault();
     return;
   }
@@ -12910,11 +12977,26 @@ window.addEventListener("pointercancel", event => {
   if (lootHold?.source === "touch") cancelLootHold();
 });
 canvas.addEventListener("pointerup", event => {
-  if (event.pointerType === "touch" && event.pointerId === touchCameraPointerId) {
-    const wasDrag = touchCameraDragged;
-    touchCameraPointerId = null;
-    touchCameraDragged = false;
-    if (!wasDrag) {
+  if (event.pointerType === "touch" && touchCameraPoints.has(event.pointerId)) {
+    const wasDrag = touchCameraDragged || touchCameraPinched;
+    touchCameraPoints.delete(event.pointerId);
+    if (touchCameraPinched) saveTabletCameraZoom();
+    if (touchCameraPoints.size === 1) {
+      const remainingEntry = touchCameraPoints.entries().next().value;
+      if (!remainingEntry) return;
+      const [remainingId, remaining] = remainingEntry;
+      touchCameraPointerId = remainingId;
+      touchCameraStart = touchCameraLast = remaining;
+      touchCameraLastAt = event.timeStamp;
+      touchCameraDragged = true;
+      touchCameraPinchSpan = null;
+    } else if (touchCameraPoints.size === 0) {
+      touchCameraPointerId = null;
+      touchCameraDragged = false;
+      touchCameraPinched = false;
+      touchCameraPinchSpan = null;
+    }
+    if (!wasDrag && touchCameraPoints.size === 0) {
       updatePointerPosition(event);
       updateTarget();
       requestPrimaryAction();
@@ -12923,7 +13005,25 @@ canvas.addEventListener("pointerup", event => {
   if (event.button === 2) requestDefense(false);
 });
 canvas.addEventListener("pointercancel", event => {
-  if (event.pointerId === touchCameraPointerId) { touchCameraPointerId = null; touchCameraDragged = false; }
+  if (touchCameraPoints.has(event.pointerId)) {
+    touchCameraPoints.delete(event.pointerId);
+    if (touchCameraPinched) saveTabletCameraZoom();
+    if (touchCameraPoints.size === 1) {
+      const remainingEntry = touchCameraPoints.entries().next().value;
+      if (!remainingEntry) return;
+      const [remainingId, remaining] = remainingEntry;
+      touchCameraPointerId = remainingId;
+      touchCameraStart = touchCameraLast = remaining;
+      touchCameraLastAt = event.timeStamp;
+      touchCameraDragged = true;
+      touchCameraPinchSpan = null;
+    } else if (touchCameraPoints.size === 0) {
+      touchCameraPointerId = null;
+      touchCameraDragged = false;
+      touchCameraPinched = false;
+      touchCameraPinchSpan = null;
+    }
+  }
   requestDefense(false);
 });
 canvas.addEventListener("contextmenu", event => event.preventDefault());

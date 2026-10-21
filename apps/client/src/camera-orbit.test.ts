@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { advanceCameraOrbit, cameraOrbitOffset, dragCameraOrbit, initialCameraOrbit } from "./camera-orbit.js";
+import { advanceCameraOrbit, cameraOrbitOffset, dragCameraOrbit, initialCameraOrbit, MAX_CAMERA_DISTANCE, MIN_CAMERA_DISTANCE, pinchCameraOrbit } from "./camera-orbit.js";
 
 describe("camera orbit", () => {
   it("preserves the existing starting camera view", () => {
@@ -32,6 +32,26 @@ describe("camera orbit", () => {
     const dragged = dragCameraOrbit(initial, 50, -10_000);
     expect(dragged.yaw).toBeLessThan(initial.yaw);
     expect(dragged.pitch).toBeCloseTo(Math.PI / 9);
-    expect(dragged.yawSpeed).toBe(0);
+    expect(dragged.yawSpeed).toBeLessThan(0);
+  });
+
+  it("carries a short swipe with bounded momentum then settles", () => {
+    const initial = initialCameraOrbit();
+    let orbit = dragCameraOrbit(initial, 35, 0, 16);
+    expect(Math.abs(orbit.yawSpeed)).toBeLessThanOrEqual(2.4);
+    const releasedYaw = orbit.yaw;
+    for (let frame = 0; frame < 60; frame++) orbit = advanceCameraOrbit(orbit, 0, 0, 1 / 60);
+    expect(orbit.yaw).toBeLessThan(releasedYaw);
+    expect(Math.abs(orbit.yawSpeed)).toBeLessThan(.001);
+  });
+
+  it("pinches inward and outward within safe zoom limits", () => {
+    const initial = initialCameraOrbit();
+    const closer = pinchCameraOrbit(initial, 100, 150);
+    const farther = pinchCameraOrbit(initial, 100, 50);
+    expect(closer.distance).toBeLessThan(initial.distance);
+    expect(farther.distance).toBeGreaterThan(initial.distance);
+    expect(pinchCameraOrbit(initialCameraOrbit(MIN_CAMERA_DISTANCE), 100, 1_000).distance).toBe(MIN_CAMERA_DISTANCE);
+    expect(pinchCameraOrbit(initialCameraOrbit(MAX_CAMERA_DISTANCE), 100, 1).distance).toBe(MAX_CAMERA_DISTANCE);
   });
 });
