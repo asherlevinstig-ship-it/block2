@@ -3,6 +3,7 @@ import { advanceOnboarding, ONBOARDING_DONE, ONBOARDING_STAGE, ONBOARDING_STEPS,
   callingFirstOnboardingStorageKey, legacyOnboardingStorageKey, migrateLegacyOnboardingStep,
   migrateOldestOnboardingStep, oldestOnboardingStorageKey, parseOnboardingStep,
   shouldDeferOnboardingForCalling, shouldPromptTownDeparture, shouldStartCallingFirstJourney,
+  shouldShowKeyboardCameraHint,
   starterEquipmentRequired, starterEquipmentStorageKey, starterInventoryLesson } from "./new-player-onboarding.js";
 
 describe("first-play onboarding", () => {
@@ -99,5 +100,16 @@ describe("first-play onboarding", () => {
     expect(shouldPromptTownDeparture(false, true, 1)).toBe(false);
     expect(shouldPromptTownDeparture(true, false, 1)).toBe(false);
     expect(shouldPromptTownDeparture(true, true, 3)).toBe(false);
+  });
+
+  it("shows keyboard camera guidance in town throughout level one", () => {
+    const ready = { worldReady: true, inTown: true, level: 1, coarsePointer: false,
+      dialogOpen: false, competingNoticeOpen: false };
+    expect(shouldShowKeyboardCameraHint(ready)).toBe(true);
+    expect(shouldShowKeyboardCameraHint({ ...ready, inTown: false })).toBe(false);
+    expect(shouldShowKeyboardCameraHint({ ...ready, level: 2 })).toBe(false);
+    expect(shouldShowKeyboardCameraHint({ ...ready, coarsePointer: true })).toBe(false);
+    expect(shouldShowKeyboardCameraHint({ ...ready, dialogOpen: true })).toBe(false);
+    expect(shouldShowKeyboardCameraHint({ ...ready, competingNoticeOpen: true })).toBe(false);
   });
 });

@@ -381,7 +381,8 @@ import { characterCreationNeeded, createGuestProfileToken, finishCharacterCreati
 import { advanceOnboarding, ONBOARDING_DONE, ONBOARDING_STAGE, ONBOARDING_STEPS, onboardingStorageKey, legacyOnboardingStorageKey,
   callingFirstOnboardingStorageKey, migrateLegacyOnboardingStep, migrateOldestOnboardingStep, oldestOnboardingStorageKey,
   parseOnboardingStep, shouldPromptTownDeparture, starterEquipmentRequired, starterEquipmentStorageKey,
-  starterInventoryLesson, shouldDeferOnboardingForCalling, shouldStartCallingFirstJourney, type OnboardingEvent } from "./new-player-onboarding.js";
+  starterInventoryLesson, shouldDeferOnboardingForCalling, shouldShowKeyboardCameraHint,
+  shouldStartCallingFirstJourney, type OnboardingEvent } from "./new-player-onboarding.js";
 import { firstVictoryTownRoute, onboardingTrailRoute, sampleTrail } from "./onboarding-trail.js";
 import { firstVictoryCallingFit, firstVictoryItemFromDrop, firstVictoryRewardStorageKey,
   parseFirstVictoryReward, type FirstVictoryRewardState } from "./first-victory-reward.js";
@@ -1384,8 +1385,10 @@ const contextButtonHint = contextButton.querySelector<HTMLElement>("small")!;
 const touchModeButton = document.querySelector<HTMLButtonElement>("#touch-mode-button")!;
 const touchModeLabel = document.querySelector<HTMLElement>("#touch-mode-label")!;
 const tabletCameraHint = document.querySelector<HTMLElement>("#tablet-camera-hint")!;
+const keyboardCameraHint = document.querySelector<HTMLElement>("#keyboard-camera-hint")!;
+const keyboardCameraKeys = [...keyboardCameraHint.querySelectorAll<HTMLElement>("kbd[data-key]")];
 const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-toggle [data-mode]")];
-if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !dangerZone || !dangerZoneName || !locationCoordinates || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !graphicsQualitySelect || !graphicsQualityStatus || !performanceCopyLog || !performanceClearLog || !performanceLogStatus || !inventoryPanel || !inventoryTotal || !inventoryToggle || !inventoryClose || !inventoryBadge || !inventoryEquipped || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== requiredInventoryMainHands || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !callingButton || !contextButton || !contextButtonLabel || !contextButtonHint || !touchModeButton || !touchModeLabel || !tabletCameraHint || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !controlsHelp || !combatReticle || !tabletAimGuide || !combatFeedback || modeButtons.length !== 2) {
+if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !dangerZone || !dangerZoneName || !locationCoordinates || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !graphicsQualitySelect || !graphicsQualityStatus || !performanceCopyLog || !performanceClearLog || !performanceLogStatus || !inventoryPanel || !inventoryTotal || !inventoryToggle || !inventoryClose || !inventoryBadge || !inventoryEquipped || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== requiredInventoryMainHands || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !callingButton || !contextButton || !contextButtonLabel || !contextButtonHint || !touchModeButton || !touchModeLabel || !tabletCameraHint || !keyboardCameraHint || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !controlsHelp || !combatReticle || !tabletAimGuide || !combatFeedback || modeButtons.length !== 2) {
   throw new Error("Game shell is missing required elements");
 }
 if ([quizTablePrompt, blacksmithPrompt, playerTradePrompt, playerTradeName, blacksmithPanel, blacksmithMessage, blacksmithOre, blacksmithGold, blacksmithPrice, blacksmithSell, blacksmithClose, haulEquipName, haulEquipDetail, haulEquip, haulSalvageCount, haulSalvageDetail, haulSalvage, haulStoreCount, haulStore, haulUpgradeName, haulUpgradeTrack, haulUpgradeDetail, haulRegionName, haulRegionDetail, haulTrackRegion, quizPanel, quizBalance, quizBalanceAmount, quizPotDisplay, quizPotLabel, quizWinToast, quizAnswerFeedback, quizFeedbackIcon, quizFeedbackTitle, quizFeedbackDetail, quizMessage, quizStakeHeading, quizStakes, quizQuestion, quizPot, quizPrompt, quizChoices, quizDecision, quizDouble, quizQuit, quizClose, tavernCoins].some(element => !element) || blacksmithUpgradeCards.length !== Object.keys(BLACKSMITH_UPGRADES).length) {
@@ -8427,6 +8430,18 @@ function updateTabletCameraHint(now = performance.now()): void {
     || now < tabletCameraHintEligibleAt || tabletHudCombatActive || popupQueue.active() !== null;
 }
 
+function updateKeyboardCameraHint(): void {
+  keyboardCameraHint.hidden = !shouldShowKeyboardCameraHint({
+    worldReady,
+    inTown: isAtTownOfBeginnings(),
+    level: localCharacterProgression.level,
+    coarsePointer: tabletControlsQuery.matches,
+    dialogOpen: reportedProtectedDialog === true || popupQueue.active() !== null,
+    competingNoticeOpen: !progressionNoticePanel.hidden || !callingFirstUse.hidden,
+  });
+  for (const key of keyboardCameraKeys) key.dataset.active = String(keys.has(key.dataset.key ?? ""));
+}
+
 function saveTabletCameraZoom(): void {
   try { window.localStorage.setItem(CAMERA_ZOOM_STORAGE_KEY, cameraOrbit.distance.toFixed(3)); } catch { /* Storage may be disabled. */ }
 }
@@ -11575,6 +11590,7 @@ function updateTabletHudCombatState(now: number): void {
     document.documentElement.classList.toggle("tablet-combat-active", active);
   }
   updateTabletCameraHint(now);
+  updateKeyboardCameraHint();
 }
 
 interface StopTraceFrame {

@@ -85,3 +85,15 @@ export function starterEquipmentRequired(savedState: string | null, level: numbe
 export function shouldPromptTownDeparture(wasInsideTown: boolean, isBeyondTown: boolean, level: number): boolean {
   return wasInsideTown && isBeyondTown && level >= 1 && level <= 2;
 }
+
+export function shouldShowKeyboardCameraHint(input: {
+  worldReady: boolean;
+  inTown: boolean;
+  level: number;
+  coarsePointer: boolean;
+  dialogOpen: boolean;
+  competingNoticeOpen: boolean;
+}): boolean {
+  return input.worldReady && input.inTown && input.level === 1 && !input.coarsePointer
+    && !input.dialogOpen && !input.competingNoticeOpen;
+}
