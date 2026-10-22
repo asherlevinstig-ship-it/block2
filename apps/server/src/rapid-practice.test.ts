@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   RAPID_PRACTICE_ARENA,
+  RAPID_PRACTICE_BOSS_ID,
   RAPID_PRACTICE_SPAWNS,
+  RAPID_PRACTICE_WAVES,
+  rapidPracticeAttackTiming,
   rapidPracticeMovementSpeed,
+  rapidPracticeProjectileFan,
   rapidPracticeProjectileTravelMs,
 } from "./rapid-practice.js";
 
@@ -16,6 +20,9 @@ describe("rapid 2.5D practice", () => {
       expect(spawn.z).toBeGreaterThan(RAPID_PRACTICE_ARENA.minZ);
       expect(spawn.z).toBeLessThan(RAPID_PRACTICE_ARENA.maxZ);
     }
+    expect(RAPID_PRACTICE_WAVES.flat()).toHaveLength(18);
+    expect(new Set(RAPID_PRACTICE_WAVES.flat()).size).toBe(18);
+    expect(RAPID_PRACTICE_WAVES[2]).toContain(RAPID_PRACTICE_BOSS_ID);
   });
 
   it("speeds up play only inside the prototype", () => {
@@ -24,5 +31,14 @@ describe("rapid 2.5D practice", () => {
     expect(rapidPracticeProjectileTravelMs(900, false)).toBe(900);
     expect(rapidPracticeProjectileTravelMs(900, true)).toBe(612);
     expect(rapidPracticeProjectileTravelMs(200, true)).toBe(180);
+  });
+
+  it("tightens attacks and expands hostile shots into readable lanes", () => {
+    expect(rapidPracticeAttackTiming({ durationMs: 600, impactMs: 280 }, true))
+      .toEqual({ durationMs: 420, impactMs: 196 });
+    const fan = rapidPracticeProjectileFan({ x: 0, z: 0 }, [{ x: 0, y: 1, z: 8 }], true);
+    expect(fan).toHaveLength(3);
+    expect(fan.map(shot => shot.x)).toEqual([-0.72, 0, 0.72]);
+    expect(rapidPracticeProjectileFan({ x: 0, z: 0 }, [{ x: 0, y: 1, z: 8 }], false)).toHaveLength(1);
   });
 });

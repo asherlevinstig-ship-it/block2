@@ -57,7 +57,9 @@ import { REGIONAL_PACK_DISRUPTION_MS, regionalPackCooldownMultiplier, regionalPa
   regionalPackSpeedMultiplier } from "./regional-pack-tactics.js";
 import { mobSimulationActive } from "./mob-activation.js";
 import { SERVER_TICK_BUDGET_MS, appendTickSample, samplePercentile } from "./performance-metrics.js";
-import { RAPID_PRACTICE_ARENA, RAPID_PRACTICE_SPAWNS, rapidPracticeMovementSpeed, rapidPracticeProjectileTravelMs } from "./rapid-practice.js";
+import { RAPID_PRACTICE_ARENA, RAPID_PRACTICE_BOSS_ID, RAPID_PRACTICE_RESTART_DELAY_MS, RAPID_PRACTICE_SPAWNS,
+  RAPID_PRACTICE_WAVE_DELAY_MS, RAPID_PRACTICE_WAVES, rapidPracticeAttackTiming, rapidPracticeMovementSpeed,
+  rapidPracticeProjectileFan, rapidPracticeProjectileTravelMs } from "./rapid-practice.js";
 import type { ServerPerformanceUpdate } from "@blockcraft/protocol";
 import { regionalPackRewardDefeat, regionalPackRewardItems, regionalPackRewardNotice,
   type RegionalPackRewardCycle, type RegionalPackRewardKind } from "./regional-pack-rewards.js";
@@ -640,6 +642,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private worldSeed = "blockcraft-dev";
   private roomKind: "overworld" | "silver-depths" | "practice" = "overworld";
   private rapidPractice = false;
+  private rapidPracticeWave = 1;
+  private rapidPracticeWaveAdvanceAt = 0;
   private practiceReturnRoomId = new Map<string, string>();
   private silverInstanceKey = "";
   private instancePartySize = 1;
@@ -763,12 +767,21 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.state.mobs.clear(); this.mobHomes.clear(); this.state.portals.clear();
       if (this.rapidPractice) {
         for (const spawn of RAPID_PRACTICE_SPAWNS) this.registerMob(spawn.id, spawn.archetype, spawn);
-        for (const mob of this.state.mobs.values()) {
+        const openingWave = new Set<string>(RAPID_PRACTICE_WAVES[0]);
+        for (const [mobId, mob] of this.state.mobs) {
           mob.name = "Speed Lab " + mob.name;
           mob.attackDamage = 1;
-          mob.maxHealth = mob.health = mob.archetype === "stone_brute" ? 20 : 10;
+          mob.maxHealth = mob.health = mob.archetype === "stone_brute" ? 14 : 6;
           mob.speedMultiplier *= 1.18;
+          if (!openingWave.has(mobId)) { mob.alive = false; mob.health = 0; mob.respawnAt = Number.MAX_SAFE_INTEGER; }
         }
+        const boss = this.state.mobs.get(RAPID_PRACTICE_BOSS_ID)!;
+        boss.name = "Speed Lab Warden";
+        boss.isChampion = true;
+        boss.maxHealth = 38;
+        boss.health = 0;
+        boss.armor = 1;
+        boss.speedMultiplier *= 1.12;
       } else {
         this.registerMob("practice-crawler", "moss_crawler", { x: 105.5, y: 8, z: 104.5 });
         this.registerMob("practice-spitter", "cave_spitter", { x: 105.5, y: 8, z: 108.5 });
@@ -2374,6 +2387,47 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
   }
 
+  private activateRapidPracticeWave(wave: number, now: number): void {
+    const ids = RAPID_PRACTICE_WAVES[wave - 1] ?? RAPID_PRACTICE_WAVES[0];
+    for (const mobId of ids) {
+      const mob = this.state.mobs.get(mobId);
+      const home = this.mobHomes.get(mobId);
+      if (!mob || !home) continue;
+      mob.x = home.x; mob.y = home.y; mob.z = home.z;
+      mob.health = mob.maxHealth;
+      mob.alive = true;
+      mob.respawnAt = 0;
+      mob.materializeUntil = now + 700;
+      mob.combatState = "recover";
+      mob.stateUntil = mob.materializeUntil;
+      mob.targetId = "";
+      mob.aimCommitted = false;
+      mob.actionSequence = 0;
+      this.clearMobAttackTimeline(mob);
+      this.mobNavigation.set(mobId, createMobNavigationState());
+      this.mobAwareness.delete(mobId);
+    }
+    this.rapidPracticeWave = wave;
+    this.rapidPracticeWaveAdvanceAt = 0;
+    this.broadcast("practice:state", { active: true, wave,
+      message: wave === 3 ? "FINAL WAVE · Speed Lab Warden incoming" : `WAVE ${wave} · keep moving and hold attack` });
+  }
+
+  private advanceRapidPracticeWaves(now: number): void {
+    if (!this.rapidPractice) return;
+    const activeIds = RAPID_PRACTICE_WAVES[this.rapidPracticeWave - 1] ?? RAPID_PRACTICE_WAVES[0];
+    if (activeIds.some(id => this.state.mobs.get(id)?.alive)) { this.rapidPracticeWaveAdvanceAt = 0; return; }
+    if (this.rapidPracticeWaveAdvanceAt === 0) {
+      this.rapidPracticeWaveAdvanceAt = now + (this.rapidPracticeWave === 3
+        ? RAPID_PRACTICE_RESTART_DELAY_MS : RAPID_PRACTICE_WAVE_DELAY_MS);
+      this.broadcast("practice:state", { active: true, wave: this.rapidPracticeWave,
+        message: this.rapidPracticeWave === 3 ? "LAB CLEARED · restarting shortly" : `WAVE ${this.rapidPracticeWave} CLEARED` });
+      return;
+    }
+    if (now < this.rapidPracticeWaveAdvanceAt) return;
+    this.activateRapidPracticeWave(this.rapidPracticeWave === 3 ? 1 : this.rapidPracticeWave + 1, now);
+  }
+
   private setPracticeAbility(player: PlayerState, abilityId: CallingAbilityId): void {
     const ability = CALLING_ABILITY_OPTIONS.find(option => option.id === abilityId);
     if (!ability) return;
@@ -3124,7 +3178,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private defeatMob(mobId: string, mob: MobState, attackerId: string, now: number): void {
     if (!mob.alive) return;
     if (this.roomKind === "practice") {
-      mob.health = 0; mob.alive = false; mob.respawnAt = now + 3_000;
+      mob.health = 0; mob.alive = false; mob.respawnAt = this.rapidPractice ? Number.MAX_SAFE_INTEGER : now + 3_000;
       this.combatContributions.clear(mobId);
       return;
     }
@@ -8353,6 +8407,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       }
     }
     const now = Date.now();
+    this.advanceRapidPracticeWaves(now);
     if (this.roomKind === "overworld" && this.silverDepthsLobbies.size) this.validateSilverDepthsLobbies(now);
     this.resolvePendingIncomingHits(now);
     if (this.roomKind === "overworld") {
@@ -8713,6 +8768,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
             shots = spitterRingWithSafeGap(shots, aliveFollowers, followerIds.length);
           }
           const origin = { x: mob.x, y: mob.y, z: mob.z };
+          shots = rapidPracticeProjectileFan(origin, shots, this.rapidPractice);
           const championVenom = huntChampion?.pathId === "venom" ? huntChampionVenomHazard(mob.attackPattern) : null;
           const venomPools = mobId === GREENWOOD_MATRIARCH_ID && (mob.attackPattern === "double-fan" || mob.attackPattern === "venom-ring");
           const mistfenEruption = (mobId === "mistfen-behemoth" || mobId === MISTFEN_EVENT_ID)
@@ -9847,8 +9903,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const step = attackDefinition.combo && chain?.mainHandId === mainHandId
       ? nextComboStep(chain.step, chain.comboExpiresAt, now)
       : 1;
-    const timing = attackDefinition.attacks[step - 1] ?? attackDefinition.attacks[0];
-    if (!timing) return;
+    const baseTiming = attackDefinition.attacks[step - 1] ?? attackDefinition.attacks[0];
+    if (!baseTiming) return;
+    const timing = rapidPracticeAttackTiming(baseTiming, this.rapidPractice);
     this.attackChains.set(client.sessionId, {
       step,
       mainHandId,

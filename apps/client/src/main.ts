@@ -10,6 +10,7 @@ import type { AshenEquipmentForged, AshenReliquaryChoice, AshenReliquaryResult, 
 import { nearestRoleFieldOpportunity, nearestRoadsideEncounter, parseRoadsideClaims, type RoleFieldPath } from "@blockcraft/voxel-world";
 import { confirmedRangedHit, projectileImpactCue } from "./ranged-feedback.js";
 import { heldFireStep } from "./held-fire.js";
+import { continuousAttackEnabled, rapidCombatAnimationElapsed, rapidCombatDuration } from "./rapid-combat.js";
 import { callingLevelGuide, statChoiceDisabled } from "./progression-guidance.js";
 import { progressionNotice as chooseProgressionNotice, type ProgressionNotice } from "./progression-notice.js";
 import { abilityRevealUse, callingUnlockAnnouncement, canPresentAbilityReveal, earnedCallingAbilities, firstCallingUseInstruction, shouldGuideFirstCallingUse } from "./ability-reveal.js";
@@ -2118,10 +2119,12 @@ if (rapidPrototypeRequested) {
 
   const badge = document.createElement("aside");
   badge.id = "rapid-prototype-badge";
-  badge.innerHTML = "<strong>2.5D SPEED LAB</strong><span>18-enemy wave · all Callings · no progress saved</span>";
+  badge.innerHTML = "<strong>2.5D SPEED LAB</strong><span>Wave 1/3 · hold attack · aim while moving</span><small id=\"rapid-prototype-metrics\">Measuring frame and input timing…</small>";
   badge.style.cssText = "position:fixed;left:18px;top:68px;z-index:18;display:grid;gap:2px;padding:9px 13px;border:1px solid rgba(117,242,180,.55);border-radius:10px;background:rgba(6,18,14,.86);color:#d9ffdf;font:700 12px/1.2 system-ui;letter-spacing:.08em;pointer-events:none;box-shadow:0 7px 24px rgba(0,0,0,.32)";
   const detail = badge.querySelector("span") as HTMLElement;
   detail.style.cssText = "color:#9fc6ac;font-size:10px;font-weight:600;letter-spacing:.02em";
+  const metrics = badge.querySelector("small") as HTMLElement;
+  metrics.style.cssText = "color:#75cde8;font-size:9px;font-weight:700;letter-spacing:.02em";
   document.body.appendChild(badge);
 }
 
@@ -5438,12 +5441,14 @@ function updateDangerZone(tierValue: number, position = localPlayer.getPosition(
 
 function actionDuration(step: number): number {
   if (step < 1 || step > 3 || localActionMainHandId === null) return PRIMARY_ACTION_DURATION_MS;
-  return WEAPON_ATTACK_DEFINITIONS[localActionMainHandId].attacks[step - 1]?.durationMs ?? PRIMARY_ACTION_DURATION_MS;
+  return rapidCombatDuration(WEAPON_ATTACK_DEFINITIONS[localActionMainHandId].attacks[step - 1]?.durationMs ?? PRIMARY_ACTION_DURATION_MS,
+    rapidPrototypeRequested);
 }
 
 function remoteActionDuration(mainHandId: MainHandId | null, step: number): number {
   if (!mainHandId || step < 1 || step > 3) return PRIMARY_ACTION_DURATION_MS;
-  return WEAPON_ATTACK_DEFINITIONS[mainHandId].attacks[step - 1]?.durationMs ?? PRIMARY_ACTION_DURATION_MS;
+  return rapidCombatDuration(WEAPON_ATTACK_DEFINITIONS[mainHandId].attacks[step - 1]?.durationMs ?? PRIMARY_ACTION_DURATION_MS,
+    rapidPrototypeRequested);
 }
 
 function powerDuration(powerId: PowerId | null): number {
@@ -8683,7 +8688,7 @@ function rangedFireAllowed(requirePointerAim = true): boolean {
   const combatMenuPanels = [inventoryPanel, lootPanel, defeatScreen, quizPanel, blacksmithPanel, tavernDialogue];
   return Boolean(room && worldReady && (interactionMode === "combat" || !requirePointerAim)
     && (!requirePointerAim || rangedPointer.active) && !document.hidden
-    && WEAPON_ATTACK_DEFINITIONS[localMainHandId].projectileTravelMs > 0
+    && continuousAttackEnabled(WEAPON_ATTACK_DEFINITIONS[localMainHandId].projectileTravelMs > 0, rapidPrototypeRequested)
     && combatMenuPanels.every(panel => panel.hidden === true) && !tradeUI.isOpen() && !playerInteractionUI.isOpen()
     && !(document.activeElement instanceof HTMLInputElement || document.activeElement instanceof HTMLTextAreaElement)
     && !powerAimActive && !specialAimActive && localPowerStartedAt === null && !localDefending);
@@ -8695,8 +8700,8 @@ function mouseRangedYaw(fallback: number): number {
   return rangedAimYaw(camera.camera.screenToWorld(x, y, camera.camera.nearClip), camera.camera.screenToWorld(x, y, camera.camera.farClip), localPlayer.getPosition(), fallback);
 }
 function updateRangedReticle(): void {
-  const ranged = WEAPON_ATTACK_DEFINITIONS[localMainHandId].projectileTravelMs > 0;
-  const active = rangedPointer.active && ranged && interactionMode === "combat" && worldReady && defeatScreen.hidden === true && inventoryPanel.hidden === true;
+  const continuous = continuousAttackEnabled(WEAPON_ATTACK_DEFINITIONS[localMainHandId].projectileTravelMs > 0, rapidPrototypeRequested);
+  const active = rangedPointer.active && continuous && interactionMode === "combat" && worldReady && defeatScreen.hidden === true && inventoryPanel.hidden === true;
   combatReticle.hidden = !active;
   canvas.classList.toggle("ranged-aim", active);
   if (active) { combatReticle.style.left = `${rangedPointer.x}px`; combatReticle.style.top = `${rangedPointer.y}px`; }
@@ -12395,7 +12400,8 @@ function requestAttack(aimWithPointer = true, tabletAim?: { yaw: number; targetI
   localActionStep = comboStep;
   localActionMainHandId = localMainHandId;
   localComboStep = comboStep;
-  localComboExpiresAt = attackDefinition.combo ? now + timing.durationMs + attackDefinition.comboWindowMs : 0;
+  localComboExpiresAt = attackDefinition.combo
+    ? now + rapidCombatDuration(timing.durationMs, rapidPrototypeRequested) + attackDefinition.comboWindowMs : 0;
   attackSequence += 1;
   const requestId = `attack-${attackSequence}`;
   combatSync.start("attack", requestId, now);
@@ -13222,7 +13228,8 @@ window.addEventListener("keydown", event => {
   if (event.code === "KeyC") requestDefense(true);
   if (event.code === "KeyJ") {
     event.preventDefault();
-    keyboardFireHeld = WEAPON_ATTACK_DEFINITIONS[localMainHandId].projectileTravelMs > 0;
+    keyboardFireHeld = continuousAttackEnabled(WEAPON_ATTACK_DEFINITIONS[localMainHandId].projectileTravelMs > 0,
+      rapidPrototypeRequested);
     requestAttack(false);
   }
   if (WEAPON_TECHNIQUES_AVAILABLE && event.code === "KeyR") {
@@ -13683,6 +13690,10 @@ function updatePerformanceMetrics(now: number): void {
   const p50 = percentile(frameSamples, 0.5);
   const p95 = percentile(frameSamples, 0.95);
   const fps = p50 > 0 ? 1000 / p50 : 0;
+  if (rapidPrototypeRequested) {
+    const metrics = document.querySelector<HTMLElement>("#rapid-prototype-metrics");
+    if (metrics) metrics.textContent = `${Math.round(fps)} FPS · ${p95.toFixed(1)}ms p95 · ${inputAcknowledgementMs === null ? "input measuring" : `${inputAcknowledgementMs.toFixed(0)}ms input`}`;
+  }
   const visibleVoxels = [...chunks.values()].reduce((total, chunk) => total + chunk.visibleBlocks, 0);
   const meshes = [...chunks.values()].reduce((total, chunk) => total + chunk.meshes.length, 0);
   const triangles = [...chunks.values()].reduce((total, chunk) => total + chunk.visibleFaces * 2, 0);
@@ -14232,7 +14243,9 @@ app.on("update", (dt: number) => {
     localPowerStepApplied = true;
   }
   if (animationNow >= localHitPauseUntil) {
-    animateVoxelCharacter(localPlayerRig, animationTime, frameTime, localVerticalVelocity, predicted.grounded || grounded, localActionElapsed, localActionStep, localActionMainHandId, localPowerElapsed, localActivePower, localActionFacingYaw, moving ? collisionTravel : 0, localFacingYaw);
+    animateVoxelCharacter(localPlayerRig, animationTime, frameTime, localVerticalVelocity, predicted.grounded || grounded,
+      rapidCombatAnimationElapsed(localActionElapsed, rapidPrototypeRequested), localActionStep, localActionMainHandId,
+      localPowerElapsed, localActivePower, localActionFacingYaw, moving ? collisionTravel : 0, localFacingYaw);
     if (localDefending) applyDefensePose(localPlayerRig);
     if (room) applyMageCastAnimation(room.sessionId, localPlayerRig, animationNow);
   }
@@ -14304,7 +14317,9 @@ app.on("update", (dt: number) => {
       remote.entity.setEulerAngles(0, pose.yaw, 0);
       const remoteActionElapsed = remote.actionStartedAt === null ? null : animationNow - remote.actionStartedAt;
       const remotePowerElapsed = remote.powerStartedAt === null ? null : animationNow - remote.powerStartedAt;
-      animateVoxelCharacter(remote.rig, animationTime, frameTime, remoteVerticalVelocity, true, remoteActionElapsed, remote.actionStep, remote.actionMainHandId, remotePowerElapsed, remote.powerId, remote.entity.getEulerAngles().y, remoteTravel, pose.yaw);
+      animateVoxelCharacter(remote.rig, animationTime, frameTime, remoteVerticalVelocity, true,
+        rapidCombatAnimationElapsed(remoteActionElapsed, rapidPrototypeRequested), remote.actionStep, remote.actionMainHandId,
+        remotePowerElapsed, remote.powerId, remote.entity.getEulerAngles().y, remoteTravel, pose.yaw);
       if (remote.defending) applyDefensePose(remote.rig);
       applyMageCastAnimation(id, remote.rig, animationNow);
       if (remoteActionElapsed !== null && remoteActionElapsed >= remoteActionDuration(remote.actionMainHandId, remote.actionStep)) {
@@ -15535,12 +15550,17 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     }
     window.setTimeout(() => window.location.replace(url), 180);
   });
-  room.onMessage("practice:state", (update: { active: boolean; abilityId?: CallingAbilityId; message: string }) => {
+  room.onMessage("practice:state", (update: { active: boolean; abilityId?: CallingAbilityId; wave?: number; message: string }) => {
     abilityPracticeOpen.disabled = false;
     abilityPracticeStatus.textContent = update.message;
     status.textContent = update.message;
+    if (rapidPrototypeRequested && update.active) setInteractionMode("combat");
+    if (rapidPrototypeRequested && update.wave) {
+      const detail = document.querySelector<HTMLElement>("#rapid-prototype-badge span");
+      if (detail) detail.textContent = `Wave ${update.wave}/3 · ${update.message}`;
+    }
     if (update.abilityId) { localCallingCooldownUntil = 0; localCallingSpecialCooldownUntil = 0; }
-    if (update.active && activeRoomName === PRACTICE_ROOM && !update.abilityId) {
+    if (update.active && activeRoomName === PRACTICE_ROOM && !update.abilityId && !update.wave) {
       abilityPracticeCalling.value = localBuildPathId ?? "assassin";
       renderPracticeAbilities();
       abilityPractice.hidden = false;
