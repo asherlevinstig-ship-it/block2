@@ -4065,6 +4065,47 @@ body:has(#loot-pack-decision:not([hidden])) #waypoint-guide { display: none; }
   #tablet-camera-hint { animation: none; }
 }
 
+/* The 2.5D Speed Lab is a focused combat prototype, not another world-HUD state. */
+html.rapid-prototype-active :is(
+  #location-readout,
+  #first-steps,
+  #trait-slot,
+  #exit-guide,
+  #world-objective,
+  #objective-marker,
+  #minimap,
+  #waypoint-guide,
+  #party-panel,
+  #event-log,
+  #resource-toasts,
+  #progression-notice,
+  #calling-first-use,
+  #inventory-toggle,
+  #keyboard-camera-hint,
+  #tablet-camera-hint
+) { display: none !important; }
+
+#rapid-practice-reward[hidden] { display: none !important; }
+#rapid-practice-reward:not([hidden]) { display: grid; }
+
+@media (max-width: 760px) {
+  html.rapid-prototype-active #rapid-prototype-badge {
+    top: calc(46px + env(safe-area-inset-top)) !important;
+    left: max(10px, env(safe-area-inset-left)) !important;
+    max-width: calc(100vw - 86px);
+    box-sizing: border-box;
+  }
+  html.rapid-prototype-active #rapid-practice-reward .rapid-reward-shell {
+    max-height: calc(100dvh - 24px);
+    overflow-y: auto;
+    padding: 17px !important;
+  }
+  html.rapid-prototype-active #rapid-practice-reward .rapid-reward-choices {
+    grid-template-columns: 1fr !important;
+    margin: 14px 0 !important;
+  }
+}
+
 /* Measured tablet clearances: social history, vitals, map and thumb zones never share pixels. */
 @media (pointer: coarse) and (orientation: landscape) {
   #event-log {

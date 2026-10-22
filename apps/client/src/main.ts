@@ -1012,6 +1012,7 @@ function renderGreenwoodMastery(position: { x: number; y: number; z: number }): 
 const canvas = document.querySelector<HTMLCanvasElement>("#game")!;
 const initialPageQuery = new URLSearchParams(window.location.search);
 const rapidPrototypeRequested = initialPageQuery.get("room") === "practice" && initialPageQuery.get("prototype") === "2d";
+document.documentElement.classList.toggle("rapid-prototype-active", rapidPrototypeRequested);
 let rapidPracticeHaste = 0;
 let rapidPracticeRewardPanel: HTMLElement | null = null;
 let rapidPracticeRewardTitle: HTMLElement | null = null;
@@ -2136,7 +2137,7 @@ if (rapidPrototypeRequested) {
   rapidPracticeRewardPanel.id = "rapid-practice-reward";
   rapidPracticeRewardPanel.hidden = true;
   rapidPracticeRewardPanel.innerHTML = "<div class=\"rapid-reward-shell\"><small>WAVE REWARD</small><h2></h2><p></p><div class=\"rapid-reward-choices\"></div><footer>One click · no inventory · next wave starts immediately</footer></div>";
-  rapidPracticeRewardPanel.style.cssText = "position:fixed;inset:0;z-index:90;display:grid;place-items:center;background:radial-gradient(circle,rgba(11,29,22,.2),rgba(2,7,6,.78));font-family:system-ui;color:#ecfff1";
+  rapidPracticeRewardPanel.style.cssText = "position:fixed;inset:0;z-index:90;place-items:center;background:radial-gradient(circle,rgba(11,29,22,.2),rgba(2,7,6,.78));font-family:system-ui;color:#ecfff1";
   rapidPracticeRewardPanel.querySelector<HTMLElement>(".rapid-reward-shell")!.style.cssText = "width:min(760px,calc(100vw - 32px));padding:24px;border:1px solid rgba(239,194,79,.8);border-radius:16px;background:linear-gradient(145deg,rgba(10,28,20,.97),rgba(4,12,10,.98));box-shadow:0 20px 80px #000,0 0 40px rgba(239,194,79,.18);text-align:center";
   rapidPracticeRewardTitle = rapidPracticeRewardPanel.querySelector("h2");
   rapidPracticeRewardDetail = rapidPracticeRewardPanel.querySelector("p");
