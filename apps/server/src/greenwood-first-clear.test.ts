@@ -31,24 +31,30 @@ describe("Greenwood first clear", () => {
     const mob = new MobState(); Object.assign(mob, { x: 42.5, y: 8, z: 19.5, archetype: "moss_crawler", difficultyTier: 1 });
     internal.spawnLootDrops("wild-crawler", mob, 10_000, "hero");
     const [firstId, first] = [...room.state.lootDrops.entries()][0]!;
+    const firstCollectionItemId = first.leaderCollectionItemId;
     expect(firstId).toContain("greenwood-first:forged_bow:");
     expect(decodeLootBagItems(first.contentsJson)).toContainEqual({ itemId: "forged_bow", quantity: 1 });
     expect(JSON.parse(player.huntLoadoutsJson).greenwood?.firstBossGearClaimed ?? false).toBe(false);
-    // A repeat leader still offers Calling-relevant gear, but it is a normal attuned reward.
+    // Repeat leaders move into the regional collection while retaining a Calling-matched attunement.
     internal.spawnLootDrops("wild-crawler", mob, 11_000, "hero");
     const repeat = [...room.state.lootDrops.values()][1]!;
-    expect(decodeLootBagItems(repeat.contentsJson)).toContainEqual({ itemId: "forged_bow", quantity: 1 });
-    expect(repeat.affixItemId).toBe("forged_bow");
+    const repeatItems = decodeLootBagItems(repeat.contentsJson);
+    expect(["forged_bow", "fang_dagger", "forager_wrap"]).toContain(repeat.affixItemId);
+    expect(repeatItems).toContainEqual({ itemId: repeat.affixItemId, quantity: 1 });
     expect(repeat.affixTier).toBe(2);
     expect(["piercing", "snaring", "precise"]).toContain(repeat.affixId);
-    internal.handleLootCollect({ sessionId: "hero", send: vi.fn() }, { dropId: firstId, action: "keep" });
+    const send = vi.fn();
+    internal.handleLootCollect({ sessionId: "hero", send }, { dropId: firstId, action: "keep" });
     expect(player.inventory.get("forged_bow")?.quantity).toBe(1);
     expect(JSON.parse(player.huntLoadoutsJson).greenwood.firstBossGearClaimed).toBe(true);
+    expect(JSON.parse(player.huntLoadoutsJson).leaderCollections.discovered.greenwood).toContain(firstCollectionItemId);
+    expect(send).toHaveBeenCalledWith("leader:collection", expect.objectContaining({ message: expect.stringContaining("1 / 4 leader items discovered") }));
     internal.grantRegionalMark("hero", "greenwood");
     expect(JSON.parse(player.huntLoadoutsJson).greenwood.firstBossGearClaimed).toBe(true);
     internal.spawnLootDrops("wild-crawler", mob, 12_000, "hero");
     const third = [...room.state.lootDrops.values()].at(-1)!;
-    expect(decodeLootBagItems(third.contentsJson).some(item => item.itemId === "forged_bow")).toBe(true);
+    expect(["forged_bow", "fang_dagger", "forager_wrap"]).toContain(third.affixItemId);
+    expect(decodeLootBagItems(third.contentsJson).some(item => item.itemId === third.affixItemId)).toBe(true);
   });
 
   it("reoffers an uncollected weapon after its bag expires", () => {

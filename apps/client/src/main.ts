@@ -15522,6 +15522,9 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   room.onMessage("mineral:status", (payload: MineralDepositStatus[]) => minimap.setMineralStatus(payload));
   room.onMessage("chat:message", message => social.message(message));
   room.onMessage("chat:notice", message => { social.notice(String(message)); partyUI.notice(String(message)); tradeUI.notice(String(message)); });
+  room.onMessage("leader:collection", (update: { message?: string }) => {
+    if (update.message) social.event(update.message);
+  });
   room.onMessage("party:update", update => partyUI.update(update));
   room.onMessage("realm:event", (update: RealmEventUpdate) => {
     if (update.phase === "active") {

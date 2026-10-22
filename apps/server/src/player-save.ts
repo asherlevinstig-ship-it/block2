@@ -37,6 +37,7 @@ import { parseNorthwatchProgress } from "./northwatch-progress.js";
 import { starterKitClaimed, withStarterKitClaimed } from "./starter-kit.js";
 import { ashenBlueprints } from "./ashen-reliquary.js";
 import { parseAshenMastery } from "./ashen-mastery.js";
+import { parseLeaderCollectionState, type LeaderCollectionState } from "./leader-loot-collections.js";
 
 export const PLAYER_SAVE_VERSION = 1;
 export const PLAYER_SAVE_HASH = "blockcraft:player-saves:v1";
@@ -86,6 +87,7 @@ export interface PlayerSaveData {
   northwatchPatrolMarks?: number;
   ashenBlueprints?: AshenBlueprintId[];
   ashenMastery?: AshenMasteryProgress;
+  leaderCollections?: LeaderCollectionState;
   inventory: Partial<Record<ItemId, number>>;
   storage?: Partial<Record<ItemId, number>>;
   recoveryBags?: RecoveryBagData[];
@@ -201,6 +203,7 @@ export function snapshotPlayerSave(player: PlayerState, now = Date.now()): Playe
     northwatchPatrolMarks: parseNorthwatchProgress(player.huntLoadoutsJson).marks,
     ashenBlueprints: ashenBlueprints(player.huntLoadoutsJson),
     ashenMastery: parseAshenMastery(player.huntLoadoutsJson),
+    leaderCollections: (() => { try { return parseLeaderCollectionState((JSON.parse(player.huntLoadoutsJson) as { leaderCollections?: unknown }).leaderCollections); } catch { return parseLeaderCollectionState(null); } })(),
     inventory,
     storage,
     recoveryBags: snapshotRecoveryBags(player),
@@ -309,6 +312,7 @@ export function parsePlayerSave(raw: string | null): PlayerSaveData | null {
     northwatchPatrolMarks: Math.floor(finiteNumber(value.northwatchPatrolMarks, 0, 0, 3)) & 3,
     ashenBlueprints: ashenBlueprints(JSON.stringify({ ashenBlueprints: value.ashenBlueprints })),
     ashenMastery: parseAshenMastery(value.ashenMastery),
+    leaderCollections: parseLeaderCollectionState(value.leaderCollections),
     inventory,
     storage,
     mainHandId,
@@ -351,7 +355,8 @@ export function applyPlayerSave(player: PlayerState, save: PlayerSaveData): void
     offers: parseEquipmentAffixOffers(save.attunementOffers), mistfen: { points: save.mistfenMastery ?? 0, discovered: save.mistfenDiscovered === true, marks: save.mistfenMarks ?? 0 },
     greenwood: { points: save.greenwoodMastery ?? 0, discovered: save.greenwoodDiscovered === true, marks: save.greenwoodMarks ?? 0 },
     northwatch: { clears: save.northwatchClears ?? 0, marks: save.northwatchPatrolMarks ?? 0 },
-    ashenBlueprints: save.ashenBlueprints ?? [], ashenMastery: parseAshenMastery(save.ashenMastery) });
+    ashenBlueprints: save.ashenBlueprints ?? [], ashenMastery: parseAshenMastery(save.ashenMastery),
+    leaderCollections: parseLeaderCollectionState(save.leaderCollections) });
   player.huntLoadoutsJson = withStarterKitClaimed(JSON.stringify({ ...JSON.parse(player.huntLoadoutsJson), roadsideClaims: save.roadsideClaims ?? [] }), save.starterKitClaimed !== false);
   player.huntCollectionRewardClaimed = save.huntCollectionRewardClaimed === true;
   player.forestBestTimeMs = save.forestBestTimeMs ?? 0;

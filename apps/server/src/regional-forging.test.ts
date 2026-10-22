@@ -29,4 +29,17 @@ describe("regional forging", () => {
     });
     expect(restored.inventory.size).toBe(0);
   });
+
+  it("persists regional leader discoveries and bad-luck protection", () => {
+    const player = new PlayerState();
+    player.huntLoadoutsJson = JSON.stringify({ leaderCollections: {
+      discovered: { greenwood: ["forged_bow", "forager_wrap"] }, misses: { greenwood: 2 },
+    } });
+    const saved = parsePlayerSave(JSON.stringify(snapshotPlayerSave(player)));
+    const restored = new PlayerState();
+    applyPlayerSave(restored, saved!);
+    expect(JSON.parse(restored.huntLoadoutsJson).leaderCollections).toEqual({
+      discovered: { greenwood: ["forged_bow", "forager_wrap"] }, misses: { greenwood: 2 },
+    });
+  });
 });

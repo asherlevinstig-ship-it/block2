@@ -243,6 +243,8 @@ import { equipmentReforgeRank, parseReforgeRanks, withReforgeRank } from "./equi
 import { attunementDustCost, attunementDustYield, keepBetterAffix, parseEquipmentAffixes, parseEquipmentAffixOffers,
   rollEquipmentAffix, rollEquipmentAffixOptions, rollTargetedEquipmentAffix } from "./equipment-affixes.js";
 import { parseSignaturePity, resolveSignatureDrop, serializeSignaturePity, signatureLootHint, type SignatureItemId } from "./signature-loot.js";
+import { LEADER_COLLECTIONS, discoverLeaderItem, leaderCollectionFor, parseLeaderCollectionState,
+  resolveLeaderCollectionDrop, type LeaderCollectionId, type LeaderCollectionState } from "./leader-loot-collections.js";
 import { canUseStorage, transferStoredItem } from "./personal-storage.js";
 import { playerBackpackAddable, playerBackpackHasRoom, playerBackpackSlots } from "./backpack.js";
 import { leaveRecoveryBag, collectRecoveryBag } from "./death-recovery.js";
@@ -4058,8 +4060,32 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       thief: "fang_dagger", ranger: "forged_bow", healer: "wanderer_robes",
     };
     const leaderReward = isAreaMiniBoss(mobId) || mob.isChampion || Boolean(huntChampion);
+    const leaderCollection = rewardPlayer && isAreaMiniBoss(mobId) ? leaderCollectionFor(mobId) : null;
+    const storedLeaderCollectionState = rewardPlayer ? this.leaderCollectionState(rewardPlayer) : null;
+    const ownedLeaderItems = rewardPlayer && leaderCollection ? leaderCollection.items.map(entry => entry.itemId)
+      .filter(itemId => (rewardPlayer.inventory.get(itemId)?.quantity ?? 0) + (rewardPlayer.storage.get(itemId)?.quantity ?? 0) > 0) : [];
+    const leaderCollectionState = storedLeaderCollectionState && leaderCollection ? {
+      discovered: { ...storedLeaderCollectionState.discovered,
+        [leaderCollection.id]: [...new Set([...(storedLeaderCollectionState.discovered[leaderCollection.id] ?? []), ...ownedLeaderItems])] },
+      misses: storedLeaderCollectionState.misses,
+    } : storedLeaderCollectionState;
+    const thisBagEquipment = [...baseDrops, ...greenwoodFirstClearDrops, ...northwatchCloakDrop,
+      ...mistfenMasteryDrops, ...greenwoodMasteryDrops, ...regionalRewardDrops]
+      .filter(entry => isEquipmentItem(entry.itemId)).map(entry => entry.itemId);
+    const leaderCollectionRoll = leaderCollection && leaderCollectionState ? resolveLeaderCollectionDrop(leaderCollection,
+      leaderCollectionState, personalRematchTier,
+      new Set([...leaderCollection.items.map(entry => entry.itemId).filter(itemId => this.ownsOrHasPendingItem(ownerId, itemId)),
+        ...thisBagEquipment]), Math.random()) : null;
+    const leaderCollectionDrops: { itemId: ItemId; quantity: number }[] = leaderCollectionRoll
+      ? [{ itemId: leaderCollectionRoll.itemId, quantity: 1 }] : [];
+    if (rewardPlayer && leaderCollection && leaderCollectionState && leaderCollectionRoll) {
+      this.setLeaderCollectionState(rewardPlayer, { discovered: leaderCollectionState.discovered,
+        misses: { ...leaderCollectionState.misses, [leaderCollection.id]: leaderCollectionRoll.nextMisses } });
+      void this.persistPlayer(ownerId, rewardPlayer, true).catch(() => {});
+    }
     const combinedDrops: { itemId: ItemId; quantity: number }[] = [
       ...baseDrops,
+      ...leaderCollectionDrops,
       ...(mobId === REALM_WARDEN_ID && this.realmWardenRepeatActive
         ? [{ itemId: "moonstone" as ItemId, quantity: 2 }, { itemId: "silver_ore" as ItemId, quantity: 6 }]
         : []),
@@ -4080,7 +4106,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       ...regionalRewardDrops,
       ...armourDropForMob(mob.archetype, mob.difficultyTier, Math.random()),
     ];
-    if (leaderReward && selectedCalling && !combinedDrops.some(entry => isEquipmentItem(entry.itemId)))
+    if (!leaderCollectionRoll && leaderReward && selectedCalling && !combinedDrops.some(entry => isEquipmentItem(entry.itemId)))
       combinedDrops.push({ itemId: callingGear[selectedCalling], quantity: 1 });
     const items = normalizeLootBagItems(combinedDrops);
     const representative = lootBagRepresentative(items);
@@ -4096,10 +4122,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     );
     const drop = new LootDropState();
     const baseAffixTier = realmReward || mobId === CRYSTAL_MATRIARCH_ID || mobId === "forge-colossus" || huntChampion?.difficulty === "ascendant"
+      || (isAreaMiniBoss(mobId) && personalRematchTier >= 3)
       ? 3 : isAreaMiniBoss(mobId) || mob.isChampion || mob.isElite || huntChampion ? 2 : Math.random() < .2 ? 1 : 0;
     const affixTier = Math.min(3, baseAffixTier + (this.warbandDisrupted.has(mobId) ? 1 : 0));
     const affixRegion = this.equipmentHuntRegionAt(mob.x, mob.z) ?? "";
-    const affixItemId = items.find(entry => isEquipmentItem(entry.itemId))?.itemId ?? "";
+    const affixItemId = leaderCollectionRoll?.itemId ?? items.find(entry => isEquipmentItem(entry.itemId))?.itemId ?? "";
     const callingAffixes = selectedCalling ? (Object.keys(EQUIPMENT_AFFIXES) as EquipmentAffixId[])
       .filter(id => EQUIPMENT_AFFIXES[id].pathId === selectedCalling) : [];
     const affixId = affixTier > 0 && affixItemId && callingAffixes.length > 0
@@ -4112,6 +4139,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       affixRegion,
       affixId,
       affixItemId,
+      leaderCollectionId: leaderCollection?.id ?? "",
+      leaderCollectionItemId: leaderCollectionRoll?.itemId ?? "",
+      leaderCollectionProtected: leaderCollectionRoll?.protected ?? false,
       contentsJson: encodeLootBagItems(items),
       x: landing.x,
       y: landing.y + .22,
@@ -4129,6 +4159,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       dropId, ownerId, itemId: drop.itemId, quantity: drop.quantity, contentsJson: drop.contentsJson, affixTier: drop.affixTier,
       affixRegion: drop.affixRegion, affixId: drop.affixId, affixItemId: drop.affixItemId,
       x: drop.x, y: drop.y, z: drop.z, expiresAt: drop.expiresAt,
+    });
+    if (leaderCollection && leaderCollectionRoll?.protected) this.clients.find(client => client.sessionId === ownerId)?.send("leader:collection", {
+      message: `MISSING-ITEM PROTECTION · ${ITEM_DEFINITIONS[leaderCollectionRoll.itemId].name} rolled from the ${leaderCollection.name}. Hold E to collect it.`,
     });
     if (areaRelicDrops.length) this.clients.find(client => client.sessionId === ownerId)?.send("chat:notice",
       `${firstLeaderVictory ? "FIRST LEADER VICTORY" : personalRematchTier > 0 ? `EMPOWERED REMATCH ${personalRematchTier}` : "SIGNATURE DROP"} · ${areaRelicDrops[0]!.quantity} ${ITEM_DEFINITIONS[areaRelicDrops[0]!.itemId].name}${rematchMaterialQuantity ? ` + ${rematchMaterialQuantity} bonus ${ITEM_DEFINITIONS[rematchMaterialId].name}` : ""} added to your personal cache.`);
@@ -4279,8 +4312,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         Object.hasOwn(EQUIPMENT_HUNT_REGIONS, drop.affixRegion) ? drop.affixRegion as EquipmentHuntRegionId : null,
         reward.itemId === drop.affixItemId && Object.hasOwn(EQUIPMENT_AFFIXES, drop.affixId)
           ? drop.affixId as EquipmentAffixId : null);
+      for (const reward of collected) this.recordLeaderCollectionPickup(client, player, drop, reward.itemId);
       if (collected.some(entry => entry.itemId === drop.affixItemId)) {
         drop.affixId = ""; drop.affixItemId = ""; drop.affixTier = 0;
+      }
+      if (collected.some(entry => entry.itemId === drop.leaderCollectionItemId)) {
+        drop.leaderCollectionId = ""; drop.leaderCollectionItemId = ""; drop.leaderCollectionProtected = false;
       }
       const firstGearId = parsed.data.dropId.startsWith("greenwood-first:") ? parsed.data.dropId.split(":")[1] : null;
       if (firstGearId && collected.some(entry => entry.itemId === firstGearId)) {
@@ -4343,6 +4380,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         Object.hasOwn(EQUIPMENT_HUNT_REGIONS, drop.affixRegion) ? drop.affixRegion as EquipmentHuntRegionId : null,
         itemId === drop.affixItemId && Object.hasOwn(EQUIPMENT_AFFIXES, drop.affixId)
           ? drop.affixId as EquipmentAffixId : null);
+      this.recordLeaderCollectionPickup(client, player, drop, itemId);
       const collectedQuantity = drop.quantity;
       drop.itemId = carriedItemId; drop.quantity = 1; drop.contentsJson = ""; drop.affixTier = 0; drop.affixRegion = "";
       drop.affixId = ""; drop.affixItemId = "";
@@ -4398,6 +4436,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       Object.hasOwn(EQUIPMENT_HUNT_REGIONS, drop.affixRegion) ? drop.affixRegion as EquipmentHuntRegionId : null,
       itemId === drop.affixItemId && Object.hasOwn(EQUIPMENT_AFFIXES, drop.affixId)
         ? drop.affixId as EquipmentAffixId : null);
+    this.recordLeaderCollectionPickup(client, player, drop, itemId);
     // Synchronous removal makes competing and replayed requests collect at most once.
     this.state.lootDrops.delete(parsed.data.dropId);
     if (action === "equip" && mainHandId) this.handleMainHandEquip(client, { requestId: `loot-equip-${Date.now()}`, mainHandId });
@@ -5626,13 +5665,44 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     } catch { return []; }
   }
 
+  private leaderCollectionState(player: PlayerState): LeaderCollectionState {
+    try {
+      const raw = JSON.parse(player.huntLoadoutsJson) as { leaderCollections?: unknown };
+      return parseLeaderCollectionState(raw?.leaderCollections);
+    } catch { return parseLeaderCollectionState(null); }
+  }
+
+  private setLeaderCollectionState(player: PlayerState, leaderCollections: LeaderCollectionState): void {
+    let raw: Record<string, unknown> = {};
+    try {
+      const parsed = JSON.parse(player.huntLoadoutsJson) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) raw = parsed as Record<string, unknown>;
+    } catch { /* Repair malformed legacy data. */ }
+    player.huntLoadoutsJson = JSON.stringify({ ...raw, leaderCollections });
+  }
+
+  private recordLeaderCollectionPickup(client: Client, player: PlayerState, drop: LootDropState, itemId: ItemId): void {
+    if (!Object.hasOwn(LEADER_COLLECTIONS, drop.leaderCollectionId) || itemId !== drop.leaderCollectionItemId) return;
+    const collectionId = drop.leaderCollectionId as LeaderCollectionId;
+    const result = discoverLeaderItem(this.leaderCollectionState(player), collectionId, itemId);
+    this.setLeaderCollectionState(player, result.state);
+    const dust = result.duplicate ? attunementDustYield(Math.max(1, drop.affixTier)) : 0;
+    if (dust > 0) this.setEquipmentAttunements(player, this.equipmentAffixes(player),
+      this.attunementDust(player) + dust, this.attunementOffers(player));
+    const itemName = ITEM_DEFINITIONS[itemId].name;
+    const protection = drop.leaderCollectionProtected ? " · MISSING-ITEM PROTECTION" : "";
+    const duplicate = result.duplicate ? ` · DUPLICATE +${dust} ATTUNEMENT DUST` : ` · NEW: ${itemName}`;
+    client.send("leader:collection", { message: `${LEADER_COLLECTIONS[collectionId].name.toUpperCase()} · ${result.discovered} / ${result.total} leader items discovered${duplicate}${protection}` });
+  }
+
   private setPlayerBuildData(player: PlayerState, loadouts: HuntLoadoutSlot[], buildPath = parseBuildPathState(player.huntLoadoutsJson)): void {
     const mistfen = this.mistfenProgress(player);
     const greenwood = this.greenwoodProgress(player);
     player.huntLoadoutsJson = JSON.stringify({ starterKitClaimed: starterKitClaimed(player.huntLoadoutsJson), loadouts, buildPath, affixes: this.equipmentAffixes(player),
       dust: this.attunementDust(player), offers: this.attunementOffers(player), targetAffixId: this.equipmentAffixTarget(player),
       mistfen, greenwood, northwatch: parseNorthwatchProgress(player.huntLoadoutsJson), roadsideClaims: [...parseRoadsideClaims(player.huntLoadoutsJson)],
-      ashenBlueprints: ashenBlueprints(player.huntLoadoutsJson), ashenMastery: parseAshenMastery(player.huntLoadoutsJson) });
+      ashenBlueprints: ashenBlueprints(player.huntLoadoutsJson), ashenMastery: parseAshenMastery(player.huntLoadoutsJson),
+      leaderCollections: this.leaderCollectionState(player) });
   }
 
   private equipmentAffixes(player: PlayerState): Partial<Record<ItemId, EquipmentAffixRoll>> {
@@ -5693,7 +5763,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       loadouts: this.huntLoadouts(player), buildPath: parseBuildPathState(player.huntLoadoutsJson),
       affixes, dust: Math.max(0, Math.min(65_535, Math.floor(dust))), offers, targetAffixId: this.equipmentAffixTarget(player),
       mistfen, greenwood, northwatch: parseNorthwatchProgress(player.huntLoadoutsJson), roadsideClaims: [...parseRoadsideClaims(player.huntLoadoutsJson)],
-      ashenBlueprints: ashenBlueprints(player.huntLoadoutsJson), ashenMastery: parseAshenMastery(player.huntLoadoutsJson) });
+      ashenBlueprints: ashenBlueprints(player.huntLoadoutsJson), ashenMastery: parseAshenMastery(player.huntLoadoutsJson),
+      leaderCollections: this.leaderCollectionState(player) });
   }
 
   private sendEquipmentAffixes(client: Client, message = "Equipment attunements strengthen matching Calling mechanics."): void {
