@@ -462,7 +462,7 @@ export function equipmentAffixEffect(affixId: EquipmentAffixId, tier: number): s
 }
 export const EQUIPMENT_HUNT_REGIONS = {
   greenwood: { name: "Greenwood", x: 42.5, y: 8, z: 19.5, tier: 1, paths: ["assassin", "ranger", "healer"] },
-  mistfen: { name: "Mistfen Marsh", x: -47.5, y: 8, z: -31.5, tier: 2, paths: ["mage", "thief", "healer"] },
+  mistfen: { name: "Mistfen Marsh", x: -99.5, y: 8, z: -42.5, tier: 2, paths: ["mage", "thief", "healer"] },
   frontier: { name: "Stone Frontier", x: 68.5, y: 8, z: 34.5, tier: 3, paths: ["tank", "ranger"] },
   ashen: { name: "Ashen Reach", x: 97.5, y: 8, z: 62.5, tier: 3, paths: ["mage", "assassin"] },
   quarry: { name: "Redstone Pit", x: 8.5, y: 8, z: 171.5, tier: 3, paths: ["tank", "thief"] },

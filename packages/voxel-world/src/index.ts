@@ -124,15 +124,20 @@ export const ASHEN_RELIQUARY_POSITION = { x: 97.5, y: 8, z: 57.5 } as const;
 export const ASHEN_SENTRY_HOMES = [
   { x: 88.5, y: 8, z: 57.5 }, { x: 106.5, y: 8, z: 67.5 },
 ] as const;
-export const MISTFEN_MARSH = { minX: -58, maxX: -20, minZ: -43, maxZ: -11 } as const;
-export const MISTFEN_BEHEMOTH_HOME = { x: -47.5, y: 8, z: -31.5 } as const;
+export const MISTFEN_MARSH = { minX: -112, maxX: -20, minZ: -59, maxZ: -11 } as const;
+export const MISTFEN_BEHEMOTH_HOME = { x: -99.5, y: 8, z: -42.5 } as const;
 export const MISTFEN_MOB_HOMES = [
   MISTFEN_BEHEMOTH_HOME,
-  { x: -42.5, y: 8, z: -25.5 },
-  { x: -51.5, y: 8, z: -27.5 },
-  { x: -45.5, y: 8, z: -36.5 },
+  { x: -94.5, y: 8, z: -36.5 },
+  { x: -104.5, y: 8, z: -38.5 },
+  { x: -96.5, y: 8, z: -48.5 },
 ] as const;
-export const MISTFEN_SILVER_SEAM = { minX: -56, maxX: -54, minZ: -39, maxZ: -37 } as const;
+export const MISTFEN_SILVER_SEAM = { minX: -109, maxX: -107, minZ: -50, maxZ: -48 } as const;
+export const MISTFEN_IRON_ISLAND = { minX: -82, maxX: -79, minZ: -37, maxZ: -34 } as const;
+const MISTFEN_LANDMARK_CLEARINGS = [
+  { x: -42, z: -23 }, { x: -65, z: -21 }, { x: -84, z: -31 },
+  { x: -76, z: -49 }, { x: -104, z: -51 }, { x: -70, z: -24 }, { x: -103, z: -53 },
+] as const;
 export const SOUTHERN_QUARRY = { minX: -20, maxX: 29, minZ: 31, maxZ: 184 } as const;
 export const SOUTHERN_QUARRYMASTER_HOME = { x: 8.5, y: 8, z: 171.5 } as const;
 export const SOUTHERN_MOB_HOMES = [
@@ -165,7 +170,8 @@ export function isInNorthwatchHighlands(x: number, z: number): boolean {
 export function isNorthwatchRoad(x: number, z: number): boolean {
   const cellX = Math.floor(x), cellZ = Math.floor(z);
   return cellX >= 8 && cellX <= 10 && cellZ >= -76 && cellZ <= -30
-    || cellZ >= -73 && cellZ <= -70 && cellX >= 9 && cellX <= 16;
+    || cellZ >= -73 && cellZ <= -70 && cellX >= 9 && cellX <= 16
+    || (cellZ === -58 || cellZ === -57) && cellX >= -9 && cellX <= 10;
 }
 /** Wind-scoured stone ridges frame an open leader clearing; the road always has headroom. */
 export function northwatchHighlandsBlock(x: number, y: number, z: number): BlockId | null {
@@ -240,23 +246,39 @@ export function isInMistfenMarsh(x: number, z: number): boolean {
     && z >= MISTFEN_MARSH.minZ && z <= MISTFEN_MARSH.maxZ;
 }
 export function isMistfenBoardwalk(x: number, z: number): boolean {
-  return (x === -30 || x === -29) && z >= MISTFEN_MARSH.minZ && z <= MISTFEN_MARSH.maxZ
-    || (z === -27 || z === -26) && x >= MISTFEN_MARSH.minX && x <= MISTFEN_MARSH.maxX
-    || x >= -49 && x <= -46 && z >= -32 && z <= -30
+  const cellX = Math.floor(x), cellZ = Math.floor(z);
+  return (cellX === -30 || cellX === -29) && cellZ >= -58 && cellZ <= MISTFEN_MARSH.maxZ
+    || (cellZ === -27 || cellZ === -26) && cellX >= -72 && cellX <= MISTFEN_MARSH.maxX
+    || (cellX === -72 || cellX === -71) && cellZ >= -43 && cellZ <= -26
+    || (cellZ === -43 || cellZ === -42) && cellX >= -101 && cellX <= -71
+    || (cellX === -102 || cellX === -101) && cellZ >= -58 && cellZ <= -42
+    // The northern span closes the loop into Northwatch instead of ending at the boss.
+    || (cellZ === -58 || cellZ === -57) && cellX >= -104 && cellX <= 10
+    || cellX >= -101 && cellX <= -98 && cellZ >= -43 && cellZ <= -41
     // A narrow, readable way off the leader island to the exposed silver seam.
-    || x === -52 && z === -36
-    || x >= -55 && x <= -53 && z === -37;
+    || cellX === -104 && cellZ >= -47 && cellZ <= -43
+    || cellX >= -108 && cellX <= -105 && cellZ === -48;
 }
 export function isMistfenApproachTrail(x: number, z: number): boolean {
   return (z === 8 || z === 9) && x >= -30 && x <= -14
     || (x === -30 || x === -29) && z >= MISTFEN_MARSH.maxZ && z <= 9;
 }
+/** A faster broken causeway crosses exposed toxic ground instead of guaranteeing safety. */
+export function isMistfenToxicShortcut(x: number, z: number): boolean {
+  const cellX = Math.floor(x), cellZ = Math.floor(z);
+  if (cellX > -36 || cellX < -96) return false;
+  const expectedZ = -29 + (cellX + 36) / 6;
+  return Math.abs(cellZ - expectedZ) <= 1;
+}
 export function isMistfenToxicPool(x: number, z: number): boolean {
   if (!isInMistfenMarsh(x, z) || isMistfenBoardwalk(x, z)
     || x >= MISTFEN_SILVER_SEAM.minX && x <= MISTFEN_SILVER_SEAM.maxX
       && z >= MISTFEN_SILVER_SEAM.minZ && z <= MISTFEN_SILVER_SEAM.maxZ
-    || Math.hypot(x - MISTFEN_BEHEMOTH_HOME.x, z - MISTFEN_BEHEMOTH_HOME.z) < 6) return false;
-  const dx = Math.floor(x) + 44, dz = Math.floor(z) + 29;
+    || x >= MISTFEN_IRON_ISLAND.minX && x <= MISTFEN_IRON_ISLAND.maxX
+      && z >= MISTFEN_IRON_ISLAND.minZ && z <= MISTFEN_IRON_ISLAND.maxZ
+    || Math.hypot(x - MISTFEN_BEHEMOTH_HOME.x, z - MISTFEN_BEHEMOTH_HOME.z) < 6
+    || MISTFEN_LANDMARK_CLEARINGS.some(point => Math.hypot(x - point.x, z - point.z) <= 3)) return false;
+  const dx = Math.floor(x) + 73, dz = Math.floor(z) + 37;
   return Math.abs(Math.imul(dx, 17) + Math.imul(dz, 31)) % 13 < 3;
 }
 
@@ -267,16 +289,25 @@ export function mistfenMarshBlock(x: number, y: number, z: number): BlockId | nu
   if (approach && !isInMistfenMarsh(x, z)) return y === SURFACE_HEIGHT ? Block.Dirt : y > SURFACE_HEIGHT ? Block.Air : null;
   const seam = x >= MISTFEN_SILVER_SEAM.minX && x <= MISTFEN_SILVER_SEAM.maxX
     && z >= MISTFEN_SILVER_SEAM.minZ && z <= MISTFEN_SILVER_SEAM.maxZ;
+  const ironIsland = x >= MISTFEN_IRON_ISLAND.minX && x <= MISTFEN_IRON_ISLAND.maxX
+    && z >= MISTFEN_IRON_ISLAND.minZ && z <= MISTFEN_IRON_ISLAND.maxZ;
   if (seam && (y === SURFACE_HEIGHT || y === SURFACE_HEIGHT - 1)) return Block.SilverOre;
+  if (ironIsland && (y === SURFACE_HEIGHT || y === SURFACE_HEIGHT - 1)) return Block.IronOre;
   if (y === SURFACE_HEIGHT) {
     if (Math.hypot(x - MISTFEN_BEHEMOTH_HOME.x, z - MISTFEN_BEHEMOTH_HOME.z) < 6) return Block.Stone;
     if (isMistfenBoardwalk(x, z)) return Block.OakLog;
     if (isMistfenToxicPool(x, z)) return Block.BogWater;
+    if (isMistfenToxicShortcut(x, z)) return Block.Dirt;
     return Block.Grass;
   }
   if (y <= SURFACE_HEIGHT) return null;
-  const ruin = (x === -53 || x === -42) && (z === -34 || z === -21) && y <= 10;
+  const ruin = (x === -108 || x === -84 || x === -53 || x === -42)
+    && (z === -50 || z === -34 || z === -31 || z === -21) && y <= 10;
   if (ruin) return Block.Stone;
+  // Broken peat ridges and drowned walls frame the enlarged marsh without sealing it.
+  const boundaryRidge = (x === MISTFEN_MARSH.minX + 1 || z === MISTFEN_MARSH.minZ + 1)
+    && Math.abs(Math.imul(x + 7, 13) + Math.imul(z - 5, 19)) % 9 < 6;
+  if (boundaryRidge && y <= SURFACE_HEIGHT + 2 && !isMistfenBoardwalk(x, z)) return Block.Stone;
   const deadTree = Math.abs(Math.imul(x, 19) + Math.imul(z, 23)) % 29 === 0
     && !isMistfenBoardwalk(x, z) && !isMistfenToxicPool(x, z)
     && Math.hypot(x - MISTFEN_BEHEMOTH_HOME.x, z - MISTFEN_BEHEMOTH_HOME.z) >= 7;
@@ -459,7 +490,7 @@ export const WILDERNESS_TERRITORIES = [
   { tier: 3, name: "STONE FRONTIER", detail: "Brutes guard rich silver seams · defeat them for Stone Core Hammers" },
 ] as const;
 export const ASHEN_REACH_TERRITORY = { tier: 3, name: "ASHEN REACH", detail: "Find the split spire · Ashglass Sentries fire sweeping fans" } as const;
-export const MISTFEN_TERRITORY = { tier: 2, name: "MISTFEN MARSH", detail: "LV 5–9 · use the boardwalks · toxic pools surround the Mireback Behemoth" } as const;
+export const MISTFEN_TERRITORY = { tier: 2, name: "MISTFEN MARSH", detail: "LV 5–9 · boardwalks lead west · toxic shortcuts cross the deepfen" } as const;
 export const SOUTHERN_TERRITORIES = [
   { tier: 1, name: "SOUTHERN CAUSEWAY", detail: "LV 1–4 · abandoned carts and crawler patrols line the old road" },
   { tier: 2, name: "SUNFALL QUARRY", detail: "LV 4–8 · use broken shelves against spitter volleys" },
@@ -499,6 +530,8 @@ export const REGIONAL_WAYSTONES = [
   { x: 82, z: 45, name: "Ashen Road Waystone" },
   { x: -18, z: 12, name: "Mistfen Road Waystone" },
   { x: -33, z: -8, name: "Mistfen Crossing Waystone" },
+  { x: -70, z: -24, name: "Mirelight Waystone" },
+  { x: -103, z: -53, name: "Deepfen Waystone" },
   { x: 13, z: 42, name: "Southroad Waystone" },
   { x: 13, z: 66, name: "Sunfall Quarry Waystone" },
   { x: 25, z: 84, name: "Redstone Pit Waystone" },
@@ -527,7 +560,7 @@ export const MISTFEN_ENCOUNTER_CHAIN = {
   leaderName: "Mireback Behemoth",
   discovery: { x: -21, z: 1 },
   shrine: { x: -39, z: -15 },
-  leader: { x: -47.5, z: -31.5 },
+  leader: MISTFEN_BEHEMOTH_HOME,
 } as const;
 export const SOUTHERN_QUARRY_ENCOUNTER_CHAIN = {
   id: "southern-quarry-chain",
@@ -593,6 +626,10 @@ export const ROADSIDE_DISCOVERIES = [
   { id: "mistfen-cart", name: "Sunkroad Cart", kind: "cart", x: -16, z: 5 },
   { id: "mistfen-shrine", name: "Mossbound Shrine", kind: "shrine", x: -39, z: -15 },
   { id: "mistfen-camp", name: "Drowned Survey Camp", kind: "camp", x: -42, z: -23 },
+  { id: "mistfen-reedwatch", name: "Reedwatch Outpost", kind: "camp", x: -65, z: -21 },
+  { id: "mistfen-bell-ruins", name: "Drowned Bell Ruins", kind: "ruin", x: -84, z: -31 },
+  { id: "mistfen-mirelight-grove", name: "Mirelight Grove", kind: "grove", x: -76, z: -49 },
+  { id: "mistfen-last-pontoon", name: "Last Pontoon Camp", kind: "camp", x: -104, z: -51 },
   { id: "southgate-cart", name: "Southgate Supply Cart", kind: "cart", x: 15, z: 36 },
   { id: "sunfall-survey", name: "Sunfall Survey Camp", kind: "camp", x: -4, z: 55 },
   { id: "quarry-shrine", name: "Quarryworker Shrine", kind: "shrine", x: 18, z: 72 },

@@ -36,6 +36,11 @@ export const ROAMING_PACKS: readonly RoamingPack[] = [
     archetypes: ["fen_bloater", "cave_spitter", "briar_crawler"], eliteIndex: 0, route: [
       { x: -54.5, y: 8, z: -39.5 }, { x: -46.5, y: 8, z: -39.5 }, { x: -36.5, y: 8, z: -36.5 }],
     offsets: [{ x: 0, z: 0 }, { x: -1, z: -.8 }, { x: 1, z: -.8 }] },
+  { id: "mistfen-deep-pack", name: "Deepfen Lantern Hunters", tier: 2, archetype: "fen_bloater",
+    archetypes: ["fen_bloater", "cave_spitter", "ridge_stalker"], eliteIndex: 0, route: [
+      { x: -68.5, y: 8, z: -34.5 }, { x: -76.5, y: 8, z: -40.5 },
+      { x: -84.5, y: 8, z: -46.5 }, { x: -91.5, y: 8, z: -50.5 }],
+    offsets: [{ x: 0, z: 0 }, { x: -1.1, z: -.9 }, { x: 1.1, z: -.9 }] },
   { id: "stoneheart-west-pack", name: "Stoneheart Skirmishers", tier: 3, archetype: "briar_crawler",
     archetypes: ["briar_crawler", "cave_spitter", "moss_crawler"], eliteIndex: 0, route: [
       { x: 34.5, y: 8, z: 50.5 }, { x: 31.5, y: 8, z: 55.5 }, { x: 35.5, y: 8, z: 61.5 }],

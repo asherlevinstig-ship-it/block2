@@ -6,12 +6,19 @@ describe("overworld road guidance", () => {
     [{ x: 8.5, z: 8.5 }, { x: 8.5, z: 171.5 }],
     [{ x: 8.5, z: 8.5 }, { x: 15.5, z: -72.5 }],
     [{ x: 8.5, z: 8.5 }, { x: 93.5, z: 61.5 }],
-    [{ x: 8.5, z: 8.5 }, { x: -50.5, z: -27.5 }],
+    [{ x: 8.5, z: 8.5 }, { x: -99.5, z: -42.5 }],
   ])("connects the town to distant authored regions", (start, end) => {
     const route = planWorldRoute(start, end);
     expect(route.length).toBeGreaterThan(1);
     expect(route.at(-1)).toMatchObject(end);
     expect(route.slice(0, -1).every(point => isWorldGuidanceRoad(point.x, point.z))).toBe(true);
+  });
+
+  it("closes the northern loop between Deepfen and Northwatch", () => {
+    const route = planWorldRoute({ x: -99.5, z: -42.5 }, { x: 15.5, z: -72.5 });
+    expect(route.length).toBeGreaterThan(2);
+    expect(route.some(point => point.z === -57.5 || point.z === -58.5)).toBe(true);
+    expect(route.at(-1)).toMatchObject({ x: 15.5, z: -72.5 });
   });
 
   it("trims completed sections and detects when the player leaves the route", () => {

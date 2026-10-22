@@ -3,7 +3,7 @@ import { SURFACE_HEIGHT, TOWN_CENTER_X, TOWN_CENTER_Z, isRegionalRoad } from "@b
 export type WorldRoutePoint = { x: number; y: number; z: number };
 type FlatPoint = Pick<WorldRoutePoint, "x" | "z">;
 
-const MIN_X = -90, MAX_X = 125, MIN_Z = -100, MAX_Z = 125;
+const MIN_X = -125, MAX_X = 125, MIN_Z = -100, MAX_Z = 190;
 const key = (x: number, z: number) => `${x},${z}`;
 const parseKey = (value: string): FlatPoint => {
   const [x, z] = value.split(",").map(Number);

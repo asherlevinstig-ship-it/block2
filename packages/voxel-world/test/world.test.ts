@@ -23,6 +23,7 @@ import {
   isMistfenApproachTrail,
   isMistfenBoardwalk,
   isMistfenToxicPool,
+  isMistfenToxicShortcut,
   isInSouthernQuarry,
   isSouthernRoad,
   southernQuarryTierAt,
@@ -129,7 +130,7 @@ describe("deterministic voxel world", () => {
       if (!cache.has(key)) cache.set(key, generateChunk("density-test", a.chunkX, a.chunkZ));
       return getBlock(cache.get(key)!, a.localX, y, a.localZ);
     };
-    expect(ROADSIDE_DISCOVERIES).toHaveLength(33);
+    expect(ROADSIDE_DISCOVERIES).toHaveLength(37);
     expect(new Set(ROADSIDE_DISCOVERIES.map(site => site.kind)).size).toBe(5);
     for (const site of ROADSIDE_DISCOVERIES) {
       expect(isRegionalRoad(site.x, site.z)).toBe(false);
@@ -465,7 +466,7 @@ describe("deterministic voxel world", () => {
     const camp = generateChunk("test-world", 2, 0);
     expect(getBlock(camp, GREENWOOD_CAMP.minX - 32, SURFACE_HEIGHT, GREENWOOD_CAMP.minZ)).toBe(Block.Dirt);
   });
-  it("authors Mistfen as an open level 5–9 region with two safe crossing routes", () => {
+  it("authors Mistfen as a broad level 5–9 region with a safe loop and toxic shortcut", () => {
     expect(isInMistfenMarsh(-40, -27)).toBe(true);
     expect(isInMistfenMarsh(-19, -27)).toBe(false);
     expect(wildernessTerritoryAt(-40, -27)?.name).toBe("MISTFEN MARSH");
@@ -473,17 +474,17 @@ describe("deterministic voxel world", () => {
       const a = worldToChunk(x, z);
       return getBlock(generateChunk("mistfen-test", a.chunkX, a.chunkZ), a.localX, y, a.localZ);
     };
-    for (let z = MISTFEN_MARSH.minZ; z <= MISTFEN_MARSH.maxZ; z++) {
+    for (let z = -58; z <= MISTFEN_MARSH.maxZ; z++) {
       expect(isMistfenBoardwalk(-30, z)).toBe(true);
       expect(read(-30, SURFACE_HEIGHT, z)).toBe(Block.OakLog);
       expect(read(-30, SURFACE_HEIGHT + 1, z)).toBe(Block.Air);
     }
-    for (let x = MISTFEN_MARSH.minX; x <= MISTFEN_MARSH.maxX; x++) {
+    for (let x = -72; x <= MISTFEN_MARSH.maxX; x++) {
       expect(isMistfenBoardwalk(x, -27)).toBe(true);
       expect([Block.OakLog, Block.Stone]).toContain(read(x, SURFACE_HEIGHT, -27));
     }
     expect(read(Math.floor(MISTFEN_BEHEMOTH_HOME.x), SURFACE_HEIGHT, Math.floor(MISTFEN_BEHEMOTH_HOME.z))).toBe(Block.Stone);
-    for (const [x, z] of [[-52, -36], [-53, -37], [-54, -37], [-55, -37]] as const) {
+    for (const [x, z] of [[-104, -47], [-105, -48], [-106, -48], [-107, -48], [-108, -48]] as const) {
       expect(isMistfenBoardwalk(x, z)).toBe(true);
       expect(isMistfenToxicPool(x, z)).toBe(false);
       expect([Block.OakLog, Block.SilverOre]).toContain(read(x, SURFACE_HEIGHT, z));
@@ -503,6 +504,15 @@ describe("deterministic voxel world", () => {
       }
     }
     expect(pools).toBeGreaterThan(40);
+    expect(MISTFEN_MARSH.maxX - MISTFEN_MARSH.minX).toBeGreaterThanOrEqual(90);
+    for (const [x, z] of [[-70, -27], [-72, -36], [-88, -43], [-102, -50], [-80, -58], [0, -58]] as const) {
+      expect(isMistfenBoardwalk(x, z)).toBe(true);
+      expect(read(x, SURFACE_HEIGHT + 1, z)).toBe(Block.Air);
+    }
+    expect(isMistfenToxicShortcut(-66, -34)).toBe(true);
+    expect(isMistfenBoardwalk(-66, -34)).toBe(false);
+    expect(read(-80, SURFACE_HEIGHT, -35)).toBe(Block.IronOre);
+    expect(read(-108, SURFACE_HEIGHT, -49)).toBe(Block.SilverOre);
   });
   it.each(["test-world", "another-seed"])("keeps crawler camp sightlines, approach, and mining foundation clear for %s", seed => {
     const cache = new Map<string, ReturnType<typeof generateChunk>>();

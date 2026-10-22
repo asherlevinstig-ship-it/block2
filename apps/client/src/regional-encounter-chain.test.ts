@@ -37,7 +37,8 @@ describe("regional encounter chains", () => {
   it("routes Mistfen lanterns along the raised boardwalks", () => {
     const route = mistfenChainRoute("follow-to-leader")!;
     expect(route).toContainEqual({ x: -29.5, z: -26.5 });
-    expect(route).toContainEqual({ x: -47.5, z: -26.5 });
+    expect(route).toContainEqual({ x: -71.5, z: -26.5 });
+    expect(route).toContainEqual({ x: -71.5, z: -42.5 });
     expect(regionalPolylineBreadcrumbs(route, 12)).toHaveLength(12);
     expect(regionalPolylineTrailVisible({ x: -35, y: 8, z: -26.5 }, route)).toBe(true);
     expect(regionalPolylineTrailVisible({ x: 20, y: 8, z: 20 }, route)).toBe(false);

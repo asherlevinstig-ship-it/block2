@@ -52,13 +52,13 @@ describe("world objective director", () => {
   });
   it("reveals the Mireback Behemoth dynamically when the player approaches Mistfen", () => {
     const mobs = new Map([
-      ["mistfen-behemoth", mob(-47.5, -31.5, { name: "Mireback Behemoth", difficultyTier: 2, level: 7 })],
-      ["mistfen-briar-west", mob(-42.5, -25.5, { difficultyTier: 2, level: 6 })],
-      ["mistfen-briar-east", mob(-51.5, -27.5, { difficultyTier: 2, level: 6 })],
-      ["mistfen-spitter", mob(-45.5, -36.5, { difficultyTier: 2, level: 7 })],
+      ["mistfen-behemoth", mob(-99.5, -42.5, { name: "Mireback Behemoth", difficultyTier: 2, level: 7 })],
+      ["mistfen-briar-west", mob(-94.5, -36.5, { difficultyTier: 2, level: 6 })],
+      ["mistfen-briar-east", mob(-104.5, -38.5, { difficultyTier: 2, level: 6 })],
+      ["mistfen-spitter", mob(-96.5, -48.5, { difficultyTier: 2, level: 7 })],
     ]);
     expect(select(player(8.5, 8.5), mobs).objectiveId).toBe("leave-town");
-    const objective = select(player(-34, -26), mobs);
+    const objective = select(player(-86, -42), mobs);
     expect(objective.objectiveId).toBe("mistfen");
     expect(objective.title).toBe("Mireback Behemoth");
     expect(objective.kind).toBe("miniboss");
@@ -67,13 +67,13 @@ describe("world objective director", () => {
   });
   it("offers an optional dry crossing to silver only after the Mistfen pack is cleared", () => {
     const cleared = new Map([
-      ["mistfen-behemoth", mob(-47.5, -31.5, { alive: false })],
-      ["mistfen-briar-west", mob(-42.5, -25.5, { alive: false })],
-      ["mistfen-briar-east", mob(-51.5, -27.5, { alive: false })],
-      ["mistfen-spitter", mob(-45.5, -36.5, { alive: false })],
+      ["mistfen-behemoth", mob(-99.5, -42.5, { alive: false })],
+      ["mistfen-briar-west", mob(-94.5, -36.5, { alive: false })],
+      ["mistfen-briar-east", mob(-104.5, -38.5, { alive: false })],
+      ["mistfen-spitter", mob(-96.5, -48.5, { alive: false })],
     ]);
-    const pose = player(-48, -32);
-    const bag = { x: -47, y: 8, z: -32, ownerId: "tester", itemId: "acid_gland", expiresAt: 20_000 };
+    const pose = player(-100, -43);
+    const bag = { x: -99, y: 8, z: -43, ownerId: "tester", itemId: "acid_gland", expiresAt: 20_000 };
     expect(nearbyObjective("tester", pose, cleared, [], [["mireback-bag", bag]], 10_000, null).objectiveId).toBe("loot-mireback-bag");
     expect(nearbyObjective("tester", pose, cleared, [], [], 10_000, null)).toMatchObject({
       objectiveId: "mistfen-seam", title: "Find the Silver on Safe Ground", progressLabel: "OPTIONAL · MISTFEN CROSSING",
@@ -220,10 +220,10 @@ describe("world objective director", () => {
   it("keeps Mistfen event guidance local to the marsh", () => {
     const active = { phase: "active" as const, eventId: "mistfen-mireheart", eventName: "Toxic Mireheart",
       eventTitle: "Toxic Bloom", eventDetail: "Destroy the spreading bloom guards.", eventVariant: "toxic-bloom" as const,
-      trackingRadius: 36, targetX: -47.5, targetY: 8, targetZ: -31.5, warningUntil: 0,
+      trackingRadius: 36, targetX: -99.5, targetY: 8, targetZ: -42.5, warningUntil: 0,
       completed: 0, required: 3, realmBoss: false, eliteKills: 0, eliteRequired: 2 };
-    const mobs = [["mistfen-mireheart", mob(-47.5, -31.5, { name: "Toxic Mireheart", difficultyTier: 2 })]] as const;
-    expect(nearbyObjective("tester", player(-45, -30), mobs, [], [], 10_000, null, active)).toMatchObject({
+    const mobs = [["mistfen-mireheart", mob(-99.5, -42.5, { name: "Toxic Mireheart", difficultyTier: 2 })]] as const;
+    expect(nearbyObjective("tester", player(-97, -41), mobs, [], [], 10_000, null, active)).toMatchObject({
       objectiveId: "mistfen-event", title: "Toxic Bloom", progressLabel: "REGIONAL EVENT · TOXIC BLOOM",
     });
     expect(nearbyObjective("tester", player(-8, -30), mobs, [], [], 10_000, null, active).objectiveId).not.toBe("mistfen-event");

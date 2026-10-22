@@ -22,7 +22,7 @@ describe("Mistfen dynamic regional events", () => {
     const patterns = MISTFEN_DYNAMIC_EVENTS.map(event => mistfenEventPattern(event.kind, 0, 30, 30));
     expect(patterns).toEqual(["bog-charge", "toxic-eruption", "slam"]);
     for (const event of MISTFEN_DYNAMIC_EVENTS) {
-      expect(mistfenEventFollowers(event.kind, event.followerCount, { x: -47.5, y: 8, z: -31.5 }))
+      expect(mistfenEventFollowers(event.kind, event.followerCount, { x: -99.5, y: 8, z: -42.5 }))
         .toHaveLength(event.followerCount);
     }
   });
@@ -31,7 +31,7 @@ describe("Mistfen dynamic regional events", () => {
     const room = new WorldRoom(); room.setState(new WorldState()); const internal = room as any;
     Object.defineProperty(room, "readWorldBlock", { value: (_x: number, y: number) => y <= 7 ? Block.Stone : Block.Air });
     vi.spyOn(room, "broadcast").mockImplementation(() => {}); vi.spyOn(internal, "persistPlayer").mockResolvedValue(undefined);
-    const player = new PlayerState(); Object.assign(player, { x: -47.5, y: 8, z: -31.5 });
+    const player = new PlayerState(); Object.assign(player, { x: -99.5, y: 8, z: -42.5 });
     room.state.players.set("tester", player);
     for (const id of ["mistfen-behemoth", "mistfen-briar-west", "mistfen-briar-east", "mistfen-spitter"])
       internal.realmEvents.recordTrigger(id, 1_000, false);

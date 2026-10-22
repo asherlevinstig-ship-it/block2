@@ -52,7 +52,7 @@ export function mistfenChainRoute(stage: MistfenChainStage): ChainPoint[] | null
   ];
   if (stage === "follow-to-leader") return [
     MISTFEN_ENCOUNTER_CHAIN.shrine, { x: -29.5, z: -15 }, { x: -29.5, z: -26.5 },
-    { x: -47.5, z: -26.5 }, MISTFEN_ENCOUNTER_CHAIN.leader,
+    { x: -71.5, z: -26.5 }, { x: -71.5, z: -42.5 }, MISTFEN_ENCOUNTER_CHAIN.leader,
   ];
   return null;
 }
