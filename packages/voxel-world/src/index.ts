@@ -154,42 +154,70 @@ export const SOUTHERN_QUARRY_COVER = [
   { x: 1, z: 166, height: 2 }, { x: 16, z: 166, height: 3 },
   { x: 1, z: 176, height: 3 }, { x: 16, z: 176, height: 2 },
 ] as const;
-export const NORTHWATCH_HIGHLANDS = { minX: -9, maxX: 29, minZ: -84, maxZ: -34 } as const;
-export const NORTHWATCH_LEADER_HOME = { x: 15.5, y: 8, z: -72.5 } as const;
+export const NORTHWATCH_HIGHLANDS = { minX: -19, maxX: 80, minZ: -152, maxZ: -14 } as const;
+export const NORTHWATCH_LEADER_HOME = { x: 18.5, y: 8, z: -142.5 } as const;
 /** Non-colliding visual landmark for the sentry-and-stalker patrol. */
 export const NORTHWATCH_SHARD_PATROL_SITE = { x: 23.5, y: 8, z: -48.5 } as const;
 export const NORTHWATCH_MOB_HOMES = [
   { x: 7.5, y: 8, z: -42.5 }, { x: 18.5, y: 8, z: -54.5 },
-  { x: 14.5, y: 8, z: -68.5 }, { x: 21.5, y: 8, z: -70.5 }, NORTHWATCH_LEADER_HOME,
+  { x: 13.5, y: 8, z: -137.5 }, { x: 24.5, y: 8, z: -138.5 }, NORTHWATCH_LEADER_HOME,
   { x: 14.5, y: 8, z: -56.5 }, { x: 21.5, y: 8, z: -52.5 },
 ] as const;
 export function isInNorthwatchHighlands(x: number, z: number): boolean {
-  return x >= NORTHWATCH_HIGHLANDS.minX && x <= NORTHWATCH_HIGHLANDS.maxX
-    && z >= NORTHWATCH_HIGHLANDS.minZ && z <= NORTHWATCH_HIGHLANDS.maxZ;
+  const core = x >= -9 && x <= 29 && z >= -84 && z <= -34;
+  const northernRange = x >= NORTHWATCH_HIGHLANDS.minX && x <= 58
+    && z >= NORTHWATCH_HIGHLANDS.minZ && z <= -80;
+  const easternDescent = x >= 29 && x <= NORTHWATCH_HIGHLANDS.maxX
+    && z >= -128 && z <= NORTHWATCH_HIGHLANDS.maxZ;
+  return core || northernRange || easternDescent;
+}
+export function isNorthwatchExposedAscent(x: number, z: number): boolean {
+  const cellX = Math.floor(x), cellZ = Math.floor(z);
+  if (cellZ < -128 || cellZ > -80) return false;
+  const centreX = 20 + Math.floor((-cellZ - 80) * 18 / 48);
+  return Math.abs(cellX - centreX) <= 1;
 }
 export function isNorthwatchRoad(x: number, z: number): boolean {
   const cellX = Math.floor(x), cellZ = Math.floor(z);
-  return cellX >= 8 && cellX <= 10 && cellZ >= -76 && cellZ <= -30
-    || cellZ >= -73 && cellZ <= -70 && cellX >= 9 && cellX <= 16
+  return cellX >= 8 && cellX <= 10 && cellZ >= -102 && cellZ <= -30
+    || cellZ >= -73 && cellZ <= -70 && cellX >= 9 && cellX <= 20
+    || cellZ >= -102 && cellZ <= -100 && cellX >= 8 && cellX <= 38
+    || cellX >= 36 && cellX <= 38 && cellZ >= -127 && cellZ <= -101
+    || cellZ >= -129 && cellZ <= -127 && cellX >= 13 && cellX <= 74
+    || cellX >= 12 && cellX <= 14 && cellZ >= -144 && cellZ <= -128
+    || cellZ >= -144 && cellZ <= -141 && cellX >= 13 && cellX <= 20
+    || cellX >= 72 && cellX <= 74 && cellZ >= -127 && cellZ <= 9
+    || cellZ >= -82 && cellZ <= -80 && cellX >= 9 && cellX <= 21
+    || isNorthwatchExposedAscent(cellX, cellZ)
     || (cellZ === -58 || cellZ === -57) && cellX >= -9 && cellX <= 10;
 }
-/** Wind-scoured stone ridges frame an open leader clearing; the road always has headroom. */
+/** Wind-scoured ridges frame two ascents, a ruined stronghold and an eastern return road. */
 export function northwatchHighlandsBlock(x: number, y: number, z: number): BlockId | null {
-  if (!isInNorthwatchHighlands(x, z) || y < SURFACE_HEIGHT) return null;
+  if ((!isInNorthwatchHighlands(x, z) && !isNorthwatchRoad(x, z)) || y < SURFACE_HEIGHT) return null;
   const road = isNorthwatchRoad(x, z);
   const clearing = Math.hypot(x - NORTHWATCH_LEADER_HOME.x, z - NORTHWATCH_LEADER_HOME.z) < 8;
   if (y === SURFACE_HEIGHT) {
     if (road) return Block.Dirt;
     if (clearing) return Block.Stone;
     const scar = Math.abs(Math.imul(x + 13, 17) + Math.imul(z - 7, 11)) % 11;
-    return z < -58 ? scar < 7 ? Block.Stone : Block.Grass : scar < 4 ? Block.Stone : Block.Grass;
+    return z < -90 ? scar < 8 ? Block.Stone : Block.Grass : z < -58 ? scar < 7 ? Block.Stone : Block.Grass : scar < 4 ? Block.Stone : Block.Grass;
   }
+  const southGateOpening = z === -135 && x >= 12 && x <= 15;
+  const strongholdWall = !southGateOpening && ((x === 10 || x === 27) && z >= -150 && z <= -135
+    || (z === -150 || z === -135) && x >= 10 && x <= 27);
+  if (strongholdWall && y <= SURFACE_HEIGHT + 3) return Block.Stone;
+  const strongholdTower = (x === 12 || x === 25) && (z === -148 || z === -137);
+  if (strongholdTower && y <= SURFACE_HEIGHT + 4) return Block.Stone;
   if (road || clearing) return y <= SURFACE_HEIGHT + 4 ? Block.Air : null;
   // The patrol cairn is real two-block cover, not a decoration that shots pass through.
   if ((x === 23 || x === 24) && z === -49 && y <= SURFACE_HEIGHT + 2) return Block.Stone;
-  const ridge = (x === -5 || x === 26) && z <= -47 && z >= -80 && Math.abs(z) % 9 < 6;
-  const brokenSpur = (z === -57 || z === -63) && (x >= -3 && x <= 3 || x >= 22 && x <= 27);
+  const ridge = (x === -5 || x === 26) && z <= -47 && z >= -80 && Math.abs(z) % 9 < 6
+    || (x === -12 || x === 52) && z <= -88 && z >= -145 && Math.abs(z) % 11 < 8;
+  const brokenSpur = (z === -57 || z === -63) && (x >= -3 && x <= 3 || x >= 22 && x <= 27)
+    || (z === -111 || z === -120) && (x >= -8 && x <= 7 || x >= 43 && x <= 57);
   if ((ridge || brokenSpur) && y <= SURFACE_HEIGHT + (z < -64 ? 3 : 2)) return Block.Stone;
+  const silverPocket = x >= 44 && x <= 47 && z >= -119 && z <= -116;
+  if (silverPocket && y <= SURFACE_HEIGHT + 1) return Block.SilverOre;
   const windPine = Math.abs(Math.imul(x, 19) + Math.imul(z, 23)) % 67 === 0 && x > -3 && x < 25;
   if (windPine && y <= SURFACE_HEIGHT + 3) return Block.OakLog;
   if (windPine && y === SURFACE_HEIGHT + 4) return Block.Leaves;
@@ -527,7 +555,7 @@ export const SOUTHERN_TERRITORIES = [
   { tier: 2, name: "SUNFALL QUARRY", detail: "LV 4–8 · use broken shelves against spitter volleys" },
   { tier: 3, name: "REDSTONE PIT", detail: "LV 8–12 · the Quarrymaster waits beyond the collapsed lift" },
 ] as const;
-export const NORTHWATCH_TERRITORY = { tier: 3, name: "NORTHWATCH HIGHLANDS", detail: "LV 8–12 · follow the ridge road · break the Watchbreaker escort" } as const;
+export const NORTHWATCH_TERRITORY = { tier: 3, name: "NORTHWATCH HIGHLANDS", detail: "LV 8–12 · sheltered switchbacks or exposed ascent · breach the northern stronghold" } as const;
 export function wildernessTerritoryAt(x: number, z: number) {
   const radius = Math.hypot(x - TOWN_CENTER_X, z - TOWN_CENTER_Z);
   const southernTier = southernQuarryTierAt(x, z);
@@ -574,6 +602,9 @@ export const REGIONAL_WAYSTONES = [
   { x: 2, z: 157, name: "Deep Quarry Waystone" },
   { x: 8, z: -46, name: "Northwatch Road Waystone" },
   { x: 8, z: -65, name: "Northwatch Ridge Waystone" },
+  { x: 6, z: -98, name: "Ridgetrail Waystone" },
+  { x: 35, z: -126, name: "Stormwall Waystone" },
+  { x: 69, z: -88, name: "East Descent Waystone" },
 ] as const;
 
 export type RoadsideDiscoveryKind = "cart" | "shrine" | "camp" | "grove" | "ruin";
@@ -624,8 +655,8 @@ export const NORTHWATCH_ENCOUNTER_CHAIN = {
   signalWest: { x: -3, z: -54 },
   signalEast: { x: 7, z: -54 },
   patrol: { x: 18.5, z: -54.5 },
-  watchpost: { x: 20, z: -62 },
-  leader: { x: 15.5, z: -72.5 },
+  watchpost: { x: 5, z: -96 },
+  leader: NORTHWATCH_LEADER_HOME,
 } as const;
 export const ASHEN_REACH_ENCOUNTER_CHAIN = {
   id: "ashen-reach-chain",
@@ -685,7 +716,13 @@ export const ROADSIDE_DISCOVERIES = [
   { id: "last-lantern-camp", name: "Last Lantern Camp", kind: "camp", x: -10, z: 173 },
   { id: "northwatch-cart", name: "Abandoned Northwatch Cart", kind: "cart", x: 15, z: -40 },
   { id: "windworn-shrine", name: "Windworn Shrine", kind: "shrine", x: 2, z: -54 },
-  { id: "northwatch-watchpost", name: "Ruined Northwatch Post", kind: "ruin", x: 20, z: -62 },
+  { id: "northwatch-watchpost", name: "Ruined Northwatch Post", kind: "ruin", x: 5, z: -96 },
+  { id: "ridgetrail-mining-camp", name: "Ridgetrail Mining Camp", kind: "camp", x: 1, z: -104 },
+  { id: "broken-signal-tower", name: "Broken Signal Tower", kind: "ruin", x: 43, z: -110 },
+  { id: "stormwall-fort", name: "Stormwall Fort", kind: "ruin", x: 5, z: -131 },
+  { id: "cliffside-shrine", name: "Cliffside Shrine", kind: "shrine", x: 64, z: -72 },
+  { id: "highroad-refuge", name: "Highroad Refuge", kind: "camp", x: 64, z: -118 },
+  { id: "greenwood-north-gate", name: "Greenwood North Gate", kind: "ruin", x: 66, z: -24 },
   { id: "wilds-hunter-blind", name: "Wilds Hunter Blind", kind: "camp", x: -25, z: 22 },
   { id: "outskirts-pilgrim-shrine", name: "Outskirts Pilgrim Shrine", kind: "shrine", x: 27, z: 24 },
 ] as const satisfies readonly { id: string; name: string; kind: RoadsideDiscoveryKind; x: number; z: number }[];
@@ -704,6 +741,14 @@ export const ROADSIDE_ENCOUNTERS = [
   { id: "windworn-shrine", kind: "signals", itemId: "ridge_hide", quantity: 1, gold: 6,
     signalADx: -5, signalADz: 0, signalBDx: 5, signalBDz: 0, windowMs: 12_000 },
   { id: "northwatch-watchpost", kind: "guarded", itemId: "silver_ore", quantity: 1, gold: 8, guardRadius: 11 },
+  { id: "ridgetrail-mining-camp", kind: "cache", itemId: "iron_ore", quantity: 2, gold: 6 },
+  { id: "broken-signal-tower", kind: "signals", itemId: "ridge_hide", quantity: 2, gold: 8,
+    signalADx: -5, signalADz: 0, signalBDx: 5, signalBDz: 0, windowMs: 12_000 },
+  { id: "stormwall-fort", kind: "guarded", itemId: "silver_ore", quantity: 2, gold: 8, guardRadius: 14 },
+  { id: "cliffside-shrine", kind: "shrine", itemId: "healing_potion", quantity: 1, gold: 0 },
+  { id: "highroad-refuge", kind: "cache", itemId: "ridge_hide", quantity: 2, gold: 7 },
+  { id: "greenwood-north-gate", kind: "trail", itemId: "crawler_fang", quantity: 2, gold: 6, stashDx: -5, stashDz: -4,
+    clue: "Fresh tracks leave the northern gate and bend southwest beneath the pines." },
   { id: "ashen-pilgrims", kind: "shrine", itemId: "healing_potion", quantity: 1, gold: 0 },
   { id: "emberfall-shrine", kind: "shrine", itemId: "healing_potion", quantity: 1, gold: 0 },
   { id: "ashglass-survey", kind: "ambush", itemId: "silver_ore", quantity: 2, gold: 8, guardRadius: 14 },

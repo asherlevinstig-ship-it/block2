@@ -32,8 +32,11 @@ const FIXED_ROADSIDE_GUARDS: readonly RoadsideGuard[] = [
   { id: "roadside-southgate-spitter", siteId: "southgate-cart", archetype: "cave_spitter", name: "Cart Lookout", x: 19.5, y: 8, z: 38.5 },
   { id: "roadside-lift-crawler", siteId: "collapsed-lift", archetype: "briar_crawler", name: "Lift Scavenger", x: -8.5, y: 8, z: 87.5 },
   { id: "roadside-lift-spitter", siteId: "collapsed-lift", archetype: "cave_spitter", name: "Lift Lookout", x: -.5, y: 8, z: 85.5 },
-  { id: "roadside-watch-stalker", siteId: "northwatch-watchpost", archetype: "ridge_stalker", name: "Watchpost Stalker", x: 16.5, y: 8, z: -59.5 },
-  { id: "roadside-watch-sentry", siteId: "northwatch-watchpost", archetype: "shard_sentry", name: "Watchpost Sentry", x: 24.5, y: 8, z: -59.5 },
+  { id: "roadside-watch-stalker", siteId: "northwatch-watchpost", archetype: "ridge_stalker", name: "Watchpost Stalker", x: 1.5, y: 8, z: -99.5 },
+  { id: "roadside-watch-sentry", siteId: "northwatch-watchpost", archetype: "shard_sentry", name: "Watchpost Sentry", x: 9.5, y: 8, z: -98.5 },
+  { id: "roadside-stormwall-brute", siteId: "stormwall-fort", archetype: "stone_brute", name: "Stormwall Castellan", x: 5.5, y: 8, z: -136.5, elite: true },
+  { id: "roadside-stormwall-stalker", siteId: "stormwall-fort", archetype: "ridge_stalker", name: "Stormwall Stalker", x: .5, y: 8, z: -133.5 },
+  { id: "roadside-stormwall-sentry", siteId: "stormwall-fort", archetype: "shard_sentry", name: "Stormwall Sentry", x: 9.5, y: 8, z: -133.5 },
 ];
 
 const variant = (siteId: string, id: string, title: string, activation: string, rewardItemId: ItemId,

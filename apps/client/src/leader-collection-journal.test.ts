@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { NORTHWATCH_LEADER_HOME } from "@blockcraft/voxel-world";
 import { advanceTrackedLeaderCollectionHunt, leaderCollectionProgress, leaderCollectionRematchTier, leaderCollectionTarget,
   parseLeaderCollectionDiscoveries, parseTrackedLeaderCollectionHunt, trackedLeaderArenaPresentation } from "./leader-collection-journal.js";
 
@@ -48,7 +49,7 @@ describe("regional leader collection journal", () => {
 
   it("presents fixed arena difficulty and suppressible combat state near the tracked leader", () => {
     const tracked = { collectionId: "northwatch", itemId: "northwatch_cloak" } as const;
-    const player = { x: 15.5, y: 8, z: -70, alive: true };
+    const player = { ...NORTHWATCH_LEADER_HOME, z: NORTHWATCH_LEADER_HOME.z + 2.5, alive: true };
     const ready = trackedLeaderArenaPresentation(tracked,
       { id: "northwatch-watchbreaker", alive: true, combatState: "idle", targetId: "", respawnAt: 0 }, player, 10_000);
     expect(ready).toMatchObject({ phase: "ready", difficulty: "EMPOWERED II", party: "2–3 PLAYERS RECOMMENDED",

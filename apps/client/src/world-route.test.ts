@@ -4,7 +4,7 @@ import { isWorldGuidanceRoad, planWorldRoute, remainingWorldRoute, routeDeviatio
 describe("overworld road guidance", () => {
   it.each([
     [{ x: 8.5, z: 8.5 }, { x: 8.5, z: 171.5 }],
-    [{ x: 8.5, z: 8.5 }, { x: 15.5, z: -72.5 }],
+    [{ x: 8.5, z: 8.5 }, { x: 18.5, z: -142.5 }],
     [{ x: 8.5, z: 8.5 }, { x: 165.5, z: 68.5 }],
     [{ x: 8.5, z: 8.5 }, { x: -99.5, z: -42.5 }],
   ])("connects the town to distant authored regions", (start, end) => {
@@ -15,10 +15,17 @@ describe("overworld road guidance", () => {
   });
 
   it("closes the northern loop between Deepfen and Northwatch", () => {
-    const route = planWorldRoute({ x: -99.5, z: -42.5 }, { x: 15.5, z: -72.5 });
+    const route = planWorldRoute({ x: -99.5, z: -42.5 }, { x: 18.5, z: -142.5 });
     expect(route.length).toBeGreaterThan(2);
     expect(route.some(point => point.z === -57.5 || point.z === -58.5)).toBe(true);
-    expect(route.at(-1)).toMatchObject({ x: 15.5, z: -72.5 });
+    expect(route.at(-1)).toMatchObject({ x: 18.5, z: -142.5 });
+  });
+
+  it("returns from the northern stronghold to Greenwood along the east descent", () => {
+    const route = planWorldRoute({ x: 64.5, z: -118.5 }, { x: 43.5, z: 4.5 });
+    expect(route.length).toBeGreaterThan(3);
+    expect(routeDeviationDistance({ x: 73.5, z: -60.5 }, route)).toBeLessThanOrEqual(1);
+    expect(route.at(-1)).toMatchObject({ x: 43.5, z: 4.5 });
   });
 
   it("closes the eastern Ashen loop into the southern quarry", () => {

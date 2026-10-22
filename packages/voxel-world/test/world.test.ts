@@ -13,6 +13,7 @@ import {
   SOUTHERN_QUARRY_COVER,
   NORTHWATCH_LEADER_HOME,
   isInNorthwatchHighlands,
+  isNorthwatchExposedAscent,
   isNorthwatchRoad,
   ashenReachBlock,
   isInAshenReach,
@@ -142,7 +143,7 @@ describe("deterministic voxel world", () => {
       if (!cache.has(key)) cache.set(key, generateChunk("density-test", a.chunkX, a.chunkZ));
       return getBlock(cache.get(key)!, a.localX, y, a.localZ);
     };
-    expect(ROADSIDE_DISCOVERIES).toHaveLength(44);
+    expect(ROADSIDE_DISCOVERIES).toHaveLength(50);
     expect(new Set(ROADSIDE_DISCOVERIES.map(site => site.kind)).size).toBe(5);
     for (const site of ROADSIDE_DISCOVERIES) {
       expect(isRegionalRoad(site.x, site.z)).toBe(false);
@@ -176,24 +177,30 @@ describe("deterministic voxel world", () => {
     }
   });
 
-  it("authors a bounded north road, ridge clearing, and silver destination", () => {
-    expect(isInNorthwatchHighlands(15, -72)).toBe(true);
+  it("authors two northern ascents, a stronghold, and an eastern return loop", () => {
+    expect(isInNorthwatchHighlands(15, -142)).toBe(true);
+    expect(isInNorthwatchHighlands(72, -70)).toBe(true);
     expect(isInNorthwatchHighlands(15, -20)).toBe(false);
-    expect(wildernessTerritoryAt(15, -72)?.name).toBe("NORTHWATCH HIGHLANDS");
+    expect(wildernessTerritoryAt(15, -142)?.name).toBe("NORTHWATCH HIGHLANDS");
     expect(isNorthwatchRoad(9, -50)).toBe(true);
     expect(isNorthwatchRoad(9, -72)).toBe(true);
-    expect(isNorthwatchRoad(9, -90)).toBe(false);
+    expect(isNorthwatchRoad(9, -90)).toBe(true);
+    expect(isNorthwatchRoad(37, -116)).toBe(true);
+    expect(isNorthwatchExposedAscent(29, -104)).toBe(true);
+    expect(isNorthwatchRoad(73, -50)).toBe(true);
     const chunks = new Map<string, ReturnType<typeof generateChunk>>();
     const read = (x: number, y: number, z: number) => {
       const address = worldToChunk(x, z); const key = `${address.chunkX},${address.chunkZ}`;
       if (!chunks.has(key)) chunks.set(key, generateChunk("northwatch-test", address.chunkX, address.chunkZ));
       return getBlock(chunks.get(key)!, address.localX, y, address.localZ);
     };
-    for (let z = -76; z <= -30; z++) {
+    for (let z = -102; z <= -30; z++) {
       expect(read(9, SURFACE_HEIGHT + 1, z)).toBe(Block.Air);
       expect(read(9, SURFACE_HEIGHT, z)).not.toBe(Block.Air);
     }
     expect(read(Math.floor(NORTHWATCH_LEADER_HOME.x), SURFACE_HEIGHT + 1, Math.floor(NORTHWATCH_LEADER_HOME.z))).toBe(Block.Air);
+    expect(read(10, SURFACE_HEIGHT + 2, -145)).toBe(Block.Stone);
+    expect(read(45, SURFACE_HEIGHT + 1, -117)).toBe(Block.SilverOre);
     expect(read(23, SURFACE_HEIGHT, -77)).toBe(Block.SilverOre);
     expect(read(26, SURFACE_HEIGHT + 1, -68)).toBe(Block.Stone);
   });

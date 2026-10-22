@@ -76,6 +76,9 @@ describe("regional encounter chains", () => {
     expect(route).toContainEqual({ x: 9, z: -46 });
     expect(route).toContainEqual({ x: 9, z: -54 });
     expect(regionalPolylineTrailVisible({ x: 9, y: 8, z: -50 }, route)).toBe(true);
+    const leaderRoute = northwatchChainRoute("follow-to-leader")!;
+    expect(leaderRoute).toContainEqual({ x: 37, z: -128 });
+    expect(leaderRoute.at(-1)).toMatchObject({ x: 18.5, z: -142.5 });
   });
 
   it("turns the Ashen landmarks into one first-clear journey", () => {

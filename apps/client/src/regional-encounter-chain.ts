@@ -109,7 +109,8 @@ export function northwatchChainRoute(stage: NorthwatchChainStage): ChainPoint[] 
   ];
   if (stage === "follow-to-watchpost") return [NORTHWATCH_ENCOUNTER_CHAIN.patrol, NORTHWATCH_ENCOUNTER_CHAIN.watchpost];
   if (stage === "follow-to-leader") return [
-    NORTHWATCH_ENCOUNTER_CHAIN.watchpost, { x: 9, z: -70 }, NORTHWATCH_ENCOUNTER_CHAIN.leader,
+    NORTHWATCH_ENCOUNTER_CHAIN.watchpost, { x: 9, z: -101 }, { x: 37, z: -101 },
+    { x: 37, z: -128 }, { x: 13, z: -128 }, NORTHWATCH_ENCOUNTER_CHAIN.leader,
   ];
   return null;
 }

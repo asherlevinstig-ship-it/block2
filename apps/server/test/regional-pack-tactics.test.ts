@@ -9,6 +9,8 @@ describe("static regional roaming-pack tactics", () => {
   it("gives each region a distinct fixed combat role", () => {
     expect(regionalPackCue("greenwood-south-pack", "moss_crawler", 1)).toBe("FLANKING");
     expect(regionalPackCue("mistfen-south-pack", "fen_bloater", 0)).toBe("BLOCKING ESCAPE");
+    expect(regionalPackCue("northwatch-ascent-pack", "ridge_stalker", 0)).toBe("HOLDING PASS");
+    expect(regionalPackCue("northwatch-ascent-pack", "shard_sentry", 1)).toBe("COVERING FIRE");
     expect(regionalPackCue("stoneheart-east-pack", "cave_spitter", 1)).toBe("COVERING FIRE");
     expect(regionalPackCue("ashen-west-pack", "ember_hound", 1)).toBe("PINCER RUSH");
     expect(regionalPackCue("outskirts-west-pack", "moss_crawler", 0)).toBeNull();

@@ -41,6 +41,11 @@ export const ROAMING_PACKS: readonly RoamingPack[] = [
       { x: -68.5, y: 8, z: -34.5 }, { x: -76.5, y: 8, z: -40.5 },
       { x: -84.5, y: 8, z: -46.5 }, { x: -91.5, y: 8, z: -50.5 }],
     offsets: [{ x: 0, z: 0 }, { x: -1.1, z: -.9 }, { x: 1.1, z: -.9 }] },
+  { id: "northwatch-ascent-pack", name: "Northwatch Pass Wardens", tier: 3, archetype: "ridge_stalker",
+    archetypes: ["ridge_stalker", "shard_sentry", "ridge_stalker"], eliteIndex: 0, route: [
+      { x: 24.5, y: 8, z: -91.5 }, { x: 27.5, y: 8, z: -99.5 },
+      { x: 31.5, y: 8, z: -107.5 }, { x: 34.5, y: 8, z: -115.5 }],
+    offsets: [{ x: 0, z: 0 }, { x: -1.2, z: -.9 }, { x: 1.2, z: -.9 }] },
   { id: "stoneheart-west-pack", name: "Stoneheart Skirmishers", tier: 3, archetype: "briar_crawler",
     archetypes: ["briar_crawler", "cave_spitter", "moss_crawler"], eliteIndex: 0, route: [
       { x: 34.5, y: 8, z: 50.5 }, { x: 31.5, y: 8, z: 55.5 }, { x: 35.5, y: 8, z: 61.5 }],

@@ -5,11 +5,12 @@ type Point = { x: number; y: number; z: number };
 export const REGIONAL_PACK_DISRUPTION_MS = 3_500;
 
 export type RegionalPackCue = "PINNING" | "FLANKING" | "VENOM LOCK" | "BLOCKING ESCAPE"
-  | "BREACHING" | "COVERING FIRE" | "PINCER RUSH" | "CENTRE PRESSURE";
+  | "BREACHING" | "COVERING FIRE" | "PINCER RUSH" | "CENTRE PRESSURE" | "HOLDING PASS";
 
-function region(packId: string): "greenwood" | "mistfen" | "stoneheart" | "ashen" | null {
+function region(packId: string): "greenwood" | "mistfen" | "northwatch" | "stoneheart" | "ashen" | null {
   if (packId.startsWith("greenwood-")) return "greenwood";
   if (packId.startsWith("mistfen-")) return "mistfen";
+  if (packId.startsWith("northwatch-")) return "northwatch";
   if (packId.startsWith("stoneheart-")) return "stoneheart";
   if (packId.startsWith("ashen-")) return "ashen";
   return null;
@@ -20,6 +21,8 @@ export function regionalPackCue(packId: string, archetype: MobArchetypeId, membe
   const identity = region(packId);
   if (identity === "greenwood") return memberIndex === 0 ? "PINNING" : "FLANKING";
   if (identity === "mistfen") return archetype === "fen_bloater" ? "BLOCKING ESCAPE" : "VENOM LOCK";
+  if (identity === "northwatch") return archetype === "shard_sentry" ? "COVERING FIRE"
+    : memberIndex === 0 ? "HOLDING PASS" : "FLANKING";
   if (identity === "stoneheart") return archetype === "stone_brute" ? "BREACHING" : "COVERING FIRE";
   if (identity === "ashen") return archetype === "ember_hound" ? "PINCER RUSH"
     : archetype === "cinder_ram" ? "CENTRE PRESSURE" : "COVERING FIRE";
@@ -43,6 +46,8 @@ export function regionalPackGoal(packId: string, archetype: MobArchetypeId, memb
   if (identity === "greenwood") return memberIndex === 0 ? point(-1.8, 0) : point(-.25, side * 2.25);
   if (identity === "mistfen") return archetype === "fen_bloater" ? point(1.9, 0)
     : archetype === "cave_spitter" ? point(-4.6, side * 2.2) : point(-.4, side * 2.1);
+  if (identity === "northwatch") return archetype === "shard_sentry" ? point(-5.2, side * 1.8)
+    : memberIndex === 0 ? point(-1.8, 0) : point(-.2, side * 2.4);
   if (identity === "stoneheart") return archetype === "stone_brute" ? point(-2.1, 0)
     : point(-4.8, side * 2.4);
   return archetype === "cinder_ram" ? point(-2.1, 0)
@@ -54,6 +59,7 @@ export function regionalPackSpeedMultiplier(packId: string, archetype: MobArchet
   const identity = region(packId);
   if (identity === "greenwood" && archetype !== "cave_spitter") return 1.08;
   if (identity === "mistfen" && archetype === "fen_bloater") return 1.06;
+  if (identity === "northwatch" && archetype === "ridge_stalker") return 1.1;
   if (identity === "stoneheart" && archetype === "stone_brute") return 1.08;
   if (identity === "ashen" && archetype === "ember_hound") return 1.12;
   return 1;
