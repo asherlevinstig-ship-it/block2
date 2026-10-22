@@ -57,6 +57,7 @@ import { REGIONAL_PACK_DISRUPTION_MS, regionalPackCooldownMultiplier, regionalPa
   regionalPackSpeedMultiplier } from "./regional-pack-tactics.js";
 import { mobSimulationActive } from "./mob-activation.js";
 import { SERVER_TICK_BUDGET_MS, appendTickSample, samplePercentile } from "./performance-metrics.js";
+import { RAPID_PRACTICE_ARENA, RAPID_PRACTICE_SPAWNS, rapidPracticeMovementSpeed, rapidPracticeProjectileTravelMs } from "./rapid-practice.js";
 import type { ServerPerformanceUpdate } from "@blockcraft/protocol";
 import { regionalPackRewardDefeat, regionalPackRewardItems, regionalPackRewardNotice,
   type RegionalPackRewardCycle, type RegionalPackRewardKind } from "./regional-pack-rewards.js";
@@ -344,6 +345,7 @@ type WorldRoomOptions = {
   roomKind?: "overworld" | "silver-depths" | "practice";
   instanceKey?: string;
   partySize?: number;
+  prototype?: "2d";
 };
 type ExpeditionPartyTicket = { instanceKey: string; worldRoomId: string; profiles: string[] };
 const HAUL_STORAGE_MATERIALS = ["timber", "moss_fibre", "crawler_fang", "stone_core", "acid_gland"] as const satisfies readonly ItemId[];
@@ -637,6 +639,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private realmWardenRepeatAvailableAt = 0;
   private worldSeed = "blockcraft-dev";
   private roomKind: "overworld" | "silver-depths" | "practice" = "overworld";
+  private rapidPractice = false;
   private practiceReturnRoomId = new Map<string, string>();
   private silverInstanceKey = "";
   private instancePartySize = 1;
@@ -665,6 +668,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
 
   override async onCreate(options: WorldRoomOptions = {}): Promise<void> {
     this.roomKind = options.roomKind === "silver-depths" ? "silver-depths" : options.roomKind === "practice" ? "practice" : "overworld";
+    this.rapidPractice = this.roomKind === "practice" && options.prototype === "2d";
     // The Colyseus input stream is the default. Keep an explicit server-side
     // rollback while older clients can still use the legacy "move" messages.
     this.movementShadowEnabled = process.env.MOVEMENT_NETCODE_LEGACY !== "1";
@@ -757,9 +761,19 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
     if (this.roomKind === "practice") {
       this.state.mobs.clear(); this.mobHomes.clear(); this.state.portals.clear();
-      this.registerMob("practice-crawler", "moss_crawler", { x: 105.5, y: 8, z: 104.5 });
-      this.registerMob("practice-spitter", "cave_spitter", { x: 105.5, y: 8, z: 108.5 });
-      for (const mob of this.state.mobs.values()) { mob.name = "Training " + mob.name; mob.attackDamage = 1; mob.maxHealth = mob.health = 28; }
+      if (this.rapidPractice) {
+        for (const spawn of RAPID_PRACTICE_SPAWNS) this.registerMob(spawn.id, spawn.archetype, spawn);
+        for (const mob of this.state.mobs.values()) {
+          mob.name = "Speed Lab " + mob.name;
+          mob.attackDamage = 1;
+          mob.maxHealth = mob.health = mob.archetype === "stone_brute" ? 20 : 10;
+          mob.speedMultiplier *= 1.18;
+        }
+      } else {
+        this.registerMob("practice-crawler", "moss_crawler", { x: 105.5, y: 8, z: 104.5 });
+        this.registerMob("practice-spitter", "cave_spitter", { x: 105.5, y: 8, z: 108.5 });
+        for (const mob of this.state.mobs.values()) { mob.name = "Training " + mob.name; mob.attackDamage = 1; mob.maxHealth = mob.health = 28; }
+      }
     }
     this.onMessage("world:ready", client => {
       client.send("world:bootstrap", this.bootstrapPayload(this.state.players.get(client.sessionId)));
@@ -774,7 +788,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (this.roomKind === "overworld") this.sendAshenReliquaryState(client, Date.now());
       this.sendHuntCollection(client);
       this.sendBuildPath(client);
-      if (this.roomKind === "practice") client.send("practice:state", { active: true, message: "Training arena · select any ability, then use G. F uses your Calling Special. Your character will not be changed." });
+      if (this.roomKind === "practice") client.send("practice:state", { active: true, message: this.rapidPractice
+        ? "2.5D Speed Lab · 18-enemy wave · faster movement and projectiles · use G and F to compare every Calling."
+        : "Training arena · select any ability, then use G. F uses your Calling Special. Your character will not be changed." });
       this.sendEquipmentAffixes(client);
       if (this.roomKind === "overworld") client.send("party:update", this.parties.snapshot(client.sessionId, this.state.players, Date.now()));
       if (this.roomKind === "overworld") for (const [key, lobby] of this.silverDepthsLobbies)
@@ -1111,6 +1127,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     player.z = spawn.z;
     if (this.roomKind === "practice") {
       player.level = Math.max(player.level, 10);
+      if (this.rapidPractice) player.maxHealth = Math.max(player.maxHealth, 30);
       player.health = player.maxHealth;
       player.stamina = player.maxStamina;
       player.invulnerableUntil = Date.now() + 600_000;
@@ -2346,12 +2363,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
 
   private buildPracticeArena(): void {
     // This room has its own generated chunks; no block edits reach the shared world.
-    for (let x = 94; x <= 112; x++) for (let z = 98; z <= 114; z++) {
+    const bounds = this.rapidPractice ? RAPID_PRACTICE_ARENA : { minX: 94, maxX: 112, minZ: 98, maxZ: 114, floorY: 7 };
+    for (let x = bounds.minX; x <= bounds.maxX; x++) for (let z = bounds.minZ; z <= bounds.maxZ; z++) {
       const address = worldToChunk(x, z);
       const stored = this.getChunk(address.chunkX, address.chunkZ);
-      setBlock(stored.chunk, address.localX, 7, address.localZ, Block.Stone);
+      setBlock(stored.chunk, address.localX, bounds.floorY, address.localZ, Block.Stone);
       for (let y = 8; y <= 15; y++) setBlock(stored.chunk, address.localX, y, address.localZ,
-        (x === 94 || x === 112 || z === 98 || z === 114) && y <= 10 ? Block.Stone : Block.Air);
+        (x === bounds.minX || x === bounds.maxX || z === bounds.minZ || z === bounds.maxZ) && y <= 10 ? Block.Stone : Block.Air);
       stored.revision++;
     }
   }
@@ -8154,7 +8172,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const availableMs = Math.min(2_000, clock.availableMs + Math.max(0, now - clock.lastAt));
       if (durationMs > availableMs)
         return this.reject(client, { action: "move", reason: "rate" });
-      const speed = movementSpeedWithMomentum(player.defending ? 2.1 : 4.2,
+      const speed = movementSpeedWithMomentum(rapidPracticeMovementSpeed(player.defending ? 2.1 : 4.2, this.rapidPractice),
         player.momentumStacks, player.equippedTrait as TraitId)
         * armourStats(player.armourId).speed * progressionSpeedMultiplier(player);
       let pose = { x: player.x, y: player.y, z: player.z,
@@ -8287,7 +8305,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const command = this.inputs.get(client.sessionId).next();
       if (this.movementPilotControllers.has(client.sessionId)) {
         const direction = command ?? { strafe: 0, forward: 0, yaw: player.yaw };
-        const speed = movementSpeedWithMomentum(player.defending ? 2.1 : 4.2, player.momentumStacks, player.equippedTrait as TraitId)
+        const speed = movementSpeedWithMomentum(rapidPracticeMovementSpeed(player.defending ? 2.1 : 4.2, this.rapidPractice), player.momentumStacks, player.equippedTrait as TraitId)
           * armourStats(player.armourId).speed * progressionSpeedMultiplier(player);
         const next = stepShadowMovement({ x: player.x, y: player.y, z: player.z, verticalVelocity: player.pilotVy },
           direction, speed, deltaTime, this.readWorldBlock);
@@ -8309,7 +8327,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           authorityX: player.x, authorityY: player.y, authorityZ: player.z, reset: true });
         continue;
       }
-      const speed = movementSpeedWithMomentum(player.defending ? 2.1 : 4.2, player.momentumStacks, player.equippedTrait as TraitId)
+      const speed = movementSpeedWithMomentum(rapidPracticeMovementSpeed(player.defending ? 2.1 : 4.2, this.rapidPractice), player.momentumStacks, player.equippedTrait as TraitId)
         * armourStats(player.armourId).speed * progressionSpeedMultiplier(player);
       const next = stepShadowMovement(shadow, command ?? { strafe: 0, forward: 0 }, speed, deltaTime, this.readWorldBlock);
       this.movementShadows.set(client.sessionId, next);
@@ -8699,11 +8717,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           const venomPools = mobId === GREENWOOD_MATRIARCH_ID && (mob.attackPattern === "double-fan" || mob.attackPattern === "venom-ring");
           const mistfenEruption = (mobId === "mistfen-behemoth" || mobId === MISTFEN_EVENT_ID)
             && mob.attackPattern === "toxic-eruption";
-          this.releaseMobVolley(mobId, mob, origin, shots, now, definition.projectileTravelMs,
+          const projectileTravelMs = rapidPracticeProjectileTravelMs(definition.projectileTravelMs, this.rapidPractice);
+          this.releaseMobVolley(mobId, mob, origin, shots, now, projectileTravelMs,
             mobId === "northwatch-spitter" ? northwatchPatrolShotDamage(mob.attackPattern, mob.attackDamage) : mob.attackDamage,
             championVenom?.radius ?? (mistfenEruption ? 1.15 : venomPools ? .82 : definition.hazardRadius),
             championVenom?.durationMs ?? (mistfenEruption ? 4_500 : venomPools ? 3_600 : definition.hazardDurationMs));
-          this.launchSpitterPackCrossfire(mobId, mob, aim, now, definition.projectileTravelMs);
+          this.launchSpitterPackCrossfire(mobId, mob, aim, now, projectileTravelMs);
           if (usesFallingRockZones(mob.attackPattern)) this.scheduleRealmFallingRocks(mobId, aim, now, mob.attackDamage,
             mob.attackPattern === "warden-barrage" || mob.attackPattern === "fault-line" && huntChampion?.difficulty === "ascendant");
           if ((usesDoubleVolley(mob.attackPattern) && (mobId === WILDERNESS_EVENT_ID || mobId === CRYSTAL_MATRIARCH_ID || isRealmEventId(mobId) || isAreaMiniBoss(mobId)))
@@ -8711,7 +8730,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
             const secondYaw = matriarchSecondVolleyYaw(aim.yaw, Math.max(0, mob.actionSequence - 1));
             const secondShots = usesRockVolley(mob.attackPattern) ? bruteRockEndpoints(mob, secondYaw)
               : spitterShotEndpoints(mob, secondYaw, mob.attackPattern === "cross-volley" ? "double-fan" : mob.attackPattern);
-            this.delayedMatriarchVolleys.set(mobId, { origin, shots: secondShots, releaseAt: now + MATRIARCH_PHASE.volleyGapMs, damage: mob.attackDamage, travelMs: definition.projectileTravelMs });
+            this.delayedMatriarchVolleys.set(mobId, { origin, shots: secondShots, releaseAt: now + MATRIARCH_PHASE.volleyGapMs, damage: mob.attackDamage, travelMs: projectileTravelMs });
           }
           if (mobId === ASHGLASS_ORACLE_ID && mob.attackPattern === "teleport-burst") this.teleportAshglassOracle(mob, aim, mob.actionSequence);
           mob.targetId = "";
@@ -9001,7 +9020,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const input = this.thornBindings.has(sessionId) ? { ...liveInput, strafe: 0, forward: 0 } : liveInput;
       const inputLength = Math.hypot(input.strafe, input.forward);
       const scale = inputLength > 1 ? 1 / inputLength : 1;
-      const speed = movementSpeedWithMomentum(player.defending ? 2.1 : 4.2, player.momentumStacks, player.equippedTrait as TraitId)
+      const speed = movementSpeedWithMomentum(rapidPracticeMovementSpeed(player.defending ? 2.1 : 4.2, this.rapidPractice), player.momentumStacks, player.equippedTrait as TraitId)
         * armourStats(player.armourId).speed * progressionSpeedMultiplier(player);
       const grounded = isPlayerSupported(this.readWorldBlock, player.x, player.y, player.z);
       let verticalVelocity = this.verticalVelocities.get(sessionId) ?? 0;
@@ -10171,6 +10190,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         attackDefinition.minimumFacingDot,
       );
       if (attackDefinition.projectileTravelMs > 0) {
+        const projectileTravelMs = rapidPracticeProjectileTravelMs(attackDefinition.projectileTravelMs, this.rapidPractice);
         const radians = pending.yaw * Math.PI / 180;
         const endpoint = {
           x: player.x + Math.sin(radians) * attackDefinition.range,
@@ -10182,7 +10202,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         const end = bodyPoint(endpoint);
         this.pendingWeaponProjectiles.set(projectileId, {
           ...pending, projectileId, attackerId: sessionId,
-          start, end, position: start, startedAt: now, impactAt: now + attackDefinition.projectileTravelMs,
+          start, end, position: start, startedAt: now, impactAt: now + projectileTravelMs,
         });
         this.broadcast("combat:projectile", {
           projectileId,
@@ -10194,7 +10214,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           targetX: endpoint.x,
           targetY: endpoint.y,
           targetZ: endpoint.z,
-          travelMs: attackDefinition.projectileTravelMs,
+          travelMs: projectileTravelMs,
           releasedAt: now,
         } satisfies WeaponAttackReleased);
         continue;

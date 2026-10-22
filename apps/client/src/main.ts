@@ -1009,6 +1009,8 @@ function renderGreenwoodMastery(position: { x: number; y: number; z: number }): 
 }
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game")!;
+const initialPageQuery = new URLSearchParams(window.location.search);
+const rapidPrototypeRequested = initialPageQuery.get("room") === "practice" && initialPageQuery.get("prototype") === "2d";
 const status = document.querySelector<HTMLElement>("#status")!;
 const targetLabel = document.querySelector<HTMLElement>("#target")!;
 const tavernDialogue = document.querySelector<HTMLElement>("#tavern-dialogue")!;
@@ -1471,7 +1473,9 @@ const CAMERA_ZOOM_STORAGE_KEY = "blockcraft-tablet-camera-zoom-v1";
 const storedCameraDistance = (() => {
   try { return Number(window.localStorage.getItem(CAMERA_ZOOM_STORAGE_KEY)) || undefined; } catch { return undefined; }
 })();
-let cameraOrbit = initialCameraOrbit(storedCameraDistance);
+let cameraOrbit = rapidPrototypeRequested
+  ? { ...initialCameraOrbit(39), pitch: Math.PI * .4, yawSpeed: 0, pitchSpeed: 0 }
+  : initialCameraOrbit(storedCameraDistance);
 let indoorCameraBlend = 0;
 
 const light = new pc.Entity("sun");
@@ -1494,6 +1498,7 @@ caveLight.enabled = false;
 app.root.addChild(caveLight);
 
 const worldRoot = new pc.Entity("voxel-world");
+worldRoot.enabled = !rapidPrototypeRequested;
 app.root.addChild(worldRoot);
 const caveFogRoot = new pc.Entity("undiscovered-cave");
 app.root.addChild(caveFogRoot);
@@ -1817,6 +1822,7 @@ function queueChunkRebuild(chunk: ClientChunk): void {
 }
 
 function processNextChunkRebuild(position: { x: number; z: number }): void {
+  if (rapidPrototypeRequested) return;
   if (queuedChunkRebuilds.size === 0) return;
   const center = worldToChunk(position.x, position.z);
   const key = nearestQueuedChunkKey(queuedChunkRebuilds, center);
@@ -1879,6 +1885,11 @@ function rebuildChunkAndNeighbors(chunk: ClientChunk, x: number, z: number): voi
 }
 
 function updateActiveChunkMeshes(position: { x: number; z: number }): void {
+  if (rapidPrototypeRequested) {
+    for (const chunk of chunks.values()) chunk.root.enabled = false;
+    queuedChunkRebuilds.clear();
+    return;
+  }
   const address = worldToChunk(position.x, position.z);
   const regionKey = chunkKey(address.chunkX, address.chunkZ);
   if (regionKey !== requestedChunkRegionKey && room && worldReady) {
@@ -1923,8 +1934,10 @@ function applyChunkRegion(payload: ChunkRegion): void {
   }
   activeChunkViewKey = null;
   updateActiveChunkMeshes(position);
-  sceneDressing.rebuild(readWorldBlock, [...chunks.values()], indoorRoofBuilding);
-  sceneDressing.setSurfaceVisible(!playerCutaway.active);
+  if (!rapidPrototypeRequested) {
+    sceneDressing.rebuild(readWorldBlock, [...chunks.values()], indoorRoofBuilding);
+    sceneDressing.setSurfaceVisible(!playerCutaway.active);
+  }
   const streamSetupMs = performance.now() - buildStartedAt;
   lastChunkStreamSetupMs = streamSetupMs;
   logMovementEvent(`CHUNK STREAM count=${payload.chunks.length} setup=${streamSetupMs.toFixed(1)}ms queued=${queuedChunkRebuilds.size}`);
@@ -2070,6 +2083,46 @@ function addBox(
   box.setLocalPosition(...position);
   parent.addChild(box);
   return box;
+}
+
+const rapidPrototypeRoot = new pc.Entity("rapid-2d-speed-lab");
+app.root.addChild(rapidPrototypeRoot);
+rapidPrototypeRoot.enabled = rapidPrototypeRequested;
+if (rapidPrototypeRequested) {
+  const grass = coloredMaterial(new pc.Color(.16, .34, .2));
+  const grassLight = coloredMaterial(new pc.Color(.22, .43, .24));
+  const path = coloredMaterial(new pc.Color(.48, .35, .2));
+  const stone = coloredMaterial(new pc.Color(.31, .35, .34));
+  const trunk = coloredMaterial(new pc.Color(.24, .13, .07));
+  const leaf = coloredMaterial(new pc.Color(.08, .25, .13));
+  const leafLight = coloredMaterial(new pc.Color(.13, .38, .18));
+  const boundary = coloredMaterial(new pc.Color(.08, .13, .12));
+  addBox(rapidPrototypeRoot, "arena-ground", grass, [40, .25, 32], [108, 7.875, 106]);
+  addBox(rapidPrototypeRoot, "west-green", grassLight, [9, .035, 29], [94, 8.02, 106]);
+  addBox(rapidPrototypeRoot, "combat-lane", path, [27, .04, 5.2], [111.5, 8.03, 106]);
+  addBox(rapidPrototypeRoot, "cross-lane", path, [5.2, .045, 23], [116, 8.035, 106]);
+  addBox(rapidPrototypeRoot, "arena-heart", stone, [7.5, .08, 7.5], [116, 8.07, 106]);
+  for (const [x, z] of [[91,93],[96,93],[102,93],[108,92],[114,92],[121,92],[126,94],[126,120],[120,120],[112,120],[104,120],[96,120],[91,117],[91,109],[91,101]] as const) {
+    addBox(rapidPrototypeRoot, "tree-trunk", trunk, [.45, 1.55, .45], [x, 8.75, z]);
+    addBox(rapidPrototypeRoot, "tree-crown", leaf, [2.1, 1.15, 2.1], [x, 10.15, z]);
+    addBox(rapidPrototypeRoot, "tree-highlight", leafLight, [1.25, .65, 1.25], [x - .25, 10.85, z - .2]);
+  }
+  for (const [x, z, s] of [[104,96,1.2],[123,97,.9],[124,114,1.1],[108,116,.8],[98,112,.75]] as const) {
+    const rock = addBox(rapidPrototypeRoot, "arena-rock", stone, [s, s * .72, s], [x, 8 + s * .36, z]);
+    rock.setLocalEulerAngles(0, x * 7 % 45, 12);
+  }
+  addBox(rapidPrototypeRoot, "north-edge", boundary, [40, .5, .65], [108, 8.25, 90.3]);
+  addBox(rapidPrototypeRoot, "south-edge", boundary, [40, .5, .65], [108, 8.25, 121.7]);
+  addBox(rapidPrototypeRoot, "west-edge", boundary, [.65, .5, 32], [88.3, 8.25, 106]);
+  addBox(rapidPrototypeRoot, "east-edge", boundary, [.65, .5, 32], [127.7, 8.25, 106]);
+
+  const badge = document.createElement("aside");
+  badge.id = "rapid-prototype-badge";
+  badge.innerHTML = "<strong>2.5D SPEED LAB</strong><span>18-enemy wave · all Callings · no progress saved</span>";
+  badge.style.cssText = "position:fixed;left:18px;top:68px;z-index:18;display:grid;gap:2px;padding:9px 13px;border:1px solid rgba(117,242,180,.55);border-radius:10px;background:rgba(6,18,14,.86);color:#d9ffdf;font:700 12px/1.2 system-ui;letter-spacing:.08em;pointer-events:none;box-shadow:0 7px 24px rgba(0,0,0,.32)";
+  const detail = badge.querySelector("span") as HTMLElement;
+  detail.style.cssText = "color:#9fc6ac;font-size:10px;font-weight:600;letter-spacing:.02em";
+  document.body.appendChild(badge);
 }
 
 const lanternMetal = coloredMaterial(new pc.Color(0.2, 0.16, 0.1));
@@ -5323,7 +5376,8 @@ function updateMomentum(stacksValue: number): void {
 }
 
 function localMovementSpeed(): number {
-  const baseSpeed = (localDefending ? 2.1 : 4.2) * armourStats(localArmourId).speed;
+  const prototypeMultiplier = rapidPrototypeRequested ? 1.38 : 1;
+  const baseSpeed = (localDefending ? 2.1 : 4.2) * prototypeMultiplier * armourStats(localArmourId).speed;
   const traitSpeed = localTraitId === "momentum"
     ? baseSpeed * (1 + localMomentumStacks * MOMENTUM_TRAIT.movementSpeedBonusPerStack)
     : baseSpeed;
@@ -11019,8 +11073,10 @@ function renderBootstrap(payload: WorldBootstrap): void {
   const initialChunk = worldToChunk(initialPosition.x, initialPosition.z);
   const initialChunkKey = chunkKey(initialChunk.chunkX, initialChunk.chunkZ);
   requestedChunkRegionKey = chunks.has(initialChunkKey) ? initialChunkKey : null;
-  sceneDressing.rebuild(readWorldBlock, payload.chunks, indoorRoofBuilding);
-  sceneDressing.setSurfaceVisible(!playerCutaway.active);
+  if (!rapidPrototypeRequested) {
+    sceneDressing.rebuild(readWorldBlock, payload.chunks, indoorRoofBuilding);
+    sceneDressing.setSurfaceVisible(!playerCutaway.active);
+  }
   const bootstrapSetupMs = performance.now() - buildStartedAt;
   logMovementEvent(
     `WORLD REFRESH ${previousSliceY === null ? "surface" : `slice:${previousSliceY}`} → ${cutawayStateKey} y=${initialPosition.y.toFixed(3)} surface=${surfaceReferenceY.toFixed(3)} stateGap=${statePoseGap?.toFixed(3) ?? "missing"} chunks=${payload.chunks.length} setup=${bootstrapSetupMs.toFixed(1)}ms queued=${queuedChunkRebuilds.size}`,
@@ -11028,7 +11084,9 @@ function renderBootstrap(payload: WorldBootstrap): void {
   worldReady = true;
   lastWorldBootstrapAt = performance.now();
   snapFrameHistory.length = 0;
-  status.textContent = isInGreenwoodRegion(initialPosition.x, initialPosition.z)
+  status.textContent = rapidPrototypeRequested
+    ? "2.5D Speed Lab ready · choose any Calling ability and test it against the full wave."
+    : isInGreenwoodRegion(initialPosition.x, initialPosition.z)
     ? "Greenwood Outskirts · harvest oak timber and investigate the abandoned forester camp."
     : "Welcome to the Town of Beginnings. Starter supplies are nearby; follow the south road when ready.";
 }
@@ -12037,8 +12095,10 @@ function updateIndoorRoof(position: pc.Vec3): void {
     chunk.renderedSliceKey = null;
     if (chunk.root.enabled) queueChunkRebuild(chunk);
   }
-  sceneDressing.rebuild(readWorldBlock, [...chunks.values()], indoorRoofBuilding);
-  sceneDressing.setSurfaceVisible(!playerCutaway.active);
+  if (!rapidPrototypeRequested) {
+    sceneDressing.rebuild(readWorldBlock, [...chunks.values()], indoorRoofBuilding);
+    sceneDressing.setSurfaceVisible(!playerCutaway.active);
+  }
 }
 
 function highestLoadedSolidY(x: number, z: number): number {
@@ -12231,7 +12291,7 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
   if (!visibilityCutaway) surfaceReferenceY = SURFACE_HEIGHT + 1;
   playerCutaway.active = visibilityCutaway;
   playerCutaway.sliceY = nextSliceY ?? CHUNK_HEIGHT;
-  sceneDressing.setSurfaceVisible(!visibilityCutaway);
+  if (!rapidPrototypeRequested) sceneDressing.setSurfaceVisible(!visibilityCutaway);
   updateActiveChunkMeshes(position);
   status.textContent = atSurface && visibilityCutaway
     ? `Returning to surface · restoring slice ${nextSliceY}`
@@ -13999,8 +14059,8 @@ app.on("update", (dt: number) => {
   const frameTime = Math.min(dt, 0.05);
   cameraOrbit = advanceCameraOrbit(
     cameraOrbit,
-    Number(keys.has("ArrowRight")) - Number(keys.has("ArrowLeft")),
-    Number(keys.has("ArrowUp")) - Number(keys.has("ArrowDown")),
+    rapidPrototypeRequested ? 0 : Number(keys.has("ArrowRight")) - Number(keys.has("ArrowLeft")),
+    rapidPrototypeRequested ? 0 : Number(keys.has("ArrowUp")) - Number(keys.has("ArrowDown")),
     frameTime,
   );
   const cameraOffset = cameraOrbitOffset(cameraOrbit);
@@ -15319,7 +15379,7 @@ function applyBlockChange(message: BlockChanged): void {
   chunk.blocks[chunkIndex(address.localX, message.y, address.localZ)] = message.block;
   chunk.revision = message.revision;
   rebuildChunkAndNeighbors(chunk, message.x, message.z);
-  if (message.y >= SURFACE_HEIGHT) sceneDressing.rebuild(readWorldBlock, [...chunks.values()], indoorRoofBuilding);
+  if (!rapidPrototypeRequested && message.y >= SURFACE_HEIGHT) sceneDressing.rebuild(readWorldBlock, [...chunks.values()], indoorRoofBuilding);
   if (message.block === Block.Air) status.textContent = "Block broken.";
 }
 
@@ -15362,7 +15422,8 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     ...(activeRoomName === SILVER_DEPTHS_ROOM && instanceKey ? { instanceKey, partySize: Number.isFinite(requestedPartySize) ? requestedPartySize : 1 } : {}),
     ...(activeRoomName === WORLD_ROOM && returnFrom ? { returnFrom } : {}),
     ...(partyTicket ? { partyTicket } : {}),
-    ...(activeRoomName === PRACTICE_ROOM && worldRoomId ? { worldRoomId } : {}) };
+    ...(activeRoomName === PRACTICE_ROOM && worldRoomId ? { worldRoomId } : {}),
+    ...(activeRoomName === PRACTICE_ROOM && rapidPrototypeRequested ? { prototype: "2d" } : {}) };
   room = await retryConnection(
     (signal, attempt) => {
       const client = new Client(endpoint, {
