@@ -60,7 +60,8 @@ import { CALLING_AWAKENING_MINIMUM_MS, callingAwakening, callingPreviewMarkup } 
 import { advanceFirstCombatPhase, completesFirstCombatLesson, FIRST_COMBAT_GROUP_IDS, firstCombatLesson,
   type FirstCombatPhase } from "./first-combat-lesson.js";
 import { EQUIPMENT_COLLECTION, collectionProgress, equipmentCollectionLabel, equipmentProgressionText } from "./equipment-progression.js";
-import { leaderCollectionProgress, parseLeaderCollectionDiscoveries, type LeaderCollectionDiscoveries } from "./leader-collection-journal.js";
+import { advanceTrackedLeaderCollectionHunt, leaderCollectionProgress, leaderCollectionRematchTier, leaderCollectionTarget, parseLeaderCollectionDiscoveries,
+  parseTrackedLeaderCollectionHunt, type LeaderCollectionDiscoveries, type TrackedLeaderCollectionHunt } from "./leader-collection-journal.js";
 import { blacksmithShopStock, shopGoldShortfall, type BlacksmithShopTab } from "./blacksmith-shop.js";
 import { FIELD_FORGE_RECIPES, type FieldForgeId } from "@blockcraft/protocol";
 import { haulUpgradeProgress, nextHaulRegion, nextHaulUpgrade, type HaulRegion } from "./blacksmith-haul.js";
@@ -3872,11 +3873,27 @@ const codexHuntName = document.querySelector<HTMLElement>("#codex-hunt-name")!;
 const codexHuntSource = document.querySelector<HTMLElement>("#codex-hunt-source")!;
 const codexHuntClear = document.querySelector<HTMLButtonElement>("#codex-hunt-clear")!;
 const CODEX_HUNT_STORAGE_KEY = "blockcraft.codex-hunt.v1";
+const LEADER_COLLECTION_HUNT_STORAGE_KEY = `blockcraft.leader-collection-hunt.v1:${profileToken}`;
 let trackedCodexItemId: ItemId | null = (() => {
   try { const value = localStorage.getItem(CODEX_HUNT_STORAGE_KEY); return value && isItemId(value) ? value : null; }
   catch { return null; }
 })();
+let trackedLeaderCollectionHunt: TrackedLeaderCollectionHunt | null = (() => {
+  try { return parseTrackedLeaderCollectionHunt(localStorage.getItem(LEADER_COLLECTION_HUNT_STORAGE_KEY)); }
+  catch { return null; }
+})();
+function storeTrackedLeaderCollectionHunt(): void {
+  try {
+    if (trackedLeaderCollectionHunt) localStorage.setItem(LEADER_COLLECTION_HUNT_STORAGE_KEY, JSON.stringify(trackedLeaderCollectionHunt));
+    else localStorage.removeItem(LEADER_COLLECTION_HUNT_STORAGE_KEY);
+  } catch { /* storage unavailable */ }
+}
 function setCodexHunt(itemId: ItemId | null, guide = true): void {
+  if (itemId && trackedLeaderCollectionHunt) {
+    minimap.clearGuide(leaderCollectionTarget(trackedLeaderCollectionHunt.collectionId, trackedLeaderCollectionHunt.itemId).id);
+    trackedLeaderCollectionHunt = null;
+    storeTrackedLeaderCollectionHunt();
+  }
   const previousPlan = trackedCodexItemId ? codexHuntPlan(trackedCodexItemId) : null;
   trackedCodexItemId = itemId;
   try { itemId ? localStorage.setItem(CODEX_HUNT_STORAGE_KEY, itemId) : localStorage.removeItem(CODEX_HUNT_STORAGE_KEY); } catch { /* storage unavailable */ }
@@ -3895,7 +3912,10 @@ for (const entry of EQUIPMENT_COLLECTION) {
   card.dataset.collectionItem = entry.itemId;
   card.dataset.slot = entry.slot;
   card.innerHTML = `<i aria-hidden="true"></i><div class="collection-item-copy"><small class="collection-state">UNDISCOVERED</small><strong>${ITEM_DEFINITIONS[entry.itemId].name}</strong><span>${entry.source}</span><p class="collection-upgrade"></p></div><div class="collection-actions"><button class="track" type="button">TRACK</button><button class="compare" type="button" disabled>COMPARE</button></div>`;
-  card.querySelector<HTMLButtonElement>(".track")!.addEventListener("click", () => setCodexHunt(entry.itemId));
+  card.querySelector<HTMLButtonElement>(".track")!.addEventListener("click", () => {
+    setCodexHunt(entry.itemId);
+    if (leaderCollectionJson) renderRegionalLeaderCollections(leaderCollectionJson);
+  });
   card.querySelector<HTMLButtonElement>(".compare")!.addEventListener("click", () => {
     const hand = equipmentForItem(entry.itemId);
     const armour = armourForItem(entry.itemId);
@@ -3916,12 +3936,58 @@ const huntCollectionMessage = document.querySelector<HTMLElement>("#hunt-collect
 const huntCollectionReward = document.querySelector<HTMLElement>("#hunt-collection-reward")!;
 let latestHuntCollection: HuntCollectionUpdate | null = null;
 let leaderCollectionDiscoveries: LeaderCollectionDiscoveries = {};
+let leaderCollectionJson = "";
+let leaderCollectionHydrated = false;
 const huntMarkForSet = { fang: "alpha_forgemark", venom: "venom_forgemark", crusher: "crusher_forgemark" } as const;
 const huntTime = (milliseconds?: number): string => milliseconds && milliseconds > 0
   ? `${Math.floor(milliseconds / 60_000)}:${String(Math.floor(milliseconds / 1_000) % 60).padStart(2, "0")}.${String(Math.floor(milliseconds % 1_000 / 100)).padStart(1, "0")}` : "—";
 
+function trackLeaderCollectionPiece(collectionId: RegionalLeaderCollectionId, itemId: ItemId): void {
+  setCodexHunt(null);
+  trackedLeaderCollectionHunt = { collectionId, itemId };
+  storeTrackedLeaderCollectionHunt();
+  const definition = REGIONAL_LEADER_COLLECTIONS[collectionId];
+  const tier = leaderCollectionRematchTier(collectionId, itemId);
+  minimap.guideTo(leaderCollectionTarget(collectionId, itemId));
+  social.event(`Collection hunt tracked · ${definition.leaderName}${tier ? ` · Empowered Rematch ${["", "I", "II", "III"][tier] ?? tier}` : ""}.`);
+  status.textContent = `Tracking ${definition.leaderName} on your map${tier ? ` · Empowered Rematch ${["", "I", "II", "III"][tier] ?? tier} required` : ""}.`;
+  renderRegionalLeaderCollections(leaderCollectionJson);
+}
+
+function stopLeaderCollectionHunt(): void {
+  if (!trackedLeaderCollectionHunt) return;
+  minimap.clearGuide(leaderCollectionTarget(trackedLeaderCollectionHunt.collectionId, trackedLeaderCollectionHunt.itemId).id);
+  const leaderName = REGIONAL_LEADER_COLLECTIONS[trackedLeaderCollectionHunt.collectionId].leaderName;
+  trackedLeaderCollectionHunt = null;
+  storeTrackedLeaderCollectionHunt();
+  social.event(`Collection hunt stopped · ${leaderName}.`);
+  status.textContent = `Stopped tracking ${leaderName}.`;
+  renderRegionalLeaderCollections(leaderCollectionJson);
+}
+
 function renderRegionalLeaderCollections(value: string): void {
-  leaderCollectionDiscoveries = parseLeaderCollectionDiscoveries(value);
+  leaderCollectionJson = value;
+  const nextDiscoveries = parseLeaderCollectionDiscoveries(value);
+  if (trackedLeaderCollectionHunt && nextDiscoveries[trackedLeaderCollectionHunt.collectionId]?.includes(trackedLeaderCollectionHunt.itemId)) {
+    const completed = trackedLeaderCollectionHunt;
+    const definition = REGIONAL_LEADER_COLLECTIONS[completed.collectionId];
+    const next = advanceTrackedLeaderCollectionHunt(completed, nextDiscoveries);
+    if (next) {
+      trackedLeaderCollectionHunt = next;
+      storeTrackedLeaderCollectionHunt();
+      minimap.guideTo(leaderCollectionTarget(completed.collectionId, next.itemId));
+      if (leaderCollectionHydrated) social.event(`${ITEM_DEFINITIONS[completed.itemId].name} discovered · the next hidden ${definition.name} piece is now tracked.`);
+    } else {
+      minimap.clearGuide(leaderCollectionTarget(completed.collectionId, completed.itemId).id);
+      trackedLeaderCollectionHunt = null;
+      storeTrackedLeaderCollectionHunt();
+      if (leaderCollectionHydrated) social.event(`${definition.name} complete · ${definition.badgeName} earned.`);
+    }
+  } else if (!leaderCollectionHydrated && trackedLeaderCollectionHunt) {
+    minimap.guideTo(leaderCollectionTarget(trackedLeaderCollectionHunt.collectionId, trackedLeaderCollectionHunt.itemId));
+  }
+  leaderCollectionDiscoveries = nextDiscoveries;
+  leaderCollectionHydrated = true;
   regionalLeaderCollectionGrid.replaceChildren();
   let discoveredTotal = 0;
   let itemTotal = 0;
@@ -3940,10 +4006,16 @@ function renderRegionalLeaderCollections(value: string): void {
     pieces.className = "leader-collection-pieces";
     for (const entry of definition.items) {
       const known = discovered.has(entry.itemId);
-      const piece = document.createElement("div");
+      const piece = document.createElement("button");
+      piece.type = "button";
       piece.className = "leader-collection-piece";
       piece.dataset.discovered = String(known);
       piece.dataset.rarity = known ? itemRarity(entry.itemId) : "unknown";
+      const tracked = !known && trackedLeaderCollectionHunt?.collectionId === collectionId && trackedLeaderCollectionHunt.itemId === entry.itemId;
+      piece.dataset.tracked = String(tracked);
+      piece.disabled = known;
+      piece.setAttribute("aria-label", known ? `${ITEM_DEFINITIONS[entry.itemId].name} discovered`
+        : tracked ? `Stop tracking hidden piece from ${definition.leaderName}` : `Track hidden piece from ${definition.leaderName}`);
       const icon = document.createElement("i");
       icon.setAttribute("aria-hidden", "true");
       icon.textContent = known ? (armourForItem(entry.itemId) ? "◆" : "✦") : "?";
@@ -3952,9 +4024,11 @@ function renderRegionalLeaderCollections(value: string): void {
       name.textContent = known ? ITEM_DEFINITIONS[entry.itemId].name : "Unknown piece";
       const status = document.createElement("small");
       const rematchTier = "minRematchTier" in entry ? entry.minRematchTier : undefined;
-      status.textContent = known ? "DISCOVERED" : rematchTier ? `EMPOWERED REMATCH ${["", "I", "II", "III"][rematchTier] ?? rematchTier}` : "LEADER DROP";
+      const huntRequirement = rematchTier ? `REMATCH ${["", "I", "II", "III"][rematchTier] ?? rematchTier}` : "LEADER DROP";
+      status.textContent = known ? "DISCOVERED" : tracked ? `TRACKED · ${huntRequirement}` : huntRequirement;
       copy.append(name, status);
       piece.append(icon, copy);
+      if (!known) piece.addEventListener("click", () => tracked ? stopLeaderCollectionHunt() : trackLeaderCollectionPiece(collectionId, entry.itemId));
       pieces.append(piece);
     }
     const footer = document.createElement("footer");

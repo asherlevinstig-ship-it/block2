@@ -1,5 +1,5 @@
 import type { MobArchetypeId } from "./mob-archetypes.js";
-import { ASHEN_REACH, ASHEN_SENTRY_HOMES, MISTFEN_MOB_HOMES, NORTHWATCH_MOB_HOMES, SILVER_GUARD_HOMES, SOUTHERN_MOB_HOMES, isInAshenReach, isInMistfenMarsh, isInNorthwatchHighlands, isInSouthernQuarry } from "@blockcraft/voxel-world";
+import { ASHEN_REACH, ASHEN_SENTRY_HOMES, FRONTIER_WARLEADER_HOME, MISTFEN_MOB_HOMES, NORTHWATCH_MOB_HOMES, SILVER_GUARD_HOMES, SOUTHERN_MOB_HOMES, isInAshenReach, isInMistfenMarsh, isInNorthwatchHighlands, isInSouthernQuarry } from "@blockcraft/voxel-world";
 export const ASHEN_SENTRY_IDS = ["ashglass-sentry-west", "ashglass-sentry-east"] as const;
 export const ASHEN_HOUND_IDS = ["ashen-ember-hound-west", "ashen-ember-hound-east"] as const;
 export const ASHEN_COMBAT_GROUP_IDS = [...ASHEN_SENTRY_IDS, "ashen-cinder-ram", ...ASHEN_HOUND_IDS] as const;
@@ -77,7 +77,7 @@ export const WILDERNESS_ENCOUNTERS: readonly { id: string; archetype: MobArchety
   { id: "frontier-brute", archetype: "stone_brute", x: 65.5, y: 8, z: 23.5 },
   { id: "frontier-brute-crawler", archetype: "briar_crawler", x: 62.5, y: 8, z: 25.5 },
   { id: "frontier-brute-spitter", archetype: "cave_spitter", x: 68.5, y: 8, z: 24.5 },
-  { id: "frontier-brute-east", archetype: "stone_brute", x: 70.5, y: 8, z: 32.5 },
+  { id: "frontier-brute-east", archetype: "stone_brute", ...FRONTIER_WARLEADER_HOME },
   { id: "frontier-brute-west", archetype: "stone_brute", x: -48.5, y: 8, z: 12.5 },
   { id: "frontier-brute-west-crawler", archetype: "briar_crawler", x: -46.5, y: 8, z: 10.5 },
   { id: "frontier-brute-west-spitter", archetype: "cave_spitter", x: -51.5, y: 8, z: 11.5 },

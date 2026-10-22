@@ -105,6 +105,7 @@ export const GREENWOOD_NEST_MARKERS = [{ x: 37, z: 17 }, { x: 46, z: 22 }, { x: 
 export const STONE_BRUTE_ARENA = { minX: 35, maxX: 49, minZ: 34, maxZ: 48 } as const;
 export const STONE_BRUTE_ARENA_HOME = { x: 42.5, y: 8, z: 41.5 } as const;
 export const FRONTIER_BRUTE_ARENA = { minX: 60, maxX: 75, minZ: 19, maxZ: 34 } as const;
+export const FRONTIER_WARLEADER_HOME = { x: 70.5, y: 8, z: 32.5 } as const;
 export const FRONTIER_BRUTE_COVER = [
   { x: 64, z: 23, height: 2 }, { x: 72, z: 23, height: 3 },
   { x: 64, z: 31, height: 3 }, { x: 72, z: 31, height: 2 },
