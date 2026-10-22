@@ -26,5 +26,5 @@ export function nextHaulRegion(level: number): HaulRegion {
   if (level <= 3) return { name: "Greenwood Camp", detail: "LV 2–5 · follow the east road", x: 42.5, y: 8, z: 19.5 };
   if (level <= 6) return { name: "Mistfen Marsh", detail: "LV 5–9 · follow the western boardwalk into the deepfen", x: -99.5, y: 8, z: -42.5 };
   if (level <= 9) return { name: "Stone Frontier", detail: "LV 8–12 · follow the southeast road", x: 42.5, y: 8, z: 41.5 };
-  return { name: "Ashen Reach", detail: "LV 10+ · seek the split eastern spire", x: 97.5, y: 8, z: 62.5 };
+  return { name: "Ashen Reach", detail: "LV 10+ · cross the ash plains to the deep split spire", x: 165.5, y: 8, z: 68.5 };
 }

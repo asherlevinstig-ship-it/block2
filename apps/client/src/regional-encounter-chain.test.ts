@@ -91,7 +91,7 @@ describe("regional encounter chains", () => {
   it("takes the Ashen trail through the Scorched Gate and around the basin", () => {
     expect(ashenChainRoute("follow-to-shrine")).toContainEqual({ x: 93, z: 53 });
     const route = ashenChainRoute("follow-to-camp")!;
-    expect(route).toContainEqual({ x: 103, z: 73 });
-    expect(regionalPolylineTrailVisible({ x: 103, y: 8, z: 73 }, route)).toBe(true);
+    expect(route).toContainEqual({ x: 124, z: 90 });
+    expect(regionalPolylineTrailVisible({ x: 124, y: 8, z: 90 }, route)).toBe(true);
   });
 });

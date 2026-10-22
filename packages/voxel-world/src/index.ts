@@ -118,11 +118,11 @@ export const REALM_WARDEN_COVER = [
   { x: 82, z: 28, height: 3 }, { x: 92, z: 28, height: 2 },
   { x: 82, z: 36, height: 2 }, { x: 92, z: 36, height: 3 },
 ] as const;
-export const ASHEN_REACH = { x: 97, z: 62, radius: 21 } as const;
-export const ASHEN_SPIRE_POSITION = { x: 97.5, y: 8, z: 62.5 } as const;
-export const ASHEN_RELIQUARY_POSITION = { x: 97.5, y: 8, z: 57.5 } as const;
+export const ASHEN_REACH = { x: 97, z: 62, radius: 21, minX: 76, maxX: 180, minZ: 41, maxZ: 114 } as const;
+export const ASHEN_SPIRE_POSITION = { x: 165.5, y: 8, z: 68.5 } as const;
+export const ASHEN_RELIQUARY_POSITION = { x: 165.5, y: 8, z: 74.5 } as const;
 export const ASHEN_SENTRY_HOMES = [
-  { x: 88.5, y: 8, z: 57.5 }, { x: 106.5, y: 8, z: 67.5 },
+  { x: 157.5, y: 8, z: 64.5 }, { x: 172.5, y: 8, z: 72.5 },
 ] as const;
 export const MISTFEN_MARSH = { minX: -112, maxX: -20, minZ: -59, maxZ: -11 } as const;
 export const MISTFEN_BEHEMOTH_HOME = { x: -99.5, y: 8, z: -42.5 } as const;
@@ -210,7 +210,7 @@ export function isSouthernRoad(x: number, z: number): boolean {
     || cellZ >= 86 && cellZ <= 89 && cellX >= 8 && cellX <= 22
     // Two long alternatives break the southern march into loops rather than one corridor.
     || cellX >= -6 && cellX <= -3 && cellZ >= 110 && cellZ <= 158
-    || cellZ >= 110 && cellZ <= 113 && cellX >= -4 && cellX <= 10
+    || cellZ >= 110 && cellZ <= 113 && cellX >= -4 && cellX <= 168
     || cellZ >= 156 && cellZ <= 159 && cellX >= -4 && cellX <= 10
     || cellX >= 20 && cellX <= 23 && cellZ >= 110 && cellZ <= 148
     || cellZ >= 110 && cellZ <= 113 && cellX >= 8 && cellX <= 22
@@ -315,30 +315,58 @@ export function mistfenMarshBlock(x: number, y: number, z: number): BlockId | nu
   return Block.Air;
 }
 export function isInAshenReach(x: number, z: number): boolean {
-  return Math.hypot(x - ASHEN_REACH.x, z - ASHEN_REACH.z) <= ASHEN_REACH.radius;
+  const core = Math.hypot(x - ASHEN_REACH.x, z - ASHEN_REACH.z) <= ASHEN_REACH.radius;
+  const east = x >= 104 && x <= ASHEN_REACH.maxX && z >= ASHEN_REACH.minZ && z <= ASHEN_REACH.maxZ;
+  return core || east;
 }
 
-/** Broken outer ridges frame the Reach while leaving wide gaps and the western road completely open. */
+/** The long route trades speed for clear ground, cover and a connection into the southern quarry. */
+export function isAshenSafeRoad(x: number, z: number): boolean {
+  const cellX = Math.floor(x), cellZ = Math.floor(z);
+  return cellZ >= 60 && cellZ <= 62 && cellX >= 92 && cellX <= 168
+    || cellX >= 123 && cellX <= 125 && cellZ >= 61 && cellZ <= 91
+    || cellZ >= 89 && cellZ <= 91 && cellX >= 123 && cellX <= 168
+    || cellX >= 166 && cellX <= 168 && cellZ >= 61 && cellZ <= 112
+    || cellZ >= 110 && cellZ <= 113 && cellX >= 22 && cellX <= 168;
+}
+
+/** A much shorter route cuts across exposed fissures patrolled by fast Ashen packs. */
+export function isAshenScorchedCut(x: number, z: number): boolean {
+  const cellX = Math.floor(x), cellZ = Math.floor(z);
+  if (cellX < 111 || cellX > 163) return false;
+  const expectedZ = 55 + (cellX - 111) * .25;
+  return Math.abs(cellZ - expectedZ) <= 1;
+}
+
+/** Broken ridges make readable borders while leaving the authored roads and cut open. */
 export function ashenRidgeHeight(x: number, z: number): number {
   const dx = Math.floor(x - ASHEN_REACH.x), dz = Math.floor(z - ASHEN_REACH.z);
-  if (!isInAshenReach(x, z) || dx < 0 && Math.abs(dz) <= 3) return 0;
-  const horizontal = Math.abs(dz) >= 16 && Math.abs(dz) <= 18 && Math.abs(dx) <= 11
+  if (!isInAshenReach(x, z) || isAshenSafeRoad(x, z) || isAshenScorchedCut(x, z)
+    || dx < 0 && Math.abs(dz) <= 3) return 0;
+  const coreHorizontal = Math.abs(dz) >= 16 && Math.abs(dz) <= 18 && Math.abs(dx) <= 11
     && Math.abs(Math.floor((dx + 13) / 4)) % 3 !== 1;
-  const east = dx >= 16 && dx <= 18 && Math.abs(dz) <= 11
+  const coreEast = dx >= 16 && dx <= 18 && Math.abs(dz) <= 11
     && Math.abs(Math.floor((dz + 13) / 4)) % 3 !== 1;
-  if (!horizontal && !east) return 0;
+  const north = z >= 42 && z <= 44 && x >= 109 && x <= 175 && Math.floor((x - 109) / 8) % 3 !== 1;
+  const south = z >= 106 && z <= 108 && x >= 113 && x <= 176 && Math.floor((x - 113) / 9) % 3 !== 1;
+  const farEast = x >= 177 && x <= 179 && z >= 46 && z <= 105 && Math.floor((z - 46) / 8) % 3 !== 1;
+  if (!coreHorizontal && !coreEast && !north && !south && !farEast) return 0;
   return 1 + Math.abs(Math.imul(x, 7) + Math.imul(z, 13)) % 3;
 }
 
-/** Ash-and-stone ground, broken cover, a visible split spire, and an open ring of scorched ridges. */
+/** Ash plains, charred woods, fissures, villages, ridges and a deep visible split spire. */
 export function ashenReachBlock(x: number, y: number, z: number): BlockId | null {
   if (!isInAshenReach(x, z) || y < SURFACE_HEIGHT) return null;
-  const dx = x - ASHEN_REACH.x, dz = z - ASHEN_REACH.z;
+  const dx = x - Math.floor(ASHEN_SPIRE_POSITION.x), dz = z - Math.floor(ASHEN_SPIRE_POSITION.z);
   if (y === SURFACE_HEIGHT) {
+    if (isAshenSafeRoad(x, z)) return Block.Dirt;
     if (Math.abs(dx) <= 3 && Math.abs(dz) <= 3) return Block.Stone;
+    if (isAshenScorchedCut(x, z))
+      return Math.abs(Math.imul(x, 17) + Math.imul(z, 11)) % 7 === 0 ? Block.IronOre : Block.Bedrock;
     const stripe = Math.abs(Math.imul(x, 13) + Math.imul(z, 7)) % 11;
     return stripe < 2 ? Block.Bedrock : stripe < 8 ? Block.Stone : Block.Dirt;
   }
+  if (isAshenSafeRoad(x, z) || isAshenScorchedCut(x, z)) return y <= SURFACE_HEIGHT + 3 ? Block.Air : null;
   const core = dx === 0 && dz === 0 && y <= 15;
   const fork = dz === 0 && Math.abs(dx) === 1 && y <= (dx < 0 ? 12 : 11);
   const brokenCap = dz === 0 && Math.abs(dx) === 2 && y >= 11 && y <= 13;
@@ -348,6 +376,9 @@ export function ashenReachBlock(x: number, y: number, z: number): BlockId | null
   if (cover && y <= SURFACE_HEIGHT + 2) return Block.Stone;
   const ridgeHeight = ashenRidgeHeight(x, z);
   if (ridgeHeight && y <= SURFACE_HEIGHT + ridgeHeight) return y === SURFACE_HEIGHT + ridgeHeight ? Block.Stone : Block.Bedrock;
+  const charwood = x >= 112 && x <= 139 && z >= 94 && z <= 106
+    && Math.abs(Math.imul(x, 19) + Math.imul(z, 23)) % 17 === 0;
+  if (charwood && y <= SURFACE_HEIGHT + 3) return Block.OakLog;
   return Block.Air;
 }
 export const FOREST_DUNGEON = { minX: 156, maxX: 192, minZ: 156, maxZ: 174 } as const;
@@ -489,7 +520,7 @@ export const WILDERNESS_TERRITORIES = [
   { tier: 2, name: "SILVER WILDS", detail: "Spitter pairs guard silver · use cover and dodge their shots" },
   { tier: 3, name: "STONE FRONTIER", detail: "Brutes guard rich silver seams · defeat them for Stone Core Hammers" },
 ] as const;
-export const ASHEN_REACH_TERRITORY = { tier: 3, name: "ASHEN REACH", detail: "Find the split spire · Ashglass Sentries fire sweeping fans" } as const;
+export const ASHEN_REACH_TERRITORY = { tier: 3, name: "ASHEN REACH", detail: "LV 10+ · safe switchbacks or the exposed ashglass cut · the split spire lies deep east" } as const;
 export const MISTFEN_TERRITORY = { tier: 2, name: "MISTFEN MARSH", detail: "LV 5–9 · boardwalks lead west · toxic shortcuts cross the deepfen" } as const;
 export const SOUTHERN_TERRITORIES = [
   { tier: 1, name: "SOUTHERN CAUSEWAY", detail: "LV 1–4 · abandoned carts and crawler patrols line the old road" },
@@ -520,7 +551,8 @@ export function isRegionalRoad(x: number, z: number): boolean {
   const wardenToAshen = cellX >= 86 && cellX <= 89 && cellZ >= 33 && cellZ <= 61;
   const ashenApproach = cellX >= 87 && cellX <= 94 && cellZ >= 60 && cellZ <= 62;
   return eastTrunk || greenwoodToStone || frontierCrossing || wardenToAshen || ashenApproach
-    || isMistfenApproachTrail(cellX, cellZ) || isMistfenBoardwalk(cellX, cellZ) || isSouthernRoad(cellX, cellZ) || isNorthwatchRoad(cellX, cellZ);
+    || isAshenSafeRoad(cellX, cellZ) || isMistfenApproachTrail(cellX, cellZ) || isMistfenBoardwalk(cellX, cellZ)
+    || isSouthernRoad(cellX, cellZ) || isNorthwatchRoad(cellX, cellZ);
 }
 
 export const REGIONAL_WAYSTONES = [
@@ -528,6 +560,9 @@ export const REGIONAL_WAYSTONES = [
   { x: 58, z: 29, name: "Stone Frontier Waystone" },
   { x: 77, z: 29, name: "Warden Road Waystone" },
   { x: 82, z: 45, name: "Ashen Road Waystone" },
+  { x: 128, z: 64, name: "Cinderpath Waystone" },
+  { x: 164, z: 88, name: "Deep Reach Waystone" },
+  { x: 108, z: 107, name: "Ashen Quarry Waystone" },
   { x: -18, z: 12, name: "Mistfen Road Waystone" },
   { x: -33, z: -8, name: "Mistfen Crossing Waystone" },
   { x: -70, z: -24, name: "Mirelight Waystone" },
@@ -601,11 +636,11 @@ export const ASHEN_REACH_ENCOUNTER_CHAIN = {
   warpackIds: ["ashglass-sentry-west", "ashglass-sentry-east", "ashen-cinder-ram", "ashen-ember-hound-west", "ashen-ember-hound-east"],
   pilgrims: { x: 82, z: 54 },
   gate: { x: 93, z: 53 },
-  shrine: { x: 109, z: 48 },
-  survey: { x: 112, z: 70 },
-  camp: { x: 90, z: 69 },
-  warpack: { x: 103.5, z: 55 },
-  reliquary: { x: 97.5, z: 57.5 },
+  shrine: { x: 116, z: 48 },
+  survey: { x: 143, z: 81 },
+  camp: { x: 132, z: 101 },
+  warpack: { x: 165.5, z: 66.5 },
+  reliquary: ASHEN_RELIQUARY_POSITION,
 } as const;
 /** Small optional landmarks sit beside every long road segment, never in its movement lane. */
 export const ROADSIDE_DISCOVERIES = [
@@ -620,9 +655,16 @@ export const ROADSIDE_DISCOVERIES = [
   { id: "warden-cairn", name: "Warden Cairn", kind: "shrine", x: 78, z: 42 },
   { id: "ashen-pilgrims", name: "Ashen Pilgrim Camp", kind: "camp", x: 82, z: 54 },
   { id: "scorched-gate", name: "Scorched Gate", kind: "ruin", x: 93, z: 53 },
-  { id: "emberfall-shrine", name: "Emberfall Shrine", kind: "shrine", x: 109, z: 48 },
-  { id: "ashglass-survey", name: "Ashglass Survey Cache", kind: "ruin", x: 112, z: 70 },
-  { id: "cindergrave-camp", name: "Cindergrave Camp", kind: "camp", x: 85, z: 73 },
+  { id: "emberfall-shrine", name: "Emberfall Shrine", kind: "shrine", x: 116, z: 48 },
+  { id: "ashglass-survey", name: "Ashglass Survey Cache", kind: "ruin", x: 143, z: 81 },
+  { id: "cindergrave-camp", name: "Cindergrave Camp", kind: "camp", x: 132, z: 101 },
+  { id: "cinder-hamlet", name: "Ruined Cinder Hamlet", kind: "ruin", x: 131, z: 52 },
+  { id: "glassfall-ridge", name: "Glassfall Ridge", kind: "shrine", x: 150, z: 82 },
+  { id: "charwood-grove", name: "Charwood Grove", kind: "grove", x: 118, z: 103 },
+  { id: "emberwatch-ruins", name: "Emberwatch Ruins", kind: "camp", x: 176, z: 98 },
+  { id: "ashen-caravan-wreck", name: "Ashen Caravan Wreck", kind: "cart", x: 91, z: 119 },
+  { id: "sootfield-shrine", name: "Sootfield Shrine", kind: "shrine", x: 67, z: 104 },
+  { id: "basalt-refuge", name: "Basalt Refuge", kind: "camp", x: 44, z: 119 },
   { id: "mistfen-cart", name: "Sunkroad Cart", kind: "cart", x: -16, z: 5 },
   { id: "mistfen-shrine", name: "Mossbound Shrine", kind: "shrine", x: -39, z: -15 },
   { id: "mistfen-camp", name: "Drowned Survey Camp", kind: "camp", x: -42, z: -23 },
@@ -666,6 +708,10 @@ export const ROADSIDE_ENCOUNTERS = [
   { id: "emberfall-shrine", kind: "shrine", itemId: "healing_potion", quantity: 1, gold: 0 },
   { id: "ashglass-survey", kind: "ambush", itemId: "silver_ore", quantity: 2, gold: 8, guardRadius: 14 },
   { id: "cindergrave-camp", kind: "trail", itemId: "ember_ore", quantity: 1, gold: 7, stashDx: 5, stashDz: -4, clue: "A scorched drag trail bends northeast towards a half-buried field case." },
+  { id: "cinder-hamlet", kind: "cache", itemId: "ember_ore", quantity: 2, gold: 7 },
+  { id: "charwood-grove", kind: "cache", itemId: "ember_ore", quantity: 1, gold: 6 },
+  { id: "ashen-caravan-wreck", kind: "trail", itemId: "ember_ore", quantity: 2, gold: 8, stashDx: -5, stashDz: 4, clue: "A line of cooled slag leads southwest to the caravan's emergency coffer." },
+  { id: "sootfield-shrine", kind: "shrine", itemId: "healing_potion", quantity: 1, gold: 0 },
   { id: "western-shelf-cache", kind: "cache", itemId: "iron_ore", quantity: 2, gold: 4 },
   { id: "broken-winch-camp", kind: "repair", itemId: "silver_ore", quantity: 2, gold: 8, guardRadius: 16, holdMs: 10_000 },
   { id: "redstone-prospector", kind: "cache", itemId: "stone_core", quantity: 1, gold: 6 },
@@ -1202,7 +1248,7 @@ export function isProtectedVoxel(x: number, z: number): boolean {
     || isRegionalWaystone(x, z)
     || isSilverDepthsProgressionGate(x, z)
     || (x >= 45 && x <= 46 && z >= 28 && z <= 29)
-    || (Math.abs(x - ASHEN_REACH.x) <= 2 && z === ASHEN_REACH.z);
+    || (Math.abs(x - Math.floor(ASHEN_SPIRE_POSITION.x)) <= 2 && z === Math.floor(ASHEN_SPIRE_POSITION.z));
 }
 
 export function isSilverDepthsProgressionGate(x: number, z: number): boolean {

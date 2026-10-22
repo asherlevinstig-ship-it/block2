@@ -5,7 +5,7 @@ describe("overworld road guidance", () => {
   it.each([
     [{ x: 8.5, z: 8.5 }, { x: 8.5, z: 171.5 }],
     [{ x: 8.5, z: 8.5 }, { x: 15.5, z: -72.5 }],
-    [{ x: 8.5, z: 8.5 }, { x: 93.5, z: 61.5 }],
+    [{ x: 8.5, z: 8.5 }, { x: 165.5, z: 68.5 }],
     [{ x: 8.5, z: 8.5 }, { x: -99.5, z: -42.5 }],
   ])("connects the town to distant authored regions", (start, end) => {
     const route = planWorldRoute(start, end);
@@ -19,6 +19,13 @@ describe("overworld road guidance", () => {
     expect(route.length).toBeGreaterThan(2);
     expect(route.some(point => point.z === -57.5 || point.z === -58.5)).toBe(true);
     expect(route.at(-1)).toMatchObject({ x: 15.5, z: -72.5 });
+  });
+
+  it("closes the eastern Ashen loop into the southern quarry", () => {
+    const route = planWorldRoute({ x: 165.5, z: 68.5 }, { x: 24.5, z: 137.5 });
+    expect(route.length).toBeGreaterThan(2);
+    expect(routeDeviationDistance({ x: 100.5, z: 113.5 }, route)).toBeLessThan(1);
+    expect(route.at(-1)).toMatchObject({ x: 24.5, z: 137.5 });
   });
 
   it("trims completed sections and detects when the player leaves the route", () => {

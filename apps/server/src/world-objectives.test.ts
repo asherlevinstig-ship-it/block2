@@ -19,10 +19,10 @@ describe("world objective director", () => {
   });
   it("temporarily shows nearby wilderness activity instead of a distant expedition step", () => {
     const pose = { ...player(8.5, 8.5), miningExpeditionStage: 0 };
-    const sentries = new Map([["ashglass-sentry-west", mob(88.5, 57.5, { name: "Ashglass Sentry", difficultyTier: 3, level: 11 })],
-      ["ashglass-sentry-east", mob(106.5, 67.5, { name: "Ashglass Sentry", difficultyTier: 3, level: 11 })]]);
+    const sentries = new Map([["ashglass-sentry-west", mob(157.5, 64.5, { name: "Ashglass Sentry", difficultyTier: 3, level: 11 })],
+      ["ashglass-sentry-east", mob(172.5, 72.5, { name: "Ashglass Sentry", difficultyTier: 3, level: 11 })]]);
     expect(nearbyObjective("tester", pose, sentries, [], [], 10000, null).objectiveId).toBe("leave-town");
-    Object.assign(pose, { x: 98, z: 62 });
+    Object.assign(pose, { x: 165, z: 68 });
     expect(nearbyObjective("tester", pose, sentries, [], [], 10000, null).objectiveId).toBe("ashen-sentries");
     const defeated = new Map([...sentries].map(([id, enemy]) => [id, { ...enemy, alive: false }]));
     expect(nearbyObjective("tester", pose, defeated, [], [], 10000, "ashen-sentries").objectiveId).toBe("ashen-spire");
@@ -282,7 +282,7 @@ describe("world objective director", () => {
     const client = { sessionId: "tester", send: vi.fn() } as any;
     internal.sendObjectiveState(client);
     expect(client.send.mock.calls[0][1].objectiveId).toBe("leave-town");
-    Object.assign(pose, { x: 97.5, z: 62.5 });
+    Object.assign(pose, { x: 165.5, z: 68.5 });
     internal.sendObjectiveState(client);
     expect(client.send.mock.calls[1][1].objectiveId).toBe("ashen-spire");
     internal.sendObjectiveState(client);

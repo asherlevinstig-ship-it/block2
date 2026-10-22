@@ -11,7 +11,7 @@ describe("north-up explorer minimap", () => {
     expect(surfaceMapColorAt(2.5, 101.5)).toEqual([116, 66, 52]);
     expect(surfaceMapColorAt(8.5, 70.5)).toEqual([165, 137, 85]);
     expect(surfaceMapColorAt(21.5, -60.5)).toEqual([67, 81, 88]);
-    expect(surfaceMapColorAt(97.5, 62.5)).toEqual([106, 65, 50]);
+    expect(surfaceMapColorAt(100.5, 70.5)).toEqual([106, 65, 50]);
     expect(surfaceMapColorAt(-30.5, -26.5)).toEqual([176, 152, 96]);
   });
   it("remembers visited regions while keeping unseen terrain muted", () => {

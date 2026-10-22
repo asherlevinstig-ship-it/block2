@@ -133,13 +133,13 @@ export function ashenChainRoute(stage: AshenChainStage): ChainPoint[] | null {
     ASHEN_REACH_ENCOUNTER_CHAIN.pilgrims, ASHEN_REACH_ENCOUNTER_CHAIN.gate, ASHEN_REACH_ENCOUNTER_CHAIN.shrine,
   ];
   if (stage === "follow-to-survey") return [
-    ASHEN_REACH_ENCOUNTER_CHAIN.shrine, { x: 114, z: 57 }, ASHEN_REACH_ENCOUNTER_CHAIN.survey,
+    ASHEN_REACH_ENCOUNTER_CHAIN.shrine, { x: 124, z: 60 }, { x: 124, z: 90 }, ASHEN_REACH_ENCOUNTER_CHAIN.survey,
   ];
   if (stage === "follow-to-camp") return [
-    ASHEN_REACH_ENCOUNTER_CHAIN.survey, { x: 103, z: 73 }, ASHEN_REACH_ENCOUNTER_CHAIN.camp,
+    ASHEN_REACH_ENCOUNTER_CHAIN.survey, { x: 140, z: 90 }, { x: 124, z: 90 }, ASHEN_REACH_ENCOUNTER_CHAIN.camp,
   ];
   if (stage === "clear-warpack") return [
-    ASHEN_REACH_ENCOUNTER_CHAIN.camp, { x: 92, z: 62 }, ASHEN_REACH_ENCOUNTER_CHAIN.warpack,
+    ASHEN_REACH_ENCOUNTER_CHAIN.camp, { x: 124, z: 90 }, { x: 167, z: 90 }, { x: 167, z: 70 }, ASHEN_REACH_ENCOUNTER_CHAIN.warpack,
   ];
   if (stage === "claim-reliquary") return [ASHEN_REACH_ENCOUNTER_CHAIN.warpack, ASHEN_REACH_ENCOUNTER_CHAIN.reliquary];
   return null;

@@ -55,8 +55,14 @@ export const ROAMING_PACKS: readonly RoamingPack[] = [
     offsets: [{ x: 0, z: 0 }, { x: -1, z: 1 }, { x: 1, z: 1 }] },
   { id: "ashen-east-pack", name: "Ashen Furnace Patrol", tier: 3, archetype: "cinder_ram",
     archetypes: ["cinder_ram", "ember_hound", "cave_spitter"], eliteIndex: 0, route: [
-      { x: 101.5, y: 8, z: 74.5 }, { x: 106.5, y: 8, z: 71.5 }, { x: 110.5, y: 8, z: 67.5 }],
+      { x: 137.5, y: 8, z: 61.5 }, { x: 146.5, y: 8, z: 63.5 },
+      { x: 155.5, y: 8, z: 66.5 }, { x: 163.5, y: 8, z: 68.5 }],
     offsets: [{ x: 0, z: 0 }, { x: -1.2, z: -.9 }, { x: 1.2, z: -.9 }] },
+  { id: "ashen-south-pack", name: "Charwood Cinder Hunt", tier: 3, archetype: "ember_hound",
+    archetypes: ["ember_hound", "ember_hound", "cave_spitter"], eliteIndex: 0, route: [
+      { x: 156.5, y: 8, z: 94.5 }, { x: 148.5, y: 8, z: 99.5 },
+      { x: 140.5, y: 8, z: 104.5 }, { x: 132.5, y: 8, z: 108.5 }],
+    offsets: [{ x: 0, z: 0 }, { x: -1, z: 1 }, { x: 1, z: 1 }] },
 ];
 export const roamingMemberId = (pack: RoamingPack, index: number) => `${pack.id}:${index}`;
 export const roamingMemberArchetype = (pack: RoamingPack, index: number): MobArchetypeId =>

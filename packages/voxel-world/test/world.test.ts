@@ -5,6 +5,8 @@ import {
   ASHEN_SPIRE_POSITION,
   ASHEN_SENTRY_HOMES,
   ashenRidgeHeight,
+  isAshenSafeRoad,
+  isAshenScorchedCut,
   SOUTHERN_QUARRY,
   SOUTHERN_QUARRYMASTER_HOME,
   SOUTHERN_MOB_HOMES,
@@ -92,9 +94,9 @@ describe("deterministic voxel world", () => {
       expect(isProtectedVoxel(marker.x, marker.z)).toBe(true);
       expect(read(marker.x, SURFACE_HEIGHT + 2, marker.z)).toBe(Block.Stone);
     }
-    expect(read(ASHEN_REACH.x, 15, ASHEN_REACH.z)).toBe(Block.IronOre);
+    expect(read(Math.floor(ASHEN_SPIRE_POSITION.x), 15, Math.floor(ASHEN_SPIRE_POSITION.z))).toBe(Block.IronOre);
   });
-  it("builds a distinct, walkable Ashen Reach with a protected visible spire", () => {
+  it("builds a broad, walkable Ashen Reach with two routes and a protected deep spire", () => {
     const cache = new Map<string, ReturnType<typeof generateChunk>>();
     const read = (x: number, y: number, z: number) => {
       const address = worldToChunk(x, z), key = `${address.chunkX},${address.chunkZ}`;
@@ -103,11 +105,12 @@ describe("deterministic voxel world", () => {
     };
     expect(isInAshenReach(ASHEN_REACH.x, ASHEN_REACH.z)).toBe(true);
     expect(isInAshenReach(75, 62)).toBe(false);
+    expect(isInAshenReach(178, 100)).toBe(true);
+    expect(isInAshenReach(181, 100)).toBe(false);
     expect(wildernessTerritoryAt(ASHEN_REACH.x, ASHEN_REACH.z)?.name).toBe("ASHEN REACH");
-    expect(read(ASHEN_REACH.x, 15, ASHEN_REACH.z)).toBe(Block.IronOre);
-    expect(isProtectedVoxel(ASHEN_REACH.x, ASHEN_REACH.z)).toBe(true);
-    expect(isProtectedVoxel(ASHEN_REACH.x + 8, ASHEN_REACH.z)).toBe(false);
-    expect(ASHEN_SPIRE_POSITION.x).toBe(ASHEN_REACH.x + .5);
+    expect(read(Math.floor(ASHEN_SPIRE_POSITION.x), 15, Math.floor(ASHEN_SPIRE_POSITION.z))).toBe(Block.IronOre);
+    expect(isProtectedVoxel(Math.floor(ASHEN_SPIRE_POSITION.x), Math.floor(ASHEN_SPIRE_POSITION.z))).toBe(true);
+    expect(isProtectedVoxel(Math.floor(ASHEN_SPIRE_POSITION.x) + 8, Math.floor(ASHEN_SPIRE_POSITION.z))).toBe(false);
     for (const home of ASHEN_SENTRY_HOMES) {
       expect(isInAshenReach(home.x, home.z)).toBe(true);
       expect(isPlayerSupported(read, home.x, home.y, home.z)).toBe(true);
@@ -121,6 +124,15 @@ describe("deterministic voxel world", () => {
     expect(ashenRidgeHeight(ASHEN_REACH.x, ASHEN_REACH.z - 17)).toBeGreaterThan(0);
     expect(read(ASHEN_REACH.x, SURFACE_HEIGHT + 1, ASHEN_REACH.z - 17)).not.toBe(Block.Air);
     expect(ashenRidgeHeight(ASHEN_REACH.x - 17, ASHEN_REACH.z)).toBe(0);
+    for (const [x, z] of [[110, 61], [124, 75], [145, 90], [167, 100], [100, 111], [22, 111]] as const) {
+      expect(isAshenSafeRoad(x, z)).toBe(true);
+      expect(read(x, SURFACE_HEIGHT, z)).toBe(Block.Dirt);
+      expect(read(x, SURFACE_HEIGHT + 1, z)).toBe(Block.Air);
+    }
+    expect(isAshenScorchedCut(135, 61)).toBe(true);
+    expect(isAshenSafeRoad(135, 61)).toBe(true);
+    expect(isAshenScorchedCut(151, 65)).toBe(true);
+    expect(isAshenSafeRoad(151, 65)).toBe(false);
   });
 
   it("places distinct discoveries beside every regional road while leaving travel lanes open", () => {
@@ -130,7 +142,7 @@ describe("deterministic voxel world", () => {
       if (!cache.has(key)) cache.set(key, generateChunk("density-test", a.chunkX, a.chunkZ));
       return getBlock(cache.get(key)!, a.localX, y, a.localZ);
     };
-    expect(ROADSIDE_DISCOVERIES).toHaveLength(37);
+    expect(ROADSIDE_DISCOVERIES).toHaveLength(44);
     expect(new Set(ROADSIDE_DISCOVERIES.map(site => site.kind)).size).toBe(5);
     for (const site of ROADSIDE_DISCOVERIES) {
       expect(isRegionalRoad(site.x, site.z)).toBe(false);

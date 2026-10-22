@@ -16,11 +16,11 @@ function fixture(flat = false) {
 }
 describe("bounded roaming enemy packs", () => {
   it("adds fixed roaming packs to every major region with correct bands and spacing", () => {
-    const { room } = fixture(); expect(room.state.mobs.size).toBe(37);
+    const { room } = fixture(); expect(room.state.mobs.size).toBe(40);
     expect(ROAMING_PACKS.filter(pack => pack.id.startsWith("greenwood-")).length).toBe(2);
     expect(ROAMING_PACKS.filter(pack => pack.id.startsWith("mistfen-")).length).toBe(3);
     expect(ROAMING_PACKS.filter(pack => pack.id.startsWith("stoneheart-")).length).toBe(2);
-    expect(ROAMING_PACKS.filter(pack => pack.id.startsWith("ashen-")).length).toBe(2);
+    expect(ROAMING_PACKS.filter(pack => pack.id.startsWith("ashen-")).length).toBe(3);
     expect(ROAMING_PACKS.filter(pack => /^(greenwood|mistfen|stoneheart|ashen)-/.test(pack.id))
       .every(pack => pack.eliteIndex === 0)).toBe(true);
     for (const pack of ROAMING_PACKS) for (let index = 0; index < pack.offsets.length; index++) {

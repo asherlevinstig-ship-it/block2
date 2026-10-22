@@ -10,15 +10,15 @@ import { ASHEN_COMBAT_GROUP_IDS, ASHEN_HOUND_IDS, ASHEN_SENTRY_IDS, WILDERNESS_E
 describe("Ashen Reach Cinder Ram", () => {
   it("is an authored Ashen enemy without changing the two-sentry objective", () => {
     const spawn = WILDERNESS_ENCOUNTERS.find(entry => entry.id === "ashen-cinder-ram");
-    expect(spawn).toEqual({ id: "ashen-cinder-ram", archetype: "cinder_ram", x: 103.5, y: 8, z: 52.5 });
+    expect(spawn).toEqual({ id: "ashen-cinder-ram", archetype: "cinder_ram", x: 165.5, y: 8, z: 61.5 });
     expect(ashenSentryAllows(spawn!)).toBe(true);
     expect(isAshenMob(spawn!.id)).toBe(true);
     expect(ASHEN_SENTRY_IDS).toHaveLength(2);
     expect(ASHEN_HOUND_IDS).toHaveLength(2);
     expect(ASHEN_COMBAT_GROUP_IDS).toHaveLength(5);
     expect(WILDERNESS_ENCOUNTERS.filter(entry => ASHEN_HOUND_IDS.some(id => id === entry.id))).toEqual([
-      { id: "ashen-ember-hound-west", archetype: "ember_hound", x: 99.5, y: 8, z: 55.5 },
-      { id: "ashen-ember-hound-east", archetype: "ember_hound", x: 107.5, y: 8, z: 56.5 },
+      { id: "ashen-ember-hound-west", archetype: "ember_hound", x: 161.5, y: 8, z: 64.5 },
+      { id: "ashen-ember-hound-east", archetype: "ember_hound", x: 169.5, y: 8, z: 65.5 },
     ]);
   });
 
@@ -49,7 +49,7 @@ describe("Ashen Reach Cinder Ram", () => {
     Object.defineProperty(room, "readWorldBlock", { value: (_x: number, y: number) => y <= 7 ? Block.Stone : Block.Air });
     for (const spawn of WILDERNESS_ENCOUNTERS.filter(entry => isAshenMob(entry.id)))
       internal.registerMob(spawn.id, spawn.archetype, spawn);
-    const player = new PlayerState(); Object.assign(player, { x: 103.5, y: 8, z: 54.5, health: 5 });
+    const player = new PlayerState(); Object.assign(player, { x: 165.5, y: 8, z: 65.5, health: 5 });
     room.state.players.set("hero", player);
 
     internal.rallyAshenCombatGroup("ashen-cinder-ram", "hero", 10_000);

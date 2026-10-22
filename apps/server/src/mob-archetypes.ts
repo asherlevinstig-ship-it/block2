@@ -171,7 +171,7 @@ export const MOB_ARCHETYPES: Record<MobArchetypeId, MobArchetypeDefinition> = {
     respawnMs: 45_000, rewardHealth: 0, rewardStamina: 28,
   },
   cinder_ram: {
-    id: "cinder_ram", name: "Cinder Ram", spawn: { x: 103.5, y: 8, z: 52.5 },
+    id: "cinder_ram", name: "Cinder Ram", spawn: { x: 165.5, y: 8, z: 61.5 },
     maxHealth: 18, armor: 1, attackKind: "melee", speed: 1.05,
     stopDistance: 6.4, minimumAttackRange: 0, aggroRange: 12,
     windupMs: 1_600, recoverMs: 2_100, cooldownMs: 4_800, damage: 2,
