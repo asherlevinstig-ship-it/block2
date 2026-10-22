@@ -3,7 +3,7 @@ import { isWorldGuidanceRoad, planWorldRoute, remainingWorldRoute, routeDeviatio
 
 describe("overworld road guidance", () => {
   it.each([
-    [{ x: 8.5, z: 8.5 }, { x: 8.5, z: 101.5 }],
+    [{ x: 8.5, z: 8.5 }, { x: 8.5, z: 171.5 }],
     [{ x: 8.5, z: 8.5 }, { x: 15.5, z: -72.5 }],
     [{ x: 8.5, z: 8.5 }, { x: 93.5, z: 61.5 }],
     [{ x: 8.5, z: 8.5 }, { x: -50.5, z: -27.5 }],
@@ -15,7 +15,7 @@ describe("overworld road guidance", () => {
   });
 
   it("trims completed sections and detects when the player leaves the route", () => {
-    const route = planWorldRoute({ x: 8.5, z: 8.5 }, { x: 8.5, z: 101.5 });
+    const route = planWorldRoute({ x: 8.5, z: 8.5 }, { x: 8.5, z: 171.5 });
     const midway = route[0]!;
     expect(remainingWorldRoute(midway, route).length).toBeLessThan(route.length);
     expect(routeDeviationDistance(midway, route)).toBeLessThan(.1);

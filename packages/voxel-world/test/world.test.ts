@@ -35,6 +35,8 @@ import {
   MINERAL_DEPOSITS,
   CHUNK_HEIGHT,
   CHUNK_SIZE,
+  TOWN_CENTER_X,
+  TOWN_CENTER_Z,
   GRAVITY,
   GREENWOOD_CAMP,
   GREENWOOD_CRAWLER_HOMES,
@@ -127,7 +129,7 @@ describe("deterministic voxel world", () => {
       if (!cache.has(key)) cache.set(key, generateChunk("density-test", a.chunkX, a.chunkZ));
       return getBlock(cache.get(key)!, a.localX, y, a.localZ);
     };
-    expect(ROADSIDE_DISCOVERIES).toHaveLength(29);
+    expect(ROADSIDE_DISCOVERIES).toHaveLength(33);
     expect(new Set(ROADSIDE_DISCOVERIES.map(site => site.kind)).size).toBe(5);
     for (const site of ROADSIDE_DISCOVERIES) {
       expect(isRegionalRoad(site.x, site.z)).toBe(false);
@@ -147,7 +149,8 @@ describe("deterministic voxel world", () => {
 
   it("places the density-pass discoveries well away from the road rather than extending the roadside strip", () => {
     const offRoadIds = ["emberfall-shrine", "ashglass-survey", "cindergrave-camp", "western-shelf-cache",
-      "broken-winch-camp", "redstone-prospector", "wilds-hunter-blind", "outskirts-pilgrim-shrine"];
+      "broken-winch-camp", "redstone-prospector", "emberstep-outpost", "splitrail-shrine",
+      "deep-quarry-overlook", "last-lantern-camp", "wilds-hunter-blind", "outskirts-pilgrim-shrine"];
     for (const id of offRoadIds) {
       const site = ROADSIDE_DISCOVERIES.find(entry => entry.id === id)!;
       expect(site).toBeDefined();
@@ -204,13 +207,22 @@ describe("deterministic voxel world", () => {
     expect([40, 65, 100].map(z => southernQuarryTierAt(8, z))).toEqual([1, 2, 3]);
     expect([40, 65, 100].map(z => wildernessTerritoryAt(8, z)?.name))
       .toEqual(["SOUTHERN CAUSEWAY", "SUNFALL QUARRY", "REDSTONE PIT"]);
-    for (let z = 30; z <= 106; z++) {
+    for (let z = 30; z <= 176; z++) {
       expect(isSouthernRoad(8, z)).toBe(true);
       expect(read(8, SURFACE_HEIGHT, z)).toBe(Block.Dirt);
       expect(read(8, SURFACE_HEIGHT + 1, z)).toBe(Block.Air);
       expect(isPlayerSupported(read, 8.5, 8, z + .5)).toBe(true);
       expect(playerCollides(read, 8.5, 8, z + .5)).toBe(false);
     }
+    // The deep south offers two long alternatives that rejoin the central road.
+    for (const [x, z] of [[-4, 120], [-4, 150], [21, 120], [21, 145], [8, 158]] as const) {
+      expect(isSouthernRoad(x, z)).toBe(true);
+      expect(read(x, SURFACE_HEIGHT, z)).toBe(Block.Dirt);
+      expect(read(x, SURFACE_HEIGHT + 1, z)).toBe(Block.Air);
+    }
+    expect(SOUTHERN_QUARRY.maxZ - SOUTHERN_QUARRY.minZ).toBeGreaterThan(150);
+    expect(Math.hypot(SOUTHERN_QUARRYMASTER_HOME.x - TOWN_CENTER_X,
+      SOUTHERN_QUARRYMASTER_HOME.z - TOWN_CENTER_Z)).toBeGreaterThan(160);
     for (const home of [...SOUTHERN_MOB_HOMES, SOUTHERN_QUARRYMASTER_HOME]) {
       expect(isPlayerSupported(read, home.x, home.y, home.z)).toBe(true);
       expect(playerCollides(read, home.x, home.y, home.z)).toBe(false);

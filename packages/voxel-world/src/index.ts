@@ -133,19 +133,21 @@ export const MISTFEN_MOB_HOMES = [
   { x: -45.5, y: 8, z: -36.5 },
 ] as const;
 export const MISTFEN_SILVER_SEAM = { minX: -56, maxX: -54, minZ: -39, maxZ: -37 } as const;
-export const SOUTHERN_QUARRY = { minX: -12, maxX: 29, minZ: 31, maxZ: 112 } as const;
-export const SOUTHERN_QUARRYMASTER_HOME = { x: 8.5, y: 8, z: 101.5 } as const;
+export const SOUTHERN_QUARRY = { minX: -20, maxX: 29, minZ: 31, maxZ: 184 } as const;
+export const SOUTHERN_QUARRYMASTER_HOME = { x: 8.5, y: 8, z: 171.5 } as const;
 export const SOUTHERN_MOB_HOMES = [
   { x: 3.5, y: 8, z: 44.5 },
   { x: -2.5, y: 8, z: 67.5 },
   { x: 18.5, y: 8, z: 76.5 },
-  { x: 2.5, y: 8, z: 96.5 },
-  { x: 14.5, y: 8, z: 97.5 },
+  { x: -8.5, y: 8, z: 128.5 },
+  { x: 24.5, y: 8, z: 137.5 },
+  { x: 2.5, y: 8, z: 166.5 },
+  { x: 14.5, y: 8, z: 167.5 },
   SOUTHERN_QUARRYMASTER_HOME,
 ] as const;
 export const SOUTHERN_QUARRY_COVER = [
-  { x: 1, z: 96, height: 2 }, { x: 16, z: 96, height: 3 },
-  { x: 1, z: 106, height: 3 }, { x: 16, z: 106, height: 2 },
+  { x: 1, z: 166, height: 2 }, { x: 16, z: 166, height: 3 },
+  { x: 1, z: 176, height: 3 }, { x: 16, z: 176, height: 2 },
 ] as const;
 export const NORTHWATCH_HIGHLANDS = { minX: -9, maxX: 29, minZ: -84, maxZ: -34 } as const;
 export const NORTHWATCH_LEADER_HOME = { x: 15.5, y: 8, z: -72.5 } as const;
@@ -197,9 +199,16 @@ export function southernQuarryTierAt(x: number, z: number): 1 | 2 | 3 | null {
 }
 export function isSouthernRoad(x: number, z: number): boolean {
   const cellX = Math.floor(x), cellZ = Math.floor(z);
-  return cellX >= 7 && cellX <= 10 && cellZ >= 29 && cellZ <= 106
+  return cellX >= 7 && cellX <= 10 && cellZ >= 29 && cellZ <= 176
     || cellZ >= 67 && cellZ <= 70 && cellX >= -4 && cellX <= 10
-    || cellZ >= 86 && cellZ <= 89 && cellX >= 8 && cellX <= 22;
+    || cellZ >= 86 && cellZ <= 89 && cellX >= 8 && cellX <= 22
+    // Two long alternatives break the southern march into loops rather than one corridor.
+    || cellX >= -6 && cellX <= -3 && cellZ >= 110 && cellZ <= 158
+    || cellZ >= 110 && cellZ <= 113 && cellX >= -4 && cellX <= 10
+    || cellZ >= 156 && cellZ <= 159 && cellX >= -4 && cellX <= 10
+    || cellX >= 20 && cellX <= 23 && cellZ >= 110 && cellZ <= 148
+    || cellZ >= 110 && cellZ <= 113 && cellX >= 8 && cellX <= 22
+    || cellZ >= 146 && cellZ <= 149 && cellX >= 8 && cellX <= 22;
 }
 
 /** A broad, flat combat route framed by quarry cuts and broken ravine walls. */
@@ -209,7 +218,7 @@ export function southernQuarryBlock(x: number, y: number, z: number): BlockId | 
   const tier = southernQuarryTierAt(x, z) ?? 1;
   if (y === SURFACE_HEIGHT) {
     if (road) return Block.Dirt;
-    if (z >= 91 && z <= 111 && x >= -2 && x <= 19) return Block.Stone;
+    if (z >= 161 && z <= 181 && x >= -2 && x <= 19) return Block.Stone;
     const scar = Math.abs(Math.imul(x + 17, 11) + Math.imul(z - 27, 5)) % 9;
     return tier === 1 ? (scar < 2 ? Block.Dirt : Block.Grass)
       : tier === 2 ? (scar < 5 ? Block.Stone : Block.Dirt)
@@ -217,8 +226,9 @@ export function southernQuarryBlock(x: number, y: number, z: number): BlockId | 
   }
   if (road) return y <= SURFACE_HEIGHT + 3 ? Block.Air : null;
   const sideWall = (x === SOUTHERN_QUARRY.minX + 1 || x === SOUTHERN_QUARRY.maxX - 1)
-    && z >= 51 && z <= 109 && Math.floor((z - 51) / 7) % 3 !== 1;
-  const quarryShelf = (z === 58 || z === 81) && (x >= -8 && x <= 2 || x >= 15 && x <= 25);
+    && z >= 51 && z <= 181 && Math.floor((z - 51) / 7) % 3 !== 1;
+  const quarryShelf = (z === 58 || z === 81 || z === 121 || z === 151)
+    && (x >= -16 && x <= 2 || x >= 15 && x <= 31);
   if ((sideWall || quarryShelf) && y <= SURFACE_HEIGHT + (tier === 3 ? 3 : 2))
     return tier === 3 ? Block.Bedrock : Block.Stone;
   const cover = SOUTHERN_QUARRY_COVER.find(point => point.x === x && point.z === z);
@@ -492,6 +502,8 @@ export const REGIONAL_WAYSTONES = [
   { x: 13, z: 42, name: "Southroad Waystone" },
   { x: 13, z: 66, name: "Sunfall Quarry Waystone" },
   { x: 25, z: 84, name: "Redstone Pit Waystone" },
+  { x: 13, z: 118, name: "Emberstep Waystone" },
+  { x: 2, z: 157, name: "Deep Quarry Waystone" },
   { x: 8, z: -46, name: "Northwatch Road Waystone" },
   { x: 8, z: -65, name: "Northwatch Ridge Waystone" },
 ] as const;
@@ -528,7 +540,7 @@ export const SOUTHERN_QUARRY_ENCOUNTER_CHAIN = {
   cart: { x: 15, z: 36 },
   survey: { x: -4, z: 55 },
   winch: { x: 24, z: 59 },
-  lift: { x: -4, z: 89 },
+  lift: { x: -10, z: 115 },
   leader: SOUTHERN_QUARRYMASTER_HOME,
 } as const;
 export const NORTHWATCH_ENCOUNTER_CHAIN = {
@@ -584,10 +596,14 @@ export const ROADSIDE_DISCOVERIES = [
   { id: "southgate-cart", name: "Southgate Supply Cart", kind: "cart", x: 15, z: 36 },
   { id: "sunfall-survey", name: "Sunfall Survey Camp", kind: "camp", x: -4, z: 55 },
   { id: "quarry-shrine", name: "Quarryworker Shrine", kind: "shrine", x: 18, z: 72 },
-  { id: "collapsed-lift", name: "Collapsed Quarry Lift", kind: "ruin", x: -4, z: 89 },
+  { id: "collapsed-lift", name: "Collapsed Quarry Lift", kind: "ruin", x: -10, z: 115 },
   { id: "western-shelf-cache", name: "Western Shelf Cache", kind: "ruin", x: -8, z: 63 },
   { id: "broken-winch-camp", name: "Broken Winch Camp", kind: "camp", x: 24, z: 59 },
   { id: "redstone-prospector", name: "Redstone Prospector Camp", kind: "camp", x: -8, z: 103 },
+  { id: "emberstep-outpost", name: "Emberstep Wayfarer Outpost", kind: "camp", x: 29, z: 127 },
+  { id: "splitrail-shrine", name: "Splitrail Shrine", kind: "shrine", x: -12, z: 139 },
+  { id: "deep-quarry-overlook", name: "Deep Quarry Overlook", kind: "ruin", x: 16, z: 156 },
+  { id: "last-lantern-camp", name: "Last Lantern Camp", kind: "camp", x: -10, z: 173 },
   { id: "northwatch-cart", name: "Abandoned Northwatch Cart", kind: "cart", x: 15, z: -40 },
   { id: "windworn-shrine", name: "Windworn Shrine", kind: "shrine", x: 2, z: -54 },
   { id: "northwatch-watchpost", name: "Ruined Northwatch Post", kind: "ruin", x: 20, z: -62 },
@@ -616,6 +632,11 @@ export const ROADSIDE_ENCOUNTERS = [
   { id: "western-shelf-cache", kind: "cache", itemId: "iron_ore", quantity: 2, gold: 4 },
   { id: "broken-winch-camp", kind: "repair", itemId: "silver_ore", quantity: 2, gold: 8, guardRadius: 16, holdMs: 10_000 },
   { id: "redstone-prospector", kind: "cache", itemId: "stone_core", quantity: 1, gold: 6 },
+  { id: "emberstep-outpost", kind: "shrine", itemId: "healing_potion", quantity: 1, gold: 0 },
+  { id: "splitrail-shrine", kind: "signals", itemId: "silver_ore", quantity: 1, gold: 7,
+    signalADx: -5, signalADz: 0, signalBDx: 5, signalBDz: 0, windowMs: 12_000 },
+  { id: "deep-quarry-overlook", kind: "guarded", itemId: "stone_core", quantity: 2, gold: 8, guardRadius: 15 },
+  { id: "last-lantern-camp", kind: "cache", itemId: "healing_potion", quantity: 2, gold: 8 },
   { id: "wilds-hunter-blind", kind: "hunt", itemId: "crawler_fang", quantity: 2, gold: 7, guardRadius: 15,
     stashDx: -6, stashDz: 4, clue: "Blood and snapped reeds lead northwest. The wounded stalker is still moving." },
   { id: "outskirts-pilgrim-shrine", kind: "shrine", itemId: "healing_potion", quantity: 1, gold: 0 },

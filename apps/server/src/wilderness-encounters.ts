@@ -39,7 +39,7 @@ export const isMistfenMob = (id: string) => id === "mistfen-bloater" || MISTFEN_
 export const mistfenAllows = (pose: { x: number; y: number; z: number }) => Math.abs(pose.y - 8) <= 1.5
   && isInMistfenMarsh(pose.x, pose.z);
 export const SOUTHERN_QUARRY_IDS = ["south-causeway-crawler", "south-causeway-scavenger-west", "south-causeway-scavenger-east", "south-quarry-spitter-west", "south-quarry-spitter-east",
-  "south-pit-crawler", "south-pit-spitter", "south-quarrymaster"] as const;
+  "south-redstone-stalker", "south-redstone-sentry", "south-pit-crawler", "south-pit-spitter", "south-quarrymaster"] as const;
 export const isSouthernQuarryMob = (id: string) => SOUTHERN_QUARRY_IDS.some(member => member === id);
 export const southernQuarryAllows = (pose: { x: number; y: number; z: number }) => Math.abs(pose.y - 8) <= 1.5
   && isInSouthernQuarry(pose.x, pose.z);
@@ -95,9 +95,11 @@ export const WILDERNESS_ENCOUNTERS: readonly { id: string; archetype: MobArchety
   { id: SOUTHERN_QUARRY_IDS[2], archetype: "moss_crawler", x: 6.5, y: 8, z: 47.5 },
   { id: SOUTHERN_QUARRY_IDS[3], archetype: "cave_spitter", ...SOUTHERN_MOB_HOMES[1] },
   { id: SOUTHERN_QUARRY_IDS[4], archetype: "cave_spitter", ...SOUTHERN_MOB_HOMES[2] },
-  { id: SOUTHERN_QUARRY_IDS[5], archetype: "briar_crawler", ...SOUTHERN_MOB_HOMES[3] },
-  { id: SOUTHERN_QUARRY_IDS[6], archetype: "cave_spitter", ...SOUTHERN_MOB_HOMES[4] },
-  { id: SOUTHERN_QUARRY_IDS[7], archetype: "stone_brute", ...SOUTHERN_MOB_HOMES[5] },
+  { id: SOUTHERN_QUARRY_IDS[5], archetype: "ridge_stalker", ...SOUTHERN_MOB_HOMES[3] },
+  { id: SOUTHERN_QUARRY_IDS[6], archetype: "shard_sentry", ...SOUTHERN_MOB_HOMES[4] },
+  { id: SOUTHERN_QUARRY_IDS[7], archetype: "briar_crawler", ...SOUTHERN_MOB_HOMES[5] },
+  { id: SOUTHERN_QUARRY_IDS[8], archetype: "cave_spitter", ...SOUTHERN_MOB_HOMES[6] },
+  { id: SOUTHERN_QUARRY_IDS[9], archetype: "stone_brute", ...SOUTHERN_MOB_HOMES[7] },
   { id: NORTHWATCH_IDS[0], archetype: "ridge_stalker", ...NORTHWATCH_MOB_HOMES[0] },
   { id: NORTHWATCH_IDS[1], archetype: "shard_sentry", ...NORTHWATCH_MOB_HOMES[1] },
   { id: NORTHWATCH_IDS[2], archetype: "ridge_stalker", ...NORTHWATCH_MOB_HOMES[2] },

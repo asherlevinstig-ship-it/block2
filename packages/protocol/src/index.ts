@@ -465,7 +465,7 @@ export const EQUIPMENT_HUNT_REGIONS = {
   mistfen: { name: "Mistfen Marsh", x: -47.5, y: 8, z: -31.5, tier: 2, paths: ["mage", "thief", "healer"] },
   frontier: { name: "Stone Frontier", x: 68.5, y: 8, z: 34.5, tier: 3, paths: ["tank", "ranger"] },
   ashen: { name: "Ashen Reach", x: 97.5, y: 8, z: 62.5, tier: 3, paths: ["mage", "assassin"] },
-  quarry: { name: "Redstone Pit", x: 8.5, y: 8, z: 101.5, tier: 3, paths: ["tank", "thief"] },
+  quarry: { name: "Redstone Pit", x: 8.5, y: 8, z: 171.5, tier: 3, paths: ["tank", "thief"] },
 } as const satisfies Record<string, { name: string; x: number; y: number; z: number; tier: number; paths: readonly BuildPathId[] }>;
 export type EquipmentHuntRegionId = keyof typeof EQUIPMENT_HUNT_REGIONS;
 export type EquipmentHuntTarget = { affixId: EquipmentAffixId; regionId: EquipmentHuntRegionId; regionName: string;

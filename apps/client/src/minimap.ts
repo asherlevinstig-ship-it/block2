@@ -194,7 +194,7 @@ const SURFACE_REGION_LABELS: readonly (Position & { id: string; name: string })[
   { ...ASHEN_SPIRE_WAYPOINT, id: "ashen", name: "ASHEN REACH" },
   { x: 8.5, z: 52.5, id: "causeway", name: "SOUTHERN CAUSEWAY" },
   { x: 20.5, z: 70.5, id: "quarry", name: "SUNFALL QUARRY" },
-  { x: 2.5, z: 101.5, id: "redstone", name: "REDSTONE PIT" },
+  { x: 8.5, z: 171.5, id: "redstone", name: "REDSTONE PIT" },
   { x: 21.5, z: -60.5, id: "northwatch", name: "NORTHWATCH HIGHLANDS" },
 ];
 export function discoverMistfen(player: Position & { y: number }, discovered: Set<string>): boolean {

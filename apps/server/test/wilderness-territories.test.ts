@@ -33,8 +33,8 @@ describe("distinct radial wilderness territories", () => {
       expect(radiusFromSafeCenter(mob)).toBeGreaterThanOrEqual(MOB_TOWN_MINIMUM_RADIUS - .001);
     }
     expect(WILDERNESS_ENCOUNTERS.filter(e => e.archetype === "cave_spitter" && !isAshenSentry(e.id))).toHaveLength(10);
-    expect(WILDERNESS_ENCOUNTERS.filter(e => e.archetype === "ridge_stalker")).toHaveLength(4);
-    expect(WILDERNESS_ENCOUNTERS.filter(e => e.archetype === "shard_sentry")).toHaveLength(2);
+    expect(WILDERNESS_ENCOUNTERS.filter(e => e.archetype === "ridge_stalker")).toHaveLength(5);
+    expect(WILDERNESS_ENCOUNTERS.filter(e => e.archetype === "shard_sentry")).toHaveLength(3);
     expect(lootForArchetype("stone_brute", "", 0)).toContainEqual({ itemId: "stone_core_hammer", quantity: 1 });
     expect(lootForArchetype("stone_brute", "", .5)).not.toContainEqual({ itemId: "stone_core_hammer", quantity: 1 });
   });

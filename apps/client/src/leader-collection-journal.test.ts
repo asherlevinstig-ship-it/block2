@@ -24,7 +24,7 @@ describe("regional leader collection journal", () => {
 
   it("routes missing pieces to their authored leader arena and truthful rematch tier", () => {
     expect(leaderCollectionTarget("quarry", "bastion_plate")).toMatchObject({
-      x: 8.5, z: 101.5, id: "leader-collection-quarry", name: "Redstone Quarrymaster · Empowered Rematch III",
+      x: 8.5, z: 171.5, id: "leader-collection-quarry", name: "Redstone Quarrymaster · Empowered Rematch III",
     });
     expect(leaderCollectionRematchTier("northwatch", "northwatch_cloak")).toBe(2);
     expect(leaderCollectionRematchTier("greenwood", "forged_bow")).toBe(0);
@@ -65,6 +65,6 @@ describe("regional leader collection journal", () => {
     const tracked = { collectionId: "quarry", itemId: "forged_sword" } as const;
     const mob = { id: "south-quarrymaster", alive: true, combatState: "idle", targetId: "", respawnAt: 0 };
     expect(trackedLeaderArenaPresentation(tracked, mob, { x: 8.5, y: 8, z: 40, alive: true }, 0)).toBeNull();
-    expect(trackedLeaderArenaPresentation(tracked, { ...mob, id: "stone-brute" }, { x: 8.5, y: 8, z: 101.5, alive: true }, 0)).toBeNull();
+    expect(trackedLeaderArenaPresentation(tracked, { ...mob, id: "stone-brute" }, { x: 8.5, y: 8, z: 171.5, alive: true }, 0)).toBeNull();
   });
 });
