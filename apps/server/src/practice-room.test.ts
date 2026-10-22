@@ -54,7 +54,7 @@ describe("private Calling practice", () => {
     const { internal, player, client } = fixture();
     internal.rapidPractice = true;
     player.maxHealth = 30; player.health = 20;
-    internal.rapidPracticePendingRewards.set("trainee", { wave: 1, rare: false });
+    internal.rapidPracticePendingRewards.set("trainee", { wave: 2, rare: false, weapon: false });
     internal.chooseRapidPracticeUpgrade(client, { upgradeId: "bloodstone" });
     expect(player.maxHealth).toBe(35);
     expect(player.health).toBe(25);
@@ -65,9 +65,21 @@ describe("private Calling practice", () => {
   it("makes every Warden choice a doubled rare relic", () => {
     const { internal, client } = fixture();
     internal.rapidPractice = true;
-    internal.rapidPracticePendingRewards.set("trainee", { wave: 3, rare: true });
+    internal.rapidPracticePendingRewards.set("trainee", { wave: 3, rare: true, weapon: false });
     internal.chooseRapidPracticeUpgrade(client, { upgradeId: "swift_hands" });
     expect(internal.rapidPracticeUpgrades.get("trainee")).toEqual({ damage: 0, haste: 2, vitality: 0, relics: 1 });
     expect(client.send).toHaveBeenCalledWith("practice:reward-applied", expect.objectContaining({ rare: true, haste: 2, relics: 1 }));
+  });
+
+  it("swaps Speed Lab weapons without adding inventory clutter", () => {
+    const { internal, player, client } = fixture();
+    internal.rapidPractice = true;
+    internal.rapidPracticePendingRewards.set("trainee", { wave: 1, rare: false, weapon: true });
+    internal.chooseRapidPracticeUpgrade(client, { upgradeId: "weapon_bow" });
+    expect(player.mainHandId).toBe("forged_bow");
+    expect(player.mainHandTag).toBe("ranged");
+    expect(player.inventory.size).toBe(0);
+    expect(client.send).toHaveBeenCalledWith("practice:reward-applied",
+      expect.objectContaining({ weapon: true, mainHandId: "forged_bow", name: "Deadeye Bow" }));
   });
 });

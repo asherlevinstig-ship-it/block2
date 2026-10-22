@@ -1,4 +1,5 @@
 import type { MobArchetypeId } from "./mob-archetypes.js";
+import type { MainHandId } from "@blockcraft/protocol";
 
 export const RAPID_PRACTICE_ARENA = {
   minX: 88,
@@ -50,6 +51,24 @@ export const RAPID_PRACTICE_RESTART_DELAY_MS = 4_000;
 export const RAPID_PRACTICE_ATTACK_SCALE = .7;
 
 export type RapidPracticeUpgradeId = "razor_edge" | "swift_hands" | "bloodstone";
+export type RapidPracticeWeaponChoiceId = "weapon_sword" | "weapon_bow" | "weapon_focus";
+export type RapidPracticeProjectileStyle = "crescent" | "arrow" | "orb";
+
+export type RapidPracticeWeaponProfile = {
+  style: RapidPracticeProjectileStyle;
+  range: number;
+  travelMs: number;
+  pierce: number;
+  splashRadius: number;
+  bonusDamage: number;
+};
+
+export const RAPID_PRACTICE_WEAPON_CHOICES: Record<RapidPracticeWeaponChoiceId,
+  { name: string; detail: string; mainHandId: MainHandId }> = {
+  weapon_sword: { name: "Crescent Sword", detail: "Short-range arcs pierce up to 3 enemies", mainHandId: "forged_sword" },
+  weapon_bow: { name: "Deadeye Bow", detail: "Fast precise shots deal +1 damage", mainHandId: "forged_bow" },
+  weapon_focus: { name: "Nova Focus", detail: "Slower orbs splash nearby enemies", mainHandId: "forged_focus" },
+};
 
 export type RapidPracticeUpgrades = {
   damage: number;
@@ -92,6 +111,20 @@ export function rapidPracticeMovementSpeed(baseSpeed: number, enabled: boolean):
 export function rapidPracticeProjectileTravelMs(travelMs: number, enabled: boolean): number {
   if (!enabled || travelMs <= 0) return travelMs;
   return Math.max(180, Math.round(travelMs * 0.68));
+}
+
+export function rapidPracticeWeaponProfile(mainHandId: MainHandId, enabled: boolean): RapidPracticeWeaponProfile | null {
+  if (!enabled) return null;
+  if (mainHandId === "longsword" || mainHandId === "forged_sword") return {
+    style: "crescent", range: 4.6, travelMs: 160, pierce: 3, splashRadius: 0, bonusDamage: 0,
+  };
+  if (mainHandId === "bow" || mainHandId === "forged_bow") return {
+    style: "arrow", range: 11, travelMs: 110, pierce: 1, splashRadius: 0, bonusDamage: 1,
+  };
+  if (mainHandId === "magic_focus" || mainHandId === "forged_focus") return {
+    style: "orb", range: 8.5, travelMs: 250, pierce: 1, splashRadius: 1.8, bonusDamage: 0,
+  };
+  return null;
 }
 
 export function rapidPracticeAttackTiming<T extends { durationMs: number; impactMs: number }>(

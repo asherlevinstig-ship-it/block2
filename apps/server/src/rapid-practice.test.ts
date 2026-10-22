@@ -4,12 +4,14 @@ import {
   RAPID_PRACTICE_BOSS_ID,
   RAPID_PRACTICE_SPAWNS,
   RAPID_PRACTICE_WAVES,
+  RAPID_PRACTICE_WEAPON_CHOICES,
   EMPTY_RAPID_PRACTICE_UPGRADES,
   applyRapidPracticeUpgrade,
   rapidPracticeAttackTiming,
   rapidPracticeMovementSpeed,
   rapidPracticeProjectileFan,
   rapidPracticeProjectileTravelMs,
+  rapidPracticeWeaponProfile,
 } from "./rapid-practice.js";
 
 describe("rapid 2.5D practice", () => {
@@ -50,5 +52,13 @@ describe("rapid 2.5D practice", () => {
     expect(rareHaste).toEqual({ damage: 1, haste: 2, vitality: 0, relics: 1 });
     expect(rapidPracticeAttackTiming({ durationMs: 600, impactMs: 280 }, true, rareHaste.haste))
       .toEqual({ durationMs: 340, impactMs: 159 });
+  });
+
+  it("gives the three lab weapons distinct projectile identities", () => {
+    expect(Object.keys(RAPID_PRACTICE_WEAPON_CHOICES)).toHaveLength(3);
+    expect(rapidPracticeWeaponProfile("forged_sword", true)).toMatchObject({ style: "crescent", pierce: 3 });
+    expect(rapidPracticeWeaponProfile("forged_bow", true)).toMatchObject({ style: "arrow", bonusDamage: 1 });
+    expect(rapidPracticeWeaponProfile("forged_focus", true)).toMatchObject({ style: "orb", splashRadius: 1.8 });
+    expect(rapidPracticeWeaponProfile("forged_sword", false)).toBeNull();
   });
 });

@@ -5606,6 +5606,7 @@ interface WeaponProjectileVisual {
   end: pc.Vec3;
   startedAt: number;
   durationMs: number;
+  rapidStyle?: WeaponAttackReleased["rapidStyle"];
 }
 
 interface MobHazardVisual {
@@ -5670,6 +5671,7 @@ let nextNearMissAt = 0;
 let lastLocalCallingImpact: { abilityId: CallingAbilityId; at: number } | null = null;
 // Retain impact style after the short-lived mesh ends, until server confirmation arrives.
 const projectileWeapons = new Map<string, MainHandId>();
+const projectileRapidStyles = new Map<string, WeaponAttackReleased["rapidStyle"]>();
 const mobHazardVisuals = new Map<string, MobHazardVisual>();
 const thornBindingVisuals = new Map<string, ThornBindingVisual>();
 let localThornBoundUntil = 0;
@@ -6695,10 +6697,12 @@ function updateCallingPersistentState(state: CallingStateUpdate): void {
 
 function createWeaponProjectile(message: WeaponAttackReleased): void {
   projectileWeapons.set(message.projectileId, message.mainHandId);
+  projectileRapidStyles.set(message.projectileId, message.rapidStyle);
   while (projectileWeapons.size > 128) projectileWeapons.delete(projectileWeapons.keys().next().value!);
+  while (projectileRapidStyles.size > 128) projectileRapidStyles.delete(projectileRapidStyles.keys().next().value!);
   const flight = projectilePresentation(message.releasedAt, serverClock.offset, performance.now(), message.travelMs);
   if (flight.expired) return;
-  const style = rangedStyle(message.mainHandId);
+  const style = rangedStyle(message.mainHandId, message.rapidStyle);
   const entity = new pc.Entity(`${message.mainHandId}-projectile`);
   entity.addComponent("render", { type: style.shape });
   const material = powerMaterial(new pc.Color(style.color[0]!, style.color[1]!, style.color[2]!), 0.96);
@@ -6717,6 +6721,7 @@ function createWeaponProjectile(message: WeaponAttackReleased): void {
     end,
     startedAt: flight.startedAt,
     durationMs: flight.durationMs,
+    rapidStyle: message.rapidStyle,
   });
 }
 
@@ -15020,6 +15025,13 @@ app.on("update", (dt: number) => {
     const hit = direction.length() > 0.00001 ? voxelRaycast(from, direction, direction.length(), readCollisionWorldBlock) : null;
     if (hit) next.copy(from).add(direction.normalize().mulScalar(hit.distance));
     projectile.entity.setPosition(next);
+    if (projectile.rapidStyle === "crescent") {
+      const pulse = 1 + Math.sin(animationTime * 28) * .12;
+      projectile.entity.setLocalScale(.72 * pulse, .07, .2 * pulse);
+    } else if (projectile.rapidStyle === "orb") {
+      const pulse = 1 + Math.sin(animationTime * 18) * .16;
+      projectile.entity.setLocalScale(.42 * pulse, .42 * pulse, .42 * pulse);
+    }
     if (projectile.enemy && projectile.sampled && !projectile.nearMissPlayed && !hit && worldReady && potionHealth > 0
       && !document.hidden && wildernessTerritoryAt(localPlayer.getPosition().x, localPlayer.getPosition().z) !== null) {
       const player = localPlayer.getPosition();
@@ -15597,15 +15609,15 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       abilityPractice.hidden = false;
     }
   });
-  room.onMessage("practice:reward", (reward: { wave: number; rare: boolean; message: string; x: number; y: number; z: number;
+  room.onMessage("practice:reward", (reward: { wave: number; rare: boolean; weapon: boolean; message: string; x: number; y: number; z: number;
     choices: { id: string; name: string; detail: string }[] }) => {
     if (!rapidPrototypeRequested || !rapidPracticeRewardPanel || !rapidPracticeRewardChoices) return;
     resetMovementControls();
     lootPickupBurst({ itemId: reward.rare ? "matriarch_edge" : "forged_sword", quantity: reward.rare ? 3 : 1,
       x: reward.x, y: reward.y, z: reward.z, expiresAt: Date.now() + 10_000 });
-    createRangedPopup(new pc.Vec3(reward.x, reward.y + 2.2, reward.z), reward.rare ? "RARE WARDEN RELIC" : "UPGRADE DROP", "landmark");
+    createRangedPopup(new pc.Vec3(reward.x, reward.y + 2.2, reward.z), reward.rare ? "RARE WARDEN RELIC" : reward.weapon ? "WEAPON DROP" : "UPGRADE DROP", "landmark");
     combatAudio.play(reward.rare ? "levelUp" : "lootPickup");
-    rapidPracticeRewardTitle!.textContent = reward.rare ? "Warden Relic" : `Wave ${reward.wave} Cleared`;
+    rapidPracticeRewardTitle!.textContent = reward.weapon ? "Choose Your Weapon" : reward.rare ? "Warden Relic" : `Wave ${reward.wave} Cleared`;
     rapidPracticeRewardDetail!.textContent = reward.message;
     rapidPracticeRewardChoices.innerHTML = reward.choices.map(choice => `<button type="button" data-upgrade="${choice.id}"><strong>${choice.name}</strong><span>${choice.detail}</span></button>`).join("");
     rapidPracticeRewardChoices.querySelectorAll<HTMLElement>("button").forEach(button => {
@@ -15616,7 +15628,8 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     rapidPracticeRewardPanel.hidden = false;
     rapidPracticeRewardChoices.querySelector<HTMLButtonElement>("button")?.focus();
   });
-  room.onMessage("practice:reward-applied", (reward: { name: string; rare: boolean; damage: number; haste: number; vitality: number; relics: number }) => {
+  room.onMessage("practice:reward-applied", (reward: { name: string; rare: boolean; weapon?: boolean; mainHandId?: MainHandId;
+    damage: number; haste: number; vitality: number; relics: number }) => {
     rapidPracticeHaste = reward.haste;
     if (rapidPracticeRewardPanel) rapidPracticeRewardPanel.hidden = true;
     const detail = document.querySelector<HTMLElement>("#rapid-prototype-badge span");
@@ -15973,15 +15986,16 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   });
   room.onMessage("combat:projectile", (message: WeaponAttackReleased) => {
     createWeaponProjectile(message);
-    logMovementEvent(`${message.mainHandId === "bow" ? "ARROW" : "ARCANE"} RELEASED`);
+    logMovementEvent(`${message.rapidStyle?.toUpperCase() ?? (message.mainHandId === "bow" ? "ARROW" : "ARCANE")} RELEASED`);
   });
   room.onMessage("combat:projectile-resolved", (message: ProjectileResolved) => {
     const cue = projectileImpactCue(message.projectileId, message.reason);
     const point = new pc.Vec3(message.x, message.y, message.z);
     const index = weaponProjectileVisuals.findIndex(projectile => projectile.projectileId === message.projectileId);
     const weapon = projectileWeapons.get(message.projectileId);
-    const style = rangedStyle(weapon ?? "magic_focus");
+    const style = rangedStyle(weapon ?? "magic_focus", projectileRapidStyles.get(message.projectileId));
     projectileWeapons.delete(message.projectileId);
+    projectileRapidStyles.delete(message.projectileId);
     if (cue && localPlayer.getPosition().distance(point) <= 18)
       createRangedPopup(point, cue === "enemy" ? style.glyph : "•", cue, false, cue === "enemy" ? style.color : undefined);
     if (index >= 0) {
@@ -16736,6 +16750,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     weaponProjectileVisuals.length = 0;
     nextNearMissAt = 0;
     projectileWeapons.clear();
+    projectileRapidStyles.clear();
     for (const hazard of mobHazardVisuals.values()) hazard.root.destroy();
     mobHazardVisuals.clear();
     for (const binding of thornBindingVisuals.values()) { binding.root.destroy(); binding.material.destroy(); }

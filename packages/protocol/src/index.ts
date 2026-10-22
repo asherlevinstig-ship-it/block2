@@ -1918,6 +1918,8 @@ export interface WeaponAttackReleased {
   targetY: number;
   targetZ: number;
   travelMs: number;
+  /** Speed Lab-only visual identity; absent in the standard game. */
+  rapidStyle?: "crescent" | "arrow" | "orb";
 }
 
 export interface ProjectileResolved {

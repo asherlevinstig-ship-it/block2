@@ -59,9 +59,10 @@ import { mobSimulationActive } from "./mob-activation.js";
 import { SERVER_TICK_BUDGET_MS, appendTickSample, samplePercentile } from "./performance-metrics.js";
 import { EMPTY_RAPID_PRACTICE_UPGRADES, RAPID_PRACTICE_ARENA, RAPID_PRACTICE_BOSS_ID,
   RAPID_PRACTICE_SPAWNS, RAPID_PRACTICE_UPGRADE_LABELS, RAPID_PRACTICE_WAVES,
-  applyRapidPracticeUpgrade, rapidPracticeAttackTiming,
+  RAPID_PRACTICE_WEAPON_CHOICES, applyRapidPracticeUpgrade, rapidPracticeAttackTiming,
   rapidPracticeMovementSpeed, rapidPracticeProjectileFan, rapidPracticeProjectileTravelMs,
-  type RapidPracticeUpgradeId, type RapidPracticeUpgrades } from "./rapid-practice.js";
+  rapidPracticeWeaponProfile, type RapidPracticeProjectileStyle, type RapidPracticeUpgradeId,
+  type RapidPracticeUpgrades, type RapidPracticeWeaponChoiceId } from "./rapid-practice.js";
 import type { ServerPerformanceUpdate } from "@blockcraft/protocol";
 import { regionalPackRewardDefeat, regionalPackRewardItems, regionalPackRewardNotice,
   type RegionalPackRewardCycle, type RegionalPackRewardKind } from "./regional-pack-rewards.js";
@@ -422,6 +423,10 @@ interface PendingWeaponProjectile extends PendingAttack {
   end: { x: number; y: number; z: number };
   position: { x: number; y: number; z: number };
   startedAt: number;
+  rapidStyle?: RapidPracticeProjectileStyle;
+  pierceRemaining?: number;
+  hitIds?: Set<string>;
+  splashRadius?: number;
 }
 
 interface ActiveMobHazard {
@@ -646,7 +651,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private rapidPractice = false;
   private rapidPracticeWave = 1;
   private rapidPracticeWaveAdvanceAt = 0;
-  private readonly rapidPracticePendingRewards = new Map<string, { wave: number; rare: boolean }>();
+  private readonly rapidPracticePendingRewards = new Map<string, { wave: number; rare: boolean; weapon: boolean }>();
   private readonly rapidPracticeUpgrades = new Map<string, RapidPracticeUpgrades>();
   private practiceReturnRoomId = new Map<string, string>();
   private silverInstanceKey = "";
@@ -2448,25 +2453,33 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (activeIds.some(id => this.state.mobs.get(id)?.alive)) { this.rapidPracticeWaveAdvanceAt = 0; return; }
     if (this.rapidPracticeWaveAdvanceAt === 0) {
       this.rapidPracticeWaveAdvanceAt = Number.MAX_SAFE_INTEGER;
-      this.broadcast("practice:state", { active: true, wave: this.rapidPracticeWave,
-        message: this.rapidPracticeWave === 3 ? "WARDEN DEFEATED · rare relic dropped" : `WAVE ${this.rapidPracticeWave} CLEARED · choose one upgrade` });
       const rare = this.rapidPracticeWave === 3;
+      const weapon = this.rapidPracticeWave === 1;
+      this.broadcast("practice:state", { active: true, wave: this.rapidPracticeWave,
+        message: rare ? "WARDEN DEFEATED · rare relic dropped"
+          : weapon ? "WAVE 1 CLEARED · choose your weapon" : `WAVE ${this.rapidPracticeWave} CLEARED · choose one upgrade` });
       const source = this.state.mobs.get(rare ? RAPID_PRACTICE_BOSS_ID : activeIds[activeIds.length - 1]!)
         ?? RAPID_PRACTICE_ARENA.spawn;
-      const choices = (Object.keys(RAPID_PRACTICE_UPGRADE_LABELS) as RapidPracticeUpgradeId[]).map(id => ({
-        id,
-        name: rare ? `Warden ${RAPID_PRACTICE_UPGRADE_LABELS[id].name}` : RAPID_PRACTICE_UPGRADE_LABELS[id].name,
-        detail: rare ? RAPID_PRACTICE_UPGRADE_LABELS[id].detail.replace("+1", "+2").replace("10%", "20%").replace("+5", "+10")
-          : RAPID_PRACTICE_UPGRADE_LABELS[id].detail,
-      }));
+      const choices = weapon
+        ? (Object.keys(RAPID_PRACTICE_WEAPON_CHOICES) as RapidPracticeWeaponChoiceId[]).map(id => ({
+          id, name: RAPID_PRACTICE_WEAPON_CHOICES[id].name, detail: RAPID_PRACTICE_WEAPON_CHOICES[id].detail,
+        }))
+        : (Object.keys(RAPID_PRACTICE_UPGRADE_LABELS) as RapidPracticeUpgradeId[]).map(id => ({
+          id,
+          name: rare ? `Warden ${RAPID_PRACTICE_UPGRADE_LABELS[id].name}` : RAPID_PRACTICE_UPGRADE_LABELS[id].name,
+          detail: rare ? RAPID_PRACTICE_UPGRADE_LABELS[id].detail.replace("+1", "+2").replace("10%", "20%").replace("+5", "+10")
+            : RAPID_PRACTICE_UPGRADE_LABELS[id].detail,
+        }));
       for (const client of this.clients) {
         const player = this.state.players.get(client.sessionId);
         if (!player || player.health <= 0) continue;
         player.invulnerableUntil = now + 600_000;
-        this.rapidPracticePendingRewards.set(client.sessionId, { wave: this.rapidPracticeWave, rare });
-        client.send("practice:reward", { wave: this.rapidPracticeWave, rare, choices,
+        this.rapidPracticePendingRewards.set(client.sessionId, { wave: this.rapidPracticeWave, rare, weapon });
+        client.send("practice:reward", { wave: this.rapidPracticeWave, rare, weapon, choices,
           x: source.x, y: source.y, z: source.z,
-          message: rare ? "WARDEN RELIC · choose one permanent run upgrade" : "QUICK UPGRADE · choose one and keep moving" });
+          message: rare ? "WARDEN RELIC · choose one permanent run upgrade"
+            : weapon ? "CHOOSE YOUR WEAPON · change your attack, not just its numbers"
+              : "QUICK UPGRADE · choose one and keep moving" });
       }
       return;
     }
@@ -2480,7 +2493,26 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const player = this.state.players.get(client.sessionId);
     const upgradeId = typeof payload === "object" && payload && "upgradeId" in payload
       ? payload.upgradeId : null;
-    if (!pending || !player || typeof upgradeId !== "string" || !Object.hasOwn(RAPID_PRACTICE_UPGRADE_LABELS, upgradeId)) return;
+    if (!pending || !player || typeof upgradeId !== "string") return;
+    if (pending.weapon) {
+      if (!Object.hasOwn(RAPID_PRACTICE_WEAPON_CHOICES, upgradeId)) return;
+      const choice = RAPID_PRACTICE_WEAPON_CHOICES[upgradeId as RapidPracticeWeaponChoiceId];
+      const hand = MAIN_HAND_DEFINITIONS[choice.mainHandId];
+      player.mainHandId = hand.id; player.mainHandTag = hand.tag;
+      player.health = Math.min(player.maxHealth, player.health + 4);
+      player.stamina = player.maxStamina;
+      player.invulnerableUntil = Date.now() + 1_000;
+      this.attackChains.delete(client.sessionId);
+      this.pendingAttacks.delete(client.sessionId);
+      this.cancelWeaponProjectiles(client.sessionId);
+      this.rapidPracticePendingRewards.delete(client.sessionId);
+      this.rapidPracticeWaveAdvanceAt = Date.now() + 700;
+      const upgrades = this.rapidPracticeUpgrades.get(client.sessionId) ?? { ...EMPTY_RAPID_PRACTICE_UPGRADES };
+      client.send("practice:reward-applied", { upgradeId, rare: false, weapon: true, mainHandId: hand.id,
+        ...upgrades, name: choice.name });
+      return;
+    }
+    if (!Object.hasOwn(RAPID_PRACTICE_UPGRADE_LABELS, upgradeId)) return;
     const id = upgradeId as RapidPracticeUpgradeId;
     const previous = this.rapidPracticeUpgrades.get(client.sessionId) ?? { ...EMPTY_RAPID_PRACTICE_UPGRADES };
     const next = applyRapidPracticeUpgrade(previous, id, pending.rare);
@@ -10251,7 +10283,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
 
   private resolvePendingAttacks(now: number): void {
     for (const [sessionId, pending] of this.pendingAttacks) {
-      const strike = playerMeleeStrike(pending.mainHandId, pending.step);
+      const rapidWeapon = rapidPracticeWeaponProfile(pending.mainHandId, this.rapidPractice);
+      const strike = rapidWeapon ? null : playerMeleeStrike(pending.mainHandId, pending.step);
       if (strike) {
         const start = pending.impactAt - strike.beforeImpactMs;
         const end = pending.impactAt + strike.afterImpactMs;
@@ -10310,6 +10343,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const attackDefinition = WEAPON_ATTACK_DEFINITIONS[pending.mainHandId];
       const timing = attackDefinition.attacks[pending.step - 1] ?? attackDefinition.attacks[0];
       if (!timing) continue;
+      const effectiveRange = rapidWeapon?.range ?? attackDefinition.range;
       const targets = [...this.state.mobs.entries()].map(([id, mob]) => ({
         id,
         x: mob.x,
@@ -10320,17 +10354,19 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const target = selectAttackTarget(
         player,
         pending.yaw,
-        attackDefinition.projectileTravelMs > 0 ? targets : targets.filter(target => hasCombatLineOfSight(player, target, this.readWorldBlock)),
-        attackDefinition.range,
+        attackDefinition.projectileTravelMs > 0 || rapidWeapon ? targets
+          : targets.filter(target => hasCombatLineOfSight(player, target, this.readWorldBlock)),
+        effectiveRange,
         attackDefinition.minimumFacingDot,
       );
-      if (attackDefinition.projectileTravelMs > 0) {
-        const projectileTravelMs = rapidPracticeProjectileTravelMs(attackDefinition.projectileTravelMs, this.rapidPractice);
+      if (attackDefinition.projectileTravelMs > 0 || rapidWeapon) {
+        const projectileTravelMs = rapidWeapon?.travelMs
+          ?? rapidPracticeProjectileTravelMs(attackDefinition.projectileTravelMs, this.rapidPractice);
         const radians = pending.yaw * Math.PI / 180;
         const endpoint = {
-          x: player.x + Math.sin(radians) * attackDefinition.range,
+          x: player.x + Math.sin(radians) * effectiveRange,
           y: player.y,
-          z: player.z + Math.cos(radians) * attackDefinition.range,
+          z: player.z + Math.cos(radians) * effectiveRange,
         };
         const projectileId = `weapon:${sessionId}:${++this.weaponProjectileSequence}`;
         const start = { x: player.x, y: player.y + 1.05, z: player.z };
@@ -10338,6 +10374,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         this.pendingWeaponProjectiles.set(projectileId, {
           ...pending, projectileId, attackerId: sessionId,
           start, end, position: start, startedAt: now, impactAt: now + projectileTravelMs,
+          rapidStyle: rapidWeapon?.style,
+          pierceRemaining: rapidWeapon?.pierce,
+          hitIds: rapidWeapon ? new Set<string>() : undefined,
+          splashRadius: rapidWeapon?.splashRadius,
         });
         this.broadcast("combat:projectile", {
           projectileId,
@@ -10351,6 +10391,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           targetZ: endpoint.z,
           travelMs: projectileTravelMs,
           releasedAt: now,
+          rapidStyle: rapidWeapon?.style,
         } satisfies WeaponAttackReleased);
         continue;
       }
@@ -10373,24 +10414,40 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       }
       const progress = Math.max(0, Math.min(1, (now - projectile.startedAt) / (projectile.impactAt - projectile.startedAt)));
       const next = flightPoint(projectile.start, projectile.end, progress);
-      const targets = [...this.state.mobs.entries()].filter(([, mob]) => mob.alive)
+      const targets = [...this.state.mobs.entries()].filter(([id, mob]) => mob.alive && !projectile.hitIds?.has(id))
         .map(([id, mob]) => ({ id, x: mob.x, y: mob.y, z: mob.z, radius: mob.archetype === "stone_brute" ? 0.55 : 0.38 }));
       for (const [targetId] of this.thornBindings) {
         const target = this.state.players.get(targetId);
-        if (target) targets.push({ id: `thorn-binding:${targetId}`, x: target.x, y: target.y, z: target.z, radius: .55 });
+        const bindingId = `thorn-binding:${targetId}`;
+        if (target && !projectile.hitIds?.has(bindingId))
+          targets.push({ id: bindingId, x: target.x, y: target.y, z: target.z, radius: .55 });
       }
       const collision = projectileImpact(projectile.position, next, targets, this.readWorldBlock);
       projectile.position = next;
       if (!collision && progress < 1) continue;
-      this.pendingWeaponProjectiles.delete(projectileId);
       const point = collision?.point ?? next;
-      this.resolveProjectileVisual(projectileId, point, collision?.kind === "terrain" ? "terrain" : collision ? "hit" : "miss");
       if (collision?.kind === "entity" && collision.targetId) {
-        if (collision.targetId.startsWith("thorn-binding:")) this.damageThornBinding(collision.targetId.slice("thorn-binding:".length), projectile.attackerId);
-        else this.applyWeaponHit(projectile.attackerId, projectile, collision.targetId, now, projectile.start);
+        const firstHit = !projectile.hitIds?.size;
+        (projectile.hitIds ??= new Set()).add(collision.targetId);
+        const hitPending = firstHit ? projectile : { ...projectile, requestId: "rapid-pierce" };
+        if (collision.targetId.startsWith("thorn-binding:"))
+          this.damageThornBinding(collision.targetId.slice("thorn-binding:".length), projectile.attackerId);
+        else {
+          const target = this.state.mobs.get(collision.targetId);
+          this.applyWeaponHit(projectile.attackerId, hitPending, collision.targetId, now, projectile.start);
+          if (target && (projectile.splashRadius ?? 0) > 0)
+            this.applyEquipmentAreaDamage(projectile.attackerId, collision.targetId, target, now,
+              projectile.mainHandId, projectile.step, projectile.splashRadius!, 1, "echo_chain", 4);
+        }
+        if ((projectile.pierceRemaining ?? 1) > 1 && progress < 1) {
+          projectile.pierceRemaining = (projectile.pierceRemaining ?? 1) - 1;
+          continue;
+        }
       } else this.broadcast("combat:miss", {
         attackerId: projectile.attackerId, mainHandId: projectile.mainHandId, comboStep: projectile.step,
       } satisfies CombatMiss);
+      this.pendingWeaponProjectiles.delete(projectileId);
+      this.resolveProjectileVisual(projectileId, point, collision?.kind === "terrain" ? "terrain" : collision ? "hit" : "miss");
       if (!collision?.targetId && projectile.requestId.startsWith("attack-"))
         this.sendCombatTiming(projectile.attackerId, { requestId: projectile.requestId, action: "attack", phase: "resolved", serverTime: now, outcome: "miss" });
     }
@@ -10621,6 +10678,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       let damage = damageAfterArmor(
         timing.damage + ironSwordDamageBonus(player.blacksmithUpgrades, pending.mainHandId)
           + (this.rapidPracticeUpgrades.get(sessionId)?.damage ?? 0)
+          + (rapidPracticeWeaponProfile(pending.mainHandId, this.rapidPractice)?.bonusDamage ?? 0)
           + reforgeWeaponDamageBonus(equipmentReforgeRank(player.reforgeRanksJson, pending.mainHandId))
           + progressionAttackBonus(player) + this.specialDamageBonus(sessionId, mobId, now) + perkBonusDamage + setBonusDamage
           + this.buildPathDamageBonus(player, mob, mobId, sessionId, now, "weapon") + shadowstepDamage + markStrikeBonus + pinBonusDamage

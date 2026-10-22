@@ -25,4 +25,14 @@ describe("ranged weapon identity", () => {
     expect(acid.hitSound).not.toBe(venom.hitSound);
     expect(rangedStyle("forged_bow")).toEqual(bow);
   });
+  it("gives every Speed Lab weapon a distinct projectile silhouette", () => {
+    const sword = rangedStyle("forged_sword", "crescent");
+    const bow = rangedStyle("forged_bow", "arrow");
+    const focus = rangedStyle("forged_focus", "orb");
+    expect(sword.shape).toBe("box"); expect(bow.shape).toBe("box"); expect(focus.shape).toBe("sphere");
+    expect(sword.scale[0]).toBeGreaterThan(bow.scale[0]!);
+    expect(bow.scale[2]).toBeGreaterThan(sword.scale[2]!);
+    expect(focus.color).not.toEqual(sword.color);
+    expect(new Set([sword.glyph, bow.glyph, focus.glyph]).size).toBe(3);
+  });
 });

@@ -1,5 +1,15 @@
 import type { MainHandId } from "@blockcraft/protocol";
-export function rangedStyle(weapon: MainHandId) {
+export type RapidProjectileStyle = "crescent" | "arrow" | "orb";
+export function rangedStyle(weapon: MainHandId, rapidStyle?: RapidProjectileStyle) {
+  if (rapidStyle === "crescent") return {
+    shape: "box" as const, color: [.28, .94, 1], scale: [.72, .07, .2], glyph: "◖", hitSound: "rangedHit" as const,
+  };
+  if (rapidStyle === "arrow") return {
+    shape: "box" as const, color: [1, .78, .22], scale: [.045, .045, .95], glyph: "➤", hitSound: "rangedHit" as const,
+  };
+  if (rapidStyle === "orb") return {
+    shape: "sphere" as const, color: [.7, .32, 1], scale: [.42, .42, .42], glyph: "✹", hitSound: "rangedHit" as const,
+  };
   if (weapon === "bow" || weapon === "forged_bow") return {
     shape: "box" as const, color: [.93, .76, .34], scale: [.065, .065, .72], glyph: "✧", hitSound: "rangedHit" as const,
   };
