@@ -36,7 +36,7 @@ import { createPlayerInteractionUI, type PlayerInteractionView } from "./player-
 import type { RealmEventUpdate } from "@blockcraft/protocol";
 import { ATTUNEMENT_FOCUS_COST, ATTUNEMENT_REROLL_COST, ATTUNEMENT_UPGRADE_COST, EQUIPMENT_AFFIXES, EQUIPMENT_AFFIX_RESONANCE,
   equipmentAffixEffect, equipmentAffixResonanceForLoadout,
-  type EquipmentAffixId, type EquipmentAffixOffers, type EquipmentAffixRoll, type EquipmentAffixUpdate, type EquipmentHuntTarget } from "@blockcraft/protocol";
+  type EquipmentAffixId, type EquipmentAffixProc, type EquipmentAffixOffers, type EquipmentAffixRoll, type EquipmentAffixUpdate, type EquipmentHuntTarget } from "@blockcraft/protocol";
 import { DODGE_EXHAUSTION_MS, dodgeChainStaminaCost, nextDodgeChain, type DodgePressureUpdate } from "@blockcraft/protocol";
 import { equipmentForItem, armourForItem, utilityForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE,
   decodeLootBagItems, encodeLootBagItems, lootBagRepresentative, lootBagTierForItems,
@@ -3833,6 +3833,7 @@ lootPackSalvage.addEventListener("click", () => collectInspectedLoot("dismantle"
 const inventoryCounts = new Map<ItemId, number>(Object.keys(ITEM_DEFINITIONS).map(itemId => [itemId as ItemId, 0]));
 let blacksmithReforgeRanks: EquipmentReforgeRanks = {};
 let equipmentAffixes: Partial<Record<ItemId, EquipmentAffixRoll>> = {};
+const announcedEquipmentResonances = new Set<BuildPathId>();
 let equipmentAffixOffers: EquipmentAffixOffers = {};
 let attunementDust = 0;
 let equipmentTargetAffixId: keyof typeof EQUIPMENT_AFFIXES | null = null;
@@ -8810,6 +8811,30 @@ function regionalArmourBurst(proc: RegionalArmourProc): void {
     miningChips.push({ entity, origin,
       velocity: new pc.Vec3(Math.sin(angle) * .45, .85, Math.cos(angle) * .45), startedAt: performance.now() });
   }
+}
+
+function equipmentAffixBurst(proc: EquipmentAffixProc): void {
+  const pathId = EQUIPMENT_AFFIXES[proc.affixId].pathId;
+  const material = pathId === "mage" || pathId === "assassin" ? rarityLootMaterials.epic
+    : pathId === "thief" || pathId === "healer" ? rarityLootMaterials.uncommon : rarityLootMaterials.rare;
+  const color: Record<BuildPathId, readonly number[]> = {
+    tank: [.42, .82, 1], mage: [.72, .4, 1], assassin: [1, .24, .4],
+    thief: [.36, 1, .62], ranger: [1, .72, .22], healer: [.48, 1, .78],
+  };
+  const origin = new pc.Vec3(proc.x, proc.y + .55, proc.z);
+  for (let index = 0; index < 7; index++) {
+    if (miningChips.length >= 24) miningChips.shift()!.entity.destroy();
+    const angle = index / 7 * Math.PI * 2;
+    const entity = addBox(app.root, `affix-${proc.affixId}-spark`, material, [.06, .06, .06],
+      [origin.x + Math.sin(angle) * .24, origin.y, origin.z + Math.cos(angle) * .24]);
+    if (entity.render) entity.render.castShadows = false;
+    miningChips.push({ entity, origin: origin.clone(),
+      velocity: new pc.Vec3(Math.sin(angle) * .72, .8 + index % 2 * .18, Math.cos(angle) * .72), startedAt: performance.now() });
+  }
+  createRangedPopup(new pc.Vec3(proc.x, proc.y + 1.85, proc.z), proc.label, "melee", false, color[pathId]);
+  combatAudio.play(pathId === "tank" ? "callingTank" : pathId === "mage" || pathId === "healer" ? "callingMage"
+    : pathId === "assassin" ? "callingShadow" : pathId === "thief" ? "callingThief" : "callingRanger",
+  enemyCuePan(proc.x, localPlayer.getPosition().x, 14));
 }
 
 function northwatchShardBurst(): void {
@@ -15452,7 +15477,10 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       message.empowered ? `MARK STRUCK · +${message.bonusDamage}` : "MARK BROKEN", "melee", message.defeated, [1, .22, .32]);
   });
   room.onMessage("calling:state", (state: CallingStateUpdate) => updateCallingPersistentState(state));
+  room.onMessage("equipment:affix-proc", (proc: EquipmentAffixProc) => equipmentAffixBurst(proc));
   room.onMessage("equipment:affixes", (update: EquipmentAffixUpdate) => {
+    const previousResonance = equipmentAffixResonanceForLoadout(itemForMainHand(localMainHandId),
+      localArmourId === "none" ? null : localArmourId as ItemId, equipmentAffixes);
     equipmentAffixes = update.affixes ?? {};
     equipmentAffixOffers = update.offers ?? equipmentAffixOffers;
     attunementDust = update.dust ?? attunementDust;
@@ -15463,6 +15491,17 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     if (inventoryPreviewDrawer.open) refreshInventoryPreview();
     if (blacksmithShopTab === "attunement") renderAttunementShop();
     if (update.message && !update.message.startsWith("Equipment attunements strengthen")) status.textContent = update.message;
+    const handItem = itemForMainHand(localMainHandId);
+    const armourItem = localArmourId === "none" ? null : localArmourId as ItemId;
+    const resonance = equipmentAffixResonanceForLoadout(handItem, armourItem, equipmentAffixes);
+    if (resonance && resonance !== previousResonance && !announcedEquipmentResonances.has(resonance)) {
+      announcedEquipmentResonances.add(resonance);
+      const roll = handItem ? equipmentAffixes[handItem] : undefined;
+      const position = localPlayer.getPosition();
+      if (worldReady && roll) equipmentAffixBurst({ affixId: roll.affixId, tier: roll.tier,
+        label: `${EQUIPMENT_AFFIX_RESONANCE[resonance].name.toUpperCase()} RESONANCE`, x: position.x, y: position.y, z: position.z });
+      social.event(`${EQUIPMENT_AFFIX_RESONANCE[resonance].name.toUpperCase()} RESONANCE ACTIVE · matching ${BUILD_PATHS[resonance].name} equipment strengthened.`);
+    }
   });
   room.onMessage("build:path-proc", (proc: BuildPathProc) => {
     if (localCombatActive()) {

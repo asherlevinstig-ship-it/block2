@@ -435,6 +435,8 @@ export const EQUIPMENT_AFFIXES = {
 export type EquipmentAffixId = keyof typeof EQUIPMENT_AFFIXES;
 export type EquipmentAffixRoll = { affixId: EquipmentAffixId; tier: 1 | 2 | 3 };
 export type EquipmentAffixOffers = Partial<Record<ItemId, EquipmentAffixId[]>>;
+export type EquipmentAffixProc = { affixId: EquipmentAffixId; tier: number; label: string;
+  x: number; y: number; z: number };
 export function equipmentAffixEffect(affixId: EquipmentAffixId, tier: number): string {
   const value = Math.max(1, Math.min(4, Math.floor(tier)));
   switch (affixId) {

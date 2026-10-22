@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { attunementDustCost, attunementDustYield, keepBetterAffix, parseEquipmentAffixes, parseEquipmentAffixOffers,
   rollEquipmentAffix, rollEquipmentAffixOptions, rollTargetedEquipmentAffix } from "./equipment-affixes.js";
 import { WorldRoom } from "./game-room.js";
-import { PlayerState } from "./schema.js";
+import { PlayerState, WorldState } from "./schema.js";
 
 describe("equipment affixes", () => {
   it("favours the active Calling while retaining off-build possibilities", () => {
@@ -65,5 +65,20 @@ describe("equipment affixes", () => {
     const player = new PlayerState(); player.x = 8.5; player.z = 8.5;
     room.setEquipmentAffixTarget(player, "mending");
     expect(room.equipmentHuntTarget(player)).toMatchObject({ affixId: "mending", regionId: "greenwood" });
+  });
+
+  it("emits equipped affix procs at the effect position without combat spam", () => {
+    const room = new WorldRoom() as any; room.setState(new WorldState());
+    const player = new PlayerState();
+    player.mainHandId = "fang_dagger";
+    player.huntLoadoutsJson = JSON.stringify({ affixes: { fang_dagger: { affixId: "lethal", tier: 2 } } });
+    room.state.players.set("hero", player);
+    const send = vi.fn(); Object.defineProperty(room, "clients", { value: [{ sessionId: "hero", send }] });
+    room.equipmentAffixProc("hero", "lethal", "LETHAL +2", { x: 4, y: 8, z: 6 }, 1_000);
+    room.equipmentAffixProc("hero", "lethal", "LETHAL +2", { x: 4, y: 8, z: 6 }, 1_100);
+    room.equipmentAffixProc("hero", "lethal", "LETHAL +2", { x: 4, y: 8, z: 6 }, 1_400);
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(send).toHaveBeenLastCalledWith("equipment:affix-proc",
+      { affixId: "lethal", tier: 2, label: "LETHAL +2", x: 4, y: 8, z: 6 });
   });
 });
