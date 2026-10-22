@@ -15,6 +15,13 @@ export interface VoxelCharacterPose {
   rightArmPitch: number;
   leftLegPitch: number;
   rightLegPitch: number;
+  leftLegRoll: number;
+  rightLegRoll: number;
+}
+
+export interface LocomotionDirection {
+  forward: number;
+  strafe: number;
 }
 
 export interface PrimaryActionPose {
@@ -90,7 +97,26 @@ export function advanceLocomotionAnimation(
   const weight = previous.weight + (targetWeight - previous.weight) * (1 - Math.exp(-Math.max(0, deltaSeconds) * response));
   return {
     weight: weight < 0.001 ? 0 : weight,
-    phase: previous.phase + deltaSeconds * (4.5 + weight * 5.5),
+    // Cadence follows real travel speed, so the faster 2.5D movement does not
+    // look like the character is skating across the floor.
+    phase: previous.phase + deltaSeconds * (4.5 + Math.min(1.4, speed / 4.2) * 5.5) * Math.max(.18, weight),
+  };
+}
+
+/** Resolve world travel into the character's facing space. This lets an aimed
+ * character visibly strafe and backpedal instead of playing a forward run. */
+export function locomotionDirection(
+  travelX: number,
+  travelZ: number,
+  facingYaw: number,
+): LocomotionDirection {
+  const length = Math.hypot(travelX, travelZ);
+  if (length < 0.00001) return { forward: 1, strafe: 0 };
+  const x = travelX / length, z = travelZ / length;
+  const radians = facingYaw * Math.PI / 180;
+  return {
+    forward: x * Math.sin(radians) + z * Math.cos(radians),
+    strafe: x * Math.cos(radians) - z * Math.sin(radians),
   };
 }
 
@@ -281,6 +307,7 @@ export function voxelCharacterPose(
   grounded: boolean,
   maximumSpeed = 4.2,
   locomotion?: LocomotionAnimationSample,
+  direction: LocomotionDirection = { forward: 1, strafe: 0 },
 ): VoxelCharacterPose {
   const movement = locomotion?.weight ?? Math.max(0, Math.min(1, speed / maximumSpeed));
   if (!grounded) {
@@ -300,28 +327,34 @@ export function voxelCharacterPose(
       rightArmPitch: rising ? -34 : -18,
       leftLegPitch: rising ? 16 : 8,
       rightLegPitch: rising ? -12 : -6,
+      leftLegRoll: 0,
+      rightLegRoll: 0,
     };
   }
 
   const phase = locomotion?.phase ?? elapsedSeconds * (4.5 + movement * 5.5);
   const stride = Math.sin(phase) * 32 * movement;
+  const forwardStride = stride * direction.forward;
+  const sideStride = stride * direction.strafe;
   const breath = Math.sin(elapsedSeconds * 1.9);
   return {
     // Keep the feet planted. In an angled top-down view even a small whole-body
     // bob reads as a hop when locomotion settles back to idle.
     bodyY: 0,
-    torsoPitch: -5 * movement + breath * 0.55 * (1 - movement),
-    torsoRoll: Math.sin(phase) * 1.6 * movement,
-    headYaw: Math.sin(phase * 0.5) * 1.5 * movement,
+    torsoPitch: (-3.5 - 2.5 * Math.max(0, direction.forward)) * movement + breath * 0.55 * (1 - movement),
+    torsoRoll: Math.sin(phase) * 1.6 * movement - direction.strafe * 4.5 * movement,
+    headYaw: Math.sin(phase * 0.5) * 1.5 * movement - direction.strafe * 2 * movement,
     headPitch: 3 * movement - breath * 0.4 * (1 - movement),
     leftElbowPitch: -8 - Math.max(0, Math.sin(phase)) * 17 * movement,
     rightElbowPitch: -8 - Math.max(0, -Math.sin(phase)) * 17 * movement,
     leftKneePitch: Math.max(0, -Math.sin(phase)) * 34 * movement,
     rightKneePitch: Math.max(0, Math.sin(phase)) * 34 * movement,
     scarfPitch: -10 - 28 * movement + Math.sin(phase - 0.8) * 7 * movement + breath * 2,
-    leftArmPitch: -stride * 0.7,
-    rightArmPitch: stride * 0.7,
-    leftLegPitch: stride,
-    rightLegPitch: -stride,
+    leftArmPitch: -forwardStride * 0.7 + sideStride * .22,
+    rightArmPitch: forwardStride * 0.7 + sideStride * .22,
+    leftLegPitch: forwardStride + Math.abs(sideStride) * .18,
+    rightLegPitch: -forwardStride - Math.abs(sideStride) * .18,
+    leftLegRoll: sideStride * .62,
+    rightLegRoll: -sideStride * .62,
   };
 }

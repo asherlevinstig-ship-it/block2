@@ -373,6 +373,7 @@ import {
   advanceTurnLean,
   eruptionPowerPose,
   lungePowerPose,
+  locomotionDirection,
   primaryActionPose,
   recentTravelSpeed,
   seismicPowerPose,
@@ -2965,19 +2966,24 @@ function animateVoxelCharacter(
   powerElapsedMilliseconds: number | null = null,
   powerId: PowerId | null = null,
   actionYaw?: number | null,
-  travelDistance = 0,
+  travelX = 0,
+  travelZ = 0,
   facingYaw?: number,
+  maximumAnimationSpeed = 4.2,
 ): void {
+  const travelDistance = Math.hypot(travelX, travelZ);
   const measuredSpeed = recentTravelSpeed(rig.travelFrames, travelDistance, deltaTime);
-  const animationSpeed = measuredSpeed < 0.12 ? 0 : Math.min(measuredSpeed, 4.2);
+  const animationSpeed = measuredSpeed < 0.12 ? 0 : Math.min(measuredSpeed, maximumAnimationSpeed);
   const locomotion = advanceLocomotionAnimation(
     { phase: rig.locomotionPhase, weight: rig.locomotionWeight },
     animationSpeed,
     deltaTime,
+    maximumAnimationSpeed,
   );
   rig.locomotionPhase = locomotion.phase;
   rig.locomotionWeight = locomotion.weight;
-  const pose = voxelCharacterPose(animationSpeed, time, verticalVelocity, grounded, 4.2, locomotion);
+  const direction = locomotionDirection(travelX, travelZ, facingYaw ?? 0);
+  const pose = voxelCharacterPose(animationSpeed, time, verticalVelocity, grounded, maximumAnimationSpeed, locomotion, direction);
   const yawDelta = facingYaw === undefined || rig.lastFacingYaw === null ? 0 : shortestYawDelta(rig.lastFacingYaw, facingYaw);
   rig.lastFacingYaw = facingYaw ?? rig.lastFacingYaw;
   rig.turnLean = advanceTurnLean(rig.turnLean, yawDelta, deltaTime);
@@ -3000,8 +3006,8 @@ function animateVoxelCharacter(
   rig.leftElbow.setLocalEulerAngles(pose.leftElbowPitch, 0, 0);
   rig.rightElbow.setLocalEulerAngles(pose.rightElbowPitch - 8, 0, 0);
   const pivot = rig.turnLean * (1 - locomotion.weight) * 6;
-  rig.leftLeg.setLocalEulerAngles(pose.leftLegPitch + pivot, 0, 0);
-  rig.rightLeg.setLocalEulerAngles(pose.rightLegPitch - pivot, 0, 0);
+  rig.leftLeg.setLocalEulerAngles(pose.leftLegPitch + pivot, 0, pose.leftLegRoll);
+  rig.rightLeg.setLocalEulerAngles(pose.rightLegPitch - pivot, 0, pose.rightLegRoll);
   rig.leftKnee.setLocalEulerAngles(pose.leftKneePitch, 0, 0);
   rig.rightKnee.setLocalEulerAngles(pose.rightKneePitch, 0, 0);
   rig.scarf.setLocalEulerAngles(pose.scarfPitch, 0, pose.torsoRoll * -1.5);
@@ -14282,7 +14288,9 @@ app.on("update", (dt: number) => {
   if (animationNow >= localHitPauseUntil) {
     animateVoxelCharacter(localPlayerRig, animationTime, frameTime, localVerticalVelocity, predicted.grounded || grounded,
       rapidCombatAnimationElapsed(localActionElapsed, rapidPrototypeRequested, rapidPracticeHaste), localActionStep, localActionMainHandId,
-      localPowerElapsed, localActivePower, localActionFacingYaw, moving ? collisionTravel : 0, localFacingYaw);
+      localPowerElapsed, localActivePower, localActionFacingYaw,
+      moving ? predicted.x - current.x : 0, moving ? predicted.z - current.z : 0, localFacingYaw,
+      rapidPrototypeRequested ? 5.8 : 4.2);
     if (localDefending) applyDefensePose(localPlayerRig);
     if (room) applyMageCastAnimation(room.sessionId, localPlayerRig, animationNow);
   }
@@ -14348,7 +14356,6 @@ app.on("update", (dt: number) => {
       remote.entity.enabled = undergroundKnown(pose.x, pose.y, pose.z)
         && visibilityNow >= (playerStealthUntil.get(id) ?? 0);
       const previousPosition = remote.entity.getPosition();
-      const remoteTravel = Math.hypot(pose.x - previousPosition.x, pose.z - previousPosition.z);
       const remoteVerticalVelocity = (pose.y - previousPosition.y) / Math.max(frameTime, 0.001);
       remote.entity.setPosition(pose.x, pose.y, pose.z);
       remote.entity.setEulerAngles(0, pose.yaw, 0);
@@ -14356,7 +14363,8 @@ app.on("update", (dt: number) => {
       const remotePowerElapsed = remote.powerStartedAt === null ? null : animationNow - remote.powerStartedAt;
       animateVoxelCharacter(remote.rig, animationTime, frameTime, remoteVerticalVelocity, true,
         rapidCombatAnimationElapsed(remoteActionElapsed, rapidPrototypeRequested, rapidPracticeHaste), remote.actionStep, remote.actionMainHandId,
-        remotePowerElapsed, remote.powerId, remote.entity.getEulerAngles().y, remoteTravel, pose.yaw);
+        remotePowerElapsed, remote.powerId, remote.entity.getEulerAngles().y,
+        pose.x - previousPosition.x, pose.z - previousPosition.z, pose.yaw, rapidPrototypeRequested ? 5.8 : 4.2);
       if (remote.defending) applyDefensePose(remote.rig);
       applyMageCastAnimation(id, remote.rig, animationNow);
       if (remoteActionElapsed !== null && remoteActionElapsed >= remoteActionDuration(remote.actionMainHandId, remote.actionStep)) {

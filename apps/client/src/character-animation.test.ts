@@ -7,6 +7,7 @@ import {
   advanceTurnLean,
   eruptionPowerPose,
   lungePowerPose,
+  locomotionDirection,
   primaryActionPose,
   recentTravelSpeed,
   seismicPowerPose,
@@ -197,6 +198,30 @@ describe("voxel character animation", () => {
     expect(turning).toBeGreaterThan(0);
     expect(turning).toBeLessThan(1);
     expect(advanceTurnLean(turning, 0, 1 / 60)).toBeLessThan(turning);
+  });
+
+  it("turns world travel into forward, backward and strafing gait", () => {
+    expect(locomotionDirection(0, 1, 0)).toEqual({ forward: 1, strafe: 0 });
+    expect(locomotionDirection(0, -1, 0)).toEqual({ forward: -1, strafe: 0 });
+    expect(locomotionDirection(1, 0, 0)).toEqual({ forward: 0, strafe: 1 });
+    expect(locomotionDirection(-1, 0, 0)).toEqual({ forward: 0, strafe: -1 });
+  });
+
+  it("uses lateral leg motion when circling an aimed target", () => {
+    const locomotion = { phase: Math.PI / 2, weight: 1 };
+    const forward = voxelCharacterPose(4.2, 0, 0, true, 4.2, locomotion, { forward: 1, strafe: 0 });
+    const strafe = voxelCharacterPose(4.2, 0, 0, true, 4.2, locomotion, { forward: 0, strafe: 1 });
+    expect(forward.leftLegRoll).toBe(0);
+    expect(strafe.leftLegRoll).toBeGreaterThan(15);
+    expect(strafe.rightLegRoll).toBeLessThan(-15);
+    expect(Math.abs(strafe.leftLegPitch)).toBeLessThan(Math.abs(forward.leftLegPitch));
+  });
+
+  it("increases cadence for the faster Speed Lab run", () => {
+    const normal = advanceLocomotionAnimation({ phase: 0, weight: 1 }, 4.2, 1 / 60, 4.2);
+    const rapid = advanceLocomotionAnimation({ phase: 0, weight: 1 }, 5.8, 1 / 60, 5.8);
+    expect(rapid.phase).toBeGreaterThan(normal.phase);
+    expect(rapid.weight).toBe(normal.weight);
   });
 
   it("finishes attack recovery without an abrupt pose reset", () => {
