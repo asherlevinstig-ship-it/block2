@@ -49,4 +49,25 @@ describe("private Calling practice", () => {
     expect(mob.alive).toBe(false);
     expect(mob.respawnAt).toBe(Number.MAX_SAFE_INTEGER);
   });
+
+  it("applies quick upgrades without saving or opening inventory", () => {
+    const { internal, player, client } = fixture();
+    internal.rapidPractice = true;
+    player.maxHealth = 30; player.health = 20;
+    internal.rapidPracticePendingRewards.set("trainee", { wave: 1, rare: false });
+    internal.chooseRapidPracticeUpgrade(client, { upgradeId: "bloodstone" });
+    expect(player.maxHealth).toBe(35);
+    expect(player.health).toBe(25);
+    expect(internal.rapidPracticeUpgrades.get("trainee")).toEqual({ damage: 0, haste: 0, vitality: 1, relics: 0 });
+    expect(client.send).toHaveBeenCalledWith("practice:reward-applied", expect.objectContaining({ upgradeId: "bloodstone", vitality: 1 }));
+  });
+
+  it("makes every Warden choice a doubled rare relic", () => {
+    const { internal, client } = fixture();
+    internal.rapidPractice = true;
+    internal.rapidPracticePendingRewards.set("trainee", { wave: 3, rare: true });
+    internal.chooseRapidPracticeUpgrade(client, { upgradeId: "swift_hands" });
+    expect(internal.rapidPracticeUpgrades.get("trainee")).toEqual({ damage: 0, haste: 2, vitality: 0, relics: 1 });
+    expect(client.send).toHaveBeenCalledWith("practice:reward-applied", expect.objectContaining({ rare: true, haste: 2, relics: 1 }));
+  });
 });

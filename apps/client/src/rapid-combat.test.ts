@@ -10,7 +10,9 @@ describe("rapid combat controls", () => {
 
   it("keeps the animation aligned with shortened recovery", () => {
     expect(rapidCombatDuration(600, true)).toBe(420);
+    expect(rapidCombatDuration(600, true, 1)).toBe(378);
     expect(rapidCombatDuration(600, false)).toBe(600);
     expect(rapidCombatAnimationElapsed(210, true)).toBe(300);
+    expect(rapidCombatAnimationElapsed(189, true, 1)).toBe(300);
   });
 });

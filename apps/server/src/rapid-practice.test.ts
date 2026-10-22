@@ -4,6 +4,8 @@ import {
   RAPID_PRACTICE_BOSS_ID,
   RAPID_PRACTICE_SPAWNS,
   RAPID_PRACTICE_WAVES,
+  EMPTY_RAPID_PRACTICE_UPGRADES,
+  applyRapidPracticeUpgrade,
   rapidPracticeAttackTiming,
   rapidPracticeMovementSpeed,
   rapidPracticeProjectileFan,
@@ -40,5 +42,13 @@ describe("rapid 2.5D practice", () => {
     expect(fan).toHaveLength(3);
     expect(fan.map(shot => shot.x)).toEqual([-0.72, 0, 0.72]);
     expect(rapidPracticeProjectileFan({ x: 0, z: 0 }, [{ x: 0, y: 1, z: 8 }], false)).toHaveLength(1);
+  });
+
+  it("stacks run upgrades and doubles Warden rewards", () => {
+    const damage = applyRapidPracticeUpgrade(EMPTY_RAPID_PRACTICE_UPGRADES, "razor_edge");
+    const rareHaste = applyRapidPracticeUpgrade(damage, "swift_hands", true);
+    expect(rareHaste).toEqual({ damage: 1, haste: 2, vitality: 0, relics: 1 });
+    expect(rapidPracticeAttackTiming({ durationMs: 600, impactMs: 280 }, true, rareHaste.haste))
+      .toEqual({ durationMs: 340, impactMs: 159 });
   });
 });

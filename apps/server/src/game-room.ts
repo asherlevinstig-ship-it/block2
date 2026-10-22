@@ -57,9 +57,11 @@ import { REGIONAL_PACK_DISRUPTION_MS, regionalPackCooldownMultiplier, regionalPa
   regionalPackSpeedMultiplier } from "./regional-pack-tactics.js";
 import { mobSimulationActive } from "./mob-activation.js";
 import { SERVER_TICK_BUDGET_MS, appendTickSample, samplePercentile } from "./performance-metrics.js";
-import { RAPID_PRACTICE_ARENA, RAPID_PRACTICE_BOSS_ID, RAPID_PRACTICE_RESTART_DELAY_MS, RAPID_PRACTICE_SPAWNS,
-  RAPID_PRACTICE_WAVE_DELAY_MS, RAPID_PRACTICE_WAVES, rapidPracticeAttackTiming, rapidPracticeMovementSpeed,
-  rapidPracticeProjectileFan, rapidPracticeProjectileTravelMs } from "./rapid-practice.js";
+import { EMPTY_RAPID_PRACTICE_UPGRADES, RAPID_PRACTICE_ARENA, RAPID_PRACTICE_BOSS_ID,
+  RAPID_PRACTICE_SPAWNS, RAPID_PRACTICE_UPGRADE_LABELS, RAPID_PRACTICE_WAVES,
+  applyRapidPracticeUpgrade, rapidPracticeAttackTiming,
+  rapidPracticeMovementSpeed, rapidPracticeProjectileFan, rapidPracticeProjectileTravelMs,
+  type RapidPracticeUpgradeId, type RapidPracticeUpgrades } from "./rapid-practice.js";
 import type { ServerPerformanceUpdate } from "@blockcraft/protocol";
 import { regionalPackRewardDefeat, regionalPackRewardItems, regionalPackRewardNotice,
   type RegionalPackRewardCycle, type RegionalPackRewardKind } from "./regional-pack-rewards.js";
@@ -644,6 +646,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private rapidPractice = false;
   private rapidPracticeWave = 1;
   private rapidPracticeWaveAdvanceAt = 0;
+  private readonly rapidPracticePendingRewards = new Map<string, { wave: number; rare: boolean }>();
+  private readonly rapidPracticeUpgrades = new Map<string, RapidPracticeUpgrades>();
   private practiceReturnRoomId = new Map<string, string>();
   private silverInstanceKey = "";
   private instancePartySize = 1;
@@ -801,9 +805,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (this.roomKind === "overworld") this.sendAshenReliquaryState(client, Date.now());
       this.sendHuntCollection(client);
       this.sendBuildPath(client);
-      if (this.roomKind === "practice") client.send("practice:state", { active: true, message: this.rapidPractice
-        ? "2.5D Speed Lab · 18-enemy wave · faster movement and projectiles · use G and F to compare every Calling."
-        : "Training arena · select any ability, then use G. F uses your Calling Special. Your character will not be changed." });
+      if (this.roomKind === "practice") client.send("practice:state", { active: true,
+        ...(this.rapidPractice ? { wave: this.rapidPracticeWave } : {}),
+        message: this.rapidPractice
+          ? "2.5D Speed Lab · clear three waves · choose upgrades · defeat the Warden · hold attack."
+          : "Training arena · select any ability, then use G. F uses your Calling Special. Your character will not be changed." });
       this.sendEquipmentAffixes(client);
       if (this.roomKind === "overworld") client.send("party:update", this.parties.snapshot(client.sessionId, this.state.players, Date.now()));
       if (this.roomKind === "overworld") for (const [key, lobby] of this.silverDepthsLobbies)
@@ -844,6 +850,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         .catch(() => client.send("practice:state", { active: false, message: "Your character could not be saved. Please try the arena again shortly." }));
     });
     this.onMessage("practice:select", (client, payload: unknown) => this.selectPracticeAbility(client, payload));
+    this.onMessage("practice:upgrade", (client, payload: unknown) => this.chooseRapidPracticeUpgrade(client, payload));
     this.onMessage("practice:menu", (client, payload: unknown) => {
       if (this.roomKind !== "practice") return;
       const player = this.state.players.get(client.sessionId);
@@ -1143,8 +1150,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (this.rapidPractice) player.maxHealth = Math.max(player.maxHealth, 30);
       player.health = player.maxHealth;
       player.stamina = player.maxStamina;
-      player.invulnerableUntil = Date.now() + 600_000;
+      player.invulnerableUntil = this.rapidPractice ? Date.now() + 1_500 : Date.now() + 600_000;
       this.setPracticeAbility(player, "assassin_vanish");
+      if (this.rapidPractice) this.rapidPracticeUpgrades.set(client.sessionId, { ...EMPTY_RAPID_PRACTICE_UPGRADES });
     }
     if (process.env.NODE_ENV !== "production" && (requestedQaSpawn === "combat" || requestedQaSpawn === "spitter" || requestedQaSpawn === "greenwood" || requestedQaSpawn === "stream")) {
       player.invulnerableUntil = Date.now() + 60 * 60 * 1000;
@@ -1242,6 +1250,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
     this.state.players.delete(client.sessionId);
     this.practiceReturnRoomId.delete(client.sessionId);
+    this.rapidPracticePendingRewards.delete(client.sessionId);
+    this.rapidPracticeUpgrades.delete(client.sessionId);
     for (let index = this.pendingIncomingHits.length - 1; index >= 0; index--)
       if (this.pendingIncomingHits[index]!.playerId === client.sessionId) this.pendingIncomingHits.splice(index, 1);
     this.silverDepthsRuns.delete(client.sessionId);
@@ -2413,19 +2423,77 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       message: wave === 3 ? "FINAL WAVE · Speed Lab Warden incoming" : `WAVE ${wave} · keep moving and hold attack` });
   }
 
+  private restartRapidPracticeRun(now: number): void {
+    const ids = new Set<string>(RAPID_PRACTICE_WAVES.flat());
+    for (const mobId of ids) {
+      const mob = this.state.mobs.get(mobId);
+      if (!mob) continue;
+      mob.alive = false; mob.health = 0; mob.respawnAt = Number.MAX_SAFE_INTEGER;
+      mob.targetId = ""; mob.combatState = "idle"; mob.stateUntil = 0;
+      this.clearMobAttackTimeline(mob);
+      this.pendingMobMelee.delete(mobId);
+      this.mobAwareness.delete(mobId);
+    }
+    for (const [projectileId, projectile] of this.pendingMobProjectiles) if (ids.has(projectile.mobId)) {
+      this.pendingMobProjectiles.delete(projectileId);
+      this.resolveProjectileVisual(projectileId, projectile.position, "miss");
+    }
+    this.rapidPracticePendingRewards.clear();
+    this.activateRapidPracticeWave(1, now);
+  }
+
   private advanceRapidPracticeWaves(now: number): void {
     if (!this.rapidPractice) return;
     const activeIds = RAPID_PRACTICE_WAVES[this.rapidPracticeWave - 1] ?? RAPID_PRACTICE_WAVES[0];
     if (activeIds.some(id => this.state.mobs.get(id)?.alive)) { this.rapidPracticeWaveAdvanceAt = 0; return; }
     if (this.rapidPracticeWaveAdvanceAt === 0) {
-      this.rapidPracticeWaveAdvanceAt = now + (this.rapidPracticeWave === 3
-        ? RAPID_PRACTICE_RESTART_DELAY_MS : RAPID_PRACTICE_WAVE_DELAY_MS);
+      this.rapidPracticeWaveAdvanceAt = Number.MAX_SAFE_INTEGER;
       this.broadcast("practice:state", { active: true, wave: this.rapidPracticeWave,
-        message: this.rapidPracticeWave === 3 ? "LAB CLEARED · restarting shortly" : `WAVE ${this.rapidPracticeWave} CLEARED` });
+        message: this.rapidPracticeWave === 3 ? "WARDEN DEFEATED · rare relic dropped" : `WAVE ${this.rapidPracticeWave} CLEARED · choose one upgrade` });
+      const rare = this.rapidPracticeWave === 3;
+      const source = this.state.mobs.get(rare ? RAPID_PRACTICE_BOSS_ID : activeIds[activeIds.length - 1]!)
+        ?? RAPID_PRACTICE_ARENA.spawn;
+      const choices = (Object.keys(RAPID_PRACTICE_UPGRADE_LABELS) as RapidPracticeUpgradeId[]).map(id => ({
+        id,
+        name: rare ? `Warden ${RAPID_PRACTICE_UPGRADE_LABELS[id].name}` : RAPID_PRACTICE_UPGRADE_LABELS[id].name,
+        detail: rare ? RAPID_PRACTICE_UPGRADE_LABELS[id].detail.replace("+1", "+2").replace("10%", "20%").replace("+5", "+10")
+          : RAPID_PRACTICE_UPGRADE_LABELS[id].detail,
+      }));
+      for (const client of this.clients) {
+        const player = this.state.players.get(client.sessionId);
+        if (!player || player.health <= 0) continue;
+        player.invulnerableUntil = now + 600_000;
+        this.rapidPracticePendingRewards.set(client.sessionId, { wave: this.rapidPracticeWave, rare });
+        client.send("practice:reward", { wave: this.rapidPracticeWave, rare, choices,
+          x: source.x, y: source.y, z: source.z,
+          message: rare ? "WARDEN RELIC · choose one permanent run upgrade" : "QUICK UPGRADE · choose one and keep moving" });
+      }
       return;
     }
     if (now < this.rapidPracticeWaveAdvanceAt) return;
     this.activateRapidPracticeWave(this.rapidPracticeWave === 3 ? 1 : this.rapidPracticeWave + 1, now);
+  }
+
+  private chooseRapidPracticeUpgrade(client: Client, payload: unknown): void {
+    if (!this.rapidPractice) return;
+    const pending = this.rapidPracticePendingRewards.get(client.sessionId);
+    const player = this.state.players.get(client.sessionId);
+    const upgradeId = typeof payload === "object" && payload && "upgradeId" in payload
+      ? payload.upgradeId : null;
+    if (!pending || !player || typeof upgradeId !== "string" || !Object.hasOwn(RAPID_PRACTICE_UPGRADE_LABELS, upgradeId)) return;
+    const id = upgradeId as RapidPracticeUpgradeId;
+    const previous = this.rapidPracticeUpgrades.get(client.sessionId) ?? { ...EMPTY_RAPID_PRACTICE_UPGRADES };
+    const next = applyRapidPracticeUpgrade(previous, id, pending.rare);
+    this.rapidPracticeUpgrades.set(client.sessionId, next);
+    const vitalityGained = (next.vitality - previous.vitality) * 5;
+    if (vitalityGained > 0) player.maxHealth = Math.min(127, player.maxHealth + vitalityGained);
+    player.health = Math.min(player.maxHealth, player.health + (vitalityGained || 4));
+    player.stamina = player.maxStamina;
+    player.invulnerableUntil = Date.now() + 1_000;
+    this.rapidPracticePendingRewards.delete(client.sessionId);
+    this.rapidPracticeWaveAdvanceAt = Date.now() + 700;
+    client.send("practice:reward-applied", { upgradeId: id, rare: pending.rare, ...next,
+      name: pending.rare ? `Warden ${RAPID_PRACTICE_UPGRADE_LABELS[id].name}` : RAPID_PRACTICE_UPGRADE_LABELS[id].name });
   }
 
   private setPracticeAbility(player: PlayerState, abilityId: CallingAbilityId): void {
@@ -7735,7 +7803,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (cast.targetId === client.sessionId) this.pendingResurrections.delete(casterId);
     const now = Date.now();
     const returningFromSilverDepths = this.roomKind === "silver-depths";
-    const spawn = returningFromSilverDepths ? TOWN_SILVER_DEPTHS_PORTAL_POSITION : this.spawnPoint();
+    const spawn = this.rapidPractice ? RAPID_PRACTICE_ARENA.spawn
+      : returningFromSilverDepths ? TOWN_SILVER_DEPTHS_PORTAL_POSITION : this.spawnPoint();
     this.silverDepthsRuns.delete(client.sessionId);
     this.forestReturns.delete(client.sessionId);
     player.x = spawn.x; player.y = spawn.y; player.z = spawn.z;
@@ -7747,6 +7816,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     player.invulnerableUntil = now + 1500;
     this.movementInputs.set(client.sessionId, { request: idleMovementInput(), receivedAt: now });
     this.verticalVelocities.set(client.sessionId, 0);
+    if (this.rapidPractice) {
+      for (let index = this.pendingIncomingHits.length - 1; index >= 0; index--)
+        if (this.pendingIncomingHits[index]!.playerId === client.sessionId) this.pendingIncomingHits.splice(index, 1);
+      this.restartRapidPracticeRun(now);
+    }
     await this.persistPlayer(client.sessionId, player, true);
     if (returningFromSilverDepths) {
       client.send("portal:notice", "Expedition failed · returning to the Town of Beginnings.");
@@ -7755,6 +7829,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     } else {
       client.send("player:returned", spawn);
       this.sendBuildPath(client);
+      if (this.rapidPractice) client.send("practice:state", { active: true, wave: 1,
+        message: "RUN RESTARTED · upgrades retained · hold attack" });
     }
   }
 
@@ -9618,6 +9694,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         arcaneEchoDamage = Math.max(arcaneEchoDamage, echoDamage);
         const volatileTier = mageRank > 0 ? this.equipmentAffixTier(player, "volatile") : 0;
         const damage = damageAfterArmor(definition.damage + payoff.bonusDamage + progressionAttackBonus(player)
+          + (this.rapidPracticeUpgrades.get(sessionId)?.damage ?? 0)
           + this.buildPathDamageBonus(player, mob, target.id, sessionId, now, "power") + shadowstepDamage
           + this.northwatchAssassinOpening(player, target.id, now), mob.armor, true)
           + traitBonusDamage + echoDamage + volatileTier;
@@ -9905,7 +9982,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       : 1;
     const baseTiming = attackDefinition.attacks[step - 1] ?? attackDefinition.attacks[0];
     if (!baseTiming) return;
-    const timing = rapidPracticeAttackTiming(baseTiming, this.rapidPractice);
+    const timing = rapidPracticeAttackTiming(baseTiming, this.rapidPractice,
+      this.rapidPracticeUpgrades.get(client.sessionId)?.haste ?? 0);
     this.attackChains.set(client.sessionId, {
       step,
       mainHandId,
@@ -10542,6 +10620,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (preciseTier > 0) this.equipmentAffixProc(sessionId, "precise", `PRECISE +${preciseTier}`, mob, now);
       let damage = damageAfterArmor(
         timing.damage + ironSwordDamageBonus(player.blacksmithUpgrades, pending.mainHandId)
+          + (this.rapidPracticeUpgrades.get(sessionId)?.damage ?? 0)
           + reforgeWeaponDamageBonus(equipmentReforgeRank(player.reforgeRanksJson, pending.mainHandId))
           + progressionAttackBonus(player) + this.specialDamageBonus(sessionId, mobId, now) + perkBonusDamage + setBonusDamage
           + this.buildPathDamageBonus(player, mob, mobId, sessionId, now, "weapon") + shadowstepDamage + markStrikeBonus + pinBonusDamage

@@ -49,6 +49,42 @@ export const RAPID_PRACTICE_WAVE_DELAY_MS = 1_800;
 export const RAPID_PRACTICE_RESTART_DELAY_MS = 4_000;
 export const RAPID_PRACTICE_ATTACK_SCALE = .7;
 
+export type RapidPracticeUpgradeId = "razor_edge" | "swift_hands" | "bloodstone";
+
+export type RapidPracticeUpgrades = {
+  damage: number;
+  haste: number;
+  vitality: number;
+  relics: number;
+};
+
+export const EMPTY_RAPID_PRACTICE_UPGRADES: RapidPracticeUpgrades = {
+  damage: 0,
+  haste: 0,
+  vitality: 0,
+  relics: 0,
+};
+
+export const RAPID_PRACTICE_UPGRADE_LABELS: Record<RapidPracticeUpgradeId, { name: string; detail: string }> = {
+  razor_edge: { name: "Razor Edge", detail: "+1 damage to every attack" },
+  swift_hands: { name: "Swift Hands", detail: "10% faster attacks" },
+  bloodstone: { name: "Bloodstone", detail: "+5 maximum health and heal" },
+};
+
+export function applyRapidPracticeUpgrade(
+  current: RapidPracticeUpgrades,
+  upgradeId: RapidPracticeUpgradeId,
+  rare = false,
+): RapidPracticeUpgrades {
+  const amount = rare ? 2 : 1;
+  return {
+    damage: current.damage + (upgradeId === "razor_edge" ? amount : 0),
+    haste: current.haste + (upgradeId === "swift_hands" ? amount : 0),
+    vitality: current.vitality + (upgradeId === "bloodstone" ? amount : 0),
+    relics: current.relics + Number(rare),
+  };
+}
+
 export function rapidPracticeMovementSpeed(baseSpeed: number, enabled: boolean): number {
   return enabled ? baseSpeed * 1.38 : baseSpeed;
 }
@@ -58,12 +94,17 @@ export function rapidPracticeProjectileTravelMs(travelMs: number, enabled: boole
   return Math.max(180, Math.round(travelMs * 0.68));
 }
 
-export function rapidPracticeAttackTiming<T extends { durationMs: number; impactMs: number }>(timing: T, enabled: boolean): T {
+export function rapidPracticeAttackTiming<T extends { durationMs: number; impactMs: number }>(
+  timing: T,
+  enabled: boolean,
+  haste = 0,
+): T {
   if (!enabled) return timing;
+  const scale = RAPID_PRACTICE_ATTACK_SCALE * Math.max(.55, Math.pow(.9, haste));
   return {
     ...timing,
-    durationMs: Math.max(170, Math.round(timing.durationMs * RAPID_PRACTICE_ATTACK_SCALE)),
-    impactMs: Math.max(70, Math.round(timing.impactMs * RAPID_PRACTICE_ATTACK_SCALE)),
+    durationMs: Math.max(135, Math.round(timing.durationMs * scale)),
+    impactMs: Math.max(55, Math.round(timing.impactMs * scale)),
   };
 }
 

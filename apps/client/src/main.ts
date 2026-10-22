@@ -1012,6 +1012,11 @@ function renderGreenwoodMastery(position: { x: number; y: number; z: number }): 
 const canvas = document.querySelector<HTMLCanvasElement>("#game")!;
 const initialPageQuery = new URLSearchParams(window.location.search);
 const rapidPrototypeRequested = initialPageQuery.get("room") === "practice" && initialPageQuery.get("prototype") === "2d";
+let rapidPracticeHaste = 0;
+let rapidPracticeRewardPanel: HTMLElement | null = null;
+let rapidPracticeRewardTitle: HTMLElement | null = null;
+let rapidPracticeRewardDetail: HTMLElement | null = null;
+let rapidPracticeRewardChoices: HTMLElement | null = null;
 const status = document.querySelector<HTMLElement>("#status")!;
 const targetLabel = document.querySelector<HTMLElement>("#target")!;
 const tavernDialogue = document.querySelector<HTMLElement>("#tavern-dialogue")!;
@@ -2126,6 +2131,28 @@ if (rapidPrototypeRequested) {
   const metrics = badge.querySelector("small") as HTMLElement;
   metrics.style.cssText = "color:#75cde8;font-size:9px;font-weight:700;letter-spacing:.02em";
   document.body.appendChild(badge);
+
+  rapidPracticeRewardPanel = document.createElement("section");
+  rapidPracticeRewardPanel.id = "rapid-practice-reward";
+  rapidPracticeRewardPanel.hidden = true;
+  rapidPracticeRewardPanel.innerHTML = "<div class=\"rapid-reward-shell\"><small>WAVE REWARD</small><h2></h2><p></p><div class=\"rapid-reward-choices\"></div><footer>One click · no inventory · next wave starts immediately</footer></div>";
+  rapidPracticeRewardPanel.style.cssText = "position:fixed;inset:0;z-index:90;display:grid;place-items:center;background:radial-gradient(circle,rgba(11,29,22,.2),rgba(2,7,6,.78));font-family:system-ui;color:#ecfff1";
+  rapidPracticeRewardPanel.querySelector<HTMLElement>(".rapid-reward-shell")!.style.cssText = "width:min(760px,calc(100vw - 32px));padding:24px;border:1px solid rgba(239,194,79,.8);border-radius:16px;background:linear-gradient(145deg,rgba(10,28,20,.97),rgba(4,12,10,.98));box-shadow:0 20px 80px #000,0 0 40px rgba(239,194,79,.18);text-align:center";
+  rapidPracticeRewardTitle = rapidPracticeRewardPanel.querySelector("h2");
+  rapidPracticeRewardDetail = rapidPracticeRewardPanel.querySelector("p");
+  rapidPracticeRewardChoices = rapidPracticeRewardPanel.querySelector(".rapid-reward-choices");
+  rapidPracticeRewardChoices!.style.cssText = "display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:20px 0";
+  rapidPracticeRewardPanel.querySelector<HTMLElement>("small")!.style.cssText = "color:#efc24f;font-weight:900;letter-spacing:.16em";
+  rapidPracticeRewardPanel.querySelector<HTMLElement>("h2")!.style.cssText = "margin:8px 0 4px;font-size:clamp(25px,4vw,42px);color:#fff0ae";
+  rapidPracticeRewardPanel.querySelector<HTMLElement>("p")!.style.cssText = "margin:0;color:#afd4ba";
+  rapidPracticeRewardPanel.querySelector<HTMLElement>("footer")!.style.cssText = "color:#789487;font-size:12px";
+  rapidPracticeRewardPanel.addEventListener("click", event => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-upgrade]");
+    if (!button || !room) return;
+    rapidPracticeRewardPanel!.querySelectorAll("button").forEach(candidate => { candidate.disabled = true; });
+    room.send("practice:upgrade", { upgradeId: button.dataset.upgrade });
+  });
+  document.body.appendChild(rapidPracticeRewardPanel);
 }
 
 const lanternMetal = coloredMaterial(new pc.Color(0.2, 0.16, 0.1));
@@ -5442,13 +5469,13 @@ function updateDangerZone(tierValue: number, position = localPlayer.getPosition(
 function actionDuration(step: number): number {
   if (step < 1 || step > 3 || localActionMainHandId === null) return PRIMARY_ACTION_DURATION_MS;
   return rapidCombatDuration(WEAPON_ATTACK_DEFINITIONS[localActionMainHandId].attacks[step - 1]?.durationMs ?? PRIMARY_ACTION_DURATION_MS,
-    rapidPrototypeRequested);
+    rapidPrototypeRequested, rapidPracticeHaste);
 }
 
 function remoteActionDuration(mainHandId: MainHandId | null, step: number): number {
   if (!mainHandId || step < 1 || step > 3) return PRIMARY_ACTION_DURATION_MS;
   return rapidCombatDuration(WEAPON_ATTACK_DEFINITIONS[mainHandId].attacks[step - 1]?.durationMs ?? PRIMARY_ACTION_DURATION_MS,
-    rapidPrototypeRequested);
+    rapidPrototypeRequested, rapidPracticeHaste);
 }
 
 function powerDuration(powerId: PowerId | null): number {
@@ -8685,7 +8712,8 @@ function saveTabletCameraZoom(): void {
   try { window.localStorage.setItem(CAMERA_ZOOM_STORAGE_KEY, cameraOrbit.distance.toFixed(3)); } catch { /* Storage may be disabled. */ }
 }
 function rangedFireAllowed(requirePointerAim = true): boolean {
-  const combatMenuPanels = [inventoryPanel, lootPanel, defeatScreen, quizPanel, blacksmithPanel, tavernDialogue];
+  const combatMenuPanels = [inventoryPanel, lootPanel, defeatScreen, quizPanel, blacksmithPanel, tavernDialogue,
+    ...(rapidPracticeRewardPanel ? [rapidPracticeRewardPanel] : [])];
   return Boolean(room && worldReady && (interactionMode === "combat" || !requirePointerAim)
     && (!requirePointerAim || rangedPointer.active) && !document.hidden
     && continuousAttackEnabled(WEAPON_ATTACK_DEFINITIONS[localMainHandId].projectileTravelMs > 0, rapidPrototypeRequested)
@@ -11165,12 +11193,15 @@ function clearDefeatCombat(): void {
 function showDefeat(attackerName: string): void {
   closeLoot();
   clearDefeatCombat();
+  if (rapidPracticeRewardPanel) rapidPracticeRewardPanel.hidden = true;
   quizPanel.hidden = true; blacksmithPanel.hidden = true; setInventoryOpen(false); closeTavernDialogue();
-  defeatDetail.textContent = `${attackerName} defeated you. Carried minerals stay in your personal recovery bag. Levels, equipment, other loot, gold, supplies and chest contents are safe. Return to town, then follow your bag marker.`;
-  defeatTitle.textContent = "You were defeated";
+  defeatDetail.textContent = rapidPrototypeRequested
+    ? `${attackerName} ended the run. Your Speed Lab upgrades are retained for this session; restart immediately and push farther.`
+    : `${attackerName} defeated you. Carried minerals stay in your personal recovery bag. Levels, equipment, other loot, gold, supplies and chest contents are safe. Return to town, then follow your bag marker.`;
+  defeatTitle.textContent = rapidPrototypeRequested ? "RUN ENDED" : "You were defeated";
   defeatScreen.hidden = false;
   returnToTownButton.disabled = !room;
-  returnToTownButton.textContent = "Return to Town";
+  returnToTownButton.textContent = rapidPrototypeRequested ? "Restart Run" : "Return to Town";
   if (activeRoomName === SILVER_DEPTHS_ROOM && latestDepthsPartyStatus) renderDepthsPartyStatus(latestDepthsPartyStatus);
   returnToTownButton.focus();
 }
@@ -12401,7 +12432,7 @@ function requestAttack(aimWithPointer = true, tabletAim?: { yaw: number; targetI
   localActionMainHandId = localMainHandId;
   localComboStep = comboStep;
   localComboExpiresAt = attackDefinition.combo
-    ? now + rapidCombatDuration(timing.durationMs, rapidPrototypeRequested) + attackDefinition.comboWindowMs : 0;
+    ? now + rapidCombatDuration(timing.durationMs, rapidPrototypeRequested, rapidPracticeHaste) + attackDefinition.comboWindowMs : 0;
   attackSequence += 1;
   const requestId = `attack-${attackSequence}`;
   combatSync.start("attack", requestId, now);
@@ -14244,7 +14275,7 @@ app.on("update", (dt: number) => {
   }
   if (animationNow >= localHitPauseUntil) {
     animateVoxelCharacter(localPlayerRig, animationTime, frameTime, localVerticalVelocity, predicted.grounded || grounded,
-      rapidCombatAnimationElapsed(localActionElapsed, rapidPrototypeRequested), localActionStep, localActionMainHandId,
+      rapidCombatAnimationElapsed(localActionElapsed, rapidPrototypeRequested, rapidPracticeHaste), localActionStep, localActionMainHandId,
       localPowerElapsed, localActivePower, localActionFacingYaw, moving ? collisionTravel : 0, localFacingYaw);
     if (localDefending) applyDefensePose(localPlayerRig);
     if (room) applyMageCastAnimation(room.sessionId, localPlayerRig, animationNow);
@@ -14318,7 +14349,7 @@ app.on("update", (dt: number) => {
       const remoteActionElapsed = remote.actionStartedAt === null ? null : animationNow - remote.actionStartedAt;
       const remotePowerElapsed = remote.powerStartedAt === null ? null : animationNow - remote.powerStartedAt;
       animateVoxelCharacter(remote.rig, animationTime, frameTime, remoteVerticalVelocity, true,
-        rapidCombatAnimationElapsed(remoteActionElapsed, rapidPrototypeRequested), remote.actionStep, remote.actionMainHandId,
+        rapidCombatAnimationElapsed(remoteActionElapsed, rapidPrototypeRequested, rapidPracticeHaste), remote.actionStep, remote.actionMainHandId,
         remotePowerElapsed, remote.powerId, remote.entity.getEulerAngles().y, remoteTravel, pose.yaw);
       if (remote.defending) applyDefensePose(remote.rig);
       applyMageCastAnimation(id, remote.rig, animationNow);
@@ -15566,6 +15597,33 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       abilityPractice.hidden = false;
     }
   });
+  room.onMessage("practice:reward", (reward: { wave: number; rare: boolean; message: string; x: number; y: number; z: number;
+    choices: { id: string; name: string; detail: string }[] }) => {
+    if (!rapidPrototypeRequested || !rapidPracticeRewardPanel || !rapidPracticeRewardChoices) return;
+    resetMovementControls();
+    lootPickupBurst({ itemId: reward.rare ? "matriarch_edge" : "forged_sword", quantity: reward.rare ? 3 : 1,
+      x: reward.x, y: reward.y, z: reward.z, expiresAt: Date.now() + 10_000 });
+    createRangedPopup(new pc.Vec3(reward.x, reward.y + 2.2, reward.z), reward.rare ? "RARE WARDEN RELIC" : "UPGRADE DROP", "landmark");
+    combatAudio.play(reward.rare ? "levelUp" : "lootPickup");
+    rapidPracticeRewardTitle!.textContent = reward.rare ? "Warden Relic" : `Wave ${reward.wave} Cleared`;
+    rapidPracticeRewardDetail!.textContent = reward.message;
+    rapidPracticeRewardChoices.innerHTML = reward.choices.map(choice => `<button type="button" data-upgrade="${choice.id}"><strong>${choice.name}</strong><span>${choice.detail}</span></button>`).join("");
+    rapidPracticeRewardChoices.querySelectorAll<HTMLElement>("button").forEach(button => {
+      button.style.cssText = `display:grid;gap:7px;min-height:120px;padding:16px;border:1px solid ${reward.rare ? "#efc24f" : "#3e9669"};border-radius:12px;background:${reward.rare ? "linear-gradient(145deg,#49350c,#17150a)" : "linear-gradient(145deg,#123524,#091a12)"};color:#effff3;cursor:pointer;text-align:left;box-shadow:inset 0 0 20px rgba(255,255,255,.03)`;
+      button.querySelector<HTMLElement>("strong")!.style.cssText = "font-size:18px;color:#fff0ae";
+      button.querySelector<HTMLElement>("span")!.style.cssText = "font-size:13px;color:#b9d5c1";
+    });
+    rapidPracticeRewardPanel.hidden = false;
+    rapidPracticeRewardChoices.querySelector<HTMLButtonElement>("button")?.focus();
+  });
+  room.onMessage("practice:reward-applied", (reward: { name: string; rare: boolean; damage: number; haste: number; vitality: number; relics: number }) => {
+    rapidPracticeHaste = reward.haste;
+    if (rapidPracticeRewardPanel) rapidPracticeRewardPanel.hidden = true;
+    const detail = document.querySelector<HTMLElement>("#rapid-prototype-badge span");
+    if (detail) detail.textContent = `DMG +${reward.damage} · HASTE ${reward.haste} · HP +${reward.vitality * 5} · RELICS ${reward.relics}`;
+    status.textContent = `${reward.rare ? "RARE " : ""}${reward.name} claimed · next wave incoming.`;
+    canvas.focus();
+  });
   room.onMessage("player:portal", (spawn: { x: number; y: number; z: number; entering: boolean }) => {
     clearDefeatCombat(); closeLoot();
     const own = (room?.state as { players?: Map<string, NetworkPlayer> } | undefined)?.players?.get(room!.sessionId);
@@ -16244,8 +16302,9 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     defeatScreen.hidden = true;
     worldReady = false;
     room?.send("world:ready");
-    status.textContent = "Back in the Town of Beginnings · follow your recovery marker to reclaim dropped items.";
-    social.event("Returned to the Town of Beginnings.");
+    status.textContent = rapidPrototypeRequested
+      ? "Speed Lab run restarted · upgrades retained." : "Back in the Town of Beginnings · follow your recovery marker to reclaim dropped items.";
+    social.event(rapidPrototypeRequested ? "Speed Lab run restarted." : "Returned to the Town of Beginnings.");
   });
   room.onMessage("player:rescue-window", (message: { until: number }) => showRescueOption(message.until));
   room.onMessage("player:resurrected", (message: { health: number; maxHealth: number; casterName: string }) => {
