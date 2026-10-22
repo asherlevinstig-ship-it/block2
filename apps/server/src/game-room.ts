@@ -58,7 +58,7 @@ import { REGIONAL_PACK_DISRUPTION_MS, regionalPackCooldownMultiplier, regionalPa
 import { mobSimulationActive } from "./mob-activation.js";
 import { SERVER_TICK_BUDGET_MS, appendTickSample, samplePercentile } from "./performance-metrics.js";
 import { EMPTY_RAPID_PRACTICE_UPGRADES, RAPID_PRACTICE_ARENA, RAPID_PRACTICE_BOSS_ID,
-  RAPID_PRACTICE_SPAWNS, RAPID_PRACTICE_UPGRADE_LABELS, RAPID_PRACTICE_WAVES,
+  RAPID_PRACTICE_SPAWNS, RAPID_PRACTICE_TOWN_COLLIDERS, RAPID_PRACTICE_UPGRADE_LABELS, RAPID_PRACTICE_WAVES,
   RAPID_PRACTICE_WEAPON_CHOICES, applyRapidPracticeUpgrade, rapidPracticeAttackTiming,
   rapidPracticeMovementSpeed, rapidPracticeProjectileFan, rapidPracticeProjectileTravelMs,
   rapidPracticeWeaponProfile, type RapidPracticeProjectileStyle, type RapidPracticeUpgradeId,
@@ -2399,6 +2399,14 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       for (let y = 8; y <= 15; y++) setBlock(stored.chunk, address.localX, y, address.localZ,
         (x === bounds.minX || x === bounds.maxX || z === bounds.minZ || z === bounds.maxZ) && y <= 10 ? Block.Stone : Block.Air);
       stored.revision++;
+    }
+    if (this.rapidPractice) for (const footprint of RAPID_PRACTICE_TOWN_COLLIDERS) {
+      for (let x = footprint.minX; x <= footprint.maxX; x++) for (let z = footprint.minZ; z <= footprint.maxZ; z++) {
+        const address = worldToChunk(x, z);
+        const stored = this.getChunk(address.chunkX, address.chunkZ);
+        for (let y = 8; y <= 10; y++) setBlock(stored.chunk, address.localX, y, address.localZ, Block.Stone);
+        stored.revision++;
+      }
     }
   }
 

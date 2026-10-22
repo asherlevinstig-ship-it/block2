@@ -3,6 +3,7 @@ import {
   RAPID_PRACTICE_ARENA,
   RAPID_PRACTICE_BOSS_ID,
   RAPID_PRACTICE_SPAWNS,
+  RAPID_PRACTICE_TOWN_COLLIDERS,
   RAPID_PRACTICE_WAVES,
   RAPID_PRACTICE_WEAPON_CHOICES,
   EMPTY_RAPID_PRACTICE_UPGRADES,
@@ -27,6 +28,22 @@ describe("rapid 2.5D practice", () => {
     expect(RAPID_PRACTICE_WAVES.flat()).toHaveLength(18);
     expect(new Set(RAPID_PRACTICE_WAVES.flat()).size).toBe(18);
     expect(RAPID_PRACTICE_WAVES[2]).toContain(RAPID_PRACTICE_BOSS_ID);
+  });
+
+  it("keeps the Town of Beginnings inside the arena with a clear east gate", () => {
+    for (const building of RAPID_PRACTICE_TOWN_COLLIDERS) {
+      expect(building.minX).toBeGreaterThanOrEqual(RAPID_PRACTICE_ARENA.minX);
+      expect(building.maxX).toBeLessThanOrEqual(RAPID_PRACTICE_ARENA.maxX);
+      expect(building.minZ).toBeGreaterThanOrEqual(RAPID_PRACTICE_ARENA.minZ);
+      expect(building.maxZ).toBeLessThanOrEqual(RAPID_PRACTICE_ARENA.maxZ);
+      const blocksGate = building.maxX >= 101 && building.minZ <= 109 && building.maxZ >= 103;
+      expect(blocksGate).toBe(false);
+      const containsSpawn = RAPID_PRACTICE_ARENA.spawn.x >= building.minX
+        && RAPID_PRACTICE_ARENA.spawn.x <= building.maxX
+        && RAPID_PRACTICE_ARENA.spawn.z >= building.minZ
+        && RAPID_PRACTICE_ARENA.spawn.z <= building.maxZ;
+      expect(containsSpawn).toBe(false);
+    }
   });
 
   it("speeds up play only inside the prototype", () => {

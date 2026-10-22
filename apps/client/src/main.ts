@@ -893,7 +893,6 @@ modeSwitchTutorialBuild.addEventListener("click", () => {
   townDeparturePromptOpen = false; modeLessonAcknowledged = true;
   setInteractionMode("build"); renderFirstSteps();
 });
-renderFirstSteps();
 const adminInvitation = consumeAdminInvitation();
 const minimapPanel = document.querySelector<HTMLDetailsElement>("#minimap")!;
 const minimapExpand = document.querySelector<HTMLButtonElement>("#minimap-expand")!;
@@ -2101,6 +2100,20 @@ if (rapidPrototypeRequested) {
   const grassLight = coloredMaterial(new pc.Color(.22, .43, .24));
   const path = coloredMaterial(new pc.Color(.48, .35, .2));
   const stone = coloredMaterial(new pc.Color(.31, .35, .34));
+  const townStone = coloredMaterial(new pc.Color(.43, .46, .42));
+  const townStoneLight = coloredMaterial(new pc.Color(.58, .57, .49));
+  const plaster = coloredMaterial(new pc.Color(.72, .64, .48));
+  const warmPlaster = coloredMaterial(new pc.Color(.63, .43, .25));
+  const timber = coloredMaterial(new pc.Color(.28, .16, .085));
+  const roofRed = coloredMaterial(new pc.Color(.48, .16, .105));
+  const roofBlue = coloredMaterial(new pc.Color(.12, .25, .31));
+  const bannerBlue = coloredMaterial(new pc.Color(.08, .28, .48));
+  const bannerGold = coloredMaterial(new pc.Color(.95, .65, .16));
+  const hedge = coloredMaterial(new pc.Color(.09, .29, .13));
+  const windowGlow = new pc.StandardMaterial();
+  windowGlow.diffuse = new pc.Color(1, .72, .27);
+  windowGlow.emissive = new pc.Color(.72, .31, .055);
+  windowGlow.update();
   const trunk = coloredMaterial(new pc.Color(.24, .13, .07));
   const leaf = coloredMaterial(new pc.Color(.08, .25, .13));
   const leafLight = coloredMaterial(new pc.Color(.13, .38, .18));
@@ -2110,6 +2123,69 @@ if (rapidPrototypeRequested) {
   addBox(rapidPrototypeRoot, "combat-lane", path, [27, .04, 5.2], [111.5, 8.03, 106]);
   addBox(rapidPrototypeRoot, "cross-lane", path, [5.2, .045, 23], [116, 8.035, 106]);
   addBox(rapidPrototypeRoot, "arena-heart", stone, [7.5, .08, 7.5], [116, 8.07, 106]);
+
+  // Town of Beginnings: a compact, legible sanctuary framing the western spawn.
+  // Its open east gate feeds directly into the faster combat lane.
+  addBox(rapidPrototypeRoot, "beginnings-plaza", townStone, [12.5, .065, 17.5], [96.7, 8.06, 106]);
+  addBox(rapidPrototypeRoot, "beginnings-main-road", townStoneLight, [16.5, .075, 3.25], [99.25, 8.085, 106]);
+  for (const offset of [-5.2, 5.2]) addBox(rapidPrototypeRoot, "beginnings-side-road", townStoneLight,
+    [8.5, .07, 2.15], [97.5, 8.08, 106 + offset]);
+
+  const addTownBuilding = (name: string, x: number, z: number, width: number, depth: number,
+    wall: pc.StandardMaterial, roof: pc.StandardMaterial, height = 2.5): pc.Entity => {
+    const root = new pc.Entity(name);
+    rapidPrototypeRoot.addChild(root);
+    addBox(root, `${name}-foundation`, townStone, [width + .45, .28, depth + .45], [x, 8.14, z]);
+    addBox(root, `${name}-walls`, wall, [width, height, depth], [x, 8.28 + height / 2, z]);
+    addBox(root, `${name}-lower-timber`, timber, [width + .08, .14, depth + .08], [x, 8.48, z]);
+    addBox(root, `${name}-upper-timber`, timber, [width + .08, .14, depth + .08], [x, 8.28 + height * .78, z]);
+    for (const side of [-1, 1]) {
+      addBox(root, `${name}-corner-post`, timber, [.18, height + .12, .22],
+        [x + side * (width / 2 - .12), 8.28 + height / 2, z + depth / 2 - .13]);
+      addBox(root, `${name}-window`, windowGlow, [.045, .64, .72],
+        [x + width / 2 + .025, 9.15, z + side * depth * .25]);
+    }
+    addBox(root, `${name}-door`, timber, [.06, 1.42, .86], [x + width / 2 + .045, 8.99, z]);
+    for (let level = 0; level < 3; level++) addBox(root, `${name}-roof-${level}`, roof,
+      [width + .8 - level * .62, .3, depth + .8 - level * .62], [x, 8.48 + height + level * .22, z]);
+    return root;
+  };
+
+  const hall = addTownBuilding("founders-hall", 91.6, 106, 5.4, 6.2, plaster, roofBlue, 2.9);
+  addBox(hall, "founders-bell-tower", plaster, [1.65, 1.8, 1.65], [91.6, 12.05, 106]);
+  addBox(hall, "founders-tower-roof", roofBlue, [2.15, .55, 2.15], [91.6, 13.18, 106]);
+  addBox(hall, "founders-sun-mark", bannerGold, [.04, .72, .72], [92.45, 12.05, 106]);
+  addTownBuilding("wayfarer-inn", 92.2, 96.2, 6.1, 5.2, warmPlaster, roofRed);
+  const smithy = addTownBuilding("beginnings-smithy", 92.2, 115.8, 6.1, 5.2, warmPlaster, roofRed);
+  addBox(smithy, "smithy-chimney", townStone, [.72, 2.1, .72], [90.2, 11.2, 114.5]);
+  addBox(smithy, "smithy-forge-glow", windowGlow, [.06, .72, 1.25], [95.28, 8.95, 114.55]);
+
+  const addGatehouse = (z: number): void => {
+    addBox(rapidPrototypeRoot, "town-gate-tower", townStone, [2.65, 3.25, 3.35], [102.1, 9.63, z]);
+    addBox(rapidPrototypeRoot, "town-gate-cap", roofBlue, [3.1, .48, 3.8], [102.1, 11.48, z]);
+    addBox(rapidPrototypeRoot, "town-gate-banner", bannerBlue, [.05, 1.45, .78], [103.46, 10.05, z]);
+    addBox(rapidPrototypeRoot, "town-gate-sigil", bannerGold, [.055, .28, .28], [103.5, 10.2, z]);
+  };
+  addGatehouse(100.65);
+  addGatehouse(111.35);
+  addBox(rapidPrototypeRoot, "town-gate-lintel", timber, [1.15, .42, 7.35], [102.1, 11.08, 106]);
+
+  const addMarketStall = (name: string, z: number, canopy: pc.StandardMaterial): void => {
+    const root = new pc.Entity(name); rapidPrototypeRoot.addChild(root);
+    addBox(root, `${name}-counter`, timber, [2.1, .58, .75], [98.15, 8.48, z]);
+    for (const side of [-1, 1]) addBox(root, `${name}-post`, timber, [.12, 1.75, .12], [98.15 + side * .85, 9.12, z]);
+    addBox(root, `${name}-canopy`, canopy, [2.35, .18, 1.5], [98.15, 9.9, z]);
+  };
+  addMarketStall("north-market-stall", 98.2, bannerBlue);
+  addMarketStall("south-market-stall", 113.8, roofRed);
+
+  for (const [x, z] of [[96.4,102.8],[96.4,109.2],[100,103.1],[100,108.9]] as const) {
+    addBox(rapidPrototypeRoot, "town-lamp-post", timber, [.13, 1.65, .13], [x, 8.82, z]);
+    addBox(rapidPrototypeRoot, "town-lamp", windowGlow, [.42, .48, .42], [x, 9.75, z]);
+    addBox(rapidPrototypeRoot, "town-lamp-cap", townStone, [.56, .12, .56], [x, 10.05, z]);
+  }
+  for (const [x, z, sx, sz] of [[97.2,93.1,3.2,.55],[97.2,118.9,3.2,.55],[99.9,96.1,.55,2.6],[99.9,115.9,.55,2.6]] as const)
+    addBox(rapidPrototypeRoot, "town-hedge", hedge, [sx, .72, sz], [x, 8.38, z]);
   for (const [x, z] of [[91,93],[96,93],[102,93],[108,92],[114,92],[121,92],[126,94],[126,120],[120,120],[112,120],[104,120],[96,120],[91,117],[91,109],[91,101]] as const) {
     addBox(rapidPrototypeRoot, "tree-trunk", trunk, [.45, 1.55, .45], [x, 8.75, z]);
     addBox(rapidPrototypeRoot, "tree-crown", leaf, [2.1, 1.15, 2.1], [x, 10.15, z]);
@@ -2126,7 +2202,7 @@ if (rapidPrototypeRequested) {
 
   const badge = document.createElement("aside");
   badge.id = "rapid-prototype-badge";
-  badge.innerHTML = "<strong>2.5D SPEED LAB</strong><span>Wave 1/3 · hold attack · aim while moving</span><small id=\"rapid-prototype-metrics\">Measuring frame and input timing…</small>";
+  badge.innerHTML = "<strong>TOWN OF BEGINNINGS · SPEED LAB</strong><span>Leave through the east gate · Wave 1/3</span><small id=\"rapid-prototype-metrics\">Measuring frame and input timing…</small>";
   badge.style.cssText = "position:fixed;left:18px;top:68px;z-index:18;display:grid;gap:2px;padding:9px 13px;border:1px solid rgba(117,242,180,.55);border-radius:10px;background:rgba(6,18,14,.86);color:#d9ffdf;font:700 12px/1.2 system-ui;letter-spacing:.08em;pointer-events:none;box-shadow:0 7px 24px rgba(0,0,0,.32)";
   const detail = badge.querySelector("span") as HTMLElement;
   detail.style.cssText = "color:#9fc6ac;font-size:10px;font-weight:600;letter-spacing:.02em";
@@ -3974,6 +4050,7 @@ let trackedLeaderCollectionHunt: TrackedLeaderCollectionHunt | null = (() => {
   catch { return null; }
 })();
 let leaderCollectionGuidanceSuppressed = false;
+let latestHuntCollection: HuntCollectionUpdate | null = null;
 function storeTrackedLeaderCollectionHunt(): void {
   try {
     if (trackedLeaderCollectionHunt) localStorage.setItem(LEADER_COLLECTION_HUNT_STORAGE_KEY, JSON.stringify(trackedLeaderCollectionHunt));
@@ -4026,7 +4103,6 @@ const regionalLeaderProgress = document.querySelector<HTMLElement>("#regional-le
 const huntLoadoutList = document.querySelector<HTMLElement>("#hunt-loadout-list")!;
 const huntCollectionMessage = document.querySelector<HTMLElement>("#hunt-collection-message")!;
 const huntCollectionReward = document.querySelector<HTMLElement>("#hunt-collection-reward")!;
-let latestHuntCollection: HuntCollectionUpdate | null = null;
 let leaderCollectionDiscoveries: LeaderCollectionDiscoveries = {};
 let leaderCollectionJson = "";
 let leaderCollectionHydrated = false;
@@ -4221,6 +4297,9 @@ let fieldSpecialSelectionBeforeEquip = false;
 let callingAbilityPendingUntil = 0;
 let localMainHandId: MainHandId = "unarmed";
 let localArmourId: ArmourId = "none";
+// The onboarding renderer reads the equipped weapon. Run its initial pass only
+// after equipment state exists so a fresh profile cannot hit the temporal dead zone.
+renderFirstSteps();
 let northwatchWardReadyAt = 0;
 let northwatchWardRefreshTimer: number | null = null;
 let localIronSwordOwned = false;

@@ -10,6 +10,17 @@ export const RAPID_PRACTICE_ARENA = {
   spawn: { x: 99.5, y: 8, z: 106.5 },
 } as const;
 
+/** Solid footprints for the Town of Beginnings set dressing. The Speed Lab
+ * renders these with its lighter art layer, while the authored blocks keep
+ * players and enemies from walking through the buildings. */
+export const RAPID_PRACTICE_TOWN_COLLIDERS = [
+  { id: "founders-hall", minX: 89, maxX: 94, minZ: 103, maxZ: 109 },
+  { id: "wayfarer-inn", minX: 89, maxX: 95, minZ: 93, maxZ: 99 },
+  { id: "beginnings-smithy", minX: 89, maxX: 95, minZ: 113, maxZ: 119 },
+  { id: "north-gatehouse", minX: 101, maxX: 103, minZ: 99, maxZ: 102 },
+  { id: "south-gatehouse", minX: 101, maxX: 103, minZ: 110, maxZ: 113 },
+] as const;
+
 export type RapidPracticeSpawn = {
   id: string;
   archetype: MobArchetypeId;
