@@ -32,6 +32,8 @@ describe("Greenwood first clear", () => {
     internal.spawnLootDrops("wild-crawler", mob, 10_000, "hero");
     const [firstId, first] = [...room.state.lootDrops.entries()][0]!;
     const firstCollectionItemId = first.leaderCollectionItemId;
+    expect(first).toMatchObject({ leaderCollectionId: "greenwood", leaderCollectionName: "Greenwood Leader Set",
+      leaderCollectionDiscovered: 0, leaderCollectionTotal: 4, leaderCollectionDuplicate: false });
     expect(firstId).toContain("greenwood-first:forged_bow:");
     expect(decodeLootBagItems(first.contentsJson)).toContainEqual({ itemId: "forged_bow", quantity: 1 });
     expect(JSON.parse(player.huntLoadoutsJson).greenwood?.firstBossGearClaimed ?? false).toBe(false);

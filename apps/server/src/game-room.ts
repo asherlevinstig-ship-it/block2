@@ -4131,6 +4131,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       .filter(id => EQUIPMENT_AFFIXES[id].pathId === selectedCalling) : [];
     const affixId = affixTier > 0 && affixItemId && callingAffixes.length > 0
       ? callingAffixes[Math.min(callingAffixes.length - 1, Math.floor(Math.random() * callingAffixes.length))]! : "";
+    const leaderCollectionKnown = leaderCollection && leaderCollectionState
+      ? new Set(leaderCollectionState.discovered[leaderCollection.id] ?? []) : new Set<ItemId>();
+    const leaderCollectionDuplicate = Boolean(leaderCollectionRoll && leaderCollectionKnown.has(leaderCollectionRoll.itemId));
     Object.assign(drop, {
       ownerId,
       itemId: representative.itemId,
@@ -4142,6 +4145,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       leaderCollectionId: leaderCollection?.id ?? "",
       leaderCollectionItemId: leaderCollectionRoll?.itemId ?? "",
       leaderCollectionProtected: leaderCollectionRoll?.protected ?? false,
+      leaderCollectionName: leaderCollection?.name ?? "",
+      leaderCollectionDiscovered: leaderCollectionKnown.size,
+      leaderCollectionTotal: leaderCollection?.items.length ?? 0,
+      leaderCollectionDuplicate,
+      leaderCollectionDust: leaderCollectionDuplicate ? attunementDustYield(Math.max(1, affixTier)) : 0,
       contentsJson: encodeLootBagItems(items),
       x: landing.x,
       y: landing.y + .22,
@@ -4158,6 +4166,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.clients.find(client => client.sessionId === ownerId)?.send("loot:spawned", {
       dropId, ownerId, itemId: drop.itemId, quantity: drop.quantity, contentsJson: drop.contentsJson, affixTier: drop.affixTier,
       affixRegion: drop.affixRegion, affixId: drop.affixId, affixItemId: drop.affixItemId,
+      leaderCollectionId: drop.leaderCollectionId, leaderCollectionItemId: drop.leaderCollectionItemId,
+      leaderCollectionProtected: drop.leaderCollectionProtected, leaderCollectionName: drop.leaderCollectionName,
+      leaderCollectionDiscovered: drop.leaderCollectionDiscovered, leaderCollectionTotal: drop.leaderCollectionTotal,
+      leaderCollectionDuplicate: drop.leaderCollectionDuplicate, leaderCollectionDust: drop.leaderCollectionDust,
       x: drop.x, y: drop.y, z: drop.z, expiresAt: drop.expiresAt,
     });
     if (leaderCollection && leaderCollectionRoll?.protected) this.clients.find(client => client.sessionId === ownerId)?.send("leader:collection", {
@@ -4384,6 +4396,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const collectedQuantity = drop.quantity;
       drop.itemId = carriedItemId; drop.quantity = 1; drop.contentsJson = ""; drop.affixTier = 0; drop.affixRegion = "";
       drop.affixId = ""; drop.affixItemId = "";
+      drop.leaderCollectionId = ""; drop.leaderCollectionItemId = ""; drop.leaderCollectionProtected = false;
+      drop.leaderCollectionName = ""; drop.leaderCollectionDiscovered = 0; drop.leaderCollectionTotal = 0;
+      drop.leaderCollectionDuplicate = false; drop.leaderCollectionDust = 0;
       void this.persistPlayer(client.sessionId, player);
       this.broadcast("loot:picked-up", { playerId: client.sessionId, dropId: parsed.data.dropId, itemId,
         quantity: collectedQuantity, total: collected.quantity } satisfies LootPickedUp);

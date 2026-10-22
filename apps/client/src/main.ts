@@ -3123,6 +3123,14 @@ interface NetworkLootDrop {
   affixRegion?: string;
   affixId?: string;
   affixItemId?: string;
+  leaderCollectionId?: string;
+  leaderCollectionItemId?: string;
+  leaderCollectionProtected?: boolean;
+  leaderCollectionName?: string;
+  leaderCollectionDiscovered?: number;
+  leaderCollectionTotal?: number;
+  leaderCollectionDuplicate?: boolean;
+  leaderCollectionDust?: number;
 }
 
 const LOOT_BAG_TIER_LABEL: Record<LootBagTier, string> = {
@@ -3402,6 +3410,7 @@ function updateFirstStepsTrail(player: pc.Vec3, now: number): void {
 const lootPanel = document.querySelector<HTMLElement>("#loot-panel")!;
 const lootWorldLabel = document.querySelector<HTMLElement>("#loot-world-label")!;
 const lootWorldName = document.querySelector<HTMLElement>("#loot-world-name")!;
+const lootWorldCollection = document.querySelector<HTMLElement>("#loot-world-collection")!;
 const lootWorldAttunement = document.querySelector<HTMLElement>("#loot-world-attunement")!;
 const lootWorldAction = document.querySelector<HTMLElement>("#loot-world-action")!;
 const lootWorldHold = document.querySelector<HTMLElement>("#loot-world-hold")!;
@@ -3629,9 +3638,20 @@ function updateLootWorldLabel(): void {
   lootWorldLabel.style.left = `${labelX}px`;
   lootWorldLabel.style.top = `${anchorY}px`;
   lootWorldLabel.style.setProperty("--tail-shift", `${anchorX - labelX}px`);
-  lootWorldName.textContent = nearest.id.startsWith("roadside-cache:") ? "Regional Victory Cache" : bagTier
+  const collectionItemId = drop.leaderCollectionItemId && isItemId(drop.leaderCollectionItemId)
+    ? drop.leaderCollectionItemId : null;
+  lootWorldName.textContent = collectionItemId ? ITEM_DEFINITIONS[collectionItemId].name
+    : nearest.id.startsWith("roadside-cache:") ? "Regional Victory Cache" : bagTier
     ? nearest.id.startsWith("northwatch-shard-patrol-cache:") ? "Shard Patrol Cache" : LOOT_BAG_TIER_LABEL[bagTier]
     : `${drop.quantity > 1 ? `${drop.quantity}× ` : ""}${ITEM_DEFINITIONS[drop.itemId].name}`;
+  const collectionDrop = Boolean(collectionItemId && drop.leaderCollectionName && drop.leaderCollectionTotal);
+  const collectionProgress = Math.min(drop.leaderCollectionTotal ?? 0,
+    (drop.leaderCollectionDiscovered ?? 0) + (drop.leaderCollectionDuplicate ? 0 : 1));
+  lootWorldCollection.hidden = !collectionDrop;
+  lootWorldCollection.dataset.duplicate = String(Boolean(drop.leaderCollectionDuplicate));
+  lootWorldCollection.textContent = collectionDrop
+    ? `${drop.leaderCollectionDuplicate ? "DUPLICATE" : drop.leaderCollectionProtected ? "PROTECTED NEW ITEM" : "NEW LEADER ITEM"} · ${drop.leaderCollectionName!.toUpperCase()} · ${collectionProgress} / ${drop.leaderCollectionTotal} DISCOVERED${drop.leaderCollectionDuplicate && drop.leaderCollectionDust ? ` · +${drop.leaderCollectionDust} DUST` : ""}`
+    : "";
   const previewAffix = typeof drop.affixId === "string" && Object.hasOwn(EQUIPMENT_AFFIXES, drop.affixId)
     ? drop.affixId as EquipmentAffixId : null;
   lootWorldAttunement.hidden = !previewAffix || !drop.affixTier;
@@ -3640,7 +3660,7 @@ function updateLootWorldLabel(): void {
   const holding = lootHold?.dropId === nearest.id;
   const pending = (pendingFloorLoot.get(nearest.id) ?? 0) > now;
   lootWorldAction.textContent = `${near ? full ? "PACK FULL" : pending ? "COLLECTING…" : holding ? "KEEP HOLDING" : "HOLD TO COLLECT" : `${nearest.distance.toFixed(1)}m · MOVE CLOSER`}${seconds < 20 ? ` · ${seconds}s` : ""}`;
-  lootWorldLabel.setAttribute("aria-label", `${lootWorldName.textContent}. ${lootWorldAction.textContent}`);
+  lootWorldLabel.setAttribute("aria-label", `${lootWorldName.textContent}. ${lootWorldCollection.textContent} ${lootWorldAttunement.textContent} ${lootWorldAction.textContent}`.trim());
   lootWorldLabel.dataset.near = String(near);
   lootWorldLabel.dataset.full = String(full);
   lootWorldLabel.hidden = false;
