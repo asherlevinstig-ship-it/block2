@@ -60,8 +60,9 @@ import { CALLING_AWAKENING_MINIMUM_MS, callingAwakening, callingPreviewMarkup } 
 import { advanceFirstCombatPhase, completesFirstCombatLesson, FIRST_COMBAT_GROUP_IDS, firstCombatLesson,
   type FirstCombatPhase } from "./first-combat-lesson.js";
 import { EQUIPMENT_COLLECTION, collectionProgress, equipmentCollectionLabel, equipmentProgressionText } from "./equipment-progression.js";
-import { advanceTrackedLeaderCollectionHunt, leaderCollectionProgress, leaderCollectionRematchTier, leaderCollectionTarget, parseLeaderCollectionDiscoveries,
-  parseTrackedLeaderCollectionHunt, type LeaderCollectionDiscoveries, type TrackedLeaderCollectionHunt } from "./leader-collection-journal.js";
+import { advanceTrackedLeaderCollectionHunt, leaderCollectionMobId, leaderCollectionProgress, leaderCollectionRematchTier, leaderCollectionTarget,
+  parseLeaderCollectionDiscoveries, parseTrackedLeaderCollectionHunt, trackedLeaderArenaPresentation,
+  type LeaderCollectionDiscoveries, type TrackedLeaderArenaPresentation, type TrackedLeaderCollectionHunt } from "./leader-collection-journal.js";
 import { blacksmithShopStock, shopGoldShortfall, type BlacksmithShopTab } from "./blacksmith-shop.js";
 import { FIELD_FORGE_RECIPES, type FieldForgeId } from "@blockcraft/protocol";
 import { haulUpgradeProgress, nextHaulRegion, nextHaulUpgrade, type HaulRegion } from "./blacksmith-haul.js";
@@ -3882,6 +3883,7 @@ let trackedLeaderCollectionHunt: TrackedLeaderCollectionHunt | null = (() => {
   try { return parseTrackedLeaderCollectionHunt(localStorage.getItem(LEADER_COLLECTION_HUNT_STORAGE_KEY)); }
   catch { return null; }
 })();
+let leaderCollectionGuidanceSuppressed = false;
 function storeTrackedLeaderCollectionHunt(): void {
   try {
     if (trackedLeaderCollectionHunt) localStorage.setItem(LEADER_COLLECTION_HUNT_STORAGE_KEY, JSON.stringify(trackedLeaderCollectionHunt));
@@ -3945,6 +3947,7 @@ const huntTime = (milliseconds?: number): string => milliseconds && milliseconds
 function trackLeaderCollectionPiece(collectionId: RegionalLeaderCollectionId, itemId: ItemId): void {
   setCodexHunt(null);
   trackedLeaderCollectionHunt = { collectionId, itemId };
+  leaderCollectionGuidanceSuppressed = false;
   storeTrackedLeaderCollectionHunt();
   const definition = REGIONAL_LEADER_COLLECTIONS[collectionId];
   const tier = leaderCollectionRematchTier(collectionId, itemId);
@@ -3959,6 +3962,7 @@ function stopLeaderCollectionHunt(): void {
   minimap.clearGuide(leaderCollectionTarget(trackedLeaderCollectionHunt.collectionId, trackedLeaderCollectionHunt.itemId).id);
   const leaderName = REGIONAL_LEADER_COLLECTIONS[trackedLeaderCollectionHunt.collectionId].leaderName;
   trackedLeaderCollectionHunt = null;
+  leaderCollectionGuidanceSuppressed = false;
   storeTrackedLeaderCollectionHunt();
   social.event(`Collection hunt stopped · ${leaderName}.`);
   status.textContent = `Stopped tracking ${leaderName}.`;
@@ -3974,12 +3978,14 @@ function renderRegionalLeaderCollections(value: string): void {
     const next = advanceTrackedLeaderCollectionHunt(completed, nextDiscoveries);
     if (next) {
       trackedLeaderCollectionHunt = next;
+      leaderCollectionGuidanceSuppressed = false;
       storeTrackedLeaderCollectionHunt();
       minimap.guideTo(leaderCollectionTarget(completed.collectionId, next.itemId));
       if (leaderCollectionHydrated) social.event(`${ITEM_DEFINITIONS[completed.itemId].name} discovered · the next hidden ${definition.name} piece is now tracked.`);
     } else {
       minimap.clearGuide(leaderCollectionTarget(completed.collectionId, completed.itemId).id);
       trackedLeaderCollectionHunt = null;
+      leaderCollectionGuidanceSuppressed = false;
       storeTrackedLeaderCollectionHunt();
       if (leaderCollectionHydrated) social.event(`${definition.name} complete · ${definition.badgeName} earned.`);
     }
@@ -14337,12 +14343,29 @@ app.on("update", (dt: number) => {
   settledRigMobCount = 0;
   const serverNow = animationNow + serverClock.offset;
   const playerEye = localPlayer.getPosition();
+  let trackedArena: { mobId: string; presentation: TrackedLeaderArenaPresentation } | null = null;
+  if (trackedLeaderCollectionHunt) {
+    const trackedMobId = leaderCollectionMobId(trackedLeaderCollectionHunt.collectionId);
+    const trackedMob = mobVisuals.get(trackedMobId)?.state;
+    const presentation = trackedMob ? trackedLeaderArenaPresentation(trackedLeaderCollectionHunt,
+      { id: trackedMobId, alive: trackedMob.alive, combatState: trackedMob.combatState,
+        targetId: trackedMob.targetId, respawnAt: trackedMob.respawnAt },
+      { x: playerEye.x, y: playerEye.y, z: playerEye.z, alive: potionHealth > 0 }, serverNow) : null;
+    if (presentation) trackedArena = { mobId: trackedMobId, presentation };
+    const suppress = presentation?.phase === "battle";
+    if (suppress !== leaderCollectionGuidanceSuppressed) {
+      leaderCollectionGuidanceSuppressed = suppress;
+      if (suppress) minimap.clearGuide(leaderCollectionTarget(trackedLeaderCollectionHunt.collectionId, trackedLeaderCollectionHunt.itemId).id);
+      else minimap.guideTo(leaderCollectionTarget(trackedLeaderCollectionHunt.collectionId, trackedLeaderCollectionHunt.itemId));
+    }
+  }
   const tabletTargetId = tabletSoftTargetMob(playerEye, WEAPON_ATTACK_DEFINITIONS[localMainHandId].range)?.id ?? null;
   const healthBarTargetId = interactionMode === "combat"
     ? tabletControlsQuery.matches ? tabletTargetId : nearestLivingMob(playerEye, WEAPON_ATTACK_DEFINITIONS[localMainHandId].range)?.id ?? null
     : null;
   let canvasBounds: DOMRect | null = null;
   for (const [mobId, mob] of mobVisuals) {
+    const trackedArenaPresentation = trackedArena?.mobId === mobId ? trackedArena.presentation : null;
     mob.levelTag.dataset.softTarget = String(tabletTargetId === mobId);
     mob.levelTag.dataset.abilityTarget = String(callingTouchAimTargetId === mobId);
     const refreshLabels = animationNow >= mob.nextLabelPresentationAt;
@@ -14373,7 +14396,8 @@ app.on("update", (dt: number) => {
       undergroundMobVisible(mob.state.x, mob.state.y, mob.state.z), mobDistance, combatActive,
     );
     const visible = presentationDetail !== "hidden"
-      && (mob.state.alive || deathPose.visible || materializing || Boolean(respawnIndicator));
+      && (mob.state.alive || deathPose.visible || materializing || Boolean(respawnIndicator)
+        || trackedArenaPresentation?.phase === "respawning");
     mob.entity.enabled = visible;
     if (!visible) {
       setElementHidden(mob.combatCue, true);
@@ -14529,7 +14553,7 @@ app.on("update", (dt: number) => {
     const cue = combatCue.visible ? combatCue : tacticCue ?? enemyAwarenessCue(mob.state, animationNow + serverClock.offset);
     const sampledMobDistance = Math.hypot(sampled.x - playerEye.x, sampled.y - playerEye.y, sampled.z - playerEye.z);
     if (refreshLabels) setElementHidden(mob.respawnTag, true);
-    if (refreshLabels && respawnIndicator && sampledMobDistance <= 24 && camera.camera
+    if (refreshLabels && (respawnIndicator || trackedArenaPresentation?.phase === "respawning") && sampledMobDistance <= 28 && camera.camera
       && enemyCueLineClear({ x: playerEye.x, y: playerEye.y + .8, z: playerEye.z },
         { x: mob.state.x, y: mob.state.y + .35, z: mob.state.z }, readCollisionWorldBlock)) {
       const screen = camera.camera.worldToScreen(new pc.Vec3(mob.state.x, mob.state.y + .48, mob.state.z));
@@ -14537,11 +14561,17 @@ app.on("update", (dt: number) => {
       const onScreen = screen.z > 0 && screen.x >= 0 && screen.x <= rect.width && screen.y >= 0 && screen.y <= rect.height;
       setElementHidden(mob.respawnTag, !onScreen);
       if (onScreen) {
-        if (mob.respawnTag.dataset.phase !== respawnIndicator.phase) mob.respawnTag.dataset.phase = respawnIndicator.phase;
-        const label = respawnIndicator.phase === "warning"
-          ? `DANGER · RETURNING IN ${respawnIndicator.seconds}s`
-          : `AREA CLEAR · RETURNS IN ${respawnIndicator.seconds}s`;
+        const trackedSeconds = trackedArenaPresentation?.phase === "respawning" ? trackedArenaPresentation.respawnSeconds : 0;
+        const warning = respawnIndicator?.phase === "warning" || trackedSeconds > 0 && trackedSeconds <= 5;
+        const phase = warning ? "warning" : "waiting";
+        if (mob.respawnTag.dataset.phase !== phase) mob.respawnTag.dataset.phase = phase;
+        const label = trackedArenaPresentation?.phase === "respawning"
+          ? `★ ${REGIONAL_LEADER_COLLECTIONS[trackedLeaderCollectionHunt!.collectionId].leaderName.toUpperCase()}\n${trackedArenaPresentation.difficulty} · RETURNS IN ${trackedSeconds}s\n${trackedArenaPresentation.party} · ${trackedArenaPresentation.slot}`
+          : warning
+            ? `DANGER · RETURNING IN ${respawnIndicator!.seconds}s`
+            : `AREA CLEAR · RETURNS IN ${respawnIndicator!.seconds}s`;
         if (mob.respawnTag.textContent !== label) mob.respawnTag.textContent = label;
+        mob.respawnTag.dataset.collection = String(trackedArenaPresentation?.phase === "respawning");
         setWorldOverlayPosition(mob.respawnTag, rect.left + screen.x, rect.top + screen.y);
       }
     }
@@ -14555,9 +14585,13 @@ app.on("update", (dt: number) => {
         const threat = enemyThreat(localCharacterProgression.level, mob.state.level);
         const skulls = threat === "deadly" ? "☠☠ " : threat === "dangerous" ? "☠ " : "";
         const miniboss = String(mob.state.isMiniBoss);
-        const label = `${mob.state.isMiniBoss ? "★ MINI-BOSS · " : skulls}LV ${mob.state.level} · ${mob.state.name}`;
+        const trackedReady = trackedArenaPresentation?.phase === "ready";
+        const label = trackedReady
+          ? `★ ${REGIONAL_LEADER_COLLECTIONS[trackedLeaderCollectionHunt!.collectionId].leaderName.toUpperCase()}\n${trackedArenaPresentation.difficulty} · READY\n${trackedArenaPresentation.party} · ${trackedArenaPresentation.slot}`
+          : `${mob.state.isMiniBoss ? "★ MINI-BOSS · " : skulls}LV ${mob.state.level} · ${mob.state.name}`;
         if (mob.levelTag.dataset.threat !== threat) mob.levelTag.dataset.threat = threat;
         if (mob.levelTag.dataset.miniboss !== miniboss) mob.levelTag.dataset.miniboss = miniboss;
+        mob.levelTag.dataset.collection = String(trackedReady);
         if (mob.levelTag.textContent !== label) mob.levelTag.textContent = label;
         setWorldOverlayPosition(mob.levelTag, rect.left + screen.x, rect.top + screen.y);
       }

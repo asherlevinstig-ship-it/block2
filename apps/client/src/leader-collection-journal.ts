@@ -13,6 +13,43 @@ const LEADER_COLLECTION_POINTS = {
   frontier: FRONTIER_WARLEADER_HOME,
   ashen: ASHEN_SENTRY_HOMES[1],
 } as const satisfies Record<RegionalLeaderCollectionId, { x: number; y: number; z: number }>;
+const LEADER_COLLECTION_MOBS = {
+  greenwood: "wild-crawler",
+  mistfen: "mistfen-behemoth",
+  quarry: "south-quarrymaster",
+  northwatch: "northwatch-watchbreaker",
+  frontier: "frontier-brute-east",
+  ashen: "ashglass-sentry-east",
+} as const satisfies Record<RegionalLeaderCollectionId, string>;
+
+export type TrackedLeaderArenaPresentation = {
+  phase: "ready" | "battle" | "respawning";
+  difficulty: string;
+  party: string;
+  slot: string;
+  respawnSeconds: number;
+};
+
+export function leaderCollectionMobId(collectionId: RegionalLeaderCollectionId): string {
+  return LEADER_COLLECTION_MOBS[collectionId];
+}
+
+export function trackedLeaderArenaPresentation(tracked: TrackedLeaderCollectionHunt,
+  mob: { id: string; alive: boolean; combatState: string; targetId: string; respawnAt: number },
+  player: { x: number; y: number; z: number; alive: boolean }, serverNow: number, radius = 26): TrackedLeaderArenaPresentation | null {
+  if (mob.id !== leaderCollectionMobId(tracked.collectionId)
+    || Math.abs(player.y - LEADER_COLLECTION_POINTS[tracked.collectionId].y) > 2.5
+    || Math.hypot(player.x - LEADER_COLLECTION_POINTS[tracked.collectionId].x,
+      player.z - LEADER_COLLECTION_POINTS[tracked.collectionId].z) > radius) return null;
+  const tier = leaderCollectionRematchTier(tracked.collectionId, tracked.itemId);
+  const difficulty = tier ? `EMPOWERED ${["", "I", "II", "III"][tier] ?? tier}` : "NORMAL";
+  const party = tier >= 3 ? "3 PLAYERS RECOMMENDED" : tier >= 2 ? "2–3 PLAYERS RECOMMENDED" : "2 PLAYERS RECOMMENDED";
+  const slotIndex = REGIONAL_LEADER_COLLECTIONS[tracked.collectionId].items.findIndex(entry => entry.itemId === tracked.itemId) + 1;
+  const battle = player.alive && mob.alive && Boolean(mob.targetId);
+  const respawnSeconds = !mob.alive && mob.respawnAt > serverNow ? Math.max(1, Math.ceil((mob.respawnAt - serverNow) / 1_000)) : 0;
+  return { phase: battle ? "battle" : respawnSeconds > 0 ? "respawning" : "ready", difficulty, party,
+    slot: `COLLECTION SLOT ${slotIndex} · UNKNOWN`, respawnSeconds };
+}
 
 export function leaderCollectionRematchTier(collectionId: RegionalLeaderCollectionId, itemId: ItemId): number {
   const entry = REGIONAL_LEADER_COLLECTIONS[collectionId].items.find(candidate => candidate.itemId === itemId);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { advanceTrackedLeaderCollectionHunt, leaderCollectionProgress, leaderCollectionRematchTier, leaderCollectionTarget,
-  parseLeaderCollectionDiscoveries, parseTrackedLeaderCollectionHunt } from "./leader-collection-journal.js";
+  parseLeaderCollectionDiscoveries, parseTrackedLeaderCollectionHunt, trackedLeaderArenaPresentation } from "./leader-collection-journal.js";
 
 describe("regional leader collection journal", () => {
   it("reads permanent discoveries and ignores invalid items", () => {
@@ -44,5 +44,27 @@ describe("regional leader collection journal", () => {
     expect(advanceTrackedLeaderCollectionHunt(tracked, { greenwood: ["forged_bow", "fang_dagger", "forager_wrap", "rootstalker_wrap"] }))
       .toBeNull();
     expect(advanceTrackedLeaderCollectionHunt(tracked, {})).toEqual(tracked);
+  });
+
+  it("presents fixed arena difficulty and suppressible combat state near the tracked leader", () => {
+    const tracked = { collectionId: "northwatch", itemId: "northwatch_cloak" } as const;
+    const player = { x: 15.5, y: 8, z: -70, alive: true };
+    const ready = trackedLeaderArenaPresentation(tracked,
+      { id: "northwatch-watchbreaker", alive: true, combatState: "idle", targetId: "", respawnAt: 0 }, player, 10_000);
+    expect(ready).toMatchObject({ phase: "ready", difficulty: "EMPOWERED II", party: "2–3 PLAYERS RECOMMENDED",
+      slot: "COLLECTION SLOT 4 · UNKNOWN" });
+    expect(trackedLeaderArenaPresentation(tracked,
+      { id: "northwatch-watchbreaker", alive: true, combatState: "windup", targetId: "player", respawnAt: 0 }, player, 10_000)?.phase)
+      .toBe("battle");
+    expect(trackedLeaderArenaPresentation(tracked,
+      { id: "northwatch-watchbreaker", alive: false, combatState: "idle", targetId: "", respawnAt: 16_200 }, player, 10_000))
+      .toMatchObject({ phase: "respawning", respawnSeconds: 7 });
+  });
+
+  it("does not present a tracked arena for the wrong leader or a distant player", () => {
+    const tracked = { collectionId: "quarry", itemId: "forged_sword" } as const;
+    const mob = { id: "south-quarrymaster", alive: true, combatState: "idle", targetId: "", respawnAt: 0 };
+    expect(trackedLeaderArenaPresentation(tracked, mob, { x: 8.5, y: 8, z: 40, alive: true }, 0)).toBeNull();
+    expect(trackedLeaderArenaPresentation(tracked, { ...mob, id: "stone-brute" }, { x: 8.5, y: 8, z: 101.5, alive: true }, 0)).toBeNull();
   });
 });

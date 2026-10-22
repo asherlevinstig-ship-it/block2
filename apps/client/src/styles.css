@@ -3040,6 +3040,8 @@ body:has(#progression-notice:not([hidden])) #resource-toasts { display: none; }
 .enemy-level-tag[data-threat="dangerous"] { color: #ffd268; border-color: #e3a637bb; box-shadow: 0 0 8px #e3a63733; }
 .enemy-level-tag[data-threat="deadly"] { color: #ff7968; border-color: #ff4d3dcc; box-shadow: 0 0 10px #ff382b55; }
 .enemy-level-tag[data-miniboss="true"] { color: #ffd36b; border-color: #e89a32cc; background: #24160bea; box-shadow: 0 0 14px #e8902f66; }
+.enemy-level-tag[data-collection="true"], .enemy-respawn-tag[data-collection="true"] { min-width: 215px; padding: 7px 10px; border-color: #e8b84e; background: #211808ee; color: #ffe4a0; line-height: 1.45; text-align: center; white-space: pre-line; box-shadow: 0 0 18px #e7a93655; }
+.enemy-respawn-tag[data-collection="true"][data-phase="warning"] { border-color: #ff755d; color: #ffb09f; background: #260d09ee; }
 .enemy-level-tag[data-soft-target="true"] {
   border-color: #fff0a8;
   outline: 2px solid rgb(255 214 73 / 44%);
