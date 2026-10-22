@@ -13,6 +13,8 @@ export interface VoxelCharacterPose {
   scarfPitch: number;
   leftArmPitch: number;
   rightArmPitch: number;
+  leftArmRoll: number;
+  rightArmRoll: number;
   leftLegPitch: number;
   rightLegPitch: number;
   leftLegRoll: number;
@@ -325,6 +327,8 @@ export function voxelCharacterPose(
       scarfPitch: rising ? -26 : -14,
       leftArmPitch: rising ? -34 : -18,
       rightArmPitch: rising ? -34 : -18,
+      leftArmRoll: rising ? 8 : 4,
+      rightArmRoll: rising ? -8 : -4,
       leftLegPitch: rising ? 16 : 8,
       rightLegPitch: rising ? -12 : -6,
       leftLegRoll: 0,
@@ -336,6 +340,10 @@ export function voxelCharacterPose(
   const stride = Math.sin(phase) * 32 * movement;
   const forwardStride = stride * direction.forward;
   const sideStride = stride * direction.strafe;
+  // Arms keep pumping while strafing instead of appearing pinned to the torso.
+  // Reverse their phase while backpedalling so they remain opposed to the legs.
+  const armStride = forwardStride + stride * Math.abs(direction.strafe) * 0.72;
+  const armSpread = direction.strafe * 5.5 * movement;
   const breath = Math.sin(elapsedSeconds * 1.9);
   return {
     // Keep the feet planted. In an angled top-down view even a small whole-body
@@ -350,8 +358,10 @@ export function voxelCharacterPose(
     leftKneePitch: Math.max(0, -Math.sin(phase)) * 34 * movement,
     rightKneePitch: Math.max(0, Math.sin(phase)) * 34 * movement,
     scarfPitch: -10 - 28 * movement + Math.sin(phase - 0.8) * 7 * movement + breath * 2,
-    leftArmPitch: -forwardStride * 0.7 + sideStride * .22,
-    rightArmPitch: forwardStride * 0.7 + sideStride * .22,
+    leftArmPitch: -armStride * 0.96,
+    rightArmPitch: armStride * 0.96,
+    leftArmRoll: 4 + armSpread + Math.sin(phase) * 1.8 * movement,
+    rightArmRoll: -4 + armSpread + Math.sin(phase) * 1.8 * movement,
     leftLegPitch: forwardStride + Math.abs(sideStride) * .18,
     rightLegPitch: -forwardStride - Math.abs(sideStride) * .18,
     leftLegRoll: sideStride * .62,

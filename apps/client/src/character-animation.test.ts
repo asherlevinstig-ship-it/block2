@@ -20,6 +20,7 @@ describe("voxel character animation", () => {
   it("keeps opposing arms and legs in a readable walk cycle", () => {
     const pose = voxelCharacterPose(4.2, 0.15, 0, true);
     expect(pose.leftArmPitch).toBeCloseTo(-pose.rightArmPitch);
+    expect(Math.abs(pose.leftArmPitch)).toBeGreaterThan(20);
     expect(pose.leftLegPitch).toBeCloseTo(-pose.rightLegPitch);
     expect(Math.sign(pose.leftArmPitch)).toBe(-Math.sign(pose.leftLegPitch));
     expect(pose.bodyY).toBeGreaterThanOrEqual(0);
@@ -215,6 +216,9 @@ describe("voxel character animation", () => {
     expect(strafe.leftLegRoll).toBeGreaterThan(15);
     expect(strafe.rightLegRoll).toBeLessThan(-15);
     expect(Math.abs(strafe.leftLegPitch)).toBeLessThan(Math.abs(forward.leftLegPitch));
+    expect(Math.abs(strafe.leftArmPitch)).toBeGreaterThan(15);
+    expect(strafe.leftArmPitch).toBeCloseTo(-strafe.rightArmPitch);
+    expect(strafe.leftArmRoll).toBeGreaterThan(forward.leftArmRoll);
   });
 
   it("increases cadence for the faster Speed Lab run", () => {

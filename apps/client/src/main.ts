@@ -3001,8 +3001,8 @@ function animateVoxelCharacter(
   // Ease walking arms out and back in with the actual action pose. A boolean
   // active switch snaps the gait at both ends of an otherwise smooth attack.
   const armSwing = actionArmSwingWeight(action);
-  rig.leftArm.setLocalEulerAngles(pose.leftArmPitch * armSwing + action.leftArmPitch, 0, action.leftArmRoll + 4);
-  rig.rightArm.setLocalEulerAngles(-12 + pose.rightArmPitch * armSwing + action.rightArmPitch, 0, action.rightArmRoll - 4);
+  rig.leftArm.setLocalEulerAngles(pose.leftArmPitch * armSwing + action.leftArmPitch, 0, action.leftArmRoll + pose.leftArmRoll * armSwing);
+  rig.rightArm.setLocalEulerAngles(-12 + pose.rightArmPitch * armSwing + action.rightArmPitch, 0, action.rightArmRoll + pose.rightArmRoll * armSwing);
   rig.leftElbow.setLocalEulerAngles(pose.leftElbowPitch, 0, 0);
   rig.rightElbow.setLocalEulerAngles(pose.rightElbowPitch - 8, 0, 0);
   const pivot = rig.turnLean * (1 - locomotion.weight) * 6;
