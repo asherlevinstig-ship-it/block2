@@ -1,8 +1,14 @@
-export const defeatDuration = (kind: string) => kind === "root_guardian" ? 1450 : kind === "stone_brute" ? 920 : kind === "cave_spitter" ? 680 : 520;
+export function leaderDefeatKind(kind: string, leader: boolean): string {
+  return leader ? `leader:${kind}` : kind;
+}
+const baseKind = (kind: string) => kind.startsWith("leader:") ? kind.slice(7) : kind;
+export const defeatDuration = (kind: string) => kind.startsWith("leader:") ? 1_350
+  : kind === "root_guardian" ? 1450 : kind === "stone_brute" ? 920 : kind === "cave_spitter" ? 680 : 520;
 const smooth = (value: number) => { const t = Math.max(0, Math.min(1, value)); return t * t * (3 - 2 * t); };
 export function mobDefeatPose(kind: string, elapsed: number) {
   const progress = Math.max(0, Math.min(1, elapsed / defeatDuration(kind)));
-  const guardian = kind === "root_guardian", brute = kind === "stone_brute" || guardian, spitter = kind === "cave_spitter";
+  const resolved = baseKind(kind);
+  const guardian = resolved === "root_guardian", brute = resolved === "stone_brute" || guardian, spitter = resolved === "cave_spitter";
   const collapse = smooth(brute ? (progress - (guardian ? .2 : .12)) / (guardian ? .68 : .7) : progress / .78);
   return { progress, collapse, visible: progress < 1, width: 1 + collapse * (guardian ? .42 : brute ? .12 : .18),
     height: 1 - collapse * (guardian ? .82 : brute ? .6 : spitter ? .76 : .72), length: 1 + collapse * (guardian ? .36 : .12),

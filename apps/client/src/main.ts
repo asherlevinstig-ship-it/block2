@@ -120,7 +120,7 @@ import {
   predictedDodgeRecoveryElapsed,
 } from "./dodge-input.js";
 import { animateMobArt, createMobArt, setMobArtEnraged, setMobArtDefeated, type MobArtRig } from "./mob-art";
-import { defeatDuration, mobDefeatPose, lootSourceMob, lootMarkerScale } from "./mob-defeat.js";
+import { defeatDuration, leaderDefeatKind, mobDefeatPose, lootSourceMob, lootMarkerScale } from "./mob-defeat.js";
 import { matriarchBodyPose, matriarchRecoil } from "./matriarch-art.js";
 import { Client, Predict, getStateCallbacks, type InputHandle, type Room } from "@colyseus/sdk";
 import { stepPlayerNetcode } from "@blockcraft/voxel-world";
@@ -7816,6 +7816,7 @@ function createLootVisual(dropId: string, drop: NetworkLootDrop, settled = false
   const vaultCache = sourceId === "buried-chamber-brute" && itemId === "miners_lantern";
   const guardianDrop = rewardCache || vaultCache || sourceId === "forest-guardian" && isEquipmentItem(itemId);
   const attunedDrop = Boolean(drop.affixId && drop.affixTier && drop.affixItemId);
+  const collectionDrop = Boolean(drop.leaderCollectionItemId);
   if (groupedBag) {
     addBox(root, `${bagTier}-personal-loot-bag`, presentationMaterial, [.72, .46, .58], [0, -.12, 0]);
     addBox(root, "loot-bag-fold", presentationMaterial, [.62, .18, .5], [0, .2, .01]).setLocalEulerAngles(0, 0, 4);
@@ -7888,14 +7889,15 @@ function createLootVisual(dropId: string, drop: NetworkLootDrop, settled = false
   const miniBossDrop = source?.state.isMiniBoss === true;
   const beam = new pc.Entity(`loot-${rarity}-beam`);
   beam.addComponent("render", { type: "cylinder", material: presentationMaterial, castShadows: false, receiveShadows: false });
-  const beamHeight = realmWardenDrop ? 5.5 : patrolCache ? 2.8 : miniBossDrop || attunedDrop ? 2.65 : equipmentDrop ? legendaryDrop ? 2.4 : 1.8 : legendaryDrop ? 1.7 : 1.35;
-  const beamWidth = realmWardenDrop ? .11 : patrolCache ? .075 : miniBossDrop || attunedDrop ? .072 : equipmentDrop ? legendaryDrop ? .065 : .05 : .04;
+  const beamHeight = realmWardenDrop ? 5.5 : collectionDrop ? 3.35 : patrolCache ? 2.8 : miniBossDrop || attunedDrop ? 2.65 : equipmentDrop ? legendaryDrop ? 2.4 : 1.8 : legendaryDrop ? 1.7 : 1.35;
+  const beamWidth = realmWardenDrop ? .11 : collectionDrop ? .09 : patrolCache ? .075 : miniBossDrop || attunedDrop ? .072 : equipmentDrop ? legendaryDrop ? .065 : .05 : .04;
   beam.setLocalScale(beamWidth, beamHeight, beamWidth);
   beam.setLocalPosition(0, beamHeight * .52, 0); root.addChild(beam);
-  if (patrolCache || miniBossDrop || attunedDrop || ITEM_RARITIES[rarity].order >= ITEM_RARITIES.rare.order) {
+  if (collectionDrop || patrolCache || miniBossDrop || attunedDrop || ITEM_RARITIES[rarity].order >= ITEM_RARITIES.rare.order) {
     const halo = new pc.Entity(`loot-${rarity}-halo`);
     halo.addComponent("render", { type: "cylinder", material: presentationMaterial, castShadows: false, receiveShadows: false });
-    halo.setLocalScale(patrolCache || miniBossDrop || attunedDrop ? 1.38 : legendaryDrop ? 1.25 : .95, .018, patrolCache || miniBossDrop || attunedDrop ? 1.38 : legendaryDrop ? 1.25 : .95);
+    const haloScale = collectionDrop ? 1.65 : patrolCache || miniBossDrop || attunedDrop ? 1.38 : legendaryDrop ? 1.25 : .95;
+    halo.setLocalScale(haloScale, .018, haloScale);
     halo.setLocalPosition(0, -.42, 0); root.addChild(halo);
   }
   const glow = new pc.Entity(`loot-${rarity}-light`);
@@ -7907,7 +7909,9 @@ function createLootVisual(dropId: string, drop: NetworkLootDrop, settled = false
     range: realmWardenDrop ? 8 : patrolCache ? 6 : miniBossDrop || attunedDrop ? 6 : legendaryDrop ? 5.5 : equipmentDrop ? 3.5 : 2.8, castShadows: false });
   glow.setLocalPosition(0, .45, 0); root.addChild(glow);
   const now = performance.now();
-  const revealAt = settled ? now : source ? Math.max(now, Number.isFinite(source.defeatAt) ? source.defeatAt : now) + defeatDuration(source.art.rootGuardian ? "root_guardian" : source.state.archetype) : now + 180;
+  const revealAt = settled ? now : source ? Math.max(now, Number.isFinite(source.defeatAt) ? source.defeatAt : now)
+    + defeatDuration(leaderDefeatKind(source.art.rootGuardian ? "root_guardian" : source.state.archetype,
+      source.state.isMiniBoss === true)) : now + 180;
   const landedAt = settled ? now : revealAt + (source ? 520 : 260);
   const tossFrom = source
     ? new pc.Vec3(source.state.x, source.state.y + .72, source.state.z)
@@ -7966,6 +7970,9 @@ function bindLootDrops(joinedRoom: Room): void {
     showDrop(dropId, drop);
     if (dropId.startsWith("northwatch-shard-patrol-cache:"))
       createRangedPopup(new pc.Vec3(drop.x, drop.y + 2.2, drop.z), "PATROL CLEARED · YOUR CACHE", "landmark");
+    if (drop.leaderCollectionItemId && isItemId(drop.leaderCollectionItemId))
+      createRangedPopup(new pc.Vec3(drop.x, drop.y + 2.45, drop.z),
+        `COLLECTION PIECE · ${ITEM_DEFINITIONS[drop.leaderCollectionItemId].name.toUpperCase()}`, "landmark", false, [1, .78, .22]);
     if (drop.affixId && Object.hasOwn(EQUIPMENT_AFFIXES, drop.affixId) && drop.affixTier && drop.affixItemId && isItemId(drop.affixItemId)) {
       const affixId = drop.affixId as EquipmentAffixId;
       social.event(`ATTUNED LOOT · ${ITEM_DEFINITIONS[drop.affixItemId].name} · ${EQUIPMENT_AFFIXES[affixId].name} T${drop.affixTier}`);
@@ -14388,7 +14395,8 @@ app.on("update", (dt: number) => {
     const realmArrival = mobId === "realm-stone-warden" && mob.state.alive && mob.state.materializeUntil > serverNow;
     const materializing = (!mob.state.alive || realmArrival) && mob.state.materializeUntil > serverNow;
     const respawnIndicator = cavernRespawnIndicator(mobId, mob.state.alive, mob.state.respawnAt, serverNow);
-    const deathPose = mobDefeatPose(mob.art.rootGuardian ? "root_guardian" : mob.state.archetype, mob.state.alive ? 0 : animationNow - mob.defeatAt);
+    const deathPose = mobDefeatPose(leaderDefeatKind(mob.art.rootGuardian ? "root_guardian" : mob.state.archetype,
+      mob.state.isMiniBoss === true), mob.state.alive ? 0 : animationNow - mob.defeatAt);
     const defeat = mob.state.alive ? 0 : deathPose.collapse;
     const mobDistance = Math.hypot(mob.state.x - playerEye.x, mob.state.y - playerEye.y, mob.state.z - playerEye.z);
     const combatActive = mob.state.alive && mob.state.combatState !== "idle";
@@ -15865,6 +15873,9 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   });
   room.onMessage("combat:mob-hazard", (message: MobHazardPlaced) => {
     createMobHazard(message);
+    if (message.cue) createRangedPopup(new pc.Vec3(message.x, message.y + 1.1, message.z), message.cue,
+      "landmark", false, message.kind === "root" ? [.52, .9, .2] : message.kind === "toxic-cloud" ? [.64, 1, .18]
+        : message.kind === "fire-trail" ? [1, .42, .08] : [1, .72, .2]);
     logMovementEvent(`${message.kind === "pressure" ? "ARENA PRESSURE" : message.kind === "root" ? "ROOT HAZARD" : message.kind === "toxic-cloud" ? "TOXIC CLOUD" : message.kind === "fire-trail" ? "BURNING TRAIL" : "ACID POOL"} ${message.hazardId}`);
   });
   room.onMessage("depths:hazard", (message: DepthsRouteHazard) => createDepthsHazard(message));

@@ -68,7 +68,7 @@ import { AREA_LEADER_FOLLOWERS, AREA_MAIN_MOBS, areaLeaderPattern, areaLeaderPha
 import { MINI_BOSS_ENRAGE_MS, bruteLeaderPursuitSpeed, miniBossDamage, miniBossOrbitCounterPattern, miniBossWindupDelay, predictedMiniBossAim, updateOrbitPressure, type OrbitPressureState } from "./mini-boss-pressure.js";
 import { isMixedWarbandLeader, warbandCrawlerYaw, warbandCrossfireSite, warbandFormationState, warbandTactic, warbandTacticStats } from "./mixed-warband.js";
 import { selectWarbandTargets, warbandChallengeTargets, type WarbandTargetCandidate } from "./warband-targeting.js";
-import { miniBossCoverSites, miniBossPressureSites } from "./mini-boss-arena.js";
+import { miniBossCoverSites, miniBossPressureSites, regionalLeaderArenaMechanic } from "./mini-boss-arena.js";
 import { leaderRematch, leaderRematchMaterialBonus, leaderRematchPattern, northwatchWatchbreakerPattern, leaderRematchPressureCadence,
   leaderRematchStats, leaderRematchTiming, leaderTerritory } from "./leader-rematches.js";
 import { RealmHuntBoardRequestSchema, type RealmHuntBoardUpdate, type RealmHuntContractStatus, type RealmHuntStatus } from "@blockcraft/protocol";
@@ -4919,13 +4919,16 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private placeMiniBossArenaPressure(mobId: string, mob: MobState, phase: AreaLeaderPhase, now: number): void {
     if (phase === 1) return;
     const duration = phase === 3 ? 4_000 : 3_200;
-    for (const [index, site] of miniBossPressureSites(mob, phase, mob.actionSequence).entries()) {
+    const regional = regionalLeaderArenaMechanic(mobId, mob, phase, mob.actionSequence);
+    const sites = regional?.sites ?? miniBossPressureSites(mob, phase, mob.actionSequence);
+    for (const [index, site] of sites.entries()) {
       const hazardId = `arena-pressure:${mobId}:${mob.actionSequence}:${index}`;
       const expiresAt = now + duration;
-      this.mobHazards.set(hazardId, { hazardId, mobId, ...site, radius: .68, damage: 1,
+      const radius = regional?.radius ?? .68;
+      this.mobHazards.set(hazardId, { hazardId, mobId, ...site, radius, damage: 1,
         expiresAt, nextDamageAt: now + 550, lastDamageAt: new Map() });
-      this.broadcast("combat:mob-hazard", { hazardId, mobId, kind: "pressure", ...site,
-        radius: .68, expiresAt } satisfies MobHazardPlaced);
+      this.broadcast("combat:mob-hazard", { hazardId, mobId, kind: regional?.kind ?? "pressure", ...site,
+        radius, expiresAt, cue: index === 0 ? regional?.cue : undefined } satisfies MobHazardPlaced);
     }
   }
 

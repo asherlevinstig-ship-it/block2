@@ -1965,6 +1965,7 @@ export interface MobHazardPlaced {
   z: number;
   radius: number;
   expiresAt: number;
+  cue?: string;
 }
 
 export interface CinderRamImpact {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defeatDuration, mobDefeatPose, lootSourceMob, lootMarkerScale } from "./mob-defeat.js";
+import { defeatDuration, leaderDefeatKind, mobDefeatPose, lootSourceMob, lootMarkerScale } from "./mob-defeat.js";
 describe("enemy defeat presentation", () => {
   it("gives the brute a delayed heavy fall and the smaller enemies distinct crumples", () => {
     expect(defeatDuration("stone_brute")).toBeGreaterThan(defeatDuration("cave_spitter"));
@@ -23,6 +23,13 @@ describe("enemy defeat presentation", () => {
     const brute = mobDefeatPose("stone_brute", 800);
     expect(guardian.pitch).toBeGreaterThan(brute.pitch);
     expect(guardian.width).toBeGreaterThan(brute.width);
+  });
+  it("holds collection leaders for a clear defeat beat before their loot lands", () => {
+    const kind = leaderDefeatKind("moss_crawler", true);
+    expect(kind).toBe("leader:moss_crawler");
+    expect(defeatDuration(kind)).toBeGreaterThan(defeatDuration("stone_brute"));
+    expect(mobDefeatPose(kind, 1_000).visible).toBe(true);
+    expect(leaderDefeatKind("moss_crawler", false)).toBe("moss_crawler");
   });
   it("keeps pack IDs intact and reveals a steady, non-pulsing marker", () => {
     expect(lootSourceMob("wilds-east-pack:0:10000:2")).toBe("wilds-east-pack:0");
