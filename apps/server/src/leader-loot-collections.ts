@@ -1,6 +1,6 @@
-import type { ItemId } from "@blockcraft/protocol";
+import { REGIONAL_LEADER_COLLECTIONS, type ItemId, type RegionalLeaderCollectionId } from "@blockcraft/protocol";
 
-export type LeaderCollectionId = "greenwood" | "mistfen" | "quarry" | "northwatch" | "frontier" | "ashen";
+export type LeaderCollectionId = RegionalLeaderCollectionId;
 
 export interface LeaderCollectionState {
   discovered: Partial<Record<LeaderCollectionId, ItemId[]>>;
@@ -16,21 +16,18 @@ export type LeaderCollectionDefinition = {
 };
 
 export const LEADER_COLLECTIONS: Record<LeaderCollectionId, LeaderCollectionDefinition> = {
-  greenwood: { id: "greenwood", name: "Greenwood Leader Set",
+  greenwood: { id: "greenwood", ...REGIONAL_LEADER_COLLECTIONS.greenwood,
     leaders: ["moss-crawler", "outskirts-crawler-a", "outskirts-crawler-b", "outskirts-crawler-c", "wild-crawler", "roaming-crawler-alpha"],
-    items: [{ itemId: "forged_bow" }, { itemId: "fang_dagger" }, { itemId: "forager_wrap" }, { itemId: "rootstalker_wrap", minRematchTier: 3 }] },
-  mistfen: { id: "mistfen", name: "Mistfen Leader Set",
+  },
+  mistfen: { id: "mistfen", ...REGIONAL_LEADER_COLLECTIONS.mistfen,
     leaders: ["frontier-spitter", "wild-spitter-a", "wild-spitter-b", "wild-spitter-c", "gloomfang-spitter", "mistfen-behemoth", "roaming-spitter-alpha"],
-    items: [{ itemId: "forged_focus" }, { itemId: "acid_gland_focus" }, { itemId: "fenwalker_mantle" }, { itemId: "mirebreaker_mantle", minRematchTier: 3 }] },
-  quarry: { id: "quarry", name: "Quarry Leader Set",
+  },
+  quarry: { id: "quarry", ...REGIONAL_LEADER_COLLECTIONS.quarry,
     leaders: ["stone-brute", "south-quarrymaster"],
-    items: [{ itemId: "stone_core_hammer" }, { itemId: "forged_sword" }, { itemId: "quarry_hauberk" }, { itemId: "bastion_plate", minRematchTier: 3 }] },
-  northwatch: { id: "northwatch", name: "Northwatch Leader Set", leaders: ["northwatch-watchbreaker"],
-    items: [{ itemId: "forged_bow" }, { itemId: "fang_dagger" }, { itemId: "ridgeguard_mantle" }, { itemId: "northwatch_cloak", minRematchTier: 2 }] },
-  frontier: { id: "frontier", name: "Frontier Leader Set", leaders: ["frontier-brute", "frontier-brute-west", "frontier-brute-east", "roaming-brute-alpha"],
-    items: [{ itemId: "stone_core_hammer" }, { itemId: "forged_sword" }, { itemId: "iron_armour" }, { itemId: "worldsplitter_plate", minRematchTier: 3 }] },
-  ashen: { id: "ashen", name: "Ashen Leader Set", leaders: ["ashglass-sentry-east"],
-    items: [{ itemId: "cinderfang_blade" }, { itemId: "ashguard_mantle" }, { itemId: "emberheart_focus" }, { itemId: "worldsplitter_plate", minRematchTier: 3 }] },
+  },
+  northwatch: { id: "northwatch", ...REGIONAL_LEADER_COLLECTIONS.northwatch, leaders: ["northwatch-watchbreaker"] },
+  frontier: { id: "frontier", ...REGIONAL_LEADER_COLLECTIONS.frontier, leaders: ["frontier-brute", "frontier-brute-west", "frontier-brute-east", "roaming-brute-alpha"] },
+  ashen: { id: "ashen", ...REGIONAL_LEADER_COLLECTIONS.ashen, leaders: ["ashglass-sentry-east"] },
 };
 
 export function leaderCollectionFor(mobId: string): LeaderCollectionDefinition | null {

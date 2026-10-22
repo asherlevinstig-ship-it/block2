@@ -863,6 +863,22 @@ export const ITEM_DEFINITIONS = {
 } as const;
 
 export type ItemId = keyof typeof ITEM_DEFINITIONS;
+export const REGIONAL_LEADER_COLLECTIONS = {
+  greenwood: { name: "Greenwood Leader Set", leaderName: "Greenwood Broodmother", badgeName: "Rootbound Crest",
+    items: [{ itemId: "forged_bow" }, { itemId: "fang_dagger" }, { itemId: "forager_wrap" }, { itemId: "rootstalker_wrap", minRematchTier: 3 }] },
+  mistfen: { name: "Mistfen Leader Set", leaderName: "Mireback Behemoth", badgeName: "Mireborn Crest",
+    items: [{ itemId: "forged_focus" }, { itemId: "acid_gland_focus" }, { itemId: "fenwalker_mantle" }, { itemId: "mirebreaker_mantle", minRematchTier: 3 }] },
+  quarry: { name: "Quarry Leader Set", leaderName: "Redstone Quarrymaster", badgeName: "Quarry Crest",
+    items: [{ itemId: "stone_core_hammer" }, { itemId: "forged_sword" }, { itemId: "quarry_hauberk" }, { itemId: "bastion_plate", minRematchTier: 3 }] },
+  northwatch: { name: "Northwatch Leader Set", leaderName: "Northwatch Watchbreaker", badgeName: "Watchbreaker Crest",
+    items: [{ itemId: "forged_bow" }, { itemId: "fang_dagger" }, { itemId: "ridgeguard_mantle" }, { itemId: "northwatch_cloak", minRematchTier: 2 }] },
+  frontier: { name: "Frontier Leader Set", leaderName: "Frontier Warleader", badgeName: "Warleader Crest",
+    items: [{ itemId: "stone_core_hammer" }, { itemId: "forged_sword" }, { itemId: "iron_armour" }, { itemId: "worldsplitter_plate", minRematchTier: 3 }] },
+  ashen: { name: "Ashen Leader Set", leaderName: "Ashglass High Sentry", badgeName: "Ashglass Crest",
+    items: [{ itemId: "cinderfang_blade" }, { itemId: "ashguard_mantle" }, { itemId: "emberheart_focus" }, { itemId: "worldsplitter_plate", minRematchTier: 3 }] },
+} as const satisfies Record<string, { name: string; leaderName: string; badgeName: string;
+  items: readonly { itemId: ItemId; minRematchTier?: number }[] }>;
+export type RegionalLeaderCollectionId = keyof typeof REGIONAL_LEADER_COLLECTIONS;
 export const HUNT_EQUIPMENT_SETS = {
   fang: { name: "Fangstalker", weaponId: "fang_dagger", armourId: "fangstalker_wrap",
     bonus: "Finishers restore 12 stamina and deal +2 damage to enemies below 30% health" },

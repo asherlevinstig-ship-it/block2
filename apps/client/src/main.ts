@@ -60,6 +60,7 @@ import { CALLING_AWAKENING_MINIMUM_MS, callingAwakening, callingPreviewMarkup } 
 import { advanceFirstCombatPhase, completesFirstCombatLesson, FIRST_COMBAT_GROUP_IDS, firstCombatLesson,
   type FirstCombatPhase } from "./first-combat-lesson.js";
 import { EQUIPMENT_COLLECTION, collectionProgress, equipmentCollectionLabel, equipmentProgressionText } from "./equipment-progression.js";
+import { leaderCollectionProgress, parseLeaderCollectionDiscoveries, type LeaderCollectionDiscoveries } from "./leader-collection-journal.js";
 import { blacksmithShopStock, shopGoldShortfall, type BlacksmithShopTab } from "./blacksmith-shop.js";
 import { FIELD_FORGE_RECIPES, type FieldForgeId } from "@blockcraft/protocol";
 import { haulUpgradeProgress, nextHaulRegion, nextHaulUpgrade, type HaulRegion } from "./blacksmith-haul.js";
@@ -181,6 +182,7 @@ import {
   lootCarryCapacity,
   equipmentPerkStats,
   HUNT_EQUIPMENT_SETS,
+  REGIONAL_LEADER_COLLECTIONS,
   huntSetForItem,
   huntSetForLoadout,
   type ItemRarity,
@@ -222,6 +224,7 @@ import {
   type RealmHuntDifficulty,
   type HuntCollectionUpdate,
   type HuntSetId,
+  type RegionalLeaderCollectionId,
   type DungeonLobbyUpdate,
   type SilverDepthsLobbyUpdate,
   type ItemId,
@@ -3906,13 +3909,64 @@ for (const entry of EQUIPMENT_COLLECTION) {
 }
 setCodexHunt(trackedCodexItemId, false);
 const huntSetGrid = document.querySelector<HTMLElement>("#hunt-set-grid")!;
+const regionalLeaderCollectionGrid = document.querySelector<HTMLElement>("#regional-leader-collection-grid")!;
+const regionalLeaderProgress = document.querySelector<HTMLElement>("#regional-leader-progress")!;
 const huntLoadoutList = document.querySelector<HTMLElement>("#hunt-loadout-list")!;
 const huntCollectionMessage = document.querySelector<HTMLElement>("#hunt-collection-message")!;
 const huntCollectionReward = document.querySelector<HTMLElement>("#hunt-collection-reward")!;
 let latestHuntCollection: HuntCollectionUpdate | null = null;
+let leaderCollectionDiscoveries: LeaderCollectionDiscoveries = {};
 const huntMarkForSet = { fang: "alpha_forgemark", venom: "venom_forgemark", crusher: "crusher_forgemark" } as const;
 const huntTime = (milliseconds?: number): string => milliseconds && milliseconds > 0
   ? `${Math.floor(milliseconds / 60_000)}:${String(Math.floor(milliseconds / 1_000) % 60).padStart(2, "0")}.${String(Math.floor(milliseconds % 1_000 / 100)).padStart(1, "0")}` : "—";
+
+function renderRegionalLeaderCollections(value: string): void {
+  leaderCollectionDiscoveries = parseLeaderCollectionDiscoveries(value);
+  regionalLeaderCollectionGrid.replaceChildren();
+  let discoveredTotal = 0;
+  let itemTotal = 0;
+  for (const collectionId of Object.keys(REGIONAL_LEADER_COLLECTIONS) as RegionalLeaderCollectionId[]) {
+    const definition = REGIONAL_LEADER_COLLECTIONS[collectionId];
+    const progress = leaderCollectionProgress(collectionId, leaderCollectionDiscoveries);
+    const discovered = new Set(leaderCollectionDiscoveries[collectionId] ?? []);
+    discoveredTotal += progress.discovered;
+    itemTotal += progress.total;
+    const row = document.createElement("article");
+    row.className = "leader-collection-row";
+    row.dataset.complete = String(progress.complete);
+    const header = document.createElement("header");
+    header.innerHTML = `<div><small>${collectionId.toUpperCase()} · LEADER SET</small><strong>${definition.name}</strong><span>Defeat ${definition.leaderName}</span></div><b>${progress.discovered} / ${progress.total}</b>`;
+    const pieces = document.createElement("div");
+    pieces.className = "leader-collection-pieces";
+    for (const entry of definition.items) {
+      const known = discovered.has(entry.itemId);
+      const piece = document.createElement("div");
+      piece.className = "leader-collection-piece";
+      piece.dataset.discovered = String(known);
+      piece.dataset.rarity = known ? itemRarity(entry.itemId) : "unknown";
+      const icon = document.createElement("i");
+      icon.setAttribute("aria-hidden", "true");
+      icon.textContent = known ? (armourForItem(entry.itemId) ? "◆" : "✦") : "?";
+      const copy = document.createElement("span");
+      const name = document.createElement("strong");
+      name.textContent = known ? ITEM_DEFINITIONS[entry.itemId].name : "Unknown piece";
+      const status = document.createElement("small");
+      const rematchTier = "minRematchTier" in entry ? entry.minRematchTier : undefined;
+      status.textContent = known ? "DISCOVERED" : rematchTier ? `EMPOWERED REMATCH ${["", "I", "II", "III"][rematchTier] ?? rematchTier}` : "LEADER DROP";
+      copy.append(name, status);
+      piece.append(icon, copy);
+      pieces.append(piece);
+    }
+    const footer = document.createElement("footer");
+    footer.innerHTML = progress.complete
+      ? `<span>SET COMPLETE</span><b data-earned="true">✦ ${definition.badgeName}</b>`
+      : `<span>${progress.total - progress.discovered} piece${progress.total - progress.discovered === 1 ? "" : "s"} still hidden</span><b data-earned="false">CREST LOCKED</b>`;
+    row.append(header, pieces, footer);
+    regionalLeaderCollectionGrid.append(row);
+  }
+  regionalLeaderProgress.textContent = `${discoveredTotal} / ${itemTotal}`;
+  regionalLeaderProgress.dataset.complete = String(discoveredTotal === itemTotal);
+}
 
 function renderHuntCollection(update: HuntCollectionUpdate): void {
   latestHuntCollection = update;
@@ -8166,6 +8220,7 @@ function bindPlayers(joinedRoom: Room): void {
       localSilverDepthsRunStage = player.silverDepthsRunStage;
       localSilverDepthsWing = player.silverDepthsWing === "iron" || player.silverDepthsWing === "silver" ? player.silverDepthsWing : null;
       updateLocalMistfenProgress(player.huntLoadoutsJson);
+      renderRegionalLeaderCollections(player.huntLoadoutsJson);
       updateTavernCoins(player.coins);
       renderCharacterProgression({ reason: "sync", level: player.level, experience: player.experience,
         experienceRequired: experienceToNextLevel(player.level), unspentStatPoints: player.unspentStatPoints,
@@ -8255,7 +8310,11 @@ function bindPlayers(joinedRoom: Room): void {
     playerCallbacks.listen("silverDepthsWing", () => {
       if (isLocal) localSilverDepthsWing = player.silverDepthsWing === "iron" || player.silverDepthsWing === "silver" ? player.silverDepthsWing : null;
     }, true);
-    playerCallbacks.listen("huntLoadoutsJson", () => { if (isLocal) updateLocalMistfenProgress(player.huntLoadoutsJson); }, true);
+    playerCallbacks.listen("huntLoadoutsJson", () => {
+      if (!isLocal) return;
+      updateLocalMistfenProgress(player.huntLoadoutsJson);
+      renderRegionalLeaderCollections(player.huntLoadoutsJson);
+    }, true);
     if (isLocal) {
       playerCallbacks.inventory.onAdd((item: { quantity: number }, itemId: string) => {
         if (!isItemId(itemId)) return;
