@@ -63,8 +63,8 @@ export function advanceOnboarding(step: number, event: OnboardingEvent): number 
 }
 
 /** A low-level character with no journey state must resolve its Calling before any field tutorial. */
-export function shouldStartCallingFirstJourney(step: number | null, level: number): boolean {
-  return step === null && level <= 2;
+export function shouldStartCallingFirstJourney(step: number | null, level: number, fastModeNewPath = false): boolean {
+  return step === null && (level <= 2 || fastModeNewPath);
 }
 
 export type StarterInventoryLesson = "hidden" | "open_pack" | "equip_sword";

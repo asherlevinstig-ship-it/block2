@@ -35,7 +35,9 @@ describe("first-play onboarding", () => {
     expect(shouldStartCallingFirstJourney(null, 1)).toBe(true);
     expect(shouldStartCallingFirstJourney(null, 2)).toBe(true);
     expect(shouldStartCallingFirstJourney(null, 3)).toBe(false);
+    expect(shouldStartCallingFirstJourney(null, 10, true)).toBe(true);
     expect(shouldStartCallingFirstJourney(0, 1)).toBe(false);
+    expect(shouldStartCallingFirstJourney(0, 10, true)).toBe(false);
     expect(callingFirstOnboardingStorageKey("guest_a")).not.toBe(callingFirstOnboardingStorageKey("guest_b"));
   });
 

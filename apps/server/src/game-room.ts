@@ -800,7 +800,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.onMessage("world:ready", client => {
       client.send("world:bootstrap", this.bootstrapPayload(this.state.players.get(client.sessionId)));
       const starterPlayer = this.state.players.get(client.sessionId);
-      if (this.roomKind === "overworld" && starterPlayer) {
+      if ((this.roomKind === "overworld" || this.rapidPractice) && starterPlayer) {
         this.ensureStarterKit(client.sessionId, starterPlayer, Date.now());
         const starter = this.state.lootDrops.get(`starter-kit:${client.sessionId}`);
         if (starter) client.send("loot:spawned", { dropId: `starter-kit:${client.sessionId}`,
@@ -1179,7 +1179,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.state.players.set(client.sessionId, player);
     for (const [playerId, until] of this.stealthUntil)
       if (until > Date.now()) client.send("player:stealth", { playerId, until });
-    if (this.roomKind === "overworld") this.ensureStarterKit(client.sessionId, player, Date.now());
+    if (this.roomKind === "overworld" || this.rapidPractice) this.ensureStarterKit(client.sessionId, player, Date.now());
     if (player.miningExpeditionStage === 7 && (player.inventory.get("miners_lantern")?.quantity ?? 0) > 0) {
       this.advanceFirstExpedition(client, "returned_to_blacksmith");
     }
@@ -3941,7 +3941,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
 
   private ensureStarterKit(playerId: string, player: PlayerState, now: number): void {
     if (starterKitClaimed(player.huntLoadoutsJson) || this.state.lootDrops.has(`starter-kit:${playerId}`)) return;
-    const spawn = this.spawnPoint();
+    const spawn = this.rapidPractice ? { x: 99.5, y: 8, z: 106.5 } : this.spawnPoint();
     const drop = new LootDropState();
     Object.assign(drop, { ownerId: playerId, itemId: "forged_sword", quantity: 1,
       contentsJson: encodeLootBagItems([...STARTER_KIT_ITEMS]), x: spawn.x, y: spawn.y + .22, z: spawn.z + 3,

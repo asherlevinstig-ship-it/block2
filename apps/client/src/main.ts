@@ -5567,7 +5567,8 @@ callingAwakeningContinue.addEventListener("click", closeCallingAwakening);
 function renderBuildPath(update: BuildPathUpdate): void {
   lastBuildPathUpdate = update;
   if (!callingFirstOnboardingPending
-    && shouldStartCallingFirstJourney(firstStepsIndex, localCharacterProgression.level)) {
+    && shouldStartCallingFirstJourney(firstStepsIndex, localCharacterProgression.level,
+      rapidPrototypeRequested && !update.selectedPathId)) {
     callingFirstOnboardingPending = true;
     try { window.localStorage.setItem(callingFirstOnboardingKey, "pending"); } catch { /* Storage may be unavailable. */ }
   }

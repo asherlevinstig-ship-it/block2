@@ -40,4 +40,18 @@ describe("new-character starter supplies", () => {
     internal.ensureStarterKit("new-player", player, first.expiresAt + 2);
     expect(room.state.lootDrops.has(id)).toBe(false);
   });
+
+  it("places the personal bag beside the fast-mode town spawn", () => {
+    const room = new WorldRoom(); room.setState(new WorldState());
+    const internal = room as any;
+    internal.rapidPractice = true;
+    const player = new PlayerState(); Object.assign(player, { x: 99.5, y: 8, z: 106.5 });
+    room.state.players.set("fast-new-player", player);
+
+    internal.ensureStarterKit("fast-new-player", player, 20_000);
+
+    const drop = room.state.lootDrops.get("starter-kit:fast-new-player")!;
+    expect({ x: drop.x, y: drop.y, z: drop.z }).toEqual({ x: 99.5, y: 8.22, z: 109.5 });
+    expect(decodeLootBagItems(drop.contentsJson)).toEqual([...STARTER_KIT_ITEMS]);
+  });
 });
