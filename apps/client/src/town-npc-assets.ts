@@ -17,22 +17,29 @@ export interface TownNpcAssetLoadResult {
 }
 
 type TownNpcAnimationAsset = Pick<pc.Asset, "name" | "resource">;
+type TownNpcAnimationSource = TownNpcAnimationAsset | pc.AnimTrack;
 
 const townNpcAnimationLoops = (name: string): boolean => name === "Idle" || name.startsWith("Walking_");
 
 /** Bind GLB AnimTracks to the instantiated character's actual bone hierarchy.
  * Container animations are modern AnimTracks, so the legacy `animation`
  * component can load without ever moving the joints. */
-export function bindTownNpcRig(entity: pc.Entity, animationAssets: readonly TownNpcAnimationAsset[],
+export function bindTownNpcRig(entity: pc.Entity, animationAssets: readonly TownNpcAnimationSource[],
   initialState: string, normalizedStart = 0): boolean {
-  const tracks = animationAssets.filter((asset): asset is TownNpcAnimationAsset & { resource: pc.AnimTrack } =>
-    asset.resource instanceof pc.AnimTrack);
-  if (!tracks.some(asset => asset.name === initialState)) return false;
+  const tracks = animationAssets.flatMap(source => {
+    const track = source instanceof pc.AnimTrack ? source
+      : source.resource instanceof pc.AnimTrack ? source.resource : null;
+    if (!track) return [];
+    // A GLB container names its sub-assets "<file>/animation/<index>".
+    // The authored clip name (Idle, Walking_A, etc.) belongs to AnimTrack.
+    return [{ name: track.name, track }];
+  });
+  if (!tracks.some(({ name }) => name === initialState)) return false;
 
   entity.addComponent("anim", { activate: false, speed: 1 });
   if (!entity.anim) return false;
-  for (const asset of tracks)
-    entity.anim.assignAnimation(asset.name, asset.resource, undefined, 1, townNpcAnimationLoops(asset.name));
+  for (const { name, track } of tracks)
+    entity.anim.assignAnimation(name, track, undefined, 1, townNpcAnimationLoops(name));
 
   const layer = entity.anim.baseLayer;
   if (!layer?.states.includes(initialState)) return false;

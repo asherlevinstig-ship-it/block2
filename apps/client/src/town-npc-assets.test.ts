@@ -27,8 +27,8 @@ describe("town NPC assets", () => {
         this.anim = anim;
       }),
     } as unknown as pc.Entity;
-    const clips = ["Idle", "Walking_A", "Interact"].map(name => ({
-      name, resource: new pc.AnimTrack(name, 2, [], [], []),
+    const clips = ["Idle", "Walking_A", "Interact"].map((name, index) => ({
+      name: `guard.glb/animation/${index}`, resource: new pc.AnimTrack(name, 2, [], [], []),
     }));
 
     expect(bindTownNpcRig(entity, clips, "Idle", .4)).toBe(true);
@@ -41,6 +41,19 @@ describe("town NPC assets", () => {
 
     expect(transitionTownNpcRig(entity, "Walking_A", .2)).toBe(true);
     expect(layer.transition).toHaveBeenCalledWith("Walking_A", .2);
+  });
+
+  it("also accepts unpacked AnimTracks when a loader returns them directly", () => {
+    const layer = { states: ["Idle"], activeStateDuration: 1, play: vi.fn(), transition: vi.fn() };
+    const anim = { assignAnimation: vi.fn(), baseLayer: layer, playing: false, speed: 1 };
+    const entity = {
+      anim: undefined,
+      addComponent: vi.fn(function (this: { anim?: typeof anim }) { this.anim = anim; }),
+    } as unknown as pc.Entity;
+    const idle = new pc.AnimTrack("Idle", 1, [], [], []);
+
+    expect(bindTownNpcRig(entity, [idle], "Idle")).toBe(true);
+    expect(anim.assignAnimation).toHaveBeenCalledWith("Idle", idle, undefined, 1, true);
   });
 
   it("keeps the visible fallback when a requested skeletal clip is missing", () => {

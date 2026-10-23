@@ -2218,6 +2218,11 @@ if (rapidPrototypeRequested) {
       accent: coloredMaterial(new pc.Color(...definition.accent)),
     });
   }
+  const npcIrisMaterials = new Map<TownLifeActorDefinition["role"], pc.StandardMaterial>();
+  for (const definition of SPEED_LAB_TOWN_ACTORS) {
+    if (npcIrisMaterials.has(definition.role)) continue;
+    npcIrisMaterials.set(definition.role, coloredMaterial(new pc.Color(...townNpcFaceStyle(definition.role).iris)));
+  }
   const addTownLimb = (root: pc.Entity, name: string, pivot: [number, number, number], material: pc.StandardMaterial,
     scale: [number, number, number]): pc.Entity => {
     const limb = new pc.Entity(`${name}-pivot`);
@@ -2238,6 +2243,17 @@ if (rapidPrototypeRequested) {
     addTownShape(fallback, "townsperson-coat-skirt", "cone", materials.coat, [.42, .38, .34], [0, .72, 0]);
     const head = addTownShape(fallback, "townsperson-head", "sphere", skin, [.34, .39, .34], [0, 1.61, 0]);
     addTownShape(fallback, "townsperson-hair", "sphere", darkHair, [.36, .16, .36], [0, 1.79, -.02]);
+    const faceStyle = townNpcFaceStyle(definition.role);
+    const iris = npcIrisMaterials.get(definition.role)!;
+    for (const side of [-1, 1] as const) {
+      addTownShape(head, `fallback-eye-white-${side}`, "sphere", eyeWhite, [.2, .115, .07], [side * .36, .12, .93]);
+      addTownShape(head, `fallback-iris-${side}`, "sphere", iris, [.09, .09, .04], [side * .36, .12, 1.01]);
+      addTownShape(head, `fallback-pupil-${side}`, "sphere", faceInk, [.038, .05, .025], [side * .36, .12, 1.06]);
+      addTownShape(head, `fallback-brow-${side}`, "box", faceInk, [.23, .05, .045], [side * .36, .38, .98])
+        .setLocalEulerAngles(0, 0, side * faceStyle.browTilt);
+    }
+    addTownShape(head, "fallback-nose", "sphere", skin, [.13, .22, .12], [0, -.08, 1.02]);
+    addTownShape(head, "fallback-mouth", "box", faceInk, [.32, .05, .04], [0, -.37, 1]);
     const leftArm = addTownLimb(fallback, "townsperson-left-arm", [-.33, 1.25, 0], materials.coat, [.17, .54, .2]);
     const rightArm = addTownLimb(fallback, "townsperson-right-arm", [.33, 1.25, 0], materials.coat, [.17, .54, .2]);
     const leftLeg = addTownLimb(fallback, "townsperson-left-leg", [-.14, .72, 0], trouser, [.2, .62, .23]);
@@ -2270,11 +2286,6 @@ if (rapidPrototypeRequested) {
     healer: new Set(["Spellbook_open", "1H_Wand"]),
     vendor: new Set(), smith: new Set(), resident: new Set(),
   };
-  const npcIrisMaterials = new Map<TownLifeActorDefinition["role"], pc.StandardMaterial>();
-  for (const definition of SPEED_LAB_TOWN_ACTORS) {
-    if (npcIrisMaterials.has(definition.role)) continue;
-    npcIrisMaterials.set(definition.role, coloredMaterial(new pc.Color(...townNpcFaceStyle(definition.role).iris)));
-  }
   const addTownFaceShape = (parent: pc.Entity, name: string, type: "box" | "sphere",
     material: pc.StandardMaterial, scale: [number, number, number], position: [number, number, number],
     euler?: [number, number, number]): pc.Entity => {
@@ -2354,6 +2365,7 @@ if (rapidPrototypeRequested) {
     if (townNpcAssetsStarted) return;
     townNpcAssetsStarted = true;
     void loadTownNpcAssets(app).then(result => {
+      let animatedActors = 0;
       for (const actor of rapidTownActors) {
         const asset = result.loaded.get(actor.definition.role);
         const resource = asset?.resource as (pc.ContainerResource & { animations: pc.Asset[] }) | undefined;
@@ -2373,8 +2385,10 @@ if (rapidPrototypeRequested) {
         actor.model = model;
         actor.animationName = animationName;
         actor.fallback.enabled = false;
+        animatedActors++;
       }
-      console.info(`[town-npcs] ${result.loaded.size} role models ready; ${result.failed.size} procedural fallbacks retained.`);
+      console.info(`[town-npcs] ${animatedActors}/${rapidTownActors.length} animated actors ready; ` +
+        `${rapidTownActors.length - animatedActors} procedural fallbacks retained (${result.loaded.size} role assets loaded).`);
     });
   };
 
