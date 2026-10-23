@@ -111,6 +111,15 @@ import { bruteRecoveryPose, enemyAwarenessCue, enemyCombatCue, enemyCueLineClear
 import { confirmPredictedDodges, removeRejectedDodge, replayPendingMovement, type PredictionFrame } from "./prediction-replay.js";
 import { advanceCameraOrbit, cameraOrbitOffset, dragCameraOrbit, initialCameraOrbit, pinchCameraOrbit } from "./camera-orbit.js";
 import { advanceCameraFollow, advanceCameraHeight, advanceCameraPosition } from "./camera-follow.js";
+import {
+  FIRST_PERSON_EYE_HEIGHT,
+  FIRST_PERSON_FOV,
+  FIRST_PERSON_NEUTRAL_ORBIT_PITCH,
+  THIRD_PERSON_FOV,
+  firstPersonFacingYaw,
+  firstPersonLookDirection,
+  type CameraViewMode,
+} from "./camera-view.js";
 import { CombatSyncRecorder } from "./combat-sync.js";
 import {
   advanceDodgeVisualOffset,
@@ -1331,6 +1340,7 @@ const inventoryCapacity = document.querySelector<HTMLElement>("#inventory-capaci
 const inventoryCapacityLabel = document.querySelector<HTMLElement>("#inventory-capacity-label")!;
 const inventoryCapacitySlots = document.querySelector<HTMLElement>("#inventory-capacity-slots")!;
 const inventoryToggle = document.querySelector<HTMLButtonElement>("#inventory-toggle")!;
+const cameraModeToggle = document.querySelector<HTMLButtonElement>("#camera-mode-toggle")!;
 const inventoryClose = document.querySelector<HTMLButtonElement>("#inventory-close")!;
 const abilityPracticeOpen = document.querySelector<HTMLButtonElement>("#ability-practice-open")!;
 const abilityPractice = document.querySelector<HTMLElement>("#ability-practice")!;
@@ -1402,7 +1412,7 @@ const tabletCameraHint = document.querySelector<HTMLElement>("#tablet-camera-hin
 const keyboardCameraHint = document.querySelector<HTMLElement>("#keyboard-camera-hint")!;
 const keyboardCameraKeys = [...keyboardCameraHint.querySelectorAll<HTMLElement>("kbd[data-key]")];
 const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-toggle [data-mode]")];
-if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !dangerZone || !dangerZoneName || !locationCoordinates || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !graphicsQualitySelect || !graphicsQualityStatus || !performanceCopyLog || !performanceClearLog || !performanceLogStatus || !inventoryPanel || !inventoryTotal || !inventoryToggle || !inventoryClose || !inventoryBadge || !inventoryEquipped || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== requiredInventoryMainHands || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !callingButton || !contextButton || !contextButtonLabel || !contextButtonHint || !touchModeButton || !touchModeLabel || !tabletCameraHint || !keyboardCameraHint || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !controlsHelp || !combatReticle || !tabletAimGuide || !combatFeedback || modeButtons.length !== 2) {
+if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !dangerZone || !dangerZoneName || !locationCoordinates || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !graphicsQualitySelect || !graphicsQualityStatus || !performanceCopyLog || !performanceClearLog || !performanceLogStatus || !inventoryPanel || !inventoryTotal || !inventoryToggle || !cameraModeToggle || !inventoryClose || !inventoryBadge || !inventoryEquipped || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== requiredInventoryMainHands || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !callingButton || !contextButton || !contextButtonLabel || !contextButtonHint || !touchModeButton || !touchModeLabel || !tabletCameraHint || !keyboardCameraHint || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !controlsHelp || !combatReticle || !tabletAimGuide || !combatFeedback || modeButtons.length !== 2) {
   throw new Error("Game shell is missing required elements");
 }
 if ([quizTablePrompt, blacksmithPrompt, playerTradePrompt, playerTradeName, blacksmithPanel, blacksmithMessage, blacksmithOre, blacksmithGold, blacksmithPrice, blacksmithSell, blacksmithClose, haulEquipName, haulEquipDetail, haulEquip, haulSalvageCount, haulSalvageDetail, haulSalvage, haulStoreCount, haulStore, haulUpgradeName, haulUpgradeTrack, haulUpgradeDetail, haulRegionName, haulRegionDetail, haulTrackRegion, quizPanel, quizBalance, quizBalanceAmount, quizPotDisplay, quizPotLabel, quizWinToast, quizAnswerFeedback, quizFeedbackIcon, quizFeedbackTitle, quizFeedbackDetail, quizMessage, quizStakeHeading, quizStakes, quizQuestion, quizPot, quizPrompt, quizChoices, quizDecision, quizDouble, quizQuit, quizClose, tavernCoins].some(element => !element) || blacksmithUpgradeCards.length !== Object.keys(BLACKSMITH_UPGRADES).length) {
@@ -1483,6 +1493,14 @@ const storedCameraDistance = (() => {
 let cameraOrbit = rapidPrototypeRequested
   ? { ...initialCameraOrbit(39), pitch: Math.PI * .4, yawSpeed: 0, pitchSpeed: 0 }
   : initialCameraOrbit(storedCameraDistance);
+const CAMERA_VIEW_STORAGE_KEY = "blockcraft-camera-view-v1";
+let cameraViewMode: CameraViewMode = (() => {
+  try { return window.localStorage.getItem(CAMERA_VIEW_STORAGE_KEY) === "first-person" ? "first-person" : "third-person"; }
+  catch { return "third-person"; }
+})();
+let appliedCameraViewMode: CameraViewMode = "third-person";
+let thirdPersonCameraPitch = cameraOrbit.pitch;
+let firstPersonCameraPitch = FIRST_PERSON_NEUTRAL_ORBIT_PITCH;
 let indoorCameraBlend = 0;
 
 const light = new pc.Entity("sun");
@@ -3313,6 +3331,52 @@ for (const side of [-1, 1]) {
   addStealthGhostPart("leg", side * .15, .32, 0, .22, .6, .26);
 }
 localStealthGhost.enabled = false;
+const localFirstPersonRenderers = localPlayerVisual.findComponents("render") as pc.RenderComponent[];
+
+function setCameraViewMode(next: CameraViewMode, capturePointer = false): void {
+  if (next !== appliedCameraViewMode) {
+    if (appliedCameraViewMode === "first-person") firstPersonCameraPitch = cameraOrbit.pitch;
+    else thirdPersonCameraPitch = cameraOrbit.pitch;
+    cameraOrbit = {
+      ...cameraOrbit,
+      pitch: next === "first-person" ? firstPersonCameraPitch : thirdPersonCameraPitch,
+      yawSpeed: 0,
+      pitchSpeed: 0,
+    };
+    appliedCameraViewMode = next;
+  }
+  cameraViewMode = next;
+  const firstPerson = next === "first-person";
+  document.documentElement.classList.toggle("first-person-camera", firstPerson);
+  cameraModeToggle.setAttribute("aria-pressed", String(firstPerson));
+  cameraModeToggle.dataset.mode = firstPerson ? "first" : "third";
+  cameraModeToggle.querySelector("strong")!.textContent = firstPerson ? "1P" : "3P";
+  cameraModeToggle.title = firstPerson
+    ? "First-person camera · press V to return to third-person"
+    : "Third-person camera · press V for first-person";
+  for (const renderer of localFirstPersonRenderers) renderer.enabled = !firstPerson;
+  if (camera.camera) {
+    camera.camera.fov = firstPerson ? FIRST_PERSON_FOV : THIRD_PERSON_FOV;
+    camera.camera.nearClip = firstPerson ? .04 : .1;
+  }
+  try { window.localStorage.setItem(CAMERA_VIEW_STORAGE_KEY, next); } catch { /* Storage may be disabled. */ }
+  if (!firstPerson && document.pointerLockElement === canvas) document.exitPointerLock();
+  if (firstPerson && capturePointer && !tabletControlsQuery.matches) {
+    const lock = canvas.requestPointerLock();
+    if (lock instanceof Promise) void lock.catch(() => { /* Arrow keys remain available if pointer lock is denied. */ });
+  }
+}
+
+function toggleCameraView(capturePointer = false): void {
+  setCameraViewMode(cameraViewMode === "first-person" ? "third-person" : "first-person", capturePointer);
+}
+
+cameraModeToggle.addEventListener("click", () => toggleCameraView(true));
+document.addEventListener("mousemove", event => {
+  if (cameraViewMode !== "first-person" || document.pointerLockElement !== canvas) return;
+  cameraOrbit = dragCameraOrbit(cameraOrbit, event.movementX, event.movementY);
+});
+setCameraViewMode(cameraViewMode);
 localPlayer.setPosition(8.5, 11, 8.5);
 app.root.addChild(localPlayer);
 
@@ -8964,6 +9028,7 @@ function rangedFireAllowed(requirePointerAim = true): boolean {
     && !powerAimActive && !specialAimActive && localPowerStartedAt === null && !localDefending);
 }
 function mouseRangedYaw(fallback: number): number {
+  if (cameraViewMode === "first-person") return firstPersonFacingYaw(cameraOrbit.yaw);
   if (!rangedPointer.active || !camera.camera) return fallback;
   const rect = canvas.getBoundingClientRect();
   const x = rangedPointer.x - rect.left, y = rangedPointer.y - rect.top;
@@ -8974,7 +9039,10 @@ function updateRangedReticle(): void {
   const active = rangedPointer.active && continuous && interactionMode === "combat" && worldReady && defeatScreen.hidden === true && inventoryPanel.hidden === true;
   combatReticle.hidden = !active;
   canvas.classList.toggle("ranged-aim", active);
-  if (active) { combatReticle.style.left = `${rangedPointer.x}px`; combatReticle.style.top = `${rangedPointer.y}px`; }
+  if (active) {
+    combatReticle.style.left = cameraViewMode === "first-person" ? "50vw" : `${rangedPointer.x}px`;
+    combatReticle.style.top = cameraViewMode === "first-person" ? "50vh" : `${rangedPointer.y}px`;
+  }
 }
 let currentTarget: VoxelRaycastHit | null = null;
 let targetStateKey = "";
@@ -13349,7 +13417,7 @@ function closePopupFromEscape(popup: HTMLElement): boolean {
 }
 const tutorialGameplayKeys = new Set([
   "KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
-  "Space", "KeyE", "KeyJ", "KeyQ", "KeyC", "KeyR", "KeyF", "KeyG", "KeyH", "Enter",
+  "Space", "KeyE", "KeyJ", "KeyQ", "KeyV", "KeyC", "KeyR", "KeyF", "KeyG", "KeyH", "Enter",
 ]);
 
 window.addEventListener("keydown", event => {
@@ -13492,6 +13560,11 @@ window.addEventListener("keydown", event => {
     setInventoryOpen(true);
     return;
   }
+  if (event.code === "KeyV") {
+    event.preventDefault();
+    toggleCameraView(true);
+    return;
+  }
   if (event.code === "KeyQ") setInteractionMode(alternateInteractionMode(interactionMode));
   if (event.code === "KeyH") { event.preventDefault(); requestPotion(); }
   if (event.code === "KeyE") {
@@ -13539,6 +13612,12 @@ window.addEventListener("keyup", event => {
 window.addEventListener("blur", () => { cancelLootHold(); keyboardFireHeld = false; });
 canvas.addEventListener("pointerdown", event => {
   if (popupQueue.active() !== null) return;
+  if (event.pointerType === "mouse" && cameraViewMode === "first-person" && document.pointerLockElement !== canvas) {
+    const lock = canvas.requestPointerLock();
+    if (lock instanceof Promise) void lock.catch(() => { /* Arrow keys remain available if pointer lock is denied. */ });
+    event.preventDefault();
+    return;
+  }
   if (event.pointerType === "touch" && callingTouchAimPointerId !== null) {
     event.preventDefault();
     return;
@@ -14349,13 +14428,14 @@ app.on("update", (dt: number) => {
     && ashenEquipmentRevealPanel.hidden
     && levelUpPanel.hidden && expeditionPanel.hidden && realmHuntPanel.hidden && !playerInteractionUI.isOpen()
     && reportedProtectedDialog !== true;
+  if (!modalMovementAllowed && document.pointerLockElement === canvas) document.exitPointerLock();
   const strafe = modalMovementAllowed ? Math.max(-1, Math.min(1, keyboardStrafe + touchStrafe)) : 0;
   const forward = modalMovementAllowed ? Math.max(-1, Math.min(1, keyboardForward - touchForward)) : 0;
   const frameTime = Math.min(dt, 0.05);
   cameraOrbit = advanceCameraOrbit(
     cameraOrbit,
-    rapidPrototypeRequested ? 0 : Number(keys.has("ArrowRight")) - Number(keys.has("ArrowLeft")),
-    rapidPrototypeRequested ? 0 : Number(keys.has("ArrowUp")) - Number(keys.has("ArrowDown")),
+    rapidPrototypeRequested && cameraViewMode !== "first-person" ? 0 : Number(keys.has("ArrowRight")) - Number(keys.has("ArrowLeft")),
+    rapidPrototypeRequested && cameraViewMode !== "first-person" ? 0 : Number(keys.has("ArrowUp")) - Number(keys.has("ArrowDown")),
     frameTime,
   );
   const cameraOffset = cameraOrbitOffset(cameraOrbit);
@@ -14376,6 +14456,8 @@ app.on("update", (dt: number) => {
     ? powerAimActive ? powerAimYaw : localPowerFacingYaw!
     : actionFacingActive
     ? localActionFacingYaw!
+    : cameraViewMode === "first-person"
+    ? firstPersonFacingYaw(cameraOrbit.yaw)
     : locomotionFacingYaw(desiredMovement, localFacingYaw,
       rangedFirePointer !== null && rangedFireAllowed() ? mouseRangedYaw(localFacingYaw) : null);
   localFacingYaw = approachYaw(localFacingYaw, desiredFacingYaw, frameTime);
@@ -14564,7 +14646,7 @@ app.on("update", (dt: number) => {
   }
   const localStealthed = visibilityNow < (playerStealthUntil.get(room?.sessionId ?? "") ?? 0);
   localPlayerRig.root.enabled = !localStealthed;
-  localStealthGhost.enabled = localStealthed;
+  localStealthGhost.enabled = localStealthed && cameraViewMode !== "first-person";
 
   const player = localPlayer.getPosition();
   if (worldReady && firstStepsIndex === ONBOARDING_STAGE.headSouth
@@ -15382,10 +15464,16 @@ app.on("update", (dt: number) => {
   cameraFollow = advanceCameraFollow(cameraFollow, cameraTarget, frameTime);
   cameraFocus.set(cameraFollow.x, advanceCameraHeight(cameraFocus.y, cameraTarget.y, frameTime), cameraFollow.z);
   // A small, fixed room-center bias keeps the bar and tables in view without tracking furniture as the player walks.
-  cameraFocus.x += (8.5 - cameraFocus.x) * indoorCameraBlend * 0.16;
-  cameraFocus.z += (15 - cameraFocus.z) * indoorCameraBlend * 0.16;
+  const firstPersonCamera = cameraViewMode === "first-person";
+  if (!firstPersonCamera) {
+    cameraFocus.x += (8.5 - cameraFocus.x) * indoorCameraBlend * 0.16;
+    cameraFocus.z += (15 - cameraFocus.z) * indoorCameraBlend * 0.16;
+  }
   const viewOffset = indoorCameraOffset(cameraOrbit, indoorCameraBlend);
-  const desiredCamera = new pc.Vec3(cameraFocus.x + viewOffset.x, cameraFocus.y - 2 + viewOffset.y, cameraFocus.z + viewOffset.z);
+  const firstPersonDirection = firstPersonLookDirection(cameraOrbit.yaw, cameraOrbit.pitch);
+  const desiredCamera = firstPersonCamera
+    ? new pc.Vec3(cameraTarget.x, cameraTarget.y + FIRST_PERSON_EYE_HEIGHT, cameraTarget.z)
+    : new pc.Vec3(cameraFocus.x + viewOffset.x, cameraFocus.y - 2 + viewOffset.y, cameraFocus.z + viewOffset.z);
   const stableRealmCamera = Boolean(mobVisuals.get("realm-stone-warden")?.state.alive)
     && isInRealmWardenArena(player.x, player.z);
   if (!stableRealmCamera && animationNow < cameraShakeUntil) {
@@ -15395,9 +15483,14 @@ app.on("update", (dt: number) => {
     desiredCamera.y += Math.cos(animationNow * 0.12) * amplitude * 0.55;
     desiredCamera.z += Math.sin(animationNow * 0.14 + 1.7) * amplitude;
   }
-  const smoothCamera = advanceCameraPosition(camera.getPosition(), desiredCamera, frameTime);
+  const smoothCamera = firstPersonCamera ? desiredCamera : advanceCameraPosition(camera.getPosition(), desiredCamera, frameTime);
   camera.setPosition(smoothCamera.x, smoothCamera.y, smoothCamera.z);
-  camera.lookAt(cameraFocus.x, cameraFocus.y - 2, cameraFocus.z);
+  if (firstPersonCamera) camera.lookAt(
+    smoothCamera.x + firstPersonDirection.x * 10,
+    smoothCamera.y + firstPersonDirection.y * 10,
+    smoothCamera.z + firstPersonDirection.z * 10,
+  );
+  else camera.lookAt(cameraFocus.x, cameraFocus.y - 2, cameraFocus.z);
   updateNorthwatchPatrolCue(player);
   updateObjectiveGuidance();
   updateRangedReticle();
