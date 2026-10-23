@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ExclusivePopupQueue, popupFocusIndex, popupIsPresented } from "./popup-queue.js";
+import { ExclusivePopupQueue, gameplayBlockedByPopup, popupFocusIndex, popupIsPresented } from "./popup-queue.js";
 
 describe("exclusive popup queue", () => {
   it("shows one popup and queues later requests in order", () => {
@@ -39,6 +39,12 @@ describe("popup presentation state", () => {
   it("only presents an open popup that is not queued", () => {
     expect(popupIsPresented({ hidden: false, dataset: {} })).toBe(true);
     expect(popupIsPresented({ hidden: true, dataset: {} })).toBe(false);
+  });
+
+  it("does not freeze gameplay for a tutorial that is pending but has no visible popup", () => {
+    expect(gameplayBlockedByPopup(null, false)).toBe(false);
+    expect(gameplayBlockedByPopup("calling-intro", false)).toBe(true);
+    expect(gameplayBlockedByPopup(null, true)).toBe(true);
   });
 });
 

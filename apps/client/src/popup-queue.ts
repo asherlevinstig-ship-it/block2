@@ -18,6 +18,11 @@ export function popupFocusIndex(current: number, count: number, backwards: boole
   return (current + (backwards ? -1 : 1) + count) % count;
 }
 
+/** Gameplay is blocked by UI that is actually presented, never by a future/pending tutorial state. */
+export function gameplayBlockedByPopup(activePopupId: string | null, protectedDialogPresented: boolean): boolean {
+  return activePopupId !== null || protectedDialogPresented;
+}
+
 /** Serialises blocking UI without coupling the individual feature systems. */
 export class ExclusivePopupQueue {
   private current: string | null = null;

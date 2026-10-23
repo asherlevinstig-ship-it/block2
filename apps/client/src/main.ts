@@ -23,7 +23,7 @@ import { tabletJoystickSample, touchDragStarted } from "./tablet-input.js";
 import { tabletContextAction } from "./tablet-context-action.js";
 import { tabletDragAimYaw, tabletSoftTarget } from "./tablet-combat-aim.js";
 import { callingAimReleaseCancels, callingTouchAimProfile, type CallingTouchAimProfile } from "./calling-touch-aim.js";
-import { ExclusivePopupQueue, popupFocusIndex, popupIsPresented } from "./popup-queue.js";
+import { ExclusivePopupQueue, gameplayBlockedByPopup, popupFocusIndex, popupIsPresented } from "./popup-queue.js";
 import { COORDINATED_BRUTE_FOLLOWERS, COORDINATED_SPITTER_FOLLOWERS, activeCombatNearby, advanceBossHud, initialBossHud, leaderArmourSegments, leaderChargeGuidance, leaderExposureLabel, leaderExposureRoleLabel, leaderFormationLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
 import { formationLanePoints, formationMarkerPoints, formationRingPoints, formationTargetStyle, formationVfxStyle,
   type FormationTactic, type FormationTargetRole } from "./formation-vfx.js";
@@ -11750,11 +11750,16 @@ function popupElementsIn(node: Node): HTMLElement[] {
   return [node, ...node.querySelectorAll<HTMLElement>(exclusivePopupSelector)]
     .filter(popup => popup.matches(exclusivePopupSelector) && Boolean(popup.id));
 }
-function syncProtectedDialog(): void {
-  if (!room) { reportedProtectedDialog = null; return; }
-  const open = callingFirstOnboardingPending || [...document.querySelectorAll<HTMLElement>(protectedDialogSelector)].some(dialog =>
+function protectedDialogPresented(): boolean {
+  return [...document.querySelectorAll<HTMLElement>(protectedDialogSelector)].some(dialog =>
     dialog.id !== "defeat-screen" && dialog.id !== "character-creator"
     && !dialog.hidden && dialog.getClientRects().length > 0);
+}
+function syncProtectedDialog(): void {
+  if (!room) { reportedProtectedDialog = null; return; }
+  // A pending Calling journey is progression state, not an on-screen modal. Treating it
+  // as a dialog left some returning players invulnerable and completely unable to move.
+  const open = protectedDialogPresented();
   if (reportedProtectedDialog === open) return;
   if (open) {
     resetMovementControls();
@@ -14468,7 +14473,7 @@ app.on("update", (dt: number) => {
   const modalMovementAllowed = lootPanel.hidden && defeatScreen.hidden && quizPanel.hidden && blacksmithPanel.hidden && inventoryPanel.hidden
     && ashenEquipmentRevealPanel.hidden
     && levelUpPanel.hidden && expeditionPanel.hidden && realmHuntPanel.hidden && !playerInteractionUI.isOpen()
-    && reportedProtectedDialog !== true;
+    && !gameplayBlockedByPopup(popupQueue.active(), protectedDialogPresented());
   if (!modalMovementAllowed && document.pointerLockElement === canvas) document.exitPointerLock();
   const strafe = modalMovementAllowed ? Math.max(-1, Math.min(1, keyboardStrafe + touchStrafe)) : 0;
   const forward = modalMovementAllowed ? Math.max(-1, Math.min(1, keyboardForward - touchForward)) : 0;
