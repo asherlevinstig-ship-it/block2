@@ -2386,9 +2386,11 @@ if (rapidPrototypeRequested) {
   // The imported kit is decorative only: server-owned world geometry remains authoritative for
   // movement and combat. Primitive art stays visible until a complete replacement family loads.
   const hideRapidTownFallback = (family: TownFallbackFamily): void => {
-    const names = family === "modular-buildings" ? new Set(["founders-hall", "wayfarer-inn", "beginnings-smithy",
+    const names = family === "complete-buildings" ? new Set(["founders-hall", "wayfarer-inn", "beginnings-smithy",
       "weavers-row", "healers-house", "wardens-lodge"])
       : family === "market-stalls" ? new Set(["north-market-stall", "south-market-stall"])
+      : family === "street-props" ? new Set(["town-barrel", "barrel-hoop", "town-crate", "crate-band",
+        "town-bench-seat", "town-bench-leg"])
       : family === "lamp-posts" ? new Set(["town-lamp-post", "town-lamp-arm", "town-lamp", "town-lamp-cap"])
       : family === "trees" ? new Set(["tree-trunk", "tree-crown"])
       : new Set(["arena-rock"]);
