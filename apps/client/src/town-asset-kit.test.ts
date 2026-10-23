@@ -22,5 +22,9 @@ describe("town asset kit", () => {
     expect(SPEED_LAB_TOWN_ASSETS.filter(asset => asset.id === "wallWoodDoor")).toHaveLength(6);
     expect(SPEED_LAB_TOWN_ASSETS.filter(asset => asset.id === "wallWoodWindow").length).toBeGreaterThan(60);
     expect(SPEED_LAB_TOWN_ASSETS.some(asset => asset.id === "roofHigh")).toBe(true);
+    const xs = SPEED_LAB_TOWN_ASSETS.map(asset => asset.position[0]);
+    const zs = SPEED_LAB_TOWN_ASSETS.map(asset => asset.position[2]);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(65);
+    expect(Math.max(...zs) - Math.min(...zs)).toBeGreaterThan(65);
   });
 });

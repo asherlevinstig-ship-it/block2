@@ -42,40 +42,40 @@ export interface TownAssetPlacement {
 }
 
 const TOWN_DECORATIONS: readonly TownAssetPlacement[] = [
-  { id: "stallGreen", name: "north-market", position: [98.15, 8.15, 98.2], yaw: 90, scale: 2.05 },
-  { id: "stallRed", name: "south-market", position: [98.15, 8.15, 113.8], yaw: 90, scale: 2.05 },
-  { id: "cart", name: "inn-supply-cart", position: [96.1, 8.15, 101.2], yaw: -18, scale: 1.65 },
-  { id: "cart", name: "smithy-supply-cart", position: [96.2, 8.15, 110.85], yaw: 198, scale: 1.55 },
-  { id: "lantern", name: "plaza-lamp-northwest", position: [96.4, 8.15, 102.8], scale: 1.12 },
-  { id: "lantern", name: "plaza-lamp-southwest", position: [96.4, 8.15, 109.2], scale: 1.12 },
-  { id: "lantern", name: "plaza-lamp-northeast", position: [100, 8.15, 103.1], scale: 1.12 },
-  { id: "lantern", name: "plaza-lamp-southeast", position: [100, 8.15, 108.9], scale: 1.12 },
-  { id: "lantern", name: "west-square-lamp-north", position: [85.2, 8.15, 102.2], scale: 1.12 },
-  { id: "lantern", name: "west-square-lamp-south", position: [85.2, 8.15, 109.8], scale: 1.12 },
-  { id: "fountainRound", name: "founders-fountain", position: [87.2, 8.15, 106], scale: 1.45 },
-  { id: "treeCrooked", name: "inn-tree", position: [91, 8.15, 93], yaw: 22, scale: 1.45 },
-  { id: "treeHighRound", name: "north-road-tree", position: [102, 8.15, 93], yaw: -14, scale: 1.35 },
+  { id: "stallGreen", name: "north-market", position: [88, 8.15, 91], yaw: 90, scale: 2.2 },
+  { id: "stallRed", name: "south-market", position: [88, 8.15, 121], yaw: 90, scale: 2.2 },
+  { id: "cart", name: "inn-supply-cart", position: [82, 8.15, 84], yaw: -18, scale: 1.8 },
+  { id: "cart", name: "smithy-supply-cart", position: [82, 8.15, 128], yaw: 198, scale: 1.75 },
+  { id: "lantern", name: "plaza-lamp-northwest", position: [62, 8.15, 90], scale: 1.25 },
+  { id: "lantern", name: "plaza-lamp-southwest", position: [62, 8.15, 122], scale: 1.25 },
+  { id: "lantern", name: "plaza-lamp-northeast", position: [94, 8.15, 90], scale: 1.25 },
+  { id: "lantern", name: "plaza-lamp-southeast", position: [94, 8.15, 122], scale: 1.25 },
+  { id: "lantern", name: "west-square-lamp-north", position: [54, 8.15, 96], scale: 1.2 },
+  { id: "lantern", name: "west-square-lamp-south", position: [54, 8.15, 116], scale: 1.2 },
+  { id: "fountainRound", name: "founders-fountain", position: [76, 8.15, 106], scale: 2.15 },
+  { id: "treeCrooked", name: "inn-tree", position: [83, 8.15, 71], yaw: 22, scale: 1.55 },
+  { id: "treeHighRound", name: "north-road-tree", position: [98, 8.15, 75], yaw: -14, scale: 1.45 },
   { id: "treeCrooked", name: "east-road-tree", position: [114, 8.15, 92], yaw: 104, scale: 1.38 },
-  { id: "treeHighRound", name: "smithy-tree", position: [96, 8.15, 120], yaw: 38, scale: 1.32 },
-  { id: "treeCrooked", name: "south-road-tree", position: [112, 8.15, 120], yaw: -72, scale: 1.42 },
-  { id: "treeHighRound", name: "weavers-tree", position: [76.8, 8.15, 90], yaw: 18, scale: 1.38 },
-  { id: "treeCrooked", name: "healers-tree", position: [76.7, 8.15, 105.5], yaw: 84, scale: 1.46 },
-  { id: "treeHighRound", name: "lodge-tree", position: [76.8, 8.15, 122], yaw: -36, scale: 1.34 },
-  { id: "treeCrooked", name: "northwest-grove", position: [84.5, 8.15, 87.5], yaw: 142, scale: 1.36 },
-  { id: "treeHighRound", name: "southwest-grove", position: [86, 8.15, 124.4], yaw: -92, scale: 1.4 },
+  { id: "treeHighRound", name: "smithy-tree", position: [83, 8.15, 141], yaw: 38, scale: 1.5 },
+  { id: "treeCrooked", name: "south-road-tree", position: [110, 8.15, 138], yaw: -72, scale: 1.5 },
+  { id: "treeHighRound", name: "weavers-tree", position: [41.5, 8.15, 88], yaw: 18, scale: 1.48 },
+  { id: "treeCrooked", name: "healers-tree", position: [41.5, 8.15, 106], yaw: 84, scale: 1.56 },
+  { id: "treeHighRound", name: "lodge-tree", position: [41.5, 8.15, 137], yaw: -36, scale: 1.48 },
+  { id: "treeCrooked", name: "northwest-grove", position: [55, 8.15, 70], yaw: 142, scale: 1.5 },
+  { id: "treeHighRound", name: "southwest-grove", position: [58, 8.15, 142], yaw: -92, scale: 1.55 },
   { id: "rockLarge", name: "north-gate-rock", position: [104, 8.15, 96], yaw: 18, scale: .86 },
   { id: "rockSmall", name: "east-road-rock", position: [123, 8.15, 97], yaw: -28, scale: .76 },
   { id: "rockLarge", name: "south-gate-rock", position: [124, 8.15, 114], yaw: 56, scale: .8 },
   { id: "rockSmall", name: "south-road-rock", position: [108, 8.15, 116], yaw: 15, scale: .68 },
-  { id: "hedge", name: "inn-hedge", position: [97.2, 8.15, 93.1], yaw: 90, scale: 3.1 },
-  { id: "hedge", name: "smithy-hedge", position: [97.2, 8.15, 118.9], yaw: 90, scale: 3.1 },
-  { id: "fence", name: "west-fence-north-1", position: [76.2, 8.15, 94], scale: 2.2 },
-  { id: "fence", name: "west-fence-north-2", position: [76.2, 8.15, 97.8], scale: 2.2 },
-  { id: "fenceGate", name: "west-fence-gate", position: [76.2, 8.15, 101.7], scale: 2.2 },
-  { id: "fence", name: "west-fence-south-1", position: [76.2, 8.15, 114.2], scale: 2.2 },
-  { id: "fence", name: "west-fence-south-2", position: [76.2, 8.15, 118], scale: 2.2 },
-  { id: "bannerGreen", name: "founders-banner", position: [94.33, 9.65, 106], yaw: 180, scale: 1.5 },
-  { id: "bannerRed", name: "smithy-banner", position: [95.4, 9.15, 116.9], yaw: 90, scale: 1.35 },
+  { id: "hedge", name: "inn-hedge", position: [83, 8.15, 82], yaw: 90, scale: 3.6 },
+  { id: "hedge", name: "smithy-hedge", position: [83, 8.15, 130], yaw: 90, scale: 3.6 },
+  { id: "fence", name: "west-fence-north-1", position: [41.5, 8.15, 78], scale: 2.5 },
+  { id: "fence", name: "west-fence-north-2", position: [41.5, 8.15, 83], scale: 2.5 },
+  { id: "fenceGate", name: "west-fence-gate", position: [41.5, 8.15, 101], scale: 2.5 },
+  { id: "fence", name: "west-fence-south-1", position: [41.5, 8.15, 129], scale: 2.5 },
+  { id: "fence", name: "west-fence-south-2", position: [41.5, 8.15, 134], scale: 2.5 },
+  { id: "bannerGreen", name: "founders-banner", position: [50, 9.65, 73], yaw: 180, scale: 1.65 },
+  { id: "bannerRed", name: "smithy-banner", position: [79, 9.15, 137], yaw: 90, scale: 1.5 },
 ] as const;
 
 type ModularBuildingSpec = {
@@ -134,12 +134,12 @@ function modularBuilding(spec: ModularBuildingSpec): TownAssetPlacement[] {
 }
 
 const TOWN_BUILDINGS: readonly TownAssetPlacement[] = [
-  ...modularBuilding({ name: "founders-hall", x: 79.5, z: 88.4, scale: 2.15, floors: 2 }),
-  ...modularBuilding({ name: "wayfarer-inn", x: 91.2, z: 92.2, scale: 1.9, floors: 2, redRoof: true, chimney: true }),
-  ...modularBuilding({ name: "beginnings-smithy", x: 91.2, z: 119.8, scale: 1.9, floors: 1, redRoof: true, chimney: true }),
-  ...modularBuilding({ name: "weavers-row", x: 78.8, z: 97.4, scale: 1.75, floors: 1 }),
-  ...modularBuilding({ name: "healers-house", x: 78.8, z: 108.2, scale: 1.8, floors: 1, redRoof: true }),
-  ...modularBuilding({ name: "wardens-lodge", x: 78.8, z: 119.2, scale: 1.8, floors: 2 }),
+  ...modularBuilding({ name: "founders-hall", x: 46.5, z: 73, scale: 2.25, floors: 2 }),
+  ...modularBuilding({ name: "wayfarer-inn", x: 74.5, z: 76, scale: 2.15, floors: 2, redRoof: true, chimney: true }),
+  ...modularBuilding({ name: "beginnings-smithy", x: 74.5, z: 136.5, scale: 2.15, floors: 1, redRoof: true, chimney: true }),
+  ...modularBuilding({ name: "weavers-row", x: 46.5, z: 93, scale: 2, floors: 1 }),
+  ...modularBuilding({ name: "healers-house", x: 46.5, z: 108, scale: 2, floors: 1, redRoof: true }),
+  ...modularBuilding({ name: "wardens-lodge", x: 46.5, z: 130, scale: 2.1, floors: 2 }),
 ] as const;
 
 export const SPEED_LAB_TOWN_ASSETS: readonly TownAssetPlacement[] = [
@@ -200,7 +200,8 @@ export async function populateTownAssetKit(
   }));
 
   const entities: pc.Entity[] = [];
-  for (const placement of placements) {
+  for (let index = 0; index < placements.length; index++) {
+    const placement = placements[index]!;
     const asset = loaded.get(placement.id);
     const resource = asset?.resource as pc.ContainerResource | undefined;
     if (!resource) continue;
@@ -212,6 +213,9 @@ export async function populateTownAssetKit(
     entity.setLocalScale(scale, scale, scale);
     parent.addChild(entity);
     entities.push(entity);
+    // Large modular towns must not monopolise the main thread. Let input,
+    // rendering and network reconciliation run between small placement batches.
+    if (index > 0 && index % 24 === 0) await new Promise<void>(resolve => window.setTimeout(resolve, 0));
   }
 
   return { loadedIds: new Set(loaded.keys()), failedIds, entities };

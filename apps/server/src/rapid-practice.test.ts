@@ -32,7 +32,7 @@ describe("rapid 2.5D practice", () => {
 
   it("keeps the Town of Beginnings inside the arena with a clear east gate", () => {
     expect((RAPID_PRACTICE_ARENA.maxX - RAPID_PRACTICE_ARENA.minX)
-      * (RAPID_PRACTICE_ARENA.maxZ - RAPID_PRACTICE_ARENA.minZ)).toBeGreaterThanOrEqual(2_700);
+      * (RAPID_PRACTICE_ARENA.maxZ - RAPID_PRACTICE_ARENA.minZ)).toBeGreaterThanOrEqual(7_000);
     expect(RAPID_PRACTICE_TOWN_COLLIDERS).toHaveLength(8);
     expect(Math.min(...RAPID_PRACTICE_TOWN_COLLIDERS.map(building => building.minX))).toBeLessThanOrEqual(79);
     for (const building of RAPID_PRACTICE_TOWN_COLLIDERS) {
@@ -51,7 +51,7 @@ describe("rapid 2.5D practice", () => {
   });
 
   it("keeps a large walkable civic centre between the buildings and east gate", () => {
-    const civicCentre = { minX: 84, maxX: 100, minZ: 98, maxZ: 114 };
+    const civicCentre = { minX: 52, maxX: 100, minZ: 82, maxZ: 130 };
     for (const building of RAPID_PRACTICE_TOWN_COLLIDERS) {
       const overlaps = building.maxX > civicCentre.minX && building.minX < civicCentre.maxX
         && building.maxZ > civicCentre.minZ && building.minZ < civicCentre.maxZ;

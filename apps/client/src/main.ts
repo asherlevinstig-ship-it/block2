@@ -2116,6 +2116,7 @@ app.root.addChild(rapidPrototypeRoot);
 rapidPrototypeRoot.enabled = rapidPrototypeRequested;
 const rapidTownSmoke: { entity: pc.Entity; x: number; y: number; z: number; phase: number; drift: number }[] = [];
 const rapidTownBanners: { entity: pc.Entity; phase: number }[] = [];
+let requestRapidTownAssets = (): void => {};
 if (rapidPrototypeRequested) {
   const grass = coloredMaterial(new pc.Color(.19, .37, .2));
   const grassLight = coloredMaterial(new pc.Color(.26, .46, .25));
@@ -2172,26 +2173,26 @@ if (rapidPrototypeRequested) {
     return shape;
   };
 
-  addBox(rapidPrototypeRoot, "arena-ground", grass, [62, .25, 44], [105, 7.875, 106]);
-  addBox(rapidPrototypeRoot, "west-green", grassLight, [27, .035, 40], [87.5, 8.02, 106]);
+  addBox(rapidPrototypeRoot, "arena-ground", grass, [96, .25, 80], [88, 7.875, 106]);
+  addBox(rapidPrototypeRoot, "west-green", grassLight, [62, .035, 74], [71, 8.02, 106]);
   addBox(rapidPrototypeRoot, "combat-lane", path, [34, .04, 5.2], [119, 8.03, 106]);
   addBox(rapidPrototypeRoot, "cross-lane", path, [5.2, .045, 31], [120, 8.035, 106]);
   addBox(rapidPrototypeRoot, "arena-heart", stone, [7.5, .08, 7.5], [120, 8.07, 106]);
 
   // Town of Beginnings art kit: warm timber-and-plaster buildings, pitched roofs,
   // inset stone roads, readable civic blue and small lived-in details.
-  addBox(rapidPrototypeRoot, "beginnings-plaza-rim", mortar, [28.8, .09, 36.05], [89.3, 8.055, 106]);
-  addBox(rapidPrototypeRoot, "beginnings-plaza", townStoneMid, [28.3, .095, 35.55], [89.3, 8.075, 106]);
-  addBox(rapidPrototypeRoot, "beginnings-main-road-rim", mortar, [32, .085, 4.4], [91.5, 8.08, 106]);
-  addBox(rapidPrototypeRoot, "beginnings-main-road", townStoneLight, [31.55, .09, 4.05], [91.5, 8.105, 106]);
-  for (const offset of [-8, 8]) {
-    addBox(rapidPrototypeRoot, "beginnings-side-road-rim", mortar, [17.3, .08, 2.45], [91.2, 8.075, 106 + offset]);
-    addBox(rapidPrototypeRoot, "beginnings-side-road", townStoneLight, [17, .095, 2.12], [91.2, 8.105, 106 + offset]);
+  addBox(rapidPrototypeRoot, "beginnings-plaza-rim", mortar, [60.5, .09, 70.05], [70.5, 8.055, 106]);
+  addBox(rapidPrototypeRoot, "beginnings-plaza", townStoneMid, [60, .095, 69.55], [70.5, 8.075, 106]);
+  addBox(rapidPrototypeRoot, "beginnings-main-road-rim", mortar, [62, .085, 5.2], [71, 8.08, 106]);
+  addBox(rapidPrototypeRoot, "beginnings-main-road", townStoneLight, [61.55, .09, 4.8], [71, 8.105, 106]);
+  for (const offset of [-24, 24]) {
+    addBox(rapidPrototypeRoot, "beginnings-side-road-rim", mortar, [50, .08, 3.1], [72, 8.075, 106 + offset]);
+    addBox(rapidPrototypeRoot, "beginnings-side-road", townStoneLight, [49.5, .095, 2.75], [72, 8.105, 106 + offset]);
   }
   // Sparse inset cobbles break up the old flat paving without turning the plaza into visual noise.
-  for (let index = 0; index < 42; index++) {
-    const x = 79.5 + (index * 17 % 220) / 10;
-    const z = 90.2 + (index * 29 % 318) / 10;
+  for (let index = 0; index < 88; index++) {
+    const x = 42.5 + (index * 37 % 565) / 10;
+    const z = 72.5 + (index * 53 % 670) / 10;
     const cobble = addBox(rapidPrototypeRoot, "plaza-cobble", index % 3 === 0 ? townStone : townStoneLight,
       [.64 + (index % 2) * .15, .025, .38 + (index % 3) * .07], [x, 8.135, z]);
     cobble.setLocalEulerAngles(0, (index * 23) % 50 - 25, 0);
@@ -2393,15 +2394,20 @@ if (rapidPrototypeRequested) {
       : new Set(["arena-rock"]);
     for (const node of rapidPrototypeRoot.find(graphNode => names.has(graphNode.name))) node.enabled = false;
   };
-  void populateTownAssetKit(app, rapidPrototypeRoot, SPEED_LAB_TOWN_ASSETS).then(result => {
-    for (const family of readyTownFallbacks(result.loadedIds)) hideRapidTownFallback(family);
-    console.info(`[town-assets] ${result.entities.length} placements ready; ${result.failedIds.size} model types kept their fallback.`);
-  });
+  let townAssetsStarted = false;
+  requestRapidTownAssets = () => {
+    if (townAssetsStarted) return;
+    townAssetsStarted = true;
+    void populateTownAssetKit(app, rapidPrototypeRoot, SPEED_LAB_TOWN_ASSETS).then(result => {
+      for (const family of readyTownFallbacks(result.loadedIds)) hideRapidTownFallback(family);
+      console.info(`[town-assets] ${result.entities.length} placements ready; ${result.failedIds.size} model types kept their fallback.`);
+    });
+  };
 
-  addBox(rapidPrototypeRoot, "north-edge", boundary, [62, .5, .65], [105, 8.25, 84.3]);
-  addBox(rapidPrototypeRoot, "south-edge", boundary, [62, .5, .65], [105, 8.25, 127.7]);
-  addBox(rapidPrototypeRoot, "west-edge", boundary, [.65, .5, 44], [74.3, 8.25, 106]);
-  addBox(rapidPrototypeRoot, "east-edge", boundary, [.65, .5, 44], [135.7, 8.25, 106]);
+  addBox(rapidPrototypeRoot, "north-edge", boundary, [96, .5, .65], [88, 8.25, 68.3]);
+  addBox(rapidPrototypeRoot, "south-edge", boundary, [96, .5, .65], [88, 8.25, 143.7]);
+  addBox(rapidPrototypeRoot, "west-edge", boundary, [.65, .5, 80], [40.3, 8.25, 106]);
+  addBox(rapidPrototypeRoot, "east-edge", boundary, [.65, .5, 80], [135.7, 8.25, 106]);
 
   const badge = document.createElement("aside");
   badge.id = "rapid-prototype-badge";
@@ -11459,6 +11465,7 @@ function renderBootstrap(payload: WorldBootstrap): void {
     `WORLD REFRESH ${previousSliceY === null ? "surface" : `slice:${previousSliceY}`} → ${cutawayStateKey} y=${initialPosition.y.toFixed(3)} surface=${surfaceReferenceY.toFixed(3)} stateGap=${statePoseGap?.toFixed(3) ?? "missing"} chunks=${payload.chunks.length} setup=${bootstrapSetupMs.toFixed(1)}ms queued=${queuedChunkRebuilds.size}`,
   );
   worldReady = true;
+  if (rapidPrototypeRequested) window.setTimeout(requestRapidTownAssets, 250);
   lastWorldBootstrapAt = performance.now();
   snapFrameHistory.length = 0;
   status.textContent = rapidPrototypeRequested
