@@ -3,9 +3,9 @@ import type { MainHandId } from "@blockcraft/protocol";
 
 export const RAPID_PRACTICE_ARENA = {
   minX: 40,
-  maxX: 136,
-  minZ: 68,
-  maxZ: 144,
+  maxX: 260,
+  minZ: 20,
+  maxZ: 192,
   floorY: 7,
   spawn: { x: 99.5, y: 8, z: 106.5 },
 } as const;
@@ -27,39 +27,82 @@ export const RAPID_PRACTICE_TOWN_COLLIDERS = [
 export type RapidPracticeSpawn = {
   id: string;
   archetype: MobArchetypeId;
+  name: string;
+  zone: RapidWorldZoneId;
+  level: number;
+  leader?: boolean;
+  respawnMs: number;
   x: number;
   y: number;
   z: number;
 };
 
+export type RapidWorldZoneId = "greenwood" | "mistfen" | "southern-quarry" | "ashen-reach";
+
+export type RapidWorldZone = {
+  id: RapidWorldZoneId;
+  name: string;
+  levelMin: number;
+  levelMax: number;
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+  leaderId: string;
+};
+
+export const RAPID_WORLD_ZONES: readonly RapidWorldZone[] = [
+  { id: "greenwood", name: "Greenwood", levelMin: 1, levelMax: 4,
+    minX: 108, maxX: 156, minZ: 78, maxZ: 134, leaderId: "greenwood-elderthorn" },
+  { id: "mistfen", name: "Mistfen", levelMin: 4, levelMax: 7,
+    minX: 152, maxX: 204, minZ: 24, maxZ: 82, leaderId: "mistfen-miremother" },
+  { id: "southern-quarry", name: "Southern Quarry", levelMin: 6, levelMax: 9,
+    minX: 152, maxX: 204, minZ: 136, maxZ: 188, leaderId: "quarry-quarrymaster" },
+  { id: "ashen-reach", name: "Ashen Reach", levelMin: 9, levelMax: 12,
+    minX: 204, maxX: 256, minZ: 74, maxZ: 140, leaderId: "ashen-cinderlord" },
+] as const;
+
+export const rapidWorldZoneAt = (x: number, z: number): RapidWorldZone | null =>
+  RAPID_WORLD_ZONES.find(zone => x >= zone.minX && x <= zone.maxX && z >= zone.minZ && z <= zone.maxZ) ?? null;
+
 export const RAPID_PRACTICE_SPAWNS: readonly RapidPracticeSpawn[] = [
-  { id: "rapid-crawler-01", archetype: "moss_crawler", x: 106.5, y: 8, z: 99.5 },
-  { id: "rapid-crawler-02", archetype: "moss_crawler", x: 109.5, y: 8, z: 102.5 },
-  { id: "rapid-crawler-03", archetype: "briar_crawler", x: 113.5, y: 8, z: 97.5 },
-  { id: "rapid-crawler-04", archetype: "briar_crawler", x: 119.5, y: 8, z: 103.5 },
-  { id: "rapid-crawler-05", archetype: "moss_crawler", x: 123.5, y: 8, z: 108.5 },
-  { id: "rapid-crawler-06", archetype: "briar_crawler", x: 118.5, y: 8, z: 115.5 },
-  { id: "rapid-crawler-07", archetype: "moss_crawler", x: 109.5, y: 8, z: 118.5 },
-  { id: "rapid-crawler-08", archetype: "briar_crawler", x: 101.5, y: 8, z: 116.5 },
-  { id: "rapid-spitter-01", archetype: "cave_spitter", x: 111.5, y: 8, z: 93.5 },
-  { id: "rapid-spitter-02", archetype: "cave_spitter", x: 125.5, y: 8, z: 100.5 },
-  { id: "rapid-spitter-03", archetype: "cave_spitter", x: 125.5, y: 8, z: 117.5 },
-  { id: "rapid-spitter-04", archetype: "cave_spitter", x: 113.5, y: 8, z: 120.5 },
-  { id: "rapid-stalker-01", archetype: "ridge_stalker", x: 116.5, y: 8, z: 106.5 },
-  { id: "rapid-stalker-02", archetype: "ridge_stalker", x: 121.5, y: 8, z: 112.5 },
-  { id: "rapid-stalker-03", archetype: "ridge_stalker", x: 106.5, y: 8, z: 111.5 },
-  { id: "rapid-brute-01", archetype: "stone_brute", x: 121.5, y: 8, z: 94.5 },
-  { id: "rapid-brute-02", archetype: "stone_brute", x: 126.5, y: 8, z: 111.5 },
-  { id: "rapid-brute-03", archetype: "stone_brute", x: 115.5, y: 8, z: 110.5 },
+  { id: "greenwood-crawler-a", archetype: "moss_crawler", name: "Moss Crawler", zone: "greenwood", level: 1, respawnMs: 40_000, x: 120.5, y: 8, z: 91.5 },
+  { id: "greenwood-crawler-b", archetype: "moss_crawler", name: "Moss Crawler", zone: "greenwood", level: 2, respawnMs: 42_000, x: 130.5, y: 8, z: 122.5 },
+  { id: "greenwood-briar-a", archetype: "briar_crawler", name: "Briar Crawler", zone: "greenwood", level: 2, respawnMs: 43_000, x: 140.5, y: 8, z: 92.5 },
+  { id: "greenwood-briar-b", archetype: "briar_crawler", name: "Briar Crawler", zone: "greenwood", level: 3, respawnMs: 46_000, x: 146.5, y: 8, z: 119.5 },
+  { id: "greenwood-thorn-a", archetype: "thornbinder", name: "Thornbinder", zone: "greenwood", level: 4, respawnMs: 50_000, x: 137.5, y: 8, z: 106.5 },
+  { id: "greenwood-elderthorn", archetype: "thornbinder", name: "Elderthorn Keeper", zone: "greenwood", level: 4, leader: true, respawnMs: 62_000, x: 150.5, y: 8, z: 106.5 },
+
+  { id: "mistfen-spitter-a", archetype: "cave_spitter", name: "Bog Spitter", zone: "mistfen", level: 4, respawnMs: 50_000, x: 164.5, y: 8, z: 67.5 },
+  { id: "mistfen-spitter-b", archetype: "cave_spitter", name: "Bog Spitter", zone: "mistfen", level: 5, respawnMs: 53_000, x: 190.5, y: 8, z: 65.5 },
+  { id: "mistfen-bloater-a", archetype: "fen_bloater", name: "Fen Bloater", zone: "mistfen", level: 5, respawnMs: 54_000, x: 166.5, y: 8, z: 42.5 },
+  { id: "mistfen-briar-a", archetype: "briar_crawler", name: "Mire Briar", zone: "mistfen", level: 6, respawnMs: 57_000, x: 185.5, y: 8, z: 36.5 },
+  { id: "mistfen-bloater-b", archetype: "fen_bloater", name: "Fen Bloater", zone: "mistfen", level: 7, respawnMs: 60_000, x: 197.5, y: 8, z: 49.5 },
+  { id: "mistfen-miremother", archetype: "fen_bloater", name: "Miremother", zone: "mistfen", level: 7, leader: true, respawnMs: 76_000, x: 179.5, y: 8, z: 51.5 },
+
+  { id: "quarry-stalker-a", archetype: "ridge_stalker", name: "Quarry Stalker", zone: "southern-quarry", level: 6, respawnMs: 58_000, x: 162.5, y: 8, z: 151.5 },
+  { id: "quarry-stalker-b", archetype: "ridge_stalker", name: "Quarry Stalker", zone: "southern-quarry", level: 7, respawnMs: 61_000, x: 192.5, y: 8, z: 149.5 },
+  { id: "quarry-sentry-a", archetype: "shard_sentry", name: "Iron Shard Sentry", zone: "southern-quarry", level: 7, respawnMs: 62_000, x: 168.5, y: 8, z: 177.5 },
+  { id: "quarry-brute-a", archetype: "stone_brute", name: "Pit Brute", zone: "southern-quarry", level: 8, respawnMs: 66_000, x: 194.5, y: 8, z: 178.5 },
+  { id: "quarry-sentry-b", archetype: "shard_sentry", name: "Iron Shard Sentry", zone: "southern-quarry", level: 9, respawnMs: 69_000, x: 181.5, y: 8, z: 167.5 },
+  { id: "quarry-quarrymaster", archetype: "stone_brute", name: "Redstone Quarrymaster", zone: "southern-quarry", level: 9, leader: true, respawnMs: 86_000, x: 198.5, y: 8, z: 166.5 },
+
+  { id: "ashen-hound-a", archetype: "ember_hound", name: "Ember Hound", zone: "ashen-reach", level: 9, respawnMs: 68_000, x: 214.5, y: 8, z: 87.5 },
+  { id: "ashen-hound-b", archetype: "ember_hound", name: "Ember Hound", zone: "ashen-reach", level: 10, respawnMs: 71_000, x: 231.5, y: 8, z: 128.5 },
+  { id: "ashen-sentry-a", archetype: "shard_sentry", name: "Ashglass Sentry", zone: "ashen-reach", level: 10, respawnMs: 72_000, x: 241.5, y: 8, z: 87.5 },
+  { id: "ashen-ram-a", archetype: "cinder_ram", name: "Cinder Ram", zone: "ashen-reach", level: 11, respawnMs: 76_000, x: 216.5, y: 8, z: 120.5 },
+  { id: "ashen-ram-b", archetype: "cinder_ram", name: "Cinder Ram", zone: "ashen-reach", level: 12, respawnMs: 80_000, x: 248.5, y: 8, z: 121.5 },
+  { id: "ashen-cinderlord", archetype: "cinder_ram", name: "Cinderlord", zone: "ashen-reach", level: 12, leader: true, respawnMs: 100_000, x: 242.5, y: 8, z: 106.5 },
 ] as const;
 
 export const RAPID_PRACTICE_WAVES = [
-  ["rapid-crawler-01", "rapid-crawler-02", "rapid-crawler-03", "rapid-crawler-04", "rapid-spitter-01", "rapid-stalker-01"],
-  ["rapid-crawler-05", "rapid-crawler-06", "rapid-crawler-07", "rapid-crawler-08", "rapid-spitter-02", "rapid-spitter-03", "rapid-stalker-02"],
-  ["rapid-spitter-04", "rapid-stalker-03", "rapid-brute-01", "rapid-brute-02", "rapid-brute-03"],
+  RAPID_PRACTICE_SPAWNS.filter(spawn => spawn.zone === "greenwood").map(spawn => spawn.id),
+  RAPID_PRACTICE_SPAWNS.filter(spawn => spawn.zone === "mistfen" || spawn.zone === "southern-quarry").map(spawn => spawn.id),
+  RAPID_PRACTICE_SPAWNS.filter(spawn => spawn.zone === "ashen-reach").map(spawn => spawn.id),
 ] as const;
 
-export const RAPID_PRACTICE_BOSS_ID = "rapid-brute-03";
+export const RAPID_PRACTICE_BOSS_ID = "ashen-cinderlord";
+export const RAPID_PRACTICE_FREE_ROAM = true;
 export const RAPID_PRACTICE_WAVE_DELAY_MS = 1_800;
 export const RAPID_PRACTICE_RESTART_DELAY_MS = 4_000;
 export const RAPID_PRACTICE_ATTACK_SCALE = .7;

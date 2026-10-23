@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   RAPID_PRACTICE_ARENA,
   RAPID_PRACTICE_BOSS_ID,
+  RAPID_PRACTICE_FREE_ROAM,
   RAPID_PRACTICE_SPAWNS,
   RAPID_PRACTICE_TOWN_COLLIDERS,
   RAPID_PRACTICE_WAVES,
   RAPID_PRACTICE_WEAPON_CHOICES,
+  RAPID_WORLD_ZONES,
   EMPTY_RAPID_PRACTICE_UPGRADES,
   applyRapidPracticeUpgrade,
   rapidPracticeAttackTiming,
@@ -16,18 +18,28 @@ import {
 } from "./rapid-practice.js";
 
 describe("rapid 2.5D practice", () => {
-  it("provides a dense but bounded combat wave", () => {
-    expect(RAPID_PRACTICE_SPAWNS).toHaveLength(18);
-    expect(new Set(RAPID_PRACTICE_SPAWNS.map(spawn => spawn.id)).size).toBe(18);
+  it("provides four bounded free-roam regions with permanent populations", () => {
+    expect(RAPID_PRACTICE_FREE_ROAM).toBe(true);
+    expect(RAPID_WORLD_ZONES.map(zone => zone.name)).toEqual(["Greenwood", "Mistfen", "Southern Quarry", "Ashen Reach"]);
+    expect(RAPID_PRACTICE_SPAWNS).toHaveLength(24);
+    expect(new Set(RAPID_PRACTICE_SPAWNS.map(spawn => spawn.id)).size).toBe(24);
     for (const spawn of RAPID_PRACTICE_SPAWNS) {
       expect(spawn.x).toBeGreaterThan(RAPID_PRACTICE_ARENA.minX);
       expect(spawn.x).toBeLessThan(RAPID_PRACTICE_ARENA.maxX);
       expect(spawn.z).toBeGreaterThan(RAPID_PRACTICE_ARENA.minZ);
       expect(spawn.z).toBeLessThan(RAPID_PRACTICE_ARENA.maxZ);
+      expect(spawn.respawnMs).toBeGreaterThanOrEqual(40_000);
     }
-    expect(RAPID_PRACTICE_WAVES.flat()).toHaveLength(18);
-    expect(new Set(RAPID_PRACTICE_WAVES.flat()).size).toBe(18);
+    expect(RAPID_PRACTICE_WAVES.flat()).toHaveLength(24);
+    expect(new Set(RAPID_PRACTICE_WAVES.flat()).size).toBe(24);
     expect(RAPID_PRACTICE_WAVES[2]).toContain(RAPID_PRACTICE_BOSS_ID);
+    for (const zone of RAPID_WORLD_ZONES) {
+      const residents = RAPID_PRACTICE_SPAWNS.filter(spawn => spawn.zone === zone.id);
+      expect(residents).toHaveLength(6);
+      expect(residents.filter(spawn => spawn.leader).map(spawn => spawn.id)).toEqual([zone.leaderId]);
+      expect(Math.min(...residents.map(spawn => spawn.level))).toBeGreaterThanOrEqual(zone.levelMin);
+      expect(Math.max(...residents.map(spawn => spawn.level))).toBeLessThanOrEqual(zone.levelMax);
+    }
   });
 
   it("keeps the Town of Beginnings inside the arena with a clear east gate", () => {

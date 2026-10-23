@@ -119,6 +119,7 @@ import { townNpcFaceStyle, type TownNpcMouthExpression } from "./town-npc-appear
 import { bindTownNpcRig, loadTownNpcAssets, TOWN_NPC_MODEL_YAW, transitionTownNpcRig } from "./town-npc-assets.js";
 import { SPEED_LAB_TOWN_TERRAIN, SPEED_LAB_TOWN_TERRAIN_DETAILS,
   type TownTerrainMaterial } from "./town-terrain.js";
+import { rapidWorldRegionAt } from "./rapid-world.js";
 import {
   FIRST_PERSON_EYE_HEIGHT,
   FIRST_PERSON_FOV,
@@ -2138,10 +2139,12 @@ interface RapidTownActorVisual {
 const rapidTownActors: RapidTownActorVisual[] = [];
 const rapidTownLights: { entity: pc.Entity; phase: number }[] = [];
 const rapidTownSparks: { entity: pc.Entity; phase: number }[] = [];
+let rapidWorldRegionId = "";
 let requestRapidTownAssets = (): void => {};
 let requestRapidTownNpcAssets = (): void => {};
 if (rapidPrototypeRequested) {
   const townNpcFaceBatchGroup = app.batcher.addGroup("town-npc-faces", true, 32);
+  const rapidWorldSceneryBatchGroup = app.batcher.addGroup("rapid-world-scenery", false, 512);
   const grass = coloredMaterial(new pc.Color(.19, .37, .2));
   const grassLight = coloredMaterial(new pc.Color(.26, .46, .25));
   const path = coloredMaterial(new pc.Color(.46, .34, .21));
@@ -2191,6 +2194,20 @@ if (rapidPrototypeRequested) {
   const leaf = coloredMaterial(new pc.Color(.08, .25, .13));
   const leafLight = coloredMaterial(new pc.Color(.13, .38, .18));
   const boundary = coloredMaterial(new pc.Color(.08, .13, .12));
+  const greenwoodGround = coloredMaterial(new pc.Color(.12, .31, .14));
+  const greenwoodCanopy = coloredMaterial(new pc.Color(.055, .22, .09));
+  const mistfenGround = coloredMaterial(new pc.Color(.14, .22, .18));
+  const mistfenWater = coloredMaterial(new pc.Color(.08, .27, .28));
+  const marshGlow = coloredMaterial(new pc.Color(.31, .58, .24));
+  const quarryGround = coloredMaterial(new pc.Color(.42, .31, .22));
+  const quarryRock = coloredMaterial(new pc.Color(.38, .34, .31));
+  const ironOre = coloredMaterial(new pc.Color(.72, .39, .13));
+  const ashenGround = coloredMaterial(new pc.Color(.17, .15, .15));
+  const ashRock = coloredMaterial(new pc.Color(.25, .22, .22));
+  const lava = new pc.StandardMaterial();
+  lava.diffuse = new pc.Color(.95, .19, .035);
+  lava.emissive = new pc.Color(.8, .07, .01);
+  lava.update();
 
   const addTownShape = (parent: pc.Entity, name: string, type: "box" | "cylinder" | "cone" | "sphere",
     material: pc.StandardMaterial, scale: [number, number, number], position: [number, number, number]): pc.Entity => {
@@ -2200,6 +2217,18 @@ if (rapidPrototypeRequested) {
     shape.setLocalScale(...scale);
     shape.setLocalPosition(...position);
     parent.addChild(shape);
+    return shape;
+  };
+  const addRapidWorldShape = (name: string, type: "box" | "cylinder" | "cone" | "sphere",
+    material: pc.StandardMaterial, scale: [number, number, number], position: [number, number, number]): pc.Entity => {
+    const shape = addTownShape(rapidPrototypeRoot, name, type, material, scale, position);
+    if (shape.render) shape.render.batchGroupId = rapidWorldSceneryBatchGroup.id;
+    return shape;
+  };
+  const addRapidWorldBox = (name: string, material: pc.StandardMaterial,
+    scale: [number, number, number], position: [number, number, number]): pc.Entity => {
+    const shape = addBox(rapidPrototypeRoot, name, material, scale, position);
+    if (shape.render) shape.render.batchGroupId = rapidWorldSceneryBatchGroup.id;
     return shape;
   };
 
@@ -2438,11 +2467,17 @@ if (rapidPrototypeRequested) {
     rapidTownLights.push({ entity: light, phase: index * 1.7 });
   }
 
-  addBox(rapidPrototypeRoot, "arena-ground", grass, [96, .25, 80], [88, 7.875, 106]);
+  addRapidWorldBox("realm-ground", grass, [220, .25, 172], [150, 7.875, 106]);
   addBox(rapidPrototypeRoot, "west-green", grassLight, [62, .035, 74], [71, 8.02, 106]);
-  addBox(rapidPrototypeRoot, "combat-lane", path, [34, .04, 5.2], [119, 8.03, 106]);
-  addBox(rapidPrototypeRoot, "cross-lane", path, [5.2, .045, 31], [120, 8.035, 106]);
-  addBox(rapidPrototypeRoot, "arena-heart", stone, [7.5, .08, 7.5], [120, 8.07, 106]);
+  addRapidWorldBox("greenwood-ground", greenwoodGround, [48, .035, 56], [132, 8.02, 106]);
+  addRapidWorldBox("mistfen-ground", mistfenGround, [52, .035, 58], [178, 8.02, 53]);
+  addRapidWorldBox("quarry-ground", quarryGround, [52, .035, 52], [178, 8.02, 162]);
+  addRapidWorldBox("ashen-ground", ashenGround, [52, .035, 66], [230, 8.02, 107]);
+  addRapidWorldBox("east-realm-road", path, [154, .055, 5.2], [179, 8.035, 106]);
+  addRapidWorldBox("regional-fork-road", path, [5.2, .06, 130], [168, 8.04, 106]);
+  addRapidWorldBox("mistfen-road", roadWarm, [28, .055, 4.2], [181, 8.045, 65]);
+  addRapidWorldBox("quarry-road", roadWarm, [28, .055, 4.2], [181, 8.045, 151]);
+  addRapidWorldBox("realm-crossroads", stone, [9.5, .09, 9.5], [168, 8.075, 106]);
 
   // Town of Beginnings terrain: a circular civic square, a readable street
   // hierarchy and planted verges replace the old town-sized rectangle of stone.
@@ -2678,6 +2713,60 @@ if (rapidPrototypeRequested) {
     rock.setLocalEulerAngles(0, x * 7 % 45, 12);
   }
 
+  // Four readable free-roam biomes continue the original game's regional journey.
+  // Their shapes are deliberately low-poly and batched so the faster prototype keeps its pace.
+  for (const [x, z, size] of [[113,83,1.7],[119,127,1.9],[125,86,1.6],[132,130,1.8],[139,83,2],[147,88,1.7],
+    [151,126,1.8],[117,114,1.5],[143,116,1.65],[130,96,1.45],[151,98,1.5],[123,103,1.35]] as const) {
+    addRapidWorldShape("greenwood-tree-trunk", "cylinder", trunk, [.34 * size, 1.25 * size, .34 * size], [x, 8.62 + size * .42, z]);
+    addRapidWorldShape("greenwood-tree-crown", "cone", greenwoodCanopy, [1.25 * size, 2 * size, 1.25 * size], [x, 10 + size * .72, z]);
+  }
+  for (const [x, z, turn] of [[121,94,18],[132,119,-26],[144,97,32],[147,122,-12],[126,111,8]] as const) {
+    const root = addRapidWorldBox("greenwood-root", timber, [2.6, .22, .3], [x, 8.24, z]);
+    root.setLocalEulerAngles(0, turn, 8);
+  }
+  addRapidWorldShape("elderthorn-ring", "cylinder", greenwoodCanopy, [5.2, .08, 5.2], [150.5, 8.13, 106.5]);
+
+  for (const [x, z, sx, sz] of [[159,34,3.8,2.5],[174,39,3,2.2],[193,31,4.1,2.7],[158,60,3.2,2.4],
+    [179,61,4.4,2.5],[197,68,3.5,2.1],[188,49,2.7,1.9]] as const)
+    addRapidWorldShape("mistfen-pool", "cylinder", mistfenWater, [sx, .035, sz], [x, 8.075, z]);
+  for (const [x, z, turn] of [[160,46,8],[170,29,-17],[183,72,26],[198,40,-8],[193,76,14],[175,55,-24]] as const) {
+    const snag = addRapidWorldBox("mistfen-snag", timber, [.3, 2.1, .3], [x, 9.05, z]);
+    snag.setLocalEulerAngles(0, turn, turn * .35);
+    const branch = addRapidWorldBox("mistfen-snag-branch", timberLight, [1.2, .18, .18], [x + .35, 9.95, z]);
+    branch.setLocalEulerAngles(0, turn, -18);
+  }
+  for (const [x, z] of [[163,31],[171,65],[185,35],[195,57],[181,76],[199,29]] as const)
+    addRapidWorldShape("mistfen-reeds", "cone", marshGlow, [.42, 1.15, .42], [x, 8.62, z]);
+  addRapidWorldShape("miremother-ring", "cylinder", marshGlow, [5.4, .055, 5.4], [179.5, 8.11, 51.5]);
+
+  for (const [x, z, sx, sz, height] of [[158,142,9,5,.5],[188,141,12,4,.75],[155,181,8,5,.65],[184,184,13,4,1.05],
+    [199,154,5,9,.8],[171,165,7,6,.55]] as const)
+    addRapidWorldBox("quarry-terrace", quarryRock, [sx, height, sz], [x, 8 + height * .5, z]);
+  for (const [x, z, size] of [[161,153,1.3],[174,144,.9],[193,159,1.5],[199,181,1.2],[168,181,1],[188,174,1.35]] as const) {
+    const rock = addRapidWorldBox("quarry-boulder", quarryRock, [size, size * .8, size], [x, 8 + size * .4, z]);
+    rock.setLocalEulerAngles(10, x * 11 % 46, 8);
+    addRapidWorldShape("quarry-ore", "sphere", ironOre, [.3 * size, .22 * size, .18 * size], [x + .45 * size, 8 + size * .7, z]);
+  }
+  addRapidWorldShape("quarrymaster-ring", "cylinder", ironOre, [5.6, .06, 5.6], [198.5, 8.12, 166.5]);
+
+  for (const [x, z, length, turn] of [[210,82,6,22],[222,94,8,-14],[239,78,7,31],[248,96,6,-24],[214,132,7,-10],
+    [232,119,9,18],[250,132,6,9]] as const) {
+    const crack = addRapidWorldBox("ashen-lava-rift", lava, [length, .045, .32], [x, 8.075, z]);
+    crack.setLocalEulerAngles(0, turn, 0);
+  }
+  for (const [x, z, height] of [[211,91,2.4],[220,78,3.2],[237,134,2.8],[251,84,3.5],[253,122,2.6],[225,129,2.2]] as const) {
+    const spire = addRapidWorldShape("ashen-spire", "cone", ashRock, [1.2, height, 1.2], [x, 8 + height * .5, z]);
+    spire.setLocalEulerAngles(0, x * 9 % 50, z % 2 ? 8 : -8);
+  }
+  addRapidWorldShape("cinderlord-ring", "cylinder", lava, [6.2, .065, 6.2], [242.5, 8.13, 106.5]);
+
+  for (const [x, z, material] of [[108,106,greenwoodCanopy],[168,82,mistfenWater],[168,136,ironOre],[204,106,lava]] as const) {
+    addRapidWorldBox("region-threshold-left", stone, [.48, 2.2, .48], [x, 9.1, z - 3.5]);
+    addRapidWorldBox("region-threshold-right", stone, [.48, 2.2, .48], [x, 9.1, z + 3.5]);
+    addRapidWorldShape("region-threshold-flame", "sphere", material, [.42, .42, .42], [x, 11.3, z - 3.5]);
+    addRapidWorldShape("region-threshold-flame", "sphere", material, [.42, .42, .42], [x, 11.3, z + 3.5]);
+  }
+
   // The imported kit is decorative only: server-owned world geometry remains authoritative for
   // movement and combat. Primitive art stays visible until a complete replacement family loads.
   const hideRapidTownFallback = (family: TownFallbackFamily): void => {
@@ -2701,14 +2790,14 @@ if (rapidPrototypeRequested) {
     });
   };
 
-  addBox(rapidPrototypeRoot, "north-edge", boundary, [96, .5, .65], [88, 8.25, 68.3]);
-  addBox(rapidPrototypeRoot, "south-edge", boundary, [96, .5, .65], [88, 8.25, 143.7]);
-  addBox(rapidPrototypeRoot, "west-edge", boundary, [.65, .5, 80], [40.3, 8.25, 106]);
-  addBox(rapidPrototypeRoot, "east-edge", boundary, [.65, .5, 80], [135.7, 8.25, 106]);
+  addRapidWorldBox("north-edge", boundary, [220, .5, .65], [150, 8.25, 20.3]);
+  addRapidWorldBox("south-edge", boundary, [220, .5, .65], [150, 8.25, 191.7]);
+  addRapidWorldBox("west-edge", boundary, [.65, .5, 172], [40.3, 8.25, 106]);
+  addRapidWorldBox("east-edge", boundary, [.65, .5, 172], [259.7, 8.25, 106]);
 
   const badge = document.createElement("aside");
   badge.id = "rapid-prototype-badge";
-  badge.innerHTML = "<strong>TOWN OF BEGINNINGS · SPEED LAB</strong><span>Leave through the east gate · Wave 1/3</span><small id=\"rapid-prototype-metrics\">Measuring frame and input timing…</small>";
+  badge.innerHTML = "<strong>TOWN OF BEGINNINGS · SAFE</strong><span>East gate leads to Greenwood · fixed regional difficulty</span><small id=\"rapid-prototype-metrics\">Measuring frame and input timing…</small>";
   badge.style.cssText = "position:fixed;left:18px;top:68px;z-index:18;display:grid;gap:2px;padding:9px 13px;border:1px solid rgba(117,242,180,.55);border-radius:10px;background:rgba(6,18,14,.86);color:#d9ffdf;font:700 12px/1.2 system-ui;letter-spacing:.08em;pointer-events:none;box-shadow:0 7px 24px rgba(0,0,0,.32)";
   const detail = badge.querySelector("span") as HTMLElement;
   detail.style.cssText = "color:#9fc6ac;font-size:10px;font-weight:600;letter-spacing:.02em";
@@ -14802,6 +14891,15 @@ app.on("update", (dt: number) => {
   const customUpdateStartedAt = performance.now();
   if (rapidPrototypeRequested) {
     const townTime = customUpdateStartedAt * .001;
+    const playerPosition = localPlayer.getPosition();
+    const region = rapidWorldRegionAt(playerPosition.x, playerPosition.z);
+    if (region.id !== rapidWorldRegionId) {
+      rapidWorldRegionId = region.id;
+      const title = document.querySelector<HTMLElement>("#rapid-prototype-badge strong");
+      const detail = document.querySelector<HTMLElement>("#rapid-prototype-badge span");
+      if (title) title.textContent = `${region.name.toUpperCase()} · ${region.levelLabel}`;
+      if (detail) detail.textContent = region.guidance;
+    }
     for (const smoke of rapidTownSmoke) {
       const travel = (townTime * .22 + smoke.phase) % 1;
       const size = .16 + travel * .42;
@@ -16405,7 +16503,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       if (detail) detail.textContent = `Wave ${update.wave}/3 · ${update.message}`;
     }
     if (update.abilityId) { localCallingCooldownUntil = 0; localCallingSpecialCooldownUntil = 0; }
-    if (update.active && activeRoomName === PRACTICE_ROOM && !update.abilityId && !update.wave) {
+    if (!rapidPrototypeRequested && update.active && activeRoomName === PRACTICE_ROOM && !update.abilityId && !update.wave) {
       abilityPracticeCalling.value = localBuildPathId ?? "assassin";
       renderPracticeAbilities();
       abilityPractice.hidden = false;

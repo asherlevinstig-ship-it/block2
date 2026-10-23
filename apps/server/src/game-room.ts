@@ -58,7 +58,8 @@ import { REGIONAL_PACK_DISRUPTION_MS, regionalPackCooldownMultiplier, regionalPa
 import { mobSimulationActive } from "./mob-activation.js";
 import { SERVER_TICK_BUDGET_MS, appendTickSample, samplePercentile } from "./performance-metrics.js";
 import { EMPTY_RAPID_PRACTICE_UPGRADES, RAPID_PRACTICE_ARENA, RAPID_PRACTICE_BOSS_ID,
-  RAPID_PRACTICE_SPAWNS, RAPID_PRACTICE_TOWN_COLLIDERS, RAPID_PRACTICE_UPGRADE_LABELS, RAPID_PRACTICE_WAVES,
+  RAPID_PRACTICE_FREE_ROAM, RAPID_PRACTICE_SPAWNS, RAPID_PRACTICE_TOWN_COLLIDERS, RAPID_PRACTICE_UPGRADE_LABELS, RAPID_PRACTICE_WAVES,
+  RAPID_WORLD_ZONES,
   RAPID_PRACTICE_WEAPON_CHOICES, applyRapidPracticeUpgrade, rapidPracticeAttackTiming,
   rapidPracticeMovementSpeed, rapidPracticeProjectileFan, rapidPracticeProjectileTravelMs,
   rapidPracticeWeaponProfile, type RapidPracticeProjectileStyle, type RapidPracticeUpgradeId,
@@ -693,7 +694,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.silverInstanceKey = this.roomKind === "silver-depths" ? options.instanceKey ?? "" : "";
     this.instancePartySize = Math.max(1, Math.min(4, Math.floor(options.partySize ?? 1)));
     if (this.roomKind === "silver-depths") this.maxClients = 4;
-    if (this.roomKind === "practice") this.maxClients = 1;
+    if (this.roomKind === "practice") this.maxClients = this.rapidPractice ? 20 : 1;
     this.worldSeed = String(process.env.WORLD_SEED || "blockcraft-dev");
     this.worldDeltaStorageKey = worldDeltaHashKey(this.worldSeed);
     if (this.roomKind === "overworld") {
@@ -775,22 +776,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (this.roomKind === "practice") {
       this.state.mobs.clear(); this.mobHomes.clear(); this.state.portals.clear();
       if (this.rapidPractice) {
-        for (const spawn of RAPID_PRACTICE_SPAWNS) this.registerMob(spawn.id, spawn.archetype, spawn);
-        const openingWave = new Set<string>(RAPID_PRACTICE_WAVES[0]);
-        for (const [mobId, mob] of this.state.mobs) {
-          mob.name = "Speed Lab " + mob.name;
-          mob.attackDamage = 1;
-          mob.maxHealth = mob.health = mob.archetype === "stone_brute" ? 14 : 6;
-          mob.speedMultiplier *= 1.18;
-          if (!openingWave.has(mobId)) { mob.alive = false; mob.health = 0; mob.respawnAt = Number.MAX_SAFE_INTEGER; }
+        for (const spawn of RAPID_PRACTICE_SPAWNS) {
+          this.registerMob(spawn.id, spawn.archetype, spawn);
+          this.configureRapidWorldMob(spawn.id, this.state.mobs.get(spawn.id)!);
         }
-        const boss = this.state.mobs.get(RAPID_PRACTICE_BOSS_ID)!;
-        boss.name = "Speed Lab Warden";
-        boss.isChampion = true;
-        boss.maxHealth = 38;
-        boss.health = 0;
-        boss.armor = 1;
-        boss.speedMultiplier *= 1.12;
       } else {
         this.registerMob("practice-crawler", "moss_crawler", { x: 105.5, y: 8, z: 104.5 });
         this.registerMob("practice-spitter", "cave_spitter", { x: 105.5, y: 8, z: 108.5 });
@@ -811,9 +800,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.sendHuntCollection(client);
       this.sendBuildPath(client);
       if (this.roomKind === "practice") client.send("practice:state", { active: true,
-        ...(this.rapidPractice ? { wave: this.rapidPracticeWave } : {}),
         message: this.rapidPractice
-          ? "2.5D Speed Lab · clear three waves · choose upgrades · defeat the Warden · hold attack."
+          ? "FAST WORLD · leave through the east gate · each region has fixed enemies and a main leader."
           : "Training arena · select any ability, then use G. F uses your Calling Special. Your character will not be changed." });
       this.sendEquipmentAffixes(client);
       if (this.roomKind === "overworld") client.send("party:update", this.parties.snapshot(client.sessionId, this.state.players, Date.now()));
@@ -1151,8 +1139,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     player.y = spawn.y;
     player.z = spawn.z;
     if (this.roomKind === "practice") {
-      player.level = Math.max(player.level, 10);
-      if (this.rapidPractice) player.maxHealth = Math.max(player.maxHealth, 30);
+      if (!this.rapidPractice) player.level = Math.max(player.level, 10);
       player.health = player.maxHealth;
       player.stamina = player.maxStamina;
       player.invulnerableUntil = this.rapidPractice ? Date.now() + 1_500 : Date.now() + 600_000;
@@ -2215,7 +2202,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   }
 
   private persistPlayer(sessionId: string, player: PlayerState, force = false): Promise<void> {
-    if (this.roomKind === "practice") return Promise.resolve();
+    if (this.roomKind === "practice" && !this.rapidPractice) return Promise.resolve();
     const profileToken = this.profileTokens.get(sessionId);
     if (!profileToken) return Promise.resolve();
     const fingerprint = serializePlayerSave(player, 0);
@@ -2459,7 +2446,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   }
 
   private advanceRapidPracticeWaves(now: number): void {
-    if (!this.rapidPractice) return;
+    if (!this.rapidPractice || RAPID_PRACTICE_FREE_ROAM) return;
     const activeIds = RAPID_PRACTICE_WAVES[this.rapidPracticeWave - 1] ?? RAPID_PRACTICE_WAVES[0];
     if (activeIds.some(id => this.state.mobs.get(id)?.alive)) { this.rapidPracticeWaveAdvanceAt = 0; return; }
     if (this.rapidPracticeWaveAdvanceAt === 0) {
@@ -2621,6 +2608,31 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
   }
 
+  private configureRapidWorldMob(mobId: string, mob: MobState): void {
+    const spawn = RAPID_PRACTICE_SPAWNS.find(candidate => candidate.id === mobId);
+    if (!spawn) return;
+    const tier = spawn.zone === "greenwood" ? 1 : spawn.zone === "mistfen" ? 2
+      : spawn.zone === "southern-quarry" ? 3 : 4;
+    mob.name = spawn.name;
+    mob.level = spawn.level;
+    mob.difficultyTier = tier;
+    mob.isChampion = Boolean(spawn.leader);
+    mob.isMiniBoss = Boolean(spawn.leader);
+    mob.isElite = false;
+    mob.eliteKind = "";
+    mob.attackDamage = spawn.leader ? Math.max(2, Math.ceil(spawn.level / 3)) : Math.max(1, Math.ceil(spawn.level / 4));
+    mob.maxHealth = spawn.leader ? 18 + spawn.level * 4 : 4 + spawn.level * 2;
+    mob.health = mob.maxHealth;
+    mob.armor = spawn.leader ? Math.max(1, Math.floor(spawn.level / 5)) : Math.floor(spawn.level / 7);
+    mob.speedMultiplier = spawn.leader ? 1.22 : 1.08;
+    mob.rewardMultiplier = spawn.leader ? 2 + spawn.level * .08 : 1 + spawn.level * .04;
+    mob.attackPattern = spawn.leader ? championPattern(mob)
+      : spawn.archetype === "fen_bloater" ? "toxic-bloom"
+      : spawn.archetype === "cinder_ram" ? "furnace-charge"
+      : spawn.archetype === "ember_hound" ? "ember-pounce" : mob.attackPattern;
+    this.mobBaseNames.set(mobId, mob.name);
+  }
+
   private registerMob(mobId: string, archetypeId: MobArchetypeId, spawn: { x: number; y: number; z: number }): void {
     const outside = keepMobOutsideTown(spawn);
     const home = walkableMobSpawn({ ...spawn, ...outside }, this.readWorldBlock, pose => this.mobPositionAllowed(pose) && this.roamingAllowed(mobId, pose) && caveEncounterAllows(mobId, pose));
@@ -2670,8 +2682,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.state.mobs.set(mobId, mob);
   }
 
-  private readonly mobPositionAllowed = (position: { x: number; z: number }): boolean =>
-    radiusFromSafeCenter(position) >= MOB_TOWN_MINIMUM_RADIUS - 0.001;
+  private readonly mobPositionAllowed = (position: { x: number; z: number }): boolean => this.rapidPractice
+    ? position.x >= RAPID_PRACTICE_ARENA.minX + 1 && position.x <= RAPID_PRACTICE_ARENA.maxX - 1
+      && position.z >= RAPID_PRACTICE_ARENA.minZ + 1 && position.z <= RAPID_PRACTICE_ARENA.maxZ - 1
+      && !(position.x <= 108 && position.z >= 66 && position.z <= 146)
+    : radiusFromSafeCenter(position) >= MOB_TOWN_MINIMUM_RADIUS - 0.001;
 
   private activeRoadsideVariant(siteId: string) {
     return roadsideVariantFor(siteId, this.roadsideVariantIndex.get(siteId) ?? 0);
@@ -2790,6 +2805,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   }
 
   private roamingAllowed(id: string, pose: { x: number; y: number; z: number }): boolean {
+    const rapidSpawn = this.rapidPractice ? RAPID_PRACTICE_SPAWNS.find(spawn => spawn.id === id) : undefined;
+    if (rapidSpawn) {
+      const zone = RAPID_WORLD_ZONES.find(candidate => candidate.id === rapidSpawn.zone)!;
+      return Math.abs(pose.y - 8) <= 1.5 && pose.x >= zone.minX - 3 && pose.x <= zone.maxX + 3
+        && pose.z >= zone.minZ - 3 && pose.z <= zone.maxZ + 3;
+    }
     const siteGuard = roadsideGuard(id);
     if (siteGuard) return Math.abs(pose.y - siteGuard.y) <= 1.5
       && Math.hypot(pose.x - siteGuard.x, pose.z - siteGuard.z) <= 14;
@@ -3289,7 +3310,32 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private defeatMob(mobId: string, mob: MobState, attackerId: string, now: number): void {
     if (!mob.alive) return;
     if (this.roomKind === "practice") {
-      mob.health = 0; mob.alive = false; mob.respawnAt = this.rapidPractice ? Number.MAX_SAFE_INTEGER : now + 3_000;
+      const rapidSpawn = this.rapidPractice ? RAPID_PRACTICE_SPAWNS.find(candidate => candidate.id === mobId) : null;
+      mob.health = 0;
+      mob.alive = false;
+      mob.combatState = "idle";
+      mob.targetId = "";
+      mob.aimCommitted = false;
+      this.clearMobAttackTimeline(mob);
+      this.pendingMobMelee.delete(mobId);
+      this.mobAwareness.delete(mobId);
+      mob.respawnAt = rapidSpawn ? now + rapidSpawn.respawnMs : now + 3_000;
+      const player = this.state.players.get(attackerId);
+      if (rapidSpawn && player) {
+        const cadenceId = this.profileTokens.get(attackerId) ?? attackerId;
+        const itemDrop = Boolean(rapidSpawn.leader) || this.normalLootCadence.record(cadenceId, Math.random());
+        if (itemDrop) this.spawnLootDrops(mobId, mob, now, attackerId);
+        const coinsGranted = rapidSpawn.leader ? 7 + Math.floor(rapidSpawn.level / 2) : 1 + Math.floor(rapidSpawn.level / 4);
+        player.coins = Math.min(1_000_000, player.coins + coinsGranted);
+        const experience = mobExperience(mob.archetype, mob.rewardMultiplier, Boolean(rapidSpawn.leader), player.level, mob.level);
+        this.grantProgression(attackerId, experience, mob.name);
+        this.grantBuildProgress(attackerId, rapidSpawn.leader ? 3 : 1);
+        void this.persistPlayer(attackerId, player);
+        this.clients.find(client => client.sessionId === attackerId)?.send("chat:notice",
+          rapidSpawn.leader
+            ? `${mob.name.toUpperCase()} DEFEATED · leader loot landed · returns in ${Math.round(rapidSpawn.respawnMs / 1000)}s.`
+            : itemDrop ? `Enemy defeated · loot landed · +${coinsGranted} gold.` : `Enemy defeated · +${coinsGranted} gold and XP.`);
+      }
       this.combatContributions.clear(mobId);
       return;
     }
@@ -4901,7 +4947,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       defense.damage = Math.max(1, defense.damage - 1);
     }
     player.momentumStacks = momentumAfterDefense(player.momentumStacks, defense.damage, defense.parried, traitId);
-    player.health = Math.max(this.roomKind === "practice" ? 1 : 0, player.health - defense.damage);
+    player.health = Math.max(this.roomKind === "practice" && !this.rapidPractice ? 1 : 0, player.health - defense.damage);
     if (defense.damage > 0 && this.pendingResurrections.delete(playerId))
       this.clients.find(candidate => candidate.sessionId === playerId)?.send("chat:notice", "RESURRECTION INTERRUPTED · you took damage.");
     const depthsRun = this.silverDepthsRuns.get(playerId);
@@ -6592,7 +6638,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (abilityId === "healer_resurrection") {
       if (this.buildPathRankFor(player, "healer") < 4) return;
       if (this.pendingResurrections.has(client.sessionId)) return;
-      const allies = this.roomKind === "practice" ? ["practice-ally"]
+      const allies = this.rapidPractice ? [...this.state.players.keys()]
+        : this.roomKind === "practice" ? ["practice-ally"]
         : this.roomKind === "silver-depths" ? [...this.silverDepthsRoster.keys()]
         : this.parties.cohort(client.sessionId).members;
       const target = allies.filter(id => id !== client.sessionId && this.state.players.get(id)?.health === 0
@@ -7862,7 +7909,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     player.invulnerableUntil = now + 1500;
     this.movementInputs.set(client.sessionId, { request: idleMovementInput(), receivedAt: now });
     this.verticalVelocities.set(client.sessionId, 0);
-    if (this.rapidPractice) {
+    if (this.rapidPractice && !RAPID_PRACTICE_FREE_ROAM) {
       for (let index = this.pendingIncomingHits.length - 1; index >= 0; index--)
         if (this.pendingIncomingHits[index]!.playerId === client.sessionId) this.pendingIncomingHits.splice(index, 1);
       this.restartRapidPracticeRun(now);
@@ -7875,8 +7922,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     } else {
       client.send("player:returned", spawn);
       this.sendBuildPath(client);
-      if (this.rapidPractice) client.send("practice:state", { active: true, wave: 1,
-        message: "RUN RESTARTED · upgrades retained · hold attack" });
+      if (this.rapidPractice) client.send("practice:state", { active: true,
+        message: "Returned to the Town of Beginnings · your regional progress is retained." });
     }
   }
 
@@ -7884,7 +7931,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     for (const [casterId, cast] of this.pendingResurrections) {
       const caster = this.state.players.get(casterId);
       const target = this.state.players.get(cast.targetId);
-      const allies = this.roomKind === "practice" ? ["practice-ally"]
+      const allies = this.rapidPractice ? [...this.state.players.keys()]
+        : this.roomKind === "practice" ? ["practice-ally"]
         : this.roomKind === "silver-depths" ? [...this.silverDepthsRoster.keys()]
         : this.parties.cohort(casterId).members;
       const valid = caster && target && caster.health > 0 && target.health === 0
@@ -8768,7 +8816,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         mob.rewardMultiplier = stats.rewardMultiplier;
         mob.enraged = false;
         mob.level = enemyLevelForTier(mob.difficultyTier, mob.isChampion || mob.isElite || isAreaMiniBoss(mobId), false);
-        if (mob.isChampion) { mob.rewardMultiplier *= 1.5; mob.actionSequence = 0; mob.attackPattern = championPattern(mob); }
+        if (this.rapidPractice) this.configureRapidWorldMob(mobId, mob);
+        if (mob.isChampion && !this.rapidPractice) { mob.rewardMultiplier *= 1.5; mob.actionSequence = 0; mob.attackPattern = championPattern(mob); }
         if (mobId === CRYSTAL_MATRIARCH_ID) { mob.health = mob.maxHealth = 28; mob.attackPattern = crystalMatriarchPattern(0, false); }
         if (mobId === "forge-colossus") { mob.health = mob.maxHealth = 38; mob.attackDamage = 3; mob.attackPattern = "rocks"; }
         const areaLeader = areaMainMobDefinition(mobId);
