@@ -116,7 +116,7 @@ import { populateTownAssetKit, readyTownFallbacks, SPEED_LAB_TOWN_ASSETS, type T
 import { SPEED_LAB_TOWN_ACTORS, SPEED_LAB_TOWN_LIGHTS, SPEED_LAB_TOWN_SIGNS, townLifeActorPose, townLifeAnimation,
   type TownLifeActorDefinition } from "./town-life.js";
 import { townNpcFaceStyle, type TownNpcMouthExpression } from "./town-npc-appearance.js";
-import { bindTownNpcRig, loadTownNpcAssets, transitionTownNpcRig } from "./town-npc-assets.js";
+import { bindTownNpcRig, loadTownNpcAssets, TOWN_NPC_MODEL_YAW, transitionTownNpcRig } from "./town-npc-assets.js";
 import { SPEED_LAB_TOWN_TERRAIN, SPEED_LAB_TOWN_TERRAIN_DETAILS,
   type TownTerrainMaterial } from "./town-terrain.js";
 import {
@@ -2373,7 +2373,7 @@ if (rapidPrototypeRequested) {
         const model = resource.instantiateRenderEntity({ castShadows: true, receiveShadows: true });
         model.name = `town-npc-model:${actor.definition.role}`;
         model.setLocalScale(.78, .78, .78);
-        model.setLocalEulerAngles(0, 180, 0);
+        model.setLocalEulerAngles(0, TOWN_NPC_MODEL_YAW, 0);
         actor.root.addChild(model);
         decorateLoadedTownNpc(actor, model);
         const animationName = townLifeAnimation(actor.definition, townLifeActorPose(actor.definition, performance.now() * .001));

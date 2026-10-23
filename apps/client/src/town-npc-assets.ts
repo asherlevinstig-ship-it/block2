@@ -2,6 +2,8 @@ import * as pc from "playcanvas";
 import type { TownLifeRole } from "./town-life.js";
 
 export const TOWN_NPC_ASSET_BASE_URL = "/assets/kaykit-town-npcs";
+/** KayKit's authored forward is the same +Z direction used by town routes. */
+export const TOWN_NPC_MODEL_YAW = 0;
 
 export const TOWN_NPC_MODEL_FILES: Readonly<Record<TownLifeRole, string>> = {
   guard: `${TOWN_NPC_ASSET_BASE_URL}/guard.glb`,

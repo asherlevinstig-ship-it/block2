@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import * as pc from "playcanvas";
 import { vi } from "vitest";
-import { bindTownNpcRig, TOWN_NPC_MODEL_FILES, transitionTownNpcRig } from "./town-npc-assets.js";
+import { bindTownNpcRig, TOWN_NPC_MODEL_FILES, TOWN_NPC_MODEL_YAW, transitionTownNpcRig } from "./town-npc-assets.js";
 
 describe("town NPC assets", () => {
   it("provides an optimized role model for every town occupation", () => {
@@ -9,6 +9,10 @@ describe("town NPC assets", () => {
     for (const url of Object.values(TOWN_NPC_MODEL_FILES)) {
       expect(url).toMatch(/^\/assets\/kaykit-town-npcs\/[a-z-]+\.glb$/);
     }
+  });
+
+  it("keeps the model facing the same direction as its authored route", () => {
+    expect(TOWN_NPC_MODEL_YAW).toBe(0);
   });
 
   it("binds imported AnimTracks to the modern skeletal animation component", () => {
