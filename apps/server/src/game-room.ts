@@ -6105,12 +6105,14 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       callingAugmentProgress: state.callingAugmentProgress,
       masteredCallingAugments: state.masteredCallingAugments,
       nextRankXp: nextBuildRankXp(xp), candidates,
-      canChoose: this.roomKind === "overworld" && (isInsideTownSafeZone(player) || !state.selectedPathId),
+      canChoose: this.roomKind === "overworld" && (isInsideTownSafeZone(player) || !state.selectedPathId)
+        || this.rapidPractice && !state.selectedPathId,
       selectedSpecializationId: specializationId,
       canSpecialize: Boolean(state.selectedPathId && rank >= 3 && !state.specializations[state.selectedPathId]),
       masterTrial: specialization ? { name: specialization.name, description: specialization.trial, progress: trialProgress,
         target: specialization.trialTarget, complete: state.mastered.includes(specialization.id), capstone: specialization.capstone } : null,
-      inTown: this.roomKind === "overworld" && isInsideTownSafeZone(player), message } satisfies BuildPathUpdate);
+      inTown: this.roomKind === "overworld" && isInsideTownSafeZone(player) || this.rapidPractice,
+      message } satisfies BuildPathUpdate);
   }
 
   private handleBuildPath(client: Client, payload: unknown): void {
@@ -6119,8 +6121,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (!parsed.success || !player) return;
     if (parsed.data.action === "sync") { this.sendBuildPath(client); return; }
     const currentPathId = parseBuildPathState(player.huntLoadoutsJson).selectedPathId;
-    if (this.roomKind !== "overworld" || (!isInsideTownSafeZone(player)
-      && (parsed.data.action !== "choose" || currentPathId !== null))) {
+    const firstFastModeChoice = this.rapidPractice && parsed.data.action === "choose" && currentPathId === null;
+    if (!firstFastModeChoice && (this.roomKind !== "overworld" || (!isInsideTownSafeZone(player)
+      && (parsed.data.action !== "choose" || currentPathId !== null)))) {
       this.sendBuildPath(client, currentPathId
         ? "Return to Town before changing your Calling."
         : "Return to the surface before choosing your first Calling."); return;

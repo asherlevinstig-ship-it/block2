@@ -47,4 +47,23 @@ describe("starter Calling choice", () => {
     internal.handleBuildPath(client, { action: "choose", pathId: "mage" });
     expect(parseBuildPathState(player.huntLoadoutsJson).selectedPathId).toBe("mage");
   });
+
+  it("lets a fresh fast-mode character choose its first Calling before collecting the starter bag", () => {
+    const room = new WorldRoom(); room.setState(new WorldState());
+    const internal = room as any;
+    internal.roomKind = "practice";
+    internal.rapidPractice = true;
+    vi.spyOn(internal, "persistPlayer").mockResolvedValue(undefined);
+    const player = new PlayerState();
+    Object.assign(player, { x: 99.5, y: 8, z: 106.5, level: 10 });
+    room.state.players.set("fast-newcomer", player);
+    const client = { sessionId: "fast-newcomer", send: vi.fn() } as any;
+
+    internal.handleBuildPath(client, { action: "sync" });
+    expect(client.send.mock.lastCall?.[1]).toEqual(expect.objectContaining({ canChoose: true, inTown: true }));
+    internal.handleBuildPath(client, { action: "choose", pathId: "assassin" });
+
+    expect(parseBuildPathState(player.huntLoadoutsJson).selectedPathId).toBe("assassin");
+    expect(client.send.mock.lastCall?.[1].canChoose).toBe(false);
+  });
 });
