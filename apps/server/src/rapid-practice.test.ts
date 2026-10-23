@@ -50,6 +50,15 @@ describe("rapid 2.5D practice", () => {
     }
   });
 
+  it("keeps a large walkable civic centre between the buildings and east gate", () => {
+    const civicCentre = { minX: 84, maxX: 100, minZ: 98, maxZ: 114 };
+    for (const building of RAPID_PRACTICE_TOWN_COLLIDERS) {
+      const overlaps = building.maxX > civicCentre.minX && building.minX < civicCentre.maxX
+        && building.maxZ > civicCentre.minZ && building.minZ < civicCentre.maxZ;
+      expect(overlaps, building.id).toBe(false);
+    }
+  });
+
   it("speeds up play only inside the prototype", () => {
     expect(rapidPracticeMovementSpeed(4.2, false)).toBe(4.2);
     expect(rapidPracticeMovementSpeed(4.2, true)).toBeCloseTo(5.796);

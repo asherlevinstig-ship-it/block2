@@ -2180,10 +2180,10 @@ if (rapidPrototypeRequested) {
 
   // Town of Beginnings art kit: warm timber-and-plaster buildings, pitched roofs,
   // inset stone roads, readable civic blue and small lived-in details.
-  addBox(rapidPrototypeRoot, "beginnings-plaza-rim", mortar, [25.05, .09, 34.05], [90.7, 8.055, 106]);
-  addBox(rapidPrototypeRoot, "beginnings-plaza", townStoneMid, [24.55, .095, 33.55], [90.7, 8.075, 106]);
-  addBox(rapidPrototypeRoot, "beginnings-main-road-rim", mortar, [29, .085, 3.6], [93.5, 8.08, 106]);
-  addBox(rapidPrototypeRoot, "beginnings-main-road", townStoneLight, [28.55, .09, 3.25], [93.5, 8.105, 106]);
+  addBox(rapidPrototypeRoot, "beginnings-plaza-rim", mortar, [28.8, .09, 36.05], [89.3, 8.055, 106]);
+  addBox(rapidPrototypeRoot, "beginnings-plaza", townStoneMid, [28.3, .095, 35.55], [89.3, 8.075, 106]);
+  addBox(rapidPrototypeRoot, "beginnings-main-road-rim", mortar, [32, .085, 4.4], [91.5, 8.08, 106]);
+  addBox(rapidPrototypeRoot, "beginnings-main-road", townStoneLight, [31.55, .09, 4.05], [91.5, 8.105, 106]);
   for (const offset of [-8, 8]) {
     addBox(rapidPrototypeRoot, "beginnings-side-road-rim", mortar, [17.3, .08, 2.45], [91.2, 8.075, 106 + offset]);
     addBox(rapidPrototypeRoot, "beginnings-side-road", townStoneLight, [17, .095, 2.12], [91.2, 8.105, 106 + offset]);
@@ -2350,10 +2350,10 @@ if (rapidPrototypeRequested) {
   }
 
   // The Founder Compass is a low, walkable landmark: cyan points east toward adventure.
-  addTownShape(rapidPrototypeRoot, "founder-compass-ring", "cylinder", mortar, [1.38, .045, 1.38], [97.25, 8.18, 106]);
-  const compassCore = addBox(rapidPrototypeRoot, "founder-compass-core", townRune, [1.42, .035, .38], [97.25, 8.235, 106]);
+  addTownShape(rapidPrototypeRoot, "founder-compass-ring", "cylinder", mortar, [1.82, .045, 1.82], [94.6, 8.18, 106]);
+  const compassCore = addBox(rapidPrototypeRoot, "founder-compass-core", townRune, [1.9, .035, .42], [94.6, 8.235, 106]);
   compassCore.setLocalEulerAngles(0, 45, 0);
-  const compassCross = addBox(rapidPrototypeRoot, "founder-compass-cross", townRune, [.38, .04, 1.42], [97.25, 8.24, 106]);
+  const compassCross = addBox(rapidPrototypeRoot, "founder-compass-cross", townRune, [.42, .04, 1.9], [94.6, 8.24, 106]);
   compassCross.setLocalEulerAngles(0, 45, 0);
 
   const addBarrel = (x: number, z: number): void => {
@@ -2385,7 +2385,9 @@ if (rapidPrototypeRequested) {
   // The imported kit is decorative only: server-owned world geometry remains authoritative for
   // movement and combat. Primitive art stays visible until a complete replacement family loads.
   const hideRapidTownFallback = (family: TownFallbackFamily): void => {
-    const names = family === "market-stalls" ? new Set(["north-market-stall", "south-market-stall"])
+    const names = family === "modular-buildings" ? new Set(["founders-hall", "wayfarer-inn", "beginnings-smithy",
+      "weavers-row", "healers-house", "wardens-lodge"])
+      : family === "market-stalls" ? new Set(["north-market-stall", "south-market-stall"])
       : family === "lamp-posts" ? new Set(["town-lamp-post", "town-lamp-arm", "town-lamp", "town-lamp-cap"])
       : family === "trees" ? new Set(["tree-trunk", "tree-crown"])
       : new Set(["arena-rock"]);

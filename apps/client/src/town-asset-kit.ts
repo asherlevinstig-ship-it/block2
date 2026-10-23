@@ -11,6 +11,17 @@ export const TOWN_ASSET_FILES = {
   fountainRound: "fountain-round.glb",
   hedge: "hedge.glb",
   lantern: "lantern.glb",
+  chimney: "chimney.glb",
+  overhang: "overhang.glb",
+  pillarStone: "pillar-stone.glb",
+  roof: "roof.glb",
+  roofGableEnd: "roof-gable-end.glb",
+  roofHigh: "roof-high.glb",
+  stairsWideStone: "stairs-wide-stone.glb",
+  wallWood: "wall-wood.glb",
+  wallWoodCorner: "wall-wood-corner.glb",
+  wallWoodDoor: "wall-wood-door.glb",
+  wallWoodWindow: "wall-wood-window-shutters.glb",
   rockLarge: "rock-large.glb",
   rockSmall: "rock-small.glb",
   stallGreen: "stall-green.glb",
@@ -20,7 +31,7 @@ export const TOWN_ASSET_FILES = {
 } as const;
 
 export type TownAssetId = keyof typeof TOWN_ASSET_FILES;
-export type TownFallbackFamily = "market-stalls" | "lamp-posts" | "trees" | "rocks";
+export type TownFallbackFamily = "modular-buildings" | "market-stalls" | "lamp-posts" | "trees" | "rocks";
 
 export interface TownAssetPlacement {
   id: TownAssetId;
@@ -30,7 +41,7 @@ export interface TownAssetPlacement {
   scale?: number;
 }
 
-export const SPEED_LAB_TOWN_ASSETS: readonly TownAssetPlacement[] = [
+const TOWN_DECORATIONS: readonly TownAssetPlacement[] = [
   { id: "stallGreen", name: "north-market", position: [98.15, 8.15, 98.2], yaw: 90, scale: 2.05 },
   { id: "stallRed", name: "south-market", position: [98.15, 8.15, 113.8], yaw: 90, scale: 2.05 },
   { id: "cart", name: "inn-supply-cart", position: [96.1, 8.15, 101.2], yaw: -18, scale: 1.65 },
@@ -67,7 +78,78 @@ export const SPEED_LAB_TOWN_ASSETS: readonly TownAssetPlacement[] = [
   { id: "bannerRed", name: "smithy-banner", position: [95.4, 9.15, 116.9], yaw: 90, scale: 1.35 },
 ] as const;
 
+type ModularBuildingSpec = {
+  name: string;
+  x: number;
+  z: number;
+  scale?: number;
+  floors?: number;
+  redRoof?: boolean;
+  chimney?: boolean;
+};
+
+/** Build complete houses from Kenney's authored wall, window, door, roof and
+ * stone modules. The original pilot only imported small props; these shells
+ * make the asset kit define the town's dominant silhouette as well. */
+function modularBuilding(spec: ModularBuildingSpec): TownAssetPlacement[] {
+  const scale = spec.scale ?? 2;
+  const floors = spec.floors ?? 2;
+  const half = scale * 1.5;
+  const wallOffset = half - scale * .4;
+  const placements: TownAssetPlacement[] = [];
+  const add = (id: TownAssetId, part: string, position: readonly [number, number, number], yaw = 0,
+    partScale = scale): void => {
+    placements.push({ id, name: `${spec.name}-${part}`, position, yaw, scale: partScale });
+  };
+
+  for (let floor = 0; floor < floors; floor++) {
+    const y = 8.15 + floor * scale;
+    for (let index = 0; index < 3; index++) {
+      const offset = (index - 1) * scale;
+      const front = floor === 0 && index === 1 ? "wallWoodDoor" : "wallWoodWindow";
+      add(front, `east-${floor}-${index}`, [spec.x + wallOffset, y, spec.z + offset]);
+      add("wallWoodWindow", `west-${floor}-${index}`, [spec.x - wallOffset, y, spec.z - offset], 180);
+      add("wallWoodWindow", `north-${floor}-${index}`, [spec.x + offset, y, spec.z - wallOffset], 90);
+      add("wallWoodWindow", `south-${floor}-${index}`, [spec.x - offset, y, spec.z + wallOffset], -90);
+    }
+  }
+
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    add("wallWoodCorner", `corner-${sx}-${sz}`, [spec.x + sx * wallOffset, 8.15, spec.z + sz * wallOffset],
+      sx < 0 ? 180 : 0, scale);
+  }
+
+  const roofId: TownAssetId = spec.redRoof ? "roofHigh" : "roof";
+  const roofY = 8.15 + floors * scale;
+  for (const zOffset of [-scale * .75, scale * .75]) {
+    add(roofId, `roof-east-${zOffset}`, [spec.x + scale * .74, roofY, spec.z + zOffset], 0, scale * 1.5);
+    add(roofId, `roof-west-${zOffset}`, [spec.x - scale * .74, roofY, spec.z - zOffset], 180, scale * 1.5);
+  }
+  add("roofGableEnd", "gable-north", [spec.x, roofY, spec.z - half], 90, scale * 1.5);
+  add("roofGableEnd", "gable-south", [spec.x, roofY, spec.z + half], -90, scale * 1.5);
+  add("stairsWideStone", "front-steps", [spec.x + half + scale * .05, 8.15, spec.z], 90, scale * 1.25);
+  add("overhang", "door-awning", [spec.x + half + scale * .04, 9.65, spec.z], 90, scale * 1.15);
+  if (spec.chimney) add("chimney", "chimney", [spec.x - scale * .65, roofY + scale * .25, spec.z - scale * .55], 0, scale * 1.15);
+  return placements;
+}
+
+const TOWN_BUILDINGS: readonly TownAssetPlacement[] = [
+  ...modularBuilding({ name: "founders-hall", x: 79.5, z: 88.4, scale: 2.15, floors: 2 }),
+  ...modularBuilding({ name: "wayfarer-inn", x: 91.2, z: 92.2, scale: 1.9, floors: 2, redRoof: true, chimney: true }),
+  ...modularBuilding({ name: "beginnings-smithy", x: 91.2, z: 119.8, scale: 1.9, floors: 1, redRoof: true, chimney: true }),
+  ...modularBuilding({ name: "weavers-row", x: 78.8, z: 97.4, scale: 1.75, floors: 1 }),
+  ...modularBuilding({ name: "healers-house", x: 78.8, z: 108.2, scale: 1.8, floors: 1, redRoof: true }),
+  ...modularBuilding({ name: "wardens-lodge", x: 78.8, z: 119.2, scale: 1.8, floors: 2 }),
+] as const;
+
+export const SPEED_LAB_TOWN_ASSETS: readonly TownAssetPlacement[] = [
+  ...TOWN_BUILDINGS,
+  ...TOWN_DECORATIONS,
+] as const;
+
 const FALLBACK_REQUIREMENTS: Readonly<Record<TownFallbackFamily, readonly TownAssetId[]>> = {
+  "modular-buildings": ["wallWood", "wallWoodCorner", "wallWoodDoor", "wallWoodWindow", "roof", "roofHigh",
+    "roofGableEnd", "stairsWideStone", "overhang", "chimney"],
   "market-stalls": ["stallGreen", "stallRed"],
   "lamp-posts": ["lantern"],
   trees: ["treeCrooked", "treeHighRound"],

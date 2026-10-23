@@ -14,12 +14,12 @@ export const RAPID_PRACTICE_ARENA = {
  * renders these with its lighter art layer, while the authored blocks keep
  * players and enemies from walking through the buildings. */
 export const RAPID_PRACTICE_TOWN_COLLIDERS = [
-  { id: "founders-hall", minX: 89, maxX: 94, minZ: 103, maxZ: 109 },
-  { id: "wayfarer-inn", minX: 89, maxX: 95, minZ: 93, maxZ: 99 },
-  { id: "beginnings-smithy", minX: 89, maxX: 95, minZ: 113, maxZ: 119 },
-  { id: "weavers-row", minX: 79, maxX: 85, minZ: 92, maxZ: 98 },
-  { id: "healers-house", minX: 79, maxX: 85, minZ: 103, maxZ: 109 },
-  { id: "wardens-lodge", minX: 79, maxX: 85, minZ: 114, maxZ: 120 },
+  { id: "founders-hall", minX: 76, maxX: 83, minZ: 85, maxZ: 92 },
+  { id: "wayfarer-inn", minX: 88, maxX: 94, minZ: 89, maxZ: 95 },
+  { id: "beginnings-smithy", minX: 88, maxX: 94, minZ: 117, maxZ: 123 },
+  { id: "weavers-row", minX: 76, maxX: 82, minZ: 95, maxZ: 100 },
+  { id: "healers-house", minX: 76, maxX: 82, minZ: 105, maxZ: 111 },
+  { id: "wardens-lodge", minX: 76, maxX: 82, minZ: 116, maxZ: 122 },
   { id: "north-gatehouse", minX: 101, maxX: 103, minZ: 99, maxZ: 102 },
   { id: "south-gatehouse", minX: 101, maxX: 103, minZ: 110, maxZ: 113 },
 ] as const;

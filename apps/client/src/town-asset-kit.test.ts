@@ -19,5 +19,8 @@ describe("town asset kit", () => {
     expect(SPEED_LAB_TOWN_ASSETS.every(asset => asset.position[1] >= 8.15)).toBe(true);
     expect(Math.min(...SPEED_LAB_TOWN_ASSETS.map(asset => asset.position[0]))).toBeLessThan(77);
     expect(SPEED_LAB_TOWN_ASSETS.some(asset => asset.id === "fountainRound")).toBe(true);
+    expect(SPEED_LAB_TOWN_ASSETS.filter(asset => asset.id === "wallWoodDoor")).toHaveLength(6);
+    expect(SPEED_LAB_TOWN_ASSETS.filter(asset => asset.id === "wallWoodWindow").length).toBeGreaterThan(60);
+    expect(SPEED_LAB_TOWN_ASSETS.some(asset => asset.id === "roofHigh")).toBe(true);
   });
 });
