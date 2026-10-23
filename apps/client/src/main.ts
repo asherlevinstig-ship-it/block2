@@ -113,8 +113,9 @@ import { confirmPredictedDodges, removeRejectedDodge, replayPendingMovement, typ
 import { advanceCameraOrbit, cameraOrbitOffset, dragCameraOrbit, initialCameraOrbit, pinchCameraOrbit } from "./camera-orbit.js";
 import { advanceCameraFollow, advanceCameraHeight, advanceCameraPosition } from "./camera-follow.js";
 import { populateTownAssetKit, readyTownFallbacks, SPEED_LAB_TOWN_ASSETS, type TownFallbackFamily } from "./town-asset-kit.js";
-import { SPEED_LAB_TOWN_ACTORS, SPEED_LAB_TOWN_LIGHTS, SPEED_LAB_TOWN_SIGNS, townLifeActorPose,
+import { SPEED_LAB_TOWN_ACTORS, SPEED_LAB_TOWN_LIGHTS, SPEED_LAB_TOWN_SIGNS, townLifeActorPose, townLifeAnimation,
   type TownLifeActorDefinition } from "./town-life.js";
+import { loadTownNpcAssets } from "./town-npc-assets.js";
 import { SPEED_LAB_TOWN_TERRAIN, SPEED_LAB_TOWN_TERRAIN_DETAILS,
   type TownTerrainMaterial } from "./town-terrain.js";
 import {
@@ -2123,6 +2124,9 @@ const rapidTownBanners: { entity: pc.Entity; phase: number }[] = [];
 interface RapidTownActorVisual {
   definition: TownLifeActorDefinition;
   root: pc.Entity;
+  fallback: pc.Entity;
+  model: pc.Entity | null;
+  animationName: string;
   torso: pc.Entity;
   head: pc.Entity;
   leftArm: pc.Entity;
@@ -2134,6 +2138,7 @@ const rapidTownActors: RapidTownActorVisual[] = [];
 const rapidTownLights: { entity: pc.Entity; phase: number }[] = [];
 const rapidTownSparks: { entity: pc.Entity; phase: number }[] = [];
 let requestRapidTownAssets = (): void => {};
+let requestRapidTownNpcAssets = (): void => {};
 if (rapidPrototypeRequested) {
   const grass = coloredMaterial(new pc.Color(.19, .37, .2));
   const grassLight = coloredMaterial(new pc.Color(.26, .46, .25));
@@ -2217,16 +2222,19 @@ if (rapidPrototypeRequested) {
   const addTownActor = (definition: TownLifeActorDefinition): void => {
     const materials = actorMaterials.get(definition.id)!;
     const root = new pc.Entity(`town-life:${definition.id}`);
-    root.setLocalPosition(definition.start[0], 8.15, definition.start[1]);
+    root.setLocalPosition(definition.route[0]![0], 8.15, definition.route[0]![1]);
     rapidPrototypeRoot.addChild(root);
-    const torso = addBox(root, "townsperson-torso", materials.coat, [.48, .68, .3], [0, 1.02, 0]);
-    addBox(root, "townsperson-belt", materials.accent, [.51, .08, .32], [0, .82, 0]);
-    const head = addBox(root, "townsperson-head", skin, [.38, .4, .38], [0, 1.61, 0]);
-    addBox(root, "townsperson-hair", darkHair, [.4, .12, .4], [0, 1.83, -.01]);
-    const leftArm = addTownLimb(root, "townsperson-left-arm", [-.33, 1.25, 0], materials.coat, [.17, .54, .2]);
-    const rightArm = addTownLimb(root, "townsperson-right-arm", [.33, 1.25, 0], materials.coat, [.17, .54, .2]);
-    const leftLeg = addTownLimb(root, "townsperson-left-leg", [-.14, .72, 0], trouser, [.2, .62, .23]);
-    const rightLeg = addTownLimb(root, "townsperson-right-leg", [.14, .72, 0], trouser, [.2, .62, .23]);
+    const fallback = new pc.Entity("townsperson-procedural-fallback");
+    root.addChild(fallback);
+    const torso = addBox(fallback, "townsperson-torso", materials.coat, [.48, .68, .3], [0, 1.02, 0]);
+    addBox(fallback, "townsperson-belt", materials.accent, [.51, .08, .32], [0, .82, 0]);
+    addTownShape(fallback, "townsperson-coat-skirt", "cone", materials.coat, [.42, .38, .34], [0, .72, 0]);
+    const head = addTownShape(fallback, "townsperson-head", "sphere", skin, [.34, .39, .34], [0, 1.61, 0]);
+    addTownShape(fallback, "townsperson-hair", "sphere", darkHair, [.36, .16, .36], [0, 1.79, -.02]);
+    const leftArm = addTownLimb(fallback, "townsperson-left-arm", [-.33, 1.25, 0], materials.coat, [.17, .54, .2]);
+    const rightArm = addTownLimb(fallback, "townsperson-right-arm", [.33, 1.25, 0], materials.coat, [.17, .54, .2]);
+    const leftLeg = addTownLimb(fallback, "townsperson-left-leg", [-.14, .72, 0], trouser, [.2, .62, .23]);
+    const rightLeg = addTownLimb(fallback, "townsperson-right-leg", [.14, .72, 0], trouser, [.2, .62, .23]);
     if (definition.role === "guard") {
       addBox(torso, "warden-breastplate", materials.accent, [.34, .34, .045], [0, .02, .175]);
       addTownShape(leftArm, "warden-shield", "cylinder", materials.accent, [.34, .08, .34], [0, -.3, .2])
@@ -2241,9 +2249,57 @@ if (rapidPrototypeRequested) {
       addBox(torso, "healer-cross-vertical", materials.accent, [.08, .3, .04], [0, .02, .18]);
       addBox(torso, "healer-cross-horizontal", materials.accent, [.25, .08, .04], [0, .02, .18]);
     }
-    rapidTownActors.push({ definition, root, torso, head, leftArm, rightArm, leftLeg, rightLeg });
+    rapidTownActors.push({ definition, root, fallback, model: null, animationName: "", torso, head,
+      leftArm, rightArm, leftLeg, rightLeg });
   };
   SPEED_LAB_TOWN_ACTORS.forEach(addTownActor);
+
+  const townNpcAccessories = new Set(["1H_Sword_Offhand", "Badge_Shield", "Rectangle_Shield", "Round_Shield",
+    "Spike_Shield", "1H_Sword", "2H_Sword", "Knife_Offhand", "1H_Crossbow", "2H_Crossbow", "Knife",
+    "Throwable", "1H_Axe_Offhand", "Barbarian_Round_Shield", "1H_Axe", "2H_Axe", "Mug", "Spellbook",
+    "Spellbook_open", "1H_Wand", "2H_Staff"]);
+  const visibleNpcAccessories: Readonly<Record<TownLifeActorDefinition["role"], ReadonlySet<string>>> = {
+    guard: new Set(["Round_Shield", "1H_Sword"]),
+    healer: new Set(["Spellbook_open", "1H_Wand"]),
+    vendor: new Set(), smith: new Set(), resident: new Set(),
+  };
+  const decorateLoadedTownNpc = (actor: RapidTownActorVisual, model: pc.Entity): void => {
+    const visible = visibleNpcAccessories[actor.definition.role];
+    for (const node of model.find(candidate => townNpcAccessories.has(candidate.name))) node.enabled = visible.has(node.name);
+    if (actor.definition.role !== "smith") return;
+    const hand = model.findByName("handslot.r") as pc.Entity | null;
+    if (!hand) return;
+    const handle = addBox(hand, "smith-hammer-handle", timber, [.07, .42, .07], [0, -.18, 0]);
+    handle.setLocalEulerAngles(0, 0, 8);
+    const hammer = addBox(hand, "smith-hammer-head", iron, [.34, .14, .16], [0, -.45, 0]);
+    hammer.setLocalEulerAngles(0, 0, 8);
+  };
+  let townNpcAssetsStarted = false;
+  requestRapidTownNpcAssets = (): void => {
+    if (townNpcAssetsStarted) return;
+    townNpcAssetsStarted = true;
+    void loadTownNpcAssets(app).then(result => {
+      for (const actor of rapidTownActors) {
+        const asset = result.loaded.get(actor.definition.role);
+        const resource = asset?.resource as (pc.ContainerResource & { animations: pc.Asset[] }) | undefined;
+        if (!resource) continue;
+        const model = resource.instantiateRenderEntity({ castShadows: true, receiveShadows: true });
+        model.name = `town-npc-model:${actor.definition.role}`;
+        model.setLocalScale(.78, .78, .78);
+        model.setLocalEulerAngles(0, 180, 0);
+        actor.root.addChild(model);
+        decorateLoadedTownNpc(actor, model);
+        model.addComponent("animation", { assets: resource.animations, activate: false, loop: true, speed: 1 });
+        const animationName = townLifeAnimation(actor.definition, townLifeActorPose(actor.definition, performance.now() * .001));
+        model.animation?.play(animationName);
+        if (model.animation && model.animation.duration > 0) model.animation.currentTime = actor.definition.phase * model.animation.duration;
+        actor.model = model;
+        actor.animationName = animationName;
+        actor.fallback.enabled = false;
+      }
+      console.info(`[town-npcs] ${result.loaded.size} role models ready; ${result.failed.size} procedural fallbacks retained.`);
+    });
+  };
 
   const signSymbol = new pc.StandardMaterial();
   signSymbol.diffuse = new pc.Color(1, .72, .2);
@@ -11616,7 +11672,10 @@ function renderBootstrap(payload: WorldBootstrap): void {
     `WORLD REFRESH ${previousSliceY === null ? "surface" : `slice:${previousSliceY}`} → ${cutawayStateKey} y=${initialPosition.y.toFixed(3)} surface=${surfaceReferenceY.toFixed(3)} stateGap=${statePoseGap?.toFixed(3) ?? "missing"} chunks=${payload.chunks.length} setup=${bootstrapSetupMs.toFixed(1)}ms queued=${queuedChunkRebuilds.size}`,
   );
   worldReady = true;
-  if (rapidPrototypeRequested) window.setTimeout(requestRapidTownAssets, 250);
+  if (rapidPrototypeRequested) window.setTimeout(() => {
+    requestRapidTownAssets();
+    requestRapidTownNpcAssets();
+  }, 250);
   lastWorldBootstrapAt = performance.now();
   snapFrameHistory.length = 0;
   status.textContent = rapidPrototypeRequested
@@ -14663,21 +14722,33 @@ app.on("update", (dt: number) => {
     for (const actor of rapidTownActors) {
       const pose = townLifeActorPose(actor.definition, townTime);
       const walk = pose.stride * 34;
-      const bob = pose.moving ? Math.abs(pose.stride) * .035 : Math.sin(townTime * 1.6 + actor.definition.phase * 5) * .01;
+      const bob = actor.model ? 0 : pose.moving ? Math.abs(pose.stride) * .028 : Math.sin(townTime * 1.6 + actor.definition.phase * 5) * .01;
       actor.root.setLocalPosition(pose.x, 8.15 + bob, pose.z);
       actor.root.setLocalEulerAngles(0, pose.yaw, 0);
+      if (actor.model?.animation) {
+        const animationName = townLifeAnimation(actor.definition, pose);
+        if (animationName !== actor.animationName) {
+          actor.model.animation.loop = pose.motion !== "work";
+          actor.model.animation.speed = pose.motion === "walk" ? .92 + actor.definition.moveSpeed * .08 : 1;
+          actor.model.animation.play(animationName, .2);
+          actor.animationName = animationName;
+        }
+        continue;
+      }
       actor.leftArm.setLocalEulerAngles(-walk, 0, 0);
       actor.rightArm.setLocalEulerAngles(walk, 0, 0);
       actor.leftLeg.setLocalEulerAngles(walk, 0, 0);
       actor.rightLeg.setLocalEulerAngles(-walk, 0, 0);
-      actor.torso.setLocalEulerAngles(0, 0, pose.moving ? pose.stride * 1.8 : 0);
-      actor.head.setLocalEulerAngles(0, Math.sin(townTime * .7 + actor.definition.phase * 8) * 8, 0);
-      if (actor.definition.role === "smith") {
+      actor.torso.setLocalEulerAngles(pose.moving ? Math.abs(pose.stride) * 1.5 : 0, 0,
+        pose.moving ? pose.stride * 1.8 : pose.turn * 3.5);
+      actor.head.setLocalEulerAngles(0, pose.moving ? Math.sin(townTime * .7 + actor.definition.phase * 8) * 3
+        : Math.sin(townTime * .45 + actor.definition.phase * 8) * 9, 0);
+      if (actor.definition.role === "smith" && pose.motion === "work") {
         actor.rightArm.setLocalEulerAngles(-34 - pose.activity * 82, 0, -8);
         actor.leftArm.setLocalEulerAngles(-18, 0, 12);
-      } else if (actor.definition.role === "vendor") {
+      } else if (actor.definition.role === "vendor" && pose.motion === "work") {
         actor.rightArm.setLocalEulerAngles(-20 - pose.activity * 48, 0, -18);
-      } else if (actor.definition.role === "healer") {
+      } else if (actor.definition.role === "healer" && pose.motion === "work") {
         actor.leftArm.setLocalEulerAngles(-18 - pose.activity * 16, 0, 18);
         actor.rightArm.setLocalEulerAngles(-18 - pose.activity * 16, 0, -18);
       }
