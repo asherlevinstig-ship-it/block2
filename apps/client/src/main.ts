@@ -115,7 +115,7 @@ import { advanceCameraFollow, advanceCameraHeight, advanceCameraPosition } from 
 import { populateTownAssetKit, readyTownFallbacks, SPEED_LAB_TOWN_ASSETS, type TownFallbackFamily } from "./town-asset-kit.js";
 import { SPEED_LAB_TOWN_ACTORS, SPEED_LAB_TOWN_LIGHTS, SPEED_LAB_TOWN_SIGNS, townLifeActorPose, townLifeAnimation,
   type TownLifeActorDefinition } from "./town-life.js";
-import { loadTownNpcAssets } from "./town-npc-assets.js";
+import { bindTownNpcRig, loadTownNpcAssets, transitionTownNpcRig } from "./town-npc-assets.js";
 import { SPEED_LAB_TOWN_TERRAIN, SPEED_LAB_TOWN_TERRAIN_DETAILS,
   type TownTerrainMaterial } from "./town-terrain.js";
 import {
@@ -2289,10 +2289,12 @@ if (rapidPrototypeRequested) {
         model.setLocalEulerAngles(0, 180, 0);
         actor.root.addChild(model);
         decorateLoadedTownNpc(actor, model);
-        model.addComponent("animation", { assets: resource.animations, activate: false, loop: true, speed: 1 });
         const animationName = townLifeAnimation(actor.definition, townLifeActorPose(actor.definition, performance.now() * .001));
-        model.animation?.play(animationName);
-        if (model.animation && model.animation.duration > 0) model.animation.currentTime = actor.definition.phase * model.animation.duration;
+        if (!bindTownNpcRig(model, resource.animations, animationName, actor.definition.phase)) {
+          console.warn(`[town-npcs] ${actor.definition.role} rig did not expose playable AnimTracks; retaining fallback.`);
+          model.destroy();
+          continue;
+        }
         actor.model = model;
         actor.animationName = animationName;
         actor.fallback.enabled = false;
@@ -14725,13 +14727,11 @@ app.on("update", (dt: number) => {
       const bob = actor.model ? 0 : pose.moving ? Math.abs(pose.stride) * .028 : Math.sin(townTime * 1.6 + actor.definition.phase * 5) * .01;
       actor.root.setLocalPosition(pose.x, 8.15 + bob, pose.z);
       actor.root.setLocalEulerAngles(0, pose.yaw, 0);
-      if (actor.model?.animation) {
+      if (actor.model?.anim) {
         const animationName = townLifeAnimation(actor.definition, pose);
         if (animationName !== actor.animationName) {
-          actor.model.animation.loop = pose.motion !== "work";
-          actor.model.animation.speed = pose.motion === "walk" ? .92 + actor.definition.moveSpeed * .08 : 1;
-          actor.model.animation.play(animationName, .2);
-          actor.animationName = animationName;
+          actor.model.anim.speed = pose.motion === "walk" ? .92 + actor.definition.moveSpeed * .08 : 1;
+          if (transitionTownNpcRig(actor.model, animationName, .2)) actor.animationName = animationName;
         }
         continue;
       }
