@@ -111,6 +111,7 @@ import { bruteRecoveryPose, enemyAwarenessCue, enemyCombatCue, enemyCueLineClear
 import { confirmPredictedDodges, removeRejectedDodge, replayPendingMovement, type PredictionFrame } from "./prediction-replay.js";
 import { advanceCameraOrbit, cameraOrbitOffset, dragCameraOrbit, initialCameraOrbit, pinchCameraOrbit } from "./camera-orbit.js";
 import { advanceCameraFollow, advanceCameraHeight, advanceCameraPosition } from "./camera-follow.js";
+import { populateTownAssetKit, readyTownFallbacks, SPEED_LAB_TOWN_ASSETS, type TownFallbackFamily } from "./town-asset-kit.js";
 import {
   FIRST_PERSON_EYE_HEIGHT,
   FIRST_PERSON_FOV,
@@ -2364,6 +2365,21 @@ if (rapidPrototypeRequested) {
     const rock = addBox(rapidPrototypeRoot, "arena-rock", stone, [s, s * .72, s], [x, 8 + s * .36, z]);
     rock.setLocalEulerAngles(0, x * 7 % 45, 12);
   }
+
+  // The imported kit is decorative only: server-owned world geometry remains authoritative for
+  // movement and combat. Primitive art stays visible until a complete replacement family loads.
+  const hideRapidTownFallback = (family: TownFallbackFamily): void => {
+    const names = family === "market-stalls" ? new Set(["north-market-stall", "south-market-stall"])
+      : family === "lamp-posts" ? new Set(["town-lamp-post", "town-lamp-arm", "town-lamp", "town-lamp-cap"])
+      : family === "trees" ? new Set(["tree-trunk", "tree-crown"])
+      : new Set(["arena-rock"]);
+    for (const node of rapidPrototypeRoot.find(graphNode => names.has(graphNode.name))) node.enabled = false;
+  };
+  void populateTownAssetKit(app, rapidPrototypeRoot, SPEED_LAB_TOWN_ASSETS).then(result => {
+    for (const family of readyTownFallbacks(result.loadedIds)) hideRapidTownFallback(family);
+    console.info(`[town-assets] ${result.entities.length} placements ready; ${result.failedIds.size} model types kept their fallback.`);
+  });
+
   addBox(rapidPrototypeRoot, "north-edge", boundary, [40, .5, .65], [108, 8.25, 90.3]);
   addBox(rapidPrototypeRoot, "south-edge", boundary, [40, .5, .65], [108, 8.25, 121.7]);
   addBox(rapidPrototypeRoot, "west-edge", boundary, [.65, .5, 32], [88.3, 8.25, 106]);

@@ -1,0 +1,21 @@
+import { describe, expect, it } from "vitest";
+import { SPEED_LAB_TOWN_ASSETS, TOWN_ASSET_FILES, readyTownFallbacks, townAssetUrl, type TownAssetId } from "./town-asset-kit.js";
+
+describe("town asset kit", () => {
+  it("serves every declared asset from the versioned town directory", () => {
+    for (const id of Object.keys(TOWN_ASSET_FILES) as TownAssetId[]) {
+      expect(townAssetUrl(id)).toMatch(/^\/assets\/kenney-fantasy-town\/[a-z-]+\.glb$/);
+    }
+  });
+
+  it("only retires a fallback after every replacement it needs has loaded", () => {
+    expect(readyTownFallbacks(new Set<TownAssetId>(["stallGreen"]))).not.toContain("market-stalls");
+    expect(readyTownFallbacks(new Set<TownAssetId>(["stallGreen", "stallRed"]))).toContain("market-stalls");
+    expect(readyTownFallbacks(new Set<TownAssetId>(["rockLarge"]))).not.toContain("rocks");
+  });
+
+  it("gives each pilot placement a unique name and keeps it on or above town ground", () => {
+    expect(new Set(SPEED_LAB_TOWN_ASSETS.map(asset => asset.name)).size).toBe(SPEED_LAB_TOWN_ASSETS.length);
+    expect(SPEED_LAB_TOWN_ASSETS.every(asset => asset.position[1] >= 8.15)).toBe(true);
+  });
+});
