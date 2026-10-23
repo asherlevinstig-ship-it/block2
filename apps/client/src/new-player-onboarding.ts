@@ -20,7 +20,10 @@ export const ONBOARDING_DONE = ONBOARDING_STEPS.length;
 export const onboardingStorageKey = (profileToken: string): string => `blockcraft.onboarding.v4:${profileToken}`;
 export const legacyOnboardingStorageKey = (profileToken: string): string => `blockcraft.onboarding.v3:${profileToken}`;
 export const oldestOnboardingStorageKey = (profileToken: string): string => `blockcraft.onboarding.v2:${profileToken}`;
-export const starterEquipmentStorageKey = (profileToken: string): string => `blockcraft.starter-equipment.v1:${profileToken}`;
+// v2 deliberately records only a confirmed starter-bag pickup. The old key could be
+// set merely because an inventory sync reported an owned sword, which skipped the bag
+// lesson and left returning characters trapped behind the equipment prompt.
+export const starterEquipmentStorageKey = (profileToken: string): string => `blockcraft.starter-equipment.v2:${profileToken}`;
 export const callingFirstOnboardingStorageKey = (profileToken: string): string => `blockcraft.calling-first.v1:${profileToken}`;
 
 export function shouldDeferOnboardingForCalling(
@@ -77,9 +80,9 @@ export function starterInventoryLesson(
   return packOpenedWithKeyboard ? "equip_sword" : "open_pack";
 }
 
-export function starterEquipmentRequired(savedState: string | null, level: number, swordOwned: number, mainHandId: string): boolean {
+export function starterEquipmentRequired(savedState: string | null, _level: number, _swordOwned: number, mainHandId: string): boolean {
   if (savedState === "complete" || mainHandId === "forged_sword") return false;
-  return savedState === "required" || level <= 2 && swordOwned > 0;
+  return savedState === "required";
 }
 
 export function shouldPromptTownDeparture(wasInsideTown: boolean, isBeyondTown: boolean, level: number): boolean {

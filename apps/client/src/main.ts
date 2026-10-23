@@ -817,7 +817,7 @@ function renderFirstSteps(): void {
     : rewardInventoryLesson === "open_pack" ? `Press I to compare ${rewardName}, your first Calling-matched reward.`
       : starterLesson === "equip_sword"
         ? "Select the glowing sword, then choose EQUIP. This lesson completes only when the sword is equipped."
-        : "Press I to see the sword you collected. Other controls are paused until your pack is open.";
+        : "Starter bag collected. Press I to open your inventory, then select and equip the Forged Sword.";
   const starterCard = document.querySelector<HTMLElement>('[data-item="forged_sword"]');
   if (starterCard) starterCard.dataset.starterTutorial = starterLesson === "equip_sword" ? "true" : "false";
   for (const card of document.querySelectorAll<HTMLElement>("#inventory-panel article.equipment[data-item]"))
@@ -887,7 +887,6 @@ function requireStarterEquipment(): void {
   forcedStarterEquipment = true;
   starterInventoryOpenedWithKeyboard = false;
   try { window.localStorage.setItem(starterEquipmentKey, "required"); } catch { /* Storage may be unavailable. */ }
-  resetMovementControls();
   renderFirstSteps();
 }
 function completeStarterEquipment(): void {
@@ -13521,6 +13520,9 @@ const tutorialGameplayKeys = new Set([
   "KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
   "Space", "KeyE", "KeyJ", "KeyQ", "KeyV", "KeyC", "KeyR", "KeyF", "KeyG", "KeyH", "Enter",
 ]);
+const tutorialMovementKeys = new Set([
+  "KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
+]);
 
 window.addEventListener("keydown", event => {
   if (event.repeat) return;
@@ -13544,8 +13546,9 @@ window.addEventListener("keydown", event => {
     if (event.code === "KeyI") {
       saveFirstVictoryReward({ ...firstVictoryReward, stage: "choose" });
       setInventoryOpen(true);
-    } else if (tutorialGameplayKeys.has(event.code)) {
-      status.textContent = "Tutorial paused · press I to inspect your reward. Movement and combat resume afterwards.";
+    } else if (tutorialMovementKeys.has(event.code)) return;
+    else if (tutorialGameplayKeys.has(event.code)) {
+      status.textContent = "Press I to inspect your reward before using another action.";
       nudgeStarterInventoryTutorial();
     } else return;
     event.preventDefault();
@@ -13561,8 +13564,9 @@ window.addEventListener("keydown", event => {
       starterInventoryOpenedWithKeyboard = true;
       renderFirstSteps();
       setInventoryOpen(true);
-    } else if (tutorialGameplayKeys.has(event.code)) {
-      status.textContent = "Tutorial paused · press I to equip your sword. Movement and combat resume afterwards.";
+    } else if (tutorialMovementKeys.has(event.code)) return;
+    else if (tutorialGameplayKeys.has(event.code)) {
+      status.textContent = "Starter bag collected · press I to equip your sword before using another action.";
       nudgeStarterInventoryTutorial();
     } else return;
     event.preventDefault();

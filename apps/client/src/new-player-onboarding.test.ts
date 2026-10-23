@@ -39,10 +39,10 @@ describe("first-play onboarding", () => {
     expect(callingFirstOnboardingStorageKey("guest_a")).not.toBe(callingFirstOnboardingStorageKey("guest_b"));
   });
 
-  it("ties the forced equipment lesson to the starter sword, even when numbered onboarding drifted", () => {
+  it("starts the forced equipment lesson only after a confirmed starter-bag pickup", () => {
     expect(starterEquipmentRequired("required", 10, 0, "unarmed")).toBe(true);
-    expect(starterEquipmentRequired(null, 1, 1, "unarmed")).toBe(true);
-    expect(starterEquipmentRequired(null, 2, 1, "unarmed")).toBe(true);
+    expect(starterEquipmentRequired(null, 1, 1, "unarmed")).toBe(false);
+    expect(starterEquipmentRequired(null, 2, 1, "unarmed")).toBe(false);
     expect(starterEquipmentRequired(null, 3, 1, "unarmed")).toBe(false);
     expect(starterEquipmentRequired("complete", 1, 1, "unarmed")).toBe(false);
     expect(starterEquipmentRequired("required", 1, 1, "forged_sword")).toBe(false);

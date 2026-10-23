@@ -196,7 +196,9 @@ button:disabled, button[aria-disabled="true"] { cursor: not-allowed; }
 @keyframes south-gate-guidance { 0% { transform: scale(.96); filter: brightness(1); } 35% { transform: scale(1.035); filter: brightness(1.35); } 100% { transform: scale(1); filter: brightness(1); } }
 #starter-inventory-tutorial { position: fixed; z-index: 2001; left: 50%; top: 43%; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 14px; width: min(430px, calc(100vw - 28px)); box-sizing: border-box; padding: 16px 18px; border: 2px solid #f0c35b; border-radius: 14px; background: linear-gradient(145deg, #2d2818f5, #0d1711f5); box-shadow: 0 20px 70px #000d, inset 0 0 24px #e6b6431c; color: #f6edd2; transform: translate(-50%, -50%); pointer-events: none; }
 #starter-inventory-tutorial[hidden] { display: none; }
-#starter-inventory-tutorial[data-phase="open_pack"] { box-shadow: 0 0 0 100vmax #020604aa, 0 20px 70px #000d, inset 0 0 24px #e6b6431c; }
+#starter-inventory-tutorial[data-phase="open_pack"] { top: max(22px, env(safe-area-inset-top)); width: min(560px, calc(100vw - 28px)); grid-template-columns: 48px minmax(0, 1fr); padding: 12px 16px; transform: translateX(-50%); box-shadow: 0 14px 42px #000b, 0 0 22px #f5c25328, inset 0 0 24px #e6b6431c; }
+#starter-inventory-tutorial[data-phase="open_pack"] > small { display: none; }
+#starter-inventory-tutorial[data-phase="open_pack"] > kbd { width: 42px; height: 42px; border-width: 1px; border-radius: 7px; box-shadow: 0 3px 0 #171108, 0 0 18px #f5c2534f; font-size: 18px; }
 #starter-inventory-tutorial > small { grid-column: 1 / -1; color: #f2c969; font: 950 10px/1 system-ui; letter-spacing: .16em; }
 #starter-inventory-tutorial > kbd { display: grid; place-items: center; width: 62px; height: 62px; border: 2px solid #fff0bc; border-radius: 11px; background: linear-gradient(#705422, #302514); box-shadow: 0 5px 0 #171108, 0 0 22px #f5c2535c; color: #fff5d2; font: 1000 28px/1 system-ui; animation: starter-i-key 1.2s ease-in-out infinite; }
 #starter-inventory-tutorial strong { display: block; color: #fff1bb; font: 950 17px/1.15 system-ui; }
