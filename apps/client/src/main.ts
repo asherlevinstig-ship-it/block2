@@ -113,6 +113,8 @@ import { confirmPredictedDodges, removeRejectedDodge, replayPendingMovement, typ
 import { advanceCameraOrbit, cameraOrbitOffset, dragCameraOrbit, initialCameraOrbit, pinchCameraOrbit } from "./camera-orbit.js";
 import { advanceCameraFollow, advanceCameraHeight, advanceCameraPosition } from "./camera-follow.js";
 import { populateTownAssetKit, readyTownFallbacks, SPEED_LAB_TOWN_ASSETS, type TownFallbackFamily } from "./town-asset-kit.js";
+import { SPEED_LAB_TOWN_ACTORS, SPEED_LAB_TOWN_LIGHTS, SPEED_LAB_TOWN_SIGNS, townLifeActorPose,
+  type TownLifeActorDefinition } from "./town-life.js";
 import {
   FIRST_PERSON_EYE_HEIGHT,
   FIRST_PERSON_FOV,
@@ -2116,6 +2118,19 @@ app.root.addChild(rapidPrototypeRoot);
 rapidPrototypeRoot.enabled = rapidPrototypeRequested;
 const rapidTownSmoke: { entity: pc.Entity; x: number; y: number; z: number; phase: number; drift: number }[] = [];
 const rapidTownBanners: { entity: pc.Entity; phase: number }[] = [];
+interface RapidTownActorVisual {
+  definition: TownLifeActorDefinition;
+  root: pc.Entity;
+  torso: pc.Entity;
+  head: pc.Entity;
+  leftArm: pc.Entity;
+  rightArm: pc.Entity;
+  leftLeg: pc.Entity;
+  rightLeg: pc.Entity;
+}
+const rapidTownActors: RapidTownActorVisual[] = [];
+const rapidTownLights: { entity: pc.Entity; phase: number }[] = [];
+const rapidTownSparks: { entity: pc.Entity; phase: number }[] = [];
 let requestRapidTownAssets = (): void => {};
 if (rapidPrototypeRequested) {
   const grass = coloredMaterial(new pc.Color(.19, .37, .2));
@@ -2172,6 +2187,101 @@ if (rapidPrototypeRequested) {
     parent.addChild(shape);
     return shape;
   };
+
+  const skin = coloredMaterial(new pc.Color(.72, .49, .31));
+  const darkHair = coloredMaterial(new pc.Color(.12, .07, .04));
+  const trouser = coloredMaterial(new pc.Color(.16, .16, .18));
+  const actorMaterials = new Map<string, { coat: pc.StandardMaterial; accent: pc.StandardMaterial }>();
+  for (const definition of SPEED_LAB_TOWN_ACTORS) {
+    actorMaterials.set(definition.id, {
+      coat: coloredMaterial(new pc.Color(...definition.coat)),
+      accent: coloredMaterial(new pc.Color(...definition.accent)),
+    });
+  }
+  const addTownLimb = (root: pc.Entity, name: string, pivot: [number, number, number], material: pc.StandardMaterial,
+    scale: [number, number, number]): pc.Entity => {
+    const limb = new pc.Entity(`${name}-pivot`);
+    limb.setLocalPosition(...pivot);
+    root.addChild(limb);
+    addBox(limb, name, material, scale, [0, -scale[1] * .45, 0]);
+    return limb;
+  };
+  const addTownActor = (definition: TownLifeActorDefinition): void => {
+    const materials = actorMaterials.get(definition.id)!;
+    const root = new pc.Entity(`town-life:${definition.id}`);
+    root.setLocalPosition(definition.start[0], 8.15, definition.start[1]);
+    rapidPrototypeRoot.addChild(root);
+    const torso = addBox(root, "townsperson-torso", materials.coat, [.48, .68, .3], [0, 1.02, 0]);
+    addBox(root, "townsperson-belt", materials.accent, [.51, .08, .32], [0, .82, 0]);
+    const head = addBox(root, "townsperson-head", skin, [.38, .4, .38], [0, 1.61, 0]);
+    addBox(root, "townsperson-hair", darkHair, [.4, .12, .4], [0, 1.83, -.01]);
+    const leftArm = addTownLimb(root, "townsperson-left-arm", [-.33, 1.25, 0], materials.coat, [.17, .54, .2]);
+    const rightArm = addTownLimb(root, "townsperson-right-arm", [.33, 1.25, 0], materials.coat, [.17, .54, .2]);
+    const leftLeg = addTownLimb(root, "townsperson-left-leg", [-.14, .72, 0], trouser, [.2, .62, .23]);
+    const rightLeg = addTownLimb(root, "townsperson-right-leg", [.14, .72, 0], trouser, [.2, .62, .23]);
+    if (definition.role === "guard") {
+      addBox(torso, "warden-breastplate", materials.accent, [.34, .34, .045], [0, .02, .175]);
+      addTownShape(leftArm, "warden-shield", "cylinder", materials.accent, [.34, .08, .34], [0, -.3, .2])
+        .setLocalEulerAngles(90, 0, 0);
+    } else if (definition.role === "vendor") {
+      addBox(torso, "vendor-apron", materials.accent, [.38, .48, .04], [0, -.02, .175]);
+    } else if (definition.role === "smith") {
+      addBox(torso, "smith-apron", materials.accent, [.39, .5, .045], [0, -.03, .18]);
+      addBox(rightArm, "smith-hammer-grip", timber, [.09, .55, .09], [0, -.42, 0]);
+      addBox(rightArm, "smith-hammer-head", iron, [.46, .18, .2], [0, -.72, 0]);
+    } else if (definition.role === "healer") {
+      addBox(torso, "healer-cross-vertical", materials.accent, [.08, .3, .04], [0, .02, .18]);
+      addBox(torso, "healer-cross-horizontal", materials.accent, [.25, .08, .04], [0, .02, .18]);
+    }
+    rapidTownActors.push({ definition, root, torso, head, leftArm, rightArm, leftLeg, rightLeg });
+  };
+  SPEED_LAB_TOWN_ACTORS.forEach(addTownActor);
+
+  const signSymbol = new pc.StandardMaterial();
+  signSymbol.diffuse = new pc.Color(1, .72, .2);
+  signSymbol.emissive = new pc.Color(.26, .1, .01);
+  signSymbol.update();
+  for (const sign of SPEED_LAB_TOWN_SIGNS) {
+    const root = new pc.Entity(`town-landmark:${sign.id}`);
+    root.setLocalPosition(...sign.position);
+    root.setLocalEulerAngles(0, sign.yaw, 0);
+    rapidPrototypeRoot.addChild(root);
+    addTownShape(root, "landmark-sign-post", "cylinder", timber, [.1, 1.2, .1], [0, .58, 0]);
+    addBox(root, "landmark-sign-board", timberLight, [.14, .82, 1.05], [0, 1.45, 0]);
+    addBox(root, "landmark-sign-inlay", signSymbol, [.15, .58, .82], [.08, 1.45, 0]);
+    if (sign.kind === "healer") {
+      addBox(root, "healer-symbol", plasterLight, [.16, .12, .56], [.17, 1.45, 0]);
+      addBox(root, "healer-symbol", plasterLight, [.16, .5, .13], [.17, 1.45, 0]);
+    } else if (sign.kind === "smith") {
+      const handle = addBox(root, "smith-symbol", iron, [.17, .08, .58], [.17, 1.45, 0]);
+      handle.setLocalEulerAngles(35, 0, 0);
+      const hammer = addBox(root, "smith-symbol", iron, [.18, .18, .42], [.17, 1.66, -.2]);
+      hammer.setLocalEulerAngles(35, 0, 0);
+    } else if (sign.kind === "inn") {
+      addTownShape(root, "inn-symbol", "cylinder", plasterLight, [.26, .16, .26], [.17, 1.44, 0])
+        .setLocalEulerAngles(0, 0, 90);
+      addBox(root, "inn-symbol-handle", plasterLight, [.16, .26, .09], [.17, 1.45, .28]);
+    } else if (sign.kind === "weaver") {
+      for (const z of [-.28, 0, .28]) addTownShape(root, "weaver-symbol", "cylinder", z === 0 ? bannerBlue : plasterLight,
+        [.16, .13, .16], [.17, 1.45, z]).setLocalEulerAngles(0, 0, 90);
+    } else if (sign.kind === "barracks") {
+      const shield = addBox(root, "warden-symbol", bannerBlue, [.16, .48, .42], [.17, 1.46, 0]);
+      shield.setLocalEulerAngles(0, 0, 45);
+    } else {
+      addTownShape(root, "hall-symbol", "cylinder", plasterLight, [.28, .12, .28], [.17, 1.45, 0])
+        .setLocalEulerAngles(0, 0, 90);
+    }
+  }
+
+  for (let index = 0; index < SPEED_LAB_TOWN_LIGHTS.length; index++) {
+    const [x, y, z] = SPEED_LAB_TOWN_LIGHTS[index]!;
+    const light = new pc.Entity(`town-lantern-light-${index + 1}`);
+    light.addComponent("light", { type: "omni", color: new pc.Color(1, .63, .25), intensity: 1.1,
+      range: 7, castShadows: false });
+    light.setLocalPosition(x, y, z);
+    rapidPrototypeRoot.addChild(light);
+    rapidTownLights.push({ entity: light, phase: index * 1.7 });
+  }
 
   addBox(rapidPrototypeRoot, "arena-ground", grass, [96, .25, 80], [88, 7.875, 106]);
   addBox(rapidPrototypeRoot, "west-green", grassLight, [62, .035, 74], [71, 8.02, 106]);
@@ -2278,8 +2388,18 @@ if (rapidPrototypeRequested) {
   const smithHammerGrip = addBox(smithy, "smith-sign-hammer", bannerGold, [.11, .58, .11], [95.58, 9.55, 113.98]);
   smithHammerGrip.setLocalEulerAngles(-32, 0, 0);
   for (let index = 0; index < 5; index++) {
-    const puff = addTownShape(rapidPrototypeRoot, "smithy-smoke", "sphere", smokeMaterial, [.2, .2, .2], [90.2, 12.9, 114.5]);
-    rapidTownSmoke.push({ entity: puff, x: 90.2, y: 12.9, z: 114.5, phase: index / 5, drift: -.6 });
+    const puff = addTownShape(rapidPrototypeRoot, "smithy-smoke", "sphere", smokeMaterial, [.2, .2, .2], [73.3, 13.1, 135.3]);
+    rapidTownSmoke.push({ entity: puff, x: 73.3, y: 13.1, z: 135.3, phase: index / 5, drift: -.6 });
+  }
+  const sparkMaterial = new pc.StandardMaterial();
+  sparkMaterial.diffuse = new pc.Color(1, .42, .06);
+  sparkMaterial.emissive = new pc.Color(1, .18, .01);
+  sparkMaterial.useLighting = false;
+  sparkMaterial.update();
+  for (let index = 0; index < 6; index++) {
+    const spark = addTownShape(rapidPrototypeRoot, "smithy-spark", "sphere", sparkMaterial,
+      [.055, .055, .055], [79, 8.85, 136.5]);
+    rapidTownSparks.push({ entity: spark, phase: index / 6 });
   }
 
   const weavers = addTownBuilding("weavers-row", 82, 95, 5.7, 5.2, plaster, roofBlue, roofBlueLight, 2.45);
@@ -14512,6 +14632,38 @@ app.on("update", (dt: number) => {
     }
     for (const banner of rapidTownBanners)
       banner.entity.setLocalEulerAngles(Math.sin(townTime * 1.7 + banner.phase) * 3.5, 0, 0);
+    for (const actor of rapidTownActors) {
+      const pose = townLifeActorPose(actor.definition, townTime);
+      const walk = pose.stride * 34;
+      const bob = pose.moving ? Math.abs(pose.stride) * .035 : Math.sin(townTime * 1.6 + actor.definition.phase * 5) * .01;
+      actor.root.setLocalPosition(pose.x, 8.15 + bob, pose.z);
+      actor.root.setLocalEulerAngles(0, pose.yaw, 0);
+      actor.leftArm.setLocalEulerAngles(-walk, 0, 0);
+      actor.rightArm.setLocalEulerAngles(walk, 0, 0);
+      actor.leftLeg.setLocalEulerAngles(walk, 0, 0);
+      actor.rightLeg.setLocalEulerAngles(-walk, 0, 0);
+      actor.torso.setLocalEulerAngles(0, 0, pose.moving ? pose.stride * 1.8 : 0);
+      actor.head.setLocalEulerAngles(0, Math.sin(townTime * .7 + actor.definition.phase * 8) * 8, 0);
+      if (actor.definition.role === "smith") {
+        actor.rightArm.setLocalEulerAngles(-34 - pose.activity * 82, 0, -8);
+        actor.leftArm.setLocalEulerAngles(-18, 0, 12);
+      } else if (actor.definition.role === "vendor") {
+        actor.rightArm.setLocalEulerAngles(-20 - pose.activity * 48, 0, -18);
+      } else if (actor.definition.role === "healer") {
+        actor.leftArm.setLocalEulerAngles(-18 - pose.activity * 16, 0, 18);
+        actor.rightArm.setLocalEulerAngles(-18 - pose.activity * 16, 0, -18);
+      }
+    }
+    for (const lantern of rapidTownLights) {
+      if (lantern.entity.light) lantern.entity.light.intensity = 1.05 + Math.sin(townTime * 4.3 + lantern.phase) * .12;
+    }
+    for (const spark of rapidTownSparks) {
+      const travel = (townTime * 1.45 + spark.phase) % 1;
+      const drift = Math.sin(townTime * 5 + spark.phase * 18) * .32;
+      spark.entity.setLocalPosition(79 + drift, 8.85 + travel * 1.35, 136.5 + Math.cos(townTime * 4 + spark.phase * 15) * .2);
+      const scale = .035 + (1 - travel) * .055;
+      spark.entity.setLocalScale(scale, scale, scale);
+    }
   }
   lastPresentationWaitMs = Math.max(0, dt * 1000 - lastEngineUpdateMs - lastRenderMs);
   capturePerformancePeak("presentationWaitMs", lastPresentationWaitMs);
