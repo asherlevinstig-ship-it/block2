@@ -1156,7 +1156,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       player.health = player.maxHealth;
       player.stamina = player.maxStamina;
       player.invulnerableUntil = this.rapidPractice ? Date.now() + 1_500 : Date.now() + 600_000;
-      this.setPracticeAbility(player, "assassin_vanish");
+      // The dedicated ability arena keeps its instant test loadout. Fast mode is
+      // now a real new-player route, so it must not silently bind Assassin before
+      // the player sees the Calling choice.
+      if (!this.rapidPractice) this.setPracticeAbility(player, "assassin_vanish");
       if (this.rapidPractice) this.rapidPracticeUpgrades.set(client.sessionId, { ...EMPTY_RAPID_PRACTICE_UPGRADES });
     }
     if (process.env.NODE_ENV !== "production" && (requestedQaSpawn === "combat" || requestedQaSpawn === "spitter" || requestedQaSpawn === "greenwood" || requestedQaSpawn === "stream")) {
