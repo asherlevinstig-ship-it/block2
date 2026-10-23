@@ -24,6 +24,7 @@ import { tabletContextAction } from "./tablet-context-action.js";
 import { tabletDragAimYaw, tabletSoftTarget } from "./tablet-combat-aim.js";
 import { callingAimReleaseCancels, callingTouchAimProfile, type CallingTouchAimProfile } from "./calling-touch-aim.js";
 import { ExclusivePopupQueue, gameplayBlockedByPopup, popupFocusIndex, popupIsPresented } from "./popup-queue.js";
+import { shouldCaptureMovementKey } from "./keyboard-movement.js";
 import { COORDINATED_BRUTE_FOLLOWERS, COORDINATED_SPITTER_FOLLOWERS, activeCombatNearby, advanceBossHud, initialBossHud, leaderArmourSegments, leaderChargeGuidance, leaderExposureLabel, leaderExposureRoleLabel, leaderFormationLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
 import { formationLanePoints, formationMarkerPoints, formationRingPoints, formationTargetStyle, formationVfxStyle,
   type FormationTactic, type FormationTargetRole } from "./formation-vfx.js";
@@ -11476,6 +11477,21 @@ function renderBootstrap(payload: WorldBootstrap): void {
 }
 
 const keys = new Set<string>();
+function visibleEditableTarget(target: EventTarget | null): { editable: boolean; visible: boolean } {
+  const element = target instanceof HTMLElement ? target : null;
+  const editable = element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement
+    || element instanceof HTMLSelectElement || Boolean(element?.isContentEditable);
+  const visible = Boolean(element && !element.closest("[hidden], [inert]") && element.getClientRects().length > 0);
+  return { editable, visible };
+}
+// Capture movement before a stale focused control can swallow it. This particularly matters
+// after onboarding/dialog transitions, where a closed input may remain document.activeElement.
+window.addEventListener("keydown", event => {
+  const target = visibleEditableTarget(event.target);
+  if (!shouldCaptureMovementKey(event.code, target.editable, target.visible)) return;
+  keys.add(event.code);
+  if (target.editable && !target.visible) canvas.focus();
+}, true);
 let awaitingReturnState = false;
 let townReturnPosition: { x: number; y: number; z: number } | null = null;
 const defeatScreen = document.querySelector<HTMLElement>("#defeat-screen")!;
