@@ -31,6 +31,10 @@ describe("rapid 2.5D practice", () => {
   });
 
   it("keeps the Town of Beginnings inside the arena with a clear east gate", () => {
+    expect((RAPID_PRACTICE_ARENA.maxX - RAPID_PRACTICE_ARENA.minX)
+      * (RAPID_PRACTICE_ARENA.maxZ - RAPID_PRACTICE_ARENA.minZ)).toBeGreaterThanOrEqual(2_700);
+    expect(RAPID_PRACTICE_TOWN_COLLIDERS).toHaveLength(8);
+    expect(Math.min(...RAPID_PRACTICE_TOWN_COLLIDERS.map(building => building.minX))).toBeLessThanOrEqual(79);
     for (const building of RAPID_PRACTICE_TOWN_COLLIDERS) {
       expect(building.minX).toBeGreaterThanOrEqual(RAPID_PRACTICE_ARENA.minX);
       expect(building.maxX).toBeLessThanOrEqual(RAPID_PRACTICE_ARENA.maxX);

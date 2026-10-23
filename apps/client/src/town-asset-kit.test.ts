@@ -17,5 +17,7 @@ describe("town asset kit", () => {
   it("gives each pilot placement a unique name and keeps it on or above town ground", () => {
     expect(new Set(SPEED_LAB_TOWN_ASSETS.map(asset => asset.name)).size).toBe(SPEED_LAB_TOWN_ASSETS.length);
     expect(SPEED_LAB_TOWN_ASSETS.every(asset => asset.position[1] >= 8.15)).toBe(true);
+    expect(Math.min(...SPEED_LAB_TOWN_ASSETS.map(asset => asset.position[0]))).toBeLessThan(77);
+    expect(SPEED_LAB_TOWN_ASSETS.some(asset => asset.id === "fountainRound")).toBe(true);
   });
 });

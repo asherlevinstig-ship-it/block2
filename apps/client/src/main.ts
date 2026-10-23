@@ -2172,26 +2172,26 @@ if (rapidPrototypeRequested) {
     return shape;
   };
 
-  addBox(rapidPrototypeRoot, "arena-ground", grass, [40, .25, 32], [108, 7.875, 106]);
-  addBox(rapidPrototypeRoot, "west-green", grassLight, [9, .035, 29], [94, 8.02, 106]);
-  addBox(rapidPrototypeRoot, "combat-lane", path, [27, .04, 5.2], [111.5, 8.03, 106]);
-  addBox(rapidPrototypeRoot, "cross-lane", path, [5.2, .045, 23], [116, 8.035, 106]);
-  addBox(rapidPrototypeRoot, "arena-heart", stone, [7.5, .08, 7.5], [116, 8.07, 106]);
+  addBox(rapidPrototypeRoot, "arena-ground", grass, [62, .25, 44], [105, 7.875, 106]);
+  addBox(rapidPrototypeRoot, "west-green", grassLight, [27, .035, 40], [87.5, 8.02, 106]);
+  addBox(rapidPrototypeRoot, "combat-lane", path, [34, .04, 5.2], [119, 8.03, 106]);
+  addBox(rapidPrototypeRoot, "cross-lane", path, [5.2, .045, 31], [120, 8.035, 106]);
+  addBox(rapidPrototypeRoot, "arena-heart", stone, [7.5, .08, 7.5], [120, 8.07, 106]);
 
   // Town of Beginnings art kit: warm timber-and-plaster buildings, pitched roofs,
   // inset stone roads, readable civic blue and small lived-in details.
-  addBox(rapidPrototypeRoot, "beginnings-plaza-rim", mortar, [13.05, .09, 18.05], [96.7, 8.055, 106]);
-  addBox(rapidPrototypeRoot, "beginnings-plaza", townStoneMid, [12.55, .095, 17.55], [96.7, 8.075, 106]);
-  addBox(rapidPrototypeRoot, "beginnings-main-road-rim", mortar, [16.8, .085, 3.6], [99.25, 8.08, 106]);
-  addBox(rapidPrototypeRoot, "beginnings-main-road", townStoneLight, [16.55, .09, 3.25], [99.25, 8.105, 106]);
-  for (const offset of [-5.2, 5.2]) {
-    addBox(rapidPrototypeRoot, "beginnings-side-road-rim", mortar, [8.8, .08, 2.45], [97.5, 8.075, 106 + offset]);
-    addBox(rapidPrototypeRoot, "beginnings-side-road", townStoneLight, [8.5, .095, 2.12], [97.5, 8.105, 106 + offset]);
+  addBox(rapidPrototypeRoot, "beginnings-plaza-rim", mortar, [25.05, .09, 34.05], [90.7, 8.055, 106]);
+  addBox(rapidPrototypeRoot, "beginnings-plaza", townStoneMid, [24.55, .095, 33.55], [90.7, 8.075, 106]);
+  addBox(rapidPrototypeRoot, "beginnings-main-road-rim", mortar, [29, .085, 3.6], [93.5, 8.08, 106]);
+  addBox(rapidPrototypeRoot, "beginnings-main-road", townStoneLight, [28.55, .09, 3.25], [93.5, 8.105, 106]);
+  for (const offset of [-8, 8]) {
+    addBox(rapidPrototypeRoot, "beginnings-side-road-rim", mortar, [17.3, .08, 2.45], [91.2, 8.075, 106 + offset]);
+    addBox(rapidPrototypeRoot, "beginnings-side-road", townStoneLight, [17, .095, 2.12], [91.2, 8.105, 106 + offset]);
   }
   // Sparse inset cobbles break up the old flat paving without turning the plaza into visual noise.
-  for (let index = 0; index < 20; index++) {
-    const x = 91.2 + (index * 17 % 105) / 10;
-    const z = 98.2 + (index * 29 % 156) / 10;
+  for (let index = 0; index < 42; index++) {
+    const x = 79.5 + (index * 17 % 220) / 10;
+    const z = 90.2 + (index * 29 % 318) / 10;
     const cobble = addBox(rapidPrototypeRoot, "plaza-cobble", index % 3 === 0 ? townStone : townStoneLight,
       [.64 + (index % 2) * .15, .025, .38 + (index % 3) * .07], [x, 8.135, z]);
     cobble.setLocalEulerAngles(0, (index * 23) % 50 - 25, 0);
@@ -2281,6 +2281,22 @@ if (rapidPrototypeRequested) {
     rapidTownSmoke.push({ entity: puff, x: 90.2, y: 12.9, z: 114.5, phase: index / 5, drift: -.6 });
   }
 
+  const weavers = addTownBuilding("weavers-row", 82, 95, 5.7, 5.2, plaster, roofBlue, roofBlueLight, 2.45);
+  addBox(weavers, "weavers-awning", bannerBlue, [.12, .7, 1.7], [84.94, 9.2, 95]);
+  for (const offset of [-.48, 0, .48]) addTownShape(weavers, "weavers-cloth", "cylinder",
+    offset === 0 ? bannerGold : bannerBlue, [.18, .42, .18], [85.04, 8.65, 95 + offset]);
+
+  const healer = addTownBuilding("healers-house", 82, 106, 5.5, 5.4, plasterLight, roofRed, roofRedLight, 2.55);
+  const healerSign = addBox(healer, "healer-sign", townRune, [.09, .82, .82], [84.86, 9.55, 106]);
+  healerSign.setLocalEulerAngles(0, 0, 45);
+  addBox(healer, "healer-sign-cross", bannerGold, [.1, .16, .68], [84.97, 9.55, 106]);
+  addBox(healer, "healer-sign-cross", bannerGold, [.1, .68, .16], [84.98, 9.55, 106]);
+
+  const lodge = addTownBuilding("wardens-lodge", 82, 117, 5.7, 5.2, warmPlaster, roofBlue, roofBlueLight, 2.5);
+  addBox(lodge, "lodge-banner", bannerBlue, [.1, 1.5, .75], [84.96, 9.7, 117]);
+  addTownShape(lodge, "lodge-sigil", "cylinder", bannerGold, [.25, .08, .25], [85.04, 9.78, 117])
+    .setLocalEulerAngles(0, 0, 90);
+
   const addGatehouse = (z: number): void => {
     addBox(rapidPrototypeRoot, "town-gate-footing", mortar, [2.95, .24, 3.65], [102.1, 8.14, z]);
     addBox(rapidPrototypeRoot, "town-gate-tower", townStone, [2.65, 3.25, 3.35], [102.1, 9.72, z]);
@@ -2355,7 +2371,7 @@ if (rapidPrototypeRequested) {
     for (const side of [-1, 1]) addBox(rapidPrototypeRoot, "town-bench-leg", iron, [.16, .42, .16], [x + side * .62, 8.28, z]);
   }
 
-  for (const [x, z] of [[91,93],[96,93],[102,93],[108,92],[114,92],[121,92],[126,94],[126,120],[120,120],[112,120],[104,120],[96,120],[91,117],[91,109],[91,101]] as const) {
+  for (const [x, z] of [[76.8,87.5],[84.5,87.5],[91,93],[96,93],[102,93],[108,88],[116,87],[126,88],[133,92],[133,120],[126,124],[116,125],[104,124],[96,120],[86,124],[77,122],[76.5,106],[77,90]] as const) {
     addTownShape(rapidPrototypeRoot, "tree-trunk", "cylinder", trunk, [.42, 1.65, .42], [x, 8.82, z]);
     addTownShape(rapidPrototypeRoot, "tree-crown", "sphere", leaf, [2.1, 1.45, 2.1], [x, 10.05, z]);
     addTownShape(rapidPrototypeRoot, "tree-crown", "sphere", leafLight, [1.38, 1.05, 1.38], [x - .45, 10.72, z - .25]);
@@ -2380,10 +2396,10 @@ if (rapidPrototypeRequested) {
     console.info(`[town-assets] ${result.entities.length} placements ready; ${result.failedIds.size} model types kept their fallback.`);
   });
 
-  addBox(rapidPrototypeRoot, "north-edge", boundary, [40, .5, .65], [108, 8.25, 90.3]);
-  addBox(rapidPrototypeRoot, "south-edge", boundary, [40, .5, .65], [108, 8.25, 121.7]);
-  addBox(rapidPrototypeRoot, "west-edge", boundary, [.65, .5, 32], [88.3, 8.25, 106]);
-  addBox(rapidPrototypeRoot, "east-edge", boundary, [.65, .5, 32], [127.7, 8.25, 106]);
+  addBox(rapidPrototypeRoot, "north-edge", boundary, [62, .5, .65], [105, 8.25, 84.3]);
+  addBox(rapidPrototypeRoot, "south-edge", boundary, [62, .5, .65], [105, 8.25, 127.7]);
+  addBox(rapidPrototypeRoot, "west-edge", boundary, [.65, .5, 44], [74.3, 8.25, 106]);
+  addBox(rapidPrototypeRoot, "east-edge", boundary, [.65, .5, 44], [135.7, 8.25, 106]);
 
   const badge = document.createElement("aside");
   badge.id = "rapid-prototype-badge";
