@@ -115,6 +115,8 @@ import { advanceCameraFollow, advanceCameraHeight, advanceCameraPosition } from 
 import { populateTownAssetKit, readyTownFallbacks, SPEED_LAB_TOWN_ASSETS, type TownFallbackFamily } from "./town-asset-kit.js";
 import { SPEED_LAB_TOWN_ACTORS, SPEED_LAB_TOWN_LIGHTS, SPEED_LAB_TOWN_SIGNS, townLifeActorPose,
   type TownLifeActorDefinition } from "./town-life.js";
+import { SPEED_LAB_TOWN_TERRAIN, SPEED_LAB_TOWN_TERRAIN_DETAILS,
+  type TownTerrainMaterial } from "./town-terrain.js";
 import {
   FIRST_PERSON_EYE_HEIGHT,
   FIRST_PERSON_FOV,
@@ -2136,6 +2138,12 @@ if (rapidPrototypeRequested) {
   const grass = coloredMaterial(new pc.Color(.19, .37, .2));
   const grassLight = coloredMaterial(new pc.Color(.26, .46, .25));
   const path = coloredMaterial(new pc.Color(.46, .34, .21));
+  const roadEdge = coloredMaterial(new pc.Color(.27, .22, .16));
+  const roadWarm = coloredMaterial(new pc.Color(.52, .46, .35));
+  const plazaEdge = coloredMaterial(new pc.Color(.29, .3, .27));
+  const plazaStone = coloredMaterial(new pc.Color(.48, .47, .4));
+  const forecourt = coloredMaterial(new pc.Color(.57, .49, .36));
+  const gardenSoil = coloredMaterial(new pc.Color(.24, .16, .085));
   const stone = coloredMaterial(new pc.Color(.3, .34, .33));
   const townStone = coloredMaterial(new pc.Color(.35, .36, .33));
   const townStoneMid = coloredMaterial(new pc.Color(.47, .46, .4));
@@ -2289,23 +2297,43 @@ if (rapidPrototypeRequested) {
   addBox(rapidPrototypeRoot, "cross-lane", path, [5.2, .045, 31], [120, 8.035, 106]);
   addBox(rapidPrototypeRoot, "arena-heart", stone, [7.5, .08, 7.5], [120, 8.07, 106]);
 
-  // Town of Beginnings art kit: warm timber-and-plaster buildings, pitched roofs,
-  // inset stone roads, readable civic blue and small lived-in details.
-  addBox(rapidPrototypeRoot, "beginnings-plaza-rim", mortar, [60.5, .09, 70.05], [70.5, 8.055, 106]);
-  addBox(rapidPrototypeRoot, "beginnings-plaza", townStoneMid, [60, .095, 69.55], [70.5, 8.075, 106]);
-  addBox(rapidPrototypeRoot, "beginnings-main-road-rim", mortar, [62, .085, 5.2], [71, 8.08, 106]);
-  addBox(rapidPrototypeRoot, "beginnings-main-road", townStoneLight, [61.55, .09, 4.8], [71, 8.105, 106]);
-  for (const offset of [-24, 24]) {
-    addBox(rapidPrototypeRoot, "beginnings-side-road-rim", mortar, [50, .08, 3.1], [72, 8.075, 106 + offset]);
-    addBox(rapidPrototypeRoot, "beginnings-side-road", townStoneLight, [49.5, .095, 2.75], [72, 8.105, 106 + offset]);
+  // Town of Beginnings terrain: a circular civic square, a readable street
+  // hierarchy and planted verges replace the old town-sized rectangle of stone.
+  const townTerrainMaterials: Record<TownTerrainMaterial, pc.StandardMaterial> = {
+    "road-edge": roadEdge,
+    road: roadWarm,
+    "plaza-edge": plazaEdge,
+    plaza: plazaStone,
+    forecourt,
+    garden: gardenSoil,
+  };
+  for (const patch of SPEED_LAB_TOWN_TERRAIN) {
+    const scale: [number, number, number] = [...patch.scale];
+    const position: [number, number, number] = [...patch.position];
+    const entity = patch.shape === "box"
+      ? addBox(rapidPrototypeRoot, `town-terrain:${patch.id}`, townTerrainMaterials[patch.material], scale, position)
+      : addTownShape(rapidPrototypeRoot, `town-terrain:${patch.id}`, "cylinder", townTerrainMaterials[patch.material], scale, position);
+    if (patch.yaw) entity.setLocalEulerAngles(0, patch.yaw, 0);
   }
-  // Sparse inset cobbles break up the old flat paving without turning the plaza into visual noise.
-  for (let index = 0; index < 88; index++) {
-    const x = 42.5 + (index * 37 % 565) / 10;
-    const z = 72.5 + (index * 53 % 670) / 10;
-    const cobble = addBox(rapidPrototypeRoot, "plaza-cobble", index % 3 === 0 ? townStone : townStoneLight,
-      [.64 + (index % 2) * .15, .025, .38 + (index % 3) * .07], [x, 8.135, z]);
-    cobble.setLocalEulerAngles(0, (index * 23) % 50 - 25, 0);
+  for (const item of SPEED_LAB_TOWN_TERRAIN_DETAILS) {
+    const [x, y, z] = item.position;
+    if (item.kind === "edge-stone") {
+      const stone = addBox(rapidPrototypeRoot, `town-terrain:${item.id}`, item.id.length % 2 ? townStone : townStoneLight,
+        [item.scale, .045, item.scale * .58], [x, y, z]);
+      stone.setLocalEulerAngles(0, item.yaw, (item.id.length % 3 - 1) * 2);
+      continue;
+    }
+    const flowerMaterial = item.kind === "flower-red" ? flowerRed
+      : item.kind === "flower-yellow" ? flowerYellow : item.kind === "flower-blue" ? townRune : grassLight;
+    for (const offset of [-.12, .12]) {
+      const blade = addTownShape(rapidPrototypeRoot, `town-terrain:${item.id}-blade`, "cone", grassLight,
+        [.07 * item.scale, .3 * item.scale, .07 * item.scale], [x + offset, y + .12 * item.scale, z - offset * .45]);
+      blade.setLocalEulerAngles(offset * 45, item.yaw, offset * 55);
+    }
+    if (item.kind !== "grass") {
+      addTownShape(rapidPrototypeRoot, `town-terrain:${item.id}-bloom`, "sphere", flowerMaterial,
+        [.13 * item.scale, .09 * item.scale, .13 * item.scale], [x, y + .33 * item.scale, z]);
+    }
   }
 
   const addGabledRoof = (parent: pc.Entity, name: string, x: number, z: number, width: number, depth: number,
