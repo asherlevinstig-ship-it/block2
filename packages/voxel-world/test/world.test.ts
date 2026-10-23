@@ -341,7 +341,7 @@ describe("deterministic voxel world", () => {
     const southQuarter = generateChunk("test-world", 0, 1);
     expect(getBlock(centre, 8, SURFACE_HEIGHT, 8)).toBe(Block.Stone);
     expect(getBlock(centre, 8, SURFACE_HEIGHT + 1, 8)).toBe(Block.Air);
-    expect(TOWN_BUILDINGS).toHaveLength(1);
+    expect(TOWN_BUILDINGS).toHaveLength(4);
     expect(getBlock(centre, 2, 8, 4)).toBe(Block.Air);
     expect(getBlock(centre, 2, 10, 4)).toBe(Block.Air);
     expect(getBlock(westQuarter, TOWN_BEACON_POSITION.x + 16, 11, TOWN_BEACON_POSITION.z)).toBe(Block.IronOre);

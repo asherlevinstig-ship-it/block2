@@ -9,7 +9,10 @@ export const FRONTIER_MINIMUM_RADIUS = 46;
 export const SPAWN_PROTECTION_RADIUS = TOWN_SAFE_RADIUS;
 export const TOWN_TAVERN_Z_OFFSET = 6;
 export const TOWN_TAVERN = { minX: 0, maxX: 16, minZ: 16, maxZ: 25, roofBaseY: 12, roofTopY: 16 } as const;
-export const TOWN_BUILDINGS = [TOWN_TAVERN] as const;
+export const TOWN_WEAVERS_HALL = { minX: -8, maxX: -1, minZ: 11, maxZ: 18, roofBaseY: 11, roofTopY: 13 } as const;
+export const TOWN_HEALERS_HOUSE = { minX: 15, maxX: 22, minZ: -8, maxZ: -1, roofBaseY: 11, roofTopY: 13 } as const;
+export const TOWN_WARDENS_LODGE = { minX: 18, maxX: 25, minZ: 14, maxZ: 21, roofBaseY: 11, roofTopY: 13 } as const;
+export const TOWN_BUILDINGS = [TOWN_TAVERN, TOWN_WEAVERS_HALL, TOWN_HEALERS_HOUSE, TOWN_WARDENS_LODGE] as const;
 export const TOWN_GATE_POSTS = [
   [-14, 7], [-14, 10], [30, 7], [30, 10],
   [7, -14], [10, -14], [7, 30], [10, 30],
@@ -1228,6 +1231,32 @@ export function townTavernBlock(worldX: number, y: number, worldZ: number): Bloc
   return Block.Air;
 }
 
+type TownDistrictBuilding = Exclude<(typeof TOWN_BUILDINGS)[number], typeof TOWN_TAVERN>;
+
+/** Compact civic buildings fill the expanded town without adding indoor quest dependencies. */
+export function townDistrictBuildingBlock(worldX: number, y: number, worldZ: number): BlockId | null {
+  const building = ([TOWN_WEAVERS_HALL, TOWN_HEALERS_HOUSE, TOWN_WARDENS_LODGE] as const)
+    .find(candidate => worldX >= candidate.minX && worldX <= candidate.maxX
+      && worldZ >= candidate.minZ && worldZ <= candidate.maxZ) as TownDistrictBuilding | undefined;
+  if (!building) return null;
+  if (y === SURFACE_HEIGHT) return Block.Dirt;
+  const edge = worldX === building.minX || worldX === building.maxX
+    || worldZ === building.minZ || worldZ === building.maxZ;
+  const doorZ = Math.floor((building.minZ + building.maxZ) / 2);
+  const doorway = worldX === building.maxX && worldZ >= doorZ && worldZ <= doorZ + 1 && y <= 9;
+  if (y >= 8 && y <= 10) {
+    if (doorway) return Block.Air;
+    if (!edge) return Block.Air;
+    const window = y === 9 && (worldZ === building.minZ || worldZ === building.maxZ)
+      && worldX === Math.floor((building.minX + building.maxX) / 2);
+    return window ? Block.Air : y === 8 ? Block.Stone : Block.Dirt;
+  }
+  if (y === building.roofBaseY) return Block.Stone;
+  if (y === building.roofTopY - 1 && worldX > building.minX && worldX < building.maxX
+    && worldZ > building.minZ && worldZ < building.maxZ) return Block.Stone;
+  return null;
+}
+
 /** A continuous voxel rampart, with two-block-wide passages at the four cardinal gates. */
 export function townWallBlock(worldX: number, y: number, worldZ: number): BlockId | null {
   if (y < 8 || y > 11) return null;
@@ -1249,6 +1278,9 @@ export function townOfBeginningsBlock(worldX: number, y: number, worldZ: number)
   const tavern = townTavernBlock(worldX, y, worldZ);
   if (tavern !== null) return tavern;
 
+  const districtBuilding = townDistrictBuildingBlock(worldX, y, worldZ);
+  if (districtBuilding !== null) return districtBuilding;
+
   const wall = townWallBlock(worldX, y, worldZ);
   if (wall !== null) return wall;
 
@@ -1264,7 +1296,10 @@ export function townOfBeginningsBlock(worldX: number, y: number, worldZ: number)
       || ((worldZ === 8 || worldZ === 9) && worldX >= -14 && worldX <= 30)
       || ((worldZ === 1 || worldZ === 2) && worldX >= -2 && worldX <= 23)
       || ((worldX === 21 || worldX === 22) && worldZ >= 2 && worldZ <= 9)
-      || (worldZ === 19 && worldX >= 8 && worldX <= 16);
+      || (worldZ === 19 && worldX >= 8 && worldX <= 16)
+      || ((worldX === 0 || worldX === 1) && worldZ >= 8 && worldZ <= 15)
+      || ((worldZ === 3 || worldZ === 4) && worldX >= 8 && worldX <= 17)
+      || ((worldX === 17 || worldX === 18) && worldZ >= -8 && worldZ <= 3);
     if (road) return Block.Dirt;
   }
   return null;
