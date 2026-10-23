@@ -2095,101 +2095,252 @@ function addBox(
 const rapidPrototypeRoot = new pc.Entity("rapid-2d-speed-lab");
 app.root.addChild(rapidPrototypeRoot);
 rapidPrototypeRoot.enabled = rapidPrototypeRequested;
+const rapidTownSmoke: { entity: pc.Entity; x: number; y: number; z: number; phase: number; drift: number }[] = [];
+const rapidTownBanners: { entity: pc.Entity; phase: number }[] = [];
 if (rapidPrototypeRequested) {
-  const grass = coloredMaterial(new pc.Color(.16, .34, .2));
-  const grassLight = coloredMaterial(new pc.Color(.22, .43, .24));
-  const path = coloredMaterial(new pc.Color(.48, .35, .2));
-  const stone = coloredMaterial(new pc.Color(.31, .35, .34));
-  const townStone = coloredMaterial(new pc.Color(.43, .46, .42));
-  const townStoneLight = coloredMaterial(new pc.Color(.58, .57, .49));
-  const plaster = coloredMaterial(new pc.Color(.72, .64, .48));
-  const warmPlaster = coloredMaterial(new pc.Color(.63, .43, .25));
-  const timber = coloredMaterial(new pc.Color(.28, .16, .085));
-  const roofRed = coloredMaterial(new pc.Color(.48, .16, .105));
-  const roofBlue = coloredMaterial(new pc.Color(.12, .25, .31));
-  const bannerBlue = coloredMaterial(new pc.Color(.08, .28, .48));
-  const bannerGold = coloredMaterial(new pc.Color(.95, .65, .16));
-  const hedge = coloredMaterial(new pc.Color(.09, .29, .13));
+  const grass = coloredMaterial(new pc.Color(.19, .37, .2));
+  const grassLight = coloredMaterial(new pc.Color(.26, .46, .25));
+  const path = coloredMaterial(new pc.Color(.46, .34, .21));
+  const stone = coloredMaterial(new pc.Color(.3, .34, .33));
+  const townStone = coloredMaterial(new pc.Color(.35, .36, .33));
+  const townStoneMid = coloredMaterial(new pc.Color(.47, .46, .4));
+  const townStoneLight = coloredMaterial(new pc.Color(.61, .58, .48));
+  const mortar = coloredMaterial(new pc.Color(.25, .27, .25));
+  const plaster = coloredMaterial(new pc.Color(.78, .69, .5));
+  const plasterLight = coloredMaterial(new pc.Color(.9, .81, .61));
+  const warmPlaster = coloredMaterial(new pc.Color(.68, .46, .27));
+  const timber = coloredMaterial(new pc.Color(.27, .14, .065));
+  const timberLight = coloredMaterial(new pc.Color(.42, .24, .1));
+  const roofRed = coloredMaterial(new pc.Color(.52, .15, .075));
+  const roofRedLight = coloredMaterial(new pc.Color(.68, .24, .1));
+  const roofBlue = coloredMaterial(new pc.Color(.095, .24, .3));
+  const roofBlueLight = coloredMaterial(new pc.Color(.16, .38, .43));
+  const bannerBlue = coloredMaterial(new pc.Color(.06, .3, .5));
+  const bannerGold = coloredMaterial(new pc.Color(.98, .68, .17));
+  const hedge = coloredMaterial(new pc.Color(.075, .28, .12));
+  const flowerRed = coloredMaterial(new pc.Color(.82, .15, .12));
+  const flowerYellow = coloredMaterial(new pc.Color(1, .72, .13));
+  const iron = coloredMaterial(new pc.Color(.12, .15, .15));
   const windowGlow = new pc.StandardMaterial();
-  windowGlow.diffuse = new pc.Color(1, .72, .27);
-  windowGlow.emissive = new pc.Color(.72, .31, .055);
+  windowGlow.diffuse = new pc.Color(1, .76, .31);
+  windowGlow.emissive = new pc.Color(.85, .37, .06);
+  windowGlow.gloss = .5;
   windowGlow.update();
+  const townRune = new pc.StandardMaterial();
+  townRune.diffuse = new pc.Color(.16, .78, .94);
+  townRune.emissive = new pc.Color(.04, .38, .66);
+  townRune.useLighting = false;
+  townRune.update();
+  const smokeMaterial = new pc.StandardMaterial();
+  smokeMaterial.diffuse = new pc.Color(.62, .62, .57);
+  smokeMaterial.opacity = .36;
+  smokeMaterial.blendType = pc.BLEND_NORMAL;
+  smokeMaterial.depthWrite = false;
+  smokeMaterial.update();
   const trunk = coloredMaterial(new pc.Color(.24, .13, .07));
   const leaf = coloredMaterial(new pc.Color(.08, .25, .13));
   const leafLight = coloredMaterial(new pc.Color(.13, .38, .18));
   const boundary = coloredMaterial(new pc.Color(.08, .13, .12));
+
+  const addTownShape = (parent: pc.Entity, name: string, type: "box" | "cylinder" | "cone" | "sphere",
+    material: pc.StandardMaterial, scale: [number, number, number], position: [number, number, number]): pc.Entity => {
+    const shape = new pc.Entity(name);
+    shape.addComponent("render", { type, castShadows: true });
+    if (shape.render) shape.render.material = material;
+    shape.setLocalScale(...scale);
+    shape.setLocalPosition(...position);
+    parent.addChild(shape);
+    return shape;
+  };
+
   addBox(rapidPrototypeRoot, "arena-ground", grass, [40, .25, 32], [108, 7.875, 106]);
   addBox(rapidPrototypeRoot, "west-green", grassLight, [9, .035, 29], [94, 8.02, 106]);
   addBox(rapidPrototypeRoot, "combat-lane", path, [27, .04, 5.2], [111.5, 8.03, 106]);
   addBox(rapidPrototypeRoot, "cross-lane", path, [5.2, .045, 23], [116, 8.035, 106]);
   addBox(rapidPrototypeRoot, "arena-heart", stone, [7.5, .08, 7.5], [116, 8.07, 106]);
 
-  // Town of Beginnings: a compact, legible sanctuary framing the western spawn.
-  // Its open east gate feeds directly into the faster combat lane.
-  addBox(rapidPrototypeRoot, "beginnings-plaza", townStone, [12.5, .065, 17.5], [96.7, 8.06, 106]);
-  addBox(rapidPrototypeRoot, "beginnings-main-road", townStoneLight, [16.5, .075, 3.25], [99.25, 8.085, 106]);
-  for (const offset of [-5.2, 5.2]) addBox(rapidPrototypeRoot, "beginnings-side-road", townStoneLight,
-    [8.5, .07, 2.15], [97.5, 8.08, 106 + offset]);
+  // Town of Beginnings art kit: warm timber-and-plaster buildings, pitched roofs,
+  // inset stone roads, readable civic blue and small lived-in details.
+  addBox(rapidPrototypeRoot, "beginnings-plaza-rim", mortar, [13.05, .09, 18.05], [96.7, 8.055, 106]);
+  addBox(rapidPrototypeRoot, "beginnings-plaza", townStoneMid, [12.55, .095, 17.55], [96.7, 8.075, 106]);
+  addBox(rapidPrototypeRoot, "beginnings-main-road-rim", mortar, [16.8, .085, 3.6], [99.25, 8.08, 106]);
+  addBox(rapidPrototypeRoot, "beginnings-main-road", townStoneLight, [16.55, .09, 3.25], [99.25, 8.105, 106]);
+  for (const offset of [-5.2, 5.2]) {
+    addBox(rapidPrototypeRoot, "beginnings-side-road-rim", mortar, [8.8, .08, 2.45], [97.5, 8.075, 106 + offset]);
+    addBox(rapidPrototypeRoot, "beginnings-side-road", townStoneLight, [8.5, .095, 2.12], [97.5, 8.105, 106 + offset]);
+  }
+  // Sparse inset cobbles break up the old flat paving without turning the plaza into visual noise.
+  for (let index = 0; index < 20; index++) {
+    const x = 91.2 + (index * 17 % 105) / 10;
+    const z = 98.2 + (index * 29 % 156) / 10;
+    const cobble = addBox(rapidPrototypeRoot, "plaza-cobble", index % 3 === 0 ? townStone : townStoneLight,
+      [.64 + (index % 2) * .15, .025, .38 + (index % 3) * .07], [x, 8.135, z]);
+    cobble.setLocalEulerAngles(0, (index * 23) % 50 - 25, 0);
+  }
+
+  const addGabledRoof = (parent: pc.Entity, name: string, x: number, z: number, width: number, depth: number,
+    baseY: number, roof: pc.StandardMaterial, highlight: pc.StandardMaterial, angle = 34): void => {
+    const halfSpan = width / 2 + .48;
+    const radians = angle * Math.PI / 180;
+    const slopeLength = halfSpan / Math.cos(radians);
+    const rise = halfSpan * Math.tan(radians);
+    for (const side of [-1, 1] as const) {
+      const panel = addBox(parent, `${name}-roof-slope`, roof, [slopeLength, .2, depth + .9],
+        [x + side * halfSpan / 2, baseY + rise / 2, z]);
+      panel.setLocalEulerAngles(0, 0, side < 0 ? angle : -angle);
+      for (const band of [.38, .72]) {
+        const bandX = x + side * halfSpan * band;
+        const bandY = baseY + (halfSpan - Math.abs(bandX - x)) * Math.tan(radians) + .06;
+        addBox(parent, `${name}-roof-rib`, highlight, [.075, .075, depth + .96], [bandX, bandY, z]);
+      }
+    }
+    addBox(parent, `${name}-roof-ridge`, highlight, [.24, .24, depth + 1.08], [x, baseY + rise + .02, z]);
+  };
 
   const addTownBuilding = (name: string, x: number, z: number, width: number, depth: number,
-    wall: pc.StandardMaterial, roof: pc.StandardMaterial, height = 2.5): pc.Entity => {
+    wall: pc.StandardMaterial, roof: pc.StandardMaterial, roofHighlight: pc.StandardMaterial, height = 2.5): pc.Entity => {
     const root = new pc.Entity(name);
     rapidPrototypeRoot.addChild(root);
-    addBox(root, `${name}-foundation`, townStone, [width + .45, .28, depth + .45], [x, 8.14, z]);
+    addBox(root, `${name}-foundation-shadow`, mortar, [width + .7, .22, depth + .7], [x, 8.12, z]);
+    addBox(root, `${name}-foundation`, townStone, [width + .45, .32, depth + .45], [x, 8.22, z]);
     addBox(root, `${name}-walls`, wall, [width, height, depth], [x, 8.28 + height / 2, z]);
-    addBox(root, `${name}-lower-timber`, timber, [width + .08, .14, depth + .08], [x, 8.48, z]);
-    addBox(root, `${name}-upper-timber`, timber, [width + .08, .14, depth + .08], [x, 8.28 + height * .78, z]);
-    for (const side of [-1, 1]) {
-      addBox(root, `${name}-corner-post`, timber, [.18, height + .12, .22],
-        [x + side * (width / 2 - .12), 8.28 + height / 2, z + depth / 2 - .13]);
-      addBox(root, `${name}-window`, windowGlow, [.045, .64, .72],
-        [x + width / 2 + .025, 9.15, z + side * depth * .25]);
+    addBox(root, `${name}-lower-timber`, timber, [width + .08, .18, depth + .08], [x, 8.5, z]);
+    addBox(root, `${name}-upper-timber`, timber, [width + .08, .18, depth + .08], [x, 8.3 + height * .78, z]);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      addBox(root, `${name}-corner-post`, timber, [.2, height + .15, .2],
+        [x + sx * (width / 2 - .11), 8.3 + height / 2, z + sz * (depth / 2 - .11)]);
     }
-    addBox(root, `${name}-door`, timber, [.06, 1.42, .86], [x + width / 2 + .045, 8.99, z]);
-    for (let level = 0; level < 3; level++) addBox(root, `${name}-roof-${level}`, roof,
-      [width + .8 - level * .62, .3, depth + .8 - level * .62], [x, 8.48 + height + level * .22, z]);
+    for (const side of [-1, 1]) {
+      const windowZ = z + side * depth * .26;
+      addBox(root, `${name}-window-frame`, timber, [.08, .88, .92], [x + width / 2 + .035, 9.22, windowZ]);
+      addBox(root, `${name}-window`, windowGlow, [.085, .68, .72], [x + width / 2 + .075, 9.22, windowZ]);
+      addBox(root, `${name}-window-cross`, timber, [.1, .09, .78], [x + width / 2 + .13, 9.22, windowZ]);
+      addBox(root, `${name}-window-cross`, timber, [.1, .74, .075], [x + width / 2 + .13, 9.22, windowZ]);
+    }
+    addBox(root, `${name}-door-frame`, townStone, [.15, 1.72, 1.18], [x + width / 2 + .04, 9.13, z]);
+    addBox(root, `${name}-door`, timberLight, [.18, 1.48, .92], [x + width / 2 + .13, 9.02, z]);
+    addBox(root, `${name}-door-step`, townStoneLight, [.62, .15, 1.3], [x + width / 2 + .38, 8.27, z]);
+    // Decorative gable braces make the eastern gameplay-facing façade read at camera distance.
+    for (const side of [-1, 1] as const) {
+      const brace = addBox(root, `${name}-gable-brace`, timber, [.12, .12, depth * .43],
+        [x + width / 2 + .1, 10.03, z + side * depth * .2]);
+      brace.setLocalEulerAngles(side * 32, 0, 0);
+    }
+    addGabledRoof(root, name, x, z, width, depth, 8.42 + height, roof, roofHighlight);
     return root;
   };
 
-  const hall = addTownBuilding("founders-hall", 91.6, 106, 5.4, 6.2, plaster, roofBlue, 2.9);
-  addBox(hall, "founders-bell-tower", plaster, [1.65, 1.8, 1.65], [91.6, 12.05, 106]);
-  addBox(hall, "founders-tower-roof", roofBlue, [2.15, .55, 2.15], [91.6, 13.18, 106]);
-  addBox(hall, "founders-sun-mark", bannerGold, [.04, .72, .72], [92.45, 12.05, 106]);
-  addTownBuilding("wayfarer-inn", 92.2, 96.2, 6.1, 5.2, warmPlaster, roofRed);
-  const smithy = addTownBuilding("beginnings-smithy", 92.2, 115.8, 6.1, 5.2, warmPlaster, roofRed);
-  addBox(smithy, "smithy-chimney", townStone, [.72, 2.1, .72], [90.2, 11.2, 114.5]);
-  addBox(smithy, "smithy-forge-glow", windowGlow, [.06, .72, 1.25], [95.28, 8.95, 114.55]);
+  const hall = addTownBuilding("founders-hall", 91.6, 106, 5.4, 6.2, plasterLight, roofBlue, roofBlueLight, 2.9);
+  addBox(hall, "founders-bell-tower-base", timber, [2.02, .2, 2.02], [91.6, 11.78, 106]);
+  addBox(hall, "founders-bell-tower", plaster, [1.72, 1.9, 1.72], [91.6, 12.67, 106]);
+  for (const side of [-1, 1]) {
+    addBox(hall, "founders-belfry-opening", iron, [.42, .76, .08], [91.6 + side * .46, 12.72, 106.89]);
+    addBox(hall, "founders-belfry-opening", iron, [.08, .76, .42], [92.48, 12.72, 106 + side * .46]);
+  }
+  addGabledRoof(hall, "founders-tower", 91.6, 106, 2, 2, 13.62, roofBlue, roofBlueLight, 42);
+  addTownShape(hall, "founders-sun-mark", "cylinder", bannerGold, [.48, .08, .48], [92.5, 12.72, 106])
+    .setLocalEulerAngles(0, 0, 90);
+
+  const inn = addTownBuilding("wayfarer-inn", 92.2, 96.2, 6.1, 5.2, warmPlaster, roofRed, roofRedLight);
+  addBox(inn, "inn-sign-arm", timber, [.12, .12, 1.25], [95.42, 10.18, 97.25]);
+  addBox(inn, "inn-sign-board", timberLight, [.14, .84, 1.02], [95.48, 9.72, 97.83]);
+  addTownShape(inn, "inn-sign-mug", "cylinder", bannerGold, [.28, .12, .28], [95.57, 9.75, 97.83])
+    .setLocalEulerAngles(0, 0, 90);
+
+  const smithy = addTownBuilding("beginnings-smithy", 92.2, 115.8, 6.1, 5.2, warmPlaster, roofRed, roofRedLight);
+  addBox(smithy, "smithy-chimney", townStone, [.74, 2.2, .74], [90.2, 11.65, 114.5]);
+  addBox(smithy, "smithy-chimney-cap", townStoneLight, [.94, .18, .94], [90.2, 12.79, 114.5]);
+  addBox(smithy, "smithy-forge-glow", windowGlow, [.08, .74, 1.25], [95.3, 8.98, 114.55]);
+  addBox(smithy, "smith-sign-arm", timber, [.12, .12, 1.2], [95.42, 10.18, 114.55]);
+  addBox(smithy, "smith-sign-board", timberLight, [.14, .84, 1.02], [95.48, 9.72, 113.98]);
+  const smithHammerHead = addBox(smithy, "smith-sign-hammer", iron, [.11, .18, .6], [95.57, 9.83, 113.98]);
+  smithHammerHead.setLocalEulerAngles(35, 0, 0);
+  const smithHammerGrip = addBox(smithy, "smith-sign-hammer", bannerGold, [.11, .58, .11], [95.58, 9.55, 113.98]);
+  smithHammerGrip.setLocalEulerAngles(-32, 0, 0);
+  for (let index = 0; index < 5; index++) {
+    const puff = addTownShape(rapidPrototypeRoot, "smithy-smoke", "sphere", smokeMaterial, [.2, .2, .2], [90.2, 12.9, 114.5]);
+    rapidTownSmoke.push({ entity: puff, x: 90.2, y: 12.9, z: 114.5, phase: index / 5, drift: -.6 });
+  }
 
   const addGatehouse = (z: number): void => {
-    addBox(rapidPrototypeRoot, "town-gate-tower", townStone, [2.65, 3.25, 3.35], [102.1, 9.63, z]);
-    addBox(rapidPrototypeRoot, "town-gate-cap", roofBlue, [3.1, .48, 3.8], [102.1, 11.48, z]);
-    addBox(rapidPrototypeRoot, "town-gate-banner", bannerBlue, [.05, 1.45, .78], [103.46, 10.05, z]);
-    addBox(rapidPrototypeRoot, "town-gate-sigil", bannerGold, [.055, .28, .28], [103.5, 10.2, z]);
+    addBox(rapidPrototypeRoot, "town-gate-footing", mortar, [2.95, .24, 3.65], [102.1, 8.14, z]);
+    addBox(rapidPrototypeRoot, "town-gate-tower", townStone, [2.65, 3.25, 3.35], [102.1, 9.72, z]);
+    addBox(rapidPrototypeRoot, "town-gate-face", townStoneMid, [.2, 2.65, 2.65], [103.48, 9.72, z]);
+    for (const offset of [-1.12, -.38, .38, 1.12])
+      addBox(rapidPrototypeRoot, "town-gate-masonry", townStoneLight, [.12, .12, .48], [103.6, 9.02 + Math.abs(offset) * .56, z + offset]);
+    addGabledRoof(rapidPrototypeRoot, "town-gate", 102.1, z, 3, 3.8, 11.36, roofBlue, roofBlueLight, 38);
+    const banner = addBox(rapidPrototypeRoot, "town-gate-banner", bannerBlue, [.07, 1.52, .84], [103.54, 10.15, z]);
+    rapidTownBanners.push({ entity: banner, phase: z * .41 });
+    addBox(rapidPrototypeRoot, "town-gate-banner-tail", bannerBlue, [.075, .42, .55], [103.55, 9.24, z]);
+    addTownShape(rapidPrototypeRoot, "town-gate-sigil", "cylinder", bannerGold, [.25, .08, .25], [103.62, 10.25, z])
+      .setLocalEulerAngles(0, 0, 90);
   };
   addGatehouse(100.65);
   addGatehouse(111.35);
-  addBox(rapidPrototypeRoot, "town-gate-lintel", timber, [1.15, .42, 7.35], [102.1, 11.08, 106]);
+  // A stepped stone arch leaves a tall, readable opening instead of the old giant brown beam.
+  addBox(rapidPrototypeRoot, "town-gate-arch-crown", townStone, [1.32, .6, 9.05], [102.1, 11.18, 106]);
+  for (const side of [-1, 1] as const) {
+    addBox(rapidPrototypeRoot, "town-gate-arch-step", townStone, [1.34, .58, 1.18], [102.1, 10.72, 106 + side * 3.05]);
+    addBox(rapidPrototypeRoot, "town-gate-arch-step", townStoneMid, [1.35, .52, .95], [102.1, 10.38, 106 + side * 2.45]);
+  }
+  addBox(rapidPrototypeRoot, "town-gate-nameplate", timberLight, [.08, .62, 2.6], [102.82, 11.28, 106]);
+  addBox(rapidPrototypeRoot, "town-gate-nameplate-inlay", bannerGold, [.09, .1, 1.82], [102.88, 11.28, 106]);
 
   const addMarketStall = (name: string, z: number, canopy: pc.StandardMaterial): void => {
     const root = new pc.Entity(name); rapidPrototypeRoot.addChild(root);
-    addBox(root, `${name}-counter`, timber, [2.1, .58, .75], [98.15, 8.48, z]);
-    for (const side of [-1, 1]) addBox(root, `${name}-post`, timber, [.12, 1.75, .12], [98.15 + side * .85, 9.12, z]);
-    addBox(root, `${name}-canopy`, canopy, [2.35, .18, 1.5], [98.15, 9.9, z]);
+    addBox(root, `${name}-rug`, bannerGold, [2.45, .025, 1.42], [98.15, 8.17, z]);
+    addBox(root, `${name}-counter`, timberLight, [2.1, .58, .75], [98.15, 8.5, z]);
+    for (const side of [-1, 1]) addBox(root, `${name}-post`, timber, [.12, 1.85, .12], [98.15 + side * .87, 9.15, z]);
+    const canopyLeft = addBox(root, `${name}-canopy`, canopy, [1.2, .16, 1.62], [97.58, 9.96, z]);
+    canopyLeft.setLocalEulerAngles(0, 0, 8);
+    const canopyRight = addBox(root, `${name}-canopy`, canopy === bannerBlue ? roofBlueLight : roofRedLight,
+      [1.2, .16, 1.62], [98.72, 9.96, z]);
+    canopyRight.setLocalEulerAngles(0, 0, -8);
+    for (const offset of [-.56, 0, .56]) addTownShape(root, `${name}-wares`, "sphere",
+      offset === 0 ? flowerYellow : flowerRed, [.18, .18, .18], [98.15 + offset, 8.9, z - .16]);
   };
   addMarketStall("north-market-stall", 98.2, bannerBlue);
   addMarketStall("south-market-stall", 113.8, roofRed);
 
   for (const [x, z] of [[96.4,102.8],[96.4,109.2],[100,103.1],[100,108.9]] as const) {
-    addBox(rapidPrototypeRoot, "town-lamp-post", timber, [.13, 1.65, .13], [x, 8.82, z]);
-    addBox(rapidPrototypeRoot, "town-lamp", windowGlow, [.42, .48, .42], [x, 9.75, z]);
-    addBox(rapidPrototypeRoot, "town-lamp-cap", townStone, [.56, .12, .56], [x, 10.05, z]);
+    addTownShape(rapidPrototypeRoot, "town-lamp-post", "cylinder", iron, [.14, 1.72, .14], [x, 8.88, z]);
+    addBox(rapidPrototypeRoot, "town-lamp-arm", iron, [.62, .1, .1], [x + .24, 9.58, z]);
+    addBox(rapidPrototypeRoot, "town-lamp", windowGlow, [.34, .44, .34], [x + .5, 9.42, z]);
+    addTownShape(rapidPrototypeRoot, "town-lamp-cap", "cone", iron, [.5, .35, .5], [x + .5, 9.75, z]);
   }
-  for (const [x, z, sx, sz] of [[97.2,93.1,3.2,.55],[97.2,118.9,3.2,.55],[99.9,96.1,.55,2.6],[99.9,115.9,.55,2.6]] as const)
+  for (const [x, z, sx, sz] of [[97.2,93.1,3.2,.55],[97.2,118.9,3.2,.55],[99.9,96.1,.55,2.6],[99.9,115.9,.55,2.6]] as const) {
     addBox(rapidPrototypeRoot, "town-hedge", hedge, [sx, .72, sz], [x, 8.38, z]);
+    for (const offset of [-.34, .34]) addTownShape(rapidPrototypeRoot, "town-flower", "sphere",
+      offset < 0 ? flowerRed : flowerYellow, [.16, .16, .16], [x + (sx > sz ? offset : 0), 8.78, z + (sz > sx ? offset : 0)]);
+  }
+
+  // The Founder Compass is a low, walkable landmark: cyan points east toward adventure.
+  addTownShape(rapidPrototypeRoot, "founder-compass-ring", "cylinder", mortar, [1.38, .045, 1.38], [97.25, 8.18, 106]);
+  const compassCore = addBox(rapidPrototypeRoot, "founder-compass-core", townRune, [1.42, .035, .38], [97.25, 8.235, 106]);
+  compassCore.setLocalEulerAngles(0, 45, 0);
+  const compassCross = addBox(rapidPrototypeRoot, "founder-compass-cross", townRune, [.38, .04, 1.42], [97.25, 8.24, 106]);
+  compassCross.setLocalEulerAngles(0, 45, 0);
+
+  const addBarrel = (x: number, z: number): void => {
+    addTownShape(rapidPrototypeRoot, "town-barrel", "cylinder", timberLight, [.48, .7, .48], [x, 8.48, z]);
+    for (const y of [8.2, 8.48, 8.76]) addTownShape(rapidPrototypeRoot, "barrel-hoop", "cylinder", iron, [.5, .045, .5], [x, y, z]);
+  };
+  addBarrel(95.25, 94.15); addBarrel(95.35, 117.35);
+  for (const [x, z, turn] of [[96.4,94.1,8],[97.05,94.35,-12],[96.35,117.7,-8],[97.02,117.45,11]] as const) {
+    const crate = addBox(rapidPrototypeRoot, "town-crate", timberLight, [.58, .58, .58], [x, 8.47, z]);
+    crate.setLocalEulerAngles(0, turn, 0);
+    addBox(rapidPrototypeRoot, "crate-band", timber, [.64, .1, .64], [x, 8.47, z]).setLocalEulerAngles(0, turn, 0);
+  }
+  for (const [x, z, turn] of [[96.7,99.85,0],[96.7,112.15,0]] as const) {
+    addBox(rapidPrototypeRoot, "town-bench-seat", timberLight, [1.8, .16, .48], [x, 8.48, z]).setLocalEulerAngles(0, turn, 0);
+    for (const side of [-1, 1]) addBox(rapidPrototypeRoot, "town-bench-leg", iron, [.16, .42, .16], [x + side * .62, 8.28, z]);
+  }
+
   for (const [x, z] of [[91,93],[96,93],[102,93],[108,92],[114,92],[121,92],[126,94],[126,120],[120,120],[112,120],[104,120],[96,120],[91,117],[91,109],[91,101]] as const) {
-    addBox(rapidPrototypeRoot, "tree-trunk", trunk, [.45, 1.55, .45], [x, 8.75, z]);
-    addBox(rapidPrototypeRoot, "tree-crown", leaf, [2.1, 1.15, 2.1], [x, 10.15, z]);
-    addBox(rapidPrototypeRoot, "tree-highlight", leafLight, [1.25, .65, 1.25], [x - .25, 10.85, z - .2]);
+    addTownShape(rapidPrototypeRoot, "tree-trunk", "cylinder", trunk, [.42, 1.65, .42], [x, 8.82, z]);
+    addTownShape(rapidPrototypeRoot, "tree-crown", "sphere", leaf, [2.1, 1.45, 2.1], [x, 10.05, z]);
+    addTownShape(rapidPrototypeRoot, "tree-crown", "sphere", leafLight, [1.38, 1.05, 1.38], [x - .45, 10.72, z - .25]);
+    addTownShape(rapidPrototypeRoot, "tree-crown", "sphere", leaf, [1.15, .88, 1.15], [x + .5, 10.62, z + .35]);
   }
   for (const [x, z, s] of [[104,96,1.2],[123,97,.9],[124,114,1.1],[108,116,.8],[98,112,.75]] as const) {
     const rock = addBox(rapidPrototypeRoot, "arena-rock", stone, [s, s * .72, s], [x, 8 + s * .36, z]);
@@ -14161,6 +14312,17 @@ app.on("postrender", () => {
 
 app.on("update", (dt: number) => {
   const customUpdateStartedAt = performance.now();
+  if (rapidPrototypeRequested) {
+    const townTime = customUpdateStartedAt * .001;
+    for (const smoke of rapidTownSmoke) {
+      const travel = (townTime * .22 + smoke.phase) % 1;
+      const size = .16 + travel * .42;
+      smoke.entity.setLocalPosition(smoke.x + smoke.drift * travel, smoke.y + travel * 2.35, smoke.z + Math.sin(townTime + smoke.phase * 8) * .16);
+      smoke.entity.setLocalScale(size, size * .82, size);
+    }
+    for (const banner of rapidTownBanners)
+      banner.entity.setLocalEulerAngles(Math.sin(townTime * 1.7 + banner.phase) * 3.5, 0, 0);
+  }
   lastPresentationWaitMs = Math.max(0, dt * 1000 - lastEngineUpdateMs - lastRenderMs);
   capturePerformancePeak("presentationWaitMs", lastPresentationWaitMs);
   const gpuFrameMs = gpuProfiler?._frameTime;
