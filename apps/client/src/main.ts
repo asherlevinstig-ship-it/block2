@@ -24,7 +24,7 @@ import { tabletContextAction } from "./tablet-context-action.js";
 import { tabletDragAimYaw, tabletSoftTarget } from "./tablet-combat-aim.js";
 import { callingAimReleaseCancels, callingTouchAimProfile, type CallingTouchAimProfile } from "./calling-touch-aim.js";
 import { ExclusivePopupQueue, gameplayBlockedByPopup, popupFocusIndex, popupIsPresented } from "./popup-queue.js";
-import { shouldCaptureMovementKey } from "./keyboard-movement.js";
+import { normalizedMovementCode, shouldCaptureMovementKey } from "./keyboard-movement.js";
 import { COORDINATED_BRUTE_FOLLOWERS, COORDINATED_SPITTER_FOLLOWERS, activeCombatNearby, advanceBossHud, initialBossHud, leaderArmourSegments, leaderChargeGuidance, leaderExposureLabel, leaderExposureRoleLabel, leaderFormationLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
 import { formationLanePoints, formationMarkerPoints, formationRingPoints, formationTargetStyle, formationVfxStyle,
   type FormationTactic, type FormationTargetRole } from "./formation-vfx.js";
@@ -11477,6 +11477,8 @@ function renderBootstrap(payload: WorldBootstrap): void {
 }
 
 const keys = new Set<string>();
+let lastKeyboardEvent = "none";
+let lastMovementDialogUnlockAt = Number.NEGATIVE_INFINITY;
 function visibleEditableTarget(target: EventTarget | null): { editable: boolean; visible: boolean } {
   const element = target instanceof HTMLElement ? target : null;
   const editable = element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement
@@ -11488,9 +11490,21 @@ function visibleEditableTarget(target: EventTarget | null): { editable: boolean;
 // after onboarding/dialog transitions, where a closed input may remain document.activeElement.
 window.addEventListener("keydown", event => {
   const target = visibleEditableTarget(event.target);
-  if (!shouldCaptureMovementKey(event.code, target.editable, target.visible)) return;
-  keys.add(event.code);
-  if (target.editable && !target.visible) canvas.focus();
+  const movementCode = normalizedMovementCode(event.code, event.key);
+  lastKeyboardEvent = `${event.key || "∅"}/${event.code || "∅"} target=${event.target instanceof HTMLElement ? event.target.tagName : "unknown"}`;
+  if (!movementCode || !shouldCaptureMovementKey(event.code, event.key, target.editable, target.visible)) return;
+  keys.add(movementCode);
+  // Reassert the real UI state whenever the player expresses movement intent. A dropped
+  // dialog-close message previously left the server discarding every move indefinitely.
+  if (!protectedDialogPresented() && (!event.repeat || performance.now() - lastMovementDialogUnlockAt >= 1_000)) {
+    lastMovementDialogUnlockAt = performance.now();
+    syncProtectedDialog(true);
+  }
+  if (target.editable && !target.visible) canvas.focus({ preventScroll: true });
+}, true);
+window.addEventListener("keyup", event => {
+  const movementCode = normalizedMovementCode(event.code, event.key);
+  if (movementCode) keys.delete(movementCode);
 }, true);
 let awaitingReturnState = false;
 let townReturnPosition: { x: number; y: number; z: number } | null = null;
@@ -11771,12 +11785,12 @@ function protectedDialogPresented(): boolean {
     dialog.id !== "defeat-screen" && dialog.id !== "character-creator"
     && !dialog.hidden && dialog.getClientRects().length > 0);
 }
-function syncProtectedDialog(): void {
+function syncProtectedDialog(force = false): void {
   if (!room) { reportedProtectedDialog = null; return; }
   // A pending Calling journey is progression state, not an on-screen modal. Treating it
   // as a dialog left some returning players invulnerable and completely unable to move.
   const open = protectedDialogPresented();
-  if (reportedProtectedDialog === open) return;
+  if (!force && reportedProtectedDialog === open) return;
   if (open) {
     resetMovementControls();
     setDefensePresentation(false);
@@ -13674,6 +13688,8 @@ window.addEventListener("keyup", event => {
 window.addEventListener("blur", () => { cancelLootHold(); keyboardFireHeld = false; });
 canvas.addEventListener("pointerdown", event => {
   if (popupQueue.active() !== null) return;
+  canvas.focus({ preventScroll: true });
+  if (!protectedDialogPresented()) syncProtectedDialog(true);
   if (event.pointerType === "mouse" && cameraViewMode === "first-person" && document.pointerLockElement !== canvas) {
     const lock = canvas.requestPointerLock();
     if (lock instanceof Promise) void lock.catch(() => { /* Arrow keys remain available if pointer lock is denied. */ });
@@ -15789,6 +15805,8 @@ app.on("update", (dt: number) => {
     const keysDown = ["KeyW", "KeyA", "KeyS", "KeyD"].filter(code => keys.has(code)).map(code => code.at(-1)).join("") || "none";
     movementDebugLive.textContent = [
       `keys       ${keysDown}   raw ${strafe.toFixed(2)}, ${forward.toFixed(2)}`,
+      `key event  ${lastKeyboardEvent}`,
+      `focus      ${document.activeElement instanceof HTMLElement ? document.activeElement.tagName : "none"} dialog=${protectedDialogPresented()} popup=${popupQueue.active() ?? "none"}`,
       `desired    ${movementVectorLabel(desiredMovement)}`,
       `applied    ${movementVectorLabel(smoothedMovement)}`,
       `yaw        ${localFacingYaw.toFixed(1)} → ${desiredFacingYaw.toFixed(1)}`,
