@@ -11479,6 +11479,7 @@ function renderBootstrap(payload: WorldBootstrap): void {
 const keys = new Set<string>();
 let lastKeyboardEvent = "none";
 let lastMovementDialogUnlockAt = Number.NEGATIVE_INFINITY;
+let lastMovementWorldRefreshAt = Number.NEGATIVE_INFINITY;
 function visibleEditableTarget(target: EventTarget | null): { editable: boolean; visible: boolean } {
   const element = target instanceof HTMLElement ? target : null;
   const editable = element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement
@@ -11493,7 +11494,13 @@ window.addEventListener("keydown", event => {
   const movementCode = normalizedMovementCode(event.code, event.key);
   lastKeyboardEvent = `${event.key || "∅"}/${event.code || "∅"} target=${event.target instanceof HTMLElement ? event.target.tagName : "unknown"}`;
   if (!movementCode || !shouldCaptureMovementKey(event.code, event.key, target.editable, target.visible)) return;
+  repairStaleActivePopup();
   keys.add(movementCode);
+  if (!worldReady && room && performance.now() - lastMovementWorldRefreshAt >= 1_000) {
+    lastMovementWorldRefreshAt = performance.now();
+    room.send("world:ready");
+    logMovementEvent("MOVEMENT REQUESTED WORLD REFRESH");
+  }
   // Reassert the real UI state whenever the player expresses movement intent. A dropped
   // dialog-close message previously left the server discarding every move indefinitely.
   if (!protectedDialogPresented() && (!event.repeat || performance.now() - lastMovementDialogUnlockAt >= 1_000)) {
@@ -11784,6 +11791,25 @@ function protectedDialogPresented(): boolean {
   return [...document.querySelectorAll<HTMLElement>(protectedDialogSelector)].some(dialog =>
     dialog.id !== "defeat-screen" && dialog.id !== "character-creator"
     && !dialog.hidden && dialog.getClientRects().length > 0);
+}
+function elementActuallyPresented(element: HTMLElement): boolean {
+  if (element.hidden || element.dataset.popupQueued === "true" || element.getClientRects().length === 0) return false;
+  const style = window.getComputedStyle(element);
+  return style.display !== "none" && style.visibility !== "hidden";
+}
+function activePresentedPopupId(): string | null {
+  const id = popupQueue.active();
+  if (!id) return null;
+  const element = document.getElementById(id);
+  return element instanceof HTMLElement && elementActuallyPresented(element) ? id : null;
+}
+function repairStaleActivePopup(): void {
+  const id = popupQueue.active();
+  if (!id || activePresentedPopupId() === id) return;
+  const element = document.getElementById(id);
+  if (element instanceof HTMLElement) registerPopupClose(element);
+  else showPopupFromQueue(popupQueue.close(id).show);
+  logMovementEvent(`STALE POPUP RELEASED ${id}`);
 }
 function syncProtectedDialog(force = false): void {
   if (!room) { reportedProtectedDialog = null; return; }
@@ -14502,10 +14528,13 @@ app.on("update", (dt: number) => {
   else frameCadenceBuckets.slower += 1;
   const keyboardStrafe = Number(keys.has("KeyD")) - Number(keys.has("KeyA"));
   const keyboardForward = Number(keys.has("KeyW")) - Number(keys.has("KeyS"));
-  const modalMovementAllowed = lootPanel.hidden && defeatScreen.hidden && quizPanel.hidden && blacksmithPanel.hidden && inventoryPanel.hidden
-    && ashenEquipmentRevealPanel.hidden
-    && levelUpPanel.hidden && expeditionPanel.hidden && realmHuntPanel.hidden && !playerInteractionUI.isOpen()
-    && !gameplayBlockedByPopup(popupQueue.active(), protectedDialogPresented());
+  const visibleMovementPanels = [lootPanel, defeatScreen, quizPanel, blacksmithPanel, inventoryPanel,
+    ashenEquipmentRevealPanel, levelUpPanel, expeditionPanel, realmHuntPanel]
+    .filter(elementActuallyPresented).map(panel => panel.id || panel.getAttribute("aria-label") || "panel");
+  const presentedPopupId = activePresentedPopupId();
+  const protectedDialogOpen = protectedDialogPresented();
+  const modalMovementAllowed = visibleMovementPanels.length === 0 && !playerInteractionUI.isOpen()
+    && !gameplayBlockedByPopup(presentedPopupId, protectedDialogOpen);
   if (!modalMovementAllowed && document.pointerLockElement === canvas) document.exitPointerLock();
   const strafe = modalMovementAllowed ? Math.max(-1, Math.min(1, keyboardStrafe + touchStrafe)) : 0;
   const forward = modalMovementAllowed ? Math.max(-1, Math.min(1, keyboardForward - touchForward)) : 0;
@@ -15807,6 +15836,9 @@ app.on("update", (dt: number) => {
       `keys       ${keysDown}   raw ${strafe.toFixed(2)}, ${forward.toFixed(2)}`,
       `key event  ${lastKeyboardEvent}`,
       `focus      ${document.activeElement instanceof HTMLElement ? document.activeElement.tagName : "none"} dialog=${protectedDialogPresented()} popup=${popupQueue.active() ?? "none"}`,
+      `gate       ${!worldReady ? "WORLD_NOT_READY" : visibleMovementPanels.length ? `PANEL:${visibleMovementPanels.join(",")}`
+        : playerInteractionUI.isOpen() ? "PLAYER_INTERACTION" : presentedPopupId ? `POPUP:${presentedPopupId}`
+        : protectedDialogOpen ? "DIALOG" : Date.now() < localThornBoundUntil ? `THORN:${localThornBoundUntil - Date.now()}ms` : "OPEN"}`,
       `desired    ${movementVectorLabel(desiredMovement)}`,
       `applied    ${movementVectorLabel(smoothedMovement)}`,
       `yaw        ${localFacingYaw.toFixed(1)} → ${desiredFacingYaw.toFixed(1)}`,
