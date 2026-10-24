@@ -23,7 +23,8 @@ describe("town asset kit", () => {
     expect(SPEED_LAB_TOWN_ASSETS.some(asset => asset.id === "well")).toBe(true);
     expect(SPEED_LAB_TOWN_ASSETS.some(asset => asset.id === "gazebo")).toBe(true);
     expect(SPEED_LAB_TOWN_ASSETS.some(asset => asset.id === "marketStandA")).toBe(true);
-    expect(SPEED_LAB_TOWN_ASSETS.filter(asset => asset.id === "hedge" || asset.id === "fence")).toHaveLength(6);
+    expect(SPEED_LAB_TOWN_ASSETS.filter(asset => asset.id === "hedge" || asset.id === "fence")).toHaveLength(10);
+    expect(SPEED_LAB_TOWN_ASSETS.filter(asset => asset.name.startsWith("east-gate-")).length).toBeGreaterThanOrEqual(8);
     const xs = SPEED_LAB_TOWN_ASSETS.map(asset => asset.position[0]);
     const zs = SPEED_LAB_TOWN_ASSETS.map(asset => asset.position[2]);
     expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(65);

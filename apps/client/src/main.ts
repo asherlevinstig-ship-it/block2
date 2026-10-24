@@ -137,6 +137,8 @@ import { townNpcFaceStyle, type TownNpcMouthExpression } from "./town-npc-appear
 import { bindTownNpcRig, loadTownNpcAssets, TOWN_NPC_MODEL_YAW, transitionTownNpcRig } from "./town-npc-assets.js";
 import { SPEED_LAB_TOWN_TERRAIN, SPEED_LAB_TOWN_TERRAIN_DETAILS,
   type TownTerrainMaterial } from "./town-terrain.js";
+import { TOWN_ATMOSPHERE_PARTICLES, TOWN_ATMOSPHERE_PATCHES, TOWN_GATE_EMBANKMENTS,
+  TOWN_TEXTURE_STYLES } from "./town-atmosphere.js";
 import { rapidWorldRegionAt } from "./rapid-world.js";
 import {
   FastWorldVisualChunkStream,
@@ -1504,6 +1506,19 @@ let appliedGraphicsQualityTier: GraphicsQualityTier = initialGraphicsTier;
 let autoQualityState: AutoQualityState = { tier: initialGraphicsTier, slowSamples: 0, fastSamples: 0, changedAt: performance.now() };
 let callingParticleDensity = GRAPHICS_QUALITY_PROFILES[initialGraphicsTier].particleScale;
 
+// Fast World uses a warmer, brighter outdoor grade. The old blue-grey surface
+// grade made low-poly roof shadows read as black voids and flattened the town.
+const surfaceSunIntensity = fastWorldRequested ? 1.24 : 1.45;
+const surfaceSkyFillIntensity = fastWorldRequested ? .44 : .32;
+const surfaceAmbientBase = fastWorldRequested
+  ? { r: .47, g: .47, b: .41 }
+  : { r: .43, g: .48, b: .54 };
+const surfaceFogBase = fastWorldRequested
+  ? { r: .31, g: .39, b: .36 }
+  : { r: .21, g: .3, b: .32 };
+const surfaceFogStartBase = fastWorldRequested ? 44 : 34;
+const surfaceFogEndBase = fastWorldRequested ? 78 : 58;
+
 const app = new pc.Application(canvas, {
   graphicsDeviceOptions: { antialias: graphicsQualityMode !== "low", alpha: false },
   mouse: new pc.Mouse(canvas),
@@ -1512,11 +1527,11 @@ const app = new pc.Application(canvas, {
 app.setCanvasFillMode(pc.FILLMODE_FILL_WINDOW);
 app.setCanvasResolution(pc.RESOLUTION_AUTO);
 app.graphicsDevice.maxPixelRatio = GRAPHICS_QUALITY_PROFILES[initialGraphicsTier].renderScale;
-app.scene.ambientLight = new pc.Color(0.43, 0.48, 0.54);
+app.scene.ambientLight = new pc.Color(surfaceAmbientBase.r, surfaceAmbientBase.g, surfaceAmbientBase.b);
 app.scene.fog.type = pc.FOG_LINEAR;
-app.scene.fog.color = new pc.Color(0.21, 0.3, 0.32);
-app.scene.fog.start = 34;
-app.scene.fog.end = 58;
+app.scene.fog.color = new pc.Color(surfaceFogBase.r, surfaceFogBase.g, surfaceFogBase.b);
+app.scene.fog.start = surfaceFogStartBase;
+app.scene.fog.end = surfaceFogEndBase;
 app.start();
 const distantMobBatchGroup = app.batcher.addGroup("distant-mob-silhouettes", true, 96);
 const closeMobBatchGroup = app.batcher.addGroup("close-mob-rigs", true, 48);
@@ -1525,7 +1540,7 @@ if (gpuProfiler) gpuProfiler.enabled = true;
 
 const camera = new pc.Entity("camera");
 camera.addComponent("camera", {
-  clearColor: new pc.Color(0.21, 0.3, 0.32), farClip: 120, fov: 42,
+  clearColor: new pc.Color(surfaceFogBase.r, surfaceFogBase.g, surfaceFogBase.b), farClip: 120, fov: 42,
   toneMapping: pc.TONEMAP_ACES, gammaCorrection: pc.GAMMA_SRGB,
 });
 app.root.addChild(camera);
@@ -1548,7 +1563,7 @@ let indoorCameraBlend = 0;
 
 const light = new pc.Entity("sun");
 light.addComponent("light", {
-  type: "directional", color: new pc.Color(1, 0.93, 0.82), intensity: 1.45,
+  type: "directional", color: new pc.Color(1, 0.93, 0.82), intensity: surfaceSunIntensity,
   castShadows: initialGraphicsTier !== "low", shadowResolution: GRAPHICS_QUALITY_PROFILES[initialGraphicsTier].shadowResolution, shadowType: pc.SHADOW_PCF3_32F,
   shadowDistance: 55, normalOffsetBias: 0.06, shadowBias: 0.2, numCascades: 1,
 });
@@ -1556,7 +1571,7 @@ light.setEulerAngles(52, -28, 0);
 app.root.addChild(light);
 
 const skyFill = new pc.Entity("cool-sky-fill");
-skyFill.addComponent("light", { type: "directional", color: new pc.Color(0.53, 0.7, 1), intensity: 0.32, castShadows: false });
+skyFill.addComponent("light", { type: "directional", color: new pc.Color(0.53, 0.7, 1), intensity: surfaceSkyFillIntensity, castShadows: false });
 skyFill.setEulerAngles(35, 145, 0);
 app.root.addChild(skyFill);
 
@@ -2188,6 +2203,7 @@ const rapidTownActors: RapidTownActorVisual[] = [];
 const rapidTownLights: { entity: pc.Entity; phase: number }[] = [];
 const rapidTownSparks: { entity: pc.Entity; phase: number }[] = [];
 const rapidGreenwoodMotes: { entity: pc.Entity; x: number; y: number; z: number; phase: number }[] = [];
+const rapidTownAtmosphere: { entity: pc.Entity; kind: "leaf" | "pollen"; x: number; y: number; z: number; phase: number }[] = [];
 let rapidWorldRegionId = "";
 let requestRapidTownAssets = (): void => {};
 let requestRapidTownNpcAssets = (): void => {};
@@ -2198,15 +2214,19 @@ let rapidWorldTotalVisualChunks = 0;
 if (fastWorldRequested) {
   const townNpcFaceBatchGroup = app.batcher.addGroup("town-npc-faces", true, 32);
   const rapidWorldSceneryBatchGroup = app.batcher.addGroup("rapid-world-scenery", false, 512);
-  const grass = coloredMaterial(new pc.Color(.19, .37, .2));
+  const grass = createPaintedGroundMaterial(app, TOWN_TEXTURE_STYLES.meadow, [22, 17]);
   const grassLight = coloredMaterial(new pc.Color(.26, .46, .25));
-  const path = coloredMaterial(new pc.Color(.46, .34, .21));
-  const roadEdge = coloredMaterial(new pc.Color(.27, .22, .16));
-  const roadWarm = coloredMaterial(new pc.Color(.52, .46, .35));
-  const plazaEdge = coloredMaterial(new pc.Color(.29, .3, .27));
-  const plazaStone = coloredMaterial(new pc.Color(.48, .47, .4));
-  const forecourt = coloredMaterial(new pc.Color(.57, .49, .36));
-  const gardenSoil = coloredMaterial(new pc.Color(.24, .16, .085));
+  const townVerge = createPaintedGroundMaterial(app, TOWN_TEXTURE_STYLES.verge, [8, 5]);
+  const townMeadowOverlay = createPaintedGroundMaterial(app, TOWN_TEXTURE_STYLES.meadow, [5, 3]);
+  const townVergeOverlay = createPaintedGroundMaterial(app, TOWN_TEXTURE_STYLES.verge, [5, 3]);
+  const path = createPaintedGroundMaterial(app, TOWN_TEXTURE_STYLES.road, [24, 3]);
+  const roadEdge = createPaintedGroundMaterial(app, TOWN_TEXTURE_STYLES.roadEdge, [18, 2]);
+  const roadWarm = createPaintedGroundMaterial(app, TOWN_TEXTURE_STYLES.road, [10, 3]);
+  const roadWearOverlay = createPaintedGroundMaterial(app, TOWN_TEXTURE_STYLES.roadEdge, [5, 2]);
+  const plazaEdge = createPaintedGroundMaterial(app, TOWN_TEXTURE_STYLES.roadEdge, [9, 9]);
+  const plazaStone = createPaintedGroundMaterial(app, TOWN_TEXTURE_STYLES.plaza, [9, 9]);
+  const forecourt = createPaintedGroundMaterial(app, TOWN_TEXTURE_STYLES.forecourt, [5, 2]);
+  const gardenSoil = createPaintedGroundMaterial(app, TOWN_TEXTURE_STYLES.garden, [5, 2]);
   const stone = coloredMaterial(new pc.Color(.3, .34, .33));
   const townStone = coloredMaterial(new pc.Color(.35, .36, .33));
   const townStoneMid = coloredMaterial(new pc.Color(.47, .46, .4));
@@ -2278,6 +2298,33 @@ if (fastWorldRequested) {
   greenwoodMoteMaterial.blendType = pc.BLEND_ADDITIVE;
   greenwoodMoteMaterial.depthWrite = false;
   greenwoodMoteMaterial.update();
+  for (const [material, opacity] of [[townMeadowOverlay, .28], [townVergeOverlay, .34], [roadWearOverlay, .18],
+    [greenwoodMoss, .54], [greenwoodLeafLitter, .64]] as const) {
+    material.opacity = opacity;
+    material.blendType = pc.BLEND_NORMAL;
+    material.depthWrite = false;
+    material.update();
+  }
+  const townPollenMaterial = new pc.StandardMaterial();
+  townPollenMaterial.diffuse = new pc.Color(1, .82, .36);
+  townPollenMaterial.emissive = new pc.Color(.38, .2, .035);
+  townPollenMaterial.useLighting = false;
+  townPollenMaterial.blendType = pc.BLEND_ADDITIVE;
+  townPollenMaterial.depthWrite = false;
+  townPollenMaterial.update();
+  const townLeafMaterial = new pc.StandardMaterial();
+  townLeafMaterial.diffuse = new pc.Color(.54, .36, .12);
+  townLeafMaterial.opacity = .82;
+  townLeafMaterial.blendType = pc.BLEND_NORMAL;
+  townLeafMaterial.depthWrite = false;
+  townLeafMaterial.update();
+  const townWaterMaterial = new pc.StandardMaterial();
+  townWaterMaterial.diffuse = new pc.Color(.18, .55, .63);
+  townWaterMaterial.emissive = new pc.Color(.02, .12, .15);
+  townWaterMaterial.opacity = .84;
+  townWaterMaterial.blendType = pc.BLEND_NORMAL;
+  townWaterMaterial.gloss = .65;
+  townWaterMaterial.update();
   const rapidRegionGroundMaterials: Record<FastWorldVisualTheme, pc.StandardMaterial> = {
     forest: greenwoodGround,
     marsh: mistfenGround,
@@ -2580,7 +2627,7 @@ if (fastWorldRequested) {
   }
 
   addRapidWorldBox("realm-ground", grass, [220, .25, 172], [150, 7.875, 106]);
-  addBox(rapidPrototypeRoot, "west-green", grassLight, [62, .035, 74], [71, 8.02, 106]);
+  addBox(rapidPrototypeRoot, "west-green", townVerge, [62, .035, 74], [71, 8.02, 106]);
   for (const region of FAST_WORLD_REGION_DEFINITIONS) {
     const regionId = region.id as FastWorldStreamedRegionId;
     for (const chunk of fastWorldRegionVisualChunks(regionId))
@@ -2598,6 +2645,46 @@ if (fastWorldRequested) {
     const groundPatch = addRapidRegionShape("greenwood", `greenwood-ground:${patch.id}`, "cylinder", material,
       [patch.scale[0], .025, patch.scale[1]], [patch.position[0], 8.105, patch.position[1]]);
     groundPatch.setLocalEulerAngles(0, patch.yaw, 0);
+  }
+
+  // The town now fades into Greenwood through layered verge, moss and leaf
+  // textures. These shallow shapes communicate terrain without lying about
+  // the server-owned collision plane.
+  for (const patch of TOWN_ATMOSPHERE_PATCHES) {
+    const material = patch.material === "meadow" ? townMeadowOverlay
+      : patch.material === "verge" ? townVergeOverlay
+      : patch.material === "roadWear" ? roadWearOverlay
+      : patch.material === "moss" ? greenwoodMoss : greenwoodLeafLitter;
+    const scale: [number, number, number] = [patch.scale[0], .018, patch.scale[1]];
+    const position: [number, number, number] = [patch.position[0], 8.112, patch.position[1]];
+    const entity = patch.region === "greenwood"
+      ? addRapidRegionShape("greenwood", `town-threshold:${patch.id}`, "cylinder", material, scale, position)
+      : addTownShape(rapidPrototypeRoot, `town-atmosphere:${patch.id}`, "cylinder", material, scale, position);
+    entity.setLocalEulerAngles(0, patch.yaw, 0);
+  }
+  for (const bank of TOWN_GATE_EMBANKMENTS) {
+    const mound = addRapidRegionShape("greenwood", `town-threshold:${bank.id}`, "cylinder", greenwoodMoss,
+      [bank.width, bank.height, bank.depth], [bank.x, 8.02 + bank.height * .5, bank.z]);
+    mound.setLocalEulerAngles(0, bank.yaw, 0);
+  }
+
+  // Founder Well water and a subtle rune ring give the civic square a focal
+  // point even when the imported well model is viewed from a high camera.
+  addTownShape(rapidPrototypeRoot, "founder-well-rune", "cylinder", townRune, [2.45, .022, 2.45], [67, 8.145, 106]);
+  addTownShape(rapidPrototypeRoot, "founder-well-water", "cylinder", townWaterMaterial, [1.72, .03, 1.72], [67, 8.19, 106]);
+  const thresholdStone = addRapidRegionBox("greenwood", "east-road-milestone", townStoneLight,
+    [.52, 1.2, .4], [110.2, 8.64, 99.7]);
+  thresholdStone.setLocalEulerAngles(-4, 9, 5);
+  addRapidRegionBox("greenwood", "east-road-milestone-rune", townRune,
+    [.08, .34, .19], [110.55, 8.75, 99.7]).setLocalEulerAngles(0, 0, 45);
+
+  for (const particle of TOWN_ATMOSPHERE_PARTICLES) {
+    const streamed = particle.kind === "leaf" && particle.x >= 108;
+    const parent = streamed ? rapidRegionChunkRoot("greenwood", particle.x, particle.z) : rapidPrototypeRoot;
+    const entity = addTownShape(parent, `town-atmosphere:${particle.kind}`, particle.kind === "leaf" ? "box" : "sphere",
+      particle.kind === "leaf" ? townLeafMaterial : townPollenMaterial,
+      particle.kind === "leaf" ? [.12, .035, .25] : [.045, .045, .045], [particle.x, particle.y, particle.z]);
+    rapidTownAtmosphere.push({ entity, ...particle });
   }
 
   // Town of Beginnings terrain: a circular civic square, a readable street
@@ -13297,18 +13384,19 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
   exitTrail.enabled = visibilityCutaway;
   exitGuide.hidden = !visibilityCutaway;
   caveLight.setPosition(position.x, position.y + 1.2, position.z);
-  if (light.light) light.light.intensity = (1.45 + (0.45 - 1.45) * undergroundLightingBlend) * (1 - .36 * forestDungeonLightingBlend) * (1 - .58 * silverDepthsLightingBlend) * (1 - .72 * emberVaultLightingBlend);
-  if (skyFill.light) skyFill.light.intensity = 0.32 * (1 - undergroundLightingBlend) * (1 - .5 * forestDungeonLightingBlend) * (1 - .75 * emberVaultLightingBlend);
+  if (light.light) light.light.intensity = (surfaceSunIntensity + (0.45 - surfaceSunIntensity) * undergroundLightingBlend) * (1 - .36 * forestDungeonLightingBlend) * (1 - .58 * silverDepthsLightingBlend) * (1 - .72 * emberVaultLightingBlend);
+  if (skyFill.light) skyFill.light.intensity = surfaceSkyFillIntensity * (1 - undergroundLightingBlend) * (1 - .5 * forestDungeonLightingBlend) * (1 - .75 * emberVaultLightingBlend);
   if (caveLight.light) {
     const lanternOwned = (inventoryCounts.get("miners_lantern") ?? 0) > 0;
     const crystalLantern = (localDepthsRewardFlags & 32) !== 0 && silverDepthsLightingBlend > .2;
     caveLight.light.intensity = (crystalLantern ? 3.4 : lanternOwned ? 2.65 : 1.25) * undergroundLightingBlend;
     caveLight.light.range = crystalLantern ? 27 : lanternOwned ? 19 : silverDepthsLightingBlend > .2 ? 8 : 12;
   }
+  const greenwoodAmbientTarget = fastWorldRequested ? { r: .34, g: .43, b: .3 } : { r: .3, g: .43, b: .36 };
   const surfaceAmbient = {
-    r: 0.43 + (0.3 - 0.43) * greenwoodLightingBlend,
-    g: 0.48 + (0.43 - 0.48) * greenwoodLightingBlend,
-    b: 0.54 + (0.36 - 0.54) * greenwoodLightingBlend,
+    r: surfaceAmbientBase.r + (greenwoodAmbientTarget.r - surfaceAmbientBase.r) * greenwoodLightingBlend,
+    g: surfaceAmbientBase.g + (greenwoodAmbientTarget.g - surfaceAmbientBase.g) * greenwoodLightingBlend,
+    b: surfaceAmbientBase.b + (greenwoodAmbientTarget.b - surfaceAmbientBase.b) * greenwoodLightingBlend,
   };
   const ambientR = surfaceAmbient.r + (0.2 - surfaceAmbient.r) * undergroundLightingBlend;
   const ambientG = surfaceAmbient.g + (0.24 - surfaceAmbient.g) * undergroundLightingBlend;
@@ -13324,9 +13412,10 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
     depthsAmbientG + (.055 - depthsAmbientG) * emberVaultLightingBlend,
     depthsAmbientB + (.025 - depthsAmbientB) * emberVaultLightingBlend,
   );
-  const surfaceFogR = 0.21 + (0.11 - 0.21) * greenwoodLightingBlend;
-  const surfaceFogG = 0.3 + (0.24 - 0.3) * greenwoodLightingBlend;
-  const surfaceFogB = 0.32 + (0.2 - 0.32) * greenwoodLightingBlend;
+  const greenwoodFogTarget = fastWorldRequested ? { r: .13, g: .25, b: .17 } : { r: .11, g: .24, b: .2 };
+  const surfaceFogR = surfaceFogBase.r + (greenwoodFogTarget.r - surfaceFogBase.r) * greenwoodLightingBlend;
+  const surfaceFogG = surfaceFogBase.g + (greenwoodFogTarget.g - surfaceFogBase.g) * greenwoodLightingBlend;
+  const surfaceFogB = surfaceFogBase.b + (greenwoodFogTarget.b - surfaceFogBase.b) * greenwoodLightingBlend;
   const mixedFogR = surfaceFogR + (forestDungeonFog.r - surfaceFogR) * forestDungeonLightingBlend;
   const mixedFogG = surfaceFogG + (forestDungeonFog.g - surfaceFogG) * forestDungeonLightingBlend;
   const mixedFogB = surfaceFogB + (forestDungeonFog.b - surfaceFogB) * forestDungeonLightingBlend;
@@ -13338,8 +13427,10 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
     depthsFogG + (.025 - depthsFogG) * emberVaultLightingBlend,
     depthsFogB + (.012 - depthsFogB) * emberVaultLightingBlend,
   );
-  const baseFogStart = 34 + (forestDungeonFogStart - 34) * forestDungeonLightingBlend;
-  const baseFogEnd = 58 + (forestDungeonFogEnd - 58) * forestDungeonLightingBlend;
+  const regionalSurfaceFogStart = surfaceFogStartBase + ((fastWorldRequested ? 37 : 34) - surfaceFogStartBase) * greenwoodLightingBlend;
+  const regionalSurfaceFogEnd = surfaceFogEndBase + ((fastWorldRequested ? 66 : 58) - surfaceFogEndBase) * greenwoodLightingBlend;
+  const baseFogStart = regionalSurfaceFogStart + (forestDungeonFogStart - regionalSurfaceFogStart) * forestDungeonLightingBlend;
+  const baseFogEnd = regionalSurfaceFogEnd + (forestDungeonFogEnd - regionalSurfaceFogEnd) * forestDungeonLightingBlend;
   const mixedDepthsFogStart = baseFogStart + (depthsFogStart - baseFogStart) * silverDepthsLightingBlend;
   const mixedDepthsFogEnd = baseFogEnd + (depthsFogEnd - baseFogEnd) * silverDepthsLightingBlend;
   app.scene.fog.start = mixedDepthsFogStart + (19 - mixedDepthsFogStart) * emberVaultLightingBlend;
@@ -15190,8 +15281,23 @@ app.on("update", (dt: number) => {
       const drift = townTime * .78 + mote.phase;
       mote.entity.setLocalPosition(mote.x + Math.sin(drift * 1.7) * .22,
         mote.y + Math.sin(drift * 2.4) * .18, mote.z + Math.cos(drift * 1.35) * .22);
-      const pulse = .72 + Math.sin(drift * 3.1) * .22;
+      const pulse = .075 * (.72 + Math.sin(drift * 3.1) * .22);
       mote.entity.setLocalScale(pulse, pulse, pulse);
+    }
+    for (const particle of rapidTownAtmosphere) {
+      const drift = townTime + particle.phase;
+      if (particle.kind === "leaf") {
+        const travel = (townTime * .085 + particle.phase * .13) % 1;
+        particle.entity.setLocalPosition(particle.x + travel * 2.4 - 1.2,
+          particle.y + Math.sin(drift * 1.8) * .4 - travel * .35,
+          particle.z + Math.cos(drift * 1.3) * .55);
+        particle.entity.setLocalEulerAngles(Math.sin(drift * 2.4) * 32, drift * 42, Math.cos(drift * 1.9) * 26);
+      } else {
+        particle.entity.setLocalPosition(particle.x + Math.sin(drift * 1.15) * .34,
+          particle.y + Math.sin(drift * 1.7) * .22, particle.z + Math.cos(drift * .9) * .34);
+        const pulse = .045 * (.72 + Math.sin(drift * 2.6) * .18);
+        particle.entity.setLocalScale(pulse, pulse, pulse);
+      }
     }
   }
   lastPresentationWaitMs = Math.max(0, dt * 1000 - lastEngineUpdateMs - lastRenderMs);

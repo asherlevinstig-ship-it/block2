@@ -99,6 +99,16 @@ const TOWN_DECORATIONS: readonly TownAssetPlacement[] = [
   { id: "rockSmall", name: "east-road-rock", position: [123, 8.15, 97], yaw: -28, scale: .76 },
   { id: "rockLarge", name: "south-gate-rock", position: [124, 8.15, 114], yaw: 56, scale: .8 },
   { id: "rockSmall", name: "south-road-rock", position: [108, 8.15, 116], yaw: 15, scale: .68 },
+
+  // East gate staging: town order gradually gives way to Greenwood growth.
+  { id: "fence", name: "east-gate-fence-north-a", position: [101.5, 8.15, 99.2], yaw: 90, scale: 1.2 },
+  { id: "fence", name: "east-gate-fence-north-b", position: [104.7, 8.15, 99.3], yaw: 90, scale: 1.15 },
+  { id: "fence", name: "east-gate-fence-south-a", position: [101.5, 8.15, 112.8], yaw: 90, scale: 1.2 },
+  { id: "fence", name: "east-gate-fence-south-b", position: [104.7, 8.15, 112.7], yaw: 90, scale: 1.15 },
+  { id: "treeHighRound", name: "east-gate-tree-north", position: [105.4, 8.15, 96.2], yaw: 26, scale: 1.38 },
+  { id: "treeCrooked", name: "east-gate-tree-south", position: [105.8, 8.15, 116.2], yaw: -34, scale: 1.45 },
+  { id: "rockSmall", name: "east-gate-marker-rock-north", position: [107.2, 8.15, 100.2], yaw: 38, scale: .66 },
+  { id: "rockLarge", name: "east-gate-marker-rock-south", position: [107.5, 8.15, 112.1], yaw: -24, scale: .7 },
 ] as const;
 
 export const SPEED_LAB_TOWN_ASSETS: readonly TownAssetPlacement[] = [
