@@ -154,6 +154,7 @@ import {
   FAST_WORLD_MAP_BOUNDS,
   FAST_WORLD_NAV_LANDMARKS,
   FAST_WORLD_SIGNPOSTS,
+  closestFastWorldMiniBoss,
   discoverFastWorldLandmarks,
   fastWorldDestinationDirection,
   fastWorldMapPoint,
@@ -2248,6 +2249,11 @@ let fastWorldRegionReveal: HTMLElement | null = null;
 let fastWorldRegionRevealTimer = 0;
 let fastWorldDestinationHud: HTMLElement | null = null;
 let fastWorldDestination: FastWorldNavPoint | null = null;
+let fastWorldNearbyMiniBoss: (FastWorldNavPoint & { distance: number; level: number }) | null = null;
+let fastWorldMiniBossPanel: HTMLElement | null = null;
+let fastWorldMiniBossName: HTMLElement | null = null;
+let fastWorldMiniBossDistance: HTMLElement | null = null;
+let lastFastWorldMiniBossCheckAt = -Infinity;
 let lastFastWorldMapDrawAt = -Infinity;
 
 const saveFastWorldNavigation = (): void => {
@@ -2273,6 +2279,7 @@ const fastWorldMapTargets = (): FastWorldNavPoint[] => [
     regionId: region.id, kind: "connection" as const, discoveryRadius: 0,
   })),
   ...FAST_WORLD_NAV_LANDMARKS.filter(landmark => fastWorldNavigationState.landmarks.has(landmark.id)),
+  ...(fastWorldNearbyMiniBoss ? [fastWorldNearbyMiniBoss] : []),
 ];
 
 const drawFastWorldMap = (position: { x: number; z: number }, facingYawDegrees: number, now: number, force = false): void => {
@@ -2315,6 +2322,11 @@ const drawFastWorldMap = (position: { x: number; z: number }, facingYawDegrees: 
   for (const sign of FAST_WORLD_SIGNPOSTS) if (fastWorldNavigationState.regions.has(sign.regionId)) point(sign, "#e7b94f", 2.5);
   for (const target of fastWorldMapTargets()) point(target,
     target.kind === "town" ? "#77ed91" : target.kind === "leader" ? "#ffbd55" : "#b6e27c", target.kind === "leader" ? 4 : 3);
+  if (fastWorldNearbyMiniBoss) {
+    const boss = fastWorldMapPoint(fastWorldNearbyMiniBoss.x, fastWorldNearbyMiniBoss.z, width, height);
+    ctx.fillStyle = "#2a1507"; ctx.font = "900 8px system-ui"; ctx.textAlign = "center";
+    ctx.fillText("♛", boss.x, boss.y + 3);
+  }
   if (fastWorldDestination) {
     const from = fastWorldMapPoint(position.x, position.z, width, height);
     const to = fastWorldMapPoint(fastWorldDestination.x, fastWorldDestination.z, width, height);
@@ -3492,9 +3504,18 @@ if (fastWorldRequested) {
   fastWorldMapPanel = document.createElement("aside");
   fastWorldMapPanel.id = "fast-world-map";
   fastWorldMapPanel.dataset.expanded = "false";
-  fastWorldMapPanel.innerHTML = '<header><strong>REALM MAP</strong><span>M · click a discovered marker</span></header><canvas width="224" height="172" aria-label="Fast World regional map"></canvas><footer>Undiscovered landmarks appear when approached.</footer>';
+  fastWorldMapPanel.innerHTML = '<header><strong>REALM MAP</strong><span>M · click a discovered marker</span></header><canvas width="224" height="172" aria-label="Fast World regional map"></canvas><section class="fast-world-nearby-leader" hidden><small>♛ NEARBY MINI-BOSS</small><strong></strong><span></span></section><footer>Undiscovered landmarks appear when approached.</footer>';
   fastWorldMapCanvas = fastWorldMapPanel.querySelector("canvas");
   fastWorldMapDetail = fastWorldMapPanel.querySelector("footer");
+  fastWorldMiniBossPanel = fastWorldMapPanel.querySelector(".fast-world-nearby-leader");
+  fastWorldMiniBossName = fastWorldMiniBossPanel?.querySelector("strong") ?? null;
+  fastWorldMiniBossDistance = fastWorldMiniBossPanel?.querySelector("span") ?? null;
+  fastWorldMiniBossPanel?.addEventListener("click", () => {
+    if (!fastWorldNearbyMiniBoss) return;
+    fastWorldDestination = fastWorldNearbyMiniBoss;
+    lastFastWorldMapDrawAt = -Infinity;
+    if (fastWorldMapDetail) fastWorldMapDetail.textContent = `GUIDING · ${fastWorldNearbyMiniBoss.name}`;
+  });
   fastWorldMapCanvas?.addEventListener("click", event => {
     if (!fastWorldMapCanvas) return;
     const rect = fastWorldMapCanvas.getBoundingClientRect();
@@ -15946,6 +15967,32 @@ app.on("update", (dt: number) => {
       saveFastWorldNavigation();
       const landmark = newlyDiscovered[0]!;
       showFastWorldReveal(landmark.name, `${rapidWorldRegionAt(landmark.x, landmark.z).name} · now marked on the Realm Map`, "landmark");
+    }
+    if (customUpdateStartedAt - lastFastWorldMiniBossCheckAt >= 100) {
+      lastFastWorldMiniBossCheckAt = customUpdateStartedAt;
+      const previousNearbyMiniBossId = fastWorldNearbyMiniBoss?.id ?? null;
+      const nearbyMiniBoss = closestFastWorldMiniBoss(playerPosition, [...mobVisuals.entries()].map(([id, visual]) => ({
+        id, name: visual.state.name, x: visual.state.x, z: visual.state.z, level: visual.state.level,
+        alive: visual.state.alive, isMiniBoss: visual.state.isMiniBoss,
+      })));
+      if (nearbyMiniBoss) {
+        const bossRegion = FAST_WORLD_REGION_DEFINITIONS.find(({ bounds }) => nearbyMiniBoss.x >= bounds.minX
+          && nearbyMiniBoss.x <= bounds.maxX && nearbyMiniBoss.z >= bounds.minZ && nearbyMiniBoss.z <= bounds.maxZ);
+        fastWorldNearbyMiniBoss = {
+          id: `proximity-miniboss:${nearbyMiniBoss.id}`, name: nearbyMiniBoss.name,
+          x: nearbyMiniBoss.x, z: nearbyMiniBoss.z, regionId: bossRegion?.id ?? "town", kind: "leader",
+          discoveryRadius: 0, distance: nearbyMiniBoss.distance, level: nearbyMiniBoss.level,
+        };
+        if (fastWorldDestination?.id === fastWorldNearbyMiniBoss.id) fastWorldDestination = fastWorldNearbyMiniBoss;
+      } else {
+        fastWorldNearbyMiniBoss = null;
+        if (previousNearbyMiniBossId && fastWorldDestination?.id === previousNearbyMiniBossId) fastWorldDestination = null;
+      }
+      if (fastWorldMiniBossPanel) fastWorldMiniBossPanel.hidden = !fastWorldNearbyMiniBoss;
+      if (fastWorldMiniBossName && fastWorldNearbyMiniBoss)
+        fastWorldMiniBossName.textContent = `${fastWorldNearbyMiniBoss.name} · LV ${fastWorldNearbyMiniBoss.level}`;
+      if (fastWorldMiniBossDistance && fastWorldNearbyMiniBoss)
+        fastWorldMiniBossDistance.textContent = `${Math.ceil(fastWorldNearbyMiniBoss.distance)}m · click to guide`;
     }
     if (fastWorldDestination) {
       const direction = fastWorldDestinationDirection(playerPosition, fastWorldDestination, cameraOrbit.yaw);

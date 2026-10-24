@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   FAST_WORLD_NAV_LANDMARKS,
   FAST_WORLD_SIGNPOSTS,
+  closestFastWorldMiniBoss,
   discoverFastWorldLandmarks,
   fastWorldDestinationDirection,
   fastWorldMapPoint,
@@ -36,5 +37,16 @@ describe("Fast World navigation", () => {
   it("contains the authored Greenwood and Mistfen discoveries", () => {
     expect(FAST_WORLD_NAV_LANDMARKS.filter(point => point.regionId === "greenwood")).toHaveLength(5);
     expect(FAST_WORLD_NAV_LANDMARKS.filter(point => point.regionId === "mistfen")).toHaveLength(5);
+  });
+
+  it("shows only the closest living miniboss inside proximity", () => {
+    const mobs = [
+      { id: "near", name: "Near Keeper", x: 20, z: 0, level: 4, alive: true, isMiniBoss: true },
+      { id: "closer", name: "Closer Keeper", x: 12, z: 0, level: 6, alive: true, isMiniBoss: true },
+      { id: "dead", name: "Dead Keeper", x: 2, z: 0, level: 8, alive: false, isMiniBoss: true },
+      { id: "ordinary", name: "Ordinary", x: 1, z: 0, level: 1, alive: true, isMiniBoss: false },
+    ];
+    expect(closestFastWorldMiniBoss({ x: 0, z: 0 }, mobs)).toMatchObject({ id: "closer", distance: 12 });
+    expect(closestFastWorldMiniBoss({ x: 100, z: 100 }, mobs)).toBeNull();
   });
 });

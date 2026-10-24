@@ -13,6 +13,7 @@ export type FastWorldNavPoint = {
 };
 
 export const FAST_WORLD_MAP_BOUNDS = { minX: 40, maxX: 256, minZ: 20, maxZ: 192 } as const;
+export const FAST_WORLD_MINIBOSS_PROXIMITY = 34;
 
 export const FAST_WORLD_NAV_LANDMARKS: readonly FastWorldNavPoint[] = [
   ...GREENWOOD_LANDMARKS.map(landmark => ({
@@ -87,4 +88,14 @@ export function fastWorldDestinationDirection(
  * the upward-authored arrow needs a half-turn with yaw applied clockwise. */
 export function fastWorldPlayerMapRotation(facingYawDegrees: number): number {
   return Math.PI - facingYawDegrees * Math.PI / 180;
+}
+
+export function closestFastWorldMiniBoss<T extends {
+  id: string; name: string; x: number; z: number; level: number; alive: boolean; isMiniBoss: boolean;
+}>(position: { x: number; z: number }, mobs: readonly T[], maximumDistance = FAST_WORLD_MINIBOSS_PROXIMITY): (T & { distance: number }) | null {
+  return mobs.flatMap(mob => {
+    if (!mob.alive || !mob.isMiniBoss) return [];
+    const distance = Math.hypot(mob.x - position.x, mob.z - position.z);
+    return distance <= maximumDistance ? [{ ...mob, distance }] : [];
+  }).sort((a, b) => a.distance - b.distance)[0] ?? null;
 }

@@ -4166,6 +4166,18 @@ html.fast-world-active :is(
 #fast-world-map header strong { color: #e9d783; font: 900 10px/1.2 system-ui; letter-spacing: .11em; }
 #fast-world-map header span { color: #7ea292; font: 650 8px/1.2 system-ui; }
 #fast-world-map canvas { display: block; width: 100%; height: auto; border-block: 1px solid #314c3f; cursor: crosshair; }
+#fast-world-map .fast-world-nearby-leader {
+  display: grid;
+  gap: 2px;
+  padding: 7px 9px;
+  border-bottom: 1px solid #6b4b28;
+  background: linear-gradient(90deg, #2d190bcc, #15150dee);
+  cursor: pointer;
+}
+#fast-world-map .fast-world-nearby-leader[hidden] { display: none; }
+#fast-world-map .fast-world-nearby-leader small { color: #ffbd55; font: 900 8px/1.15 system-ui; letter-spacing: .08em; }
+#fast-world-map .fast-world-nearby-leader strong { overflow: hidden; color: #fff1c7; font: 850 10px/1.2 system-ui; text-overflow: ellipsis; white-space: nowrap; }
+#fast-world-map .fast-world-nearby-leader span { color: #d5ae73; font: 700 8px/1.2 system-ui; }
 #fast-world-map footer { min-height: 12px; padding: 6px 9px 7px; color: #91aa9d; font: 650 8px/1.25 system-ui; }
 
 #fast-world-destination {
