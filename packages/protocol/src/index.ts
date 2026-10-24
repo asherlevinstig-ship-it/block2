@@ -136,8 +136,8 @@ export interface MineralDepositStatus { id: string; available: number; total: nu
 export const WORLD_BOOTSTRAP_CHUNK_RADIUS = 3;
 export const WORLD_STREAM_CHUNK_RADIUS = 3;
 
-/** Shared collision footprint for the lightweight fast-world prototype.
- * Both prediction and authority must use these exact bounds: the prototype
+/** Shared collision footprint for the lightweight Fast World.
+ * Both prediction and authority must use these exact bounds: the Fast World
  * renders its own low-poly scenery, but still uses voxel cells for collision. */
 export const RAPID_PRACTICE_ARENA = {
   minX: 40,
@@ -1957,7 +1957,7 @@ export interface WeaponAttackReleased {
   targetY: number;
   targetZ: number;
   travelMs: number;
-  /** Speed Lab-only visual identity; absent in the standard game. */
+  /** Fast World-only visual identity; absent in the archived voxel game. */
   rapidStyle?: "crescent" | "arrow" | "orb";
 }
 

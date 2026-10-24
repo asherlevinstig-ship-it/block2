@@ -221,7 +221,7 @@ describe("voxel character animation", () => {
     expect(strafe.leftArmRoll).toBeGreaterThan(forward.leftArmRoll);
   });
 
-  it("increases cadence for the faster Speed Lab run", () => {
+  it("increases cadence for the faster Fast World run", () => {
     const normal = advanceLocomotionAnimation({ phase: 0, weight: 1 }, 4.2, 1 / 60, 4.2);
     const rapid = advanceLocomotionAnimation({ phase: 0, weight: 1 }, 5.8, 1 / 60, 5.8);
     expect(rapid.phase).toBeGreaterThan(normal.phase);

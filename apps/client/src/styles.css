@@ -4100,8 +4100,8 @@ body:has(#loot-pack-decision:not([hidden])) #waypoint-guide { display: none; }
   #tablet-camera-hint { animation: none; }
 }
 
-/* The 2.5D Speed Lab is a focused combat prototype, not another world-HUD state. */
-html.rapid-prototype-active :is(
+/* The fast low-poly world is the canonical game; legacy voxel HUD is suppressed. */
+html.fast-world-active :is(
   #location-readout,
   #first-steps,
   #trait-slot,
@@ -4124,21 +4124,55 @@ html.rapid-prototype-active :is(
 #rapid-practice-reward:not([hidden]) { display: grid; }
 
 @media (max-width: 760px) {
-  html.rapid-prototype-active #rapid-prototype-badge {
+  html.fast-world-active #fast-world-badge {
     top: calc(46px + env(safe-area-inset-top)) !important;
     left: max(10px, env(safe-area-inset-left)) !important;
     max-width: calc(100vw - 86px);
     box-sizing: border-box;
   }
-  html.rapid-prototype-active #rapid-practice-reward .rapid-reward-shell {
+  html.fast-world-active #rapid-practice-reward .rapid-reward-shell {
     max-height: calc(100dvh - 24px);
     overflow-y: auto;
     padding: 17px !important;
   }
-  html.rapid-prototype-active #rapid-practice-reward .rapid-reward-choices {
+  html.fast-world-active #rapid-practice-reward .rapid-reward-choices {
     grid-template-columns: 1fr !important;
     margin: 14px 0 !important;
   }
+}
+
+#legacy-voxel-notice {
+  position: fixed;
+  z-index: 12000;
+  top: 12px;
+  left: 50%;
+  display: grid;
+  grid-template-columns: auto auto auto;
+  align-items: center;
+  gap: 12px;
+  max-width: calc(100vw - 24px);
+  padding: 9px 12px;
+  border: 1px solid #d5ad4f;
+  border-radius: 10px;
+  background: #17140fee;
+  color: #eee6d0;
+  box-shadow: 0 5px 24px #0008;
+  transform: translateX(-50%);
+  font: 600 12px/1.25 system-ui, sans-serif;
+}
+#legacy-voxel-notice strong { color: #ffd46b; letter-spacing: .08em; }
+#legacy-voxel-notice span { color: #c9c1ad; }
+#legacy-voxel-notice a {
+  padding: 6px 9px;
+  border-radius: 7px;
+  background: #2f7957;
+  color: white;
+  text-decoration: none;
+  white-space: nowrap;
+}
+@media (max-width: 720px) {
+  #legacy-voxel-notice { grid-template-columns: 1fr auto; }
+  #legacy-voxel-notice span { display: none; }
 }
 
 /* Measured tablet clearances: social history, vitals, map and thumb zones never share pixels. */

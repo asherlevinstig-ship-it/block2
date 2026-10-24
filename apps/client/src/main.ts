@@ -121,6 +121,7 @@ import { bindTownNpcRig, loadTownNpcAssets, TOWN_NPC_MODEL_YAW, transitionTownNp
 import { SPEED_LAB_TOWN_TERRAIN, SPEED_LAB_TOWN_TERRAIN_DETAILS,
   type TownTerrainMaterial } from "./town-terrain.js";
 import { rapidWorldRegionAt } from "./rapid-world.js";
+import { gameExperience, usesFastWorld } from "./game-experience.js";
 import {
   FIRST_PERSON_EYE_HEIGHT,
   FIRST_PERSON_FOV,
@@ -1030,14 +1031,22 @@ function renderGreenwoodMastery(position: { x: number; y: number; z: number }): 
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game")!;
 const initialPageQuery = new URLSearchParams(window.location.search);
-const rapidPrototypeRequested = initialPageQuery.get("room") === "practice" && initialPageQuery.get("prototype") === "2d";
-document.documentElement.classList.toggle("rapid-prototype-active", rapidPrototypeRequested);
+const initialGameExperience = gameExperience(initialPageQuery);
+const fastWorldRequested = usesFastWorld(initialPageQuery);
+document.documentElement.classList.toggle("fast-world-active", fastWorldRequested);
+document.documentElement.classList.toggle("legacy-voxel-active", initialGameExperience === "legacy-voxel");
 let rapidPracticeHaste = 0;
 let rapidPracticeRewardPanel: HTMLElement | null = null;
 let rapidPracticeRewardTitle: HTMLElement | null = null;
 let rapidPracticeRewardDetail: HTMLElement | null = null;
 let rapidPracticeRewardChoices: HTMLElement | null = null;
 const status = document.querySelector<HTMLElement>("#status")!;
+if (initialGameExperience === "legacy-voxel") {
+  const archiveNotice = document.createElement("aside");
+  archiveNotice.id = "legacy-voxel-notice";
+  archiveNotice.innerHTML = '<strong>ARCHIVED VOXEL WORLD</strong><span>Reference build only · active development continues in the Fast World.</span><a href="/">OPEN FAST WORLD</a>';
+  document.body.append(archiveNotice);
+}
 const targetLabel = document.querySelector<HTMLElement>("#target")!;
 const tavernDialogue = document.querySelector<HTMLElement>("#tavern-dialogue")!;
 const potionBuy = document.querySelector<HTMLButtonElement>("#potion-buy")!;
@@ -1500,7 +1509,7 @@ const CAMERA_ZOOM_STORAGE_KEY = "blockcraft-tablet-camera-zoom-v1";
 const storedCameraDistance = (() => {
   try { return Number(window.localStorage.getItem(CAMERA_ZOOM_STORAGE_KEY)) || undefined; } catch { return undefined; }
 })();
-let cameraOrbit = rapidPrototypeRequested
+let cameraOrbit = fastWorldRequested
   ? { ...initialCameraOrbit(39), pitch: Math.PI * .4, yawSpeed: 0, pitchSpeed: 0 }
   : initialCameraOrbit(storedCameraDistance);
 const CAMERA_VIEW_STORAGE_KEY = "blockcraft-camera-view-v1";
@@ -1533,7 +1542,7 @@ caveLight.enabled = false;
 app.root.addChild(caveLight);
 
 const worldRoot = new pc.Entity("voxel-world");
-worldRoot.enabled = !rapidPrototypeRequested;
+worldRoot.enabled = !fastWorldRequested;
 app.root.addChild(worldRoot);
 const caveFogRoot = new pc.Entity("undiscovered-cave");
 app.root.addChild(caveFogRoot);
@@ -1745,8 +1754,8 @@ function readCollisionWorldBlock(x: number, y: number, z: number): BlockId {
   if (y >= CHUNK_HEIGHT) return Block.Air;
   const address = worldToChunk(x, z);
   const chunk = chunks.get(chunkKey(address.chunkX, address.chunkZ));
-  if (!chunk) return rapidPrototypeRequested && rapidPracticeCollisionCellSolid(x, y, z)
-    ? Block.Stone : rapidPrototypeRequested ? Block.Air : Block.Bedrock;
+  if (!chunk) return fastWorldRequested && rapidPracticeCollisionCellSolid(x, y, z)
+    ? Block.Stone : fastWorldRequested ? Block.Air : Block.Bedrock;
   return (chunk.blocks[chunkIndex(address.localX, y, address.localZ)] ?? Block.Air) as BlockId;
 }
 
@@ -1858,7 +1867,7 @@ function queueChunkRebuild(chunk: ClientChunk): void {
 }
 
 function processNextChunkRebuild(position: { x: number; z: number }): void {
-  if (rapidPrototypeRequested) return;
+  if (fastWorldRequested) return;
   if (queuedChunkRebuilds.size === 0) return;
   const center = worldToChunk(position.x, position.z);
   const key = nearestQueuedChunkKey(queuedChunkRebuilds, center);
@@ -1923,7 +1932,7 @@ function rebuildChunkAndNeighbors(chunk: ClientChunk, x: number, z: number): voi
 function updateActiveChunkMeshes(position: { x: number; z: number }): void {
   const address = worldToChunk(position.x, position.z);
   const regionKey = chunkKey(address.chunkX, address.chunkZ);
-  if (rapidPrototypeRequested) {
+  if (fastWorldRequested) {
     for (const chunk of chunks.values()) chunk.root.enabled = false;
     queuedChunkRebuilds.clear();
     // The lightweight renderer does not need voxel meshes, but prediction still
@@ -1982,7 +1991,7 @@ function applyChunkRegion(payload: ChunkRegion): void {
   }
   activeChunkViewKey = null;
   updateActiveChunkMeshes(position);
-  if (!rapidPrototypeRequested) {
+  if (!fastWorldRequested) {
     sceneDressing.rebuild(readWorldBlock, [...chunks.values()], indoorRoofBuilding);
     sceneDressing.setSurfaceVisible(!playerCutaway.active);
   }
@@ -2135,7 +2144,7 @@ function addBox(
 
 const rapidPrototypeRoot = new pc.Entity("rapid-2d-speed-lab");
 app.root.addChild(rapidPrototypeRoot);
-rapidPrototypeRoot.enabled = rapidPrototypeRequested;
+rapidPrototypeRoot.enabled = fastWorldRequested;
 const rapidTownSmoke: { entity: pc.Entity; x: number; y: number; z: number; phase: number; drift: number }[] = [];
 const rapidTownBanners: { entity: pc.Entity; phase: number }[] = [];
 interface RapidTownActorVisual {
@@ -2157,7 +2166,7 @@ const rapidTownSparks: { entity: pc.Entity; phase: number }[] = [];
 let rapidWorldRegionId = "";
 let requestRapidTownAssets = (): void => {};
 let requestRapidTownNpcAssets = (): void => {};
-if (rapidPrototypeRequested) {
+if (fastWorldRequested) {
   const townNpcFaceBatchGroup = app.batcher.addGroup("town-npc-faces", true, 32);
   const rapidWorldSceneryBatchGroup = app.batcher.addGroup("rapid-world-scenery", false, 512);
   const grass = coloredMaterial(new pc.Color(.19, .37, .2));
@@ -2729,7 +2738,7 @@ if (rapidPrototypeRequested) {
   }
 
   // Four readable free-roam biomes continue the original game's regional journey.
-  // Their shapes are deliberately low-poly and batched so the faster prototype keeps its pace.
+  // Their shapes are deliberately low-poly and batched so the Fast World keeps its pace.
   for (const [x, z, size] of [[113,83,1.7],[119,127,1.9],[125,86,1.6],[132,130,1.8],[139,83,2],[147,88,1.7],
     [151,126,1.8],[117,114,1.5],[143,116,1.65],[130,96,1.45],[151,98,1.5],[123,103,1.35]] as const) {
     addRapidWorldShape("greenwood-tree-trunk", "cylinder", trunk, [.34 * size, 1.25 * size, .34 * size], [x, 8.62 + size * .42, z]);
@@ -2811,8 +2820,8 @@ if (rapidPrototypeRequested) {
   addRapidWorldBox("east-edge", boundary, [.65, .5, 172], [259.7, 8.25, 106]);
 
   const badge = document.createElement("aside");
-  badge.id = "rapid-prototype-badge";
-  badge.innerHTML = "<strong>TOWN OF BEGINNINGS · SAFE</strong><span>East gate leads to Greenwood · fixed regional difficulty</span><small id=\"rapid-prototype-metrics\">Measuring frame and input timing…</small>";
+  badge.id = "fast-world-badge";
+  badge.innerHTML = "<strong>TOWN OF BEGINNINGS · SAFE</strong><span>East gate leads to Greenwood · fixed regional difficulty</span><small id=\"fast-world-metrics\">Measuring frame and input timing…</small>";
   badge.style.cssText = "position:fixed;left:18px;top:68px;z-index:18;display:grid;gap:2px;padding:9px 13px;border:1px solid rgba(117,242,180,.55);border-radius:10px;background:rgba(6,18,14,.86);color:#d9ffdf;font:700 12px/1.2 system-ui;letter-spacing:.08em;pointer-events:none;box-shadow:0 7px 24px rgba(0,0,0,.32)";
   const detail = badge.querySelector("span") as HTMLElement;
   detail.style.cssText = "color:#9fc6ac;font-size:10px;font-weight:600;letter-spacing:.02em";
@@ -5969,7 +5978,7 @@ function renderBuildPath(update: BuildPathUpdate): void {
   lastBuildPathUpdate = update;
   if (!callingFirstOnboardingPending
     && shouldStartCallingFirstJourney(firstStepsIndex, localCharacterProgression.level,
-      rapidPrototypeRequested && !update.selectedPathId)) {
+      fastWorldRequested && !update.selectedPathId)) {
     callingFirstOnboardingPending = true;
     try { window.localStorage.setItem(callingFirstOnboardingKey, "pending"); } catch { /* Storage may be unavailable. */ }
   }
@@ -6149,8 +6158,8 @@ function updateMomentum(stacksValue: number): void {
 }
 
 function localMovementSpeed(): number {
-  const prototypeMultiplier = rapidPrototypeRequested ? 1.38 : 1;
-  const baseSpeed = (localDefending ? 2.1 : 4.2) * prototypeMultiplier * armourStats(localArmourId).speed;
+  const fastWorldMultiplier = fastWorldRequested ? 1.38 : 1;
+  const baseSpeed = (localDefending ? 2.1 : 4.2) * fastWorldMultiplier * armourStats(localArmourId).speed;
   const traitSpeed = localTraitId === "momentum"
     ? baseSpeed * (1 + localMomentumStacks * MOMENTUM_TRAIT.movementSpeedBonusPerStack)
     : baseSpeed;
@@ -6212,13 +6221,13 @@ function updateDangerZone(tierValue: number, position = localPlayer.getPosition(
 function actionDuration(step: number): number {
   if (step < 1 || step > 3 || localActionMainHandId === null) return PRIMARY_ACTION_DURATION_MS;
   return rapidCombatDuration(WEAPON_ATTACK_DEFINITIONS[localActionMainHandId].attacks[step - 1]?.durationMs ?? PRIMARY_ACTION_DURATION_MS,
-    rapidPrototypeRequested, rapidPracticeHaste);
+    fastWorldRequested, rapidPracticeHaste);
 }
 
 function remoteActionDuration(mainHandId: MainHandId | null, step: number): number {
   if (!mainHandId || step < 1 || step > 3) return PRIMARY_ACTION_DURATION_MS;
   return rapidCombatDuration(WEAPON_ATTACK_DEFINITIONS[mainHandId].attacks[step - 1]?.durationMs ?? PRIMARY_ACTION_DURATION_MS,
-    rapidPrototypeRequested, rapidPracticeHaste);
+    fastWorldRequested, rapidPracticeHaste);
 }
 
 function powerDuration(powerId: PowerId | null): number {
@@ -9464,7 +9473,7 @@ function rangedFireAllowed(requirePointerAim = true): boolean {
     ...(rapidPracticeRewardPanel ? [rapidPracticeRewardPanel] : [])];
   return Boolean(room && worldReady && (interactionMode === "combat" || !requirePointerAim)
     && (!requirePointerAim || rangedPointer.active) && !document.hidden
-    && continuousAttackEnabled(WEAPON_ATTACK_DEFINITIONS[localMainHandId].projectileTravelMs > 0, rapidPrototypeRequested)
+    && continuousAttackEnabled(WEAPON_ATTACK_DEFINITIONS[localMainHandId].projectileTravelMs > 0, fastWorldRequested)
     && combatMenuPanels.every(panel => panel.hidden === true) && !tradeUI.isOpen() && !playerInteractionUI.isOpen()
     && !(document.activeElement instanceof HTMLInputElement || document.activeElement instanceof HTMLTextAreaElement)
     && !powerAimActive && !specialAimActive && localPowerStartedAt === null && !localDefending);
@@ -9477,7 +9486,7 @@ function mouseRangedYaw(fallback: number): number {
   return rangedAimYaw(camera.camera.screenToWorld(x, y, camera.camera.nearClip), camera.camera.screenToWorld(x, y, camera.camera.farClip), localPlayer.getPosition(), fallback);
 }
 function updateRangedReticle(): void {
-  const continuous = continuousAttackEnabled(WEAPON_ATTACK_DEFINITIONS[localMainHandId].projectileTravelMs > 0, rapidPrototypeRequested);
+  const continuous = continuousAttackEnabled(WEAPON_ATTACK_DEFINITIONS[localMainHandId].projectileTravelMs > 0, fastWorldRequested);
   const active = rangedPointer.active && continuous && interactionMode === "combat" && worldReady && defeatScreen.hidden === true && inventoryPanel.hidden === true;
   combatReticle.hidden = !active;
   canvas.classList.toggle("ranged-aim", active);
@@ -11858,7 +11867,7 @@ function renderBootstrap(payload: WorldBootstrap): void {
   const initialChunk = worldToChunk(initialPosition.x, initialPosition.z);
   const initialChunkKey = chunkKey(initialChunk.chunkX, initialChunk.chunkZ);
   requestedChunkRegionKey = chunks.has(initialChunkKey) ? initialChunkKey : null;
-  if (!rapidPrototypeRequested) {
+  if (!fastWorldRequested) {
     sceneDressing.rebuild(readWorldBlock, payload.chunks, indoorRoofBuilding);
     sceneDressing.setSurfaceVisible(!playerCutaway.active);
   }
@@ -11867,14 +11876,14 @@ function renderBootstrap(payload: WorldBootstrap): void {
     `WORLD REFRESH ${previousSliceY === null ? "surface" : `slice:${previousSliceY}`} → ${cutawayStateKey} y=${initialPosition.y.toFixed(3)} surface=${surfaceReferenceY.toFixed(3)} stateGap=${statePoseGap?.toFixed(3) ?? "missing"} chunks=${payload.chunks.length} setup=${bootstrapSetupMs.toFixed(1)}ms queued=${queuedChunkRebuilds.size}`,
   );
   worldReady = true;
-  if (rapidPrototypeRequested) window.setTimeout(() => {
+  if (fastWorldRequested) window.setTimeout(() => {
     requestRapidTownAssets();
     requestRapidTownNpcAssets();
   }, 250);
   lastWorldBootstrapAt = performance.now();
   snapFrameHistory.length = 0;
-  status.textContent = rapidPrototypeRequested
-    ? "2.5D Speed Lab ready · choose any Calling ability and test it against the full wave."
+  status.textContent = fastWorldRequested
+    ? "Fast World ready · choose a Calling, explore freely and test your build against regional enemies."
     : isInGreenwoodRegion(initialPosition.x, initialPosition.z)
     ? "Greenwood Outskirts · harvest oak timber and investigate the abandoned forester camp."
     : "Welcome to the Town of Beginnings. Starter supplies are nearby; follow the south road when ready.";
@@ -11987,13 +11996,13 @@ function showDefeat(attackerName: string): void {
   clearDefeatCombat();
   if (rapidPracticeRewardPanel) rapidPracticeRewardPanel.hidden = true;
   quizPanel.hidden = true; blacksmithPanel.hidden = true; setInventoryOpen(false); closeTavernDialogue();
-  defeatDetail.textContent = rapidPrototypeRequested
-    ? `${attackerName} ended the run. Your Speed Lab upgrades are retained for this session; restart immediately and push farther.`
+  defeatDetail.textContent = fastWorldRequested
+    ? `${attackerName} ended the run. Your upgrades are retained for this session; restart immediately and push farther.`
     : `${attackerName} defeated you. Carried minerals stay in your personal recovery bag. Levels, equipment, other loot, gold, supplies and chest contents are safe. Return to town, then follow your bag marker.`;
-  defeatTitle.textContent = rapidPrototypeRequested ? "RUN ENDED" : "You were defeated";
+  defeatTitle.textContent = fastWorldRequested ? "RUN ENDED" : "You were defeated";
   defeatScreen.hidden = false;
   returnToTownButton.disabled = !room;
-  returnToTownButton.textContent = rapidPrototypeRequested ? "Restart Run" : "Return to Town";
+  returnToTownButton.textContent = fastWorldRequested ? "Restart Run" : "Return to Town";
   if (activeRoomName === SILVER_DEPTHS_ROOM && latestDepthsPartyStatus) renderDepthsPartyStatus(latestDepthsPartyStatus);
   returnToTownButton.focus();
 }
@@ -12947,7 +12956,7 @@ function updateIndoorRoof(position: pc.Vec3): void {
     chunk.renderedSliceKey = null;
     if (chunk.root.enabled) queueChunkRebuild(chunk);
   }
-  if (!rapidPrototypeRequested) {
+  if (!fastWorldRequested) {
     sceneDressing.rebuild(readWorldBlock, [...chunks.values()], indoorRoofBuilding);
     sceneDressing.setSurfaceVisible(!playerCutaway.active);
   }
@@ -13143,7 +13152,7 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
   if (!visibilityCutaway) surfaceReferenceY = SURFACE_HEIGHT + 1;
   playerCutaway.active = visibilityCutaway;
   playerCutaway.sliceY = nextSliceY ?? CHUNK_HEIGHT;
-  if (!rapidPrototypeRequested) sceneDressing.setSurfaceVisible(!visibilityCutaway);
+  if (!fastWorldRequested) sceneDressing.setSurfaceVisible(!visibilityCutaway);
   updateActiveChunkMeshes(position);
   status.textContent = atSurface && visibilityCutaway
     ? `Returning to surface · restoring slice ${nextSliceY}`
@@ -13248,7 +13257,7 @@ function requestAttack(aimWithPointer = true, tabletAim?: { yaw: number; targetI
   localActionMainHandId = localMainHandId;
   localComboStep = comboStep;
   localComboExpiresAt = attackDefinition.combo
-    ? now + rapidCombatDuration(timing.durationMs, rapidPrototypeRequested, rapidPracticeHaste) + attackDefinition.comboWindowMs : 0;
+    ? now + rapidCombatDuration(timing.durationMs, fastWorldRequested, rapidPracticeHaste) + attackDefinition.comboWindowMs : 0;
   attackSequence += 1;
   const requestId = `attack-${attackSequence}`;
   combatSync.start("attack", requestId, now);
@@ -14086,7 +14095,7 @@ window.addEventListener("keydown", event => {
   if (event.code === "KeyJ") {
     event.preventDefault();
     keyboardFireHeld = continuousAttackEnabled(WEAPON_ATTACK_DEFINITIONS[localMainHandId].projectileTravelMs > 0,
-      rapidPrototypeRequested);
+      fastWorldRequested);
     requestAttack(false);
   }
   if (WEAPON_TECHNIQUES_AVAILABLE && event.code === "KeyR") {
@@ -14555,8 +14564,8 @@ function updatePerformanceMetrics(now: number): void {
   const p50 = percentile(frameSamples, 0.5);
   const p95 = percentile(frameSamples, 0.95);
   const fps = p50 > 0 ? 1000 / p50 : 0;
-  if (rapidPrototypeRequested) {
-    const metrics = document.querySelector<HTMLElement>("#rapid-prototype-metrics");
+  if (fastWorldRequested) {
+    const metrics = document.querySelector<HTMLElement>("#fast-world-metrics");
     if (metrics) metrics.textContent = `${Math.round(fps)} FPS · ${p95.toFixed(1)}ms p95 · ${inputAcknowledgementMs === null ? "input measuring" : `${inputAcknowledgementMs.toFixed(0)}ms input`}`;
   }
   const visibleVoxels = [...chunks.values()].reduce((total, chunk) => total + chunk.visibleBlocks, 0);
@@ -14904,14 +14913,14 @@ app.on("postrender", () => {
 
 app.on("update", (dt: number) => {
   const customUpdateStartedAt = performance.now();
-  if (rapidPrototypeRequested) {
+  if (fastWorldRequested) {
     const townTime = customUpdateStartedAt * .001;
     const playerPosition = localPlayer.getPosition();
     const region = rapidWorldRegionAt(playerPosition.x, playerPosition.z);
     if (region.id !== rapidWorldRegionId) {
       rapidWorldRegionId = region.id;
-      const title = document.querySelector<HTMLElement>("#rapid-prototype-badge strong");
-      const detail = document.querySelector<HTMLElement>("#rapid-prototype-badge span");
+      const title = document.querySelector<HTMLElement>("#fast-world-badge strong");
+      const detail = document.querySelector<HTMLElement>("#fast-world-badge span");
       if (title) title.textContent = `${region.name.toUpperCase()} · ${region.levelLabel}`;
       if (detail) detail.textContent = region.guidance;
     }
@@ -15001,8 +15010,8 @@ app.on("update", (dt: number) => {
   const frameTime = Math.min(dt, 0.05);
   cameraOrbit = advanceCameraOrbit(
     cameraOrbit,
-    rapidPrototypeRequested && cameraViewMode !== "first-person" ? 0 : Number(keys.has("ArrowRight")) - Number(keys.has("ArrowLeft")),
-    rapidPrototypeRequested && cameraViewMode !== "first-person" ? 0 : Number(keys.has("ArrowUp")) - Number(keys.has("ArrowDown")),
+    fastWorldRequested && cameraViewMode !== "first-person" ? 0 : Number(keys.has("ArrowRight")) - Number(keys.has("ArrowLeft")),
+    fastWorldRequested && cameraViewMode !== "first-person" ? 0 : Number(keys.has("ArrowUp")) - Number(keys.has("ArrowDown")),
     frameTime,
   );
   const cameraOffset = cameraOrbitOffset(cameraOrbit);
@@ -15177,10 +15186,10 @@ app.on("update", (dt: number) => {
   }
   if (animationNow >= localHitPauseUntil) {
     animateVoxelCharacter(localPlayerRig, animationTime, frameTime, localVerticalVelocity, predicted.grounded || grounded,
-      rapidCombatAnimationElapsed(localActionElapsed, rapidPrototypeRequested, rapidPracticeHaste), localActionStep, localActionMainHandId,
+      rapidCombatAnimationElapsed(localActionElapsed, fastWorldRequested, rapidPracticeHaste), localActionStep, localActionMainHandId,
       localPowerElapsed, localActivePower, localActionFacingYaw,
       moving ? predicted.x - current.x : 0, moving ? predicted.z - current.z : 0, localFacingYaw,
-      rapidPrototypeRequested ? 5.8 : 4.2);
+      fastWorldRequested ? 5.8 : 4.2);
     if (localDefending) applyDefensePose(localPlayerRig);
     if (room) applyMageCastAnimation(room.sessionId, localPlayerRig, animationNow);
   }
@@ -15252,9 +15261,9 @@ app.on("update", (dt: number) => {
       const remoteActionElapsed = remote.actionStartedAt === null ? null : animationNow - remote.actionStartedAt;
       const remotePowerElapsed = remote.powerStartedAt === null ? null : animationNow - remote.powerStartedAt;
       animateVoxelCharacter(remote.rig, animationTime, frameTime, remoteVerticalVelocity, true,
-        rapidCombatAnimationElapsed(remoteActionElapsed, rapidPrototypeRequested, rapidPracticeHaste), remote.actionStep, remote.actionMainHandId,
+        rapidCombatAnimationElapsed(remoteActionElapsed, fastWorldRequested, rapidPracticeHaste), remote.actionStep, remote.actionMainHandId,
         remotePowerElapsed, remote.powerId, remote.entity.getEulerAngles().y,
-        pose.x - previousPosition.x, pose.z - previousPosition.z, pose.yaw, rapidPrototypeRequested ? 5.8 : 4.2);
+        pose.x - previousPosition.x, pose.z - previousPosition.z, pose.yaw, fastWorldRequested ? 5.8 : 4.2);
       if (remote.defending) applyDefensePose(remote.rig);
       applyMageCastAnimation(id, remote.rig, animationNow);
       if (remoteActionElapsed !== null && remoteActionElapsed >= remoteActionDuration(remote.actionMainHandId, remote.actionStep)) {
@@ -16352,7 +16361,7 @@ function applyBlockChange(message: BlockChanged): void {
   chunk.blocks[chunkIndex(address.localX, message.y, address.localZ)] = message.block;
   chunk.revision = message.revision;
   rebuildChunkAndNeighbors(chunk, message.x, message.z);
-  if (!rapidPrototypeRequested && message.y >= SURFACE_HEIGHT) sceneDressing.rebuild(readWorldBlock, [...chunks.values()], indoorRoofBuilding);
+  if (!fastWorldRequested && message.y >= SURFACE_HEIGHT) sceneDressing.rebuild(readWorldBlock, [...chunks.values()], indoorRoofBuilding);
   if (message.block === Block.Air) status.textContent = "Block broken.";
 }
 
@@ -16371,7 +16380,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   movementPilotRequested = useColyseusMovementPilot(query);
   const qaSpawn = import.meta.env.DEV ? query.get("qa") : null;
   activeRoomName = query.get("room") === "silver-depths" ? SILVER_DEPTHS_ROOM
-    : query.get("room") === "practice" ? PRACTICE_ROOM : WORLD_ROOM;
+    : fastWorldRequested || query.get("room") === "practice" ? PRACTICE_ROOM : WORLD_ROOM;
   const instanceKey = query.get("instanceKey");
   const partyTicket = query.get("partyTicket");
   const worldRoomId = query.get("worldRoomId");
@@ -16400,7 +16409,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     ...(activeRoomName === WORLD_ROOM && returnFrom ? { returnFrom } : {}),
     ...(partyTicket ? { partyTicket } : {}),
     ...(activeRoomName === PRACTICE_ROOM && worldRoomId ? { worldRoomId } : {}),
-    ...(activeRoomName === PRACTICE_ROOM && rapidPrototypeRequested ? { prototype: "2d" } : {}) };
+    ...(activeRoomName === PRACTICE_ROOM && fastWorldRequested ? { prototype: "2d" } : {}) };
   room = await retryConnection(
     (signal, attempt) => {
       const attemptEndpoint = connectionEndpointForAttempt(endpoint, fallbackEndpoint, attempt, fallbackEnabled);
@@ -16487,6 +16496,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     const url = new URL(window.location.href);
     if (transfer.room === SILVER_DEPTHS_ROOM) {
       url.searchParams.set("room", "silver-depths");
+      if (fastWorldRequested) url.searchParams.set("mode", "fast");
       url.searchParams.set("instanceKey", transfer.instanceKey ?? "solo");
       url.searchParams.set("partySize", String(transfer.partySize ?? 1));
       if (transfer.partyTicket) url.searchParams.set("partyTicket", transfer.partyTicket);
@@ -16511,6 +16521,8 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       if (transfer.returnFrom) url.searchParams.set("returnFrom", transfer.returnFrom);
       if (transfer.retry) url.searchParams.set("retry", "1");
       else url.searchParams.delete("retry");
+      if (url.searchParams.get("mode") === "fast") url.searchParams.delete("legacy");
+      else url.searchParams.set("legacy", "voxel");
       status.textContent = "Returning to the shared Town of Beginnings...";
     }
     window.setTimeout(() => window.location.replace(url), 180);
@@ -16519,13 +16531,13 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     abilityPracticeOpen.disabled = false;
     abilityPracticeStatus.textContent = update.message;
     status.textContent = update.message;
-    if (rapidPrototypeRequested && update.active) setInteractionMode("combat");
-    if (rapidPrototypeRequested && update.wave) {
-      const detail = document.querySelector<HTMLElement>("#rapid-prototype-badge span");
+    if (fastWorldRequested && update.active) setInteractionMode("combat");
+    if (fastWorldRequested && update.wave) {
+      const detail = document.querySelector<HTMLElement>("#fast-world-badge span");
       if (detail) detail.textContent = `Wave ${update.wave}/3 · ${update.message}`;
     }
     if (update.abilityId) { localCallingCooldownUntil = 0; localCallingSpecialCooldownUntil = 0; }
-    if (!rapidPrototypeRequested && update.active && activeRoomName === PRACTICE_ROOM && !update.abilityId && !update.wave) {
+    if (!fastWorldRequested && update.active && activeRoomName === PRACTICE_ROOM && !update.abilityId && !update.wave) {
       abilityPracticeCalling.value = localBuildPathId ?? "assassin";
       renderPracticeAbilities();
       abilityPractice.hidden = false;
@@ -16533,7 +16545,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   });
   room.onMessage("practice:reward", (reward: { wave: number; rare: boolean; weapon: boolean; message: string; x: number; y: number; z: number;
     choices: { id: string; name: string; detail: string }[] }) => {
-    if (!rapidPrototypeRequested || !rapidPracticeRewardPanel || !rapidPracticeRewardChoices) return;
+    if (!fastWorldRequested || !rapidPracticeRewardPanel || !rapidPracticeRewardChoices) return;
     resetMovementControls();
     lootPickupBurst({ itemId: reward.rare ? "matriarch_edge" : "forged_sword", quantity: reward.rare ? 3 : 1,
       x: reward.x, y: reward.y, z: reward.z, expiresAt: Date.now() + 10_000 });
@@ -16554,7 +16566,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     damage: number; haste: number; vitality: number; relics: number }) => {
     rapidPracticeHaste = reward.haste;
     if (rapidPracticeRewardPanel) rapidPracticeRewardPanel.hidden = true;
-    const detail = document.querySelector<HTMLElement>("#rapid-prototype-badge span");
+    const detail = document.querySelector<HTMLElement>("#fast-world-badge span");
     if (detail) detail.textContent = `DMG +${reward.damage} · HASTE ${reward.haste} · HP +${reward.vitality * 5} · RELICS ${reward.relics}`;
     status.textContent = `${reward.rare ? "RARE " : ""}${reward.name} claimed · next wave incoming.`;
     canvas.focus();
@@ -17238,9 +17250,9 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     defeatScreen.hidden = true;
     worldReady = false;
     room?.send("world:ready");
-    status.textContent = rapidPrototypeRequested
-      ? "Speed Lab run restarted · upgrades retained." : "Back in the Town of Beginnings · follow your recovery marker to reclaim dropped items.";
-    social.event(rapidPrototypeRequested ? "Speed Lab run restarted." : "Returned to the Town of Beginnings.");
+    status.textContent = fastWorldRequested
+      ? "Fast World run restarted · upgrades retained." : "Back in the Town of Beginnings · follow your recovery marker to reclaim dropped items.";
+    social.event(fastWorldRequested ? "Fast World run restarted." : "Returned to the Town of Beginnings.");
   });
   room.onMessage("player:rescue-window", (message: { until: number }) => showRescueOption(message.until));
   room.onMessage("player:resurrected", (message: { health: number; maxHealth: number; casterName: string }) => {

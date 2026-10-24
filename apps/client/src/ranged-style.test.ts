@@ -25,7 +25,7 @@ describe("ranged weapon identity", () => {
     expect(acid.hitSound).not.toBe(venom.hitSound);
     expect(rangedStyle("forged_bow")).toEqual(bow);
   });
-  it("gives every Speed Lab weapon a distinct projectile silhouette", () => {
+  it("gives every Fast World weapon a distinct projectile silhouette", () => {
     const sword = rangedStyle("forged_sword", "crescent");
     const bow = rangedStyle("forged_bow", "arrow");
     const focus = rangedStyle("forged_focus", "orb");

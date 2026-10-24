@@ -2,7 +2,18 @@
 
 ## Product constraint
 
-Deep world, simple controls. Every technical choice must support fast browser entry, readable top-down play, authoritative multiplayer, and acceptable iPad performance.
+Fast world, deep builds, simple controls. Every technical choice must support quick Realm-of-the-Mad-God-style movement, readable low-poly combat, authoritative multiplayer, and acceptable tablet performance.
+
+## Active and archived runtimes
+
+The Fast World is canonical and owns all new product development. The root URL opens it.
+
+The voxel game is frozen at Git tag `voxel-world-final-2026-10-24` and is available only at `/?legacy=voxel` for comparison and migration checks. Frozen means:
+
+- no new regions, quests, UI, art or balance work is added to the voxel presentation;
+- reusable gameplay rules are extracted or adapted according to the migration ledger;
+- `packages/voxel-world` may receive only compatibility fixes required to keep a transferable shared system working while it is extracted;
+- visual or terrain-specific bugs in the archived route are documented, not allowed to redirect current development.
 
 ## Initial boundaries
 
@@ -13,7 +24,7 @@ The server owns players, action validation, voxel mutations, and the active simu
 Shared packages remain narrow:
 
 - `protocol` owns message validation and public payload types.
-- `voxel-world` owns deterministic generation, addressing, and block rules.
+- `voxel-world` is a transitional legacy dependency. New Fast World terrain, collision and navigation rules must not be added there.
 - Future combat, items, quests, and persistence packages are added only when the vertical slice needs them.
 
 ## Deliberately deferred

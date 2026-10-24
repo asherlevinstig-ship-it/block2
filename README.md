@@ -1,19 +1,28 @@
-# Blockcraft
+# Blockcraft Fast World
 
-Blockcraft is restarting as a browser-first, top-down voxel multiplayer RPG.
+Blockcraft is a browser-first, fast low-poly multiplayer action RPG inspired by the pace and readability of Realm of the Mad God. The Fast World is the only active product direction.
 
-The old game is preserved in the Git branch `codex/backup-current-game-2026-09-29`. This branch intentionally begins with a small technical foundation instead of carrying the old runtime forward.
+## Archived voxel game
 
-## First product test
+The final shared-runtime voxel version is preserved permanently at:
 
-One player can leave a protected town, enter mineable wilderness, dig into a hill, descend into a readable cave, fight one enemy, collect iron, and return to craft a better pickaxe. Then the same loop must work with two players and on iPad.
+- Branch: `archive/voxel-world-final-2026-10-24`
+- Tag: `voxel-world-final-2026-10-24`
+- Commit: `67c554af`
+- Live reference route: `/?legacy=voxel`
+
+Do not add new product work to the voxel experience. Reusable systems are tracked in [the migration ledger](docs/archive/voxel-world/feature-migration-ledger.md) and should be extracted into the Fast World deliberately.
+
+## Current product test
+
+A new player chooses a Calling, learns movement and combat quickly, leaves a readable low-poly Town of Beginnings, crosses fixed-difficulty regions, fights distinct enemy groups and leaders, collects meaningful loot, and develops a build. The loop must remain fluid on laptop and tablet-class hardware.
 
 ## Workspace
 
 - `apps/client` - PlayCanvas browser client
 - `apps/server` - authoritative Colyseus simulation
 - `packages/protocol` - validated network contracts
-- `packages/voxel-world` - deterministic chunks and voxel rules
+- `packages/voxel-world` - archived terrain implementation still used temporarily by shared collision and legacy systems; do not expand it
 - `docs` - architecture decisions and milestone acceptance criteria
 
 ## Commands
@@ -24,8 +33,6 @@ npm run dev
 npm run check
 ```
 
-The client runs at `http://localhost:5173` and connects to the server at `ws://localhost:2567` by default.
+The client runs at `http://localhost:5173` and connects to the server at `ws://localhost:2567` by default. The root route opens the Fast World. Use `/?legacy=voxel` only when checking a migration against the archived game.
 
-In the first playable slice, use WASD to move, point at a nearby voxel, and press E or left-click to mine. The server validates distance, spawn protection, block existence, and chunk revision before broadcasting the mutation.
-
-Other connected players appear as blue explorers. Their movement is interpolated from authoritative room state; rejected local movement is reconciled to the last server position.
+The server remains authoritative for movement, combat, progression, loot, inventory and multiplayer state. The client predicts presentation and reconciles against acknowledged server input.

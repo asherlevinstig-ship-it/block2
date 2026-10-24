@@ -71,7 +71,7 @@ describe("private Calling practice", () => {
     expect(client.send).toHaveBeenCalledWith("practice:reward-applied", expect.objectContaining({ rare: true, haste: 2, relics: 1 }));
   });
 
-  it("swaps Speed Lab weapons without adding inventory clutter", () => {
+  it("swaps Fast World weapons without adding inventory clutter", () => {
     const { internal, player, client } = fixture();
     internal.rapidPractice = true;
     internal.rapidPracticePendingRewards.set("trainee", { wave: 1, rare: false, weapon: true });

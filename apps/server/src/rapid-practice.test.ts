@@ -18,7 +18,7 @@ import {
 } from "./rapid-practice.js";
 import { rapidPracticeCollisionCellSolid } from "@blockcraft/protocol";
 
-describe("rapid 2.5D practice", () => {
+describe("fast low-poly world", () => {
   it("provides four bounded free-roam regions with permanent populations", () => {
     expect(RAPID_PRACTICE_FREE_ROAM).toBe(true);
     expect(RAPID_WORLD_ZONES.map(zone => zone.name)).toEqual(["Greenwood", "Mistfen", "Southern Quarry", "Ashen Reach"]);
@@ -80,7 +80,7 @@ describe("rapid 2.5D practice", () => {
     expect(rapidPracticeCollisionCellSolid(99, 8, 106)).toBe(false);
   });
 
-  it("speeds up play only inside the prototype", () => {
+  it("speeds up play only inside the Fast World", () => {
     expect(rapidPracticeMovementSpeed(4.2, false)).toBe(4.2);
     expect(rapidPracticeMovementSpeed(4.2, true)).toBeCloseTo(5.796);
     expect(rapidPracticeProjectileTravelMs(900, false)).toBe(900);
