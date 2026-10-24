@@ -16,6 +16,7 @@ import {
   rapidPracticeProjectileTravelMs,
   rapidPracticeWeaponProfile,
 } from "./rapid-practice.js";
+import { rapidPracticeCollisionCellSolid } from "@blockcraft/protocol";
 
 describe("rapid 2.5D practice", () => {
   it("provides four bounded free-roam regions with permanent populations", () => {
@@ -69,6 +70,14 @@ describe("rapid 2.5D practice", () => {
         && building.maxZ > civicCentre.minZ && building.minZ < civicCentre.maxZ;
       expect(overlaps, building.id).toBe(false);
     }
+  });
+
+  it("shares an analytic collision fallback with fast-world prediction", () => {
+    expect(rapidPracticeCollisionCellSolid(180, RAPID_PRACTICE_ARENA.floorY, 106)).toBe(true);
+    expect(rapidPracticeCollisionCellSolid(180, RAPID_PRACTICE_ARENA.floorY + 1, 106)).toBe(false);
+    expect(rapidPracticeCollisionCellSolid(RAPID_PRACTICE_ARENA.minX, 8, 106)).toBe(true);
+    expect(rapidPracticeCollisionCellSolid(45, 8, 72)).toBe(true);
+    expect(rapidPracticeCollisionCellSolid(99, 8, 106)).toBe(false);
   });
 
   it("speeds up play only inside the prototype", () => {

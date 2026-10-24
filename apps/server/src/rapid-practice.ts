@@ -1,28 +1,7 @@
 import type { MobArchetypeId } from "./mob-archetypes.js";
 import type { MainHandId } from "@blockcraft/protocol";
-
-export const RAPID_PRACTICE_ARENA = {
-  minX: 40,
-  maxX: 260,
-  minZ: 20,
-  maxZ: 192,
-  floorY: 7,
-  spawn: { x: 99.5, y: 8, z: 106.5 },
-} as const;
-
-/** Solid footprints for the Town of Beginnings set dressing. The Speed Lab
- * renders these with its lighter art layer, while the authored blocks keep
- * players and enemies from walking through the buildings. */
-export const RAPID_PRACTICE_TOWN_COLLIDERS = [
-  { id: "founders-hall", minX: 43, maxX: 50, minZ: 69, maxZ: 77 },
-  { id: "wayfarer-inn", minX: 71, maxX: 78, minZ: 72, maxZ: 80 },
-  { id: "beginnings-smithy", minX: 71, maxX: 78, minZ: 133, maxZ: 140 },
-  { id: "weavers-row", minX: 43, maxX: 50, minZ: 90, maxZ: 97 },
-  { id: "healers-house", minX: 43, maxX: 50, minZ: 105, maxZ: 112 },
-  { id: "wardens-lodge", minX: 43, maxX: 50, minZ: 126, maxZ: 134 },
-  { id: "north-gatehouse", minX: 101, maxX: 103, minZ: 99, maxZ: 102 },
-  { id: "south-gatehouse", minX: 101, maxX: 103, minZ: 110, maxZ: 113 },
-] as const;
+import { RAPID_PRACTICE_ARENA, RAPID_PRACTICE_TOWN_COLLIDERS } from "@blockcraft/protocol";
+export { RAPID_PRACTICE_ARENA, RAPID_PRACTICE_TOWN_COLLIDERS } from "@blockcraft/protocol";
 
 export type RapidPracticeSpawn = {
   id: string;

@@ -136,6 +136,45 @@ export interface MineralDepositStatus { id: string; available: number; total: nu
 export const WORLD_BOOTSTRAP_CHUNK_RADIUS = 3;
 export const WORLD_STREAM_CHUNK_RADIUS = 3;
 
+/** Shared collision footprint for the lightweight fast-world prototype.
+ * Both prediction and authority must use these exact bounds: the prototype
+ * renders its own low-poly scenery, but still uses voxel cells for collision. */
+export const RAPID_PRACTICE_ARENA = {
+  minX: 40,
+  maxX: 260,
+  minZ: 20,
+  maxZ: 192,
+  floorY: 7,
+  spawn: { x: 99.5, y: 8, z: 106.5 },
+} as const;
+
+export const RAPID_PRACTICE_TOWN_COLLIDERS = [
+  { id: "founders-hall", minX: 43, maxX: 50, minZ: 69, maxZ: 77 },
+  { id: "wayfarer-inn", minX: 71, maxX: 78, minZ: 72, maxZ: 80 },
+  { id: "beginnings-smithy", minX: 71, maxX: 78, minZ: 133, maxZ: 140 },
+  { id: "weavers-row", minX: 43, maxX: 50, minZ: 90, maxZ: 97 },
+  { id: "healers-house", minX: 43, maxX: 50, minZ: 105, maxZ: 112 },
+  { id: "wardens-lodge", minX: 43, maxX: 50, minZ: 126, maxZ: 134 },
+  { id: "north-gatehouse", minX: 101, maxX: 103, minZ: 99, maxZ: 102 },
+  { id: "south-gatehouse", minX: 101, maxX: 103, minZ: 110, maxZ: 113 },
+] as const;
+
+/** Analytic fallback used while a fast-world chunk is in flight. It mirrors
+ * buildPracticeArena so a missing visual chunk never turns into an invisible
+ * wall (or removes a real town building collision). */
+export function rapidPracticeCollisionCellSolid(x: number, y: number, z: number): boolean {
+  const cellX = Math.floor(x), cellY = Math.floor(y), cellZ = Math.floor(z);
+  const inside = cellX >= RAPID_PRACTICE_ARENA.minX && cellX <= RAPID_PRACTICE_ARENA.maxX
+    && cellZ >= RAPID_PRACTICE_ARENA.minZ && cellZ <= RAPID_PRACTICE_ARENA.maxZ;
+  if (!inside) return cellY >= RAPID_PRACTICE_ARENA.floorY && cellY <= 10;
+  if (cellY === RAPID_PRACTICE_ARENA.floorY) return true;
+  if (cellY < 8 || cellY > 10) return false;
+  if (cellX === RAPID_PRACTICE_ARENA.minX || cellX === RAPID_PRACTICE_ARENA.maxX
+    || cellZ === RAPID_PRACTICE_ARENA.minZ || cellZ === RAPID_PRACTICE_ARENA.maxZ) return true;
+  return RAPID_PRACTICE_TOWN_COLLIDERS.some(collider => cellX >= collider.minX && cellX <= collider.maxX
+    && cellZ >= collider.minZ && cellZ <= collider.maxZ);
+}
+
 export type ServerPerformanceUpdate = {
   tickP50Ms: number;
   tickP95Ms: number;

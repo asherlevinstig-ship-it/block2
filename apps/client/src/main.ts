@@ -3,6 +3,7 @@ import { addCallingParticleLayers } from "./calling-particles.js";
 import { CALLING_ABILITY_SUSTAIN_PARTICLES, CALLING_ANTICIPATION_PARTICLES, CALLING_IMPACT_PARTICLES, CALLING_SUSTAIN_PARTICLES, callingParticleLifetime } from "./calling-vfx-presets.js";
 import { mageCastDuration, mageCastPose, type MageAbilityId } from "./mage-casting.js";
 import { greenwoodMasteryStatus, mistfenMasteryStatus } from "@blockcraft/protocol";
+import { rapidPracticeCollisionCellSolid } from "@blockcraft/protocol";
 import type { RegionalArmourProc } from "@blockcraft/protocol";
 import { isInMistfenMarsh, NORTHWATCH_SHARD_PATROL_SITE } from "@blockcraft/voxel-world";
 import { ASHEN_RELIQUARY_POSITION } from "@blockcraft/voxel-world";
@@ -1744,7 +1745,8 @@ function readCollisionWorldBlock(x: number, y: number, z: number): BlockId {
   if (y >= CHUNK_HEIGHT) return Block.Air;
   const address = worldToChunk(x, z);
   const chunk = chunks.get(chunkKey(address.chunkX, address.chunkZ));
-  if (!chunk) return Block.Bedrock;
+  if (!chunk) return rapidPrototypeRequested && rapidPracticeCollisionCellSolid(x, y, z)
+    ? Block.Stone : rapidPrototypeRequested ? Block.Air : Block.Bedrock;
   return (chunk.blocks[chunkIndex(address.localX, y, address.localZ)] ?? Block.Air) as BlockId;
 }
 
@@ -1919,13 +1921,25 @@ function rebuildChunkAndNeighbors(chunk: ClientChunk, x: number, z: number): voi
 }
 
 function updateActiveChunkMeshes(position: { x: number; z: number }): void {
+  const address = worldToChunk(position.x, position.z);
+  const regionKey = chunkKey(address.chunkX, address.chunkZ);
   if (rapidPrototypeRequested) {
     for (const chunk of chunks.values()) chunk.root.enabled = false;
     queuedChunkRebuilds.clear();
+    // The lightweight renderer does not need voxel meshes, but prediction still
+    // needs the authoritative collision chunks. Stream them ahead of the player
+    // exactly as the full renderer does.
+    if (regionKey !== requestedChunkRegionKey && room && worldReady) {
+      requestedChunkRegionKey = regionKey;
+      room.send("world:chunks", {
+        chunkX: address.chunkX, chunkZ: address.chunkZ,
+        knownChunks: [...chunks.values()].slice(0, 121).map(chunk => ({
+          chunkX: chunk.chunkX, chunkZ: chunk.chunkZ, revision: chunk.revision,
+        })),
+      });
+    }
     return;
   }
-  const address = worldToChunk(position.x, position.z);
-  const regionKey = chunkKey(address.chunkX, address.chunkZ);
   if (regionKey !== requestedChunkRegionKey && room && worldReady) {
     requestedChunkRegionKey = regionKey;
     room.send("world:chunks", {
