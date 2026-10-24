@@ -121,7 +121,7 @@ export const FAST_WORLD_REGION_DEFINITIONS: readonly FastWorldRegionDefinition[]
     leaderId: "mistfen-miremother",
     leaderName: "Miremother",
     encounterArchetypes: ["cave_spitter", "fen_bloater", "briar_crawler"],
-    targetPopulation: 9,
+    targetPopulation: 11,
     encounters: [
       { id: "mistfen-drowned-spitter", archetype: "cave_spitter", name: "Drowned-Camp Spitter", level: 4, respawnMs: 50_000, x: 161.5, y: 8, z: 67.5 },
       { id: "mistfen-drowned-bloater", archetype: "fen_bloater", name: "Drowned-Camp Bloater", level: 5, respawnMs: 54_000, x: 166.5, y: 8, z: 65.5 },
@@ -131,6 +131,8 @@ export const FAST_WORLD_REGION_DEFINITIONS: readonly FastWorldRegionDefinition[]
       { id: "mistfen-spring-spitter", archetype: "cave_spitter", name: "Corrupted-Spring Spitter", level: 7, respawnMs: 66_000, x: 199.5, y: 8, z: 56.5 },
       { id: "mistfen-wayfinder-guard", archetype: "briar_crawler", name: "Wayfinder Cache Guard", level: 6, respawnMs: 64_000, x: 191.5, y: 8, z: 72.5 },
       { id: "mistfen-wayfinder-keeper", archetype: "fen_bloater", name: "Wayfinder Cache Keeper", level: 7, respawnMs: 72_000, x: 197.5, y: 8, z: 72.5 },
+      { id: "mistfen-miremother-spitter", archetype: "cave_spitter", name: "Miremother Attendant", level: 6, respawnMs: 70_000, x: 175.5, y: 8, z: 48.5 },
+      { id: "mistfen-miremother-briar", archetype: "briar_crawler", name: "Miremother Rootguard", level: 7, respawnMs: 74_000, x: 183.5, y: 8, z: 49.5 },
       { id: "mistfen-miremother", archetype: "fen_bloater", name: "Miremother", level: 7, respawnMs: 96_000, x: 179.5, y: 8, z: 51.5, leader: true },
     ],
     encounterPockets: [
@@ -143,7 +145,8 @@ export const FAST_WORLD_REGION_DEFINITIONS: readonly FastWorldRegionDefinition[]
       { id: "wayfinder-cache", name: "Wayfinder Cache", kind: "guarded-reward", x: 194.5, z: 72.5, radius: 7,
         encounterIds: ["mistfen-wayfinder-guard", "mistfen-wayfinder-keeper"], rewardLabel: "Guarded marsh cache" },
       { id: "miremother-basin", name: "Miremother Basin", kind: "leader", x: 179.5, z: 51.5, radius: 10,
-        encounterIds: ["mistfen-miremother"], rewardLabel: "Highest Mistfen loot" },
+        encounterIds: ["mistfen-miremother-spitter", "mistfen-miremother-briar", "mistfen-miremother"],
+        rewardLabel: "Highest Mistfen loot" },
     ],
     connections: [
       { regionId: "greenwood", name: "Fenward Track", x: 153.5, z: 80.5 },

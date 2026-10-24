@@ -56,7 +56,9 @@ describe("Fast World region manifest", () => {
     expect(mistfen.encounters).toHaveLength(mistfen.targetPopulation);
     expect(mistfen.encounterPockets?.filter(pocket => pocket.kind === "combat")).toHaveLength(3);
     expect(mistfen.encounterPockets?.find(pocket => pocket.kind === "guarded-reward")?.encounterIds).toHaveLength(2);
-    expect(mistfen.encounterPockets?.find(pocket => pocket.kind === "leader")?.encounterIds).toEqual([mistfen.leaderId]);
+    const leaderPocket = mistfen.encounterPockets?.find(pocket => pocket.kind === "leader");
+    expect(leaderPocket?.encounterIds).toContain(mistfen.leaderId);
+    expect(leaderPocket?.encounterIds).toHaveLength(3);
     expect(mistfen.connections?.map(connection => connection.regionId)).toEqual(["greenwood", "ashen-reach"]);
     expect(mistfen.hazards?.filter(hazard => hazard.kind === "toxic-pool")).toHaveLength(7);
     expect(mistfen.encounters?.every(encounter => encounter.respawnMs >= 40_000)).toBe(true);

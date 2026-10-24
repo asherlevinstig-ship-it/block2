@@ -3217,6 +3217,13 @@ if (fastWorldRequested) {
   for (const [x, y, z, sx, sz] of [[160,9.2,54,5,2.4],[174,9.5,33,6,2.7],[190,9.15,62,5.5,2.3],
     [200,9.55,35,4.5,2.2],[181,9.3,72,5,2.2]] as const)
     addRapidRegionShape("mistfen", "mistfen-ground-fog", "sphere", mistfenFog, [sx, .55, sz], [x, y, z]);
+  for (const [x, z, range, intensity] of [[179.5,51.5,10,1.05],[197,54.5,7,.8],[186.5,36,6,.65]] as const) {
+    const light = new pc.Entity("mistfen-marsh-light");
+    light.addComponent("light", { type: "omni", color: new pc.Color(.34, .7, .45), intensity,
+      range, castShadows: false });
+    light.setLocalPosition(x, 9.2, z);
+    rapidRegionChunkRoot("mistfen", x, z).addChild(light);
+  }
 
   for (const pool of SUNKEN_COAST_TIDE_POOLS) {
     const water = addRapidRegionShape("sunken-coast", "coast-tide-pool", "cylinder", coastWater,

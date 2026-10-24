@@ -18,14 +18,14 @@ import {
   rapidPracticeProjectileTravelMs,
   rapidPracticeWeaponProfile,
 } from "./rapid-practice.js";
-import { rapidPracticeCollisionCellSolid } from "@blockcraft/protocol";
+import { fastWorldRegionDefinition, rapidPracticeCollisionCellSolid } from "@blockcraft/protocol";
 
 describe("fast low-poly world", () => {
   it("provides five bounded free-roam regions with authored permanent populations", () => {
     expect(RAPID_PRACTICE_FREE_ROAM).toBe(true);
     expect(RAPID_WORLD_ZONES.map(zone => zone.name)).toEqual(["Greenwood", "Mistfen", "Sunken Coast", "Southern Quarry", "Ashen Reach"]);
     const totalPopulation = RAPID_WORLD_ZONES.reduce((total, zone) => total
-      + (zone.id === "greenwood" || zone.id === "mistfen" ? 9 : 6), 0);
+      + fastWorldRegionDefinition(zone.id).targetPopulation, 0);
     expect(RAPID_PRACTICE_SPAWNS).toHaveLength(totalPopulation);
     expect(new Set(RAPID_PRACTICE_SPAWNS.map(spawn => spawn.id)).size).toBe(totalPopulation);
     for (const spawn of RAPID_PRACTICE_SPAWNS) {
@@ -40,7 +40,7 @@ describe("fast low-poly world", () => {
     expect(RAPID_PRACTICE_WAVES[2]).toContain(RAPID_PRACTICE_BOSS_ID);
     for (const zone of RAPID_WORLD_ZONES) {
       const residents = RAPID_PRACTICE_SPAWNS.filter(spawn => spawn.zone === zone.id);
-      expect(residents).toHaveLength(zone.id === "greenwood" || zone.id === "mistfen" ? 9 : 6);
+      expect(residents).toHaveLength(fastWorldRegionDefinition(zone.id).targetPopulation);
       expect(residents.filter(spawn => spawn.leader).map(spawn => spawn.id)).toEqual([zone.leaderId]);
       expect(Math.min(...residents.map(spawn => spawn.level))).toBeGreaterThanOrEqual(zone.levelMin);
       expect(Math.max(...residents.map(spawn => spawn.level))).toBeLessThanOrEqual(zone.levelMax);

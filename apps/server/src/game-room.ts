@@ -2627,7 +2627,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     mob.armor = spawn.leader ? Math.max(1, Math.floor(spawn.level / 5)) : Math.floor(spawn.level / 7);
     mob.speedMultiplier = spawn.leader ? 1.22 : 1.08;
     mob.rewardMultiplier = spawn.leader ? 2 + spawn.level * .08 : 1 + spawn.level * .04;
-    mob.attackPattern = spawn.leader ? championPattern(mob)
+    mob.attackPattern = spawn.leader && spawn.archetype === "fen_bloater" ? "toxic-bloom"
+      : spawn.leader ? championPattern(mob)
       : spawn.archetype === "fen_bloater" ? "toxic-bloom"
       : spawn.archetype === "cinder_ram" ? "furnace-charge"
       : spawn.archetype === "ember_hound" ? "ember-pounce" : mob.attackPattern;
