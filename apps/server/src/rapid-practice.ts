@@ -1,6 +1,6 @@
 import type { MobArchetypeId } from "./mob-archetypes.js";
-import type { MainHandId } from "@blockcraft/protocol";
-import { RAPID_PRACTICE_ARENA, RAPID_PRACTICE_TOWN_COLLIDERS } from "@blockcraft/protocol";
+import type { FastWorldRegionId, MainHandId } from "@blockcraft/protocol";
+import { FAST_WORLD_REGION_DEFINITIONS, RAPID_PRACTICE_ARENA, RAPID_PRACTICE_TOWN_COLLIDERS } from "@blockcraft/protocol";
 export { RAPID_PRACTICE_ARENA, RAPID_PRACTICE_TOWN_COLLIDERS } from "@blockcraft/protocol";
 
 export type RapidPracticeSpawn = {
@@ -16,7 +16,7 @@ export type RapidPracticeSpawn = {
   z: number;
 };
 
-export type RapidWorldZoneId = "greenwood" | "mistfen" | "southern-quarry" | "ashen-reach";
+export type RapidWorldZoneId = FastWorldRegionId;
 
 export type RapidWorldZone = {
   id: RapidWorldZoneId;
@@ -30,16 +30,17 @@ export type RapidWorldZone = {
   leaderId: string;
 };
 
-export const RAPID_WORLD_ZONES: readonly RapidWorldZone[] = [
-  { id: "greenwood", name: "Greenwood", levelMin: 1, levelMax: 4,
-    minX: 108, maxX: 156, minZ: 78, maxZ: 134, leaderId: "greenwood-elderthorn" },
-  { id: "mistfen", name: "Mistfen", levelMin: 4, levelMax: 7,
-    minX: 152, maxX: 204, minZ: 24, maxZ: 82, leaderId: "mistfen-miremother" },
-  { id: "southern-quarry", name: "Southern Quarry", levelMin: 6, levelMax: 9,
-    minX: 152, maxX: 204, minZ: 136, maxZ: 188, leaderId: "quarry-quarrymaster" },
-  { id: "ashen-reach", name: "Ashen Reach", levelMin: 9, levelMax: 12,
-    minX: 204, maxX: 256, minZ: 74, maxZ: 140, leaderId: "ashen-cinderlord" },
-] as const;
+export const RAPID_WORLD_ZONES: readonly RapidWorldZone[] = FAST_WORLD_REGION_DEFINITIONS.map(region => ({
+  id: region.id,
+  name: region.name,
+  levelMin: region.levelMin,
+  levelMax: region.levelMax,
+  minX: region.bounds.minX,
+  maxX: region.bounds.maxX,
+  minZ: region.bounds.minZ,
+  maxZ: region.bounds.maxZ,
+  leaderId: region.leaderId,
+}));
 
 export const rapidWorldZoneAt = (x: number, z: number): RapidWorldZone | null =>
   RAPID_WORLD_ZONES.find(zone => x >= zone.minX && x <= zone.maxX && z >= zone.minZ && z <= zone.maxZ) ?? null;

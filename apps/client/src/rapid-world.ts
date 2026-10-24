@@ -1,3 +1,5 @@
+import { FAST_WORLD_REGION_DEFINITIONS, fastWorldRegionDefinitionAt } from "@blockcraft/protocol";
+
 export type RapidWorldRegionId = "town" | "greenwood" | "mistfen" | "southern-quarry" | "ashen-reach" | "crossroads";
 
 export type RapidWorldRegion = {
@@ -14,19 +16,24 @@ export type RapidWorldRegion = {
 export const RAPID_WORLD_REGIONS: readonly RapidWorldRegion[] = [
   { id: "town", name: "Town of Beginnings", levelLabel: "SAFE", guidance: "East gate leads to Greenwood",
     minX: 40, maxX: 108, minZ: 66, maxZ: 146 },
-  { id: "greenwood", name: "Greenwood", levelLabel: "LV 1–4", guidance: "Crawler packs · Elderthorn Keeper",
-    minX: 108, maxX: 156, minZ: 78, maxZ: 134 },
-  { id: "mistfen", name: "Mistfen", levelLabel: "LV 4–7", guidance: "Northern fork · Miremother",
-    minX: 152, maxX: 204, minZ: 24, maxZ: 82 },
-  { id: "southern-quarry", name: "Southern Quarry", levelLabel: "LV 6–9", guidance: "Southern fork · Redstone Quarrymaster",
-    minX: 152, maxX: 204, minZ: 136, maxZ: 188 },
-  { id: "ashen-reach", name: "Ashen Reach", levelLabel: "LV 9–12", guidance: "Far east · Cinderlord",
-    minX: 204, maxX: 256, minZ: 74, maxZ: 140 },
+  ...FAST_WORLD_REGION_DEFINITIONS.map(region => ({
+    id: region.id,
+    name: region.name,
+    levelLabel: `LV ${region.levelMin}–${region.levelMax}`,
+    guidance: region.guidance,
+    minX: region.bounds.minX,
+    maxX: region.bounds.maxX,
+    minZ: region.bounds.minZ,
+    maxZ: region.bounds.maxZ,
+  })),
 ] as const;
 
 export function rapidWorldRegionAt(x: number, z: number): RapidWorldRegion {
-  return RAPID_WORLD_REGIONS.find(region => x >= region.minX && x <= region.maxX
-    && z >= region.minZ && z <= region.maxZ) ?? {
+  const town = RAPID_WORLD_REGIONS[0]!;
+  if (x >= town.minX && x <= town.maxX && z >= town.minZ && z <= town.maxZ) return town;
+  const region = fastWorldRegionDefinitionAt(x, z);
+  if (region) return RAPID_WORLD_REGIONS.find(candidate => candidate.id === region.id)!;
+  return {
     id: "crossroads", name: "Realm Crossroads", levelLabel: "TRAVEL", guidance: "Roads link every fixed-difficulty region",
     minX: 0, maxX: 0, minZ: 0, maxZ: 0,
   };

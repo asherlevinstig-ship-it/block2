@@ -130,6 +130,12 @@ import { bindTownNpcRig, loadTownNpcAssets, TOWN_NPC_MODEL_YAW, transitionTownNp
 import { SPEED_LAB_TOWN_TERRAIN, SPEED_LAB_TOWN_TERRAIN_DETAILS,
   type TownTerrainMaterial } from "./town-terrain.js";
 import { rapidWorldRegionAt } from "./rapid-world.js";
+import {
+  FastWorldVisualChunkStream,
+  fastWorldRegionVisualChunks,
+  fastWorldVisualChunkForPosition,
+  type FastWorldStreamedRegionId,
+} from "./fast-world-region-kit.js";
 import { gameExperience, usesFastWorld } from "./game-experience.js";
 import {
   FIRST_PERSON_EYE_HEIGHT,
@@ -2177,6 +2183,7 @@ let rapidWorldRegionId = "";
 let requestRapidTownAssets = (): void => {};
 let requestRapidTownNpcAssets = (): void => {};
 let requestGreenwoodAssets = (): void => {};
+let updateRapidRegionVisualStream = (_x: number, _z: number): void => {};
 if (fastWorldRequested) {
   const townNpcFaceBatchGroup = app.batcher.addGroup("town-npc-faces", true, 32);
   const rapidWorldSceneryBatchGroup = app.batcher.addGroup("rapid-world-scenery", false, 512);
@@ -2278,6 +2285,38 @@ if (fastWorldRequested) {
     const shape = addBox(rapidPrototypeRoot, name, material, scale, position);
     if (shape.render) shape.render.batchGroupId = rapidWorldSceneryBatchGroup.id;
     return shape;
+  };
+  const rapidRegionChunkRoots = new Map<string, pc.Entity>();
+  const rapidRegionStream = new FastWorldVisualChunkStream(1);
+  let activeRapidRegionChunkKeys: Set<string> | null = null;
+  const rapidRegionChunkRoot = (regionId: FastWorldStreamedRegionId, x: number, z: number): pc.Entity => {
+    const key = fastWorldVisualChunkForPosition(regionId, x, z);
+    const existing = rapidRegionChunkRoots.get(key);
+    if (existing) return existing;
+    const root = new pc.Entity(`fast-world-region-chunk:${key}`);
+    root.enabled = activeRapidRegionChunkKeys === null || activeRapidRegionChunkKeys.has(key);
+    rapidPrototypeRoot.addChild(root);
+    rapidRegionChunkRoots.set(key, root);
+    return root;
+  };
+  const addRapidRegionShape = (regionId: FastWorldStreamedRegionId, name: string,
+    type: "box" | "cylinder" | "cone" | "sphere", material: pc.StandardMaterial,
+    scale: [number, number, number], position: [number, number, number]): pc.Entity => {
+    const shape = addTownShape(rapidRegionChunkRoot(regionId, position[0], position[2]), name, type, material, scale, position);
+    if (shape.render) shape.render.batchGroupId = rapidWorldSceneryBatchGroup.id;
+    return shape;
+  };
+  const addRapidRegionBox = (regionId: FastWorldStreamedRegionId, name: string, material: pc.StandardMaterial,
+    scale: [number, number, number], position: [number, number, number]): pc.Entity => {
+    const shape = addBox(rapidRegionChunkRoot(regionId, position[0], position[2]), name, material, scale, position);
+    if (shape.render) shape.render.batchGroupId = rapidWorldSceneryBatchGroup.id;
+    return shape;
+  };
+  updateRapidRegionVisualStream = (x: number, z: number): void => {
+    const change = rapidRegionStream.update(x, z);
+    if (!change) return;
+    activeRapidRegionChunkKeys = change.active;
+    for (const [key, root] of rapidRegionChunkRoots) root.enabled = activeRapidRegionChunkKeys.has(key);
   };
 
   const skin = coloredMaterial(new pc.Color(.72, .49, .31));
@@ -2517,8 +2556,12 @@ if (fastWorldRequested) {
 
   addRapidWorldBox("realm-ground", grass, [220, .25, 172], [150, 7.875, 106]);
   addBox(rapidPrototypeRoot, "west-green", grassLight, [62, .035, 74], [71, 8.02, 106]);
-  addRapidWorldBox("greenwood-ground", greenwoodGround, [48, .035, 56], [132, 8.02, 106]);
-  addRapidWorldBox("mistfen-ground", mistfenGround, [52, .035, 58], [178, 8.02, 53]);
+  for (const chunk of fastWorldRegionVisualChunks("greenwood"))
+    addRapidRegionBox("greenwood", `greenwood-ground:${chunk.key}`, greenwoodGround,
+      [chunk.width, .035, chunk.depth], [chunk.centerX, 8.02, chunk.centerZ]);
+  for (const chunk of fastWorldRegionVisualChunks("mistfen"))
+    addRapidRegionBox("mistfen", `mistfen-ground:${chunk.key}`, mistfenGround,
+      [chunk.width, .035, chunk.depth], [chunk.centerX, 8.02, chunk.centerZ]);
   addRapidWorldBox("quarry-ground", quarryGround, [52, .035, 52], [178, 8.02, 162]);
   addRapidWorldBox("ashen-ground", ashenGround, [52, .035, 66], [230, 8.02, 107]);
   addRapidWorldBox("east-realm-road", path, [154, .055, 5.2], [179, 8.035, 106]);
@@ -2528,7 +2571,7 @@ if (fastWorldRequested) {
   addRapidWorldBox("realm-crossroads", stone, [9.5, .09, 9.5], [168, 8.075, 106]);
   for (const patch of GREENWOOD_GROUND_PATCHES) {
     const material = patch.material === "moss" ? greenwoodMoss : greenwoodLeafLitter;
-    const groundPatch = addRapidWorldShape(`greenwood-ground:${patch.id}`, "cylinder", material,
+    const groundPatch = addRapidRegionShape("greenwood", `greenwood-ground:${patch.id}`, "cylinder", material,
       [patch.scale[0], .025, patch.scale[1]], [patch.position[0], 8.105, patch.position[1]]);
     groundPatch.setLocalEulerAngles(0, patch.yaw, 0);
   }
@@ -2771,19 +2814,19 @@ if (fastWorldRequested) {
   // Their shapes are deliberately low-poly and batched so the Fast World keeps its pace.
   for (const [x, z, size] of [[113,83,1.7],[119,127,1.9],[125,86,1.6],[132,130,1.8],[139,83,2],[147,88,1.7],
     [151,126,1.8],[117,114,1.5],[143,116,1.65],[130,96,1.45],[151,98,1.5],[123,103,1.35]] as const) {
-    addRapidWorldShape("greenwood-tree-trunk", "cylinder", trunk, [.34 * size, 1.25 * size, .34 * size], [x, 8.62 + size * .42, z]);
-    addRapidWorldShape("greenwood-tree-crown", "cone", greenwoodCanopy, [1.25 * size, 2 * size, 1.25 * size], [x, 10 + size * .72, z]);
+    addRapidRegionShape("greenwood", "greenwood-tree-trunk", "cylinder", trunk, [.34 * size, 1.25 * size, .34 * size], [x, 8.62 + size * .42, z]);
+    addRapidRegionShape("greenwood", "greenwood-tree-crown", "cone", greenwoodCanopy, [1.25 * size, 2 * size, 1.25 * size], [x, 10 + size * .72, z]);
   }
   for (const [x, z, turn] of [[121,94,18],[132,119,-26],[144,97,32],[147,122,-12],[126,111,8]] as const) {
-    const root = addRapidWorldBox("greenwood-root", greenwoodBark, [2.6, .22, .3], [x, 8.24, z]);
+    const root = addRapidRegionBox("greenwood", "greenwood-root", greenwoodBark, [2.6, .22, .3], [x, 8.24, z]);
     root.setLocalEulerAngles(0, turn, 8);
   }
   for (const log of GREENWOOD_FALLEN_LOGS) {
-    const trunk = addRapidWorldShape("greenwood-fallen-log", "cylinder", greenwoodBark,
+    const trunk = addRapidRegionShape("greenwood", "greenwood-fallen-log", "cylinder", greenwoodBark,
       [.52, log.length * .5, .52], [log.x, 8.48, log.z]);
     trunk.setLocalEulerAngles(90, log.yaw, 0);
     for (const side of [-1, 1] as const) {
-      const cut = addRapidWorldShape("greenwood-log-cut", "cylinder", timberLight,
+      const cut = addRapidRegionShape("greenwood", "greenwood-log-cut", "cylinder", timberLight,
         [.42, .035, .42], [log.x + Math.sin(log.yaw * Math.PI / 180) * log.length * .48 * side,
           8.48, log.z + Math.cos(log.yaw * Math.PI / 180) * log.length * .48 * side]);
       cut.setLocalEulerAngles(90, log.yaw, 0);
@@ -2792,47 +2835,48 @@ if (fastWorldRequested) {
   for (let index = 0; index < GREENWOOD_UNDERGROWTH.length; index++) {
     const [x, z, size] = GREENWOOD_UNDERGROWTH[index]!;
     for (let blade = 0; blade < 3; blade++) {
-      const fern = addRapidWorldShape("greenwood-fern", "cone", blade === 1 ? greenwoodFernLight : greenwoodFern,
+      const fern = addRapidRegionShape("greenwood", "greenwood-fern", "cone", blade === 1 ? greenwoodFernLight : greenwoodFern,
         [.2 * size, .72 * size, .12 * size], [x + (blade - 1) * .18 * size, 8.34 + blade * .025, z]);
       fern.setLocalEulerAngles(blade === 1 ? -12 : 12, index * 47 + blade * 58, (blade - 1) * 24);
     }
   }
   for (const standingStone of GREENWOOD_GROVE_STONES) {
-    const stoneRoot = addRapidWorldBox("elderthorn-standing-stone", greenwoodStone,
+    const stoneRoot = addRapidRegionBox("greenwood", "elderthorn-standing-stone", greenwoodStone,
       [.48, 1.3, .38], [standingStone.x, 8.7, standingStone.z]);
     stoneRoot.setLocalEulerAngles(standingStone.yaw * .12, standingStone.yaw, standingStone.yaw > 0 ? 7 : -7);
-    addRapidWorldShape("elderthorn-stone-moss", "sphere", greenwoodMoss,
+    addRapidRegionShape("greenwood", "elderthorn-stone-moss", "sphere", greenwoodMoss,
       [.44, .16, .34], [standingStone.x, 9.6, standingStone.z]);
   }
   // A natural clearing replaces the old bright boss pad. The centre remains open
   // for readable combat while roots, stones and motes frame the Elderthorn Keeper.
   for (let index = 0; index < 10; index++) {
     const angle = index / 10 * Math.PI * 2;
-    const root = addRapidWorldBox("elderthorn-crown-root", greenwoodBark, [2.2, .17, .24],
+    const root = addRapidRegionBox("greenwood", "elderthorn-crown-root", greenwoodBark, [2.2, .17, .24],
       [150.5 + Math.cos(angle) * 5.45, 8.25, 106.5 + Math.sin(angle) * 5.45]);
     root.setLocalEulerAngles(0, 90 - angle * 180 / Math.PI, index % 2 ? 7 : -5);
   }
   for (let index = 0; index < 12; index++) {
     const angle = index / 12 * Math.PI * 2;
-    const entity = addTownShape(rapidPrototypeRoot, "elderthorn-firefly", "sphere", greenwoodMoteMaterial,
-      [.075, .075, .075], [150.5 + Math.cos(angle) * (3.4 + index % 3), 8.8 + index % 4 * .35,
-        106.5 + Math.sin(angle) * (3.4 + index % 3)]);
+    const moteX = 150.5 + Math.cos(angle) * (3.4 + index % 3);
+    const moteZ = 106.5 + Math.sin(angle) * (3.4 + index % 3);
+    const entity = addTownShape(rapidRegionChunkRoot("greenwood", moteX, moteZ), "elderthorn-firefly", "sphere", greenwoodMoteMaterial,
+      [.075, .075, .075], [moteX, 8.8 + index % 4 * .35, moteZ]);
     rapidGreenwoodMotes.push({ entity, x: entity.getLocalPosition().x, y: entity.getLocalPosition().y,
       z: entity.getLocalPosition().z, phase: index * .73 });
   }
 
   for (const [x, z, sx, sz] of [[159,34,3.8,2.5],[174,39,3,2.2],[193,31,4.1,2.7],[158,60,3.2,2.4],
     [179,61,4.4,2.5],[197,68,3.5,2.1],[188,49,2.7,1.9]] as const)
-    addRapidWorldShape("mistfen-pool", "cylinder", mistfenWater, [sx, .035, sz], [x, 8.075, z]);
+    addRapidRegionShape("mistfen", "mistfen-pool", "cylinder", mistfenWater, [sx, .035, sz], [x, 8.075, z]);
   for (const [x, z, turn] of [[160,46,8],[170,29,-17],[183,72,26],[198,40,-8],[193,76,14],[175,55,-24]] as const) {
-    const snag = addRapidWorldBox("mistfen-snag", timber, [.3, 2.1, .3], [x, 9.05, z]);
+    const snag = addRapidRegionBox("mistfen", "mistfen-snag", timber, [.3, 2.1, .3], [x, 9.05, z]);
     snag.setLocalEulerAngles(0, turn, turn * .35);
-    const branch = addRapidWorldBox("mistfen-snag-branch", timberLight, [1.2, .18, .18], [x + .35, 9.95, z]);
+    const branch = addRapidRegionBox("mistfen", "mistfen-snag-branch", timberLight, [1.2, .18, .18], [x + .35, 9.95, z]);
     branch.setLocalEulerAngles(0, turn, -18);
   }
   for (const [x, z] of [[163,31],[171,65],[185,35],[195,57],[181,76],[199,29]] as const)
-    addRapidWorldShape("mistfen-reeds", "cone", marshGlow, [.42, 1.15, .42], [x, 8.62, z]);
-  addRapidWorldShape("miremother-ring", "cylinder", marshGlow, [5.4, .055, 5.4], [179.5, 8.11, 51.5]);
+    addRapidRegionShape("mistfen", "mistfen-reeds", "cone", marshGlow, [.42, 1.15, .42], [x, 8.62, z]);
+  addRapidRegionShape("mistfen", "miremother-ring", "cylinder", marshGlow, [5.4, .055, 5.4], [179.5, 8.11, 51.5]);
 
   for (const [x, z, sx, sz, height] of [[158,142,9,5,.5],[188,141,12,4,.75],[155,181,8,5,.65],[184,184,13,4,1.05],
     [199,154,5,9,.8],[171,165,7,6,.55]] as const)
@@ -2890,6 +2934,13 @@ if (fastWorldRequested) {
     greenwoodAssetsStarted = true;
     void populateTownAssetKit(app, rapidPrototypeRoot, GREENWOOD_ASSET_PLACEMENTS, "greenwood-asset").then(result => {
       for (const entity of result.entities) {
+        const position = entity.getLocalPosition().clone();
+        const rotation = entity.getLocalRotation().clone();
+        const scale = entity.getLocalScale().clone();
+        entity.reparent(rapidRegionChunkRoot("greenwood", position.x, position.z));
+        entity.setLocalPosition(position);
+        entity.setLocalRotation(rotation);
+        entity.setLocalScale(scale);
         for (const node of entity.find(candidate => Boolean((candidate as pc.Entity).render))) {
           const render = (node as pc.Entity).render;
           if (render) render.batchGroupId = rapidWorldSceneryBatchGroup.id;
@@ -15006,6 +15057,7 @@ app.on("update", (dt: number) => {
   if (fastWorldRequested) {
     const townTime = customUpdateStartedAt * .001;
     const playerPosition = localPlayer.getPosition();
+    updateRapidRegionVisualStream(playerPosition.x, playerPosition.z);
     const region = rapidWorldRegionAt(playerPosition.x, playerPosition.z);
     if (region.id !== rapidWorldRegionId) {
       rapidWorldRegionId = region.id;
