@@ -65,6 +65,25 @@ describe("private Calling practice", () => {
     expect(mob.respawnAt).toBe(76_000);
   });
 
+  it("reuses the archived Greenwood leader phases and follower opening in Fast World", () => {
+    const { room, internal } = fixture();
+    internal.rapidPractice = true;
+    internal.spawnLootDrops = vi.fn();
+    internal.persistPlayer = vi.fn().mockResolvedValue(undefined);
+    const leader = new MobState(); Object.assign(leader, { alive: true, health: 34, maxHealth: 34,
+      archetype: "thornbinder", combatState: "windup", targetId: "trainee" });
+    internal.configureRapidWorldMob("greenwood-elderthorn", leader);
+    expect(leader).toMatchObject({ name: "Elderthorn Keeper", isMiniBoss: true, isChampion: false, attackPattern: "rush" });
+    const follower = new MobState(); Object.assign(follower, { alive: true, health: 1, maxHealth: 10,
+      archetype: "briar_crawler", level: 3, rewardMultiplier: 1 });
+    room.state.mobs.set("greenwood-elderthorn", leader);
+    room.state.mobs.set("greenwood-elderthorn-rootguard", follower);
+    internal.defeatMob("greenwood-elderthorn-rootguard", follower, "trainee", 10_000);
+    expect(leader.combatState).toBe("recover");
+    expect(leader.stateUntil).toBe(12_500);
+    expect(leader.targetId).toBe("");
+  });
+
   it("applies quick upgrades without saving or opening inventory", () => {
     const { internal, player, client } = fixture();
     internal.rapidPractice = true;

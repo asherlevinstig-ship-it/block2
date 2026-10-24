@@ -2612,12 +2612,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private configureRapidWorldMob(mobId: string, mob: MobState): void {
     const spawn = RAPID_PRACTICE_SPAWNS.find(candidate => candidate.id === mobId);
     if (!spawn) return;
+    const areaLeader = areaMiniBossDefinition(mobId);
     const tier = spawn.zone === "greenwood" ? 1 : spawn.zone === "mistfen" || spawn.zone === "sunken-coast" ? 2
       : spawn.zone === "southern-quarry" ? 3 : 4;
     mob.name = spawn.name;
     mob.level = spawn.level;
     mob.difficultyTier = tier;
-    mob.isChampion = Boolean(spawn.leader);
+    mob.isChampion = Boolean(spawn.leader && !areaLeader);
     mob.isMiniBoss = Boolean(spawn.leader);
     mob.isElite = false;
     mob.eliteKind = "";
@@ -2627,7 +2628,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     mob.armor = spawn.leader ? Math.max(1, Math.floor(spawn.level / 5)) : Math.floor(spawn.level / 7);
     mob.speedMultiplier = spawn.leader ? 1.22 : 1.08;
     mob.rewardMultiplier = spawn.leader ? 2 + spawn.level * .08 : 1 + spawn.level * .04;
-    mob.attackPattern = spawn.leader && spawn.archetype === "fen_bloater" ? "toxic-bloom"
+    mob.attackPattern = areaLeader ? areaLeaderPattern(spawn.archetype, 0, 1, mobId)
+      : spawn.leader && spawn.archetype === "fen_bloater" ? "toxic-bloom"
       : spawn.leader ? championPattern(mob)
       : spawn.archetype === "fen_bloater" ? "toxic-bloom"
       : spawn.archetype === "cinder_ram" ? "furnace-charge"
@@ -3342,6 +3344,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
             : itemDrop ? `Enemy defeated · loot landed · +${coinsGranted} gold.` : `Enemy defeated · +${coinsGranted} gold and XP.`);
       }
       this.combatContributions.clear(mobId);
+      this.openAreaLeaderAfterFollowerDefeat(mobId, now);
+      if (mob.isMiniBoss) {
+        this.areaLeaderPhases.delete(mobId);
+        this.miniBossEngagedAt.delete(mobId);
+        this.miniBossOrbitPressure.delete(mobId);
+      }
       return;
     }
     const masterTrialTag = this.masterTrialMobTags.get(mobId);

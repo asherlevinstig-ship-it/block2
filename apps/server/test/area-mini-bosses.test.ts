@@ -14,6 +14,7 @@ describe("area mini-bosses", () => {
 
   it("finds named area leaders without treating normal followers as bosses", () => {
     expect(areaMiniBossDefinition("wild-crawler")?.name).toBe("Greenwood Broodmother");
+    expect(areaMiniBossDefinition("greenwood-elderthorn")?.name).toBe("Elderthorn Keeper");
     expect(areaMiniBossDefinition("south-quarrymaster")?.name).toBe("Redstone Quarrymaster");
     expect(isAreaMiniBoss("frontier-spitter")).toBe(true);
     expect(isAreaMiniBoss("greenwood-briar")).toBe(false);
@@ -58,6 +59,7 @@ describe("area mini-bosses", () => {
 
   it("links authored followers to the leader opening they create", () => {
     expect(leaderForFollower("greenwood-briar")).toBe("wild-crawler");
+    expect(leaderForFollower("greenwood-elderthorn-rootguard")).toBe("greenwood-elderthorn");
     expect(leaderForFollower("frontier-support-spitter")).toBe("frontier-brute-east");
     expect(leaderForFollower("mistfen-spitter")).toBe("mistfen-behemoth");
     expect(leaderForFollower("south-pit-spitter")).toBe("south-quarrymaster");
@@ -77,6 +79,7 @@ describe("area mini-bosses", () => {
 
   it("turns crawler escorts into attack lanes that disappear as the pack is defeated", () => {
     expect(isCoordinatedCrawlerLeader("wild-crawler")).toBe(true);
+    expect(isCoordinatedCrawlerLeader("greenwood-elderthorn")).toBe(true);
     expect(isCoordinatedCrawlerLeader("moss-crawler")).toBe(false);
     expect(crawlerPackPattern("alpha-rush", 2)).toBe("alpha-rush");
     expect(crawlerPackPattern("alpha-rush", 1)).toBe("pack-rush");

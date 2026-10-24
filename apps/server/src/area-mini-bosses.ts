@@ -40,19 +40,28 @@ export const AREA_MINI_BOSSES: readonly AreaMiniBossDefinition[] = [
   { id: "buried-chamber-brute", name: "Stone Warden", rewardLabel: "Warden's Lantern Cache", rewardItemId: "stone_warden_lantern" },
 ] as const;
 
-const AREA_MINI_BOSS_BY_ID = new Map(AREA_MINI_BOSSES.map(definition => [definition.id, definition]));
+/** Fast World leaders reuse the archived combat/reward contracts without
+ * importing voxel positions or rendering. */
+const FAST_WORLD_AREA_LEADERS: readonly AreaMiniBossDefinition[] = [
+  { id: "greenwood-elderthorn", name: "Elderthorn Keeper", rewardLabel: "Elderthorn Fang Cache", rewardItemId: "broodmother_heart" },
+];
+const COMBAT_AREA_MINI_BOSS_BY_ID = new Map([...AREA_MINI_BOSSES, ...FAST_WORLD_AREA_LEADERS]
+  .map(definition => [definition.id, definition]));
 const EXISTING_AREA_BOSSES: readonly AreaMiniBossDefinition[] = [
   { id: "frontier-brute-west", name: "Frontier Stone Champion", rewardLabel: "Frontier Champion Cache", rewardItemId: "frontier_champion_crest" },
 ];
+/** Archived Hunt Board catalogue. Fast World leaders stay out of this list so
+ * its legacy contracts do not leak into the new regional progression. */
 export const AREA_MAIN_MOBS: readonly AreaMiniBossDefinition[] = [...AREA_MINI_BOSSES, ...EXISTING_AREA_BOSSES];
-const AREA_MAIN_MOB_BY_ID = new Map(AREA_MAIN_MOBS.map(definition => [definition.id, definition]));
+const AREA_MAIN_MOB_BY_ID = new Map([...AREA_MAIN_MOBS, ...FAST_WORLD_AREA_LEADERS]
+  .map(definition => [definition.id, definition]));
 
 export function areaMiniBossDefinition(id: string): AreaMiniBossDefinition | undefined {
-  return AREA_MINI_BOSS_BY_ID.get(id);
+  return COMBAT_AREA_MINI_BOSS_BY_ID.get(id);
 }
 
 export function isAreaMiniBoss(id: string): boolean {
-  return AREA_MINI_BOSS_BY_ID.has(id);
+  return COMBAT_AREA_MINI_BOSS_BY_ID.has(id);
 }
 
 export function areaMainMobDefinition(id: string): AreaMiniBossDefinition | undefined {
@@ -60,6 +69,7 @@ export function areaMainMobDefinition(id: string): AreaMiniBossDefinition | unde
 }
 
 export const AREA_LEADER_FOLLOWERS: Readonly<Record<string, readonly string[]>> = {
+  "greenwood-elderthorn": ["greenwood-elderthorn-rootguard", "greenwood-elderthorn-attendant"],
   "stone-brute": ["stone-brute-crawler", "stone-brute-spitter"],
   "frontier-brute": ["frontier-brute-crawler", "frontier-brute-spitter"],
   "frontier-brute-west": ["frontier-brute-west-crawler", "frontier-brute-west-spitter"],
@@ -83,7 +93,7 @@ const COORDINATED_BRUTE_LEADERS = new Set([
 ]);
 
 const COORDINATED_CRAWLER_LEADERS = new Set([
-  "wild-crawler", "outskirts-west-pack:0", "outskirts-north-pack:0",
+  "greenwood-elderthorn", "wild-crawler", "outskirts-west-pack:0", "outskirts-north-pack:0",
 ]);
 
 const COORDINATED_SPITTER_LEADERS = new Set([

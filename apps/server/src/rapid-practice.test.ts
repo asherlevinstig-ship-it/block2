@@ -56,6 +56,16 @@ describe("fast low-poly world", () => {
     expect(rapidMistfenToxicPoolAt(179.5, 51.5)).toBe(false);
   });
 
+  it("gives the Greenwood leader a close two-mob escort group", () => {
+    const region = fastWorldRegionDefinition("greenwood");
+    const leader = RAPID_PRACTICE_SPAWNS.find(spawn => spawn.id === region.leaderId)!;
+    const followers = RAPID_PRACTICE_SPAWNS.filter(spawn =>
+      ["greenwood-elderthorn-rootguard", "greenwood-elderthorn-attendant"].includes(spawn.id));
+    expect(followers).toHaveLength(2);
+    expect(followers.every(follower => Math.hypot(follower.x - leader.x, follower.z - leader.z) <= 6)).toBe(true);
+    expect(leader.respawnMs).toBe(90_000);
+  });
+
   it("keeps the Town of Beginnings inside the arena with a clear east gate", () => {
     expect((RAPID_PRACTICE_ARENA.maxX - RAPID_PRACTICE_ARENA.minX)
       * (RAPID_PRACTICE_ARENA.maxZ - RAPID_PRACTICE_ARENA.minZ)).toBeGreaterThanOrEqual(7_000);

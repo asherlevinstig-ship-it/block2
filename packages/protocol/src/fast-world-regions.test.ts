@@ -46,7 +46,9 @@ describe("Fast World region manifest", () => {
     expect(greenwood.encounters).toHaveLength(greenwood.targetPopulation);
     expect(greenwood.encounterPockets?.filter(pocket => pocket.kind === "combat")).toHaveLength(3);
     expect(greenwood.encounterPockets?.find(pocket => pocket.kind === "guarded-reward")?.encounterIds).toHaveLength(2);
-    expect(greenwood.encounterPockets?.find(pocket => pocket.kind === "leader")?.encounterIds).toEqual([greenwood.leaderId]);
+    expect(greenwood.encounterPockets?.find(pocket => pocket.kind === "leader")?.encounterIds).toEqual([
+      "greenwood-elderthorn-rootguard", "greenwood-elderthorn-attendant", greenwood.leaderId,
+    ]);
     expect(greenwood.connections).toContainEqual(expect.objectContaining({ regionId: "mistfen", name: "Fenward Track" }));
     expect(greenwood.encounters?.every(encounter => encounter.respawnMs >= 40_000)).toBe(true);
   });
