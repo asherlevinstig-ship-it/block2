@@ -121,6 +121,8 @@ import {
   GREENWOOD_FALLEN_LOGS,
   GREENWOOD_GROUND_PATCHES,
   GREENWOOD_GROVE_STONES,
+  GREENWOOD_ELEVATION_MOUNDS,
+  GREENWOOD_LANDMARKS,
   GREENWOOD_TEXTURE_STYLES,
   GREENWOOD_UNDERGROWTH,
 } from "./greenwood-visuals.js";
@@ -2298,6 +2300,16 @@ if (fastWorldRequested) {
   greenwoodMoteMaterial.blendType = pc.BLEND_ADDITIVE;
   greenwoodMoteMaterial.depthWrite = false;
   greenwoodMoteMaterial.update();
+  const greenwoodCorruption = new pc.StandardMaterial();
+  greenwoodCorruption.diffuse = new pc.Color(.28, .09, .32);
+  greenwoodCorruption.emissive = new pc.Color(.12, .015, .18);
+  greenwoodCorruption.gloss = .24;
+  greenwoodCorruption.update();
+  const greenwoodEmber = new pc.StandardMaterial();
+  greenwoodEmber.diffuse = new pc.Color(1, .34, .055);
+  greenwoodEmber.emissive = new pc.Color(.8, .1, .01);
+  greenwoodEmber.useLighting = false;
+  greenwoodEmber.update();
   for (const [material, opacity] of [[townMeadowOverlay, .28], [townVergeOverlay, .34], [roadWearOverlay, .18],
     [greenwoodMoss, .54], [greenwoodLeafLitter, .64]] as const) {
     material.opacity = opacity;
@@ -2646,6 +2658,11 @@ if (fastWorldRequested) {
       [patch.scale[0], .025, patch.scale[1]], [patch.position[0], 8.105, patch.position[1]]);
     groundPatch.setLocalEulerAngles(0, patch.yaw, 0);
   }
+  for (const mound of GREENWOOD_ELEVATION_MOUNDS) {
+    const bank = addRapidRegionShape("greenwood", `greenwood-bank:${mound.id}`, "cylinder", greenwoodMoss,
+      [mound.width, mound.height, mound.depth], [mound.x, 8.01 + mound.height * .36, mound.z]);
+    bank.setLocalEulerAngles(0, mound.yaw, 0);
+  }
 
   // The town now fades into Greenwood through layered verge, moss and leaf
   // textures. These shallow shapes communicate terrain without lying about
@@ -2950,6 +2967,93 @@ if (fastWorldRequested) {
         [.2 * size, .72 * size, .12 * size], [x + (blade - 1) * .18 * size, 8.34 + blade * .025, z]);
       fern.setLocalEulerAngles(blade === 1 ? -12 : 12, index * 47 + blade * 58, (blade - 1) * 24);
     }
+  }
+  for (const landmark of GREENWOOD_LANDMARKS) {
+    const [x, z] = landmark.position;
+    if (landmark.kind === "ruined-camp") {
+      // A collapsed expedition camp rewards the first short detour north.
+      for (let index = 0; index < 7; index++) {
+        const angle = index / 7 * Math.PI * 2;
+        const fireStone = addRapidRegionBox("greenwood", `${landmark.id}:fire-stone`, greenwoodStone,
+          [.34, .18, .27], [x + Math.cos(angle) * .76, 8.24, z + Math.sin(angle) * .76]);
+        fireStone.setLocalEulerAngles(index % 2 ? 8 : -6, -angle * 180 / Math.PI, 4);
+      }
+      addRapidRegionShape("greenwood", `${landmark.id}:embers`, "cylinder", greenwoodEmber,
+        [.5, .035, .5], [x, 8.23, z]);
+      addRapidRegionShape("greenwood", `${landmark.id}:flame`, "cone", greenwoodEmber,
+        [.22, .6, .22], [x, 8.56, z]);
+      for (const side of [-1, 1] as const) {
+        const canvas = addRapidRegionBox("greenwood", `${landmark.id}:fallen-tent`, side < 0 ? bannerBlue : roofBlueLight,
+          [2.2, .1, 2.35], [x - 2.5 + side * .55, 8.95, z - 1.5]);
+        canvas.setLocalEulerAngles(0, landmark.yaw, side * 42);
+      }
+      for (const offset of [-1, 1] as const) {
+        const seat = addRapidRegionBox("greenwood", `${landmark.id}:log-seat`, greenwoodBark,
+          [2.2, .3, .34], [x + .15, 8.36, z + offset * 1.65]);
+        seat.setLocalEulerAngles(0, landmark.yaw + offset * 7, 0);
+      }
+      const brokenStandard = addRapidRegionBox("greenwood", `${landmark.id}:broken-standard`, timber,
+        [.18, 2.25, .18], [x + 2.55, 9.14, z - .9]);
+      brokenStandard.setLocalEulerAngles(0, landmark.yaw, -18);
+      addRapidRegionBox("greenwood", `${landmark.id}:torn-banner`, bannerBlue,
+        [.08, .72, .68], [x + 2.82, 9.62, z - .9]).setLocalEulerAngles(0, landmark.yaw, -11);
+      continue;
+    }
+    if (landmark.kind === "ancient-shrine") {
+      // Low concentric steps and asymmetrical stones create a readable sacred
+      // silhouette without introducing a collision wall across the route.
+      addRapidRegionShape("greenwood", `${landmark.id}:lower-step`, "cylinder", greenwoodStone,
+        [3.4, .14, 3.4], [x, 8.2, z]);
+      addRapidRegionShape("greenwood", `${landmark.id}:moss-step`, "cylinder", greenwoodMoss,
+        [2.55, .12, 2.55], [x, 8.36, z]);
+      const altar = addRapidRegionBox("greenwood", `${landmark.id}:altar`, townStoneLight,
+        [1.65, .72, 1.1], [x, 8.78, z]);
+      altar.setLocalEulerAngles(0, landmark.yaw, 0);
+      addRapidRegionShape("greenwood", `${landmark.id}:rune`, "cylinder", townRune,
+        [.58, .045, .58], [x, 9.17, z]).setLocalEulerAngles(0, landmark.yaw, 0);
+      for (let index = 0; index < 5; index++) {
+        const angle = index / 5 * Math.PI * 2 + .35;
+        const pillar = addRapidRegionBox("greenwood", `${landmark.id}:root-stone`, greenwoodStone,
+          [.48, 1.25 + index % 2 * .38, .42], [x + Math.cos(angle) * 3.15,
+            8.75 + index % 2 * .18, z + Math.sin(angle) * 3.15]);
+        pillar.setLocalEulerAngles(index % 2 ? 5 : -7, -angle * 180 / Math.PI, index % 2 ? -5 : 8);
+      }
+      continue;
+    }
+    if (landmark.kind === "corrupted-grove") {
+      // Corruption appears as veins and growths, not a clean circular arena.
+      for (let index = 0; index < 7; index++) {
+        const angle = index / 7 * Math.PI * 2 + .2;
+        const reach = 1.2 + index % 3 * .85;
+        const vein = addRapidRegionBox("greenwood", `${landmark.id}:blight-vein`, greenwoodCorruption,
+          [reach, .055, .16 + index % 2 * .08], [x + Math.cos(angle) * reach * .48,
+            8.18 + index * .001, z + Math.sin(angle) * reach * .48]);
+        vein.setLocalEulerAngles(0, -angle * 180 / Math.PI, index % 2 ? 3 : -3);
+        const bulbX = x + Math.cos(angle) * (reach + .35);
+        const bulbZ = z + Math.sin(angle) * (reach + .35);
+        addRapidRegionShape("greenwood", `${landmark.id}:blight-bulb`, "sphere", greenwoodCorruption,
+          [.3 + index % 2 * .1, .4 + index % 3 * .08, .3 + index % 2 * .1], [bulbX, 8.48, bulbZ]);
+      }
+      for (const side of [-1, 1] as const) {
+        const snag = addRapidRegionShape("greenwood", `${landmark.id}:snag`, "cylinder", greenwoodBark,
+          [.33, 1.75, .33], [x + side * 2.7, 9.05, z + side * .9]);
+        snag.setLocalEulerAngles(side * 10, landmark.yaw + side * 18, side * 14);
+      }
+      continue;
+    }
+    // The leader grove gets a thorn arch that reads from the main path. It
+    // frames the fight but leaves the combat centre and retreat lane clear.
+    for (const side of [-1, 1] as const) {
+      const archRoot = addRapidRegionShape("greenwood", `${landmark.id}:arch-root`, "cylinder", greenwoodBark,
+        [.48, 2.25, .48], [x - 6.4, 9.75, z + side * 3.15]);
+      archRoot.setLocalEulerAngles(side * 8, side * 9, side * 7);
+    }
+    const archCrown = addRapidRegionBox("greenwood", `${landmark.id}:arch-crown`, greenwoodBark,
+      [.52, .48, 6.8], [x - 6.4, 11.52, z]);
+    archCrown.setLocalEulerAngles(0, 0, -4);
+    for (const side of [-1, 1] as const)
+      addRapidRegionShape("greenwood", `${landmark.id}:thorn-crown`, "cone", greenwoodCorruption,
+        [.34, .72, .34], [x - 6.05, 11.5, z + side * 2.35]).setLocalEulerAngles(0, 0, 90);
   }
   for (const standingStone of GREENWOOD_GROVE_STONES) {
     const stoneRoot = addRapidRegionBox("greenwood", "elderthorn-standing-stone", greenwoodStone,

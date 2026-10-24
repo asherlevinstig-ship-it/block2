@@ -3,7 +3,10 @@ import {
   GREENWOOD_ASSET_PLACEMENTS,
   GREENWOOD_FALLEN_LOGS,
   GREENWOOD_GROUND_PATCHES,
+  GREENWOOD_ELEVATION_MOUNDS,
+  GREENWOOD_LANDMARKS,
   GREENWOOD_LEADER_POSITION,
+  GREENWOOD_ROUTE_NODES,
   GREENWOOD_TEXTURE_STYLES,
   GREENWOOD_UNDERGROWTH,
 } from "./greenwood-visuals.js";
@@ -29,5 +32,20 @@ describe("Greenwood visual composition", () => {
     expect(GREENWOOD_GROUND_PATCHES.some(patch => patch.id === "elderthorn-clearing")).toBe(true);
     expect(GREENWOOD_FALLEN_LOGS.length).toBeGreaterThanOrEqual(5);
     expect(GREENWOOD_UNDERGROWTH.length).toBeGreaterThanOrEqual(24);
+  });
+
+  it("gives exploration three optional landmarks before the leader grove", () => {
+    expect(GREENWOOD_LANDMARKS.map(landmark => landmark.kind)).toEqual([
+      "ruined-camp", "ancient-shrine", "corrupted-grove", "leader-grove",
+    ]);
+    expect(new Set(GREENWOOD_LANDMARKS.map(landmark => landmark.id)).size).toBe(GREENWOOD_LANDMARKS.length);
+    expect(GREENWOOD_LANDMARKS.every(landmark => landmark.discoveryRadius >= 7)).toBe(true);
+  });
+
+  it("keeps a readable main route while branches and low ridges break up the field", () => {
+    expect(GREENWOOD_ROUTE_NODES[0]).toMatchObject({ id: "east-gate", x: 108.5 });
+    expect(GREENWOOD_ROUTE_NODES.at(-1)).toMatchObject({ id: "elderthorn", x: GREENWOOD_LEADER_POSITION.x });
+    expect(GREENWOOD_ELEVATION_MOUNDS.length).toBeGreaterThanOrEqual(6);
+    expect(GREENWOOD_ELEVATION_MOUNDS.every(mound => Math.abs(mound.z - 106) >= 8)).toBe(true);
   });
 });

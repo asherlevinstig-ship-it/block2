@@ -3,7 +3,7 @@ import { defineRoom, defineServer } from "@colyseus/core";
 import { PRACTICE_ROOM, SILVER_DEPTHS_ROOM, WORLD_ROOM } from "@blockcraft/protocol";
 import { WorldRoom } from "./game-room.js";
 
-const SERVER_BUILD = "colyseus-fast-world-art-slice-v267";
+const SERVER_BUILD = "colyseus-greenwood-region-slice-v268";
 
 const gameServer = defineServer({
   rooms: {

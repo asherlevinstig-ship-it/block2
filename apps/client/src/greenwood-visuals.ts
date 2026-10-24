@@ -77,12 +77,56 @@ export interface GreenwoodGroundPatch {
 }
 
 export const GREENWOOD_GROUND_PATCHES: readonly GreenwoodGroundPatch[] = [
+  { id: "gate-trail", material: "leafLitter", position: [116, 106], scale: [7.8, 2.1], yaw: 0 },
+  { id: "camp-branch", material: "leafLitter", position: [124, 96], scale: [6.8, 1.7], yaw: -34 },
+  { id: "shrine-branch", material: "moss", position: [130, 117], scale: [7.2, 1.75], yaw: 32 },
   { id: "west-moss", material: "moss", position: [116, 92], scale: [6.8, 3.9], yaw: 18 },
   { id: "north-glade", material: "moss", position: [132, 88], scale: [8.5, 4.2], yaw: -12 },
   { id: "south-glade", material: "moss", position: [130, 124], scale: [7.8, 4.5], yaw: 24 },
   { id: "thorn-path", material: "leafLitter", position: [141, 104], scale: [8.5, 2.4], yaw: -8 },
   { id: "fallen-grove", material: "leafLitter", position: [121, 116], scale: [5.5, 3.2], yaw: 33 },
   { id: "elderthorn-clearing", material: "leafLitter", position: [150.5, 106.5], scale: [6.4, 6.4], yaw: 0 },
+] as const;
+
+export type GreenwoodLandmarkKind = "ruined-camp" | "ancient-shrine" | "corrupted-grove" | "leader-grove";
+
+export interface GreenwoodLandmark {
+  id: string;
+  name: string;
+  kind: GreenwoodLandmarkKind;
+  position: readonly [number, number];
+  yaw: number;
+  discoveryRadius: number;
+}
+
+/**
+ * These are deliberately spread between the road and forest edges. Players can
+ * read the main eastbound journey at a glance, then peel north or south into a
+ * short discovery loop without crossing a featureless field.
+ */
+export const GREENWOOD_LANDMARKS: readonly GreenwoodLandmark[] = [
+  { id: "mosswatch-camp", name: "Mosswatch Remains", kind: "ruined-camp", position: [123.5, 88.5], yaw: 18, discoveryRadius: 7 },
+  { id: "first-root-shrine", name: "Shrine of the First Root", kind: "ancient-shrine", position: [130.5, 124], yaw: -12, discoveryRadius: 7 },
+  { id: "blighted-hollow", name: "Blighted Hollow", kind: "corrupted-grove", position: [143, 121], yaw: 26, discoveryRadius: 7.5 },
+  { id: "elderthorn-court", name: "Elderthorn Court", kind: "leader-grove", position: [150.5, 106.5], yaw: 0, discoveryRadius: 10 },
+] as const;
+
+export const GREENWOOD_ROUTE_NODES = [
+  { id: "east-gate", x: 108.5, z: 106 },
+  { id: "forest-threshold", x: 117, z: 106 },
+  { id: "fork", x: 126, z: 106 },
+  { id: "mosswatch", x: 123.5, z: 92 },
+  { id: "first-root", x: 130.5, z: 121 },
+  { id: "elderthorn", x: GREENWOOD_LEADER_POSITION.x, z: GREENWOOD_LEADER_POSITION.z },
+] as const;
+
+export const GREENWOOD_ELEVATION_MOUNDS = [
+  { id: "gate-north-bank", x: 114, z: 95, width: 4.8, depth: 3.2, height: .42, yaw: 14 },
+  { id: "gate-south-bank", x: 115, z: 117, width: 5.2, depth: 3.4, height: .46, yaw: -18 },
+  { id: "camp-ridge", x: 128, z: 82.5, width: 7.5, depth: 3.8, height: .65, yaw: -9 },
+  { id: "shrine-rise", x: 131, z: 130, width: 6.2, depth: 3.3, height: .58, yaw: 8 },
+  { id: "east-north-ridge", x: 146, z: 87, width: 6.8, depth: 3.2, height: .55, yaw: 21 },
+  { id: "east-south-ridge", x: 149, z: 126.5, width: 5.8, depth: 3.1, height: .5, yaw: -16 },
 ] as const;
 
 export const GREENWOOD_FALLEN_LOGS = [
