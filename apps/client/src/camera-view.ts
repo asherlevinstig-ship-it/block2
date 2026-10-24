@@ -1,3 +1,5 @@
+import type { CameraOrbit } from "./camera-orbit.js";
+
 export const FIRST_PERSON_EYE_HEIGHT = 1.48;
 export const FIRST_PERSON_FOV = 68;
 export const THIRD_PERSON_FOV = 42;
@@ -5,6 +7,8 @@ export const THIRD_PERSON_FOV = 42;
 export const FIRST_PERSON_NEUTRAL_ORBIT_PITCH = Math.atan2(20, Math.hypot(16, 16));
 const MIN_FIRST_PERSON_ELEVATION = -Math.PI / 9;
 const MAX_FIRST_PERSON_ELEVATION = Math.PI / 6;
+const FIRST_PERSON_MOUSE_YAW_RADIANS_PER_PIXEL = .0018;
+const FIRST_PERSON_MOUSE_PITCH_RADIANS_PER_PIXEL = .0015;
 
 export type CameraViewMode = "third-person" | "first-person";
 
@@ -22,4 +26,17 @@ export function firstPersonLookDirection(cameraYaw: number, orbitPitch: number):
 export function firstPersonFacingYaw(cameraYaw: number): number {
   const yaw = Math.atan2(-Math.cos(cameraYaw), -Math.sin(cameraYaw)) * 180 / Math.PI;
   return (yaw + 360) % 360;
+}
+
+export function firstPersonMouseLook(orbit: CameraOrbit, deltaX: number, deltaY: number): CameraOrbit {
+  const minPitch = FIRST_PERSON_NEUTRAL_ORBIT_PITCH + MIN_FIRST_PERSON_ELEVATION;
+  const maxPitch = FIRST_PERSON_NEUTRAL_ORBIT_PITCH + MAX_FIRST_PERSON_ELEVATION;
+  return {
+    ...orbit,
+    yaw: orbit.yaw + deltaX * FIRST_PERSON_MOUSE_YAW_RADIANS_PER_PIXEL,
+    pitch: Math.max(minPitch, Math.min(maxPitch,
+      orbit.pitch - deltaY * FIRST_PERSON_MOUSE_PITCH_RADIANS_PER_PIXEL)),
+    yawSpeed: 0,
+    pitchSpeed: 0,
+  };
 }

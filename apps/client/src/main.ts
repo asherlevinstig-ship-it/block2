@@ -157,6 +157,7 @@ import {
   THIRD_PERSON_FOV,
   firstPersonFacingYaw,
   firstPersonLookDirection,
+  firstPersonMouseLook,
   type CameraViewMode,
 } from "./camera-view.js";
 import { firstPersonActionPose, firstPersonWeaponKind, type FirstPersonWeaponKind } from "./first-person-action.js";
@@ -4356,7 +4357,7 @@ function toggleCameraView(capturePointer = false): void {
 cameraModeToggle.addEventListener("click", () => toggleCameraView(true));
 document.addEventListener("mousemove", event => {
   if (cameraViewMode !== "first-person" || document.pointerLockElement !== canvas) return;
-  cameraOrbit = dragCameraOrbit(cameraOrbit, event.movementX, event.movementY);
+  cameraOrbit = firstPersonMouseLook(cameraOrbit, event.movementX, event.movementY);
 });
 setCameraViewMode(cameraViewMode);
 localPlayer.setPosition(8.5, 11, 8.5);
