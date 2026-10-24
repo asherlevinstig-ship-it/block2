@@ -151,6 +151,16 @@ import { TOWN_ATMOSPHERE_PARTICLES, TOWN_ATMOSPHERE_PATCHES, TOWN_GATE_EMBANKMEN
   TOWN_TEXTURE_STYLES } from "./town-atmosphere.js";
 import { rapidWorldRegionAt } from "./rapid-world.js";
 import {
+  FAST_WORLD_MAP_BOUNDS,
+  FAST_WORLD_NAV_LANDMARKS,
+  FAST_WORLD_SIGNPOSTS,
+  discoverFastWorldLandmarks,
+  fastWorldDestinationDirection,
+  fastWorldMapPoint,
+  fastWorldRegionTravelSummary,
+  type FastWorldNavPoint,
+} from "./fast-world-navigation.js";
+import {
   FastWorldVisualChunkStream,
   fastWorldActiveVisualChunkKeys,
   fastWorldRegionVisualChunks,
@@ -2218,6 +2228,111 @@ const rapidTownSparks: { entity: pc.Entity; phase: number }[] = [];
 const rapidGreenwoodMotes: { entity: pc.Entity; x: number; y: number; z: number; phase: number }[] = [];
 const rapidTownAtmosphere: { entity: pc.Entity; kind: "leaf" | "pollen"; x: number; y: number; z: number; phase: number }[] = [];
 let rapidWorldRegionId = "";
+const FAST_WORLD_NAV_STORAGE_KEY = `blockcraft:fast-world-navigation:v1:${profileToken}`;
+const fastWorldNavigationState = (() => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(FAST_WORLD_NAV_STORAGE_KEY) ?? "{}") as {
+      regions?: unknown; landmarks?: unknown;
+    };
+    return {
+      regions: new Set(Array.isArray(parsed.regions) ? parsed.regions.filter((value): value is string => typeof value === "string") : ["town"]),
+      landmarks: new Set(Array.isArray(parsed.landmarks) ? parsed.landmarks.filter((value): value is string => typeof value === "string") : []),
+    };
+  } catch { return { regions: new Set<string>(["town"]), landmarks: new Set<string>() }; }
+})();
+let fastWorldMapPanel: HTMLElement | null = null;
+let fastWorldMapCanvas: HTMLCanvasElement | null = null;
+let fastWorldMapDetail: HTMLElement | null = null;
+let fastWorldRegionReveal: HTMLElement | null = null;
+let fastWorldRegionRevealTimer = 0;
+let fastWorldDestinationHud: HTMLElement | null = null;
+let fastWorldDestination: FastWorldNavPoint | null = null;
+let lastFastWorldMapDrawAt = -Infinity;
+
+const saveFastWorldNavigation = (): void => {
+  try { localStorage.setItem(FAST_WORLD_NAV_STORAGE_KEY, JSON.stringify({
+    regions: [...fastWorldNavigationState.regions], landmarks: [...fastWorldNavigationState.landmarks],
+  })); } catch { /* Private browsing can disable storage. */ }
+};
+
+const showFastWorldReveal = (title: string, detail: string, kind: "region" | "landmark" | "arrival" = "region"): void => {
+  if (!fastWorldRegionReveal) return;
+  fastWorldRegionReveal.dataset.kind = kind;
+  fastWorldRegionReveal.innerHTML = `<small>${kind === "landmark" ? "LANDMARK DISCOVERED" : kind === "arrival" ? "DESTINATION REACHED" : "REGION ENTERED"}</small><strong>${title}</strong><span>${detail}</span>`;
+  fastWorldRegionReveal.hidden = false;
+  window.clearTimeout(fastWorldRegionRevealTimer);
+  fastWorldRegionRevealTimer = window.setTimeout(() => { if (fastWorldRegionReveal) fastWorldRegionReveal.hidden = true; }, 2_800);
+};
+
+const fastWorldMapTargets = (): FastWorldNavPoint[] => [
+  { id: "town", name: "Town of Beginnings", x: 74, z: 106, regionId: "town", kind: "town", discoveryRadius: 0 },
+  ...FAST_WORLD_REGION_DEFINITIONS.filter(region => fastWorldNavigationState.regions.has(region.id)).map(region => ({
+    id: `region:${region.id}`, name: `${region.name} · LV ${region.levelMin}–${region.levelMax}`,
+    x: (region.bounds.minX + region.bounds.maxX) / 2, z: (region.bounds.minZ + region.bounds.maxZ) / 2,
+    regionId: region.id, kind: "connection" as const, discoveryRadius: 0,
+  })),
+  ...FAST_WORLD_NAV_LANDMARKS.filter(landmark => fastWorldNavigationState.landmarks.has(landmark.id)),
+];
+
+const drawFastWorldMap = (position: { x: number; z: number }, facingYaw: number, now: number, force = false): void => {
+  if (!fastWorldMapCanvas || !fastWorldMapPanel || !force && now - lastFastWorldMapDrawAt < 100) return;
+  lastFastWorldMapDrawAt = now;
+  const ctx = fastWorldMapCanvas.getContext("2d");
+  if (!ctx) return;
+  const width = fastWorldMapCanvas.width, height = fastWorldMapCanvas.height;
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = "#071511"; ctx.fillRect(0, 0, width, height);
+  const palette: Record<string, string> = {
+    town: "#315d49", greenwood: "#315b31", mistfen: "#274e4b", "sunken-coast": "#52634f",
+    "southern-quarry": "#6a4d31", "ashen-reach": "#593333",
+  };
+  const drawRegion = (id: string, name: string, minX: number, maxX: number, minZ: number, maxZ: number): void => {
+    const a = fastWorldMapPoint(minX, minZ, width, height);
+    const b = fastWorldMapPoint(maxX, maxZ, width, height);
+    const visited = fastWorldNavigationState.regions.has(id);
+    ctx.fillStyle = visited ? palette[id] ?? "#36453c" : "#101b18";
+    ctx.globalAlpha = visited ? .88 : .62; ctx.fillRect(a.x, a.y, b.x - a.x, b.y - a.y); ctx.globalAlpha = 1;
+    ctx.strokeStyle = id === rapidWorldRegionId ? "#f6d66b" : visited ? "#94b995" : "#385047";
+    ctx.lineWidth = id === rapidWorldRegionId ? 2 : 1; ctx.strokeRect(a.x + .5, a.y + .5, b.x - a.x - 1, b.y - a.y - 1);
+    if (visited && (fastWorldMapPanel?.dataset.expanded === "true" || id === rapidWorldRegionId)) {
+      ctx.fillStyle = "#e8f2d7"; ctx.font = `800 ${fastWorldMapPanel?.dataset.expanded === "true" ? 11 : 8}px system-ui`;
+      ctx.textAlign = "center"; ctx.fillText(name.toUpperCase(), (a.x + b.x) / 2, a.y + 12);
+    }
+  };
+  drawRegion("town", "Town", 40, 108, 66, 146);
+  for (const region of FAST_WORLD_REGION_DEFINITIONS)
+    drawRegion(region.id, region.name, region.bounds.minX, region.bounds.maxX, region.bounds.minZ, region.bounds.maxZ);
+  const point = (target: FastWorldNavPoint, colour: string, radius: number): void => {
+    const mapped = fastWorldMapPoint(target.x, target.z, width, height);
+    ctx.beginPath(); ctx.arc(mapped.x, mapped.y, radius, 0, Math.PI * 2);
+    ctx.fillStyle = colour; ctx.fill(); ctx.strokeStyle = "#07110e"; ctx.lineWidth = 1.5; ctx.stroke();
+    if (fastWorldDestination?.id === target.id) {
+      ctx.beginPath(); ctx.arc(mapped.x, mapped.y, radius + 4 + Math.sin(now / 180), 0, Math.PI * 2);
+      ctx.strokeStyle = "#ffe071"; ctx.lineWidth = 2; ctx.stroke();
+    }
+  };
+  for (const sign of FAST_WORLD_SIGNPOSTS) if (fastWorldNavigationState.regions.has(sign.regionId)) point(sign, "#e7b94f", 2.5);
+  for (const target of fastWorldMapTargets()) point(target,
+    target.kind === "town" ? "#77ed91" : target.kind === "leader" ? "#ffbd55" : "#b6e27c", target.kind === "leader" ? 4 : 3);
+  if (fastWorldDestination) {
+    const from = fastWorldMapPoint(position.x, position.z, width, height);
+    const to = fastWorldMapPoint(fastWorldDestination.x, fastWorldDestination.z, width, height);
+    ctx.setLineDash([4, 4]); ctx.strokeStyle = "#f3d466"; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y); ctx.stroke(); ctx.setLineDash([]);
+  }
+  const player = fastWorldMapPoint(position.x, position.z, width, height);
+  ctx.save(); ctx.translate(player.x, player.y); ctx.rotate(-facingYaw);
+  ctx.beginPath(); ctx.moveTo(0, -7); ctx.lineTo(5, 6); ctx.lineTo(0, 3); ctx.lineTo(-5, 6); ctx.closePath();
+  ctx.fillStyle = "#ffffff"; ctx.fill(); ctx.strokeStyle = "#10201a"; ctx.lineWidth = 2; ctx.stroke(); ctx.restore();
+};
+
+const setFastWorldMapExpanded = (expanded: boolean): void => {
+  if (!fastWorldMapPanel || !fastWorldMapCanvas) return;
+  fastWorldMapPanel.dataset.expanded = String(expanded);
+  fastWorldMapCanvas.width = expanded ? 420 : 224;
+  fastWorldMapCanvas.height = expanded ? 300 : 172;
+  lastFastWorldMapDrawAt = -Infinity;
+};
 let requestRapidTownAssets = (): void => {};
 let requestRapidTownNpcAssets = (): void => {};
 let requestGreenwoodAssets = (): void => {};
@@ -3289,6 +3404,21 @@ if (fastWorldRequested) {
     addRapidWorldBox("coast-threshold", stone, [.48, 2.2, .48], [x, 9.1, 148]);
     addRapidWorldShape("coast-threshold-flame", "sphere", coastWater, [.42, .42, .42], [x, 11.3, 148]);
   }
+  for (const sign of FAST_WORLD_SIGNPOSTS) {
+    const parentRegion = sign.regionId === "town" ? null : sign.regionId;
+    const post = parentRegion
+      ? addRapidRegionBox(parentRegion, `route-sign:${sign.id}:post`, timber, [.16, 1.75, .16], [sign.x, 8.9, sign.z])
+      : addRapidWorldBox(`route-sign:${sign.id}:post`, timber, [.16, 1.75, .16], [sign.x, 8.9, sign.z]);
+    post.setLocalEulerAngles(0, 18, -3);
+    const board = parentRegion
+      ? addRapidRegionBox(parentRegion, `route-sign:${sign.id}:board`, timberLight, [.18, .58, 1.7], [sign.x, 9.65, sign.z])
+      : addRapidWorldBox(`route-sign:${sign.id}:board`, timberLight, [.18, .58, 1.7], [sign.x, 9.65, sign.z]);
+    board.setLocalEulerAngles(0, 18, 0);
+    const cap = parentRegion
+      ? addRapidRegionShape(parentRegion, `route-sign:${sign.id}:marker`, "sphere", townRune, [.18, .18, .18], [sign.x, 9.66, sign.z])
+      : addRapidWorldShape(`route-sign:${sign.id}:marker`, "sphere", townRune, [.18, .18, .18], [sign.x, 9.66, sign.z]);
+    cap.setLocalPosition(sign.x + .2, 9.66, sign.z);
+  }
 
   // The imported kit is decorative only: server-owned world geometry remains authoritative for
   // movement and combat. Primitive art stays visible until a complete replacement family loads.
@@ -3352,6 +3482,43 @@ if (fastWorldRequested) {
   const metrics = badge.querySelector("small") as HTMLElement;
   metrics.style.cssText = "color:#75cde8;font-size:9px;font-weight:700;letter-spacing:.02em";
   document.body.appendChild(badge);
+
+  fastWorldRegionReveal = document.createElement("aside");
+  fastWorldRegionReveal.id = "fast-world-region-reveal";
+  fastWorldRegionReveal.hidden = true;
+  document.body.appendChild(fastWorldRegionReveal);
+
+  fastWorldMapPanel = document.createElement("aside");
+  fastWorldMapPanel.id = "fast-world-map";
+  fastWorldMapPanel.dataset.expanded = "false";
+  fastWorldMapPanel.innerHTML = '<header><strong>REALM MAP</strong><span>M · click a discovered marker</span></header><canvas width="224" height="172" aria-label="Fast World regional map"></canvas><footer>Undiscovered landmarks appear when approached.</footer>';
+  fastWorldMapCanvas = fastWorldMapPanel.querySelector("canvas");
+  fastWorldMapDetail = fastWorldMapPanel.querySelector("footer");
+  fastWorldMapCanvas?.addEventListener("click", event => {
+    if (!fastWorldMapCanvas) return;
+    const rect = fastWorldMapCanvas.getBoundingClientRect();
+    const px = (event.clientX - rect.left) / rect.width * fastWorldMapCanvas.width;
+    const py = (event.clientY - rect.top) / rect.height * fastWorldMapCanvas.height;
+    const selected = fastWorldMapTargets().map(target => ({ target,
+      point: fastWorldMapPoint(target.x, target.z, fastWorldMapCanvas!.width, fastWorldMapCanvas!.height) }))
+      .filter(candidate => Math.hypot(candidate.point.x - px, candidate.point.y - py) <= (fastWorldMapPanel?.dataset.expanded === "true" ? 18 : 12))
+      .sort((a, b) => Math.hypot(a.point.x - px, a.point.y - py) - Math.hypot(b.point.x - px, b.point.y - py))[0];
+    fastWorldDestination = selected?.target ?? null;
+    lastFastWorldMapDrawAt = -Infinity;
+    if (fastWorldDestination && fastWorldMapDetail) fastWorldMapDetail.textContent = `GUIDING · ${fastWorldDestination.name}`;
+  });
+  document.body.appendChild(fastWorldMapPanel);
+
+  fastWorldDestinationHud = document.createElement("aside");
+  fastWorldDestinationHud.id = "fast-world-destination";
+  fastWorldDestinationHud.hidden = true;
+  fastWorldDestinationHud.innerHTML = "<span>▲</span><div><strong></strong><small></small></div><button type=\"button\" aria-label=\"Clear destination\">×</button>";
+  fastWorldDestinationHud.querySelector("button")?.addEventListener("click", () => {
+    fastWorldDestination = null;
+    if (fastWorldDestinationHud) fastWorldDestinationHud.hidden = true;
+    if (fastWorldMapDetail) fastWorldMapDetail.textContent = "Destination cleared · choose a discovered marker.";
+  });
+  document.body.appendChild(fastWorldDestinationHud);
 
   rapidPracticeRewardPanel = document.createElement("section");
   rapidPracticeRewardPanel.id = "rapid-practice-reward";
@@ -12875,6 +13042,11 @@ window.addEventListener("keydown", event => {
 window.addEventListener("keydown", event => {
   if (event.code !== "KeyM" || event.repeat || event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
   event.preventDefault();
+  if (fastWorldRequested && fastWorldMapPanel) {
+    setFastWorldMapExpanded(fastWorldMapPanel.dataset.expanded !== "true");
+    drawFastWorldMap(localPlayer.getPosition(), cameraOrbit.yaw, performance.now(), true);
+    return;
+  }
   setMinimapExpanded(minimapPanel.dataset.expanded !== "true");
 });
 
@@ -15756,12 +15928,41 @@ app.on("update", (dt: number) => {
     updateRapidRegionVisualStream(playerPosition.x, playerPosition.z);
     const region = rapidWorldRegionAt(playerPosition.x, playerPosition.z);
     if (region.id !== rapidWorldRegionId) {
+      const previousRegion = rapidWorldRegionId;
       rapidWorldRegionId = region.id;
+      fastWorldNavigationState.regions.add(region.id);
+      saveFastWorldNavigation();
       const title = document.querySelector<HTMLElement>("#fast-world-badge strong");
       const detail = document.querySelector<HTMLElement>("#fast-world-badge span");
       if (title) title.textContent = `${region.name.toUpperCase()} · ${region.levelLabel}`;
-      if (detail) detail.textContent = region.guidance;
+      if (detail) detail.textContent = `${region.guidance} · ${fastWorldRegionTravelSummary(region.id)}`;
+      if (previousRegion && region.id !== "crossroads") showFastWorldReveal(region.name,
+        `${region.levelLabel} · fixed difficulty · ${fastWorldRegionTravelSummary(region.id)}`);
     }
+    const newlyDiscovered = discoverFastWorldLandmarks(playerPosition, fastWorldNavigationState.landmarks);
+    if (newlyDiscovered.length) {
+      for (const landmark of newlyDiscovered) fastWorldNavigationState.landmarks.add(landmark.id);
+      saveFastWorldNavigation();
+      const landmark = newlyDiscovered[0]!;
+      showFastWorldReveal(landmark.name, `${rapidWorldRegionAt(landmark.x, landmark.z).name} · now marked on the Realm Map`, "landmark");
+    }
+    if (fastWorldDestination) {
+      const direction = fastWorldDestinationDirection(playerPosition, fastWorldDestination, cameraOrbit.yaw);
+      if (direction.distance <= 4) {
+        showFastWorldReveal(fastWorldDestination.name, "Marker cleared", "arrival");
+        fastWorldDestination = null;
+        if (fastWorldDestinationHud) fastWorldDestinationHud.hidden = true;
+      } else if (fastWorldDestinationHud) {
+        fastWorldDestinationHud.hidden = false;
+        const arrow = fastWorldDestinationHud.querySelector<HTMLElement>("span");
+        const name = fastWorldDestinationHud.querySelector<HTMLElement>("strong");
+        const distance = fastWorldDestinationHud.querySelector<HTMLElement>("small");
+        if (arrow) arrow.style.transform = `rotate(${direction.angle}rad)`;
+        if (name) name.textContent = fastWorldDestination.name;
+        if (distance) distance.textContent = `${Math.ceil(direction.distance)}m · M for map`;
+      }
+    } else if (fastWorldDestinationHud) fastWorldDestinationHud.hidden = true;
+    drawFastWorldMap(playerPosition, cameraOrbit.yaw, customUpdateStartedAt);
     for (const smoke of rapidTownSmoke) {
       const travel = (townTime * .22 + smoke.phase) % 1;
       const size = .16 + travel * .42;
