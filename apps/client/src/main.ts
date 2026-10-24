@@ -159,6 +159,7 @@ import {
   firstPersonLookDirection,
   type CameraViewMode,
 } from "./camera-view.js";
+import { firstPersonActionPose, firstPersonWeaponKind, type FirstPersonWeaponKind } from "./first-person-action.js";
 import { CombatSyncRecorder } from "./combat-sync.js";
 import {
   advanceDodgeVisualOffset,
@@ -4175,6 +4176,109 @@ for (const side of [-1, 1]) {
 localStealthGhost.enabled = false;
 const localFirstPersonRenderers = localPlayerVisual.findComponents("render") as pc.RenderComponent[];
 
+interface FirstPersonActionRig {
+  root: pc.Entity;
+  leftHand: pc.Entity;
+  rightHand: pc.Entity;
+  weapons: Record<FirstPersonWeaponKind, pc.Entity>;
+  magic: pc.Entity;
+  magicCore: pc.Entity;
+  runeRing: pc.Entity;
+}
+
+const createFirstPersonMaterial = (color: pc.Color, emissive?: pc.Color): pc.StandardMaterial => {
+  const material = new pc.StandardMaterial();
+  material.diffuse = color;
+  if (emissive) material.emissive = emissive;
+  material.depthTest = false;
+  material.depthWrite = true;
+  material.update();
+  return material;
+};
+
+function createFirstPersonActionRig(): FirstPersonActionRig {
+  const root = new pc.Entity("first-person-action-rig");
+  camera.addChild(root);
+  const sleeve = createFirstPersonMaterial(new pc.Color(.1, .27, .32), new pc.Color(.012, .03, .035));
+  const leather = createFirstPersonMaterial(new pc.Color(.31, .17, .075), new pc.Color(.018, .008, .003));
+  const skin = createFirstPersonMaterial(new pc.Color(.72, .48, .31), new pc.Color(.025, .012, .006));
+  const steel = createFirstPersonMaterial(new pc.Color(.7, .8, .84), new pc.Color(.035, .055, .065));
+  steel.metalness = .55; steel.useMetalness = true; steel.shininess = 70; steel.update();
+  const wood = createFirstPersonMaterial(new pc.Color(.32, .16, .055));
+  const arcane = createFirstPersonMaterial(new pc.Color(.34, .14, .92), new pc.Color(.26, .055, .82));
+  const arcaneEdge = createFirstPersonMaterial(new pc.Color(.65, .82, 1), new pc.Color(.25, .55, 1));
+
+  const actionShape = (parent: pc.Entity, name: string, type: "box" | "cylinder" | "cone" | "sphere",
+    material: pc.StandardMaterial, scale: [number, number, number], position: [number, number, number]): pc.Entity => {
+    const entity = new pc.Entity(name);
+    entity.addComponent("render", { type, material, castShadows: false, receiveShadows: false });
+    for (const meshInstance of entity.render?.meshInstances ?? []) meshInstance.cull = false;
+    entity.setLocalScale(...scale); entity.setLocalPosition(...position); parent.addChild(entity);
+    return entity;
+  };
+  const makeHand = (side: "left" | "right"): pc.Entity => {
+    const hand = new pc.Entity(`first-person-${side}-hand`); root.addChild(hand);
+    actionShape(hand, `${side}-sleeve`, "box", sleeve, [.18, .42, .18], [0, -.22, .04]);
+    actionShape(hand, `${side}-bracer`, "box", leather, [.195, .16, .2], [0, .02, 0]);
+    actionShape(hand, `${side}-glove`, "box", skin, [.18, .2, .18], [0, .18, -.05]);
+    return hand;
+  };
+  const leftHand = makeHand("left"), rightHand = makeHand("right");
+  leftHand.setLocalScale(.72, .72, .72);
+  rightHand.setLocalScale(.72, .72, .72);
+  const weapons = Object.fromEntries((["unarmed", "sword", "dagger", "bow", "focus", "hammer"] as const)
+    .map(kind => [kind, new pc.Entity(`first-person-${kind}`)])) as Record<FirstPersonWeaponKind, pc.Entity>;
+  for (const weapon of Object.values(weapons)) rightHand.addChild(weapon);
+
+  actionShape(weapons.sword, "sword-grip", "box", leather, [.075, .075, .3], [0, 0, -.44]);
+  actionShape(weapons.sword, "sword-guard", "box", steel, [.38, .06, .08], [0, 0, -.62]);
+  actionShape(weapons.sword, "sword-blade", "box", steel, [.085, .045, .72], [0, 0, -1.02]);
+  const swordTip = actionShape(weapons.sword, "sword-tip", "cone", steel, [.09, .22, .09], [0, 0, -1.48]);
+  swordTip.setLocalEulerAngles(90, 0, 0);
+
+  actionShape(weapons.dagger, "dagger-grip", "box", leather, [.08, .08, .24], [0, 0, -.4]);
+  actionShape(weapons.dagger, "dagger-guard", "box", steel, [.27, .055, .07], [0, 0, -.55]);
+  actionShape(weapons.dagger, "dagger-blade", "box", steel, [.09, .04, .42], [0, 0, -.78]);
+
+  actionShape(weapons.hammer, "hammer-shaft", "box", wood, [.075, .075, .75], [0, 0, -.72]);
+  actionShape(weapons.hammer, "hammer-head", "box", steel, [.52, .28, .3], [0, 0, -1.13]);
+  actionShape(weapons.hammer, "hammer-core", "box", arcane, [.18, .2, .32], [0, 0, -1.16]);
+
+  actionShape(weapons.bow, "bow-grip", "box", leather, [.08, .32, .1], [0, 0, -.48]);
+  for (const side of [-1, 1] as const) {
+    const limb = actionShape(weapons.bow, "bow-limb", "box", wood, [.07, .62, .08], [0, side * .48, -.58]);
+    limb.setLocalEulerAngles(side * 18, 0, side * 12);
+    const string = actionShape(weapons.bow, "bow-string", "box", arcaneEdge, [.012, .64, .012], [0, side * .46, -.43]);
+    string.setLocalEulerAngles(side * -12, 0, 0);
+  }
+
+  actionShape(weapons.focus, "focus-handle", "box", leather, [.08, .08, .3], [0, 0, -.45]);
+  actionShape(weapons.focus, "focus-cage", "sphere", steel, [.24, .24, .24], [0, 0, -.72]);
+  actionShape(weapons.focus, "focus-core", "sphere", arcane, [.14, .14, .14], [0, 0, -.72]);
+
+  const magic = new pc.Entity("first-person-triggered-magic"); root.addChild(magic); magic.setLocalPosition(0, -.12, -1.3);
+  const magicCore = actionShape(magic, "magic-core", "sphere", arcane, [.22, .22, .22], [0, 0, 0]);
+  const runeRing = new pc.Entity("magic-rune-ring"); magic.addChild(runeRing);
+  for (let index = 0; index < 8; index++) {
+    const angle = index / 8 * Math.PI * 2;
+    const rune = actionShape(runeRing, "magic-rune", "box", index % 2 ? arcane : arcaneEdge,
+      [.025, .025, .16], [Math.sin(angle) * .36, Math.cos(angle) * .36, 0]);
+    rune.setLocalEulerAngles(0, 0, -angle * 180 / Math.PI);
+  }
+  magic.enabled = false;
+  root.enabled = false;
+  return { root, leftHand, rightHand, weapons, magic, magicCore, runeRing };
+}
+
+const firstPersonActionRig = createFirstPersonActionRig();
+let firstPersonAbilityCastStartedAt: number | null = null;
+let firstPersonAbilityCastDuration = 700;
+function setFirstPersonMainHand(mainHandId: MainHandId): void {
+  const active = firstPersonWeaponKind(mainHandId);
+  for (const [kind, weapon] of Object.entries(firstPersonActionRig.weapons)) weapon.enabled = kind === active;
+}
+setFirstPersonMainHand("unarmed");
+
 function setCameraViewMode(next: CameraViewMode, capturePointer = false): void {
   if (next !== appliedCameraViewMode) {
     if (appliedCameraViewMode === "first-person") firstPersonCameraPitch = cameraOrbit.pitch;
@@ -4197,6 +4301,7 @@ function setCameraViewMode(next: CameraViewMode, capturePointer = false): void {
     ? "First-person camera · press V to return to third-person"
     : "Third-person camera · press V for first-person";
   for (const renderer of localFirstPersonRenderers) renderer.enabled = !firstPerson;
+  firstPersonActionRig.root.enabled = firstPerson;
   if (camera.camera) {
     camera.camera.fov = firstPerson ? FIRST_PERSON_FOV : THIRD_PERSON_FOV;
     camera.camera.nearClip = firstPerson ? .04 : .1;
@@ -5354,6 +5459,43 @@ let fieldSpecialSelectionBeforeEquip = false;
 let callingAbilityPendingUntil = 0;
 let localMainHandId: MainHandId = "unarmed";
 let localArmourId: ArmourId = "none";
+
+function updateFirstPersonActionView(now: number, moving: boolean, actionElapsed: number | null,
+  powerElapsed: number | null): void {
+  if (cameraViewMode !== "first-person") return;
+  const weaponKind = firstPersonWeaponKind(localMainHandId);
+  const triggeredCastElapsed = firstPersonAbilityCastStartedAt === null ? null : now - firstPersonAbilityCastStartedAt;
+  if (triggeredCastElapsed !== null && triggeredCastElapsed >= firstPersonAbilityCastDuration)
+    firstPersonAbilityCastStartedAt = null;
+  const focusAttack = weaponKind === "focus" ? actionElapsed : null;
+  const castElapsed = powerElapsed ?? focusAttack
+    ?? (firstPersonAbilityCastStartedAt === null ? null : now - firstPersonAbilityCastStartedAt);
+  const castDuration = powerElapsed !== null ? Math.max(1, powerDuration(localActivePower))
+    : focusAttack !== null ? Math.max(1, actionDuration(localActionStep)) : firstPersonAbilityCastDuration;
+  const pose = firstPersonActionPose({
+    timeSeconds: now / 1000,
+    moving,
+    weaponKind,
+    attackElapsedMs: weaponKind === "focus" ? null : actionElapsed,
+    attackDurationMs: Math.max(1, actionDuration(localActionStep)),
+    comboStep: localActionStep,
+    castElapsedMs: castElapsed,
+    castDurationMs: castDuration,
+  });
+  firstPersonActionRig.leftHand.setLocalPosition(pose.leftX, pose.leftY, pose.leftZ);
+  firstPersonActionRig.leftHand.setLocalEulerAngles(pose.leftPitch, pose.leftYaw, pose.leftRoll);
+  firstPersonActionRig.rightHand.setLocalPosition(pose.rightX, pose.rightY, pose.rightZ);
+  firstPersonActionRig.rightHand.setLocalEulerAngles(pose.rightPitch, pose.rightYaw, pose.rightRoll);
+  const magicVisible = pose.magicStrength > .025;
+  firstPersonActionRig.magic.enabled = magicVisible;
+  if (magicVisible) {
+    const scale = .3 + pose.magicStrength * .25;
+    firstPersonActionRig.magic.setLocalScale(scale, scale, scale);
+    firstPersonActionRig.runeRing.setLocalEulerAngles(0, 0, now * .12);
+    firstPersonActionRig.magicCore.setLocalScale(.12 + pose.magicStrength * .08,
+      .12 + pose.magicStrength * .08, .12 + pose.magicStrength * .08);
+  }
+}
 // The onboarding renderer reads the equipped weapon. Run its initial pass only
 // after equipment state exists so a fresh profile cannot hit the temporal dead zone.
 renderFirstSteps();
@@ -5820,6 +5962,8 @@ function requestCallingAbility(slot: "power" | "special" = "power", aimedYaw?: n
   callingAbilitySequence += 1;
   if (slot === "power") combatHud.setCallingPending(true);
   createCallingAnticipation(localBuildPathId);
+  firstPersonAbilityCastStartedAt = performance.now();
+  firstPersonAbilityCastDuration = slot === "special" ? 900 : 700;
   const pendingSequence = callingAbilitySequence;
   window.setTimeout(() => {
     if (callingAbilitySequence === pendingSequence && performance.now() >= callingAbilityPendingUntil) {
@@ -5858,6 +6002,7 @@ function requestSpecialEquip(specialId: SpecialId): void {
 
 function updateMainHandLoadout(mainHandId: MainHandId): void {
   localMainHandId = mainHandId;
+  setFirstPersonMainHand(mainHandId);
   localComboStep = 0;
   localComboExpiresAt = 0;
   targetStateKey = "";
@@ -7690,6 +7835,10 @@ function createCallingImpact(effect: CallingAbilityEffect): void {
     });
   }
   const abilityId = effect.abilityId;
+  if (effect.casterId === room?.sessionId) {
+    firstPersonAbilityCastStartedAt = performance.now();
+    firstPersonAbilityCastDuration = Math.max(520, Math.min(1_200, effect.durationMs ?? 700));
+  }
   if (effect.pathId === "mage") createMageHandCast(effect.casterId, abilityId as MageAbilityId);
   if (abilityId === "thief_decoy") createThiefDecoyImitation(effect);
   const layers = CALLING_IMPACT_PARTICLES[abilityId];
@@ -15593,6 +15742,8 @@ app.on("update", (dt: number) => {
   }
   const localActionElapsed = localActionStartedAt === null ? null : animationNow - localActionStartedAt;
   const localPowerElapsed = localPowerStartedAt === null ? null : animationNow - localPowerStartedAt;
+  updateFirstPersonActionView(animationNow, moving,
+    rapidCombatAnimationElapsed(localActionElapsed, fastWorldRequested, rapidPracticeHaste), localPowerElapsed);
   const activePowerDefinition = localActivePower ? POWER_DEFINITIONS[localActivePower] : null;
   const activePowerForwardStep = localActivePower ? activePowerShape(localActivePower).forwardStep : 0;
   if (localPowerElapsed !== null
