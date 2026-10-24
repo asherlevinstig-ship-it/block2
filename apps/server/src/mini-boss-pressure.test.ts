@@ -22,6 +22,7 @@ describe("mini boss pressure", () => {
   it("selects an archetype-specific circle breaker", () => {
     expect(miniBossOrbitCounterPattern("cave_spitter")).toBe("venom-ring");
     expect(miniBossOrbitCounterPattern("stone_brute")).toBe("warden-barrage");
+    expect(miniBossOrbitCounterPattern("fen_bloater")).toBe("bog-charge");
     expect(miniBossOrbitCounterPattern("moss_crawler")).toBe("alpha-rush");
   });
 

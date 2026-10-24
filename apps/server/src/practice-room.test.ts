@@ -84,6 +84,26 @@ describe("private Calling practice", () => {
     expect(leader.targetId).toBe("");
   });
 
+  it("adapts Miremother to toxic phases and the shared follower opening", () => {
+    const { room, internal } = fixture();
+    internal.rapidPractice = true;
+    internal.spawnLootDrops = vi.fn();
+    internal.persistPlayer = vi.fn().mockResolvedValue(undefined);
+    const leader = new MobState(); Object.assign(leader, { alive: true, health: 46, maxHealth: 46,
+      archetype: "fen_bloater", combatState: "windup", targetId: "trainee" });
+    internal.configureRapidWorldMob("mistfen-miremother", leader);
+    expect(leader).toMatchObject({ name: "Miremother", level: 7, isMiniBoss: true,
+      isChampion: false, attackPattern: "toxic-bloom" });
+    const follower = new MobState(); Object.assign(follower, { alive: true, health: 1, maxHealth: 16,
+      archetype: "cave_spitter", level: 6, rewardMultiplier: 1 });
+    room.state.mobs.set("mistfen-miremother", leader);
+    room.state.mobs.set("mistfen-miremother-spitter", follower);
+    internal.defeatMob("mistfen-miremother-spitter", follower, "trainee", 20_000);
+    expect(leader.combatState).toBe("recover");
+    expect(leader.stateUntil).toBe(22_500);
+    expect(leader.targetId).toBe("");
+  });
+
   it("applies quick upgrades without saving or opening inventory", () => {
     const { internal, player, client } = fixture();
     internal.rapidPractice = true;

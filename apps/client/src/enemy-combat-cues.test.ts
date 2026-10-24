@@ -11,6 +11,7 @@ describe("readable enemy combat cues", () => {
   });
   it("keeps Mistfen attacks distinct from generic brute cues", () => {
     expect(enemyCombatCue({ ...mob, attackPattern: "bog-charge" }, 1_100).label).toBe("BOG CHARGE · AIMING");
+    expect(enemyCombatCue({ ...mob, archetype: "fen_bloater", attackPattern: "bog-charge" }, 1_100).kind).toBe("charge");
     expect(enemyCombatCue({ ...mob, attackPattern: "toxic-eruption" }, 1_100).label).toBe("TOXIC ERUPTION · AIMING");
   });
   it("makes the Fen Bloater swell and counter window readable", () => {

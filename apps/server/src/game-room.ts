@@ -8993,7 +8993,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           mob.targetId = "";
           continue;
         }
-        if (mob.archetype === "fen_bloater") {
+        if (mob.archetype === "fen_bloater" && mob.attackPattern === "toxic-bloom") {
           this.pendingMobMelee.delete(mobId);
           this.fenBloaterGlandHits.delete(mobId);
           this.placeFenBloaterCloud(mobId, mob, now);
@@ -9025,7 +9025,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         }
         if (mob.archetype === "cinder_ram" && mob.attackPattern === "furnace-charge"
           || (mob.isChampion || mob.isMiniBoss && mob.archetype === "stone_brute") && mob.attackPattern === "charge"
-          || (mobId === "mistfen-behemoth" || mobId === MISTFEN_EVENT_ID || isMistfenEventFollower(mobId)) && mob.attackPattern === "bog-charge") {
+          || (mobId === "mistfen-behemoth" || mobId === "mistfen-miremother" || mobId === MISTFEN_EVENT_ID || isMistfenEventFollower(mobId)) && mob.attackPattern === "bog-charge") {
           this.launchMixedWarbandPush(mobId, mob, mob.targetId, aim, now);
           this.championCharges.set(mobId, { yaw: aim.yaw, startedAt: now, progress: 0, hit: new Set() });
         } else {
@@ -9235,7 +9235,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         || !hasCombatLineOfSight(mob, target, this.readWorldBlock)) continue;
       if (mobId === "frontier-brute" && !mob.isMiniBoss && mob.attackPattern !== "rocks") mob.attackPattern = frontierBrutePattern(mob.actionSequence);
       mob.combatState = "windup";
-      if (mob.archetype === "fen_bloater") this.fenBloaterGlandHits.set(mobId, { hits: 0, expiresAt: now + windupMs });
+      if (mob.archetype === "fen_bloater" && mob.attackPattern === "toxic-bloom")
+        this.fenBloaterGlandHits.set(mobId, { hits: 0, expiresAt: now + windupMs });
       this.silverGuardVolley.started(mobId, now + windupMs);
       this.crawlerPositioning.delete(mobId);
       if (definition.attackKind !== "projectile") this.spitterPositioning.delete(mobId);
@@ -10148,7 +10149,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
     if (mob.archetype === "cinder_ram" && mob.attackPattern === "furnace-charge"
       || (mob.isChampion || mob.isMiniBoss && mob.archetype === "stone_brute") && mob.attackPattern === "charge"
-      || (mobId === "mistfen-behemoth" || mobId === MISTFEN_EVENT_ID || isMistfenEventFollower(mobId)) && mob.attackPattern === "bog-charge") {
+      || (mobId === "mistfen-behemoth" || mobId === "mistfen-miremother" || mobId === MISTFEN_EVENT_ID || isMistfenEventFollower(mobId)) && mob.attackPattern === "bog-charge") {
       if (mob.aimCommitted) return;
       mob.attackStrikeX = mob.x; mob.attackStrikeY = mob.y; mob.attackStrikeZ = mob.z;
       return;
@@ -10204,7 +10205,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       return;
     }
     if ((mob.isChampion || mob.isMiniBoss && mob.archetype === "stone_brute") && mob.attackPattern === "charge"
-      || (mobId === "mistfen-behemoth" || mobId === MISTFEN_EVENT_ID || isMistfenEventFollower(mobId)) && mob.attackPattern === "bog-charge") {
+      || (mobId === "mistfen-behemoth" || mobId === "mistfen-miremother" || mobId === MISTFEN_EVENT_ID || isMistfenEventFollower(mobId)) && mob.attackPattern === "bog-charge") {
       mob.attackContactAt = releaseAt;
       mob.attackContactEndAt = releaseAt + CHAMPION_CHARGE.durationMs;
       mob.attackRecoveryEndAt = mob.attackContactEndAt + CHAMPION_CHARGE.recoveryMs;

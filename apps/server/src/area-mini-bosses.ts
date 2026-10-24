@@ -44,6 +44,7 @@ export const AREA_MINI_BOSSES: readonly AreaMiniBossDefinition[] = [
  * importing voxel positions or rendering. */
 const FAST_WORLD_AREA_LEADERS: readonly AreaMiniBossDefinition[] = [
   { id: "greenwood-elderthorn", name: "Elderthorn Keeper", rewardLabel: "Elderthorn Fang Cache", rewardItemId: "broodmother_heart" },
+  { id: "mistfen-miremother", name: "Miremother", rewardLabel: "Miremother Hoard", rewardItemId: "mireback_crown" },
 ];
 const COMBAT_AREA_MINI_BOSS_BY_ID = new Map([...AREA_MINI_BOSSES, ...FAST_WORLD_AREA_LEADERS]
   .map(definition => [definition.id, definition]));
@@ -70,6 +71,7 @@ export function areaMainMobDefinition(id: string): AreaMiniBossDefinition | unde
 
 export const AREA_LEADER_FOLLOWERS: Readonly<Record<string, readonly string[]>> = {
   "greenwood-elderthorn": ["greenwood-elderthorn-rootguard", "greenwood-elderthorn-attendant"],
+  "mistfen-miremother": ["mistfen-miremother-spitter", "mistfen-miremother-briar"],
   "stone-brute": ["stone-brute-crawler", "stone-brute-spitter"],
   "frontier-brute": ["frontier-brute-crawler", "frontier-brute-spitter"],
   "frontier-brute-west": ["frontier-brute-west-crawler", "frontier-brute-west-spitter"],
@@ -156,6 +158,11 @@ export function bruteLeaderExposureMs(aliveFollowers: number): number {
 }
 
 export function areaLeaderPattern(archetype: string, sequence: number, phase: AreaLeaderPhase = 1, leaderId = ""): string {
+  if (archetype === "fen_bloater") {
+    const rotation = phase === 1 ? ["toxic-bloom"]
+      : phase === 2 ? ["toxic-bloom", "bog-charge"] : ["bog-charge", "toxic-bloom", "bog-charge"];
+    return rotation[sequence % rotation.length]!;
+  }
   if (archetype === "cave_spitter") {
     const rotation = phase === 1 ? leaderId === "frontier-spitter" ? ["fan", "aimed"] : ["aimed", "fan"]
       : phase === 2 ? ["fan", "pool", "aimed"] : ["venom-ring", "fan", "pool"];

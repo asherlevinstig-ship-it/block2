@@ -15,6 +15,7 @@ describe("area mini-bosses", () => {
   it("finds named area leaders without treating normal followers as bosses", () => {
     expect(areaMiniBossDefinition("wild-crawler")?.name).toBe("Greenwood Broodmother");
     expect(areaMiniBossDefinition("greenwood-elderthorn")?.name).toBe("Elderthorn Keeper");
+    expect(areaMiniBossDefinition("mistfen-miremother")?.name).toBe("Miremother");
     expect(areaMiniBossDefinition("south-quarrymaster")?.name).toBe("Redstone Quarrymaster");
     expect(isAreaMiniBoss("frontier-spitter")).toBe(true);
     expect(isAreaMiniBoss("greenwood-briar")).toBe(false);
@@ -38,6 +39,10 @@ describe("area mini-bosses", () => {
     expect([0, 1, 2, 3].map(sequence => areaLeaderPattern("stone_brute", sequence, 2))).toEqual(["charge", "rocks", "smash", "slam"]);
     expect([0, 1, 2, 3].map(sequence => areaLeaderPattern("stone_brute", sequence, 3))).toEqual(["warden-barrage", "charge", "smash", "rocks"]);
     expect([0, 1].map(sequence => areaLeaderPattern("moss_crawler", sequence, 3))).toEqual(["alpha-rush", "pack-rush"]);
+    expect([0, 1].map(sequence => areaLeaderPattern("fen_bloater", sequence, 2, "mistfen-miremother")))
+      .toEqual(["toxic-bloom", "bog-charge"]);
+    expect([0, 1, 2].map(sequence => areaLeaderPattern("fen_bloater", sequence, 3, "mistfen-miremother")))
+      .toEqual(["bog-charge", "toxic-bloom", "bog-charge"]);
     expect([0, 1].map(sequence => areaLeaderPattern("stone_brute", sequence, 1, "mistfen-behemoth"))).toEqual(["bog-charge", "slam"]);
     expect([0, 1, 2].map(sequence => areaLeaderPattern("stone_brute", sequence, 2, "mistfen-behemoth"))).toEqual(["toxic-eruption", "bog-charge", "smash"]);
     expect([0, 1, 2].map(sequence => areaLeaderPattern("stone_brute", sequence, 3, "mistfen-behemoth"))).toEqual(["toxic-eruption", "bog-charge", "warden-barrage"]);
@@ -60,6 +65,7 @@ describe("area mini-bosses", () => {
   it("links authored followers to the leader opening they create", () => {
     expect(leaderForFollower("greenwood-briar")).toBe("wild-crawler");
     expect(leaderForFollower("greenwood-elderthorn-rootguard")).toBe("greenwood-elderthorn");
+    expect(leaderForFollower("mistfen-miremother-spitter")).toBe("mistfen-miremother");
     expect(leaderForFollower("frontier-support-spitter")).toBe("frontier-brute-east");
     expect(leaderForFollower("mistfen-spitter")).toBe("mistfen-behemoth");
     expect(leaderForFollower("south-pit-spitter")).toBe("south-quarrymaster");

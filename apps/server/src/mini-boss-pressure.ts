@@ -54,6 +54,7 @@ export function updateOrbitPressure(
 export function miniBossOrbitCounterPattern(archetype: string): string {
   if (archetype === "cave_spitter") return "venom-ring";
   if (archetype === "stone_brute") return "warden-barrage";
+  if (archetype === "fen_bloater") return "bog-charge";
   return "alpha-rush";
 }
 
