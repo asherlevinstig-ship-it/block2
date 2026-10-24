@@ -1,4 +1,5 @@
 import * as pc from "playcanvas";
+import { finishBuildingMaterials } from "./building-finish.js";
 
 export const QUATERNIUS_TOWN_ASSET_BASE_URL = "/assets/quaternius-medieval-village";
 export const KENNEY_TOWN_ASSET_BASE_URL = "/assets/kenney-fantasy-town";
@@ -176,6 +177,7 @@ export async function populateTownAssetKit(
     const resource = asset?.resource as pc.ContainerResource | undefined;
     if (!resource) continue;
     const entity = resource.instantiateRenderEntity({ castShadows: true, receiveShadows: true });
+    if (townAssetUrl(placement.id).startsWith(QUATERNIUS_TOWN_ASSET_BASE_URL)) finishBuildingMaterials(app, entity);
     entity.name = `${namePrefix}:${placement.name}`;
     entity.setLocalPosition(...placement.position);
     entity.setLocalEulerAngles(0, placement.yaw ?? 0, 0);

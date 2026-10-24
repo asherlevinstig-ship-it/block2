@@ -1,4 +1,5 @@
 import * as pc from "playcanvas";
+import { facetedBoxMesh } from "./faceted-shapes.js";
 import { addCallingParticleLayers } from "./calling-particles.js";
 import { CALLING_ABILITY_SUSTAIN_PARTICLES, CALLING_ANTICIPATION_PARTICLES, CALLING_IMPACT_PARTICLES, CALLING_SUSTAIN_PARTICLES, callingParticleLifetime } from "./calling-vfx-presets.js";
 import { mageCastDuration, mageCastPose, type MageAbilityId } from "./mage-casting.js";
@@ -115,7 +116,7 @@ import { confirmPredictedDodges, removeRejectedDodge, replayPendingMovement, typ
 import { advanceCameraOrbit, cameraOrbitOffset, dragCameraOrbit, initialCameraOrbit, pinchCameraOrbit } from "./camera-orbit.js";
 import { advanceCameraFollow, advanceCameraHeight, advanceCameraPosition } from "./camera-follow.js";
 import { populateTownAssetKit, readyTownFallbacks, SPEED_LAB_TOWN_ASSETS, type TownFallbackFamily } from "./town-asset-kit.js";
-import { createPaintedGroundMaterial } from "./fast-world-texture.js";
+import { createPaintedGroundMaterial, fitGroundTexture } from "./fast-world-texture.js";
 import {
   GREENWOOD_ASSET_PLACEMENTS,
   GREENWOOD_FALLEN_LOGS,
@@ -2200,6 +2201,7 @@ function addBox(
   const box = new pc.Entity(name);
   box.addComponent("render", { type: "box", castShadows: true });
   if (box.render) box.render.material = material;
+  if (fastWorldRequested) fitGroundTexture(app.graphicsDevice, box, material, scale, position);
   box.setLocalScale(...scale);
   box.setLocalPosition(...position);
   parent.addChild(box);
@@ -2436,10 +2438,12 @@ if (fastWorldRequested) {
   const coastWater = createPaintedGroundMaterial(app, SUNKEN_COAST_TEXTURE_STYLES.shallows, [3, 2]);
   const coastGrass = coloredMaterial(new pc.Color(.27, .43, .29));
   const coastFoam = coloredMaterial(new pc.Color(.62, .79, .7));
-  const quarryGround = coloredMaterial(new pc.Color(.42, .31, .22));
+  const quarryGround = createPaintedGroundMaterial(app, { name: "quarry-fractured-stone", base: "#796451",
+    mottles: ["#675342", "#8d7860", "#a18b70"], litter: ["#c4ac89", "#50473d", "#907c64"], seed: 90031, pattern: "stone" }, [12, 12]);
   const quarryRock = coloredMaterial(new pc.Color(.38, .34, .31));
   const ironOre = coloredMaterial(new pc.Color(.72, .39, .13));
-  const ashenGround = coloredMaterial(new pc.Color(.17, .15, .15));
+  const ashenGround = createPaintedGroundMaterial(app, { name: "ashen-basalt", base: "#373438",
+    mottles: ["#292b30", "#494449", "#51433d"], litter: ["#69636a", "#2c2727", "#795c46"], seed: 90047, pattern: "stone" }, [12, 12]);
   const ashRock = coloredMaterial(new pc.Color(.25, .22, .22));
   const lava = new pc.StandardMaterial();
   lava.diffuse = new pc.Color(.95, .19, .035);
@@ -2502,6 +2506,7 @@ if (fastWorldRequested) {
     const shape = new pc.Entity(name);
     shape.addComponent("render", { type, castShadows: true });
     if (shape.render) shape.render.material = material;
+    if (type === "box") fitGroundTexture(app.graphicsDevice, shape, material, scale, position);
     shape.setLocalScale(...scale);
     shape.setLocalPosition(...position);
     parent.addChild(shape);
@@ -3971,6 +3976,16 @@ const ARMOUR_OUTFIT_COLORS: Record<ArmourId, pc.Color> = {
 function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, withSilhouette = false, appearance: Appearance = DEFAULT_APPEARANCE): VoxelCharacterRig {
   const root = new pc.Entity("voxel-character");
   parent.addChild(root);
+  // Keep joint/weapon transforms and equipment silhouettes; soften the rendered body only.
+  const addBox = (parent: pc.Entity, name: string, material: pc.StandardMaterial,
+    scale: [number, number, number], position: [number, number, number]): pc.Entity => {
+    const part = new pc.Entity(name);
+    part.addComponent("render", { type: "box", material, castShadows: true, receiveShadows: true });
+    if (fastWorldRequested && part.render) part.render.meshInstances[0]!.mesh = facetedBoxMesh(app.graphicsDevice,
+      /face|hand|sleeve|forearm|trousers|shin|boot|coat|hair/.test(name) ? .12 : .06);
+    part.setLocalScale(...scale); part.setLocalPosition(...position); parent.addChild(part);
+    return part;
+  };
   const skinMaterial = coloredMaterial(appearanceColor("skin", appearance.skin));
   skinMaterial.shininess = 12; skinMaterial.update();
   const hairMaterial = coloredMaterial(appearanceColor("hair", appearance.hair));
@@ -4013,6 +4028,14 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
   head.setLocalPosition(0, 0.46, 0.015);
   torso.addChild(head);
   addBox(head, "face", skinMaterial, [0.4, 0.38, 0.38], [0, 0, 0]);
+  if (fastWorldRequested) {
+    addBox(head, "nose", skinMaterial, [.055, .075, .065], [0, -.035, .207]);
+    addBox(head, "mouth", faceMaterial, [.075, .018, .012], [0, -.112, .193]);
+    for (const side of [-1, 1]) {
+      addBox(head, "ear", skinMaterial, [.055, .105, .08], [side * .209, -.02, -.015]);
+      addBox(head, "eyebrow", hairMaterial, [.082, .022, .024], [side * .09, .075, .197]);
+    }
+  }
   const hairStyles = {
     swept: new pc.Entity("swept-hair"),
     spiked: new pc.Entity("spiked-hair"),
@@ -4541,6 +4564,8 @@ function createFirstPersonActionRig(): FirstPersonActionRig {
     material: pc.StandardMaterial, scale: [number, number, number], position: [number, number, number]): pc.Entity => {
     const entity = new pc.Entity(name);
     entity.addComponent("render", { type, material, castShadows: false, receiveShadows: false });
+    if (fastWorldRequested && type === "box" && /palm|finger|thumb/.test(name) && entity.render)
+      entity.render.meshInstances[0]!.mesh = facetedBoxMesh(app.graphicsDevice, .12);
     for (const meshInstance of entity.render?.meshInstances ?? []) meshInstance.cull = false;
     entity.setLocalScale(...scale); entity.setLocalPosition(...position); parent.addChild(entity);
     return entity;
@@ -9297,7 +9322,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   markMaterial.depthWrite = false;
   markMaterial.update();
   if (rootGuardian) bodyRoot.setLocalScale(1.16, 1.16, 1.16);
-  const art = createMobArt(bodyRoot, mob.archetype, bodyMaterial, matriarch, rootGuardian);
+  const art = createMobArt(bodyRoot, mob.archetype, bodyMaterial, matriarch, rootGuardian, fastWorldRequested);
   if (mobId === "northwatch-spitter" || mobId === "northwatch-patrol-stalker-west" || mobId === "northwatch-patrol-stalker-east") {
     const patrolShard = coloredMaterial(new pc.Color(.5, .86, 1));
     patrolShard.emissive.set(.1, .27, .38); patrolShard.update();

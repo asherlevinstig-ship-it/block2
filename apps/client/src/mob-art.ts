@@ -1,4 +1,5 @@
 import * as pc from "playcanvas";
+import { facetedBoxMesh } from "./faceted-shapes.js";
 import { mobGaitTargets } from "./mob-motion.js";
 
 type MobKind = "stone_brute" | "cave_spitter" | "moss_crawler" | "ridge_stalker" | "ember_hound" | "shard_sentry" | "thornbinder" | "fen_bloater" | "cinder_ram";
@@ -82,9 +83,14 @@ const emberHoundFlame = material("ember-hound-flame", [1, .34, .045], [.9, .12, 
 const dimGlowMaterials = new Map<pc.StandardMaterial, pc.StandardMaterial>([core, acid, crawlerEye, matriarchVenom, matriarchEnragedVenom, guardianCore, guardianEnragedCore, northwatchEye, shardCrystal, thornSap, fenGland, cinderEmber, emberHoundFlame]
   .map(live => [live, material(`defeated-${live.name}`, [live.diffuse.r * .5, live.diffuse.g * .5, live.diffuse.b * .5])]));
 
-function box(parent: pc.Entity, name: string, surface: pc.StandardMaterial, size: Triple, at: Triple, angle?: Triple): pc.Entity {
+function addMobPart(parent: pc.Entity, name: string, surface: pc.StandardMaterial, size: Triple, at: Triple, angle?: Triple, faceted = false): pc.Entity {
   const result = new pc.Entity(name);
   result.addComponent("render", { type: "box", material: surface, castShadows: true, receiveShadows: true });
+  const device = pc.Application.getApplication()?.graphicsDevice;
+  if (faceted && device && result.render) {
+    const organic = /body|belly|head|torso|muzzle|thigh|sac|paw|mane/.test(name);
+    result.render.meshInstances[0]!.mesh = facetedBoxMesh(device, organic ? .25 : .12);
+  }
   result.setLocalPosition(...at);
   result.setLocalScale(...size);
   if (angle) result.setLocalEulerAngles(...angle);
@@ -99,7 +105,9 @@ function pivot(parent: pc.Entity, name: string, at: Triple): pc.Entity {
   return result;
 }
 
-export function createMobArt(parent: pc.Entity, archetype: string, body: pc.StandardMaterial, matriarch = false, rootGuardian = false): MobArtRig {
+export function createMobArt(parent: pc.Entity, archetype: string, body: pc.StandardMaterial, matriarch = false, rootGuardian = false, faceted = false): MobArtRig {
+  const box = (parent: pc.Entity, name: string, surface: pc.StandardMaterial, size: Triple, at: Triple, angle?: Triple) =>
+    addMobPart(parent, name, surface, size, at, angle, faceted);
   const kind: MobKind = archetype === "stone_brute" ? "stone_brute" : archetype === "cave_spitter" ? "cave_spitter"
     : archetype === "ridge_stalker" ? "ridge_stalker" : archetype === "ember_hound" ? "ember_hound" : archetype === "shard_sentry" ? "shard_sentry"
       : archetype === "thornbinder" ? "thornbinder" : archetype === "fen_bloater" ? "fen_bloater"
