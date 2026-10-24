@@ -379,6 +379,7 @@ import {
   voxelTint,
 } from "./voxel-textures.js";
 import { retryConnection } from "./connection-retry.js";
+import { connectionEndpointForAttempt } from "./connection-endpoint.js";
 import {
   alternateInteractionMode,
   primaryActionForMode,
@@ -16343,8 +16344,12 @@ function applyBlockChange(message: BlockChanged): void {
 
 async function connect(initialCharacter?: { name: string; appearance: Appearance }): Promise<void> {
   const localHost = ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname);
-  const endpoint = import.meta.env.VITE_GAME_SERVER_URL
+  const configuredEndpoint = import.meta.env.VITE_GAME_SERVER_URL;
+  const endpoint = configuredEndpoint
     || (localHost ? "ws://localhost:2567" : `${window.location.origin}/game`);
+  const fallbackEndpoint = import.meta.env.VITE_GAME_SERVER_FALLBACK_URL
+    || "https://us-mia-ea26ba04.colyseus.cloud";
+  const fallbackEnabled = !localHost && !configuredEndpoint;
   const query = new URLSearchParams(window.location.search);
   // Live latency can expose the SDK reconciler's intermediate patch rewinds.
   // Use the acknowledged movement path by default and retain the pilot as an
@@ -16384,7 +16389,8 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     ...(activeRoomName === PRACTICE_ROOM && rapidPrototypeRequested ? { prototype: "2d" } : {}) };
   room = await retryConnection(
     (signal, attempt) => {
-      const client = new Client(endpoint, {
+      const attemptEndpoint = connectionEndpointForAttempt(endpoint, fallbackEndpoint, attempt, fallbackEnabled);
+      const client = new Client(attemptEndpoint, {
         fetchFn: (input, init) => fetch(input, { ...init, signal }),
       });
       if (storedReconnectToken) return client.reconnect(storedReconnectToken);
@@ -16397,10 +16403,12 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
         : client.create(activeRoomName, joinOptions);
     },
     (attempt, delay) => {
-      status.textContent = attempt === 2
-        ? `Shared world is delayed. Starting a recovery world in ${Math.round(delay / 1000)}s…`
+      status.textContent = attempt === 2 && fallbackEnabled
+        ? `Cloudflare matchmaking is delayed. Connecting directly to the game server in ${Math.round(delay / 1000)}s…`
         : `Game server is restarting. Reconnecting in ${Math.round(delay / 1000)}s… (attempt ${attempt}/5)`;
     },
+    undefined,
+    8_000,
   ).catch(error => {
     if (storedReconnectToken) {
       clearReconnectToken();
