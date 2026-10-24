@@ -176,14 +176,21 @@ export const FAST_WORLD_REGION_DEFINITIONS: readonly FastWorldRegionDefinition[]
     leaderId: "sunken-coast-tidecaller",
     leaderName: "Tidecaller Behemoth",
     encounterArchetypes: ["cave_spitter", "ridge_stalker", "fen_bloater"],
-    targetPopulation: 6,
+    targetPopulation: 8,
     encounters: [
       { id: "coast-spitter-a", archetype: "cave_spitter", name: "Brine Spitter", level: 5, respawnMs: 52_000, x: 48.5, y: 8, z: 158.5 },
       { id: "coast-stalker-a", archetype: "ridge_stalker", name: "Dune Stalker", level: 6, respawnMs: 56_000, x: 58.5, y: 8, z: 181.5 },
       { id: "coast-bloater-a", archetype: "fen_bloater", name: "Brine Bloater", level: 6, respawnMs: 59_000, x: 76.5, y: 8, z: 157.5 },
       { id: "coast-spitter-b", archetype: "cave_spitter", name: "Brine Spitter", level: 7, respawnMs: 63_000, x: 91.5, y: 8, z: 180.5 },
       { id: "coast-stalker-b", archetype: "ridge_stalker", name: "Dune Stalker", level: 8, respawnMs: 68_000, x: 98.5, y: 8, z: 162.5 },
+      { id: "coast-tidecaller-shoalguard", archetype: "cave_spitter", name: "Tidecaller Shoalguard", level: 7, respawnMs: 72_000, x: 66.5, y: 8, z: 171.5 },
+      { id: "coast-tidecaller-brinefang", archetype: "ridge_stalker", name: "Brinefang Escort", level: 8, respawnMs: 76_000, x: 74.5, y: 8, z: 176.5 },
       { id: "sunken-coast-tidecaller", archetype: "fen_bloater", name: "Tidecaller Behemoth", level: 8, respawnMs: 90_000, x: 70.5, y: 8, z: 174.5, leader: true },
+    ],
+    encounterPockets: [
+      { id: "tidecaller-shoal", name: "Tidecaller Shoal", kind: "leader", x: 70.5, z: 174.5, radius: 10,
+        encounterIds: ["coast-tidecaller-shoalguard", "coast-tidecaller-brinefang", "sunken-coast-tidecaller"],
+        rewardLabel: "Highest Sunken Coast loot" },
     ],
   },
   {

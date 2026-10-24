@@ -45,6 +45,7 @@ export const AREA_MINI_BOSSES: readonly AreaMiniBossDefinition[] = [
 const FAST_WORLD_AREA_LEADERS: readonly AreaMiniBossDefinition[] = [
   { id: "greenwood-elderthorn", name: "Elderthorn Keeper", rewardLabel: "Elderthorn Fang Cache", rewardItemId: "broodmother_heart" },
   { id: "mistfen-miremother", name: "Miremother", rewardLabel: "Miremother Hoard", rewardItemId: "mireback_crown" },
+  { id: "sunken-coast-tidecaller", name: "Tidecaller Behemoth", rewardLabel: "Tidecaller Conch Cache", rewardItemId: "tidecaller_conch" },
 ];
 const COMBAT_AREA_MINI_BOSS_BY_ID = new Map([...AREA_MINI_BOSSES, ...FAST_WORLD_AREA_LEADERS]
   .map(definition => [definition.id, definition]));
@@ -72,6 +73,7 @@ export function areaMainMobDefinition(id: string): AreaMiniBossDefinition | unde
 export const AREA_LEADER_FOLLOWERS: Readonly<Record<string, readonly string[]>> = {
   "greenwood-elderthorn": ["greenwood-elderthorn-rootguard", "greenwood-elderthorn-attendant"],
   "mistfen-miremother": ["mistfen-miremother-spitter", "mistfen-miremother-briar"],
+  "sunken-coast-tidecaller": ["coast-tidecaller-shoalguard", "coast-tidecaller-brinefang"],
   "stone-brute": ["stone-brute-crawler", "stone-brute-spitter"],
   "frontier-brute": ["frontier-brute-crawler", "frontier-brute-spitter"],
   "frontier-brute-west": ["frontier-brute-west-crawler", "frontier-brute-west-spitter"],

@@ -104,6 +104,26 @@ describe("private Calling practice", () => {
     expect(leader.targetId).toBe("");
   });
 
+  it("adapts Tidecaller to the shared coastal leader encounter", () => {
+    const { room, internal } = fixture();
+    internal.rapidPractice = true;
+    internal.spawnLootDrops = vi.fn();
+    internal.persistPlayer = vi.fn().mockResolvedValue(undefined);
+    const leader = new MobState(); Object.assign(leader, { alive: true, health: 50, maxHealth: 50,
+      archetype: "fen_bloater", combatState: "windup", targetId: "trainee" });
+    internal.configureRapidWorldMob("sunken-coast-tidecaller", leader);
+    expect(leader).toMatchObject({ name: "Tidecaller Behemoth", level: 8, isMiniBoss: true,
+      isChampion: false, attackPattern: "toxic-bloom" });
+    const follower = new MobState(); Object.assign(follower, { alive: true, health: 1, maxHealth: 18,
+      archetype: "cave_spitter", level: 7, rewardMultiplier: 1 });
+    room.state.mobs.set("sunken-coast-tidecaller", leader);
+    room.state.mobs.set("coast-tidecaller-shoalguard", follower);
+    internal.defeatMob("coast-tidecaller-shoalguard", follower, "trainee", 30_000);
+    expect(leader.combatState).toBe("recover");
+    expect(leader.stateUntil).toBe(32_500);
+    expect(leader.targetId).toBe("");
+  });
+
   it("applies quick upgrades without saving or opening inventory", () => {
     const { internal, player, client } = fixture();
     internal.rapidPractice = true;

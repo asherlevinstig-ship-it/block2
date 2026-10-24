@@ -9025,7 +9025,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         }
         if (mob.archetype === "cinder_ram" && mob.attackPattern === "furnace-charge"
           || (mob.isChampion || mob.isMiniBoss && mob.archetype === "stone_brute") && mob.attackPattern === "charge"
-          || (mobId === "mistfen-behemoth" || mobId === "mistfen-miremother" || mobId === MISTFEN_EVENT_ID || isMistfenEventFollower(mobId)) && mob.attackPattern === "bog-charge") {
+          || (mob.isMiniBoss && mob.archetype === "fen_bloater" || mobId === "mistfen-behemoth" || mobId === MISTFEN_EVENT_ID || isMistfenEventFollower(mobId)) && mob.attackPattern === "bog-charge") {
           this.launchMixedWarbandPush(mobId, mob, mob.targetId, aim, now);
           this.championCharges.set(mobId, { yaw: aim.yaw, startedAt: now, progress: 0, hit: new Set() });
         } else {
@@ -10149,7 +10149,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
     if (mob.archetype === "cinder_ram" && mob.attackPattern === "furnace-charge"
       || (mob.isChampion || mob.isMiniBoss && mob.archetype === "stone_brute") && mob.attackPattern === "charge"
-      || (mobId === "mistfen-behemoth" || mobId === "mistfen-miremother" || mobId === MISTFEN_EVENT_ID || isMistfenEventFollower(mobId)) && mob.attackPattern === "bog-charge") {
+      || (mob.isMiniBoss && mob.archetype === "fen_bloater" || mobId === "mistfen-behemoth" || mobId === MISTFEN_EVENT_ID || isMistfenEventFollower(mobId)) && mob.attackPattern === "bog-charge") {
       if (mob.aimCommitted) return;
       mob.attackStrikeX = mob.x; mob.attackStrikeY = mob.y; mob.attackStrikeZ = mob.z;
       return;
@@ -10205,7 +10205,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       return;
     }
     if ((mob.isChampion || mob.isMiniBoss && mob.archetype === "stone_brute") && mob.attackPattern === "charge"
-      || (mobId === "mistfen-behemoth" || mobId === "mistfen-miremother" || mobId === MISTFEN_EVENT_ID || isMistfenEventFollower(mobId)) && mob.attackPattern === "bog-charge") {
+      || (mob.isMiniBoss && mob.archetype === "fen_bloater" || mobId === "mistfen-behemoth" || mobId === MISTFEN_EVENT_ID || isMistfenEventFollower(mobId)) && mob.attackPattern === "bog-charge") {
       mob.attackContactAt = releaseAt;
       mob.attackContactEndAt = releaseAt + CHAMPION_CHARGE.durationMs;
       mob.attackRecoveryEndAt = mob.attackContactEndAt + CHAMPION_CHARGE.recoveryMs;

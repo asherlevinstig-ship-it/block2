@@ -3,7 +3,7 @@ import { defineRoom, defineServer } from "@colyseus/core";
 import { PRACTICE_ROOM, SILVER_DEPTHS_ROOM, WORLD_ROOM } from "@blockcraft/protocol";
 import { WorldRoom } from "./game-room.js";
 
-const SERVER_BUILD = "colyseus-mistfen-leader-adapter-v280";
+const SERVER_BUILD = "colyseus-tidecaller-leader-adapter-v281";
 
 const gameServer = defineServer({
   rooms: {
