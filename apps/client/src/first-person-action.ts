@@ -53,18 +53,19 @@ export function firstPersonActionPose(input: {
   const side = input.comboStep === 2 ? -1 : 1;
   const hammerWeight = input.weaponKind === "hammer" ? 1.25 : 1;
   const bowDraw = input.weaponKind === "bow" ? windup : 0;
+  const heldItemLift = input.weaponKind === "bow" ? .18 : input.weaponKind === "focus" ? .05 : 0;
 
   return {
-    leftX: -.46 - bowDraw * .08,
-    leftY: -.29 - bob + magicStrength * .045,
-    leftZ: -.95 - Math.abs(gait) * .015 - magicStrength * .16,
-    leftPitch: -18 - gait * 2 - magicStrength * 28,
+    leftX: -.5 - bowDraw * .06,
+    leftY: -.48 - bob + magicStrength * .12,
+    leftZ: -1.08 - Math.abs(gait) * .012 - magicStrength * .18,
+    leftPitch: -10 - gait * 2 - magicStrength * 24,
     leftYaw: bowDraw * -12,
     leftRoll: -8 - bowDraw * 16 - magicStrength * 6,
-    rightX: .46 + side * strike * .1,
-    rightY: -.3 - bob + strike * .07 + magicStrength * .045,
-    rightZ: -.98 - strike * .28 * hammerWeight - magicStrength * .16,
-    rightPitch: -16 - windup * 24 * hammerWeight + strike * 72 * hammerWeight - magicStrength * 28,
+    rightX: .5 + side * strike * .08,
+    rightY: -.49 + heldItemLift - bob + strike * .08 + magicStrength * .12,
+    rightZ: -1.1 - strike * .26 * hammerWeight - magicStrength * .18,
+    rightPitch: -9 - windup * 24 * hammerWeight + strike * 68 * hammerWeight - magicStrength * 24,
     rightYaw: side * (windup * 34 - strike * 68),
     rightRoll: 8 + side * (windup * 28 - strike * 96) + bowDraw * 14 + magicStrength * 6,
     magicStrength,

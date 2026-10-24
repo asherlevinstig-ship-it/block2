@@ -4201,9 +4201,12 @@ function createFirstPersonActionRig(): FirstPersonActionRig {
   camera.addChild(root);
   const sleeve = createFirstPersonMaterial(new pc.Color(.1, .27, .32), new pc.Color(.012, .03, .035));
   const leather = createFirstPersonMaterial(new pc.Color(.31, .17, .075), new pc.Color(.018, .008, .003));
-  const skin = createFirstPersonMaterial(new pc.Color(.72, .48, .31), new pc.Color(.025, .012, .006));
-  const steel = createFirstPersonMaterial(new pc.Color(.7, .8, .84), new pc.Color(.035, .055, .065));
+  const skin = createFirstPersonMaterial(new pc.Color(.65, .4, .235), new pc.Color(.022, .01, .004));
+  const steel = createFirstPersonMaterial(new pc.Color(.42, .54, .59), new pc.Color(.025, .04, .045));
   steel.metalness = .55; steel.useMetalness = true; steel.shininess = 70; steel.update();
+  const steelEdge = createFirstPersonMaterial(new pc.Color(.82, .91, .94), new pc.Color(.07, .1, .11));
+  steelEdge.metalness = .6; steelEdge.useMetalness = true; steelEdge.shininess = 80; steelEdge.update();
+  const bronze = createFirstPersonMaterial(new pc.Color(.5, .29, .08), new pc.Color(.035, .016, .002));
   const wood = createFirstPersonMaterial(new pc.Color(.32, .16, .055));
   const arcane = createFirstPersonMaterial(new pc.Color(.34, .14, .92), new pc.Color(.26, .055, .82));
   const arcaneEdge = createFirstPersonMaterial(new pc.Color(.65, .82, 1), new pc.Color(.25, .55, 1));
@@ -4218,43 +4221,75 @@ function createFirstPersonActionRig(): FirstPersonActionRig {
   };
   const makeHand = (side: "left" | "right"): pc.Entity => {
     const hand = new pc.Entity(`first-person-${side}-hand`); root.addChild(hand);
-    actionShape(hand, `${side}-sleeve`, "box", sleeve, [.18, .42, .18], [0, -.22, .04]);
-    actionShape(hand, `${side}-bracer`, "box", leather, [.195, .16, .2], [0, .02, 0]);
-    actionShape(hand, `${side}-glove`, "box", skin, [.18, .2, .18], [0, .18, -.05]);
+    const forearm = actionShape(hand, `${side}-sleeve`, "cone", sleeve, [.14, .34, .14], [0, -.2, .05]);
+    forearm.setLocalEulerAngles(0, 0, 180);
+    actionShape(hand, `${side}-cuff`, "cylinder", leather, [.155, .075, .155], [0, .01, .015]);
+    actionShape(hand, `${side}-palm`, "box", skin, [.15, .17, .115], [0, .13, -.04]);
+    const thumbDirection = side === "left" ? 1 : -1;
+    const thumb = actionShape(hand, `${side}-thumb`, "box", skin, [.065, .105, .07],
+      [thumbDirection * .105, .13, -.075]);
+    thumb.setLocalEulerAngles(0, 0, thumbDirection * 28);
+    for (let index = 0; index < 3; index++) {
+      const finger = actionShape(hand, `${side}-finger-${index}`, "box", skin,
+        side === "right" ? [.038, .09, .052] : [.036, .11, .045],
+        [(index - 1) * .05, side === "right" ? .205 : .235, side === "right" ? -.105 : -.075]);
+      if (side === "right") finger.setLocalEulerAngles(62, 0, 0);
+    }
     return hand;
   };
   const leftHand = makeHand("left"), rightHand = makeHand("right");
-  leftHand.setLocalScale(.72, .72, .72);
-  rightHand.setLocalScale(.72, .72, .72);
+  leftHand.setLocalScale(.76, .76, .76);
+  rightHand.setLocalScale(.76, .76, .76);
   const weapons = Object.fromEntries((["unarmed", "sword", "dagger", "bow", "focus", "hammer"] as const)
     .map(kind => [kind, new pc.Entity(`first-person-${kind}`)])) as Record<FirstPersonWeaponKind, pc.Entity>;
   for (const weapon of Object.values(weapons)) rightHand.addChild(weapon);
 
-  actionShape(weapons.sword, "sword-grip", "box", leather, [.075, .075, .3], [0, 0, -.44]);
-  actionShape(weapons.sword, "sword-guard", "box", steel, [.38, .06, .08], [0, 0, -.62]);
-  actionShape(weapons.sword, "sword-blade", "box", steel, [.085, .045, .72], [0, 0, -1.02]);
-  const swordTip = actionShape(weapons.sword, "sword-tip", "cone", steel, [.09, .22, .09], [0, 0, -1.48]);
-  swordTip.setLocalEulerAngles(90, 0, 0);
+  weapons.sword.setLocalPosition(-.015, .13, -.05);
+  weapons.sword.setLocalEulerAngles(-6, -8, 18);
+  actionShape(weapons.sword, "sword-grip", "cylinder", leather, [.055, .18, .055], [0, .07, 0]);
+  actionShape(weapons.sword, "sword-pommel", "sphere", bronze, [.075, .075, .075], [0, -.12, 0]);
+  actionShape(weapons.sword, "sword-guard", "box", bronze, [.3, .04, .07], [0, .25, 0]);
+  actionShape(weapons.sword, "sword-blade", "box", steel, [.082, .46, .035], [0, .5, 0]);
+  actionShape(weapons.sword, "sword-ridge", "box", steelEdge, [.012, .45, .041], [0, .5, 0]);
+  actionShape(weapons.sword, "sword-tip", "cone", steelEdge, [.085, .14, .05], [0, .8, 0]);
 
-  actionShape(weapons.dagger, "dagger-grip", "box", leather, [.08, .08, .24], [0, 0, -.4]);
-  actionShape(weapons.dagger, "dagger-guard", "box", steel, [.27, .055, .07], [0, 0, -.55]);
-  actionShape(weapons.dagger, "dagger-blade", "box", steel, [.09, .04, .42], [0, 0, -.78]);
+  weapons.dagger.setLocalPosition(-.015, .13, -.05);
+  weapons.dagger.setLocalEulerAngles(-8, -10, 24);
+  actionShape(weapons.dagger, "dagger-grip", "cylinder", leather, [.06, .15, .06], [0, .04, 0]);
+  actionShape(weapons.dagger, "dagger-guard", "box", bronze, [.23, .04, .065], [0, .2, 0]);
+  actionShape(weapons.dagger, "dagger-blade", "box", steel, [.095, .25, .032], [0, .345, 0]);
+  actionShape(weapons.dagger, "dagger-tip", "cone", steel, [.098, .12, .045], [0, .53, 0]);
 
-  actionShape(weapons.hammer, "hammer-shaft", "box", wood, [.075, .075, .75], [0, 0, -.72]);
-  actionShape(weapons.hammer, "hammer-head", "box", steel, [.52, .28, .3], [0, 0, -1.13]);
-  actionShape(weapons.hammer, "hammer-core", "box", arcane, [.18, .2, .32], [0, 0, -1.16]);
+  weapons.hammer.setLocalPosition(-.015, .12, -.06);
+  weapons.hammer.setLocalEulerAngles(-7, -7, 14);
+  actionShape(weapons.hammer, "hammer-shaft", "cylinder", wood, [.06, .4, .06], [0, .29, 0]);
+  actionShape(weapons.hammer, "hammer-head", "box", steel, [.38, .19, .21], [0, .67, 0]);
+  actionShape(weapons.hammer, "hammer-core", "box", arcane, [.14, .205, .23], [0, .67, 0]);
 
-  actionShape(weapons.bow, "bow-grip", "box", leather, [.08, .32, .1], [0, 0, -.48]);
-  for (const side of [-1, 1] as const) {
-    const limb = actionShape(weapons.bow, "bow-limb", "box", wood, [.07, .62, .08], [0, side * .48, -.58]);
-    limb.setLocalEulerAngles(side * 18, 0, side * 12);
-    const string = actionShape(weapons.bow, "bow-string", "box", arcaneEdge, [.012, .64, .012], [0, side * .46, -.43]);
-    string.setLocalEulerAngles(side * -12, 0, 0);
-  }
+  weapons.bow.setLocalPosition(-.02, .17, -.06);
+  weapons.bow.setLocalEulerAngles(-4, -7, 5);
+  actionShape(weapons.bow, "bow-grip", "box", leather, [.07, .15, .07], [0, 0, 0]);
+  const bowUpper = actionShape(weapons.bow, "bow-upper-limb", "box", wood, [.05, .28, .05], [-.035, .19, 0]);
+  bowUpper.setLocalEulerAngles(0, 0, 11);
+  const bowLower = actionShape(weapons.bow, "bow-lower-limb", "box", wood, [.05, .28, .05], [-.035, -.19, 0]);
+  bowLower.setLocalEulerAngles(0, 0, -11);
+  actionShape(weapons.bow, "bow-string", "box", steelEdge, [.006, .4, .006], [.11, 0, 0]);
+  const bowUpperTie = actionShape(weapons.bow, "bow-upper-tie", "box", steelEdge, [.006, .12, .006], [.05, .25, 0]);
+  bowUpperTie.setLocalEulerAngles(0, 0, -42);
+  const bowLowerTie = actionShape(weapons.bow, "bow-lower-tie", "box", steelEdge, [.006, .12, .006], [.05, -.25, 0]);
+  bowLowerTie.setLocalEulerAngles(0, 0, 42);
 
-  actionShape(weapons.focus, "focus-handle", "box", leather, [.08, .08, .3], [0, 0, -.45]);
-  actionShape(weapons.focus, "focus-cage", "sphere", steel, [.24, .24, .24], [0, 0, -.72]);
-  actionShape(weapons.focus, "focus-core", "sphere", arcane, [.14, .14, .14], [0, 0, -.72]);
+  weapons.focus.setLocalPosition(-.015, .13, -.05);
+  weapons.focus.setLocalEulerAngles(-8, -8, 18);
+  actionShape(weapons.focus, "focus-handle", "cylinder", leather, [.06, .24, .06], [0, .08, 0]);
+  actionShape(weapons.focus, "focus-collar", "cylinder", bronze, [.095, .045, .095], [0, .22, 0]);
+  actionShape(weapons.focus, "focus-core", "sphere", arcane, [.1, .1, .1], [0, .37, 0]);
+  for (const [x, y] of [[-.145, .37], [.145, .37], [0, .225], [0, .515]] as const)
+    actionShape(weapons.focus, "focus-rune-node", "sphere", arcaneEdge, [.035, .035, .035], [x, y, 0]);
+  const focusCrossA = actionShape(weapons.focus, "focus-cage-a", "box", steelEdge, [.018, .19, .018], [0, .37, .015]);
+  focusCrossA.setLocalEulerAngles(0, 0, 45);
+  const focusCrossB = actionShape(weapons.focus, "focus-cage-b", "box", steelEdge, [.018, .19, .018], [0, .37, .015]);
+  focusCrossB.setLocalEulerAngles(0, 0, -45);
 
   const magic = new pc.Entity("first-person-triggered-magic"); root.addChild(magic); magic.setLocalPosition(0, -.12, -1.3);
   const magicCore = actionShape(magic, "magic-core", "sphere", arcane, [.22, .22, .22], [0, 0, 0]);
