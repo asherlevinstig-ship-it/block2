@@ -3,7 +3,7 @@ import { defineRoom, defineServer } from "@colyseus/core";
 import { PRACTICE_ROOM, SILVER_DEPTHS_ROOM, WORLD_ROOM } from "@blockcraft/protocol";
 import { WorldRoom } from "./game-room.js";
 
-const SERVER_BUILD = "colyseus-first-person-mouse-look-v271";
+const SERVER_BUILD = "colyseus-first-person-combat-slice-v272";
 
 const gameServer = defineServer({
   rooms: {

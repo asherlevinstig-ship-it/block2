@@ -26,6 +26,8 @@ export interface FirstPersonActionPose {
   rightYaw: number;
   rightRoll: number;
   magicStrength: number;
+  attackStrength: number;
+  attackProgress: number;
 }
 
 const smoothPulse = (value: number): number => {
@@ -69,6 +71,8 @@ export function firstPersonActionPose(input: {
     rightYaw: side * (windup * 34 - strike * 68),
     rightRoll: 8 + side * (windup * 28 - strike * 96) + bowDraw * 14 + magicStrength * 6,
     magicStrength,
+    attackStrength: strike,
+    attackProgress: attackT,
   };
 }
 

@@ -161,6 +161,7 @@ import {
   type CameraViewMode,
 } from "./camera-view.js";
 import { firstPersonActionPose, firstPersonWeaponKind, type FirstPersonWeaponKind } from "./first-person-action.js";
+import { firstPersonImpactImpulse, selectFirstPersonAimTarget } from "./first-person-combat.js";
 import { CombatSyncRecorder } from "./combat-sync.js";
 import {
   advanceDodgeVisualOffset,
@@ -4185,6 +4186,7 @@ interface FirstPersonActionRig {
   magic: pc.Entity;
   magicCore: pc.Entity;
   runeRing: pc.Entity;
+  slashTrails: pc.Entity[];
 }
 
 const createFirstPersonMaterial = (color: pc.Color, emissive?: pc.Color): pc.StandardMaterial => {
@@ -4211,6 +4213,11 @@ function createFirstPersonActionRig(): FirstPersonActionRig {
   const wood = createFirstPersonMaterial(new pc.Color(.32, .16, .055));
   const arcane = createFirstPersonMaterial(new pc.Color(.34, .14, .92), new pc.Color(.26, .055, .82));
   const arcaneEdge = createFirstPersonMaterial(new pc.Color(.65, .82, 1), new pc.Color(.25, .55, 1));
+  const trailMaterial = createFirstPersonMaterial(new pc.Color(.7, .9, 1), new pc.Color(.2, .55, .85));
+  trailMaterial.opacity = .42;
+  trailMaterial.blendType = pc.BLEND_ADDITIVEALPHA;
+  trailMaterial.depthWrite = false;
+  trailMaterial.update();
 
   const actionShape = (parent: pc.Entity, name: string, type: "box" | "cylinder" | "cone" | "sphere",
     material: pc.StandardMaterial, scale: [number, number, number], position: [number, number, number]): pc.Entity => {
@@ -4302,13 +4309,21 @@ function createFirstPersonActionRig(): FirstPersonActionRig {
     rune.setLocalEulerAngles(0, 0, -angle * 180 / Math.PI);
   }
   magic.enabled = false;
+  const slashTrails = Array.from({ length: 3 }, (_, index) => {
+    const trail = actionShape(root, `first-person-slash-trail-${index}`, "box", trailMaterial,
+      [.45 - index * .08, .022, .012], [.14, -.02, -1.22 - index * .012]);
+    trail.enabled = false;
+    return trail;
+  });
   root.enabled = false;
-  return { root, leftHand, rightHand, weapons, magic, magicCore, runeRing };
+  return { root, leftHand, rightHand, weapons, magic, magicCore, runeRing, slashTrails };
 }
 
 const firstPersonActionRig = createFirstPersonActionRig();
 let firstPersonAbilityCastStartedAt: number | null = null;
 let firstPersonAbilityCastDuration = 700;
+let firstPersonHitKickUntil = 0;
+let firstPersonHitKickStrength = 0;
 function setFirstPersonMainHand(mainHandId: MainHandId): void {
   const active = firstPersonWeaponKind(mainHandId);
   for (const [kind, weapon] of Object.entries(firstPersonActionRig.weapons)) weapon.enabled = kind === active;
@@ -5531,6 +5546,26 @@ function updateFirstPersonActionView(now: number, moving: boolean, actionElapsed
     firstPersonActionRig.magicCore.setLocalScale(.12 + pose.magicStrength * .08,
       .12 + pose.magicStrength * .08, .12 + pose.magicStrength * .08);
   }
+  const meleeTrail = (weaponKind === "sword" || weaponKind === "dagger" || weaponKind === "hammer")
+    && pose.attackStrength > .06;
+  const trailSide = localActionStep === 2 ? -1 : 1;
+  for (let index = 0; index < firstPersonActionRig.slashTrails.length; index++) {
+    const trail = firstPersonActionRig.slashTrails[index]!;
+    trail.enabled = meleeTrail;
+    if (!meleeTrail) continue;
+    const delayedProgress = Math.max(0, Math.min(1, pose.attackProgress - index * .035));
+    trail.setLocalPosition(trailSide * (.18 - delayedProgress * .28), -.01 + delayedProgress * .08,
+      -1.24 - index * .012);
+    trail.setLocalEulerAngles(0, 0, trailSide * (72 - delayedProgress * 142 - index * 8));
+    const length = (.34 + pose.attackStrength * .3) * (1 - index * .14);
+    trail.setLocalScale(length, .024 - index * .004, .012);
+  }
+  const kickRemaining = Math.max(0, firstPersonHitKickUntil - now);
+  if (kickRemaining <= 0) firstPersonHitKickStrength = 0;
+  const kick = kickRemaining > 0
+    ? Math.sin(Math.min(1, kickRemaining / 150) * Math.PI * .5) * firstPersonHitKickStrength
+    : 0;
+  firstPersonActionRig.root.setLocalPosition(0, -kick * .12, kick * .4);
 }
 // The onboarding renderer reads the equipped weapon. Run its initial pass only
 // after equipment state exists so a fresh profile cannot hit the temporal dead zone.
@@ -6992,6 +7027,14 @@ const powerDebrisVisuals: PowerDebrisVisual[] = [];
 const markPayoffVisuals: MarkPayoffVisual[] = [];
 const brambleSnareVisuals = new Map<string, BrambleSnareVisual>();
 const weaponProjectileVisuals: WeaponProjectileVisual[] = [];
+interface FirstPersonImpactBurst {
+  root: pc.Entity;
+  material: pc.StandardMaterial;
+  sparks: { entity: pc.Entity; velocity: pc.Vec3 }[];
+  startedAt: number;
+  expiresAt: number;
+}
+const firstPersonImpactBursts: FirstPersonImpactBurst[] = [];
 let nextNearMissAt = 0;
 let lastLocalCallingImpact: { abilityId: CallingAbilityId; at: number } | null = null;
 // Retain impact style after the short-lived mesh ends, until server confirmation arrives.
@@ -7014,6 +7057,31 @@ function powerMaterial(color: pc.Color, opacity: number): pc.StandardMaterial {
   material.depthWrite = false;
   material.update();
   return material;
+}
+
+function createFirstPersonHitBurst(mob: MobVisual, weaponKind: FirstPersonWeaponKind, defeated: boolean): void {
+  const root = new pc.Entity("first-person-hit-burst");
+  const position = mob.entity.getPosition();
+  root.setPosition(position.x, position.y + Math.max(.65, mob.healthBarY * .45), position.z);
+  app.root.addChild(root);
+  const color = weaponKind === "focus" ? new pc.Color(.55, .28, 1)
+    : weaponKind === "bow" ? new pc.Color(.72, .92, 1)
+      : weaponKind === "hammer" ? new pc.Color(1, .58, .16) : new pc.Color(1, .82, .42);
+  const material = powerMaterial(color, defeated ? .95 : .82);
+  const count = defeated ? 9 : weaponKind === "hammer" ? 7 : 5;
+  const sparks = Array.from({ length: count }, (_, index) => {
+    const angle = index / count * Math.PI * 2 + (weaponKind === "dagger" ? .35 : 0);
+    const entity = new pc.Entity("first-person-hit-spark");
+    entity.addComponent("render", { type: index % 3 === 0 ? "sphere" : "box", material,
+      castShadows: false, receiveShadows: false });
+    const size = .035 + index % 3 * .012;
+    entity.setLocalScale(size, size, index % 3 === 0 ? size : size * 2.4);
+    root.addChild(entity);
+    return { entity, velocity: new pc.Vec3(Math.cos(angle) * (1.2 + index * .08),
+      .55 + (index % 3) * .28, Math.sin(angle) * (1.2 + index * .08)) };
+  });
+  const startedAt = performance.now();
+  firstPersonImpactBursts.push({ root, material, sparks, startedAt, expiresAt: startedAt + (defeated ? 360 : 240) });
 }
 
 function createCallingAnticipation(pathId: RoleFieldPath): void {
@@ -8037,7 +8105,18 @@ function createWeaponProjectile(message: WeaponAttackReleased): void {
   const material = powerMaterial(new pc.Color(style.color[0]!, style.color[1]!, style.color[2]!), 0.96);
   if (entity.render) entity.render.material = material;
   entity.setLocalScale(style.scale[0]!, style.scale[1]!, style.scale[2]!);
+  const localFirstPersonRelease = cameraViewMode === "first-person" && message.attackerId === room?.sessionId;
   const start = new pc.Vec3(message.x, message.y + 1.05, message.z);
+  if (localFirstPersonRelease) {
+    const cameraPosition = camera.getPosition();
+    const forward = firstPersonLookDirection(cameraOrbit.yaw, cameraOrbit.pitch);
+    const right = { x: Math.sin(cameraOrbit.yaw), z: -Math.cos(cameraOrbit.yaw) };
+    start.set(
+      cameraPosition.x + forward.x * .58 + right.x * .22,
+      cameraPosition.y + forward.y * .58 - .18,
+      cameraPosition.z + forward.z * .58 + right.z * .22,
+    );
+  }
   const end = new pc.Vec3(message.targetX, message.targetY + 0.72, message.targetZ);
   entity.setPosition(start);
   if (style.shape === "box") entity.lookAt(end);
@@ -9682,6 +9761,32 @@ function nearestLivingMob(position: pc.Vec3, maximumRange: number): { id: string
     nearest = { id, visual, distance };
   }
   return nearest;
+}
+
+function firstPersonCrosshairMob(position: pc.Vec3, maximumRange: number): { id: string; visual: MobVisual; distance: number } | null {
+  if (!camera.camera) return null;
+  const centerX = app.graphicsDevice.width * .5;
+  const centerY = app.graphicsDevice.height * .5;
+  const candidates = [...mobVisuals.entries()].map(([id, visual]) => {
+    const target = new pc.Vec3(visual.state.x, visual.state.y + Math.max(.7, visual.healthBarY * .52), visual.state.z);
+    const projected = camera.camera!.worldToScreen(target);
+    const inFront = projected.z > 0;
+    const screenDistance = inFront ? Math.hypot(projected.x - centerX, projected.y - centerY) : Number.POSITIVE_INFINITY;
+    const visible = visual.state.alive && inFront
+      && undergroundMobVisible(visual.state.x, visual.state.y, visual.state.z)
+      && enemyCueLineClear(
+        { x: position.x, y: position.y + FIRST_PERSON_EYE_HEIGHT, z: position.z },
+        { x: target.x, y: target.y, z: target.z },
+        readCollisionWorldBlock,
+      );
+    return { id, x: visual.state.x, z: visual.state.z, visible, screenDistance };
+  });
+  const ranged = WEAPON_ATTACK_DEFINITIONS[localMainHandId].projectileTravelMs > 0;
+  const selected = selectFirstPersonAimTarget(position, firstPersonFacingYaw(cameraOrbit.yaw), maximumRange,
+    ranged ? 82 : 120, candidates, ranged ? 7 : 14);
+  if (!selected) return null;
+  const visual = mobVisuals.get(selected.id);
+  return visual ? { id: selected.id, visual, distance: selected.distance } : null;
 }
 
 let tabletSoftTargetCache: { id: string | null; checkedAt: number; maximumRange: number; facingYaw: number; halfConeDegrees: number } = {
@@ -13811,16 +13916,21 @@ function requestAttack(aimWithPointer = true, tabletAim?: { yaw: number; targetI
   }
   const attackDefinition = WEAPON_ATTACK_DEFINITIONS[localMainHandId];
   const player = localPlayer.getPosition();
+  const firstPersonAimed = cameraViewMode === "first-person";
   const selectedTabletVisual = tabletAim?.targetId ? mobVisuals.get(tabletAim.targetId) : null;
   const targetMob = selectedTabletVisual
     ? { id: tabletAim!.targetId!, visual: selectedTabletVisual,
       distance: Math.hypot(selectedTabletVisual.state.x - player.x, selectedTabletVisual.state.y - player.y, selectedTabletVisual.state.z - player.z) }
-    : tabletAim ? null : nearestLivingMob(player, attackDefinition.range);
+    : tabletAim ? null : firstPersonAimed
+      ? firstPersonCrosshairMob(player, attackDefinition.range)
+      : nearestLivingMob(player, attackDefinition.range);
   const practisingFollowUp = guidedAbilityPracticePhase === "follow_up" && guidedAbilityPracticeId
     && (localBuildPathId === "assassin" || localBuildPathId === "ranger")
     && player.distance(CALLING_EFFIGY_POSITION) <= 4;
   const pointerAimed = aimWithPointer && rangedPointer.active;
-  localActionFacingYaw = practisingFollowUp
+  localActionFacingYaw = firstPersonAimed
+    ? firstPersonFacingYaw(cameraOrbit.yaw)
+    : practisingFollowUp
     ? movementYaw(CALLING_EFFIGY_POSITION.x - player.x, CALLING_EFFIGY_POSITION.z - player.z, localFacingYaw)
     : tabletAim?.yaw ?? attackAimYaw(
       pointerAimed ? mouseRangedYaw(localFacingYaw) : null,
@@ -13845,12 +13955,19 @@ function requestAttack(aimWithPointer = true, tabletAim?: { yaw: number; targetI
   combatSync.start("attack", requestId, now);
   room.send("attack", { requestId, yaw: localActionFacingYaw,
     ...(serverClock.synchronized ? { actionAt: now + serverClock.offset } : {}) });
+  if (firstPersonAimed) {
+    const weaponKind = firstPersonWeaponKind(localMainHandId);
+    combatAudio.play(weaponKind === "bow" ? "bowRelease" : weaponKind === "focus" ? "focusRelease" : "swordSwing");
+  }
   if (practisingFollowUp) noteGuidedAbilityPracticeAttack();
   logMovementEvent(`ACTION ${localMainHandId} step=${comboStep} impact=${timing.impactMs}ms yaw=${localActionFacingYaw.toFixed(1)}`);
   const attackName = attackDefinition.combo
     ? `${MAIN_HAND_DEFINITIONS[localMainHandId].attackName} ${comboStep}`
     : MAIN_HAND_DEFINITIONS[localMainHandId].attackName;
-  status.textContent = pointerAimed
+  status.textContent = firstPersonAimed
+    ? targetMob ? `${attackName} · crosshair locked on ${targetMob.visual.state.name}.`
+      : `${attackName} · released through the crosshair.`
+    : pointerAimed
     ? attackDefinition.projectileTravelMs > 0 ? `${attackName} · firing toward your reticle.` : `${attackName} · swinging toward your pointer.`
     : targetMob
     ? attackDefinition.combo && comboStep === 3
@@ -16540,6 +16657,24 @@ app.on("update", (dt: number) => {
     }
     snare.material.update();
   }
+  for (let index = firstPersonImpactBursts.length - 1; index >= 0; index -= 1) {
+    const burst = firstPersonImpactBursts[index]!;
+    if (animationNow >= burst.expiresAt) {
+      burst.root.destroy();
+      burst.material.destroy();
+      firstPersonImpactBursts.splice(index, 1);
+      continue;
+    }
+    const elapsed = (animationNow - burst.startedAt) / 1_000;
+    const remaining = Math.max(0, (burst.expiresAt - animationNow) / (burst.expiresAt - burst.startedAt));
+    for (const spark of burst.sparks) spark.entity.setLocalPosition(
+      spark.velocity.x * elapsed,
+      spark.velocity.y * elapsed - 3.4 * elapsed * elapsed,
+      spark.velocity.z * elapsed,
+    );
+    burst.material.opacity = remaining * .9;
+    burst.material.update();
+  }
   for (let index = weaponProjectileVisuals.length - 1; index >= 0; index -= 1) {
     const projectile = weaponProjectileVisuals[index]!;
     const progress = Math.max(0, Math.min(1, (animationNow - projectile.startedAt) / projectile.durationMs));
@@ -17791,6 +17926,18 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
         createRangedPopup(position, `−${message.damage}`, "melee", message.defeated);
       }
       if (!rangedHit) localHitPauseUntil = performance.now() + ((message.mainHandId === "stone_core_hammer" || message.mainHandId === "rootbound_hammer") ? 80 : comboStep === 3 ? 75 : 48);
+      if (cameraViewMode === "first-person" && mob && message.damage > 0) {
+        const now = performance.now();
+        const weaponKind = firstPersonWeaponKind(message.mainHandId);
+        const impulse = firstPersonImpactImpulse(weaponKind, comboStep, message.defeated);
+        localHitPauseUntil = Math.max(localHitPauseUntil, now + impulse.hitPauseMs);
+        cameraShakeStrength = Math.max(cameraShakeStrength, impulse.strength);
+        cameraShakeUntil = Math.max(cameraShakeUntil, now + impulse.durationMs);
+        firstPersonHitKickStrength = Math.max(firstPersonHitKickStrength, impulse.strength);
+        firstPersonHitKickUntil = now + impulse.durationMs;
+        rangedReticleHitUntil = now + 150;
+        createFirstPersonHitBurst(mob, weaponKind, message.defeated);
+      }
       const hitLabel = WEAPON_ATTACK_DEFINITIONS[message.mainHandId].combo && comboStep === 3
         ? `FINISHER  −${message.damage}`
         : `${MAIN_HAND_DEFINITIONS[message.mainHandId].attackName.toUpperCase()}  −${message.damage}`;
@@ -18298,6 +18445,10 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     brambleSnareVisuals.clear();
     for (const projectile of weaponProjectileVisuals) { projectile.entity.destroy(); projectile.material.destroy(); }
     weaponProjectileVisuals.length = 0;
+    for (const burst of firstPersonImpactBursts) { burst.root.destroy(); burst.material.destroy(); }
+    firstPersonImpactBursts.length = 0;
+    firstPersonHitKickUntil = 0;
+    firstPersonHitKickStrength = 0;
     nextNearMissAt = 0;
     projectileWeapons.clear();
     projectileRapidStyles.clear();

@@ -1,7 +1,8 @@
 export type EnemyCue = "warning" | "hurt" | "stagger" | "defeat";
 export type PowerCue = "seismicWindup" | "seismicImpact";
 export type CallingCue = "callingTank" | "callingMage" | "callingShadow" | "callingThief" | "callingRanger";
-export type WeaponCue = "hammerImpact" | "rangedHit" | "acidHit" | "venomHit" | "nearMiss";
+export type WeaponCue = "hammerImpact" | "rangedHit" | "acidHit" | "venomHit" | "nearMiss"
+  | "swordSwing" | "bowRelease" | "focusRelease";
 export type MiningCue = "miningStone" | "miningIron" | "miningSilver" | "miningBreak";
 export type DungeonCue = "dungeonGate" | "guardianPhase" | "dungeonVictory" | "depthsEntrance" | "depthsWing" | "depthsArena";
 export type LootCue = "lootPickup" | "lootRare" | "lootEpic" | "lootLegendary" | "levelUp" | "discovery";
@@ -95,6 +96,18 @@ export const CALLING_CUE_DEFINITIONS: Record<CallingCue, EnemyCueDefinition> = {
 };
 
 export const WEAPON_CUE_DEFINITIONS: Record<WeaponCue, EnemyCueDefinition> = {
+  swordSwing: { minimumIntervalMs: 90, tones: [
+    { wave: "triangle", startHz: 540, endHz: 150, gain: .026, delayMs: 0, durationMs: 105 },
+    { wave: "sine", startHz: 270, endHz: 110, gain: .018, delayMs: 20, durationMs: 90 },
+  ] },
+  bowRelease: { minimumIntervalMs: 110, tones: [
+    { wave: "triangle", startHz: 920, endHz: 280, gain: .032, delayMs: 0, durationMs: 90 },
+    { wave: "sine", startHz: 170, endHz: 95, gain: .018, delayMs: 12, durationMs: 120 },
+  ] },
+  focusRelease: { minimumIntervalMs: 100, tones: [
+    { wave: "sine", startHz: 260, endHz: 880, gain: .03, delayMs: 0, durationMs: 125 },
+    { wave: "triangle", startHz: 720, endHz: 420, gain: .016, delayMs: 45, durationMs: 95 },
+  ] },
   nearMiss: { minimumIntervalMs: 350, tones: [{ wave: "triangle", startHz: 700, endHz: 170, gain: .02, delayMs: 0, durationMs: 100 }] },
   acidHit: { minimumIntervalMs: 90, tones: [{ wave: "triangle", startHz: 165, endHz: 65, gain: .035, delayMs: 0, durationMs: 110 }] },
   venomHit: { minimumIntervalMs: 90, tones: [{ wave: "sine", startHz: 720, endHz: 380, gain: .03, delayMs: 0, durationMs: 85 }] },
