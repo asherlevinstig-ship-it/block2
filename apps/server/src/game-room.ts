@@ -3324,9 +3324,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const player = this.state.players.get(attackerId);
       if (rapidSpawn && player) {
         const cadenceId = this.profileTokens.get(attackerId) ?? attackerId;
-        const itemDrop = Boolean(rapidSpawn.leader) || this.normalLootCadence.record(cadenceId, Math.random());
+        const guardedReward = rapidSpawn.id === "greenwood-fenward-guard-b";
+        const itemDrop = Boolean(rapidSpawn.leader) || guardedReward || this.normalLootCadence.record(cadenceId, Math.random());
         if (itemDrop) this.spawnLootDrops(mobId, mob, now, attackerId);
-        const coinsGranted = rapidSpawn.leader ? 7 + Math.floor(rapidSpawn.level / 2) : 1 + Math.floor(rapidSpawn.level / 4);
+        const coinsGranted = rapidSpawn.leader ? 7 + Math.floor(rapidSpawn.level / 2)
+          : guardedReward ? 4 : 1 + Math.floor(rapidSpawn.level / 4);
         player.coins = Math.min(1_000_000, player.coins + coinsGranted);
         const experience = mobExperience(mob.archetype, mob.rewardMultiplier, Boolean(rapidSpawn.leader), player.level, mob.level);
         this.grantProgression(attackerId, experience, mob.name);
@@ -3335,6 +3337,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         this.clients.find(client => client.sessionId === attackerId)?.send("chat:notice",
           rapidSpawn.leader
             ? `${mob.name.toUpperCase()} DEFEATED · leader loot landed · returns in ${Math.round(rapidSpawn.respawnMs / 1000)}s.`
+            : guardedReward ? `FENWARD CACHE SECURED · guarded loot landed · +${coinsGranted} gold.`
             : itemDrop ? `Enemy defeated · loot landed · +${coinsGranted} gold.` : `Enemy defeated · +${coinsGranted} gold and XP.`);
       }
       this.combatContributions.clear(mobId);

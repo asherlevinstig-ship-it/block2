@@ -50,6 +50,21 @@ describe("private Calling practice", () => {
     expect(mob.respawnAt).toBe(50_000);
   });
 
+  it("always pays out the guarded Fenward cache discovery", () => {
+    const { room, internal, player } = fixture();
+    internal.rapidPractice = true;
+    internal.spawnLootDrops = vi.fn();
+    internal.persistPlayer = vi.fn().mockResolvedValue(undefined);
+    const mob = new MobState(); Object.assign(mob, { alive: true, health: 1, maxHealth: 12,
+      archetype: "thornbinder", level: 4, rewardMultiplier: 1 });
+    room.state.mobs.set("greenwood-fenward-guard-b", mob);
+    const coinsBefore = player.coins;
+    internal.defeatMob("greenwood-fenward-guard-b", mob, "trainee", 10_000);
+    expect(internal.spawnLootDrops).toHaveBeenCalledWith("greenwood-fenward-guard-b", mob, 10_000, "trainee");
+    expect(player.coins).toBe(coinsBefore + 4);
+    expect(mob.respawnAt).toBe(76_000);
+  });
+
   it("applies quick upgrades without saving or opening inventory", () => {
     const { internal, player, client } = fixture();
     internal.rapidPractice = true;
