@@ -5,6 +5,7 @@ import {
   discoverFastWorldLandmarks,
   fastWorldDestinationDirection,
   fastWorldMapPoint,
+  fastWorldPlayerMapRotation,
   fastWorldRegionTravelSummary,
 } from "./fast-world-navigation.js";
 
@@ -19,6 +20,9 @@ describe("Fast World navigation", () => {
   it("maps the authored world bounds into a compact canvas", () => {
     expect(fastWorldMapPoint(40, 20, 216, 172)).toEqual({ x: 0, y: 0 });
     expect(fastWorldMapPoint(256, 192, 216, 172)).toEqual({ x: 216, y: 172 });
+    expect(fastWorldPlayerMapRotation(0)).toBeCloseTo(Math.PI);
+    expect(fastWorldPlayerMapRotation(90)).toBeCloseTo(Math.PI / 2);
+    expect(fastWorldPlayerMapRotation(180)).toBeCloseTo(0);
   });
 
   it("offers physical signs, backtracking guidance and relative direction", () => {

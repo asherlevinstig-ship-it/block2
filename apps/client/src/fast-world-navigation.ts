@@ -82,3 +82,9 @@ export function fastWorldDestinationDirection(
   while (angle < -Math.PI) angle += Math.PI * 2;
   return { distance: Math.hypot(dx, dz), angle };
 }
+
+/** Player yaw is stored in degrees where 0 faces +Z. Map +Z points down, so
+ * the upward-authored arrow needs a half-turn with yaw applied clockwise. */
+export function fastWorldPlayerMapRotation(facingYawDegrees: number): number {
+  return Math.PI - facingYawDegrees * Math.PI / 180;
+}

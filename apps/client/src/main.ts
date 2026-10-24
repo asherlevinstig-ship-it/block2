@@ -157,6 +157,7 @@ import {
   discoverFastWorldLandmarks,
   fastWorldDestinationDirection,
   fastWorldMapPoint,
+  fastWorldPlayerMapRotation,
   fastWorldRegionTravelSummary,
   type FastWorldNavPoint,
 } from "./fast-world-navigation.js";
@@ -2274,7 +2275,7 @@ const fastWorldMapTargets = (): FastWorldNavPoint[] => [
   ...FAST_WORLD_NAV_LANDMARKS.filter(landmark => fastWorldNavigationState.landmarks.has(landmark.id)),
 ];
 
-const drawFastWorldMap = (position: { x: number; z: number }, facingYaw: number, now: number, force = false): void => {
+const drawFastWorldMap = (position: { x: number; z: number }, facingYawDegrees: number, now: number, force = false): void => {
   if (!fastWorldMapCanvas || !fastWorldMapPanel || !force && now - lastFastWorldMapDrawAt < 100) return;
   lastFastWorldMapDrawAt = now;
   const ctx = fastWorldMapCanvas.getContext("2d");
@@ -2321,7 +2322,7 @@ const drawFastWorldMap = (position: { x: number; z: number }, facingYaw: number,
     ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y); ctx.stroke(); ctx.setLineDash([]);
   }
   const player = fastWorldMapPoint(position.x, position.z, width, height);
-  ctx.save(); ctx.translate(player.x, player.y); ctx.rotate(-facingYaw);
+  ctx.save(); ctx.translate(player.x, player.y); ctx.rotate(fastWorldPlayerMapRotation(facingYawDegrees));
   ctx.beginPath(); ctx.moveTo(0, -7); ctx.lineTo(5, 6); ctx.lineTo(0, 3); ctx.lineTo(-5, 6); ctx.closePath();
   ctx.fillStyle = "#ffffff"; ctx.fill(); ctx.strokeStyle = "#10201a"; ctx.lineWidth = 2; ctx.stroke(); ctx.restore();
 };
@@ -13044,7 +13045,7 @@ window.addEventListener("keydown", event => {
   event.preventDefault();
   if (fastWorldRequested && fastWorldMapPanel) {
     setFastWorldMapExpanded(fastWorldMapPanel.dataset.expanded !== "true");
-    drawFastWorldMap(localPlayer.getPosition(), cameraOrbit.yaw, performance.now(), true);
+    drawFastWorldMap(localPlayer.getPosition(), localFacingYaw, performance.now(), true);
     return;
   }
   setMinimapExpanded(minimapPanel.dataset.expanded !== "true");
@@ -15962,7 +15963,7 @@ app.on("update", (dt: number) => {
         if (distance) distance.textContent = `${Math.ceil(direction.distance)}m · M for map`;
       }
     } else if (fastWorldDestinationHud) fastWorldDestinationHud.hidden = true;
-    drawFastWorldMap(playerPosition, cameraOrbit.yaw, customUpdateStartedAt);
+    drawFastWorldMap(playerPosition, localFacingYaw, customUpdateStartedAt);
     for (const smoke of rapidTownSmoke) {
       const travel = (townTime * .22 + smoke.phase) % 1;
       const size = .16 + travel * .42;
