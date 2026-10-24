@@ -50,4 +50,15 @@ describe("Fast World region manifest", () => {
     expect(greenwood.connections).toContainEqual(expect.objectContaining({ regionId: "mistfen", name: "Fenward Track" }));
     expect(greenwood.encounters?.every(encounter => encounter.respawnMs >= 40_000)).toBe(true);
   });
+
+  it("authors Mistfen with hazardous water, discoveries and two exits", () => {
+    const mistfen = fastWorldRegionDefinition("mistfen");
+    expect(mistfen.encounters).toHaveLength(mistfen.targetPopulation);
+    expect(mistfen.encounterPockets?.filter(pocket => pocket.kind === "combat")).toHaveLength(3);
+    expect(mistfen.encounterPockets?.find(pocket => pocket.kind === "guarded-reward")?.encounterIds).toHaveLength(2);
+    expect(mistfen.encounterPockets?.find(pocket => pocket.kind === "leader")?.encounterIds).toEqual([mistfen.leaderId]);
+    expect(mistfen.connections?.map(connection => connection.regionId)).toEqual(["greenwood", "ashen-reach"]);
+    expect(mistfen.hazards?.filter(hazard => hazard.kind === "toxic-pool")).toHaveLength(7);
+    expect(mistfen.encounters?.every(encounter => encounter.respawnMs >= 40_000)).toBe(true);
+  });
 });

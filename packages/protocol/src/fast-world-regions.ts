@@ -23,6 +23,7 @@ export type FastWorldRegionDefinition = {
   encounters?: readonly FastWorldConfiguredEncounter[];
   encounterPockets?: readonly FastWorldEncounterPocket[];
   connections?: readonly FastWorldRegionConnection[];
+  hazards?: readonly FastWorldRegionHazard[];
 };
 
 export type FastWorldEncounterPocket = {
@@ -41,6 +42,15 @@ export type FastWorldRegionConnection = {
   name: string;
   x: number;
   z: number;
+};
+
+export type FastWorldRegionHazard = {
+  id: string;
+  kind: "toxic-pool";
+  x: number;
+  z: number;
+  radiusX: number;
+  radiusZ: number;
 };
 
 export type FastWorldConfiguredEncounter = {
@@ -111,7 +121,43 @@ export const FAST_WORLD_REGION_DEFINITIONS: readonly FastWorldRegionDefinition[]
     leaderId: "mistfen-miremother",
     leaderName: "Miremother",
     encounterArchetypes: ["cave_spitter", "fen_bloater", "briar_crawler"],
-    targetPopulation: 6,
+    targetPopulation: 9,
+    encounters: [
+      { id: "mistfen-drowned-spitter", archetype: "cave_spitter", name: "Drowned-Camp Spitter", level: 4, respawnMs: 50_000, x: 161.5, y: 8, z: 67.5 },
+      { id: "mistfen-drowned-bloater", archetype: "fen_bloater", name: "Drowned-Camp Bloater", level: 5, respawnMs: 54_000, x: 166.5, y: 8, z: 65.5 },
+      { id: "mistfen-reed-spitter", archetype: "cave_spitter", name: "Reed-Maze Spitter", level: 5, respawnMs: 56_000, x: 183.5, y: 8, z: 34.5 },
+      { id: "mistfen-reed-briar", archetype: "briar_crawler", name: "Reed-Maze Briar", level: 6, respawnMs: 60_000, x: 189.5, y: 8, z: 37.5 },
+      { id: "mistfen-spring-bloater", archetype: "fen_bloater", name: "Spring Bloater", level: 6, respawnMs: 62_000, x: 194.5, y: 8, z: 52.5 },
+      { id: "mistfen-spring-spitter", archetype: "cave_spitter", name: "Corrupted-Spring Spitter", level: 7, respawnMs: 66_000, x: 199.5, y: 8, z: 56.5 },
+      { id: "mistfen-wayfinder-guard", archetype: "briar_crawler", name: "Wayfinder Cache Guard", level: 6, respawnMs: 64_000, x: 191.5, y: 8, z: 72.5 },
+      { id: "mistfen-wayfinder-keeper", archetype: "fen_bloater", name: "Wayfinder Cache Keeper", level: 7, respawnMs: 72_000, x: 197.5, y: 8, z: 72.5 },
+      { id: "mistfen-miremother", archetype: "fen_bloater", name: "Miremother", level: 7, respawnMs: 96_000, x: 179.5, y: 8, z: 51.5, leader: true },
+    ],
+    encounterPockets: [
+      { id: "drowned-camp", name: "Drowned Camp", kind: "combat", x: 164, z: 66.5, radius: 8,
+        encounterIds: ["mistfen-drowned-spitter", "mistfen-drowned-bloater"] },
+      { id: "reed-maze", name: "Whispering Reed Maze", kind: "combat", x: 186.5, z: 36, radius: 8,
+        encounterIds: ["mistfen-reed-spitter", "mistfen-reed-briar"] },
+      { id: "corrupted-spring", name: "Corrupted Spring", kind: "combat", x: 197, z: 54.5, radius: 8,
+        encounterIds: ["mistfen-spring-bloater", "mistfen-spring-spitter"] },
+      { id: "wayfinder-cache", name: "Wayfinder Cache", kind: "guarded-reward", x: 194.5, z: 72.5, radius: 7,
+        encounterIds: ["mistfen-wayfinder-guard", "mistfen-wayfinder-keeper"], rewardLabel: "Guarded marsh cache" },
+      { id: "miremother-basin", name: "Miremother Basin", kind: "leader", x: 179.5, z: 51.5, radius: 10,
+        encounterIds: ["mistfen-miremother"], rewardLabel: "Highest Mistfen loot" },
+    ],
+    connections: [
+      { regionId: "greenwood", name: "Fenward Track", x: 153.5, z: 80.5 },
+      { regionId: "ashen-reach", name: "Cinder Causeway", x: 202.5, z: 77.5 },
+    ],
+    hazards: [
+      { id: "entry-shallows", kind: "toxic-pool", x: 160, z: 75, radiusX: 4.2, radiusZ: 2.4 },
+      { id: "drowned-water", kind: "toxic-pool", x: 169, z: 59, radiusX: 3.6, radiusZ: 2.5 },
+      { id: "western-mire", kind: "toxic-pool", x: 158, z: 43, radiusX: 3.2, radiusZ: 2.6 },
+      { id: "reed-depths", kind: "toxic-pool", x: 184, z: 28.5, radiusX: 4.6, radiusZ: 2.7 },
+      { id: "spring-runoff", kind: "toxic-pool", x: 198, z: 45, radiusX: 3.8, radiusZ: 2.5 },
+      { id: "eastern-shallows", kind: "toxic-pool", x: 199, z: 64, radiusX: 3.5, radiusZ: 2.2 },
+      { id: "mother-mire", kind: "toxic-pool", x: 187.5, z: 55.5, radiusX: 2.8, radiusZ: 1.9 },
+    ],
   },
   {
     id: "sunken-coast",

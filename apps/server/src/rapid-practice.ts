@@ -45,6 +45,17 @@ export const RAPID_WORLD_ZONES: readonly RapidWorldZone[] = FAST_WORLD_REGION_DE
 export const rapidWorldZoneAt = (x: number, z: number): RapidWorldZone | null =>
   RAPID_WORLD_ZONES.find(zone => x >= zone.minX && x <= zone.maxX && z >= zone.minZ && z <= zone.maxZ) ?? null;
 
+export const rapidPracticeGuardedReward = (encounterId: string): boolean =>
+  FAST_WORLD_REGION_DEFINITIONS.some(region => region.encounterPockets?.some(pocket =>
+    pocket.kind === "guarded-reward" && pocket.encounterIds.at(-1) === encounterId));
+
+export const rapidMistfenToxicPoolAt = (x: number, z: number): boolean =>
+  (fastWorldRegionDefinition("mistfen").hazards ?? []).some(pool => {
+    const dx = (x - pool.x) / pool.radiusX;
+    const dz = (z - pool.z) / pool.radiusZ;
+    return dx * dx + dz * dz <= 1;
+  });
+
 const configuredRegionSpawns = (regionId: FastWorldRegionId): readonly RapidPracticeSpawn[] =>
   (fastWorldRegionDefinition(regionId).encounters ?? []).map(encounter => ({
     ...encounter,
@@ -55,12 +66,7 @@ const configuredRegionSpawns = (regionId: FastWorldRegionId): readonly RapidPrac
 export const RAPID_PRACTICE_SPAWNS: readonly RapidPracticeSpawn[] = [
   ...configuredRegionSpawns("greenwood"),
 
-  { id: "mistfen-spitter-a", archetype: "cave_spitter", name: "Bog Spitter", zone: "mistfen", level: 4, respawnMs: 50_000, x: 164.5, y: 8, z: 67.5 },
-  { id: "mistfen-spitter-b", archetype: "cave_spitter", name: "Bog Spitter", zone: "mistfen", level: 5, respawnMs: 53_000, x: 190.5, y: 8, z: 65.5 },
-  { id: "mistfen-bloater-a", archetype: "fen_bloater", name: "Fen Bloater", zone: "mistfen", level: 5, respawnMs: 54_000, x: 166.5, y: 8, z: 42.5 },
-  { id: "mistfen-briar-a", archetype: "briar_crawler", name: "Mire Briar", zone: "mistfen", level: 6, respawnMs: 57_000, x: 185.5, y: 8, z: 36.5 },
-  { id: "mistfen-bloater-b", archetype: "fen_bloater", name: "Fen Bloater", zone: "mistfen", level: 7, respawnMs: 60_000, x: 197.5, y: 8, z: 49.5 },
-  { id: "mistfen-miremother", archetype: "fen_bloater", name: "Miremother", zone: "mistfen", level: 7, leader: true, respawnMs: 76_000, x: 179.5, y: 8, z: 51.5 },
+  ...configuredRegionSpawns("mistfen"),
 
   ...configuredRegionSpawns("sunken-coast"),
 

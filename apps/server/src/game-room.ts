@@ -61,7 +61,7 @@ import { EMPTY_RAPID_PRACTICE_UPGRADES, RAPID_PRACTICE_ARENA, RAPID_PRACTICE_BOS
   RAPID_PRACTICE_FREE_ROAM, RAPID_PRACTICE_SPAWNS, RAPID_PRACTICE_TOWN_COLLIDERS, RAPID_PRACTICE_UPGRADE_LABELS, RAPID_PRACTICE_WAVES,
   RAPID_WORLD_ZONES,
   RAPID_PRACTICE_WEAPON_CHOICES, applyRapidPracticeUpgrade, rapidPracticeAttackTiming,
-  rapidPracticeMovementSpeed, rapidPracticeProjectileFan, rapidPracticeProjectileTravelMs,
+  rapidMistfenToxicPoolAt, rapidPracticeGuardedReward, rapidPracticeMovementSpeed, rapidPracticeProjectileFan, rapidPracticeProjectileTravelMs,
   rapidPracticeWeaponProfile, type RapidPracticeProjectileStyle, type RapidPracticeUpgradeId,
   type RapidPracticeUpgrades, type RapidPracticeWeaponChoiceId } from "./rapid-practice.js";
 import type { ServerPerformanceUpdate } from "@blockcraft/protocol";
@@ -3324,7 +3324,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const player = this.state.players.get(attackerId);
       if (rapidSpawn && player) {
         const cadenceId = this.profileTokens.get(attackerId) ?? attackerId;
-        const guardedReward = rapidSpawn.id === "greenwood-fenward-guard-b";
+        const guardedReward = rapidPracticeGuardedReward(rapidSpawn.id);
         const itemDrop = Boolean(rapidSpawn.leader) || guardedReward || this.normalLootCadence.record(cadenceId, Math.random());
         if (itemDrop) this.spawnLootDrops(mobId, mob, now, attackerId);
         const coinsGranted = rapidSpawn.leader ? 7 + Math.floor(rapidSpawn.level / 2)
@@ -3337,7 +3337,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         this.clients.find(client => client.sessionId === attackerId)?.send("chat:notice",
           rapidSpawn.leader
             ? `${mob.name.toUpperCase()} DEFEATED · leader loot landed · returns in ${Math.round(rapidSpawn.respawnMs / 1000)}s.`
-            : guardedReward ? `FENWARD CACHE SECURED · guarded loot landed · +${coinsGranted} gold.`
+            : guardedReward ? `${mob.name.replace(/ keeper$/i, "").toUpperCase()} SECURED · guarded loot landed · +${coinsGranted} gold.`
             : itemDrop ? `Enemy defeated · loot landed · +${coinsGranted} gold.` : `Enemy defeated · +${coinsGranted} gold and XP.`);
       }
       this.combatContributions.clear(mobId);
@@ -8161,7 +8161,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       }
     }
     for (const [playerId, player] of this.state.players) {
-      if (player.health <= 0 || player.y < 7 || player.y > 9 || !isMistfenToxicPool(player.x, player.z)) continue;
+      const insideToxicPool = this.rapidPractice
+        ? rapidMistfenToxicPoolAt(player.x, player.z) : isMistfenToxicPool(player.x, player.z);
+      if (player.health <= 0 || player.y < 7 || player.y > 9 || !insideToxicPool) continue;
       const lastDamageAt = this.mistfenPoolDamageAt.get(playerId) ?? 0;
       if (now - lastDamageAt < 1_250) continue;
       if (fenwalkerBlocksPoolPulse(player.armourId, player.x, player.y, player.z, now,

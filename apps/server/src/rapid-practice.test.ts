@@ -11,6 +11,8 @@ import {
   EMPTY_RAPID_PRACTICE_UPGRADES,
   applyRapidPracticeUpgrade,
   rapidPracticeAttackTiming,
+  rapidMistfenToxicPoolAt,
+  rapidPracticeGuardedReward,
   rapidPracticeMovementSpeed,
   rapidPracticeProjectileFan,
   rapidPracticeProjectileTravelMs,
@@ -23,7 +25,7 @@ describe("fast low-poly world", () => {
     expect(RAPID_PRACTICE_FREE_ROAM).toBe(true);
     expect(RAPID_WORLD_ZONES.map(zone => zone.name)).toEqual(["Greenwood", "Mistfen", "Sunken Coast", "Southern Quarry", "Ashen Reach"]);
     const totalPopulation = RAPID_WORLD_ZONES.reduce((total, zone) => total
-      + (zone.id === "greenwood" ? 9 : 6), 0);
+      + (zone.id === "greenwood" || zone.id === "mistfen" ? 9 : 6), 0);
     expect(RAPID_PRACTICE_SPAWNS).toHaveLength(totalPopulation);
     expect(new Set(RAPID_PRACTICE_SPAWNS.map(spawn => spawn.id)).size).toBe(totalPopulation);
     for (const spawn of RAPID_PRACTICE_SPAWNS) {
@@ -38,11 +40,20 @@ describe("fast low-poly world", () => {
     expect(RAPID_PRACTICE_WAVES[2]).toContain(RAPID_PRACTICE_BOSS_ID);
     for (const zone of RAPID_WORLD_ZONES) {
       const residents = RAPID_PRACTICE_SPAWNS.filter(spawn => spawn.zone === zone.id);
-      expect(residents).toHaveLength(zone.id === "greenwood" ? 9 : 6);
+      expect(residents).toHaveLength(zone.id === "greenwood" || zone.id === "mistfen" ? 9 : 6);
       expect(residents.filter(spawn => spawn.leader).map(spawn => spawn.id)).toEqual([zone.leaderId]);
       expect(Math.min(...residents.map(spawn => spawn.level))).toBeGreaterThanOrEqual(zone.levelMin);
       expect(Math.max(...residents.map(spawn => spawn.level))).toBeLessThanOrEqual(zone.levelMax);
     }
+  });
+
+  it("shares guarded rewards and toxic-pool footprints with the authored region", () => {
+    expect(rapidPracticeGuardedReward("greenwood-fenward-guard-b")).toBe(true);
+    expect(rapidPracticeGuardedReward("mistfen-wayfinder-keeper")).toBe(true);
+    expect(rapidPracticeGuardedReward("mistfen-wayfinder-guard")).toBe(false);
+    expect(rapidMistfenToxicPoolAt(160, 75)).toBe(true);
+    expect(rapidMistfenToxicPoolAt(164, 66.5)).toBe(false);
+    expect(rapidMistfenToxicPoolAt(179.5, 51.5)).toBe(false);
   });
 
   it("keeps the Town of Beginnings inside the arena with a clear east gate", () => {

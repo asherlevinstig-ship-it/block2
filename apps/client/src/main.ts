@@ -127,6 +127,14 @@ import {
   GREENWOOD_UNDERGROWTH,
 } from "./greenwood-visuals.js";
 import {
+  MISTFEN_BOARDWALKS,
+  MISTFEN_LANDMARKS,
+  MISTFEN_REEDS,
+  MISTFEN_SNAGS,
+  MISTFEN_TEXTURE_STYLES,
+  MISTFEN_TOXIC_POOLS,
+} from "./mistfen-visuals.js";
+import {
   SUNKEN_COAST_GRASS,
   SUNKEN_COAST_ROCKS,
   SUNKEN_COAST_TEXTURE_STYLES,
@@ -2280,9 +2288,22 @@ if (fastWorldRequested) {
   const greenwoodFern = coloredMaterial(new pc.Color(.16, .44, .17));
   const greenwoodFernLight = coloredMaterial(new pc.Color(.3, .58, .22));
   const greenwoodStone = coloredMaterial(new pc.Color(.31, .36, .29));
-  const mistfenGround = coloredMaterial(new pc.Color(.14, .22, .18));
-  const mistfenWater = coloredMaterial(new pc.Color(.08, .27, .28));
+  const mistfenGround = createPaintedGroundMaterial(app, MISTFEN_TEXTURE_STYLES.marsh, [11, 12]);
+  const mistfenWater = createPaintedGroundMaterial(app, MISTFEN_TEXTURE_STYLES.water, [3, 2]);
+  const mistfenMud = createPaintedGroundMaterial(app, MISTFEN_TEXTURE_STYLES.mud, [4, 3]);
   const marshGlow = coloredMaterial(new pc.Color(.31, .58, .24));
+  mistfenWater.opacity = .86;
+  mistfenWater.blendType = pc.BLEND_NORMAL;
+  mistfenWater.depthWrite = false;
+  mistfenWater.gloss = .5;
+  mistfenWater.update();
+  const mistfenFog = new pc.StandardMaterial();
+  mistfenFog.diffuse = new pc.Color(.35, .58, .48);
+  mistfenFog.emissive = new pc.Color(.025, .08, .065);
+  mistfenFog.opacity = .13;
+  mistfenFog.blendType = pc.BLEND_NORMAL;
+  mistfenFog.depthWrite = false;
+  mistfenFog.update();
   const coastGround = createPaintedGroundMaterial(app, SUNKEN_COAST_TEXTURE_STYLES.sand, [12, 8]);
   const coastWater = createPaintedGroundMaterial(app, SUNKEN_COAST_TEXTURE_STYLES.shallows, [3, 2]);
   const coastGrass = coloredMaterial(new pc.Color(.27, .43, .29));
@@ -3106,18 +3127,96 @@ if (fastWorldRequested) {
       z: entity.getLocalPosition().z, phase: index * .73 });
   }
 
-  for (const [x, z, sx, sz] of [[159,34,3.8,2.5],[174,39,3,2.2],[193,31,4.1,2.7],[158,60,3.2,2.4],
-    [179,61,4.4,2.5],[197,68,3.5,2.1],[188,49,2.7,1.9]] as const)
-    addRapidRegionShape("mistfen", "mistfen-pool", "cylinder", mistfenWater, [sx, .035, sz], [x, 8.075, z]);
-  for (const [x, z, turn] of [[160,46,8],[170,29,-17],[183,72,26],[198,40,-8],[193,76,14],[175,55,-24]] as const) {
-    const snag = addRapidRegionBox("mistfen", "mistfen-snag", timber, [.3, 2.1, .3], [x, 9.05, z]);
-    snag.setLocalEulerAngles(0, turn, turn * .35);
-    const branch = addRapidRegionBox("mistfen", "mistfen-snag-branch", timberLight, [1.2, .18, .18], [x + .35, 9.95, z]);
-    branch.setLocalEulerAngles(0, turn, -18);
+  for (const pool of MISTFEN_TOXIC_POOLS) {
+    const water = addRapidRegionShape("mistfen", `mistfen-pool:${pool.id}`, "cylinder", mistfenWater,
+      [pool.width, .035, pool.depth], [pool.x, 8.075, pool.z]);
+    water.setLocalEulerAngles(0, pool.yaw, 0);
+    const rim = addRapidRegionShape("mistfen", `mistfen-pool-rim:${pool.id}`, "cylinder", marshGlow,
+      [pool.width + .22, .018, pool.depth + .22], [pool.x, 8.068, pool.z]);
+    rim.setLocalEulerAngles(0, pool.yaw, 0);
   }
-  for (const [x, z] of [[163,31],[171,65],[185,35],[195,57],[181,76],[199,29]] as const)
-    addRapidRegionShape("mistfen", "mistfen-reeds", "cone", marshGlow, [.42, 1.15, .42], [x, 8.62, z]);
-  addRapidRegionShape("mistfen", "miremother-ring", "cylinder", marshGlow, [5.4, .055, 5.4], [179.5, 8.11, 51.5]);
+  for (const walk of MISTFEN_BOARDWALKS) {
+    const deck = addRapidRegionBox("mistfen", `mistfen-boardwalk:${walk.id}`, timberLight,
+      [walk.length, .12, walk.width], [walk.x, 8.2, walk.z]);
+    deck.setLocalEulerAngles(0, walk.yaw, 0);
+    const angle = walk.yaw * Math.PI / 180;
+    for (const side of [-1, 1] as const) for (const end of [-1, 1] as const) {
+      const along = walk.length * .42 * end;
+      const across = walk.width * .47 * side;
+      const stakeX = walk.x + Math.cos(angle) * along - Math.sin(angle) * across;
+      const stakeZ = walk.z - Math.sin(angle) * along - Math.cos(angle) * across;
+      addRapidRegionBox("mistfen", `mistfen-boardwalk-stake:${walk.id}`, timber,
+        [.14, .7, .14], [stakeX, 8.52, stakeZ]).setLocalEulerAngles(0, walk.yaw, side * 4);
+    }
+  }
+  for (const snagDefinition of MISTFEN_SNAGS) {
+    const snag = addRapidRegionBox("mistfen", "mistfen-snag", timber, [.3, 2.1, .3],
+      [snagDefinition.x, 9.05, snagDefinition.z]);
+    snag.setLocalEulerAngles(0, snagDefinition.yaw, snagDefinition.yaw * .35);
+    const branch = addRapidRegionBox("mistfen", "mistfen-snag-branch", timberLight, [1.2, .18, .18],
+      [snagDefinition.x + .35, 9.95, snagDefinition.z]);
+    branch.setLocalEulerAngles(0, snagDefinition.yaw, -18);
+  }
+  for (let index = 0; index < MISTFEN_REEDS.length; index++) {
+    const [x, z] = MISTFEN_REEDS[index]!;
+    for (let blade = 0; blade < 3; blade++) {
+      const reed = addRapidRegionShape("mistfen", "mistfen-reed", "cone", blade === 1 ? marshGlow : greenwoodFern,
+        [.16, .85 + blade * .13, .13], [x + (blade - 1) * .22, 8.48, z]);
+      reed.setLocalEulerAngles((blade - 1) * 7, index * 41 + blade * 36, (blade - 1) * 14);
+    }
+  }
+  for (const landmark of MISTFEN_LANDMARKS) {
+    if (landmark.kind === "drowned-camp") {
+      const platform = addRapidRegionBox("mistfen", `${landmark.id}:platform`, timber,
+        [4.8, .16, 3.5], [landmark.x, 8.24, landmark.z]);
+      platform.setLocalEulerAngles(0, -18, -3);
+      for (const side of [-1, 1] as const)
+        addRapidRegionBox("mistfen", `${landmark.id}:broken-pole`, timberLight,
+          [.16, 1.65 + side * .2, .16], [landmark.x + side * 1.6, 9.05, landmark.z - .9])
+          .setLocalEulerAngles(side * 8, -18, side * 12);
+    } else if (landmark.kind === "reed-maze") {
+      for (let index = 0; index < 12; index++) {
+        const angle = index / 12 * Math.PI * 2;
+        const radius = index % 2 ? 3.6 : 2.6;
+        addRapidRegionShape("mistfen", `${landmark.id}:high-reed`, "cone", greenwoodFern,
+          [.3, 1.65, .22], [landmark.x + Math.cos(angle) * radius, 8.82,
+            landmark.z + Math.sin(angle) * radius]).setLocalEulerAngles(0, index * 37, index % 2 ? 8 : -8);
+      }
+    } else if (landmark.kind === "corrupted-spring") {
+      addRapidRegionShape("mistfen", `${landmark.id}:spring`, "cylinder", mistfenWater,
+        [3.1, .045, 3.1], [landmark.x, 8.1, landmark.z]);
+      for (let index = 0; index < 8; index++) {
+        const angle = index / 8 * Math.PI * 2;
+        addRapidRegionShape("mistfen", `${landmark.id}:bubble`, "sphere", marshGlow,
+          [.18 + index % 2 * .08, .12, .18 + index % 2 * .08],
+          [landmark.x + Math.cos(angle) * 2.3, 8.22, landmark.z + Math.sin(angle) * 2.3]);
+      }
+    } else if (landmark.kind === "guarded-cache") {
+      const cache = addRapidRegionBox("mistfen", `${landmark.id}:cache`, timberLight,
+        [1.55, .72, 1.05], [landmark.x, 8.58, landmark.z]);
+      cache.setLocalEulerAngles(0, 18, 0);
+      addRapidRegionBox("mistfen", `${landmark.id}:lid`, timber,
+        [1.68, .22, 1.16], [landmark.x, 9, landmark.z]).setLocalEulerAngles(0, 18, 0);
+      for (const side of [-1, 1] as const)
+        addRapidRegionBox("mistfen", `${landmark.id}:band`, iron,
+          [.12, .82, 1.12], [landmark.x + side * .48, 8.65, landmark.z]).setLocalEulerAngles(0, 18, 0);
+    } else {
+      // A raised, irregular mud island preserves readable footing while toxic
+      // water and roots create the Miremother's pressure lanes.
+      addRapidRegionShape("mistfen", `${landmark.id}:island`, "cylinder", mistfenMud,
+        [6.2, .18, 5.5], [landmark.x, 8.16, landmark.z]);
+      for (let index = 0; index < 9; index++) {
+        const angle = index / 9 * Math.PI * 2;
+        const root = addRapidRegionBox("mistfen", `${landmark.id}:root`, timber,
+          [1.8, .15, .22], [landmark.x + Math.cos(angle) * 4.7, 8.32,
+            landmark.z + Math.sin(angle) * 4.15]);
+        root.setLocalEulerAngles(0, 90 - angle * 180 / Math.PI, index % 2 ? 6 : -5);
+      }
+    }
+  }
+  for (const [x, y, z, sx, sz] of [[160,9.2,54,5,2.4],[174,9.5,33,6,2.7],[190,9.15,62,5.5,2.3],
+    [200,9.55,35,4.5,2.2],[181,9.3,72,5,2.2]] as const)
+    addRapidRegionShape("mistfen", "mistfen-ground-fog", "sphere", mistfenFog, [sx, .55, sz], [x, y, z]);
 
   for (const pool of SUNKEN_COAST_TIDE_POOLS) {
     const water = addRapidRegionShape("sunken-coast", "coast-tide-pool", "cylinder", coastWater,
