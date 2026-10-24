@@ -8,11 +8,15 @@ import {
 } from "./fast-world-region-kit.js";
 
 describe("Fast World visual region kit", () => {
-  it("cuts Greenwood and Mistfen into reusable 32 metre visual chunks", () => {
+  it("cuts every region into reusable 32 metre visual chunks", () => {
     expect(FAST_WORLD_VISUAL_CHUNK_SIZE).toBe(32);
     expect(fastWorldRegionVisualChunks("greenwood")).toHaveLength(6);
     expect(fastWorldRegionVisualChunks("mistfen")).toHaveLength(9);
-    for (const chunk of [...fastWorldRegionVisualChunks("greenwood"), ...fastWorldRegionVisualChunks("mistfen")]) {
+    expect(fastWorldRegionVisualChunks("sunken-coast")).toHaveLength(6);
+    expect(fastWorldRegionVisualChunks("southern-quarry")).toHaveLength(6);
+    expect(fastWorldRegionVisualChunks("ashen-reach")).toHaveLength(6);
+    for (const regionId of ["greenwood", "mistfen", "sunken-coast", "southern-quarry", "ashen-reach"] as const)
+    for (const chunk of fastWorldRegionVisualChunks(regionId)) {
       expect(chunk.width).toBeGreaterThan(0);
       expect(chunk.width).toBeLessThanOrEqual(32);
       expect(chunk.depth).toBeGreaterThan(0);

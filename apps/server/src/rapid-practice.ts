@@ -1,6 +1,6 @@
 import type { MobArchetypeId } from "./mob-archetypes.js";
 import type { FastWorldRegionId, MainHandId } from "@blockcraft/protocol";
-import { FAST_WORLD_REGION_DEFINITIONS, RAPID_PRACTICE_ARENA, RAPID_PRACTICE_TOWN_COLLIDERS } from "@blockcraft/protocol";
+import { FAST_WORLD_REGION_DEFINITIONS, fastWorldRegionDefinition, RAPID_PRACTICE_ARENA, RAPID_PRACTICE_TOWN_COLLIDERS } from "@blockcraft/protocol";
 export { RAPID_PRACTICE_ARENA, RAPID_PRACTICE_TOWN_COLLIDERS } from "@blockcraft/protocol";
 
 export type RapidPracticeSpawn = {
@@ -45,6 +45,13 @@ export const RAPID_WORLD_ZONES: readonly RapidWorldZone[] = FAST_WORLD_REGION_DE
 export const rapidWorldZoneAt = (x: number, z: number): RapidWorldZone | null =>
   RAPID_WORLD_ZONES.find(zone => x >= zone.minX && x <= zone.maxX && z >= zone.minZ && z <= zone.maxZ) ?? null;
 
+const configuredRegionSpawns = (regionId: FastWorldRegionId): readonly RapidPracticeSpawn[] =>
+  (fastWorldRegionDefinition(regionId).encounters ?? []).map(encounter => ({
+    ...encounter,
+    archetype: encounter.archetype as MobArchetypeId,
+    zone: regionId,
+  }));
+
 export const RAPID_PRACTICE_SPAWNS: readonly RapidPracticeSpawn[] = [
   { id: "greenwood-crawler-a", archetype: "moss_crawler", name: "Moss Crawler", zone: "greenwood", level: 1, respawnMs: 40_000, x: 120.5, y: 8, z: 91.5 },
   { id: "greenwood-crawler-b", archetype: "moss_crawler", name: "Moss Crawler", zone: "greenwood", level: 2, respawnMs: 42_000, x: 130.5, y: 8, z: 122.5 },
@@ -59,6 +66,8 @@ export const RAPID_PRACTICE_SPAWNS: readonly RapidPracticeSpawn[] = [
   { id: "mistfen-briar-a", archetype: "briar_crawler", name: "Mire Briar", zone: "mistfen", level: 6, respawnMs: 57_000, x: 185.5, y: 8, z: 36.5 },
   { id: "mistfen-bloater-b", archetype: "fen_bloater", name: "Fen Bloater", zone: "mistfen", level: 7, respawnMs: 60_000, x: 197.5, y: 8, z: 49.5 },
   { id: "mistfen-miremother", archetype: "fen_bloater", name: "Miremother", zone: "mistfen", level: 7, leader: true, respawnMs: 76_000, x: 179.5, y: 8, z: 51.5 },
+
+  ...configuredRegionSpawns("sunken-coast"),
 
   { id: "quarry-stalker-a", archetype: "ridge_stalker", name: "Quarry Stalker", zone: "southern-quarry", level: 6, respawnMs: 58_000, x: 162.5, y: 8, z: 151.5 },
   { id: "quarry-stalker-b", archetype: "ridge_stalker", name: "Quarry Stalker", zone: "southern-quarry", level: 7, respawnMs: 61_000, x: 192.5, y: 8, z: 149.5 },
@@ -77,7 +86,7 @@ export const RAPID_PRACTICE_SPAWNS: readonly RapidPracticeSpawn[] = [
 
 export const RAPID_PRACTICE_WAVES = [
   RAPID_PRACTICE_SPAWNS.filter(spawn => spawn.zone === "greenwood").map(spawn => spawn.id),
-  RAPID_PRACTICE_SPAWNS.filter(spawn => spawn.zone === "mistfen" || spawn.zone === "southern-quarry").map(spawn => spawn.id),
+  RAPID_PRACTICE_SPAWNS.filter(spawn => spawn.zone === "mistfen" || spawn.zone === "sunken-coast" || spawn.zone === "southern-quarry").map(spawn => spawn.id),
   RAPID_PRACTICE_SPAWNS.filter(spawn => spawn.zone === "ashen-reach").map(spawn => spawn.id),
 ] as const;
 

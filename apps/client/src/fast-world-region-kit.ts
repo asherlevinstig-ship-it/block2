@@ -5,7 +5,9 @@ import {
 } from "@blockcraft/protocol";
 
 export const FAST_WORLD_VISUAL_CHUNK_SIZE = 32;
-export const FAST_WORLD_STREAMED_REGION_IDS = ["greenwood", "mistfen"] as const;
+export const FAST_WORLD_STREAMED_REGION_IDS = [
+  "greenwood", "mistfen", "sunken-coast", "southern-quarry", "ashen-reach",
+] as const;
 export type FastWorldStreamedRegionId = typeof FAST_WORLD_STREAMED_REGION_IDS[number];
 
 export type FastWorldVisualChunk = {
@@ -30,9 +32,9 @@ export const fastWorldVisualChunkKey = (regionId: FastWorldStreamedRegionId, chu
 
 const chunkRange = (bounds: FastWorldRegionBounds): { minChunkX: number; maxChunkX: number; minChunkZ: number; maxChunkZ: number } => ({
   minChunkX: Math.floor(bounds.minX / FAST_WORLD_VISUAL_CHUNK_SIZE),
-  maxChunkX: Math.floor((bounds.maxX - Number.EPSILON) / FAST_WORLD_VISUAL_CHUNK_SIZE),
+  maxChunkX: Math.floor((bounds.maxX - 1e-6) / FAST_WORLD_VISUAL_CHUNK_SIZE),
   minChunkZ: Math.floor(bounds.minZ / FAST_WORLD_VISUAL_CHUNK_SIZE),
-  maxChunkZ: Math.floor((bounds.maxZ - Number.EPSILON) / FAST_WORLD_VISUAL_CHUNK_SIZE),
+  maxChunkZ: Math.floor((bounds.maxZ - 1e-6) / FAST_WORLD_VISUAL_CHUNK_SIZE),
 });
 
 export function fastWorldRegionVisualChunks(regionId: FastWorldStreamedRegionId): readonly FastWorldVisualChunk[] {

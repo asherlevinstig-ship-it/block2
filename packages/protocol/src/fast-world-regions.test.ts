@@ -8,7 +8,7 @@ import {
 describe("Fast World region manifest", () => {
   it("keeps every region statically levelled with one leader and a population target", () => {
     expect(FAST_WORLD_REGION_DEFINITIONS.map(region => region.id)).toEqual([
-      "greenwood", "mistfen", "southern-quarry", "ashen-reach",
+      "greenwood", "mistfen", "sunken-coast", "southern-quarry", "ashen-reach",
     ]);
     for (const region of FAST_WORLD_REGION_DEFINITIONS) {
       expect(region.levelMax).toBeGreaterThanOrEqual(region.levelMin);
@@ -21,7 +21,23 @@ describe("Fast World region manifest", () => {
   it("resolves shared region borders consistently", () => {
     expect(fastWorldRegionDefinitionAt(130, 106)?.id).toBe("greenwood");
     expect(fastWorldRegionDefinitionAt(178, 50)?.id).toBe("mistfen");
+    expect(fastWorldRegionDefinitionAt(70, 170)?.id).toBe("sunken-coast");
     expect(fastWorldRegionDefinitionAt(180, 106)).toBeNull();
     expect(fastWorldRegionDefinition("ashen-reach").leaderName).toBe("Cinderlord");
+  });
+
+  it("can define a complete playable region from one manifest entry", () => {
+    const coast = fastWorldRegionDefinition("sunken-coast");
+    expect(coast.visualTheme).toBe("coast");
+    expect(coast.encounters).toHaveLength(coast.targetPopulation);
+    expect(coast.encounters?.filter(encounter => encounter.leader).map(encounter => encounter.id)).toEqual([coast.leaderId]);
+    for (const encounter of coast.encounters ?? []) {
+      expect(encounter.level).toBeGreaterThanOrEqual(coast.levelMin);
+      expect(encounter.level).toBeLessThanOrEqual(coast.levelMax);
+      expect(encounter.x).toBeGreaterThanOrEqual(coast.bounds.minX);
+      expect(encounter.x).toBeLessThanOrEqual(coast.bounds.maxX);
+      expect(encounter.z).toBeGreaterThanOrEqual(coast.bounds.minZ);
+      expect(encounter.z).toBeLessThanOrEqual(coast.bounds.maxZ);
+    }
   });
 });

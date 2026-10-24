@@ -2,7 +2,8 @@ import * as pc from "playcanvas";
 import { addCallingParticleLayers } from "./calling-particles.js";
 import { CALLING_ABILITY_SUSTAIN_PARTICLES, CALLING_ANTICIPATION_PARTICLES, CALLING_IMPACT_PARTICLES, CALLING_SUSTAIN_PARTICLES, callingParticleLifetime } from "./calling-vfx-presets.js";
 import { mageCastDuration, mageCastPose, type MageAbilityId } from "./mage-casting.js";
-import { greenwoodMasteryStatus, mistfenMasteryStatus } from "@blockcraft/protocol";
+import { FAST_WORLD_REGION_DEFINITIONS, greenwoodMasteryStatus, mistfenMasteryStatus,
+  type FastWorldVisualTheme } from "@blockcraft/protocol";
 import { rapidPracticeCollisionCellSolid } from "@blockcraft/protocol";
 import type { RegionalArmourProc } from "@blockcraft/protocol";
 import { isInMistfenMarsh, NORTHWATCH_SHARD_PATROL_SITE } from "@blockcraft/voxel-world";
@@ -123,6 +124,13 @@ import {
   GREENWOOD_TEXTURE_STYLES,
   GREENWOOD_UNDERGROWTH,
 } from "./greenwood-visuals.js";
+import {
+  SUNKEN_COAST_GRASS,
+  SUNKEN_COAST_ROCKS,
+  SUNKEN_COAST_TEXTURE_STYLES,
+  SUNKEN_COAST_TIDE_POOLS,
+  SUNKEN_COAST_WRECKAGE,
+} from "./sunken-coast-visuals.js";
 import { SPEED_LAB_TOWN_ACTORS, SPEED_LAB_TOWN_LIGHTS, SPEED_LAB_TOWN_SIGNS, townLifeActorPose, townLifeAnimation,
   type TownLifeActorDefinition } from "./town-life.js";
 import { townNpcFaceStyle, type TownNpcMouthExpression } from "./town-npc-appearance.js";
@@ -132,6 +140,7 @@ import { SPEED_LAB_TOWN_TERRAIN, SPEED_LAB_TOWN_TERRAIN_DETAILS,
 import { rapidWorldRegionAt } from "./rapid-world.js";
 import {
   FastWorldVisualChunkStream,
+  fastWorldActiveVisualChunkKeys,
   fastWorldRegionVisualChunks,
   fastWorldVisualChunkForPosition,
   type FastWorldStreamedRegionId,
@@ -2184,6 +2193,8 @@ let requestRapidTownAssets = (): void => {};
 let requestRapidTownNpcAssets = (): void => {};
 let requestGreenwoodAssets = (): void => {};
 let updateRapidRegionVisualStream = (_x: number, _z: number): void => {};
+let rapidWorldActiveVisualChunks = 0;
+let rapidWorldTotalVisualChunks = 0;
 if (fastWorldRequested) {
   const townNpcFaceBatchGroup = app.batcher.addGroup("town-npc-faces", true, 32);
   const rapidWorldSceneryBatchGroup = app.batcher.addGroup("rapid-world-scenery", false, 512);
@@ -2247,6 +2258,10 @@ if (fastWorldRequested) {
   const mistfenGround = coloredMaterial(new pc.Color(.14, .22, .18));
   const mistfenWater = coloredMaterial(new pc.Color(.08, .27, .28));
   const marshGlow = coloredMaterial(new pc.Color(.31, .58, .24));
+  const coastGround = createPaintedGroundMaterial(app, SUNKEN_COAST_TEXTURE_STYLES.sand, [12, 8]);
+  const coastWater = createPaintedGroundMaterial(app, SUNKEN_COAST_TEXTURE_STYLES.shallows, [3, 2]);
+  const coastGrass = coloredMaterial(new pc.Color(.27, .43, .29));
+  const coastFoam = coloredMaterial(new pc.Color(.62, .79, .7));
   const quarryGround = coloredMaterial(new pc.Color(.42, .31, .22));
   const quarryRock = coloredMaterial(new pc.Color(.38, .34, .31));
   const ironOre = coloredMaterial(new pc.Color(.72, .39, .13));
@@ -2263,6 +2278,13 @@ if (fastWorldRequested) {
   greenwoodMoteMaterial.blendType = pc.BLEND_ADDITIVE;
   greenwoodMoteMaterial.depthWrite = false;
   greenwoodMoteMaterial.update();
+  const rapidRegionGroundMaterials: Record<FastWorldVisualTheme, pc.StandardMaterial> = {
+    forest: greenwoodGround,
+    marsh: mistfenGround,
+    coast: coastGround,
+    quarry: quarryGround,
+    volcanic: ashenGround,
+  };
 
   const addTownShape = (parent: pc.Entity, name: string, type: "box" | "cylinder" | "cone" | "sphere",
     material: pc.StandardMaterial, scale: [number, number, number], position: [number, number, number]): pc.Entity => {
@@ -2288,15 +2310,17 @@ if (fastWorldRequested) {
   };
   const rapidRegionChunkRoots = new Map<string, pc.Entity>();
   const rapidRegionStream = new FastWorldVisualChunkStream(1);
-  let activeRapidRegionChunkKeys: Set<string> | null = null;
+  let activeRapidRegionChunkKeys = fastWorldActiveVisualChunkKeys(99.5, 106.5, 1);
+  rapidWorldActiveVisualChunks = activeRapidRegionChunkKeys.size;
   const rapidRegionChunkRoot = (regionId: FastWorldStreamedRegionId, x: number, z: number): pc.Entity => {
     const key = fastWorldVisualChunkForPosition(regionId, x, z);
     const existing = rapidRegionChunkRoots.get(key);
     if (existing) return existing;
     const root = new pc.Entity(`fast-world-region-chunk:${key}`);
-    root.enabled = activeRapidRegionChunkKeys === null || activeRapidRegionChunkKeys.has(key);
+    root.enabled = activeRapidRegionChunkKeys.has(key);
     rapidPrototypeRoot.addChild(root);
     rapidRegionChunkRoots.set(key, root);
+    rapidWorldTotalVisualChunks = rapidRegionChunkRoots.size;
     return root;
   };
   const addRapidRegionShape = (regionId: FastWorldStreamedRegionId, name: string,
@@ -2316,6 +2340,7 @@ if (fastWorldRequested) {
     const change = rapidRegionStream.update(x, z);
     if (!change) return;
     activeRapidRegionChunkKeys = change.active;
+    rapidWorldActiveVisualChunks = change.active.size;
     for (const [key, root] of rapidRegionChunkRoots) root.enabled = activeRapidRegionChunkKeys.has(key);
   };
 
@@ -2556,18 +2581,17 @@ if (fastWorldRequested) {
 
   addRapidWorldBox("realm-ground", grass, [220, .25, 172], [150, 7.875, 106]);
   addBox(rapidPrototypeRoot, "west-green", grassLight, [62, .035, 74], [71, 8.02, 106]);
-  for (const chunk of fastWorldRegionVisualChunks("greenwood"))
-    addRapidRegionBox("greenwood", `greenwood-ground:${chunk.key}`, greenwoodGround,
-      [chunk.width, .035, chunk.depth], [chunk.centerX, 8.02, chunk.centerZ]);
-  for (const chunk of fastWorldRegionVisualChunks("mistfen"))
-    addRapidRegionBox("mistfen", `mistfen-ground:${chunk.key}`, mistfenGround,
-      [chunk.width, .035, chunk.depth], [chunk.centerX, 8.02, chunk.centerZ]);
-  addRapidWorldBox("quarry-ground", quarryGround, [52, .035, 52], [178, 8.02, 162]);
-  addRapidWorldBox("ashen-ground", ashenGround, [52, .035, 66], [230, 8.02, 107]);
+  for (const region of FAST_WORLD_REGION_DEFINITIONS) {
+    const regionId = region.id as FastWorldStreamedRegionId;
+    for (const chunk of fastWorldRegionVisualChunks(regionId))
+      addRapidRegionBox(regionId, `${regionId}-ground:${chunk.key}`, rapidRegionGroundMaterials[region.visualTheme],
+        [chunk.width, .035, chunk.depth], [chunk.centerX, 8.02, chunk.centerZ]);
+  }
   addRapidWorldBox("east-realm-road", path, [154, .055, 5.2], [179, 8.035, 106]);
   addRapidWorldBox("regional-fork-road", path, [5.2, .06, 130], [168, 8.04, 106]);
   addRapidWorldBox("mistfen-road", roadWarm, [28, .055, 4.2], [181, 8.045, 65]);
   addRapidWorldBox("quarry-road", roadWarm, [28, .055, 4.2], [181, 8.045, 151]);
+  addRapidWorldBox("coast-road", roadWarm, [4.2, .055, 48], [100, 8.045, 166]);
   addRapidWorldBox("realm-crossroads", stone, [9.5, .09, 9.5], [168, 8.075, 106]);
   for (const patch of GREENWOOD_GROUND_PATCHES) {
     const material = patch.material === "moss" ? greenwoodMoss : greenwoodLeafLitter;
@@ -2878,32 +2902,69 @@ if (fastWorldRequested) {
     addRapidRegionShape("mistfen", "mistfen-reeds", "cone", marshGlow, [.42, 1.15, .42], [x, 8.62, z]);
   addRapidRegionShape("mistfen", "miremother-ring", "cylinder", marshGlow, [5.4, .055, 5.4], [179.5, 8.11, 51.5]);
 
+  for (const pool of SUNKEN_COAST_TIDE_POOLS) {
+    const water = addRapidRegionShape("sunken-coast", "coast-tide-pool", "cylinder", coastWater,
+      [pool.width, .035, pool.depth], [pool.x, 8.075, pool.z]);
+    water.setLocalEulerAngles(0, pool.yaw, 0);
+    const foam = addRapidRegionShape("sunken-coast", "coast-tide-foam", "cylinder", coastFoam,
+      [pool.width + .24, .018, pool.depth + .24], [pool.x, 8.068, pool.z]);
+    foam.setLocalEulerAngles(0, pool.yaw, 0);
+  }
+  for (const wreck of SUNKEN_COAST_WRECKAGE) {
+    const beam = addRapidRegionBox("sunken-coast", "coast-wreck-beam", timberLight,
+      [wreck.length, .28, .36], [wreck.x, 8.28, wreck.z]);
+    beam.setLocalEulerAngles(0, wreck.yaw, wreck.yaw > 0 ? 7 : -7);
+    for (const side of [-1, 1]) {
+      const rib = addRapidRegionBox("sunken-coast", "coast-wreck-rib", timber,
+        [.25, .85, 1.25], [wreck.x + side * 1.15, 8.55, wreck.z]);
+      rib.setLocalEulerAngles(0, wreck.yaw + side * 12, side * 24);
+    }
+  }
+  for (const [x, z, size] of SUNKEN_COAST_ROCKS) {
+    const rock = addRapidRegionBox("sunken-coast", "coast-rock", greenwoodStone,
+      [size, size * .65, size * .82], [x, 8 + size * .34, z]);
+    rock.setLocalEulerAngles(8, x * 13 % 55, z % 2 ? 7 : -8);
+  }
+  for (const [x, z] of SUNKEN_COAST_GRASS) {
+    for (let blade = 0; blade < 3; blade++) {
+      const grassBlade = addRapidRegionShape("sunken-coast", "coast-grass", "cone", coastGrass,
+        [.16, .68 + blade * .08, .11], [x + (blade - 1) * .22, 8.35, z]);
+      grassBlade.setLocalEulerAngles(blade === 1 ? -8 : 10, x * 9 + blade * 47, (blade - 1) * 20);
+    }
+  }
+  addRapidRegionShape("sunken-coast", "tidecaller-ring", "cylinder", coastWater,
+    [5.8, .055, 5.8], [70.5, 8.11, 174.5]);
+
   for (const [x, z, sx, sz, height] of [[158,142,9,5,.5],[188,141,12,4,.75],[155,181,8,5,.65],[184,184,13,4,1.05],
     [199,154,5,9,.8],[171,165,7,6,.55]] as const)
-    addRapidWorldBox("quarry-terrace", quarryRock, [sx, height, sz], [x, 8 + height * .5, z]);
+    addRapidRegionBox("southern-quarry", "quarry-terrace", quarryRock, [sx, height, sz], [x, 8 + height * .5, z]);
   for (const [x, z, size] of [[161,153,1.3],[174,144,.9],[193,159,1.5],[199,181,1.2],[168,181,1],[188,174,1.35]] as const) {
-    const rock = addRapidWorldBox("quarry-boulder", quarryRock, [size, size * .8, size], [x, 8 + size * .4, z]);
+    const rock = addRapidRegionBox("southern-quarry", "quarry-boulder", quarryRock, [size, size * .8, size], [x, 8 + size * .4, z]);
     rock.setLocalEulerAngles(10, x * 11 % 46, 8);
-    addRapidWorldShape("quarry-ore", "sphere", ironOre, [.3 * size, .22 * size, .18 * size], [x + .45 * size, 8 + size * .7, z]);
+    addRapidRegionShape("southern-quarry", "quarry-ore", "sphere", ironOre, [.3 * size, .22 * size, .18 * size], [x + .45 * size, 8 + size * .7, z]);
   }
-  addRapidWorldShape("quarrymaster-ring", "cylinder", ironOre, [5.6, .06, 5.6], [198.5, 8.12, 166.5]);
+  addRapidRegionShape("southern-quarry", "quarrymaster-ring", "cylinder", ironOre, [5.6, .06, 5.6], [198.5, 8.12, 166.5]);
 
   for (const [x, z, length, turn] of [[210,82,6,22],[222,94,8,-14],[239,78,7,31],[248,96,6,-24],[214,132,7,-10],
     [232,119,9,18],[250,132,6,9]] as const) {
-    const crack = addRapidWorldBox("ashen-lava-rift", lava, [length, .045, .32], [x, 8.075, z]);
+    const crack = addRapidRegionBox("ashen-reach", "ashen-lava-rift", lava, [length, .045, .32], [x, 8.075, z]);
     crack.setLocalEulerAngles(0, turn, 0);
   }
   for (const [x, z, height] of [[211,91,2.4],[220,78,3.2],[237,134,2.8],[251,84,3.5],[253,122,2.6],[225,129,2.2]] as const) {
-    const spire = addRapidWorldShape("ashen-spire", "cone", ashRock, [1.2, height, 1.2], [x, 8 + height * .5, z]);
+    const spire = addRapidRegionShape("ashen-reach", "ashen-spire", "cone", ashRock, [1.2, height, 1.2], [x, 8 + height * .5, z]);
     spire.setLocalEulerAngles(0, x * 9 % 50, z % 2 ? 8 : -8);
   }
-  addRapidWorldShape("cinderlord-ring", "cylinder", lava, [6.2, .065, 6.2], [242.5, 8.13, 106.5]);
+  addRapidRegionShape("ashen-reach", "cinderlord-ring", "cylinder", lava, [6.2, .065, 6.2], [242.5, 8.13, 106.5]);
 
   for (const [x, z, material] of [[108,106,greenwoodCanopy],[168,82,mistfenWater],[168,136,ironOre],[204,106,lava]] as const) {
     addRapidWorldBox("region-threshold-left", stone, [.48, 2.2, .48], [x, 9.1, z - 3.5]);
     addRapidWorldBox("region-threshold-right", stone, [.48, 2.2, .48], [x, 9.1, z + 3.5]);
     addRapidWorldShape("region-threshold-flame", "sphere", material, [.42, .42, .42], [x, 11.3, z - 3.5]);
     addRapidWorldShape("region-threshold-flame", "sphere", material, [.42, .42, .42], [x, 11.3, z + 3.5]);
+  }
+  for (const x of [96.5, 103.5]) {
+    addRapidWorldBox("coast-threshold", stone, [.48, 2.2, .48], [x, 9.1, 148]);
+    addRapidWorldShape("coast-threshold-flame", "sphere", coastWater, [.42, .42, .42], [x, 11.3, 148]);
   }
 
   // The imported kit is decorative only: server-owned world geometry remains authoritative for
@@ -14707,7 +14768,16 @@ function updatePerformanceMetrics(now: number): void {
   const fps = p50 > 0 ? 1000 / p50 : 0;
   if (fastWorldRequested) {
     const metrics = document.querySelector<HTMLElement>("#fast-world-metrics");
-    if (metrics) metrics.textContent = `${Math.round(fps)} FPS · ${p95.toFixed(1)}ms p95 · ${inputAcknowledgementMs === null ? "input measuring" : `${inputAcknowledgementMs.toFixed(0)}ms input`}`;
+    if (metrics) {
+      const position = localPlayer.getPosition();
+      const livingMobCount = [...mobVisuals.values()].filter(({ state }) => state.alive).length;
+      const nearbyMobCount = [...mobVisuals.values()].filter(({ state }) => state.alive
+        && Math.hypot(state.x - position.x, state.z - position.z) <= 56).length;
+      const simulation = serverPerformance
+        ? `${serverPerformance.activeMobs} active / ${serverPerformance.sleepingMobs} sleeping`
+        : `${nearbyMobCount} nearby / ${livingMobCount} known`;
+      metrics.textContent = `${Math.round(fps)} FPS · ${p95.toFixed(1)}ms p95 · chunks ${rapidWorldActiveVisualChunks}/${rapidWorldTotalVisualChunks} · mobs ${simulation}`;
+    }
   }
   const visibleVoxels = [...chunks.values()].reduce((total, chunk) => total + chunk.visibleBlocks, 0);
   const meshes = [...chunks.values()].reduce((total, chunk) => total + chunk.meshes.length, 0);

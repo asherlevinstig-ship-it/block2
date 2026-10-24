@@ -55,7 +55,7 @@ import { ROAMING_PACKS, roamingMemberArchetype, roamingMemberId, roamingMembersh
   createRoamingRouteState, advanceRoamingRoute, type RoamingRouteState } from "./roaming-packs.js";
 import { REGIONAL_PACK_DISRUPTION_MS, regionalPackCooldownMultiplier, regionalPackCue, regionalPackGoal,
   regionalPackSpeedMultiplier } from "./regional-pack-tactics.js";
-import { mobSimulationActive } from "./mob-activation.js";
+import { FAST_WORLD_SIMULATION_RANGE, fastWorldMobSimulationActive, mobSimulationActive } from "./mob-activation.js";
 import { SERVER_TICK_BUDGET_MS, appendTickSample, samplePercentile } from "./performance-metrics.js";
 import { EMPTY_RAPID_PRACTICE_UPGRADES, RAPID_PRACTICE_ARENA, RAPID_PRACTICE_BOSS_ID,
   RAPID_PRACTICE_FREE_ROAM, RAPID_PRACTICE_SPAWNS, RAPID_PRACTICE_TOWN_COLLIDERS, RAPID_PRACTICE_UPGRADE_LABELS, RAPID_PRACTICE_WAVES,
@@ -1053,7 +1053,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     let activeMobs = 0, sleepingMobs = 0;
     for (const mob of this.state.mobs.values()) {
       if (!mob.alive) continue;
-      if (mobSimulationActive(mob, this.state.players.values())) activeMobs++;
+      if ((this.rapidPractice ? fastWorldMobSimulationActive : mobSimulationActive)(mob, this.state.players.values())) activeMobs++;
       else sleepingMobs++;
     }
     const update: ServerPerformanceUpdate = {
@@ -1064,6 +1064,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         : this.simulationTickSamples.filter(sample => sample > SERVER_TICK_BUDGET_MS).length * 100 / this.simulationTickSamples.length,
       activeMobs,
       sleepingMobs,
+      interestRadius: this.rapidPractice ? FAST_WORLD_SIMULATION_RANGE : 64,
       sampleCount: this.simulationTickSamples.length,
       tickBudgetMs: SERVER_TICK_BUDGET_MS,
     };
@@ -2611,7 +2612,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private configureRapidWorldMob(mobId: string, mob: MobState): void {
     const spawn = RAPID_PRACTICE_SPAWNS.find(candidate => candidate.id === mobId);
     if (!spawn) return;
-    const tier = spawn.zone === "greenwood" ? 1 : spawn.zone === "mistfen" ? 2
+    const tier = spawn.zone === "greenwood" ? 1 : spawn.zone === "mistfen" || spawn.zone === "sunken-coast" ? 2
       : spawn.zone === "southern-quarry" ? 3 : 4;
     mob.name = spawn.name;
     mob.level = spawn.level;
@@ -4955,7 +4956,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const emberRun = this.emberVaultRuns.get(playerId);
     if (emberRun && emberRun.completedAt === 0) emberRun.damageTaken += defense.damage;
     const defeated = player.health === 0;
-    this.broadcast("combat:player-hit", {
+    this.broadcastToInterest("combat:player-hit", {
       mobId,
       playerId,
       damage: defense.damage,
@@ -4967,14 +4968,14 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       absorbed,
       absorbedBy,
       wardCooldownMs: absorbedBy === "northwatch" ? NORTHWATCH_SHARD_WARD_COOLDOWN_MS : undefined,
-    } satisfies PlayerHit);
+    } satisfies PlayerHit, player);
     if (bulwarkPrevented > 0) {
       const impact = { playerId, mobId, prevented: bulwarkPrevented };
       this.broadcast("tank:block-impact", impact);
       this.clients.find(client => client.sessionId === playerId)?.send("tank:block-impact", impact);
     }
     if (defense.guarded) {
-      this.broadcast("combat:defense", {
+      this.broadcastToInterest("combat:defense", {
         playerId,
         mobId,
         guarded: true,
@@ -4983,7 +4984,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         stamina: Math.round(player.stamina),
         momentumStacks: player.momentumStacks,
         perkStaminaRestored,
-      } satisfies DefenseResolved);
+      } satisfies DefenseResolved, player);
     }
     if (!defeated) return true;
     this.recordAscendantHuntDefeat(playerId, now);
@@ -5156,8 +5157,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const radius = regional?.radius ?? .68;
       this.mobHazards.set(hazardId, { hazardId, mobId, ...site, radius, damage: 1,
         expiresAt, nextDamageAt: now + 550, lastDamageAt: new Map() });
-      this.broadcast("combat:mob-hazard", { hazardId, mobId, kind: regional?.kind ?? "pressure", ...site,
-        radius, expiresAt, cue: index === 0 ? regional?.cue : undefined } satisfies MobHazardPlaced);
+      this.broadcastToInterest("combat:mob-hazard", { hazardId, mobId, kind: regional?.kind ?? "pressure", ...site,
+        radius, expiresAt, cue: index === 0 ? regional?.cue : undefined } satisfies MobHazardPlaced, site);
     }
   }
 
@@ -5169,8 +5170,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const expiresAt = now + duration;
       this.mobHazards.set(hazardId, { hazardId, mobId, ...site, radius: .72, damage: 1,
         expiresAt, nextDamageAt: now + 550, lastDamageAt: new Map() });
-      this.broadcast("combat:mob-hazard", { hazardId, mobId, kind: "pressure", ...site,
-        radius: .72, expiresAt } satisfies MobHazardPlaced);
+      this.broadcastToInterest("combat:mob-hazard", { hazardId, mobId, kind: "pressure", ...site,
+        radius: .72, expiresAt } satisfies MobHazardPlaced, site);
     }
   }
 
@@ -7973,6 +7974,20 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     for (const [id, until] of this.resurrectionWindows) if (now >= until) this.resurrectionWindows.delete(id);
   }
 
+  private broadcastToInterest(type: string, payload: unknown, origin: { x: number; z: number }, radius = 80): void {
+    if (!this.rapidPractice) {
+      this.broadcast(type, payload);
+      return;
+    }
+    const rangeSquared = radius * radius;
+    for (const client of this.clients) {
+      const player = this.state.players.get(client.sessionId);
+      if (!player) continue;
+      const dx = player.x - origin.x, dz = player.z - origin.z;
+      if (dx * dx + dz * dz <= rangeSquared) client.send(type, payload);
+    }
+  }
+
   private releaseMobVolley(mobId: string, mob: MobState, origin: { x: number; y: number; z: number }, shots: { x: number; y: number; z: number }[], now: number, travelMs: number, damage: number, hazardRadius: number, hazardDurationMs: number): void {
     for (const aim of shots) {
       const projectileId = `${mobId}:${++this.mobProjectileSequence}`;
@@ -7980,7 +7995,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const end = { x: aim.x, y: aim.y + .08, z: aim.z };
       this.pendingMobProjectiles.set(projectileId, { projectileId, mobId, archetype: mob.archetype, damage, hazardRadius, hazardDurationMs,
         start, end, position: start, startedAt: now, impactAt: now + travelMs });
-      this.broadcast("combat:mob-projectile", { projectileId, mobId, kind: isThornbinder(mob.archetype) ? "vine" : mobId === CRYSTAL_MATRIARCH_ID || mobId === ASHGLASS_ORACLE_ID || mob.archetype === "shard_sentry" ? "crystal" : mob.archetype === "stone_brute" ? "rock" : "acid", ...origin, targetX: aim.x, targetY: aim.y, targetZ: aim.z, travelMs, releasedAt: now } satisfies MobProjectileReleased);
+      this.broadcastToInterest("combat:mob-projectile", { projectileId, mobId, kind: isThornbinder(mob.archetype) ? "vine" : mobId === CRYSTAL_MATRIARCH_ID || mobId === ASHGLASS_ORACLE_ID || mob.archetype === "shard_sentry" ? "crystal" : mob.archetype === "stone_brute" ? "rock" : "acid", ...origin, targetX: aim.x, targetY: aim.y, targetZ: aim.z, travelMs, releasedAt: now } satisfies MobProjectileReleased, origin);
     }
   }
 
@@ -7991,7 +8006,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const hazard = { hazardId: `realm-rock-${sequence}-${index}`, kind: "falling-rock" as const,
         x: site.x, y: site.y, z: site.z, radius: site.radius, impactAt, expiresAt: impactAt + 550, mobId, damage };
       this.realmBossPendingHazards.push(hazard);
-      this.broadcast("depths:hazard", hazard satisfies DepthsRouteHazard);
+      this.broadcastToInterest("depths:hazard", hazard satisfies DepthsRouteHazard, hazard);
     }
   }
 
@@ -8002,7 +8017,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (!mob?.alive) { this.realmBossPendingHazards.splice(index, 1); continue; }
       if (now < hazard.impactAt) continue;
       this.realmBossPendingHazards.splice(index, 1);
-      this.broadcast("depths:hazard-impact", hazard satisfies DepthsRouteHazard);
+      this.broadcastToInterest("depths:hazard-impact", hazard satisfies DepthsRouteHazard, hazard);
       for (const [id, player] of this.state.players) {
         if (player.health > 0 && !isInsideTownSafeZone(player) && Math.abs(player.y - hazard.y) <= 1.5
           && Math.hypot(player.x - hazard.x, player.z - hazard.z) <= hazard.radius
@@ -8642,7 +8657,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (!mob.alive && FOREST_DUNGEON_MOBS.some(entry => entry.id === mobId)) continue;
       if (!mob.alive && this.roomKind === "silver-depths"
         && (SILVER_DEPTHS_ENEMY_IDS.includes(mobId) || SILVER_DEPTHS_CACHE_GUARD_IDS.includes(mobId))) continue;
-      if (mob.alive && this.state.players.size > 0 && !mobSimulationActive(mob, this.state.players.values())) {
+      if (mob.alive && this.state.players.size > 0
+        && !(this.rapidPractice ? fastWorldMobSimulationActive : mobSimulationActive)(mob, this.state.players.values())) {
         if (mob.combatState !== "idle" || mob.targetId) {
           mob.combatState = "idle"; mob.stateUntil = 0; mob.targetId = ""; mob.aimCommitted = false;
           mob.attackStartedAt = 0; mob.attackReleaseAt = 0; mob.attackContactAt = 0;

@@ -1,6 +1,6 @@
 import { FAST_WORLD_REGION_DEFINITIONS, fastWorldRegionDefinitionAt } from "@blockcraft/protocol";
 
-export type RapidWorldRegionId = "town" | "greenwood" | "mistfen" | "southern-quarry" | "ashen-reach" | "crossroads";
+export type RapidWorldRegionId = "town" | "greenwood" | "mistfen" | "sunken-coast" | "southern-quarry" | "ashen-reach" | "crossroads";
 
 export type RapidWorldRegion = {
   id: RapidWorldRegionId;

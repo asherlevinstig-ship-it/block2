@@ -183,6 +183,7 @@ export type ServerPerformanceUpdate = {
   overBudgetPercent: number;
   activeMobs: number;
   sleepingMobs: number;
+  interestRadius: number;
   sampleCount: number;
   tickBudgetMs: number;
 };
