@@ -19,11 +19,13 @@ import {
 import { rapidPracticeCollisionCellSolid } from "@blockcraft/protocol";
 
 describe("fast low-poly world", () => {
-  it("provides four bounded free-roam regions with permanent populations", () => {
+  it("provides five bounded free-roam regions with authored permanent populations", () => {
     expect(RAPID_PRACTICE_FREE_ROAM).toBe(true);
     expect(RAPID_WORLD_ZONES.map(zone => zone.name)).toEqual(["Greenwood", "Mistfen", "Sunken Coast", "Southern Quarry", "Ashen Reach"]);
-    expect(RAPID_PRACTICE_SPAWNS).toHaveLength(30);
-    expect(new Set(RAPID_PRACTICE_SPAWNS.map(spawn => spawn.id)).size).toBe(30);
+    const totalPopulation = RAPID_WORLD_ZONES.reduce((total, zone) => total
+      + (zone.id === "greenwood" ? 9 : 6), 0);
+    expect(RAPID_PRACTICE_SPAWNS).toHaveLength(totalPopulation);
+    expect(new Set(RAPID_PRACTICE_SPAWNS.map(spawn => spawn.id)).size).toBe(totalPopulation);
     for (const spawn of RAPID_PRACTICE_SPAWNS) {
       expect(spawn.x).toBeGreaterThan(RAPID_PRACTICE_ARENA.minX);
       expect(spawn.x).toBeLessThan(RAPID_PRACTICE_ARENA.maxX);
@@ -31,12 +33,12 @@ describe("fast low-poly world", () => {
       expect(spawn.z).toBeLessThan(RAPID_PRACTICE_ARENA.maxZ);
       expect(spawn.respawnMs).toBeGreaterThanOrEqual(40_000);
     }
-    expect(RAPID_PRACTICE_WAVES.flat()).toHaveLength(30);
-    expect(new Set(RAPID_PRACTICE_WAVES.flat()).size).toBe(30);
+    expect(RAPID_PRACTICE_WAVES.flat()).toHaveLength(totalPopulation);
+    expect(new Set(RAPID_PRACTICE_WAVES.flat()).size).toBe(totalPopulation);
     expect(RAPID_PRACTICE_WAVES[2]).toContain(RAPID_PRACTICE_BOSS_ID);
     for (const zone of RAPID_WORLD_ZONES) {
       const residents = RAPID_PRACTICE_SPAWNS.filter(spawn => spawn.zone === zone.id);
-      expect(residents).toHaveLength(6);
+      expect(residents).toHaveLength(zone.id === "greenwood" ? 9 : 6);
       expect(residents.filter(spawn => spawn.leader).map(spawn => spawn.id)).toEqual([zone.leaderId]);
       expect(Math.min(...residents.map(spawn => spawn.level))).toBeGreaterThanOrEqual(zone.levelMin);
       expect(Math.max(...residents.map(spawn => spawn.level))).toBeLessThanOrEqual(zone.levelMax);

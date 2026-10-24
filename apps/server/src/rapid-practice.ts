@@ -53,12 +53,7 @@ const configuredRegionSpawns = (regionId: FastWorldRegionId): readonly RapidPrac
   }));
 
 export const RAPID_PRACTICE_SPAWNS: readonly RapidPracticeSpawn[] = [
-  { id: "greenwood-crawler-a", archetype: "moss_crawler", name: "Moss Crawler", zone: "greenwood", level: 1, respawnMs: 40_000, x: 120.5, y: 8, z: 91.5 },
-  { id: "greenwood-crawler-b", archetype: "moss_crawler", name: "Moss Crawler", zone: "greenwood", level: 2, respawnMs: 42_000, x: 130.5, y: 8, z: 122.5 },
-  { id: "greenwood-briar-a", archetype: "briar_crawler", name: "Briar Crawler", zone: "greenwood", level: 2, respawnMs: 43_000, x: 140.5, y: 8, z: 92.5 },
-  { id: "greenwood-briar-b", archetype: "briar_crawler", name: "Briar Crawler", zone: "greenwood", level: 3, respawnMs: 46_000, x: 146.5, y: 8, z: 119.5 },
-  { id: "greenwood-thorn-a", archetype: "thornbinder", name: "Thornbinder", zone: "greenwood", level: 4, respawnMs: 50_000, x: 137.5, y: 8, z: 106.5 },
-  { id: "greenwood-elderthorn", archetype: "thornbinder", name: "Elderthorn Keeper", zone: "greenwood", level: 4, leader: true, respawnMs: 62_000, x: 150.5, y: 8, z: 106.5 },
+  ...configuredRegionSpawns("greenwood"),
 
   { id: "mistfen-spitter-a", archetype: "cave_spitter", name: "Bog Spitter", zone: "mistfen", level: 4, respawnMs: 50_000, x: 164.5, y: 8, z: 67.5 },
   { id: "mistfen-spitter-b", archetype: "cave_spitter", name: "Bog Spitter", zone: "mistfen", level: 5, respawnMs: 53_000, x: 190.5, y: 8, z: 65.5 },

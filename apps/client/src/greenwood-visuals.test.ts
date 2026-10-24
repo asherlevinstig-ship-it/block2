@@ -34,9 +34,9 @@ describe("Greenwood visual composition", () => {
     expect(GREENWOOD_UNDERGROWTH.length).toBeGreaterThanOrEqual(24);
   });
 
-  it("gives exploration three optional landmarks before the leader grove", () => {
+  it("gives exploration three combat landmarks and a guarded cache before the leader grove", () => {
     expect(GREENWOOD_LANDMARKS.map(landmark => landmark.kind)).toEqual([
-      "ruined-camp", "ancient-shrine", "corrupted-grove", "leader-grove",
+      "ruined-camp", "ancient-shrine", "corrupted-grove", "guarded-cache", "leader-grove",
     ]);
     expect(new Set(GREENWOOD_LANDMARKS.map(landmark => landmark.id)).size).toBe(GREENWOOD_LANDMARKS.length);
     expect(GREENWOOD_LANDMARKS.every(landmark => landmark.discoveryRadius >= 7)).toBe(true);
@@ -44,6 +44,7 @@ describe("Greenwood visual composition", () => {
 
   it("keeps a readable main route while branches and low ridges break up the field", () => {
     expect(GREENWOOD_ROUTE_NODES[0]).toMatchObject({ id: "east-gate", x: 108.5 });
+    expect(GREENWOOD_ROUTE_NODES).toContainEqual(expect.objectContaining({ id: "mistfen-threshold", x: 153.5 }));
     expect(GREENWOOD_ROUTE_NODES.at(-1)).toMatchObject({ id: "elderthorn", x: GREENWOOD_LEADER_POSITION.x });
     expect(GREENWOOD_ELEVATION_MOUNDS.length).toBeGreaterThanOrEqual(6);
     expect(GREENWOOD_ELEVATION_MOUNDS.every(mound => Math.abs(mound.z - 106) >= 8)).toBe(true);

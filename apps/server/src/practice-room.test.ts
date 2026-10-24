@@ -40,14 +40,14 @@ describe("private Calling practice", () => {
     expect(room.state.lootDrops.size).toBe(0);
   });
 
-  it("leaves rapid-arena defeats under wave control instead of individually respawning", () => {
+  it("uses the authored static respawn rhythm for Fast World defeats", () => {
     const { room, internal } = fixture();
     internal.rapidPractice = true;
     const mob = new MobState(); Object.assign(mob, { alive: true, health: 1, maxHealth: 6 });
-    room.state.mobs.set("rapid-crawler-01", mob);
-    internal.defeatMob("rapid-crawler-01", mob, "trainee", 10_000);
+    room.state.mobs.set("greenwood-mosswatch-crawler", mob);
+    internal.defeatMob("greenwood-mosswatch-crawler", mob, "trainee", 10_000);
     expect(mob.alive).toBe(false);
-    expect(mob.respawnAt).toBe(Number.MAX_SAFE_INTEGER);
+    expect(mob.respawnAt).toBe(50_000);
   });
 
   it("applies quick upgrades without saving or opening inventory", () => {

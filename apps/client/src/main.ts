@@ -3044,6 +3044,29 @@ if (fastWorldRequested) {
       }
       continue;
     }
+    if (landmark.kind === "guarded-cache") {
+      // The guards own the real drops. The abandoned cache makes their
+      // optional reward detour readable without adding another HUD objective.
+      const cache = addRapidRegionBox("greenwood", `${landmark.id}:cache`, timberLight,
+        [1.55, .72, 1.05], [x, 8.58, z]);
+      cache.setLocalEulerAngles(0, landmark.yaw, 0);
+      addRapidRegionBox("greenwood", `${landmark.id}:cache-lid`, timber,
+        [1.68, .22, 1.16], [x, 9, z]).setLocalEulerAngles(0, landmark.yaw, 0);
+      for (const side of [-1, 1] as const)
+        addRapidRegionBox("greenwood", `${landmark.id}:cache-band`, iron,
+          [.12, .82, 1.12], [x + side * .48, 8.65, z]).setLocalEulerAngles(0, landmark.yaw, 0);
+      for (const [dx, dz, yaw] of [[-1.6, .7, 14], [1.45, .85, -22], [.9, -1.2, 31]] as const) {
+        const supply = addRapidRegionBox("greenwood", `${landmark.id}:supply`, timberLight,
+          [.72, .58, .72], [x + dx, 8.43, z + dz]);
+        supply.setLocalEulerAngles(0, landmark.yaw + yaw, 0);
+      }
+      const post = addRapidRegionBox("greenwood", `${landmark.id}:fenward-sign-post`, greenwoodBark,
+        [.15, 1.8, .15], [x + 3.2, 9, z - 2]);
+      post.setLocalEulerAngles(0, -35, -3);
+      addRapidRegionBox("greenwood", `${landmark.id}:fenward-sign`, timberLight,
+        [.18, .55, 1.55], [x + 3.2, 9.78, z - 2]).setLocalEulerAngles(0, -35, 0);
+      continue;
+    }
     // The leader grove gets a thorn arch that reads from the main path. It
     // frames the fight but leaves the combat centre and retreat lane clear.
     for (const side of [-1, 1] as const) {

@@ -47,6 +47,11 @@ const trees = [
   // A denser threshold frames the east gate without closing the combat road.
   [109.5, 97.2, 18, 1.48], [109.8, 114.8, -21, 1.58], [114.5, 95.8, 64, 1.7], [115.2, 116.3, -52, 1.62],
   [121, 96.4, -12, 1.78], [121.8, 115.4, 31, 1.68], [127.5, 97.5, 47, 1.54], [128.2, 114.5, -68, 1.6],
+  // The outer wall makes Greenwood read as woodland while leaving authored
+  // pockets and the Fenward Track open as intentional negative space.
+  [134, 78.8, 12, 1.72], [140, 79.2, -38, 1.88], [147, 79.4, 57, 1.66],
+  [155, 84, -12, 1.78], [155.2, 91, 44, 1.64], [155.3, 123, -48, 1.82],
+  [111, 126, 25, 1.58], [118, 130.5, -55, 1.72], [140, 132.5, 19, 1.7], [153, 130, -17, 1.86],
 ] as const;
 
 const rocks = [
@@ -86,9 +91,12 @@ export const GREENWOOD_GROUND_PATCHES: readonly GreenwoodGroundPatch[] = [
   { id: "thorn-path", material: "leafLitter", position: [141, 104], scale: [8.5, 2.4], yaw: -8 },
   { id: "fallen-grove", material: "leafLitter", position: [121, 116], scale: [5.5, 3.2], yaw: 33 },
   { id: "elderthorn-clearing", material: "leafLitter", position: [150.5, 106.5], scale: [6.4, 6.4], yaw: 0 },
+  { id: "fenward-track-a", material: "leafLitter", position: [139, 94], scale: [7.2, 1.45], yaw: -42 },
+  { id: "fenward-track-b", material: "leafLitter", position: [149, 84.5], scale: [6.8, 1.45], yaw: -37 },
+  { id: "fenward-cache-clearing", material: "moss", position: [149, 84.5], scale: [4.7, 3.6], yaw: 8 },
 ] as const;
 
-export type GreenwoodLandmarkKind = "ruined-camp" | "ancient-shrine" | "corrupted-grove" | "leader-grove";
+export type GreenwoodLandmarkKind = "ruined-camp" | "ancient-shrine" | "corrupted-grove" | "guarded-cache" | "leader-grove";
 
 export interface GreenwoodLandmark {
   id: string;
@@ -108,6 +116,7 @@ export const GREENWOOD_LANDMARKS: readonly GreenwoodLandmark[] = [
   { id: "mosswatch-camp", name: "Mosswatch Remains", kind: "ruined-camp", position: [123.5, 88.5], yaw: 18, discoveryRadius: 7 },
   { id: "first-root-shrine", name: "Shrine of the First Root", kind: "ancient-shrine", position: [130.5, 124], yaw: -12, discoveryRadius: 7 },
   { id: "blighted-hollow", name: "Blighted Hollow", kind: "corrupted-grove", position: [143, 121], yaw: 26, discoveryRadius: 7.5 },
+  { id: "fenward-cache", name: "Fenward Cache", kind: "guarded-cache", position: [149, 84.5], yaw: -18, discoveryRadius: 7 },
   { id: "elderthorn-court", name: "Elderthorn Court", kind: "leader-grove", position: [150.5, 106.5], yaw: 0, discoveryRadius: 10 },
 ] as const;
 
@@ -117,6 +126,9 @@ export const GREENWOOD_ROUTE_NODES = [
   { id: "fork", x: 126, z: 106 },
   { id: "mosswatch", x: 123.5, z: 92 },
   { id: "first-root", x: 130.5, z: 121 },
+  { id: "fenward-turn", x: 138.5, z: 94 },
+  { id: "fenward-cache", x: 149, z: 84.5 },
+  { id: "mistfen-threshold", x: 153.5, z: 80.5 },
   { id: "elderthorn", x: GREENWOOD_LEADER_POSITION.x, z: GREENWOOD_LEADER_POSITION.z },
 ] as const;
 

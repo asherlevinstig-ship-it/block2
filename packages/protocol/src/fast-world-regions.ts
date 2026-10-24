@@ -21,6 +21,26 @@ export type FastWorldRegionDefinition = {
   encounterArchetypes: readonly string[];
   targetPopulation: number;
   encounters?: readonly FastWorldConfiguredEncounter[];
+  encounterPockets?: readonly FastWorldEncounterPocket[];
+  connections?: readonly FastWorldRegionConnection[];
+};
+
+export type FastWorldEncounterPocket = {
+  id: string;
+  name: string;
+  kind: "combat" | "guarded-reward" | "leader";
+  x: number;
+  z: number;
+  radius: number;
+  encounterIds: readonly string[];
+  rewardLabel?: string;
+};
+
+export type FastWorldRegionConnection = {
+  regionId: FastWorldRegionId;
+  name: string;
+  x: number;
+  z: number;
 };
 
 export type FastWorldConfiguredEncounter = {
@@ -52,7 +72,33 @@ export const FAST_WORLD_REGION_DEFINITIONS: readonly FastWorldRegionDefinition[]
     leaderId: "greenwood-elderthorn",
     leaderName: "Elderthorn Keeper",
     encounterArchetypes: ["moss_crawler", "briar_crawler", "thornbinder"],
-    targetPopulation: 6,
+    targetPopulation: 9,
+    encounters: [
+      { id: "greenwood-mosswatch-crawler", archetype: "moss_crawler", name: "Mosswatch Crawler", level: 1, respawnMs: 40_000, x: 121.5, y: 8, z: 90.5 },
+      { id: "greenwood-mosswatch-briar", archetype: "briar_crawler", name: "Mosswatch Briar", level: 2, respawnMs: 45_000, x: 126, y: 8, z: 91.5 },
+      { id: "greenwood-root-crawler", archetype: "moss_crawler", name: "First-Root Crawler", level: 2, respawnMs: 46_000, x: 127.5, y: 8, z: 121.5 },
+      { id: "greenwood-root-thornbinder", archetype: "thornbinder", name: "Root Shrine Keeper", level: 3, respawnMs: 54_000, x: 133.5, y: 8, z: 124.5 },
+      { id: "greenwood-blight-briar", archetype: "briar_crawler", name: "Blighted Briar", level: 3, respawnMs: 56_000, x: 140.5, y: 8, z: 119.5 },
+      { id: "greenwood-blight-thornbinder", archetype: "thornbinder", name: "Hollow Thornbinder", level: 4, respawnMs: 62_000, x: 146.5, y: 8, z: 122.5 },
+      { id: "greenwood-fenward-guard-a", archetype: "briar_crawler", name: "Fenward Cache Guard", level: 3, respawnMs: 58_000, x: 146.5, y: 8, z: 85.5 },
+      { id: "greenwood-fenward-guard-b", archetype: "thornbinder", name: "Fenward Cache Keeper", level: 4, respawnMs: 66_000, x: 151.5, y: 8, z: 87.5 },
+      { id: "greenwood-elderthorn", archetype: "thornbinder", name: "Elderthorn Keeper", level: 4, respawnMs: 90_000, x: 150.5, y: 8, z: 106.5, leader: true },
+    ],
+    encounterPockets: [
+      { id: "mosswatch-pack", name: "Mosswatch Remains", kind: "combat", x: 123.5, z: 90.5, radius: 8,
+        encounterIds: ["greenwood-mosswatch-crawler", "greenwood-mosswatch-briar"] },
+      { id: "first-root-pack", name: "Shrine of the First Root", kind: "combat", x: 130.5, z: 123, radius: 8,
+        encounterIds: ["greenwood-root-crawler", "greenwood-root-thornbinder"] },
+      { id: "blighted-hollow-pack", name: "Blighted Hollow", kind: "combat", x: 143.5, z: 121, radius: 8,
+        encounterIds: ["greenwood-blight-briar", "greenwood-blight-thornbinder"] },
+      { id: "fenward-cache", name: "Fenward Cache", kind: "guarded-reward", x: 149, z: 84.5, radius: 7,
+        encounterIds: ["greenwood-fenward-guard-a", "greenwood-fenward-guard-b"], rewardLabel: "Guarded supply cache" },
+      { id: "elderthorn-court", name: "Elderthorn Court", kind: "leader", x: 150.5, z: 106.5, radius: 10,
+        encounterIds: ["greenwood-elderthorn"], rewardLabel: "Highest Greenwood loot" },
+    ],
+    connections: [
+      { regionId: "mistfen", name: "Fenward Track", x: 153.5, z: 80.5 },
+    ],
   },
   {
     id: "mistfen",
