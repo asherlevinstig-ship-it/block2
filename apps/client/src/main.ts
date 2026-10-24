@@ -114,6 +114,15 @@ import { confirmPredictedDodges, removeRejectedDodge, replayPendingMovement, typ
 import { advanceCameraOrbit, cameraOrbitOffset, dragCameraOrbit, initialCameraOrbit, pinchCameraOrbit } from "./camera-orbit.js";
 import { advanceCameraFollow, advanceCameraHeight, advanceCameraPosition } from "./camera-follow.js";
 import { populateTownAssetKit, readyTownFallbacks, SPEED_LAB_TOWN_ASSETS, type TownFallbackFamily } from "./town-asset-kit.js";
+import { createPaintedGroundMaterial } from "./fast-world-texture.js";
+import {
+  GREENWOOD_ASSET_PLACEMENTS,
+  GREENWOOD_FALLEN_LOGS,
+  GREENWOOD_GROUND_PATCHES,
+  GREENWOOD_GROVE_STONES,
+  GREENWOOD_TEXTURE_STYLES,
+  GREENWOOD_UNDERGROWTH,
+} from "./greenwood-visuals.js";
 import { SPEED_LAB_TOWN_ACTORS, SPEED_LAB_TOWN_LIGHTS, SPEED_LAB_TOWN_SIGNS, townLifeActorPose, townLifeAnimation,
   type TownLifeActorDefinition } from "./town-life.js";
 import { townNpcFaceStyle, type TownNpcMouthExpression } from "./town-npc-appearance.js";
@@ -2163,9 +2172,11 @@ interface RapidTownActorVisual {
 const rapidTownActors: RapidTownActorVisual[] = [];
 const rapidTownLights: { entity: pc.Entity; phase: number }[] = [];
 const rapidTownSparks: { entity: pc.Entity; phase: number }[] = [];
+const rapidGreenwoodMotes: { entity: pc.Entity; x: number; y: number; z: number; phase: number }[] = [];
 let rapidWorldRegionId = "";
 let requestRapidTownAssets = (): void => {};
 let requestRapidTownNpcAssets = (): void => {};
+let requestGreenwoodAssets = (): void => {};
 if (fastWorldRequested) {
   const townNpcFaceBatchGroup = app.batcher.addGroup("town-npc-faces", true, 32);
   const rapidWorldSceneryBatchGroup = app.batcher.addGroup("rapid-world-scenery", false, 512);
@@ -2218,8 +2229,14 @@ if (fastWorldRequested) {
   const leaf = coloredMaterial(new pc.Color(.08, .25, .13));
   const leafLight = coloredMaterial(new pc.Color(.13, .38, .18));
   const boundary = coloredMaterial(new pc.Color(.08, .13, .12));
-  const greenwoodGround = coloredMaterial(new pc.Color(.12, .31, .14));
+  const greenwoodGround = createPaintedGroundMaterial(app, GREENWOOD_TEXTURE_STYLES.forestFloor, [12, 14]);
+  const greenwoodMoss = createPaintedGroundMaterial(app, GREENWOOD_TEXTURE_STYLES.moss, [3.5, 3.5]);
+  const greenwoodLeafLitter = createPaintedGroundMaterial(app, GREENWOOD_TEXTURE_STYLES.leafLitter, [4, 4]);
+  const greenwoodBark = createPaintedGroundMaterial(app, GREENWOOD_TEXTURE_STYLES.bark, [3, 1]);
   const greenwoodCanopy = coloredMaterial(new pc.Color(.055, .22, .09));
+  const greenwoodFern = coloredMaterial(new pc.Color(.16, .44, .17));
+  const greenwoodFernLight = coloredMaterial(new pc.Color(.3, .58, .22));
+  const greenwoodStone = coloredMaterial(new pc.Color(.31, .36, .29));
   const mistfenGround = coloredMaterial(new pc.Color(.14, .22, .18));
   const mistfenWater = coloredMaterial(new pc.Color(.08, .27, .28));
   const marshGlow = coloredMaterial(new pc.Color(.31, .58, .24));
@@ -2232,6 +2249,13 @@ if (fastWorldRequested) {
   lava.diffuse = new pc.Color(.95, .19, .035);
   lava.emissive = new pc.Color(.8, .07, .01);
   lava.update();
+  const greenwoodMoteMaterial = new pc.StandardMaterial();
+  greenwoodMoteMaterial.diffuse = new pc.Color(.76, 1, .42);
+  greenwoodMoteMaterial.emissive = new pc.Color(.35, .78, .08);
+  greenwoodMoteMaterial.useLighting = false;
+  greenwoodMoteMaterial.blendType = pc.BLEND_ADDITIVE;
+  greenwoodMoteMaterial.depthWrite = false;
+  greenwoodMoteMaterial.update();
 
   const addTownShape = (parent: pc.Entity, name: string, type: "box" | "cylinder" | "cone" | "sphere",
     material: pc.StandardMaterial, scale: [number, number, number], position: [number, number, number]): pc.Entity => {
@@ -2502,6 +2526,12 @@ if (fastWorldRequested) {
   addRapidWorldBox("mistfen-road", roadWarm, [28, .055, 4.2], [181, 8.045, 65]);
   addRapidWorldBox("quarry-road", roadWarm, [28, .055, 4.2], [181, 8.045, 151]);
   addRapidWorldBox("realm-crossroads", stone, [9.5, .09, 9.5], [168, 8.075, 106]);
+  for (const patch of GREENWOOD_GROUND_PATCHES) {
+    const material = patch.material === "moss" ? greenwoodMoss : greenwoodLeafLitter;
+    const groundPatch = addRapidWorldShape(`greenwood-ground:${patch.id}`, "cylinder", material,
+      [patch.scale[0], .025, patch.scale[1]], [patch.position[0], 8.105, patch.position[1]]);
+    groundPatch.setLocalEulerAngles(0, patch.yaw, 0);
+  }
 
   // Town of Beginnings terrain: a circular civic square, a readable street
   // hierarchy and planted verges replace the old town-sized rectangle of stone.
@@ -2745,10 +2775,51 @@ if (fastWorldRequested) {
     addRapidWorldShape("greenwood-tree-crown", "cone", greenwoodCanopy, [1.25 * size, 2 * size, 1.25 * size], [x, 10 + size * .72, z]);
   }
   for (const [x, z, turn] of [[121,94,18],[132,119,-26],[144,97,32],[147,122,-12],[126,111,8]] as const) {
-    const root = addRapidWorldBox("greenwood-root", timber, [2.6, .22, .3], [x, 8.24, z]);
+    const root = addRapidWorldBox("greenwood-root", greenwoodBark, [2.6, .22, .3], [x, 8.24, z]);
     root.setLocalEulerAngles(0, turn, 8);
   }
-  addRapidWorldShape("elderthorn-ring", "cylinder", greenwoodCanopy, [5.2, .08, 5.2], [150.5, 8.13, 106.5]);
+  for (const log of GREENWOOD_FALLEN_LOGS) {
+    const trunk = addRapidWorldShape("greenwood-fallen-log", "cylinder", greenwoodBark,
+      [.52, log.length * .5, .52], [log.x, 8.48, log.z]);
+    trunk.setLocalEulerAngles(90, log.yaw, 0);
+    for (const side of [-1, 1] as const) {
+      const cut = addRapidWorldShape("greenwood-log-cut", "cylinder", timberLight,
+        [.42, .035, .42], [log.x + Math.sin(log.yaw * Math.PI / 180) * log.length * .48 * side,
+          8.48, log.z + Math.cos(log.yaw * Math.PI / 180) * log.length * .48 * side]);
+      cut.setLocalEulerAngles(90, log.yaw, 0);
+    }
+  }
+  for (let index = 0; index < GREENWOOD_UNDERGROWTH.length; index++) {
+    const [x, z, size] = GREENWOOD_UNDERGROWTH[index]!;
+    for (let blade = 0; blade < 3; blade++) {
+      const fern = addRapidWorldShape("greenwood-fern", "cone", blade === 1 ? greenwoodFernLight : greenwoodFern,
+        [.2 * size, .72 * size, .12 * size], [x + (blade - 1) * .18 * size, 8.34 + blade * .025, z]);
+      fern.setLocalEulerAngles(blade === 1 ? -12 : 12, index * 47 + blade * 58, (blade - 1) * 24);
+    }
+  }
+  for (const standingStone of GREENWOOD_GROVE_STONES) {
+    const stoneRoot = addRapidWorldBox("elderthorn-standing-stone", greenwoodStone,
+      [.48, 1.3, .38], [standingStone.x, 8.7, standingStone.z]);
+    stoneRoot.setLocalEulerAngles(standingStone.yaw * .12, standingStone.yaw, standingStone.yaw > 0 ? 7 : -7);
+    addRapidWorldShape("elderthorn-stone-moss", "sphere", greenwoodMoss,
+      [.44, .16, .34], [standingStone.x, 9.6, standingStone.z]);
+  }
+  // A natural clearing replaces the old bright boss pad. The centre remains open
+  // for readable combat while roots, stones and motes frame the Elderthorn Keeper.
+  for (let index = 0; index < 10; index++) {
+    const angle = index / 10 * Math.PI * 2;
+    const root = addRapidWorldBox("elderthorn-crown-root", greenwoodBark, [2.2, .17, .24],
+      [150.5 + Math.cos(angle) * 5.45, 8.25, 106.5 + Math.sin(angle) * 5.45]);
+    root.setLocalEulerAngles(0, 90 - angle * 180 / Math.PI, index % 2 ? 7 : -5);
+  }
+  for (let index = 0; index < 12; index++) {
+    const angle = index / 12 * Math.PI * 2;
+    const entity = addTownShape(rapidPrototypeRoot, "elderthorn-firefly", "sphere", greenwoodMoteMaterial,
+      [.075, .075, .075], [150.5 + Math.cos(angle) * (3.4 + index % 3), 8.8 + index % 4 * .35,
+        106.5 + Math.sin(angle) * (3.4 + index % 3)]);
+    rapidGreenwoodMotes.push({ entity, x: entity.getLocalPosition().x, y: entity.getLocalPosition().y,
+      z: entity.getLocalPosition().z, phase: index * .73 });
+  }
 
   for (const [x, z, sx, sz] of [[159,34,3.8,2.5],[174,39,3,2.2],[193,31,4.1,2.7],[158,60,3.2,2.4],
     [179,61,4.4,2.5],[197,68,3.5,2.1],[188,49,2.7,1.9]] as const)
@@ -2811,6 +2882,24 @@ if (fastWorldRequested) {
     void populateTownAssetKit(app, rapidPrototypeRoot, SPEED_LAB_TOWN_ASSETS).then(result => {
       for (const family of readyTownFallbacks(result.loadedIds)) hideRapidTownFallback(family);
       console.info(`[town-assets] ${result.entities.length} placements ready; ${result.failedIds.size} model types kept their fallback.`);
+    });
+  };
+  let greenwoodAssetsStarted = false;
+  requestGreenwoodAssets = () => {
+    if (greenwoodAssetsStarted) return;
+    greenwoodAssetsStarted = true;
+    void populateTownAssetKit(app, rapidPrototypeRoot, GREENWOOD_ASSET_PLACEMENTS, "greenwood-asset").then(result => {
+      for (const entity of result.entities) {
+        for (const node of entity.find(candidate => Boolean((candidate as pc.Entity).render))) {
+          const render = (node as pc.Entity).render;
+          if (render) render.batchGroupId = rapidWorldSceneryBatchGroup.id;
+        }
+      }
+      const treesReady = result.loadedIds.has("treeCrooked") && result.loadedIds.has("treeHighRound");
+      if (treesReady) for (const node of rapidPrototypeRoot.find(candidate =>
+        candidate.name === "greenwood-tree-trunk" || candidate.name === "greenwood-tree-crown")) node.enabled = false;
+      console.info(`[greenwood-assets] ${result.entities.length} nature placements ready; ` +
+        `${result.failedIds.size} model types retained their procedural fallback.`);
     });
   };
 
@@ -11879,6 +11968,7 @@ function renderBootstrap(payload: WorldBootstrap): void {
   if (fastWorldRequested) window.setTimeout(() => {
     requestRapidTownAssets();
     requestRapidTownNpcAssets();
+    requestGreenwoodAssets();
   }, 250);
   lastWorldBootstrapAt = performance.now();
   snapFrameHistory.length = 0;
@@ -14973,6 +15063,13 @@ app.on("update", (dt: number) => {
       spark.entity.setLocalPosition(79 + drift, 8.85 + travel * 1.35, 136.5 + Math.cos(townTime * 4 + spark.phase * 15) * .2);
       const scale = .035 + (1 - travel) * .055;
       spark.entity.setLocalScale(scale, scale, scale);
+    }
+    for (const mote of rapidGreenwoodMotes) {
+      const drift = townTime * .78 + mote.phase;
+      mote.entity.setLocalPosition(mote.x + Math.sin(drift * 1.7) * .22,
+        mote.y + Math.sin(drift * 2.4) * .18, mote.z + Math.cos(drift * 1.35) * .22);
+      const pulse = .72 + Math.sin(drift * 3.1) * .22;
+      mote.entity.setLocalScale(pulse, pulse, pulse);
     }
   }
   lastPresentationWaitMs = Math.max(0, dt * 1000 - lastEngineUpdateMs - lastRenderMs);

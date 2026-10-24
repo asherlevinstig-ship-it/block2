@@ -144,6 +144,7 @@ export async function populateTownAssetKit(
   app: pc.Application,
   parent: pc.Entity,
   placements: readonly TownAssetPlacement[],
+  namePrefix = "town-asset",
 ): Promise<TownAssetLoadResult> {
   const ids = [...new Set(placements.map(placement => placement.id))];
   const loaded = new Map<TownAssetId, pc.Asset>();
@@ -165,7 +166,7 @@ export async function populateTownAssetKit(
     const resource = asset?.resource as pc.ContainerResource | undefined;
     if (!resource) continue;
     const entity = resource.instantiateRenderEntity({ castShadows: true, receiveShadows: true });
-    entity.name = `town-asset:${placement.name}`;
+    entity.name = `${namePrefix}:${placement.name}`;
     entity.setLocalPosition(...placement.position);
     entity.setLocalEulerAngles(0, placement.yaw ?? 0, 0);
     const scale = placement.scale ?? 1;

@@ -1,0 +1,33 @@
+import { describe, expect, it } from "vitest";
+import {
+  GREENWOOD_ASSET_PLACEMENTS,
+  GREENWOOD_FALLEN_LOGS,
+  GREENWOOD_GROUND_PATCHES,
+  GREENWOOD_LEADER_POSITION,
+  GREENWOOD_TEXTURE_STYLES,
+  GREENWOOD_UNDERGROWTH,
+} from "./greenwood-visuals.js";
+
+describe("Greenwood visual composition", () => {
+  const trees = GREENWOOD_ASSET_PLACEMENTS.filter(asset => asset.id === "treeCrooked" || asset.id === "treeHighRound");
+  const rocks = GREENWOOD_ASSET_PLACEMENTS.filter(asset => asset.id === "rockLarge" || asset.id === "rockSmall");
+
+  it("forms a dense forest border with licensed low-poly nature assets", () => {
+    expect(trees.length).toBeGreaterThanOrEqual(36);
+    expect(rocks.length).toBeGreaterThanOrEqual(10);
+    expect(new Set(GREENWOOD_ASSET_PLACEMENTS.map(asset => asset.name)).size).toBe(GREENWOOD_ASSET_PLACEMENTS.length);
+  });
+
+  it("keeps the east-west combat road and leader clearing readable", () => {
+    expect(trees.every(tree => Math.abs(tree.position[2] - 106) >= 6)).toBe(true);
+    expect(trees.every(tree => Math.hypot(tree.position[0] - GREENWOOD_LEADER_POSITION.x,
+      tree.position[2] - GREENWOOD_LEADER_POSITION.z) >= 7.5)).toBe(true);
+  });
+
+  it("adds texture and layered forest-floor detail instead of another flat green slab", () => {
+    expect(Object.keys(GREENWOOD_TEXTURE_STYLES)).toEqual(["forestFloor", "moss", "leafLitter", "bark"]);
+    expect(GREENWOOD_GROUND_PATCHES.some(patch => patch.id === "elderthorn-clearing")).toBe(true);
+    expect(GREENWOOD_FALLEN_LOGS.length).toBeGreaterThanOrEqual(5);
+    expect(GREENWOOD_UNDERGROWTH.length).toBeGreaterThanOrEqual(24);
+  });
+});
