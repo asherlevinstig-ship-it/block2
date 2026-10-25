@@ -5029,6 +5029,7 @@ interface LootVisual {
 }
 
 interface MobVisual {
+  mobId: string;
   locomotionSpeed: number;
   renderYaw: number;
   turnLean: number;
@@ -5087,6 +5088,10 @@ interface MobVisual {
   lastAlive: boolean;
   greenwoodStyle: GreenwoodMobStyle | null;
   emergenceAt: number;
+  elderthornBranches: pc.Entity[];
+  elderthornHeart: pc.Entity | null;
+  elderthornHeartMaterial: pc.StandardMaterial | null;
+  greenwoodPhase: 1 | 2 | 3;
 }
 
 interface MarkVisualState {
@@ -7627,6 +7632,57 @@ function createGreenwoodCombatEffect(mob: MobVisual, groundImpact = false): void
   greenwoodCombatEffects.push({ root, materials, fragments, startedAt: performance.now(), durationMs: groundImpact ? (elderthorn ? 1_900 : 1_250) : 620 });
 }
 
+function createElderthornRootPath(mob: MobVisual): void {
+  if (mob.greenwoodStyle !== "elderthorn") return;
+  const root = new pc.Entity("elderthorn-root-path");
+  const rootMaterial = powerMaterial(new pc.Color(.34, .2, .07), .74);
+  const sapMaterial = powerMaterial(new pc.Color(.46, .95, .12), .5);
+  const start = mob.entity.getPosition();
+  const dx = mob.state.attackStrikeX - start.x;
+  const dz = mob.state.attackStrikeZ - start.z;
+  const distance = Math.max(.8, Math.hypot(dx, dz));
+  const yaw = Math.atan2(dx, dz) * 180 / Math.PI;
+  const segments = Math.max(4, Math.min(12, Math.ceil(distance / .65)));
+  for (let index = 0; index < segments; index += 1) {
+    const t = (index + .5) / segments;
+    const rootSegment = addBox(root, "aimed-root", index % 3 === 0 ? sapMaterial : rootMaterial,
+      [.11 + index % 2 * .035, .055 + index % 3 * .025, distance / segments * .72],
+      [dx * t, .04, dz * t]);
+    rootSegment.setLocalEulerAngles(index % 2 ? -6 : 6, yaw, index % 2 ? -9 : 9);
+  }
+  root.setPosition(start.x, mob.state.attackStrikeY + .02, start.z);
+  app.root.addChild(root);
+  greenwoodCombatEffects.push({ root, materials: [rootMaterial, sapMaterial], fragments: [],
+    startedAt: performance.now(), durationMs: Math.max(700, mob.state.attackReleaseAt - mob.state.attackStartedAt + 220) });
+}
+
+function createElderthornLeafStorm(mob: MobVisual, phase: 2 | 3): void {
+  const root = new pc.Entity(`elderthorn-phase-${phase}`);
+  const leafMaterial = powerMaterial(new pc.Color(phase === 3 ? .7 : .3, phase === 3 ? .88 : .75, .1), .92);
+  const barkMaterial = powerMaterial(new pc.Color(.3, .14, .045), .88);
+  const fragments: GreenwoodCombatEffect["fragments"] = [];
+  const count = phase === 3 ? 30 : 22;
+  for (let index = 0; index < count; index += 1) {
+    const angle = index / count * Math.PI * 2;
+    const radius = .35 + index % 5 * .14;
+    const leaf = addBox(root, "phase-leaf", index % 6 === 0 ? barkMaterial : leafMaterial,
+      [.06 + index % 2 * .025, .025, .13 + index % 3 * .025],
+      [Math.sin(angle) * radius, .35 + index % 4 * .16, Math.cos(angle) * radius]);
+    fragments.push({ entity: leaf,
+      velocity: new pc.Vec3(Math.sin(angle) * (2.1 + index % 4 * .3), 1.4 + index % 5 * .25, Math.cos(angle) * (2.1 + index % 4 * .3)),
+      spin: new pc.Vec3(120 + index * 5, 220 - index * 3, 150 + index * 4) });
+  }
+  const point = mob.entity.getPosition();
+  root.setPosition(point.x, point.y + .08, point.z);
+  app.root.addChild(root);
+  greenwoodCombatEffects.push({ root, materials: [leafMaterial, barkMaterial], fragments,
+    startedAt: performance.now(), durationMs: phase === 3 ? 1_250 : 1_050 });
+  createGreenwoodCombatEffect(mob, true);
+  const playerPosition = localPlayer.getPosition();
+  if (Math.hypot(playerPosition.x - point.x, playerPosition.z - point.z) <= 20)
+    combatAudio.play("guardianPhase", enemyCuePan(point.x, playerPosition.x, 20));
+}
+
 function createFirstPersonHitBurst(mob: MobVisual, weaponKind: FirstPersonWeaponKind, defeated: boolean): void {
   const root = new pc.Entity("first-person-hit-burst");
   const position = mob.entity.getPosition();
@@ -9556,6 +9612,9 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   markMaterial.update();
   if (rootGuardian) bodyRoot.setLocalScale(1.16, 1.16, 1.16);
   const art = createMobArt(bodyRoot, mob.archetype, bodyMaterial, matriarch, rootGuardian, fastWorldRequested);
+  const elderthornBranches: pc.Entity[] = [];
+  let elderthornHeart: pc.Entity | null = null;
+  let elderthornHeartMaterial: pc.StandardMaterial | null = null;
   if (greenwoodStyle) {
     const forestAccent = coloredMaterial(new pc.Color(
       greenwoodStyle === "briar" ? .46 : greenwoodStyle === "elderthorn" ? .3 : .35,
@@ -9575,8 +9634,17 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
       addBox(bodyRoot, "thornbinder-crown", forestAccent, [.72, .13, .31], [0, 2.22, -.04]);
       for (const side of [-1, 1]) addBox(bodyRoot, "hanging-vine", forestAccent,
         [.08, .67, .08], [side * .48, 1.38, -.14]).setLocalEulerAngles(0, 0, side * 9);
-      if (greenwoodStyle === "elderthorn")
-        addBox(bodyRoot, "elderthorn-heart", livingSap, [.31, .42, .16], [0, 1.16, .34]).setLocalEulerAngles(0, 0, 45);
+      if (greenwoodStyle === "elderthorn") {
+        elderthornHeartMaterial = livingSap;
+        elderthornHeart = addBox(bodyRoot, "elderthorn-heart", livingSap, [.31, .42, .16], [0, 1.16, .34]);
+        elderthornHeart.setLocalEulerAngles(0, 0, 45);
+        for (const side of [-1, 1]) for (let tier = 0; tier < 3; tier += 1) {
+          const branch = addBox(bodyRoot, "elderthorn-breakable-branch", forestAccent,
+            [.13, .24 + tier * .09, .48 - tier * .06], [side * (.52 + tier * .14), 1.48 + tier * .31, -.1 - tier * .08]);
+          branch.setLocalEulerAngles(-18 - tier * 5, side * (18 + tier * 9), side * (-32 - tier * 7));
+          elderthornBranches.push(branch);
+        }
+      }
     }
   }
   if (mobId === "northwatch-spitter" || mobId === "northwatch-patrol-stalker-west" || mobId === "northwatch-patrol-stalker-east") {
@@ -9726,6 +9794,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   entity.setPosition(mob.x, mob.y, mob.z);
   app.root.addChild(entity);
   return {
+    mobId,
     entity,
     snapshots: [{ receivedAt: performance.now(), x: mob.x, y: mob.y, z: mob.z, yaw: mob.yaw }],
     bodyRoot,
@@ -9775,6 +9844,10 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     lastAlive: mob.alive,
     greenwoodStyle,
     emergenceAt: -Infinity,
+    elderthornBranches,
+    elderthornHeart,
+    elderthornHeartMaterial,
+    greenwoodPhase: leaderHealthPhase(mob.health, mob.maxHealth),
   };
 }
 
@@ -10299,6 +10372,14 @@ function updateMobVisual(mob: MobVisual): void {
   if (mob.state.actionSequence > mob.lastActionSequence) {
     mob.lastActionSequence = mob.state.actionSequence;
     mob.actionAt = performance.now();
+    createElderthornRootPath(mob);
+  }
+  if (mob.greenwoodStyle === "elderthorn" && mob.state.alive) {
+    const phase = leaderHealthPhase(mob.state.health, mob.state.maxHealth);
+    if (phase > mob.greenwoodPhase) createElderthornLeafStorm(mob, phase as 2 | 3);
+    mob.greenwoodPhase = phase;
+    const visibleBranches = phase === 1 ? mob.elderthornBranches.length : phase === 2 ? 4 : 2;
+    mob.elderthornBranches.forEach((branch, index) => { branch.enabled = index < visibleBranches; });
   }
   if (mob.state.staggerSequence > mob.lastStaggerSequence) {
     mob.lastStaggerSequence = mob.state.staggerSequence;
@@ -13948,8 +14029,14 @@ function updateBossHud(now: number): void {
     ? `${boss.leaderRematchTier >= 9 ? "ASCENDANT Â· TWO MECHANICS" : boss.leaderRematchTier >= 7 ? "VETERAN Â· ADVANCED ATTACK" : "NORMAL"} Â· ${boss.leaderRematchTier >= 9 ? "2Ã— CACHE + FORGEMARK" : boss.leaderRematchTier >= 7 ? "1.5Ã— CACHE" : "CHAMPION CACHE"}`
     : rematchLabel;
   bossRematch.dataset.modifier = boss.leaderModifier || "";
+  const elderthornAttack = nextBossId === "greenwood-elderthorn"
+    ? boss.combatState === "recover" ? "HEART EXPOSED · STRIKE NOW"
+      : boss.attackPattern === "alpha-rush" ? "HEARTWOOD RUSH"
+        : boss.attackPattern === "pack-rush" ? "THORN SWEEP"
+          : "ROOT LUNGE"
+    : "";
   bossAttackLabel.textContent = boss.alive
-    ? formationLabel || leaderChargeGuidance(boss.attackPattern, boss.combatState, boss.targetId, room?.sessionId ?? "")
+    ? formationLabel || elderthornAttack || leaderChargeGuidance(boss.attackPattern, boss.combatState, boss.targetId, room?.sessionId ?? "")
     : "ENCOUNTER COMPLETE";
   bossAttackLabel.dataset.state = boss.combatState;
   bossHealthFill.style.transform = `scaleX(${Math.max(0, Math.min(1, boss.health / Math.max(1, boss.maxHealth)))})`;
@@ -17106,6 +17193,15 @@ app.on("update", (dt: number) => {
       mob.eliteAura.setLocalEulerAngles(0, animationTime * 42, 0);
       mob.eliteAuraMaterial.opacity = (mob.state.isMiniBoss ? .5 : .38) + Math.sin(animationTime * 6.5) * .12;
       mob.eliteAuraMaterial.update();
+    }
+    if (mob.elderthornHeart && mob.elderthornHeartMaterial) {
+      const weakPointOpen = animationNow < (leaderExposedUntil.get(mob.mobId) ?? 0)
+        || mob.state.combatState === "recover";
+      const heartPulse = 1 + Math.sin(animationTime * (weakPointOpen ? 15 : 6)) * (weakPointOpen ? .2 : .07);
+      mob.elderthornHeart.setLocalScale(heartPulse, heartPulse, heartPulse);
+      mob.elderthornHeartMaterial.emissive.set(weakPointOpen ? .42 : .08, weakPointOpen ? .85 : .3, .02);
+      mob.elderthornHeartMaterial.opacity = weakPointOpen ? .98 : 1;
+      mob.elderthornHeartMaterial.update();
     }
     setMobArtEnraged(mob.art, mob.state.enraged === true);
     setMobArtDefeated(mob.art, !mob.state.alive && deathPose.progress >= .3);
