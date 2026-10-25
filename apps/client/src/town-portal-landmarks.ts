@@ -104,21 +104,20 @@ export function createTownPortalLandmarks(app: pc.Application, parent: pc.Entity
     spiral.enabled = true;
   });
 
-  // Reuse the existing village bell tower at a monumental scale. Its base is
-  // below the horizon so it reads as a distant silhouette over the empty realm.
+  // Reuse the village tower as an unreachable monument. Its upper roof is
+  // beyond the camera range, while cloud banks conceal the shaft above town.
   const tower = new pc.Entity("distant-tower-silhouette");
   tower.setLocalPosition(150, -10, 122);
   parent.addChild(tower);
-  const silhouette = material(new pc.Color(.065, .085, .12));
+  const silhouette = material(new pc.Color(.045, .065, .09));
   const towerFallback = new pc.Entity("tower-silhouette-fallback");
   tower.addChild(towerFallback);
-  shape(towerFallback, "tower-base", "box", silhouette, [13, 28, 13], [0, 14, 0]);
-  shape(towerFallback, "tower-upper", "box", silhouette, [9, 12, 9], [0, 32, 0]);
-  shape(towerFallback, "tower-spire", "cone", silhouette, [12, 15, 12], [0, 44, 0]);
+  shape(towerFallback, "tower-base", "box", silhouette, [18, 125, 18], [0, 62.5, 0]);
+  shape(towerFallback, "tower-upper", "box", silhouette, [13, 80, 13], [0, 165, 0]);
   loadContainer(app, TOWER_ASSET, resource => {
     const model = resource.instantiateRenderEntity({ castShadows: false, receiveShadows: false });
     model.name = "tower-bell-model";
-    model.setLocalScale(7, 11, 7);
+    model.setLocalScale(10, 34, 10);
     for (const node of model.find(candidate => Boolean((candidate as pc.Entity).render))) {
       const render = (node as pc.Entity).render;
       if (render) for (const mesh of render.meshInstances) mesh.material = silhouette;
@@ -127,7 +126,28 @@ export function createTownPortalLandmarks(app: pc.Application, parent: pc.Entity
     towerFallback.enabled = false;
   });
 
+  const cloudLight = material(new pc.Color(.82, .87, .88));
+  const cloudShade = material(new pc.Color(.66, .75, .78));
+  const cloudLayout = [
+    [-18, 31, -9, 19, 5, 9], [-14, 35, 8, 21, 5, 9],
+    [-20, 48, 2, 24, 6, 10], [-12, 60, -10, 23, 6, 10],
+    [-17, 75, 9, 25, 7, 11],
+  ] as const;
+  const clouds = cloudLayout.map(([x, y, z, sx, sy, sz], index) => {
+    const bank = new pc.Entity(`tower-cloud-bank-${index}`);
+    tower.addChild(bank);
+    shape(bank, "cloud-middle", "sphere", cloudLight, [sx, sy, sz], [0, 0, 0]);
+    shape(bank, "cloud-left", "sphere", cloudShade, [sx * .68, sy * .9, sz * .85], [-sx * .37, -sy * .13, .9]);
+    shape(bank, "cloud-right", "sphere", cloudLight, [sx * .73, sy * .78, sz * .9], [sx * .35, -sy * .17, -.8]);
+    return { entity: bank, x, y, z, phase: index * 1.3 };
+  });
+
   app.on("update", () => {
-    if (parent.enabled && spiral.enabled) spiral.setLocalEulerAngles(0, performance.now() * .022, 0);
+    if (!parent.enabled) return;
+    const now = performance.now();
+    if (spiral.enabled) spiral.setLocalEulerAngles(0, now * .022, 0);
+    for (const cloud of clouds) cloud.entity.setLocalPosition(
+      cloud.x + Math.sin(now * .00012 + cloud.phase) * 1.7, cloud.y,
+      cloud.z + Math.cos(now * .00009 + cloud.phase) * .7);
   });
 }

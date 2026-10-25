@@ -14,7 +14,7 @@ export { DODGE_STAMINA_COST, DODGE_CHAIN_COST_STEP, DODGE_MAX_STAMINA_COST, DODG
 // otherwise let a new client join a room still serving the old terrain.
 export const WORLD_ROOM = "world-warden-gate-v165";
 export const SILVER_DEPTHS_ROOM = "silver-depths-instance-v3";
-export const PRACTICE_ROOM = "calling-practice-v3";
+export const PRACTICE_ROOM = "calling-practice-v4";
 export type RoomTransfer = { room: typeof WORLD_ROOM | typeof SILVER_DEPTHS_ROOM | typeof PRACTICE_ROOM; instanceKey?: string; partySize?: number; returnFrom?: "silver-depths" | "practice"; retry?: boolean; partyTicket?: string; worldRoomId?: string };
 export interface ForestPortal { kind: string; x: number; y: number; z: number; expiresAt: number }
 export const FOREST_PORTAL_LIFETIME_MS = 120_000;
@@ -165,8 +165,6 @@ export const RAPID_PRACTICE_TOWN_COLLIDERS = [
   { id: "weavers-row", minX: 43, maxX: 50, minZ: 90, maxZ: 97 },
   { id: "healers-house", minX: 43, maxX: 50, minZ: 105, maxZ: 112 },
   { id: "wardens-lodge", minX: 43, maxX: 50, minZ: 126, maxZ: 134 },
-  { id: "north-gatehouse", minX: 101, maxX: 103, minZ: 99, maxZ: 102 },
-  { id: "south-gatehouse", minX: 101, maxX: 103, minZ: 110, maxZ: 113 },
 ] as const;
 
 /** Shared obstacle query for Fast World prediction and authority. */

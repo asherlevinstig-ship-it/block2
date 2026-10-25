@@ -3161,30 +3161,6 @@ if (fastWorldRequested) {
   addTownShape(lodge, "lodge-sigil", "cylinder", bannerGold, [.25, .08, .25], [85.04, 9.78, 117])
     .setLocalEulerAngles(0, 0, 90);
 
-  const addGatehouse = (z: number): void => {
-    addBox(rapidPrototypeRoot, "town-gate-footing", mortar, [2.95, .24, 3.65], [102.1, 8.14, z]);
-    addBox(rapidPrototypeRoot, "town-gate-tower", townStone, [2.65, 3.25, 3.35], [102.1, 9.72, z]);
-    addBox(rapidPrototypeRoot, "town-gate-face", townStoneMid, [.2, 2.65, 2.65], [103.48, 9.72, z]);
-    for (const offset of [-1.12, -.38, .38, 1.12])
-      addBox(rapidPrototypeRoot, "town-gate-masonry", townStoneLight, [.12, .12, .48], [103.6, 9.02 + Math.abs(offset) * .56, z + offset]);
-    addGabledRoof(rapidPrototypeRoot, "town-gate", 102.1, z, 3, 3.8, 11.36, roofBlue, roofBlueLight, 38);
-    const banner = addBox(rapidPrototypeRoot, "town-gate-banner", bannerBlue, [.07, 1.52, .84], [103.54, 10.15, z]);
-    rapidTownBanners.push({ entity: banner, phase: z * .41 });
-    addBox(rapidPrototypeRoot, "town-gate-banner-tail", bannerBlue, [.075, .42, .55], [103.55, 9.24, z]);
-    addTownShape(rapidPrototypeRoot, "town-gate-sigil", "cylinder", bannerGold, [.25, .08, .25], [103.62, 10.25, z])
-      .setLocalEulerAngles(0, 0, 90);
-  };
-  addGatehouse(100.65);
-  addGatehouse(111.35);
-  // A stepped stone arch leaves a tall, readable opening instead of the old giant brown beam.
-  addBox(rapidPrototypeRoot, "town-gate-arch-crown", townStone, [1.32, .6, 9.05], [102.1, 11.18, 106]);
-  for (const side of [-1, 1] as const) {
-    addBox(rapidPrototypeRoot, "town-gate-arch-step", townStone, [1.34, .58, 1.18], [102.1, 10.72, 106 + side * 3.05]);
-    addBox(rapidPrototypeRoot, "town-gate-arch-step", townStoneMid, [1.35, .52, .95], [102.1, 10.38, 106 + side * 2.45]);
-  }
-  addBox(rapidPrototypeRoot, "town-gate-nameplate", timberLight, [.08, .62, 2.6], [102.82, 11.28, 106]);
-  addBox(rapidPrototypeRoot, "town-gate-nameplate-inlay", bannerGold, [.09, .1, 1.82], [102.88, 11.28, 106]);
-
   const addMarketStall = (name: string, z: number, canopy: pc.StandardMaterial): void => {
     const root = new pc.Entity(name); rapidPrototypeRoot.addChild(root);
     addBox(root, `${name}-rug`, bannerGold, [2.45, .025, 1.42], [98.15, 8.17, z]);
