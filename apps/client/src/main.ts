@@ -116,7 +116,7 @@ import { confirmPredictedDodges, removeRejectedDodge, replayPendingMovement, typ
 import { advanceCameraOrbit, cameraOrbitOffset, dragCameraOrbit, initialCameraOrbit, pinchCameraOrbit } from "./camera-orbit.js";
 import { advanceCameraFollow, advanceCameraHeight, advanceCameraPosition } from "./camera-follow.js";
 import { populateTownAssetKit, readyTownFallbacks, SPEED_LAB_TOWN_ASSETS, type TownFallbackFamily } from "./town-asset-kit.js";
-import { createPaintedGroundMaterial, fitGroundTexture } from "./fast-world-texture.js";
+import { createPaintedGroundMaterial, fitGroundTexture, fitOrganicGroundPatch } from "./fast-world-texture.js";
 import {
   GREENWOOD_ASSET_PLACEMENTS,
   GREENWOOD_FALLEN_LOGS,
@@ -2507,6 +2507,8 @@ if (fastWorldRequested) {
     shape.addComponent("render", { type, castShadows: true });
     if (shape.render) shape.render.material = material;
     if (type === "box") fitGroundTexture(app.graphicsDevice, shape, material, scale, position);
+    else if (type === "cylinder" && /ground:|bank:|threshold:|atmosphere:|pool:|pool-rim:|tide-pool|tide-foam|:island|:spring/.test(name))
+      fitOrganicGroundPatch(app.graphicsDevice, shape, material, scale, position);
     shape.setLocalScale(...scale);
     shape.setLocalPosition(...position);
     parent.addChild(shape);
@@ -2515,13 +2517,15 @@ if (fastWorldRequested) {
   const addRapidWorldShape = (name: string, type: "box" | "cylinder" | "cone" | "sphere",
     material: pc.StandardMaterial, scale: [number, number, number], position: [number, number, number]): pc.Entity => {
     const shape = addTownShape(rapidPrototypeRoot, name, type, material, scale, position);
-    if (shape.render) shape.render.batchGroupId = rapidWorldSceneryBatchGroup.id;
+    if (shape.render && shape.render.meshInstances.every(instance => instance.material.blendType === pc.BLEND_NONE))
+      shape.render.batchGroupId = rapidWorldSceneryBatchGroup.id;
     return shape;
   };
   const addRapidWorldBox = (name: string, material: pc.StandardMaterial,
     scale: [number, number, number], position: [number, number, number]): pc.Entity => {
     const shape = addBox(rapidPrototypeRoot, name, material, scale, position);
-    if (shape.render) shape.render.batchGroupId = rapidWorldSceneryBatchGroup.id;
+    if (shape.render && shape.render.meshInstances.every(instance => instance.material.blendType === pc.BLEND_NONE))
+      shape.render.batchGroupId = rapidWorldSceneryBatchGroup.id;
     return shape;
   };
   const rapidRegionChunkRoots = new Map<string, pc.Entity>();
@@ -2543,13 +2547,15 @@ if (fastWorldRequested) {
     type: "box" | "cylinder" | "cone" | "sphere", material: pc.StandardMaterial,
     scale: [number, number, number], position: [number, number, number]): pc.Entity => {
     const shape = addTownShape(rapidRegionChunkRoot(regionId, position[0], position[2]), name, type, material, scale, position);
-    if (shape.render) shape.render.batchGroupId = rapidWorldSceneryBatchGroup.id;
+    if (shape.render && shape.render.meshInstances.every(instance => instance.material.blendType === pc.BLEND_NONE))
+      shape.render.batchGroupId = rapidWorldSceneryBatchGroup.id;
     return shape;
   };
   const addRapidRegionBox = (regionId: FastWorldStreamedRegionId, name: string, material: pc.StandardMaterial,
     scale: [number, number, number], position: [number, number, number]): pc.Entity => {
     const shape = addBox(rapidRegionChunkRoot(regionId, position[0], position[2]), name, material, scale, position);
-    if (shape.render) shape.render.batchGroupId = rapidWorldSceneryBatchGroup.id;
+    if (shape.render && shape.render.meshInstances.every(instance => instance.material.blendType === pc.BLEND_NONE))
+      shape.render.batchGroupId = rapidWorldSceneryBatchGroup.id;
     return shape;
   };
   updateRapidRegionVisualStream = (x: number, z: number): void => {

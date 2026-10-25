@@ -1,4 +1,5 @@
 import * as pc from "playcanvas";
+import { FAST_WORLD_REGION_DEFINITIONS } from "@blockcraft/protocol";
 
 export interface PaintedGroundStyle {
   name: string;
@@ -17,16 +18,77 @@ const textureCache = new WeakMap<pc.GraphicsDevice, Map<string, pc.Texture>>();
 export function fitGroundTexture(device: pc.GraphicsDevice, entity: pc.Entity, material: pc.StandardMaterial,
   scale: readonly [number, number, number], position: readonly [number, number, number]): void {
   if (!entity.render || !material.diffuseMap || scale[1] > .5 || Math.min(scale[0], scale[2]) < 1) return;
-  const mesh = pc.createBox(device, {});
-  const positions: number[] = [], uvs: number[] = [];
-  mesh.getPositions(positions);
+  const region = FAST_WORLD_REGION_DEFINITIONS.find(r => entity.name.startsWith(`${r.id}-ground:`));
+  const road = /road|forecourt|approach/.test(entity.name);
+  const feather = !!region || road || entity.name === "west-green";
+  const spacing = road ? .5 : 1.5;
+  const nx = Math.max(2, Math.ceil(scale[0] / spacing)), nz = Math.max(2, Math.ceil(scale[2] / spacing));
+  const positions: number[] = [], uvs: number[] = [], colors: number[] = [], indices: number[] = [], normals: number[] = [];
   const tileSize = /plaza/.test(material.name) ? 6 : 5;
-  for (let i = 0; i < positions.length; i += 3) {
-    uvs.push((positions[i]! * scale[0] + position[0]) / tileSize / material.diffuseMapTiling.x,
-      (positions[i + 2]! * scale[2] + position[2]) / tileSize / material.diffuseMapTiling.y);
+  for (let z = 0; z <= nz; z++) for (let x = 0; x <= nx; x++) {
+    const lx = x / nx - .5, lz = z / nz - .5;
+    const wx = position[0] + lx * scale[0], wz = position[2] + lz * scale[2];
+    const variation = .88 + .08 * Math.sin(wx * .17 + Math.sin(wz * .12)) + .04 * Math.cos(wz * .31 - wx * .08);
+    let alpha = 1;
+    if (region) {
+      const b = region.bounds;
+      const edge = Math.min(wx - b.minX, b.maxX - wx, wz - b.minZ, b.maxZ - wz);
+      alpha = Math.max(0, Math.min(1, (edge - .8 - Math.sin(wx * .6 + wz * .43) * .8) / 4));
+    } else if (feather) {
+      const edge = Math.min((.5 - Math.abs(lx)) * scale[0], (.5 - Math.abs(lz)) * scale[2]);
+      alpha = Math.max(0, Math.min(1, (edge - .14 + Math.sin(wx * 1.3 + wz * .9) * .3) / .45));
+    }
+    positions.push(lx, .5, lz); normals.push(0, 1, 0);
+    uvs.push(wx / tileSize / material.diffuseMapTiling.x, wz / tileSize / material.diffuseMapTiling.y);
+    colors.push(variation, variation, variation, alpha);
+    if (x < nx && z < nz) { const i = z * (nx + 1) + x; indices.push(i, i + nx + 1, i + 1, i + 1, i + nx + 1, i + nx + 2); }
   }
-  mesh.setUvs(0, uvs); mesh.update();
-  entity.render.meshInstances[0]!.mesh = mesh;
+  const mesh = new pc.Mesh(device);
+  mesh.setPositions(positions); mesh.setNormals(normals); mesh.setUvs(0, uvs); mesh.setColors(colors); mesh.setIndices(indices); mesh.update();
+  entity.render.meshInstances = [new pc.MeshInstance(mesh, terrainVertexMaterial(material, feather), entity)];
+  entity.render.meshInstances[0]!.drawBucket = region ? 240 : road ? 230 : 245;
+  entity.render.castShadows = false;
+
+}
+
+const terrainMaterials = new WeakMap<pc.StandardMaterial, Map<boolean, pc.StandardMaterial>>();
+function terrainVertexMaterial(source: pc.StandardMaterial, feather: boolean): pc.StandardMaterial {
+  let variants = terrainMaterials.get(source);
+  if (!variants) { variants = new Map(); terrainMaterials.set(source, variants); }
+  let material = variants.get(feather);
+  if (!material) {
+    material = source.clone(); material.diffuseVertexColor = true;
+    if (feather) { material.opacityVertexColor = true; material.opacityVertexColorChannel = "a";
+      material.blendType = pc.BLEND_NORMAL; material.depthWrite = false; }
+    material.update(); variants.set(feather, material);
+  }
+  return material;
+}
+
+/** Soft irregular patches replace obvious circular stamps; geometry stays on the
+ * authoritative ground plane and shares cached materials for static batching. */
+export function fitOrganicGroundPatch(device: pc.GraphicsDevice, entity: pc.Entity, material: pc.StandardMaterial,
+  scale: readonly [number, number, number], position: readonly [number, number, number]): void {
+  if (!entity.render || Math.min(scale[0], scale[2]) < 1 || /plaza|civic/.test(entity.name)) return;
+  const positions: number[] = [], normals: number[] = [], uvs: number[] = [], colors: number[] = [], indices: number[] = [];
+  const segments = 32, rings = [0, .55, .8, 1];
+  for (let ring = 0; ring < rings.length; ring++) for (let i = 0; i <= segments; i++) {
+    const angle = i / segments * Math.PI * 2;
+    const radius = rings[ring]! * (.44 + .035 * Math.sin(angle * 5 + position[0]) + .025 * Math.cos(angle * 7 + position[2]));
+    const x = Math.cos(angle) * radius, z = Math.sin(angle) * radius;
+    const height = scale[1] > .1 ? Math.pow(1 - rings[ring]!, 1.7) - .36 : .5;
+    positions.push(x, height, z); normals.push(0, 1, 0);
+    uvs.push((position[0] + x * scale[0]) / 5 / material.diffuseMapTiling.x,
+      (position[2] + z * scale[2]) / 5 / material.diffuseMapTiling.y);
+    colors.push(1, 1, 1, ring === 3 ? 0 : ring === 2 ? .72 : 1);
+    if (ring < rings.length - 1 && i < segments) { const n = ring * (segments + 1) + i;
+      indices.push(n, n + 1, n + segments + 1, n + 1, n + segments + 2, n + segments + 1); }
+  }
+  const mesh = new pc.Mesh(device); mesh.setPositions(positions); mesh.setNormals(normals); mesh.setUvs(0, uvs);
+  mesh.setColors(colors); mesh.setIndices(indices); mesh.update();
+  entity.render.meshInstances = [new pc.MeshInstance(mesh, terrainVertexMaterial(material, true), entity)];
+  entity.render.meshInstances[0]!.drawBucket = /rim|foam/.test(entity.name) ? 225 : 220;
+  entity.render.castShadows = false;
 }
 
 function seededRandom(seed: number): () => number {
