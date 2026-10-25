@@ -5528,31 +5528,34 @@ function releaseLootHold(source: LootHold["source"]): void {
   if (!lootHold || lootHold.source !== source) return;
   const dropId = lootHold.dropId;
   const complete = !localCombatActive()
-    && lootHoldProgress(lootHold, performance.now(), nearestVisibleLootDrop(EQUIPMENT_LOOT_RANGE)?.id ?? null) >= 1;
+    && visibleLootDistance(dropId, EQUIPMENT_LOOT_RANGE) !== null
+    && lootHoldProgress(lootHold, performance.now(), dropId) >= 1;
   cancelLootHold();
   if (complete) interactWithLoot(dropId);
 }
 function beginLootHold(source: LootHold["source"]): void {
-  if (localCombatActive()) return;
+  if (lootHold || localCombatActive()) return;
   const nearby = nearestVisibleLootDrop(EQUIPMENT_LOOT_RANGE);
-  if (!nearby || !lootWorldLabel.hidden && lootWorldLabel.dataset.near === "false") return;
+  if (!nearby) return;
   const drop = lootVisuals.get(nearby.id)?.state;
   if (!drop || (pendingFloorLoot.get(nearby.id) ?? 0) > performance.now()) return;
-  if (lootWouldOverflow(nearby.id, drop)) { interactWithLoot(nearby.id); return; }
   lootHold = { dropId: nearby.id, startedAt: performance.now(), source };
+  lootCombatActive = false;
+  lootCombatCheckedAt = lootHold.startedAt;
   lootWorldLabel.dataset.holding = "true";
+  updateLootWorldLabel();
 }
 function updateLootHold(now: number): void {
   if (!lootHold) return;
-  const nearby = nearestVisibleLootDrop(EQUIPMENT_LOOT_RANGE);
+  const dropId = lootHold.dropId;
   if (!room || !worldReady || !defeatScreen.hidden || !lootPanel.hidden || !lootPackDecision.hidden
-    || !inventoryPanel.hidden || !levelUpPanel.hidden || localCombatActive() || nearby?.id !== lootHold.dropId
+    || !inventoryPanel.hidden || !levelUpPanel.hidden || localCombatActive()
+    || visibleLootDistance(dropId, EQUIPMENT_LOOT_RANGE) === null
     || lootHold.source === "keyboard" && !keys.has("KeyE")) { cancelLootHold(); return; }
-  const progress = lootHoldProgress(lootHold, now, nearby.id);
+  const progress = lootHoldProgress(lootHold, now, dropId);
   lootWorldHold.style.setProperty("--hold-progress", `${Math.round(progress * 100)}%`);
   contextButton.style.setProperty("--context-progress", `${Math.round(progress * 100)}%`);
   if (progress >= 1) {
-    const dropId = lootHold.dropId;
     cancelLootHold();
     interactWithLoot(dropId);
   }
@@ -5641,15 +5644,22 @@ function openPackDecision(dropId: string, drop: NetworkLootDrop): void {
   lootPackDecision.hidden = false;
   if (candidates[0]) selectSwapItem(candidates[0].itemId); else lootPackClose.focus();
 }
-function nearestVisibleLootDrop(maxDistance: number): { id: string; distance: number } | null {
+function visibleLootDistance(id: string, maxDistance: number): number | null {
   const player = localPlayer.getPosition();
+  const visual = lootVisuals.get(id);
+  if (!visual) return null;
+  const drop = visual.state;
+  const distance = Math.hypot(drop.x - player.x, drop.y - player.y, drop.z - player.z);
+  if (!isItemId(drop.itemId) || !visual.root.enabled || performance.now() < visual.landedAt
+    || distance > maxDistance || !enemyCueLineClear({ x: player.x, y: player.y + .72, z: player.z },
+      { x: drop.x, y: drop.y + .72, z: drop.z }, readCollisionWorldBlock)) return null;
+  return distance;
+}
+function nearestVisibleLootDrop(maxDistance: number): { id: string; distance: number } | null {
   let nearest: string | null = null; let distance = maxDistance;
-  for (const [id, visual] of lootVisuals) {
-    const drop = visual.state;
-    const d = Math.hypot(drop.x - player.x, drop.y - player.y, drop.z - player.z);
-    if (!isItemId(drop.itemId) || !visual.root.enabled || performance.now() < visual.landedAt || d > distance
-      || !enemyCueLineClear({ x: player.x, y: player.y + .72, z: player.z },
-        { x: drop.x, y: drop.y + .72, z: drop.z }, readCollisionWorldBlock)) continue;
+  for (const id of lootVisuals.keys()) {
+    const d = visibleLootDistance(id, distance);
+    if (d === null) continue;
     nearest = id; distance = d;
   }
   return nearest ? { id: nearest, distance } : null;
@@ -5695,7 +5705,10 @@ function updateLootWorldLabel(): void {
     lootCombatActive = localCombatActive();
   }
   if (lootCombatActive) { cancelLootHold(); return; }
-  const nearest = nearestVisibleLootDrop(8);
+  const heldId = lootHold?.dropId;
+  const heldDistance = heldId ? visibleLootDistance(heldId, 8) : null;
+  const nearest = heldId && heldDistance !== null
+    ? { id: heldId, distance: heldDistance } : nearestVisibleLootDrop(8);
   if (!nearest) return;
   const drop = lootVisuals.get(nearest.id)?.state;
   if (!drop || !isItemId(drop.itemId)) return;
@@ -13138,7 +13151,7 @@ function updateTarget(): void {
   const combatMark = combatMob ? visibleMarkState(combatMob.visual) : null;
   const combatKey = combatMob ? `${combatMob.id}:${combatMob.visual.state.health}:${combatMob.visual.state.combatState}:${combatMob.visual.state.aimCommitted}:${combatMark?.stacks ?? 0}` : "none";
   const chopping = currentTarget?.block === Block.OakLog || currentTarget?.block === Block.Leaves;
-  const nearbyLoot = nearestLootDrop();
+  const nearbyLoot = lootHold?.dropId ?? nearestLootDrop();
   const roleOpportunity = nearbyRoleOpportunity();
   const roadsideEncounter = nearbyRoadsideEncounter();
   const ashenReliquaryClaimNearby = canClaimAshenReliquary();
@@ -15375,8 +15388,8 @@ function requestPrimaryAction(): void {
 }
 
 function requestContextAction(source: LootHold["source"]): void {
-  if (nearbyTradePlayerId) { openNearbyPlayerInteraction(); return; }
   if (nearestLootDrop()) { beginLootHold(source); return; }
+  if (nearbyTradePlayerId) { openNearbyPlayerInteraction(); return; }
   requestPrimaryAction();
 }
 
@@ -17019,7 +17032,7 @@ app.on("update", (dt: number) => {
     }
     trimRemoteSnapshots(remote.snapshots, renderAt);
   }
-  const highlightedLootId = nearestLootDrop();
+  const highlightedLootId = lootHold?.dropId ?? nearestLootDrop();
   for (const [dropId, expiresAt] of pendingFloorLoot) {
     if (expiresAt > animationNow) continue;
     pendingFloorLoot.delete(dropId);
