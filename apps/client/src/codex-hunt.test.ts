@@ -12,6 +12,12 @@ describe("Codex equipment hunts", () => {
     expect(codexHuntPlan("rootbound_hammer")?.target.id).toBe("codex-forest");
   });
 
+  it("routes the Fast World Greenwood hunt to Elderthorn without changing the legacy plan", () => {
+    expect(codexHuntPlan("fang_dagger", true)).toMatchObject({ source: "Elderthorn Keeper",
+      target: { id: "codex-elderthorn", x: 150.5, z: 106.5 } });
+    expect(codexHuntPlan("fang_dagger")?.source).toBe("Mossback Alpha");
+  });
+
   it("suggests the matching build-set piece after a successful hunt", () => {
     expect(nextSetPiece("fang_dagger")).toBe("fangstalker_wrap");
     expect(nextSetPiece("venomweave_mantle")).toBe("acid_gland_focus");

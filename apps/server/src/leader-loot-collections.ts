@@ -17,7 +17,8 @@ export type LeaderCollectionDefinition = {
 
 export const LEADER_COLLECTIONS: Record<LeaderCollectionId, LeaderCollectionDefinition> = {
   greenwood: { id: "greenwood", ...REGIONAL_LEADER_COLLECTIONS.greenwood,
-    leaders: ["moss-crawler", "outskirts-crawler-a", "outskirts-crawler-b", "outskirts-crawler-c", "wild-crawler", "roaming-crawler-alpha"],
+    leaders: ["moss-crawler", "outskirts-crawler-a", "outskirts-crawler-b", "outskirts-crawler-c", "wild-crawler", "roaming-crawler-alpha",
+      "greenwood-elderthorn"],
   },
   mistfen: { id: "mistfen", ...REGIONAL_LEADER_COLLECTIONS.mistfen,
     leaders: ["frontier-spitter", "wild-spitter-a", "wild-spitter-b", "wild-spitter-c", "gloomfang-spitter", "mistfen-behemoth", "roaming-spitter-alpha"],

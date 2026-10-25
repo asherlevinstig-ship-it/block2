@@ -5,6 +5,7 @@ import { LEADER_COLLECTIONS, discoverLeaderItem, leaderCollectionFor, parseLeade
 describe("regional leader loot collections", () => {
   it("maps authored leaders to a compact regional pool", () => {
     expect(leaderCollectionFor("wild-crawler")?.id).toBe("greenwood");
+    expect(leaderCollectionFor("greenwood-elderthorn")?.id).toBe("greenwood");
     expect(leaderCollectionFor("northwatch-watchbreaker")?.id).toBe("northwatch");
     expect(leaderCollectionFor("ordinary-crawler")).toBeNull();
     expect(LEADER_COLLECTIONS.greenwood.items).toHaveLength(4);

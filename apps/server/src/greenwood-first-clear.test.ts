@@ -3,11 +3,15 @@ import { Block } from "@blockcraft/voxel-world";
 import { decodeLootBagItems } from "@blockcraft/protocol";
 import { WorldRoom } from "./game-room.js";
 import { InventoryItemState, MobState, PlayerState, WorldState } from "./schema.js";
-import { greenwoodFirstClearWeapon } from "./greenwood-first-clear.js";
+import { greenwoodFirstClearBossId, greenwoodFirstClearWeapon } from "./greenwood-first-clear.js";
 
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 
 describe("Greenwood first clear", () => {
+  it("moves the Fast World reward to Elderthorn while preserving the archived boss", () => {
+    expect(greenwoodFirstClearBossId(true)).toBe("greenwood-elderthorn");
+    expect(greenwoodFirstClearBossId(false)).toBe("wild-crawler");
+  });
   it("gives every path a usable first weapon", () => {
     expect(greenwoodFirstClearWeapon(null)).toBe("forged_sword");
     expect(greenwoodFirstClearWeapon("tank")).toBe("forged_sword");

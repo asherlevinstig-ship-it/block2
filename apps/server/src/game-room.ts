@@ -296,7 +296,7 @@ import { MOB_PATROL_RADIUS, patrolDestination, type MobPatrolState } from "./mob
 import { STAGGER_IMMUNITY_MS, basicStaggerDuration, bodyPoint, flightPoint, hasCombatLineOfSight, projectileImpact, meleeSweepImpact } from "./combat-impact.js";
 import { compensatedActionAt, MAX_COMBAT_LAG_COMPENSATION_MS } from "./combat-lag.js";
 import { FOREST_CACHE_DUPLICATE_GOLD, forestCacheFeaturedReward, forestCacheRewardLabel } from "./forest-dungeon-rewards.js";
-import { greenwoodFirstClearWeapon } from "./greenwood-first-clear.js";
+import { greenwoodFirstClearBossId, greenwoodFirstClearWeapon } from "./greenwood-first-clear.js";
 import { chooseCharacterStat, grantCharacterExperience, mobExperience, progressionAttackBonus, progressionMiningBonus, progressionSnapshot, progressionSpeedMultiplier } from "./character-progression.js";
 import { enemyLevelForTier } from "@blockcraft/protocol";
 import { elderthornGuardGoal, greenwoodRegroupGoal, greenwoodRegroupState, isGreenwoodCombatant,
@@ -4230,7 +4230,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const greenwoodRank = greenwoodMasteryRank(greenwoodProgress.points, greenwoodProgress.discovered);
     const pendingGreenwoodFirstClear = [...this.state.lootDrops.keys()].some(dropId =>
       dropId.startsWith("greenwood-first:") && this.state.lootDrops.get(dropId)?.ownerId === ownerId);
-    const firstGreenwoodClear = mobId === "wild-crawler" && rewardPlayer
+    const firstGreenwoodClear = mobId === greenwoodFirstClearBossId(this.rapidPractice) && rewardPlayer
       && !greenwoodProgress.firstBossGearClaimed && !pendingGreenwoodFirstClear;
     const firstGreenwoodWeapon = firstGreenwoodClear
       ? greenwoodFirstClearWeapon(parseBuildPathState(rewardPlayer.huntLoadoutsJson).selectedPathId) : null;

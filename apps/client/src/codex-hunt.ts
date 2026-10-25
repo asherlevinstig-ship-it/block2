@@ -9,7 +9,7 @@ import {
   TOWN_EXPEDITION_BOARD_POSITION,
   TOWN_SILVER_DEPTHS_PORTAL_POSITION,
 } from "@blockcraft/voxel-world";
-import { HUNT_EQUIPMENT_SETS, type ItemId } from "@blockcraft/protocol";
+import { FAST_WORLD_REGION_DEFINITIONS, HUNT_EQUIPMENT_SETS, type ItemId } from "@blockcraft/protocol";
 
 export type CodexHuntPlan = {
   itemId: ItemId;
@@ -24,6 +24,10 @@ const smith = waypoint(TOWN_BLACKSMITH_STALL_POSITION, "codex-smith", "Blacksmit
 const huntBoard = waypoint(TOWN_EXPEDITION_BOARD_POSITION, "codex-hunt-board", "Realm Hunt Board · equipment contracts");
 const depths = waypoint(TOWN_SILVER_DEPTHS_PORTAL_POSITION, "codex-depths", "Silver Depths · equipment route");
 const forest = waypoint(FOREST_PORTAL_POSITION, "codex-forest", "Forest Dungeon · equipment source");
+const elderthornEncounter = FAST_WORLD_REGION_DEFINITIONS.flatMap(region => region.encounters ?? [])
+  .find(encounter => encounter.id === "greenwood-elderthorn");
+const elderthorn = waypoint(elderthornEncounter ?? { x: 150.5, y: 8, z: 106.5 },
+  "codex-elderthorn", "Elderthorn Keeper · Greenwood leader cache");
 
 export const CODEX_HUNT_PLANS: Partial<Record<ItemId, CodexHuntPlan>> = {
   forged_sword: { itemId: "forged_sword", source: "Town Blacksmith", level: "LV 1+", protection: "Always available once its smithing requirement is met", target: smith },
@@ -48,7 +52,11 @@ export const CODEX_HUNT_PLANS: Partial<Record<ItemId, CodexHuntPlan>> = {
   northwatch_cloak: { itemId: "northwatch_cloak", source: "Northwatch Watchbreaker", level: "LV 8–12", protection: "First victory guarantees the cloak; Ridge Hide from Stalkers reforges it", target: waypoint(NORTHWATCH_LEADER_HOME, "codex-northwatch", "Northwatch Watchbreaker · Cloak") },
 };
 
-export function codexHuntPlan(itemId: ItemId): CodexHuntPlan | null {
+export function codexHuntPlan(itemId: ItemId, fastWorld = false): CodexHuntPlan | null {
+  if (fastWorld && itemId === "fang_dagger") return {
+    itemId, source: "Elderthorn Keeper", level: "LV 4",
+    protection: "Guaranteed by the Greenwood leader collection and first-clear protection", target: elderthorn,
+  };
   return CODEX_HUNT_PLANS[itemId] ?? null;
 }
 

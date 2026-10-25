@@ -5759,10 +5759,10 @@ function setCodexHunt(itemId: ItemId | null, guide = true): void {
     trackedLeaderCollectionHunt = null;
     storeTrackedLeaderCollectionHunt();
   }
-  const previousPlan = trackedCodexItemId ? codexHuntPlan(trackedCodexItemId) : null;
+  const previousPlan = trackedCodexItemId ? codexHuntPlan(trackedCodexItemId, fastWorldRequested) : null;
   trackedCodexItemId = itemId;
   try { itemId ? localStorage.setItem(CODEX_HUNT_STORAGE_KEY, itemId) : localStorage.removeItem(CODEX_HUNT_STORAGE_KEY); } catch { /* storage unavailable */ }
-  const plan = itemId ? codexHuntPlan(itemId) : null;
+  const plan = itemId ? codexHuntPlan(itemId, fastWorldRequested) : null;
   codexHuntSummary.hidden = !plan;
   if (plan) {
     codexHuntName.textContent = ITEM_DEFINITIONS[plan.itemId].name;
@@ -9986,16 +9986,30 @@ function createLootVisual(dropId: string, drop: NetworkLootDrop, settled = false
   const material = lootMaterials[itemId] ?? rarityLootMaterials[rarity];
   const sourceId = lootSourceMob(dropId);
   const realmWardenDrop = sourceId === "realm-stone-warden";
+  const elderthornCache = fastWorldRequested && (sourceId === "greenwood-elderthorn" || dropId.startsWith("greenwood-first:"));
   const rewardCache = dropId.startsWith("forest-cache:");
   const vaultCache = sourceId === "buried-chamber-brute" && itemId === "miners_lantern";
   const guardianDrop = rewardCache || vaultCache || sourceId === "forest-guardian" && isEquipmentItem(itemId);
   const attunedDrop = Boolean(drop.affixId && drop.affixTier && drop.affixItemId);
   const collectionDrop = Boolean(drop.leaderCollectionItemId);
   if (groupedBag) {
-    addBox(root, `${bagTier}-personal-loot-bag`, presentationMaterial, [.72, .46, .58], [0, -.12, 0]);
-    addBox(root, "loot-bag-fold", presentationMaterial, [.62, .18, .5], [0, .2, .01]).setLocalEulerAngles(0, 0, 4);
-    addBox(root, "loot-bag-clasp", brassMaterial, [.18, .14, .06], [0, -.02, -.31]);
-    addBox(root, "loot-bag-emblem", material, [.28, .22, .065], [0, -.02, -.35]);
+    if (elderthornCache) {
+      addBox(root, "elderthorn-cache-base", weaponWoodMaterial, [1.05, .5, .78], [0, -.14, 0]);
+      addBox(root, "elderthorn-cache-lid", presentationMaterial, [1.08, .25, .82], [0, .23, 0]);
+      addBox(root, "elderthorn-cache-band", brassMaterial, [.14, .7, .86], [0, .02, 0]);
+      addBox(root, "elderthorn-cache-heart", material, [.28, .3, .09], [0, .03, -.45]).setLocalEulerAngles(0, 0, 45);
+      for (const side of [-1, 1]) {
+        addBox(root, `elderthorn-cache-root-${side}`, weaponWoodMaterial, [.12, .68, .13], [side * .52, -.06, .02])
+          .setLocalEulerAngles(0, 0, side * 28);
+        addBox(root, `elderthorn-cache-leaf-${side}`, presentationMaterial, [.22, .08, .38], [side * .48, .35, .02])
+          .setLocalEulerAngles(0, side * 18, side * 24);
+      }
+    } else {
+      addBox(root, `${bagTier}-personal-loot-bag`, presentationMaterial, [.72, .46, .58], [0, -.12, 0]);
+      addBox(root, "loot-bag-fold", presentationMaterial, [.62, .18, .5], [0, .2, .01]).setLocalEulerAngles(0, 0, 4);
+      addBox(root, "loot-bag-clasp", brassMaterial, [.18, .14, .06], [0, -.02, -.31]);
+      addBox(root, "loot-bag-emblem", material, [.28, .22, .065], [0, -.02, -.35]);
+    }
     if (patrolCache) {
       addBox(root, "patrol-cache-shard", northwatchCueMaterial, [.27, .45, .18], [0, .48, 0]).setLocalEulerAngles(0, 0, 45);
       for (const side of [-1, 1])
@@ -10063,24 +10077,24 @@ function createLootVisual(dropId: string, drop: NetworkLootDrop, settled = false
   const miniBossDrop = source?.state.isMiniBoss === true;
   const beam = new pc.Entity(`loot-${rarity}-beam`);
   beam.addComponent("render", { type: "cylinder", material: presentationMaterial, castShadows: false, receiveShadows: false });
-  const beamHeight = realmWardenDrop ? 5.5 : collectionDrop ? 3.35 : patrolCache ? 2.8 : miniBossDrop || attunedDrop ? 2.65 : equipmentDrop ? legendaryDrop ? 2.4 : 1.8 : legendaryDrop ? 1.7 : 1.35;
-  const beamWidth = realmWardenDrop ? .11 : collectionDrop ? .09 : patrolCache ? .075 : miniBossDrop || attunedDrop ? .072 : equipmentDrop ? legendaryDrop ? .065 : .05 : .04;
+  const beamHeight = realmWardenDrop ? 5.5 : elderthornCache ? 4.2 : collectionDrop ? 3.35 : patrolCache ? 2.8 : miniBossDrop || attunedDrop ? 2.65 : equipmentDrop ? legendaryDrop ? 2.4 : 1.8 : legendaryDrop ? 1.7 : 1.35;
+  const beamWidth = realmWardenDrop ? .11 : elderthornCache ? .1 : collectionDrop ? .09 : patrolCache ? .075 : miniBossDrop || attunedDrop ? .072 : equipmentDrop ? legendaryDrop ? .065 : .05 : .04;
   beam.setLocalScale(beamWidth, beamHeight, beamWidth);
   beam.setLocalPosition(0, beamHeight * .52, 0); root.addChild(beam);
   if (collectionDrop || patrolCache || miniBossDrop || attunedDrop || ITEM_RARITIES[rarity].order >= ITEM_RARITIES.rare.order) {
     const halo = new pc.Entity(`loot-${rarity}-halo`);
     halo.addComponent("render", { type: "cylinder", material: presentationMaterial, castShadows: false, receiveShadows: false });
-    const haloScale = collectionDrop ? 1.65 : patrolCache || miniBossDrop || attunedDrop ? 1.38 : legendaryDrop ? 1.25 : .95;
+    const haloScale = elderthornCache ? 1.85 : collectionDrop ? 1.65 : patrolCache || miniBossDrop || attunedDrop ? 1.38 : legendaryDrop ? 1.25 : .95;
     halo.setLocalScale(haloScale, .018, haloScale);
     halo.setLocalPosition(0, -.42, 0); root.addChild(halo);
   }
   const glow = new pc.Entity(`loot-${rarity}-light`);
-  const tint = patrolCache ? new pc.Color(.46, .86, 1) : miniBossDrop ? new pc.Color(1, .62, .12) : bagTier === "white" ? new pc.Color(1, 1, 1) : bagTier === "purple" ? new pc.Color(.7, .25, 1)
+  const tint = elderthornCache ? new pc.Color(.55, 1, .18) : patrolCache ? new pc.Color(.46, .86, 1) : miniBossDrop ? new pc.Color(1, .62, .12) : bagTier === "white" ? new pc.Color(1, 1, 1) : bagTier === "purple" ? new pc.Color(.7, .25, 1)
     : bagTier === "blue" ? new pc.Color(.2, .55, 1) : bagTier === "pink" ? new pc.Color(1, .28, .56) : bagTier === "brown" ? new pc.Color(.55, .3, .12)
       : legendaryDrop ? new pc.Color(1, .52, .12) : rarity === "epic" ? new pc.Color(.7, .25, 1)
         : rarity === "rare" ? new pc.Color(.25, .55, 1) : rarity === "uncommon" ? new pc.Color(.28, .88, .4) : new pc.Color(.72, .76, .72);
-  glow.addComponent("light", { type: "omni", color: tint, intensity: realmWardenDrop ? 2.2 : patrolCache ? 1.8 : miniBossDrop || attunedDrop ? 1.8 : legendaryDrop ? 1.6 : equipmentDrop ? .85 : .45,
-    range: realmWardenDrop ? 8 : patrolCache ? 6 : miniBossDrop || attunedDrop ? 6 : legendaryDrop ? 5.5 : equipmentDrop ? 3.5 : 2.8, castShadows: false });
+  glow.addComponent("light", { type: "omni", color: tint, intensity: realmWardenDrop ? 2.2 : elderthornCache ? 2 : patrolCache ? 1.8 : miniBossDrop || attunedDrop ? 1.8 : legendaryDrop ? 1.6 : equipmentDrop ? .85 : .45,
+    range: realmWardenDrop ? 8 : elderthornCache ? 7 : patrolCache ? 6 : miniBossDrop || attunedDrop ? 6 : legendaryDrop ? 5.5 : equipmentDrop ? 3.5 : 2.8, castShadows: false });
   glow.setLocalPosition(0, .45, 0); root.addChild(glow);
   const now = performance.now();
   const revealAt = settled ? now : source ? Math.max(now, Number.isFinite(source.defeatAt) ? source.defeatAt : now)
@@ -10297,7 +10311,7 @@ function refreshEquipmentProgression(): void {
     button.disabled = !owned || (!equipmentForItem(entry.itemId) && !armourForItem(entry.itemId));
     button.textContent = button.disabled && owned ? "AUTO-EQUIPPED" : "COMPARE";
     const track = card.querySelector<HTMLButtonElement>(".track")!;
-    const plan = codexHuntPlan(entry.itemId);
+  const plan = codexHuntPlan(entry.itemId, fastWorldRequested);
     track.hidden = !plan || owned;
     track.dataset.active = String(trackedCodexItemId === entry.itemId);
     track.textContent = trackedCodexItemId === entry.itemId ? "TRACKING" : "TRACK HUNT";
@@ -19000,7 +19014,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     if (completedTrackedHunt) {
       const completedItem = message.itemId;
       const next = nextSetPiece(completedItem);
-      const completedPlan = codexHuntPlan(completedItem);
+      const completedPlan = codexHuntPlan(completedItem, fastWorldRequested);
       if (completedPlan) minimap.clearGuide(completedPlan.target.id);
       window.setTimeout(() => showLootNotice(next
         ? `Hunt complete Â· next build piece: ${ITEM_DEFINITIONS[next].name}`
