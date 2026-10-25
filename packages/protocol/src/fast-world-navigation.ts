@@ -9,7 +9,7 @@ export type FastWorldNavigationNode = {
 
 export type FastWorldEncounterNavigation = {
   id: string;
-  regionId: "greenwood" | "mistfen" | "sunken-coast";
+  regionId: "greenwood" | "mistfen" | "sunken-coast" | "southern-quarry";
   center: { x: number; z: number };
   spawnRadius: number;
   leashRadius: number;
@@ -176,10 +176,63 @@ export const SUNKEN_COAST_ENCOUNTER_NAVIGATION: readonly FastWorldEncounterNavig
     ] },
 ] as const;
 
+export const SOUTHERN_QUARRY_NAVIGATION_TERRACES = [
+  { id: "entry-shelf", x: 158, z: 142, width: 9, depth: 5, height: .5 },
+  { id: "north-shelf", x: 188, z: 141, width: 12, depth: 4, height: .75 },
+  { id: "west-lower-shelf", x: 155, z: 181, width: 8, depth: 5, height: .65 },
+  { id: "lift-shelf", x: 184, z: 184, width: 13, depth: 4, height: 1.05 },
+  { id: "foreman-shelf", x: 199, z: 154, width: 5, depth: 9, height: .8 },
+  { id: "central-shelf", x: 171, z: 165, width: 7, depth: 6, height: .55 },
+] as const;
+
+export const SOUTHERN_QUARRY_NAVIGATION_RAMPS = [
+  { id: "scree-ramp", x: 164, z: 151.5, length: 14, width: 4.3, yaw: 74 },
+  { id: "lift-ramp", x: 175, z: 177, length: 15, width: 4.2, yaw: 82 },
+  { id: "foreman-ramp", x: 191, z: 154, length: 13, width: 4, yaw: -38 },
+  { id: "pit-ramp", x: 193, z: 166, length: 14, width: 4.5, yaw: 88 },
+] as const;
+
+export const SOUTHERN_QUARRY_NAVIGATION_BOULDERS = [
+  [161, 153, 1.3], [174, 144, .9], [193, 159, 1.5], [199, 181, 1.2],
+  [168, 181, 1], [188, 174, 1.35],
+] as const;
+
+export const SOUTHERN_QUARRY_NAVIGATION_BARRICADES = [
+  { id: "scree-support", x: 164, z: 156, width: 3.8, depth: .65, yaw: 8 },
+  { id: "lift-support", x: 174, z: 173, width: 4.2, depth: .7, yaw: -12 },
+  { id: "foreman-support", x: 190, z: 154, width: 3.8, depth: .65, yaw: 35 },
+  { id: "pit-support", x: 194, z: 168, width: 4.4, depth: .72, yaw: -5 },
+] as const;
+
+export const SOUTHERN_QUARRY_ENCOUNTER_NAVIGATION: readonly FastWorldEncounterNavigation[] = [
+  { id: "scree-gate", regionId: "southern-quarry", center: { x: 164, z: 152 }, spawnRadius: 6.5, leashRadius: 11,
+    encounterIds: ["quarry-stalker-a", "quarry-sentry-a"], nodes: [
+      node("scree-west", "patrol", 158.5, 150.5), node("scree-east", "patrol", 168.5, 153.5),
+      node("scree-high-shot", "firing", 168, 148), node("scree-stalker-flank", "flank", 161, 157),
+    ] },
+  { id: "broken-lift", regionId: "southern-quarry", center: { x: 174.5, z: 177 }, spawnRadius: 7, leashRadius: 11,
+    encounterIds: ["quarry-sentry-b", "quarry-brute-a"], nodes: [
+      node("lift-west", "patrol", 168.5, 177.5), node("lift-east", "patrol", 180, 176.5),
+      node("lift-high-shot", "firing", 175, 170.5), node("lift-brute-breach", "flank", 177.5, 181),
+    ] },
+  { id: "foreman-shelf", regionId: "southern-quarry", center: { x: 192.5, z: 149.5 }, spawnRadius: 5.5, leashRadius: 9,
+    encounterIds: ["quarry-stalker-b"], nodes: [
+      node("foreman-west", "patrol", 188.5, 148.5), node("foreman-east", "patrol", 196, 151),
+      node("foreman-flank-north", "flank", 193, 145.5), node("foreman-flank-south", "flank", 187.5, 154.5),
+    ] },
+  { id: "quarrymaster-pit", regionId: "southern-quarry", center: { x: 198.5, z: 166.5 }, spawnRadius: 7.5, leashRadius: 12,
+    encounterIds: ["quarry-quarrymaster-sentry", "quarry-quarrymaster-brute", "quarry-quarrymaster"], nodes: [
+      node("pit-west", "patrol", 194, 164), node("pit-east", "patrol", 199.5, 171.5),
+      node("pit-sentry-gallery", "firing", 194.5, 161.5), node("pitguard-breach", "flank", 202, 168),
+      node("quarrymaster-counter-flank", "flank", 195, 172),
+    ] },
+] as const;
+
 export const FAST_WORLD_ENCOUNTER_NAVIGATION: readonly FastWorldEncounterNavigation[] = [
   ...GREENWOOD_ENCOUNTER_NAVIGATION,
   ...MISTFEN_ENCOUNTER_NAVIGATION,
   ...SUNKEN_COAST_ENCOUNTER_NAVIGATION,
+  ...SOUTHERN_QUARRY_ENCOUNTER_NAVIGATION,
 ] as const;
 
 export const fastWorldEncounterNavigationForMob = (mobId: string): FastWorldEncounterNavigation | null =>

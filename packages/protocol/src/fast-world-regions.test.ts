@@ -69,4 +69,14 @@ describe("Fast World region manifest", () => {
     expect(mistfen.hazards?.filter(hazard => hazard.kind === "toxic-pool")).toHaveLength(7);
     expect(mistfen.encounters?.every(encounter => encounter.respawnMs >= 40_000)).toBe(true);
   });
+
+  it("authors Southern Quarry as three approaches and an escorted leader pit", () => {
+    const quarry = fastWorldRegionDefinition("southern-quarry");
+    expect(quarry.encounters).toHaveLength(quarry.targetPopulation);
+    expect(quarry.encounterPockets?.filter(pocket => pocket.kind === "combat")).toHaveLength(3);
+    expect(quarry.encounterPockets?.find(pocket => pocket.kind === "leader")?.encounterIds).toEqual([
+      "quarry-quarrymaster-sentry", "quarry-quarrymaster-brute", quarry.leaderId,
+    ]);
+    expect(quarry.encounters?.every(encounter => encounter.respawnMs >= 40_000)).toBe(true);
+  });
 });

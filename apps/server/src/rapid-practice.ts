@@ -69,12 +69,7 @@ export const RAPID_PRACTICE_SPAWNS: readonly RapidPracticeSpawn[] = [
 
   ...configuredRegionSpawns("sunken-coast"),
 
-  { id: "quarry-stalker-a", archetype: "ridge_stalker", name: "Quarry Stalker", zone: "southern-quarry", level: 6, respawnMs: 58_000, x: 162.5, y: 8, z: 151.5 },
-  { id: "quarry-stalker-b", archetype: "ridge_stalker", name: "Quarry Stalker", zone: "southern-quarry", level: 7, respawnMs: 61_000, x: 192.5, y: 8, z: 149.5 },
-  { id: "quarry-sentry-a", archetype: "shard_sentry", name: "Iron Shard Sentry", zone: "southern-quarry", level: 7, respawnMs: 62_000, x: 168.5, y: 8, z: 177.5 },
-  { id: "quarry-brute-a", archetype: "stone_brute", name: "Pit Brute", zone: "southern-quarry", level: 8, respawnMs: 66_000, x: 194.5, y: 8, z: 178.5 },
-  { id: "quarry-sentry-b", archetype: "shard_sentry", name: "Iron Shard Sentry", zone: "southern-quarry", level: 9, respawnMs: 69_000, x: 181.5, y: 8, z: 167.5 },
-  { id: "quarry-quarrymaster", archetype: "stone_brute", name: "Redstone Quarrymaster", zone: "southern-quarry", level: 9, leader: true, respawnMs: 86_000, x: 198.5, y: 8, z: 166.5 },
+  ...configuredRegionSpawns("southern-quarry"),
 
   { id: "ashen-hound-a", archetype: "ember_hound", name: "Ember Hound", zone: "ashen-reach", level: 9, respawnMs: 68_000, x: 214.5, y: 8, z: 87.5 },
   { id: "ashen-hound-b", archetype: "ember_hound", name: "Ember Hound", zone: "ashen-reach", level: 10, respawnMs: 71_000, x: 231.5, y: 8, z: 128.5 },

@@ -7,7 +7,9 @@ import { facetedBoxMesh } from "./faceted-shapes.js";
 import { addCallingParticleLayers } from "./calling-particles.js";
 import { CALLING_ABILITY_SUSTAIN_PARTICLES, CALLING_ANTICIPATION_PARTICLES, CALLING_IMPACT_PARTICLES, CALLING_SUSTAIN_PARTICLES, callingParticleLifetime } from "./calling-vfx-presets.js";
 import { mageCastDuration, mageCastPose, type MageAbilityId } from "./mage-casting.js";
-import { FAST_WORLD_ENCOUNTER_NAVIGATION, FAST_WORLD_REGION_DEFINITIONS, greenwoodMasteryStatus, mistfenMasteryStatus,
+import { FAST_WORLD_ENCOUNTER_NAVIGATION, FAST_WORLD_REGION_DEFINITIONS, SOUTHERN_QUARRY_NAVIGATION_BARRICADES,
+  SOUTHERN_QUARRY_NAVIGATION_BOULDERS, SOUTHERN_QUARRY_NAVIGATION_RAMPS, SOUTHERN_QUARRY_NAVIGATION_TERRACES,
+  greenwoodMasteryStatus, mistfenMasteryStatus,
   type FastWorldVisualTheme } from "@blockcraft/protocol";
 import { rapidPracticeCollisionCellSolid } from "@blockcraft/protocol";
 import type { RegionalArmourProc } from "@blockcraft/protocol";
@@ -3519,13 +3521,31 @@ if (fastWorldRequested) {
   addRapidRegionShape("sunken-coast", "tidecaller-ring", "cylinder", coastWater,
     [5.8, .055, 5.8], [70.5, 8.11, 174.5]);
 
-  for (const [x, z, sx, sz, height] of [[158,142,9,5,.5],[188,141,12,4,.75],[155,181,8,5,.65],[184,184,13,4,1.05],
-    [199,154,5,9,.8],[171,165,7,6,.55]] as const)
-    addRapidRegionBox("southern-quarry", "quarry-terrace", quarryRock, [sx, height, sz], [x, 8 + height * .5, z]);
-  for (const [x, z, size] of [[161,153,1.3],[174,144,.9],[193,159,1.5],[199,181,1.2],[168,181,1],[188,174,1.35]] as const) {
+  for (const shelf of SOUTHERN_QUARRY_NAVIGATION_TERRACES)
+    addRapidRegionBox("southern-quarry", `quarry-terrace:${shelf.id}`, quarryRock,
+      [shelf.width, shelf.height, shelf.depth], [shelf.x, 8 + shelf.height * .5, shelf.z]);
+  for (const ramp of SOUTHERN_QUARRY_NAVIGATION_RAMPS) {
+    const path = addRapidRegionBox("southern-quarry", `quarry-ramp:${ramp.id}`, quarryGround,
+      [ramp.width, .1, ramp.length], [ramp.x, 8.09, ramp.z]);
+    path.setLocalEulerAngles(0, ramp.yaw, 0);
+  }
+  for (const [x, z, size] of SOUTHERN_QUARRY_NAVIGATION_BOULDERS) {
     const rock = addRapidRegionBox("southern-quarry", "quarry-boulder", quarryRock, [size, size * .8, size], [x, 8 + size * .4, z]);
     rock.setLocalEulerAngles(10, x * 11 % 46, 8);
     addRapidRegionShape("southern-quarry", "quarry-ore", "sphere", ironOre, [.3 * size, .22 * size, .18 * size], [x + .45 * size, 8 + size * .7, z]);
+  }
+  for (const support of SOUTHERN_QUARRY_NAVIGATION_BARRICADES) {
+    const beam = addRapidRegionBox("southern-quarry", `quarry-support:${support.id}`, timberLight,
+      [support.width, .34, support.depth], [support.x, 9.72, support.z]);
+    beam.setLocalEulerAngles(0, support.yaw, 0);
+    for (const side of [-1, 1]) {
+      const radians = support.yaw * Math.PI / 180;
+      const offset = side * support.width * .42;
+      const post = addRapidRegionBox("southern-quarry", `quarry-support-post:${support.id}`, timber,
+        [.34, 2.15, .34], [support.x + Math.cos(radians) * offset, 9.08,
+          support.z - Math.sin(radians) * offset]);
+      post.setLocalEulerAngles(0, support.yaw, side * 3);
+    }
   }
   addRapidRegionShape("southern-quarry", "quarrymaster-ring", "cylinder", ironOre, [5.6, .06, 5.6], [198.5, 8.12, 166.5]);
 

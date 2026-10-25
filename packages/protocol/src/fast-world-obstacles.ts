@@ -63,6 +63,16 @@ export const FAST_WORLD_SCENE_OBSTACLES: readonly FastWorldObstacle[] = [
   box("coast-rock-west", "encounter-cover", 44.35, 45.65, 180.35, 181.65, 8, 9.35),
   box("coast-rock-shoal", "encounter-cover", 66.25, 67.75, 161.25, 162.75, 8, 9.45),
   box("coast-rock-saltwatch", "encounter-cover", 88.3, 89.7, 166.3, 167.7, 8, 9.4),
+
+  // Quarry boulders and timber supports form the cover rhythm visible on the
+  // shelves. Their conservative boxes leave every authored ramp traversable.
+  box("quarry-boulder-scree", "encounter-cover", 160.35, 161.65, 152.35, 153.65, 8, 9.3),
+  box("quarry-boulder-foreman", "encounter-cover", 192.25, 193.75, 158.25, 159.75, 8, 9.5),
+  box("quarry-boulder-lift", "encounter-cover", 187.3, 188.7, 173.3, 174.7, 8, 9.4),
+  box("quarry-support-scree", "encounter-cover", 162.1, 165.9, 155.55, 156.45, 8, 10.2),
+  box("quarry-support-lift", "encounter-cover", 171.9, 176.1, 172.5, 173.5, 8, 10.2),
+  box("quarry-support-foreman", "encounter-cover", 188.1, 191.9, 153.45, 154.55, 8, 10.2),
+  box("quarry-support-pit", "encounter-cover", 191.8, 196.2, 167.45, 168.55, 8, 10.2),
 ] as const;
 
 export function createFastWorldObstacleQuery(

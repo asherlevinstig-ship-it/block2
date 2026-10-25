@@ -31,6 +31,15 @@ describe("Fast World obstacle queries", () => {
       FAST_WORLD_BLOCK_READER)?.kind).toBe("terrain");
   });
 
+  it("makes Quarry boulders and mining supports block shots and pursuit", () => {
+    expect(FAST_WORLD_COLLISION_QUERY.obstacleAt(161, 8.8, 153)?.id).toBe("quarry-boulder-scree");
+    expect(FAST_WORLD_COLLISION_QUERY.obstacleAt(194, 9, 168)?.id).toBe("quarry-support-pit");
+    expect(hasCombatLineOfSight({ x: 160, y: 8, z: 156 }, { x: 168, y: 8, z: 156 },
+      FAST_WORLD_BLOCK_READER)).toBe(false);
+    const moved = moveMobSafely({ x: 160, y: 8, z: 156 }, { x: 8, z: 0 }, FAST_WORLD_BLOCK_READER);
+    expect(moved.x).toBeLessThan(162.1);
+  });
+
   it("prevents mobs navigating through Fast World cover", () => {
     const start = { x: 116.5, y: 8, z: 89 };
     const moved = moveMobSafely(start, { x: 3, z: 0 }, FAST_WORLD_BLOCK_READER);

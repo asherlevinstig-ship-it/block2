@@ -17,6 +17,7 @@ describe("area mini-bosses", () => {
     expect(areaMiniBossDefinition("greenwood-elderthorn")?.name).toBe("Elderthorn Keeper");
     expect(areaMiniBossDefinition("mistfen-miremother")?.name).toBe("Miremother");
     expect(areaMiniBossDefinition("sunken-coast-tidecaller")?.rewardItemId).toBe("tidecaller_conch");
+    expect(areaMiniBossDefinition("quarry-quarrymaster")?.rewardItemId).toBe("quarrymaster_sigil");
     expect(areaMiniBossDefinition("south-quarrymaster")?.name).toBe("Redstone Quarrymaster");
     expect(isAreaMiniBoss("frontier-spitter")).toBe(true);
     expect(isAreaMiniBoss("greenwood-briar")).toBe(false);
@@ -68,6 +69,7 @@ describe("area mini-bosses", () => {
     expect(leaderForFollower("greenwood-elderthorn-rootguard")).toBe("greenwood-elderthorn");
     expect(leaderForFollower("mistfen-miremother-spitter")).toBe("mistfen-miremother");
     expect(leaderForFollower("coast-tidecaller-shoalguard")).toBe("sunken-coast-tidecaller");
+    expect(leaderForFollower("quarry-quarrymaster-sentry")).toBe("quarry-quarrymaster");
     expect(leaderForFollower("frontier-support-spitter")).toBe("frontier-brute-east");
     expect(leaderForFollower("mistfen-spitter")).toBe("mistfen-behemoth");
     expect(leaderForFollower("south-pit-spitter")).toBe("south-quarrymaster");
