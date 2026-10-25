@@ -124,6 +124,7 @@ import { advanceCameraOrbit, cameraOrbitOffset, dragCameraOrbit, initialCameraOr
 import { advanceCameraFollow, advanceCameraHeight, advanceCameraPosition } from "./camera-follow.js";
 import { populateTownAssetKit, readyTownFallbacks, SPEED_LAB_TOWN_ASSETS, type TownFallbackFamily } from "./town-asset-kit.js";
 import { createTownPortalLandmarks } from "./town-portal-landmarks.js";
+import { createFastWorldSky } from "./fast-world-sky.js";
 import { createPaintedGroundMaterial, fitGroundTexture, fitOrganicGroundPatch, createWoodlandTrailMesh, woodlandFernMesh } from "./fast-world-texture.js";
 import {
   GREENWOOD_ASSET_PLACEMENTS,
@@ -1586,6 +1587,7 @@ camera.addComponent("camera", {
   toneMapping: pc.TONEMAP_ACES, gammaCorrection: pc.GAMMA_SRGB,
 });
 app.root.addChild(camera);
+if (fastWorldRequested && FAST_WORLD_TOWN_ONLY) createFastWorldSky(app, camera);
 const CAMERA_ZOOM_STORAGE_KEY = "blockcraft-tablet-camera-zoom-v1";
 const storedCameraDistance = (() => {
   try { return Number(window.localStorage.getItem(CAMERA_ZOOM_STORAGE_KEY)) || undefined; } catch { return undefined; }
