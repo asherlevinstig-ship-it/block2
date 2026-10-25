@@ -155,7 +155,7 @@ import {
   SUNKEN_COAST_TIDE_POOLS,
   SUNKEN_COAST_WRECKAGE,
 } from "./sunken-coast-visuals.js";
-import { createCoastShallowMesh, createCoastWaterAnimator, createCoastWaterNormalMap,
+import { createCoastShallowMesh, createCoastTidalInletMesh, createCoastWaterAnimator, createCoastWaterNormalMap,
   createCoastWetShoreMesh } from "./sunken-coast-water.js";
 import { SPEED_LAB_TOWN_ACTORS, SPEED_LAB_TOWN_LIGHTS, SPEED_LAB_TOWN_SIGNS, townLifeActorPose, townLifeAnimation,
   type TownLifeActorDefinition } from "./town-life.js";
@@ -2471,9 +2471,10 @@ if (fastWorldRequested) {
   mistfenFog.update();
   const coastGround = createPaintedGroundMaterial(app, SUNKEN_COAST_TEXTURE_STYLES.sand, [12, 8]);
   const coastWater = createPaintedGroundMaterial(app, SUNKEN_COAST_TEXTURE_STYLES.shallows, [3, 2]);
-  coastWater.opacity = .74;
-  coastWater.blendType = pc.BLEND_NORMAL;
-  coastWater.depthWrite = false;
+  // Stylized opaque shallows avoid sorting and overdraw across the widened bay.
+  coastWater.opacity = 1;
+  coastWater.blendType = pc.BLEND_NONE;
+  coastWater.depthWrite = true;
   coastWater.gloss = .72;
   coastWater.specular = new pc.Color(.34, .52, .5);
   coastWater.emissive = new pc.Color(.015, .07, .075);
@@ -2485,7 +2486,7 @@ if (fastWorldRequested) {
   coastDeepWater.name = "sunken-coast-deep-water";
   coastDeepWater.diffuse = new pc.Color(.46, .67, .7);
   coastDeepWater.emissive = new pc.Color(.01, .045, .065);
-  coastDeepWater.opacity = .88;
+  coastDeepWater.opacity = 1;
   coastDeepWater.gloss = .84;
   coastDeepWater.update();
   animateCoastWater = createCoastWaterAnimator([coastWater, coastDeepWater]);
@@ -3535,6 +3536,10 @@ if (fastWorldRequested) {
 
   // The shared heightfield already supplies these dune crests. Flat cylinder
   // caps made them look like platforms and cut through the sloping ground.
+  const coastInlet = rapidRegionChunkRoot("sunken-coast", 92, 168);
+  coastInlet.addChild(createCoastTidalInletMesh(app.graphicsDevice, coastWetSand, "wet"));
+  coastInlet.addChild(createCoastTidalInletMesh(app.graphicsDevice, coastWater, "water"));
+  coastInlet.addChild(createCoastTidalInletMesh(app.graphicsDevice, coastFoam, "foam"));
   for (const sheet of SUNKEN_COAST_SHALLOW_SHEETS) {
     const parent = rapidRegionChunkRoot("sunken-coast", sheet.x, sheet.z);
     parent.addChild(createCoastShallowMesh(app.graphicsDevice, coastWater,
@@ -13272,7 +13277,8 @@ let animatedRigMobCount = 0;
 let settledRigMobCount = 0;
 const performancePeaks = {
   engineUpdateMs: 0, renderMs: 0, customUpdateMs: 0, terrainUpdateMs: 0,
-  sceneDressingMs: 0, mobPresentationMs: 0, worldUiMs: 0, gpuMs: 0, presentationWaitMs: 0,
+  sceneDressingMs: 0, coastWaterUpdateMs: 0, mobPresentationMs: 0, worldUiMs: 0,
+  gpuMs: 0, presentationWaitMs: 0,
 };
 const pendingPerformanceMarkers = new Set<string>();
 let lastPerformanceAnomalies: string[] = [];
@@ -16220,6 +16226,7 @@ function updatePerformanceMetrics(now: number): void {
     lastPerformanceLogAt = now;
     const sample: PerformanceLogSample = {
       at: Date.now(),
+      regionId: fastWorldRequested ? rapidWorldRegionId || "town" : "legacy-voxel",
       frameP50Ms: p50,
       frameP95Ms: p95,
       fps,
@@ -16244,6 +16251,7 @@ function updatePerformanceMetrics(now: number): void {
       customUpdateMs: observedPeaks.customUpdateMs,
       terrainUpdateMs: observedPeaks.terrainUpdateMs,
       sceneDressingMs: observedPeaks.sceneDressingMs,
+      coastWaterUpdateMs: observedPeaks.coastWaterUpdateMs,
       mobPresentationMs: observedPeaks.mobPresentationMs,
       worldUiMs: observedPeaks.worldUiMs,
       drawCalls: app.stats.drawCalls.total,
@@ -16359,6 +16367,7 @@ function updatePerformanceMetrics(now: number): void {
       : `CHECK Â· ${warnings.join(" Â· ")} over budget`;
 
   (window as Window & { __BLOCKCRAFT_PERF__?: Record<string, number | boolean | string | null> }).__BLOCKCRAFT_PERF__ = {
+    regionId: fastWorldRequested ? rapidWorldRegionId || "town" : "legacy-voxel",
     p50,
     p95,
     fps,
@@ -16391,6 +16400,7 @@ function updatePerformanceMetrics(now: number): void {
     customUpdateMs: observedPeaks.customUpdateMs,
     terrainUpdateMs: observedPeaks.terrainUpdateMs,
     sceneDressingMs: observedPeaks.sceneDressingMs,
+    coastWaterUpdateMs: observedPeaks.coastWaterUpdateMs,
     mobPresentationMs: observedPeaks.mobPresentationMs,
     worldUiMs: observedPeaks.worldUiMs,
     drawCalls: app.stats.drawCalls.total,
@@ -16537,8 +16547,11 @@ app.on("update", (dt: number) => {
   if (fastWorldRequested) {
     const townTime = customUpdateStartedAt * .001;
     const playerPosition = localPlayer.getPosition();
+    const coastWaterStartedAt = performance.now();
     animateCoastWater(dt, playerPosition.z > 140 && playerPosition.z < 200
       && playerPosition.x > 30 && playerPosition.x < 112);
+    if (playerPosition.z > 140 && playerPosition.z < 200 && playerPosition.x > 30 && playerPosition.x < 112)
+      capturePerformancePeak("coastWaterUpdateMs", performance.now() - coastWaterStartedAt);
     updateRapidRegionVisualStream(playerPosition.x, playerPosition.z);
     const region = rapidWorldRegionAt(playerPosition.x, playerPosition.z);
     if (region.id !== rapidWorldRegionId) {

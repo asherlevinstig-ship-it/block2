@@ -12,6 +12,7 @@ export function alignedDrawCallTotal(total: number, forward: number, depth: numb
 
 export type PerformanceLogSample = {
   at: number;
+  regionId?: string;
   frameP50Ms: number;
   frameP95Ms: number;
   fps: number;
@@ -36,6 +37,7 @@ export type PerformanceLogSample = {
   customUpdateMs: number;
   terrainUpdateMs: number;
   sceneDressingMs: number;
+  coastWaterUpdateMs?: number;
   mobPresentationMs: number;
   worldUiMs: number;
   drawCalls: number;

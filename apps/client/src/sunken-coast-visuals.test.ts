@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { fastWorldCoastInletCenter, fastWorldCoastInletWaterRadius } from "@blockcraft/protocol";
 import {
   SUNKEN_COAST_DRIFTWOOD,
   SUNKEN_COAST_DUNES,
@@ -42,5 +43,16 @@ describe("Sunken Coast visuals", () => {
     expect(SUNKEN_COAST_GRASS.length).toBeGreaterThanOrEqual(20);
     expect(SUNKEN_COAST_HERO_WRECK.length).toBeGreaterThan(8);
     expect(SUNKEN_COAST_HERO_WRECK.mastHeight).toBeGreaterThan(6);
+  });
+
+  it("shows the bay from the approach while keeping the south road dry", () => {
+    for (const sheet of SUNKEN_COAST_SHALLOW_SHEETS.slice(0, 3)) {
+      expect(sheet.z - sheet.depth / 2).toBeLessThan(180);
+      expect(sheet.z + sheet.depth * .54).toBeLessThan(188);
+    }
+    for (let z = 154; z <= 184; z++) {
+      const radius = fastWorldCoastInletWaterRadius(z);
+      expect(fastWorldCoastInletCenter(z) + radius).toBeLessThan(97.9);
+    }
   });
 });

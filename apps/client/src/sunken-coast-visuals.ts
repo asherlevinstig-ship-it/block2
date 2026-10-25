@@ -41,9 +41,9 @@ export const SUNKEN_COAST_GRASS = [
  * collection of isolated ponds. They are shallow, traversable colour layers;
  * authoritative deep-water exclusions remain in the navigation definition. */
 export const SUNKEN_COAST_SHALLOW_SHEETS = [
-  { x: 48, z: 185.2, width: 15, depth: 4.8, yaw: -6 },
-  { x: 66, z: 186.2, width: 20, depth: 5.2, yaw: 4 },
-  { x: 87, z: 185.3, width: 20, depth: 5.5, yaw: -5 },
+  { x: 48, z: 182.5, width: 15, depth: 9, yaw: -6 },
+  { x: 66, z: 182.3, width: 20, depth: 10, yaw: 4 },
+  { x: 87, z: 181.8, width: 20, depth: 10, yaw: -5 },
   { x: 102, z: 178.5, width: 5.2, depth: 16, yaw: 3 },
 ] as const;
 

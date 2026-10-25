@@ -1,5 +1,46 @@
 import * as pc from "playcanvas";
-import { fastWorldGroundHeight } from "@blockcraft/protocol";
+import { fastWorldCoastInletCenter, fastWorldCoastInletWaterRadius,
+  fastWorldGroundHeight } from "@blockcraft/protocol";
+
+/** Three narrow strips form the visible tidal approach with only three draw
+ * calls. The channel is shallow and uses the same height as server movement. */
+export function createCoastTidalInletMesh(device: pc.GraphicsDevice, material: pc.StandardMaterial,
+  layer: "water" | "wet" | "foam"): pc.Entity {
+  const positions: number[] = [], uvs: number[] = [], indices: number[] = [];
+  const banks = layer === "water" ? 1 : 2;
+  const segments = 30;
+  for (let bank = 0; bank < banks; bank++) {
+    const start = positions.length / 3;
+    for (let i = 0; i <= segments; i++) {
+      const z = 154 + i;
+      const center = fastWorldCoastInletCenter(z);
+      const radius = fastWorldCoastInletWaterRadius(z);
+      const offsets = layer === "water" ? [-radius, radius]
+        : layer === "wet" ? bank === 0 ? [-radius - 1.15, -radius + .08] : [radius - .08, radius + 1.15]
+          : bank === 0 ? [-radius - .2, -radius + .12] : [radius - .12, radius + .2];
+      for (const offset of offsets) {
+        const x = center + offset;
+        positions.push(x, fastWorldGroundHeight(x, z) + (layer === "foam" ? .075 : layer === "water" ? .062 : .042), z);
+        uvs.push(x / 5, z / 5);
+      }
+      if (i < segments) {
+        const n = start + i * 2;
+        indices.push(n, n + 2, n + 1, n + 1, n + 2, n + 3);
+      }
+    }
+  }
+  const mesh = new pc.Mesh(device);
+  const normals = pc.calculateNormals(positions, indices);
+  mesh.setPositions(positions);
+  mesh.setNormals(normals);
+  mesh.setUvs(0, uvs);
+  mesh.setVertexStream(pc.SEMANTIC_TANGENT, pc.calculateTangents(positions, normals, uvs, indices), 4);
+  mesh.setIndices(indices);
+  mesh.update();
+  const entity = new pc.Entity(`coast-tidal-inlet-${layer}`);
+  entity.addComponent("render", { meshInstances: [new pc.MeshInstance(mesh, material, entity)], castShadows: false });
+  return entity;
+}
 
 /** Irregular oval water and its narrow foam edge replace visible rectangular
  * primitive sheets. The shallow surface rides the shared terrain height. */
@@ -108,7 +149,7 @@ export function createCoastWaterAnimator(materials: readonly pc.StandardMaterial
   return (dt, active) => {
     if (!active) return;
     elapsed += dt;
-    if (elapsed < 1 / 24) return;
+    if (elapsed < 1 / 12) return;
     offset += elapsed * .012;
     elapsed = 0;
     for (let index = 0; index < materials.length; index++) {

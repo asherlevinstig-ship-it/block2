@@ -11,4 +11,10 @@ describe("fast world elevation", () => {
   it("keeps unrelated open ground at the shared baseline", () => {
     expect(fastWorldGroundHeight(145, 130)).toBe(8);
   });
+
+  it("forms a shallow inlet beside the dry south road without a hard entrance step", () => {
+    expect(fastWorldGroundHeight(88, 162)).toBeLessThan(fastWorldGroundHeight(100, 162) - .15);
+    expect(fastWorldGroundHeight(94, 153)).toBeCloseTo(8, 4);
+    expect(fastWorldGroundHeight(100, 170)).toBeCloseTo(8, 4);
+  });
 });
