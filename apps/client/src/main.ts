@@ -1831,11 +1831,12 @@ function readWorldBlock(x: number, y: number, z: number): BlockId {
 
 const readCollisionWorldBlock = Object.assign(function (x: number, y: number, z: number): BlockId {
   if (y < 0) return Block.Bedrock;
+  // Fast World uses the same boundary as the server, even when old practice chunks are loaded.
+  if (fastWorldRequested) return rapidPracticeCollisionCellSolid(x, y, z) ? Block.Stone : Block.Air;
   if (y >= CHUNK_HEIGHT) return Block.Air;
   const address = worldToChunk(x, z);
   const chunk = chunks.get(chunkKey(address.chunkX, address.chunkZ));
-  if (!chunk) return fastWorldRequested && rapidPracticeCollisionCellSolid(x, y, z)
-    ? Block.Stone : fastWorldRequested ? Block.Air : Block.Bedrock;
+  if (!chunk) return Block.Bedrock;
   return (chunk.blocks[chunkIndex(address.localX, y, address.localZ)] ?? Block.Air) as BlockId;
 }, { groundHeight: (x: number,z: number) => fastWorldRequested ? fastWorldGroundHeight(x,z) : undefined });
 
@@ -3791,10 +3792,10 @@ if (fastWorldRequested) {
 
   // The server and client still block travel at this edge; these panes only show where it is.
   const fieldSides = [
-    { name: "north", length: 70, center: [74, 65.5] as const, alongX: true },
-    { name: "south", length: 70, center: [74, 146.5] as const, alongX: true },
-    { name: "west", length: 82, center: [39.5, 106] as const, alongX: false },
-    { name: "east", length: 82, center: [108.5, 106] as const, alongX: false },
+    { name: "north", length: 68.8, center: [74, 66.1] as const, alongX: true },
+    { name: "south", length: 68.8, center: [74, 146.9] as const, alongX: true },
+    { name: "west", length: 80.8, center: [40.1, 106] as const, alongX: false },
+    { name: "east", length: 80.8, center: [108.9, 106] as const, alongX: false },
   ];
   for (const side of fieldSides) {
     const [x, z] = side.center;

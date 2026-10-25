@@ -2,7 +2,7 @@ import { Client, Room } from "@colyseus/core";
 import { GREENWOOD_MASTERY_CAP, MISTFEN_MASTERY_CAP, greenwoodMasteryRank, mistfenMasteryRank } from "@blockcraft/protocol";
 import { callingStarterAbility } from "@blockcraft/protocol";
 import { experienceToNextLevel } from "@blockcraft/protocol";
-import { FAST_WORLD_TOWN_ONLY, PRACTICE_ROOM } from "@blockcraft/protocol";
+import { FAST_WORLD_TOWN_BOUNDS, FAST_WORLD_TOWN_ONLY, PRACTICE_ROOM } from "@blockcraft/protocol";
 import type { SchemaType } from "@colyseus/schema";
 import { ShadowMoveInput, stepShadowMovement, type ShadowPose } from "./movement-shadow.js";
 import { FIRST_COMBAT_MOB_ID, firstCombatExperience, firstCombatHealthAfterHit, firstCombatReward, isFirstCombatSupport } from "./first-combat-training.js";
@@ -2391,7 +2391,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
 
   private buildPracticeArena(): void {
     // This room has its own generated chunks; no block edits reach the shared world.
-    const bounds = this.rapidPractice ? RAPID_PRACTICE_ARENA : { minX: 94, maxX: 112, minZ: 98, maxZ: 114, floorY: 7 };
+    const bounds = this.rapidPractice
+      ? FAST_WORLD_TOWN_ONLY ? { ...FAST_WORLD_TOWN_BOUNDS, floorY: RAPID_PRACTICE_ARENA.floorY } : RAPID_PRACTICE_ARENA
+      : { minX: 94, maxX: 112, minZ: 98, maxZ: 114, floorY: 7 };
     for (let x = bounds.minX; x <= bounds.maxX; x++) for (let z = bounds.minZ; z <= bounds.maxZ; z++) {
       const address = worldToChunk(x, z);
       const stored = this.getChunk(address.chunkX, address.chunkZ);

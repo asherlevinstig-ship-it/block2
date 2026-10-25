@@ -17,6 +17,7 @@ export type FastWorldCollisionArena = {
   minZ: number;
   maxZ: number;
   floorY: number;
+  sealedBounds?: boolean;
 };
 
 export interface FastWorldObstacleQuery {
@@ -91,11 +92,12 @@ export function createFastWorldObstacleQuery(
 ): FastWorldObstacleQuery {
   const buildings = townFootprints.map(footprint => box(footprint.id, "building",
     footprint.minX, footprint.maxX, footprint.minZ, footprint.maxZ));
+  const cliffTop = arena.sealedBounds ? Number.POSITIVE_INFINITY : 12;
   const cliffs: FastWorldObstacle[] = [
-    box("world-cliff-west", "cliff", arena.minX, arena.minX + .99, arena.minZ, arena.maxZ, 8, 12),
-    box("world-cliff-east", "cliff", arena.maxX, arena.maxX + .99, arena.minZ, arena.maxZ, 8, 12),
-    box("world-cliff-north", "cliff", arena.minX, arena.maxX, arena.minZ, arena.minZ + .99, 8, 12),
-    box("world-cliff-south", "cliff", arena.minX, arena.maxX, arena.maxZ, arena.maxZ + .99, 8, 12),
+    box("world-cliff-west", "cliff", arena.minX, arena.minX + .99, arena.minZ, arena.maxZ, 8, cliffTop),
+    box("world-cliff-east", "cliff", arena.maxX, arena.maxX + .99, arena.minZ, arena.maxZ, 8, cliffTop),
+    box("world-cliff-north", "cliff", arena.minX, arena.maxX, arena.minZ, arena.minZ + .99, 8, cliffTop),
+    box("world-cliff-south", "cliff", arena.minX, arena.maxX, arena.maxZ, arena.maxZ + .99, 8, cliffTop),
   ];
   const obstacles = [...buildings, ...cliffs, ...sceneObstacles] as const;
   const obstacleAt = (x: number, y: number, z: number): FastWorldObstacle | null => obstacles.find(obstacle =>
@@ -109,7 +111,7 @@ export function createFastWorldObstacleQuery(
       const cellX = Math.floor(x), cellY = Math.floor(y), cellZ = Math.floor(z);
       const inside = cellX >= arena.minX && cellX <= arena.maxX
         && cellZ >= arena.minZ && cellZ <= arena.maxZ;
-      if (!inside) return cellY >= arena.floorY && cellY <= 11;
+      if (!inside) return cellY >= arena.floorY && (arena.sealedBounds || cellY <= 11);
       if (cellY === arena.floorY) return true;
       // The temporary block-reader adapter asks about whole cells. Test box
       // overlap rather than only the cell centre, otherwise a narrow trunk can

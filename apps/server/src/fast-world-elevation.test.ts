@@ -36,6 +36,23 @@ describe("Town of Beginnings shared collision", () => {
     expect(dash.x).toBeLessThan(FAST_WORLD_TOWN_BOUNDS.maxX);
   });
 
+  it("stops walking and dodging at every side of the visible force field", () => {
+    const approaches = [
+      { start: { x: 43, z: 118 }, delta: { x: -8, z: 0 }, staysInside: (x: number, _z: number) => x > 40.1 },
+      { start: { x: 105, z: 106 }, delta: { x: 8, z: 0 }, staysInside: (x: number, _z: number) => x < 108.9 },
+      { start: { x: 74, z: 69 }, delta: { x: 0, z: -8 }, staysInside: (_x: number, z: number) => z > 66.1 },
+      { start: { x: 60, z: 143 }, delta: { x: 0, z: 8 }, staysInside: (_x: number, z: number) => z < 146.9 },
+    ];
+    for (const approach of approaches) for (const y of [8, 13]) {
+      const start = { ...approach.start, y };
+      const walk = resolvePlayerMotion(start, { ...approach.delta, y: 0 }, reader);
+      const dodge = resolveSweptHorizontalMotion(start, approach.delta, reader);
+      expect(approach.staysInside(walk.x, walk.z), `walk ${JSON.stringify(start)} -> ${JSON.stringify(walk)}`).toBe(true);
+      expect(approach.staysInside(dodge.x, dodge.z), `dodge ${JSON.stringify(start)} -> ${JSON.stringify(dodge)}`).toBe(true);
+    }
+    expect(rapidPracticeCollisionCellSolid(130, 20, 106)).toBe(true);
+  });
+
   it("keeps airborne actors airborne and grounds mobs and loot", () => {
     const airborne = resolvePlayerMotion({ x: 65, y: 12, z: 100 }, { x: .1, y: -.1, z: 0 }, reader);
     expect(airborne.y).toBeCloseTo(11.9);
