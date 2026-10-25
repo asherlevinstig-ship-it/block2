@@ -123,6 +123,7 @@ import { confirmPredictedDodges, removeRejectedDodge, replayPendingMovement, typ
 import { advanceCameraOrbit, cameraOrbitOffset, dragCameraOrbit, initialCameraOrbit, pinchCameraOrbit } from "./camera-orbit.js";
 import { advanceCameraFollow, advanceCameraHeight, advanceCameraPosition } from "./camera-follow.js";
 import { populateTownAssetKit, readyTownFallbacks, SPEED_LAB_TOWN_ASSETS, type TownFallbackFamily } from "./town-asset-kit.js";
+import { createTownPortalLandmarks } from "./town-portal-landmarks.js";
 import { createPaintedGroundMaterial, fitGroundTexture, fitOrganicGroundPatch, createWoodlandTrailMesh, woodlandFernMesh } from "./fast-world-texture.js";
 import {
   GREENWOOD_ASSET_PLACEMENTS,
@@ -3814,6 +3815,7 @@ if (fastWorldRequested) {
       if (seam.render) seam.render.castShadows = false;
     }
   }
+  if (FAST_WORLD_TOWN_ONLY) createTownPortalLandmarks(app, rapidPrototypeRoot);
 
   const badge = document.createElement("aside");
   badge.id = "fast-world-badge";
