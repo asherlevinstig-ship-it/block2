@@ -299,6 +299,8 @@ import { FOREST_CACHE_DUPLICATE_GOLD, forestCacheFeaturedReward, forestCacheRewa
 import { greenwoodFirstClearWeapon } from "./greenwood-first-clear.js";
 import { chooseCharacterStat, grantCharacterExperience, mobExperience, progressionAttackBonus, progressionMiningBonus, progressionSnapshot, progressionSpeedMultiplier } from "./character-progression.js";
 import { enemyLevelForTier } from "@blockcraft/protocol";
+import { elderthornGuardGoal, greenwoodRegroupGoal, greenwoodRegroupState, isGreenwoodCombatant,
+  type GreenwoodRegroupState } from "./greenwood-group-tactics.js";
 
 interface MutableChunk {
   chunk: GeneratedChunk;
@@ -590,6 +592,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly roamingPackDisruptedUntil = new Map<string, number>();
   private readonly roamingPackRewardCycles = new Map<string, RegionalPackRewardCycle>();
   private readonly spitterPositioning = new Map<string, SpitterPositioning>();
+  private readonly greenwoodRegroup = new Map<string, GreenwoodRegroupState>();
   private readonly profileTokens = new Map<string, string>();
   private readonly lastChatAt = new Map<string, number>();
   private readonly lastNameAt = new Map<string, number>();
@@ -8533,6 +8536,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.pendingMobMelee.delete(entry.id); this.mobAwareness.delete(entry.id); this.combatContributions.clear(entry.id);
       this.mobPatrols.delete(entry.id); this.mobProgress.delete(entry.id); this.mobUnreachableUntil.delete(entry.id); this.mobReturning.delete(entry.id);
       this.mobVerticalVelocities.delete(entry.id); this.lastMobAttackAt.delete(entry.id); this.mobCommittedAim.delete(entry.id);
+      this.greenwoodRegroup.delete(entry.id);
       this.crawlerPositioning.delete(entry.id); this.crawlerRushes.delete(entry.id); this.spitterPositioning.delete(entry.id);
       this.mobStaggerImmuneUntil.delete(entry.id); this.mobAssistAt.delete(entry.id);
       for (const [id, shot] of this.pendingMobProjectiles) if (shot.mobId === entry.id) {
@@ -9167,6 +9171,26 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           patrolCharge ? 1_400 : (isCoordinatedCrawlerLeader(mobId)
             || isCoordinatedCrawlerLeader(leaderForFollower(mobId) ?? "")) ? 1_150 : undefined);
       } else this.crawlerPositioning.delete(mobId);
+      let woundedGoal: { x: number; y: number; z: number } | null = null;
+      if (isGreenwoodCombatant(mobId)) {
+        const regroup = greenwoodRegroupState(mob.health, mob.maxHealth, now, this.greenwoodRegroup.get(mobId));
+        if (regroup) this.greenwoodRegroup.set(mobId, regroup); else this.greenwoodRegroup.delete(mobId);
+        if (regroup && now < regroup.until) {
+          const ally = [...this.state.mobs.entries()]
+            .filter(([id, peer]) => id !== mobId && isGreenwoodCombatant(id) && peer.alive
+              && peer.health > mob.health && Math.abs(peer.y - mob.y) <= 1.75
+              && Math.hypot(peer.x - mob.x, peer.z - mob.z) <= 8)
+            .sort((a, b) => Math.hypot(a[1].x - mob.x, a[1].z - mob.z)
+              - Math.hypot(b[1].x - mob.x, b[1].z - mob.z))[0]?.[1];
+          if (ally) woundedGoal = greenwoodRegroupGoal(mob, target, ally);
+        }
+      }
+      let guardGoal: { x: number; y: number; z: number } | null = null;
+      const elderthornFollowers = AREA_LEADER_FOLLOWERS["greenwood-elderthorn"] ?? [];
+      const escortIndex = elderthornFollowers.indexOf(mobId);
+      const elderthorn = escortIndex >= 0 ? this.state.mobs.get("greenwood-elderthorn") : undefined;
+      if (elderthorn?.alive && elderthorn.combatState === "recover" && elderthorn.stateUntil > now && target.visible)
+        guardGoal = elderthornGuardGoal(elderthorn, target, escortIndex);
       const ashenRam = this.state.mobs.get("ashen-cinder-ram");
       const ashenGoal = target.visible && isAshenMob(mobId)
         ? ashenWarpackGoal(mobId, this.ashenWarpackActiveTactic, target,
@@ -9177,6 +9201,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const regionalGoal = target.visible && roaming && !packDisrupted && packLeader?.alive
         ? regionalPackGoal(roaming.pack.id, mob.archetype as MobArchetypeId, roaming.index, target, packLeader) : null;
       const regionalPursuit = regionalGoal ? pursueTarget(mob, regionalGoal, deltaTime, movementSpeed, .22) : null;
+      const greenwoodGoal = woundedGoal ?? guardGoal;
+      const greenwoodPursuit = greenwoodGoal ? pursueTarget(mob, greenwoodGoal, deltaTime,
+        movementSpeed * (woundedGoal ? 1.12 : 1.06), woundedGoal ? .18 : .28) : null;
       const attackers = () => [...this.state.mobs.entries()].map(([id, peer]) => ({
         id, alive: peer.alive, health: peer.health, archetype: peer.archetype, combatState: peer.combatState, targetId: peer.targetId,
       }));
@@ -9184,9 +9211,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const waitingGoal = waiting ? meleeWaitingGoal(mobId, target, [...this.mobAwareness.entries()]
         .filter(([id, awareness]) => awareness.targetId === target.id && this.state.mobs.get(id)?.alive
           && !isSpitterLike(this.state.mobs.get(id)?.archetype ?? "")).map(([id]) => id), definition.stopDistance + 1.1) : null;
-      const pursuit = ashenPursuit ?? regionalPursuit ?? (waitingGoal ? pursueTarget(mob, waitingGoal, deltaTime, movementSpeed, .2)
+      const pursuit = greenwoodPursuit ?? ashenPursuit ?? regionalPursuit ?? (waitingGoal ? pursueTarget(mob, waitingGoal, deltaTime, movementSpeed, .2)
         : circling ?? rangedPursuit ?? pursueTarget(mob, target, deltaTime, movementSpeed, target.visible ? definition.stopDistance : .3));
-      const goal = ashenGoal ?? regionalGoal ?? waitingGoal ?? circling?.goal ?? rangedPursuit?.goal ?? target;
+      const goal = greenwoodGoal ?? ashenGoal ?? regionalGoal ?? waitingGoal ?? circling?.goal ?? rangedPursuit?.goal ?? target;
       const stuck = this.moveNavigatingMob(mobId, mob, pursuit, goal, now, pose => this.mobPositionAllowed(pose)
         && this.roamingAllowed(mobId, pose) && caveEncounterAllows(mobId, pose)
         && (!rangedPursuit?.retreating || Math.hypot(pose.x - home.x, pose.z - home.z) <= 6), !waiting);
@@ -9223,7 +9250,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const inAttackRange = definition.attackKind === "projectile"
         ? (rangedPursuit?.cornered || actualDistance >= definition.minimumAttackRange - 0.05) && actualDistance <= definition.stopDistance + 0.05
         : actualDistance <= definition.stopDistance + 0.05;
-      if (waiting || (definition.attackKind === "melee" && meleeSlotsFull(target.id, attackers()))
+      if (woundedGoal || waiting || (definition.attackKind === "melee" && meleeSlotsFull(target.id, attackers()))
         || !this.silverGuardVolley.canStart(mobId, now, now + windupMs)
         || !this.attackCoordination.canStart(mobId, target.id, mob, now, now + windupMs, (id, startedAt) => {
           const peer = this.state.mobs.get(id);
