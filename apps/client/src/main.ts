@@ -2443,7 +2443,22 @@ if (fastWorldRequested) {
   const trunk = coloredMaterial(new pc.Color(.24, .13, .07));
   const leaf = coloredMaterial(new pc.Color(.08, .25, .13));
   const leafLight = coloredMaterial(new pc.Color(.13, .38, .18));
-  const boundary = coloredMaterial(new pc.Color(.08, .13, .12));
+  const forceField = new pc.StandardMaterial();
+  forceField.diffuse = new pc.Color(.16, .57, .68);
+  forceField.emissive = new pc.Color(.055, .27, .34);
+  forceField.useLighting = false;
+  forceField.opacity = .12;
+  forceField.blendType = pc.BLEND_NORMAL;
+  forceField.depthWrite = false;
+  forceField.cull = pc.CULLFACE_NONE;
+  forceField.update();
+  const forceFieldEdge = new pc.StandardMaterial();
+  forceFieldEdge.emissive = new pc.Color(.2, .76, .87);
+  forceFieldEdge.useLighting = false;
+  forceFieldEdge.opacity = .4;
+  forceFieldEdge.blendType = pc.BLEND_ADDITIVE;
+  forceFieldEdge.depthWrite = false;
+  forceFieldEdge.update();
   const greenwoodGround = createPaintedGroundMaterial(app, GREENWOOD_TEXTURE_STYLES.forestFloor, [12, 14]);
   const greenwoodMoss = createPaintedGroundMaterial(app, GREENWOOD_TEXTURE_STYLES.moss, [3.5, 3.5]);
   const greenwoodLeafLitter = createPaintedGroundMaterial(app, GREENWOOD_TEXTURE_STYLES.leafLitter, [4, 4]);
@@ -3774,10 +3789,30 @@ if (fastWorldRequested) {
     });
   };
 
-  addRapidWorldBox("town-north-wall", boundary, [70, 1.6, .8], [74, 8.8, 65.5]);
-  addRapidWorldBox("town-south-wall", boundary, [70, 1.6, .8], [74, 8.8, 146.5]);
-  addRapidWorldBox("town-west-wall", boundary, [.8, 1.6, 82], [39.5, 8.8, 106]);
-  addRapidWorldBox("town-east-wall", boundary, [.8, 1.6, 82], [108.5, 8.8, 106]);
+  // The server and client still block travel at this edge; these panes only show where it is.
+  const fieldSides = [
+    { name: "north", length: 70, center: [74, 65.5] as const, alongX: true },
+    { name: "south", length: 70, center: [74, 146.5] as const, alongX: true },
+    { name: "west", length: 82, center: [39.5, 106] as const, alongX: false },
+    { name: "east", length: 82, center: [108.5, 106] as const, alongX: false },
+  ];
+  for (const side of fieldSides) {
+    const [x, z] = side.center;
+    const pane = addRapidWorldBox(`town-force-field-${side.name}`, forceField,
+      side.alongX ? [side.length, 8, .08] : [.08, 8, side.length], [x, 12.05, z]);
+    if (pane.render) pane.render.castShadows = false;
+    for (const y of [8.16, 15.94]) {
+      const rail = addRapidWorldBox(`town-force-field-${side.name}-edge`, forceFieldEdge,
+        side.alongX ? [side.length, .045, .08] : [.08, .045, side.length], [x, y, z]);
+      if (rail.render) rail.render.castShadows = false;
+    }
+    for (let offset = -side.length / 2; offset <= side.length / 2; offset += 10) {
+      const seam = addRapidWorldBox(`town-force-field-${side.name}-seam`, forceFieldEdge,
+        side.alongX ? [.035, 7.7, .09] : [.09, 7.7, .035],
+        side.alongX ? [x + offset, 12.05, z] : [x, 12.05, z + offset]);
+      if (seam.render) seam.render.castShadows = false;
+    }
+  }
 
   const badge = document.createElement("aside");
   badge.id = "fast-world-badge";
