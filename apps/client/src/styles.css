@@ -29,6 +29,7 @@ body:has(#inventory-panel:not([hidden])) .forest-portal-label { display: none; }
 #loot-world-label[data-holding="true"] { animation: none; filter: brightness(1.22); }
 #loot-world-label[data-holding="true"] #loot-world-hold { box-shadow: 0 0 11px var(--rarity); }
 #loot-world-label[data-near="false"] { opacity: .7; cursor: default; box-shadow: 0 4px 12px #0007; }
+#loot-world-label[data-approach="true"] { opacity: 1; filter: brightness(1.45); box-shadow: 0 0 22px var(--rarity), 0 4px 12px #0007; }
 #loot-world-label[data-rarity="common"] { --rarity: #c3cbc5; }
 #loot-world-label[data-rarity="uncommon"] { --rarity: #68dc72; }
 #loot-world-label[data-rarity="rare"] { --rarity: #63a5ff; }

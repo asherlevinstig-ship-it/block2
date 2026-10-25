@@ -15389,6 +15389,13 @@ function requestPrimaryAction(): void {
 
 function requestContextAction(source: LootHold["source"]): void {
   if (nearestLootDrop()) { beginLootHold(source); return; }
+  const visibleLoot = !lootWorldLabel.hidden && nearestVisibleLootDrop(8);
+  if (visibleLoot) {
+    status.textContent = `Move closer to the loot (${visibleLoot.distance.toFixed(1)} m away), then hold E to collect it.`;
+    lootWorldLabel.dataset.approach = "true";
+    window.setTimeout(() => { delete lootWorldLabel.dataset.approach; }, 900);
+    return;
+  }
   if (nearbyTradePlayerId) { openNearbyPlayerInteraction(); return; }
   requestPrimaryAction();
 }

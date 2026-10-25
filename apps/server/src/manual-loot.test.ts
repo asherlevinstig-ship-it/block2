@@ -51,6 +51,14 @@ describe("manual floor loot", () => {
     }));
   });
 
+  it("accepts loot beside the player at the visible pickup distance", () => {
+    const { room, player, client } = roomWithMaterialDrop();
+    room.state.lootDrops.get("iron-drop")!.x = player.x + 4.2;
+    (room as any).handleLootCollect(client, { dropId: "iron-drop", action: "keep" });
+    expect(room.state.lootDrops.has("iron-drop")).toBe(false);
+    expect(player.inventory.get("iron_ore")?.quantity).toBe(2);
+  });
+
   it("keeps the drop on the floor and reports when capacity is full", () => {
     const { room, player, client } = roomWithMaterialDrop();
     const carried = new InventoryItemState();
