@@ -1,4 +1,7 @@
 export { fastWorldGroundHeight } from "./fast-world-elevation.js";
+import { fastWorldGroundHeight } from "./fast-world-elevation.js";
+import { createFastWorldObstacleQuery } from "./fast-world-obstacles.js";
+export * from "./fast-world-obstacles.js";
 import { z } from "zod";
 export * from "./fast-world-regions.js";
 export { BRUTE_VOLLEY, bruteVolleyReady, bruteRockEndpoints, bruteRockLanes } from "./brute-volley.js";
@@ -8,7 +11,7 @@ export { DODGE_STAMINA_COST, DODGE_CHAIN_COST_STEP, DODGE_MAX_STAMINA_COST, DODG
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-warden-gate-v159";
+export const WORLD_ROOM = "world-warden-gate-v160";
 export const SILVER_DEPTHS_ROOM = "silver-depths-instance-v3";
 export const PRACTICE_ROOM = "calling-practice-v1";
 export type RoomTransfer = { room: typeof WORLD_ROOM | typeof SILVER_DEPTHS_ROOM | typeof PRACTICE_ROOM; instanceKey?: string; partySize?: number; returnFrom?: "silver-depths" | "practice"; retry?: boolean; partyTicket?: string; worldRoomId?: string };
@@ -161,20 +164,16 @@ export const RAPID_PRACTICE_TOWN_COLLIDERS = [
   { id: "south-gatehouse", minX: 101, maxX: 103, minZ: 110, maxZ: 113 },
 ] as const;
 
-/** Analytic fallback used while a fast-world chunk is in flight. It mirrors
- * buildPracticeArena so a missing visual chunk never turns into an invisible
- * wall (or removes a real town building collision). */
+/** Shared obstacle query for Fast World prediction and authority. */
+export const FAST_WORLD_COLLISION_QUERY = createFastWorldObstacleQuery(
+  RAPID_PRACTICE_ARENA,
+  RAPID_PRACTICE_TOWN_COLLIDERS,
+  fastWorldGroundHeight,
+);
+
+/** Compatibility entry point for movement code crossing a rolling deploy. */
 export function rapidPracticeCollisionCellSolid(x: number, y: number, z: number): boolean {
-  const cellX = Math.floor(x), cellY = Math.floor(y), cellZ = Math.floor(z);
-  const inside = cellX >= RAPID_PRACTICE_ARENA.minX && cellX <= RAPID_PRACTICE_ARENA.maxX
-    && cellZ >= RAPID_PRACTICE_ARENA.minZ && cellZ <= RAPID_PRACTICE_ARENA.maxZ;
-  if (!inside) return cellY >= RAPID_PRACTICE_ARENA.floorY && cellY <= 10;
-  if (cellY === RAPID_PRACTICE_ARENA.floorY) return true;
-  if (cellY < 8 || cellY > 10) return false;
-  if (cellX === RAPID_PRACTICE_ARENA.minX || cellX === RAPID_PRACTICE_ARENA.maxX
-    || cellZ === RAPID_PRACTICE_ARENA.minZ || cellZ === RAPID_PRACTICE_ARENA.maxZ) return true;
-  return RAPID_PRACTICE_TOWN_COLLIDERS.some(collider => cellX >= collider.minX && cellX <= collider.maxX
-    && cellZ >= collider.minZ && cellZ <= collider.maxZ);
+  return FAST_WORLD_COLLISION_QUERY.cellSolid(x, y, z);
 }
 
 export type ServerPerformanceUpdate = {

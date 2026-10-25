@@ -1,4 +1,3 @@
-import { fastWorldGroundHeight } from "@blockcraft/protocol";
 import { Client, Room } from "@colyseus/core";
 import { GREENWOOD_MASTERY_CAP, MISTFEN_MASTERY_CAP, greenwoodMasteryRank, mistfenMasteryRank } from "@blockcraft/protocol";
 import { callingStarterAbility } from "@blockcraft/protocol";
@@ -57,6 +56,7 @@ import { ROAMING_PACKS, roamingMemberArchetype, roamingMemberId, roamingMembersh
 import { REGIONAL_PACK_DISRUPTION_MS, regionalPackCooldownMultiplier, regionalPackCue, regionalPackGoal,
   regionalPackSpeedMultiplier } from "./regional-pack-tactics.js";
 import { FAST_WORLD_SIMULATION_RANGE, fastWorldMobSimulationActive, mobSimulationActive } from "./mob-activation.js";
+import { FAST_WORLD_BLOCK_READER } from "./world-collision.js";
 import { SERVER_TICK_BUDGET_MS, appendTickSample, samplePercentile } from "./performance-metrics.js";
 import { EMPTY_RAPID_PRACTICE_UPGRADES, RAPID_PRACTICE_ARENA, RAPID_PRACTICE_BOSS_ID,
   RAPID_PRACTICE_FREE_ROAM, RAPID_PRACTICE_SPAWNS, RAPID_PRACTICE_TOWN_COLLIDERS, RAPID_PRACTICE_UPGRADE_LABELS, RAPID_PRACTICE_WAVES,
@@ -8487,11 +8487,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   }
 
   private readWorldBlock = Object.assign((x: number, y: number, z: number) => {
+    if (this.rapidPractice) return FAST_WORLD_BLOCK_READER(x, y, z);
     if (y < 0) return Block.Bedrock;
     if (y >= CHUNK_HEIGHT) return Block.Air;
     const address = worldToChunk(x, z);
     return getBlock(this.getChunk(address.chunkX, address.chunkZ).chunk, address.localX, y, address.localZ);
-  }, { groundHeight: (x: number,z: number) => this.rapidPractice ? fastWorldGroundHeight(x,z) : undefined });
+  }, { groundHeight: (x: number,z: number) => this.rapidPractice
+    ? FAST_WORLD_BLOCK_READER.groundHeight?.(x, z) : undefined });
 
   private resolveBrambleSnares(now: number): void {
     for (const [casterId, snare] of this.brambleSnares) {
