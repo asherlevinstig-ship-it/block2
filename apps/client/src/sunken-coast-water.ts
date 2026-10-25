@@ -1,97 +1,26 @@
 import * as pc from "playcanvas";
-import { fastWorldCoastInletCenter, fastWorldCoastInletWaterRadius,
-  fastWorldGroundHeight } from "@blockcraft/protocol";
+import { fastWorldCoastShorelineZ, fastWorldGroundHeight } from "@blockcraft/protocol";
 
-/** Three narrow strips form the visible tidal approach with only three draw
- * calls. The channel is shallow and uses the same height as server movement. */
-export function createCoastTidalInletMesh(device: pc.GraphicsDevice, material: pc.StandardMaterial,
-  layer: "water" | "wet" | "foam"): pc.Entity {
+/** A single sea surface runs beyond the camera's far plane. The two narrow
+ * shoreline layers are optional and share its authored, irregular edge. */
+export function createCoastOceanMesh(device: pc.GraphicsDevice, material: pc.StandardMaterial,
+  layer: "water" | "wet" | "surf"): pc.Entity {
   const positions: number[] = [], uvs: number[] = [], indices: number[] = [];
-  const banks = layer === "water" ? 1 : 2;
-  const segments = 30;
-  for (let bank = 0; bank < banks; bank++) {
-    const start = positions.length / 3;
-    for (let i = 0; i <= segments; i++) {
-      const z = 154 + i;
-      const center = fastWorldCoastInletCenter(z);
-      const radius = fastWorldCoastInletWaterRadius(z);
-      const offsets = layer === "water" ? [-radius, radius]
-        : layer === "wet" ? bank === 0 ? [-radius - 1.15, -radius + .08] : [radius - .08, radius + 1.15]
-          : bank === 0 ? [-radius - .2, -radius + .12] : [radius - .12, radius + .2];
-      for (const offset of offsets) {
-        const x = center + offset;
-        positions.push(x, fastWorldGroundHeight(x, z) + (layer === "foam" ? .075 : layer === "water" ? .062 : .042), z);
-        uvs.push(x / 5, z / 5);
-      }
-      if (i < segments) {
-        const n = start + i * 2;
-        indices.push(n, n + 2, n + 1, n + 1, n + 2, n + 3);
-      }
+  const firstX = layer === "water" ? -100 : 40;
+  const lastX = layer === "water" ? 110 : 104;
+  const step = 2;
+  const count = (lastX - firstX) / step;
+  for (let i = 0; i <= count; i++) {
+    const x = firstX + i * step;
+    const shore = fastWorldCoastShorelineZ(x);
+    const nearZ = layer === "wet" ? shore - 2.2 : layer === "surf" ? shore + .18 : shore;
+    const farZ = layer === "wet" ? shore + .05 : layer === "surf" ? shore + .31 : 340;
+    for (const z of [nearZ, farZ]) {
+      const y = layer === "water" ? 8.075 : fastWorldGroundHeight(x, z) + (layer === "surf" ? .095 : .045);
+      positions.push(x, y, z);
+      uvs.push(x / 5, z / 5);
     }
-  }
-  const mesh = new pc.Mesh(device);
-  const normals = pc.calculateNormals(positions, indices);
-  mesh.setPositions(positions);
-  mesh.setNormals(normals);
-  mesh.setUvs(0, uvs);
-  mesh.setVertexStream(pc.SEMANTIC_TANGENT, pc.calculateTangents(positions, normals, uvs, indices), 4);
-  mesh.setIndices(indices);
-  mesh.update();
-  const entity = new pc.Entity(`coast-tidal-inlet-${layer}`);
-  entity.addComponent("render", { meshInstances: [new pc.MeshInstance(mesh, material, entity)], castShadows: false });
-  return entity;
-}
-
-/** Irregular oval water and its narrow foam edge replace visible rectangular
- * primitive sheets. The shallow surface rides the shared terrain height. */
-export function createCoastShallowMesh(device: pc.GraphicsDevice, material: pc.StandardMaterial,
-  x: number, z: number, width: number, depth: number, yaw: number, foam = false): pc.Entity {
-  const positions: number[] = [], uvs: number[] = [], indices: number[] = [];
-  const segments = 40;
-  const radians = yaw * Math.PI / 180;
-  const cos = Math.cos(radians), sin = Math.sin(radians);
-  const rings = foam ? [.91, 1.02] : [0, .5, 1];
-  for (let ring = 0; ring < rings.length; ring++) for (let i = 0; i <= segments; i++) {
-    const angle = i / segments * Math.PI * 2;
-    const radius = rings[ring]! * (1 + .065 * Math.sin(angle * 5 + x) + .035 * Math.cos(angle * 9 + z));
-    const dx = Math.cos(angle) * width * .5 * radius;
-    const dz = Math.sin(angle) * depth * .5 * radius;
-    const wx = x + dx * cos - dz * sin, wz = z + dx * sin + dz * cos;
-    positions.push(wx, fastWorldGroundHeight(wx, wz) + (foam ? .072 : .058), wz);
-    uvs.push(wx / 5, wz / 5);
-    if (ring && i < segments) {
-      const n = (ring - 1) * (segments + 1) + i;
-      indices.push(n, n + 1, n + segments + 1, n + 1, n + segments + 2, n + segments + 1);
-    }
-  }
-  const mesh = new pc.Mesh(device);
-  const normals = pc.calculateNormals(positions, indices);
-  mesh.setPositions(positions);
-  mesh.setNormals(normals);
-  mesh.setUvs(0, uvs);
-  mesh.setVertexStream(pc.SEMANTIC_TANGENT, pc.calculateTangents(positions, normals, uvs, indices), 4);
-  mesh.setIndices(indices);
-  mesh.update();
-  const entity = new pc.Entity(foam ? "coast-foam-edge" : "coast-shallow-water");
-  entity.addComponent("render", { meshInstances: [new pc.MeshInstance(mesh, material, entity)], castShadows: false });
-  return entity;
-}
-
-/** A narrow irregular wet-sand band follows the real ground, instead of
- * floating as a flat cylinder at the edge of each shallow sheet. */
-export function createCoastWetShoreMesh(device: pc.GraphicsDevice, material: pc.StandardMaterial,
-  x: number, z: number, width: number, depth: number): pc.Entity {
-  const positions: number[] = [], uvs: number[] = [], indices: number[] = [];
-  const segments = Math.ceil(width / 1.2);
-  for (let i = 0; i <= segments; i++) {
-    const wx = x + (i / segments - .5) * width;
-    const wave = Math.sin(wx * .67) * .24 + Math.sin(wx * 1.31) * .09;
-    const nearZ = z - depth * .5 - .7 + wave;
-    for (const edgeZ of [nearZ - .85, nearZ + .48]) {
-      positions.push(wx, fastWorldGroundHeight(wx, edgeZ) + .045, edgeZ);
-      uvs.push(wx / 5, edgeZ / 5);
-    }
-    if (i < segments) {
+    if (i < count && (layer !== "surf" || i % 7 < 3)) {
       const n = i * 2;
       indices.push(n, n + 1, n + 2, n + 1, n + 3, n + 2);
     }
@@ -104,7 +33,7 @@ export function createCoastWetShoreMesh(device: pc.GraphicsDevice, material: pc.
   mesh.setVertexStream(pc.SEMANTIC_TANGENT, pc.calculateTangents(positions, normals, uvs, indices), 4);
   mesh.setIndices(indices);
   mesh.update();
-  const entity = new pc.Entity("coast-wet-shore");
+  const entity = new pc.Entity(`coast-ocean-${layer}`);
   entity.addComponent("render", { meshInstances: [new pc.MeshInstance(mesh, material, entity)], castShadows: false });
   return entity;
 }

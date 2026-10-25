@@ -148,15 +148,12 @@ import {
   SUNKEN_COAST_GRASS,
   SUNKEN_COAST_HERO_WRECK,
   SUNKEN_COAST_ROCKS,
-  SUNKEN_COAST_SANDBARS,
-  SUNKEN_COAST_SHALLOW_SHEETS,
   SUNKEN_COAST_SHELL_BEDS,
   SUNKEN_COAST_TEXTURE_STYLES,
   SUNKEN_COAST_TIDE_POOLS,
   SUNKEN_COAST_WRECKAGE,
 } from "./sunken-coast-visuals.js";
-import { createCoastShallowMesh, createCoastTidalInletMesh, createCoastWaterAnimator, createCoastWaterNormalMap,
-  createCoastWetShoreMesh } from "./sunken-coast-water.js";
+import { createCoastOceanMesh, createCoastWaterAnimator, createCoastWaterNormalMap } from "./sunken-coast-water.js";
 import { SPEED_LAB_TOWN_ACTORS, SPEED_LAB_TOWN_LIGHTS, SPEED_LAB_TOWN_SIGNS, townLifeActorPose, townLifeAnimation,
   type TownLifeActorDefinition } from "./town-life.js";
 import { townNpcFaceStyle, type TownNpcMouthExpression } from "./town-npc-appearance.js";
@@ -2496,8 +2493,8 @@ if (fastWorldRequested) {
   coastWetSand.gloss = .26;
   coastWetSand.update();
   const coastGrass = coloredMaterial(new pc.Color(.27, .43, .29));
-  const coastFoam = coloredMaterial(new pc.Color(.62, .79, .7));
-  coastFoam.opacity = .58;
+  const coastFoam = coloredMaterial(new pc.Color(.32, .51, .5));
+  coastFoam.opacity = .2;
   coastFoam.blendType = pc.BLEND_ADDITIVE;
   coastFoam.depthWrite = false;
   coastFoam.update();
@@ -2880,7 +2877,9 @@ if (fastWorldRequested) {
     rapidTownLights.push({ entity: light, phase: index * 1.7 });
   }
 
-  addRapidWorldBox("realm-ground", grass, [220, .25, 172], [150, 7.875, 106]);
+  // Continue the western land beyond the camera range so the coastal view
+  // does not end in a straight black map boundary beside the sea.
+  addRapidWorldBox("realm-ground", grass, [360, .25, 172], [80, 7.875, 106]);
   addBox(rapidPrototypeRoot, "west-green", townVerge, [62, .035, 74], [71, 8.02, 106]);
   for (const region of FAST_WORLD_REGION_DEFINITIONS) {
     const regionId = region.id as FastWorldStreamedRegionId;
@@ -3534,36 +3533,16 @@ if (fastWorldRequested) {
     rapidRegionChunkRoot("mistfen", x, z).addChild(light);
   }
 
-  // The shared heightfield already supplies these dune crests. Flat cylinder
-  // caps made them look like platforms and cut through the sloping ground.
-  const coastInlet = rapidRegionChunkRoot("sunken-coast", 92, 168);
-  coastInlet.addChild(createCoastTidalInletMesh(app.graphicsDevice, coastWetSand, "wet"));
-  coastInlet.addChild(createCoastTidalInletMesh(app.graphicsDevice, coastWater, "water"));
-  coastInlet.addChild(createCoastTidalInletMesh(app.graphicsDevice, coastFoam, "foam"));
-  for (const sheet of SUNKEN_COAST_SHALLOW_SHEETS) {
-    const parent = rapidRegionChunkRoot("sunken-coast", sheet.x, sheet.z);
-    parent.addChild(createCoastShallowMesh(app.graphicsDevice, coastWater,
-      sheet.x, sheet.z, sheet.width, sheet.depth, sheet.yaw));
-    parent.addChild(createCoastShallowMesh(app.graphicsDevice, coastFoam,
-      sheet.x, sheet.z, sheet.width, sheet.depth, sheet.yaw, true));
-    if (sheet.width > sheet.depth) parent.addChild(createCoastWetShoreMesh(app.graphicsDevice,
-      coastWetSand, sheet.x, sheet.z, sheet.width, sheet.depth));
-  }
+  // One sea reaches past the far plane. Its shared shoreline leaves the road
+  // and leader arena dry while the beach slopes beneath the shallow water.
+  const coastOcean = rapidRegionChunkRoot("sunken-coast", 72, 178);
+  coastOcean.addChild(createCoastOceanMesh(app.graphicsDevice, coastWetSand, "wet"));
+  coastOcean.addChild(createCoastOceanMesh(app.graphicsDevice, coastWater, "water"));
+  coastOcean.addChild(createCoastOceanMesh(app.graphicsDevice, coastFoam, "surf"));
   for (const pool of SUNKEN_COAST_TIDE_POOLS) {
     const water = addRapidRegionShape("sunken-coast", "coast-tide-pool", "cylinder", coastDeepWater,
       [pool.width, .035, pool.depth], [pool.x, 8.075, pool.z]);
     water.setLocalEulerAngles(0, pool.yaw, 0);
-    const foam = addRapidRegionShape("sunken-coast", "coast-tide-foam", "cylinder", coastFoam,
-      [pool.width + .24, .018, pool.depth + .24], [pool.x, 8.068, pool.z]);
-    foam.setLocalEulerAngles(0, pool.yaw, 0);
-  }
-  for (const bar of SUNKEN_COAST_SANDBARS) {
-    const sandbar = addRapidRegionShape("sunken-coast", `coast-sandbar:${bar.id}`, "cylinder", coastGround,
-      [bar.width, .055, bar.length], [bar.x, 8.105, bar.z]);
-    sandbar.setLocalEulerAngles(0, bar.yaw, 0);
-    const wetEdge = addRapidRegionShape("sunken-coast", `coast-sandbar-edge:${bar.id}`, "cylinder", coastFoam,
-      [bar.width + .28, .018, bar.length + .28], [bar.x, 8.075, bar.z]);
-    wetEdge.setLocalEulerAngles(0, bar.yaw, 0);
   }
   for (const wreck of SUNKEN_COAST_WRECKAGE) {
     const wreckGround = fastWorldGroundHeight(wreck.x, wreck.z);

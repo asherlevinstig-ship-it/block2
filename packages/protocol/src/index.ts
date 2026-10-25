@@ -1,4 +1,4 @@
-export { fastWorldGroundHeight, fastWorldCoastInletCenter, fastWorldCoastInletWaterRadius } from "./fast-world-elevation.js";
+export { fastWorldGroundHeight, fastWorldCoastShorelineZ } from "./fast-world-elevation.js";
 import { fastWorldGroundHeight } from "./fast-world-elevation.js";
 import { createFastWorldObstacleQuery } from "./fast-world-obstacles.js";
 export * from "./fast-world-obstacles.js";

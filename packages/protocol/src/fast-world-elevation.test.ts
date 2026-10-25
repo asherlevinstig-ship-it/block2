@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fastWorldGroundHeight } from "./fast-world-elevation.js";
+import { fastWorldCoastShorelineZ, fastWorldGroundHeight } from "./fast-world-elevation.js";
 
 describe("fast world elevation", () => {
   it("gives Sunken Coast readable dunes and a falling shoreline", () => {
@@ -12,9 +12,9 @@ describe("fast world elevation", () => {
     expect(fastWorldGroundHeight(145, 130)).toBe(8);
   });
 
-  it("forms a shallow inlet beside the dry south road without a hard entrance step", () => {
-    expect(fastWorldGroundHeight(88, 162)).toBeLessThan(fastWorldGroundHeight(100, 162) - .15);
-    expect(fastWorldGroundHeight(94, 153)).toBeCloseTo(8, 4);
+  it("slopes below the shared waterline beyond the beach without flooding the road", () => {
+    const shoreline = fastWorldCoastShorelineZ(66);
+    expect(fastWorldGroundHeight(66, shoreline + 7)).toBeLessThan(fastWorldGroundHeight(66, shoreline));
     expect(fastWorldGroundHeight(100, 170)).toBeCloseTo(8, 4);
   });
 });

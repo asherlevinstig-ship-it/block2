@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fastWorldCoastInletCenter, fastWorldCoastInletWaterRadius } from "@blockcraft/protocol";
+import { fastWorldCoastShorelineZ } from "@blockcraft/protocol";
 import {
   SUNKEN_COAST_DRIFTWOOD,
   SUNKEN_COAST_DUNES,
@@ -8,7 +8,6 @@ import {
   SUNKEN_COAST_LEADER_POSITION,
   SUNKEN_COAST_ROCKS,
   SUNKEN_COAST_SANDBARS,
-  SUNKEN_COAST_SHALLOW_SHEETS,
   SUNKEN_COAST_SHELL_BEDS,
   SUNKEN_COAST_TIDE_POOLS,
   SUNKEN_COAST_WRECKAGE,
@@ -25,7 +24,6 @@ describe("Sunken Coast visuals", () => {
       ...SUNKEN_COAST_DUNES,
       ...SUNKEN_COAST_DRIFTWOOD,
       ...SUNKEN_COAST_SHELL_BEDS,
-      ...SUNKEN_COAST_SHALLOW_SHEETS,
       SUNKEN_COAST_HERO_WRECK,
       SUNKEN_COAST_LEADER_POSITION,
     ];
@@ -39,20 +37,15 @@ describe("Sunken Coast visuals", () => {
 
   it("builds a layered coast around a dominant offshore wreck", () => {
     expect(SUNKEN_COAST_DUNES.length).toBeGreaterThanOrEqual(5);
-    expect(SUNKEN_COAST_SHALLOW_SHEETS.length).toBeGreaterThanOrEqual(4);
     expect(SUNKEN_COAST_GRASS.length).toBeGreaterThanOrEqual(20);
     expect(SUNKEN_COAST_HERO_WRECK.length).toBeGreaterThan(8);
     expect(SUNKEN_COAST_HERO_WRECK.mastHeight).toBeGreaterThan(6);
   });
 
-  it("shows the bay from the approach while keeping the south road dry", () => {
-    for (const sheet of SUNKEN_COAST_SHALLOW_SHEETS.slice(0, 3)) {
-      expect(sheet.z - sheet.depth / 2).toBeLessThan(180);
-      expect(sheet.z + sheet.depth * .54).toBeLessThan(188);
-    }
-    for (let z = 154; z <= 184; z++) {
-      const radius = fastWorldCoastInletWaterRadius(z);
-      expect(fastWorldCoastInletCenter(z) + radius).toBeLessThan(97.9);
-    }
+  it("keeps the approach and boss dry along one irregular shoreline", () => {
+    expect(fastWorldCoastShorelineZ(100)).toBeGreaterThan(174);
+    expect(fastWorldCoastShorelineZ(70.5)).toBeGreaterThan(174.5);
+    const shoreline = Array.from({ length: 33 }, (_, index) => fastWorldCoastShorelineZ(40 + index * 2));
+    expect(Math.max(...shoreline) - Math.min(...shoreline)).toBeGreaterThan(4);
   });
 });

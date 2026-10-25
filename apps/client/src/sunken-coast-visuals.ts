@@ -18,9 +18,9 @@ export const SUNKEN_COAST_TEXTURE_STYLES: Readonly<Record<"sand" | "shallows", P
   },
   shallows: {
     name: "sunken-coast-shallows",
-    base: "#24666b",
-    mottles: ["#2d7b77", "#1c505a", "#398a7e", "#2c6260"],
-    litter: ["#8bb595", "#b6a76c", "#315458", "#d1bc79"],
+    base: "#205b65",
+    mottles: ["#286771", "#1f5864", "#2b6770", "#245d67"],
+    litter: ["#4d7f82", "#376e77", "#315e69", "#498088"],
     seed: 83_907,
   },
 } as const;
@@ -35,16 +35,6 @@ export const SUNKEN_COAST_GRASS = [
   [86, 179], [93, 151], [100, 169], [102, 182], [73, 166], [82, 151],
   [42.5, 164], [46, 176], [53, 172], [59, 149.5], [67, 154], [75, 184],
   [81, 169], [88, 183], [94, 173], [101, 155], [99, 185], [84, 155],
-] as const;
-
-/** Broad translucent sheets make the biome read as a coastline rather than a
- * collection of isolated ponds. They are shallow, traversable colour layers;
- * authoritative deep-water exclusions remain in the navigation definition. */
-export const SUNKEN_COAST_SHALLOW_SHEETS = [
-  { x: 48, z: 182.5, width: 15, depth: 9, yaw: -6 },
-  { x: 66, z: 182.3, width: 20, depth: 10, yaw: 4 },
-  { x: 87, z: 181.8, width: 20, depth: 10, yaw: -5 },
-  { x: 102, z: 178.5, width: 5.2, depth: 16, yaw: 3 },
 ] as const;
 
 export const SUNKEN_COAST_DUNES = [
