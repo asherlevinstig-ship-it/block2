@@ -40,6 +40,58 @@ function loadContainer(app: pc.Application, url: string, onReady: (resource: pc.
   });
 }
 
+function cloudTexture(device: pc.GraphicsDevice, seed: number): pc.Texture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 128;
+  const context = canvas.getContext("2d")!;
+  const pixels = context.createImageData(canvas.width, canvas.height);
+  const puffs = Array.from({ length: 8 }, (_, index) => ({
+    x: .1 + index * .115 + Math.sin(seed * 3.1 + index * 2.7) * .025,
+    y: .52 + Math.sin(seed * 1.7 + index * 2.1) * .18,
+    rx: .13 + (index % 3) * .014,
+    ry: .19 + (index % 4) * .025,
+  }));
+  for (let y = 0; y < canvas.height; y++) for (let x = 0; x < canvas.width; x++) {
+    const u = x / (canvas.width - 1), v = y / (canvas.height - 1);
+    let density = 0;
+    for (const puff of puffs) {
+      const dx = (u - puff.x) / puff.rx, dy = (v - puff.y) / puff.ry;
+      density = Math.max(density, Math.exp(-(dx * dx + dy * dy) * 1.25));
+    }
+    const ripple = Math.sin(u * 53 + seed * 5 + Math.sin(v * 21) * 2) * .035
+      + Math.sin(u * 91 - v * 34 + seed * 7) * .018;
+    const edge = Math.max(0, Math.min(1, (density + ripple - .17) / .43));
+    const fade = Math.min(1, u * 12, (1 - u) * 12, v * 11, (1 - v) * 11);
+    const alpha = edge * edge * (3 - 2 * edge) * fade;
+    const shade = Math.round(250 - v * 18 + Math.sin(u * 17 + seed) * 3);
+    const offset = (y * canvas.width + x) * 4;
+    pixels.data[offset] = shade;
+    pixels.data[offset + 1] = Math.min(255, shade + 5);
+    pixels.data[offset + 2] = Math.min(255, shade + 9);
+    pixels.data[offset + 3] = Math.round(alpha * 244);
+  }
+  context.putImageData(pixels, 0, 0);
+  const texture = new pc.Texture(device, { width: canvas.width, height: canvas.height, mipmaps: true });
+  texture.setSource(canvas);
+  return texture;
+}
+
+function cloudMaterial(texture: pc.Texture): pc.StandardMaterial {
+  const finish = new pc.StandardMaterial();
+  finish.diffuse = new pc.Color(1, 1, 1);
+  finish.diffuseMap = texture;
+  finish.emissive = new pc.Color(.68, .72, .74);
+  finish.useLighting = false;
+  finish.opacityMap = texture;
+  finish.opacityMapChannel = "a";
+  finish.blendType = pc.BLEND_NORMAL;
+  finish.depthWrite = false;
+  finish.cull = pc.CULLFACE_NONE;
+  finish.update();
+  return finish;
+}
+
 /** Town landmarks are visual only. The force field and travel rules stay server-owned. */
 export function createTownPortalLandmarks(app: pc.Application, parent: pc.Entity): void {
   const portal = new pc.Entity("tower-portal");
@@ -129,19 +181,16 @@ export function createTownPortalLandmarks(app: pc.Application, parent: pc.Entity
     towerFallback.enabled = false;
   });
 
-  const cloudLight = material(new pc.Color(.82, .87, .88));
-  const cloudShade = material(new pc.Color(.66, .75, .78));
+  const cloudFinishes = [0, 1, 2].map(seed => cloudMaterial(cloudTexture(app.graphicsDevice, seed)));
   const cloudLayout = [
-    [-18, 31, -9, 19, 5, 9], [-14, 35, 8, 21, 5, 9],
-    [-20, 48, 2, 24, 6, 10], [-12, 60, -10, 23, 6, 10],
-    [-17, 75, 9, 25, 7, 11],
+    [-19, 33, 2, 26, 10], [-17, 42, -12, 34, 11],
+    [-22, 63, 0, 42, 13], [-15, 79, -12, 38, 12],
+    [-19, 95, 11, 43, 14],
   ] as const;
-  const clouds = cloudLayout.map(([x, y, z, sx, sy, sz], index) => {
-    const bank = new pc.Entity(`tower-cloud-bank-${index}`);
-    tower.addChild(bank);
-    shape(bank, "cloud-middle", "sphere", cloudLight, [sx, sy, sz], [0, 0, 0]);
-    shape(bank, "cloud-left", "sphere", cloudShade, [sx * .68, sy * .9, sz * .85], [-sx * .37, -sy * .13, .9]);
-    shape(bank, "cloud-right", "sphere", cloudLight, [sx * .73, sy * .78, sz * .9], [sx * .35, -sy * .17, -.8]);
+  const clouds = cloudLayout.map(([x, y, z, width, height], index) => {
+    const bank = shape(tower, `tower-cloud-bank-${index}`, "plane", cloudFinishes[index % cloudFinishes.length]!,
+      [height, 1, width], [x, y, z]);
+    bank.setLocalEulerAngles(0, 0, 90);
     return { entity: bank, x, y, z, phase: index * 1.3 };
   });
 
