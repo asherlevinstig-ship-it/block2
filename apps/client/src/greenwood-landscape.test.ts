@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { rapidPracticeCollisionCellSolid } from "@blockcraft/protocol";
-import { GREENWOOD_MAIN_TRAIL, GREENWOOD_CAMP_TRAIL, GREENWOOD_CLUSTER_PLANTS,
+import { GREENWOOD_MAIN_TRAIL, GREENWOOD_CAMP_TRAIL, GREENWOOD_CLUSTER_PLANTS, GREENWOOD_VERGE_PLANTS,
   MOSSWATCH_CLEARING, sampleWoodlandTrail, woodlandPlantAllowed } from "./greenwood-landscape.js";
 
 describe("Greenwood gate-to-Mosswatch route", () => {
@@ -23,6 +23,6 @@ describe("Greenwood gate-to-Mosswatch route", () => {
     const end=GREENWOOD_CAMP_TRAIL.at(-1)!;
     expect(Math.hypot(end[0]-MOSSWATCH_CLEARING.x,end[1]-MOSSWATCH_CLEARING.z)).toBeLessThan(2);
     expect(woodlandPlantAllowed(MOSSWATCH_CLEARING.x,MOSSWATCH_CLEARING.z)).toBe(false);
-    for(const p of GREENWOOD_CLUSTER_PLANTS) expect(woodlandPlantAllowed(p.x,p.z)).toBe(true);
+    for(const p of [...GREENWOOD_CLUSTER_PLANTS, ...GREENWOOD_VERGE_PLANTS]) expect(woodlandPlantAllowed(p.x,p.z)).toBe(true);
   });
 });

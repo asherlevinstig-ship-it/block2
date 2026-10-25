@@ -221,19 +221,21 @@ export function createPaintedGroundMaterial(
 
 /** One continuous ribbon per route, with metre-scaled UVs and feathered verges. */
 export function createWoodlandTrailMesh(device: pc.GraphicsDevice, entity: pc.Entity,
-  material: pc.StandardMaterial, points: readonly (readonly [number, number, number])[]): void {
+  material: pc.StandardMaterial, points: readonly (readonly [number, number, number])[],
+  options: { widthExtra?: number; height?: number; bucket?: number; fadeEnds?: boolean } = {}): void {
   const vertices: number[] = [], normals: number[] = [], uv: number[] = [], colors: number[] = [], indices: number[] = [];
   const lanes = [-1, -.78, -.35, .35, .78, 1];
   points.forEach((point,i) => {
     const before = points[Math.max(0,i-1)]!, after = points[Math.min(points.length-1,i+1)]!;
     const dx=after[0]-before[0], dz=after[1]-before[1], length=Math.hypot(dx,dz)||1;
     lanes.forEach((lane,j) => {
-      const width=point[2]*.5 + Math.sin(i*.71)*.12;
+      const width=point[2]*.5 + (options.widthExtra ?? 0) + Math.sin(i*.71)*.12;
       const x=point[0]-dz/length*lane*width, z=point[1]+dx/length*lane*width;
-      vertices.push(x,fastWorldGroundHeight(x,z)+.095,z); normals.push(0,1,0);
+      vertices.push(x,fastWorldGroundHeight(x,z)+(options.height ?? .095),z); normals.push(0,1,0);
       uv.push(x/5/material.diffuseMapTiling.x,z/5/material.diffuseMapTiling.y);
       const tone = .78 + Math.abs(lane)*.13 + Math.sin(i*.21)*.025;
-      colors.push(tone,tone,tone,j===0||j===lanes.length-1?0:1);
+      const endFade = options.fadeEnds ? Math.min(1, i / 5, (points.length - 1 - i) / 5) : 1;
+      colors.push(tone,tone,tone,(j===0||j===lanes.length-1?0:1)*endFade);
       if(i<points.length-1 && j<lanes.length-1) {
         const n=i*lanes.length+j; indices.push(n,n+1,n+lanes.length,n+1,n+lanes.length+1,n+lanes.length);
       }
@@ -242,7 +244,7 @@ export function createWoodlandTrailMesh(device: pc.GraphicsDevice, entity: pc.En
   const mesh=new pc.Mesh(device); mesh.setPositions(vertices); mesh.setNormals(pc.calculateNormals(vertices,indices)); mesh.setUvs(0,uv);
   mesh.setColors(colors); mesh.setIndices(indices); mesh.update();
   entity.addComponent("render",{meshInstances:[new pc.MeshInstance(mesh,terrainVertexMaterial(material,true),entity)],castShadows:false});
-  entity.render!.meshInstances[0]!.drawBucket=230;
+  entity.render!.meshInstances[0]!.drawBucket=options.bucket ?? 230;
 }
 
 const woodlandFernMeshes = new WeakMap<pc.GraphicsDevice, pc.Mesh>();

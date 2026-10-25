@@ -36,3 +36,18 @@ export const GREENWOOD_CLUSTER_PLANTS = GREENWOOD_THICKETS.flatMap(([x,z,radius]
     return { x:x+Math.cos(angle)*distance, z:z+Math.sin(angle)*distance,
       scale: .9 + (i%4)*.22, yaw: (i*137+cluster*41)%360, tree: i%3===0 };
   }).filter(p => woodlandPlantAllowed(p.x,p.z)));
+
+/** Small irregular groups outside the playable shoulders, never a hedge wall. */
+export const GREENWOOD_VERGE_PLANTS = trails.flatMap((trail, route) =>
+  trail.flatMap((p, i) => {
+    if (i % 5 !== 2) return [];
+    const a = trail[Math.max(0, i - 1)]!, b = trail[Math.min(trail.length - 1, i + 1)]!;
+    const dx = b[0] - a[0], dz = b[1] - a[1], length = Math.hypot(dx, dz) || 1;
+    const side = i % 2 ? -1 : 1;
+    return [0, 1, 2].map(j => {
+      const offset = p[2] * .5 + 1.45 + j * .38;
+      return { x: p[0] - dz / length * offset * side + dx / length * j * .42,
+        z: p[1] + dx / length * offset * side + dz / length * j * .42,
+        scale: .45 + ((i + j) % 4) * .12, yaw: (i * 137 + j * 71 + route * 29) % 360, tree: false };
+    }).filter(p => woodlandPlantAllowed(p.x, p.z));
+  }));

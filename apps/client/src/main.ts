@@ -1,5 +1,5 @@
 import { fastWorldGroundHeight } from "@blockcraft/protocol";
-import { GREENWOOD_MAIN_TRAIL, GREENWOOD_CAMP_TRAIL, GREENWOOD_THICKETS, GREENWOOD_CLUSTER_PLANTS, sampleWoodlandTrail } from "./greenwood-landscape.js";
+import { GREENWOOD_MAIN_TRAIL, GREENWOOD_CAMP_TRAIL, GREENWOOD_THICKETS, GREENWOOD_CLUSTER_PLANTS, GREENWOOD_VERGE_PLANTS, sampleWoodlandTrail } from "./greenwood-landscape.js";
 import * as pc from "playcanvas";
 import { facetedBoxMesh } from "./faceted-shapes.js";
 import { addCallingParticleLayers } from "./calling-particles.js";
@@ -2813,13 +2813,17 @@ if (fastWorldRequested) {
   }
   addRapidWorldBox("east-realm-road", path, [118, .055, 5.2], [198, 8.035, 106]);
   for (const [name, points] of [["greenwood-main-trail", GREENWOOD_MAIN_TRAIL], ["mosswatch-approach", GREENWOOD_CAMP_TRAIL]] as const) {
+    const verge = new pc.Entity(`${name}-leaf-verge`);
+    rapidPrototypeRoot.addChild(verge);
+    createWoodlandTrailMesh(app.graphicsDevice, verge, greenwoodLeafLitter, sampleWoodlandTrail(points),
+      { widthExtra: 1.45, height: .075, bucket: 235, fadeEnds: true });
     const trail = new pc.Entity(name);
     rapidPrototypeRoot.addChild(trail);
     createWoodlandTrailMesh(app.graphicsDevice, trail, roadWarm, sampleWoodlandTrail(points));
   }
   // Cluster the understory around authored tree groups, leaving routes and the
   // first combat pocket open. Shared low-poly meshes remain statically batched.
-  for (const [index, plant] of GREENWOOD_CLUSTER_PLANTS.entries()) {
+  for (const [index, plant] of [...GREENWOOD_CLUSTER_PLANTS, ...GREENWOOD_VERGE_PLANTS].entries()) {
     if (plant.tree) continue;
     const {x,z,scale} = plant;
     const fern = new pc.Entity(`mosswatch-fern-${index}`);
@@ -2876,6 +2880,21 @@ if (fastWorldRequested) {
     const mound = addRapidRegionShape("greenwood", `town-threshold:${bank.id}`, "cylinder", greenwoodMoss,
       [bank.width, bank.height, bank.depth], [bank.x, 8.02 + bank.height * .5, bank.z]);
     mound.setLocalEulerAngles(0, bank.yaw, 0);
+  }
+
+  // Feathered soil beneath entrance-side props anchors them into the ground.
+  // Keep these patches shallow: the shared heightfield still defines movement.
+  for (const placement of SPEED_LAB_TOWN_ASSETS) {
+    if (placement.position[0] < 98 || !/tree|rock/.test(placement.id)) continue;
+    const size = placement.id.startsWith("tree") ? 3.8 : 2.4;
+    addRapidRegionShape("greenwood", `greenwood-ground:contact-${placement.name}`, "cylinder",
+      greenwoodLeafLitter, [size, .018, size * .8],
+      [placement.position[0], 8.065, placement.position[2]]);
+  }
+  // Dust collects at the gate rather than ending in a perfectly straight seam.
+  for (const [x, z, width, depth] of [[103, 106, 5.5, 5], [106.4, 105.8, 5, 4.5]] as const) {
+    addTownShape(rapidPrototypeRoot, `town-atmosphere:gate-dust-${x}`, "cylinder", roadWearOverlay,
+      [width, .018, depth], [x, 8.125, z]);
   }
 
   // Founder Well water and a subtle rune ring give the civic square a focal
