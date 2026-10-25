@@ -1,4 +1,5 @@
 import { greenwoodAtmosphere } from "./greenwood-atmosphere.js";
+import { greenwoodEmergence, greenwoodMobStyle, type GreenwoodMobStyle } from "./greenwood-mob-style.js";
 import { fastWorldGroundHeight } from "@blockcraft/protocol";
 import { GREENWOOD_MAIN_TRAIL, GREENWOOD_CAMP_TRAIL, GREENWOOD_THICKETS, GREENWOOD_CLUSTER_PLANTS, GREENWOOD_VERGE_PLANTS, sampleWoodlandTrail } from "./greenwood-landscape.js";
 import * as pc from "playcanvas";
@@ -127,6 +128,7 @@ import {
   GREENWOOD_GROVE_STONES,
   GREENWOOD_ELEVATION_MOUNDS,
   GREENWOOD_LANDMARKS,
+  GREENWOOD_MOB_SIGNS,
   GREENWOOD_TEXTURE_STYLES,
   GREENWOOD_UNDERGROWTH,
 } from "./greenwood-visuals.js";
@@ -3187,6 +3189,36 @@ if (fastWorldRequested) {
       cut.setLocalEulerAngles(90, log.yaw, 0);
     }
   }
+  for (const sign of GREENWOOD_MOB_SIGNS) {
+    if (sign.kind === "nest") {
+      addRapidRegionShape("greenwood", "mosswatch-nest-bed", "cylinder", greenwoodMoss,
+        [2.1, .07, 1.7], [sign.x, 8.09, sign.z]).setLocalEulerAngles(0, sign.yaw, 0);
+      for (let index = 0; index < 6; index++) {
+        const angle = index / 6 * Math.PI * 2 + sign.yaw * Math.PI / 180;
+        const root = addRapidRegionBox("greenwood", "mosswatch-nest-root", greenwoodBark,
+          [.12, .12, 1.05], [sign.x + Math.sin(angle) * .72, 8.16, sign.z + Math.cos(angle) * .72]);
+        root.setLocalEulerAngles(0, angle * 180 / Math.PI, index % 2 ? 8 : -8);
+      }
+      for (const side of [-1, 1])
+        addRapidRegionShape("greenwood", "mosswatch-nest-egg", "sphere", greenwoodCorruption,
+          [.28, .36, .28], [sign.x + side * .31, 8.25, sign.z + .08]);
+    } else if (sign.kind === "venom") {
+      const stain = addRapidRegionShape("greenwood", "greenwood-ground:mosswatch-venom", "cylinder",
+        greenwoodCorruption, [2.3, .018, 1.65], [sign.x, 8.095, sign.z]);
+      stain.setLocalEulerAngles(0, sign.yaw, 0);
+    } else if (sign.kind === "tracks") {
+      const track = addRapidRegionBox("greenwood", "mosswatch-claw-track", greenwoodBark,
+        [.12, .025, .52], [sign.x, 8.095, sign.z]);
+      track.setLocalEulerAngles(0, sign.yaw, 0);
+      addRapidRegionBox("greenwood", "mosswatch-claw-track", greenwoodBark,
+        [.12, .025, .52], [sign.x + .24, 8.095, sign.z + .06]).setLocalEulerAngles(0, sign.yaw, 0);
+    } else {
+      addRapidRegionBox("greenwood", "mosswatch-broken-pack", timberLight,
+        [.62, .44, .3], [sign.x, 8.28, sign.z]).setLocalEulerAngles(0, sign.yaw, 8);
+      addRapidRegionBox("greenwood", "mosswatch-broken-tool", iron,
+        [.09, .08, .86], [sign.x + .45, 8.18, sign.z - .16]).setLocalEulerAngles(0, sign.yaw + 35, 4);
+    }
+  }
   for (let index = 0; index < GREENWOOD_UNDERGROWTH.length; index++) {
     const [x, z, size] = GREENWOOD_UNDERGROWTH[index]!;
     for (let blade = 0; blade < 3; blade++) {
@@ -5052,6 +5084,8 @@ interface MobVisual {
   staggerAt: number;
   lastCombatState: string;
   lastAlive: boolean;
+  greenwoodStyle: GreenwoodMobStyle | null;
+  emergenceAt: number;
 }
 
 interface MarkVisualState {
@@ -9414,6 +9448,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   const isNorthwatch = mob.archetype === "ridge_stalker" || mob.archetype === "shard_sentry";
   const matriarch = mobId === "greenwood-venom-matriarch" || mobId === "crystal-matriarch";
   const rootGuardian = mobId === "forest-guardian";
+  const greenwoodStyle = greenwoodMobStyle(mobId, mob.archetype);
   const tierColor = mob.difficultyTier >= 3
     ? new pc.Color(1, 0.2, 0.08)
     : mob.difficultyTier === 2
@@ -9462,6 +9497,29 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   markMaterial.update();
   if (rootGuardian) bodyRoot.setLocalScale(1.16, 1.16, 1.16);
   const art = createMobArt(bodyRoot, mob.archetype, bodyMaterial, matriarch, rootGuardian, fastWorldRequested);
+  if (greenwoodStyle) {
+    const forestAccent = coloredMaterial(new pc.Color(
+      greenwoodStyle === "briar" ? .46 : greenwoodStyle === "elderthorn" ? .3 : .35,
+      greenwoodStyle === "briar" ? .19 : greenwoodStyle === "elderthorn" ? .68 : .52,
+      greenwoodStyle === "briar" ? .09 : .16));
+    const livingSap = coloredMaterial(new pc.Color(.55, 1, .2));
+    livingSap.emissive.set(.08, .3, .015); livingSap.update();
+    if (greenwoodStyle === "moss") {
+      addBox(bodyRoot, "forest-leaf-mantle", forestAccent, [.62, .11, .34], [0, .98, -.2]).setLocalEulerAngles(-8, 13, 0);
+      for (const side of [-1, 1]) addBox(bodyRoot, "forest-leaf-ear", forestAccent,
+        [.16, .3, .08], [side * .36, .72, .06]).setLocalEulerAngles(0, 0, side * -28);
+    } else if (greenwoodStyle === "briar") {
+      for (const side of [-1, 1]) for (let index = 0; index < 2; index++)
+        addBox(bodyRoot, "briar-back-thorn", forestAccent, [.1, .42, .11],
+          [side * (.22 + index * .14), .94, -.2 - index * .3]).setLocalEulerAngles(-18, 0, side * -24);
+    } else {
+      addBox(bodyRoot, "thornbinder-crown", forestAccent, [.72, .13, .31], [0, 2.22, -.04]);
+      for (const side of [-1, 1]) addBox(bodyRoot, "hanging-vine", forestAccent,
+        [.08, .67, .08], [side * .48, 1.38, -.14]).setLocalEulerAngles(0, 0, side * 9);
+      if (greenwoodStyle === "elderthorn")
+        addBox(bodyRoot, "elderthorn-heart", livingSap, [.31, .42, .16], [0, 1.16, .34]).setLocalEulerAngles(0, 0, 45);
+    }
+  }
   if (mobId === "northwatch-spitter" || mobId === "northwatch-patrol-stalker-west" || mobId === "northwatch-patrol-stalker-east") {
     const patrolShard = coloredMaterial(new pc.Color(.5, .86, 1));
     patrolShard.emissive.set(.1, .27, .38); patrolShard.update();
@@ -9655,6 +9713,8 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     staggerAt: 0,
     lastCombatState: mob.combatState,
     lastAlive: mob.alive,
+    greenwoodStyle,
+    emergenceAt: -Infinity,
   };
 }
 
@@ -16688,6 +16748,7 @@ app.on("update", (dt: number) => {
         mob.snapshots.push({ receivedAt: animationNow, x: mob.state.x, y: mob.state.y, z: mob.state.z, yaw: mob.state.yaw });
         mob.entity.setPosition(mob.state.x, mob.state.y, mob.state.z);
         mob.renderYaw = mob.state.yaw;
+        if (mob.greenwoodStyle) mob.emergenceAt = animationNow;
       }
       mob.rigSettled = false;
     }
@@ -17004,10 +17065,11 @@ app.on("update", (dt: number) => {
     const woundedLimp = mob.state.name === "Wounded Wilds Stalker" ? Math.max(0, Math.sin(mob.art.phase)) * mob.art.walk : 0;
     const bruteRecovery = bruteRecoveryPose(mob.state, animationNow + serverClock.offset);
     const bodySize = mob.art.rootGuardian ? 1.38 : mob.state.isChampion ? 1.25 : mob.state.isMiniBoss ? 1.18 : mob.state.isElite ? 1.12 : 1;
-    mob.bodyRoot.setLocalScale(bodySize * (1 + defeat * 0.13), bodySize * (1 - defeat * (mob.isBrute ? 0.42 : 0.58)), bodySize * (1 + defeat * 0.1));
+    const emergence = mob.greenwoodStyle ? greenwoodEmergence(animationNow - mob.emergenceAt) : { y: 0, scaleY: 1 };
+    mob.bodyRoot.setLocalScale(bodySize * (1 + defeat * 0.13), bodySize * emergence.scaleY * (1 - defeat * (mob.isBrute ? 0.42 : 0.58)), bodySize * (1 + defeat * 0.1));
     mob.bodyRoot.setLocalPosition(
       0,
-      gaitBob - woundedLimp * .075 - hitStrength * 0.035 - attackStrength * (mob.isBrute ? 0.07 : 0) - crawlerRecovery * 0.06 - bruteRecovery * .1,
+      gaitBob + emergence.y - woundedLimp * .075 - hitStrength * 0.035 - attackStrength * (mob.isBrute ? 0.07 : 0) - crawlerRecovery * 0.06 - bruteRecovery * .1,
       attackStrength * (mob.isBrute ? 0.42 : mob.isSpitter ? -0.3 : 0.24) - windupStrength * (mob.isBrute ? 0.25 : mob.isSpitter ? -0.18 : 0.16),
     );
     mob.bodyRoot.setLocalEulerAngles(

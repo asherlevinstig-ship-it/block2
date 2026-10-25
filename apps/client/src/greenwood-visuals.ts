@@ -158,6 +158,18 @@ export const GREENWOOD_FALLEN_LOGS = [
   { x: 150, z: 99, yaw: 48, length: 3.1 },
 ] as const;
 
+/** Story dressing around Mosswatch. All points stay outside its central dodge lane. */
+export const GREENWOOD_MOB_SIGNS = [
+  { kind: "nest", x: 116.6, z: 87.4, yaw: 18 },
+  { kind: "nest", x: 130.5, z: 86.5, yaw: -24 },
+  { kind: "venom", x: 117.9, z: 94.9, yaw: 12 },
+  { kind: "venom", x: 130.1, z: 94.2, yaw: -18 },
+  { kind: "tracks", x: 121.1, z: 97.2, yaw: -20 },
+  { kind: "tracks", x: 122.1, z: 95.9, yaw: -20 },
+  { kind: "tracks", x: 123.1, z: 94.6, yaw: -20 },
+  { kind: "broken-kit", x: 130.6, z: 92.5, yaw: 31 },
+] as const;
+
 export const GREENWOOD_UNDERGROWTH = [
   [113, 86, .8], [117, 92, 1.1], [121, 86, .9], [125, 98, .8], [129, 84, 1.2], [133, 96, .75],
   [138, 86, .95], [143, 94, 1.15], [149, 86, .82], [153, 93, 1.05], [115, 126, .9], [120, 120, 1.1],

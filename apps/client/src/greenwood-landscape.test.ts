@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { rapidPracticeCollisionCellSolid } from "@blockcraft/protocol";
 import { GREENWOOD_MAIN_TRAIL, GREENWOOD_CAMP_TRAIL, GREENWOOD_CLUSTER_PLANTS, GREENWOOD_VERGE_PLANTS,
   MOSSWATCH_CLEARING, sampleWoodlandTrail, woodlandPlantAllowed } from "./greenwood-landscape.js";
+import { GREENWOOD_MOB_SIGNS } from "./greenwood-visuals.js";
 
 describe("Greenwood gate-to-Mosswatch route", () => {
   it("keeps the trail centre and walking shoulders on supported, unobstructed ground", () => {
@@ -24,5 +25,7 @@ describe("Greenwood gate-to-Mosswatch route", () => {
     expect(Math.hypot(end[0]-MOSSWATCH_CLEARING.x,end[1]-MOSSWATCH_CLEARING.z)).toBeLessThan(2);
     expect(woodlandPlantAllowed(MOSSWATCH_CLEARING.x,MOSSWATCH_CLEARING.z)).toBe(false);
     for(const p of [...GREENWOOD_CLUSTER_PLANTS, ...GREENWOOD_VERGE_PLANTS]) expect(woodlandPlantAllowed(p.x,p.z)).toBe(true);
+    for (const sign of GREENWOOD_MOB_SIGNS.filter(sign => sign.kind === "nest" || sign.kind === "broken-kit"))
+      expect(Math.hypot(sign.x-MOSSWATCH_CLEARING.x,sign.z-MOSSWATCH_CLEARING.z)).toBeGreaterThan(MOSSWATCH_CLEARING.radius);
   });
 });
