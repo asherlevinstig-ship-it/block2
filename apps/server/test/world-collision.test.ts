@@ -40,6 +40,14 @@ describe("Fast World obstacle queries", () => {
     expect(moved.x).toBeLessThan(162.1);
   });
 
+  it("makes Ashen basalt spires real line-of-sight and movement cover", () => {
+    expect(FAST_WORLD_COLLISION_QUERY.obstacleAt(211, 9, 91)?.id).toBe("ashen-spire-ember-gate");
+    expect(hasCombatLineOfSight({ x: 208, y: 8, z: 91 }, { x: 214, y: 8, z: 91 },
+      FAST_WORLD_BLOCK_READER)).toBe(false);
+    const moved = moveMobSafely({ x: 208, y: 8, z: 91 }, { x: 6, z: 0 }, FAST_WORLD_BLOCK_READER);
+    expect(moved.x).toBeLessThan(210.4);
+  });
+
   it("prevents mobs navigating through Fast World cover", () => {
     const start = { x: 116.5, y: 8, z: 89 };
     const moved = moveMobSafely(start, { x: 3, z: 0 }, FAST_WORLD_BLOCK_READER);

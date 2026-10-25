@@ -18,6 +18,7 @@ describe("area mini-bosses", () => {
     expect(areaMiniBossDefinition("mistfen-miremother")?.name).toBe("Miremother");
     expect(areaMiniBossDefinition("sunken-coast-tidecaller")?.rewardItemId).toBe("tidecaller_conch");
     expect(areaMiniBossDefinition("quarry-quarrymaster")?.rewardItemId).toBe("quarrymaster_sigil");
+    expect(areaMiniBossDefinition("ashen-cinderlord")?.name).toBe("Cinderlord");
     expect(areaMiniBossDefinition("south-quarrymaster")?.name).toBe("Redstone Quarrymaster");
     expect(isAreaMiniBoss("frontier-spitter")).toBe(true);
     expect(isAreaMiniBoss("greenwood-briar")).toBe(false);
@@ -70,6 +71,7 @@ describe("area mini-bosses", () => {
     expect(leaderForFollower("mistfen-miremother-spitter")).toBe("mistfen-miremother");
     expect(leaderForFollower("coast-tidecaller-shoalguard")).toBe("sunken-coast-tidecaller");
     expect(leaderForFollower("quarry-quarrymaster-sentry")).toBe("quarry-quarrymaster");
+    expect(leaderForFollower("ashen-cinderlord-hound")).toBe("ashen-cinderlord");
     expect(leaderForFollower("frontier-support-spitter")).toBe("frontier-brute-east");
     expect(leaderForFollower("mistfen-spitter")).toBe("mistfen-behemoth");
     expect(leaderForFollower("south-pit-spitter")).toBe("south-quarrymaster");
@@ -84,6 +86,7 @@ describe("area mini-bosses", () => {
     expect(bruteLeaderExposureMs(1)).toBe(2_500);
     expect(bruteLeaderExposureMs(0)).toBe(4_000);
     expect(isCoordinatedBruteLeader("stone-brute")).toBe(true);
+    expect(isCoordinatedBruteLeader("ashen-cinderlord")).toBe(true);
     expect(isCoordinatedBruteLeader("northwatch-watchbreaker")).toBe(false);
   });
 

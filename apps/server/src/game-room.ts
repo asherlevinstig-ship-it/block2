@@ -64,7 +64,8 @@ import { EMPTY_RAPID_PRACTICE_UPGRADES, RAPID_PRACTICE_ARENA, RAPID_PRACTICE_BOS
   RAPID_PRACTICE_FREE_ROAM, RAPID_PRACTICE_SPAWNS, RAPID_PRACTICE_TOWN_COLLIDERS, RAPID_PRACTICE_UPGRADE_LABELS, RAPID_PRACTICE_WAVES,
   RAPID_WORLD_ZONES,
   RAPID_PRACTICE_WEAPON_CHOICES, applyRapidPracticeUpgrade, rapidPracticeAttackTiming,
-  rapidMistfenToxicPoolAt, rapidPracticeGuardedReward, rapidPracticeMovementSpeed, rapidPracticeProjectileFan, rapidPracticeProjectileTravelMs,
+  rapidAshenLavaAt, rapidAshenVentEruptingAt, rapidMistfenToxicPoolAt, rapidPracticeGuardedReward,
+  rapidPracticeMovementSpeed, rapidPracticeProjectileFan, rapidPracticeProjectileTravelMs,
   rapidPracticeWeaponProfile, type RapidPracticeProjectileStyle, type RapidPracticeUpgradeId,
   type RapidPracticeUpgrades, type RapidPracticeWeaponChoiceId } from "./rapid-practice.js";
 import type { ServerPerformanceUpdate } from "@blockcraft/protocol";
@@ -561,6 +562,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly cinderRamExposedUntil = new Map<string, number>();
   private readonly cinderRamTrailLast = new Map<string, { x: number; z: number }>();
   private readonly mistfenPoolDamageAt = new Map<string, number>();
+  private readonly ashenTerrainDamageAt = new Map<string, number>();
   private readonly fenwalkerWardReadyAt = new Map<string, number>();
   private readonly northwatchShardWardReadyAt = new Map<string, number>();
   private readonly ashguardWardUntil = new Map<string, number>();
@@ -1214,6 +1216,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.protectedDialogs.delete(client.sessionId);
     this.northwatchPatrolContributors.delete(client.sessionId);
     this.mistfenPoolDamageAt.delete(client.sessionId);
+    this.ashenTerrainDamageAt.delete(client.sessionId);
     this.fenwalkerWardReadyAt.delete(client.sessionId);
     this.northwatchShardWardReadyAt.delete(client.sessionId);
     this.foragerCueAt.delete(client.sessionId);
@@ -3754,7 +3757,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
 
   private syncBruteLeaderArmour(leaderId: string, leader: MobState): number {
     const followerIds = AREA_LEADER_FOLLOWERS[leaderId] ?? [];
-    if (!leader.isMiniBoss || !isCoordinatedBruteLeader(leaderId) || leader.archetype !== "stone_brute" || followerIds.length === 0) return 0;
+    if (!leader.isMiniBoss || !isCoordinatedBruteLeader(leaderId)
+      || leader.archetype !== "stone_brute" && leader.archetype !== "cinder_ram" || followerIds.length === 0) return 0;
     const alive = followerIds.filter(id => this.state.mobs.get(id)?.alive).length;
     const desired = bruteLeaderArmourSegments(alive, followerIds.length);
     const current = this.bruteLeaderArmourBonus.get(leaderId) ?? 0;
@@ -3766,7 +3770,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   }
 
   private reinforceBruteLeader(leaderId: string, leader: MobState, phase: AreaLeaderPhase, now: number): void {
-    if (!isCoordinatedBruteLeader(leaderId) || leader.archetype !== "stone_brute") return;
+    if (!isCoordinatedBruteLeader(leaderId)
+      || leader.archetype !== "stone_brute" && leader.archetype !== "cinder_ram") return;
     const dead = (AREA_LEADER_FOLLOWERS[leaderId] ?? [])
       .map(id => [id, this.state.mobs.get(id)] as const)
       .filter((entry): entry is readonly [string, MobState] => Boolean(entry[1] && !entry[1].alive));
@@ -8197,6 +8202,15 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         continue;
       }
       if (this.damagePlayer("mistfen-pool", playerId, 1, now, false, "hazard")) this.mistfenPoolDamageAt.set(playerId, now);
+    }
+    if (this.rapidPractice) for (const [playerId, player] of this.state.players) {
+      const lava = rapidAshenLavaAt(player.x, player.z);
+      const vent = rapidAshenVentEruptingAt(player.x, player.z, now);
+      if (player.health <= 0 || player.y < 7 || player.y > 9 || (!lava && !vent)) continue;
+      const lastDamageAt = this.ashenTerrainDamageAt.get(playerId) ?? 0;
+      if (now - lastDamageAt < 900) continue;
+      if (this.damagePlayer(vent ? "ashen-heat-vent" : "ashen-lava", playerId, 1, now, false, "hazard"))
+        this.ashenTerrainDamageAt.set(playerId, now);
     }
   }
 

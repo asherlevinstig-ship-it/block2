@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { FAST_WORLD_ENCOUNTER_NAVIGATION, GREENWOOD_ENCOUNTER_NAVIGATION, MISTFEN_ENCOUNTER_NAVIGATION,
+  ASHEN_REACH_ENCOUNTER_NAVIGATION,
   fastWorldEncounterAllows, fastWorldMistfenBoardwalkAt, fastWorldMistfenToxicAt,
   fastWorldNavigationGroundAllows, fastWorldSpawnAllows, SUNKEN_COAST_ENCOUNTER_NAVIGATION,
+  fastWorldAshenLavaAt, fastWorldEruptingHeatVentAt, fastWorldHeatVentPhase,
   fastWorldSunkenCoastSandbarAt, fastWorldSunkenCoastTideAt,
   SOUTHERN_QUARRY_ENCOUNTER_NAVIGATION } from "@blockcraft/protocol";
 import { playerCollides } from "@blockcraft/voxel-world";
@@ -43,7 +45,7 @@ describe("Greenwood authored navigation", () => {
 
   it("authors all five Mistfen pockets with dry patrol, flank and firing choices", () => {
     expect(MISTFEN_ENCOUNTER_NAVIGATION).toHaveLength(5);
-    expect(FAST_WORLD_ENCOUNTER_NAVIGATION).toHaveLength(18);
+    expect(FAST_WORLD_ENCOUNTER_NAVIGATION).toHaveLength(22);
     for (const encounter of MISTFEN_ENCOUNTER_NAVIGATION) {
       expect(encounter.nodes.filter(node => node.kind === "patrol").length).toBeGreaterThanOrEqual(2);
       expect(encounter.nodes.some(node => node.kind === "flank")).toBe(true);
@@ -107,5 +109,24 @@ describe("Greenwood authored navigation", () => {
     const pit = SOUTHERN_QUARRY_ENCOUNTER_NAVIGATION.find(encounter => encounter.id === "quarrymaster-pit")!;
     expect(pit.nodes.filter(node => node.kind === "firing")).toHaveLength(1);
     expect(pit.nodes.filter(node => node.kind === "flank")).toHaveLength(2);
+  });
+
+  it("authors three Ashen warbands and a safe-lane Cinderlord caldera", () => {
+    expect(ASHEN_REACH_ENCOUNTER_NAVIGATION).toHaveLength(4);
+    for (const encounter of ASHEN_REACH_ENCOUNTER_NAVIGATION) for (const navNode of encounter.nodes) {
+      expect(fastWorldAshenLavaAt(navNode.x, navNode.z), navNode.id).toBe(false);
+      expect(playerCollides(FAST_WORLD_BLOCK_READER, navNode.x, 8, navNode.z), navNode.id).toBe(false);
+    }
+    const caldera = ASHEN_REACH_ENCOUNTER_NAVIGATION.find(encounter => encounter.id === "cinderlord-caldera")!;
+    expect(caldera.nodes.some(node => node.kind === "firing")).toBe(true);
+    expect(caldera.nodes.filter(node => node.kind === "flank")).toHaveLength(2);
+  });
+
+  it("cycles heat vents through a readable warning before damaging eruption", () => {
+    expect(fastWorldHeatVentPhase(0, 3_499)).toBe("idle");
+    expect(fastWorldHeatVentPhase(0, 3_500)).toBe("warning");
+    expect(fastWorldHeatVentPhase(0, 4_800)).toBe("erupting");
+    expect(fastWorldEruptingHeatVentAt(218, 94, 4_800)).toBe(true);
+    expect(fastWorldEruptingHeatVentAt(218, 94, 3_600)).toBe(false);
   });
 });

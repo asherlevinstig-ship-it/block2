@@ -7,9 +7,10 @@ import { facetedBoxMesh } from "./faceted-shapes.js";
 import { addCallingParticleLayers } from "./calling-particles.js";
 import { CALLING_ABILITY_SUSTAIN_PARTICLES, CALLING_ANTICIPATION_PARTICLES, CALLING_IMPACT_PARTICLES, CALLING_SUSTAIN_PARTICLES, callingParticleLifetime } from "./calling-vfx-presets.js";
 import { mageCastDuration, mageCastPose, type MageAbilityId } from "./mage-casting.js";
-import { FAST_WORLD_ENCOUNTER_NAVIGATION, FAST_WORLD_REGION_DEFINITIONS, SOUTHERN_QUARRY_NAVIGATION_BARRICADES,
+import { ASHEN_REACH_HEAT_VENTS, ASHEN_REACH_NAVIGATION_LAVA_FISSURES, ASHEN_REACH_NAVIGATION_SPIRES,
+  FAST_WORLD_ENCOUNTER_NAVIGATION, FAST_WORLD_REGION_DEFINITIONS, SOUTHERN_QUARRY_NAVIGATION_BARRICADES,
   SOUTHERN_QUARRY_NAVIGATION_BOULDERS, SOUTHERN_QUARRY_NAVIGATION_RAMPS, SOUTHERN_QUARRY_NAVIGATION_TERRACES,
-  greenwoodMasteryStatus, mistfenMasteryStatus,
+  fastWorldHeatVentPhase, greenwoodMasteryStatus, mistfenMasteryStatus,
   type FastWorldVisualTheme } from "@blockcraft/protocol";
 import { rapidPracticeCollisionCellSolid } from "@blockcraft/protocol";
 import type { RegionalArmourProc } from "@blockcraft/protocol";
@@ -2379,6 +2380,8 @@ let requestGreenwoodAssets = (): void => {};
 let updateRapidRegionVisualStream = (_x: number, _z: number): void => {};
 let rapidWorldActiveVisualChunks = 0;
 let rapidWorldTotalVisualChunks = 0;
+const ashenVentVisuals: { entity: pc.Entity; material: pc.StandardMaterial; offsetMs: number; radius: number }[] = [];
+const ashenAshMotes: { entity: pc.Entity; baseY: number; phase: number }[] = [];
 if (fastWorldRequested) {
   const townNpcFaceBatchGroup = app.batcher.addGroup("town-npc-faces", true, 32);
   const rapidWorldSceneryBatchGroup = app.batcher.addGroup("rapid-world-scenery", false, 512);
@@ -2474,6 +2477,12 @@ if (fastWorldRequested) {
   lava.diffuse = new pc.Color(.95, .19, .035);
   lava.emissive = new pc.Color(.8, .07, .01);
   lava.update();
+  const airborneAsh = new pc.StandardMaterial();
+  airborneAsh.diffuse = new pc.Color(.34, .31, .31);
+  airborneAsh.opacity = .42;
+  airborneAsh.blendType = pc.BLEND_NORMAL;
+  airborneAsh.depthWrite = false;
+  airborneAsh.update();
   const greenwoodMoteMaterial = new pc.StandardMaterial();
   greenwoodMoteMaterial.diffuse = new pc.Color(.76, 1, .42);
   greenwoodMoteMaterial.emissive = new pc.Color(.35, .78, .08);
@@ -3549,14 +3558,39 @@ if (fastWorldRequested) {
   }
   addRapidRegionShape("southern-quarry", "quarrymaster-ring", "cylinder", ironOre, [5.6, .06, 5.6], [198.5, 8.12, 166.5]);
 
-  for (const [x, z, length, turn] of [[210,82,6,22],[222,94,8,-14],[239,78,7,31],[248,96,6,-24],[214,132,7,-10],
-    [232,119,9,18],[250,132,6,9]] as const) {
-    const crack = addRapidRegionBox("ashen-reach", "ashen-lava-rift", lava, [length, .045, .32], [x, 8.075, z]);
-    crack.setLocalEulerAngles(0, turn, 0);
+  for (const fissure of ASHEN_REACH_NAVIGATION_LAVA_FISSURES) {
+    const crack = addRapidRegionBox("ashen-reach", `ashen-lava-rift:${fissure.id}`, lava,
+      [fissure.length, .045, fissure.width], [fissure.x, 8.075, fissure.z]);
+    crack.setLocalEulerAngles(0, fissure.yaw, 0);
   }
-  for (const [x, z, height] of [[211,91,2.4],[220,78,3.2],[237,134,2.8],[251,84,3.5],[253,122,2.6],[225,129,2.2]] as const) {
+  for (const [x, z, height] of ASHEN_REACH_NAVIGATION_SPIRES) {
     const spire = addRapidRegionShape("ashen-reach", "ashen-spire", "cone", ashRock, [1.2, height, 1.2], [x, 8 + height * .5, z]);
     spire.setLocalEulerAngles(0, x * 9 % 50, z % 2 ? 8 : -8);
+  }
+  for (const vent of ASHEN_REACH_HEAT_VENTS) {
+    const ventMaterial = new pc.StandardMaterial();
+    ventMaterial.diffuse = new pc.Color(.82, .13, .025);
+    ventMaterial.emissive = new pc.Color(.36, .025, .004);
+    ventMaterial.opacity = .42;
+    ventMaterial.blendType = pc.BLEND_ADDITIVE;
+    ventMaterial.depthWrite = false;
+    ventMaterial.update();
+    const entity = addRapidRegionShape("ashen-reach", `ashen-heat-vent:${vent.id}`, "cylinder", ventMaterial,
+      [vent.radius * 2, .035, vent.radius * 2], [vent.x, 8.09, vent.z]);
+    ashenVentVisuals.push({ entity, material: ventMaterial, offsetMs: vent.offsetMs, radius: vent.radius });
+  }
+  for (const [x, z, range, intensity] of [[218,89,8,.8],[242.5,106.5,13,1.25],[248.5,121.5,8,.75]] as const) {
+    const light = new pc.Entity("ashen-ember-light");
+    light.addComponent("light", { type: "omni", color: new pc.Color(1, .24, .045), intensity,
+      range, castShadows: false });
+    light.setLocalPosition(x, 9, z);
+    rapidRegionChunkRoot("ashen-reach", x, z).addChild(light);
+  }
+  for (let index = 0; index < 18; index++) {
+    const x = 207 + (index * 17 % 47), z = 77 + (index * 29 % 59), baseY = 9.4 + index % 5 * .68;
+    const entity = addRapidRegionShape("ashen-reach", "airborne-ash", "sphere", airborneAsh,
+      [.055 + index % 3 * .018, .035, .055], [x, baseY, z]);
+    ashenAshMotes.push({ entity, baseY, phase: index * 1.73 });
   }
   addRapidRegionShape("ashen-reach", "cinderlord-ring", "cylinder", lava, [6.2, .065, 6.2], [242.5, 8.13, 106.5]);
 
@@ -16704,6 +16738,21 @@ app.on("update", (dt: number) => {
   lastSceneDressingMs = performance.now() - sceneDressingStartedAt;
   capturePerformancePeak("sceneDressingMs", lastSceneDressingMs);
   const animationTime = animationNow / 1000;
+  for (const vent of ashenVentVisuals) {
+    const phase = fastWorldHeatVentPhase(vent.offsetMs, Date.now());
+    const pulse = phase === "erupting" ? 1.12 + Math.sin(animationTime * 18) * .16
+      : phase === "warning" ? 1 + Math.sin(animationTime * 9) * .1 : .9;
+    vent.entity.setLocalScale(vent.radius * 2 * pulse, .035, vent.radius * 2 * pulse);
+    vent.material.opacity = phase === "erupting" ? .86 : phase === "warning" ? .48 + Math.sin(animationTime * 9) * .14 : .2;
+    vent.material.emissive = phase === "erupting" ? new pc.Color(1, .12, .015)
+      : phase === "warning" ? new pc.Color(.72, .08, .008) : new pc.Color(.25, .018, .003);
+    vent.material.update();
+  }
+  for (const mote of ashenAshMotes) {
+    const position = mote.entity.getLocalPosition();
+    mote.entity.setLocalPosition(position.x, mote.baseY + Math.sin(animationTime * .72 + mote.phase) * .55, position.z);
+    mote.entity.rotateLocal(frameTime * 12, frameTime * 19, frameTime * 8);
+  }
   if (silverDepthsRoot.enabled) for (const mote of silverDepthsMotes) {
     mote.entity.setLocalPosition(mote.entity.getLocalPosition().x, mote.baseY + Math.sin(animationTime * 1.35 + mote.phase) * .16, mote.entity.getLocalPosition().z);
     mote.entity.rotateLocal(0, frameTime * 32, frameTime * 18);

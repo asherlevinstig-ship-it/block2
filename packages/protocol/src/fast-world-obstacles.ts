@@ -73,6 +73,14 @@ export const FAST_WORLD_SCENE_OBSTACLES: readonly FastWorldObstacle[] = [
   box("quarry-support-lift", "encounter-cover", 171.9, 176.1, 172.5, 173.5, 8, 10.2),
   box("quarry-support-foreman", "encounter-cover", 188.1, 191.9, 153.45, 154.55, 8, 10.2),
   box("quarry-support-pit", "encounter-cover", 191.8, 196.2, 167.45, 168.55, 8, 10.2),
+
+  // Basalt spires are both the Reach's skyline and its hard cover.
+  box("ashen-spire-ember-gate", "encounter-cover", 210.4, 211.6, 90.4, 91.6, 8, 10.4),
+  box("ashen-spire-west", "encounter-cover", 219.4, 220.6, 77.4, 78.6, 8, 11.2),
+  box("ashen-spire-south", "encounter-cover", 236.4, 237.6, 133.4, 134.6, 8, 10.8),
+  box("ashen-spire-east", "encounter-cover", 250.4, 251.6, 83.4, 84.6, 8, 11.5),
+  box("ashen-spire-glass-ridge", "encounter-cover", 252.4, 253.6, 121.4, 122.6, 8, 10.6),
+  box("ashen-spire-cinder-lane", "encounter-cover", 224.4, 225.6, 128.4, 129.6, 8, 10.2),
 ] as const;
 
 export function createFastWorldObstacleQuery(

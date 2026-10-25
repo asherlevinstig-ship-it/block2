@@ -47,6 +47,7 @@ const FAST_WORLD_AREA_LEADERS: readonly AreaMiniBossDefinition[] = [
   { id: "mistfen-miremother", name: "Miremother", rewardLabel: "Miremother Hoard", rewardItemId: "mireback_crown" },
   { id: "sunken-coast-tidecaller", name: "Tidecaller Behemoth", rewardLabel: "Tidecaller Conch Cache", rewardItemId: "tidecaller_conch" },
   { id: "quarry-quarrymaster", name: "Redstone Quarrymaster", rewardLabel: "Quarrymaster Vault", rewardItemId: "quarrymaster_sigil" },
+  { id: "ashen-cinderlord", name: "Cinderlord", rewardLabel: "Cinderlord Reliquary", rewardItemId: "ashglass_lens" },
 ];
 const COMBAT_AREA_MINI_BOSS_BY_ID = new Map([...AREA_MINI_BOSSES, ...FAST_WORLD_AREA_LEADERS]
   .map(definition => [definition.id, definition]));
@@ -76,6 +77,7 @@ export const AREA_LEADER_FOLLOWERS: Readonly<Record<string, readonly string[]>> 
   "mistfen-miremother": ["mistfen-miremother-spitter", "mistfen-miremother-briar"],
   "sunken-coast-tidecaller": ["coast-tidecaller-shoalguard", "coast-tidecaller-brinefang"],
   "quarry-quarrymaster": ["quarry-quarrymaster-sentry", "quarry-quarrymaster-brute"],
+  "ashen-cinderlord": ["ashen-cinderlord-hound", "ashen-cinderlord-sentry"],
   "stone-brute": ["stone-brute-crawler", "stone-brute-spitter"],
   "frontier-brute": ["frontier-brute-crawler", "frontier-brute-spitter"],
   "frontier-brute-west": ["frontier-brute-west-crawler", "frontier-brute-west-spitter"],
@@ -97,6 +99,7 @@ const COORDINATED_BRUTE_LEADERS = new Set([
   "stone-brute", "frontier-brute", "frontier-brute-west", "frontier-brute-east",
   "mistfen-behemoth", "south-quarrymaster", "buried-chamber-brute",
   "quarry-quarrymaster",
+  "ashen-cinderlord",
 ]);
 
 const COORDINATED_CRAWLER_LEADERS = new Set([
@@ -163,6 +166,11 @@ export function bruteLeaderExposureMs(aliveFollowers: number): number {
 }
 
 export function areaLeaderPattern(archetype: string, sequence: number, phase: AreaLeaderPhase = 1, leaderId = ""): string {
+  if (archetype === "cinder_ram") {
+    const rotation = phase === 1 ? ["furnace-charge"]
+      : phase === 2 ? ["furnace-charge", "rush"] : ["furnace-charge", "alpha-rush", "furnace-charge"];
+    return rotation[sequence % rotation.length]!;
+  }
   if (archetype === "fen_bloater") {
     const rotation = phase === 1 ? ["toxic-bloom"]
       : phase === 2 ? ["toxic-bloom", "bog-charge"] : ["bog-charge", "toxic-bloom", "bog-charge"];

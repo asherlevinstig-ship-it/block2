@@ -63,6 +63,13 @@ export function regionalLeaderArenaMechanic(leaderId: string, center: ArenaPoint
       point(center, spread / 2, -spread / 2), point(center, spread, -spread),
     ] };
   }
+  if (leaderId === "ashen-cinderlord") {
+    const lane = 2.15 * turn;
+    return { cue: "CALDERA SURGE", kind: "fire-trail", radius: .78, sites: [
+      point(center, lane, -3.6), point(center, lane, -1.2), point(center, lane, 1.2), point(center, lane, 3.6),
+      ...(stronger ? [point(center, -lane, -2.4), point(center, -lane, 0), point(center, -lane, 2.4)] : []),
+    ] };
+  }
   return null;
 }
 

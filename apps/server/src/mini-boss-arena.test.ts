@@ -23,15 +23,16 @@ describe("dynamic mini-boss arenas", () => {
 
   it("gives every collection leader a distinct readable arena mechanic", () => {
     const ids = ["wild-crawler", "mistfen-behemoth", "south-quarrymaster",
-      "northwatch-watchbreaker", "frontier-brute-east", "ashglass-sentry-east"];
+      "northwatch-watchbreaker", "frontier-brute-east", "ashglass-sentry-east", "ashen-cinderlord"];
     const mechanics = ids.map(id => regionalLeaderArenaMechanic(id, { x: 0, y: 8, z: 0 }, 2, 1)!);
     expect(mechanics.every(Boolean)).toBe(true);
     expect(new Set(mechanics.map(mechanic => mechanic.cue)).size).toBe(ids.length);
     expect(mechanics.map(mechanic => mechanic.kind)).toEqual([
-      "root", "toxic-cloud", "pressure", "pressure", "pressure", "fire-trail",
+      "root", "toxic-cloud", "pressure", "pressure", "pressure", "fire-trail", "fire-trail",
     ]);
     expect(regionalLeaderArenaMechanic("wild-crawler", { x: 0, y: 8, z: 0 }, 1, 0)).toBeNull();
     expect(regionalLeaderArenaMechanic("ordinary-mob", { x: 0, y: 8, z: 0 }, 3, 0)).toBeNull();
     expect(regionalLeaderArenaMechanic("northwatch-watchbreaker", { x: 0, y: 8, z: 0 }, 3, 0)!.sites).toHaveLength(7);
+    expect(regionalLeaderArenaMechanic("ashen-cinderlord", { x: 0, y: 8, z: 0 }, 3, 0)!.sites).toHaveLength(7);
   });
 });

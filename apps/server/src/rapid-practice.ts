@@ -1,7 +1,8 @@
 import { fastWorldGroundHeight } from "@blockcraft/protocol";
 import type { MobArchetypeId } from "./mob-archetypes.js";
 import type { FastWorldRegionId, MainHandId } from "@blockcraft/protocol";
-import { FAST_WORLD_REGION_DEFINITIONS, fastWorldMistfenBoardwalkAt, fastWorldMistfenToxicAt,
+import { FAST_WORLD_REGION_DEFINITIONS, fastWorldAshenLavaAt, fastWorldEruptingHeatVentAt,
+  fastWorldMistfenBoardwalkAt, fastWorldMistfenToxicAt,
   fastWorldRegionDefinition, RAPID_PRACTICE_ARENA, RAPID_PRACTICE_TOWN_COLLIDERS } from "@blockcraft/protocol";
 export { RAPID_PRACTICE_ARENA, RAPID_PRACTICE_TOWN_COLLIDERS } from "@blockcraft/protocol";
 
@@ -53,6 +54,9 @@ export const rapidPracticeGuardedReward = (encounterId: string): boolean =>
 
 export const rapidMistfenToxicPoolAt = (x: number, z: number): boolean =>
   fastWorldMistfenToxicAt(x, z) && !fastWorldMistfenBoardwalkAt(x, z);
+export const rapidAshenLavaAt = (x: number, z: number): boolean => fastWorldAshenLavaAt(x, z);
+export const rapidAshenVentEruptingAt = (x: number, z: number, now: number): boolean =>
+  fastWorldEruptingHeatVentAt(x, z, now);
 
 const configuredRegionSpawns = (regionId: FastWorldRegionId): readonly RapidPracticeSpawn[] =>
   (fastWorldRegionDefinition(regionId).encounters ?? []).map(encounter => ({
@@ -71,12 +75,7 @@ export const RAPID_PRACTICE_SPAWNS: readonly RapidPracticeSpawn[] = [
 
   ...configuredRegionSpawns("southern-quarry"),
 
-  { id: "ashen-hound-a", archetype: "ember_hound", name: "Ember Hound", zone: "ashen-reach", level: 9, respawnMs: 68_000, x: 214.5, y: 8, z: 87.5 },
-  { id: "ashen-hound-b", archetype: "ember_hound", name: "Ember Hound", zone: "ashen-reach", level: 10, respawnMs: 71_000, x: 231.5, y: 8, z: 128.5 },
-  { id: "ashen-sentry-a", archetype: "shard_sentry", name: "Ashglass Sentry", zone: "ashen-reach", level: 10, respawnMs: 72_000, x: 241.5, y: 8, z: 87.5 },
-  { id: "ashen-ram-a", archetype: "cinder_ram", name: "Cinder Ram", zone: "ashen-reach", level: 11, respawnMs: 76_000, x: 216.5, y: 8, z: 120.5 },
-  { id: "ashen-ram-b", archetype: "cinder_ram", name: "Cinder Ram", zone: "ashen-reach", level: 12, respawnMs: 80_000, x: 248.5, y: 8, z: 121.5 },
-  { id: "ashen-cinderlord", archetype: "cinder_ram", name: "Cinderlord", zone: "ashen-reach", level: 12, leader: true, respawnMs: 100_000, x: 242.5, y: 8, z: 106.5 },
+  ...configuredRegionSpawns("ashen-reach"),
 ] as const;
 
 export const RAPID_PRACTICE_WAVES = [

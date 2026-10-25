@@ -9,7 +9,7 @@ export type FastWorldNavigationNode = {
 
 export type FastWorldEncounterNavigation = {
   id: string;
-  regionId: "greenwood" | "mistfen" | "sunken-coast" | "southern-quarry";
+  regionId: "greenwood" | "mistfen" | "sunken-coast" | "southern-quarry" | "ashen-reach";
   center: { x: number; z: number };
   spawnRadius: number;
   leashRadius: number;
@@ -228,11 +228,80 @@ export const SOUTHERN_QUARRY_ENCOUNTER_NAVIGATION: readonly FastWorldEncounterNa
     ] },
 ] as const;
 
+export const ASHEN_REACH_NAVIGATION_LAVA_FISSURES = [
+  { id: "ember-gate-rift", x: 210, z: 82, length: 6, width: .8, yaw: 22 },
+  { id: "western-fault", x: 222, z: 94, length: 8, width: .85, yaw: -14 },
+  { id: "caldera-fault", x: 239, z: 78, length: 7, width: .8, yaw: 31 },
+  { id: "glass-ridge-rift", x: 248, z: 96, length: 6, width: .85, yaw: -24 },
+  { id: "cinder-lane-rift", x: 214, z: 132, length: 7, width: .8, yaw: -10 },
+  { id: "southern-fault", x: 232, z: 119, length: 9, width: .9, yaw: 18 },
+  { id: "far-ridge-rift", x: 250, z: 132, length: 6, width: .8, yaw: 9 },
+] as const;
+
+export const ASHEN_REACH_NAVIGATION_SPIRES = [
+  [211, 91, 2.4], [220, 78, 3.2], [237, 134, 2.8],
+  [251, 84, 3.5], [253, 122, 2.6], [225, 129, 2.2],
+] as const;
+
+export const ASHEN_REACH_HEAT_VENTS = [
+  { id: "ember-gate-vent", x: 218, z: 94, radius: 1.35, offsetMs: 0 },
+  { id: "cinder-lane-vent", x: 226, z: 119, radius: 1.45, offsetMs: 2_000 },
+  { id: "caldera-vent", x: 242, z: 112, radius: 1.55, offsetMs: 4_000 },
+] as const;
+
+const insideOrientedLane = (x: number, z: number, lane: {
+  x: number; z: number; length: number; width: number; yaw: number;
+}, padding = 0): boolean => {
+  const radians = -lane.yaw * Math.PI / 180;
+  const dx = x - lane.x, dz = z - lane.z;
+  const localX = dx * Math.cos(radians) - dz * Math.sin(radians);
+  const localZ = dx * Math.sin(radians) + dz * Math.cos(radians);
+  return Math.abs(localX) <= lane.length / 2 + padding && Math.abs(localZ) <= lane.width / 2 + padding;
+};
+
+export const fastWorldAshenLavaAt = (x: number, z: number): boolean =>
+  ASHEN_REACH_NAVIGATION_LAVA_FISSURES.some(fissure => insideOrientedLane(x, z, fissure, .12));
+
+export type FastWorldHeatVentPhase = "idle" | "warning" | "erupting";
+export const fastWorldHeatVentPhase = (offsetMs: number, now: number): FastWorldHeatVentPhase => {
+  const phase = ((now + offsetMs) % 6_000 + 6_000) % 6_000;
+  return phase >= 4_800 ? "erupting" : phase >= 3_500 ? "warning" : "idle";
+};
+
+export const fastWorldEruptingHeatVentAt = (x: number, z: number, now: number): boolean =>
+  ASHEN_REACH_HEAT_VENTS.some(vent => fastWorldHeatVentPhase(vent.offsetMs, now) === "erupting"
+    && Math.hypot(x - vent.x, z - vent.z) <= vent.radius);
+
+export const ASHEN_REACH_ENCOUNTER_NAVIGATION: readonly FastWorldEncounterNavigation[] = [
+  { id: "ember-gate", regionId: "ashen-reach", center: { x: 218, z: 89 }, spawnRadius: 6.5, leashRadius: 11,
+    encounterIds: ["ashen-hound-a", "ashen-sentry-a"], nodes: [
+      node("ember-gate-west", "patrol", 214.5, 87.5), node("ember-gate-east", "patrol", 222, 90),
+      node("ember-gate-gallery", "firing", 223.5, 85), node("ember-hound-flank", "flank", 216, 94),
+    ] },
+  { id: "cinder-lane", regionId: "ashen-reach", center: { x: 219.5, z: 123 }, spawnRadius: 6.5, leashRadius: 11,
+    encounterIds: ["ashen-ram-a", "ashen-hound-b"], nodes: [
+      node("cinder-lane-west", "patrol", 216.5, 120.5), node("cinder-lane-east", "patrol", 223, 125),
+      node("cinder-hound-flank", "flank", 218, 128), node("cinder-ram-charge", "flank", 224, 120),
+    ] },
+  { id: "glass-ridge", regionId: "ashen-reach", center: { x: 248.5, z: 121.5 }, spawnRadius: 5.5, leashRadius: 9,
+    encounterIds: ["ashen-ram-b"], nodes: [
+      node("glass-ridge-north", "patrol", 247, 117.5), node("glass-ridge-south", "patrol", 249, 126),
+      node("glass-ridge-flank-west", "flank", 244.5, 122), node("glass-ridge-flank-east", "flank", 252, 119),
+    ] },
+  { id: "cinderlord-caldera", regionId: "ashen-reach", center: { x: 242.5, z: 106.5 }, spawnRadius: 7.5, leashRadius: 12,
+    encounterIds: ["ashen-cinderlord-hound", "ashen-cinderlord-sentry", "ashen-cinderlord"], nodes: [
+      node("caldera-west", "patrol", 237.5, 109.5), node("caldera-east", "patrol", 247, 103.5),
+      node("ashglass-gallery", "firing", 247, 109), node("hellhound-flank", "flank", 238, 102),
+      node("cinderlord-charge-lane", "flank", 244, 112),
+    ] },
+] as const;
+
 export const FAST_WORLD_ENCOUNTER_NAVIGATION: readonly FastWorldEncounterNavigation[] = [
   ...GREENWOOD_ENCOUNTER_NAVIGATION,
   ...MISTFEN_ENCOUNTER_NAVIGATION,
   ...SUNKEN_COAST_ENCOUNTER_NAVIGATION,
   ...SOUTHERN_QUARRY_ENCOUNTER_NAVIGATION,
+  ...ASHEN_REACH_ENCOUNTER_NAVIGATION,
 ] as const;
 
 export const fastWorldEncounterNavigationForMob = (mobId: string): FastWorldEncounterNavigation | null =>
@@ -258,5 +327,6 @@ export const fastWorldNavigationGroundAllows = (mobId: string, pose: { x: number
     || fastWorldMistfenBoardwalkAt(pose.x, pose.z);
   if (encounter?.regionId === "sunken-coast") return !fastWorldSunkenCoastTideAt(pose.x, pose.z)
     || fastWorldSunkenCoastSandbarAt(pose.x, pose.z);
+  if (encounter?.regionId === "ashen-reach") return !fastWorldAshenLavaAt(pose.x, pose.z);
   return true;
 };

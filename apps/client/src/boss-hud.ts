@@ -130,6 +130,7 @@ export const COORDINATED_BRUTE_FOLLOWERS: Readonly<Record<string, readonly strin
   "mistfen-behemoth": ["mistfen-briar-west", "mistfen-briar-east", "mistfen-spitter"],
   "south-quarrymaster": ["south-pit-crawler", "south-pit-spitter"],
   "quarry-quarrymaster": ["quarry-quarrymaster-sentry", "quarry-quarrymaster-brute"],
+  "ashen-cinderlord": ["ashen-cinderlord-hound", "ashen-cinderlord-sentry"],
   "buried-chamber-brute": ["buried-vault-crawler"],
 };
 

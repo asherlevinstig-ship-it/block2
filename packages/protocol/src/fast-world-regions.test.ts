@@ -79,4 +79,14 @@ describe("Fast World region manifest", () => {
     ]);
     expect(quarry.encounters?.every(encounter => encounter.respawnMs >= 40_000)).toBe(true);
   });
+
+  it("authors Ashen Reach as three warbands and an escorted Cinderlord", () => {
+    const ashen = fastWorldRegionDefinition("ashen-reach");
+    expect(ashen.encounters).toHaveLength(ashen.targetPopulation);
+    expect(ashen.encounterPockets?.filter(pocket => pocket.kind === "combat")).toHaveLength(3);
+    expect(ashen.encounterPockets?.find(pocket => pocket.kind === "leader")?.encounterIds).toEqual([
+      "ashen-cinderlord-hound", "ashen-cinderlord-sentry", ashen.leaderId,
+    ]);
+    expect(ashen.encounters?.every(encounter => encounter.respawnMs >= 40_000)).toBe(true);
+  });
 });
