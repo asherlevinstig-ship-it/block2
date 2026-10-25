@@ -1,6 +1,6 @@
 import { greenwoodAtmosphere } from "./greenwood-atmosphere.js";
 import { greenwoodEmergence, greenwoodMobStyle, type GreenwoodMobStyle } from "./greenwood-mob-style.js";
-import { FAST_WORLD_TOWN_ONLY, fastWorldGroundHeight } from "@blockcraft/protocol";
+import { FAST_WORLD_TOWN_BOUNDS, FAST_WORLD_TOWN_ONLY, fastWorldGroundHeight } from "@blockcraft/protocol";
 import { GREENWOOD_MAIN_TRAIL, GREENWOOD_CAMP_TRAIL, GREENWOOD_THICKETS, GREENWOOD_CLUSTER_PLANTS, GREENWOOD_VERGE_PLANTS, sampleWoodlandTrail } from "./greenwood-landscape.js";
 import * as pc from "playcanvas";
 import { facetedBoxMesh } from "./faceted-shapes.js";
@@ -2228,6 +2228,11 @@ function addBox(
 const rapidPrototypeRoot = new pc.Entity("rapid-2d-speed-lab");
 app.root.addChild(rapidPrototypeRoot);
 rapidPrototypeRoot.enabled = fastWorldRequested;
+const townVisualInsideBounds = (x: number, z: number, inset = 0): boolean =>
+  !FAST_WORLD_TOWN_ONLY || (x >= FAST_WORLD_TOWN_BOUNDS.minX + inset
+    && x <= FAST_WORLD_TOWN_BOUNDS.maxX - inset
+    && z >= FAST_WORLD_TOWN_BOUNDS.minZ + inset
+    && z <= FAST_WORLD_TOWN_BOUNDS.maxZ - inset);
 const rapidTownSmoke: { entity: pc.Entity; x: number; y: number; z: number; phase: number; drift: number }[] = [];
 const rapidTownBanners: { entity: pc.Entity; phase: number }[] = [];
 interface RapidTownActorVisual {
@@ -3032,6 +3037,7 @@ if (fastWorldRequested) {
   }
   for (const item of SPEED_LAB_TOWN_TERRAIN_DETAILS) {
     const [x, y, z] = item.position;
+    if (!townVisualInsideBounds(x, z, 1)) continue;
     if (item.kind === "edge-stone") {
       const stone = addBox(rapidPrototypeRoot, `town-terrain:${item.id}`, item.id.length % 2 ? townStone : townStoneLight,
         [item.scale, .045, item.scale * .58], [x, y, z]);
@@ -3212,12 +3218,14 @@ if (fastWorldRequested) {
   }
 
   for (const [x, z] of [[76.8,87.5],[84.5,87.5],[91,93],[96,93],[102,93],[108,88],[116,87],[126,88],[133,92],[133,120],[126,124],[116,125],[104,124],[96,120],[86,124],[77,122],[76.5,106],[77,90]] as const) {
+    if (!townVisualInsideBounds(x, z, 3)) continue;
     addTownShape(rapidPrototypeRoot, "tree-trunk", "cylinder", trunk, [.42, 1.65, .42], [x, 8.82, z]);
     addTownShape(rapidPrototypeRoot, "tree-crown", "sphere", leaf, [2.1, 1.45, 2.1], [x, 10.05, z]);
     addTownShape(rapidPrototypeRoot, "tree-crown", "sphere", leafLight, [1.38, 1.05, 1.38], [x - .45, 10.72, z - .25]);
     addTownShape(rapidPrototypeRoot, "tree-crown", "sphere", leaf, [1.15, .88, 1.15], [x + .5, 10.62, z + .35]);
   }
   for (const [x, z, s] of [[104,96,1.2],[123,97,.9],[124,114,1.1],[108,116,.8],[98,112,.75]] as const) {
+    if (!townVisualInsideBounds(x, z, 1)) continue;
     const rock = addBox(rapidPrototypeRoot, "arena-rock", stone, [s, s * .72, s], [x, 8 + s * .36, z]);
     rock.setLocalEulerAngles(0, x * 7 % 45, 12);
   }
@@ -3736,10 +3744,12 @@ if (fastWorldRequested) {
   requestRapidTownAssets = () => {
     if (townAssetsStarted) return;
     townAssetsStarted = true;
-    void populateTownAssetKit(app, rapidPrototypeRoot, SPEED_LAB_TOWN_ASSETS).then(result => {
-      for (const family of readyTownFallbacks(result.loadedIds)) hideRapidTownFallback(family);
-      console.info(`[town-assets] ${result.entities.length} placements ready; ${result.failedIds.size} model types kept their fallback.`);
-    });
+    void populateTownAssetKit(app, rapidPrototypeRoot,
+      SPEED_LAB_TOWN_ASSETS.filter(asset => townVisualInsideBounds(asset.position[0], asset.position[2], 4)))
+      .then(result => {
+        for (const family of readyTownFallbacks(result.loadedIds)) hideRapidTownFallback(family);
+        console.info(`[town-assets] ${result.entities.length} placements ready; ${result.failedIds.size} model types kept their fallback.`);
+      });
   };
   let greenwoodAssetsStarted = false;
   requestGreenwoodAssets = () => {

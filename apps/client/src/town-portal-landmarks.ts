@@ -110,6 +110,9 @@ export function createTownPortalLandmarks(app: pc.Application, parent: pc.Entity
   tower.setLocalPosition(150, -10, 122);
   parent.addChild(tower);
   const silhouette = material(new pc.Color(.045, .065, .09));
+  // The town is a suspended island. Continue the monument far below its floor
+  // so looking over the edge never reveals the tower ending in mid-air.
+  shape(tower, "tower-deep-shaft", "box", silhouette, [18, 320, 18], [0, -160, 0]);
   const towerFallback = new pc.Entity("tower-silhouette-fallback");
   tower.addChild(towerFallback);
   shape(towerFallback, "tower-base", "box", silhouette, [18, 125, 18], [0, 62.5, 0]);
