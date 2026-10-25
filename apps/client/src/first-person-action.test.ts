@@ -2,6 +2,27 @@ import { describe, expect, it } from "vitest";
 import { firstPersonActionPose, firstPersonWeaponKind } from "./first-person-action.js";
 
 describe("first-person action presentation", () => {
+  it("returns every weapon to its rest pose without snapping at the end of an action", () => {
+    for (const weaponKind of ["unarmed", "sword", "dagger", "bow", "focus", "hammer"] as const) {
+      const input = { timeSeconds: 0, moving: false, weaponKind, attackElapsedMs: null,
+        attackDurationMs: 500, comboStep: 1, castElapsedMs: null, castDurationMs: 600 };
+      const idle = firstPersonActionPose(input);
+      const ended = firstPersonActionPose({ ...input, attackElapsedMs: 500 });
+      for (const key of ["leftX", "leftY", "leftZ", "rightX", "rightY", "rightZ", "rightPitch", "rightYaw", "rightRoll"] as const)
+        expect(ended[key], `${weaponKind} ${key}`).toBeCloseTo(idle[key], 6);
+    }
+  });
+
+  it("raises the guard and opens the casting hand while retaining the weapon grip", () => {
+    const input = { timeSeconds: 0, moving: false, weaponKind: "sword" as const, attackElapsedMs: null,
+      attackDurationMs: 500, comboStep: 1, castElapsedMs: null, castDurationMs: 600 };
+    const idle = firstPersonActionPose(input), guard = firstPersonActionPose({ ...input, guarding: 1 });
+    const cast = firstPersonActionPose({ ...input, castElapsedMs: 300 });
+    expect(guard.leftY).toBeGreaterThan(idle.leftY);
+    expect(guard.rightY).toBeGreaterThan(idle.rightY);
+    expect(cast.leftCurl).toBeLessThan(.1);
+    expect(cast.rightCurl).toBeGreaterThan(.8);
+  });
   it("maps every carried main-hand family to a recognizable viewmodel", () => {
     expect(firstPersonWeaponKind("forged_sword")).toBe("sword");
     expect(firstPersonWeaponKind("fang_dagger")).toBe("dagger");

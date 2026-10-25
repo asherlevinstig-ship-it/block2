@@ -4521,8 +4521,13 @@ const localFirstPersonRenderers = localPlayerVisual.findComponents("render") as 
 
 interface FirstPersonActionRig {
   root: pc.Entity;
+  viewCamera: pc.Entity;
   leftHand: pc.Entity;
   rightHand: pc.Entity;
+  wrists: Record<"left" | "right", pc.Entity>;
+  fingers: { side: "left" | "right"; base: pc.Entity; tip: pc.Entity; spread: number }[];
+  skin: pc.StandardMaterial;
+  sleeve: pc.StandardMaterial;
   weapons: Record<FirstPersonWeaponKind, pc.Entity>;
   magic: pc.Entity;
   magicCore: pc.Entity;
@@ -4534,13 +4539,23 @@ const createFirstPersonMaterial = (color: pc.Color, emissive?: pc.Color): pc.Sta
   const material = new pc.StandardMaterial();
   material.diffuse = color;
   if (emissive) material.emissive = emissive;
-  material.depthTest = false;
+  material.depthTest = true;
   material.depthWrite = true;
   material.update();
   return material;
 };
 
 function createFirstPersonActionRig(): FirstPersonActionRig {
+  // A final depth-cleared pass keeps weapons out of walls while preserving
+  // correct finger / handle occlusion inside the viewmodel itself.
+  const layer = new pc.Layer({ name: "first-person-hands" });
+  app.scene.layers.push(layer);
+  const viewCamera = new pc.Entity("first-person-hands-camera");
+  viewCamera.addComponent("camera", { layers: [layer.id], priority: 2, fov: FIRST_PERSON_FOV,
+    nearClip: .025, farClip: 5, clearColorBuffer: false, clearDepthBuffer: true,
+    toneMapping: pc.TONEMAP_ACES, gammaCorrection: pc.GAMMA_SRGB });
+  camera.addChild(viewCamera); viewCamera.enabled = false;
+  for (const source of [light, skyFill]) if (source.light) source.light.layers = [...source.light.layers, layer.id];
   const root = new pc.Entity("first-person-action-rig");
   camera.addChild(root);
   const sleeve = createFirstPersonMaterial(new pc.Color(.1, .27, .32), new pc.Color(.012, .03, .035));
@@ -4563,28 +4578,39 @@ function createFirstPersonActionRig(): FirstPersonActionRig {
   const actionShape = (parent: pc.Entity, name: string, type: "box" | "cylinder" | "cone" | "sphere",
     material: pc.StandardMaterial, scale: [number, number, number], position: [number, number, number]): pc.Entity => {
     const entity = new pc.Entity(name);
-    entity.addComponent("render", { type, material, castShadows: false, receiveShadows: false });
-    if (fastWorldRequested && type === "box" && /palm|finger|thumb/.test(name) && entity.render)
+    entity.addComponent("render", { type, material, layers: [layer.id], castShadows: false, receiveShadows: false });
+    if (type === "box" && /palm|finger|thumb|sleeve|bracer/.test(name) && entity.render)
       entity.render.meshInstances[0]!.mesh = facetedBoxMesh(app.graphicsDevice, .12);
     for (const meshInstance of entity.render?.meshInstances ?? []) meshInstance.cull = false;
     entity.setLocalScale(...scale); entity.setLocalPosition(...position); parent.addChild(entity);
     return entity;
   };
+  const wrists = {} as Record<"left" | "right", pc.Entity>;
+  const fingers: FirstPersonActionRig["fingers"] = [];
   const makeHand = (side: "left" | "right"): pc.Entity => {
     const hand = new pc.Entity(`first-person-${side}-hand`); root.addChild(hand);
-    const forearm = actionShape(hand, `${side}-sleeve`, "cone", sleeve, [.14, .34, .14], [0, -.2, .05]);
-    forearm.setLocalEulerAngles(0, 0, 180);
-    actionShape(hand, `${side}-cuff`, "cylinder", leather, [.155, .075, .155], [0, .01, .015]);
-    actionShape(hand, `${side}-palm`, "box", skin, [.15, .17, .115], [0, .13, -.04]);
+    const sign = side === "left" ? -1 : 1;
+    const forearm = actionShape(hand, `${side}-sleeve`, "box", sleeve, [.17, .38, .17], [sign * .02, -.2, .07]);
+    forearm.setLocalEulerAngles(-18, 0, sign * 5);
+    actionShape(hand, `${side}-upper-sleeve`, "box", sleeve, [.21, .36, .21], [sign * .045, -.5, .17]).setLocalEulerAngles(-12, 0, sign * 5);
+    actionShape(hand, `${side}-bracer`, "box", leather, [.175, .14, .17], [0, -.035, .015]);
+    for (const y of [-.085, .015]) actionShape(hand, `${side}-cuff-seam`, "box", bronze, [.18, .014, .174], [0, y, .015]);
+    const wrist = new pc.Entity(`${side}-wrist`); hand.addChild(wrist); wrists[side] = wrist;
+    actionShape(wrist, `${side}-palm`, "box", skin, [.15, .15, .085], [0, .105, -.015]);
     const thumbDirection = side === "left" ? 1 : -1;
-    const thumb = actionShape(hand, `${side}-thumb`, "box", skin, [.065, .105, .07],
-      [thumbDirection * .105, .13, -.075]);
-    thumb.setLocalEulerAngles(0, 0, thumbDirection * 28);
-    for (let index = 0; index < 3; index++) {
-      const finger = actionShape(hand, `${side}-finger-${index}`, "box", skin,
-        side === "right" ? [.038, .09, .052] : [.036, .11, .045],
-        [(index - 1) * .05, side === "right" ? .205 : .235, side === "right" ? -.105 : -.075]);
-      if (side === "right") finger.setLocalEulerAngles(62, 0, 0);
+    const thumb = new pc.Entity(`${side}-thumb-joint`); wrist.addChild(thumb);
+    thumb.setLocalPosition(thumbDirection * .082, .075, -.015);
+    thumb.setLocalEulerAngles(-35, thumbDirection * -25, thumbDirection * -38);
+    actionShape(thumb, `${side}-thumb`, "box", skin, [.048, .07, .052], [0, .027, 0]);
+    actionShape(thumb, `${side}-thumb-tip`, "box", skin, [.043, .055, .045], [0, .075, -.024]).setLocalEulerAngles(-48, 0, 0);
+    for (let index = 0; index < 4; index++) {
+      const length = [.069, .079, .073, .058][index]!;
+      const base = new pc.Entity(`${side}-finger-${index}-joint`); wrist.addChild(base);
+      base.setLocalPosition((index - 1.5) * .038, .174, -.015);
+      actionShape(base, `${side}-finger-${index}`, "box", skin, [.033, length, .04], [0, length * .5, 0]);
+      const tip = new pc.Entity(`${side}-finger-${index}-tip-joint`); base.addChild(tip); tip.setLocalPosition(0, length, 0);
+      actionShape(tip, `${side}-finger-${index}-tip`, "box", skin, [.029, length * .72, .036], [0, length * .36, 0]);
+      fingers.push({ side, base, tip, spread: (index - 1.5) * -5 });
     }
     return hand;
   };
@@ -4593,11 +4619,11 @@ function createFirstPersonActionRig(): FirstPersonActionRig {
   rightHand.setLocalScale(.76, .76, .76);
   const weapons = Object.fromEntries((["unarmed", "sword", "dagger", "bow", "focus", "hammer"] as const)
     .map(kind => [kind, new pc.Entity(`first-person-${kind}`)])) as Record<FirstPersonWeaponKind, pc.Entity>;
-  for (const weapon of Object.values(weapons)) rightHand.addChild(weapon);
+  for (const weapon of Object.values(weapons)) wrists.right.addChild(weapon);
 
   weapons.sword.setLocalPosition(-.015, .13, -.05);
   weapons.sword.setLocalEulerAngles(-6, -8, 18);
-  actionShape(weapons.sword, "sword-grip", "cylinder", leather, [.055, .18, .055], [0, .07, 0]);
+  actionShape(weapons.sword, "sword-grip", "cylinder", leather, [.055, .32, .055], [0, .07, 0]);
   actionShape(weapons.sword, "sword-pommel", "sphere", bronze, [.075, .075, .075], [0, -.12, 0]);
   actionShape(weapons.sword, "sword-guard", "box", bronze, [.3, .04, .07], [0, .25, 0]);
   actionShape(weapons.sword, "sword-blade", "box", steel, [.082, .46, .035], [0, .5, 0]);
@@ -4606,7 +4632,7 @@ function createFirstPersonActionRig(): FirstPersonActionRig {
 
   weapons.dagger.setLocalPosition(-.015, .13, -.05);
   weapons.dagger.setLocalEulerAngles(-8, -10, 24);
-  actionShape(weapons.dagger, "dagger-grip", "cylinder", leather, [.06, .15, .06], [0, .04, 0]);
+  actionShape(weapons.dagger, "dagger-grip", "cylinder", leather, [.06, .28, .06], [0, .04, 0]);
   actionShape(weapons.dagger, "dagger-guard", "box", bronze, [.23, .04, .065], [0, .2, 0]);
   actionShape(weapons.dagger, "dagger-blade", "box", steel, [.095, .25, .032], [0, .345, 0]);
   actionShape(weapons.dagger, "dagger-tip", "cone", steel, [.098, .12, .045], [0, .53, 0]);
@@ -4659,7 +4685,7 @@ function createFirstPersonActionRig(): FirstPersonActionRig {
     return trail;
   });
   root.enabled = false;
-  return { root, leftHand, rightHand, weapons, magic, magicCore, runeRing, slashTrails };
+  return { root, viewCamera, leftHand, rightHand, wrists, fingers, skin, sleeve, weapons, magic, magicCore, runeRing, slashTrails };
 }
 
 const firstPersonActionRig = createFirstPersonActionRig();
@@ -4667,7 +4693,10 @@ let firstPersonAbilityCastStartedAt: number | null = null;
 let firstPersonAbilityCastDuration = 700;
 let firstPersonHitKickUntil = 0;
 let firstPersonHitKickStrength = 0;
+let firstPersonEquippedAt = 0;
+let firstPersonEquippedId: MainHandId = "unarmed";
 function setFirstPersonMainHand(mainHandId: MainHandId): void {
+  if (mainHandId !== firstPersonEquippedId) { firstPersonEquippedAt = performance.now(); firstPersonEquippedId = mainHandId; }
   const active = firstPersonWeaponKind(mainHandId);
   for (const [kind, weapon] of Object.entries(firstPersonActionRig.weapons)) weapon.enabled = kind === active;
 }
@@ -4696,6 +4725,7 @@ function setCameraViewMode(next: CameraViewMode, capturePointer = false): void {
     : "Third-person camera · press V for first-person";
   for (const renderer of localFirstPersonRenderers) renderer.enabled = !firstPerson;
   firstPersonActionRig.root.enabled = firstPerson;
+  firstPersonActionRig.viewCamera.enabled = firstPerson;
   if (camera.camera) {
     camera.camera.fov = firstPerson ? FIRST_PERSON_FOV : THIRD_PERSON_FOV;
     camera.camera.nearClip = firstPerson ? .04 : .1;
@@ -5853,10 +5883,31 @@ let fieldSpecialSelectionBeforeEquip = false;
 let callingAbilityPendingUntil = 0;
 let localMainHandId: MainHandId = "unarmed";
 let localArmourId: ArmourId = "none";
+let firstPersonLastFrame = 0;
+let firstPersonMovementWeight = 0;
+let firstPersonGuardWeight = 0;
+let firstPersonPreviousYaw: number | null = null;
+let firstPersonLookSway = 0;
+let firstPersonAppearanceKey = "";
 
 function updateFirstPersonActionView(now: number, moving: boolean, actionElapsed: number | null,
   powerElapsed: number | null): void {
-  if (cameraViewMode !== "first-person") return;
+  if (cameraViewMode !== "first-person") { firstPersonLastFrame = 0; firstPersonPreviousYaw = null; return; }
+  const dt = firstPersonLastFrame ? Math.min(.05, Math.max(0, (now - firstPersonLastFrame) / 1000)) : 1 / 60;
+  firstPersonLastFrame = now;
+  const blend = 1 - Math.exp(-12 * dt);
+  firstPersonMovementWeight += ((moving ? 1 : 0) - firstPersonMovementWeight) * blend;
+  firstPersonGuardWeight += ((localDefending ? 1 : 0) - firstPersonGuardWeight) * blend;
+  const yawDelta = firstPersonPreviousYaw === null ? 0 : Math.atan2(Math.sin(cameraOrbit.yaw - firstPersonPreviousYaw), Math.cos(cameraOrbit.yaw - firstPersonPreviousYaw));
+  firstPersonPreviousYaw = cameraOrbit.yaw;
+  firstPersonLookSway += (Math.max(-.025, Math.min(.025, -yawDelta / Math.max(.001, dt) * .008)) - firstPersonLookSway) * blend;
+  const skinColor = localPlayerRig.appearanceMaterials.skin.diffuse, coatColor = localPlayerRig.appearanceMaterials.coat.diffuse;
+  const appearanceKey = `${skinColor.r}:${skinColor.g}:${skinColor.b}:${coatColor.r}:${coatColor.g}:${coatColor.b}`;
+  if (appearanceKey !== firstPersonAppearanceKey) {
+    firstPersonAppearanceKey = appearanceKey;
+    firstPersonActionRig.skin.diffuse.copy(skinColor); firstPersonActionRig.skin.update();
+    firstPersonActionRig.sleeve.diffuse.copy(coatColor); firstPersonActionRig.sleeve.update();
+  }
   const weaponKind = firstPersonWeaponKind(localMainHandId);
   const triggeredCastElapsed = firstPersonAbilityCastStartedAt === null ? null : now - firstPersonAbilityCastStartedAt;
   if (triggeredCastElapsed !== null && triggeredCastElapsed >= firstPersonAbilityCastDuration)
@@ -5869,6 +5920,8 @@ function updateFirstPersonActionView(now: number, moving: boolean, actionElapsed
   const pose = firstPersonActionPose({
     timeSeconds: now / 1000,
     moving,
+    movementWeight: firstPersonMovementWeight,
+    guarding: firstPersonGuardWeight,
     weaponKind,
     attackElapsedMs: weaponKind === "focus" ? null : actionElapsed,
     attackDurationMs: Math.max(1, actionDuration(localActionStep)),
@@ -5880,9 +5933,23 @@ function updateFirstPersonActionView(now: number, moving: boolean, actionElapsed
   firstPersonActionRig.leftHand.setLocalEulerAngles(pose.leftPitch, pose.leftYaw, pose.leftRoll);
   firstPersonActionRig.rightHand.setLocalPosition(pose.rightX, pose.rightY, pose.rightZ);
   firstPersonActionRig.rightHand.setLocalEulerAngles(pose.rightPitch, pose.rightYaw, pose.rightRoll);
+  firstPersonActionRig.wrists.left.setLocalEulerAngles(-pose.magicStrength * 22, pose.magicStrength * -15, 0);
+  firstPersonActionRig.wrists.right.setLocalEulerAngles(pose.attackStrength * -10, 0, pose.magicStrength * 8);
+  for (const finger of firstPersonActionRig.fingers) {
+    const curl = finger.side === "left" ? pose.leftCurl : pose.rightCurl;
+    finger.base.setLocalEulerAngles(-curl * 78, 0, finger.spread * (1 - curl));
+    finger.tip.setLocalEulerAngles(-curl * 88, 0, 0);
+  }
+  for (const side of ["left", "right"] as const) {
+    const curl = side === "left" ? pose.leftCurl : pose.rightCurl;
+    firstPersonActionRig.wrists[side].findByName(`${side}-thumb-joint`)?.setLocalEulerAngles(
+      -25 - curl * 25, (side === "left" ? 1 : -1) * -25,
+      (side === "left" ? -1 : 1) * (35 - curl * 90));
+  }
   const magicVisible = pose.magicStrength > .025;
   firstPersonActionRig.magic.enabled = magicVisible;
   if (magicVisible) {
+    firstPersonActionRig.magic.setLocalPosition(pose.leftX + .08, pose.leftY + .22, pose.leftZ - .16);
     const scale = .3 + pose.magicStrength * .25;
     firstPersonActionRig.magic.setLocalScale(scale, scale, scale);
     firstPersonActionRig.runeRing.setLocalEulerAngles(0, 0, now * .12);
@@ -5908,7 +5975,9 @@ function updateFirstPersonActionView(now: number, moving: boolean, actionElapsed
   const kick = kickRemaining > 0
     ? Math.sin(Math.min(1, kickRemaining / 150) * Math.PI * .5) * firstPersonHitKickStrength
     : 0;
-  firstPersonActionRig.root.setLocalPosition(0, -kick * .12, kick * .4);
+  const equipT = Math.min(1, Math.max(0, (now - firstPersonEquippedAt) / 240));
+  const equipDip = (1 - equipT) * (1 - equipT) * .2;
+  firstPersonActionRig.root.setLocalPosition(firstPersonLookSway, -kick * .12 - equipDip, kick * .4);
 }
 // The onboarding renderer reads the equipped weapon. Run its initial pass only
 // after equipment state exists so a fresh profile cannot hit the temporal dead zone.
