@@ -52,6 +52,7 @@ describe("fast low-poly world", () => {
     expect(rapidPracticeGuardedReward("mistfen-wayfinder-keeper")).toBe(true);
     expect(rapidPracticeGuardedReward("mistfen-wayfinder-guard")).toBe(false);
     expect(rapidMistfenToxicPoolAt(160, 75)).toBe(true);
+    expect(rapidMistfenToxicPoolAt(169, 59)).toBe(false); // visible basin boardwalk is safe
     expect(rapidMistfenToxicPoolAt(164, 66.5)).toBe(false);
     expect(rapidMistfenToxicPoolAt(179.5, 51.5)).toBe(false);
   });

@@ -1,4 +1,5 @@
 import type { PaintedGroundStyle } from "./fast-world-texture.js";
+import { MISTFEN_NAVIGATION_BOARDWALKS } from "@blockcraft/protocol";
 
 export const MISTFEN_TEXTURE_STYLES: Readonly<Record<"marsh" | "water" | "mud", PaintedGroundStyle>> = {
   marsh: {
@@ -29,15 +30,7 @@ export const MISTFEN_TOXIC_POOLS = [
 ] as const;
 
 /** Narrow dry routes are deliberately authored between damaging pools. */
-export const MISTFEN_BOARDWALKS = [
-  { id: "greenwood-entry", x: 157.5, z: 78.5, length: 9, width: 2.5, yaw: -28 },
-  { id: "drowned-crossing", x: 164, z: 69, length: 10, width: 2.35, yaw: -38 },
-  { id: "basin-approach", x: 172, z: 60.5, length: 10.5, width: 2.3, yaw: -43 },
-  { id: "mother-bridge", x: 177.5, z: 54, length: 6.5, width: 2.5, yaw: -24 },
-  { id: "reed-turn", x: 181.5, z: 43, length: 11, width: 2.2, yaw: 7 },
-  { id: "spring-crossing", x: 190.5, z: 48.5, length: 10, width: 2.2, yaw: 38 },
-  { id: "cinder-exit", x: 198, z: 68, length: 15, width: 2.45, yaw: 70 },
-] as const;
+export const MISTFEN_BOARDWALKS = MISTFEN_NAVIGATION_BOARDWALKS;
 
 export const MISTFEN_SNAGS = [
   { x: 156, z: 51, yaw: 8 }, { x: 164, z: 29, yaw: -17 }, { x: 176, z: 73, yaw: 26 },

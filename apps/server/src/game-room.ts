@@ -58,7 +58,7 @@ import { REGIONAL_PACK_DISRUPTION_MS, regionalPackCooldownMultiplier, regionalPa
 import { FAST_WORLD_SIMULATION_RANGE, fastWorldMobSimulationActive, mobSimulationActive } from "./mob-activation.js";
 import { FAST_WORLD_BLOCK_READER } from "./world-collision.js";
 import { fastWorldEncounterAllows, fastWorldFiringSites, fastWorldPatrolDestination,
-  fastWorldSpawnAllows } from "./fast-world-navigation.js";
+  fastWorldNavigationGroundAllows, fastWorldSpawnAllows } from "./fast-world-navigation.js";
 import { SERVER_TICK_BUDGET_MS, appendTickSample, samplePercentile } from "./performance-metrics.js";
 import { EMPTY_RAPID_PRACTICE_UPGRADES, RAPID_PRACTICE_ARENA, RAPID_PRACTICE_BOSS_ID,
   RAPID_PRACTICE_FREE_ROAM, RAPID_PRACTICE_SPAWNS, RAPID_PRACTICE_TOWN_COLLIDERS, RAPID_PRACTICE_UPGRADE_LABELS, RAPID_PRACTICE_WAVES,
@@ -2646,7 +2646,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private registerMob(mobId: string, archetypeId: MobArchetypeId, spawn: { x: number; y: number; z: number }): void {
     const outside = keepMobOutsideTown(spawn);
     const home = walkableMobSpawn({ ...spawn, ...outside }, this.readWorldBlock, pose => this.mobPositionAllowed(pose)
-      && this.roamingAllowed(mobId, pose) && (!this.rapidPractice || fastWorldSpawnAllows(mobId, pose))
+      && this.roamingAllowed(mobId, pose) && (!this.rapidPractice
+        || fastWorldSpawnAllows(mobId, pose) && fastWorldNavigationGroundAllows(mobId, pose))
       && caveEncounterAllows(mobId, pose));
     this.mobHomes.set(mobId, home);
     this.mobNavigation.set(mobId, createMobNavigationState());
@@ -2821,7 +2822,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (rapidSpawn) {
       const zone = RAPID_WORLD_ZONES.find(candidate => candidate.id === rapidSpawn.zone)!;
       return Math.abs(pose.y - 8) <= 1.5 && pose.x >= zone.minX - 3 && pose.x <= zone.maxX + 3
-        && pose.z >= zone.minZ - 3 && pose.z <= zone.maxZ + 3 && fastWorldEncounterAllows(id, pose);
+        && pose.z >= zone.minZ - 3 && pose.z <= zone.maxZ + 3 && fastWorldEncounterAllows(id, pose)
+        && fastWorldNavigationGroundAllows(id, pose);
     }
     const siteGuard = roadsideGuard(id);
     if (siteGuard) return Math.abs(pose.y - siteGuard.y) <= 1.5

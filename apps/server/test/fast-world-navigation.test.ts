@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { GREENWOOD_ENCOUNTER_NAVIGATION, fastWorldEncounterAllows, fastWorldSpawnAllows } from "@blockcraft/protocol";
+import { FAST_WORLD_ENCOUNTER_NAVIGATION, GREENWOOD_ENCOUNTER_NAVIGATION, MISTFEN_ENCOUNTER_NAVIGATION,
+  fastWorldEncounterAllows, fastWorldMistfenBoardwalkAt, fastWorldMistfenToxicAt,
+  fastWorldNavigationGroundAllows, fastWorldSpawnAllows } from "@blockcraft/protocol";
 import { playerCollides } from "@blockcraft/voxel-world";
 import { FAST_WORLD_BLOCK_READER } from "../src/world-collision.js";
 import { fastWorldFiringSites, fastWorldPatrolDestination } from "../src/fast-world-navigation.js";
@@ -35,5 +37,34 @@ describe("Greenwood authored navigation", () => {
       pose => fastWorldEncounterAllows(mobId, pose));
     expect(sites.length).toBeGreaterThan(0);
     expect(sites.every(site => !playerCollides(FAST_WORLD_BLOCK_READER, site.x, site.y, site.z))).toBe(true);
+  });
+
+  it("authors all five Mistfen pockets with dry patrol, flank and firing choices", () => {
+    expect(MISTFEN_ENCOUNTER_NAVIGATION).toHaveLength(5);
+    expect(FAST_WORLD_ENCOUNTER_NAVIGATION).toHaveLength(10);
+    for (const encounter of MISTFEN_ENCOUNTER_NAVIGATION) {
+      expect(encounter.nodes.filter(node => node.kind === "patrol").length).toBeGreaterThanOrEqual(2);
+      expect(encounter.nodes.some(node => node.kind === "flank")).toBe(true);
+      for (const mobId of encounter.encounterIds) for (const node of encounter.nodes)
+        expect(fastWorldNavigationGroundAllows(mobId, node), `${mobId}:${node.id}`).toBe(true);
+    }
+  });
+
+  it("treats toxic water as blocked navigation but keeps visible boardwalks safe", () => {
+    expect(fastWorldMistfenToxicAt(169, 59)).toBe(true);
+    expect(fastWorldMistfenBoardwalkAt(169, 59)).toBe(true);
+    expect(fastWorldNavigationGroundAllows("mistfen-drowned-spitter", { x: 158, z: 43 })).toBe(false);
+    expect(fastWorldNavigationGroundAllows("mistfen-drowned-spitter", { x: 169, z: 59 })).toBe(true);
+  });
+
+  it("gives Miremother escorts distinct approach roles", () => {
+    const basin = MISTFEN_ENCOUNTER_NAVIGATION.find(encounter => encounter.id === "miremother-basin")!;
+    expect(basin.nodes.filter(node => node.kind === "flank")).toHaveLength(2);
+    expect(basin.nodes.filter(node => node.kind === "firing")).toHaveLength(1);
+    for (const mobId of basin.encounterIds) {
+      const destination = fastWorldPatrolDestination(mobId, 1, FAST_WORLD_BLOCK_READER,
+        pose => fastWorldEncounterAllows(mobId, pose) && fastWorldNavigationGroundAllows(mobId, pose));
+      expect(destination, mobId).not.toBeNull();
+    }
   });
 });

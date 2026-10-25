@@ -1,7 +1,8 @@
 import { fastWorldGroundHeight } from "@blockcraft/protocol";
 import type { MobArchetypeId } from "./mob-archetypes.js";
 import type { FastWorldRegionId, MainHandId } from "@blockcraft/protocol";
-import { FAST_WORLD_REGION_DEFINITIONS, fastWorldRegionDefinition, RAPID_PRACTICE_ARENA, RAPID_PRACTICE_TOWN_COLLIDERS } from "@blockcraft/protocol";
+import { FAST_WORLD_REGION_DEFINITIONS, fastWorldMistfenBoardwalkAt, fastWorldMistfenToxicAt,
+  fastWorldRegionDefinition, RAPID_PRACTICE_ARENA, RAPID_PRACTICE_TOWN_COLLIDERS } from "@blockcraft/protocol";
 export { RAPID_PRACTICE_ARENA, RAPID_PRACTICE_TOWN_COLLIDERS } from "@blockcraft/protocol";
 
 export type RapidPracticeSpawn = {
@@ -51,11 +52,7 @@ export const rapidPracticeGuardedReward = (encounterId: string): boolean =>
     pocket.kind === "guarded-reward" && pocket.encounterIds.at(-1) === encounterId));
 
 export const rapidMistfenToxicPoolAt = (x: number, z: number): boolean =>
-  (fastWorldRegionDefinition("mistfen").hazards ?? []).some(pool => {
-    const dx = (x - pool.x) / pool.radiusX;
-    const dz = (z - pool.z) / pool.radiusZ;
-    return dx * dx + dz * dz <= 1;
-  });
+  fastWorldMistfenToxicAt(x, z) && !fastWorldMistfenBoardwalkAt(x, z);
 
 const configuredRegionSpawns = (regionId: FastWorldRegionId): readonly RapidPracticeSpawn[] =>
   (fastWorldRegionDefinition(regionId).encounters ?? []).map(encounter => ({

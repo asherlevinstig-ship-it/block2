@@ -7,7 +7,7 @@ import { facetedBoxMesh } from "./faceted-shapes.js";
 import { addCallingParticleLayers } from "./calling-particles.js";
 import { CALLING_ABILITY_SUSTAIN_PARTICLES, CALLING_ANTICIPATION_PARTICLES, CALLING_IMPACT_PARTICLES, CALLING_SUSTAIN_PARTICLES, callingParticleLifetime } from "./calling-vfx-presets.js";
 import { mageCastDuration, mageCastPose, type MageAbilityId } from "./mage-casting.js";
-import { FAST_WORLD_REGION_DEFINITIONS, GREENWOOD_ENCOUNTER_NAVIGATION, greenwoodMasteryStatus, mistfenMasteryStatus,
+import { FAST_WORLD_ENCOUNTER_NAVIGATION, FAST_WORLD_REGION_DEFINITIONS, greenwoodMasteryStatus, mistfenMasteryStatus,
   type FastWorldVisualTheme } from "@blockcraft/protocol";
 import { rapidPracticeCollisionCellSolid } from "@blockcraft/protocol";
 import type { RegionalArmourProc } from "@blockcraft/protocol";
@@ -2319,7 +2319,7 @@ const drawFastWorldMap = (position: { x: number; z: number }, facingYawDegrees: 
   for (const region of FAST_WORLD_REGION_DEFINITIONS)
     drawRegion(region.id, region.name, region.bounds.minX, region.bounds.maxX, region.bounds.minZ, region.bounds.maxZ);
   if (fastWorldNavigationDebug) {
-    for (const encounter of GREENWOOD_ENCOUNTER_NAVIGATION) {
+    for (const encounter of FAST_WORLD_ENCOUNTER_NAVIGATION) {
       const center = fastWorldMapPoint(encounter.center.x, encounter.center.z, width, height);
       const edge = fastWorldMapPoint(encounter.center.x + encounter.leashRadius, encounter.center.z, width, height);
       ctx.beginPath(); ctx.arc(center.x, center.y, Math.abs(edge.x - center.x), 0, Math.PI * 2);
