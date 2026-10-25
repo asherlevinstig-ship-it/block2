@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { rapidPracticeCollisionCellSolid } from "@blockcraft/protocol";
+import { ARCHIVED_FAST_WORLD_COLLISION_QUERY } from "@blockcraft/protocol";
 import { GREENWOOD_MAIN_TRAIL, GREENWOOD_CAMP_TRAIL, GREENWOOD_CLUSTER_PLANTS, GREENWOOD_VERGE_PLANTS,
   MOSSWATCH_CLEARING, sampleWoodlandTrail, woodlandPlantAllowed } from "./greenwood-landscape.js";
 import { GREENWOOD_MOB_SIGNS } from "./greenwood-visuals.js";
@@ -13,8 +13,8 @@ describe("Greenwood gate-to-Mosswatch route", () => {
         const dx=next[0]-prev[0],dz=next[1]-prev[1],len=Math.hypot(dx,dz);
         for(const side of [-.35,0,.35]) {
           const x=p[0]-dz/len*p[2]*side,z=p[1]+dx/len*p[2]*side;
-          expect(rapidPracticeCollisionCellSolid(x,7,z)).toBe(true);
-          expect(rapidPracticeCollisionCellSolid(x,8,z)).toBe(false);
+          expect(ARCHIVED_FAST_WORLD_COLLISION_QUERY.cellSolid(x,7,z)).toBe(true);
+          expect(ARCHIVED_FAST_WORLD_COLLISION_QUERY.cellSolid(x,8,z)).toBe(false);
         }
         if(i) expect(Math.hypot(p[0]-trail[i-1]![0],p[1]-trail[i-1]![1])).toBeLessThan(1);
       }

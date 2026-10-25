@@ -5,10 +5,12 @@ import { FAST_WORLD_ENCOUNTER_NAVIGATION, GREENWOOD_ENCOUNTER_NAVIGATION, MISTFE
   fastWorldNavigationGroundAllows, fastWorldSpawnAllows, SUNKEN_COAST_ENCOUNTER_NAVIGATION,
   fastWorldAshenLavaAt, fastWorldEruptingHeatVentAt, fastWorldHeatVentPhase,
   fastWorldSunkenCoastSandbarAt, fastWorldSunkenCoastTideAt,
-  SOUTHERN_QUARRY_ENCOUNTER_NAVIGATION } from "@blockcraft/protocol";
+  SOUTHERN_QUARRY_ENCOUNTER_NAVIGATION, ARCHIVED_FAST_WORLD_COLLISION_QUERY } from "@blockcraft/protocol";
 import { playerCollides } from "@blockcraft/voxel-world";
-import { FAST_WORLD_BLOCK_READER } from "../src/world-collision.js";
+import { obstacleQueryReader } from "../src/world-collision.js";
 import { fastWorldFiringSites, fastWorldPatrolDestination } from "../src/fast-world-navigation.js";
+
+const FAST_WORLD_BLOCK_READER = obstacleQueryReader(ARCHIVED_FAST_WORLD_COLLISION_QUERY);
 
 describe("Greenwood authored navigation", () => {
   it("gives every encounter bounded spawns and purposeful combat nodes", () => {

@@ -1,6 +1,6 @@
 import { greenwoodAtmosphere } from "./greenwood-atmosphere.js";
 import { greenwoodEmergence, greenwoodMobStyle, type GreenwoodMobStyle } from "./greenwood-mob-style.js";
-import { fastWorldGroundHeight } from "@blockcraft/protocol";
+import { FAST_WORLD_TOWN_ONLY, fastWorldGroundHeight } from "@blockcraft/protocol";
 import { GREENWOOD_MAIN_TRAIL, GREENWOOD_CAMP_TRAIL, GREENWOOD_THICKETS, GREENWOOD_CLUSTER_PLANTS, GREENWOOD_VERGE_PLANTS, sampleWoodlandTrail } from "./greenwood-landscape.js";
 import * as pc from "playcanvas";
 import { facetedBoxMesh } from "./faceted-shapes.js";
@@ -932,7 +932,9 @@ function beginFirstStepsAfterCalling(): void {
 }
 function noteFirstStep(event: OnboardingEvent): void {
   if (firstStepsIndex === null || firstStepsIndex >= ONBOARDING_DONE) return;
-  const next = advanceOnboarding(firstStepsIndex, event);
+  const advanced = advanceOnboarding(firstStepsIndex, event);
+  const next = FAST_WORLD_TOWN_ONLY && usesFastWorld(initialPageQuery) && advanced === ONBOARDING_STAGE.headSouth
+    ? ONBOARDING_DONE : advanced;
   if (next === firstStepsIndex) return;
   if (next === ONBOARDING_STAGE.firstCombat) {
     firstCombatPhase = "attack";
@@ -2288,13 +2290,13 @@ const showFastWorldReveal = (title: string, detail: string, kind: "region" | "la
 
 const fastWorldMapTargets = (): FastWorldNavPoint[] => [
   { id: "town", name: "Town of Beginnings", x: 74, z: 106, regionId: "town", kind: "town", discoveryRadius: 0 },
-  ...FAST_WORLD_REGION_DEFINITIONS.filter(region => fastWorldNavigationState.regions.has(region.id)).map(region => ({
+  ...FAST_WORLD_REGION_DEFINITIONS.filter(region => !FAST_WORLD_TOWN_ONLY && fastWorldNavigationState.regions.has(region.id)).map(region => ({
     id: `region:${region.id}`, name: `${region.name} Â· LV ${region.levelMin}â€“${region.levelMax}`,
     x: (region.bounds.minX + region.bounds.maxX) / 2, z: (region.bounds.minZ + region.bounds.maxZ) / 2,
     regionId: region.id, kind: "connection" as const, discoveryRadius: 0,
   })),
-  ...FAST_WORLD_NAV_LANDMARKS.filter(landmark => fastWorldNavigationState.landmarks.has(landmark.id)),
-  ...(fastWorldNearbyMiniBoss ? [fastWorldNearbyMiniBoss] : []),
+  ...FAST_WORLD_NAV_LANDMARKS.filter(landmark => !FAST_WORLD_TOWN_ONLY && fastWorldNavigationState.landmarks.has(landmark.id)),
+  ...(!FAST_WORLD_TOWN_ONLY && fastWorldNearbyMiniBoss ? [fastWorldNearbyMiniBoss] : []),
 ];
 
 const drawFastWorldMap = (position: { x: number; z: number }, facingYawDegrees: number, now: number, force = false): void => {
@@ -2323,9 +2325,9 @@ const drawFastWorldMap = (position: { x: number; z: number }, facingYawDegrees: 
     }
   };
   drawRegion("town", "Town", 40, 108, 66, 146);
-  for (const region of FAST_WORLD_REGION_DEFINITIONS)
+  for (const region of FAST_WORLD_REGION_DEFINITIONS.filter(() => !FAST_WORLD_TOWN_ONLY))
     drawRegion(region.id, region.name, region.bounds.minX, region.bounds.maxX, region.bounds.minZ, region.bounds.maxZ);
-  if (fastWorldNavigationDebug) {
+  if (fastWorldNavigationDebug && !FAST_WORLD_TOWN_ONLY) {
     for (const encounter of FAST_WORLD_ENCOUNTER_NAVIGATION) {
       const center = fastWorldMapPoint(encounter.center.x, encounter.center.z, width, height);
       const edge = fastWorldMapPoint(encounter.center.x + encounter.leashRadius, encounter.center.z, width, height);
@@ -2350,7 +2352,7 @@ const drawFastWorldMap = (position: { x: number; z: number }, facingYawDegrees: 
       ctx.strokeStyle = "#ffe071"; ctx.lineWidth = 2; ctx.stroke();
     }
   };
-  for (const sign of FAST_WORLD_SIGNPOSTS) if (fastWorldNavigationState.regions.has(sign.regionId)) point(sign, "#e7b94f", 2.5);
+  for (const sign of FAST_WORLD_SIGNPOSTS) if (!FAST_WORLD_TOWN_ONLY && fastWorldNavigationState.regions.has(sign.regionId)) point(sign, "#e7b94f", 2.5);
   for (const target of fastWorldMapTargets()) point(target,
     target.kind === "town" ? "#77ed91" : target.kind === "leader" ? "#ffbd55" : "#b6e27c", target.kind === "leader" ? 4 : 3);
   if (fastWorldNearbyMiniBoss) {
@@ -2607,16 +2609,16 @@ if (fastWorldRequested) {
   const rapidRegionChunkRoots = new Map<string, pc.Entity>();
   const rapidRegionStream = new FastWorldVisualChunkStream(1);
   let activeRapidRegionChunkKeys = fastWorldActiveVisualChunkKeys(99.5, 106.5, 1);
-  rapidWorldActiveVisualChunks = activeRapidRegionChunkKeys.size;
+  rapidWorldActiveVisualChunks = FAST_WORLD_TOWN_ONLY ? 0 : activeRapidRegionChunkKeys.size;
   const rapidRegionChunkRoot = (regionId: FastWorldStreamedRegionId, x: number, z: number): pc.Entity => {
     const key = fastWorldVisualChunkForPosition(regionId, x, z);
     const existing = rapidRegionChunkRoots.get(key);
     if (existing) return existing;
     const root = new pc.Entity(`fast-world-region-chunk:${key}`);
-    root.enabled = activeRapidRegionChunkKeys.has(key);
+    root.enabled = !FAST_WORLD_TOWN_ONLY && activeRapidRegionChunkKeys.has(key);
     rapidPrototypeRoot.addChild(root);
     rapidRegionChunkRoots.set(key, root);
-    rapidWorldTotalVisualChunks = rapidRegionChunkRoots.size;
+    rapidWorldTotalVisualChunks = FAST_WORLD_TOWN_ONLY ? 0 : rapidRegionChunkRoots.size;
     return root;
   };
   const addRapidRegionShape = (regionId: FastWorldStreamedRegionId, name: string,
@@ -2635,11 +2637,12 @@ if (fastWorldRequested) {
     return shape;
   };
   updateRapidRegionVisualStream = (x: number, z: number): void => {
+    if (FAST_WORLD_TOWN_ONLY) return;
     const change = rapidRegionStream.update(x, z);
     if (!change) return;
     activeRapidRegionChunkKeys = change.active;
     rapidWorldActiveVisualChunks = change.active.size;
-    for (const [key, root] of rapidRegionChunkRoots) root.enabled = activeRapidRegionChunkKeys.has(key);
+    for (const [key, root] of rapidRegionChunkRoots) root.enabled = !FAST_WORLD_TOWN_ONLY && activeRapidRegionChunkKeys.has(key);
   };
 
   const skin = coloredMaterial(new pc.Color(.72, .49, .31));
@@ -2877,18 +2880,15 @@ if (fastWorldRequested) {
     rapidTownLights.push({ entity: light, phase: index * 1.7 });
   }
 
-  // Continue the western land beyond the camera range so the coastal view
-  // does not end in a straight black map boundary beside the sea.
-  addRapidWorldBox("realm-ground", grass, [360, .25, 172], [80, 7.875, 106]);
+  addRapidWorldBox("town-ground", grass, [70, .25, 82], [74, 7.875, 106]);
   addBox(rapidPrototypeRoot, "west-green", townVerge, [62, .035, 74], [71, 8.02, 106]);
-  for (const region of FAST_WORLD_REGION_DEFINITIONS) {
+  for (const region of FAST_WORLD_REGION_DEFINITIONS.filter(() => !FAST_WORLD_TOWN_ONLY)) {
     const regionId = region.id as FastWorldStreamedRegionId;
     for (const chunk of fastWorldRegionVisualChunks(regionId))
       addRapidRegionBox(regionId, `${regionId}-ground:${chunk.key}`, rapidRegionGroundMaterials[region.visualTheme],
         [chunk.width, .035, chunk.depth], [chunk.centerX, 8.02, chunk.centerZ]);
   }
-  addRapidWorldBox("east-realm-road", path, [118, .055, 5.2], [198, 8.035, 106]);
-  for (const [name, points] of [["greenwood-main-trail", GREENWOOD_MAIN_TRAIL], ["mosswatch-approach", GREENWOOD_CAMP_TRAIL]] as const) {
+  if (!FAST_WORLD_TOWN_ONLY) for (const [name, points] of [["greenwood-main-trail", GREENWOOD_MAIN_TRAIL], ["mosswatch-approach", GREENWOOD_CAMP_TRAIL]] as const) {
     const verge = new pc.Entity(`${name}-leaf-verge`);
     rapidPrototypeRoot.addChild(verge);
     createWoodlandTrailMesh(app.graphicsDevice, verge, greenwoodLeafLitter, sampleWoodlandTrail(points),
@@ -2920,11 +2920,14 @@ if (fastWorldRequested) {
     addRapidRegionShape("greenwood", `greenwood-bank:thicket-moss-${index}`, "cylinder", greenwoodMoss,
       [radius*2,.16,radius*1.7],[x+.4,8.06,z-.3]);
   }
-  addRapidWorldBox("regional-fork-road", path, [5.2, .06, 130], [168, 8.04, 106]);
-  addRapidWorldBox("mistfen-road", roadWarm, [28, .055, 4.2], [181, 8.045, 65]);
-  addRapidWorldBox("quarry-road", roadWarm, [28, .055, 4.2], [181, 8.045, 151]);
-  addRapidWorldBox("coast-road", roadWarm, [4.2, .055, 48], [100, 8.045, 166]);
-  addRapidWorldBox("realm-crossroads", stone, [9.5, .09, 9.5], [168, 8.075, 106]);
+  if (!FAST_WORLD_TOWN_ONLY) {
+    addRapidWorldBox("east-realm-road", path, [118, .055, 5.2], [198, 8.035, 106]);
+    addRapidWorldBox("regional-fork-road", path, [5.2, .06, 130], [168, 8.04, 106]);
+    addRapidWorldBox("mistfen-road", roadWarm, [28, .055, 4.2], [181, 8.045, 65]);
+    addRapidWorldBox("quarry-road", roadWarm, [28, .055, 4.2], [181, 8.045, 151]);
+    addRapidWorldBox("coast-road", roadWarm, [4.2, .055, 48], [100, 8.045, 166]);
+    addRapidWorldBox("realm-crossroads", stone, [9.5, .09, 9.5], [168, 8.075, 106]);
+  }
   for (const patch of GREENWOOD_GROUND_PATCHES) {
     const material = patch.material === "moss" ? greenwoodMoss : greenwoodLeafLitter;
     const groundPatch = addRapidRegionShape("greenwood", `greenwood-ground:${patch.id}`, "cylinder", material,
@@ -3697,17 +3700,17 @@ if (fastWorldRequested) {
   }
   addRapidRegionShape("ashen-reach", "cinderlord-ring", "cylinder", lava, [6.2, .065, 6.2], [242.5, 8.13, 106.5]);
 
-  for (const [x, z, material] of [[108,106,greenwoodCanopy],[168,82,mistfenWater],[168,136,ironOre],[204,106,lava]] as const) {
+  for (const [x, z, material] of (FAST_WORLD_TOWN_ONLY ? [] : [[108,106,greenwoodCanopy],[168,82,mistfenWater],[168,136,ironOre],[204,106,lava]]) as readonly (readonly [number, number, pc.StandardMaterial])[]) {
     addRapidWorldBox("region-threshold-left", stone, [.48, 2.2, .48], [x, 9.1, z - 3.5]);
     addRapidWorldBox("region-threshold-right", stone, [.48, 2.2, .48], [x, 9.1, z + 3.5]);
     addRapidWorldShape("region-threshold-flame", "sphere", material, [.42, .42, .42], [x, 11.3, z - 3.5]);
     addRapidWorldShape("region-threshold-flame", "sphere", material, [.42, .42, .42], [x, 11.3, z + 3.5]);
   }
-  for (const x of [96.5, 103.5]) {
+  for (const x of FAST_WORLD_TOWN_ONLY ? [] : [96.5, 103.5]) {
     addRapidWorldBox("coast-threshold", stone, [.48, 2.2, .48], [x, 9.1, 148]);
     addRapidWorldShape("coast-threshold-flame", "sphere", coastWater, [.42, .42, .42], [x, 11.3, 148]);
   }
-  for (const sign of FAST_WORLD_SIGNPOSTS) {
+  for (const sign of FAST_WORLD_SIGNPOSTS.filter(() => !FAST_WORLD_TOWN_ONLY)) {
     const parentRegion = sign.regionId === "town" ? null : sign.regionId;
     const post = parentRegion
       ? addRapidRegionBox(parentRegion, `route-sign:${sign.id}:post`, timber, [.16, 1.75, .16], [sign.x, 8.9, sign.z])
@@ -3771,14 +3774,14 @@ if (fastWorldRequested) {
     });
   };
 
-  addRapidWorldBox("north-edge", boundary, [220, .5, .65], [150, 8.25, 20.3]);
-  addRapidWorldBox("south-edge", boundary, [220, .5, .65], [150, 8.25, 191.7]);
-  addRapidWorldBox("west-edge", boundary, [.65, .5, 172], [40.3, 8.25, 106]);
-  addRapidWorldBox("east-edge", boundary, [.65, .5, 172], [259.7, 8.25, 106]);
+  addRapidWorldBox("town-north-wall", boundary, [70, 1.6, .8], [74, 8.8, 65.5]);
+  addRapidWorldBox("town-south-wall", boundary, [70, 1.6, .8], [74, 8.8, 146.5]);
+  addRapidWorldBox("town-west-wall", boundary, [.8, 1.6, 82], [39.5, 8.8, 106]);
+  addRapidWorldBox("town-east-wall", boundary, [.8, 1.6, 82], [108.5, 8.8, 106]);
 
   const badge = document.createElement("aside");
   badge.id = "fast-world-badge";
-  badge.innerHTML = "<strong>TOWN OF BEGINNINGS Â· SAFE</strong><span>East gate leads to Greenwood Â· fixed regional difficulty</span><small id=\"fast-world-metrics\">Measuring frame and input timingâ€¦</small>";
+  badge.innerHTML = "<strong>TOWN OF BEGINNINGS · SAFE</strong><span>Explore town · choose a Calling · collect starter gear</span><small id=\"fast-world-metrics\">Measuring frame and input timing…</small>";
   badge.style.cssText = "position:fixed;left:18px;top:68px;z-index:18;display:grid;gap:2px;padding:9px 13px;border:1px solid rgba(117,242,180,.55);border-radius:10px;background:rgba(6,18,14,.86);color:#d9ffdf;font:700 12px/1.2 system-ui;letter-spacing:.08em;pointer-events:none;box-shadow:0 7px 24px rgba(0,0,0,.32)";
   const detail = badge.querySelector("span") as HTMLElement;
   detail.style.cssText = "color:#9fc6ac;font-size:10px;font-weight:600;letter-spacing:.02em";
@@ -13440,15 +13443,18 @@ function renderBootstrap(payload: WorldBootstrap): void {
     `WORLD REFRESH ${previousSliceY === null ? "surface" : `slice:${previousSliceY}`} â†’ ${cutawayStateKey} y=${initialPosition.y.toFixed(3)} surface=${surfaceReferenceY.toFixed(3)} stateGap=${statePoseGap?.toFixed(3) ?? "missing"} chunks=${payload.chunks.length} setup=${bootstrapSetupMs.toFixed(1)}ms queued=${queuedChunkRebuilds.size}`,
   );
   worldReady = true;
+  if (fastWorldRequested && FAST_WORLD_TOWN_ONLY && firstStepsIndex !== null
+    && firstStepsIndex >= ONBOARDING_STAGE.headSouth && firstStepsIndex < ONBOARDING_DONE)
+    setFirstSteps(ONBOARDING_DONE);
   if (fastWorldRequested) window.setTimeout(() => {
     requestRapidTownAssets();
     requestRapidTownNpcAssets();
-    requestGreenwoodAssets();
+    if (!FAST_WORLD_TOWN_ONLY) requestGreenwoodAssets();
   }, 250);
   lastWorldBootstrapAt = performance.now();
   snapFrameHistory.length = 0;
   status.textContent = fastWorldRequested
-    ? "Fast World ready Â· choose a Calling, explore freely and test your build against regional enemies."
+    ? "Town of Beginnings ready · choose a Calling and equip your starter gear."
     : isInGreenwoodRegion(initialPosition.x, initialPosition.z)
     ? "Greenwood Outskirts Â· harvest oak timber and investigate the abandoned forester camp."
     : "Welcome to the Town of Beginnings. Starter supplies are nearby; follow the south road when ready.";
@@ -16935,7 +16941,7 @@ app.on("update", (dt: number) => {
   localStealthGhost.enabled = localStealthed && cameraViewMode !== "first-person";
 
   const player = localPlayer.getPosition();
-  if (worldReady && firstStepsIndex === ONBOARDING_STAGE.headSouth
+  if (!FAST_WORLD_TOWN_ONLY && worldReady && firstStepsIndex === ONBOARDING_STAGE.headSouth
     && Math.hypot(player.x - TOWN_CENTER_X, player.z - TOWN_CENTER_Z) > TOWN_SAFE_RADIUS + 1) {
     noteFirstStep("left_town");
     if (interactionMode === "combat") setInteractionMode("build");
@@ -16948,7 +16954,7 @@ app.on("update", (dt: number) => {
       lowLevelWasInsideTown = true;
       lowLevelTownStateReady = true;
     } else if (townDistance > TOWN_SAFE_RADIUS + 1 && lowLevelTownStateReady && lowLevelWasInsideTown) {
-      if (shouldPromptTownDeparture(lowLevelWasInsideTown, true, localCharacterProgression.level)) {
+      if (!FAST_WORLD_TOWN_ONLY && shouldPromptTownDeparture(lowLevelWasInsideTown, true, localCharacterProgression.level)) {
         townDeparturePromptOpen = true;
         modeLessonAcknowledged = false;
         resetMovementControls();

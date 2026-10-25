@@ -18,7 +18,7 @@ import {
   rapidPracticeProjectileTravelMs,
   rapidPracticeWeaponProfile,
 } from "./rapid-practice.js";
-import { fastWorldRegionDefinition, rapidPracticeCollisionCellSolid } from "@blockcraft/protocol";
+import { FAST_WORLD_TOWN_BOUNDS, fastWorldRegionDefinition, rapidPracticeCollisionCellSolid } from "@blockcraft/protocol";
 
 describe("fast low-poly world", () => {
   it("provides five bounded free-roam regions with authored permanent populations", () => {
@@ -118,8 +118,8 @@ describe("fast low-poly world", () => {
 
   it("shares an analytic collision fallback with fast-world prediction", () => {
     expect(rapidPracticeCollisionCellSolid(180, RAPID_PRACTICE_ARENA.floorY, 106)).toBe(true);
-    expect(rapidPracticeCollisionCellSolid(180, RAPID_PRACTICE_ARENA.floorY + 1, 106)).toBe(false);
-    expect(rapidPracticeCollisionCellSolid(RAPID_PRACTICE_ARENA.minX, 8, 106)).toBe(true);
+    expect(rapidPracticeCollisionCellSolid(180, RAPID_PRACTICE_ARENA.floorY + 1, 106)).toBe(true);
+    expect(rapidPracticeCollisionCellSolid(FAST_WORLD_TOWN_BOUNDS.minX, 8, 106)).toBe(true);
     expect(rapidPracticeCollisionCellSolid(45, 8, 72)).toBe(true);
     expect(rapidPracticeCollisionCellSolid(99, 8, 106)).toBe(false);
   });

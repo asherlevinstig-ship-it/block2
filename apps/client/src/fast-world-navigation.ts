@@ -1,4 +1,4 @@
-import { FAST_WORLD_REGION_DEFINITIONS, type FastWorldRegionId } from "@blockcraft/protocol";
+import { FAST_WORLD_REGION_DEFINITIONS, FAST_WORLD_TOWN_ONLY, type FastWorldRegionId } from "@blockcraft/protocol";
 import { GREENWOOD_LANDMARKS } from "./greenwood-visuals.js";
 import { MISTFEN_LANDMARKS } from "./mistfen-visuals.js";
 
@@ -12,7 +12,9 @@ export type FastWorldNavPoint = {
   discoveryRadius: number;
 };
 
-export const FAST_WORLD_MAP_BOUNDS = { minX: 40, maxX: 256, minZ: 20, maxZ: 192 } as const;
+export const FAST_WORLD_MAP_BOUNDS = FAST_WORLD_TOWN_ONLY
+  ? { minX: 39, maxX: 109, minZ: 65, maxZ: 147 }
+  : { minX: 40, maxX: 256, minZ: 20, maxZ: 192 };
 export const FAST_WORLD_MINIBOSS_PROXIMITY = 34;
 
 export const FAST_WORLD_NAV_LANDMARKS: readonly FastWorldNavPoint[] = [
@@ -60,6 +62,7 @@ export function discoverFastWorldLandmarks(
 }
 
 export function fastWorldRegionTravelSummary(regionId: string): string {
+  if (FAST_WORLD_TOWN_ONLY) return "Town of Beginnings · safe";
   if (regionId === "town") return "East gate → Greenwood";
   if (regionId === "crossroads") return "Roads connect every fixed-difficulty region";
   const region = FAST_WORLD_REGION_DEFINITIONS.find(candidate => candidate.id === regionId);

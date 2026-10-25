@@ -2,7 +2,7 @@ import { Client, Room } from "@colyseus/core";
 import { GREENWOOD_MASTERY_CAP, MISTFEN_MASTERY_CAP, greenwoodMasteryRank, mistfenMasteryRank } from "@blockcraft/protocol";
 import { callingStarterAbility } from "@blockcraft/protocol";
 import { experienceToNextLevel } from "@blockcraft/protocol";
-import { PRACTICE_ROOM } from "@blockcraft/protocol";
+import { FAST_WORLD_TOWN_ONLY, PRACTICE_ROOM } from "@blockcraft/protocol";
 import type { SchemaType } from "@colyseus/schema";
 import { ShadowMoveInput, stepShadowMovement, type ShadowPose } from "./movement-shadow.js";
 import { FIRST_COMBAT_MOB_ID, firstCombatExperience, firstCombatHealthAfterHit, firstCombatReward, isFirstCombatSupport } from "./first-combat-training.js";
@@ -784,7 +784,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (this.roomKind === "practice") {
       this.state.mobs.clear(); this.mobHomes.clear(); this.state.portals.clear();
       if (this.rapidPractice) {
-        for (const spawn of RAPID_PRACTICE_SPAWNS) {
+        for (const spawn of FAST_WORLD_TOWN_ONLY ? [] : RAPID_PRACTICE_SPAWNS) {
           this.registerMob(spawn.id, spawn.archetype, spawn);
           this.configureRapidWorldMob(spawn.id, this.state.mobs.get(spawn.id)!);
         }
@@ -809,7 +809,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.sendBuildPath(client);
       if (this.roomKind === "practice") client.send("practice:state", { active: true,
         message: this.rapidPractice
-          ? "FAST WORLD · leave through the east gate · each region has fixed enemies and a main leader."
+          ? "TOWN OF BEGINNINGS · explore the safe town, choose a Calling and equip your starter gear."
           : "Training arena · select any ability, then use G. F uses your Calling Special. Your character will not be changed." });
       this.sendEquipmentAffixes(client);
       if (this.roomKind === "overworld") client.send("party:update", this.parties.snapshot(client.sessionId, this.state.players, Date.now()));

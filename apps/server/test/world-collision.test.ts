@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { Block, playerCollides, type WorldBlockReader } from "@blockcraft/voxel-world";
-import { FAST_WORLD_COLLISION_QUERY } from "@blockcraft/protocol";
+import { ARCHIVED_FAST_WORLD_COLLISION_QUERY as FAST_WORLD_COLLISION_QUERY } from "@blockcraft/protocol";
 import { hasCombatLineOfSight, projectileImpact } from "../src/combat-impact.js";
 import { moveMobSafely } from "../src/mob-navigation.js";
-import { FAST_WORLD_BLOCK_READER, legacyCollisionReader } from "../src/world-collision.js";
+import { obstacleQueryReader, legacyCollisionReader } from "../src/world-collision.js";
+
+const FAST_WORLD_BLOCK_READER = obstacleQueryReader(FAST_WORLD_COLLISION_QUERY);
 
 describe("Fast World obstacle queries", () => {
   it("registers buildings, cliffs, trees and encounter cover explicitly", () => {

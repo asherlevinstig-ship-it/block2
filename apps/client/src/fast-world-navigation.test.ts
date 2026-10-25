@@ -18,9 +18,9 @@ describe("Fast World navigation", () => {
     expect(discoverFastWorldLandmarks({ x: 123.5, z: 88.5 }, new Set(["greenwood:mosswatch-camp"]))).toEqual([]);
   });
 
-  it("maps the authored world bounds into a compact canvas", () => {
-    expect(fastWorldMapPoint(40, 20, 216, 172)).toEqual({ x: 0, y: 0 });
-    expect(fastWorldMapPoint(256, 192, 216, 172)).toEqual({ x: 216, y: 172 });
+  it("maps only the town into a compact canvas", () => {
+    expect(fastWorldMapPoint(39, 65, 216, 172)).toEqual({ x: 0, y: 0 });
+    expect(fastWorldMapPoint(109, 147, 216, 172)).toEqual({ x: 216, y: 172 });
     expect(fastWorldPlayerMapRotation(0)).toBeCloseTo(Math.PI);
     expect(fastWorldPlayerMapRotation(90)).toBeCloseTo(Math.PI / 2);
     expect(fastWorldPlayerMapRotation(180)).toBeCloseTo(0);
@@ -28,8 +28,7 @@ describe("Fast World navigation", () => {
 
   it("offers physical signs, backtracking guidance and relative direction", () => {
     expect(FAST_WORLD_SIGNPOSTS.some(sign => sign.name === "Fenward Track")).toBe(true);
-    expect(fastWorldRegionTravelSummary("greenwood")).toContain("← Town");
-    expect(fastWorldRegionTravelSummary("mistfen")).toContain("Greenwood / Town");
+    expect(fastWorldRegionTravelSummary("town")).toContain("safe");
     expect(fastWorldDestinationDirection({ x: 0, z: 0 }, { x: 0, z: 10 }, 0))
       .toEqual({ distance: 10, angle: 0 });
   });
