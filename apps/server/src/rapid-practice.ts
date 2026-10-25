@@ -1,3 +1,4 @@
+import { fastWorldGroundHeight } from "@blockcraft/protocol";
 import type { MobArchetypeId } from "./mob-archetypes.js";
 import type { FastWorldRegionId, MainHandId } from "@blockcraft/protocol";
 import { FAST_WORLD_REGION_DEFINITIONS, fastWorldRegionDefinition, RAPID_PRACTICE_ARENA, RAPID_PRACTICE_TOWN_COLLIDERS } from "@blockcraft/protocol";
@@ -59,6 +60,7 @@ export const rapidMistfenToxicPoolAt = (x: number, z: number): boolean =>
 const configuredRegionSpawns = (regionId: FastWorldRegionId): readonly RapidPracticeSpawn[] =>
   (fastWorldRegionDefinition(regionId).encounters ?? []).map(encounter => ({
     ...encounter,
+    y: fastWorldGroundHeight(encounter.x,encounter.z),
     archetype: encounter.archetype as MobArchetypeId,
     zone: regionId,
   }));

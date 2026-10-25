@@ -1,3 +1,4 @@
+import { fastWorldGroundHeight } from "@blockcraft/protocol";
 import * as pc from "playcanvas";
 import { finishBuildingMaterials } from "./building-finish.js";
 
@@ -179,7 +180,7 @@ export async function populateTownAssetKit(
     const entity = resource.instantiateRenderEntity({ castShadows: true, receiveShadows: true });
     if (townAssetUrl(placement.id).startsWith(QUATERNIUS_TOWN_ASSET_BASE_URL)) finishBuildingMaterials(app, entity);
     entity.name = `${namePrefix}:${placement.name}`;
-    entity.setLocalPosition(...placement.position);
+    entity.setLocalPosition(placement.position[0],placement.position[1]+(namePrefix.startsWith("greenwood") ? fastWorldGroundHeight(placement.position[0],placement.position[2])-8 : 0),placement.position[2]);
     entity.setLocalEulerAngles(0, placement.yaw ?? 0, 0);
     const scale = placement.scale ?? 1;
     entity.setLocalScale(scale, scale, scale);

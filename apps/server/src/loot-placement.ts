@@ -8,7 +8,7 @@ function clearCorridor(from: LootPosition, to: LootPosition, read: WorldBlockRea
   for (let index = 1; index <= steps; index++) {
     const t = index / steps;
     const x = from.x + (to.x - from.x) * t;
-    const y = from.y + (to.y - from.y) * t;
+    const y = read.groundHeight?.(x, from.z + (to.z-from.z)*t) ?? from.y + (to.y - from.y) * t;
     const z = from.z + (to.z - from.z) * t;
     if (playerCollides(read, x, y, z)) return false;
   }
@@ -33,7 +33,7 @@ export function findLootLanding(origin: LootPosition, desired: LootPosition, rea
     if (seen.has(key)) continue;
     seen.add(key);
     for (const offsetY of [0, 1, -1, 2, -2, 3, -3]) {
-      const pose = { x: candidate.x, y: origin.y + offsetY, z: candidate.z };
+      const pose = { x: candidate.x, y: read.groundHeight?.(candidate.x,candidate.z) ?? origin.y + offsetY, z: candidate.z };
       if (!playerCollides(read, pose.x, pose.y, pose.z)
         && isPlayerSupported(read, pose.x, pose.y, pose.z)
         && clearCorridor(origin, pose, read)) return pose;

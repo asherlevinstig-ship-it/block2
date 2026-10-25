@@ -1,5 +1,5 @@
 import * as pc from "playcanvas";
-import { FAST_WORLD_REGION_DEFINITIONS } from "@blockcraft/protocol";
+import { FAST_WORLD_REGION_DEFINITIONS, fastWorldGroundHeight } from "@blockcraft/protocol";
 
 export interface PaintedGroundStyle {
   name: string;
@@ -21,7 +21,7 @@ export function fitGroundTexture(device: pc.GraphicsDevice, entity: pc.Entity, m
   const region = FAST_WORLD_REGION_DEFINITIONS.find(r => entity.name.startsWith(`${r.id}-ground:`));
   const road = /road|forecourt|approach/.test(entity.name);
   const feather = !!region || road || entity.name === "west-green";
-  const spacing = road ? .5 : 1.5;
+  const spacing = road || region?.id === "greenwood" ? .5 : 1.5;
   const nx = Math.max(2, Math.ceil(scale[0] / spacing)), nz = Math.max(2, Math.ceil(scale[2] / spacing));
   const positions: number[] = [], uvs: number[] = [], colors: number[] = [], indices: number[] = [], normals: number[] = [];
   const tileSize = /plaza/.test(material.name) ? 6 : 5;
@@ -38,13 +38,13 @@ export function fitGroundTexture(device: pc.GraphicsDevice, entity: pc.Entity, m
       const edge = Math.min((.5 - Math.abs(lx)) * scale[0], (.5 - Math.abs(lz)) * scale[2]);
       alpha = Math.max(0, Math.min(1, (edge - .14 + Math.sin(wx * 1.3 + wz * .9) * .3) / .45));
     }
-    positions.push(lx, .5, lz); normals.push(0, 1, 0);
+    positions.push(lx, .5 + (fastWorldGroundHeight(wx,wz)-fastWorldGroundHeight(position[0],position[2]))/scale[1], lz); normals.push(0, 1, 0);
     uvs.push(wx / tileSize / material.diffuseMapTiling.x, wz / tileSize / material.diffuseMapTiling.y);
     colors.push(variation, variation, variation, alpha);
     if (x < nx && z < nz) { const i = z * (nx + 1) + x; indices.push(i, i + nx + 1, i + 1, i + 1, i + nx + 1, i + nx + 2); }
   }
   const mesh = new pc.Mesh(device);
-  mesh.setPositions(positions); mesh.setNormals(normals); mesh.setUvs(0, uvs); mesh.setColors(colors); mesh.setIndices(indices); mesh.update();
+  mesh.setPositions(positions); mesh.setNormals(pc.calculateNormals(positions,indices)); mesh.setUvs(0, uvs); mesh.setColors(colors); mesh.setIndices(indices); mesh.update();
   entity.render.meshInstances = [new pc.MeshInstance(mesh, terrainVertexMaterial(material, feather), entity)];
   entity.render.meshInstances[0]!.drawBucket = region ? 240 : road ? 230 : 245;
   entity.render.castShadows = false;
@@ -77,14 +77,14 @@ export function fitOrganicGroundPatch(device: pc.GraphicsDevice, entity: pc.Enti
     const radius = rings[ring]! * (.44 + .035 * Math.sin(angle * 5 + position[0]) + .025 * Math.cos(angle * 7 + position[2]));
     const x = Math.cos(angle) * radius, z = Math.sin(angle) * radius;
     const height = scale[1] > .1 ? Math.pow(1 - rings[ring]!, 1.7) - .36 : .5;
-    positions.push(x, height, z); normals.push(0, 1, 0);
+    positions.push(x, height + (fastWorldGroundHeight(position[0]+x*scale[0],position[2]+z*scale[2])-fastWorldGroundHeight(position[0],position[2]))/scale[1], z); normals.push(0, 1, 0);
     uvs.push((position[0] + x * scale[0]) / 5 / material.diffuseMapTiling.x,
       (position[2] + z * scale[2]) / 5 / material.diffuseMapTiling.y);
     colors.push(1, 1, 1, ring === 3 ? 0 : ring === 2 ? .72 : 1);
     if (ring < rings.length - 1 && i < segments) { const n = ring * (segments + 1) + i;
       indices.push(n, n + 1, n + segments + 1, n + 1, n + segments + 2, n + segments + 1); }
   }
-  const mesh = new pc.Mesh(device); mesh.setPositions(positions); mesh.setNormals(normals); mesh.setUvs(0, uvs);
+  const mesh = new pc.Mesh(device); mesh.setPositions(positions); mesh.setNormals(pc.calculateNormals(positions,indices)); mesh.setUvs(0, uvs);
   mesh.setColors(colors); mesh.setIndices(indices); mesh.update();
   entity.render.meshInstances = [new pc.MeshInstance(mesh, terrainVertexMaterial(material, true), entity)];
   entity.render.meshInstances[0]!.drawBucket = /rim|foam/.test(entity.name) ? 225 : 220;
@@ -230,7 +230,7 @@ export function createWoodlandTrailMesh(device: pc.GraphicsDevice, entity: pc.En
     lanes.forEach((lane,j) => {
       const width=point[2]*.5 + Math.sin(i*.71)*.12;
       const x=point[0]-dz/length*lane*width, z=point[1]+dx/length*lane*width;
-      vertices.push(x,8.095,z); normals.push(0,1,0);
+      vertices.push(x,fastWorldGroundHeight(x,z)+.095,z); normals.push(0,1,0);
       uv.push(x/5/material.diffuseMapTiling.x,z/5/material.diffuseMapTiling.y);
       const tone = .78 + Math.abs(lane)*.13 + Math.sin(i*.21)*.025;
       colors.push(tone,tone,tone,j===0||j===lanes.length-1?0:1);
@@ -239,7 +239,7 @@ export function createWoodlandTrailMesh(device: pc.GraphicsDevice, entity: pc.En
       }
     });
   });
-  const mesh=new pc.Mesh(device); mesh.setPositions(vertices); mesh.setNormals(normals); mesh.setUvs(0,uv);
+  const mesh=new pc.Mesh(device); mesh.setPositions(vertices); mesh.setNormals(pc.calculateNormals(vertices,indices)); mesh.setUvs(0,uv);
   mesh.setColors(colors); mesh.setIndices(indices); mesh.update();
   entity.addComponent("render",{meshInstances:[new pc.MeshInstance(mesh,terrainVertexMaterial(material,true),entity)],castShadows:false});
   entity.render!.meshInstances[0]!.drawBucket=230;

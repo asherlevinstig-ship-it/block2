@@ -1,3 +1,4 @@
+import { fastWorldGroundHeight } from "@blockcraft/protocol";
 import { GREENWOOD_MAIN_TRAIL, GREENWOOD_CAMP_TRAIL, GREENWOOD_THICKETS, GREENWOOD_CLUSTER_PLANTS, sampleWoodlandTrail } from "./greenwood-landscape.js";
 import * as pc from "playcanvas";
 import { facetedBoxMesh } from "./faceted-shapes.js";
@@ -1815,7 +1816,7 @@ function readWorldBlock(x: number, y: number, z: number): BlockId {
   return (chunk.blocks[chunkIndex(address.localX, y, address.localZ)] ?? Block.Air) as BlockId;
 }
 
-function readCollisionWorldBlock(x: number, y: number, z: number): BlockId {
+const readCollisionWorldBlock = Object.assign(function (x: number, y: number, z: number): BlockId {
   if (y < 0) return Block.Bedrock;
   if (y >= CHUNK_HEIGHT) return Block.Air;
   const address = worldToChunk(x, z);
@@ -1823,7 +1824,7 @@ function readCollisionWorldBlock(x: number, y: number, z: number): BlockId {
   if (!chunk) return fastWorldRequested && rapidPracticeCollisionCellSolid(x, y, z)
     ? Block.Stone : fastWorldRequested ? Block.Air : Block.Bedrock;
   return (chunk.blocks[chunkIndex(address.localX, y, address.localZ)] ?? Block.Air) as BlockId;
-}
+}, { groundHeight: (x: number,z: number) => fastWorldRequested ? fastWorldGroundHeight(x,z) : undefined });
 
 function isCutawayHidden(x: number, y: number, z: number): boolean {
   return isVoxelHiddenForPlayer(x, y, z, playerCutaway)
@@ -2204,7 +2205,7 @@ function addBox(
   if (box.render) box.render.material = material;
   if (fastWorldRequested) fitGroundTexture(app.graphicsDevice, box, material, scale, position);
   box.setLocalScale(...scale);
-  box.setLocalPosition(...position);
+  box.setLocalPosition(position[0],position[1]+(fastWorldRequested ? fastWorldGroundHeight(position[0],position[2])-8 : 0),position[2]);
   parent.addChild(box);
   return box;
 }
@@ -2511,7 +2512,7 @@ if (fastWorldRequested) {
     else if (type === "cylinder" && /ground:|bank:|threshold:|atmosphere:|pool:|pool-rim:|tide-pool|tide-foam|:island|:spring/.test(name))
       fitOrganicGroundPatch(app.graphicsDevice, shape, material, scale, position);
     shape.setLocalScale(...scale);
-    shape.setLocalPosition(...position);
+    shape.setLocalPosition(position[0],position[1]+fastWorldGroundHeight(position[0],position[2])-8,position[2]);
     parent.addChild(shape);
     return shape;
   };
@@ -2824,7 +2825,7 @@ if (fastWorldRequested) {
     const fern = new pc.Entity(`mosswatch-fern-${index}`);
     fern.addComponent("render", {meshInstances:[new pc.MeshInstance(woodlandFernMesh(app.graphicsDevice),
       index%2 ? greenwoodFern : greenwoodFernLight, fern)],castShadows:false});
-    fern.setLocalPosition(x,8.06,z);fern.setLocalScale(scale,scale,scale);fern.setLocalEulerAngles(0,plant.yaw,0);
+    fern.setLocalPosition(x,fastWorldGroundHeight(x,z)+.06,z);fern.setLocalScale(scale,scale,scale);fern.setLocalEulerAngles(0,plant.yaw,0);
     rapidRegionChunkRoot("greenwood",x,z).addChild(fern);
     fern.render!.batchGroupId=rapidWorldSceneryBatchGroup.id;
     if (index%4===0) {
@@ -12625,7 +12626,7 @@ function updateTarget(): void {
   const start = camera.camera.screenToWorld(pointer.x, pointer.y, camera.camera.nearClip);
   const end = camera.camera.screenToWorld(pointer.x, pointer.y, camera.camera.farClip);
   const direction = end.clone().sub(start);
-  const aimedHit = voxelRaycast(start, direction, camera.camera.farClip, readVisibleWorldBlock);
+  const aimedHit = voxelRaycast(start, direction, camera.camera.farClip, fastWorldRequested ? readCollisionWorldBlock : readVisibleWorldBlock);
   const hit = aimedHit && undergroundKnown(aimedHit.x, localPlayer.getPosition().y, aimedHit.z) ? aimedHit : null;
   const player = localPlayer.getPosition();
   const caveSignScreen = camera.camera.worldToScreen(new pc.Vec3(32.5, 8.4, 8.5));
@@ -14534,7 +14535,8 @@ function updatePowerAimFromPointer(): void {
   const end = camera.camera.screenToWorld(pointer.x, pointer.y, camera.camera.farClip);
   const rayY = end.y - start.y;
   if (Math.abs(rayY) < 0.0001) return;
-  const distanceAlongRay = (player.y - start.y) / rayY;
+  const terrainHit = fastWorldRequested ? voxelRaycast(start,end.clone().sub(start),camera.camera.farClip,readCollisionWorldBlock) : null;
+  const distanceAlongRay = terrainHit ? terrainHit.distance / end.clone().sub(start).length() : (player.y - start.y) / rayY;
   if (distanceAlongRay <= 0) return;
   const worldX = start.x + (end.x - start.x) * distanceAlongRay;
   const worldZ = start.z + (end.z - start.z) * distanceAlongRay;
@@ -14569,7 +14571,7 @@ function updatePowerAimFromPointer(): void {
       powerAimYaw = movementYaw(assistedTarget.state.x - player.x, assistedTarget.state.z - player.z, powerAimYaw);
     }
   }
-  if (definition.core === "ground") powerAimTarget.set(targetX, player.y, targetZ);
+  if (definition.core === "ground") powerAimTarget.set(targetX, fastWorldRequested ? fastWorldGroundHeight(targetX,targetZ) : player.y, targetZ);
   localFacingYaw = powerAimYaw;
   updatePowerAimVisual();
 }
@@ -14748,7 +14750,8 @@ function updateSpecialAimFromPointer(): void {
   const end = camera.camera.screenToWorld(pointer.x, pointer.y, camera.camera.farClip);
   const rayY = end.y - start.y;
   if (Math.abs(rayY) < 0.0001) return;
-  const distanceAlongRay = (player.y - start.y) / rayY;
+  const terrainHit = fastWorldRequested ? voxelRaycast(start,end.clone().sub(start),camera.camera.farClip,readCollisionWorldBlock) : null;
+  const distanceAlongRay = terrainHit ? terrainHit.distance / end.clone().sub(start).length() : (player.y - start.y) / rayY;
   if (distanceAlongRay <= 0) return;
   const worldX = start.x + (end.x - start.x) * distanceAlongRay;
   const worldZ = start.z + (end.z - start.z) * distanceAlongRay;
@@ -14756,7 +14759,7 @@ function updateSpecialAimFromPointer(): void {
   const deltaZ = worldZ - player.z;
   const pointerDistance = Math.hypot(deltaX, deltaZ);
   const scale = pointerDistance > BRAMBLE_SNARE.range ? BRAMBLE_SNARE.range / pointerDistance : 1;
-  specialAimTarget.set(player.x + deltaX * scale, player.y, player.z + deltaZ * scale);
+  specialAimTarget.set(player.x + deltaX * scale, fastWorldRequested ? fastWorldGroundHeight(player.x+deltaX*scale,player.z+deltaZ*scale) : player.y, player.z + deltaZ * scale);
   specialAimYaw = movementYaw(specialAimTarget.x - player.x, specialAimTarget.z - player.z, specialAimYaw);
   localFacingYaw = specialAimYaw;
   updateSpecialAimVisual();

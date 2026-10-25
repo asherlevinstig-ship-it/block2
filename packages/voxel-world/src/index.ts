@@ -1031,7 +1031,7 @@ export interface VoxelRaycastHit extends VoxelPoint {
   previous: VoxelPoint;
 }
 
-export type WorldBlockReader = (x: number, y: number, z: number) => BlockId;
+export type WorldBlockReader = ((x: number, y: number, z: number) => BlockId) & { groundHeight?: (x: number, z: number) => number | undefined };
 
 export interface PlayerPosition {
   x: number;
@@ -1419,6 +1419,9 @@ export function highestSolidY(chunk: GeneratedChunk, localX: number, localZ: num
 }
 
 export function playerCollides(readBlock: WorldBlockReader, x: number, y: number, z: number): boolean {
+  const terrain = readBlock.groundHeight?.(x,z);
+  if (terrain !== undefined && y < terrain - .06) return true;
+
   const chest = TOWN_STORAGE_CHEST_POSITION;
   if (y + PLAYER_HEIGHT > chest.y && y < chest.y + .95
     && readBlock(Math.floor(chest.x), SURFACE_HEIGHT, Math.floor(chest.z)) !== Block.Air) {
@@ -1470,6 +1473,8 @@ export function isPlayerSupported(readBlock: WorldBlockReader, x: number, y: num
 }
 
 function hasPlayerSupport(readBlock: WorldBlockReader, x: number, y: number, z: number, sampleRadius: number): boolean {
+  const terrain = readBlock.groundHeight?.(x,z);
+  if (terrain !== undefined && Math.abs(y-terrain) <= .08) return true;
   const supportY = Math.floor(y - 0.08);
   for (const offsetX of [-sampleRadius, sampleRadius]) {
     for (const offsetZ of [-sampleRadius, sampleRadius]) {
@@ -1520,6 +1525,25 @@ export function resolvePlayerMotion(
   readBlock: WorldBlockReader,
 ): PlayerMotionResult {
   const position = { ...start };
+  const initialGround = readBlock.groundHeight?.(start.x,start.z);
+  if (initialGround !== undefined) {
+    // Follow gentle terrain in small horizontal steps; retain voxel obstacles
+    // and airborne vertical motion. This is used unchanged by server and replay.
+    const supported = Math.abs(start.y-initialGround) <= .08;
+    const steps=Math.max(1,Math.ceil(Math.hypot(delta.x,delta.z)/.2));
+    for(let i=0;i<steps;i++) for(const axis of ["x","z"] as const) {
+      const candidate={...position,[axis]:position[axis]+delta[axis]/steps};
+      const ground=readBlock.groundHeight?.(candidate.x,candidate.z) ?? initialGround;
+      if(supported) candidate.y=ground;
+      if(!playerCollides(readBlock,candidate.x,candidate.y,candidate.z)) Object.assign(position,candidate);
+    }
+    const ground=readBlock.groundHeight?.(position.x,position.z) ?? initialGround;
+    const proposed=position.y+delta.y;
+    const landed=proposed<=ground;
+    if(landed) position.y=ground;
+    else moveVertical(position,delta.y,readBlock);
+    return {...position,grounded:Math.abs(position.y-ground)<=.08,hitVertical:landed,stepped:false};
+  }
   const supportedBeforeMove = isPlayerSupported(readBlock, position.x, position.y, position.z);
   const steppedX = moveHorizontalAxis(position, "x", delta.x, supportedBeforeMove, readBlock);
   const steppedZ = moveHorizontalAxis(position, "z", delta.z, supportedBeforeMove || steppedX, readBlock);
@@ -1592,6 +1616,20 @@ export function voxelRaycast(
   const dx = direction.x / length;
   const dy = direction.y / length;
   const dz = direction.z / length;
+  let terrainHit: VoxelRaycastHit | null = null;
+  if(readBlock.groundHeight?.(origin.x,origin.z) !== undefined) for(let step=0;step<=Math.ceil(maxDistance/.2);step++) {
+    const t=Math.min(maxDistance,step*.2);
+    const px=origin.x+dx*t, py=origin.y+dy*t, pz=origin.z+dz*t;
+    const height=readBlock.groundHeight(px,pz);
+    if(height!==undefined && py<=height) {
+      let low=Math.max(0,t-.2),high=t;
+      for(let i=0;i<10;i++){const mid=(low+high)/2;
+        if(origin.y+dy*mid <= (readBlock.groundHeight(origin.x+dx*mid,origin.z+dz*mid) ?? -Infinity)) high=mid;else low=mid;}
+      terrainHit={x:Math.floor(px),y:Math.floor(height-.001),z:Math.floor(pz),block:Block.Stone,distance:high,
+        previous:{x:Math.floor(px),y:Math.floor(height),z:Math.floor(pz)}};
+      break;
+    }
+  }
   let x = Math.floor(origin.x);
   let y = Math.floor(origin.y);
   let z = Math.floor(origin.z);
@@ -1609,6 +1647,7 @@ export function voxelRaycast(
   let sideZ = dz > 0 ? (z + 1 - origin.z) * deltaZ : dz < 0 ? (origin.z - z) * deltaZ : Number.POSITIVE_INFINITY;
 
   while (distance <= maxDistance) {
+    if(terrainHit && terrainHit.distance <= distance) return terrainHit;
     const block = readBlock(x, y, z);
     if (block !== Block.Air) return { x, y, z, block, distance, previous };
 
@@ -1628,5 +1667,5 @@ export function voxelRaycast(
     }
   }
 
-  return null;
+  return terrainHit;
 }

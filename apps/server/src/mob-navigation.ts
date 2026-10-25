@@ -155,7 +155,7 @@ export function walkableMobSpawn(spawn: Position, read: WorldBlockReader, allowe
     for (let x = -radius; x <= radius; x += 1) for (let z = -radius; z <= radius; z += 1) {
       if (Math.max(Math.abs(x), Math.abs(z)) !== radius) continue;
       for (const y of [0, 1, -1]) {
-        const candidate = { x: spawn.x + x, y: spawn.y + y, z: spawn.z + z };
+        const candidate = { x: spawn.x + x, y: read.groundHeight?.(spawn.x+x,spawn.z+z) ?? spawn.y + y, z: spawn.z + z };
         if (allowed(candidate) && !playerCollides(read, candidate.x, candidate.y, candidate.z)
           && isPlayerSupported(read, candidate.x, candidate.y, candidate.z)) return candidate;
       }

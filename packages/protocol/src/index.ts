@@ -1,3 +1,4 @@
+export { fastWorldGroundHeight } from "./fast-world-elevation.js";
 import { z } from "zod";
 export * from "./fast-world-regions.js";
 export { BRUTE_VOLLEY, bruteVolleyReady, bruteRockEndpoints, bruteRockLanes } from "./brute-volley.js";

@@ -1,3 +1,4 @@
+import { fastWorldGroundHeight } from "@blockcraft/protocol";
 import { Client, Room } from "@colyseus/core";
 import { GREENWOOD_MASTERY_CAP, MISTFEN_MASTERY_CAP, greenwoodMasteryRank, mistfenMasteryRank } from "@blockcraft/protocol";
 import { callingStarterAbility } from "@blockcraft/protocol";
@@ -8482,12 +8483,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
   }
 
-  private readWorldBlock = (x: number, y: number, z: number) => {
+  private readWorldBlock = Object.assign((x: number, y: number, z: number) => {
     if (y < 0) return Block.Bedrock;
     if (y >= CHUNK_HEIGHT) return Block.Air;
     const address = worldToChunk(x, z);
     return getBlock(this.getChunk(address.chunkX, address.chunkZ).chunk, address.localX, y, address.localZ);
-  };
+  }, { groundHeight: (x: number,z: number) => this.rapidPractice ? fastWorldGroundHeight(x,z) : undefined });
 
   private resolveBrambleSnares(now: number): void {
     for (const [casterId, snare] of this.brambleSnares) {
