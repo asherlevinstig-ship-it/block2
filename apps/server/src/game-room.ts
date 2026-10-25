@@ -4026,7 +4026,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const spawn = this.rapidPractice ? { x: 99.5, y: 8, z: 106.5 } : this.spawnPoint();
     const drop = new LootDropState();
     Object.assign(drop, { ownerId: playerId, itemId: "forged_sword", quantity: 1,
-      contentsJson: encodeLootBagItems([...STARTER_KIT_ITEMS]), x: spawn.x, y: spawn.y + .22, z: spawn.z + 3,
+      contentsJson: encodeLootBagItems([...STARTER_KIT_ITEMS]), x: spawn.x, y: spawn.y + .22, z: spawn.z + 5.5,
       expiresAt: now + 30 * 60_000 });
     this.state.lootDrops.set(`starter-kit:${playerId}`, drop);
   }

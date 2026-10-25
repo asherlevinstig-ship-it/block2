@@ -112,7 +112,7 @@ export function resolveAppearance(value: unknown): Appearance {
   };
 }
 export type NearbyChatMessage = { senderId: string; name: string; text: string };
-export const EQUIPMENT_LOOT_RANGE = 1.8;
+export const EQUIPMENT_LOOT_RANGE = 3.5;
 export type LootCollectAction = "keep" | "equip" | "dismantle" | "swap";
 export const LootCollectRequestSchema = z.object({
   dropId: z.string().min(1).max(160),
