@@ -1,3 +1,4 @@
+import { shapeWoodlandTree, type WoodlandTreeShape } from "./woodland-tree-shape.js";
 import { fastWorldGroundHeight } from "@blockcraft/protocol";
 import * as pc from "playcanvas";
 import { finishBuildingMaterials } from "./building-finish.js";
@@ -42,6 +43,7 @@ export interface TownAssetPlacement {
   position: readonly [number, number, number];
   yaw?: number;
   scale?: number;
+  woodlandShape?: WoodlandTreeShape;
 }
 
 /** The authored buildings sit exactly over the server-owned collision
@@ -179,6 +181,7 @@ export async function populateTownAssetKit(
     if (!resource) continue;
     const entity = resource.instantiateRenderEntity({ castShadows: true, receiveShadows: true });
     if (townAssetUrl(placement.id).startsWith(QUATERNIUS_TOWN_ASSET_BASE_URL)) finishBuildingMaterials(app, entity);
+    if (placement.woodlandShape) shapeWoodlandTree(app.graphicsDevice, entity, placement.woodlandShape);
     entity.name = `${namePrefix}:${placement.name}`;
     entity.setLocalPosition(placement.position[0],placement.position[1]+(fastWorldGroundHeight(placement.position[0],placement.position[2])-8),placement.position[2]);
     entity.setLocalEulerAngles(0, placement.yaw ?? 0, 0);

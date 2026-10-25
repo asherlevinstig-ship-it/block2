@@ -64,12 +64,14 @@ const rocks = [
 export const GREENWOOD_ASSET_PLACEMENTS: readonly TownAssetPlacement[] = [
   ...GREENWOOD_CLUSTER_PLANTS.filter(p => p.tree).map((p,index): TownAssetPlacement => ({
     id: index%2 ? "treeCrooked" : "treeHighRound", name: `mosswatch-cluster-tree-${index}`,
-    position: [p.x,8.05,p.z], yaw:p.yaw, scale:p.scale*1.35,
+    position: [p.x,8.05,p.z], yaw:p.yaw, scale:p.scale*(index%3===2 ? .85 : 1.5),
+    woodlandShape: index%3===0 ? "oak" : index%3===1 ? "crooked" : "sapling",
   })),
   ...trees.filter(([x,z]) => x > 136 || woodlandPlantAllowed(x,z)).map(([x, z, yaw, scale], index): TownAssetPlacement => ({
     id: index % 3 === 0 ? "treeCrooked" : "treeHighRound",
     name: `greenwood-tree-${String(index + 1).padStart(2, "0")}`,
     position: [x, 8.15, z], yaw, scale,
+    woodlandShape: index % 4 === 0 ? "sapling" : index % 3 === 0 ? "crooked" : "oak",
   })),
   ...rocks.map(([x, z, yaw, scale], index): TownAssetPlacement => ({
     id: index % 2 === 0 ? "rockLarge" : "rockSmall",

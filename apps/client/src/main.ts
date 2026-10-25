@@ -503,10 +503,10 @@ expeditionPanel.id = "expedition-board-panel";
 expeditionPanel.hidden = true;
 expeditionPanel.setAttribute("role", "dialog");
 expeditionPanel.setAttribute("aria-label", "Forest dungeon expedition board");
-expeditionPanel.innerHTML = '<button class="expedition-close" type="button" aria-label="Close">×</button><small>TOWN OF BEGINNINGS</small><h2>FOREST DUNGEON</h2><p class="expedition-message"></p><button class="realm-hunts-open" type="button"><b>REALM HUNTS</b><span>Track leaders · forge awakened weapons</span></button><ol><li data-stage="1">Breach the forest sentinels</li><li data-stage="2">Defeat the thicket guards</li><li data-stage="3">Slay the Ancient Root Guardian</li><li data-stage="4">Collect the Rootbound Cache and escape</li></ol><div class="expedition-stats"><span>GROUP <strong class="expedition-party">SOLO</strong></span><span>BEST <strong class="expedition-best">—</strong></span></div><div class="expedition-reward"><b>GUARANTEED PERSONAL REWARD</b><strong>Rootbound Hammer</strong><span>Heavy 3-hit combo · finisher roots groups</span></div><button class="expedition-launch" type="button">OPEN DUNGEON PORTAL</button>';
+expeditionPanel.innerHTML = '<button class="expedition-close" type="button" aria-label="Close">Ã—</button><small>TOWN OF BEGINNINGS</small><h2>FOREST DUNGEON</h2><p class="expedition-message"></p><button class="realm-hunts-open" type="button"><b>REALM HUNTS</b><span>Track leaders Â· forge awakened weapons</span></button><ol><li data-stage="1">Breach the forest sentinels</li><li data-stage="2">Defeat the thicket guards</li><li data-stage="3">Slay the Ancient Root Guardian</li><li data-stage="4">Collect the Rootbound Cache and escape</li></ol><div class="expedition-stats"><span>GROUP <strong class="expedition-party">SOLO</strong></span><span>BEST <strong class="expedition-best">â€”</strong></span></div><div class="expedition-reward"><b>GUARANTEED PERSONAL REWARD</b><strong>Rootbound Hammer</strong><span>Heavy 3-hit combo Â· finisher roots groups</span></div><button class="expedition-launch" type="button">OPEN DUNGEON PORTAL</button>';
 document.body.append(expeditionPanel);
 const formatDungeonTime = (milliseconds: number) => milliseconds > 0
-  ? `${Math.floor(milliseconds / 60000)}:${String(Math.floor(milliseconds / 1000) % 60).padStart(2, "0")}` : "—";
+  ? `${Math.floor(milliseconds / 60000)}:${String(Math.floor(milliseconds / 1000) % 60).padStart(2, "0")}` : "â€”";
 function renderDungeonBoard(update: DungeonBoardUpdate): void {
   latestDungeonBoard = update;
   expeditionPanel.querySelector(".expedition-message")!.textContent = update.message;
@@ -534,16 +534,16 @@ realmHuntPanel.id = "realm-hunt-board-panel";
 realmHuntPanel.hidden = true;
 realmHuntPanel.setAttribute("role", "dialog");
 realmHuntPanel.setAttribute("aria-label", "Realm Hunt Board");
-realmHuntPanel.innerHTML = '<button class="realm-hunt-close" type="button" aria-label="Close">×</button><small>TOWN OF BEGINNINGS · REALM HUNT BOARD</small><h2>Choose Your Contract</h2><p class="realm-hunt-message"></p><div class="realm-contract-card" hidden><small>ACTIVE CONTRACT</small><strong></strong><span></span><b></b></div><div class="realm-hunt-difficulties"><button class="active" data-hunt-difficulty="normal" type="button"><b>NORMAL</b><span>Standard three-phase rotation</span></button><button data-hunt-difficulty="veteran" type="button"><b>VETERAN</b><span>Rank 1 · advanced path attack · 1.5× cache</span></button><button data-hunt-difficulty="ascendant" type="button"><b>ASCENDANT</b><span>Rank 3 · overlapping mechanics · 3 lives · 2× cache</span></button></div><div class="realm-hunt-tier-preview"></div><div class="realm-hunt-rewards"><b>CHAMPION CACHE</b><div><span>FANG</span><strong>Crawler Fang Dagger · Fangstalker Wrap</strong></div><div><span>VENOM</span><strong>Acid Gland Focus · Venomweave Mantle</strong></div><div><span>CRUSHER</span><strong>Stone Core Hammer · Worldsplitter Plate</strong></div></div><div class="realm-hunt-mastery"></div><div class="realm-hunt-paths"><button class="active" data-path="all" type="button">ALL LEADERS</button><button data-path="Alpha Fang" data-contract="fang" type="button">FANG CONTRACT</button><button data-path="Venom Surge" data-contract="venom" type="button">VENOM CONTRACT</button><button data-path="Crusher Break" data-contract="crusher" type="button">CRUSHER CONTRACT</button></div><div class="realm-hunt-legend"><span><i data-status="alive"></i>Alive</span><span><i data-status="recovering"></i>Recovering</span><span><i data-status="empowered"></i>Empowered</span></div><div class="realm-hunt-list"></div><button class="realm-hunt-back" type="button">BACK TO EXPEDITIONS</button>';
+realmHuntPanel.innerHTML = '<button class="realm-hunt-close" type="button" aria-label="Close">Ã—</button><small>TOWN OF BEGINNINGS Â· REALM HUNT BOARD</small><h2>Choose Your Contract</h2><p class="realm-hunt-message"></p><div class="realm-contract-card" hidden><small>ACTIVE CONTRACT</small><strong></strong><span></span><b></b></div><div class="realm-hunt-difficulties"><button class="active" data-hunt-difficulty="normal" type="button"><b>NORMAL</b><span>Standard three-phase rotation</span></button><button data-hunt-difficulty="veteran" type="button"><b>VETERAN</b><span>Rank 1 Â· advanced path attack Â· 1.5Ã— cache</span></button><button data-hunt-difficulty="ascendant" type="button"><b>ASCENDANT</b><span>Rank 3 Â· overlapping mechanics Â· 3 lives Â· 2Ã— cache</span></button></div><div class="realm-hunt-tier-preview"></div><div class="realm-hunt-rewards"><b>CHAMPION CACHE</b><div><span>FANG</span><strong>Crawler Fang Dagger Â· Fangstalker Wrap</strong></div><div><span>VENOM</span><strong>Acid Gland Focus Â· Venomweave Mantle</strong></div><div><span>CRUSHER</span><strong>Stone Core Hammer Â· Worldsplitter Plate</strong></div></div><div class="realm-hunt-mastery"></div><div class="realm-hunt-paths"><button class="active" data-path="all" type="button">ALL LEADERS</button><button data-path="Alpha Fang" data-contract="fang" type="button">FANG CONTRACT</button><button data-path="Venom Surge" data-contract="venom" type="button">VENOM CONTRACT</button><button data-path="Crusher Break" data-contract="crusher" type="button">CRUSHER CONTRACT</button></div><div class="realm-hunt-legend"><span><i data-status="alive"></i>Alive</span><span><i data-status="recovering"></i>Recovering</span><span><i data-status="empowered"></i>Empowered</span></div><div class="realm-hunt-list"></div><button class="realm-hunt-back" type="button">BACK TO EXPEDITIONS</button>';
 document.body.append(realmHuntPanel);
 
 function renderRealmHuntRewardTier(): void {
   const preview = realmHuntPanel.querySelector(".realm-hunt-tier-preview")!;
   preview.textContent = realmHuntDifficulty === "ascendant"
-    ? "ASCENDANT GUARANTEE · path weapon + rare set armour + awakened Forgemark · 2× materials"
+    ? "ASCENDANT GUARANTEE Â· path weapon + rare set armour + awakened Forgemark Â· 2Ã— materials"
     : realmHuntDifficulty === "veteran"
-      ? "VETERAN CACHE · path weapon + 1.5× materials · first set armour guaranteed, then 35%"
-      : "NORMAL GUARANTEE · path weapon + foundational materials";
+      ? "VETERAN CACHE Â· path weapon + 1.5Ã— materials Â· first set armour guaranteed, then 35%"
+      : "NORMAL GUARANTEE Â· path weapon + foundational materials";
 }
 
 function renderRealmHuntBoard(update: RealmHuntBoardUpdate): void {
@@ -560,15 +560,15 @@ function renderRealmHuntBoard(update: RealmHuntBoardUpdate): void {
     contractCard.dataset.state = contract.failed ? "failed" : contract.completed ? "complete" : contract.championActive ? "champion" : "active";
     contractCard.querySelector("strong")!.textContent = contract.failed ? `${contract.pathName.toUpperCase()} FAILED`
       : contract.completed ? `${contract.pathName.toUpperCase()} COMPLETE`
-      : contract.championActive ? `FINAL HUNT · ${contract.championName}` : contract.pathName;
-    const lives = contract.difficulty === "ascendant" ? ` · ${contract.livesRemaining} LIVES` : "";
-    contractCard.querySelector("span")!.textContent = contract.failed ? "Ascendant lives spent · begin a new contract"
-      : contract.completed ? "Champion cache secured · mastery and best time recorded"
+      : contract.championActive ? `FINAL HUNT Â· ${contract.championName}` : contract.pathName;
+    const lives = contract.difficulty === "ascendant" ? ` Â· ${contract.livesRemaining} LIVES` : "";
+    contractCard.querySelector("span")!.textContent = contract.failed ? "Ascendant lives spent Â· begin a new contract"
+      : contract.completed ? "Champion cache secured Â· mastery and best time recorded"
       : contract.championActive ? "The Path Champion is active in the final territory"
-        : `Next: ${contract.targetName} · ${contract.modifier.toUpperCase()} · REMATCH ${contract.tier}`;
+        : `Next: ${contract.targetName} Â· ${contract.modifier.toUpperCase()} Â· REMATCH ${contract.tier}`;
     contractCard.querySelector("b")!.textContent = contract.failed ? "FAILED"
       : contract.completed ? "COMPLETE"
-        : `${contract.difficulty.toUpperCase()}${lives} · ${formatDungeonTime(contract.elapsedMs)}`;
+        : `${contract.difficulty.toUpperCase()}${lives} Â· ${formatDungeonTime(contract.elapsedMs)}`;
   }
   realmHuntPanel.querySelectorAll<HTMLButtonElement>("[data-hunt-difficulty]").forEach(button => {
     button.classList.toggle("active", button.dataset.huntDifficulty === realmHuntDifficulty);
@@ -581,10 +581,10 @@ function renderRealmHuntBoard(update: RealmHuntBoardUpdate): void {
     const bestDifficulty: RealmHuntDifficulty | null = mastery.bestTimesMs.ascendant ? "ascendant"
       : mastery.bestTimesMs.veteran ? "veteran" : mastery.bestTimesMs.normal ? "normal" : null;
     const record = document.createElement("span");
-    record.innerHTML = `<b>${pathId.toUpperCase()} · R${mastery.rank}</b><small>${bestDifficulty ? `${bestDifficulty.toUpperCase()} BEST ${formatDungeonTime(mastery.bestTimesMs[bestDifficulty] ?? 0)}` : "NO CLEAR YET"}</small>`;
+    record.innerHTML = `<b>${pathId.toUpperCase()} Â· R${mastery.rank}</b><small>${bestDifficulty ? `${bestDifficulty.toUpperCase()} BEST ${formatDungeonTime(mastery.bestTimesMs[bestDifficulty] ?? 0)}` : "NO CLEAR YET"}</small>`;
     masteryPanel.append(record);
     const button = realmHuntPanel.querySelector<HTMLButtonElement>(`[data-contract="${pathId}"]`);
-    if (button) button.textContent = `${pathId.toUpperCase()} · R${mastery.rank}`;
+    if (button) button.textContent = `${pathId.toUpperCase()} Â· R${mastery.rank}`;
   }
   realmHuntPanel.querySelectorAll<HTMLButtonElement>("[data-path]").forEach(button => {
     const active = button.dataset.contract ? update.contract?.pathId === button.dataset.contract && !update.contract.completed
@@ -606,16 +606,16 @@ function renderRealmHuntBoard(update: RealmHuntBoardUpdate): void {
     heading.append(title, territory);
     const status = document.createElement("b");
     status.className = "realm-hunt-status";
-    status.textContent = hunt.status === "recovering" ? `RECOVERING · ${hunt.respawnSeconds}s`
-      : hunt.status === "empowered" ? `${hunt.modifier.toUpperCase()} · REMATCH ${hunt.rematchTier}` : "ALIVE · FIRST HUNT";
+    status.textContent = hunt.status === "recovering" ? `RECOVERING Â· ${hunt.respawnSeconds}s`
+      : hunt.status === "empowered" ? `${hunt.modifier.toUpperCase()} Â· REMATCH ${hunt.rematchTier}` : "ALIVE Â· FIRST HUNT";
     const progress = document.createElement("div"); progress.className = "realm-hunt-progress";
-    const relic = document.createElement("span"); relic.textContent = hunt.awakened ? `${hunt.relicName} · AWAKENED` : `${hunt.relicCount} / 3 · ${hunt.relicName}`;
+    const relic = document.createElement("span"); relic.textContent = hunt.awakened ? `${hunt.relicName} Â· AWAKENED` : `${hunt.relicCount} / 3 Â· ${hunt.relicName}`;
     const path = document.createElement("em"); path.textContent = hunt.forgeName.toUpperCase();
     progress.append(relic, path);
     const track = document.createElement("button"); track.type = "button";
     const contractLocked = Boolean(update.contract && !update.contract.completed);
     track.disabled = contractLocked;
-    track.textContent = contractLocked ? selected ? "CONTRACT TARGET" : "CONTRACT LOCKED" : selected ? "TRACKING ✓" : "TRACK HUNT";
+    track.textContent = contractLocked ? selected ? "CONTRACT TARGET" : "CONTRACT LOCKED" : selected ? "TRACKING âœ“" : "TRACK HUNT";
     track.addEventListener("click", () => room?.send("realm-hunt:board", { action: "select", mobId: hunt.mobId }));
     row.append(heading, status, progress, track);
     list.append(row);
@@ -670,7 +670,7 @@ function renderDungeonLobby(update: DungeonLobbyUpdate): void {
   dungeonLobbyPanel.querySelector(".dungeon-lobby-scaling")!.textContent = `Combat scales to players present when the run begins. Current entry: ${update.members.filter(member => member.entered).length}.`;
   const self = update.members.find(member => member.id === room?.sessionId);
   const ready = dungeonLobbyPanel.querySelector<HTMLButtonElement>(".dungeon-ready")!;
-  ready.disabled = !self?.entered || Boolean(self.ready); ready.textContent = self?.ready ? "READY ✓" : "READY";
+  ready.disabled = !self?.entered || Boolean(self.ready); ready.textContent = self?.ready ? "READY âœ“" : "READY";
   const start = dungeonLobbyPanel.querySelector<HTMLButtonElement>(".dungeon-start")!;
   start.hidden = !update.leader; start.disabled = !update.members.some(member => member.entered);
 }
@@ -705,7 +705,7 @@ function renderSilverDepthsLobby(update: SilverDepthsLobbyUpdate): void {
   const self = update.members.find(member => member.id === room?.sessionId);
   const ready = silverDepthsLobbyPanel.querySelector<HTMLButtonElement>(".depths-lobby-ready")!;
   ready.disabled = !self || self.ready;
-  ready.textContent = self?.ready ? "READY ✓" : "READY";
+  ready.textContent = self?.ready ? "READY âœ“" : "READY";
 }
 silverDepthsLobbyPanel.querySelector(".depths-lobby-ready")!.addEventListener("click", () => room?.send("depths:lobby", { action: "ready" }));
 silverDepthsLobbyPanel.querySelector(".depths-lobby-cancel")!.addEventListener("click", () => room?.send("depths:lobby", { action: "cancel" }));
@@ -721,12 +721,12 @@ function showDungeonRunResult(update: DungeonRunUpdate): void {
   panel.dataset.dungeon = silverDepths ? "silver-depths" : emberVault ? "ember-vault" : "forest";
   panel.setAttribute("aria-label", silverDepths ? "Silver Depths run results" : emberVault ? "Ember Vault run results" : "Forest Dungeon complete");
   panel.innerHTML = emberVault
-    ? '<small>EMBER VAULT · FORGE CONQUERED</small><h2>FORGE COLOSSUS DEFEATED</h2><div class="dungeon-rank"></div><p class="dungeon-run-time"></p><div class="dungeon-stat-grid"><span><small>ENEMIES</small><b data-stat="enemies">0</b></span><span><small>DAMAGE TAKEN</small><b data-stat="damage">0</b></span><span><small>EMBER CORES</small><b data-stat="ember">0</b></span><span><small>CORES HELD</small><b data-stat="wallet">0</b></span><span><small>FORGE LOOT</small><b data-stat="relic">SECURED</b></span></div><strong class="dungeon-run-reward"></strong><p class="dungeon-best-time">The return portal is stable. Collect the Colossus loot before leaving.</p><div class="dungeon-result-actions"><button class="dungeon-return" type="button">CONTINUE</button><button class="dungeon-replay" type="button">RUN AGAIN</button></div>'
+    ? '<small>EMBER VAULT Â· FORGE CONQUERED</small><h2>FORGE COLOSSUS DEFEATED</h2><div class="dungeon-rank"></div><p class="dungeon-run-time"></p><div class="dungeon-stat-grid"><span><small>ENEMIES</small><b data-stat="enemies">0</b></span><span><small>DAMAGE TAKEN</small><b data-stat="damage">0</b></span><span><small>EMBER CORES</small><b data-stat="ember">0</b></span><span><small>CORES HELD</small><b data-stat="wallet">0</b></span><span><small>FORGE LOOT</small><b data-stat="relic">SECURED</b></span></div><strong class="dungeon-run-reward"></strong><p class="dungeon-best-time">The return portal is stable. Collect the Colossus loot before leaving.</p><div class="dungeon-result-actions"><button class="dungeon-return" type="button">CONTINUE</button><button class="dungeon-replay" type="button">RUN AGAIN</button></div>'
     : silverDepths
-    ? '<small>SILVER DEPTHS · EXPEDITION COMPLETE</small><h2>CRYSTAL MATRIARCH DEFEATED</h2><div class="dungeon-rank"></div><p class="dungeon-run-time"></p><div class="dungeon-stat-grid"><span><small>ENEMIES</small><b data-stat="enemies">0</b></span><span><small>DAMAGE TAKEN</small><b data-stat="damage">0</b></span><span><small>MOONSTONE AWARD</small><b data-stat="moonstone">0</b></span><span><small>MOONSTONE HELD</small><b data-stat="wallet">0</b></span><span><small>RELIC</small><b data-stat="relic">SECURED</b></span></div><strong class="dungeon-run-reward"></strong><p class="dungeon-best-time"></p><div class="dungeon-result-actions"><button class="dungeon-return" type="button">RETURN TO TOWN</button><button class="dungeon-replay" type="button">RUN AGAIN</button></div>'
+    ? '<small>SILVER DEPTHS Â· EXPEDITION COMPLETE</small><h2>CRYSTAL MATRIARCH DEFEATED</h2><div class="dungeon-rank"></div><p class="dungeon-run-time"></p><div class="dungeon-stat-grid"><span><small>ENEMIES</small><b data-stat="enemies">0</b></span><span><small>DAMAGE TAKEN</small><b data-stat="damage">0</b></span><span><small>MOONSTONE AWARD</small><b data-stat="moonstone">0</b></span><span><small>MOONSTONE HELD</small><b data-stat="wallet">0</b></span><span><small>RELIC</small><b data-stat="relic">SECURED</b></span></div><strong class="dungeon-run-reward"></strong><p class="dungeon-best-time"></p><div class="dungeon-result-actions"><button class="dungeon-return" type="button">RETURN TO TOWN</button><button class="dungeon-replay" type="button">RUN AGAIN</button></div>'
     : '<small>FOREST DUNGEON</small><h2>ROOT GUARDIAN DEFEATED</h2><p class="dungeon-run-time"></p><strong class="dungeon-run-reward"></strong><p>Collect your personal equipment bag, then take the return portal.</p><button class="dungeon-return" type="button">CONTINUE</button>';
   const seconds = Math.max(1, Math.round((update.durationMs ?? 0) / 1000));
-  panel.querySelector(".dungeon-run-time")!.textContent = `${update.partySize > 1 ? `${update.partySize}-player party` : "Solo clear"} · ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+  panel.querySelector(".dungeon-run-time")!.textContent = `${update.partySize > 1 ? `${update.partySize}-player party` : "Solo clear"} Â· ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
   panel.querySelector(".dungeon-run-reward")!.textContent = update.reward ?? "Personal reward unlocked";
   if (silverDepths || emberVault) {
     const stats = update.stats;
@@ -738,16 +738,16 @@ function showDungeonRunResult(update: DungeonRunUpdate): void {
       panel.querySelector<HTMLElement>('[data-stat="ember"]')!.textContent = `+${stats?.emberCoresAwarded ?? 0}`;
       panel.querySelector<HTMLElement>('[data-stat="wallet"]')!.textContent = String(stats?.emberCoresTotal ?? 0);
     } else {
-      panel.querySelector<HTMLElement>('[data-stat="moonstone"]')!.textContent = `+${stats?.moonstoneAwarded ?? stats?.moonstoneCollected ?? 0} ◆`;
-      panel.querySelector<HTMLElement>('[data-stat="wallet"]')!.textContent = `${stats?.moonstoneTotal ?? 0} ◆`;
+      panel.querySelector<HTMLElement>('[data-stat="moonstone"]')!.textContent = `+${stats?.moonstoneAwarded ?? stats?.moonstoneCollected ?? 0} â—†`;
+      panel.querySelector<HTMLElement>('[data-stat="wallet"]')!.textContent = `${stats?.moonstoneTotal ?? 0} â—†`;
     }
     panel.querySelector<HTMLElement>('[data-stat="relic"]')!.textContent = stats?.signatureItemObtained ? "OBTAINED" : "SECURED";
     if (silverDepths) {
       const best = Math.max(1, Math.round((update.bestTimeMs ?? update.durationMs ?? 0) / 1000));
-      panel.querySelector(".dungeon-best-time")!.textContent = `${update.newBest ? "NEW PERSONAL BEST" : "PERSONAL BEST"} · ${Math.floor(best / 60)}:${String(best % 60).padStart(2, "0")}`;
+      panel.querySelector(".dungeon-best-time")!.textContent = `${update.newBest ? "NEW PERSONAL BEST" : "PERSONAL BEST"} Â· ${Math.floor(best / 60)}:${String(best % 60).padStart(2, "0")}`;
     }
     panel.querySelector<HTMLButtonElement>(".dungeon-replay")!.addEventListener("click", event => {
-      const button = event.currentTarget as HTMLButtonElement; button.disabled = true; button.textContent = "OPENING PORTAL…";
+      const button = event.currentTarget as HTMLButtonElement; button.disabled = true; button.textContent = "OPENING PORTALâ€¦";
       setTimeout(() => { panel.remove(); room?.send("portal:use", { id: emberVault ? "ember-entry" : "depths-entry" }); }, 1050);
     });
   }
@@ -827,8 +827,8 @@ function beginFirstVictoryReward(itemId: ItemId): void {
   if (firstVictoryReward?.stage === "complete" || firstVictoryReward?.stage === "return_town") return;
   saveFirstVictoryReward({ stage: "open_pack", itemId });
   status.textContent = firstVictoryRewardLessonReady()
-    ? `Calling-matched reward collected · press I to compare ${ITEM_DEFINITIONS[itemId].name}.`
-    : `${ITEM_DEFINITIONS[itemId].name} secured · finish the remaining enemies, then inspect your reward.`;
+    ? `Calling-matched reward collected Â· press I to compare ${ITEM_DEFINITIONS[itemId].name}.`
+    : `${ITEM_DEFINITIONS[itemId].name} secured Â· finish the remaining enemies, then inspect your reward.`;
 }
 function completeFirstVictoryDecision(choice: "equipped" | "kept"): void {
   if (!firstVictoryReward || firstVictoryReward.stage !== "choose") return;
@@ -836,14 +836,14 @@ function completeFirstVictoryDecision(choice: "equipped" | "kept"): void {
   saveFirstVictoryReward({ ...firstVictoryReward, stage: "return_town" });
   firstStepsTrailUpdatedAt = -Infinity;
   if (!inventoryPanel.hidden) setInventoryOpen(false);
-  status.textContent = `${itemName} ${choice} · follow the gold trail back to Town.`;
-  social.event(`${itemName} ${choice} · return to Town to awaken your first ability.`);
+  status.textContent = `${itemName} ${choice} Â· follow the gold trail back to Town.`;
+  social.event(`${itemName} ${choice} Â· return to Town to awaken your first ability.`);
 }
 function completeFirstVictoryReturn(): void {
   if (!firstVictoryReward || firstVictoryReward.stage !== "return_town") return;
   saveFirstVictoryReward({ ...firstVictoryReward, stage: "complete" });
-  status.textContent = "Returned to Town · your first Calling ability is ready to reveal.";
-  social.event("Returned to Town · Calling ability ready.");
+  status.textContent = "Returned to Town Â· your first Calling ability is ready to reveal.";
+  social.event("Returned to Town Â· Calling ability ready.");
 }
 function renderFirstSteps(): void {
   const index = firstStepsIndex;
@@ -917,7 +917,7 @@ function beginFirstStepsAfterCalling(): void {
   callingFirstOnboardingPending = false;
   try { window.localStorage.removeItem(callingFirstOnboardingKey); } catch { /* Storage may be unavailable. */ }
   setFirstSteps(0);
-  status.textContent = "Calling chosen · follow the gold trail to your personal starter bag.";
+  status.textContent = "Calling chosen Â· follow the gold trail to your personal starter bag.";
   syncProtectedDialog();
 }
 function noteFirstStep(event: OnboardingEvent): void {
@@ -935,10 +935,10 @@ function noteFirstStep(event: OnboardingEvent): void {
     void firstSteps.offsetWidth;
     firstSteps.classList.add("route-started");
     window.setTimeout(() => firstSteps.classList.remove("route-started"), 1_100);
-    status.textContent = "Starter gear equipped · follow the gold trail to the SOUTH GATE.";
-    social.event("Starter gear equipped · follow the gold trail to the South Gate.");
+    status.textContent = "Starter gear equipped Â· follow the gold trail to the SOUTH GATE.";
+    social.event("Starter gear equipped Â· follow the gold trail to the South Gate.");
   }
-  if (next === ONBOARDING_DONE) status.textContent = "First steps complete · follow Realm Guidance or explore freely.";
+  if (next === ONBOARDING_DONE) status.textContent = "First steps complete Â· follow Realm Guidance or explore freely.";
 }
 function nudgeStarterInventoryTutorial(): void {
   starterInventoryTutorial.classList.remove("nudge");
@@ -1064,7 +1064,7 @@ function renderMistfenMastery(position: { x: number; y: number; z: number }): vo
   mistfenMasteryPanel.hidden = !visible;
   if (!visible) return;
   const mastery = mistfenMasteryStatus(localMistfenMastery, localMistfenDiscovered);
-  const next = mastery.rank >= 3 ? "Mireback caches empowered" : `${mastery.points}/${mastery.nextThreshold} · Next: ${mastery.reward}`;
+  const next = mastery.rank >= 3 ? "Mireback caches empowered" : `${mastery.points}/${mastery.nextThreshold} Â· Next: ${mastery.reward}`;
   const fingerprint = `${mastery.name}:${mastery.points}:${mastery.progress}:${next}`;
   if (fingerprint === lastMistfenMasteryView) return;
   lastMistfenMasteryView = fingerprint;
@@ -1077,7 +1077,7 @@ function renderGreenwoodMastery(position: { x: number; y: number; z: number }): 
   const visible = worldReady && position.y >= SURFACE_HEIGHT - 1 && isInGreenwoodRegion(position.x, position.z);
   greenwoodMasteryPanel.hidden = !visible; if (!visible) return;
   const mastery = greenwoodMasteryStatus(localGreenwoodMastery, localGreenwoodDiscovered);
-  const next = mastery.rank >= 3 ? "Broodmother rematches empowered" : `${mastery.points}/${mastery.nextThreshold} · Next: ${mastery.reward}`;
+  const next = mastery.rank >= 3 ? "Broodmother rematches empowered" : `${mastery.points}/${mastery.nextThreshold} Â· Next: ${mastery.reward}`;
   const fingerprint = `${mastery.name}:${mastery.points}:${mastery.progress}:${next}`; if (fingerprint === lastGreenwoodMasteryView) return;
   lastGreenwoodMasteryView = fingerprint; greenwoodMasteryRank.textContent = mastery.name;
   greenwoodMasteryFill.style.transform = `scaleX(${Math.max(0, Math.min(1, mastery.progress))})`; greenwoodMasteryDetail.textContent = next;
@@ -1098,7 +1098,7 @@ const status = document.querySelector<HTMLElement>("#status")!;
 if (initialGameExperience === "legacy-voxel") {
   const archiveNotice = document.createElement("aside");
   archiveNotice.id = "legacy-voxel-notice";
-  archiveNotice.innerHTML = '<strong>ARCHIVED VOXEL WORLD</strong><span>Reference build only · active development continues in the Fast World.</span><a href="/">OPEN FAST WORLD</a>';
+  archiveNotice.innerHTML = '<strong>ARCHIVED VOXEL WORLD</strong><span>Reference build only Â· active development continues in the Fast World.</span><a href="/">OPEN FAST WORLD</a>';
   document.body.append(archiveNotice);
 }
 const targetLabel = document.querySelector<HTMLElement>("#target")!;
@@ -2278,7 +2278,7 @@ const showFastWorldReveal = (title: string, detail: string, kind: "region" | "la
 const fastWorldMapTargets = (): FastWorldNavPoint[] => [
   { id: "town", name: "Town of Beginnings", x: 74, z: 106, regionId: "town", kind: "town", discoveryRadius: 0 },
   ...FAST_WORLD_REGION_DEFINITIONS.filter(region => fastWorldNavigationState.regions.has(region.id)).map(region => ({
-    id: `region:${region.id}`, name: `${region.name} · LV ${region.levelMin}–${region.levelMax}`,
+    id: `region:${region.id}`, name: `${region.name} Â· LV ${region.levelMin}â€“${region.levelMax}`,
     x: (region.bounds.minX + region.bounds.maxX) / 2, z: (region.bounds.minZ + region.bounds.maxZ) / 2,
     regionId: region.id, kind: "connection" as const, discoveryRadius: 0,
   })),
@@ -2329,7 +2329,7 @@ const drawFastWorldMap = (position: { x: number; z: number }, facingYawDegrees: 
   if (fastWorldNearbyMiniBoss) {
     const boss = fastWorldMapPoint(fastWorldNearbyMiniBoss.x, fastWorldNearbyMiniBoss.z, width, height);
     ctx.fillStyle = "#2a1507"; ctx.font = "900 8px system-ui"; ctx.textAlign = "center";
-    ctx.fillText("♛", boss.x, boss.y + 3);
+    ctx.fillText("â™›", boss.x, boss.y + 3);
   }
   if (fastWorldDestination) {
     const from = fastWorldMapPoint(position.x, position.z, width, height);
@@ -2997,7 +2997,7 @@ if (fastWorldRequested) {
     addBox(root, `${name}-door-frame`, townStone, [.15, 1.72, 1.18], [x + width / 2 + .04, 9.13, z]);
     addBox(root, `${name}-door`, timberLight, [.18, 1.48, .92], [x + width / 2 + .13, 9.02, z]);
     addBox(root, `${name}-door-step`, townStoneLight, [.62, .15, 1.3], [x + width / 2 + .38, 8.27, z]);
-    // Decorative gable braces make the eastern gameplay-facing façade read at camera distance.
+    // Decorative gable braces make the eastern gameplay-facing faÃ§ade read at camera distance.
     for (const side of [-1, 1] as const) {
       const brace = addBox(root, `${name}-gable-brace`, timber, [.12, .12, depth * .43],
         [x + width / 2 + .1, 10.03, z + side * depth * .2]);
@@ -3160,6 +3160,20 @@ if (fastWorldRequested) {
   for (const [x, z, turn] of [[121,94,18],[132,119,-26],[144,97,32],[147,122,-12],[126,111,8]] as const) {
     const root = addRapidRegionBox("greenwood", "greenwood-root", greenwoodBark, [2.6, .22, .3], [x, 8.24, z]);
     root.setLocalEulerAngles(0, turn, 8);
+  }
+  // Selected mature trees receive short buttress roots and a moss bed.
+  // All details share materials and are culled with their existing region chunk.
+  for (const tree of GREENWOOD_ASSET_PLACEMENTS.filter(p => p.woodlandShape === "oak" &&
+    p.position[0] < 136).filter((_, index) => index % 3 === 0)) {
+    const [x, , z] = tree.position;
+    addRapidRegionShape("greenwood", `greenwood-ground:root-moss-${tree.name}`, "cylinder",
+      greenwoodMoss, [3.4, .025, 3], [x, 8.08, z]);
+    for (let arm = 0; arm < 3; arm++) {
+      const angle = ((tree.yaw ?? 0) + arm * 120) * Math.PI / 180;
+      const root = addRapidRegionBox("greenwood", `woodland-buttress-${tree.name}-${arm}`, greenwoodBark,
+        [.18, .17, .95], [x + Math.sin(angle) * .46, 8.12, z + Math.cos(angle) * .46]);
+      root.setLocalEulerAngles(0, angle * 180 / Math.PI, 0);
+    }
   }
   for (const log of GREENWOOD_FALLEN_LOGS) {
     const trunk = addRapidRegionShape("greenwood", "greenwood-fallen-log", "cylinder", greenwoodBark,
@@ -3548,7 +3562,7 @@ if (fastWorldRequested) {
 
   const badge = document.createElement("aside");
   badge.id = "fast-world-badge";
-  badge.innerHTML = "<strong>TOWN OF BEGINNINGS · SAFE</strong><span>East gate leads to Greenwood · fixed regional difficulty</span><small id=\"fast-world-metrics\">Measuring frame and input timing…</small>";
+  badge.innerHTML = "<strong>TOWN OF BEGINNINGS Â· SAFE</strong><span>East gate leads to Greenwood Â· fixed regional difficulty</span><small id=\"fast-world-metrics\">Measuring frame and input timingâ€¦</small>";
   badge.style.cssText = "position:fixed;left:18px;top:68px;z-index:18;display:grid;gap:2px;padding:9px 13px;border:1px solid rgba(117,242,180,.55);border-radius:10px;background:rgba(6,18,14,.86);color:#d9ffdf;font:700 12px/1.2 system-ui;letter-spacing:.08em;pointer-events:none;box-shadow:0 7px 24px rgba(0,0,0,.32)";
   const detail = badge.querySelector("span") as HTMLElement;
   detail.style.cssText = "color:#9fc6ac;font-size:10px;font-weight:600;letter-spacing:.02em";
@@ -3564,7 +3578,7 @@ if (fastWorldRequested) {
   fastWorldMapPanel = document.createElement("aside");
   fastWorldMapPanel.id = "fast-world-map";
   fastWorldMapPanel.dataset.expanded = "false";
-  fastWorldMapPanel.innerHTML = '<header><strong>REALM MAP</strong><span>M · click a discovered marker</span></header><canvas width="224" height="172" aria-label="Fast World regional map"></canvas><section class="fast-world-nearby-leader" hidden><small>♛ NEARBY MINI-BOSS</small><strong></strong><span></span></section><footer>Undiscovered landmarks appear when approached.</footer>';
+  fastWorldMapPanel.innerHTML = '<header><strong>REALM MAP</strong><span>M Â· click a discovered marker</span></header><canvas width="224" height="172" aria-label="Fast World regional map"></canvas><section class="fast-world-nearby-leader" hidden><small>â™› NEARBY MINI-BOSS</small><strong></strong><span></span></section><footer>Undiscovered landmarks appear when approached.</footer>';
   fastWorldMapCanvas = fastWorldMapPanel.querySelector("canvas");
   fastWorldMapDetail = fastWorldMapPanel.querySelector("footer");
   fastWorldMiniBossPanel = fastWorldMapPanel.querySelector(".fast-world-nearby-leader");
@@ -3574,7 +3588,7 @@ if (fastWorldRequested) {
     if (!fastWorldNearbyMiniBoss) return;
     fastWorldDestination = fastWorldNearbyMiniBoss;
     lastFastWorldMapDrawAt = -Infinity;
-    if (fastWorldMapDetail) fastWorldMapDetail.textContent = `GUIDING · ${fastWorldNearbyMiniBoss.name}`;
+    if (fastWorldMapDetail) fastWorldMapDetail.textContent = `GUIDING Â· ${fastWorldNearbyMiniBoss.name}`;
   });
   fastWorldMapCanvas?.addEventListener("click", event => {
     if (!fastWorldMapCanvas) return;
@@ -3587,25 +3601,25 @@ if (fastWorldRequested) {
       .sort((a, b) => Math.hypot(a.point.x - px, a.point.y - py) - Math.hypot(b.point.x - px, b.point.y - py))[0];
     fastWorldDestination = selected?.target ?? null;
     lastFastWorldMapDrawAt = -Infinity;
-    if (fastWorldDestination && fastWorldMapDetail) fastWorldMapDetail.textContent = `GUIDING · ${fastWorldDestination.name}`;
+    if (fastWorldDestination && fastWorldMapDetail) fastWorldMapDetail.textContent = `GUIDING Â· ${fastWorldDestination.name}`;
   });
   document.body.appendChild(fastWorldMapPanel);
 
   fastWorldDestinationHud = document.createElement("aside");
   fastWorldDestinationHud.id = "fast-world-destination";
   fastWorldDestinationHud.hidden = true;
-  fastWorldDestinationHud.innerHTML = "<span>▲</span><div><strong></strong><small></small></div><button type=\"button\" aria-label=\"Clear destination\">×</button>";
+  fastWorldDestinationHud.innerHTML = "<span>â–²</span><div><strong></strong><small></small></div><button type=\"button\" aria-label=\"Clear destination\">Ã—</button>";
   fastWorldDestinationHud.querySelector("button")?.addEventListener("click", () => {
     fastWorldDestination = null;
     if (fastWorldDestinationHud) fastWorldDestinationHud.hidden = true;
-    if (fastWorldMapDetail) fastWorldMapDetail.textContent = "Destination cleared · choose a discovered marker.";
+    if (fastWorldMapDetail) fastWorldMapDetail.textContent = "Destination cleared Â· choose a discovered marker.";
   });
   document.body.appendChild(fastWorldDestinationHud);
 
   rapidPracticeRewardPanel = document.createElement("section");
   rapidPracticeRewardPanel.id = "rapid-practice-reward";
   rapidPracticeRewardPanel.hidden = true;
-  rapidPracticeRewardPanel.innerHTML = "<div class=\"rapid-reward-shell\"><small>WAVE REWARD</small><h2></h2><p></p><div class=\"rapid-reward-choices\"></div><footer>One click · no inventory · next wave starts immediately</footer></div>";
+  rapidPracticeRewardPanel.innerHTML = "<div class=\"rapid-reward-shell\"><small>WAVE REWARD</small><h2></h2><p></p><div class=\"rapid-reward-choices\"></div><footer>One click Â· no inventory Â· next wave starts immediately</footer></div>";
   rapidPracticeRewardPanel.style.cssText = "position:fixed;inset:0;z-index:90;place-items:center;background:radial-gradient(circle,rgba(11,29,22,.2),rgba(2,7,6,.78));font-family:system-ui;color:#ecfff1";
   rapidPracticeRewardPanel.querySelector<HTMLElement>(".rapid-reward-shell")!.style.cssText = "width:min(760px,calc(100vw - 32px));padding:24px;border:1px solid rgba(239,194,79,.8);border-radius:16px;background:linear-gradient(145deg,rgba(10,28,20,.97),rgba(4,12,10,.98));box-shadow:0 20px 80px #000,0 0 40px rgba(239,194,79,.18);text-align:center";
   rapidPracticeRewardTitle = rapidPracticeRewardPanel.querySelector("h2");
@@ -4776,8 +4790,8 @@ function setCameraViewMode(next: CameraViewMode, capturePointer = false): void {
   cameraModeToggle.dataset.mode = firstPerson ? "first" : "third";
   cameraModeToggle.querySelector("strong")!.textContent = firstPerson ? "1P" : "3P";
   cameraModeToggle.title = firstPerson
-    ? "First-person camera · press V to return to third-person"
-    : "Third-person camera · press V for first-person";
+    ? "First-person camera Â· press V to return to third-person"
+    : "Third-person camera Â· press V for first-person";
   for (const renderer of localFirstPersonRenderers) renderer.enabled = !firstPerson;
   firstPersonActionRig.root.enabled = firstPerson;
   firstPersonActionRig.viewCamera.enabled = firstPerson;
@@ -5108,7 +5122,7 @@ function playerInteractionView(id: string): PlayerInteractionView | null {
     armour: ARMOUR_DEFINITIONS[armourId].name,
     trait: Object.hasOwn(TRAIT_DEFINITIONS, player.equippedTrait)
       ? TRAIT_DEFINITIONS[player.equippedTrait as keyof typeof TRAIT_DEFINITIONS].name : "None",
-    appearance: hairStyle + " hair · outfit from equipped gear",
+    appearance: hairStyle + " hair Â· outfit from equipped gear",
     handId,
     armourId,
     appearanceKey: appearance.skin + ":" + appearance.hair + ":" + appearance.coat + ":" + appearance.hairStyle + ":" + appearance.coatStyle,
@@ -5340,7 +5354,7 @@ function openPackDecision(dropId: string, drop: NetworkLootDrop): void {
   lootPackVerdict.dataset.tone = advice.tone;
   lootPackVerdict.textContent = advice.label;
   lootPackIncoming.dataset.tone = advice.tone;
-  lootPackIncoming.innerHTML = `<strong>${ITEM_DEFINITIONS[drop.itemId].name} ×${drop.quantity}</strong><span>${advice.detail}</span><small>${ITEM_RARITIES[itemRarity(drop.itemId)].label} · ${ITEM_DEFINITIONS[drop.itemId].description}</small>`;
+  lootPackIncoming.innerHTML = `<strong>${ITEM_DEFINITIONS[drop.itemId].name} Ã—${drop.quantity}</strong><span>${advice.detail}</span><small>${ITEM_RARITIES[itemRarity(drop.itemId)].label} Â· ${ITEM_DEFINITIONS[drop.itemId].description}</small>`;
   lootPackCandidates.replaceChildren();
   const candidates = (Object.keys(ITEM_DEFINITIONS) as ItemId[])
     .filter(itemId => swapCandidateFits(drop, itemId))
@@ -5361,7 +5375,7 @@ function openPackDecision(dropId: string, drop: NetworkLootDrop): void {
     const button = document.createElement("button"); button.type = "button"; button.dataset.itemId = itemId;
     button.dataset.recommendation = index === 0 ? "best" : "option";
     button.setAttribute("role", "option"); button.setAttribute("aria-selected", "false");
-    button.innerHTML = `<strong>${ITEM_DEFINITIONS[itemId].name} ×${inventoryCounts.get(itemId) ?? 0}</strong><span>${index === 0 ? "RECOMMENDED · " : ""}${candidate.reason}</span>`;
+    button.innerHTML = `<strong>${ITEM_DEFINITIONS[itemId].name} Ã—${inventoryCounts.get(itemId) ?? 0}</strong><span>${index === 0 ? "RECOMMENDED Â· " : ""}${candidate.reason}</span>`;
     button.addEventListener("click", () => selectSwapItem(itemId)); lootPackCandidates.append(button);
   }
   if (candidates.length === 0) {
@@ -5370,7 +5384,7 @@ function openPackDecision(dropId: string, drop: NetworkLootDrop): void {
   lootPackSwap.disabled = true; lootPackSwap.textContent = "SELECT ITEM TO SWAP";
   const materialFits = !recipe || !("materialId" in recipe) || localBackpackAddable(recipe.materialId, recipe.materialQuantity) >= recipe.materialQuantity;
   lootPackSalvage.hidden = !recipe; lootPackSalvage.disabled = !materialFits;
-  lootPackSalvage.textContent = recipe ? materialFits ? `SALVAGE · +${recipe.gold} GOLD` : "NO ROOM FOR SALVAGE" : "SALVAGE";
+  lootPackSalvage.textContent = recipe ? materialFits ? `SALVAGE Â· +${recipe.gold} GOLD` : "NO ROOM FOR SALVAGE" : "SALVAGE";
   lootPackDecision.hidden = false;
   if (candidates[0]) selectSwapItem(candidates[0].itemId); else lootPackClose.focus();
 }
@@ -5400,7 +5414,7 @@ function interactWithLoot(dropId: string): void {
   const drop = lootVisuals.get(dropId)?.state;
   if (!drop || !room || !worldReady) return;
   if (lootWouldOverflow(dropId, drop)) {
-    const message = `PACK FULL · Make room before collecting ${isItemId(drop.itemId) ? ITEM_DEFINITIONS[drop.itemId].name : "loot"}.`;
+    const message = `PACK FULL Â· Make room before collecting ${isItemId(drop.itemId) ? ITEM_DEFINITIONS[drop.itemId].name : "loot"}.`;
     status.textContent = message;
     showCombatFeedback("PACK FULL", "hurt");
     openPackDecision(dropId, drop);
@@ -5455,23 +5469,23 @@ function updateLootWorldLabel(): void {
   lootWorldName.textContent = collectionItemId ? ITEM_DEFINITIONS[collectionItemId].name
     : nearest.id.startsWith("roadside-cache:") ? "Regional Victory Cache" : bagTier
     ? nearest.id.startsWith("northwatch-shard-patrol-cache:") ? "Shard Patrol Cache" : LOOT_BAG_TIER_LABEL[bagTier]
-    : `${drop.quantity > 1 ? `${drop.quantity}× ` : ""}${ITEM_DEFINITIONS[drop.itemId].name}`;
+    : `${drop.quantity > 1 ? `${drop.quantity}Ã— ` : ""}${ITEM_DEFINITIONS[drop.itemId].name}`;
   const collectionDrop = Boolean(collectionItemId && drop.leaderCollectionName && drop.leaderCollectionTotal);
   const collectionProgress = Math.min(drop.leaderCollectionTotal ?? 0,
     (drop.leaderCollectionDiscovered ?? 0) + (drop.leaderCollectionDuplicate ? 0 : 1));
   lootWorldCollection.hidden = !collectionDrop;
   lootWorldCollection.dataset.duplicate = String(Boolean(drop.leaderCollectionDuplicate));
   lootWorldCollection.textContent = collectionDrop
-    ? `${drop.leaderCollectionDuplicate ? "DUPLICATE" : drop.leaderCollectionProtected ? "PROTECTED NEW ITEM" : "NEW LEADER ITEM"} · ${drop.leaderCollectionName!.toUpperCase()} · ${collectionProgress} / ${drop.leaderCollectionTotal} DISCOVERED${drop.leaderCollectionDuplicate && drop.leaderCollectionDust ? ` · +${drop.leaderCollectionDust} DUST` : ""}`
+    ? `${drop.leaderCollectionDuplicate ? "DUPLICATE" : drop.leaderCollectionProtected ? "PROTECTED NEW ITEM" : "NEW LEADER ITEM"} Â· ${drop.leaderCollectionName!.toUpperCase()} Â· ${collectionProgress} / ${drop.leaderCollectionTotal} DISCOVERED${drop.leaderCollectionDuplicate && drop.leaderCollectionDust ? ` Â· +${drop.leaderCollectionDust} DUST` : ""}`
     : "";
   const previewAffix = typeof drop.affixId === "string" && Object.hasOwn(EQUIPMENT_AFFIXES, drop.affixId)
     ? drop.affixId as EquipmentAffixId : null;
   lootWorldAttunement.hidden = !previewAffix || !drop.affixTier;
   lootWorldAttunement.textContent = previewAffix && drop.affixTier
-    ? `${drop.affixItemId && isItemId(drop.affixItemId) ? `${ITEM_DEFINITIONS[drop.affixItemId].name} · ` : ""}${EQUIPMENT_AFFIXES[previewAffix].name.toUpperCase()} T${drop.affixTier} · ${equipmentAffixEffect(previewAffix, drop.affixTier)}` : "";
+    ? `${drop.affixItemId && isItemId(drop.affixItemId) ? `${ITEM_DEFINITIONS[drop.affixItemId].name} Â· ` : ""}${EQUIPMENT_AFFIXES[previewAffix].name.toUpperCase()} T${drop.affixTier} Â· ${equipmentAffixEffect(previewAffix, drop.affixTier)}` : "";
   const holding = lootHold?.dropId === nearest.id;
   const pending = (pendingFloorLoot.get(nearest.id) ?? 0) > now;
-  lootWorldAction.textContent = `${near ? full ? "PACK FULL" : pending ? "COLLECTING…" : holding ? "KEEP HOLDING" : "HOLD TO COLLECT" : `${nearest.distance.toFixed(1)}m · MOVE CLOSER`}${seconds < 20 ? ` · ${seconds}s` : ""}`;
+  lootWorldAction.textContent = `${near ? full ? "PACK FULL" : pending ? "COLLECTINGâ€¦" : holding ? "KEEP HOLDING" : "HOLD TO COLLECT" : `${nearest.distance.toFixed(1)}m Â· MOVE CLOSER`}${seconds < 20 ? ` Â· ${seconds}s` : ""}`;
   lootWorldLabel.setAttribute("aria-label", `${lootWorldName.textContent}. ${lootWorldCollection.textContent} ${lootWorldAttunement.textContent} ${lootWorldAction.textContent}`.trim());
   lootWorldLabel.dataset.near = String(near);
   lootWorldLabel.dataset.full = String(full);
@@ -5504,7 +5518,7 @@ function appendEquipmentBuildFit(element: HTMLElement, itemId: ItemId): void {
     node.dataset.fit = "resonance";
     const definition = EQUIPMENT_AFFIX_RESONANCE[resonance];
     const active = resonance === localBuildPathId;
-    node.innerHTML = `<strong>${definition.name.toUpperCase()} RESONANCE · ${active ? "ACTIVE" : "READY"}</strong>${definition.effect}${active ? "" : ` Choose the ${BUILD_PATHS[resonance].name} Calling to activate its mechanics.`}`;
+    node.innerHTML = `<strong>${definition.name.toUpperCase()} RESONANCE Â· ${active ? "ACTIVE" : "READY"}</strong>${definition.effect}${active ? "" : ` Choose the ${BUILD_PATHS[resonance].name} Calling to activate its mechanics.`}`;
   } else if (pathId === localBuildPathId) {
     node.dataset.fit = "match";
     node.innerHTML = `<strong>${BUILD_PATHS[pathId].name.toUpperCase()} BUILD FIT</strong>Supports your current Calling. Pair it with another ${BUILD_PATHS[pathId].name} affix for resonance.`;
@@ -5521,7 +5535,7 @@ function appendEquipmentIdentity(element: HTMLElement, itemId: ItemId | null, ra
   const affix = equipmentAffixes[itemId];
   if (affix) {
     const affixNode = document.createElement("p"); affixNode.className = "inventory-affix";
-    const affixName = document.createElement("strong"); affixName.textContent = `${EQUIPMENT_AFFIXES[affix.affixId].name.toUpperCase()} · TIER ${affix.tier}`;
+    const affixName = document.createElement("strong"); affixName.textContent = `${EQUIPMENT_AFFIXES[affix.affixId].name.toUpperCase()} Â· TIER ${affix.tier}`;
     affixNode.append(affixName, document.createTextNode(equipmentAffixEffect(affix.affixId, affix.tier))); element.append(affixNode);
     appendEquipmentBuildFit(element, itemId);
   }
@@ -5553,7 +5567,7 @@ function fillLootComparison(element: HTMLElement, id: MainHandId, rank = equipme
   appendComparisonRow(element, "Damage", comparison.damage, comparison.damageValue, worn?.damageValue);
   appendComparisonRow(element, "Reach", comparison.range, comparison.rangeValue, worn?.rangeValue);
   appendComparisonRow(element, "First attack", comparison.speed, comparison.speedValue, worn?.speedValue, true);
-  const note = document.createElement("p"); note.textContent = `${comparison.style} · ${comparison.benefit}`; element.append(note);
+  const note = document.createElement("p"); note.textContent = `${comparison.style} Â· ${comparison.benefit}`; element.append(note);
 }
 function fillArmourComparison(element: HTMLElement, id: ArmourId, rank = equipmentRank(id === "none" ? null : id), compareId?: ArmourId) {
   const comparison = armourComparison(id, rank);
@@ -5585,17 +5599,17 @@ function openLoot(id: string) {
   const duplicate = owned > 0;
   lootPanel.dataset.rarity = rarity;
   lootAcquisitionState.dataset.duplicate = String(duplicate);
-  lootAcquisitionState.textContent = duplicate ? `DUPLICATE · ${owned} OWNED` : "NEW FIND";
+  lootAcquisitionState.textContent = duplicate ? `DUPLICATE Â· ${owned} OWNED` : "NEW FIND";
   const sourceId = lootSourceMob(id);
   lootSource.textContent = sourceId ? `Dropped by ${mobVisuals.get(sourceId)?.state.name ?? "enemy"}` : rewardCache ? "Personal dungeon reward" : "Personal equipment drop";
-  lootHeadingLabel.textContent = rewardCache ? "PERSONAL DUNGEON CACHE" : `${ITEM_RARITIES[rarity].label.toUpperCase()} · ENEMY EQUIPMENT`;
+  lootHeadingLabel.textContent = rewardCache ? "PERSONAL DUNGEON CACHE" : `${ITEM_RARITIES[rarity].label.toUpperCase()} Â· ENEMY EQUIPMENT`;
   document.querySelector<HTMLElement>("#loot-title")!.textContent = rewardCache ? "Personal Rootbound Cache" : ITEM_DEFINITIONS[drop.itemId as ItemId].name;
   document.querySelector<HTMLElement>("#loot-description")!.textContent = rewardCache
     ? `Your secured dungeon reward features ${isItemId(drop.itemId) ? ITEM_DEFINITIONS[drop.itemId].name : "veteran supplies"}.`
-    : `${drop.quantity} item · ${isItemId(drop.itemId) ? ITEM_DEFINITIONS[drop.itemId].description : "Enemy equipment"}`;
+    : `${drop.quantity} item Â· ${isItemId(drop.itemId) ? ITEM_DEFINITIONS[drop.itemId].description : "Enemy equipment"}`;
   if (rewardCache) {
     const featuredName = isItemId(drop.itemId) ? ITEM_DEFINITIONS[drop.itemId].name : "Veteran supplies";
-    document.querySelector<HTMLElement>("#loot-new")!.innerHTML = `<strong>Featured: ${featuredName}</strong><p>Also contains gold · Stone Cores · Iron Ore · Healing Potion${drop.itemId === "silver_ore" ? " · bonus Silver Ore" : ""}</p>`;
+    document.querySelector<HTMLElement>("#loot-new")!.innerHTML = `<strong>Featured: ${featuredName}</strong><p>Also contains gold Â· Stone Cores Â· Iron Ore Â· Healing Potion${drop.itemId === "silver_ore" ? " Â· bonus Silver Ore" : ""}</p>`;
     document.querySelector<HTMLElement>("#loot-current")!.innerHTML = `<strong>${hand || armour ? "New fixed equipment" : "Repeat-clear supplies"}</strong><p>Only you can see and claim this cache. Duplicate equipment converts into silver, materials, and gold.</p>`;
   } else if (armour) {
     const dropRank = owned > 0 ? equipmentRank(drop.itemId as ItemId) : 0;
@@ -5607,15 +5621,15 @@ function openLoot(id: string) {
     fillLootComparison(document.querySelector<HTMLElement>("#loot-current")!, localMainHandId);
   } else if (utility) {
     document.querySelector<HTMLElement>("#loot-new")!.innerHTML = utility === "moonstone"
-      ? `<strong>Matriarch's Moonstone</strong><p>Fixed expedition reward · forge a permanent weapon upgrade</p>`
-      : `<strong>Miner's Lantern</strong><p>18-block cave light · brighter warm glow · auto-equipped</p>`;
+      ? `<strong>Matriarch's Moonstone</strong><p>Fixed expedition reward Â· forge a permanent weapon upgrade</p>`
+      : `<strong>Miner's Lantern</strong><p>18-block cave light Â· brighter warm glow Â· auto-equipped</p>`;
     document.querySelector<HTMLElement>("#loot-current")!.innerHTML = utility === "moonstone"
-      ? `<strong>Moonstone Edge</strong><p>Return this stone to the blacksmith · +1 damage to every weapon</p>`
-      : `<strong>${(inventoryCounts.get("miners_lantern") ?? 0) > 0 ? "Already owned" : "Explorer's lamp"}</strong><p>12-block cave light · standard intensity</p>`;
+      ? `<strong>Moonstone Edge</strong><p>Return this stone to the blacksmith Â· +1 damage to every weapon</p>`
+      : `<strong>${(inventoryCounts.get("miners_lantern") ?? 0) > 0 ? "Already owned" : "Explorer's lamp"}</strong><p>12-block cave light Â· standard intensity</p>`;
   }
   if (!rewardCache && !utility && (drop.affixTier ?? 0) > 0) {
     const attunement = document.createElement("p"); attunement.className = "loot-attunement";
-    attunement.textContent = `TIER ${drop.affixTier} ATTUNEMENT · A Calling-linked affix is revealed on pickup.`;
+    attunement.textContent = `TIER ${drop.affixTier} ATTUNEMENT Â· A Calling-linked affix is revealed on pickup.`;
     document.querySelector<HTMLElement>("#loot-new")!.append(attunement);
   }
   lootMessage.textContent = rewardCache ? "Claim this cache before using the victory portal."
@@ -5627,7 +5641,7 @@ function openLoot(id: string) {
   const dismantleRecipe = Object.hasOwn(BLACKSMITH_DISMANTLE, drop.itemId)
     ? BLACKSMITH_DISMANTLE[drop.itemId as BlacksmithDismantleItemId] : null;
   lootDismantle.hidden = rewardCache || Boolean(utility) || !dismantleRecipe;
-  lootDismantle.textContent = dismantleRecipe ? `DISMANTLE · +${dismantleRecipe.gold} GOLD` : "DISMANTLE";
+  lootDismantle.textContent = dismantleRecipe ? `DISMANTLE Â· +${dismantleRecipe.gold} GOLD` : "DISMANTLE";
   lootEquip.disabled = lootKeep.disabled = lootDismantle.disabled = false;
   lootClose.focus();
 }
@@ -5635,7 +5649,7 @@ function collectInspectedLoot(action: LootCollectAction, swapItemId?: ItemId) {
   if (!room || !inspectedDropId || lootPending) return;
   lootPending = true; lootEquip.disabled = lootKeep.disabled = lootDismantle.disabled = true;
   lootPackSwap.disabled = lootPackSalvage.disabled = true;
-  lootMessage.textContent = action === "dismantle" ? "Dismantling…" : "Collecting…";
+  lootMessage.textContent = action === "dismantle" ? "Dismantlingâ€¦" : "Collectingâ€¦";
   const id = inspectedDropId;
   // Keep/equip can cross an older rolling server safely; dismantle omits the
   // legacy flag so an old server rejects it instead of accidentally keeping it.
@@ -5672,7 +5686,7 @@ let equipmentTargetAffixId: keyof typeof EQUIPMENT_AFFIXES | null = null;
 let equipmentHuntTarget: EquipmentHuntTarget | null = null;
 function equipmentAffixLabel(itemId: ItemId): string | null {
   const roll = equipmentAffixes[itemId];
-  return roll ? `${EQUIPMENT_AFFIXES[roll.affixId].name} · Tier ${roll.tier}` : null;
+  return roll ? `${EQUIPMENT_AFFIXES[roll.affixId].name} Â· Tier ${roll.tier}` : null;
 }
 const rankLabel = (rank: number): string => rank <= 0 ? "UNFORGED" : `RANK ${["I", "II", "III"][Math.min(3, rank) - 1]}`;
 const equipmentCollectionGrid = document.querySelector<HTMLElement>("#equipment-collection-grid")!;
@@ -5711,7 +5725,7 @@ function setCodexHunt(itemId: ItemId | null, guide = true): void {
   codexHuntSummary.hidden = !plan;
   if (plan) {
     codexHuntName.textContent = ITEM_DEFINITIONS[plan.itemId].name;
-    codexHuntSource.textContent = `${plan.source} · ${plan.level} · ${plan.protection} · ${equipmentCallingFit(plan.itemId, localBuildPathId)}`;
+    codexHuntSource.textContent = `${plan.source} Â· ${plan.level} Â· ${plan.protection} Â· ${equipmentCallingFit(plan.itemId, localBuildPathId)}`;
     if (guide) minimap.guideTo(plan.target);
   } else if (guide && previousPlan) minimap.clearGuide(previousPlan.target.id);
   refreshEquipmentProgression();
@@ -5749,7 +5763,7 @@ let leaderCollectionJson = "";
 let leaderCollectionHydrated = false;
 const huntMarkForSet = { fang: "alpha_forgemark", venom: "venom_forgemark", crusher: "crusher_forgemark" } as const;
 const huntTime = (milliseconds?: number): string => milliseconds && milliseconds > 0
-  ? `${Math.floor(milliseconds / 60_000)}:${String(Math.floor(milliseconds / 1_000) % 60).padStart(2, "0")}.${String(Math.floor(milliseconds % 1_000 / 100)).padStart(1, "0")}` : "—";
+  ? `${Math.floor(milliseconds / 60_000)}:${String(Math.floor(milliseconds / 1_000) % 60).padStart(2, "0")}.${String(Math.floor(milliseconds % 1_000 / 100)).padStart(1, "0")}` : "â€”";
 
 function trackLeaderCollectionPiece(collectionId: RegionalLeaderCollectionId, itemId: ItemId): void {
   setCodexHunt(null);
@@ -5759,8 +5773,8 @@ function trackLeaderCollectionPiece(collectionId: RegionalLeaderCollectionId, it
   const definition = REGIONAL_LEADER_COLLECTIONS[collectionId];
   const tier = leaderCollectionRematchTier(collectionId, itemId);
   minimap.guideTo(leaderCollectionTarget(collectionId, itemId));
-  social.event(`Collection hunt tracked · ${definition.leaderName}${tier ? ` · Empowered Rematch ${["", "I", "II", "III"][tier] ?? tier}` : ""}.`);
-  status.textContent = `Tracking ${definition.leaderName} on your map${tier ? ` · Empowered Rematch ${["", "I", "II", "III"][tier] ?? tier} required` : ""}.`;
+  social.event(`Collection hunt tracked Â· ${definition.leaderName}${tier ? ` Â· Empowered Rematch ${["", "I", "II", "III"][tier] ?? tier}` : ""}.`);
+  status.textContent = `Tracking ${definition.leaderName} on your map${tier ? ` Â· Empowered Rematch ${["", "I", "II", "III"][tier] ?? tier} required` : ""}.`;
   renderRegionalLeaderCollections(leaderCollectionJson);
 }
 
@@ -5771,7 +5785,7 @@ function stopLeaderCollectionHunt(): void {
   trackedLeaderCollectionHunt = null;
   leaderCollectionGuidanceSuppressed = false;
   storeTrackedLeaderCollectionHunt();
-  social.event(`Collection hunt stopped · ${leaderName}.`);
+  social.event(`Collection hunt stopped Â· ${leaderName}.`);
   status.textContent = `Stopped tracking ${leaderName}.`;
   renderRegionalLeaderCollections(leaderCollectionJson);
 }
@@ -5788,13 +5802,13 @@ function renderRegionalLeaderCollections(value: string): void {
       leaderCollectionGuidanceSuppressed = false;
       storeTrackedLeaderCollectionHunt();
       minimap.guideTo(leaderCollectionTarget(completed.collectionId, next.itemId));
-      if (leaderCollectionHydrated) social.event(`${ITEM_DEFINITIONS[completed.itemId].name} discovered · the next hidden ${definition.name} piece is now tracked.`);
+      if (leaderCollectionHydrated) social.event(`${ITEM_DEFINITIONS[completed.itemId].name} discovered Â· the next hidden ${definition.name} piece is now tracked.`);
     } else {
       minimap.clearGuide(leaderCollectionTarget(completed.collectionId, completed.itemId).id);
       trackedLeaderCollectionHunt = null;
       leaderCollectionGuidanceSuppressed = false;
       storeTrackedLeaderCollectionHunt();
-      if (leaderCollectionHydrated) social.event(`${definition.name} complete · ${definition.badgeName} earned.`);
+      if (leaderCollectionHydrated) social.event(`${definition.name} complete Â· ${definition.badgeName} earned.`);
     }
   } else if (!leaderCollectionHydrated && trackedLeaderCollectionHunt) {
     minimap.guideTo(leaderCollectionTarget(trackedLeaderCollectionHunt.collectionId, trackedLeaderCollectionHunt.itemId));
@@ -5814,7 +5828,7 @@ function renderRegionalLeaderCollections(value: string): void {
     row.className = "leader-collection-row";
     row.dataset.complete = String(progress.complete);
     const header = document.createElement("header");
-    header.innerHTML = `<div><small>${collectionId.toUpperCase()} · LEADER SET</small><strong>${definition.name}</strong><span>Defeat ${definition.leaderName}</span></div><b>${progress.discovered} / ${progress.total}</b>`;
+    header.innerHTML = `<div><small>${collectionId.toUpperCase()} Â· LEADER SET</small><strong>${definition.name}</strong><span>Defeat ${definition.leaderName}</span></div><b>${progress.discovered} / ${progress.total}</b>`;
     const pieces = document.createElement("div");
     pieces.className = "leader-collection-pieces";
     for (const entry of definition.items) {
@@ -5831,14 +5845,14 @@ function renderRegionalLeaderCollections(value: string): void {
         : tracked ? `Stop tracking hidden piece from ${definition.leaderName}` : `Track hidden piece from ${definition.leaderName}`);
       const icon = document.createElement("i");
       icon.setAttribute("aria-hidden", "true");
-      icon.textContent = known ? (armourForItem(entry.itemId) ? "◆" : "✦") : "?";
+      icon.textContent = known ? (armourForItem(entry.itemId) ? "â—†" : "âœ¦") : "?";
       const copy = document.createElement("span");
       const name = document.createElement("strong");
       name.textContent = known ? ITEM_DEFINITIONS[entry.itemId].name : "Unknown piece";
       const status = document.createElement("small");
       const rematchTier = "minRematchTier" in entry ? entry.minRematchTier : undefined;
       const huntRequirement = rematchTier ? `REMATCH ${["", "I", "II", "III"][rematchTier] ?? rematchTier}` : "LEADER DROP";
-      status.textContent = known ? "DISCOVERED" : tracked ? `TRACKED · ${huntRequirement}` : huntRequirement;
+      status.textContent = known ? "DISCOVERED" : tracked ? `TRACKED Â· ${huntRequirement}` : huntRequirement;
       copy.append(name, status);
       piece.append(icon, copy);
       if (!known) piece.addEventListener("click", () => tracked ? stopLeaderCollectionHunt() : trackLeaderCollectionPiece(collectionId, entry.itemId));
@@ -5846,7 +5860,7 @@ function renderRegionalLeaderCollections(value: string): void {
     }
     const footer = document.createElement("footer");
     footer.innerHTML = progress.complete
-      ? `<span>SET COMPLETE</span><b data-earned="true">✦ ${definition.badgeName}</b>`
+      ? `<span>SET COMPLETE</span><b data-earned="true">âœ¦ ${definition.badgeName}</b>`
       : `<span>${progress.total - progress.discovered} piece${progress.total - progress.discovered === 1 ? "" : "s"} still hidden</span><b data-earned="false">CREST LOCKED</b>`;
     row.append(header, pieces, footer);
     regionalLeaderCollectionGrid.append(row);
@@ -5872,10 +5886,10 @@ function renderHuntCollection(update: HuntCollectionUpdate): void {
     const armourValue = BLACKSMITH_DISMANTLE[definition.armourId as BlacksmithDismantleItemId];
     const card = document.createElement("article");
     card.className = "hunt-set-card"; card.dataset.complete = String(owned.weaponOwned && owned.armourOwned);
-    card.innerHTML = `<header><div><small>${setId.toUpperCase()} PATH · RANK ${mastery.rank}</small><strong>${definition.name}</strong></div><b>${owned.weaponOwned && owned.armourOwned ? "SET COMPLETE" : `${Number(owned.weaponOwned) + Number(owned.armourOwned)} / 2 PIECES`}</b></header>
-      <div class="hunt-set-pieces"><span data-owned="${owned.weaponOwned}">${owned.weaponOwned ? "✓" : "◇"} ${ITEM_DEFINITIONS[definition.weaponId].name}<small>${rankLabel(weaponRank)} · dismantle ${weaponValue?.gold ?? 0}g</small></span><span data-owned="${owned.armourOwned}">${owned.armourOwned ? "✓" : "◇"} ${ITEM_DEFINITIONS[definition.armourId].name}<small>${rankLabel(armourRank)} · dismantle ${armourValue?.gold ?? 0}g</small></span></div>
+    card.innerHTML = `<header><div><small>${setId.toUpperCase()} PATH Â· RANK ${mastery.rank}</small><strong>${definition.name}</strong></div><b>${owned.weaponOwned && owned.armourOwned ? "SET COMPLETE" : `${Number(owned.weaponOwned) + Number(owned.armourOwned)} / 2 PIECES`}</b></header>
+      <div class="hunt-set-pieces"><span data-owned="${owned.weaponOwned}">${owned.weaponOwned ? "âœ“" : "â—‡"} ${ITEM_DEFINITIONS[definition.weaponId].name}<small>${rankLabel(weaponRank)} Â· dismantle ${weaponValue?.gold ?? 0}g</small></span><span data-owned="${owned.armourOwned}">${owned.armourOwned ? "âœ“" : "â—‡"} ${ITEM_DEFINITIONS[definition.armourId].name}<small>${rankLabel(armourRank)} Â· dismantle ${armourValue?.gold ?? 0}g</small></span></div>
       <p class="hunt-set-bonus" data-active="${owned.weaponOwned && owned.armourOwned}"><b>FULL SET</b>${definition.bonus}</p>
-      <p class="hunt-set-forgemark" data-owned="${owned.forgemarkOwned}"><b>${owned.forgemarkOwned ? "✓ AWAKENED" : "FORGEMARK MISSING"}</b>${ITEM_DEFINITIONS[huntMarkForSet[setId]].name}</p>
+      <p class="hunt-set-forgemark" data-owned="${owned.forgemarkOwned}"><b>${owned.forgemarkOwned ? "âœ“ AWAKENED" : "FORGEMARK MISSING"}</b>${ITEM_DEFINITIONS[huntMarkForSet[setId]].name}</p>
       <div class="hunt-set-times"><span>NORMAL <b>${huntTime(mastery.bestTimesMs.normal)}</b></span><span>VETERAN <b>${mastery.veteranUnlocked ? huntTime(mastery.bestTimesMs.veteran) : "LOCKED"}</b></span><span>ASCENDANT <b>${mastery.ascendantUnlocked ? huntTime(mastery.bestTimesMs.ascendant) : "LOCKED"}</b></span></div>
       <details><summary>UPGRADE PATHS</summary><p>${equipmentProgressionText(definition.weaponId, weaponRank)}</p><p>${equipmentProgressionText(definition.armourId, armourRank)}</p></details>`;
     huntSetGrid.append(card);
@@ -5884,7 +5898,7 @@ function renderHuntCollection(update: HuntCollectionUpdate): void {
   for (const slot of [1, 2, 3] as const) {
     const saved = update.loadouts.find(loadout => loadout.slot === slot);
     const row = document.createElement("div"); row.className = "hunt-loadout-row";
-    row.innerHTML = `<b>${slot}</b><input maxlength="18" aria-label="Loadout ${slot} name" value="${saved?.name ?? `Loadout ${slot}`}"><span>${saved ? `${MAIN_HAND_DEFINITIONS[saved.mainHandId].name} · ${saved.armourId === "none" ? "No armour" : ITEM_DEFINITIONS[saved.armourId].name}${saved.buildPathId ? ` · ${BUILD_PATHS[saved.buildPathId].name}` : ""}` : "Empty slot"}</span><button class="save" type="button">SAVE</button><button class="equip" type="button" ${saved ? "" : "disabled"}>EQUIP</button>`;
+    row.innerHTML = `<b>${slot}</b><input maxlength="18" aria-label="Loadout ${slot} name" value="${saved?.name ?? `Loadout ${slot}`}"><span>${saved ? `${MAIN_HAND_DEFINITIONS[saved.mainHandId].name} Â· ${saved.armourId === "none" ? "No armour" : ITEM_DEFINITIONS[saved.armourId].name}${saved.buildPathId ? ` Â· ${BUILD_PATHS[saved.buildPathId].name}` : ""}` : "Empty slot"}</span><button class="save" type="button">SAVE</button><button class="equip" type="button" ${saved ? "" : "disabled"}>EQUIP</button>`;
     const input = row.querySelector<HTMLInputElement>("input")!;
     row.querySelector<HTMLButtonElement>(".save")!.disabled = !update.inTown;
     row.querySelector<HTMLButtonElement>(".equip")!.disabled = !saved || !update.inTown;
@@ -5893,7 +5907,7 @@ function renderHuntCollection(update: HuntCollectionUpdate): void {
     huntLoadoutList.append(row);
   }
   const rewardButton = huntCollectionReward.querySelector<HTMLButtonElement>("button")!;
-  rewardButton.textContent = update.rewardClaimed ? "REWARD CLAIMED" : update.canClaim ? "CLAIM · 150 GOLD + 3 MOONSTONE" : `${completeSets} / 3 SETS`;
+  rewardButton.textContent = update.rewardClaimed ? "REWARD CLAIMED" : update.canClaim ? "CLAIM Â· 150 GOLD + 3 MOONSTONE" : `${completeSets} / 3 SETS`;
   rewardButton.disabled = !update.canClaim || !update.inTown;
   rewardButton.onclick = () => room?.send("hunt:collection", { action: "claim" });
 }
@@ -6147,8 +6161,8 @@ function refreshNorthwatchWardSlot(): void {
   }
   const remaining = Math.max(0, northwatchWardReadyAt - performance.now());
   slot.dataset.wardState = remaining > 0 ? "charging" : "ready";
-  slot.dataset.wardLabel = remaining > 0 ? `SHARD WARD · ${Math.ceil(remaining / 1000)}S` : "SHARD WARD · READY";
-  slot.title = `${armourStats(localArmourId).name} · ${slot.dataset.wardLabel.toLowerCase()}`;
+  slot.dataset.wardLabel = remaining > 0 ? `SHARD WARD Â· ${Math.ceil(remaining / 1000)}S` : "SHARD WARD Â· READY";
+  slot.title = `${armourStats(localArmourId).name} Â· ${slot.dataset.wardLabel.toLowerCase()}`;
 }
 function startNorthwatchWardRecharge(cooldownMs: number): void {
   northwatchWardReadyAt = performance.now() + cooldownMs;
@@ -6165,7 +6179,7 @@ function startNorthwatchWardRecharge(cooldownMs: number): void {
 function refreshInventoryEquipped(): void {
   combatHud.setArmour(localArmourId);
   const tool = (inventoryCounts.get("reinforced_pickaxe") ?? 0) > 0 ? "Reinforced Pickaxe" : "Starter Pickaxe";
-  inventoryEquipped.textContent = `${MAIN_HAND_DEFINITIONS[localMainHandId].name} · ${tool} · ${armourStats(localArmourId).name}`;
+  inventoryEquipped.textContent = `${MAIN_HAND_DEFINITIONS[localMainHandId].name} Â· ${tool} Â· ${armourStats(localArmourId).name}`;
   const handDefinition = MAIN_HAND_DEFINITIONS[localMainHandId];
   const handItem = ("requiredItemId" in handDefinition ? handDefinition.requiredItemId : null) as ItemId | null;
   const armourItem = localArmourId === "none" ? null : localArmourId as ItemId;
@@ -6342,7 +6356,7 @@ function refreshInventorySelectionActions(): void {
   inventorySelectedDismantle.hidden = !recipe;
   inventorySelectedDismantle.disabled = !recipe || (equipped && (inventoryCounts.get(itemId!) ?? 0) <= 1);
   inventorySelectedDismantle.textContent = recipe
-    ? `${inventorySelectedDismantle.disabled ? "EQUIPPED · " : ""}DISMANTLE AT SMITH · +${recipe.gold} GOLD`
+    ? `${inventorySelectedDismantle.disabled ? "EQUIPPED Â· " : ""}DISMANTLE AT SMITH Â· +${recipe.gold} GOLD`
     : "DISMANTLE AT SMITH";
 }
 
@@ -6394,11 +6408,11 @@ function refreshInventoryPreview(): void {
   else {
     const itemPath = EQUIPMENT_AFFIXES[roll.affixId].pathId;
     inventoryCallingFit.textContent = itemPath === localBuildPathId
-      ? `✓ Great for your ${BUILD_PATHS[itemPath].name} style.`
+      ? `âœ“ Great for your ${BUILD_PATHS[itemPath].name} style.`
       : `Built for ${BUILD_PATHS[itemPath].name}, not your current ${BUILD_PATHS[localBuildPathId].name} style.`;
   }
   const changed = hand !== localMainHandId || armour !== localArmourId;
-  document.querySelector<HTMLElement>("#inventory-preview-label")!.textContent = changed ? "Preview only · not equipped" : "Currently equipped";
+  document.querySelector<HTMLElement>("#inventory-preview-label")!.textContent = changed ? "Preview only Â· not equipped" : "Currently equipped";
 }
 
 function updatePowerLoadout(powerId: PowerId): void {
@@ -6449,15 +6463,15 @@ function requestSeismicMastery(masteryId: SeismicMasteryId): void {
 function updateControlsHelp(): void {
   const power = POWER_DEFINITIONS[localEquippedPower];
   const powerHint = power.castType === "tap" ? `R ${power.name}` : `Hold R ${power.core === "ground" ? "place" : "aim"} ${power.name}`;
-  const fireHint = WEAPON_ATTACK_DEFINITIONS[localMainHandId].projectileTravelMs > 0 ? " · Hold J or left-click to fire · Mouse aim optional" : "";
-  const secondaryHint = localCharacterProgression.level >= 5 ? ` · T ${POWER_DEFINITIONS[localSecondaryPower].name}` : "";
+  const fireHint = WEAPON_ATTACK_DEFINITIONS[localMainHandId].projectileTravelMs > 0 ? " Â· Hold J or left-click to fire Â· Mouse aim optional" : "";
+  const secondaryHint = localCharacterProgression.level >= 5 ? ` Â· T ${POWER_DEFINITIONS[localSecondaryPower].name}` : "";
   const calling = CALLING_ABILITY_OPTIONS.find(option => option.id === localCallingAbilityId);
   const callingSpecial = CALLING_ABILITY_OPTIONS.find(option => option.pathId === localBuildPathId && option.category === "Utility");
-  const callingHint = localCharacterProgression.level >= 2 && calling ? ` · G ${calling.name}` : "";
-  const unlockedPowerHint = WEAPON_TECHNIQUES_AVAILABLE && localCharacterProgression.level >= 5 ? ` · ${powerHint}${secondaryHint}` : "";
+  const callingHint = localCharacterProgression.level >= 2 && calling ? ` Â· G ${calling.name}` : "";
+  const unlockedPowerHint = WEAPON_TECHNIQUES_AVAILABLE && localCharacterProgression.level >= 5 ? ` Â· ${powerHint}${secondaryHint}` : "";
   const unlockedSpecialHint = localCharacterProgression.level >= 4 && callingSpecial
-    ? ` · F ${callingSpecial.name}` : "";
-  controlsHelp.textContent = `WASD move · Arrows camera · J main-hand attack · I inventory · H potion · Hold C/right-click Guard · Space dodge/cancel${unlockedPowerHint}${unlockedSpecialHint}${callingHint} · Q mode · E/click acts${fireHint}`;
+    ? ` Â· F ${callingSpecial.name}` : "";
+  controlsHelp.textContent = `WASD move Â· Arrows camera Â· J main-hand attack Â· I inventory Â· H potion Â· Hold C/right-click Guard Â· Space dodge/cancel${unlockedPowerHint}${unlockedSpecialHint}${callingHint} Â· Q mode Â· E/click acts${fireHint}`;
 }
 
 function updateTouchAbilityVisibility(): void {
@@ -6550,7 +6564,7 @@ function updateMainHandLoadout(mainHandId: MainHandId): void {
     completeStarterEquipment();
     if (firstStepsIndex === ONBOARDING_STAGE.equipSword) noteFirstStep("equipped_starter");
     showCombatFeedback("FORGED SWORD EQUIPPED", "dodge");
-    status.textContent = "Forged Sword equipped · your first loadout is ready.";
+    status.textContent = "Forged Sword equipped Â· your first loadout is ready.";
     if (!inventoryPanel.hidden) setInventoryOpen(false);
   }
   if (firstVictoryReward?.stage === "choose" && isItemId(firstVictoryReward.itemId)
@@ -6596,7 +6610,7 @@ function updateTraitLoadout(traitId: TraitId): void {
   traitSlot.dataset.trait = traitId;
   momentumPips[0]?.parentElement?.toggleAttribute("hidden", traitId !== "momentum");
   traitBonus.hidden = traitId === "momentum";
-  traitBonus.textContent = traitId === "bulwark" ? "−35% GUARD" : traitId === "executioner" ? "+1 VULNERABLE" : "";
+  traitBonus.textContent = traitId === "bulwark" ? "âˆ’35% GUARD" : traitId === "executioner" ? "+1 VULNERABLE" : "";
   for (const button of traitPickerButtons) button.setAttribute("aria-pressed", String(button.dataset.trait === traitId));
   if (traitId !== "momentum") updateMomentum(0);
   else updateMomentum(localMomentumStacks);
@@ -6651,17 +6665,17 @@ function renderCharacterProgression(update: ProgressionUpdate, maximumHealth = p
   powerButton.disabled = !WEAPON_TECHNIQUES_AVAILABLE || update.level < 5;
   updateTouchAbilityVisibility();
   updateControlsHelp();
-  inventoryLevel.textContent = required > 0 ? `${update.level} · ${update.experience}/${required} XP` : `${update.level} · MAX`;
+  inventoryLevel.textContent = required > 0 ? `${update.level} Â· ${update.experience}/${required} XP` : `${update.level} Â· MAX`;
   characterPoints.textContent = update.unspentStatPoints > 0 ? `${update.unspentStatPoints} POINT${update.unspentStatPoints === 1 ? "" : "S"} AVAILABLE` : "NO POINTS AVAILABLE";
-  statPower.textContent = `${update.powerPoints} · +${characterPowerBonus(update.powerPoints)} damage`;
-  statVitality.textContent = `${update.vitalityPoints} · ${maximumHealth} max HP`;
-  statAgility.textContent = `${update.agilityPoints} · ${Math.round(characterSpeedMultiplier(update.agilityPoints) * 100)}% speed`;
-  statMining.textContent = `${update.miningPoints} · ×${1 + characterMiningBonus(update.miningPoints)} yield`;
+  statPower.textContent = `${update.powerPoints} Â· +${characterPowerBonus(update.powerPoints)} damage`;
+  statVitality.textContent = `${update.vitalityPoints} Â· ${maximumHealth} max HP`;
+  statAgility.textContent = `${update.agilityPoints} Â· ${Math.round(characterSpeedMultiplier(update.agilityPoints) * 100)}% speed`;
+  statMining.textContent = `${update.miningPoints} Â· Ã—${1 + characterMiningBonus(update.miningPoints)} yield`;
   characterMilestones.replaceChildren(...CHARACTER_MILESTONES.map(milestone => {
     const row = document.createElement("article");
     const unlocked = update.level >= milestone.level;
     row.dataset.unlocked = String(unlocked);
-    row.innerHTML = `<span>${unlocked ? "✓" : `LV ${milestone.level}`}</span><div><strong>${milestone.name}</strong><small>${milestone.detail}</small></div>`;
+    row.innerHTML = `<span>${unlocked ? "âœ“" : `LV ${milestone.level}`}</span><div><strong>${milestone.name}</strong><small>${milestone.detail}</small></div>`;
     return row;
   }));
   activatePowerSlot(activePowerSlot, false);
@@ -6703,9 +6717,9 @@ function updateLevelCelebration(now: number): void {
     const calling = callingUnlockAnnouncement(celebration.level, localBuildPathId);
     const milestone = CHARACTER_MILESTONES.find(entry => entry.level === celebration.level);
     levelCelebrationDetail.textContent = calling
-      ? `${calling.title} · ${calling.detail} A permanent stat point is also ready.`
-      : milestone ? `${milestone.name} unlocked · a permanent stat point is ready.`
-        : `A permanent stat point is ready · +${celebration.experienceGranted} XP.`;
+      ? `${calling.title} Â· ${calling.detail} A permanent stat point is also ready.`
+      : milestone ? `${milestone.name} unlocked Â· a permanent stat point is ready.`
+        : `A permanent stat point is ready Â· +${celebration.experienceGranted} XP.`;
   }
   if (!levelCelebration.hidden && (now >= levelCelebrationUntil || reportedProtectedDialog === true || localCombatActive()))
     { levelCelebration.hidden = true; activeLevelCelebration = null; }
@@ -6748,13 +6762,13 @@ function updateAbilityReveal(): void {
   abilityRevealPanel.dataset.calling = definition.pathId;
   abilityRevealPanel.style.setProperty("--calling-colour", awakening.colour);
   abilityRevealPanel.style.setProperty("--calling-accent", awakening.accent);
-  abilityRevealPath.textContent = `${BUILD_PATHS[definition.pathId].name.toUpperCase()} · ABILITY UNLOCKED`;
+  abilityRevealPath.textContent = `${BUILD_PATHS[definition.pathId].name.toUpperCase()} Â· ABILITY UNLOCKED`;
   abilityRevealPreview.innerHTML = callingPreviewMarkup(definition.pathId, `${definition.name} preview`);
   abilityRevealTitle.textContent = definition.name;
   abilityRevealDescription.textContent = definition.description;
   abilityRevealUseHint.textContent = `${abilityRevealUse(id, localBuildPathRank, localCharacterProgression.level)} Town practice is optional.`;
   abilityRevealContinue.textContent = shouldGuideFirstCallingUse(id, localCallingAbilityId, callingPowerUsed(id))
-    ? "CONTINUE · PRACTICE OPTIONAL" : "CONTINUE";
+    ? "CONTINUE Â· PRACTICE OPTIONAL" : "CONTINUE";
   abilityRevealPanel.hidden = false;
   combatAudio.play("levelUp");
   resetMovementControls();
@@ -6781,7 +6795,7 @@ function updateAshenEquipmentReveal(): void {
   const forged = pendingAshenEquipmentReveal;
   ashenEquipmentRevealTitle.textContent = forged.name;
   ashenEquipmentRevealDescription.textContent = forged.description;
-  ashenEquipmentRevealIcon.textContent = forged.blueprint === "cinderfang" ? "⚔" : forged.blueprint === "ashguard" ? "◆" : "✦";
+  ashenEquipmentRevealIcon.textContent = forged.blueprint === "cinderfang" ? "âš”" : forged.blueprint === "ashguard" ? "â—†" : "âœ¦";
   blacksmithPanel.hidden = true;
   ashenEquipmentRevealPanel.hidden = false;
   combatAudio.play("levelUp"); levelUpBurst(); resetMovementControls();
@@ -6844,10 +6858,10 @@ function completeGuidedAbilityPractice(abilityId: CallingAbilityId): void {
   callingEffigy.enabled = false;
   callingFirstUse.hidden = true;
   callingSlot.dataset.firstUse = "false";
-  showCombatFeedback("POWER MASTERED · EXPLORATION READY", "dodge");
+  showCombatFeedback("POWER MASTERED Â· EXPLORATION READY", "dodge");
   combatAudio.play("levelUp");
   levelUpBurst();
-  status.textContent = "Ability mastered · follow Realm Guidance or explore beyond Town.";
+  status.textContent = "Ability mastered Â· follow Realm Guidance or explore beyond Town.";
   social.event(`${CALLING_ABILITY_OPTIONS.find(option => option.id === abilityId)?.name ?? "Calling Power"} practiced at the Town effigy.`);
 }
 
@@ -6862,7 +6876,7 @@ function acceptGuidedAbilityPractice(abilityId: CallingAbilityId): void {
     guidedTankImpactTimer = window.setTimeout(() => {
       if (guidedAbilityPracticeId !== abilityId || guidedAbilityPracticePhase !== "follow_up") return;
       createRangedPopup(CALLING_EFFIGY_POSITION.clone().add(new pc.Vec3(0, 2.5, 0)), "BLOCKED", "melee", false, [.35, 1, .76]);
-      showCombatFeedback("BULWARK HELD · TEST STRIKE BLOCKED", "dodge");
+      showCombatFeedback("BULWARK HELD Â· TEST STRIKE BLOCKED", "dodge");
       completeGuidedAbilityPractice(abilityId);
     }, 1_050);
   }
@@ -6918,16 +6932,16 @@ function updateGuidedAbilityPractice(now: number): void {
     const base = index === 0 ? [-1.7, 0] : index === 1 ? [1.7, 0] : [0, 1.65];
     projection.setLocalPosition(base[0]!, .28 + Math.sin(now * .004 + index) * .08, base[1]!);
   }
-  callingFirstUseTitle.textContent = `${definition.name} · optional practice`;
+  callingFirstUseTitle.textContent = `${definition.name} Â· optional practice`;
   callingFirstUseDetail.textContent = distance > 4 ? firstCallingUseInstruction(distance)
     : guidedAbilityPracticePhase === "cast" ? challenge.castInstruction : challenge.followUpInstruction;
   callingFirstUseKey.textContent = guidedAbilityPracticePhase === "follow_up"
     && (definition.pathId === "assassin" || definition.pathId === "ranger") ? "J" : "G";
-  callingFirstUseAction.textContent = distance > 4 ? "OPTIONAL · APPROACH THE EFFIGY"
+  callingFirstUseAction.textContent = distance > 4 ? "OPTIONAL Â· APPROACH THE EFFIGY"
     : guidedAbilityPracticePhase === "cast" ? `USE ${definition.name.toUpperCase()}`
       : definition.pathId === "tank" ? "TEST STRIKE INCOMING"
-        : definition.pathId === "assassin" ? "J · EMPOWERED STRIKE"
-          : `J · FOCUSED SHOT ${guidedAbilityPracticeHits} / ${challenge.followUpHits}`;
+        : definition.pathId === "assassin" ? "J Â· EMPOWERED STRIKE"
+          : `J Â· FOCUSED SHOT ${guidedAbilityPracticeHits} / ${challenge.followUpHits}`;
   const pulse = 1 + Math.sin(now * .005) * .045;
   callingEffigy.setLocalScale(pulse, pulse, pulse);
   callingEffigy.rotateLocal(0, .18, 0);
@@ -6999,10 +7013,10 @@ function renderAssassinJourney(update: BuildPathUpdate): void {
   if (assassinJourneyPanel.hidden) return;
   const journey = assassinJourney(update, localCharacterProgression.level);
   const activeAbility = update.selectedCallingAbilityId === "assassin_blade_dance" ? "Blade Dance" : "Stealth";
-  buildPathMessage.textContent = `G · ${activeAbility} ${localCharacterProgression.level >= 2 ? "ready" : "at character LV 2"}  ·  F · Death Mark ${localCharacterProgression.level >= 4 ? "ready" : "at character LV 4"}. Path Mastery unlocks build choices.`;
-  assassinJourneyNext.textContent = `NEXT · ${journey.next}`;
+  buildPathMessage.textContent = `G Â· ${activeAbility} ${localCharacterProgression.level >= 2 ? "ready" : "at character LV 2"}  Â·  F Â· Death Mark ${localCharacterProgression.level >= 4 ? "ready" : "at character LV 4"}. Path Mastery unlocks build choices.`;
+  assassinJourneyNext.textContent = `NEXT Â· ${journey.next}`;
   assassinJourneyTrial.hidden = !journey.trial;
-  assassinJourneyTrial.textContent = journey.trial ? `ACTIVE TRIAL · ${journey.trial}` : "";
+  assassinJourneyTrial.textContent = journey.trial ? `ACTIVE TRIAL Â· ${journey.trial}` : "";
 }
 
 function focusCallingPreview(button: HTMLButtonElement): void {
@@ -7028,12 +7042,12 @@ function beginCallingAwakening(pathId: BuildPathId, powerName: string): void {
   callingAwakeningPreview.innerHTML = callingPreviewMarkup(pathId, definition.name);
   callingAwakeningTitle.textContent = `${definition.name.toUpperCase()} CALLING AWAKENED`;
   callingAwakeningIdentity.textContent = awakening.identity;
-  callingAwakeningPower.textContent = `${powerName} · ${awakening.action}`;
+  callingAwakeningPower.textContent = `${powerName} Â· ${awakening.action}`;
   callingAwakeningUnlock.textContent = localCharacterProgression.level >= 2
-    ? "Ready now · Press G to use"
-    : "Unlocks at character level 2 · Press G to use";
+    ? "Ready now Â· Press G to use"
+    : "Unlocks at character level 2 Â· Press G to use";
   callingAwakeningContinue.disabled = true;
-  callingAwakeningContinue.textContent = "AWAKENING…";
+  callingAwakeningContinue.textContent = "AWAKENINGâ€¦";
   callingAwakeningPanel.hidden = false;
   createCallingAnticipation(pathId);
   levelUpBurst();
@@ -7081,7 +7095,7 @@ function renderBuildPath(update: BuildPathUpdate): void {
   buildPathName.textContent = selected?.name.toUpperCase() ?? "UNBOUND";
   const selectedSpecialization = update.selectedPathId && update.selectedSpecializationId
     ? BUILD_PATH_SPECIALIZATIONS[update.selectedPathId].find(option => option.id === update.selectedSpecializationId) : null;
-  buildPathRank.textContent = selected ? `${rank.name.toUpperCase()} · RANK ${update.rank}${selectedSpecialization ? ` · ${selectedSpecialization.name.toUpperCase()}` : ""}`
+  buildPathRank.textContent = selected ? `${rank.name.toUpperCase()} Â· RANK ${update.rank}${selectedSpecialization ? ` Â· ${selectedSpecialization.name.toUpperCase()}` : ""}`
     : "CHOOSE YOUR CALLING";
   const activeAbility = update.selectedCallingAbilityId
     ? CALLING_ABILITY_OPTIONS.find(option => option.id === update.selectedCallingAbilityId) : null;
@@ -7096,7 +7110,7 @@ function renderBuildPath(update: BuildPathUpdate): void {
   buildPathProgress.setAttribute("aria-label", update.nextRankXp === null ? "Master rank complete" : `${update.xp} of ${update.nextRankXp} Path Mastery`);
   const nextRank = BUILD_PATH_RANKS.find(entry => entry.rank > update.rank);
   buildPathNext.textContent = selected
-    ? update.nextRankXp === null ? "Mastery complete" : `${update.xp}/${update.nextRankXp} mastery · Next: ${nextRank?.name ?? "Master"}`
+    ? update.nextRankXp === null ? "Mastery complete" : `${update.xp}/${update.nextRankXp} mastery Â· Next: ${nextRank?.name ?? "Master"}`
     : "Six Callings available";
   buildPathOpen.textContent = selected ? update.canChoose ? "VIEW CALLING" : "CHANGE IN TOWN"
     : update.canChoose ? "CHOOSE CALLING" : "CHOOSE ON SURFACE";
@@ -7123,7 +7137,7 @@ function renderBuildPath(update: BuildPathUpdate): void {
     buildPathMasterTrial.querySelector("b")!.textContent = update.masterTrial.complete ? "MASTERED" : `${update.masterTrial.progress} / ${update.masterTrial.target}`;
     buildPathMasterTrial.querySelector("p")!.textContent = update.masterTrial.description;
     buildPathMasterTrial.querySelector<HTMLElement>("i")!.style.width = `${Math.round(update.masterTrial.progress / update.masterTrial.target * 100)}%`;
-    buildPathMasterTrial.querySelector("small")!.textContent = update.masterTrial.complete ? update.masterTrial.capstone : `CAPSTONE · ${update.masterTrial.capstone}`;
+    buildPathMasterTrial.querySelector("small")!.textContent = update.masterTrial.complete ? update.masterTrial.capstone : `CAPSTONE Â· ${update.masterTrial.capstone}`;
   }
   if (!update.canChoose) {
     callingIntro.hidden = true;
@@ -7132,13 +7146,13 @@ function renderBuildPath(update: BuildPathUpdate): void {
       status.textContent = `${selected!.name} Calling chosen. ${localCharacterProgression.level >= 2 ? `Press G to use ${activeAbility?.name ?? "your Power"}` : `${activeAbility?.name ?? "Your Power"} unlocks at level 2`}.`;
       if (pendingCallingChoicePathId === update.selectedPathId || callingFirstOnboardingPending)
         beginCallingAwakening(update.selectedPathId, activeAbility?.name ?? "Calling Power");
-      else showCombatFeedback(`${selected!.name.toUpperCase()} · ${localCharacterProgression.level >= 2 ? "PRESS G" : "POWER AT LV 2"}`, "dodge");
+      else showCombatFeedback(`${selected!.name.toUpperCase()} Â· ${localCharacterProgression.level >= 2 ? "PRESS G" : "POWER AT LV 2"}`, "dodge");
       pendingCallingChoicePathId = null;
     }
     return;
   }
   callingIntroTitle.textContent = selected ? "Your Calling" : "Choose your Calling";
-  callingIntroEyebrow.textContent = selected ? `${selected.name.toUpperCase()} · ${rank.name.toUpperCase()}` : "YOUR PLAYSTYLE HAS AWAKENED";
+  callingIntroEyebrow.textContent = selected ? `${selected.name.toUpperCase()} Â· ${rank.name.toUpperCase()}` : "YOUR PLAYSTYLE HAS AWAKENED";
   callingIntroCopy.textContent = selected
     ? "Review gear-based paths, or choose Healer for team support. Changes are allowed only in Town."
     : "Choose your first combat style here. Its Power unlocks at level 2 and Special at level 4. Changes later require Town.";
@@ -7149,9 +7163,9 @@ function renderBuildPath(update: BuildPathUpdate): void {
     button.dataset.path = candidate.pathId;
     button.dataset.active = String(candidate.pathId === update.selectedPathId);
     button.dataset.recommended = String(index === 0);
-    const why = candidate.reasons.length ? candidate.reasons.join(" · ") : "a flexible starting loadout";
+    const why = candidate.reasons.length ? candidate.reasons.join(" Â· ") : "a flexible starting loadout";
     const awakening = callingAwakening(candidate.pathId);
-    button.innerHTML = `<em>${candidate.pathId === update.selectedPathId ? "CURRENT" : index === 0 ? "RECOMMENDED" : "OPTION"}</em>${callingPreviewMarkup(candidate.pathId, definition.name)}<span><strong>${definition.name}</strong><small>${definition.role}</small></span><p class="calling-preview-caption">${awakening.action}</p><b>${starter.name} · unlocks at LV 2</b><small>${starter.description}</small>`;
+    button.innerHTML = `<em>${candidate.pathId === update.selectedPathId ? "CURRENT" : index === 0 ? "RECOMMENDED" : "OPTION"}</em>${callingPreviewMarkup(candidate.pathId, definition.name)}<span><strong>${definition.name}</strong><small>${definition.role}</small></span><p class="calling-preview-caption">${awakening.action}</p><b>${starter.name} Â· unlocks at LV 2</b><small>${starter.description}</small>`;
     button.style.setProperty("--calling-colour", awakening.colour);
     button.style.setProperty("--calling-accent", awakening.accent);
     button.dataset.previewing = String(index === 0);
@@ -7162,7 +7176,7 @@ function renderBuildPath(update: BuildPathUpdate): void {
     button.addEventListener("click", () => {
       if (!room || !update.canChoose || (update.selectedPathId && !update.inTown)) return;
       for (const candidateButton of buildPathCandidates.querySelectorAll<HTMLButtonElement>("button")) candidateButton.disabled = true;
-      callingIntroStatus.textContent = `Accepting the ${definition.name} Calling…`;
+      callingIntroStatus.textContent = `Accepting the ${definition.name} Callingâ€¦`;
       pendingCallingChoicePathId = candidate.pathId;
       room.send("build:path", { action: "choose", pathId: candidate.pathId as BuildPathId });
     });
@@ -7177,7 +7191,7 @@ function renderBuildPath(update: BuildPathUpdate): void {
     status.textContent = `${selected!.name} Calling chosen. ${localCharacterProgression.level >= 2 ? `Press G to use ${activeAbility?.name ?? "your Power"}` : `${activeAbility?.name ?? "Your Power"} unlocks at level 2`}.`;
     if (pendingCallingChoicePathId === update.selectedPathId || callingFirstOnboardingPending)
       beginCallingAwakening(update.selectedPathId, activeAbility?.name ?? "Calling Power");
-    else showCombatFeedback(`${selected!.name.toUpperCase()} · ${localCharacterProgression.level >= 2 ? "PRESS G" : "POWER AT LV 2"}`, "dodge");
+    else showCombatFeedback(`${selected!.name.toUpperCase()} Â· ${localCharacterProgression.level >= 2 ? "PRESS G" : "POWER AT LV 2"}`, "dodge");
     pendingCallingChoicePathId = null;
   } else if (!update.selectedPathId && update.canChoose && levelUpPanel.hidden) {
     openCallingIntro();
@@ -7242,10 +7256,10 @@ function localMovementSpeed(): number {
 }
 
 const DANGER_ZONE_LABELS = [
-  { name: "TOWN OF BEGINNINGS", detail: "Protected sanctuary · enemies cannot attack here" },
+  { name: "TOWN OF BEGINNINGS", detail: "Protected sanctuary Â· enemies cannot attack here" },
   { name: "OUTSKIRTS", detail: "Standard enemies and standard rewards" },
-  { name: "WILDS", detail: "Tougher, faster enemies · improved rewards" },
-  { name: "DEEP FRONTIER", detail: "Elite enemies · highest danger and rewards" },
+  { name: "WILDS", detail: "Tougher, faster enemies Â· improved rewards" },
+  { name: "DEEP FRONTIER", detail: "Elite enemies Â· highest danger and rewards" },
 ] as const;
 
 let localDangerTier = 0;
@@ -7270,27 +7284,27 @@ function updateDangerZone(tierValue: number, position = localPlayer.getPosition(
   const depthsZone = silverDepths ? silverDepthsZone(position) : null;
   const depthsProfile = depthsZone ? SILVER_DEPTHS_ATMOSPHERES[depthsZone] : null;
   const emberVault = isInEmberVault(position.x, position.z);
-  const dungeonDetail = dungeonAtmosphere.room === 1 ? "Split the rootbound crawlers · the return portal remains behind you"
-    : dungeonAtmosphere.room === 2 ? "Use stone cover · read aimed shots and fan gaps"
+  const dungeonDetail = dungeonAtmosphere.room === 1 ? "Split the rootbound crawlers Â· the return portal remains behind you"
+    : dungeonAtmosphere.room === 2 ? "Use stone cover Â· read aimed shots and fan gaps"
       : "Root volleys become committed charges below half health";
-  const label = emberVault ? { name: position.x >= 232 ? "COLOSSUS FORGE" : position.x >= 223 ? "EMBER CRUCIBLE" : "THE EMBER VAULT", detail: position.x >= 232 ? "Read the Colossus · dodge the committed smash · claim its forge loot" : "Use iron pillars as cover · clear each sealed forge chamber" }
+  const label = emberVault ? { name: position.x >= 232 ? "COLOSSUS FORGE" : position.x >= 223 ? "EMBER CRUCIBLE" : "THE EMBER VAULT", detail: position.x >= 232 ? "Read the Colossus Â· dodge the committed smash Â· claim its forge loot" : "Use iron pillars as cover Â· clear each sealed forge chamber" }
     : depthsProfile ? { name: depthsProfile.name, detail: depthsProfile.detail }
-    : forestDungeon ? { name: dungeonAtmosphere.name, detail: dungeonDetail } : realmWardenArena ? { name: "REALM WARDEN COURT", detail: "Use the four stone pillars · read the marked impacts · punish the Warden between volleys" } : frontierArena ? { name: "FRONTIER BRUTE RUINS", detail: "Sidestep the smash · leave the slam circle · counter during recovery · rich silver and a guaranteed hammer" } : silverGuard ? { name: "SILVER GUARD CLEARING", detail: "Two alternating spitters · use stone cover and fan gaps · dirt trail leads west to the south gate" } : arena ? { name: "STONE BRUTE CLEARING", detail: "One heavy opponent · dodge the marked slam · collect a Stone Core Hammer on defeat" }
-    : camp ? { name: "GREENWOOD CRAWLER CAMP", detail: "Three roaming crawlers · exposed iron on the east edge · defeat mobs and collect item drops" } : greenwood
-    ? { name: "GREENWOOD OUTSKIRTS", detail: "Ancient oaks · harvest timber · Briar Crawlers roam the camp" }
+    : forestDungeon ? { name: dungeonAtmosphere.name, detail: dungeonDetail } : realmWardenArena ? { name: "REALM WARDEN COURT", detail: "Use the four stone pillars Â· read the marked impacts Â· punish the Warden between volleys" } : frontierArena ? { name: "FRONTIER BRUTE RUINS", detail: "Sidestep the smash Â· leave the slam circle Â· counter during recovery Â· rich silver and a guaranteed hammer" } : silverGuard ? { name: "SILVER GUARD CLEARING", detail: "Two alternating spitters Â· use stone cover and fan gaps Â· dirt trail leads west to the south gate" } : arena ? { name: "STONE BRUTE CLEARING", detail: "One heavy opponent Â· dodge the marked slam Â· collect a Stone Core Hammer on defeat" }
+    : camp ? { name: "GREENWOOD CRAWLER CAMP", detail: "Three roaming crawlers Â· exposed iron on the east edge Â· defeat mobs and collect item drops" } : greenwood
+    ? { name: "GREENWOOD OUTSKIRTS", detail: "Ancient oaks Â· harvest timber Â· Briar Crawlers roam the camp" }
     : territory ?? DANGER_ZONE_LABELS[tier]!;
-  const recommendedLevel = emberVault ? position.x >= 232 ? "LV 14–16" : "LV 12–14"
+  const recommendedLevel = emberVault ? position.x >= 232 ? "LV 14â€“16" : "LV 12â€“14"
     : tier === 0 ? "SAFE"
-      : silverDepths ? depthsZone === "arena" ? "LV 10–12" : "LV 7–10"
-      : forestDungeon ? dungeonAtmosphere.room === 3 ? "LV 10–12" : dungeonAtmosphere.room === 2 ? "LV 8–10" : "LV 6–8"
-        : frontierArena ? "LV 9–12" : silverGuard ? "LV 5–8" : arena ? "LV 4–6" : worldLevelRange(territory?.tier ?? tier).label;
+      : silverDepths ? depthsZone === "arena" ? "LV 10â€“12" : "LV 7â€“10"
+      : forestDungeon ? dungeonAtmosphere.room === 3 ? "LV 10â€“12" : dungeonAtmosphere.room === 2 ? "LV 8â€“10" : "LV 6â€“8"
+        : frontierArena ? "LV 9â€“12" : silverGuard ? "LV 5â€“8" : arena ? "LV 4â€“6" : worldLevelRange(territory?.tier ?? tier).label;
   const nextKey = `${tier}:${greenwood}:${camp}:${arena}:${silverGuard}:${frontierArena}:${dungeonAtmosphere.room}:${territory?.name ?? ""}:${depthsZone}:${emberVault}:${recommendedLevel}`;
   if (nextKey === dangerZoneKey) return;
   dangerZoneKey = nextKey;
   dangerZone.dataset.tier = String(tier);
   dangerZoneName.textContent = label.name;
   dangerZoneTier.textContent = recommendedLevel;
-  dangerZoneDetail.textContent = `${label.detail} · Recommended ${recommendedLevel}`;
+  dangerZoneDetail.textContent = `${label.detail} Â· Recommended ${recommendedLevel}`;
 }
 
 function actionDuration(step: number): number {
@@ -7331,7 +7345,7 @@ function updateNorthwatchPatrolCue(player: pc.Vec3): void {
     "northwatch-spitter", "northwatch-patrol-stalker-west", "northwatch-patrol-stalker-east",
   ].some(id => mobVisuals.get(id)?.state.alive)) return;
   northwatchPatrolCueArmed = false;
-  createRangedPopup(new pc.Vec3(site.x, site.y + 1.8, site.z), "SHARD PATROL · CLEAR ALL THREE", "landmark");
+  createRangedPopup(new pc.Vec3(site.x, site.y + 1.8, site.z), "SHARD PATROL Â· CLEAR ALL THREE", "landmark");
 }
 function createRangedPopup(position: pc.Vec3, text: string, kind: "damage" | "melee" | "stagger" | "enemy" | "terrain" | "near-miss" | "landmark", defeated = false, color?: readonly number[]): void {
   const element = document.createElement("span");
@@ -7989,7 +8003,7 @@ function createTankBlockImpact(playerId: string, mobId: string, prevented: numbe
   }
   callingImpactVisuals.push({ root, expiresAt: performance.now() + 480, materials: [plate, edge], abilityId: "tank_bulwark" });
   combatAudio.play("shardDeflect", enemyCuePan(position.x, localPlayer.getPosition().x, 12));
-  createRangedPopup(new pc.Vec3(position.x, position.y + 1.85, position.z), `BULWARK · −${prevented}`, "melee", false, [.48, .86, 1]);
+  createRangedPopup(new pc.Vec3(position.x, position.y + 1.85, position.z), `BULWARK Â· âˆ’${prevented}`, "melee", false, [.48, .86, 1]);
 }
 
 function createTankChallengeTargets(targetIds: string[]): void {
@@ -8034,7 +8048,7 @@ function createBladeDanceCuts(message: { casterId: string; cuts: { mobId: string
   for (const [mobId, damage] of totals) {
     const mob = mobVisuals.get(mobId); if (!mob) continue;
     createRangedPopup(new pc.Vec3(mob.state.x, mob.state.y + mob.healthBarY + .9, mob.state.z),
-      `BLADE DANCE · −${damage}`, "melee", false, [1, .3, .48]);
+      `BLADE DANCE Â· âˆ’${damage}`, "melee", false, [1, .3, .48]);
   }
   combatAudio.play("callingShadow", enemyCuePan(caster.getPosition().x, localPlayer.getPosition().x, 14));
 }
@@ -8072,7 +8086,7 @@ function createEarthbreakerInterrupts(targetIds: string[], bonusDamage: number):
     }
     callingImpactVisuals.push({ root, expiresAt: performance.now() + 720, materials: [fault, shock], abilityId: "tank_earthbreaker" });
     createRangedPopup(new pc.Vec3(mob.state.x, mob.state.y + mob.healthBarY + .95, mob.state.z),
-      `ATTACK BROKEN · +${bonusDamage}`, "stagger", false, [1, .58, .18]);
+      `ATTACK BROKEN Â· +${bonusDamage}`, "stagger", false, [1, .58, .18]);
   }
 }
 
@@ -8124,7 +8138,7 @@ function createRangerFocusedHit(message: { mobId: string; abilityId: CallingAbil
   }
   callingImpactVisuals.push({ root, expiresAt: performance.now() + 620, materials: [primary, edge], abilityId: message.abilityId });
   createRangedPopup(new pc.Vec3(mob.state.x, mob.state.y + mob.healthBarY + .95, mob.state.z),
-    `${message.abilityId === "ranger_deadeye" ? "DEADEYE" : "FOCUSED"} · +${message.bonusDamage}`, "damage", false, [1, .78, .28]);
+    `${message.abilityId === "ranger_deadeye" ? "DEADEYE" : "FOCUSED"} Â· +${message.bonusDamage}`, "damage", false, [1, .78, .28]);
 }
 
 function createRangerVolleySplit(message: { casterId: string; primaryMobId: string; targets: { mobId: string; damage: number }[] }): void {
@@ -8141,7 +8155,7 @@ function createRangerVolleySplit(message: { casterId: string; primaryMobId: stri
       [.025, .025, Math.max(.08, length / 18)], [origin.x + dx * index / 8, origin.y + .8 + dy * index / 8, origin.z + dz * index / 8], [0, yaw, 0]);
     callingImpactVisuals.push({ root, expiresAt: performance.now() + 420, materials: [arrow], abilityId: "ranger_volley_focus" });
     createRangedPopup(new pc.Vec3(mob.state.x, mob.state.y + mob.healthBarY + .8, mob.state.z),
-      `VOLLEY · −${target.damage}`, "damage", false, [.42, 1, .58]);
+      `VOLLEY Â· âˆ’${target.damage}`, "damage", false, [.42, 1, .58]);
   }
 }
 
@@ -8157,7 +8171,7 @@ function createRangerDeadeyeShot(message: { casterId: string; mobId: string; dam
   callingImpactVisuals.push({ root, expiresAt: performance.now() + 560, materials: [tracer, precision], abilityId: "ranger_deadeye" });
   createRangerFocusedHit({ mobId: message.mobId, abilityId: "ranger_deadeye", bonusDamage: message.damage, remaining: 0 });
   createRangedPopup(new pc.Vec3(mob.state.x, mob.state.y + mob.healthBarY + 1.25, mob.state.z),
-    `${message.longShot ? "LONG SHOT" : "PRECISION"} · ${message.distance.toFixed(1)}m · −${message.damage}`, "damage", false, [1, .82, .3]);
+    `${message.longShot ? "LONG SHOT" : "PRECISION"} Â· ${message.distance.toFixed(1)}m Â· âˆ’${message.damage}`, "damage", false, [1, .82, .3]);
 }
 
 function createRangerPinUpdate(message: { mobId: string; stacks: number; rooted: boolean; durationMs: number }): void {
@@ -8174,7 +8188,7 @@ function createRangerPinUpdate(message: { mobId: string; stacks: number; rooted:
   }
   callingImpactVisuals.push({ root, expiresAt: performance.now() + message.durationMs, materials: [snare, lock], abilityId: "ranger_volley_focus" });
   createRangedPopup(new pc.Vec3(mob.state.x, mob.state.y + mob.healthBarY + .8, mob.state.z),
-    message.rooted ? "PINNED · ROOTED" : `PIN ${message.stacks}/3 · SLOWED`, "stagger", false, message.rooted ? [1, .78, .26] : [.38, .9, .58]);
+    message.rooted ? "PINNED Â· ROOTED" : `PIN ${message.stacks}/3 Â· SLOWED`, "stagger", false, message.rooted ? [1, .78, .26] : [.38, .9, .58]);
 }
 
 function createMageSurgeTargets(targetIds: string[], damage: number): void {
@@ -8191,7 +8205,7 @@ function createMageSurgeTargets(targetIds: string[], damage: number): void {
     }
     callingImpactVisuals.push({ root, expiresAt: performance.now() + 620, materials: [force, edge], abilityId: "mage_arcane_surge" });
     createRangedPopup(new pc.Vec3(mob.state.x, mob.state.y + mob.healthBarY + .86, mob.state.z),
-      `ARCANE FORCE · −${damage}`, "stagger", false, [.76, .5, 1]);
+      `ARCANE FORCE Â· âˆ’${damage}`, "stagger", false, [.76, .5, 1]);
   }
 }
 
@@ -8211,7 +8225,7 @@ function createMageShieldImpact(message: { playerId: string; mobId: string; prev
   callingImpactVisuals.push({ root, expiresAt: performance.now() + (message.shattered ? 820 : 540), materials: [shard, flash], abilityId: "mage_mana_shield" });
   const position = anchor.getPosition();
   createRangedPopup(new pc.Vec3(position.x, position.y + 2, position.z),
-    message.shattered ? "MANA SHIELD · SHATTERED" : `RUNE BROKE · ${message.remaining} LEFT`, "stagger", false, [.58, .82, 1]);
+    message.shattered ? "MANA SHIELD Â· SHATTERED" : `RUNE BROKE Â· ${message.remaining} LEFT`, "stagger", false, [.58, .82, 1]);
   combatAudio.play("shardDeflect", enemyCuePan(position.x, localPlayer.getPosition().x, 12));
 }
 
@@ -8230,10 +8244,10 @@ function createMageShieldShatter(message: { playerId: string; targetIds: string[
   for (const targetId of message.targetIds) {
     const mob = mobVisuals.get(targetId); if (!mob) continue;
     createRangedPopup(new pc.Vec3(mob.state.x, mob.state.y + mob.healthBarY + .9, mob.state.z),
-      `ARCANE SHATTER · −${message.damage}`, "damage", false, [.5, .84, 1]);
+      `ARCANE SHATTER Â· âˆ’${message.damage}`, "damage", false, [.5, .84, 1]);
   }
   createRangedPopup(new pc.Vec3(position.x, position.y + 2.15, position.z),
-    `SHATTER RELEASED · ${message.energy} CHARGE`, "stagger", false, [.72, .92, 1]);
+    `SHATTER RELEASED Â· ${message.energy} CHARGE`, "stagger", false, [.72, .92, 1]);
   combatAudio.play("seismicImpact");
 }
 
@@ -8274,7 +8288,7 @@ function createMageOverloadImpact(message: { powerId: string; x: number; y: numb
   for (const targetId of message.targetIds) {
     const mob = mobVisuals.get(targetId); if (!mob) continue;
     createRangedPopup(new pc.Vec3(mob.state.x, mob.state.y + mob.healthBarY + .9, mob.state.z),
-      `${message.aftershock ? "ARCANE AFTERSHOCK" : "OVERLOADED"} · −${message.bonusDamage}`, "damage", false, [1, .34, .86]);
+      `${message.aftershock ? "ARCANE AFTERSHOCK" : "OVERLOADED"} Â· âˆ’${message.bonusDamage}`, "damage", false, [1, .34, .86]);
   }
   combatAudio.play("seismicImpact");
 }
@@ -8304,7 +8318,7 @@ function createFieldMendFeedback(message: { casterId: string; targetId: string; 
   if (!target) return;
   const position = target.getPosition();
   createRangedPopup(new pc.Vec3(position.x, position.y + 2.05, position.z),
-    `MENDED · +${message.restored} HP${message.staminaRestored ? ` · +${message.staminaRestored} ST` : ""}`, "landmark", false, [.42, 1, .7]);
+    `MENDED Â· +${message.restored} HP${message.staminaRestored ? ` Â· +${message.staminaRestored} ST` : ""}`, "landmark", false, [.42, 1, .7]);
 }
 
 function createRenewalFeedback(targets: { targetId: string; restored: number; staminaRestored?: number; bulwark?: true }[]): void {
@@ -8322,8 +8336,8 @@ function createRenewalFeedback(targets: { targetId: string; restored: number; st
     callingImpactVisuals.push({ root, expiresAt: performance.now() + 820, materials: [life, gold], abilityId: "healer_renewal" });
     const position = target.getPosition();
     createRangedPopup(new pc.Vec3(position.x, position.y + 2, position.z), entry.bulwark
-      ? `BASTION RENEWED · +${entry.restored} HP · +${entry.staminaRestored ?? 0} ST`
-      : `RENEWED · +${entry.restored} HP`, "landmark", false, entry.bulwark ? [1, .84, .34] : [.46, 1, .68]);
+      ? `BASTION RENEWED Â· +${entry.restored} HP Â· +${entry.staminaRestored ?? 0} ST`
+      : `RENEWED Â· +${entry.restored} HP`, "landmark", false, entry.bulwark ? [1, .84, .34] : [.46, 1, .68]);
   }
 }
 
@@ -8341,7 +8355,7 @@ function createCallingComboFeedback(message: { comboId: string; label: string; x
   }
   callingImpactVisuals.push({ root, expiresAt: performance.now() + 950, materials: [primary, white], abilityId: "mage_arcane_surge" });
   createRangedPopup(new pc.Vec3(message.x, message.y + 2.4, message.z),
-    `${message.label} · COMBO${message.bonus ? ` +${message.bonus}` : ""}`, "landmark", false,
+    `${message.label} Â· COMBO${message.bonus ? ` +${message.bonus}` : ""}`, "landmark", false,
     [primaryColor.r, primaryColor.g, primaryColor.b]);
   combatAudio.play("seismicImpact");
 }
@@ -8369,7 +8383,7 @@ function createResurrectionInterrupted(casterId: string, targetId: string): void
   const target = targetId === room?.sessionId ? localPlayer : remotePlayers.get(targetId)?.entity;
   const anchor = caster ?? target; if (!anchor) return;
   const position = anchor.getPosition();
-  createRangedPopup(new pc.Vec3(position.x, position.y + 2.1, position.z), "RESURRECTION · INTERRUPTED", "enemy", false, [1, .38, .38]);
+  createRangedPopup(new pc.Vec3(position.x, position.y + 2.1, position.z), "RESURRECTION Â· INTERRUPTED", "enemy", false, [1, .38, .38]);
   combatAudio.play("warning");
 }
 
@@ -8642,7 +8656,7 @@ function updateThornBinding(message: ThornBindingUpdate): void {
   if (message.phase === "broken" || message.phase === "expired") {
     if (current) {
       const point = current.root.getPosition().clone().add(new pc.Vec3(0, .8, 0));
-      if (message.phase === "broken") createRangedPopup(point, "✦", "enemy", false, [.48, .9, .22]);
+      if (message.phase === "broken") createRangedPopup(point, "âœ¦", "enemy", false, [.48, .9, .22]);
       current.root.destroy(); current.material.destroy(); thornBindingVisuals.delete(message.bindingId);
     }
     return;
@@ -9935,13 +9949,13 @@ function bindLootDrops(joinedRoom: Room): void {
     const { dropId, ...drop } = message;
     showDrop(dropId, drop);
     if (dropId.startsWith("northwatch-shard-patrol-cache:"))
-      createRangedPopup(new pc.Vec3(drop.x, drop.y + 2.2, drop.z), "PATROL CLEARED · YOUR CACHE", "landmark");
+      createRangedPopup(new pc.Vec3(drop.x, drop.y + 2.2, drop.z), "PATROL CLEARED Â· YOUR CACHE", "landmark");
     if (drop.leaderCollectionItemId && isItemId(drop.leaderCollectionItemId))
       createRangedPopup(new pc.Vec3(drop.x, drop.y + 2.45, drop.z),
-        `COLLECTION PIECE · ${ITEM_DEFINITIONS[drop.leaderCollectionItemId].name.toUpperCase()}`, "landmark", false, [1, .78, .22]);
+        `COLLECTION PIECE Â· ${ITEM_DEFINITIONS[drop.leaderCollectionItemId].name.toUpperCase()}`, "landmark", false, [1, .78, .22]);
     if (drop.affixId && Object.hasOwn(EQUIPMENT_AFFIXES, drop.affixId) && drop.affixTier && drop.affixItemId && isItemId(drop.affixItemId)) {
       const affixId = drop.affixId as EquipmentAffixId;
-      social.event(`ATTUNED LOOT · ${ITEM_DEFINITIONS[drop.affixItemId].name} · ${EQUIPMENT_AFFIXES[affixId].name} T${drop.affixTier}`);
+      social.event(`ATTUNED LOOT Â· ${ITEM_DEFINITIONS[drop.affixItemId].name} Â· ${EQUIPMENT_AFFIXES[affixId].name} T${drop.affixTier}`);
     }
   });
   if (!state.lootDrops) return;
@@ -10013,7 +10027,7 @@ function refreshOwnedInventory(): void {
         const branch = progress.branch
           ? (ASHEN_MASTERY_BRANCHES[ashenBlueprint] as Record<string, { name: string; detail: string }>)[progress.branch] : null;
         mastery.querySelector("span")!.textContent = branch ? branch.name.toUpperCase()
-          : progress.xp >= ASHEN_MASTERY_MAX ? "MASTERY READY · VISIT BLACKSMITH" : `MASTERY ${progress.xp}/${ASHEN_MASTERY_MAX}`;
+          : progress.xp >= ASHEN_MASTERY_MAX ? "MASTERY READY Â· VISIT BLACKSMITH" : `MASTERY ${progress.xp}/${ASHEN_MASTERY_MAX}`;
         mastery.querySelector<HTMLElement>("b")!.style.width = `${progress.xp / ASHEN_MASTERY_MAX * 100}%`;
         mastery.querySelector("small")!.textContent = branch?.detail ?? (ashenBlueprint === "cinderfang"
           ? "Ignite staggered enemies" : ashenBlueprint === "ashguard" ? "Perfect-dodge incoming attacks" : "Cast Calling abilities");
@@ -10037,7 +10051,7 @@ function refreshOwnedInventory(): void {
     grid.querySelectorAll(".inventory-vacant-slot").forEach(slot => slot.remove());
     const ownedCards = [...grid.querySelectorAll<HTMLElement>("article.equipment[data-item]")].filter(card => !card.hidden);
     const subtitle = section.querySelector<HTMLElement>("h3 small");
-    if (subtitle) subtitle.textContent = `${ownedCards.length} owned · click an item to compare`;
+    if (subtitle) subtitle.textContent = `${ownedCards.length} owned Â· click an item to compare`;
   }
   refreshBackpackCapacity();
   refreshEquipmentProgression();
@@ -10054,7 +10068,7 @@ function refreshBackpackCapacity(): void {
   const capacity = backpackCapacity(localDepthsRewardFlags);
   const used = backpackSlotsUsed(id => inventoryCounts.get(id) ?? 0, localMainHandId, localArmourId);
   inventoryTotal.textContent = `${used} / ${capacity} SLOTS`;
-  inventoryCapacityLabel.textContent = `${used} / ${capacity} SLOTS${used >= capacity ? " · FULL" : ""}`;
+  inventoryCapacityLabel.textContent = `${used} / ${capacity} SLOTS${used >= capacity ? " Â· FULL" : ""}`;
   inventoryCapacity.dataset.full = String(used >= capacity);
   inventoryCapacitySlots.style.setProperty("--backpack-slots", String(capacity));
   inventoryCapacitySlots.replaceChildren(...Array.from({ length: capacity }, (_, index) => {
@@ -10083,7 +10097,7 @@ function refreshEquipmentProgression(): void {
     card.querySelector<HTMLElement>(".collection-state")!.textContent = equipmentCollectionLabel(entry.itemId, owned, rank);
     const affix = equipmentAffixLabel(entry.itemId);
     card.querySelector<HTMLElement>(".collection-upgrade")!.textContent = owned
-      ? `${equipmentProgressionText(entry.itemId, rank)}${affix ? ` · ${affix}` : ""}`
+      ? `${equipmentProgressionText(entry.itemId, rank)}${affix ? ` Â· ${affix}` : ""}`
       : "Find this item to reveal its rarity and upgrade path.";
     const button = card.querySelector<HTMLButtonElement>(".compare")!;
     button.disabled = !owned || (!equipmentForItem(entry.itemId) && !armourForItem(entry.itemId));
@@ -10485,7 +10499,7 @@ function bindPlayers(joinedRoom: Room): void {
       if (isLocal && isMainHandId(player.mainHandId)) {
         updateMainHandLoadout(player.mainHandId);
         const mainHand = MAIN_HAND_DEFINITIONS[player.mainHandId];
-        status.textContent = `${mainHand.name} equipped · Attack: ${mainHand.attackName}.`;
+        status.textContent = `${mainHand.name} equipped Â· Attack: ${mainHand.attackName}.`;
       } else if (remote && isMainHandId(player.mainHandId)) {
         setRigMainHand(remote.rig, player.mainHandId);
       }
@@ -10512,7 +10526,7 @@ function bindPlayers(joinedRoom: Room): void {
     playerCallbacks.listen("isAdmin", () => {
       if (!isLocal) return;
       localIsAdmin = player.isAdmin;
-      if (localIsAdmin) status.textContent = "ADMIN ACCESS ACTIVE · progression gates are bypassed for testing.";
+      if (localIsAdmin) status.textContent = "ADMIN ACCESS ACTIVE Â· progression gates are bypassed for testing.";
     }, true);
     playerCallbacks.listen("health", () => {
       if (isLocal) {
@@ -10700,7 +10714,7 @@ function openAshenReliquaryChoice(preview = false): void {
     : firstClear ? "Choose your first Ashen blueprint" : "Choose one personal reward";
   ashenReliquaryChoice.querySelector<HTMLElement>("p")!.textContent = firstClear
     ? preview ? "Defeat the full warpack to choose one. Your Calling recommendation is marked below."
-      : "Permanent unlock · forge this equipment at the Town blacksmith."
+      : "Permanent unlock Â· forge this equipment at the Town blacksmith."
     : "Repeat clears supply materials for forging and upgrades.";
   const recommended = recommendedAshenBlueprint();
   for (const button of ashenReliquaryChoice.querySelectorAll<HTMLButtonElement>("[data-ashen-choice]")) {
@@ -10711,12 +10725,12 @@ function openAshenReliquaryChoice(preview = false): void {
     button.disabled = preview;
     if (firstClear && blueprint) {
       const recipe = ASHEN_FORGE_RECIPES[blueprint];
-      const label = blueprint === "cinderfang" ? "Blade · ignite staggered enemies" : blueprint === "ashguard"
-        ? "Mantle · perfect-dodge ward" : "Focus · Calling empowerment field";
-      button.innerHTML = `${blueprint === recommended ? "★ RECOMMENDED · " : ""}${recipe.name.toUpperCase()}<small>${label}<br>${recipe.gold} gold · ${recipe.materials.map(cost => `${cost.quantity} ${ITEM_DEFINITIONS[cost.itemId].name}`).join(" · ")}</small>`;
+      const label = blueprint === "cinderfang" ? "Blade Â· ignite staggered enemies" : blueprint === "ashguard"
+        ? "Mantle Â· perfect-dodge ward" : "Focus Â· Calling empowerment field";
+      button.innerHTML = `${blueprint === recommended ? "â˜… RECOMMENDED Â· " : ""}${recipe.name.toUpperCase()}<small>${label}<br>${recipe.gold} gold Â· ${recipe.materials.map(cost => `${cost.quantity} ${ITEM_DEFINITIONS[cost.itemId].name}`).join(" Â· ")}</small>`;
     }
-    else if (!firstClear && choice === "weapon") button.innerHTML = "WEAPON MATERIALS<small>3 Ember Ore · 2 Stone Core</small>";
-    else if (!firstClear && choice === "armour") button.innerHTML = "ARMOUR MATERIALS<small>2 Ember Ore · 4 Iron Ore</small>";
+    else if (!firstClear && choice === "weapon") button.innerHTML = "WEAPON MATERIALS<small>3 Ember Ore Â· 2 Stone Core</small>";
+    else if (!firstClear && choice === "armour") button.innerHTML = "ARMOUR MATERIALS<small>2 Ember Ore Â· 4 Iron Ore</small>";
   }
   ashenReliquaryChoice.hidden = false;
   room?.send("ashen:menu", { open: true });
@@ -10869,9 +10883,9 @@ function updateAshenReliquaryPresentation(now = Date.now()): void {
   ashenReliquaryStatus.dataset.phase = state.phase;
   ashenReliquaryCount.textContent = `${state.defeated} / ${state.required}`;
   ashenReliquaryDetail.textContent = state.claimed ? "PERSONAL REWARD CLAIMED"
-    : unlocked ? state.eligible ? `AWAKENED · ${Math.max(0, Math.ceil((state.expiresAt - now) / 1000))}s · E TO CHOOSE` : "AWAKENED · ASSIST THE PACK CLEAR"
-    : state.phase === "cooldown" ? `DORMANT · ${Math.max(0, Math.ceil((state.cooldownUntil - now) / 1000))}s`
-      : state.blueprintChoiceRequired ? "SEALED · E TO PREVIEW BLUEPRINTS" : "RELIQUARY SEALED";
+    : unlocked ? state.eligible ? `AWAKENED Â· ${Math.max(0, Math.ceil((state.expiresAt - now) / 1000))}s Â· E TO CHOOSE` : "AWAKENED Â· ASSIST THE PACK CLEAR"
+    : state.phase === "cooldown" ? `DORMANT Â· ${Math.max(0, Math.ceil((state.cooldownUntil - now) / 1000))}s`
+      : state.blueprintChoiceRequired ? "SEALED Â· E TO PREVIEW BLUEPRINTS" : "RELIQUARY SEALED";
 }
 
 // One small draw call, updated only when a crack stage changes; never touches chunk meshes.
@@ -11040,7 +11054,7 @@ function showResourcePickup(name: string, quantity: number, itemId?: string): vo
   if (itemId) toast.dataset.item = itemId;
   const title = document.createElement("small"); title.textContent = "CRAFTING MATERIAL";
   const detail = document.createElement("strong"); detail.textContent = `+${quantity} ${name}`;
-  const hint = document.createElement("span"); hint.textContent = "Stored in your pack · used for forging and upgrades";
+  const hint = document.createElement("span"); hint.textContent = "Stored in your pack Â· used for forging and upgrades";
   toast.append(title, detail, hint);
   queueLootToast(toast, LOOT_FEED_MATERIAL_MS);
 }
@@ -11053,10 +11067,10 @@ function showEquipmentPickup(itemId: ItemId, quantity: number, total: number): v
   const rarity = itemRarity(itemId); toast.dataset.rarity = rarity;
   const discovered = total <= quantity;
   toast.classList.toggle("codex-discovery", discovered);
-  const title = document.createElement("small"); title.textContent = `${discovered ? "CODEX DISCOVERY" : "DUPLICATE"} · ${ITEM_RARITIES[rarity].label.toUpperCase()} ${card.category.toUpperCase()}`;
+  const title = document.createElement("small"); title.textContent = `${discovered ? "CODEX DISCOVERY" : "DUPLICATE"} Â· ${ITEM_RARITIES[rarity].label.toUpperCase()} ${card.category.toUpperCase()}`;
   const name = document.createElement("strong"); name.textContent = `${card.name}${card.quantity}`;
   const fit = equipmentCallingFit(itemId, localBuildPathId);
-  const hint = document.createElement("span"); hint.textContent = discovered ? `${fit} · Press I to compare` : `${fit} · ${card.hint}`;
+  const hint = document.createElement("span"); hint.textContent = discovered ? `${fit} Â· Press I to compare` : `${fit} Â· ${card.hint}`;
   toast.append(title, name, hint);
   queueLootToast(toast, LOOT_FEED_EQUIPMENT_MS);
 }
@@ -11082,7 +11096,7 @@ function showRegionDiscovery(name: string): void {
 
 function showLandmarkDiscovery(name: string): void {
   combatAudio.play("discovery");
-  social.notice(`${name} discovered · added to your explorer map.`);
+  social.notice(`${name} discovered Â· added to your explorer map.`);
 }
 
 function updateMining(now: number): void {
@@ -11112,7 +11126,7 @@ function updateMining(now: number): void {
       const progress = miningProgress(startedAt, now, miningDurationMs(cell.block));
       miningFill.style.width = `${progress * 100}%`;
       const name = cell.block === Block.MoonstoneOre ? "Moonstone" : cell.block === Block.SilverOre ? "Silver" : cell.block === Block.IronOre ? "Iron" : "Block";
-      miningCaption.textContent = progress >= 1 ? "Impact · confirming…" : `${name} · ${Math.round(progress * 100)}%`;
+      miningCaption.textContent = progress >= 1 ? "Impact Â· confirmingâ€¦" : `${name} Â· ${Math.round(progress * 100)}%`;
       const stage = Math.min(3, 1 + Math.floor(progress * 3));
       updateMiningCracks(cell, stage);
       if (stage > miningSwing.stage) {
@@ -11142,18 +11156,18 @@ function refreshPotionUi(): void {
   if (key === potionUiKey) return;
   potionUiKey = key;
   potionBuy.disabled = !room || pending || !nearby || quantity >= HEALING_POTION.capacity || tavernCoinBalance < HEALING_POTION.price;
-  potionBuy.textContent = quantity >= HEALING_POTION.capacity ? "POUCH FULL" : "BUY · 5 GOLD";
+  potionBuy.textContent = quantity >= HEALING_POTION.capacity ? "POUCH FULL" : "BUY Â· 5 GOLD";
   potionUse.disabled = !room || pending || quantity === 0 || potionHealth <= 0 || potionHealth >= potionMaxHealth || remaining > 0;
   potionCount.textContent = remaining > 0 ? `${Math.ceil(remaining / 1000)}s` : `${quantity} / 3`;
   potionUse.dataset.cooldown = String(remaining > 0);
-  potionUse.title = `Restore 2 HP · ${quantity} potions · 5 second cooldown`;
-  if (!pending) potionShopStatus.textContent = `${quantity} / 3 potions · ${tavernCoinBalance} gold`;
+  potionUse.title = `Restore 2 HP Â· ${quantity} potions Â· 5 second cooldown`;
+  if (!pending) potionShopStatus.textContent = `${quantity} / 3 potions Â· ${tavernCoinBalance} gold`;
 }
 function requestPotion(buying = false): void {
   if (!room || performance.now() < potionPendingUntil) return;
   if (buying && !canTalkToTavernKeeper(localPlayer.getPosition(), sceneDressing.keeperVisible)) return;
   potionPendingUntil = performance.now() + 3000;
-  potionShopStatus.textContent = buying ? "Buying potion…" : "Drinking potion…";
+  potionShopStatus.textContent = buying ? "Buying potionâ€¦" : "Drinking potionâ€¦";
   room.send(buying ? "potion:buy" : "potion:use");
   refreshPotionUi();
 }
@@ -11256,7 +11270,7 @@ function renderPracticeAbilities(): void {
     .map(option => {
       const card = document.createElement("article");
       const title = document.createElement("strong"); title.textContent = option.name;
-      const category = document.createElement("small"); category.textContent = `${option.category} · rank ${option.unlockRank}`;
+      const category = document.createElement("small"); category.textContent = `${option.category} Â· rank ${option.unlockRank}`;
       title.append(category);
       const button = document.createElement("button"); button.type = "button"; button.textContent = "TRY";
       button.addEventListener("click", () => {
@@ -11280,7 +11294,7 @@ abilityPracticeOpen.addEventListener("click", () => {
   } else {
     abilityPracticeOpen.disabled = true;
     room.send("practice:enter");
-    status.textContent = "Opening the private practice arena…";
+    status.textContent = "Opening the private practice arenaâ€¦";
   }
 });
 abilityPracticeClose.addEventListener("click", () => { abilityPractice.hidden = true; room?.send("practice:menu", { open: false }); });
@@ -11292,7 +11306,7 @@ function refreshProfileControls(): void {
   adventureBackup.replaceChildren(...profileBackups(window.localStorage).map((backup, index) => {
     const option = document.createElement("option");
     option.value = backup.token;
-    option.textContent = `${backup.name || "Explorer"} · saved ${new Date(backup.savedAt).toLocaleDateString()} · ${index + 1}`;
+    option.textContent = `${backup.name || "Explorer"} Â· saved ${new Date(backup.savedAt).toLocaleDateString()} Â· ${index + 1}`;
     return option;
   }));
   adventureRestore.hidden = adventureBackup.options.length === 0;
@@ -11312,7 +11326,7 @@ async function switchAdventure(action: (name: string) => void): Promise<void> {
   const name = currentProfileName();
   adventureConfirmYes.disabled = true;
   adventureRestoreButton.disabled = true;
-  adventureStatus.textContent = "Saving your current character…";
+  adventureStatus.textContent = "Saving your current characterâ€¦";
   try {
     await room?.leave();
     action(name);
@@ -11351,10 +11365,10 @@ for (const button of characterStatButtons) button.addEventListener("click", () =
   const pending = { stat, checkTimer: 0, recoveryTimer: null as number | null };
   pendingStatChoice = pending;
   refreshStatChoiceButtons();
-  levelUpMessage.textContent = `Applying ${stat.toUpperCase()}…`;
+  levelUpMessage.textContent = `Applying ${stat.toUpperCase()}â€¦`;
   pending.checkTimer = window.setTimeout(() => {
     if (pendingStatChoice !== pending) return;
-    levelUpMessage.textContent = "Checking your saved points…";
+    levelUpMessage.textContent = "Checking your saved pointsâ€¦";
     choiceRoom.send("progression:sync");
     pending.recoveryTimer = window.setTimeout(() => {
       if (pendingStatChoice !== pending) return;
@@ -11367,7 +11381,7 @@ for (const button of characterStatButtons) button.addEventListener("click", () =
 });
 const storageUI = createStorageUI(document.querySelector<HTMLElement>("#storage-content")!, (type, payload) => room?.send(type, payload));
 const storagePrompt = document.createElement("button"); storagePrompt.id = "storage-prompt"; storagePrompt.type = "button";
-storagePrompt.textContent = "PERSONAL CHEST · E"; storagePrompt.hidden = true; document.body.append(storagePrompt);
+storagePrompt.textContent = "PERSONAL CHEST Â· E"; storagePrompt.hidden = true; document.body.append(storagePrompt);
 function openPersonalStorage(): void {
   if (!room || !worldReady || !isAtTownStorage(localPlayer.getPosition())) return;
   blacksmithPanel.hidden = true; quizPanel.hidden = true;
@@ -11415,7 +11429,7 @@ function updateRecoveryMarker(): void {
     recoveryMarker.disabled = !nearbyRecoveryBag || performance.now() < recoveryPendingUntil;
     const depth = Math.round(nearest.y - player.y);
     const direction = `${nearest.z < player.z - 2 ? "N" : nearest.z > player.z + 2 ? "S" : ""}${nearest.x < player.x - 2 ? "W" : nearest.x > player.x + 2 ? "E" : ""}`;
-    const label = nearbyRecoveryBag ? `YOUR BAG · ${nearest.items} items · E to recover` : `YOUR BAG · ${Math.ceil(nearest.distance)}m ${direction}${Math.abs(depth) > 1 ? ` · ${Math.abs(depth)}m ${depth < 0 ? "below" : "above"}` : ""} · (${Math.round(nearest.x)}, ${Math.round(nearest.z)})`;
+    const label = nearbyRecoveryBag ? `YOUR BAG Â· ${nearest.items} items Â· E to recover` : `YOUR BAG Â· ${Math.ceil(nearest.distance)}m ${direction}${Math.abs(depth) > 1 ? ` Â· ${Math.abs(depth)}m ${depth < 0 ? "below" : "above"}` : ""} Â· (${Math.round(nearest.x)}, ${Math.round(nearest.z)})`;
     if (recoveryMarker.textContent !== label) recoveryMarker.textContent = label;
   }
 }
@@ -11568,8 +11582,8 @@ const attunementCost = (action: "reroll" | "focus" | "upgrade", tier: 1 | 2 | 3,
 function sendAttunementAction(action: "reroll" | "focus" | "upgrade" | "choose", itemId: BlacksmithReforgeItemId, affixId?: keyof typeof EQUIPMENT_AFFIXES): void {
   if (!room || blacksmithPending) return;
   blacksmithPending = true; renderAttunementShop();
-  blacksmithMessage.textContent = action === "choose" ? "Binding your chosen boss attunement…"
-    : `${action === "upgrade" ? "Upgrading" : action === "focus" ? "Focusing" : "Rerolling"} ${ITEM_DEFINITIONS[itemId].name}…`;
+  blacksmithMessage.textContent = action === "choose" ? "Binding your chosen boss attunementâ€¦"
+    : `${action === "upgrade" ? "Upgrading" : action === "focus" ? "Focusing" : "Rerolling"} ${ITEM_DEFINITIONS[itemId].name}â€¦`;
   room.send("blacksmith:attune", { action, itemId, ...(affixId ? { affixId } : {}) });
 }
 function renderAttunementShop(): void {
@@ -11577,20 +11591,20 @@ function renderAttunementShop(): void {
   attunementShop.hidden = blacksmithShopTab !== "attunement";
   if (attunementShop.hidden) return;
   const heading = document.createElement("h3"); heading.className = "blacksmith-shop-heading";
-  heading.textContent = "ATTUNEMENT FORGE · SHAPE CALLING AFFIXES";
+  heading.textContent = "ATTUNEMENT FORGE Â· SHAPE CALLING AFFIXES";
   const wallet = document.createElement("div"); wallet.className = "attunement-wallet";
-  wallet.innerHTML = `<span>ATTUNEMENT DUST</span><strong>${attunementDust}</strong><small>${blacksmithCalling ? `${BUILD_PATHS[blacksmithCalling].name} focus · matching affixes cost 20% less` : "Choose a Calling to unlock matching-affix discounts"}</small>`;
+  wallet.innerHTML = `<span>ATTUNEMENT DUST</span><strong>${attunementDust}</strong><small>${blacksmithCalling ? `${BUILD_PATHS[blacksmithCalling].name} focus Â· matching affixes cost 20% less` : "Choose a Calling to unlock matching-affix discounts"}</small>`;
   const hunt = document.createElement("div"); hunt.className = "attunement-hunt";
   const huntCopy = document.createElement("div");
   huntCopy.innerHTML = `<strong>TARGETED BUILD HUNT</strong><small>${equipmentHuntTarget
-    ? `${EQUIPMENT_AFFIXES[equipmentHuntTarget.affixId].name} pinned · ${equipmentHuntTarget.chancePercent}% chance in ${equipmentHuntTarget.regionName} · leaders include it in Tier 3 choices`
+    ? `${EQUIPMENT_AFFIXES[equipmentHuntTarget.affixId].name} pinned Â· ${equipmentHuntTarget.chancePercent}% chance in ${equipmentHuntTarget.regionName} Â· leaders include it in Tier 3 choices`
     : "Pin one trait. The map will guide you to a compatible region without restricting other drops."}</small>`;
   const huntSelect = document.createElement("select"); huntSelect.setAttribute("aria-label", "Target equipment trait");
-  huntSelect.append(new Option("Choose a trait…", ""));
+  huntSelect.append(new Option("Choose a traitâ€¦", ""));
   for (const pathId of Object.keys(BUILD_PATHS) as BuildPathId[]) {
     const group = document.createElement("optgroup"); group.label = BUILD_PATHS[pathId].name;
     for (const [affixId, definition] of Object.entries(EQUIPMENT_AFFIXES) as [keyof typeof EQUIPMENT_AFFIXES, typeof EQUIPMENT_AFFIXES[keyof typeof EQUIPMENT_AFFIXES]][])
-      if (definition.pathId === pathId) group.append(new Option(`${definition.name} · ${definition.effect}`, affixId));
+      if (definition.pathId === pathId) group.append(new Option(`${definition.name} Â· ${definition.effect}`, affixId));
     huntSelect.append(group);
   }
   huntSelect.value = equipmentTargetAffixId ?? "";
@@ -11598,7 +11612,7 @@ function renderAttunementShop(): void {
     if (!room || blacksmithPending) return;
     blacksmithPending = true;
     room.send("equipment:hunt", { affixId: huntSelect.value || null });
-    blacksmithMessage.textContent = huntSelect.value ? "Marking the best regions on your map…" : "Clearing the targeted hunt…";
+    blacksmithMessage.textContent = huntSelect.value ? "Marking the best regions on your mapâ€¦" : "Clearing the targeted huntâ€¦";
   });
   if (equipmentTargetAffixId) {
     const clear = document.createElement("button"); clear.type = "button"; clear.textContent = "CLEAR";
@@ -11615,14 +11629,14 @@ function renderAttunementShop(): void {
     const roll = itemId ? equipmentAffixes[itemId] : undefined;
     const active = Boolean(roll && blacksmithCalling && EQUIPMENT_AFFIXES[roll.affixId].pathId === blacksmithCalling);
     line.dataset.active = String(active);
-    line.innerHTML = `<b>${slot}</b><strong>${itemId ? ITEM_DEFINITIONS[itemId].name : "None"}</strong><small>${roll ? `${EQUIPMENT_AFFIXES[roll.affixId].name} T${roll.tier} · ${active ? "ACTIVE" : `requires ${BUILD_PATHS[EQUIPMENT_AFFIXES[roll.affixId].pathId].name}`}` : "No attunement"}</small>`;
+    line.innerHTML = `<b>${slot}</b><strong>${itemId ? ITEM_DEFINITIONS[itemId].name : "None"}</strong><small>${roll ? `${EQUIPMENT_AFFIXES[roll.affixId].name} T${roll.tier} Â· ${active ? "ACTIVE" : `requires ${BUILD_PATHS[EQUIPMENT_AFFIXES[roll.affixId].pathId].name}`}` : "No attunement"}</small>`;
     equipped.append(line);
   }
   const resonancePath = equipmentAffixResonanceForLoadout(blacksmithEquippedHandItem, blacksmithEquippedArmourItem, equipmentAffixes);
   if (resonancePath) {
     const resonance = document.createElement("strong"); resonance.className = "attunement-resonance";
     const definition = EQUIPMENT_AFFIX_RESONANCE[resonancePath];
-    resonance.textContent = `${definition.name.toUpperCase()} RESONANCE · ${resonancePath === blacksmithCalling ? "ACTIVE" : `READY · REQUIRES ${BUILD_PATHS[resonancePath].name.toUpperCase()}`} · ${definition.effect}`;
+    resonance.textContent = `${definition.name.toUpperCase()} RESONANCE Â· ${resonancePath === blacksmithCalling ? "ACTIVE" : `READY Â· REQUIRES ${BUILD_PATHS[resonancePath].name.toUpperCase()}`} Â· ${definition.effect}`;
     equipped.append(resonance);
   }
   const help = document.createElement("p"); help.className = "blacksmith-attunement-help";
@@ -11631,12 +11645,12 @@ function renderAttunementShop(): void {
   for (const [rawItemId, choices] of Object.entries(equipmentAffixOffers) as [ItemId, (keyof typeof EQUIPMENT_AFFIXES)[]][]) {
     if (!choices?.length || (inventoryCounts.get(rawItemId) ?? 0) <= 0) continue;
     const offer = document.createElement("article"); offer.className = "attunement-offer"; offer.dataset.rarity = "legendary";
-    const title = document.createElement("header"); title.innerHTML = `<strong>${ITEM_DEFINITIONS[rawItemId].name}</strong><b>BOSS CHOICE · TIER 3</b>`;
+    const title = document.createElement("header"); title.innerHTML = `<strong>${ITEM_DEFINITIONS[rawItemId].name}</strong><b>BOSS CHOICE Â· TIER 3</b>`;
     const options = document.createElement("div"); options.className = "attunement-options";
     for (const affixId of choices) {
       const definition = EQUIPMENT_AFFIXES[affixId];
       const button = document.createElement("button"); button.type = "button";
-      button.innerHTML = `<strong>${definition.name}</strong><small>${BUILD_PATHS[definition.pathId].name} · ${definition.effect}</small>`;
+      button.innerHTML = `<strong>${definition.name}</strong><small>${BUILD_PATHS[definition.pathId].name} Â· ${definition.effect}</small>`;
       button.disabled = blacksmithPending;
       button.addEventListener("click", () => sendAttunementAction("choose", rawItemId as BlacksmithReforgeItemId, affixId));
       options.append(button);
@@ -11654,8 +11668,8 @@ function renderAttunementShop(): void {
     const upgradeCost = tier < 3 ? attunementCost("upgrade", tier, roll) : 0;
     const card = document.createElement("article"); card.dataset.rarity = itemRarity(itemId);
     const title = document.createElement("header");
-    title.innerHTML = `<strong>${ITEM_DEFINITIONS[itemId].name}</strong><b>${roll ? `${EQUIPMENT_AFFIXES[roll.affixId].name.toUpperCase()} · T${roll.tier}` : "UNATTUNED"}</b>`;
-    const effect = document.createElement("p"); effect.textContent = roll ? `${BUILD_PATHS[EQUIPMENT_AFFIXES[roll.affixId].pathId].name} · ${EQUIPMENT_AFFIXES[roll.affixId].effect}` : "Reveal a Tier 1 Calling affix.";
+    title.innerHTML = `<strong>${ITEM_DEFINITIONS[itemId].name}</strong><b>${roll ? `${EQUIPMENT_AFFIXES[roll.affixId].name.toUpperCase()} Â· T${roll.tier}` : "UNATTUNED"}</b>`;
+    const effect = document.createElement("p"); effect.textContent = roll ? `${BUILD_PATHS[EQUIPMENT_AFFIXES[roll.affixId].pathId].name} Â· ${EQUIPMENT_AFFIXES[roll.affixId].effect}` : "Reveal a Tier 1 Calling affix.";
     if (roll) {
       const fit = document.createElement("small"); fit.className = "attunement-fit";
       const pathId = EQUIPMENT_AFFIXES[roll.affixId].pathId;
@@ -11664,28 +11678,28 @@ function renderAttunementShop(): void {
       const candidateResonance = equipmentAffixResonanceForLoadout(candidateHand, candidateArmour, equipmentAffixes);
       fit.dataset.fit = candidateResonance ? "resonance" : pathId === blacksmithCalling ? "match" : "off";
       fit.textContent = candidateResonance
-        ? `${candidateResonance === blacksmithCalling ? "COMPLETES" : "BUILDS"} ${EQUIPMENT_AFFIX_RESONANCE[candidateResonance].name.toUpperCase()} RESONANCE${candidateResonance === blacksmithCalling ? "" : ` · REQUIRES ${BUILD_PATHS[candidateResonance].name.toUpperCase()}`}`
+        ? `${candidateResonance === blacksmithCalling ? "COMPLETES" : "BUILDS"} ${EQUIPMENT_AFFIX_RESONANCE[candidateResonance].name.toUpperCase()} RESONANCE${candidateResonance === blacksmithCalling ? "" : ` Â· REQUIRES ${BUILD_PATHS[candidateResonance].name.toUpperCase()}`}`
         : pathId === blacksmithCalling ? `MATCHES CURRENT ${BUILD_PATHS[pathId].name.toUpperCase()} CALLING`
           : `ALTERNATE ${BUILD_PATHS[pathId].name.toUpperCase()} BUILD`;
       card.append(title, effect, fit);
     } else card.append(title, effect);
     const actions = document.createElement("div"); actions.className = "attunement-actions";
     const reroll = document.createElement("button"); reroll.type = "button";
-    reroll.textContent = attunementDust >= rerollCost ? `${roll ? "REROLL" : "ATTUNE"} · ${rerollCost} DUST` : `NEED ${rerollCost - attunementDust} DUST`;
+    reroll.textContent = attunementDust >= rerollCost ? `${roll ? "REROLL" : "ATTUNE"} Â· ${rerollCost} DUST` : `NEED ${rerollCost - attunementDust} DUST`;
     reroll.disabled = blacksmithPending || attunementDust < rerollCost;
     reroll.addEventListener("click", () => sendAttunementAction("reroll", itemId)); actions.append(reroll);
     if (roll) {
       const focus = document.createElement("button"); focus.type = "button";
       const alreadyFocused = Boolean(equipmentTargetAffixId && roll.affixId === equipmentTargetAffixId);
       focus.textContent = !equipmentTargetAffixId ? "PIN TRAIT TO FOCUS" : alreadyFocused ? "PINNED TRAIT ACTIVE"
-        : attunementDust < focusCost ? `FOCUS · NEED ${focusCost - attunementDust} DUST`
-          : `FOCUS ${EQUIPMENT_AFFIXES[equipmentTargetAffixId].name.toUpperCase()} · ${focusCost} DUST`;
+        : attunementDust < focusCost ? `FOCUS Â· NEED ${focusCost - attunementDust} DUST`
+          : `FOCUS ${EQUIPMENT_AFFIXES[equipmentTargetAffixId].name.toUpperCase()} Â· ${focusCost} DUST`;
       focus.disabled = blacksmithPending || !equipmentTargetAffixId || alreadyFocused || attunementDust < focusCost;
       focus.addEventListener("click", () => sendAttunementAction("focus", itemId)); actions.append(focus);
       const upgrade = document.createElement("button"); upgrade.type = "button";
       const needsMoonstone = tier === 2 && (inventoryCounts.get("moonstone") ?? 0) < 1;
-      upgrade.textContent = tier >= 3 ? "MAXIMUM TIER" : needsMoonstone ? "TIER 3 · NEED 1 MOONSTONE"
-        : attunementDust < upgradeCost ? `NEED ${upgradeCost - attunementDust} DUST` : `UPGRADE · ${upgradeCost} DUST${tier === 2 ? " + 1 ◆" : ""}`;
+      upgrade.textContent = tier >= 3 ? "MAXIMUM TIER" : needsMoonstone ? "TIER 3 Â· NEED 1 MOONSTONE"
+        : attunementDust < upgradeCost ? `NEED ${upgradeCost - attunementDust} DUST` : `UPGRADE Â· ${upgradeCost} DUST${tier === 2 ? " + 1 â—†" : ""}`;
       upgrade.disabled = blacksmithPending || tier >= 3 || attunementDust < upgradeCost || needsMoonstone;
       upgrade.addEventListener("click", () => sendAttunementAction("upgrade", itemId)); actions.append(upgrade);
     }
@@ -11702,7 +11716,7 @@ function renderLeaderForgeShop(): void {
   leaderForgeShop.hidden = blacksmithShopTab !== "leaders";
   if (leaderForgeShop.hidden) return;
   const heading = document.createElement("h3"); heading.className = "blacksmith-shop-heading";
-  heading.textContent = "LEADER FORGE · AWAKEN SIGNATURE WEAPONS";
+  heading.textContent = "LEADER FORGE Â· AWAKEN SIGNATURE WEAPONS";
   const help = document.createElement("p"); help.className = "blacksmith-leader-help";
   help.textContent = "Collect 3 matching relics from the same leader. Awakening consumes the relics, permanently records the set, and unlocks that weapon's boss perk.";
   leaderForgeShop.append(heading, help);
@@ -11720,20 +11734,20 @@ function renderLeaderForgeShop(): void {
     const card = document.createElement("article"); card.className = markOwned ? "complete" : "";
     card.dataset.rarity = markOwned ? "legendary" : itemRarity(relicId);
     const title = document.createElement("header");
-    const name = document.createElement("strong"); name.textContent = markOwned ? `${mark.name} · AWAKENED` : ITEM_DEFINITIONS[relicId].name;
+    const name = document.createElement("strong"); name.textContent = markOwned ? `${mark.name} Â· AWAKENED` : ITEM_DEFINITIONS[relicId].name;
     const progress = document.createElement("b"); progress.textContent = markOwned ? "COLLECTION MARK" : `${Math.min(held, recipe.relics)} / ${recipe.relics}`;
     title.append(name, progress);
-    const perk = document.createElement("p"); perk.textContent = `${ITEM_DEFINITIONS[recipe.weaponId].name} · ${mark.perk}`;
+    const perk = document.createElement("p"); perk.textContent = `${ITEM_DEFINITIONS[recipe.weaponId].name} Â· ${mark.perk}`;
     const note = document.createElement("small");
     note.textContent = markOwned
-      ? held > 0 ? `${held} spare relic${held === 1 ? "" : "s"} · exchange one for ${recipe.exchangeGold} gold` : "Permanent set completed · find another matching relic to exchange"
+      ? held > 0 ? `${held} spare relic${held === 1 ? "" : "s"} Â· exchange one for ${recipe.exchangeGold} gold` : "Permanent set completed Â· find another matching relic to exchange"
       : held < recipe.relics ? `Defeat ${ITEM_DEFINITIONS[relicId].name.replace(/ (Fang|Heart|Sac|Heart-Core|Keystone|Crest|Lens|Totem|Gland|Crown|Shard|Lantern)$/, "")} again to finish this set`
         : weaponOwned ? "Relics and weapon ready for awakening" : `Own ${ITEM_DEFINITIONS[recipe.weaponId].name} before awakening`;
     const button = document.createElement("button"); button.type = "button";
     const action = markOwned ? "exchange" : "awaken";
     const canAct = markOwned ? held > 0 && tavernCoinBalance + recipe.exchangeGold <= 1_000_000 : held >= recipe.relics && weaponOwned;
-    button.textContent = blacksmithPending ? "PLEASE WAIT…" : markOwned
-      ? held > 0 ? `EXCHANGE 1 · +${recipe.exchangeGold} GOLD` : "AWAKENED · NO SPARES"
+    button.textContent = blacksmithPending ? "PLEASE WAITâ€¦" : markOwned
+      ? held > 0 ? `EXCHANGE 1 Â· +${recipe.exchangeGold} GOLD` : "AWAKENED Â· NO SPARES"
       : held < recipe.relics ? `COLLECT ${recipe.relics - held} MORE` : !weaponOwned ? "OWN WEAPON FIRST" : `AWAKEN ${mark.name.toUpperCase()}`;
     button.disabled = blacksmithPending || !room || !canAct;
     button.addEventListener("click", () => {
@@ -11755,7 +11769,7 @@ function renderRegionalForgeShop(): void {
   regionalForgeShop.hidden = blacksmithShopTab !== "regional";
   if (regionalForgeShop.hidden) return;
   const heading = document.createElement("h3"); heading.className = "blacksmith-shop-heading";
-  heading.textContent = "REGIONAL FORGE · GUARANTEED LEGENDARY ARMOUR";
+  heading.textContent = "REGIONAL FORGE Â· GUARANTEED LEGENDARY ARMOUR";
   const help = document.createElement("p"); help.className = "blacksmith-leader-help";
   help.textContent = "Regional events are the fastest route. Each victory grants one bound mark; five marks plus local materials guarantee the region's legendary armour.";
   regionalForgeShop.append(heading, help);
@@ -11769,25 +11783,25 @@ function renderRegionalForgeShop(): void {
     const ready = rankReady && marks >= recipe.marks && tavernCoinBalance >= recipe.gold && materialsReady;
     const card = document.createElement("article"); card.dataset.rarity = "legendary";
     const title = document.createElement("header");
-    title.innerHTML = `<strong>${ITEM_DEFINITIONS[recipe.itemId].name}</strong><b>${region.toUpperCase()} · ${marks}/${recipe.marks} MARKS</b>`;
+    title.innerHTML = `<strong>${ITEM_DEFINITIONS[recipe.itemId].name}</strong><b>${region.toUpperCase()} Â· ${marks}/${recipe.marks} MARKS</b>`;
     const effect = document.createElement("p"); effect.textContent = ITEM_DEFINITIONS[recipe.itemId].description;
     const costs = document.createElement("small");
-    costs.textContent = `${rankReady ? recipe.rankName : `LOCKED · ${recipe.rankName} mastery`} · ${recipe.gold} gold · ${materialLines.join(" · ")}`;
+    costs.textContent = `${rankReady ? recipe.rankName : `LOCKED Â· ${recipe.rankName} mastery`} Â· ${recipe.gold} gold Â· ${materialLines.join(" Â· ")}`;
     const button = document.createElement("button"); button.type = "button";
-    button.textContent = blacksmithPending ? "PLEASE WAIT…" : !rankReady ? `REQUIRES ${recipe.rankName.toUpperCase()}`
+    button.textContent = blacksmithPending ? "PLEASE WAITâ€¦" : !rankReady ? `REQUIRES ${recipe.rankName.toUpperCase()}`
       : marks < recipe.marks ? `WIN ${recipe.marks - marks} MORE EVENT${recipe.marks - marks === 1 ? "" : "S"}`
       : !materialsReady ? "GATHER REGIONAL MATERIALS" : tavernCoinBalance < recipe.gold ? `NEED ${recipe.gold - tavernCoinBalance} GOLD` : "FORGE LEGENDARY";
     button.disabled = blacksmithPending || !room || !ready;
     button.addEventListener("click", () => {
       if (!room || blacksmithPending || !ready) return;
       blacksmithPending = true; renderRegionalForgeShop();
-      blacksmithMessage.textContent = `Forging ${ITEM_DEFINITIONS[recipe.itemId].name}…`;
+      blacksmithMessage.textContent = `Forging ${ITEM_DEFINITIONS[recipe.itemId].name}â€¦`;
       room.send("blacksmith:regional-forge", { region });
     });
     card.append(title, effect, costs, button); regionalForgeShop.append(card);
   }
   const ashenHeading = document.createElement("h3"); ashenHeading.className = "blacksmith-shop-heading";
-  ashenHeading.textContent = "ASHEN BLUEPRINTS · WARPACK EQUIPMENT";
+  ashenHeading.textContent = "ASHEN BLUEPRINTS Â· WARPACK EQUIPMENT";
   regionalForgeShop.append(ashenHeading);
   if (unlockedAshenBlueprints.length === 0) {
     const locked = document.createElement("p"); locked.className = "blacksmith-leader-empty";
@@ -11804,15 +11818,15 @@ function renderRegionalForgeShop(): void {
     const card = document.createElement("article"); card.dataset.rarity = "legendary";
     const title = document.createElement("header"); title.innerHTML = `<strong>${recipe.name}</strong><b>ASHEN BLUEPRINT</b>`;
     const effect = document.createElement("p"); effect.textContent = ITEM_DEFINITIONS[recipe.itemId].description;
-    const costs = document.createElement("small"); costs.textContent = `${recipe.gold} gold · ${materialLines.join(" · ")}`;
+    const costs = document.createElement("small"); costs.textContent = `${recipe.gold} gold Â· ${materialLines.join(" Â· ")}`;
     const button = document.createElement("button"); button.type = "button";
-    button.textContent = owned ? "FORGED · EQUIP FROM PACK" : blacksmithPending ? "PLEASE WAIT…" : !materialsReady ? "GATHER ASHEN MATERIALS"
+    button.textContent = owned ? "FORGED Â· EQUIP FROM PACK" : blacksmithPending ? "PLEASE WAITâ€¦" : !materialsReady ? "GATHER ASHEN MATERIALS"
       : tavernCoinBalance < recipe.gold ? `NEED ${recipe.gold - tavernCoinBalance} GOLD` : `FORGE ${recipe.name.toUpperCase()}`;
     button.disabled = owned || blacksmithPending || !room || !ready;
     button.addEventListener("click", () => {
       if (!room || blacksmithPending || !ready) return;
       blacksmithPending = true; renderRegionalForgeShop();
-      blacksmithMessage.textContent = `Forging ${recipe.name}…`;
+      blacksmithMessage.textContent = `Forging ${recipe.name}â€¦`;
       room.send("blacksmith:ashen-forge", { blueprint });
     });
     card.append(title, effect, costs, button);
@@ -11824,7 +11838,7 @@ function renderRegionalForgeShop(): void {
       if (mastery.branch) {
         const chosen = (ASHEN_MASTERY_BRANCHES[blueprint] as Record<string, { name: string; detail: string }>)[mastery.branch]!;
         const result = document.createElement("p"); result.className = "ashen-mastery-chosen";
-        result.textContent = `${chosen.name} · ${chosen.detail}`; masteryPanel.append(result);
+        result.textContent = `${chosen.name} Â· ${chosen.detail}`; masteryPanel.append(result);
       } else if (mastery.xp >= ASHEN_MASTERY_MAX) {
         const choices = document.createElement("div"); choices.className = "ashen-mastery-choices";
         for (const [branch, definition] of Object.entries(ASHEN_MASTERY_BRANCHES[blueprint])) {
@@ -11834,7 +11848,7 @@ function renderRegionalForgeShop(): void {
           choice.addEventListener("click", () => {
             if (!room || blacksmithPending) return;
             blacksmithPending = true; renderRegionalForgeShop();
-            blacksmithMessage.textContent = `Binding ${definition.name} to ${recipe.name}…`;
+            blacksmithMessage.textContent = `Binding ${definition.name} to ${recipe.name}â€¦`;
             room.send("blacksmith:ashen-mastery", { blueprint, branch });
           });
           choices.append(choice);
@@ -11857,9 +11871,9 @@ function renderReforgeShop(): void {
   reforgeShop.hidden = blacksmithShopTab !== "reforge";
   if (reforgeShop.hidden) return;
   const heading = document.createElement("h3"); heading.className = "blacksmith-shop-heading";
-  heading.textContent = "REFORGE OWNED EQUIPMENT · MAXIMUM RANK III";
+  heading.textContent = "REFORGE OWNED EQUIPMENT Â· MAXIMUM RANK III";
   const help = document.createElement("p"); help.className = "blacksmith-reforge-help";
-  help.textContent = "Fixed upgrades only—no random rarity. Every weapon rank adds +1 damage; armour gains reinforcement at Ranks I and III.";
+  help.textContent = "Fixed upgrades onlyâ€”no random rarity. Every weapon rank adds +1 damage; armour gains reinforcement at Ranks I and III.";
   reforgeShop.append(heading, help);
   let shown = 0;
   for (const itemId of Object.keys(BLACKSMITH_REFORGE) as BlacksmithReforgeItemId[]) {
@@ -11878,13 +11892,13 @@ function renderReforgeShop(): void {
     const title = document.createElement("header");
     title.innerHTML = `<strong>${ITEM_DEFINITIONS[itemId].name}<small class="smith-rarity">${ITEM_RARITIES[itemRarity(itemId)].label}</small></strong><b>${rankLabel(rank)}</b>`;
     const comparison = document.createElement("p");
-    comparison.textContent = complete ? `${armour ? "Reinforcement" : "Weapon damage"} bonus +${currentBonus} · fully reforged`
-      : `${armour ? "Reinforcement" : "Weapon damage"} +${currentBonus} → +${nextBonus}`;
+    comparison.textContent = complete ? `${armour ? "Reinforcement" : "Weapon damage"} bonus +${currentBonus} Â· fully reforged`
+      : `${armour ? "Reinforcement" : "Weapon damage"} +${currentBonus} â†’ +${nextBonus}`;
     const costs = document.createElement("small");
-    costs.textContent = cost ? `${tavernCoinBalance} / ${cost.gold} gold · ${held} / ${cost.material} ${ITEM_DEFINITIONS[recipe.materialId].name}` : "Maximum forge rank reached";
+    costs.textContent = cost ? `${tavernCoinBalance} / ${cost.gold} gold Â· ${held} / ${cost.material} ${ITEM_DEFINITIONS[recipe.materialId].name}` : "Maximum forge rank reached";
     const button = document.createElement("button"); button.type = "button";
     const canAfford = !!cost && tavernCoinBalance >= cost.gold && held >= cost.material;
-    button.textContent = complete ? "FULLY REFORGED" : blacksmithPending ? "PLEASE WAIT…" : canAfford ? `REFORGE TO ${rankLabel(rank + 1)}` : "MATERIALS REQUIRED";
+    button.textContent = complete ? "FULLY REFORGED" : blacksmithPending ? "PLEASE WAITâ€¦" : canAfford ? `REFORGE TO ${rankLabel(rank + 1)}` : "MATERIALS REQUIRED";
     button.disabled = complete || blacksmithPending || !room || !canAfford;
     button.addEventListener("click", () => {
       if (!room || blacksmithPending || !canAfford) return;
@@ -11905,7 +11919,7 @@ function renderDismantleShop(): void {
   dismantleShop.hidden = blacksmithShopTab !== "dismantle";
   if (dismantleShop.hidden) return;
   const heading = document.createElement("h3"); heading.className = "blacksmith-shop-heading";
-  heading.textContent = "DISMANTLE EQUIPMENT · ONE ITEM AT A TIME";
+  heading.textContent = "DISMANTLE EQUIPMENT Â· ONE ITEM AT A TIME";
   const help = document.createElement("p"); help.className = "blacksmith-dismantle-help";
   help.textContent = "Break unwanted gear into gold and useful materials. Your last equipped copy is protected.";
   dismantleShop.append(heading, help);
@@ -11922,16 +11936,16 @@ function renderDismantleShop(): void {
     const card = document.createElement("article");
     card.dataset.rarity = itemRarity(itemId);
     card.className = protectedLastCopy ? "protected" : "";
-    const title = document.createElement("strong"); title.textContent = `${ITEM_DEFINITIONS[itemId].name} · ${ITEM_RARITIES[itemRarity(itemId)].label} ×${owned}`;
+    const title = document.createElement("strong"); title.textContent = `${ITEM_DEFINITIONS[itemId].name} Â· ${ITEM_RARITIES[itemRarity(itemId)].label} Ã—${owned}`;
     const reward = document.createElement("p");
     const material = "materialId" in recipe ? ` + ${recipe.materialQuantity} ${ITEM_DEFINITIONS[recipe.materialId].name}` : "";
     const affixTier = owned === 1 ? equipmentAffixes[itemId]?.tier : undefined;
     const dust = affixTier ? [0, 1, 3, 6][affixTier] : 0;
     reward.textContent = `Returns ${recipe.gold} gold${material}${dust ? ` + ${dust} Attunement Dust` : ""}`;
     const note = document.createElement("small");
-    note.textContent = protectedLastCopy ? "Equipped · keep or equip something else first" : equipped ? "Duplicate copy · equipped copy remains safe" : "Removes one item from your pack";
+    note.textContent = protectedLastCopy ? "Equipped Â· keep or equip something else first" : equipped ? "Duplicate copy Â· equipped copy remains safe" : "Removes one item from your pack";
     const button = document.createElement("button"); button.type = "button";
-    button.textContent = protectedLastCopy ? "EQUIPPED · PROTECTED" : blacksmithPending ? "PLEASE WAIT…" : "DISMANTLE ONE";
+    button.textContent = protectedLastCopy ? "EQUIPPED Â· PROTECTED" : blacksmithPending ? "PLEASE WAITâ€¦" : "DISMANTLE ONE";
     button.disabled = protectedLastCopy || blacksmithPending || !room || tavernCoinBalance + recipe.gold > 1_000_000;
     button.addEventListener("click", () => {
       if (!room || blacksmithPending || protectedLastCopy) return;
@@ -11964,27 +11978,27 @@ function renderWeaponShop(): void {
   }
   if (!shopping) return;
   const heading = document.createElement("h3"); heading.className = "blacksmith-shop-heading";
-  heading.textContent = `${blacksmithShopTab.toUpperCase()} · BUY WITH GOLD · EQUIP FROM YOUR PACK`; weaponShop.append(heading);
+  heading.textContent = `${blacksmithShopTab.toUpperCase()} Â· BUY WITH GOLD Â· EQUIP FROM YOUR PACK`; weaponShop.append(heading);
   const current = weaponComparison(localMainHandId, localIronSwordOwned);
   for (const id of blacksmithShopStock(blacksmithShopTab)) {
     const armour = id === "leather_armour" || id === "iron_armour" ? armourStats(id) : null;
     const stats = armour ? null : weaponComparison(id as MainHandId);
     const card = document.createElement("article");
     card.dataset.rarity = itemRarity(id);
-    const title = document.createElement("strong"); title.textContent = `${ITEM_DEFINITIONS[id].name} · ${ITEM_RARITIES[itemRarity(id)].label}`;
+    const title = document.createElement("strong"); title.textContent = `${ITEM_DEFINITIONS[id].name} Â· ${ITEM_RARITIES[itemRarity(id)].label}`;
     const description = document.createElement("p");
-    description.textContent = armour ? `Damage reduction ${armour.reduction} · movement ${Math.round(armour.speed * 100)}% · minimum hit 1` : `Damage ${stats!.damage} · attack ${stats!.speed} · reach ${stats!.range}`;
+    description.textContent = armour ? `Damage reduction ${armour.reduction} Â· movement ${Math.round(armour.speed * 100)}% Â· minimum hit 1` : `Damage ${stats!.damage} Â· attack ${stats!.speed} Â· reach ${stats!.range}`;
     const comparison = document.createElement("small");
     const worn = armourStats(localArmourId);
-    comparison.textContent = armour ? `Worn: ${worn.name} — reduction ${worn.reduction}, movement ${Math.round(worn.speed * 100)}%. Buy, then equip from your pack.` : `Equipped: ${current.name} — damage ${current.damage}, attack ${current.speed}, reach ${current.range}. Lower ms = faster.`;
+    comparison.textContent = armour ? `Worn: ${worn.name} â€” reduction ${worn.reduction}, movement ${Math.round(worn.speed * 100)}%. Buy, then equip from your pack.` : `Equipped: ${current.name} â€” damage ${current.damage}, attack ${current.speed}, reach ${current.range}. Lower ms = faster.`;
     const button = document.createElement("button");
     const owned = inventoryCounts.get(id) ?? 0;
     const price = document.createElement("span"); price.className = "blacksmith-item-price";
-    price.textContent = `${BLACKSMITH_STOCK[id].price} GOLD${owned ? ` · ${owned} owned` : ""}`;
+    price.textContent = `${BLACKSMITH_STOCK[id].price} GOLD${owned ? ` Â· ${owned} owned` : ""}`;
     const shortfall = shopGoldShortfall(id, tavernCoinBalance);
     const requiredLevel = blacksmithRequiredLevel(id);
     const levelLocked = blacksmithCharacterLevel < requiredLevel;
-    button.textContent = levelLocked ? `UNLOCKS AT LEVEL ${requiredLevel}` : blacksmithPending ? "PLEASE WAIT…" : shortfall ? `NEED ${shortfall} MORE GOLD` : "BUY · ADD TO PACK";
+    button.textContent = levelLocked ? `UNLOCKS AT LEVEL ${requiredLevel}` : blacksmithPending ? "PLEASE WAITâ€¦" : shortfall ? `NEED ${shortfall} MORE GOLD` : "BUY Â· ADD TO PACK";
     button.disabled = levelLocked || !room || blacksmithPending || tavernCoinBalance < BLACKSMITH_STOCK[id].price || owned >= 65535;
     button.addEventListener("click", () => {
       if (!room || blacksmithPending) return;
@@ -12003,20 +12017,20 @@ function renderWeaponShop(): void {
       : recipe.materials.some(cost => (inventoryCounts.get(cost.itemId) ?? 0) > 0);
     if (!foundMaterial && owned === 0 && blacksmithEquippedArmourItem !== recipe.itemId) continue;
     const card = document.createElement("article"); card.dataset.rarity = itemRarity(recipe.itemId);
-    const title = document.createElement("strong"); title.textContent = `${ITEM_DEFINITIONS[recipe.itemId].name} · FIELD GEAR`;
+    const title = document.createElement("strong"); title.textContent = `${ITEM_DEFINITIONS[recipe.itemId].name} Â· FIELD GEAR`;
     const description = document.createElement("p"); description.textContent = ITEM_DEFINITIONS[recipe.itemId].description;
     const costs = document.createElement("small");
-    costs.textContent = `${recipe.gold} gold · ${recipe.materials.map(cost => `${inventoryCounts.get(cost.itemId) ?? 0}/${cost.quantity} ${ITEM_DEFINITIONS[cost.itemId].name}`).join(" · ")}`;
+    costs.textContent = `${recipe.gold} gold Â· ${recipe.materials.map(cost => `${inventoryCounts.get(cost.itemId) ?? 0}/${cost.quantity} ${ITEM_DEFINITIONS[cost.itemId].name}`).join(" Â· ")}`;
     const missing = recipe.materials.find(cost => (inventoryCounts.get(cost.itemId) ?? 0) < cost.quantity);
     const button = document.createElement("button"); button.type = "button";
-    button.textContent = blacksmithPending ? "PLEASE WAIT…" : missing ? `NEED ${missing.quantity - (inventoryCounts.get(missing.itemId) ?? 0)} ${ITEM_DEFINITIONS[missing.itemId].name.toUpperCase()}`
-      : tavernCoinBalance < recipe.gold ? `NEED ${recipe.gold - tavernCoinBalance} MORE GOLD` : "FORGE · ADD TO PACK";
+    button.textContent = blacksmithPending ? "PLEASE WAITâ€¦" : missing ? `NEED ${missing.quantity - (inventoryCounts.get(missing.itemId) ?? 0)} ${ITEM_DEFINITIONS[missing.itemId].name.toUpperCase()}`
+      : tavernCoinBalance < recipe.gold ? `NEED ${recipe.gold - tavernCoinBalance} MORE GOLD` : "FORGE Â· ADD TO PACK";
     button.disabled = !room || blacksmithPending || Boolean(missing) || tavernCoinBalance < recipe.gold;
     button.addEventListener("click", () => {
       if (!room || blacksmithPending || missing || tavernCoinBalance < recipe.gold) return;
       lastShopPurchaseCategory = "gear";
       blacksmithPending = true; renderWeaponShop();
-      blacksmithMessage.textContent = `Forging ${ITEM_DEFINITIONS[recipe.itemId].name}…`;
+      blacksmithMessage.textContent = `Forging ${ITEM_DEFINITIONS[recipe.itemId].name}â€¦`;
       room.send("blacksmith:field-forge", { region });
     });
     card.append(title, description, costs, button); weaponShop.append(card);
@@ -12039,19 +12053,19 @@ haulEquip.addEventListener("click", () => {
   const hand = equipmentForItem(haulRecommendedItem), armour = armourForItem(haulRecommendedItem);
   if (hand) requestMainHandEquip(hand);
   else if (armour) room.send("armour:equip", { armourId: armour });
-  blacksmithMessage.textContent = `Equipping ${ITEM_DEFINITIONS[haulRecommendedItem].name}…`;
+  blacksmithMessage.textContent = `Equipping ${ITEM_DEFINITIONS[haulRecommendedItem].name}â€¦`;
   window.setTimeout(() => room?.send("blacksmith:sync"), 250);
 });
 haulSalvage.addEventListener("click", () => {
   if (!room || blacksmithPending) return;
   blacksmithPending = true; haulSalvage.disabled = true;
-  blacksmithMessage.textContent = "Protecting one copy and salvaging safe duplicates…";
+  blacksmithMessage.textContent = "Protecting one copy and salvaging safe duplicatesâ€¦";
   room.send("blacksmith:haul", { action: "salvage_duplicates" });
 });
 haulStore.addEventListener("click", () => {
   if (!room || blacksmithPending) return;
   blacksmithPending = true; haulStore.disabled = true;
-  blacksmithMessage.textContent = "Storing crafting materials…";
+  blacksmithMessage.textContent = "Storing crafting materialsâ€¦";
   room.send("blacksmith:haul", { action: "store_materials" });
 });
 haulTrackRegion.addEventListener("click", () => {
@@ -12059,7 +12073,7 @@ haulTrackRegion.addEventListener("click", () => {
   blacksmithPanel.hidden = true;
   status.textContent = `Map guidance set for ${haulRecommendedRegion.name}.`;
 });
-blacksmithPrice.textContent = `Iron ${IRON_ORE_GOLD_PRICE} · Silver ${SILVER_ORE_GOLD_PRICE} gold`;
+blacksmithPrice.textContent = `Iron ${IRON_ORE_GOLD_PRICE} Â· Silver ${SILVER_ORE_GOLD_PRICE} gold`;
 
 function renderBlacksmithHaul(update: BlacksmithUpdate): void {
   const equipment = (Object.keys(ITEM_DEFINITIONS) as ItemId[])
@@ -12071,13 +12085,13 @@ function renderBlacksmithHaul(update: BlacksmithUpdate): void {
   haulEquip.disabled = !haulRecommendedItem;
   haulEquipName.textContent = haulRecommendedItem ? ITEM_DEFINITIONS[haulRecommendedItem].name : "No upgrade found";
   haulEquipDetail.textContent = haulRecommendedItem
-    ? `${itemMatchesCalling(haulRecommendedItem) ? "Supports your Calling · " : ""}stronger than your equipped item.`
+    ? `${itemMatchesCalling(haulRecommendedItem) ? "Supports your Calling Â· " : ""}stronger than your equipped item.`
     : "Your current gear is still best.";
   haulEquip.textContent = haulRecommendedItem ? "EQUIP RECOMMENDED" : "NOTHING TO EQUIP";
 
   const duplicateItems = update.haulDuplicateItems ?? 0;
   haulSalvageCount.textContent = duplicateItems > 0 ? `${duplicateItems} safe duplicate${duplicateItems === 1 ? "" : "s"}` : "Pack is tidy";
-  haulSalvageDetail.textContent = duplicateItems > 0 ? `Worth up to ${update.haulDuplicateGold ?? 0} gold · last copies protected.` : "Your last copy is always protected.";
+  haulSalvageDetail.textContent = duplicateItems > 0 ? `Worth up to ${update.haulDuplicateGold ?? 0} gold Â· last copies protected.` : "Your last copy is always protected.";
   haulSalvage.disabled = duplicateItems <= 0 || blacksmithPending;
   haulSalvage.textContent = duplicateItems > 0 ? "SALVAGE DUPLICATES" : "NOTHING TO SALVAGE";
 
@@ -12166,7 +12180,7 @@ function renderBlacksmith(update: BlacksmithUpdate): void {
     const expeditionLocked = upgradeId === "moonstone_edge" && !isOwned;
     const prerequisiteLocked = upgradeId === "adventurer_pack" && !owned.has("explorer_pack");
     button.disabled = isOwned || expeditionLocked || prerequisiteLocked || blacksmithPending || update.gold < recipe.price || update.ironOre < recipe.ironOre || silver < requiredSilver;
-    button.textContent = isOwned ? "EQUIPPED" : expeditionLocked ? "BOSS DROP REQUIRED" : prerequisiteLocked ? "EXPLORER'S PACK FIRST" : upgradeId === "reinforced_pickaxe" ? `BUY · ${recipe.price} GOLD` : "FORGE";
+    button.textContent = isOwned ? "EQUIPPED" : expeditionLocked ? "BOSS DROP REQUIRED" : prerequisiteLocked ? "EXPLORER'S PACK FIRST" : upgradeId === "reinforced_pickaxe" ? `BUY Â· ${recipe.price} GOLD` : "FORGE";
   }
   const ownedDepths = new Set(update.ownedDepthsRewards ?? []);
   const moonstone = update.moonstone ?? 0;
@@ -12174,7 +12188,7 @@ function renderBlacksmith(update: BlacksmithUpdate): void {
   if (ownedDepths.has(selectedDepthsRewardId)) {
     selectedDepthsRewardId = (Object.keys(SILVER_DEPTHS_REWARDS) as SilverDepthsRewardId[]).find(id => !ownedDepths.has(id)) ?? selectedDepthsRewardId;
   }
-  document.querySelector<HTMLElement>("#blacksmith-moonstone")!.textContent = `${moonstone} ◆`;
+  document.querySelector<HTMLElement>("#blacksmith-moonstone")!.textContent = `${moonstone} â—†`;
   for (const card of depthsRewardCards) {
     const rewardId = card.dataset.depthsReward as SilverDepthsRewardId;
     const reward = SILVER_DEPTHS_REWARDS[rewardId];
@@ -12183,18 +12197,18 @@ function renderBlacksmith(update: BlacksmithUpdate): void {
     card.classList.toggle("owned", isOwned);
     card.classList.toggle("selected", selectedDepthsRewardId === rewardId);
     button.disabled = isOwned || !depthsUnlocked || blacksmithPending || moonstone < reward.cost;
-    button.textContent = isOwned ? "ATTUNED" : !depthsUnlocked ? "EXPEDITION LOCKED" : moonstone < reward.cost ? `NEED ${reward.cost - moonstone} MORE ◆` : `ATTUNE · ${reward.cost} ◆`;
+    button.textContent = isOwned ? "ATTUNED" : !depthsUnlocked ? "EXPEDITION LOCKED" : moonstone < reward.cost ? `NEED ${reward.cost - moonstone} MORE â—†` : `ATTUNE Â· ${reward.cost} â—†`;
   }
   const selectedReward = SILVER_DEPTHS_REWARDS[selectedDepthsRewardId];
   const goal = document.querySelector<HTMLElement>("#blacksmith-depths-goal")!;
-  goal.querySelector("strong")!.textContent = `${selectedReward.name} · ${Math.min(moonstone, selectedReward.cost)} / ${selectedReward.cost} ◆`;
+  goal.querySelector("strong")!.textContent = `${selectedReward.name} Â· ${Math.min(moonstone, selectedReward.cost)} / ${selectedReward.cost} â—†`;
   goal.style.setProperty("--depths-progress", `${Math.min(100, moonstone / selectedReward.cost * 100)}%`);
   if (update.phase === "traded" && update.goldGranted) {
     showCombatFeedback(`+${update.goldGranted} GOLD`, "dodge");
     status.textContent = update.message;
   }
   if (update.phase === "purchased" && update.purchasedUpgradeId) {
-    showCombatFeedback(update.purchasedUpgradeId === "reinforced_pickaxe" ? "PICKAXE BOUGHT · EQUIPPED" : "EQUIPMENT FORGED", "dodge");
+    showCombatFeedback(update.purchasedUpgradeId === "reinforced_pickaxe" ? "PICKAXE BOUGHT Â· EQUIPPED" : "EQUIPMENT FORGED", "dodge");
     status.textContent = update.message;
   }
   if (update.phase === "purchased" && update.purchasedDepthsRewardId) {
@@ -12207,13 +12221,13 @@ function renderBlacksmith(update: BlacksmithUpdate): void {
   }
   if (update.phase === "dismantled" && update.dismantledItemId) {
     const material = update.materialGranted && update.materialQuantity
-      ? ` · +${update.materialQuantity} ${ITEM_DEFINITIONS[update.materialGranted].name}` : "";
-    showCombatFeedback(`DISMANTLED · +${update.goldGranted ?? 0} GOLD${material}`.toUpperCase(), "dodge");
+      ? ` Â· +${update.materialQuantity} ${ITEM_DEFINITIONS[update.materialGranted].name}` : "";
+    showCombatFeedback(`DISMANTLED Â· +${update.goldGranted ?? 0} GOLD${material}`.toUpperCase(), "dodge");
     status.textContent = update.message;
   }
   if (update.phase === "reforged" && update.reforgedItemId) {
     const rank = blacksmithReforgeRanks[update.reforgedItemId] ?? 0;
-    showCombatFeedback(`${ITEM_DEFINITIONS[update.reforgedItemId].name.toUpperCase()} · ${rankLabel(rank)}`, "dodge");
+    showCombatFeedback(`${ITEM_DEFINITIONS[update.reforgedItemId].name.toUpperCase()} Â· ${rankLabel(rank)}`, "dodge");
     status.textContent = update.message;
   }
   if (update.phase === "attuned") {
@@ -12225,7 +12239,7 @@ function renderBlacksmith(update: BlacksmithUpdate): void {
     status.textContent = update.message;
   }
   if (update.phase === "exchanged") {
-    showCombatFeedback(`LEADER RELIC · +${update.goldGranted ?? 0} GOLD`, "dodge");
+    showCombatFeedback(`LEADER RELIC Â· +${update.goldGranted ?? 0} GOLD`, "dodge");
     status.textContent = update.message;
   }
 }
@@ -12293,7 +12307,7 @@ function animateQuizPayout(payout: number, total: number): void {
   for (let index = 0; index < 7; index += 1) {
     const coin = document.createElement("span");
     coin.className = "coin-fly";
-    coin.textContent = "✦";
+    coin.textContent = "âœ¦";
     coin.setAttribute("aria-hidden", "true");
     const jitterX = (index - 3) * 11;
     const jitterY = (index % 3 - 1) * 7;
@@ -12346,10 +12360,10 @@ function renderTavernQuiz(update: TavernQuizUpdate): void {
   quizAnswerFeedback.hidden = !["decision", "lost", "won"].includes(update.phase);
   if (!quizAnswerFeedback.hidden) {
     const feedback = update.phase === "decision" || (update.phase === "won" && previousPhase === "question")
-      ? { kind: "correct", icon: "✓", title: "CORRECT ANSWER!", detail: `The pot doubled to ${coinLabel(update.payout ?? 0)}. ${update.phase === "decision" ? "Collect it or risk another question." : "You collected the table limit!"}` }
+      ? { kind: "correct", icon: "âœ“", title: "CORRECT ANSWER!", detail: `The pot doubled to ${coinLabel(update.payout ?? 0)}. ${update.phase === "decision" ? "Collect it or risk another question." : "You collected the table limit!"}` }
       : update.phase === "lost"
-        ? { kind: "wrong", icon: "×", title: "WRONG ANSWER", detail: update.message ?? "The pot is lost. Try another round." }
-        : { kind: "collected", icon: "✦", title: "COINS COLLECTED!", detail: `${coinLabel(update.payout ?? 0)} added to your purse.` };
+        ? { kind: "wrong", icon: "Ã—", title: "WRONG ANSWER", detail: update.message ?? "The pot is lost. Try another round." }
+        : { kind: "collected", icon: "âœ¦", title: "COINS COLLECTED!", detail: `${coinLabel(update.payout ?? 0)} added to your purse.` };
     quizPanel.dataset.feedback = feedback.kind;
     quizFeedbackIcon.textContent = feedback.icon;
     quizFeedbackTitle.textContent = feedback.title;
@@ -12361,7 +12375,7 @@ function renderTavernQuiz(update: TavernQuizUpdate): void {
     delete quizPanel.dataset.feedback;
   }
   if (update.phase === "question" && update.question) {
-    quizPot.textContent = "Choose one answer · correct doubles the pot";
+    quizPot.textContent = "Choose one answer Â· correct doubles the pot";
     quizPrompt.textContent = update.question.prompt;
     update.question.choices.forEach((choice, index) => {
       const button = document.createElement("button");
@@ -12626,12 +12640,12 @@ function updateForestPortals(): void {
       ? defeatScreen.hidden && active && Math.abs(player.y - portal.y) <= 3 && distance <= 3.5
       : canUseForestPortal({ ...player, health: defeatScreen.hidden ? 1 : 0 }, portal, now);
     visual.label.disabled = !reachable;
-    const portalName = id === "warden-gate" ? (wardenGateUnlocked ? "WARDEN GATE · ASCENDANT CHALLENGE" : "WARDEN GATE · LOCKED")
+    const portalName = id === "warden-gate" ? (wardenGateUnlocked ? "WARDEN GATE Â· ASCENDANT CHALLENGE" : "WARDEN GATE Â· LOCKED")
       : id === "ember-entry" ? "THE EMBER VAULT" : id === "ember-return" ? "RETURN TO FRONTIER"
       : id === "depths-entry" ? "THE SILVER DEPTHS" : id === "depths-return" ? "RETURN TO TOWN"
       : portal.kind === "entry" ? "FOREST DUNGEON" : victory ? "VICTORY PORTAL" : "RETURN TO WILDERNESS";
-    const testState = id === "depths-entry" ? "\nE TO ENTER / ASSEMBLE PARTY" : testEntry ? "\nTEST ACCESS · E TO ENTER" : "";
-    const text = `${portalName}${testState}${portal.expiresAt ? ` · ${Math.max(0, Math.ceil((portal.expiresAt - now) / 1000))}s` : ""}${reachable && !testState ? ` · E TO ${wardenGate ? "CHALLENGE" : portal.kind === "entry" ? "ENTER" : "RETURN"}` : ""}`;
+    const testState = id === "depths-entry" ? "\nE TO ENTER / ASSEMBLE PARTY" : testEntry ? "\nTEST ACCESS Â· E TO ENTER" : "";
+    const text = `${portalName}${testState}${portal.expiresAt ? ` Â· ${Math.max(0, Math.ceil((portal.expiresAt - now) / 1000))}s` : ""}${reachable && !testState ? ` Â· E TO ${wardenGate ? "CHALLENGE" : portal.kind === "entry" ? "ENTER" : "RETURN"}` : ""}`;
     visual.label.classList.toggle("locked", wardenGate && !wardenGateUnlocked);
     if (visual.label.textContent !== text) visual.label.textContent = text;
     if (active && reachable && distance < nearest) { nearest = distance; nearbyForestPortal = id; }
@@ -12740,65 +12754,65 @@ function updateTarget(): void {
   if (nearbyLoot) {
     const drop = lootVisuals.get(nearbyLoot)?.state;
     const itemName = drop && isItemId(drop.itemId) ? ITEM_DEFINITIONS[drop.itemId].name : "Loot";
-    const quantity = drop && drop.quantity > 1 ? `${drop.quantity}× ` : "";
+    const quantity = drop && drop.quantity > 1 ? `${drop.quantity}Ã— ` : "";
     targetLabel.textContent = nearbyLoot.startsWith("forest-cache:")
-      ? "Personal Rootbound Cache · hold E or Loot to claim"
+      ? "Personal Rootbound Cache Â· hold E or Loot to claim"
       : drop && isEnemyLootBag(drop)
-        ? `${LOOT_BAG_TIER_LABEL[lootBagTierForItems(lootItems(drop))]} · hold E or Loot to collect everything that fits`
+        ? `${LOOT_BAG_TIER_LABEL[lootBagTierForItems(lootItems(drop))]} Â· hold E or Loot to collect everything that fits`
       : drop && lootWouldOverflow(nearbyLoot, drop)
-        ? `${itemName} · inventory full`
-      : `${quantity}${itemName} · hold E or Loot to pick up`;
+        ? `${itemName} Â· inventory full`
+      : `${quantity}${itemName} Â· hold E or Loot to pick up`;
   }
   else if (ashenReliquaryNearby) targetLabel.textContent = ashenReliquaryClaimNearby
-    ? "Scorched Reliquary · press E or Choose for one personal reward"
-    : "Scorched Reliquary · press E or Preview to inspect all three blueprints";
-  else if (nearbyForestPortal) targetLabel.textContent = "Glowing portal · press E or Portal to travel";
-  else if (roleOpportunity) targetLabel.textContent = `${roleOpportunity.name} · ${roleOpportunity.prompt} · press E or ${roleOpportunity.action}`;
+    ? "Scorched Reliquary Â· press E or Choose for one personal reward"
+    : "Scorched Reliquary Â· press E or Preview to inspect all three blueprints";
+  else if (nearbyForestPortal) targetLabel.textContent = "Glowing portal Â· press E or Portal to travel";
+  else if (roleOpportunity) targetLabel.textContent = `${roleOpportunity.name} Â· ${roleOpportunity.prompt} Â· press E or ${roleOpportunity.action}`;
   else if (roadsideEncounter) {
     const player = localPlayer.getPosition();
     const atTrailStash = (roadsideEncounter.kind === "trail" || roadsideEncounter.kind === "hunt")
       && Math.hypot(player.x - roadsideEncounter.x - roadsideEncounter.stashDx,
         player.z - roadsideEncounter.z - roadsideEncounter.stashDz) <= 3.2;
-    targetLabel.textContent = `${roadsideEncounter.name} · ${roadsideEncounter.kind === "guarded" ? "defeat its guards, then investigate"
+    targetLabel.textContent = `${roadsideEncounter.name} Â· ${roadsideEncounter.kind === "guarded" ? "defeat its guards, then investigate"
       : roadsideEncounter.kind === "shrine" ? "choose rest or supplies"
       : roadsideEncounter.kind === "trail" ? atTrailStash ? "open the hidden crate" : "inspect the tracks"
       : roadsideEncounter.kind === "hunt" ? atTrailStash ? "confront the wounded elite" : "inspect the blood trail"
       : roadsideEncounter.kind === "repair" ? "repair the winch and hold the ground"
       : roadsideEncounter.kind === "ambush" ? "open the survey case carefully"
-      : "search for supplies"} · press E or Explore`;
+      : "search for supplies"} Â· press E or Explore`;
   }
-  else if (expeditionBoardNearby) targetLabel.textContent = "Forest Dungeon Gate · press E to open a solo or party run";
-  else if (blacksmithNearby) targetLabel.textContent = "Blacksmith stall · press E to trade ore or forge equipment";
-  else if (quizTableNearby) targetLabel.textContent = "Double or Quit table · press E or Play";
-  else if (keeperNearby) targetLabel.textContent = `${TAVERN_KEEPER.name} · Tavernkeeper — press E or Talk`;
+  else if (expeditionBoardNearby) targetLabel.textContent = "Forest Dungeon Gate Â· press E to open a solo or party run";
+  else if (blacksmithNearby) targetLabel.textContent = "Blacksmith stall Â· press E to trade ore or forge equipment";
+  else if (quizTableNearby) targetLabel.textContent = "Double or Quit table Â· press E or Play";
+  else if (keeperNearby) targetLabel.textContent = `${TAVERN_KEEPER.name} Â· Tavernkeeper â€” press E or Talk`;
   else if (interactionMode === "combat" && combatMob) {
     const intent = combatMob.visual.state.combatState === "windup"
-      ? combatMob.visual.state.aimCommitted ? " · AIM LOCKED — DODGE OR MOVE CLEAR" : " · ATTACK WINDUP"
+      ? combatMob.visual.state.aimCommitted ? " Â· AIM LOCKED â€” DODGE OR MOVE CLEAR" : " Â· ATTACK WINDUP"
       : combatMob.visual.state.combatState === "strike"
-        ? " · STRIKE ACTIVE — DODGE"
+        ? " Â· STRIKE ACTIVE â€” DODGE"
         : combatMob.visual.state.combatState === "recover"
-          ? " · RECOVERING — COUNTER"
-          : combatMob.visual.state.combatState === "stagger" ? " · STAGGERED" : "";
+          ? " Â· RECOVERING â€” COUNTER"
+          : combatMob.visual.state.combatState === "stagger" ? " Â· STAGGERED" : "";
     const markLabel = combatMark
       ? combatMark.stacks >= combatMark.maxStacks
-        ? ` · EXPOSED ${combatMark.stacks}/${combatMark.maxStacks}`
-        : ` · HUNT ${combatMark.stacks}/${combatMark.maxStacks}`
+        ? ` Â· EXPOSED ${combatMark.stacks}/${combatMark.maxStacks}`
+        : ` Â· HUNT ${combatMark.stacks}/${combatMark.maxStacks}`
       : "";
-    targetLabel.textContent = `${combatMob.visual.state.name}: ${combatMob.visual.state.health}/${combatMob.visual.state.maxHealth} HP · ${combatMob.distance.toFixed(1)}m${markLabel}${intent}`;
+    targetLabel.textContent = `${combatMob.visual.state.name}: ${combatMob.visual.state.health}/${combatMob.visual.state.maxHealth} HP Â· ${combatMob.distance.toFixed(1)}m${markLabel}${intent}`;
   } else if (interactionMode === "combat") targetLabel.textContent = `${MAIN_HAND_DEFINITIONS[localMainHandId].name}: aim toward the Moss Crawler and attack`;
-  else if (availability === "far") targetLabel.textContent = "Out of reach · move closer (4.5m reach)";
-  else if (availability === "unbreakable") targetLabel.textContent = "Bedrock · cannot be mined";
+  else if (availability === "far") targetLabel.textContent = "Out of reach Â· move closer (4.5m reach)";
+  else if (availability === "unbreakable") targetLabel.textContent = "Bedrock Â· cannot be mined";
   else if (!currentTarget) targetLabel.textContent = "Target: move near a block and point at it";
-  else if (isProtectedVoxel(currentTarget.x, currentTarget.z)) targetLabel.textContent = `Target: ${targetKey} · protected`;
-  else if (currentTarget.block === Block.OakLog) targetLabel.textContent = `Greenwood oak · ${targetKey} · chop for timber`;
+  else if (isProtectedVoxel(currentTarget.x, currentTarget.z)) targetLabel.textContent = `Target: ${targetKey} Â· protected`;
+  else if (currentTarget.block === Block.OakLog) targetLabel.textContent = `Greenwood oak Â· ${targetKey} Â· chop for timber`;
   else if (currentTarget.block === Block.IronOre || currentTarget.block === Block.SilverOre || currentTarget.block === Block.MoonstoneOre) {
     const moonstone = currentTarget.block === Block.MoonstoneOre;
     const silver = currentTarget.block === Block.SilverOre;
-    targetLabel.textContent = moonstone ? "Moonstone seal · dungeon reward mineral · click to mine"
-      : `${silver ? "Silver" : "Iron"} deposit · ${silver ? SILVER_ORE_GOLD_PRICE : IRON_ORE_GOLD_PRICE} gold per ore · click to mine`;
+    targetLabel.textContent = moonstone ? "Moonstone seal Â· dungeon reward mineral Â· click to mine"
+      : `${silver ? "Silver" : "Iron"} deposit Â· ${silver ? SILVER_ORE_GOLD_PRICE : IRON_ORE_GOLD_PRICE} gold per ore Â· click to mine`;
   }
-  else if (currentTarget.block === Block.Leaves) targetLabel.textContent = `Greenwood canopy · ${targetKey} · clear foliage`;
-  else targetLabel.textContent = `Target: ${targetKey} · mineable`;
+  else if (currentTarget.block === Block.Leaves) targetLabel.textContent = `Greenwood canopy Â· ${targetKey} Â· clear foliage`;
+  else targetLabel.textContent = `Target: ${targetKey} Â· mineable`;
 }
 
 let lastChunkBuildMs = 0;
@@ -12852,7 +12866,7 @@ let performanceLogSamples: PerformanceLogSample[] = (() => {
 })();
 
 function updatePerformanceLogStatus(message?: string): void {
-  performanceLogStatus.textContent = message ?? `Logging locally · ${performanceLogSamples.length} samples · rolling 10 minutes`;
+  performanceLogStatus.textContent = message ?? `Logging locally Â· ${performanceLogSamples.length} samples Â· rolling 10 minutes`;
 }
 
 function persistPerformanceLog(): void {
@@ -13022,7 +13036,7 @@ function renderBootstrap(payload: WorldBootstrap): void {
   }
   const bootstrapSetupMs = performance.now() - buildStartedAt;
   logMovementEvent(
-    `WORLD REFRESH ${previousSliceY === null ? "surface" : `slice:${previousSliceY}`} → ${cutawayStateKey} y=${initialPosition.y.toFixed(3)} surface=${surfaceReferenceY.toFixed(3)} stateGap=${statePoseGap?.toFixed(3) ?? "missing"} chunks=${payload.chunks.length} setup=${bootstrapSetupMs.toFixed(1)}ms queued=${queuedChunkRebuilds.size}`,
+    `WORLD REFRESH ${previousSliceY === null ? "surface" : `slice:${previousSliceY}`} â†’ ${cutawayStateKey} y=${initialPosition.y.toFixed(3)} surface=${surfaceReferenceY.toFixed(3)} stateGap=${statePoseGap?.toFixed(3) ?? "missing"} chunks=${payload.chunks.length} setup=${bootstrapSetupMs.toFixed(1)}ms queued=${queuedChunkRebuilds.size}`,
   );
   worldReady = true;
   if (fastWorldRequested) window.setTimeout(() => {
@@ -13033,9 +13047,9 @@ function renderBootstrap(payload: WorldBootstrap): void {
   lastWorldBootstrapAt = performance.now();
   snapFrameHistory.length = 0;
   status.textContent = fastWorldRequested
-    ? "Fast World ready · choose a Calling, explore freely and test your build against regional enemies."
+    ? "Fast World ready Â· choose a Calling, explore freely and test your build against regional enemies."
     : isInGreenwoodRegion(initialPosition.x, initialPosition.z)
-    ? "Greenwood Outskirts · harvest oak timber and investigate the abandoned forester camp."
+    ? "Greenwood Outskirts Â· harvest oak timber and investigate the abandoned forester camp."
     : "Welcome to the Town of Beginnings. Starter supplies are nearby; follow the south road when ready.";
 }
 
@@ -13055,7 +13069,7 @@ function visibleEditableTarget(target: EventTarget | null): { editable: boolean;
 window.addEventListener("keydown", event => {
   const target = visibleEditableTarget(event.target);
   const movementCode = normalizedMovementCode(event.code, event.key);
-  lastKeyboardEvent = `${event.key || "∅"}/${event.code || "∅"} target=${event.target instanceof HTMLElement ? event.target.tagName : "unknown"}`;
+  lastKeyboardEvent = `${event.key || "âˆ…"}/${event.code || "âˆ…"} target=${event.target instanceof HTMLElement ? event.target.tagName : "unknown"}`;
   if (!movementCode || !shouldCaptureMovementKey(event.code, event.key, target.editable, target.visible)) return;
   repairStaleActivePopup();
   keys.add(movementCode);
@@ -13094,15 +13108,15 @@ function renderDepthsPartyStatus(next: SilverDepthsPartyStatus | null): void {
   depthsPartyCount.textContent = next.phase === "wiped" ? "PARTY WIPED"
     : `${next.activeCount} / ${next.partySize} FIGHTING`;
   depthsPartyPanel.dataset.alert = String(next.phase === "wiped" || next.members.some(member => member.state === "fallen"));
-  depthsPartyMembers.textContent = next.members.map(member => `${member.name}: ${member.state.toUpperCase()}`).join(" · ");
+  depthsPartyMembers.textContent = next.members.map(member => `${member.name}: ${member.state.toUpperCase()}`).join(" Â· ");
   if (defeatScreen.hidden) return;
   if (next.members.find(member => member.id === room?.sessionId)?.state === "fighting") return;
   if (next.phase === "wiped") {
     defeatTitle.textContent = "Party wiped";
     defeatDetail.textContent = `The party fell at the ${depthsStageName(next.stage)}. Your permanent gear and gold are safe. Return to town beside the Silver Depths portal to regroup and try again.`;
-    returnToTownButton.textContent = "Return to Town · Retry";
+    returnToTownButton.textContent = "Return to Town Â· Retry";
   } else if (next.phase === "active") {
-    defeatTitle.textContent = next.activeCount > 0 ? "You fell — party still fighting" : "You fell — party reconnecting";
+    defeatTitle.textContent = next.activeCount > 0 ? "You fell â€” party still fighting" : "You fell â€” party reconnecting";
     defeatDetail.textContent = next.activeCount > 0
       ? `${next.activeCount} teammate${next.activeCount === 1 ? " is" : "s are"} still fighting. Returning to town will not reset their run. Your permanent gear and gold are safe.`
       : "A teammate is reconnecting; their place is held briefly. Returning to town will not reset their run. Your permanent gear and gold are safe.";
@@ -13165,7 +13179,7 @@ function showRescueOption(until: number): void {
 returnToTownButton.addEventListener("click", () => {
   if (!room) return;
   returnToTownButton.disabled = true;
-  returnToTownButton.textContent = "Returning…";
+  returnToTownButton.textContent = "Returningâ€¦";
   room.send("player:return");
 });
 window.addEventListener("keydown", event => {
@@ -13202,7 +13216,7 @@ performanceCopyLog.addEventListener("click", async () => {
 performanceClearLog.addEventListener("click", () => {
   performanceLogSamples = [];
   try { window.localStorage.removeItem(PERFORMANCE_LOG_STORAGE_KEY); } catch { /* Storage may be disabled. */ }
-  updatePerformanceLogStatus("Log cleared · new samples will continue automatically");
+  updatePerformanceLogStatus("Log cleared Â· new samples will continue automatically");
   window.setTimeout(() => updatePerformanceLogStatus(), 1_500);
 });
 
@@ -13466,8 +13480,8 @@ function renderGraphicsQualityStatus(): void {
   graphicsQualitySelect.value = selectedGraphicsQualityMode;
   const tier = appliedGraphicsQualityTier.toUpperCase();
   graphicsQualityStatus.textContent = selectedGraphicsQualityMode === "auto"
-    ? `Auto · currently ${tier} · adjusts slowly from frame pacing`
-    : `${tier} · fixed until you change it`;
+    ? `Auto Â· currently ${tier} Â· adjusts slowly from frame pacing`
+    : `${tier} Â· fixed until you change it`;
 }
 
 function applyGraphicsQualityTier(tier: GraphicsQualityTier): void {
@@ -13543,7 +13557,7 @@ function renderWorldObjective(update: WorldObjectiveUpdate): void {
   } : null);
   if (changedObjective || update.showMarker === false) objectiveMarker.hidden = update.showMarker === false;
   const recommendation = update.recommendedLevel ?? worldLevelRange(update.tier).label;
-  objectiveTier.textContent = `${update.kind === "hunt" ? "TRACKED HUNT" : update.progressLabel?.startsWith("REALM THREAT") || update.progressLabel === "REALM BOSS" ? "REALM" : update.kind === "miniboss" ? "AREA MINI-BOSS" : update.kind === "hub" ? "SAFE TOWN" : update.kind === "portal" ? "PORTAL" : update.kind === "loot" ? "PERSONAL LOOT" : update.kind === "explore" ? "WILDERNESS" : update.progressLabel ? "DUNGEON" : "THREAT"} · ${recommendation}`;
+  objectiveTier.textContent = `${update.kind === "hunt" ? "TRACKED HUNT" : update.progressLabel?.startsWith("REALM THREAT") || update.progressLabel === "REALM BOSS" ? "REALM" : update.kind === "miniboss" ? "AREA MINI-BOSS" : update.kind === "hub" ? "SAFE TOWN" : update.kind === "portal" ? "PORTAL" : update.kind === "loot" ? "PERSONAL LOOT" : update.kind === "explore" ? "WILDERNESS" : update.progressLabel ? "DUNGEON" : "THREAT"} Â· ${recommendation}`;
   objectiveTitle.textContent = update.title;
   objectiveDetail.textContent = update.detail;
   objectiveLoot.hidden = !update.lootHint;
@@ -13560,7 +13574,7 @@ function renderWorldObjective(update: WorldObjectiveUpdate): void {
 function showObjectiveComplete(message: WorldObjectiveCompleted): void {
   announceWorldNotice({ kind: "objective", heading: "OBJECTIVE COMPLETE", title: message.title,
     detail: message.rewardLabel, durationMs: 4_500 });
-  social.event(`Objective complete: ${message.title}${message.rewardLabel ? ` · ${message.rewardLabel}` : ""}`);
+  social.event(`Objective complete: ${message.title}${message.rewardLabel ? ` Â· ${message.rewardLabel}` : ""}`);
 }
 
 function updateObjectiveGuidance(): void {
@@ -13607,9 +13621,9 @@ function renderDepthsWingRewards(next: SilverDepthsWingRewardStatus | null): voi
   if (!next) return;
   depthsRewardsTitle.textContent = next.wing === "iron" ? "YOUR IRON BASTION REWARDS" : "YOUR SILVER ECHO REWARDS";
   depthsRewardOreName.textContent = `${next.oreQuantity} ${ITEM_DEFINITIONS[next.oreItemId].name}`;
-  depthsRewardOreState.textContent = next.oreCollected ? "✓ COLLECTED" : "WALK OVER TO COLLECT";
+  depthsRewardOreState.textContent = next.oreCollected ? "âœ“ COLLECTED" : "WALK OVER TO COLLECT";
   depthsRewardGearName.textContent = ITEM_DEFINITIONS[next.gearItemId].name;
-  depthsRewardGearState.textContent = next.gearCollected ? "✓ CLAIMED" : "APPROACH · PRESS E";
+  depthsRewardGearState.textContent = next.gearCollected ? "âœ“ CLAIMED" : "APPROACH Â· PRESS E";
   depthsRewardOreState.classList.toggle("collected", next.oreCollected);
   depthsRewardGearState.classList.toggle("collected", next.gearCollected);
   depthsRewardParty.hidden = next.partyGearTotal <= 1;
@@ -13635,8 +13649,8 @@ function updateSilverDepthsRoute(now: number): void {
       player.z - SILVER_DEPTHS_CHECKPOINT_POSITION.z);
     const nearby = distanceToCheckpoint <= 6 && Math.abs(player.y - SILVER_DEPTHS_CHECKPOINT_POSITION.y) <= 3;
     depthsCheckpointReady.disabled = depthsCheckpointStatus.selfReady || !nearby;
-    depthsCheckpointReady.textContent = depthsCheckpointStatus.selfReady ? "READY · WAITING FOR PARTY" : "READY FOR MATRIARCH";
-    depthsCheckpointHint.textContent = !nearby ? `Regroup at the checkpoint · ${Math.round(distanceToCheckpoint)}m away`
+    depthsCheckpointReady.textContent = depthsCheckpointStatus.selfReady ? "READY Â· WAITING FOR PARTY" : "READY FOR MATRIARCH";
+    depthsCheckpointHint.textContent = !nearby ? `Regroup at the checkpoint Â· ${Math.round(distanceToCheckpoint)}m away`
       : !depthsCheckpointStatus.rewardsCollected && !depthsCheckpointStatus.selfReady
         ? "Personal rewards remain in the wing. Collect them before Ready if you want them."
       : depthsCheckpointStatus.selfReady ? "Your party can ready up beside the checkpoint." : "Prepared? Press Ready to open the boss gate together.";
@@ -13793,9 +13807,9 @@ function updateBossHud(now: number): void {
   const leaderPhase = leaderHealthPhase(boss.health, boss.maxHealth);
   const championPhase = realmBossHealthPhase(boss.health, boss.maxHealth);
   bossPhase.textContent = !boss.alive ? "DEFEATED" : pathChampion ? pathChampionPhaseLabel(boss.name, championPhase, boss.combatState === "recover")
-    : boss.isMiniBoss ? `PHASE ${leaderPhase} · ${formationLabel || (reinforcementsIncoming ? "REINFORCEMENTS INCOMING" : exposedLabel ? armour.maximum > 0 && armour.active === 0 ? "ESCORT ARMOUR BROKEN" : "FOLLOWER BREAK" : boss.combatState === "recover" ? "COUNTER WINDOW" : leaderPhase === 3 ? "FINAL ASSAULT" : leaderPhase === 2 ? "FOLLOWERS RALLIED" : "OPENING")}`
-    : realmBoss ? `PHASE ${realmPhase} · ${boss.combatState === "recover" ? "SHIFTING" : realmPhase === 3 ? "WARDEN BARRAGE" : realmPhase === 2 ? "FALLING ROCKS" : "STONE VOLLEYS"}`
-    : bossHudState.enraged ? `PHASE 2 · ${crystal ? "ROTATING CRYSTAL WAVES" : guardian ? "HEARTWOOD CHARGE" : bruteEvent ? "ENRAGED VOLLEYS" : "ENRAGED"}` : `PHASE 1 · ${crystal ? "AIMED SHOT / FAN" : guardian ? "ROOT VOLLEY" : bruteEvent ? "ROCK VOLLEY / SLAM" : "AIMED SHOT / FAN"}`;
+    : boss.isMiniBoss ? `PHASE ${leaderPhase} Â· ${formationLabel || (reinforcementsIncoming ? "REINFORCEMENTS INCOMING" : exposedLabel ? armour.maximum > 0 && armour.active === 0 ? "ESCORT ARMOUR BROKEN" : "FOLLOWER BREAK" : boss.combatState === "recover" ? "COUNTER WINDOW" : leaderPhase === 3 ? "FINAL ASSAULT" : leaderPhase === 2 ? "FOLLOWERS RALLIED" : "OPENING")}`
+    : realmBoss ? `PHASE ${realmPhase} Â· ${boss.combatState === "recover" ? "SHIFTING" : realmPhase === 3 ? "WARDEN BARRAGE" : realmPhase === 2 ? "FALLING ROCKS" : "STONE VOLLEYS"}`
+    : bossHudState.enraged ? `PHASE 2 Â· ${crystal ? "ROTATING CRYSTAL WAVES" : guardian ? "HEARTWOOD CHARGE" : bruteEvent ? "ENRAGED VOLLEYS" : "ENRAGED"}` : `PHASE 1 Â· ${crystal ? "AIMED SHOT / FAN" : guardian ? "ROOT VOLLEY" : bruteEvent ? "ROCK VOLLEY / SLAM" : "AIMED SHOT / FAN"}`;
   bossHud.dataset.encounter = boss.isMiniBoss ? "miniboss" : crystal ? "crystal" : guardian ? "dungeon" : realmBoss ? "realm" : "wilderness";
   bossHud.dataset.enraged = String(bossHudState.enraged);
   bossHud.dataset.exposed = String(Boolean(exposedLabel));
@@ -13809,7 +13823,7 @@ function updateBossHud(now: number): void {
   bossExposed.textContent = leaderExposureRoleLabel(exposedLabel, nextBossId, localBuildPathId);
   bossRematch.hidden = !rematchLabel;
   bossRematch.textContent = pathChampion
-    ? `${boss.leaderRematchTier >= 9 ? "ASCENDANT · TWO MECHANICS" : boss.leaderRematchTier >= 7 ? "VETERAN · ADVANCED ATTACK" : "NORMAL"} · ${boss.leaderRematchTier >= 9 ? "2× CACHE + FORGEMARK" : boss.leaderRematchTier >= 7 ? "1.5× CACHE" : "CHAMPION CACHE"}`
+    ? `${boss.leaderRematchTier >= 9 ? "ASCENDANT Â· TWO MECHANICS" : boss.leaderRematchTier >= 7 ? "VETERAN Â· ADVANCED ATTACK" : "NORMAL"} Â· ${boss.leaderRematchTier >= 9 ? "2Ã— CACHE + FORGEMARK" : boss.leaderRematchTier >= 7 ? "1.5Ã— CACHE" : "CHAMPION CACHE"}`
     : rematchLabel;
   bossRematch.dataset.modifier = boss.leaderModifier || "";
   bossAttackLabel.textContent = boss.alive
@@ -13978,7 +13992,7 @@ function requestDefense(active: boolean): void {
   room.send("defense", { requestId, active, yaw: localFacingYaw });
   if (active) {
     showCombatFeedback("GUARD", "dodge");
-    status.textContent = "Guarding · time the opening 0.24 seconds to parry frontal attacks.";
+    status.textContent = "Guarding Â· time the opening 0.24 seconds to parry frontal attacks.";
   }
 }
 
@@ -14034,7 +14048,7 @@ function finishStopTrace(): void {
     }
   }
   completedStopTrace = formatStopTrace(activeStopTrace);
-  movementDebugTrace.textContent = `Stop trace #${activeStopTrace.id}: ${activeStopTrace.frames.length} frames · screen Δ${maximumScreenDelta.toFixed(2)}px · idle world Δ${maximumIdleWorldDelta.toFixed(3)} · renderY Δ${maximumRenderedYDelta.toFixed(4)} — COPY LOG`;
+  movementDebugTrace.textContent = `Stop trace #${activeStopTrace.id}: ${activeStopTrace.frames.length} frames Â· screen Î”${maximumScreenDelta.toFixed(2)}px Â· idle world Î”${maximumIdleWorldDelta.toFixed(3)} Â· renderY Î”${maximumRenderedYDelta.toFixed(4)} â€” COPY LOG`;
   logMovementEvent(`STOP TRACE #${activeStopTrace.id} ready (${activeStopTrace.frames.length} frames)`);
   activeStopTrace = null;
 }
@@ -14304,7 +14318,7 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
   camera.camera?.clearColor.copy(app.scene.fog.color);
   if (nextKey === cutawayStateKey) return;
   logMovementEvent(
-    `SLICE ${cutawayStateKey} → ${nextKey} y=${position.y.toFixed(3)} underground=${underground} return=${Math.round(surfaceDurationMs)}ms`,
+    `SLICE ${cutawayStateKey} â†’ ${nextKey} y=${position.y.toFixed(3)} underground=${underground} return=${Math.round(surfaceDurationMs)}ms`,
   );
   cutawayStateKey = nextKey;
   cutawaySliceY = nextSliceY;
@@ -14314,12 +14328,12 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
   if (!fastWorldRequested) sceneDressing.setSurfaceVisible(!visibilityCutaway);
   updateActiveChunkMeshes(position);
   status.textContent = atSurface && visibilityCutaway
-    ? `Returning to surface · restoring slice ${nextSliceY}`
+    ? `Returning to surface Â· restoring slice ${nextSliceY}`
     : underground
-    ? `Underground · slice ${nextSliceY ?? "off"} · lowers only when descending`
+    ? `Underground Â· slice ${nextSliceY ?? "off"} Â· lowers only when descending`
     : excavating
-      ? `Excavation · slice ${nextSliceY ?? "off"} · lowers only when descending`
-      : "Surface · cross the flat ground to the descending mine entrance east of spawn.";
+      ? `Excavation Â· slice ${nextSliceY ?? "off"} Â· lowers only when descending`
+      : "Surface Â· cross the flat ground to the descending mine entrance east of spawn.";
 }
 
 function requestMine(): void {
@@ -14327,7 +14341,7 @@ function requestMine(): void {
   if (!room || !worldReady) return;
   if (miningSwing || pendingMine) return;
   if (powerAimActive || localPowerStartedAt !== null) {
-    status.textContent = `Committed to ${POWER_DEFINITIONS[localActivePower ?? localEquippedPower].name} · dodge to cancel.`;
+    status.textContent = `Committed to ${POWER_DEFINITIONS[localActivePower ?? localEquippedPower].name} Â· dodge to cancel.`;
     return;
   }
   if (!currentTarget) {
@@ -14347,7 +14361,7 @@ function requestMine(): void {
   }
   const mineralId = currentTarget.block === Block.IronOre ? "iron_ore" : currentTarget.block === Block.SilverOre ? "silver_ore" : currentTarget.block === Block.MoonstoneOre ? "moonstone" : null;
   if (mineralId && (inventoryCounts.get(mineralId) ?? 0) >= blacksmithIronCapacity) {
-    status.textContent = "Mineral pack full · sell ore at the blacksmith.";
+    status.textContent = "Mineral pack full Â· sell ore at the blacksmith.";
     return;
   }
   localActionFacingYaw = movementYaw(
@@ -14379,7 +14393,7 @@ function requestAttack(aimWithPointer = true, tabletAim?: { yaw: number; targetI
   if (!room || !worldReady) return;
   const now = performance.now();
   if (powerAimActive || (localPowerStartedAt !== null && now - localPowerStartedAt < powerDuration(localActivePower))) {
-    status.textContent = `Committed to ${POWER_DEFINITIONS[localActivePower ?? localEquippedPower].name} · dodge to cancel.`;
+    status.textContent = `Committed to ${POWER_DEFINITIONS[localActivePower ?? localEquippedPower].name} Â· dodge to cancel.`;
     return;
   }
   if (localActionStartedAt !== null && now - localActionStartedAt < actionDuration(localActionStep)) {
@@ -14437,15 +14451,15 @@ function requestAttack(aimWithPointer = true, tabletAim?: { yaw: number; targetI
     ? `${MAIN_HAND_DEFINITIONS[localMainHandId].attackName} ${comboStep}`
     : MAIN_HAND_DEFINITIONS[localMainHandId].attackName;
   status.textContent = firstPersonAimed
-    ? targetMob ? `${attackName} · crosshair locked on ${targetMob.visual.state.name}.`
-      : `${attackName} · released through the crosshair.`
+    ? targetMob ? `${attackName} Â· crosshair locked on ${targetMob.visual.state.name}.`
+      : `${attackName} Â· released through the crosshair.`
     : pointerAimed
-    ? attackDefinition.projectileTravelMs > 0 ? `${attackName} · firing toward your reticle.` : `${attackName} · swinging toward your pointer.`
+    ? attackDefinition.projectileTravelMs > 0 ? `${attackName} Â· firing toward your reticle.` : `${attackName} Â· swinging toward your pointer.`
     : targetMob
     ? attackDefinition.combo && comboStep === 3
       ? `Heavy finisher aimed at ${targetMob.visual.state.name}...`
       : `${attackName} aimed at ${targetMob.visual.state.name}...`
-    : `${attackName} · no target in reach.`;
+    : `${attackName} Â· no target in reach.`;
 }
 
 function requestDodge(): void {
@@ -14454,13 +14468,13 @@ function requestDodge(): void {
   if (reportedProtectedDialog === true) return;
   if (!room || !worldReady) return;
   if (Date.now() < localThornBoundUntil) {
-    status.textContent = "Rooted by vines · attack to cut free.";
+    status.textContent = "Rooted by vines Â· attack to cut free.";
     return;
   }
   const now = performance.now();
   if (now < localDodgeExhaustedUntil) {
     showCombatFeedback("EXHAUSTED", "hurt");
-    status.textContent = "Dodge exhausted · hold your ground for a moment.";
+    status.textContent = "Dodge exhausted Â· hold your ground for a moment.";
     return;
   }
   if (!canRequestPredictedDodge(now, localDodgeRequestedAt)) {
@@ -14542,9 +14556,9 @@ function requestDodge(): void {
     yaw: localFacingYaw,
     ...(serverClock.synchronized ? { actionAt: now + serverClock.offset } : {}),
   });
-  showCombatFeedback(dodgeChain >= 1 ? `DODGE −${dodgeCost} · EXHAUSTED` : `DODGE −${dodgeCost}`, "dodge");
+  showCombatFeedback(dodgeChain >= 1 ? `DODGE âˆ’${dodgeCost} Â· EXHAUSTED` : `DODGE âˆ’${dodgeCost}`, "dodge");
   logMovementEvent(`DODGE ${direction.x.toFixed(2)}, ${direction.z.toFixed(2)}`);
-  status.textContent = "Dodging · brief invulnerability active.";
+  status.textContent = "Dodging Â· brief invulnerability active.";
 }
 
 function updatePowerAimFromPointer(): void {
@@ -14603,7 +14617,7 @@ function beginPowerAim(pointerId: number | null = null): void {
   if (localCharacterProgression.level < 5) return;
   if (localDefending) requestDefense(false);
   if (!powerServerReady) {
-    status.textContent = "Power server is updating · Powers will unlock automatically.";
+    status.textContent = "Power server is updating Â· Powers will unlock automatically.";
     showCombatFeedback("POWER SERVER UPDATING", "hurt");
     return;
   }
@@ -14617,7 +14631,7 @@ function beginPowerAim(pointerId: number | null = null): void {
   }
   const remaining = localPowerCooldownUntil - Date.now();
   if (remaining > 0) {
-    status.textContent = `${definition.name} recharging · ${(remaining / 1000).toFixed(1)}s.`;
+    status.textContent = `${definition.name} recharging Â· ${(remaining / 1000).toFixed(1)}s.`;
     return;
   }
   if (definition.castType === "tap") {
@@ -14648,8 +14662,8 @@ function beginPowerAim(pointerId: number | null = null): void {
   powerButton.classList.add("aiming");
   showCombatFeedback(`AIM ${definition.name.toUpperCase()}`, "dodge");
   status.textContent = definition.core === "ground"
-    ? `Placing ${definition.name} · point within range, release to cast, dodge to cancel.`
-    : `Aiming ${definition.name} · drag to adjust, release to cast, dodge to cancel.`;
+    ? `Placing ${definition.name} Â· point within range, release to cast, dodge to cancel.`
+    : `Aiming ${definition.name} Â· drag to adjust, release to cast, dodge to cancel.`;
 }
 
 function cancelPowerAim(): void {
@@ -14695,14 +14709,14 @@ function castPower(yaw: number, target?: { x: number; y: number; z: number }): v
   showCombatFeedback(definition.name.toUpperCase(), "dodge");
   logMovementEvent(`POWER ${definition.id} yaw=${yaw.toFixed(1)}`);
   status.textContent = definition.core === "burst"
-    ? `${definition.name} charging · radial impact in ${(definition.windupMs / 1000).toFixed(2)}s.`
+    ? `${definition.name} charging Â· radial impact in ${(definition.windupMs / 1000).toFixed(2)}s.`
     : definition.core === "ground"
-      ? `${definition.name} marked · ground impact in ${(definition.windupMs / 1000).toFixed(2)}s.`
+      ? `${definition.name} marked Â· ground impact in ${(definition.windupMs / 1000).toFixed(2)}s.`
       : definition.core === "mobility"
-        ? `${definition.name} committed · lunge impact in ${(definition.windupMs / 1000).toFixed(2)}s.`
+        ? `${definition.name} committed Â· lunge impact in ${(definition.windupMs / 1000).toFixed(2)}s.`
       : powerId === "seismic_cleave"
-        ? `${definition.name} committed · brace for the travelling faultline.`
-        : `${definition.name} winding up · line impact in ${(definition.windupMs / 1000).toFixed(2)}s.`;
+        ? `${definition.name} committed Â· brace for the travelling faultline.`
+        : `${definition.name} winding up Â· line impact in ${(definition.windupMs / 1000).toFixed(2)}s.`;
 }
 
 function commitPowerAim(): void {
@@ -14732,7 +14746,7 @@ function requestHuntersMark(): void {
   if (!room || !worldReady) return;
   const remaining = localSpecialCooldownUntil - Date.now();
   if (remaining > 0) {
-    status.textContent = `${HUNTERS_MARK.name} recharging · ${(remaining / 1000).toFixed(1)}s.`;
+    status.textContent = `${HUNTERS_MARK.name} recharging Â· ${(remaining / 1000).toFixed(1)}s.`;
     return;
   }
   if (powerAimActive || localPowerStartedAt !== null || localActionStartedAt !== null) {
@@ -14794,7 +14808,7 @@ function beginSpecialAim(pointerId: number | null = null): void {
   const definition = SPECIAL_DEFINITIONS[localEquippedSpecial];
   const remaining = localSpecialCooldownUntil - Date.now();
   if (remaining > 0) {
-    status.textContent = `${definition.name} recharging · ${(remaining / 1000).toFixed(1)}s.`;
+    status.textContent = `${definition.name} recharging Â· ${(remaining / 1000).toFixed(1)}s.`;
     return;
   }
   if (powerAimActive || localPowerStartedAt !== null || localActionStartedAt !== null) {
@@ -14839,7 +14853,7 @@ function beginSpecialAim(pointerId: number | null = null): void {
   combatHud.setSpecialAiming(true);
   specialButton.classList.add("aiming");
   showCombatFeedback("AIM BRAMBLE SNARE", "dodge");
-  status.textContent = "Placing Bramble Snare · point within range, release to arm, dodge to cancel.";
+  status.textContent = "Placing Bramble Snare Â· point within range, release to arm, dodge to cancel.";
 }
 
 function cancelSpecialAim(): void {
@@ -14873,7 +14887,7 @@ function commitSpecialAim(): void {
   combatSync.start("special", requestId, performance.now());
   room.send("special", { requestId, specialId: "bramble_snare", yaw, target });
   showCombatFeedback("SNARE ARMED", "dodge");
-  status.textContent = "Bramble Snare armed · the first enemy entering it will be rooted.";
+  status.textContent = "Bramble Snare armed Â· the first enemy entering it will be rooted.";
   logMovementEvent(`SPECIAL ${BRAMBLE_SNARE.id} ${target.x.toFixed(1)},${target.z.toFixed(1)}`);
 }
 
@@ -14942,8 +14956,8 @@ function setInteractionMode(mode: InteractionMode): void {
   updateTarget();
   logMovementEvent(`MODE ${mode.toUpperCase()}`);
   status.textContent = mode === "build"
-    ? "Build mode · clicks mine nearby targeted blocks."
-    : cancelledMining ? miningMessage("mode") : `Combat mode · clicks use the ${MAIN_HAND_DEFINITIONS[localMainHandId].name} Attack without changing blocks.`;
+    ? "Build mode Â· clicks mine nearby targeted blocks."
+    : cancelledMining ? miningMessage("mode") : `Combat mode Â· clicks use the ${MAIN_HAND_DEFINITIONS[localMainHandId].name} Attack without changing blocks.`;
   if (mode === "combat") noteFirstStep("switched_combat");
 }
 
@@ -15153,7 +15167,7 @@ window.addEventListener("keydown", event => {
       setInventoryOpen(true);
     } else if (tutorialMovementKeys.has(event.code)) return;
     else if (tutorialGameplayKeys.has(event.code)) {
-      status.textContent = "Starter bag collected · press I to equip your sword before using another action.";
+      status.textContent = "Starter bag collected Â· press I to equip your sword before using another action.";
       nudgeStarterInventoryTutorial();
     } else return;
     event.preventDefault();
@@ -15747,7 +15761,7 @@ function updatePerformanceMetrics(now: number): void {
       const simulation = serverPerformance
         ? `${serverPerformance.activeMobs} active / ${serverPerformance.sleepingMobs} sleeping`
         : `${nearbyMobCount} nearby / ${livingMobCount} known`;
-      metrics.textContent = `${Math.round(fps)} FPS · ${p95.toFixed(1)}ms p95 · chunks ${rapidWorldActiveVisualChunks}/${rapidWorldTotalVisualChunks} · mobs ${simulation}`;
+      metrics.textContent = `${Math.round(fps)} FPS Â· ${p95.toFixed(1)}ms p95 Â· chunks ${rapidWorldActiveVisualChunks}/${rapidWorldTotalVisualChunks} Â· mobs ${simulation}`;
     }
   }
   const visibleVoxels = [...chunks.values()].reduce((total, chunk) => total + chunk.visibleBlocks, 0);
@@ -15873,35 +15887,35 @@ function updatePerformanceMetrics(now: number): void {
   performanceFields.frame.textContent = `${p50.toFixed(1)} / ${p95.toFixed(1)} ms`;
   performanceFields.fps.textContent = `${Math.round(fps)}`;
   performanceFields.engine.textContent = `${lastEngineUpdateMs.toFixed(1)} / ${lastRenderMs.toFixed(1)} ms`;
-  performanceFields.pacing.textContent = `${lastGpuMs === null ? "GPU unavailable" : `${lastGpuMs.toFixed(1)} ms GPU`} · ${lastPresentationWaitMs.toFixed(1)} ms wait`;
-  performanceFields.resolution.textContent = `${canvas.width}×${canvas.height} · scale ${GRAPHICS_QUALITY_PROFILES[appliedGraphicsQualityTier].renderScale.toFixed(2)} · ${document.hidden ? "hidden" : document.hasFocus() ? "focused" : "unfocused"}`;
+  performanceFields.pacing.textContent = `${lastGpuMs === null ? "GPU unavailable" : `${lastGpuMs.toFixed(1)} ms GPU`} Â· ${lastPresentationWaitMs.toFixed(1)} ms wait`;
+  performanceFields.resolution.textContent = `${canvas.width}Ã—${canvas.height} Â· scale ${GRAPHICS_QUALITY_PROFILES[appliedGraphicsQualityTier].renderScale.toFixed(2)} Â· ${document.hidden ? "hidden" : document.hasFocus() ? "focused" : "unfocused"}`;
   performanceFields.longTask.textContent = observedLongTaskPeakMs > 0 ? `${observedLongTaskPeakMs.toFixed(1)} ms` : "None";
   performanceFields.longFrame.textContent = observedLoafDurationMs > 0
     ? `${observedLoafDurationMs.toFixed(1)} / ${observedLoafBlockingMs.toFixed(1)} / ${observedLoafRenderDelayMs.toFixed(1)} / ${observedLoafStyleLayoutMs.toFixed(1)} ms`
     : "Unavailable / none";
-  performanceFields.cadence.textContent = `${appCadenceFps.toFixed(1)} app · ${browserCadenceFps.toFixed(1)} browser · RAF ${browserRafP50Ms.toFixed(1)}/${browserRafP95Ms.toFixed(1)} ms`;
+  performanceFields.cadence.textContent = `${appCadenceFps.toFixed(1)} app Â· ${browserCadenceFps.toFixed(1)} browser Â· RAF ${browserRafP50Ms.toFixed(1)}/${browserRafP95Ms.toFixed(1)} ms`;
   performanceFields.frameBuckets.textContent = `${observedCadence.under20} / ${observedCadence.under42} / ${observedCadence.under58} / ${observedCadence.slower}`;
   performanceFields.subsystems.textContent = `${lastTerrainUpdateMs.toFixed(1)} / ${lastSceneDressingMs.toFixed(1)} / ${lastMobPresentationMs.toFixed(1)} / ${lastWorldUiMs.toFixed(1)} ms`;
   performanceFields.render.textContent = `${app.stats.drawCalls.total.toLocaleString()} / ${app.stats.frame.triangles.toLocaleString()} / ${app.stats.frame.shadowMapUpdates}`;
   performanceFields.drawBreakdown.textContent = `${app.stats.drawCalls.forward} / ${app.stats.drawCalls.depth} / ${app.stats.drawCalls.shadow} / ${app.stats.drawCalls.misc}`;
   performanceFields.renderState.textContent = `${app.stats.frame.materials} / ${app.stats.frame.shaders} / ${app.stats.scene.meshInstances}`;
-  performanceFields.clientMobs.textContent = `${visibleMobCount} / ${fullDetailMobCount} / ${midDetailMobCount} / ${lodMobCount} · rigs ${animatedRigMobCount}/${settledRigMobCount}`;
-  performanceFields.anomaly.textContent = lastPerformanceAnomalies.join(" · ") || "None";
-  performanceFields.rtt.textContent = networkRttMs === null ? "Waiting…" : `${networkRttMs.toFixed(0)} ms`;
-  performanceFields.inputAck.textContent = movementPilotController ? "SDK stream" : inputAcknowledgementMs === null ? "Waiting…" : `${inputAcknowledgementMs.toFixed(0)} ms`;
-  performanceFields.networkRate.textContent = `${incomingPatchesPerSecond.toFixed(1)}/s · ${formatBytes(incomingBytesPerSecond)}/s`;
+  performanceFields.clientMobs.textContent = `${visibleMobCount} / ${fullDetailMobCount} / ${midDetailMobCount} / ${lodMobCount} Â· rigs ${animatedRigMobCount}/${settledRigMobCount}`;
+  performanceFields.anomaly.textContent = lastPerformanceAnomalies.join(" Â· ") || "None";
+  performanceFields.rtt.textContent = networkRttMs === null ? "Waitingâ€¦" : `${networkRttMs.toFixed(0)} ms`;
+  performanceFields.inputAck.textContent = movementPilotController ? "SDK stream" : inputAcknowledgementMs === null ? "Waitingâ€¦" : `${inputAcknowledgementMs.toFixed(0)} ms`;
+  performanceFields.networkRate.textContent = `${incomingPatchesPerSecond.toFixed(1)}/s Â· ${formatBytes(incomingBytesPerSecond)}/s`;
   performanceFields.serverTick.textContent = currentServerPerformance
-    ? `${currentServerPerformance.tickP50Ms.toFixed(1)} / ${currentServerPerformance.tickP95Ms.toFixed(1)} ms · max ${currentServerPerformance.tickMaxMs.toFixed(1)} · ${currentServerPerformance.overBudgetPercent.toFixed(0)}% slow`
-    : "Waiting…";
+    ? `${currentServerPerformance.tickP50Ms.toFixed(1)} / ${currentServerPerformance.tickP95Ms.toFixed(1)} ms Â· max ${currentServerPerformance.tickMaxMs.toFixed(1)} Â· ${currentServerPerformance.overBudgetPercent.toFixed(0)}% slow`
+    : "Waitingâ€¦";
   performanceFields.serverMobs.textContent = currentServerPerformance
     ? `${currentServerPerformance.activeMobs} / ${currentServerPerformance.sleepingMobs}`
-    : "Waiting…";
+    : "Waitingâ€¦";
   performanceFields.voxels.textContent = visibleVoxels.toLocaleString();
   performanceFields.geometry.textContent = `${meshes} / ${triangles.toLocaleString()}`;
-  performanceFields.chunks.textContent = `${lastChunkBuildMs.toFixed(1)} ms · peak ${chunkBuildPeakMs.toFixed(1)} · queue ${queuedChunkRebuilds.size}`;
+  performanceFields.chunks.textContent = `${lastChunkBuildMs.toFixed(1)} ms Â· peak ${chunkBuildPeakMs.toFixed(1)} Â· queue ${queuedChunkRebuilds.size}`;
   performanceFields.chunkStream.textContent = lastChunkStreamPayloadBytes === 0
     ? "None yet"
-    : `${lastChunkStreamCount} chunks · ${formatBytes(lastChunkStreamPayloadBytes)} · ${lastChunkStreamSetupMs.toFixed(1)} ms`;
+    : `${lastChunkStreamCount} chunks Â· ${formatBytes(lastChunkStreamPayloadBytes)} Â· ${lastChunkStreamSetupMs.toFixed(1)} ms`;
   performanceFields.payload.textContent = formatBytes(worldPayloadBytes);
   performanceFields.memory.textContent = memory ? formatBytes(memory) : "Unavailable";
   performanceFields.budget.className = stable ? (withinBudget ? "pass" : "fail") : "";
@@ -15914,10 +15928,10 @@ function updatePerformanceMetrics(now: number): void {
     !trafficWithinBudget ? "network traffic" : "",
   ].filter(Boolean);
   performanceFields.budget.textContent = !stable
-    ? `Collecting sample ${frameSamples.length}/120…`
+    ? `Collecting sample ${frameSamples.length}/120â€¦`
     : withinBudget
-      ? "PASS · client, server and network within budget"
-      : `CHECK · ${warnings.join(" · ")} over budget`;
+      ? "PASS Â· client, server and network within budget"
+      : `CHECK Â· ${warnings.join(" Â· ")} over budget`;
 
   (window as Window & { __BLOCKCRAFT_PERF__?: Record<string, number | boolean | string | null> }).__BLOCKCRAFT_PERF__ = {
     p50,
@@ -16107,17 +16121,17 @@ app.on("update", (dt: number) => {
       saveFastWorldNavigation();
       const title = document.querySelector<HTMLElement>("#fast-world-badge strong");
       const detail = document.querySelector<HTMLElement>("#fast-world-badge span");
-      if (title) title.textContent = `${region.name.toUpperCase()} · ${region.levelLabel}`;
-      if (detail) detail.textContent = `${region.guidance} · ${fastWorldRegionTravelSummary(region.id)}`;
+      if (title) title.textContent = `${region.name.toUpperCase()} Â· ${region.levelLabel}`;
+      if (detail) detail.textContent = `${region.guidance} Â· ${fastWorldRegionTravelSummary(region.id)}`;
       if (previousRegion && region.id !== "crossroads") showFastWorldReveal(region.name,
-        `${region.levelLabel} · fixed difficulty · ${fastWorldRegionTravelSummary(region.id)}`);
+        `${region.levelLabel} Â· fixed difficulty Â· ${fastWorldRegionTravelSummary(region.id)}`);
     }
     const newlyDiscovered = discoverFastWorldLandmarks(playerPosition, fastWorldNavigationState.landmarks);
     if (newlyDiscovered.length) {
       for (const landmark of newlyDiscovered) fastWorldNavigationState.landmarks.add(landmark.id);
       saveFastWorldNavigation();
       const landmark = newlyDiscovered[0]!;
-      showFastWorldReveal(landmark.name, `${rapidWorldRegionAt(landmark.x, landmark.z).name} · now marked on the Realm Map`, "landmark");
+      showFastWorldReveal(landmark.name, `${rapidWorldRegionAt(landmark.x, landmark.z).name} Â· now marked on the Realm Map`, "landmark");
     }
     if (customUpdateStartedAt - lastFastWorldMiniBossCheckAt >= 100) {
       lastFastWorldMiniBossCheckAt = customUpdateStartedAt;
@@ -16141,9 +16155,9 @@ app.on("update", (dt: number) => {
       }
       if (fastWorldMiniBossPanel) fastWorldMiniBossPanel.hidden = !fastWorldNearbyMiniBoss;
       if (fastWorldMiniBossName && fastWorldNearbyMiniBoss)
-        fastWorldMiniBossName.textContent = `${fastWorldNearbyMiniBoss.name} · LV ${fastWorldNearbyMiniBoss.level}`;
+        fastWorldMiniBossName.textContent = `${fastWorldNearbyMiniBoss.name} Â· LV ${fastWorldNearbyMiniBoss.level}`;
       if (fastWorldMiniBossDistance && fastWorldNearbyMiniBoss)
-        fastWorldMiniBossDistance.textContent = `${Math.ceil(fastWorldNearbyMiniBoss.distance)}m · click to guide`;
+        fastWorldMiniBossDistance.textContent = `${Math.ceil(fastWorldNearbyMiniBoss.distance)}m Â· click to guide`;
     }
     if (fastWorldDestination) {
       const direction = fastWorldDestinationDirection(playerPosition, fastWorldDestination, cameraOrbit.yaw);
@@ -16158,7 +16172,7 @@ app.on("update", (dt: number) => {
         const distance = fastWorldDestinationHud.querySelector<HTMLElement>("small");
         if (arrow) arrow.style.transform = `rotate(${direction.angle}rad)`;
         if (name) name.textContent = fastWorldDestination.name;
-        if (distance) distance.textContent = `${Math.ceil(direction.distance)}m · M for map`;
+        if (distance) distance.textContent = `${Math.ceil(direction.distance)}m Â· M for map`;
       }
     } else if (fastWorldDestinationHud) fastWorldDestinationHud.hidden = true;
     drawFastWorldMap(playerPosition, localFacingYaw, customUpdateStartedAt);
@@ -16370,7 +16384,7 @@ app.on("update", (dt: number) => {
   if (predicted.hitVertical || predicted.grounded) localVerticalVelocity = 0;
   if (predicted.stepped) {
     localVisualVerticalOffset += current.y - predicted.y;
-    logMovementEvent(`STEP y ${current.y.toFixed(3)} → ${predicted.y.toFixed(3)}`);
+    logMovementEvent(`STEP y ${current.y.toFixed(3)} â†’ ${predicted.y.toFixed(3)}`);
   }
   localPlayer.setPosition(predicted.x, predicted.y, predicted.z);
   localPlayer.setEulerAngles(0, localFacingYaw, 0);
@@ -16836,8 +16850,8 @@ app.on("update", (dt: number) => {
       ? warpackFormation.tactic : undefined;
     const warpackLabel = !warpackTactic ? "" : mobId === "ashen-cinder-ram"
       ? leaderFormationLabel(warpackFormation!.state, warpackTactic)
-      : mobId.includes("hound") ? warpackTactic === "pack-collapse" ? "PACK COLLAPSE · GUARDING RAM" : "RAM ADVANCE · FLANKING"
-      : warpackTactic === "ashglass-crossfire" ? "ASHGLASS CROSSFIRE · TAKING LANE" : warpackTactic === "pack-collapse" ? "PACK COLLAPSE · COVERING RAM" : "RAM ADVANCE · COVERING FIRE";
+      : mobId.includes("hound") ? warpackTactic === "pack-collapse" ? "PACK COLLAPSE Â· GUARDING RAM" : "RAM ADVANCE Â· FLANKING"
+      : warpackTactic === "ashglass-crossfire" ? "ASHGLASS CROSSFIRE Â· TAKING LANE" : warpackTactic === "pack-collapse" ? "PACK COLLAPSE Â· COVERING RAM" : "RAM ADVANCE Â· COVERING FIRE";
     const tacticCue = warpackLabel ? { kind: "formation", recovery: false, visible: true, label: warpackLabel, progress: 1 } : null;
     const cue = combatCue.visible ? combatCue : tacticCue ?? enemyAwarenessCue(mob.state, animationNow + serverClock.offset);
     const sampledMobDistance = Math.hypot(sampled.x - playerEye.x, sampled.y - playerEye.y, sampled.z - playerEye.z);
@@ -16855,10 +16869,10 @@ app.on("update", (dt: number) => {
         const phase = warning ? "warning" : "waiting";
         if (mob.respawnTag.dataset.phase !== phase) mob.respawnTag.dataset.phase = phase;
         const label = trackedArenaPresentation?.phase === "respawning"
-          ? `★ ${REGIONAL_LEADER_COLLECTIONS[trackedLeaderCollectionHunt!.collectionId].leaderName.toUpperCase()}\n${trackedArenaPresentation.difficulty} · RETURNS IN ${trackedSeconds}s\n${trackedArenaPresentation.party} · ${trackedArenaPresentation.slot}`
+          ? `â˜… ${REGIONAL_LEADER_COLLECTIONS[trackedLeaderCollectionHunt!.collectionId].leaderName.toUpperCase()}\n${trackedArenaPresentation.difficulty} Â· RETURNS IN ${trackedSeconds}s\n${trackedArenaPresentation.party} Â· ${trackedArenaPresentation.slot}`
           : warning
-            ? `DANGER · RETURNING IN ${respawnIndicator!.seconds}s`
-            : `AREA CLEAR · RETURNS IN ${respawnIndicator!.seconds}s`;
+            ? `DANGER Â· RETURNING IN ${respawnIndicator!.seconds}s`
+            : `AREA CLEAR Â· RETURNS IN ${respawnIndicator!.seconds}s`;
         if (mob.respawnTag.textContent !== label) mob.respawnTag.textContent = label;
         mob.respawnTag.dataset.collection = String(trackedArenaPresentation?.phase === "respawning");
         setWorldOverlayPosition(mob.respawnTag, rect.left + screen.x, rect.top + screen.y);
@@ -16872,12 +16886,12 @@ app.on("update", (dt: number) => {
       setElementHidden(mob.levelTag, !onScreen);
       if (onScreen) {
         const threat = enemyThreat(localCharacterProgression.level, mob.state.level);
-        const skulls = threat === "deadly" ? "☠☠ " : threat === "dangerous" ? "☠ " : "";
+        const skulls = threat === "deadly" ? "â˜ â˜  " : threat === "dangerous" ? "â˜  " : "";
         const miniboss = String(mob.state.isMiniBoss);
         const trackedReady = trackedArenaPresentation?.phase === "ready";
         const label = trackedReady
-          ? `★ ${REGIONAL_LEADER_COLLECTIONS[trackedLeaderCollectionHunt!.collectionId].leaderName.toUpperCase()}\n${trackedArenaPresentation.difficulty} · READY\n${trackedArenaPresentation.party} · ${trackedArenaPresentation.slot}`
-          : `${mob.state.isMiniBoss ? "★ MINI-BOSS · " : skulls}LV ${mob.state.level} · ${mob.state.name}`;
+          ? `â˜… ${REGIONAL_LEADER_COLLECTIONS[trackedLeaderCollectionHunt!.collectionId].leaderName.toUpperCase()}\n${trackedArenaPresentation.difficulty} Â· READY\n${trackedArenaPresentation.party} Â· ${trackedArenaPresentation.slot}`
+          : `${mob.state.isMiniBoss ? "â˜… MINI-BOSS Â· " : skulls}LV ${mob.state.level} Â· ${mob.state.name}`;
         if (mob.levelTag.dataset.threat !== threat) mob.levelTag.dataset.threat = threat;
         if (mob.levelTag.dataset.miniboss !== miniboss) mob.levelTag.dataset.miniboss = miniboss;
         mob.levelTag.dataset.collection = String(trackedReady);
@@ -17292,11 +17306,11 @@ app.on("update", (dt: number) => {
     ? callingButton.dataset.cancel === "true" ? "Cancel" : "Release"
     : callingRemaining > 0 ? `${Math.ceil(callingRemaining / 1000)}s` : callingDefinition?.name ?? "Power";
   combatHud.setCooldowns(
-    cooldownState(powerRemaining, POWER_DEFINITIONS[localEquippedPower].cooldownMs, "READY · R",
+    cooldownState(powerRemaining, POWER_DEFINITIONS[localEquippedPower].cooldownMs, "READY Â· R",
       !powerServerReady ? "SERVER UPDATE" : !powerCompatible ? "INCOMPATIBLE" : powerAimActive ? "RELEASE TO CAST" : undefined),
-    cooldownState(specialRemaining, specialDefinition?.cooldownMs ?? 1, "READY · F", !localBuildPathId ? "CHOOSE CALLING" : undefined),
+    cooldownState(specialRemaining, specialDefinition?.cooldownMs ?? 1, "READY Â· F", !localBuildPathId ? "CHOOSE CALLING" : undefined),
     localBuildPathId && localCallingAbilityId
-      ? cooldownState(callingRemaining, CALLING_ABILITY_OPTIONS.find(option => option.id === localCallingAbilityId)?.cooldownMs ?? 1, "READY · G")
+      ? cooldownState(callingRemaining, CALLING_ABILITY_OPTIONS.find(option => option.id === localCallingAbilityId)?.cooldownMs ?? 1, "READY Â· G")
       : cooldownState(0, 1, "CHOOSE CALLING", "CHOOSE CALLING"),
   );
   if (localCallingState?.activeUntil && localCallingState.activeUntil <= Date.now()) localCallingState = null;
@@ -17455,7 +17469,7 @@ app.on("update", (dt: number) => {
       captureUntil: now + STOP_TRACE_AFTER_RELEASE_MS,
       frames: [...stopTraceHistory],
     };
-    movementDebugTrace.textContent = `Stop trace #${stopTraceSequence}: recording ${STOP_TRACE_AFTER_RELEASE_MS}ms after release…`;
+    movementDebugTrace.textContent = `Stop trace #${stopTraceSequence}: recording ${STOP_TRACE_AFTER_RELEASE_MS}ms after releaseâ€¦`;
     logMovementEvent(`STOP TRACE #${stopTraceSequence} recording`);
   }
   activeStopTrace?.frames.push(traceFrame);
@@ -17575,7 +17589,7 @@ app.on("update", (dt: number) => {
       steps: unsentMovementSteps.splice(0),
       ...(stopPosition ? { stopX: stopPosition.x, stopY: stopPosition.y, stopZ: stopPosition.z } : {}),
     });
-    if (directionChanged) logMovementEvent(`DIR #${moveSequence} ${movementVectorLabel(lastSentMovement)} → ${movementVectorLabel(smoothedMovement)}`);
+    if (directionChanged) logMovementEvent(`DIR #${moveSequence} ${movementVectorLabel(lastSentMovement)} â†’ ${movementVectorLabel(smoothedMovement)}`);
     lastSentMovement = { ...smoothedMovement };
   }
   if (now - lastMovementDebugUpdateAt >= 100) {
@@ -17590,27 +17604,27 @@ app.on("update", (dt: number) => {
         : protectedDialogOpen ? "DIALOG" : Date.now() < localThornBoundUntil ? `THORN:${localThornBoundUntil - Date.now()}ms` : "OPEN"}`,
       `desired    ${movementVectorLabel(desiredMovement)}`,
       `applied    ${movementVectorLabel(smoothedMovement)}`,
-      `yaw        ${localFacingYaw.toFixed(1)} → ${desiredFacingYaw.toFixed(1)}`,
+      `yaw        ${localFacingYaw.toFixed(1)} â†’ ${desiredFacingYaw.toFixed(1)}`,
       `local      ${player.x.toFixed(3)}, ${player.y.toFixed(3)}, ${player.z.toFixed(3)}`,
       `server     ${authoritativeLocalPosition.x.toFixed(3)}, ${authoritativeLocalPosition.y.toFixed(3)}, ${authoritativeLocalPosition.z.toFixed(3)}`,
-      `A/B ${movementPilotController ? "COLYSEUS CONTROLS" : movementShadowInput ? "shadow only" : "off"} · diff=${movementShadowDifference?.toFixed(3) ?? "waiting"}m p50/p95=${percentile(movementShadowDifferences, 0.5).toFixed(3)}/${percentile(movementShadowDifferences, 0.95).toFixed(3)}m${movementShadowReset ? " reset" : ""}`,
-      `movement   ${movementPilotController ? "pilot" : "ordered replay"} · queued=${unsentMovementSteps.length} steps`,
-      `pending    ${pendingPredictionFrames.length} prediction frames · raw d=${localPlayer.getPosition().distance(authoritativeLocalPosition).toFixed(3)}`,
-      `loot       network=${room ? (room.state as any).lootDrops?.size ?? 0 : 0} · rendered=${lootVisuals.size}`,
+      `A/B ${movementPilotController ? "COLYSEUS CONTROLS" : movementShadowInput ? "shadow only" : "off"} Â· diff=${movementShadowDifference?.toFixed(3) ?? "waiting"}m p50/p95=${percentile(movementShadowDifferences, 0.5).toFixed(3)}/${percentile(movementShadowDifferences, 0.95).toFixed(3)}m${movementShadowReset ? " reset" : ""}`,
+      `movement   ${movementPilotController ? "pilot" : "ordered replay"} Â· queued=${unsentMovementSteps.length} steps`,
+      `pending    ${pendingPredictionFrames.length} prediction frames Â· raw d=${localPlayer.getPosition().distance(authoritativeLocalPosition).toFixed(3)}`,
+      `loot       network=${room ? (room.state as any).lootDrops?.size ?? 0 : 0} Â· rendered=${lootVisuals.size}`,
       `reconcile  d=${reconciliation.distance.toFixed(3)} rate=${Number.isFinite(reconciliation.rate) ? reconciliation.rate.toFixed(1) : "HARD"}`,
       `net visual ${localNetworkVisualOffset.x.toFixed(3)}, ${localNetworkVisualOffset.z.toFixed(3)}`,
       `recovery   ${localRecoveryVisualOffset.x.toFixed(3)}, ${localRecoveryVisualOffset.z.toFixed(3)}`,
       `vertical   v=${localVerticalVelocity.toFixed(3)} visual=${localVisualVerticalOffset.toFixed(3)}`,
       `animation  weight=${localPlayerRig.locomotionWeight.toFixed(3)} phase=${localPlayerRig.locomotionPhase.toFixed(2)} bodyY=${bodyY.toFixed(3)}`,
       `camera     yaw=${(cameraOrbit.yaw * 180 / Math.PI).toFixed(1)} pitch=${(cameraOrbit.pitch * 180 / Math.PI).toFixed(1)} screen=${playerScreen ? `${playerScreen.x.toFixed(1)}, ${playerScreen.y.toFixed(1)}` : "n/a"}`,
-      `mode       ${interactionMode} · click=${primaryActionForMode(interactionMode)}`,
+      `mode       ${interactionMode} Â· click=${primaryActionForMode(interactionMode)}`,
       `trait      ${localTraitId} momentum=${localMomentumStacks}/${MOMENTUM_TRAIT.maxStacks} speed=${localMovementSpeed().toFixed(2)}`,
       `cutaway    ${cutawaySliceY === null ? "surface" : `slice=${cutawaySliceY}`} ref=${surfaceReferenceY?.toFixed(3) ?? "n/a"} underground=${undergroundClassification} excavation=${excavationClassification} return=${surfaceReturnClassification}`,
       `collision  grounded=${grounded} stepped=${predicted.stepped} hitY=${predicted.hitVertical}`,
       `sequence   sent=${moveSequence} ack=${lastProcessedInputSequence} lag=${sequenceLag} blocked_acks=${blockedAcknowledgements}`,
       `net age    ${Math.round(performance.now() - lastAuthoritativeMovementAt)}ms`,
       `ack age    ${Math.round(performance.now() - lastAcknowledgementAdvancedAt)}ms`,
-      `snap log   ${snapDiagnosticEvents.length} events · ${activeSnapTrace ? "recording" : `${completedSnapTraces.length} saved traces`} · COPY LOG`,
+      `snap log   ${snapDiagnosticEvents.length} events Â· ${activeSnapTrace ? "recording" : `${completedSnapTraces.length} saved traces`} Â· COPY LOG`,
       `travel     collision=${collisionTravel.toFixed(3)} requested=${requestedTravel.toFixed(3)} blocked=${requestedTravel > 0.001 && collisionTravel < requestedTravel * 0.9}`,
       `stop ack   ${pendingStopInputSequence === null ? "ready" : `waiting for #${pendingStopInputSequence}`}`,
     ].join("\n");
@@ -17707,8 +17721,8 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     },
     (attempt, delay) => {
       status.textContent = attempt === 2 && fallbackEnabled
-        ? `Cloudflare matchmaking is delayed. Connecting directly to the game server in ${Math.round(delay / 1000)}s…`
-        : `Game server is restarting. Reconnecting in ${Math.round(delay / 1000)}s… (attempt ${attempt}/5)`;
+        ? `Cloudflare matchmaking is delayed. Connecting directly to the game server in ${Math.round(delay / 1000)}sâ€¦`
+        : `Game server is restarting. Reconnecting in ${Math.round(delay / 1000)}sâ€¦ (attempt ${attempt}/5)`;
     },
     undefined,
     8_000,
@@ -17736,7 +17750,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     status.textContent = "Reconnected to your dungeon run.";
   });
   room.onDrop(() => { status.textContent = activeRoomName === SILVER_DEPTHS_ROOM
-    ? "Connection interrupted. Holding your place in the dungeon…" : "Connection interrupted. Reconnecting…"; });
+    ? "Connection interrupted. Holding your place in the dungeonâ€¦" : "Connection interrupted. Reconnectingâ€¦"; });
   if (movementPilotRequested || (import.meta.env.DEV && query.get("movementShadow") === "1")) {
     room.onMessage("movement:shadow:ready", (message: { tickRate: number; control?: boolean }) => {
       // The SDK resets an existing input handle on reconnect. Preserve it so
@@ -17747,7 +17761,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       movementPilotReady = movementPilotRequested && message.control === true;
       if (movementPilotReady) activateMovementPilot(room!);
       if (movementPilotReady) movementDebug.open = true;
-      logMovementEvent(movementPilotReady ? "COLYSEUS PILOT READY" : "A/B SHADOW READY — legacy still controls movement");
+      logMovementEvent(movementPilotReady ? "COLYSEUS PILOT READY" : "A/B SHADOW READY â€” legacy still controls movement");
     });
     room.onMessage("movement:shadow:sample", (sample: {
       x: number; y: number; z: number; authorityX: number; authorityY: number; authorityZ: number; reset: boolean;
@@ -17788,7 +17802,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       url.searchParams.set("room", "practice");
       if (transfer.worldRoomId) url.searchParams.set("worldRoomId", transfer.worldRoomId);
       url.searchParams.delete("returnFrom"); url.searchParams.delete("retry");
-      status.textContent = "Opening your private combat practice arena…";
+      status.textContent = "Opening your private combat practice arenaâ€¦";
     } else {
       clearReconnectToken();
       url.searchParams.delete("room");
@@ -17814,7 +17828,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     if (fastWorldRequested && update.active) setInteractionMode("combat");
     if (fastWorldRequested && update.wave) {
       const detail = document.querySelector<HTMLElement>("#fast-world-badge span");
-      if (detail) detail.textContent = `Wave ${update.wave}/3 · ${update.message}`;
+      if (detail) detail.textContent = `Wave ${update.wave}/3 Â· ${update.message}`;
     }
     if (update.abilityId) { localCallingCooldownUntil = 0; localCallingSpecialCooldownUntil = 0; }
     if (!fastWorldRequested && update.active && activeRoomName === PRACTICE_ROOM && !update.abilityId && !update.wave) {
@@ -17847,8 +17861,8 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     rapidPracticeHaste = reward.haste;
     if (rapidPracticeRewardPanel) rapidPracticeRewardPanel.hidden = true;
     const detail = document.querySelector<HTMLElement>("#fast-world-badge span");
-    if (detail) detail.textContent = `DMG +${reward.damage} · HASTE ${reward.haste} · HP +${reward.vitality * 5} · RELICS ${reward.relics}`;
-    status.textContent = `${reward.rare ? "RARE " : ""}${reward.name} claimed · next wave incoming.`;
+    if (detail) detail.textContent = `DMG +${reward.damage} Â· HASTE ${reward.haste} Â· HP +${reward.vitality * 5} Â· RELICS ${reward.relics}`;
+    status.textContent = `${reward.rare ? "RARE " : ""}${reward.name} claimed Â· next wave incoming.`;
     canvas.focus();
   });
   room.onMessage("player:portal", (spawn: { x: number; y: number; z: number; entering: boolean }) => {
@@ -17857,8 +17871,8 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     pendingPortalDestination = own && portalArrivalSnapshot(spawn, own) ? null : spawn;
     worldReady = false; awaitingReturnState = false; townReturnPosition = spawn; cutawaySliceY = null;
     status.textContent = spawn.entering
-      ? isInEmberVault(spawn.x, spawn.z) ? "Ember Vault entered · breach the forge chambers and defeat the Colossus."
-        : spawn.y < 5 ? "Silver Depths entered · the dungeon clock is running." : "Forest Dungeon lobby · assemble, ready up, then begin the run."
+      ? isInEmberVault(spawn.x, spawn.z) ? "Ember Vault entered Â· breach the forge chambers and defeat the Colossus."
+        : spawn.y < 5 ? "Silver Depths entered Â· the dungeon clock is running." : "Forest Dungeon lobby Â· assemble, ready up, then begin the run."
       : isInEmberVault(spawn.x, spawn.z) ? "Returned to the Ember Vault."
         : spawn.x > 40 ? "Returned to the Deep Frontier with your forge rewards." : "Returned to the Town of Beginnings with your loot.";
   });
@@ -17879,16 +17893,16 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       renderDepthsWingRewards(null); renderDepthsCheckpointStatus(null);
     }
     if (update.phase === "started") status.textContent = update.dungeon === "ember-vault"
-      ? "Ember Vault run started · clear the sentinels, break the brute, then face the Forge Colossus."
-      : update.dungeon === "silver-depths" ? "Silver Depths run started · break the seal, clear both gallery waves, light the checkpoint, and overcome the Matriarch."
-        : `Forest Dungeon run started · ${update.partySize > 1 ? `${update.partySize}-player party` : "solo"}.`;
+      ? "Ember Vault run started Â· clear the sentinels, break the brute, then face the Forge Colossus."
+      : update.dungeon === "silver-depths" ? "Silver Depths run started Â· break the seal, clear both gallery waves, light the checkpoint, and overcome the Matriarch."
+        : `Forest Dungeon run started Â· ${update.partySize > 1 ? `${update.partySize}-player party` : "solo"}.`;
     showDungeonRunResult(update);
   });
   room.onMessage("dungeon:reward", (reward: DungeonRewardClaimed) => {
     updateTavernCoins(reward.totalGold);
-    showCombatFeedback(`CACHE CLAIMED · +${reward.goldGranted} GOLD`, "dodge");
+    showCombatFeedback(`CACHE CLAIMED Â· +${reward.goldGranted} GOLD`, "dodge");
     status.textContent = reward.message;
-    social.event(`Cache claimed · +${reward.goldGranted} gold.`);
+    social.event(`Cache claimed Â· +${reward.goldGranted} gold.`);
   });
   room.onMessage("dungeon:board", (update: DungeonBoardUpdate) => renderDungeonBoard(update));
   room.onMessage("realm-hunt:board", (update: RealmHuntBoardUpdate) => renderRealmHuntBoard(update));
@@ -17906,12 +17920,12 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
         localCallingAugmentProgress, localMasteredCallingAugments);
       try { window.localStorage.setItem(`calling-power-used-v1:${profileToken}:${update.abilityId}`, "1"); }
       catch { /* Private storage may be unavailable. */ }
-      status.textContent = `${update.ability} · ${update.detail.toLowerCase()}.`;
+      status.textContent = `${update.ability} Â· ${update.detail.toLowerCase()}.`;
       if (update.training) acceptGuidedAbilityPractice(update.abilityId);
       else completeGuidedAbilityPractice(update.abilityId);
       refreshProgressionNotice();
     }
-    if (update.slot === "special") status.textContent = `${update.ability} · ${update.detail.toLowerCase()}.`;
+    if (update.slot === "special") status.textContent = `${update.ability} Â· ${update.detail.toLowerCase()}.`;
     const serverAnchored = update.abilityId === "assassin_death_mark" || update.abilityId === "healer_field_mend"
       || update.abilityId === "healer_resurrection";
     if (!serverAnchored) {
@@ -17952,7 +17966,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     if (!mob) return;
     createHuntersMarkPayoff(mob, true);
     createRangedPopup(new pc.Vec3(mob.state.x, mob.state.y + mob.healthBarY + .75, mob.state.z),
-      `EMPOWERED · +${message.bonusDamage}`, "melee", false, [1, .22, .32]);
+      `EMPOWERED Â· +${message.bonusDamage}`, "melee", false, [1, .22, .32]);
   });
   room.onMessage("assassin:blade-dance", (message: { casterId: string; cuts: { mobId: string; damage: number; sequence: number }[]; durationMs: number }) => {
     createBladeDanceCuts(message);
@@ -17977,7 +17991,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     if (visual && !message.destroyed) {
       const position = visual.root.getPosition();
       createRangedPopup(new pc.Vec3(position.x, position.y + 1.9, position.z),
-        `DECOY · ${message.health}/${message.maxHealth}`, "melee", false, [.52, 1, .7]);
+        `DECOY Â· ${message.health}/${message.maxHealth}`, "melee", false, [.52, 1, .7]);
     }
     if (message.destroyed) destroyThiefDecoyImitation(message.decoyId, message.reason === "destroyed");
   });
@@ -18035,7 +18049,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     if (!mob) return;
     if (message.empowered) createHuntersMarkPayoff(mob, true);
     createRangedPopup(new pc.Vec3(mob.state.x, mob.state.y + mob.healthBarY + .75, mob.state.z),
-      message.empowered ? `MARK STRUCK · +${message.bonusDamage}` : "MARK BROKEN", "melee", message.defeated, [1, .22, .32]);
+      message.empowered ? `MARK STRUCK Â· +${message.bonusDamage}` : "MARK BROKEN", "melee", message.defeated, [1, .22, .32]);
   });
   room.onMessage("calling:state", (state: CallingStateUpdate) => updateCallingPersistentState(state));
   room.onMessage("equipment:affix-proc", (proc: EquipmentAffixProc) => equipmentAffixBurst(proc));
@@ -18061,7 +18075,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       const position = localPlayer.getPosition();
       if (worldReady && roll) equipmentAffixBurst({ affixId: roll.affixId, tier: roll.tier,
         label: `${EQUIPMENT_AFFIX_RESONANCE[resonance].name.toUpperCase()} RESONANCE`, x: position.x, y: position.y, z: position.z });
-      social.event(`${EQUIPMENT_AFFIX_RESONANCE[resonance].name.toUpperCase()} RESONANCE ACTIVE · matching ${BUILD_PATHS[resonance].name} equipment strengthened.`);
+      social.event(`${EQUIPMENT_AFFIX_RESONANCE[resonance].name.toUpperCase()} RESONANCE ACTIVE Â· matching ${BUILD_PATHS[resonance].name} equipment strengthened.`);
     }
   });
   room.onMessage("build:path-proc", (proc: BuildPathProc) => {
@@ -18160,16 +18174,16 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     if (update.reason === "level_up") {
       const milestone = CHARACTER_MILESTONES.find(entry => entry.level === update.level);
       const calling = callingUnlockAnnouncement(update.level, localBuildPathId);
-      const callingReminder = !localBuildPathId && update.level >= 2 ? " · choose a Calling in Town for abilities" : "";
+      const callingReminder = !localBuildPathId && update.level >= 2 ? " Â· choose a Calling in Town for abilities" : "";
       pendingLevelCelebrations.push({ level: update.level, experienceGranted: update.experienceGranted ?? 0 });
       status.textContent = calling
         ? `Level ${update.level}! ${calling.title}. ${calling.detail}`
         : milestone && milestone.id !== "first_power" && milestone.id !== "first_special"
         ? `Level ${update.level}! ${milestone.name} unlocked. Choose a permanent character improvement.`
         : `Level ${update.level}! Choose a permanent character improvement${callingReminder}.`;
-      social.event(`Reached level ${update.level} · ${calling?.title ?? "stat point ready"}.`);
+      social.event(`Reached level ${update.level} Â· ${calling?.title ?? "stat point ready"}.`);
     } else if (update.reason === "experience" && update.experienceGranted) {
-      status.textContent = `+${update.experienceGranted} XP · ${update.source ?? "adventuring"}`;
+      status.textContent = `+${update.experienceGranted} XP Â· ${update.source ?? "adventuring"}`;
     } else if (update.reason === "choice") {
       showCombatFeedback(`${String(update.source ?? "STAT").toUpperCase()} IMPROVED`, "dodge");
     }
@@ -18178,7 +18192,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     if (!isMainHandId(message.mainHandId)) return;
     updateMainHandLoadout(message.mainHandId);
     const mainHand = MAIN_HAND_DEFINITIONS[message.mainHandId];
-    status.textContent = `${mainHand.name} equipped · Attack: ${mainHand.attackName}.`;
+    status.textContent = `${mainHand.name} equipped Â· Attack: ${mainHand.attackName}.`;
   });
   room.onMessage("quiz:update", (update: TavernQuizUpdate) => renderTavernQuiz(update));
   room.onMessage("blacksmith:update", (update: BlacksmithUpdate) => {
@@ -18211,7 +18225,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     projectileWeapons.delete(message.projectileId);
     projectileRapidStyles.delete(message.projectileId);
     if (cue && localPlayer.getPosition().distance(point) <= 18)
-      createRangedPopup(point, cue === "enemy" ? style.glyph : "•", cue, false, cue === "enemy" ? style.color : undefined);
+      createRangedPopup(point, cue === "enemy" ? style.glyph : "â€¢", cue, false, cue === "enemy" ? style.color : undefined);
     if (index >= 0) {
       weaponProjectileVisuals[index]!.entity.destroy();
       weaponProjectileVisuals[index]!.material.destroy();
@@ -18235,7 +18249,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     const mob = mobVisuals.get(message.mobId);
     if (!mob) return;
     createRangedPopup(new pc.Vec3(mob.state.x, mob.state.y + mob.healthBarY + .55, mob.state.z),
-      message.phase === "impact" ? `VENTS EXPOSED · ${(message.durationMs / 1_000).toFixed(1)}s` : "VENT STRIKE · +2",
+      message.phase === "impact" ? `VENTS EXPOSED Â· ${(message.durationMs / 1_000).toFixed(1)}s` : "VENT STRIKE Â· +2",
       "melee", false, message.phase === "impact" ? [1, .48, .08] : [1, .82, .22]);
   });
   room.onMessage("combat:mob-hazard", (message: MobHazardPlaced) => {
@@ -18284,13 +18298,13 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
         message.defeatedMobIds.length > 0
           ? `${powerLabel} DEFEAT`
           : (message.traitBonusHitCount ?? 0) > 0
-            ? `EXECUTION! ×${message.traitBonusHitCount}`
+            ? `EXECUTION! Ã—${message.traitBonusHitCount}`
           : message.hitCount > 0
-            ? `${powerLabel} HIT ×${message.hitCount}`
+            ? `${powerLabel} HIT Ã—${message.hitCount}`
             : powerLabel,
       );
       status.textContent = message.hitCount > 0
-        ? `${definition.name} struck ${message.hitCount} target${message.hitCount === 1 ? "" : "s"} for ${message.damage} damage${message.rootbound ? ` · ROOTBOUND ${message.rootDurationMs}ms` : ""}${(message.aftershockHitCount ?? 0) > 0 ? ` · AFTERSHOCK ×${message.aftershockHitCount}` : ""}${(message.traitBonusHitCount ?? 0) > 0 ? ` · EXECUTIONER ×${message.traitBonusHitCount}` : ""}.`
+        ? `${definition.name} struck ${message.hitCount} target${message.hitCount === 1 ? "" : "s"} for ${message.damage} damage${message.rootbound ? ` Â· ROOTBOUND ${message.rootDurationMs}ms` : ""}${(message.aftershockHitCount ?? 0) > 0 ? ` Â· AFTERSHOCK Ã—${message.aftershockHitCount}` : ""}${(message.traitBonusHitCount ?? 0) > 0 ? ` Â· EXECUTIONER Ã—${message.traitBonusHitCount}` : ""}.`
         : definition.fracturesTerrain
           ? `${definition.name} fractured ${message.fractures.length} terrain block${message.fractures.length === 1 ? "" : "s"}.`
           : `${definition.name} released with no targets in range.`;
@@ -18308,7 +18322,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       localSpecialCooldownUntil = message.cooldownUntil;
       const name = mob?.state.name ?? "Enemy";
       showCombatFeedback("HUNTER'S MARK", "dodge");
-      status.textContent = `${name} marked ${message.stacks}/${message.maxStacks} · land two Attacks, then cash in with Power.`;
+      status.textContent = `${name} marked ${message.stacks}/${message.maxStacks} Â· land two Attacks, then cash in with Power.`;
     }
     logMovementEvent(`SPECIAL APPLIED ${message.mobId} ${message.stacks}/${message.maxStacks} +${message.bonusDamage}`);
   });
@@ -18317,7 +18331,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     if (message.casterId === room?.sessionId) {
       localSpecialCooldownUntil = message.cooldownUntil;
       showCombatFeedback("SNARE ARMED", "dodge");
-      status.textContent = `Bramble Snare armed for ${(BRAMBLE_SNARE.lifetimeMs / 1000).toFixed(0)}s · lure an enemy into the ring.`;
+      status.textContent = `Bramble Snare armed for ${(BRAMBLE_SNARE.lifetimeMs / 1000).toFixed(0)}s Â· lure an enemy into the ring.`;
     }
     logMovementEvent(`SNARE PLACED ${message.casterId} ${message.x.toFixed(1)},${message.z.toFixed(1)}`);
   });
@@ -18325,7 +18339,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     triggerBrambleSnareVisual(message);
     if (message.casterId === room?.sessionId) {
       const name = mobVisuals.get(message.mobId)?.state.name ?? "Enemy";
-      showCombatFeedback(`SNARED · ${(message.rootMs / 1000).toFixed(1)}S`, "dodge");
+      showCombatFeedback(`SNARED Â· ${(message.rootMs / 1000).toFixed(1)}S`, "dodge");
       status.textContent = `${name} rooted by Bramble Snare for ${(message.rootMs / 1000).toFixed(1)}s.`;
     }
     logMovementEvent(`SNARE TRIGGERED ${message.mobId} ${message.rootMs}ms`);
@@ -18339,10 +18353,10 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     });
     if (message.casterId === room?.sessionId) {
       const name = mob?.state.name ?? "Enemy";
-      showCombatFeedback(message.exposed ? "EXPOSED · USE POWER" : `HUNT ${message.stacks}/${message.maxStacks}`, "dodge");
+      showCombatFeedback(message.exposed ? "EXPOSED Â· USE POWER" : `HUNT ${message.stacks}/${message.maxStacks}`, "dodge");
       status.textContent = message.exposed
-        ? `${name} is Exposed · Power will consume the mark for bonus damage and heavy stagger.`
-        : `${name} Hunt stack ${message.stacks}/${message.maxStacks} · keep attacking.`;
+        ? `${name} is Exposed Â· Power will consume the mark for bonus damage and heavy stagger.`
+        : `${name} Hunt stack ${message.stacks}/${message.maxStacks} Â· keep attacking.`;
     }
     logMovementEvent(`SPECIAL STACK ${message.mobId} ${message.stacks}/${message.maxStacks}`);
   });
@@ -18353,13 +18367,13 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     if (mob) createHuntersMarkPayoff(mob, assassinMark);
     if (assassinMark) {
       if (mob) createRangedPopup(new pc.Vec3(mob.state.x, mob.state.y + mob.healthBarY + .75, mob.state.z),
-        `MARK STRUCK · +${message.bonusDamage}`, "melee", false, [1, .22, .32]);
+        `MARK STRUCK Â· +${message.bonusDamage}`, "melee", false, [1, .22, .32]);
       return;
     }
     if (message.casterId === room?.sessionId) {
       const name = mob?.state.name ?? "Enemy";
       showCombatFeedback(`MARK CASHED IN  +${message.bonusDamage}`, "dodge");
-      status.textContent = `${name} Exposed payoff · +${message.bonusDamage} Power damage and ${(message.staggerMs / 1000).toFixed(1)}s stagger.`;
+      status.textContent = `${name} Exposed payoff Â· +${message.bonusDamage} Power damage and ${(message.staggerMs / 1000).toFixed(1)}s stagger.`;
     }
     logMovementEvent(`SPECIAL CONSUMED ${message.mobId} +${message.bonusDamage}`);
   });
@@ -18372,8 +18386,8 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     cancelLocalPowerPresentation();
     showCombatFeedback(message.reason === "dodge" ? "DODGE CANCEL" : "POWER CANCELLED", "dodge");
     status.textContent = message.reason === "dodge"
-      ? `${powerName} cancelled into a dodge · cooldown refunded.`
-      : `${powerName} cancelled · cooldown refunded.`;
+      ? `${powerName} cancelled into a dodge Â· cooldown refunded.`
+      : `${powerName} cancelled Â· cooldown refunded.`;
     logMovementEvent(`POWER CANCEL ${message.reason}`);
   });
   room.onMessage("dodge:pressure", (message: DodgePressureUpdate) => {
@@ -18384,15 +18398,15 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     localDodgeRequestedAt = Number.NEGATIVE_INFINITY;
     localDodgeChain = 0;
     localDodgeExhaustedUntil = 0;
-    showCombatFeedback("PERFECT DODGE · COUNTER +1", "dodge");
-    status.textContent = `Perfect dodge · +${message.staminaRestored} stamina · your next hit gains +1 damage.`;
+    showCombatFeedback("PERFECT DODGE Â· COUNTER +1", "dodge");
+    status.textContent = `Perfect dodge Â· +${message.staminaRestored} stamina Â· your next hit gains +1 damage.`;
     if (firstStepsIndex === ONBOARDING_STAGE.firstCombat && message.mobId) {
       const nextPhase = advanceFirstCombatPhase(firstCombatPhase, "perfect_dodge", message.mobId);
       if (nextPhase !== firstCombatPhase) {
         firstCombatPhase = nextPhase;
         renderFirstSteps();
-        status.textContent = "Perfect dodge · the Southroad Crawler is exposed. Press J to finish it.";
-        social.event("Perfect dodge complete · finish the Southroad Crawler with J.");
+        status.textContent = "Perfect dodge Â· the Southroad Crawler is exposed. Press J to finish it.";
+        social.event("Perfect dodge complete Â· finish the Southroad Crawler with J.");
       }
     }
     logMovementEvent(`PERFECT_DODGE counterUntil=${message.counterUntil}`);
@@ -18404,14 +18418,14 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       if (nextPhase !== firstCombatPhase) {
         firstCombatPhase = nextPhase;
         renderFirstSteps();
-        status.textContent = "Good strike · watch the crawler's marked charge, then dodge with Space.";
+        status.textContent = "Good strike Â· watch the crawler's marked charge, then dodge with Space.";
       }
     }
     if (firstStepsIndex === ONBOARDING_STAGE.firstCombat && message.defeated && FIRST_COMBAT_GROUP_IDS.some(id => id === message.mobId))
       defeatedFirstCombatMobs.add(message.mobId);
     if (firstStepsIndex === ONBOARDING_STAGE.firstCombat && completesFirstCombatLesson(defeatedFirstCombatMobs, firstCombatPhase)) {
       noteFirstStep("defeated_first_enemy");
-      social.event("Southroad pack cleared · collect your Calling-matched upgrade, then return to Town to awaken your Power.");
+      social.event("Southroad pack cleared Â· collect your Calling-matched upgrade, then return to Town to awaken your Power.");
     }
     const mob = mobVisuals.get(message.mobId);
     const rangedHit = confirmedRangedHit(message.mainHandId, message.damage, message.attackerId === room?.sessionId);
@@ -18420,7 +18434,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       combatAudio.play(rangedStyle(message.mainHandId).hitSound);
       if (mob) {
         const position = mob.entity.getPosition().clone(); position.y += mob.healthBarY + .35;
-        createRangedPopup(position, `−${message.damage}`, "damage", message.defeated);
+        createRangedPopup(position, `âˆ’${message.damage}`, "damage", message.defeated);
       }
     }
     if ((message.mainHandId === "stone_core_hammer" || message.mainHandId === "rootbound_hammer") && message.damage > 0 && mob
@@ -18430,21 +18444,21 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     if (message.secondary) {
       if (message.attackerId === room?.sessionId && !rangedHit && mob) {
         const position = mob.entity.getPosition().clone(); position.y += mob.healthBarY + .35;
-        createRangedPopup(position, `−${message.damage}`, "damage", message.defeated);
+        createRangedPopup(position, `âˆ’${message.damage}`, "damage", message.defeated);
       }
       const perkName = message.perk === "core_quake" ? "CORE QUAKE" : message.perk === "moon_arc" ? "MOON ARC"
         : message.perk === "echo_chain" ? "ECHO CHAIN" : message.perk === "venom_set" ? "VENOM POOL"
           : message.perk === "crusher_set" ? "WORLDSPLITTER" : "ROOTFALL";
       if (message.attackerId === room?.sessionId && message.perk !== "venom_set" && message.perk !== "crusher_set")
-        showCombatFeedback(`${perkName}  −${message.damage}`, "dodge");
+        showCombatFeedback(`${perkName}  âˆ’${message.damage}`, "dodge");
       logMovementEvent(`${perkName} ${message.mobId} hp=${message.health} defeated=${message.defeated}`);
       return;
     }
     const name = mob?.state.name ?? "Mob";
     const respawnSeconds = mob?.state.archetype === "stone_brute" ? 8.5 : 5;
     status.textContent = message.defeated
-      ? `${name} defeated · respawning in ${respawnSeconds} seconds.`
-      : `${name} hit for ${message.damage} · ${message.health} HP remaining.`;
+      ? `${name} defeated Â· respawning in ${respawnSeconds} seconds.`
+      : `${name} hit for ${message.damage} Â· ${message.health} HP remaining.`;
     logMovementEvent(`HIT ${message.mobId} hp=${message.health} defeated=${message.defeated}`);
     if (message.attackerId === room?.sessionId) {
       updateMomentum(message.momentumStacks);
@@ -18452,7 +18466,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       const comboStep = message.comboStep >= 1 && message.comboStep <= 3 ? message.comboStep : localActionStep || 1;
       if (!rangedHit && mob && message.damage > 0) {
         const position = mob.entity.getPosition().clone(); position.y += mob.healthBarY + .35;
-        createRangedPopup(position, `−${message.damage}`, "melee", message.defeated);
+        createRangedPopup(position, `âˆ’${message.damage}`, "melee", message.defeated);
       }
       if (!rangedHit) localHitPauseUntil = performance.now() + ((message.mainHandId === "stone_core_hammer" || message.mainHandId === "rootbound_hammer") ? 80 : comboStep === 3 ? 75 : 48);
       if (cameraViewMode === "first-person" && mob && message.damage > 0) {
@@ -18468,39 +18482,39 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
         createFirstPersonHitBurst(mob, weaponKind, message.defeated);
       }
       const hitLabel = WEAPON_ATTACK_DEFINITIONS[message.mainHandId].combo && comboStep === 3
-        ? `FINISHER  −${message.damage}`
-        : `${MAIN_HAND_DEFINITIONS[message.mainHandId].attackName.toUpperCase()}  −${message.damage}`;
+        ? `FINISHER  âˆ’${message.damage}`
+        : `${MAIN_HAND_DEFINITIONS[message.mainHandId].attackName.toUpperCase()}  âˆ’${message.damage}`;
       showCombatFeedback(
         message.defeated
           ? "DEFEATED"
           : message.perk === "venom_bloom"
-            ? `VENOM BLOOM!  −${message.damage}`
+            ? `VENOM BLOOM!  âˆ’${message.damage}`
           : message.perk === "alpha_finish"
-            ? `ALPHA FINISH!  −${message.damage}`
+            ? `ALPHA FINISH!  âˆ’${message.damage}`
           : message.perk === "venom_surge"
-            ? `VENOM SURGE!  −${message.damage}`
+            ? `VENOM SURGE!  âˆ’${message.damage}`
           : message.perk === "crusher_break"
-            ? `CRUSHER BREAK!  −${message.damage}`
+            ? `CRUSHER BREAK!  âˆ’${message.damage}`
           : message.perk === "cinder_ignite"
-            ? `CINDER IGNITE!  −${message.damage}`
+            ? `CINDER IGNITE!  âˆ’${message.damage}`
           : message.perk === "emberheart_field"
-            ? `EMBERHEART!  −${message.damage}`
+            ? `EMBERHEART!  âˆ’${message.damage}`
           : (message.traitBonusDamage ?? 0) > 0
-            ? `EXECUTION!  −${message.damage}`
+            ? `EXECUTION!  âˆ’${message.damage}`
           : hitLabel,
       );
-      if (localTraitId === "momentum") status.textContent += ` · Momentum ${message.momentumStacks}/${MOMENTUM_TRAIT.maxStacks}.`;
-      else if ((message.traitBonusDamage ?? 0) > 0) status.textContent += ` · Executioner +${message.traitBonusDamage} damage.`;
-      if (message.mainHandId === "venom_focus" && message.perk !== "venom_bloom") status.textContent += ` · Venom ${message.perkStacks ?? 0}/3.`;
-      else if (message.perk === "venom_bloom") status.textContent += " · Venom Bloom detonated.";
-      else if (message.perk === "alpha_finish") status.textContent += " · Alpha Fang awakened finisher +1 damage.";
-      else if (message.perk === "venom_surge") status.textContent += " · Venom Surge awakened bolt +1 damage.";
-      else if (message.perk === "crusher_break") status.textContent += " · Crusher Break exploited stagger +1 damage.";
-      else if (message.perk === "cinder_ignite") status.textContent += " · Cinderfang ignited the staggered target.";
-      else if (message.perk === "emberheart_field") status.textContent += " · Emberheart field empowered this strike +1 damage.";
-      if (message.setBonus === "fang") status.textContent += ` · Fangstalker finisher${(message.setBonusDamage ?? 0) > 0 ? " executed a weakened enemy" : ""} · +${message.staminaRestored ?? 0} stamina.`;
-      else if (message.setBonus === "venom") status.textContent += ` · Venomweave poison pool armed${(message.cooldownReducedMs ?? 0) > 0 ? ` · Special −${((message.cooldownReducedMs ?? 0) / 1000).toFixed(1)}s` : ""}.`;
-      else if (message.setBonus === "crusher") status.textContent += " · Worldsplitter shockwave · +1 armour for 3s.";
+      if (localTraitId === "momentum") status.textContent += ` Â· Momentum ${message.momentumStacks}/${MOMENTUM_TRAIT.maxStacks}.`;
+      else if ((message.traitBonusDamage ?? 0) > 0) status.textContent += ` Â· Executioner +${message.traitBonusDamage} damage.`;
+      if (message.mainHandId === "venom_focus" && message.perk !== "venom_bloom") status.textContent += ` Â· Venom ${message.perkStacks ?? 0}/3.`;
+      else if (message.perk === "venom_bloom") status.textContent += " Â· Venom Bloom detonated.";
+      else if (message.perk === "alpha_finish") status.textContent += " Â· Alpha Fang awakened finisher +1 damage.";
+      else if (message.perk === "venom_surge") status.textContent += " Â· Venom Surge awakened bolt +1 damage.";
+      else if (message.perk === "crusher_break") status.textContent += " Â· Crusher Break exploited stagger +1 damage.";
+      else if (message.perk === "cinder_ignite") status.textContent += " Â· Cinderfang ignited the staggered target.";
+      else if (message.perk === "emberheart_field") status.textContent += " Â· Emberheart field empowered this strike +1 damage.";
+      if (message.setBonus === "fang") status.textContent += ` Â· Fangstalker finisher${(message.setBonusDamage ?? 0) > 0 ? " executed a weakened enemy" : ""} Â· +${message.staminaRestored ?? 0} stamina.`;
+      else if (message.setBonus === "venom") status.textContent += ` Â· Venomweave poison pool armed${(message.cooldownReducedMs ?? 0) > 0 ? ` Â· Special âˆ’${((message.cooldownReducedMs ?? 0) / 1000).toFixed(1)}s` : ""}.`;
+      else if (message.setBonus === "crusher") status.textContent += " Â· Worldsplitter shockwave Â· +1 armour for 3s.";
     }
   });
   room.onMessage("combat:miss", (message: CombatMiss) => {
@@ -18514,7 +18528,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     const attackName = WEAPON_ATTACK_DEFINITIONS[message.mainHandId].combo
       ? `${MAIN_HAND_DEFINITIONS[message.mainHandId].attackName} ${message.comboStep}`
       : MAIN_HAND_DEFINITIONS[message.mainHandId].attackName;
-    status.textContent = `${attackName} missed · recovery leaves you open.`;
+    status.textContent = `${attackName} missed Â· recovery leaves you open.`;
     logMovementEvent(`MISS ${message.mainHandId} step=${message.comboStep}`);
   });
   room.onMessage("combat:stagger", (message: CombatStagger) => {
@@ -18525,7 +18539,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       createRangedPopup(position, "STAGGER", "stagger");
     }
     showCombatFeedback("STAGGER!", "stagger");
-    status.textContent = `Heavy interrupt · enemy staggered for ${(message.durationMs / 1000).toFixed(1)}s.`;
+    status.textContent = `Heavy interrupt Â· enemy staggered for ${(message.durationMs / 1000).toFixed(1)}s.`;
     logMovementEvent(`STAGGER ${message.mobId} ${message.durationMs}ms`);
   });
   room.onMessage("player:returned", (spawn: { x: number; y: number; z: number }) => {
@@ -18543,7 +18557,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     worldReady = false;
     room?.send("world:ready");
     status.textContent = fastWorldRequested
-      ? "Fast World run restarted · upgrades retained." : "Back in the Town of Beginnings · follow your recovery marker to reclaim dropped items.";
+      ? "Fast World run restarted Â· upgrades retained." : "Back in the Town of Beginnings Â· follow your recovery marker to reclaim dropped items.";
     social.event(fastWorldRequested ? "Fast World run restarted." : "Returned to the Town of Beginnings.");
   });
   room.onMessage("player:rescue-window", (message: { until: number }) => showRescueOption(message.until));
@@ -18574,21 +18588,21 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
         const position = localPlayer.getPosition().clone();
         position.y += 1.55;
         createRangedPopup(position, "SHARD DEFLECT", "stagger", false, [.62, .9, 1]);
-        status.textContent = `Shard ward deflected the shot · recharging for ${((message.wardCooldownMs ?? 8_000) / 1_000).toFixed(0)} seconds.`;
+        status.textContent = `Shard ward deflected the shot Â· recharging for ${((message.wardCooldownMs ?? 8_000) / 1_000).toFixed(0)} seconds.`;
         logMovementEvent(`SHARD WARD ${message.mobId}`);
         return;
       }
       showCombatFeedback("BASTION WARD", "block");
-      status.textContent = "Bastion Ward absorbed the heavy hit · the ward is recharging.";
+      status.textContent = "Bastion Ward absorbed the heavy hit Â· the ward is recharging.";
       logMovementEvent(`BASTION WARD ${message.mobId}`);
       return;
     }
     if (message.guarded) return;
     const attackerName = mobVisuals.get(message.mobId)?.state.name ?? "Enemy";
-    showCombatFeedback(message.defeated ? "DEFEATED" : `HURT  −${message.damage}`, "hurt");
+    showCombatFeedback(message.defeated ? "DEFEATED" : `HURT  âˆ’${message.damage}`, "hurt");
     status.textContent = message.defeated
       ? "You were defeated. Return to the Town of Beginnings when ready."
-      : `${attackerName} hit you for ${message.damage} · ${message.health} HP remaining.`;
+      : `${attackerName} hit you for ${message.damage} Â· ${message.health} HP remaining.`;
     logMovementEvent(`HURT hp=${message.health} defeated=${message.defeated}`);
   });
   room.onMessage("potion:update", (message: PotionUpdate) => {
@@ -18605,13 +18619,13 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     if (message.playerId !== room?.sessionId) return;
     updateMomentum(message.momentumStacks);
     const attackerName = mobVisuals.get(message.mobId)?.state.name ?? "Enemy";
-    showCombatFeedback(message.parried ? "PARRY!" : message.damage > 0 ? `GUARD  −${message.damage}` : "BLOCK", "block");
+    showCombatFeedback(message.parried ? "PARRY!" : message.damage > 0 ? `GUARD  âˆ’${message.damage}` : "BLOCK", "block");
     if ((message.perkStaminaRestored ?? 0) > 0) showCombatFeedback(`LIVING GUARD  +${message.perkStaminaRestored} ST`, "block");
     status.textContent = message.parried
       ? localTraitId === "bulwark"
-        ? `${attackerName} parried and staggered · Bulwark restored stamina · counter now.`
-        : `${attackerName} parried and staggered · counter now.`
-      : `${attackerName} guarded · ${message.damage} damage taken · ${message.stamina} stamina remaining.${(message.perkStaminaRestored ?? 0) > 0 ? ` Living Guard restored ${message.perkStaminaRestored}.` : ""}`;
+        ? `${attackerName} parried and staggered Â· Bulwark restored stamina Â· counter now.`
+        : `${attackerName} parried and staggered Â· counter now.`
+      : `${attackerName} guarded Â· ${message.damage} damage taken Â· ${message.stamina} stamina remaining.${(message.perkStaminaRestored ?? 0) > 0 ? ` Living Guard restored ${message.perkStaminaRestored}.` : ""}`;
     logMovementEvent(`${message.parried ? "PARRY" : "GUARD"} ${message.mobId} damage=${message.damage} stamina=${message.stamina}`);
   });
   room.onMessage("combat:reward", (message: CombatReward) => {
@@ -18621,9 +18635,9 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       message.coinsGranted > 0 ? `+${message.coinsGranted} coins` : "",
       message.healthRestored > 0 ? `+${message.healthRestored} HP` : "",
       message.staminaRestored > 0 ? `+${message.staminaRestored} stamina` : "",
-    ].filter(Boolean).join(" · ");
+    ].filter(Boolean).join(" Â· ");
     showCombatFeedback(rewards || "VICTORY", "dodge");
-    status.textContent = `${defeatedName} reward${rewards ? ` · ${rewards}` : " claimed"}.`;
+    status.textContent = `${defeatedName} reward${rewards ? ` Â· ${rewards}` : " claimed"}.`;
     logMovementEvent(`REWARD ${message.mobId} hp=${message.healthRestored} stamina=${message.staminaRestored}`);
   });
   room.onMessage("roadside:progress", (message: { id: string; phase: string; progress: number; holders: number; variant?: string }) => {
@@ -18705,7 +18719,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
         updateInventoryItem(message.swappedItemId, message.swappedItemTotal);
       if (message.action === "dismantle" && message.itemId && isItemId(message.itemId)) {
         const toast = document.createElement("div"); toast.className = "resource-toast equipment-pickup"; toast.dataset.rarity = itemRarity(message.itemId);
-        toast.innerHTML = `<small>DISMANTLED · ${ITEM_RARITIES[itemRarity(message.itemId)].label.toUpperCase()}</small><strong>${ITEM_DEFINITIONS[message.itemId].name}</strong><span>+${message.goldGranted ?? 0} gold${message.materialGranted ? ` · +${message.materialQuantity ?? 0} ${ITEM_DEFINITIONS[message.materialGranted].name}` : ""}</span>`;
+        toast.innerHTML = `<small>DISMANTLED Â· ${ITEM_RARITIES[itemRarity(message.itemId)].label.toUpperCase()}</small><strong>${ITEM_DEFINITIONS[message.itemId].name}</strong><span>+${message.goldGranted ?? 0} gold${message.materialGranted ? ` Â· +${message.materialQuantity ?? 0} ${ITEM_DEFINITIONS[message.materialGranted].name}` : ""}</span>`;
         queueLootToast(toast, LOOT_FEED_EQUIPMENT_MS);
         social.event(message.message);
       }
@@ -18726,8 +18740,8 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     const item = ITEM_DEFINITIONS[message.itemId];
     if (isEquipmentItem(message.itemId)) showEquipmentPickup(message.itemId, message.quantity, message.total);
     else showResourcePickup(item.name, message.quantity, message.itemId);
-    status.textContent = `Picked up ${item.name} · ${message.total} total.`;
-    social.event(`Picked up ${item.name} ×${message.quantity}.`);
+    status.textContent = `Picked up ${item.name} Â· ${message.total} total.`;
+    social.event(`Picked up ${item.name} Ã—${message.quantity}.`);
     logMovementEvent(`LOOT ${message.itemId} +${message.quantity} total=${message.total}`);
     if (completedTrackedHunt) {
       const completedItem = message.itemId;
@@ -18735,8 +18749,8 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       const completedPlan = codexHuntPlan(completedItem);
       if (completedPlan) minimap.clearGuide(completedPlan.target.id);
       window.setTimeout(() => showLootNotice(next
-        ? `Hunt complete · next build piece: ${ITEM_DEFINITIONS[next].name}`
-        : `Hunt complete · compare or equip ${ITEM_DEFINITIONS[completedItem].name} in your pack`), 650);
+        ? `Hunt complete Â· next build piece: ${ITEM_DEFINITIONS[next].name}`
+        : `Hunt complete Â· compare or equip ${ITEM_DEFINITIONS[completedItem].name} in your pack`), 650);
     }
   });
   room.onMessage("resource:gathered", (message: ResourceGathered) => {
@@ -18745,23 +18759,23 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     miningCracks.enabled = false;
     if (message.quantity > 0) showResourcePickup(message.itemId === "iron_ore" ? "Iron" : message.itemId === "silver_ore" ? "Silver" : ITEM_DEFINITIONS[message.itemId].name, message.quantity, message.itemId);
     updateInventoryItem(message.itemId, message.total);
-    if (message.quantity > 0) social.event(`Gathered ${ITEM_DEFINITIONS[message.itemId].name} ×${message.quantity}.`);
+    if (message.quantity > 0) social.event(`Gathered ${ITEM_DEFINITIONS[message.itemId].name} Ã—${message.quantity}.`);
     if (message.itemId === "timber") {
       showCombatFeedback(`+${message.quantity} GREENWOOD TIMBER`, "dodge");
-      status.textContent = `Chopped Greenwood oak · ${message.total} timber carried.`;
+      status.textContent = `Chopped Greenwood oak Â· ${message.total} timber carried.`;
       return;
     }
     if (message.itemId === "moonstone" && message.quantity > 0) {
-      showCombatFeedback(`+${message.quantity} MOONSTONE · OBJECTIVE SECURED`, "dodge");
-      status.textContent = `Moonstone secured · ${message.total} carried. Clear the gallery and continue to the Crystal Matriarch.`;
+      showCombatFeedback(`+${message.quantity} MOONSTONE Â· OBJECTIVE SECURED`, "dodge");
+      status.textContent = `Moonstone secured Â· ${message.total} carried. Clear the gallery and continue to the Crystal Matriarch.`;
       return;
     }
     if (message.quantity > 0) {
       const reinforced = (inventoryCounts.get("reinforced_pickaxe") ?? 0) > 0;
       const name = ITEM_DEFINITIONS[message.itemId].name;
       const price = message.itemId === "silver_ore" ? SILVER_ORE_GOLD_PRICE : IRON_ORE_GOLD_PRICE;
-      showCombatFeedback(`+${message.quantity} ${name.toUpperCase()} · ${message.quantity * price} GOLD VALUE`, "dodge");
-      status.textContent = `${reinforced ? "Reinforced Pickaxe · " : ""}${name}: ${message.total}/${blacksmithIronCapacity} carried · worth ${message.total * price} gold at the town blacksmith.`;
+      showCombatFeedback(`+${message.quantity} ${name.toUpperCase()} Â· ${message.quantity * price} GOLD VALUE`, "dodge");
+      status.textContent = `${reinforced ? "Reinforced Pickaxe Â· " : ""}${name}: ${message.total}/${blacksmithIronCapacity} carried Â· worth ${message.total * price} gold at the town blacksmith.`;
     } else {
       showCombatFeedback(`${ITEM_DEFINITIONS[message.itemId].name.toUpperCase()} PACK FULL`, "hurt");
       status.textContent = `Your ${ITEM_DEFINITIONS[message.itemId].name} capacity is full. Sell minerals at the blacksmith. The block was not removed.`;
@@ -19051,10 +19065,10 @@ function showCharacterCreator(): void {
   form.addEventListener("submit", async event => {
     event.preventDefault();
     const name = PlayerNameSchema.safeParse(nameInput.value);
-    if (!name.success) { errorLabel.textContent = "Use 2–20 letters, numbers, spaces, hyphens or underscores."; nameInput.focus(); return; }
+    if (!name.success) { errorLabel.textContent = "Use 2â€“20 letters, numbers, spaces, hyphens or underscores."; nameInput.focus(); return; }
     errorLabel.textContent = "";
     enterButton.disabled = true;
-    enterButton.textContent = "ENTERING THE WORLD…";
+    enterButton.textContent = "ENTERING THE WORLDâ€¦";
     try {
       await connect({ name: name.data, appearance });
       try { finishCharacterCreation(window.localStorage); } catch { /* Private browsing may prevent storage. */ }
@@ -19074,7 +19088,7 @@ function showCharacterCreator(): void {
     } catch (error) {
       errorLabel.textContent = `Could not enter the world: ${error instanceof Error ? error.message : String(error)}`;
       enterButton.disabled = false;
-      enterButton.textContent = "TRY AGAIN →";
+      enterButton.textContent = "TRY AGAIN â†’";
     }
   });
 }
