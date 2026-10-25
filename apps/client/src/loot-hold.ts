@@ -1,4 +1,4 @@
-export const LOOT_HOLD_MS = 500;
+export const LOOT_HOLD_MS = 750;
 
 export interface LootHold { dropId: string; startedAt: number; source: "keyboard" | "touch" }
 

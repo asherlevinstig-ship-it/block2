@@ -76,6 +76,10 @@ export function starterInventoryLesson(
   mainHandId = "unarmed",
 ): StarterInventoryLesson {
   if (mainHandId === "forged_sword") return "hidden";
+  // The starter bag must be collected before any inventory instruction appears.
+  // A saved requirement can survive a reload, but it must never overtake the
+  // current collect-gear step.
+  if (step === ONBOARDING_STAGE.collectGear) return "hidden";
   if (step !== ONBOARDING_STAGE.equipSword && !equipmentRequired) return "hidden";
   return packOpenedWithKeyboard ? "equip_sword" : "open_pack";
 }

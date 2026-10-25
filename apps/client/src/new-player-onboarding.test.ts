@@ -20,6 +20,7 @@ describe("first-play onboarding", () => {
     expect(starterInventoryLesson(ONBOARDING_STAGE.equipSword, true)).toBe("equip_sword");
     expect(starterInventoryLesson(ONBOARDING_STAGE.headSouth, true)).toBe("hidden");
     expect(starterInventoryLesson(ONBOARDING_DONE, false, true)).toBe("open_pack");
+    expect(starterInventoryLesson(ONBOARDING_STAGE.collectGear, false, true)).toBe("hidden");
     expect(starterInventoryLesson(ONBOARDING_DONE, true, true)).toBe("equip_sword");
     expect(starterInventoryLesson(ONBOARDING_STAGE.equipSword, true, true, "forged_sword")).toBe("hidden");
     expect(starterInventoryLesson(ONBOARDING_DONE, false, true, "forged_sword")).toBe("hidden");
