@@ -145,7 +145,6 @@ import {
 } from "./mistfen-visuals.js";
 import {
   SUNKEN_COAST_DRIFTWOOD,
-  SUNKEN_COAST_DUNES,
   SUNKEN_COAST_GRASS,
   SUNKEN_COAST_HERO_WRECK,
   SUNKEN_COAST_ROCKS,
@@ -156,6 +155,8 @@ import {
   SUNKEN_COAST_TIDE_POOLS,
   SUNKEN_COAST_WRECKAGE,
 } from "./sunken-coast-visuals.js";
+import { createCoastShallowMesh, createCoastWaterAnimator, createCoastWaterNormalMap,
+  createCoastWetShoreMesh } from "./sunken-coast-water.js";
 import { SPEED_LAB_TOWN_ACTORS, SPEED_LAB_TOWN_LIGHTS, SPEED_LAB_TOWN_SIGNS, townLifeActorPose, townLifeAnimation,
   type TownLifeActorDefinition } from "./town-life.js";
 import { townNpcFaceStyle, type TownNpcMouthExpression } from "./town-npc-appearance.js";
@@ -2383,6 +2384,7 @@ let requestRapidTownAssets = (): void => {};
 let requestRapidTownNpcAssets = (): void => {};
 let requestGreenwoodAssets = (): void => {};
 let updateRapidRegionVisualStream = (_x: number, _z: number): void => {};
+let animateCoastWater = (_dt: number, _active: boolean): void => {};
 let rapidWorldActiveVisualChunks = 0;
 let rapidWorldTotalVisualChunks = 0;
 const ashenVentVisuals: { entity: pc.Entity; material: pc.StandardMaterial; offsetMs: number; radius: number }[] = [];
@@ -2475,6 +2477,9 @@ if (fastWorldRequested) {
   coastWater.gloss = .72;
   coastWater.specular = new pc.Color(.34, .52, .5);
   coastWater.emissive = new pc.Color(.015, .07, .075);
+  coastWater.normalMap = createCoastWaterNormalMap(app);
+  coastWater.normalMapTiling = new pc.Vec2(3, 2);
+  coastWater.bumpiness = .36;
   coastWater.update();
   const coastDeepWater = coastWater.clone();
   coastDeepWater.name = "sunken-coast-deep-water";
@@ -2483,6 +2488,7 @@ if (fastWorldRequested) {
   coastDeepWater.opacity = .88;
   coastDeepWater.gloss = .84;
   coastDeepWater.update();
+  animateCoastWater = createCoastWaterAnimator([coastWater, coastDeepWater]);
   const coastWetSand = coastGround.clone();
   coastWetSand.name = "sunken-coast-wet-sand";
   coastWetSand.diffuse = new pc.Color(.58, .64, .56);
@@ -3527,21 +3533,16 @@ if (fastWorldRequested) {
     rapidRegionChunkRoot("mistfen", x, z).addChild(light);
   }
 
-  for (const dune of SUNKEN_COAST_DUNES) {
-    const duneCap = addRapidRegionShape("sunken-coast", `coast-dune:${dune.x}`, "cylinder", coastGround,
-      [dune.width, .16, dune.depth], [dune.x, 8.1, dune.z]);
-    duneCap.setLocalEulerAngles(0, dune.yaw, 0);
-    const leeSide = addRapidRegionShape("sunken-coast", "coast-dune-wet-edge", "cylinder", coastWetSand,
-      [dune.width * .72, .035, dune.depth * .72], [dune.x + .45, 8.075, dune.z + .4]);
-    leeSide.setLocalEulerAngles(0, dune.yaw + 8, 0);
-  }
+  // The shared heightfield already supplies these dune crests. Flat cylinder
+  // caps made them look like platforms and cut through the sloping ground.
   for (const sheet of SUNKEN_COAST_SHALLOW_SHEETS) {
-    const shallows = addRapidRegionShape("sunken-coast", "coast-shallow-sheet", "cylinder", coastWater,
-      [sheet.width, .026, sheet.depth], [sheet.x, 8.055, sheet.z]);
-    shallows.setLocalEulerAngles(0, sheet.yaw, 0);
-    const shoreline = addRapidRegionShape("sunken-coast", "coast-shallow-foam", "cylinder", coastFoam,
-      [sheet.width + .35, .012, sheet.depth + .35], [sheet.x, 8.046, sheet.z]);
-    shoreline.setLocalEulerAngles(0, sheet.yaw, 0);
+    const parent = rapidRegionChunkRoot("sunken-coast", sheet.x, sheet.z);
+    parent.addChild(createCoastShallowMesh(app.graphicsDevice, coastWater,
+      sheet.x, sheet.z, sheet.width, sheet.depth, sheet.yaw));
+    parent.addChild(createCoastShallowMesh(app.graphicsDevice, coastFoam,
+      sheet.x, sheet.z, sheet.width, sheet.depth, sheet.yaw, true));
+    if (sheet.width > sheet.depth) parent.addChild(createCoastWetShoreMesh(app.graphicsDevice,
+      coastWetSand, sheet.x, sheet.z, sheet.width, sheet.depth));
   }
   for (const pool of SUNKEN_COAST_TIDE_POOLS) {
     const water = addRapidRegionShape("sunken-coast", "coast-tide-pool", "cylinder", coastDeepWater,
@@ -16536,6 +16537,8 @@ app.on("update", (dt: number) => {
   if (fastWorldRequested) {
     const townTime = customUpdateStartedAt * .001;
     const playerPosition = localPlayer.getPosition();
+    animateCoastWater(dt, playerPosition.z > 140 && playerPosition.z < 200
+      && playerPosition.x > 30 && playerPosition.x < 112);
     updateRapidRegionVisualStream(playerPosition.x, playerPosition.z);
     const region = rapidWorldRegionAt(playerPosition.x, playerPosition.z);
     if (region.id !== rapidWorldRegionId) {
