@@ -144,9 +144,14 @@ import {
   MISTFEN_TOXIC_POOLS,
 } from "./mistfen-visuals.js";
 import {
+  SUNKEN_COAST_DRIFTWOOD,
+  SUNKEN_COAST_DUNES,
   SUNKEN_COAST_GRASS,
+  SUNKEN_COAST_HERO_WRECK,
   SUNKEN_COAST_ROCKS,
   SUNKEN_COAST_SANDBARS,
+  SUNKEN_COAST_SHALLOW_SHEETS,
+  SUNKEN_COAST_SHELL_BEDS,
   SUNKEN_COAST_TEXTURE_STYLES,
   SUNKEN_COAST_TIDE_POOLS,
   SUNKEN_COAST_WRECKAGE,
@@ -2464,8 +2469,41 @@ if (fastWorldRequested) {
   mistfenFog.update();
   const coastGround = createPaintedGroundMaterial(app, SUNKEN_COAST_TEXTURE_STYLES.sand, [12, 8]);
   const coastWater = createPaintedGroundMaterial(app, SUNKEN_COAST_TEXTURE_STYLES.shallows, [3, 2]);
+  coastWater.opacity = .74;
+  coastWater.blendType = pc.BLEND_NORMAL;
+  coastWater.depthWrite = false;
+  coastWater.gloss = .72;
+  coastWater.specular = new pc.Color(.34, .52, .5);
+  coastWater.emissive = new pc.Color(.015, .07, .075);
+  coastWater.update();
+  const coastDeepWater = coastWater.clone();
+  coastDeepWater.name = "sunken-coast-deep-water";
+  coastDeepWater.diffuse = new pc.Color(.46, .67, .7);
+  coastDeepWater.emissive = new pc.Color(.01, .045, .065);
+  coastDeepWater.opacity = .88;
+  coastDeepWater.gloss = .84;
+  coastDeepWater.update();
+  const coastWetSand = coastGround.clone();
+  coastWetSand.name = "sunken-coast-wet-sand";
+  coastWetSand.diffuse = new pc.Color(.58, .64, .56);
+  coastWetSand.gloss = .26;
+  coastWetSand.update();
   const coastGrass = coloredMaterial(new pc.Color(.27, .43, .29));
   const coastFoam = coloredMaterial(new pc.Color(.62, .79, .7));
+  coastFoam.opacity = .58;
+  coastFoam.blendType = pc.BLEND_ADDITIVE;
+  coastFoam.depthWrite = false;
+  coastFoam.update();
+  const coastShell = coloredMaterial(new pc.Color(.82, .7, .5));
+  const coastSail = coloredMaterial(new pc.Color(.42, .16, .11));
+  const coastSailFaded = coloredMaterial(new pc.Color(.66, .48, .3));
+  const coastMist = new pc.StandardMaterial();
+  coastMist.diffuse = new pc.Color(.62, .78, .76);
+  coastMist.emissive = new pc.Color(.035, .07, .07);
+  coastMist.opacity = .1;
+  coastMist.blendType = pc.BLEND_NORMAL;
+  coastMist.depthWrite = false;
+  coastMist.update();
   const quarryGround = createPaintedGroundMaterial(app, { name: "quarry-fractured-stone", base: "#796451",
     mottles: ["#675342", "#8d7860", "#a18b70"], litter: ["#c4ac89", "#50473d", "#907c64"], seed: 90031, pattern: "stone" }, [12, 12]);
   const quarryRock = coloredMaterial(new pc.Color(.38, .34, .31));
@@ -3489,8 +3527,24 @@ if (fastWorldRequested) {
     rapidRegionChunkRoot("mistfen", x, z).addChild(light);
   }
 
+  for (const dune of SUNKEN_COAST_DUNES) {
+    const duneCap = addRapidRegionShape("sunken-coast", `coast-dune:${dune.x}`, "cylinder", coastGround,
+      [dune.width, .16, dune.depth], [dune.x, 8.1, dune.z]);
+    duneCap.setLocalEulerAngles(0, dune.yaw, 0);
+    const leeSide = addRapidRegionShape("sunken-coast", "coast-dune-wet-edge", "cylinder", coastWetSand,
+      [dune.width * .72, .035, dune.depth * .72], [dune.x + .45, 8.075, dune.z + .4]);
+    leeSide.setLocalEulerAngles(0, dune.yaw + 8, 0);
+  }
+  for (const sheet of SUNKEN_COAST_SHALLOW_SHEETS) {
+    const shallows = addRapidRegionShape("sunken-coast", "coast-shallow-sheet", "cylinder", coastWater,
+      [sheet.width, .026, sheet.depth], [sheet.x, 8.055, sheet.z]);
+    shallows.setLocalEulerAngles(0, sheet.yaw, 0);
+    const shoreline = addRapidRegionShape("sunken-coast", "coast-shallow-foam", "cylinder", coastFoam,
+      [sheet.width + .35, .012, sheet.depth + .35], [sheet.x, 8.046, sheet.z]);
+    shoreline.setLocalEulerAngles(0, sheet.yaw, 0);
+  }
   for (const pool of SUNKEN_COAST_TIDE_POOLS) {
-    const water = addRapidRegionShape("sunken-coast", "coast-tide-pool", "cylinder", coastWater,
+    const water = addRapidRegionShape("sunken-coast", "coast-tide-pool", "cylinder", coastDeepWater,
       [pool.width, .035, pool.depth], [pool.x, 8.075, pool.z]);
     water.setLocalEulerAngles(0, pool.yaw, 0);
     const foam = addRapidRegionShape("sunken-coast", "coast-tide-foam", "cylinder", coastFoam,
@@ -3506,19 +3560,41 @@ if (fastWorldRequested) {
     wetEdge.setLocalEulerAngles(0, bar.yaw, 0);
   }
   for (const wreck of SUNKEN_COAST_WRECKAGE) {
+    const wreckGround = fastWorldGroundHeight(wreck.x, wreck.z);
     const beam = addRapidRegionBox("sunken-coast", "coast-wreck-beam", timberLight,
-      [wreck.length, .28, .36], [wreck.x, 8.28, wreck.z]);
+      [wreck.length, .28, .36], [wreck.x, wreckGround + .28, wreck.z]);
     beam.setLocalEulerAngles(0, wreck.yaw, wreck.yaw > 0 ? 7 : -7);
     for (const side of [-1, 1]) {
       const rib = addRapidRegionBox("sunken-coast", "coast-wreck-rib", timber,
-        [.25, .85, 1.25], [wreck.x + side * 1.15, 8.55, wreck.z]);
+        [.25, .85, 1.25], [wreck.x + side * 1.15, wreckGround + .55, wreck.z]);
       rib.setLocalEulerAngles(0, wreck.yaw + side * 12, side * 24);
+    }
+  }
+  for (const driftwood of SUNKEN_COAST_DRIFTWOOD) {
+    const log = addRapidRegionBox("sunken-coast", "coast-driftwood", timberLight,
+      [driftwood.length, .2, .22], [driftwood.x, fastWorldGroundHeight(driftwood.x, driftwood.z) + .13, driftwood.z]);
+    log.setLocalEulerAngles(4, driftwood.yaw, driftwood.yaw % 2 ? 7 : -6);
+    for (const side of [-1, 1]) {
+      const branch = addRapidRegionBox("sunken-coast", "coast-driftwood-branch", timber,
+        [.75, .12, .12], [driftwood.x + side * driftwood.length * .28,
+          fastWorldGroundHeight(driftwood.x, driftwood.z) + .25, driftwood.z + side * .14]);
+      branch.setLocalEulerAngles(0, driftwood.yaw + side * 42, side * 18);
     }
   }
   for (const [x, z, size] of SUNKEN_COAST_ROCKS) {
     const rock = addRapidRegionBox("sunken-coast", "coast-rock", greenwoodStone,
-      [size, size * .65, size * .82], [x, 8 + size * .34, z]);
+      [size, size * .65, size * .82], [x, fastWorldGroundHeight(x, z) + size * .34, z]);
     rock.setLocalEulerAngles(8, x * 13 % 55, z % 2 ? 7 : -8);
+  }
+  for (const bed of SUNKEN_COAST_SHELL_BEDS) {
+    for (let shell = 0; shell < 7; shell++) {
+      const angle = shell * 2.399 + bed.x;
+      const radius = bed.radius * (.25 + shell % 3 * .22);
+      const x = bed.x + Math.cos(angle) * radius, z = bed.z + Math.sin(angle) * radius;
+      const shellShape = addRapidRegionShape("sunken-coast", "coast-shell", shell % 3 === 0 ? "cone" : "sphere", coastShell,
+        [.09 + shell % 2 * .035, .045, .07], [x, fastWorldGroundHeight(x, z) + .07, z]);
+      shellShape.setLocalEulerAngles(shell * 9, shell * 47, shell % 2 ? 18 : -12);
+    }
   }
   for (const [x, z] of SUNKEN_COAST_GRASS) {
     for (let blade = 0; blade < 3; blade++) {
@@ -3529,6 +3605,48 @@ if (fastWorldRequested) {
   }
   addRapidRegionShape("sunken-coast", "tidecaller-ring", "cylinder", coastWater,
     [5.8, .055, 5.8], [70.5, 8.11, 174.5]);
+
+  // A half-sunken ship supplies the region's missing skyline landmark. It sits
+  // inside a deep tide lane, so its large silhouette never lies about walkable
+  // collision or interrupts an encounter route.
+  {
+    const wreck = SUNKEN_COAST_HERO_WRECK;
+    const radians = wreck.yaw * Math.PI / 180;
+    const along = (distance: number): [number, number] => [Math.cos(radians) * distance, -Math.sin(radians) * distance];
+    const across = (distance: number): [number, number] => [Math.sin(radians) * distance, Math.cos(radians) * distance];
+    const ground = fastWorldGroundHeight(wreck.x, wreck.z);
+    const keel = addRapidRegionBox("sunken-coast", "coast-hero-wreck-keel", timber,
+      [wreck.length, .58, .5], [wreck.x, ground + .38, wreck.z]);
+    keel.setLocalEulerAngles(0, wreck.yaw, -5);
+    for (const side of [-1, 1]) {
+      const [ax, az] = across(side * 1.22);
+      const hull = addRapidRegionBox("sunken-coast", "coast-hero-wreck-hull", side < 0 ? timber : timberLight,
+        [wreck.length * .82, .68, .3], [wreck.x + ax, ground + .68, wreck.z + az]);
+      hull.setLocalEulerAngles(side * 8, wreck.yaw, side * 13);
+    }
+    for (let rib = -3; rib <= 3; rib++) {
+      const [rx, rz] = along(rib * 1.15);
+      const ribEntity = addRapidRegionBox("sunken-coast", "coast-hero-wreck-rib", timberLight,
+        [.22, 1.65, 2.9], [wreck.x + rx, ground + 1.15, wreck.z + rz]);
+      ribEntity.setLocalEulerAngles(0, wreck.yaw, rib * 2.5);
+    }
+    const [mx, mz] = along(-1.1);
+    const mast = addRapidRegionBox("sunken-coast", "coast-hero-wreck-mast", timberLight,
+      [.28, wreck.mastHeight, .28], [wreck.x + mx, ground + wreck.mastHeight * .5, wreck.z + mz]);
+    mast.setLocalEulerAngles(0, wreck.yaw, 7);
+    const yard = addRapidRegionBox("sunken-coast", "coast-hero-wreck-yard", timber,
+      [5.2, .18, .18], [wreck.x + mx, ground + 5.9, wreck.z + mz]);
+    yard.setLocalEulerAngles(0, wreck.yaw + 90, 7);
+    const [sx, sz] = across(.65);
+    const sail = addRapidRegionBox("sunken-coast", "coast-hero-wreck-sail", coastSail,
+      [3.7, 2.65, .07], [wreck.x + mx + sx, ground + 4.45, wreck.z + mz + sz]);
+    sail.setLocalEulerAngles(0, wreck.yaw + 90, 7);
+    const tornSail = addRapidRegionBox("sunken-coast", "coast-hero-wreck-torn-sail", coastSailFaded,
+      [1.45, 1.15, .075], [wreck.x + mx - sx * .7, ground + 3.8, wreck.z + mz - sz * .7]);
+    tornSail.setLocalEulerAngles(0, wreck.yaw + 90, 13);
+  }
+  for (const [x, y, z, sx, sz] of [[47,9.1,185,7,.7],[66,9.35,186,9,.85],[88,9.2,185,8,.75],[101,9.25,178,4,.7]] as const)
+    addRapidRegionShape("sunken-coast", "coast-sea-mist", "sphere", coastMist, [sx, .55, sz], [x, y, z]);
 
   for (const shelf of SOUTHERN_QUARRY_NAVIGATION_TERRACES)
     addRapidRegionBox("southern-quarry", `quarry-terrace:${shelf.id}`, quarryRock,
