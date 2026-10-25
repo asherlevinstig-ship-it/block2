@@ -7,7 +7,7 @@ import { facetedBoxMesh } from "./faceted-shapes.js";
 import { addCallingParticleLayers } from "./calling-particles.js";
 import { CALLING_ABILITY_SUSTAIN_PARTICLES, CALLING_ANTICIPATION_PARTICLES, CALLING_IMPACT_PARTICLES, CALLING_SUSTAIN_PARTICLES, callingParticleLifetime } from "./calling-vfx-presets.js";
 import { mageCastDuration, mageCastPose, type MageAbilityId } from "./mage-casting.js";
-import { FAST_WORLD_REGION_DEFINITIONS, greenwoodMasteryStatus, mistfenMasteryStatus,
+import { FAST_WORLD_REGION_DEFINITIONS, GREENWOOD_ENCOUNTER_NAVIGATION, greenwoodMasteryStatus, mistfenMasteryStatus,
   type FastWorldVisualTheme } from "@blockcraft/protocol";
 import { rapidPracticeCollisionCellSolid } from "@blockcraft/protocol";
 import type { RegionalArmourProc } from "@blockcraft/protocol";
@@ -1090,6 +1090,7 @@ const canvas = document.querySelector<HTMLCanvasElement>("#game")!;
 const initialPageQuery = new URLSearchParams(window.location.search);
 const initialGameExperience = gameExperience(initialPageQuery);
 const fastWorldRequested = usesFastWorld(initialPageQuery);
+const fastWorldNavigationDebug = fastWorldRequested && initialPageQuery.get("navdebug") === "1";
 document.documentElement.classList.toggle("fast-world-active", fastWorldRequested);
 document.documentElement.classList.toggle("legacy-voxel-active", initialGameExperience === "legacy-voxel");
 let rapidPracticeHaste = 0;
@@ -2317,6 +2318,22 @@ const drawFastWorldMap = (position: { x: number; z: number }, facingYawDegrees: 
   drawRegion("town", "Town", 40, 108, 66, 146);
   for (const region of FAST_WORLD_REGION_DEFINITIONS)
     drawRegion(region.id, region.name, region.bounds.minX, region.bounds.maxX, region.bounds.minZ, region.bounds.maxZ);
+  if (fastWorldNavigationDebug) {
+    for (const encounter of GREENWOOD_ENCOUNTER_NAVIGATION) {
+      const center = fastWorldMapPoint(encounter.center.x, encounter.center.z, width, height);
+      const edge = fastWorldMapPoint(encounter.center.x + encounter.leashRadius, encounter.center.z, width, height);
+      ctx.beginPath(); ctx.arc(center.x, center.y, Math.abs(edge.x - center.x), 0, Math.PI * 2);
+      ctx.fillStyle = "#73f0dc18"; ctx.fill(); ctx.strokeStyle = "#73f0dc"; ctx.lineWidth = 1; ctx.stroke();
+      for (const node of encounter.nodes) {
+        const mapped = fastWorldMapPoint(node.x, node.z, width, height);
+        ctx.beginPath(); ctx.arc(mapped.x, mapped.y, node.kind === "firing" ? 3 : 2.2, 0, Math.PI * 2);
+        ctx.fillStyle = node.kind === "firing" ? "#64cfff" : node.kind === "flank" ? "#ff9d64" : "#c7f46b";
+        ctx.fill();
+      }
+    }
+    ctx.fillStyle = "#73f0dc"; ctx.font = "800 8px system-ui"; ctx.textAlign = "left";
+    ctx.fillText("NAV DEBUG · patrol / flank / firing", 7, height - 7);
+  }
   const point = (target: FastWorldNavPoint, colour: string, radius: number): void => {
     const mapped = fastWorldMapPoint(target.x, target.z, width, height);
     ctx.beginPath(); ctx.arc(mapped.x, mapped.y, radius, 0, Math.PI * 2);

@@ -4,6 +4,7 @@ import { createFastWorldObstacleQuery } from "./fast-world-obstacles.js";
 export * from "./fast-world-obstacles.js";
 import { z } from "zod";
 export * from "./fast-world-regions.js";
+export * from "./fast-world-navigation.js";
 export { BRUTE_VOLLEY, bruteVolleyReady, bruteRockEndpoints, bruteRockLanes } from "./brute-volley.js";
 export { SPITTER_PATTERN, CRYSTAL_BURST_OFFSETS, VENOM_RING_OFFSETS, MATRIARCH_PHASE, matriarchEnraged, matriarchPattern, crystalMatriarchPattern, matriarchSecondVolleyYaw, matriarchWarningLanes, spitterPattern, spitterShotOffsets, spitterShotEndpoints, spitterWarningLanes } from "./spitter-patterns.js";
 export { DODGE_STAMINA_COST, DODGE_CHAIN_COST_STEP, DODGE_MAX_STAMINA_COST, DODGE_CHAIN_WINDOW_MS, DODGE_EXHAUSTION_MS, PERFECT_DODGE_COUNTER_MS, PERFECT_DODGE_STAMINA_RESTORE, dodgeChainStaminaCost, nextDodgeChain, type DodgePressureUpdate } from "./dodge-pressure.js";
@@ -11,7 +12,7 @@ export { DODGE_STAMINA_COST, DODGE_CHAIN_COST_STEP, DODGE_MAX_STAMINA_COST, DODG
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-warden-gate-v160";
+export const WORLD_ROOM = "world-warden-gate-v161";
 export const SILVER_DEPTHS_ROOM = "silver-depths-instance-v3";
 export const PRACTICE_ROOM = "calling-practice-v1";
 export type RoomTransfer = { room: typeof WORLD_ROOM | typeof SILVER_DEPTHS_ROOM | typeof PRACTICE_ROOM; instanceKey?: string; partySize?: number; returnFrom?: "silver-depths" | "practice"; retry?: boolean; partyTicket?: string; worldRoomId?: string };
