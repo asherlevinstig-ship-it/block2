@@ -143,6 +143,7 @@ import {
 import {
   SUNKEN_COAST_GRASS,
   SUNKEN_COAST_ROCKS,
+  SUNKEN_COAST_SANDBARS,
   SUNKEN_COAST_TEXTURE_STYLES,
   SUNKEN_COAST_TIDE_POOLS,
   SUNKEN_COAST_WRECKAGE,
@@ -3484,6 +3485,14 @@ if (fastWorldRequested) {
     const foam = addRapidRegionShape("sunken-coast", "coast-tide-foam", "cylinder", coastFoam,
       [pool.width + .24, .018, pool.depth + .24], [pool.x, 8.068, pool.z]);
     foam.setLocalEulerAngles(0, pool.yaw, 0);
+  }
+  for (const bar of SUNKEN_COAST_SANDBARS) {
+    const sandbar = addRapidRegionShape("sunken-coast", `coast-sandbar:${bar.id}`, "cylinder", coastGround,
+      [bar.width, .055, bar.length], [bar.x, 8.105, bar.z]);
+    sandbar.setLocalEulerAngles(0, bar.yaw, 0);
+    const wetEdge = addRapidRegionShape("sunken-coast", `coast-sandbar-edge:${bar.id}`, "cylinder", coastFoam,
+      [bar.width + .28, .018, bar.length + .28], [bar.x, 8.075, bar.z]);
+    wetEdge.setLocalEulerAngles(0, bar.yaw, 0);
   }
   for (const wreck of SUNKEN_COAST_WRECKAGE) {
     const beam = addRapidRegionBox("sunken-coast", "coast-wreck-beam", timberLight,

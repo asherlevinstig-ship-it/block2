@@ -1,4 +1,10 @@
 import type { PaintedGroundStyle } from "./fast-world-texture.js";
+import {
+  SUNKEN_COAST_NAVIGATION_ROCKS,
+  SUNKEN_COAST_NAVIGATION_SANDBARS,
+  SUNKEN_COAST_NAVIGATION_TIDE_POOLS,
+  SUNKEN_COAST_NAVIGATION_WRECKAGE,
+} from "@blockcraft/protocol";
 
 export const SUNKEN_COAST_LEADER_POSITION = { x: 70.5, z: 174.5 } as const;
 
@@ -19,24 +25,10 @@ export const SUNKEN_COAST_TEXTURE_STYLES: Readonly<Record<"sand" | "shallows", P
   },
 } as const;
 
-export const SUNKEN_COAST_TIDE_POOLS = [
-  { x: 47, z: 170, width: 5.8, depth: 3.4, yaw: 18 },
-  { x: 60, z: 154, width: 4.2, depth: 2.5, yaw: -12 },
-  { x: 82, z: 184, width: 6.4, depth: 3.1, yaw: 24 },
-  { x: 97, z: 158, width: 4.8, depth: 2.6, yaw: -27 },
-] as const;
-
-export const SUNKEN_COAST_WRECKAGE = [
-  { x: 51, z: 158, yaw: 28, length: 4.8 },
-  { x: 61, z: 182, yaw: -36, length: 5.4 },
-  { x: 88, z: 153, yaw: 14, length: 4.2 },
-  { x: 98, z: 178, yaw: -18, length: 5.1 },
-] as const;
-
-export const SUNKEN_COAST_ROCKS = [
-  [45, 181, 1.15], [54, 151, .8], [67, 162, 1.35], [78, 185, .95],
-  [89, 167, 1.2], [101, 184, .85], [96, 151, 1.05], [74, 151, .72],
-] as const;
+export const SUNKEN_COAST_TIDE_POOLS = SUNKEN_COAST_NAVIGATION_TIDE_POOLS;
+export const SUNKEN_COAST_SANDBARS = SUNKEN_COAST_NAVIGATION_SANDBARS;
+export const SUNKEN_COAST_WRECKAGE = SUNKEN_COAST_NAVIGATION_WRECKAGE;
+export const SUNKEN_COAST_ROCKS = SUNKEN_COAST_NAVIGATION_ROCKS;
 
 export const SUNKEN_COAST_GRASS = [
   [44, 154], [48, 184], [57, 169], [64, 151], [68, 186], [79, 158],

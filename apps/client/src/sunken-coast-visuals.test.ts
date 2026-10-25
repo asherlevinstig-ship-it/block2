@@ -3,6 +3,7 @@ import {
   SUNKEN_COAST_GRASS,
   SUNKEN_COAST_LEADER_POSITION,
   SUNKEN_COAST_ROCKS,
+  SUNKEN_COAST_SANDBARS,
   SUNKEN_COAST_TIDE_POOLS,
   SUNKEN_COAST_WRECKAGE,
 } from "./sunken-coast-visuals.js";
@@ -12,6 +13,7 @@ describe("Sunken Coast visuals", () => {
     const sites = [
       ...SUNKEN_COAST_GRASS.map(([x, z]) => ({ x, z })),
       ...SUNKEN_COAST_ROCKS.map(([x, z]) => ({ x, z })),
+      ...SUNKEN_COAST_SANDBARS,
       ...SUNKEN_COAST_TIDE_POOLS,
       ...SUNKEN_COAST_WRECKAGE,
       SUNKEN_COAST_LEADER_POSITION,

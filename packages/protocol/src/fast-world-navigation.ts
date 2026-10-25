@@ -9,7 +9,7 @@ export type FastWorldNavigationNode = {
 
 export type FastWorldEncounterNavigation = {
   id: string;
-  regionId: "greenwood" | "mistfen";
+  regionId: "greenwood" | "mistfen" | "sunken-coast";
   center: { x: number; z: number };
   spawnRadius: number;
   leashRadius: number;
@@ -106,9 +106,80 @@ export const MISTFEN_ENCOUNTER_NAVIGATION: readonly FastWorldEncounterNavigation
     ] },
 ] as const;
 
+/** Shared coast geometry keeps the visible shore and authoritative movement
+ * lanes in lockstep. Sandbars are safe routes through otherwise deep tide
+ * pools; wrecks and rocks are registered separately as solid combat cover. */
+export const SUNKEN_COAST_NAVIGATION_TIDE_POOLS = [
+  { x: 47, z: 170, width: 5.8, depth: 3.4, yaw: 18 },
+  { x: 60, z: 154, width: 4.2, depth: 2.5, yaw: -12 },
+  { x: 82, z: 184, width: 6.4, depth: 3.1, yaw: 24 },
+  { x: 97, z: 158, width: 4.8, depth: 2.6, yaw: -27 },
+] as const;
+
+export const SUNKEN_COAST_NAVIGATION_SANDBARS = [
+  { id: "brine-landing", x: 51.5, z: 159, length: 14, width: 4.2, yaw: 8 },
+  { id: "drowned-wreck", x: 61, z: 181, length: 13, width: 4, yaw: -12 },
+  { id: "saltwatch-approach", x: 96.5, z: 162, length: 13, width: 4.2, yaw: -18 },
+  { id: "tidecaller-shoal", x: 70.5, z: 174.5, length: 17, width: 8, yaw: 12 },
+] as const;
+
+export const SUNKEN_COAST_NAVIGATION_WRECKAGE = [
+  { x: 51, z: 158, yaw: 28, length: 4.8 },
+  { x: 61, z: 182, yaw: -36, length: 5.4 },
+  { x: 88, z: 153, yaw: 14, length: 4.2 },
+  { x: 98, z: 178, yaw: -18, length: 5.1 },
+] as const;
+
+export const SUNKEN_COAST_NAVIGATION_ROCKS = [
+  [45, 181, 1.15], [54, 151, .8], [67, 162, 1.35], [78, 185, .95],
+  [89, 167, 1.2], [101, 184, .85], [96, 151, 1.05], [74, 151, .72],
+] as const;
+
+const insideOrientedCoastShape = (x: number, z: number, shape: {
+  x: number; z: number; width: number; depth?: number; length?: number; yaw: number;
+}, padding = 0): boolean => {
+  const radians = -shape.yaw * Math.PI / 180;
+  const dx = x - shape.x, dz = z - shape.z;
+  const localX = dx * Math.cos(radians) - dz * Math.sin(radians);
+  const localZ = dx * Math.sin(radians) + dz * Math.cos(radians);
+  return Math.abs(localX) <= shape.width / 2 + padding
+    && Math.abs(localZ) <= (shape.depth ?? shape.length ?? 0) / 2 + padding;
+};
+
+export const fastWorldSunkenCoastTideAt = (x: number, z: number): boolean =>
+  SUNKEN_COAST_NAVIGATION_TIDE_POOLS.some(pool => insideOrientedCoastShape(x, z, pool));
+
+export const fastWorldSunkenCoastSandbarAt = (x: number, z: number): boolean =>
+  SUNKEN_COAST_NAVIGATION_SANDBARS.some(bar => insideOrientedCoastShape(x, z, bar, .3));
+
+export const SUNKEN_COAST_ENCOUNTER_NAVIGATION: readonly FastWorldEncounterNavigation[] = [
+  { id: "brine-landing", regionId: "sunken-coast", center: { x: 51.5, z: 159 }, spawnRadius: 6.2, leashRadius: 10,
+    encounterIds: ["coast-spitter-a", "coast-bloater-a"], nodes: [
+      node("brine-west", "patrol", 47.5, 158.5), node("brine-east", "patrol", 55.5, 159.5),
+      node("brine-spitter-perch", "firing", 48, 155.5), node("brine-bloater-flank", "flank", 55, 162.5),
+    ] },
+  { id: "drowned-wreck", regionId: "sunken-coast", center: { x: 61, z: 181 }, spawnRadius: 6.5, leashRadius: 10,
+    encounterIds: ["coast-stalker-a", "coast-spitter-b"], nodes: [
+      node("wreck-west", "patrol", 57, 181), node("wreck-east", "patrol", 64.5, 179.5),
+      node("wreck-spitter-perch", "firing", 64, 176.5), node("wreck-stalker-flank", "flank", 57, 177.5),
+    ] },
+  { id: "saltwatch-approach", regionId: "sunken-coast", center: { x: 98.5, z: 162.5 }, spawnRadius: 5.5, leashRadius: 9,
+    encounterIds: ["coast-stalker-b"], nodes: [
+      node("saltwatch-west", "patrol", 95, 161), node("saltwatch-east", "patrol", 101, 164),
+      node("saltwatch-flank-north", "flank", 97, 158.5), node("saltwatch-flank-south", "flank", 96, 166),
+    ] },
+  { id: "tidecaller-shoal", regionId: "sunken-coast", center: { x: 70.5, z: 174.5 }, spawnRadius: 7.5, leashRadius: 12,
+    encounterIds: ["coast-tidecaller-shoalguard", "coast-tidecaller-brinefang", "sunken-coast-tidecaller"], nodes: [
+      node("tidecaller-west", "patrol", 66.5, 171.5), node("tidecaller-east", "patrol", 74.5, 176.5),
+      node("shoalguard-perch", "firing", 66, 177), node("brinefang-flank", "flank", 75, 171),
+      node("tidecaller-rear-flank", "flank", 71, 180),
+    ] },
+] as const;
+
 export const FAST_WORLD_ENCOUNTER_NAVIGATION: readonly FastWorldEncounterNavigation[] = [
   ...GREENWOOD_ENCOUNTER_NAVIGATION,
   ...MISTFEN_ENCOUNTER_NAVIGATION,
+  ...SUNKEN_COAST_ENCOUNTER_NAVIGATION,
 ] as const;
 
 export const fastWorldEncounterNavigationForMob = (mobId: string): FastWorldEncounterNavigation | null =>
@@ -130,6 +201,9 @@ export const fastWorldSpawnAllows = (mobId: string, pose: { x: number; z: number
 };
 export const fastWorldNavigationGroundAllows = (mobId: string, pose: { x: number; z: number }): boolean => {
   const encounter = fastWorldEncounterNavigationForMob(mobId);
-  return encounter?.regionId !== "mistfen" || !fastWorldMistfenToxicAt(pose.x, pose.z)
+  if (encounter?.regionId === "mistfen") return !fastWorldMistfenToxicAt(pose.x, pose.z)
     || fastWorldMistfenBoardwalkAt(pose.x, pose.z);
+  if (encounter?.regionId === "sunken-coast") return !fastWorldSunkenCoastTideAt(pose.x, pose.z)
+    || fastWorldSunkenCoastSandbarAt(pose.x, pose.z);
+  return true;
 };

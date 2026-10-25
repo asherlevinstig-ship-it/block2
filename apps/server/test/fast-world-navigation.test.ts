@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { FAST_WORLD_ENCOUNTER_NAVIGATION, GREENWOOD_ENCOUNTER_NAVIGATION, MISTFEN_ENCOUNTER_NAVIGATION,
   fastWorldEncounterAllows, fastWorldMistfenBoardwalkAt, fastWorldMistfenToxicAt,
-  fastWorldNavigationGroundAllows, fastWorldSpawnAllows } from "@blockcraft/protocol";
+  fastWorldNavigationGroundAllows, fastWorldSpawnAllows, SUNKEN_COAST_ENCOUNTER_NAVIGATION,
+  fastWorldSunkenCoastSandbarAt, fastWorldSunkenCoastTideAt } from "@blockcraft/protocol";
 import { playerCollides } from "@blockcraft/voxel-world";
 import { FAST_WORLD_BLOCK_READER } from "../src/world-collision.js";
 import { fastWorldFiringSites, fastWorldPatrolDestination } from "../src/fast-world-navigation.js";
@@ -41,7 +42,7 @@ describe("Greenwood authored navigation", () => {
 
   it("authors all five Mistfen pockets with dry patrol, flank and firing choices", () => {
     expect(MISTFEN_ENCOUNTER_NAVIGATION).toHaveLength(5);
-    expect(FAST_WORLD_ENCOUNTER_NAVIGATION).toHaveLength(10);
+    expect(FAST_WORLD_ENCOUNTER_NAVIGATION).toHaveLength(14);
     for (const encounter of MISTFEN_ENCOUNTER_NAVIGATION) {
       expect(encounter.nodes.filter(node => node.kind === "patrol").length).toBeGreaterThanOrEqual(2);
       expect(encounter.nodes.some(node => node.kind === "flank")).toBe(true);
@@ -66,5 +67,25 @@ describe("Greenwood authored navigation", () => {
         pose => fastWorldEncounterAllows(mobId, pose) && fastWorldNavigationGroundAllows(mobId, pose));
       expect(destination, mobId).not.toBeNull();
     }
+  });
+
+  it("authors three coast encounters and a role-based Tidecaller shoal", () => {
+    expect(SUNKEN_COAST_ENCOUNTER_NAVIGATION).toHaveLength(4);
+    for (const encounter of SUNKEN_COAST_ENCOUNTER_NAVIGATION) {
+      expect(encounter.nodes.filter(node => node.kind === "patrol")).toHaveLength(2);
+      expect(encounter.nodes.some(node => node.kind === "flank")).toBe(true);
+      for (const mobId of encounter.encounterIds) for (const navNode of encounter.nodes)
+        expect(fastWorldNavigationGroundAllows(mobId, navNode), `${mobId}:${navNode.id}`).toBe(true);
+    }
+    const shoal = SUNKEN_COAST_ENCOUNTER_NAVIGATION.find(encounter => encounter.id === "tidecaller-shoal")!;
+    expect(shoal.nodes.some(node => node.kind === "firing")).toBe(true);
+    expect(shoal.nodes.filter(node => node.kind === "flank")).toHaveLength(2);
+  });
+
+  it("keeps coast mobs out of deep tide lanes while allowing visible sandbars", () => {
+    expect(fastWorldSunkenCoastTideAt(47, 170)).toBe(true);
+    expect(fastWorldNavigationGroundAllows("coast-spitter-a", { x: 47, z: 170 })).toBe(false);
+    expect(fastWorldSunkenCoastSandbarAt(51.5, 159)).toBe(true);
+    expect(fastWorldNavigationGroundAllows("coast-spitter-a", { x: 51.5, z: 159 })).toBe(true);
   });
 });

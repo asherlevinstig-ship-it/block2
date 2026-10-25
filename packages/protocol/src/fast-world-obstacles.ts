@@ -53,6 +53,16 @@ export const FAST_WORLD_SCENE_OBSTACLES: readonly FastWorldObstacle[] = [
   box("greenwood-log-fenward", "encounter-cover", 137.2, 140.8, 88.45, 89.55, 8, 9.15),
   box("greenwood-log-blighted", "encounter-cover", 140.4, 143.6, 121.45, 122.55, 8, 9.15),
   box("greenwood-log-elderthorn", "encounter-cover", 148.55, 151.45, 98.45, 99.55, 8, 9.15),
+
+  // Sunken Coast wrecks and larger rocks are real cover: they interrupt
+  // sight, projectiles and pursuit instead of being purely decorative.
+  box("coast-wreck-brine-landing", "encounter-cover", 49, 53.4, 156.8, 159.2, 8, 9.45),
+  box("coast-wreck-drowned", "encounter-cover", 58.6, 63.5, 180.4, 183.6, 8, 9.45),
+  box("coast-wreck-east-route", "encounter-cover", 86, 90.2, 151.8, 154.2, 8, 9.35),
+  box("coast-wreck-far-shore", "encounter-cover", 95.4, 100.5, 176.6, 179.5, 8, 9.45),
+  box("coast-rock-west", "encounter-cover", 44.35, 45.65, 180.35, 181.65, 8, 9.35),
+  box("coast-rock-shoal", "encounter-cover", 66.25, 67.75, 161.25, 162.75, 8, 9.45),
+  box("coast-rock-saltwatch", "encounter-cover", 88.3, 89.7, 166.3, 167.7, 8, 9.4),
 ] as const;
 
 export function createFastWorldObstacleQuery(

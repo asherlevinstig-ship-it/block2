@@ -31,6 +31,7 @@ describe("Fast World region manifest", () => {
     expect(coast.visualTheme).toBe("coast");
     expect(coast.encounters).toHaveLength(coast.targetPopulation);
     expect(coast.encounters?.filter(encounter => encounter.leader).map(encounter => encounter.id)).toEqual([coast.leaderId]);
+    expect(coast.encounterPockets?.filter(pocket => pocket.kind === "combat")).toHaveLength(3);
     expect(coast.encounterPockets?.find(pocket => pocket.kind === "leader")?.encounterIds).toEqual([
       "coast-tidecaller-shoalguard", "coast-tidecaller-brinefang", coast.leaderId,
     ]);

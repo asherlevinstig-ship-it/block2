@@ -23,6 +23,14 @@ describe("Fast World obstacle queries", () => {
     ], FAST_WORLD_BLOCK_READER)?.kind).toBe("terrain");
   });
 
+  it("makes Sunken Coast wrecks and rocks authoritative combat cover", () => {
+    expect(FAST_WORLD_COLLISION_QUERY.obstacleAt(51, 8.8, 158)?.id).toBe("coast-wreck-brine-landing");
+    expect(FAST_WORLD_COLLISION_QUERY.obstacleAt(67, 8.8, 162)?.id).toBe("coast-rock-shoal");
+    expect(hasCombatLineOfSight({ x: 47.5, y: 8, z: 158 }, { x: 55, y: 8, z: 158 }, FAST_WORLD_BLOCK_READER)).toBe(false);
+    expect(projectileImpact({ x: 47.5, y: 8.72, z: 158 }, { x: 55, y: 8.72, z: 158 }, [],
+      FAST_WORLD_BLOCK_READER)?.kind).toBe("terrain");
+  });
+
   it("prevents mobs navigating through Fast World cover", () => {
     const start = { x: 116.5, y: 8, z: 89 };
     const moved = moveMobSafely(start, { x: 3, z: 0 }, FAST_WORLD_BLOCK_READER);
