@@ -5080,6 +5080,7 @@ interface MobVisual {
   lastActionSequence: number;
   actionAt: number;
   lastImpactStartedAt: number;
+  lastGroundImpactStartedAt: number;
   lastStaggerSequence: number;
   staggerAt: number;
   lastCombatState: string;
@@ -7488,6 +7489,8 @@ interface WeaponProjectileVisual {
 interface MobHazardVisual {
   root: pc.Entity;
   material: pc.StandardMaterial;
+  stainMaterial: pc.StandardMaterial | null;
+  startedAt: number;
   expiresAt: number;
   toxicCloud: boolean;
   fireTrail: boolean;
@@ -7551,6 +7554,14 @@ interface FirstPersonImpactBurst {
   expiresAt: number;
 }
 const firstPersonImpactBursts: FirstPersonImpactBurst[] = [];
+interface GreenwoodCombatEffect {
+  root: pc.Entity;
+  materials: pc.StandardMaterial[];
+  fragments: { entity: pc.Entity; velocity: pc.Vec3; spin: pc.Vec3 }[];
+  startedAt: number;
+  durationMs: number;
+}
+const greenwoodCombatEffects: GreenwoodCombatEffect[] = [];
 let nextNearMissAt = 0;
 let lastLocalCallingImpact: { abilityId: CallingAbilityId; at: number } | null = null;
 // Retain impact style after the short-lived mesh ends, until server confirmation arrives.
@@ -7573,6 +7584,47 @@ function powerMaterial(color: pc.Color, opacity: number): pc.StandardMaterial {
   material.depthWrite = false;
   material.update();
   return material;
+}
+
+function createGreenwoodCombatEffect(mob: MobVisual, groundImpact = false): void {
+  if (!mob.greenwoodStyle) return;
+  while (greenwoodCombatEffects.length >= 28) {
+    const oldest = greenwoodCombatEffects.shift()!;
+    oldest.root.destroy();
+    for (const material of oldest.materials) material.destroy();
+  }
+  const elderthorn = mob.greenwoodStyle === "elderthorn";
+  const root = new pc.Entity(groundImpact ? "greenwood-ground-scar" : "greenwood-hit-burst");
+  const leafMaterial = powerMaterial(new pc.Color(elderthorn ? .34 : .24, elderthorn ? .62 : .78, .12), .86);
+  const barkMaterial = powerMaterial(new pc.Color(.31, .17, .07), .9);
+  const venomMaterial = powerMaterial(new pc.Color(.48, .94, .08), .8);
+  const materials = [leafMaterial, barkMaterial, venomMaterial];
+  const fragments: GreenwoodCombatEffect["fragments"] = [];
+  const count = groundImpact ? (elderthorn ? 18 : 10) : (elderthorn ? 16 : 9);
+  for (let index = 0; index < count; index += 1) {
+    const angle = index / count * Math.PI * 2 + (index % 3) * .21;
+    const material = index % 5 === 0 && mob.isSpitter ? venomMaterial : index % 3 === 0 ? barkMaterial : leafMaterial;
+    const fragment = addBox(root, groundImpact ? "claw-and-leaf" : "leaf-and-bark", material,
+      groundImpact ? [.32 + index % 3 * .09, .018, .055] : [.055 + index % 2 * .025, .025, .1 + index % 3 * .035],
+      groundImpact ? [Math.sin(angle) * (.28 + index % 4 * .16), .025, Math.cos(angle) * (.28 + index % 4 * .16)] : [0, 0, 0]);
+    fragment.setLocalEulerAngles(groundImpact ? 0 : index * 19, angle * 180 / Math.PI, groundImpact ? (index % 2 ? -14 : 14) : index * 31);
+    if (!groundImpact) fragments.push({ entity: fragment,
+      velocity: new pc.Vec3(Math.sin(angle) * (1.2 + index % 4 * .25), .8 + index % 3 * .32, Math.cos(angle) * (1.2 + index % 4 * .25)),
+      spin: new pc.Vec3(90 + index * 7, 140 - index * 4, 110 + index * 5) });
+  }
+  for (let index = 0; index < (elderthorn ? 8 : 5); index += 1) {
+    const angle = index / (elderthorn ? 8 : 5) * Math.PI * 2;
+    const blade = addBox(root, "bent-fern", leafMaterial, [.045, .32 + index % 2 * .1, .075],
+      [Math.sin(angle) * (groundImpact ? .72 : .46), .13, Math.cos(angle) * (groundImpact ? .72 : .46)]);
+    blade.setLocalEulerAngles(Math.cos(angle) * 28, angle * 180 / Math.PI, -Math.sin(angle) * 34);
+  }
+  const point = groundImpact
+    ? new pc.Vec3(mob.state.attackStrikeX, mob.state.attackStrikeY + .025, mob.state.attackStrikeZ)
+    : mob.entity.getPosition().clone().add(new pc.Vec3(0, Math.max(.42, mob.healthBarY * .3), 0));
+  root.setPosition(point);
+  if (elderthorn && groundImpact) root.setLocalScale(1.55, 1, 1.55);
+  app.root.addChild(root);
+  greenwoodCombatEffects.push({ root, materials, fragments, startedAt: performance.now(), durationMs: groundImpact ? (elderthorn ? 1_900 : 1_250) : 620 });
 }
 
 function createFirstPersonHitBurst(mob: MobVisual, weaponKind: FirstPersonWeaponKind, defeated: boolean): void {
@@ -8717,7 +8769,8 @@ function updateThornBinding(message: ThornBindingUpdate): void {
 }
 
 function createMobHazard(message: MobHazardPlaced): void {
-  mobHazardVisuals.get(message.hazardId)?.root.destroy();
+  const previous = mobHazardVisuals.get(message.hazardId);
+  if (previous) { previous.root.destroy(); previous.material.destroy(); previous.stainMaterial?.destroy(); }
   const root = new pc.Entity(`mob-hazard:${message.hazardId}`);
   const rootHazard = message.kind === "root";
   const pressureHazard = message.kind === "pressure";
@@ -8741,9 +8794,15 @@ function createMobHazard(message: MobHazardPlaced): void {
     );
     blob.setLocalEulerAngles(0, angle * 180 / Math.PI, 0);
   }
+  let stainMaterial: pc.StandardMaterial | null = null;
+  if (!rootHazard && !pressureHazard && !toxicCloud && !fireTrail) {
+    stainMaterial = powerMaterial(new pc.Color(.14, .22, .055), .34);
+    const stain = addBox(root, "venom-soil-stain", stainMaterial, [message.radius * 1.72, .012, message.radius * 1.58], [0, .012, 0]);
+    stain.setLocalEulerAngles(0, 17, 0);
+  }
   root.setPosition(message.x, message.y + 0.015, message.z);
   app.root.addChild(root);
-  mobHazardVisuals.set(message.hazardId, { root, material, expiresAt: message.expiresAt, toxicCloud, fireTrail });
+  mobHazardVisuals.set(message.hazardId, { root, material, stainMaterial, startedAt: Date.now(), expiresAt: message.expiresAt, toxicCloud, fireTrail });
 }
 
 function createDepthsHazard(message: DepthsRouteHazard): void {
@@ -9709,6 +9768,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     lastActionSequence: mob.actionSequence,
     actionAt: 0,
     lastImpactStartedAt: 0,
+    lastGroundImpactStartedAt: 0,
     lastStaggerSequence: mob.staggerSequence,
     staggerAt: 0,
     lastCombatState: mob.combatState,
@@ -10234,6 +10294,7 @@ function updateMobVisual(mob: MobVisual): void {
   if (mob.state.hitSequence > mob.lastHitSequence) {
     mob.lastHitSequence = mob.state.hitSequence;
     mob.hitAt = performance.now();
+    createGreenwoodCombatEffect(mob);
   }
   if (mob.state.actionSequence > mob.lastActionSequence) {
     mob.lastActionSequence = mob.state.actionSequence;
@@ -16870,6 +16931,10 @@ app.on("update", (dt: number) => {
       mob.lastImpactStartedAt = mob.state.attackStartedAt;
       createBruteSlamImpact(mob);
     }
+    if (mob.greenwoodStyle && presentation.impactDue && mob.lastGroundImpactStartedAt !== mob.state.attackStartedAt) {
+      mob.lastGroundImpactStartedAt = mob.state.attackStartedAt;
+      createGreenwoodCombatEffect(mob, true);
+    }
     const staggerElapsed = animationNow - mob.staggerAt;
     const staggerStrength = mob.staggerAt > 0 && mob.state.alive && mob.state.combatState === "stagger" && staggerElapsed >= 0
       ? 0.25 + 0.75 * Math.exp(-staggerElapsed / 600) : 0;
@@ -17284,6 +17349,24 @@ app.on("update", (dt: number) => {
     burst.material.opacity = remaining * .9;
     burst.material.update();
   }
+  for (let index = greenwoodCombatEffects.length - 1; index >= 0; index -= 1) {
+    const effect = greenwoodCombatEffects[index]!;
+    const elapsedMs = animationNow - effect.startedAt;
+    if (elapsedMs >= effect.durationMs) {
+      effect.root.destroy();
+      for (const material of effect.materials) material.destroy();
+      greenwoodCombatEffects.splice(index, 1);
+      continue;
+    }
+    const elapsed = elapsedMs / 1_000;
+    const remaining = Math.max(0, 1 - elapsedMs / effect.durationMs);
+    for (const fragment of effect.fragments) {
+      fragment.entity.setLocalPosition(fragment.velocity.x * elapsed,
+        fragment.velocity.y * elapsed - 3.8 * elapsed * elapsed, fragment.velocity.z * elapsed);
+      fragment.entity.setLocalEulerAngles(fragment.spin.x * elapsed, fragment.spin.y * elapsed, fragment.spin.z * elapsed);
+    }
+    for (const material of effect.materials) { material.opacity = Math.min(.9, remaining * 1.4); material.update(); }
+  }
   for (let index = weaponProjectileVisuals.length - 1; index >= 0; index -= 1) {
     const projectile = weaponProjectileVisuals[index]!;
     const progress = Math.max(0, Math.min(1, (animationNow - projectile.startedAt) / projectile.durationMs));
@@ -17322,8 +17405,11 @@ app.on("update", (dt: number) => {
     weaponProjectileVisuals.splice(index, 1);
   }
   for (const [hazardId, hazard] of mobHazardVisuals) {
-    if (Date.now() >= hazard.expiresAt) {
+    const hazardNow = Date.now();
+    if (hazardNow >= hazard.expiresAt) {
       hazard.root.destroy();
+      hazard.material.destroy();
+      hazard.stainMaterial?.destroy();
       mobHazardVisuals.delete(hazardId);
       continue;
     }
@@ -17332,9 +17418,15 @@ app.on("update", (dt: number) => {
     hazard.root.setLocalScale(pulse, (1 + Math.sin(animationTime * 11) * 0.12) * flamePulse, pulse);
     if (hazard.toxicCloud) hazard.root.rotate(0, frameTime * 9, 0);
     if (hazard.fireTrail) hazard.root.rotate(0, -frameTime * 18, 0);
-    hazard.material.opacity = (hazard.toxicCloud ? .26 : hazard.fireTrail ? .58 : .5)
-      + Math.sin(animationTime * (hazard.fireTrail ? 17 : 9)) * (hazard.toxicCloud ? .06 : hazard.fireTrail ? .12 : .1);
+    const lifeProgress = Math.max(0, Math.min(1, (hazardNow - hazard.startedAt) / Math.max(1, hazard.expiresAt - hazard.startedAt)));
+    const endFade = Math.min(1, (1 - lifeProgress) * 5);
+    hazard.material.opacity = ((hazard.toxicCloud ? .26 : hazard.fireTrail ? .58 : .5)
+      + Math.sin(animationTime * (hazard.fireTrail ? 17 : 9)) * (hazard.toxicCloud ? .06 : hazard.fireTrail ? .12 : .1)) * endFade;
     hazard.material.update();
+    if (hazard.stainMaterial) {
+      hazard.stainMaterial.opacity = (.34 - lifeProgress * .22) * endFade;
+      hazard.stainMaterial.update();
+    }
   }
   for (const [bindingId, binding] of thornBindingVisuals) {
     if (Date.now() >= binding.expiresAt) {
@@ -19056,12 +19148,14 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     weaponProjectileVisuals.length = 0;
     for (const burst of firstPersonImpactBursts) { burst.root.destroy(); burst.material.destroy(); }
     firstPersonImpactBursts.length = 0;
+    for (const effect of greenwoodCombatEffects) { effect.root.destroy(); for (const material of effect.materials) material.destroy(); }
+    greenwoodCombatEffects.length = 0;
     firstPersonHitKickUntil = 0;
     firstPersonHitKickStrength = 0;
     nextNearMissAt = 0;
     projectileWeapons.clear();
     projectileRapidStyles.clear();
-    for (const hazard of mobHazardVisuals.values()) hazard.root.destroy();
+    for (const hazard of mobHazardVisuals.values()) { hazard.root.destroy(); hazard.material.destroy(); hazard.stainMaterial?.destroy(); }
     mobHazardVisuals.clear();
     for (const binding of thornBindingVisuals.values()) { binding.root.destroy(); binding.material.destroy(); }
     thornBindingVisuals.clear();
