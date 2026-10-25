@@ -218,3 +218,44 @@ export function createPaintedGroundMaterial(
   material.update();
   return material;
 }
+
+/** One continuous ribbon per route, with metre-scaled UVs and feathered verges. */
+export function createWoodlandTrailMesh(device: pc.GraphicsDevice, entity: pc.Entity,
+  material: pc.StandardMaterial, points: readonly (readonly [number, number, number])[]): void {
+  const vertices: number[] = [], normals: number[] = [], uv: number[] = [], colors: number[] = [], indices: number[] = [];
+  const lanes = [-1, -.78, -.35, .35, .78, 1];
+  points.forEach((point,i) => {
+    const before = points[Math.max(0,i-1)]!, after = points[Math.min(points.length-1,i+1)]!;
+    const dx=after[0]-before[0], dz=after[1]-before[1], length=Math.hypot(dx,dz)||1;
+    lanes.forEach((lane,j) => {
+      const width=point[2]*.5 + Math.sin(i*.71)*.12;
+      const x=point[0]-dz/length*lane*width, z=point[1]+dx/length*lane*width;
+      vertices.push(x,8.095,z); normals.push(0,1,0);
+      uv.push(x/5/material.diffuseMapTiling.x,z/5/material.diffuseMapTiling.y);
+      const tone = .78 + Math.abs(lane)*.13 + Math.sin(i*.21)*.025;
+      colors.push(tone,tone,tone,j===0||j===lanes.length-1?0:1);
+      if(i<points.length-1 && j<lanes.length-1) {
+        const n=i*lanes.length+j; indices.push(n,n+1,n+lanes.length,n+1,n+lanes.length+1,n+lanes.length);
+      }
+    });
+  });
+  const mesh=new pc.Mesh(device); mesh.setPositions(vertices); mesh.setNormals(normals); mesh.setUvs(0,uv);
+  mesh.setColors(colors); mesh.setIndices(indices); mesh.update();
+  entity.addComponent("render",{meshInstances:[new pc.MeshInstance(mesh,terrainVertexMaterial(material,true),entity)],castShadows:false});
+  entity.render!.meshInstances[0]!.drawBucket=230;
+}
+
+const woodlandFernMeshes = new WeakMap<pc.GraphicsDevice, pc.Mesh>();
+/** Twenty triangles for a whole fern, shared by every placement. */
+export function woodlandFernMesh(device: pc.GraphicsDevice): pc.Mesh {
+  const cached=woodlandFernMeshes.get(device); if(cached) return cached;
+  const positions:number[]=[], indices:number[]=[];
+  for(let leaf=0;leaf<5;leaf++) {
+    const a=leaf*Math.PI*2/5, dx=Math.cos(a), dz=Math.sin(a), n=positions.length/3;
+    positions.push(0,0,0,dx*.32-dz*.12,.18,dz*.32+dx*.12,
+      dx*.72,.1,dz*.72,dx*.32+dz*.12,.18,dz*.32-dx*.12,dx*.34,.23,dz*.34);
+    indices.push(n,n+1,n+4,n+1,n+2,n+4,n+2,n+3,n+4,n+3,n,n+4);
+  }
+  const mesh=new pc.Mesh(device);mesh.setPositions(positions);mesh.setNormals(pc.calculateNormals(positions,indices));
+  mesh.setIndices(indices);mesh.update();woodlandFernMeshes.set(device,mesh);return mesh;
+}

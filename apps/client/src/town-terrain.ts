@@ -30,8 +30,8 @@ export const SPEED_LAB_TOWN_TERRAIN: readonly TownTerrainPatch[] = [
   { id: "civic-square", shape: "cylinder", material: "plaza", position: [67, 8.082, 106], scale: [14.65, .055, 14.65] },
 
   // Road hierarchy: the east gate road is broad, secondary streets are calm.
-  { id: "east-gate-road-edge", shape: "box", material: "road-edge", position: [102, 8.047, 106], scale: [68, .05, 7.2] },
-  { id: "east-gate-road", shape: "box", material: "road", position: [102, 8.078, 106], scale: [68, .055, 6.25] },
+  { id: "east-gate-road-edge", shape: "box", material: "road-edge", position: [87, 8.047, 106], scale: [38, .05, 7.2] },
+  { id: "east-gate-road", shape: "box", material: "road", position: [87, 8.078, 106], scale: [38, .055, 6.25] },
   { id: "high-street-edge", shape: "box", material: "road-edge", position: [67, 8.046, 106], scale: [7.2, .05, 74] },
   { id: "high-street", shape: "box", material: "road", position: [67, 8.077, 106], scale: [6.15, .055, 73.2] },
   { id: "north-cross-street-edge", shape: "box", material: "road-edge", position: [72, 8.047, 82], scale: [61, .05, 5.7] },

@@ -1,3 +1,4 @@
+import { GREENWOOD_CLUSTER_PLANTS, woodlandPlantAllowed } from "./greenwood-landscape.js";
 import type { TownAssetPlacement } from "./town-asset-kit.js";
 import type { PaintedGroundStyle } from "./fast-world-texture.js";
 
@@ -6,8 +7,8 @@ export const GREENWOOD_LEADER_POSITION = { x: 150.5, z: 106.5 } as const;
 export const GREENWOOD_TEXTURE_STYLES: Readonly<Record<"forestFloor" | "moss" | "leafLitter" | "bark", PaintedGroundStyle>> = {
   forestFloor: {
     name: "greenwood-forest-floor",
-    base: "#244f2a",
-    mottles: ["#183d22", "#356538", "#486934", "#203f28"],
+    base: "#344b2c",
+    mottles: ["#273a24", "#465b34", "#596344", "#36462c"],
     litter: ["#8a6332", "#5e4728", "#a27a3d", "#183a20"],
     seed: 9_173,
   },
@@ -55,13 +56,17 @@ const trees = [
 ] as const;
 
 const rocks = [
-  [114, 86, 12, .7], [121, 119, -18, .62], [126, 91, 46, .75], [134, 128, -35, .64],
+  [114, 86, 12, .7], [121, 119, -18, .62], [130.8, 84, 46, .75], [134, 128, -35, .64],
   [139, 85, 74, .8], [143, 119, 18, .58], [151, 88, -52, .72], [153, 125, 31, .66],
   [147, 101, 8, .56], [147, 112, -14, .62], [154, 97, 65, .54], [154, 116, -72, .58],
 ] as const;
 
 export const GREENWOOD_ASSET_PLACEMENTS: readonly TownAssetPlacement[] = [
-  ...trees.map(([x, z, yaw, scale], index): TownAssetPlacement => ({
+  ...GREENWOOD_CLUSTER_PLANTS.filter(p => p.tree).map((p,index): TownAssetPlacement => ({
+    id: index%2 ? "treeCrooked" : "treeHighRound", name: `mosswatch-cluster-tree-${index}`,
+    position: [p.x,8.05,p.z], yaw:p.yaw, scale:p.scale*1.35,
+  })),
+  ...trees.filter(([x,z]) => x > 136 || woodlandPlantAllowed(x,z)).map(([x, z, yaw, scale], index): TownAssetPlacement => ({
     id: index % 3 === 0 ? "treeCrooked" : "treeHighRound",
     name: `greenwood-tree-${String(index + 1).padStart(2, "0")}`,
     position: [x, 8.15, z], yaw, scale,
@@ -82,6 +87,8 @@ export interface GreenwoodGroundPatch {
 }
 
 export const GREENWOOD_GROUND_PATCHES: readonly GreenwoodGroundPatch[] = [
+  { id: "mosswatch-clearing", material: "leafLitter", position: [123.5,90.5], scale: [16,14], yaw: 12 },
+  { id: "mosswatch-clearing-moss", material: "moss", position: [127.5,91], scale: [7,8], yaw: -18 },
   { id: "gate-trail", material: "leafLitter", position: [116, 106], scale: [7.8, 2.1], yaw: 0 },
   { id: "camp-branch", material: "leafLitter", position: [124, 96], scale: [6.8, 1.7], yaw: -34 },
   { id: "shrine-branch", material: "moss", position: [130, 117], scale: [7.2, 1.75], yaw: 32 },

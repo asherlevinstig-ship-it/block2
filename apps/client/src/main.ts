@@ -1,3 +1,4 @@
+import { GREENWOOD_MAIN_TRAIL, GREENWOOD_CAMP_TRAIL, GREENWOOD_THICKETS, GREENWOOD_CLUSTER_PLANTS, sampleWoodlandTrail } from "./greenwood-landscape.js";
 import * as pc from "playcanvas";
 import { facetedBoxMesh } from "./faceted-shapes.js";
 import { addCallingParticleLayers } from "./calling-particles.js";
@@ -116,7 +117,7 @@ import { confirmPredictedDodges, removeRejectedDodge, replayPendingMovement, typ
 import { advanceCameraOrbit, cameraOrbitOffset, dragCameraOrbit, initialCameraOrbit, pinchCameraOrbit } from "./camera-orbit.js";
 import { advanceCameraFollow, advanceCameraHeight, advanceCameraPosition } from "./camera-follow.js";
 import { populateTownAssetKit, readyTownFallbacks, SPEED_LAB_TOWN_ASSETS, type TownFallbackFamily } from "./town-asset-kit.js";
-import { createPaintedGroundMaterial, fitGroundTexture, fitOrganicGroundPatch } from "./fast-world-texture.js";
+import { createPaintedGroundMaterial, fitGroundTexture, fitOrganicGroundPatch, createWoodlandTrailMesh, woodlandFernMesh } from "./fast-world-texture.js";
 import {
   GREENWOOD_ASSET_PLACEMENTS,
   GREENWOOD_FALLEN_LOGS,
@@ -2809,7 +2810,35 @@ if (fastWorldRequested) {
       addRapidRegionBox(regionId, `${regionId}-ground:${chunk.key}`, rapidRegionGroundMaterials[region.visualTheme],
         [chunk.width, .035, chunk.depth], [chunk.centerX, 8.02, chunk.centerZ]);
   }
-  addRapidWorldBox("east-realm-road", path, [154, .055, 5.2], [179, 8.035, 106]);
+  addRapidWorldBox("east-realm-road", path, [118, .055, 5.2], [198, 8.035, 106]);
+  for (const [name, points] of [["greenwood-main-trail", GREENWOOD_MAIN_TRAIL], ["mosswatch-approach", GREENWOOD_CAMP_TRAIL]] as const) {
+    const trail = new pc.Entity(name);
+    rapidPrototypeRoot.addChild(trail);
+    createWoodlandTrailMesh(app.graphicsDevice, trail, roadWarm, sampleWoodlandTrail(points));
+  }
+  // Cluster the understory around authored tree groups, leaving routes and the
+  // first combat pocket open. Shared low-poly meshes remain statically batched.
+  for (const [index, plant] of GREENWOOD_CLUSTER_PLANTS.entries()) {
+    if (plant.tree) continue;
+    const {x,z,scale} = plant;
+    const fern = new pc.Entity(`mosswatch-fern-${index}`);
+    fern.addComponent("render", {meshInstances:[new pc.MeshInstance(woodlandFernMesh(app.graphicsDevice),
+      index%2 ? greenwoodFern : greenwoodFernLight, fern)],castShadows:false});
+    fern.setLocalPosition(x,8.06,z);fern.setLocalScale(scale,scale,scale);fern.setLocalEulerAngles(0,plant.yaw,0);
+    rapidRegionChunkRoot("greenwood",x,z).addChild(fern);
+    fern.render!.batchGroupId=rapidWorldSceneryBatchGroup.id;
+    if (index%4===0) {
+      const stone = addRapidRegionShape("greenwood", `mosswatch-scree-${index}`, "sphere", greenwoodStone,
+        [.65*scale,.18*scale,.46*scale], [x+.5,8.07,z-.3]);
+      stone.setLocalEulerAngles(0,plant.yaw,0);
+    }
+  }
+  for (const [index,[x,z,radius]] of GREENWOOD_THICKETS.entries()) {
+    addRapidRegionShape("greenwood", `greenwood-ground:thicket-soil-${index}`, "cylinder", greenwoodLeafLitter,
+      [radius*2.6,.022,radius*2.3],[x,8.06,z]);
+    addRapidRegionShape("greenwood", `greenwood-bank:thicket-moss-${index}`, "cylinder", greenwoodMoss,
+      [radius*2,.16,radius*1.7],[x+.4,8.06,z-.3]);
+  }
   addRapidWorldBox("regional-fork-road", path, [5.2, .06, 130], [168, 8.04, 106]);
   addRapidWorldBox("mistfen-road", roadWarm, [28, .055, 4.2], [181, 8.045, 65]);
   addRapidWorldBox("quarry-road", roadWarm, [28, .055, 4.2], [181, 8.045, 151]);
@@ -3114,12 +3143,12 @@ if (fastWorldRequested) {
   }
   for (const log of GREENWOOD_FALLEN_LOGS) {
     const trunk = addRapidRegionShape("greenwood", "greenwood-fallen-log", "cylinder", greenwoodBark,
-      [.52, log.length * .5, .52], [log.x, 8.48, log.z]);
+      [.52, log.length, .52], [log.x, 8.48, log.z]);
     trunk.setLocalEulerAngles(90, log.yaw, 0);
     for (const side of [-1, 1] as const) {
       const cut = addRapidRegionShape("greenwood", "greenwood-log-cut", "cylinder", timberLight,
-        [.42, .035, .42], [log.x + Math.sin(log.yaw * Math.PI / 180) * log.length * .48 * side,
-          8.48, log.z + Math.cos(log.yaw * Math.PI / 180) * log.length * .48 * side]);
+        [.42, .035, .42], [log.x + Math.sin(log.yaw * Math.PI / 180) * log.length * .5 * side,
+          8.48, log.z + Math.cos(log.yaw * Math.PI / 180) * log.length * .5 * side]);
       cut.setLocalEulerAngles(90, log.yaw, 0);
     }
   }
