@@ -5,6 +5,11 @@ export interface BossHudState { visible: boolean; alive?: boolean; enraged: bool
 export const initialBossHud = (): BossHudState => ({ visible: false, enraged: false, message: "", messageUntil: 0 });
 export interface BossHudCopy { arrival: string; enrage: string; defeat: string }
 export function bossHudCopy(name: string, isMiniBoss = false): BossHudCopy {
+  if (/Crownkeeper/i.test(name)) return {
+    arrival: "FLOOR 1 BOSS · THE CROWNKEEPER AWAKENS",
+    enrage: "FINAL PHASE · THE LAST DECREE",
+    defeat: "THE CROWNKEEPER FALLS · FLOOR 1 CLEARED",
+  };
   if (/Razorhide Pack Sovereign/i.test(name)) return {
     arrival: "FANG PATH CHAMPION · RAZORHIDE CLAIMS THE HUNT",
     enrage: "FINAL PHASE · ALPHA RUSH",
@@ -124,6 +129,7 @@ export function leaderExposureRoleLabel(label: string, mobId: string, pathId: st
 }
 
 export const COORDINATED_BRUTE_FOLLOWERS: Readonly<Record<string, readonly string[]>> = {
+  "floor1-crownkeeper": ["floor1-court-briar-a", "floor1-court-briar-b"],
   "stone-brute": ["stone-brute-crawler", "stone-brute-spitter"],
   "frontier-brute": ["frontier-brute-crawler", "frontier-brute-spitter"],
   "frontier-brute-west": ["frontier-brute-west-crawler", "frontier-brute-west-spitter"],
@@ -189,6 +195,12 @@ export function pathChampionPhaseLabel(name: string, phase: 1 | 2 | 3, recoverin
   if (/Worldsplitter Colossus/i.test(name))
     return `PHASE ${phase} · ${phase === 1 ? "ROCK VOLLEY" : phase === 2 ? "FALLING ROCKS" : "ROCK BARRAGE"}`;
   return "";
+}
+
+export function floorBossPhaseLabel(name: string, phase: 1 | 2 | 3, recovering = false): string {
+  if (!/Crownkeeper/i.test(name)) return "";
+  if (recovering) return `PHASE ${phase} · CROWN EXPOSED`;
+  return `PHASE ${phase} · ${phase === 1 ? "ROYAL JUDGEMENT" : phase === 2 ? "BRIARS RALLY" : "THE LAST DECREE"}`;
 }
 
 export function realmBossHealthPhase(health: number, maxHealth: number): 1 | 2 | 3 {

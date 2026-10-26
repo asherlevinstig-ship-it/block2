@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeCombatNearby, advanceBossHud, initialBossHud, leaderArmourSegments, leaderAttackLabel, leaderAttackName, leaderChargeGuidance, leaderExposureLabel, leaderExposureRoleLabel, leaderFormationLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
+import { activeCombatNearby, advanceBossHud, floorBossPhaseLabel, initialBossHud, leaderArmourSegments, leaderAttackLabel, leaderAttackName, leaderChargeGuidance, leaderExposureLabel, leaderExposureRoleLabel, leaderFormationLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
 const player = { x: 40, y: 8, z: 18, health: 5 };
 const boss = { x: 43, y: 8, z: 18, name: "Matriarch", alive: true, health: 24, maxHealth: 24, enraged: false };
 describe("boss HUD", () => {
@@ -78,6 +78,19 @@ describe("boss HUD", () => {
     expect(leaderAttackName("toxic-eruption")).toBe("TOXIC ERUPTION");
     expect(leaderAttackName("mirestorm")).toContain("MIRESTORM");
     expect(leaderAttackName("root-cage")).toContain("ROOT WALLS");
+  });
+  it("presents the Crownkeeper as a floor finale with named phases and escort armour", () => {
+    const crownkeeper = { ...boss, name: "The Crownkeeper", isMiniBoss: true };
+    expect(advanceBossHud(initialBossHud(), crownkeeper, player, 1000).message)
+      .toContain("FLOOR 1 BOSS");
+    expect(floorBossPhaseLabel(crownkeeper.name, 1)).toContain("ROYAL JUDGEMENT");
+    expect(floorBossPhaseLabel(crownkeeper.name, 2)).toContain("BRIARS RALLY");
+    expect(floorBossPhaseLabel(crownkeeper.name, 3)).toContain("LAST DECREE");
+    expect(floorBossPhaseLabel(crownkeeper.name, 2, true)).toContain("CROWN EXPOSED");
+    expect(leaderArmourSegments("floor1-crownkeeper", new Map([
+      ["floor1-court-briar-a", { alive: true }],
+      ["floor1-court-briar-b", { alive: false }],
+    ]))).toEqual({ active: 1, maximum: 2 });
   });
   it("keeps Path Champion identity and phase mechanics beside the boss bar", () => {
     const champion = { ...boss, name: "Viridian Brood Oracle", isMiniBoss: true };

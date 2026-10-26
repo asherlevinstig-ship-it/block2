@@ -124,6 +124,19 @@ describe("private Calling practice", () => {
     expect(leader.targetId).toBe("");
   });
 
+  it("configures the Crownkeeper as a true floor boss above the Root Wardens", () => {
+    const { internal } = fixture();
+    internal.rapidPractice = true;
+    const boss = new MobState();
+    Object.assign(boss, { alive: true, archetype: "stone_brute", combatState: "idle" });
+    internal.configureRapidWorldMob("floor1-crownkeeper", boss);
+    expect(boss).toMatchObject({
+      name: "The Crownkeeper", level: 4, isMiniBoss: true, isChampion: true,
+      maxHealth: 52, health: 52, attackDamage: 2, attackPattern: "smash",
+    });
+    expect(boss.rewardMultiplier).toBe(3);
+  });
+
   it("applies quick upgrades without saving or opening inventory", () => {
     const { internal, player, client } = fixture();
     internal.rapidPractice = true;

@@ -164,6 +164,24 @@ export function towerFloorOneSouthWardenWindup(pattern: string): number {
       : TOWER_FLOOR_ONE_SOUTH_WARDEN_COMBAT.bindWindupMs;
 }
 export const TOWER_FLOOR_ONE_BOSS_ID = "floor1-crownkeeper";
+export const TOWER_FLOOR_ONE_CROWNKEEPER_COMBAT = {
+  health: 52,
+  phaseTwoAt: .6,
+  finalPhaseAt: .25,
+} as const;
+
+/** The Crownkeeper is deliberately learnable rather than random. Phase one
+ * establishes its close-range tells, phase two forces target switching and
+ * movement, and the last stand combines the court-wide barrage with charges. */
+export function towerFloorOneCrownkeeperPattern(actionSequence: number, phase: 1 | 2 | 3): string {
+  const rotations = {
+    1: ["smash", "slam", "smash", "rocks"],
+    2: ["charge", "rocks", "smash", "slam"],
+    3: ["warden-barrage", "charge", "smash", "rocks"],
+  } as const;
+  const rotation = rotations[phase];
+  return rotation[Math.abs(Math.trunc(actionSequence)) % rotation.length]!;
+}
 
 export function isInsideTowerFloorOne(x: number, z: number, inset = 0): boolean {
   const bounds = TOWER_FLOOR_ONE.bounds;

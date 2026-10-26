@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { FAST_WORLD_COLLISION_QUERY } from "./index.js";
-import { TOWER_FLOOR_ONE, TOWER_FLOOR_ONE_BOSS_ID, TOWER_FLOOR_ONE_SPAWNS,
+import { TOWER_FLOOR_ONE, TOWER_FLOOR_ONE_BOSS_ID, TOWER_FLOOR_ONE_CROWNKEEPER_COMBAT, TOWER_FLOOR_ONE_SPAWNS,
   TOWER_FLOOR_ONE_FORTRESS_COLLIDERS, TOWER_FLOOR_ONE_NORTH_ATTENDANTS,
   TOWER_FLOOR_ONE_NORTH_WARDEN_COMBAT, TOWER_FLOOR_ONE_SOUTH_ATTENDANTS,
   TOWER_FLOOR_ONE_SOUTH_WARDEN_COMBAT, TOWER_FLOOR_ONE_WARDENS, isInsideTowerFloorOne,
-  towerFloorOneEncounterAllows, towerFloorOneGroundHeight, towerFloorOneNorthWardenAttackTiming,
+  towerFloorOneCrownkeeperPattern, towerFloorOneEncounterAllows, towerFloorOneGroundHeight, towerFloorOneNorthWardenAttackTiming,
   towerFloorOneNorthWardenPattern, towerFloorOneSouthWardenPattern,
   towerFloorOneSouthWardenWindup } from "./tower-floor-one.js";
 
@@ -70,5 +70,15 @@ describe("tower floor one manifest", () => {
     expect(towerFloorOneSouthWardenWindup("venom-ring"))
       .toBeGreaterThan(towerFloorOneSouthWardenWindup("fan"));
     expect(TOWER_FLOOR_ONE_SOUTH_WARDEN_COMBAT.exposedMs).toBe(3_200);
+  });
+
+  it("gives the Crownkeeper a tougher fixed three-phase finale", () => {
+    expect(TOWER_FLOOR_ONE_CROWNKEEPER_COMBAT.health).toBeGreaterThan(34);
+    expect([0, 1, 2, 3].map(sequence => towerFloorOneCrownkeeperPattern(sequence, 1)))
+      .toEqual(["smash", "slam", "smash", "rocks"]);
+    expect([0, 1, 2, 3].map(sequence => towerFloorOneCrownkeeperPattern(sequence, 2)))
+      .toEqual(["charge", "rocks", "smash", "slam"]);
+    expect([0, 1, 2, 3].map(sequence => towerFloorOneCrownkeeperPattern(sequence, 3)))
+      .toEqual(["warden-barrage", "charge", "smash", "rocks"]);
   });
 });

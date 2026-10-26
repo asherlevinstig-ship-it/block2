@@ -3,11 +3,11 @@ import { GREENWOOD_MASTERY_CAP, MISTFEN_MASTERY_CAP, greenwoodMasteryRank, mistf
 import { callingStarterAbility } from "@blockcraft/protocol";
 import { experienceToNextLevel } from "@blockcraft/protocol";
 import { FAST_WORLD_TOWN_BOUNDS, FAST_WORLD_TOWN_ONLY, PRACTICE_ROOM, TOWER_FLOOR_ONE,
-  TOWER_FLOOR_ONE_BOSS_ID, TOWER_FLOOR_ONE_NORTH_WARDEN_COMBAT, TOWER_FLOOR_ONE_NORTH_WARDEN_ID,
+  TOWER_FLOOR_ONE_BOSS_ID, TOWER_FLOOR_ONE_CROWNKEEPER_COMBAT, TOWER_FLOOR_ONE_NORTH_WARDEN_COMBAT, TOWER_FLOOR_ONE_NORTH_WARDEN_ID,
   TOWER_FLOOR_ONE_SOUTH_ATTENDANTS, TOWER_FLOOR_ONE_SOUTH_WARDEN_COMBAT, TOWER_FLOOR_ONE_SOUTH_WARDEN_ID,
   TOWER_FLOOR_ONE_SPAWNS, TOWER_FLOOR_ONE_WARDENS, isInsideTowerFloorOne,
   towerFloorOneEncounterAllows, towerFloorOneNorthWardenAttackTiming,
-  towerFloorOneNorthWardenPattern, towerFloorOneSouthWardenPattern,
+  towerFloorOneCrownkeeperPattern, towerFloorOneNorthWardenPattern, towerFloorOneSouthWardenPattern,
   towerFloorOneSouthWardenWindup } from "@blockcraft/protocol";
 import type { SchemaType } from "@colyseus/schema";
 import { ShadowMoveInput, stepShadowMovement, type ShadowPose } from "./movement-shadow.js";
@@ -2675,6 +2675,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       mob.maxHealth = mob.health = 30;
       mob.speedMultiplier = 1.18;
       mob.attackPattern = towerFloorOneSouthWardenPattern(0);
+    }
+    if (mobId === TOWER_FLOOR_ONE_BOSS_ID) {
+      mob.maxHealth = mob.health = TOWER_FLOOR_ONE_CROWNKEEPER_COMBAT.health;
+      mob.attackDamage = 2;
+      mob.speedMultiplier = 1.28;
+      mob.rewardMultiplier = 3;
+      mob.attackPattern = towerFloorOneCrownkeeperPattern(0, 1);
     }
     this.mobBaseNames.set(mobId, mob.name);
   }
@@ -8893,6 +8900,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       }
       if (mobId === TOWER_FLOOR_ONE_SOUTH_WARDEN_ID && mob.combatState === "idle")
         mob.attackPattern = towerFloorOneSouthWardenPattern(mob.actionSequence);
+      if (mobId === TOWER_FLOOR_ONE_BOSS_ID && mob.combatState === "idle")
+        mob.attackPattern = towerFloorOneCrownkeeperPattern(mob.actionSequence, currentAreaLeaderPhase);
       if (!huntChampion && mob.isMiniBoss && mob.combatState === "idle") {
         if (mob.leaderRematchTier > 0)
           mob.attackPattern = leaderRematchPattern(mob.attackPattern, mob.archetype, mob.actionSequence, mob.leaderModifier);
@@ -9370,7 +9379,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           ? towerFloorOneNorthWardenAttackTiming(mob.attackPattern).windupMs
         : mobId === TOWER_FLOOR_ONE_SOUTH_WARDEN_ID
           ? towerFloorOneSouthWardenWindup(mob.attackPattern)
-        : (mobId === "frontier-brute" || isAreaMiniBoss(mobId) && mob.archetype === "stone_brute") && mob.attackPattern === "smash"
+        : (mobId === TOWER_FLOOR_ONE_BOSS_ID || mobId === "frontier-brute" || isAreaMiniBoss(mobId) && mob.archetype === "stone_brute") && mob.attackPattern === "smash"
           ? FRONTIER_BRUTE.smash.windupMs : definition.windupMs;
       const rematchTiming = leaderRematchTiming(mob.leaderModifier);
       const huntTiming = huntDifficultyTiming(this.huntChampions.get(mobId)?.difficulty
@@ -10382,7 +10391,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       mob.attackRecoveryEndAt = mob.attackContactEndAt + timing.recoveryMs;
       return;
     }
-    if (mobId === "frontier-brute" || isAreaMiniBoss(mobId) && mob.archetype === "stone_brute" && mob.attackPattern === "smash") {
+    if (mobId === "frontier-brute" || (mobId === TOWER_FLOOR_ONE_BOSS_ID || isAreaMiniBoss(mobId))
+      && mob.archetype === "stone_brute" && mob.attackPattern === "smash") {
       const timing = FRONTIER_BRUTE[mob.attackPattern === "smash" ? "smash" : "slam"];
       mob.attackContactAt = releaseAt + timing.impactMs;
       mob.attackContactEndAt = mob.attackContactAt + 100;

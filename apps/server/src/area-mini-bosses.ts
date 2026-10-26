@@ -73,6 +73,7 @@ export function areaMainMobDefinition(id: string): AreaMiniBossDefinition | unde
 }
 
 export const AREA_LEADER_FOLLOWERS: Readonly<Record<string, readonly string[]>> = {
+  "floor1-crownkeeper": ["floor1-court-briar-a", "floor1-court-briar-b"],
   "greenwood-elderthorn": ["greenwood-elderthorn-rootguard", "greenwood-elderthorn-attendant"],
   "mistfen-miremother": ["mistfen-miremother-spitter", "mistfen-miremother-briar"],
   "sunken-coast-tidecaller": ["coast-tidecaller-shoalguard", "coast-tidecaller-brinefang"],
@@ -96,6 +97,7 @@ export const AREA_LEADER_FOLLOWERS: Readonly<Record<string, readonly string[]>> 
 };
 
 const COORDINATED_BRUTE_LEADERS = new Set([
+  "floor1-crownkeeper",
   "stone-brute", "frontier-brute", "frontier-brute-west", "frontier-brute-east",
   "mistfen-behemoth", "south-quarrymaster", "buried-chamber-brute",
   "quarry-quarrymaster",
