@@ -344,6 +344,19 @@ export function createTowerFloorOneWorld(app: pc.Application, parent: pc.Entity)
   }
   shape(root, "floor1-south-shrine", "cylinder", stone, [5.5, 1.25, 5.5], [350, 9.05, 132]);
   shape(root, "floor1-south-shrine-crystal", "cone", southSealGlow, [1.5, 3.8, 1.5], [350, 11.2, 132]);
+  // The southern court telegraphs ranged control: eight thorn pylons mirror
+  // the root-ring lanes while the broken shrine provides a strong focal point.
+  for (let index = 0; index < 8; index++) {
+    const angle = index / 8 * Math.PI * 2;
+    const x = 350 + Math.cos(angle) * 9.3, z = 132 + Math.sin(angle) * 9.3;
+    const ground = towerFloorOneGroundHeight(x, z);
+    shape(root, "floor1-south-ring-pylon", "cone", index % 2 ? leafDark : southGreen,
+      [.55, 3.4, .55], [x, ground + 1.55, z], -angle * 180 / Math.PI);
+    shape(root, "floor1-south-ring-bloom", "sphere", poison, [.4, .3, .4],
+      [x, ground + 3.35, z]);
+  }
+  for (const [x, z, yaw] of [[343, 124, -42], [357, 124, 42], [343, 140, -138], [357, 140, 138]] as const)
+    rootCluster(root, x, z, yaw, 5.6, bark, southGreen);
 
   arch(root, "floor1-opening-gate", 320.5, 106, 8.55, 6.4, 6.5, 90, stoneLight, stone, bark);
   arch(root, "floor1-north-breach", 339, 94, towerFloorOneGroundHeight(339, 94), 5.4, 5.8, 49,

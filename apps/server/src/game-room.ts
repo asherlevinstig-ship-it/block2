@@ -4,9 +4,11 @@ import { callingStarterAbility } from "@blockcraft/protocol";
 import { experienceToNextLevel } from "@blockcraft/protocol";
 import { FAST_WORLD_TOWN_BOUNDS, FAST_WORLD_TOWN_ONLY, PRACTICE_ROOM, TOWER_FLOOR_ONE,
   TOWER_FLOOR_ONE_BOSS_ID, TOWER_FLOOR_ONE_NORTH_WARDEN_COMBAT, TOWER_FLOOR_ONE_NORTH_WARDEN_ID,
+  TOWER_FLOOR_ONE_SOUTH_ATTENDANTS, TOWER_FLOOR_ONE_SOUTH_WARDEN_COMBAT, TOWER_FLOOR_ONE_SOUTH_WARDEN_ID,
   TOWER_FLOOR_ONE_SPAWNS, TOWER_FLOOR_ONE_WARDENS, isInsideTowerFloorOne,
   towerFloorOneEncounterAllows, towerFloorOneNorthWardenAttackTiming,
-  towerFloorOneNorthWardenPattern } from "@blockcraft/protocol";
+  towerFloorOneNorthWardenPattern, towerFloorOneSouthWardenPattern,
+  towerFloorOneSouthWardenWindup } from "@blockcraft/protocol";
 import type { SchemaType } from "@colyseus/schema";
 import { ShadowMoveInput, stepShadowMovement, type ShadowPose } from "./movement-shadow.js";
 import { FIRST_COMBAT_MOB_ID, firstCombatExperience, firstCombatHealthAfterHit, firstCombatReward, isFirstCombatSupport } from "./first-combat-training.js";
@@ -2669,6 +2671,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       mob.speedMultiplier = 1.34;
       mob.attackPattern = towerFloorOneNorthWardenPattern(0);
     }
+    if (mobId === TOWER_FLOOR_ONE_SOUTH_WARDEN_ID) {
+      mob.maxHealth = mob.health = 30;
+      mob.speedMultiplier = 1.18;
+      mob.attackPattern = towerFloorOneSouthWardenPattern(0);
+    }
     this.mobBaseNames.set(mobId, mob.name);
   }
 
@@ -3014,7 +3021,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       && mob.attackPattern === "venom-ring";
     const brokeRootSlam = mobId === TOWER_FLOOR_ONE_NORTH_WARDEN_ID && mob.combatState === "windup"
       && mob.attackPattern === TOWER_FLOOR_ONE_NORTH_WARDEN_COMBAT.rootSlamPattern;
+    const brokeRootRing = mobId === TOWER_FLOOR_ONE_SOUTH_WARDEN_ID && mob.combatState === "windup"
+      && mob.attackPattern === TOWER_FLOOR_ONE_SOUTH_WARDEN_COMBAT.rootRingPattern;
     const staggerDuration = brokeRootSlam ? Math.max(duration, TOWER_FLOOR_ONE_NORTH_WARDEN_COMBAT.exposedMs)
+      : brokeRootRing ? Math.max(duration, TOWER_FLOOR_ONE_SOUTH_WARDEN_COMBAT.exposedMs)
       : brokePackRush || brokeVenomRing ? Math.max(duration, 3_000) : duration;
     this.delayedMatriarchVolleys.delete(mobId);
     mob.combatState = "stagger";
@@ -3041,6 +3051,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.broadcast("leader:exposed", { mobId, durationMs: staggerDuration,
         reason: "root-slam-interrupt" } satisfies AreaLeaderExposed);
       this.broadcast("chat:notice", "ROOT SLAM INTERRUPTED · NORTH ROOT WARDEN EXPOSED · ATTACK NOW!");
+    }
+    if (brokeRootRing) {
+      this.broadcast("leader:exposed", { mobId, durationMs: staggerDuration,
+        reason: "root-ring-interrupt" } satisfies AreaLeaderExposed);
+      this.broadcast("chat:notice", "ROOT RING INTERRUPTED · SOUTH ROOT WARDEN EXPOSED · ATTACK NOW!");
     }
     const warbandLeaderId = isMixedWarbandLeader(mobId) ? mobId : leaderForFollower(mobId);
     if (warbandLeaderId && isMixedWarbandLeader(warbandLeaderId)
@@ -3393,6 +3408,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         this.clients.find(client => client.sessionId === attackerId)?.send("chat:notice",
           mobId === TOWER_FLOOR_ONE_NORTH_WARDEN_ID
             ? "NORTH ROOT WARDEN FELLED · northern seal broken · warden cache landed."
+            : mobId === TOWER_FLOOR_ONE_SOUTH_WARDEN_ID
+              ? "SOUTH ROOT WARDEN FELLED · southern seal broken · warden cache landed."
             : rapidSpawn.leader
             ? `${mob.name.toUpperCase()} DEFEATED · leader loot landed · returns in ${Math.round(rapidSpawn.respawnMs / 1000)}s.`
             : guardedReward ? `${mob.name.replace(/ keeper$/i, "").toUpperCase()} SECURED · guarded loot landed · +${coinsGranted} gold.`
@@ -8874,6 +8891,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           : mobId === "frontier-brute" ? frontierBrutePattern(mob.actionSequence)
           : "slam");
       }
+      if (mobId === TOWER_FLOOR_ONE_SOUTH_WARDEN_ID && mob.combatState === "idle")
+        mob.attackPattern = towerFloorOneSouthWardenPattern(mob.actionSequence);
       if (!huntChampion && mob.isMiniBoss && mob.combatState === "idle") {
         if (mob.leaderRematchTier > 0)
           mob.attackPattern = leaderRematchPattern(mob.attackPattern, mob.archetype, mob.actionSequence, mob.leaderModifier);
@@ -9078,6 +9097,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
             const followerIds = AREA_LEADER_FOLLOWERS[mobId] ?? [];
             const aliveFollowers = followerIds.filter(id => this.state.mobs.get(id)?.alive).length;
             shots = spitterRingWithSafeGap(shots, aliveFollowers, followerIds.length);
+          }
+          if (mobId === TOWER_FLOOR_ONE_SOUTH_WARDEN_ID && mob.attackPattern === "venom-ring") {
+            const aliveAttendants = TOWER_FLOOR_ONE_SOUTH_ATTENDANTS
+              .filter(id => this.state.mobs.get(id)?.alive).length;
+            shots = spitterRingWithSafeGap(shots, aliveAttendants, TOWER_FLOOR_ONE_SOUTH_ATTENDANTS.length);
           }
           const origin = { x: mob.x, y: mob.y, z: mob.z };
           shots = rapidPracticeProjectileFan(origin, shots, this.rapidPractice);
@@ -9344,6 +9368,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         : mob.attackPattern === "charge" ? CHAMPION_CHARGE.windupMs
         : mobId === TOWER_FLOOR_ONE_NORTH_WARDEN_ID
           ? towerFloorOneNorthWardenAttackTiming(mob.attackPattern).windupMs
+        : mobId === TOWER_FLOOR_ONE_SOUTH_WARDEN_ID
+          ? towerFloorOneSouthWardenWindup(mob.attackPattern)
         : (mobId === "frontier-brute" || isAreaMiniBoss(mobId) && mob.archetype === "stone_brute") && mob.attackPattern === "smash"
           ? FRONTIER_BRUTE.smash.windupMs : definition.windupMs;
       const rematchTiming = leaderRematchTiming(mob.leaderModifier);

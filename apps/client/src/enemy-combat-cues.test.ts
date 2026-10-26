@@ -53,6 +53,13 @@ describe("readable enemy combat cues", () => {
     expect(enemyCombatCue({ ...mob, name: "North Root Warden", attackPattern: "root-slam" }, 1200).label)
       .toBe("ROOT SLAM · INTERRUPT · AIMING");
   });
+  it("names the South Root Warden control rotation explicitly", () => {
+    const south = { ...mob, archetype: "thornbinder", name: "South Root Warden" };
+    expect(enemyCombatCue({ ...south, attackPattern: "aimed" }, 1200).label).toBe("BINDING THORN · AIMING");
+    expect(enemyCombatCue({ ...south, attackPattern: "fan" }, 1200).label).toBe("THORN FAN · AIMING");
+    expect(enemyCombatCue({ ...south, attackPattern: "venom-ring" }, 1200).label)
+      .toBe("ROOT RING · INTERRUPT · AIMING");
+  });
   it("labels the enraged double volley, then only shows the counter window after both releases", () => {
     const boss = { ...mob, archetype: "cave_spitter", attackPattern: "double-fan", enraged: true,
       attackReleaseAt: 2000, attackContactAt: 2000, attackContactEndAt: 2500, attackRecoveryEndAt: 5100 };

@@ -1,6 +1,6 @@
 import { greenwoodAtmosphere } from "./greenwood-atmosphere.js";
 import { greenwoodEmergence, greenwoodMobStyle, type GreenwoodMobStyle } from "./greenwood-mob-style.js";
-import { FAST_WORLD_TOWN_BOUNDS, FAST_WORLD_TOWN_ONLY, TOWER_FLOOR_ONE, TOWER_FLOOR_ONE_WARDENS, fastWorldGroundHeight, isInsideTowerFloorOne } from "@blockcraft/protocol";
+import { FAST_WORLD_TOWN_BOUNDS, FAST_WORLD_TOWN_ONLY, TOWER_FLOOR_ONE, TOWER_FLOOR_ONE_SOUTH_ATTENDANTS, TOWER_FLOOR_ONE_WARDENS, fastWorldGroundHeight, isInsideTowerFloorOne } from "@blockcraft/protocol";
 import { GREENWOOD_MAIN_TRAIL, GREENWOOD_CAMP_TRAIL, GREENWOOD_THICKETS, GREENWOOD_CLUSTER_PLANTS, GREENWOOD_VERGE_PLANTS, sampleWoodlandTrail } from "./greenwood-landscape.js";
 import * as pc from "playcanvas";
 import { facetedBoxMesh } from "./faceted-shapes.js";
@@ -9832,13 +9832,14 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   const bodyRoot = new pc.Entity("mob-body");
   entity.addChild(bodyRoot);
   const isBrute = mob.archetype === "stone_brute";
-  const isSpitter = mob.archetype === "cave_spitter" || mob.archetype === "shard_sentry";
+  const isSpitter = mob.archetype === "cave_spitter" || mob.archetype === "shard_sentry" || mob.archetype === "thornbinder";
   const isThornbinder = mob.archetype === "thornbinder";
   const isFenBloater = mob.archetype === "fen_bloater";
   const isCinderRam = mob.archetype === "cinder_ram";
   const isEmberHound = mob.archetype === "ember_hound";
   const isWatchbreaker = mobId === "northwatch-watchbreaker";
   const isNorthRootWarden = mobId === TOWER_FLOOR_ONE_WARDENS[0];
+  const isSouthRootWarden = mobId === TOWER_FLOOR_ONE_WARDENS[1];
   const isAshglass = mobId.startsWith("ashglass-sentry-");
   const isBriar = mob.archetype === "briar_crawler";
   const isNorthwatch = mob.archetype === "ridge_stalker" || mob.archetype === "shard_sentry";
@@ -9975,6 +9976,29 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     const blade = addBox(weaponParent, "north-warden-cleaver-blade", rootIron, [.72, .52, .13], [-.22, -1.55, .23]);
     blade.setLocalEulerAngles(-8, 0, -18);
     addBox(weaponParent, "north-warden-cleaver-rune", rootSap, [.16, .22, .145], [-.18, -1.55, .24])
+      .setLocalEulerAngles(0, 0, 45);
+  }
+  if (isSouthRootWarden) {
+    const blackRoot = coloredMaterial(new pc.Color(.12, .075, .035));
+    const thornLeaf = coloredMaterial(new pc.Color(.19, .42, .12));
+    const venomBloom = coloredMaterial(new pc.Color(.64, .2, .86));
+    venomBloom.emissive.set(.3, .04, .52); venomBloom.update();
+    addBox(bodyRoot, "south-warden-thorn-mantle", thornLeaf, [1.3, .22, .72], [0, 1.67, -.12])
+      .setLocalEulerAngles(-5, 0, 3);
+    addBox(bodyRoot, "south-warden-venom-heart", venomBloom, [.3, .42, .16], [0, 1.18, .38])
+      .setLocalEulerAngles(0, 0, 45);
+    for (const side of [-1, 1]) {
+      for (let tier = 0; tier < 3; tier++)
+        addBox(bodyRoot, `south-warden-crown-${side}-${tier}`, blackRoot,
+          [.13, .58 - tier * .08, .15], [side * (.24 + tier * .2), 2.35 - tier * .08, -.06])
+          .setLocalEulerAngles(-8, side * 15, side * (-22 - tier * 14));
+      addBox(bodyRoot, `south-warden-bloom-${side}`, venomBloom, [.2, .2, .2], [side * .58, 1.77, .08])
+        .setLocalEulerAngles(0, 0, 45);
+    }
+    const staffParent = art.arms.find(arm => arm.side > 0)?.knee ?? bodyRoot;
+    addBox(staffParent, "south-warden-staff", blackRoot, [.11, 1.65, .11], [.05, -.95, .2])
+      .setLocalEulerAngles(-8, 0, -6);
+    addBox(staffParent, "south-warden-staff-bloom", venomBloom, [.42, .42, .18], [.02, -1.82, .21])
       .setLocalEulerAngles(0, 0, 45);
   }
   if (isAshglass) {
@@ -17541,7 +17565,8 @@ app.on("update", (dt: number) => {
               ? serverClock.bestRtt / 2 + (frameSamples.at(-1) ?? 0) : null);
       }
       if (mob.warningMesh) {
-        const spitterFollowers = COORDINATED_SPITTER_FOLLOWERS[mobId] ?? [];
+        const spitterFollowers = mobId === TOWER_FLOOR_ONE_WARDENS[1]
+          ? TOWER_FLOOR_ONE_SOUTH_ATTENDANTS : COORDINATED_SPITTER_FOLLOWERS[mobId] ?? [];
         const livingSpitterFollowers = spitterFollowers.filter(id => mobVisuals.get(id)?.state.alive).length;
         const safeVenomGap = mob.state.attackPattern === "venom-ring" && spitterFollowers.length > 0
           && livingSpitterFollowers < spitterFollowers.length;
@@ -18793,6 +18818,11 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     if (visual && message.reason === "root-slam-interrupt") {
       createRangedPopup(new pc.Vec3(visual.state.x, visual.state.y + visual.healthBarY + .85, visual.state.z),
         "ROOT SLAM BROKEN · EXPOSED", "melee", false, [.55, 1, .22]);
+      showCombatFeedback("WARDEN EXPOSED · ATTACK NOW", "dodge");
+    }
+    if (visual && message.reason === "root-ring-interrupt") {
+      createRangedPopup(new pc.Vec3(visual.state.x, visual.state.y + visual.healthBarY + .85, visual.state.z),
+        "ROOT RING BROKEN · EXPOSED", "melee", false, [.72, .35, 1]);
       showCombatFeedback("WARDEN EXPOSED · ATTACK NOW", "dodge");
     }
     bossHudFingerprint = "";

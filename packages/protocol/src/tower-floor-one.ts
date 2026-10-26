@@ -93,6 +93,7 @@ export const TOWER_FLOOR_ONE_SPAWNS: readonly TowerFloorOneSpawn[] = [
   { id: "floor1-north-guard-b", archetype: "thornbinder", name: "Rootbound Keeper", level: 2, respawnMs: 55_000, x: 344, y: towerFloorOneGroundHeight(344, 84), z: 84 },
   { id: "floor1-north-warden", archetype: "stone_brute", name: "North Root Warden", level: 3, respawnMs: 90_000, x: 350, y: towerFloorOneGroundHeight(350, 80), z: 80, leader: true },
   { id: "floor1-south-guard", archetype: "cave_spitter", name: "South Warden's Seer", level: 2, respawnMs: 55_000, x: 344, y: towerFloorOneGroundHeight(344, 134), z: 134 },
+  { id: "floor1-south-guard-b", archetype: "briar_crawler", name: "Thornbound Pursuer", level: 2, respawnMs: 55_000, x: 346, y: towerFloorOneGroundHeight(346, 127), z: 127 },
   { id: "floor1-south-warden", archetype: "thornbinder", name: "South Root Warden", level: 3, respawnMs: 90_000, x: 350, y: towerFloorOneGroundHeight(350, 132), z: 132, leader: true },
   { id: "floor1-court-briar-a", archetype: "briar_crawler", name: "Crown Briar", level: 3, respawnMs: 65_000, x: 361, y: towerFloorOneGroundHeight(361, 98), z: 98 },
   { id: "floor1-court-briar-b", archetype: "briar_crawler", name: "Crown Briar", level: 3, respawnMs: 65_000, x: 361, y: towerFloorOneGroundHeight(361, 114), z: 114 },
@@ -102,6 +103,8 @@ export const TOWER_FLOOR_ONE_SPAWNS: readonly TowerFloorOneSpawn[] = [
 export const TOWER_FLOOR_ONE_WARDENS = ["floor1-north-warden", "floor1-south-warden"] as const;
 export const TOWER_FLOOR_ONE_NORTH_WARDEN_ID = TOWER_FLOOR_ONE_WARDENS[0];
 export const TOWER_FLOOR_ONE_NORTH_ATTENDANTS = ["floor1-north-guard", "floor1-north-guard-b"] as const;
+export const TOWER_FLOOR_ONE_SOUTH_WARDEN_ID = TOWER_FLOOR_ONE_WARDENS[1];
+export const TOWER_FLOOR_ONE_SOUTH_ATTENDANTS = ["floor1-south-guard", "floor1-south-guard-b"] as const;
 export const TOWER_FLOOR_ONE_NORTH_WARDEN_COMBAT = {
   cleavePattern: "smash",
   rootSlamPattern: "root-slam",
@@ -132,6 +135,33 @@ export function towerFloorOneNorthWardenAttackTiming(pattern: string) {
     : { windupMs: TOWER_FLOOR_ONE_NORTH_WARDEN_COMBAT.cleaveWindupMs,
         impactMs: TOWER_FLOOR_ONE_NORTH_WARDEN_COMBAT.cleaveImpactMs,
         recoveryMs: TOWER_FLOOR_ONE_NORTH_WARDEN_COMBAT.cleaveRecoveryMs };
+}
+
+export const TOWER_FLOOR_ONE_SOUTH_WARDEN_COMBAT = {
+  bindPattern: "aimed",
+  thornFanPattern: "fan",
+  rootRingPattern: "venom-ring",
+  bindWindupMs: 1_100,
+  thornFanWindupMs: 1_300,
+  rootRingWindupMs: 1_850,
+  exposedMs: 3_200,
+} as const;
+
+/** Binding shot -> thorn fan -> interruptible root ring. Static by design, so
+ * a party can learn the sequence and coordinate its interrupt. */
+export function towerFloorOneSouthWardenPattern(actionSequence: number): string {
+  const rotation = [TOWER_FLOOR_ONE_SOUTH_WARDEN_COMBAT.bindPattern,
+    TOWER_FLOOR_ONE_SOUTH_WARDEN_COMBAT.thornFanPattern,
+    TOWER_FLOOR_ONE_SOUTH_WARDEN_COMBAT.rootRingPattern] as const;
+  return rotation[Math.abs(Math.trunc(actionSequence)) % rotation.length]!;
+}
+
+export function towerFloorOneSouthWardenWindup(pattern: string): number {
+  return pattern === TOWER_FLOOR_ONE_SOUTH_WARDEN_COMBAT.rootRingPattern
+    ? TOWER_FLOOR_ONE_SOUTH_WARDEN_COMBAT.rootRingWindupMs
+    : pattern === TOWER_FLOOR_ONE_SOUTH_WARDEN_COMBAT.thornFanPattern
+      ? TOWER_FLOOR_ONE_SOUTH_WARDEN_COMBAT.thornFanWindupMs
+      : TOWER_FLOOR_ONE_SOUTH_WARDEN_COMBAT.bindWindupMs;
 }
 export const TOWER_FLOOR_ONE_BOSS_ID = "floor1-crownkeeper";
 

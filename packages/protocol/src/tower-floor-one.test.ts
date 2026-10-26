@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import { FAST_WORLD_COLLISION_QUERY } from "./index.js";
 import { TOWER_FLOOR_ONE, TOWER_FLOOR_ONE_BOSS_ID, TOWER_FLOOR_ONE_SPAWNS,
   TOWER_FLOOR_ONE_FORTRESS_COLLIDERS, TOWER_FLOOR_ONE_NORTH_ATTENDANTS,
-  TOWER_FLOOR_ONE_NORTH_WARDEN_COMBAT, TOWER_FLOOR_ONE_WARDENS, isInsideTowerFloorOne,
+  TOWER_FLOOR_ONE_NORTH_WARDEN_COMBAT, TOWER_FLOOR_ONE_SOUTH_ATTENDANTS,
+  TOWER_FLOOR_ONE_SOUTH_WARDEN_COMBAT, TOWER_FLOOR_ONE_WARDENS, isInsideTowerFloorOne,
   towerFloorOneEncounterAllows, towerFloorOneGroundHeight, towerFloorOneNorthWardenAttackTiming,
-  towerFloorOneNorthWardenPattern } from "./tower-floor-one.js";
+  towerFloorOneNorthWardenPattern, towerFloorOneSouthWardenPattern,
+  towerFloorOneSouthWardenWindup } from "./tower-floor-one.js";
 
 describe("tower floor one manifest", () => {
   it("keeps the sanctuary, encounters and boss on a sealed playable island", () => {
@@ -57,5 +59,16 @@ describe("tower floor one manifest", () => {
     expect(towerFloorOneNorthWardenAttackTiming("root-slam").windupMs)
       .toBeGreaterThan(towerFloorOneNorthWardenAttackTiming("smash").windupMs);
     expect(TOWER_FLOOR_ONE_NORTH_WARDEN_COMBAT.exposedMs).toBe(3_200);
+  });
+
+  it("makes the South Root Warden a fixed ranged-control lesson", () => {
+    expect(TOWER_FLOOR_ONE_SOUTH_ATTENDANTS).toHaveLength(2);
+    for (const id of TOWER_FLOOR_ONE_SOUTH_ATTENDANTS)
+      expect(TOWER_FLOOR_ONE_SPAWNS.some(spawn => spawn.id === id)).toBe(true);
+    expect([0, 1, 2, 3, 4, 5].map(sequence => towerFloorOneSouthWardenPattern(sequence)))
+      .toEqual(["aimed", "fan", "venom-ring", "aimed", "fan", "venom-ring"]);
+    expect(towerFloorOneSouthWardenWindup("venom-ring"))
+      .toBeGreaterThan(towerFloorOneSouthWardenWindup("fan"));
+    expect(TOWER_FLOOR_ONE_SOUTH_WARDEN_COMBAT.exposedMs).toBe(3_200);
   });
 });

@@ -1875,7 +1875,7 @@ export type WorldObjectiveCompleted = {
 export type AreaLeaderExposed = {
   mobId: string;
   durationMs: number;
-  reason?: "follower" | "charge" | "pack-interrupt" | "volley-interrupt" | "formation-interrupt" | "root-slam-interrupt";
+  reason?: "follower" | "charge" | "pack-interrupt" | "volley-interrupt" | "formation-interrupt" | "root-slam-interrupt" | "root-ring-interrupt";
   armourSegments?: number;
 };
 
