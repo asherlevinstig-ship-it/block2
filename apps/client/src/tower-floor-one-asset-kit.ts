@@ -53,8 +53,8 @@ export const TOWER_FLOOR_ONE_ASSET_SPIKE: readonly TowerFloorOneAssetPlacement[]
   { id: "archedWall", name: "opening-gate", position: [320.5, 8.54, 106], yaw: 90, scale: 1.7 },
   { id: "archedWall", name: "north-breach", position: [339, 8.15, 94], yaw: 49, scale: 1.48 },
   { id: "archedWall", name: "south-breach", position: [339, 8.15, 118], yaw: -49, scale: 1.48 },
-  { id: "brokenWall", name: "opening-ruin-north", position: [322, 8.18, 92], yaw: -7, scale: 2.05 },
-  { id: "brokenWall", name: "opening-ruin-south", position: [322, 8.18, 120], yaw: 7, scale: 2.05 },
+  { id: "brokenWall", name: "opening-ruin-north", position: [322, 7.98, 92], yaw: -7, scale: 2.05 },
+  { id: "brokenWall", name: "opening-ruin-south", position: [322, 7.98, 120], yaw: 7, scale: 2.05 },
   { id: "brokenWall", name: "court-ruin-north", position: [337, 8.18, 96], yaw: 95, scale: 1.85 },
   { id: "brokenWall", name: "court-ruin-south", position: [337, 8.18, 116], yaw: 85, scale: 1.85 },
   { id: "rubbleLarge", name: "camp-rubble-north", position: [326, 8.2, 96.5], yaw: 18, scale: .72 },
@@ -75,14 +75,14 @@ export const TOWER_FLOOR_ONE_ASSET_SPIKE: readonly TowerFloorOneAssetPlacement[]
  * architecture that is still hidden by fog and ruins. */
 export const TOWER_FLOOR_ONE_FORTRESS_ASSETS: readonly TowerFloorOneAssetPlacement[] = [
   { id: "fortressGate", name: "crown-gate", position: [361.5, 9.45, 106], yaw: 90, scale: 2.25 },
-  { id: "fortressCorner", name: "fortress-north-corner", position: [384.8, 9.55, 96], yaw: 180, scale: 2.25 },
-  { id: "fortressCorner", name: "fortress-south-corner", position: [384.8, 9.55, 116], yaw: 90, scale: 2.25 },
-  { id: "crackedWall", name: "fortress-north-wall", position: [385.5, 9.55, 101], yaw: 90, scale: 2.25 },
-  { id: "crackedWall", name: "fortress-south-wall", position: [385.5, 9.55, 111], yaw: 90, scale: 2.25 },
+  { id: "fortressCorner", name: "fortress-north-corner", position: [384.8, 9.47, 96], yaw: 180, scale: 2.25 },
+  { id: "fortressCorner", name: "fortress-south-corner", position: [384.8, 9.47, 116], yaw: 90, scale: 2.25 },
+  { id: "crackedWall", name: "fortress-north-wall", position: [385.5, 9.55, 101.5], yaw: 90, scale: 2.25 },
+  { id: "crackedWall", name: "fortress-south-wall", position: [385.5, 9.55, 110.5], yaw: 90, scale: 2.25 },
   { id: "wallPillar", name: "fortress-north-pillar", position: [384.5, 9.55, 99], yaw: 90, scale: 2.25 },
   { id: "wallPillar", name: "fortress-south-pillar", position: [384.5, 9.55, 113], yaw: 90, scale: 2.25 },
-  { id: "wallPillar", name: "gate-north-pillar", position: [362.1, 9.45, 96.8], yaw: 90, scale: 1.8 },
-  { id: "wallPillar", name: "gate-south-pillar", position: [362.1, 9.45, 115.2], yaw: 90, scale: 1.8 },
+  { id: "wallPillar", name: "gate-north-pillar", position: [362.1, 9.17, 98], yaw: 90, scale: 1.8 },
+  { id: "wallPillar", name: "gate-south-pillar", position: [362.1, 9.17, 114], yaw: 90, scale: 1.8 },
   { id: "battlementCorner", name: "north-battlement-corner", position: [384.8, 18.55, 96], yaw: 180, scale: 2.25 },
   { id: "battlementCorner", name: "south-battlement-corner", position: [384.8, 18.55, 116], yaw: 90, scale: 2.25 },
   { id: "battlement", name: "north-battlement-west", position: [372, 9.55, 93.8], yaw: 0, scale: 2.15 },
@@ -166,7 +166,8 @@ export async function populateTowerFloorOneAssetKit(
     hideDirectChildren(parent, name => name === "floor1-ruined-wall" || name === "floor1-wall-moss");
   if (loaded.has("fortressGate"))
     hideDirectChildren(parent, name => name.startsWith("floor1-crown-gate"));
-  if (loaded.has("wallPillar"))
+  if (["wallPillar", "crackedWall", "fortressCorner", "battlement", "battlementCorner"]
+    .every(id => loaded.has(id as TowerFloorOneAssetId)))
     hideDirectChildren(parent, name => name === "floor1-crown-pillar");
   if (loaded.has("throneChair") && loaded.has("royalArms"))
     hideDirectChildren(parent, name => name === "floor1-crown-throne" || name === "floor1-crown-inlay"

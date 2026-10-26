@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { towerFloorOneGroundHeight } from "@blockcraft/protocol";
 import {
   KAYKIT_DUNGEON_BASE_URL,
   TOWER_FLOOR_ONE_ASSET_FILES,
@@ -35,5 +36,37 @@ describe("Floor 1 authored asset kit", () => {
     expect(TOWER_FLOOR_ONE_FORTRESS_ASSETS.every(asset => asset.position[0] >= 361)).toBe(true);
     expect(TOWER_FLOOR_ONE_FORTRESS_ASSETS.filter(asset => Math.abs(asset.position[2] - 106) < 4))
       .toHaveLength(3);
+  });
+
+  it("joins the gate shell and throne wall without visible metre-wide seams", () => {
+    const named = (name: string) => TOWER_FLOOR_ONE_FORTRESS_ASSETS.find(asset => asset.name === name)!;
+    const gate = named("crown-gate");
+    const northPillar = named("gate-north-pillar");
+    const southPillar = named("gate-south-pillar");
+    const gateHalfLength = 4 * (gate.scale ?? 1) / 2;
+    const pillarHalfLength = 4 * (northPillar.scale ?? 1) / 2;
+    expect((gate.position[2] - gateHalfLength) - (northPillar.position[2] + pillarHalfLength))
+      .toBeLessThanOrEqual(.15);
+    expect((southPillar.position[2] - pillarHalfLength) - (gate.position[2] + gateHalfLength))
+      .toBeLessThanOrEqual(.15);
+
+    const northWall = named("fortress-north-wall");
+    const southWall = named("fortress-south-wall");
+    const wallHalfLength = 4 * (northWall.scale ?? 1) / 2;
+    expect((southWall.position[2] - wallHalfLength) - (northWall.position[2] + wallHalfLength))
+      .toBeLessThanOrEqual(.05);
+  });
+
+  it("beds freestanding fortress pieces into the shared walkable terrain", () => {
+    const grounded = new Set([
+      "crown-gate", "fortress-north-corner", "fortress-south-corner",
+      "fortress-north-wall", "fortress-south-wall", "gate-north-pillar",
+      "gate-south-pillar", "north-battlement-west", "north-battlement-east",
+      "south-battlement-west", "south-battlement-east", "crownkeeper-throne",
+    ]);
+    for (const asset of TOWER_FLOOR_ONE_FORTRESS_ASSETS.filter(candidate => grounded.has(candidate.name))) {
+      const ground = towerFloorOneGroundHeight(asset.position[0], asset.position[2]);
+      expect(Math.abs(asset.position[1] - ground), asset.name).toBeLessThanOrEqual(.12);
+    }
   });
 });
