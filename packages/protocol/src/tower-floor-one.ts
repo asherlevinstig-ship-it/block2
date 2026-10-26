@@ -13,6 +13,22 @@ export const TOWER_FLOOR_ONE = {
   bossCourt: { x: 374, z: 106, radius: 14 },
 } as const;
 
+/** Authoritative volumes for the two visible fortress wall runs. These match
+ * the rendered KayKit modules from x=362.1 through x=384.9 while leaving the
+ * western gate opening and the interior combat lane unobstructed. */
+export const TOWER_FLOOR_ONE_FORTRESS_COLLIDERS = [
+  {
+    id: "floor1-fortress-wall-north", kind: "building" as const,
+    minX: 362.1, maxX: 384.9, minY: 9.38, maxY: 17.15,
+    minZ: 98.3, maxZ: 100.7,
+  },
+  {
+    id: "floor1-fortress-wall-south", kind: "building" as const,
+    minX: 362.1, maxX: 384.9, minY: 9.38, maxY: 17.15,
+    minZ: 111.3, maxZ: 113.7,
+  },
+] as const;
+
 const smoothStep = (value: number): number => {
   const clamped = Math.max(0, Math.min(1, value));
   return clamped * clamped * (3 - 2 * clamped);

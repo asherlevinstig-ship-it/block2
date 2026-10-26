@@ -1,7 +1,7 @@
 export { fastWorldGroundHeight, fastWorldCoastShorelineZ } from "./fast-world-elevation.js";
 import { fastWorldGroundHeight } from "./fast-world-elevation.js";
 import { createFastWorldObstacleQuery } from "./fast-world-obstacles.js";
-import { TOWER_FLOOR_ONE, isInsideTowerFloorOne } from "./tower-floor-one.js";
+import { TOWER_FLOOR_ONE, TOWER_FLOOR_ONE_FORTRESS_COLLIDERS, isInsideTowerFloorOne } from "./tower-floor-one.js";
 export * from "./fast-world-obstacles.js";
 import { z } from "zod";
 export * from "./fast-world-regions.js";
@@ -14,7 +14,7 @@ export { DODGE_STAMINA_COST, DODGE_CHAIN_COST_STEP, DODGE_MAX_STAMINA_COST, DODG
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-warden-gate-v166";
+export const WORLD_ROOM = "world-warden-gate-v167";
 export const SILVER_DEPTHS_ROOM = "silver-depths-instance-v3";
 export const PRACTICE_ROOM = "calling-practice-v5";
 export type RoomTransfer = { room: typeof WORLD_ROOM | typeof SILVER_DEPTHS_ROOM | typeof PRACTICE_ROOM; instanceKey?: string; partySize?: number; returnFrom?: "silver-depths" | "practice"; retry?: boolean; partyTicket?: string; worldRoomId?: string };
@@ -175,7 +175,7 @@ const townOnlyCollisionQuery = createFastWorldObstacleQuery(
   RAPID_PRACTICE_TOWN_COLLIDERS, fastWorldGroundHeight, []);
 const towerFloorCollisionQuery = createFastWorldObstacleQuery(
   { ...TOWER_FLOOR_ONE.bounds, floorY: RAPID_PRACTICE_ARENA.floorY, sealedBounds: true },
-  [], fastWorldGroundHeight, []);
+  [], fastWorldGroundHeight, TOWER_FLOOR_ONE_FORTRESS_COLLIDERS);
 
 /** Town and tower floors are separate sealed islands. The void between them is
  * solid to movement and can only be crossed by authoritative portal travel. */

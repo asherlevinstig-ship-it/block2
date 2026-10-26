@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { FAST_WORLD_COLLISION_QUERY } from "./index.js";
 import { TOWER_FLOOR_ONE, TOWER_FLOOR_ONE_BOSS_ID, TOWER_FLOOR_ONE_SPAWNS,
-  TOWER_FLOOR_ONE_WARDENS, isInsideTowerFloorOne, towerFloorOneEncounterAllows,
+  TOWER_FLOOR_ONE_FORTRESS_COLLIDERS, TOWER_FLOOR_ONE_WARDENS, isInsideTowerFloorOne, towerFloorOneEncounterAllows,
   towerFloorOneGroundHeight } from "./tower-floor-one.js";
 
 describe("tower floor one manifest", () => {
@@ -18,6 +18,24 @@ describe("tower floor one manifest", () => {
     expect(towerFloorOneGroundHeight(350, 80)).toBeCloseTo(8.68, 4);
     expect(towerFloorOneGroundHeight(375, 106)).toBeCloseTo(9.55, 4);
     expect(towerFloorOneGroundHeight(320, 65)).toBe(8);
+  });
+
+  it("collides with both joined fortress walls while preserving the gate and court lane", () => {
+    expect(TOWER_FLOOR_ONE_FORTRESS_COLLIDERS).toHaveLength(2);
+    for (const collider of TOWER_FLOOR_ONE_FORTRESS_COLLIDERS) {
+      expect(collider.minX).toBeCloseTo(362.1, 4);
+      expect(collider.maxX).toBeCloseTo(384.9, 4);
+      expect(collider.minY).toBeLessThanOrEqual(towerFloorOneGroundHeight(362.1, 99.5));
+      expect(collider.maxY).toBeGreaterThan(17);
+    }
+    expect(FAST_WORLD_COLLISION_QUERY.cellSolid(370, 10, 99.5)).toBe(true);
+    expect(FAST_WORLD_COLLISION_QUERY.cellSolid(370, 10, 112.5)).toBe(true);
+    expect(FAST_WORLD_COLLISION_QUERY.obstacleAt(370, 10, 99.5)?.id)
+      .toBe("floor1-fortress-wall-north");
+    expect(FAST_WORLD_COLLISION_QUERY.obstacleAt(370, 10, 112.5)?.id)
+      .toBe("floor1-fortress-wall-south");
+    expect(FAST_WORLD_COLLISION_QUERY.cellSolid(360, 10, 106)).toBe(false);
+    expect(FAST_WORLD_COLLISION_QUERY.cellSolid(370, 10, 106)).toBe(false);
   });
 
   it("requires two wardens before the single final boss can be awakened", () => {
