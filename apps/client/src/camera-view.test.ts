@@ -31,9 +31,18 @@ describe("first-person camera", () => {
     expect(moved.pitchSpeed).toBe(0);
   });
 
-  it("clamps extreme mouse movement to the first-person vertical range", () => {
+  it("limits a synthetic pointer-lock spike to one controlled flick", () => {
     const initial = initialCameraOrbit();
-    expect(firstPersonLookDirection(0, firstPersonMouseLook(initial, 0, -10_000).pitch).y).toBeCloseTo(.5);
-    expect(firstPersonLookDirection(0, firstPersonMouseLook(initial, 0, 10_000).pitch).y).toBeCloseTo(-.342, 2);
+    const moved = firstPersonMouseLook(initial, 10_000, -10_000);
+    expect(moved.yaw - initial.yaw).toBeCloseTo(.18);
+    expect(moved.pitch - initial.pitch).toBeCloseTo(.15);
+  });
+
+  it("wraps accumulated yaw and ignores invalid browser movement", () => {
+    const initial = { ...initialCameraOrbit(), yaw: -867 * Math.PI / 180 };
+    const moved = firstPersonMouseLook(initial, Number.POSITIVE_INFINITY, Number.NaN);
+    expect(moved.yaw).toBeGreaterThanOrEqual(-Math.PI);
+    expect(moved.yaw).toBeLessThanOrEqual(Math.PI);
+    expect(Number.isFinite(moved.pitch)).toBe(true);
   });
 });
