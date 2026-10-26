@@ -124,7 +124,7 @@ import { advanceCameraOrbit, cameraOrbitOffset, dragCameraOrbit, initialCameraOr
 import { advanceCameraFollow, advanceCameraHeight, advanceCameraPosition } from "./camera-follow.js";
 import { populateTownAssetKit, readyTownFallbacks, SPEED_LAB_TOWN_ASSETS, type TownFallbackFamily } from "./town-asset-kit.js";
 import { createTownPortalLandmarks } from "./town-portal-landmarks.js";
-import { createTowerFloorOneWorld } from "./tower-floor-one-world.js";
+import { createTowerFloorOneWorld } from "./tower-floor-one-world-v2.js";
 import { portalInteractionPrompt, portalLabel, portalWorldLabel } from "./portal-labels.js";
 import { createFastWorldSky } from "./fast-world-sky.js";
 import { createPaintedGroundMaterial, fitGroundTexture, fitOrganicGroundPatch, createWoodlandTrailMesh, woodlandFernMesh } from "./fast-world-texture.js";

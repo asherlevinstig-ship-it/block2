@@ -1,3 +1,5 @@
+import { towerFloorOneGroundHeight } from "./tower-floor-one.js";
+
 /** Shared authored heightfield. Keeping this in protocol means rendering,
  * movement, targeting and server reconciliation agree on the same terrain. */
 export function fastWorldCoastShorelineZ(x: number): number {
@@ -12,6 +14,7 @@ export function fastWorldGroundHeight(x: number, z: number): number {
     const r2=((x-cx)/rx)**2+((z-cz)/rz)**2;
     return r2>=1?0:h*(1-r2)**3;
   };
+  if (x >= 296 && x <= 392 && z >= 56 && z <= 156) return towerFloorOneGroundHeight(x, z);
   if (x >= 40 && x <= 104 && z >= 148 && z <= 188) {
     // Low dune ridges frame the routes while the southern shore falls gently
     // towards the sea. Encounter centres remain broad and readable.
