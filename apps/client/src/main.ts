@@ -1,6 +1,6 @@
 import { greenwoodAtmosphere } from "./greenwood-atmosphere.js";
 import { greenwoodEmergence, greenwoodMobStyle, type GreenwoodMobStyle } from "./greenwood-mob-style.js";
-import { FAST_WORLD_TOWN_BOUNDS, FAST_WORLD_TOWN_ONLY, TOWER_FLOOR_ONE, fastWorldGroundHeight, isInsideTowerFloorOne } from "@blockcraft/protocol";
+import { FAST_WORLD_TOWN_BOUNDS, FAST_WORLD_TOWN_ONLY, TOWER_FLOOR_ONE, TOWER_FLOOR_ONE_WARDENS, fastWorldGroundHeight, isInsideTowerFloorOne } from "@blockcraft/protocol";
 import { GREENWOOD_MAIN_TRAIL, GREENWOOD_CAMP_TRAIL, GREENWOOD_THICKETS, GREENWOOD_CLUSTER_PLANTS, GREENWOOD_VERGE_PLANTS, sampleWoodlandTrail } from "./greenwood-landscape.js";
 import * as pc from "playcanvas";
 import { facetedBoxMesh } from "./faceted-shapes.js";
@@ -124,7 +124,7 @@ import { advanceCameraOrbit, cameraOrbitOffset, dragCameraOrbit, initialCameraOr
 import { advanceCameraFollow, advanceCameraHeight, advanceCameraPosition } from "./camera-follow.js";
 import { populateTownAssetKit, readyTownFallbacks, SPEED_LAB_TOWN_ASSETS, type TownFallbackFamily } from "./town-asset-kit.js";
 import { createTownPortalLandmarks } from "./town-portal-landmarks.js";
-import { createTowerFloorOneWorld } from "./tower-floor-one-world-v2.js";
+import { createTowerFloorOneWorld, updateTowerFloorOneProgress } from "./tower-floor-one-world-v2.js";
 import { portalInteractionPrompt, portalLabel, portalWorldLabel } from "./portal-labels.js";
 import { createFastWorldSky } from "./fast-world-sky.js";
 import { createPaintedGroundMaterial, fitGroundTexture, fitOrganicGroundPatch, createWoodlandTrailMesh, woodlandFernMesh } from "./fast-world-texture.js";
@@ -2232,6 +2232,7 @@ function addBox(
 const rapidPrototypeRoot = new pc.Entity("rapid-2d-speed-lab");
 app.root.addChild(rapidPrototypeRoot);
 rapidPrototypeRoot.enabled = fastWorldRequested;
+let towerFloorOneWorld: pc.Entity | null = null;
 const townVisualInsideBounds = (x: number, z: number, inset = 0): boolean =>
   !FAST_WORLD_TOWN_ONLY || (x >= FAST_WORLD_TOWN_BOUNDS.minX + inset
     && x <= FAST_WORLD_TOWN_BOUNDS.maxX - inset
@@ -3810,7 +3811,7 @@ if (fastWorldRequested) {
   }
   if (FAST_WORLD_TOWN_ONLY) {
     createTownPortalLandmarks(app, rapidPrototypeRoot);
-    createTowerFloorOneWorld(app, rapidPrototypeRoot);
+    towerFloorOneWorld = createTowerFloorOneWorld(app, rapidPrototypeRoot);
   }
 
   const badge = document.createElement("aside");
@@ -16613,6 +16614,11 @@ app.on("update", (dt: number) => {
   if (fastWorldRequested) {
     const townTime = customUpdateStartedAt * .001;
     const playerPosition = localPlayer.getPosition();
+    if (towerFloorOneWorld && isInsideTowerFloorOne(playerPosition.x, playerPosition.z)) {
+      const northAlive = mobVisuals.get(TOWER_FLOOR_ONE_WARDENS[0])?.state.alive !== false;
+      const southAlive = mobVisuals.get(TOWER_FLOOR_ONE_WARDENS[1])?.state.alive !== false;
+      updateTowerFloorOneProgress(towerFloorOneWorld, northAlive, southAlive);
+    }
     const coastWaterStartedAt = performance.now();
     animateCoastWater(dt, playerPosition.z > 140 && playerPosition.z < 200
       && playerPosition.x > 30 && playerPosition.x < 112);
