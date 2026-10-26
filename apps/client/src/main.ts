@@ -9838,6 +9838,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   const isCinderRam = mob.archetype === "cinder_ram";
   const isEmberHound = mob.archetype === "ember_hound";
   const isWatchbreaker = mobId === "northwatch-watchbreaker";
+  const isNorthRootWarden = mobId === TOWER_FLOOR_ONE_WARDENS[0];
   const isAshglass = mobId.startsWith("ashglass-sentry-");
   const isBriar = mob.archetype === "briar_crawler";
   const isNorthwatch = mob.archetype === "ridge_stalker" || mob.archetype === "shard_sentry";
@@ -9849,7 +9850,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     : mob.difficultyTier === 2
       ? new pc.Color(1, 0.62, 0.08)
       : new pc.Color(0.35, 0.9, 0.28);
-  const bodyColor = rootGuardian ? new pc.Color(.28, .24, .16)
+  const bodyColor = isNorthRootWarden ? new pc.Color(.22, .19, .12) : rootGuardian ? new pc.Color(.28, .24, .16)
     : isWatchbreaker ? new pc.Color(.25, .35, .42) : isBrute ? new pc.Color(0.38, 0.43, 0.48) : mob.archetype === "shard_sentry" ? new pc.Color(.25, .43, .52)
       : mob.archetype === "ridge_stalker" ? new pc.Color(.44, .46, .39)
         : isAshglass ? new pc.Color(0.31, 0.22, 0.2) : isCinderRam ? new pc.Color(.27, .22, .19) : isEmberHound ? new pc.Color(.3, .13, .075) : isFenBloater ? new pc.Color(.24, .34, .12) : isThornbinder ? new pc.Color(.3, .24, .1) : isSpitter ? new pc.Color(0.34, 0.29, 0.43) : isBriar ? new pc.Color(0.31, 0.19, 0.12) : new pc.Color(0.28, 0.42, 0.21);
@@ -9951,6 +9952,30 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
         .setLocalEulerAngles(0, 0, side * -25);
     }
     addBox(bodyRoot, "watchbreaker-heart", ridgeCrystal, [.24, .35, .18], [0, 1.14, .52]).setLocalEulerAngles(0, 0, 45);
+  }
+  if (isNorthRootWarden) {
+    const heartwood = coloredMaterial(new pc.Color(.18, .09, .035));
+    const rootIron = coloredMaterial(new pc.Color(.24, .29, .22));
+    const rootSap = coloredMaterial(new pc.Color(.55, 1, .18));
+    rootSap.emissive.set(.12, .52, .025); rootSap.update();
+    addBox(bodyRoot, "north-warden-heartwood-cuirass", heartwood, [1.25, .42, .82], [0, 1.3, -.18])
+      .setLocalEulerAngles(-8, 0, 0);
+    addBox(bodyRoot, "north-warden-sap-heart", rootSap, [.28, .39, .15], [0, 1.16, .51]).setLocalEulerAngles(0, 0, 45);
+    for (const side of [-1, 1]) {
+      addBox(bodyRoot, `north-warden-root-antler-${side}`, heartwood, [.17, .9, .18], [side * .35, 2.22, -.04])
+        .setLocalEulerAngles(-9, side * 12, side * -31);
+      addBox(bodyRoot, `north-warden-root-branch-${side}`, heartwood, [.55, .14, .16], [side * .59, 2.47, -.03])
+        .setLocalEulerAngles(0, side * 8, side * -24);
+      addBox(bodyRoot, `north-warden-shoulder-bark-${side}`, heartwood, [.35, .72, .52], [side * .85, 1.55, -.12])
+        .setLocalEulerAngles(0, 0, side * -22);
+    }
+    const weaponParent = art.arms.find(arm => arm.side > 0)?.knee ?? bodyRoot;
+    const haft = addBox(weaponParent, "north-warden-cleaver-haft", heartwood, [.13, 1.42, .13], [.06, -.9, .22]);
+    haft.setLocalEulerAngles(-10, 0, -8);
+    const blade = addBox(weaponParent, "north-warden-cleaver-blade", rootIron, [.72, .52, .13], [-.22, -1.55, .23]);
+    blade.setLocalEulerAngles(-8, 0, -18);
+    addBox(weaponParent, "north-warden-cleaver-rune", rootSap, [.16, .22, .145], [-.18, -1.55, .24])
+      .setLocalEulerAngles(0, 0, 45);
   }
   if (isAshglass) {
     const glass = coloredMaterial(new pc.Color(0.95, 0.42, 0.11));
@@ -18765,6 +18790,11 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     if (visual && COORDINATED_BRUTE_FOLLOWERS[message.mobId])
       createBruteArmourBreak(visual, message.armourSegments === 0,
         message.reason === "charge" || message.reason === "formation-interrupt");
+    if (visual && message.reason === "root-slam-interrupt") {
+      createRangedPopup(new pc.Vec3(visual.state.x, visual.state.y + visual.healthBarY + .85, visual.state.z),
+        "ROOT SLAM BROKEN · EXPOSED", "melee", false, [.55, 1, .22]);
+      showCombatFeedback("WARDEN EXPOSED · ATTACK NOW", "dodge");
+    }
     bossHudFingerprint = "";
   });
   room.onMessage("leader:reinforcements", (message: AreaLeaderReinforcements) => {

@@ -46,6 +46,13 @@ describe("readable enemy combat cues", () => {
     expect(enemyCombatCue(smash, 2300).label).toBe("SMASH · STRIKE");
     expect(enemyCombatCue(smash, 2690).label).toBe("RECOVER · COUNTER");
   });
+
+  it("names the North Root Warden lesson attacks explicitly", () => {
+    expect(enemyCombatCue({ ...mob, name: "North Root Warden", attackPattern: "smash" }, 1200).label)
+      .toBe("ROOT CLEAVE · AIMING");
+    expect(enemyCombatCue({ ...mob, name: "North Root Warden", attackPattern: "root-slam" }, 1200).label)
+      .toBe("ROOT SLAM · INTERRUPT · AIMING");
+  });
   it("labels the enraged double volley, then only shows the counter window after both releases", () => {
     const boss = { ...mob, archetype: "cave_spitter", attackPattern: "double-fan", enraged: true,
       attackReleaseAt: 2000, attackContactAt: 2000, attackContactEndAt: 2500, attackRecoveryEndAt: 5100 };

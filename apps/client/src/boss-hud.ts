@@ -92,6 +92,7 @@ const ATTACK_NAMES: Readonly<Record<string, string>> = {
   "fault-line": "FAULT LINE · MOVE OFF THE MARKS",
   slam: "GROUND SLAM",
   smash: "FORWARD SMASH",
+  "root-slam": "ROOT SLAM · INTERRUPT NOW",
   charge: "CHARGE",
   "bog-charge": "BOG CHARGE",
   "toxic-eruption": "TOXIC ERUPTION",

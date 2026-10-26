@@ -3,8 +3,10 @@ import { GREENWOOD_MASTERY_CAP, MISTFEN_MASTERY_CAP, greenwoodMasteryRank, mistf
 import { callingStarterAbility } from "@blockcraft/protocol";
 import { experienceToNextLevel } from "@blockcraft/protocol";
 import { FAST_WORLD_TOWN_BOUNDS, FAST_WORLD_TOWN_ONLY, PRACTICE_ROOM, TOWER_FLOOR_ONE,
-  TOWER_FLOOR_ONE_BOSS_ID, TOWER_FLOOR_ONE_SPAWNS, TOWER_FLOOR_ONE_WARDENS,
-  isInsideTowerFloorOne, towerFloorOneEncounterAllows } from "@blockcraft/protocol";
+  TOWER_FLOOR_ONE_BOSS_ID, TOWER_FLOOR_ONE_NORTH_WARDEN_COMBAT, TOWER_FLOOR_ONE_NORTH_WARDEN_ID,
+  TOWER_FLOOR_ONE_SPAWNS, TOWER_FLOOR_ONE_WARDENS, isInsideTowerFloorOne,
+  towerFloorOneEncounterAllows, towerFloorOneNorthWardenAttackTiming,
+  towerFloorOneNorthWardenPattern } from "@blockcraft/protocol";
 import type { SchemaType } from "@colyseus/schema";
 import { ShadowMoveInput, stepShadowMovement, type ShadowPose } from "./movement-shadow.js";
 import { FIRST_COMBAT_MOB_ID, firstCombatExperience, firstCombatHealthAfterHit, firstCombatReward, isFirstCombatSupport } from "./first-combat-training.js";
@@ -2662,6 +2664,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       : spawn.archetype === "fen_bloater" ? "toxic-bloom"
       : spawn.archetype === "cinder_ram" ? "furnace-charge"
       : spawn.archetype === "ember_hound" ? "ember-pounce" : mob.attackPattern;
+    if (mobId === TOWER_FLOOR_ONE_NORTH_WARDEN_ID) {
+      mob.maxHealth = mob.health = 34;
+      mob.speedMultiplier = 1.34;
+      mob.attackPattern = towerFloorOneNorthWardenPattern(0);
+    }
     this.mobBaseNames.set(mobId, mob.name);
   }
 
@@ -3005,7 +3012,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       && (mob.attackPattern === "pack-rush" || mob.attackPattern === "alpha-rush");
     const brokeVenomRing = isCoordinatedSpitterLeader(mobId) && mob.combatState === "windup"
       && mob.attackPattern === "venom-ring";
-    const staggerDuration = brokePackRush || brokeVenomRing ? Math.max(duration, 3_000) : duration;
+    const brokeRootSlam = mobId === TOWER_FLOOR_ONE_NORTH_WARDEN_ID && mob.combatState === "windup"
+      && mob.attackPattern === TOWER_FLOOR_ONE_NORTH_WARDEN_COMBAT.rootSlamPattern;
+    const staggerDuration = brokeRootSlam ? Math.max(duration, TOWER_FLOOR_ONE_NORTH_WARDEN_COMBAT.exposedMs)
+      : brokePackRush || brokeVenomRing ? Math.max(duration, 3_000) : duration;
     this.delayedMatriarchVolleys.delete(mobId);
     mob.combatState = "stagger";
     mob.stateUntil = now + staggerDuration;
@@ -3027,6 +3037,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
     if (brokePackRush) this.breakCrawlerPackFormation(mobId, now, staggerDuration);
     if (brokeVenomRing) this.breakSpitterPackFormation(mobId, now, staggerDuration);
+    if (brokeRootSlam) {
+      this.broadcast("leader:exposed", { mobId, durationMs: staggerDuration,
+        reason: "root-slam-interrupt" } satisfies AreaLeaderExposed);
+      this.broadcast("chat:notice", "ROOT SLAM INTERRUPTED · NORTH ROOT WARDEN EXPOSED · ATTACK NOW!");
+    }
     const warbandLeaderId = isMixedWarbandLeader(mobId) ? mobId : leaderForFollower(mobId);
     if (warbandLeaderId && isMixedWarbandLeader(warbandLeaderId)
       && now < (this.warbandFormationUntil.get(warbandLeaderId) ?? 0)) {
@@ -3376,7 +3391,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         this.grantBuildProgress(attackerId, rapidSpawn.leader ? 3 : 1);
         void this.persistPlayer(attackerId, player);
         this.clients.find(client => client.sessionId === attackerId)?.send("chat:notice",
-          rapidSpawn.leader
+          mobId === TOWER_FLOOR_ONE_NORTH_WARDEN_ID
+            ? "NORTH ROOT WARDEN FELLED · northern seal broken · warden cache landed."
+            : rapidSpawn.leader
             ? `${mob.name.toUpperCase()} DEFEATED · leader loot landed · returns in ${Math.round(rapidSpawn.respawnMs / 1000)}s.`
             : guardedReward ? `${mob.name.replace(/ keeper$/i, "").toUpperCase()} SECURED · guarded loot landed · +${coinsGranted} gold.`
             : itemDrop ? `Enemy defeated · loot landed · +${coinsGranted} gold.` : `Enemy defeated · +${coinsGranted} gold and XP.`);
@@ -8843,7 +8860,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           ? mistfenEventPattern(this.realmEvents.mistfenVariant, mob.actionSequence, mob.health, mob.maxHealth)
           : realmBossPattern(mobId, mob.actionSequence, mob.health, mob.maxHealth);
         const orbitCounter = mob.isMiniBoss && (this.miniBossOrbitPressure.get(mobId)?.counterUntil ?? 0) > now;
-        mob.attackPattern = realmPattern ?? (mobId === "forest-guardian" && mob.enraged ? championPattern(mob)
+        mob.attackPattern = mobId === TOWER_FLOOR_ONE_NORTH_WARDEN_ID
+          ? towerFloorOneNorthWardenPattern(mob.actionSequence, orbitCounter)
+          : realmPattern ?? (mobId === "forest-guardian" && mob.enraged ? championPattern(mob)
           : orbitCounter ? miniBossOrbitCounterPattern(mob.archetype)
           : isAreaMiniBoss(mobId) ? mobId === "frontier-brute" && currentAreaLeaderPhase === 1 && bruteVolleyReady(mob.actionSequence, distance)
               ? "rocks" : areaLeaderPattern(mob.archetype, mob.actionSequence, currentAreaLeaderPhase, mobId)
@@ -9323,6 +9342,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         ? MATRIARCH_PHASE.crystalBurstWindupMs
         : mob.attackPattern === "furnace-charge" ? CINDER_RAM_CHARGE.windupMs
         : mob.attackPattern === "charge" ? CHAMPION_CHARGE.windupMs
+        : mobId === TOWER_FLOOR_ONE_NORTH_WARDEN_ID
+          ? towerFloorOneNorthWardenAttackTiming(mob.attackPattern).windupMs
         : (mobId === "frontier-brute" || isAreaMiniBoss(mobId) && mob.archetype === "stone_brute") && mob.attackPattern === "smash"
           ? FRONTIER_BRUTE.smash.windupMs : definition.windupMs;
       const rematchTiming = leaderRematchTiming(mob.leaderModifier);
@@ -10326,6 +10347,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       mob.attackContactAt = releaseAt;
       mob.attackContactEndAt = releaseAt + CHAMPION_CHARGE.durationMs;
       mob.attackRecoveryEndAt = mob.attackContactEndAt + CHAMPION_CHARGE.recoveryMs;
+      return;
+    }
+    if (mobId === TOWER_FLOOR_ONE_NORTH_WARDEN_ID) {
+      const timing = towerFloorOneNorthWardenAttackTiming(mob.attackPattern);
+      mob.attackContactAt = releaseAt + timing.impactMs;
+      mob.attackContactEndAt = mob.attackContactAt + 120;
+      mob.attackRecoveryEndAt = mob.attackContactEndAt + timing.recoveryMs;
       return;
     }
     if (mobId === "frontier-brute" || isAreaMiniBoss(mobId) && mob.archetype === "stone_brute" && mob.attackPattern === "smash") {

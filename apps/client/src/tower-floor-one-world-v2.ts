@@ -312,6 +312,25 @@ export function createTowerFloorOneWorld(app: pc.Application, parent: pc.Entity)
       [x, towerFloorOneGroundHeight(x, z) + s * .28, z], [x % 17, z % 43, x % 11]);
   rootCluster(root, 350, 72.5, 90, 8.4, bark, mossLight);
   rootCluster(root, 341, 79, 12, 6.8, bark, mossLight);
+  // The first Warden court is a combat classroom rather than an unmarked pad:
+  // roots form a readable boundary, paired sentry plinths frame the approach,
+  // and the central broken seal becomes the reward focus after the kill.
+  for (const [x, z, yaw] of [[342, 72, -35], [358, 72, 35], [340, 88, -145], [360, 88, 145]] as const) {
+    const ground = towerFloorOneGroundHeight(x, z);
+    shape(root, "floor1-north-root-pylon", "box", bark, [.72, 4.8, .78], [x, ground + 2.18, z], yaw);
+    shape(root, "floor1-north-root-pylon-tip", "cone", northSealGlow, [.5, 1.35, .5], [x, ground + 5.18, z], yaw);
+  }
+  for (let index = 0; index < 12; index++) {
+    const angle = index / 12 * Math.PI * 2;
+    const x = 350 + Math.cos(angle) * 9.2, z = 80 + Math.sin(angle) * 9.2;
+    const ground = towerFloorOneGroundHeight(x, z);
+    shape(root, "floor1-north-court-root", "box", index % 2 ? bark : mossLight,
+      [2.5, .28, .32], [x, ground + .12, z], -angle * 180 / Math.PI);
+  }
+  shape(root, "floor1-north-broken-seal-base", "cylinder", stoneWarm, [4.4, .42, 4.4],
+    [350, towerFloorOneGroundHeight(350, 80) + .18, 80]);
+  shape(root, "floor1-north-broken-seal-rune", "cylinder", northSealGlow, [2.7, .08, 2.7],
+    [350, towerFloorOneGroundHeight(350, 80) + .43, 80]);
 
   // South is a corrupted thorn shrine with a poisoned botanical silhouette.
   for (let index = 0; index < 7; index++) {

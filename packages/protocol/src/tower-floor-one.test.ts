@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { FAST_WORLD_COLLISION_QUERY } from "./index.js";
 import { TOWER_FLOOR_ONE, TOWER_FLOOR_ONE_BOSS_ID, TOWER_FLOOR_ONE_SPAWNS,
-  TOWER_FLOOR_ONE_FORTRESS_COLLIDERS, TOWER_FLOOR_ONE_WARDENS, isInsideTowerFloorOne, towerFloorOneEncounterAllows,
-  towerFloorOneGroundHeight } from "./tower-floor-one.js";
+  TOWER_FLOOR_ONE_FORTRESS_COLLIDERS, TOWER_FLOOR_ONE_NORTH_ATTENDANTS,
+  TOWER_FLOOR_ONE_NORTH_WARDEN_COMBAT, TOWER_FLOOR_ONE_WARDENS, isInsideTowerFloorOne,
+  towerFloorOneEncounterAllows, towerFloorOneGroundHeight, towerFloorOneNorthWardenAttackTiming,
+  towerFloorOneNorthWardenPattern } from "./tower-floor-one.js";
 
 describe("tower floor one manifest", () => {
   it("keeps the sanctuary, encounters and boss on a sealed playable island", () => {
@@ -43,5 +45,17 @@ describe("tower floor one manifest", () => {
     expect(TOWER_FLOOR_ONE_SPAWNS.filter(spawn => spawn.floorBoss).map(spawn => spawn.id)).toEqual([TOWER_FLOOR_ONE_BOSS_ID]);
     for (const spawn of TOWER_FLOOR_ONE_SPAWNS)
       expect(towerFloorOneEncounterAllows(spawn.id, spawn)).toBe(true);
+  });
+
+  it("gives the North Root Warden two attendants and a fixed interrupt lesson", () => {
+    expect(TOWER_FLOOR_ONE_NORTH_ATTENDANTS).toHaveLength(2);
+    for (const id of TOWER_FLOOR_ONE_NORTH_ATTENDANTS)
+      expect(TOWER_FLOOR_ONE_SPAWNS.some(spawn => spawn.id === id)).toBe(true);
+    expect([0, 1, 2, 3, 4, 5].map(sequence => towerFloorOneNorthWardenPattern(sequence)))
+      .toEqual(["smash", "smash", "root-slam", "smash", "smash", "root-slam"]);
+    expect(towerFloorOneNorthWardenPattern(2, true)).toBe("smash");
+    expect(towerFloorOneNorthWardenAttackTiming("root-slam").windupMs)
+      .toBeGreaterThan(towerFloorOneNorthWardenAttackTiming("smash").windupMs);
+    expect(TOWER_FLOOR_ONE_NORTH_WARDEN_COMBAT.exposedMs).toBe(3_200);
   });
 });
