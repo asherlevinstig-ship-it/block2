@@ -1385,6 +1385,7 @@ const controlsHelp = document.querySelector<HTMLElement>("#controls-help")!;
 const combatReticle = document.querySelector<HTMLElement>("#combat-reticle")!;
 const tabletAimGuide = document.querySelector<HTMLElement>("#tablet-aim-guide")!;
 const combatFeedback = document.querySelector<HTMLElement>("#combat-feedback")!;
+const damageOverlay = document.querySelector<HTMLElement>("#damage-overlay")!;
 const worldObjective = document.querySelector<HTMLElement>("#world-objective")!;
 const objectiveTier = document.querySelector<HTMLElement>("#objective-tier")!;
 const objectiveTitle = document.querySelector<HTMLElement>("#objective-title")!;
@@ -1503,7 +1504,7 @@ const tabletCameraHint = document.querySelector<HTMLElement>("#tablet-camera-hin
 const keyboardCameraHint = document.querySelector<HTMLElement>("#keyboard-camera-hint")!;
 const keyboardCameraKeys = [...keyboardCameraHint.querySelectorAll<HTMLElement>("kbd[data-key]")];
 const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-toggle [data-mode]")];
-if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !dangerZone || !dangerZoneName || !locationCoordinates || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !graphicsQualitySelect || !graphicsQualityStatus || !performanceCopyLog || !performanceClearLog || !performanceLogStatus || !inventoryPanel || !inventoryTotal || !inventoryToggle || !cameraModeToggle || !inventoryClose || !inventoryBadge || !inventoryEquipped || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== requiredInventoryMainHands || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !callingButton || !contextButton || !contextButtonLabel || !contextButtonHint || !touchModeButton || !touchModeLabel || !tabletCameraHint || !keyboardCameraHint || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !controlsHelp || !combatReticle || !tabletAimGuide || !combatFeedback || modeButtons.length !== 2) {
+if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !dangerZone || !dangerZoneName || !locationCoordinates || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !graphicsQualitySelect || !graphicsQualityStatus || !performanceCopyLog || !performanceClearLog || !performanceLogStatus || !inventoryPanel || !inventoryTotal || !inventoryToggle || !cameraModeToggle || !inventoryClose || !inventoryBadge || !inventoryEquipped || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== requiredInventoryMainHands || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !callingButton || !contextButton || !contextButtonLabel || !contextButtonHint || !touchModeButton || !touchModeLabel || !tabletCameraHint || !keyboardCameraHint || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !controlsHelp || !combatReticle || !tabletAimGuide || !combatFeedback || !damageOverlay || modeButtons.length !== 2) {
   throw new Error("Game shell is missing required elements");
 }
 if ([quizTablePrompt, blacksmithPrompt, playerTradePrompt, playerTradeName, blacksmithPanel, blacksmithMessage, blacksmithOre, blacksmithGold, blacksmithPrice, blacksmithSell, blacksmithClose, haulEquipName, haulEquipDetail, haulEquip, haulSalvageCount, haulSalvageDetail, haulSalvage, haulStoreCount, haulStore, haulUpgradeName, haulUpgradeTrack, haulUpgradeDetail, haulRegionName, haulRegionDetail, haulTrackRegion, quizPanel, quizBalance, quizBalanceAmount, quizPotDisplay, quizPotLabel, quizWinToast, quizAnswerFeedback, quizFeedbackIcon, quizFeedbackTitle, quizFeedbackDetail, quizMessage, quizStakeHeading, quizStakes, quizQuestion, quizPot, quizPrompt, quizChoices, quizDecision, quizDouble, quizQuit, quizClose, tavernCoins].some(element => !element) || blacksmithUpgradeCards.length !== Object.keys(BLACKSMITH_UPGRADES).length) {
@@ -6907,6 +6908,8 @@ function updatePlayerHealth(health: number, maximumHealth: number): void {
   potionHealth = health;
   potionMaxHealth = maximumHealth;
   playerHud.setHealth(health, maximumHealth);
+  document.documentElement.classList.toggle("player-health-critical",
+    health > 0 && health / Math.max(1, maximumHealth) <= .35);
 }
 
 function updatePlayerStamina(stamina: number, maximumStamina: number): void {
@@ -7607,6 +7610,48 @@ function showCombatFeedback(text: string, style: "hit" | "hurt" | "dodge" | "mis
   void combatFeedback.offsetWidth;
   if (style !== "hit") combatFeedback.classList.add(style);
   combatFeedback.classList.add("show");
+}
+
+let damageOverlayTimer = 0;
+let hitMarkerTimer = 0;
+function showPlayerDamageImpact(mobId: string, damage: number, health: number): void {
+  const now = performance.now();
+  const attacker = mobVisuals.get(mobId)?.entity.getPosition();
+  const player = localPlayer.getPosition();
+  const attackerYaw = attacker
+    ? Math.atan2(attacker.x - player.x, attacker.z - player.z) * 180 / Math.PI
+    : localFacingYaw;
+  const relativeDirection = ((attackerYaw - localFacingYaw + 540) % 360) - 180;
+  const healthFraction = health / Math.max(1, potionMaxHealth);
+  damageOverlay.style.setProperty("--damage-alpha", String(Math.min(.82, .5 + damage * .09)));
+  damageOverlay.style.setProperty("--damage-direction", `${relativeDirection}deg`);
+  damageOverlay.classList.remove("active", "critical");
+  void damageOverlay.offsetWidth;
+  damageOverlay.classList.toggle("critical", healthFraction <= .35);
+  damageOverlay.classList.add("active");
+  playerHudRoot.classList.remove("taking-damage");
+  void playerHudRoot.offsetWidth;
+  playerHudRoot.classList.add("taking-damage");
+  document.documentElement.classList.toggle("player-health-critical", health > 0 && healthFraction <= .35);
+  window.clearTimeout(damageOverlayTimer);
+  damageOverlayTimer = window.setTimeout(() => {
+    damageOverlay.classList.remove("active", "critical");
+    playerHudRoot.classList.remove("taking-damage");
+  }, 560);
+  combatAudio.play("playerHit");
+  cameraShakeStrength = Math.max(cameraShakeStrength, Math.min(.24, .09 + damage * .045));
+  cameraShakeUntil = Math.max(cameraShakeUntil, now + 220);
+}
+
+function confirmEnemyDamage(damage: number, defeated: boolean): void {
+  rangedReticleHitUntil = Math.max(rangedReticleHitUntil, performance.now() + (defeated ? 250 : 180));
+  combatReticle.dataset.damage = String(damage);
+  combatReticle.classList.remove("hit-confirmed", "defeated");
+  void combatReticle.offsetWidth;
+  combatReticle.classList.toggle("defeated", defeated);
+  combatReticle.classList.add("hit-confirmed");
+  window.clearTimeout(hitMarkerTimer);
+  hitMarkerTimer = window.setTimeout(() => combatReticle.classList.remove("hit-confirmed", "defeated"), 260);
 }
 
 let rangedReticleHitUntil = 0;
@@ -17317,7 +17362,10 @@ app.on("update", (dt: number) => {
     if (mobRootPositionChanged(currentMobPosition, sampled)) mob.entity.setPosition(sampled.x, sampled.y, sampled.z);
     mob.renderYaw = sampled.yaw;
     trimMobSnapshots(mob.snapshots, animationNow);
-    const hitStrength = mob.hitAt > 0 ? Math.max(0, 1 - (animationNow - mob.hitAt) / 180) : 0;
+    const hitStrength = mob.hitAt > 0 ? Math.max(0, 1 - (animationNow - mob.hitAt) / 260) : 0;
+    const visibleHealthFraction = Math.max(0, Math.min(1, mob.state.health / Math.max(1, mob.state.maxHealth)));
+    mob.healthFill.setLocalScale(mob.healthWidth * visibleHealthFraction,
+      .065 + hitStrength * .085, .09 + hitStrength * .045);
     const presentation = enemyAttackPresentation(mob.state, serverNow);
     // Committed attacks must match the authoritative strike direction. Keep
     // the scalar in sync so recovery never resumes from an aliased Euler Y.
@@ -17570,9 +17618,9 @@ app.on("update", (dt: number) => {
       mob.bodyRoot.setLocalEulerAngles(deathPose.pitch, 0, deathPose.roll);
     }
     mob.bodyMaterial.emissive.set(
-      0.001 + (mob.state.isMiniBoss ? .2 : mob.state.isElite ? .12 : 0) + 0.55 * hitStrength + 0.34 * windupStrength,
-      0.001 + (mob.state.isMiniBoss ? .08 : mob.state.isElite ? .025 : 0) + 0.08 * hitStrength + 0.12 * windupStrength + 0.38 * staggerStrength,
-      0.001 + (mob.state.isMiniBoss ? .01 : mob.state.isElite ? .18 : 0) + 0.04 * hitStrength + 0.08 * windupStrength + 0.48 * staggerStrength,
+      0.001 + (mob.state.isMiniBoss ? .2 : mob.state.isElite ? .12 : 0) + 0.9 * hitStrength + 0.34 * windupStrength,
+      0.001 + (mob.state.isMiniBoss ? .08 : mob.state.isElite ? .025 : 0) + 0.42 * hitStrength + 0.12 * windupStrength + 0.38 * staggerStrength,
+      0.001 + (mob.state.isMiniBoss ? .01 : mob.state.isElite ? .18 : 0) + 0.12 * hitStrength + 0.08 * windupStrength + 0.48 * staggerStrength,
     );
     mob.bodyMaterial.update();
       mob.rigSettled = !rigActive;
@@ -19000,6 +19048,8 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       social.event("Southroad pack cleared Â· collect your Calling-matched upgrade, then return to Town to awaken your Power.");
     }
     const mob = mobVisuals.get(message.mobId);
+    if (message.attackerId === room?.sessionId && message.damage > 0)
+      confirmEnemyDamage(message.damage, message.defeated);
     const rangedHit = confirmedRangedHit(message.mainHandId, message.damage, message.attackerId === room?.sessionId);
     if (rangedHit) {
       rangedReticleHitUntil = performance.now() + 110;
@@ -19171,6 +19221,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     }
     if (message.guarded) return;
     const attackerName = mobVisuals.get(message.mobId)?.state.name ?? "Enemy";
+    if (message.damage > 0) showPlayerDamageImpact(message.mobId, message.damage, message.health);
     showCombatFeedback(message.defeated ? "DEFEATED" : `HURT  âˆ’${message.damage}`, "hurt");
     status.textContent = message.defeated
       ? "You were defeated. Return to the Town of Beginnings when ready."

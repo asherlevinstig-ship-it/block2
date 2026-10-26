@@ -10,6 +10,13 @@ const idle: EnemyCueSnapshot = {
 };
 
 describe("enemy combat audio", () => {
+  it("gives damage received a heavier cue than an enemy hurt confirmation", () => {
+    const cue = ARMOUR_CUE_DEFINITIONS.playerHit;
+    expect(cue.minimumIntervalMs).toBeGreaterThanOrEqual(90);
+    expect(cue.tones).toHaveLength(2);
+    expect(cue.tones[0]!.gain).toBeGreaterThan(ENEMY_CUE_DEFINITIONS.hurt.tones[0]!.gain);
+    expect(cue.tones[0]!.startHz).toBeLessThan(ENEMY_CUE_DEFINITIONS.hurt.tones[0]!.startHz);
+  });
   it("gives shard deflection a short, restrained cue distinct from taking damage", () => {
     const cue = ARMOUR_CUE_DEFINITIONS.shardDeflect;
     expect(cue.minimumIntervalMs).toBeGreaterThanOrEqual(600);

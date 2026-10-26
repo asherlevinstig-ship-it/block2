@@ -6,7 +6,7 @@ export type WeaponCue = "hammerImpact" | "rangedHit" | "acidHit" | "venomHit" | 
 export type MiningCue = "miningStone" | "miningIron" | "miningSilver" | "miningBreak";
 export type DungeonCue = "dungeonGate" | "guardianPhase" | "dungeonVictory" | "depthsEntrance" | "depthsWing" | "depthsArena";
 export type LootCue = "lootPickup" | "lootRare" | "lootEpic" | "lootLegendary" | "levelUp" | "discovery";
-export type ArmourCue = "shardDeflect";
+export type ArmourCue = "shardDeflect" | "playerHit";
 type CombatCue = EnemyCue | PowerCue | CallingCue | WeaponCue | MiningCue | DungeonCue | LootCue | ArmourCue;
 
 interface ToneLayer {
@@ -123,6 +123,10 @@ export const WEAPON_CUE_DEFINITIONS: Record<WeaponCue, EnemyCueDefinition> = {
 };
 
 export const ARMOUR_CUE_DEFINITIONS: Record<ArmourCue, EnemyCueDefinition> = {
+  playerHit: { minimumIntervalMs: 90, tones: [
+    { wave: "square", startHz: 112, endHz: 46, gain: .095, delayMs: 0, durationMs: 150 },
+    { wave: "sine", startHz: 58, endHz: 34, gain: .11, delayMs: 8, durationMs: 190 },
+  ] },
   shardDeflect: { minimumIntervalMs: 600, tones: [
     { wave: "triangle", startHz: 1180, endHz: 420, gain: .035, delayMs: 0, durationMs: 115 },
     { wave: "sine", startHz: 520, endHz: 880, gain: .025, delayMs: 45, durationMs: 145 },

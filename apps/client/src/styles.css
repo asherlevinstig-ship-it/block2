@@ -708,6 +708,73 @@ html.onboarding-active #hud #target, html.onboarding-active #hud #players { disp
 #combat-reticle[hidden] { display: none; }
 #combat-reticle[data-hit="true"] { border-color: #fff6c4; box-shadow: 0 0 0 4px #ffd86b55, 0 0 12px #ffd86b88; }
 #combat-reticle[data-hit="true"] span, #combat-reticle[data-hit="true"] span::before { background: #fff6c4; }
+#combat-reticle.hit-confirmed::before,
+#combat-reticle.hit-confirmed::after {
+  position: absolute;
+  top: 14px;
+  left: 6px;
+  width: 18px;
+  height: 3px;
+  border-radius: 3px;
+  background: #fff8d2;
+  box-shadow: 0 0 7px #ffbd4f, 0 1px 2px #000;
+  content: "";
+}
+#combat-reticle.hit-confirmed::before { transform: rotate(45deg); }
+#combat-reticle.hit-confirmed::after { transform: rotate(-45deg); }
+#combat-reticle.hit-confirmed { animation: confirmed-hit-marker 210ms ease-out; }
+#combat-reticle.hit-confirmed.defeated::before,
+#combat-reticle.hit-confirmed.defeated::after { background: #ff9d62; box-shadow: 0 0 10px #ff4f30, 0 1px 2px #000; }
+@keyframes confirmed-hit-marker {
+  0% { transform: translate(-50%, -50%) scale(.7); }
+  42% { transform: translate(-50%, -50%) scale(1.34); }
+  100% { transform: translate(-50%, -50%) scale(1); }
+}
+#damage-overlay {
+  --damage-alpha: .58;
+  --damage-direction: 0deg;
+  position: fixed;
+  z-index: 15;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at center, transparent 30%, rgb(105 0 0 / 8%) 56%, rgb(170 8 0 / var(--damage-alpha)) 100%);
+  box-shadow: inset 0 0 52px rgb(255 30 10 / 62%);
+}
+#damage-overlay i {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-right: 11px solid transparent;
+  border-bottom: 20px solid #ff6954;
+  border-left: 11px solid transparent;
+  filter: drop-shadow(0 0 7px #ff1e0a) drop-shadow(0 2px 2px #220000);
+  transform: translate(-50%, -50%) rotate(var(--damage-direction)) translateY(min(-34vh, -210px));
+}
+#damage-overlay.active { animation: player-damage-vignette 540ms ease-out; }
+#damage-overlay.critical { --damage-alpha: .78; box-shadow: inset 0 0 78px rgb(255 20 0 / 78%); }
+#player-hud-root.taking-damage { animation: player-hud-damage 420ms ease-out; }
+#player-hud-root.taking-damage #player-health { filter: drop-shadow(0 0 12px #ff3529); }
+#player-hud-root.taking-damage #player-health-fill { background: #fff3e5; box-shadow: 0 0 16px #ff311f; }
+html.player-health-critical #player-health { animation: critical-health-pulse 1.1s ease-in-out infinite; }
+@keyframes player-damage-vignette {
+  0% { opacity: 0; }
+  12% { opacity: 1; }
+  38% { opacity: .72; }
+  100% { opacity: 0; }
+}
+@keyframes player-hud-damage {
+  0%, 100% { transform: translateX(-50%); }
+  18% { transform: translateX(calc(-50% - 6px)); }
+  36% { transform: translateX(calc(-50% + 5px)); }
+  58% { transform: translateX(calc(-50% - 2px)); }
+}
+@keyframes critical-health-pulse {
+  0%, 100% { filter: none; }
+  50% { filter: drop-shadow(0 0 9px rgb(255 47 34 / 80%)); }
+}
 #tablet-aim-guide {
   position: fixed;
   z-index: 17;
@@ -739,10 +806,10 @@ html.onboarding-active #hud #target, html.onboarding-active #hud #players { disp
   box-shadow: 0 0 0 4px rgb(55 235 180 / 18%), 0 0 16px rgb(55 235 180 / 62%);
 }
 .ranged-popup { position: fixed; z-index: 18; pointer-events: none; font: 900 24px/1 system-ui, sans-serif; text-shadow: 0 2px 2px #000, 1px 0 #000, -1px 0 #000; }
-.ranged-popup-damage { color: #fff3c5; }
-.ranged-popup-damage.defeated { color: #ffb56d; }
-.ranged-popup-melee { color: #ffe2a0; }
-.ranged-popup-melee.defeated { color: #ffae72; }
+.ranged-popup-damage { color: #fff3c5; font-size: 30px; text-shadow: 0 3px 3px #000, 0 0 9px #ffb52e; }
+.ranged-popup-damage.defeated { color: #ffb56d; font-size: 36px; }
+.ranged-popup-melee { color: #ffe2a0; font-size: 30px; text-shadow: 0 3px 3px #000, 0 0 9px #ff8e2e; }
+.ranged-popup-melee.defeated { color: #ffae72; font-size: 36px; }
 .ranged-popup-stagger { color: #e2b8ff; font-size: 18px; letter-spacing: .08em; text-shadow: 0 2px 2px #000, 0 0 12px #a657dd; }
 .ranged-popup-enemy { color: #ffe9a3; font-size: 28px; }
 .ranged-popup-terrain { color: #b8c2c3; font-size: 36px; }
@@ -1276,6 +1343,10 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
   0% { opacity: 0; transform: translate(-50%, 8px) scale(.85); }
   18% { opacity: 1; transform: translate(-50%, 0) scale(1.08); }
   100% { opacity: 0; transform: translate(-50%, -20px) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #combat-reticle.hit-confirmed, #damage-overlay.active, #player-hud-root.taking-damage,
+  html.player-health-critical #player-health { animation-duration: 1ms; animation-iteration-count: 1; }
 }
 
 #dodge-button,
