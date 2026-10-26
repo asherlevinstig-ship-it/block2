@@ -10377,6 +10377,16 @@ function bindLootDrops(joinedRoom: Room): void {
     if (!lootVisibleToPlayer(drop.ownerId, joinedRoom.sessionId)) return;
     lootVisuals.get(dropId)?.root.destroy();
     lootVisuals.set(dropId, createLootVisual(dropId, drop));
+    if (dropId === `starter-kit:${joinedRoom.sessionId}`) {
+      // The server's live bag is authoritative. Repair stale browser tutorial
+      // state so an uncollected bag can never be skipped by the inventory step.
+      forcedStarterEquipment = false;
+      starterInventoryOpenedWithKeyboard = false;
+      try { window.localStorage.removeItem(starterEquipmentKey); } catch { /* Storage may be unavailable. */ }
+      if (!callingFirstOnboardingPending && firstStepsIndex !== ONBOARDING_STAGE.collectGear)
+        setFirstSteps(ONBOARDING_STAGE.collectGear);
+      else renderFirstSteps();
+    }
   };
   joinedRoom.onMessage("loot:spawned", (message: NetworkLootDrop & { dropId: string }) => {
     const { dropId, ...drop } = message;

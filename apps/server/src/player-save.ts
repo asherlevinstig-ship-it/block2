@@ -248,8 +248,7 @@ export function parsePlayerSave(raw: string | null): PlayerSaveData | null {
   // A character who has not earned XP or carried any gear is still at the
   // starting line, including profiles created just before the starter bag was
   // introduced. Repair that save rather than making the player start over.
-  const untouchedStarter = value.starterKitClaimed !== true
-    && finiteNumber(value.level, 1, 1, 255) === 1
+  const untouchedStarter = finiteNumber(value.level, 1, 1, 255) === 1
     && finiteNumber(value.experience, 0, 0, 1_000_000_000) === 0
     && finiteNumber(value.blacksmithUpgrades, 0, 0, 65_535) === 0
     && Object.keys(inventory).length === 0 && Object.keys(storage).length === 0
