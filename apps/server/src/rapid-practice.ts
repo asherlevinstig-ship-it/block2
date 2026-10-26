@@ -3,16 +3,18 @@ import type { MobArchetypeId } from "./mob-archetypes.js";
 import type { FastWorldRegionId, MainHandId } from "@blockcraft/protocol";
 import { FAST_WORLD_REGION_DEFINITIONS, fastWorldAshenLavaAt, fastWorldEruptingHeatVentAt,
   fastWorldMistfenBoardwalkAt, fastWorldMistfenToxicAt,
-  fastWorldRegionDefinition, RAPID_PRACTICE_ARENA, RAPID_PRACTICE_TOWN_COLLIDERS } from "@blockcraft/protocol";
+  fastWorldRegionDefinition, RAPID_PRACTICE_ARENA, RAPID_PRACTICE_TOWN_COLLIDERS,
+  TOWER_FLOOR_ONE, TOWER_FLOOR_ONE_SPAWNS, towerFloorOneEncounterAllows, fastWorldSpawnAllows } from "@blockcraft/protocol";
 export { RAPID_PRACTICE_ARENA, RAPID_PRACTICE_TOWN_COLLIDERS } from "@blockcraft/protocol";
 
 export type RapidPracticeSpawn = {
   id: string;
   archetype: MobArchetypeId;
   name: string;
-  zone: RapidWorldZoneId;
+  zone: RapidWorldZoneId | "tower-floor-1";
   level: number;
   leader?: boolean;
+  floorBoss?: boolean;
   respawnMs: number;
   x: number;
   y: number;
@@ -45,6 +47,18 @@ export const RAPID_WORLD_ZONES: readonly RapidWorldZone[] = FAST_WORLD_REGION_DE
   leaderId: region.leaderId,
 }));
 
+export const TOWER_FLOOR_ONE_ZONE = {
+  id: "tower-floor-1" as const,
+  name: TOWER_FLOOR_ONE.name,
+  levelMin: TOWER_FLOOR_ONE.levelMin,
+  levelMax: TOWER_FLOOR_ONE.levelMax,
+  minX: TOWER_FLOOR_ONE.bounds.minX,
+  maxX: TOWER_FLOOR_ONE.bounds.maxX,
+  minZ: TOWER_FLOOR_ONE.bounds.minZ,
+  maxZ: TOWER_FLOOR_ONE.bounds.maxZ,
+  leaderId: "floor1-crownkeeper",
+};
+
 export const rapidWorldZoneAt = (x: number, z: number): RapidWorldZone | null =>
   RAPID_WORLD_ZONES.find(zone => x >= zone.minX && x <= zone.maxX && z >= zone.minZ && z <= zone.maxZ) ?? null;
 
@@ -76,7 +90,11 @@ export const RAPID_PRACTICE_SPAWNS: readonly RapidPracticeSpawn[] = [
   ...configuredRegionSpawns("southern-quarry"),
 
   ...configuredRegionSpawns("ashen-reach"),
+  ...TOWER_FLOOR_ONE_SPAWNS.map(spawn => ({ ...spawn, zone: "tower-floor-1" as const })),
 ] as const;
+
+export const rapidPracticeSpawnAllows = (id: string, pose: { x: number; y: number; z: number }): boolean =>
+  towerFloorOneEncounterAllows(id, pose) || fastWorldSpawnAllows(id, pose);
 
 export const RAPID_PRACTICE_WAVES = [
   RAPID_PRACTICE_SPAWNS.filter(spawn => spawn.zone === "greenwood").map(spawn => spawn.id),

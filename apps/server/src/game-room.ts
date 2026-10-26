@@ -2,7 +2,9 @@ import { Client, Room } from "@colyseus/core";
 import { GREENWOOD_MASTERY_CAP, MISTFEN_MASTERY_CAP, greenwoodMasteryRank, mistfenMasteryRank } from "@blockcraft/protocol";
 import { callingStarterAbility } from "@blockcraft/protocol";
 import { experienceToNextLevel } from "@blockcraft/protocol";
-import { FAST_WORLD_TOWN_BOUNDS, FAST_WORLD_TOWN_ONLY, PRACTICE_ROOM } from "@blockcraft/protocol";
+import { FAST_WORLD_TOWN_BOUNDS, FAST_WORLD_TOWN_ONLY, PRACTICE_ROOM, TOWER_FLOOR_ONE,
+  TOWER_FLOOR_ONE_BOSS_ID, TOWER_FLOOR_ONE_SPAWNS, TOWER_FLOOR_ONE_WARDENS,
+  isInsideTowerFloorOne, towerFloorOneEncounterAllows } from "@blockcraft/protocol";
 import type { SchemaType } from "@colyseus/schema";
 import { ShadowMoveInput, stepShadowMovement, type ShadowPose } from "./movement-shadow.js";
 import { FIRST_COMBAT_MOB_ID, firstCombatExperience, firstCombatHealthAfterHit, firstCombatReward, isFirstCombatSupport } from "./first-combat-training.js";
@@ -66,6 +68,7 @@ import { EMPTY_RAPID_PRACTICE_UPGRADES, RAPID_PRACTICE_ARENA, RAPID_PRACTICE_BOS
   RAPID_PRACTICE_WEAPON_CHOICES, applyRapidPracticeUpgrade, rapidPracticeAttackTiming,
   rapidAshenLavaAt, rapidAshenVentEruptingAt, rapidMistfenToxicPoolAt, rapidPracticeGuardedReward,
   rapidPracticeMovementSpeed, rapidPracticeProjectileFan, rapidPracticeProjectileTravelMs,
+  rapidPracticeSpawnAllows, TOWER_FLOOR_ONE_ZONE,
   rapidPracticeWeaponProfile, type RapidPracticeProjectileStyle, type RapidPracticeUpgradeId,
   type RapidPracticeUpgrades, type RapidPracticeWeaponChoiceId } from "./rapid-practice.js";
 import type { ServerPerformanceUpdate } from "@blockcraft/protocol";
@@ -784,9 +787,22 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (this.roomKind === "practice") {
       this.state.mobs.clear(); this.mobHomes.clear(); this.state.portals.clear();
       if (this.rapidPractice) {
-        for (const spawn of FAST_WORLD_TOWN_ONLY ? [] : RAPID_PRACTICE_SPAWNS) {
+        for (const spawn of FAST_WORLD_TOWN_ONLY
+          ? RAPID_PRACTICE_SPAWNS.filter(candidate => candidate.zone === "tower-floor-1" && !candidate.floorBoss)
+          : RAPID_PRACTICE_SPAWNS) {
           this.registerMob(spawn.id, spawn.archetype, spawn);
           this.configureRapidWorldMob(spawn.id, this.state.mobs.get(spawn.id)!);
+        }
+        if (FAST_WORLD_TOWN_ONLY) {
+          const entry = new ForestPortalState();
+          Object.assign(entry, TOWER_FLOOR_ONE.townPortal, { kind: "tower-entry", expiresAt: 0 });
+          this.state.portals.set("tower-floor-1-entry", entry);
+          const exit = new ForestPortalState();
+          Object.assign(exit, TOWER_FLOOR_ONE.returnPortal, { kind: "tower-return", expiresAt: 0 });
+          this.state.portals.set("tower-floor-1-return", exit);
+          const ascent = new ForestPortalState();
+          Object.assign(ascent, TOWER_FLOOR_ONE.ascentPortal, { kind: "tower-locked", expiresAt: 0 });
+          this.state.portals.set("tower-floor-2-locked", ascent);
         }
       } else {
         this.registerMob("practice-crawler", "moss_crawler", { x: 105.5, y: 8, z: 104.5 });
@@ -956,6 +972,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (id === "warden-gate") this.useRealmWardenGate(client, payload);
       else if (id.startsWith("depths-")) this.useSilverDepthsPortal(client, payload);
       else if (id.startsWith("ember-")) this.useEmberVaultPortal(client, payload);
+      else if (id.startsWith("tower-floor-")) this.useTowerPortal(client, id);
       else this.useForestPortal(client, payload);
     });
     this.onMessage("recovery:collect", (client, payload: unknown) => {
@@ -2391,10 +2408,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
 
   private buildPracticeArena(): void {
     // This room has its own generated chunks; no block edits reach the shared world.
-    const bounds = this.rapidPractice
-      ? FAST_WORLD_TOWN_ONLY ? { ...FAST_WORLD_TOWN_BOUNDS, floorY: RAPID_PRACTICE_ARENA.floorY } : RAPID_PRACTICE_ARENA
-      : { minX: 94, maxX: 112, minZ: 98, maxZ: 114, floorY: 7 };
-    for (let x = bounds.minX; x <= bounds.maxX; x++) for (let z = bounds.minZ; z <= bounds.maxZ; z++) {
+    const arenas = this.rapidPractice && FAST_WORLD_TOWN_ONLY
+      ? [{ ...FAST_WORLD_TOWN_BOUNDS, floorY: RAPID_PRACTICE_ARENA.floorY }, { ...TOWER_FLOOR_ONE.bounds, floorY: RAPID_PRACTICE_ARENA.floorY }]
+      : [this.rapidPractice ? RAPID_PRACTICE_ARENA : { minX: 94, maxX: 112, minZ: 98, maxZ: 114, floorY: 7 }];
+    for (const bounds of arenas) for (let x = bounds.minX; x <= bounds.maxX; x++) for (let z = bounds.minZ; z <= bounds.maxZ; z++) {
       const address = worldToChunk(x, z);
       const stored = this.getChunk(address.chunkX, address.chunkZ);
       setBlock(stored.chunk, address.localX, bounds.floorY, address.localZ, Block.Stone);
@@ -2624,7 +2641,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const spawn = RAPID_PRACTICE_SPAWNS.find(candidate => candidate.id === mobId);
     if (!spawn) return;
     const areaLeader = areaMiniBossDefinition(mobId);
-    const tier = spawn.zone === "greenwood" ? 1 : spawn.zone === "mistfen" || spawn.zone === "sunken-coast" ? 2
+    const tier = spawn.zone === "tower-floor-1" || spawn.zone === "greenwood" ? 1 : spawn.zone === "mistfen" || spawn.zone === "sunken-coast" ? 2
       : spawn.zone === "southern-quarry" ? 3 : 4;
     mob.name = spawn.name;
     mob.level = spawn.level;
@@ -2652,7 +2669,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const outside = keepMobOutsideTown(spawn);
     const home = walkableMobSpawn({ ...spawn, ...outside }, this.readWorldBlock, pose => this.mobPositionAllowed(pose)
       && this.roamingAllowed(mobId, pose) && (!this.rapidPractice
-        || fastWorldSpawnAllows(mobId, pose) && fastWorldNavigationGroundAllows(mobId, pose))
+        || rapidPracticeSpawnAllows(mobId, pose) && fastWorldNavigationGroundAllows(mobId, pose))
       && caveEncounterAllows(mobId, pose));
     this.mobHomes.set(mobId, home);
     this.mobNavigation.set(mobId, createMobNavigationState());
@@ -2701,8 +2718,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   }
 
   private readonly mobPositionAllowed = (position: { x: number; z: number }): boolean => this.rapidPractice
-    ? position.x >= RAPID_PRACTICE_ARENA.minX + 1 && position.x <= RAPID_PRACTICE_ARENA.maxX - 1
-      && position.z >= RAPID_PRACTICE_ARENA.minZ + 1 && position.z <= RAPID_PRACTICE_ARENA.maxZ - 1
+    ? FAST_WORLD_TOWN_ONLY ? isInsideTowerFloorOne(position.x, position.z, 1)
+      : position.x >= RAPID_PRACTICE_ARENA.minX + 1 && position.x <= RAPID_PRACTICE_ARENA.maxX - 1
+        && position.z >= RAPID_PRACTICE_ARENA.minZ + 1 && position.z <= RAPID_PRACTICE_ARENA.maxZ - 1
       && !(position.x <= 108 && position.z >= 66 && position.z <= 146)
     : radiusFromSafeCenter(position) >= MOB_TOWN_MINIMUM_RADIUS - 0.001;
 
@@ -2825,9 +2843,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private roamingAllowed(id: string, pose: { x: number; y: number; z: number }): boolean {
     const rapidSpawn = this.rapidPractice ? RAPID_PRACTICE_SPAWNS.find(spawn => spawn.id === id) : undefined;
     if (rapidSpawn) {
-      const zone = RAPID_WORLD_ZONES.find(candidate => candidate.id === rapidSpawn.zone)!;
+      const zone = rapidSpawn.zone === "tower-floor-1" ? TOWER_FLOOR_ONE_ZONE
+        : RAPID_WORLD_ZONES.find(candidate => candidate.id === rapidSpawn.zone)!;
       return Math.abs(pose.y - 8) <= 1.5 && pose.x >= zone.minX - 3 && pose.x <= zone.maxX + 3
-        && pose.z >= zone.minZ - 3 && pose.z <= zone.maxZ + 3 && fastWorldEncounterAllows(id, pose)
+        && pose.z >= zone.minZ - 3 && pose.z <= zone.maxZ + 3
+        && (rapidSpawn.zone === "tower-floor-1" ? towerFloorOneEncounterAllows(id, pose) : fastWorldEncounterAllows(id, pose))
         && fastWorldNavigationGroundAllows(id, pose);
     }
     const siteGuard = roadsideGuard(id);
@@ -3367,6 +3387,15 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         this.areaLeaderPhases.delete(mobId);
         this.miniBossEngagedAt.delete(mobId);
         this.miniBossOrbitPressure.delete(mobId);
+      }
+      if (rapidSpawn && (TOWER_FLOOR_ONE_WARDENS as readonly string[]).includes(mobId)
+        && TOWER_FLOOR_ONE_WARDENS.every(id => this.state.mobs.get(id)?.alive === false)
+        && !this.state.mobs.has(TOWER_FLOOR_ONE_BOSS_ID)) {
+        const bossSpawn = TOWER_FLOOR_ONE_SPAWNS.find(spawn => spawn.id === TOWER_FLOOR_ONE_BOSS_ID)!;
+        this.registerMob(bossSpawn.id, bossSpawn.archetype, bossSpawn);
+        this.configureRapidWorldMob(bossSpawn.id, this.state.mobs.get(bossSpawn.id)!);
+        this.broadcast("chat:notice", "BOTH ROOT WARDENS DEFEATED · the Crownkeeper has awakened in the eastern court.");
+        this.refreshNearbyObjectives();
       }
       return;
     }
@@ -7918,6 +7947,37 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     client.send("player:portal", { ...destination, entering: portal.kind === "entry" });
     client.send("world:bootstrap", this.bootstrapPayload(destination));
     if (portal.kind === "entry") this.sendDungeonLobby();
+    void this.persistPlayer(client.sessionId, player);
+  }
+
+  private useTowerPortal(client: Client, id: string): void {
+    if (!this.rapidPractice || !FAST_WORLD_TOWN_ONLY) return;
+    const player = this.state.players.get(client.sessionId), portal = this.state.portals.get(id), now = Date.now();
+    if (!player || !portal || !canUseForestPortal(player, portal, now)
+      || now - (this.forestTravelAt.get(client.sessionId) ?? -Infinity) < 900) return;
+    if (id === "tower-floor-2-locked") {
+      const bossAlive = this.state.mobs.get(TOWER_FLOOR_ONE_BOSS_ID)?.alive !== false;
+      client.send("portal:notice", bossAlive
+        ? "FLOOR 2 SEALED · defeat the Crownkeeper to awaken the ascent gate."
+        : "FLOOR 1 CLEARED · Floor 2 is being forged. The return portal remains open.");
+      return;
+    }
+    const entering = id === "tower-floor-1-entry";
+    const destination = entering ? TOWER_FLOOR_ONE.entry : RAPID_PRACTICE_ARENA.spawn;
+    this.forestTravelAt.set(client.sessionId, now);
+    this.pendingMining.delete(client.sessionId); this.pendingAttacks.delete(client.sessionId);
+    this.pendingPowers.delete(client.sessionId); this.cancelWeaponProjectiles(client.sessionId);
+    player.defending = false; player.powerCastStartedAt = 0;
+    player.x = destination.x; player.y = destination.y; player.z = destination.z;
+    player.invulnerableUntil = Math.max(player.invulnerableUntil, now + 1_500);
+    this.movementInputs.set(client.sessionId, { request: idleMovementInput(), receivedAt: now });
+    this.verticalVelocities.set(client.sessionId, 0);
+    client.send("player:portal", { ...destination, entering });
+    client.send("world:bootstrap", this.bootstrapPayload(destination));
+    client.send("portal:notice", entering
+      ? "FLOOR 1 · THE OVERGROWN RAMPART · cross three courts, defeat both Root Wardens, then challenge the Crownkeeper."
+      : "Returned to the Town of Beginnings.");
+    this.refreshNearbyObjectives();
     void this.persistPlayer(client.sessionId, player);
   }
 

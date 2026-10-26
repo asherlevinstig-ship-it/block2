@@ -12,7 +12,9 @@ describe("player saves", () => {
     applyPlayerSave(restored, parsePlayerSave(serializePlayerSave(player))!);
     expect(starterKitClaimed(restored.huntLoadoutsJson)).toBe(false);
     player.huntLoadoutsJson = withStarterKitClaimed(player.huntLoadoutsJson);
-    expect(parsePlayerSave(serializePlayerSave(player))?.starterKitClaimed).toBe(true);
+    // A level-one, zero-XP, empty character is repaired as untouched even if
+    // an old client accidentally persisted the claimed marker.
+    expect(parsePlayerSave(serializePlayerSave(player))?.starterKitClaimed).toBe(false);
     const legacy = parsePlayerSave(JSON.stringify({ version: 1, inventory: {}, mainHandId: "longsword" }))!;
     expect(legacy.starterKitClaimed).toBe(false);
     expect(legacy.mainHandId).toBe("unarmed");

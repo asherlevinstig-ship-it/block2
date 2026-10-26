@@ -18,7 +18,7 @@ import {
   rapidPracticeProjectileTravelMs,
   rapidPracticeWeaponProfile,
 } from "./rapid-practice.js";
-import { FAST_WORLD_TOWN_BOUNDS, fastWorldRegionDefinition, rapidPracticeCollisionCellSolid } from "@blockcraft/protocol";
+import { FAST_WORLD_TOWN_BOUNDS, TOWER_FLOOR_ONE_SPAWNS, fastWorldRegionDefinition, rapidPracticeCollisionCellSolid } from "@blockcraft/protocol";
 
 describe("fast low-poly world", () => {
   it("provides five bounded free-roam regions with authored permanent populations", () => {
@@ -26,9 +26,11 @@ describe("fast low-poly world", () => {
     expect(RAPID_WORLD_ZONES.map(zone => zone.name)).toEqual(["Greenwood", "Mistfen", "Sunken Coast", "Southern Quarry", "Ashen Reach"]);
     const totalPopulation = RAPID_WORLD_ZONES.reduce((total, zone) => total
       + fastWorldRegionDefinition(zone.id).targetPopulation, 0);
-    expect(RAPID_PRACTICE_SPAWNS).toHaveLength(totalPopulation);
-    expect(new Set(RAPID_PRACTICE_SPAWNS.map(spawn => spawn.id)).size).toBe(totalPopulation);
-    for (const spawn of RAPID_PRACTICE_SPAWNS) {
+    const archivedRegionSpawns = RAPID_PRACTICE_SPAWNS.filter(spawn => spawn.zone !== "tower-floor-1");
+    expect(archivedRegionSpawns).toHaveLength(totalPopulation);
+    expect(RAPID_PRACTICE_SPAWNS).toHaveLength(totalPopulation + TOWER_FLOOR_ONE_SPAWNS.length);
+    expect(new Set(RAPID_PRACTICE_SPAWNS.map(spawn => spawn.id)).size).toBe(RAPID_PRACTICE_SPAWNS.length);
+    for (const spawn of archivedRegionSpawns) {
       expect(spawn.x).toBeGreaterThan(RAPID_PRACTICE_ARENA.minX);
       expect(spawn.x).toBeLessThan(RAPID_PRACTICE_ARENA.maxX);
       expect(spawn.z).toBeGreaterThan(RAPID_PRACTICE_ARENA.minZ);

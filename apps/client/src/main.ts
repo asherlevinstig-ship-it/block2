@@ -1,6 +1,6 @@
 import { greenwoodAtmosphere } from "./greenwood-atmosphere.js";
 import { greenwoodEmergence, greenwoodMobStyle, type GreenwoodMobStyle } from "./greenwood-mob-style.js";
-import { FAST_WORLD_TOWN_BOUNDS, FAST_WORLD_TOWN_ONLY, fastWorldGroundHeight } from "@blockcraft/protocol";
+import { FAST_WORLD_TOWN_BOUNDS, FAST_WORLD_TOWN_ONLY, TOWER_FLOOR_ONE, fastWorldGroundHeight } from "@blockcraft/protocol";
 import { GREENWOOD_MAIN_TRAIL, GREENWOOD_CAMP_TRAIL, GREENWOOD_THICKETS, GREENWOOD_CLUSTER_PLANTS, GREENWOOD_VERGE_PLANTS, sampleWoodlandTrail } from "./greenwood-landscape.js";
 import * as pc from "playcanvas";
 import { facetedBoxMesh } from "./faceted-shapes.js";
@@ -124,6 +124,7 @@ import { advanceCameraOrbit, cameraOrbitOffset, dragCameraOrbit, initialCameraOr
 import { advanceCameraFollow, advanceCameraHeight, advanceCameraPosition } from "./camera-follow.js";
 import { populateTownAssetKit, readyTownFallbacks, SPEED_LAB_TOWN_ASSETS, type TownFallbackFamily } from "./town-asset-kit.js";
 import { createTownPortalLandmarks } from "./town-portal-landmarks.js";
+import { createTowerFloorOneWorld } from "./tower-floor-one-world.js";
 import { createFastWorldSky } from "./fast-world-sky.js";
 import { createPaintedGroundMaterial, fitGroundTexture, fitOrganicGroundPatch, createWoodlandTrailMesh, woodlandFernMesh } from "./fast-world-texture.js";
 import {
@@ -2305,7 +2306,7 @@ const fastWorldMapTargets = (): FastWorldNavPoint[] => [
     regionId: region.id, kind: "connection" as const, discoveryRadius: 0,
   })),
   ...FAST_WORLD_NAV_LANDMARKS.filter(landmark => !FAST_WORLD_TOWN_ONLY && fastWorldNavigationState.landmarks.has(landmark.id)),
-  ...(!FAST_WORLD_TOWN_ONLY && fastWorldNearbyMiniBoss ? [fastWorldNearbyMiniBoss] : []),
+  ...(fastWorldNearbyMiniBoss ? [fastWorldNearbyMiniBoss] : []),
 ];
 
 const drawFastWorldMap = (position: { x: number; z: number }, facingYawDegrees: number, now: number, force = false): void => {
@@ -2323,7 +2324,7 @@ const drawFastWorldMap = (position: { x: number; z: number }, facingYawDegrees: 
   const drawRegion = (id: string, name: string, minX: number, maxX: number, minZ: number, maxZ: number): void => {
     const a = fastWorldMapPoint(minX, minZ, width, height);
     const b = fastWorldMapPoint(maxX, maxZ, width, height);
-    const visited = fastWorldNavigationState.regions.has(id);
+    const visited = id === "tower-floor-1" || fastWorldNavigationState.regions.has(id);
     ctx.fillStyle = visited ? palette[id] ?? "#36453c" : "#101b18";
     ctx.globalAlpha = visited ? .88 : .62; ctx.fillRect(a.x, a.y, b.x - a.x, b.y - a.y); ctx.globalAlpha = 1;
     ctx.strokeStyle = id === rapidWorldRegionId ? "#f6d66b" : visited ? "#94b995" : "#385047";
@@ -2333,7 +2334,10 @@ const drawFastWorldMap = (position: { x: number; z: number }, facingYawDegrees: 
       ctx.textAlign = "center"; ctx.fillText(name.toUpperCase(), (a.x + b.x) / 2, a.y + 12);
     }
   };
-  drawRegion("town", "Town", 40, 108, 66, 146);
+  const inTowerFloor = FAST_WORLD_TOWN_ONLY && position.x >= TOWER_FLOOR_ONE.bounds.minX - 4;
+  if (inTowerFloor) drawRegion("tower-floor-1", "Floor 1 · Overgrown Rampart",
+    TOWER_FLOOR_ONE.bounds.minX, TOWER_FLOOR_ONE.bounds.maxX, TOWER_FLOOR_ONE.bounds.minZ, TOWER_FLOOR_ONE.bounds.maxZ);
+  else drawRegion("town", "Town", 40, 108, 66, 146);
   for (const region of FAST_WORLD_REGION_DEFINITIONS.filter(() => !FAST_WORLD_TOWN_ONLY))
     drawRegion(region.id, region.name, region.bounds.minX, region.bounds.maxX, region.bounds.minZ, region.bounds.maxZ);
   if (fastWorldNavigationDebug && !FAST_WORLD_TOWN_ONLY) {
@@ -3803,7 +3807,10 @@ if (fastWorldRequested) {
       if (seam.render) seam.render.castShadows = false;
     }
   }
-  if (FAST_WORLD_TOWN_ONLY) createTownPortalLandmarks(app, rapidPrototypeRoot);
+  if (FAST_WORLD_TOWN_ONLY) {
+    createTownPortalLandmarks(app, rapidPrototypeRoot);
+    createTowerFloorOneWorld(app, rapidPrototypeRoot);
+  }
 
   const badge = document.createElement("aside");
   badge.id = "fast-world-badge";
@@ -13061,7 +13068,7 @@ function updateForestPortals(): void {
     const ownState = (room?.state as { players?: Map<string, NetworkPlayer> } | undefined)?.players?.get(room?.sessionId ?? "");
     const wardenGate = id === "warden-gate";
     const wardenGateUnlocked = ownState?.realmWardenCleared === true;
-    visual.root.enabled = active && distance < 45;
+    visual.root.enabled = active && distance < 45 && id !== "tower-floor-1-entry";
     const victory = id === "forest-victory";
     const animationNow = performance.now();
     const pulse = victory ? Math.sin(animationNow / 220) * .1 : Math.sin(animationNow / 600) * .04;
@@ -18409,7 +18416,8 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     pendingPortalDestination = own && portalArrivalSnapshot(spawn, own) ? null : spawn;
     worldReady = false; awaitingReturnState = false; townReturnPosition = spawn; cutawaySliceY = null;
     status.textContent = spawn.entering
-      ? isInEmberVault(spawn.x, spawn.z) ? "Ember Vault entered Â· breach the forge chambers and defeat the Colossus."
+      ? spawn.x >= TOWER_FLOOR_ONE.bounds.minX ? "Floor 1 entered · defeat both Root Wardens, then challenge the Crownkeeper."
+        : isInEmberVault(spawn.x, spawn.z) ? "Ember Vault entered Â· breach the forge chambers and defeat the Colossus."
         : spawn.y < 5 ? "Silver Depths entered Â· the dungeon clock is running." : "Forest Dungeon lobby Â· assemble, ready up, then begin the run."
       : isInEmberVault(spawn.x, spawn.z) ? "Returned to the Ember Vault."
         : spawn.x > 40 ? "Returned to the Deep Frontier with your forge rewards." : "Returned to the Town of Beginnings with your loot.";

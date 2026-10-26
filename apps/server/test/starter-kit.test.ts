@@ -20,14 +20,14 @@ describe("new-character starter supplies", () => {
     internal.ensureStarterKit("new-player", player, 10_000);
     const id = "starter-kit:new-player";
     const first = room.state.lootDrops.get(id)!;
-    expect({ x: first.x, z: first.z, ownerId: first.ownerId }).toEqual({ x: 8.5, z: 11.5, ownerId: "new-player" });
+    expect({ x: first.x, z: first.z, ownerId: first.ownerId }).toEqual({ x: 8.5, z: 14, ownerId: "new-player" });
     expect(decodeLootBagItems(first.contentsJson)).toEqual([...STARTER_KIT_ITEMS]);
     internal.ensureStarterKit("new-player", player, 10_001);
     expect(room.state.lootDrops.size).toBe(1);
 
     internal.resolveLootPickups(first.expiresAt);
     expect(room.state.lootDrops.has(id)).toBe(true);
-    player.x = 8.5; player.z = 11.5;
+    player.x = 8.5; player.z = 14;
     vi.setSystemTime(first.expiresAt + 1);
     internal.handleLootCollect({ sessionId: "new-player", send: vi.fn() }, { dropId: id, action: "keep" });
     expect(player.inventory.get("forged_sword")?.quantity).toBe(1);
@@ -51,7 +51,7 @@ describe("new-character starter supplies", () => {
     internal.ensureStarterKit("fast-new-player", player, 20_000);
 
     const drop = room.state.lootDrops.get("starter-kit:fast-new-player")!;
-    expect({ x: drop.x, y: drop.y, z: drop.z }).toEqual({ x: 99.5, y: 8.22, z: 109.5 });
+    expect({ x: drop.x, y: drop.y, z: drop.z }).toEqual({ x: 99.5, y: 8.22, z: 112 });
     expect(decodeLootBagItems(drop.contentsJson)).toEqual([...STARTER_KIT_ITEMS]);
   });
 });

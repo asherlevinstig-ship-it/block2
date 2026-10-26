@@ -1,10 +1,12 @@
 export { fastWorldGroundHeight, fastWorldCoastShorelineZ } from "./fast-world-elevation.js";
 import { fastWorldGroundHeight } from "./fast-world-elevation.js";
 import { createFastWorldObstacleQuery } from "./fast-world-obstacles.js";
+import { TOWER_FLOOR_ONE, isInsideTowerFloorOne } from "./tower-floor-one.js";
 export * from "./fast-world-obstacles.js";
 import { z } from "zod";
 export * from "./fast-world-regions.js";
 export * from "./fast-world-navigation.js";
+export * from "./tower-floor-one.js";
 export { BRUTE_VOLLEY, bruteVolleyReady, bruteRockEndpoints, bruteRockLanes } from "./brute-volley.js";
 export { SPITTER_PATTERN, CRYSTAL_BURST_OFFSETS, VENOM_RING_OFFSETS, MATRIARCH_PHASE, matriarchEnraged, matriarchPattern, crystalMatriarchPattern, matriarchSecondVolleyYaw, matriarchWarningLanes, spitterPattern, spitterShotOffsets, spitterShotEndpoints, spitterWarningLanes } from "./spitter-patterns.js";
 export { DODGE_STAMINA_COST, DODGE_CHAIN_COST_STEP, DODGE_MAX_STAMINA_COST, DODGE_CHAIN_WINDOW_MS, DODGE_EXHAUSTION_MS, PERFECT_DODGE_COUNTER_MS, PERFECT_DODGE_STAMINA_RESTORE, dodgeChainStaminaCost, nextDodgeChain, type DodgePressureUpdate } from "./dodge-pressure.js";
@@ -14,7 +16,7 @@ export { DODGE_STAMINA_COST, DODGE_CHAIN_COST_STEP, DODGE_MAX_STAMINA_COST, DODG
 // otherwise let a new client join a room still serving the old terrain.
 export const WORLD_ROOM = "world-warden-gate-v165";
 export const SILVER_DEPTHS_ROOM = "silver-depths-instance-v3";
-export const PRACTICE_ROOM = "calling-practice-v4";
+export const PRACTICE_ROOM = "calling-practice-v5";
 export type RoomTransfer = { room: typeof WORLD_ROOM | typeof SILVER_DEPTHS_ROOM | typeof PRACTICE_ROOM; instanceKey?: string; partySize?: number; returnFrom?: "silver-depths" | "practice"; retry?: boolean; partyTicket?: string; worldRoomId?: string };
 export interface ForestPortal { kind: string; x: number; y: number; z: number; expiresAt: number }
 export const FOREST_PORTAL_LIFETIME_MS = 120_000;
@@ -168,11 +170,29 @@ export const RAPID_PRACTICE_TOWN_COLLIDERS = [
 ] as const;
 
 /** Shared obstacle query for Fast World prediction and authority. */
-export const FAST_WORLD_COLLISION_QUERY = createFastWorldObstacleQuery(
-  FAST_WORLD_TOWN_ONLY ? { ...FAST_WORLD_TOWN_BOUNDS, floorY: RAPID_PRACTICE_ARENA.floorY, sealedBounds: true } : RAPID_PRACTICE_ARENA,
-  RAPID_PRACTICE_TOWN_COLLIDERS,
-  fastWorldGroundHeight,
-);
+const townOnlyCollisionQuery = createFastWorldObstacleQuery(
+  { ...FAST_WORLD_TOWN_BOUNDS, floorY: RAPID_PRACTICE_ARENA.floorY, sealedBounds: true },
+  RAPID_PRACTICE_TOWN_COLLIDERS, fastWorldGroundHeight, []);
+const towerFloorCollisionQuery = createFastWorldObstacleQuery(
+  { ...TOWER_FLOOR_ONE.bounds, floorY: RAPID_PRACTICE_ARENA.floorY, sealedBounds: true },
+  [], fastWorldGroundHeight, []);
+
+/** Town and tower floors are separate sealed islands. The void between them is
+ * solid to movement and can only be crossed by authoritative portal travel. */
+export const FAST_WORLD_COLLISION_QUERY = FAST_WORLD_TOWN_ONLY ? {
+  obstacles: [...townOnlyCollisionQuery.obstacles, ...towerFloorCollisionQuery.obstacles],
+  groundHeight: fastWorldGroundHeight,
+  obstacleAt(x: number, y: number, z: number) {
+    return townOnlyCollisionQuery.obstacleAt(x, y, z) ?? towerFloorCollisionQuery.obstacleAt(x, y, z);
+  },
+  cellSolid(x: number, y: number, z: number) {
+    if (x >= FAST_WORLD_TOWN_BOUNDS.minX && x <= FAST_WORLD_TOWN_BOUNDS.maxX
+      && z >= FAST_WORLD_TOWN_BOUNDS.minZ && z <= FAST_WORLD_TOWN_BOUNDS.maxZ)
+      return townOnlyCollisionQuery.cellSolid(x, y, z);
+    if (isInsideTowerFloorOne(x, z)) return towerFloorCollisionQuery.cellSolid(x, y, z);
+    return Math.floor(y) >= RAPID_PRACTICE_ARENA.floorY;
+  },
+} : createFastWorldObstacleQuery(RAPID_PRACTICE_ARENA, RAPID_PRACTICE_TOWN_COLLIDERS, fastWorldGroundHeight);
 
 /** Preserves the former realm collision model for archived region checks. */
 export const ARCHIVED_FAST_WORLD_COLLISION_QUERY = createFastWorldObstacleQuery(
