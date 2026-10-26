@@ -125,6 +125,7 @@ import { advanceCameraFollow, advanceCameraHeight, advanceCameraPosition } from 
 import { populateTownAssetKit, readyTownFallbacks, SPEED_LAB_TOWN_ASSETS, type TownFallbackFamily } from "./town-asset-kit.js";
 import { createTownPortalLandmarks } from "./town-portal-landmarks.js";
 import { createTowerFloorOneWorld } from "./tower-floor-one-world.js";
+import { portalInteractionPrompt, portalLabel, portalWorldLabel } from "./portal-labels.js";
 import { createFastWorldSky } from "./fast-world-sky.js";
 import { createPaintedGroundMaterial, fitGroundTexture, fitOrganicGroundPatch, createWoodlandTrailMesh, woodlandFernMesh } from "./fast-world-texture.js";
 import {
@@ -13068,6 +13069,7 @@ function updateForestPortals(): void {
     const ownState = (room?.state as { players?: Map<string, NetworkPlayer> } | undefined)?.players?.get(room?.sessionId ?? "");
     const wardenGate = id === "warden-gate";
     const wardenGateUnlocked = ownState?.realmWardenCleared === true;
+    const presentation = portalLabel(id, portal.kind, wardenGateUnlocked);
     visual.root.enabled = active && distance < 45 && id !== "tower-floor-1-entry";
     const victory = id === "forest-victory";
     const animationNow = performance.now();
@@ -13095,17 +13097,13 @@ function updateForestPortals(): void {
     visual.label.hidden = !active || distance > 25 || screen.z <= 0 || screen.x < 0 || screen.x > rect.width || screen.y < 0 || screen.y > rect.height;
     visual.label.style.left = `${rect.left + screen.x}px`; visual.label.style.top = `${rect.top + screen.y}px`;
     const testEntry = id === "ember-entry" || id === "depths-entry";
-    const reachable = wardenGate && !wardenGateUnlocked ? false : testEntry
+    const reachable = presentation.locked ? false : testEntry
       ? defeatScreen.hidden && active && Math.abs(player.y - portal.y) <= 3 && distance <= 3.5
       : canUseForestPortal({ ...player, health: defeatScreen.hidden ? 1 : 0 }, portal, now);
     visual.label.disabled = !reachable;
-    const portalName = id === "warden-gate" ? (wardenGateUnlocked ? "WARDEN GATE Â· ASCENDANT CHALLENGE" : "WARDEN GATE Â· LOCKED")
-      : id === "ember-entry" ? "THE EMBER VAULT" : id === "ember-return" ? "RETURN TO FRONTIER"
-      : id === "depths-entry" ? "THE SILVER DEPTHS" : id === "depths-return" ? "RETURN TO TOWN"
-      : portal.kind === "entry" ? "FOREST DUNGEON" : victory ? "VICTORY PORTAL" : "RETURN TO WILDERNESS";
-    const testState = id === "depths-entry" ? "\nE TO ENTER / ASSEMBLE PARTY" : testEntry ? "\nTEST ACCESS Â· E TO ENTER" : "";
-    const text = `${portalName}${testState}${portal.expiresAt ? ` Â· ${Math.max(0, Math.ceil((portal.expiresAt - now) / 1000))}s` : ""}${reachable && !testState ? ` Â· E TO ${wardenGate ? "CHALLENGE" : portal.kind === "entry" ? "ENTER" : "RETURN"}` : ""}`;
-    visual.label.classList.toggle("locked", wardenGate && !wardenGateUnlocked);
+    const text = portalWorldLabel(presentation, portal.expiresAt ? Math.max(0, Math.ceil((portal.expiresAt - now) / 1000)) : 0);
+    visual.label.dataset.tone = presentation.tone;
+    visual.label.classList.toggle("locked", presentation.locked);
     if (visual.label.textContent !== text) visual.label.textContent = text;
     if (active && reachable && distance < nearest) { nearest = distance; nearbyForestPortal = id; }
   });
@@ -13225,7 +13223,13 @@ function updateTarget(): void {
   else if (ashenReliquaryNearby) targetLabel.textContent = ashenReliquaryClaimNearby
     ? "Scorched Reliquary Â· press E or Choose for one personal reward"
     : "Scorched Reliquary Â· press E or Preview to inspect all three blueprints";
-  else if (nearbyForestPortal) targetLabel.textContent = "Glowing portal Â· press E or Portal to travel";
+  else if (nearbyForestPortal) {
+    const state = forestPortalVisuals.get(nearbyForestPortal)?.state;
+    targetLabel.textContent = state
+      ? portalInteractionPrompt(portalLabel(nearbyForestPortal, state.kind,
+        nearbyForestPortal !== "warden-gate" || Boolean((room?.state as { players?: Map<string, NetworkPlayer> } | undefined)?.players?.get(room?.sessionId ?? "")?.realmWardenCleared)))
+      : "Portal · press E to travel";
+  }
   else if (roleOpportunity) targetLabel.textContent = `${roleOpportunity.name} Â· ${roleOpportunity.prompt} Â· press E or ${roleOpportunity.action}`;
   else if (roadsideEncounter) {
     const player = localPlayer.getPosition();
