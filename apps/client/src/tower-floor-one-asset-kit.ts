@@ -14,6 +14,16 @@ export const TOWER_FLOOR_ONE_ASSET_FILES = {
   torch: `${KAYKIT_DUNGEON_BASE_URL}/torch_lit.gltf.glb`,
   blueBanner: `${KAYKIT_DUNGEON_BASE_URL}/banner_patternA_blue.gltf.glb`,
   redBanner: `${KAYKIT_DUNGEON_BASE_URL}/banner_patternA_red.gltf.glb`,
+  fortressGate: `${KAYKIT_DUNGEON_BASE_URL}/wall_gated.gltf.glb`,
+  fortressCorner: `${KAYKIT_DUNGEON_BASE_URL}/wall_corner_gated.gltf.glb`,
+  crackedWall: `${KAYKIT_DUNGEON_BASE_URL}/wall_cracked.gltf.glb`,
+  wallPillar: `${KAYKIT_DUNGEON_BASE_URL}/wall_pillar.gltf.glb`,
+  battlement: `${KAYKIT_DUNGEON_BASE_URL}/barrier.gltf.glb`,
+  battlementCorner: `${KAYKIT_DUNGEON_BASE_URL}/barrier_corner.gltf.glb`,
+  throneChair: `${KAYKIT_DUNGEON_BASE_URL}/chair.gltf.glb`,
+  royalArms: `${KAYKIT_DUNGEON_BASE_URL}/sword_shield_gold.gltf.glb`,
+  royalBanner: `${KAYKIT_DUNGEON_BASE_URL}/banner_triple_yellow.gltf.glb`,
+  royalChest: `${KAYKIT_DUNGEON_BASE_URL}/chest_gold.glb`,
 } as const;
 
 export type TowerFloorOneAssetId = keyof typeof TOWER_FLOOR_ONE_ASSET_FILES;
@@ -58,6 +68,32 @@ export const TOWER_FLOOR_ONE_ASSET_SPIKE: readonly TowerFloorOneAssetPlacement[]
   { id: "redBanner", name: "north-warden-banner-east", position: [356, 8.68, 69.5], yaw: 180, scale: 1.45 },
   { id: "torch", name: "opening-torch-north", position: [320.3, 10.2, 102.65], yaw: 90, scale: 1.42 },
   { id: "torch", name: "opening-torch-south", position: [320.3, 10.2, 109.35], yaw: 90, scale: 1.42 },
+] as const;
+
+/** Eastern-court models are deferred until the player has crossed the opening
+ * court. The western sanctuary can therefore render without downloading boss
+ * architecture that is still hidden by fog and ruins. */
+export const TOWER_FLOOR_ONE_FORTRESS_ASSETS: readonly TowerFloorOneAssetPlacement[] = [
+  { id: "fortressGate", name: "crown-gate", position: [361.5, 9.45, 106], yaw: 90, scale: 2.25 },
+  { id: "fortressCorner", name: "fortress-north-corner", position: [384.8, 9.55, 96], yaw: 180, scale: 2.25 },
+  { id: "fortressCorner", name: "fortress-south-corner", position: [384.8, 9.55, 116], yaw: 90, scale: 2.25 },
+  { id: "crackedWall", name: "fortress-north-wall", position: [385.5, 9.55, 101], yaw: 90, scale: 2.25 },
+  { id: "crackedWall", name: "fortress-south-wall", position: [385.5, 9.55, 111], yaw: 90, scale: 2.25 },
+  { id: "wallPillar", name: "fortress-north-pillar", position: [384.5, 9.55, 99], yaw: 90, scale: 2.25 },
+  { id: "wallPillar", name: "fortress-south-pillar", position: [384.5, 9.55, 113], yaw: 90, scale: 2.25 },
+  { id: "wallPillar", name: "gate-north-pillar", position: [362.1, 9.45, 96.8], yaw: 90, scale: 1.8 },
+  { id: "wallPillar", name: "gate-south-pillar", position: [362.1, 9.45, 115.2], yaw: 90, scale: 1.8 },
+  { id: "battlementCorner", name: "north-battlement-corner", position: [384.8, 18.55, 96], yaw: 180, scale: 2.25 },
+  { id: "battlementCorner", name: "south-battlement-corner", position: [384.8, 18.55, 116], yaw: 90, scale: 2.25 },
+  { id: "battlement", name: "north-battlement-west", position: [372, 9.55, 93.8], yaw: 0, scale: 2.15 },
+  { id: "battlement", name: "north-battlement-east", position: [380, 9.55, 93.8], yaw: 0, scale: 2.15 },
+  { id: "battlement", name: "south-battlement-west", position: [372, 9.55, 118.2], yaw: 180, scale: 2.15 },
+  { id: "battlement", name: "south-battlement-east", position: [380, 9.55, 118.2], yaw: 180, scale: 2.15 },
+  { id: "throneChair", name: "crownkeeper-throne", position: [384.2, 9.58, 106], yaw: 90, scale: 3.65 },
+  { id: "royalArms", name: "crownkeeper-arms", position: [386.05, 14.4, 106], yaw: 90, scale: 2.45 },
+  { id: "royalBanner", name: "royal-banner-north", position: [385.8, 12.8, 99.1], yaw: 90, scale: 1.45 },
+  { id: "royalBanner", name: "royal-banner-south", position: [385.8, 12.8, 112.9], yaw: 90, scale: 1.45 },
+  { id: "royalChest", name: "crownkeeper-cache", position: [387, 9.58, 110.2], yaw: -90, scale: 1.25 },
 ] as const;
 
 function towerAssetUrl(id: TowerFloorOneAssetId): string {
@@ -128,7 +164,29 @@ export async function populateTowerFloorOneAssetKit(
       || name.startsWith("floor1-north-breach") || name.startsWith("floor1-south-breach"));
   if (loaded.has("brokenWall"))
     hideDirectChildren(parent, name => name === "floor1-ruined-wall" || name === "floor1-wall-moss");
+  if (loaded.has("fortressGate"))
+    hideDirectChildren(parent, name => name.startsWith("floor1-crown-gate"));
+  if (loaded.has("wallPillar"))
+    hideDirectChildren(parent, name => name === "floor1-crown-pillar");
+  if (loaded.has("throneChair") && loaded.has("royalArms"))
+    hideDirectChildren(parent, name => name === "floor1-crown-throne" || name === "floor1-crown-inlay"
+      || name === "floor1-throne-crown");
+  if (loaded.has("royalBanner"))
+    hideDirectChildren(parent, name => name.startsWith("floor1-crown-banner"));
 
   console.info(`[tower-assets] ${entities.length} authored placements ready; ${failedIds.size} model types kept their procedural fallback.`);
   return { loadedIds: new Set(loaded.keys()), failedIds, entities };
+}
+
+const fortressLoads = new WeakMap<pc.Entity, Promise<TowerFloorOneAssetLoadResult>>();
+
+export function requestTowerFloorOneFortressAssets(
+  app: pc.Application,
+  parent: pc.Entity,
+): Promise<TowerFloorOneAssetLoadResult> {
+  const existing = fortressLoads.get(parent);
+  if (existing) return existing;
+  const load = populateTowerFloorOneAssetKit(app, parent, TOWER_FLOOR_ONE_FORTRESS_ASSETS);
+  fortressLoads.set(parent, load);
+  return load;
 }

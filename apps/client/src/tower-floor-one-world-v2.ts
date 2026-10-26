@@ -136,6 +136,33 @@ function brokenSupply(parent: pc.Entity, name: string, x: number, z: number, yaw
   shape(parent, `${name}-roll`, "cylinder", canvas, [.55, 1.45, .55], [x + 1.25, ground + .48, z - .35], [90, yaw, 0]);
 }
 
+function sealChain(parent: pc.Entity, name: string, from: readonly [number, number, number],
+  to: readonly [number, number, number], material: pc.StandardMaterial): pc.Entity {
+  const root = new pc.Entity(name);
+  parent.addChild(root);
+  const links = 6;
+  for (let index = 0; index < links; index++) {
+    const t = index / (links - 1);
+    const x = from[0] + (to[0] - from[0]) * t;
+    const y = from[1] + (to[1] - from[1]) * t;
+    const z = from[2] + (to[2] - from[2]) * t;
+    const alongX = index % 2 === 0;
+    const link = new pc.Entity(`${name}-link`);
+    link.setLocalPosition(x, y, z);
+    root.addChild(link);
+    shape(link, `${name}-link-top`, "box", material, alongX ? [.62, .11, .13] : [.13, .11, .62], [0, .36, 0]);
+    shape(link, `${name}-link-bottom`, "box", material, alongX ? [.62, .11, .13] : [.13, .11, .62], [0, -.36, 0]);
+    if (alongX) {
+      shape(link, `${name}-link-side`, "box", material, [.11, .72, .13], [-.51, 0, 0]);
+      shape(link, `${name}-link-side`, "box", material, [.11, .72, .13], [.51, 0, 0]);
+    } else {
+      shape(link, `${name}-link-side`, "box", material, [.13, .72, .11], [0, 0, -.51]);
+      shape(link, `${name}-link-side`, "box", material, [.13, .72, .11], [0, 0, .51]);
+    }
+  }
+  return root;
+}
+
 const progressNodes = new WeakMap<pc.Entity, { northSeal: pc.Entity; southSeal: pc.Entity;
   barrier: pc.Entity; northChain: pc.Entity; southChain: pc.Entity }>();
 
@@ -326,8 +353,8 @@ export function createTowerFloorOneWorld(app: pc.Application, parent: pc.Entity)
   arch(root, "floor1-crown-gate", 361.5, 106, 9.45, 8.2, 8.8, 90, stoneWarm, stone, bark);
   const northSeal = shape(root, "floor1-north-warden-seal", "sphere", northSealGlow, [1.25, 1.25, .48], [361.35, 14.9, 103.7]);
   const southSeal = shape(root, "floor1-south-warden-seal", "sphere", southSealGlow, [1.25, 1.25, .48], [361.35, 14.9, 108.3]);
-  const northChain = shape(root, "floor1-north-seal-chain", "box", northSealGlow, [.15, 6.7, .15], [361.25, 12.2, 104.8], [0, 0, 54]);
-  const southChain = shape(root, "floor1-south-seal-chain", "box", southSealGlow, [.15, 6.7, .15], [361.25, 12.2, 107.2], [0, 0, -54]);
+  const northChain = sealChain(root, "floor1-north-seal-chain", [361.35, 14.9, 103.7], [361.55, 10.2, 100.2], northSealGlow);
+  const southChain = sealChain(root, "floor1-south-seal-chain", [361.35, 14.9, 108.3], [361.55, 10.2, 111.8], southSealGlow);
   const barrier = shape(root, "floor1-crown-seal-barrier", "box", sealBarrier, [.18, 6.8, 7.6], [362.3, 12.85, 106]);
   northSeal.enabled = southSeal.enabled = northChain.enabled = southChain.enabled = barrier.enabled = true;
   progressNodes.set(root, { northSeal, southSeal, barrier, northChain, southChain });

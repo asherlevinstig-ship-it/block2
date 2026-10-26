@@ -125,6 +125,7 @@ import { advanceCameraFollow, advanceCameraHeight, advanceCameraPosition } from 
 import { populateTownAssetKit, readyTownFallbacks, SPEED_LAB_TOWN_ASSETS, type TownFallbackFamily } from "./town-asset-kit.js";
 import { createTownPortalLandmarks } from "./town-portal-landmarks.js";
 import { createTowerFloorOneWorld, updateTowerFloorOneProgress } from "./tower-floor-one-world-v2.js";
+import { requestTowerFloorOneFortressAssets } from "./tower-floor-one-asset-kit.js";
 import { portalInteractionPrompt, portalLabel, portalWorldLabel } from "./portal-labels.js";
 import { createFastWorldSky } from "./fast-world-sky.js";
 import { createPaintedGroundMaterial, fitGroundTexture, fitOrganicGroundPatch, createWoodlandTrailMesh, woodlandFernMesh } from "./fast-world-texture.js";
@@ -16618,6 +16619,7 @@ app.on("update", (dt: number) => {
       const northAlive = mobVisuals.get(TOWER_FLOOR_ONE_WARDENS[0])?.state.alive !== false;
       const southAlive = mobVisuals.get(TOWER_FLOOR_ONE_WARDENS[1])?.state.alive !== false;
       updateTowerFloorOneProgress(towerFloorOneWorld, northAlive, southAlive);
+      if (playerPosition.x >= 340) void requestTowerFloorOneFortressAssets(app, towerFloorOneWorld);
     }
     const coastWaterStartedAt = performance.now();
     animateCoastWater(dt, playerPosition.z > 140 && playerPosition.z < 200
