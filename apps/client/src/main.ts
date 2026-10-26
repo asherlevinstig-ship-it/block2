@@ -1,6 +1,6 @@
 import { greenwoodAtmosphere } from "./greenwood-atmosphere.js";
 import { greenwoodEmergence, greenwoodMobStyle, type GreenwoodMobStyle } from "./greenwood-mob-style.js";
-import { FAST_WORLD_TOWN_BOUNDS, FAST_WORLD_TOWN_ONLY, TOWER_FLOOR_ONE, fastWorldGroundHeight } from "@blockcraft/protocol";
+import { FAST_WORLD_TOWN_BOUNDS, FAST_WORLD_TOWN_ONLY, TOWER_FLOOR_ONE, fastWorldGroundHeight, isInsideTowerFloorOne } from "@blockcraft/protocol";
 import { GREENWOOD_MAIN_TRAIL, GREENWOOD_CAMP_TRAIL, GREENWOOD_THICKETS, GREENWOOD_CLUSTER_PLANTS, GREENWOOD_VERGE_PLANTS, sampleWoodlandTrail } from "./greenwood-landscape.js";
 import * as pc from "playcanvas";
 import { facetedBoxMesh } from "./faceted-shapes.js";
@@ -13989,6 +13989,7 @@ let surfaceReturnStartedAt: number | null = null;
 let surfaceRestoreStartSliceY: number | null = null;
 let undergroundLightingBlend = 0;
 let greenwoodLightingBlend = 0;
+let towerFloorLightingBlend = 0;
 let forestDungeonLightingBlend = 0;
 let silverDepthsLightingBlend = 0;
 let emberVaultLightingBlend = 0;
@@ -14677,6 +14678,9 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
   const greenwoodTarget = !visibilityCutaway && isInGreenwoodRegion(position.x, position.z) ? 1 : 0;
   greenwoodLightingBlend += (greenwoodTarget - greenwoodLightingBlend) * (1 - Math.exp(-Math.max(0, dt) * 2.2));
   if (Math.abs(greenwoodTarget - greenwoodLightingBlend) < 0.001) greenwoodLightingBlend = greenwoodTarget;
+  const towerFloorTarget = !visibilityCutaway && isInsideTowerFloorOne(position.x, position.z) ? 1 : 0;
+  towerFloorLightingBlend += (towerFloorTarget - towerFloorLightingBlend) * (1 - Math.exp(-Math.max(0, dt) * 2.8));
+  if (Math.abs(towerFloorTarget - towerFloorLightingBlend) < 0.001) towerFloorLightingBlend = towerFloorTarget;
   const dungeon = forestDungeonAtmosphere(position.x, position.z);
   const dungeonTarget = !visibilityCutaway && dungeon.room > 0 ? 1 : 0;
   const dungeonResponse = 1 - Math.exp(-Math.max(0, dt) * 1.8);
@@ -14738,8 +14742,10 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
   exitGuide.hidden = !visibilityCutaway;
   caveLight.setPosition(position.x, position.y + 1.2, position.z);
   const woodlandGrade = greenwoodAtmosphere(position.x, position.z);
-  const outdoorSun = fastWorldRequested ? surfaceSunIntensity + (woodlandGrade.sun - surfaceSunIntensity) * greenwoodLightingBlend : surfaceSunIntensity;
-  const outdoorFill = fastWorldRequested ? surfaceSkyFillIntensity + (woodlandGrade.fill - surfaceSkyFillIntensity) * greenwoodLightingBlend : surfaceSkyFillIntensity;
+  const gradedSun = fastWorldRequested ? surfaceSunIntensity + (woodlandGrade.sun - surfaceSunIntensity) * greenwoodLightingBlend : surfaceSunIntensity;
+  const gradedFill = fastWorldRequested ? surfaceSkyFillIntensity + (woodlandGrade.fill - surfaceSkyFillIntensity) * greenwoodLightingBlend : surfaceSkyFillIntensity;
+  const outdoorSun = gradedSun + (.72 - gradedSun) * towerFloorLightingBlend;
+  const outdoorFill = gradedFill + (.19 - gradedFill) * towerFloorLightingBlend;
   if (light.light) light.light.intensity = (outdoorSun + (0.45 - outdoorSun) * undergroundLightingBlend) * (1 - .36 * forestDungeonLightingBlend) * (1 - .58 * silverDepthsLightingBlend) * (1 - .72 * emberVaultLightingBlend);
   if (skyFill.light) skyFill.light.intensity = outdoorFill * (1 - undergroundLightingBlend) * (1 - .5 * forestDungeonLightingBlend) * (1 - .75 * emberVaultLightingBlend);
   if (caveLight.light) {
@@ -14763,10 +14769,13 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
   const depthsAmbientR = mixedAmbientR + (depthsAmbient.r - mixedAmbientR) * silverDepthsLightingBlend;
   const depthsAmbientG = mixedAmbientG + (depthsAmbient.g - mixedAmbientG) * silverDepthsLightingBlend;
   const depthsAmbientB = mixedAmbientB + (depthsAmbient.b - mixedAmbientB) * silverDepthsLightingBlend;
+  const finalAmbientR = depthsAmbientR + (.19 - depthsAmbientR) * emberVaultLightingBlend;
+  const finalAmbientG = depthsAmbientG + (.055 - depthsAmbientG) * emberVaultLightingBlend;
+  const finalAmbientB = depthsAmbientB + (.025 - depthsAmbientB) * emberVaultLightingBlend;
   app.scene.ambientLight.set(
-    depthsAmbientR + (.19 - depthsAmbientR) * emberVaultLightingBlend,
-    depthsAmbientG + (.055 - depthsAmbientG) * emberVaultLightingBlend,
-    depthsAmbientB + (.025 - depthsAmbientB) * emberVaultLightingBlend,
+    finalAmbientR + (.15 - finalAmbientR) * towerFloorLightingBlend,
+    finalAmbientG + (.21 - finalAmbientG) * towerFloorLightingBlend,
+    finalAmbientB + (.17 - finalAmbientB) * towerFloorLightingBlend,
   );
   const greenwoodFogTarget = fastWorldRequested ? woodlandGrade.fog : { r: .11, g: .24, b: .2 };
   const surfaceFogR = surfaceFogBase.r + (greenwoodFogTarget.r - surfaceFogBase.r) * greenwoodLightingBlend;
@@ -14778,10 +14787,13 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
   const depthsFogR = mixedFogR + (depthsFog.r - mixedFogR) * silverDepthsLightingBlend;
   const depthsFogG = mixedFogG + (depthsFog.g - mixedFogG) * silverDepthsLightingBlend;
   const depthsFogB = mixedFogB + (depthsFog.b - mixedFogB) * silverDepthsLightingBlend;
+  const finalFogR = depthsFogR + (.12 - depthsFogR) * emberVaultLightingBlend;
+  const finalFogG = depthsFogG + (.025 - depthsFogG) * emberVaultLightingBlend;
+  const finalFogB = depthsFogB + (.012 - depthsFogB) * emberVaultLightingBlend;
   app.scene.fog.color.set(
-    depthsFogR + (.12 - depthsFogR) * emberVaultLightingBlend,
-    depthsFogG + (.025 - depthsFogG) * emberVaultLightingBlend,
-    depthsFogB + (.012 - depthsFogB) * emberVaultLightingBlend,
+    finalFogR + (.075 - finalFogR) * towerFloorLightingBlend,
+    finalFogG + (.13 - finalFogG) * towerFloorLightingBlend,
+    finalFogB + (.105 - finalFogB) * towerFloorLightingBlend,
   );
   const regionalSurfaceFogStart = surfaceFogStartBase + ((fastWorldRequested ? woodlandGrade.fogStart : 34) - surfaceFogStartBase) * greenwoodLightingBlend;
   const regionalSurfaceFogEnd = surfaceFogEndBase + ((fastWorldRequested ? woodlandGrade.fogEnd : 58) - surfaceFogEndBase) * greenwoodLightingBlend;
@@ -14789,8 +14801,10 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
   const baseFogEnd = regionalSurfaceFogEnd + (forestDungeonFogEnd - regionalSurfaceFogEnd) * forestDungeonLightingBlend;
   const mixedDepthsFogStart = baseFogStart + (depthsFogStart - baseFogStart) * silverDepthsLightingBlend;
   const mixedDepthsFogEnd = baseFogEnd + (depthsFogEnd - baseFogEnd) * silverDepthsLightingBlend;
-  app.scene.fog.start = mixedDepthsFogStart + (19 - mixedDepthsFogStart) * emberVaultLightingBlend;
-  app.scene.fog.end = mixedDepthsFogEnd + (40 - mixedDepthsFogEnd) * emberVaultLightingBlend;
+  const finalFogStart = mixedDepthsFogStart + (19 - mixedDepthsFogStart) * emberVaultLightingBlend;
+  const finalFogEnd = mixedDepthsFogEnd + (40 - mixedDepthsFogEnd) * emberVaultLightingBlend;
+  app.scene.fog.start = finalFogStart + (22 - finalFogStart) * towerFloorLightingBlend;
+  app.scene.fog.end = finalFogEnd + (68 - finalFogEnd) * towerFloorLightingBlend;
   camera.camera?.clearColor.copy(app.scene.fog.color);
   if (nextKey === cutawayStateKey) return;
   logMovementEvent(

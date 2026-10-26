@@ -1,5 +1,6 @@
 import * as pc from "playcanvas";
 import { towerFloorOneGroundHeight } from "@blockcraft/protocol";
+import { createPaintedGroundMaterial, fitOrganicGroundPatch } from "./fast-world-texture.js";
 
 function finish(color: pc.Color, emissive = 0, opacity = 1): pc.StandardMaterial {
   const material = new pc.StandardMaterial();
@@ -79,18 +80,59 @@ function arch(parent: pc.Entity, name: string, x: number, z: number, ground: num
     [x + offsetX * .7, ground + height * .47, z + offsetZ * .7], [0, yaw, 68]);
 }
 
+function rootCluster(parent: pc.Entity, x: number, z: number, yaw: number, length: number,
+  bark: pc.StandardMaterial, moss: pc.StandardMaterial): void {
+  const ground = towerFloorOneGroundHeight(x, z);
+  for (let index = 0; index < 3; index++) {
+    const spread = (index - 1) * 18;
+    const radians = (yaw + spread) * Math.PI / 180;
+    const branchLength = length * (1 - index * .08);
+    shape(parent, "floor1-rampart-root", "cylinder", bark, [.28 - index * .025, branchLength, .28 - index * .025],
+      [x + Math.cos(radians) * branchLength * .38, ground + .22 + index * .08,
+        z - Math.sin(radians) * branchLength * .38], [90, yaw + spread, 0]);
+    shape(parent, "floor1-root-moss", "sphere", moss, [.52, .18, .42],
+      [x + Math.cos(radians) * branchLength * .7, ground + .11, z - Math.sin(radians) * branchLength * .7]);
+  }
+}
+
+function ivyCurtain(parent: pc.Entity, x: number, y: number, z: number, yaw: number,
+  width: number, height: number, leaf: pc.StandardMaterial, darkLeaf: pc.StandardMaterial): void {
+  for (let strand = 0; strand < 5; strand++) {
+    const offset = (strand - 2) * width / 5;
+    const length = height * (.55 + ((strand * 37) % 5) * .1);
+    const radians = yaw * Math.PI / 180;
+    const px = x + Math.cos(radians) * offset;
+    const pz = z - Math.sin(radians) * offset;
+    shape(parent, "floor1-ivy-strand", "cylinder", strand % 2 ? leaf : darkLeaf, [.07, length, .07],
+      [px, y - length * .5, pz], [0, yaw, strand % 2 ? 4 : -5]);
+    for (let leafIndex = 0; leafIndex < 3; leafIndex++)
+      shape(parent, "floor1-ivy-leaf", "sphere", leaf, [.2, .08, .13],
+        [px + (leafIndex % 2 ? .12 : -.1), y - length * (.22 + leafIndex * .25), pz], yaw + leafIndex * 31);
+  }
+}
+
 /** Structural art pass for Floor 1. Walkable height is shared with the server;
  * hard bounds and encounter rules remain authoritative. */
 export function createTowerFloorOneWorld(app: pc.Application, parent: pc.Entity): pc.Entity {
   const root = new pc.Entity("tower-floor-1-world");
   parent.addChild(root);
 
-  const stone = finish(new pc.Color(.15, .18, .16));
-  const stoneLight = finish(new pc.Color(.34, .37, .31));
+  const stone = createPaintedGroundMaterial(app, { name: "floor1-shadow-stone", base: "#29302a",
+    mottles: ["#374038", "#202620", "#4b5045"], litter: ["#596052", "#171c18"], seed: 811,
+    roughness: .96, pattern: "stone" }, [2.2, 2.2]);
+  const stoneLight = createPaintedGroundMaterial(app, { name: "floor1-weathered-stone", base: "#596052",
+    mottles: ["#74796b", "#414a42", "#65604c"], litter: ["#8b8c78", "#303832"], seed: 812,
+    roughness: .93, pattern: "stone" }, [2.6, 2.6]);
   const stoneWarm = finish(new pc.Color(.43, .39, .29));
-  const moss = finish(new pc.Color(.12, .28, .12));
-  const mossLight = finish(new pc.Color(.27, .46, .18));
-  const earth = finish(new pc.Color(.32, .24, .14));
+  const moss = createPaintedGroundMaterial(app, { name: "floor1-deep-moss", base: "#244528",
+    mottles: ["#315d31", "#172f1d", "#516b31"], litter: ["#71854a", "#142619"], seed: 813,
+    roughness: .96, pattern: "grass" }, [3.2, 3.2]);
+  const mossLight = createPaintedGroundMaterial(app, { name: "floor1-court-moss", base: "#477339",
+    mottles: ["#60884b", "#315b32", "#80784a"], litter: ["#91a15b", "#223e26"], seed: 814,
+    roughness: .95, pattern: "grass" }, [3.4, 3.4]);
+  const earth = createPaintedGroundMaterial(app, { name: "floor1-root-soil", base: "#55402a",
+    mottles: ["#74563a", "#33291f", "#756948"], litter: ["#9b7a50", "#241d16"], seed: 815,
+    roughness: .98, pattern: "soil" }, [2.7, 2.7]);
   const bark = finish(new pc.Color(.17, .09, .045));
   const leaf = finish(new pc.Color(.075, .27, .1));
   const leafDark = finish(new pc.Color(.025, .12, .055));
@@ -98,11 +140,16 @@ export function createTowerFloorOneWorld(app: pc.Application, parent: pc.Entity)
   const bossGlow = finish(new pc.Color(.58, .16, .78), .58, .76);
   const gold = finish(new pc.Color(.78, .52, .13), .15);
   const voidMaterial = finish(new pc.Color(.006, .01, .016));
+  const shaftMaterial = finish(new pc.Color(.8, .88, .64), .18, .075);
+  const mistMaterial = finish(new pc.Color(.17, .3, .24), .05, .12);
+  const moteMaterial = finish(new pc.Color(.62, .76, .41), .5, .68);
+  const deadLeafMaterial = finish(new pc.Color(.5, .31, .12), .04, .86);
 
   shape(root, "floor1-abyss", "box", voidMaterial, [138, 4, 142], [344, 1.9, 106]);
   shape(root, "floor1-fortress-skirt", "cylinder", stone, [99, 7.6, 104], [344, 4.15, 106]);
   shape(root, "floor1-fortress-platform", "cylinder", stoneLight, [96, .8, 100], [344, 7.6, 106]);
-  shape(root, "floor1-overgrown-floor", "cylinder", moss, [90, .09, 94], [344, 8.02, 106]);
+  const floor = shape(root, "floor1-overgrown-floor", "cylinder", moss, [90, .09, 94], [344, 8.02, 106]);
+  fitOrganicGroundPatch(app.graphicsDevice, floor, moss, [90, .09, 94], [344, 8.02, 106]);
 
   const wallSegments = 38;
   for (let index = 0; index < wallSegments; index++) {
@@ -130,7 +177,8 @@ export function createTowerFloorOneWorld(app: pc.Application, parent: pc.Entity)
   }
 
   shape(root, "floor1-sanctuary-foundation", "cylinder", stone, [25.5, 2, 25.5], [306, 8, 106]);
-  shape(root, "floor1-sanctuary-cap", "cylinder", stoneLight, [23.5, .34, 23.5], [306, 8.83, 106]);
+  const sanctuaryCap = shape(root, "floor1-sanctuary-cap", "cylinder", stoneLight, [23.5, .34, 23.5], [306, 8.83, 106]);
+  fitOrganicGroundPatch(app.graphicsDevice, sanctuaryCap, stoneLight, [23.5, .34, 23.5], [306, 8.83, 106]);
   shape(root, "floor1-sanctuary-rune", "cylinder", sanctuary, [18.4, .06, 18.4], [306, 9.03, 106]);
   for (let step = 0; step < 4; step++) {
     const top = 8.82 - step * .2;
@@ -146,13 +194,15 @@ export function createTowerFloorOneWorld(app: pc.Application, parent: pc.Entity)
   }
 
   shape(root, "floor1-opening-foundation", "cylinder", stone, [30, .48, 30], [329, 7.94, 106]);
-  shape(root, "floor1-opening-court", "cylinder", mossLight, [27.5, .09, 27.5], [329, 8.2, 106]);
+  const openingCourt = shape(root, "floor1-opening-court", "cylinder", mossLight, [27.5, .09, 27.5], [329, 8.2, 106]);
+  fitOrganicGroundPatch(app.graphicsDevice, openingCourt, mossLight, [27.5, .09, 27.5], [329, 8.2, 106]);
   causeway(root, "floor1-arrival-causeway", [317, 106], [329, 106], 5, 7.2, stoneLight, earth);
 
   for (const [name, x, z] of [["north", 350, 80], ["south", 350, 132]] as const) {
     shape(root, `floor1-${name}-terrace-base`, "cylinder", stone, [28, 1.36, 28], [x, 8, z]);
     shape(root, `floor1-${name}-terrace-rim`, "cylinder", stoneWarm, [26.6, .18, 26.6], [x, 8.61, z]);
-    shape(root, `floor1-${name}-warden-court`, "cylinder", mossLight, [24.5, .09, 24.5], [x, 8.72, z]);
+    const court = shape(root, `floor1-${name}-warden-court`, "cylinder", mossLight, [24.5, .09, 24.5], [x, 8.72, z]);
+    fitOrganicGroundPatch(app.graphicsDevice, court, mossLight, [24.5, .09, 24.5], [x, 8.72, z]);
   }
   causeway(root, "floor1-north-causeway", [333, 101], [345, 86], 6, 5.4, stoneLight, earth, [2]);
   causeway(root, "floor1-south-causeway", [333, 111], [345, 126], 6, 5.4, stoneLight, earth, [3]);
@@ -162,6 +212,13 @@ export function createTowerFloorOneWorld(app: pc.Application, parent: pc.Entity)
     stoneLight, stone, bark);
   arch(root, "floor1-south-breach", 339, 118, towerFloorOneGroundHeight(339, 118), 5.4, 5.8, -49,
     stoneLight, stone, bark);
+
+  for (const [x, z, yaw, length] of [[315, 89, 26, 6], [316, 124, -31, 5.5], [333, 73, 12, 7],
+    [338, 141, -17, 6.5], [363, 72, 48, 5.8], [366, 139, -52, 6.4], [383, 91, 74, 5.2]] as const)
+    rootCluster(root, x, z, yaw, length, bark, mossLight);
+  ivyCurtain(root, 322, 14.8, 92.55, 0, 8.5, 4.8, leaf, leafDark);
+  ivyCurtain(root, 349, 14.5, 68.7, 0, 10, 4.2, leaf, leafDark);
+  ivyCurtain(root, 360.7, 14.3, 124, 90, 7.5, 3.8, leaf, leafDark);
 
   for (const [x, z, sx, sz, yaw] of [[322, 92, 11, 1.2, -7], [322, 120, 11, 1.2, 7],
     [337, 96, 1.2, 9, 5], [337, 116, 1.2, 9, -5], [349, 68, 17, 1.3, 3],
@@ -181,7 +238,8 @@ export function createTowerFloorOneWorld(app: pc.Application, parent: pc.Entity)
   arch(root, "floor1-crown-gate", 361.5, 106, 9.45, 8.2, 8.8, 90, stoneWarm, stone, bark);
   shape(root, "floor1-boss-fortress", "cylinder", stone, [32, 3.1, 32], [375, 8, 106]);
   shape(root, "floor1-boss-court-rim", "cylinder", gold, [30.5, .2, 30.5], [375, 9.47, 106]);
-  shape(root, "floor1-boss-court", "cylinder", stoneLight, [29.2, .18, 29.2], [375, 9.57, 106]);
+  const bossCourt = shape(root, "floor1-boss-court", "cylinder", stoneLight, [29.2, .18, 29.2], [375, 9.57, 106]);
+  fitOrganicGroundPatch(app.graphicsDevice, bossCourt, stoneLight, [29.2, .18, 29.2], [375, 9.57, 106]);
   shape(root, "floor1-boss-sigil", "cylinder", bossGlow, [16, .055, 16], [375, 9.68, 106]);
   for (let i = 0; i < 10; i++) {
     const angle = i / 10 * Math.PI * 2;
@@ -207,6 +265,30 @@ export function createTowerFloorOneWorld(app: pc.Application, parent: pc.Entity)
       [.35 + i % 4 * .08, .8, .35 + i % 4 * .08], [x, ground + .4, z], i * 47);
   }
 
+  // Broken ceiling light and low mist establish an interior tower atmosphere
+  // without full-screen post processing or unbounded particles.
+  for (const [x, z, scale, tilt] of [[319, 90, 1.15, 8], [347, 119, .92, -6], [373, 98, 1.25, 5]] as const)
+    shape(root, "floor1-light-shaft", "cone", shaftMaterial, [8 * scale, 34, 8 * scale],
+      [x, 25, z], [tilt, 0, tilt * .35]);
+  for (const [x, z, sx, sz] of [[327,82,17,9],[340,130,20,8],[374,106,24,13]] as const)
+    shape(root, "floor1-ground-mist", "sphere", mistMaterial, [sx, .48, sz],
+      [x, towerFloorOneGroundHeight(x, z) + .38, z]);
+
+  const atmosphericMotes: Array<{ entity: pc.Entity; x: number; y: number; z: number; phase: number }> = [];
+  for (let index = 0; index < 18; index++) {
+    const x = 311 + (index * 23 % 72), z = 66 + (index * 31 % 78);
+    const y = towerFloorOneGroundHeight(x, z) + 1.5 + (index % 5) * .72;
+    const entity = shape(root, "floor1-spore", "sphere", moteMaterial, [.055, .055, .055], [x, y, z]);
+    atmosphericMotes.push({ entity, x, y, z, phase: index * .83 });
+  }
+  const fallingLeaves: Array<{ entity: pc.Entity; x: number; y: number; z: number; phase: number }> = [];
+  for (let index = 0; index < 10; index++) {
+    const x = 315 + (index * 19 % 67), z = 69 + (index * 27 % 72);
+    const y = towerFloorOneGroundHeight(x, z) + 3.2 + index % 4;
+    const entity = shape(root, "floor1-falling-leaf", "box", deadLeafMaterial, [.16, .025, .09], [x, y, z], index * 37);
+    fallingLeaves.push({ entity, x, y, z, phase: index * 1.17 });
+  }
+
   const sanctuaryLight = new pc.Entity("floor1-sanctuary-light");
   sanctuaryLight.addComponent("light", { type: "omni", color: new pc.Color(.15, .65, 1),
     intensity: 1.45, range: 25, castShadows: false });
@@ -224,6 +306,17 @@ export function createTowerFloorOneWorld(app: pc.Application, parent: pc.Entity)
     elapsed += dt;
     if (sanctuaryLight.light) sanctuaryLight.light.intensity = 1.4 + Math.sin(elapsed * 2.4) * .16;
     if (crownLight.light) crownLight.light.intensity = 1.02 + Math.sin(elapsed * 1.65 + 1.4) * .12;
+    for (const mote of atmosphericMotes) {
+      const drift = elapsed + mote.phase;
+      mote.entity.setLocalPosition(mote.x + Math.sin(drift * .72) * .42,
+        mote.y + Math.sin(drift * 1.15) * .3, mote.z + Math.cos(drift * .63) * .42);
+    }
+    for (const leaf of fallingLeaves) {
+      const travel = (elapsed * .12 + leaf.phase * .11) % 1;
+      leaf.entity.setLocalPosition(leaf.x + Math.sin(elapsed + leaf.phase) * .8,
+        leaf.y - travel * 4.6, leaf.z + Math.cos(elapsed * .7 + leaf.phase) * .65);
+      leaf.entity.setLocalEulerAngles(travel * 210, leaf.phase * 80 + elapsed * 26, Math.sin(elapsed + leaf.phase) * 34);
+    }
   });
   return root;
 }
