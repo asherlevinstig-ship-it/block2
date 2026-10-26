@@ -1,6 +1,7 @@
 import * as pc from "playcanvas";
 import { towerFloorOneGroundHeight } from "@blockcraft/protocol";
 import { createPaintedGroundMaterial, fitOrganicGroundPatch } from "./fast-world-texture.js";
+import { populateTowerFloorOneAssetKit } from "./tower-floor-one-asset-kit.js";
 
 function finish(color: pc.Color, emissive = 0, opacity = 1): pc.StandardMaterial {
   const material = new pc.StandardMaterial();
@@ -400,6 +401,11 @@ export function createTowerFloorOneWorld(app: pc.Application, parent: pc.Entity)
     intensity: 1.05, range: 20, castShadows: false });
   crownLight.setLocalPosition(375, 13, 106);
   root.addChild(crownLight);
+
+  // Authored CC0 models progressively replace the weakest blockout visuals.
+  // The promise intentionally does not block world entry; procedural geometry
+  // remains visible until each complete replacement family is ready.
+  void populateTowerFloorOneAssetKit(app, root);
 
   let elapsed = 0;
   app.on("update", (dt: number) => {
