@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { towerFloorOneGroundHeight } from "@blockcraft/protocol";
+import { readFileSync } from "node:fs";
 import {
   KAYKIT_DUNGEON_BASE_URL,
   TOWER_FLOOR_ONE_ASSET_FILES,
@@ -68,5 +69,15 @@ describe("Floor 1 authored asset kit", () => {
       const ground = towerFloorOneGroundHeight(asset.position[0], asset.position[2]);
       expect(Math.abs(asset.position[1] - ground), asset.name).toBeLessThanOrEqual(.12);
     }
+  });
+
+  it("keeps wall-supported ivy short and removes only specifically replaced wall sections", () => {
+    const worldSource = readFileSync(new URL("./tower-floor-one-world-v2.ts", import.meta.url), "utf8");
+    const assetSource = readFileSync(new URL("./tower-floor-one-asset-kit.ts", import.meta.url), "utf8");
+    expect(worldSource).toContain('[.07, length * .5, .07]');
+    expect(worldSource).toContain('towerFloorOneGroundHeight(x, z) + 2.43');
+    expect(worldSource).not.toContain('ivyCurtain(root, 322, 14.8');
+    expect(assetSource).not.toContain('name === "floor1-ruined-wall"');
+    expect(assetSource).toContain('floor1-ruined-wall-337-116');
   });
 });

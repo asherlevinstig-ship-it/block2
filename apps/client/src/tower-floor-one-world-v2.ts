@@ -96,15 +96,19 @@ function rootCluster(parent: pc.Entity, x: number, z: number, yaw: number, lengt
   }
 }
 
-function ivyCurtain(parent: pc.Entity, x: number, y: number, z: number, yaw: number,
+function ivyCurtain(parent: pc.Entity, x: number, z: number, yaw: number,
   width: number, height: number, leaf: pc.StandardMaterial, darkLeaf: pc.StandardMaterial): void {
+  // These curtains hang from the top of the matching 2.5 m ruined wall.
+  // PlayCanvas cylinders are two units tall, so Y scale is half the desired
+  // strand length; using the full length produced the giant floating rods.
+  const y = towerFloorOneGroundHeight(x, z) + 2.43;
   for (let strand = 0; strand < 5; strand++) {
     const offset = (strand - 2) * width / 5;
     const length = height * (.55 + ((strand * 37) % 5) * .1);
     const radians = yaw * Math.PI / 180;
     const px = x + Math.cos(radians) * offset;
     const pz = z - Math.sin(radians) * offset;
-    shape(parent, "floor1-ivy-strand", "cylinder", strand % 2 ? leaf : darkLeaf, [.07, length, .07],
+    shape(parent, "floor1-ivy-strand", "cylinder", strand % 2 ? leaf : darkLeaf, [.07, length * .5, .07],
       [px, y - length * .5, pz], [0, yaw, strand % 2 ? 4 : -5]);
     for (let leafIndex = 0; leafIndex < 3; leafIndex++)
       shape(parent, "floor1-ivy-leaf", "sphere", leaf, [.2, .08, .13],
@@ -331,16 +335,16 @@ export function createTowerFloorOneWorld(app: pc.Application, parent: pc.Entity)
   for (const [x, z, yaw, length] of [[315, 89, 26, 6], [316, 124, -31, 5.5], [333, 73, 12, 7],
     [338, 141, -17, 6.5], [363, 72, 48, 5.8], [366, 139, -52, 6.4], [383, 91, 74, 5.2]] as const)
     rootCluster(root, x, z, yaw, length, bark, mossLight);
-  ivyCurtain(root, 322, 14.8, 92.55, 0, 8.5, 4.8, leaf, leafDark);
-  ivyCurtain(root, 349, 14.5, 68.7, 0, 10, 4.2, leaf, leafDark);
-  ivyCurtain(root, 360.7, 14.3, 124, 90, 7.5, 3.8, leaf, leafDark);
+  ivyCurtain(root, 322, 92.55, 0, 8.5, 2.25, leaf, leafDark);
+  ivyCurtain(root, 349, 68.7, 0, 10, 2.15, leaf, leafDark);
+  ivyCurtain(root, 360.7, 124, 90, 7.5, 2.05, leaf, leafDark);
 
   for (const [x, z, sx, sz, yaw] of [[322, 92, 11, 1.2, -7], [322, 120, 11, 1.2, 7],
     [337, 96, 1.2, 9, 5], [337, 116, 1.2, 9, -5], [349, 68, 17, 1.3, 3],
     [349, 144, 17, 1.3, -3], [360, 88, 1.3, 10, 7], [360, 124, 1.3, 10, -7]] as const) {
     const ground = towerFloorOneGroundHeight(x, z);
-    shape(root, "floor1-ruined-wall", "box", stoneLight, [sx, 2.5, sz], [x, ground + 1.18, z], yaw);
-    shape(root, "floor1-wall-moss", "box", mossLight, [sx * .7, .13, sz * 1.08],
+    shape(root, `floor1-ruined-wall-${x}-${z}`, "box", stoneLight, [sx, 2.5, sz], [x, ground + 1.18, z], yaw);
+    shape(root, `floor1-wall-moss-${x}-${z}`, "box", mossLight, [sx * .7, .13, sz * 1.08],
       [x, ground + 2.48, z], yaw);
   }
 
