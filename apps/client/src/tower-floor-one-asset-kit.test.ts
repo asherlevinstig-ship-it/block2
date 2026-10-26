@@ -30,7 +30,7 @@ describe("Floor 1 authored asset kit", () => {
   });
 
   it("keeps the boss-court architecture deferred and its combat approach open", () => {
-    expect(TOWER_FLOOR_ONE_FORTRESS_ASSETS).toHaveLength(20);
+    expect(TOWER_FLOOR_ONE_FORTRESS_ASSETS).toHaveLength(26);
     expect(TOWER_FLOOR_ONE_FORTRESS_ASSETS.some(asset => asset.id === "fortressGate")).toBe(true);
     expect(TOWER_FLOOR_ONE_FORTRESS_ASSETS.some(asset => asset.id === "throneChair")).toBe(true);
     expect(TOWER_FLOOR_ONE_FORTRESS_ASSETS.some(asset => asset.id === "battlement")).toBe(true);
@@ -56,6 +56,16 @@ describe("Floor 1 authored asset kit", () => {
     const wallHalfLength = 4 * (northWall.scale ?? 1) / 2;
     expect((southWall.position[2] - wallHalfLength) - (northWall.position[2] + wallHalfLength))
       .toBeLessThanOrEqual(.05);
+
+    for (const side of ["north", "south"] as const) {
+      const run = ["west", "mid", "east"].map(section => named(`${side}-court-wall-${section}`));
+      const halfLength = 4 * (run[0]!.scale ?? 1) / 2;
+      expect(run[0]!.position[0] - halfLength).toBeLessThanOrEqual(northPillar.position[0] + .05);
+      expect(run[2]!.position[0] + halfLength).toBeGreaterThanOrEqual(northWall.position[0] - 1.42);
+      for (let index = 1; index < run.length; index++)
+        expect((run[index]!.position[0] - halfLength) - (run[index - 1]!.position[0] + halfLength))
+          .toBeLessThanOrEqual(.05);
+    }
   });
 
   it("beds freestanding fortress pieces into the shared walkable terrain", () => {
@@ -64,6 +74,8 @@ describe("Floor 1 authored asset kit", () => {
       "fortress-north-wall", "fortress-south-wall", "gate-north-pillar",
       "gate-south-pillar", "north-battlement-west", "north-battlement-east",
       "south-battlement-west", "south-battlement-east", "crownkeeper-throne",
+      "north-court-wall-west", "north-court-wall-mid", "north-court-wall-east",
+      "south-court-wall-west", "south-court-wall-mid", "south-court-wall-east",
     ]);
     for (const asset of TOWER_FLOOR_ONE_FORTRESS_ASSETS.filter(candidate => grounded.has(candidate.name))) {
       const ground = towerFloorOneGroundHeight(asset.position[0], asset.position[2]);

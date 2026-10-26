@@ -83,6 +83,15 @@ export const TOWER_FLOOR_ONE_FORTRESS_ASSETS: readonly TowerFloorOneAssetPlaceme
   { id: "wallPillar", name: "fortress-south-pillar", position: [384.5, 9.55, 113], yaw: 90, scale: 2.25 },
   { id: "wallPillar", name: "gate-north-pillar", position: [362.1, 9.38, 99.5], yaw: 90, scale: 1.45 },
   { id: "wallPillar", name: "gate-south-pillar", position: [362.1, 9.38, 112.5], yaw: 90, scale: 1.45 },
+  // Three 7.6 m modules close each side of the boss court. Their first and
+  // last edges overlap the gate pillars and rear fortress wall respectively,
+  // so the architecture reads as one enclosure from every camera angle.
+  { id: "crackedWall", name: "north-court-wall-west", position: [365.9, 9.55, 99.5], yaw: 0, scale: 1.9 },
+  { id: "crackedWall", name: "north-court-wall-mid", position: [373.5, 9.55, 99.5], yaw: 0, scale: 1.9 },
+  { id: "crackedWall", name: "north-court-wall-east", position: [381.1, 9.55, 99.5], yaw: 0, scale: 1.9 },
+  { id: "crackedWall", name: "south-court-wall-west", position: [365.9, 9.55, 112.5], yaw: 0, scale: 1.9 },
+  { id: "crackedWall", name: "south-court-wall-mid", position: [373.5, 9.55, 112.5], yaw: 0, scale: 1.9 },
+  { id: "crackedWall", name: "south-court-wall-east", position: [381.1, 9.55, 112.5], yaw: 0, scale: 1.9 },
   { id: "battlementCorner", name: "north-battlement-corner", position: [384.8, 18.55, 96], yaw: 180, scale: 2.25 },
   { id: "battlementCorner", name: "south-battlement-corner", position: [384.8, 18.55, 116], yaw: 90, scale: 2.25 },
   { id: "battlement", name: "north-battlement-west", position: [372, 9.55, 93.8], yaw: 0, scale: 2.15 },
