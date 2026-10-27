@@ -82,6 +82,7 @@ import { createStorageUI, type StorageUpdate } from "./storage-ui.js";
 import { lootVisibleToPlayer } from "./loot-ownership.js";
 import { lootHoldProgress, lootHoldSourceForPointer, type LootHold } from "./loot-hold.js";
 import { portalHoldProgress, type PortalHold } from "./portal-hold.js";
+import { createPortalTransition } from "./portal-transition.js";
 import { incomingLootAdvice, swapCandidateReason, swapCandidateScore } from "./loot-recommendation.js";
 import { undergroundThreatVisible } from "./underground-threat-visibility.js";
 import { mobPresentationDetail, mobPresentationInitialDelay, mobPresentationIntervalMs, mobRigNeedsAnimation } from "./mob-presentation-budget.js";
@@ -13083,9 +13084,11 @@ function createDungeonBurst(x: number, z: number, kind: "gate" | "victory" | "cr
   dungeonBurstVisuals.push({ root, material, startedAt: performance.now(), kind });
 }
 let nearbyForestPortal: string | null = null;
+const portalTransition = createPortalTransition();
 let portalHold: PortalHold | null = null;
 let portalTravelPendingUntil = 0;
 function cancelPortalHold(): void {
+  portalTransition.cancel();
   if (portalHold) forestPortalVisuals.get(portalHold.portalId)?.label.style.setProperty("--portal-progress", "0%");
   portalHold = null;
   contextButton.style.setProperty("--context-progress", "0%");
@@ -13103,11 +13106,13 @@ function updatePortalHold(now: number): void {
     || activePresentedPopupId() || protectedDialogPresented() || playerInteractionUI.isOpen()
     || hold.source === "keyboard" && !keys.has("KeyE")) { cancelPortalHold(); return; }
   const progress = portalHoldProgress(hold, now, nearbyForestPortal);
+  portalTransition.charge(progress);
   forestPortalVisuals.get(hold.portalId)?.label.style.setProperty("--portal-progress", `${progress * 100}%`);
   contextButton.style.setProperty("--context-progress", `${progress * 100}%`);
   if (progress >= 1) {
     cancelPortalHold();
     portalTravelPendingUntil = now + 2000;
+    portalTransition.depart();
     room.send("portal:use", { id: hold.portalId });
   }
 }
@@ -16811,6 +16816,7 @@ app.on("postrender", () => {
 
 app.on("update", (dt: number) => {
   const customUpdateStartedAt = performance.now();
+  portalTransition.ready(worldReady && pendingPortalDestination === null);
   if (fastWorldRequested) {
     const townTime = customUpdateStartedAt * .001;
     const playerPosition = localPlayer.getPosition();
@@ -18572,6 +18578,8 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     if (retryFromDepths && partyTicket) depthsRetryPrompt.querySelector("span")!.textContent = "Your party will regroup here as members return. Enter together when ready.";
   });
   room.onMessage("room:transfer", (transfer: RoomTransfer) => {
+    portalTransition.depart();
+    portalTransition.carry();
     const url = new URL(window.location.href);
     if (transfer.room === SILVER_DEPTHS_ROOM) {
       url.searchParams.set("room", "silver-depths");
@@ -18651,6 +18659,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     canvas.focus();
   });
   room.onMessage("player:portal", (spawn: { x: number; y: number; z: number; entering: boolean }) => {
+    portalTransition.arrive();
     clearDefeatCombat(); closeLoot();
     const own = (room?.state as { players?: Map<string, NetworkPlayer> } | undefined)?.players?.get(room!.sessionId);
     pendingPortalDestination = own && portalArrivalSnapshot(spawn, own) ? null : spawn;
@@ -18663,6 +18672,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
         : spawn.x > 40 ? "Returned to the Deep Frontier with your forge rewards." : "Returned to the Town of Beginnings with your loot.";
   });
   room.onMessage("portal:notice", (message: string) => {
+    portalTransition.reject();
     status.textContent = message;
     const notice = forestDungeonNotice(message);
     if (!notice) {

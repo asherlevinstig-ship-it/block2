@@ -4,6 +4,29 @@
 .forest-portal-label.locked { filter: grayscale(.5); border-color: #81778b; color: #aaa2b0; }
 .forest-portal-label:disabled { cursor: default; opacity: .85; }
 .forest-portal-label[hidden] { display: none; }
+#portal-transition {
+  position: fixed; inset: 0; z-index: 12000; overflow: hidden;
+  pointer-events: none; opacity: var(--portal-opacity, 0);
+  background: radial-gradient(ellipse at center, #26133c22 8%, #521380bb 62%, #19052cee 100%);
+}
+#portal-transition[hidden] { display: none; }
+#portal-transition::before, #portal-transition::after {
+  content: ""; position: absolute; inset: -35%;
+  background: repeating-conic-gradient(from 25deg, #a84fe544 0deg 9deg, #49107266 12deg 24deg, #c08be522 27deg 34deg),
+    repeating-radial-gradient(ellipse at center, #be6cf433 0 18px, #31094d66 26px 43px, transparent 48px 76px);
+  filter: blur(7px); animation: portal-veil-swirl 12s linear infinite;
+}
+#portal-transition::after {
+  inset: 0; opacity: .5; filter: none; mix-blend-mode: screen;
+  background: repeating-linear-gradient(0deg, transparent 0 28px, #ac72dc18 28px 34px),
+    repeating-linear-gradient(90deg, transparent 0 28px, #b47cdf18 28px 34px);
+  animation: portal-veil-drift 5s linear infinite;
+}
+@keyframes portal-veil-swirl { from { transform: rotate(0deg) scale(1); } to { transform: rotate(360deg) scale(1); } }
+@keyframes portal-veil-drift { from { transform: translate(0, 0); } to { transform: translate(34px, 34px); } }
+@media (prefers-reduced-motion: reduce) {
+  #portal-transition::before, #portal-transition::after { animation: none; filter: none; }
+}
 .portal-title, .portal-subtitle { display: block; }
 .portal-title { font-size: 13px; color: #fff0a8; }
 .portal-subtitle { opacity: .85; font-size: 10px; margin-top: 3px; }
