@@ -26,7 +26,7 @@ export function tabletContextAction(state: TabletContextState): TabletContextAct
   if (state.loot) return { label: "Pick Up", hold: true };
   if (state.reliquaryClaim) return { label: "Choose", hold: false };
   if (state.reliquaryPreview) return { label: "Preview", hold: false };
-  if (state.portal) return { label: "Enter", hold: false };
+  if (state.portal) return { label: "Travel", hold: true };
   if (state.roleAction) return { label: state.roleAction, hold: false };
   if (state.roadside) return { label: "Explore", hold: false };
   if (state.expeditionBoard) return { label: "Board", hold: false };

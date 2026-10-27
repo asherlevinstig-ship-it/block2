@@ -4,7 +4,7 @@ import { portalInteractionPrompt, portalLabel, portalWorldLabel } from "./portal
 describe("portal labels", () => {
   it("names both directions of Floor 1 explicitly", () => {
     expect(portalWorldLabel(portalLabel("tower-floor-1-entry", "tower-entry"))).toContain("ENTER FLOOR 1");
-    expect(portalInteractionPrompt(portalLabel("tower-floor-1-return", "tower-return"))).toBe("RETURN TO TOWN · press E to return");
+    expect(portalInteractionPrompt(portalLabel("tower-floor-1-return", "tower-return"))).toBe("RETURN TO TOWN · hold E to return");
   });
 
   it("presents future floors and locked challenges as sealed", () => {

@@ -81,6 +81,7 @@ import { haulUpgradeProgress, nextHaulRegion, nextHaulUpgrade, type HaulRegion }
 import { createStorageUI, type StorageUpdate } from "./storage-ui.js";
 import { lootVisibleToPlayer } from "./loot-ownership.js";
 import { lootHoldProgress, lootHoldSourceForPointer, type LootHold } from "./loot-hold.js";
+import { portalHoldProgress, type PortalHold } from "./portal-hold.js";
 import { incomingLootAdvice, swapCandidateReason, swapCandidateScore } from "./loot-recommendation.js";
 import { undergroundThreatVisible } from "./underground-threat-visibility.js";
 import { mobPresentationDetail, mobPresentationInitialDelay, mobPresentationIntervalMs, mobRigNeedsAnimation } from "./mob-presentation-budget.js";
@@ -13082,6 +13083,34 @@ function createDungeonBurst(x: number, z: number, kind: "gate" | "victory" | "cr
   dungeonBurstVisuals.push({ root, material, startedAt: performance.now(), kind });
 }
 let nearbyForestPortal: string | null = null;
+let portalHold: PortalHold | null = null;
+let portalTravelPendingUntil = 0;
+function cancelPortalHold(): void {
+  if (portalHold) forestPortalVisuals.get(portalHold.portalId)?.label.style.setProperty("--portal-progress", "0%");
+  portalHold = null;
+  contextButton.style.setProperty("--context-progress", "0%");
+}
+function beginPortalHold(source: PortalHold["source"], portalId = nearbyForestPortal, pointerId?: number): void {
+  if (portalHold || lootHold || !worldReady || !room || !portalId || portalId !== nearbyForestPortal
+    || performance.now() < portalTravelPendingUntil || !defeatScreen.hidden
+    || activePresentedPopupId() || protectedDialogPresented()) return;
+  portalHold = { portalId, startedAt: performance.now(), source, pointerId };
+}
+function updatePortalHold(now: number): void {
+  if (!portalHold) return;
+  const hold = portalHold;
+  if (!room || !worldReady || hold.portalId !== nearbyForestPortal || !defeatScreen.hidden
+    || activePresentedPopupId() || protectedDialogPresented() || playerInteractionUI.isOpen()
+    || hold.source === "keyboard" && !keys.has("KeyE")) { cancelPortalHold(); return; }
+  const progress = portalHoldProgress(hold, now, nearbyForestPortal);
+  forestPortalVisuals.get(hold.portalId)?.label.style.setProperty("--portal-progress", `${progress * 100}%`);
+  contextButton.style.setProperty("--context-progress", `${progress * 100}%`);
+  if (progress >= 1) {
+    cancelPortalHold();
+    portalTravelPendingUntil = now + 2000;
+    room.send("portal:use", { id: hold.portalId });
+  }
+}
 let pendingPortalDestination: { x: number; y: number; z: number } | null = null;
 function nearbyRoleOpportunity() {
   if (!worldReady || !room || !localBuildPathId) return null;
@@ -13113,7 +13142,7 @@ function useNearbyRoleOpportunity(): boolean {
 }
 function useNearbyForestPortal(): void {
   if (!worldReady || !room || !nearbyForestPortal || !defeatScreen.hidden) return;
-  room.send("portal:use", { id: nearbyForestPortal });
+  status.textContent = "Hold E beside the portal to travel.";
 }
 function updateForestPortals(): void {
   const portals = (room?.state as { portals?: Map<string, ForestPortal> } | undefined)?.portals;
@@ -13175,7 +13204,14 @@ function updateForestPortals(): void {
       root.setPosition(portal.x, portal.y, portal.z); app.root.addChild(root);
       const label = document.createElement("button"); label.className = "forest-portal-label";
       label.classList.toggle("ember-portal-label", ember);
-      label.addEventListener("click", event => { event.stopPropagation(); room?.send("portal:use", { id }); }); document.body.append(label);
+      label.innerHTML = '<strong class="portal-title"></strong><span class="portal-subtitle"></span><span class="portal-hold-action"><span class="portal-hold-key"><kbd>E</kbd></span><span class="portal-action-text"></span></span>';
+      label.addEventListener("pointerdown", event => {
+        event.preventDefault(); event.stopPropagation();
+        beginPortalHold("touch", id, event.pointerId);
+        if (portalHold) label.setPointerCapture(event.pointerId);
+      });
+      label.addEventListener("click", event => { event.preventDefault(); event.stopPropagation(); });
+      document.body.append(label);
       visual = { root, glow, label, state: portal, materials: trim === frame ? [frame, light] : [frame, trim, light], ember, runes, motes, orbit, portalLight }; forestPortalVisuals.set(id, visual);
     }
     visual.state = portal;
@@ -13215,13 +13251,34 @@ function updateForestPortals(): void {
     const reachable = presentation.locked ? false : testEntry
       ? defeatScreen.hidden && active && Math.abs(player.y - portal.y) <= 3 && distance <= 3.5
       : canUseForestPortal({ ...player, health: defeatScreen.hidden ? 1 : 0 }, portal, now);
+    // At first-person interaction distance the top of a portal can be above
+    // the camera. Keep its usable prompt within the viewport, including when
+    // the player is standing beside it rather than looking directly at it.
+    if (active && reachable) {
+      visual.label.hidden = false;
+      const insetX = Math.min(130, rect.width / 2);
+      visual.label.style.left = `${rect.left + (screen.z <= 0 ? rect.width / 2
+        : Math.max(insetX, Math.min(rect.width - insetX, screen.x)))}px`;
+      visual.label.style.top = `${rect.top + (screen.z <= 0 ? rect.height * .55
+        : Math.max(140, Math.min(rect.height - 150, screen.y)))}px`;
+    }
     visual.label.disabled = !reachable;
     const text = portalWorldLabel(presentation, portal.expiresAt ? Math.max(0, Math.ceil((portal.expiresAt - now) / 1000)) : 0);
     visual.label.dataset.tone = presentation.tone;
     visual.label.classList.toggle("locked", presentation.locked);
-    if (visual.label.textContent !== text) visual.label.textContent = text;
+    visual.label.setAttribute("aria-label", text);
+    visual.label.querySelector(".portal-title")!.textContent = presentation.title;
+    visual.label.querySelector(".portal-subtitle")!.textContent = presentation.subtitle
+      + (portal.expiresAt ? ` · ${Math.max(0, Math.ceil((portal.expiresAt - now) / 1000))}s` : "");
+    visual.label.querySelector<HTMLElement>(".portal-hold-key")!.hidden = !reachable;
+    visual.label.querySelector(".portal-action-text")!.textContent = presentation.locked ? "SEALED"
+      : !reachable ? "MOVE CLOSER" : portalHold?.portalId === id ? "KEEP HOLDING"
+        : performance.now() < portalTravelPendingUntil ? "TRAVELLING…" : `HOLD ${window.matchMedia("(pointer: coarse)").matches ? "TO" : "E TO"} ${presentation.action}`;
+    visual.label.querySelector("kbd")!.textContent = window.matchMedia("(pointer: coarse)").matches ? "✋" : "E";
+    visual.label.dataset.holding = String(portalHold?.portalId === id);
     if (active && reachable && distance < nearest) { nearest = distance; nearbyForestPortal = id; }
   });
+  updatePortalHold(performance.now());
 }
 function updateTarget(): void {
   updateForestPortals();
@@ -15556,7 +15613,9 @@ function requestPrimaryAction(): void {
 }
 
 function requestContextAction(source: LootHold["source"]): void {
+  if (portalHold) return;
   if (nearestLootDrop()) { beginLootHold(source); return; }
+  if (nearbyForestPortal) { beginPortalHold(source); return; }
   const visibleLoot = !lootWorldLabel.hidden && nearestVisibleLootDrop(8);
   if (visibleLoot) {
     status.textContent = `Move closer to the loot (${visibleLoot.distance.toFixed(1)} m away), then hold E to collect it.`;
@@ -15906,7 +15965,7 @@ window.addEventListener("keydown", event => {
   if (event.code === "KeyH") { event.preventDefault(); requestPotion(); }
   if (event.code === "KeyE") {
     event.preventDefault();
-    requestContextAction("keyboard");
+    if (!event.repeat) requestContextAction("keyboard");
   }
   if (event.code === "KeyC") requestDefense(true);
   if (event.code === "KeyJ") {
@@ -15936,7 +15995,10 @@ window.addEventListener("keydown", event => {
 });
 window.addEventListener("keyup", event => {
   if (event.code === "KeyJ") keyboardFireHeld = false;
-  if (event.code === "KeyE") releaseLootHold("keyboard");
+  if (event.code === "KeyE") {
+    releaseLootHold("keyboard");
+    if (portalHold?.source === "keyboard") cancelPortalHold();
+  }
   if (event.code === "KeyC") requestDefense(false);
   if (popupQueue.active() !== null) {
     cancelPowerAim();
@@ -15946,7 +16008,7 @@ window.addEventListener("keyup", event => {
   if (event.code === powerAimKey) commitPowerAim();
   if (event.code === "KeyF") commitSpecialAim();
 });
-window.addEventListener("blur", () => { cancelLootHold(); keyboardFireHeld = false; });
+window.addEventListener("blur", () => { cancelLootHold(); cancelPortalHold(); keyboardFireHeld = false; });
 canvas.addEventListener("pointerdown", event => {
   if (popupQueue.active() !== null) return;
   canvas.focus({ preventScroll: true });
@@ -15999,10 +16061,12 @@ canvas.addEventListener("pointerdown", event => {
 window.addEventListener("pointerup", event => {
   if (event.pointerId === rangedFirePointer) rangedFirePointer = null;
   releaseLootHold("touch");
+  if (portalHold?.source === "touch" && (portalHold.pointerId === undefined || portalHold.pointerId === event.pointerId)) cancelPortalHold();
 });
 window.addEventListener("pointercancel", event => {
   if (event.pointerId === rangedFirePointer) rangedFirePointer = null;
   if (lootHold?.source === "touch") cancelLootHold();
+  if (portalHold?.source === "touch" && (portalHold.pointerId === undefined || portalHold.pointerId === event.pointerId)) cancelPortalHold();
 });
 canvas.addEventListener("pointerup", event => {
   if (event.pointerType === "touch" && touchCameraPoints.has(event.pointerId)) {
@@ -16254,6 +16318,10 @@ mineButton.addEventListener("pointercancel", clearTabletAttackAim);
 contextButton.addEventListener("pointerdown", event => {
   event.preventDefault();
   requestContextAction(lootHoldSourceForPointer(event.pointerType) ?? "touch");
+  if (portalHold?.source === "touch") {
+    portalHold.pointerId = event.pointerId;
+    contextButton.setPointerCapture(event.pointerId);
+  }
 });
 dodgeButton.addEventListener("pointerdown", event => {
   event.preventDefault();

@@ -49,10 +49,10 @@ export function portalLabel(id: string, kind: string, wardenGateUnlocked = false
 
 export function portalWorldLabel(label: PortalLabel, seconds = 0): string {
   const timer = seconds > 0 ? ` · ${seconds}s` : "";
-  return `${label.title}\n${label.subtitle}${timer}\n${label.locked ? "SEALED" : `E · ${label.action}`}`;
+  return `${label.title}\n${label.subtitle}${timer}\n${label.locked ? "SEALED" : `HOLD E · ${label.action}`}`;
 }
 
 export function portalInteractionPrompt(label: PortalLabel): string {
   return label.locked ? `${label.title} · ${label.subtitle}`
-    : `${label.title} · press E to ${label.action.toLowerCase()}`;
+    : `${label.title} · hold E to ${label.action.toLowerCase()}`;
 }

@@ -9,6 +9,7 @@ describe("tablet context action", () => {
   it("uses a hold action for loot and a tap action for NPCs", () => {
     expect(tabletContextAction({ loot: true })).toEqual({ label: "Pick Up", hold: true });
     expect(tabletContextAction({ keeper: true })).toEqual({ label: "Talk", hold: false });
+    expect(tabletContextAction({ portal: true })).toEqual({ label: "Travel", hold: true });
   });
 
   it("prioritises a player interaction over overlapping world interactions", () => {

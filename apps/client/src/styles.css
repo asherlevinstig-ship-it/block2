@@ -4,6 +4,14 @@
 .forest-portal-label.locked { filter: grayscale(.5); border-color: #81778b; color: #aaa2b0; }
 .forest-portal-label:disabled { cursor: default; opacity: .85; }
 .forest-portal-label[hidden] { display: none; }
+.portal-title, .portal-subtitle { display: block; }
+.portal-title { font-size: 13px; color: #fff0a8; }
+.portal-subtitle { opacity: .85; font-size: 10px; margin-top: 3px; }
+.portal-hold-action { display: flex; align-items: center; justify-content: center; gap: 9px; margin-top: 8px; font-size: 12px; }
+.portal-hold-key { --portal-accent: #d6b5ff; display: grid; place-items: center; flex: none; width: 32px; height: 32px; padding: 3px; border-radius: 8px; background: conic-gradient(var(--portal-accent) var(--portal-progress, 0%), #ffffff30 0); }
+.portal-hold-key[hidden] { display: none; }
+.portal-hold-key kbd { display: grid; place-items: center; width: 100%; height: 100%; border-radius: 5px; background: #171121; color: #fff4ce; font: 900 15px/1 system-ui; }
+.forest-portal-label[data-holding="true"] .portal-hold-key { box-shadow: 0 0 13px #bf8aff; }
 body:has(#inventory-panel:not([hidden])) .forest-portal-label { display: none; }
 .forest-portal-label.ember-portal-label { min-width: 210px; white-space: pre-line; color: #ffe1bf; border-color: #f06b2d; background: linear-gradient(180deg, #321209f2, #130b08f4); box-shadow: 0 0 0 1px #ff9a4133, 0 4px 18px #000b, 0 0 26px #ff4b1838; text-shadow: 0 0 10px #ff6a2b88; }
 .forest-portal-label.ember-portal-label::before { content: "◆"; display: inline-block; margin-right: 7px; color: #ff7d38; filter: drop-shadow(0 0 5px #ff4a1f); }
