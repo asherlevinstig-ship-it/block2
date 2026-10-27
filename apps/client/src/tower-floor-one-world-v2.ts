@@ -140,6 +140,54 @@ function brokenSupply(parent: pc.Entity, name: string, x: number, z: number, yaw
   shape(parent, `${name}-roll`, "cylinder", canvas, [.55, 1.45, .55], [x + 1.25, ground + .48, z - .35], [90, yaw, 0]);
 }
 
+function flagstoneTrail(parent: pc.Entity, name: string, from: readonly [number, number],
+  to: readonly [number, number], count: number, width: number, stone: pc.StandardMaterial,
+  moss: pc.StandardMaterial, seed: number): void {
+  const dx = to[0] - from[0], dz = to[1] - from[1];
+  const yaw = -Math.atan2(dz, dx) * 180 / Math.PI;
+  for (let index = 0; index < count; index++) {
+    const t = (index + .5) / count;
+    const side = (((index * 37 + seed) % 11) - 5) / 5 * width * .25;
+    const perpendicularX = -dz / Math.max(.001, Math.hypot(dx, dz));
+    const perpendicularZ = dx / Math.max(.001, Math.hypot(dx, dz));
+    const x = from[0] + dx * t + perpendicularX * side;
+    const z = from[1] + dz * t + perpendicularZ * side;
+    const ground = towerFloorOneGroundHeight(x, z);
+    const long = 1.25 + ((index * 17 + seed) % 5) * .16;
+    const broad = width * (.34 + ((index * 13 + seed) % 4) * .045);
+    shape(parent, `${name}-flagstone`, "box", index % 5 === 2 ? moss : stone,
+      [long, .11, broad], [x, ground + .065, z], [0, yaw + ((index * 29 + seed) % 13) - 6, index % 3 - 1]);
+  }
+}
+
+function brokenCourtEdge(parent: pc.Entity, name: string, cx: number, cz: number, radiusX: number,
+  radiusZ: number, count: number, stone: pc.StandardMaterial, moss: pc.StandardMaterial): void {
+  for (let index = 0; index < count; index++) {
+    if (index % 5 === 2) continue;
+    const angle = index / count * Math.PI * 2;
+    const x = cx + Math.cos(angle) * radiusX;
+    const z = cz + Math.sin(angle) * radiusZ;
+    const ground = towerFloorOneGroundHeight(x, z);
+    const height = .32 + (index % 4) * .16;
+    shape(parent, `${name}-edge-stone`, "box", index % 3 ? stone : moss,
+      [2.4 + index % 3 * .5, height, 1.15], [x, ground + height * .34, z],
+      [index % 2 ? 4 : -3, 90 - angle * 180 / Math.PI, index % 3 ? 2 : -4]);
+  }
+}
+
+function brazier(parent: pc.Entity, name: string, x: number, z: number, colour: pc.Color,
+  metal: pc.StandardMaterial, flame: pc.StandardMaterial): pc.Entity {
+  const ground = towerFloorOneGroundHeight(x, z);
+  shape(parent, `${name}-stem`, "cylinder", metal, [.18, 1.8, .18], [x, ground + .82, z]);
+  shape(parent, `${name}-bowl`, "cylinder", metal, [.72, .24, .72], [x, ground + 1.72, z]);
+  shape(parent, `${name}-flame`, "cone", flame, [.42, .92, .42], [x, ground + 2.28, z]);
+  const light = new pc.Entity(`${name}-light`);
+  light.addComponent("light", { type: "omni", color: colour, intensity: 1.15, range: 8, castShadows: false });
+  light.setLocalPosition(x, ground + 2.45, z);
+  parent.addChild(light);
+  return light;
+}
+
 function sealChain(parent: pc.Entity, name: string, from: readonly [number, number, number],
   to: readonly [number, number, number], material: pc.StandardMaterial): pc.Entity {
   const root = new pc.Entity(name);
@@ -225,6 +273,8 @@ export function createTowerFloorOneWorld(app: pc.Application, parent: pc.Entity)
   const southSealGlow = finish(new pc.Color(.22, .95, .32), .8, .78);
   const poison = finish(new pc.Color(.35, .82, .2), .48, .82);
   const sealBarrier = finish(new pc.Color(.67, .24, .82), .62, .2);
+  const warmFlame = finish(new pc.Color(1, .36, .055), .9, .9);
+  const crownFlame = finish(new pc.Color(.72, .22, 1), .82, .88);
 
   shape(root, "floor1-abyss", "box", voidMaterial, [138, 4, 142], [344, 1.9, 106]);
   shape(root, "floor1-fortress-skirt", "cylinder", stone, [99, 7.6, 104], [344, 4.15, 106]);
@@ -282,6 +332,7 @@ export function createTowerFloorOneWorld(app: pc.Application, parent: pc.Entity)
   const openingCourt = shape(root, "floor1-opening-court", "cylinder", mossLight, [27.5, .09, 27.5], [329, 8.2, 106]);
   fitOrganicGroundPatch(app.graphicsDevice, openingCourt, mossLight, [27.5, .09, 27.5], [329, 8.2, 106]);
   causeway(root, "floor1-arrival-causeway", [317, 106], [329, 106], 5, 7.2, stoneLight, earth);
+  flagstoneTrail(root, "floor1-arrival-route", [314, 106], [336, 106], 13, 5.8, stoneLight, moss, 11);
 
   // A destroyed expedition camp supplies the first environmental story beat.
   for (const [name, x, z, yaw] of [["cart-a",325,99,22],["cart-b",329,115,-18],["cache",333,101,8]] as const)
@@ -303,6 +354,11 @@ export function createTowerFloorOneWorld(app: pc.Application, parent: pc.Entity)
   }
   causeway(root, "floor1-north-causeway", [333, 101], [345, 86], 6, 5.4, stoneLight, earth, [2]);
   causeway(root, "floor1-south-causeway", [333, 111], [345, 126], 6, 5.4, stoneLight, earth, [3]);
+  flagstoneTrail(root, "floor1-north-route", [330, 101], [350, 80], 13, 4.1, stoneLight, moss, 29);
+  flagstoneTrail(root, "floor1-south-route", [330, 111], [350, 132], 13, 4.1, stoneLight, moss, 47);
+  brokenCourtEdge(root, "floor1-opening", 329, 106, 26.2, 25.2, 18, stoneLight, mossLight);
+  brokenCourtEdge(root, "floor1-north", 350, 80, 24.8, 23.8, 16, stoneLight, mossLight);
+  brokenCourtEdge(root, "floor1-south", 350, 132, 24.8, 23.8, 16, stoneLight, mossLight);
 
   // North is a crushed military gate: red standards, massive rubble and roots.
   banner(root, "floor1-north-banner-a", 344, 8.68, 69.5, 0, northRed, timber);
@@ -381,6 +437,7 @@ export function createTowerFloorOneWorld(app: pc.Application, parent: pc.Entity)
   }
 
   causeway(root, "floor1-crown-causeway", [337, 106], [359, 106], 7, 6.6, stoneLight, earth, [2]);
+  flagstoneTrail(root, "floor1-crown-route", [336, 106], [366, 106], 18, 5.4, stoneLight, moss, 71);
   for (let step = 0; step < 6; step++) {
     const top = 8.35 + step * .2;
     shape(root, "floor1-crown-step", "box", stoneLight, [2.1, .34, 8.2 - step * .18],
@@ -399,6 +456,15 @@ export function createTowerFloorOneWorld(app: pc.Application, parent: pc.Entity)
   const bossCourt = shape(root, "floor1-boss-court", "cylinder", stoneLight, [29.2, .18, 29.2], [375, 9.57, 106]);
   fitOrganicGroundPatch(app.graphicsDevice, bossCourt, stoneLight, [29.2, .18, 29.2], [375, 9.57, 106]);
   shape(root, "floor1-boss-sigil", "cylinder", bossGlow, [16, .055, 16], [375, 9.68, 106]);
+  brokenCourtEdge(root, "floor1-crown-court", 375, 106, 28.1, 27.2, 20, stone, stoneWarm);
+  for (let index = 0; index < 16; index++) {
+    const angle = index / 16 * Math.PI * 2;
+    const inner = 8.4 + (index % 2) * 1.6;
+    const x = 375 + Math.cos(angle) * inner;
+    const z = 106 + Math.sin(angle) * inner;
+    shape(root, "floor1-crown-sigil-shard", "box", index % 2 ? gold : bossGlow,
+      [2.25, .045, .24], [x, 9.715, z], 90 - angle * 180 / Math.PI);
+  }
   for (let i = 0; i < 10; i++) {
     const angle = i / 10 * Math.PI * 2;
     shape(root, "floor1-crown-pillar", "box", i % 2 ? stone : stoneWarm, [1.2, 5.8, 1.2],
@@ -417,6 +483,24 @@ export function createTowerFloorOneWorld(app: pc.Application, parent: pc.Entity)
   // The ascent portal is always visible behind the throne but remains server-
   // locked until the Crownkeeper falls.
   arch(root, "floor1-ascent-portal-frame", 388, 106, 9.55, 5.4, 7.3, 90, stoneWarm, stone, bark);
+  const fireLights = [
+    brazier(root, "floor1-opening-brazier-north", 322, 101.8, new pc.Color(1, .32, .06), iron, warmFlame),
+    brazier(root, "floor1-opening-brazier-south", 322, 110.2, new pc.Color(1, .32, .06), iron, warmFlame),
+    brazier(root, "floor1-crown-brazier-north", 366.5, 100.5, new pc.Color(.72, .18, 1), iron, crownFlame),
+    brazier(root, "floor1-crown-brazier-south", 366.5, 111.5, new pc.Color(.72, .18, 1), iron, crownFlame),
+  ];
+
+  // Tall broken watch structures give the floor a recognisable skyline and
+  // make the circular boundary read as the inside of an ancient tower.
+  for (const [x, z, yaw, height] of [[329, 64, 3, 16], [365, 67, -8, 20], [394, 83, -28, 17],
+    [394, 129, 28, 18], [365, 145, 8, 19], [329, 148, -3, 15]] as const) {
+    const ground = towerFloorOneGroundHeight(x, z);
+    shape(root, "floor1-broken-watch-pier", "box", stone, [4.2, height, 4.2], [x, ground + height * .5, z], yaw);
+    shape(root, "floor1-broken-watch-cap", "box", stoneLight, [5.4, .65, 5.4],
+      [x, ground + height - .15, z], [0, yaw, x % 2 ? 4 : -5]);
+    shape(root, "floor1-watch-root", "cylinder", bark, [.32, height * .68, .32],
+      [x + 1.2, ground + height * .38, z - .6], [0, yaw, 77]);
+  }
 
   const trees = [[318,75,1],[325,137,.9],[336,67,1.15],[340,145,.95],[357,68,.95],
     [357,144,1.05],[367,82,.85],[368,131,.95],[383,72,1.1],[383,140,1.05]] as const;
@@ -435,9 +519,13 @@ export function createTowerFloorOneWorld(app: pc.Application, parent: pc.Entity)
   for (const [x, z, scale, tilt] of [[319, 90, 1.15, 8], [347, 119, .92, -6], [373, 98, 1.25, 5]] as const)
     shape(root, "floor1-light-shaft", "cone", shaftMaterial, [8 * scale, 34, 8 * scale],
       [x, 25, z], [tilt, 0, tilt * .35]);
-  for (const [x, z, sx, sz] of [[327,82,17,9],[340,130,20,8],[374,106,24,13]] as const)
-    shape(root, "floor1-ground-mist", "sphere", mistMaterial, [sx, .48, sz],
-      [x, towerFloorOneGroundHeight(x, z) + .38, z]);
+  const fogBanks: Array<{ entity: pc.Entity; x: number; y: number; z: number; phase: number }> = [];
+  for (const [index, bank] of ([[327,82,17,9],[340,130,20,8],[374,106,24,13]] as const).entries()) {
+    const [x, z, sx, sz] = bank;
+    const y = towerFloorOneGroundHeight(x, z) + .38;
+    fogBanks.push({ entity: shape(root, "floor1-ground-mist", "sphere", mistMaterial, [sx, .48, sz], [x, y, z]),
+      x, y, z, phase: index * 2.1 });
+  }
 
   const atmosphericMotes: Array<{ entity: pc.Entity; x: number; y: number; z: number; phase: number }> = [];
   for (let index = 0; index < 18; index++) {
@@ -476,6 +564,14 @@ export function createTowerFloorOneWorld(app: pc.Application, parent: pc.Entity)
     elapsed += dt;
     if (sanctuaryLight.light) sanctuaryLight.light.intensity = 1.4 + Math.sin(elapsed * 2.4) * .16;
     if (crownLight.light) crownLight.light.intensity = 1.02 + Math.sin(elapsed * 1.65 + 1.4) * .12;
+    for (let index = 0; index < fireLights.length; index++) {
+      const fire = fireLights[index]!.light;
+      if (fire) fire.intensity = 1.05 + Math.sin(elapsed * 8.4 + index * 1.7) * .16;
+    }
+    for (const bank of fogBanks)
+      bank.entity.setLocalPosition(bank.x + Math.sin(elapsed * .12 + bank.phase) * 1.25,
+        bank.y + Math.sin(elapsed * .31 + bank.phase) * .06,
+        bank.z + Math.cos(elapsed * .1 + bank.phase) * .9);
     for (const mote of atmosphericMotes) {
       const drift = elapsed + mote.phase;
       mote.entity.setLocalPosition(mote.x + Math.sin(drift * .72) * .42,

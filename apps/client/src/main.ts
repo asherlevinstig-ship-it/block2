@@ -126,6 +126,7 @@ import { populateTownAssetKit, readyTownFallbacks, SPEED_LAB_TOWN_ASSETS, type T
 import { createTownPortalLandmarks } from "./town-portal-landmarks.js";
 import { createTowerFloorOneWorld, updateTowerFloorOneProgress } from "./tower-floor-one-world-v2.js";
 import { requestTowerFloorOneFortressAssets } from "./tower-floor-one-asset-kit.js";
+import { towerFloorOneAtmosphere } from "./tower-floor-one-atmosphere.js";
 import { portalInteractionPrompt, portalLabel, portalWorldLabel } from "./portal-labels.js";
 import { createFastWorldSky } from "./fast-world-sky.js";
 import { createPaintedGroundMaterial, fitGroundTexture, fitOrganicGroundPatch, createWoodlandTrailMesh, woodlandFernMesh } from "./fast-world-texture.js";
@@ -14855,8 +14856,9 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
   const woodlandGrade = greenwoodAtmosphere(position.x, position.z);
   const gradedSun = fastWorldRequested ? surfaceSunIntensity + (woodlandGrade.sun - surfaceSunIntensity) * greenwoodLightingBlend : surfaceSunIntensity;
   const gradedFill = fastWorldRequested ? surfaceSkyFillIntensity + (woodlandGrade.fill - surfaceSkyFillIntensity) * greenwoodLightingBlend : surfaceSkyFillIntensity;
-  const outdoorSun = gradedSun + (.72 - gradedSun) * towerFloorLightingBlend;
-  const outdoorFill = gradedFill + (.19 - gradedFill) * towerFloorLightingBlend;
+  const towerGrade = towerFloorOneAtmosphere(position.x, position.z);
+  const outdoorSun = gradedSun + (towerGrade.sun - gradedSun) * towerFloorLightingBlend;
+  const outdoorFill = gradedFill + (towerGrade.fill - gradedFill) * towerFloorLightingBlend;
   if (light.light) light.light.intensity = (outdoorSun + (0.45 - outdoorSun) * undergroundLightingBlend) * (1 - .36 * forestDungeonLightingBlend) * (1 - .58 * silverDepthsLightingBlend) * (1 - .72 * emberVaultLightingBlend);
   if (skyFill.light) skyFill.light.intensity = outdoorFill * (1 - undergroundLightingBlend) * (1 - .5 * forestDungeonLightingBlend) * (1 - .75 * emberVaultLightingBlend);
   if (caveLight.light) {
@@ -14884,9 +14886,9 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
   const finalAmbientG = depthsAmbientG + (.055 - depthsAmbientG) * emberVaultLightingBlend;
   const finalAmbientB = depthsAmbientB + (.025 - depthsAmbientB) * emberVaultLightingBlend;
   app.scene.ambientLight.set(
-    finalAmbientR + (.15 - finalAmbientR) * towerFloorLightingBlend,
-    finalAmbientG + (.21 - finalAmbientG) * towerFloorLightingBlend,
-    finalAmbientB + (.17 - finalAmbientB) * towerFloorLightingBlend,
+    finalAmbientR + (towerGrade.ambient[0] - finalAmbientR) * towerFloorLightingBlend,
+    finalAmbientG + (towerGrade.ambient[1] - finalAmbientG) * towerFloorLightingBlend,
+    finalAmbientB + (towerGrade.ambient[2] - finalAmbientB) * towerFloorLightingBlend,
   );
   const greenwoodFogTarget = fastWorldRequested ? woodlandGrade.fog : { r: .11, g: .24, b: .2 };
   const surfaceFogR = surfaceFogBase.r + (greenwoodFogTarget.r - surfaceFogBase.r) * greenwoodLightingBlend;
@@ -14902,9 +14904,9 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
   const finalFogG = depthsFogG + (.025 - depthsFogG) * emberVaultLightingBlend;
   const finalFogB = depthsFogB + (.012 - depthsFogB) * emberVaultLightingBlend;
   app.scene.fog.color.set(
-    finalFogR + (.075 - finalFogR) * towerFloorLightingBlend,
-    finalFogG + (.13 - finalFogG) * towerFloorLightingBlend,
-    finalFogB + (.105 - finalFogB) * towerFloorLightingBlend,
+    finalFogR + (towerGrade.fog[0] - finalFogR) * towerFloorLightingBlend,
+    finalFogG + (towerGrade.fog[1] - finalFogG) * towerFloorLightingBlend,
+    finalFogB + (towerGrade.fog[2] - finalFogB) * towerFloorLightingBlend,
   );
   const regionalSurfaceFogStart = surfaceFogStartBase + ((fastWorldRequested ? woodlandGrade.fogStart : 34) - surfaceFogStartBase) * greenwoodLightingBlend;
   const regionalSurfaceFogEnd = surfaceFogEndBase + ((fastWorldRequested ? woodlandGrade.fogEnd : 58) - surfaceFogEndBase) * greenwoodLightingBlend;
@@ -14914,8 +14916,8 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
   const mixedDepthsFogEnd = baseFogEnd + (depthsFogEnd - baseFogEnd) * silverDepthsLightingBlend;
   const finalFogStart = mixedDepthsFogStart + (19 - mixedDepthsFogStart) * emberVaultLightingBlend;
   const finalFogEnd = mixedDepthsFogEnd + (40 - mixedDepthsFogEnd) * emberVaultLightingBlend;
-  app.scene.fog.start = finalFogStart + (22 - finalFogStart) * towerFloorLightingBlend;
-  app.scene.fog.end = finalFogEnd + (68 - finalFogEnd) * towerFloorLightingBlend;
+  app.scene.fog.start = finalFogStart + (towerGrade.fogStart - finalFogStart) * towerFloorLightingBlend;
+  app.scene.fog.end = finalFogEnd + (towerGrade.fogEnd - finalFogEnd) * towerFloorLightingBlend;
   camera.camera?.clearColor.copy(app.scene.fog.color);
   if (nextKey === cutawayStateKey) return;
   logMovementEvent(
