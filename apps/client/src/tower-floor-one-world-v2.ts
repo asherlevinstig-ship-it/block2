@@ -1,6 +1,6 @@
 import * as pc from "playcanvas";
 import { towerFloorOneGroundHeight } from "@blockcraft/protocol";
-import { createPaintedGroundMaterial, fitOrganicGroundPatch } from "./fast-world-texture.js";
+import { createPaintedGroundMaterial, createWoodlandTrailMesh, fitOrganicGroundPatch } from "./fast-world-texture.js";
 import { populateTowerFloorOneAssetKit } from "./tower-floor-one-asset-kit.js";
 import { TOWER_FLOOR_ONE_VISUAL_FOOTPRINTS } from "./tower-floor-one-layout.js";
 
@@ -264,7 +264,6 @@ export function createTowerFloorOneWorld(app: pc.Application, parent: pc.Entity)
   const mistMaterial = finish(new pc.Color(.17, .3, .24), .05, .12);
   const moteMaterial = finish(new pc.Color(.62, .76, .41), .5, .68);
   const deadLeafMaterial = finish(new pc.Color(.5, .31, .12), .04, .86);
-  const sanctuaryStone = finish(new pc.Color(.48, .6, .56), .04);
   const expeditionCanvas = finish(new pc.Color(.48, .38, .24));
   const timber = finish(new pc.Color(.25, .13, .06));
   const iron = finish(new pc.Color(.16, .18, .18));
@@ -309,36 +308,25 @@ export function createTowerFloorOneWorld(app: pc.Application, parent: pc.Entity)
   }
 
   const sanctuaryRadius = TOWER_FLOOR_ONE_VISUAL_FOOTPRINTS.sanctuary;
-  shape(root, "floor1-sanctuary-foundation", "cylinder", stone, [sanctuaryRadius + .8, 2, sanctuaryRadius + .8], [306, 8, 106]);
+  shape(root, "floor1-sanctuary-foundation", "cylinder", stone, [sanctuaryRadius * 2, 1, sanctuaryRadius * 2], [306, 7.45, 106]);
   const sanctuaryCap = shape(root, "floor1-sanctuary-cap", "cylinder", stoneLight,
-    [sanctuaryRadius, .34, sanctuaryRadius], [306, 8.83, 106]);
+    [sanctuaryRadius * 2, .04, sanctuaryRadius * 2], [306, 9.015, 106]);
   fitOrganicGroundPatch(app.graphicsDevice, sanctuaryCap, stoneLight,
-    [sanctuaryRadius, .34, sanctuaryRadius], [306, 8.83, 106]);
-  shape(root, "floor1-sanctuary-rune", "cylinder", sanctuary, [9.2, .06, 9.2], [306, 9.03, 106]);
-  for (let step = 0; step < 4; step++) {
-    const top = 8.82 - step * .2;
-    shape(root, "floor1-sanctuary-step", "box", stoneLight, [2.4, .28, 7.4 + step * .7],
-      [317.2 + step * 1.35, top - .14, 106]);
-  }
-  for (let i = 0; i < 8; i++) {
-    const angle = i / 8 * Math.PI * 2;
-    shape(root, "floor1-sanctuary-pillar", "cylinder", stoneLight, [.72, 4.1, .72],
-      [306 + Math.cos(angle) * 8.6, 10.9, 106 + Math.sin(angle) * 8.6]);
-    shape(root, "floor1-sanctuary-flame", "sphere", sanctuary, [.48, .82, .48],
-      [306 + Math.cos(angle) * 8.6, 13.45, 106 + Math.sin(angle) * 8.6]);
-  }
-  guardianStatue(root, "floor1-sanctuary-guardian-north", 310.5, 98.2, 155, sanctuaryStone, sanctuary);
-  guardianStatue(root, "floor1-sanctuary-guardian-south", 310.5, 113.8, 25, sanctuaryStone, sanctuary);
-  brokenSupply(root, "floor1-sanctuary-supply-a", 301.5, 98.5, 18, timber, expeditionCanvas, iron);
-  brokenSupply(root, "floor1-sanctuary-supply-b", 301, 114, -23, timber, expeditionCanvas, iron);
+    [sanctuaryRadius * 2, .04, sanctuaryRadius * 2], [306, 9.015, 106]);
+  shape(root, "floor1-sanctuary-rune", "cylinder", sanctuary, [3.2, .015, 3.2], [305.5, 9.04, 106.5]);
+  // The terrain already supplies a continuous descending ramp. A decorative
+  // staircase has no walkable upper destination here and must not be placed.
 
   const openingRadius = TOWER_FLOOR_ONE_VISUAL_FOOTPRINTS.openingCourt;
   shape(root, "floor1-opening-foundation", "cylinder", stone, [openingRadius + .8, .48, openingRadius + .8], [329, 7.94, 106]);
   const openingCourt = shape(root, "floor1-opening-court", "cylinder", mossLight,
     [openingRadius, .09, openingRadius], [329, 8.2, 106]);
   fitOrganicGroundPatch(app.graphicsDevice, openingCourt, mossLight, [openingRadius, .09, openingRadius], [329, 8.2, 106]);
-  causeway(root, "floor1-arrival-causeway", [317, 106], [329, 106], 5, 7.2, stoneLight, earth);
-  flagstoneTrail(root, "floor1-arrival-route", [314, 106], [336, 106], 13, 5.8, stoneLight, moss, 11);
+  const arrivalRamp = new pc.Entity("floor1-arrival-ramp");
+  root.addChild(arrivalRamp);
+  createWoodlandTrailMesh(app.graphicsDevice, arrivalRamp, stoneLight,
+    Array.from({ length: 37 }, (_, index) => [311 + index * .6, 106, 5.6] as const),
+    { height: .04, fadeEnds: true });
 
   // A destroyed expedition camp supplies the first environmental story beat.
   for (const [name, x, z, yaw] of [["cart-a",325,99,22],["cart-b",329,115,-18],["cache",333,101,8]] as const)

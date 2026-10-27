@@ -22,14 +22,22 @@ describe("Floor 1 authored asset kit", () => {
   });
 
   it("concentrates the first pass on the sanctuary and opening court", () => {
-    expect(TOWER_FLOOR_ONE_ASSET_SPIKE.filter(asset => asset.id === "decoratedPillar")).toHaveLength(8);
-    expect(TOWER_FLOOR_ONE_ASSET_SPIKE.filter(asset => asset.id === "archedWall")).toHaveLength(3);
+    expect(TOWER_FLOOR_ONE_ASSET_SPIKE.filter(asset => asset.id === "decoratedPillar")).toHaveLength(2);
+    expect(TOWER_FLOOR_ONE_ASSET_SPIKE.some(asset => asset.id === "archedWall")).toBe(false);
     expect(TOWER_FLOOR_ONE_ASSET_SPIKE.some(asset => asset.id === "crates")).toBe(true);
     expect(TOWER_FLOOR_ONE_ASSET_SPIKE.some(asset => asset.id === "torch")).toBe(true);
-    expect(TOWER_FLOOR_ONE_ASSET_SPIKE.some(asset => asset.id === "stairsWide")).toBe(true);
-    expect(TOWER_FLOOR_ONE_ASSET_SPIKE.filter(asset => asset.name.startsWith("arrival-floor-"))).toHaveLength(7);
+    expect(TOWER_FLOOR_ONE_ASSET_SPIKE.some(asset => asset.id === "stairsWide")).toBe(false);
+    expect(TOWER_FLOOR_ONE_ASSET_SPIKE.some(asset => asset.name.startsWith("arrival-floor-"))).toBe(false);
     expect(TOWER_FLOOR_ONE_ASSET_SPIKE.filter(asset => asset.id === "trunkA" || asset.id === "trunkB" || asset.id === "trunkC")).toHaveLength(4);
     expect(Math.max(...TOWER_FLOOR_ONE_ASSET_SPIKE.map(asset => asset.position[0]))).toBeLessThanOrEqual(359);
+  });
+
+  it("leaves a clear arrival landing without oversized steps or blind arches", () => {
+    for (const asset of TOWER_FLOOR_ONE_ASSET_SPIKE) {
+      // The only nearby tall assets frame the exit seven metres off its axis.
+      expect(Math.hypot(asset.position[0] - 305.5, asset.position[2] - 106.5), asset.name).toBeGreaterThan(8);
+    }
+    expect(TOWER_FLOOR_ONE_ASSET_SPIKE.some(asset => asset.id === "stairsWide" || asset.id === "archedWall")).toBe(false);
   });
 
   it("keeps the boss-court architecture deferred and its combat approach open", () => {

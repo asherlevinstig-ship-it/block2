@@ -55,19 +55,10 @@ export interface TowerFloorOneAssetPlacement {
  * player sees first. Gameplay collision remains server-owned and the existing
  * procedural world stays underneath as a resilient loading fallback. */
 export const TOWER_FLOOR_ONE_ASSET_SPIKE: readonly TowerFloorOneAssetPlacement[] = [
-  ...Array.from({ length: 8 }, (_, index): TowerFloorOneAssetPlacement => {
-    const angle = index / 8 * Math.PI * 2;
-    return {
-      id: "decoratedPillar",
-      name: `sanctuary-pillar-${index + 1}`,
-      position: [306 + Math.cos(angle) * 8.6, 9.02, 106 + Math.sin(angle) * 8.6],
-      yaw: 45 - index * 45,
-      scale: 1.62,
-    };
-  }),
-  { id: "archedWall", name: "opening-gate", position: [320.5, 8.54, 106], yaw: 90, scale: 1.7 },
-  { id: "archedWall", name: "north-breach", position: [339, 8.15, 94], yaw: 49, scale: 1.48 },
-  { id: "archedWall", name: "south-breach", position: [339, 8.15, 118], yaw: -49, scale: 1.48 },
+  { id: "decoratedPillar", name: "sanctuary-exit-pillar-north", position: [313, 9, 99], yaw: 90, scale: .8 },
+  { id: "decoratedPillar", name: "sanctuary-exit-pillar-south", position: [313, 9, 113], yaw: 90, scale: .8 },
+  // wall_arched is a solid wall with a recessed arch, not a traversable gate.
+  // Keep the open pier-and-lintel arches created by the world at these routes.
   { id: "brokenWall", name: "opening-ruin-north", position: [322, 7.98, 92], yaw: -7, scale: 2.05 },
   { id: "brokenWall", name: "opening-ruin-south", position: [322, 7.98, 120], yaw: 7, scale: 2.05 },
   { id: "brokenWall", name: "court-ruin-north", position: [337, 8.18, 96], yaw: 95, scale: 1.85 },
@@ -77,20 +68,10 @@ export const TOWER_FLOOR_ONE_ASSET_SPIKE: readonly TowerFloorOneAssetPlacement[]
   { id: "crates", name: "expedition-crates", position: [326, 8.2, 100], yaw: 19, scale: .82 },
   { id: "barrels", name: "expedition-barrels", position: [330, 8.2, 114], yaw: -14, scale: .9 },
   { id: "chest", name: "expedition-chest", position: [333, 8.2, 101], yaw: 8, scale: 1.05 },
-  { id: "blueBanner", name: "sanctuary-banner-north", position: [309.6, 9.02, 97.9], yaw: 0, scale: 1.45 },
-  { id: "blueBanner", name: "sanctuary-banner-south", position: [309.6, 9.02, 114.1], yaw: 180, scale: 1.45 },
   { id: "redBanner", name: "north-warden-banner-west", position: [344, 8.68, 69.5], yaw: 0, scale: 1.45 },
   { id: "redBanner", name: "north-warden-banner-east", position: [356, 8.68, 69.5], yaw: 180, scale: 1.45 },
   { id: "torch", name: "opening-torch-north", position: [320.3, 10.2, 102.65], yaw: 90, scale: 1.42 },
   { id: "torch", name: "opening-torch-south", position: [320.3, 10.2, 109.35], yaw: 90, scale: 1.42 },
-  ...Array.from({ length: 7 }, (_, index): TowerFloorOneAssetPlacement => ({
-    id: index === 2 ? "floorTileBrokenA" : index === 5 ? "floorTileWeedsA" : "floorTileLarge",
-    name: `arrival-floor-${index + 1}`,
-    position: [316.4 + index * 3.05, 9.04 + (index > 0 ? -.82 : 0), 106 + (index % 2 ? .18 : -.14)],
-    yaw: index % 3 === 1 ? 90 : 0,
-    scale: 1.58,
-  })),
-  { id: "stairsWide", name: "sanctuary-stairs", position: [318.8, 8.02, 106], yaw: 90, scale: 1.9 },
   { id: "wallCorner", name: "opening-ruin-corner-north", position: [323.4, 8.08, 94.4], yaw: 173, scale: 1.75 },
   { id: "wallEndcap", name: "opening-ruin-end-south", position: [323.5, 8.08, 118.1], yaw: 7, scale: 1.75 },
   { id: "wallScaffold", name: "failed-expedition-scaffold", position: [334.2, 8.12, 115.5], yaw: 84, scale: 1.55 },
@@ -246,10 +227,6 @@ export async function populateTowerFloorOneAssetKit(
   if (loaded.has("royalBanner"))
     hideDirectChildren(parent, name => name.startsWith("floor1-crown-banner"));
   const names = new Set(placements.map(placement => placement.name));
-  if (loaded.has("floorTileLarge") && names.has("arrival-floor-1"))
-    hideDirectChildren(parent, name => name === "floor1-arrival-route-flagstone");
-  if (loaded.has("stairsWide") && names.has("sanctuary-stairs"))
-    hideDirectChildren(parent, name => name === "floor1-sanctuary-step");
   if (loaded.has("stoneColumn") && names.has("crown-court-column-1"))
     hideDirectChildren(parent, name => name === "floor1-crown-pillar");
 
