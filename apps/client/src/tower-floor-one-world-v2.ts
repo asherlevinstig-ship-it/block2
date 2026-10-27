@@ -2,6 +2,7 @@ import * as pc from "playcanvas";
 import { towerFloorOneGroundHeight } from "@blockcraft/protocol";
 import { createPaintedGroundMaterial, fitOrganicGroundPatch } from "./fast-world-texture.js";
 import { populateTowerFloorOneAssetKit } from "./tower-floor-one-asset-kit.js";
+import { TOWER_FLOOR_ONE_VISUAL_FOOTPRINTS } from "./tower-floor-one-layout.js";
 
 function finish(color: pc.Color, emissive = 0, opacity = 1): pc.StandardMaterial {
   const material = new pc.StandardMaterial();
@@ -307,10 +308,13 @@ export function createTowerFloorOneWorld(app: pc.Application, parent: pc.Entity)
     }
   }
 
-  shape(root, "floor1-sanctuary-foundation", "cylinder", stone, [25.5, 2, 25.5], [306, 8, 106]);
-  const sanctuaryCap = shape(root, "floor1-sanctuary-cap", "cylinder", stoneLight, [23.5, .34, 23.5], [306, 8.83, 106]);
-  fitOrganicGroundPatch(app.graphicsDevice, sanctuaryCap, stoneLight, [23.5, .34, 23.5], [306, 8.83, 106]);
-  shape(root, "floor1-sanctuary-rune", "cylinder", sanctuary, [18.4, .06, 18.4], [306, 9.03, 106]);
+  const sanctuaryRadius = TOWER_FLOOR_ONE_VISUAL_FOOTPRINTS.sanctuary;
+  shape(root, "floor1-sanctuary-foundation", "cylinder", stone, [sanctuaryRadius + .8, 2, sanctuaryRadius + .8], [306, 8, 106]);
+  const sanctuaryCap = shape(root, "floor1-sanctuary-cap", "cylinder", stoneLight,
+    [sanctuaryRadius, .34, sanctuaryRadius], [306, 8.83, 106]);
+  fitOrganicGroundPatch(app.graphicsDevice, sanctuaryCap, stoneLight,
+    [sanctuaryRadius, .34, sanctuaryRadius], [306, 8.83, 106]);
+  shape(root, "floor1-sanctuary-rune", "cylinder", sanctuary, [9.2, .06, 9.2], [306, 9.03, 106]);
   for (let step = 0; step < 4; step++) {
     const top = 8.82 - step * .2;
     shape(root, "floor1-sanctuary-step", "box", stoneLight, [2.4, .28, 7.4 + step * .7],
@@ -328,9 +332,11 @@ export function createTowerFloorOneWorld(app: pc.Application, parent: pc.Entity)
   brokenSupply(root, "floor1-sanctuary-supply-a", 301.5, 98.5, 18, timber, expeditionCanvas, iron);
   brokenSupply(root, "floor1-sanctuary-supply-b", 301, 114, -23, timber, expeditionCanvas, iron);
 
-  shape(root, "floor1-opening-foundation", "cylinder", stone, [30, .48, 30], [329, 7.94, 106]);
-  const openingCourt = shape(root, "floor1-opening-court", "cylinder", mossLight, [27.5, .09, 27.5], [329, 8.2, 106]);
-  fitOrganicGroundPatch(app.graphicsDevice, openingCourt, mossLight, [27.5, .09, 27.5], [329, 8.2, 106]);
+  const openingRadius = TOWER_FLOOR_ONE_VISUAL_FOOTPRINTS.openingCourt;
+  shape(root, "floor1-opening-foundation", "cylinder", stone, [openingRadius + .8, .48, openingRadius + .8], [329, 7.94, 106]);
+  const openingCourt = shape(root, "floor1-opening-court", "cylinder", mossLight,
+    [openingRadius, .09, openingRadius], [329, 8.2, 106]);
+  fitOrganicGroundPatch(app.graphicsDevice, openingCourt, mossLight, [openingRadius, .09, openingRadius], [329, 8.2, 106]);
   causeway(root, "floor1-arrival-causeway", [317, 106], [329, 106], 5, 7.2, stoneLight, earth);
   flagstoneTrail(root, "floor1-arrival-route", [314, 106], [336, 106], 13, 5.8, stoneLight, moss, 11);
 
@@ -346,19 +352,22 @@ export function createTowerFloorOneWorld(app: pc.Application, parent: pc.Entity)
   shape(root, "floor1-torn-expedition-banner", "box", expeditionCanvas, [1.8, 1.2, .07],
     [334.2, towerFloorOneGroundHeight(333, 113) + 1.15, 113], [12, 0, 18]);
 
+  const wardenRadius = TOWER_FLOOR_ONE_VISUAL_FOOTPRINTS.wardenCourt;
   for (const [name, x, z] of [["north", 350, 80], ["south", 350, 132]] as const) {
-    shape(root, `floor1-${name}-terrace-base`, "cylinder", stone, [28, 1.36, 28], [x, 8, z]);
-    shape(root, `floor1-${name}-terrace-rim`, "cylinder", stoneWarm, [26.6, .18, 26.6], [x, 8.61, z]);
-    const court = shape(root, `floor1-${name}-warden-court`, "cylinder", mossLight, [24.5, .09, 24.5], [x, 8.72, z]);
-    fitOrganicGroundPatch(app.graphicsDevice, court, mossLight, [24.5, .09, 24.5], [x, 8.72, z]);
+    shape(root, `floor1-${name}-terrace-base`, "cylinder", stone, [wardenRadius + .8, 1.36, wardenRadius + .8], [x, 8, z]);
+    shape(root, `floor1-${name}-terrace-rim`, "cylinder", stoneWarm, [wardenRadius, .18, wardenRadius], [x, 8.61, z]);
+    const court = shape(root, `floor1-${name}-warden-court`, "cylinder", mossLight,
+      [wardenRadius - .7, .09, wardenRadius - .7], [x, 8.72, z]);
+    fitOrganicGroundPatch(app.graphicsDevice, court, mossLight,
+      [wardenRadius - .7, .09, wardenRadius - .7], [x, 8.72, z]);
   }
   causeway(root, "floor1-north-causeway", [333, 101], [345, 86], 6, 5.4, stoneLight, earth, [2]);
   causeway(root, "floor1-south-causeway", [333, 111], [345, 126], 6, 5.4, stoneLight, earth, [3]);
   flagstoneTrail(root, "floor1-north-route", [330, 101], [350, 80], 13, 4.1, stoneLight, moss, 29);
   flagstoneTrail(root, "floor1-south-route", [330, 111], [350, 132], 13, 4.1, stoneLight, moss, 47);
-  brokenCourtEdge(root, "floor1-opening", 329, 106, 26.2, 25.2, 18, stoneLight, mossLight);
-  brokenCourtEdge(root, "floor1-north", 350, 80, 24.8, 23.8, 16, stoneLight, mossLight);
-  brokenCourtEdge(root, "floor1-south", 350, 132, 24.8, 23.8, 16, stoneLight, mossLight);
+  brokenCourtEdge(root, "floor1-opening", 329, 106, 14.4, 14, 14, stoneLight, mossLight);
+  brokenCourtEdge(root, "floor1-north", 350, 80, 14.8, 14.2, 14, stoneLight, mossLight);
+  brokenCourtEdge(root, "floor1-south", 350, 132, 14.8, 14.2, 14, stoneLight, mossLight);
 
   // North is a crushed military gate: red standards, massive rubble and roots.
   banner(root, "floor1-north-banner-a", 344, 8.68, 69.5, 0, northRed, timber);
@@ -451,12 +460,15 @@ export function createTowerFloorOneWorld(app: pc.Application, parent: pc.Entity)
   const barrier = shape(root, "floor1-crown-seal-barrier", "box", sealBarrier, [.18, 6.8, 7.6], [362.3, 12.85, 106]);
   northSeal.enabled = southSeal.enabled = northChain.enabled = southChain.enabled = barrier.enabled = true;
   progressNodes.set(root, { northSeal, southSeal, barrier, northChain, southChain });
-  shape(root, "floor1-boss-fortress", "cylinder", stone, [32, 3.1, 32], [375, 8, 106]);
-  shape(root, "floor1-boss-court-rim", "cylinder", gold, [30.5, .2, 30.5], [375, 9.47, 106]);
-  const bossCourt = shape(root, "floor1-boss-court", "cylinder", stoneLight, [29.2, .18, 29.2], [375, 9.57, 106]);
-  fitOrganicGroundPatch(app.graphicsDevice, bossCourt, stoneLight, [29.2, .18, 29.2], [375, 9.57, 106]);
-  shape(root, "floor1-boss-sigil", "cylinder", bossGlow, [16, .055, 16], [375, 9.68, 106]);
-  brokenCourtEdge(root, "floor1-crown-court", 375, 106, 28.1, 27.2, 20, stone, stoneWarm);
+  const crownRadius = TOWER_FLOOR_ONE_VISUAL_FOOTPRINTS.crownCourt;
+  shape(root, "floor1-boss-fortress", "cylinder", stone, [crownRadius + .8, 3.1, crownRadius + .8], [375, 8, 106]);
+  shape(root, "floor1-boss-court-rim", "cylinder", gold, [crownRadius, .2, crownRadius], [375, 9.47, 106]);
+  const bossCourt = shape(root, "floor1-boss-court", "cylinder", stoneLight,
+    [crownRadius - .7, .18, crownRadius - .7], [375, 9.57, 106]);
+  fitOrganicGroundPatch(app.graphicsDevice, bossCourt, stoneLight,
+    [crownRadius - .7, .18, crownRadius - .7], [375, 9.57, 106]);
+  shape(root, "floor1-boss-sigil", "cylinder", bossGlow, [12.8, .055, 12.8], [375, 9.68, 106]);
+  brokenCourtEdge(root, "floor1-crown-court", 375, 106, 18.7, 18, 18, stone, stoneWarm);
   for (let index = 0; index < 16; index++) {
     const angle = index / 16 * Math.PI * 2;
     const inner = 8.4 + (index % 2) * 1.6;
@@ -505,10 +517,14 @@ export function createTowerFloorOneWorld(app: pc.Application, parent: pc.Entity)
   const trees = [[318,75,1],[325,137,.9],[336,67,1.15],[340,145,.95],[357,68,.95],
     [357,144,1.05],[367,82,.85],[368,131,.95],[383,72,1.1],[383,140,1.05]] as const;
   for (const [x, z, scale] of trees) tree(root, x, z, scale, bark, leaf, leafDark);
-  for (let i = 0; i < 46; i++) {
+  // Vegetation is grouped around the margins instead of evenly noise-filling
+  // the playable courts. Clear silhouettes around gates and enemies matter
+  // more than raw prop count in a fast action floor.
+  for (let i = 0; i < 36; i++) {
     const x = 312 + (i * 17 % 72), z = 63 + (i * 29 % 86);
-    if (Math.abs(z - 106) < 6.5 || Math.hypot(x - 350, z - 80) < 10.5
-      || Math.hypot(x - 350, z - 132) < 10.5 || Math.hypot(x - 375, z - 106) < 15) continue;
+    if (Math.abs(z - 106) < 7.5 || Math.hypot(x - 306, z - 106) < 14
+      || Math.hypot(x - 329, z - 106) < 16 || Math.hypot(x - 350, z - 80) < 12
+      || Math.hypot(x - 350, z - 132) < 12 || Math.hypot(x - 375, z - 106) < 18) continue;
     const ground = towerFloorOneGroundHeight(x, z);
     shape(root, "floor1-fern", "cone", i % 3 ? leaf : mossLight,
       [.35 + i % 4 * .08, .8, .35 + i % 4 * .08], [x, ground + .4, z], i * 47);
