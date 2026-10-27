@@ -118,6 +118,7 @@ import { miningAvailability, miningReach, miningProgress, miningDurationMs, mini
 import type { MineralDepositStatus } from "@blockcraft/protocol";
 import { advanceMobMotion, advanceMobTurnLean, mobRootPositionChanged, mobRootYawChanged, trimMobSnapshots, visibleMobGaitSpeed } from "./mob-motion.js";
 import { createServerClock, sampleServerClock, enemyAttackPresentation } from "./enemy-timeline.js";
+import { thornBindingDeadline } from "./thorn-binding.js";
 import { bruteRecoveryPose, enemyAwarenessCue, enemyCombatCue, enemyCueLineClear, enemyShotGuideLength } from "./enemy-combat-cues.js";
 import { confirmPredictedDodges, removeRejectedDodge, replayPendingMovement, type PredictionFrame } from "./prediction-replay.js";
 import { advanceCameraOrbit, cameraOrbitOffset, dragCameraOrbit, initialCameraOrbit, pinchCameraOrbit } from "./camera-orbit.js";
@@ -7856,6 +7857,13 @@ const projectileRapidStyles = new Map<string, WeaponAttackReleased["rapidStyle"]
 const mobHazardVisuals = new Map<string, MobHazardVisual>();
 const thornBindingVisuals = new Map<string, ThornBindingVisual>();
 let localThornBoundUntil = 0;
+let localThornBindingId: string | null = null;
+let lastMovementGateCategory = "OPEN";
+const thornBindingNotice = document.createElement("div");
+thornBindingNotice.id = "thorn-binding-notice";
+thornBindingNotice.setAttribute("role", "status");
+thornBindingNotice.hidden = true;
+document.body.appendChild(thornBindingNotice);
 const depthsHazardVisuals = new Map<string, DepthsHazardVisual>();
 let powerAimVisual: PowerAimVisual | null = null;
 let specialAimVisual: PowerAimVisual | null = null;
@@ -9069,8 +9077,18 @@ function createMobProjectile(message: MobProjectileReleased): void {
 
 function updateThornBinding(message: ThornBindingUpdate): void {
   if (message.targetId === room?.sessionId) {
-    localThornBoundUntil = message.phase === "applied" || message.phase === "damaged" ? message.expiresAt : 0;
-    if (localThornBoundUntil > Date.now()) {
+    const active = message.phase === "applied" || message.phase === "damaged";
+    const now = performance.now();
+    if (active) {
+      localThornBoundUntil = thornBindingDeadline(message.expiresAt, now + serverClock.offset, now,
+        localThornBoundUntil, message.phase === "damaged" && localThornBindingId === message.bindingId);
+      localThornBindingId = message.bindingId;
+      logMovementEvent(`THORN ${message.phase} remaining=${Math.max(0, Math.round(localThornBoundUntil - now))}ms hp=${message.health}`);
+    } else if (localThornBindingId === message.bindingId) {
+      localThornBoundUntil = 0;
+      logMovementEvent(`THORN ${message.phase}`);
+    }
+    if (localThornBoundUntil > now) {
       smoothedMovement = { x: 0, z: 0 };
       unsentMovementSteps.length = 0;
       pendingPredictionFrames.length = 0;
@@ -14473,6 +14491,7 @@ function updateTabletHudCombatState(now: number): void {
 
 interface StopTraceFrame {
   at: number;
+  movementGate: string;
   dtMs: number;
   rawX: number;
   rawZ: number;
@@ -14590,7 +14609,7 @@ function formatStopTrace(trace: StopTrace, kind: "STOP" | "SNAP" = "STOP"): stri
   const lines = [
     `${kind} TRACE #${trace.id} frames=${trace.frames.length} pre=${kind === "SNAP" ? 60 : STOP_TRACE_HISTORY_FRAMES} post=${kind === "SNAP" ? 900 : STOP_TRACE_AFTER_RELEASE_MS}ms`,
     `viewport=${canvas.width}x${canvas.height} dpr=${window.devicePixelRatio.toFixed(2)} release_at=${trace.releasedAt.toFixed(1)}ms`,
-    "t_ms dt raw_x raw_z desired_x desired_z applied_x applied_z local_x local_y local_z render_y server_x server_y server_z screen_x screen_y ds_x ds_y camera_x camera_y camera_z focus_x focus_y focus_z anim_weight anim_phase body_y arm_r leg_l reconcile rate vertical visual grounded stepped hit_y sent ack lag stop_wait net_age_ms ack_age_ms requested_travel collision_travel net_visual_x net_visual_z",
+    "t_ms dt raw_x raw_z desired_x desired_z applied_x applied_z local_x local_y local_z render_y server_x server_y server_z screen_x screen_y ds_x ds_y camera_x camera_y camera_z focus_x focus_y focus_z anim_weight anim_phase body_y arm_r leg_l reconcile rate vertical visual grounded stepped hit_y sent ack lag stop_wait net_age_ms ack_age_ms requested_travel collision_travel net_visual_x net_visual_z gate",
   ];
   let previous: StopTraceFrame | undefined;
   for (const frame of trace.frames) {
@@ -14612,6 +14631,7 @@ function formatStopTrace(trace: StopTrace, kind: "STOP" | "SNAP" = "STOP"): stri
       Number(frame.grounded), Number(frame.stepped), Number(frame.hitVertical),
       frame.sentSequence, frame.acknowledgedSequence, Math.max(0, frame.sentSequence - frame.acknowledgedSequence), frame.pendingStopSequence ?? "-",
       fixed(frame.networkAgeMs, 0), fixed(frame.acknowledgementAgeMs, 0), fixed(frame.requestedTravel), fixed(frame.collisionTravel), fixed(frame.netVisualX), fixed(frame.netVisualZ),
+      frame.movementGate,
     ].join(" "));
     previous = frame;
   }
@@ -15070,7 +15090,7 @@ function requestDodge(): void {
   if (!defeatScreen.hidden) return;
   if (reportedProtectedDialog === true) return;
   if (!room || !worldReady) return;
-  if (Date.now() < localThornBoundUntil) {
+  if (performance.now() < localThornBoundUntil) {
     status.textContent = "Rooted by vines Â· attack to cut free.";
     return;
   }
@@ -16917,7 +16937,19 @@ app.on("update", (dt: number) => {
   const desiredMovement = quantizeMovementToEightDirections(
     cameraRelativeMovement(strafe, forward, cameraOffset.x, cameraOffset.z),
   );
-  smoothedMovement = worldReady && modalMovementAllowed && Date.now() >= localThornBoundUntil
+  const thornRemainingMs = Math.max(0, localThornBoundUntil - performance.now());
+  thornBindingNotice.hidden = thornRemainingMs <= 0;
+  if (thornRemainingMs > 0) thornBindingNotice.textContent =
+    `VINES BIND YOUR FEET · ${(thornRemainingMs / 1000).toFixed(1)}s · ${window.matchMedia("(pointer: coarse)").matches ? "Tap Attack" : "Click or press J"} to cut free`;
+  const movementGateReason = !worldReady ? "WORLD_NOT_READY" : visibleMovementPanels.length ? `PANEL:${visibleMovementPanels.join(",")}`
+    : playerInteractionUI.isOpen() ? "PLAYER_INTERACTION" : presentedPopupId ? `POPUP:${presentedPopupId}`
+      : protectedDialogOpen ? "DIALOG" : thornRemainingMs > 0 ? `THORN:${Math.ceil(thornRemainingMs)}ms` : "OPEN";
+  const movementGateCategory = movementGateReason.split(":")[0]!;
+  if (movementGateCategory !== lastMovementGateCategory) {
+    logMovementEvent(`MOVEMENT GATE ${lastMovementGateCategory} -> ${movementGateReason}`);
+    lastMovementGateCategory = movementGateCategory;
+  }
+  smoothedMovement = worldReady && modalMovementAllowed && thornRemainingMs <= 0
     ? approachMovement(smoothedMovement, desiredMovement, frameTime) : { x: 0, z: 0 };
   const powerFacingActive = powerAimActive || (localPowerStartedAt !== null
     && performance.now() - localPowerStartedAt < powerDuration(localActivePower)
@@ -18080,6 +18112,7 @@ app.on("update", (dt: number) => {
   const leftLegPitch = localPlayerRig.leftLeg.getLocalEulerAngles().x;
   const traceFrame: StopTraceFrame = {
     at: now,
+    movementGate: movementGateReason,
     dtMs: dt * 1000,
     rawX: strafe,
     rawZ: forward,
@@ -18285,9 +18318,7 @@ app.on("update", (dt: number) => {
       `keys       ${keysDown}   raw ${strafe.toFixed(2)}, ${forward.toFixed(2)}`,
       `key event  ${lastKeyboardEvent}`,
       `focus      ${document.activeElement instanceof HTMLElement ? document.activeElement.tagName : "none"} dialog=${protectedDialogPresented()} popup=${popupQueue.active() ?? "none"}`,
-      `gate       ${!worldReady ? "WORLD_NOT_READY" : visibleMovementPanels.length ? `PANEL:${visibleMovementPanels.join(",")}`
-        : playerInteractionUI.isOpen() ? "PLAYER_INTERACTION" : presentedPopupId ? `POPUP:${presentedPopupId}`
-        : protectedDialogOpen ? "DIALOG" : Date.now() < localThornBoundUntil ? `THORN:${localThornBoundUntil - Date.now()}ms` : "OPEN"}`,
+      `gate       ${movementGateReason}`,
       `desired    ${movementVectorLabel(desiredMovement)}`,
       `applied    ${movementVectorLabel(smoothedMovement)}`,
       `yaw        ${localFacingYaw.toFixed(1)} â†’ ${desiredFacingYaw.toFixed(1)}`,

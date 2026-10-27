@@ -1025,6 +1025,25 @@ body:has(#combat-hud-shell[data-loadout-open="true"]) #player-trade-prompt { dis
   transform: translate(-50%, 6px) scale(.9);
 }
 #combat-feedback.show { animation: combat-feedback 620ms ease-out; }
+#thorn-binding-notice {
+  position: fixed;
+  left: 50%;
+  top: 30%;
+  transform: translateX(-50%);
+  z-index: 26;
+  width: max-content;
+  max-width: calc(100vw - 36px);
+  box-sizing: border-box;
+  padding: 12px 18px;
+  border: 2px solid #bbd66c;
+  border-radius: 10px;
+  background: rgb(21 35 12 / 94%);
+  color: #f0ffbc;
+  font-size: clamp(.85rem, 1.8vw, 1.1rem);
+  font-weight: 800;
+  text-align: center;
+  pointer-events: none;
+}
 #tavern-dialogue {
   position: fixed;
   z-index: 22;
