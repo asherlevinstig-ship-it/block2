@@ -10,7 +10,7 @@ import {
 
 describe("Floor 1 authored asset kit", () => {
   it("uses a compact local CC0 library rather than runtime third-party requests", () => {
-    expect(Object.keys(TOWER_FLOOR_ONE_ASSET_FILES)).toHaveLength(21);
+    expect(Object.keys(TOWER_FLOOR_ONE_ASSET_FILES)).toHaveLength(36);
     expect(Object.values(TOWER_FLOOR_ONE_ASSET_FILES)
       .every(url => url.startsWith(`${KAYKIT_DUNGEON_BASE_URL}/`) && url.endsWith(".glb"))).toBe(true);
   });
@@ -26,17 +26,23 @@ describe("Floor 1 authored asset kit", () => {
     expect(TOWER_FLOOR_ONE_ASSET_SPIKE.filter(asset => asset.id === "archedWall")).toHaveLength(3);
     expect(TOWER_FLOOR_ONE_ASSET_SPIKE.some(asset => asset.id === "crates")).toBe(true);
     expect(TOWER_FLOOR_ONE_ASSET_SPIKE.some(asset => asset.id === "torch")).toBe(true);
-    expect(Math.max(...TOWER_FLOOR_ONE_ASSET_SPIKE.map(asset => asset.position[0]))).toBeLessThanOrEqual(356);
+    expect(TOWER_FLOOR_ONE_ASSET_SPIKE.some(asset => asset.id === "stairsWide")).toBe(true);
+    expect(TOWER_FLOOR_ONE_ASSET_SPIKE.filter(asset => asset.name.startsWith("arrival-floor-"))).toHaveLength(7);
+    expect(TOWER_FLOOR_ONE_ASSET_SPIKE.filter(asset => asset.id === "trunkA" || asset.id === "trunkB" || asset.id === "trunkC")).toHaveLength(4);
+    expect(Math.max(...TOWER_FLOOR_ONE_ASSET_SPIKE.map(asset => asset.position[0]))).toBeLessThanOrEqual(359);
   });
 
   it("keeps the boss-court architecture deferred and its combat approach open", () => {
-    expect(TOWER_FLOOR_ONE_FORTRESS_ASSETS).toHaveLength(26);
+    expect(TOWER_FLOOR_ONE_FORTRESS_ASSETS).toHaveLength(54);
     expect(TOWER_FLOOR_ONE_FORTRESS_ASSETS.some(asset => asset.id === "fortressGate")).toBe(true);
     expect(TOWER_FLOOR_ONE_FORTRESS_ASSETS.some(asset => asset.id === "throneChair")).toBe(true);
     expect(TOWER_FLOOR_ONE_FORTRESS_ASSETS.some(asset => asset.id === "battlement")).toBe(true);
+    expect(TOWER_FLOOR_ONE_FORTRESS_ASSETS.filter(asset => asset.name.startsWith("crown-court-floor-"))).toHaveLength(16);
+    expect(TOWER_FLOOR_ONE_FORTRESS_ASSETS.filter(asset => asset.id === "stoneColumn")).toHaveLength(8);
     expect(TOWER_FLOOR_ONE_FORTRESS_ASSETS.every(asset => asset.position[0] >= 361)).toBe(true);
-    expect(TOWER_FLOOR_ONE_FORTRESS_ASSETS.filter(asset => Math.abs(asset.position[2] - 106) < 4))
-      .toHaveLength(3);
+    const centralPlacements = TOWER_FLOOR_ONE_FORTRESS_ASSETS.filter(asset => Math.abs(asset.position[2] - 106) < 4);
+    expect(centralPlacements.filter(asset => asset.id.startsWith("floorTile"))).toHaveLength(8);
+    expect(centralPlacements.filter(asset => !asset.id.startsWith("floorTile"))).toHaveLength(5);
   });
 
   it("joins the gate shell and throne wall without visible metre-wide seams", () => {

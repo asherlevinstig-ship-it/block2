@@ -24,6 +24,21 @@ export const TOWER_FLOOR_ONE_ASSET_FILES = {
   royalArms: `${KAYKIT_DUNGEON_BASE_URL}/sword_shield_gold.gltf.glb`,
   royalBanner: `${KAYKIT_DUNGEON_BASE_URL}/banner_triple_yellow.gltf.glb`,
   royalChest: `${KAYKIT_DUNGEON_BASE_URL}/chest_gold.glb`,
+  floorTileLarge: `${KAYKIT_DUNGEON_BASE_URL}/floor_tile_large.gltf.glb`,
+  floorTileBrokenA: `${KAYKIT_DUNGEON_BASE_URL}/floor_tile_small_broken_A.gltf.glb`,
+  floorTileBrokenB: `${KAYKIT_DUNGEON_BASE_URL}/floor_tile_small_broken_B.gltf.glb`,
+  floorTileWeedsA: `${KAYKIT_DUNGEON_BASE_URL}/floor_tile_small_weeds_A.gltf.glb`,
+  floorTileWeedsB: `${KAYKIT_DUNGEON_BASE_URL}/floor_tile_small_weeds_B.gltf.glb`,
+  stairsWide: `${KAYKIT_DUNGEON_BASE_URL}/stairs_wide.gltf.glb`,
+  stoneColumn: `${KAYKIT_DUNGEON_BASE_URL}/column.gltf.glb`,
+  halfWall: `${KAYKIT_DUNGEON_BASE_URL}/wall_half.gltf.glb`,
+  wallEndcap: `${KAYKIT_DUNGEON_BASE_URL}/wall_endcap.gltf.glb`,
+  wallCorner: `${KAYKIT_DUNGEON_BASE_URL}/wall_corner.gltf.glb`,
+  wallScaffold: `${KAYKIT_DUNGEON_BASE_URL}/wall_scaffold.gltf.glb`,
+  brokenRoyalArms: `${KAYKIT_DUNGEON_BASE_URL}/sword_shield_broken.gltf.glb`,
+  trunkA: `${KAYKIT_DUNGEON_BASE_URL}/trunk_large_A.gltf.glb`,
+  trunkB: `${KAYKIT_DUNGEON_BASE_URL}/trunk_large_B.gltf.glb`,
+  trunkC: `${KAYKIT_DUNGEON_BASE_URL}/trunk_large_C.gltf.glb`,
 } as const;
 
 export type TowerFloorOneAssetId = keyof typeof TOWER_FLOOR_ONE_ASSET_FILES;
@@ -68,6 +83,22 @@ export const TOWER_FLOOR_ONE_ASSET_SPIKE: readonly TowerFloorOneAssetPlacement[]
   { id: "redBanner", name: "north-warden-banner-east", position: [356, 8.68, 69.5], yaw: 180, scale: 1.45 },
   { id: "torch", name: "opening-torch-north", position: [320.3, 10.2, 102.65], yaw: 90, scale: 1.42 },
   { id: "torch", name: "opening-torch-south", position: [320.3, 10.2, 109.35], yaw: 90, scale: 1.42 },
+  ...Array.from({ length: 7 }, (_, index): TowerFloorOneAssetPlacement => ({
+    id: index === 2 ? "floorTileBrokenA" : index === 5 ? "floorTileWeedsA" : "floorTileLarge",
+    name: `arrival-floor-${index + 1}`,
+    position: [316.4 + index * 3.05, 9.04 + (index > 0 ? -.82 : 0), 106 + (index % 2 ? .18 : -.14)],
+    yaw: index % 3 === 1 ? 90 : 0,
+    scale: 1.58,
+  })),
+  { id: "stairsWide", name: "sanctuary-stairs", position: [318.8, 8.02, 106], yaw: 90, scale: 1.9 },
+  { id: "wallCorner", name: "opening-ruin-corner-north", position: [323.4, 8.08, 94.4], yaw: 173, scale: 1.75 },
+  { id: "wallEndcap", name: "opening-ruin-end-south", position: [323.5, 8.08, 118.1], yaw: 7, scale: 1.75 },
+  { id: "wallScaffold", name: "failed-expedition-scaffold", position: [334.2, 8.12, 115.5], yaw: 84, scale: 1.55 },
+  { id: "brokenRoyalArms", name: "fallen-crown-arms", position: [333.2, 8.24, 101.7], yaw: 17, scale: 1.2 },
+  { id: "trunkA", name: "north-court-trunk-west", position: [340.7, 8.78, 79], yaw: 18, scale: 1.35 },
+  { id: "trunkB", name: "north-court-trunk-east", position: [358.7, 8.78, 84], yaw: -22, scale: 1.45 },
+  { id: "trunkC", name: "south-court-trunk-west", position: [341.5, 8.78, 132], yaw: 31, scale: 1.42 },
+  { id: "trunkA", name: "south-court-trunk-east", position: [359, 8.78, 127.5], yaw: -38, scale: 1.3 },
 ] as const;
 
 /** Eastern-court models are deferred until the player has crossed the opening
@@ -103,6 +134,30 @@ export const TOWER_FLOOR_ONE_FORTRESS_ASSETS: readonly TowerFloorOneAssetPlaceme
   { id: "royalBanner", name: "royal-banner-north", position: [385.8, 12.8, 99.1], yaw: 90, scale: 1.45 },
   { id: "royalBanner", name: "royal-banner-south", position: [385.8, 12.8, 112.9], yaw: 90, scale: 1.45 },
   { id: "royalChest", name: "crownkeeper-cache", position: [387, 9.58, 110.2], yaw: -90, scale: 1.25 },
+  ...Array.from({ length: 16 }, (_, index): TowerFloorOneAssetPlacement => {
+    const column = index % 4, row = Math.floor(index / 4);
+    return {
+      id: index === 1 || index === 14 ? "floorTileBrokenB" : index === 4 || index === 11 ? "floorTileWeedsB" : "floorTileLarge",
+      name: `crown-court-floor-${index + 1}`,
+      position: [366 + column * 6, 9.72, 97 + row * 6],
+      yaw: (index % 3) * 90,
+      scale: 2.85,
+    };
+  }),
+  ...Array.from({ length: 8 }, (_, index): TowerFloorOneAssetPlacement => {
+    const angle = index / 8 * Math.PI * 2;
+    return {
+      id: "stoneColumn",
+      name: `crown-court-column-${index + 1}`,
+      position: [375 + Math.cos(angle) * 13, 9.6, 106 + Math.sin(angle) * 13],
+      yaw: 45 - index * 45,
+      scale: 2.15,
+    };
+  }),
+  { id: "halfWall", name: "throne-dais-north", position: [383, 9.6, 101.2], yaw: 90, scale: 1.65 },
+  { id: "halfWall", name: "throne-dais-south", position: [383, 9.6, 110.8], yaw: 90, scale: 1.65 },
+  { id: "wallScaffold", name: "crown-wall-scaffold", position: [380.5, 9.6, 116], yaw: 90, scale: 1.65 },
+  { id: "brokenRoyalArms", name: "broken-royal-arms", position: [381.5, 9.72, 102], yaw: -42, scale: 1.5 },
 ] as const;
 
 function towerAssetUrl(id: TowerFloorOneAssetId): string {
@@ -190,6 +245,13 @@ export async function populateTowerFloorOneAssetKit(
       || name === "floor1-throne-crown");
   if (loaded.has("royalBanner"))
     hideDirectChildren(parent, name => name.startsWith("floor1-crown-banner"));
+  const names = new Set(placements.map(placement => placement.name));
+  if (loaded.has("floorTileLarge") && names.has("arrival-floor-1"))
+    hideDirectChildren(parent, name => name === "floor1-arrival-route-flagstone");
+  if (loaded.has("stairsWide") && names.has("sanctuary-stairs"))
+    hideDirectChildren(parent, name => name === "floor1-sanctuary-step");
+  if (loaded.has("stoneColumn") && names.has("crown-court-column-1"))
+    hideDirectChildren(parent, name => name === "floor1-crown-pillar");
 
   console.info(`[tower-assets] ${entities.length} authored placements ready; ${failedIds.size} model types kept their procedural fallback.`);
   return { loadedIds: new Set(loaded.keys()), failedIds, entities };
