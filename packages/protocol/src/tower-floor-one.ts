@@ -168,6 +168,7 @@ export const TOWER_FLOOR_ONE_CROWNKEEPER_COMBAT = {
   health: 52,
   phaseTwoAt: .6,
   finalPhaseAt: .25,
+  resetDelayMs: 8_000,
 } as const;
 
 /** The Crownkeeper is deliberately learnable rather than random. Phase one

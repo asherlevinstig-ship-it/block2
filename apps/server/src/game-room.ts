@@ -581,6 +581,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly mobAwareness = new Map<string, MobAwareness>();
   private readonly areaLeaderPhases = new Map<string, AreaLeaderPhase>();
   private readonly miniBossEngagedAt = new Map<string, number>();
+  private readonly crownkeeperDisengagedAt = new Map<string, number>();
   private readonly miniBossOrbitPressure = new Map<string, OrbitPressureState>();
   private readonly miniBossArenaCover = new Map<string, Map<string, ActiveMiniBossCover>>();
   private readonly selectedRealmHunts = new Map<string, string>();
@@ -3428,6 +3429,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         this.areaLeaderPhases.delete(mobId);
         this.miniBossEngagedAt.delete(mobId);
         this.miniBossOrbitPressure.delete(mobId);
+        if (mobId === TOWER_FLOOR_ONE_BOSS_ID) this.crownkeeperDisengagedAt.delete(mobId);
       }
       if (rapidSpawn && (TOWER_FLOOR_ONE_WARDENS as readonly string[]).includes(mobId)
         && TOWER_FLOOR_ONE_WARDENS.every(id => this.state.mobs.get(id)?.alive === false)
@@ -3614,6 +3616,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.areaLeaderPhases.delete(mobId);
       this.miniBossEngagedAt.delete(mobId);
       this.miniBossOrbitPressure.delete(mobId);
+      if (mobId === TOWER_FLOOR_ONE_BOSS_ID) this.crownkeeperDisengagedAt.delete(mobId);
     }
     if (isRealmEventId(mobId)) this.realmBossPhases.delete(mobId);
     this.openAreaLeaderAfterFollowerDefeat(mobId, now);
@@ -3918,6 +3921,68 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.mobAwareness.set(followerId, followerAwareness);
       follower.awarenessState = "engaged";
       follower.alertUntil = now + 900;
+    }
+  }
+
+  private resetCrownkeeperEncounter(boss: MobState, now: number): void {
+    const home = this.mobHomes.get(TOWER_FLOOR_ONE_BOSS_ID);
+    if (!home) return;
+    this.restoreMiniBossArena(TOWER_FLOOR_ONE_BOSS_ID);
+    const armourBonus = this.bruteLeaderArmourBonus.get(TOWER_FLOOR_ONE_BOSS_ID) ?? 0;
+    boss.armor = Math.max(0, boss.armor - armourBonus);
+    this.bruteLeaderArmourBonus.delete(TOWER_FLOOR_ONE_BOSS_ID);
+    Object.assign(boss, home, {
+      health: boss.maxHealth,
+      alive: true,
+      enraged: false,
+      combatState: "idle",
+      stateUntil: 0,
+      targetId: "",
+      awarenessState: "patrol",
+      alertUntil: 0,
+      aimCommitted: false,
+      actionSequence: 0,
+      attackPattern: towerFloorOneCrownkeeperPattern(0, 1),
+    });
+    this.clearMobAttackTimeline(boss);
+    this.pendingMobMelee.delete(TOWER_FLOOR_ONE_BOSS_ID);
+    this.mobCommittedAim.delete(TOWER_FLOOR_ONE_BOSS_ID);
+    this.championCharges.delete(TOWER_FLOOR_ONE_BOSS_ID);
+    this.mobAwareness.delete(TOWER_FLOOR_ONE_BOSS_ID);
+    this.mobReturning.delete(TOWER_FLOOR_ONE_BOSS_ID);
+    this.mobNavigation.set(TOWER_FLOOR_ONE_BOSS_ID, createMobNavigationState());
+    this.areaLeaderPhases.set(TOWER_FLOOR_ONE_BOSS_ID, 1);
+    this.miniBossEngagedAt.delete(TOWER_FLOOR_ONE_BOSS_ID);
+    this.miniBossOrbitPressure.delete(TOWER_FLOOR_ONE_BOSS_ID);
+    this.crownkeeperDisengagedAt.delete(TOWER_FLOOR_ONE_BOSS_ID);
+    this.combatContributions.clear(TOWER_FLOOR_ONE_BOSS_ID);
+    for (const followerId of AREA_LEADER_FOLLOWERS[TOWER_FLOOR_ONE_BOSS_ID] ?? []) {
+      const follower = this.state.mobs.get(followerId), followerHome = this.mobHomes.get(followerId);
+      if (!follower || !followerHome) continue;
+      Object.assign(follower, followerHome, {
+        health: follower.maxHealth,
+        alive: true,
+        respawnAt: 0,
+        materializeUntil: now + 900,
+        combatState: "recover",
+        stateUntil: now + 900,
+        targetId: "",
+        awarenessState: "patrol",
+        alertUntil: 0,
+        aimCommitted: false,
+      });
+      this.clearMobAttackTimeline(follower);
+      this.pendingMobMelee.delete(followerId);
+      this.mobAwareness.delete(followerId);
+      this.mobReturning.delete(followerId);
+      this.mobNavigation.set(followerId, createMobNavigationState());
+      this.combatContributions.clear(followerId);
+    }
+    this.syncBruteLeaderArmour(TOWER_FLOOR_ONE_BOSS_ID, boss);
+    for (const client of this.clients) {
+      const player = this.state.players.get(client.sessionId);
+      if (player && Math.abs(player.y - home.y) <= 3 && Math.hypot(player.x - home.x, player.z - home.z) <= 30)
+        client.send("chat:notice", "CROWNKEEPER RESET · the court reforms after the party withdraws.");
     }
   }
 
@@ -9218,6 +9283,21 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           mob.awarenessState = "search";
           continue;
         }
+        if (mobId === TOWER_FLOOR_ONE_BOSS_ID && this.miniBossEngagedAt.has(mobId)) {
+          const partyStillInCourt = [...this.state.players.values()].some(player => player.health > 0
+            && towerFloorOneEncounterAllows(mobId, player));
+          if (partyStillInCourt) {
+            this.crownkeeperDisengagedAt.delete(mobId);
+            mob.awarenessState = "search";
+            continue;
+          }
+          const disengagedAt = this.crownkeeperDisengagedAt.get(mobId) ?? now;
+          this.crownkeeperDisengagedAt.set(mobId, disengagedAt);
+          if (now - disengagedAt >= TOWER_FLOOR_ONE_CROWNKEEPER_COMBAT.resetDelayMs)
+            this.resetCrownkeeperEncounter(mob, now);
+          else mob.awarenessState = "return";
+          continue;
+        }
         if (mob.isMiniBoss) {
           this.restoreMiniBossArena(mobId);
           this.miniBossEngagedAt.delete(mobId);
@@ -9253,6 +9333,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         continue;
       }
       if (mob.isMiniBoss && target.visible) {
+        if (mobId === TOWER_FLOOR_ONE_BOSS_ID) this.crownkeeperDisengagedAt.delete(mobId);
         this.activateMiniBossArena(mobId, mob);
         const engagedAt = this.miniBossEngagedAt.get(mobId) ?? now;
         this.miniBossEngagedAt.set(mobId, engagedAt);

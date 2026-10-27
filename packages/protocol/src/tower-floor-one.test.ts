@@ -74,6 +74,7 @@ describe("tower floor one manifest", () => {
 
   it("gives the Crownkeeper a tougher fixed three-phase finale", () => {
     expect(TOWER_FLOOR_ONE_CROWNKEEPER_COMBAT.health).toBeGreaterThan(34);
+    expect(TOWER_FLOOR_ONE_CROWNKEEPER_COMBAT.resetDelayMs).toBe(8_000);
     expect([0, 1, 2, 3].map(sequence => towerFloorOneCrownkeeperPattern(sequence, 1)))
       .toEqual(["smash", "slam", "smash", "rocks"]);
     expect([0, 1, 2, 3].map(sequence => towerFloorOneCrownkeeperPattern(sequence, 2)))

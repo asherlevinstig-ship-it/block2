@@ -137,6 +137,32 @@ describe("private Calling practice", () => {
     expect(boss.rewardMultiplier).toBe(3);
   });
 
+  it("fully reforms the Crownkeeper court after a withdrawn encounter", () => {
+    const { room, internal } = fixture();
+    internal.rapidPractice = true;
+    const boss = new MobState();
+    Object.assign(boss, { alive: true, archetype: "stone_brute" });
+    internal.configureRapidWorldMob("floor1-crownkeeper", boss);
+    Object.assign(boss, { health: 7, armor: 3, combatState: "windup", targetId: "trainee", enraged: true });
+    room.state.mobs.set("floor1-crownkeeper", boss);
+    internal.mobHomes.set("floor1-crownkeeper", { x: 375, y: 9.55, z: 106 });
+    internal.bruteLeaderArmourBonus.set("floor1-crownkeeper", 2);
+    internal.areaLeaderPhases.set("floor1-crownkeeper", 3);
+    internal.miniBossEngagedAt.set("floor1-crownkeeper", 1_000);
+    for (const [id, z] of [["floor1-court-briar-a", 98], ["floor1-court-briar-b", 114]] as const) {
+      const follower = new MobState();
+      Object.assign(follower, { alive: false, health: 0, maxHealth: 10, archetype: "briar_crawler", combatState: "idle" });
+      room.state.mobs.set(id, follower);
+      internal.mobHomes.set(id, { x: 361, y: 9, z });
+    }
+    internal.resetCrownkeeperEncounter(boss, 20_000);
+    expect(boss).toMatchObject({ health: 52, maxHealth: 52, armor: 3, combatState: "idle",
+      targetId: "", enraged: false, attackPattern: "smash", x: 375, z: 106 });
+    expect(internal.areaLeaderPhases.get("floor1-crownkeeper")).toBe(1);
+    for (const id of ["floor1-court-briar-a", "floor1-court-briar-b"])
+      expect(room.state.mobs.get(id)).toMatchObject({ alive: true, health: 10, combatState: "recover", materializeUntil: 20_900 });
+  });
+
   it("applies quick upgrades without saving or opening inventory", () => {
     const { internal, player, client } = fixture();
     internal.rapidPractice = true;
