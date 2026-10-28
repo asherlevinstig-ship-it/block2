@@ -217,18 +217,33 @@ function sealChain(parent: pc.Entity, name: string, from: readonly [number, numb
 }
 
 const progressNodes = new WeakMap<pc.Entity, { northSeal: pc.Entity; southSeal: pc.Entity;
-  barrier: pc.Entity; northChain: pc.Entity; southChain: pc.Entity }>();
+  barrier: pc.Entity; northChain: pc.Entity; southChain: pc.Entity;
+  northFade: number; southFade: number; barrierFade: number; initialized: boolean }>();
 
 /** Synchronises the physical seals with authoritative Warden state. Missing
  * streamed mobs are treated as alive by the caller, avoiding a false unlock. */
-export function updateTowerFloorOneProgress(root: pc.Entity, northAlive: boolean, southAlive: boolean): void {
+export function updateTowerFloorOneProgress(root: pc.Entity, northAlive: boolean, southAlive: boolean, dt = 1): void {
   const nodes = progressNodes.get(root);
   if (!nodes) return;
-  nodes.northSeal.enabled = northAlive;
-  nodes.southSeal.enabled = southAlive;
-  nodes.northChain.enabled = northAlive;
-  nodes.southChain.enabled = southAlive;
-  nodes.barrier.enabled = northAlive || southAlive;
+  const fade = (previous: number, alive: boolean) => alive ? 1
+    : nodes.initialized ? Math.max(0, previous - Math.max(0, dt) / .9) : 0;
+  nodes.northFade = fade(nodes.northFade, northAlive);
+  nodes.southFade = fade(nodes.southFade, southAlive);
+  nodes.barrierFade = fade(nodes.barrierFade, northAlive || southAlive);
+  for (const [seal, chain, amount] of [[nodes.northSeal, nodes.northChain, nodes.northFade],
+    [nodes.southSeal, nodes.southChain, nodes.southFade]] as const) {
+    seal.enabled = chain.enabled = amount > 0;
+    seal.setLocalScale(1.25 * amount, 1.25 * amount, .48 * amount);
+    chain.setLocalScale(amount, amount, amount);
+  }
+  nodes.barrier.enabled = nodes.barrierFade > 0;
+  const material = nodes.barrier.render!.material as pc.StandardMaterial;
+  const opacity = .2 * nodes.barrierFade;
+  if (material.opacity !== opacity) {
+    material.opacity = opacity;
+    material.update();
+  }
+  nodes.initialized = true;
 }
 
 /** Structural art pass for Floor 1. Walkable height is shared with the server;
@@ -447,7 +462,8 @@ export function createTowerFloorOneWorld(app: pc.Application, parent: pc.Entity)
   const southChain = sealChain(root, "floor1-south-seal-chain", [361.35, 14.9, 108.3], [361.55, 10.2, 111.8], southSealGlow);
   const barrier = shape(root, "floor1-crown-seal-barrier", "box", sealBarrier, [.18, 6.8, 7.6], [362.3, 12.85, 106]);
   northSeal.enabled = southSeal.enabled = northChain.enabled = southChain.enabled = barrier.enabled = true;
-  progressNodes.set(root, { northSeal, southSeal, barrier, northChain, southChain });
+  progressNodes.set(root, { northSeal, southSeal, barrier, northChain, southChain,
+    northFade: 1, southFade: 1, barrierFade: 1, initialized: false });
   const crownRadius = TOWER_FLOOR_ONE_VISUAL_FOOTPRINTS.crownCourt;
   shape(root, "floor1-boss-fortress", "cylinder", stone, [crownRadius + .8, 3.1, crownRadius + .8], [375, 8, 106]);
   shape(root, "floor1-boss-court-rim", "cylinder", gold, [crownRadius, .2, crownRadius], [375, 9.47, 106]);

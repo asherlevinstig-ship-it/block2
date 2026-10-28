@@ -128,6 +128,7 @@ import { advanceCameraFollow, advanceCameraHeight, advanceCameraPosition } from 
 import { populateTownAssetKit, readyTownFallbacks, SPEED_LAB_TOWN_ASSETS, type TownFallbackFamily } from "./town-asset-kit.js";
 import { createTownPortalLandmarks } from "./town-portal-landmarks.js";
 import { createTowerFloorOneWorld, updateTowerFloorOneProgress } from "./tower-floor-one-world-v2.js";
+import { crownGateStatus } from "./crown-gate.js";
 import { requestTowerFloorOneFortressAssets } from "./tower-floor-one-asset-kit.js";
 import { towerFloorOneAtmosphere } from "./tower-floor-one-atmosphere.js";
 import { portalInteractionPrompt, portalLabel, portalWorldLabel } from "./portal-labels.js";
@@ -2297,10 +2298,17 @@ const saveFastWorldNavigation = (): void => {
   })); } catch { /* Private browsing can disable storage. */ }
 };
 
-const showFastWorldReveal = (title: string, detail: string, kind: "region" | "landmark" | "arrival" = "region"): void => {
+const crownGateLabel = document.createElement("div");
+crownGateLabel.id = "crown-gate-label";
+crownGateLabel.hidden = true;
+crownGateLabel.innerHTML = "<strong></strong><span></span>";
+document.body.append(crownGateLabel);
+let previousCrownGateRemaining: number | null = null;
+
+const showFastWorldReveal = (title: string, detail: string, kind: "region" | "landmark" | "arrival" | "gate" = "region"): void => {
   if (!fastWorldRegionReveal) return;
   fastWorldRegionReveal.dataset.kind = kind;
-  fastWorldRegionReveal.innerHTML = `<small>${kind === "landmark" ? "LANDMARK DISCOVERED" : kind === "arrival" ? "DESTINATION REACHED" : "REGION ENTERED"}</small><strong>${title}</strong><span>${detail}</span>`;
+  fastWorldRegionReveal.innerHTML = `<small>${kind === "gate" ? "SEALS BROKEN" : kind === "landmark" ? "LANDMARK DISCOVERED" : kind === "arrival" ? "DESTINATION REACHED" : "REGION ENTERED"}</small><strong>${title}</strong><span>${detail}</span>`;
   fastWorldRegionReveal.hidden = false;
   window.clearTimeout(fastWorldRegionRevealTimer);
   fastWorldRegionRevealTimer = window.setTimeout(() => { if (fastWorldRegionReveal) fastWorldRegionReveal.hidden = true; }, 2_800);
@@ -16817,13 +16825,34 @@ app.on("postrender", () => {
 app.on("update", (dt: number) => {
   const customUpdateStartedAt = performance.now();
   portalTransition.ready(worldReady && pendingPortalDestination === null);
+  crownGateLabel.hidden = true;
   if (fastWorldRequested) {
     const townTime = customUpdateStartedAt * .001;
     const playerPosition = localPlayer.getPosition();
     if (towerFloorOneWorld && isInsideTowerFloorOne(playerPosition.x, playerPosition.z)) {
       const northAlive = mobVisuals.get(TOWER_FLOOR_ONE_WARDENS[0])?.state.alive !== false;
       const southAlive = mobVisuals.get(TOWER_FLOOR_ONE_WARDENS[1])?.state.alive !== false;
-      updateTowerFloorOneProgress(towerFloorOneWorld, northAlive, southAlive);
+      updateTowerFloorOneProgress(towerFloorOneWorld, northAlive, southAlive, dt);
+      const gate = crownGateStatus(northAlive, southAlive);
+      if (gate.remaining !== previousCrownGateRemaining) {
+        crownGateLabel.querySelector("strong")!.textContent = gate.title;
+        crownGateLabel.querySelector("span")!.textContent = gate.detail;
+        crownGateLabel.classList.toggle("open", gate.remaining === 0);
+        if (gate.remaining === 0 && previousCrownGateRemaining !== null) {
+          showFastWorldReveal("Crownkeeper Court opened", "Both Root Warden seals have shattered. Enter the court.", "gate");
+        }
+        previousCrownGateRemaining = gate.remaining;
+      }
+      const gateDistance = Math.hypot(playerPosition.x - 362.3, playerPosition.z - 106);
+      if (gateDistance < 26 && camera.camera) {
+        const screen = camera.camera.worldToScreen(new pc.Vec3(362.3, 14.3, 106));
+        const rect = canvas.getBoundingClientRect();
+        if (screen.z > 0 && screen.x > 0 && screen.x < rect.width && screen.y > 0 && screen.y < rect.height) {
+          crownGateLabel.hidden = false;
+          crownGateLabel.style.left = `${rect.left + screen.x}px`;
+          crownGateLabel.style.top = `${rect.top + screen.y}px`;
+        }
+      }
       if (playerPosition.x >= 340) void requestTowerFloorOneFortressAssets(app, towerFloorOneWorld);
     }
     const coastWaterStartedAt = performance.now();
