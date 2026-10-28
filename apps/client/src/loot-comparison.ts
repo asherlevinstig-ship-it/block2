@@ -1,5 +1,6 @@
 import { MAIN_HAND_DEFINITIONS, WEAPON_ATTACK_DEFINITIONS, reforgeArmourReduction, reforgeWeaponDamageBonus, type MainHandId } from "@blockcraft/protocol";
 import { armourStats, type ArmourId } from "@blockcraft/protocol";
+import { effectiveWeaponRange, fastWorldWeaponProfile, fastWorldAttackTiming } from "@blockcraft/protocol";
 
 export type ComparisonTrend = "better" | "worse" | "same";
 export function comparisonTrend(selected: number, worn: number, lowerIsBetter = false): ComparisonTrend {
@@ -18,20 +19,23 @@ export function armourComparison(id: ArmourId, rank = 0) {
     hazardValue: stats.hazardReduction,
     note: "One armour slot · fixed item identity · no rarity tiers" };
 }
-export function weaponComparison(id: MainHandId, ironSwordOwned = false, rank = 0) {
+export function weaponComparison(id: MainHandId, ironSwordOwned = false, rank = 0, fastWorld = false, haste = 0) {
   const weapon = WEAPON_ATTACK_DEFINITIONS[id];
   const forgedSword = id === "longsword" && ironSwordOwned;
-  const damageBonus = reforgeWeaponDamageBonus(rank);
+  const profile = fastWorldWeaponProfile(id, fastWorld);
+  const damageBonus = reforgeWeaponDamageBonus(rank) + (profile?.bonusDamage ?? 0);
+  const range = effectiveWeaponRange(id, fastWorld);
+  const timing = fastWorldAttackTiming(weapon.attacks[0], fastWorld, haste);
   const damages = weapon.attacks.map(step => step.damage + (forgedSword ? 1 : 0) + damageBonus);
   return {
     name: forgedSword ? "Iron Sword" : MAIN_HAND_DEFINITIONS[id].name,
     damage: damages.join(" / "),
     damageValue: damages.reduce((total, damage) => total + damage, 0) / damages.length,
-    range: `${weapon.range.toFixed(2)} blocks`,
-    rangeValue: weapon.range,
-    speed: `${weapon.attacks[0].durationMs} ms`,
-    speedValue: weapon.attacks[0].durationMs,
-    style: MAIN_HAND_DEFINITIONS[id].attackName,
+    range: `${range.toFixed(2)} ${fastWorld ? "m" : "blocks"}`,
+    rangeValue: range,
+    speed: `${timing.durationMs} ms`,
+    speedValue: timing.durationMs,
+    style: profile?.style === "crescent" ? `${MAIN_HAND_DEFINITIONS[id].attackName} · Crescent reaches ${range.toFixed(1)} m, pierces ${profile.pierce} enemies` : MAIN_HAND_DEFINITIONS[id].attackName,
     benefit: id === "fang_dagger" ? "Faster attacks, shorter reach"
       : id === "rootbound_hammer" ? "Heavy 2 / 2 / 4 combo · finisher roots nearby enemies"
       : id === "matriarch_edge" ? "Moonstone 3 / 3 / 5 combo · swift boss weapon"

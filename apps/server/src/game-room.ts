@@ -2603,7 +2603,21 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   }
 
   private reject(client: Client, rejection: ActionRejected): void {
+    if (rejection.action === "attack" && rejection.requestId) this.sendWeaponAttackState(client, rejection.requestId, false);
     client.send("action:rejected", rejection);
+  }
+
+  private sendWeaponAttackState(client: Client, requestId: string, accepted: boolean, startedAt?: number): void {
+    if (!this.rapidPractice) return;
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+    const chain = this.attackChains.get(client.sessionId);
+    const mainHandId = player.mainHandId as MainHandId;
+    const matchingChain = chain?.mainHandId === mainHandId ? chain : null;
+    client.send("attack:state", { requestId, accepted, serverTime: Date.now(), startedAt,
+      mainHandId,
+      comboStep: matchingChain?.step ?? 0, comboExpiresAt: matchingChain?.comboExpiresAt ?? 0,
+      recoveryUntil: chain?.recoveryUntil ?? 0 } satisfies import("@blockcraft/protocol").WeaponAttackState);
   }
 
   private sendCombatTiming(sessionId: string, event: CombatTimingEvent): void {
@@ -3358,8 +3372,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
   }
 
-  private resolveProjectileVisual(projectileId: string, point: { x: number; y: number; z: number }, reason: ProjectileResolved["reason"]): void {
-    this.broadcast("combat:projectile-resolved", { projectileId, ...point, reason } satisfies ProjectileResolved);
+  private resolveProjectileVisual(projectileId: string, point: { x: number; y: number; z: number }, reason: ProjectileResolved["reason"], hitCount?: number): void {
+    this.broadcast("combat:projectile-resolved", { projectileId, ...point, reason, ...(hitCount === undefined ? {} : { hitCount }) } satisfies ProjectileResolved);
   }
 
   private openTemporaryForestPortal(now: number): boolean {
@@ -10377,6 +10391,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       step,
       impactAt: actionAt + timing.impactMs,
     });
+    this.sendWeaponAttackState(client, parsed.data.requestId, true, actionAt);
     this.endStealth(client.sessionId);
     player.yaw = parsed.data.yaw;
     player.attackStep = step;
@@ -10799,12 +10814,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           projectile.pierceRemaining = (projectile.pierceRemaining ?? 1) - 1;
           continue;
         }
-      } else this.broadcast("combat:miss", {
+      } else if (!projectile.hitIds?.size) this.broadcast("combat:miss", {
         attackerId: projectile.attackerId, mainHandId: projectile.mainHandId, comboStep: projectile.step,
       } satisfies CombatMiss);
       this.pendingWeaponProjectiles.delete(projectileId);
-      this.resolveProjectileVisual(projectileId, point, collision?.kind === "terrain" ? "terrain" : collision ? "hit" : "miss");
-      if (!collision?.targetId && projectile.requestId.startsWith("attack-"))
+      this.resolveProjectileVisual(projectileId, point, collision?.kind === "terrain" ? "terrain" : collision ? "hit" : "miss", projectile.hitIds?.size ?? 0);
+      if (!collision?.targetId && !projectile.hitIds?.size && projectile.requestId.startsWith("attack-"))
         this.sendCombatTiming(projectile.attackerId, { requestId: projectile.requestId, action: "attack", phase: "resolved", serverTime: now, outcome: "miss" });
     }
   }

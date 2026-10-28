@@ -4,6 +4,8 @@ import { createFastWorldObstacleQuery } from "./fast-world-obstacles.js";
 import { TOWER_FLOOR_ONE, TOWER_FLOOR_ONE_FORTRESS_COLLIDERS, isInsideTowerFloorOne } from "./tower-floor-one.js";
 export * from "./fast-world-obstacles.js";
 import { z } from "zod";
+import { fastWorldWeaponProfile } from "./fast-world-weapons.js";
+export * from "./fast-world-weapons.js";
 export * from "./fast-world-regions.js";
 export * from "./fast-world-navigation.js";
 export * from "./tower-floor-one.js";
@@ -1431,6 +1433,14 @@ export const WEAPON_ATTACK_DEFINITIONS = {
     attacks: [{ step: 1, durationMs: 460, impactMs: 185, damage: 2, knockback: .3 }] },
 } as const satisfies Record<MainHandId, WeaponAttackDefinition>;
 
+export function effectiveWeaponRange(id: MainHandId, fastWorld: boolean): number {
+  return fastWorldWeaponProfile(id, fastWorld)?.range ?? WEAPON_ATTACK_DEFINITIONS[id].range;
+}
+
+export function weaponFiresProjectile(id: MainHandId, fastWorld: boolean): boolean {
+  return fastWorldWeaponProfile(id, fastWorld) !== null || WEAPON_ATTACK_DEFINITIONS[id].projectileTravelMs > 0;
+}
+
 export interface PowerDefinition {
   id: string;
   name: string;
@@ -1961,6 +1971,17 @@ export interface CombatHit {
 
 export const ROOTBOUND_FINISHER = { radius: 2.35, damage: 1, rootMs: 650 } as const;
 
+export interface WeaponAttackState {
+  requestId: string;
+  accepted: boolean;
+  serverTime: number;
+  mainHandId: MainHandId;
+  comboStep: 0 | 1 | 2 | 3;
+  comboExpiresAt: number;
+  recoveryUntil: number;
+  startedAt?: number;
+}
+
 export interface CombatMiss {
   attackerId: string;
   mainHandId: MainHandId;
@@ -1997,6 +2018,8 @@ export interface WeaponAttackReleased {
 export interface ProjectileResolved {
   projectileId: string;
   reason: "hit" | "terrain" | "miss";
+  /** Flight can end in empty space after a piercing projectile already hit. */
+  hitCount?: number;
   x: number;
   y: number;
   z: number;

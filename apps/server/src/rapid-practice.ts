@@ -106,20 +106,12 @@ export const RAPID_PRACTICE_BOSS_ID = "ashen-cinderlord";
 export const RAPID_PRACTICE_FREE_ROAM = true;
 export const RAPID_PRACTICE_WAVE_DELAY_MS = 1_800;
 export const RAPID_PRACTICE_RESTART_DELAY_MS = 4_000;
-export const RAPID_PRACTICE_ATTACK_SCALE = .7;
+export { FAST_WORLD_ATTACK_SCALE as RAPID_PRACTICE_ATTACK_SCALE,
+  fastWorldWeaponProfile as rapidPracticeWeaponProfile, fastWorldAttackTiming as rapidPracticeAttackTiming } from "@blockcraft/protocol";
 
 export type RapidPracticeUpgradeId = "razor_edge" | "swift_hands" | "bloodstone";
 export type RapidPracticeWeaponChoiceId = "weapon_sword" | "weapon_bow" | "weapon_focus";
-export type RapidPracticeProjectileStyle = "crescent" | "arrow" | "orb";
-
-export type RapidPracticeWeaponProfile = {
-  style: RapidPracticeProjectileStyle;
-  range: number;
-  travelMs: number;
-  pierce: number;
-  splashRadius: number;
-  bonusDamage: number;
-};
+export type { FastWorldProjectileStyle as RapidPracticeProjectileStyle, FastWorldWeaponProfile as RapidPracticeWeaponProfile } from "@blockcraft/protocol";
 
 export const RAPID_PRACTICE_WEAPON_CHOICES: Record<RapidPracticeWeaponChoiceId,
   { name: string; detail: string; mainHandId: MainHandId }> = {
@@ -169,34 +161,6 @@ export function rapidPracticeMovementSpeed(baseSpeed: number, enabled: boolean):
 export function rapidPracticeProjectileTravelMs(travelMs: number, enabled: boolean): number {
   if (!enabled || travelMs <= 0) return travelMs;
   return Math.max(180, Math.round(travelMs * 0.68));
-}
-
-export function rapidPracticeWeaponProfile(mainHandId: MainHandId, enabled: boolean): RapidPracticeWeaponProfile | null {
-  if (!enabled) return null;
-  if (mainHandId === "longsword" || mainHandId === "forged_sword") return {
-    style: "crescent", range: 4.6, travelMs: 160, pierce: 3, splashRadius: 0, bonusDamage: 0,
-  };
-  if (mainHandId === "bow" || mainHandId === "forged_bow") return {
-    style: "arrow", range: 11, travelMs: 110, pierce: 1, splashRadius: 0, bonusDamage: 1,
-  };
-  if (mainHandId === "magic_focus" || mainHandId === "forged_focus") return {
-    style: "orb", range: 8.5, travelMs: 250, pierce: 1, splashRadius: 1.8, bonusDamage: 0,
-  };
-  return null;
-}
-
-export function rapidPracticeAttackTiming<T extends { durationMs: number; impactMs: number }>(
-  timing: T,
-  enabled: boolean,
-  haste = 0,
-): T {
-  if (!enabled) return timing;
-  const scale = RAPID_PRACTICE_ATTACK_SCALE * Math.max(.55, Math.pow(.9, haste));
-  return {
-    ...timing,
-    durationMs: Math.max(135, Math.round(timing.durationMs * scale)),
-    impactMs: Math.max(55, Math.round(timing.impactMs * scale)),
-  };
 }
 
 export function rapidPracticeProjectileFan<T extends { x: number; y: number; z: number }>(
