@@ -20,7 +20,8 @@ import type { AshenEquipmentForged, AshenReliquaryChoice, AshenReliquaryResult, 
 import { nearestRoleFieldOpportunity, nearestRoadsideEncounter, parseRoadsideClaims, type RoleFieldPath } from "@blockcraft/voxel-world";
 import { confirmedRangedHit, projectileImpactCue } from "./ranged-feedback.js";
 import { heldFireStep } from "./held-fire.js";
-import { continuousAttackEnabled, rapidCombatAnimationElapsed, rapidCombatDuration } from "./rapid-combat.js";
+import { continuousAttackEnabled, rapidCombatAnimationElapsed, rapidCombatDuration, rapidCombatImpact } from "./rapid-combat.js";
+import { AttackBuffer, attackReadiness, attackOutcomeAllowed, type AttackOutcome } from "./attack-buffer.js";
 import { callingLevelGuide, statChoiceDisabled } from "./progression-guidance.js";
 import { progressionNotice as chooseProgressionNotice, type ProgressionNotice } from "./progression-notice.js";
 import { abilityRevealUse, callingUnlockAnnouncement, canPresentAbilityReveal, earnedCallingAbilities, firstCallingUseInstruction, shouldGuideFirstCallingUse } from "./ability-reveal.js";
@@ -6232,6 +6233,27 @@ let localActionStartedAt: number | null = null;
 let localActionFacingYaw: number | null = null;
 let localActionStep = 0;
 let localActionMainHandId: MainHandId | null = null;
+const attackBuffer = new AttackBuffer<{ aimWithPointer: boolean; tabletAim?: { yaw: number; targetId: string | null } }>();
+const attackReadinessMeter = document.createElement("div");
+attackReadinessMeter.id = "attack-readiness";
+attackReadinessMeter.innerHTML = '<div><i></i></div><small>READY</small>';
+combatReticle.appendChild(attackReadinessMeter);
+const attackOutcome = document.createElement("small");
+attackOutcome.id = "attack-outcome";
+attackOutcome.hidden = true;
+combatReticle.appendChild(attackOutcome);
+let attackOutcomeUntil = 0;
+let lastAttackOutcome: { kind: AttackOutcome; at: number } | null = null;
+
+function showAttackOutcome(outcome: AttackOutcome): void {
+  const now = performance.now();
+  if (!attackOutcomeAllowed(lastAttackOutcome, outcome, now)) return;
+  lastAttackOutcome = { kind: outcome, at: now };
+  attackOutcome.textContent = outcome.toUpperCase();
+  attackOutcome.dataset.outcome = outcome;
+  attackOutcomeUntil = now + (outcome === "defeated" ? 500 : 320);
+  attackOutcome.hidden = false;
+}
 let localComboStep = 0;
 let localComboExpiresAt = 0;
 let localHitPauseUntil = 0;
@@ -6300,6 +6322,7 @@ function updateFirstPersonActionView(now: number, moving: boolean, actionElapsed
     weaponKind,
     attackElapsedMs: weaponKind === "focus" ? null : actionElapsed,
     attackDurationMs: Math.max(1, actionDuration(localActionStep)),
+    attackImpactMs: actionImpact(localActionStep),
     comboStep: localActionStep,
     castElapsedMs: castElapsed,
     castDurationMs: castDuration,
@@ -6800,6 +6823,7 @@ function updateSpecialLoadout(specialId: SpecialId): void {
 }
 
 function requestCallingAbility(slot: "power" | "special" = "power", aimedYaw?: number): void {
+  attackBuffer.clear();
   if (reportedProtectedDialog === true) return;
   if (!room || !worldReady) return;
   if (localCharacterProgression.level < (slot === "special" ? 4 : 2)) return;
@@ -6859,6 +6883,7 @@ function requestSpecialEquip(specialId: SpecialId): void {
 }
 
 function updateMainHandLoadout(mainHandId: MainHandId): void {
+  attackBuffer.clear();
   localMainHandId = mainHandId;
   setFirstPersonMainHand(mainHandId);
   localComboStep = 0;
@@ -7642,6 +7667,12 @@ function actionDuration(step: number): number {
     fastWorldRequested, rapidPracticeHaste);
 }
 
+function actionImpact(step: number): number {
+  const weapon = localActionMainHandId ?? localMainHandId;
+  const timing = WEAPON_ATTACK_DEFINITIONS[weapon].attacks[Math.max(0, step - 1)] ?? WEAPON_ATTACK_DEFINITIONS[weapon].attacks[0]!;
+  return rapidCombatImpact(timing.impactMs, fastWorldRequested, rapidPracticeHaste);
+}
+
 function remoteActionDuration(mainHandId: MainHandId | null, step: number): number {
   if (!mainHandId || step < 1 || step > 3) return PRIMARY_ACTION_DURATION_MS;
   return rapidCombatDuration(WEAPON_ATTACK_DEFINITIONS[mainHandId].attacks[step - 1]?.durationMs ?? PRIMARY_ACTION_DURATION_MS,
@@ -7697,6 +7728,7 @@ function showPlayerDamageImpact(mobId: string, damage: number, health: number): 
 }
 
 function confirmEnemyDamage(damage: number, defeated: boolean): void {
+  showAttackOutcome(defeated ? "defeated" : "hit");
   rangedReticleHitUntil = Math.max(rangedReticleHitUntil, performance.now() + (defeated ? 250 : 180));
   combatReticle.dataset.damage = String(damage);
   combatReticle.classList.remove("hit-confirmed", "defeated");
@@ -7884,6 +7916,7 @@ const powerDebrisVisuals: PowerDebrisVisual[] = [];
 const markPayoffVisuals: MarkPayoffVisual[] = [];
 const brambleSnareVisuals = new Map<string, BrambleSnareVisual>();
 const weaponProjectileVisuals: WeaponProjectileVisual[] = [];
+const projectileOwners = new Map<string, string>();
 interface FirstPersonImpactBurst {
   root: pc.Entity;
   material: pc.StandardMaterial;
@@ -9057,6 +9090,8 @@ function updateCallingPersistentState(state: CallingStateUpdate): void {
 }
 
 function createWeaponProjectile(message: WeaponAttackReleased): void {
+  projectileOwners.set(message.projectileId, message.attackerId);
+  while (projectileOwners.size > 128) projectileOwners.delete(projectileOwners.keys().next().value!);
   projectileWeapons.set(message.projectileId, message.mainHandId);
   projectileRapidStyles.set(message.projectileId, message.rapidStyle);
   while (projectileWeapons.size > 128) projectileWeapons.delete(projectileWeapons.keys().next().value!);
@@ -11278,12 +11313,14 @@ function mouseRangedYaw(fallback: number): number {
 }
 function updateRangedReticle(): void {
   const continuous = continuousAttackEnabled(WEAPON_ATTACK_DEFINITIONS[localMainHandId].projectileTravelMs > 0, fastWorldRequested);
-  const active = rangedPointer.active && continuous && interactionMode === "combat" && worldReady && defeatScreen.hidden === true && inventoryPanel.hidden === true;
+  const pointerActive = rangedPointer.active;
+  const active = (pointerActive || cameraViewMode === "first-person" || keyboardFireHeld || localActionStartedAt !== null)
+    && continuous && interactionMode === "combat" && worldReady && defeatScreen.hidden === true && inventoryPanel.hidden === true;
   combatReticle.hidden = !active;
   canvas.classList.toggle("ranged-aim", active);
   if (active) {
-    combatReticle.style.left = cameraViewMode === "first-person" ? "50vw" : `${rangedPointer.x}px`;
-    combatReticle.style.top = cameraViewMode === "first-person" ? "50vh" : `${rangedPointer.y}px`;
+    combatReticle.style.left = cameraViewMode === "first-person" || !pointerActive ? "50vw" : `${rangedPointer.x}px`;
+    combatReticle.style.top = cameraViewMode === "first-person" || !pointerActive ? "50vh" : `${rangedPointer.y}px`;
   }
 }
 let currentTarget: VoxelRaycastHit | null = null;
@@ -13835,6 +13872,11 @@ function renderDepthsPartyStatus(next: SilverDepthsPartyStatus | null): void {
   }
 }
 function clearDefeatCombat(): void {
+  attackBuffer.clear();
+  attackOutcome.hidden = true;
+  attackOutcomeUntil = 0;
+  lastAttackOutcome = null;
+  projectileOwners.clear();
   keys.clear(); touchStrafe = 0; touchForward = 0;
   smoothedMovement = { x: 0, z: 0 };
   rangedFirePointer = null;
@@ -14713,6 +14755,7 @@ function setDefensePresentation(active: boolean): void {
 }
 
 function requestDefense(active: boolean): void {
+  if (active) attackBuffer.clear();
   if (!defeatScreen.hidden) return;
   if (active && reportedProtectedDialog === true) return;
   if (!room || !worldReady || active === localDefending) return;
@@ -15140,19 +15183,29 @@ function requestMine(): void {
   status.textContent = `Mining ${currentTarget.x}, ${currentTarget.y}, ${currentTarget.z}...`;
 }
 
+function weaponAttackInputAllowed(): boolean {
+  return !!room && worldReady && !document.hidden && defeatScreen.hidden && inventoryPanel.hidden && lootPanel.hidden
+    && !playerInteractionUI.isOpen() && !tradeUI.isOpen() && activePresentedPopupId() === null
+    && reportedProtectedDialog !== true && !portalHold && !lootHold && pendingPortalDestination === null
+    && !portalTransition.isActive() && !(document.activeElement instanceof HTMLInputElement)
+    && !(document.activeElement instanceof HTMLTextAreaElement);
+}
+
 function requestAttack(aimWithPointer = true, tabletAim?: { yaw: number; targetId: string | null }): void {
-  if (!defeatScreen.hidden) return;
-  if (reportedProtectedDialog === true) return;
-  if (!room || !worldReady) return;
+  if (!weaponAttackInputAllowed() || !room) { attackBuffer.clear(); return; }
   const now = performance.now();
+  if (specialAimActive) { attackBuffer.clear(); return; }
   if (powerAimActive || (localPowerStartedAt !== null && now - localPowerStartedAt < powerDuration(localActivePower))) {
     status.textContent = `Committed to ${POWER_DEFINITIONS[localActivePower ?? localEquippedPower].name} Â· dodge to cancel.`;
     return;
   }
   if (localActionStartedAt !== null && now - localActionStartedAt < actionDuration(localActionStep)) {
-    status.textContent = "Recovering from the previous attack...";
+    if (WEAPON_ATTACK_DEFINITIONS[localMainHandId].combo)
+      attackBuffer.offer({ aimWithPointer, tabletAim }, localMainHandId, now, localActionStartedAt + actionDuration(localActionStep));
     return;
   }
+  attackBuffer.clear();
+  if (localDefending) requestDefense(false);
   const attackDefinition = WEAPON_ATTACK_DEFINITIONS[localMainHandId];
   const player = localPlayer.getPosition();
   const firstPersonAimed = cameraViewMode === "first-person";
@@ -15251,6 +15304,7 @@ function requestDodge(): void {
     localPredictedDodgeStamina -= dodgeCost;
   }
   localDodgeRequestedAt = now;
+  attackBuffer.clear();
   localDodgeChain = dodgeChain;
   if (dodgeChain >= 1) localDodgeExhaustedUntil = now + DODGE_EXHAUSTION_MS;
   if (localDefending) requestDefense(false);
@@ -15363,6 +15417,7 @@ function updatePowerAimFromPointer(): void {
 }
 
 function beginPowerAim(pointerId: number | null = null): void {
+  attackBuffer.clear();
   if (!WEAPON_TECHNIQUES_AVAILABLE) return;
   if (!defeatScreen.hidden) return;
   if (reportedProtectedDialog === true) return;
@@ -15552,6 +15607,7 @@ function updateSpecialAimFromPointer(): void {
 }
 
 function beginSpecialAim(pointerId: number | null = null): void {
+  attackBuffer.clear();
   if (!FIELD_TECHNIQUES_AVAILABLE) return;
   if (!defeatScreen.hidden) return;
   if (reportedProtectedDialog === true) return;
@@ -15651,6 +15707,11 @@ function requestModePrimaryAction(): void {
 }
 
 function requestPrimaryAction(): void {
+  if (!weaponAttackInputAllowed()) return;
+  requestModePrimaryAction();
+}
+
+function requestWorldInteraction(): void {
   if (playerInteractionUI.isOpen()) return;
   if (!roadsideChoice.hidden) return;
   if (!ashenReliquaryChoice.hidden) return;
@@ -15682,10 +15743,10 @@ function requestPrimaryAction(): void {
     advanceTavernDialogue();
     return;
   }
-  requestModePrimaryAction();
 }
 
 function requestContextAction(source: LootHold["source"]): void {
+  attackBuffer.clear();
   if (portalHold) return;
   if (nearestLootDrop()) { beginLootHold(source); return; }
   if (nearbyForestPortal) { beginPortalHold(source); return; }
@@ -15697,10 +15758,11 @@ function requestContextAction(source: LootHold["source"]): void {
     return;
   }
   if (nearbyTradePlayerId) { openNearbyPlayerInteraction(); return; }
-  requestPrimaryAction();
+  requestWorldInteraction();
 }
 
 function setInteractionMode(mode: InteractionMode): void {
+  attackBuffer.clear();
   rangedFirePointer = null;
   clearTabletAttackAim();
   if (interactionMode === mode && targetStateKey.startsWith(`${mode}:`)) return;
@@ -16043,9 +16105,11 @@ window.addEventListener("keydown", event => {
   if (event.code === "KeyC") requestDefense(true);
   if (event.code === "KeyJ") {
     event.preventDefault();
-    keyboardFireHeld = continuousAttackEnabled(WEAPON_ATTACK_DEFINITIONS[localMainHandId].projectileTravelMs > 0,
-      fastWorldRequested);
-    requestAttack(false);
+    if (!event.repeat) {
+      keyboardFireHeld = continuousAttackEnabled(WEAPON_ATTACK_DEFINITIONS[localMainHandId].projectileTravelMs > 0,
+        fastWorldRequested);
+      requestAttack(false);
+    }
   }
   if (WEAPON_TECHNIQUES_AVAILABLE && event.code === "KeyR") {
     activatePowerSlot("primary", false);
@@ -16081,7 +16145,7 @@ window.addEventListener("keyup", event => {
   if (event.code === powerAimKey) commitPowerAim();
   if (event.code === "KeyF") commitSpecialAim();
 });
-window.addEventListener("blur", () => { cancelLootHold("focus"); cancelPortalHold("focus"); keyboardFireHeld = false; });
+window.addEventListener("blur", () => { cancelLootHold("focus"); cancelPortalHold("focus"); attackBuffer.clear(); keyboardFireHeld = false; });
 canvas.addEventListener("pointerdown", event => {
   if (popupQueue.active() !== null) return;
   canvas.focus({ preventScroll: true });
@@ -17271,10 +17335,20 @@ app.on("update", (dt: number) => {
     mote.entity.setLocalPosition(mote.entity.getLocalPosition().x, mote.baseY + Math.sin(animationTime * 1.35 + mote.phase) * .16, mote.entity.getLocalPosition().z);
     mote.entity.rotateLocal(0, frameTime * 32, frameTime * 18);
   }
+  const bufferedAttack = attackBuffer.take(localMainHandId, animationNow,
+    localActionStartedAt === null ? 0 : localActionStartedAt + actionDuration(localActionStep),
+    weaponAttackInputAllowed() && !localDefending && !powerAimActive && !specialAimActive && localPowerStartedAt === null);
+  if (bufferedAttack) requestAttack(bufferedAttack.aimWithPointer, bufferedAttack.tabletAim);
   const localActionElapsed = localActionStartedAt === null ? null : animationNow - localActionStartedAt;
   const localPowerElapsed = localPowerStartedAt === null ? null : animationNow - localPowerStartedAt;
-  updateFirstPersonActionView(animationNow, moving,
-    rapidCombatAnimationElapsed(localActionElapsed, fastWorldRequested, rapidPracticeHaste), localPowerElapsed);
+  updateFirstPersonActionView(animationNow, moving, localActionElapsed, localPowerElapsed);
+  const readiness = attackReadiness(animationNow, localActionStartedAt, actionDuration(localActionStep), actionImpact(localActionStep), attackBuffer.hasQueued());
+  attackReadinessMeter.hidden = !weaponAttackInputAllowed();
+  attackReadinessMeter.dataset.ready = String(readiness.progress >= 1);
+  attackReadinessMeter.dataset.queued = String(attackBuffer.hasQueued());
+  attackReadinessMeter.querySelector<HTMLElement>("i")!.style.transform = `scaleX(${readiness.progress})`;
+  attackReadinessMeter.querySelector("small")!.textContent = readiness.label;
+  attackOutcome.hidden = animationNow >= attackOutcomeUntil;
   const activePowerDefinition = localActivePower ? POWER_DEFINITIONS[localActivePower] : null;
   const activePowerForwardStep = localActivePower ? activePowerShape(localActivePower).forwardStep : 0;
   if (localPowerElapsed !== null
@@ -19121,6 +19195,12 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     logMovementEvent(`${message.rapidStyle?.toUpperCase() ?? (message.mainHandId === "bow" ? "ARROW" : "ARCANE")} RELEASED`);
   });
   room.onMessage("combat:projectile-resolved", (message: ProjectileResolved) => {
+    const owned = projectileOwners.get(message.projectileId) === room?.sessionId;
+    projectileOwners.delete(message.projectileId);
+    if (owned && message.reason !== "hit") {
+      showAttackOutcome(message.reason === "terrain" ? "blocked" : "miss");
+      if (message.reason === "terrain") combatAudio.play("weaponBlocked");
+    }
     const cue = projectileImpactCue(message.projectileId, message.reason);
     const point = new pc.Vec3(message.x, message.y, message.z);
     const index = weaponProjectileVisuals.findIndex(projectile => projectile.projectileId === message.projectileId);
@@ -19332,8 +19412,11 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       social.event("Southroad pack cleared Â· collect your Calling-matched upgrade, then return to Town to awaken your Power.");
     }
     const mob = mobVisuals.get(message.mobId);
-    if (message.attackerId === room?.sessionId && message.damage > 0)
+    if (message.attackerId === room?.sessionId && message.damage > 0) {
       confirmEnemyDamage(message.damage, message.defeated);
+      const family = firstPersonWeaponKind(message.mainHandId);
+      if (family === "sword" || family === "dagger") combatAudio.play("swordImpact");
+    }
     const rangedHit = confirmedRangedHit(message.mainHandId, message.damage, message.attackerId === room?.sessionId);
     if (rangedHit) {
       rangedReticleHitUntil = performance.now() + 110;
@@ -19430,6 +19513,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       logMovementEvent(`MISS ${message.mainHandId} step=${message.comboStep}`);
       return;
     }
+    showAttackOutcome("miss");
     showCombatFeedback("MISS", "miss");
     const attackName = WEAPON_ATTACK_DEFINITIONS[message.mainHandId].combo
       ? `${MAIN_HAND_DEFINITIONS[message.mainHandId].attackName} ${message.comboStep}`
@@ -19702,6 +19786,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     pendingPings.delete(message.id);
   });
   room.onMessage("action:rejected", (message: ActionRejected) => {
+    if (message.action === "attack") attackBuffer.clear();
     if (["attack", "dodge", "defense", "power", "special", "calling"].includes(message.action))
       combatSync.reject(message.requestId, message.action, message.reason, performance.now());
     if (message.action === "mine" && message.requestId === pendingMine?.requestId) cancelMining();

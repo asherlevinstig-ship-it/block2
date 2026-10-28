@@ -2,6 +2,17 @@ import { describe, expect, it } from "vitest";
 import { firstPersonActionPose, firstPersonWeaponKind } from "./first-person-action.js";
 
 describe("first-person action presentation", () => {
+  it("peaks the blade strike at authored contact time and recovers afterward", () => {
+    const input = { timeSeconds: 0, moving: false, weaponKind: "sword" as const,
+      attackDurationMs: 266, attackImpactMs: 95, comboStep: 1, castElapsedMs: null, castDurationMs: 600 };
+    const before = firstPersonActionPose({ ...input, attackElapsedMs: 60 });
+    const contact = firstPersonActionPose({ ...input, attackElapsedMs: 95 });
+    const recovery = firstPersonActionPose({ ...input, attackElapsedMs: 200 });
+    expect(contact.attackStrength).toBeCloseTo(1);
+    expect(before.attackStrength).toBeLessThan(contact.attackStrength);
+    expect(recovery.attackStrength).toBeLessThan(contact.attackStrength);
+    expect(firstPersonActionPose({ ...input, attackElapsedMs: 266 }).attackStrength).toBe(0);
+  });
   it("returns every weapon to its rest pose without snapping at the end of an action", () => {
     for (const weaponKind of ["unarmed", "sword", "dagger", "bow", "focus", "hammer"] as const) {
       const input = { timeSeconds: 0, moving: false, weaponKind, attackElapsedMs: null,

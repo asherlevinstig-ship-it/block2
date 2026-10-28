@@ -4534,3 +4534,25 @@ html.fast-world-active #progression-notice[data-priority-visible="true"]:not([hi
 @media (max-height: 500px) {
   #interaction-feedback { bottom: 125px; padding: 7px 12px; }
 }
+#attack-readiness {
+  position: absolute;
+  top: 42px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 84px;
+  text-align: center;
+  color: #d9e9df;
+  text-shadow: 0 1px 3px #000;
+  pointer-events: none;
+}
+#attack-readiness[hidden], #attack-outcome[hidden] { display: none; }
+#attack-readiness > div { height: 4px; border: 1px solid #a4c4b577; border-radius: 3px; background: #071510c9; overflow: hidden; }
+#attack-readiness i { display: block; width: 100%; height: 100%; background: #e4c873; transform-origin: left; }
+#attack-readiness small { display: block; margin-top: 4px; font: 800 9px/1.2 system-ui; letter-spacing: .07em; white-space: nowrap; }
+#attack-readiness[data-ready="true"] { opacity: .65; }
+#attack-readiness[data-ready="true"] i { background: #9ddeb8; }
+#attack-readiness[data-queued="true"] i { background: #72dbea; }
+#attack-outcome { position: absolute; bottom: 43px; left: 50%; transform: translateX(-50%); color: #fff1b5; font: 900 10px/1.2 system-ui; text-shadow: 0 2px 3px #000; white-space: nowrap; }
+#attack-outcome[data-outcome="miss"] { color: #becbc5; }
+#attack-outcome[data-outcome="blocked"] { color: #ffce7d; }
+#attack-outcome[data-outcome="defeated"] { color: #ffaf7e; }

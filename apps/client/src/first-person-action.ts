@@ -45,6 +45,7 @@ export function firstPersonActionPose(input: {
   weaponKind: FirstPersonWeaponKind;
   attackElapsedMs: number | null;
   attackDurationMs: number;
+  attackImpactMs?: number;
   comboStep: number;
   castElapsedMs: number | null;
   castDurationMs: number;
@@ -54,11 +55,14 @@ export function firstPersonActionPose(input: {
   const gait = Math.sin(input.timeSeconds * 8.5) * movement;
   const bob = Math.sin(input.timeSeconds * 17) * .009 * movement + Math.sin(input.timeSeconds * 1.5) * .004;
   const attackT = input.attackElapsedMs === null ? 0 : Math.max(0, Math.min(1, input.attackElapsedMs / Math.max(1, input.attackDurationMs)));
-  const windupEnd = input.weaponKind === "hammer" ? .36 : input.weaponKind === "dagger" ? .18 : .25;
-  const contactEnd = windupEnd + .2;
+  const impactT = input.attackImpactMs === undefined ? null
+    : Math.max(.12, Math.min(.8, input.attackImpactMs / Math.max(1, input.attackDurationMs)));
+  const windupEnd = impactT === null ? input.weaponKind === "hammer" ? .36 : input.weaponKind === "dagger" ? .18 : .25
+    : Math.max(.04, impactT - .16);
+  const contactEnd = impactT ?? windupEnd + .2;
   const windup = attackT < windupEnd ? smoothPulse(attackT / windupEnd)
-    : 1 - smoothPulse((attackT - windupEnd) / .2);
-  const strike = attackT < windupEnd ? 0 : attackT < contactEnd ? smoothPulse((attackT - windupEnd) / .2)
+    : 1 - smoothPulse((attackT - windupEnd) / (contactEnd - windupEnd));
+  const strike = attackT < windupEnd ? 0 : attackT < contactEnd ? smoothPulse((attackT - windupEnd) / (contactEnd - windupEnd))
     : 1 - smoothPulse((attackT - contactEnd) / (1 - contactEnd));
   const castT = input.castElapsedMs === null ? 0 : Math.max(0, Math.min(1, input.castElapsedMs / Math.max(1, input.castDurationMs)));
   const magicStrength = input.castElapsedMs === null ? 0 : Math.sin(castT * Math.PI);
