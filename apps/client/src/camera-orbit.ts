@@ -31,16 +31,17 @@ export function initialCameraOrbit(distance = CAMERA_DISTANCE): CameraOrbit {
   };
 }
 
-export function advanceCameraOrbit(orbit: CameraOrbit, turn: number, tilt: number, dt: number): CameraOrbit {
+export function advanceCameraOrbit(orbit: CameraOrbit, turn: number, tilt: number, dt: number,
+  limits = { min: MIN_PITCH, max: MAX_PITCH }): CameraOrbit {
   const blend = 1 - Math.exp(-dt * 14);
   const yawSpeed = orbit.yawSpeed + (turn * TURN_SPEED - orbit.yawSpeed) * blend;
   const pitchSpeed = orbit.pitchSpeed + (tilt * TILT_SPEED - orbit.pitchSpeed) * blend;
-  const pitch = Math.max(MIN_PITCH, Math.min(MAX_PITCH, orbit.pitch + pitchSpeed * dt));
+  const pitch = Math.max(limits.min, Math.min(limits.max, orbit.pitch + pitchSpeed * dt));
   return {
     yaw: orbit.yaw + yawSpeed * dt,
     pitch,
     yawSpeed,
-    pitchSpeed: (pitch === MIN_PITCH && pitchSpeed < 0) || (pitch === MAX_PITCH && pitchSpeed > 0) ? 0 : pitchSpeed,
+    pitchSpeed: (pitch === limits.min && pitchSpeed < 0) || (pitch === limits.max && pitchSpeed > 0) ? 0 : pitchSpeed,
     distance: orbit.distance,
   };
 }

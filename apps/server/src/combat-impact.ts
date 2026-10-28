@@ -1,15 +1,29 @@
 import { voxelRaycast, type WorldBlockReader } from "@blockcraft/voxel-world";
 import type { Position } from "./action-rules.js";
-import { sampleMeleeStrike, type MeleeStrikeProfile, type MainHandId } from "@blockcraft/protocol";
+import { sampleMeleeStrike, attackBodyIntersection, type MeleeStrikeProfile, type MainHandId } from "@blockcraft/protocol";
 
 /** Sample the blade's swept contact window, not a range/facing cone. */
 export function meleeSweepImpact(origin: Position, yaw: number, profile: MeleeStrikeProfile,
-  from: number, to: number, targets: readonly ProjectileTarget[], read: WorldBlockReader): string | null {
+  from: number, to: number, targets: readonly ProjectileTarget[], read: WorldBlockReader, elevation?: number): string | null {
   const visible = targets.filter(target => hasCombatLineOfSight(origin, target, read))
     .map(target => ({ ...target, radius: (target.radius ?? 0.38) + profile.radius }));
   const steps = Math.max(1, Math.ceil(Math.abs(to - from) * 32));
   for (let i = 0; i <= steps; i++) {
     const blade = sampleMeleeStrike(origin, yaw, profile, from + (to - from) * i / steps);
+    if (elevation !== undefined) {
+      const radians = yaw * Math.PI / 180;
+      const pitchPoint = (point: Position): void => {
+        const dx = point.x - origin.x, dz = point.z - origin.z;
+        const forward = dx * Math.sin(radians) + dz * Math.cos(radians);
+        const side = dx * Math.cos(radians) - dz * Math.sin(radians);
+        const height = point.y - origin.y - 1.05;
+        const reach = forward * Math.cos(elevation) - height * Math.sin(elevation);
+        point.x = origin.x + reach * Math.sin(radians) + side * Math.cos(radians);
+        point.z = origin.z + reach * Math.cos(radians) - side * Math.sin(radians);
+        point.y = origin.y + 1.05 + forward * Math.sin(elevation) + height * Math.cos(elevation);
+      };
+      pitchPoint(blade.base); pitchPoint(blade.tip);
+    }
     const impact = projectileImpact(blade.base, blade.tip, visible, read);
     if (impact?.kind === "entity") return impact.targetId ?? null;
   }
@@ -43,23 +57,8 @@ export function projectileImpact(start: Position, end: Position, targets: readon
   const terrain = terrainImpact(start, end, read);
   let result: ReturnType<typeof projectileImpact> = terrain ? { kind: "terrain", ...terrain } : null;
   for (const target of targets) {
-    const radius = target.radius ?? 0.38;
-    let near = 0;
-    let far = 1;
-    for (const axis of ["x", "y", "z"] as const) {
-      const minimum = axis === "y" ? target.y + 0.05 : target[axis] - radius;
-      const maximum = axis === "y" ? target.y + 1.4 : target[axis] + radius;
-      const delta = end[axis] - start[axis];
-      if (Math.abs(delta) < 0.000001) {
-        if (start[axis] < minimum || start[axis] > maximum) { far = -1; break; }
-      } else {
-        const a = (minimum - start[axis]) / delta;
-        const b = (maximum - start[axis]) / delta;
-        near = Math.max(near, Math.min(a, b));
-        far = Math.min(far, Math.max(a, b));
-      }
-    }
-    if (near > far || far < 0 || near > 1 || (result && near >= result.fraction)) continue;
+    const near = attackBodyIntersection(start, end, target, target.radius);
+    if (near === null || (result && near >= result.fraction)) continue;
     result = { kind: "entity", targetId: target.id, fraction: near, point: flightPoint(start, end, near) };
   }
   return result;

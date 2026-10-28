@@ -22,7 +22,7 @@ import { confirmedRangedHit, projectileImpactCue } from "./ranged-feedback.js";
 import { heldFireStep } from "./held-fire.js";
 import { continuousAttackEnabled, rapidCombatAnimationElapsed, rapidCombatDuration, rapidCombatImpact } from "./rapid-combat.js";
 import { AttackBuffer, attackReadiness, attackOutcomeAllowed, type AttackOutcome } from "./attack-buffer.js";
-import { effectiveWeaponRange, weaponFiresProjectile } from "@blockcraft/protocol";
+import { effectiveWeaponRange, weaponFiresProjectile, aimedWeaponFlight, attackBodyIntersection } from "@blockcraft/protocol";
 import { AttackPredictionJournal } from "./attack-prediction.js";
 import type { WeaponAttackState } from "@blockcraft/protocol";
 import { callingLevelGuide, statChoiceDisabled } from "./progression-guidance.js";
@@ -204,6 +204,8 @@ import {
   FIRST_PERSON_EYE_HEIGHT,
   FIRST_PERSON_FOV,
   FIRST_PERSON_NEUTRAL_ORBIT_PITCH,
+  FIRST_PERSON_ORBIT_LIMITS,
+  cameraControlOffset,
   THIRD_PERSON_FOV,
   firstPersonFacingYaw,
   firstPersonLookDirection,
@@ -9128,8 +9130,9 @@ function createWeaponProjectile(message: WeaponAttackReleased): void {
   if (entity.render) entity.render.material = material;
   entity.setLocalScale(style.scale[0]!, style.scale[1]!, style.scale[2]!);
   const localFirstPersonRelease = cameraViewMode === "first-person" && message.attackerId === room?.sessionId;
-  const start = new pc.Vec3(message.x, message.y + 1.05, message.z);
-  if (localFirstPersonRelease) {
+  const start = message.origin ? new pc.Vec3(message.origin.x, message.origin.y, message.origin.z)
+    : new pc.Vec3(message.x, message.y + 1.05, message.z);
+  if (localFirstPersonRelease && !message.origin) {
     const cameraPosition = camera.getPosition();
     const forward = firstPersonLookDirection(cameraOrbit.yaw, cameraOrbit.pitch);
     const right = { x: Math.sin(cameraOrbit.yaw), z: -Math.cos(cameraOrbit.yaw) };
@@ -9139,7 +9142,8 @@ function createWeaponProjectile(message: WeaponAttackReleased): void {
       cameraPosition.z + forward.z * .58 + right.z * .22,
     );
   }
-  const end = new pc.Vec3(message.targetX, message.targetY + 0.72, message.targetZ);
+  const end = message.end ? new pc.Vec3(message.end.x, message.end.y, message.end.z)
+    : new pc.Vec3(message.targetX, message.targetY + 0.72, message.targetZ);
   entity.setPosition(start);
   if (style.shape === "box") entity.lookAt(end);
   app.root.addChild(entity);
@@ -10934,20 +10938,35 @@ function firstPersonCrosshairMob(position: pc.Vec3, maximumRange: number): { id:
   if (!camera.camera) return null;
   const centerX = app.graphicsDevice.width * .5;
   const centerY = app.graphicsDevice.height * .5;
+  const flight = fastWorldRequested ? aimedWeaponFlight(position, firstPersonFacingYaw(cameraOrbit.yaw),
+    Math.asin(firstPersonLookDirection(cameraOrbit.yaw, cameraOrbit.pitch).y), maximumRange) : null;
   const candidates = [...mobVisuals.entries()].map(([id, visual]) => {
-    const target = new pc.Vec3(visual.state.x, visual.state.y + Math.max(.7, visual.healthBarY * .52), visual.state.z);
+    const target = new pc.Vec3(visual.state.x, visual.state.y + (fastWorldRequested ? .72 : Math.max(.7, visual.healthBarY * .52)), visual.state.z);
     const projected = camera.camera!.worldToScreen(target);
     const inFront = projected.z > 0;
     const screenDistance = inFront ? Math.hypot(projected.x - centerX, projected.y - centerY) : Number.POSITIVE_INFINITY;
+    const fraction = flight ? attackBodyIntersection(flight.origin, flight.end, visual.state,
+      visual.state.archetype === "stone_brute" ? .55 : .38) : null;
+    const sightPoint = flight && fraction !== null ? {
+      x: flight.origin.x + (flight.end.x - flight.origin.x) * fraction,
+      y: flight.origin.y + (flight.end.y - flight.origin.y) * fraction,
+      z: flight.origin.z + (flight.end.z - flight.origin.z) * fraction,
+    } : target;
     const visible = visual.state.alive && inFront
       && undergroundMobVisible(visual.state.x, visual.state.y, visual.state.z)
       && enemyCueLineClear(
         { x: position.x, y: position.y + FIRST_PERSON_EYE_HEIGHT, z: position.z },
-        { x: target.x, y: target.y, z: target.z },
+        sightPoint,
         readCollisionWorldBlock,
       );
-    return { id, x: visual.state.x, z: visual.state.z, visible, screenDistance };
+    return { id, x: visual.state.x, y: target.y, z: visual.state.z, visible, screenDistance, fraction };
   });
+  if (flight) {
+    const selected = candidates.filter(candidate => candidate.visible && candidate.fraction !== null)
+      .sort((a, b) => a.fraction! - b.fraction!)[0];
+    if (!selected) return null;
+    return { id: selected.id, visual: mobVisuals.get(selected.id)!, distance: selected.fraction! * maximumRange };
+  }
   const ranged = weaponFiresProjectile(localMainHandId, fastWorldRequested);
   const selected = selectFirstPersonAimTarget(position, firstPersonFacingYaw(cameraOrbit.yaw), maximumRange,
     ranged ? 82 : 120, candidates, ranged ? 7 : 14);
@@ -15277,6 +15296,7 @@ function requestAttack(aimWithPointer = true, tabletAim?: { yaw: number; targetI
     durations: attackDefinition.attacks.map(timing => rapidCombatDuration(timing.durationMs, true, rapidPracticeHaste)) });
   combatSync.start("attack", requestId, now);
   room.send("attack", { requestId, yaw: localActionFacingYaw,
+    ...(firstPersonAimed && fastWorldRequested ? { elevation: Math.asin(firstPersonLookDirection(cameraOrbit.yaw, cameraOrbit.pitch).y) } : {}),
     ...(serverClock.synchronized ? { actionAt: now + serverClock.offset } : {}) });
   if (firstPersonAimed) {
     const weaponKind = firstPersonWeaponKind(localMainHandId);
@@ -16413,7 +16433,7 @@ function updateCallingTouchAim(event: PointerEvent): void {
   const deltaY = event.clientY - callingTouchAimStart.y;
   if (Math.hypot(deltaX, deltaY) < 12) return;
   callingTouchAimDragged = true;
-  const cameraOffset = cameraOrbitOffset(cameraOrbit);
+  const cameraOffset = cameraControlOffset(cameraOrbit, cameraViewMode);
   callingTouchAimYaw = tabletDragAimYaw(deltaX, deltaY, cameraOffset.x, cameraOffset.z, callingTouchAimYaw);
   const cancelling = callingAimReleaseCancels(true, { x: event.clientX, y: event.clientY }, callingTouchAimButton.getBoundingClientRect());
   callingTouchAimButton.dataset.cancel = String(cancelling);
@@ -16455,7 +16475,7 @@ function updateTabletAttackAim(event: PointerEvent): void {
   const deltaX = event.clientX - tabletAttackStart.x;
   const deltaY = event.clientY - tabletAttackStart.y;
   if (Math.hypot(deltaX, deltaY) < 12) return;
-  const cameraOffset = cameraOrbitOffset(cameraOrbit);
+  const cameraOffset = cameraControlOffset(cameraOrbit, cameraViewMode);
   tabletAttackYaw = tabletDragAimYaw(deltaX, deltaY, cameraOffset.x, cameraOffset.z, localFacingYaw);
   mineButton.dataset.aiming = "true";
   renderTabletAimGuide(event);
@@ -17191,8 +17211,9 @@ app.on("update", (dt: number) => {
     fastWorldRequested && cameraViewMode !== "first-person" ? 0 : Number(keys.has("ArrowRight")) - Number(keys.has("ArrowLeft")),
     fastWorldRequested && cameraViewMode !== "first-person" ? 0 : Number(keys.has("ArrowUp")) - Number(keys.has("ArrowDown")),
     frameTime,
+    cameraViewMode === "first-person" ? FIRST_PERSON_ORBIT_LIMITS : undefined,
   );
-  const cameraOffset = cameraOrbitOffset(cameraOrbit);
+  const cameraOffset = cameraControlOffset(cameraOrbit, cameraViewMode);
   const desiredMovement = quantizeMovementToEightDirections(
     cameraRelativeMovement(strafe, forward, cameraOffset.x, cameraOffset.z),
   );

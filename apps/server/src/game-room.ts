@@ -1,4 +1,5 @@
 import { Client, Room } from "@colyseus/core";
+import { aimedWeaponFlight } from "@blockcraft/protocol";
 import { GREENWOOD_MASTERY_CAP, MISTFEN_MASTERY_CAP, greenwoodMasteryRank, mistfenMasteryRank } from "@blockcraft/protocol";
 import { callingStarterAbility } from "@blockcraft/protocol";
 import { experienceToNextLevel } from "@blockcraft/protocol";
@@ -328,6 +329,7 @@ interface PendingAttack {
   requestId: string;
   mainHandId: MainHandId;
   yaw: number;
+  elevation?: number;
   step: 1 | 2 | 3;
   impactAt: number;
   lastSweepAt?: number;
@@ -10390,6 +10392,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       yaw: parsed.data.yaw,
       step,
       impactAt: actionAt + timing.impactMs,
+      elevation: this.rapidPractice ? parsed.data.elevation : undefined,
     });
     this.sendWeaponAttackState(client, parsed.data.requestId, true, actionAt);
     this.endStealth(client.sessionId);
@@ -10678,7 +10681,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         });
         const bindingHit = meleeSweepImpact(player, pending.yaw, strike,
           (Math.max(start, pending.lastSweepAt ?? start) - start) / (end - start),
-          (Math.min(now, end) - start) / (end - start), bindingTargets, this.readWorldBlock);
+          (Math.min(now, end) - start) / (end - start), bindingTargets, this.readWorldBlock, pending.elevation);
         if (bindingHit?.startsWith("thorn-binding:")) {
           this.pendingAttacks.delete(sessionId);
           this.damageThornBinding(bindingHit.slice("thorn-binding:".length), sessionId);
@@ -10689,7 +10692,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           .map(([id, mob]) => ({ id, x: mob.x, y: mob.y, z: mob.z, radius: mob.archetype === "stone_brute" ? 0.55 : 0.38 }));
         const hit = meleeSweepImpact(player, pending.yaw, strike,
           (Math.max(start, pending.lastSweepAt ?? start) - start) / (end - start),
-          (Math.min(now, end) - start) / (end - start), targets, this.readWorldBlock);
+          (Math.min(now, end) - start) / (end - start), targets, this.readWorldBlock, pending.elevation);
         pending.lastSweepAt = Math.min(now, end);
         if (hit) {
           this.pendingAttacks.delete(sessionId);
@@ -10741,7 +10744,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         };
         const projectileId = `weapon:${sessionId}:${++this.weaponProjectileSequence}`;
         const start = { x: player.x, y: player.y + 1.05, z: player.z };
-        const end = bodyPoint(endpoint);
+        let end = bodyPoint(endpoint);
+        const aimed = pending.elevation === undefined ? null : aimedWeaponFlight(player, pending.yaw, pending.elevation, effectiveRange);
+        if (aimed) { Object.assign(start, aimed.origin); end = aimed.end; }
         this.pendingWeaponProjectiles.set(projectileId, {
           ...pending, projectileId, attackerId: sessionId,
           start, end, position: start, startedAt: now, impactAt: now + projectileTravelMs,
@@ -10763,6 +10768,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           travelMs: projectileTravelMs,
           releasedAt: now,
           rapidStyle: rapidWeapon?.style,
+          ...(aimed ? { origin: aimed.origin, end: aimed.end } : {}),
         } satisfies WeaponAttackReleased);
         continue;
       }

@@ -5,6 +5,8 @@ import { TOWER_FLOOR_ONE, TOWER_FLOOR_ONE_FORTRESS_COLLIDERS, isInsideTowerFloor
 export * from "./fast-world-obstacles.js";
 import { z } from "zod";
 import { fastWorldWeaponProfile } from "./fast-world-weapons.js";
+import { FIRST_PERSON_AIM_MIN, FIRST_PERSON_AIM_MAX } from "./first-person-aim.js";
+export * from "./first-person-aim.js";
 export * from "./fast-world-weapons.js";
 export * from "./fast-world-regions.js";
 export * from "./fast-world-navigation.js";
@@ -1641,6 +1643,7 @@ export const MineBlockRequestSchema = z.object({
 export const AttackRequestSchema = z.object({
   requestId: z.string().min(1).max(64),
   yaw: z.number().finite(),
+  elevation: z.number().finite().min(FIRST_PERSON_AIM_MIN).max(FIRST_PERSON_AIM_MAX).optional(),
   actionAt: z.number().finite().optional(),
 });
 
@@ -1999,6 +2002,9 @@ export interface CombatTimingEvent {
 }
 
 export interface WeaponAttackReleased {
+  /** Exact authoritative first-person flight; omitted by horizontal attacks. */
+  origin?: { x: number; y: number; z: number };
+  end?: { x: number; y: number; z: number };
   /** Authoritative release time, used to catch up delayed presentation without replaying the flight. */
   releasedAt?: number;
   projectileId: string;

@@ -1,8 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { firstPersonFacingYaw, firstPersonLookDirection, firstPersonMouseLook } from "./camera-view.js";
-import { initialCameraOrbit } from "./camera-orbit.js";
+import { firstPersonFacingYaw, firstPersonLookDirection, firstPersonMouseLook, cameraControlOffset, FIRST_PERSON_ORBIT_LIMITS, FIRST_PERSON_NEUTRAL_ORBIT_PITCH } from "./camera-view.js";
+import { advanceCameraOrbit, initialCameraOrbit } from "./camera-orbit.js";
 
 describe("first-person camera", () => {
+  it("keeps the same forward controls while looking steeply up or down", () => {
+    const level = cameraControlOffset(initialCameraOrbit(), "first-person");
+    for (const pitch of [FIRST_PERSON_ORBIT_LIMITS.min, FIRST_PERSON_ORBIT_LIMITS.max])
+      expect(cameraControlOffset({ ...initialCameraOrbit(), pitch }, "first-person")).toEqual(level);
+  });
+  it("preserves steep stair aiming through idle updates instead of clamping it to top-down limits", () => {
+    const orbit = { ...initialCameraOrbit(), pitch: FIRST_PERSON_NEUTRAL_ORBIT_PITCH - Math.PI / 3 };
+    expect(advanceCameraOrbit(orbit, 0, 0, .016, FIRST_PERSON_ORBIT_LIMITS).pitch).toBeCloseTo(orbit.pitch);
+    expect(firstPersonLookDirection(orbit.yaw, orbit.pitch).y).toBeLessThan(-.8);
+    expect(advanceCameraOrbit(orbit, 0, 0, .016).pitch).toBeGreaterThan(orbit.pitch);
+  });
   it("looks back toward the player from the matching third-person orbit heading", () => {
     const direction = firstPersonLookDirection(0, Math.atan2(20, Math.hypot(16, 16)));
     expect(direction.x).toBeCloseTo(-1);

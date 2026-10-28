@@ -1,12 +1,15 @@
-import type { CameraOrbit } from "./camera-orbit.js";
+import { cameraOrbitOffset, type CameraOrbit } from "./camera-orbit.js";
+import { AIM_EYE_HEIGHT, FIRST_PERSON_AIM_MIN, FIRST_PERSON_AIM_MAX } from "@blockcraft/protocol";
 
-export const FIRST_PERSON_EYE_HEIGHT = 1.48;
+export const FIRST_PERSON_EYE_HEIGHT = AIM_EYE_HEIGHT;
 export const FIRST_PERSON_FOV = 68;
 export const THIRD_PERSON_FOV = 42;
 
 export const FIRST_PERSON_NEUTRAL_ORBIT_PITCH = Math.atan2(20, Math.hypot(16, 16));
-const MIN_FIRST_PERSON_ELEVATION = -Math.PI / 9;
-const MAX_FIRST_PERSON_ELEVATION = Math.PI / 6;
+const MIN_FIRST_PERSON_ELEVATION = FIRST_PERSON_AIM_MIN;
+const MAX_FIRST_PERSON_ELEVATION = FIRST_PERSON_AIM_MAX;
+export const FIRST_PERSON_ORBIT_LIMITS = { min: FIRST_PERSON_NEUTRAL_ORBIT_PITCH + FIRST_PERSON_AIM_MIN,
+  max: FIRST_PERSON_NEUTRAL_ORBIT_PITCH + FIRST_PERSON_AIM_MAX };
 const FIRST_PERSON_MOUSE_YAW_RADIANS_PER_PIXEL = .0018;
 const FIRST_PERSON_MOUSE_PITCH_RADIANS_PER_PIXEL = .0015;
 // Pointer lock occasionally reports a very large synthetic movement when the
@@ -31,6 +34,11 @@ export function firstPersonLookDirection(cameraYaw: number, orbitPitch: number):
 export function firstPersonFacingYaw(cameraYaw: number): number {
   const yaw = Math.atan2(-Math.cos(cameraYaw), -Math.sin(cameraYaw)) * 180 / Math.PI;
   return (yaw + 360) % 360;
+}
+
+/** Movement and touch aim depend on heading, never the sign of a steep tilt. */
+export function cameraControlOffset(orbit: CameraOrbit, mode: CameraViewMode): { x: number; z: number } {
+  return mode === "first-person" ? { x: Math.cos(orbit.yaw), z: Math.sin(orbit.yaw) } : cameraOrbitOffset(orbit);
 }
 
 export function firstPersonMouseLook(orbit: CameraOrbit, deltaX: number, deltaY: number): CameraOrbit {
