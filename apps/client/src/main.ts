@@ -5758,23 +5758,23 @@ function updateLootWorldLabel(): void {
   if (!nearest) return;
   const drop = lootVisuals.get(nearest.id)?.state;
   if (!drop || !isItemId(drop.itemId)) return;
+  const near = nearest.distance <= EQUIPMENT_LOOT_RANGE;
   const rect = canvas.getBoundingClientRect();
   const screen = camera.camera.worldToScreen(new pc.Vec3(drop.x, drop.y + 1.6, drop.z));
-  if (screen.z <= 0 || screen.x < 0 || screen.x > canvas.width || screen.y < 0 || screen.y > canvas.height) return;
+  if (!near && (screen.z <= 0 || screen.x < 0 || screen.x > canvas.width || screen.y < 0 || screen.y > canvas.height)) return;
   const anchorX = rect.left + screen.x * rect.width / canvas.width;
   const anchorY = rect.top + screen.y * rect.height / canvas.height;
-  if (anchorY < rect.top + 90) return;
+  if (!near && anchorY < rect.top + 90) return;
   const halfWidth = window.innerWidth <= 820 ? 95 : 105;
   const labelX = Math.max(rect.left + halfWidth, Math.min(rect.right - halfWidth, anchorX));
   const seconds = Math.max(0, Math.ceil((drop.expiresAt - Date.now()) / 1000));
-  const near = nearest.distance <= EQUIPMENT_LOOT_RANGE;
   const items = lootItems(drop);
   const bagTier = isEnemyLootBag(drop) ? lootBagTierForItems(items) : null;
   const rarity = bagTier ? LOOT_BAG_TIER_RARITY[bagTier] : itemRarity(drop.itemId);
   const full = lootWouldOverflow(nearest.id, drop);
   lootWorldLabel.dataset.rarity = rarity;
-  lootWorldLabel.style.left = `${labelX}px`;
-  lootWorldLabel.style.top = `${anchorY}px`;
+  lootWorldLabel.style.left = `${near ? rect.left + rect.width / 2 : labelX}px`;
+  lootWorldLabel.style.top = `${near ? rect.top + rect.height / 2 + 36 : anchorY}px`;
   lootWorldLabel.style.setProperty("--tail-shift", `${anchorX - labelX}px`);
   const collectionItemId = drop.leaderCollectionItemId && isItemId(drop.leaderCollectionItemId)
     ? drop.leaderCollectionItemId : null;
