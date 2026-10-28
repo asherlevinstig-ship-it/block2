@@ -1,6 +1,7 @@
 export { fastWorldGroundHeight, fastWorldCoastShorelineZ } from "./fast-world-elevation.js";
 import { fastWorldGroundHeight } from "./fast-world-elevation.js";
 export const FAST_WORLD_BLACKSMITH_POSITION = { x: 79, y: 8, z: 136 } as const;
+export * from "./floor-run-upgrades.js";
 import { createFastWorldObstacleQuery } from "./fast-world-obstacles.js";
 import { TOWER_FLOOR_ONE, TOWER_FLOOR_ONE_FORTRESS_COLLIDERS, isInsideTowerFloorOne } from "./tower-floor-one.js";
 export * from "./fast-world-obstacles.js";
@@ -430,6 +431,7 @@ export type CallingAbilityEffect = {
   durationMs?: number;
   targetId?: string;
   augmentId?: CallingAugmentId;
+  radiusScale?: number;
 };
 export type CallingStateUpdate = {
   playerId: string;

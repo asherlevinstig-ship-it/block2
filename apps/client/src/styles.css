@@ -4566,3 +4566,21 @@ html.fast-world-active #progression-notice[data-priority-visible="true"]:not([hi
 #attack-outcome[data-outcome="miss"] { color: #becbc5; }
 #attack-outcome[data-outcome="blocked"] { color: #ffce7d; }
 #attack-outcome[data-outcome="defeated"] { color: #ffaf7e; }
+#floor-run-upgrade[hidden], #floor-upgrade-ready[hidden] { display: none; }
+#floor-run-upgrade { position: fixed; inset: 0; z-index: 120; display: grid; place-items: center; padding: 18px; background: rgba(3, 10, 9, .78); color: #f5f0da; }
+.floor-upgrade-shell { width: min(860px, 100%); max-height: 90dvh; overflow-y: auto; box-sizing: border-box; padding: 28px; border: 1px solid #c5a65a; border-radius: 18px; background: linear-gradient(145deg, #16291f, #091410); box-shadow: 0 18px 80px #0009; }
+.floor-upgrade-shell > small { color: #c9b370; letter-spacing: .12em; font-weight: 800; }
+.floor-upgrade-shell h2 { margin: 8px 0; font-size: clamp(24px, 4vw, 38px); color: #ffe39c; }
+.floor-upgrade-intro, .floor-upgrade-expiry { color: #b3c4b8; line-height: 1.5; }
+.floor-upgrade-choices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 24px 0; }
+.floor-upgrade-choices button { display: flex; flex-direction: column; gap: 14px; min-height: 210px; padding: 20px; border: 1px solid #647f62; border-radius: 12px; background: #1c3628; color: #eaf1e6; text-align: left; cursor: pointer; }
+.floor-upgrade-choices button:hover, .floor-upgrade-choices button:focus-visible { outline: 2px solid #f3d37c; background: #294b34; }
+.floor-upgrade-choices button small { color: #8fd6b0; text-transform: uppercase; font-size: 11px; letter-spacing: .08em; }
+.floor-upgrade-choices button strong { color: #ffe39c; font-size: 21px; }
+.floor-upgrade-choices button span { font-size: 14px; line-height: 1.55; }
+.floor-upgrade-later { min-height: 44px; padding: 10px 20px; border: 1px solid #59715c; border-radius: 8px; background: #14261d; color: #e9e8d3; cursor: pointer; }
+#floor-upgrade-ready { position: fixed; bottom: calc(180px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); z-index: 35; max-width: 90vw; min-height: 44px; padding: 10px 18px; background: #1c3527; color: #ffe39c; border: 1px solid #b99d54; border-radius: 10px; font-weight: 800; cursor: pointer; }
+#floor-upgrade-ready:disabled { color: #b9c7bb; cursor: default; }
+.floor-run-picked { display: grid; gap: 5px; padding: 10px 0; border-bottom: 1px solid #647f6244; }
+.floor-run-picked small { line-height: 1.5; }
+@media (max-width: 650px) { .floor-upgrade-shell { padding: 18px; } .floor-upgrade-choices { grid-template-columns: 1fr; margin: 16px 0; } .floor-upgrade-choices button { min-height: 110px; padding: 16px; gap: 8px; } }

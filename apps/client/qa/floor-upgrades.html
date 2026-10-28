@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Floor upgrade UI preview</title>
+<link rel="stylesheet" href="/src/styles.css">
+<style>body{background:#0b1e19;color:#f4efd7;font:16px system-ui;padding:24px}main{max-width:650px}main button,main select{padding:12px;margin:6px}#summary{white-space:pre-line;line-height:1.6}</style>
+<main><h1>Floor 1 upgrade preview</h1><p>Local UI fixture. No game or character data is changed.</p>
+<label>Calling <select id="path"><option>assassin</option><option>tank</option><option>mage</option><option>thief</option><option>ranger</option><option>healer</option></select></label>
+<button id="restart">New two-Warden attempt</button><button id="combat">Toggle combat</button>
+<button id="reopen">Open choices</button><button id="end">End attempt</button><p id="summary"></p></main>
+<script type="module">
+import { createFloorRunUpgradeUI } from "/src/floor-run-upgrades.ts";
+import { EMPTY_FLOOR_RUN_STATE, FLOOR_RUN_UPGRADES, floorUpgradeChoices } from "@blockcraft/protocol";
+let state, sequence = 0, open;
+const summary = document.querySelector("#summary");
+const ui = createFloorRunUpgradeUI({
+  changed: (next, show) => { open = show; summary.textContent = next.active
+    ? "Pending choices: " + next.pending + "\nChosen: " + (next.picked.map(id => FLOOR_RUN_UPGRADES.find(upgrade => upgrade.id === id).name).join(", ") || "none")
+      + "\n" + (next.canChoose ? "Safe to choose" : "Combat: reward remains banked") : "Attempt ended. Temporary upgrades cleared."; },
+  send: (offerId, id) => {
+    if (offerId !== state.offerId || !state.choices.includes(id)) return;
+    state = { ...state, pending: state.pending - 1, picked: [...state.picked, id], offerId: "preview-" + (++sequence) };
+    state.choices = state.pending ? floorUpgradeChoices(state.path, abilities(), state.picked, sequence) : [];
+    ui.update(state);
+  },
+});
+function abilities() { return FLOOR_RUN_UPGRADES.filter(upgrade => upgrade.path === document.querySelector("#path").value && upgrade.ability).map(upgrade => upgrade.ability); }
+function restart() {
+  const path = document.querySelector("#path").value;
+  state = { ...EMPTY_FLOOR_RUN_STATE, active: true, path, earned: 2, pending: 2, canChoose: true, offerId: "preview-" + (++sequence),
+    picked: [], choices: floorUpgradeChoices(path, abilities(), [], sequence) };
+  ui.update(state); ui.tick(true);
+}
+document.querySelector("#restart").onclick = restart;
+document.querySelector("#path").onchange = restart;
+document.querySelector("#combat").onclick = () => { state = { ...state, canChoose: !state.canChoose }; ui.update(state); };
+document.querySelector("#reopen").onclick = () => open();
+document.querySelector("#end").onclick = () => ui.update({ ...EMPTY_FLOOR_RUN_STATE, canChoose: false });
+restart();
+</script></html>

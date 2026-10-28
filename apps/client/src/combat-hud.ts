@@ -23,6 +23,7 @@ import {
   type CallingAugmentId,
 } from "@blockcraft/protocol";
 import { isPowerCompatibleWithMainHand } from "./power-loadout.js";
+import { EMPTY_FLOOR_RUN_STATE, FLOOR_RUN_UPGRADES, type FloorRunUpgradeUpdate } from "@blockcraft/protocol";
 import type { InteractionMode } from "./interaction-mode.js";
 
 type PowerSlot = "primary" | "secondary";
@@ -54,6 +55,12 @@ const powerCooldown = signal<CooldownState>({ percent: 0, label: "SERVER UPDATE"
 const specialCooldown = signal<CooldownState>({ percent: 0, label: "READY · F", ready: true });
 const callingCooldown = signal<CooldownState>({ percent: 0, label: "CHOOSE CALLING", ready: false });
 const loadoutOpen = signal(false);
+const floorRun = signal<FloorRunUpgradeUpdate>({ ...EMPTY_FLOOR_RUN_STATE, canChoose: false });
+let openFloorUpgrades = () => {};
+export function setFloorRunKit(state: FloorRunUpgradeUpdate, open: () => void): void {
+  floorRun.value = state;
+  openFloorUpgrades = () => { loadoutOpen.value = false; open(); };
+}
 const newCallingUnlock = signal<string | null>(null);
 
 const POWER_IDS = ["shockwave", "seismic_cleave", "eruption", "lunge_strike"] as const;
@@ -153,6 +160,16 @@ function LoadoutDrawer() {
     h("header", null,
       h("div", null, h("span", null, "FIELD LOADOUT"), h("strong", null, "Prepare your combat kit")),
       h("button", { type: "button", class: "loadout-close", "aria-label": "Close loadout", onClick: () => { loadoutOpen.value = false; } }, "×"),
+    ),
+    floorRun.value.active && h("section", { class: "loadout-group floor-run-kit" },
+      h("p", null, h("span", null, "FLOOR 1 BUILD"), h("small", null, "Until death or leaving Floor 1")),
+      floorRun.value.picked.length === 0 && h("small", null, "Defeat each Root Warden to earn one Calling upgrade."),
+      floorRun.value.picked.map(id => {
+        const upgrade = FLOOR_RUN_UPGRADES.find(entry => entry.id === id)!;
+        return h("div", { class: "floor-run-picked" }, h("strong", null, upgrade.name), h("small", null, upgrade.detail));
+      }),
+      floorRun.value.pending > 0 && h("button", { type: "button", disabled: !floorRun.value.canChoose, onClick: openFloorUpgrades },
+        floorRun.value.canChoose ? "CHOOSE WARDEN UPGRADE" : "UPGRADE BANKED · LEAVE COMBAT"),
     ),
     h("section", { class: "loadout-group" },
       h("p", null, h("span", null, "MAIN HAND"), h("small", null, MAIN_HAND_DEFINITIONS[selectedHand].name)),

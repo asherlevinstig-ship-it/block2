@@ -71,7 +71,9 @@ import { playerHud } from "./player-hud.js";
 import { ashenChainRoute, ashenChainStage, greenwoodChainRoute, greenwoodChainStage, mistfenChainRoute, mistfenChainStage, northwatchChainRoute, northwatchChainStage, quarryChainRoute, quarryChainStage, regionalChainBreadcrumbs, regionalFreeRoamPresentation,
   regionalChainTrailVisible, regionalPolylineBreadcrumbs, regionalPolylineTrailVisible,
   type AshenChainStage, type GreenwoodChainStage, type MistfenChainStage, type NorthwatchChainStage, type QuarryChainStage } from "./regional-encounter-chain.js";
-import { combatHud, cooldownState } from "./combat-hud.js";
+import { combatHud, cooldownState, setFloorRunKit } from "./combat-hud.js";
+import { createFloorRunUpgradeUI } from "./floor-run-upgrades.js";
+import type { FloorRunUpgradeUpdate } from "@blockcraft/protocol";
 import { assassinJourney } from "./assassin-journey.js";
 import { CALLING_AWAKENING_MINIMUM_MS, callingAwakening, callingPreviewMarkup } from "./calling-awakening.js";
 import { advanceFirstCombatPhase, completesFirstCombatLesson, FIRST_COMBAT_GROUP_IDS, firstCombatLesson,
@@ -1348,6 +1350,10 @@ const traitBonus = document.querySelector<HTMLElement>("#trait-bonus")!;
 const traitPickerButtons = [...document.querySelectorAll<HTMLButtonElement>("#trait-picker [data-trait]")];
 const momentumPips = [...document.querySelectorAll<HTMLElement>("#momentum-pips i")];
 const combatHudRoot = document.querySelector<HTMLElement>("#combat-hud-root")!;
+const floorRunUpgradeUI = createFloorRunUpgradeUI({
+  send: (offerId, upgradeId) => room?.send("floor:upgrades:choose", { offerId, upgradeId }),
+  changed: (state, open) => setFloorRunKit(state, open),
+});
 if (!combatHudRoot) throw new Error("Combat HUD root is missing");
 combatHud.mount(combatHudRoot);
 const buildPathProc = document.querySelector<HTMLElement>("#build-path-proc")!;
@@ -7933,6 +7939,7 @@ interface CallingImpactVisual {
   expiresAt: number;
   materials: pc.StandardMaterial[];
   abilityId: CallingAbilityId;
+  stationary?: boolean;
 }
 const callingImpactVisuals: CallingImpactVisual[] = [];
 interface CallingPersistentVisual {
@@ -8986,6 +8993,7 @@ function createCallingImpact(effect: CallingAbilityEffect): void {
   if (abilityId === "thief_decoy") createThiefDecoyImitation(effect);
   const layers = CALLING_IMPACT_PARTICLES[abilityId];
   const root = new pc.Entity(`calling-impact:${abilityId}`);
+  if (effect.radiusScale) root.setLocalScale(effect.radiusScale, 1, effect.radiusScale);
   const followsPlayer = abilityId === "tank_bulwark" || abilityId === "mage_mana_shield"
     || abilityId === "mage_overload" || abilityId === "ranger_volley_focus" || abilityId === "ranger_deadeye";
   const targetAnchor = abilityId === "assassin_death_mark" && effect.targetId
@@ -14004,7 +14012,7 @@ function showDefeat(attackerName: string): void {
   if (rapidPracticeRewardPanel) rapidPracticeRewardPanel.hidden = true;
   quizPanel.hidden = true; blacksmithPanel.hidden = true; setInventoryOpen(false); closeTavernDialogue();
   defeatDetail.textContent = fastWorldRequested
-    ? `${attackerName} ended the run. Your upgrades are retained for this session; restart immediately and push farther.`
+    ? `${attackerName} ended the attempt. Floor upgrades are cleared. Your character progression, equipment and banked Crown Fragments are kept.`
     : `${attackerName} defeated you. Carried minerals stay in your personal recovery bag. Levels, equipment, other loot, gold, supplies and chest contents are safe. Return to town, then follow your bag marker.`;
   defeatTitle.textContent = fastWorldRequested ? "RUN ENDED" : "You were defeated";
   defeatScreen.hidden = false;
@@ -14748,6 +14756,9 @@ function updateTabletHudCombatState(now: number): void {
   }
   updateTabletCameraHint(now);
   updateKeyboardCameraHint();
+  floorRunUpgradeUI.tick(fastWorldRequested && worldReady && keys.size === 0 && touchStrafe === 0 && touchForward === 0 && !tabletHudCombatActive
+    && popupQueue.active() === null && reportedProtectedDialog !== true && !notificationAttentionBlocked
+    && !lootHold && !portalHold && pendingPortalDestination === null);
 }
 
 interface StopTraceFrame {
@@ -18126,7 +18137,7 @@ app.on("update", (dt: number) => {
   }
   for (let index = callingImpactVisuals.length - 1; index >= 0; index -= 1) {
     const visual = callingImpactVisuals[index]!;
-    if (visual.abilityId === "mage_arcane_surge" || visual.abilityId === "mage_overload" || visual.abilityId === "healer_renewal") visual.root.rotateLocal(0, frameTime * 105, 0);
+    if (!visual.stationary && (visual.abilityId === "mage_arcane_surge" || visual.abilityId === "mage_overload" || visual.abilityId === "healer_renewal")) visual.root.rotateLocal(0, frameTime * 105, 0);
     if (animationNow >= visual.expiresAt) {
       visual.root.destroy();
       for (const material of visual.materials) material.destroy();
@@ -18903,6 +18914,27 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       abilityPractice.hidden = false;
     }
   });
+  room.onMessage("floor:upgrades", (state: FloorRunUpgradeUpdate) => {
+    if (fastWorldRequested) floorRunUpgradeUI.update(state);
+  });
+  room.onMessage("floor:arc-jump", (event: { x: number; y: number; z: number; targetId: string }) => {
+    const target = mobVisuals.get(event.targetId);
+    if (!target) return;
+    const start = new pc.Vec3(event.x, event.y, event.z), end = target.entity.getPosition().clone().add(new pc.Vec3(0, .8, 0));
+    const arc = new pc.Entity("floor-arc-jump"); app.root.addChild(arc);
+    const material = coloredMaterial(new pc.Color(.4, .8, 1));
+    material.emissive = new pc.Color(.3, .65, 1);
+    material.useLighting = false; material.update();
+    for (let i = 0; i < 3; i++) {
+      const a = new pc.Vec3().lerp(start, end, i / 3), b = new pc.Vec3().lerp(start, end, (i + 1) / 3);
+      if (i > 0) a.y += i === 1 ? .18 : -.12;
+      if (i < 2) b.y += i === 0 ? .18 : -.12;
+      const segment = addBox(arc, "arc-segment", material, [.045, .045, a.distance(b)], [0, 0, 0]);
+      segment.setPosition(new pc.Vec3().lerp(a, b, .5)); segment.lookAt(b);
+    }
+    callingImpactVisuals.push({ root: arc, expiresAt: performance.now() + 180, materials: [material], abilityId: "mage_arcane_surge", stationary: true });
+  });
+  room.send("floor:upgrades:sync");
   room.onMessage("practice:reward", (reward: { wave: number; rare: boolean; weapon: boolean; message: string; x: number; y: number; z: number;
     choices: { id: string; name: string; detail: string }[] }) => {
     if (!fastWorldRequested || !rapidPracticeRewardPanel || !rapidPracticeRewardChoices) return;

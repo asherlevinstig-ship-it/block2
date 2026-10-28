@@ -2,6 +2,8 @@ import { Client, Room } from "@colyseus/core";
 import { aimedWeaponFlight, mobAttackBody, ENEMY_PROJECTILE_RADIUS } from "@blockcraft/protocol";
 import { CROWNKEEPER_FORGE } from "@blockcraft/protocol";
 import { crownkeeperFragments, withCrownkeeperFragments } from "./crownkeeper-progress.js";
+import { FloorRunUpgrades } from "./floor-run-upgrades.js";
+import { FLOOR_RUN_UPGRADES } from "@blockcraft/protocol";
 import { GREENWOOD_MASTERY_CAP, MISTFEN_MASTERY_CAP, greenwoodMasteryRank, mistfenMasteryRank } from "@blockcraft/protocol";
 import { callingStarterAbility } from "@blockcraft/protocol";
 import { experienceToNextLevel } from "@blockcraft/protocol";
@@ -488,6 +490,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly chunks = new Map<string, MutableChunk>();
   private readonly movementInputs = new Map<string, StoredMovementInput>();
   private readonly protectedDialogs = new Set<string>();
+  private readonly floorRunUpgrades = new FloorRunUpgrades();
+  private readonly floorRunStateKeys = new Map<string, string>();
+  private readonly floorRunLastHitAt = new Map<string, number>();
+  private readonly floorRunReprisalUntil = new Map<string, number>();
+  private readonly floorRunProcAt = new Map<string, number>();
+  private readonly floorRunPathCache = new Map<string, { source: string; path: BuildPathId | null }>();
   private readonly performanceSubscribers = new Set<string>();
   private readonly simulationTickSamples: number[] = [];
   private lastPerformanceReportAt = 0;
@@ -878,6 +886,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     });
     this.onMessage("practice:select", (client, payload: unknown) => this.selectPracticeAbility(client, payload));
     this.onMessage("practice:upgrade", (client, payload: unknown) => this.chooseRapidPracticeUpgrade(client, payload));
+    this.onMessage("floor:upgrades:sync", client => this.sendFloorRunUpgrades(client, true));
+    this.onMessage("floor:upgrades:choose", (client, payload: unknown) => this.chooseFloorRunUpgrade(client, payload));
     this.onMessage("practice:menu", (client, payload: unknown) => {
       if (this.roomKind !== "practice") return;
       const player = this.state.players.get(client.sessionId);
@@ -1238,6 +1248,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   }
 
   override async onLeave(client: Client): Promise<void> {
+    this.clearFloorRunUpgrades(client.sessionId);
     this.performanceSubscribers.delete(client.sessionId);
     this.firstCombatPerfectDodges.delete(client.sessionId);
     this.protectedDialogs.delete(client.sessionId);
@@ -2570,6 +2581,133 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       name: pending.rare ? `Warden ${RAPID_PRACTICE_UPGRADE_LABELS[id].name}` : RAPID_PRACTICE_UPGRADE_LABELS[id].name });
   }
 
+  private floorUpgradeAbilities(player: PlayerState): CallingAbilityId[] {
+    const state = parseBuildPathState(player.huntLoadoutsJson), path = state.selectedPathId;
+    if (!path) return [];
+    const power = this.roomKind === "practice" ? state.callingAbilities[path] ?? selectedCallingAbility(state, path) : selectedCallingAbility(state, path);
+    return [...(player.level >= 2 ? [power] : []),
+      ...(player.level >= 4 ? [callingStarterAbility(path, "special").id] : [])];
+  }
+
+  private hasFloorUpgrade(id: string, upgrade: string): boolean {
+    const player = this.state.players.get(id), definition = FLOOR_RUN_UPGRADES.find(entry => entry.id === upgrade);
+    if (!this.rapidPractice || !player || player.health <= 0 || !isInsideTowerFloorOne(player.x, player.z)
+      || !this.floorRunUpgrades.has(id, upgrade)) return false;
+    let cached = this.floorRunPathCache.get(id);
+    if (!cached || cached.source !== player.huntLoadoutsJson) {
+      cached = { source: player.huntLoadoutsJson, path: parseBuildPathState(player.huntLoadoutsJson).selectedPathId };
+      this.floorRunPathCache.set(id, cached);
+    }
+    return definition?.path === cached.path;
+  }
+
+  private floorUpgradeSafe(id: string, now = Date.now()): boolean {
+    const player = this.state.players.get(id);
+    return Boolean(player && player.health > 0 && isInsideTowerFloorOne(player.x, player.z)
+      && now - (this.floorRunLastHitAt.get(id) ?? -Infinity) >= 5_000
+      && ![...this.state.mobs.entries()].some(([mobId, mob]) => mob.alive && Math.abs(mob.y - player.y) <= 2.5
+        && Math.hypot(mob.x - player.x, mob.z - player.z) <= 14
+        && (mob.targetId === id || this.mobAwareness.get(mobId)?.targetId === id
+          || mob.combatState === "windup" || mob.combatState === "strike")));
+  }
+
+  private sendFloorRunUpgrades(client: Client, force = false): void {
+    if (!this.rapidPractice) return;
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+    if (!isInsideTowerFloorOne(player.x, player.z) && this.floorRunUpgrades.active(client.sessionId))
+      this.clearFloorRunUpgrades(client.sessionId);
+    if (player.health > 0 && isInsideTowerFloorOne(player.x, player.z)
+      && !this.floorRunUpgrades.active(client.sessionId)) this.floorRunUpgrades.start(client.sessionId);
+    const state = this.floorRunUpgrades.state(client.sessionId, parseBuildPathState(player.huntLoadoutsJson).selectedPathId,
+      this.floorUpgradeAbilities(player));
+    const update = { ...state, canChoose: state.pending > 0 && state.path !== null && this.floorUpgradeSafe(client.sessionId) };
+    const key = JSON.stringify(update);
+    if (force || key !== this.floorRunStateKeys.get(client.sessionId)) {
+      this.floorRunStateKeys.set(client.sessionId, key); client.send("floor:upgrades", update);
+    }
+  }
+
+  private chooseFloorRunUpgrade(client: Client, payload: unknown): void {
+    const player = this.state.players.get(client.sessionId);
+    if (!this.rapidPractice || !player || !payload || typeof payload !== "object"
+      || !("offerId" in payload) || typeof payload.offerId !== "string"
+      || !("upgradeId" in payload) || typeof payload.upgradeId !== "string") return;
+    if (!this.floorUpgradeSafe(client.sessionId)) { this.sendFloorRunUpgrades(client, true); return; }
+    if (this.floorRunUpgrades.choose(client.sessionId, payload.offerId, payload.upgradeId,
+      parseBuildPathState(player.huntLoadoutsJson).selectedPathId, this.floorUpgradeAbilities(player))) {
+      const upgrade = FLOOR_RUN_UPGRADES.find(entry => entry.id === payload.upgradeId)!;
+      client.send("chat:notice", `FLOOR UPGRADE · ${upgrade.name} · ${upgrade.detail} Lasts until death or leaving Floor 1.`);
+    }
+    this.sendFloorRunUpgrades(client, true);
+  }
+
+  private clearFloorRunUpgrades(id: string): void {
+    this.floorRunUpgrades.clear(id); this.floorRunStateKeys.delete(id); this.floorRunLastHitAt.delete(id);
+    this.floorRunReprisalUntil.delete(id);
+    this.floorRunPathCache.delete(id);
+    for (const key of this.floorRunProcAt.keys()) if (key.startsWith(id + ":")) this.floorRunProcAt.delete(key);
+  }
+
+  private floorRunProc(id: string, key: string, now: number, cooldownMs: number): boolean {
+    const procKey = id + ":" + key;
+    if (now < (this.floorRunProcAt.get(procKey) ?? 0)) return false;
+    this.floorRunProcAt.set(procKey, now + cooldownMs); return true;
+  }
+
+  private floorRunWeaponBonus(id: string, player: PlayerState, mob: MobState, now: number): number {
+    const has = (key: string) => this.hasFloorUpgrade(id, key);
+    const distance = Math.hypot(player.x - mob.x, player.z - mob.z);
+    const radians = mob.yaw * Math.PI / 180;
+    const behind = distance > .01 && ((player.x - mob.x) * Math.sin(radians) + (player.z - mob.z) * Math.cos(radians)) / distance < -.35;
+    let bonus = Number(behind && has("assassin_flank"))
+      + Number(mob.health === mob.maxHealth && (has("assassin_open") || has("ranger_open")))
+      + Number(mob.health <= mob.maxHealth * .3 && has("assassin_finish"))
+      + Number(Boolean(mob.targetId && mob.targetId !== id) && has("thief_distraction"))
+      + Number(mob.combatState === "stagger" && has("thief_opening"))
+      + Number(distance >= 6 && (has("mage_distance") || has("ranger_distance")));
+    const victim = this.state.players.get(mob.targetId);
+    if (victim && mob.targetId !== id && victim.health > 0 && victim.health < victim.maxHealth / 2 && has("healer_protect")) bonus++;
+    if (has("mage_reserve") && player.stamina >= 80) { player.stamina -= 8; bonus++; }
+    if ((has("tank_riposte") || has("mage_shield")) && now < (this.floorRunReprisalUntil.get(id) ?? 0)) {
+      bonus += 2; this.floorRunReprisalUntil.delete(id);
+    }
+    return bonus;
+  }
+
+  private floorRunWeaponEffects(id: string, player: PlayerState, mobId: string, mob: MobState, now: number, step: number): void {
+    if (this.hasFloorUpgrade(id, "mage_chain")) {
+      const other = [...this.state.mobs.entries()].filter(([targetId, target]) => targetId !== mobId && target.alive
+        && Math.abs(target.y - mob.y) <= 2.5 && Math.hypot(target.x - mob.x, target.z - mob.z) <= 4
+        && hasCombatLineOfSight(mob, target, this.readWorldBlock))
+        .sort(([, a], [, b]) => Math.hypot(a.x - mob.x, a.z - mob.z) - Math.hypot(b.x - mob.x, b.z - mob.z))[0];
+      if (other && this.floorRunProc(id, "arc", now, 3_000)) {
+        const [targetId, target] = other, damage = damageAfterArmor(1, target.armor);
+        this.combatContributions.record(targetId, id, Math.min(target.health, damage), now);
+        target.health = Math.max(0, target.health - damage); target.hitSequence++;
+        this.alertHitMob(targetId, id, now);
+        if (target.health === 0) this.defeatMob(targetId, target, id, now);
+        this.broadcast("combat:hit", { attackerId: id, mainHandId: player.mainHandId as MainHandId,
+          mobId: targetId, damage, health: target.health, defeated: !target.alive, comboStep: step,
+          knockback: 0, momentumStacks: player.momentumStacks, secondary: true } satisfies CombatHit);
+        this.broadcast("floor:arc-jump", { x: mob.x, y: mob.y + .8, z: mob.z, targetId });
+      }
+    }
+    if (mob.health > 0 && mob.combatState === "stagger" && this.hasFloorUpgrade(id, "ranger_snare")
+      && this.floorRunProc(id, "snare", now, 3_000)) {
+      this.rangerRootedUntil.set(mobId, Math.max(this.rangerRootedUntil.get(mobId) ?? 0, now + 700));
+      this.broadcast("ranger:pin-update", { casterId: id, mobId, stacks: 3, rooted: true, durationMs: 700 });
+    }
+    if (this.hasFloorUpgrade(id, "healer_vigor")) {
+      const ally = [...this.state.players.entries()].filter(([, target]) => target.health > 0 && target.stamina < target.maxStamina
+        && Math.abs(target.y - player.y) <= 2.5 && Math.hypot(target.x - player.x, target.z - player.z) <= 6
+        && hasCombatLineOfSight(player, target, this.readWorldBlock))
+        .sort(([aId, a], [bId, b]) => Number(aId === id) - Number(bId === id)
+          || Math.hypot(a.x - player.x, a.z - player.z) - Math.hypot(b.x - player.x, b.z - player.z))[0];
+      if (ally && this.floorRunProc(id, "vigor", now, 2_000)) ally[1].stamina = Math.min(ally[1].maxStamina, ally[1].stamina + 4);
+    }
+  }
+
   private setPracticeAbility(player: PlayerState, abilityId: CallingAbilityId): void {
     const ability = CALLING_ABILITY_OPTIONS.find(option => option.id === abilityId);
     if (!ability) return;
@@ -3442,6 +3580,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         const experience = mobExperience(mob.archetype, mob.rewardMultiplier, Boolean(rapidSpawn.leader), player.level, mob.level);
         this.grantProgression(playerId, experience, mob.name);
         this.grantBuildProgress(playerId, rapidSpawn.leader ? 3 : 1);
+        if (mobId === TOWER_FLOOR_ONE_NORTH_WARDEN_ID || mobId === TOWER_FLOOR_ONE_SOUTH_WARDEN_ID) {
+          if (!this.floorRunUpgrades.active(playerId)) this.floorRunUpgrades.start(playerId);
+          this.floorRunUpgrades.earn(playerId, mobId);
+          const client = this.clients.find(candidate => candidate.sessionId === playerId);
+          if (client) this.sendFloorRunUpgrades(client, true);
+        }
         if (mobId === TOWER_FLOOR_ONE_BOSS_ID) {
           const fragments = Math.min(65535, crownkeeperFragments(player.huntLoadoutsJson) + 1);
           player.huntLoadoutsJson = withCrownkeeperFragments(player.huntLoadoutsJson, fragments);
@@ -3453,9 +3597,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
               ? "CROWNKEEPER DEFEATED · CROWNCLEAVER FORGE READY · bring 5 Crown Fragments and 30 gold to the Town blacksmith's Weapons tab."
               : `CROWNKEEPER DEFEATED · CROWN FRAGMENT BANKED · ${crownkeeperFragments(player.huntLoadoutsJson)}/${CROWNKEEPER_FORGE.fragments} toward Crowncleaver · progress kept even if you fall.`
           : mobId === TOWER_FLOOR_ONE_NORTH_WARDEN_ID
-            ? "NORTH ROOT WARDEN FELLED · northern seal broken · warden cache landed."
+            ? "NORTH ROOT WARDEN FELLED · northern seal broken · cache landed · Calling upgrade banked in Kit."
             : mobId === TOWER_FLOOR_ONE_SOUTH_WARDEN_ID
-              ? "SOUTH ROOT WARDEN FELLED · southern seal broken · warden cache landed."
+              ? "SOUTH ROOT WARDEN FELLED · southern seal broken · cache landed · Calling upgrade banked in Kit."
             : rapidSpawn.leader
             ? `${mob.name.toUpperCase()} DEFEATED · leader loot landed · returns in ${Math.round(rapidSpawn.respawnMs / 1000)}s.`
             : guardedReward ? `${mob.name.replace(/ keeper$/i, "").toUpperCase()} SECURED · guarded loot landed · +${coinsGranted} gold.`
@@ -4993,9 +5137,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.combatContributions.recordSupport(mobId, playerId, damage - defense.damage, now);
     const traitId = player.equippedTrait as TraitId;
     if (defense.guarded) {
-      const cost = guardStaminaCost(defense.parried ? 8 : 14, traitId);
+      const floorGuard = ["tank_guard", "thief_guard", "healer_guard"].some(upgrade => this.hasFloorUpgrade(playerId, upgrade)) ? 4 : 0;
+      const cost = Math.max(0, guardStaminaCost(defense.parried ? 8 : 14, traitId) - floorGuard);
       player.stamina = Math.max(0, player.stamina - cost);
       if (defense.parried) player.stamina = Math.min(player.maxStamina, player.stamina + parryStaminaRestore(traitId));
+      if (defense.parried && this.hasFloorUpgrade(playerId, "tank_riposte")) this.floorRunReprisalUntil.set(playerId, now + 5_000);
     }
     let perkStaminaRestored = 0;
     if (defense.guarded && player.armourId === "rootguard_armour") {
@@ -5062,7 +5208,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const build = parseBuildPathState(guard.huntLoadoutsJson);
       const ability = selectedCallingAbility(build, "tank");
       const beforeProtection = defense.damage;
-      defense.damage = Math.max(0, defense.damage - (selectedCallingAugment(build, ability) === "bulwark_iron_skin" ? 2 : 1));
+      defense.damage = Math.max(0, defense.damage - (selectedCallingAugment(build, ability) === "bulwark_iron_skin" ? 2 : 1)
+        - Number(this.hasFloorUpgrade(guardId, "tank_wall")));
       const prevented = beforeProtection - defense.damage;
       if (prevented <= 0) continue;
       allyBulwarkGuardId = guardId;
@@ -5080,6 +5227,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const beforeBarrier = defense.damage;
       defense.damage = Math.max(0, defense.damage - (selectedCallingAugment(build, "mage_mana_shield") === "shield_reinforced_rune" ? 2 : 1));
       const prevented = beforeBarrier - defense.damage;
+      if (prevented > 0 && this.hasFloorUpgrade(playerId, "mage_shield")) this.floorRunReprisalUntil.set(playerId, now + 5_000);
       const barrierEnergy = Math.min(4, (this.mageBarrierEnergy.get(playerId) ?? 0) + prevented);
       this.mageBarrierEnergy.set(playerId, barrierEnergy);
       this.grantCallingTrial(playerId, "shield_prismatic_layers", 1);
@@ -5168,6 +5316,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const emberRun = this.emberVaultRuns.get(playerId);
     if (emberRun && emberRun.completedAt === 0) emberRun.damageTaken += defense.damage;
     const defeated = player.health === 0;
+    if (defense.damage > 0) this.floorRunLastHitAt.set(playerId, now);
     this.broadcastToInterest("combat:player-hit", {
       mobId,
       playerId,
@@ -5199,6 +5348,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       } satisfies DefenseResolved, player);
     }
     if (!defeated) return true;
+    this.clearFloorRunUpgrades(playerId);
+    const defeatedClient = this.clients.find(client => client.sessionId === playerId);
+    if (defeatedClient) this.sendFloorRunUpgrades(defeatedClient, true);
     this.recordAscendantHuntDefeat(playerId, now);
     const failedDepthsRun = this.silverDepthsRuns.get(playerId);
     if (failedDepthsRun) this.restoreRunMoonstone(player, failedDepthsRun);
@@ -6904,7 +7056,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       return;
     }
     const consecratedTier = abilityId === "healer_renewal" ? this.equipmentAffixTier(player, "consecrated") : 0;
-    const renewalRadius = 4.5 + consecratedTier * .35;
+    const renewalRadius = 4.5 + consecratedTier * .35 + (this.hasFloorUpgrade(client.sessionId, "healer_field") ? 1.5 : 0);
     const renewalTargets = abilityId === "healer_renewal"
       ? [...this.state.players.entries()].filter(([, target]) => target.health > 0 && target.health < target.maxHealth
         && Math.abs(target.y - player.y) <= 2.5 && Math.hypot(target.x - player.x, target.z - player.z) <= renewalRadius
@@ -6938,7 +7090,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       ? [...this.state.mobs.entries()].filter(([, mob]) => {
         if (!mob.alive || Math.abs(mob.y - player.y) > 3 || !hasCombatLineOfSight(player, mob, this.readWorldBlock)) return false;
         const dx = mob.x - player.x, dz = mob.z - player.z, distance = Math.hypot(dx, dz);
-        if (distance < .001 || distance > (augmentId === "deadeye_eagle_eye" ? 22 : 18)) return false;
+        if (distance < .001 || distance > (augmentId === "deadeye_eagle_eye" ? 22 : 18)
+          + (this.hasFloorUpgrade(client.sessionId, "ranger_deadeye") ? 4 : 0)) return false;
         const radians = (parsed.data.yaw ?? player.yaw) * Math.PI / 180;
         return (Math.sin(radians) * dx + Math.cos(radians) * dz) / distance >= (augmentId === "deadeye_eagle_eye" ? .94 : .97);
       }).sort(([, a], [, b]) => {
@@ -6950,7 +7103,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         return aim(b) - aim(a) || Math.hypot(a.x - player.x, a.z - player.z) - Math.hypot(b.x - player.x, b.z - player.z);
       })[0] : undefined;
     if (abilityId === "ranger_deadeye" && !deadeyeTarget) {
-      client.send("chat:notice", `DEADEYE · aim precisely at a visible enemy within ${augmentId === "deadeye_eagle_eye" ? 22 : 18}m.`);
+      client.send("chat:notice", `DEADEYE · aim precisely at a visible enemy within ${(augmentId === "deadeye_eagle_eye" ? 22 : 18) + (this.hasFloorUpgrade(client.sessionId, "ranger_deadeye") ? 4 : 0)}m.`);
       return;
     }
     const overloadTarget = abilityId === "mage_overload"
@@ -6978,12 +7131,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const nearbyMobs = (radius: number) => [...this.state.mobs.entries()].filter(([, mob]) => mob.alive
       && Math.abs(mob.y - player.y) <= 2.5 && Math.hypot(mob.x - player.x, mob.z - player.z) <= radius);
     if (abilityId === "tank_bulwark") {
-      durationMs = 5_000 + rank * 350 + (augmentId === "bulwark_guardian_wall" ? 2_000 : 0);
+      durationMs = 5_000 + rank * 350 + (augmentId === "bulwark_guardian_wall" ? 2_000 : 0) + (this.hasFloorUpgrade(client.sessionId, "tank_wall") ? 2_000 : 0);
       this.tankBulwarkUntil.set(client.sessionId, now + durationMs);
       detail = `BRACED · −${augmentId === "bulwark_iron_skin" ? 2 : 1} DAMAGE PER HIT · ${(durationMs / 1_000).toFixed(1)}s`;
       this.grantCallingTrial(client.sessionId, "bulwark_guardian_wall", 1);
     } else if (abilityId === "tank_challenge") {
-      const nearby = nearbyMobs(8 + rank * .5 + (augmentId === "challenge_mass_provocation" ? 3 : 0));
+      const nearby = nearbyMobs(8 + rank * .5 + (augmentId === "challenge_mass_provocation" ? 3 : 0) + (this.hasFloorUpgrade(client.sessionId, "tank_challenge") ? 3 : 0));
       const allowed = new Set(warbandChallengeTargets(nearby.map(([mobId]) => ({ id: mobId,
         leaderId: leaderForFollower(mobId), isLeader: isMixedWarbandLeader(mobId) }))).map(target => target.id));
       const targets = nearby.filter(([mobId]) => allowed.has(mobId));
@@ -7005,7 +7158,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.grantCallingTrial(client.sessionId, "challenge_mass_provocation", targets.length);
       this.grantCallingTrial(client.sessionId, "challenge_rallying_cry", player.stamina - staminaBefore);
     } else if (abilityId === "tank_earthbreaker") {
-      const targets = nearbyMobs(4.2 + rank * .2 + (augmentId === "earthbreaker_faultline" ? 1.8 : 0));
+      const targets = nearbyMobs(4.2 + rank * .2 + (augmentId === "earthbreaker_faultline" ? 1.8 : 0) + (this.hasFloorUpgrade(client.sessionId, "tank_fault") ? 1.5 : 0));
       const baseDamage = 2 + (rank >= 4 ? 1 : 0) + (augmentId === "earthbreaker_crushing_force" ? 2 : 0);
       const interruptedTargetIds: string[] = [];
       const shatteredTargetIds: string[] = [];
@@ -7038,7 +7191,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     } else if (abilityId === "mage_arcane_surge") {
       const staminaBefore = player.stamina, specialRecovering = player.specialCooldownUntil > now;
       const stamina = 30 + rank * 5 + (augmentId === "surge_deep_reserves" ? 25 : 0);
-      const targets = nearbyMobs(4.5);
+      const targets = nearbyMobs(4.5 + (this.hasFloorUpgrade(client.sessionId, "mage_surge") ? 2 : 0));
       for (const [mobId, mob] of targets) {
         const damage = damageAfterArmor(2, mob.armor, true);
         this.combatContributions.record(mobId, client.sessionId, Math.min(mob.health, damage), now);
@@ -7063,7 +7216,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     } else if (abilityId === "mage_overload") {
       const [mobId, target] = overloadTarget!;
       const overloadId = `overload:${client.sessionId}:${++this.mageOverloadSequence}`;
-      const radius = 3 + (augmentId === "overload_volatile_core" ? 1 : 0);
+      const radius = 3 + (augmentId === "overload_volatile_core" ? 1 : 0) + Number(this.hasFloorUpgrade(client.sessionId, "mage_fault"));
       const damage = 5 + Number(rank >= 4) + (augmentId === "overload_volatile_core" ? 2 : 0);
       const pulses = augmentId === "overload_residual_charge" ? 2 : 1;
       this.pendingMageOverloads.set(overloadId, { ownerId: client.sessionId, x: target.x, y: target.y, z: target.z,
@@ -7075,7 +7228,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         z: target.z, radius, detonatesAt: now + 850, pulses });
     } else if (abilityId === "healer_renewal") {
       const fieldId = `renewal:${client.sessionId}:${++this.renewalFieldSequence}`;
-      const radius = renewalRadius, durationMsValue = 6_000 + consecratedTier * 500;
+      const radius = renewalRadius, durationMsValue = 6_000 + consecratedTier * 500 + (this.hasFloorUpgrade(client.sessionId, "healer_renew") ? 2_000 : 0);
       durationMs = durationMsValue;
       this.renewalFields.set(fieldId, { ownerId: client.sessionId, x: player.x, y: player.y, z: player.z,
         radius, heal: 1, expiresAt: now + durationMsValue, nextPulseAt: now + 500 });
@@ -7090,7 +7243,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const mendingTier = this.equipmentAffixTier(player, "mending");
       const heal = 2 + (rank >= 2 ? 1 : 0) + (rank >= 4 ? 1 : 0)
         + (specialization === "lifebinder" ? 1 + Number(this.buildSpecializationMastered(player, "lifebinder")) : 0)
-        + Math.ceil(mendingTier / 2);
+        + Math.ceil(mendingTier / 2) + (this.hasFloorUpgrade(client.sessionId, "healer_rescue") && target.health < target.maxHealth / 2 ? 2 : 0);
       const restored = Math.min(heal, target.maxHealth - target.health);
       target.health += restored;
       const staminaBefore = target.stamina;
@@ -7116,7 +7269,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (targetId !== client.sessionId && specialization === "field_medic") this.grantMasterTrial(client.sessionId, "field_medic", staminaRestored);
     } else if (abilityId === "assassin_vanish") {
       formationCountered = this.counterWarbandCrawlerCommitment(client.sessionId, now);
-      durationMs = 3_000 + rank * 400 + (augmentId === "vanish_deep_cloak" ? 2_000 : 0);
+      durationMs = 3_000 + rank * 400 + (augmentId === "vanish_deep_cloak" ? 2_000 : 0) + (this.hasFloorUpgrade(client.sessionId, "assassin_cloak") ? 2_000 : 0);
       this.stealthUntil.set(client.sessionId, now + durationMs);
       this.broadcast("player:stealth", { playerId: client.sessionId, until: now + durationMs });
       this.assassinShadowUntil.set(client.sessionId, now + durationMs);
@@ -7144,7 +7297,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const target = deathMarkTarget && this.state.mobs.get(deathMarkTarget.id);
       if (target) {
         effectTargetId = deathMarkTarget!.id;
-        const markMs = 10_000 + (augmentId === "mark_lingering_sentence" ? 5_000 : 0);
+        const markMs = 10_000 + (augmentId === "mark_lingering_sentence" ? 5_000 : 0) + (this.hasFloorUpgrade(client.sessionId, "assassin_mark") ? 5_000 : 0);
         this.specialMarks.set(client.sessionId, { mobId: deathMarkTarget!.id, expiresAt: now + markMs, stacks: HUNTERS_MARK.maxStacks });
         if (augmentId === "mark_open_wound") {
           this.combatContributions.record(deathMarkTarget!.id, client.sessionId, Math.min(target.health, 2), now);
@@ -7158,7 +7311,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     } else if (abilityId === "assassin_blade_dance") {
       durationMs = 650 + rank * 50;
       player.invulnerableUntil = Math.max(player.invulnerableUntil, now + durationMs);
-      const cutCount = 4 + (augmentId === "dance_blade_storm" ? 2 : 0);
+      const cutCount = 4 + (augmentId === "dance_blade_storm" ? 2 : 0) + Number(this.hasFloorUpgrade(client.sessionId, "assassin_dance"));
       const cuts: { mobId: string; damage: number; sequence: number }[] = [];
       for (let sequence = 0; sequence < cutCount; sequence += 1) {
         const living = bladeDanceTargets.filter(([, mob]) => mob.alive && mob.health > 0);
@@ -7179,7 +7332,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.grantCallingTrial(client.sessionId, "dance_blade_storm", cuts.length);
       this.broadcast("assassin:blade-dance", { casterId: client.sessionId, cuts, durationMs });
     } else if (abilityId === "thief_smoke_bomb") {
-      durationMs = 2_500 + rank * 350 + (augmentId === "smoke_dense_cloud" ? 2_000 : 0);
+      durationMs = 2_500 + rank * 350 + (augmentId === "smoke_dense_cloud" ? 2_000 : 0) + (this.hasFloorUpgrade(client.sessionId, "thief_smoke") ? 2_000 : 0);
       const radius = 6 + rank;
       const divertedMobIds: string[] = [];
       for (const [mobId, awareness] of this.mobAwareness) if (awareness.targetId === client.sessionId) {
@@ -7200,10 +7353,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       }
     } else if (abilityId === "thief_decoy") {
       formationCountered = this.counterWarbandCrawlerCommitment(client.sessionId, now);
-      durationMs = 3_500 + rank * 250;
+      durationMs = 3_500 + rank * 250 + (this.hasFloorUpgrade(client.sessionId, "thief_decoy") ? 2_000 : 0);
       const targets = nearbyMobs(8 + rank * .5 + (augmentId === "decoy_wide_stage" ? 3 : 0));
       const decoyId = `thief-decoy:${client.sessionId}`;
-      const decoyHealth = 2 + rank;
+      const decoyHealth = 2 + rank + (this.hasFloorUpgrade(client.sessionId, "thief_decoy") ? 3 : 0);
       this.thiefDecoys.set(decoyId, { ownerId: client.sessionId, x: player.x, y: player.y, z: player.z,
         yaw: parsed.data.yaw ?? player.yaw, until: now + durationMs, health: decoyHealth, maxHealth: decoyHealth });
       for (const [mobId, mob] of targets) {
@@ -7223,7 +7376,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       }
     } else if (abilityId === "thief_escape_artist") {
       const staminaBefore = player.stamina, healthBefore = player.health;
-      durationMs = 700 + rank * 80 + (augmentId === "escape_extended_window" ? 500 : 0);
+      durationMs = 700 + rank * 80 + (augmentId === "escape_extended_window" ? 500 : 0) + (this.hasFloorUpgrade(client.sessionId, "thief_escape") ? 400 : 0);
       this.dodgePressure.set(client.sessionId, { chain: 0, lastAt: Number.NEGATIVE_INFINITY, exhaustedUntil: 0 });
       player.invulnerableUntil = Math.max(player.invulnerableUntil, now + durationMs);
       player.stamina = player.maxStamina;
@@ -7235,7 +7388,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       formationCountered = this.counterWarbandCrawlerCommitment(client.sessionId, now);
       const origin = { x: player.x, y: player.y, z: player.z };
       const radians = (parsed.data.yaw ?? player.yaw) * Math.PI / 180;
-      const leap = 3 + (augmentId === "disengage_long_leap" ? 2 : 0);
+      const leap = 3 + (augmentId === "disengage_long_leap" ? 2 : 0) + (this.hasFloorUpgrade(client.sessionId, "ranger_leap") ? 1.5 : 0);
       const moved = resolvePlayerMotion({ x: player.x, y: player.y, z: player.z },
         { x: -Math.sin(radians) * leap, y: 0, z: -Math.cos(radians) * leap }, this.readWorldBlock);
       Object.assign(player, moved, { invulnerableUntil: Math.max(player.invulnerableUntil, now + 450 + (augmentId === "disengage_evasive_roll" ? 450 : 0)) });
@@ -7273,7 +7426,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (markedBy) this.broadcast("calling:combo", { comboId: "marked_deadeye", label: "MARKED DEADEYE",
         casterId: client.sessionId, partnerId: markedBy, targetIds: [mobId], x: mob.x, y: mob.y, z: mob.z, bonus: 3 });
     } else {
-      const hits = (rank >= 4 ? 4 : 3) + (augmentId === "volley_deep_quiver" ? 2 : 0);
+      const hits = (rank >= 4 ? 4 : 3) + (augmentId === "volley_deep_quiver" ? 2 : 0) + Number(this.hasFloorUpgrade(client.sessionId, "ranger_volley"));
       const bonus = 1 + (augmentId === "volley_heavy_arrows" ? 1 : 0);
       this.rangerCallingFocus.set(client.sessionId, { hits, bonus });
       detail = `NEXT ${hits} RANGED HITS +${bonus}`;
@@ -7292,6 +7445,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       casterId: client.sessionId, pathId, abilityId, x: effectPosition.x, y: effectPosition.y, z: effectPosition.z,
       yaw: parsed.data.yaw ?? player.yaw, ...(durationMs ? { durationMs } : {}), ...(effectTargetId ? { targetId: effectTargetId } : {}),
       ...(augmentId ? { augmentId } : {}),
+      ...(abilityId === "mage_arcane_surge" && this.hasFloorUpgrade(client.sessionId, "mage_surge") ? { radiusScale: 6.5 / 4.5 } : {}),
+      ...(abilityId === "tank_earthbreaker" && this.hasFloorUpgrade(client.sessionId, "tank_fault")
+        ? { radiusScale: 1 + 1.5 / (4.2 + rank * .2 + (augmentId === "earthbreaker_faultline" ? 1.8 : 0)) } : {}),
     };
     if (player.mainHandId === "emberheart_focus") {
       const emberheart = equipmentPerkStats("emberheart_focus", equipmentReforgeRank(player.reforgeRanksJson, "emberheart_focus"))!;
@@ -8117,12 +8273,15 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
     const entering = id === "tower-floor-1-entry";
     const destination = entering ? TOWER_FLOOR_ONE.entry : RAPID_PRACTICE_ARENA.spawn;
+    this.clearFloorRunUpgrades(client.sessionId);
+    if (entering) this.floorRunUpgrades.start(client.sessionId);
     this.forestTravelAt.set(client.sessionId, now);
     this.pendingMining.delete(client.sessionId); this.pendingAttacks.delete(client.sessionId);
     this.pendingPowers.delete(client.sessionId); this.cancelWeaponProjectiles(client.sessionId);
     player.defending = false; player.powerCastStartedAt = 0;
     player.x = destination.x; player.y = destination.y; player.z = destination.z;
     player.invulnerableUntil = Math.max(player.invulnerableUntil, now + 1_500);
+    this.sendFloorRunUpgrades(client, true);
     this.movementInputs.set(client.sessionId, { request: idleMovementInput(), receivedAt: now });
     this.verticalVelocities.set(client.sessionId, 0);
     client.send("player:portal", { ...destination, entering });
@@ -8864,6 +9023,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (this.roomKind === "overworld") this.sendPartyUpdates(Date.now());
       else this.lastPartyUpdateAt = Date.now();
       for (const client of this.clients) this.sendObjectiveState(client);
+      if (this.rapidPractice) for (const client of this.clients) this.sendFloorRunUpgrades(client);
       if (this.roomKind === "overworld") {
         const reliquary = this.ashenReliquary.snapshot("", Date.now());
         const phaseKey = `${reliquary.phase}:${reliquary.defeated}:${reliquary.expiresAt}:${reliquary.cooldownUntil}`;
@@ -11126,6 +11286,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (preciseTier > 0) this.equipmentAffixProc(sessionId, "precise", `PRECISE +${preciseTier}`, mob, now);
       let damage = damageAfterArmor(
         timing.damage + ironSwordDamageBonus(player.blacksmithUpgrades, pending.mainHandId)
+          + this.floorRunWeaponBonus(sessionId, player, mob, now)
           + (this.rapidPracticeUpgrades.get(sessionId)?.damage ?? 0)
           + (rapidPracticeWeaponProfile(pending.mainHandId, this.rapidPractice)?.bonusDamage ?? 0)
           + reforgeWeaponDamageBonus(equipmentReforgeRank(player.reforgeRanksJson, pending.mainHandId))
@@ -11173,13 +11334,16 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.alertHitMob(mobId, sessionId, now, source);
       mob.hitSequence += 1;
       player.momentumStacks = gainMomentum(player.momentumStacks, player.equippedTrait as TraitId);
+      const floorBreak = mob.combatState === "windup" && this.hasFloorUpgrade(sessionId, "tank_breaker")
+        && this.floorRunProc(sessionId, "break", now, 3_000) ? 350 : 0;
       const staggerDuration = northwatchPatrolInterruptDuration(mobId, mob.attackPattern,
-        basicStaggerDuration(pending.mainHandId, pending.step, mob.archetype, mob.combatState, mob.isChampion));
+        Math.max(floorBreak, basicStaggerDuration(pending.mainHandId, pending.step, mob.archetype, mob.combatState, mob.isChampion)));
       const struckBloaterGland = mob.health > 0 && this.strikeFenBloaterGland(mobId, mob, sessionId, now);
       if (!struckBloaterGland && !cinderArmoured && this.staggerMob(mobId, mob, now, staggerDuration)) {
         const stagger: CombatStagger = { attackerId: sessionId, mobId, durationMs: staggerDuration };
         this.broadcast("combat:stagger", stagger);
       }
+      this.floorRunWeaponEffects(sessionId, player, mobId, mob, now, pending.step);
       if (mob.health > 0 && rangerActive) {
         if (pinStacks >= 3) {
           const snaringTier = this.equipmentAffixTier(player, "snaring");
