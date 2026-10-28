@@ -9,7 +9,7 @@ import {
   TOWN_EXPEDITION_BOARD_POSITION,
   TOWN_SILVER_DEPTHS_PORTAL_POSITION,
 } from "@blockcraft/voxel-world";
-import { FAST_WORLD_REGION_DEFINITIONS, HUNT_EQUIPMENT_SETS, type ItemId } from "@blockcraft/protocol";
+import { FAST_WORLD_REGION_DEFINITIONS, HUNT_EQUIPMENT_SETS, TOWER_FLOOR_ONE_SPAWNS, TOWER_FLOOR_ONE_BOSS_ID, type ItemId } from "@blockcraft/protocol";
 
 export type CodexHuntPlan = {
   itemId: ItemId;
@@ -30,6 +30,9 @@ const elderthorn = waypoint(elderthornEncounter ?? { x: 150.5, y: 8, z: 106.5 },
   "codex-elderthorn", "Elderthorn Keeper · Greenwood leader cache");
 
 export const CODEX_HUNT_PLANS: Partial<Record<ItemId, CodexHuntPlan>> = {
+  crownkeeper_blade: { itemId: "crownkeeper_blade", source: "Floor 1 · The Crownkeeper", level: "LV 1–4",
+    protection: "One permanent Crown Fragment per credited clear · forge with 5 fragments and 30 gold",
+    target: waypoint(TOWER_FLOOR_ONE_SPAWNS.find(spawn => spawn.id === TOWER_FLOOR_ONE_BOSS_ID)!, "floor1-crownkeeper", "The Crownkeeper · Floor 1 signature") },
   forged_sword: { itemId: "forged_sword", source: "Town Blacksmith", level: "LV 1+", protection: "Always available once its smithing requirement is met", target: smith },
   forged_bow: { itemId: "forged_bow", source: "Town Blacksmith", level: "LV 1+", protection: "Always available once its smithing requirement is met", target: smith },
   forged_focus: { itemId: "forged_focus", source: "Town Blacksmith", level: "LV 1+", protection: "Always available once its smithing requirement is met", target: smith },

@@ -1,5 +1,6 @@
 export { fastWorldGroundHeight, fastWorldCoastShorelineZ } from "./fast-world-elevation.js";
 import { fastWorldGroundHeight } from "./fast-world-elevation.js";
+export const FAST_WORLD_BLACKSMITH_POSITION = { x: 79, y: 8, z: 136 } as const;
 import { createFastWorldObstacleQuery } from "./fast-world-obstacles.js";
 import { TOWER_FLOOR_ONE, TOWER_FLOOR_ONE_FORTRESS_COLLIDERS, isInsideTowerFloorOne } from "./tower-floor-one.js";
 export * from "./fast-world-obstacles.js";
@@ -634,6 +635,7 @@ export const BLACKSMITH_DISMANTLE = {
   fang_dagger: { gold: 3, materialId: "crawler_fang", materialQuantity: 1 },
   stone_core_hammer: { gold: 6, materialId: "stone_core", materialQuantity: 1 },
   rootbound_hammer: { gold: 16, materialId: "timber", materialQuantity: 2 },
+  crownkeeper_blade: { gold: 16, materialId: "stone_core", materialQuantity: 2 },
   matriarch_edge: { gold: 22, materialId: "moonstone", materialQuantity: 1 },
   acid_gland_focus: { gold: 6, materialId: "acid_gland", materialQuantity: 1 },
   venom_focus: { gold: 16, materialId: "acid_gland", materialQuantity: 2 },
@@ -701,6 +703,7 @@ export const AshenMasteryChooseSchema = z.object({
 }).strict();
 /** Short, optional exploration-to-gear bridge before mastery-gated legendary forging. */
 export const FIELD_FORGE_RECIPES = {
+  crownkeeper: { itemId: "crownkeeper_blade", gold: 30, materials: [] },
   greenwood: { itemId: "forager_wrap", gold: 12,
     materials: [{ itemId: "moss_fibre", quantity: 2 }, { itemId: "timber", quantity: 1 }] },
   mistfen: { itemId: "fenwalker_mantle", gold: 16,
@@ -709,9 +712,10 @@ export const FIELD_FORGE_RECIPES = {
     materials: [{ itemId: "iron_ore", quantity: 2 }, { itemId: "stone_core", quantity: 1 }] },
   northwatch: { itemId: "ridgeguard_mantle", gold: 24,
     materials: [{ itemId: "ridge_hide", quantity: 2 }, { itemId: "iron_ore", quantity: 2 }] },
-} as const satisfies Record<"greenwood" | "mistfen" | "quarry" | "northwatch", { itemId: ItemId; gold: number; materials: readonly { itemId: ItemId; quantity: number }[] }>;
+} as const satisfies Record<"greenwood" | "mistfen" | "quarry" | "northwatch" | "crownkeeper", { itemId: ItemId; gold: number; materials: readonly { itemId: ItemId; quantity: number }[] }>;
+export const CROWNKEEPER_FORGE = { fragments: 5, dropChance: .1 } as const;
 export type FieldForgeId = keyof typeof FIELD_FORGE_RECIPES;
-export const FieldForgeSchema = z.object({ region: z.enum(["greenwood", "mistfen", "quarry", "northwatch"]) }).strict();
+export const FieldForgeSchema = z.object({ region: z.enum(["greenwood", "mistfen", "quarry", "northwatch", "crownkeeper"]) }).strict();
 export const BLACKSMITH_REFORGE = {
   forged_sword: { materialId: "iron_ore", costs: [{ gold: 18, material: 3 }, { gold: 36, material: 6 }, { gold: 70, material: 10 }] },
   forged_bow: { materialId: "iron_ore", costs: [{ gold: 20, material: 3 }, { gold: 40, material: 6 }, { gold: 75, material: 10 }] },
@@ -761,6 +765,7 @@ export function armouredDamage(damage: number, id: string, kind: IncomingDamageK
   return Math.max(1, damage - armour.reduction - situational - reforgeArmourReduction(reforgeRank));
 }
 export type BlacksmithUpdate = {
+  crownkeeperFragments?: number;
   phase: "idle" | "traded" | "purchased" | "dismantled" | "reforged" | "attuned" | "awakened" | "exchanged" | "regional-forged" | "haul" | "error";
   ironOre: number;
   silverOre?: number;
@@ -885,6 +890,7 @@ export const ITEM_DEFINITIONS = {
   northwatch_cloak: { id: "northwatch_cloak", name: "Northwatch Cloak", description: "Watchbreaker reward · reduce damage by 1 · 4% faster movement · extra projectile protection · deflects one Shard Sentry shot every 8s in Northwatch · reforge with Ridge Hide" },
   worldsplitter_plate: { id: "worldsplitter_plate", name: "Worldsplitter Plate", description: "Rare Crusher Hunt armour · reduce damage by 3 · heavy projectile and hazard protection · 10% slower" },
   cinderfang_blade: { id: "cinderfang_blade", name: "Cinderfang Blade", description: "Ashen regional blade · strikes against staggered enemies ignite for bonus damage" },
+  crownkeeper_blade: { id: "crownkeeper_blade", name: "Crowncleaver", description: "Crownkeeper signature sword · slower 2 / 2 / 3 combo · third-strike Royal Break interrupts windups, including brutes. Forge with 5 Crown Fragments and 30 gold." },
   ashguard_mantle: { id: "ashguard_mantle", name: "Ashguard Mantle", description: "Ashen regional armour · a perfect dodge grants brief fire, hazard and projectile protection" },
   emberheart_focus: { id: "emberheart_focus", name: "Emberheart Focus", description: "Ashen regional focus · Calling abilities empower nearby allies inside an ember field" },
   forged_sword: { id: "forged_sword", name: "Forged Sword", description: "Iron blade · 2 / 2 / 3 combo damage · equip from your pack" },
@@ -1037,6 +1043,7 @@ export const EQUIPMENT_RARITY = {
   northwatch_cloak: "rare",
   worldsplitter_plate: "rare",
   cinderfang_blade: "legendary",
+  crownkeeper_blade: "epic",
   ashguard_mantle: "legendary",
   emberheart_focus: "legendary",
   forged_sword: "uncommon",
@@ -1137,9 +1144,10 @@ export function lootBagRepresentative(items: readonly LootBagItem[]): LootBagIte
   })[0] ?? null;
 }
 
-export type EquipmentPerkId = "core_quake" | "rootfall" | "moon_arc" | "living_guard" | "bastion_ward" | "venom_bloom" | "echo_chain" | "cinder_ignite" | "emberheart_field"
+export type EquipmentPerkId = "crown_break" | "core_quake" | "rootfall" | "moon_arc" | "living_guard" | "bastion_ward" | "venom_bloom" | "echo_chain" | "cinder_ignite" | "emberheart_field"
   | "alpha_finish" | "venom_surge" | "crusher_break" | "fang_set" | "venom_set" | "crusher_set";
 export const EQUIPMENT_PERK_ITEMS = {
+  crownkeeper_blade: "crown_break",
   stone_core_hammer: "core_quake",
   rootbound_hammer: "rootfall",
   matriarch_edge: "moon_arc",
@@ -1156,6 +1164,7 @@ export const EQUIPMENT_PERK_ITEMS = {
 export function equipmentPerkStats(itemId: string, rank = 0): { id: EquipmentPerkId; name: string; detail: string; damage?: number; radius?: number; durationMs?: number; stamina?: number; cooldownMs?: number; stacks?: number; windowMs?: number } | null {
   const safeRank = Math.max(0, Math.min(3, Math.floor(rank)));
   switch (EQUIPMENT_PERK_ITEMS[itemId as keyof typeof EQUIPMENT_PERK_ITEMS]) {
+    case "crown_break": return { id: "crown_break", name: "Royal Break", detail: "Third combo strike interrupts enemy windups, including brutes; slower swings reward deliberate timing" };
     case "core_quake": {
       const radius = 1.7 + safeRank * .15, damage = 1 + Math.floor(safeRank / 2);
       return { id: "core_quake", name: "Core Quake", damage, radius, detail: `Overhead hits pulse for ${damage} damage within ${radius.toFixed(2)}m` };
@@ -1274,6 +1283,7 @@ export const MAIN_HAND_DEFINITIONS = {
   venom_focus: { id: "venom_focus", name: "Venom Focus", tag: "focus", attackName: "Venom Bolt", requiredItemId: "venom_focus" },
   echo_prism: { id: "echo_prism", name: "Echo Prism", tag: "focus", attackName: "Crystal Bolt", requiredItemId: "echo_prism" },
   cinderfang_blade: { id: "cinderfang_blade", name: "Cinderfang Blade", tag: "melee", attackName: "Cinder Combo", requiredItemId: "cinderfang_blade" },
+  crownkeeper_blade: { id: "crownkeeper_blade", name: "Crowncleaver", tag: "melee", attackName: "Royal Break Combo", requiredItemId: "crownkeeper_blade" },
   emberheart_focus: { id: "emberheart_focus", name: "Emberheart Focus", tag: "focus", attackName: "Ember Bolt", requiredItemId: "emberheart_focus" },
 } as const satisfies Record<string, MainHandDefinition>;
 
@@ -1435,6 +1445,12 @@ export const WEAPON_ATTACK_DEFINITIONS = {
     ] },
   emberheart_focus: { combo: false, comboWindowMs: 0, range: 8, minimumFacingDot: .58, projectileTravelMs: 260,
     attacks: [{ step: 1, durationMs: 460, impactMs: 185, damage: 2, knockback: .3 }] },
+  crownkeeper_blade: { combo: true, comboWindowMs: 600, range: 1.7, minimumFacingDot: .32, projectileTravelMs: 0,
+    attacks: [
+      { step: 1, durationMs: 400, impactMs: 145, damage: 2, knockback: .26 },
+      { step: 2, durationMs: 440, impactMs: 165, damage: 2, knockback: .38 },
+      { step: 3, durationMs: 700, impactMs: 270, damage: 3, knockback: .82 },
+    ] },
 } as const satisfies Record<MainHandId, WeaponAttackDefinition>;
 
 export function effectiveWeaponRange(id: MainHandId, fastWorld: boolean): number {
@@ -1707,7 +1723,7 @@ export const SpecialEquipRequestSchema = z.object({
 
 export const MainHandEquipRequestSchema = z.object({
   requestId: z.string().min(1).max(64),
-  mainHandId: z.enum(["unarmed", "longsword", "bow", "magic_focus", "fang_dagger", "stone_core_hammer", "rootbound_hammer", "matriarch_edge", "acid_gland_focus", "venom_focus", "echo_prism", "forged_sword", "forged_bow", "forged_focus"]),
+  mainHandId: z.enum(["unarmed", "longsword", "bow", "magic_focus", "fang_dagger", "stone_core_hammer", "rootbound_hammer", "matriarch_edge", "acid_gland_focus", "venom_focus", "echo_prism", "forged_sword", "forged_bow", "forged_focus", "crownkeeper_blade"]),
 });
 
 export const TraitEquipRequestSchema = z.object({

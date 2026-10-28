@@ -1,3 +1,4 @@
+import { FAST_WORLD_BLACKSMITH_POSITION } from "@blockcraft/protocol";
 export type TownLifeRole = "guard" | "vendor" | "smith" | "healer" | "resident";
 
 export interface TownLifeActorDefinition {
@@ -35,7 +36,7 @@ export const SPEED_LAB_TOWN_ACTORS: readonly TownLifeActorDefinition[] = [
     facingYaw: 90, coat: [.54, .2, .12], accent: [.96, .72, .28] },
   { id: "south-market-keeper", role: "vendor", route: [[82.7, 120]], moveSpeed: 0, pauseSeconds: 0, phase: .65,
     facingYaw: 90, coat: [.2, .42, .28], accent: [.92, .55, .18] },
-  { id: "beginning-smith", role: "smith", route: [[79, 136]], moveSpeed: 0, pauseSeconds: 0, phase: .3,
+  { id: "beginning-smith", role: "smith", route: [[FAST_WORLD_BLACKSMITH_POSITION.x, FAST_WORLD_BLACKSMITH_POSITION.z]], moveSpeed: 0, pauseSeconds: 0, phase: .3,
     facingYaw: 90, coat: [.34, .18, .08], accent: [.96, .45, .08] },
   { id: "town-healer", role: "healer", route: [[51, 108.5]], moveSpeed: 0, pauseSeconds: 0, phase: .8,
     facingYaw: 90, coat: [.18, .5, .42], accent: [.45, 1, .78] },

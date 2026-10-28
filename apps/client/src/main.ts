@@ -81,7 +81,7 @@ import { advanceTrackedLeaderCollectionHunt, leaderCollectionMobId, leaderCollec
   parseLeaderCollectionDiscoveries, parseTrackedLeaderCollectionHunt, trackedLeaderArenaPresentation,
   type LeaderCollectionDiscoveries, type TrackedLeaderArenaPresentation, type TrackedLeaderCollectionHunt } from "./leader-collection-journal.js";
 import { blacksmithShopStock, shopGoldShortfall, type BlacksmithShopTab } from "./blacksmith-shop.js";
-import { FIELD_FORGE_RECIPES, type FieldForgeId } from "@blockcraft/protocol";
+import { FIELD_FORGE_RECIPES, CROWNKEEPER_FORGE, type FieldForgeId } from "@blockcraft/protocol";
 import { haulUpgradeProgress, nextHaulRegion, nextHaulUpgrade, type HaulRegion } from "./blacksmith-haul.js";
 import { createStorageUI, type StorageUpdate } from "./storage-ui.js";
 import { lootVisibleToPlayer } from "./loot-ownership.js";
@@ -503,6 +503,7 @@ import { WARDEN_LOOT_BEAM_MS } from "./warden-victory-effects.js";
 import { advanceIndoorCameraBlend, indoorCameraOffset } from "./indoor-camera.js";
 import { canPlayAtTavernTable, canTalkToTavernKeeper, TAVERN_KEEPER, TAVERN_KEEPER_LINES, TAVERN_QUIZ_TABLE } from "./tavern-keeper.js";
 import { BLACKSMITH_STALL, canTradeAtBlacksmithStall } from "./blacksmith.js";
+import { FAST_WORLD_BLACKSMITH_POSITION } from "@blockcraft/protocol";
 import "./styles.css";
 
 function newGuestProfileToken() {
@@ -4543,6 +4544,12 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
   addBox(cinderfangBlade, "cinderfang-spine", emberGlow, [.05, .42, .025], [0, -.34, .05]);
   addBox(cinderfangBlade, "cinderfang-guard", emberMetal, [.4, .09, .13], [0, -.12, 0]);
   cinderfangBlade.enabled = false;
+  const crowncleaver = longsword.clone(); crowncleaver.name = "main-hand-crowncleaver"; rightElbow.addChild(crowncleaver);
+  const crownGold = coloredMaterial(new pc.Color(.95, .69, .2));
+  addBox(crowncleaver, "royal-gold-spine", crownGold, [.055, .44, .035], [0, -.34, .05]);
+  addBox(crowncleaver, "royal-crossguard", crownGold, [.43, .08, .13], [0, -.11, 0]);
+  for (const side of [-1, 1]) addBox(crowncleaver, `crown-prong-${side}`, crownGold, [.06, .16, .1], [side * .17, -.19, 0]);
+  crowncleaver.enabled = false;
   const emberheartFocus = magicFocus.clone();
   emberheartFocus.name = "main-hand-emberheart-focus"; rightElbow.addChild(emberheartFocus);
   addBox(emberheartFocus, "emberheart-cage", emberMetal, [.38, .1, .38], [0, -.34, 0]);
@@ -4564,6 +4571,7 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
     matriarch_edge: matriarchEdge,
     acid_gland_focus: acidGlandFocus,
     cinderfang_blade: cinderfangBlade,
+    crownkeeper_blade: crowncleaver,
     emberheart_focus: emberheartFocus,
   };
   bow.enabled = false;
@@ -4791,9 +4799,9 @@ function animateVoxelCharacter(
   rig.leftKnee.setLocalEulerAngles(pose.leftKneePitch, 0, 0);
   rig.rightKnee.setLocalEulerAngles(pose.rightKneePitch, 0, 0);
   rig.scarf.setLocalEulerAngles(pose.scarfPitch, 0, pose.torsoRoll * -1.5);
-  for (const id of ["longsword", "forged_sword", "matriarch_edge", "fang_dagger", "stone_core_hammer", "rootbound_hammer"] as const) {
+  for (const id of ["longsword", "forged_sword", "crownkeeper_blade", "matriarch_edge", "fang_dagger", "stone_core_hammer", "rootbound_hammer"] as const) {
     const weapon = rig.mainHands[id];
-    const sword = id === "longsword" || id === "forged_sword" || id === "matriarch_edge";
+    const sword = id === "longsword" || id === "forged_sword" || id === "crownkeeper_blade" || id === "matriarch_edge";
     weapon.setLocalPosition(0, sword ? -0.29 : -0.28, sword ? 0.085 : 0.1);
     weapon.setLocalEulerAngles(0, 0, 0);
     weapon.setLocalScale(1, 1, 1);
@@ -4978,6 +4986,12 @@ function createFirstPersonActionRig(): FirstPersonActionRig {
   actionShape(weapons.sword, "sword-blade", "box", steel, [.082, .46, .035], [0, .5, 0]);
   actionShape(weapons.sword, "sword-ridge", "box", steelEdge, [.012, .45, .041], [0, .5, 0]);
   actionShape(weapons.sword, "sword-tip", "cone", steelEdge, [.085, .14, .05], [0, .8, 0]);
+  const crownOrnament = new pc.Entity("crowncleaver-ornament"); weapons.sword.addChild(crownOrnament);
+  const crownGold = createFirstPersonMaterial(new pc.Color(.95, .7, .22), new pc.Color(.12, .07, .01));
+  actionShape(crownOrnament, "royal-guard", "box", crownGold, [.39, .055, .085], [0, .25, 0]);
+  actionShape(crownOrnament, "royal-spine", "box", crownGold, [.028, .44, .045], [0, .5, 0]);
+  for (const side of [-1, 1]) actionShape(crownOrnament, `royal-prong-${side}`, "box", crownGold, [.045, .12, .08], [side * .15, .31, 0]);
+  crownOrnament.enabled = false;
 
   weapons.dagger.setLocalPosition(-.015, .13, -.05);
   weapons.dagger.setLocalEulerAngles(-8, -10, 24);
@@ -5047,6 +5061,8 @@ let firstPersonEquippedId: MainHandId = "unarmed";
 function setFirstPersonMainHand(mainHandId: MainHandId): void {
   if (mainHandId !== firstPersonEquippedId) { firstPersonEquippedAt = performance.now(); firstPersonEquippedId = mainHandId; }
   const active = firstPersonWeaponKind(mainHandId);
+  const crownOrnament = firstPersonActionRig.weapons.sword.findByName("crowncleaver-ornament");
+  if (crownOrnament) crownOrnament.enabled = mainHandId === "crownkeeper_blade";
   for (const [kind, weapon] of Object.entries(firstPersonActionRig.weapons)) weapon.enabled = kind === active;
 }
 setFirstPersonMainHand("unarmed");
@@ -10426,7 +10442,7 @@ function addDroppedEquipmentModel(root: pc.Entity, itemId: ItemId, material: pc.
     addBox(root, "dropped-hammer-core", hand === "rootbound_hammer" ? coreGlowMaterial : brassMaterial, [.26, .25, .48], [0, .48, 0]);
     return true;
   }
-  if (hand === "forged_sword" || hand === "matriarch_edge") {
+  if (hand === "forged_sword" || hand === "matriarch_edge" || hand === "crownkeeper_blade") {
     addBox(root, "dropped-sword-grip", weaponWoodMaterial, [.13, .42, .13], [0, .42, 0]);
     addBox(root, "dropped-sword-guard", brassMaterial, [.52, .11, .16], [0, .16, 0]);
     addBox(root, "dropped-sword-blade", material, [.2, .95, .12], [0, -.38, 0]);
@@ -12242,7 +12258,7 @@ inventorySelectedKeep.addEventListener("click", () => {
 });
 inventorySelectedDismantle.addEventListener("click", () => {
   if (!selectedInventoryItem || inventorySelectedDismantle.disabled) return;
-  if (!canTradeAtBlacksmithStall(localPlayer.getPosition(), sceneDressing.blacksmithVisible)) {
+  if (!canTradeAtBlacksmithStall(localPlayer.getPosition(), sceneDressing.blacksmithVisible, fastWorldRequested)) {
     setInventoryOpen(false);
     status.textContent = "Take this item to the Town of Beginnings blacksmith to dismantle it.";
     showCombatFeedback("BLACKSMITH REQUIRED", "hurt");
@@ -12277,6 +12293,7 @@ let blacksmithPending = false;
 let blacksmithIronCapacity = 12;
 let blacksmithShopTab: BlacksmithShopTab = "sell";
 let blacksmithCharacterLevel = 1;
+let blacksmithCrownFragments = 0;
 let selectedDepthsRewardId: SilverDepthsRewardId = "depths_compass";
 let lastShopPurchaseCategory: InventoryTab = "gear";
 const weaponShop = document.createElement("div");
@@ -12740,25 +12757,28 @@ function renderWeaponShop(): void {
     });
     card.append(title, price, description, comparison, button); weaponShop.append(card);
   }
-  if (blacksmithShopTab === "armour") for (const region of Object.keys(FIELD_FORGE_RECIPES) as FieldForgeId[]) {
+  for (const region of Object.keys(FIELD_FORGE_RECIPES) as FieldForgeId[]) {
+    const crown = region === "crownkeeper";
+    if (blacksmithShopTab !== (crown ? "weapons" : "armour")) continue;
     const recipe = FIELD_FORGE_RECIPES[region];
     const owned = inventoryCounts.get(recipe.itemId) ?? 0;
-    const foundMaterial = region === "quarry" ? (inventoryCounts.get("stone_core") ?? 0) > 0
+    const foundMaterial = crown ? blacksmithCrownFragments > 0 : region === "quarry" ? (inventoryCounts.get("stone_core") ?? 0) > 0
       : region === "northwatch" ? (inventoryCounts.get("ridge_hide") ?? 0) > 0
       : recipe.materials.some(cost => (inventoryCounts.get(cost.itemId) ?? 0) > 0);
-    if (!foundMaterial && owned === 0 && blacksmithEquippedArmourItem !== recipe.itemId) continue;
+    if (!foundMaterial && owned === 0 && blacksmithEquippedArmourItem !== recipe.itemId && blacksmithEquippedHandItem !== recipe.itemId) continue;
     const card = document.createElement("article"); card.dataset.rarity = itemRarity(recipe.itemId);
-    const title = document.createElement("strong"); title.textContent = `${ITEM_DEFINITIONS[recipe.itemId].name} Â· FIELD GEAR`;
+    const title = document.createElement("strong"); title.textContent = `${ITEM_DEFINITIONS[recipe.itemId].name} · ${crown ? "CROWNKEEPER SIGNATURE" : "FIELD GEAR"}`;
     const description = document.createElement("p"); description.textContent = ITEM_DEFINITIONS[recipe.itemId].description;
     const costs = document.createElement("small");
-    costs.textContent = `${recipe.gold} gold Â· ${recipe.materials.map(cost => `${inventoryCounts.get(cost.itemId) ?? 0}/${cost.quantity} ${ITEM_DEFINITIONS[cost.itemId].name}`).join(" Â· ")}`;
+    costs.textContent = `${recipe.gold} gold · ${crown ? `${blacksmithCrownFragments}/${CROWNKEEPER_FORGE.fragments} Crown Fragments · one banked per clear · 10% chance of a direct boss drop` : recipe.materials.map(cost => `${inventoryCounts.get(cost.itemId) ?? 0}/${cost.quantity} ${ITEM_DEFINITIONS[cost.itemId].name}`).join(" · ")}`;
     const missing = recipe.materials.find(cost => (inventoryCounts.get(cost.itemId) ?? 0) < cost.quantity);
+    const missingFragments = crown ? Math.max(0, CROWNKEEPER_FORGE.fragments - blacksmithCrownFragments) : 0;
     const button = document.createElement("button"); button.type = "button";
-    button.textContent = blacksmithPending ? "PLEASE WAITâ€¦" : missing ? `NEED ${missing.quantity - (inventoryCounts.get(missing.itemId) ?? 0)} ${ITEM_DEFINITIONS[missing.itemId].name.toUpperCase()}`
+    button.textContent = blacksmithPending ? "PLEASE WAIT…" : missingFragments ? `NEED ${missingFragments} MORE CROWN FRAGMENT${missingFragments === 1 ? "" : "S"}` : missing ? `NEED ${missing.quantity - (inventoryCounts.get(missing.itemId) ?? 0)} ${ITEM_DEFINITIONS[missing.itemId].name.toUpperCase()}`
       : tavernCoinBalance < recipe.gold ? `NEED ${recipe.gold - tavernCoinBalance} MORE GOLD` : "FORGE Â· ADD TO PACK";
-    button.disabled = !room || blacksmithPending || Boolean(missing) || tavernCoinBalance < recipe.gold;
+    button.disabled = !room || blacksmithPending || Boolean(missing) || missingFragments > 0 || tavernCoinBalance < recipe.gold;
     button.addEventListener("click", () => {
-      if (!room || blacksmithPending || missing || tavernCoinBalance < recipe.gold) return;
+      if (!room || blacksmithPending || missing || missingFragments > 0 || tavernCoinBalance < recipe.gold) return;
       lastShopPurchaseCategory = "gear";
       blacksmithPending = true; renderWeaponShop();
       blacksmithMessage.textContent = `Forging ${ITEM_DEFINITIONS[recipe.itemId].name}â€¦`;
@@ -12877,6 +12897,7 @@ function renderBlacksmith(update: BlacksmithUpdate): void {
   blacksmithEquippedHandItem = update.equippedMainHandItemId ?? null;
   blacksmithEquippedArmourItem = update.equippedArmourItemId ?? null;
   regionalMarks = update.regionalMarks ?? regionalMarks;
+  blacksmithCrownFragments = update.crownkeeperFragments ?? blacksmithCrownFragments;
   regionalMasteryRanks = update.regionalMasteryRanks ?? regionalMasteryRanks;
   unlockedAshenBlueprints = update.ashenBlueprints ?? unlockedAshenBlueprints;
   localAshenMastery = update.ashenMastery ? parseLocalAshenMastery(update.ashenMastery) : localAshenMastery;
@@ -13460,7 +13481,7 @@ function updateTarget(): void {
     caveEntranceSign.style.left = `${bounds.left + caveSignScreen.x * bounds.width / canvas.width}px`;
     caveEntranceSign.style.top = `${bounds.top + caveSignScreen.y * bounds.height / canvas.height}px`;
   }
-  const blacksmithNearby = worldReady && room !== null && canTradeAtBlacksmithStall(player, sceneDressing.blacksmithVisible);
+  const blacksmithNearby = worldReady && room !== null && canTradeAtBlacksmithStall(player, sceneDressing.blacksmithVisible, fastWorldRequested);
   const expeditionBoardNearby = worldReady && room !== null && Math.abs(player.y - TOWN_EXPEDITION_BOARD_POSITION.y) <= 1.6
     && Math.hypot(player.x - TOWN_EXPEDITION_BOARD_POSITION.x, player.z - TOWN_EXPEDITION_BOARD_POSITION.z) <= 3;
   const chestNearby = worldReady && room !== null && sceneDressing.blacksmithVisible && isAtTownStorage(player);
@@ -13474,7 +13495,8 @@ function updateTarget(): void {
   }
   blacksmithPrompt.hidden = !blacksmithNearby || !blacksmithPanel.hidden || chestNearby;
   if (!blacksmithPrompt.hidden) {
-    const screen = camera.camera.worldToScreen(new pc.Vec3(BLACKSMITH_STALL.x, 10.35, BLACKSMITH_STALL.z));
+    const stall = fastWorldRequested ? FAST_WORLD_BLACKSMITH_POSITION : BLACKSMITH_STALL;
+    const screen = camera.camera.worldToScreen(new pc.Vec3(stall.x, stall.y + 2.35, stall.z));
     const rect = canvas.getBoundingClientRect();
     blacksmithPrompt.style.left = `${rect.left + screen.x * rect.width / canvas.width}px`;
     blacksmithPrompt.style.top = `${rect.top + screen.y * rect.height / canvas.height}px`;
@@ -15806,7 +15828,7 @@ function requestWorldInteraction(): void {
     && Math.hypot(boardPosition.x - TOWN_EXPEDITION_BOARD_POSITION.x, boardPosition.z - TOWN_EXPEDITION_BOARD_POSITION.z) <= 3) {
     openDungeonBoard(); return;
   }
-  if (canTradeAtBlacksmithStall(localPlayer.getPosition(), sceneDressing.blacksmithVisible)) {
+  if (canTradeAtBlacksmithStall(localPlayer.getPosition(), sceneDressing.blacksmithVisible, fastWorldRequested)) {
     openBlacksmith();
     return;
   }

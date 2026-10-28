@@ -2,7 +2,7 @@ import type { MainHandId } from "@blockcraft/protocol";
 export type RapidProjectileStyle = "crescent" | "arrow" | "orb";
 export function rangedStyle(weapon: MainHandId, rapidStyle?: RapidProjectileStyle) {
   if (rapidStyle === "crescent") return {
-    shape: "box" as const, color: [.28, .94, 1], scale: [.72, .07, .2], glyph: "◖", hitSound: "rangedHit" as const,
+    shape: "box" as const, color: weapon === "crownkeeper_blade" ? [1, .74, .2] : [.28, .94, 1], scale: [.72, .07, .2], glyph: "◖", hitSound: "rangedHit" as const,
   };
   if (rapidStyle === "arrow") return {
     shape: "box" as const, color: [1, .78, .22], scale: [.045, .045, .95], glyph: "➤", hitSound: "rangedHit" as const,

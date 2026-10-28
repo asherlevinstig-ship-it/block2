@@ -3937,6 +3937,7 @@ html.onboarding-mode-lesson #touch-mode-button { border-color: #ffe59a; box-shad
   transform: none;
 }
 .inventory-grid article[data-item="forged_sword"] > i { background-image: url('/icons/basic-sword.png'); }
+.inventory-grid article[data-item="crownkeeper_blade"] > i { display: block; width: 46px; height: 46px; margin: 3px auto 7px; border: 0; border-radius: 6px; background: url('/icons/crowncleaver.svg') center / cover no-repeat; clip-path: none; transform: none; box-shadow: none; }
 .inventory-grid article[data-item="wanderer_robes"] > i { background-image: url('/icons/wanderer-robes.png'); }
 .inventory-grid article[data-item="iron_ore"] > i { background-image: url('/icons/iron-ore.png'); }
 .potion-inventory[data-item="healing_potion"] > i { background-image: url('/icons/healing-potion.png'); }

@@ -23,8 +23,8 @@ function fixture() {
 
 describe("regional field armour", () => {
   it("has equippable regional gear and keeps boss rewards superior", () => {
-    expect(Object.keys(FIELD_FORGE_RECIPES)).toEqual(["greenwood", "mistfen", "quarry", "northwatch"]);
-    for (const [region, recipe] of Object.entries(FIELD_FORGE_RECIPES)) {
+    expect(Object.keys(FIELD_FORGE_RECIPES).filter(id => id !== "crownkeeper")).toEqual(["greenwood", "mistfen", "quarry", "northwatch"]);
+    for (const [region, recipe] of Object.entries(FIELD_FORGE_RECIPES).filter(([id]) => id !== "crownkeeper")) {
       expect(FieldForgeSchema.safeParse({ region }).success).toBe(true);
       expect(armourForItem(recipe.itemId)).toBe(recipe.itemId);
       expect(ArmourEquipSchema.safeParse({ armourId: recipe.itemId }).success).toBe(true);

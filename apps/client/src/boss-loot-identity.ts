@@ -20,6 +20,7 @@ const ITEM_CALLINGS: Partial<Record<ItemId, readonly BuildPathId[]>> = {
 };
 
 const BOSS_SIGNATURES: Readonly<Record<string, ItemId>> = {
+  "floor1-crownkeeper": "crownkeeper_blade",
   "crystal-matriarch": "matriarch_edge",
   "forest-guardian": "rootbound_hammer",
   "greenwood-venom-matriarch": "venom_focus",
@@ -49,7 +50,7 @@ export function bossLootIdentity(id: string, name: string, archetype: string, ac
     itemName: ITEM_DEFINITIONS[itemId].name,
     callings,
     fitLabel,
-    dropLabel: id === "crystal-matriarch" || id === "greenwood-venom-matriarch" || id === "realm-stone-warden"
+    dropLabel: id === "floor1-crownkeeper" ? "10% CHANCE · 5-FRAGMENT FORGE" : id === "crystal-matriarch" || id === "greenwood-venom-matriarch" || id === "realm-stone-warden"
       ? "SIGNATURE CHANCE"
       : "LEADER CACHE",
   };

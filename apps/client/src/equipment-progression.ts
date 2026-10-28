@@ -17,6 +17,7 @@ export type EquipmentCollectionEntry = {
 };
 
 export const EQUIPMENT_COLLECTION: readonly EquipmentCollectionEntry[] = [
+  { itemId: "crownkeeper_blade", slot: "weapon", source: "Crownkeeper drop or forge with 5 Crown Fragments and 30 gold" },
   { itemId: "wanderer_robes", slot: "armour", source: "Starter supplies in the Town of Beginnings" },
   { itemId: "forged_sword", slot: "weapon", source: "Buy from the Town blacksmith" },
   { itemId: "forged_bow", slot: "weapon", source: "Buy from the Town blacksmith" },

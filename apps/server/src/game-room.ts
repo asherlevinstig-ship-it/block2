@@ -1,5 +1,7 @@
 import { Client, Room } from "@colyseus/core";
 import { aimedWeaponFlight, mobAttackBody, ENEMY_PROJECTILE_RADIUS } from "@blockcraft/protocol";
+import { CROWNKEEPER_FORGE } from "@blockcraft/protocol";
+import { crownkeeperFragments, withCrownkeeperFragments } from "./crownkeeper-progress.js";
 import { GREENWOOD_MASTERY_CAP, MISTFEN_MASTERY_CAP, greenwoodMasteryRank, mistfenMasteryRank } from "@blockcraft/protocol";
 import { callingStarterAbility } from "@blockcraft/protocol";
 import { experienceToNextLevel } from "@blockcraft/protocol";
@@ -1603,6 +1605,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       ironCapacity: ironCapacity(player.blacksmithUpgrades),
       gold: player.coins,
       characterLevel: player.level,
+      crownkeeperFragments: crownkeeperFragments(player.huntLoadoutsJson),
       ownedUpgrades: ownedBlacksmithUpgrades(player.blacksmithUpgrades),
       ownedDepthsRewards: ownedDepthsRewards(player.blacksmithUpgrades),
       weapons: Object.fromEntries(Object.keys(BLACKSMITH_STOCK).map(id => [id, player.inventory.get(id)?.quantity ?? 0])),
@@ -1721,9 +1724,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
     let message: string | undefined;
-    if (canTradeAtBlacksmith(player) && player.miningExpeditionStage === 8 && player.silverDepthsStage === 0 && player.level < 7) {
+    if (canTradeAtBlacksmith(player, this.rapidPractice) && player.miningExpeditionStage === 8 && player.silverDepthsStage === 0 && player.level < 7) {
       message = "The Silver Depths unlock at character level 7. Continue exploring and completing encounters.";
-    } else if (canTradeAtBlacksmith(player) && canExitSilverDepths(player) && player.silverDepthsStage === 6 && this.advanceSilverDepthsExpedition(client, "returned_to_blacksmith")) {
+    } else if (canTradeAtBlacksmith(player, this.rapidPractice) && canExitSilverDepths(player) && player.silverDepthsStage === 6 && this.advanceSilverDepthsExpedition(client, "returned_to_blacksmith")) {
       message = "Matriarch's Edge secured. Your Moonstone was attuned for +1 permanent weapon damage.";
     }
     this.sendBlacksmithState(client, message);
@@ -1750,7 +1753,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const parsed = BlacksmithBuySchema.safeParse(payload);
     if (!player) return;
     if (!parsed.success) return this.sendBlacksmithState(client, "Choose equipment from the shop.", "error");
-    if (player.health <= 0 || !canTradeAtBlacksmith(player)) return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to buy equipment.", "error");
+    if (player.health <= 0 || !canTradeAtBlacksmith(player, this.rapidPractice)) return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to buy equipment.", "error");
     const id = parsed.data.itemId;
     const requiredLevel = blacksmithRequiredLevel(id);
     if (player.level < requiredLevel) return this.sendBlacksmithState(client, `${ITEM_DEFINITIONS[id].name} unlocks at character level ${requiredLevel}.`, "error");
@@ -1768,7 +1771,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private handleBlacksmithSell(client: Client): void {
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
-    if (!canTradeAtBlacksmith(player)) return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to trade.", "error");
+    if (!canTradeAtBlacksmith(player, this.rapidPractice)) return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to trade.", "error");
     const ore = player.inventory.get("iron_ore");
     const silver = player.inventory.get("silver_ore");
     const ember = player.inventory.get("ember_ore");
@@ -1791,7 +1794,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const player = this.state.players.get(client.sessionId);
     const parsed = BlacksmithDismantleSchema.safeParse(payload);
     if (!player || !parsed.success) return this.sendBlacksmithState(client, "Choose an equipment item to dismantle.", "error");
-    if (!canTradeAtBlacksmith(player)) return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to dismantle equipment.", "error");
+    if (!canTradeAtBlacksmith(player, this.rapidPractice)) return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to dismantle equipment.", "error");
     const itemId = parsed.data.itemId;
     const recipe = BLACKSMITH_DISMANTLE[itemId];
     const item = player.inventory.get(itemId);
@@ -1838,7 +1841,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const player = this.state.players.get(client.sessionId);
     const parsed = BlacksmithHaulSchema.safeParse(payload);
     if (!player || !parsed.success) return this.sendBlacksmithState(client, "Choose a haul action.", "error");
-    if (!canTradeAtBlacksmith(player)) return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to process your haul.", "error");
+    if (!canTradeAtBlacksmith(player, this.rapidPractice)) return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to process your haul.", "error");
     if (parsed.data.action === "store_materials") {
       let moved = 0;
       for (const itemId of HAUL_STORAGE_MATERIALS) {
@@ -1888,7 +1891,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const player = this.state.players.get(client.sessionId);
     const parsed = BlacksmithReforgeSchema.safeParse(payload);
     if (!player || !parsed.success) return this.sendBlacksmithState(client, "Choose owned equipment to reforge.", "error");
-    if (!canTradeAtBlacksmith(player)) return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to reforge equipment.", "error");
+    if (!canTradeAtBlacksmith(player, this.rapidPractice)) return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to reforge equipment.", "error");
     const itemId = parsed.data.itemId;
     if ((player.inventory.get(itemId)?.quantity ?? 0) <= 0) {
       return this.sendBlacksmithState(client, `You need ${ITEM_DEFINITIONS[itemId].name} in your pack before it can be reforged.`, "error");
@@ -1916,7 +1919,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const player = this.state.players.get(client.sessionId);
     const parsed = AttunementForgeSchema.safeParse(payload);
     if (!player || !parsed.success) return this.sendBlacksmithState(client, "Choose owned equipment and an attunement action.", "error");
-    if (!canTradeAtBlacksmith(player)) return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to use the Attunement Forge.", "error");
+    if (!canTradeAtBlacksmith(player, this.rapidPractice)) return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to use the Attunement Forge.", "error");
     const { action, itemId, affixId } = parsed.data;
     if ((player.inventory.get(itemId)?.quantity ?? 0) <= 0) return this.sendBlacksmithState(client, `You need ${ITEM_DEFINITIONS[itemId].name} in your pack first.`, "error");
     const affixes = this.equipmentAffixes(player), offers = this.attunementOffers(player);
@@ -1978,7 +1981,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const player = this.state.players.get(client.sessionId);
     const parsed = EquipmentAffixHuntSchema.safeParse(payload);
     if (!player || !parsed.success) return;
-    if (!canTradeAtBlacksmith(player)) return this.sendBlacksmithState(client,
+    if (!canTradeAtBlacksmith(player, this.rapidPractice)) return this.sendBlacksmithState(client,
       "Stand beside the blacksmith to focus an equipment hunt.", "error");
     this.setEquipmentAffixTarget(player, parsed.data.affixId);
     void this.persistPlayer(client.sessionId, player, true).catch(() => {});
@@ -1993,7 +1996,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const player = this.state.players.get(client.sessionId);
     const parsed = LeaderForgeSchema.safeParse(payload);
     if (!player || !parsed.success) return this.sendBlacksmithState(client, "Choose a leader relic to forge.", "error");
-    if (!canTradeAtBlacksmith(player)) return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to use the Leader Forge.", "error");
+    if (!canTradeAtBlacksmith(player, this.rapidPractice)) return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to use the Leader Forge.", "error");
     const relicId = parsed.data.relicId as AreaLeaderRelicId;
     const recipe = LEADER_FORGE_RECIPES[relicId];
     const relic = player.inventory.get(relicId);
@@ -2026,7 +2029,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const player = this.state.players.get(client.sessionId);
     const parsed = RegionalForgeSchema.safeParse(payload);
     if (!player || !parsed.success) return this.sendBlacksmithState(client, "Choose a regional forge recipe.", "error");
-    if (!canTradeAtBlacksmith(player)) return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to use Regional Forging.", "error");
+    if (!canTradeAtBlacksmith(player, this.rapidPractice)) return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to use Regional Forging.", "error");
     const region = parsed.data.region as RegionalForgeId;
     const recipe = REGIONAL_FORGE_RECIPES[region];
     const progress = region === "greenwood" ? this.greenwoodProgress(player) : this.mistfenProgress(player);
@@ -2054,7 +2057,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const player = this.state.players.get(client.sessionId);
     const parsed = AshenForgeSchema.safeParse(payload);
     if (!player || !parsed.success) return this.sendBlacksmithState(client, "Choose an unlocked Ashen blueprint.", "error");
-    if (!canTradeAtBlacksmith(player)) return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to use the Ashen Forge.", "error");
+    if (!canTradeAtBlacksmith(player, this.rapidPractice)) return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to use the Ashen Forge.", "error");
     const blueprint = parsed.data.blueprint as AshenBlueprintId;
     const recipe = ASHEN_FORGE_RECIPES[blueprint];
     if (!ashenBlueprints(player.huntLoadoutsJson).includes(blueprint))
@@ -2085,7 +2088,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const player = this.state.players.get(client.sessionId);
     const parsed = AshenMasteryChooseSchema.safeParse(payload);
     if (!player || !parsed.success) return this.sendBlacksmithState(client, "Choose a valid Ashen mastery.", "error");
-    if (!canTradeAtBlacksmith(player))
+    if (!canTradeAtBlacksmith(player, this.rapidPractice))
       return this.sendBlacksmithState(client, "Return to the Town blacksmith to master Ashen equipment.", "error");
     const blueprint = parsed.data.blueprint as AshenBlueprintId;
     const branch = parsed.data.branch as AshenMasteryBranchId;
@@ -2121,11 +2124,14 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private handleFieldForge(client: Client, payload: unknown): void {
     const player = this.state.players.get(client.sessionId);
     const parsed = FieldForgeSchema.safeParse(payload);
-    if (!player || !parsed.success) return this.sendBlacksmithState(client, "Choose a field armour recipe.", "error");
-    if (player.health <= 0 || !canTradeAtBlacksmith(player))
-      return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to forge field armour.", "error");
+    if (!player || !parsed.success) return this.sendBlacksmithState(client, "Choose a forge recipe.", "error");
+    if (player.health <= 0 || !canTradeAtBlacksmith(player, this.rapidPractice))
+      return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to forge equipment.", "error");
     const region = parsed.data.region as FieldForgeId;
     const recipe = FIELD_FORGE_RECIPES[region];
+    const fragments = crownkeeperFragments(player.huntLoadoutsJson);
+    if (region === "crownkeeper" && (!this.rapidPractice || fragments < CROWNKEEPER_FORGE.fragments))
+      return this.sendBlacksmithState(client, `CROWNCLEAVER · ${fragments}/${CROWNKEEPER_FORGE.fragments} Crown Fragments. Earn one per eligible Crownkeeper clear.`, "error");
     if (player.coins < recipe.gold) return this.sendBlacksmithState(client, `You need ${recipe.gold - player.coins} more gold.`, "error");
     for (const cost of recipe.materials) {
       const held = player.inventory.get(cost.itemId)?.quantity ?? 0;
@@ -2136,8 +2142,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       - (recipe.materials.find(cost => cost.itemId === id)?.quantity ?? 0);
     if (backpackAddableQuantity(afterCosts, recipe.itemId, 1,
       player.mainHandId as MainHandId, player.armourId as ArmourId, backpackCapacity(player.blacksmithUpgrades)) < 1)
-      return this.sendBlacksmithState(client, "PACK FULL · Make room before forging field armour.", "error");
+      return this.sendBlacksmithState(client, "PACK FULL · Make room before forging equipment.", "error");
     player.coins -= recipe.gold;
+    if (region === "crownkeeper") player.huntLoadoutsJson = withCrownkeeperFragments(player.huntLoadoutsJson, fragments - CROWNKEEPER_FORGE.fragments);
     for (const cost of recipe.materials) player.inventory.get(cost.itemId)!.quantity -= cost.quantity;
     let item = player.inventory.get(recipe.itemId);
     if (!item) { item = new InventoryItemState(); player.inventory.set(recipe.itemId, item); }
@@ -2150,7 +2157,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const parsed = BlacksmithForgeSchema.safeParse(payload);
     const player = this.state.players.get(client.sessionId);
     if (!parsed.success || !player) return;
-    if (!canTradeAtBlacksmith(player)) return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to forge equipment.", "error");
+    if (!canTradeAtBlacksmith(player, this.rapidPractice)) return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to forge equipment.", "error");
     const upgradeId = parsed.data.upgradeId as BlacksmithUpgradeId;
     if (upgradeId === "moonstone_edge") return this.sendBlacksmithState(client, "Complete The Silver Depths to unlock the Moonstone Edge.", "error");
     const ore = player.inventory.get("iron_ore");
@@ -2192,7 +2199,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const player = this.state.players.get(client.sessionId);
     const parsed = SilverDepthsRewardBuySchema.safeParse(payload);
     if (!player || !parsed.success) return this.sendBlacksmithState(client, "Choose a Silver Depths reward.", "error");
-    if (!canTradeAtBlacksmith(player)) return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to attune Moonstone.", "error");
+    if (!canTradeAtBlacksmith(player, this.rapidPractice)) return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to attune Moonstone.", "error");
     if (player.silverDepthsStage < 7) return this.sendBlacksmithState(client, "Complete The Silver Depths before attuning its rewards.", "error");
     const rewardId = parsed.data.rewardId;
     const moonstone = player.inventory.get("moonstone");
@@ -3435,9 +3442,17 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         const experience = mobExperience(mob.archetype, mob.rewardMultiplier, Boolean(rapidSpawn.leader), player.level, mob.level);
         this.grantProgression(playerId, experience, mob.name);
         this.grantBuildProgress(playerId, rapidSpawn.leader ? 3 : 1);
+        if (mobId === TOWER_FLOOR_ONE_BOSS_ID) {
+          const fragments = Math.min(65535, crownkeeperFragments(player.huntLoadoutsJson) + 1);
+          player.huntLoadoutsJson = withCrownkeeperFragments(player.huntLoadoutsJson, fragments);
+        }
         void this.persistPlayer(playerId, player);
         this.clients.find(client => client.sessionId === playerId)?.send("chat:notice",
-          mobId === TOWER_FLOOR_ONE_NORTH_WARDEN_ID
+          mobId === TOWER_FLOOR_ONE_BOSS_ID
+            ? crownkeeperFragments(player.huntLoadoutsJson) >= CROWNKEEPER_FORGE.fragments && !this.ownsOrHasPendingItem(playerId, "crownkeeper_blade")
+              ? "CROWNKEEPER DEFEATED · CROWNCLEAVER FORGE READY · bring 5 Crown Fragments and 30 gold to the Town blacksmith's Weapons tab."
+              : `CROWNKEEPER DEFEATED · CROWN FRAGMENT BANKED · ${crownkeeperFragments(player.huntLoadoutsJson)}/${CROWNKEEPER_FORGE.fragments} toward Crowncleaver · progress kept even if you fall.`
+          : mobId === TOWER_FLOOR_ONE_NORTH_WARDEN_ID
             ? "NORTH ROOT WARDEN FELLED · northern seal broken · warden cache landed."
             : mobId === TOWER_FLOOR_ONE_SOUTH_WARDEN_ID
               ? "SOUTH ROOT WARDEN FELLED · southern seal broken · warden cache landed."
@@ -4504,6 +4519,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       void this.persistPlayer(ownerId, rewardPlayer, true).catch(() => {});
     }
     const combinedDrops: { itemId: ItemId; quantity: number }[] = [
+      ...(this.rapidPractice && mobId === TOWER_FLOOR_ONE_BOSS_ID && rewardPlayer
+        && !this.ownsOrHasPendingItem(ownerId, "crownkeeper_blade") && Math.random() < CROWNKEEPER_FORGE.dropChance
+        ? [{ itemId: "crownkeeper_blade" as ItemId, quantity: 1 }] : []),
       ...baseDrops,
       ...leaderCollectionDrops,
       ...(mobId === REALM_WARDEN_ID && this.realmWardenRepeatActive
@@ -6144,7 +6162,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       dust: this.attunementDust(player), offers: this.attunementOffers(player), targetAffixId: this.equipmentAffixTarget(player),
       mistfen, greenwood, northwatch: parseNorthwatchProgress(player.huntLoadoutsJson), roadsideClaims: [...parseRoadsideClaims(player.huntLoadoutsJson)],
       ashenBlueprints: ashenBlueprints(player.huntLoadoutsJson), ashenMastery: parseAshenMastery(player.huntLoadoutsJson),
-      leaderCollections: this.leaderCollectionState(player) });
+      leaderCollections: this.leaderCollectionState(player), crownkeeperFragments: crownkeeperFragments(player.huntLoadoutsJson) });
   }
 
   private equipmentAffixes(player: PlayerState): Partial<Record<ItemId, EquipmentAffixRoll>> {
@@ -6206,7 +6224,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       affixes, dust: Math.max(0, Math.min(65_535, Math.floor(dust))), offers, targetAffixId: this.equipmentAffixTarget(player),
       mistfen, greenwood, northwatch: parseNorthwatchProgress(player.huntLoadoutsJson), roadsideClaims: [...parseRoadsideClaims(player.huntLoadoutsJson)],
       ashenBlueprints: ashenBlueprints(player.huntLoadoutsJson), ashenMastery: parseAshenMastery(player.huntLoadoutsJson),
-      leaderCollections: this.leaderCollectionState(player) });
+      leaderCollections: this.leaderCollectionState(player), crownkeeperFragments: crownkeeperFragments(player.huntLoadoutsJson) });
   }
 
   private sendEquipmentAffixes(client: Client, message = "Equipment attunements strengthen matching Calling mechanics."): void {

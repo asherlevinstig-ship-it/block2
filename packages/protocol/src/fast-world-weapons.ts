@@ -10,7 +10,7 @@ export interface FastWorldWeaponProfile {
 /** Sword upgrades retain the crescent identity; daggers and hammers stay melee. */
 export function fastWorldWeaponProfile(id: MainHandId, enabled: boolean): FastWorldWeaponProfile | null {
   if (!enabled) return null;
-  if (id === "longsword" || id === "forged_sword" || id === "matriarch_edge" || id === "cinderfang_blade")
+  if (id === "longsword" || id === "forged_sword" || id === "matriarch_edge" || id === "cinderfang_blade" || id === "crownkeeper_blade")
     return { style: "crescent", range: 4.6, travelMs: 160, pierce: 3, splashRadius: 0, bonusDamage: 0 };
   if (id === "bow" || id === "forged_bow")
     return { style: "arrow", range: 11, travelMs: 110, pierce: 1, splashRadius: 0, bonusDamage: 1 };

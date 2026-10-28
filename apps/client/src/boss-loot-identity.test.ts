@@ -2,6 +2,11 @@ import { describe, expect, it } from "vitest";
 import { bossLootIdentity, equipmentCallingFit } from "./boss-loot-identity.js";
 
 describe("boss loot identity", () => {
+  it("shows Crowncleaver and both ways to earn it for any Calling", () => {
+    expect(bossLootIdentity("floor1-crownkeeper", "The Crownkeeper", "stone_brute", "healer"))
+      .toMatchObject({ itemId: "crownkeeper_blade", itemName: "Crowncleaver",
+        fitLabel: "WORKS WITH ANY CALLING", dropLabel: "10% CHANCE · 5-FRAGMENT FORGE" });
+  });
   it("shows the Crystal Matriarch reward and recognises a matching Calling", () => {
     expect(bossLootIdentity("crystal-matriarch", "Crystal Matriarch", "cave_spitter", "assassin"))
       .toMatchObject({ itemId: "matriarch_edge", fitLabel: "YOUR ASSASSIN CALLING", dropLabel: "SIGNATURE CHANCE" });

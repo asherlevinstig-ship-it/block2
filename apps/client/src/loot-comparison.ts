@@ -37,6 +37,7 @@ export function weaponComparison(id: MainHandId, ironSwordOwned = false, rank = 
     speedValue: timing.durationMs,
     style: profile?.style === "crescent" ? `${MAIN_HAND_DEFINITIONS[id].attackName} · Crescent reaches ${range.toFixed(1)} m, pierces ${profile.pierce} enemies` : MAIN_HAND_DEFINITIONS[id].attackName,
     benefit: id === "fang_dagger" ? "Faster attacks, shorter reach"
+      : id === "crownkeeper_blade" ? "Slower combo · third strike interrupts windups, including brutes"
       : id === "rootbound_hammer" ? "Heavy 2 / 2 / 4 combo · finisher roots nearby enemies"
       : id === "matriarch_edge" ? "Moonstone 3 / 3 / 5 combo · swift boss weapon"
       : id === "stone_core_hammer" ? "Heavy knockback · can stagger windups"

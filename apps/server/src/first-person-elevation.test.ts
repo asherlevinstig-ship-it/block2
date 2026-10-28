@@ -27,7 +27,7 @@ function fixture(mainHandId: MainHandId, targetY: number, wall = false, distance
 }
 
 describe("first-person elevation on authoritative attacks", () => {
-  for (const weapon of ["forged_sword", "matriarch_edge", "cinderfang_blade", "forged_bow", "forged_focus"] as const)
+  for (const weapon of ["forged_sword", "crownkeeper_blade", "matriarch_edge", "cinderfang_blade", "forged_bow", "forged_focus"] as const)
     it.each([6.5, 8, 9.55])(`${weapon} hits a clear target standing at height %s`, targetY => {
       const { target, events, fire } = fixture(weapon, targetY);
       const elevation = Math.atan2(targetY + .72 - (8 + AIM_EYE_HEIGHT), 3);
