@@ -3,7 +3,7 @@ import { defineRoom, defineServer } from "@colyseus/core";
 import { PRACTICE_ROOM, SILVER_DEPTHS_ROOM, WORLD_ROOM } from "@blockcraft/protocol";
 import { WorldRoom } from "./game-room.js";
 
-const SERVER_BUILD = "tower-crownkeeper-counterplay-v291";
+const SERVER_BUILD = "tower-attempt-summary-v292";
 
 const gameServer = defineServer({
   rooms: {

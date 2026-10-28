@@ -76,6 +76,8 @@ import { createFloorRunUpgradeUI } from "./floor-run-upgrades.js";
 import type { FloorRunUpgradeUpdate } from "@blockcraft/protocol";
 import { crownkeeperAttackCue, TOWER_FLOOR_ONE_BOSS_ID } from "@blockcraft/protocol";
 import { crownkeeperOpeningLabel } from "./boss-hud.js";
+import { floorAttemptSummaryCopy, renderFloorAttemptSummary } from "./floor-attempt-summary.js";
+import type { FloorAttemptSummary } from "@blockcraft/protocol";
 import { assassinJourney } from "./assassin-journey.js";
 import { CALLING_AWAKENING_MINIMUM_MS, callingAwakening, callingPreviewMarkup } from "./calling-awakening.js";
 import { advanceFirstCombatPhase, completesFirstCombatLesson, FIRST_COMBAT_GROUP_IDS, firstCombatLesson,
@@ -13943,6 +13945,15 @@ const defeatScreen = document.querySelector<HTMLElement>("#defeat-screen")!;
 const defeatTitle = document.querySelector<HTMLElement>("#defeat-title")!;
 const returnToTownButton = document.querySelector<HTMLButtonElement>("#return-to-town")!;
 const defeatDetail = document.querySelector<HTMLElement>("#defeat-detail")!;
+const floorAttemptSummaryPanel = document.querySelector<HTMLElement>("#floor-attempt-summary")!;
+let latestFloorAttemptSummary: FloorAttemptSummary | null = null;
+let loggedFloorAttemptId = "";
+function updateDefeatAttemptSummary(): void {
+  renderFloorAttemptSummary(floorAttemptSummaryPanel, latestFloorAttemptSummary);
+  defeatScreen.dataset.floorSummary = String(latestFloorAttemptSummary !== null);
+  const genericKept = defeatScreen.querySelector<HTMLElement>(".defeat-kept");
+  if (genericKept) genericKept.hidden = latestFloorAttemptSummary !== null;
+}
 let latestDepthsPartyStatus: SilverDepthsPartyStatus | null = null;
 function depthsStageName(stage: number): string {
   return stage >= 4 ? "Matriarch approach" : stage === 3 ? "Crystal Antechamber"
@@ -14014,12 +14025,14 @@ function showDefeat(attackerName: string): void {
   if (rapidPracticeRewardPanel) rapidPracticeRewardPanel.hidden = true;
   quizPanel.hidden = true; blacksmithPanel.hidden = true; setInventoryOpen(false); closeTavernDialogue();
   defeatDetail.textContent = fastWorldRequested
-    ? `${attackerName} ended the attempt. Floor upgrades are cleared. Your character progression, equipment and banked Crown Fragments are kept.`
+    ? latestFloorAttemptSummary ? `${latestFloorAttemptSummary.cause.name} ended this attempt.`
+      : `${attackerName} ended the attempt. Floor upgrades are cleared. Your character progression, equipment and banked Crown Fragments are kept.`
     : `${attackerName} defeated you. Carried minerals stay in your personal recovery bag. Levels, equipment, other loot, gold, supplies and chest contents are safe. Return to town, then follow your bag marker.`;
-  defeatTitle.textContent = fastWorldRequested ? "RUN ENDED" : "You were defeated";
+  defeatTitle.textContent = fastWorldRequested ? "ATTEMPT ENDED" : "You were defeated";
   defeatScreen.hidden = false;
   returnToTownButton.disabled = !room;
-  returnToTownButton.textContent = fastWorldRequested ? "Restart Run" : "Return to Town";
+  returnToTownButton.textContent = "Return to Town";
+  updateDefeatAttemptSummary();
   if (activeRoomName === SILVER_DEPTHS_ROOM && latestDepthsPartyStatus) renderDepthsPartyStatus(latestDepthsPartyStatus);
   returnToTownButton.focus();
 }
@@ -18932,6 +18945,17 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   room.onMessage("floor:upgrades", (state: FloorRunUpgradeUpdate) => {
     if (fastWorldRequested) floorRunUpgradeUI.update(state);
   });
+  room.onMessage("floor:attempt-ended", (summary: FloorAttemptSummary) => {
+    if (!fastWorldRequested || summary.floor !== 1) return;
+    latestFloorAttemptSummary = summary;
+    if (!defeatScreen.hidden) {
+      defeatDetail.textContent = `${summary.cause.name} ended this attempt.`;
+      updateDefeatAttemptSummary();
+    }
+    if (summary.id !== loggedFloorAttemptId) {
+      loggedFloorAttemptId = summary.id; social.event(floorAttemptSummaryCopy(summary).log);
+    }
+  });
   room.onMessage("floor:arc-jump", (event: { x: number; y: number; z: number; targetId: string }) => {
     const target = mobVisuals.get(event.targetId);
     if (!target) return;
@@ -18979,6 +19003,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     canvas.focus();
   });
   room.onMessage("player:portal", (spawn: { x: number; y: number; z: number; entering: boolean }) => {
+    latestFloorAttemptSummary = null; updateDefeatAttemptSummary();
     portalTransition.arrive();
     pendingPortalArrival = fastWorldRequested ? towerPortalArrival(spawn) : null;
     clearDefeatCombat(); closeLoot();
@@ -19714,11 +19739,13 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     worldReady = false;
     room?.send("world:ready");
     status.textContent = fastWorldRequested
-      ? "Fast World run restarted Â· upgrades retained." : "Back in the Town of Beginnings Â· follow your recovery marker to reclaim dropped items.";
-    social.event(fastWorldRequested ? "Fast World run restarted." : "Returned to the Town of Beginnings.");
+      ? "Returned to the Town of Beginnings · enter Floor 1 for a fresh build." : "Back in the Town of Beginnings Â· follow your recovery marker to reclaim dropped items.";
+    latestFloorAttemptSummary = null; updateDefeatAttemptSummary();
+    social.event("Returned to the Town of Beginnings.");
   });
   room.onMessage("player:rescue-window", (message: { until: number }) => showRescueOption(message.until));
   room.onMessage("player:resurrected", (message: { health: number; maxHealth: number; casterName: string }) => {
+    latestFloorAttemptSummary = null; updateDefeatAttemptSummary();
     rescueUntil = 0;
     defeatScreen.hidden = true;
     returnToTownButton.disabled = false;
@@ -19735,7 +19762,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     if (message.defeated) {
       const attacker = mobVisuals.get(message.mobId)?.state.name ?? "An enemy";
       showDefeat(attacker);
-      social.event(`Defeated by ${attacker}. Your progress is safe.`);
+      if (!latestFloorAttemptSummary) social.event(`Defeated by ${attacker}. Your progress is safe.`);
     }
     if (message.absorbed) {
       if (message.absorbedBy === "northwatch") {

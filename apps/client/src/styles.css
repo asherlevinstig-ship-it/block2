@@ -4588,3 +4588,13 @@ html.fast-world-active #progression-notice[data-priority-visible="true"]:not([hi
 #boss-attack-label[data-response="interrupt"], .enemy-combat-cue[data-response="interrupt"] { color: #dda3ff; border-color: #dda3ff; }
 #boss-attack-label[data-response="evade"], .enemy-combat-cue[data-response="evade"] { color: #ffb86b; border-color: #ffb86b; }
 #boss-attack-label[data-response="guard"], .enemy-combat-cue[data-response="guard"] { color: #ffe390; border-color: #ffe390; }
+.defeat-kept[hidden], #floor-attempt-summary[hidden] { display: none; }
+#defeat-screen[data-floor-summary="true"] .defeat-card { width: min(560px, 100%); padding: 24px; max-height: calc(100dvh - 32px); overflow-y: auto; box-sizing: border-box; }
+#defeat-screen[data-floor-summary="true"] h1 { margin: 12px 0 8px; font-size: 28px; }
+#floor-attempt-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 18px 0; text-align: left; }
+#floor-attempt-summary > div:nth-child(n+3) { grid-column: 1 / -1; }
+#floor-attempt-summary > div { padding: 12px 14px; border: 1px solid #647b6844; background: #1d3229; border-radius: 9px; }
+#floor-attempt-summary strong { color: #e7cf86; font: 800 11px/1.3 system-ui; letter-spacing: .06em; }
+#floor-attempt-summary p { margin: 5px 0 0; font-size: 14px; line-height: 1.45; color: #deeadf; }
+#floor-attempt-summary > div:last-child { background: #303021; border-color: #b6a15b66; }
+@media (max-width: 480px) { #floor-attempt-summary { grid-template-columns: 1fr; } #defeat-screen[data-floor-summary="true"] .defeat-card { padding: 18px; } }

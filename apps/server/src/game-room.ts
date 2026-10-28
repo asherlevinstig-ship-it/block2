@@ -5,6 +5,7 @@ import { crownkeeperFragments, withCrownkeeperFragments } from "./crownkeeper-pr
 import { FloorRunUpgrades } from "./floor-run-upgrades.js";
 import { FLOOR_RUN_UPGRADES } from "@blockcraft/protocol";
 import { crownkeeperCounterDuration, CROWNKEEPER_OPENING_WEAPON_BONUS, type CrownkeeperCounter } from "@blockcraft/protocol";
+import { floorDefeatTip, type FloorAttemptSummary } from "@blockcraft/protocol";
 import { GREENWOOD_MASTERY_CAP, MISTFEN_MASTERY_CAP, greenwoodMasteryRank, mistfenMasteryRank } from "@blockcraft/protocol";
 import { callingStarterAbility } from "@blockcraft/protocol";
 import { experienceToNextLevel } from "@blockcraft/protocol";
@@ -353,6 +354,7 @@ interface PendingIncomingHit {
   defending: boolean;
   defenseStartedAt: number;
   insideGuardArc: boolean;
+  attackPattern?: string;
 }
 
 interface SilverDepthsRunStats {
@@ -424,6 +426,7 @@ interface PendingPower {
 }
 
 interface PendingMobProjectile {
+  attackPattern?: string;
   coreRadius?: number;
   hazardRadius?: number;
   hazardDurationMs?: number;
@@ -497,6 +500,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly floorRunReprisalUntil = new Map<string, number>();
   private readonly floorRunProcAt = new Map<string, number>();
   private readonly floorRunPathCache = new Map<string, { source: string; path: BuildPathId | null }>();
+  private readonly floorRunBossSeen = new Map<string, { health: number; maxHealth: number }>();
+  private floorDefeatSequence = 0;
   private readonly performanceSubscribers = new Set<string>();
   private readonly simulationTickSamples: number[] = [];
   private lastPerformanceReportAt = 0;
@@ -563,7 +568,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly equipmentAffixProcAt = new Map<string, number>();
   private readonly masterTrialMobTags = new Map<string, { playerId: string; specializationId: BuildPathSpecializationId; until: number }>();
   private readonly pendingMobProjectiles = new Map<string, PendingMobProjectile>();
-  private readonly delayedMatriarchVolleys = new Map<string, { origin: { x: number; y: number; z: number }; shots: { x: number; y: number; z: number }[]; releaseAt: number; damage: number; travelMs: number }>();
+  private readonly delayedMatriarchVolleys = new Map<string, { origin: { x: number; y: number; z: number }; shots: { x: number; y: number; z: number }[]; releaseAt: number; damage: number; travelMs: number; attackPattern?: string }>();
   private readonly matriarchCoverHits = new Map<string, number>();
   private readonly silverDepthsRuns = new Map<string, SilverDepthsRunStats>();
   private silverDepthsRunSequence = 0;
@@ -2621,6 +2626,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.clearFloorRunUpgrades(client.sessionId);
     if (player.health > 0 && isInsideTowerFloorOne(player.x, player.z)
       && !this.floorRunUpgrades.active(client.sessionId)) this.floorRunUpgrades.start(client.sessionId);
+    this.observeFloorAttemptBoss(client.sessionId, player);
     const state = this.floorRunUpgrades.state(client.sessionId, parseBuildPathState(player.huntLoadoutsJson).selectedPathId,
       this.floorUpgradeAbilities(player));
     const update = { ...state, canChoose: state.pending > 0 && state.path !== null && this.floorUpgradeSafe(client.sessionId) };
@@ -2648,7 +2654,34 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.floorRunUpgrades.clear(id); this.floorRunStateKeys.delete(id); this.floorRunLastHitAt.delete(id);
     this.floorRunReprisalUntil.delete(id);
     this.floorRunPathCache.delete(id);
+    this.floorRunBossSeen.delete(id);
     for (const key of this.floorRunProcAt.keys()) if (key.startsWith(id + ":")) this.floorRunProcAt.delete(key);
+  }
+
+  private observeFloorAttemptBoss(id: string, player: PlayerState): void {
+    if (!this.rapidPractice || !this.floorRunUpgrades.active(id)) return;
+    const boss = this.state.mobs.get(TOWER_FLOOR_ONE_BOSS_ID);
+    if (boss && Math.abs(boss.y - player.y) <= 2.5 && Math.hypot(boss.x - player.x, boss.z - player.z) <= 28)
+      this.floorRunBossSeen.set(id, { health: Math.max(0, boss.health), maxHealth: boss.maxHealth });
+  }
+
+  private sendFloorDefeatSummary(id: string, player: PlayerState, mobId: string, pattern: string, kind: string, now: number): void {
+    if (!this.rapidPractice || !isInsideTowerFloorOne(player.x, player.z) || !this.floorRunUpgrades.active(id)) return;
+    this.observeFloorAttemptBoss(id, player);
+    const path = parseBuildPathState(player.huntLoadoutsJson).selectedPathId;
+    const run = this.floorRunUpgrades.state(id, path, this.floorUpgradeAbilities(player));
+    const boss = this.state.mobs.get(TOWER_FLOOR_ONE_BOSS_ID), seenBoss = this.floorRunBossSeen.get(id);
+    const nearBoss = boss && Math.abs(boss.y - player.y) <= 2.5 && Math.hypot(boss.x - player.x, boss.z - player.z) <= 28;
+    const summary: FloorAttemptSummary = {
+      id: `${now}:${++this.floorDefeatSequence}`, floor: 1, calling: path,
+      wardensDefeated: run.earned, picked: run.picked, unusedChoices: run.pending,
+      boss: seenBoss ? { ...seenBoss, lastSeen: !nearBoss } : null,
+      kept: { level: player.level, experience: player.experience, gold: player.coins,
+        crownFragments: crownkeeperFragments(player.huntLoadoutsJson) },
+      cause: { name: this.state.mobs.get(mobId)?.name || (kind === "hazard" ? "Marked ground" : "An enemy"), pattern, kind },
+      tip: floorDefeatTip(pattern, kind),
+    };
+    this.clients.find(client => client.sessionId === id)?.send("floor:attempt-ended", summary);
   }
 
   private floorRunProc(id: string, key: string, now: number, cooldownMs: number): boolean {
@@ -5094,9 +5127,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   }
 
   private damagePlayer(mobId: string, playerId: string, damage: number, now: number, blockable = true,
-    kind: IncomingDamageKind = "melee", contact?: PendingIncomingHit): boolean {
+    kind: IncomingDamageKind = "melee", contact?: PendingIncomingHit, sourcePattern?: string): boolean {
     const player = this.state.players.get(playerId);
     if (!player || player.health <= 0 || this.protectedDialogs.has(playerId) || isInsideTownSafeZone(player) || !caveEncounterAllows(mobId, player)) return false;
+    const hitPattern = sourcePattern ?? contact?.attackPattern ?? (kind === "melee" ? this.state.mobs.get(mobId)?.attackPattern : undefined) ?? "";
     const dodge = this.activeDodgeWindows.get(playerId);
     const lateDodgeCoversContact = !!contact && !!dodge && dodge.startedAt <= contact.contactAt && contact.contactAt <= dodge.until;
     if (contact ? lateDodgeCoversContact : now < player.invulnerableUntil) {
@@ -5105,7 +5139,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         this.dodgePressure.set(playerId, { chain: 0, lastAt: Number.NEGATIVE_INFINITY, exhaustedUntil: 0 });
         const counterUntil = now + PERFECT_DODGE_COUNTER_MS;
         const dodgedBoss = mobId === TOWER_FLOOR_ONE_BOSS_ID ? this.state.mobs.get(mobId) : undefined;
-        if (dodgedBoss) this.openCrownkeeperCounter(dodgedBoss, "evade", now, playerId);
+        if (dodgedBoss && kind === "melee" && hitPattern === dodgedBoss.attackPattern) this.openCrownkeeperCounter(dodgedBoss, "evade", now, playerId);
         this.dodgeCounterUntil.set(playerId, counterUntil);
         if (mobId === FIRST_COMBAT_MOB_ID) this.firstCombatPerfectDodges.add(playerId);
         if (player.armourId === "ashguard_mantle") {
@@ -5183,11 +5217,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       player.stamina += perkStaminaRestored;
     }
     if (defense.parried && mob) {
-      if (!(mobId === TOWER_FLOOR_ONE_BOSS_ID && this.openCrownkeeperCounter(mob,
+      if (!(kind === "melee" && hitPattern === mob.attackPattern && mobId === TOWER_FLOOR_ONE_BOSS_ID && this.openCrownkeeperCounter(mob,
         mob.attackPattern === "charge" ? "guard" : "parry", now, playerId)))
         this.staggerMob(mobId, mob, now, PARRY_STAGGER_MS, true);
     }
-    if (defense.guarded && mobId === TOWER_FLOOR_ONE_BOSS_ID && mob) this.openCrownkeeperCounter(mob, "guard", now, playerId);
+    if (defense.guarded && kind === "melee" && mobId === TOWER_FLOOR_ONE_BOSS_ID && mob && hitPattern === mob.attackPattern) this.openCrownkeeperCounter(mob, "guard", now, playerId);
     if (player.stamina <= 0) player.defending = false;
     let absorbed = false;
     let absorbedBy: "bastion" | "northwatch" | undefined;
@@ -5353,6 +5387,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (emberRun && emberRun.completedAt === 0) emberRun.damageTaken += defense.damage;
     const defeated = player.health === 0;
     if (defense.damage > 0) this.floorRunLastHitAt.set(playerId, now);
+    if (defeated) this.sendFloorDefeatSummary(playerId, player, mobId, hitPattern, kind, now);
     this.broadcastToInterest("combat:player-hit", {
       mobId,
       playerId,
@@ -5437,17 +5472,18 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   }
 
   private queueIncomingHit(mobId: string, playerId: string, damage: number, now: number,
-    kind: "melee" | "projectile" = "melee"): void {
+    kind: "melee" | "projectile" = "melee", sourcePattern?: string): void {
     const player = this.state.players.get(playerId);
     if (!player) return;
+    const attackPattern = sourcePattern ?? this.state.mobs.get(mobId)?.attackPattern ?? "";
     // Offline/test actors and already protected players do not need a late-input window.
     if (!this.clients.some(client => client.sessionId === playerId)
       || now < player.invulnerableUntil || this.pendingIncomingHits.length >= 256) {
-      this.damagePlayer(mobId, playerId, damage, now, true, kind);
+      this.damagePlayer(mobId, playerId, damage, now, true, kind, undefined, attackPattern);
       return;
     }
     const mob = this.state.mobs.get(mobId);
-    this.pendingIncomingHits.push({ mobId, playerId, damage, kind, contactAt: now,
+    this.pendingIncomingHits.push({ mobId, playerId, damage, kind, attackPattern, contactAt: now,
       contactX: player.x, contactY: player.y, contactZ: player.z,
       defending: player.defending, defenseStartedAt: player.defenseStartedAt,
       insideGuardArc: !!mob && isAttackInGuardArc(player, mob),
@@ -8429,12 +8465,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
   }
 
-  private releaseMobVolley(mobId: string, mob: MobState, origin: { x: number; y: number; z: number }, shots: { x: number; y: number; z: number }[], now: number, travelMs: number, damage: number, hazardRadius: number, hazardDurationMs: number): void {
+  private releaseMobVolley(mobId: string, mob: MobState, origin: { x: number; y: number; z: number }, shots: { x: number; y: number; z: number }[], now: number, travelMs: number, damage: number, hazardRadius: number, hazardDurationMs: number, sourcePattern = mob.attackPattern): void {
     for (const aim of rapidPracticeProjectileFan(origin, shots, this.rapidPractice)) {
       const projectileId = `${mobId}:${++this.mobProjectileSequence}`;
       const start = { x: origin.x, y: origin.y + 1.05, z: origin.z };
       const end = { x: aim.x, y: aim.y + .08, z: aim.z };
-      this.pendingMobProjectiles.set(projectileId, { projectileId, mobId, archetype: mob.archetype, damage, hazardRadius, hazardDurationMs,
+      this.pendingMobProjectiles.set(projectileId, { projectileId, mobId, archetype: mob.archetype, attackPattern: sourcePattern, damage, hazardRadius, hazardDurationMs,
         start, end, position: start, startedAt: now, impactAt: now + travelMs,
         coreRadius: this.rapidPractice ? ENEMY_PROJECTILE_RADIUS : 0 });
       this.broadcastToInterest("combat:mob-projectile", { projectileId, mobId, kind: isThornbinder(mob.archetype) ? "vine" : mobId === CRYSTAL_MATRIARCH_ID || mobId === ASHGLASS_ORACLE_ID || mob.archetype === "shard_sentry" ? "crystal" : mob.archetype === "stone_brute" ? "rock" : "acid", ...origin, targetX: aim.x, targetY: aim.y, targetZ: aim.z, travelMs, releasedAt: now,
@@ -8485,7 +8521,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (!mob?.alive || mob.combatState === "stagger") { this.delayedMatriarchVolleys.delete(mobId); continue; }
       if (now < volley.releaseAt) continue;
       this.delayedMatriarchVolleys.delete(mobId);
-      this.releaseMobVolley(mobId, mob, volley.origin, volley.shots, now, volley.travelMs, volley.damage, 0, 0);
+      this.releaseMobVolley(mobId, mob, volley.origin, volley.shots, now, volley.travelMs, volley.damage, 0, 0, volley.attackPattern ?? "");
     }
     for (const [projectileId, projectile] of this.pendingMobProjectiles) {
       const progress = Math.max(0, Math.min(1, (now - projectile.startedAt) / (projectile.impactAt - projectile.startedAt)));
@@ -8511,7 +8547,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const target = collision?.targetId ? this.state.players.get(collision.targetId) : undefined;
       if (target && collision?.targetId) {
         if (isThornbinder(projectile.archetype)) this.applyThornBinding(projectile.mobId, collision.targetId, now);
-        else this.queueIncomingHit(projectile.mobId, collision.targetId, projectile.damage, now, "projectile");
+        else this.queueIncomingHit(projectile.mobId, collision.targetId, projectile.damage, now, "projectile", projectile.attackPattern ?? "");
       } else if (collision?.targetId && this.thiefDecoys.has(collision.targetId))
         this.damageThiefDecoy(collision.targetId, projectile.mobId, projectile.damage, now);
       const hazardDurationMs = projectile.hazardDurationMs ?? definition.hazardDurationMs;
@@ -9474,7 +9510,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
             const secondYaw = matriarchSecondVolleyYaw(aim.yaw, Math.max(0, mob.actionSequence - 1));
             const secondShots = usesRockVolley(mob.attackPattern) ? bruteRockEndpoints(mob, secondYaw)
               : spitterShotEndpoints(mob, secondYaw, mob.attackPattern === "cross-volley" ? "double-fan" : mob.attackPattern);
-            this.delayedMatriarchVolleys.set(mobId, { origin, shots: secondShots, releaseAt: now + MATRIARCH_PHASE.volleyGapMs, damage: mob.attackDamage, travelMs: projectileTravelMs });
+            this.delayedMatriarchVolleys.set(mobId, { origin, shots: secondShots, releaseAt: now + MATRIARCH_PHASE.volleyGapMs, damage: mob.attackDamage, travelMs: projectileTravelMs, attackPattern: mob.attackPattern });
           }
           if (mobId === ASHGLASS_ORACLE_ID && mob.attackPattern === "teleport-burst") this.teleportAshglassOracle(mob, aim, mob.actionSequence);
           mob.targetId = "";
