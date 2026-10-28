@@ -55,7 +55,7 @@ describe("private Calling practice", () => {
     internal.rapidPractice = true;
     internal.spawnLootDrops = vi.fn();
     internal.persistPlayer = vi.fn().mockResolvedValue(undefined);
-    const mob = new MobState(); Object.assign(mob, { alive: true, health: 1, maxHealth: 12,
+    const mob = new MobState(); Object.assign(mob, { x: player.x + 1, y: player.y, z: player.z, alive: true, health: 1, maxHealth: 12,
       archetype: "thornbinder", level: 4, rewardMultiplier: 1 });
     room.state.mobs.set("greenwood-fenward-guard-b", mob);
     const coinsBefore = player.coins;

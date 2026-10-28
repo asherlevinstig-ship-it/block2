@@ -3417,20 +3417,26 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.pendingMobMelee.delete(mobId);
       this.mobAwareness.delete(mobId);
       mob.respawnAt = rapidSpawn ? now + rapidSpawn.respawnMs : now + 3_000;
-      const player = this.state.players.get(attackerId);
-      if (rapidSpawn && player) {
-        const cadenceId = this.profileTokens.get(attackerId) ?? attackerId;
+      const credited = rapidSpawn?.leader
+        ? this.combatContributions.eligiblePersistent(mobId, mob, this.state.players)
+        : this.combatContributions.eligible(mobId, mob, this.state.players, now);
+      const killer = this.state.players.get(attackerId);
+      const recipients = credited.length ? credited : killer && killer.health > 0
+        && Math.abs(killer.y - mob.y) <= 2.5 && Math.hypot(killer.x - mob.x, killer.z - mob.z) <= 22 ? [attackerId] : [];
+      if (rapidSpawn) for (const playerId of recipients) {
+        const player = this.state.players.get(playerId)!;
+        const cadenceId = this.profileTokens.get(playerId) ?? playerId;
         const guardedReward = rapidPracticeGuardedReward(rapidSpawn.id);
         const itemDrop = Boolean(rapidSpawn.leader) || guardedReward || this.normalLootCadence.record(cadenceId, Math.random());
-        if (itemDrop) this.spawnLootDrops(mobId, mob, now, attackerId);
+        if (itemDrop) this.spawnLootDrops(mobId, mob, now, playerId);
         const coinsGranted = rapidSpawn.leader ? 7 + Math.floor(rapidSpawn.level / 2)
           : guardedReward ? 4 : 1 + Math.floor(rapidSpawn.level / 4);
         player.coins = Math.min(1_000_000, player.coins + coinsGranted);
         const experience = mobExperience(mob.archetype, mob.rewardMultiplier, Boolean(rapidSpawn.leader), player.level, mob.level);
-        this.grantProgression(attackerId, experience, mob.name);
-        this.grantBuildProgress(attackerId, rapidSpawn.leader ? 3 : 1);
-        void this.persistPlayer(attackerId, player);
-        this.clients.find(client => client.sessionId === attackerId)?.send("chat:notice",
+        this.grantProgression(playerId, experience, mob.name);
+        this.grantBuildProgress(playerId, rapidSpawn.leader ? 3 : 1);
+        void this.persistPlayer(playerId, player);
+        this.clients.find(client => client.sessionId === playerId)?.send("chat:notice",
           mobId === TOWER_FLOOR_ONE_NORTH_WARDEN_ID
             ? "NORTH ROOT WARDEN FELLED · northern seal broken · warden cache landed."
             : mobId === TOWER_FLOOR_ONE_SOUTH_WARDEN_ID
@@ -4965,6 +4971,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       ? resolveDefense(damage, contact?.defending ?? player.defending, contact?.defenseStartedAt ?? player.defenseStartedAt,
         contact?.contactAt ?? now, contact?.insideGuardArc ?? isAttackInGuardArc(player, mob))
       : { damage, guarded: false, parried: false };
+    if (this.rapidPractice && mob?.alive && defense.guarded)
+      this.combatContributions.recordSupport(mobId, playerId, damage - defense.damage, now);
     const traitId = player.equippedTrait as TraitId;
     if (defense.guarded) {
       const cost = guardStaminaCost(defense.parried ? 8 : 14, traitId);
@@ -5011,6 +5019,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const beforeBulwark = defense.damage;
       defense.damage = Math.max(0, defense.damage - (selectedCallingAugment(build, bulwarkAbility) === "bulwark_iron_skin" ? 2 : 1));
       bulwarkPrevented = beforeBulwark - defense.damage;
+      if (this.rapidPractice && mob?.alive)
+        this.combatContributions.recordSupport(mobId, playerId, bulwarkPrevented, now);
       this.grantCallingTrial(playerId, "bulwark_iron_skin", beforeBulwark - defense.damage);
     } else if (bulwarkUntil > 0) {
       this.tankBulwarkUntil.delete(playerId);
@@ -5039,7 +5049,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (prevented <= 0) continue;
       allyBulwarkGuardId = guardId;
       this.grantCallingTrial(guardId, "bulwark_iron_skin", prevented);
-      if (mobId === "northwatch-watchbreaker") this.combatContributions.recordSupport(mobId, guardId, prevented, now);
+      if (this.rapidPractice || mobId === "northwatch-watchbreaker") this.combatContributions.recordSupport(mobId, guardId, prevented, now);
       const impact = { guardId, allyId: playerId, mobId, prevented };
       this.broadcast("tank:ally-block-impact", impact);
       this.clients.find(client => client.sessionId === guardId)?.send("tank:ally-block-impact", impact);
@@ -5105,7 +5115,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       defense.damage = Math.max(0, defense.damage - (guardianMaster ? 3 : guardian ? 2 : 1) - (protectorTier >= 2 ? 1 : 0));
       if (protectorTier > 0 && beforeProtection > defense.damage)
         this.equipmentAffixProc(guardId, "protector", `PROTECTOR −${beforeProtection - defense.damage}`, player, now, 600);
-      if (mobId === "northwatch-watchbreaker" && beforeProtection > defense.damage)
+      if ((this.rapidPractice || mobId === "northwatch-watchbreaker") && beforeProtection > defense.damage)
         this.combatContributions.recordSupport(mobId, guardId, beforeProtection - defense.damage, now);
       if (guardian) this.grantMasterTrial(guardId, "guardian", beforeProtection - defense.damage);
       if (now - (this.fortressProcAt.get(guardId) ?? 0) >= 600) {
@@ -6962,7 +6972,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       challengedTargetIds = targets.map(([mobId]) => mobId);
       for (const [mobId, mob] of targets) {
         const awareness = this.mobAwareness.get(mobId) ?? createMobAwareness();
-        if (mobId === "northwatch-watchbreaker" && awareness.targetId && awareness.targetId !== client.sessionId)
+        const redirectedAlly = this.state.players.get(awareness.targetId ?? "");
+        if ((this.rapidPractice && redirectedAlly && redirectedAlly.health > 0 || mobId === "northwatch-watchbreaker")
+          && awareness.targetId && awareness.targetId !== client.sessionId)
           this.combatContributions.recordSupport(mobId, client.sessionId, Math.ceil(mob.maxHealth * .05), now);
         provokeMob(awareness, { id: client.sessionId, x: player.x, y: player.y, z: player.z, health: player.health }, now);
         this.mobAwareness.set(mobId, awareness);
@@ -7074,8 +7086,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         `MENDING +${Math.ceil(mendingTier / 2)} HP`, target, now, 0);
       if (targetId !== client.sessionId) this.clients.find(candidate => candidate.sessionId === targetId)
         ?.send("chat:notice", `${player.name || "A HEALER"} used Field Mend · +${restored} HP${staminaRestored ? ` · +${staminaRestored} stamina` : ""}.`);
-      let engagedBoss = false;
-      if (targetId !== client.sessionId) for (const [mobId, mob] of this.state.mobs) {
+      let engagedBoss = this.recordFastWorldHealingSupport(client.sessionId, targetId, restored, now);
+      if (!this.rapidPractice && targetId !== client.sessionId) for (const [mobId, mob] of this.state.mobs) {
         if (!mob.alive || !mob.isMiniBoss || (mob.combatState === "idle" && !this.mobAwareness.get(mobId)?.targetId)
           || Math.abs(mob.y - target.y) > 2.5 || Math.hypot(mob.x - target.x, mob.z - target.z) > 22) continue;
         this.combatContributions.recordSupport(mobId, client.sessionId, restored, now);
@@ -8170,6 +8182,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.resurrectionWindows.delete(cast.targetId);
       const soulboundTier = this.equipmentAffixTier(caster, "soulbound");
       target.health = Math.max(1, Math.ceil(target.maxHealth * (.25 + soulboundTier * .05)));
+      this.recordFastWorldHealingSupport(casterId, cast.targetId, target.health, now);
       target.stamina = Math.min(target.maxStamina, Math.max(target.stamina, 25 + soulboundTier * 5));
       target.invulnerableUntil = now + 1_500 + soulboundTier * 250;
       if (soulboundTier > 0) this.equipmentAffixProc(casterId, "soulbound",
@@ -8502,6 +8515,25 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
   }
 
+  /** Healing earns encounter credit only when it restores an involved ally. */
+  private recordFastWorldHealingSupport(casterId: string, targetId: string, restored: number, now: number): boolean {
+    if (!this.rapidPractice || casterId === targetId || !Number.isFinite(restored) || restored <= 0) return false;
+    const caster = this.state.players.get(casterId), target = this.state.players.get(targetId);
+    if (!caster || !target || caster.health <= 0 || target.health <= 0) return false;
+    let bossSupported = false;
+    for (const [mobId, mob] of this.state.mobs) {
+      if (!mob.alive || Math.abs(mob.y - target.y) > 2.5 || Math.abs(mob.y - caster.y) > 2.5
+        || Math.hypot(mob.x - target.x, mob.z - target.z) > 22
+        || Math.hypot(mob.x - caster.x, mob.z - caster.z) > 22) continue;
+      const fighting = this.combatContributions.hasRecentContribution(mobId, targetId, now)
+        || mob.targetId === targetId || this.mobAwareness.get(mobId)?.targetId === targetId;
+      if (!fighting) continue;
+      this.combatContributions.recordSupport(mobId, casterId, restored, now);
+      bossSupported ||= mob.isMiniBoss;
+    }
+    return bossSupported;
+  }
+
   private resolveRenewalFields(now: number): void {
     for (const [fieldId, field] of this.renewalFields) {
       if (now >= field.expiresAt) { this.renewalFields.delete(fieldId); continue; }
@@ -8517,6 +8549,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         const staminaRestored = bulwark ? Math.min(8, target.maxStamina - target.stamina) : 0;
         target.health += restored;
         target.stamina += staminaRestored;
+        this.recordFastWorldHealingSupport(field.ownerId, targetId, restored, now);
         targets.push(bulwark ? { targetId, restored, staminaRestored, bulwark: true } : { targetId, restored });
         if (bulwark) this.broadcast("calling:combo", { comboId: "sanctuary_bastion", label: "SANCTUARY BASTION",
           casterId: field.ownerId, partnerId: targetId, targetIds: [targetId], x: target.x, y: target.y, z: target.z,

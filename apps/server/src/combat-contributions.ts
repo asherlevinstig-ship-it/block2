@@ -6,6 +6,10 @@ export class CombatContributions {
   private readonly mobs = new Map<string, Map<string, Hit[]>>();
   private readonly supports = new Map<string, Map<string, Hit[]>>();
   private readonly totals = new Map<string, Map<string, number>>();
+  hasRecentContribution(mobId: string, playerId: string, now: number): boolean {
+    return [this.mobs.get(mobId)?.get(playerId), this.supports.get(mobId)?.get(playerId)]
+      .some(hits => hits?.some(hit => now >= hit.at && now - hit.at <= CONTRIBUTION_WINDOW_MS && hit.value > 0));
+  }
   record(mobId: string, playerId: string, damage: number, now: number): void {
     if (!Number.isFinite(damage) || damage <= 0) return;
     let contributors = this.mobs.get(mobId);
