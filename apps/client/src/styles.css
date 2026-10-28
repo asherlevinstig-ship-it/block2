@@ -4499,3 +4499,26 @@ html.fast-world-active :is(
 #crown-gate-label strong, #crown-gate-label span { display: block; }
 #crown-gate-label span { margin-top: 6px; color: #d4ded6; font-size: 13px; }
 #crown-gate-label.open { border-color: #81dfac; color: #a4f2c5; }
+#interaction-feedback {
+  position: fixed;
+  left: 50%;
+  bottom: max(190px, calc(env(safe-area-inset-bottom) + 160px));
+  transform: translateX(-50%);
+  z-index: 26;
+  width: max-content;
+  max-width: min(480px, calc(100vw - 32px));
+  box-sizing: border-box;
+  padding: 10px 16px;
+  border: 1px solid #e5b477;
+  border-radius: 8px;
+  background: #17201af2;
+  color: #ffe1b3;
+  font-size: clamp(13px, 1.6vw, 16px);
+  font-weight: 700;
+  text-align: center;
+  pointer-events: none;
+}
+#interaction-feedback[hidden] { display: none; }
+@media (max-height: 500px) {
+  #interaction-feedback { bottom: 125px; padding: 7px 12px; }
+}

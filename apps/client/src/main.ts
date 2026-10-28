@@ -129,6 +129,7 @@ import { populateTownAssetKit, readyTownFallbacks, SPEED_LAB_TOWN_ASSETS, type T
 import { createTownPortalLandmarks } from "./town-portal-landmarks.js";
 import { createTowerFloorOneWorld, updateTowerFloorOneProgress } from "./tower-floor-one-world-v2.js";
 import { crownGateStatus } from "./crown-gate.js";
+import { createInteractionFeedback, holdStopMessage, holdStopReason, type HoldStopReason } from "./interaction-feedback.js";
 import { requestTowerFloorOneFortressAssets } from "./tower-floor-one-asset-kit.js";
 import { towerFloorOneAtmosphere } from "./tower-floor-one-atmosphere.js";
 import { portalInteractionPrompt, portalLabel, portalWorldLabel } from "./portal-labels.js";
@@ -5541,7 +5542,9 @@ const pendingLootDrops = new Map<string, NetworkLootDrop>();
 let lootHold: LootHold | null = null;
 let lootCombatCheckedAt = -Infinity;
 let lootCombatActive = false;
-function cancelLootHold(): void {
+const interactionFeedback = createInteractionFeedback();
+function cancelLootHold(reason?: HoldStopReason): void {
+  if (lootHold && reason) interactionFeedback.show(holdStopMessage("loot", reason, lootHold.source === "touch"));
   lootHold = null;
   lootWorldLabel.dataset.holding = "false";
   lootWorldHold.style.setProperty("--hold-progress", "0%");
@@ -5553,11 +5556,19 @@ function releaseLootHold(source: LootHold["source"]): void {
   const complete = !localCombatActive()
     && visibleLootDistance(dropId, EQUIPMENT_LOOT_RANGE) !== null
     && lootHoldProgress(lootHold, performance.now(), dropId) >= 1;
-  cancelLootHold();
+  const reason = holdStopReason({ connected: !!room && worldReady, defeated: !defeatScreen.hidden,
+    menuOpen: !lootPanel.hidden || !lootPackDecision.hidden || !inventoryPanel.hidden || !levelUpPanel.hidden,
+    combat: localCombatActive(), inRange: visibleLootDistance(dropId, EQUIPMENT_LOOT_RANGE) !== null,
+    released: true });
+  cancelLootHold(complete ? undefined : reason ?? "released");
   if (complete) interactWithLoot(dropId);
 }
 function beginLootHold(source: LootHold["source"]): void {
-  if (lootHold || localCombatActive()) return;
+  if (lootHold) return;
+  if (localCombatActive()) {
+    interactionFeedback.show("Cannot collect loot during combat. Get to safety, then hold to collect.");
+    return;
+  }
   const nearby = nearestVisibleLootDrop(EQUIPMENT_LOOT_RANGE);
   if (!nearby) return;
   const drop = lootVisuals.get(nearby.id)?.state;
@@ -5571,10 +5582,11 @@ function beginLootHold(source: LootHold["source"]): void {
 function updateLootHold(now: number): void {
   if (!lootHold) return;
   const dropId = lootHold.dropId;
-  if (!room || !worldReady || !defeatScreen.hidden || !lootPanel.hidden || !lootPackDecision.hidden
-    || !inventoryPanel.hidden || !levelUpPanel.hidden || localCombatActive()
-    || visibleLootDistance(dropId, EQUIPMENT_LOOT_RANGE) === null
-    || lootHold.source === "keyboard" && !keys.has("KeyE")) { cancelLootHold(); return; }
+  const reason = holdStopReason({ connected: !!room && worldReady, defeated: !defeatScreen.hidden,
+    menuOpen: !lootPanel.hidden || !lootPackDecision.hidden || !inventoryPanel.hidden || !levelUpPanel.hidden,
+    combat: localCombatActive(), inRange: visibleLootDistance(dropId, EQUIPMENT_LOOT_RANGE) !== null,
+    released: lootHold.source === "keyboard" && !keys.has("KeyE") });
+  if (reason) { cancelLootHold(reason); return; }
   const progress = lootHoldProgress(lootHold, now, dropId);
   lootWorldHold.style.setProperty("--hold-progress", `${Math.round(progress * 100)}%`);
   contextButton.style.setProperty("--context-progress", `${Math.round(progress * 100)}%`);
@@ -5727,7 +5739,7 @@ function updateLootWorldLabel(): void {
     lootCombatCheckedAt = now;
     lootCombatActive = localCombatActive();
   }
-  if (lootCombatActive) { cancelLootHold(); return; }
+  if (lootCombatActive) { cancelLootHold("combat"); return; }
   const heldId = lootHold?.dropId;
   const heldDistance = heldId ? visibleLootDistance(heldId, 8) : null;
   const nearest = heldId && heldDistance !== null
@@ -7627,6 +7639,8 @@ function showCombatFeedback(text: string, style: "hit" | "hurt" | "dodge" | "mis
 let damageOverlayTimer = 0;
 let hitMarkerTimer = 0;
 function showPlayerDamageImpact(mobId: string, damage: number, health: number): void {
+  cancelLootHold(health > 0 ? "damage" : "defeated");
+  cancelPortalHold(health > 0 ? "damage" : "defeated");
   const now = performance.now();
   const attacker = mobVisuals.get(mobId)?.entity.getPosition();
   const player = localPlayer.getPosition();
@@ -9096,6 +9110,8 @@ function updateThornBinding(message: ThornBindingUpdate): void {
       logMovementEvent(`THORN ${message.phase} remaining=${Math.max(0, Math.round(localThornBoundUntil - now))}ms hp=${message.health}`);
     } else if (localThornBindingId === message.bindingId) {
       localThornBoundUntil = 0;
+      localThornBindingId = null;
+      interactionFeedback.show(message.phase === "broken" ? "Vines broken. You can move again." : "Vines released. You can move again.");
       logMovementEvent(`THORN ${message.phase}`);
     }
     if (localThornBoundUntil > now) {
@@ -13095,7 +13111,8 @@ let nearbyForestPortal: string | null = null;
 const portalTransition = createPortalTransition();
 let portalHold: PortalHold | null = null;
 let portalTravelPendingUntil = 0;
-function cancelPortalHold(): void {
+function cancelPortalHold(reason?: HoldStopReason): void {
+  if (portalHold && reason) interactionFeedback.show(holdStopMessage("portal", reason, portalHold.source === "touch"));
   portalTransition.cancel();
   if (portalHold) forestPortalVisuals.get(portalHold.portalId)?.label.style.setProperty("--portal-progress", "0%");
   portalHold = null;
@@ -13110,9 +13127,10 @@ function beginPortalHold(source: PortalHold["source"], portalId = nearbyForestPo
 function updatePortalHold(now: number): void {
   if (!portalHold) return;
   const hold = portalHold;
-  if (!room || !worldReady || hold.portalId !== nearbyForestPortal || !defeatScreen.hidden
-    || activePresentedPopupId() || protectedDialogPresented() || playerInteractionUI.isOpen()
-    || hold.source === "keyboard" && !keys.has("KeyE")) { cancelPortalHold(); return; }
+  const reason = holdStopReason({ connected: !!room && worldReady, defeated: !defeatScreen.hidden,
+    menuOpen: !!activePresentedPopupId() || protectedDialogPresented() || playerInteractionUI.isOpen(),
+    inRange: hold.portalId === nearbyForestPortal, released: hold.source === "keyboard" && !keys.has("KeyE") });
+  if (!room || reason) { cancelPortalHold(reason ?? "connection"); return; }
   const progress = portalHoldProgress(hold, now, nearbyForestPortal);
   portalTransition.charge(progress);
   forestPortalVisuals.get(hold.portalId)?.label.style.setProperty("--portal-progress", `${progress * 100}%`);
@@ -16010,7 +16028,7 @@ window.addEventListener("keyup", event => {
   if (event.code === "KeyJ") keyboardFireHeld = false;
   if (event.code === "KeyE") {
     releaseLootHold("keyboard");
-    if (portalHold?.source === "keyboard") cancelPortalHold();
+    if (portalHold?.source === "keyboard") cancelPortalHold("released");
   }
   if (event.code === "KeyC") requestDefense(false);
   if (popupQueue.active() !== null) {
@@ -16021,7 +16039,7 @@ window.addEventListener("keyup", event => {
   if (event.code === powerAimKey) commitPowerAim();
   if (event.code === "KeyF") commitSpecialAim();
 });
-window.addEventListener("blur", () => { cancelLootHold(); cancelPortalHold(); keyboardFireHeld = false; });
+window.addEventListener("blur", () => { cancelLootHold("focus"); cancelPortalHold("focus"); keyboardFireHeld = false; });
 canvas.addEventListener("pointerdown", event => {
   if (popupQueue.active() !== null) return;
   canvas.focus({ preventScroll: true });
@@ -16074,12 +16092,12 @@ canvas.addEventListener("pointerdown", event => {
 window.addEventListener("pointerup", event => {
   if (event.pointerId === rangedFirePointer) rangedFirePointer = null;
   releaseLootHold("touch");
-  if (portalHold?.source === "touch" && (portalHold.pointerId === undefined || portalHold.pointerId === event.pointerId)) cancelPortalHold();
+  if (portalHold?.source === "touch" && (portalHold.pointerId === undefined || portalHold.pointerId === event.pointerId)) cancelPortalHold("released");
 });
 window.addEventListener("pointercancel", event => {
   if (event.pointerId === rangedFirePointer) rangedFirePointer = null;
-  if (lootHold?.source === "touch") cancelLootHold();
-  if (portalHold?.source === "touch" && (portalHold.pointerId === undefined || portalHold.pointerId === event.pointerId)) cancelPortalHold();
+  if (lootHold?.source === "touch") cancelLootHold("released");
+  if (portalHold?.source === "touch" && (portalHold.pointerId === undefined || portalHold.pointerId === event.pointerId)) cancelPortalHold("released");
 });
 canvas.addEventListener("pointerup", event => {
   if (event.pointerType === "touch" && touchCameraPoints.has(event.pointerId)) {
