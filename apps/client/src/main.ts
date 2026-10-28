@@ -125,7 +125,7 @@ import { CAVE_CHAMBERS, caveReturnPath, discoverChambers, type CavePosition } fr
 import { miningAvailability, miningReach, miningProgress, miningDurationMs, miningLineClear, miningMessage, type MiningCell } from "./mining-feedback.js";
 import type { MineralDepositStatus } from "@blockcraft/protocol";
 import { advanceMobMotion, advanceMobTurnLean, mobRootPositionChanged, mobRootYawChanged, trimMobSnapshots, visibleMobGaitSpeed } from "./mob-motion.js";
-import { createServerClock, sampleServerClock, enemyAttackPresentation } from "./enemy-timeline.js";
+import { createServerClock, sampleServerClock, enemyAttackPresentation, enemyAttackStrength } from "./enemy-timeline.js";
 import { thornBindingDeadline } from "./thorn-binding.js";
 import { bruteRecoveryPose, enemyAwarenessCue, enemyCombatCue, enemyCueLineClear, enemyShotGuideLength } from "./enemy-combat-cues.js";
 import { confirmPredictedDodges, removeRejectedDodge, replayPendingMovement, type PredictionFrame } from "./prediction-replay.js";
@@ -232,7 +232,6 @@ import {
   BRAMBLE_SNARE,
   playerMeleeStrike,
   sampleMeleeStrike,
-  mobMeleeImpactMs,
   mobStrikeGroundOutline,
   BRUTE_SLAM,
   CHAMPION_CHARGE,
@@ -17774,12 +17773,8 @@ app.on("update", (dt: number) => {
     mob.turnLean = advanceMobTurnLean(mob.turnLean, previousYaw, mob.renderYaw, frameTime, presentation.aimLocked);
     if (mobRootYawChanged(previousYaw, mob.renderYaw)) mob.entity.setEulerAngles(0, mob.renderYaw, 0);
     const attackElapsed = presentation.elapsed;
-    const attackDuration = mob.isBrute ? 760 : mob.isSpitter ? 520 : 460;
-    const attackPeak = ["rocks", "falling-rocks", "warden-barrage", "fault-line"].includes(mob.state.attackPattern) ? 180 : mob.isSpitter ? attackDuration / 2 : mobMeleeImpactMs(mob.state.archetype);
-    const attackPhase = attackElapsed < attackPeak ? attackElapsed / attackPeak * 0.5
-      : 0.5 + (attackElapsed - attackPeak) / (attackDuration - attackPeak) * 0.5;
     const attackStrength = mob.art.matriarch ? mob.state.alive && mob.state.attackStartedAt > 0 && ["windup", "recover"].includes(mob.state.combatState) ? matriarchRecoil(attackElapsed, mob.state.attackPattern === "double-fan") : 0
-      : mob.state.attackStartedAt > 0 && mob.state.alive && attackElapsed >= 0 && attackElapsed < attackDuration ? Math.sin(attackPhase * Math.PI) : 0;
+      : enemyAttackStrength(mob.state, serverNow);
     if (mob.isBrute && mob.state.attackPattern !== "charge" && !["rocks", "falling-rocks", "warden-barrage", "fault-line"].includes(mob.state.attackPattern) && presentation.impactDue && mob.lastImpactStartedAt !== mob.state.attackStartedAt) {
       mob.lastImpactStartedAt = mob.state.attackStartedAt;
       createBruteSlamImpact(mob);

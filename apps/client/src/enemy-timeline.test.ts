@@ -1,10 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { createServerClock, sampleServerClock, enemyAttackPresentation, type EnemyTimeline } from "./enemy-timeline.js";
+import { createServerClock, sampleServerClock, enemyAttackPresentation, enemyAttackStrength, type EnemyTimeline } from "./enemy-timeline.js";
+import { towerFloorOneNorthWardenAttackTiming, FRONTIER_BRUTE } from "@blockcraft/protocol";
 
 const mob: EnemyTimeline = { alive: true, combatState: "windup", aimCommitted: false,
   attackStartedAt: 10_000, attackReleaseAt: 11_150, attackContactAt: 11_430,
   attackContactEndAt: 11_530, attackRecoveryEndAt: 12_380 };
 describe("authoritative enemy presentation", () => {
+  it.each([towerFloorOneNorthWardenAttackTiming("smash").impactMs,
+    towerFloorOneNorthWardenAttackTiming("root-slam").impactMs, FRONTIER_BRUTE.smash.impactMs, 280])(
+    "lands the brute animation at its actual %s ms contact delay", delay => {
+      const attack = { ...mob, archetype: "stone_brute", attackContactAt: mob.attackReleaseAt + delay,
+        attackContactEndAt: mob.attackReleaseAt + delay + 120 };
+      expect(enemyAttackStrength(attack, attack.attackContactAt)).toBeCloseTo(1);
+      expect(enemyAttackStrength(attack, attack.attackContactAt - 50)).toBeLessThan(1);
+      expect(enemyAttackStrength(attack, attack.attackContactAt + 50)).toBeLessThan(1);
+      expect(enemyAttackStrength(attack, attack.attackReleaseAt - 1)).toBe(0);
+      expect(enemyAttackStrength({ ...attack, combatState: "stagger" }, attack.attackContactAt)).toBe(0);
+      expect(enemyAttackStrength(attack, attack.attackRecoveryEndAt)).toBe(0);
+    });
   it("shows the brute's early aim-lock cue, without changing other enemies", () => {
     expect(enemyAttackPresentation({ ...mob, archetype: "stone_brute" }, 10_550).aimLocked).toBe(true);
     expect(enemyAttackPresentation({ ...mob, archetype: "moss_crawler" }, 10_550).aimLocked).toBe(false);

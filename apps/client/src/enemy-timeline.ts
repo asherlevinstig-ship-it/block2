@@ -23,6 +23,22 @@ export interface EnemyTimeline {
   attackStartedAt: number; attackReleaseAt: number; attackContactAt: number;
   attackContactEndAt: number; attackRecoveryEndAt: number;
 }
+/** Peak the visible strike at its authoritative contact, including boss variants. */
+export function enemyAttackStrength(mob: EnemyTimeline, serverNow: number): number {
+  const presentation = enemyAttackPresentation(mob, serverNow);
+  if (!mob.alive || mob.attackStartedAt <= 0 || presentation.elapsed < 0
+    || !["strike", "recover"].includes(presentation.phase)) return 0;
+  const brute = mob.archetype === "stone_brute";
+  const caster = ["cave_spitter", "shard_sentry", "thornbinder"].includes(mob.archetype ?? "");
+  const contactDelay = mob.attackContactAt - mob.attackReleaseAt;
+  const peak = contactDelay > 0 ? contactDelay : brute ? 180 : caster ? 260 : 150;
+  const duration = Math.max(brute ? 760 : caster ? 520 : 460, peak + 200);
+  if (presentation.elapsed >= duration) return 0;
+  const phase = presentation.elapsed < peak ? presentation.elapsed / peak * .5
+    : .5 + (presentation.elapsed - peak) / (duration - peak) * .5;
+  return Math.sin(phase * Math.PI);
+}
+
 export function enemyAttackPresentation(mob: EnemyTimeline, serverNow: number) {
   const valid = mob.alive && mob.attackStartedAt > 0
     && ["windup", "strike", "recover"].includes(mob.combatState);

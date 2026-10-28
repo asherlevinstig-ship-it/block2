@@ -9157,7 +9157,20 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         const aim = this.mobCommittedAim.get(mobId) ?? { x: mob.x + Math.sin(mob.yaw * Math.PI / 180) * definition.stopDistance,
           y: mob.y, z: mob.z + Math.cos(mob.yaw * Math.PI / 180) * definition.stopDistance, yaw: mob.yaw };
         this.mobCommittedAim.delete(mobId);
-        this.setMobAttackTimeline(mob, mob.attackStartedAt, now, mobId);
+        // Preserve the contact time already shown by the warning. A late tick
+        // must not schedule a fresh melee strike after that warning has ended.
+        const committedMelee = this.rapidPractice && definition.attackKind === "melee" && mob.attackPattern !== "toxic-bloom";
+        const releaseAt = committedMelee ? mob.attackReleaseAt || mob.stateUntil : now;
+        this.setMobAttackTimeline(mob, mob.attackStartedAt, releaseAt, mobId);
+        if (committedMelee && now > mob.attackContactEndAt) {
+          mob.combatState = "recover";
+          mob.stateUntil = mob.attackRecoveryEndAt;
+          mob.aimCommitted = false;
+          mob.targetId = "";
+          this.pendingMobMelee.delete(mobId);
+          this.lastMobAttackAt.set(mobId, now);
+          continue;
+        }
         mob.aimCommitted = definition.attackKind === "melee";
         mob.combatState = definition.attackKind === "melee" ? "strike" : "recover";
         mob.stateUntil = definition.attackKind === "melee" ? mob.attackContactEndAt : mob.attackRecoveryEndAt;
@@ -10506,7 +10519,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private advanceChampionCharges(now: number): void {
     for (const [id, charge] of this.championCharges) {
       const mob = this.state.mobs.get(id);
-      if (!mob?.alive || mob.combatState !== "strike") {
+      if (!mob?.alive || mob.combatState !== "strike"
+        || this.rapidPractice && now > mob.attackContactEndAt) {
         this.championCharges.delete(id); this.cinderRamTrailLast.delete(id); continue;
       }
       const cinderRam = mob.archetype === "cinder_ram";
@@ -10591,6 +10605,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (mob.archetype === "stone_brute") {
         if (now < pending.impactAt) continue;
         this.pendingMobMelee.delete(mobId); // One impact, not damage on every contact frame.
+        if (this.rapidPractice && now > mob.attackContactEndAt) continue;
         const center = { x: mob.attackStrikeX, y: mob.attackStrikeY, z: mob.attackStrikeZ };
         for (const [id, target] of this.state.players) {
           if (target.health <= 0 || !caveEncounterAllows(mobId, target)
@@ -10618,6 +10633,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const start = pending.impactAt - strike.beforeImpactMs;
       const end = pending.impactAt + strike.afterImpactMs;
       if (now < start) continue;
+      if (this.rapidPractice && now > end) { this.pendingMobMelee.delete(mobId); continue; }
       const hit = meleeSweepImpact(mob, pending.yaw, strike,
         (Math.max(start, pending.lastSweepAt ?? start) - start) / (end - start),
         (Math.min(now, end) - start) / (end - start), [{ id: pending.targetId, x: target.x, y: target.y, z: target.z }], this.readWorldBlock);
