@@ -1,12 +1,13 @@
 import { voxelRaycast, type WorldBlockReader } from "@blockcraft/voxel-world";
 import type { Position } from "./action-rules.js";
-import { sampleMeleeStrike, attackBodyIntersection, type MeleeStrikeProfile, type MainHandId } from "@blockcraft/protocol";
+import { sampleMeleeStrike, attackBodyIntersection, type AttackBodyTarget, type MeleeStrikeProfile, type MainHandId } from "@blockcraft/protocol";
 
 /** Sample the blade's swept contact window, not a range/facing cone. */
 export function meleeSweepImpact(origin: Position, yaw: number, profile: MeleeStrikeProfile,
   from: number, to: number, targets: readonly ProjectileTarget[], read: WorldBlockReader, elevation?: number): string | null {
   const visible = targets.filter(target => hasCombatLineOfSight(origin, target, read))
-    .map(target => ({ ...target, radius: (target.radius ?? 0.38) + profile.radius }));
+    .map(target => ({ ...target, radius: (target.radius ?? 0.38) + profile.radius,
+      bodyPadding: (target.bodyPadding ?? 0) + profile.radius }));
   const steps = Math.max(1, Math.ceil(Math.abs(to - from) * 32));
   for (let i = 0; i <= steps; i++) {
     const blade = sampleMeleeStrike(origin, yaw, profile, from + (to - from) * i / steps);
@@ -50,7 +51,7 @@ export function hasCombatLineOfSight(origin: Position, target: Position, read: W
   return terrainImpact(bodyPoint(origin), bodyPoint(target), read) === null;
 }
 
-export interface ProjectileTarget extends Position { id: string; radius?: number }
+export interface ProjectileTarget extends AttackBodyTarget { id: string; radius?: number }
 /** Swept segment vs body AABB: a fast projectile cannot skip a target between ticks. */
 export function projectileImpact(start: Position, end: Position, targets: readonly ProjectileTarget[], read: WorldBlockReader):
   { kind: "terrain" | "entity"; point: Position; targetId?: string; fraction: number } | null {

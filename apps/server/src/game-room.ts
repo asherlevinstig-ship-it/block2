@@ -1,5 +1,5 @@
 import { Client, Room } from "@colyseus/core";
-import { aimedWeaponFlight } from "@blockcraft/protocol";
+import { aimedWeaponFlight, mobAttackBody } from "@blockcraft/protocol";
 import { GREENWOOD_MASTERY_CAP, MISTFEN_MASTERY_CAP, greenwoodMasteryRank, mistfenMasteryRank } from "@blockcraft/protocol";
 import { callingStarterAbility } from "@blockcraft/protocol";
 import { experienceToNextLevel } from "@blockcraft/protocol";
@@ -10689,7 +10689,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           continue;
         }
         const targets = [...this.state.mobs.entries()].filter(([, mob]) => mob.alive)
-          .map(([id, mob]) => ({ id, x: mob.x, y: mob.y, z: mob.z, radius: mob.archetype === "stone_brute" ? 0.55 : 0.38 }));
+          .map(([id, mob]) => ({ id, x: mob.x, y: mob.y, z: mob.z, radius: mob.archetype === "stone_brute" ? 0.55 : 0.38,
+            ...(this.rapidPractice ? mobAttackBody(id, mob) : {}) }));
         const hit = meleeSweepImpact(player, pending.yaw, strike,
           (Math.max(start, pending.lastSweepAt ?? start) - start) / (end - start),
           (Math.min(now, end) - start) / (end - start), targets, this.readWorldBlock, pending.elevation);
@@ -10743,7 +10744,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           z: player.z + Math.cos(radians) * effectiveRange,
         };
         const projectileId = `weapon:${sessionId}:${++this.weaponProjectileSequence}`;
-        const start = { x: player.x, y: player.y + 1.05, z: player.z };
+        // Flat third-person attacks must cross low enemy bodies even at close range.
+        const start = { x: player.x, y: player.y + (this.rapidPractice ? .72 : 1.05), z: player.z };
         let end = bodyPoint(endpoint);
         const aimed = pending.elevation === undefined ? null : aimedWeaponFlight(player, pending.yaw, pending.elevation, effectiveRange);
         if (aimed) { Object.assign(start, aimed.origin); end = aimed.end; }
@@ -10768,7 +10770,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           travelMs: projectileTravelMs,
           releasedAt: now,
           rapidStyle: rapidWeapon?.style,
-          ...(aimed ? { origin: aimed.origin, end: aimed.end } : {}),
+          ...(aimed || this.rapidPractice ? { origin: start, end } : {}),
         } satisfies WeaponAttackReleased);
         continue;
       }
@@ -10792,7 +10794,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const progress = Math.max(0, Math.min(1, (now - projectile.startedAt) / (projectile.impactAt - projectile.startedAt)));
       const next = flightPoint(projectile.start, projectile.end, progress);
       const targets = [...this.state.mobs.entries()].filter(([id, mob]) => mob.alive && !projectile.hitIds?.has(id))
-        .map(([id, mob]) => ({ id, x: mob.x, y: mob.y, z: mob.z, radius: mob.archetype === "stone_brute" ? 0.55 : 0.38 }));
+        .map(([id, mob]) => ({ id, x: mob.x, y: mob.y, z: mob.z, radius: mob.archetype === "stone_brute" ? 0.55 : 0.38,
+          ...(this.rapidPractice ? mobAttackBody(id, mob) : {}) }));
       for (const [targetId] of this.thornBindings) {
         const target = this.state.players.get(targetId);
         const bindingId = `thorn-binding:${targetId}`;

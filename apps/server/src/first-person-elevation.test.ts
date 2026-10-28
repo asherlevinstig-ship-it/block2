@@ -47,15 +47,33 @@ describe("first-person elevation on authoritative attacks", () => {
     const { target, fire } = fixture("forged_sword", 9.55); fire(0);
     expect(target.health).toBe(30);
   });
-  it("preserves the old horizontal flight when elevation is omitted", () => {
+  it("hits a brute's visible head above the old player-sized hitbox", () => {
+    const { target, fire } = fixture("forged_bow", 8);
+    target.archetype = "stone_brute";
+    fire(Math.atan2(1.85 - AIM_EYE_HEIGHT, 3));
+    expect(target.health).toBeLessThan(30);
+  });
+  it("does not hit the empty space above a crawler with a level shot", () => {
+    const { target, fire } = fixture("forged_sword", 8);
+    target.archetype = "moss_crawler";
+    fire(0);
+    expect(target.health).toBe(30);
+  });
+  it("still blocks a brute head shot behind terrain", () => {
+    const { target, fire } = fixture("forged_bow", 8, true);
+    target.archetype = "stone_brute";
+    fire(Math.atan2(1.85 - AIM_EYE_HEIGHT, 3));
+    expect(target.health).toBe(30);
+  });
+  it("keeps unaimed third-person flight level with low enemy bodies", () => {
     const { target, events, fire } = fixture("forged_sword", 8); fire();
     expect(target.health).toBe(28);
     const release = events.find(event => event.type === "combat:projectile")!.payload;
-    expect(release.origin).toBeUndefined(); expect(release.end).toBeUndefined(); expect(release.targetY).toBe(8);
+    expect(release.origin.y).toBe(8.72); expect(release.end.y).toBe(8.72); expect(release.targetY).toBe(8);
   });
   it.each([7, 9])("lets a close-range dagger follow the view toward height %s", targetY => {
     const { target, fire } = fixture("fang_dagger", targetY, false, 1);
-    fire(targetY > 8 ? Math.PI / 4 : -Math.PI / 4);
+    fire(Math.atan2(targetY + .6 - (8 + 1.05), 1));
     expect(target.health).toBeLessThan(30);
   });
   it("ignores first-person elevation in the archived combat mode", () => {

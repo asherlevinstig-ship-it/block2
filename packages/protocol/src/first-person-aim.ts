@@ -2,6 +2,8 @@ export const FIRST_PERSON_AIM_MIN = -Math.PI * 5 / 12;
 export const FIRST_PERSON_AIM_MAX = Math.PI * 5 / 12;
 export const AIM_EYE_HEIGHT = 1.48;
 type Point = { x: number; y: number; z: number };
+export interface AttackBodyBox extends Point { width: number; height: number; depth: number }
+export interface AttackBodyTarget extends Point { body?: readonly AttackBodyBox[]; yaw?: number; bodyPadding?: number }
 
 export function aimedAttackDirection(yawDegrees: number, elevation: number): Point {
   const pitch = Math.max(FIRST_PERSON_AIM_MIN, Math.min(FIRST_PERSON_AIM_MAX, elevation));
@@ -18,11 +20,28 @@ export function aimedWeaponFlight(position: Point, yaw: number, elevation: numbe
 }
 
 /** Shared swept segment vs the same body volume used for authoritative hits. */
-export function attackBodyIntersection(start: Point, end: Point, target: Point, radius = .38): number | null {
+export function attackBodyIntersection(start: Point, end: Point, target: AttackBodyTarget, radius = .38): number | null {
+  if (target.body) {
+    const yaw = (target.yaw ?? 0) * Math.PI / 180, c = Math.cos(yaw), s = Math.sin(yaw);
+    const local = (p: Point): Point => ({ x: (p.x - target.x) * c - (p.z - target.z) * s,
+      y: p.y - target.y, z: (p.x - target.x) * s + (p.z - target.z) * c });
+    const a = local(start), b = local(end), padding = target.bodyPadding ?? 0;
+    let nearest: number | null = null;
+    for (const shape of target.body) {
+      const hit = segmentBox(a, b, { x: shape.x - shape.width / 2 - padding, y: shape.y - shape.height / 2 - padding, z: shape.z - shape.depth / 2 - padding },
+        { x: shape.x + shape.width / 2 + padding, y: shape.y + shape.height / 2 + padding, z: shape.z + shape.depth / 2 + padding });
+      if (hit !== null && (nearest === null || hit < nearest)) nearest = hit;
+    }
+    return nearest;
+  }
+  return segmentBox(start, end, { x: target.x - radius, y: target.y + .05, z: target.z - radius },
+    { x: target.x + radius, y: target.y + 1.4, z: target.z + radius });
+}
+
+function segmentBox(start: Point, end: Point, min: Point, max: Point): number | null {
   let near = 0, far = 1;
   for (const axis of ["x", "y", "z"] as const) {
-    const minimum = axis === "y" ? target.y + .05 : target[axis] - radius;
-    const maximum = axis === "y" ? target.y + 1.4 : target[axis] + radius;
+    const minimum = min[axis], maximum = max[axis];
     const delta = end[axis] - start[axis];
     if (Math.abs(delta) < .000001) {
       if (start[axis] < minimum || start[axis] > maximum) return null;

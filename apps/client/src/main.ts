@@ -22,7 +22,7 @@ import { confirmedRangedHit, projectileImpactCue } from "./ranged-feedback.js";
 import { heldFireStep } from "./held-fire.js";
 import { continuousAttackEnabled, rapidCombatAnimationElapsed, rapidCombatDuration, rapidCombatImpact } from "./rapid-combat.js";
 import { AttackBuffer, attackReadiness, attackOutcomeAllowed, type AttackOutcome } from "./attack-buffer.js";
-import { effectiveWeaponRange, weaponFiresProjectile, aimedWeaponFlight, attackBodyIntersection } from "@blockcraft/protocol";
+import { effectiveWeaponRange, weaponFiresProjectile, aimedWeaponFlight, attackBodyIntersection, mobAttackBody, mobBodyScale } from "@blockcraft/protocol";
 import { AttackPredictionJournal } from "./attack-prediction.js";
 import type { WeaponAttackState } from "@blockcraft/protocol";
 import { callingLevelGuide, statChoiceDisabled } from "./progression-guidance.js";
@@ -10945,8 +10945,8 @@ function firstPersonCrosshairMob(position: pc.Vec3, maximumRange: number): { id:
     const projected = camera.camera!.worldToScreen(target);
     const inFront = projected.z > 0;
     const screenDistance = inFront ? Math.hypot(projected.x - centerX, projected.y - centerY) : Number.POSITIVE_INFINITY;
-    const fraction = flight ? attackBodyIntersection(flight.origin, flight.end, visual.state,
-      visual.state.archetype === "stone_brute" ? .55 : .38) : null;
+    const fraction = flight ? attackBodyIntersection(flight.origin, flight.end,
+      { x: visual.state.x, y: visual.state.y, z: visual.state.z, ...mobAttackBody(id, visual.state) }) : null;
     const sightPoint = flight && fraction !== null ? {
       x: flight.origin.x + (flight.end.x - flight.origin.x) * fraction,
       y: flight.origin.y + (flight.end.y - flight.origin.y) * fraction,
@@ -17992,7 +17992,7 @@ app.on("update", (dt: number) => {
     const gaitBob = Math.abs(Math.sin(mob.art.phase)) * mob.art.walk * (mob.isBrute ? 0.026 : 0.018);
     const woundedLimp = mob.state.name === "Wounded Wilds Stalker" ? Math.max(0, Math.sin(mob.art.phase)) * mob.art.walk : 0;
     const bruteRecovery = bruteRecoveryPose(mob.state, animationNow + serverClock.offset);
-    const bodySize = mob.art.rootGuardian ? 1.38 : mob.state.isChampion ? 1.25 : mob.state.isMiniBoss ? 1.18 : mob.state.isElite ? 1.12 : 1;
+    const bodySize = mobBodyScale(mob.entity.name.slice(4), mob.state);
     const emergence = mob.greenwoodStyle ? greenwoodEmergence(animationNow - mob.emergenceAt) : { y: 0, scaleY: 1 };
     mob.bodyRoot.setLocalScale(bodySize * (1 + defeat * 0.13), bodySize * emergence.scaleY * (1 - defeat * (mob.isBrute ? 0.42 : 0.58)), bodySize * (1 + defeat * 0.1));
     mob.bodyRoot.setLocalPosition(
