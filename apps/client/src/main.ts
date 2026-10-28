@@ -99,6 +99,7 @@ import { cavernRespawnIndicator } from "./cavern-respawn-indicator.js";
 import { SILVER_DEPTHS, SILVER_DEPTHS_CHECKPOINT_POSITION, isInSilverGuardClearing, isInFrontierBruteArena, isInRealmWardenArena, isInForestDungeon, isInEmberVault } from "@blockcraft/voxel-world";
 import { canUseForestPortal, type ForestPortal, type SilverDepthsWing } from "@blockcraft/protocol";
 import { portalArrivalSnapshot } from "./portal-travel.js";
+import { towerPortalArrival, portalArrivalOrbit, type PortalArrival } from "./portal-arrival.js";
 import { SPITTER_PATTERN, matriarchSecondVolleyYaw, spitterShotOffsets, spitterWarningLanes } from "@blockcraft/protocol";
 import { TOWN_STORAGE_CHEST_POSITION, isAtTownStorage } from "@blockcraft/voxel-world";
 import { TOWN_EXPEDITION_BOARD_POSITION } from "@blockcraft/voxel-world";
@@ -2310,10 +2311,11 @@ crownGateLabel.innerHTML = "<strong></strong><span></span>";
 document.body.append(crownGateLabel);
 let previousCrownGateRemaining: number | null = null;
 
-const showFastWorldReveal = (title: string, detail: string, kind: "region" | "landmark" | "arrival" | "gate" = "region"): void => {
+const showFastWorldReveal = (title: string, detail: string, kind: "region" | "landmark" | "arrival" | "gate" | "portal-arrival" = "region"): void => {
   passiveNotices.enqueue(kind === "region" ? "reveal:current-region" : `reveal:${kind}:${title}:${detail}`,
-    kind === "gate" ? 80 : kind === "arrival" ? 40 : 30,
-    kind === "gate" ? 4000 : 2800, { kind: "reveal", title, detail, revealKind: kind }, kind === "region");
+    kind === "portal-arrival" ? 100 : kind === "gate" ? 80 : kind === "arrival" ? 40 : 30,
+    kind === "portal-arrival" ? 4500 : kind === "gate" ? 4000 : 2800,
+    { kind: "reveal", title, detail, revealKind: kind }, kind === "region");
 };
 
 const fastWorldMapTargets = (): FastWorldNavPoint[] => [
@@ -7011,7 +7013,7 @@ function updateLevelCelebration(now: number): void {
     levelCelebrationRemainingMs -= Math.max(0, now - levelCelebrationLastTick);
   levelCelebrationLastTick = null;
   if (activeLevelCelebration && levelCelebrationRemainingMs <= 0) activeLevelCelebration = null;
-  if (notificationAttentionBlocked) { levelCelebration.hidden = true; return; }
+  if (notificationAttentionBlocked || passiveNotices.hasPriorityAtLeast(100)) { levelCelebration.hidden = true; return; }
   if (pendingLevelCelebrations.length && !activeLevelCelebration) {
     const celebration = pendingLevelCelebrations.shift()!;
     activeLevelCelebration = celebration;
@@ -7063,7 +7065,7 @@ function isAtTownOfBeginnings(): boolean {
 function updateAbilityReveal(): void {
   if (!abilityRevealPanel.hidden || !canPresentAbilityReveal({ worldReady, inTown: isAtTownOfBeginnings(),
     defeated: !defeatScreen.hidden, levelCelebrating: !levelCelebration.hidden || !!activeLevelCelebration || pendingLevelCelebrations.length > 0,
-    otherDialogOpen: notificationAttentionBlocked || reportedProtectedDialog === true })) return;
+    otherDialogOpen: notificationAttentionBlocked || passiveNotices.hasPriorityAtLeast(100) || reportedProtectedDialog === true })) return;
   const id = unseenCallingAbilityIds()[0];
   if (!id) return;
   const definition = CALLING_ABILITY_OPTIONS.find(option => option.id === id)!;
@@ -7101,7 +7103,7 @@ abilityRevealContinue.addEventListener("click", () => {
 
 function updateAshenEquipmentReveal(): void {
   if (!pendingAshenEquipmentReveal || !ashenEquipmentRevealPanel.hidden || !isAtTownOfBeginnings()
-    || notificationAttentionBlocked || activeLevelCelebration || pendingLevelCelebrations.length > 0
+    || notificationAttentionBlocked || passiveNotices.hasPriorityAtLeast(100) || activeLevelCelebration || pendingLevelCelebrations.length > 0
     || localCombatActive() || !defeatScreen.hidden || reportedProtectedDialog === true) return;
   const forged = pendingAshenEquipmentReveal;
   ashenEquipmentRevealTitle.textContent = forged.name;
@@ -7282,8 +7284,9 @@ function refreshProgressionNotice(): void {
 }
 
 function updateProgressionNoticeVisibility(now: number): void {
+  const arrivalPending = passiveNotices.hasPriorityAtLeast(100);
   const blocked = notificationAttentionBlocked || activePresentedPopupId() !== null || reportedProtectedDialog === true
-    || !!activeLevelCelebration || pendingLevelCelebrations.length > 0;
+    || !arrivalPending && (!!activeLevelCelebration || pendingLevelCelebrations.length > 0);
   const passive = passiveNotices.tick(now, blocked);
   if (fastWorldRegionReveal) fastWorldRegionReveal.hidden = true;
   resourceToasts.hidden = true;
@@ -7291,7 +7294,8 @@ function updateProgressionNoticeVisibility(now: number): void {
     if (passive !== renderedPassiveNotice) {
       const heading = passive.kind === "world" ? passive.notice.heading
         : passive.kind === "loot" ? passive.toast.querySelector("small")?.textContent ?? "LOOT COLLECTED"
-          : passive.revealKind === "gate" ? "SEALS BROKEN" : passive.revealKind === "landmark" ? "LANDMARK DISCOVERED"
+          : passive.revealKind === "portal-arrival" ? "YOU HAVE ARRIVED"
+            : passive.revealKind === "gate" ? "SEALS BROKEN" : passive.revealKind === "landmark" ? "LANDMARK DISCOVERED"
             : passive.revealKind === "arrival" ? "DESTINATION REACHED" : "REGION ENTERED";
       const title = passive.kind === "world" ? passive.notice.title
         : passive.kind === "loot" ? passive.toast.querySelector("strong")?.textContent ?? "Collected" : passive.title;
@@ -13166,6 +13170,7 @@ function updatePortalHold(now: number): void {
   }
 }
 let pendingPortalDestination: { x: number; y: number; z: number } | null = null;
+let pendingPortalArrival: PortalArrival | null = null;
 function nearbyRoleOpportunity() {
   if (!worldReady || !room || !localBuildPathId) return null;
   const player = localPlayer.getPosition();
@@ -13668,6 +13673,20 @@ function renderBootstrap(payload: WorldBootstrap): void {
     : null;
   townReturnPosition = null;
   const initialPosition = new pc.Vec3(initialPose.x, initialPose.y, initialPose.z);
+  // Adjust once, beneath the travel veil. Ordinary world refreshes must never
+  // turn a camera the player has already aimed.
+  const arrival = fastWorldRequested ? pendingPortalArrival
+    ?? (!Number.isFinite(lastWorldBootstrapAt) && portalTransition.isActive() ? towerPortalArrival(initialPose) : null) : null;
+  pendingPortalArrival = null;
+  if (arrival) {
+    cameraOrbit = portalArrivalOrbit(cameraOrbit, arrival, cameraViewMode);
+    firstPersonCameraPitch = FIRST_PERSON_NEUTRAL_ORBIT_PITCH;
+    thirdPersonCameraPitch = Math.PI * .4;
+    localFacingYaw = firstPersonFacingYaw(arrival.cameraYaw);
+    localPlayer.setEulerAngles(0, localFacingYaw, 0);
+    cameraShakeUntil = 0;
+    showFastWorldReveal(arrival.title, arrival.detail, "portal-arrival");
+  }
   localPlayer.setPosition(initialPosition.x, initialPosition.y, initialPosition.z);
   authoritativeLocalPosition.set(initialPosition.x, initialPosition.y, initialPosition.z);
   cameraFocus.set(initialPosition.x, initialPosition.y, initialPosition.z);
@@ -16912,7 +16931,7 @@ app.on("update", (dt: number) => {
       const detail = document.querySelector<HTMLElement>("#fast-world-badge span");
       if (title) title.textContent = `${region.name.toUpperCase()} Â· ${region.levelLabel}`;
       if (detail) detail.textContent = `${region.guidance} Â· ${fastWorldRegionTravelSummary(region.id)}`;
-      if (previousRegion && region.id !== "crossroads") showFastWorldReveal(region.name,
+      if (previousRegion && region.id !== "crossroads" && !portalTransition.isActive()) showFastWorldReveal(region.name,
         `${region.levelLabel} Â· fixed difficulty Â· ${fastWorldRegionTravelSummary(region.id)}`);
     }
     const newlyDiscovered = discoverFastWorldLandmarks(playerPosition, fastWorldNavigationState.landmarks);
@@ -18738,6 +18757,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   });
   room.onMessage("player:portal", (spawn: { x: number; y: number; z: number; entering: boolean }) => {
     portalTransition.arrive();
+    pendingPortalArrival = fastWorldRequested ? towerPortalArrival(spawn) : null;
     clearDefeatCombat(); closeLoot();
     const own = (room?.state as { players?: Map<string, NetworkPlayer> } | undefined)?.players?.get(room!.sessionId);
     pendingPortalDestination = own && portalArrivalSnapshot(spawn, own) ? null : spawn;
@@ -19833,6 +19853,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     for (const visual of thiefDecoyVisuals.values()) { visual.root.destroy(); visual.materials.forEach(material => material.destroy()); }
     thiefDecoyVisuals.clear();
     pendingPortalDestination = null;
+    pendingPortalArrival = null;
     social.clearNames();
     partyUI.reset();
     activeRealmEventId = "";

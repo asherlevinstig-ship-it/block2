@@ -39,4 +39,15 @@ describe("notification priority", () => {
     expect(queue.tick(5000, false)).toBe("Current region");
     expect(queue.tick(7000, false)).toBeNull();
   });
+  it("reserves the first clear moment after travel for the destination", () => {
+    const queue = new NotificationPriorityQueue<string>();
+    queue.enqueue("loot", 50, 2000, "Loot");
+    queue.enqueue("objective", 80, 2000, "Gate opened");
+    queue.enqueue("arrival", 100, 4500, "Floor 1");
+    expect(queue.hasPriorityAtLeast(100)).toBe(true);
+    expect(queue.tick(0, true)).toBeNull();
+    expect(queue.tick(1000, false)).toBe("Floor 1");
+    expect(queue.tick(5500, false)).toBe("Gate opened");
+    expect(queue.hasPriorityAtLeast(100)).toBe(false);
+  });
 });

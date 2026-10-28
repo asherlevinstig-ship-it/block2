@@ -34,5 +34,6 @@ export class NotificationPriorityQueue<T> {
     return this.visible?.value ?? null;
   }
 
+  hasPriorityAtLeast(priority: number): boolean { return this.entries.some(entry => entry.priority >= priority); }
   clear(): void { this.entries = []; this.visible = null; this.lastTick = null; }
 }
