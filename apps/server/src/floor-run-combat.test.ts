@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Block } from "@blockcraft/voxel-world";
-import { FLOOR_RUN_UPGRADES, TOWER_FLOOR_ONE_NORTH_WARDEN_ID, TOWER_FLOOR_ONE_SOUTH_WARDEN_ID,
+import { CALLING_ABILITY_OPTIONS, FLOOR_RUN_UPGRADES, TOWER_FLOOR_ONE_NORTH_WARDEN_ID, TOWER_FLOOR_ONE_SOUTH_WARDEN_ID,
   type BuildPathId, type CallingAbilityId } from "@blockcraft/protocol";
 import { WorldRoom } from "./game-room.js";
 import { MobState, PlayerState, WorldState } from "./schema.js";
@@ -37,7 +37,7 @@ function fixture(path: BuildPathId = "assassin", ability?: CallingAbilityId) {
     }
     throw new Error("No eligible offer for " + upgrade);
   };
-  const cast = (slot: "power" | "special" = "power") => internal.handleCallingAbility(client, { requestId: "cast", slot, yaw: 90 });
+  const cast = (slot: "power" | "special" = CALLING_ABILITY_OPTIONS.find(option => option.id === ability)?.category === "Utility" ? "special" : "power") => internal.handleCallingAbility(client, { requestId: "cast", slot, yaw: 90 });
   const hit = (step = 1) => {
     internal.pendingAttacks.set("hero", { requestId: "attack-run", mainHandId: player.mainHandId, step, yaw: 90, impactAt: 10000 });
     internal.resolvePendingAttacks(10000);

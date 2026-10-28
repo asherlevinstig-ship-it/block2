@@ -120,14 +120,14 @@ export function chooseBuildPath(state: BuildPathState, pathId: BuildPathId): Bui
 }
 
 export function selectedCallingAbility(state: BuildPathState, pathId: BuildPathId): CallingAbilityId {
-  return (pathId === "assassin" && state.callingAbilities[pathId] === "assassin_death_mark" ? null : state.callingAbilities[pathId])
+  return CALLING_ABILITY_OPTIONS.find(option => option.id === state.callingAbilities[pathId] && option.pathId === pathId && option.category !== "Utility")?.id
     ?? CALLING_ABILITY_OPTIONS.find(option => option.pathId === pathId && option.unlockRank === 0)!.id;
 }
 
 export function chooseCallingAbility(state: BuildPathState, pathId: BuildPathId, abilityId: CallingAbilityId): BuildPathState {
   const definition = CALLING_ABILITY_OPTIONS.find(option => option.id === abilityId);
   if (state.selectedPathId !== pathId || !definition || definition.pathId !== pathId
-    || (pathId === "assassin" && abilityId === "assassin_death_mark")
+    || definition.category === "Utility"
     || effectiveBuildPathRank(state, pathId) < definition.unlockRank) return state;
   return { ...state, callingAbilities: { ...state.callingAbilities, [pathId]: abilityId } };
 }
@@ -139,7 +139,7 @@ export function selectedCallingAugment(state: BuildPathState, abilityId: Calling
 export function chooseCallingAugment(state: BuildPathState, abilityId: CallingAbilityId, augmentId: CallingAugmentId): BuildPathState {
   const ability = CALLING_ABILITY_OPTIONS.find(option => option.id === abilityId);
   const augment = CALLING_ABILITY_AUGMENTS.find(option => option.id === augmentId && option.abilityId === abilityId);
-  if (!ability || state.selectedPathId !== ability.pathId || selectedCallingAbility(state, ability.pathId) !== abilityId
+  if (!ability || state.selectedPathId !== ability.pathId || (ability.category !== "Utility" && selectedCallingAbility(state, ability.pathId) !== abilityId)
     || !augment || effectiveBuildPathRank(state, ability.pathId) < augment.unlockRank
     || !state.masteredCallingAugments.includes(augmentId)) return state;
   return { ...state, callingAugments: { ...state.callingAugments, [abilityId]: augmentId } };
@@ -150,7 +150,7 @@ export function grantCallingAugmentProgress(state: BuildPathState, augmentId: Ca
   const augment = CALLING_ABILITY_AUGMENTS.find(option => option.id === augmentId);
   if (!augment) return { state, completed: false };
   const ability = CALLING_ABILITY_OPTIONS.find(option => option.id === augment.abilityId)!;
-  if (state.selectedPathId !== ability.pathId || selectedCallingAbility(state, ability.pathId) !== ability.id
+  if (state.selectedPathId !== ability.pathId || (ability.category !== "Utility" && selectedCallingAbility(state, ability.pathId) !== ability.id)
     || effectiveBuildPathRank(state, ability.pathId) < augment.unlockRank) return { state, completed: false };
   const target = CALLING_AUGMENT_TRIALS[augmentId].target;
   const before = state.callingAugmentProgress[augmentId] ?? 0, after = Math.min(target, before + Math.floor(amount));

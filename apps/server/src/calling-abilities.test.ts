@@ -173,7 +173,7 @@ describe("hotbar Calling abilities", () => {
     const mob = new MobState(); Object.assign(mob, { x: 52, y: 8, z: 50, alive: true, health: 20, maxHealth: 20, name: "Target", targetId: "hero" });
     internal.state.mobs.set("target", mob);
     internal.mobAwareness.set("target", { targetId: "hero" });
-    if (option.id !== "assassin_death_mark") {
+    if (option.category !== "Utility") {
       internal.handleCallingAbilityEquip(client, { abilityId: option.id as CallingAbilityId });
       expect(parseBuildPathState(player.huntLoadoutsJson).callingAbilities[option.pathId]).toBe(option.id);
     } else {
@@ -189,7 +189,7 @@ describe("hotbar Calling abilities", () => {
     }
     if (option.pathId === "healer") player.health = 2;
     internal.handleCallingAbility(client, { requestId: `activate-${option.id}`, yaw: 0,
-      ...(option.id === "assassin_death_mark" ? { slot: "special" } : {}) });
+      ...(option.category === "Utility" ? { slot: "special" } : {}) });
     expect(client.send).toHaveBeenCalledWith("calling:ability", expect.objectContaining({ abilityId: option.id }));
   });
 
@@ -208,7 +208,7 @@ describe("hotbar Calling abilities", () => {
     internal.state.mobs.set("pursuer", mob);
     internal.mobAwareness.set("pursuer", { targetId: "hero", lastSeen: { x: 50, y: 8, z: 50 }, seenAt: 10_000 });
     internal.handleCallingAbilityEquip(client, { abilityId: "thief_decoy" });
-    internal.handleCallingAbility(client, { requestId: "throw-decoy" });
+    internal.handleCallingAbility(client, { slot: "special", requestId: "throw-decoy" });
     const decoyId = "thief-decoy:hero";
     expect(internal.thiefDecoys.get(decoyId)).toEqual({ ownerId: "hero", x: player.x, y: player.y, z: player.z,
       yaw: player.yaw, until: 14_250, health: 5, maxHealth: 5 });
@@ -226,7 +226,7 @@ describe("hotbar Calling abilities", () => {
     internal.state.mobs.set("pursuer", mob);
     internal.mobAwareness.set("pursuer", { targetId: "hero", lastSeen: { x: 50, y: 8, z: 50 }, seenAt: 10_000 });
     internal.handleCallingAbilityEquip(client, { abilityId: "thief_decoy" });
-    internal.handleCallingAbility(client, { requestId: "bait" });
+    internal.handleCallingAbility(client, { slot: "special", requestId: "bait" });
     const decoyId = "thief-decoy:hero";
     internal.damageThiefDecoy(decoyId, "pursuer", 3, 10_100);
     expect(internal.thiefDecoys.get(decoyId).health).toBe(2);
@@ -387,7 +387,7 @@ describe("hotbar Calling abilities", () => {
     room.state.mobs.set("northwatch-watchbreaker", boss);
     internal.mobAwareness.set("northwatch-watchbreaker", { targetId: "ally", lastSeen: { x: 51, y: 8, z: 50 }, seenAt: 10_000 });
     internal.handleCallingAbilityEquip(client, { abilityId: "tank_challenge" });
-    internal.handleCallingAbility(client, { requestId: "northwatch-challenge" });
+    internal.handleCallingAbility(client, { slot: "special", requestId: "northwatch-challenge" });
     expect(internal.mobAwareness.get("northwatch-watchbreaker").targetId).toBe("hero");
     expect(internal.combatContributions.eligiblePersistent("northwatch-watchbreaker", boss, room.state.players)).toContain("hero");
     expect(internal.combatContributions.eligible("northwatch-watchbreaker", boss, room.state.players, 10_000)).toEqual([]);
@@ -504,7 +504,7 @@ describe("hotbar Calling abilities", () => {
     const ally = new PlayerState(); Object.assign(ally, { x: 52, y: 8, z: 50, health: 1, maxHealth: 5 });
     room.state.players.set("ally", ally);
     internal.handleCallingAbilityEquip(client, { abilityId: "healer_renewal" });
-    internal.handleCallingAbility(client, { requestId: "renew-party" });
+    internal.handleCallingAbility(client, { slot: "special", requestId: "renew-party" });
     expect(player.health).toBe(3); expect(ally.health).toBe(1);
     expect(broadcast).toHaveBeenCalledWith("healer:renewal-field", expect.objectContaining({
       fieldId: "renewal:hero:1", casterId: "hero", x: 50, z: 50, radius: 4.5, expiresAt: 16_000,
@@ -525,7 +525,7 @@ describe("hotbar Calling abilities", () => {
     const state = JSON.parse(player.huntLoadoutsJson); player.armourId = "wanderer_robes"; player.health = 3;
     player.huntLoadoutsJson = JSON.stringify({ ...state, affixes: { wanderer_robes: { affixId: "consecrated", tier: 2 } } });
     internal.handleCallingAbilityEquip(client, { abilityId: "healer_renewal" });
-    internal.handleCallingAbility(client, { requestId: "consecrated-gear" });
+    internal.handleCallingAbility(client, { slot: "special", requestId: "consecrated-gear" });
     expect(broadcast).toHaveBeenCalledWith("healer:renewal-field", expect.objectContaining({ radius: 5.2, expiresAt: 17_000 }));
   });
 
@@ -535,7 +535,7 @@ describe("hotbar Calling abilities", () => {
     const ally = new PlayerState(); Object.assign(ally, { x: 57, y: 8, z: 50, health: 1, maxHealth: 5 });
     room.state.players.set("ally", ally);
     internal.handleCallingAbilityEquip(client, { abilityId: "healer_renewal" });
-    internal.handleCallingAbility(client, { requestId: "place-sanctuary" });
+    internal.handleCallingAbility(client, { slot: "special", requestId: "place-sanctuary" });
     ally.x = 53;
     internal.resolveRenewalFields(10_500);
     expect(ally.health).toBe(2);
@@ -550,7 +550,7 @@ describe("hotbar Calling abilities", () => {
     const tank = new PlayerState(); Object.assign(tank, { x: 52, y: 8, z: 50, health: 1, maxHealth: 5, stamina: 40, maxStamina: 100 });
     room.state.players.set("tank", tank); internal.tankBulwarkUntil.set("tank", 15_000);
     internal.handleCallingAbilityEquip(client, { abilityId: "healer_renewal" });
-    internal.handleCallingAbility(client, { requestId: "renew-bulwark" });
+    internal.handleCallingAbility(client, { slot: "special", requestId: "renew-bulwark" });
     internal.resolveRenewalFields(10_500);
     expect(tank.health).toBe(3); expect(tank.stamina).toBe(48);
     expect(broadcast).toHaveBeenCalledWith("calling:combo", expect.objectContaining({
@@ -574,7 +574,7 @@ describe("hotbar Calling abilities", () => {
     const attacker = new MobState(); Object.assign(attacker, { x: 52, y: 8, z: 50, alive: true, health: 20, maxHealth: 20 });
     internal.state.mobs.set("attacker", attacker);
     internal.handleCallingAbilityEquip(client, { abilityId: "mage_mana_shield" });
-    internal.handleCallingAbility(client, { requestId: "shield" });
+    internal.handleCallingAbility(client, { slot: "special", requestId: "shield" });
     expect(broadcast).toHaveBeenCalledWith("calling:state", expect.objectContaining({
       abilityId: "mage_mana_shield", charges: 3, phase: "active",
     }));

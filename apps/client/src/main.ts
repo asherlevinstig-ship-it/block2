@@ -7474,7 +7474,7 @@ function renderBuildPath(update: BuildPathUpdate): void {
   localBuildPathRank = update.rank;
   updateLevelUpCallingGuide();
   combatHud.setCalling(update.selectedPathId, update.selectedCallingAbilityId, update.rank, update.selectedCallingAugmentId,
-    update.callingAugmentProgress, update.masteredCallingAugments);
+    update.callingAugmentProgress, update.masteredCallingAugments, update.selectedSpecialCallingAugmentId ?? null);
   refreshCallingUnlockNotice();
   updateTouchAbilityVisibility();
   updateControlsHelp();

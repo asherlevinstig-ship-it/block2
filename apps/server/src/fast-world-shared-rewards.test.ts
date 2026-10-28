@@ -100,7 +100,7 @@ describe("Fast World personal contribution rewards", () => {
   it("counts Renewal's real ally healing rather than just placing its field", () => {
     const f = fixture(); f.contribute("damage", 10); f.damage.player.health = 10;
     f.internal.handleCallingAbilityEquip(f.helper.client, { abilityId: "healer_renewal" });
-    f.internal.handleCallingAbility(f.helper.client, { requestId: "renewal" });
+    f.internal.handleCallingAbility(f.helper.client, { slot: "special", requestId: "renewal" });
     expect(f.internal.combatContributions.eligible(f.id, f.mob, f.room.state.players, 10000)).not.toContain("helper");
     f.internal.resolveRenewalFields(10500); f.internal.resolveRenewalFields(11500);
     f.defeat("damage", 11500); expect(f.owners()).toEqual(["damage", "helper"]);
@@ -137,7 +137,7 @@ describe("Fast World personal contribution rewards", () => {
     const f = fixture(true); f.contribute("damage", 15);
     f.internal.mobAwareness.set(f.id, { targetId: "damage", lastSeen: { x: 331, y: 8, z: 105 }, seenAt: 10000 });
     f.internal.handleCallingAbilityEquip(f.tank.client, { abilityId: "tank_challenge" });
-    f.internal.handleCallingAbility(f.tank.client, { requestId: "challenge" });
+    f.internal.handleCallingAbility(f.tank.client, { slot: "special", requestId: "challenge" });
     expect(f.internal.mobAwareness.get(f.id).targetId).toBe("tank");
     f.defeat(); expect(f.owners()).toEqual(["damage", "tank"]);
   });
@@ -153,7 +153,7 @@ describe("Fast World personal contribution rewards", () => {
     const f = fixture(true); f.contribute("damage", 15); f.watcher.player.health = 0;
     f.internal.mobAwareness.set(f.id, { targetId: "watcher", lastSeen: { x: 331, y: 8, z: 105 }, seenAt: 10000 });
     f.internal.handleCallingAbilityEquip(f.tank.client, { abilityId: "tank_challenge" });
-    f.internal.handleCallingAbility(f.tank.client, { requestId: "challenge-dead" });
+    f.internal.handleCallingAbility(f.tank.client, { slot: "special", requestId: "challenge-dead" });
     f.defeat(); expect(f.owners()).toEqual(["damage"]);
   });
 });

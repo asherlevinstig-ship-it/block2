@@ -538,6 +538,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly activeDodgeWindows = new Map<string, { startedAt: number; until: number }>();
   private readonly dodgeCounterUntil = new Map<string, number>();
   private readonly magePowerCasts = new Map<string, number>();
+  private readonly mageCallingCasts = new Map<string, number>();
   private readonly assassinShadowUntil = new Map<string, number>();
   private readonly stealthUntil = new Map<string, number>();
   private readonly assassinShadowBonus = new Map<string, number>();
@@ -1329,6 +1330,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.activeDodgeWindows.delete(client.sessionId);
     this.dodgeCounterUntil.delete(client.sessionId);
     this.magePowerCasts.delete(client.sessionId);
+    this.mageCallingCasts.delete(client.sessionId);
     this.assassinShadowUntil.delete(client.sessionId);
     this.stealthUntil.delete(client.sessionId);
     this.assassinShadowBonus.delete(client.sessionId);
@@ -2591,7 +2593,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private floorUpgradeAbilities(player: PlayerState): CallingAbilityId[] {
     const state = parseBuildPathState(player.huntLoadoutsJson), path = state.selectedPathId;
     if (!path) return [];
-    const power = this.roomKind === "practice" ? state.callingAbilities[path] ?? selectedCallingAbility(state, path) : selectedCallingAbility(state, path);
+    const power = selectedCallingAbility(state, path);
     return [...(player.level >= 2 ? [power] : []),
       ...(player.level >= 4 ? [callingStarterAbility(path, "special").id] : [])];
   }
@@ -2752,7 +2754,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const specialization = BUILD_PATH_SPECIALIZATIONS[ability.pathId][0];
     state.specializations[ability.pathId] = specialization.id;
     if (!state.mastered.includes(specialization.id)) state.mastered.push(specialization.id);
-    state.callingAbilities[ability.pathId] = abilityId;
+    state.callingAbilities[ability.pathId] = ability.category === "Utility" ? callingStarterAbility(ability.pathId, "power").id : abilityId;
     this.setPlayerBuildData(player, this.huntLoadouts(player), state);
     const practiceHand = ability.pathId === "ranger" ? "bow" : ability.pathId === "mage" || ability.pathId === "healer" ? "magic_focus" : "longsword";
     player.mainHandId = practiceHand;
@@ -2780,9 +2782,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.resurrectionWindows.set("practice-ally", Date.now() + 600_000);
     }
     player.health = Math.min(player.maxHealth, Math.max(1, player.health));
-    this.sendBuildPath(client, `${ability.name.toUpperCase()} READY · press G to use it against the training targets${ability.id === "healer_resurrection" ? " or the fallen ally" : ""}.`);
+    const key = ability.category === "Utility" ? "F" : "G";
+    this.sendBuildPath(client, `${ability.name.toUpperCase()} READY · press ${key} to use it against the training targets${ability.id === "healer_resurrection" ? " or the fallen ally" : ""}.`);
     client.send("practice:state", { active: true, abilityId: ability.id,
-      message: `${ability.name} equipped for practice. Press G to use it; F uses ${BUILD_PATHS[ability.pathId].name}'s Special. No progress is saved.` });
+      message: `${ability.name} ready for practice. Press ${key} to use it. G is your Calling Power; F is your Special. No progress is saved.` });
   }
 
   private reject(client: Client, rejection: ActionRejected): void {
@@ -3590,6 +3593,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
 
   private defeatMob(mobId: string, mob: MobState, attackerId: string, now: number): void {
     if (!mob.alive) return;
+    const masterTrialTag = this.masterTrialMobTags.get(mobId);
+    this.masterTrialMobTags.delete(mobId);
+    this.rangerSlows.delete(mobId);
     if (this.roomKind === "practice") {
       const rapidSpawn = this.rapidPractice ? RAPID_PRACTICE_SPAWNS.find(candidate => candidate.id === mobId) : null;
       mob.health = 0;
@@ -3607,6 +3613,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const killer = this.state.players.get(attackerId);
       const recipients = credited.length ? credited : killer && killer.health > 0
         && Math.abs(killer.y - mob.y) <= 2.5 && Math.hypot(killer.x - mob.x, killer.z - mob.z) <= 22 ? [attackerId] : [];
+      if (masterTrialTag && now <= masterTrialTag.until && recipients.includes(masterTrialTag.playerId))
+        this.grantMasterTrial(masterTrialTag.playerId, masterTrialTag.specializationId);
       if (rapidSpawn) for (const playerId of recipients) {
         const player = this.state.players.get(playerId)!;
         const cadenceId = this.profileTokens.get(playerId) ?? playerId;
@@ -3663,9 +3671,6 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       }
       return;
     }
-    const masterTrialTag = this.masterTrialMobTags.get(mobId);
-    this.masterTrialMobTags.delete(mobId);
-    this.rangerSlows.delete(mobId);
     this.rangerRootedUntil.delete(mobId);
     this.fenBloaterGlandHits.delete(mobId);
     this.cinderRamExposedUntil.delete(mobId);
@@ -5313,6 +5318,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           this.combatContributions.record(targetId, playerId, Math.min(target.health, dealt), now);
           target.health = Math.max(0, target.health - dealt); target.hitSequence += 1; targets.push(targetId);
           this.alertHitMob(targetId, playerId, now);
+          this.applyMageCallingSlow(playerId, player, targetId, target, now);
           if (target.health === 0) this.defeatMob(targetId, target, playerId, now);
           else this.staggerMob(targetId, target, now, 900, true);
         }
@@ -5419,6 +5425,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       } satisfies DefenseResolved, player);
     }
     if (!defeated) return true;
+    this.mageCallingCasts.delete(playerId);
     this.clearFloorRunUpgrades(playerId);
     const defeatedClient = this.clients.find(client => client.sessionId === playerId);
     if (defeatedClient) this.sendFloorRunUpgrades(defeatedClient, true);
@@ -6572,6 +6579,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     void this.persistPlayer(playerId, player);
   }
 
+  private isCallingTown(player: PlayerState): boolean {
+    return this.rapidPractice
+      ? player.x >= FAST_WORLD_TOWN_BOUNDS.minX && player.x <= FAST_WORLD_TOWN_BOUNDS.maxX
+        && player.z >= FAST_WORLD_TOWN_BOUNDS.minZ && player.z <= FAST_WORLD_TOWN_BOUNDS.maxZ && Math.abs(player.y - 8) <= 2.5
+      : this.roomKind === "overworld" && isInsideTownSafeZone(player);
+  }
+
   private sendBuildPath(client: Client, message = "Your equipment and stat choices shape a hidden calling."): void {
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
@@ -6584,20 +6598,19 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       ? BUILD_PATH_SPECIALIZATIONS[state.selectedPathId].find(option => option.id === specializationId) : null;
     const trialProgress = specializationId ? state.trials[specializationId] ?? 0 : 0;
     client.send("build:path", { selectedPathId: state.selectedPathId, rank, xp,
-      selectedCallingAbilityId: state.selectedPathId ? this.roomKind === "practice"
-        ? state.callingAbilities[state.selectedPathId] ?? selectedCallingAbility(state, state.selectedPathId)
-        : selectedCallingAbility(state, state.selectedPathId) : null,
+      selectedCallingAbilityId: state.selectedPathId ? selectedCallingAbility(state, state.selectedPathId) : null,
       selectedCallingAugmentId: state.selectedPathId ? selectedCallingAugment(state, selectedCallingAbility(state, state.selectedPathId)) : null,
+      selectedSpecialCallingAugmentId: state.selectedPathId ? selectedCallingAugment(state, callingStarterAbility(state.selectedPathId, "special").id) : null,
       callingAugmentProgress: state.callingAugmentProgress,
       masteredCallingAugments: state.masteredCallingAugments,
       nextRankXp: nextBuildRankXp(xp), candidates,
-      canChoose: this.roomKind === "overworld" && (isInsideTownSafeZone(player) || !state.selectedPathId)
+      canChoose: this.isCallingTown(player) || this.roomKind === "overworld" && !state.selectedPathId
         || this.rapidPractice && !state.selectedPathId,
       selectedSpecializationId: specializationId,
-      canSpecialize: Boolean(state.selectedPathId && rank >= 3 && !state.specializations[state.selectedPathId]),
+      canSpecialize: Boolean(this.isCallingTown(player) && state.selectedPathId && rank >= 3 && !state.specializations[state.selectedPathId]),
       masterTrial: specialization ? { name: specialization.name, description: specialization.trial, progress: trialProgress,
         target: specialization.trialTarget, complete: state.mastered.includes(specialization.id), capstone: specialization.capstone } : null,
-      inTown: this.roomKind === "overworld" && isInsideTownSafeZone(player) || this.rapidPractice,
+      inTown: this.isCallingTown(player),
       message } satisfies BuildPathUpdate);
   }
 
@@ -6608,8 +6621,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (parsed.data.action === "sync") { this.sendBuildPath(client); return; }
     const currentPathId = parseBuildPathState(player.huntLoadoutsJson).selectedPathId;
     const firstFastModeChoice = this.rapidPractice && parsed.data.action === "choose" && currentPathId === null;
-    if (!firstFastModeChoice && (this.roomKind !== "overworld" || (!isInsideTownSafeZone(player)
-      && (parsed.data.action !== "choose" || currentPathId !== null)))) {
+    if (player.health <= 0 || !firstFastModeChoice && !this.isCallingTown(player)
+      && !(this.roomKind === "overworld" && parsed.data.action === "choose" && currentPathId === null)) {
       this.sendBuildPath(client, currentPathId
         ? "Return to Town before changing your Calling."
         : "Return to the surface before choosing your first Calling."); return;
@@ -6633,6 +6646,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.sendBuildPath(client, "Choose one of the six Callings. You can change it in Town."); return;
     }
     const previous = parseBuildPathState(player.huntLoadoutsJson).selectedPathId;
+    if (previous !== pathId) this.mageCallingCasts.delete(client.sessionId);
     this.setPlayerBuildData(player, this.huntLoadouts(player), chooseBuildPath(parseBuildPathState(player.huntLoadoutsJson), pathId));
     if (player.level <= 2 && player.mainHandId === "longsword" && (pathId === "mage" || pathId === "ranger")) {
       const hand = MAIN_HAND_DEFINITIONS[pathId === "mage" ? "magic_focus" : "bow"];
@@ -7047,9 +7061,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       client.send("chat:notice", `${slot === "special" ? "Calling Special" : "Calling Power"} has not unlocked yet.`);
       return;
     }
-    const abilityId = slot === "special" ? callingStarterAbility(pathId, "special").id
-      : this.roomKind === "practice" ? state.callingAbilities[pathId] ?? selectedCallingAbility(state, pathId)
-      : selectedCallingAbility(state, pathId);
+    const abilityId = slot === "special" ? callingStarterAbility(pathId, "special").id : selectedCallingAbility(state, pathId);
     const augmentId = selectedCallingAugment(state, abilityId);
     const definition = CALLING_ABILITY_OPTIONS.find(option => option.id === abilityId)!;
     const now = Date.now();
@@ -7191,7 +7203,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       return;
     }
     const rank = this.buildPathRankFor(player, pathId);
-    const cooldownUntil = now + definition.cooldownMs;
+    const cooldownUntil = now + Math.round(definition.cooldownMs * (pathId === "mage" && slot === "power" ? 1 - rank * .05 : 1));
     cooldowns.set(client.sessionId, cooldownUntil);
     if (abilityId !== "assassin_vanish") this.endStealth(client.sessionId);
     let detail = "ACTIVATED";
@@ -7264,11 +7276,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const staminaBefore = player.stamina, specialRecovering = player.specialCooldownUntil > now;
       const stamina = 30 + rank * 5 + (augmentId === "surge_deep_reserves" ? 25 : 0);
       const targets = nearbyMobs(4.5 + (this.hasFloorUpgrade(client.sessionId, "mage_surge") ? 2 : 0));
+      const echo = targets.length > 0 ? this.mageCallingEcho(client.sessionId, player) : 0;
       for (const [mobId, mob] of targets) {
-        const damage = damageAfterArmor(2, mob.armor, true);
+        const damage = damageAfterArmor(2, mob.armor, true) + (echo > 0 ? Math.max(1, Math.ceil(2 * echo)) : 0);
         this.combatContributions.record(mobId, client.sessionId, Math.min(mob.health, damage), now);
         mob.health = Math.max(0, mob.health - damage); mob.hitSequence += 1;
         this.alertHitMob(mobId, client.sessionId, now);
+        this.applyMageCallingSlow(client.sessionId, player, mobId, mob, now);
         if (mob.health === 0) this.defeatMob(mobId, mob, client.sessionId, now);
         else this.staggerMob(mobId, mob, now, 450, true, client.sessionId);
       }
@@ -7278,7 +7292,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.grantCallingTrial(client.sessionId, "surge_deep_reserves", player.stamina - staminaBefore);
       this.grantCallingTrial(client.sessionId, "surge_temporal_flux", specialRecovering ? 1 : 0);
       if (targets.length > 0) this.broadcast("mage:surge-targets", {
-        casterId: client.sessionId, targetIds: targets.map(([mobId]) => mobId), damage: 2,
+        casterId: client.sessionId, targetIds: targets.map(([mobId]) => mobId), damage: 2 + (echo > 0 ? Math.max(1, Math.ceil(2 * echo)) : 0),
       });
     } else if (abilityId === "mage_mana_shield") {
       const hits = (rank >= 4 ? 4 : 3) + (augmentId === "shield_prismatic_layers" ? 2 : 0);
@@ -7447,15 +7461,17 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         this.broadcast("thief:diverted-targets", diverted); client.send("thief:diverted-targets", diverted);
       }
     } else if (abilityId === "thief_escape_artist") {
-      const staminaBefore = player.stamina, healthBefore = player.health;
+      const staminaBefore = player.stamina;
+      const pursued = [...this.state.mobs.values()].some(mob => mob.alive && mob.targetId === client.sessionId
+        && Math.abs(mob.y - player.y) <= 2.5 && Math.hypot(mob.x - player.x, mob.z - player.z) <= 8);
       durationMs = 700 + rank * 80 + (augmentId === "escape_extended_window" ? 500 : 0) + (this.hasFloorUpgrade(client.sessionId, "thief_escape") ? 400 : 0);
       this.dodgePressure.set(client.sessionId, { chain: 0, lastAt: Number.NEGATIVE_INFINITY, exhaustedUntil: 0 });
       player.invulnerableUntil = Math.max(player.invulnerableUntil, now + durationMs);
       player.stamina = player.maxStamina;
-      if (augmentId === "escape_clean_getaway") player.health = Math.min(player.maxHealth, player.health + 1);
-      detail = `DODGE RESET · FULL STAMINA · ${(durationMs / 1_000).toFixed(1)}s EVADE`;
+      if (augmentId === "escape_clean_getaway") this.pathConcealedUntil.set(client.sessionId, now + 1_500);
+      detail = `DODGE RESET · FULL STAMINA · ${(durationMs / 1_000).toFixed(1)}s EVADE${augmentId === "escape_clean_getaway" ? " · CONCEALED 1.5s" : ""}`;
       this.grantCallingTrial(client.sessionId, "escape_extended_window", staminaBefore < 25 ? 1 : 0);
-      this.grantCallingTrial(client.sessionId, "escape_clean_getaway", healthBefore < player.maxHealth ? 1 : 0);
+      this.grantCallingTrial(client.sessionId, "escape_clean_getaway", pursued ? 1 : 0);
     } else if (abilityId === "ranger_disengage") {
       formationCountered = this.counterWarbandCrawlerCommitment(client.sessionId, now);
       const origin = { x: player.x, y: player.y, z: player.z };
@@ -7575,6 +7591,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (!pathId || !definition || definition.pathId !== pathId) {
       this.sendBuildPath(client, "That ability does not belong to your active Calling."); return;
     }
+    if (definition.category === "Utility") {
+      this.sendBuildPath(client, `${definition.name.toUpperCase()} is your F Special. Choose a different ability for G.`); return;
+    }
     const rank = effectiveBuildPathRank(state, pathId);
     if (rank < definition.unlockRank) {
       this.sendBuildPath(client, `${definition.name.toUpperCase()} unlocks at Path Rank ${definition.unlockRank}.`); return;
@@ -7590,12 +7609,14 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const player = this.state.players.get(client.sessionId);
     if (!parsed.success || !player) return;
     const state = parseBuildPathState(player.huntLoadoutsJson), pathId = state.selectedPathId;
-    const abilityId = pathId ? selectedCallingAbility(state, pathId) : null;
     const augment = CALLING_ABILITY_AUGMENTS.find(option => option.id === parsed.data.augmentId);
+    const definition = CALLING_ABILITY_OPTIONS.find(option => option.id === augment?.abilityId);
+    const abilityId = pathId && definition?.pathId === pathId
+      ? definition.category === "Utility" ? callingStarterAbility(pathId, "special").id : selectedCallingAbility(state, pathId) : null;
     if (!pathId || !abilityId || !augment || augment.abilityId !== abilityId) {
       this.sendBuildPath(client, "That upgrade does not belong to your equipped Calling ability."); return;
     }
-    if (this.roomKind !== "overworld" || !isInsideTownSafeZone(player)) {
+    if (player.health <= 0 || !this.isCallingTown(player)) {
       this.sendBuildPath(client, "Return to Town to reshape a Calling ability."); return;
     }
     if (effectiveBuildPathRank(state, pathId) < augment.unlockRank) {
@@ -8808,6 +8829,27 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
   }
 
+  private mageCallingEcho(playerId: string, player: PlayerState): number {
+    if (this.buildPathRankFor(player, "mage") < 2) return 0;
+    const count = ((this.mageCallingCasts.get(playerId) ?? 0) + 1) % 3;
+    this.mageCallingCasts.set(playerId, count);
+    if (count !== 0) return 0;
+    const arcanist = this.buildSpecializationFor(player, "mage") === "arcanist";
+    if (arcanist) this.grantMasterTrial(playerId, "arcanist");
+    this.buildPathProc(playerId, "mage", "ARCANE ECHO", "SPELL REPEATED");
+    return Math.min(1, (arcanist ? this.buildSpecializationMastered(player, "arcanist") ? 1 : .75 : .5)
+      + this.equipmentAffixTier(player, "echoing") * .08);
+  }
+
+  private applyMageCallingSlow(playerId: string, player: PlayerState, mobId: string, mob: MobState, now: number): void {
+    if (mob.health <= 0 || this.buildSpecializationFor(player, "mage") !== "elementalist") return;
+    const mastered = this.buildSpecializationMastered(player, "elementalist");
+    const tier = this.equipmentAffixTier(player, "elemental");
+    const until = now + (mastered ? 3_000 : 2_000) + tier * 250;
+    this.rangerSlows.set(mobId, { until, multiplier: Math.max(.48, (mastered ? .58 : .78) - tier * .05) });
+    this.masterTrialMobTags.set(mobId, { playerId, specializationId: "elementalist", until });
+  }
+
   private resolveMageOverloads(now: number): void {
     for (const [overloadId, overload] of this.pendingMageOverloads) {
       if (now < overload.nextPulseAt) continue;
@@ -8818,6 +8860,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const targets: string[] = [];
       const reactedTargets: string[] = [];
       let totalDamage = 0;
+      let echo = 0;
+      let countedCast = false;
       for (const [mobId, mob] of this.state.mobs) {
         if (!mob.alive || Math.abs(mob.y - overload.y) > 2.5 || Math.hypot(mob.x - overload.x, mob.z - overload.z) > overload.radius
           || !hasCombatLineOfSight(overload, mob, this.readWorldBlock)) continue;
@@ -8826,17 +8870,20 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         const reacted = venomKeys.length > 0;
         for (const key of venomKeys) this.venomBuildup.delete(key);
         if (reacted) reactedTargets.push(mobId);
-        const damage = damageAfterArmor(pulseDamage + (reacted ? 2 : 0), mob.armor, true);
+        if (!aftershock && !countedCast) { echo = this.mageCallingEcho(overload.ownerId, owner); countedCast = true; }
+        const damage = damageAfterArmor(pulseDamage + (reacted ? 2 : 0), mob.armor, true)
+          + (echo > 0 ? Math.max(1, Math.ceil(pulseDamage * echo)) : 0);
         this.combatContributions.record(mobId, overload.ownerId, Math.min(mob.health, damage), now);
         mob.health = Math.max(0, mob.health - damage); mob.hitSequence += 1; targets.push(mobId); totalDamage += damage;
         this.alertHitMob(mobId, overload.ownerId, now, overload);
+        this.applyMageCallingSlow(overload.ownerId, owner, mobId, mob, now);
         if (mob.health === 0) this.defeatMob(mobId, mob, overload.ownerId, now);
         else this.staggerMob(mobId, mob, now, aftershock ? 550 : 1_050, true);
       }
       this.grantCallingTrial(overload.ownerId, "overload_volatile_core", totalDamage);
       if (aftershock) this.grantCallingTrial(overload.ownerId, "overload_residual_charge", targets.length);
       this.broadcast("mage:overload-impact", { casterId: overload.ownerId, powerId: "mage_overload",
-        x: overload.x, y: overload.y, z: overload.z, bonusDamage: pulseDamage, targetIds: targets, aftershock });
+        x: overload.x, y: overload.y, z: overload.z, bonusDamage: pulseDamage + (echo > 0 ? Math.max(1, Math.ceil(pulseDamage * echo)) : 0), targetIds: targets, aftershock });
       if (reactedTargets.length > 0) this.broadcast("calling:combo", { comboId: "volatile_reaction",
         label: "VOLATILE REACTION", casterId: overload.ownerId, targetIds: reactedTargets,
         x: overload.x, y: overload.y, z: overload.z, bonus: 2 });

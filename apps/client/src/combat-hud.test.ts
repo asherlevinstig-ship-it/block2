@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import { cooldownState, visibleCallingAbilities, visibleCallingAugments } from "./combat-hud.js";
 
 describe("reactive combat HUD", () => {
+  it.each(["tank", "mage", "assassin", "thief", "ranger", "healer"] as const)("keeps %s Specials out of the G picker", path => {
+    expect(visibleCallingAbilities(path, 4).every(option => option.category !== "Utility")).toBe(true);
+  });
   it("clamps cooldown bars and formats their countdown", () => {
     expect(cooldownState(2500, 5000, "READY · R")).toEqual({ percent: 50, label: "2.5s", ready: false });
     expect(cooldownState(-10, 5000, "READY · R")).toEqual({ percent: 0, label: "READY · R", ready: true });

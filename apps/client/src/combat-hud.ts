@@ -47,6 +47,7 @@ const calling = signal<BuildPathId | null>(null);
 const callingAbility = signal<CallingAbilityId | null>(null);
 const callingRank = signal(0);
 const callingAugment = signal<CallingAugmentId | null>(null);
+const specialCallingAugment = signal<CallingAugmentId | null>(null);
 const callingAugmentProgress = signal<Partial<Record<CallingAugmentId, number>>>({});
 const masteredCallingAugments = signal<CallingAugmentId[]>([]);
 const callingPending = signal(false);
@@ -108,7 +109,7 @@ export function cooldownState(remainingMs: number, cooldownMs: number, readyLabe
 
 export function visibleCallingAbilities(pathId: BuildPathId, rank: number) {
   return CALLING_ABILITY_OPTIONS.filter(option => option.pathId === pathId && option.unlockRank <= rank
-    && !(pathId === "assassin" && option.id === "assassin_death_mark"));
+    && option.category !== "Utility");
 }
 
 export function visibleCallingAugments(abilityId: CallingAbilityId, rank: number) {
@@ -229,6 +230,17 @@ function LoadoutDrawer() {
             !mastered ? h("i", { class: "calling-trial-fill", style: { width: `${Math.round(progress / trial.target * 100)}%` } }) : null);
         }),
       ) : null,
+      h("div", { role: "group", "aria-label": "F Special upgrades" },
+        h("p", null, h("span", null, `F SPECIAL · ${callingStarterAbility(calling.value, "special").name}`), h("small", null, "Unlocks at Level 4 · upgrades change in Town")),
+        visibleCallingAugments(callingStarterAbility(calling.value, "special").id, callingRank.value).map(option => {
+          const mastered = masteredCallingAugments.value.includes(option.id);
+          const trial = CALLING_AUGMENT_TRIALS[option.id];
+          return h("button", { type: "button", "data-calling-augment": option.id, disabled: !mastered || characterLevel.value < 4,
+            "aria-pressed": String(specialCallingAugment.value === option.id),
+            title: mastered ? option.description : trial.description }, h("strong", null, option.name),
+            h("small", null, mastered ? option.description : `TRIAL ${callingAugmentProgress.value[option.id] ?? 0}/${trial.target} · ${trial.description}`));
+        }),
+      ),
     ) : null,
   );
 }
@@ -302,9 +314,10 @@ export const combatHud = {
   setSpecial(value: SpecialId): void { setIfChanged(special, value); },
   setFieldSpecialSelected(value: boolean): void { setIfChanged(fieldSpecialSelected, value); },
   setCalling(value: BuildPathId | null, abilityId: CallingAbilityId | null, rank: number, augmentId: CallingAugmentId | null = null,
-    progress: Partial<Record<CallingAugmentId, number>> = {}, mastered: CallingAugmentId[] = []): void {
+    progress: Partial<Record<CallingAugmentId, number>> = {}, mastered: CallingAugmentId[] = [], specialAugmentId: CallingAugmentId | null = null): void {
     batch(() => {
       setIfChanged(calling, value); setIfChanged(callingAbility, abilityId); setIfChanged(callingRank, rank); setIfChanged(callingAugment, augmentId);
+      setIfChanged(specialCallingAugment, specialAugmentId);
       if (JSON.stringify(callingAugmentProgress.value) !== JSON.stringify(progress)) callingAugmentProgress.value = progress;
       if (JSON.stringify(masteredCallingAugments.value) !== JSON.stringify(mastered)) masteredCallingAugments.value = mastered;
     });

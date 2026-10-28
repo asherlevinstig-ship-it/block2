@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { CALLING_ABILITY_OPTIONS } from "@blockcraft/protocol";
+import { CALLING_ABILITY_OPTIONS, callingStarterAbility } from "@blockcraft/protocol";
 import { WorldRoom } from "./game-room.js";
 import { MobState, PlayerState, WorldState } from "./schema.js";
 import { effectiveBuildPathRank, parseBuildPathState } from "./build-paths.js";
@@ -21,11 +21,12 @@ describe("private Calling practice", () => {
     internal.selectPracticeAbility(client, { abilityId: option.id });
     const state = parseBuildPathState(player.huntLoadoutsJson);
     expect(state.selectedPathId).toBe(option.pathId);
-    expect(state.callingAbilities[option.pathId]).toBe(option.id);
+    expect(state.callingAbilities[option.pathId]).toBe(option.category === "Utility" ? callingStarterAbility(option.pathId, "power").id : option.id);
     expect(effectiveBuildPathRank(state, option.pathId)).toBe(4);
     expect(player.mainHandTag).toBe(option.pathId === "ranger" ? "ranged"
       : option.pathId === "mage" || option.pathId === "healer" ? "focus" : "melee");
     expect(client.send).toHaveBeenCalledWith("practice:state", expect.objectContaining({ active: true, abilityId: option.id }));
+    expect(client.send).toHaveBeenCalledWith("practice:state", expect.objectContaining({ message: expect.stringContaining(`Press ${option.category === "Utility" ? "F" : "G"}`) }));
   });
 
   it("never saves practice changes or produces loot from a training kill", async () => {

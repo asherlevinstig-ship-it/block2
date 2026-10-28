@@ -298,7 +298,7 @@ export type ProgressionUpdate = {
 
 export const BUILD_PATHS = {
   tank: { name: "Tank", role: "Hold the line", passive: "Path ranks reduce incoming damage while guarding.", adept: "FORTRESS GUARD · Guarding protects nearby allies." },
-  mage: { name: "Mage", role: "Shape raw power", passive: "Path ranks shorten Power cooldowns.", adept: "ARCANE ECHO · Every third Power repeats at half strength." },
+  mage: { name: "Mage", role: "Shape raw power", passive: "Path ranks shorten G spell cooldowns by 5% each.", adept: "ARCANE ECHO · Every third Arcane Surge or Overload hit repeats at half strength." },
   assassin: { name: "Assassin", role: "Exploit vulnerability", passive: "Path ranks add damage against marked or weakened enemies.", adept: "SHADOWSTEP · A perfect dodge conceals you and empowers your next strike." },
   thief: { name: "Thief", role: "Escape with the prize", passive: "Path ranks improve perfect-dodge recovery and kill gold.", adept: "SMOKE DECOY · An exhausted dodge breaks nearby enemy pursuit." },
   ranger: { name: "Ranger", role: "Control the distance", passive: "Path ranks add damage to bow attacks.", adept: "PINNING SHOT · Consecutive bow hits slow, then root their target." },
@@ -361,7 +361,7 @@ export const CALLING_ABILITY_AUGMENTS = [
   { id: "decoy_wide_stage", abilityId: "thief_decoy", name: "Wide Stage", unlockRank: 3, description: "Greater diversion radius." },
   { id: "decoy_flash_charge", abilityId: "thief_decoy", name: "Flash Charge", unlockRank: 3, description: "+0.8s stagger." },
   { id: "escape_extended_window", abilityId: "thief_escape_artist", name: "Extended Window", unlockRank: 4, description: "+0.5s evasion." },
-  { id: "escape_clean_getaway", abilityId: "thief_escape_artist", name: "Clean Getaway", unlockRank: 4, description: "Recover 1 health." },
+  { id: "escape_clean_getaway", abilityId: "thief_escape_artist", name: "Clean Getaway", unlockRank: 4, description: "Conceal yourself for 1.5 seconds after escaping." },
   { id: "volley_deep_quiver", abilityId: "ranger_volley_focus", name: "Deep Quiver", unlockRank: 2, description: "+2 split volleys." },
   { id: "volley_heavy_arrows", abilityId: "ranger_volley_focus", name: "Heavy Arrows", unlockRank: 2, description: "+1 damage to every arrow in the volley." },
   { id: "disengage_long_leap", abilityId: "ranger_disengage", name: "Long Leap", unlockRank: 3, description: "Leap 2m farther." },
@@ -394,7 +394,7 @@ export const CALLING_AUGMENT_TRIALS = {
   decoy_wide_stage: { description: "Divert 25 enemies with Decoy.", target: 25 },
   decoy_flash_charge: { description: "Stagger 25 enemies with Decoy.", target: 25 },
   escape_extended_window: { description: "Escape while low on stamina 8 times.", target: 8 },
-  escape_clean_getaway: { description: "Escape while wounded 10 times.", target: 10 },
+  escape_clean_getaway: { description: "Use Escape Artist while pursued 10 times.", target: 10 },
   volley_deep_quiver: { description: "Land 25 Volley Focus shots.", target: 25 },
   volley_heavy_arrows: { description: "Deal 25 Volley Focus bonus damage.", target: 25 },
   disengage_long_leap: { description: "Disengage from nearby enemies 10 times.", target: 10 },
@@ -452,7 +452,7 @@ export const BUILD_PATH_SPECIALIZATIONS = {
   ],
   mage: [
     { id: "arcanist", name: "Arcanist", role: "Amplify the echo", effect: "Arcane Echo repeats at 75% strength.", trial: "Trigger 15 Arcane Echoes.", trialTarget: 15, capstone: "RESONANCE · Arcane Echo repeats at full strength." },
-    { id: "elementalist", name: "Elementalist", role: "Bind with power", effect: "Power hits slow surviving enemies for 2 seconds.", trial: "Defeat 20 Power-slowed enemies.", trialTarget: 20, capstone: "DEEP FREEZE · Power slows are stronger and last 3 seconds." },
+    { id: "elementalist", name: "Elementalist", role: "Bind with magic", effect: "Arcane Surge, Overload and Mana Shield shatter slow surviving enemies for 2 seconds.", trial: "Defeat 20 spell-slowed enemies.", trialTarget: 20, capstone: "DEEP FREEZE · Spell slows are stronger and last 3 seconds." },
   ],
   assassin: [
     { id: "executioner", name: "Executioner", role: "Commit to the kill", effect: "Shadowstep's empowered strike deals +4 damage.", trial: "Land 15 empowered killing blows.", trialTarget: 15, capstone: "DEATHBLOW · Empowered killing blows restore 20 stamina." },
@@ -484,6 +484,7 @@ export type BuildPathAffinity = { pathId: BuildPathId; score: number; reasons: s
 export type BuildPathUpdate = { selectedPathId: BuildPathId | null; rank: number; xp: number; nextRankXp: number | null;
   selectedCallingAbilityId: CallingAbilityId | null;
   selectedCallingAugmentId: CallingAugmentId | null;
+  selectedSpecialCallingAugmentId?: CallingAugmentId | null;
   callingAugmentProgress: Partial<Record<CallingAugmentId, number>>;
   masteredCallingAugments: CallingAugmentId[];
   selectedSpecializationId: BuildPathSpecializationId | null; candidates: BuildPathAffinity[]; canChoose: boolean;

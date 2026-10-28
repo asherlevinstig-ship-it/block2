@@ -27,11 +27,12 @@ describe("hidden build paths", () => {
     expect(chooseCallingAugment(parseBuildPathState("{}"), "tank_bulwark", "bulwark_iron_skin")).toEqual(parseBuildPathState("{}"));
   });
   it("persists one rank-gated Calling ability per path", () => {
-    let state = grantBuildPathXp(chooseBuildPath(parseBuildPathState("{}"), "tank"), 30).state;
-    state = chooseCallingAbility(state, "tank", "tank_challenge");
-    expect(selectedCallingAbility(state, "tank")).toBe("tank_challenge");
-    expect(parseBuildPathState(JSON.stringify(state)).callingAbilities.tank).toBe("tank_challenge");
-    expect(chooseCallingAbility(state, "tank", "tank_earthbreaker")).toBe(state);
+    const adept = grantBuildPathXp(chooseBuildPath(parseBuildPathState("{}"), "tank"), 30).state;
+    expect(chooseCallingAbility(adept, "tank", "tank_challenge")).toBe(adept);
+    expect(chooseCallingAbility(adept, "tank", "tank_earthbreaker")).toBe(adept);
+    const state = chooseCallingAbility(grantBuildPathXp(adept, 40).state, "tank", "tank_earthbreaker");
+    expect(selectedCallingAbility(state, "tank")).toBe("tank_earthbreaker");
+    expect(parseBuildPathState(JSON.stringify(state)).callingAbilities.tank).toBe("tank_earthbreaker");
   });
   it("keeps Death Mark on F instead of allowing a duplicate Assassin G ability", () => {
     const adept = grantBuildPathXp(chooseBuildPath(parseBuildPathState("{}"), "assassin"), 30).state;

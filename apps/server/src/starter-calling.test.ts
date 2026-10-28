@@ -64,6 +64,6 @@ describe("starter Calling choice", () => {
     internal.handleBuildPath(client, { action: "choose", pathId: "assassin" });
 
     expect(parseBuildPathState(player.huntLoadoutsJson).selectedPathId).toBe("assassin");
-    expect(client.send.mock.lastCall?.[1].canChoose).toBe(false);
+    expect(client.send.mock.lastCall?.[1].canChoose).toBe(true);
   });
 });
