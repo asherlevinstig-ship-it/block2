@@ -36,6 +36,7 @@ export function createInteractionFeedback() {
   let lastShown = -Infinity;
   let timer = 0;
   return {
+    isActive() { return !element.hidden; },
     show(message: string | null) {
       if (!message) return;
       const now = performance.now();

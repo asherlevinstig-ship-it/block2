@@ -26,7 +26,8 @@ import { progressionNotice as chooseProgressionNotice, type ProgressionNotice } 
 import { abilityRevealUse, callingUnlockAnnouncement, canPresentAbilityReveal, earnedCallingAbilities, firstCallingUseInstruction, shouldGuideFirstCallingUse } from "./ability-reveal.js";
 import { abilityPracticeChallenge, practiceFollowUpProgress, practicePhaseAfterCast, shouldDismissOptionalPractice,
   type AbilityPracticePhase } from "./ability-practice.js";
-import { queueWorldNotice, type WorldNotice } from "./notification-lane.js";
+import { type WorldNotice } from "./notification-lane.js";
+import { NotificationPriorityQueue } from "./notification-priority.js";
 import { attackAimYaw, rangedAimYaw } from "./ranged-aim.js";
 import { canvasScreenPoint } from "./screen-pointer.js";
 import { tabletJoystickSample, touchDragStarted } from "./tablet-input.js";
@@ -101,7 +102,7 @@ import { portalArrivalSnapshot } from "./portal-travel.js";
 import { SPITTER_PATTERN, matriarchSecondVolleyYaw, spitterShotOffsets, spitterWarningLanes } from "@blockcraft/protocol";
 import { TOWN_STORAGE_CHEST_POSITION, isAtTownStorage } from "@blockcraft/voxel-world";
 import { TOWN_EXPEDITION_BOARD_POSITION } from "@blockcraft/voxel-world";
-import { equipmentPickupCard, LOOT_FEED_EQUIPMENT_MS, LOOT_FEED_MATERIAL_MS, LOOT_FEED_MAX_ITEMS } from "./equipment-pickup.js";
+import { equipmentPickupCard, LOOT_FEED_EQUIPMENT_MS, LOOT_FEED_MATERIAL_MS } from "./equipment-pickup.js";
 import { bossLootIdentity, equipmentCallingFit } from "./boss-loot-identity.js";
 import { codexHuntPlan, nextSetPiece } from "./codex-hunt.js";
 import { wildernessTerritoryAt } from "@blockcraft/voxel-world";
@@ -1260,19 +1261,23 @@ let dismissedUseAbilityId: CallingAbilityId | null = null;
 let progressionNoticeQuietUntil = 0;
 let progressionNoticeCombatCheckedAt = -Infinity;
 let progressionNoticeCombatActive = false;
-let pendingWorldNotices: WorldNotice[] = [];
-let activeWorldNotice: WorldNotice | null = null;
-let activeWorldNoticeRemainingMs = 0;
-let worldNoticeLastTick = 0;
+type PassiveNotice = { kind: "world"; notice: WorldNotice }
+  | { kind: "loot"; toast: HTMLElement }
+  | { kind: "reveal"; title: string; detail: string; revealKind: string };
+const passiveNotices = new NotificationPriorityQueue<PassiveNotice>();
+let renderedPassiveNotice: PassiveNotice | null = null;
+let notificationAttentionBlocked = true;
+let notificationDamageUntil = 0;
 function announceWorldNotice(notice: WorldNotice): void {
-  if (activeWorldNotice?.kind === notice.kind && activeWorldNotice.title === notice.title && activeWorldNotice.detail === notice.detail) return;
-  pendingWorldNotices = queueWorldNotice(pendingWorldNotices, notice);
-  updateProgressionNoticeVisibility(performance.now());
+  passiveNotices.enqueue(`world:${notice.kind}:${notice.title}:${notice.detail}`,
+    notice.kind === "objective" ? 80 : notice.kind === "roadside" ? 40 : 30,
+    notice.durationMs, { kind: "world", notice });
 }
 type PendingLevelCelebration = { level: number; experienceGranted: number };
 const pendingLevelCelebrations: PendingLevelCelebration[] = [];
 let activeLevelCelebration: PendingLevelCelebration | null = null;
-let levelCelebrationUntil = 0;
+let levelCelebrationRemainingMs = 0;
+let levelCelebrationLastTick: number | null = null;
 levelCelebrationChoose.addEventListener("click", () => {
   levelCelebration.hidden = true;
   activeLevelCelebration = null;
@@ -2283,7 +2288,6 @@ let fastWorldMapPanel: HTMLElement | null = null;
 let fastWorldMapCanvas: HTMLCanvasElement | null = null;
 let fastWorldMapDetail: HTMLElement | null = null;
 let fastWorldRegionReveal: HTMLElement | null = null;
-let fastWorldRegionRevealTimer = 0;
 let fastWorldDestinationHud: HTMLElement | null = null;
 let fastWorldDestination: FastWorldNavPoint | null = null;
 let fastWorldNearbyMiniBoss: (FastWorldNavPoint & { distance: number; level: number }) | null = null;
@@ -2307,12 +2311,9 @@ document.body.append(crownGateLabel);
 let previousCrownGateRemaining: number | null = null;
 
 const showFastWorldReveal = (title: string, detail: string, kind: "region" | "landmark" | "arrival" | "gate" = "region"): void => {
-  if (!fastWorldRegionReveal) return;
-  fastWorldRegionReveal.dataset.kind = kind;
-  fastWorldRegionReveal.innerHTML = `<small>${kind === "gate" ? "SEALS BROKEN" : kind === "landmark" ? "LANDMARK DISCOVERED" : kind === "arrival" ? "DESTINATION REACHED" : "REGION ENTERED"}</small><strong>${title}</strong><span>${detail}</span>`;
-  fastWorldRegionReveal.hidden = false;
-  window.clearTimeout(fastWorldRegionRevealTimer);
-  fastWorldRegionRevealTimer = window.setTimeout(() => { if (fastWorldRegionReveal) fastWorldRegionReveal.hidden = true; }, 2_800);
+  passiveNotices.enqueue(kind === "region" ? "reveal:current-region" : `reveal:${kind}:${title}:${detail}`,
+    kind === "gate" ? 80 : kind === "arrival" ? 40 : 30,
+    kind === "gate" ? 4000 : 2800, { kind: "reveal", title, detail, revealKind: kind }, kind === "region");
 };
 
 const fastWorldMapTargets = (): FastWorldNavPoint[] => [
@@ -3841,6 +3842,8 @@ if (fastWorldRequested) {
 
   fastWorldRegionReveal = document.createElement("aside");
   fastWorldRegionReveal.id = "fast-world-region-reveal";
+  fastWorldRegionReveal.setAttribute("role", "status");
+  fastWorldRegionReveal.setAttribute("aria-live", "polite");
   fastWorldRegionReveal.hidden = true;
   document.body.appendChild(fastWorldRegionReveal);
 
@@ -7004,18 +7007,24 @@ function updateLevelUpCallingGuide(): void {
 }
 
 function updateLevelCelebration(now: number): void {
-  if (pendingLevelCelebrations.length && levelCelebration.hidden && worldReady && defeatScreen.hidden
-    && reportedProtectedDialog !== true && !localCombatActive()) {
+  if (activeLevelCelebration && levelCelebrationLastTick !== null)
+    levelCelebrationRemainingMs -= Math.max(0, now - levelCelebrationLastTick);
+  levelCelebrationLastTick = null;
+  if (activeLevelCelebration && levelCelebrationRemainingMs <= 0) activeLevelCelebration = null;
+  if (notificationAttentionBlocked) { levelCelebration.hidden = true; return; }
+  if (pendingLevelCelebrations.length && !activeLevelCelebration) {
     const celebration = pendingLevelCelebrations.shift()!;
     activeLevelCelebration = celebration;
     levelCelebrationTitle.textContent = `LEVEL ${celebration.level}!`;
     levelCelebrationChoose.hidden = localCharacterProgression.unspentStatPoints <= 0;
     levelCelebration.hidden = false;
-    levelCelebrationUntil = now + 5_500;
+    levelCelebrationRemainingMs = 5_500;
     combatAudio.play("levelUp");
     levelUpBurst();
   }
-  if (!levelCelebration.hidden && activeLevelCelebration) {
+  levelCelebration.hidden = !activeLevelCelebration;
+  if (activeLevelCelebration) {
+    levelCelebrationLastTick = now;
     const celebration = activeLevelCelebration;
     const calling = callingUnlockAnnouncement(celebration.level, localBuildPathId);
     const milestone = CHARACTER_MILESTONES.find(entry => entry.level === celebration.level);
@@ -7024,8 +7033,6 @@ function updateLevelCelebration(now: number): void {
       : milestone ? `${milestone.name} unlocked Â· a permanent stat point is ready.`
         : `A permanent stat point is ready Â· +${celebration.experienceGranted} XP.`;
   }
-  if (!levelCelebration.hidden && (now >= levelCelebrationUntil || reportedProtectedDialog === true || localCombatActive()))
-    { levelCelebration.hidden = true; activeLevelCelebration = null; }
 }
 
 function abilityRevealStorageKey(abilityId: CallingAbilityId): string {
@@ -7055,8 +7062,8 @@ function isAtTownOfBeginnings(): boolean {
 
 function updateAbilityReveal(): void {
   if (!abilityRevealPanel.hidden || !canPresentAbilityReveal({ worldReady, inTown: isAtTownOfBeginnings(),
-    defeated: !defeatScreen.hidden, levelCelebrating: !levelCelebration.hidden || pendingLevelCelebrations.length > 0,
-    otherDialogOpen: reportedProtectedDialog === true })) return;
+    defeated: !defeatScreen.hidden, levelCelebrating: !levelCelebration.hidden || !!activeLevelCelebration || pendingLevelCelebrations.length > 0,
+    otherDialogOpen: notificationAttentionBlocked || reportedProtectedDialog === true })) return;
   const id = unseenCallingAbilityIds()[0];
   if (!id) return;
   const definition = CALLING_ABILITY_OPTIONS.find(option => option.id === id)!;
@@ -7094,6 +7101,7 @@ abilityRevealContinue.addEventListener("click", () => {
 
 function updateAshenEquipmentReveal(): void {
   if (!pendingAshenEquipmentReveal || !ashenEquipmentRevealPanel.hidden || !isAtTownOfBeginnings()
+    || notificationAttentionBlocked || activeLevelCelebration || pendingLevelCelebrations.length > 0
     || localCombatActive() || !defeatScreen.hidden || reportedProtectedDialog === true) return;
   const forged = pendingAshenEquipmentReveal;
   ashenEquipmentRevealTitle.textContent = forged.name;
@@ -7274,24 +7282,37 @@ function refreshProgressionNotice(): void {
 }
 
 function updateProgressionNoticeVisibility(now: number): void {
-  if ((currentProgressionNotice || activeWorldNotice || pendingWorldNotices.length) && now - progressionNoticeCombatCheckedAt >= 100) {
-    progressionNoticeCombatCheckedAt = now;
-    progressionNoticeCombatActive = localCombatActive();
+  const blocked = notificationAttentionBlocked || activePresentedPopupId() !== null || reportedProtectedDialog === true
+    || !!activeLevelCelebration || pendingLevelCelebrations.length > 0;
+  const passive = passiveNotices.tick(now, blocked);
+  if (fastWorldRegionReveal) fastWorldRegionReveal.hidden = true;
+  resourceToasts.hidden = true;
+  if (passive && (fastWorldRequested || passive.kind === "reveal") && fastWorldRegionReveal) {
+    if (passive !== renderedPassiveNotice) {
+      const heading = passive.kind === "world" ? passive.notice.heading
+        : passive.kind === "loot" ? passive.toast.querySelector("small")?.textContent ?? "LOOT COLLECTED"
+          : passive.revealKind === "gate" ? "SEALS BROKEN" : passive.revealKind === "landmark" ? "LANDMARK DISCOVERED"
+            : passive.revealKind === "arrival" ? "DESTINATION REACHED" : "REGION ENTERED";
+      const title = passive.kind === "world" ? passive.notice.title
+        : passive.kind === "loot" ? passive.toast.querySelector("strong")?.textContent ?? "Collected" : passive.title;
+      const detail = passive.kind === "world" ? passive.notice.detail
+        : passive.kind === "loot" ? passive.toast.querySelector("span")?.textContent ?? "Stored in your pack" : passive.detail;
+      fastWorldRegionReveal.replaceChildren(...[heading, title, detail].map((text, index) => {
+        const element = document.createElement(index === 0 ? "small" : index === 1 ? "strong" : "span");
+        element.textContent = text;
+        return element;
+      }));
+      fastWorldRegionReveal.dataset.kind = passive.kind === "reveal" ? passive.revealKind : passive.kind;
+    }
+    fastWorldRegionReveal.hidden = false;
+  } else if (passive?.kind === "loot") {
+    if (passive !== renderedPassiveNotice) resourceToasts.replaceChildren(passive.toast);
+    resourceToasts.hidden = false;
   }
-  const blocked = !worldReady || !defeatScreen.hidden
-    || !levelCelebration.hidden || pendingLevelCelebrations.length > 0
-    || !callingFirstUse.hidden
-    || reportedProtectedDialog === true || now < progressionNoticeQuietUntil || progressionNoticeCombatActive;
-  if (activeWorldNotice && !blocked && worldNoticeLastTick > 0) activeWorldNoticeRemainingMs -= Math.max(0, now - worldNoticeLastTick);
-  worldNoticeLastTick = blocked ? 0 : now;
-  if (activeWorldNotice && activeWorldNoticeRemainingMs <= 0) activeWorldNotice = null;
-  if (!activeWorldNotice && pendingWorldNotices.length && !blocked) {
-    activeWorldNotice = pendingWorldNotices.shift()!;
-    activeWorldNoticeRemainingMs = activeWorldNotice.durationMs;
-  }
-  const notice = activeWorldNotice;
+  renderedPassiveNotice = passive;
+  const notice = passive?.kind === "world" && !fastWorldRequested ? passive.notice : null;
   const next = notice ?? currentProgressionNotice;
-  const hidden = blocked || !next;
+  const hidden = blocked || !next || !!passive && !notice || !notice && now < progressionNoticeQuietUntil;
   if (next) {
     const heading = notice?.heading ?? "NEW FOR YOUR CHARACTER";
     if (progressionNoticeHeading.textContent !== heading) progressionNoticeHeading.textContent = heading;
@@ -7304,6 +7325,7 @@ function updateProgressionNoticeVisibility(now: number): void {
   progressionNoticeAction.hidden = Boolean(notice);
   progressionNoticeLater.hidden = Boolean(notice);
   if (progressionNoticePanel.hidden !== hidden) progressionNoticePanel.hidden = hidden;
+  progressionNoticePanel.dataset.priorityVisible = String(!hidden);
 }
 
 function refreshCallingUnlockNotice(): void {
@@ -7639,6 +7661,7 @@ function showCombatFeedback(text: string, style: "hit" | "hurt" | "dodge" | "mis
 let damageOverlayTimer = 0;
 let hitMarkerTimer = 0;
 function showPlayerDamageImpact(mobId: string, damage: number, health: number): void {
+  notificationDamageUntil = performance.now() + 1200;
   cancelLootHold(health > 0 ? "damage" : "defeated");
   cancelPortalHold(health > 0 ? "damage" : "defeated");
   const now = performance.now();
@@ -11644,9 +11667,9 @@ function levelUpBurst(): void {
 }
 
 function queueLootToast(toast: HTMLElement, lifetimeMs: number): void {
-  resourceToasts.prepend(toast);
-  while (resourceToasts.children.length > LOOT_FEED_MAX_ITEMS) resourceToasts.lastElementChild!.remove();
-  setTimeout(() => toast.remove(), lifetimeMs);
+  passiveNotices.enqueue(`loot:${toast.textContent}`, toast.classList.contains("warning") ? 70
+    : toast.classList.contains("equipment-pickup") ? 60 : 50,
+  Math.min(lifetimeMs, 4500), { kind: "loot", toast });
 }
 
 function showResourcePickup(name: string, quantity: number, itemId?: string): void {
@@ -17424,6 +17447,14 @@ app.on("update", (dt: number) => {
   }
   updateLootHold(animationNow);
   updateLootWorldLabel();
+  if (animationNow - progressionNoticeCombatCheckedAt >= 100) {
+    progressionNoticeCombatCheckedAt = animationNow;
+    progressionNoticeCombatActive = localCombatActive();
+  }
+  notificationAttentionBlocked = !worldReady || !defeatScreen.hidden || progressionNoticeCombatActive
+    || animationNow < notificationDamageUntil || portalTransition.isActive() || pendingPortalDestination !== null
+    || !!portalHold || !!lootHold || interactionFeedback.isActive() || localThornBoundUntil > animationNow
+    || activePresentedPopupId() !== null || reportedProtectedDialog === true || playerInteractionUI.isOpen();
   updateLevelCelebration(animationNow);
   updateAbilityReveal();
   updateGuidedAbilityPractice(animationNow);
@@ -19755,8 +19786,10 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     currentWorldObjective = null;
     worldObjective.hidden = true;
     objectiveMarker.hidden = true;
-    activeWorldNotice = null;
-    pendingWorldNotices = [];
+    passiveNotices.clear();
+    renderedPassiveNotice = null;
+    if (fastWorldRegionReveal) fastWorldRegionReveal.hidden = true;
+    resourceToasts.hidden = true;
     progressionNoticePanel.hidden = true;
     ashenEquipmentRevealPanel.hidden = true;
     pendingAshenEquipmentReveal = null;

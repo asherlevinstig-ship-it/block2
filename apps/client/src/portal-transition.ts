@@ -40,6 +40,7 @@ export function createPortalTransition() {
   function schedule(): void { if (!animationFrame) animationFrame = requestAnimationFrame(render); }
   schedule();
   return {
+    isActive() { return state.phase !== "idle"; },
     charge(amount: number) {
       if (state.phase === "travelling" || state.phase === "arriving") return;
       state = { phase: "charging", startedAt: performance.now(), charge: Math.max(0, Math.min(1, amount)), arrived: false };
