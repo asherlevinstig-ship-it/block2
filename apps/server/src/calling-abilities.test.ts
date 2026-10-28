@@ -45,7 +45,7 @@ describe("hotbar Calling abilities", () => {
       casterId: "hero", pathId, abilityId: `${pathId}_${pathId === "tank" ? "bulwark" : pathId === "mage" ? "arcane_surge" : pathId === "assassin" ? "vanish" : pathId === "thief" ? "smoke_bomb" : pathId === "healer" ? "field_mend" : "volley_focus"}`,
       x: 50, y: 8, z: 50,
     }));
-    if (pathId !== "assassin") expect(client.send).toHaveBeenCalledWith("calling:ability:effect", expect.objectContaining({
+    if (pathId !== "assassin") expect(broadcast).toHaveBeenCalledWith("calling:ability:effect", expect.objectContaining({
       casterId: "hero", pathId,
     }));
     if (pathId !== "mage" && pathId !== "healer") expect(pathId === "assassin" ? client.send : broadcast).toHaveBeenCalledWith("calling:state", expect.objectContaining({
@@ -55,7 +55,7 @@ describe("hotbar Calling abilities", () => {
       expect(internal.tankBulwarkUntil.get("hero")).toBe(15_000);
       internal.damagePlayer("field-test", "hero", 3, 10_000, false);
       expect(player.health).toBe(3);
-      expect(client.send).toHaveBeenCalledWith("tank:block-impact", { playerId: "hero", mobId: "field-test", prevented: 1 });
+      expect(broadcast).toHaveBeenCalledWith("tank:block-impact", { playerId: "hero", mobId: "field-test", prevented: 1 });
     }
     if (pathId === "mage") {
       expect(player.powerCooldownUntil).toBe(99_000); expect(player.stamina).toBe(55);
@@ -74,7 +74,7 @@ describe("hotbar Calling abilities", () => {
       expect(player.stamina).toBe(45);
       expect(internal.mobAwareness.has("pursuer")).toBe(false);
     }
-    if (pathId === "ranger") expect(internal.rangerCallingFocus.get("hero")).toEqual({ hits: 3, bonus: 1 });
+    if (pathId === "ranger") expect(internal.rangerCallingFocus.get("hero")).toEqual({ hits: 3, bonus: 1, abilityId: "ranger_volley_focus" });
     if (pathId === "healer") expect(player.health).toBe(4);
   });
 
@@ -214,7 +214,7 @@ describe("hotbar Calling abilities", () => {
       yaw: player.yaw, until: 14_250, health: 5, maxHealth: 5 });
     expect(internal.mobAwareness.get("pursuer").targetId).toBe(decoyId);
     expect(mob.awarenessState).toBe("search");
-    expect(client.send).toHaveBeenCalledWith("thief:diverted-targets", {
+    expect(broadcast).toHaveBeenCalledWith("thief:diverted-targets", {
       casterId: "hero", abilityId: "thief_decoy", targetIds: ["pursuer"],
     });
     expect(broadcast).toHaveBeenCalledWith("thief:diverted-targets", expect.objectContaining({ abilityId: "thief_decoy" }));
@@ -392,7 +392,7 @@ describe("hotbar Calling abilities", () => {
     expect(internal.combatContributions.eligiblePersistent("northwatch-watchbreaker", boss, room.state.players)).toContain("hero");
     expect(internal.combatContributions.eligible("northwatch-watchbreaker", boss, room.state.players, 10_000)).toEqual([]);
     expect(player.stamina).toBeGreaterThan(25);
-    expect(client.send).toHaveBeenCalledWith("tank:challenge-targets", {
+    expect(room.broadcast).toHaveBeenCalledWith("tank:challenge-targets", {
       casterId: "hero", targetIds: ["northwatch-watchbreaker"],
     });
   });

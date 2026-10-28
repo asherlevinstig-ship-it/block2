@@ -321,10 +321,10 @@ export const CALLING_ABILITY_OPTIONS = [
   { id: "mage_mana_shield", pathId: "mage", name: "Mana Shield", category: "Utility", unlockRank: 2, cooldownMs: 18_000, description: "Absorb attacks, charging a retaliatory pulse when the barrier shatters." },
   { id: "mage_overload", pathId: "mage", name: "Overload", category: "Aggressive", unlockRank: 3, cooldownMs: 20_000, description: "Aim at an enemy and destabilize the ground beneath it before an arcane detonation." },
   { id: "assassin_vanish", pathId: "assassin", name: "Stealth", category: "Core", unlockRank: 0, cooldownMs: 14_000, description: "Break pursuit and empower your next strike." },
-  { id: "assassin_death_mark", pathId: "assassin", name: "Death Mark", category: "Utility", unlockRank: 2, cooldownMs: 16_000, description: "Fully mark the nearest enemy for execution." },
+  { id: "assassin_death_mark", pathId: "assassin", name: "Death Mark", category: "Utility", unlockRank: 2, cooldownMs: 16_000, description: "Aim at a visible enemy within 8m and mark it for execution." },
   { id: "assassin_blade_dance", pathId: "assassin", name: "Blade Dance", category: "Aggressive", unlockRank: 3, cooldownMs: 19_000, description: "Unleash rapid aimed cuts across nearby enemies." },
   { id: "thief_smoke_bomb", pathId: "thief", name: "Smoke Bomb", category: "Core", unlockRank: 0, cooldownMs: 18_000, description: "Divert nearby enemies, conceal, and recover stamina." },
-  { id: "thief_decoy", pathId: "thief", name: "Decoy", category: "Utility", unlockRank: 2, cooldownMs: 20_000, description: "Divert and stagger enemies in a wide area." },
+  { id: "thief_decoy", pathId: "thief", name: "Decoy", category: "Utility", unlockRank: 2, cooldownMs: 20_000, description: "Leave an attackable imitation that draws nearby enemies while you conceal yourself." },
   { id: "thief_escape_artist", pathId: "thief", name: "Escape Artist", category: "Aggressive", unlockRank: 3, cooldownMs: 16_000, description: "Reset dodge exhaustion and briefly evade all damage." },
   { id: "ranger_volley_focus", pathId: "ranger", name: "Volley Focus", category: "Core", unlockRank: 0, cooldownMs: 12_000, description: "Your next three bow attacks split toward nearby enemies." },
   { id: "ranger_disengage", pathId: "ranger", name: "Disengage", category: "Utility", unlockRank: 2, cooldownMs: 15_000, description: "Leap backward and empower your next two shots." },
@@ -423,6 +423,7 @@ export type CallingAbilityUpdate = {
   training?: boolean;
 };
 export type CallingAbilityEffect = {
+  effectId?: string;
   casterId: string;
   pathId: BuildPathId;
   abilityId: CallingAbilityId;
@@ -434,6 +435,7 @@ export type CallingAbilityEffect = {
   targetId?: string;
   augmentId?: CallingAugmentId;
   radiusScale?: number;
+  radius?: number;
 };
 export type CallingStateUpdate = {
   playerId: string;

@@ -314,10 +314,10 @@ export const combatHud = {
   setSpecial(value: SpecialId): void { setIfChanged(special, value); },
   setFieldSpecialSelected(value: boolean): void { setIfChanged(fieldSpecialSelected, value); },
   setCalling(value: BuildPathId | null, abilityId: CallingAbilityId | null, rank: number, augmentId: CallingAugmentId | null = null,
-    progress: Partial<Record<CallingAugmentId, number>> = {}, mastered: CallingAugmentId[] = [], specialAugmentId: CallingAugmentId | null = null): void {
+    progress: Partial<Record<CallingAugmentId, number>> = {}, mastered: CallingAugmentId[] = [], specialAugmentId?: CallingAugmentId | null): void {
     batch(() => {
       setIfChanged(calling, value); setIfChanged(callingAbility, abilityId); setIfChanged(callingRank, rank); setIfChanged(callingAugment, augmentId);
-      setIfChanged(specialCallingAugment, specialAugmentId);
+      if (specialAugmentId !== undefined) setIfChanged(specialCallingAugment, specialAugmentId);
       if (JSON.stringify(callingAugmentProgress.value) !== JSON.stringify(progress)) callingAugmentProgress.value = progress;
       if (JSON.stringify(masteredCallingAugments.value) !== JSON.stringify(mastered)) masteredCallingAugments.value = mastered;
     });

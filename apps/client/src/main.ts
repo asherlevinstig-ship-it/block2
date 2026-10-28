@@ -5,6 +5,7 @@ import { GREENWOOD_MAIN_TRAIL, GREENWOOD_CAMP_TRAIL, GREENWOOD_THICKETS, GREENWO
 import * as pc from "playcanvas";
 import { facetedBoxMesh } from "./faceted-shapes.js";
 import { addCallingParticleLayers } from "./calling-particles.js";
+import { CallingEffectState, callingEffectKey } from "./calling-effect-state.js";
 import { CALLING_ABILITY_SUSTAIN_PARTICLES, CALLING_ANTICIPATION_PARTICLES, CALLING_IMPACT_PARTICLES, CALLING_SUSTAIN_PARTICLES, callingParticleLifetime } from "./calling-vfx-presets.js";
 import { mageCastDuration, mageCastPose, type MageAbilityId } from "./mage-casting.js";
 import { ASHEN_REACH_HEAT_VENTS, ASHEN_REACH_NAVIGATION_LAVA_FISSURES, ASHEN_REACH_NAVIGATION_SPIRES,
@@ -7939,6 +7940,7 @@ const powerImpactVisuals: PowerImpactVisual[] = [];
 interface CallingAnticipationVisual { root: pc.Entity; expiresAt: number }
 const callingAnticipationVisuals: CallingAnticipationVisual[] = [];
 interface CallingImpactVisual {
+  casterId?: string;
   root: pc.Entity;
   expiresAt: number;
   materials: pc.StandardMaterial[];
@@ -7947,12 +7949,14 @@ interface CallingImpactVisual {
 }
 const callingImpactVisuals: CallingImpactVisual[] = [];
 interface CallingPersistentVisual {
+  playerId: string;
   root: pc.Entity;
   expiresAt: number;
   materials: pc.StandardMaterial[];
   abilityId: CallingAbilityId;
 }
 const callingPersistentVisuals = new Map<string, CallingPersistentVisual>();
+const callingEffectState = new CallingEffectState();
 interface FormationTelegraphVisual {
   root: pc.Entity;
   materials: pc.StandardMaterial[];
@@ -7987,7 +7991,6 @@ interface GreenwoodCombatEffect {
 }
 const greenwoodCombatEffects: GreenwoodCombatEffect[] = [];
 let nextNearMissAt = 0;
-let lastLocalCallingImpact: { abilityId: CallingAbilityId; at: number } | null = null;
 // Retain impact style after the short-lived mesh ends, until server confirmation arrives.
 const projectileWeapons = new Map<string, MainHandId>();
 const projectileRapidStyles = new Map<string, WeaponAttackReleased["rapidStyle"]>();
@@ -8175,10 +8178,10 @@ function addCallingSignature(root: pc.Entity, abilityId: CallingAbilityId): pc.S
     for (let row = 0; row < 3; row += 1) for (let column = 0; column < 3; column += 1) {
       const outer = row === 0 || row === 2 || column === 0 || column === 2;
       addCallingSignaturePrimitive(root, "bulwark-plate", "box", outer ? edge : plate,
-        [.16, .15, .045], [(column - 1) * .35, .48 + row * .32, -.76],
+        [.16, .15, .045], [(column - 1) * .35, .48 + row * .32, .76],
         [0, (column - 1) * -6, (column - 1) * 4]);
     }
-    addCallingSignaturePrimitive(root, "bulwark-boss", "sphere", edge, [.17, .17, .08], [0, .8, -.84]);
+    addCallingSignaturePrimitive(root, "bulwark-boss", "sphere", edge, [.17, .17, .08], [0, .8, .84]);
     return [plate, edge];
   }
   if (abilityId === "tank_challenge") {
@@ -8422,7 +8425,7 @@ function addCallingPersistentSignature(root: pc.Entity, state: CallingStateUpdat
     const edge = callingSignatureMaterial(new pc.Color(.65, .88, 1), .68, .95);
     for (let row = 0; row < 3; row += 1) for (let column = 0; column < 3; column += 1)
       addCallingSignaturePrimitive(root, "bulwark-wall", "box", row === 1 && column === 1 ? plate : edge,
-        [.17, .16, .035], [(column - 1) * .37, .45 + row * .34, -.82], [0, (column - 1) * -5, 0]);
+        [.17, .16, .035], [(column - 1) * .37, .45 + row * .34, .82], [0, (column - 1) * -5, 0]);
     return [plate, edge];
   }
   if (state.abilityId === "tank_challenge") {
@@ -8820,7 +8823,7 @@ function createMageShieldShatter(message: { playerId: string; targetIds: string[
   combatAudio.play("seismicImpact");
 }
 
-function createMageOverloadTelegraph(message: { overloadId: string; x: number; y: number; z: number; radius: number; detonatesAt: number; pulses: number }): void {
+function createMageOverloadTelegraph(message: { overloadId: string; casterId: string; x: number; y: number; z: number; radius: number; detonatesAt: number; pulses: number }): void {
   const root = new pc.Entity(`mage-overload-telegraph:${message.overloadId}`); root.setPosition(message.x, message.y + .035, message.z); app.root.addChild(root);
   const warning = callingSignatureMaterial(new pc.Color(.72, .12, 1), .46, .78);
   const core = callingSignatureMaterial(new pc.Color(1, .25, .78), .9, 1.25);
@@ -8834,7 +8837,7 @@ function createMageOverloadTelegraph(message: { overloadId: string; x: number; y
     addCallingSignaturePrimitive(root, "overload-converging-rune", "box", index % 2 ? warning : core,
       [.04, .025, .5], [Math.sin(angle) * message.radius * .52, .055, Math.cos(angle) * message.radius * .52], [0, angle * 180 / Math.PI, 0]);
   }
-  callingImpactVisuals.push({ root, expiresAt: performance.now() + Math.max(250, message.detonatesAt - Date.now()), materials: [warning, core], abilityId: "mage_overload" });
+  callingImpactVisuals.push({ root, expiresAt: performance.now() + Math.max(250, message.detonatesAt - Date.now()), materials: [warning, core], abilityId: "mage_overload", casterId: message.casterId, stationary: true });
 }
 
 function createMageOverloadImpact(message: { powerId: string; x: number; y: number; z: number; bonusDamage: number; targetIds: string[]; aftershock?: boolean }): void {
@@ -8878,7 +8881,7 @@ function createHealerLink(casterId: string, targetId: string, abilityId: "healer
       [start.x + dx * progress, start.y + .85 + (end.y - start.y) * progress + Math.sin(progress * Math.PI) * .34,
         start.z + dz * progress], [0, yaw, 0]);
   }
-  callingImpactVisuals.push({ root, expiresAt: performance.now() + lifetimeMs, materials: [life, blessing], abilityId });
+  callingImpactVisuals.push({ root, expiresAt: performance.now() + lifetimeMs, materials: [life, blessing], abilityId, casterId, stationary: true });
 }
 
 function createFieldMendFeedback(message: { casterId: string; targetId: string; restored: number; staminaRestored: number }): void {
@@ -8944,10 +8947,12 @@ function createRenewalField(message: { fieldId: string; casterId: string; x: num
     addCallingSignaturePrimitive(root, "renewal-ground-rune", "box", ring === 3 ? gold : life,
       [.045, .025, .22], [Math.sin(angle) * distance, .04, Math.cos(angle) * distance], [0, angle * 180 / Math.PI, 0]);
   }
-  callingImpactVisuals.push({ root, expiresAt: performance.now() + Math.max(300, message.expiresAt - Date.now()), materials: [life, gold], abilityId: "healer_renewal" });
+  callingImpactVisuals.push({ root, expiresAt: performance.now() + Math.max(300, message.expiresAt - Date.now()), materials: [life, gold], abilityId: "healer_renewal", casterId: message.casterId, stationary: true });
 }
 
 function createResurrectionInterrupted(casterId: string, targetId: string): void {
+  for (const visual of callingImpactVisuals)
+    if (visual.casterId === casterId && visual.abilityId === "healer_resurrection") visual.expiresAt = 0;
   const caster = casterId === room?.sessionId ? localPlayer : remotePlayers.get(casterId)?.entity;
   const target = targetId === room?.sessionId ? localPlayer : remotePlayers.get(targetId)?.entity;
   const anchor = caster ?? target; if (!anchor) return;
@@ -8982,7 +8987,21 @@ function updateHealerAllyCues(players: Map<string, NetworkPlayer>): void {
   }
 }
 
+function createCallingRangePulse(effect: CallingAbilityEffect): void {
+  if (!effect.radius) return;
+  const root = new pc.Entity("calling-effect-boundary"); root.setPosition(effect.x, effect.y + .07, effect.z); app.root.addChild(root);
+  const color = effect.pathId === "mage" ? new pc.Color(.66, .38, 1) : new pc.Color(1, .7, .32);
+  const material = callingSignatureMaterial(color, .48, .7);
+  for (let index = 0; index < 32; index++) {
+    const angle = index / 32 * Math.PI * 2;
+    addCallingSignaturePrimitive(root, "ability-range", "box", material, [.045, .018, effect.radius * .15],
+      [Math.sin(angle) * effect.radius, 0, Math.cos(angle) * effect.radius], [0, angle * 180 / Math.PI + 90, 0]);
+  }
+  callingImpactVisuals.push({ root, expiresAt: performance.now() + 450, materials: [material], abilityId: effect.abilityId, casterId: effect.casterId, stationary: true });
+}
+
 function createCallingImpact(effect: CallingAbilityEffect): void {
+  createCallingRangePulse(effect);
   if (effect.abilityId === "assassin_death_mark" && effect.targetId) {
     mobVisuals.get(effect.targetId)?.marks.set(effect.casterId, {
       expiresAt: Date.now() + (effect.durationMs ?? 10_000), stacks: 3, maxStacks: 3, kind: "assassin",
@@ -8994,12 +9013,14 @@ function createCallingImpact(effect: CallingAbilityEffect): void {
     firstPersonAbilityCastDuration = Math.max(520, Math.min(1_200, effect.durationMs ?? 700));
   }
   if (effect.pathId === "mage") createMageHandCast(effect.casterId, abilityId as MageAbilityId);
+  // The aimed Overload telegraph owns the ground effect; hands only gather at the caster.
+  if (abilityId === "mage_overload") { combatAudio.play("callingMage"); return; }
   if (abilityId === "thief_decoy") createThiefDecoyImitation(effect);
   const layers = CALLING_IMPACT_PARTICLES[abilityId];
   const root = new pc.Entity(`calling-impact:${abilityId}`);
   if (effect.radiusScale) root.setLocalScale(effect.radiusScale, 1, effect.radiusScale);
   const followsPlayer = abilityId === "tank_bulwark" || abilityId === "mage_mana_shield"
-    || abilityId === "mage_overload" || abilityId === "ranger_volley_focus" || abilityId === "ranger_deadeye";
+    || abilityId === "ranger_volley_focus" || abilityId === "ranger_deadeye";
   const targetAnchor = abilityId === "assassin_death_mark" && effect.targetId
     ? mobVisuals.get(effect.targetId)?.entity
     : (abilityId === "healer_field_mend" || abilityId === "healer_resurrection") && effect.targetId
@@ -9013,11 +9034,10 @@ function createCallingImpact(effect: CallingAbilityEffect): void {
   } else {
     root.setPosition(effect.x, effect.y + .03, effect.z); app.root.addChild(root);
   }
-  if (root.parent === app.root) root.setEulerAngles(0, effect.yaw, 0);
-  else root.setLocalEulerAngles(0, effect.yaw, 0);
+  root.setEulerAngles(0, effect.yaw, 0);
   addCallingParticleLayers(app, root, layers, false, callingParticleDensity);
   const materials = addCallingSignature(root, abilityId);
-  callingImpactVisuals.push({ root, expiresAt: performance.now() + callingParticleLifetime(layers) * 1000, materials, abilityId });
+  callingImpactVisuals.push({ root, expiresAt: performance.now() + callingParticleLifetime(layers) * 1000, materials, abilityId, casterId: effect.casterId });
   const local = localPlayer.getPosition(), pan = enemyCuePan(effect.x, local.x, 14);
   combatAudio.play(effect.pathId === "tank" ? "callingTank" : effect.pathId === "mage" || effect.pathId === "healer" ? "callingMage"
     : effect.pathId === "assassin" ? "callingShadow" : effect.pathId === "thief" ? "callingThief" : "callingRanger", pan);
@@ -9089,7 +9109,7 @@ function createMageHandCast(playerId: string, abilityId: MageAbilityId): void {
     else for (let index = 0; index < 4; index += 1)
       addCallingSignaturePrimitive(root, "overload-hand-prong", "box", index % 2 ? edge : core,
         [.035, .22 + index * .06, .035], [side * (.08 + index * .05), -.18 - index * .07, 0], [side * (18 + index * 8), 0, side * 22]);
-    callingImpactVisuals.push({ root, expiresAt: startedAt + durationMs, materials: [core, edge], abilityId });
+    callingImpactVisuals.push({ root, expiresAt: startedAt + durationMs, materials: [core, edge], abilityId, casterId: playerId });
   }
   if (abilityId === "mage_overload") {
     const root = new pc.Entity("overload-between-hands"); root.setLocalPosition(0, .02, -.52); rig.torso.addChild(root);
@@ -9101,7 +9121,7 @@ function createMageHandCast(playerId: string, abilityId: MageAbilityId): void {
       addCallingSignaturePrimitive(root, "overload-orbit", "box", index % 2 ? edge : core,
         [.035, .035, .2], [Math.sin(angle) * .42, Math.cos(angle) * .42, 0], [0, 0, angle * 180 / Math.PI]);
     }
-    callingImpactVisuals.push({ root, expiresAt: startedAt + durationMs, materials: [core, edge], abilityId });
+    callingImpactVisuals.push({ root, expiresAt: startedAt + durationMs, materials: [core, edge], abilityId, casterId: playerId });
   }
 }
 
@@ -9118,13 +9138,14 @@ function applyMageCastAnimation(playerId: string, rig: VoxelCharacterRig, now: n
 }
 
 function updateCallingPersistentState(state: CallingStateUpdate): void {
-  const existing = callingPersistentVisuals.get(state.playerId);
+  const key = callingEffectKey(state.playerId, state.abilityId);
+  callingEffectState.update(state);
+  const existing = callingPersistentVisuals.get(key);
   if (existing) {
-    existing.root.destroy(); existing.materials.forEach(material => material.destroy()); callingPersistentVisuals.delete(state.playerId);
+    existing.root.destroy(); existing.materials.forEach(material => material.destroy()); callingPersistentVisuals.delete(key);
   }
-  if (state.playerId === room?.sessionId) localCallingState = state.phase === "clear" ? null : state;
   if (state.phase === "clear") return;
-  if (state.abilityId === "thief_decoy") return;
+  if (state.abilityId === "thief_decoy" || state.abilityId === "healer_renewal" || state.abilityId === "mage_overload") return;
   const casterAnchor = state.playerId === room?.sessionId ? localPlayer : remotePlayers.get(state.playerId)?.entity;
   const targetAnchor = state.targetId
     ? mobVisuals.get(state.targetId)?.entity ?? remotePlayers.get(state.targetId)?.entity : undefined;
@@ -9138,8 +9159,8 @@ function updateCallingPersistentState(state: CallingStateUpdate): void {
   addCallingParticleLayers(app, root,
     CALLING_ABILITY_SUSTAIN_PARTICLES[state.abilityId] ?? CALLING_SUSTAIN_PARTICLES[state.pathId], true, callingParticleDensity);
   const materials = addCallingPersistentSignature(root, state);
-  callingPersistentVisuals.set(state.playerId, {
-    root, expiresAt: state.activeUntil ?? Number.POSITIVE_INFINITY, materials, abilityId: state.abilityId,
+  callingPersistentVisuals.set(key, {
+    playerId: state.playerId, root, expiresAt: state.activeUntil ?? Number.POSITIVE_INFINITY, materials, abilityId: state.abilityId,
   });
 }
 
@@ -18172,12 +18193,11 @@ app.on("update", (dt: number) => {
       callingImpactVisuals.splice(index, 1);
     }
   }
-  for (const [playerId, visual] of callingPersistentVisuals) {
+  for (const [key, visual] of callingPersistentVisuals) {
     if (visual.abilityId === "mage_mana_shield" || visual.abilityId === "healer_resurrection") visual.root.rotateLocal(0, frameTime * 24, 0);
     else if (visual.abilityId === "mage_overload") visual.root.rotateLocal(0, frameTime * 92, 0);
     if (Date.now() >= visual.expiresAt) {
-      visual.root.destroy(); visual.materials.forEach(material => material.destroy()); callingPersistentVisuals.delete(playerId);
-      if (playerId === room?.sessionId) localCallingState = null;
+      visual.root.destroy(); visual.materials.forEach(material => material.destroy()); callingPersistentVisuals.delete(key);
     }
   }
   for (const [decoyId, visual] of thiefDecoyVisuals) {
@@ -18417,7 +18437,7 @@ app.on("update", (dt: number) => {
       ? cooldownState(callingRemaining, CALLING_ABILITY_OPTIONS.find(option => option.id === localCallingAbilityId)?.cooldownMs ?? 1, "READY Â· G")
       : cooldownState(0, 1, "CHOOSE CALLING", "CHOOSE CALLING"),
   );
-  if (localCallingState?.activeUntil && localCallingState.activeUntil <= Date.now()) localCallingState = null;
+  localCallingState = callingEffectState.latest(room?.sessionId ?? "", Date.now());
   combatHud.setCallingState(localCallingState ? {
     label: localCallingState.label,
     detail: localCallingState.charges !== undefined
@@ -19068,32 +19088,25 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       refreshProgressionNotice();
     }
     if (update.slot === "special") status.textContent = `${update.ability} Â· ${update.detail.toLowerCase()}.`;
-    const serverAnchored = update.abilityId === "assassin_death_mark" || update.abilityId === "healer_field_mend"
-      || update.abilityId === "healer_resurrection";
-    if (!serverAnchored) {
-      const position = localPlayer.getPosition();
-      createCallingImpact({
-        casterId: room!.sessionId,
-        pathId: update.pathId,
-        abilityId: update.abilityId,
-        x: position.x,
-        y: position.y,
-        z: position.z,
-        yaw: cameraOrbit.yaw,
-        ...(update.durationMs ? { durationMs: update.durationMs } : {}),
-      });
-      lastLocalCallingImpact = { abilityId: update.abilityId, at: performance.now() };
-    }
   });
   room.onMessage("calling:ability:effect", (effect: CallingAbilityEffect) => {
-    const duplicateLocal = effect.casterId === room?.sessionId
-      && lastLocalCallingImpact?.abilityId === effect.abilityId
-      && performance.now() - lastLocalCallingImpact.at < 700;
-    if (!duplicateLocal) {
-      createCallingImpact(effect);
-      if (effect.casterId === room?.sessionId)
-        lastLocalCallingImpact = { abilityId: effect.abilityId, at: performance.now() };
+    if (callingEffectState.accept(effect)) createCallingImpact(effect);
+  });
+  room.onMessage("calling:recovery", (update: { slot: "special"; cooldownUntil: number }) => {
+    localCallingSpecialCooldownUntil = update.cooldownUntil;
+  });
+  room.onMessage("calling:reset", ({ playerId }: { playerId: string }) => {
+    callingEffectState.removePlayer(playerId);
+    for (const [key, visual] of callingPersistentVisuals) if (visual.playerId === playerId) {
+      visual.root.destroy(); visual.materials.forEach(material => material.destroy()); callingPersistentVisuals.delete(key);
     }
+    for (const visual of callingImpactVisuals) if (visual.casterId === playerId) visual.expiresAt = 0;
+    mageCastAnimations.delete(playerId); destroyThiefDecoyImitation(`thief-decoy:${playerId}`, false);
+    for (const visual of mobVisuals.values()) visual.marks.delete(playerId);
+  });
+  room.onMessage("mage:arcane-echo", (message: { casterId: string; x: number; y: number; z: number }) => {
+    createRangedPopup(new pc.Vec3(message.x, message.y + 2.2, message.z), "ARCANE ECHO", "landmark", false, [.78, .58, 1]);
+    if (message.casterId === room?.sessionId) combatAudio.play("callingMage");
   });
   room.onMessage("player:stealth", (state: { playerId: string; until: number }) => {
     if (state.until > Date.now()) playerStealthUntil.set(state.playerId, state.until);
@@ -20129,7 +20142,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     for (const visual of callingPersistentVisuals.values()) {
       visual.root.destroy(); visual.materials.forEach(material => material.destroy());
     }
-    callingPersistentVisuals.clear(); localCallingState = null; combatHud.setCallingState(null);
+    callingPersistentVisuals.clear(); callingEffectState.clear(); localCallingState = null; combatHud.setCallingState(null);
     for (const mobId of [...formationTelegraphs.keys()]) destroyFormationTelegraph(mobId);
     mageCastAnimations.clear();
     for (const visual of thiefDecoyVisuals.values()) { visual.root.destroy(); visual.materials.forEach(material => material.destroy()); }

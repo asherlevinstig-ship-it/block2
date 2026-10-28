@@ -178,7 +178,7 @@ describe("class ability upgrades", () => {
       case "tank_challenge": expect(a.mobAwareness.has("target")).toBe(false); expect(b.mobAwareness.get("target")?.targetId).toBe("hero"); break;
       case "tank_fault": case "mage_surge":
         expect(upgraded.mob.health).toBeLessThan(base.mob.health);
-        expect(upgraded.client.send).toHaveBeenCalledWith("calling:ability:effect", expect.objectContaining({ radiusScale: expect.any(Number) }));
+        expect(upgraded.broadcast).toHaveBeenCalledWith("calling:ability:effect", expect.objectContaining({ radiusScale: expect.any(Number) }));
         break;
       case "mage_shield":
         b.damagePlayer("target", "hero", 2, 10000, false);
