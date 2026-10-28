@@ -124,7 +124,7 @@ describe("Crownkeeper signature reward", () => {
   });
   it.each([1, 2, 3])("resolves real crescent hit %s and only interrupts on the third", step => {
     const f = fixture(); f.hero.mainHandId = "crownkeeper_blade"; f.mob.x = 334;
-    f.mob.combatState = "windup"; f.mob.armor = 0;
+    f.mob.combatState = "windup"; f.mob.attackPattern = "smash"; f.mob.armor = 0;
     f.internal.pendingAttacks.set("hero", { requestId: "royal-break", mainHandId: "crownkeeper_blade",
       step, yaw: 90, impactAt: 10000 });
     f.internal.resolvePendingAttacks(10000);

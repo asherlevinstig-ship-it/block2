@@ -74,6 +74,8 @@ import { ashenChainRoute, ashenChainStage, greenwoodChainRoute, greenwoodChainSt
 import { combatHud, cooldownState, setFloorRunKit } from "./combat-hud.js";
 import { createFloorRunUpgradeUI } from "./floor-run-upgrades.js";
 import type { FloorRunUpgradeUpdate } from "@blockcraft/protocol";
+import { crownkeeperAttackCue, TOWER_FLOOR_ONE_BOSS_ID } from "@blockcraft/protocol";
+import { crownkeeperOpeningLabel } from "./boss-hud.js";
 import { assassinJourney } from "./assassin-journey.js";
 import { CALLING_AWAKENING_MINIMUM_MS, callingAwakening, callingPreviewMarkup } from "./calling-awakening.js";
 import { advanceFirstCombatPhase, completesFirstCombatLesson, FIRST_COMBAT_GROUP_IDS, firstCombatLesson,
@@ -14562,6 +14564,7 @@ const bossLootPreview = document.querySelector<HTMLElement>("#boss-loot-preview"
 const bossLootName = document.querySelector<HTMLElement>("#boss-loot-name")!;
 const bossLootFit = document.querySelector<HTMLElement>("#boss-loot-fit")!;
 const leaderExposedUntil = new Map<string, number>();
+let crownkeeperWeaponOpeningUntil = 0;
 const leaderReinforcementUntil = new Map<string, number>();
 const leaderFormation = new Map<string, { state: AreaLeaderFormation["state"]; tactic?: AreaLeaderFormation["tactic"]; until: number }>();
 const escortLinkVisuals = new Map<string, pc.Entity>();
@@ -14646,7 +14649,8 @@ function updateBossHud(now: number): void {
   if (floorBoss && previous.alive === true && boss?.alive === false) {
     combatAudio.play("dungeonVictory"); createDungeonBurst(boss.x, boss.z, "victory", boss.y + .08);
   }
-  const exposedLabel = boss?.isMiniBoss ? leaderExposureLabel(leaderExposedUntil.get(nextBossId) ?? 0, now) : "";
+  const crownOpeningLabel = nextBossId === TOWER_FLOOR_ONE_BOSS_ID && boss?.alive ? crownkeeperOpeningLabel(crownkeeperWeaponOpeningUntil, now) : "";
+  const exposedLabel = crownOpeningLabel || (boss?.isMiniBoss && boss.alive ? leaderExposureLabel(leaderExposedUntil.get(nextBossId) ?? 0, now) : "");
   const followerStates = new Map((COORDINATED_BRUTE_FOLLOWERS[nextBossId] ?? [])
     .map(id => [id, { alive: mobVisuals.get(id)?.state.alive === true }] as const));
   const armour = leaderArmourSegments(nextBossId, followerStates);
@@ -14673,7 +14677,7 @@ function updateBossHud(now: number): void {
   bossEncounter.textContent = floorBoss ? "FLOOR 1 BOSS" : pathChampion ? "PATH CHAMPION" : boss.isMiniBoss ? "AREA MINI-BOSS" : crystal ? "SILVER DEPTHS BOSS" : guardian ? "FOREST DUNGEON BOSS" : realmBoss ? "REALM BOSS" : "SHARED WILDERNESS EVENT";
   const leaderPhase = leaderHealthPhase(boss.health, boss.maxHealth);
   const championPhase = realmBossHealthPhase(boss.health, boss.maxHealth);
-  bossPhase.textContent = !boss.alive ? "DEFEATED" : floorBoss ? floorBossPhaseLabel(boss.name, leaderPhase, boss.combatState === "recover") : pathChampion ? pathChampionPhaseLabel(boss.name, championPhase, boss.combatState === "recover")
+  bossPhase.textContent = !boss.alive ? "DEFEATED" : floorBoss ? floorBossPhaseLabel(boss.name, leaderPhase, Boolean(exposedLabel)) : pathChampion ? pathChampionPhaseLabel(boss.name, championPhase, boss.combatState === "recover")
     : boss.isMiniBoss ? `PHASE ${leaderPhase} Â· ${formationLabel || (reinforcementsIncoming ? "REINFORCEMENTS INCOMING" : exposedLabel ? armour.maximum > 0 && armour.active === 0 ? "ESCORT ARMOUR BROKEN" : "FOLLOWER BREAK" : boss.combatState === "recover" ? "COUNTER WINDOW" : leaderPhase === 3 ? "FINAL ASSAULT" : leaderPhase === 2 ? "FOLLOWERS RALLIED" : "OPENING")}`
     : realmBoss ? `PHASE ${realmPhase} Â· ${boss.combatState === "recover" ? "SHIFTING" : realmPhase === 3 ? "WARDEN BARRAGE" : realmPhase === 2 ? "FALLING ROCKS" : "STONE VOLLEYS"}`
     : bossHudState.enraged ? `PHASE 2 Â· ${crystal ? "ROTATING CRYSTAL WAVES" : guardian ? "HEARTWOOD CHARGE" : bruteEvent ? "ENRAGED VOLLEYS" : "ENRAGED"}` : `PHASE 1 Â· ${crystal ? "AIMED SHOT / FAN" : guardian ? "ROOT VOLLEY" : bruteEvent ? "ROCK VOLLEY / SLAM" : "AIMED SHOT / FAN"}`;
@@ -14700,8 +14704,11 @@ function updateBossHud(now: number): void {
           : "ROOT LUNGE"
     : "";
   bossAttackLabel.textContent = boss.alive
-    ? formationLabel || elderthornAttack || leaderChargeGuidance(boss.attackPattern, boss.combatState, boss.targetId, room?.sessionId ?? "")
+    ? crownOpeningLabel ? "PARTY OPENING · STRIKE OR REGROUP"
+      : floorBoss ? crownkeeperAttackCue(boss.attackPattern, boss.combatState, tabletControlsQuery.matches).label
+        : formationLabel || elderthornAttack || leaderChargeGuidance(boss.attackPattern, boss.combatState, boss.targetId, room?.sessionId ?? "")
     : "ENCOUNTER COMPLETE";
+  bossAttackLabel.dataset.response = floorBoss ? crownkeeperAttackCue(boss.attackPattern, boss.combatState, tabletControlsQuery.matches).response : "none";
   bossAttackLabel.dataset.state = boss.combatState;
   bossHealthFill.style.transform = `scaleX(${Math.max(0, Math.min(1, boss.health / Math.max(1, boss.maxHealth)))})`;
   bossHealthText.textContent = `${Math.max(0, boss.health)} / ${boss.maxHealth}`;
@@ -17952,7 +17959,10 @@ app.on("update", (dt: number) => {
         setWorldOverlayPosition(mob.combatCue, rect.left + screen.x, rect.top + screen.y);
         if (mob.combatCue.dataset.kind !== kind) mob.combatCue.dataset.kind = kind;
         if (mob.combatCue.dataset.miniboss !== miniboss) mob.combatCue.dataset.miniboss = miniboss;
-        if (mob.combatCueLabel.textContent !== cue.label) mob.combatCueLabel.textContent = cue.label;
+        const crownCue = mobId === TOWER_FLOOR_ONE_BOSS_ID ? crownkeeperAttackCue(mob.state.attackPattern, mob.state.combatState, tabletControlsQuery.matches) : null;
+        const cueLabel = crownCue?.label ?? cue.label;
+        if (mob.combatCueLabel.textContent !== cueLabel) mob.combatCueLabel.textContent = cueLabel;
+        mob.combatCue.dataset.response = crownCue?.response ?? "none";
         if (mob.combatCueFill.style.transform !== fill) mob.combatCueFill.style.transform = fill;
       }
     }
@@ -18002,6 +18012,11 @@ app.on("update", (dt: number) => {
       if (mob.state.isMiniBoss) {
         mob.warningMaterial.diffuse.set(1, .56, .08);
         mob.warningMaterial.emissive.set(1, .28, .02);
+      }
+      if (mobId === TOWER_FLOOR_ONE_BOSS_ID) {
+        const color = crownkeeperAttackCue(mob.state.attackPattern, mob.state.combatState).color;
+        mob.warningMaterial.diffuse.set(color[0], color[1], color[2]);
+        mob.warningMaterial.emissive.copy(mob.warningMaterial.diffuse);
       }
       mob.warningMaterial.opacity = presentation.aimLocked ? mob.state.isMiniBoss ? .78 : .65 : mob.state.isMiniBoss ? .5 : .38;
       mob.warningMaterial.update();
@@ -19242,8 +19257,20 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   room.onMessage("objective:completed", (message: WorldObjectiveCompleted) => showObjectiveComplete(message));
   room.onMessage("leader:exposed", (message: AreaLeaderExposed) => {
     if (!message?.mobId || !Number.isFinite(message.durationMs) || message.durationMs <= 0) return;
-    leaderExposedUntil.set(message.mobId, performance.now() + Math.min(5_000, message.durationMs));
+    const remainingMs = message.expiresAt !== undefined && Number.isFinite(message.expiresAt) && serverClock.synchronized
+      ? Math.min(message.durationMs, message.expiresAt - (performance.now() + serverClock.offset)) : message.durationMs;
+    if (remainingMs <= 0) return;
+    leaderExposedUntil.set(message.mobId, performance.now() + Math.min(5_000, remainingMs));
     const visual = mobVisuals.get(message.mobId);
+    if (message.mobId === TOWER_FLOOR_ONE_BOSS_ID && message.reason?.startsWith("crown-")) {
+      crownkeeperWeaponOpeningUntil = performance.now() + Math.min(5_000, remainingMs);
+      if (visual) {
+        const action = message.reason === "crown-parry" ? "CLEAVE PARRIED" : message.reason === "crown-interrupt" ? "SLAM INTERRUPTED"
+          : message.reason === "crown-guard" ? "CHARGE GUARDED" : "CHARGE EVADED";
+        createRangedPopup(new pc.Vec3(visual.state.x, visual.state.y + visual.healthBarY + .85, visual.state.z),
+          action + " · CROWN EXPOSED", "melee", false, [1, .85, .35]);
+      }
+    }
     if (visual && COORDINATED_BRUTE_FOLLOWERS[message.mobId])
       createBruteArmourBreak(visual, message.armourSegments === 0,
         message.reason === "charge" || message.reason === "formation-interrupt");
@@ -20100,7 +20127,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     mobVisuals.clear();
     for (const popup of rangedPopups) popup.element.remove(); rangedPopups.length = 0; rangedReticleHitUntil = 0;
     bossHudState = initialBossHud(); bossHudFingerprint = ""; activeBossId = ""; bossHud.hidden = true;
-    leaderExposedUntil.clear(); leaderReinforcementUntil.clear(); leaderFormation.clear();
+    leaderExposedUntil.clear(); crownkeeperWeaponOpeningUntil = 0; leaderReinforcementUntil.clear(); leaderFormation.clear();
     for (const link of escortLinkVisuals.values()) link.destroy(); escortLinkVisuals.clear(); escortLinkMaterial?.destroy(); escortLinkMaterial = null;
     for (const loot of lootVisuals.values()) loot.root.destroy();
     lootVisuals.clear();

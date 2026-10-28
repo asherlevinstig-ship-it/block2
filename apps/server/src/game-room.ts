@@ -4,6 +4,7 @@ import { CROWNKEEPER_FORGE } from "@blockcraft/protocol";
 import { crownkeeperFragments, withCrownkeeperFragments } from "./crownkeeper-progress.js";
 import { FloorRunUpgrades } from "./floor-run-upgrades.js";
 import { FLOOR_RUN_UPGRADES } from "@blockcraft/protocol";
+import { crownkeeperCounterDuration, CROWNKEEPER_OPENING_WEAPON_BONUS, type CrownkeeperCounter } from "@blockcraft/protocol";
 import { GREENWOOD_MASTERY_CAP, MISTFEN_MASTERY_CAP, greenwoodMasteryRank, mistfenMasteryRank } from "@blockcraft/protocol";
 import { callingStarterAbility } from "@blockcraft/protocol";
 import { experienceToNextLevel } from "@blockcraft/protocol";
@@ -595,6 +596,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly areaLeaderPhases = new Map<string, AreaLeaderPhase>();
   private readonly miniBossEngagedAt = new Map<string, number>();
   private readonly crownkeeperDisengagedAt = new Map<string, number>();
+  private crownkeeperOpeningUntil = 0;
   private readonly miniBossOrbitPressure = new Map<string, OrbitPressureState>();
   private readonly miniBossArenaCover = new Map<string, Map<string, ActiveMiniBossCover>>();
   private readonly selectedRealmHunts = new Map<string, string>();
@@ -3183,8 +3185,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     return mob;
   }
 
-  private staggerMob(mobId: string, mob: MobState, now: number, duration: number, force = false): boolean {
+  private staggerMob(mobId: string, mob: MobState, now: number, duration: number, force = false, actorId?: string): boolean {
     if (!mob.alive || mob.health <= 0 || duration <= 0 || (!force && now < (this.mobStaggerImmuneUntil.get(mobId) ?? 0))) return false;
+    if (this.rapidPractice && mobId === TOWER_FLOOR_ONE_BOSS_ID) {
+      if (now < this.crownkeeperOpeningUntil) return false;
+      if (this.openCrownkeeperCounter(mob, "interrupt", now, actorId)) return true;
+    }
     const brokePackRush = isCoordinatedCrawlerLeader(mobId) && mob.combatState === "windup"
       && (mob.attackPattern === "pack-rush" || mob.attackPattern === "alpha-rush");
     const brokeVenomRing = isCoordinatedSpitterLeader(mobId) && mob.combatState === "windup"
@@ -4069,7 +4075,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const targetId = leader.targetId || awareness?.targetId || "";
     leader.enraged = leader.enraged || phase === 3;
     leader.combatState = "recover";
-    leader.stateUntil = now + (phase === 3 ? 1_400 : 1_200);
+    leader.stateUntil = Math.max(now + (phase === 3 ? 1_400 : 1_200),
+      leaderId === TOWER_FLOOR_ONE_BOSS_ID ? this.crownkeeperOpeningUntil : 0);
     leader.targetId = "";
     leader.aimCommitted = false;
     this.pendingMobMelee.delete(leaderId);
@@ -4106,7 +4113,31 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
   }
 
+  private openCrownkeeperCounter(boss: MobState, response: CrownkeeperCounter, now: number, actorId?: string): boolean {
+    if (!this.rapidPractice || !boss.alive || boss.health <= 0 || now < this.crownkeeperOpeningUntil) return false;
+    const durationMs = crownkeeperCounterDuration(boss.attackPattern, boss.combatState, response);
+    if (durationMs <= 0) return false;
+    if (boss.combatState === "windup") boss.actionSequence++;
+    this.crownkeeperOpeningUntil = now + durationMs;
+    if (actorId && this.state.players.get(actorId)?.health! > 0)
+      this.combatContributions.recordSupport(TOWER_FLOOR_ONE_BOSS_ID, actorId, Math.ceil(boss.maxHealth * .05), now);
+    Object.assign(boss, { combatState: "recover", stateUntil: now + durationMs, targetId: "", aimCommitted: false });
+    this.clearMobAttackTimeline(boss);
+    this.pendingMobMelee.delete(TOWER_FLOOR_ONE_BOSS_ID);
+    this.championCharges.delete(TOWER_FLOOR_ONE_BOSS_ID);
+    this.mobCommittedAim.delete(TOWER_FLOOR_ONE_BOSS_ID);
+    this.mobStaggerImmuneUntil.set(TOWER_FLOOR_ONE_BOSS_ID, now + durationMs + STAGGER_IMMUNITY_MS);
+    for (const client of this.clients) {
+      const player = this.state.players.get(client.sessionId);
+      if (!player || player.health <= 0 || Math.abs(player.y - boss.y) > 2.5 || Math.hypot(player.x - boss.x, player.z - boss.z) > 28) continue;
+      client.send("leader:exposed", { mobId: TOWER_FLOOR_ONE_BOSS_ID, durationMs, expiresAt: this.crownkeeperOpeningUntil,
+        reason: `crown-${response}` } satisfies AreaLeaderExposed);
+    }
+    return true;
+  }
+
   private resetCrownkeeperEncounter(boss: MobState, now: number): void {
+    this.crownkeeperOpeningUntil = 0;
     const home = this.mobHomes.get(TOWER_FLOOR_ONE_BOSS_ID);
     if (!home) return;
     this.restoreMiniBossArena(TOWER_FLOOR_ONE_BOSS_ID);
@@ -5073,6 +5104,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         this.activeDodgeWindows.delete(playerId);
         this.dodgePressure.set(playerId, { chain: 0, lastAt: Number.NEGATIVE_INFINITY, exhaustedUntil: 0 });
         const counterUntil = now + PERFECT_DODGE_COUNTER_MS;
+        const dodgedBoss = mobId === TOWER_FLOOR_ONE_BOSS_ID ? this.state.mobs.get(mobId) : undefined;
+        if (dodgedBoss) this.openCrownkeeperCounter(dodgedBoss, "evade", now, playerId);
         this.dodgeCounterUntil.set(playerId, counterUntil);
         if (mobId === FIRST_COMBAT_MOB_ID) this.firstCombatPerfectDodges.add(playerId);
         if (player.armourId === "ashguard_mantle") {
@@ -5150,8 +5183,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       player.stamina += perkStaminaRestored;
     }
     if (defense.parried && mob) {
-      this.staggerMob(mobId, mob, now, PARRY_STAGGER_MS, true);
+      if (!(mobId === TOWER_FLOOR_ONE_BOSS_ID && this.openCrownkeeperCounter(mob,
+        mob.attackPattern === "charge" ? "guard" : "parry", now, playerId)))
+        this.staggerMob(mobId, mob, now, PARRY_STAGGER_MS, true);
     }
+    if (defense.guarded && mobId === TOWER_FLOOR_ONE_BOSS_ID && mob) this.openCrownkeeperCounter(mob, "guard", now, playerId);
     if (player.stamina <= 0) player.defending = false;
     let absorbed = false;
     let absorbedBy: "bastion" | "northwatch" | undefined;
@@ -7172,7 +7208,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         mob.health = Math.max(0, mob.health - damage); mob.hitSequence += 1;
         this.alertHitMob(mobId, client.sessionId, now);
         if (mob.health === 0) this.defeatMob(mobId, mob, client.sessionId, now);
-        else this.staggerMob(mobId, mob, now, interrupted ? 2_200 + rank * 150 : 1_200 + rank * 100, true);
+        else this.staggerMob(mobId, mob, now, interrupted ? 2_200 + rank * 150 : 1_200 + rank * 100, true, client.sessionId);
         if (interrupted) interruptedTargetIds.push(mobId);
       }
       detail = shatteredTargetIds.length > 0
@@ -7198,7 +7234,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         mob.health = Math.max(0, mob.health - damage); mob.hitSequence += 1;
         this.alertHitMob(mobId, client.sessionId, now);
         if (mob.health === 0) this.defeatMob(mobId, mob, client.sessionId, now);
-        else this.staggerMob(mobId, mob, now, 450, true);
+        else this.staggerMob(mobId, mob, now, 450, true, client.sessionId);
       }
       if (augmentId === "surge_temporal_flux") player.specialCooldownUntil = Math.max(now, player.specialCooldownUntil - 4_000);
       player.stamina = Math.min(player.maxStamina, player.stamina + stamina);
@@ -10772,6 +10808,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           this.exposeCinderRam(id, mob, now);
           continue;
         }
+        if (id === TOWER_FLOOR_ONE_BOSS_ID && this.rapidPractice) {
+          // Guard success is confirmed after contact-time defense resolves.
+          if (!intercepted && charge.hit.size === 0) this.openCrownkeeperCounter(mob, "evade", now,
+            this.state.players.has(mob.targetId) ? mob.targetId : undefined);
+          continue;
+        }
         const redirectedBrute = mob.isMiniBoss && mob.archetype === "stone_brute" && (intercepted || charge.hit.size === 0);
         if (redirectedBrute || (id === "mistfen-behemoth" || id === MISTFEN_EVENT_ID) && charge.hit.size === 0) {
           const durationMs = intercepted ? 3_500 : 2_500;
@@ -11294,7 +11336,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           + this.buildPathDamageBonus(player, mob, mobId, sessionId, now, "weapon") + shadowstepDamage + markStrikeBonus + pinBonusDamage
           + this.northwatchAssassinOpening(player, mobId, now),
         mob.armor,
-      ) + traitBonusDamage + dodgeCounterBonus;
+      ) + traitBonusDamage + dodgeCounterBonus
+        + (this.rapidPractice && mobId === TOWER_FLOOR_ONE_BOSS_ID && now < this.crownkeeperOpeningUntil ? CROWNKEEPER_OPENING_WEAPON_BONUS : 0);
       const cinderExposedUntil = this.cinderRamExposedUntil.get(mobId) ?? 0;
       const cinderExposed = mob.archetype === "cinder_ram" && now < cinderExposedUntil;
       const sourceX = source?.x ?? player.x, sourceZ = source?.z ?? player.z;
@@ -11339,7 +11382,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const staggerDuration = northwatchPatrolInterruptDuration(mobId, mob.attackPattern,
         Math.max(floorBreak, basicStaggerDuration(pending.mainHandId, pending.step, mob.archetype, mob.combatState, mob.isChampion)));
       const struckBloaterGland = mob.health > 0 && this.strikeFenBloaterGland(mobId, mob, sessionId, now);
-      if (!struckBloaterGland && !cinderArmoured && this.staggerMob(mobId, mob, now, staggerDuration)) {
+      if (!struckBloaterGland && !cinderArmoured && this.staggerMob(mobId, mob, now, staggerDuration, false, sessionId)) {
         const stagger: CombatStagger = { attackerId: sessionId, mobId, durationMs: staggerDuration };
         this.broadcast("combat:stagger", stagger);
       }

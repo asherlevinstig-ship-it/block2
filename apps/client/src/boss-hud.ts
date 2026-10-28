@@ -119,6 +119,11 @@ export function leaderAttackLabel(pattern: string, combatState: string): string 
   return `${name} · READY`;
 }
 
+export function crownkeeperOpeningLabel(expiresAt: number, now: number): string {
+  const remaining = Math.max(0, expiresAt - now);
+  return remaining > 0 ? `CROWN EXPOSED · WEAPON HITS +1 · ${(Math.ceil(remaining / 100) / 10).toFixed(1)}s` : "";
+}
+
 export function leaderExposureLabel(expiresAt: number, now: number): string {
   const remaining = Math.max(0, expiresAt - now);
   return remaining > 0 ? `LEADER EXPOSED · ${(Math.ceil(remaining / 100) / 10).toFixed(1)}s` : "";

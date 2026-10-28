@@ -2,6 +2,7 @@ export { fastWorldGroundHeight, fastWorldCoastShorelineZ } from "./fast-world-el
 import { fastWorldGroundHeight } from "./fast-world-elevation.js";
 export const FAST_WORLD_BLACKSMITH_POSITION = { x: 79, y: 8, z: 136 } as const;
 export * from "./floor-run-upgrades.js";
+export * from "./crownkeeper-combat.js";
 import { createFastWorldObstacleQuery } from "./fast-world-obstacles.js";
 import { TOWER_FLOOR_ONE, TOWER_FLOOR_ONE_FORTRESS_COLLIDERS, isInsideTowerFloorOne } from "./tower-floor-one.js";
 export * from "./fast-world-obstacles.js";
@@ -1908,7 +1909,9 @@ export type WorldObjectiveCompleted = {
 export type AreaLeaderExposed = {
   mobId: string;
   durationMs: number;
-  reason?: "follower" | "charge" | "pack-interrupt" | "volley-interrupt" | "formation-interrupt" | "root-slam-interrupt" | "root-ring-interrupt";
+  expiresAt?: number;
+  reason?: "follower" | "charge" | "pack-interrupt" | "volley-interrupt" | "formation-interrupt" | "root-slam-interrupt" | "root-ring-interrupt"
+    | "crown-parry" | "crown-interrupt" | "crown-evade" | "crown-guard";
   armourSegments?: number;
 };
 

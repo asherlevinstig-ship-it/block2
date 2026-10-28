@@ -4584,3 +4584,7 @@ html.fast-world-active #progression-notice[data-priority-visible="true"]:not([hi
 .floor-run-picked { display: grid; gap: 5px; padding: 10px 0; border-bottom: 1px solid #647f6244; }
 .floor-run-picked small { line-height: 1.5; }
 @media (max-width: 650px) { .floor-upgrade-shell { padding: 18px; } .floor-upgrade-choices { grid-template-columns: 1fr; margin: 16px 0; } .floor-upgrade-choices button { min-height: 110px; padding: 16px; gap: 8px; } }
+#boss-attack-label[data-response="parry"], .enemy-combat-cue[data-response="parry"] { color: #80d8ff; border-color: #80d8ff; }
+#boss-attack-label[data-response="interrupt"], .enemy-combat-cue[data-response="interrupt"] { color: #dda3ff; border-color: #dda3ff; }
+#boss-attack-label[data-response="evade"], .enemy-combat-cue[data-response="evade"] { color: #ffb86b; border-color: #ffb86b; }
+#boss-attack-label[data-response="guard"], .enemy-combat-cue[data-response="guard"] { color: #ffe390; border-color: #ffe390; }

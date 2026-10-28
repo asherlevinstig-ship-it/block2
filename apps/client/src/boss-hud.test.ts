@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { crownkeeperOpeningLabel } from "./boss-hud.js";
 import { activeCombatNearby, advanceBossHud, floorBossPhaseLabel, initialBossHud, leaderArmourSegments, leaderAttackLabel, leaderAttackName, leaderChargeGuidance, leaderExposureLabel, leaderExposureRoleLabel, leaderFormationLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
 const player = { x: 40, y: 8, z: 18, health: 5 };
 const boss = { x: 43, y: 8, z: 18, name: "Matriarch", alive: true, health: 24, maxHealth: 24, enraged: false };
 describe("boss HUD", () => {
+  it("shows the earned weapon bonus only until its counter window expires", () => {
+    expect(crownkeeperOpeningLabel(12500, 10000)).toBe("CROWN EXPOSED · WEAPON HITS +1 · 2.5s");
+    expect(crownkeeperOpeningLabel(12500, 12500)).toBe("");
+  });
   it("uses compact formation labels without opening a central overlay", () => {
     expect(leaderFormationLabel("forming", "surround")).toBe("FORMATION INCOMING · SURROUND");
     expect(leaderFormationLabel("forming", "venom-lock")).toContain("VENOM LOCK");
