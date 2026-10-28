@@ -8,6 +8,7 @@ import { fastWorldWeaponProfile } from "./fast-world-weapons.js";
 import { FIRST_PERSON_AIM_MIN, FIRST_PERSON_AIM_MAX } from "./first-person-aim.js";
 export * from "./first-person-aim.js";
 export * from "./mob-hitboxes.js";
+export * from "./enemy-projectiles.js";
 export * from "./fast-world-weapons.js";
 export * from "./fast-world-regions.js";
 export * from "./fast-world-navigation.js";
@@ -2033,6 +2034,7 @@ export interface ProjectileResolved {
 }
 
 export interface MobProjectileReleased {
+  coreRadius?: number;
   kind?: "rock" | "acid" | "crystal" | "vine";
   releasedAt?: number;
   projectileId: string;

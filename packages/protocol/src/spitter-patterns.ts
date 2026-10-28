@@ -1,3 +1,4 @@
+import { mobProjectileWarningLane, mobVolleyOffsets } from "./enemy-projectiles.js";
 export const SPITTER_PATTERN = { range: 10, travelMs: 1250, fanOffsets: [-30, -12, 12, 30], laneHalfWidth: .42 } as const;
 export const CRYSTAL_BURST_OFFSETS = [-120, -60, 0, 60, 120, 180] as const;
 export const VENOM_RING_OFFSETS = [-157.5, -112.5, -67.5, -22.5, 22.5, 67.5, 112.5, 157.5] as const;
@@ -20,13 +21,10 @@ export function spitterShotEndpoints(start: { x: number; y: number; z: number },
   });
 }
 /** Independent warning strips, leaving the same open gaps as the actual volley. */
-export function spitterWarningLanes(yaw: number, pattern: string, lengths?: readonly number[]) {
-  return spitterShotOffsets(pattern).map((offset, index) => {
-    const angle = (yaw + offset) * Math.PI / 180;
-    const dx = Math.sin(angle), dz = Math.cos(angle), w = SPITTER_PATTERN.laneHalfWidth;
+export function spitterWarningLanes(yaw: number, pattern: string, lengths?: readonly number[], fastWorld = false) {
+  return mobVolleyOffsets(spitterShotOffsets(pattern), SPITTER_PATTERN.range, fastWorld).map((offset, index) => {
     const length = Math.max(0, Math.min(SPITTER_PATTERN.range, lengths?.[index] ?? SPITTER_PATTERN.range));
-    return [{ x: dz * w, z: -dx * w }, { x: -dz * w, z: dx * w },
-      { x: dx * length - dz * w, z: dz * length + dx * w }, { x: dx * length + dz * w, z: dz * length - dx * w }];
+    return mobProjectileWarningLane(yaw + offset, length, SPITTER_PATTERN.laneHalfWidth, fastWorld);
   });
 }
 export function matriarchWarningLanes(yaw: number, sequence: number, firstLengths?: readonly number[], secondLengths?: readonly number[]) {

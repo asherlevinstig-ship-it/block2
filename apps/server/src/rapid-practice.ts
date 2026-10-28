@@ -1,4 +1,4 @@
-import { fastWorldGroundHeight } from "@blockcraft/protocol";
+import { fastWorldGroundHeight, fastWorldProjectileFan } from "@blockcraft/protocol";
 import type { MobArchetypeId } from "./mob-archetypes.js";
 import type { FastWorldRegionId, MainHandId } from "@blockcraft/protocol";
 import { FAST_WORLD_REGION_DEFINITIONS, fastWorldAshenLavaAt, fastWorldEruptingHeatVentAt,
@@ -168,17 +168,5 @@ export function rapidPracticeProjectileFan<T extends { x: number; y: number; z: 
   shots: readonly T[],
   enabled: boolean,
 ): T[] {
-  if (!enabled) return [...shots];
-  return shots.flatMap(shot => {
-    const dx = shot.x - origin.x;
-    const dz = shot.z - origin.z;
-    const length = Math.max(.001, Math.hypot(dx, dz));
-    const sideX = -dz / length * .72;
-    const sideZ = dx / length * .72;
-    return [
-      { ...shot, x: shot.x + sideX, z: shot.z + sideZ },
-      shot,
-      { ...shot, x: shot.x - sideX, z: shot.z - sideZ },
-    ];
-  });
+  return fastWorldProjectileFan(origin, shots, enabled);
 }

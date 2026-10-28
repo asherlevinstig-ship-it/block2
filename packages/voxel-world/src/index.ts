@@ -1604,6 +1604,41 @@ export function resolveSweptHorizontalMotion(
   };
 }
 
+/** Sweep an axis-aligned projectile core, so its visible edge also hits cover. */
+export function projectileTerrainImpact(start: VoxelPoint, end: VoxelPoint, radius: number, read: WorldBlockReader):
+  { fraction: number; point: VoxelPoint } | null {
+  const delta = { x: end.x - start.x, y: end.y - start.y, z: end.z - start.z };
+  const length = Math.hypot(delta.x, delta.y, delta.z);
+  let nearest = Infinity;
+  // Continuous terrain is not represented by voxel blocks. Sample the bottom
+  // and perimeter of the core against the movement terrain reader.
+  if (radius <= 0 || read.groundHeight) {
+    for (const ox of radius > 0 ? [-radius, 0, radius] : [0]) for (const oz of radius > 0 ? [-radius, 0, radius] : [0]) {
+      const hit = voxelRaycast({ x: start.x + ox, y: start.y - radius, z: start.z + oz }, delta, length, read);
+      if (hit && length > 0) nearest = Math.min(nearest, hit.distance / length);
+    }
+  }
+  if (radius > 0) for (let x = Math.floor(Math.min(start.x, end.x) - radius); x <= Math.floor(Math.max(start.x, end.x) + radius); x++)
+    for (let y = Math.floor(Math.min(start.y, end.y) - radius); y <= Math.floor(Math.max(start.y, end.y) + radius); y++)
+      for (let z = Math.floor(Math.min(start.z, end.z) - radius); z <= Math.floor(Math.max(start.z, end.z) + radius); z++) {
+        if (read(x, y, z) === Block.Air) continue;
+        let near = 0, far = 1;
+        for (const axis of ["x", "y", "z"] as const) {
+          const cell = axis === "x" ? x : axis === "y" ? y : z;
+          const low = cell - radius, high = cell + 1 + radius;
+          if (Math.abs(delta[axis]) < .000001) {
+            if (start[axis] < low || start[axis] > high) { far = -1; break; }
+          } else {
+            const a = (low - start[axis]) / delta[axis], b = (high - start[axis]) / delta[axis];
+            near = Math.max(near, Math.min(a, b)); far = Math.min(far, Math.max(a, b));
+          }
+        }
+        if (near <= far && far >= 0 && near <= 1) nearest = Math.min(nearest, near);
+      }
+  return Number.isFinite(nearest) ? { fraction: nearest,
+    point: { x: start.x + delta.x * nearest, y: start.y + delta.y * nearest, z: start.z + delta.z * nearest } } : null;
+}
+
 export function voxelRaycast(
   origin: VoxelPoint,
   direction: VoxelPoint,

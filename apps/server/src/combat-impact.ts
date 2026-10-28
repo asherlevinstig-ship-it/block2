@@ -1,4 +1,4 @@
-import { voxelRaycast, type WorldBlockReader } from "@blockcraft/voxel-world";
+import { voxelRaycast, projectileTerrainImpact, type WorldBlockReader } from "@blockcraft/voxel-world";
 import type { Position } from "./action-rules.js";
 import { sampleMeleeStrike, attackBodyIntersection, type AttackBodyTarget, type MeleeStrikeProfile, type MainHandId } from "@blockcraft/protocol";
 
@@ -7,7 +7,7 @@ export function meleeSweepImpact(origin: Position, yaw: number, profile: MeleeSt
   from: number, to: number, targets: readonly ProjectileTarget[], read: WorldBlockReader, elevation?: number): string | null {
   const visible = targets.filter(target => hasCombatLineOfSight(origin, target, read))
     .map(target => ({ ...target, radius: (target.radius ?? 0.38) + profile.radius,
-      bodyPadding: (target.bodyPadding ?? 0) + profile.radius }));
+      bodyPadding: target.body ? (target.bodyPadding ?? 0) + profile.radius : target.bodyPadding }));
   const steps = Math.max(1, Math.ceil(Math.abs(to - from) * 32));
   for (let i = 0; i <= steps; i++) {
     const blade = sampleMeleeStrike(origin, yaw, profile, from + (to - from) * i / steps);
@@ -53,12 +53,13 @@ export function hasCombatLineOfSight(origin: Position, target: Position, read: W
 
 export interface ProjectileTarget extends AttackBodyTarget { id: string; radius?: number }
 /** Swept segment vs body AABB: a fast projectile cannot skip a target between ticks. */
-export function projectileImpact(start: Position, end: Position, targets: readonly ProjectileTarget[], read: WorldBlockReader):
+export function projectileImpact(start: Position, end: Position, targets: readonly ProjectileTarget[], read: WorldBlockReader, coreRadius = 0):
   { kind: "terrain" | "entity"; point: Position; targetId?: string; fraction: number } | null {
-  const terrain = terrainImpact(start, end, read);
+  const terrain = coreRadius > 0 ? projectileTerrainImpact(start, end, coreRadius, read) : terrainImpact(start, end, read);
   let result: ReturnType<typeof projectileImpact> = terrain ? { kind: "terrain", ...terrain } : null;
   for (const target of targets) {
-    const near = attackBodyIntersection(start, end, target, target.radius);
+    const near = attackBodyIntersection(start, end, coreRadius > 0
+      ? { ...target, bodyPadding: (target.bodyPadding ?? 0) + coreRadius } : target, target.radius);
     if (near === null || (result && near >= result.fraction)) continue;
     result = { kind: "entity", targetId: target.id, fraction: near, point: flightPoint(start, end, near) };
   }

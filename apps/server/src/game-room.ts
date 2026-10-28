@@ -1,5 +1,5 @@
 import { Client, Room } from "@colyseus/core";
-import { aimedWeaponFlight, mobAttackBody } from "@blockcraft/protocol";
+import { aimedWeaponFlight, mobAttackBody, ENEMY_PROJECTILE_RADIUS } from "@blockcraft/protocol";
 import { GREENWOOD_MASTERY_CAP, MISTFEN_MASTERY_CAP, greenwoodMasteryRank, mistfenMasteryRank } from "@blockcraft/protocol";
 import { callingStarterAbility } from "@blockcraft/protocol";
 import { experienceToNextLevel } from "@blockcraft/protocol";
@@ -419,6 +419,7 @@ interface PendingPower {
 }
 
 interface PendingMobProjectile {
+  coreRadius?: number;
   hazardRadius?: number;
   hazardDurationMs?: number;
   projectileId: string;
@@ -8203,13 +8204,15 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   }
 
   private releaseMobVolley(mobId: string, mob: MobState, origin: { x: number; y: number; z: number }, shots: { x: number; y: number; z: number }[], now: number, travelMs: number, damage: number, hazardRadius: number, hazardDurationMs: number): void {
-    for (const aim of shots) {
+    for (const aim of rapidPracticeProjectileFan(origin, shots, this.rapidPractice)) {
       const projectileId = `${mobId}:${++this.mobProjectileSequence}`;
       const start = { x: origin.x, y: origin.y + 1.05, z: origin.z };
       const end = { x: aim.x, y: aim.y + .08, z: aim.z };
       this.pendingMobProjectiles.set(projectileId, { projectileId, mobId, archetype: mob.archetype, damage, hazardRadius, hazardDurationMs,
-        start, end, position: start, startedAt: now, impactAt: now + travelMs });
-      this.broadcastToInterest("combat:mob-projectile", { projectileId, mobId, kind: isThornbinder(mob.archetype) ? "vine" : mobId === CRYSTAL_MATRIARCH_ID || mobId === ASHGLASS_ORACLE_ID || mob.archetype === "shard_sentry" ? "crystal" : mob.archetype === "stone_brute" ? "rock" : "acid", ...origin, targetX: aim.x, targetY: aim.y, targetZ: aim.z, travelMs, releasedAt: now } satisfies MobProjectileReleased, origin);
+        start, end, position: start, startedAt: now, impactAt: now + travelMs,
+        coreRadius: this.rapidPractice ? ENEMY_PROJECTILE_RADIUS : 0 });
+      this.broadcastToInterest("combat:mob-projectile", { projectileId, mobId, kind: isThornbinder(mob.archetype) ? "vine" : mobId === CRYSTAL_MATRIARCH_ID || mobId === ASHGLASS_ORACLE_ID || mob.archetype === "shard_sentry" ? "crystal" : mob.archetype === "stone_brute" ? "rock" : "acid", ...origin, targetX: aim.x, targetY: aim.y, targetZ: aim.z, travelMs, releasedAt: now,
+        coreRadius: this.rapidPractice ? ENEMY_PROJECTILE_RADIUS : undefined } satisfies MobProjectileReleased, origin);
     }
   }
 
@@ -8267,7 +8270,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       for (const [id, decoy] of this.thiefDecoys)
         if (now < decoy.until && decoy.health > 0 && caveEncounterAllows(projectile.mobId, decoy))
           targets.push({ id, x: decoy.x, y: decoy.y, z: decoy.z });
-      const collision = projectileImpact(projectile.position, next, targets, this.readWorldBlock);
+      const collision = projectileImpact(projectile.position, next, targets, this.readWorldBlock, projectile.coreRadius);
       projectile.position = next;
       if (!collision && progress < 1) continue;
       this.pendingMobProjectiles.delete(projectileId);
@@ -9207,7 +9210,6 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
             shots = spitterRingWithSafeGap(shots, aliveAttendants, TOWER_FLOOR_ONE_SOUTH_ATTENDANTS.length);
           }
           const origin = { x: mob.x, y: mob.y, z: mob.z };
-          shots = rapidPracticeProjectileFan(origin, shots, this.rapidPractice);
           const championVenom = huntChampion?.pathId === "venom" ? huntChampionVenomHazard(mob.attackPattern) : null;
           const venomPools = mobId === GREENWOOD_MATRIARCH_ID && (mob.attackPattern === "double-fan" || mob.attackPattern === "venom-ring");
           const mistfenEruption = (mobId === "mistfen-behemoth" || mobId === MISTFEN_EVENT_ID)

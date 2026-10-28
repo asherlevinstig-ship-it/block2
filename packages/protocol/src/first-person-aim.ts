@@ -34,8 +34,9 @@ export function attackBodyIntersection(start: Point, end: Point, target: AttackB
     }
     return nearest;
   }
-  return segmentBox(start, end, { x: target.x - radius, y: target.y + .05, z: target.z - radius },
-    { x: target.x + radius, y: target.y + 1.4, z: target.z + radius });
+  const padding = target.bodyPadding ?? 0;
+  return segmentBox(start, end, { x: target.x - radius - padding, y: target.y + .05 - padding, z: target.z - radius - padding },
+    { x: target.x + radius + padding, y: target.y + 1.4 + padding, z: target.z + radius + padding });
 }
 
 function segmentBox(start: Point, end: Point, min: Point, max: Point): number | null {

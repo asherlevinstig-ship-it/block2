@@ -22,7 +22,7 @@ import { confirmedRangedHit, projectileImpactCue } from "./ranged-feedback.js";
 import { heldFireStep } from "./held-fire.js";
 import { continuousAttackEnabled, rapidCombatAnimationElapsed, rapidCombatDuration, rapidCombatImpact } from "./rapid-combat.js";
 import { AttackBuffer, attackReadiness, attackOutcomeAllowed, type AttackOutcome } from "./attack-buffer.js";
-import { effectiveWeaponRange, weaponFiresProjectile, aimedWeaponFlight, attackBodyIntersection, mobAttackBody, mobBodyScale } from "@blockcraft/protocol";
+import { effectiveWeaponRange, weaponFiresProjectile, aimedWeaponFlight, attackBodyIntersection, mobAttackBody, mobBodyScale, mobVolleyOffsets } from "@blockcraft/protocol";
 import { AttackPredictionJournal } from "./attack-prediction.js";
 import type { WeaponAttackState } from "@blockcraft/protocol";
 import { callingLevelGuide, statChoiceDisabled } from "./progression-guidance.js";
@@ -413,6 +413,7 @@ import {
   resolvePlayerMotion,
   resolveSweptHorizontalMotion,
   voxelRaycast,
+  projectileTerrainImpact,
   worldToChunk,
   type BlockId,
   type VoxelRaycastHit,
@@ -7867,6 +7868,7 @@ interface BrambleSnareVisual {
 }
 
 interface WeaponProjectileVisual {
+  coreRadius?: number;
   projectileId: string;
   enemy?: boolean;
   sampled?: boolean;
@@ -9158,6 +9160,7 @@ function createWeaponProjectile(message: WeaponAttackReleased): void {
   });
 }
 
+let enemyProjectileRimMaterial: pc.StandardMaterial | null = null;
 function createMobProjectile(message: MobProjectileReleased): void {
   const flight = projectilePresentation(message.releasedAt, serverClock.offset, performance.now(), message.travelMs);
   if (flight.expired) return;
@@ -9175,7 +9178,29 @@ function createMobProjectile(message: MobProjectileReleased): void {
   if (vine) entity.lookAt(end);
   entity.setPosition(start);
   app.root.addChild(entity);
+  if (message.coreRadius) {
+    // Keep the solid core axis-aligned, exactly like its swept collision box.
+    entity.setLocalScale(1, 1, 1); entity.setEulerAngles(0, 0, 0);
+    entity.removeComponent("render");
+    const diameter = message.coreRadius * 2;
+    material.useLighting = false; material.opacity = 1; material.blendType = pc.BLEND_NONE;
+    material.depthWrite = true; material.emissive = (rock ? new pc.Color(1, .74, .27)
+      : crystal ? new pc.Color(.87, .62, 1) : vine ? new pc.Color(.75, 1, .38) : new pc.Color(.85, 1, .25));
+    material.update();
+    addBox(entity, "hostile-solid-core", material, [diameter, diameter, diameter], [0, 0, 0]);
+    if (!enemyProjectileRimMaterial) {
+      enemyProjectileRimMaterial = coloredMaterial(new pc.Color(.035, .018, .035));
+      enemyProjectileRimMaterial.useLighting = false; enemyProjectileRimMaterial.cull = pc.CULLFACE_FRONT;
+      enemyProjectileRimMaterial.update();
+    }
+    addBox(entity, "hostile-contrast-rim", enemyProjectileRimMaterial, [diameter + .055, diameter + .055, diameter + .055], [0, 0, 0]);
+    const direction = end.clone().sub(start).normalize();
+    const tail = addBox(entity, "hostile-direction-trail", material, [.075, .075, .48],
+      [-direction.x * .35, -direction.y * .35, -direction.z * .35]);
+    tail.lookAt(tail.getPosition().clone().add(direction));
+  }
   weaponProjectileVisuals.push({
+    coreRadius: message.coreRadius,
     projectileId: message.projectileId,
     enemy: true,
     entity,
@@ -9710,16 +9735,16 @@ function updateStrikeWarningMesh(mesh: pc.Mesh, archetype: string, yaw: number, 
   shotOrigin: { x: number; y: number; z: number; name?: string; actionSequence?: number } = { x: 0, y: 0, z: 0 }, safeGap = false): void {
   const rockVolley = pattern === "rocks" || pattern === "falling-rocks" || pattern === "warden-barrage" || pattern === "fault-line";
   if (rockVolley || (archetype === "cave_spitter" || archetype === "shard_sentry" || archetype === "thornbinder") && pattern !== "pool") {
-    const offsets = rockVolley ? BRUTE_VOLLEY.offsets : spitterShotOffsets(pattern);
+    const offsets = rockVolley ? BRUTE_VOLLEY.offsets : mobVolleyOffsets(spitterShotOffsets(pattern), SPITTER_PATTERN.range, fastWorldRequested);
     const lengths = offsets.map(offset => enemyShotGuideLength({ x: shotOrigin.x, y: shotOrigin.y + 1.05, z: shotOrigin.z }, yaw + offset, readCollisionWorldBlock, rockVolley ? BRUTE_VOLLEY.range : SPITTER_PATTERN.range));
     const doubleVolley = pattern === "double-fan" || pattern === "teleport-burst" || pattern === "warden-barrage"
       || pattern === "cross-volley" || pattern === "fault-line";
     const secondYaw = matriarchSecondVolleyYaw(yaw, Math.max(0, (shotOrigin.actionSequence ?? 1) - 1));
     const secondLengths = doubleVolley ? offsets.map(offset => enemyShotGuideLength(
       { x: shotOrigin.x, y: shotOrigin.y + 1.05, z: shotOrigin.z }, secondYaw + offset, readCollisionWorldBlock, rockVolley ? BRUTE_VOLLEY.range : SPITTER_PATTERN.range)) : undefined;
-    let lanes = rockVolley ? [...bruteRockLanes(yaw, lengths), ...(doubleVolley ? bruteRockLanes(secondYaw, secondLengths) : [])]
-      : doubleVolley ? [...spitterWarningLanes(yaw, pattern, lengths), ...spitterWarningLanes(secondYaw, pattern, secondLengths)]
-      : spitterWarningLanes(yaw, pattern, lengths);
+    let lanes = rockVolley ? [...bruteRockLanes(yaw, lengths, fastWorldRequested), ...(doubleVolley ? bruteRockLanes(secondYaw, secondLengths, fastWorldRequested) : [])]
+      : doubleVolley ? [...spitterWarningLanes(yaw, pattern, lengths, fastWorldRequested), ...spitterWarningLanes(secondYaw, pattern, secondLengths, fastWorldRequested)]
+      : spitterWarningLanes(yaw, pattern, lengths, fastWorldRequested);
     if (safeGap && pattern === "venom-ring" && lanes.length >= 4) {
       const left = Math.floor(lanes.length / 2) - 1;
       lanes = lanes.filter((_lane, index) => index !== left && index !== left + 1);
@@ -18231,7 +18256,9 @@ app.on("update", (dt: number) => {
     const next = new pc.Vec3().lerp(projectile.start, projectile.end, progress);
     const from = projectile.entity.getPosition().clone();
     const direction = next.clone().sub(from);
-    const hit = direction.length() > 0.00001 ? voxelRaycast(from, direction, direction.length(), readCollisionWorldBlock) : null;
+    const coreHit = projectile.coreRadius ? projectileTerrainImpact(from, next, projectile.coreRadius, readCollisionWorldBlock) : null;
+    const hit = projectile.coreRadius ? coreHit ? { distance: coreHit.fraction * direction.length() } : null
+      : direction.length() > 0.00001 ? voxelRaycast(from, direction, direction.length(), readCollisionWorldBlock) : null;
     if (hit) next.copy(from).add(direction.normalize().mulScalar(hit.distance));
     projectile.entity.setPosition(next);
     if (projectile.rapidStyle === "crescent") {
