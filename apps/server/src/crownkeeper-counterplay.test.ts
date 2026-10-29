@@ -166,5 +166,17 @@ describe("Crownkeeper earned counter openings", () => {
     f.internal.useTowerPortal(f.client, "tower-floor-1-return");
     expect(f.player.x).toBe(RAPID_PRACTICE_ARENA.spawn.x); expect(f.internal.floorRunUpgrades.active("hero")).toBe(false);
     expect(crownkeeperFragments(f.player.huntLoadoutsJson)).toBe(1); expect(f.player.experience).toBe(xp); expect(f.player.coins).toBe(coins);
+    Object.assign(f.ally, RAPID_PRACTICE_ARENA.spawn);
+    f.internal.towerFloorWasOccupied = true;
+    f.internal.resetTowerFloorAfterDeparture(40_000);
+    f.internal.resetTowerFloorAfterDeparture(44_999);
+    expect(f.room.state.mobs.has(TOWER_FLOOR_ONE_BOSS_ID)).toBe(true);
+    f.internal.resetTowerFloorAfterDeparture(45_000);
+    expect(f.room.state.mobs.has(TOWER_FLOOR_ONE_BOSS_ID)).toBe(false);
+    expect(f.room.state.mobs.get(TOWER_FLOOR_ONE_NORTH_WARDEN_ID)?.alive).toBe(true);
+    expect(f.room.state.mobs.get(TOWER_FLOOR_ONE_SOUTH_WARDEN_ID)?.alive).toBe(true);
+    expect([...f.room.state.lootDrops.values()].some(drop =>
+      drop.x >= TOWER_FLOOR_ONE.bounds.minX && drop.x <= TOWER_FLOOR_ONE.bounds.maxX
+      && drop.z >= TOWER_FLOOR_ONE.bounds.minZ && drop.z <= TOWER_FLOOR_ONE.bounds.maxZ)).toBe(false);
   });
 });

@@ -2907,7 +2907,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   }
 
   /** Floor populations remain cleared for the whole active party attempt. The
-   * shared floor resets only after every player has left for ten seconds. */
+   * public floor resets completely after every player has left for five seconds. */
   private resetTowerFloorAfterDeparture(now: number): void {
     if (!this.rapidPractice || !FAST_WORLD_TOWN_ONLY) return;
     const occupied = [...this.state.players.values()].some(player => isInsideTowerFloorOne(player.x, player.z));
@@ -2918,19 +2918,35 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
     if (!this.towerFloorWasOccupied) return;
     if (!this.towerFloorEmptySince) this.towerFloorEmptySince = now;
-    if (now - this.towerFloorEmptySince < 10_000) return;
+    if (now - this.towerFloorEmptySince < 5_000) return;
     this.towerFloorWasOccupied = false;
     this.towerFloorEmptySince = 0;
-    const boss = this.state.mobs.get(TOWER_FLOOR_ONE_BOSS_ID);
-    if (boss) {
-      this.state.mobs.delete(TOWER_FLOOR_ONE_BOSS_ID);
-      this.mobHomes.delete(TOWER_FLOOR_ONE_BOSS_ID);
-      this.mobNavigation.delete(TOWER_FLOOR_ONE_BOSS_ID);
-      this.combatContributions.clear(TOWER_FLOOR_ONE_BOSS_ID);
+    const floorMobIds = new Set(TOWER_FLOOR_ONE_SPAWNS.map(spawn => spawn.id));
+    for (const mobId of floorMobIds) {
+      const mob = this.state.mobs.get(mobId);
+      if (mob) this.clearMobAttackTimeline(mob);
+      this.state.mobs.delete(mobId); this.mobHomes.delete(mobId); this.mobNavigation.delete(mobId);
+      this.pendingMobMelee.delete(mobId); this.mobAwareness.delete(mobId); this.combatContributions.clear(mobId);
+      this.mobPatrols.delete(mobId); this.mobProgress.delete(mobId); this.mobUnreachableUntil.delete(mobId);
+      this.mobReturning.delete(mobId); this.mobVerticalVelocities.delete(mobId); this.lastMobAttackAt.delete(mobId);
+      this.mobCommittedAim.delete(mobId); this.mobStaggerImmuneUntil.delete(mobId); this.mobAssistAt.delete(mobId);
+      this.crawlerPositioning.delete(mobId); this.crawlerRushes.delete(mobId); this.spitterPositioning.delete(mobId);
+      this.areaLeaderPhases.delete(mobId); this.miniBossEngagedAt.delete(mobId);
+      this.miniBossOrbitPressure.delete(mobId); this.championCharges.delete(mobId);
+      this.bruteLeaderArmourBonus.delete(mobId);
     }
+    for (const [projectileId, projectile] of this.pendingMobProjectiles) if (floorMobIds.has(projectile.mobId)) {
+      this.pendingMobProjectiles.delete(projectileId);
+      this.resolveProjectileVisual(projectileId, projectile.position, "miss");
+    }
+    for (const [hazardId, hazard] of this.mobHazards) if (floorMobIds.has(hazard.mobId)) this.mobHazards.delete(hazardId);
+    for (const [dropId, drop] of this.state.lootDrops)
+      if (isInsideTowerFloorOne(drop.x, drop.z)) this.state.lootDrops.delete(dropId);
+    this.crownkeeperOpeningUntil = 0;
+    this.crownkeeperDisengagedAt.delete(TOWER_FLOOR_ONE_BOSS_ID);
     for (const spawn of TOWER_FLOOR_ONE_SPAWNS) {
       if (spawn.floorBoss) continue;
-      if (!this.state.mobs.has(spawn.id)) this.registerMob(spawn.id, spawn.archetype, spawn);
+      this.registerMob(spawn.id, spawn.archetype, spawn);
       const mob = this.state.mobs.get(spawn.id)!;
       this.configureRapidWorldMob(spawn.id, mob);
       mob.x = spawn.x; mob.y = spawn.y; mob.z = spawn.z;
@@ -2939,6 +2955,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.clearMobAttackTimeline(mob);
       this.pendingMobMelee.delete(spawn.id); this.mobAwareness.delete(spawn.id);
       this.combatContributions.clear(spawn.id);
+    }
+    for (const client of this.clients) {
+      const player = this.state.players.get(client.sessionId);
+      if (!player || isInsideTowerFloorOne(player.x, player.z)) continue;
+      this.clearFloorRunUpgrades(client.sessionId);
+      this.floorRunTimings.delete(client.sessionId);
+      this.sendFloorRunUpgrades(client, true);
     }
     this.refreshNearbyObjectives();
   }
