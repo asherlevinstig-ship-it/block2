@@ -143,6 +143,7 @@ import { populateTownAssetKit, readyTownFallbacks, SPEED_LAB_TOWN_ASSETS, type T
 import { createTownPortalLandmarks } from "./town-portal-landmarks.js";
 import { createTowerFloorOneWorld, updateTowerFloorOneProgress } from "./tower-floor-one-world-v2.js";
 import { crownGateStatus } from "./crown-gate.js";
+import { createFloorOneRunUI, type FloorOneBossState } from "./floor-one-run-flow.js";
 import { createInteractionFeedback, holdStopMessage, holdStopReason, type HoldStopReason } from "./interaction-feedback.js";
 import { requestTowerFloorOneFortressAssets } from "./tower-floor-one-asset-kit.js";
 import { towerFloorOneAtmosphere } from "./tower-floor-one-atmosphere.js";
@@ -1365,6 +1366,7 @@ const floorRunUpgradeUI = createFloorRunUpgradeUI({
   send: (offerId, upgradeId) => room?.send("floor:upgrades:choose", { offerId, upgradeId }),
   changed: (state, open) => setFloorRunKit(state, open),
 });
+const floorOneRunUI = createFloorOneRunUI();
 if (!combatHudRoot) throw new Error("Combat HUD root is missing");
 combatHud.mount(combatHudRoot);
 const buildPathProc = document.querySelector<HTMLElement>("#build-path-proc")!;
@@ -17157,9 +17159,15 @@ app.on("update", (dt: number) => {
   if (fastWorldRequested) {
     const townTime = customUpdateStartedAt * .001;
     const playerPosition = localPlayer.getPosition();
-    if (towerFloorOneWorld && isInsideTowerFloorOne(playerPosition.x, playerPosition.z)) {
+    const floorOneActive = Boolean(towerFloorOneWorld && isInsideTowerFloorOne(playerPosition.x, playerPosition.z));
+    if (floorOneActive && towerFloorOneWorld) {
       const northAlive = mobVisuals.get(TOWER_FLOOR_ONE_WARDENS[0])?.state.alive !== false;
       const southAlive = mobVisuals.get(TOWER_FLOOR_ONE_WARDENS[1])?.state.alive !== false;
+      const crownkeeper = mobVisuals.get(TOWER_FLOOR_ONE_BOSS_ID)?.state;
+      const bossState: FloorOneBossState = crownkeeper
+        ? crownkeeper.alive ? "alive" : "defeated"
+        : northAlive || southAlive ? "sealed" : "awakening";
+      floorOneRunUI.update({ active: true, x: playerPosition.x, z: playerPosition.z, northAlive, southAlive, bossState });
       updateTowerFloorOneProgress(towerFloorOneWorld, northAlive, southAlive, dt);
       const gate = crownGateStatus(northAlive, southAlive);
       if (gate.remaining !== previousCrownGateRemaining) {
@@ -17182,7 +17190,8 @@ app.on("update", (dt: number) => {
         }
       }
       if (playerPosition.x >= 340) void requestTowerFloorOneFortressAssets(app, towerFloorOneWorld);
-    }
+    } else floorOneRunUI.update({ active: false, x: playerPosition.x, z: playerPosition.z,
+      northAlive: true, southAlive: true, bossState: "sealed" });
     const coastWaterStartedAt = performance.now();
     animateCoastWater(dt, playerPosition.z > 140 && playerPosition.z < 200
       && playerPosition.x > 30 && playerPosition.x < 112);
