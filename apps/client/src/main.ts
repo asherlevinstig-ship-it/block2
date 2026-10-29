@@ -40,6 +40,7 @@ import { tabletContextAction } from "./tablet-context-action.js";
 import { tabletDragAimYaw, tabletSoftTarget } from "./tablet-combat-aim.js";
 import { callingAimReleaseCancels, callingTouchAimProfile, type CallingTouchAimProfile } from "./calling-touch-aim.js";
 import { ExclusivePopupQueue, gameplayBlockedByPopup, popupFocusIndex, popupIsPresented } from "./popup-queue.js";
+import { createPopupInputGuard, popupInputBlocked, type PopupInputGuard } from "./popup-input-guard.js";
 import { normalizedMovementCode, shouldCaptureMovementKey } from "./keyboard-movement.js";
 import { COORDINATED_BRUTE_FOLLOWERS, COORDINATED_SPITTER_FOLLOWERS, activeCombatNearby, advanceBossHud, floorBossPhaseLabel, initialBossHud, leaderArmourSegments, leaderChargeGuidance, leaderExposureLabel, leaderExposureRoleLabel, leaderFormationLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
 import { formationLanePoints, formationMarkerPoints, formationRingPoints, formationTargetStyle, formationVfxStyle,
@@ -1293,39 +1294,11 @@ const pendingLevelCelebrations: PendingLevelCelebration[] = [];
 let activeLevelCelebration: PendingLevelCelebration | null = null;
 let levelCelebrationRemainingMs = 0;
 let levelCelebrationLastTick: number | null = null;
-const LEVEL_UP_INPUT_GUARD_MS = 900;
-let levelUpInputReadyAt = 0;
-let levelUpInputGuardTimer = 0;
+const CHOICE_POPUP_INPUT_GUARD_MS = 900;
 let levelCelebrationInputGuardTimer = 0;
-let levelUpIntentPointerId: number | null = null;
 function openLevelUpPanel(): void {
-  levelUpInputReadyAt = performance.now() + LEVEL_UP_INPUT_GUARD_MS;
-  levelUpIntentPointerId = null;
-  levelUpPanel.dataset.inputReady = "false";
-  window.clearTimeout(levelUpInputGuardTimer);
-  levelUpInputGuardTimer = window.setTimeout(() => {
-    levelUpPanel.dataset.inputReady = "true";
-  }, LEVEL_UP_INPUT_GUARD_MS);
   levelUpPanel.hidden = false;
 }
-function blockEarlyLevelUpInput(event: Event): void {
-  const early = performance.now() < levelUpInputReadyAt;
-  if (event.type === "pointerdown" && event instanceof PointerEvent && !early) {
-    levelUpIntentPointerId = event.pointerId;
-    return;
-  }
-  if (event.type === "pointercancel") levelUpIntentPointerId = null;
-  const clickWithoutFreshPress = event.type === "click" && event instanceof MouseEvent
-    && event.detail > 0 && levelUpIntentPointerId === null;
-  if (!early && !clickWithoutFreshPress) {
-    if (event.type === "click") levelUpIntentPointerId = null;
-    return;
-  }
-  event.preventDefault();
-  event.stopImmediatePropagation();
-}
-for (const type of ["pointerdown", "pointerup", "pointercancel", "click"])
-  levelUpPanel.addEventListener(type, blockEarlyLevelUpInput, { capture: true });
 levelCelebrationChoose.addEventListener("click", () => {
   levelCelebration.hidden = true;
   activeLevelCelebration = null;
@@ -3943,6 +3916,9 @@ if (fastWorldRequested) {
 
   rapidPracticeRewardPanel = document.createElement("section");
   rapidPracticeRewardPanel.id = "rapid-practice-reward";
+  rapidPracticeRewardPanel.setAttribute("role", "dialog");
+  rapidPracticeRewardPanel.setAttribute("aria-modal", "true");
+  rapidPracticeRewardPanel.setAttribute("aria-label", "Choose a wave reward");
   rapidPracticeRewardPanel.hidden = true;
   rapidPracticeRewardPanel.innerHTML = "<div class=\"rapid-reward-shell\"><small>WAVE REWARD</small><h2></h2><p></p><div class=\"rapid-reward-choices\"></div><footer>One click Â· no inventory Â· next wave starts immediately</footer></div>";
   rapidPracticeRewardPanel.style.cssText = "position:fixed;inset:0;z-index:90;place-items:center;background:radial-gradient(circle,rgba(11,29,22,.2),rgba(2,7,6,.78));font-family:system-ui;color:#ecfff1";
@@ -7119,7 +7095,7 @@ function updateLevelCelebration(now: number): void {
     window.clearTimeout(levelCelebrationInputGuardTimer);
     levelCelebrationInputGuardTimer = window.setTimeout(() => {
       if (activeLevelCelebration === celebration) levelCelebrationChoose.disabled = false;
-    }, LEVEL_UP_INPUT_GUARD_MS);
+    }, CHOICE_POPUP_INPUT_GUARD_MS);
     levelCelebration.hidden = false;
     levelCelebrationRemainingMs = 5_500;
     combatAudio.play("levelUp");
@@ -14225,6 +14201,33 @@ const protectedDialogSelector = '[role="dialog"], [aria-modal="true"], #loot-pac
 const exclusivePopupSelector = '[role="dialog"]:not(#starter-inventory-tutorial), [aria-modal="true"]:not(#starter-inventory-tutorial), #loot-pack-decision, #combat-loadout-drawer, #depths-retry-prompt, #mode-switch-tutorial, #ability-practice, #minimap[data-expanded="true"]';
 const popupQueue = new ExclusivePopupQueue();
 const popupFocusOrigins = new Map<string, HTMLElement>();
+const popupInputGuards = new Map<string, PopupInputGuard>();
+function armPopupInputGuard(popup: HTMLElement): void {
+  const guard = createPopupInputGuard(performance.now(), CHOICE_POPUP_INPUT_GUARD_MS);
+  popupInputGuards.set(popup.id, guard);
+  popup.dataset.inputReady = "false";
+  window.setTimeout(() => {
+    if (popupInputGuards.get(popup.id) === guard) popup.dataset.inputReady = "true";
+  }, CHOICE_POPUP_INPUT_GUARD_MS);
+}
+function guardPopupInput(event: Event): void {
+  const target = event.target instanceof HTMLElement ? event.target : null;
+  const popup = target?.closest<HTMLElement>(exclusivePopupSelector);
+  if (!popup?.id) return;
+  const guard = popupInputGuards.get(popup.id);
+  if (!guard) return;
+  const blocked = popupInputBlocked(guard, {
+    type: event.type as "pointerdown" | "pointerup" | "pointercancel" | "click",
+    now: performance.now(),
+    ...(event instanceof PointerEvent ? { pointerId: event.pointerId } : {}),
+    ...(event instanceof MouseEvent ? { clickDetail: event.detail } : {}),
+  });
+  if (!blocked) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+}
+for (const type of ["pointerdown", "pointerup", "pointercancel", "click"])
+  document.addEventListener(type, guardPopupInput, { capture: true });
 let lastNonPopupFocus: HTMLElement = canvas;
 document.addEventListener("focusin", event => {
   const target = event.target instanceof HTMLElement ? event.target : null;
@@ -14276,6 +14279,7 @@ function showPopupFromQueue(id: string | null): void {
     showPopupFromQueue(popupQueue.close(id).show);
     return;
   }
+  armPopupInputGuard(popup);
   resetMovementControls();
   focusQueuedPopup(popup);
 }
@@ -14291,6 +14295,7 @@ function registerPopupOpen(popup: HTMLElement): void {
     if (hidden) hidePopupForQueue(hidden);
   }
   if (popupQueue.active() === popup.id) {
+    armPopupInputGuard(popup);
     resetMovementControls();
     focusQueuedPopup(popup);
   }

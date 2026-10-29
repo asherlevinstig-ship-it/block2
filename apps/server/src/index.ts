@@ -3,7 +3,7 @@ import { defineRoom, defineServer } from "@colyseus/core";
 import { PRACTICE_ROOM, SILVER_DEPTHS_ROOM, WORLD_ROOM } from "@blockcraft/protocol";
 import { WorldRoom } from "./game-room.js";
 
-const SERVER_BUILD = "level-up-input-guard-v296";
+const SERVER_BUILD = "choice-popup-input-guard-v297";
 
 const gameServer = defineServer({
   rooms: {

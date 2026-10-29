@@ -2631,6 +2631,9 @@ html.boss-hud-active #world-objective { display: none !important; }
 .level-up-card { width: min(540px, 100%); padding: 28px; border: 1px solid #e3b45d; border-radius: 18px; background: radial-gradient(circle at 50% 0, #57431f, #17201a 48%); box-shadow: 0 24px 90px #000b, 0 0 40px #e4b35424; text-align: center; color: #f5ead1; }
 #level-up-panel[data-input-ready="false"] .level-up-card::before { content: "COMBAT INPUT PAUSED · RELEASE ATTACK, THEN CHOOSE"; display: block; margin: -8px 0 14px; color: #ffdc85; font: 900 10px system-ui; letter-spacing: .09em; }
 #level-up-panel[data-input-ready="false"] button { opacity: .48; cursor: wait; }
+[role="dialog"][data-input-ready="false"] button, [aria-modal="true"][data-input-ready="false"] button { opacity: .48 !important; cursor: wait !important; }
+#floor-run-upgrade[data-input-ready="false"] .floor-upgrade-shell::before,
+#rapid-practice-reward[data-input-ready="false"] .rapid-reward-shell::before { content: "COMBAT INPUT PAUSED · RELEASE ATTACK, THEN CHOOSE"; display: block; margin: 0 0 12px; color: #ffdc85; font: 900 10px system-ui; letter-spacing: .09em; }
 .level-up-card > span { color: #f0c96f; font-size: .65rem; font-weight: 1000; letter-spacing: .16em; }
 .level-up-card h2 { margin: 7px 0; font: 700 2.2rem Georgia, serif; color: #fff0b8; }
 .level-up-card p { color: #c7d2c5; }
