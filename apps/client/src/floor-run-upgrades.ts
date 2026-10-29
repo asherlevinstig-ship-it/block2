@@ -1,5 +1,13 @@
 import { BUILD_PATHS, EMPTY_FLOOR_RUN_STATE, FLOOR_RUN_UPGRADES, type FloorRunUpgradeUpdate } from "@blockcraft/protocol";
 
+export function floorUpgradeTick(state: FloorRunUpgradeUpdate, panelOpen: boolean, canPresent: boolean) {
+  const validChoice = state.active && state.pending > 0 && state.canChoose && state.choices.length > 0;
+  return {
+    closePanel: panelOpen && !validChoice,
+    readyVisible: !panelOpen && validChoice && canPresent,
+  };
+}
+
 export function createFloorRunUpgradeUI(options: {
   send: (offerId: string, upgradeId: string) => void;
   changed: (state: FloorRunUpgradeUpdate, open: () => void) => void;
@@ -50,8 +58,11 @@ export function createFloorRunUpgradeUI(options: {
     tick(canPresent: boolean): void {
       // Warden rewards are banked in the Kit. Never open a choice over combat
       // or immediately after the killing blow; a deliberate HUD/Kit click opens it.
-      if (!canPresent && !panel.hidden) close();
-      ready.hidden = !state.active || state.pending <= 0 || !canPresent || !panel.hidden;
+      // Once deliberately opened, the modal itself becomes the active protected
+      // popup. Do not treat that as a reason to close it on the following frame.
+      const presentation = floorUpgradeTick(state, !panel.hidden, canPresent);
+      if (presentation.closePanel) close();
+      ready.hidden = !presentation.readyVisible;
     },
   };
 }
