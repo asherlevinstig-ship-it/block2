@@ -476,6 +476,7 @@ import { retryConnection } from "./connection-retry.js";
 import { connectionEndpointForAttempt } from "./connection-endpoint.js";
 import {
   alternateInteractionMode,
+  portalArrivalInteractionMode,
   primaryActionForMode,
   type InteractionMode,
 } from "./interaction-mode.js";
@@ -19095,6 +19096,11 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     const own = (room?.state as { players?: Map<string, NetworkPlayer> } | undefined)?.players?.get(room!.sessionId);
     pendingPortalDestination = own && portalArrivalSnapshot(spawn, own) ? null : spawn;
     worldReady = false; awaitingReturnState = false; townReturnPosition = spawn; cutawaySliceY = null;
+    // A same-room portal does not recreate the client, so the mode selected in
+    // town otherwise leaks into the dungeon. Reset the action route before the
+    // travel veil lifts so J/click immediately drives the equipped weapon.
+    if (fastWorldRequested && spawn.entering)
+      setInteractionMode(portalArrivalInteractionMode(interactionMode, spawn.entering));
     status.textContent = spawn.entering
       ? spawn.x >= TOWER_FLOOR_ONE.bounds.minX ? "Floor 1 entered · defeat both Root Wardens, then challenge the Crownkeeper."
         : isInEmberVault(spawn.x, spawn.z) ? "Ember Vault entered · breach the forge chambers and defeat the Colossus."
