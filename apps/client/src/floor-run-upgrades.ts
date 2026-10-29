@@ -5,15 +5,13 @@ export function createFloorRunUpgradeUI(options: {
   changed: (state: FloorRunUpgradeUpdate, open: () => void) => void;
 }) {
   let state: FloorRunUpgradeUpdate = { ...EMPTY_FLOOR_RUN_STATE, canChoose: false };
-  let lastAutoOffer = "", sending = false;
+  let sending = false;
   const panel = document.createElement("section"); panel.id = "floor-run-upgrade"; panel.hidden = true;
   panel.setAttribute("role", "dialog"); panel.setAttribute("aria-modal", "true");
   panel.setAttribute("aria-labelledby", "floor-run-upgrade-title");
   panel.innerHTML = '<div class="floor-upgrade-shell"><small>WARDEN REWARD · FLOOR 1</small><h2 id="floor-run-upgrade-title"></h2><p class="floor-upgrade-intro"></p><div class="floor-upgrade-choices"></div><p class="floor-upgrade-expiry">Lasts until death or leaving Floor 1. Your permanent progression is separate.</p><button type="button" aria-label="Close upgrade choices" class="floor-upgrade-later">CHOOSE LATER</button></div>';
-  const ready = document.createElement("button"); ready.type = "button"; ready.id = "floor-upgrade-ready"; ready.hidden = true;
-  const open = () => { if (!state.canChoose || !state.pending || !state.choices.length) return; panel.hidden = false; lastAutoOffer = state.offerId ?? ""; };
-  const close = () => { panel.hidden = true; lastAutoOffer = state.offerId ?? ""; };
-  ready.addEventListener("click", open);
+  const open = () => { if (!state.canChoose || !state.pending || !state.choices.length) return; panel.hidden = false; };
+  const close = () => { panel.hidden = true; };
   panel.querySelector(".floor-upgrade-later")!.addEventListener("click", close);
   panel.addEventListener("click", event => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-floor-upgrade]");
@@ -22,13 +20,9 @@ export function createFloorRunUpgradeUI(options: {
     panel.querySelectorAll<HTMLButtonElement>("button[data-floor-upgrade]").forEach(candidate => candidate.disabled = true);
     options.send(state.offerId, button.dataset.floorUpgrade!);
   });
-  document.body.append(panel, ready);
+  document.body.append(panel);
   function update(next: FloorRunUpgradeUpdate): void {
     state = next; sending = false;
-    ready.hidden = !state.active || state.pending <= 0;
-    ready.disabled = !state.canChoose || !state.choices.length;
-    ready.textContent = state.canChoose ? `WARDEN UPGRADE · CHOOSE ${state.pending > 1 ? "(" + state.pending + ")" : ""}`
-      : state.path ? "WARDEN UPGRADE BANKED · LEAVE COMBAT TO CHOOSE" : "WARDEN UPGRADE BANKED · CHOOSE A CALLING";
     panel.querySelector("h2")!.textContent = state.path ? `Shape your ${BUILD_PATHS[state.path].name}` : "Choose your Calling first";
     panel.querySelector(".floor-upgrade-intro")!.textContent = `Choose one effect for this attempt. ${state.picked.length}/2 upgrades chosen.`;
     const choices = panel.querySelector(".floor-upgrade-choices")!; choices.replaceChildren();
@@ -42,14 +36,14 @@ export function createFloorRunUpgradeUI(options: {
       button.append(branch, name, detail); choices.append(button);
     }
     if (!state.active || !state.pending || !state.canChoose) panel.hidden = true;
-    if (!state.active) lastAutoOffer = "";
     options.changed(state, open);
   }
   return {
     update, close,
     tick(canPresent: boolean): void {
-      ready.hidden = !state.active || state.pending <= 0 || !canPresent || !panel.hidden;
-      if (canPresent && state.canChoose && state.pending > 0 && state.offerId !== lastAutoOffer) open();
+      // Warden rewards are banked in the Kit. Never open a choice over combat
+      // or immediately after the killing blow; only the Kit button calls open().
+      if (!canPresent && !panel.hidden) close();
     },
   };
 }
