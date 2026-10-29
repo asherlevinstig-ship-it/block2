@@ -62,8 +62,9 @@ describe("enemy combat audio", () => {
   });
 
   it("gives gates, guardian phase changes, and victory distinct restrained cues", () => {
-    expect(Object.keys(DUNGEON_CUE_DEFINITIONS).sort()).toEqual(["depthsArena", "depthsEntrance", "depthsWing", "dungeonGate", "dungeonVictory", "guardianPhase"]);
+    expect(Object.keys(DUNGEON_CUE_DEFINITIONS).sort()).toEqual(["depthsArena", "depthsEntrance", "depthsWing", "dungeonGate", "dungeonVictory", "guardianPhase", "townVictoryBell"]);
     expect(DUNGEON_CUE_DEFINITIONS.dungeonVictory.tones).toHaveLength(3);
+    expect(DUNGEON_CUE_DEFINITIONS.townVictoryBell.tones.length).toBeGreaterThanOrEqual(3);
     expect(DUNGEON_CUE_DEFINITIONS.guardianPhase.tones[0]!.startHz).toBeLessThan(100);
     expect(Object.values(DUNGEON_CUE_DEFINITIONS).every(cue => cue.tones.every(tone => tone.gain <= .075))).toBe(true);
   });

@@ -59,8 +59,7 @@ const TOWN_BUILDINGS: readonly TownAssetPlacement[] = [
 ] as const;
 
 const TOWN_DECORATIONS: readonly TownAssetPlacement[] = [
-  // A calm, generous centre with a well, pavilion and seating instead of more buildings.
-  { id: "well", name: "founders-well", position: [67, 8.15, 106], yaw: 10, scale: 3.6 },
+  // The Tower Chronicle owns the centre; the pavilion and seating frame it.
   { id: "gazebo", name: "calling-pavilion", position: [57, 8.15, 106], yaw: 45, scale: 4 },
   { id: "bench", name: "square-bench-northwest", position: [62, 8.15, 98.5], yaw: 0, scale: 4 },
   { id: "bench", name: "square-bench-southwest", position: [62, 8.15, 113.5], yaw: 180, scale: 4 },

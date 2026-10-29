@@ -12,19 +12,27 @@ const reader: WorldBlockReader = Object.assign(
 
 describe("Town of Beginnings shared collision", () => {
   it("keeps the town walkable and the removed wilderness closed", () => {
-    expect(height(65, 106)).toBe(8);
-    expect(rapidPracticeCollisionCellSolid(65, 8, 106)).toBe(false);
+    expect(height(60, 100)).toBe(8);
+    expect(rapidPracticeCollisionCellSolid(60, 8, 100)).toBe(false);
     expect(rapidPracticeCollisionCellSolid(130, 8, 106)).toBe(true);
   });
 
   it("walks across the civic centre without changing horizontal speed", () => {
-    let pose = { x: 60, y: height(60, 106), z: 106, verticalVelocity: 0 };
+    // The Chronicle owns the exact centre; the broad northern promenade stays
+    // clear for uninterrupted group movement around it.
+    let pose = { x: 60, y: height(60, 100), z: 100, verticalVelocity: 0 };
     for (let i = 0; i < 200; i++) {
       const before = pose;
       pose = stepPlayerNetcode(pose, { strafe: 1, forward: 0 }, 5.8, 1 / 60, reader);
       expect(pose.x - before.x).toBeCloseTo(5.8 / 60, 8);
       expect(pose.y).toBeCloseTo(height(pose.x, pose.z), 8);
     }
+  });
+
+  it("makes the Tower Chronicle physical without sealing the plaza", () => {
+    expect(rapidPracticeCollisionCellSolid(67, height(67, 106), 106)).toBe(true);
+    expect(rapidPracticeCollisionCellSolid(67, height(67, 100), 100)).toBe(false);
+    expect(rapidPracticeCollisionCellSolid(73, height(73, 106), 106)).toBe(false);
   });
 
   it("walks the Founders and market ramps without snagging or desyncing", () => {

@@ -1,6 +1,7 @@
 import { Client, Room } from "@colyseus/core";
 import { aimedWeaponFlight, mobAttackBody, ENEMY_PROJECTILE_RADIUS } from "@blockcraft/protocol";
 import { CROWNKEEPER_FORGE } from "@blockcraft/protocol";
+import { parseTowerProgress, withTowerFloorCleared } from "@blockcraft/protocol";
 import { crownkeeperFragments, withCrownkeeperFragments } from "./crownkeeper-progress.js";
 import { FloorRunUpgrades } from "./floor-run-upgrades.js";
 import { FLOOR_RUN_UPGRADES } from "@blockcraft/protocol";
@@ -1177,6 +1178,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       }
       this.profileTokens.set(client.sessionId, profileToken);
       this.profileSaveFingerprints.set(client.sessionId, serializePlayerSave(player, 0));
+      const ownsCrownkeeperBlade = (player.inventory.get("crownkeeper_blade")?.quantity ?? 0) > 0;
+      if (crownkeeperFragments(player.huntLoadoutsJson) > 0 || ownsCrownkeeperBlade) {
+        // Migrate victories earned before the Tower Chronicle existed. This is
+        // deliberately applied after the fingerprint so the next save writes
+        // the explicit record without replaying the first-clear celebration.
+        player.huntLoadoutsJson = withTowerFloorCleared(player.huntLoadoutsJson, 1).json;
+      }
       player.isAdmin = await this.resolveAdminAccess(profileToken, requestedAdminPass);
     }
     const requestedQaSpawn = typeof options === "object" && options && "qaSpawn" in options ? String(options.qaSpawn) : "";
@@ -3740,8 +3748,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
             name: mobId === TOWER_FLOOR_ONE_NORTH_WARDEN_ID ? "North Warden Shrine" : "South Warden Shrine" });
         }
         if (mobId === TOWER_FLOOR_ONE_BOSS_ID) {
+          const towerClear = withTowerFloorCleared(player.huntLoadoutsJson, 1);
+          player.huntLoadoutsJson = towerClear.json;
           const fragments = Math.min(65535, crownkeeperFragments(player.huntLoadoutsJson) + 1);
           player.huntLoadoutsJson = withCrownkeeperFragments(player.huntLoadoutsJson, fragments);
+          recipientClient?.send("tower:floor-cleared", { floor: 1, firstClear: towerClear.firstClear,
+            highestFloorCleared: towerClear.progress.highestFloorCleared, bossName: "The Crownkeeper" });
           const timing = this.floorRunTimings.get(playerId);
           if (timing) {
             timing.bossAt = now;
@@ -6520,7 +6532,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       dust: this.attunementDust(player), offers: this.attunementOffers(player), targetAffixId: this.equipmentAffixTarget(player),
       mistfen, greenwood, northwatch: parseNorthwatchProgress(player.huntLoadoutsJson), roadsideClaims: [...parseRoadsideClaims(player.huntLoadoutsJson)],
       ashenBlueprints: ashenBlueprints(player.huntLoadoutsJson), ashenMastery: parseAshenMastery(player.huntLoadoutsJson),
-      leaderCollections: this.leaderCollectionState(player), crownkeeperFragments: crownkeeperFragments(player.huntLoadoutsJson) });
+      leaderCollections: this.leaderCollectionState(player), crownkeeperFragments: crownkeeperFragments(player.huntLoadoutsJson),
+      towerProgress: parseTowerProgress(player.huntLoadoutsJson) });
   }
 
   private equipmentAffixes(player: PlayerState): Partial<Record<ItemId, EquipmentAffixRoll>> {
@@ -6582,7 +6595,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       affixes, dust: Math.max(0, Math.min(65_535, Math.floor(dust))), offers, targetAffixId: this.equipmentAffixTarget(player),
       mistfen, greenwood, northwatch: parseNorthwatchProgress(player.huntLoadoutsJson), roadsideClaims: [...parseRoadsideClaims(player.huntLoadoutsJson)],
       ashenBlueprints: ashenBlueprints(player.huntLoadoutsJson), ashenMastery: parseAshenMastery(player.huntLoadoutsJson),
-      leaderCollections: this.leaderCollectionState(player), crownkeeperFragments: crownkeeperFragments(player.huntLoadoutsJson) });
+      leaderCollections: this.leaderCollectionState(player), crownkeeperFragments: crownkeeperFragments(player.huntLoadoutsJson),
+      towerProgress: parseTowerProgress(player.huntLoadoutsJson) });
   }
 
   private sendEquipmentAffixes(client: Client, message = "Equipment attunements strengthen matching Calling mechanics."): void {

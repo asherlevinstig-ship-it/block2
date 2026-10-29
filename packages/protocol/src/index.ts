@@ -4,6 +4,7 @@ export const FAST_WORLD_BLACKSMITH_POSITION = { x: 79, y: 8, z: 136 } as const;
 export * from "./floor-run-upgrades.js";
 export * from "./crownkeeper-combat.js";
 export * from "./floor-attempt-summary.js";
+export * from "./tower-progress.js";
 import { createFastWorldObstacleQuery } from "./fast-world-obstacles.js";
 import { TOWER_FLOOR_ONE, TOWER_FLOOR_ONE_FORTRESS_COLLIDERS, isInsideTowerFloorOne } from "./tower-floor-one.js";
 export * from "./fast-world-obstacles.js";
@@ -26,7 +27,7 @@ export { DODGE_STAMINA_COST, DODGE_CHAIN_COST_STEP, DODGE_MAX_STAMINA_COST, DODG
 // otherwise let a new client join a room still serving the old terrain.
 export const WORLD_ROOM = "world-warden-gate-v167";
 export const SILVER_DEPTHS_ROOM = "silver-depths-instance-v3";
-export const PRACTICE_ROOM = "calling-practice-v5";
+export const PRACTICE_ROOM = "calling-practice-v6";
 export type RoomTransfer = { room: typeof WORLD_ROOM | typeof SILVER_DEPTHS_ROOM | typeof PRACTICE_ROOM; instanceKey?: string; partySize?: number; returnFrom?: "silver-depths" | "practice"; retry?: boolean; partyTicket?: string; worldRoomId?: string };
 export interface ForestPortal { kind: string; x: number; y: number; z: number; expiresAt: number }
 export const FOREST_PORTAL_LIFETIME_MS = 120_000;
@@ -170,7 +171,13 @@ export const RAPID_PRACTICE_ARENA = {
 export const FAST_WORLD_TOWN_ONLY = true;
 export const FAST_WORLD_TOWN_BOUNDS = { minX: 39, maxX: 109, minZ: 65, maxZ: 147 } as const;
 
+const TOWER_CHRONICLE_TROPHY_COLLIDERS = Array.from({ length: 5 }, (_, index) => {
+  const angle = index / 5 * Math.PI * 2, x = 67 + Math.cos(angle) * 3.6, z = 106 + Math.sin(angle) * 3.6;
+  return { id: `tower-chronicle-floor-${index + 1}`, minX: x - .53, maxX: x + .53, minZ: z - .53, maxZ: z + .53 };
+});
 export const RAPID_PRACTICE_TOWN_COLLIDERS = [
+  { id: "tower-chronicle", minX: 63.85, maxX: 70.15, minZ: 102.85, maxZ: 109.15 },
+  ...TOWER_CHRONICLE_TROPHY_COLLIDERS,
   { id: "founders-hall", minX: 43, maxX: 50, minZ: 69, maxZ: 77 },
   { id: "wayfarer-inn", minX: 71, maxX: 78, minZ: 72, maxZ: 80 },
   { id: "beginnings-smithy", minX: 71, maxX: 78, minZ: 133, maxZ: 140 },

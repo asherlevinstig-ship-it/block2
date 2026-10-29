@@ -20,7 +20,8 @@ describe("town asset kit", () => {
     expect(Math.min(...SPEED_LAB_TOWN_ASSETS.map(asset => asset.position[0]))).toBeLessThan(77);
     expect(SPEED_LAB_TOWN_ASSETS.filter(asset => ["foundersBellTower", "wayfarerInn", "beginningsSmithy",
       "weaversHouse", "healersHouse", "wardensBarracks"].includes(asset.id))).toHaveLength(6);
-    expect(SPEED_LAB_TOWN_ASSETS.some(asset => asset.id === "well")).toBe(true);
+    // The Tower Chronicle now owns the central-plaza footprint formerly used by the well.
+    expect(SPEED_LAB_TOWN_ASSETS.some(asset => asset.id === "well")).toBe(false);
     expect(SPEED_LAB_TOWN_ASSETS.some(asset => asset.id === "gazebo")).toBe(true);
     expect(SPEED_LAB_TOWN_ASSETS.some(asset => asset.id === "marketStandA")).toBe(true);
     expect(SPEED_LAB_TOWN_ASSETS.filter(asset => asset.id === "hedge" || asset.id === "fence")).toHaveLength(10);

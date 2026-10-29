@@ -1,4 +1,10 @@
 .forest-portal-label { position: fixed; z-index: 25; transform: translate(-50%, -100%); min-width: 190px; padding: 8px 12px; border: 1px solid #81eeb0; border-radius: 8px; background: #101b23ed; color: #d7ffe6; font: 700 11px/1.4 ui-sans-serif, system-ui; letter-spacing: .06em; white-space: pre-line; text-align: center; cursor: pointer; box-shadow: 0 3px 12px #0006; }
+#tower-chronicle-label { position: fixed; z-index: 24; transform: translate(-50%,-100%); display: grid; gap: 3px; min-width: min(310px,72vw); padding: 11px 15px 12px; border: 1px solid #cfae5b; border-radius: 9px; background: linear-gradient(180deg,#18231fee,#080f0ded); color: #e8e1c8; text-align: center; pointer-events: none; box-shadow: 0 0 0 1px #f3d87522,0 8px 24px #000a,0 0 25px #4bc7dd22; font-family: ui-sans-serif,system-ui; }
+#tower-chronicle-label[hidden] { display: none; }
+#tower-chronicle-label small { color: #70d6cf; font-size: 10px; font-weight: 900; letter-spacing: .19em; }
+#tower-chronicle-label strong { color: #ffe49a; font-family: Georgia,serif; font-size: 18px; letter-spacing: .035em; text-shadow: 0 2px 8px #000; }
+#tower-chronicle-label span { font-size: 11px; font-weight: 700; color: #d7ddcf; }
+#tower-chronicle-label em { color: #9ca9a0; font-size: 9px; font-style: normal; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
 .forest-portal-label[data-tone="tower"] { color: #f3e7ff; border-color: #a96cff; background: linear-gradient(180deg,#211136f2,#0d0a16f5); box-shadow: 0 0 0 1px #a96cff33,0 4px 18px #000b,0 0 24px #7a28d833; }
 .forest-portal-label[data-tone="tower"]::first-line { color: #fff0a8; font-size: 13px; }
 .forest-portal-label.locked { filter: grayscale(.5); border-color: #81778b; color: #aaa2b0; }

@@ -1,6 +1,6 @@
 import { greenwoodAtmosphere } from "./greenwood-atmosphere.js";
 import { greenwoodEmergence, greenwoodMobStyle, type GreenwoodMobStyle } from "./greenwood-mob-style.js";
-import { FAST_WORLD_TOWN_BOUNDS, FAST_WORLD_TOWN_ONLY, TOWER_FLOOR_ONE, TOWER_FLOOR_ONE_SOUTH_ATTENDANTS, TOWER_FLOOR_ONE_WARDENS, fastWorldGroundHeight, isInsideTowerFloorOne } from "@blockcraft/protocol";
+import { FAST_WORLD_TOWN_BOUNDS, FAST_WORLD_TOWN_ONLY, TOWER_FLOOR_ONE, TOWER_FLOOR_ONE_SOUTH_ATTENDANTS, TOWER_FLOOR_ONE_WARDENS, fastWorldGroundHeight, isInsideTowerFloorOne, parseTowerProgress, type TowerProgress } from "@blockcraft/protocol";
 import { GREENWOOD_MAIN_TRAIL, GREENWOOD_CAMP_TRAIL, GREENWOOD_THICKETS, GREENWOOD_CLUSTER_PLANTS, GREENWOOD_VERGE_PLANTS, sampleWoodlandTrail } from "./greenwood-landscape.js";
 import * as pc from "playcanvas";
 import { facetedBoxMesh } from "./faceted-shapes.js";
@@ -1122,6 +1122,11 @@ let rapidPracticeRewardTitle: HTMLElement | null = null;
 let rapidPracticeRewardDetail: HTMLElement | null = null;
 let rapidPracticeRewardChoices: HTMLElement | null = null;
 const status = document.querySelector<HTMLElement>("#status")!;
+const towerChronicleLabel = document.createElement("aside");
+towerChronicleLabel.id = "tower-chronicle-label";
+towerChronicleLabel.hidden = true;
+towerChronicleLabel.innerHTML = '<small>TOWER CHRONICLE</small><strong>NO FLOOR CLEARED</strong><span>Defeat a floor boss to raise its trophy and banner.</span><em>5 victory spaces · 5 locked</em>';
+document.body.appendChild(towerChronicleLabel);
 if (initialGameExperience === "legacy-voxel") {
   const archiveNotice = document.createElement("aside");
   archiveNotice.id = "legacy-voxel-notice";
@@ -2262,6 +2267,51 @@ const rapidPrototypeRoot = new pc.Entity("rapid-2d-speed-lab");
 app.root.addChild(rapidPrototypeRoot);
 rapidPrototypeRoot.enabled = fastWorldRequested;
 let towerFloorOneWorld: pc.Entity | null = null;
+type TowerChronicleFloorVisual = { floor: number; victory: pc.Entity[]; locked: pc.Entity[] };
+const towerChronicleFloors: TowerChronicleFloorVisual[] = [];
+let towerChronicleBell: pc.Entity | null = null;
+let towerChronicleBeacon: pc.Entity | null = null;
+let towerChronicleProgress: TowerProgress = { highestFloorCleared: 0, clearedFloors: [] };
+let towerChronicleBellSwingUntil = 0;
+let towerChronicleCelebrationUntil = 0;
+let pendingTowerChronicleCelebration: { floor: number; bossName: string } | null = null;
+function renderTowerChronicleProgress(source: string): void {
+  towerChronicleProgress = parseTowerProgress(source);
+  for (const slot of towerChronicleFloors) {
+    const cleared = towerChronicleProgress.clearedFloors.includes(slot.floor);
+    slot.victory.forEach(entity => { entity.enabled = cleared; });
+    slot.locked.forEach(entity => { entity.enabled = !cleared; });
+  }
+  const locked = Math.max(0, 5 - towerChronicleProgress.clearedFloors.filter(floor => floor <= 5).length);
+  towerChronicleLabel.querySelector("strong")!.textContent = towerChronicleProgress.highestFloorCleared > 0
+    ? `HIGHEST FLOOR CLEARED · ${towerChronicleProgress.highestFloorCleared}` : "NO FLOOR CLEARED";
+  towerChronicleLabel.querySelector("span")!.textContent = towerChronicleProgress.highestFloorCleared > 0
+    ? `Floor 1 · Crownkeeper trophy ${towerChronicleProgress.clearedFloors.includes(1) ? "raised" : "locked"}`
+    : "Defeat a floor boss to raise its trophy and banner.";
+  towerChronicleLabel.querySelector("em")!.textContent = `5 victory spaces · ${locked} locked`;
+}
+
+function updateTowerChronicleLabel(): void {
+  if (!fastWorldRequested || !worldReady || !camera.camera) { towerChronicleLabel.hidden = true; return; }
+  const player = localPlayer.getPosition();
+  const distance = Math.hypot(player.x - 67, player.z - 106);
+  const screen = camera.camera.worldToScreen(new pc.Vec3(67, 15.2, 106));
+  const rect = canvas.getBoundingClientRect();
+  towerChronicleLabel.hidden = distance > 24 || screen.z <= 0 || screen.x < 0 || screen.x > rect.width || screen.y < 0 || screen.y > rect.height;
+  if (!towerChronicleLabel.hidden) {
+    towerChronicleLabel.style.left = `${rect.left + screen.x}px`;
+    towerChronicleLabel.style.top = `${rect.top + Math.max(120, screen.y)}px`;
+  }
+}
+function beginTowerChronicleTownCelebration(): void {
+  if (!pendingTowerChronicleCelebration) return;
+  const victory = pendingTowerChronicleCelebration;
+  pendingTowerChronicleCelebration = null;
+  towerChronicleBellSwingUntil = performance.now() + 4_200;
+  towerChronicleCelebrationUntil = performance.now() + 6_000;
+  combatAudio.play("townVictoryBell");
+  social.event(`TOWER CHRONICLE · Floor ${victory.floor} trophy raised for defeating ${victory.bossName}.`);
+}
 const townVisualInsideBounds = (x: number, z: number, inset = 0): boolean =>
   !FAST_WORLD_TOWN_ONLY || (x >= FAST_WORLD_TOWN_BOUNDS.minX + inset
     && x <= FAST_WORLD_TOWN_BOUNDS.maxX - inset
@@ -3042,9 +3092,75 @@ if (fastWorldRequested) {
   }
 
   // Founder Well water and a subtle rune ring give the civic square a focal
-  // point even when the imported well model is viewed from a high camera.
+  // point even when the imported well model is viewed from a high camera. The
+  // Tower Chronicle now rises from that ceremonial basin and changes as the
+  // player clears floors.
   addTownShape(rapidPrototypeRoot, "founder-well-rune", "cylinder", townRune, [2.45, .022, 2.45], [67, 8.145, 106]);
   addTownShape(rapidPrototypeRoot, "founder-well-water", "cylinder", townWaterMaterial, [1.72, .03, 1.72], [67, 8.19, 106]);
+  addTownShape(rapidPrototypeRoot, "tower-chronicle-lower-dais", "cylinder", townStone,
+    [6.3, .34, 6.3], [67, 8.22, 106]);
+  addTownShape(rapidPrototypeRoot, "tower-chronicle-upper-dais", "cylinder", townStoneLight,
+    [5.25, .28, 5.25], [67, 8.52, 106]);
+  addTownShape(rapidPrototypeRoot, "tower-chronicle-rune-ring", "cylinder", townRune,
+    [4.45, .045, 4.45], [67, 8.69, 106]);
+  addBox(rapidPrototypeRoot, "tower-chronicle-spire", townStone, [1.72, 4.45, 1.72], [67, 10.92, 106]);
+  addBox(rapidPrototypeRoot, "tower-chronicle-lower-band", bannerGold, [2.06, .22, 2.06], [67, 9.05, 106]);
+  addBox(rapidPrototypeRoot, "tower-chronicle-upper-band", bannerGold, [2.06, .18, 2.06], [67, 12.68, 106]);
+  for (const yaw of [0, 90, 180, 270]) {
+    const tablet = addBox(rapidPrototypeRoot, "tower-chronicle-tablet", iron, [.12, 1.08, 1.18],
+      [67 + Math.cos(yaw * Math.PI / 180) * .93, 11.25, 106 + Math.sin(yaw * Math.PI / 180) * .93]);
+    tablet.setLocalEulerAngles(0, -yaw, 0);
+    const rune = addBox(rapidPrototypeRoot, "tower-chronicle-tablet-rune", townRune, [.08, .48, .48],
+      [67 + Math.cos(yaw * Math.PI / 180) * 1.01, 11.25, 106 + Math.sin(yaw * Math.PI / 180) * 1.01]);
+    rune.setLocalEulerAngles(0, -yaw, 45);
+  }
+  addBox(rapidPrototypeRoot, "tower-chronicle-bell-left", timber, [.22, 2.05, .22], [66.16, 13.55, 106]);
+  addBox(rapidPrototypeRoot, "tower-chronicle-bell-right", timber, [.22, 2.05, .22], [67.84, 13.55, 106]);
+  addBox(rapidPrototypeRoot, "tower-chronicle-bell-beam", timberLight, [2.25, .24, .32], [67, 14.5, 106]);
+  towerChronicleBell = addTownShape(rapidPrototypeRoot, "tower-chronicle-bell", "cone", bannerGold,
+    [.75, .92, .75], [67, 13.82, 106]);
+  addTownShape(towerChronicleBell, "tower-chronicle-bell-clapper", "sphere", iron,
+    [.16, .18, .16], [0, -.5, 0]);
+  towerChronicleBeacon = addTownShape(rapidPrototypeRoot, "tower-chronicle-beacon", "sphere", townRune,
+    [.28, .28, .28], [67, 14.72, 106]);
+
+  // Five authored victory bays make future progression visible from day one.
+  // Cleared floors reveal their banner and trophy; all others retain a heavy
+  // lock, so the monument visibly fills as the tower grows.
+  for (let index = 0; index < 5; index++) {
+    const floor = index + 1, angle = index / 5 * Math.PI * 2;
+    const x = 67 + Math.cos(angle) * 3.6, z = 106 + Math.sin(angle) * 3.6;
+    const yaw = -angle * 180 / Math.PI;
+    addBox(rapidPrototypeRoot, `tower-chronicle-floor-${floor}-plinth`, townStone,
+      [1.05, .68, 1.05], [x, 8.96, z]);
+    const victory: pc.Entity[] = [], locked: pc.Entity[] = [];
+    const banner = addBox(rapidPrototypeRoot, `tower-chronicle-floor-${floor}-banner`, floor === 1 ? bannerBlue : bannerGold,
+      [.13, 1.46, 1.08], [67 + Math.cos(angle) * 2.22, 10.42, 106 + Math.sin(angle) * 2.22]);
+    banner.setLocalEulerAngles(0, yaw, 0); victory.push(banner);
+    const bannerTrim = addBox(rapidPrototypeRoot, `tower-chronicle-floor-${floor}-banner-trim`, bannerGold,
+      [.16, .12, 1.18], [67 + Math.cos(angle) * 2.28, 9.78, 106 + Math.sin(angle) * 2.28]);
+    bannerTrim.setLocalEulerAngles(0, yaw, 0); victory.push(bannerTrim);
+    if (floor === 1) {
+      const helm = addTownShape(rapidPrototypeRoot, "tower-chronicle-crownkeeper-helm", "sphere", iron,
+        [.52, .48, .52], [x, 9.6, z]); victory.push(helm);
+      const crownBand = addTownShape(rapidPrototypeRoot, "tower-chronicle-crownkeeper-crown", "cylinder", bannerGold,
+        [.58, .16, .58], [x, 9.96, z]); victory.push(crownBand);
+      for (const offset of [-.32, 0, .32]) victory.push(addTownShape(rapidPrototypeRoot,
+        "tower-chronicle-crownkeeper-spike", "cone", bannerGold, [.16, .5, .16],
+        [x + Math.cos(angle + Math.PI / 2) * offset, 10.24 + (offset === 0 ? .12 : 0), z + Math.sin(angle + Math.PI / 2) * offset]));
+    } else {
+      const trophy = addTownShape(rapidPrototypeRoot, `tower-chronicle-floor-${floor}-trophy`, "sphere", bannerGold,
+        [.42, .42, .42], [x, 9.66, z]); victory.push(trophy);
+    }
+    const lockBody = addBox(rapidPrototypeRoot, `tower-chronicle-floor-${floor}-lock`, iron,
+      [.62, .58, .22], [x, 9.58, z]); lockBody.setLocalEulerAngles(0, yaw, 0); locked.push(lockBody);
+    const lockArc = addTownShape(rapidPrototypeRoot, `tower-chronicle-floor-${floor}-lock-arc`, "cylinder", iron,
+      [.38, .48, .38], [x, 9.98, z]); locked.push(lockArc);
+    const cross = addBox(rapidPrototypeRoot, `tower-chronicle-floor-${floor}-sealed`, townStoneLight,
+      [.12, .92, .12], [x, 10.22, z]); cross.setLocalEulerAngles(45, yaw, 0); locked.push(cross);
+    towerChronicleFloors.push({ floor, victory, locked });
+  }
+  renderTowerChronicleProgress("{}");
   const thresholdStone = addRapidRegionBox("greenwood", "east-road-milestone", townStoneLight,
     [.52, 1.2, .4], [110.2, 8.64, 99.7]);
   thresholdStone.setLocalEulerAngles(-4, 9, 5);
@@ -11415,6 +11531,7 @@ function bindPlayers(joinedRoom: Room): void {
       localSilverDepthsWing = player.silverDepthsWing === "iron" || player.silverDepthsWing === "silver" ? player.silverDepthsWing : null;
       updateLocalMistfenProgress(player.huntLoadoutsJson);
       renderRegionalLeaderCollections(player.huntLoadoutsJson);
+      renderTowerChronicleProgress(player.huntLoadoutsJson);
       updateTavernCoins(player.coins);
       renderCharacterProgression({ reason: "sync", level: player.level, experience: player.experience,
         experienceRequired: experienceToNextLevel(player.level), unspentStatPoints: player.unspentStatPoints,
@@ -11508,6 +11625,7 @@ function bindPlayers(joinedRoom: Room): void {
       if (!isLocal) return;
       updateLocalMistfenProgress(player.huntLoadoutsJson);
       renderRegionalLeaderCollections(player.huntLoadoutsJson);
+      renderTowerChronicleProgress(player.huntLoadoutsJson);
     }, true);
     if (isLocal) {
       playerCallbacks.inventory.onAdd((item: { quantity: number }, itemId: string) => {
@@ -13821,6 +13939,7 @@ function updateForestPortals(): void {
 }
 function updateTarget(): void {
   updateForestPortals();
+  updateTowerChronicleLabel();
   updateRecoveryMarker();
   updateAshenReliquaryPresentation();
   if (!camera.camera) return;
@@ -17563,6 +17682,20 @@ app.on("update", (dt: number) => {
     }
     for (const banner of rapidTownBanners)
       banner.entity.setLocalEulerAngles(Math.sin(townTime * 1.7 + banner.phase) * 3.5, 0, 0);
+    if (towerChronicleBell) {
+      const playerPosition = localPlayer.getPosition();
+      if (pendingTowerChronicleCelebration && townVisualInsideBounds(playerPosition.x, playerPosition.z, 2))
+        beginTowerChronicleTownCelebration();
+      const ringing = customUpdateStartedAt < towerChronicleBellSwingUntil;
+      towerChronicleBell.setLocalEulerAngles(0, 0, ringing
+        ? Math.sin(customUpdateStartedAt * .026) * 24 * Math.min(1, (towerChronicleBellSwingUntil - customUpdateStartedAt) / 900) : 0);
+    }
+    if (towerChronicleBeacon) {
+      const celebrating = customUpdateStartedAt < towerChronicleCelebrationUntil;
+      const pulse = celebrating ? 1.1 + Math.sin(customUpdateStartedAt * .018) * .55
+        : towerChronicleProgress.highestFloorCleared > 0 ? .92 + Math.sin(customUpdateStartedAt * .004) * .12 : .62;
+      towerChronicleBeacon.setLocalScale(pulse, pulse, pulse);
+    }
     for (const actor of rapidTownActors) {
       const pose = townLifeActorPose(actor.definition, townTime);
       const walk = pose.stride * 34;
@@ -19327,6 +19460,13 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   });
   room.onMessage("floor:upgrades", (state: FloorRunUpgradeUpdate) => {
     if (fastWorldRequested) floorRunUpgradeUI.update(state);
+  });
+  room.onMessage("tower:floor-cleared", (message: { floor: number; firstClear: boolean; highestFloorCleared: number; bossName: string }) => {
+    if (!fastWorldRequested || !message.firstClear) return;
+    pendingTowerChronicleCelebration = { floor: message.floor, bossName: message.bossName };
+    showFastWorldReveal(`FLOOR ${message.floor} CONQUERED`,
+      `${message.bossName} trophy raised in the Town Chronicle · highest floor ${message.highestFloorCleared}`, "landmark");
+    social.event(`TOWER CHRONICLE · Floor ${message.floor} conquered · return to Town for the victory ceremony.`);
   });
   room.onMessage("floor:attempt-ended", (summary: FloorAttemptSummary) => {
     if (!fastWorldRequested || summary.floor !== 1) return;

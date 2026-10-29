@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Block, TOWN_BLACKSMITH_STALL_POSITION } from "@blockcraft/voxel-world";
-import { FAST_WORLD_BLACKSMITH_POSITION, TOWER_FLOOR_ONE_BOSS_ID, decodeLootBagItems } from "@blockcraft/protocol";
+import { FAST_WORLD_BLACKSMITH_POSITION, TOWER_FLOOR_ONE_BOSS_ID, decodeLootBagItems, parseTowerProgress } from "@blockcraft/protocol";
 import { WorldRoom } from "./game-room.js";
 import { InventoryItemState, MobState, PlayerState, WorldState } from "./schema.js";
 import { crownkeeperFragments, withCrownkeeperFragments } from "./crownkeeper-progress.js";
@@ -47,6 +47,15 @@ describe("Crownkeeper signature reward", () => {
     f.internal.defeatMob(TOWER_FLOOR_ONE_BOSS_ID, f.mob, "hero", 10000);
     expect(crownkeeperFragments(f.hero.huntLoadoutsJson)).toBe(1);
   });
+  it("records the first floor clear once and announces only the new victory", () => {
+    const f = fixture(); f.clear();
+    expect(parseTowerProgress(f.hero.huntLoadoutsJson)).toEqual({ highestFloorCleared: 1, clearedFloors: [1] });
+    expect(f.client.send).toHaveBeenCalledWith("tower:floor-cleared",
+      { floor: 1, firstClear: true, highestFloorCleared: 1, bossName: "The Crownkeeper" });
+    f.clear();
+    expect(f.client.send).toHaveBeenCalledWith("tower:floor-cleared",
+      { floor: 1, firstClear: false, highestFloorCleared: 1, bossName: "The Crownkeeper" });
+  });
   it.each(["dead", "far", "other-floor"])("excludes a %s contributor", reason => {
     const f = fixture();
     if (reason === "dead") f.ally.health = 0;
@@ -90,11 +99,13 @@ describe("Crownkeeper signature reward", () => {
     expect(f.hero.inventory.get("crownkeeper_blade")).toBeUndefined();
   });
   it("retains banked fragments through Calling and equipment save rewrites", () => {
-    const f = fixture(); f.hero.huntLoadoutsJson = withCrownkeeperFragments("{}", 4);
+    const f = fixture(); f.hero.huntLoadoutsJson = withCrownkeeperFragments("{\"towerProgress\":{\"highestFloorCleared\":1,\"clearedFloors\":[1]}}", 4);
     f.internal.setPlayerBuildData(f.hero, []);
     expect(crownkeeperFragments(f.hero.huntLoadoutsJson)).toBe(4);
+    expect(parseTowerProgress(f.hero.huntLoadoutsJson).highestFloorCleared).toBe(1);
     f.internal.setEquipmentAttunements(f.hero, {}, 7, {});
     expect(crownkeeperFragments(f.hero.huntLoadoutsJson)).toBe(4);
+    expect(parseTowerProgress(f.hero.huntLoadoutsJson).highestFloorCleared).toBe(1);
   });
   it("equips a forged sword through the real request handler and refuses unowned copies", () => {
     const f = fixture();
