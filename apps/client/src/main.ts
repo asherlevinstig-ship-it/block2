@@ -376,6 +376,7 @@ import {
   type BuildPathUpdate,
   type BuildPathProc,
   type BuildPathId,
+  type BuildPathSpecializationId,
   type CallingAbilityUpdate,
   type CallingAbilityEffect,
   type CallingStateUpdate,
@@ -1361,6 +1362,7 @@ let localMasteredCallingAugments: CallingAugmentId[] = [];
 let localCallingState: CallingStateUpdate | null = null;
 let localBuildPathRank = 0;
 let lastBuildPathUpdate: BuildPathUpdate | null = null;
+let pendingSpecializationPreview: BuildPathSpecializationId | null = null;
 const powerSlot = document.querySelector<HTMLButtonElement>("#power-slot")!;
 const powerPickerButtons = [...document.querySelectorAll<HTMLButtonElement>("#power-picker [data-power]")];
 const powerLoadoutButtons = [...document.querySelectorAll<HTMLButtonElement>("#power-loadout-slots [data-power-slot]")];
@@ -7524,14 +7526,27 @@ function renderBuildPath(update: BuildPathUpdate): void {
   buildPathCandidates.replaceChildren();
   const specializationList = buildPathSpecializations.querySelector<HTMLElement>("div")!;
   specializationList.replaceChildren();
+  if (update.selectedSpecializationId) pendingSpecializationPreview = null;
   buildPathSpecializations.hidden = !selected || update.rank < 3;
   if (selected && update.selectedPathId && update.rank >= 3) for (const specialization of BUILD_PATH_SPECIALIZATIONS[update.selectedPathId]) {
     const button = document.createElement("button"); button.type = "button";
     button.dataset.active = String(specialization.id === update.selectedSpecializationId);
-    button.innerHTML = `<strong>${specialization.name}</strong><small>${specialization.role}</small><span>${specialization.effect}</span>`;
+    button.innerHTML = `<strong>${specialization.name}</strong><small>${specialization.role}</small><span>${specialization.effect}</span><em>MASTERY TRIAL · ${specialization.trial}</em>`;
     button.disabled = Boolean(update.selectedSpecializationId) || !update.canSpecialize || !update.inTown;
     button.title = update.selectedSpecializationId ? "Veteran path already bound" : update.inTown ? `Bind the ${specialization.name} path` : "Return to Town to specialize";
-    button.addEventListener("click", () => room?.send("build:path", { action: "specialize", specializationId: specialization.id }));
+    button.addEventListener("click", () => {
+      if (pendingSpecializationPreview !== specialization.id) {
+        pendingSpecializationPreview = specialization.id;
+        for (const candidate of specializationList.querySelectorAll<HTMLButtonElement>("button")) {
+          candidate.dataset.preview = String(candidate === button);
+          candidate.querySelector("b")?.remove();
+        }
+        const confirm = document.createElement("b"); confirm.textContent = "PREVIEWED · CLICK AGAIN TO BIND PERMANENTLY";
+        button.append(confirm); button.title = `Click again to permanently bind ${specialization.name}`;
+        return;
+      }
+      room?.send("build:path", { action: "specialize", specializationId: specialization.id });
+    });
     specializationList.append(button);
   }
   buildPathMasterTrial.hidden = !update.masterTrial;
@@ -8946,7 +8961,10 @@ function createCallingComboFeedback(message: { comboId: string; label: string; x
   const root = new pc.Entity(`calling-combo:${message.comboId}`); root.setPosition(message.x, message.y + .05, message.z); app.root.addChild(root);
   const primaryColor = message.comboId === "volatile_reaction" ? new pc.Color(.66, 1, .18)
     : message.comboId === "root_shatter" ? new pc.Color(.42, .9, 1)
-      : message.comboId === "marked_deadeye" ? new pc.Color(1, .3, .32) : new pc.Color(1, .86, .36);
+      : message.comboId === "marked_deadeye" ? new pc.Color(1, .3, .32)
+        : message.comboId === "rune_surge" ? new pc.Color(.67, .34, 1)
+          : message.comboId === "time_fracture" ? new pc.Color(.32, .88, 1)
+            : new pc.Color(1, .86, .36);
   const primary = callingSignatureMaterial(primaryColor, .88, 1.3);
   const white = callingSignatureMaterial(new pc.Color(1, .98, .86), .96, 1.42);
   for (let ring = 1; ring <= 2; ring += 1) for (let index = 0; index < 16; index += 1) {

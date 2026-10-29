@@ -542,6 +542,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly dodgeCounterUntil = new Map<string, number>();
   private readonly magePowerCasts = new Map<string, number>();
   private readonly mageCallingCasts = new Map<string, number>();
+  private readonly mageBurns = new Map<string, { ownerId: string; mobId: string; nextTickAt: number; ticks: number; damage: number }>();
+  private readonly mageRuneMarks = new Map<string, { abilityId: string; until: number }>();
+  private readonly mageChronomancerEncounters = new Map<string, { lastCombatAt: number; uses: number }>();
   private readonly assassinShadowUntil = new Map<string, number>();
   private readonly stealthUntil = new Map<string, number>();
   private readonly assassinShadowBonus = new Map<string, number>();
@@ -5391,6 +5394,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           const dealt = damageAfterArmor(shatterDamage, target.armor, true);
           this.combatContributions.record(targetId, playerId, Math.min(target.health, dealt), now);
           target.health = Math.max(0, target.health - dealt); target.hitSequence += 1; targets.push(targetId);
+          this.applyMageVeteranHit(playerId, player, targetId, target, now, "mage_mana_shield");
           this.alertHitMob(targetId, playerId, now);
           this.applyMageCallingSlow(playerId, player, targetId, target, now);
           if (target.health === 0) this.defeatMob(targetId, target, playerId, now);
@@ -7367,6 +7371,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         const damage = damageAfterArmor(rawDamage, mob.armor, true);
         this.combatContributions.record(mobId, client.sessionId, Math.min(mob.health, damage), now);
         mob.health = Math.max(0, mob.health - damage); mob.hitSequence += 1;
+        this.applyMageVeteranHit(client.sessionId, player, mobId, mob, now, "mage_arcane_surge");
         this.alertHitMob(mobId, client.sessionId, now);
         if (mob.health === 0) this.defeatMob(mobId, mob, client.sessionId, now);
         else this.staggerMob(mobId, mob, now, interrupted ? 2_200 + rank * 150 : 1_200 + rank * 100, true, client.sessionId);
@@ -9038,6 +9043,77 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.masterTrialMobTags.set(mobId, { playerId, specializationId: "elementalist", until });
   }
 
+  private applyMageVeteranHit(playerId: string, player: PlayerState, mobId: string, mob: MobState,
+    now: number, abilityId: string): void {
+    if (mob.health <= 0) return;
+    const specialization = this.buildSpecializationFor(player, "mage");
+    if (specialization === "pyromancer") {
+      const key = `${playerId}:${mobId}`;
+      const fresh = !this.mageBurns.has(key);
+      this.mageBurns.set(key, { ownerId: playerId, mobId, nextTickAt: now + 650, ticks: 3, damage: 1 });
+      this.buildPathProc(playerId, "mage", "BURN", fresh ? "IGNITED · 3 DAMAGE" : "BURN REFRESHED");
+      if (fresh && this.buildSpecializationMastered(player, "pyromancer")) {
+        const spread = [...this.state.mobs].find(([targetId, target]) => targetId !== mobId && target.alive
+          && Math.abs(target.y - mob.y) <= 2.5 && Math.hypot(target.x - mob.x, target.z - mob.z) <= 4
+          && hasCombatLineOfSight(mob, target, this.readWorldBlock));
+        if (spread) {
+          const [targetId] = spread;
+          this.mageBurns.set(`${playerId}:${targetId}`, { ownerId: playerId, mobId: targetId,
+            nextTickAt: now + 650, ticks: 3, damage: 1 });
+          this.buildPathProc(playerId, "mage", "WILDFIRE", "BURN SPREAD TO A SECOND TARGET");
+        }
+      }
+      return;
+    }
+    if (specialization === "runebinder") {
+      const key = `${playerId}:${mobId}`;
+      const previous = this.mageRuneMarks.get(key);
+      if (previous && now < previous.until && previous.abilityId !== abilityId) {
+        this.mageRuneMarks.delete(key);
+        const damage = damageAfterArmor(2, mob.armor, true);
+        this.combatContributions.record(mobId, playerId, Math.min(mob.health, damage), now);
+        mob.health = Math.max(0, mob.health - damage); mob.hitSequence += 1;
+        this.grantMasterTrial(playerId, "runebinder");
+        if (this.buildSpecializationMastered(player, "runebinder")) player.stamina = Math.min(player.maxStamina, player.stamina + 10);
+        this.buildPathProc(playerId, "mage", "RUNE SURGE", `SPELLS COMBINED · +${damage} DAMAGE${this.buildSpecializationMastered(player, "runebinder") ? " · +10 STAMINA" : ""}`);
+        this.broadcast("calling:combo", { comboId: "rune_surge", label: "RUNE SURGE", casterId: playerId,
+          targetIds: [mobId], x: mob.x, y: mob.y, z: mob.z, bonus: damage });
+      } else this.mageRuneMarks.set(key, { abilityId, until: now + 6_000 });
+      return;
+    }
+    if (specialization !== "chronomancer") return;
+    const encounter = this.mageChronomancerEncounters.get(playerId);
+    const reset = !encounter || now - encounter.lastCombatAt > 8_000;
+    const uses = reset ? 0 : encounter.uses;
+    const limit = this.buildSpecializationMastered(player, "chronomancer") ? 2 : 1;
+    this.mageChronomancerEncounters.set(playerId, { lastCombatAt: now, uses });
+    if (mob.combatState !== "windup" || uses >= limit) return;
+    this.pendingMobMelee.delete(mobId);
+    const delayed = this.staggerMob(mobId, mob, now, 1_500, true, playerId);
+    if (!delayed) return;
+    this.mageChronomancerEncounters.set(playerId, { lastCombatAt: now, uses: uses + 1 });
+    this.grantMasterTrial(playerId, "chronomancer");
+    this.buildPathProc(playerId, "mage", "TIME FRACTURE", `DANGEROUS ATTACK DELAYED · ${uses + 1}/${limit}`);
+    this.broadcast("calling:combo", { comboId: "time_fracture", label: "TIME FRACTURE", casterId: playerId,
+      targetIds: [mobId], x: mob.x, y: mob.y, z: mob.z, bonus: 0 });
+  }
+
+  private resolveMageBurns(now: number): void {
+    for (const [key, burn] of this.mageBurns) {
+      if (now < burn.nextTickAt) continue;
+      const owner = this.state.players.get(burn.ownerId), mob = this.state.mobs.get(burn.mobId);
+      if (!owner || !mob?.alive) { this.mageBurns.delete(key); continue; }
+      const damage = damageAfterArmor(burn.damage, mob.armor, true);
+      this.combatContributions.record(burn.mobId, burn.ownerId, Math.min(mob.health, damage), now);
+      mob.health = Math.max(0, mob.health - damage); mob.hitSequence += 1;
+      this.grantMasterTrial(burn.ownerId, "pyromancer", damage);
+      this.buildPathProc(burn.ownerId, "mage", "BURN", `−${damage} DAMAGE · ${burn.ticks - 1} TICKS LEFT`, 700);
+      burn.ticks -= 1; burn.nextTickAt = now + 1_000;
+      if (mob.health === 0) { this.mageBurns.delete(key); this.defeatMob(burn.mobId, mob, burn.ownerId, now); }
+      else if (burn.ticks <= 0) this.mageBurns.delete(key);
+    }
+  }
+
   private resolveMageOverloads(now: number): void {
     for (const [overloadId, overload] of this.pendingMageOverloads) {
       if (now < overload.nextPulseAt) continue;
@@ -9063,6 +9139,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           + (echo > 0 ? Math.max(1, Math.ceil(pulseDamage * echo)) : 0);
         this.combatContributions.record(mobId, overload.ownerId, Math.min(mob.health, damage), now);
         mob.health = Math.max(0, mob.health - damage); mob.hitSequence += 1; targets.push(mobId); totalDamage += damage;
+        this.applyMageVeteranHit(overload.ownerId, owner, mobId, mob, now, "mage_overload");
         this.alertHitMob(mobId, overload.ownerId, now, overload);
         this.applyMageCallingSlow(overload.ownerId, owner, mobId, mob, now);
         if (mob.health === 0) this.defeatMob(mobId, mob, overload.ownerId, now);
@@ -9375,6 +9452,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.resolveMobHazards(now);
     this.resolveVenomSetPools(now);
     this.resolveRenewalFields(now);
+    this.resolveMageBurns(now);
     this.resolveMageOverloads(now);
     this.advanceRealmBossHazards(now);
     this.advanceSilverDepthsRouteHazards(now);
@@ -10640,6 +10718,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         resolvedDamage = Math.max(resolvedDamage, damage);
         this.combatContributions.record(target.id, sessionId, Math.min(mob.health, damage), now);
         mob.health = Math.max(0, mob.health - damage);
+        this.applyMageVeteranHit(sessionId, player, target.id, mob, now, pending.powerId);
         if (mob.health > 0 && mageSpecialization === "elementalist") {
           const mastered = this.buildSpecializationMastered(player, "elementalist");
           const elementalTier = this.equipmentAffixTier(player, "elemental");

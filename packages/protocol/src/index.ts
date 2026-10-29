@@ -456,6 +456,9 @@ export const BUILD_PATH_SPECIALIZATIONS = {
     { id: "arcanist", name: "Arcanist", role: "Repeat and amplify spells", effect: "Arcane Echo repeats at 75% strength.", trial: "Trigger 15 Arcane Echoes.", trialTarget: 15, capstone: "RESONANCE · Arcane Echo repeats at full strength." },
     { id: "elementalist", name: "Elementalist", role: "Control the battlefield", effect: "Arcane Surge, Overload and Mana Shield shatter slow surviving enemies for 2 seconds.", trial: "Defeat 20 spell-slowed enemies.", trialTarget: 20, capstone: "DEEP FREEZE · Spell slows are stronger and last 3 seconds." },
     { id: "spellguard", name: "Spellguard", role: "Cast from the front line", effect: "Mana Shield gains 1 charge and prevents 1 additional damage per hit.", trial: "Prevent 30 damage with Mana Shield.", trialTarget: 30, capstone: "AEGIS SHATTER · When Mana Shield breaks, become invulnerable for 2 seconds." },
+    { id: "pyromancer", name: "Pyromancer", role: "Sustain pressure with flame", effect: "Damaging Mage spells ignite enemies for 3 damage over time.", trial: "Inflict 40 Burn damage.", trialTarget: 40, capstone: "WILDFIRE · A fresh Burn spreads to one nearby enemy." },
+    { id: "runebinder", name: "Runebinder", role: "Weave different spells together", effect: "Hit the same enemy with two different Mage spells within 6 seconds to trigger a 2-damage Rune Surge.", trial: "Trigger 10 Rune Surges.", trialTarget: 10, capstone: "RUNIC FLOW · Rune Surge restores 10 stamina." },
+    { id: "chronomancer", name: "Chronomancer", role: "Interrupt dangerous moments", effect: "Your first spell each encounter delays an enemy windup by 1.5 seconds.", trial: "Delay 5 dangerous enemy attacks.", trialTarget: 5, capstone: "SECOND HAND · Delay a second windup in each encounter." },
   ],
   assassin: [
     { id: "executioner", name: "Executioner", role: "Commit to the kill", effect: "Shadowstep's empowered strike deals +4 damage.", trial: "Land 15 empowered killing blows.", trialTarget: 15, capstone: "DEATHBLOW · Empowered killing blows restore 20 stamina." },
@@ -482,7 +485,7 @@ export const BUILD_PATH_RANKS = [
   { rank: 3, name: "Veteran", xp: 70 },
   { rank: 4, name: "Master", xp: 140 },
 ] as const;
-export const BuildPathRequestSchema = z.object({ action: z.enum(["sync", "choose", "specialize"]), pathId: z.enum(["tank", "mage", "assassin", "thief", "ranger", "healer"]).optional(), specializationId: z.enum(["guardian", "juggernaut", "arcanist", "elementalist", "spellguard", "executioner", "phantom", "trickster", "plunderer", "marksman", "trapper", "lifebinder", "field_medic"]).optional() }).strict();
+export const BuildPathRequestSchema = z.object({ action: z.enum(["sync", "choose", "specialize"]), pathId: z.enum(["tank", "mage", "assassin", "thief", "ranger", "healer"]).optional(), specializationId: z.enum(["guardian", "juggernaut", "arcanist", "elementalist", "spellguard", "pyromancer", "runebinder", "chronomancer", "executioner", "phantom", "trickster", "plunderer", "marksman", "trapper", "lifebinder", "field_medic"]).optional() }).strict();
 export type BuildPathAffinity = { pathId: BuildPathId; score: number; reasons: string[] };
 export type BuildPathUpdate = { selectedPathId: BuildPathId | null; rank: number; xp: number; nextRankXp: number | null;
   selectedCallingAbilityId: CallingAbilityId | null;

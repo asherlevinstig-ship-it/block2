@@ -61,4 +61,12 @@ describe("hidden build paths", () => {
     expect(spellguard.specializations.mage).toBe("spellguard");
     expect(chooseBuildSpecialization(spellguard, "mage", "elementalist")).toBe(spellguard);
   });
+  it("offers six distinct permanent Veteran Mage specializations", () => {
+    const specializationIds = ["arcanist", "elementalist", "spellguard", "pyromancer", "runebinder", "chronomancer"] as const;
+    for (const specializationId of specializationIds) {
+      const veteran = grantBuildPathXp(chooseBuildPath(parseBuildPathState("{}"), "mage"), 70).state;
+      const specialized = chooseBuildSpecialization(veteran, "mage", specializationId);
+      expect(specialized.specializations.mage).toBe(specializationId);
+    }
+  });
 });
