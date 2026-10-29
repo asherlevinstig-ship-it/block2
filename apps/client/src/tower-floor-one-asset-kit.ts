@@ -160,6 +160,15 @@ function hideDirectChildren(parent: pc.Entity, predicate: (name: string) => bool
   }
 }
 
+function rebuildAffectedStaticBatches(app: pc.Application, parent: pc.Entity): void {
+  const groupIds = new Set<number>();
+  for (const child of parent.children) {
+    if (!(child instanceof pc.Entity) || !child.render || child.render.batchGroupId < 0) continue;
+    groupIds.add(child.render.batchGroupId);
+  }
+  if (groupIds.size > 0) app.batcher.generate([...groupIds]);
+}
+
 const REPLACED_RUINED_WALL_FALLBACKS = new Set([
   "floor1-ruined-wall-322-92", "floor1-wall-moss-322-92",
   "floor1-ruined-wall-322-120", "floor1-wall-moss-322-120",
@@ -229,6 +238,11 @@ export async function populateTowerFloorOneAssetKit(
   const names = new Set(placements.map(placement => placement.name));
   if (loaded.has("stoneColumn") && names.has("crown-court-column-1"))
     hideDirectChildren(parent, name => name === "floor1-crown-pillar");
+
+  // Procedural fallbacks can already be part of Floor 1's static batch when
+  // their authored replacements finish loading. Rebuild only that affected
+  // batch so hidden fallbacks do not remain baked into the rendered scene.
+  rebuildAffectedStaticBatches(app, parent);
 
   console.info(`[tower-assets] ${entities.length} authored placements ready; ${failedIds.size} model types kept their procedural fallback.`);
   return { loadedIds: new Set(loaded.keys()), failedIds, entities };

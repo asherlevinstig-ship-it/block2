@@ -3,6 +3,7 @@ import { towerFloorOneGroundHeight } from "@blockcraft/protocol";
 import { createPaintedGroundMaterial, createWoodlandTrailMesh, fitOrganicGroundPatch } from "./fast-world-texture.js";
 import { populateTowerFloorOneAssetKit } from "./tower-floor-one-asset-kit.js";
 import { TOWER_FLOOR_ONE_VISUAL_FOOTPRINTS } from "./tower-floor-one-layout.js";
+import { towerFloorOneRenderPolicy } from "./tower-floor-one-render-policy.js";
 
 function finish(color: pc.Color, emissive = 0, opacity = 1): pc.StandardMaterial {
   const material = new pc.StandardMaterial();
@@ -18,12 +19,23 @@ function finish(color: pc.Color, emissive = 0, opacity = 1): pc.StandardMaterial
 
 type Rotation = number | [number, number, number];
 
+let floorOneStaticBatchGroupId = -1;
+let floorOneShapeCount = 0;
+let floorOneShadowCasterCount = 0;
+
 function shape(parent: pc.Entity, name: string, type: "box" | "cylinder" | "cone" | "sphere",
   material: pc.StandardMaterial, scale: [number, number, number], position: [number, number, number],
   rotation: Rotation = 0): pc.Entity {
   const entity = new pc.Entity(name);
-  entity.addComponent("render", { type, castShadows: true, receiveShadows: true });
-  if (entity.render) entity.render.material = material;
+  const policy = towerFloorOneRenderPolicy(name);
+  entity.addComponent("render", { type, castShadows: policy.castShadows, receiveShadows: policy.receiveShadows });
+  if (entity.render) {
+    entity.render.material = material;
+    if (!policy.dynamic && floorOneStaticBatchGroupId >= 0)
+      entity.render.batchGroupId = floorOneStaticBatchGroupId;
+  }
+  floorOneShapeCount++;
+  if (policy.castShadows) floorOneShadowCasterCount++;
   const euler: [number, number, number] = typeof rotation === "number" ? [0, rotation, 0] : rotation;
   entity.setLocalScale(...scale);
   entity.setLocalPosition(...position);
@@ -251,6 +263,10 @@ export function updateTowerFloorOneProgress(root: pc.Entity, northAlive: boolean
 export function createTowerFloorOneWorld(app: pc.Application, parent: pc.Entity): pc.Entity {
   const root = new pc.Entity("tower-floor-1-world");
   parent.addChild(root);
+  const staticBatch = app.batcher.addGroup("tower-floor-one-static", false, 34);
+  floorOneStaticBatchGroupId = staticBatch.id;
+  floorOneShapeCount = 0;
+  floorOneShadowCasterCount = 0;
 
   const stone = createPaintedGroundMaterial(app, { name: "floor1-shadow-stone", base: "#29302a",
     mottles: ["#374038", "#202620", "#4b5045"], litter: ["#596052", "#171c18"], seed: 811,
@@ -572,6 +588,14 @@ export function createTowerFloorOneWorld(app: pc.Application, parent: pc.Entity)
     intensity: 1.05, range: 20, castShadows: false });
   crownLight.setLocalPosition(375, 13, 106);
   root.addChild(crownLight);
+
+  // The application is already running when this streamed room is authored,
+  // so generate its batches explicitly instead of waiting for app.start().
+  // A modest AABB limit preserves useful frustum culling across the wide floor.
+  app.batcher.generate([staticBatch.id]);
+  console.info(`[floor1-performance] ${floorOneShapeCount} primitives; `
+    + `${floorOneShadowCasterCount} shadow casters; static scenery batched in 34m cells.`);
+  floorOneStaticBatchGroupId = -1;
 
   // Authored CC0 models progressively replace the weakest blockout visuals.
   // The promise intentionally does not block world entry; procedural geometry
