@@ -9,12 +9,40 @@ export function fastWorldCoastShorelineZ(x: number): number {
   return bend + Math.max(0, coastX - 90) * .23;
 }
 
+const smoothstep = (edge0: number, edge1: number, value: number): number => {
+  const t = Math.max(0, Math.min(1, (value - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+};
+
+const smoothBand = (value: number, start: number, end: number, feather: number): number =>
+  smoothstep(start - feather, start + feather, value) * (1 - smoothstep(end - feather, end + feather, value));
+
+/** The Town of Beginnings uses the same elevation profile on the server and
+ * client. Its long feathers are deliberate: players, NPCs and dodges traverse
+ * these as broad ramps rather than colliding with decorative steps. */
+export function fastWorldTownTerraceOffset(x: number, z: number): number {
+  if (x < 39 || x > 109 || z < 65 || z > 147) return 0;
+
+  // Founders' Hall sits above the town. The eastern falloff is the ceremonial
+  // stair/ramp; the northern and southern falloffs form landscaped banks.
+  const founders = (1 - smoothstep(52, 65, x)) * smoothBand(z, 65, 86, 2.2);
+
+  // Two market courts descend from the civic plaza. Keeping the central east
+  // gate lane level protects the spawn/portal sightline and makes both lower
+  // courts visible from the plaza overlooks.
+  const marketAccess = smoothstep(76, 86, x);
+  const northMarket = marketAccess * smoothBand(z, 84, 101, 2.6);
+  const southMarket = marketAccess * smoothBand(z, 111, 129, 2.6);
+  return founders * 1.45 - Math.max(northMarket, southMarket) * .72;
+}
+
 export function fastWorldGroundHeight(x: number, z: number): number {
   const mound=(cx:number,cz:number,rx:number,rz:number,h:number):number=>{
     const r2=((x-cx)/rx)**2+((z-cz)/rz)**2;
     return r2>=1?0:h*(1-r2)**3;
   };
   if (x >= 296 && x <= 392 && z >= 56 && z <= 156) return towerFloorOneGroundHeight(x, z);
+  if (x >= 39 && x <= 109 && z >= 65 && z <= 147) return 8 + fastWorldTownTerraceOffset(x, z);
   if (x >= 40 && x <= 104 && z >= 148 && z <= 188) {
     // Low dune ridges frame the routes while the southern shore falls gently
     // towards the sea. Encounter centres remain broad and readable.

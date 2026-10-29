@@ -180,8 +180,11 @@ export const RAPID_PRACTICE_TOWN_COLLIDERS = [
 ] as const;
 
 /** Shared obstacle query for Fast World prediction and authority. */
+const TOWN_UNDERFLOOR_Y = 6;
 const townOnlyCollisionQuery = createFastWorldObstacleQuery(
-  { ...FAST_WORLD_TOWN_BOUNDS, floorY: RAPID_PRACTICE_ARENA.floorY, sealedBounds: true },
+  // The lower market reaches 7.28m. Keep the hidden sealed floor one full cell
+  // beneath it so the player's foot inset cannot catch while descending.
+  { ...FAST_WORLD_TOWN_BOUNDS, floorY: TOWN_UNDERFLOOR_Y, sealedBounds: true },
   RAPID_PRACTICE_TOWN_COLLIDERS, fastWorldGroundHeight, []);
 const towerFloorCollisionQuery = createFastWorldObstacleQuery(
   { ...TOWER_FLOOR_ONE.bounds, floorY: RAPID_PRACTICE_ARENA.floorY, sealedBounds: true },

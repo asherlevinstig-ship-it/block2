@@ -27,6 +27,23 @@ describe("Town of Beginnings shared collision", () => {
     }
   });
 
+  it("walks the Founders and market ramps without snagging or desyncing", () => {
+    for (const route of [
+      { start: { x: 66, z: 73 }, strafe: -1, steps: 105 },
+      { start: { x: 75, z: 92 }, strafe: 1, steps: 210 },
+      { start: { x: 75, z: 120 }, strafe: 1, steps: 210 },
+    ]) {
+      let pose = { x: route.start.x, y: height(route.start.x, route.start.z), z: route.start.z, verticalVelocity: 0 };
+      for (let index = 0; index < route.steps; index++) {
+        const before = pose;
+        pose = stepPlayerNetcode(pose, { strafe: route.strafe, forward: 0 }, 5.8, 1 / 60, reader);
+        expect(Math.abs(pose.x - before.x), `${JSON.stringify(route)} stopped at ${JSON.stringify(pose)}`)
+          .toBeCloseTo(5.8 / 60, 6);
+        expect(pose.y).toBeCloseTo(height(pose.x, pose.z), 6);
+      }
+    }
+  });
+
   it("keeps replay and dodges aligned with the town edge", () => {
     const start = { x: 95, y: 8, z: 106 };
     const dash = resolveSweptHorizontalMotion(start, { x: 20, z: 0 }, reader);

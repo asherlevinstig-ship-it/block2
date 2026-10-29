@@ -2739,7 +2739,8 @@ if (fastWorldRequested) {
   const addTownActor = (definition: TownLifeActorDefinition): void => {
     const materials = actorMaterials.get(definition.id)!;
     const root = new pc.Entity(`town-life:${definition.id}`);
-    root.setLocalPosition(definition.route[0]![0], 8.15, definition.route[0]![1]);
+    root.setLocalPosition(definition.route[0]![0],
+      fastWorldGroundHeight(definition.route[0]![0], definition.route[0]![1]) + .15, definition.route[0]![1]);
     rapidPrototypeRoot.addChild(root);
     const fallback = new pc.Entity("townsperson-procedural-fallback");
     root.addChild(fallback);
@@ -2903,7 +2904,8 @@ if (fastWorldRequested) {
   signSymbol.update();
   for (const sign of SPEED_LAB_TOWN_SIGNS) {
     const root = new pc.Entity(`town-landmark:${sign.id}`);
-    root.setLocalPosition(...sign.position);
+    root.setLocalPosition(sign.position[0], sign.position[1] + fastWorldGroundHeight(sign.position[0], sign.position[2]) - 8,
+      sign.position[2]);
     root.setLocalEulerAngles(0, sign.yaw, 0);
     rapidPrototypeRoot.addChild(root);
     addTownShape(root, "landmark-sign-post", "cylinder", timber, [.1, 1.2, .1], [0, .58, 0]);
@@ -2938,13 +2940,13 @@ if (fastWorldRequested) {
     const light = new pc.Entity(`town-lantern-light-${index + 1}`);
     light.addComponent("light", { type: "omni", color: new pc.Color(1, .63, .25), intensity: 1.1,
       range: 7, castShadows: false });
-    light.setLocalPosition(x, y, z);
+    light.setLocalPosition(x, y + fastWorldGroundHeight(x, z) - 8, z);
     rapidPrototypeRoot.addChild(light);
     rapidTownLights.push({ entity: light, phase: index * 1.7 });
   }
 
-  addRapidWorldBox("town-ground", grass, [70, .25, 82], [74, 7.875, 106]);
-  addBox(rapidPrototypeRoot, "west-green", townVerge, [62, .035, 74], [71, 8.02, 106]);
+  addRapidWorldShape("town-ground", "box", grass, [70, .25, 82], [74, 7.875, 106]);
+  addRapidWorldShape("west-green", "box", townVerge, [62, .035, 74], [71, 8.02, 106]);
   for (const region of FAST_WORLD_REGION_DEFINITIONS.filter(() => !FAST_WORLD_TOWN_ONLY)) {
     const regionId = region.id as FastWorldStreamedRegionId;
     for (const chunk of fastWorldRegionVisualChunks(regionId))
@@ -3071,13 +3073,13 @@ if (fastWorldRequested) {
   for (const patch of SPEED_LAB_TOWN_TERRAIN) {
     const scale: [number, number, number] = [...patch.scale];
     const position: [number, number, number] = [...patch.position];
-    const entity = patch.shape === "box"
-      ? addBox(rapidPrototypeRoot, `town-terrain:${patch.id}`, townTerrainMaterials[patch.material], scale, position)
-      : addTownShape(rapidPrototypeRoot, `town-terrain:${patch.id}`, "cylinder", townTerrainMaterials[patch.material], scale, position);
+    const entity = addTownShape(rapidPrototypeRoot, `town-terrain:${patch.id}`, patch.shape,
+      townTerrainMaterials[patch.material], scale, position);
     if (patch.yaw) entity.setLocalEulerAngles(0, patch.yaw, 0);
   }
   for (const item of SPEED_LAB_TOWN_TERRAIN_DETAILS) {
-    const [x, y, z] = item.position;
+    const [x, authoredY, z] = item.position;
+    const y = authoredY + fastWorldGroundHeight(x, z) - 8;
     if (!townVisualInsideBounds(x, z, 1)) continue;
     if (item.kind === "edge-stone") {
       const stone = addBox(rapidPrototypeRoot, `town-terrain:${item.id}`, item.id.length % 2 ? townStone : townStoneLight,
@@ -3097,6 +3099,39 @@ if (fastWorldRequested) {
         [.13 * item.scale, .09 * item.scale, .13 * item.scale], [x, y + .33 * item.scale, z]);
     }
   }
+
+  // The collision surface is a smooth shared ramp. These shallow masonry bands
+  // make its elevation changes read as broad stairs without creating dozens of
+  // small collision ledges that can trap a player or interrupt a dodge.
+  const addTerraceTread = (name: string, x: number, z: number, width: number, depth: number): void => {
+    const y = fastWorldGroundHeight(x, z) + .035;
+    addBox(rapidPrototypeRoot, name, plazaStone, [width, .07, depth], [x, y, z]);
+  };
+  for (let step = 0; step < 10; step++)
+    addTerraceTread(`town-elevation:founders-step-${step}`, 53.3 + step * 1.12, 73, 1.02, 8.6);
+  for (const [court, z] of [["north", 92.5], ["south", 120]] as const)
+    for (let step = 0; step < 8; step++)
+      addTerraceTread(`town-elevation:${court}-market-step-${step}`, 77.5 + step * 1.18, z, 1.06, 5.7);
+
+  const addRetainingRun = (name: string, from: readonly [number, number], to: readonly [number, number],
+    segments: number, height: number): void => {
+    const dx = (to[0] - from[0]) / segments, dz = (to[1] - from[1]) / segments;
+    const length = Math.hypot(dx, dz) + .08;
+    const yaw = Math.atan2(dx, dz) * 180 / Math.PI;
+    for (let index = 0; index < segments; index++) {
+      const x = from[0] + dx * (index + .5), z = from[1] + dz * (index + .5);
+      const ground = fastWorldGroundHeight(x, z);
+      const block = addBox(rapidPrototypeRoot, `${name}-${index}`, index % 2 ? townStone : townStoneLight,
+        [.38, height, length], [x, ground + height * .42, z]);
+      block.setLocalEulerAngles(0, yaw, 0);
+    }
+  };
+  addRetainingRun("town-elevation:founders-north-wall", [52.2, 67.7], [64.2, 67.7], 8, .72);
+  addRetainingRun("town-elevation:founders-south-wall", [52.2, 78.3], [64.2, 78.3], 8, .72);
+  addRetainingRun("town-elevation:north-market-overlook-a", [81.8, 83.2], [81.8, 89.1], 4, .7);
+  addRetainingRun("town-elevation:north-market-overlook-b", [81.8, 96], [81.8, 101.5], 4, .7);
+  addRetainingRun("town-elevation:south-market-overlook-a", [81.8, 110.5], [81.8, 117], 4, .7);
+  addRetainingRun("town-elevation:south-market-overlook-b", [81.8, 123], [81.8, 129.5], 4, .7);
 
   const addGabledRoof = (parent: pc.Entity, name: string, x: number, z: number, width: number, depth: number,
     baseY: number, roof: pc.StandardMaterial, highlight: pc.StandardMaterial, angle = 34): void => {
@@ -17541,7 +17576,7 @@ app.on("update", (dt: number) => {
       const pose = townLifeActorPose(actor.definition, townTime);
       const walk = pose.stride * 34;
       const bob = actor.model ? 0 : pose.moving ? Math.abs(pose.stride) * .028 : Math.sin(townTime * 1.6 + actor.definition.phase * 5) * .01;
-      actor.root.setLocalPosition(pose.x, 8.15 + bob, pose.z);
+      actor.root.setLocalPosition(pose.x, fastWorldGroundHeight(pose.x, pose.z) + .15 + bob, pose.z);
       actor.root.setLocalEulerAngles(0, pose.yaw, 0);
       if (actor.model?.anim) {
         const animationName = townLifeAnimation(actor.definition, pose);

@@ -12,6 +12,21 @@ describe("fast world elevation", () => {
     expect(fastWorldGroundHeight(145, 130)).toBe(8);
   });
 
+  it("authors three readable Town of Beginnings elevations", () => {
+    expect(fastWorldGroundHeight(46.5, 73)).toBeCloseTo(9.45, 2);
+    expect(fastWorldGroundHeight(67, 106)).toBe(8);
+    expect(fastWorldGroundHeight(99, 92)).toBeCloseTo(7.28, 2);
+    expect(fastWorldGroundHeight(99, 120)).toBeCloseTo(7.28, 2);
+    expect(fastWorldGroundHeight(99.5, 106.5)).toBe(8);
+  });
+
+  it("feathers Town terraces into traversable ramps", () => {
+    const founders = [52, 54, 56, 58, 60, 62, 64, 66].map(x => fastWorldGroundHeight(x, 73));
+    const northMarket = [76, 78, 80, 82, 84, 86, 88].map(x => fastWorldGroundHeight(x, 92));
+    for (const samples of [founders, northMarket]) for (let index = 1; index < samples.length; index++)
+      expect(Math.abs(samples[index]! - samples[index - 1]!)).toBeLessThan(.45);
+  });
+
   it("slopes below the shared waterline beyond the beach without flooding the road", () => {
     const shoreline = fastWorldCoastShorelineZ(66);
     expect(fastWorldGroundHeight(66, shoreline + 7)).toBeLessThan(fastWorldGroundHeight(66, shoreline));
