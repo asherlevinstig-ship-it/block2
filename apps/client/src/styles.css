@@ -4783,3 +4783,226 @@ html.fast-world-active #progression-notice[data-priority-visible="true"]:not([hi
 @media (prefers-reduced-motion: reduce) {
   :is(.level-up-choices, .floor-upgrade-choices, .rapid-reward-choices, #build-path-candidates) > button { transition: none; }
 }
+
+/* Adaptive inventory shell: restrained RPG styling with layout driven by the
+   space the panel actually has, rather than by input type. */
+#inventory-panel {
+  container: inventory / inline-size;
+  box-sizing: border-box;
+  width: min(1180px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 18px;
+  border: 1px solid #a98c4f;
+  border-radius: 10px;
+  background: linear-gradient(155deg, #132119 0%, #09120e 62%, #15140d 100%);
+  box-shadow: 0 24px 80px #000d, inset 0 0 0 3px #223329;
+  scrollbar-gutter: stable;
+}
+
+.inventory-header {
+  position: sticky;
+  z-index: 20;
+  top: -18px;
+  margin: -18px -18px 12px;
+  padding: 16px 18px 13px;
+  border-bottom: 1px solid #8c754a;
+  background: #101d17f5;
+  box-shadow: 0 7px 18px #0007;
+  backdrop-filter: blur(10px);
+}
+
+.inventory-header h2 {
+  color: #f1dfad;
+  font: 800 clamp(1.45rem, 2.6vw, 2rem)/1.05 Georgia, "Times New Roman", serif;
+}
+
+.inventory-header .eyebrow { color: #c2a45f; letter-spacing: .15em; }
+.inventory-header-actions { flex-wrap: wrap; justify-content: flex-end; }
+
+.inventory-header-actions button,
+#inventory-close {
+  min-height: 40px;
+  border-radius: 5px;
+}
+
+.inventory-summary {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0 0 8px;
+}
+
+.inventory-summary > div {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid #6d765e55;
+  border-radius: 5px;
+  background: #ffffff05;
+}
+
+.inventory-summary strong {
+  overflow: hidden;
+  color: #ead49a;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inventory-capacity {
+  grid-template-columns: minmax(180px, .55fr) minmax(260px, 1.45fr);
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border-radius: 5px;
+}
+
+.inventory-beginner-guide {
+  margin-bottom: 8px;
+  border-radius: 5px;
+}
+
+#inventory-progress-drawer { margin-bottom: 8px; }
+
+.inventory-tabs {
+  position: sticky;
+  z-index: 15;
+  top: 64px;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 5px;
+  border: 1px solid #64735e55;
+  border-radius: 7px;
+  background: #09130ff2;
+  backdrop-filter: blur(8px);
+}
+
+.inventory-tabs button {
+  min-width: 0;
+  min-height: 48px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.inventory-tabs button[aria-selected="true"] {
+  border-color: #d0ad5d;
+  background: linear-gradient(145deg, #59451f, #28200f);
+  box-shadow: inset 0 -2px #d0ad5d;
+}
+
+.inventory-workspace {
+  grid-template-columns: minmax(0, 1fr) minmax(270px, 310px);
+  gap: 10px;
+}
+
+#inventory-decision-panel {
+  top: 126px;
+  max-height: calc(100dvh - 176px);
+  overflow-y: auto;
+  border-radius: 7px;
+}
+
+#inventory-panel[data-tab="gear"] .inventory-content {
+  grid-template-columns: minmax(270px, .72fr) minmax(340px, 1.28fr);
+  gap: 10px;
+}
+
+#inventory-panel[data-tab="gear"] #inventory-preview-drawer {
+  top: 126px;
+  border-width: 1px;
+  border-radius: 7px;
+}
+
+#inventory-panel[data-tab="gear"] .inventory-portrait { min-height: 286px; }
+#inventory-panel[data-tab="gear"] #inventory-portrait { max-height: 270px; }
+#inventory-panel[data-tab="gear"] .equipment-slot-ring button { width: 94px; min-height: 56px; border-width: 1px; border-radius: 6px; }
+
+#inventory-panel[data-tab="gear"] .equipment-grid {
+  grid-template-columns: repeat(auto-fit, minmax(126px, 1fr));
+}
+
+#inventory-panel[data-tab="gear"] .inventory-grid article.equipment,
+#inventory-panel[data-tab="gear"] .inventory-vacant-slot {
+  min-height: 138px;
+  border-radius: 7px;
+}
+
+#inventory-panel[data-tab="bag"] .inventory-grid {
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+}
+
+.inventory-footer { text-align: center; }
+
+@container inventory (max-width: 940px) {
+  .inventory-workspace { grid-template-columns: 1fr; }
+  #inventory-decision-panel { position: static; order: -1; max-height: none; }
+  #inventory-panel[data-tab="gear"] .inventory-content {
+    grid-template-columns: minmax(250px, .68fr) minmax(330px, 1.32fr);
+  }
+  #inventory-panel[data-tab="gear"] #inventory-preview-drawer { position: static; }
+}
+
+@container inventory (max-width: 700px) {
+  .inventory-summary { grid-template-columns: 1fr 1fr; }
+  .inventory-capacity { grid-template-columns: 1fr; }
+  .inventory-tabs { top: 74px; }
+  .inventory-tabs button { grid-template-columns: 24px 1fr; }
+  .inventory-tabs button > span { grid-row: 1 / 3; }
+  #inventory-panel[data-tab="gear"] .inventory-content {
+    grid-template-columns: 1fr;
+    grid-template-areas: "doll" "weapons" "armour";
+  }
+  #inventory-panel[data-tab="gear"] .inventory-portrait { min-height: 250px; }
+  #inventory-panel[data-tab="gear"] #inventory-portrait { max-height: 238px; }
+  #inventory-panel[data-tab="gear"] .equipment-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .inventory-selection-actions button { min-height: 44px; }
+}
+
+@media (max-width: 820px), (pointer: coarse) {
+  #inventory-panel {
+    inset: max(6px, env(safe-area-inset-top)) max(6px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left));
+    width: auto;
+    max-height: none;
+    padding: 12px;
+    border-radius: 8px;
+    transform: none;
+  }
+  .inventory-header { top: -12px; margin: -12px -12px 9px; padding: 12px; }
+  .inventory-tabs { top: 66px; }
+  .inventory-header-actions button,
+  #inventory-close,
+  .inventory-tabs button,
+  .inventory-selection-actions button { min-height: 46px; }
+}
+
+@media (max-width: 560px) {
+  #inventory-panel {
+    inset: 0;
+    border: 0;
+    border-radius: 0;
+  }
+  .inventory-header { align-items: stretch; flex-direction: column; gap: 9px; }
+  .inventory-header-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) 46px; }
+  .inventory-header-actions button { min-width: 0; padding-inline: 5px; font-size: .5rem; }
+  .inventory-summary > div { padding: 7px 8px; }
+  .inventory-capacity-slots { gap: 2px; }
+  .inventory-beginner-guide { overflow-x: auto; justify-content: flex-start; white-space: nowrap; }
+  .inventory-tabs { top: 119px; }
+  .inventory-tabs button { grid-template-columns: 1fr; justify-items: center; text-align: center; }
+  .inventory-tabs button > span { grid-row: auto; }
+  .inventory-tabs button > small { display: none; }
+  #inventory-panel[data-tab="gear"] .inventory-loadout { padding: 7px; }
+  #inventory-panel[data-tab="gear"] .inventory-portrait { min-height: 216px; }
+  #inventory-panel[data-tab="gear"] #inventory-portrait { max-height: 200px; }
+  #inventory-panel[data-tab="gear"] .equipment-slot-ring { inset: 2px 0 48px; }
+  #inventory-panel[data-tab="gear"] .equipment-slot-ring button { width: 82px; min-height: 50px; padding: 5px; }
+  #inventory-panel[data-tab="gear"] #inventory-preview-drawer > summary { pointer-events: auto; }
+  #inventory-panel[data-tab="gear"] .equipment-grid { grid-template-columns: 1fr 1fr; }
+  #inventory-panel[data-tab="bag"] .inventory-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-height: 650px) and (min-width: 700px) {
+  #inventory-panel { top: 8px; bottom: 8px; max-height: none; transform: translateX(-50%); }
+  .inventory-header { padding-block: 10px; }
+  .inventory-summary > div { min-height: 0; padding-block: 6px; }
+  .inventory-capacity, .inventory-beginner-guide { padding-block: 6px; }
+  .inventory-tabs { top: 57px; }
+  #inventory-panel[data-tab="gear"] #inventory-preview-drawer,
+  #inventory-decision-panel { top: 116px; }
+}
