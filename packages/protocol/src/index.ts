@@ -181,11 +181,19 @@ export const RAPID_PRACTICE_TOWN_COLLIDERS = [
 
 /** Shared obstacle query for Fast World prediction and authority. */
 const TOWN_UNDERFLOOR_Y = 6;
+const townTerraceWalls = [
+  { id: "founders-north", minX: 52, maxX: 64.4, minZ: 67.51, maxZ: 67.89 },
+  { id: "founders-south", minX: 52, maxX: 64.4, minZ: 78.11, maxZ: 78.49 },
+  { id: "market-north-a", minX: 81.61, maxX: 81.99, minZ: 83.2, maxZ: 89.1 },
+  { id: "market-north-b", minX: 81.61, maxX: 81.99, minZ: 96, maxZ: 101.5 },
+  { id: "market-south-a", minX: 81.61, maxX: 81.99, minZ: 110.5, maxZ: 117 },
+  { id: "market-south-b", minX: 81.61, maxX: 81.99, minZ: 123, maxZ: 129.5 },
+].map(wall => ({ ...wall, kind: "building" as const, minY: 6, maxY: 10.2 }));
 const townOnlyCollisionQuery = createFastWorldObstacleQuery(
   // The lower market reaches 7.28m. Keep the hidden sealed floor one full cell
   // beneath it so the player's foot inset cannot catch while descending.
   { ...FAST_WORLD_TOWN_BOUNDS, floorY: TOWN_UNDERFLOOR_Y, sealedBounds: true },
-  RAPID_PRACTICE_TOWN_COLLIDERS, fastWorldGroundHeight, []);
+  RAPID_PRACTICE_TOWN_COLLIDERS, fastWorldGroundHeight, townTerraceWalls);
 const towerFloorCollisionQuery = createFastWorldObstacleQuery(
   { ...TOWER_FLOOR_ONE.bounds, floorY: RAPID_PRACTICE_ARENA.floorY, sealedBounds: true },
   [], fastWorldGroundHeight, TOWER_FLOOR_ONE_FORTRESS_COLLIDERS);

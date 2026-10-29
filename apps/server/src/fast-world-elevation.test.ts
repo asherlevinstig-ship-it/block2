@@ -44,6 +44,16 @@ describe("Town of Beginnings shared collision", () => {
     }
   });
 
+  it("keeps terrace edges solid while their broad approaches stay open", () => {
+    for (const wall of [
+      { x: 58, z: 67.7 }, { x: 58, z: 78.3 },
+      { x: 81.8, z: 86 }, { x: 81.8, z: 126 },
+    ]) expect(rapidPracticeCollisionCellSolid(wall.x, height(wall.x, wall.z), wall.z)).toBe(true);
+    for (const route of [
+      { x: 58, z: 73 }, { x: 82, z: 92.5 }, { x: 82, z: 120 },
+    ]) expect(rapidPracticeCollisionCellSolid(route.x, height(route.x, route.z), route.z)).toBe(false);
+  });
+
   it("keeps replay and dodges aligned with the town edge", () => {
     const start = { x: 95, y: 8, z: 106 };
     const dash = resolveSweptHorizontalMotion(start, { x: 20, z: 0 }, reader);

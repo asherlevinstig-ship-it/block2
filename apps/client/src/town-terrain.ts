@@ -25,6 +25,17 @@ export interface TownTerrainDetail {
  * below the decorative assets and do not participate in server collision.
  */
 export const SPEED_LAB_TOWN_TERRAIN: readonly TownTerrainPatch[] = [
+  // Connected civic terraces: keep paving narrow enough to retain planted
+  // verges and wide enough for groups to pass each other.
+  { id: "founders-landing", shape: "box", material: "plaza", position: [51.5, 8.06, 73], scale: [3, .04, 10] },
+  { id: "founders-broad-approach", shape: "box", material: "plaza", position: [58.5, 8.06, 73], scale: [13, .04, 8.6] },
+  { id: "north-market-court", shape: "box", material: "plaza", position: [89, 8.06, 92.5], scale: [12, .04, 12] },
+  { id: "south-market-court", shape: "box", material: "plaza", position: [89, 8.06, 120], scale: [12, .04, 12] },
+  { id: "north-market-approach", shape: "box", material: "forecourt", position: [81, 8.07, 92.5], scale: [12, .04, 5.7] },
+  { id: "south-market-approach", shape: "box", material: "forecourt", position: [81, 8.07, 120], scale: [12, .04, 5.7] },
+  { id: "force-field-promenade-road", shape: "box", material: "forecourt", position: [103, 8.07, 106], scale: [4, .04, 46] },
+  { id: "north-promenade-road", shape: "box", material: "forecourt", position: [97, 8.07, 92.5], scale: [14, .04, 3.8] },
+  { id: "south-promenade-road", shape: "box", material: "forecourt", position: [97, 8.07, 120], scale: [14, .04, 3.8] },
   // A circular civic square gives the well and pavilion a deliberate home.
   { id: "civic-square-border", shape: "cylinder", material: "plaza-edge", position: [67, 8.052, 106], scale: [15.4, .052, 15.4] },
   { id: "civic-square", shape: "cylinder", material: "plaza", position: [67, 8.082, 106], scale: [14.65, .055, 14.65] },

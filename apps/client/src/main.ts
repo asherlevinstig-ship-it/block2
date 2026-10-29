@@ -3078,8 +3078,7 @@ if (fastWorldRequested) {
     if (patch.yaw) entity.setLocalEulerAngles(0, patch.yaw, 0);
   }
   for (const item of SPEED_LAB_TOWN_TERRAIN_DETAILS) {
-    const [x, authoredY, z] = item.position;
-    const y = authoredY + fastWorldGroundHeight(x, z) - 8;
+    const [x, y, z] = item.position;
     if (!townVisualInsideBounds(x, z, 1)) continue;
     if (item.kind === "edge-stone") {
       const stone = addBox(rapidPrototypeRoot, `town-terrain:${item.id}`, item.id.length % 2 ? townStone : townStoneLight,
@@ -3100,38 +3099,30 @@ if (fastWorldRequested) {
     }
   }
 
-  // The collision surface is a smooth shared ramp. These shallow masonry bands
-  // make its elevation changes read as broad stairs without creating dozens of
-  // small collision ledges that can trap a player or interrupt a dodge.
-  const addTerraceTread = (name: string, x: number, z: number, width: number, depth: number): void => {
-    const y = fastWorldGroundHeight(x, z) + .035;
-    addBox(rapidPrototypeRoot, name, plazaStone, [width, .07, depth], [x, y, z]);
-  };
-  for (let step = 0; step < 10; step++)
-    addTerraceTread(`town-elevation:founders-step-${step}`, 53.3 + step * 1.12, 73, 1.02, 8.6);
-  for (const [court, z] of [["north", 92.5], ["south", 120]] as const)
-    for (let step = 0; step < 8; step++)
-      addTerraceTread(`town-elevation:${court}-market-step-${step}`, 77.5 + step * 1.18, z, 1.06, 5.7);
-
-  const addRetainingRun = (name: string, from: readonly [number, number], to: readonly [number, number],
-    segments: number, height: number): void => {
-    const dx = (to[0] - from[0]) / segments, dz = (to[1] - from[1]) / segments;
-    const length = Math.hypot(dx, dz) + .08;
+  // One continuous beam follows each terrace edge. The former row of separate
+  // blocks amplified every height sample and made the approach look broken.
+  const addTerraceWall = (name: string, from: readonly [number, number], to: readonly [number, number],
+    height = .56): void => {
+    const dx = to[0] - from[0], dz = to[1] - from[1];
+    const horizontal = Math.hypot(dx, dz);
+    const startY = fastWorldGroundHeight(from[0], from[1]);
+    const endY = fastWorldGroundHeight(to[0], to[1]);
+    const x = (from[0] + to[0]) * .5, z = (from[1] + to[1]) * .5;
     const yaw = Math.atan2(dx, dz) * 180 / Math.PI;
-    for (let index = 0; index < segments; index++) {
-      const x = from[0] + dx * (index + .5), z = from[1] + dz * (index + .5);
-      const ground = fastWorldGroundHeight(x, z);
-      const block = addBox(rapidPrototypeRoot, `${name}-${index}`, index % 2 ? townStone : townStoneLight,
-        [.38, height, length], [x, ground + height * .42, z]);
-      block.setLocalEulerAngles(0, yaw, 0);
-    }
+    const pitch = -Math.atan2(endY - startY, horizontal) * 180 / Math.PI;
+    const beam = addBox(rapidPrototypeRoot, name, townStone,
+      [.34, height, Math.hypot(horizontal, endY - startY) + .08], [x, 8 + height * .44, z]);
+    beam.setLocalEulerAngles(pitch, yaw, 0);
+    for (const [index, point] of [from, to].entries())
+      addBox(rapidPrototypeRoot, `${name}-post-${index}`, townStoneLight,
+        [.48, .62, .48], [point[0], 8 + .27, point[1]]);
   };
-  addRetainingRun("town-elevation:founders-north-wall", [52.2, 67.7], [64.2, 67.7], 8, .72);
-  addRetainingRun("town-elevation:founders-south-wall", [52.2, 78.3], [64.2, 78.3], 8, .72);
-  addRetainingRun("town-elevation:north-market-overlook-a", [81.8, 83.2], [81.8, 89.1], 4, .7);
-  addRetainingRun("town-elevation:north-market-overlook-b", [81.8, 96], [81.8, 101.5], 4, .7);
-  addRetainingRun("town-elevation:south-market-overlook-a", [81.8, 110.5], [81.8, 117], 4, .7);
-  addRetainingRun("town-elevation:south-market-overlook-b", [81.8, 123], [81.8, 129.5], 4, .7);
+  addTerraceWall("town-elevation:founders-north-wall", [52.2, 67.7], [64.2, 67.7]);
+  addTerraceWall("town-elevation:founders-south-wall", [52.2, 78.3], [64.2, 78.3]);
+  addTerraceWall("town-elevation:north-market-overlook-a", [81.8, 83.2], [81.8, 89.1]);
+  addTerraceWall("town-elevation:north-market-overlook-b", [81.8, 96], [81.8, 101.5]);
+  addTerraceWall("town-elevation:south-market-overlook-a", [81.8, 110.5], [81.8, 117]);
+  addTerraceWall("town-elevation:south-market-overlook-b", [81.8, 123], [81.8, 129.5]);
 
   const addGabledRoof = (parent: pc.Entity, name: string, x: number, z: number, width: number, depth: number,
     baseY: number, roof: pc.StandardMaterial, highlight: pc.StandardMaterial, angle = 34): void => {
