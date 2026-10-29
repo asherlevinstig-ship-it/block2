@@ -543,6 +543,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly stealthUntil = new Map<string, number>();
   private readonly assassinShadowBonus = new Map<string, number>();
   private readonly pathConcealedUntil = new Map<string, number>();
+  private readonly pendingBladeDances = new Map<string, {
+    endsAt: number; nextCutAt: number; intervalMs: number; totalCuts: number; sequence: number;
+    damage: number; range: number; initialYaw: number; originX: number; originY: number; originZ: number; lastTargetId?: string;
+  }>();
   private readonly thiefDecoys = new Map<string, { ownerId: string; x: number; y: number; z: number; yaw: number; until: number; health: number; maxHealth: number }>();
   private readonly assassinBossConcealedUntil = new Map<string, number>();
   private readonly rangerPinning = new Map<string, { mobId: string; stacks: number; expiresAt: number }>();
@@ -1336,6 +1340,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.assassinShadowUntil.delete(client.sessionId);
     this.stealthUntil.delete(client.sessionId);
     this.assassinShadowBonus.delete(client.sessionId);
+    this.pendingBladeDances.delete(client.sessionId);
     this.pathConcealedUntil.delete(client.sessionId);
     this.assassinBossConcealedUntil.delete(client.sessionId);
     this.rangerPinning.delete(client.sessionId);
@@ -6599,6 +6604,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.mageBarrierHits.delete(playerId); this.mageBarrierEnergy.delete(playerId);
     this.rangerCallingFocus.delete(playerId); this.rangerFieldFocusHits.delete(playerId);
     this.assassinShadowUntil.delete(playerId); this.assassinShadowBonus.delete(playerId);
+    this.pendingBladeDances.delete(playerId);
     this.specialMarks.delete(playerId); this.mageCallingCasts.delete(playerId);
     this.endStealth(playerId);
     for (const [id, field] of this.renewalFields) if (field.ownerId === playerId) this.renewalFields.delete(id);
@@ -7440,25 +7446,14 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       durationMs = 650 + rank * 50;
       player.invulnerableUntil = Math.max(player.invulnerableUntil, now + durationMs);
       const cutCount = 4 + (augmentId === "dance_blade_storm" ? 2 : 0) + Number(this.hasFloorUpgrade(client.sessionId, "assassin_dance"));
-      const cuts: { mobId: string; damage: number; sequence: number }[] = [];
-      for (let sequence = 0; sequence < cutCount; sequence += 1) {
-        const living = bladeDanceTargets.filter(([, mob]) => mob.alive && mob.health > 0);
-        if (living.length === 0) break;
-        const [mobId, mob] = living[sequence % living.length]!;
-        const damage = damageAfterArmor(2 + Number(rank >= 4), mob.armor);
-        this.combatContributions.record(mobId, client.sessionId, Math.min(mob.health, damage), now);
-        mob.health = Math.max(0, mob.health - damage); mob.hitSequence += 1;
-        this.alertHitMob(mobId, client.sessionId, now);
-        cuts.push({ mobId, damage, sequence });
-        if (mob.health === 0) this.defeatMob(mobId, mob, client.sessionId, now);
-      }
-      for (const [mobId, mob] of bladeDanceTargets) if (mob.alive && cuts.some(cut => cut.mobId === mobId)) {
-        this.staggerMob(mobId, mob, now, 700 + rank * 75, true);
-      }
-      detail = `${cuts.length} RAPID CUT${cuts.length === 1 ? "" : "S"} · ${new Set(cuts.map(cut => cut.mobId)).size} TARGET${new Set(cuts.map(cut => cut.mobId)).size === 1 ? "" : "S"}`;
+      const intervalMs = Math.max(70, Math.floor(durationMs / cutCount));
+      this.pendingBladeDances.set(client.sessionId, {
+        endsAt: now + durationMs, nextCutAt: now, intervalMs, totalCuts: cutCount, sequence: 0,
+        damage: 2 + Number(rank >= 4), range: 6 + (augmentId === "dance_long_step" ? 2 : 0),
+        initialYaw: parsed.data.yaw ?? player.yaw, originX: player.x, originY: player.y, originZ: player.z,
+      });
+      detail = `${cutCount} CUTS PRIMED · ${bladeDanceTargets.length} TARGET${bladeDanceTargets.length === 1 ? "" : "S"} IN REACH`;
       this.grantCallingTrial(client.sessionId, "dance_long_step", 1);
-      this.grantCallingTrial(client.sessionId, "dance_blade_storm", cuts.length);
-      this.broadcast("assassin:blade-dance", { casterId: client.sessionId, cuts, durationMs });
     } else if (abilityId === "thief_smoke_bomb") {
       durationMs = 2_500 + rank * 350 + (augmentId === "smoke_dense_cloud" ? 2_000 : 0) + (this.hasFloorUpgrade(client.sessionId, "thief_smoke") ? 2_000 : 0);
       const radius = 6 + rank;
@@ -8850,6 +8845,78 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     return bossSupported;
   }
 
+  private resolveBladeDances(now: number): void {
+    for (const [casterId, dance] of this.pendingBladeDances) {
+      if (now < dance.nextCutAt) continue;
+      const caster = this.state.players.get(casterId);
+      const build = caster ? parseBuildPathState(caster.huntLoadoutsJson) : null;
+      const stillDancing = caster && caster.health > 0 && build?.selectedPathId === "assassin"
+        && selectedCallingAbility(build, "assassin") === "assassin_blade_dance";
+      if (!stillDancing) {
+        this.pendingBladeDances.delete(casterId);
+        if (caster && caster.invulnerableUntil <= dance.endsAt) caster.invulnerableUntil = now;
+        this.callingState(casterId, "assassin", "assassin_blade_dance", "RAPID FLURRY", { clear: true });
+        continue;
+      }
+      {
+        const candidates = [...this.state.mobs.entries()].filter(([, mob]) => {
+          if (!mob.alive || mob.health <= 0 || Math.abs(mob.y - dance.originY) > 2.5
+            || !hasCombatLineOfSight(caster, mob, this.readWorldBlock)) return false;
+          const dx = mob.x - dance.originX, dz = mob.z - dance.originZ, distance = Math.hypot(dx, dz);
+          if (distance < .001 || distance > dance.range) return false;
+          const radians = dance.initialYaw * Math.PI / 180;
+          return (Math.sin(radians) * dx + Math.cos(radians) * dz) / distance >= -.15;
+        }).sort(([idA, a], [idB, b]) => {
+          const repeatedA = Number(idA === dance.lastTargetId), repeatedB = Number(idB === dance.lastTargetId);
+          return repeatedA - repeatedB
+            || Math.hypot(a.x - caster.x, a.z - caster.z) - Math.hypot(b.x - caster.x, b.z - caster.z);
+        });
+        const selected = candidates[0];
+        if (!selected) {
+          this.pendingBladeDances.delete(casterId);
+          if (caster.invulnerableUntil <= dance.endsAt) caster.invulnerableUntil = now;
+          this.callingState(casterId, "assassin", "assassin_blade_dance", "RAPID FLURRY", { clear: true });
+          continue;
+        }
+        const [mobId, mob] = selected;
+        const fromX = caster.x, fromY = caster.y, fromZ = caster.z;
+        const dx = mob.x - caster.x, dz = mob.z - caster.z, distance = Math.max(.001, Math.hypot(dx, dz));
+        const advance = Math.max(0, distance - 1.25);
+        if (advance > 0) {
+          const stepped = resolveSweptHorizontalMotion({ x: caster.x, y: caster.y, z: caster.z },
+            { x: dx / distance * advance, z: dz / distance * advance }, this.readWorldBlock);
+          if (Number.isFinite(stepped.x) && Number.isFinite(stepped.y) && Number.isFinite(stepped.z)) {
+            caster.x = stepped.x; caster.y = stepped.y; caster.z = stepped.z;
+          }
+        }
+        caster.yaw = Math.atan2(mob.x - caster.x, mob.z - caster.z) * 180 / Math.PI;
+        const final = dance.sequence === dance.totalCuts - 1;
+        const damage = damageAfterArmor(dance.damage + Number(final), mob.armor);
+        this.combatContributions.record(mobId, casterId, Math.min(mob.health, damage), now);
+        mob.health = Math.max(0, mob.health - damage); mob.hitSequence += 1;
+        this.alertHitMob(mobId, casterId, now, caster);
+        const cut = { mobId, damage, sequence: dance.sequence, final,
+          x: mob.x, y: mob.y, z: mob.z, fromX, fromY, fromZ,
+          casterX: caster.x, casterY: caster.y, casterZ: caster.z };
+        if (mob.health === 0) this.defeatMob(mobId, mob, casterId, now);
+        else this.staggerMob(mobId, mob, now, final ? 1_050 : 260, true);
+        this.broadcast("assassin:blade-dance", { casterId, cuts: [cut], durationMs: dance.intervalMs + 120,
+          started: false, totalCuts: dance.totalCuts });
+        this.grantCallingTrial(casterId, "dance_blade_storm", 1);
+        dance.lastTargetId = mobId;
+        dance.sequence += 1;
+        dance.nextCutAt = now + dance.intervalMs;
+        dance.endsAt = dance.nextCutAt + dance.intervalMs;
+        caster.invulnerableUntil = Math.max(caster.invulnerableUntil, dance.endsAt);
+        if (dance.sequence >= dance.totalCuts) {
+          this.pendingBladeDances.delete(casterId);
+          this.callingState(casterId, "assassin", "assassin_blade_dance", "RAPID FLURRY", { clear: true });
+          continue;
+        }
+      }
+    }
+  }
+
   private resolveRenewalFields(now: number): void {
     for (const [fieldId, field] of this.renewalFields) {
       if (now >= field.expiresAt) { this.renewalFields.delete(fieldId); continue; }
@@ -9223,6 +9290,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.resolvePendingPowers(now);
     this.resolveThornBindings(now);
     this.resolvePendingResurrections(now);
+    this.resolveBladeDances(now);
     this.resolvePendingAttacks(now);
     this.advanceCrawlerRushes(now);
     this.advanceChampionCharges(now);
@@ -9934,6 +10002,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           this.clients.find(client => client.sessionId === sessionId)?.send("armour:terrain-proc",
             { armourId: "forager_wrap" } satisfies RegionalArmourProc);
         }
+      }
+      if (this.pendingBladeDances.has(sessionId)) {
+        player.lastProcessedInput = activeMovementInput(this.movementInputs.get(sessionId), now, player.yaw).sequence;
+        continue;
       }
       if (this.protectedDialogs.has(sessionId) || this.movementPilotControllers.has(sessionId) || this.orderedMovement.has(sessionId)) continue;
       const liveInput = activeMovementInput(this.movementInputs.get(sessionId), now, player.yaw);

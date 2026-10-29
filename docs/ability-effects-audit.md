@@ -37,7 +37,7 @@ These ratings concern mechanical clarity found in source and tests, not an unsee
 | Overload | Amber | Targeted warning, delayed blast and aftershock are distinct. Effects stay at their actual location. Readability under crowded combat still needs playtesting. |
 | Stealth | Green | Pursuit break, private activation, concealment and empowered attack have dedicated signals. Owner outline and remote invisibility still need visual confirmation. |
 | Death Mark | Green | Aimed visible target; marks clear on consumption, combo execution and defeat. Description matches targeting. |
-| Blade Dance | Amber | Aimed multi-target cuts and damage work. Damage resolves in one server batch while visual cuts unfold over time; sequencing is the next substantial mechanics task. |
+| Blade Dance | Green | Every cut now resolves on its visible beat, collision-safely advances the Assassin, revalidates and retargets living enemies, and ends with a stronger staggered final cut. Death, Calling changes and missing targets cancel the remaining sequence safely. |
 | Smoke Bomb | Green | Smoke, concealment and actual stamina recovery have separate feedback; diversion respects visibility and cancels pending melee. |
 | Decoy | Green | Attackable player imitation, enemy redirection and destruction. Description now promises the implemented decoy. Dies with its owner/attempt. |
 | Escape Artist | Green | Dodge exhaustion reset, stamina and evasion work; Clean Getaway conceals rather than heals. |
@@ -54,4 +54,4 @@ Automated checks cover the six defeated-caster cases, wall occlusion, real coold
 
 Release validation: all type checks and production builds pass, with 2,186 reported tests passing (695 client, 1,290 server, 148 protocol and 53 world tests).
 
-The next live review should exercise G and F together, interrupt Resurrection, kill an active Mage/Thief, and compare normal versus upgraded ranges in both camera views. Then review Blade Dance's damage schedule. Multiplayer effect density, late-join reconstruction of long-lived effects and subjective particles/audio quality remain unverified by this code audit.
+The next live review should exercise G and F together, interrupt Resurrection, kill an active Mage/Thief, compare normal versus upgraded ranges in both camera views, and judge Blade Dance's new dash cadence under real latency. Multiplayer effect density, late-join reconstruction of long-lived effects and subjective particles/audio quality remain unverified by this code audit.

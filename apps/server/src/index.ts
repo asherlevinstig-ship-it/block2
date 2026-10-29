@@ -3,7 +3,7 @@ import { defineRoom, defineServer } from "@colyseus/core";
 import { PRACTICE_ROOM, SILVER_DEPTHS_ROOM, WORLD_ROOM } from "@blockcraft/protocol";
 import { WorldRoom } from "./game-room.js";
 
-const SERVER_BUILD = "calling-effects-audit-v294";
+const SERVER_BUILD = "blade-dance-sequencing-v295";
 
 const gameServer = defineServer({
   rooms: {

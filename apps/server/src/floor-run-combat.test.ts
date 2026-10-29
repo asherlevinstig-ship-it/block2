@@ -186,7 +186,12 @@ describe("class ability upgrades", () => {
       case "mage_fault": expect([...b.pendingMageOverloads.values()][0].radius - [...a.pendingMageOverloads.values()][0].radius).toBe(1); break;
       case "assassin_cloak": expect(b.stealthUntil.get("hero") - a.stealthUntil.get("hero")).toBe(2000); break;
       case "assassin_mark": expect(b.specialMarks.get("hero").expiresAt - a.specialMarks.get("hero").expiresAt).toBe(5000); break;
-      case "assassin_dance": expect(upgraded.mob.health).toBeLessThan(base.mob.health); break;
+      case "assassin_dance":
+        for (let index = 0; index < 5; index += 1) {
+          a.resolveBladeDances(10_000 + index * 250);
+          b.resolveBladeDances(10_000 + index * 250);
+        }
+        expect(upgraded.mob.health).toBeLessThan(base.mob.health); break;
       case "thief_smoke": expect(b.pathConcealedUntil.get("hero") - a.pathConcealedUntil.get("hero")).toBe(2000); break;
       case "thief_decoy": {
         const before = a.thiefDecoys.get("thief-decoy:hero"), after = b.thiefDecoys.get("thief-decoy:hero");

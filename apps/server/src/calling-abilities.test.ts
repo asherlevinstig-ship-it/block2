@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CALLING_ABILITIES, CALLING_ABILITY_OPTIONS, callingStarterAbility, type BuildPathId, type CallingAbilityId } from "@blockcraft/protocol";
+import { Block } from "@blockcraft/voxel-world";
 import { WorldRoom } from "./game-room.js";
 import { MobState, PlayerState, WorldState } from "./schema.js";
 import { chooseBuildPath, chooseBuildSpecialization, grantBuildPathXp, parseBuildPathState, serializeBuildPathState } from "./build-paths.js";
@@ -114,21 +115,70 @@ describe("hotbar Calling abilities", () => {
     expect(internal.pathConcealedUntil.has("hero")).toBe(false);
   });
 
-  it("makes Blade Dance an aimed multi-cut attack instead of a next-hit buff", () => {
+  it("times Blade Dance damage to each cut and finishes with a heavier strike", () => {
     const { room, internal, player, client, broadcast } = fixture("assassin", 70);
-    Object.assign(player, { yaw: 0, x: 50, z: 50 });
-    const first = new MobState(); Object.assign(first, { x: 50, y: 8, z: 53, alive: true, health: 12, maxHealth: 12 });
-    const second = new MobState(); Object.assign(second, { x: 52, y: 8, z: 54, alive: true, health: 12, maxHealth: 12 });
-    const behind = new MobState(); Object.assign(behind, { x: 50, y: 8, z: 47, alive: true, health: 12, maxHealth: 12 });
+    Object.defineProperty(room, "readWorldBlock", { value: (_x: number, y: number) => y <= 7 ? Block.Stone : Block.Air });
+    Object.assign(player, { yaw: 0, x: 330, z: 105 });
+    const first = new MobState(); Object.assign(first, { x: 330, y: 8, z: 108, alive: true, health: 12, maxHealth: 12 });
+    const second = new MobState(); Object.assign(second, { x: 332, y: 8, z: 109, alive: true, health: 12, maxHealth: 12 });
+    const behind = new MobState(); Object.assign(behind, { x: 330, y: 8, z: 102, alive: true, health: 12, maxHealth: 12 });
     room.state.mobs.set("first", first); room.state.mobs.set("second", second); room.state.mobs.set("behind", behind);
     internal.handleCallingAbilityEquip(client, { abilityId: "assassin_blade_dance" });
     internal.handleCallingAbility(client, { requestId: "dance", yaw: 0 });
-    const event = broadcast.mock.calls.find((call: unknown[]) => call[0] === "assassin:blade-dance")?.[1] as any;
-    expect(event.cuts).toHaveLength(4);
-    expect(new Set(event.cuts.map((cut: any) => cut.mobId))).toEqual(new Set(["first", "second"]));
+    expect(first.health).toBe(12); expect(second.health).toBe(12);
+    expect(internal.pendingBladeDances.get("hero").totalCuts).toBe(4);
+    internal.resolveBladeDances(10_000);
+    expect(first.health).toBeLessThan(12); expect(second.health).toBe(12);
+    for (let index = 1; index < 4; index += 1) {
+      vi.setSystemTime(10_000 + index * 250);
+      internal.resolveBladeDances(10_000 + index * 250);
+    }
+    const impacts = broadcast.mock.calls.filter((call: unknown[]) => call[0] === "assassin:blade-dance")
+      .map((call: unknown[]) => call[1] as any).filter(event => event.cuts.length > 0);
+    expect(impacts).toHaveLength(4);
+    expect(new Set(impacts.map(event => event.cuts[0].mobId))).toEqual(new Set(["first", "second"]));
+    expect(impacts.at(-1).cuts[0]).toMatchObject({ sequence: 3, final: true, damage: 3 });
+    expect(impacts.at(-1).cuts[0].damage).toBeGreaterThan(impacts[0].cuts[0].damage);
     expect(first.health).toBeLessThan(12); expect(second.health).toBeLessThan(12); expect(behind.health).toBe(12);
+    expect(internal.pendingBladeDances.has("hero")).toBe(false);
+    expect(player.z).toBeGreaterThan(105);
     expect(internal.assassinShadowUntil.has("hero")).toBe(false);
-    expect(client.send).toHaveBeenCalledWith("calling:ability", expect.objectContaining({ detail: expect.stringContaining("RAPID CUTS") }));
+    expect(client.send).toHaveBeenCalledWith("calling:ability", expect.objectContaining({ detail: expect.stringContaining("CUTS PRIMED") }));
+  });
+
+  it("retargets remaining Blade Dance cuts when its first enemy dies", () => {
+    const { room, internal, player, client, broadcast } = fixture("assassin", 70);
+    Object.defineProperty(room, "readWorldBlock", { value: (_x: number, y: number) => y <= 7 ? Block.Stone : Block.Air });
+    Object.assign(player, { yaw: 0, x: 330, z: 105 });
+    const fragile = new MobState(); Object.assign(fragile, { x: 330, y: 8, z: 108, alive: true, health: 1, maxHealth: 1 });
+    const reserve = new MobState(); Object.assign(reserve, { x: 332, y: 8, z: 109, alive: true, health: 20, maxHealth: 20 });
+    room.state.mobs.set("fragile", fragile); room.state.mobs.set("reserve", reserve);
+    internal.handleCallingAbilityEquip(client, { abilityId: "assassin_blade_dance" });
+    internal.handleCallingAbility(client, { requestId: "retarget", yaw: 0 });
+    internal.resolveBladeDances(10_000);
+    expect(fragile.alive).toBe(false);
+    vi.setSystemTime(10_250); internal.resolveBladeDances(10_250);
+    expect(reserve.health).toBeLessThan(20);
+    const impacts = broadcast.mock.calls.filter((call: unknown[]) => call[0] === "assassin:blade-dance")
+      .map((call: unknown[]) => call[1] as any).filter(event => event.cuts.length > 0);
+    expect(impacts.map(event => event.cuts[0].mobId)).toEqual(["fragile", "reserve"]);
+  });
+
+  it("cancels Blade Dance safely if its caster changes ability", () => {
+    const { room, internal, player, client, broadcast } = fixture("assassin", 70);
+    Object.assign(player, { yaw: 0, x: 50, z: 50 });
+    const target = new MobState(); Object.assign(target, { x: 50, y: 8, z: 53, alive: true, health: 20, maxHealth: 20 });
+    room.state.mobs.set("target", target);
+    internal.handleCallingAbilityEquip(client, { abilityId: "assassin_blade_dance" });
+    internal.handleCallingAbility(client, { requestId: "cancel", yaw: 0 });
+    internal.handleCallingAbilityEquip(client, { abilityId: "assassin_vanish" });
+    internal.resolveBladeDances(10_000);
+    expect(target.health).toBe(20);
+    expect(internal.pendingBladeDances.has("hero")).toBe(false);
+    expect(player.invulnerableUntil).toBe(10_000);
+    expect(broadcast).toHaveBeenCalledWith("calling:state", expect.objectContaining({
+      abilityId: "assassin_blade_dance", phase: "clear",
+    }));
   });
 
   it("does not spend Blade Dance when no enemy is inside its aimed arc", () => {

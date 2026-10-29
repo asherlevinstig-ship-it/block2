@@ -8594,35 +8594,53 @@ function createTankChallengeTargets(targetIds: string[]): void {
   }
 }
 
-function createBladeDanceCuts(message: { casterId: string; cuts: { mobId: string; damage: number; sequence: number }[]; durationMs: number }): void {
+type BladeDanceCutMessage = { casterId: string; cuts: { mobId: string; damage: number; sequence: number; final?: boolean;
+  x?: number; y?: number; z?: number; fromX?: number; fromY?: number; fromZ?: number;
+  casterX?: number; casterY?: number; casterZ?: number }[]; durationMs: number;
+  started?: boolean; totalCuts?: number };
+
+function createBladeDanceCuts(message: BladeDanceCutMessage): void {
   const caster = message.casterId === room?.sessionId ? localPlayer : remotePlayers.get(message.casterId)?.entity;
   if (!caster || message.cuts.length === 0) return;
   const root = new pc.Entity("blade-dance-cut-sequence"); app.root.addChild(root);
   const blade = callingSignatureMaterial(new pc.Color(1, .86, .94), .94, 1.36);
   const wound = callingSignatureMaterial(new pc.Color(1, .04, .16), .84, 1.2);
-  let previous = caster.getPosition().clone();
+  const first = message.cuts[0]!;
+  let previous = first.fromX !== undefined
+    ? new pc.Vec3(first.fromX, first.fromY ?? caster.getPosition().y, first.fromZ ?? caster.getPosition().z)
+    : caster.getPosition().clone();
   const totals = new Map<string, number>();
+  let finalCut = false;
   for (const cut of message.cuts) {
     const mob = mobVisuals.get(cut.mobId); if (!mob) continue;
-    const target = mob.entity.getPosition();
+    const target = cut.x !== undefined
+      ? new pc.Vec3(cut.x, cut.y ?? mob.entity.getPosition().y, cut.z ?? mob.entity.getPosition().z)
+      : mob.entity.getPosition();
     const dx = target.x - previous.x, dz = target.z - previous.z;
     const length = Math.max(.2, Math.hypot(dx, dz)), yaw = Math.atan2(dx, dz) * 180 / Math.PI;
     addCallingSignaturePrimitive(root, "blade-dance-dash-line", "box", cut.sequence % 2 ? wound : blade,
-      [.035, .035, length], [(previous.x + target.x) / 2, target.y + .8 + (cut.sequence % 2) * .18, (previous.z + target.z) / 2],
+      [cut.final ? .075 : .035, cut.final ? .075 : .035, length], [(previous.x + target.x) / 2, target.y + .8 + (cut.sequence % 2) * .18, (previous.z + target.z) / 2],
       [cut.sequence % 2 ? 12 : -12, yaw, cut.sequence % 2 ? 24 : -24]);
     for (const side of [-1, 1]) addCallingSignaturePrimitive(root, "blade-dance-aimed-cut", "box", side > 0 ? blade : wound,
-      [.035, .045, .72], [target.x + side * .15, target.y + .8 + (cut.sequence % 3) * .18, target.z],
+      [cut.final ? .075 : .035, cut.final ? .085 : .045, cut.final ? 1.05 : .72], [target.x + side * .15, target.y + .8 + (cut.sequence % 3) * .18, target.z],
       [side * (28 + cut.sequence * 3), yaw + side * 22, side * 42]);
+    if (cut.final) for (let index = 0; index < 8; index += 1) {
+      const angle = index * Math.PI / 4;
+      addCallingSignaturePrimitive(root, "blade-dance-final-spark", "box", index % 2 ? wound : blade,
+        [.035, .035, .5], [target.x + Math.sin(angle) * .48, target.y + .85, target.z + Math.cos(angle) * .48],
+        [0, angle * 180 / Math.PI, 48]);
+    }
     totals.set(cut.mobId, (totals.get(cut.mobId) ?? 0) + cut.damage);
+    finalCut ||= Boolean(cut.final);
     previous = target.clone();
   }
   callingImpactVisuals.push({ root, expiresAt: performance.now() + message.durationMs, materials: [blade, wound], abilityId: "assassin_blade_dance" });
   for (const [mobId, damage] of totals) {
     const mob = mobVisuals.get(mobId); if (!mob) continue;
     createRangedPopup(new pc.Vec3(mob.state.x, mob.state.y + mob.healthBarY + .9, mob.state.z),
-      `BLADE DANCE Â· âˆ’${damage}`, "melee", false, [1, .3, .48]);
+      `${finalCut ? "FINAL CUT" : "BLADE DANCE"} Â· âˆ’${damage}`, "melee", false, finalCut ? [1, .78, .9] : [1, .3, .48]);
   }
-  combatAudio.play("callingShadow", enemyCuePan(caster.getPosition().x, localPlayer.getPosition().x, 14));
+  combatAudio.play(finalCut ? "swordImpact" : "callingShadow", enemyCuePan(caster.getPosition().x, localPlayer.getPosition().x, 14));
 }
 
 function createTankAllyBlockImpact(guardId: string, allyId: string, mobId: string, prevented: number): void {
@@ -19123,7 +19141,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     createRangedPopup(new pc.Vec3(mob.state.x, mob.state.y + mob.healthBarY + .75, mob.state.z),
       `EMPOWERED Â· +${message.bonusDamage}`, "melee", false, [1, .22, .32]);
   });
-  room.onMessage("assassin:blade-dance", (message: { casterId: string; cuts: { mobId: string; damage: number; sequence: number }[]; durationMs: number }) => {
+  room.onMessage("assassin:blade-dance", (message: BladeDanceCutMessage) => {
     createBladeDanceCuts(message);
   });
   room.onMessage("tank:block-impact", (message: { playerId: string; mobId: string; prevented: number }) => {
