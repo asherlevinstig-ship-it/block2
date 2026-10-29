@@ -221,7 +221,7 @@ import {
   firstPersonMouseLook,
   type CameraViewMode,
 } from "./camera-view.js";
-import { firstPersonActionPose, firstPersonSwordVariant, firstPersonWeaponKind, type FirstPersonWeaponKind } from "./first-person-action.js";
+import { firstPersonActionPose, firstPersonMeleePresentation, firstPersonSwordVariant, firstPersonWeaponKind, type FirstPersonWeaponKind } from "./first-person-action.js";
 import { firstPersonImpactImpulse, selectFirstPersonAimTarget } from "./first-person-combat.js";
 import { ensureKayKitWeaponModel, kayKitWeaponAssetForMainHand, type KayKitWeaponAssetId } from "./weapon-asset-kit.js";
 import { CombatSyncRecorder } from "./combat-sync.js";
@@ -6519,8 +6519,9 @@ function updateFirstPersonActionView(now: number, moving: boolean, actionElapsed
     firstPersonActionRig.magicCore.setLocalScale(.12 + pose.magicStrength * .08,
       .12 + pose.magicStrength * .08, .12 + pose.magicStrength * .08);
   }
-  const meleeTrail = (weaponKind === "sword" || weaponKind === "dagger" || weaponKind === "hammer")
-    && pose.attackStrength > .06;
+  const meleePresentation = firstPersonMeleePresentation(weaponKind, pose.attackStrength);
+  const meleeTrail = meleePresentation.trailVisible;
+  firstPersonActionRig.weapons[weaponKind].enabled = meleePresentation.weaponVisible;
   const trailSide = localActionStep === 2 ? -1 : 1;
   for (let index = 0; index < firstPersonActionRig.slashTrails.length; index++) {
     const trail = firstPersonActionRig.slashTrails[index]!;

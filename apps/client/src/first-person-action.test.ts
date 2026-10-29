@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { firstPersonActionPose, firstPersonSwordVariant, firstPersonWeaponKind } from "./first-person-action.js";
+import { firstPersonActionPose, firstPersonMeleePresentation, firstPersonSwordVariant, firstPersonWeaponKind } from "./first-person-action.js";
 
 describe("first-person action presentation", () => {
   it("peaks the blade strike at authored contact time and recovers afterward", () => {
@@ -58,6 +58,15 @@ describe("first-person action presentation", () => {
       attackElapsedMs: 330, attackDurationMs: 500, comboStep: 1, castElapsedMs: null, castDurationMs: 600 });
     expect(Math.abs(strike.rightYaw - idle.rightYaw)).toBeGreaterThan(20);
     expect(strike.rightZ).toBeLessThan(idle.rightZ);
+  });
+
+  it("never renders the held melee weapon over its contact slash", () => {
+    expect(firstPersonMeleePresentation("sword", 0)).toEqual({ weaponVisible: true, trailVisible: false });
+    expect(firstPersonMeleePresentation("sword", .8)).toEqual({ weaponVisible: false, trailVisible: true });
+    expect(firstPersonMeleePresentation("dagger", .4)).toEqual({ weaponVisible: false, trailVisible: true });
+    expect(firstPersonMeleePresentation("hammer", .4)).toEqual({ weaponVisible: false, trailVisible: true });
+    expect(firstPersonMeleePresentation("bow", .8)).toEqual({ weaponVisible: true, trailVisible: false });
+    expect(firstPersonMeleePresentation("focus", .8)).toEqual({ weaponVisible: true, trailVisible: false });
   });
 
   it("brings both hands forward and exposes magic strength while casting", () => {

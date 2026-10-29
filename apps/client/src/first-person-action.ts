@@ -3,6 +3,22 @@ import type { MainHandId } from "@blockcraft/protocol";
 export type FirstPersonWeaponKind = "unarmed" | "sword" | "dagger" | "bow" | "focus" | "hammer";
 export type FirstPersonSwordVariant = "plain" | "forged" | "matriarch" | "cinderfang" | "crowncleaver";
 
+export interface FirstPersonMeleePresentation {
+  weaponVisible: boolean;
+  trailVisible: boolean;
+}
+
+/** The contact slash replaces the held model rather than drawing a second
+ * weapon silhouette over it. Wind-up and recovery still show the real item. */
+export function firstPersonMeleePresentation(
+  weaponKind: FirstPersonWeaponKind,
+  attackStrength: number,
+): FirstPersonMeleePresentation {
+  const melee = weaponKind === "sword" || weaponKind === "dagger" || weaponKind === "hammer";
+  const trailVisible = melee && attackStrength > .06;
+  return { weaponVisible: !trailVisible, trailVisible };
+}
+
 export const firstPersonWeaponKind = (mainHandId: MainHandId): FirstPersonWeaponKind => {
   if (mainHandId === "unarmed") return "unarmed";
   if (mainHandId === "bow" || mainHandId === "forged_bow") return "bow";
