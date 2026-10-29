@@ -3663,7 +3663,14 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.clearMobAttackTimeline(mob);
       this.pendingMobMelee.delete(mobId);
       this.mobAwareness.delete(mobId);
-      mob.respawnAt = rapidSpawn ? now + rapidSpawn.respawnMs : now + 3_000;
+      // Floor 1 is a single shared attempt: once an encounter is cleared it
+      // must stay cleared until the whole party leaves and
+      // resetTowerFloorAfterDeparture() rebuilds the floor. In particular,
+      // respawning a Root Warden used to silently restore its seal after 90s,
+      // making players defeat both Wardens inside an undocumented timer.
+      mob.respawnAt = rapidSpawn?.zone === "tower-floor-1"
+        ? Number.MAX_SAFE_INTEGER
+        : rapidSpawn ? now + rapidSpawn.respawnMs : now + 3_000;
       const credited = rapidSpawn?.leader
         ? this.combatContributions.eligiblePersistent(mobId, mob, this.state.players)
         : this.combatContributions.eligible(mobId, mob, this.state.players, now);

@@ -146,6 +146,7 @@ describe("Crownkeeper earned counter openings", () => {
       Object.assign(f.player, { x: warden.x - 1, y: warden.y, z: warden.z });
       f.internal.combatContributions.record(id, "hero", 30, 10000);
       f.internal.defeatMob(id, warden, "hero", 10000);
+      expect(warden.respawnAt).toBe(Number.MAX_SAFE_INTEGER);
       const offer = f.internal.floorRunUpgrades.state("hero", "tank", f.internal.floorUpgradeAbilities(f.player));
       expect(offer.choices.length).toBeGreaterThan(0);
       f.internal.chooseFloorRunUpgrade(f.client, { offerId: offer.offerId, upgradeId: offer.choices[0] });
