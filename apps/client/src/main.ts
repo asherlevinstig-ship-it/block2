@@ -42,7 +42,7 @@ import { callingAimReleaseCancels, callingTouchAimProfile, type CallingTouchAimP
 import { ExclusivePopupQueue, gameplayBlockedByPopup, popupFocusIndex, popupIsPresented } from "./popup-queue.js";
 import { createPopupInputGuard, popupInputBlocked, type PopupInputGuard } from "./popup-input-guard.js";
 import { normalizedMovementCode, shouldCaptureMovementKey } from "./keyboard-movement.js";
-import { COORDINATED_BRUTE_FOLLOWERS, COORDINATED_SPITTER_FOLLOWERS, activeCombatNearby, advanceBossHud, floorBossPhaseLabel, initialBossHud, leaderArmourSegments, leaderChargeGuidance, leaderExposureLabel, leaderExposureRoleLabel, leaderFormationLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
+import { COORDINATED_BRUTE_FOLLOWERS, COORDINATED_SPITTER_FOLLOWERS, activeCombatNearby, advanceBossHud, floorBossPhaseLabel, floorBossPhaseTransitionMessage, initialBossHud, leaderArmourSegments, leaderChargeGuidance, leaderExposureLabel, leaderExposureRoleLabel, leaderFormationLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
 import { formationLanePoints, formationMarkerPoints, formationRingPoints, formationTargetStyle, formationVfxStyle,
   type FormationTactic, type FormationTargetRole } from "./formation-vfx.js";
 import { forestDungeonAtmosphere, forestDungeonNotice, portalNoticeFeedback } from "./forest-dungeon-presentation.js";
@@ -10149,6 +10149,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   const isWatchbreaker = mobId === "northwatch-watchbreaker";
   const isNorthRootWarden = mobId === TOWER_FLOOR_ONE_WARDENS[0];
   const isSouthRootWarden = mobId === TOWER_FLOOR_ONE_WARDENS[1];
+  const isCrownkeeper = mobId === TOWER_FLOOR_ONE_BOSS_ID;
   const isAshglass = mobId.startsWith("ashglass-sentry-");
   const isBriar = mob.archetype === "briar_crawler";
   const isNorthwatch = mob.archetype === "ridge_stalker" || mob.archetype === "shard_sentry";
@@ -10160,7 +10161,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     : mob.difficultyTier === 2
       ? new pc.Color(1, 0.62, 0.08)
       : new pc.Color(0.35, 0.9, 0.28);
-  const bodyColor = isNorthRootWarden ? new pc.Color(.22, .19, .12) : rootGuardian ? new pc.Color(.28, .24, .16)
+  const bodyColor = isCrownkeeper ? new pc.Color(.18, .16, .22) : isNorthRootWarden ? new pc.Color(.22, .19, .12) : rootGuardian ? new pc.Color(.28, .24, .16)
     : isWatchbreaker ? new pc.Color(.25, .35, .42) : isBrute ? new pc.Color(0.38, 0.43, 0.48) : mob.archetype === "shard_sentry" ? new pc.Color(.25, .43, .52)
       : mob.archetype === "ridge_stalker" ? new pc.Color(.44, .46, .39)
         : isAshglass ? new pc.Color(0.31, 0.22, 0.2) : isCinderRam ? new pc.Color(.27, .22, .19) : isEmberHound ? new pc.Color(.3, .13, .075) : isFenBloater ? new pc.Color(.24, .34, .12) : isThornbinder ? new pc.Color(.3, .24, .1) : isSpitter ? new pc.Color(0.34, 0.29, 0.43) : isBriar ? new pc.Color(0.31, 0.19, 0.12) : new pc.Color(0.28, 0.42, 0.21);
@@ -10169,7 +10170,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   // Keep the emissive shader feature active while varying cue intensity.
   bodyMaterial.emissive.set(0.001, 0.001, 0.001);
   bodyMaterial.update();
-  const midScale = rootGuardian ? 1.2 : mob.isMiniBoss ? 1.14 : mob.isChampion ? 1.08 : 1;
+  const midScale = isCrownkeeper ? 1.28 : rootGuardian ? 1.2 : mob.isMiniBoss ? 1.14 : mob.isChampion ? 1.08 : 1;
   const midBody = createMidDetailMob(mob.archetype, bodyColor, midScale);
   entity.addChild(midBody);
   const lodBody = new pc.Entity("mob-distant-silhouette");
@@ -10310,6 +10311,36 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     addBox(staffParent, "south-warden-staff-bloom", venomBloom, [.42, .42, .18], [.02, -1.82, .21])
       .setLocalEulerAngles(0, 0, 45);
   }
+  if (isCrownkeeper) {
+    const royalStone = coloredMaterial(new pc.Color(.11, .09, .15));
+    const crownGold = coloredMaterial(new pc.Color(.92, .59, .12));
+    crownGold.metalness = .72; crownGold.shininess = 70; crownGold.update();
+    const crownCore = coloredMaterial(new pc.Color(.74, .22, 1));
+    crownCore.emissive.set(.3, .035, .58); crownCore.update();
+    addBox(bodyRoot, "crownkeeper-cuirass", royalStone, [1.46, .72, .9], [0, 1.35, -.06]);
+    addBox(bodyRoot, "crownkeeper-gorget", crownGold, [.82, .16, .62], [0, 1.83, -.02]);
+    elderthornHeartMaterial = crownCore;
+    elderthornHeart = addBox(bodyRoot, "crownkeeper-heart", crownCore, [.3, .42, .18], [0, 1.28, .48]);
+    elderthornHeart.setLocalEulerAngles(0, 0, 45);
+    for (const side of [-1, 1]) {
+      addBox(bodyRoot, `crownkeeper-pauldron-${side}`, royalStone, [.48, .64, .66], [side * .9, 1.62, -.04])
+        .setLocalEulerAngles(0, 0, side * -18);
+      addBox(bodyRoot, `crownkeeper-pauldron-trim-${side}`, crownGold, [.52, .12, .7], [side * .9, 1.94, -.04])
+        .setLocalEulerAngles(0, 0, side * -18);
+    }
+    addBox(bodyRoot, "crownkeeper-crown-band", crownGold, [.78, .18, .46], [0, 2.13, 0]);
+    for (const [x, height] of [[-.31, .5], [0, .72], [.31, .5]] as const)
+      addBox(bodyRoot, "crownkeeper-crown-point", crownGold, [.15, height, .16], [x, 2.28 + height * .32, 0])
+        .setLocalEulerAngles(0, 0, x * -22);
+    const weaponParent = art.arms.find(arm => arm.side > 0)?.knee ?? bodyRoot;
+    addBox(weaponParent, "crownkeeper-blade-grip", royalStone, [.13, 1.35, .13], [.05, -.82, .2])
+      .setLocalEulerAngles(-8, 0, -7);
+    addBox(weaponParent, "crownkeeper-blade-guard", crownGold, [.68, .12, .18], [.02, -1.48, .2])
+      .setLocalEulerAngles(0, 0, -5);
+    addBox(weaponParent, "crownkeeper-greatblade", crownGold, [.32, 1.55, .12], [.02, -2.22, .2])
+      .setLocalEulerAngles(-5, 0, -4);
+    addBox(weaponParent, "crownkeeper-blade-rune", crownCore, [.13, .65, .135], [.02, -2.17, .205]);
+  }
   if (isAshglass) {
     const glass = coloredMaterial(new pc.Color(0.95, 0.42, 0.11));
     glass.emissive.set(0.33, 0.08, 0.015); glass.update();
@@ -10319,7 +10350,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
       spike.setLocalEulerAngles(0, 0, side * -25);
     }
   }
-  if ((mob.isChampion || mob.isMiniBoss) && !matriarch && !rootGuardian && !isWatchbreaker) {
+  if ((mob.isChampion || mob.isMiniBoss) && !matriarch && !rootGuardian && !isWatchbreaker && !isCrownkeeper) {
     const crestMaterial = coloredMaterial(new pc.Color(.87, .58, .16));
     const crestY = mob.archetype === "shard_sentry" ? 1.77 : isSpitter ? 1.18 : 2.02;
     addBox(bodyRoot, "champion-stone-crest", crestMaterial, [.75, .22, .28], [0, crestY, 0]);
@@ -10329,7 +10360,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   const statusRoot = new pc.Entity("mob-status");
   entity.addChild(statusRoot);
   const healthWidth = isBrute ? 1.46 : isCinderRam ? 1.4 : isFenBloater ? 1.36 : isThornbinder ? 1.2 : isSpitter ? 1.12 : 0.96;
-  const healthBarY = matriarch ? 2.5 : isThornbinder ? 2.58 : isCinderRam ? 2.05 : isFenBloater ? 1.72 : mob.isChampion || mob.isMiniBoss ? mob.archetype === "shard_sentry" ? 2.45 : isSpitter ? 1.9 : isBrute ? 3.08 : 1.72 : isBrute ? 2.32 : mob.archetype === "shard_sentry" ? 1.98 : isSpitter ? 1.43 : 1.34;
+  const healthBarY = isCrownkeeper ? 3.38 : matriarch ? 2.5 : isThornbinder ? 2.58 : isCinderRam ? 2.05 : isFenBloater ? 1.72 : mob.isChampion || mob.isMiniBoss ? mob.archetype === "shard_sentry" ? 2.45 : isSpitter ? 1.9 : isBrute ? 3.08 : 1.72 : isBrute ? 2.32 : mob.archetype === "shard_sentry" ? 1.98 : isSpitter ? 1.43 : 1.34;
   addBox(statusRoot, "health-back", healthBackMaterial, [healthWidth + 0.06, 0.1, 0.08], [0, healthBarY, 0]);
   const healthFill = addBox(statusRoot, "health-fill", healthMaterial, [healthWidth, 0.065, 0.09], [0, healthBarY, 0.01]);
   const tierMaterial = coloredMaterial(tierColor);
@@ -14746,8 +14777,12 @@ function updateBossHud(now: number): void {
   }
   const position = localPlayer.getPosition();
   const inSilverDepths = position.y < 5 && position.x >= 59 && position.x <= 78 && position.z >= 3 && position.z <= 16;
+  const floorBossNearby = isInsideTowerFloorOne(position.x, position.z)
+    && Math.hypot(position.x - TOWER_FLOOR_ONE.bossCourt.x, position.z - TOWER_FLOOR_ONE.bossCourt.z) <= 30
+    && mobVisuals.has(TOWER_FLOOR_ONE_BOSS_ID);
   const trackedMiniBossId = currentWorldObjective?.kind === "miniboss" || currentWorldObjective?.kind === "hunt" ? currentWorldObjective.targetMobId : "";
   const nextBossId = inSilverDepths ? "crystal-matriarch" : isInForestDungeon(position.x, position.z) ? "forest-guardian"
+    : floorBossNearby ? TOWER_FLOOR_ONE_BOSS_ID
     : isInRealmWardenArena(position.x, position.z) && mobVisuals.has("realm-stone-warden") ? "realm-stone-warden"
       : activeRealmEventId || trackedMiniBossId || "greenwood-venom-matriarch";
   const boss = mobVisuals.get(nextBossId)?.state;
@@ -14805,14 +14840,18 @@ function updateBossHud(now: number): void {
   if (floorBoss && bossHudState.visible && boss?.alive && previous.alive !== true) {
     displayedFloorBossPhase = floorBossPhase;
     combatAudio.play("dungeonGate"); createDungeonBurst(boss.x, boss.z, "gate", boss.y + .08);
+    showCombatFeedback(floorBossPhaseTransitionMessage(floorBossPhase), "stagger");
   } else if (floorBoss && bossHudState.visible && boss?.alive && floorBossPhase > displayedFloorBossPhase) {
     displayedFloorBossPhase = floorBossPhase;
     combatAudio.play("guardianPhase"); createDungeonBurst(boss.x, boss.z, "gate", boss.y + .08);
     cameraShakeStrength = Math.max(cameraShakeStrength, floorBossPhase === 3 ? .2 : .13);
     cameraShakeUntil = performance.now() + (floorBossPhase === 3 ? 420 : 280);
+    showCombatFeedback(floorBossPhaseTransitionMessage(floorBossPhase), "stagger");
   }
   if (floorBoss && previous.alive === true && boss?.alive === false) {
     combatAudio.play("dungeonVictory"); createDungeonBurst(boss.x, boss.z, "victory", boss.y + .08);
+    cameraShakeStrength = Math.max(cameraShakeStrength, .24); cameraShakeUntil = performance.now() + 520;
+    showCombatFeedback("CROWNKEEPER DEFEATED · FLOOR 1 CLEARED", "dodge");
   }
   const crownOpeningLabel = nextBossId === TOWER_FLOOR_ONE_BOSS_ID && boss?.alive ? crownkeeperOpeningLabel(crownkeeperWeaponOpeningUntil, now) : "";
   const exposedLabel = crownOpeningLabel || (boss?.isMiniBoss && boss.alive ? leaderExposureLabel(leaderExposedUntil.get(nextBossId) ?? 0, now) : "");
@@ -18178,14 +18217,27 @@ app.on("update", (dt: number) => {
     }
     mob.eliteAura.enabled = mob.state.alive && (mob.state.isElite || mob.state.isMiniBoss);
     if (mob.eliteAura.enabled) {
-      const elitePulse = 1 + Math.sin(animationTime * 6.5) * .09;
+      const crownPhase = mob.mobId === TOWER_FLOOR_ONE_BOSS_ID
+        ? leaderHealthPhase(mob.state.health, mob.state.maxHealth) : 1;
+      const crownOpening = mob.mobId === TOWER_FLOOR_ONE_BOSS_ID
+        && animationNow < crownkeeperWeaponOpeningUntil;
+      if (mob.mobId === TOWER_FLOOR_ONE_BOSS_ID) {
+        const color = crownOpening ? [.25, .85, 1]
+          : crownPhase === 3 ? [1, .18, .06]
+            : crownPhase === 2 ? [.58, .2, .92] : [1, .62, .12];
+        mob.eliteAuraMaterial.diffuse.set(color[0]!, color[1]!, color[2]!);
+        mob.eliteAuraMaterial.emissive.set(color[0]! * .8, color[1]! * .55, color[2]! * .75);
+      }
+      const elitePulse = (mob.mobId === TOWER_FLOOR_ONE_BOSS_ID ? 1.28 : 1)
+        + Math.sin(animationTime * 6.5) * .09;
       mob.eliteAura.setLocalScale(elitePulse, elitePulse, elitePulse);
       mob.eliteAura.setLocalEulerAngles(0, animationTime * 42, 0);
       mob.eliteAuraMaterial.opacity = (mob.state.isMiniBoss ? .5 : .38) + Math.sin(animationTime * 6.5) * .12;
       mob.eliteAuraMaterial.update();
     }
     if (mob.elderthornHeart && mob.elderthornHeartMaterial) {
-      const weakPointOpen = animationNow < (leaderExposedUntil.get(mob.mobId) ?? 0)
+      const weakPointOpen = animationNow < (mob.mobId === TOWER_FLOOR_ONE_BOSS_ID
+        ? crownkeeperWeaponOpeningUntil : leaderExposedUntil.get(mob.mobId) ?? 0)
         || mob.state.combatState === "recover";
       const heartPulse = 1 + Math.sin(animationTime * (weakPointOpen ? 15 : 6)) * (weakPointOpen ? .2 : .07);
       mob.elderthornHeart.setLocalScale(heartPulse, heartPulse, heartPulse);

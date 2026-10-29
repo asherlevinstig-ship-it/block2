@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { crownkeeperOpeningLabel } from "./boss-hud.js";
-import { activeCombatNearby, advanceBossHud, floorBossPhaseLabel, initialBossHud, leaderArmourSegments, leaderAttackLabel, leaderAttackName, leaderChargeGuidance, leaderExposureLabel, leaderExposureRoleLabel, leaderFormationLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
+import { activeCombatNearby, advanceBossHud, floorBossPhaseLabel, floorBossPhaseTransitionMessage, initialBossHud, leaderArmourSegments, leaderAttackLabel, leaderAttackName, leaderChargeGuidance, leaderExposureLabel, leaderExposureRoleLabel, leaderFormationLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
 const player = { x: 40, y: 8, z: 18, health: 5 };
 const boss = { x: 43, y: 8, z: 18, name: "Matriarch", alive: true, health: 24, maxHealth: 24, enraged: false };
 describe("boss HUD", () => {
@@ -92,6 +92,9 @@ describe("boss HUD", () => {
     expect(floorBossPhaseLabel(crownkeeper.name, 2)).toContain("BRIARS RALLY");
     expect(floorBossPhaseLabel(crownkeeper.name, 3)).toContain("LAST DECREE");
     expect(floorBossPhaseLabel(crownkeeper.name, 2, true)).toContain("CROWN EXPOSED");
+    expect([1, 2, 3].map(phase => floorBossPhaseTransitionMessage(phase as 1 | 2 | 3))).toEqual([
+      "THE CROWNKEEPER AWAKENS", "PHASE 2 · BRIARS RALLY", "FINAL PHASE · THE LAST DECREE",
+    ]);
     expect(leaderArmourSegments("floor1-crownkeeper", new Map([
       ["floor1-court-briar-a", { alive: true }],
       ["floor1-court-briar-b", { alive: false }],

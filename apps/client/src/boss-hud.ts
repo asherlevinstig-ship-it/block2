@@ -208,6 +208,12 @@ export function floorBossPhaseLabel(name: string, phase: 1 | 2 | 3, recovering =
   return `PHASE ${phase} · ${phase === 1 ? "ROYAL JUDGEMENT" : phase === 2 ? "BRIARS RALLY" : "THE LAST DECREE"}`;
 }
 
+export function floorBossPhaseTransitionMessage(phase: 1 | 2 | 3): string {
+  return phase === 1 ? "THE CROWNKEEPER AWAKENS"
+    : phase === 2 ? "PHASE 2 · BRIARS RALLY"
+      : "FINAL PHASE · THE LAST DECREE";
+}
+
 export function realmBossHealthPhase(health: number, maxHealth: number): 1 | 2 | 3 {
   if (maxHealth <= 0 || health * 3 <= maxHealth) return 3;
   if (health * 3 <= maxHealth * 2) return 2;
