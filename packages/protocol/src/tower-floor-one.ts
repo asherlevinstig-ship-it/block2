@@ -85,20 +85,79 @@ export type TowerFloorOneSpawn = {
   floorBoss?: boolean;
 };
 
+export type TowerFloorOneEncounter = {
+  id: string;
+  name: string;
+  route: "opening" | "north" | "south";
+  kind: "required" | "optional" | "warden";
+  memberIds: readonly string[];
+  x: number;
+  z: number;
+  lesson: string;
+};
+
 export const TOWER_FLOOR_ONE_SPAWNS: readonly TowerFloorOneSpawn[] = [
   { id: "floor1-mossling-a", archetype: "moss_crawler", name: "Rampart Mossling", level: 1, respawnMs: 40_000, x: 325, y: towerFloorOneGroundHeight(325, 97), z: 97 },
   { id: "floor1-mossling-b", archetype: "briar_crawler", name: "Briarbound Scout", level: 1, respawnMs: 42_000, x: 329, y: towerFloorOneGroundHeight(329, 113), z: 113 },
   { id: "floor1-thorn-a", archetype: "thornbinder", name: "Rampart Thorncaster", level: 2, respawnMs: 46_000, x: 335, y: towerFloorOneGroundHeight(335, 105), z: 105 },
+  { id: "floor1-north-approach-hound", archetype: "moss_crawler", name: "Bramble Hound", level: 1, respawnMs: 300_000, x: 335, y: towerFloorOneGroundHeight(335, 92), z: 92 },
+  { id: "floor1-north-approach-keeper", archetype: "thornbinder", name: "Rootway Keeper", level: 2, respawnMs: 300_000, x: 339, y: towerFloorOneGroundHeight(339, 89), z: 89 },
   { id: "floor1-north-guard", archetype: "briar_crawler", name: "Rootbound Hound", level: 2, respawnMs: 55_000, x: 344, y: towerFloorOneGroundHeight(344, 76), z: 76 },
   { id: "floor1-north-guard-b", archetype: "thornbinder", name: "Rootbound Keeper", level: 2, respawnMs: 55_000, x: 344, y: towerFloorOneGroundHeight(344, 84), z: 84 },
   { id: "floor1-north-warden", archetype: "stone_brute", name: "North Root Warden", level: 3, respawnMs: 90_000, x: 350, y: towerFloorOneGroundHeight(350, 80), z: 80, leader: true },
+  { id: "floor1-north-cache-hound", archetype: "briar_crawler", name: "Lost Cache Hound", level: 2, respawnMs: 420_000, x: 326, y: towerFloorOneGroundHeight(326, 68), z: 68 },
+  { id: "floor1-north-cache-keeper", archetype: "stone_brute", name: "Lost Cache Keeper", level: 3, respawnMs: 420_000, x: 331, y: towerFloorOneGroundHeight(331, 68), z: 68 },
+  { id: "floor1-south-approach-spitter", archetype: "cave_spitter", name: "Thornway Spitter", level: 1, respawnMs: 300_000, x: 335, y: towerFloorOneGroundHeight(335, 120), z: 120 },
+  { id: "floor1-south-approach-pursuer", archetype: "briar_crawler", name: "Thornway Pursuer", level: 2, respawnMs: 300_000, x: 339, y: towerFloorOneGroundHeight(339, 123), z: 123 },
   { id: "floor1-south-guard", archetype: "cave_spitter", name: "South Warden's Seer", level: 2, respawnMs: 55_000, x: 344, y: towerFloorOneGroundHeight(344, 134), z: 134 },
   { id: "floor1-south-guard-b", archetype: "briar_crawler", name: "Thornbound Pursuer", level: 2, respawnMs: 55_000, x: 346, y: towerFloorOneGroundHeight(346, 127), z: 127 },
   { id: "floor1-south-warden", archetype: "thornbinder", name: "South Root Warden", level: 3, respawnMs: 90_000, x: 350, y: towerFloorOneGroundHeight(350, 132), z: 132, leader: true },
+  { id: "floor1-south-cache-spitter", archetype: "cave_spitter", name: "Sunken Cache Spitter", level: 2, respawnMs: 420_000, x: 326, y: towerFloorOneGroundHeight(326, 144), z: 144 },
+  { id: "floor1-south-cache-brute", archetype: "stone_brute", name: "Sunken Cache Keeper", level: 3, respawnMs: 420_000, x: 332, y: towerFloorOneGroundHeight(332, 144), z: 144 },
   { id: "floor1-court-briar-a", archetype: "briar_crawler", name: "Crown Briar", level: 3, respawnMs: 65_000, x: 361, y: towerFloorOneGroundHeight(361, 98), z: 98 },
   { id: "floor1-court-briar-b", archetype: "briar_crawler", name: "Crown Briar", level: 3, respawnMs: 65_000, x: 361, y: towerFloorOneGroundHeight(361, 114), z: 114 },
   { id: "floor1-crownkeeper", archetype: "stone_brute", name: "The Crownkeeper", level: 4, respawnMs: 120_000, x: 375, y: towerFloorOneGroundHeight(375, 106), z: 106, leader: true, floorBoss: true },
 ] as const;
+
+/** The run is authored as readable combat rooms instead of an undifferentiated
+ * population. Optional rooms are deliberately off the critical path and pay a
+ * guaranteed guarded reward. */
+export const TOWER_FLOOR_ONE_ENCOUNTERS: readonly TowerFloorOneEncounter[] = [
+  { id: "floor1-opening", name: "Breach Skirmish", route: "opening", kind: "required",
+    memberIds: ["floor1-mossling-a", "floor1-mossling-b", "floor1-thorn-a"], x: 329, z: 106,
+    lesson: "Mix melee movement with a readable ranged threat." },
+  { id: "floor1-north-approach", name: "Bramble Causeway", route: "north", kind: "required",
+    memberIds: ["floor1-north-approach-hound", "floor1-north-approach-keeper"], x: 337, z: 90,
+    lesson: "Close down the caster while the hound applies pressure." },
+  { id: "floor1-north-warden", name: "North Seal Guard", route: "north", kind: "warden",
+    memberIds: ["floor1-north-guard", "floor1-north-guard-b", "floor1-north-warden"], x: 350, z: 80,
+    lesson: "Break the escort, interrupt Root Slam, then punish the opening." },
+  { id: "floor1-north-cache", name: "Lost Rampart Cache", route: "north", kind: "optional",
+    memberIds: ["floor1-north-cache-hound", "floor1-north-cache-keeper"], x: 329, z: 68,
+    lesson: "Optional close-range risk for a guaranteed loot drop." },
+  { id: "floor1-south-approach", name: "Thornway Crossfire", route: "south", kind: "required",
+    memberIds: ["floor1-south-approach-spitter", "floor1-south-approach-pursuer"], x: 337, z: 122,
+    lesson: "Use cover and spacing to split ranged and pursuing enemies." },
+  { id: "floor1-south-warden", name: "South Seal Guard", route: "south", kind: "warden",
+    memberIds: ["floor1-south-guard", "floor1-south-guard-b", "floor1-south-warden"], x: 350, z: 132,
+    lesson: "Move through the fan and interrupt the expanding Root Ring." },
+  { id: "floor1-south-cache", name: "Sunken Rampart Cache", route: "south", kind: "optional",
+    memberIds: ["floor1-south-cache-spitter", "floor1-south-cache-brute"], x: 329, z: 144,
+    lesson: "Optional ranged pressure for a guaranteed loot drop." },
+] as const;
+
+export const TOWER_FLOOR_ONE_OPTIONAL_REWARD_MOBS = TOWER_FLOOR_ONE_ENCOUNTERS
+  .filter(encounter => encounter.kind === "optional")
+  .flatMap(encounter => encounter.memberIds.slice(-1));
+
+export function towerFloorOneEncounter(id: string): TowerFloorOneEncounter | undefined {
+  return TOWER_FLOOR_ONE_ENCOUNTERS.find(encounter => encounter.id === id);
+}
+
+export function towerFloorOneEncounterComplete(id: string, aliveIds: ReadonlySet<string>): boolean {
+  const encounter = towerFloorOneEncounter(id);
+  return Boolean(encounter) && encounter!.memberIds.every(memberId => !aliveIds.has(memberId));
+}
 
 export const TOWER_FLOOR_ONE_WARDENS = ["floor1-north-warden", "floor1-south-warden"] as const;
 export const TOWER_FLOOR_ONE_NORTH_WARDEN_ID = TOWER_FLOOR_ONE_WARDENS[0];

@@ -8,13 +8,22 @@ const state = (overrides: Partial<FloorOneRunInput> = {}): FloorOneRunInput => (
 describe("Floor 1 run flow", () => {
   it("orients arrival toward the encounter fork", () => {
     const view = floorOneRunView(state());
-    expect(view.stage).toBe("arrival"); expect(view.targetName).toBe("Ruined Warden Fork");
+    expect(view.stage).toBe("arrival"); expect(view.targetName).toBe("Breach Skirmish");
     expect(view.detail).toContain("North teaches interrupts");
   });
 
   it("allows either Warden route and recommends the nearer one", () => {
     expect(floorOneRunView(state({ x: 338, z: 83 })).targetName).toBe("North Root Warden");
     expect(floorOneRunView(state({ x: 338, z: 130 })).targetName).toBe("South Root Warden");
+  });
+
+  it("guides the player through authored groups before either Warden", () => {
+    const breach = floorOneRunView(state({ x: 326, openingAlive: true }));
+    expect(breach.title).toBe("Clear the Breach Skirmish");
+    const north = floorOneRunView(state({ x: 335, z: 88, openingAlive: false, northApproachAlive: true }));
+    const south = floorOneRunView(state({ x: 335, z: 124, openingAlive: false, southApproachAlive: true }));
+    expect(north.targetName).toBe("Bramble Causeway");
+    expect(south.targetName).toBe("Thornway Crossfire");
   });
 
   it("names the remaining seal and its combat lesson", () => {

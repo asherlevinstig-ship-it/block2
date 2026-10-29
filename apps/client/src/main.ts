@@ -17164,10 +17164,15 @@ app.on("update", (dt: number) => {
       const northAlive = mobVisuals.get(TOWER_FLOOR_ONE_WARDENS[0])?.state.alive !== false;
       const southAlive = mobVisuals.get(TOWER_FLOOR_ONE_WARDENS[1])?.state.alive !== false;
       const crownkeeper = mobVisuals.get(TOWER_FLOOR_ONE_BOSS_ID)?.state;
+      const encounterAlive = (ids: readonly string[]): boolean => ids.some(id => mobVisuals.get(id)?.state.alive !== false);
       const bossState: FloorOneBossState = crownkeeper
         ? crownkeeper.alive ? "alive" : "defeated"
         : northAlive || southAlive ? "sealed" : "awakening";
-      floorOneRunUI.update({ active: true, x: playerPosition.x, z: playerPosition.z, northAlive, southAlive, bossState });
+      floorOneRunUI.update({ active: true, x: playerPosition.x, z: playerPosition.z, northAlive, southAlive, bossState,
+        openingAlive: encounterAlive(["floor1-mossling-a", "floor1-mossling-b", "floor1-thorn-a"]),
+        northApproachAlive: encounterAlive(["floor1-north-approach-hound", "floor1-north-approach-keeper"]),
+        southApproachAlive: encounterAlive(["floor1-south-approach-spitter", "floor1-south-approach-pursuer"]),
+      });
       updateTowerFloorOneProgress(towerFloorOneWorld, northAlive, southAlive, dt);
       const gate = crownGateStatus(northAlive, southAlive);
       if (gate.remaining !== previousCrownGateRemaining) {
@@ -19109,6 +19114,14 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     combatAudio.play(notice.kind === "victory" ? "dungeonVictory" : "dungeonGate");
     showCombatFeedback(notice.title, notice.kind === "victory" ? "dodge" : "hit");
   });
+  room.onMessage("floor:recovery", (message: { x: number; y: number; z: number; health: number;
+    stamina: number; splitMs: number; name: string }) => {
+    createDungeonBurst(message.x, message.z, "crystal", message.y + .08);
+    combatAudio.play("guardianPhase");
+    showFastWorldReveal(message.name, `Recovery pulse · +${message.health} health · +${message.stamina} stamina`, "gate");
+    showCombatFeedback(`RECOVERED · +${message.health} HP`, "dodge");
+  });
+  room.onMessage("floor:timing", (message: { elapsedMs: number }) => floorOneRunUI.timing(message));
   room.onMessage("dungeon:run", (update: DungeonRunUpdate) => {
     if (update.phase === "started" && update.dungeon === "silver-depths") {
       renderDepthsWingRewards(null); renderDepthsCheckpointStatus(null);

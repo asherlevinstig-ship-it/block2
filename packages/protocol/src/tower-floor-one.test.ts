@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { FAST_WORLD_COLLISION_QUERY } from "./index.js";
-import { TOWER_FLOOR_ONE, TOWER_FLOOR_ONE_BOSS_ID, TOWER_FLOOR_ONE_CROWNKEEPER_COMBAT, TOWER_FLOOR_ONE_SPAWNS,
+import { TOWER_FLOOR_ONE, TOWER_FLOOR_ONE_BOSS_ID, TOWER_FLOOR_ONE_CROWNKEEPER_COMBAT,
+  TOWER_FLOOR_ONE_ENCOUNTERS, TOWER_FLOOR_ONE_OPTIONAL_REWARD_MOBS, TOWER_FLOOR_ONE_SPAWNS,
   TOWER_FLOOR_ONE_FORTRESS_COLLIDERS, TOWER_FLOOR_ONE_NORTH_ATTENDANTS,
   TOWER_FLOOR_ONE_NORTH_WARDEN_COMBAT, TOWER_FLOOR_ONE_SOUTH_ATTENDANTS,
   TOWER_FLOOR_ONE_SOUTH_WARDEN_COMBAT, TOWER_FLOOR_ONE_WARDENS, isInsideTowerFloorOne,
-  towerFloorOneCrownkeeperPattern, towerFloorOneEncounterAllows, towerFloorOneGroundHeight, towerFloorOneNorthWardenAttackTiming,
+  towerFloorOneCrownkeeperPattern, towerFloorOneEncounterAllows, towerFloorOneEncounterComplete,
+  towerFloorOneGroundHeight, towerFloorOneNorthWardenAttackTiming,
   towerFloorOneNorthWardenPattern, towerFloorOneSouthWardenPattern,
   towerFloorOneSouthWardenWindup } from "./tower-floor-one.js";
 
@@ -47,6 +49,19 @@ describe("tower floor one manifest", () => {
     expect(TOWER_FLOOR_ONE_SPAWNS.filter(spawn => spawn.floorBoss).map(spawn => spawn.id)).toEqual([TOWER_FLOOR_ONE_BOSS_ID]);
     for (const spawn of TOWER_FLOOR_ONE_SPAWNS)
       expect(towerFloorOneEncounterAllows(spawn.id, spawn)).toBe(true);
+  });
+
+  it("authors two readable combat groups on either Warden route plus optional cache rooms", () => {
+    const required = TOWER_FLOOR_ONE_ENCOUNTERS.filter(encounter => encounter.kind !== "optional");
+    expect(required.filter(encounter => encounter.route === "north")).toHaveLength(2);
+    expect(required.filter(encounter => encounter.route === "south")).toHaveLength(2);
+    expect(TOWER_FLOOR_ONE_ENCOUNTERS.filter(encounter => encounter.kind === "optional")).toHaveLength(2);
+    expect(TOWER_FLOOR_ONE_OPTIONAL_REWARD_MOBS).toEqual(["floor1-north-cache-keeper", "floor1-south-cache-brute"]);
+    const north = TOWER_FLOOR_ONE_ENCOUNTERS.find(encounter => encounter.id === "floor1-north-approach")!;
+    expect(towerFloorOneEncounterComplete(north.id, new Set(north.memberIds))).toBe(false);
+    expect(towerFloorOneEncounterComplete(north.id, new Set())).toBe(true);
+    for (const encounter of TOWER_FLOOR_ONE_ENCOUNTERS)
+      for (const id of encounter.memberIds) expect(TOWER_FLOOR_ONE_SPAWNS.some(spawn => spawn.id === id)).toBe(true);
   });
 
   it("gives the North Root Warden two attendants and a fixed interrupt lesson", () => {

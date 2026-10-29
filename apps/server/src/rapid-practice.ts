@@ -4,7 +4,8 @@ import type { FastWorldRegionId, MainHandId } from "@blockcraft/protocol";
 import { FAST_WORLD_REGION_DEFINITIONS, fastWorldAshenLavaAt, fastWorldEruptingHeatVentAt,
   fastWorldMistfenBoardwalkAt, fastWorldMistfenToxicAt,
   fastWorldRegionDefinition, RAPID_PRACTICE_ARENA, RAPID_PRACTICE_TOWN_COLLIDERS,
-  TOWER_FLOOR_ONE, TOWER_FLOOR_ONE_SPAWNS, towerFloorOneEncounterAllows, fastWorldSpawnAllows } from "@blockcraft/protocol";
+  TOWER_FLOOR_ONE, TOWER_FLOOR_ONE_OPTIONAL_REWARD_MOBS, TOWER_FLOOR_ONE_SPAWNS,
+  towerFloorOneEncounterAllows, fastWorldSpawnAllows } from "@blockcraft/protocol";
 export { RAPID_PRACTICE_ARENA, RAPID_PRACTICE_TOWN_COLLIDERS } from "@blockcraft/protocol";
 
 export type RapidPracticeSpawn = {
@@ -63,7 +64,8 @@ export const rapidWorldZoneAt = (x: number, z: number): RapidWorldZone | null =>
   RAPID_WORLD_ZONES.find(zone => x >= zone.minX && x <= zone.maxX && z >= zone.minZ && z <= zone.maxZ) ?? null;
 
 export const rapidPracticeGuardedReward = (encounterId: string): boolean =>
-  FAST_WORLD_REGION_DEFINITIONS.some(region => region.encounterPockets?.some(pocket =>
+  TOWER_FLOOR_ONE_OPTIONAL_REWARD_MOBS.includes(encounterId)
+  || FAST_WORLD_REGION_DEFINITIONS.some(region => region.encounterPockets?.some(pocket =>
     pocket.kind === "guarded-reward" && pocket.encounterIds.at(-1) === encounterId));
 
 export const rapidMistfenToxicPoolAt = (x: number, z: number): boolean =>

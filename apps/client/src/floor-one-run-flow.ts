@@ -10,6 +10,9 @@ export type FloorOneRunInput = {
   northAlive: boolean;
   southAlive: boolean;
   bossState: FloorOneBossState;
+  openingAlive?: boolean;
+  northApproachAlive?: boolean;
+  southApproachAlive?: boolean;
 };
 
 export type FloorOneRunView = {
@@ -28,6 +31,9 @@ export type FloorOneRunView = {
 
 const NORTH = { name: "North Root Warden", x: 350, z: 80 } as const;
 const SOUTH = { name: "South Root Warden", x: 350, z: 132 } as const;
+const OPENING = { name: "Breach Skirmish", x: 329, z: 106 } as const;
+const NORTH_APPROACH = { name: "Bramble Causeway", x: 337, z: 90 } as const;
+const SOUTH_APPROACH = { name: "Thornway Crossfire", x: 337, z: 122 } as const;
 const CROWN = { name: "Crownkeeper Court", x: 375, z: 106 } as const;
 const ASCENT = { name: "Floor 2 Ascent", x: TOWER_FLOOR_ONE.ascentPortal.x, z: TOWER_FLOOR_ONE.ascentPortal.z } as const;
 
@@ -41,6 +47,16 @@ export function floorOneRunView(input: FloorOneRunInput): FloorOneRunView {
   let stage: FloorOneRunStage, eyebrow: string, title: string, detail: string;
   let target: { name: string; x: number; z: number };
 
+  const routeTarget = (north: boolean): { target: { name: string; x: number; z: number }; detail: string } => {
+    if (north && input.northApproachAlive) return { target: NORTH_APPROACH,
+      detail: "Close down the Rootway Keeper while the Bramble Hound pressures the front line." };
+    if (!north && input.southApproachAlive) return { target: SOUTH_APPROACH,
+      detail: "Use the ruined cover to split the Spitter from its pursuing guard." };
+    return north
+      ? { target: NORTH, detail: "Break the escort, interrupt the long Root Slam, then punish the exposed Warden." }
+      : { target: SOUTH, detail: "Break the escort, weave through the Thorn Fan and interrupt the expanding Root Ring." };
+  };
+
   if (crownComplete) {
     stage = "cleared"; eyebrow = "FLOOR 1 CLEARED"; title = "Reach the ascent gate";
     detail = "The Overgrown Rampart is conquered. Collect remaining loot, then continue east to the tower ascent.";
@@ -52,19 +68,25 @@ export function floorOneRunView(input: FloorOneRunInput): FloorOneRunView {
     target = CROWN;
   } else if (northComplete || southComplete) {
     stage = "final-seal"; eyebrow = "ONE SEAL REMAINS";
-    target = input.northAlive ? NORTH : SOUTH;
+    const route = routeTarget(input.northAlive);
+    target = route.target;
     title = `Defeat the ${target.name}`;
-    detail = input.northAlive
-      ? "Interrupt the long Root Slam, then punish the exposed Warden."
-      : "Weave through the Thorn Fan and interrupt the expanding Root Ring.";
+    detail = route.detail;
   } else if (input.x < 322) {
     stage = "arrival"; eyebrow = "FLOOR 1 · OVERGROWN RAMPART"; title = "Cross the sanctuary causeway";
     detail = "At the ruined fork, choose either Warden. North teaches interrupts; South teaches spacing.";
-    target = { name: "Ruined Warden Fork", x: 329, z: 106 };
+    target = OPENING;
+  } else if (input.openingAlive) {
+    stage = "arrival"; eyebrow = "FIRST ENCOUNTER"; title = "Clear the Breach Skirmish";
+    detail = "Remove the melee pressure first, then punish the Thorncaster during its windup.";
+    target = OPENING;
   } else {
     stage = "wardens"; eyebrow = "BREAK BOTH ROOT SEALS"; title = "Choose your first Warden";
     detail = "North: interrupt heavy slams. South: move through ranged patterns. Either route is valid.";
-    target = range(input.x, input.z, NORTH) <= range(input.x, input.z, SOUTH) ? NORTH : SOUTH;
+    const north = range(input.x, input.z, NORTH) <= range(input.x, input.z, SOUTH);
+    const route = routeTarget(north);
+    target = route.target; detail = route.detail;
+    title = `Clear ${target.name}`;
   }
 
   return {
@@ -80,7 +102,8 @@ function formatDuration(milliseconds: number): string {
   return `${minutes}:${seconds}`;
 }
 
-export function createFloorOneRunUI(): { update: (input: FloorOneRunInput) => void; close: () => void } {
+export function createFloorOneRunUI(): { update: (input: FloorOneRunInput) => void;
+  timing: (update: { elapsedMs: number }) => void; close: () => void } {
   const tracker = document.createElement("aside");
   tracker.id = "floor-one-run"; tracker.hidden = true;
   tracker.innerHTML = `
@@ -105,15 +128,20 @@ export function createFloorOneRunUI(): { update: (input: FloorOneRunInput) => vo
   </div>`;
   document.body.append(tracker, complete);
 
-  let active = false, runStartedAt = 0, bossWasAlive = false, celebrated = false, fingerprint = "";
+  let active = false, runStartedAt = 0, serverRunTime = 0, bossWasAlive = false, celebrated = false, fingerprint = "";
   const close = (): void => { complete.hidden = true; };
   complete.querySelector<HTMLButtonElement>("#floor-one-complete-continue")!.addEventListener("click", close);
 
   return {
     close,
+    timing(update): void {
+      serverRunTime = Math.max(0, update.elapsedMs);
+      complete.querySelector<HTMLElement>("#floor-one-clear-time")!.textContent = formatDuration(serverRunTime);
+    },
     update(input): void {
       if (!input.active) {
-        tracker.hidden = true; complete.hidden = true; active = false; bossWasAlive = false; celebrated = false; fingerprint = "";
+        tracker.hidden = true; complete.hidden = true; active = false; serverRunTime = 0;
+        bossWasAlive = false; celebrated = false; fingerprint = "";
         return;
       }
       if (!active) { active = true; runStartedAt = performance.now(); }
@@ -133,7 +161,7 @@ export function createFloorOneRunUI(): { update: (input: FloorOneRunInput) => vo
       }
       if (view.crownComplete && bossWasAlive && !celebrated) {
         celebrated = true;
-        complete.querySelector<HTMLElement>("#floor-one-clear-time")!.textContent = formatDuration(performance.now() - runStartedAt);
+        complete.querySelector<HTMLElement>("#floor-one-clear-time")!.textContent = formatDuration(serverRunTime || performance.now() - runStartedAt);
         complete.hidden = false;
       }
     },

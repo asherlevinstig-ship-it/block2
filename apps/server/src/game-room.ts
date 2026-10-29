@@ -501,6 +501,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly floorRunProcAt = new Map<string, number>();
   private readonly floorRunPathCache = new Map<string, { source: string; path: BuildPathId | null }>();
   private readonly floorRunBossSeen = new Map<string, { health: number; maxHealth: number }>();
+  private readonly floorRunTimings = new Map<string, { enteredAt: number; northAt?: number; southAt?: number; bossAt?: number }>();
+  private towerFloorWasOccupied = false;
+  private towerFloorEmptySince = 0;
   private floorDefeatSequence = 0;
   private readonly performanceSubscribers = new Set<string>();
   private readonly simulationTickSamples: number[] = [];
@@ -2898,6 +2901,43 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.mobBaseNames.set(mobId, mob.name);
   }
 
+  /** Floor populations remain cleared for the whole active party attempt. The
+   * shared floor resets only after every player has left for ten seconds. */
+  private resetTowerFloorAfterDeparture(now: number): void {
+    if (!this.rapidPractice || !FAST_WORLD_TOWN_ONLY) return;
+    const occupied = [...this.state.players.values()].some(player => isInsideTowerFloorOne(player.x, player.z));
+    if (occupied) {
+      this.towerFloorWasOccupied = true;
+      this.towerFloorEmptySince = 0;
+      return;
+    }
+    if (!this.towerFloorWasOccupied) return;
+    if (!this.towerFloorEmptySince) this.towerFloorEmptySince = now;
+    if (now - this.towerFloorEmptySince < 10_000) return;
+    this.towerFloorWasOccupied = false;
+    this.towerFloorEmptySince = 0;
+    const boss = this.state.mobs.get(TOWER_FLOOR_ONE_BOSS_ID);
+    if (boss) {
+      this.state.mobs.delete(TOWER_FLOOR_ONE_BOSS_ID);
+      this.mobHomes.delete(TOWER_FLOOR_ONE_BOSS_ID);
+      this.mobNavigation.delete(TOWER_FLOOR_ONE_BOSS_ID);
+      this.combatContributions.clear(TOWER_FLOOR_ONE_BOSS_ID);
+    }
+    for (const spawn of TOWER_FLOOR_ONE_SPAWNS) {
+      if (spawn.floorBoss) continue;
+      if (!this.state.mobs.has(spawn.id)) this.registerMob(spawn.id, spawn.archetype, spawn);
+      const mob = this.state.mobs.get(spawn.id)!;
+      this.configureRapidWorldMob(spawn.id, mob);
+      mob.x = spawn.x; mob.y = spawn.y; mob.z = spawn.z;
+      mob.alive = true; mob.respawnAt = 0; mob.materializeUntil = 0;
+      mob.combatState = "idle"; mob.stateUntil = 0; mob.targetId = ""; mob.aimCommitted = false;
+      this.clearMobAttackTimeline(mob);
+      this.pendingMobMelee.delete(spawn.id); this.mobAwareness.delete(spawn.id);
+      this.combatContributions.clear(spawn.id);
+    }
+    this.refreshNearbyObjectives();
+  }
+
   private registerMob(mobId: string, archetypeId: MobArchetypeId, spawn: { x: number; y: number; z: number }): void {
     const outside = keepMobOutsideTown(spawn);
     const home = walkableMobSpawn({ ...spawn, ...outside }, this.readWorldBlock, pose => this.mobPositionAllowed(pose)
@@ -3629,6 +3669,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         this.grantMasterTrial(masterTrialTag.playerId, masterTrialTag.specializationId);
       if (rapidSpawn) for (const playerId of recipients) {
         const player = this.state.players.get(playerId)!;
+        const recipientClient = this.clients.find(candidate => candidate.sessionId === playerId);
         const cadenceId = this.profileTokens.get(playerId) ?? playerId;
         const guardedReward = rapidPracticeGuardedReward(rapidSpawn.id);
         const itemDrop = Boolean(rapidSpawn.leader) || guardedReward || this.normalLootCadence.record(cadenceId, Math.random());
@@ -3642,12 +3683,31 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         if (mobId === TOWER_FLOOR_ONE_NORTH_WARDEN_ID || mobId === TOWER_FLOOR_ONE_SOUTH_WARDEN_ID) {
           if (!this.floorRunUpgrades.active(playerId)) this.floorRunUpgrades.start(playerId);
           this.floorRunUpgrades.earn(playerId, mobId);
-          const client = this.clients.find(candidate => candidate.sessionId === playerId);
-          if (client) this.sendFloorRunUpgrades(client, true);
+          if (recipientClient) this.sendFloorRunUpgrades(recipientClient, true);
+          const health = Math.max(2, Math.ceil(player.maxHealth * .35));
+          const before = player.health;
+          player.health = Math.min(player.maxHealth, player.health + health);
+          player.stamina = Math.min(player.maxStamina, player.stamina + 40);
+          const timing = this.floorRunTimings.get(playerId);
+          if (timing) {
+            if (mobId === TOWER_FLOOR_ONE_NORTH_WARDEN_ID) timing.northAt = now;
+            else timing.southAt = now;
+          }
+          recipientClient?.send("floor:recovery", { x: mob.x, y: mob.y, z: mob.z,
+            health: player.health - before, stamina: 40,
+            splitMs: timing ? now - timing.enteredAt : 0,
+            name: mobId === TOWER_FLOOR_ONE_NORTH_WARDEN_ID ? "North Warden Shrine" : "South Warden Shrine" });
         }
         if (mobId === TOWER_FLOOR_ONE_BOSS_ID) {
           const fragments = Math.min(65535, crownkeeperFragments(player.huntLoadoutsJson) + 1);
           player.huntLoadoutsJson = withCrownkeeperFragments(player.huntLoadoutsJson, fragments);
+          const timing = this.floorRunTimings.get(playerId);
+          if (timing) {
+            timing.bossAt = now;
+            recipientClient?.send("floor:timing", { elapsedMs: now - timing.enteredAt,
+              northMs: timing.northAt ? timing.northAt - timing.enteredAt : null,
+              southMs: timing.southAt ? timing.southAt - timing.enteredAt : null });
+          }
         }
         void this.persistPlayer(playerId, player);
         this.clients.find(client => client.sessionId === playerId)?.send("chat:notice",
@@ -8408,7 +8468,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const entering = id === "tower-floor-1-entry";
     const destination = entering ? TOWER_FLOOR_ONE.entry : RAPID_PRACTICE_ARENA.spawn;
     this.clearFloorRunUpgrades(client.sessionId);
-    if (entering) this.floorRunUpgrades.start(client.sessionId);
+    if (entering) {
+      this.floorRunUpgrades.start(client.sessionId);
+      this.floorRunTimings.set(client.sessionId, { enteredAt: now });
+    } else this.floorRunTimings.delete(client.sessionId);
     this.forestTravelAt.set(client.sessionId, now);
     this.pendingMining.delete(client.sessionId); this.pendingAttacks.delete(client.sessionId);
     this.pendingPowers.delete(client.sessionId); this.cancelWeaponProjectiles(client.sessionId);
@@ -9304,6 +9367,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.resolveMageOverloads(now);
     this.advanceRealmBossHazards(now);
     this.advanceSilverDepthsRouteHazards(now);
+    this.resetTowerFloorAfterDeparture(now);
     if (this.roomKind === "overworld") {
       this.advanceRealmEvent(now);
       this.advanceRoadsideGuards(now);
