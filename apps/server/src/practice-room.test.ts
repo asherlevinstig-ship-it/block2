@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { CALLING_ABILITY_OPTIONS, callingStarterAbility } from "@blockcraft/protocol";
+import { CALLING_ABILITY_OPTIONS, TOWER_FLOOR_ONE_BOSS_ID, callingStarterAbility, towerFloorOneGroundHeight } from "@blockcraft/protocol";
 import { WorldRoom } from "./game-room.js";
 import { MobState, PlayerState, WorldState } from "./schema.js";
 import { effectiveBuildPathRank, parseBuildPathState } from "./build-paths.js";
@@ -136,6 +136,14 @@ describe("private Calling practice", () => {
       maxHealth: 52, health: 52, attackDamage: 2, attackPattern: "smash",
     });
     expect(boss.rewardMultiplier).toBe(3);
+  });
+
+  it("allows the Crownkeeper to acquire targets on its raised court", () => {
+    const { internal } = fixture();
+    internal.rapidPractice = true;
+    const pose = { x: 375, y: towerFloorOneGroundHeight(375, 106), z: 106 };
+    expect(pose.y).toBeGreaterThan(9.5);
+    expect(internal.roamingAllowed(TOWER_FLOOR_ONE_BOSS_ID, pose)).toBe(true);
   });
 
   it("fully reforms the Crownkeeper court after a withdrawn encounter", () => {

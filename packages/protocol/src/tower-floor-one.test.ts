@@ -5,12 +5,17 @@ import { TOWER_FLOOR_ONE, TOWER_FLOOR_ONE_BOSS_ID, TOWER_FLOOR_ONE_CROWNKEEPER_C
   TOWER_FLOOR_ONE_FORTRESS_COLLIDERS, TOWER_FLOOR_ONE_NORTH_ATTENDANTS,
   TOWER_FLOOR_ONE_NORTH_WARDEN_COMBAT, TOWER_FLOOR_ONE_SOUTH_ATTENDANTS,
   TOWER_FLOOR_ONE_SOUTH_WARDEN_COMBAT, TOWER_FLOOR_ONE_WARDENS, isInsideTowerFloorOne,
-  towerFloorOneCrownkeeperPattern, towerFloorOneEncounterAllows, towerFloorOneEncounterComplete,
+  towerFloorOneAggroRange, towerFloorOneCrownkeeperPattern, towerFloorOneEncounterAllows, towerFloorOneEncounterComplete,
   towerFloorOneGroundHeight, towerFloorOneNorthWardenAttackTiming,
   towerFloorOneNorthWardenPattern, towerFloorOneSouthWardenPattern,
   towerFloorOneSouthWardenWindup } from "./tower-floor-one.js";
 
 describe("tower floor one manifest", () => {
+  it("awakens the Crownkeeper across its whole court", () => {
+    expect(towerFloorOneAggroRange(TOWER_FLOOR_ONE_BOSS_ID, 10)).toBe(TOWER_FLOOR_ONE.bossCourt.radius);
+    expect(towerFloorOneAggroRange("floor1-north-warden", 10)).toBe(10);
+  });
+
   it("keeps the sanctuary, encounters and boss on a sealed playable island", () => {
     expect(isInsideTowerFloorOne(TOWER_FLOOR_ONE.entry.x, TOWER_FLOOR_ONE.entry.z, 1)).toBe(true);
     expect(FAST_WORLD_COLLISION_QUERY.cellSolid(TOWER_FLOOR_ONE.entry.x, 7, TOWER_FLOOR_ONE.entry.z)).toBe(true);

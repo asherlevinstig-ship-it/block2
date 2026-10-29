@@ -223,6 +223,9 @@ export function towerFloorOneSouthWardenWindup(pattern: string): number {
       : TOWER_FLOOR_ONE_SOUTH_WARDEN_COMBAT.bindWindupMs;
 }
 export const TOWER_FLOOR_ONE_BOSS_ID = "floor1-crownkeeper";
+export function towerFloorOneAggroRange(id: string, fallback: number): number {
+  return id === TOWER_FLOOR_ONE_BOSS_ID ? TOWER_FLOOR_ONE.bossCourt.radius : fallback;
+}
 export const TOWER_FLOOR_ONE_CROWNKEEPER_COMBAT = {
   health: 52,
   phaseTwoAt: .6,

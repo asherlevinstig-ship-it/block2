@@ -13,7 +13,7 @@ import { FAST_WORLD_TOWN_BOUNDS, FAST_WORLD_TOWN_ONLY, PRACTICE_ROOM, TOWER_FLOO
   TOWER_FLOOR_ONE_BOSS_ID, TOWER_FLOOR_ONE_CROWNKEEPER_COMBAT, TOWER_FLOOR_ONE_NORTH_WARDEN_COMBAT, TOWER_FLOOR_ONE_NORTH_WARDEN_ID,
   TOWER_FLOOR_ONE_SOUTH_ATTENDANTS, TOWER_FLOOR_ONE_SOUTH_WARDEN_COMBAT, TOWER_FLOOR_ONE_SOUTH_WARDEN_ID,
   TOWER_FLOOR_ONE_SPAWNS, TOWER_FLOOR_ONE_WARDENS, isInsideTowerFloorOne,
-  towerFloorOneEncounterAllows, towerFloorOneNorthWardenAttackTiming,
+  towerFloorOneAggroRange, towerFloorOneEncounterAllows, towerFloorOneNorthWardenAttackTiming,
   towerFloorOneCrownkeeperPattern, towerFloorOneNorthWardenPattern, towerFloorOneSouthWardenPattern,
   towerFloorOneSouthWardenWindup } from "@blockcraft/protocol";
 import type { SchemaType } from "@colyseus/schema";
@@ -3146,9 +3146,15 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (rapidSpawn) {
       const zone = rapidSpawn.zone === "tower-floor-1" ? TOWER_FLOOR_ONE_ZONE
         : RAPID_WORLD_ZONES.find(candidate => candidate.id === rapidSpawn.zone)!;
-      return Math.abs(pose.y - 8) <= 1.5 && pose.x >= zone.minX - 3 && pose.x <= zone.maxX + 3
+      const encounterAllows = rapidSpawn.zone === "tower-floor-1"
+        // Floor 1 has authored terraces up to y=9.55. Its encounter rule
+        // already validates the pose against that local ground height; the
+        // old flat-world y=8 check rejected everyone in the Crownkeeper court.
+        ? towerFloorOneEncounterAllows(id, pose)
+        : Math.abs(pose.y - 8) <= 1.5 && fastWorldEncounterAllows(id, pose);
+      return pose.x >= zone.minX - 3 && pose.x <= zone.maxX + 3
         && pose.z >= zone.minZ - 3 && pose.z <= zone.maxZ + 3
-        && (rapidSpawn.zone === "tower-floor-1" ? towerFloorOneEncounterAllows(id, pose) : fastWorldEncounterAllows(id, pose))
+        && encounterAllows
         && fastWorldNavigationGroundAllows(id, pose);
     }
     const siteGuard = roadsideGuard(id);
@@ -9998,7 +10004,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.mobAwareness.set(mobId, awareness);
       const previousTarget = awareness.targetId;
       const target = this.roamingReturning.has(mobId) || this.mobReturning.has(mobId) || now < (this.mobUnreachableUntil.get(mobId) ?? 0)
-        ? null : awareMobTarget(mob, players, awareness, now, definition.aggroRange,
+        ? null : awareMobTarget(mob, players, awareness, now, towerFloorOneAggroRange(mobId, definition.aggroRange),
         player => hasCombatLineOfSight(mob, player, this.readWorldBlock));
       const roaming = roamingMembership(mobId);
       const packDisruptedUntil = roaming ? this.roamingPackDisruptedUntil.get(roaming.pack.id) ?? 0 : 0;

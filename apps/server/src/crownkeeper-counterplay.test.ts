@@ -157,7 +157,10 @@ describe("Crownkeeper earned counter openings", () => {
     boss.attackPattern = "slam"; boss.combatState = "windup";
     f.internal.handleCallingAbility(f.client, { requestId: "floor-finale", yaw: 90 });
     expect(boss.combatState).toBe("recover"); expect(f.internal.crownkeeperOpeningUntil).toBe(12500);
-    for (let attempt = 0; boss.alive && attempt < 30; attempt++) f.attack("hero", "forged_sword", 3, 10200 + attempt * 700);
+    for (let attempt = 0; boss.alive && attempt < 30; attempt++) {
+      Object.assign(f.player, { x: boss.x - 3, y: boss.y, z: boss.z });
+      f.attack("hero", "forged_sword", 3, 10200 + attempt * 700);
+    }
     expect(boss.alive).toBe(false);
     expect(crownkeeperFragments(f.player.huntLoadoutsJson)).toBe(1);
     expect([...f.room.state.lootDrops.values()].some(bag => bag.ownerId === "hero")).toBe(true);
