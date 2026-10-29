@@ -3,7 +3,7 @@ import { defineRoom, defineServer } from "@colyseus/core";
 import { PRACTICE_ROOM, SILVER_DEPTHS_ROOM, WORLD_ROOM } from "@blockcraft/protocol";
 import { WorldRoom } from "./game-room.js";
 
-const SERVER_BUILD = "manual-warden-reward-v308";
+const SERVER_BUILD = "warden-upgrade-button-v309";
 
 const gameServer = defineServer({
   rooms: {
