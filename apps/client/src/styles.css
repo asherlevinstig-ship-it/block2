@@ -4604,3 +4604,182 @@ html.fast-world-active #progression-notice[data-priority-visible="true"]:not([hi
 #floor-attempt-summary p { margin: 5px 0 0; font-size: 14px; line-height: 1.45; color: #deeadf; }
 #floor-attempt-summary > div:last-child { background: #303021; border-color: #b6a15b66; }
 @media (max-width: 480px) { #floor-attempt-summary { grid-template-columns: 1fr; } #defeat-screen[data-floor-summary="true"] .defeat-card { padding: 18px; } }
+
+/* Shared RPG modal language. The frame and divider are CC0 9-slice art from
+   Kenney's Fantasy UI Borders pack; layout, contrast and controls remain ours. */
+:root {
+  --rpg-modal-gold: #d7ad58;
+  --rpg-modal-gold-bright: #ffe19a;
+  --rpg-modal-ink: #07100d;
+  --rpg-modal-surface: #101d17;
+}
+
+:is(
+  .level-up-card,
+  .calling-intro-card,
+  .calling-awakening-card,
+  .ability-reveal-card,
+  .defeat-card,
+  .floor-upgrade-shell,
+  .rapid-reward-shell,
+  .loot-card
+) {
+  position: relative;
+  isolation: isolate;
+  box-sizing: border-box;
+  border: 1px solid #80652f;
+  border-radius: 4px;
+  background:
+    radial-gradient(circle at 50% -20%, #5b441d5e 0, transparent 43%),
+    linear-gradient(145deg, #17271f 0%, #09130f 66%, #151006 100%);
+  box-shadow:
+    0 30px 100px #000e,
+    0 0 0 1px #050806,
+    inset 0 0 0 2px #d6b35c24,
+    inset 0 -28px 70px #0008;
+}
+
+:is(
+  .level-up-card,
+  .calling-intro-card,
+  .calling-awakening-card,
+  .ability-reveal-card,
+  .defeat-card,
+  .floor-upgrade-shell,
+  .rapid-reward-shell,
+  .loot-card
+)::after {
+  content: "";
+  position: absolute;
+  z-index: 20;
+  inset: 5px;
+  border: 22px solid transparent;
+  border-image: url("/assets/kenney-fantasy-ui-borders/panel-transparent-border-000.png") 24 / 20px / 3px stretch;
+  filter: sepia(1) saturate(3.2) hue-rotate(352deg) brightness(.86);
+  opacity: .92;
+  pointer-events: none;
+}
+
+:is(
+  .level-up-card,
+  .calling-intro-card,
+  .calling-awakening-card,
+  .ability-reveal-card,
+  .defeat-card,
+  .floor-upgrade-shell,
+  .rapid-reward-shell,
+  .loot-card
+) :is(h1, h2) {
+  color: #fff0b8;
+  font-family: Georgia, "Times New Roman", serif;
+  text-wrap: balance;
+  text-shadow: 0 2px 0 #281807, 0 0 18px #e8b95a38;
+}
+
+:is(
+  .level-up-card,
+  .calling-intro-card,
+  .calling-awakening-card,
+  .ability-reveal-card,
+  .defeat-card,
+  .floor-upgrade-shell,
+  .rapid-reward-shell
+) > :is(h1, h2)::after,
+.calling-intro-card > header h2::after {
+  content: "";
+  display: block;
+  width: min(310px, 78%);
+  height: 14px;
+  margin: 8px auto 0;
+  background: url("/assets/kenney-fantasy-ui-borders/divider-fade-000.png") center / 100% 10px no-repeat;
+  filter: sepia(1) saturate(3.2) hue-rotate(352deg) brightness(.92);
+  opacity: .7;
+}
+
+.calling-intro-card > header h2::after { width: min(260px, 90%); margin-left: 0; }
+
+:is(
+  .level-up-choices,
+  .floor-upgrade-choices,
+  .rapid-reward-choices,
+  #build-path-candidates
+) > button {
+  position: relative;
+  border: 1px solid #8a713c;
+  border-radius: 4px;
+  background:
+    linear-gradient(135deg, #ffffff08, transparent 38%),
+    linear-gradient(160deg, #203a2b, #0d1b14);
+  box-shadow: inset 0 0 0 2px #080d0a, inset 0 0 0 3px #b8974930, 0 6px 16px #0007;
+  transition: transform .14s ease, border-color .14s ease, filter .14s ease, box-shadow .14s ease;
+}
+
+:is(
+  .level-up-choices,
+  .floor-upgrade-choices,
+  .rapid-reward-choices,
+  #build-path-candidates
+) > button:is(:hover, :focus-visible) {
+  border-color: var(--rpg-modal-gold-bright);
+  outline: 0;
+  filter: brightness(1.12);
+  transform: translateY(-2px);
+  box-shadow: inset 0 0 0 2px #080d0a, inset 0 0 0 3px #e3bd6152, 0 10px 22px #0009, 0 0 18px #d8af5152;
+}
+
+:is(
+  #ability-reveal-continue,
+  #ashen-equipment-reveal-continue,
+  #calling-awakening-continue,
+  #level-up-calling-action,
+  #return-to-town,
+  .floor-upgrade-later
+) {
+  border: 1px solid #f2d17a;
+  border-radius: 4px;
+  background: linear-gradient(#b5883d, #75501f 52%, #9b6d2b);
+  box-shadow: inset 0 0 0 2px #3a250e, inset 0 1px 0 #ffe8a45c, 0 5px 14px #0008;
+  color: #fff2c8;
+  text-shadow: 0 1px 0 #251306;
+}
+
+#rapid-practice-reward {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  place-items: center;
+  padding: 18px;
+  background: radial-gradient(circle at 50% 42%, #1834264d, #020706e8 70%);
+  color: #ecfff1;
+  font-family: system-ui, sans-serif;
+  backdrop-filter: blur(6px);
+}
+.rapid-reward-shell { width: min(760px, calc(100vw - 32px)); padding: 28px; text-align: center; }
+.rapid-reward-shell > small { color: #efc86c; font-weight: 900; letter-spacing: .16em; }
+.rapid-reward-shell h2 { margin: 8px 0 4px; font-size: clamp(25px, 4vw, 42px); }
+.rapid-reward-shell > p { margin: 0; color: #b9cebe; }
+.rapid-reward-shell > footer { color: #83998d; font-size: 12px; }
+.rapid-reward-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 20px 0; }
+.rapid-reward-choices > button { display: grid; gap: 7px; min-height: 120px; padding: 16px; color: #effff3; cursor: pointer; text-align: left; }
+.rapid-reward-choices > button strong { color: #fff0ae; font: 800 18px/1.2 Georgia, serif; }
+.rapid-reward-choices > button span { color: #b9d5c1; font-size: 13px; line-height: 1.45; }
+#rapid-practice-reward[data-rarity="rare"] .rapid-reward-choices > button {
+  border-color: #efc24f;
+  background: linear-gradient(145deg, #49350c, #17150a);
+}
+
+.level-up-choices button::before {
+  display: block;
+  margin-bottom: 6px;
+  color: #f3cd73;
+  font: 900 23px/1 Georgia, serif;
+  text-shadow: 0 0 14px #f0b84b66;
+}
+.level-up-choices button[data-character-stat="power"]::before { content: "⚔"; }
+.level-up-choices button[data-character-stat="vitality"]::before { content: "♥"; }
+.level-up-choices button[data-character-stat="agility"]::before { content: "✦"; }
+.level-up-choices button[data-character-stat="mining"]::before { content: "◆"; }
+
+@media (prefers-reduced-motion: reduce) {
+  :is(.level-up-choices, .floor-upgrade-choices, .rapid-reward-choices, #build-path-candidates) > button { transition: none; }
+}

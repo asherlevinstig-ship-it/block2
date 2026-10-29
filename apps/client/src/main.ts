@@ -3921,16 +3921,9 @@ if (fastWorldRequested) {
   rapidPracticeRewardPanel.setAttribute("aria-label", "Choose a wave reward");
   rapidPracticeRewardPanel.hidden = true;
   rapidPracticeRewardPanel.innerHTML = "<div class=\"rapid-reward-shell\"><small>WAVE REWARD</small><h2></h2><p></p><div class=\"rapid-reward-choices\"></div><footer>One click Â· no inventory Â· next wave starts immediately</footer></div>";
-  rapidPracticeRewardPanel.style.cssText = "position:fixed;inset:0;z-index:90;place-items:center;background:radial-gradient(circle,rgba(11,29,22,.2),rgba(2,7,6,.78));font-family:system-ui;color:#ecfff1";
-  rapidPracticeRewardPanel.querySelector<HTMLElement>(".rapid-reward-shell")!.style.cssText = "width:min(760px,calc(100vw - 32px));padding:24px;border:1px solid rgba(239,194,79,.8);border-radius:16px;background:linear-gradient(145deg,rgba(10,28,20,.97),rgba(4,12,10,.98));box-shadow:0 20px 80px #000,0 0 40px rgba(239,194,79,.18);text-align:center";
   rapidPracticeRewardTitle = rapidPracticeRewardPanel.querySelector("h2");
   rapidPracticeRewardDetail = rapidPracticeRewardPanel.querySelector("p");
   rapidPracticeRewardChoices = rapidPracticeRewardPanel.querySelector(".rapid-reward-choices");
-  rapidPracticeRewardChoices!.style.cssText = "display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:20px 0";
-  rapidPracticeRewardPanel.querySelector<HTMLElement>("small")!.style.cssText = "color:#efc24f;font-weight:900;letter-spacing:.16em";
-  rapidPracticeRewardPanel.querySelector<HTMLElement>("h2")!.style.cssText = "margin:8px 0 4px;font-size:clamp(25px,4vw,42px);color:#fff0ae";
-  rapidPracticeRewardPanel.querySelector<HTMLElement>("p")!.style.cssText = "margin:0;color:#afd4ba";
-  rapidPracticeRewardPanel.querySelector<HTMLElement>("footer")!.style.cssText = "color:#789487;font-size:12px";
   rapidPracticeRewardPanel.addEventListener("click", event => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-upgrade]");
     if (!button || !room) return;
@@ -19063,14 +19056,10 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       x: reward.x, y: reward.y, z: reward.z, expiresAt: Date.now() + 10_000 });
     createRangedPopup(new pc.Vec3(reward.x, reward.y + 2.2, reward.z), reward.rare ? "RARE WARDEN RELIC" : reward.weapon ? "WEAPON DROP" : "UPGRADE DROP", "landmark");
     combatAudio.play(reward.rare ? "levelUp" : "lootPickup");
+    rapidPracticeRewardPanel.dataset.rarity = reward.rare ? "rare" : "standard";
     rapidPracticeRewardTitle!.textContent = reward.weapon ? "Choose Your Weapon" : reward.rare ? "Warden Relic" : `Wave ${reward.wave} Cleared`;
     rapidPracticeRewardDetail!.textContent = reward.message;
     rapidPracticeRewardChoices.innerHTML = reward.choices.map(choice => `<button type="button" data-upgrade="${choice.id}"><strong>${choice.name}</strong><span>${choice.detail}</span></button>`).join("");
-    rapidPracticeRewardChoices.querySelectorAll<HTMLElement>("button").forEach(button => {
-      button.style.cssText = `display:grid;gap:7px;min-height:120px;padding:16px;border:1px solid ${reward.rare ? "#efc24f" : "#3e9669"};border-radius:12px;background:${reward.rare ? "linear-gradient(145deg,#49350c,#17150a)" : "linear-gradient(145deg,#123524,#091a12)"};color:#effff3;cursor:pointer;text-align:left;box-shadow:inset 0 0 20px rgba(255,255,255,.03)`;
-      button.querySelector<HTMLElement>("strong")!.style.cssText = "font-size:18px;color:#fff0ae";
-      button.querySelector<HTMLElement>("span")!.style.cssText = "font-size:13px;color:#b9d5c1";
-    });
     rapidPracticeRewardPanel.hidden = false;
     rapidPracticeRewardChoices.querySelector<HTMLButtonElement>("button")?.focus();
   });
