@@ -4,7 +4,7 @@ import { FAST_WORLD_TOWN_BOUNDS, FAST_WORLD_TOWN_ONLY, TOWER_FLOOR_ONE, TOWER_FL
 import { GREENWOOD_MAIN_TRAIL, GREENWOOD_CAMP_TRAIL, GREENWOOD_THICKETS, GREENWOOD_CLUSTER_PLANTS, GREENWOOD_VERGE_PLANTS, sampleWoodlandTrail } from "./greenwood-landscape.js";
 import * as pc from "playcanvas";
 import { facetedBoxMesh } from "./faceted-shapes.js";
-import { addCallingParticleLayers } from "./calling-particles.js";
+import { addCallingParticleLayers, preloadCallingParticleTextures } from "./calling-particles.js";
 import { CallingEffectState, callingEffectKey } from "./calling-effect-state.js";
 import { CALLING_ABILITY_SUSTAIN_PARTICLES, CALLING_ANTICIPATION_PARTICLES, CALLING_IMPACT_PARTICLES, CALLING_SUSTAIN_PARTICLES, callingParticleLifetime } from "./calling-vfx-presets.js";
 import { mageCastDuration, mageCastPose, type MageAbilityId } from "./mage-casting.js";
@@ -1618,6 +1618,7 @@ app.scene.fog.color = new pc.Color(surfaceFogBase.r, surfaceFogBase.g, surfaceFo
 app.scene.fog.start = surfaceFogStartBase;
 app.scene.fog.end = surfaceFogEndBase;
 app.start();
+preloadCallingParticleTextures(app);
 const distantMobBatchGroup = app.batcher.addGroup("distant-mob-silhouettes", true, 96);
 const closeMobBatchGroup = app.batcher.addGroup("close-mob-rigs", true, 48);
 const gpuProfiler = app.graphicsDevice.gpuProfiler as unknown as { enabled: boolean; _frameTime?: number } | null;

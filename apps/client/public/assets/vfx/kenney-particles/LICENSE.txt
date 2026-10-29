@@ -1,0 +1,16 @@
+Kenney Particle Pack
+Source: https://kenney.nl/assets/particle-pack
+License: Creative Commons CC0 1.0 Universal
+License URL: https://creativecommons.org/publicdomain/zero/1.0/
+Downloaded: 2026-10-29
+
+Curated files used by Blockcraft:
+- smoke_04.png -> smoke.png
+- dirt_03.png -> debris.png
+- light_03.png -> arcane-orb.png
+- magic_03.png -> arcane-rune.png
+- spark_05.png -> lightning.png
+- trace_02.png -> streak.png
+
+The asset creator states attribution is not required. This manifest is retained
+to make the origin and reuse terms clear.

@@ -1,10 +1,38 @@
 import * as pc from "playcanvas";
-import type { ParticleKind, ParticleLayer } from "./calling-vfx-presets.js";
+import type { ParticleKind, ParticleLayer, ParticleTexture } from "./calling-vfx-presets.js";
 
-const textureCache = new Map<ParticleKind, pc.Texture>();
+export const CALLING_PARTICLE_TEXTURE_URLS: Record<ParticleTexture, string> = {
+  smoke: "/assets/vfx/kenney-particles/smoke.png",
+  debris: "/assets/vfx/kenney-particles/debris.png",
+  orb: "/assets/vfx/kenney-particles/arcane-orb.png",
+  rune: "/assets/vfx/kenney-particles/arcane-rune.png",
+  lightning: "/assets/vfx/kenney-particles/lightning.png",
+  streak: "/assets/vfx/kenney-particles/streak.png",
+};
 
-function textureFor(app: pc.Application, kind: ParticleKind): pc.Texture {
-  const cached = textureCache.get(kind);
+const authoredTextureCache = new Map<ParticleTexture, pc.Texture>();
+const generatedTextureCache = new Map<ParticleKind, pc.Texture>();
+let preloadStarted = false;
+
+/** Warm a compact local texture library. Effects remain functional with generated fallbacks while loading. */
+export function preloadCallingParticleTextures(app: pc.Application): void {
+  if (preloadStarted) return;
+  preloadStarted = true;
+  for (const [id, url] of Object.entries(CALLING_PARTICLE_TEXTURE_URLS) as [ParticleTexture, string][]) {
+    app.assets.loadFromUrl(url, "texture", (error, asset) => {
+      if (!error && asset?.resource) authoredTextureCache.set(id, asset.resource as pc.Texture);
+    });
+  }
+}
+
+const defaultTexture: Record<ParticleKind, ParticleTexture> = {
+  smoke: "smoke", dust: "debris", glow: "orb", spark: "rune", streak: "streak",
+};
+
+function textureFor(app: pc.Application, kind: ParticleKind, authored = defaultTexture[kind]): pc.Texture {
+  const authoredTexture = authoredTextureCache.get(authored);
+  if (authoredTexture) return authoredTexture;
+  const cached = generatedTextureCache.get(kind);
   if (cached) return cached;
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = 64;
@@ -26,7 +54,7 @@ function textureFor(app: pc.Application, kind: ParticleKind): pc.Texture {
   context.putImageData(pixels, 0, 0);
   const texture = new pc.Texture(app.graphicsDevice, { width: 64, height: 64, mipmaps: true });
   texture.setSource(canvas);
-  textureCache.set(kind, texture);
+  generatedTextureCache.set(kind, texture);
   return texture;
 }
 
@@ -51,7 +79,7 @@ export function addCallingParticleLayers(app: pc.Application, root: pc.Entity,
       emitterShape: pc.EMITTERSHAPE_SPHERE,
       emitterRadius: layer.radius,
       localSpace: true,
-      colorMap: textureFor(app, layer.kind),
+      colorMap: textureFor(app, layer.kind, layer.texture),
       colorGraph: new pc.CurveSet([
         [0, layer.color[0], 1, layer.color[0] * (smoky ? .62 : .85)],
         [0, layer.color[1], 1, layer.color[1] * (smoky ? .62 : .85)],

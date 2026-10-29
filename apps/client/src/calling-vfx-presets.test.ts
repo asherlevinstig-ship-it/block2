@@ -38,6 +38,10 @@ describe("calling particle identity and budget", () => {
       .reduce((sum, layer) => sum + layer.count, 0)).toBeGreaterThanOrEqual(80);
     expect(CALLING_ABILITY_SUSTAIN_PARTICLES.mage_mana_shield?.length).toBeGreaterThanOrEqual(2);
     expect(CALLING_ABILITY_SUSTAIN_PARTICLES.mage_overload?.some(layer => layer.kind === "streak")).toBe(true);
+    expect(new Set(CALLING_IMPACT_PARTICLES.mage_arcane_surge.map(layer => layer.texture)))
+      .toEqual(new Set(["rune", "streak", "orb"]));
+    expect(CALLING_IMPACT_PARTICLES.mage_mana_shield.some(layer => layer.texture === "orb")).toBe(true);
+    expect(CALLING_IMPACT_PARTICLES.mage_overload.some(layer => layer.texture === "lightning")).toBe(true);
   });
 
   it("separates Tank bracing, provocation, and terrain-breaking impacts", () => {

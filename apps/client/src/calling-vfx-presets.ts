@@ -1,6 +1,7 @@
 import type { BuildPathId, CallingAbilityId } from "@blockcraft/protocol";
 
 export type ParticleKind = "smoke" | "dust" | "glow" | "spark" | "streak";
+export type ParticleTexture = "smoke" | "debris" | "orb" | "rune" | "lightning" | "streak";
 export type ParticleColor = readonly [number, number, number];
 export type ParticleLayer = {
   kind: ParticleKind;
@@ -14,12 +15,14 @@ export type ParticleLayer = {
   opacity: number;
   offsetY?: number;
   forward?: boolean;
+  /** Optional authored sprite. The particle kind still owns motion and blending. */
+  texture?: ParticleTexture;
 };
 
 const layer = (kind: ParticleKind, color: ParticleColor, count: number, life: number,
   size: number, radius: number, speed: number, rise: number, opacity: number,
-  offsetY = 0, forward = false): ParticleLayer =>
-  ({ kind, color, count, life, size, radius, speed, rise, opacity, offsetY, forward });
+  offsetY = 0, forward = false, texture?: ParticleTexture): ParticleLayer =>
+  ({ kind, color, count, life, size, radius, speed, rise, opacity, offsetY, forward, texture });
 
 const steel: ParticleColor = [.4, .8, 1];
 const silver: ParticleColor = [.86, .94, 1];
@@ -57,18 +60,18 @@ export const CALLING_IMPACT_PARTICLES: Record<CallingAbilityId, readonly Particl
     layer("smoke", [.42, .39, .34], 24, 1.92, .98, 2.55, 1.42, .52, .4, .16),
   ],
   mage_arcane_surge: [
-    layer("glow", violet, 64, 1.28, .5, 1.95, 3.25, 1.22, .9, .22),
-    layer("streak", [.84, .72, 1], 38, .72, .4, 1.2, 4.45, 2, .9, .44),
-    layer("spark", silver, 22, .54, .12, 1.55, 5, 1.5, .94, .2),
+    layer("glow", violet, 64, 1.28, .5, 1.95, 3.25, 1.22, .9, .22, false, "rune"),
+    layer("streak", [.84, .72, 1], 38, .72, .4, 1.2, 4.45, 2, .9, .44, false, "streak"),
+    layer("spark", silver, 22, .54, .12, 1.55, 5, 1.5, .94, .2, false, "orb"),
   ],
   mage_mana_shield: [
-    layer("glow", azure, 46, 1.42, .52, 1.12, 1.42, .86, .76, .7),
-    layer("spark", silver, 30, .96, .14, 1.16, 2.25, 1.18, .88, .84),
+    layer("glow", azure, 46, 1.42, .52, 1.12, 1.42, .86, .76, .7, false, "orb"),
+    layer("spark", silver, 30, .96, .14, 1.16, 2.25, 1.18, .88, .84, false, "rune"),
   ],
   mage_overload: [
-    layer("streak", magenta, 62, 1.1, .48, 1.14, 4.2, 1.55, .96, .5),
-    layer("glow", violet, 38, 1.44, .5, .8, 1.3, 1.26, .8, .84),
-    layer("spark", silver, 24, .65, .11, .98, 3.65, 1.6, .9, .74),
+    layer("streak", magenta, 62, 1.1, .48, 1.14, 4.2, 1.55, .96, .5, false, "lightning"),
+    layer("glow", violet, 38, 1.44, .5, .8, 1.3, 1.26, .8, .84, false, "orb"),
+    layer("spark", silver, 24, .65, .11, .98, 3.65, 1.6, .9, .74, false, "rune"),
   ],
   assassin_vanish: [
     layer("smoke", shadow, 54, 1.55, .74, .78, 1.45, 1.05, .62, .68),
@@ -161,12 +164,12 @@ export const CALLING_ABILITY_SUSTAIN_PARTICLES: Partial<Record<CallingAbilityId,
     layer("dust", earth, 14, .88, .42, 1.08, .44, .2, .3, .04),
   ],
   mage_mana_shield: [
-    layer("glow", azure, 32, 1.08, .4, 1.02, .3, .58, .52, .68),
-    layer("spark", silver, 16, .72, .12, 1, .62, .72, .58, .86),
+    layer("glow", azure, 32, 1.08, .4, 1.02, .3, .58, .52, .68, false, "orb"),
+    layer("spark", silver, 16, .72, .12, 1, .62, .72, .58, .86, false, "rune"),
   ],
   mage_overload: [
-    layer("streak", magenta, 28, .72, .32, .82, .82, .78, .68, .7),
-    layer("glow", violet, 22, .9, .3, .68, .38, .7, .5, .88),
+    layer("streak", magenta, 28, .72, .32, .82, .82, .78, .68, .7, false, "lightning"),
+    layer("glow", violet, 22, .9, .3, .68, .38, .7, .5, .88, false, "orb"),
   ],
   assassin_vanish: [
     layer("smoke", shadow, 34, 1.25, .64, .72, .46, .76, .46, .4),
