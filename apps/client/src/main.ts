@@ -223,6 +223,7 @@ import {
 } from "./camera-view.js";
 import { firstPersonActionPose, firstPersonSwordVariant, firstPersonWeaponKind, type FirstPersonWeaponKind } from "./first-person-action.js";
 import { firstPersonImpactImpulse, selectFirstPersonAimTarget } from "./first-person-combat.js";
+import { ensureKayKitWeaponModel, kayKitWeaponAssetForMainHand, type KayKitWeaponAssetId } from "./weapon-asset-kit.js";
 import { CombatSyncRecorder } from "./combat-sync.js";
 import {
   advanceDodgeVisualOffset,
@@ -4751,7 +4752,33 @@ function setRigArmour(rig: VoxelCharacterRig, id: string): void {
   rig.appearanceMaterials.coat.update();
 }
 
+const THIRD_PERSON_AUTHORED_WEAPON_TRANSFORMS: Record<KayKitWeaponAssetId, {
+  rotation: readonly [number, number, number]; scale: number;
+}> = {
+  swordBasic: { rotation: [0, 0, 180], scale: .58 },
+  swordForged: { rotation: [0, 0, 180], scale: .58 },
+  bowBasic: { rotation: [90, 0, -90], scale: .55 },
+  bowForged: { rotation: [90, 0, -90], scale: .55 },
+  daggerFang: { rotation: [0, 0, 180], scale: .66 },
+  hammerStone: { rotation: [0, 0, 180], scale: .78 },
+};
+
+function requestRigAuthoredWeapon(parent: pc.Entity, mainHandId: MainHandId): void {
+  const assetId = kayKitWeaponAssetForMainHand(mainHandId);
+  if (!assetId || parent.findByName(`kaykit-weapon:${assetId}`)) return;
+  const transform = THIRD_PERSON_AUTHORED_WEAPON_TRANSFORMS[assetId];
+  void ensureKayKitWeaponModel(app, parent, assetId, {
+    position: [0, 0, 0], rotation: transform.rotation, scale: transform.scale,
+  }).then(model => {
+    for (const child of parent.children) {
+      if (!(child instanceof pc.Entity) || child === model) continue;
+      if (child.render) child.enabled = false;
+    }
+  }).catch(error => console.warn(`[weapon-assets] Keeping procedural ${mainHandId} fallback.`, error));
+}
+
 function setRigMainHand(rig: VoxelCharacterRig, mainHandId: MainHandId): void {
+  requestRigAuthoredWeapon(rig.mainHands[mainHandId], mainHandId);
   for (const [id, entity] of Object.entries(rig.mainHands)) entity.enabled = id === mainHandId;
 }
 
@@ -5117,6 +5144,30 @@ let firstPersonHitKickUntil = 0;
 let firstPersonHitKickStrength = 0;
 let firstPersonEquippedAt = 0;
 let firstPersonEquippedId: MainHandId = "unarmed";
+const FIRST_PERSON_AUTHORED_WEAPON_TRANSFORMS: Record<KayKitWeaponAssetId, {
+  rotation: readonly [number, number, number]; scale: number;
+}> = {
+  swordBasic: { rotation: [0, 0, 0], scale: .58 },
+  swordForged: { rotation: [0, 0, 0], scale: .58 },
+  bowBasic: { rotation: [90, 0, 90], scale: .55 },
+  bowForged: { rotation: [90, 0, 90], scale: .55 },
+  daggerFang: { rotation: [0, 0, 0], scale: .66 },
+  hammerStone: { rotation: [0, 0, 0], scale: .78 },
+};
+
+function requestFirstPersonAuthoredWeapon(mainHandId: MainHandId): void {
+  const assetId = kayKitWeaponAssetForMainHand(mainHandId);
+  if (!assetId) return;
+  const parent = firstPersonActionRig.weapons[firstPersonWeaponKind(mainHandId)];
+  if (parent.findByName(`kaykit-weapon:${assetId}`)) return;
+  const transform = FIRST_PERSON_AUTHORED_WEAPON_TRANSFORMS[assetId];
+  void ensureKayKitWeaponModel(app, parent, assetId, {
+    position: [0, 0, 0], rotation: transform.rotation, scale: transform.scale,
+    layers: firstPersonActionRig.viewCamera.camera?.layers,
+  }).then(() => setFirstPersonMainHand(firstPersonEquippedId))
+    .catch(error => console.warn(`[weapon-assets] Keeping first-person ${mainHandId} fallback.`, error));
+}
+
 function setFirstPersonCallingPalette(pathId: RoleFieldPath): void {
   const palette: Record<RoleFieldPath, readonly [pc.Color, pc.Color]> = {
     tank: [new pc.Color(.2, .56, .82), new pc.Color(.78, .94, 1)],
@@ -5137,13 +5188,21 @@ function setFirstPersonCallingPalette(pathId: RoleFieldPath): void {
 function setFirstPersonMainHand(mainHandId: MainHandId): void {
   if (mainHandId !== firstPersonEquippedId) { firstPersonEquippedAt = performance.now(); firstPersonEquippedId = mainHandId; }
   const active = firstPersonWeaponKind(mainHandId);
+  const authoredAsset = kayKitWeaponAssetForMainHand(mainHandId);
+  requestFirstPersonAuthoredWeapon(mainHandId);
+  const activeParent = firstPersonActionRig.weapons[active];
+  for (const child of activeParent.children) {
+    if (!(child instanceof pc.Entity)) continue;
+    if (child.name.startsWith("kaykit-weapon:")) child.enabled = child.name === `kaykit-weapon:${authoredAsset}`;
+    else if (child.render) child.enabled = authoredAsset === null;
+  }
   const swordVariant = firstPersonSwordVariant(mainHandId);
   for (const [variant, name] of [
     ["forged", "forged-sword-ornament"], ["matriarch", "matriarch-edge-ornament"],
     ["cinderfang", "cinderfang-ornament"], ["crowncleaver", "crowncleaver-ornament"],
   ] as const) {
     const ornament = firstPersonActionRig.weapons.sword.findByName(name);
-    if (ornament) ornament.enabled = swordVariant === variant;
+    if (ornament) ornament.enabled = authoredAsset === null && swordVariant === variant;
   }
   for (const [kind, weapon] of Object.entries(firstPersonActionRig.weapons)) weapon.enabled = kind === active;
 }
