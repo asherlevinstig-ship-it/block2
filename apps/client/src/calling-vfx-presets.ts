@@ -144,6 +144,34 @@ export const CALLING_ANTICIPATION_PARTICLES: Record<BuildPathId, readonly Partic
   healer: [layer("glow", mint, 18, .56, .3, .48, .35, 1.25, .7, .6)],
 };
 
+/** Short character-bound flourishes make every Calling visibly cast from the player. */
+export const CALLING_CAST_PARTICLES: Record<BuildPathId, readonly ParticleLayer[]> = {
+  tank: [
+    layer("spark", steel, 18, .52, .13, .32, 1.4, .68, .82, 0, false, "rune"),
+    layer("streak", silver, 10, .42, .2, .24, 1.9, .28, .74, 0, true, "streak"),
+  ],
+  mage: [
+    layer("glow", violet, 20, .62, .24, .28, .52, .72, .82, 0, false, "orb"),
+    layer("spark", silver, 12, .46, .1, .3, 1.4, .7, .8, 0, false, "rune"),
+  ],
+  assassin: [
+    layer("smoke", shadow, 22, .72, .42, .34, .6, .62, .54, 0, false, "smoke"),
+    layer("streak", paleBlade, 16, .4, .3, .2, 2.8, .18, .84, 0, true, "streak"),
+  ],
+  thief: [
+    layer("smoke", smoke, 24, .82, .5, .4, .62, .48, .62, 0, false, "smoke"),
+    layer("spark", lime, 12, .48, .1, .3, 1.25, .65, .7, 0, false, "rune"),
+  ],
+  ranger: [
+    layer("streak", gold, 22, .48, .28, .18, 3.2, .12, .88, 0, true, "streak"),
+    layer("spark", teal, 10, .44, .09, .28, 1.1, .42, .66, 0, false, "orb"),
+  ],
+  healer: [
+    layer("glow", mint, 24, .76, .3, .34, .46, .95, .78, 0, false, "orb"),
+    layer("spark", warmWhite, 14, .56, .11, .3, .9, .9, .78, 0, false, "rune"),
+  ],
+};
+
 export const CALLING_SUSTAIN_PARTICLES: Record<BuildPathId, readonly ParticleLayer[]> = {
   tank: [layer("spark", steel, 12, .72, .1, .8, .45, .5, .4, .85)],
   mage: [layer("glow", violet, 14, .9, .24, .62, .3, .85, .35, .85)],

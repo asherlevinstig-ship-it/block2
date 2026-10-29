@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BUILD_PATHS, CALLING_ABILITY_OPTIONS, type BuildPathId } from "@blockcraft/protocol";
-import { CALLING_ABILITY_SUSTAIN_PARTICLES, CALLING_ANTICIPATION_PARTICLES, CALLING_IMPACT_PARTICLES, CALLING_SUSTAIN_PARTICLES, callingParticleLifetime } from "./calling-vfx-presets.js";
+import { CALLING_ABILITY_SUSTAIN_PARTICLES, CALLING_ANTICIPATION_PARTICLES, CALLING_CAST_PARTICLES, CALLING_IMPACT_PARTICLES, CALLING_SUSTAIN_PARTICLES, callingParticleLifetime } from "./calling-vfx-presets.js";
 
 describe("calling particle identity and budget", () => {
   it("covers every ability and build phase with bounded layers", () => {
@@ -18,7 +18,16 @@ describe("calling particle identity and budget", () => {
     }
     for (const path of Object.keys(BUILD_PATHS) as BuildPathId[]) {
       expect(CALLING_ANTICIPATION_PARTICLES[path].length).toBeGreaterThan(0);
+      expect(CALLING_CAST_PARTICLES[path].length).toBeGreaterThan(0);
+      expect(CALLING_CAST_PARTICLES[path].every(layer => layer.texture !== undefined)).toBe(true);
       expect(CALLING_SUSTAIN_PARTICLES[path].length).toBeGreaterThan(0);
+    }
+  });
+
+  it("gives every non-Mage role a character-bound authored casting flourish", () => {
+    for (const path of ["tank", "assassin", "thief", "ranger", "healer"] as const) {
+      expect(CALLING_CAST_PARTICLES[path].reduce((sum, layer) => sum + layer.count, 0)).toBeGreaterThanOrEqual(28);
+      expect(new Set(CALLING_CAST_PARTICLES[path].map(layer => layer.texture)).size).toBeGreaterThanOrEqual(2);
     }
   });
 

@@ -6,7 +6,7 @@ import * as pc from "playcanvas";
 import { facetedBoxMesh } from "./faceted-shapes.js";
 import { addCallingParticleLayers, preloadCallingParticleTextures } from "./calling-particles.js";
 import { CallingEffectState, callingEffectKey } from "./calling-effect-state.js";
-import { CALLING_ABILITY_SUSTAIN_PARTICLES, CALLING_ANTICIPATION_PARTICLES, CALLING_IMPACT_PARTICLES, CALLING_SUSTAIN_PARTICLES, callingParticleLifetime } from "./calling-vfx-presets.js";
+import { CALLING_ABILITY_SUSTAIN_PARTICLES, CALLING_ANTICIPATION_PARTICLES, CALLING_CAST_PARTICLES, CALLING_IMPACT_PARTICLES, CALLING_SUSTAIN_PARTICLES, callingParticleLifetime } from "./calling-vfx-presets.js";
 import { mageCastDuration, mageCastPose, type MageAbilityId } from "./mage-casting.js";
 import { ASHEN_REACH_HEAT_VENTS, ASHEN_REACH_NAVIGATION_LAVA_FISSURES, ASHEN_REACH_NAVIGATION_SPIRES,
   FAST_WORLD_ENCOUNTER_NAVIGATION, FAST_WORLD_REGION_DEFINITIONS, SOUTHERN_QUARRY_NAVIGATION_BARRICADES,
@@ -4883,6 +4883,8 @@ interface FirstPersonActionRig {
   weapons: Record<FirstPersonWeaponKind, pc.Entity>;
   magic: pc.Entity;
   magicCore: pc.Entity;
+  magicCoreMaterial: pc.StandardMaterial;
+  magicEdgeMaterial: pc.StandardMaterial;
   runeRing: pc.Entity;
   slashTrails: pc.Entity[];
 }
@@ -5027,11 +5029,13 @@ function createFirstPersonActionRig(): FirstPersonActionRig {
   focusCrossB.setLocalEulerAngles(0, 0, -45);
 
   const magic = new pc.Entity("first-person-triggered-magic"); root.addChild(magic); magic.setLocalPosition(0, -.12, -1.3);
-  const magicCore = actionShape(magic, "magic-core", "sphere", arcane, [.22, .22, .22], [0, 0, 0]);
+  const magicCoreMaterial = createFirstPersonMaterial(new pc.Color(.34, .14, .92), new pc.Color(.26, .055, .82));
+  const magicEdgeMaterial = createFirstPersonMaterial(new pc.Color(.65, .82, 1), new pc.Color(.25, .55, 1));
+  const magicCore = actionShape(magic, "magic-core", "sphere", magicCoreMaterial, [.22, .22, .22], [0, 0, 0]);
   const runeRing = new pc.Entity("magic-rune-ring"); magic.addChild(runeRing);
   for (let index = 0; index < 8; index++) {
     const angle = index / 8 * Math.PI * 2;
-    const rune = actionShape(runeRing, "magic-rune", "box", index % 2 ? arcane : arcaneEdge,
+    const rune = actionShape(runeRing, "magic-rune", "box", index % 2 ? magicCoreMaterial : magicEdgeMaterial,
       [.025, .025, .16], [Math.sin(angle) * .36, Math.cos(angle) * .36, 0]);
     rune.setLocalEulerAngles(0, 0, -angle * 180 / Math.PI);
   }
@@ -5043,7 +5047,8 @@ function createFirstPersonActionRig(): FirstPersonActionRig {
     return trail;
   });
   root.enabled = false;
-  return { root, viewCamera, leftHand, rightHand, wrists, fingers, skin, sleeve, weapons, magic, magicCore, runeRing, slashTrails };
+  return { root, viewCamera, leftHand, rightHand, wrists, fingers, skin, sleeve, weapons, magic, magicCore,
+    magicCoreMaterial, magicEdgeMaterial, runeRing, slashTrails };
 }
 
 const firstPersonActionRig = createFirstPersonActionRig();
@@ -5053,6 +5058,23 @@ let firstPersonHitKickUntil = 0;
 let firstPersonHitKickStrength = 0;
 let firstPersonEquippedAt = 0;
 let firstPersonEquippedId: MainHandId = "unarmed";
+function setFirstPersonCallingPalette(pathId: RoleFieldPath): void {
+  const palette: Record<RoleFieldPath, readonly [pc.Color, pc.Color]> = {
+    tank: [new pc.Color(.2, .56, .82), new pc.Color(.78, .94, 1)],
+    mage: [new pc.Color(.4, .18, .95), new pc.Color(.7, .86, 1)],
+    assassin: [new pc.Color(.18, .06, .3), new pc.Color(1, .3, .5)],
+    thief: [new pc.Color(.14, .34, .23), new pc.Color(.65, 1, .42)],
+    ranger: [new pc.Color(.08, .72, .68), new pc.Color(1, .82, .3)],
+    healer: [new pc.Color(.18, .92, .52), new pc.Color(1, .9, .48)],
+  };
+  const [core, edge] = palette[pathId];
+  firstPersonActionRig.magicCoreMaterial.diffuse.copy(core);
+  firstPersonActionRig.magicCoreMaterial.emissive.copy(core).mulScalar(.9);
+  firstPersonActionRig.magicCoreMaterial.update();
+  firstPersonActionRig.magicEdgeMaterial.diffuse.copy(edge);
+  firstPersonActionRig.magicEdgeMaterial.emissive.copy(edge).mulScalar(1.05);
+  firstPersonActionRig.magicEdgeMaterial.update();
+}
 function setFirstPersonMainHand(mainHandId: MainHandId): void {
   if (mainHandId !== firstPersonEquippedId) { firstPersonEquippedAt = performance.now(); firstPersonEquippedId = mainHandId; }
   const active = firstPersonWeaponKind(mainHandId);
@@ -9018,8 +9040,9 @@ function createCallingImpact(effect: CallingAbilityEffect): void {
   if (effect.casterId === room?.sessionId) {
     firstPersonAbilityCastStartedAt = performance.now();
     firstPersonAbilityCastDuration = Math.max(520, Math.min(1_200, effect.durationMs ?? 700));
+    setFirstPersonCallingPalette(effect.pathId);
   }
-  if (effect.pathId === "mage") createMageHandCast(effect.casterId, abilityId as MageAbilityId);
+  createCallingCastFlourish(effect.casterId, effect.pathId, abilityId);
   // The aimed Overload telegraph owns the ground effect; hands only gather at the caster.
   if (abilityId === "mage_overload") { combatAudio.play("callingMage"); return; }
   if (abilityId === "thief_decoy") createThiefDecoyImitation(effect);
@@ -9129,6 +9152,51 @@ function createMageHandCast(playerId: string, abilityId: MageAbilityId): void {
         [.035, .035, .2], [Math.sin(angle) * .42, Math.cos(angle) * .42, 0], [0, 0, angle * 180 / Math.PI]);
     }
     callingImpactVisuals.push({ root, expiresAt: startedAt + durationMs, materials: [core, edge], abilityId, casterId: playerId });
+  }
+}
+
+function createCallingCastFlourish(playerId: string, pathId: RoleFieldPath, abilityId: CallingAbilityId): void {
+  if (pathId === "mage") { createMageHandCast(playerId, abilityId as MageAbilityId); return; }
+  const rig = playerId === room?.sessionId ? localPlayerRig : remotePlayers.get(playerId)?.rig;
+  if (!rig) return;
+  const anchors = pathId === "thief" ? [rig.leftElbow]
+    : pathId === "ranger" ? [rig.rightElbow] : [rig.leftElbow, rig.rightElbow];
+  const palette: Record<Exclude<RoleFieldPath, "mage">, readonly [pc.Color, pc.Color]> = {
+    tank: [new pc.Color(.2, .56, .82), new pc.Color(.78, .94, 1)],
+    assassin: [new pc.Color(.18, .08, .3), new pc.Color(1, .72, .82)],
+    thief: [new pc.Color(.15, .28, .22), new pc.Color(.55, 1, .62)],
+    ranger: [new pc.Color(.08, .72, .68), new pc.Color(1, .82, .3)],
+    healer: [new pc.Color(.2, .95, .58), new pc.Color(1, .92, .52)],
+  };
+  const [baseColor, edgeColor] = palette[pathId];
+  const durationMs = pathId === "healer" ? 900 : pathId === "tank" ? 720 : 620;
+  for (const [index, anchor] of anchors.entries()) {
+    const side = anchors.length === 1 ? 1 : index === 0 ? -1 : 1;
+    const root = new pc.Entity(`calling-hand-cast:${pathId}:${abilityId}`);
+    root.setLocalPosition(0, -.29, 0); anchor.addChild(root);
+    addCallingParticleLayers(app, root, CALLING_CAST_PARTICLES[pathId], false, callingParticleDensity);
+    const base = callingSignatureMaterial(baseColor, .72, .92);
+    const edge = callingSignatureMaterial(edgeColor, .92, 1.28);
+    if (pathId === "tank") {
+      addCallingSignaturePrimitive(root, "tank-cast-gauntlet", "box", base, [.22, .18, .28], [0, -.06, 0]);
+      addCallingSignaturePrimitive(root, "tank-cast-brace", "box", edge, [.28, .045, .34], [0, -.12, -.12], [0, 0, side * 12]);
+    } else if (pathId === "assassin") {
+      addCallingSignaturePrimitive(root, "assassin-cast-wrist-blade", "box", edge,
+        [.035, .055, .54], [side * .08, -.08, -.34], [side * 12, side * 8, side * 24]);
+      addCallingSignaturePrimitive(root, "assassin-cast-shadow", "sphere", base, [.2, .16, .2], [0, -.02, 0]);
+    } else if (pathId === "thief") {
+      addCallingSignaturePrimitive(root, "thief-cast-bomb", "sphere", base, [.2, .2, .2], [0, -.04, -.08]);
+      addCallingSignaturePrimitive(root, "thief-cast-fuse", "box", edge, [.025, .16, .025], [.04, -.28, -.08], [0, 0, -18]);
+    } else if (pathId === "ranger") {
+      addCallingSignaturePrimitive(root, "ranger-cast-arrow", "box", edge, [.025, .025, .68], [0, -.06, -.42], [-8, 0, 0]);
+      addCallingSignaturePrimitive(root, "ranger-cast-arrowhead", "box", base, [.075, .045, .12], [0, -.01, -.98], [35, 45, 35]);
+    } else {
+      addCallingSignaturePrimitive(root, "healer-cast-orb", "sphere", base, [.2, .2, .2], [0, -.04, 0]);
+      addCallingSignaturePrimitive(root, "healer-cast-cross-vertical", "box", edge, [.045, .2, .035], [0, -.04, -.22]);
+      addCallingSignaturePrimitive(root, "healer-cast-cross-horizontal", "box", edge, [.16, .045, .035], [0, -.04, -.22]);
+    }
+    callingImpactVisuals.push({ root, expiresAt: performance.now() + durationMs,
+      materials: [base, edge], abilityId, casterId: playerId });
   }
 }
 
