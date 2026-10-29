@@ -619,6 +619,32 @@ html.onboarding-active #hud #target, html.onboarding-active #hud #players { disp
   100% { transform: scale(1); filter: brightness(1); }
 }
 #calling-slot:active { transform: scale(.985); }
+#calling-slot[data-hover-name]::after,
+#special-slot[data-hover-name]::after {
+  content: attr(data-hover-name);
+  position: absolute;
+  z-index: 12;
+  left: 50%;
+  bottom: calc(100% + 9px);
+  width: max-content;
+  max-width: 190px;
+  padding: 7px 10px;
+  border: 1px solid #e5cf82aa;
+  border-radius: 7px;
+  background: #091510f2;
+  box-shadow: 0 8px 22px #000a;
+  color: #fff0ae;
+  font: 900 11px/1.2 system-ui;
+  letter-spacing: .05em;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 4px);
+  transition: opacity 100ms ease, transform 100ms ease;
+}
+#calling-slot[data-hover-name]:hover::after,
+#calling-slot[data-hover-name]:focus-visible::after,
+#special-slot[data-hover-name]:hover::after,
+#special-slot[data-hover-name]:focus-visible::after { opacity: 1; transform: translate(-50%, 0); }
 #calling-slot.active-state {
   border-color: rgb(255 211 91 / 74%);
   box-shadow: inset 0 0 18px rgb(255 203 75 / 13%), 0 0 13px rgb(255 203 75 / 16%);

@@ -92,6 +92,17 @@ describe("hotbar Calling abilities", () => {
     expect(internal.callingAbilityReadyAt.has("hero")).toBe(false);
   });
 
+  it("runs the equipped F ability as a safe lesson without starting its cooldown", () => {
+    const { internal, player, client } = fixture("tank");
+    Object.assign(player, { x: 12.5, y: 8, z: 12.5, level: 5 });
+    internal.handleCallingAbility(client, { requestId: "train-challenge", slot: "special", training: true });
+    expect(client.send).toHaveBeenCalledWith("calling:ability", expect.objectContaining({
+      requestId: "train-challenge", abilityId: "tank_challenge", slot: "special", training: true,
+      cooldownUntil: 10_000,
+    }));
+    expect(internal.callingSpecialReadyAt.has("hero")).toBe(false);
+  });
+
   it("does not fake Field Mend training away from the Town effigy", () => {
     const { internal, player, client } = fixture("healer");
     Object.assign(player, { health: 5, maxHealth: 5 });

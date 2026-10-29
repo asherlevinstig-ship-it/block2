@@ -7,6 +7,7 @@ import { facetedBoxMesh } from "./faceted-shapes.js";
 import { addCallingParticleLayers, preloadCallingParticleTextures } from "./calling-particles.js";
 import { CallingEffectState, callingEffectKey } from "./calling-effect-state.js";
 import { CALLING_ABILITY_SUSTAIN_PARTICLES, CALLING_ANTICIPATION_PARTICLES, CALLING_CAST_PARTICLES, CALLING_IMPACT_PARTICLES, CALLING_SUSTAIN_PARTICLES, callingParticleLifetime } from "./calling-vfx-presets.js";
+import { ABILITY_PRACTICE_EXPLANATION_MS, abilityPracticeDummyInRange, abilityPracticeLesson } from "./ability-practice-dummy.js";
 import { mageCastDuration, mageCastPose, type MageAbilityId } from "./mage-casting.js";
 import { ASHEN_REACH_HEAT_VENTS, ASHEN_REACH_NAVIGATION_LAVA_FISSURES, ASHEN_REACH_NAVIGATION_SPIRES,
   FAST_WORLD_ENCOUNTER_NAVIGATION, FAST_WORLD_REGION_DEFINITIONS, SOUTHERN_QUARRY_NAVIGATION_BARRICADES,
@@ -1238,6 +1239,7 @@ const abilityRevealDescription = document.querySelector<HTMLElement>("#ability-r
 const abilityRevealUseHint = document.querySelector<HTMLElement>("#ability-reveal-use")!;
 const abilityRevealContinue = document.querySelector<HTMLButtonElement>("#ability-reveal-continue")!;
 const callingFirstUse = document.querySelector<HTMLElement>("#calling-first-use")!;
+const callingFirstUseHeading = document.querySelector<HTMLElement>("#calling-first-use-heading")!;
 const callingFirstUseTitle = document.querySelector<HTMLElement>("#calling-first-use-title")!;
 const callingFirstUseDetail = document.querySelector<HTMLElement>("#calling-first-use-detail")!;
 const callingFirstUseAction = document.querySelector<HTMLElement>("#calling-first-use-action")!;
@@ -1253,6 +1255,9 @@ let guidedAbilityPracticeId: CallingAbilityId | null = null;
 let guidedAbilityPracticePhase: AbilityPracticePhase = "cast";
 let guidedAbilityPracticeHits = 0;
 let guidedTankImpactTimer = 0;
+let practiceDummyLessonAbilityId: CallingAbilityId | null = null;
+let practiceDummyLessonKey: "G" | "F" = "G";
+let practiceDummyLessonUntil = 0;
 const seenAbilityReveals = new Set<CallingAbilityId>();
 let currentProgressionNotice: ProgressionNotice | null = null;
 let dismissedStatLevel = -1;
@@ -3925,7 +3930,7 @@ lanternGlow.diffuse = new pc.Color(1, 0.7, 0.24);
 lanternGlow.emissive = new pc.Color(1, 0.5, 0.12);
 lanternGlow.update();
 const CALLING_EFFIGY_POSITION = new pc.Vec3(12.5, SURFACE_HEIGHT + 1, 12.5);
-const callingEffigy = new pc.Entity("calling-practice-effigy");
+const callingEffigy = new pc.Entity("town-ability-practice-dummy");
 const callingEffigyStone = coloredMaterial(new pc.Color(.16, .22, .24));
 const callingEffigyTrim = new pc.StandardMaterial();
 callingEffigyTrim.diffuse = new pc.Color(.22, .92, .72);
@@ -7008,6 +7013,16 @@ function requestCallingAbility(slot: "power" | "special" = "power", aimedYaw?: n
     return;
   }
   if (performance.now() < callingAbilityPendingUntil) return;
+  const usedAbility = slot === "special"
+    ? CALLING_ABILITY_OPTIONS.find(option => option.id === localSpecialCallingAbilityId)
+      ?? CALLING_ABILITY_OPTIONS.find(option => option.pathId === localBuildPathId && option.category === "Utility")
+    : CALLING_ABILITY_OPTIONS.find(option => option.id === localCallingAbilityId);
+  if (usedAbility && isAtTownOfBeginnings()
+    && abilityPracticeDummyInRange(localPlayer.getPosition(), CALLING_EFFIGY_POSITION)) {
+    practiceDummyLessonAbilityId = usedAbility.id;
+    practiceDummyLessonKey = slot === "special" ? "F" : "G";
+    practiceDummyLessonUntil = performance.now() + ABILITY_PRACTICE_EXPLANATION_MS;
+  }
   callingAbilityPendingUntil = performance.now() + 700;
   callingAbilitySequence += 1;
   if (slot === "power") combatHud.setCallingPending(true);
@@ -7022,8 +7037,8 @@ function requestCallingAbility(slot: "power" | "special" = "power", aimedYaw?: n
   }, 720);
   const requestId = `calling-${callingAbilitySequence}`;
   combatSync.start("calling", requestId, performance.now());
-  const training = slot === "power" && guidedAbilityPracticeId === localCallingAbilityId
-    && guidedAbilityPracticePhase === "cast" && localPlayer.getPosition().distance(CALLING_EFFIGY_POSITION) <= 4;
+  const training = isAtTownOfBeginnings()
+    && abilityPracticeDummyInRange(localPlayer.getPosition(), CALLING_EFFIGY_POSITION);
   room.send("calling:ability", { requestId, yaw: aimedYaw ?? cameraOrbit.yaw, slot, ...(training ? { training: true } : {}) });
 }
 
@@ -7424,20 +7439,46 @@ function resumeGuidedAbilityPractice(): void {
 
 function updateGuidedAbilityPractice(now: number): void {
   resumeGuidedAbilityPractice();
-  if (shouldDismissOptionalPractice(Boolean(guidedAbilityPracticeId), isAtTownOfBeginnings())) {
+  const inTown = isAtTownOfBeginnings();
+  if (shouldDismissOptionalPractice(Boolean(guidedAbilityPracticeId), inTown)) {
     dismissGuidedAbilityPractice();
     refreshProgressionNotice();
     return;
   }
   const abilityId = guidedAbilityPracticeId;
-  const active = Boolean(abilityId && worldReady && isAtTownOfBeginnings() && defeatScreen.hidden);
-  callingEffigy.enabled = active;
-  callingFirstUse.hidden = !active;
+  const dummyActive = Boolean(worldReady && inTown && defeatScreen.hidden);
+  const active = Boolean(abilityId && dummyActive);
+  const nearDummy = dummyActive && abilityPracticeDummyInRange(localPlayer.getPosition(), CALLING_EFFIGY_POSITION);
+  callingEffigy.enabled = dummyActive;
   callingSlot.dataset.firstUse = String(active);
-  if (!active || !abilityId) return;
+  if (!active || !abilityId) {
+    callingPracticeProjections.forEach(projection => { projection.enabled = false; });
+    if (!nearDummy) {
+      callingFirstUse.hidden = true;
+      return;
+    }
+    callingFirstUse.hidden = false;
+    callingFirstUseHeading.textContent = "TOWN PRACTICE DUMMY";
+    const lesson = practiceDummyLessonAbilityId && now <= practiceDummyLessonUntil
+      ? abilityPracticeLesson(practiceDummyLessonAbilityId) : null;
+    callingFirstUseTitle.textContent = lesson ? `${lesson.name} · ${practiceDummyLessonKey}` : "Test your abilities here";
+    callingFirstUseDetail.textContent = lesson?.description
+      ?? (localCharacterProgression.level < 2
+        ? "Your first Calling ability unlocks at level 2. Return here to learn what it does."
+        : "Press G or F beside the dummy. It will explain the ability you just used.");
+    callingFirstUseKey.textContent = lesson ? practiceDummyLessonKey : "G/F";
+    callingFirstUseAction.textContent = lesson ? "ABILITY EXPLAINED" : "USE AN ABILITY";
+    const idlePulse = 1 + Math.sin(now * .004) * .025;
+    callingEffigy.setLocalScale(idlePulse, idlePulse, idlePulse);
+    callingEffigy.rotateLocal(0, .1, 0);
+    return;
+  }
+  callingFirstUse.hidden = false;
+  callingFirstUseHeading.textContent = "FIRST POWER PRACTICE";
   const definition = CALLING_ABILITY_OPTIONS.find(option => option.id === abilityId)!;
   const distance = localPlayer.getPosition().distance(CALLING_EFFIGY_POSITION);
   const challenge = abilityPracticeChallenge(definition.pathId);
+  const justExplained = practiceDummyLessonAbilityId === abilityId && now <= practiceDummyLessonUntil;
   const projectionCount = definition.pathId === "mage" || definition.pathId === "thief" || definition.pathId === "ranger" ? 3 : 1;
   for (let index = 0; index < callingPracticeProjections.length; index++) {
     const projection = callingPracticeProjections[index]!;
@@ -7448,7 +7489,8 @@ function updateGuidedAbilityPractice(now: number): void {
   }
   callingFirstUseTitle.textContent = `${definition.name} · optional practice`;
   callingFirstUseDetail.textContent = distance > 4 ? firstCallingUseInstruction(distance)
-    : guidedAbilityPracticePhase === "cast" ? challenge.castInstruction : challenge.followUpInstruction;
+    : justExplained ? `${definition.description} ${guidedAbilityPracticePhase === "follow_up" ? challenge.followUpInstruction : ""}`.trim()
+      : guidedAbilityPracticePhase === "cast" ? challenge.castInstruction : challenge.followUpInstruction;
   callingFirstUseKey.textContent = guidedAbilityPracticePhase === "follow_up"
     && (definition.pathId === "assassin" || definition.pathId === "ranger") ? "J" : "G";
   callingFirstUseAction.textContent = distance > 4 ? "OPTIONAL · APPROACH THE EFFIGY"

@@ -7225,16 +7225,17 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const augmentId = selectedCallingAugment(state, abilityId);
     const definition = CALLING_ABILITY_OPTIONS.find(option => option.id === abilityId)!;
     const now = Date.now();
-    const trainingAtEffigy = parsed.data.training === true && this.roomKind === "overworld" && slot === "power"
-      && definition.category === "Core" && player.y >= SURFACE_HEIGHT - 1
+    const trainingAtEffigy = parsed.data.training === true && this.roomKind === "overworld"
+      && player.y >= SURFACE_HEIGHT - 1
       && Math.hypot(player.x - 12.5, player.z - 12.5) <= 4;
     if (trainingAtEffigy) {
-      const detail = pathId === "tank" ? "BRACED · TEST STRIKE INCOMING"
-        : pathId === "mage" ? "3 TARGET PROJECTIONS HIT · +30 STAMINA"
-          : pathId === "assassin" ? "STEALTH ACTIVE · EMPOWERED STRIKE READY"
-            : pathId === "thief" ? "3 PURSUERS DIVERTED · CONCEALED"
-              : pathId === "ranger" ? "3 EMPOWERED SHOTS READY"
-                : "TRAINING ALLY +3 HP";
+      const detail = definition.category !== "Core" ? definition.description
+        : pathId === "tank" ? "BRACED · TEST STRIKE INCOMING"
+          : pathId === "mage" ? "3 TARGET PROJECTIONS HIT · +30 STAMINA"
+            : pathId === "assassin" ? "STEALTH ACTIVE · EMPOWERED STRIKE READY"
+              : pathId === "thief" ? "3 PURSUERS DIVERTED · CONCEALED"
+                : pathId === "ranger" ? "3 EMPOWERED SHOTS READY"
+                  : "TRAINING ALLY +3 HP";
       const durationMs = pathId === "tank" ? 1_100 : pathId === "assassin" ? 4_000 : pathId === "ranger" ? 6_000 : 1_600;
       client.send("calling:ability", { requestId: parsed.data.requestId, pathId, abilityId,
         ability: definition.name, detail, cooldownUntil: now, durationMs, slot, training: true } satisfies CallingAbilityUpdate);

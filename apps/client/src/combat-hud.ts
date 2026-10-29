@@ -244,6 +244,8 @@ function SpecialLoadout() {
   const name = selected?.name;
   const locked = characterLevel.value < 4 || !selected;
   return h("button", { id: "special-slot", type: "button", disabled: locked,
+      "data-hover-name": locked ? undefined : name,
+      title: locked ? characterLevel.value < 4 ? "Calling Special unlocks at level 4" : "Choose a Calling" : `${name} — ${selected.description}`,
       "aria-label": locked ? characterLevel.value < 4 ? "Calling Special unlocks at level 4" : "Choose a Calling to use your Special" : `Use ${name}`,
       class: `${locked ? "locked" : cooldown.ready && !specialAiming.value ? "ready" : ""} ${specialAiming.value ? "aiming" : ""}`.trim() },
       h("span", { class: "action-art" }, locked ? h(LockedGlyph, null) : h(ActionGlyph, { kind: "special", path: selected?.pathId })),
@@ -263,6 +265,8 @@ function CallingLoadout() {
   const artwork = unlocked && definition?.id === "assassin_vanish" ? "assassin-vanish"
     : unlocked && definition?.id === "healer_field_mend" ? "healer-mend" : undefined;
   return h("button", { id: "calling-slot", type: "button", disabled: characterLevel.value < 2, "data-icon": artwork,
+      "data-hover-name": unlocked ? definition?.name : undefined,
+      title: unlocked && definition ? `${definition.name} — ${definition.description}` : characterLevel.value < 2 ? "Calling Power unlocks at level 2" : "Choose a Calling in Town",
       "aria-label": unlocked && definition ? `Use ${definition.name}` : characterLevel.value < 2 ? "Calling Power unlocks at level 2" : "Choose a Calling in Town to use your Power",
       class: `${cooldown.ready && unlocked && !callingPending.value ? "ready" : ""} ${callingPending.value ? "anticipating" : ""} ${state ? "active-state" : ""}`.trim() },
       h("span", { class: "action-art" }, !unlocked ? h(LockedGlyph, null) : h(ActionGlyph, { kind: "calling", path: selected })),
