@@ -6,7 +6,7 @@ import { MobState, PlayerState, WorldState } from "./schema.js";
 import { chooseBuildPath, chooseBuildSpecialization, grantBuildPathXp, parseBuildPathState, selectedCallingAbility, serializeBuildPathState } from "./build-paths.js";
 
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
-function fixture(path: BuildPathId = "mage", spec?: "arcanist" | "elementalist") {
+function fixture(path: BuildPathId = "mage", spec?: "arcanist" | "elementalist" | "spellguard") {
   vi.useFakeTimers(); vi.setSystemTime(10_000);
   const room = new WorldRoom(); room.setState(new WorldState()); const internal = room as any;
   internal.roomKind = "practice"; internal.rapidPractice = true;
@@ -83,6 +83,21 @@ describe("Fast World Calling progression", () => {
     const f = fixture("mage", "elementalist"); f.cast();
     f.internal.defeatMob("target", f.mob, "hero", 12_001);
     expect(parseBuildPathState(f.player.huntLoadoutsJson).trials.elementalist).toBeUndefined();
+  });
+  it("makes Spellguard a defensive Mage branch with an Aegis Shatter capstone", () => {
+    const f = fixture("mage", "spellguard");
+    expect(parseBuildPathState(f.player.huntLoadoutsJson).specializations.mage).toBe("spellguard");
+    f.internal.handleCallingAbility(f.client, { requestId: "shield", slot: "special" });
+    expect(f.internal.mageBarrierHits.get("hero")).toBe(4);
+    f.internal.damagePlayer("target", "hero", 3, 10_001, false);
+    expect(f.player.health).toBe(19);
+    expect(parseBuildPathState(f.player.huntLoadoutsJson).trials.spellguard).toBe(2);
+    const state = parseBuildPathState(f.player.huntLoadoutsJson);
+    state.mastered.push("spellguard"); f.player.huntLoadoutsJson = serializeBuildPathState(state);
+    f.internal.mageBarrierHits.set("hero", 1);
+    f.internal.damagePlayer("target", "hero", 3, 10_002, false);
+    expect(f.player.invulnerableUntil).toBe(12_002);
+    expect(f.room.broadcast).toHaveBeenCalledWith("calling:combo", expect.objectContaining({ comboId: "aegis_shatter" }));
   });
   it("allows mastered F augments to equip in Town without replacing G", () => {
     const f = fixture(); const state = parseBuildPathState(f.player.huntLoadoutsJson);

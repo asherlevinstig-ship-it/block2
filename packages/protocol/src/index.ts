@@ -453,8 +453,9 @@ export const BUILD_PATH_SPECIALIZATIONS = {
     { id: "juggernaut", name: "Juggernaut", role: "Break attackers", effect: "Every guarded hit staggers its attacker.", trial: "Stagger 20 attackers through guarding.", trialTarget: 20, capstone: "UNMOVABLE · Guard staggers last twice as long." },
   ],
   mage: [
-    { id: "arcanist", name: "Arcanist", role: "Amplify the echo", effect: "Arcane Echo repeats at 75% strength.", trial: "Trigger 15 Arcane Echoes.", trialTarget: 15, capstone: "RESONANCE · Arcane Echo repeats at full strength." },
-    { id: "elementalist", name: "Elementalist", role: "Bind with magic", effect: "Arcane Surge, Overload and Mana Shield shatter slow surviving enemies for 2 seconds.", trial: "Defeat 20 spell-slowed enemies.", trialTarget: 20, capstone: "DEEP FREEZE · Spell slows are stronger and last 3 seconds." },
+    { id: "arcanist", name: "Arcanist", role: "Repeat and amplify spells", effect: "Arcane Echo repeats at 75% strength.", trial: "Trigger 15 Arcane Echoes.", trialTarget: 15, capstone: "RESONANCE · Arcane Echo repeats at full strength." },
+    { id: "elementalist", name: "Elementalist", role: "Control the battlefield", effect: "Arcane Surge, Overload and Mana Shield shatter slow surviving enemies for 2 seconds.", trial: "Defeat 20 spell-slowed enemies.", trialTarget: 20, capstone: "DEEP FREEZE · Spell slows are stronger and last 3 seconds." },
+    { id: "spellguard", name: "Spellguard", role: "Cast from the front line", effect: "Mana Shield gains 1 charge and prevents 1 additional damage per hit.", trial: "Prevent 30 damage with Mana Shield.", trialTarget: 30, capstone: "AEGIS SHATTER · When Mana Shield breaks, become invulnerable for 2 seconds." },
   ],
   assassin: [
     { id: "executioner", name: "Executioner", role: "Commit to the kill", effect: "Shadowstep's empowered strike deals +4 damage.", trial: "Land 15 empowered killing blows.", trialTarget: 15, capstone: "DEATHBLOW · Empowered killing blows restore 20 stamina." },
@@ -481,7 +482,7 @@ export const BUILD_PATH_RANKS = [
   { rank: 3, name: "Veteran", xp: 70 },
   { rank: 4, name: "Master", xp: 140 },
 ] as const;
-export const BuildPathRequestSchema = z.object({ action: z.enum(["sync", "choose", "specialize"]), pathId: z.enum(["tank", "mage", "assassin", "thief", "ranger", "healer"]).optional(), specializationId: z.enum(["guardian", "juggernaut", "arcanist", "elementalist", "executioner", "phantom", "trickster", "plunderer", "marksman", "trapper", "lifebinder", "field_medic"]).optional() }).strict();
+export const BuildPathRequestSchema = z.object({ action: z.enum(["sync", "choose", "specialize"]), pathId: z.enum(["tank", "mage", "assassin", "thief", "ranger", "healer"]).optional(), specializationId: z.enum(["guardian", "juggernaut", "arcanist", "elementalist", "spellguard", "executioner", "phantom", "trickster", "plunderer", "marksman", "trapper", "lifebinder", "field_medic"]).optional() }).strict();
 export type BuildPathAffinity = { pathId: BuildPathId; score: number; reasons: string[] };
 export type BuildPathUpdate = { selectedPathId: BuildPathId | null; rank: number; xp: number; nextRankXp: number | null;
   selectedCallingAbilityId: CallingAbilityId | null;

@@ -5369,9 +5369,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const barrierHits = this.mageBarrierHits.get(playerId) ?? 0;
     if (defense.damage > 0 && barrierHits > 0) {
       const build = parseBuildPathState(player.huntLoadoutsJson);
+      const spellguard = this.buildSpecializationFor(player, "mage") === "spellguard";
       const beforeBarrier = defense.damage;
-      defense.damage = Math.max(0, defense.damage - (selectedCallingAugment(build, "mage_mana_shield") === "shield_reinforced_rune" ? 2 : 1));
+      defense.damage = Math.max(0, defense.damage
+        - (selectedCallingAugment(build, "mage_mana_shield") === "shield_reinforced_rune" ? 2 : 1)
+        - Number(spellguard));
       const prevented = beforeBarrier - defense.damage;
+      if (spellguard) this.grantMasterTrial(playerId, "spellguard", prevented);
       if (prevented > 0 && this.hasFloorUpgrade(playerId, "mage_shield")) this.floorRunReprisalUntil.set(playerId, now + 5_000);
       const barrierEnergy = Math.min(4, (this.mageBarrierEnergy.get(playerId) ?? 0) + prevented);
       this.mageBarrierEnergy.set(playerId, barrierEnergy);
@@ -5393,6 +5397,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           else this.staggerMob(targetId, target, now, 900, true);
         }
         this.broadcast("mage:shield-shatter", { playerId, targetIds: targets, damage: shatterDamage, energy: barrierEnergy });
+        if (spellguard && this.buildSpecializationMastered(player, "spellguard")) {
+          player.invulnerableUntil = Math.max(player.invulnerableUntil, now + 2_000);
+          this.buildPathProc(playerId, "mage", "AEGIS SHATTER", "INVULNERABLE · 2.0s", 2_000);
+          this.broadcast("calling:combo", { comboId: "aegis_shatter", label: "AEGIS SHATTER",
+            casterId: playerId, targetIds: targets, x: player.x, y: player.y, z: player.z, bonus: 2 });
+        }
       }
       else this.mageBarrierHits.set(playerId, barrierHits - 1);
       this.callingState(playerId, "mage", "mage_mana_shield", "BARRIER", {
@@ -7403,10 +7413,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         casterId: client.sessionId, targetIds: targets.map(([mobId]) => mobId), damage: 2 + (echo > 0 ? Math.max(1, Math.ceil(2 * echo)) : 0),
       });
     } else if (abilityId === "mage_mana_shield") {
-      const hits = (rank >= 4 ? 4 : 3) + (augmentId === "shield_prismatic_layers" ? 2 : 0);
+      const spellguard = this.buildSpecializationFor(player, "mage") === "spellguard";
+      const hits = (rank >= 4 ? 4 : 3) + (augmentId === "shield_prismatic_layers" ? 2 : 0) + Number(spellguard);
       this.mageBarrierHits.set(client.sessionId, hits);
       this.mageBarrierEnergy.set(client.sessionId, 0);
-      detail = `${hits} BARRIER CHARGES · ABSORB TO CHARGE SHATTER`;
+      detail = `${hits} BARRIER CHARGES · ${spellguard ? "SPELLGUARD · " : ""}ABSORB TO CHARGE SHATTER`;
     } else if (abilityId === "mage_overload") {
       const [mobId, target] = overloadTarget!;
       const overloadId = `overload:${client.sessionId}:${++this.mageOverloadSequence}`;
