@@ -475,8 +475,7 @@ import {
 import { retryConnection } from "./connection-retry.js";
 import { connectionEndpointForAttempt } from "./connection-endpoint.js";
 import {
-  alternateInteractionMode,
-  portalArrivalInteractionMode,
+  ACTIVE_GAME_INTERACTION_MODE,
   primaryActionForMode,
   type InteractionMode,
 } from "./interaction-mode.js";
@@ -499,9 +498,9 @@ import {
 import { isPowerCompatibleWithMainHand } from "./power-loadout.js";
 import { characterCreationNeeded, createGuestProfileToken, finishCharacterCreation, getOrCreateProfileToken,
   profileBackups, restoreProfile, startNewAdventure } from "./player-profile.js";
-import { advanceOnboarding, ONBOARDING_DONE, ONBOARDING_STAGE, ONBOARDING_STEPS, onboardingStorageKey, legacyOnboardingStorageKey,
-  callingFirstOnboardingStorageKey, migrateLegacyOnboardingStep, migrateOldestOnboardingStep, oldestOnboardingStorageKey,
-  parseOnboardingStep, shouldPromptTownDeparture, starterEquipmentRequired, starterEquipmentStorageKey,
+import { advanceOnboarding, ONBOARDING_DONE, ONBOARDING_STAGE, ONBOARDING_STEPS, onboardingStorageKey, buildModeOnboardingStorageKey, legacyOnboardingStorageKey,
+  callingFirstOnboardingStorageKey, migrateBuildModeOnboardingStep, migrateLegacyOnboardingStep, migrateOldestOnboardingStep, oldestOnboardingStorageKey,
+  parseOnboardingStep, starterEquipmentRequired, starterEquipmentStorageKey,
   starterInventoryLesson, shouldDeferOnboardingForCalling, shouldShowKeyboardCameraHint,
   shouldStartCallingFirstJourney, type OnboardingEvent } from "./new-player-onboarding.js";
 import { firstVictoryTownRoute, onboardingTrailRoute, sampleTrail } from "./onboarding-trail.js";
@@ -810,13 +809,6 @@ const starterInventoryTutorial = document.querySelector<HTMLElement>("#starter-i
 const starterInventoryEyebrow = document.querySelector<HTMLElement>("#starter-inventory-eyebrow")!;
 const starterInventoryTitle = document.querySelector<HTMLElement>("#starter-inventory-title")!;
 const starterInventoryCopy = document.querySelector<HTMLElement>("#starter-inventory-copy")!;
-const modeSwitchTutorial = document.querySelector<HTMLElement>("#mode-switch-tutorial")!;
-const modeSwitchTutorialAction = document.querySelector<HTMLButtonElement>("#mode-switch-tutorial-action")!;
-const modeSwitchTutorialBuild = document.querySelector<HTMLButtonElement>("#mode-switch-tutorial-build")!;
-const modeSwitchTutorialTitle = document.querySelector<HTMLElement>("#mode-switch-tutorial-title")!;
-const modeSwitchTutorialCopy = document.querySelector<HTMLElement>("#mode-switch-tutorial-copy")!;
-let townDeparturePromptOpen = false;
-let modeLessonAcknowledged = false;
 let lowLevelWasInsideTown = false;
 let lowLevelTownStateReady = false;
 let starterInventoryOpenedWithKeyboard = false;
@@ -833,6 +825,9 @@ let firstStepsIndex = (() => {
   try {
     const current = parseOnboardingStep(window.localStorage.getItem(firstStepsKey));
     if (current !== null) return current;
+    const buildMode = migrateBuildModeOnboardingStep(window.localStorage.getItem(buildModeOnboardingStorageKey(profileToken)));
+    if (buildMode !== null) window.localStorage.setItem(firstStepsKey, String(buildMode));
+    if (buildMode !== null) return buildMode;
     const previous = migrateLegacyOnboardingStep(window.localStorage.getItem(legacyOnboardingStorageKey(profileToken)));
     if (previous !== null) window.localStorage.setItem(firstStepsKey, String(previous));
     if (previous !== null) return previous;
@@ -891,20 +886,14 @@ function renderFirstSteps(): void {
   const rewardActive = firstVictoryRewardLessonReady()
     && Boolean(firstVictoryReward && firstVictoryReward.stage !== "complete");
   const active = onboardingActive || rewardActive;
-  const modeLesson = index === ONBOARDING_STAGE.chooseMode;
   firstSteps.hidden = !active;
   firstSteps.dataset.guidance = firstVictoryReward?.stage === "return_town" ? "return-town"
     : index === ONBOARDING_STAGE.headSouth ? "south-gate" : "";
   const starterLesson = starterInventoryLesson(index, starterInventoryOpenedWithKeyboard, forcedStarterEquipment, localMainHandId);
   const rewardInventoryLesson = rewardActive && (firstVictoryReward?.stage === "open_pack" || firstVictoryReward?.stage === "choose")
     ? firstVictoryReward.stage : null;
-  firstStepsSkip.hidden = rewardActive || modeLesson || starterLesson !== "hidden";
-  const showModeChoice = townDeparturePromptOpen || modeLesson && !modeLessonAcknowledged;
-  modeSwitchTutorial.hidden = !showModeChoice;
-  modeSwitchTutorialTitle.textContent = "Choose how to leave Town";
-  modeSwitchTutorialCopy.innerHTML = "<b>BUILD</b> gathers resources. <b>COMBAT</b> attacks enemies. Press <kbd>Q</kbd> at any time to switch.";
+  firstStepsSkip.hidden = rewardActive || starterLesson !== "hidden";
   document.documentElement.classList.toggle("onboarding-active", active);
-  document.documentElement.classList.toggle("onboarding-mode-lesson", modeLesson);
   document.documentElement.classList.toggle("first-combat-attack", index === ONBOARDING_STAGE.firstCombat && firstCombatPhase === "attack");
   document.documentElement.classList.toggle("first-combat-dodge", index === ONBOARDING_STAGE.firstCombat && firstCombatPhase === "dodge");
   document.documentElement.classList.toggle("first-combat-finish", index === ONBOARDING_STAGE.firstCombat && firstCombatPhase === "finish");
@@ -1001,14 +990,6 @@ function completeStarterEquipment(): void {
   renderFirstSteps();
 }
 firstStepsSkip.addEventListener("click", () => setFirstSteps(ONBOARDING_DONE));
-modeSwitchTutorialAction.addEventListener("click", () => {
-  townDeparturePromptOpen = false; modeLessonAcknowledged = true;
-  setInteractionMode("combat"); renderFirstSteps();
-});
-modeSwitchTutorialBuild.addEventListener("click", () => {
-  townDeparturePromptOpen = false; modeLessonAcknowledged = true;
-  setInteractionMode("build"); renderFirstSteps();
-});
 const adminInvitation = consumeAdminInvitation();
 const minimapPanel = document.querySelector<HTMLDetailsElement>("#minimap")!;
 const minimapExpand = document.querySelector<HTMLButtonElement>("#minimap-expand")!;
@@ -1537,13 +1518,10 @@ const callingButton = document.querySelector<HTMLButtonElement>("#calling-button
 const contextButton = document.querySelector<HTMLButtonElement>("#context-button")!;
 const contextButtonLabel = contextButton.querySelector<HTMLElement>("span")!;
 const contextButtonHint = contextButton.querySelector<HTMLElement>("small")!;
-const touchModeButton = document.querySelector<HTMLButtonElement>("#touch-mode-button")!;
-const touchModeLabel = document.querySelector<HTMLElement>("#touch-mode-label")!;
 const tabletCameraHint = document.querySelector<HTMLElement>("#tablet-camera-hint")!;
 const keyboardCameraHint = document.querySelector<HTMLElement>("#keyboard-camera-hint")!;
 const keyboardCameraKeys = [...keyboardCameraHint.querySelectorAll<HTMLElement>("kbd[data-key]")];
-const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-toggle [data-mode]")];
-if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !dangerZone || !dangerZoneName || !locationCoordinates || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !graphicsQualitySelect || !graphicsQualityStatus || !performanceCopyLog || !performanceClearLog || !performanceLogStatus || !inventoryPanel || !inventoryTotal || !inventoryToggle || !cameraModeToggle || !inventoryClose || !inventoryBadge || !inventoryEquipped || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== requiredInventoryMainHands || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !callingButton || !contextButton || !contextButtonLabel || !contextButtonHint || !touchModeButton || !touchModeLabel || !tabletCameraHint || !keyboardCameraHint || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !controlsHelp || !combatReticle || !tabletAimGuide || !combatFeedback || !damageOverlay || modeButtons.length !== 2) {
+if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !dangerZone || !dangerZoneName || !locationCoordinates || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !graphicsQualitySelect || !graphicsQualityStatus || !performanceCopyLog || !performanceClearLog || !performanceLogStatus || !inventoryPanel || !inventoryTotal || !inventoryToggle || !cameraModeToggle || !inventoryClose || !inventoryBadge || !inventoryEquipped || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== requiredInventoryMainHands || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !callingButton || !contextButton || !contextButtonLabel || !contextButtonHint || !tabletCameraHint || !keyboardCameraHint || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !controlsHelp || !combatReticle || !tabletAimGuide || !combatFeedback || !damageOverlay) {
   throw new Error("Game shell is missing required elements");
 }
 if ([quizTablePrompt, blacksmithPrompt, playerTradePrompt, playerTradeName, blacksmithPanel, blacksmithMessage, blacksmithOre, blacksmithGold, blacksmithPrice, blacksmithSell, blacksmithClose, haulEquipName, haulEquipDetail, haulEquip, haulSalvageCount, haulSalvageDetail, haulSalvage, haulStoreCount, haulStore, haulUpgradeName, haulUpgradeTrack, haulUpgradeDetail, haulRegionName, haulRegionDetail, haulTrackRegion, quizPanel, quizBalance, quizBalanceAmount, quizPotDisplay, quizPotLabel, quizWinToast, quizAnswerFeedback, quizFeedbackIcon, quizFeedbackTitle, quizFeedbackDetail, quizMessage, quizStakeHeading, quizStakes, quizQuestion, quizPot, quizPrompt, quizChoices, quizDecision, quizDouble, quizQuit, quizClose, tavernCoins].some(element => !element) || blacksmithUpgradeCards.length !== Object.keys(BLACKSMITH_UPGRADES).length) {
@@ -11469,7 +11447,7 @@ function updateRangedReticle(): void {
 }
 let currentTarget: VoxelRaycastHit | null = null;
 let targetStateKey = "";
-let interactionMode: InteractionMode = "build";
+let interactionMode: InteractionMode = ACTIVE_GAME_INTERACTION_MODE;
 const miningHud = document.querySelector<HTMLElement>("#mining-progress")!;
 const miningFill = document.querySelector<HTMLElement>("#mining-progress-fill")!;
 const miningCaption = document.querySelector<HTMLElement>("#mining-progress-label")!;
@@ -14194,8 +14172,8 @@ joystickZone.addEventListener("pointercancel", event => releaseJoystick(event.po
 
 let room: Room | null = null;
 let reportedProtectedDialog: boolean | null = null;
-const protectedDialogSelector = '[role="dialog"], [aria-modal="true"], #loot-pack-decision, #combat-loadout-drawer, #depths-retry-prompt, #mode-switch-tutorial, #minimap[data-expanded="true"], #party-panel details[open]';
-const exclusivePopupSelector = '[role="dialog"]:not(#starter-inventory-tutorial), [aria-modal="true"]:not(#starter-inventory-tutorial), #loot-pack-decision, #combat-loadout-drawer, #depths-retry-prompt, #mode-switch-tutorial, #ability-practice, #minimap[data-expanded="true"]';
+const protectedDialogSelector = '[role="dialog"], [aria-modal="true"], #loot-pack-decision, #combat-loadout-drawer, #depths-retry-prompt, #minimap[data-expanded="true"], #party-panel details[open]';
+const exclusivePopupSelector = '[role="dialog"]:not(#starter-inventory-tutorial), [aria-modal="true"]:not(#starter-inventory-tutorial), #loot-pack-decision, #combat-loadout-drawer, #depths-retry-prompt, #ability-practice, #minimap[data-expanded="true"]';
 const popupQueue = new ExclusivePopupQueue();
 const popupFocusOrigins = new Map<string, HTMLElement>();
 const popupInputGuards = new Map<string, PopupInputGuard>();
@@ -15909,8 +15887,7 @@ function commitSpecialAim(): void {
 
 function requestModePrimaryAction(): void {
   if (localDefending) requestDefense(false);
-  if (primaryActionForMode(interactionMode) === "mine") requestMine();
-  else requestAttack();
+  requestAttack();
 }
 
 function requestPrimaryAction(): void {
@@ -15968,37 +15945,24 @@ function requestContextAction(source: LootHold["source"]): void {
   requestWorldInteraction();
 }
 
-function setInteractionMode(mode: InteractionMode): void {
+function restoreCombatMode(): void {
   attackBuffer.clear();
   attackPredictions.clear(); localActionRequestId = null;
   rangedFirePointer = null;
   clearTabletAttackAim();
-  if (interactionMode === mode && targetStateKey.startsWith(`${mode}:`)) return;
-  const cancelledMining = mode !== "build" && Boolean(miningSwing || pendingMine);
-  interactionMode = mode;
-  if (mode !== "build") cancelMining("mode");
-  combatHud.setMode(mode);
-  mineButton.textContent = mode === "build" ? "Mine" : "Attack";
-  mineButton.dataset.mode = mode;
-  touchModeLabel.textContent = mode === "build" ? "Build" : "Combat";
-  touchModeButton.dataset.mode = mode;
-  touchModeButton.setAttribute("aria-label", `Switch to ${alternateInteractionMode(mode)} mode`);
-  combatReticle.hidden = mode !== "combat";
+  if (interactionMode === "combat" && targetStateKey.startsWith("combat:")) return;
+  const cancelledMining = Boolean(miningSwing || pendingMine);
+  interactionMode = "combat";
+  cancelMining("mode");
+  mineButton.textContent = "Attack";
+  mineButton.dataset.mode = "combat";
+  combatReticle.hidden = false;
   targetStateKey = "";
   updateTarget();
-  logMovementEvent(`MODE ${mode.toUpperCase()}`);
-  status.textContent = mode === "build"
-    ? "Build mode · clicks mine nearby targeted blocks."
-    : cancelledMining ? miningMessage("mode") : `Combat mode · clicks use the ${MAIN_HAND_DEFINITIONS[localMainHandId].name} Attack without changing blocks.`;
-  if (mode === "combat") noteFirstStep("switched_combat");
+  logMovementEvent("MODE COMBAT");
+  status.textContent = cancelledMining ? miningMessage("mode")
+    : `Combat ready · clicks use the ${MAIN_HAND_DEFINITIONS[localMainHandId].name}.`;
 }
-
-for (const button of modeButtons) {
-  button.addEventListener("click", () => setInteractionMode(button.dataset.mode as InteractionMode));
-}
-touchModeButton.addEventListener("click", () => {
-  setInteractionMode(alternateInteractionMode(interactionMode));
-});
 for (const button of powerPickerButtons) {
   button.addEventListener("click", () => {
     const powerId = button.dataset.power;
@@ -16095,7 +16059,7 @@ function requiredPopup(id: string): boolean {
   if (id === "calling-intro") return !localBuildPathId;
   return new Set([
     "character-creator", "ability-reveal", "ashen-equipment-reveal", "calling-awakening",
-    "defeat-screen", "mode-switch-tutorial", "dungeon-lobby-panel",
+    "defeat-screen", "dungeon-lobby-panel",
   ]).has(id);
 }
 function explainRequiredPopup(popup: HTMLElement): void {
@@ -16304,7 +16268,6 @@ window.addEventListener("keydown", event => {
     toggleCameraView(true);
     return;
   }
-  if (event.code === "KeyQ") setInteractionMode(alternateInteractionMode(interactionMode));
   if (event.code === "KeyH") { event.preventDefault(); requestPotion(); }
   if (event.code === "KeyE") {
     event.preventDefault();
@@ -17639,7 +17602,6 @@ app.on("update", (dt: number) => {
   if (!FAST_WORLD_TOWN_ONLY && worldReady && firstStepsIndex === ONBOARDING_STAGE.headSouth
     && Math.hypot(player.x - TOWN_CENTER_X, player.z - TOWN_CENTER_Z) > TOWN_SAFE_RADIUS + 1) {
     noteFirstStep("left_town");
-    if (interactionMode === "combat") setInteractionMode("build");
   }
   if (worldReady) {
     const townDistance = Math.hypot(player.x - TOWN_CENTER_X, player.z - TOWN_CENTER_Z);
@@ -17649,12 +17611,6 @@ app.on("update", (dt: number) => {
       lowLevelWasInsideTown = true;
       lowLevelTownStateReady = true;
     } else if (townDistance > TOWN_SAFE_RADIUS + 1 && lowLevelTownStateReady && lowLevelWasInsideTown) {
-      if (!FAST_WORLD_TOWN_ONLY && shouldPromptTownDeparture(lowLevelWasInsideTown, true, localCharacterProgression.level)) {
-        townDeparturePromptOpen = true;
-        modeLessonAcknowledged = false;
-        resetMovementControls();
-        renderFirstSteps();
-      }
       lowLevelWasInsideTown = false;
     }
   }
@@ -19020,7 +18976,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     abilityPracticeOpen.disabled = false;
     abilityPracticeStatus.textContent = update.message;
     status.textContent = update.message;
-    if (fastWorldRequested && update.active) setInteractionMode("combat");
+    if (fastWorldRequested && update.active) restoreCombatMode();
     if (fastWorldRequested && update.wave) {
       const detail = document.querySelector<HTMLElement>("#fast-world-badge span");
       if (detail) detail.textContent = `Wave ${update.wave}/3 · ${update.message}`;
@@ -19099,8 +19055,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     // A same-room portal does not recreate the client, so the mode selected in
     // town otherwise leaks into the dungeon. Reset the action route before the
     // travel veil lifts so J/click immediately drives the equipped weapon.
-    if (fastWorldRequested && spawn.entering)
-      setInteractionMode(portalArrivalInteractionMode(interactionMode, spawn.entering));
+    if (fastWorldRequested && spawn.entering) restoreCombatMode();
     status.textContent = spawn.entering
       ? spawn.x >= TOWER_FLOOR_ONE.bounds.minX ? "Floor 1 entered · defeat both Root Wardens, then challenge the Crownkeeper."
         : isInEmberVault(spawn.x, spawn.z) ? "Ember Vault entered · breach the forge chambers and defeat the Colossus."

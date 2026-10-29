@@ -1,23 +1,22 @@
-export type OnboardingEvent = "left_town" | "switched_combat" | "defeated_first_enemy" | "picked_loot" | "equipped_starter";
+export type OnboardingEvent = "left_town" | "defeated_first_enemy" | "picked_loot" | "equipped_starter";
 
 export const ONBOARDING_STAGE = {
   collectGear: 0,
   equipSword: 1,
   headSouth: 2,
-  chooseMode: 3,
-  firstCombat: 4,
+  firstCombat: 3,
 } as const;
 
 export const ONBOARDING_STEPS = [
   { title: "Collect your starter gear", detail: "Follow the gold dots to your personal bag. Hold E to take the sword and robes.", event: "picked_loot" },
   { title: "Equip your first sword", detail: "Press I to open your inventory, select the Forged Sword, then choose EQUIP.", event: "equipped_starter" },
   { title: "Head south", detail: "Follow the gold dots around the tavern and through the south gate. Stay on the road.", event: "left_town" },
-  { title: "Switch to Combat", detail: "Press Q or select COMBAT in the hotbar. Q switches between Build and Combat.", event: "switched_combat" },
-  { title: "Defeat your first enemy", detail: "Follow the gold trail to the Southroad Crawler. Defeat it to complete your combat lesson.", event: "defeated_first_enemy" },
+  { title: "Defeat your first enemy", detail: "Follow the gold trail to the Southroad Crawler. Your weapon is always ready; press J or attack to strike.", event: "defeated_first_enemy" },
 ] as const satisfies readonly { title: string; detail: string; event: OnboardingEvent }[];
 
 export const ONBOARDING_DONE = ONBOARDING_STEPS.length;
-export const onboardingStorageKey = (profileToken: string): string => `blockcraft.onboarding.v4:${profileToken}`;
+export const onboardingStorageKey = (profileToken: string): string => `blockcraft.onboarding.v5:${profileToken}`;
+export const buildModeOnboardingStorageKey = (profileToken: string): string => `blockcraft.onboarding.v4:${profileToken}`;
 export const legacyOnboardingStorageKey = (profileToken: string): string => `blockcraft.onboarding.v3:${profileToken}`;
 export const oldestOnboardingStorageKey = (profileToken: string): string => `blockcraft.onboarding.v2:${profileToken}`;
 // v2 deliberately records only a confirmed starter-bag pickup. The old key could be
@@ -40,7 +39,18 @@ export function migrateLegacyOnboardingStep(value: string | null): number | null
   if (!Number.isInteger(step) || step < 0 || step > 6) return null;
   if (step <= 1) return ONBOARDING_STAGE.collectGear;
   if (step >= 6) return ONBOARDING_DONE;
+  if (step >= 4) return ONBOARDING_STAGE.firstCombat;
   return step - 1;
+}
+
+/** v4 contained a Build/Combat choice that no longer exists. */
+export function migrateBuildModeOnboardingStep(value: string | null): number | null {
+  if (value === null) return null;
+  const step = Number(value);
+  if (!Number.isInteger(step) || step < 0 || step > 5) return null;
+  if (step >= 5) return ONBOARDING_DONE;
+  if (step >= 3) return ONBOARDING_STAGE.firstCombat;
+  return step;
 }
 
 export function migrateOldestOnboardingStep(value: string | null): number | null {
@@ -49,6 +59,7 @@ export function migrateOldestOnboardingStep(value: string | null): number | null
   if (!Number.isInteger(step) || step < 0 || step > 5) return null;
   if (step === 5) return ONBOARDING_DONE;
   if (step <= 1) return ONBOARDING_STAGE.collectGear;
+  if (step >= 4) return ONBOARDING_STAGE.firstCombat;
   return step - 1;
 }
 

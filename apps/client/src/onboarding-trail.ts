@@ -13,8 +13,7 @@ export function onboardingTrailRoute(
   mobs: readonly TrailMob[],
   drops: readonly TrailPoint[],
 ): TrailPoint[] {
-  if (step === null || step >= ONBOARDING_DONE || step === ONBOARDING_STAGE.equipSword
-    || step === ONBOARDING_STAGE.chooseMode || player.y < 7) return [];
+  if (step === null || step >= ONBOARDING_DONE || step === ONBOARDING_STAGE.equipSword || player.y < 7) return [];
   if (step === ONBOARDING_STAGE.collectGear) {
     return [drops.find(drop => drop.starter) ?? STARTER_BAG];
   }

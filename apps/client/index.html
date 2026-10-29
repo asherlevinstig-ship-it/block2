@@ -127,12 +127,6 @@
         <kbd>I</kbd>
         <div><strong id="starter-inventory-title">Open your inventory</strong><p id="starter-inventory-copy">Press I to see the sword you collected.</p></div>
       </aside>
-      <aside id="mode-switch-tutorial" aria-live="assertive" hidden>
-        <small>BEYOND TOWN · FIRST FIGHT</small>
-          <strong id="mode-switch-tutorial-title">Choose how to leave Town</strong>
-          <p id="mode-switch-tutorial-copy"><b>BUILD</b> gathers resources. <b>COMBAT</b> attacks enemies. Press <kbd>Q</kbd> at any time to switch.</p>
-          <div><button id="mode-switch-tutorial-build" type="button">LEAVE IN BUILD</button><button id="mode-switch-tutorial-action" type="button">LEAVE IN COMBAT</button></div>
-      </aside>
       <p id="status">Connecting to the authoritative world...</p>
       <p id="target">Target: waiting for world data</p>
       <div id="player-hud-root"></div>
@@ -635,12 +629,9 @@
         <button id="calling-button" type="button" hidden>Power</button>
         <button id="power-button" type="button" hidden>Power</button>
         <button id="context-button" type="button" hidden><span>Interact</span><small>Tap</small></button>
-        <button id="touch-mode-button" type="button" aria-label="Switch to combat mode">
-          <span>Mode</span><strong id="touch-mode-label">Build</strong>
-        </button>
         <button id="dodge-button" type="button">Dodge</button>
         <button id="defense-button" type="button">Guard</button>
-        <button id="mine-button" type="button" data-mode="build">Mine</button>
+        <button id="mine-button" type="button" data-mode="combat">Attack</button>
       </div>
     </section>
     <aside id="tablet-orientation-prompt" aria-label="Tablet orientation suggestion">

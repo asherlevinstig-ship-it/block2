@@ -24,13 +24,11 @@ import {
 } from "@blockcraft/protocol";
 import { isPowerCompatibleWithMainHand } from "./power-loadout.js";
 import { EMPTY_FLOOR_RUN_STATE, FLOOR_RUN_UPGRADES, type FloorRunUpgradeUpdate } from "@blockcraft/protocol";
-import type { InteractionMode } from "./interaction-mode.js";
 
 type PowerSlot = "primary" | "secondary";
 type CooldownState = { percent: number; label: string; ready: boolean };
 type CallingState = { label: string; detail: string } | null;
 
-const mode = signal<InteractionMode>("build");
 const mainHand = signal<MainHandId>("longsword");
 const armour = signal<ArmourId>("none");
 const ironSwordOwned = signal(false);
@@ -114,13 +112,6 @@ export function visibleCallingAbilities(pathId: BuildPathId, rank: number) {
 
 export function visibleCallingAugments(abilityId: CallingAbilityId, rank: number) {
   return CALLING_ABILITY_AUGMENTS.filter(option => option.abilityId === abilityId && option.unlockRank <= rank);
-}
-
-function ModeToggle() {
-  return h("div", { id: "mode-toggle", role: "group", "aria-label": "Primary action mode" },
-    h("button", { type: "button", "data-mode": "build", "aria-pressed": String(mode.value === "build") }, "BUILD"),
-    h("button", { type: "button", "data-mode": "combat", "aria-pressed": String(mode.value === "combat") }, "COMBAT"),
-  );
 }
 
 function MainHandLoadout() {
@@ -283,7 +274,6 @@ function CallingLoadout() {
 
 function CombatHud() {
   return h("div", { id: "combat-hud-shell", "data-loadout-open": String(loadoutOpen.value) },
-    h(ModeToggle, null),
     h(MainHandLoadout, null),
     h(PowerLoadout, null),
     h(SpecialLoadout, null),
@@ -304,7 +294,6 @@ function setIfChanged<T>(target: { value: T }, value: T): void {
 
 export const combatHud = {
   mount(root: HTMLElement): void { render(h(CombatHud, null), root); },
-  setMode(value: InteractionMode): void { setIfChanged(mode, value); },
   setWeapon(value: MainHandId, hasIronSword: boolean): void { batch(() => { setIfChanged(mainHand, value); setIfChanged(ironSwordOwned, hasIronSword); }); },
   setArmour(value: ArmourId): void { setIfChanged(armour, value); },
   setPowerLoadout(primary: PowerId, secondary: PowerId, active: PowerSlot, level: number): void {

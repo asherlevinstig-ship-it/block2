@@ -368,40 +368,6 @@ html.onboarding-active #hud #target, html.onboarding-active #hud #players { disp
 #exit-guide[hidden] { display: none; }
 .controls { margin-top: 12px !important; color: #94aa90; font-size: .82rem; }
 
-#mode-toggle {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 5px;
-  margin-top: 12px;
-  padding: 4px;
-  border: 1px solid rgb(255 255 255 / 12%);
-  border-radius: 10px;
-  background: rgb(0 0 0 / 22%);
-}
-
-#mode-toggle button {
-  padding: 7px 10px;
-  border: 1px solid transparent;
-  border-radius: 7px;
-  background: transparent;
-  color: #829287;
-  font-size: .7rem;
-  font-weight: 900;
-  letter-spacing: .1em;
-}
-
-#mode-toggle button[aria-pressed="true"][data-mode="build"] {
-  border-color: rgb(240 203 103 / 42%);
-  background: rgb(128 78 11 / 72%);
-  color: #ffe49a;
-}
-
-#mode-toggle button[aria-pressed="true"][data-mode="combat"] {
-  border-color: rgb(255 118 96 / 48%);
-  background: rgb(126 31 24 / 76%);
-  color: #ffc1b5;
-}
-
 #main-hand-loadout {
   margin-top: 8px;
   padding: 8px;
@@ -1409,8 +1375,7 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 }
 
 #dodge-button,
-#power-button,
-#touch-mode-button {
+#power-button {
   border-color: rgb(79 201 238 / 45%) !important;
   background: rgb(17 76 98 / 82%) !important;
   color: #c5f3ff !important;
@@ -2218,7 +2183,7 @@ button[data-previewing="true"] .calling-preview *, #calling-awakening:not([hidde
     grid-template: 64px 84px / 62px 68px 76px 96px;
     grid-template-areas:
       "special calling context primary"
-      "mode dodge defense primary";
+      ". dodge defense primary";
     align-items: center;
     gap: 8px;
     pointer-events: none;
@@ -2231,7 +2196,6 @@ button[data-previewing="true"] .calling-preview *, #calling-awakening:not([hidde
   #power-button,
   #calling-button,
   #context-button,
-  #touch-mode-button,
   #special-button { pointer-events: auto; touch-action: none; user-select: none; }
 
   #joystick-zone {
@@ -2279,7 +2243,6 @@ button[data-previewing="true"] .calling-preview *, #calling-awakening:not([hidde
   #power-button,
   #calling-button,
   #context-button,
-  #touch-mode-button,
   #special-button {
     width: 92px;
     height: 92px;
@@ -2321,25 +2284,6 @@ button[data-previewing="true"] .calling-preview *, #calling-awakening:not([hidde
   #special-button { grid-area: special; width: 68px; height: 68px; font-size: .64rem; }
   #dodge-button { grid-area: dodge; }
   #defense-button { grid-area: defense; width: 68px; height: 68px; border-color: rgb(111 211 255 / 62%); background: rgb(18 79 107 / 86%); font-size: .64rem; }
-  #touch-mode-button {
-    grid-area: mode;
-    width: 68px;
-    height: 68px;
-    padding: 0;
-    border-color: rgb(184 206 196 / 42%) !important;
-    background: rgb(22 41 35 / 86%) !important;
-    color: #d4e3da !important;
-    font-size: .56rem;
-    line-height: 1.05;
-  }
-  #touch-mode-button span,
-  #touch-mode-button strong { display: block; }
-  #touch-mode-button strong { margin-top: 3px; color: #fff2bd; font-size: .7rem; }
-  #touch-mode-button[data-mode="combat"] {
-    border-color: rgb(255 126 106 / 58%) !important;
-    background: rgb(91 30 25 / 88%) !important;
-  }
-
   #mine-button:active { transform: scale(.94); background: rgb(184 111 24 / 92%); }
   #dodge-button:active { transform: scale(.94); background: rgb(23 111 143 / 92%) !important; }
   #defense-button[aria-pressed="true"] { transform: scale(.94); background: rgb(30 137 179 / 96%) !important; box-shadow: 0 0 22px rgb(91 213 255 / 34%); }
@@ -2358,7 +2302,6 @@ button[data-previewing="true"] .calling-preview *, #calling-awakening:not([hidde
   }
   #context-button:active { transform: scale(.94); }
   #special-button:active { transform: scale(.94); background: rgb(101 45 137 / 96%) !important; }
-  #touch-mode-button:active { transform: scale(.94); }
   #mine-button[data-mode="combat"] {
     border-color: rgb(255 126 106 / 70%);
     background: rgb(135 35 27 / 88%);
@@ -2390,7 +2333,6 @@ button[data-previewing="true"] .calling-preview *, #calling-awakening:not([hidde
     gap: 6px;
   }
   #mine-button { width: 78px; height: 78px; font-size: .78rem; }
-  #touch-mode-button { width: 58px; height: 58px; }
   #defense-button { width: 58px; height: 58px; }
 }
 
@@ -2443,9 +2385,7 @@ button[data-previewing="true"] .calling-preview *, #calling-awakening:not([hidde
   #calling-button { width: 58px; height: 58px; font-size: .61rem; }
   #context-button { width: 58px; height: 58px; font-size: .5rem; }
   #special-button { width: 52px; height: 52px; font-size: .52rem; }
-  #touch-mode-button { width: 52px; height: 52px; font-size: .48rem; }
   #defense-button { width: 52px; height: 52px; font-size: .48rem; }
-  #touch-mode-button strong { font-size: .58rem; }
 }
 #world-objective {
   position: fixed;
@@ -3475,19 +3415,16 @@ body:has(#combat-hud-shell[data-loadout-open="true"]) #blacksmith-prompt { displ
 #combat-hud-shell {
   position: relative;
   display: grid;
-  grid-template-columns: 82px minmax(112px, 1fr) repeat(3, minmax(112px, 1fr)) 44px;
+  grid-template-columns: repeat(3, minmax(112px, 1fr)) 44px;
   gap: 6px;
   align-items: stretch;
   pointer-events: auto;
 }
-#mode-toggle,
 #main-hand-loadout,
 #power-slot,
 #special-slot,
 #calling-slot,
 #loadout-toggle { height: 56px; margin: 0; }
-#mode-toggle { align-self: stretch; gap: 3px; padding: 3px; border-radius: 9px; }
-#mode-toggle button { min-width: 0; padding: 5px 4px; font-size: .54rem; letter-spacing: .06em; }
 #main-hand-loadout { display: grid; align-items: center; padding: 7px 9px; }
 #main-hand-loadout p { grid-template-columns: 1fr auto; gap: 1px 5px; margin: 0; }
 #main-hand-loadout p span { font-size: .45rem; }
@@ -3605,15 +3542,13 @@ body:has(#combat-hud-shell[data-loadout-open="true"]) #blacksmith-prompt { displ
   transform: translateX(-50%);
 }
 #combat-hud-root { position: relative; z-index: auto; bottom: auto; left: auto; width: auto; min-width: 0; pointer-events: auto; transform: none; }
-#combat-hud-shell { height: 100%; grid-template-columns: 56px repeat(3, minmax(0, 1fr)) 52px; gap: 8px; }
-#mode-toggle, #main-hand-loadout, #calling-slot, #special-slot, #loadout-toggle,
+#combat-hud-shell { height: 100%; grid-template-columns: repeat(3, minmax(0, 1fr)) 52px; gap: 8px; }
+#main-hand-loadout, #calling-slot, #special-slot, #loadout-toggle,
 #combat-action-bar #defense-slot, #combat-action-bar #dodge-hotbar, #combat-action-bar #potion-use { height: 96px; min-width: 0; box-sizing: border-box; margin: 0; }
-#mode-toggle { grid-column: 1; grid-row: 1; grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; gap: 3px; padding: 5px; border-color: #bc9b5840; background: #0a1712eb; }
-#mode-toggle button { padding: 3px 2px; font-size: .5rem; letter-spacing: 0; }
-#main-hand-loadout { grid-column: 2; grid-row: 1; }
-#calling-slot { grid-column: 3; grid-row: 1; }
-#special-slot { grid-column: 4; grid-row: 1; }
-#loadout-toggle { grid-column: 5; grid-row: 1; }
+#main-hand-loadout { grid-column: 1; grid-row: 1; }
+#calling-slot { grid-column: 2; grid-row: 1; }
+#special-slot { grid-column: 3; grid-row: 1; }
+#loadout-toggle { grid-column: 4; grid-row: 1; }
 #main-hand-loadout, #calling-slot, #special-slot,
 #combat-action-bar #defense-slot, #combat-action-bar #dodge-hotbar, #combat-action-bar #potion-use {
   position: relative;
@@ -3756,8 +3691,8 @@ html.first-combat-dodge #combat-action-bar #dodge-hotbar { border-color: #ffe17b
     border-top-color: transparent;
     background: linear-gradient(180deg, #0b1b16ee, #07110bed);
   }
-  #combat-hud-shell { grid-template-columns: 45px repeat(3, minmax(0, 1fr)) 45px; gap: 5px; }
-  #mode-toggle, #main-hand-loadout, #calling-slot, #special-slot, #loadout-toggle,
+  #combat-hud-shell { grid-template-columns: repeat(3, minmax(0, 1fr)) 45px; gap: 5px; }
+  #main-hand-loadout, #calling-slot, #special-slot, #loadout-toggle,
   #combat-action-bar #defense-slot, #combat-action-bar #dodge-hotbar, #combat-action-bar #potion-use {
     height: 63px;
     grid-template-rows: 1fr;
@@ -3801,8 +3736,6 @@ html.first-combat-dodge #combat-action-bar #dodge-hotbar { border-color: #ffe17b
     color: #fff3df;
     font-size: 9px;
   }
-  #mode-toggle { grid-template-rows: 1fr 1fr; gap: 2px; }
-  #mode-toggle button { padding: 1px; font-size: 8px; }
   #loadout-toggle { gap: 0; }
   #loadout-toggle span { font-size: 1.45rem; }
   #loadout-toggle strong { font-size: .42rem; }
@@ -3862,41 +3795,6 @@ html.onboarding-active #trait-slot { display: none; }
   #location-readout { top: calc(106px + env(safe-area-inset-top)); left: 10px; max-width: 190px; }
   #first-steps, #trait-slot { top: calc(167px + env(safe-area-inset-top)); left: 10px; width: 190px; }
   #exit-guide { top: calc(245px + env(safe-area-inset-top)); left: 10px; width: 190px; }
-}
-
-/* Town-exit lesson stays above the hotbar and clears as soon as Combat is selected. */
-#mode-switch-tutorial {
-  position: fixed;
-  z-index: 22;
-  bottom: calc(174px + env(safe-area-inset-bottom));
-  left: 50%;
-  box-sizing: border-box;
-  width: min(360px, calc(100vw - 28px));
-  padding: 12px 14px;
-  border: 1px solid #e5bd67;
-  border-radius: 12px;
-  background: linear-gradient(145deg, #14291feF, #101c1aF5);
-  box-shadow: 0 12px 30px #000b, 0 0 20px #e4b65755;
-  color: #f5ecd4;
-  text-align: center;
-  transform: translateX(-50%);
-}
-#mode-switch-tutorial[hidden] { display: none; }
-#mode-switch-tutorial small { display: block; color: #f4ca79; font: 900 10px/1.2 system-ui; letter-spacing: .11em; }
-#mode-switch-tutorial strong { display: block; margin-top: 5px; font: 900 17px/1.2 system-ui; }
-#mode-switch-tutorial p { margin: 7px 0 10px !important; color: #d8e2d9; font: 600 12px/1.35 system-ui; }
-#mode-switch-tutorial kbd { padding: 2px 5px; border: 1px solid #f4d799; border-radius: 4px; background: #2d2b1e; color: #fff1c6; font: 900 12px system-ui; }
-#mode-switch-tutorial > div { display: flex; justify-content: center; gap: 8px; }
-#mode-switch-tutorial button { min-height: 36px; padding: 7px 16px; border: 1px solid #f5ce7c; border-radius: 7px; background: #9b6025; color: #fff2cb; font: 900 11px system-ui; letter-spacing: .06em; cursor: pointer; }
-#mode-switch-tutorial-build { background: #234d3f !important; border-color: #72c5a5 !important; }
-html.onboarding-mode-lesson #mode-toggle { border-color: #ffe59a; box-shadow: 0 0 0 2px #ffe59a77, 0 0 22px #ffce69aa; }
-html.onboarding-mode-lesson #mode-toggle button[data-mode="combat"] { color: #fff1ba; }
-html.onboarding-mode-lesson #touch-mode-button { border-color: #ffe59a; box-shadow: 0 0 0 2px #ffe59a77, 0 0 22px #ffce69aa; }
-@media (pointer: coarse), (max-width: 820px) {
-  #mode-switch-tutorial { bottom: calc(254px + env(safe-area-inset-bottom)); }
-}
-@media (max-width: 520px) {
-  #mode-switch-tutorial { bottom: calc(218px + env(safe-area-inset-bottom)); }
 }
 
 /* Starter gear remains visually ordinary; dramatic art belongs to combat abilities. */
@@ -4090,7 +3988,6 @@ html:not(.boss-hud-active):has(#world-objective:not([hidden])) #exit-guide {
   bottom: calc(166px + env(safe-area-inset-bottom));
   z-index: 28;
 }
-#mode-switch-tutorial { z-index: 29; }
 #combat-action-bar { z-index: 24; }
 #player-hud-root { z-index: 23; }
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { advanceOnboarding, ONBOARDING_DONE, ONBOARDING_STAGE, ONBOARDING_STEPS, onboardingStorageKey,
-  callingFirstOnboardingStorageKey, legacyOnboardingStorageKey, migrateLegacyOnboardingStep,
+  buildModeOnboardingStorageKey, callingFirstOnboardingStorageKey, legacyOnboardingStorageKey,
+  migrateBuildModeOnboardingStep, migrateLegacyOnboardingStep,
   migrateOldestOnboardingStep, oldestOnboardingStorageKey, parseOnboardingStep,
   shouldDeferOnboardingForCalling, shouldPromptTownDeparture, shouldStartCallingFirstJourney,
   shouldShowKeyboardCameraHint,
@@ -52,10 +53,8 @@ describe("first-play onboarding", () => {
     expect(starterEquipmentStorageKey("guest_a")).not.toBe(starterEquipmentStorageKey("guest_b"));
   });
 
-  it("requires a Combat switch after leaving town before the first fight counts", () => {
-    expect(advanceOnboarding(ONBOARDING_STAGE.headSouth, "left_town")).toBe(ONBOARDING_STAGE.chooseMode);
-    expect(advanceOnboarding(ONBOARDING_STAGE.chooseMode, "defeated_first_enemy")).toBe(ONBOARDING_STAGE.chooseMode);
-    expect(advanceOnboarding(ONBOARDING_STAGE.chooseMode, "switched_combat")).toBe(ONBOARDING_STAGE.firstCombat);
+  it("enters the first fight directly after leaving town", () => {
+    expect(advanceOnboarding(ONBOARDING_STAGE.headSouth, "left_town")).toBe(ONBOARDING_STAGE.firstCombat);
     expect(advanceOnboarding(ONBOARDING_STAGE.firstCombat, "defeated_first_enemy")).toBe(ONBOARDING_DONE);
   });
 
@@ -70,8 +69,6 @@ describe("first-play onboarding", () => {
     step = advanceOnboarding(step, "equipped_starter");
     expect(step).toBe(ONBOARDING_STAGE.headSouth);
     step = advanceOnboarding(step, "left_town");
-    expect(step).toBe(ONBOARDING_STAGE.chooseMode);
-    step = advanceOnboarding(step, "switched_combat");
     expect(step).toBe(ONBOARDING_STAGE.firstCombat);
     step = advanceOnboarding(step, "defeated_first_enemy");
     expect(step).toBe(ONBOARDING_DONE);
@@ -86,13 +83,17 @@ describe("first-play onboarding", () => {
     expect(parseOnboardingStep("999")).toBeNull();
     expect(parseOnboardingStep("not-a-step")).toBeNull();
     expect(legacyOnboardingStorageKey("guest_a")).not.toBe(onboardingStorageKey("guest_a"));
+    expect(buildModeOnboardingStorageKey("guest_a")).not.toBe(onboardingStorageKey("guest_a"));
     expect(oldestOnboardingStorageKey("guest_a")).not.toBe(legacyOnboardingStorageKey("guest_a"));
     expect(migrateLegacyOnboardingStep("0")).toBe(ONBOARDING_STAGE.collectGear);
     expect(migrateLegacyOnboardingStep("1")).toBe(ONBOARDING_STAGE.collectGear);
-    expect(migrateLegacyOnboardingStep("4")).toBe(ONBOARDING_STAGE.chooseMode);
+    expect(migrateBuildModeOnboardingStep("3")).toBe(ONBOARDING_STAGE.firstCombat);
+    expect(migrateBuildModeOnboardingStep("4")).toBe(ONBOARDING_STAGE.firstCombat);
+    expect(migrateBuildModeOnboardingStep("5")).toBe(ONBOARDING_DONE);
+    expect(migrateLegacyOnboardingStep("4")).toBe(ONBOARDING_STAGE.firstCombat);
     expect(migrateLegacyOnboardingStep("5")).toBe(ONBOARDING_STAGE.firstCombat);
     expect(migrateLegacyOnboardingStep("6")).toBe(ONBOARDING_DONE);
-    expect(migrateOldestOnboardingStep("4")).toBe(ONBOARDING_STAGE.chooseMode);
+    expect(migrateOldestOnboardingStep("4")).toBe(ONBOARDING_STAGE.firstCombat);
     expect(migrateOldestOnboardingStep("5")).toBe(ONBOARDING_DONE);
     expect(migrateLegacyOnboardingStep("not-a-step")).toBeNull();
   });
