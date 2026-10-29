@@ -1,6 +1,7 @@
 import type { MainHandId } from "@blockcraft/protocol";
 
 export type FirstPersonWeaponKind = "unarmed" | "sword" | "dagger" | "bow" | "focus" | "hammer";
+export type FirstPersonSwordVariant = "plain" | "forged" | "matriarch" | "cinderfang" | "crowncleaver";
 
 export const firstPersonWeaponKind = (mainHandId: MainHandId): FirstPersonWeaponKind => {
   if (mainHandId === "unarmed") return "unarmed";
@@ -10,6 +11,14 @@ export const firstPersonWeaponKind = (mainHandId: MainHandId): FirstPersonWeapon
   if (mainHandId === "fang_dagger") return "dagger";
   if (mainHandId === "stone_core_hammer" || mainHandId === "rootbound_hammer") return "hammer";
   return "sword";
+};
+
+export const firstPersonSwordVariant = (mainHandId: MainHandId): FirstPersonSwordVariant => {
+  if (mainHandId === "forged_sword") return "forged";
+  if (mainHandId === "matriarch_edge") return "matriarch";
+  if (mainHandId === "cinderfang_blade") return "cinderfang";
+  if (mainHandId === "crownkeeper_blade") return "crowncleaver";
+  return "plain";
 };
 
 export interface FirstPersonActionPose {

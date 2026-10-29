@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { firstPersonActionPose, firstPersonWeaponKind } from "./first-person-action.js";
+import { firstPersonActionPose, firstPersonSwordVariant, firstPersonWeaponKind } from "./first-person-action.js";
 
 describe("first-person action presentation", () => {
   it("peaks the blade strike at authored contact time and recovers afterward", () => {
@@ -41,6 +41,14 @@ describe("first-person action presentation", () => {
     expect(firstPersonWeaponKind("venom_focus")).toBe("focus");
     expect(firstPersonWeaponKind("rootbound_hammer")).toBe("hammer");
     expect(firstPersonWeaponKind("unarmed")).toBe("unarmed");
+  });
+
+  it("keeps progression swords visually distinct from the basic blade", () => {
+    expect(firstPersonSwordVariant("longsword")).toBe("plain");
+    expect(firstPersonSwordVariant("forged_sword")).toBe("forged");
+    expect(firstPersonSwordVariant("matriarch_edge")).toBe("matriarch");
+    expect(firstPersonSwordVariant("cinderfang_blade")).toBe("cinderfang");
+    expect(firstPersonSwordVariant("crownkeeper_blade")).toBe("crowncleaver");
   });
 
   it("moves the weapon through the centre during an attack instead of only bobbing", () => {

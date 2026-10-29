@@ -221,7 +221,7 @@ import {
   firstPersonMouseLook,
   type CameraViewMode,
 } from "./camera-view.js";
-import { firstPersonActionPose, firstPersonWeaponKind, type FirstPersonWeaponKind } from "./first-person-action.js";
+import { firstPersonActionPose, firstPersonSwordVariant, firstPersonWeaponKind, type FirstPersonWeaponKind } from "./first-person-action.js";
 import { firstPersonImpactImpulse, selectFirstPersonAimTarget } from "./first-person-combat.js";
 import { CombatSyncRecorder } from "./combat-sync.js";
 import {
@@ -4436,12 +4436,17 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
 
   const longsword = new pc.Entity("main-hand-longsword");
   longsword.setLocalPosition(0, -0.29, 0.085);
-  addBox(longsword, "sword-grip", weaponWoodMaterial, [0.085, 0.2, 0.09], [0, 0, 0]);
+  addBox(longsword, "sword-grip", weaponWoodMaterial, [0.085, 0.22, 0.09], [0, 0, 0]);
   addBox(longsword, "sword-pommel", brassMaterial, [0.12, 0.075, 0.12], [0, 0.115, 0]);
-  addBox(longsword, "sword-guard", brassMaterial, [0.33, 0.07, 0.115], [0, -0.105, 0]);
-  addBox(longsword, "sword-blade", bladeMaterial, [0.115, 0.44, 0.065], [0, -0.335, 0]);
-  addBox(longsword, "sword-tip", bladeMaterial, [0.065, 0.075, 0.055], [0, -0.59, 0]);
-  addBox(longsword, "blade-spine", eyeWhiteMaterial, [.028, .4, .018], [0, -.335, .043]);
+  const swordLeftGuard = addBox(longsword, "sword-guard-left", brassMaterial, [0.19, 0.065, 0.115], [-.15, -0.105, 0]);
+  swordLeftGuard.setLocalEulerAngles(0, 0, 8);
+  const swordRightGuard = addBox(longsword, "sword-guard-right", brassMaterial, [0.19, 0.065, 0.115], [.15, -0.105, 0]);
+  swordRightGuard.setLocalEulerAngles(0, 0, -8);
+  addBox(longsword, "sword-ricasso", bladeMaterial, [0.13, 0.14, 0.07], [0, -0.19, 0]);
+  addBox(longsword, "sword-blade-lower", bladeMaterial, [0.12, 0.36, 0.065], [0, -0.42, 0]);
+  addBox(longsword, "sword-blade-upper", bladeMaterial, [0.09, 0.27, 0.06], [0, -0.735, 0]);
+  addBox(longsword, "sword-tip", bladeMaterial, [0.05, 0.1, 0.05], [0, -0.92, 0]);
+  addBox(longsword, "blade-fuller", eyeWhiteMaterial, [.025, .63, .018], [0, -.56, .043]);
   rightElbow.addChild(longsword);
 
   const bow = new pc.Entity("main-hand-bow");
@@ -4511,7 +4516,8 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
   const forgedBow = bow.clone(); rightElbow.addChild(forgedBow);
   const forgedFocus = magicFocus.clone(); rightElbow.addChild(forgedFocus);
   addBox(forgedBow, "forged-bow-bracing", bladeMaterial, [.1, .4, .1], [.075, .32, 0]);
-  addBox(forgedSword, "forged-sword-collar", bladeMaterial, [.18, .09, .13], [0, -.16, 0]);
+  addBox(forgedSword, "forged-sword-collar", coreWeaponMaterial, [.18, .09, .13], [0, -.16, 0]);
+  addBox(forgedSword, "forged-sword-pommel-cap", coreWeaponMaterial, [.14, .06, .13], [0, .14, 0]);
   addBox(forgedFocus, "forged-focus-frame", bladeMaterial, [.34, .07, .34], [0, -.34, 0]);
   forgedSword.enabled = forgedBow.enabled = forgedFocus.enabled = false;
   const matriarchEdge = longsword.clone();
@@ -4519,8 +4525,10 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
   rightElbow.addChild(matriarchEdge);
   const moonstoneBlade = coloredMaterial(new pc.Color(.58, .28, .9));
   const moonstoneGlow = coloredMaterial(new pc.Color(.42, .82, 1));
-  addBox(matriarchEdge, "matriarch-edge-rune", moonstoneGlow, [.045, .38, .025], [0, -.35, .05]);
+  addBox(matriarchEdge, "matriarch-edge-rune", moonstoneGlow, [.045, .66, .025], [0, -.56, .05]);
   addBox(matriarchEdge, "matriarch-edge-crystal", moonstoneBlade, [.17, .13, .12], [0, -.14, 0]).setLocalEulerAngles(0, 45, 0);
+  for (const side of [-1, 1]) addBox(matriarchEdge, `matriarch-edge-wing-${side}`, moonstoneBlade,
+    [.17, .07, .12], [side * .16, -.12, 0]).setLocalEulerAngles(0, 0, side * -14);
   matriarchEdge.enabled = false;
   const venomFocus = acidGlandFocus.clone();
   venomFocus.name = "venom-focus";
@@ -4539,14 +4547,21 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
   cinderfangBlade.name = "main-hand-cinderfang-blade"; rightElbow.addChild(cinderfangBlade);
   const emberMetal = coloredMaterial(new pc.Color(.42, .13, .045));
   const emberGlow = powerMaterial(new pc.Color(1, .25, .035), .72);
-  addBox(cinderfangBlade, "cinderfang-spine", emberGlow, [.05, .42, .025], [0, -.34, .05]);
+  addBox(cinderfangBlade, "cinderfang-black-blade", emberMetal, [.1, .65, .07], [0, -.56, 0]);
+  addBox(cinderfangBlade, "cinderfang-spine", emberGlow, [.05, .64, .025], [0, -.56, .05]);
   addBox(cinderfangBlade, "cinderfang-guard", emberMetal, [.4, .09, .13], [0, -.12, 0]);
+  for (const side of [-1, 1]) addBox(cinderfangBlade, `cinderfang-tooth-${side}`, emberGlow,
+    [.08, .2, .1], [side * .19, -.2, 0]).setLocalEulerAngles(0, 0, side * 58);
   cinderfangBlade.enabled = false;
   const crowncleaver = longsword.clone(); crowncleaver.name = "main-hand-crowncleaver"; rightElbow.addChild(crowncleaver);
   const crownGold = coloredMaterial(new pc.Color(.95, .69, .2));
-  addBox(crowncleaver, "royal-gold-spine", crownGold, [.055, .44, .035], [0, -.34, .05]);
-  addBox(crowncleaver, "royal-crossguard", crownGold, [.43, .08, .13], [0, -.11, 0]);
-  for (const side of [-1, 1]) addBox(crowncleaver, `crown-prong-${side}`, crownGold, [.06, .16, .1], [side * .17, -.19, 0]);
+  const crownPurple = powerMaterial(new pc.Color(.65, .16, .92), .58);
+  addBox(crowncleaver, "royal-blade-shoulder", crownGold, [.19, .15, .08], [0, -.22, 0]);
+  addBox(crowncleaver, "royal-gold-spine", crownGold, [.055, .68, .035], [0, -.56, .05]);
+  addBox(crowncleaver, "royal-purple-core", crownPurple, [.028, .3, .04], [0, -.5, .055]);
+  addBox(crowncleaver, "royal-crossguard", crownGold, [.46, .08, .13], [0, -.11, 0]);
+  for (const side of [-1, 1]) addBox(crowncleaver, `crown-prong-${side}`, crownGold,
+    [.06, .17, .1], [side * .18, -.19, 0]).setLocalEulerAngles(0, 0, side * 18);
   crowncleaver.enabled = false;
   const emberheartFocus = magicFocus.clone();
   emberheartFocus.name = "main-hand-emberheart-focus"; rightElbow.addChild(emberheartFocus);
@@ -4978,19 +4993,60 @@ function createFirstPersonActionRig(): FirstPersonActionRig {
     .map(kind => [kind, new pc.Entity(`first-person-${kind}`)])) as Record<FirstPersonWeaponKind, pc.Entity>;
   for (const weapon of Object.values(weapons)) wrists.right.addChild(weapon);
 
-  weapons.sword.setLocalPosition(-.015, .13, -.05);
-  weapons.sword.setLocalEulerAngles(-6, -8, 18);
-  actionShape(weapons.sword, "sword-grip", "cylinder", leather, [.055, .32, .055], [0, .07, 0]);
-  actionShape(weapons.sword, "sword-pommel", "sphere", bronze, [.075, .075, .075], [0, -.12, 0]);
-  actionShape(weapons.sword, "sword-guard", "box", bronze, [.3, .04, .07], [0, .25, 0]);
-  actionShape(weapons.sword, "sword-blade", "box", steel, [.082, .46, .035], [0, .5, 0]);
-  actionShape(weapons.sword, "sword-ridge", "box", steelEdge, [.012, .45, .041], [0, .5, 0]);
-  actionShape(weapons.sword, "sword-tip", "cone", steelEdge, [.085, .14, .05], [0, .8, 0]);
+  weapons.sword.setLocalPosition(-.025, .11, -.075);
+  weapons.sword.setLocalEulerAngles(-10, -12, 13);
+  actionShape(weapons.sword, "sword-grip", "cylinder", leather, [.058, .3, .058], [0, .065, 0]);
+  actionShape(weapons.sword, "sword-pommel", "sphere", bronze, [.078, .078, .078], [0, -.105, 0]);
+  const leftQuillon = actionShape(weapons.sword, "sword-guard-left", "box", bronze, [.17, .038, .07], [-.15, .24, 0]);
+  leftQuillon.setLocalEulerAngles(0, 0, -8);
+  const rightQuillon = actionShape(weapons.sword, "sword-guard-right", "box", bronze, [.17, .038, .07], [.15, .24, 0]);
+  rightQuillon.setLocalEulerAngles(0, 0, 8);
+  actionShape(weapons.sword, "sword-ricasso", "box", steel, [.1, .12, .04], [0, .32, 0]);
+  actionShape(weapons.sword, "sword-blade-lower", "box", steel, [.095, .31, .038], [0, .5, 0]);
+  actionShape(weapons.sword, "sword-blade-upper", "box", steel, [.075, .25, .034], [0, .77, 0]);
+  actionShape(weapons.sword, "sword-fuller", "box", steelEdge, [.016, .5, .041], [0, .61, 0]);
+  actionShape(weapons.sword, "sword-tip", "cone", steelEdge, [.078, .15, .045], [0, .97, 0]);
+
+  const forgedOrnament = new pc.Entity("forged-sword-ornament"); weapons.sword.addChild(forgedOrnament);
+  const forgedIron = createFirstPersonMaterial(new pc.Color(.24, .31, .34), new pc.Color(.015, .025, .028));
+  forgedIron.metalness = .65; forgedIron.useMetalness = true; forgedIron.shininess = 68; forgedIron.update();
+  actionShape(forgedOrnament, "forged-rain-guard", "box", forgedIron, [.115, .09, .055], [0, .3, 0]);
+  actionShape(forgedOrnament, "forged-pommel-cap", "cylinder", forgedIron, [.09, .055, .09], [0, -.12, 0]);
+  forgedOrnament.enabled = false;
+
+  const matriarchOrnament = new pc.Entity("matriarch-edge-ornament"); weapons.sword.addChild(matriarchOrnament);
+  const moonstone = createFirstPersonMaterial(new pc.Color(.54, .25, .9), new pc.Color(.31, .08, .72));
+  const moonEdge = createFirstPersonMaterial(new pc.Color(.54, .86, 1), new pc.Color(.2, .58, 1));
+  actionShape(matriarchOrnament, "matriarch-moon-fuller", "box", moonEdge, [.023, .48, .045], [0, .62, 0]);
+  actionShape(matriarchOrnament, "matriarch-crystal", "sphere", moonstone, [.095, .095, .095], [0, -.115, 0]);
+  for (const side of [-1, 1]) {
+    const wing = actionShape(matriarchOrnament, `matriarch-wing-${side}`, "box", moonstone, [.16, .045, .085], [side * .15, .25, 0]);
+    wing.setLocalEulerAngles(0, 0, side * 14);
+  }
+  matriarchOrnament.enabled = false;
+
+  const cinderfangOrnament = new pc.Entity("cinderfang-ornament"); weapons.sword.addChild(cinderfangOrnament);
+  const cinderMetal = createFirstPersonMaterial(new pc.Color(.13, .045, .025), new pc.Color(.025, .005, .002));
+  const cinderGlow = createFirstPersonMaterial(new pc.Color(.95, .16, .025), new pc.Color(.85, .08, .005));
+  actionShape(cinderfangOrnament, "cinderfang-black-blade", "box", cinderMetal, [.087, .43, .043], [0, .62, 0]);
+  actionShape(cinderfangOrnament, "cinderfang-ember-fuller", "box", cinderGlow, [.018, .43, .047], [0, .62, 0]);
+  for (const side of [-1, 1]) {
+    const fang = actionShape(cinderfangOrnament, `cinderfang-guard-fang-${side}`, "cone", cinderGlow, [.065, .17, .065], [side * .21, .27, 0]);
+    fang.setLocalEulerAngles(0, 0, side * -62);
+  }
+  cinderfangOrnament.enabled = false;
+
   const crownOrnament = new pc.Entity("crowncleaver-ornament"); weapons.sword.addChild(crownOrnament);
   const crownGold = createFirstPersonMaterial(new pc.Color(.95, .7, .22), new pc.Color(.12, .07, .01));
-  actionShape(crownOrnament, "royal-guard", "box", crownGold, [.39, .055, .085], [0, .25, 0]);
-  actionShape(crownOrnament, "royal-spine", "box", crownGold, [.028, .44, .045], [0, .5, 0]);
-  for (const side of [-1, 1]) actionShape(crownOrnament, `royal-prong-${side}`, "box", crownGold, [.045, .12, .08], [side * .15, .31, 0]);
+  const royalCore = createFirstPersonMaterial(new pc.Color(.64, .16, .92), new pc.Color(.45, .04, .78));
+  actionShape(crownOrnament, "royal-blade-shoulders", "box", crownGold, [.145, .12, .055], [0, .35, 0]);
+  actionShape(crownOrnament, "royal-guard", "box", crownGold, [.42, .052, .085], [0, .24, 0]);
+  actionShape(crownOrnament, "royal-spine", "box", crownGold, [.028, .55, .047], [0, .63, 0]);
+  actionShape(crownOrnament, "royal-core", "box", royalCore, [.016, .25, .05], [0, .58, 0]);
+  for (const side of [-1, 1]) {
+    const prong = actionShape(crownOrnament, `royal-prong-${side}`, "box", crownGold, [.05, .14, .08], [side * .17, .31, 0]);
+    prong.setLocalEulerAngles(0, 0, side * -18);
+  }
   crownOrnament.enabled = false;
 
   weapons.dagger.setLocalPosition(-.015, .13, -.05);
@@ -5081,8 +5137,14 @@ function setFirstPersonCallingPalette(pathId: RoleFieldPath): void {
 function setFirstPersonMainHand(mainHandId: MainHandId): void {
   if (mainHandId !== firstPersonEquippedId) { firstPersonEquippedAt = performance.now(); firstPersonEquippedId = mainHandId; }
   const active = firstPersonWeaponKind(mainHandId);
-  const crownOrnament = firstPersonActionRig.weapons.sword.findByName("crowncleaver-ornament");
-  if (crownOrnament) crownOrnament.enabled = mainHandId === "crownkeeper_blade";
+  const swordVariant = firstPersonSwordVariant(mainHandId);
+  for (const [variant, name] of [
+    ["forged", "forged-sword-ornament"], ["matriarch", "matriarch-edge-ornament"],
+    ["cinderfang", "cinderfang-ornament"], ["crowncleaver", "crowncleaver-ornament"],
+  ] as const) {
+    const ornament = firstPersonActionRig.weapons.sword.findByName(name);
+    if (ornament) ornament.enabled = swordVariant === variant;
+  }
   for (const [kind, weapon] of Object.entries(firstPersonActionRig.weapons)) weapon.enabled = kind === active;
 }
 setFirstPersonMainHand("unarmed");
