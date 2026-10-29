@@ -2629,6 +2629,8 @@ html.boss-hud-active #world-objective { display: none !important; }
 #level-up-panel { position: fixed; inset: 0; z-index: 1100; display: grid; place-items: center; padding: 20px; background: #060b09c9; backdrop-filter: blur(5px); }
 #level-up-panel[hidden] { display: none; }
 .level-up-card { width: min(540px, 100%); padding: 28px; border: 1px solid #e3b45d; border-radius: 18px; background: radial-gradient(circle at 50% 0, #57431f, #17201a 48%); box-shadow: 0 24px 90px #000b, 0 0 40px #e4b35424; text-align: center; color: #f5ead1; }
+#level-up-panel[data-input-ready="false"] .level-up-card::before { content: "COMBAT INPUT PAUSED · RELEASE ATTACK, THEN CHOOSE"; display: block; margin: -8px 0 14px; color: #ffdc85; font: 900 10px system-ui; letter-spacing: .09em; }
+#level-up-panel[data-input-ready="false"] button { opacity: .48; cursor: wait; }
 .level-up-card > span { color: #f0c96f; font-size: .65rem; font-weight: 1000; letter-spacing: .16em; }
 .level-up-card h2 { margin: 7px 0; font: 700 2.2rem Georgia, serif; color: #fff0b8; }
 .level-up-card p { color: #c7d2c5; }
@@ -2684,6 +2686,7 @@ html.boss-hud-active #world-objective { display: none !important; }
 #level-up-celebration span { color: #e9e5c9; font: 700 13px system-ui; }
 #level-celebration-choose { margin-top: 16px; padding: 10px 16px; border: 1px solid #ffdf81; border-radius: 8px; background: #e1b754; color: #24170a; cursor: pointer; font: 1000 11px system-ui; letter-spacing: .08em; }
 #level-celebration-choose:hover, #level-celebration-choose:focus-visible { background: #ffe492; }
+#level-celebration-choose:disabled { opacity: .52; cursor: wait; filter: saturate(.55); }
 #progression-notice { position: fixed; z-index: 24; left: 50%; bottom: calc(166px + env(safe-area-inset-bottom)); width: min(410px, calc(100vw - 30px)); box-sizing: border-box; padding: 13px 15px; transform: translateX(-50%); border: 1px solid #e5bd67; border-radius: 11px; background: linear-gradient(135deg, #302517f5, #10261df2); color: #fff3c9; box-shadow: 0 12px 35px #0009, 0 0 18px #deb45a44; font-family: system-ui, sans-serif; }
 #progression-notice[hidden] { display: none; }
 #progression-notice > small { display: block; color: #e7bb65; font: 900 9px/1.2 system-ui, sans-serif; letter-spacing: .13em; }

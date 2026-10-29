@@ -1293,10 +1293,43 @@ const pendingLevelCelebrations: PendingLevelCelebration[] = [];
 let activeLevelCelebration: PendingLevelCelebration | null = null;
 let levelCelebrationRemainingMs = 0;
 let levelCelebrationLastTick: number | null = null;
+const LEVEL_UP_INPUT_GUARD_MS = 900;
+let levelUpInputReadyAt = 0;
+let levelUpInputGuardTimer = 0;
+let levelCelebrationInputGuardTimer = 0;
+let levelUpIntentPointerId: number | null = null;
+function openLevelUpPanel(): void {
+  levelUpInputReadyAt = performance.now() + LEVEL_UP_INPUT_GUARD_MS;
+  levelUpIntentPointerId = null;
+  levelUpPanel.dataset.inputReady = "false";
+  window.clearTimeout(levelUpInputGuardTimer);
+  levelUpInputGuardTimer = window.setTimeout(() => {
+    levelUpPanel.dataset.inputReady = "true";
+  }, LEVEL_UP_INPUT_GUARD_MS);
+  levelUpPanel.hidden = false;
+}
+function blockEarlyLevelUpInput(event: Event): void {
+  const early = performance.now() < levelUpInputReadyAt;
+  if (event.type === "pointerdown" && event instanceof PointerEvent && !early) {
+    levelUpIntentPointerId = event.pointerId;
+    return;
+  }
+  if (event.type === "pointercancel") levelUpIntentPointerId = null;
+  const clickWithoutFreshPress = event.type === "click" && event instanceof MouseEvent
+    && event.detail > 0 && levelUpIntentPointerId === null;
+  if (!early && !clickWithoutFreshPress) {
+    if (event.type === "click") levelUpIntentPointerId = null;
+    return;
+  }
+  event.preventDefault();
+  event.stopImmediatePropagation();
+}
+for (const type of ["pointerdown", "pointerup", "pointercancel", "click"])
+  levelUpPanel.addEventListener(type, blockEarlyLevelUpInput, { capture: true });
 levelCelebrationChoose.addEventListener("click", () => {
   levelCelebration.hidden = true;
   activeLevelCelebration = null;
-  if (localCharacterProgression.unspentStatPoints > 0) levelUpPanel.hidden = false;
+  if (localCharacterProgression.unspentStatPoints > 0) openLevelUpPanel();
 });
 levelUpLater.addEventListener("click", () => {
   levelUpPanel.hidden = true;
@@ -1306,7 +1339,7 @@ levelUpLater.addEventListener("click", () => {
 });
 progressionNoticeAction.addEventListener("click", () => {
   switch (currentProgressionNotice?.kind) {
-    case "stat": levelUpPanel.hidden = false; break;
+    case "stat": openLevelUpPanel(); break;
     case "calling":
       if (lastBuildPathUpdate?.canChoose) openCallingIntro();
       else status.textContent = "Return to the surface to choose your Calling.";
@@ -7082,6 +7115,11 @@ function updateLevelCelebration(now: number): void {
     activeLevelCelebration = celebration;
     levelCelebrationTitle.textContent = `LEVEL ${celebration.level}!`;
     levelCelebrationChoose.hidden = localCharacterProgression.unspentStatPoints <= 0;
+    levelCelebrationChoose.disabled = true;
+    window.clearTimeout(levelCelebrationInputGuardTimer);
+    levelCelebrationInputGuardTimer = window.setTimeout(() => {
+      if (activeLevelCelebration === celebration) levelCelebrationChoose.disabled = false;
+    }, LEVEL_UP_INPUT_GUARD_MS);
     levelCelebration.hidden = false;
     levelCelebrationRemainingMs = 5_500;
     combatAudio.play("levelUp");
@@ -12149,7 +12187,7 @@ adventureRestoreButton.addEventListener("click", () => {
   void switchAdventure(name => restoreProfile(window.localStorage, selected, name, Date.now()));
 });
 playerLevel.addEventListener("click", () => {
-  if (localCharacterProgression.unspentStatPoints > 0) levelUpPanel.hidden = false;
+  if (localCharacterProgression.unspentStatPoints > 0) openLevelUpPanel();
   else setInventoryOpen(true);
 });
 for (const button of characterStatButtons) button.addEventListener("click", () => {
