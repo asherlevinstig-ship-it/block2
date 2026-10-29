@@ -1,4 +1,4 @@
-import { BUILD_PATHS, CALLING_ABILITY_OPTIONS, type BuildPathId, type CallingAbilityId } from "@blockcraft/protocol";
+import { BUILD_PATHS, CALLING_ABILITY_OPTIONS, type BuildPathId, type BuildPathSpecializationId, type CallingAbilityId } from "@blockcraft/protocol";
 
 export type CallingUnlockAnnouncement = { title: string; detail: string };
 
@@ -17,9 +17,11 @@ export function callingUnlockAnnouncement(level: number, pathId: BuildPathId | n
 }
 
 /** Unlocks are earned immediately; only their introduction waits for Town. */
-export function earnedCallingAbilities(pathId: BuildPathId | null, rank: number, level: number): CallingAbilityId[] {
+export function earnedCallingAbilities(pathId: BuildPathId | null, rank: number, level: number,
+  specializationId: BuildPathSpecializationId | null = null): CallingAbilityId[] {
   if (!pathId || level < 2) return [];
-  return CALLING_ABILITY_OPTIONS.filter(ability => ability.pathId === pathId && (
+  return CALLING_ABILITY_OPTIONS.filter(ability => ability.pathId === pathId
+    && (!("specializationId" in ability) || ability.specializationId === specializationId) && (
     ability.unlockRank <= rank || (ability.category === "Utility" && level >= 4)
   )).map(ability => ability.id);
 }
@@ -27,6 +29,8 @@ export function earnedCallingAbilities(pathId: BuildPathId | null, rank: number,
 export function abilityRevealUse(abilityId: CallingAbilityId, rank: number, level: number): string {
   const ability = CALLING_ABILITY_OPTIONS.find(option => option.id === abilityId)!;
   if (ability.category === "Core") return "Equipped on G. Press G to use it.";
+  if (ability.category === "Specialization") return "Your Veteran path Power is equipped on G. Press G to use it.";
+  if (ability.category === "Master") return "Your mastered path Special is equipped on F. Press F to use it.";
   if (ability.category === "Utility" && level >= 4)
     return rank >= ability.unlockRank
       ? "Ready on F. You can also equip it to G from your Kit."

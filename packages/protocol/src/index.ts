@@ -320,6 +320,18 @@ export const CALLING_ABILITY_OPTIONS = [
   { id: "mage_arcane_surge", pathId: "mage", name: "Arcane Surge", category: "Core", unlockRank: 0, cooldownMs: 16_000, description: "Pulse nearby enemies and restore stamina." },
   { id: "mage_mana_shield", pathId: "mage", name: "Mana Shield", category: "Utility", unlockRank: 2, cooldownMs: 18_000, description: "Absorb attacks, charging a retaliatory pulse when the barrier shatters." },
   { id: "mage_overload", pathId: "mage", name: "Overload", category: "Aggressive", unlockRank: 3, cooldownMs: 20_000, description: "Aim at an enemy and destabilize the ground beneath it before an arcane detonation." },
+  { id: "mage_arcane_lance", pathId: "mage", specializationId: "arcanist", name: "Arcane Lance", category: "Specialization", unlockRank: 3, cooldownMs: 10_000, description: "Pierce the enemy under your aim with concentrated arcane force." },
+  { id: "mage_mirror_cast", pathId: "mage", specializationId: "arcanist", name: "Mirror Cast", category: "Master", unlockRank: 4, cooldownMs: 24_000, description: "Conjure two reflections that strike the enemy under your aim." },
+  { id: "mage_frost_nova", pathId: "mage", specializationId: "elementalist", name: "Frost Nova", category: "Specialization", unlockRank: 3, cooldownMs: 13_000, description: "Freeze and stagger enemies surrounding you." },
+  { id: "mage_tempest", pathId: "mage", specializationId: "elementalist", name: "Tempest", category: "Master", unlockRank: 4, cooldownMs: 25_000, description: "Unleash a wide elemental storm that damages and slows enemies." },
+  { id: "mage_rune_ward", pathId: "mage", specializationId: "spellguard", name: "Rune Ward", category: "Specialization", unlockRank: 3, cooldownMs: 15_000, description: "Raise a combat ward and blast nearby enemies away." },
+  { id: "mage_spellbreak", pathId: "mage", specializationId: "spellguard", name: "Spellbreak", category: "Master", unlockRank: 4, cooldownMs: 23_000, description: "Break nearby enemy windups and reinforce your ward." },
+  { id: "mage_fireball", pathId: "mage", specializationId: "pyromancer", name: "Fireball", category: "Specialization", unlockRank: 3, cooldownMs: 9_000, description: "Strike the enemy under your aim and ignite it." },
+  { id: "mage_inferno", pathId: "mage", specializationId: "pyromancer", name: "Inferno", category: "Master", unlockRank: 4, cooldownMs: 26_000, description: "Ignite every nearby enemy with an extended Burn." },
+  { id: "mage_rune_brand", pathId: "mage", specializationId: "runebinder", name: "Rune Brand", category: "Specialization", unlockRank: 3, cooldownMs: 11_000, description: "Brand an aimed enemy and prime it for a Rune Surge." },
+  { id: "mage_grand_sigil", pathId: "mage", specializationId: "runebinder", name: "Grand Sigil", category: "Master", unlockRank: 4, cooldownMs: 24_000, description: "Detonate a sigil around you and recover stamina for every enemy struck." },
+  { id: "mage_time_snare", pathId: "mage", specializationId: "chronomancer", name: "Time Snare", category: "Specialization", unlockRank: 3, cooldownMs: 12_000, description: "Suspend the enemy under your aim, delaying its next action." },
+  { id: "mage_rewind", pathId: "mage", specializationId: "chronomancer", name: "Rewind", category: "Master", unlockRank: 4, cooldownMs: 30_000, description: "Rewind recent strain, restoring health and stamina with brief protection." },
   { id: "assassin_vanish", pathId: "assassin", name: "Stealth", category: "Core", unlockRank: 0, cooldownMs: 14_000, description: "Break pursuit and empower your next strike." },
   { id: "assassin_death_mark", pathId: "assassin", name: "Death Mark", category: "Utility", unlockRank: 2, cooldownMs: 16_000, description: "Aim at a visible enemy within 8m and mark it for execution." },
   { id: "assassin_blade_dance", pathId: "assassin", name: "Blade Dance", category: "Aggressive", unlockRank: 3, cooldownMs: 19_000, description: "Unleash rapid aimed cuts across nearby enemies." },
@@ -403,9 +415,7 @@ export const CALLING_AUGMENT_TRIALS = {
   deadeye_execution_rounds: { description: "Deal 45 Deadeye bonus damage.", target: 45 },
 } as const satisfies Record<CallingAugmentId, { description: string; target: number }>;
 export const CallingAbilityEquipRequestSchema = z.object({
-  abilityId: z.enum(["tank_bulwark", "tank_challenge", "tank_earthbreaker", "mage_arcane_surge", "mage_mana_shield", "mage_overload",
-    "assassin_vanish", "assassin_death_mark", "assassin_blade_dance", "thief_smoke_bomb", "thief_decoy", "thief_escape_artist",
-    "ranger_volley_focus", "ranger_disengage", "ranger_deadeye", "healer_field_mend", "healer_renewal", "healer_resurrection"]),
+  abilityId: z.enum(CALLING_ABILITY_OPTIONS.map(option => option.id) as [CallingAbilityId, ...CallingAbilityId[]]),
 }).strict();
 export const CallingAugmentEquipRequestSchema = z.object({
   augmentId: z.enum(CALLING_ABILITY_AUGMENTS.map(option => option.id) as [CallingAugmentId, ...CallingAugmentId[]]),
@@ -478,6 +488,13 @@ export const BUILD_PATH_SPECIALIZATIONS = {
   ],
 } as const;
 export type BuildPathSpecializationId = typeof BUILD_PATH_SPECIALIZATIONS[BuildPathId][number]["id"];
+export function specializationCallingAbility(specializationId: BuildPathSpecializationId | null | undefined,
+  slot: "power" | "special", rank: number) {
+  if (!specializationId) return null;
+  const category = slot === "power" ? "Specialization" : "Master";
+  return CALLING_ABILITY_OPTIONS.find(option => "specializationId" in option
+    && option.specializationId === specializationId && option.category === category && option.unlockRank <= rank) ?? null;
+}
 export const BUILD_PATH_RANKS = [
   { rank: 0, name: "Untrained", xp: 0 },
   { rank: 1, name: "Initiate", xp: 10 },
@@ -489,6 +506,7 @@ export const BuildPathRequestSchema = z.object({ action: z.enum(["sync", "choose
 export type BuildPathAffinity = { pathId: BuildPathId; score: number; reasons: string[] };
 export type BuildPathUpdate = { selectedPathId: BuildPathId | null; rank: number; xp: number; nextRankXp: number | null;
   selectedCallingAbilityId: CallingAbilityId | null;
+  selectedSpecialAbilityId?: CallingAbilityId | null;
   selectedCallingAugmentId: CallingAugmentId | null;
   selectedSpecialCallingAugmentId?: CallingAugmentId | null;
   callingAugmentProgress: Partial<Record<CallingAugmentId, number>>;

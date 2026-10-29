@@ -1356,6 +1356,7 @@ const buildPathProc = document.querySelector<HTMLElement>("#build-path-proc")!;
 let buildPathProcTimer = 0;
 let localBuildPathId: RoleFieldPath | null = null;
 let localCallingAbilityId: CallingAbilityId | null = null;
+let localSpecialCallingAbilityId: CallingAbilityId | null = null;
 let localCallingAugmentId: CallingAugmentId | null = null;
 let localCallingAugmentProgress: Partial<Record<CallingAugmentId, number>> = {};
 let localMasteredCallingAugments: CallingAugmentId[] = [];
@@ -6838,7 +6839,8 @@ function updateControlsHelp(): void {
   const fireHint = WEAPON_ATTACK_DEFINITIONS[localMainHandId].projectileTravelMs > 0 ? " · Hold J or left-click to fire · Mouse aim optional" : "";
   const secondaryHint = localCharacterProgression.level >= 5 ? ` · T ${POWER_DEFINITIONS[localSecondaryPower].name}` : "";
   const calling = CALLING_ABILITY_OPTIONS.find(option => option.id === localCallingAbilityId);
-  const callingSpecial = CALLING_ABILITY_OPTIONS.find(option => option.pathId === localBuildPathId && option.category === "Utility");
+  const callingSpecial = CALLING_ABILITY_OPTIONS.find(option => option.id === localSpecialCallingAbilityId)
+    ?? CALLING_ABILITY_OPTIONS.find(option => option.pathId === localBuildPathId && option.category === "Utility");
   const callingHint = localCharacterProgression.level >= 2 && calling ? ` · G ${calling.name}` : "";
   const unlockedPowerHint = WEAPON_TECHNIQUES_AVAILABLE && localCharacterProgression.level >= 5 ? ` · ${powerHint}${secondaryHint}` : "";
   const unlockedSpecialHint = localCharacterProgression.level >= 4 && callingSpecial
@@ -6877,7 +6879,8 @@ function requestCallingAbility(slot: "power" | "special" = "power", aimedYaw?: n
   }
   const now = Date.now();
   if (now < (slot === "special" ? localCallingSpecialCooldownUntil : localCallingCooldownUntil)) {
-    const definition = slot === "special" ? CALLING_ABILITY_OPTIONS.find(option => option.pathId === localBuildPathId && option.category === "Utility")
+    const definition = slot === "special" ? CALLING_ABILITY_OPTIONS.find(option => option.id === localSpecialCallingAbilityId)
+      ?? CALLING_ABILITY_OPTIONS.find(option => option.pathId === localBuildPathId && option.category === "Utility")
       : CALLING_ABILITY_OPTIONS.find(option => option.id === localCallingAbilityId);
     showCombatFeedback(`${definition?.name.toUpperCase() ?? "CALLING"} RECHARGING`, "hurt");
     return;
@@ -7124,7 +7127,7 @@ function abilityPracticeStorageKey(abilityId: CallingAbilityId): string {
 function unseenCallingAbilityIds(): CallingAbilityId[] {
   const update = lastBuildPathUpdate;
   if (!update?.selectedPathId) return [];
-  return earnedCallingAbilities(update.selectedPathId, update.rank, localCharacterProgression.level)
+  return earnedCallingAbilities(update.selectedPathId, update.rank, localCharacterProgression.level, update.selectedSpecializationId)
     .filter(id => {
       if (seenAbilityReveals.has(id)) return false;
       try { return window.localStorage.getItem(abilityRevealStorageKey(id)) !== "1"; }
@@ -7482,13 +7485,15 @@ function renderBuildPath(update: BuildPathUpdate): void {
   tutorialCallingId = update.selectedPathId;
   renderFirstSteps();
   localCallingAbilityId = update.selectedCallingAbilityId;
+  localSpecialCallingAbilityId = update.selectedSpecialAbilityId ?? null;
   localCallingAugmentId = update.selectedCallingAugmentId;
   localCallingAugmentProgress = update.callingAugmentProgress;
   localMasteredCallingAugments = update.masteredCallingAugments;
   localBuildPathRank = update.rank;
   updateLevelUpCallingGuide();
   combatHud.setCalling(update.selectedPathId, update.selectedCallingAbilityId, update.rank, update.selectedCallingAugmentId,
-    update.callingAugmentProgress, update.masteredCallingAugments, update.selectedSpecialCallingAugmentId ?? null);
+    update.callingAugmentProgress, update.masteredCallingAugments, update.selectedSpecialCallingAugmentId ?? null,
+    update.selectedSpecialAbilityId ?? null);
   refreshCallingUnlockNotice();
   updateTouchAbilityVisibility();
   updateControlsHelp();
@@ -7529,9 +7534,13 @@ function renderBuildPath(update: BuildPathUpdate): void {
   if (update.selectedSpecializationId) pendingSpecializationPreview = null;
   buildPathSpecializations.hidden = !selected || update.rank < 3;
   if (selected && update.selectedPathId && update.rank >= 3) for (const specialization of BUILD_PATH_SPECIALIZATIONS[update.selectedPathId]) {
+    const pathPower = CALLING_ABILITY_OPTIONS.find(option => "specializationId" in option
+      && option.specializationId === specialization.id && option.category === "Specialization");
+    const pathSpecial = CALLING_ABILITY_OPTIONS.find(option => "specializationId" in option
+      && option.specializationId === specialization.id && option.category === "Master");
     const button = document.createElement("button"); button.type = "button";
     button.dataset.active = String(specialization.id === update.selectedSpecializationId);
-    button.innerHTML = `<strong>${specialization.name}</strong><small>${specialization.role}</small><span>${specialization.effect}</span><em>MASTERY TRIAL · ${specialization.trial}</em>`;
+    button.innerHTML = `<strong>${specialization.name}</strong><small>${specialization.role}</small><span>${specialization.effect}</span>${pathPower ? `<em>G · ${pathPower.name} — ${pathPower.description}</em>` : ""}${pathSpecial ? `<em>MASTER F · ${pathSpecial.name} — ${pathSpecial.description}</em>` : ""}<em>MASTERY TRIAL · ${specialization.trial}</em>`;
     button.disabled = Boolean(update.selectedSpecializationId) || !update.canSpecialize || !update.inTown;
     button.title = update.selectedSpecializationId ? "Veteran path already bound" : update.inTown ? `Bind the ${specialization.name} path` : "Return to Town to specialize";
     button.addEventListener("click", () => {

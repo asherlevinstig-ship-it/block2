@@ -46,29 +46,24 @@ describe("Fast World Calling progression", () => {
     expect(f.client.send.mock.lastCall?.[1].message).toContain("F Special");
   });
   it("makes every third damaging Mage spell echo and advance the Arcanist trial", () => {
-    const f = fixture("mage", "arcanist"); f.cast(); f.cast(); expect(f.mob.health).toBe(96);
-    f.cast(); expect(f.mob.health).toBe(92);
+    const f = fixture("mage", "arcanist"); f.cast(); f.cast(); expect(f.mob.health).toBe(88);
+    f.cast(); expect(f.mob.health).toBe(77);
     expect(parseBuildPathState(f.player.huntLoadoutsJson).trials.arcanist).toBe(1);
-    expect(f.client.send).toHaveBeenCalledWith("calling:ability", expect.objectContaining({ cooldownUntil: 23_600 }));
+    expect(f.client.send).toHaveBeenCalledWith("calling:ability", expect.objectContaining({ cooldownUntil: 18_500 }));
   });
   it("does not farm Arcane Echo from empty casts", () => {
     const f = fixture("mage", "arcanist"); f.mob.x = 200;
     f.cast(); f.cast(); f.cast(); expect(f.internal.mageCallingCasts.has("hero")).toBe(false);
     expect(parseBuildPathState(f.player.huntLoadoutsJson).trials.arcanist).toBeUndefined();
   });
-  it("echoes an Overload once across multiple targets without counting its aftershock as another cast", () => {
-    const f = fixture("mage", "arcanist"); f.cast(); f.cast();
+  it("upgrades the third Arcanist cast to a full-strength Master echo", () => {
+    const f = fixture("mage", "arcanist");
     const state = parseBuildPathState(f.player.huntLoadoutsJson);
-    state.callingAbilities.mage = "mage_overload";
-    state.callingAugments.mage_overload = "overload_residual_charge";
+    state.mastered.push("arcanist");
     f.player.huntLoadoutsJson = serializeBuildPathState(state);
-    const other = new MobState(); Object.assign(other, { x: 102, y: 8, z: 106.5, health: 100, maxHealth: 100 });
-    f.room.state.mobs.set("other", other);
-    f.cast(); f.internal.resolveMageOverloads(10_850);
-    expect(f.mob.health).toBe(87); expect(other.health).toBe(91);
-    f.internal.resolveMageOverloads(11_600);
-    expect(f.mob.health).toBe(84); expect(other.health).toBe(88);
-    expect(parseBuildPathState(f.player.huntLoadoutsJson).trials.arcanist).toBe(1);
+    f.cast(); f.cast(); f.cast();
+    expect(f.mob.health).toBe(76);
+    expect(parseBuildPathState(f.player.huntLoadoutsJson).mastered).toContain("arcanist");
     expect(f.internal.mageCallingCasts.get("hero")).toBe(0);
   });
   it("slows spell survivors and credits a slowed kill once in Fast World", () => {

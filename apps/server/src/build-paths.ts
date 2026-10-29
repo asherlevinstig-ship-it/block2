@@ -120,13 +120,15 @@ export function chooseBuildPath(state: BuildPathState, pathId: BuildPathId): Bui
 }
 
 export function selectedCallingAbility(state: BuildPathState, pathId: BuildPathId): CallingAbilityId {
-  return CALLING_ABILITY_OPTIONS.find(option => option.id === state.callingAbilities[pathId] && option.pathId === pathId && option.category !== "Utility")?.id
+  return CALLING_ABILITY_OPTIONS.find(option => option.id === state.callingAbilities[pathId] && option.pathId === pathId
+    && option.category !== "Utility" && (!("specializationId" in option) || option.specializationId === state.specializations[pathId]))?.id
     ?? CALLING_ABILITY_OPTIONS.find(option => option.pathId === pathId && option.unlockRank === 0)!.id;
 }
 
 export function chooseCallingAbility(state: BuildPathState, pathId: BuildPathId, abilityId: CallingAbilityId): BuildPathState {
   const definition = CALLING_ABILITY_OPTIONS.find(option => option.id === abilityId);
   if (state.selectedPathId !== pathId || !definition || definition.pathId !== pathId
+    || "specializationId" in definition && definition.specializationId !== state.specializations[pathId]
     || definition.category === "Utility"
     || effectiveBuildPathRank(state, pathId) < definition.unlockRank) return state;
   return { ...state, callingAbilities: { ...state.callingAbilities, [pathId]: abilityId } };

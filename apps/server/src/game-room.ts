@@ -34,7 +34,7 @@ import { Parties } from "./parties.js";
 import { TradeRequestSchema } from "@blockcraft/protocol";
 import { FIELD_FORGE_RECIPES, FieldForgeSchema, type FieldForgeId } from "@blockcraft/protocol";
 import { Trading } from "./trading.js";
-import { BLACKSMITH_STOCK, BLACKSMITH_DISMANTLE, BLACKSMITH_REFORGE, REGIONAL_FORGE_RECIPES, ASHEN_FORGE_RECIPES, AshenForgeSchema, BlacksmithBuySchema, BlacksmithDismantleSchema, BlacksmithHaulSchema, BlacksmithReforgeSchema, RegionalForgeSchema, AttunementForgeSchema, EquipmentAffixHuntSchema, EQUIPMENT_HUNT_REGIONS, ITEM_DEFINITIONS, EQUIPMENT_AFFIXES, HUNT_EQUIPMENT_SETS, BUILD_PATHS, BUILD_PATH_SPECIALIZATIONS, CALLING_ABILITY_OPTIONS, CALLING_ABILITY_AUGMENTS, CALLING_AUGMENT_TRIALS, CallingAbilityRequestSchema, CallingAbilityEquipRequestSchema, CallingAugmentEquipRequestSchema, HuntCollectionRequestSchema, BuildPathRequestSchema, ArmourEquipSchema, armourStats, armouredDamage, reforgeWeaponDamageBonus, equipmentPerkStats, equipmentAffixResonanceForLoadout, type EquipmentPerkId, type BlacksmithDismantleItemId, type BlacksmithReforgeItemId, type RegionalForgeId, type AshenBlueprintId, type HuntCollectionUpdate, type HuntLoadoutSlot, type BuildPathId, type BuildPathUpdate, type BuildPathProc, type BuildPathSpecializationId, type CallingAbilityId, type CallingAugmentId, type CallingAbilityUpdate, type CallingAbilityEffect, type CallingStateUpdate, type EquipmentAffixId, type EquipmentAffixProc, type EquipmentAffixRoll, type EquipmentAffixOffers, type EquipmentAffixUpdate, type EquipmentHuntRegionId, type EquipmentHuntTarget } from "@blockcraft/protocol";
+import { BLACKSMITH_STOCK, BLACKSMITH_DISMANTLE, BLACKSMITH_REFORGE, REGIONAL_FORGE_RECIPES, ASHEN_FORGE_RECIPES, AshenForgeSchema, BlacksmithBuySchema, BlacksmithDismantleSchema, BlacksmithHaulSchema, BlacksmithReforgeSchema, RegionalForgeSchema, AttunementForgeSchema, EquipmentAffixHuntSchema, EQUIPMENT_HUNT_REGIONS, ITEM_DEFINITIONS, EQUIPMENT_AFFIXES, HUNT_EQUIPMENT_SETS, BUILD_PATHS, BUILD_PATH_SPECIALIZATIONS, CALLING_ABILITY_OPTIONS, CALLING_ABILITY_AUGMENTS, CALLING_AUGMENT_TRIALS, specializationCallingAbility, CallingAbilityRequestSchema, CallingAbilityEquipRequestSchema, CallingAugmentEquipRequestSchema, HuntCollectionRequestSchema, BuildPathRequestSchema, ArmourEquipSchema, armourStats, armouredDamage, reforgeWeaponDamageBonus, equipmentPerkStats, equipmentAffixResonanceForLoadout, type EquipmentPerkId, type BlacksmithDismantleItemId, type BlacksmithReforgeItemId, type RegionalForgeId, type AshenBlueprintId, type HuntCollectionUpdate, type HuntLoadoutSlot, type BuildPathId, type BuildPathUpdate, type BuildPathProc, type BuildPathSpecializationId, type CallingAbilityId, type CallingAugmentId, type CallingAbilityUpdate, type CallingAbilityEffect, type CallingStateUpdate, type EquipmentAffixId, type EquipmentAffixProc, type EquipmentAffixRoll, type EquipmentAffixOffers, type EquipmentAffixUpdate, type EquipmentHuntRegionId, type EquipmentHuntTarget } from "@blockcraft/protocol";
 import { AREA_LEADER_RELIC_IDS, LEADER_FORGE_MARKS, LEADER_FORGE_RECIPES, LeaderForgeSchema,
   type AreaLeaderRelicId, type LeaderForgemarkId } from "@blockcraft/protocol";
 import { emberOreSale, weaponPurchase } from "./blacksmith.js";
@@ -2765,7 +2765,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const state = parseBuildPathState(player.huntLoadoutsJson);
     state.selectedPathId = ability.pathId;
     state.xp[ability.pathId] = 140;
-    const specialization = BUILD_PATH_SPECIALIZATIONS[ability.pathId][0];
+    const specialization = "specializationId" in ability
+      ? BUILD_PATH_SPECIALIZATIONS[ability.pathId].find(option => option.id === ability.specializationId)!
+      : BUILD_PATH_SPECIALIZATIONS[ability.pathId][0];
     state.specializations[ability.pathId] = specialization.id;
     if (!state.mastered.includes(specialization.id)) state.mastered.push(specialization.id);
     state.callingAbilities[ability.pathId] = ability.category === "Utility" ? callingStarterAbility(ability.pathId, "power").id : abilityId;
@@ -6711,9 +6713,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const specializationId = state.selectedPathId ? state.specializations[state.selectedPathId] ?? null : null;
     const specialization = state.selectedPathId && specializationId
       ? BUILD_PATH_SPECIALIZATIONS[state.selectedPathId].find(option => option.id === specializationId) : null;
+    const specializationPower = state.selectedPathId === "mage" ? specializationCallingAbility(specializationId, "power", rank) : null;
+    const specializationSpecial = state.selectedPathId === "mage" ? specializationCallingAbility(specializationId, "special", rank) : null;
     const trialProgress = specializationId ? state.trials[specializationId] ?? 0 : 0;
     client.send("build:path", { selectedPathId: state.selectedPathId, rank, xp,
-      selectedCallingAbilityId: state.selectedPathId ? selectedCallingAbility(state, state.selectedPathId) : null,
+      selectedCallingAbilityId: specializationPower?.id ?? (state.selectedPathId ? selectedCallingAbility(state, state.selectedPathId) : null),
+      selectedSpecialAbilityId: specializationSpecial?.id ?? (state.selectedPathId ? callingStarterAbility(state.selectedPathId, "special").id : null),
       selectedCallingAugmentId: state.selectedPathId ? selectedCallingAugment(state, selectedCallingAbility(state, state.selectedPathId)) : null,
       selectedSpecialCallingAugmentId: state.selectedPathId ? selectedCallingAugment(state, callingStarterAbility(state.selectedPathId, "special").id) : null,
       callingAugmentProgress: state.callingAugmentProgress,
@@ -7176,7 +7181,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       client.send("chat:notice", `${slot === "special" ? "Calling Special" : "Calling Power"} has not unlocked yet.`);
       return;
     }
-    const abilityId = slot === "special" ? callingStarterAbility(pathId, "special").id : selectedCallingAbility(state, pathId);
+    const rank = this.buildPathRankFor(player, pathId);
+    const specializationId = state.specializations[pathId] ?? null;
+    const specializedAbility = pathId === "mage" ? specializationCallingAbility(specializationId, slot, rank) : null;
+    const abilityId = specializedAbility?.id
+      ?? (slot === "special" ? callingStarterAbility(pathId, "special").id : selectedCallingAbility(state, pathId));
     const augmentId = selectedCallingAugment(state, abilityId);
     const definition = CALLING_ABILITY_OPTIONS.find(option => option.id === abilityId)!;
     const now = Date.now();
@@ -7306,7 +7315,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       client.send("chat:notice", `DEADEYE · aim precisely at a visible enemy within ${(augmentId === "deadeye_eagle_eye" ? 22 : 18) + (this.hasFloorUpgrade(client.sessionId, "ranger_deadeye") ? 4 : 0)}m.`);
       return;
     }
-    const overloadTarget = abilityId === "mage_overload"
+    const aimedMageAbilities: CallingAbilityId[] = ["mage_overload", "mage_arcane_lance", "mage_mirror_cast",
+      "mage_fireball", "mage_rune_brand", "mage_time_snare"];
+    const overloadTarget = aimedMageAbilities.includes(abilityId)
       ? [...this.state.mobs.entries()].filter(([, mob]) => {
         if (!mob.alive || Math.abs(mob.y - player.y) > 3 || !hasCombatLineOfSight(player, mob, this.readWorldBlock)) return false;
         const dx = mob.x - player.x, dz = mob.z - player.z, distance = Math.hypot(dx, dz);
@@ -7314,11 +7325,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         const radians = (parsed.data.yaw ?? player.yaw) * Math.PI / 180;
         return (Math.sin(radians) * dx + Math.cos(radians) * dz) / distance >= .9;
       }).sort(([, a], [, b]) => Math.hypot(a.x - player.x, a.z - player.z) - Math.hypot(b.x - player.x, b.z - player.z))[0] : undefined;
-    if (abilityId === "mage_overload" && !overloadTarget) {
-      client.send("chat:notice", "OVERLOAD · aim toward a visible enemy within 14m.");
+    if (aimedMageAbilities.includes(abilityId) && !overloadTarget) {
+      client.send("chat:notice", `${definition.name.toUpperCase()} · aim toward a visible enemy within 14m.`);
       return;
     }
-    const rank = this.buildPathRankFor(player, pathId);
     const cooldownUntil = now + Math.round(definition.cooldownMs * (pathId === "mage" && slot === "power" ? 1 - rank * .05 : 1));
     cooldowns.set(client.sessionId, cooldownUntil);
     if (abilityId !== "assassin_vanish") this.endStealth(client.sessionId);
@@ -7331,6 +7341,17 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const nearbyMobs = (radius: number) => [...this.state.mobs.entries()].filter(([, mob]) => mob.alive
       && Math.abs(mob.y - player.y) <= 2.5 && Math.hypot(mob.x - player.x, mob.z - player.z) <= radius
       && hasCombatLineOfSight(player, mob, this.readWorldBlock));
+    const damageMageTarget = (mobId: string, mob: MobState, rawDamage: number, staggerMs: number) => {
+      const damage = damageAfterArmor(rawDamage, mob.armor, true);
+      this.combatContributions.record(mobId, client.sessionId, Math.min(mob.health, damage), now);
+      mob.health = Math.max(0, mob.health - damage); mob.hitSequence += 1;
+      this.applyMageVeteranHit(client.sessionId, player, mobId, mob, now, abilityId);
+      this.applyMageCallingSlow(client.sessionId, player, mobId, mob, now);
+      this.alertHitMob(mobId, client.sessionId, now);
+      if (mob.health === 0) this.defeatMob(mobId, mob, client.sessionId, now);
+      else if (staggerMs > 0) this.staggerMob(mobId, mob, now, staggerMs, true, client.sessionId);
+      return damage;
+    };
     if (abilityId === "tank_bulwark") {
       durationMs = 5_000 + rank * 350 + (augmentId === "bulwark_guardian_wall" ? 2_000 : 0) + (this.hasFloorUpgrade(client.sessionId, "tank_wall") ? 2_000 : 0);
       this.tankBulwarkUntil.set(client.sessionId, now + durationMs);
@@ -7390,6 +7411,54 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (shatteredTargetIds.length > 0) this.broadcast("calling:combo", { comboId: "root_shatter",
         label: "ROOT SHATTER", casterId: client.sessionId, targetIds: shatteredTargetIds,
         x: player.x, y: player.y, z: player.z, bonus: 3 });
+    } else if (abilityId === "mage_arcane_lance" || abilityId === "mage_fireball"
+      || abilityId === "mage_rune_brand" || abilityId === "mage_time_snare" || abilityId === "mage_mirror_cast") {
+      const [mobId, mob] = overloadTarget!;
+      const baseDamage = abilityId === "mage_mirror_cast" ? 8 : abilityId === "mage_arcane_lance" ? 6
+        : abilityId === "mage_fireball" ? 5 : abilityId === "mage_rune_brand" ? 3 : 2;
+      const echo = this.buildSpecializationFor(player, "mage") === "arcanist" ? this.mageCallingEcho(client.sessionId, player) : 0;
+      const rawDamage = baseDamage + (echo > 0 ? Math.max(1, Math.ceil(baseDamage * echo)) : 0);
+      const staggerMs = abilityId === "mage_time_snare" ? 2_600 : abilityId === "mage_arcane_lance" ? 700 : 400;
+      const damage = damageMageTarget(mobId, mob, rawDamage, staggerMs);
+      effectTargetId = mobId; effectPosition = mob;
+      if (abilityId === "mage_rune_brand" && mob.alive)
+        this.mageRuneMarks.set(`${client.sessionId}:${mobId}`, { abilityId, until: now + 8_000 });
+      detail = abilityId === "mage_mirror_cast" ? `TWIN REFLECTIONS · ${damage} DAMAGE`
+        : abilityId === "mage_time_snare" ? `TIME SUSPENDED · ${damage} DAMAGE · 2.6s DELAY`
+          : abilityId === "mage_rune_brand" ? `RUNE BRANDED · ${damage} DAMAGE · COMBINE ANOTHER SPELL`
+            : `${definition.name.toUpperCase()} · ${damage} DAMAGE`;
+    } else if (abilityId === "mage_frost_nova" || abilityId === "mage_tempest"
+      || abilityId === "mage_rune_ward" || abilityId === "mage_spellbreak"
+      || abilityId === "mage_inferno" || abilityId === "mage_grand_sigil") {
+      const radius = abilityId === "mage_tempest" ? 7 : abilityId === "mage_inferno" ? 6.5
+        : abilityId === "mage_grand_sigil" ? 6 : 5;
+      const targets = nearbyMobs(radius);
+      let totalDamage = 0, interrupted = 0;
+      for (const [mobId, mob] of targets) {
+        const wasWindingUp = mob.combatState === "windup";
+        const rawDamage = abilityId === "mage_tempest" ? 5 : abilityId === "mage_grand_sigil" ? 4
+          : abilityId === "mage_frost_nova" ? 3 : abilityId === "mage_inferno" ? 2 : 2;
+        totalDamage += damageMageTarget(mobId, mob, rawDamage,
+          abilityId === "mage_spellbreak" && wasWindingUp ? 2_200 : abilityId === "mage_frost_nova" ? 1_400 : 650);
+        if (wasWindingUp && abilityId === "mage_spellbreak") interrupted += 1;
+        if (mob.alive && abilityId === "mage_inferno")
+          this.mageBurns.set(`${client.sessionId}:${mobId}`, { ownerId: client.sessionId, mobId,
+            nextTickAt: now + 500, ticks: 5, damage: 1 });
+      }
+      if (abilityId === "mage_rune_ward" || abilityId === "mage_spellbreak") {
+        this.mageBarrierHits.set(client.sessionId, abilityId === "mage_spellbreak" ? 5 : 4);
+        this.mageBarrierEnergy.set(client.sessionId, 0);
+      }
+      if (abilityId === "mage_grand_sigil") player.stamina = Math.min(player.maxStamina, player.stamina + targets.length * 12);
+      detail = `${definition.name.toUpperCase()} · ${targets.length} HIT · ${totalDamage} DAMAGE`
+        + (interrupted ? ` · ${interrupted} INTERRUPTED` : "")
+        + (abilityId === "mage_grand_sigil" ? ` · +${targets.length * 12} STAMINA` : "");
+    } else if (abilityId === "mage_rewind") {
+      const restored = Math.min(5, player.maxHealth - player.health);
+      player.health += restored; player.stamina = player.maxStamina;
+      player.invulnerableUntil = Math.max(player.invulnerableUntil, now + 1_200);
+      durationMs = 1_200;
+      detail = `REWOUND · +${restored} HP · FULL STAMINA · 1.2s PROTECTION`;
     } else if (abilityId === "mage_arcane_surge") {
       const staminaBefore = player.stamina, specialRecovering = (this.callingSpecialReadyAt.get(client.sessionId) ?? 0) > now;
       const stamina = 30 + rank * 5 + (augmentId === "surge_deep_reserves" ? 25 : 0);

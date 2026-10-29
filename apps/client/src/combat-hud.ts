@@ -43,6 +43,7 @@ const powerAiming = signal(false);
 const specialAiming = signal(false);
 const calling = signal<BuildPathId | null>(null);
 const callingAbility = signal<CallingAbilityId | null>(null);
+const specialCallingAbility = signal<CallingAbilityId | null>(null);
 const callingRank = signal(0);
 const callingAugment = signal<CallingAugmentId | null>(null);
 const specialCallingAugment = signal<CallingAugmentId | null>(null);
@@ -107,7 +108,7 @@ export function cooldownState(remainingMs: number, cooldownMs: number, readyLabe
 
 export function visibleCallingAbilities(pathId: BuildPathId, rank: number) {
   return CALLING_ABILITY_OPTIONS.filter(option => option.pathId === pathId && option.unlockRank <= rank
-    && option.category !== "Utility");
+    && (option.category === "Core" || option.category === "Aggressive"));
 }
 
 export function visibleCallingAugments(abilityId: CallingAbilityId, rank: number) {
@@ -237,7 +238,8 @@ function LoadoutDrawer() {
 }
 
 function SpecialLoadout() {
-  const selected = calling.value ? callingStarterAbility(calling.value, "special") : null;
+  const selected = CALLING_ABILITY_OPTIONS.find(option => option.id === specialCallingAbility.value)
+    ?? (calling.value ? callingStarterAbility(calling.value, "special") : null);
   const cooldown = specialCooldown.value;
   const name = selected?.name;
   const locked = characterLevel.value < 4 || !selected;
@@ -303,9 +305,11 @@ export const combatHud = {
   setSpecial(value: SpecialId): void { setIfChanged(special, value); },
   setFieldSpecialSelected(value: boolean): void { setIfChanged(fieldSpecialSelected, value); },
   setCalling(value: BuildPathId | null, abilityId: CallingAbilityId | null, rank: number, augmentId: CallingAugmentId | null = null,
-    progress: Partial<Record<CallingAugmentId, number>> = {}, mastered: CallingAugmentId[] = [], specialAugmentId?: CallingAugmentId | null): void {
+    progress: Partial<Record<CallingAugmentId, number>> = {}, mastered: CallingAugmentId[] = [], specialAugmentId?: CallingAugmentId | null,
+    specialAbilityId?: CallingAbilityId | null): void {
     batch(() => {
       setIfChanged(calling, value); setIfChanged(callingAbility, abilityId); setIfChanged(callingRank, rank); setIfChanged(callingAugment, augmentId);
+      if (specialAbilityId !== undefined) setIfChanged(specialCallingAbility, specialAbilityId);
       if (specialAugmentId !== undefined) setIfChanged(specialCallingAugment, specialAugmentId);
       if (JSON.stringify(callingAugmentProgress.value) !== JSON.stringify(progress)) callingAugmentProgress.value = progress;
       if (JSON.stringify(masteredCallingAugments.value) !== JSON.stringify(mastered)) masteredCallingAugments.value = mastered;

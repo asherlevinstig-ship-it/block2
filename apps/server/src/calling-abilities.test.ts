@@ -218,7 +218,8 @@ describe("hotbar Calling abilities", () => {
     expect(internal.callingSpecialReadyAt.has("hero")).toBe(true);
   });
 
-  it.each(CALLING_ABILITY_OPTIONS)("equips and activates $id when its rank is unlocked", option => {
+  it.each(CALLING_ABILITY_OPTIONS.filter(option => option.category !== "Specialization" && option.category !== "Master"))
+  ("equips and activates $id when its rank is unlocked", option => {
     const { internal, player, client } = fixture(option.pathId, option.unlockRank >= 4 ? 140 : 70);
     const mob = new MobState(); Object.assign(mob, { x: 52, y: 8, z: 50, alive: true, health: 20, maxHealth: 20, name: "Target", targetId: "hero" });
     internal.state.mobs.set("target", mob);
@@ -231,16 +232,30 @@ describe("hotbar Calling abilities", () => {
     }
     if (option.id === "ranger_deadeye") { mob.x = 50; mob.z = 60; }
     if (option.id === "mage_overload") { mob.x = 50; mob.z = 56; }
-    if (option.id === "healer_resurrection") {
-      const ally = new PlayerState(); Object.assign(ally, { x: 52, y: 8, z: 50, health: 0 });
-      internal.state.players.set("ally", ally);
-      internal.parties.restore(["hero", "ally"]);
-      internal.resurrectionWindows.set("ally", 22_000);
-    }
     if (option.pathId === "healer") player.health = 2;
     internal.handleCallingAbility(client, { requestId: `activate-${option.id}`, yaw: 0,
       ...(option.category === "Utility" ? { slot: "special" } : {}) });
     expect(client.send).toHaveBeenCalledWith("calling:ability", expect.objectContaining({ abilityId: option.id }));
+  });
+
+  it.each([
+    ["arcanist", "mage_arcane_lance", "mage_mirror_cast"],
+    ["elementalist", "mage_frost_nova", "mage_tempest"],
+    ["spellguard", "mage_rune_ward", "mage_spellbreak"],
+    ["pyromancer", "mage_fireball", "mage_inferno"],
+    ["runebinder", "mage_rune_brand", "mage_grand_sigil"],
+    ["chronomancer", "mage_time_snare", "mage_rewind"],
+  ] as const)("equips the %s Veteran Power and Master Special", (specializationId, powerId, specialId) => {
+    const { internal, player, client } = fixture("mage", 140);
+    const state = parseBuildPathState(player.huntLoadoutsJson);
+    state.specializations.mage = specializationId; state.mastered.push(specializationId);
+    player.huntLoadoutsJson = JSON.stringify(state);
+    const mob = new MobState(); Object.assign(mob, { x: 50, y: 8, z: 56, alive: true, health: 100, maxHealth: 100, name: "Target" });
+    internal.state.mobs.set("target", mob);
+    internal.handleCallingAbility(client, { requestId: `power-${specializationId}`, yaw: 0 });
+    expect(client.send).toHaveBeenCalledWith("calling:ability", expect.objectContaining({ abilityId: powerId, slot: "power" }));
+    internal.handleCallingAbility(client, { requestId: `special-${specializationId}`, yaw: 0, slot: "special" });
+    expect(client.send).toHaveBeenCalledWith("calling:ability", expect.objectContaining({ abilityId: specialId, slot: "special" }));
   });
 
   it("does not spend Death Mark's cooldown when no enemy is under the aim", () => {
