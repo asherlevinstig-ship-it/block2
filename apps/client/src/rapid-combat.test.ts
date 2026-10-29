@@ -2,10 +2,11 @@ import { describe, expect, it } from "vitest";
 import { continuousAttackEnabled, rapidCombatAnimationElapsed, rapidCombatDuration, rapidCombatImpact } from "./rapid-combat.js";
 
 describe("rapid combat controls", () => {
-  it("allows held attacks for every weapon only in the prototype", () => {
+  it("reserves held attacks for projectile weapons", () => {
     expect(continuousAttackEnabled(false, false)).toBe(false);
-    expect(continuousAttackEnabled(false, true)).toBe(true);
+    expect(continuousAttackEnabled(false, true)).toBe(false);
     expect(continuousAttackEnabled(true, false)).toBe(true);
+    expect(continuousAttackEnabled(true, true)).toBe(true);
   });
 
   it("keeps the animation aligned with shortened recovery", () => {

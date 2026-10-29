@@ -2498,7 +2498,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.rapidPracticeWave = wave;
     this.rapidPracticeWaveAdvanceAt = 0;
     this.broadcast("practice:state", { active: true, wave,
-      message: wave === 3 ? "FINAL WAVE · Cinderlord incoming" : `WAVE ${wave} · keep moving and hold attack` });
+      message: wave === 3 ? "FINAL WAVE · Cinderlord incoming" : `WAVE ${wave} · keep moving and time your attacks` });
   }
 
   private restartRapidPracticeRun(now: number): void {

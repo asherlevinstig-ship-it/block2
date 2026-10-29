@@ -14,6 +14,9 @@ export function rapidCombatAnimationElapsed(elapsedMs: number | null, enabled: b
   return elapsedMs === null || !enabled ? elapsedMs : elapsedMs / scale;
 }
 
-export function continuousAttackEnabled(isProjectile: boolean, rapidPrototype: boolean): boolean {
-  return isProjectile || rapidPrototype;
+export function continuousAttackEnabled(isProjectile: boolean, _rapidPrototype: boolean): boolean {
+  // Rapid combat shortens attack recovery, but it must not turn melee combos into
+  // automatic fire. Sword and dagger swings require a fresh press for every step;
+  // projectile weapons retain hold-to-fire for accessible sustained aiming.
+  return isProjectile;
 }
