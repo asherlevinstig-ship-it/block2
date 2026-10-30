@@ -2977,6 +2977,7 @@ if (fastWorldRequested) {
     root.setLocalPosition(sign.position[0], sign.position[1] + fastWorldGroundHeight(sign.position[0], sign.position[2]) - 8,
       sign.position[2]);
     root.setLocalEulerAngles(0, sign.yaw, 0);
+    if (sign.kind === "inn") root.setLocalScale(1.35, 1.35, 1.35);
     rapidPrototypeRoot.addChild(root);
     addTownShape(root, "landmark-sign-post", "cylinder", timber, [.1, 1.2, .1], [0, .58, 0]);
     addBox(root, "landmark-sign-board", timberLight, [.14, .82, 1.05], [0, 1.45, 0]);
@@ -2993,6 +2994,9 @@ if (fastWorldRequested) {
       addTownShape(root, "inn-symbol", "cylinder", plasterLight, [.26, .16, .26], [.17, 1.44, 0])
         .setLocalEulerAngles(0, 0, 90);
       addBox(root, "inn-symbol-handle", plasterLight, [.16, .26, .09], [.17, 1.45, .28]);
+      const innLight = new pc.Entity("inn-landmark-light");
+      innLight.addComponent("light", { type: "omni", color: new pc.Color(1, .58, .22), intensity: 1.25, range: 9, castShadows: false });
+      innLight.setLocalPosition(.25, 1.6, 0); root.addChild(innLight);
     } else if (sign.kind === "weaver") {
       for (const z of [-.28, 0, .28]) addTownShape(root, "weaver-symbol", "cylinder", z === 0 ? bannerBlue : plasterLight,
         [.16, .13, .16], [.17, 1.45, z]).setLocalEulerAngles(0, 0, 90);

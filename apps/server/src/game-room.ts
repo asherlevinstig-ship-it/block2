@@ -222,6 +222,7 @@ import {
   type TavernQuizUpdate,
   SILVER_DEPTHS_ROOM,
   TAVERN_ROOM,
+  FAST_WORLD_TAVERN_ENTRANCE,
   SilverDepthsRouteRequestSchema,
   type SilverDepthsWing,
   WORLD_ROOM,
@@ -836,7 +837,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         }
         if (FAST_WORLD_TOWN_ONLY) {
           const tavernEntry = new ForestPortalState();
-          Object.assign(tavernEntry, { x: 95.15, y: 8, z: 96.2, kind: "tavern-entry", expiresAt: 0 });
+          Object.assign(tavernEntry, FAST_WORLD_TAVERN_ENTRANCE, { kind: "tavern-entry", expiresAt: 0 });
           this.state.portals.set("tavern-entry", tavernEntry);
           const entry = new ForestPortalState();
           Object.assign(entry, TOWER_FLOOR_ONE.townPortal, { kind: "tower-entry", expiresAt: 0 });

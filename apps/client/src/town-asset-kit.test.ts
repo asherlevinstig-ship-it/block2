@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { FAST_WORLD_TAVERN_ENTRANCE, RAPID_PRACTICE_TOWN_COLLIDERS } from "@blockcraft/protocol";
 import { SPEED_LAB_TOWN_ASSETS, TOWN_ASSET_FILES, readyTownFallbacks, townAssetUrl, type TownAssetId } from "./town-asset-kit.js";
 
 describe("town asset kit", () => {
@@ -30,5 +31,14 @@ describe("town asset kit", () => {
     const zs = SPEED_LAB_TOWN_ASSETS.map(asset => asset.position[2]);
     expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(65);
     expect(Math.max(...zs) - Math.min(...zs)).toBeGreaterThan(65);
+  });
+
+  it("places the tavern entrance beside the authored inn rather than the retired fallback", () => {
+    const inn = SPEED_LAB_TOWN_ASSETS.find(asset => asset.id === "wayfarerInn")!;
+    const collider = RAPID_PRACTICE_TOWN_COLLIDERS.find(candidate => candidate.id === "wayfarer-inn")!;
+    expect(Math.hypot(FAST_WORLD_TAVERN_ENTRANCE.x - inn.position[0], FAST_WORLD_TAVERN_ENTRANCE.z - inn.position[2])).toBeLessThan(5);
+    expect(FAST_WORLD_TAVERN_ENTRANCE.x).toBeGreaterThan(collider.maxX);
+    expect(FAST_WORLD_TAVERN_ENTRANCE.z).toBeGreaterThanOrEqual(collider.minZ);
+    expect(FAST_WORLD_TAVERN_ENTRANCE.z).toBeLessThanOrEqual(collider.maxZ);
   });
 });

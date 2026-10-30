@@ -27,8 +27,9 @@ export { DODGE_STAMINA_COST, DODGE_CHAIN_COST_STEP, DODGE_MAX_STAMINA_COST, DODG
 // otherwise let a new client join a room still serving the old terrain.
 export const WORLD_ROOM = "world-warden-gate-v167";
 export const SILVER_DEPTHS_ROOM = "silver-depths-instance-v3";
-export const PRACTICE_ROOM = "calling-practice-v6";
+export const PRACTICE_ROOM = "calling-practice-v7";
 export const TAVERN_ROOM = "hearth-and-hammer-v1";
+export const FAST_WORLD_TAVERN_ENTRANCE = { x: 79, y: 8, z: 76 } as const;
 export type RoomTransfer = { room: typeof WORLD_ROOM | typeof SILVER_DEPTHS_ROOM | typeof PRACTICE_ROOM | typeof TAVERN_ROOM; instanceKey?: string; partySize?: number; returnFrom?: "silver-depths" | "practice" | "tavern"; retry?: boolean; partyTicket?: string; worldRoomId?: string };
 export interface ForestPortal { kind: string; x: number; y: number; z: number; expiresAt: number }
 export const FOREST_PORTAL_LIFETIME_MS = 120_000;
