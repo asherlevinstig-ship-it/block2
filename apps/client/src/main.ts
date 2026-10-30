@@ -3938,7 +3938,8 @@ if (fastWorldRequested) {
   }
 
   // The imported kit is decorative only: server-owned world geometry remains authoritative for
-  // movement and combat. Primitive art stays visible until a complete replacement family loads.
+  // movement and combat. Authored buildings own their plots from frame one so the procedural
+  // village can never flash briefly while GLB files are loading.
   const hideRapidTownFallback = (family: TownFallbackFamily): void => {
     const names = family === "complete-buildings" ? new Set(["founders-hall", "wayfarer-inn", "beginnings-smithy",
       "weavers-row", "healers-house", "wardens-lodge"])
@@ -3950,6 +3951,7 @@ if (fastWorldRequested) {
       : new Set(["arena-rock"]);
     for (const node of rapidPrototypeRoot.find(graphNode => names.has(graphNode.name))) node.enabled = false;
   };
+  hideRapidTownFallback("complete-buildings");
   let townAssetsStarted = false;
   requestRapidTownAssets = () => {
     if (townAssetsStarted) return;
@@ -3965,6 +3967,7 @@ if (fastWorldRequested) {
       console.info("[tower-chronicle] Authored Quaternius monument ready; procedural core retired.");
     }).catch(error => console.warn("[tower-chronicle] Authored monument unavailable; retaining procedural fallback.", error));
   };
+  if (!tavernRoomRequested) requestRapidTownAssets();
   let greenwoodAssetsStarted = false;
   requestGreenwoodAssets = () => {
     if (greenwoodAssetsStarted) return;
