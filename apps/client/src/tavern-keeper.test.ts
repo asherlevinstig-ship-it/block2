@@ -14,7 +14,7 @@ describe("tavernkeeper interaction", () => {
   });
 
   it("supports Mara's dedicated tavern-room station", () => {
-    expect(canTalkToTavernKeeper({ x: -4.4, y: 9, z: -4.3 }, true, TAVERN_ROOM_KEEPER)).toBe(true);
+    expect(canTalkToTavernKeeper({ x: -5.6, y: 9, z: -1.5 }, true, TAVERN_ROOM_KEEPER)).toBe(true);
   });
 });
 

@@ -13,7 +13,7 @@ export const TAVERN_KEEPER_LINES = [
 ] as const;
 
 export const TAVERN_QUIZ_TABLE = { ...TOWN_TAVERN_QUIZ_TABLE_POSITION, interactRange: 2.6 } as const;
-export const TAVERN_ROOM_KEEPER = { name: "Mara", x: -4.6, y: 9.5, z: -6, talkRange: 2.8 } as const;
+export const TAVERN_ROOM_KEEPER = { name: "Mara", x: -8.2, y: 9.5, z: -1.5, talkRange: 2.8 } as const;
 export const TAVERN_ROOM_QUIZ_TABLE = { x: 3.6, y: 9, z: -1.4, interactRange: 2.8 } as const;
 
 export function canPlayAtTavernTable(player: { x: number; y: number; z: number }, tavernVisible: boolean,
