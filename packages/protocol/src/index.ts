@@ -29,7 +29,7 @@ export const WORLD_ROOM = "world-warden-gate-v167";
 export const SILVER_DEPTHS_ROOM = "silver-depths-instance-v3";
 export const PRACTICE_ROOM = "calling-practice-v7";
 export const TAVERN_ROOM = "hearth-and-hammer-v1";
-export const FAST_WORLD_TAVERN_ENTRANCE = { x: 79, y: 8, z: 76 } as const;
+export const FAST_WORLD_TAVERN_ENTRANCE = { x: 79.65, y: 8, z: 76 } as const;
 export type RoomTransfer = { room: typeof WORLD_ROOM | typeof SILVER_DEPTHS_ROOM | typeof PRACTICE_ROOM | typeof TAVERN_ROOM; instanceKey?: string; partySize?: number; returnFrom?: "silver-depths" | "practice" | "tavern"; retry?: boolean; partyTicket?: string; worldRoomId?: string };
 export interface ForestPortal { kind: string; x: number; y: number; z: number; expiresAt: number }
 export const FOREST_PORTAL_LIFETIME_MS = 120_000;
@@ -180,12 +180,12 @@ const TOWER_CHRONICLE_TROPHY_COLLIDERS = Array.from({ length: 5 }, (_, index) =>
 export const RAPID_PRACTICE_TOWN_COLLIDERS = [
   { id: "tower-chronicle", minX: 63.85, maxX: 70.15, minZ: 102.85, maxZ: 109.15 },
   ...TOWER_CHRONICLE_TROPHY_COLLIDERS,
-  { id: "founders-hall", minX: 43, maxX: 50, minZ: 69, maxZ: 77 },
-  { id: "wayfarer-inn", minX: 71, maxX: 78, minZ: 72, maxZ: 80 },
-  { id: "beginnings-smithy", minX: 71, maxX: 78, minZ: 133, maxZ: 140 },
-  { id: "weavers-row", minX: 43, maxX: 50, minZ: 90, maxZ: 97 },
-  { id: "healers-house", minX: 43, maxX: 50, minZ: 105, maxZ: 112 },
-  { id: "wardens-lodge", minX: 43, maxX: 50, minZ: 126, maxZ: 134 },
+  { id: "founders-hall", minX: 42.5, maxX: 50.5, minZ: 68.5, maxZ: 77.5 },
+  { id: "wayfarer-inn", minX: 70, maxX: 79, minZ: 71.5, maxZ: 80.5 },
+  { id: "beginnings-smithy", minX: 70, maxX: 79, minZ: 132, maxZ: 141 },
+  { id: "weavers-row", minX: 42, maxX: 51, minZ: 89, maxZ: 98 },
+  { id: "healers-house", minX: 42, maxX: 51, minZ: 104, maxZ: 113 },
+  { id: "wardens-lodge", minX: 42, maxX: 51, minZ: 125, maxZ: 135 },
 ] as const;
 
 /** Shared obstacle query for Fast World prediction and authority. */

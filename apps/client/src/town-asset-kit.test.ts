@@ -21,6 +21,9 @@ describe("town asset kit", () => {
     expect(Math.min(...SPEED_LAB_TOWN_ASSETS.map(asset => asset.position[0]))).toBeLessThan(77);
     expect(SPEED_LAB_TOWN_ASSETS.filter(asset => ["foundersBellTower", "wayfarerInn", "beginningsSmithy",
       "weaversHouse", "healersHouse", "wardensBarracks"].includes(asset.id))).toHaveLength(6);
+    expect(SPEED_LAB_TOWN_ASSETS.filter(asset => ["foundersBellTower", "wayfarerInn", "beginningsSmithy",
+      "weaversHouse", "healersHouse", "wardensBarracks"].includes(asset.id))
+      .every(asset => (asset.scale ?? 0) >= 2.1)).toBe(true);
     // The Tower Chronicle now owns the central-plaza footprint formerly used by the well.
     expect(SPEED_LAB_TOWN_ASSETS.some(asset => asset.id === "well")).toBe(false);
     expect(SPEED_LAB_TOWN_ASSETS.some(asset => asset.id === "gazebo")).toBe(true);
@@ -36,7 +39,7 @@ describe("town asset kit", () => {
   it("places the tavern entrance beside the authored inn rather than the retired fallback", () => {
     const inn = SPEED_LAB_TOWN_ASSETS.find(asset => asset.id === "wayfarerInn")!;
     const collider = RAPID_PRACTICE_TOWN_COLLIDERS.find(candidate => candidate.id === "wayfarer-inn")!;
-    expect(Math.hypot(FAST_WORLD_TAVERN_ENTRANCE.x - inn.position[0], FAST_WORLD_TAVERN_ENTRANCE.z - inn.position[2])).toBeLessThan(5);
+    expect(Math.hypot(FAST_WORLD_TAVERN_ENTRANCE.x - inn.position[0], FAST_WORLD_TAVERN_ENTRANCE.z - inn.position[2])).toBeLessThan(5.5);
     expect(FAST_WORLD_TAVERN_ENTRANCE.x).toBeGreaterThan(collider.maxX);
     expect(FAST_WORLD_TAVERN_ENTRANCE.z).toBeGreaterThanOrEqual(collider.minZ);
     expect(FAST_WORLD_TAVERN_ENTRANCE.z).toBeLessThanOrEqual(collider.maxZ);
