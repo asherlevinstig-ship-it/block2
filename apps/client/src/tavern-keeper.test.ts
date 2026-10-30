@@ -30,6 +30,6 @@ describe("tavern quiz table interaction", () => {
   });
 
   it("supports the dedicated room's blue-and-gold table", () => {
-    expect(canPlayAtTavernTable({ x: 3.6, y: 8, z: .5 }, true, TAVERN_ROOM_QUIZ_TABLE)).toBe(true);
+    expect(canPlayAtTavernTable({ x: 0, y: 8, z: 3.2 }, true, TAVERN_ROOM_QUIZ_TABLE)).toBe(true);
   });
 });

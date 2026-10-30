@@ -11,7 +11,7 @@ const TORCH_URL = `${DUNGEON_ASSET_ROOT}/torch_lit.gltf.glb`;
 export const TAVERN_ROOM_ZONES = {
   entrance: { x: 0, z: 5.6, radius: 2.2 },
   bar: { x: -7.2, z: -1.5, radius: 3.2 },
-  hearth: { x: 3.8, z: -5.7, radius: 3.5 },
+  hearth: { x: 3.8, z: -6.2, radius: 3.1 },
   dining: { x: 4.6, z: 2.8, radius: 3.4 },
 } as const;
 
@@ -181,50 +181,52 @@ export function createTavernRoom(app: pc.Application): pc.Entity {
   for (let line = 0; line < 4; line++)
     box(root, "bar-menu-line", brass, [.035, .045, 1.35 - line * .1], [-9.15, 12.42 - line * .28, -1.4]);
 
-  // A single monumental hearth anchors the back wall.
+  // A restrained stone hearth anchors the back wall without swallowing the room.
   const hearthX = 3.8;
-  box(root, "hearth-plinth", stoneLight, [6.7, .48, 2.35], [hearthX, 8.24, -6.72]);
-  box(root, "hearth-back", stone, [6.5, 4.8, .62], [hearthX, 10.15, -7.55]);
-  box(root, "hearth-recess", iron, [3.65, 2.55, .24], [hearthX, 9.35, -7.04]);
-  box(root, "hearth-pillar-left", stoneLight, [.88, 3.55, 1.05], [hearthX - 2.28, 9.85, -6.92]);
-  box(root, "hearth-pillar-right", stoneLight, [.88, 3.55, 1.05], [hearthX + 2.28, 9.85, -6.92]);
-  box(root, "hearth-lintel", stoneLight, [5.45, .78, 1.08], [hearthX, 11.52, -6.92]);
-  box(root, "hearth-mantle", stone, [6.15, .32, 1.35], [hearthX, 11.98, -6.88]);
-  box(root, "hearth-chimney", stone, [2.7, 2.1, .82], [hearthX, 13.02, -7.48]);
-  for (let index = 0; index < 7; index++) {
-    const angle = Math.PI * index / 6;
-    const arch = box(root, "hearth-arch-stone", stoneLight, [.72, .5, .84],
-      [hearthX + Math.cos(angle) * 1.85, 10.35 + Math.sin(angle) * 1.18, -6.78]);
-    arch.setLocalEulerAngles(0, 0, 90 - angle * 180 / Math.PI);
+  box(root, "hearth-plinth", stoneLight, [5.25, .36, 1.7], [hearthX, 8.18, -6.82]);
+  box(root, "hearth-back", stone, [4.85, 4.35, .58], [hearthX, 10.05, -7.58]);
+  box(root, "hearth-recess", iron, [2.55, 2.2, .3], [hearthX, 9.25, -6.98]);
+  for (const x of [hearthX - 1.72, hearthX + 1.72]) {
+    box(root, "hearth-pier", stoneLight, [.7, 3.25, .92], [x, 9.72, -6.9]);
+    for (const y of [8.55, 9.45, 10.35])
+      box(root, "hearth-pier-course", stone, [.78, .08, .98], [x, y, -6.86]);
   }
+  box(root, "hearth-lintel", stoneLight, [4.05, .68, 1], [hearthX, 10.96, -6.9]);
+  box(root, "hearth-corbel-left", stoneLight, [.72, .5, .95], [hearthX - 1.34, 10.55, -6.88], [0, 0, -22]);
+  box(root, "hearth-corbel-right", stoneLight, [.72, .5, .95], [hearthX + 1.34, 10.55, -6.88], [0, 0, 22]);
+  box(root, "hearth-mantle", stone, [4.75, .28, 1.22], [hearthX, 11.42, -6.88]);
+  box(root, "hearth-chimney", stone, [2.25, 2.45, .74], [hearthX, 12.65, -7.52]);
   for (const yaw of [-28, 28])
-    cylinder(root, "hearth-log", oak, [.25, 1.45, .25], [hearthX, 8.58, -6.55], [0, 0, yaw]);
-  for (const offset of [-.9, -.45, 0, .45, .9])
-    shape(root, "hearth-ember", "sphere", ember, [.18, .11, .18], [hearthX + offset, 8.64, -6.38]);
-  const flames = [-.72, -.26, .2, .66].map((offset, index) =>
-    shape(root, `hearth-flame-${index}`, "cone", index % 2 ? ember : fire,
-      [.5, 1.15 + (index % 2) * .34, .5], [hearthX + offset, 9.05, -6.32], [0, 0, offset * 15]));
+    cylinder(root, "hearth-log", oak, [.2, 1.08, .2], [hearthX, 8.46, -6.46], [0, 0, yaw]);
+  for (const offset of [-.72, -.36, 0, .36, .72])
+    shape(root, "hearth-ember", "sphere", ember, [.15, .08, .12], [hearthX + offset, 8.5, -6.28]);
+  const flameSpecs = [
+    [-.58, .38, .62], [-.22, .46, .86], [.16, .42, .72], [.52, .34, .56],
+  ] as const;
+  const flames = flameSpecs.map(([offset, width, height], index) =>
+    shape(root, `hearth-flame-${index}`, "sphere", index % 2 ? ember : fire,
+      [width, height, .19], [hearthX + offset, 8.68 + height * .45, -6.22]));
   const fireParticles = new pc.Entity("hearth-particles");
-  fireParticles.setLocalPosition(hearthX, 8.68, -6.22);
+  fireParticles.setLocalPosition(hearthX, 8.54, -6.16);
   root.addChild(fireParticles);
   addCallingParticleLayers(app, fireParticles, [
-    { kind: "glow", texture: "orb", count: 16, life: .72, radius: .75, speed: .2, rise: 1.15, size: .5, color: [1, .24, .025], opacity: .9 },
-    { kind: "spark", texture: "rune", count: 9, life: 1.1, radius: .65, speed: .3, rise: 1.7, size: .12, color: [1, .66, .12], opacity: .82 },
-    { kind: "smoke", texture: "smoke", count: 7, life: 2.3, radius: .52, speed: .08, rise: .62, size: .48, color: [.16, .14, .13], opacity: .28 },
-  ], true, .85);
+    { kind: "glow", texture: "orb", count: 13, life: .62, radius: .52, speed: .14, rise: .82, size: .34, color: [1, .23, .02], opacity: .78 },
+    { kind: "spark", texture: "rune", count: 7, life: 1.05, radius: .48, speed: .24, rise: 1.35, size: .08, color: [1, .62, .1], opacity: .75 },
+    { kind: "smoke", texture: "smoke", count: 5, life: 2.5, radius: .4, speed: .05, rise: .52, size: .38, color: [.13, .12, .11], opacity: .2 },
+  ], true, .72);
   const hearthLight = new pc.Entity("hearth-light");
-  hearthLight.addComponent("light", { type: "omni", color: new pc.Color(1, .34, .075), intensity: 3, range: 13, castShadows: true, shadowResolution: 512 });
-  hearthLight.setLocalPosition(hearthX, 9.5, -5.75);
+  hearthLight.addComponent("light", { type: "omni", color: new pc.Color(1, .36, .1), intensity: 1.75, range: 8, castShadows: true, shadowResolution: 512 });
+  hearthLight.setLocalPosition(hearthX, 9.05, -5.9);
   root.addChild(hearthLight);
-  box(root, "hearth-rug", rugRed, [6.2, .04, 3.55], [hearthX, 8.025, -3.85]);
-  for (const [x, z, yaw] of [[1.05, -3.9, 90], [6.55, -3.9, 90]] as const) {
-    box(root, "hearth-bench-seat", oakLight, [2.8, .28, .75], [x, 8.68, z], [0, yaw, 0]);
-    box(root, "hearth-bench-back", oak, [2.8, 1.1, .26], [x, 9.24, z], [0, yaw, 0]);
+  box(root, "hearth-rug", rugRed, [5.25, .04, 2.55], [hearthX, 8.025, -4.75]);
+  for (const [x, z, yaw] of [[.9, -5.0, 90], [6.7, -5.0, 90]] as const) {
+    box(root, "hearth-bench-seat", oakLight, [2.15, .28, .68], [x, 8.68, z], [0, yaw, 0]);
+    box(root, "hearth-bench-back", oak, [2.15, .94, .24], [x, 9.17, z], [0, yaw, 0]);
   }
 
-  addRoundTable(root, "quiz-table", 3.6, -1.4, oak, oakLight, brass);
+  addRoundTable(root, "quiz-table", 0, 1.35, oak, oakLight, brass);
   addRoundTable(root, "dining-table", 5.6, 3.35, oak, oakLight, brass);
-  box(root, "quiz-rug", rugGreen, [4.6, .038, 3.7], [3.6, 8.022, -1.4]);
+  box(root, "quiz-rug", rugGreen, [4.35, .038, 3.55], [0, 8.022, 1.35]);
   box(root, "dining-rug", rugGreen, [4.5, .038, 3.8], [5.6, 8.022, 3.35]);
 
   box(root, "notice-board", oak, [3.4, 2.25, .18], [-6.8, 10.55, 7.68]);
@@ -237,8 +239,8 @@ export function createTavernRoom(app: pc.Application): pc.Entity {
   shape(maraFallback, "mara-head", "sphere", brass, [.46, .46, .46], [-8.2, 10.62, -1.5]);
 
   loadProp(app, CHAIR_URL, root, [
-    { position: [1.75, 8.02, -1.4], yaw: 90, scale: 1.05 },
-    { position: [5.45, 8.02, -1.4], yaw: -90, scale: 1.05 },
+    { position: [-1.85, 8.02, 1.35], yaw: 90, scale: 1.05 },
+    { position: [1.85, 8.02, 1.35], yaw: -90, scale: 1.05 },
     { position: [3.75, 8.02, 3.35], yaw: 90, scale: 1.05 },
     { position: [7.45, 8.02, 3.35], yaw: -90, scale: 1.05 },
   ]);
@@ -274,9 +276,12 @@ export function createTavernRoom(app: pc.Application): pc.Entity {
     if (!root.enabled) return;
     elapsed += dt;
     const flicker = Math.sin(elapsed * 9.7) * .08 + Math.sin(elapsed * 17.3) * .045;
-    if (hearthLight.light) hearthLight.light.intensity = 3.05 + flicker * 2.2;
-    flames.forEach((flame, index) => flame.setLocalScale(.48 + index % 2 * .12,
-      1.15 + (index === 1 ? .45 : 0) + Math.sin(elapsed * (7 + index)) * .12, .48));
+    if (hearthLight.light) hearthLight.light.intensity = 1.75 + flicker * .85;
+    flames.forEach((flame, index) => {
+      const [, width, height] = flameSpecs[index]!;
+      flame.setLocalScale(width * (1 + Math.sin(elapsed * (6.4 + index)) * .09),
+        height * (1 + Math.sin(elapsed * (7.2 + index * .7)) * .14), .19);
+    });
   });
   return root;
 }
