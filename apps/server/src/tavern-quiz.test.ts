@@ -12,6 +12,12 @@ describe("tavern quiz", () => {
     expect(canStartTavernQuiz({ x: 12.5, y: 5, z: 22.5 }, 20, 5)).toBe(false);
   });
 
+  it("accepts the dedicated tavern room table", () => {
+    const table = { x: 3.6, y: 9, z: -1.4 };
+    expect(canStartTavernQuiz({ x: 3.6, y: 8, z: .2 }, 20, 5, table)).toBe(true);
+    expect(canStartTavernQuiz({ x: -3.6, y: 8, z: .2 }, 20, 5, table)).toBe(false);
+  });
+
   it("never repeats a question or exposes an invalid answer index", () => {
     const asked: string[] = [];
     for (let index = 0; index < 16; index += 1) {

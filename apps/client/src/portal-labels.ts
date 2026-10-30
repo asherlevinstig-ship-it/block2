@@ -8,6 +8,12 @@ export type PortalLabel = {
 
 /** One naming source for floating labels and the contextual E prompt. */
 export function portalLabel(id: string, kind: string, wardenGateUnlocked = false): PortalLabel {
+  if (id === "tavern-entry") return {
+    title: "THE HEARTH & HAMMER", subtitle: "TAVERN · REST, RUMOURS & GAMES", action: "ENTER", locked: false, tone: "tower",
+  };
+  if (id === "tavern-exit") return {
+    title: "RETURN TO TOWN", subtitle: "TOWN OF BEGINNINGS · SAFE", action: "RETURN", locked: false, tone: "tower",
+  };
   if (id === "tower-floor-1-entry") return {
     title: "ENTER FLOOR 1", subtitle: "THE OVERGROWN RAMPART · LV 1–4", action: "ENTER", locked: false, tone: "tower",
   };

@@ -30,10 +30,11 @@ export type QuizRound = {
   phase: "question" | "decision";
 };
 
-export function canStartTavernQuiz(player: { x: number; y: number; z: number }, coins: number, stake: number): boolean {
+export function canStartTavernQuiz(player: { x: number; y: number; z: number }, coins: number, stake: number,
+  table: { x: number; y: number; z: number } = TOWN_TAVERN_QUIZ_TABLE_POSITION): boolean {
   return Number.isInteger(stake) && stake >= 1 && stake <= TAVERN_QUIZ_MAX_STAKE && coins >= stake
-    && Math.abs(player.y - TOWN_TAVERN_QUIZ_TABLE_POSITION.y) <= 1.6
-    && Math.hypot(player.x - TOWN_TAVERN_QUIZ_TABLE_POSITION.x, player.z - TOWN_TAVERN_QUIZ_TABLE_POSITION.z) <= 2.6;
+    && Math.abs(player.y - table.y) <= 1.6
+    && Math.hypot(player.x - table.x, player.z - table.z) <= 2.8;
 }
 
 export function drawQuizQuestion(askedIds: readonly string[], random = Math.random): QuizQuestion | null {

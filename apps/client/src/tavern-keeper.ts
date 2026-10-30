@@ -13,18 +13,22 @@ export const TAVERN_KEEPER_LINES = [
 ] as const;
 
 export const TAVERN_QUIZ_TABLE = { ...TOWN_TAVERN_QUIZ_TABLE_POSITION, interactRange: 2.6 } as const;
+export const TAVERN_ROOM_KEEPER = { name: "Mara", x: -4.6, y: 9.5, z: -6, talkRange: 2.8 } as const;
+export const TAVERN_ROOM_QUIZ_TABLE = { x: 3.6, y: 9, z: -1.4, interactRange: 2.8 } as const;
 
-export function canPlayAtTavernTable(player: { x: number; y: number; z: number }, tavernVisible: boolean): boolean {
+export function canPlayAtTavernTable(player: { x: number; y: number; z: number }, tavernVisible: boolean,
+  table: typeof TAVERN_QUIZ_TABLE | typeof TAVERN_ROOM_QUIZ_TABLE = TAVERN_QUIZ_TABLE): boolean {
   return tavernVisible
-    && Math.abs(player.y - TAVERN_QUIZ_TABLE.y) <= 1.6
-    && Math.hypot(player.x - TAVERN_QUIZ_TABLE.x, player.z - TAVERN_QUIZ_TABLE.z) <= TAVERN_QUIZ_TABLE.interactRange;
+    && Math.abs(player.y - table.y) <= 1.6
+    && Math.hypot(player.x - table.x, player.z - table.z) <= table.interactRange;
 }
 
 export function canTalkToTavernKeeper(
   player: { x: number; y: number; z: number },
   keeperVisible: boolean,
+  keeper: typeof TAVERN_KEEPER | typeof TAVERN_ROOM_KEEPER = TAVERN_KEEPER,
 ): boolean {
   return keeperVisible
-    && Math.abs(player.y - TAVERN_KEEPER.y) <= 1.6
-    && Math.hypot(player.x - TAVERN_KEEPER.x, player.z - TAVERN_KEEPER.z) <= TAVERN_KEEPER.talkRange;
+    && Math.abs(player.y - keeper.y) <= 1.6
+    && Math.hypot(player.x - keeper.x, player.z - keeper.z) <= keeper.talkRange;
 }

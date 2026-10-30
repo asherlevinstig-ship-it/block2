@@ -13,4 +13,9 @@ describe("portal labels", () => {
     expect(portalWorldLabel(floorTwo)).toContain("ASCENT GATE · SEALED");
     expect(portalLabel("warden-gate", "entry", false).action).toBe("SEALED");
   });
+
+  it("names both sides of the tavern doorway", () => {
+    expect(portalLabel("tavern-entry", "tavern-entry").title).toBe("THE HEARTH & HAMMER");
+    expect(portalInteractionPrompt(portalLabel("tavern-exit", "tavern-exit"))).toBe("RETURN TO TOWN · hold E to return");
+  });
 });

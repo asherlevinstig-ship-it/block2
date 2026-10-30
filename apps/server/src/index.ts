@@ -1,6 +1,6 @@
 import { listen } from "@colyseus/tools";
 import { defineRoom, defineServer } from "@colyseus/core";
-import { PRACTICE_ROOM, SILVER_DEPTHS_ROOM, WORLD_ROOM } from "@blockcraft/protocol";
+import { PRACTICE_ROOM, SILVER_DEPTHS_ROOM, TAVERN_ROOM, WORLD_ROOM } from "@blockcraft/protocol";
 import { WorldRoom } from "./game-room.js";
 
 const SERVER_BUILD = "warden-upgrade-button-v309";
@@ -10,6 +10,7 @@ const gameServer = defineServer({
     [WORLD_ROOM]: defineRoom(WorldRoom, { roomKind: "overworld" }),
     [SILVER_DEPTHS_ROOM]: defineRoom(WorldRoom, { roomKind: "silver-depths" }).filterBy(["instanceKey"]),
     [PRACTICE_ROOM]: defineRoom(WorldRoom, { roomKind: "practice" }),
+    [TAVERN_ROOM]: defineRoom(WorldRoom, { roomKind: "tavern" }),
   },
   express: app => {
     app.get("/health", (_request, response) => response.json({

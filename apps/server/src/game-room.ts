@@ -221,6 +221,7 @@ import {
   type ResourceGathered,
   type TavernQuizUpdate,
   SILVER_DEPTHS_ROOM,
+  TAVERN_ROOM,
   SilverDepthsRouteRequestSchema,
   type SilverDepthsWing,
   WORLD_ROOM,
@@ -371,7 +372,7 @@ interface SilverDepthsRunStats {
 }
 
 type WorldRoomOptions = {
-  roomKind?: "overworld" | "silver-depths" | "practice";
+  roomKind?: "overworld" | "silver-depths" | "practice" | "tavern";
   instanceKey?: string;
   partySize?: number;
   prototype?: "2d";
@@ -697,7 +698,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private realmWardenRepeatActive = false;
   private realmWardenRepeatAvailableAt = 0;
   private worldSeed = "blockcraft-dev";
-  private roomKind: "overworld" | "silver-depths" | "practice" = "overworld";
+  private roomKind: "overworld" | "silver-depths" | "practice" | "tavern" = "overworld";
   private rapidPractice = false;
   private rapidPracticeWave = 1;
   private rapidPracticeWaveAdvanceAt = 0;
@@ -730,8 +731,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly silverDepthsTransferPending = new Map<string, number>();
 
   override async onCreate(options: WorldRoomOptions = {}): Promise<void> {
-    this.roomKind = options.roomKind === "silver-depths" ? "silver-depths" : options.roomKind === "practice" ? "practice" : "overworld";
-    this.rapidPractice = this.roomKind === "practice" && options.prototype === "2d";
+    this.roomKind = options.roomKind === "silver-depths" ? "silver-depths"
+      : options.roomKind === "practice" ? "practice" : options.roomKind === "tavern" ? "tavern" : "overworld";
+    this.rapidPractice = this.roomKind === "tavern" || this.roomKind === "practice" && options.prototype === "2d";
     // The Colyseus input stream is the default. Keep an explicit server-side
     // rollback while older clients can still use the legacy "move" messages.
     this.movementShadowEnabled = process.env.MOVEMENT_NETCODE_LEGACY !== "1";
@@ -744,6 +746,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.instancePartySize = Math.max(1, Math.min(4, Math.floor(options.partySize ?? 1)));
     if (this.roomKind === "silver-depths") this.maxClients = 4;
     if (this.roomKind === "practice") this.maxClients = this.rapidPractice ? 20 : 1;
+    if (this.roomKind === "tavern") this.maxClients = 20;
     this.worldSeed = String(process.env.WORLD_SEED || "blockcraft-dev");
     this.worldDeltaStorageKey = worldDeltaHashKey(this.worldSeed);
     if (this.roomKind === "overworld") {
@@ -832,6 +835,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           this.configureRapidWorldMob(spawn.id, this.state.mobs.get(spawn.id)!);
         }
         if (FAST_WORLD_TOWN_ONLY) {
+          const tavernEntry = new ForestPortalState();
+          Object.assign(tavernEntry, { x: 95.15, y: 8, z: 96.2, kind: "tavern-entry", expiresAt: 0 });
+          this.state.portals.set("tavern-entry", tavernEntry);
           const entry = new ForestPortalState();
           Object.assign(entry, TOWER_FLOOR_ONE.townPortal, { kind: "tower-entry", expiresAt: 0 });
           this.state.portals.set("tower-floor-1-entry", entry);
@@ -847,6 +853,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         this.registerMob("practice-spitter", "cave_spitter", { x: 105.5, y: 8, z: 108.5 });
         for (const mob of this.state.mobs.values()) { mob.name = "Training " + mob.name; mob.attackDamage = 1; mob.maxHealth = mob.health = 28; }
       }
+    }
+    if (this.roomKind === "tavern") {
+      this.state.mobs.clear(); this.mobHomes.clear(); this.state.portals.clear();
+      const exit = new ForestPortalState();
+      Object.assign(exit, { x: 0, y: 8, z: 7.7, kind: "tavern-exit", expiresAt: 0 });
+      this.state.portals.set("tavern-exit", exit);
     }
     this.onMessage("world:ready", client => {
       client.send("world:bootstrap", this.bootstrapPayload(this.state.players.get(client.sessionId)));
@@ -1013,6 +1025,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       else if (id.startsWith("depths-")) this.useSilverDepthsPortal(client, payload);
       else if (id.startsWith("ember-")) this.useEmberVaultPortal(client, payload);
       else if (id.startsWith("tower-floor-")) this.useTowerPortal(client, id);
+      else if (id.startsWith("tavern-")) this.useTavernPortal(client, id);
       else this.useForestPortal(client, payload);
     });
     this.onMessage("recovery:collect", (client, payload: unknown) => {
@@ -1193,7 +1206,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const returningFromDepths = typeof options === "object" && options && "returnFrom" in options && options.returnFrom === "silver-depths";
     const instanceSpawn = SILVER_DEPTHS_PARTY_SPAWNS.find(candidate => [...this.state.players.values()]
       .every(other => Math.hypot(other.x - candidate.x, other.z - candidate.z) >= 1.25)) ?? SILVER_DEPTHS_ENTRY_POSITION;
-    const spawn = this.roomKind === "practice" ? { x: 99.5, y: 8, z: 106.5 }
+    const spawn = this.roomKind === "tavern" ? { x: 0, y: 8, z: 4.8 }
+      : this.roomKind === "practice" ? { x: 99.5, y: 8, z: 106.5 }
       : this.roomKind === "silver-depths" ? instanceSpawn
       : process.env.NODE_ENV !== "production" && requestedQaSpawn === "cave"
       ? { x: 37.5, y: 3, z: 8.5 }
@@ -1557,7 +1571,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const player = this.state.players.get(client.sessionId);
     if (!parsed.success || !player) return this.quizError(client, "Choose a stake of 1, 5, or 10 coins.");
     if (this.quizRounds.has(client.sessionId)) return this.sendQuizState(client);
-    if (!canStartTavernQuiz(player, player.coins, parsed.data.stake)) {
+    if (!canStartTavernQuiz(player, player.coins, parsed.data.stake,
+      this.roomKind === "tavern" ? { x: 3.6, y: 9, z: -1.4 } : undefined)) {
       return this.quizError(client, "Stand by the blue-and-gold quiz table with enough coins to place that stake.");
     }
     const question = drawQuizQuestion([]);
@@ -4383,7 +4398,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   }
 
   private sendObjectiveState(client: Client, force = false): void {
-    if (this.roomKind === "practice") return;
+    if (this.roomKind === "practice" || this.roomKind === "tavern") return;
     this.ensureFirstExpeditionReward(client, Date.now());
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
@@ -8626,6 +8641,23 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     void this.persistPlayer(client.sessionId, player);
   }
 
+  private useTavernPortal(client: Client, id: string): void {
+    const player = this.state.players.get(client.sessionId), portal = this.state.portals.get(id), now = Date.now();
+    if (!player || !portal || !canUseForestPortal(player, portal, now)
+      || now - (this.forestTravelAt.get(client.sessionId) ?? -Infinity) < 900) return;
+    const entering = id === "tavern-entry" && this.roomKind === "practice";
+    const leaving = id === "tavern-exit" && this.roomKind === "tavern";
+    if (!entering && !leaving) return;
+    this.forestTravelAt.set(client.sessionId, now);
+    player.defending = false; player.powerCastStartedAt = 0;
+    player.invulnerableUntil = Math.max(player.invulnerableUntil, now + 1_500);
+    void this.persistPlayer(client.sessionId, player, true).then(() => client.send("room:transfer", {
+      room: entering ? TAVERN_ROOM : PRACTICE_ROOM,
+      returnFrom: entering ? undefined : "tavern",
+      worldRoomId: this.roomId,
+    } satisfies RoomTransfer)).catch(() => client.send("portal:notice", "The tavern door is stuck. Please try again."));
+  }
+
   private async returnPlayerToTown(client: Client): Promise<void> {
     const player = this.state.players.get(client.sessionId);
     if (!player || player.health > 0) return;
@@ -9411,12 +9443,18 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   }
 
   private readWorldBlock = Object.assign((x: number, y: number, z: number) => {
+    if (this.roomKind === "tavern") {
+      const wall = (Math.abs(x) >= 9 && Math.abs(x) <= 10 && z >= -8 && z <= 8.5)
+        || (z <= -8 && z >= -9 && Math.abs(x) <= 10)
+        || (z >= 8 && z <= 9 && Math.abs(x) >= 1.35 && Math.abs(x) <= 10);
+      return y < 8 || wall && y < 13 ? Block.Stone : Block.Air;
+    }
     if (this.rapidPractice) return FAST_WORLD_BLOCK_READER(x, y, z);
     if (y < 0) return Block.Bedrock;
     if (y >= CHUNK_HEIGHT) return Block.Air;
     const address = worldToChunk(x, z);
     return getBlock(this.getChunk(address.chunkX, address.chunkZ).chunk, address.localX, y, address.localZ);
-  }, { groundHeight: (x: number,z: number) => this.rapidPractice
+  }, { groundHeight: (x: number,z: number) => this.roomKind === "tavern" ? 8 : this.rapidPractice
     ? FAST_WORLD_BLOCK_READER.groundHeight?.(x, z) : undefined });
 
   private resolveBrambleSnares(now: number): void {

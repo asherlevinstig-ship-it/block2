@@ -151,6 +151,7 @@ import { loadTowerChronicleMonument } from "./tower-chronicle-asset.js";
 import { towerFloorOneAtmosphere } from "./tower-floor-one-atmosphere.js";
 import { portalInteractionPrompt, portalLabel, portalWorldLabel } from "./portal-labels.js";
 import { createFastWorldSky } from "./fast-world-sky.js";
+import { createTavernRoom } from "./tavern-room.js";
 import { createPaintedGroundMaterial, fitGroundTexture, fitOrganicGroundPatch, createWoodlandTrailMesh, woodlandFernMesh } from "./fast-world-texture.js";
 import {
   GREENWOOD_ASSET_PLACEMENTS,
@@ -315,6 +316,7 @@ import {
   WORLD_ROOM,
   SILVER_DEPTHS_ROOM,
   PRACTICE_ROOM,
+  TAVERN_ROOM,
   type RoomTransfer,
   type ActionRejected,
   type BlacksmithUpdate,
@@ -514,7 +516,8 @@ import { CombatAudio, enemyCuePan, enemyCuesForTransition, type EnemyCue, type E
 import { LazySceneDressing } from "./lazy-scene-dressing.js";
 import { WARDEN_LOOT_BEAM_MS } from "./warden-victory-effects.js";
 import { advanceIndoorCameraBlend, indoorCameraOffset } from "./indoor-camera.js";
-import { canPlayAtTavernTable, canTalkToTavernKeeper, TAVERN_KEEPER, TAVERN_KEEPER_LINES, TAVERN_QUIZ_TABLE } from "./tavern-keeper.js";
+import { canPlayAtTavernTable, canTalkToTavernKeeper, TAVERN_KEEPER, TAVERN_KEEPER_LINES, TAVERN_QUIZ_TABLE,
+  TAVERN_ROOM_KEEPER, TAVERN_ROOM_QUIZ_TABLE } from "./tavern-keeper.js";
 import { BLACKSMITH_STALL, canTradeAtBlacksmithStall } from "./blacksmith.js";
 import { FAST_WORLD_BLACKSMITH_POSITION } from "@blockcraft/protocol";
 import "./styles.css";
@@ -1114,6 +1117,8 @@ const canvas = document.querySelector<HTMLCanvasElement>("#game")!;
 const initialPageQuery = new URLSearchParams(window.location.search);
 const initialGameExperience = gameExperience(initialPageQuery);
 const fastWorldRequested = usesFastWorld(initialPageQuery);
+const tavernRoomRequested = initialPageQuery.get("room") === "tavern";
+document.documentElement.classList.toggle("tavern-room-active", tavernRoomRequested);
 const fastWorldNavigationDebug = fastWorldRequested && initialPageQuery.get("navdebug") === "1";
 document.documentElement.classList.toggle("fast-world-active", fastWorldRequested);
 document.documentElement.classList.toggle("legacy-voxel-active", initialGameExperience === "legacy-voxel");
@@ -1624,13 +1629,13 @@ camera.addComponent("camera", {
   toneMapping: pc.TONEMAP_ACES, gammaCorrection: pc.GAMMA_SRGB,
 });
 app.root.addChild(camera);
-if (fastWorldRequested && FAST_WORLD_TOWN_ONLY) createFastWorldSky(app, camera);
+if (fastWorldRequested && FAST_WORLD_TOWN_ONLY && !tavernRoomRequested) createFastWorldSky(app, camera);
 const CAMERA_ZOOM_STORAGE_KEY = "blockcraft-tablet-camera-zoom-v1";
 const storedCameraDistance = (() => {
   try { return Number(window.localStorage.getItem(CAMERA_ZOOM_STORAGE_KEY)) || undefined; } catch { return undefined; }
 })();
 let cameraOrbit = fastWorldRequested
-  ? { ...initialCameraOrbit(39), pitch: Math.PI * .4, yawSpeed: 0, pitchSpeed: 0 }
+  ? { ...initialCameraOrbit(tavernRoomRequested ? 7.5 : 39), pitch: Math.PI * .4, yawSpeed: 0, pitchSpeed: 0 }
   : initialCameraOrbit(storedCameraDistance);
 const CAMERA_VIEW_STORAGE_KEY = "blockcraft-camera-view-v1";
 let cameraViewMode: CameraViewMode = (() => {
@@ -1872,6 +1877,12 @@ function readWorldBlock(x: number, y: number, z: number): BlockId {
 const readCollisionWorldBlock = Object.assign(function (x: number, y: number, z: number): BlockId {
   if (y < 0) return Block.Bedrock;
   // Fast World uses the same boundary as the server, even when old practice chunks are loaded.
+  if (tavernRoomRequested) {
+    const wall = (Math.abs(x) >= 9 && Math.abs(x) <= 10 && z >= -8 && z <= 8.5)
+      || (z <= -8 && z >= -9 && Math.abs(x) <= 10)
+      || (z >= 8 && z <= 9 && Math.abs(x) >= 1.35 && Math.abs(x) <= 10);
+    return y < 8 || wall && y < 13 ? Block.Stone : Block.Air;
+  }
   if (fastWorldRequested) return rapidPracticeCollisionCellSolid(x, y, z) ? Block.Stone : Block.Air;
   if (y >= CHUNK_HEIGHT) return Block.Air;
   const address = worldToChunk(x, z);
@@ -2266,7 +2277,14 @@ function addBox(
 
 const rapidPrototypeRoot = new pc.Entity("rapid-2d-speed-lab");
 app.root.addChild(rapidPrototypeRoot);
-rapidPrototypeRoot.enabled = fastWorldRequested;
+rapidPrototypeRoot.enabled = fastWorldRequested && !tavernRoomRequested;
+if (tavernRoomRequested) {
+  createTavernRoom(app);
+  app.scene.ambientLight = new pc.Color(.2, .14, .09);
+  app.scene.fog.color = new pc.Color(.12, .075, .045);
+  app.scene.fog.start = 20; app.scene.fog.end = 42;
+  if (camera.camera) { camera.camera.clearColor = new pc.Color(.12, .075, .045); camera.camera.farClip = 48; }
+}
 let towerFloorOneWorld: pc.Entity | null = null;
 type TowerChronicleFloorVisual = { floor: number; victory: pc.Entity[]; locked: pc.Entity[] };
 const towerChronicleFloors: TowerChronicleFloorVisual[] = [];
@@ -4017,6 +4035,7 @@ if (fastWorldRequested) {
 
   fastWorldMapPanel = document.createElement("aside");
   fastWorldMapPanel.id = "fast-world-map";
+  fastWorldMapPanel.hidden = tavernRoomRequested;
   fastWorldMapPanel.dataset.expanded = "false";
   fastWorldMapPanel.innerHTML = '<header><strong>REALM MAP</strong><span>M · click a discovered marker</span></header><canvas width="224" height="172" aria-label="Fast World regional map"></canvas><section class="fast-world-nearby-leader" hidden><small>♛ NEARBY MINI-BOSS</small><strong></strong><span></span></section><footer>Undiscovered landmarks appear when approached.</footer>';
   fastWorldMapCanvas = fastWorldMapPanel.querySelector("canvas");
@@ -12381,7 +12400,8 @@ function refreshPotionUi(): void {
   const quantity = inventoryCounts.get("healing_potion") ?? 0;
   const remaining = Math.max(0, potionCooldownUntil - (performance.now() + serverClock.offset));
   const pending = performance.now() < potionPendingUntil;
-  const nearby = canTalkToTavernKeeper(localPlayer.getPosition(), sceneDressing.keeperVisible);
+  const nearby = canTalkToTavernKeeper(localPlayer.getPosition(), tavernRoomRequested || sceneDressing.keeperVisible,
+    tavernRoomRequested ? TAVERN_ROOM_KEEPER : TAVERN_KEEPER);
   const key = `${quantity}:${Math.ceil(remaining / 1000)}:${pending}:${nearby}:${Boolean(room)}:${tavernCoinBalance}:${potionHealth}:${potionMaxHealth}`;
   if (key === potionUiKey) return;
   potionUiKey = key;
@@ -12395,7 +12415,8 @@ function refreshPotionUi(): void {
 }
 function requestPotion(buying = false): void {
   if (!room || performance.now() < potionPendingUntil) return;
-  if (buying && !canTalkToTavernKeeper(localPlayer.getPosition(), sceneDressing.keeperVisible)) return;
+  if (buying && !canTalkToTavernKeeper(localPlayer.getPosition(), tavernRoomRequested || sceneDressing.keeperVisible,
+    tavernRoomRequested ? TAVERN_ROOM_KEEPER : TAVERN_KEEPER)) return;
   potionPendingUntil = performance.now() + 3000;
   potionShopStatus.textContent = buying ? "Buying potion…" : "Drinking potion…";
   room.send(buying ? "potion:buy" : "potion:use");
@@ -13985,15 +14006,17 @@ function updateTarget(): void {
     blacksmithPrompt.style.left = `${rect.left + screen.x * rect.width / canvas.width}px`;
     blacksmithPrompt.style.top = `${rect.top + screen.y * rect.height / canvas.height}px`;
   }
-  const quizTableNearby = canPlayAtTavernTable(player, sceneDressing.keeperVisible);
+  const activeQuizTable = tavernRoomRequested ? TAVERN_ROOM_QUIZ_TABLE : TAVERN_QUIZ_TABLE;
+  const quizTableNearby = canPlayAtTavernTable(player, tavernRoomRequested || sceneDressing.keeperVisible, activeQuizTable);
   quizTablePrompt.hidden = !quizTableNearby || !quizPanel.hidden;
   if (!quizTablePrompt.hidden) {
-    const screen = camera.camera.worldToScreen(new pc.Vec3(TAVERN_QUIZ_TABLE.x, 9.5, TAVERN_QUIZ_TABLE.z));
+    const screen = camera.camera.worldToScreen(new pc.Vec3(activeQuizTable.x, activeQuizTable.y + .5, activeQuizTable.z));
     const rect = canvas.getBoundingClientRect();
     quizTablePrompt.style.left = `${rect.left + screen.x * rect.width / canvas.width}px`;
     quizTablePrompt.style.top = `${rect.top + screen.y * rect.height / canvas.height}px`;
   }
-  const keeperNearby = canTalkToTavernKeeper(player, sceneDressing.keeperVisible);
+  const keeperNearby = canTalkToTavernKeeper(player, tavernRoomRequested || sceneDressing.keeperVisible,
+    tavernRoomRequested ? TAVERN_ROOM_KEEPER : TAVERN_KEEPER);
   if (!keeperNearby && !tavernDialogue.hidden) closeTavernDialogue();
   const availability = hit ? miningAvailability(player, hit) : null;
   const inRange = availability !== "far";
@@ -14838,7 +14861,7 @@ function activateMovementPilot(joinedRoom: Room): void {
 minimap.setPingHandler((x, z) => {
   if (activeRoomName === SILVER_DEPTHS_ROOM && room) room.send("depths:ping", { x, z });
 });
-let activeRoomName: typeof WORLD_ROOM | typeof SILVER_DEPTHS_ROOM | typeof PRACTICE_ROOM = WORLD_ROOM;
+let activeRoomName: typeof WORLD_ROOM | typeof SILVER_DEPTHS_ROOM | typeof PRACTICE_ROOM | typeof TAVERN_ROOM = WORLD_ROOM;
 let currentWorldObjective: WorldObjectiveUpdate | null = null;
 let worldReady = false;
 let lastWorldBootstrapAt = Number.NEGATIVE_INFINITY;
@@ -16371,11 +16394,13 @@ function requestWorldInteraction(): void {
     openBlacksmith();
     return;
   }
-  if (canPlayAtTavernTable(localPlayer.getPosition(), sceneDressing.keeperVisible)) {
+  if (canPlayAtTavernTable(localPlayer.getPosition(), tavernRoomRequested || sceneDressing.keeperVisible,
+    tavernRoomRequested ? TAVERN_ROOM_QUIZ_TABLE : TAVERN_QUIZ_TABLE)) {
     openTavernQuiz();
     return;
   }
-  if (canTalkToTavernKeeper(localPlayer.getPosition(), sceneDressing.keeperVisible)) {
+  if (canTalkToTavernKeeper(localPlayer.getPosition(), tavernRoomRequested || sceneDressing.keeperVisible,
+    tavernRoomRequested ? TAVERN_ROOM_KEEPER : TAVERN_KEEPER)) {
     advanceTavernDialogue();
     return;
   }
@@ -19302,6 +19327,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   movementPilotRequested = useColyseusMovementPilot(query);
   const qaSpawn = import.meta.env.DEV ? query.get("qa") : null;
   activeRoomName = query.get("room") === "silver-depths" ? SILVER_DEPTHS_ROOM
+    : query.get("room") === "tavern" ? TAVERN_ROOM
     : fastWorldRequested || query.get("room") === "practice" ? PRACTICE_ROOM : WORLD_ROOM;
   const instanceKey = query.get("instanceKey");
   const partyTicket = query.get("partyTicket");
@@ -19339,7 +19365,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
         fetchFn: (input, init) => fetch(input, { ...init, signal }),
       });
       if (storedReconnectToken) return client.reconnect(storedReconnectToken);
-      if (activeRoomName === PRACTICE_ROOM) return client.create(activeRoomName, joinOptions);
+      if (activeRoomName === PRACTICE_ROOM || activeRoomName === TAVERN_ROOM) return client.create(activeRoomName, joinOptions);
       if (activeRoomName === WORLD_ROOM && returnFrom && worldRoomId) {
         return client.joinById(worldRoomId, joinOptions).catch(() => client.joinOrCreate(activeRoomName, joinOptions));
       }
@@ -19428,8 +19454,14 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       url.searchParams.delete("worldRoomId");
       url.searchParams.delete("returnFrom");
       status.textContent = `Opening a private Silver Depths instance for ${transfer.partySize ?? 1} player${transfer.partySize === 1 ? "" : "s"}...`;
+    } else if (transfer.room === TAVERN_ROOM) {
+      url.searchParams.set("room", "tavern");
+      url.searchParams.set("prototype", "2d");
+      url.searchParams.delete("returnFrom"); url.searchParams.delete("retry");
+      status.textContent = "Entering the Hearth & Hammer…";
     } else if (transfer.room === PRACTICE_ROOM) {
       url.searchParams.set("room", "practice");
+      url.searchParams.set("prototype", "2d");
       if (transfer.worldRoomId) url.searchParams.set("worldRoomId", transfer.worldRoomId);
       url.searchParams.delete("returnFrom"); url.searchParams.delete("retry");
       status.textContent = "Opening your private combat practice arena…";
