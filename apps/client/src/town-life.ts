@@ -60,7 +60,7 @@ export interface TownLandmarkSign {
 /** Symbol signs face the roads rather than adding more permanent HUD text. */
 export const SPEED_LAB_TOWN_SIGNS: readonly TownLandmarkSign[] = [
   { id: "founders-hall-sign", kind: "hall", position: [51, 8.15, 73], yaw: 0 },
-  { id: "wayfarer-inn-sign", kind: "inn", position: [81, 8.15, 76], yaw: 0 },
+  { id: "wayfarer-inn-sign", kind: "inn", position: [82, 8.15, 76], yaw: 0 },
   { id: "weavers-sign", kind: "weaver", position: [51, 8.15, 93.5], yaw: 0 },
   { id: "healer-sign", kind: "healer", position: [51, 8.15, 108.5], yaw: 0 },
   { id: "wardens-sign", kind: "barracks", position: [51, 8.15, 130], yaw: 0 },

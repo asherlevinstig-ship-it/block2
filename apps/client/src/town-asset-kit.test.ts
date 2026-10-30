@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  canUseForestPortal,
   FAST_WORLD_COLLISION_QUERY,
   FAST_WORLD_TAVERN_ENTRANCE,
   RAPID_PRACTICE_TOWN_COLLIDERS,
 } from "@blockcraft/protocol";
+import { Block, playerCollides } from "@blockcraft/voxel-world";
 import { SPEED_LAB_TOWN_ASSETS, TOWN_ASSET_FILES, readyTownFallbacks, townAssetUrl, type TownAssetId } from "./town-asset-kit.js";
 
 describe("town asset kit", () => {
@@ -43,7 +45,9 @@ describe("town asset kit", () => {
   it("places the tavern entrance beside the authored inn rather than the retired fallback", () => {
     const inn = SPEED_LAB_TOWN_ASSETS.find(asset => asset.id === "wayfarerInn")!;
     const collider = RAPID_PRACTICE_TOWN_COLLIDERS.find(candidate => candidate.id === "wayfarer-inn")!;
-    expect(Math.hypot(FAST_WORLD_TAVERN_ENTRANCE.x - inn.position[0], FAST_WORLD_TAVERN_ENTRANCE.z - inn.position[2])).toBeLessThan(5.5);
+    // The inn's enlarged authored mesh places its east doorway 6.7m from the
+    // model origin; this anchor intentionally follows that visible threshold.
+    expect(Math.hypot(FAST_WORLD_TAVERN_ENTRANCE.x - inn.position[0], FAST_WORLD_TAVERN_ENTRANCE.z - inn.position[2])).toBeLessThan(7);
     expect(FAST_WORLD_TAVERN_ENTRANCE.x).toBeGreaterThan(collider.maxX);
     expect(FAST_WORLD_TAVERN_ENTRANCE.z).toBeGreaterThanOrEqual(collider.minZ);
     expect(FAST_WORLD_TAVERN_ENTRANCE.z).toBeLessThanOrEqual(collider.maxZ);
@@ -56,13 +60,19 @@ describe("town asset kit", () => {
     expect(FAST_WORLD_COLLISION_QUERY.obstacleAt(79.7, 9, 79)).toMatchObject({
       id: "wayfarer-inn-facade-south",
     });
-    for (const z of [75, 75.5, 76, 76.5, 77]) {
-      expect(FAST_WORLD_COLLISION_QUERY.obstacleAt(79.7, 9, z)).toBeNull();
+    const read = Object.assign(
+      (x: number, y: number, z: number) => FAST_WORLD_COLLISION_QUERY.cellSolid(x, y, z) ? Block.Stone : Block.Air,
+      { groundHeight: FAST_WORLD_COLLISION_QUERY.groundHeight },
+    );
+    for (const z of [74.5, 75.5, 76, 76.5, 77.5]) {
+      for (const x of [83, 82, 81, 80.5, 79.5]) {
+        expect(playerCollides(read, x, 8, z), `${x},${z}`).toBe(false);
+      }
     }
-    expect(FAST_WORLD_COLLISION_QUERY.obstacleAt(
-      FAST_WORLD_TAVERN_ENTRANCE.x,
-      FAST_WORLD_TAVERN_ENTRANCE.y + 1,
-      FAST_WORLD_TAVERN_ENTRANCE.z,
-    )).toBeNull();
+    expect(canUseForestPortal(
+      { x: 83, y: 8, z: 76, health: 5 },
+      { ...FAST_WORLD_TAVERN_ENTRANCE, kind: "tavern-entry", expiresAt: 0 },
+      Date.now(),
+    )).toBe(true);
   });
 });
