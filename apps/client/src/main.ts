@@ -147,6 +147,7 @@ import { crownGateStatus } from "./crown-gate.js";
 import { createFloorOneRunUI, type FloorOneBossState } from "./floor-one-run-flow.js";
 import { createInteractionFeedback, holdStopMessage, holdStopReason, type HoldStopReason } from "./interaction-feedback.js";
 import { requestTowerFloorOneFortressAssets } from "./tower-floor-one-asset-kit.js";
+import { loadTowerChronicleMonument } from "./tower-chronicle-asset.js";
 import { towerFloorOneAtmosphere } from "./tower-floor-one-atmosphere.js";
 import { portalInteractionPrompt, portalLabel, portalWorldLabel } from "./portal-labels.js";
 import { createFastWorldSky } from "./fast-world-sky.js";
@@ -2269,6 +2270,7 @@ rapidPrototypeRoot.enabled = fastWorldRequested;
 let towerFloorOneWorld: pc.Entity | null = null;
 type TowerChronicleFloorVisual = { floor: number; victory: pc.Entity[]; locked: pc.Entity[] };
 const towerChronicleFloors: TowerChronicleFloorVisual[] = [];
+const towerChronicleProceduralCore: pc.Entity[] = [];
 let towerChronicleBell: pc.Entity | null = null;
 let towerChronicleBeacon: pc.Entity | null = null;
 let towerChronicleProgress: TowerProgress = { highestFloorCleared: 0, clearedFloors: [] };
@@ -2295,7 +2297,7 @@ function updateTowerChronicleLabel(): void {
   if (!fastWorldRequested || !worldReady || !camera.camera) { towerChronicleLabel.hidden = true; return; }
   const player = localPlayer.getPosition();
   const distance = Math.hypot(player.x - 67, player.z - 106);
-  const screen = camera.camera.worldToScreen(new pc.Vec3(67, 15.2, 106));
+  const screen = camera.camera.worldToScreen(new pc.Vec3(67, 17.4, 106));
   const rect = canvas.getBoundingClientRect();
   towerChronicleLabel.hidden = distance > 24 || screen.z <= 0 || screen.x < 0 || screen.x > rect.width || screen.y < 0 || screen.y > rect.height;
   if (!towerChronicleLabel.hidden) {
@@ -3103,9 +3105,11 @@ if (fastWorldRequested) {
     [5.25, .28, 5.25], [67, 8.52, 106]);
   addTownShape(rapidPrototypeRoot, "tower-chronicle-rune-ring", "cylinder", townRune,
     [4.45, .045, 4.45], [67, 8.69, 106]);
-  addBox(rapidPrototypeRoot, "tower-chronicle-spire", townStone, [1.72, 4.45, 1.72], [67, 10.92, 106]);
-  addBox(rapidPrototypeRoot, "tower-chronicle-lower-band", bannerGold, [2.06, .22, 2.06], [67, 9.05, 106]);
-  addBox(rapidPrototypeRoot, "tower-chronicle-upper-band", bannerGold, [2.06, .18, 2.06], [67, 12.68, 106]);
+  towerChronicleProceduralCore.push(
+    addBox(rapidPrototypeRoot, "tower-chronicle-spire", townStone, [1.72, 4.45, 1.72], [67, 10.92, 106]),
+    addBox(rapidPrototypeRoot, "tower-chronicle-lower-band", bannerGold, [2.06, .22, 2.06], [67, 9.05, 106]),
+    addBox(rapidPrototypeRoot, "tower-chronicle-upper-band", bannerGold, [2.06, .18, 2.06], [67, 12.68, 106]),
+  );
   for (const yaw of [0, 90, 180, 270]) {
     const tablet = addBox(rapidPrototypeRoot, "tower-chronicle-tablet", iron, [.12, 1.08, 1.18],
       [67 + Math.cos(yaw * Math.PI / 180) * .93, 11.25, 106 + Math.sin(yaw * Math.PI / 180) * .93]);
@@ -3113,16 +3117,17 @@ if (fastWorldRequested) {
     const rune = addBox(rapidPrototypeRoot, "tower-chronicle-tablet-rune", townRune, [.08, .48, .48],
       [67 + Math.cos(yaw * Math.PI / 180) * 1.01, 11.25, 106 + Math.sin(yaw * Math.PI / 180) * 1.01]);
     rune.setLocalEulerAngles(0, -yaw, 45);
+    towerChronicleProceduralCore.push(tablet, rune);
   }
-  addBox(rapidPrototypeRoot, "tower-chronicle-bell-left", timber, [.22, 2.05, .22], [66.16, 13.55, 106]);
-  addBox(rapidPrototypeRoot, "tower-chronicle-bell-right", timber, [.22, 2.05, .22], [67.84, 13.55, 106]);
-  addBox(rapidPrototypeRoot, "tower-chronicle-bell-beam", timberLight, [2.25, .24, .32], [67, 14.5, 106]);
+  addBox(rapidPrototypeRoot, "tower-chronicle-bell-left", timber, [.22, 2.05, .22], [66.16, 15.85, 106]);
+  addBox(rapidPrototypeRoot, "tower-chronicle-bell-right", timber, [.22, 2.05, .22], [67.84, 15.85, 106]);
+  addBox(rapidPrototypeRoot, "tower-chronicle-bell-beam", timberLight, [2.25, .24, .32], [67, 16.8, 106]);
   towerChronicleBell = addTownShape(rapidPrototypeRoot, "tower-chronicle-bell", "cone", bannerGold,
-    [.75, .92, .75], [67, 13.82, 106]);
+    [.75, .92, .75], [67, 16.12, 106]);
   addTownShape(towerChronicleBell, "tower-chronicle-bell-clapper", "sphere", iron,
     [.16, .18, .16], [0, -.5, 0]);
   towerChronicleBeacon = addTownShape(rapidPrototypeRoot, "tower-chronicle-beacon", "sphere", townRune,
-    [.28, .28, .28], [67, 14.72, 106]);
+    [.28, .28, .28], [67, 17.02, 106]);
 
   // Five authored victory bays make future progression visible from day one.
   // Cleared floors reveal their banner and trophy; all others retain a heavy
@@ -3933,6 +3938,10 @@ if (fastWorldRequested) {
         for (const family of readyTownFallbacks(result.loadedIds)) hideRapidTownFallback(family);
         console.info(`[town-assets] ${result.entities.length} placements ready; ${result.failedIds.size} model types kept their fallback.`);
       });
+    void loadTowerChronicleMonument(app, rapidPrototypeRoot).then(() => {
+      towerChronicleProceduralCore.forEach(entity => { entity.enabled = false; });
+      console.info("[tower-chronicle] Authored Quaternius monument ready; procedural core retired.");
+    }).catch(error => console.warn("[tower-chronicle] Authored monument unavailable; retaining procedural fallback.", error));
   };
   let greenwoodAssetsStarted = false;
   requestGreenwoodAssets = () => {
