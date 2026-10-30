@@ -27,9 +27,9 @@ export { DODGE_STAMINA_COST, DODGE_CHAIN_COST_STEP, DODGE_MAX_STAMINA_COST, DODG
 // otherwise let a new client join a room still serving the old terrain.
 export const WORLD_ROOM = "world-warden-gate-v167";
 export const SILVER_DEPTHS_ROOM = "silver-depths-instance-v3";
-export const PRACTICE_ROOM = "calling-practice-v7";
+export const PRACTICE_ROOM = "calling-practice-v8";
 export const TAVERN_ROOM = "hearth-and-hammer-v1";
-export const FAST_WORLD_TAVERN_ENTRANCE = { x: 79.65, y: 8, z: 76 } as const;
+export const FAST_WORLD_TAVERN_ENTRANCE = { x: 79.8, y: 8, z: 76 } as const;
 export type RoomTransfer = { room: typeof WORLD_ROOM | typeof SILVER_DEPTHS_ROOM | typeof PRACTICE_ROOM | typeof TAVERN_ROOM; instanceKey?: string; partySize?: number; returnFrom?: "silver-depths" | "practice" | "tavern"; retry?: boolean; partyTicket?: string; worldRoomId?: string };
 export interface ForestPortal { kind: string; x: number; y: number; z: number; expiresAt: number }
 export const FOREST_PORTAL_LIFETIME_MS = 120_000;
@@ -180,12 +180,16 @@ const TOWER_CHRONICLE_TROPHY_COLLIDERS = Array.from({ length: 5 }, (_, index) =>
 export const RAPID_PRACTICE_TOWN_COLLIDERS = [
   { id: "tower-chronicle", minX: 63.85, maxX: 70.15, minZ: 102.85, maxZ: 109.15 },
   ...TOWER_CHRONICLE_TROPHY_COLLIDERS,
-  { id: "founders-hall", minX: 42.5, maxX: 50.5, minZ: 68.5, maxZ: 77.5 },
-  { id: "wayfarer-inn", minX: 70, maxX: 79, minZ: 71.5, maxZ: 80.5 },
-  { id: "beginnings-smithy", minX: 70, maxX: 79, minZ: 132, maxZ: 141 },
-  { id: "weavers-row", minX: 42, maxX: 51, minZ: 89, maxZ: 98 },
-  { id: "healers-house", minX: 42, maxX: 51, minZ: 104, maxZ: 113 },
-  { id: "wardens-lodge", minX: 42, maxX: 51, minZ: 125, maxZ: 135 },
+  { id: "founders-hall", minX: 41.5, maxX: 51.5, minZ: 67.5, maxZ: 78.5 },
+  // The inn uses three colliders instead of one solid box. Its east façade has
+  // a real 2.6m doorway corridor so first-person players can reach the threshold.
+  { id: "wayfarer-inn", minX: 69, maxX: 79.2, minZ: 70.5, maxZ: 81.5 },
+  { id: "wayfarer-inn-facade-north", minX: 79.2, maxX: 80.2, minZ: 70.5, maxZ: 74.7 },
+  { id: "wayfarer-inn-facade-south", minX: 79.2, maxX: 80.2, minZ: 77.3, maxZ: 81.5 },
+  { id: "beginnings-smithy", minX: 69, maxX: 80, minZ: 131, maxZ: 142 },
+  { id: "weavers-row", minX: 41, maxX: 52, minZ: 88, maxZ: 99 },
+  { id: "healers-house", minX: 41, maxX: 52, minZ: 103, maxZ: 114 },
+  { id: "wardens-lodge", minX: 41, maxX: 52, minZ: 124, maxZ: 136 },
 ] as const;
 
 /** Shared obstacle query for Fast World prediction and authority. */

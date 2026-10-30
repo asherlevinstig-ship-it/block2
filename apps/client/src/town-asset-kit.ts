@@ -50,12 +50,12 @@ export interface TownAssetPlacement {
  * footprints. Keeping the square's middle open produces a readable civic
  * centre and gives the spawn camera a clear landmark view. */
 const TOWN_BUILDINGS: readonly TownAssetPlacement[] = [
-  { id: "foundersBellTower", name: "founders-hall", position: [46.5, 8.15, 73], yaw: 90, scale: 3.25 },
-  { id: "wayfarerInn", name: "wayfarer-inn", position: [74.5, 8.15, 76], yaw: 0, scale: 2.1 },
-  { id: "beginningsSmithy", name: "beginnings-smithy", position: [74.5, 8.15, 136.5], yaw: 180, scale: 2.15 },
-  { id: "weaversHouse", name: "weavers-row", position: [46.5, 8.15, 93.5], yaw: 90, scale: 3.55 },
-  { id: "healersHouse", name: "healers-house", position: [46.5, 8.15, 108.5], yaw: 90, scale: 2.6 },
-  { id: "wardensBarracks", name: "wardens-lodge", position: [46.5, 8.15, 130], yaw: 90, scale: 3.45 },
+  { id: "foundersBellTower", name: "founders-hall", position: [46.5, 8.15, 73], yaw: 90, scale: 3.9 },
+  { id: "wayfarerInn", name: "wayfarer-inn", position: [74.5, 8.15, 76], yaw: 0, scale: 2.65 },
+  { id: "beginningsSmithy", name: "beginnings-smithy", position: [74.5, 8.15, 136.5], yaw: 180, scale: 2.65 },
+  { id: "weaversHouse", name: "weavers-row", position: [46.5, 8.15, 93.5], yaw: 90, scale: 4.2 },
+  { id: "healersHouse", name: "healers-house", position: [46.5, 8.15, 108.5], yaw: 90, scale: 3.2 },
+  { id: "wardensBarracks", name: "wardens-lodge", position: [46.5, 8.15, 130], yaw: 90, scale: 4.1 },
 ] as const;
 
 const TOWN_DECORATIONS: readonly TownAssetPlacement[] = [

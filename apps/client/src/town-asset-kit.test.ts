@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { FAST_WORLD_TAVERN_ENTRANCE, RAPID_PRACTICE_TOWN_COLLIDERS } from "@blockcraft/protocol";
+import {
+  FAST_WORLD_COLLISION_QUERY,
+  FAST_WORLD_TAVERN_ENTRANCE,
+  RAPID_PRACTICE_TOWN_COLLIDERS,
+} from "@blockcraft/protocol";
 import { SPEED_LAB_TOWN_ASSETS, TOWN_ASSET_FILES, readyTownFallbacks, townAssetUrl, type TownAssetId } from "./town-asset-kit.js";
 
 describe("town asset kit", () => {
@@ -43,5 +47,22 @@ describe("town asset kit", () => {
     expect(FAST_WORLD_TAVERN_ENTRANCE.x).toBeGreaterThan(collider.maxX);
     expect(FAST_WORLD_TAVERN_ENTRANCE.z).toBeGreaterThanOrEqual(collider.minZ);
     expect(FAST_WORLD_TAVERN_ENTRANCE.z).toBeLessThanOrEqual(collider.maxZ);
+  });
+
+  it("keeps a player-sized route open through the inn facade to the tavern door", () => {
+    expect(FAST_WORLD_COLLISION_QUERY.obstacleAt(79.7, 9, 73)).toMatchObject({
+      id: "wayfarer-inn-facade-north",
+    });
+    expect(FAST_WORLD_COLLISION_QUERY.obstacleAt(79.7, 9, 79)).toMatchObject({
+      id: "wayfarer-inn-facade-south",
+    });
+    for (const z of [75, 75.5, 76, 76.5, 77]) {
+      expect(FAST_WORLD_COLLISION_QUERY.obstacleAt(79.7, 9, z)).toBeNull();
+    }
+    expect(FAST_WORLD_COLLISION_QUERY.obstacleAt(
+      FAST_WORLD_TAVERN_ENTRANCE.x,
+      FAST_WORLD_TAVERN_ENTRANCE.y + 1,
+      FAST_WORLD_TAVERN_ENTRANCE.z,
+    )).toBeNull();
   });
 });
