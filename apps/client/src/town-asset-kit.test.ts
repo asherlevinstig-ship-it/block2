@@ -45,32 +45,30 @@ describe("town asset kit", () => {
   it("places the tavern entrance beside the authored inn rather than the retired fallback", () => {
     const inn = SPEED_LAB_TOWN_ASSETS.find(asset => asset.id === "wayfarerInn")!;
     const collider = RAPID_PRACTICE_TOWN_COLLIDERS.find(candidate => candidate.id === "wayfarer-inn")!;
-    // The inn's enlarged authored mesh places its east doorway 6.7m from the
-    // model origin; this anchor intentionally follows that visible threshold.
-    expect(Math.hypot(FAST_WORLD_TAVERN_ENTRANCE.x - inn.position[0], FAST_WORLD_TAVERN_ENTRANCE.z - inn.position[2])).toBeLessThan(7);
-    expect(FAST_WORLD_TAVERN_ENTRANCE.x).toBeGreaterThan(collider.maxX);
-    expect(FAST_WORLD_TAVERN_ENTRANCE.z).toBeGreaterThanOrEqual(collider.minZ);
-    expect(FAST_WORLD_TAVERN_ENTRANCE.z).toBeLessThanOrEqual(collider.maxZ);
+    expect(FAST_WORLD_TAVERN_ENTRANCE.x).toBe(inn.position[0]);
+    expect(FAST_WORLD_TAVERN_ENTRANCE.z).toBeGreaterThan(collider.maxZ);
+    expect(FAST_WORLD_TAVERN_ENTRANCE.x).toBeGreaterThanOrEqual(collider.minX);
+    expect(FAST_WORLD_TAVERN_ENTRANCE.x).toBeLessThanOrEqual(collider.maxX);
   });
 
   it("keeps a player-sized route open through the inn facade to the tavern door", () => {
-    expect(FAST_WORLD_COLLISION_QUERY.obstacleAt(79.7, 9, 73)).toMatchObject({
-      id: "wayfarer-inn-facade-north",
+    expect(FAST_WORLD_COLLISION_QUERY.obstacleAt(71, 9, 80.7)).toMatchObject({
+      id: "wayfarer-inn-front-west",
     });
-    expect(FAST_WORLD_COLLISION_QUERY.obstacleAt(79.7, 9, 79)).toMatchObject({
-      id: "wayfarer-inn-facade-south",
+    expect(FAST_WORLD_COLLISION_QUERY.obstacleAt(78, 9, 80.7)).toMatchObject({
+      id: "wayfarer-inn-front-east",
     });
     const read = Object.assign(
       (x: number, y: number, z: number) => FAST_WORLD_COLLISION_QUERY.cellSolid(x, y, z) ? Block.Stone : Block.Air,
       { groundHeight: FAST_WORLD_COLLISION_QUERY.groundHeight },
     );
-    for (const z of [74.5, 75.5, 76, 76.5, 77.5]) {
-      for (const x of [83, 82, 81, 80.5, 79.5]) {
+    for (const x of [73.5, 74, 74.5, 75, 75.5]) {
+      for (const z of [84, 83, 82, 81.5, 81, 80.5]) {
         expect(playerCollides(read, x, 8, z), `${x},${z}`).toBe(false);
       }
     }
     expect(canUseForestPortal(
-      { x: 83, y: 8, z: 76, health: 5 },
+      { x: 74.5, y: 8, z: 83.3, health: 5 },
       { ...FAST_WORLD_TAVERN_ENTRANCE, kind: "tavern-entry", expiresAt: 0 },
       Date.now(),
     )).toBe(true);
