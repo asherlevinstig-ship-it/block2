@@ -3,16 +3,16 @@ export type PortalLabel = {
   subtitle: string;
   action: "ENTER" | "RETURN" | "CHALLENGE" | "SEALED";
   locked: boolean;
-  tone: "forest" | "depths" | "ember" | "warden" | "tower";
+  tone: "forest" | "depths" | "ember" | "warden" | "tower" | "tavern";
 };
 
 /** One naming source for floating labels and the contextual E prompt. */
 export function portalLabel(id: string, kind: string, wardenGateUnlocked = false): PortalLabel {
   if (id === "tavern-entry") return {
-    title: "THE HEARTH & HAMMER", subtitle: "TAVERN · REST, RUMOURS & GAMES", action: "ENTER", locked: false, tone: "tower",
+    title: "THE HEARTH & HAMMER", subtitle: "WAYFARER INN · MARA'S TAVERN", action: "ENTER", locked: false, tone: "tavern",
   };
   if (id === "tavern-exit") return {
-    title: "RETURN TO TOWN", subtitle: "TOWN OF BEGINNINGS · SAFE", action: "RETURN", locked: false, tone: "tower",
+    title: "RETURN TO TOWN", subtitle: "LEAVE THE HEARTH & HAMMER", action: "RETURN", locked: false, tone: "tavern",
   };
   if (id === "tower-floor-1-entry") return {
     title: "ENTER FLOOR 1", subtitle: "THE OVERGROWN RAMPART · LV 1–4", action: "ENTER", locked: false, tone: "tower",

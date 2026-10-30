@@ -3327,10 +3327,14 @@ if (fastWorldRequested) {
     .setLocalEulerAngles(0, 0, 90);
 
   const inn = addTownBuilding("wayfarer-inn", 92.2, 96.2, 6.1, 5.2, warmPlaster, roofRed, roofRedLight);
-  addBox(inn, "inn-sign-arm", timber, [.12, .12, 1.25], [95.42, 10.18, 97.25]);
-  addBox(inn, "inn-sign-board", timberLight, [.14, .84, 1.02], [95.48, 9.72, 97.83]);
-  addTownShape(inn, "inn-sign-mug", "cylinder", bannerGold, [.28, .12, .28], [95.57, 9.75, 97.83])
+  addBox(inn, "inn-sign-arm", iron, [.16, .16, 1.65], [95.48, 10.72, 97.38]);
+  addBox(inn, "inn-sign-brace", iron, [.12, .12, 1.2], [95.48, 10.38, 97.12]).setLocalEulerAngles(28, 0, 0);
+  addBox(inn, "inn-sign-board", timberLight, [.18, 1.15, 1.42], [95.58, 9.92, 98.28]);
+  addBox(inn, "inn-sign-inlay", roofBlue, [.2, .88, 1.17], [95.69, 9.92, 98.28]);
+  addTownShape(inn, "inn-sign-mug", "cylinder", bannerGold, [.38, .15, .38], [95.82, 9.94, 98.28])
     .setLocalEulerAngles(0, 0, 90);
+  addBox(inn, "inn-sign-mug-handle", bannerGold, [.12, .36, .34], [95.84, 9.94, 98.68]);
+  for (const z of [94.25, 98.15]) addBox(inn, "inn-door-lantern", windowGlow, [.2, .5, .2], [95.52, 9.75, z]);
 
   const smithy = addTownBuilding("beginnings-smithy", 92.2, 115.8, 6.1, 5.2, warmPlaster, roofRed, roofRedLight);
   addBox(smithy, "smithy-chimney", townStone, [.74, 2.2, .74], [90.2, 11.65, 114.5]);
@@ -13891,6 +13895,7 @@ function updateForestPortals(): void {
       root.setPosition(portal.x, portal.y, portal.z); app.root.addChild(root);
       const label = document.createElement("button"); label.className = "forest-portal-label";
       label.classList.toggle("ember-portal-label", ember);
+      label.classList.toggle("tavern-door-label", id.startsWith("tavern-"));
       label.innerHTML = '<strong class="portal-title"></strong><span class="portal-subtitle"></span><span class="portal-hold-action"><span class="portal-hold-key"><kbd>E</kbd></span><span class="portal-action-text"></span></span>';
       label.addEventListener("pointerdown", event => {
         event.preventDefault(); event.stopPropagation();
@@ -13908,7 +13913,7 @@ function updateForestPortals(): void {
     const wardenGate = id === "warden-gate";
     const wardenGateUnlocked = ownState?.realmWardenCleared === true;
     const presentation = portalLabel(id, portal.kind, wardenGateUnlocked);
-    visual.root.enabled = active && distance < 45 && id !== "tower-floor-1-entry";
+    visual.root.enabled = active && distance < 45 && id !== "tower-floor-1-entry" && !id.startsWith("tavern-");
     const victory = id === "forest-victory";
     const animationNow = performance.now();
     const pulse = victory ? Math.sin(animationNow / 220) * .1 : Math.sin(animationNow / 600) * .04;
@@ -13932,7 +13937,8 @@ function updateForestPortals(): void {
     }
     const screen = camera.camera!.worldToScreen(new pc.Vec3(portal.x, portal.y + 3.3, portal.z));
     const rect = canvas.getBoundingClientRect();
-    visual.label.hidden = !active || distance > 25 || screen.z <= 0 || screen.x < 0 || screen.x > rect.width || screen.y < 0 || screen.y > rect.height;
+    const labelRange = id.startsWith("tavern-") ? 14 : 25;
+    visual.label.hidden = !active || distance > labelRange || screen.z <= 0 || screen.x < 0 || screen.x > rect.width || screen.y < 0 || screen.y > rect.height;
     visual.label.style.left = `${rect.left + screen.x}px`; visual.label.style.top = `${rect.top + screen.y}px`;
     const testEntry = id === "ember-entry" || id === "depths-entry";
     const reachable = presentation.locked ? false : testEntry

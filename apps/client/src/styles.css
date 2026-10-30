@@ -7,6 +7,10 @@
 #tower-chronicle-label em { color: #9ca9a0; font-size: 9px; font-style: normal; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
 .forest-portal-label[data-tone="tower"] { color: #f3e7ff; border-color: #a96cff; background: linear-gradient(180deg,#211136f2,#0d0a16f5); box-shadow: 0 0 0 1px #a96cff33,0 4px 18px #000b,0 0 24px #7a28d833; }
 .forest-portal-label[data-tone="tower"]::first-line { color: #fff0a8; font-size: 13px; }
+.forest-portal-label[data-tone="tavern"] { min-width: 230px; color: #f7dfb1; border-color: #d69a42; background: linear-gradient(180deg,#321b0ef5,#160d08f7); box-shadow: 0 0 0 1px #ffd78326,0 7px 24px #000c,0 0 22px #e7892730; }
+.forest-portal-label[data-tone="tavern"] .portal-title { display: block; color: #ffe4a3; font: 950 14px/1.15 Georgia,serif; letter-spacing: .08em; }
+.forest-portal-label[data-tone="tavern"] .portal-subtitle { display: block; margin-top: 3px; color: #cdbd9d; font-size: 9px; letter-spacing: .1em; }
+.forest-portal-label[data-tone="tavern"] .portal-hold-key { border-color: #e2aa52; background: #4a2914; color: #fff0be; }
 .forest-portal-label.locked { filter: grayscale(.5); border-color: #81778b; color: #aaa2b0; }
 .forest-portal-label:disabled { cursor: default; opacity: .85; }
 .forest-portal-label[hidden] { display: none; }
