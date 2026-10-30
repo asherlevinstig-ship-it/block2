@@ -3,10 +3,23 @@ import { addCallingParticleLayers } from "./calling-particles.js";
 import { bindTownNpcRig, loadTownNpcAssets, TOWN_NPC_MODEL_YAW } from "./town-npc-assets.js";
 
 const DUNGEON_ASSET_ROOT = "/assets/kaykit-dungeon";
-const CHAIR_URL = `${DUNGEON_ASSET_ROOT}/chair.gltf.glb`;
-const BARRELS_URL = `${DUNGEON_ASSET_ROOT}/barrel_small_stack.gltf.glb`;
-const CRATES_URL = `${DUNGEON_ASSET_ROOT}/crates_stacked.gltf.glb`;
 const TORCH_URL = `${DUNGEON_ASSET_ROOT}/torch_lit.gltf.glb`;
+const FANTASY_PROP_ROOT = "/assets/quaternius-fantasy-props";
+const propUrl = (name: string): string => `${FANTASY_PROP_ROOT}/${name}.gltf`;
+const CHAIR_URL = propUrl("Chair_1");
+const TABLE_URL = propUrl("Table_Large");
+const STOOL_URL = propUrl("Stool");
+const BENCH_URL = propUrl("Bench");
+const BAR_URL = propUrl("Workbench");
+const SHELF_BOTTLES_URL = propUrl("Shelf_Small_Bottles");
+const BOOKCASE_URL = propUrl("Bookcase_2");
+const CABINET_URL = propUrl("Cabinet");
+const MUG_URL = propUrl("Mug");
+const PLATE_URL = propUrl("Table_Plate");
+const CANDLE_URL = propUrl("CandleStick_Triple");
+const BARREL_URL = propUrl("Barrel");
+const CRATE_URL = propUrl("Crate_Wooden");
+const BUCKET_URL = propUrl("Bucket_Wooden_1");
 
 export const TAVERN_ROOM_ZONES = {
   entrance: { x: 0, z: 5.6, radius: 2.2 },
@@ -75,14 +88,6 @@ function addWindow(parent: pc.Entity, name: string, x: number, z: number, yaw: n
   box(root, "window-frame-vertical", oak, [.3, 1.78, .13], [-.29, 0, 0]);
   box(root, "window-frame-horizontal", oak, [.3, .13, 1.9], [-.3, 0, 0]);
   box(root, "window-sill", stone, [.45, .18, 2.55], [-.05, -1.22, 0]);
-}
-
-function addRoundTable(parent: pc.Entity, name: string, x: number, z: number,
-  oak: pc.Material, oakLight: pc.Material, brass: pc.Material): void {
-  cylinder(parent, `${name}-top`, oakLight, [2.05, .18, 2.05], [x, 9.05, z]);
-  cylinder(parent, `${name}-leg`, oak, [.42, 1.05, .42], [x, 8.5, z]);
-  cylinder(parent, `${name}-foot`, oak, [1.05, .12, 1.05], [x, 8.1, z]);
-  cylinder(parent, `${name}-candle`, brass, [.09, .38, .09], [x, 9.38, z]);
 }
 
 function addWallTimbers(parent: pc.Entity, oak: pc.Material): void {
@@ -166,17 +171,7 @@ export function createTavernRoom(app: pc.Application): pc.Entity {
   box(root, "entrance-frame-right", stone, [.52, 4.5, .65], [1.65, 10.08, 7.82]);
   box(root, "entrance-runner", rugGreen, [3.2, .035, 5.2], [0, 8.02, 5.25]);
 
-  // The bar lives along the west wall, leaving the entrance-to-hearth axis open.
-  box(root, "bar-front", oak, [.9, 1.55, 8.2], [-7.35, 8.8, -1.4]);
-  box(root, "bar-panel", oakLight, [.12, 1.02, 7.5], [-6.84, 8.76, -1.4]);
-  box(root, "bar-top", oakLight, [1.45, .22, 8.7], [-7.35, 9.68, -1.4]);
-  for (const z of [-4.2, -1.4, 1.4]) {
-    cylinder(root, "bar-stool-seat", oakLight, [.78, .22, .78], [-5.85, 8.9, z]);
-    cylinder(root, "bar-stool-leg", oak, [.18, .82, .18], [-5.85, 8.42, z]);
-    box(root, "bottle-shelf", oakLight, [.38, .14, 1.35], [-9.25, 10.4, z]);
-    cylinder(root, "bottle", z < 0 ? rugGreen : brass, [.14, .5, .14], [-8.95, 10.75, z]);
-    cylinder(root, "bottle-neck", brass, [.065, .2, .065], [-8.95, 11.08, z]);
-  }
+  // The asset-backed west-wall bar leaves the entrance-to-hearth axis open.
   box(root, "bar-menu-board", iron, [.16, 1.5, 2.2], [-9.26, 12.05, -1.4]);
   for (let line = 0; line < 4; line++)
     box(root, "bar-menu-line", brass, [.035, .045, 1.35 - line * .1], [-9.15, 12.42 - line * .28, -1.4]);
@@ -219,13 +214,6 @@ export function createTavernRoom(app: pc.Application): pc.Entity {
   hearthLight.setLocalPosition(hearthX, 9.05, -5.9);
   root.addChild(hearthLight);
   box(root, "hearth-rug", rugRed, [5.25, .04, 2.55], [hearthX, 8.025, -4.75]);
-  for (const [x, z, yaw] of [[.9, -5.0, 90], [6.7, -5.0, 90]] as const) {
-    box(root, "hearth-bench-seat", oakLight, [2.15, .28, .68], [x, 8.68, z], [0, yaw, 0]);
-    box(root, "hearth-bench-back", oak, [2.15, .94, .24], [x, 9.17, z], [0, yaw, 0]);
-  }
-
-  addRoundTable(root, "quiz-table", 0, 1.35, oak, oakLight, brass);
-  addRoundTable(root, "dining-table", 5.6, 3.35, oak, oakLight, brass);
   box(root, "quiz-rug", rugGreen, [4.35, .038, 3.55], [0, 8.022, 1.35]);
   box(root, "dining-rug", rugGreen, [4.5, .038, 3.8], [5.6, 8.022, 3.35]);
 
@@ -238,17 +226,49 @@ export function createTavernRoom(app: pc.Application): pc.Entity {
   cylinder(maraFallback, "mara-body", rugRed, [.66, 1.25, .66], [-8.2, 9.28, -1.5]);
   shape(maraFallback, "mara-head", "sphere", brass, [.46, .46, .46], [-8.2, 10.62, -1.5]);
 
+  loadProp(app, BAR_URL, root, [-3.75, -1.25, 1.25].map(z =>
+    ({ position: [-7.25, 8.02, z] as [number, number, number], yaw: 90, scale: 1.2 })));
+  loadProp(app, STOOL_URL, root, [-3.75, -1.25, 1.25].map(z =>
+    ({ position: [-5.75, 8.02, z] as [number, number, number], yaw: 90, scale: 1.35 })));
+  loadProp(app, SHELF_BOTTLES_URL, root, [-3.5, -1.2, 1.1].map(z =>
+    ({ position: [-9.22, 10.25, z] as [number, number, number], yaw: 90, scale: 1.45 })));
+  loadProp(app, BOOKCASE_URL, root, [{ position: [-9.1, 8.02, 5.75], yaw: 90, scale: 1.05 }]);
+  loadProp(app, CABINET_URL, root, [{ position: [-9.12, 8.02, 3.95], yaw: 90, scale: 1.15 }]);
+  loadProp(app, TABLE_URL, root, [
+    { position: [0, 8.02, 1.35], yaw: 0, scale: 1.25 },
+    { position: [5.6, 8.02, 3.35], yaw: 0, scale: 1.25 },
+  ]);
   loadProp(app, CHAIR_URL, root, [
-    { position: [-1.85, 8.02, 1.35], yaw: 90, scale: 1.05 },
-    { position: [1.85, 8.02, 1.35], yaw: -90, scale: 1.05 },
-    { position: [3.75, 8.02, 3.35], yaw: 90, scale: 1.05 },
-    { position: [7.45, 8.02, 3.35], yaw: -90, scale: 1.05 },
+    { position: [-.85, 8.02, .25], yaw: 0, scale: 1.05 },
+    { position: [.85, 8.02, 2.45], yaw: 180, scale: 1.05 },
+    { position: [4.75, 8.02, 2.25], yaw: 0, scale: 1.05 },
+    { position: [6.45, 8.02, 4.45], yaw: 180, scale: 1.05 },
   ]);
-  loadProp(app, BARRELS_URL, root, [
-    { position: [-8.25, 8.02, -6.35], yaw: 20, scale: 1.15 },
-    { position: [-8.15, 8.02, 5.85], yaw: -15, scale: 1.1 },
+  loadProp(app, BENCH_URL, root, [
+    { position: [.95, 8.02, -4.9], yaw: 90, scale: 1.02 },
+    { position: [6.65, 8.02, -4.9], yaw: 90, scale: 1.02 },
   ]);
-  loadProp(app, CRATES_URL, root, [{ position: [-8.1, 8.02, 4.55], yaw: 12, scale: .95 }]);
+  loadProp(app, MUG_URL, root, [
+    { position: [-6.82, 9.15, -3.75], yaw: 15, scale: 1.35 },
+    { position: [-6.82, 9.15, -1.25], yaw: -20, scale: 1.35 },
+    { position: [-6.82, 9.15, 1.25], yaw: 8, scale: 1.35 },
+    { position: [-.55, 9.08, 1.3], yaw: -15, scale: 1.25 },
+    { position: [5.05, 9.08, 3.3], yaw: 12, scale: 1.25 },
+  ]);
+  loadProp(app, PLATE_URL, root, [
+    { position: [.55, 9.07, 1.35], yaw: 0, scale: 1.25 },
+    { position: [6.15, 9.07, 3.35], yaw: 0, scale: 1.25 },
+  ]);
+  loadProp(app, CANDLE_URL, root, [
+    { position: [0, 9.07, 1.35], yaw: 0, scale: 1.05 },
+    { position: [5.6, 9.07, 3.35], yaw: 0, scale: 1.05 },
+  ]);
+  loadProp(app, BARREL_URL, root, [
+    { position: [-8.35, 8.02, -6.35], yaw: 20, scale: 1.05 },
+    { position: [8.5, 8.02, 5.9], yaw: -15, scale: .95 },
+  ]);
+  loadProp(app, CRATE_URL, root, [{ position: [-8.25, 8.02, 6.4], yaw: 12, scale: 1.05 }]);
+  loadProp(app, BUCKET_URL, root, [{ position: [7.95, 8.02, -6.6], yaw: -18, scale: 1.1 }]);
   loadProp(app, TORCH_URL, root, [
     { position: [-9.25, 10.2, -4.2], yaw: 90, scale: 1.25 },
     { position: [9.25, 10.2, -4.2], yaw: -90, scale: 1.25 },
