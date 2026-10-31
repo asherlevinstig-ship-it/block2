@@ -103,16 +103,37 @@ function addWallTimbers(parent: pc.Entity, oak: pc.Material): void {
   }
 }
 
-interface TavernPersonMotion { entity: pc.Entity; nextGesture: number; gestureEnds: number }
+interface TavernSeatRig {
+  upperLeft: pc.GraphNode;
+  upperRight: pc.GraphNode;
+  lowerLeft: pc.GraphNode;
+  lowerRight: pc.GraphNode;
+}
+interface TavernPersonMotion { entity: pc.Entity; nextGesture: number; gestureEnds: number; seatRig?: TavernSeatRig }
+
+function tavernSeatRig(entity: pc.Entity): TavernSeatRig | undefined {
+  const upperLeft = entity.findByName("upperleg.l"), upperRight = entity.findByName("upperleg.r");
+  const lowerLeft = entity.findByName("lowerleg.l"), lowerRight = entity.findByName("lowerleg.r");
+  return upperLeft && upperRight && lowerLeft && lowerRight ? { upperLeft, upperRight, lowerLeft, lowerRight } : undefined;
+}
+
+/** KayKit does not include a seated clip. Apply a compact chair pose after the
+ * animation system updates so hips stay on the seat and shins hang in front. */
+function applyTavernSeatPose(rig: TavernSeatRig): void {
+  rig.upperLeft.setLocalEulerAngles(91, 0, -4);
+  rig.upperRight.setLocalEulerAngles(91, 0, 4);
+  rig.lowerLeft.setLocalEulerAngles(88, 0, 1);
+  rig.lowerRight.setLocalEulerAngles(88, 0, -1);
+}
 
 function loadTavernPeople(app: pc.Application, root: pc.Entity, proceduralMara: pc.Entity,
   movingPeople: TavernPersonMotion[]): void {
   void loadTownNpcAssets(app).then(result => {
     const placements = [
       { role: "vendor" as const, position: [-8.2, 8.02, -1.5] as [number, number, number], yaw: 90, phase: .2, seated: false },
-      { role: "resident" as const, position: [4.72, 7.6, 2.22] as [number, number, number], yaw: 0, phase: .8, seated: true },
-      { role: "resident" as const, position: [6.42, 7.6, 4.42] as [number, number, number], yaw: 180, phase: .45, seated: true },
-      { role: "healer" as const, position: [.95, 7.62, -4.88] as [number, number, number], yaw: 90, phase: .65, seated: true },
+      { role: "resident" as const, position: [4.72, 8.31, 2.22] as [number, number, number], yaw: 0, phase: .8, seated: true },
+      { role: "resident" as const, position: [6.42, 8.31, 4.42] as [number, number, number], yaw: 180, phase: .45, seated: true },
+      { role: "healer" as const, position: [.95, 8.31, -4.88] as [number, number, number], yaw: 90, phase: .65, seated: true },
     ];
     for (const [index, placement] of placements.entries()) {
       const asset = result.loaded.get(placement.role);
@@ -128,7 +149,9 @@ function loadTavernPeople(app: pc.Application, root: pc.Entity, proceduralMara: 
         model.destroy();
         continue;
       }
-      movingPeople.push({ entity: model, nextGesture: 4.5 + index * 2.4, gestureEnds: 0 });
+      const seatRig = placement.seated ? tavernSeatRig(model) : undefined;
+      if (seatRig) applyTavernSeatPose(seatRig);
+      movingPeople.push({ entity: model, nextGesture: 4.5 + index * 2.4, gestureEnds: 0, seatRig });
       if (index === 0) proceduralMara.enabled = false;
     }
   });
@@ -325,6 +348,7 @@ export function createTavernRoom(app: pc.Application): pc.Entity {
         if (transitionTownNpcRig(person.entity, "Interact", .2)) person.gestureEnds = elapsed + 1.55;
         person.nextGesture = elapsed + 7 + Math.random() * 6;
       }
+      if (person.seatRig) applyTavernSeatPose(person.seatRig);
     }
   });
   return root;
