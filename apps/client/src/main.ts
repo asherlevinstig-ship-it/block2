@@ -153,7 +153,7 @@ import { loadTowerChronicleMonument } from "./tower-chronicle-asset.js";
 import { towerFloorOneAtmosphere } from "./tower-floor-one-atmosphere.js";
 import { portalInteractionPrompt, portalLabel, portalWorldLabel } from "./portal-labels.js";
 import { createFastWorldSky } from "./fast-world-sky.js";
-import { createTavernRoom, setTavernTrophyProgress } from "./tavern-room.js";
+import { createTavernRoom, setTavernSleepCutaway, setTavernTrophyProgress } from "./tavern-room.js";
 import { TavernAmbience } from "./tavern-ambience.js";
 import { rotatingTavernBounties } from "./tavern-services.js";
 import { createPaintedGroundMaterial, fitGroundTexture, fitOrganicGroundPatch, createWoodlandTrailMesh, woodlandFernMesh } from "./fast-world-texture.js";
@@ -2333,6 +2333,7 @@ const rapidPrototypeRoot = new pc.Entity("rapid-2d-speed-lab");
 app.root.addChild(rapidPrototypeRoot);
 rapidPrototypeRoot.enabled = fastWorldRequested && !tavernRoomRequested;
 let tavernRoomWorld: pc.Entity | null = null;
+let tavernSleepCutawayActive = false;
 const tavernAmbience = tavernRoomRequested ? new TavernAmbience() : null;
 if (tavernRoomRequested) {
   tavernRoomWorld = createTavernRoom(app);
@@ -18331,6 +18332,10 @@ app.on("update", (dt: number) => {
   }
   const sleepClockNow = Date.now();
   const localSleeping = localSleepingUntil > sleepClockNow;
+  if (localSleeping !== tavernSleepCutawayActive) {
+    tavernSleepCutawayActive = localSleeping;
+    setTavernSleepCutaway(tavernRoomWorld, localSleeping);
+  }
   updateInnSleepHud(sleepClockNow);
   refreshPotionUi();
   const frameDurationMs = dt * 1000;

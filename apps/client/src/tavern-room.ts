@@ -166,6 +166,8 @@ function loadTavernPeople(app: pc.Application, root: pc.Entity, proceduralMara: 
 export function createTavernRoom(app: pc.Application): pc.Entity {
   const root = new pc.Entity("hearth-and-hammer-room");
   app.root.addChild(root);
+  const upperRoomShell = new pc.Entity("tavern-upper-room-shell");
+  root.addChild(upperRoomShell);
 
   const oak = material(new pc.Color(.105, .045, .018), undefined, .14);
   const oakLight = material(new pc.Color(.31, .145, .045), undefined, .2);
@@ -217,17 +219,17 @@ export function createTavernRoom(app: pc.Application): pc.Entity {
     ["upper-left-wall", [.35, 5.8, 16.5], [-9.65, 17.25, 0]],
     ["upper-right-wall", [.35, 5.8, 16.5], [9.65, 17.25, 0]],
     ["upper-front-wall", [19.5, 5.8, .35], [0, 17.25, 8.15]],
-  ] as const) box(root, name, plaster, scale, position);
-  box(root, "upper-ceiling", oak, [19.5, .35, 16.5], [0, 20.2, 0]);
+  ] as const) box(upperRoomShell, name, plaster, scale, position);
+  box(upperRoomShell, "upper-ceiling", oak, [19.5, .35, 16.5], [0, 20.2, 0]);
   for (const z of [-7.7, 0, 7.7])
-    box(root, "upper-wall-beam", oak, [19.2, .34, .34], [0, 19.45, z]);
+    box(upperRoomShell, "upper-wall-beam", oak, [19.2, .34, .34], [0, 19.45, z]);
   for (const x of [-9.25, 0, 9.25])
-    box(root, "upper-wall-post", oak, [.42, 5.35, .42], [x, 17.15, -7.72]);
-  box(root, "guest-partition-west", oak, [8.05, 4.5, .3], [-5.48, 17.25, 2.9]);
+    box(upperRoomShell, "upper-wall-post", oak, [.42, 5.35, .42], [x, 17.15, -7.72]);
+  box(upperRoomShell, "guest-partition-west", oak, [8.05, 4.5, .3], [-5.48, 17.25, 2.9]);
   // The east partition ends before the stairwell so the landing has a clear
   // route into the guest room instead of opening into a wall.
-  box(root, "guest-partition-east", oak, [2.8, 4.5, .3], [2.85, 17.25, 2.9]);
-  box(root, "guest-door-lintel", oakLight, [2.9, .42, .46], [0, 19.2, 2.9]);
+  box(upperRoomShell, "guest-partition-east", oak, [2.8, 4.5, .3], [2.85, 17.25, 2.9]);
+  box(upperRoomShell, "guest-door-lintel", oakLight, [2.9, .42, .46], [0, 19.2, 2.9]);
   box(root, "upper-hall-runner", rugGreen, [11.2, .04, 3.15], [-3.3, 15.02, 5.2]);
   box(root, "stairwell-frame-left", oakLight, [.28, .42, 7.2], [4.38, 15.02, 3.7]);
   box(root, "stairwell-frame-rear", oakLight, [5.25, .42, .28], [7.02, 15.02, .18]);
@@ -248,15 +250,15 @@ export function createTavernRoom(app: pc.Application): pc.Entity {
   // Five trophy bays make future floors tangible even while still locked.
   for (let index = 0; index < 5; index++) {
     const x = -5.6 + index * 2.8;
-    box(root, `inn-trophy-plaque-${index + 1}`, stone, [2.15, 2.2, .24], [x, 17.55, -7.72]);
+    box(upperRoomShell, `inn-trophy-plaque-${index + 1}`, stone, [2.15, 2.2, .24], [x, 17.55, -7.72]);
     const locked = new pc.Entity(`inn-trophy-floor-${index + 1}-locked`);
-    locked.setLocalPosition(x, 17.55, -7.42); root.addChild(locked);
+    locked.setLocalPosition(x, 17.55, -7.42); upperRoomShell.addChild(locked);
     const victory = new pc.Entity(`inn-trophy-floor-${index + 1}-victory`);
-    victory.setLocalPosition(x, 17.55, -7.42); victory.enabled = false; root.addChild(victory);
+    victory.setLocalPosition(x, 17.55, -7.42); victory.enabled = false; upperRoomShell.addChild(victory);
     loadProp(app, TROPHY_LOCKED_URL, locked, [{ position: [0, 0, 0], yaw: 0, scale: .78 }]);
     loadProp(app, TROPHY_VICTORY_URL, victory, [{ position: [0, 0, 0], yaw: 0, scale: .78 }]);
   }
-  const innBanner = new pc.Entity("inn-victory-banner"); innBanner.enabled = false; root.addChild(innBanner);
+  const innBanner = new pc.Entity("inn-victory-banner"); innBanner.enabled = false; upperRoomShell.addChild(innBanner);
   loadProp(app, VICTORY_BANNER_URL, innBanner, [{ position: [0, 18.85, -7.46], yaw: 0, scale: 1.15 }]);
   // Render the same seven one-metre steps used by authoritative collision.
   // The previous imported mesh reported bounds that did not match its visible
@@ -444,6 +446,14 @@ export function createTavernRoom(app: pc.Application): pc.Entity {
     }
   });
   return root;
+}
+
+/** Opens the upper suite as a clean dollhouse view while the local player is
+ * asleep. Collision remains authoritative; only the camera-blocking enclosure
+ * and wall-mounted trophies are hidden. */
+export function setTavernSleepCutaway(root: pc.Entity | null, active: boolean): void {
+  const shell = root?.findByName("tavern-upper-room-shell");
+  if (shell) shell.enabled = !active;
 }
 
 export function setTavernTrophyProgress(root: pc.Entity | null, highestFloorCleared: number): void {
