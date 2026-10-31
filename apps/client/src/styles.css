@@ -1855,6 +1855,9 @@ html.first-person-camera canvas { cursor: crosshair; }
 #calling-weapon-next { display: block; margin-top: 7px; color: #80968a; font-size: .43rem; line-height: 1.35; }
 #calling-weapon-progression[data-compatible="false"] { border-color: #ad604f66; }
 #calling-weapon-progression[data-compatible="false"] #calling-weapon-next { color: #e58b72; }
+article.equipment[data-calling-locked] { border-color: #9d514a66 !important; }
+article.equipment[data-calling-locked] > div { opacity: .72; }
+article.equipment[data-calling-locked] [data-equip-main-hand] { border-color: #9d514a66; background: #291412; color: #e69b8d; }
 @media (max-width: 700px) {
   #calling-weapon-stages { grid-template-columns: repeat(5, 42px); overflow-x: auto; padding-bottom: 3px; }
   #calling-weapon-stages b { display: none; }

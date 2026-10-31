@@ -25,6 +25,9 @@ import {
   type TavernMealId,
   pvpMurdererUntil,
   withPvpMurdererUntil,
+  fallbackMainHandForCalling,
+  mainHandAllowedForCalling,
+  starterWeaponForPath,
 } from "@blockcraft/protocol";
 import { parseRoadsideClaims } from "@blockcraft/voxel-world";
 import { canEquipMainHand } from "./equipment-rules.js";
@@ -400,9 +403,14 @@ export function applyPlayerSave(player: PlayerState, save: PlayerSaveData): void
     item.quantity = quantity;
     player.inventory.set(itemId, item);
   }
-  const mainHandId = canEquipMainHand(save.mainHandId, itemId => player.inventory.get(itemId)?.quantity ?? 0)
-    ? save.mainHandId
+  const savedPathId = parseBuildPathState(player.huntLoadoutsJson).selectedPathId;
+  const starterHandId = savedPathId ? starterWeaponForPath(savedPathId) as MainHandId : null;
+  const fallbackHandId = savedPathId
+    ? starterHandId && canEquipMainHand(starterHandId, itemId => player.inventory.get(itemId)?.quantity ?? 0)
+      ? starterHandId : fallbackMainHandForCalling(savedPathId)
     : "longsword";
+  const mainHandId = canEquipMainHand(save.mainHandId, itemId => player.inventory.get(itemId)?.quantity ?? 0)
+    && mainHandAllowedForCalling(save.mainHandId, savedPathId) ? save.mainHandId : fallbackHandId;
   for (const [itemId, quantity] of Object.entries(save.storage ?? {}) as [ItemId, number][]) {
     const item = new InventoryItemState(); item.quantity = quantity; player.storage.set(itemId, item);
   }

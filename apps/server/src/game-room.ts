@@ -14,6 +14,7 @@ import { crownkeeperCounterDuration, CROWNKEEPER_OPENING_WEAPON_BONUS, type Crow
 import { floorDefeatTip, type FloorAttemptSummary } from "@blockcraft/protocol";
 import { GREENWOOD_MASTERY_CAP, MISTFEN_MASTERY_CAP, greenwoodMasteryRank, mistfenMasteryRank } from "@blockcraft/protocol";
 import { callingStarterAbility } from "@blockcraft/protocol";
+import { fallbackMainHandForCalling, mainHandAllowedForCalling, mainHandCallingLabel, starterWeaponForPath } from "@blockcraft/protocol";
 import { experienceToNextLevel } from "@blockcraft/protocol";
 import { FAST_WORLD_TOWN_BOUNDS, FAST_WORLD_TOWN_ONLY, PRACTICE_ROOM, TOWER_FLOOR_ONE,
   TOWER_FLOOR_ONE_BOSS_ID, TOWER_FLOOR_ONE_CROWNKEEPER_COMBAT, TOWER_FLOOR_ONE_NORTH_WARDEN_COMBAT, TOWER_FLOOR_ONE_NORTH_WARDEN_ID,
@@ -7109,11 +7110,17 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         itemId: starter.itemId, quantity: starter.quantity, contentsJson: starter.contentsJson,
         x: starter.x, y: starter.y, z: starter.z, expiresAt: starter.expiresAt });
     }
-    if (player.level <= 2 && player.mainHandId === "longsword" && (pathId === "mage" || pathId === "ranger")) {
-      const hand = MAIN_HAND_DEFINITIONS[pathId === "mage" ? "magic_focus" : "bow"];
+    const equippedHandId = Object.hasOwn(MAIN_HAND_DEFINITIONS, player.mainHandId) ? player.mainHandId as MainHandId : "unarmed";
+    if (!mainHandAllowedForCalling(equippedHandId, pathId)) {
+      const starterHand = starterWeaponForPath(pathId) as MainHandId;
+      const nextHandId = canEquipMainHand(starterHand, itemId => player.inventory.get(itemId)?.quantity ?? 0)
+        ? starterHand : fallbackMainHandForCalling(pathId);
+      const hand = MAIN_HAND_DEFINITIONS[nextHandId];
       player.mainHandId = hand.id; player.mainHandTag = hand.tag;
       player.equippedPower = compatiblePowerOrFallback(player.equippedPower, hand.tag);
       player.equippedPowerSecondary = compatiblePowerOrFallback(player.equippedPowerSecondary, hand.tag);
+      client.send("main-hand:equipped", { requestId: `calling-${Date.now()}`, mainHandId: hand.id });
+      client.send("chat:notice", `${BUILD_PATHS[pathId].name.toUpperCase()} CALLING · incompatible weapons were returned to your pack.`);
     }
     void this.persistPlayer(client.sessionId, player, true);
     this.sendBuildPath(client, previous === pathId ? `${BUILD_PATHS[pathId].name} remains your active Calling.`
@@ -8472,6 +8479,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
     const loadout = this.huntLoadouts(player).find(saved => saved.slot === slot);
     if (!loadout) { this.sendHuntCollection(client, `Loadout ${slot} has not been saved yet.`); return; }
+    const targetPathId = loadout.buildPathId ?? parseBuildPathState(player.huntLoadoutsJson).selectedPathId;
+    if (!mainHandAllowedForCalling(loadout.mainHandId, targetPathId)) {
+      this.sendHuntCollection(client, `${loadout.name} is invalid · ${MAIN_HAND_DEFINITIONS[loadout.mainHandId].name} requires ${mainHandCallingLabel(loadout.mainHandId)}.`); return;
+    }
     if (!canEquipMainHand(loadout.mainHandId, itemId => player.inventory.get(itemId)?.quantity ?? 0)
       || (loadout.armourId !== "none" && (player.inventory.get(loadout.armourId)?.quantity ?? 0) <= 0)) {
       this.sendHuntCollection(client, `${loadout.name} needs gear that is not in your pack.`); return;
@@ -11019,6 +11030,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       return this.reject(client, { requestId: parsed.data.requestId, action: "loadout", reason: "rate" });
     }
     const mainHand = MAIN_HAND_DEFINITIONS[parsed.data.mainHandId];
+    const pathId = parseBuildPathState(player.huntLoadoutsJson).selectedPathId;
+    if (!mainHandAllowedForCalling(parsed.data.mainHandId, pathId)) {
+      client.send("chat:notice", `${mainHand.name.toUpperCase()} · requires the ${mainHandCallingLabel(parsed.data.mainHandId)} Calling.`);
+      return this.reject(client, { requestId: parsed.data.requestId, action: "loadout", reason: "missing" });
+    }
     if (!canEquipMainHand(parsed.data.mainHandId, itemId => player.inventory.get(itemId)?.quantity ?? 0)) {
       return this.reject(client, { requestId: parsed.data.requestId, action: "loadout", reason: "missing" });
     }

@@ -387,6 +387,8 @@ import {
   callingWeaponCompatible,
   callingWeaponStage,
   nextCallingWeaponStage,
+  mainHandAllowedForCalling,
+  mainHandCallingLabel,
   CALLING_ABILITY_OPTIONS,
   CALLING_ABILITY_AUGMENTS,
   blacksmithRequiredLevel,
@@ -7070,9 +7072,17 @@ function refreshPowerCompatibility(): void {
   combatHud.setWeapon(localMainHandId, localIronSwordOwned);
   refreshInventoryEquipped();
   for (const button of inventoryEquipButtons) {
-    const equipped = button.dataset.equipMainHand === localMainHandId;
+    const handId = button.dataset.equipMainHand as MainHandId;
+    const equipped = handId === localMainHandId;
+    const definition = MAIN_HAND_DEFINITIONS[handId];
+    const itemId = "requiredItemId" in definition ? definition.requiredItemId as ItemId : null;
+    const owned = !itemId || (inventoryCounts.get(itemId) ?? 0) > 0;
+    const allowed = mainHandAllowedForCalling(handId, localBuildPathId);
     button.setAttribute("aria-pressed", String(equipped));
-    button.textContent = equipped ? "EQUIPPED" : "EQUIP";
+    button.disabled = !equipped && (!owned || !allowed);
+    button.textContent = equipped ? "EQUIPPED" : !allowed ? `${mainHandCallingLabel(handId).toUpperCase()} ONLY` : "EQUIP";
+    button.title = allowed ? definition.name : `Requires ${mainHandCallingLabel(handId)} Calling`;
+    button.closest<HTMLElement>("article.equipment")?.toggleAttribute("data-calling-locked", !allowed);
   }
   setRigMainHand(localPlayerRig, localMainHandId, localBuildPathId);
 }
@@ -7273,11 +7283,13 @@ function refreshInventorySelectionActions(): void {
   inventorySelectionActions.hidden = !itemId || !owned || (!hand && !armour);
   if (inventorySelectionActions.hidden) return;
   const equipped = hand ? hand === localMainHandId : armour === localArmourId;
+  const roleLocked = Boolean(hand && !mainHandAllowedForCalling(hand, localBuildPathId));
   const canUnequip = Boolean(armour && armour === localArmourId);
   const firstVictoryChoice = firstVictoryReward?.stage === "choose" && itemId === firstVictoryReward.itemId;
-  inventorySelectedEquip.disabled = equipped && !canUnequip;
+  inventorySelectedEquip.disabled = roleLocked || equipped && !canUnequip;
   inventorySelectedEquip.textContent = canUnequip ? "UNEQUIP" : equipped ? "EQUIPPED"
-    : firstVictoryChoice ? "EQUIP UPGRADE" : "EQUIP NOW";
+    : roleLocked && hand ? `${mainHandCallingLabel(hand).toUpperCase()} ONLY`
+      : firstVictoryChoice ? "EQUIP UPGRADE" : "EQUIP NOW";
   inventorySelectedKeep.textContent = firstVictoryChoice ? "KEEP FOR LATER" : "CLEAR";
   const recipe = Object.hasOwn(BLACKSMITH_DISMANTLE, itemId!)
     ? BLACKSMITH_DISMANTLE[itemId! as BlacksmithDismantleItemId] : null;
@@ -7329,7 +7341,9 @@ function refreshInventoryPreview(): void {
   inventoryDecisionVerdict.textContent = inventoryDecisionLabel[decision];
   inventoryDecisionPanel.dataset.verdict = decision;
   const roll = equipmentAffixes[selectedInventoryItem];
-  if (firstVictoryReward?.stage === "choose" && selectedInventoryItem === firstVictoryReward.itemId)
+  if (hand && !mainHandAllowedForCalling(hand, localBuildPathId))
+    inventoryCallingFit.textContent = `LOCKED · Requires the ${mainHandCallingLabel(hand)} Calling.`;
+  else if (firstVictoryReward?.stage === "choose" && selectedInventoryItem === firstVictoryReward.itemId)
     inventoryCallingFit.textContent = firstVictoryCallingFit(localBuildPathId, ITEM_DEFINITIONS[selectedInventoryItem].name);
   else if (!localBuildPathId) inventoryCallingFit.textContent = "No combat style chosen yet. This item still works normally.";
   else if (!roll) inventoryCallingFit.textContent = `Works normally with your ${BUILD_PATHS[localBuildPathId].name} style.`;
@@ -7541,6 +7555,12 @@ function requestPowerEquip(powerId: PowerId): void {
 
 function requestMainHandEquip(mainHandId: MainHandId): void {
   if (!room || !worldReady || mainHandId === localMainHandId) return;
+  if (!mainHandAllowedForCalling(mainHandId, localBuildPathId)) {
+    const required = mainHandCallingLabel(mainHandId);
+    status.textContent = `${MAIN_HAND_DEFINITIONS[mainHandId].name} requires the ${required} Calling.`;
+    showCombatFeedback(`${required.toUpperCase()} WEAPON`, "hurt");
+    return;
+  }
   if (powerAimActive || localPowerStartedAt !== null) {
     status.textContent = "Finish or cancel the current Power before changing main hand.";
     return;
@@ -8102,6 +8122,7 @@ function renderBuildPath(update: BuildPathUpdate): void {
   document.documentElement.dataset.calling = update.selectedPathId ?? "unbound";
   setRigMainHand(localPlayerRig, localMainHandId, localBuildPathId);
   setFirstPersonMainHand(localMainHandId);
+  refreshPowerCompatibility();
   tutorialCallingId = update.selectedPathId;
   renderFirstSteps();
   localCallingAbilityId = update.selectedCallingAbilityId;
@@ -11651,7 +11672,10 @@ function updateInventoryItem(itemId: ItemId, total: number): void {
   const count = inventoryCountElements.get(itemId);
   if (count) count.textContent = String(total);
   const equipButton = inventoryPanel.querySelector<HTMLButtonElement>(`[data-item="${itemId}"] [data-equip-main-hand]`);
-  if (equipButton) equipButton.disabled = total <= 0;
+  if (equipButton) {
+    const handId = equipButton.dataset.equipMainHand as MainHandId;
+    equipButton.disabled = total <= 0 || !mainHandAllowedForCalling(handId, localBuildPathId);
+  }
   refreshInventoryEquipped();
   const card = inventoryPanel.querySelector<HTMLElement>(`[data-item="${itemId}"]`);
   if (card) {

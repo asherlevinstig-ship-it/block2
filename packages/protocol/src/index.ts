@@ -1553,6 +1553,47 @@ export const MAIN_HAND_DEFINITIONS = {
 } as const satisfies Record<string, MainHandDefinition>;
 
 export type MainHandId = keyof typeof MAIN_HAND_DEFINITIONS;
+export const MAIN_HAND_CALLINGS = {
+  unarmed: ["tank", "mage", "assassin", "thief", "ranger", "healer"],
+  forged_sword: ["tank"],
+  forged_bow: ["ranger"],
+  forged_focus: ["mage", "healer"],
+  longsword: ["tank"],
+  bow: ["ranger"],
+  magic_focus: ["mage", "healer"],
+  fang_dagger: ["assassin", "thief"],
+  stone_core_hammer: ["tank"],
+  rootbound_hammer: ["tank"],
+  matriarch_edge: ["assassin", "thief"],
+  acid_gland_focus: ["mage", "healer"],
+  venom_focus: ["mage", "healer"],
+  echo_prism: ["mage", "healer"],
+  cinderfang_blade: ["tank"],
+  crownkeeper_blade: ["tank"],
+  emberheart_focus: ["mage", "healer"],
+} as const satisfies Record<MainHandId, readonly BuildPathId[]>;
+
+export const CALLING_FALLBACK_MAIN_HANDS = {
+  tank: "longsword",
+  mage: "magic_focus",
+  assassin: "unarmed",
+  thief: "unarmed",
+  ranger: "bow",
+  healer: "magic_focus",
+} as const satisfies Record<BuildPathId, MainHandId>;
+
+export function mainHandAllowedForCalling(mainHandId: MainHandId, pathId: BuildPathId | null | undefined): boolean {
+  return !pathId || (MAIN_HAND_CALLINGS[mainHandId] as readonly BuildPathId[]).includes(pathId);
+}
+
+export function mainHandCallingLabel(mainHandId: MainHandId): string {
+  return MAIN_HAND_CALLINGS[mainHandId].map(pathId => BUILD_PATHS[pathId].name).join(" / ");
+}
+
+export function fallbackMainHandForCalling(pathId: BuildPathId): MainHandId {
+  return CALLING_FALLBACK_MAIN_HANDS[pathId];
+}
+
 export function equipmentForItem(itemId: string): MainHandId | null {
   return (Object.keys(MAIN_HAND_DEFINITIONS) as MainHandId[])
     .find(id => "requiredItemId" in MAIN_HAND_DEFINITIONS[id] && (MAIN_HAND_DEFINITIONS[id] as MainHandDefinition).requiredItemId === itemId) ?? null;

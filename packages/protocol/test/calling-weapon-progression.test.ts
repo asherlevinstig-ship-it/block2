@@ -8,6 +8,8 @@ import {
   callingWeaponPulseInterval,
   callingWeaponStage,
   callingWeaponStaggerBonus,
+  mainHandAllowedForCalling,
+  mainHandCallingLabel,
   nextCallingWeaponStage,
   type BuildPathId,
 } from "../src/index.js";
@@ -28,6 +30,18 @@ describe("Calling weapon progression", () => {
     expect(callingWeaponCompatible("mage", "emberheart_focus")).toBe(true);
     expect(callingWeaponCompatible("healer", "fang_dagger")).toBe(false);
     expect(callingWeaponCompatible("assassin", "unarmed")).toBe(false);
+  });
+
+  it("assigns every weapon to explicit Callings", () => {
+    expect(mainHandAllowedForCalling("forged_sword", "tank")).toBe(true);
+    expect(mainHandAllowedForCalling("forged_sword", "ranger")).toBe(false);
+    expect(mainHandAllowedForCalling("fang_dagger", "assassin")).toBe(true);
+    expect(mainHandAllowedForCalling("fang_dagger", "thief")).toBe(true);
+    expect(mainHandAllowedForCalling("fang_dagger", "mage")).toBe(false);
+    expect(mainHandAllowedForCalling("emberheart_focus", "mage")).toBe(true);
+    expect(mainHandAllowedForCalling("emberheart_focus", "healer")).toBe(true);
+    expect(mainHandAllowedForCalling("forged_bow", null)).toBe(true);
+    expect(mainHandCallingLabel("fang_dagger")).toBe("Assassin / Thief");
   });
 
   it("scales each offensive Calling's distinct combat opening", () => {
