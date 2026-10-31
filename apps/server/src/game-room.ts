@@ -1,5 +1,7 @@
 import { Client, Room } from "@colyseus/core";
 import { aimedWeaponFlight, mobAttackBody, ENEMY_PROJECTILE_RADIUS } from "@blockcraft/protocol";
+import { PVP_MURDERER_DURATION_MS, pvpCombatAllowed, pvpMurdererUntil, withPvpMurdererUntil,
+  type PvpHit, type PvpKill } from "@blockcraft/protocol";
 import { CROWNKEEPER_FORGE } from "@blockcraft/protocol";
 import { parseTowerProgress, withTowerFloorCleared } from "@blockcraft/protocol";
 import { tavernRoomFurnitureCellSolid } from "@blockcraft/protocol";
@@ -6692,7 +6694,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private setPlayerBuildData(player: PlayerState, loadouts: HuntLoadoutSlot[], buildPath = parseBuildPathState(player.huntLoadoutsJson)): void {
     const mistfen = this.mistfenProgress(player);
     const greenwood = this.greenwoodProgress(player);
-    player.huntLoadoutsJson = JSON.stringify({ starterKitClaimed: starterKitClaimed(player.huntLoadoutsJson), loadouts, buildPath, affixes: this.equipmentAffixes(player),
+    player.huntLoadoutsJson = JSON.stringify({ murdererUntil: pvpMurdererUntil(player.huntLoadoutsJson),
+      starterKitClaimed: starterKitClaimed(player.huntLoadoutsJson), loadouts, buildPath, affixes: this.equipmentAffixes(player),
       dust: this.attunementDust(player), offers: this.attunementOffers(player), targetAffixId: this.equipmentAffixTarget(player),
       mistfen, greenwood, northwatch: parseNorthwatchProgress(player.huntLoadoutsJson), roadsideClaims: [...parseRoadsideClaims(player.huntLoadoutsJson)],
       ashenBlueprints: ashenBlueprints(player.huntLoadoutsJson), ashenMastery: parseAshenMastery(player.huntLoadoutsJson),
@@ -6754,7 +6757,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     dust: number, offers: EquipmentAffixOffers): void {
     const mistfen = this.mistfenProgress(player);
     const greenwood = this.greenwoodProgress(player);
-    player.huntLoadoutsJson = JSON.stringify({ starterKitClaimed: starterKitClaimed(player.huntLoadoutsJson),
+    player.huntLoadoutsJson = JSON.stringify({ murdererUntil: pvpMurdererUntil(player.huntLoadoutsJson),
+      starterKitClaimed: starterKitClaimed(player.huntLoadoutsJson),
       loadouts: this.huntLoadouts(player), buildPath: parseBuildPathState(player.huntLoadoutsJson),
       affixes, dust: Math.max(0, Math.min(65_535, Math.floor(dust))), offers, targetAffixId: this.equipmentAffixTarget(player),
       mistfen, greenwood, northwatch: parseNorthwatchProgress(player.huntLoadoutsJson), roadsideClaims: [...parseRoadsideClaims(player.huntLoadoutsJson)],
@@ -11605,6 +11609,77 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
   }
 
+  private pvpTargets(attackerId: string): { id: string; x: number; y: number; z: number; radius: number; alive: boolean }[] {
+    const attacker = this.state.players.get(attackerId);
+    if (!attacker) return [];
+    return [...this.state.players.entries()].flatMap(([targetId, target]) =>
+      targetId !== attackerId && !this.protectedDialogs.has(targetId)
+        && pvpCombatAllowed(this.roomKind, attacker, target)
+        ? [{ id: `pvp:${targetId}`, x: target.x, y: target.y, z: target.z, radius: .42, alive: true }]
+        : []);
+  }
+
+  private applyPvpWeaponHit(attackerId: string, pending: PendingAttack, targetId: string, now: number,
+    projectile = false): boolean {
+    const attacker = this.state.players.get(attackerId), target = this.state.players.get(targetId);
+    const timing = WEAPON_ATTACK_DEFINITIONS[pending.mainHandId].attacks[pending.step - 1]
+      ?? WEAPON_ATTACK_DEFINITIONS[pending.mainHandId].attacks[0];
+    if (!attacker || !target || !timing || this.protectedDialogs.has(attackerId) || this.protectedDialogs.has(targetId)
+      || !pvpCombatAllowed(this.roomKind, attacker, target)) return false;
+    const dodge = this.activeDodgeWindows.get(targetId);
+    if (now < target.invulnerableUntil || dodge && now >= dodge.startedAt && now <= dodge.until) {
+      this.broadcast("combat:pvp-hit", {
+        attackerId, attackerName: attacker.name, targetId, targetName: target.name,
+        mainHandId: pending.mainHandId, damage: 0, health: target.health, defeated: false,
+        guarded: false, parried: false, dodged: true, murdererUntil: pvpMurdererUntil(attacker.huntLoadoutsJson),
+      } satisfies PvpHit);
+      return true;
+    }
+    const baseDamage = timing.damage + ironSwordDamageBonus(attacker.blacksmithUpgrades, pending.mainHandId)
+      + reforgeWeaponDamageBonus(equipmentReforgeRank(attacker.reforgeRanksJson, pending.mainHandId))
+      + progressionAttackBonus(attacker) + (this.rapidPracticeUpgrades.get(attackerId)?.damage ?? 0);
+    const defense = resolveDefense(baseDamage, target.defending, target.defenseStartedAt, now,
+      isAttackInGuardArc(target, attacker));
+    const damage = armouredDamage(defense.damage, target.armourId, projectile ? "projectile" : "melee",
+      equipmentReforgeRank(target.reforgeRanksJson, target.armourId));
+    if (defense.guarded) {
+      target.stamina = Math.max(0, target.stamina - guardStaminaCost(defense.parried ? 8 : 14,
+        target.equippedTrait as TraitId));
+      if (target.stamina <= 0) target.defending = false;
+    }
+    target.health = Math.max(0, target.health - damage);
+    target.momentumStacks = momentumAfterDefense(target.momentumStacks, damage, defense.parried,
+      target.equippedTrait as TraitId);
+    const defeated = target.health === 0;
+    if (defeated) {
+      attacker.huntLoadoutsJson = withPvpMurdererUntil(attacker.huntLoadoutsJson, now + PVP_MURDERER_DURATION_MS);
+      this.clearCallingEffects(targetId);
+      this.clearFloorRunUpgrades(targetId);
+      target.defending = false; target.momentumStacks = 0;
+      this.pendingAttacks.delete(targetId); this.cancelWeaponProjectiles(targetId);
+      this.pendingPowers.delete(targetId); this.specialMarks.delete(targetId); this.brambleSnares.delete(targetId);
+      this.attackChains.delete(targetId);
+      this.movementInputs.set(targetId, { request: idleMovementInput(), receivedAt: now });
+      this.verticalVelocities.set(targetId, 0);
+      void this.persistPlayer(attackerId, attacker, true).catch(() => {});
+      void this.persistPlayer(targetId, target, true).catch(() => {});
+    }
+    this.broadcast("combat:pvp-hit", {
+      attackerId, attackerName: attacker.name, targetId, targetName: target.name,
+      mainHandId: pending.mainHandId, damage, health: target.health, defeated,
+      guarded: defense.guarded, parried: defense.parried, dodged: false,
+      murdererUntil: pvpMurdererUntil(attacker.huntLoadoutsJson),
+    } satisfies PvpHit);
+    if (defeated) this.broadcast("combat:pvp-kill", {
+      attackerId, attackerName: attacker.name, targetId, targetName: target.name,
+      murdererUntil: pvpMurdererUntil(attacker.huntLoadoutsJson),
+    } satisfies PvpKill);
+    if (pending.requestId.startsWith("attack-")) this.sendCombatTiming(attackerId, {
+      requestId: pending.requestId, action: "attack", phase: "resolved", serverTime: now, outcome: "hit",
+    });
+    return true;
+  }
+
   private resolvePendingAttacks(now: number): void {
     for (const [sessionId, pending] of this.pendingAttacks) {
       const rapidWeapon = rapidPracticeWeaponProfile(pending.mainHandId, this.rapidPractice);
@@ -11640,14 +11715,16 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         }
         const targets = [...this.state.mobs.entries()].filter(([, mob]) => mob.alive)
           .map(([id, mob]) => ({ id, x: mob.x, y: mob.y, z: mob.z, radius: mob.archetype === "stone_brute" ? 0.55 : 0.38,
-            ...(this.rapidPractice ? mobAttackBody(id, mob) : {}) }));
+            ...(this.rapidPractice ? mobAttackBody(id, mob) : {}) }))
+          .concat(this.pvpTargets(sessionId));
         const hit = meleeSweepImpact(player, pending.yaw, strike,
           (Math.max(start, pending.lastSweepAt ?? start) - start) / (end - start),
           (Math.min(now, end) - start) / (end - start), targets, this.readWorldBlock, pending.elevation);
         pending.lastSweepAt = Math.min(now, end);
         if (hit) {
           this.pendingAttacks.delete(sessionId);
-          this.applyWeaponHit(sessionId, pending, hit, now);
+          if (hit.startsWith("pvp:")) this.applyPvpWeaponHit(sessionId, pending, hit.slice(4), now);
+          else this.applyWeaponHit(sessionId, pending, hit, now);
         } else if (now >= end) {
           this.pendingAttacks.delete(sessionId);
           this.broadcast("combat:miss", { attackerId: sessionId, mainHandId: pending.mainHandId, comboStep: pending.step } satisfies CombatMiss);
@@ -11675,7 +11752,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         y: mob.y,
         z: mob.z,
         alive: mob.alive,
-      }));
+      })).concat(this.pvpTargets(sessionId));
       const target = selectAttackTarget(
         player,
         pending.yaw,
@@ -11730,7 +11807,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         this.sendCombatTiming(sessionId, { requestId: pending.requestId, action: "attack", phase: "resolved", serverTime: now, outcome: "miss" });
         continue;
       }
-      this.applyWeaponHit(sessionId, pending, target.id, now);
+      if (target.id.startsWith("pvp:")) this.applyPvpWeaponHit(sessionId, pending, target.id.slice(4), now);
+      else this.applyWeaponHit(sessionId, pending, target.id, now);
     }
   }
 
@@ -11745,7 +11823,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const next = flightPoint(projectile.start, projectile.end, progress);
       const targets = [...this.state.mobs.entries()].filter(([id, mob]) => mob.alive && !projectile.hitIds?.has(id))
         .map(([id, mob]) => ({ id, x: mob.x, y: mob.y, z: mob.z, radius: mob.archetype === "stone_brute" ? 0.55 : 0.38,
-          ...(this.rapidPractice ? mobAttackBody(id, mob) : {}) }));
+          ...(this.rapidPractice ? mobAttackBody(id, mob) : {}) }))
+        .concat(this.pvpTargets(projectile.attackerId).filter(target => !projectile.hitIds?.has(target.id)));
       for (const [targetId] of this.thornBindings) {
         const target = this.state.players.get(targetId);
         const bindingId = `thorn-binding:${targetId}`;
@@ -11762,7 +11841,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         const hitPending = firstHit ? projectile : { ...projectile, requestId: "rapid-pierce" };
         if (collision.targetId.startsWith("thorn-binding:"))
           this.damageThornBinding(collision.targetId.slice("thorn-binding:".length), projectile.attackerId);
-        else {
+        else if (collision.targetId.startsWith("pvp:")) {
+          this.applyPvpWeaponHit(projectile.attackerId, hitPending, collision.targetId.slice(4), now, true);
+        } else {
           const target = this.state.mobs.get(collision.targetId);
           this.applyWeaponHit(projectile.attackerId, hitPending, collision.targetId, now, projectile.start);
           if (target && (projectile.splashRadius ?? 0) > 0)

@@ -1,6 +1,6 @@
 import { greenwoodAtmosphere } from "./greenwood-atmosphere.js";
 import { greenwoodEmergence, greenwoodMobStyle, type GreenwoodMobStyle } from "./greenwood-mob-style.js";
-import { FAST_WORLD_TOWN_BOUNDS, FAST_WORLD_TOWN_ONLY, TOWER_FLOOR_ONE, TOWER_FLOOR_ONE_SOUTH_ATTENDANTS, TOWER_FLOOR_ONE_WARDENS, fastWorldGroundHeight, isInsideTowerFloorOne, parseTowerProgress, type TowerProgress } from "@blockcraft/protocol";
+import { FAST_WORLD_TOWN_BOUNDS, FAST_WORLD_TOWN_ONLY, TOWER_FLOOR_ONE, TOWER_FLOOR_ONE_SOUTH_ATTENDANTS, TOWER_FLOOR_ONE_WARDENS, fastWorldGroundHeight, isInsideTowerFloorOne, isTowerFloorSafeZone, parseTowerProgress, pvpMurdererUntil, type TowerProgress } from "@blockcraft/protocol";
 import { GREENWOOD_MAIN_TRAIL, GREENWOOD_CAMP_TRAIL, GREENWOOD_THICKETS, GREENWOOD_CLUSTER_PLANTS, GREENWOOD_VERGE_PLANTS, sampleWoodlandTrail } from "./greenwood-landscape.js";
 import * as pc from "playcanvas";
 import { facetedBoxMesh } from "./faceted-shapes.js";
@@ -364,6 +364,8 @@ import {
   type MobProjectileReleased,
   type ThornBindingUpdate,
   type PlayerHit,
+  type PvpHit,
+  type PvpKill,
   type ProjectileResolved,
   type PowerCast,
   type PowerCancelled,
@@ -8111,21 +8113,27 @@ function updateDangerZone(tierValue: number, position = localPlayer.getPosition(
   const depthsZone = silverDepths ? silverDepthsZone(position) : null;
   const depthsProfile = depthsZone ? SILVER_DEPTHS_ATMOSPHERES[depthsZone] : null;
   const emberVault = isInEmberVault(position.x, position.z);
+  const towerFloor = isInsideTowerFloorOne(position.x, position.z);
+  const towerSafe = towerFloor && isTowerFloorSafeZone(position);
   const dungeonDetail = dungeonAtmosphere.room === 1 ? "Split the rootbound crawlers · the return portal remains behind you"
     : dungeonAtmosphere.room === 2 ? "Use stone cover · read aimed shots and fan gaps"
       : "Root volleys become committed charges below half health";
-  const label = emberVault ? { name: position.x >= 232 ? "COLOSSUS FORGE" : position.x >= 223 ? "EMBER CRUCIBLE" : "THE EMBER VAULT", detail: position.x >= 232 ? "Read the Colossus · dodge the committed smash · claim its forge loot" : "Use iron pillars as cover · clear each sealed forge chamber" }
+  const label = towerFloor ? towerSafe
+    ? { name: "FLOOR 1 SANCTUARY", detail: "Safe zone · player damage is disabled" }
+    : { name: "FLOOR 1 · PVP ENABLED", detail: "Players can damage one another · killers are marked for three days" }
+    : emberVault ? { name: position.x >= 232 ? "COLOSSUS FORGE" : position.x >= 223 ? "EMBER CRUCIBLE" : "THE EMBER VAULT", detail: position.x >= 232 ? "Read the Colossus · dodge the committed smash · claim its forge loot" : "Use iron pillars as cover · clear each sealed forge chamber" }
     : depthsProfile ? { name: depthsProfile.name, detail: depthsProfile.detail }
     : forestDungeon ? { name: dungeonAtmosphere.name, detail: dungeonDetail } : realmWardenArena ? { name: "REALM WARDEN COURT", detail: "Use the four stone pillars · read the marked impacts · punish the Warden between volleys" } : frontierArena ? { name: "FRONTIER BRUTE RUINS", detail: "Sidestep the smash · leave the slam circle · counter during recovery · rich silver and a guaranteed hammer" } : silverGuard ? { name: "SILVER GUARD CLEARING", detail: "Two alternating spitters · use stone cover and fan gaps · dirt trail leads west to the south gate" } : arena ? { name: "STONE BRUTE CLEARING", detail: "One heavy opponent · dodge the marked slam · collect a Stone Core Hammer on defeat" }
     : camp ? { name: "GREENWOOD CRAWLER CAMP", detail: "Three roaming crawlers · exposed iron on the east edge · defeat mobs and collect item drops" } : greenwood
     ? { name: "GREENWOOD OUTSKIRTS", detail: "Ancient oaks · harvest timber · Briar Crawlers roam the camp" }
     : territory ?? DANGER_ZONE_LABELS[tier]!;
-  const recommendedLevel = emberVault ? position.x >= 232 ? "LV 14–16" : "LV 12–14"
+  const recommendedLevel = towerFloor ? towerSafe ? "SAFE" : "LV 1–4 · PVP"
+    : emberVault ? position.x >= 232 ? "LV 14–16" : "LV 12–14"
     : tier === 0 ? "SAFE"
       : silverDepths ? depthsZone === "arena" ? "LV 10–12" : "LV 7–10"
       : forestDungeon ? dungeonAtmosphere.room === 3 ? "LV 10–12" : dungeonAtmosphere.room === 2 ? "LV 8–10" : "LV 6–8"
         : frontierArena ? "LV 9–12" : silverGuard ? "LV 5–8" : arena ? "LV 4–6" : worldLevelRange(territory?.tier ?? tier).label;
-  const nextKey = `${tier}:${greenwood}:${camp}:${arena}:${silverGuard}:${frontierArena}:${dungeonAtmosphere.room}:${territory?.name ?? ""}:${depthsZone}:${emberVault}:${recommendedLevel}`;
+  const nextKey = `${tier}:${greenwood}:${camp}:${arena}:${silverGuard}:${frontierArena}:${dungeonAtmosphere.room}:${territory?.name ?? ""}:${depthsZone}:${emberVault}:${towerFloor}:${towerSafe}:${recommendedLevel}`;
   if (nextKey === dangerZoneKey) return;
   dangerZoneKey = nextKey;
   dangerZone.dataset.tier = String(tier);
@@ -8182,12 +8190,13 @@ function showCombatFeedback(text: string, style: "hit" | "hurt" | "dodge" | "mis
 
 let damageOverlayTimer = 0;
 let hitMarkerTimer = 0;
-function showPlayerDamageImpact(mobId: string, damage: number, health: number): void {
+function showPlayerDamageImpact(mobId: string, damage: number, health: number,
+  attackerPosition?: { x: number; z: number }): void {
   notificationDamageUntil = performance.now() + 1200;
   cancelLootHold(health > 0 ? "damage" : "defeated");
   cancelPortalHold(health > 0 ? "damage" : "defeated");
   const now = performance.now();
-  const attacker = mobVisuals.get(mobId)?.entity.getPosition();
+  const attacker = attackerPosition ?? mobVisuals.get(mobId)?.entity.getPosition();
   const player = localPlayer.getPosition();
   const attackerYaw = attacker
     ? Math.atan2(attacker.x - player.x, attacker.z - player.z) * 180 / Math.PI
@@ -19584,7 +19593,7 @@ app.on("update", (dt: number) => {
     if (now - lastNameplateSampleAt >= 100) {
     lastNameplateSampleAt = now;
     const nameplates: { id: string; name: string; x: number; y: number; visible: boolean; local: boolean;
-      healHealth?: number; healMaxHealth?: number; healTarget?: boolean }[] = [];
+      murderer?: boolean; healHealth?: number; healMaxHealth?: number; healTarget?: boolean }[] = [];
     const healerActive = localBuildPathId === "healer";
     const fieldMendReady = localCallingAbilityId === "healer_field_mend";
     const healRoom = room;
@@ -19614,6 +19623,7 @@ app.on("update", (dt: number) => {
           && Math.hypot(pose.x - eye.x, pose.z - eye.z) <= 8
           && (player.health <= 0 || player.health / Math.max(1, player.maxHealth) <= .4 || id === healTargetId);
         nameplates.push({ id, name: player.name, x: rect.left + screen.x, y: rect.top + screen.y, visible: Boolean(visible), local: isLocal,
+          murderer: pvpMurdererUntil(player.huntLoadoutsJson) > Date.now(),
           healHealth: inHealRange ? player.health : undefined, healMaxHealth: inHealRange ? player.maxHealth : undefined,
           healTarget: id === healTargetId });
       }
@@ -20762,6 +20772,50 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       ? "You were defeated. Return to the Town of Beginnings when ready."
       : `${attackerName} hit you for ${message.damage} · ${message.health} HP remaining.`;
     logMovementEvent(`HURT hp=${message.health} defeated=${message.defeated}`);
+  });
+  room.onMessage("combat:pvp-hit", (message: PvpHit) => {
+    const activeRoom = room;
+    if (!activeRoom) return;
+    const localId = activeRoom.sessionId;
+    const players = activeRoom.state.players as Map<string, NetworkPlayer>;
+    if (message.attackerId === localId) {
+      if (message.dodged) {
+        showCombatFeedback("PLAYER DODGED", "miss");
+        status.textContent = `${message.targetName} dodged your attack.`;
+      } else {
+        confirmEnemyDamage(message.damage, message.defeated);
+        const target = remotePlayers.get(message.targetId)?.entity.getPosition() ?? players.get(message.targetId);
+        if (target) createRangedPopup(new pc.Vec3(target.x, target.y + 2.15, target.z),
+          message.defeated ? "PLAYER DEFEATED" : `−${message.damage}`, "damage", message.defeated, [1, .24, .18]);
+        showCombatFeedback(message.defeated ? "PLAYER DEFEATED"
+          : message.parried ? "PARRIED" : message.guarded ? `GUARDED  −${message.damage}` : `PVP HIT  −${message.damage}`,
+        message.parried || message.guarded ? "block" : "hit");
+        status.textContent = message.defeated
+          ? `${message.targetName} defeated · your name is marked red with a skull for three days.`
+          : `${message.targetName} took ${message.damage} damage · ${message.health} HP remaining.`;
+      }
+    }
+    if (message.targetId === localId) {
+      if (message.dodged) {
+        showCombatFeedback("DODGED", "dodge");
+        status.textContent = `You dodged ${message.attackerName}'s attack.`;
+        return;
+      }
+      const attacker = remotePlayers.get(message.attackerId)?.entity.getPosition() ?? players.get(message.attackerId);
+      if (message.damage > 0) showPlayerDamageImpact(`pvp:${message.attackerId}`, message.damage, message.health, attacker);
+      showCombatFeedback(message.defeated ? "DEFEATED BY PLAYER"
+        : message.parried ? "PARRY!" : message.guarded ? `GUARD  −${message.damage}` : `PVP HURT  −${message.damage}`,
+      message.parried || message.guarded ? "block" : "hurt");
+      if (message.defeated) {
+        showDefeat(message.attackerName);
+        defeatTitle.textContent = "DEFEATED BY A PLAYER";
+        defeatDetail.textContent = `${message.attackerName} defeated you on Floor 1. Your permanent character progression and equipment are safe.`;
+      } else status.textContent = `${message.attackerName} hit you for ${message.damage} · ${message.health} HP remaining.`;
+      logMovementEvent(`PVP HURT attacker=${message.attackerId} hp=${message.health} defeated=${message.defeated}`);
+    }
+  });
+  room.onMessage("combat:pvp-kill", (message: PvpKill) => {
+    social.event(`☠ ${message.attackerName} defeated ${message.targetName} and is marked as a player killer for three days.`);
   });
   room.onMessage("potion:update", (message: PotionUpdate) => {
     potionPendingUntil = 0;

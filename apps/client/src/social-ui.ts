@@ -33,7 +33,7 @@ export function createSocialUI(send: (type: string, payload: unknown) => boolean
     notice(text: string) { add("System", text, "notice"); },
     event(text: string) { add("World", text, "event"); },
     message(message: NearbyChatMessage) { add(message.name + ":", message.text, "chat"); },
-    update(now: number, players: { id: string; name: string; x: number; y: number; visible: boolean; local: boolean;
+    update(now: number, players: { id: string; name: string; x: number; y: number; visible: boolean; local: boolean; murderer?: boolean;
       healHealth?: number; healMaxHealth?: number; healTarget?: boolean }[]) {
       if (now - lastUpdate < 100) return; lastUpdate = now;
       const ids = new Set(players.map(player => player.id));
@@ -41,7 +41,7 @@ export function createSocialUI(send: (type: string, payload: unknown) => boolean
       for (const player of players) {
         let tag = tags.get(player.id);
         if (!tag) { tag = document.createElement("div"); tag.className = "player-nameplate"; document.body.append(tag); tags.set(player.id, tag); }
-        tag.replaceChildren(document.createTextNode(player.name));
+        tag.replaceChildren(document.createTextNode(player.murderer ? `☠ ${player.name}` : player.name));
         if (player.healHealth !== undefined && player.healMaxHealth !== undefined) {
           const meter = document.createElement("span"); meter.className = "player-heal-meter";
           const fill = document.createElement("i");
@@ -52,6 +52,7 @@ export function createSocialUI(send: (type: string, payload: unknown) => boolean
           const cue = document.createElement("span"); cue.className = "player-heal-cue"; cue.textContent = "G · HEAL"; tag.append(cue);
         }
         tag.hidden = !player.visible; tag.dataset.local = String(player.local);
+        tag.dataset.murderer = String(Boolean(player.murderer));
         tag.dataset.healTarget = String(Boolean(player.healTarget));
         tag.style.left = `${player.x}px`; tag.style.top = `${player.y}px`;
       }

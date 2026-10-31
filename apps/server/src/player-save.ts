@@ -23,6 +23,8 @@ import {
   type AshenBlueprintId,
   type AshenMasteryProgress,
   type TavernMealId,
+  pvpMurdererUntil,
+  withPvpMurdererUntil,
 } from "@blockcraft/protocol";
 import { parseRoadsideClaims } from "@blockcraft/voxel-world";
 import { canEquipMainHand } from "./equipment-rules.js";
@@ -63,6 +65,7 @@ export interface PlayerSaveData {
   agilityPoints?: number;
   miningPoints?: number;
   coins: number;
+  murdererUntil?: number;
   potionCooldownUntil?: number;
   blacksmithUpgrades: number;
   reforgeRanks?: EquipmentReforgeRanks;
@@ -185,6 +188,7 @@ export function snapshotPlayerSave(player: PlayerState, now = Date.now()): Playe
     agilityPoints: player.agilityPoints,
     miningPoints: player.miningPoints,
     coins: player.coins,
+    murdererUntil: pvpMurdererUntil(player.huntLoadoutsJson),
     potionCooldownUntil: player.potionCooldownUntil,
     blacksmithUpgrades: player.blacksmithUpgrades,
     reforgeRanks: parseReforgeRanks(player.reforgeRanksJson),
@@ -293,6 +297,7 @@ export function parsePlayerSave(raw: string | null): PlayerSaveData | null {
     agilityPoints: Math.floor(finiteNumber(value.agilityPoints, 0, 0, 5)),
     miningPoints: Math.floor(finiteNumber(value.miningPoints, 0, 0, 5)),
     coins: Math.floor(finiteNumber(value.coins, TAVERN_QUIZ_STARTING_COINS, 0, 1_000_000)),
+    murdererUntil: finiteNumber(value.murdererUntil, 0, 0, Number.MAX_SAFE_INTEGER),
     potionCooldownUntil: finiteNumber(value.potionCooldownUntil, 0, 0, Number.MAX_SAFE_INTEGER),
     blacksmithUpgrades: Math.floor(finiteNumber(value.blacksmithUpgrades, 0, 0, 2047)),
     reforgeRanks: parseReforgeRanks(value.reforgeRanks),
@@ -381,6 +386,7 @@ export function applyPlayerSave(player: PlayerState, save: PlayerSaveData): void
     ...(save.tavernMealId ? { tavernMeal: { id: save.tavernMealId, state: save.tavernMealState ?? "prepared" } } : {}) });
   player.huntLoadoutsJson = withStarterKitClaimed(JSON.stringify({ ...JSON.parse(player.huntLoadoutsJson), roadsideClaims: save.roadsideClaims ?? [] }), save.starterKitClaimed !== false);
   if (save.tavernReturnBound === true) player.huntLoadoutsJson = withTavernReturnBound(player.huntLoadoutsJson);
+  player.huntLoadoutsJson = withPvpMurdererUntil(player.huntLoadoutsJson, save.murdererUntil ?? 0);
   player.huntCollectionRewardClaimed = save.huntCollectionRewardClaimed === true;
   player.forestBestTimeMs = save.forestBestTimeMs ?? 0;
   player.silverDepthsBestTimeMs = save.silverDepthsBestTimeMs ?? 0;

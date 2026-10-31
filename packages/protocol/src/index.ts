@@ -18,6 +18,7 @@ export * from "./fast-world-weapons.js";
 export * from "./fast-world-regions.js";
 export * from "./fast-world-navigation.js";
 export * from "./tower-floor-one.js";
+export * from "./pvp.js";
 export { BRUTE_VOLLEY, bruteVolleyReady, bruteRockEndpoints, bruteRockLanes } from "./brute-volley.js";
 export { SPITTER_PATTERN, CRYSTAL_BURST_OFFSETS, VENOM_RING_OFFSETS, MATRIARCH_PHASE, matriarchEnraged, matriarchPattern, crystalMatriarchPattern, matriarchSecondVolleyYaw, matriarchWarningLanes, spitterPattern, spitterShotOffsets, spitterShotEndpoints, spitterWarningLanes } from "./spitter-patterns.js";
 export { DODGE_STAMINA_COST, DODGE_CHAIN_COST_STEP, DODGE_MAX_STAMINA_COST, DODGE_CHAIN_WINDOW_MS, DODGE_EXHAUSTION_MS, PERFECT_DODGE_COUNTER_MS, PERFECT_DODGE_STAMINA_RESTORE, dodgeChainStaminaCost, nextDodgeChain, type DodgePressureUpdate } from "./dodge-pressure.js";
@@ -27,8 +28,8 @@ export { DODGE_STAMINA_COST, DODGE_CHAIN_COST_STEP, DODGE_MAX_STAMINA_COST, DODG
 // otherwise let a new client join a room still serving the old terrain.
 export const WORLD_ROOM = "world-warden-gate-v167";
 export const SILVER_DEPTHS_ROOM = "silver-depths-instance-v3";
-export const PRACTICE_ROOM = "calling-practice-v10";
-export const TAVERN_ROOM = "hearth-and-hammer-v1";
+export const PRACTICE_ROOM = "calling-practice-v11";
+export const TAVERN_ROOM = "hearth-and-hammer-v2";
 // The authored inn faces south (+Z). Keep the interaction anchor immediately
 // outside its visible front door rather than beside the building.
 export const FAST_WORLD_TAVERN_ENTRANCE = { x: 74.5, y: 8, z: 81.5 } as const;
