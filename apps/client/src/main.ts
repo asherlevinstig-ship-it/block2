@@ -522,7 +522,7 @@ import { LazySceneDressing } from "./lazy-scene-dressing.js";
 import { WARDEN_LOOT_BEAM_MS } from "./warden-victory-effects.js";
 import { advanceIndoorCameraBlend, indoorCameraOffset } from "./indoor-camera.js";
 import { canPlayAtTavernTable, canPlayHigherOrLower, canTalkToTavernKeeper, TAVERN_HIGH_LOW_TABLE, TAVERN_KEEPER, TAVERN_KEEPER_LINES, TAVERN_QUIZ_TABLE,
-  TAVERN_ROOM_KEEPER, TAVERN_ROOM_QUIZ_TABLE } from "./tavern-keeper.js";
+  TAVERN_ROOM_KEEPER } from "./tavern-keeper.js";
 import { BLACKSMITH_STALL, canTradeAtBlacksmithStall } from "./blacksmith.js";
 import { FAST_WORLD_BLACKSMITH_POSITION } from "@blockcraft/protocol";
 import "./styles.css";
@@ -14316,8 +14316,8 @@ function updateTarget(): void {
     blacksmithPrompt.style.left = `${rect.left + screen.x * rect.width / canvas.width}px`;
     blacksmithPrompt.style.top = `${rect.top + screen.y * rect.height / canvas.height}px`;
   }
-  const activeQuizTable = tavernRoomRequested ? TAVERN_ROOM_QUIZ_TABLE : TAVERN_QUIZ_TABLE;
-  const quizTableNearby = canPlayAtTavernTable(player, tavernRoomRequested || sceneDressing.keeperVisible, activeQuizTable);
+  const activeQuizTable = TAVERN_QUIZ_TABLE;
+  const quizTableNearby = !tavernRoomRequested && canPlayAtTavernTable(player, sceneDressing.keeperVisible, activeQuizTable);
   quizTablePrompt.hidden = !quizTableNearby || !quizPanel.hidden;
   if (!quizTablePrompt.hidden) {
     const screen = camera.camera.worldToScreen(new pc.Vec3(activeQuizTable.x, activeQuizTable.y + .5, activeQuizTable.z));
@@ -16725,8 +16725,7 @@ function requestWorldInteraction(): void {
     openHighLow();
     return;
   }
-  if (canPlayAtTavernTable(localPlayer.getPosition(), tavernRoomRequested || sceneDressing.keeperVisible,
-    tavernRoomRequested ? TAVERN_ROOM_QUIZ_TABLE : TAVERN_QUIZ_TABLE)) {
+  if (!tavernRoomRequested && canPlayAtTavernTable(localPlayer.getPosition(), sceneDressing.keeperVisible, TAVERN_QUIZ_TABLE)) {
     openTavernQuiz();
     return;
   }

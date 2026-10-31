@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { canPlayAtTavernTable, canPlayHigherOrLower, canTalkToTavernKeeper, TAVERN_HIGH_LOW_TABLE, TAVERN_KEEPER,
-  TAVERN_ROOM_KEEPER, TAVERN_ROOM_QUIZ_TABLE } from "./tavern-keeper.js";
+  TAVERN_ROOM_KEEPER } from "./tavern-keeper.js";
 
 describe("tavernkeeper interaction", () => {
   it("can be reached from the customer side of the bar", () => {
@@ -27,10 +27,6 @@ describe("tavern quiz table interaction", () => {
     expect(canPlayAtTavernTable({ x: 5.1, y: 8, z: 22.5 }, true)).toBe(false);
     expect(canPlayAtTavernTable({ x: 12.5, y: 5, z: 22.5 }, true)).toBe(false);
     expect(canPlayAtTavernTable({ x: 12.5, y: 8, z: 22.5 }, false)).toBe(false);
-  });
-
-  it("supports the dedicated room's blue-and-gold table", () => {
-    expect(canPlayAtTavernTable({ x: 0, y: 8, z: 3.2 }, true, TAVERN_ROOM_QUIZ_TABLE)).toBe(true);
   });
 });
 
