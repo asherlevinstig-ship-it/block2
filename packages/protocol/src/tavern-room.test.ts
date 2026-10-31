@@ -10,8 +10,10 @@ describe("tavern furniture collision", () => {
   });
   it("supports a solid upper floor with an open guest-room doorway", () => {
     expect(tavernRoomFurnitureCellSolid(0, 14, 0)).toBe(true);
+    expect(tavernRoomFurnitureCellSolid(6, 14, 2)).toBe(false);
     expect(tavernRoomFurnitureCellSolid(-4, 15, 2)).toBe(true);
     expect(tavernRoomFurnitureCellSolid(0, 15, 2)).toBe(false);
+    expect(tavernRoomFurnitureCellSolid(6, 15, 2)).toBe(false);
   });
   it("authorizes inn interactions only beside their furnishings", () => {
     expect(canUseTavernInnPoint({ x: TAVERN_INN_POINTS.rest.x, y: 15, z: TAVERN_INN_POINTS.rest.z }, "rest")).toBe(true);

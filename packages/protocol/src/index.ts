@@ -180,11 +180,12 @@ export type TavernServiceUpdate = {
   mealState: "prepared" | "active" | null;
 };
 export const TAVERN_INN_POINTS = {
-  upstairs: { x: 7.35, y: 9, z: 4.75, range: 2.25, target: { x: 7.15, y: 15, z: 5.2 } },
-  downstairs: { x: 7.15, y: 15, z: 5.2, range: 2.25, target: { x: 7.35, y: 9, z: 4.75 } },
+  upstairs: { x: 7.02, y: 8, z: 5.85, range: 2.8, target: { x: 3.8, y: 15, z: .75 } },
+  downstairs: { x: 4.15, y: 15, z: .75, range: 2.9, target: { x: 7.02, y: 8, z: 6.25 } },
   rest: { x: 0, y: 15, z: -4.55, range: 2.6 },
   storage: { x: -6.25, y: 15, z: -4.85, range: 2.5 },
 } as const;
+export const TAVERN_INN_STAIRWELL = { minX: 4.35, maxX: 9.4, minZ: .15, maxZ: 5.25 } as const;
 export const TavernInnActionSchema = z.object({
   action: z.enum(["upstairs", "downstairs", "rest", "storage"]),
 }).strict();
@@ -292,7 +293,7 @@ export const TAVERN_ROOM_FURNITURE_COLLIDERS = [
   { id: "hearth-bench-west", minX: .45, maxX: 1.45, minZ: -5.7, maxZ: -3.75, minY: 8, maxY: 11.5 },
   { id: "hearth-bench-east", minX: 6.15, maxX: 7.15, minZ: -5.7, maxZ: -3.75, minY: 8, maxY: 11.5 },
   { id: "inn-partition-west", minX: -9.5, maxX: -1.45, minZ: 2.35, maxZ: 3.45, minY: 15, maxY: 19.5 },
-  { id: "inn-partition-east", minX: 1.45, maxX: 9.5, minZ: 2.35, maxZ: 3.45, minY: 15, maxY: 19.5 },
+  { id: "inn-partition-east", minX: 1.45, maxX: 4.25, minZ: 2.35, maxZ: 3.45, minY: 15, maxY: 19.5 },
   { id: "inn-bed", minX: -1.45, maxX: 1.45, minZ: -6.25, maxZ: -2.65, minY: 15, maxY: 17 },
   { id: "inn-chest", minX: -7.35, maxX: -5.15, minZ: -6.1, maxZ: -3.75, minY: 15, maxY: 17 },
   { id: "inn-wardrobe", minX: 5.25, maxX: 7.5, minZ: -7.75, maxZ: -5.4, minY: 15, maxY: 18.5 },
@@ -300,7 +301,10 @@ export const TAVERN_ROOM_FURNITURE_COLLIDERS = [
 
 export function tavernRoomFurnitureCellSolid(x: number, y: number, z: number): boolean {
   const centerX = x + .5, centerZ = z + .5;
-  if (y >= 14 && y < 15 && centerX > -9.4 && centerX < 9.4 && centerZ > -7.9 && centerZ < 7.9) return true;
+  const stairwell = centerX >= TAVERN_INN_STAIRWELL.minX && centerX <= TAVERN_INN_STAIRWELL.maxX
+    && centerZ >= TAVERN_INN_STAIRWELL.minZ && centerZ <= TAVERN_INN_STAIRWELL.maxZ;
+  if (y >= 14 && y < 15 && centerX > -9.4 && centerX < 9.4 && centerZ > -7.9 && centerZ < 7.9)
+    return !stairwell;
   return TAVERN_ROOM_FURNITURE_COLLIDERS.some(collider => centerX >= collider.minX && centerX <= collider.maxX
     && centerZ >= collider.minZ && centerZ <= collider.maxZ && y >= collider.minY && y < collider.maxY);
 }

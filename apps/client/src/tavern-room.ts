@@ -65,7 +65,8 @@ const cylinder = (parent: pc.Entity, name: string, mat: pc.Material, scale: read
   shape(parent, name, "cylinder", mat, scale, position, euler);
 
 function loadProp(app: pc.Application, url: string, parent: pc.Entity,
-  placements: { position: [number, number, number]; yaw?: number; scale?: number }[]): void {
+  placements: { position: [number, number, number]; yaw?: number;
+    scale?: number | [number, number, number] }[]): void {
   app.assets.loadFromUrl(url, "container", (error, asset) => {
     const resource = asset?.resource as pc.ContainerResource | undefined;
     if (error || !resource) {
@@ -77,7 +78,8 @@ function loadProp(app: pc.Application, url: string, parent: pc.Entity,
       entity.setLocalPosition(...placement.position);
       entity.setLocalEulerAngles(0, placement.yaw ?? 0, 0);
       const scale = placement.scale ?? 1;
-      entity.setLocalScale(scale, scale, scale);
+      if (Array.isArray(scale)) entity.setLocalScale(...scale);
+      else entity.setLocalScale(scale, scale, scale);
       parent.addChild(entity);
     }
   });
@@ -197,9 +199,16 @@ export function createTavernRoom(app: pc.Application): pc.Entity {
     [[.45, 1.05, 15.7], [-9.43, 8.52, 0]], [[.45, 1.05, 15.7], [9.43, 8.52, 0]],
   ] as const) box(root, "stone-wainscot", stone, scale, position);
   addWallTimbers(root, oak);
-  box(root, "raised-ceiling", oak, [19.5, .3, 16.5], [0, 14.18, 0]);
-  for (const z of [-5.2, 0, 5.2])
-    box(root, "ceiling-rafter", oakLight, [19.75, .42, .46], [0, 13.72, z]);
+  // Frame the upper floor around a genuine stairwell. A single full slab made
+  // the staircase visibly terminate in a ceiling even though travel worked.
+  box(root, "upper-floor-main", oak, [14.15, .3, 16.5], [-2.675, 14.18, 0]);
+  box(root, "upper-floor-east-rear", oak, [5.35, .3, 8.35], [7.075, 14.18, -4.075]);
+  box(root, "upper-floor-east-front", oak, [5.35, .3, 3], [7.075, 14.18, 6.75]);
+  box(root, "ceiling-rafter", oakLight, [19.75, .42, .46], [0, 13.72, -5.2]);
+  // The rafters beside the staircase stop at the well instead of forming a
+  // waist-high bar across the player's view at the top step.
+  for (const z of [0, 5.2])
+    box(root, "ceiling-rafter-trimmed", oakLight, [14.05, .42, .46], [-2.7, 13.72, z]);
 
   // The inn's upper floor is a real guest suite, reached from the stair landing.
   // It deliberately uses the same footprint as the common room so the building
@@ -216,9 +225,17 @@ export function createTavernRoom(app: pc.Application): pc.Entity {
   for (const x of [-9.25, 0, 9.25])
     box(root, "upper-wall-post", oak, [.42, 5.35, .42], [x, 17.15, -7.72]);
   box(root, "guest-partition-west", oak, [8.05, 4.5, .3], [-5.48, 17.25, 2.9]);
-  box(root, "guest-partition-east", oak, [8.05, 4.5, .3], [5.48, 17.25, 2.9]);
+  // The east partition ends before the stairwell so the landing has a clear
+  // route into the guest room instead of opening into a wall.
+  box(root, "guest-partition-east", oak, [2.8, 4.5, .3], [2.85, 17.25, 2.9]);
   box(root, "guest-door-lintel", oakLight, [2.9, .42, .46], [0, 19.2, 2.9]);
-  box(root, "upper-hall-runner", rugGreen, [16.2, .04, 3.15], [0, 14.38, 5.2]);
+  box(root, "upper-hall-runner", rugGreen, [11.2, .04, 3.15], [-3.3, 14.38, 5.2]);
+  box(root, "stairwell-frame-left", oakLight, [.28, .42, 5.2], [4.38, 14.38, 2.7]);
+  box(root, "stairwell-frame-rear", oakLight, [5.25, .42, .28], [7.02, 14.38, .18]);
+  box(root, "stairwell-frame-front", oakLight, [5.25, .42, .28], [7.02, 14.38, 5.22]);
+  for (const z of [.45, 2.7, 4.95])
+    box(root, "stairwell-rail-post", oakLight, [.18, 1.65, .18], [4.48, 15.2, z]);
+  box(root, "stairwell-handrail", oakLight, [.22, .22, 5.1], [4.48, 16.02, 2.7]);
   box(root, "guest-room-rug", rugRed, [7.7, .04, 6.9], [0, 14.38, -3.65]);
 
   // A substantial, readable bed: resting here also binds the inn return point.
@@ -242,9 +259,10 @@ export function createTavernRoom(app: pc.Application): pc.Entity {
   }
   const innBanner = new pc.Entity("inn-victory-banner"); innBanner.enabled = false; root.addChild(innBanner);
   loadProp(app, VICTORY_BANNER_URL, innBanner, [{ position: [0, 18.85, -7.46], yaw: 0, scale: 1.15 }]);
+  // Preserve the required six-metre rise while narrowing the oversized asset
+  // to a believable inn staircase. Its top now passes through the open well.
   loadProp(app, STAIRS_URL, root, [
-    { position: [7.35, 8.02, 4.75], yaw: 180, scale: 1.2 },
-    { position: [7.15, 14.34, 5.2], yaw: 0, scale: .92 },
+    { position: [7.02, 8.02, 4.82], yaw: 180, scale: [.68, 1.16, 1.08] },
   ]);
   loadProp(app, CHEST_URL, root, [{ position: [-6.25, 14.35, -4.85], yaw: 90, scale: 1.3 }]);
   loadProp(app, CABINET_URL, root, [{ position: [6.35, 14.35, -6.55], yaw: 0, scale: 1.25 }]);
