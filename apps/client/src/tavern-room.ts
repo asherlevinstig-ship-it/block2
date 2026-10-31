@@ -6,7 +6,6 @@ const DUNGEON_ASSET_ROOT = "/assets/kaykit-dungeon";
 const TORCH_URL = `${DUNGEON_ASSET_ROOT}/torch_lit.gltf.glb`;
 const TROPHY_LOCKED_URL = `${DUNGEON_ASSET_ROOT}/sword_shield_broken.gltf.glb`;
 const TROPHY_VICTORY_URL = `${DUNGEON_ASSET_ROOT}/sword_shield_gold.gltf.glb`;
-const STAIRS_URL = `${DUNGEON_ASSET_ROOT}/stairs_wide.gltf.glb`;
 const CHEST_URL = `${DUNGEON_ASSET_ROOT}/chest.glb`;
 const VICTORY_BANNER_URL = `${DUNGEON_ASSET_ROOT}/banner_triple_yellow.gltf.glb`;
 const FANTASY_PROP_ROOT = "/assets/quaternius-fantasy-props";
@@ -259,11 +258,20 @@ export function createTavernRoom(app: pc.Application): pc.Entity {
   }
   const innBanner = new pc.Entity("inn-victory-banner"); innBanner.enabled = false; root.addChild(innBanner);
   loadProp(app, VICTORY_BANNER_URL, innBanner, [{ position: [0, 18.85, -7.46], yaw: 0, scale: 1.15 }]);
-  // Preserve the required six-metre rise while narrowing the oversized asset
-  // to a believable inn staircase. Its top now passes through the open well.
-  loadProp(app, STAIRS_URL, root, [
-    { position: [7.02, 8.02, 7.15], yaw: 180, scale: [.68, 1.37, 1.75] },
-  ]);
+  // Render the same seven one-metre steps used by authoritative collision.
+  // The previous imported mesh reported bounds that did not match its visible
+  // treads, leaving its top several metres below the real upper floor.
+  for (let step = 0; step < 7; step++) {
+    const z = 6.5 - step;
+    const height = step + 1;
+    const top = 8 + height;
+    box(root, `guest-stair-riser-${step + 1}`, oak, [4.8, height, .96], [7.02, 8 + height / 2, z]);
+    box(root, `guest-stair-tread-${step + 1}`, oakLight, [5.02, .12, 1.08], [7.02, top + .02, z]);
+    if (step % 2 === 0 || step === 6) for (const x of [4.5, 9.54])
+      box(root, "guest-stair-rail-post", oakLight, [.16, 1.15, .16], [x, top + .57, z]);
+  }
+  for (const x of [4.5, 9.54])
+    box(root, "guest-stair-sloped-rail", oakLight, [.2, .2, 8.48], [x, 12.5, 3.5], [45, 0, 0]);
   loadProp(app, CHEST_URL, root, [{ position: [-6.25, 15, -4.85], yaw: 90, scale: 1.3 }]);
   loadProp(app, CABINET_URL, root, [{ position: [6.35, 15, -6.55], yaw: 0, scale: 1.25 }]);
   loadProp(app, BOOKCASE_URL, root, [{ position: [7.6, 15, -.5], yaw: 0, scale: 1.08 }]);

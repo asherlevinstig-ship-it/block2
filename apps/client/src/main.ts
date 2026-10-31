@@ -1942,7 +1942,8 @@ const readCollisionWorldBlock = Object.assign(function (x: number, y: number, z:
   const chunk = chunks.get(chunkKey(address.chunkX, address.chunkZ));
   if (!chunk) return Block.Bedrock;
   return (chunk.blocks[chunkIndex(address.localX, y, address.localZ)] ?? Block.Air) as BlockId;
-}, { groundHeight: (x: number,z: number) => fastWorldRequested ? fastWorldGroundHeight(x,z) : undefined });
+}, { groundHeight: (x: number,z: number) => tavernRoomRequested ? undefined
+  : fastWorldRequested ? fastWorldGroundHeight(x,z) : undefined });
 
 function isCutawayHidden(x: number, y: number, z: number): boolean {
   return isVoxelHiddenForPlayer(x, y, z, playerCutaway)

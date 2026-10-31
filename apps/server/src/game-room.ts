@@ -9665,7 +9665,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (y >= CHUNK_HEIGHT) return Block.Air;
     const address = worldToChunk(x, z);
     return getBlock(this.getChunk(address.chunkX, address.chunkZ).chunk, address.localX, y, address.localZ);
-  }, { groundHeight: (x: number,z: number) => this.roomKind === "tavern" ? 8 : this.rapidPractice
+  // Tavern furnishings and the guest staircase are voxel collision. Supplying
+  // a flat analytic height here bypasses all step-up checks in the shared solver.
+  }, { groundHeight: (x: number,z: number) => this.roomKind === "tavern" ? undefined : this.rapidPractice
     ? FAST_WORLD_BLOCK_READER.groundHeight?.(x, z) : undefined });
 
   private resolveBrambleSnares(now: number): void {
