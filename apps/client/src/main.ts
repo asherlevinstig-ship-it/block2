@@ -96,7 +96,7 @@ import { createStorageUI, type StorageUpdate } from "./storage-ui.js";
 import { lootVisibleToPlayer } from "./loot-ownership.js";
 import { lootHoldProgress, lootHoldSourceForPointer, type LootHold } from "./loot-hold.js";
 import { portalHoldProgress, type PortalHold } from "./portal-hold.js";
-import { createPortalTransition } from "./portal-transition.js";
+import { createPortalTransition, portalTravelUsesVeil } from "./portal-transition.js";
 import { incomingLootAdvice, swapCandidateReason, swapCandidateScore } from "./loot-recommendation.js";
 import { undergroundThreatVisible } from "./underground-threat-visibility.js";
 import { mobPresentationDetail, mobPresentationInitialDelay, mobPresentationIntervalMs, mobRigNeedsAnimation } from "./mob-presentation-budget.js";
@@ -14116,8 +14116,35 @@ function createDungeonBurst(x: number, z: number, kind: "gate" | "victory" | "cr
 }
 let nearbyForestPortal: string | null = null;
 const portalTransition = createPortalTransition();
+const tavernDoorHold = document.querySelector<HTMLElement>("#tavern-door-hold")!;
+const tavernDoorRing = document.querySelector<HTMLElement>("#tavern-door-ring")!;
+const tavernDoorAction = document.querySelector<HTMLElement>("#tavern-door-action")!;
+const tavernDoorDestination = document.querySelector<HTMLElement>("#tavern-door-destination")!;
 let portalHold: PortalHold | null = null;
 let portalTravelPendingUntil = 0;
+function isTavernDoor(portalId: string | null): boolean {
+  return portalId === "tavern-entry" || portalId === "tavern-exit";
+}
+function updateTavernDoorHold(now: number): void {
+  const portalId = nearbyForestPortal;
+  const visible = isTavernDoor(portalId) && now >= portalTravelPendingUntil;
+  tavernDoorHold.hidden = !visible;
+  if (!visible || !portalId) {
+    tavernDoorRing.style.setProperty("--tavern-progress", "0%");
+    tavernDoorHold.dataset.holding = "false";
+    return;
+  }
+  const holding = portalHold?.portalId === portalId;
+  const progress = holding && portalHold ? portalHoldProgress(portalHold, now, nearbyForestPortal) : 0;
+  const entering = portalId === "tavern-entry";
+  const coarse = window.matchMedia("(pointer: coarse)").matches;
+  tavernDoorRing.style.setProperty("--tavern-progress", `${Math.round(progress * 100)}%`);
+  tavernDoorRing.querySelector("kbd")!.textContent = coarse ? "✋" : "E";
+  tavernDoorHold.dataset.holding = String(holding);
+  tavernDoorAction.textContent = holding ? `KEEP HOLDING · ${Math.round(progress * 100)}%`
+    : `HOLD ${coarse ? "TO" : "E TO"} ${entering ? "ENTER" : "EXIT"}`;
+  tavernDoorDestination.textContent = entering ? "THE HEARTH & HAMMER" : "TOWN OF BEGINNINGS";
+}
 function cancelPortalHold(reason?: HoldStopReason): void {
   if (portalHold && reason) interactionFeedback.show(holdStopMessage("portal", reason, portalHold.source === "touch"));
   portalTransition.cancel();
@@ -14139,13 +14166,15 @@ function updatePortalHold(now: number): void {
     inRange: hold.portalId === nearbyForestPortal, released: hold.source === "keyboard" && !keys.has("KeyE") });
   if (!room || reason) { cancelPortalHold(reason ?? "connection"); return; }
   const progress = portalHoldProgress(hold, now, nearbyForestPortal);
-  portalTransition.charge(progress);
+  if (isTavernDoor(hold.portalId)) portalTransition.cancel();
+  else portalTransition.charge(progress);
   forestPortalVisuals.get(hold.portalId)?.label.style.setProperty("--portal-progress", `${progress * 100}%`);
   contextButton.style.setProperty("--context-progress", `${progress * 100}%`);
   if (progress >= 1) {
+    const tavernDoor = isTavernDoor(hold.portalId);
     cancelPortalHold();
     portalTravelPendingUntil = now + 2000;
-    portalTransition.depart();
+    if (!tavernDoor) portalTransition.depart();
     room.send("portal:use", { id: hold.portalId });
   }
 }
@@ -14320,6 +14349,7 @@ function updateForestPortals(): void {
     if (active && reachable && distance < nearest) { nearest = distance; nearbyForestPortal = id; }
   });
   updatePortalHold(performance.now());
+  updateTavernDoorHold(performance.now());
 }
 function updateTarget(): void {
   updateForestPortals();
@@ -19815,8 +19845,11 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     if (retryFromDepths && partyTicket) depthsRetryPrompt.querySelector("span")!.textContent = "Your party will regroup here as members return. Enter together when ready.";
   });
   room.onMessage("room:transfer", (transfer: RoomTransfer) => {
-    portalTransition.depart();
-    portalTransition.carry();
+    const useVeil = portalTravelUsesVeil(activeRoomName, transfer.room);
+    if (useVeil) {
+      portalTransition.depart();
+      portalTransition.carry();
+    } else portalTransition.cancel();
     const url = new URL(window.location.href);
     if (transfer.room === SILVER_DEPTHS_ROOM) {
       url.searchParams.set("room", "silver-depths");
@@ -19855,7 +19888,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       else url.searchParams.set("legacy", "voxel");
       status.textContent = "Returning to the shared Town of Beginnings...";
     }
-    window.setTimeout(() => window.location.replace(url), 180);
+    window.setTimeout(() => window.location.replace(url), useVeil ? 180 : 0);
   });
   room.onMessage("practice:state", (update: { active: boolean; abilityId?: CallingAbilityId; wave?: number; message: string }) => {
     abilityPracticeOpen.disabled = false;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { portalTransitionFrame, type PortalTransitionState } from "./portal-transition.js";
+import { portalTransitionFrame, portalTravelUsesVeil, type PortalTransitionState } from "./portal-transition.js";
 describe("portal transition lifecycle", () => {
   const travelling: PortalTransitionState = { phase: "travelling", startedAt: 1000, charge: 1, arrived: false };
   it("keeps travel covered until arrival is acknowledged and the world is ready", () => {
@@ -15,5 +15,10 @@ describe("portal transition lifecycle", () => {
   });
   it("builds a light veil during the interaction hold", () => {
     expect(portalTransitionFrame({ ...travelling, phase: "charging", charge: .5 }, 1000, true).opacity).toBe(.2);
+  });
+  it("keeps tavern doors immediate while preserving portal travel effects elsewhere", () => {
+    expect(portalTravelUsesVeil("practice", "tavern")).toBe(false);
+    expect(portalTravelUsesVeil("tavern", "practice")).toBe(false);
+    expect(portalTravelUsesVeil("practice", "silver-depths")).toBe(true);
   });
 });

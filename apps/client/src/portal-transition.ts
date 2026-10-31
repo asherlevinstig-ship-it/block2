@@ -1,5 +1,8 @@
 type Phase = "idle" | "charging" | "travelling" | "arriving";
 export interface PortalTransitionState { phase: Phase; startedAt: number; charge: number; arrived: boolean }
+export function portalTravelUsesVeil(fromRoom: string, toRoom: string): boolean {
+  return fromRoom !== "tavern" && toRoom !== "tavern";
+}
 export function portalTransitionFrame(state: PortalTransitionState, now: number, ready: boolean) {
   const elapsed = Math.max(0, now - state.startedAt);
   if (state.phase === "travelling" && (state.arrived && ready && elapsed >= 350 || elapsed > 8000))

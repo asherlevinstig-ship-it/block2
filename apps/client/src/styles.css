@@ -46,6 +46,35 @@
 .portal-hold-key kbd { display: grid; place-items: center; width: 100%; height: 100%; border-radius: 5px; background: #171121; color: #fff4ce; font: 900 15px/1 system-ui; }
 .forest-portal-label[data-holding="true"] .portal-hold-key { box-shadow: 0 0 13px #bf8aff; }
 body:has(#inventory-panel:not([hidden])) .forest-portal-label { display: none; }
+#tavern-door-hold {
+  position: fixed; z-index: 31; left: 50%; top: 57%; transform: translate(-50%, -50%);
+  display: flex; align-items: center; gap: 13px; min-width: 245px; box-sizing: border-box;
+  padding: 10px 15px 10px 10px; border: 1px solid #e0a74b99; border-radius: 999px;
+  background: linear-gradient(100deg, #150d08e8, #2c190ee8); color: #fff0c5;
+  box-shadow: 0 9px 30px #000b, inset 0 0 0 1px #ffe2a213, 0 0 24px #d9862530;
+  pointer-events: none; backdrop-filter: blur(4px);
+}
+#tavern-door-hold[hidden] { display: none; }
+#tavern-door-ring {
+  --tavern-progress: 0%; display: grid; place-items: center; flex: none;
+  width: 58px; height: 58px; padding: 5px; box-sizing: border-box; border-radius: 50%;
+  background: conic-gradient(#ffd875 var(--tavern-progress), #806b4d55 0);
+  box-shadow: 0 0 0 1px #ffe7ad55, 0 0 15px #da8a2638;
+}
+#tavern-door-ring kbd {
+  display: grid; place-items: center; width: 100%; height: 100%; border: 1px solid #e8b75c66;
+  border-radius: 50%; background: radial-gradient(circle at 40% 32%, #3c2919, #130d09 74%);
+  color: #fff3c7; font: 1000 23px/1 system-ui; box-shadow: inset 0 0 9px #000a;
+}
+.tavern-door-copy { display: grid; gap: 3px; text-align: left; }
+#tavern-door-action { color: #ffe3a1; font: 950 12px/1 system-ui; letter-spacing: .11em; }
+#tavern-door-destination { color: #cdbb9b; font: 850 9px/1.2 system-ui; letter-spacing: .09em; }
+#tavern-door-hold[data-holding="true"] { border-color: #ffd875; filter: brightness(1.12); }
+#tavern-door-hold[data-holding="true"] #tavern-door-ring { box-shadow: 0 0 0 1px #fff0b9, 0 0 22px #f0a22d99; }
+@media (max-width: 640px) {
+  #tavern-door-hold { top: 51%; min-width: 220px; padding: 8px 13px 8px 8px; }
+  #tavern-door-ring { width: 52px; height: 52px; }
+}
 .forest-portal-label.ember-portal-label { min-width: 210px; white-space: pre-line; color: #ffe1bf; border-color: #f06b2d; background: linear-gradient(180deg, #321209f2, #130b08f4); box-shadow: 0 0 0 1px #ff9a4133, 0 4px 18px #000b, 0 0 26px #ff4b1838; text-shadow: 0 0 10px #ff6a2b88; }
 .forest-portal-label.ember-portal-label::before { content: "◆"; display: inline-block; margin-right: 7px; color: #ff7d38; filter: drop-shadow(0 0 5px #ff4a1f); }
 .forest-portal-label.ember-portal-label.locked { color: #baaaa1; border-color: #705147; background: linear-gradient(180deg, #241713f2, #100d0cf4); box-shadow: 0 4px 18px #000b; text-shadow: none; }
