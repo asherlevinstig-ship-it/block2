@@ -15,7 +15,7 @@ import { ASHEN_REACH_HEAT_VENTS, ASHEN_REACH_NAVIGATION_LAVA_FISSURES, ASHEN_REA
   fastWorldHeatVentPhase, greenwoodMasteryStatus, mistfenMasteryStatus,
   type FastWorldVisualTheme } from "@blockcraft/protocol";
 import { rapidPracticeCollisionCellSolid, tavernRoomFurnitureCellSolid } from "@blockcraft/protocol";
-import { TAVERN_INN_POINTS, canUseTavernInnPoint, type TavernInnAction,
+import { TAVERN_INN_POINTS, TAVERN_REST_DURATION_MS, canUseTavernInnPoint, type TavernInnAction,
   type TavernInnActionUpdate } from "@blockcraft/protocol";
 import type { RegionalArmourProc } from "@blockcraft/protocol";
 import { isInMistfenMarsh, NORTHWATCH_SHARD_PATROL_SITE } from "@blockcraft/voxel-world";
@@ -5045,6 +5045,7 @@ function animateVoxelCharacter(
   facingYaw?: number,
   maximumAnimationSpeed = 4.2,
 ): void {
+  rig.root.setLocalEulerAngles(0, 0, 0);
   const travelDistance = Math.hypot(travelX, travelZ);
   const measuredSpeed = recentTravelSpeed(rig.travelFrames, travelDistance, deltaTime);
   const animationSpeed = measuredSpeed < 0.12 ? 0 : Math.min(measuredSpeed, maximumAnimationSpeed);
@@ -5109,6 +5110,28 @@ function animateVoxelCharacter(
       weapon.setLocalScale(1, 1 + (delta.length() / strike.weaponLength - 1) * blend, 1);
     }
   }
+}
+
+function applySleepingPose(rig: VoxelCharacterRig, sleeping: boolean, mainHandId: MainHandId): void {
+  for (const [id, hand] of Object.entries(rig.mainHands)) hand.enabled = !sleeping && id === mainHandId;
+  if (!sleeping) {
+    rig.root.setLocalPosition(0, 0, 0);
+    return;
+  }
+  // Rotate the complete character from its feet onto the mattress, then soften
+  // the limbs into a readable sleeping silhouette rather than a rigid corpse.
+  rig.root.setLocalPosition(0, .2, .72);
+  rig.root.setLocalEulerAngles(-90, 0, 0);
+  rig.torso.setLocalEulerAngles(0, 0, 0);
+  rig.head.setLocalEulerAngles(-6, 0, 0);
+  rig.leftArm.setLocalEulerAngles(20, 0, -18);
+  rig.rightArm.setLocalEulerAngles(24, 0, 18);
+  rig.leftElbow.setLocalEulerAngles(28, 0, 0);
+  rig.rightElbow.setLocalEulerAngles(24, 0, 0);
+  rig.leftLeg.setLocalEulerAngles(5, 0, -4);
+  rig.rightLeg.setLocalEulerAngles(-3, 0, 4);
+  rig.leftKnee.setLocalEulerAngles(8, 0, 0);
+  rig.rightKnee.setLocalEulerAngles(5, 0, 0);
 }
 
 const localPlayerVisual = new pc.Entity("local-player-visual");
@@ -5491,6 +5514,7 @@ function setCameraViewMode(next: CameraViewMode, capturePointer = false): void {
 }
 
 function toggleCameraView(capturePointer = false): void {
+  if (localSleepingUntil > Date.now()) { setCameraViewMode("third-person"); return; }
   setCameraViewMode(cameraViewMode === "first-person" ? "third-person" : "first-person", capturePointer);
 }
 
@@ -5572,6 +5596,8 @@ interface RemotePlayerVisual {
   powerId: PowerId | null;
   lastPowerSequence: number;
   defending: boolean;
+  sleepingUntil: number;
+  mainHandId: MainHandId;
 }
 
 interface NetworkMob {
@@ -10539,6 +10565,8 @@ function createRemotePlayer(sessionId: string, player: NetworkPlayer): RemotePla
     powerId: isPowerId(player.equippedPower) ? player.equippedPower : null,
     lastPowerSequence: player.powerSequence,
     defending: player.defending,
+    sleepingUntil: 0,
+    mainHandId: isMainHandId(player.mainHandId) ? player.mainHandId : "unarmed",
   };
 }
 
@@ -11827,6 +11855,7 @@ function bindPlayers(joinedRoom: Room): void {
         const mainHand = MAIN_HAND_DEFINITIONS[player.mainHandId];
         status.textContent = `${mainHand.name} equipped · Attack: ${mainHand.attackName}.`;
       } else if (remote && isMainHandId(player.mainHandId)) {
+        remote.mainHandId = player.mainHandId;
         setRigMainHand(remote.rig, player.mainHandId);
       }
     }, true);
@@ -14135,6 +14164,10 @@ const tavernDoorHold = document.querySelector<HTMLElement>("#tavern-door-hold")!
 const tavernDoorRing = document.querySelector<HTMLElement>("#tavern-door-ring")!;
 const tavernDoorAction = document.querySelector<HTMLElement>("#tavern-door-action")!;
 const tavernDoorDestination = document.querySelector<HTMLElement>("#tavern-door-destination")!;
+const innSleepHud = document.querySelector<HTMLElement>("#inn-sleep-hud")!;
+const innSleepTime = document.querySelector<HTMLElement>("#inn-sleep-time")!;
+const innSleepProgress = document.querySelector<HTMLElement>("#inn-sleep-progress")!;
+let localSleepingUntil = 0;
 let portalHold: PortalHold | null = null;
 interface InnRoomHold { action: TavernInnAction; startedAt: number; source: "keyboard" | "touch"; pointerId?: number }
 let innRoomHold: InnRoomHold | null = null;
@@ -14173,7 +14206,9 @@ function updateTavernDoorHold(now: number): void {
   const labels: Record<TavernInnAction, { action: string; destination: string }> = {
     upstairs: { action: "GO UPSTAIRS", destination: "GUEST ROOMS" },
     downstairs: { action: "GO DOWNSTAIRS", destination: "TAVERN COMMON ROOM" },
-    rest: { action: "REST & BIND", destination: "YOUR GUEST BED" },
+    rest: localSleepingUntil > Date.now()
+      ? { action: "WAKE EARLY", destination: "REST REWARD WILL BE LOST" }
+      : { action: "REST FOR 5 MIN", destination: "YOUR GUEST BED" },
     storage: { action: "OPEN", destination: "PRIVATE ROOM CHEST" },
   };
   const presentation = innAction ? labels[innAction] : {
@@ -14185,6 +14220,14 @@ function updateTavernDoorHold(now: number): void {
   tavernDoorAction.textContent = holding ? `KEEP HOLDING · ${Math.round(progress * 100)}%`
     : `HOLD ${coarse ? "TO" : "E TO"} ${presentation.action}`;
   tavernDoorDestination.textContent = presentation.destination;
+}
+function updateInnSleepHud(now: number): void {
+  const remaining = Math.max(0, localSleepingUntil - now);
+  innSleepHud.hidden = remaining <= 0;
+  if (remaining <= 0) return;
+  const seconds = Math.ceil(remaining / 1_000);
+  innSleepTime.textContent = `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+  innSleepProgress.style.transform = `scaleX(${Math.max(0, Math.min(1, 1 - remaining / TAVERN_REST_DURATION_MS))})`;
 }
 function cancelPortalHold(reason?: HoldStopReason): void {
   if (portalHold && reason) interactionFeedback.show(holdStopMessage("portal", reason, portalHold.source === "touch"));
@@ -16306,6 +16349,7 @@ function requestMine(): void {
 
 function weaponAttackInputAllowed(): boolean {
   return !!room && worldReady && !document.hidden && defeatScreen.hidden && inventoryPanel.hidden && lootPanel.hidden
+    && localSleepingUntil <= Date.now()
     && !playerInteractionUI.isOpen() && !tradeUI.isOpen() && activePresentedPopupId() === null
     && reportedProtectedDialog !== true && !portalHold && !lootHold && pendingPortalDestination === null
     && !portalTransition.isActive() && !(document.activeElement instanceof HTMLInputElement)
@@ -18285,6 +18329,9 @@ app.on("update", (dt: number) => {
     inventoryBackgroundFrameAt = performance.now();
     app.renderNextFrame = true;
   }
+  const sleepClockNow = Date.now();
+  const localSleeping = localSleepingUntil > sleepClockNow;
+  updateInnSleepHud(sleepClockNow);
   refreshPotionUi();
   const frameDurationMs = dt * 1000;
   frameSamples.push(frameDurationMs);
@@ -18301,7 +18348,7 @@ app.on("update", (dt: number) => {
     .filter(elementActuallyPresented).map(panel => panel.id || panel.getAttribute("aria-label") || "panel");
   const presentedPopupId = activePresentedPopupId();
   const protectedDialogOpen = protectedDialogPresented();
-  const modalMovementAllowed = visibleMovementPanels.length === 0 && !playerInteractionUI.isOpen()
+  const modalMovementAllowed = !localSleeping && visibleMovementPanels.length === 0 && !playerInteractionUI.isOpen()
     && !gameplayBlockedByPopup(presentedPopupId, protectedDialogOpen);
   if (!modalMovementAllowed && document.pointerLockElement === canvas) document.exitPointerLock();
   const strafe = modalMovementAllowed ? Math.max(-1, Math.min(1, keyboardStrafe + touchStrafe)) : 0;
@@ -18322,7 +18369,7 @@ app.on("update", (dt: number) => {
   thornBindingNotice.hidden = thornRemainingMs <= 0;
   if (thornRemainingMs > 0) thornBindingNotice.textContent =
     `VINES BIND YOUR FEET · ${(thornRemainingMs / 1000).toFixed(1)}s · ${window.matchMedia("(pointer: coarse)").matches ? "Tap Attack" : "Click or press J"} to cut free`;
-  const movementGateReason = !worldReady ? "WORLD_NOT_READY" : visibleMovementPanels.length ? `PANEL:${visibleMovementPanels.join(",")}`
+  const movementGateReason = !worldReady ? "WORLD_NOT_READY" : localSleeping ? "INN_SLEEP" : visibleMovementPanels.length ? `PANEL:${visibleMovementPanels.join(",")}`
     : playerInteractionUI.isOpen() ? "PLAYER_INTERACTION" : presentedPopupId ? `POPUP:${presentedPopupId}`
       : protectedDialogOpen ? "DIALOG" : thornRemainingMs > 0 ? `THORN:${Math.ceil(thornRemainingMs)}ms` : "OPEN";
   const movementGateCategory = movementGateReason.split(":")[0]!;
@@ -18533,8 +18580,9 @@ app.on("update", (dt: number) => {
       localPowerElapsed, localActivePower, localActionFacingYaw,
       moving ? predicted.x - current.x : 0, moving ? predicted.z - current.z : 0, localFacingYaw,
       fastWorldRequested ? 5.8 : 4.2);
-    if (localDefending) applyDefensePose(localPlayerRig);
-    if (room) applyMageCastAnimation(room.sessionId, localPlayerRig, animationNow);
+    if (localDefending && !localSleeping) applyDefensePose(localPlayerRig);
+    if (room && !localSleeping) applyMageCastAnimation(room.sessionId, localPlayerRig, animationNow);
+    applySleepingPose(localPlayerRig, localSleeping, localMainHandId);
   }
   const dodgeElapsed = localDodgeStartedAt === null ? null : animationNow - localDodgeStartedAt;
   if (dodgeElapsed !== null && dodgeElapsed < 320) {
@@ -18603,6 +18651,7 @@ app.on("update", (dt: number) => {
         pose.x - previousPosition.x, pose.z - previousPosition.z, pose.yaw, fastWorldRequested ? 5.8 : 4.2);
       if (remote.defending) applyDefensePose(remote.rig);
       applyMageCastAnimation(id, remote.rig, animationNow);
+      applySleepingPose(remote.rig, visibilityNow < remote.sleepingUntil, remote.mainHandId);
       if (remoteActionElapsed !== null && remoteActionElapsed >= remoteActionDuration(remote.actionMainHandId, remote.actionStep)) {
         remote.actionStartedAt = null;
         remote.actionMainHandId = null;
@@ -20909,7 +20958,24 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     }
   });
   room.onMessage("tavern:inn-action", (message: TavernInnActionUpdate) => {
+    const actionPlayerId = message.playerId ?? room!.sessionId;
+    if (actionPlayerId !== room!.sessionId) {
+      const remote = remotePlayers.get(actionPlayerId);
+      if (remote && message.sleepingUntil !== undefined) remote.sleepingUntil = message.sleepingUntil;
+      if (remote && message.target) remote.entity.setPosition(message.target.x, message.target.y, message.target.z);
+      return;
+    }
     status.textContent = message.message;
+    if (message.sleepingUntil !== undefined) {
+      const wasSleeping = localSleepingUntil > Date.now();
+      localSleepingUntil = message.sleepingUntil;
+      updateInnSleepHud(Date.now());
+      if (!wasSleeping && localSleepingUntil > Date.now()) {
+        setCameraViewMode("third-person");
+        for (const code of ["KeyW", "KeyA", "KeyS", "KeyD"]) keys.delete(code);
+        attackBuffer.clear();
+      }
+    }
     if (!message.ok) {
       showCombatFeedback("INN ACTION BLOCKED", "hurt");
       return;
@@ -20921,7 +20987,18 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       localNetworkVisualOffset = { x: 0, z: 0 }; localRecoveryVisualOffset = { x: 0, z: 0 };
       localDodgeVisualOffset = { x: 0, z: 0 }; localVerticalVelocity = 0; localVisualVerticalOffset = 0;
       snapFrameHistory.length = 0;
-      showCombatFeedback(message.action === "upstairs" ? "GUEST ROOM" : "COMMON ROOM", "dodge");
+      if (message.action === "rest") {
+        if (message.restCompleted) {
+          showCombatFeedback("FULLY RESTED · RETURN BOUND", "dodge");
+          social.event("Five-minute rest complete · fully restored · the Hearth & Hammer is now your return point.");
+        } else if ((message.sleepingUntil ?? 0) > Date.now()) {
+          showCombatFeedback("RESTING · 05:00", "dodge");
+          social.event("You lie down in your guest bed for a five-minute rest.");
+        } else {
+          showCombatFeedback("WOKE EARLY · NO REWARD", "miss");
+          social.event("You woke before completing the rest.");
+        }
+      } else showCombatFeedback(message.action === "upstairs" ? "GUEST ROOM" : "COMMON ROOM", "dodge");
       return;
     }
     if (message.action === "storage") {
@@ -20929,8 +21006,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       return;
     }
     if (message.action === "rest") {
-      showCombatFeedback("WELL RESTED · RETURN BOUND", "dodge");
-      social.event("Guest room rested · the Hearth & Hammer is now your return point.");
+      showCombatFeedback(message.restCompleted ? "FULLY RESTED · RETURN BOUND" : "RESTING", "dodge");
     }
   });
   room.send("tavern:sync");

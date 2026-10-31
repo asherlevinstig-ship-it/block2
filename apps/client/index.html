@@ -231,6 +231,12 @@
       <span id="tavern-door-ring" aria-hidden="true"><kbd>E</kbd></span>
       <span class="tavern-door-copy"><strong id="tavern-door-action">HOLD TO ENTER</strong><small id="tavern-door-destination">THE HEARTH &amp; HAMMER</small></span>
     </div>
+    <section id="inn-sleep-hud" role="status" aria-live="polite" hidden>
+      <span>THE HEARTH &amp; HAMMER · GUEST ROOM</span>
+      <strong id="inn-sleep-time">05:00</strong>
+      <div aria-hidden="true"><i id="inn-sleep-progress"></i></div>
+      <small>RESTING · HOLD E AT THE BED TO WAKE EARLY WITHOUT THE REWARD</small>
+    </section>
     <button id="player-trade-prompt" type="button" hidden>
       <span>NEARBY EXPLORER</span>
       <strong id="player-trade-name">Explorer</strong>
@@ -247,7 +253,7 @@
       <h2>Mara <small>Tavernkeeper</small></h2>
       <p id="tavern-dialogue-line"></p>
       <div class="tavern-services" aria-label="Inn services">
-        <button id="tavern-rest" type="button"><strong>REST AT THE HEARTH</strong><small>Restore health, stamina and cooldowns</small></button>
+        <button id="tavern-rest" type="button"><strong>REST IN YOUR GUEST ROOM</strong><small>Use the upstairs bed · five real minutes</small></button>
         <button id="tavern-bind" type="button"><strong>BIND RETURN POINT</strong><small id="tavern-bind-status">Return here after defeat</small></button>
       </div>
       <section class="tavern-meals" aria-label="Mara's meals">

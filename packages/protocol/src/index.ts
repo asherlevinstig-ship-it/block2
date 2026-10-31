@@ -187,13 +187,17 @@ export const TAVERN_INN_POINTS = {
   rest: { x: 0, y: 15, z: -4.55, range: 2.6 },
   storage: { x: -6.25, y: 15, z: -4.85, range: 2.5 },
 } as const;
+export const TAVERN_REST_DURATION_MS = 5 * 60 * 1_000;
+export const TAVERN_INN_SLEEP_POSITION = { x: 0, y: 16.05, z: -4.55, yaw: 180 } as const;
+export const TAVERN_INN_WAKE_POSITION = { x: 2.65, y: 15, z: -4.55 } as const;
 export const TAVERN_INN_STAIRWELL = { minX: 4.35, maxX: 9.4, minZ: .15, maxZ: 7.25 } as const;
 export const TavernInnActionSchema = z.object({
   action: z.enum(["upstairs", "downstairs", "rest", "storage"]),
 }).strict();
 export type TavernInnAction = z.infer<typeof TavernInnActionSchema>["action"];
 export type TavernInnActionUpdate = { action: TavernInnAction; ok: boolean; message: string;
-  target?: { x: number; y: number; z: number } };
+  playerId?: string; target?: { x: number; y: number; z: number };
+  sleepingUntil?: number; restCompleted?: boolean };
 export function canUseTavernInnPoint(player: { x: number; y: number; z: number }, action: TavernInnAction): boolean {
   const point = TAVERN_INN_POINTS[action];
   return Math.abs(player.y - point.y) <= 1.7
@@ -296,7 +300,7 @@ export const TAVERN_ROOM_FURNITURE_COLLIDERS = [
   { id: "hearth-bench-east", minX: 6.15, maxX: 7.15, minZ: -5.7, maxZ: -3.75, minY: 8, maxY: 11.5 },
   { id: "inn-partition-west", minX: -9.5, maxX: -1.45, minZ: 2.35, maxZ: 3.45, minY: 15, maxY: 19.5 },
   { id: "inn-partition-east", minX: 1.45, maxX: 4.25, minZ: 2.35, maxZ: 3.45, minY: 15, maxY: 19.5 },
-  { id: "inn-bed", minX: -1.45, maxX: 1.45, minZ: -6.25, maxZ: -2.65, minY: 15, maxY: 17 },
+  { id: "inn-bed", minX: -1.45, maxX: 1.45, minZ: -6.25, maxZ: -2.65, minY: 15, maxY: 16 },
   { id: "inn-chest", minX: -7.35, maxX: -5.15, minZ: -6.1, maxZ: -3.75, minY: 15, maxY: 17 },
   { id: "inn-wardrobe", minX: 5.25, maxX: 7.5, minZ: -7.75, maxZ: -5.4, minY: 15, maxY: 18.5 },
 ] as const;

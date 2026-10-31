@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { canUseTavernKeeperService, tavernReturnBound, withTavernReturnBound } from "./tavern-services.js";
+import { TAVERN_INN_SLEEP_POSITION, TAVERN_INN_WAKE_POSITION, TAVERN_REST_DURATION_MS } from "@blockcraft/protocol";
+import { beginTavernRest, canUseTavernKeeperService, completeTavernRest, tavernRestActive,
+  tavernReturnBound, wakeTavernRestEarly, withTavernReturnBound } from "./tavern-services.js";
 import { PlayerState } from "./schema.js";
 import { applyPlayerSave, parsePlayerSave, snapshotPlayerSave } from "./player-save.js";
 
@@ -27,5 +29,26 @@ describe("tavern services", () => {
     const saved = parsePlayerSave(JSON.stringify(snapshotPlayerSave(player)));
     const restored = new PlayerState(); applyPlayerSave(restored, saved!);
     expect(tavernReturnBound(restored.huntLoadoutsJson)).toBe(true);
+  });
+
+  it("requires a real five-minute sleep before granting the rest benefits", () => {
+    const player = new PlayerState();
+    player.health = 1; player.stamina = 7;
+    const until = beginTavernRest(player, 10_000);
+    expect(until).toBe(10_000 + TAVERN_REST_DURATION_MS);
+    expect(player).toMatchObject(TAVERN_INN_SLEEP_POSITION);
+    expect(tavernRestActive(until, until - 1)).toBe(true);
+    expect(completeTavernRest(player, until, until - 1)).toBe(false);
+    expect(player.health).toBe(1);
+    expect(completeTavernRest(player, until, until)).toBe(true);
+    expect(player).toMatchObject({ ...TAVERN_INN_WAKE_POSITION, health: player.maxHealth, stamina: player.maxStamina });
+    expect(tavernReturnBound(player.huntLoadoutsJson)).toBe(true);
+  });
+
+  it("wakes early without granting recovery", () => {
+    const player = new PlayerState(); player.health = 2; player.stamina = 11;
+    beginTavernRest(player, 10_000); wakeTavernRestEarly(player);
+    expect(player).toMatchObject({ ...TAVERN_INN_WAKE_POSITION, health: 2, stamina: 11 });
+    expect(tavernReturnBound(player.huntLoadoutsJson)).toBe(false);
   });
 });

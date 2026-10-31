@@ -71,6 +71,19 @@ body:has(#inventory-panel:not([hidden])) .forest-portal-label { display: none; }
 #tavern-door-destination { color: #cdbb9b; font: 850 9px/1.2 system-ui; letter-spacing: .09em; }
 #tavern-door-hold[data-holding="true"] { border-color: #ffd875; filter: brightness(1.12); }
 #tavern-door-hold[data-holding="true"] #tavern-door-ring { box-shadow: 0 0 0 1px #fff0b9, 0 0 22px #f0a22d99; }
+#inn-sleep-hud {
+  position: fixed; z-index: 42; left: 50%; top: 12%; transform: translateX(-50%);
+  display: grid; justify-items: center; gap: 5px; width: min(420px, calc(100vw - 32px));
+  padding: 12px 18px; box-sizing: border-box; border: 1px solid #e8c67888; border-radius: 14px;
+  background: linear-gradient(180deg, #171008f0, #080d0bf2); color: #fff0c7;
+  box-shadow: 0 10px 30px #000b, inset 0 0 22px #e4932510; pointer-events: none;
+}
+#inn-sleep-hud[hidden] { display: none; }
+#inn-sleep-hud > span { color: #cbbd9a; font: 850 9px/1 system-ui; letter-spacing: .12em; }
+#inn-sleep-time { color: #ffe19a; font: 950 28px/1 system-ui; letter-spacing: .06em; text-shadow: 0 0 15px #e6993a55; }
+#inn-sleep-hud > div { width: 100%; height: 5px; overflow: hidden; border: 1px solid #e9c77455; border-radius: 999px; background: #050b09; }
+#inn-sleep-progress { display: block; width: 100%; height: 100%; transform: scaleX(0); transform-origin: left; background: linear-gradient(90deg, #d78c37, #ffe09b); }
+#inn-sleep-hud > small { color: #b9b59f; font: 800 9px/1.25 system-ui; letter-spacing: .06em; text-align: center; }
 @media (max-width: 640px) {
   #tavern-door-hold { top: 51%; min-width: 220px; padding: 8px 13px 8px 8px; }
   #tavern-door-ring { width: 52px; height: 52px; }

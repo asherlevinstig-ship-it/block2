@@ -117,7 +117,8 @@ import { createSpitterPositioning, positionSpitter, type SpitterPositioning } fr
 import { HEALING_POTION, TAVERN_MEALS, backpackAddableQuantity, backpackCapacity, backpackSlotsUsed, lootCarryCapacity,
   TavernServiceRequestSchema, type ArmourId, type PotionUpdate, type TavernServiceUpdate } from "@blockcraft/protocol";
 import { canBuyPotionAtKeeper, potionBuyError, potionUseError } from "./healing-potions.js";
-import { canUseTavernKeeperService, tavernReturnBound, withTavernReturnBound } from "./tavern-services.js";
+import { beginTavernRest, canUseTavernKeeperService, completeTavernRest, tavernRestActive,
+  tavernReturnBound, wakeTavernRestEarly, withTavernReturnBound } from "./tavern-services.js";
 import { activateTavernMeal, endTavernMeal, parseTavernMeal, prepareTavernMeal,
   tavernMealEquipmentRoll, tavernMealStaminaRecoveryBonus } from "./tavern-meals.js";
 import { MINERAL_REGROWTH_MS, type MineralDepositStatus } from "@blockcraft/protocol";
@@ -510,6 +511,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   override patchRate = 33;
   private readonly chunks = new Map<string, MutableChunk>();
   private readonly movementInputs = new Map<string, StoredMovementInput>();
+  private readonly tavernSleeps = new Map<string, number>();
   private readonly protectedDialogs = new Set<string>();
   private readonly floorRunUpgrades = new FloorRunUpgrades();
   private readonly floorRunStateKeys = new Map<string, string>();
@@ -878,6 +880,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
     this.onMessage("world:ready", client => {
       client.send("world:bootstrap", this.bootstrapPayload(this.state.players.get(client.sessionId)));
+      if (this.roomKind === "tavern") for (const [playerId, sleepingUntil] of this.tavernSleeps)
+        if (sleepingUntil > Date.now()) client.send("tavern:inn-action", { action: "rest", ok: true,
+          message: "A guest is resting.", playerId, sleepingUntil } satisfies TavernInnActionUpdate);
       const starterPlayer = this.state.players.get(client.sessionId);
       if ((this.roomKind === "overworld" || this.rapidPractice) && starterPlayer) {
         this.ensureStarterKit(client.sessionId, starterPlayer, Date.now());
@@ -1006,7 +1011,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     });
     const aliveMessage = (type: string, handler: (client: Client, payload: any) => void) => {
       this.onMessage(type, (client, payload) => {
-        if ((this.state.players.get(client.sessionId)?.health ?? 0) <= 0) return;
+        const player = this.state.players.get(client.sessionId);
+        if ((player?.health ?? 0) <= 0 || tavernRestActive(this.tavernSleeps.get(client.sessionId))) return;
         if (this.protectedDialogs.has(client.sessionId) && ["move", "mine", "attack", "dodge", "defense", "power", "special", "calling:ability", "role:opportunity"].includes(type)) return;
         handler(client, payload);
       });
@@ -1150,6 +1156,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private recordSimulationTick(durationMs: number): void {
     appendTickSample(this.simulationTickSamples, durationMs);
     const now = Date.now();
+    this.resolveCompletedInnRests(now);
     if (this.performanceSubscribers.size === 0 || now - this.lastPerformanceReportAt < 1_000) return;
     this.lastPerformanceReportAt = now;
     let activeMobs = 0, sleepingMobs = 0;
@@ -1316,6 +1323,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   }
 
   override async onLeave(client: Client): Promise<void> {
+    this.tavernSleeps.delete(client.sessionId);
     this.clearFloorRunUpgrades(client.sessionId);
     this.performanceSubscribers.delete(client.sessionId);
     this.firstCombatPerfectDodges.delete(client.sessionId);
@@ -2434,12 +2442,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
     let message: string;
     if (action === "rest") {
-      player.health = player.maxHealth;
-      player.stamina = player.maxStamina;
-      player.potionCooldownUntil = 0;
-      player.powerCooldownUntil = 0;
-      player.specialCooldownUntil = 0;
-      message = "Well rested · health, stamina and cooldowns restored.";
+      this.sendTavernServiceState(client, "Your guest bed is upstairs · rest there for five real minutes to recover.", action, false);
+      return;
     } else if (action === "bind") {
       player.huntLoadoutsJson = withTavernReturnBound(player.huntLoadoutsJson);
       message = "Return point bound · defeat will bring you back to the Hearth & Hammer.";
@@ -2463,8 +2467,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const parsed = TavernInnActionSchema.safeParse(payload);
     if (!player || !parsed.success) return;
     const action = parsed.data.action;
-    const send = (ok: boolean, message: string, target?: { x: number; y: number; z: number }) =>
-      client.send("tavern:inn-action", { action, ok, message, ...(target ? { target } : {}) } satisfies TavernInnActionUpdate);
+    const send = (ok: boolean, message: string, target?: { x: number; y: number; z: number },
+      sleepingUntil?: number, restCompleted?: boolean) =>
+      client.send("tavern:inn-action", { action, ok, message, ...(target ? { target } : {}),
+        ...(sleepingUntil === undefined ? {} : { sleepingUntil }),
+        ...(restCompleted === undefined ? {} : { restCompleted }) } satisfies TavernInnActionUpdate);
     if (this.roomKind !== "tavern" || !canUseTavernInnPoint(player, action)) {
       send(false, "Move closer to the inn-room furnishing.");
       return;
@@ -2484,13 +2491,46 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       send(true, "Private chest opened.");
       return;
     }
-    player.health = player.maxHealth;
-    player.stamina = player.maxStamina;
-    player.potionCooldownUntil = 0; player.powerCooldownUntil = 0; player.specialCooldownUntil = 0;
-    player.huntLoadoutsJson = withTavernReturnBound(player.huntLoadoutsJson);
-    void this.persistPlayer(client.sessionId, player, true);
-    this.sendTavernServiceState(client, "Well rested · this guest room is now your return point.", "rest", true);
-    send(true, "Well rested · health, stamina and cooldowns restored · return point bound.");
+    const activeSleepUntil = this.tavernSleeps.get(client.sessionId);
+    if (tavernRestActive(activeSleepUntil)) {
+      this.tavernSleeps.delete(client.sessionId);
+      wakeTavernRestEarly(player);
+      this.verticalVelocities.set(client.sessionId, 0);
+      this.movementShadows.set(client.sessionId, { x: player.x, y: player.y, z: player.z, verticalVelocity: 0 });
+      this.broadcast("tavern:inn-action", { action, ok: true,
+        message: "Woke early · no rest benefits were granted.", playerId: client.sessionId,
+        target: { x: player.x, y: player.y, z: player.z }, sleepingUntil: 0, restCompleted: false } satisfies TavernInnActionUpdate);
+      return;
+    }
+    const sleepingUntil = beginTavernRest(player);
+    this.tavernSleeps.set(client.sessionId, sleepingUntil);
+    player.pilotVy = 0; player.defending = false;
+    this.movementInputs.set(client.sessionId, { request: idleMovementInput(), receivedAt: Date.now() });
+    this.movementShadows.set(client.sessionId, { x: player.x, y: player.y, z: player.z, verticalVelocity: 0 });
+    this.verticalVelocities.set(client.sessionId, 0);
+    this.broadcast("tavern:inn-action", { action, ok: true,
+      message: "Resting for five real minutes · hold E again to wake early without the reward.", playerId: client.sessionId,
+      target: { x: player.x, y: player.y, z: player.z }, sleepingUntil, restCompleted: false } satisfies TavernInnActionUpdate);
+  }
+
+  private resolveCompletedInnRests(now: number): void {
+    if (this.roomKind !== "tavern") return;
+    for (const [sessionId, sleepingUntil] of this.tavernSleeps) {
+      if (now < sleepingUntil) continue;
+      this.tavernSleeps.delete(sessionId);
+      const player = this.state.players.get(sessionId);
+      if (!player || !completeTavernRest(player, sleepingUntil, now)) continue;
+      player.pilotVy = 0; player.defending = false;
+      this.verticalVelocities.set(sessionId, 0);
+      this.movementShadows.set(sessionId, { x: player.x, y: player.y, z: player.z, verticalVelocity: 0 });
+      void this.persistPlayer(sessionId, player, true);
+      const client = this.clients.find(candidate => candidate.sessionId === sessionId);
+      if (client) this.sendTavernServiceState(client, "Five-minute rest complete · fully restored · return point bound.", "rest", true);
+      this.broadcast("tavern:inn-action", { action: "rest", ok: true,
+        message: "Five-minute rest complete · health, stamina and cooldowns restored · return point bound.",
+        playerId: sessionId, target: { x: player.x, y: player.y, z: player.z },
+        sleepingUntil: 0, restCompleted: true } satisfies TavernInnActionUpdate);
+    }
   }
 
   private persistPlayer(sessionId: string, player: PlayerState, force = false): Promise<void> {
