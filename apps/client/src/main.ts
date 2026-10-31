@@ -231,7 +231,8 @@ import {
 } from "./camera-view.js";
 import { firstPersonActionPose, firstPersonMeleePresentation, firstPersonSwordVariant, firstPersonWeaponKind, type FirstPersonWeaponKind } from "./first-person-action.js";
 import { firstPersonImpactImpulse, selectFirstPersonAimTarget } from "./first-person-combat.js";
-import { ensureKayKitWeaponModel, kayKitWeaponAssetForMainHand, type KayKitWeaponAssetId } from "./weapon-asset-kit.js";
+import { ensureKayKitWeaponModel, kayKitTankShieldAsset, kayKitWeaponAssetForMainHand,
+  type KayKitWeaponAssetId } from "./weapon-asset-kit.js";
 import { CombatSyncRecorder } from "./combat-sync.js";
 import {
   advanceDodgeVisualOffset,
@@ -905,6 +906,13 @@ function selectedStarterWeaponId(): ItemId {
 }
 function selectedStarterWeaponName(): string {
   return ITEM_DEFINITIONS[selectedStarterWeaponId()].name;
+}
+function buildPathFromLoadout(raw: string): BuildPathId | null {
+  try {
+    const parsed = JSON.parse(raw) as { buildPath?: { selectedPathId?: unknown }; selectedPathId?: unknown };
+    const candidate = parsed.buildPath?.selectedPathId ?? parsed.selectedPathId;
+    return typeof candidate === "string" && Object.hasOwn(BUILD_PATHS, candidate) ? candidate as BuildPathId : null;
+  } catch { return null; }
 }
 function renderFirstSteps(): void {
   const index = firstStepsIndex;
@@ -2309,6 +2317,8 @@ interface VoxelCharacterRig {
   rightLeg: pc.Entity;
   leftElbow: pc.Entity;
   rightElbow: pc.Entity;
+  tankShield: pc.Entity;
+  assassinOffhand: pc.Entity;
   leftKnee: pc.Entity;
   rightKnee: pc.Entity;
   scarf: pc.Entity;
@@ -4850,6 +4860,20 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
     crownkeeper_blade: crowncleaver,
     emberheart_focus: emberheartFocus,
   };
+  const tankShield = new pc.Entity("calling-tank-shield");
+  tankShield.setLocalPosition(-.02, -.27, -.13);
+  tankShield.setLocalEulerAngles(8, 5, -8);
+  leftElbow.addChild(tankShield);
+  addBox(tankShield, "tank-shield-face", clothing, [.52, .62, .13], [0, 0, 0]);
+  addBox(tankShield, "tank-shield-boss", brassMaterial, [.18, .2, .16], [0, 0, -.1]);
+  for (const x of [-.25, .25]) addBox(tankShield, "tank-shield-rim", bladeMaterial, [.07, .58, .16], [x, 0, 0]);
+  tankShield.enabled = false;
+  const assassinOffhand = fangDagger.clone();
+  assassinOffhand.name = "calling-assassin-offhand";
+  assassinOffhand.setLocalPosition(.01, -.05, -.03);
+  assassinOffhand.setLocalEulerAngles(0, 0, -18);
+  leftElbow.addChild(assassinOffhand);
+  assassinOffhand.enabled = false;
   bow.enabled = false;
   magicFocus.enabled = false;
   fangDagger.enabled = false;
@@ -4991,7 +5015,10 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
     }
     layer.enabled = false;
   }
-  const rig: VoxelCharacterRig = { root, torso, head, leftArm, rightArm, leftElbow, rightElbow, leftLeg, rightLeg, leftKnee, rightKnee, scarf, minersLantern, silhouette, mainHands, armour, hairStyles, coatStyles, appearanceMaterials: { skin: skinMaterial, hair: hairMaterial, coat: clothing }, locomotionPhase: 0, locomotionWeight: 0, travelFrames: [], lastFacingYaw: null, turnLean: 0 };
+  const rig: VoxelCharacterRig = { root, torso, head, leftArm, rightArm, leftElbow, rightElbow, tankShield, assassinOffhand,
+    leftLeg, rightLeg, leftKnee, rightKnee, scarf, minersLantern, silhouette, mainHands, armour, hairStyles,
+    coatStyles, appearanceMaterials: { skin: skinMaterial, hair: hairMaterial, coat: clothing }, locomotionPhase: 0,
+    locomotionWeight: 0, travelFrames: [], lastFacingYaw: null, turnLean: 0 };
   setRigAppearance(rig, appearance);
   return rig;
 }
@@ -5021,12 +5048,18 @@ const THIRD_PERSON_AUTHORED_WEAPON_TRANSFORMS: Record<KayKitWeaponAssetId, {
   swordForged: { rotation: [0, 0, 180], scale: .58 },
   bowBasic: { rotation: [90, 0, -90], scale: .55 },
   bowForged: { rotation: [90, 0, -90], scale: .55 },
-  daggerFang: { rotation: [0, 0, 180], scale: .66 },
+  daggerThief: { rotation: [0, 0, 180], scale: .66 },
+  daggerAssassin: { rotation: [0, 0, 180], scale: .66 },
+  wandMage: { rotation: [0, 0, 180], scale: .7 },
+  staffHealer: { rotation: [0, 0, 180], scale: .68 },
+  shieldTank: { rotation: [90, 0, 0], scale: .62 },
   hammerStone: { rotation: [0, 0, 180], scale: .78 },
 };
 
-function requestRigAuthoredWeapon(parent: pc.Entity, mainHandId: MainHandId): void {
-  const assetId = kayKitWeaponAssetForMainHand(mainHandId);
+function requestRigAuthoredWeapon(rig: VoxelCharacterRig, mainHandId: MainHandId,
+  pathId: BuildPathId | null): void {
+  const parent = rig.mainHands[mainHandId];
+  const assetId = kayKitWeaponAssetForMainHand(mainHandId, pathId);
   if (!assetId || parent.findByName(`kaykit-weapon:${assetId}`)) return;
   const transform = THIRD_PERSON_AUTHORED_WEAPON_TRANSFORMS[assetId];
   void ensureKayKitWeaponModel(app, parent, assetId, {
@@ -5036,12 +5069,49 @@ function requestRigAuthoredWeapon(parent: pc.Entity, mainHandId: MainHandId): vo
       if (!(child instanceof pc.Entity) || child === model) continue;
       if (child.render) child.enabled = false;
     }
+    setRigMainHand(rig, mainHandId, pathId);
   }).catch(error => console.warn(`[weapon-assets] Keeping procedural ${mainHandId} fallback.`, error));
 }
 
-function setRigMainHand(rig: VoxelCharacterRig, mainHandId: MainHandId): void {
-  requestRigAuthoredWeapon(rig.mainHands[mainHandId], mainHandId);
+function requestRigTankShield(rig: VoxelCharacterRig, mainHandId: MainHandId, pathId: BuildPathId | null): void {
+  const assetId = kayKitTankShieldAsset(mainHandId, pathId);
+  if (!assetId || rig.tankShield.findByName(`kaykit-weapon:${assetId}`)) return;
+  const transform = THIRD_PERSON_AUTHORED_WEAPON_TRANSFORMS[assetId];
+  void ensureKayKitWeaponModel(app, rig.tankShield, assetId, {
+    position: [0, 0, 0], rotation: transform.rotation, scale: transform.scale,
+  }).then(model => {
+    for (const child of rig.tankShield.children) {
+      if (!(child instanceof pc.Entity) || child === model) continue;
+      if (child.render) child.enabled = false;
+    }
+  }).catch(error => console.warn("[weapon-assets] Keeping procedural Tank shield fallback.", error));
+}
+
+function requestRigAssassinOffhand(rig: VoxelCharacterRig, mainHandId: MainHandId, pathId: BuildPathId | null): void {
+  if (mainHandId !== "fang_dagger" || pathId !== "assassin"
+    || rig.assassinOffhand.findByName("kaykit-weapon:daggerAssassin")) return;
+  const transform = THIRD_PERSON_AUTHORED_WEAPON_TRANSFORMS.daggerAssassin;
+  void ensureKayKitWeaponModel(app, rig.assassinOffhand, "daggerAssassin", {
+    position: [0, 0, 0], rotation: transform.rotation, scale: transform.scale,
+  }).then(model => {
+    for (const child of rig.assassinOffhand.children) {
+      if (!(child instanceof pc.Entity) || child === model) continue;
+      if (child.render) child.enabled = false;
+    }
+  }).catch(error => console.warn("[weapon-assets] Keeping procedural Assassin offhand fallback.", error));
+}
+
+function setRigMainHand(rig: VoxelCharacterRig, mainHandId: MainHandId, pathId: BuildPathId | null = null): void {
+  requestRigAuthoredWeapon(rig, mainHandId, pathId);
+  requestRigTankShield(rig, mainHandId, pathId);
+  requestRigAssassinOffhand(rig, mainHandId, pathId);
+  const authoredAsset = kayKitWeaponAssetForMainHand(mainHandId, pathId);
+  const activeParent = rig.mainHands[mainHandId];
+  for (const child of activeParent.children) if (child instanceof pc.Entity && child.name.startsWith("kaykit-weapon:"))
+    child.enabled = child.name === `kaykit-weapon:${authoredAsset}`;
   for (const [id, entity] of Object.entries(rig.mainHands)) entity.enabled = id === mainHandId;
+  rig.tankShield.enabled = kayKitTankShieldAsset(mainHandId, pathId) !== null;
+  rig.assassinOffhand.enabled = mainHandId === "fang_dagger" && pathId === "assassin";
 }
 
 function animateVoxelCharacter(
@@ -5211,6 +5281,8 @@ interface FirstPersonActionRig {
   skin: pc.StandardMaterial;
   sleeve: pc.StandardMaterial;
   weapons: Record<FirstPersonWeaponKind, pc.Entity>;
+  tankShield: pc.Entity;
+  assassinOffhand: pc.Entity;
   magic: pc.Entity;
   magicCore: pc.Entity;
   magicCoreMaterial: pc.StandardMaterial;
@@ -5399,6 +5471,26 @@ function createFirstPersonActionRig(): FirstPersonActionRig {
   const focusCrossB = actionShape(weapons.focus, "focus-cage-b", "box", steelEdge, [.018, .19, .018], [0, .37, .015]);
   focusCrossB.setLocalEulerAngles(0, 0, -45);
 
+  const tankShield = new pc.Entity("first-person-tank-shield");
+  wrists.left.addChild(tankShield);
+  tankShield.setLocalPosition(.03, .13, -.09);
+  tankShield.setLocalEulerAngles(-12, 18, -12);
+  actionShape(tankShield, "tank-shield-face", "box", steel, [.36, .46, .055], [0, .22, 0]);
+  actionShape(tankShield, "tank-shield-boss", "sphere", bronze, [.13, .13, .08], [0, .22, -.06]);
+  for (const x of [-.33, .33]) actionShape(tankShield, "tank-shield-rim", "box", steelEdge,
+    [.035, .43, .065], [x, .22, 0]);
+  tankShield.enabled = false;
+
+  const assassinOffhand = new pc.Entity("first-person-assassin-offhand");
+  wrists.left.addChild(assassinOffhand);
+  assassinOffhand.setLocalPosition(.015, .13, -.05);
+  assassinOffhand.setLocalEulerAngles(-8, 10, -24);
+  actionShape(assassinOffhand, "offhand-dagger-grip", "cylinder", leather, [.06, .28, .06], [0, .04, 0]);
+  actionShape(assassinOffhand, "offhand-dagger-guard", "box", bronze, [.23, .04, .065], [0, .2, 0]);
+  actionShape(assassinOffhand, "offhand-dagger-blade", "box", steel, [.095, .25, .032], [0, .345, 0]);
+  actionShape(assassinOffhand, "offhand-dagger-tip", "cone", steel, [.098, .12, .045], [0, .53, 0]);
+  assassinOffhand.enabled = false;
+
   const magic = new pc.Entity("first-person-triggered-magic"); root.addChild(magic); magic.setLocalPosition(0, -.12, -1.3);
   const magicCoreMaterial = createFirstPersonMaterial(new pc.Color(.34, .14, .92), new pc.Color(.26, .055, .82));
   const magicEdgeMaterial = createFirstPersonMaterial(new pc.Color(.65, .82, 1), new pc.Color(.25, .55, 1));
@@ -5418,7 +5510,7 @@ function createFirstPersonActionRig(): FirstPersonActionRig {
     return trail;
   });
   root.enabled = false;
-  return { root, viewCamera, leftHand, rightHand, wrists, fingers, skin, sleeve, weapons, magic, magicCore,
+  return { root, viewCamera, leftHand, rightHand, wrists, fingers, skin, sleeve, weapons, tankShield, assassinOffhand, magic, magicCore,
     magicCoreMaterial, magicEdgeMaterial, runeRing, slashTrails };
 }
 
@@ -5436,12 +5528,16 @@ const FIRST_PERSON_AUTHORED_WEAPON_TRANSFORMS: Record<KayKitWeaponAssetId, {
   swordForged: { rotation: [0, 0, 0], scale: .58 },
   bowBasic: { rotation: [90, 0, 90], scale: .55 },
   bowForged: { rotation: [90, 0, 90], scale: .55 },
-  daggerFang: { rotation: [0, 0, 0], scale: .66 },
+  daggerThief: { rotation: [0, 0, 0], scale: .66 },
+  daggerAssassin: { rotation: [0, 0, 0], scale: .66 },
+  wandMage: { rotation: [0, 0, 0], scale: .7 },
+  staffHealer: { rotation: [0, 0, 0], scale: .68 },
+  shieldTank: { rotation: [90, 0, 180], scale: .62 },
   hammerStone: { rotation: [0, 0, 0], scale: .78 },
 };
 
-function requestFirstPersonAuthoredWeapon(mainHandId: MainHandId): void {
-  const assetId = kayKitWeaponAssetForMainHand(mainHandId);
+function requestFirstPersonAuthoredWeapon(mainHandId: MainHandId, pathId: BuildPathId | null): void {
+  const assetId = kayKitWeaponAssetForMainHand(mainHandId, pathId);
   if (!assetId) return;
   const parent = firstPersonActionRig.weapons[firstPersonWeaponKind(mainHandId)];
   if (parent.findByName(`kaykit-weapon:${assetId}`)) return;
@@ -5451,6 +5547,36 @@ function requestFirstPersonAuthoredWeapon(mainHandId: MainHandId): void {
     layers: firstPersonActionRig.viewCamera.camera?.layers,
   }).then(() => setFirstPersonMainHand(firstPersonEquippedId))
     .catch(error => console.warn(`[weapon-assets] Keeping first-person ${mainHandId} fallback.`, error));
+}
+
+function requestFirstPersonTankShield(mainHandId: MainHandId, pathId: BuildPathId | null): void {
+  const assetId = kayKitTankShieldAsset(mainHandId, pathId);
+  if (!assetId || firstPersonActionRig.tankShield.findByName(`kaykit-weapon:${assetId}`)) return;
+  const transform = FIRST_PERSON_AUTHORED_WEAPON_TRANSFORMS[assetId];
+  void ensureKayKitWeaponModel(app, firstPersonActionRig.tankShield, assetId, {
+    position: [0, 0, 0], rotation: transform.rotation, scale: transform.scale,
+    layers: firstPersonActionRig.viewCamera.camera?.layers,
+  }).then(model => {
+    for (const child of firstPersonActionRig.tankShield.children) {
+      if (!(child instanceof pc.Entity) || child === model) continue;
+      if (child.render) child.enabled = false;
+    }
+  }).catch(error => console.warn("[weapon-assets] Keeping first-person Tank shield fallback.", error));
+}
+
+function requestFirstPersonAssassinOffhand(mainHandId: MainHandId, pathId: BuildPathId | null): void {
+  if (mainHandId !== "fang_dagger" || pathId !== "assassin"
+    || firstPersonActionRig.assassinOffhand.findByName("kaykit-weapon:daggerAssassin")) return;
+  const transform = FIRST_PERSON_AUTHORED_WEAPON_TRANSFORMS.daggerAssassin;
+  void ensureKayKitWeaponModel(app, firstPersonActionRig.assassinOffhand, "daggerAssassin", {
+    position: [0, 0, 0], rotation: [0, 0, 180], scale: transform.scale,
+    layers: firstPersonActionRig.viewCamera.camera?.layers,
+  }).then(model => {
+    for (const child of firstPersonActionRig.assassinOffhand.children) {
+      if (!(child instanceof pc.Entity) || child === model) continue;
+      if (child.render) child.enabled = false;
+    }
+  }).catch(error => console.warn("[weapon-assets] Keeping first-person Assassin offhand fallback.", error));
 }
 
 function setFirstPersonCallingPalette(pathId: RoleFieldPath): void {
@@ -5473,8 +5599,10 @@ function setFirstPersonCallingPalette(pathId: RoleFieldPath): void {
 function setFirstPersonMainHand(mainHandId: MainHandId): void {
   if (mainHandId !== firstPersonEquippedId) { firstPersonEquippedAt = performance.now(); firstPersonEquippedId = mainHandId; }
   const active = firstPersonWeaponKind(mainHandId);
-  const authoredAsset = kayKitWeaponAssetForMainHand(mainHandId);
-  requestFirstPersonAuthoredWeapon(mainHandId);
+  const authoredAsset = kayKitWeaponAssetForMainHand(mainHandId, localBuildPathId);
+  requestFirstPersonAuthoredWeapon(mainHandId, localBuildPathId);
+  requestFirstPersonTankShield(mainHandId, localBuildPathId);
+  requestFirstPersonAssassinOffhand(mainHandId, localBuildPathId);
   const activeParent = firstPersonActionRig.weapons[active];
   for (const child of activeParent.children) {
     if (!(child instanceof pc.Entity)) continue;
@@ -5490,6 +5618,8 @@ function setFirstPersonMainHand(mainHandId: MainHandId): void {
     if (ornament) ornament.enabled = authoredAsset === null && swordVariant === variant;
   }
   for (const [kind, weapon] of Object.entries(firstPersonActionRig.weapons)) weapon.enabled = kind === active;
+  firstPersonActionRig.tankShield.enabled = kayKitTankShieldAsset(mainHandId, localBuildPathId) !== null;
+  firstPersonActionRig.assassinOffhand.enabled = mainHandId === "fang_dagger" && localBuildPathId === "assassin";
 }
 setFirstPersonMainHand("unarmed");
 
@@ -6934,7 +7064,7 @@ function refreshPowerCompatibility(): void {
     button.setAttribute("aria-pressed", String(equipped));
     button.textContent = equipped ? "EQUIPPED" : "EQUIP";
   }
-  setRigMainHand(localPlayerRig, localMainHandId);
+  setRigMainHand(localPlayerRig, localMainHandId, localBuildPathId);
 }
 
 let lastInventoryLoadoutKey = "";
@@ -7154,10 +7284,10 @@ function refreshInventoryPreview(): void {
   if (previewOpen && !inventoryPortrait) {
     inventoryPortrait = createLazyCharacterPortrait(document.querySelector<HTMLCanvasElement>("#inventory-portrait")!, localPlayerRig.root,
       (hand, armour) => {
-        setRigMainHand(localPlayerRig, hand);
+        setRigMainHand(localPlayerRig, hand, localBuildPathId);
         setRigArmour(localPlayerRig, armour);
         return () => {
-          setRigMainHand(localPlayerRig, localMainHandId);
+          setRigMainHand(localPlayerRig, localMainHandId, localBuildPathId);
           setRigArmour(localPlayerRig, localArmourId);
         };
       });
@@ -7935,6 +8065,9 @@ function renderBuildPath(update: BuildPathUpdate): void {
   renderAssassinJourney(update);
   const previousPathId = localBuildPathId;
   localBuildPathId = update.selectedPathId;
+  document.documentElement.dataset.calling = update.selectedPathId ?? "unbound";
+  setRigMainHand(localPlayerRig, localMainHandId, localBuildPathId);
+  setFirstPersonMainHand(localMainHandId);
   tutorialCallingId = update.selectedPathId;
   renderFirstSteps();
   localCallingAbilityId = update.selectedCallingAbilityId;
@@ -10571,7 +10704,8 @@ function createRemotePlayer(sessionId: string, player: NetworkPlayer): RemotePla
   const appearance = resolveAppearance({ skin: player.appearanceSkin, hair: player.appearanceHair, coat: player.appearanceCoat,
     hairStyle: player.appearanceHairStyle, coatStyle: player.appearanceCoatStyle });
   const rig = createVoxelCharacter(entity, coloredMaterial(appearanceColor("coat", appearance.coat)), false, appearance);
-  if (isMainHandId(player.mainHandId)) setRigMainHand(rig, player.mainHandId);
+  if (isMainHandId(player.mainHandId))
+    setRigMainHand(rig, player.mainHandId, buildPathFromLoadout(player.huntLoadoutsJson));
   setRigArmour(rig, player.armourId);
   entity.setPosition(player.x, player.y, player.z);
   app.root.addChild(entity);
@@ -11780,7 +11914,11 @@ function bindPlayers(joinedRoom: Room): void {
       if (isLocal) localSilverDepthsWing = player.silverDepthsWing === "iron" || player.silverDepthsWing === "silver" ? player.silverDepthsWing : null;
     }, true);
     playerCallbacks.listen("huntLoadoutsJson", () => {
-      if (!isLocal) return;
+      if (!isLocal) {
+        if (remote && isMainHandId(player.mainHandId))
+          setRigMainHand(remote.rig, player.mainHandId, buildPathFromLoadout(player.huntLoadoutsJson));
+        return;
+      }
       updateLocalMistfenProgress(player.huntLoadoutsJson);
       renderRegionalLeaderCollections(player.huntLoadoutsJson);
       renderTowerChronicleProgress(player.huntLoadoutsJson);
@@ -11879,7 +12017,7 @@ function bindPlayers(joinedRoom: Room): void {
         status.textContent = `${mainHand.name} equipped · Attack: ${mainHand.attackName}.`;
       } else if (remote && isMainHandId(player.mainHandId)) {
         remote.mainHandId = player.mainHandId;
-        setRigMainHand(remote.rig, player.mainHandId);
+        setRigMainHand(remote.rig, player.mainHandId, buildPathFromLoadout(player.huntLoadoutsJson));
       }
     }, true);
     playerCallbacks.listen("armourId", () => {

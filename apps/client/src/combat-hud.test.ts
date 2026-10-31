@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cooldownState, visibleCallingAbilities, visibleCallingAugments } from "./combat-hud.js";
+import { cooldownState, starterWeaponArtwork, visibleCallingAbilities, visibleCallingAugments } from "./combat-hud.js";
 
 describe("reactive combat HUD", () => {
   it.each(["tank", "mage", "assassin", "thief", "ranger", "healer"] as const)("keeps %s Specials out of the G picker", path => {
@@ -21,5 +21,14 @@ describe("reactive combat HUD", () => {
     expect(visibleCallingAbilities("assassin", 3).map(option => option.name)).toEqual(["Stealth", "Blade Dance"]);
     expect(visibleCallingAugments("assassin_vanish", 1)).toHaveLength(0);
     expect(visibleCallingAugments("assassin_vanish", 2)).toHaveLength(2);
+  });
+
+  it("shows Calling-specific starter weapon artwork", () => {
+    expect(starterWeaponArtwork("forged_sword", "tank")).toBe("starter-tank");
+    expect(starterWeaponArtwork("forged_bow", "ranger")).toBe("starter-ranger");
+    expect(starterWeaponArtwork("fang_dagger", "assassin")).toBe("starter-assassin");
+    expect(starterWeaponArtwork("fang_dagger", "thief")).toBe("starter-thief");
+    expect(starterWeaponArtwork("forged_focus", "mage")).toBe("starter-mage");
+    expect(starterWeaponArtwork("forged_focus", "healer")).toBe("starter-healer");
   });
 });

@@ -1,4 +1,4 @@
-import type { MainHandId } from "@blockcraft/protocol";
+import type { BuildPathId, MainHandId } from "@blockcraft/protocol";
 import * as pc from "playcanvas";
 
 export const KAYKIT_WEAPON_BASE_URL = "/assets/kaykit-fantasy-weapons";
@@ -8,20 +8,31 @@ export const KAYKIT_WEAPON_ASSET_FILES = {
   swordForged: `${KAYKIT_WEAPON_BASE_URL}/sword_B.gltf`,
   bowBasic: `${KAYKIT_WEAPON_BASE_URL}/bow_A_withString.gltf`,
   bowForged: `${KAYKIT_WEAPON_BASE_URL}/bow_B_withString.gltf`,
-  daggerFang: `${KAYKIT_WEAPON_BASE_URL}/dagger_A.gltf`,
+  daggerThief: `${KAYKIT_WEAPON_BASE_URL}/dagger_A.gltf`,
+  daggerAssassin: `${KAYKIT_WEAPON_BASE_URL}/dagger_B.gltf`,
+  wandMage: `${KAYKIT_WEAPON_BASE_URL}/wand_A.gltf`,
+  staffHealer: `${KAYKIT_WEAPON_BASE_URL}/staff_A.gltf`,
+  shieldTank: `${KAYKIT_WEAPON_BASE_URL}/shield_C.gltf`,
   hammerStone: `${KAYKIT_WEAPON_BASE_URL}/hammer_A.gltf`,
 } as const;
 
 export type KayKitWeaponAssetId = keyof typeof KAYKIT_WEAPON_ASSET_FILES;
 
-export function kayKitWeaponAssetForMainHand(mainHandId: MainHandId): KayKitWeaponAssetId | null {
+export function kayKitWeaponAssetForMainHand(mainHandId: MainHandId,
+  pathId: BuildPathId | null = null): KayKitWeaponAssetId | null {
   if (mainHandId === "longsword") return "swordBasic";
   if (mainHandId === "forged_sword") return "swordForged";
   if (mainHandId === "bow") return "bowBasic";
   if (mainHandId === "forged_bow") return "bowForged";
-  if (mainHandId === "fang_dagger") return "daggerFang";
+  if (mainHandId === "fang_dagger") return pathId === "assassin" ? "daggerAssassin" : "daggerThief";
+  if (mainHandId === "forged_focus") return pathId === "healer" ? "staffHealer" : "wandMage";
   if (mainHandId === "stone_core_hammer") return "hammerStone";
   return null;
+}
+
+export function kayKitTankShieldAsset(mainHandId: MainHandId,
+  pathId: BuildPathId | null): KayKitWeaponAssetId | null {
+  return mainHandId === "forged_sword" && pathId === "tank" ? "shieldTank" : null;
 }
 
 const assetLoads = new Map<KayKitWeaponAssetId, Promise<pc.Asset>>();

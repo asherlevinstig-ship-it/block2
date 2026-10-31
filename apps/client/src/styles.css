@@ -4031,6 +4031,12 @@ html.onboarding-active #trait-slot { display: none; }
 #combat-action-bar #dodge-hotbar .action-art { background-image: url('/icons/dodge.png'); }
 #combat-action-bar #potion-use .action-art { background-image: url('/icons/healing-potion.png'); }
 #combat-hud-shell #main-hand-loadout[data-icon="basic-sword"] .action-art { background-image: url('/icons/basic-sword.png'); }
+#combat-hud-shell #main-hand-loadout[data-icon="starter-tank"] .action-art { background-image: url('/icons/starter-tank.png'); }
+#combat-hud-shell #main-hand-loadout[data-icon="starter-ranger"] .action-art { background-image: url('/icons/starter-ranger.png'); }
+#combat-hud-shell #main-hand-loadout[data-icon="starter-assassin"] .action-art { background-image: url('/icons/starter-assassin.png'); }
+#combat-hud-shell #main-hand-loadout[data-icon="starter-thief"] .action-art { background-image: url('/icons/starter-thief.png'); }
+#combat-hud-shell #main-hand-loadout[data-icon="starter-mage"] .action-art { background-image: url('/icons/starter-mage.png'); }
+#combat-hud-shell #main-hand-loadout[data-icon="starter-healer"] .action-art { background-image: url('/icons/starter-healer.png'); }
 #combat-hud-shell #calling-slot[data-icon="assassin-vanish"] .action-art { background-image: url('/icons/assassin-vanish.png'); }
 #combat-hud-shell #calling-slot[data-icon="healer-mend"] .action-art { background-image: url('/icons/healer-mend.png'); }
 #combat-action-bar #defense-slot .action-art svg,
@@ -4039,7 +4045,7 @@ html.onboarding-active #trait-slot { display: none; }
 #combat-hud-shell #main-hand-loadout[data-icon] .action-art svg,
 #combat-hud-shell #calling-slot[data-icon] .action-art svg { display: none; }
 
-.inventory-grid article[data-item="forged_sword"] > i,
+.inventory-grid article:is([data-item="forged_sword"], [data-item="forged_bow"], [data-item="forged_focus"], [data-item="fang_dagger"]) > i,
 .inventory-grid article[data-item="wanderer_robes"] > i,
 .inventory-grid article[data-item="iron_ore"] > i,
 .potion-inventory[data-item="healing_potion"] > i {
@@ -4057,7 +4063,12 @@ html.onboarding-active #trait-slot { display: none; }
   clip-path: none;
   transform: none;
 }
-.inventory-grid article[data-item="forged_sword"] > i { background-image: url('/icons/basic-sword.png'); }
+.inventory-grid article[data-item="forged_sword"] > i { background-image: url('/icons/starter-tank.png'); }
+.inventory-grid article[data-item="forged_bow"] > i { background-image: url('/icons/starter-ranger.png'); }
+.inventory-grid article[data-item="fang_dagger"] > i { background-image: url('/icons/starter-assassin.png'); }
+html[data-calling="thief"] .inventory-grid article[data-item="fang_dagger"] > i { background-image: url('/icons/starter-thief.png'); }
+.inventory-grid article[data-item="forged_focus"] > i { background-image: url('/icons/starter-mage.png'); }
+html[data-calling="healer"] .inventory-grid article[data-item="forged_focus"] > i { background-image: url('/icons/starter-healer.png'); }
 .inventory-grid article[data-item="crownkeeper_blade"] > i { display: block; width: 46px; height: 46px; margin: 3px auto 7px; border: 0; border-radius: 6px; background: url('/icons/crowncleaver.svg') center / cover no-repeat; clip-path: none; transform: none; box-shadow: none; }
 .inventory-grid article[data-item="wanderer_robes"] > i { background-image: url('/icons/wanderer-robes.png'); }
 .inventory-grid article[data-item="iron_ore"] > i { background-image: url('/icons/iron-ore.png'); }

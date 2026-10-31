@@ -115,13 +115,22 @@ export function visibleCallingAugments(abilityId: CallingAbilityId, rank: number
   return CALLING_ABILITY_AUGMENTS.filter(option => option.abilityId === abilityId && option.unlockRank <= rank);
 }
 
+export function starterWeaponArtwork(mainHandId: MainHandId, pathId: BuildPathId | null): string | undefined {
+  if (mainHandId === "forged_sword") return "starter-tank";
+  if (mainHandId === "forged_bow") return "starter-ranger";
+  if (mainHandId === "fang_dagger") return pathId === "thief" ? "starter-thief" : "starter-assassin";
+  if (mainHandId === "forged_focus") return pathId === "healer" ? "starter-healer" : "starter-mage";
+  if (mainHandId === "longsword") return "basic-sword";
+  return undefined;
+}
+
 function MainHandLoadout() {
   const selected = mainHand.value;
   const definition = MAIN_HAND_DEFINITIONS[selected];
   const name = selected === "longsword" && ironSwordOwned.value ? "Iron Sword · +1 DMG" : definition.name;
   const activeSet = huntSetForLoadout(selected, armour.value);
   return h("div", { id: "main-hand-loadout", title: `${name} · Press J to attack`, "aria-label": `Main hand: ${name}. Press J to attack`,
-    "data-icon": selected === "longsword" || selected === "forged_sword" ? "basic-sword" : undefined },
+    "data-icon": starterWeaponArtwork(selected, calling.value) },
     h("span", { class: "action-art" }, h(ActionGlyph, { kind: "weapon", weapon: selected })),
     h("kbd", { title: "Press J to attack; hold J to fire ranged weapons" }, "J"),
     h("strong", { id: "main-hand-name" }, name),
