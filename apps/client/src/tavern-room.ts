@@ -1,6 +1,7 @@
 import * as pc from "playcanvas";
 import { addCallingParticleLayers } from "./calling-particles.js";
 import { bindTownNpcRig, loadTownNpcAssets, TOWN_NPC_MODEL_YAW, transitionTownNpcRig } from "./town-npc-assets.js";
+import { tavernPatronSchedule, type TavernPatronPhase } from "./tavern-patron-schedule.js";
 
 const DUNGEON_ASSET_ROOT = "/assets/kaykit-dungeon";
 const TORCH_URL = `${DUNGEON_ASSET_ROOT}/torch_lit.gltf.glb`;
@@ -114,7 +115,17 @@ interface TavernSeatRig {
   lowerLeft: pc.GraphNode;
   lowerRight: pc.GraphNode;
 }
-interface TavernPersonMotion { entity: pc.Entity; nextGesture: number; gestureEnds: number; seatRig?: TavernSeatRig }
+interface TavernPersonMotion {
+  entity: pc.Entity;
+  route: readonly [number, number, number][];
+  seat: readonly [number, number, number];
+  seatYaw: number;
+  scheduleOffset: number;
+  phase: TavernPatronPhase | null;
+  nextGesture: number;
+  gestureEnds: number;
+  seatRig?: TavernSeatRig;
+}
 
 function tavernSeatRig(entity: pc.Entity): TavernSeatRig | undefined {
   const upperLeft = entity.findByName("upperleg.l"), upperRight = entity.findByName("upperleg.r");
@@ -131,14 +142,41 @@ function applyTavernSeatPose(rig: TavernSeatRig): void {
   rig.lowerRight.setLocalEulerAngles(88, 0, -1);
 }
 
+function routePosition(route: readonly [number, number, number][], progress: number): pc.Vec3 {
+  const lengths = route.slice(1).map((point, index) => Math.hypot(
+    point[0] - route[index]![0], point[1] - route[index]![1], point[2] - route[index]![2]));
+  const total = lengths.reduce((sum, length) => sum + length, 0);
+  let distance = Math.max(0, Math.min(1, progress)) * total;
+  for (let index = 0; index < lengths.length; index++) {
+    const length = lengths[index]!;
+    if (distance <= length || index === lengths.length - 1) {
+      const start = route[index]!, end = route[index + 1]!;
+      const amount = length <= 0 ? 1 : Math.max(0, Math.min(1, distance / length));
+      return new pc.Vec3(start[0] + (end[0] - start[0]) * amount,
+        start[1] + (end[1] - start[1]) * amount,
+        start[2] + (end[2] - start[2]) * amount);
+    }
+    distance -= length;
+  }
+  return new pc.Vec3(...route[route.length - 1]!);
+}
+
+function faceRoute(entity: pc.Entity, from: pc.Vec3, to: pc.Vec3): void {
+  const dx = to.x - from.x, dz = to.z - from.z;
+  if (Math.hypot(dx, dz) > .001) entity.setLocalEulerAngles(0, TOWN_NPC_MODEL_YAW + Math.atan2(dx, dz) * 180 / Math.PI, 0);
+}
+
 function loadTavernPeople(app: pc.Application, root: pc.Entity, proceduralMara: pc.Entity,
   movingPeople: TavernPersonMotion[]): void {
   void loadTownNpcAssets(app).then(result => {
     const placements = [
       { role: "vendor" as const, position: [-8.2, 8.02, -1.5] as [number, number, number], yaw: 90, phase: .2, seated: false },
-      { role: "resident" as const, position: [4.72, 8.31, 2.22] as [number, number, number], yaw: 0, phase: .8, seated: true },
-      { role: "resident" as const, position: [6.42, 8.31, 4.42] as [number, number, number], yaw: 180, phase: .45, seated: true },
-      { role: "healer" as const, position: [.95, 8.31, -4.88] as [number, number, number], yaw: 90, phase: .65, seated: true },
+      { role: "resident" as const, position: [4.72, 8.31, 2.22] as [number, number, number], yaw: 0, phase: .8, seated: true,
+        scheduleOffset: 25, route: [[0, 8.02, 7.55], [2.1, 8.02, 6.1], [3.7, 8.02, 4.2], [4.72, 8.31, 2.22]] as [number, number, number][] },
+      { role: "resident" as const, position: [6.42, 8.31, 4.42] as [number, number, number], yaw: 180, phase: .45, seated: true,
+        scheduleOffset: 40, route: [[0, 8.02, 7.55], [2.5, 8.02, 6.35], [5.1, 8.02, 5.55], [6.42, 8.31, 4.42]] as [number, number, number][] },
+      { role: "healer" as const, position: [.95, 8.31, -4.88] as [number, number, number], yaw: 90, phase: .65, seated: true,
+        scheduleOffset: 7, route: [[0, 8.02, 7.55], [-2.2, 8.02, 5.4], [-3.1, 8.02, -.7], [-1.1, 8.02, -4.85], [.95, 8.31, -4.88]] as [number, number, number][] },
     ];
     for (const [index, placement] of placements.entries()) {
       const asset = result.loaded.get(placement.role);
@@ -155,8 +193,14 @@ function loadTavernPeople(app: pc.Application, root: pc.Entity, proceduralMara: 
         continue;
       }
       const seatRig = placement.seated ? tavernSeatRig(model) : undefined;
-      if (seatRig) applyTavernSeatPose(seatRig);
-      movingPeople.push({ entity: model, nextGesture: 4.5 + index * 2.4, gestureEnds: 0, seatRig });
+      const route = "route" in placement ? placement.route : undefined;
+      const scheduleOffset = "scheduleOffset" in placement ? placement.scheduleOffset : undefined;
+      if (seatRig && route && scheduleOffset !== undefined) {
+        model.enabled = false;
+        movingPeople.push({ entity: model, route, seat: placement.position,
+          seatYaw: placement.yaw, scheduleOffset, phase: null,
+          nextGesture: 0, gestureEnds: 0, seatRig });
+      }
       if (index === 0) proceduralMara.enabled = false;
     }
   });
@@ -435,12 +479,40 @@ export function createTavernRoom(app: pc.Application): pc.Entity {
         height * (1 + Math.sin(elapsed * (7.2 + index * .7)) * .14), .19);
     });
     for (const person of movingPeople) {
-      if (person.gestureEnds > 0 && elapsed >= person.gestureEnds) {
-        transitionTownNpcRig(person.entity, "Idle", .24);
+      const schedule = tavernPatronSchedule(elapsed, person.scheduleOffset);
+      if (schedule.phase === "away") {
+        person.entity.enabled = false;
+        person.phase = schedule.phase;
         person.gestureEnds = 0;
-      } else if (person.gestureEnds === 0 && elapsed >= person.nextGesture) {
-        if (transitionTownNpcRig(person.entity, "Interact", .2)) person.gestureEnds = elapsed + 1.55;
-        person.nextGesture = elapsed + 7 + Math.random() * 6;
+        continue;
+      }
+      person.entity.enabled = true;
+      const walking = schedule.phase === "entering" || schedule.phase === "leaving";
+      if (person.phase !== schedule.phase) {
+        transitionTownNpcRig(person.entity, walking ? "Walking_A" : "Idle", .22);
+        person.phase = schedule.phase;
+        person.gestureEnds = 0;
+        person.nextGesture = elapsed + (schedule.phase === "settling" ? 1.2 : .55);
+      }
+      if (walking) {
+        const routeProgress = schedule.phase === "entering" ? schedule.progress : 1 - schedule.progress;
+        const position = routePosition(person.route, routeProgress);
+        const aheadProgress = schedule.phase === "entering"
+          ? Math.min(1, routeProgress + .015) : Math.max(0, routeProgress - .015);
+        const ahead = routePosition(person.route, aheadProgress);
+        person.entity.setLocalPosition(position);
+        faceRoute(person.entity, position, ahead);
+        continue;
+      }
+      person.entity.setLocalPosition(...person.seat);
+      person.entity.setLocalEulerAngles(0, TOWN_NPC_MODEL_YAW + person.seatYaw, 0);
+      if (person.gestureEnds > 0 && elapsed >= person.gestureEnds) {
+        transitionTownNpcRig(person.entity, "Idle", .2);
+        person.gestureEnds = 0;
+      } else if ((schedule.phase === "eating" || schedule.phase === "talking")
+        && person.gestureEnds === 0 && elapsed >= person.nextGesture) {
+        if (transitionTownNpcRig(person.entity, "Interact", .18)) person.gestureEnds = elapsed + 1.5;
+        person.nextGesture = elapsed + (schedule.phase === "eating" ? 3.2 : 4.4);
       }
       if (person.seatRig) applyTavernSeatPose(person.seatRig);
     }
