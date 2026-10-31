@@ -74,6 +74,8 @@ export function firstPersonActionPose(input: {
   comboStep: number;
   castElapsedMs: number | null;
   castDurationMs: number;
+  bowDrawProgress?: number;
+  bowDrawing?: boolean;
 }): FirstPersonActionPose {
   const movement = Math.max(0, Math.min(1, input.movementWeight ?? (input.moving ? 1 : 0)));
   const guard = Math.max(0, Math.min(1, input.guarding ?? 0));
@@ -93,7 +95,9 @@ export function firstPersonActionPose(input: {
   const magicStrength = input.castElapsedMs === null ? 0 : Math.sin(castT * Math.PI);
   const side = input.comboStep === 2 ? -1 : 1;
   const hammerWeight = input.weaponKind === "hammer" ? 1.25 : 1;
-  const bowDraw = input.weaponKind === "bow" ? windup : 0;
+  const bowDraw = input.weaponKind === "bow" ? Math.max(0, Math.min(1, input.bowDrawProgress ?? 0)) : 0;
+  const bowRelease = input.weaponKind === "bow" && input.attackElapsedMs !== null
+    ? Math.sin(Math.min(1, input.attackElapsedMs / 180) * Math.PI) : 0;
   const heldItemLift = input.weaponKind === "bow" ? .18 : input.weaponKind === "focus" ? .05 : 0;
 
   const pose: FirstPersonActionPose = {
@@ -129,11 +133,19 @@ export function firstPersonActionPose(input: {
     pose.rightY += windup * .18 - strike * .12; pose.rightYaw *= .35;
     pose.rightRoll = 10 + windup * 10 - strike * 16;
   } else if (input.weaponKind === "bow") {
-    // The bow remains steady while the free hand draws back toward the chest.
-    pose.rightX = .32; pose.rightYaw = -8; pose.rightPitch = -8; pose.rightRoll = 5;
-    pose.rightZ = -.95 - strike * .04;
-    pose.leftX = -.12 + windup * .15; pose.leftY = -.26;
-    pose.leftZ = -.92 + windup * .28; pose.leftCurl = .7;
+    // Skyrim-style silhouette: the off-hand plants the bow ahead of the camera
+    // while the string hand travels back toward the cheek and settles at full draw.
+    pose.leftX = -.3 - bowRelease * .035; pose.leftY = -.2 - bob * .25;
+    pose.leftZ = -.94 + bowRelease * .055; pose.leftPitch = -4;
+    pose.leftYaw = 3; pose.leftRoll = -4; pose.leftCurl = .84;
+    pose.rightX = .02 + bowDraw * .12; pose.rightY = -.19 + bowDraw * .12;
+    pose.rightZ = -.9 + bowDraw * .2 - bowRelease * .05;
+    pose.rightPitch = -2 - bowDraw * 8; pose.rightYaw = -4 - bowDraw * 14;
+    pose.rightRoll = 2 + bowDraw * 8; pose.rightCurl = .58;
+    if (!input.bowDrawing && (input.attackElapsedMs === null || input.attackElapsedMs >= input.attackDurationMs)) {
+      pose.rightX = .34; pose.rightY = -.4; pose.rightZ = -.82;
+      pose.rightPitch = -12; pose.rightYaw = -4; pose.rightRoll = 8; pose.rightCurl = .76;
+    }
   }
   return pose;
 }

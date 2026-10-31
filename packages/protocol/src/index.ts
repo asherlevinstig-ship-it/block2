@@ -1692,13 +1692,40 @@ export interface WeaponAttackDefinition {
   attacks: readonly WeaponAttackStep[];
 }
 
+/** Bows are released after a deliberate first-person draw instead of using the
+ * repeating projectile-fire path. A partial draw is still valid, but it is
+ * slower, shorter and weaker than a settled full draw. */
+export const BOW_DRAW_MIN_MS = 140;
+export const BOW_DRAW_FULL_MS = 900;
+export const BOW_DRAW_MAX_HOLD_MS = 1_800;
+
+export function bowDrawCharge(elapsedMs: number): number {
+  if (!Number.isFinite(elapsedMs)) return 0;
+  return Math.max(0, Math.min(1, elapsedMs / BOW_DRAW_FULL_MS));
+}
+
+export function bowShotRangeMultiplier(charge: number): number {
+  const amount = Math.max(0, Math.min(1, charge));
+  return .42 + amount * .58;
+}
+
+export function bowShotTravelMultiplier(charge: number): number {
+  const amount = Math.max(0, Math.min(1, charge));
+  return 1.65 - amount * .65;
+}
+
+export function bowShotDamage(baseDamage: number, charge: number): number {
+  const amount = Math.max(0, Math.min(1, charge));
+  return Math.max(1, Math.round(baseDamage * (.55 + amount * .7)));
+}
+
 export const WEAPON_ATTACK_DEFINITIONS = {
   unarmed: { combo: false, comboWindowMs: 0, range: 1.2, minimumFacingDot: .5, projectileTravelMs: 0,
     attacks: [{ step: 1, durationMs: 600, impactMs: 280, damage: 1, knockback: .05 }] },
   forged_sword: { combo: true, comboWindowMs: COMBO_CHAIN_WINDOW_MS, range: 2.1, minimumFacingDot: .35, projectileTravelMs: 0,
     attacks: COMBAT_ATTACKS.map(step => ({ ...step, damage: step.damage + 1 })) },
   forged_bow: { combo: false, comboWindowMs: 0, range: 9, minimumFacingDot: .92, projectileTravelMs: 160,
-    attacks: [{ step: 1, durationMs: 540, impactMs: 220, damage: 2, knockback: .18 }] },
+    attacks: [{ step: 1, durationMs: 360, impactMs: 70, damage: 2, knockback: .18 }] },
   forged_focus: { combo: false, comboWindowMs: 0, range: 7, minimumFacingDot: .58, projectileTravelMs: 230,
     attacks: [{ step: 1, durationMs: 470, impactMs: 190, damage: 2, knockback: .28 }] },
   longsword: {
@@ -1715,7 +1742,7 @@ export const WEAPON_ATTACK_DEFINITIONS = {
     range: 9,
     minimumFacingDot: 0.92,
     projectileTravelMs: 160,
-    attacks: [{ step: 1, durationMs: 540, impactMs: 220, damage: 1, knockback: 0.18 }],
+    attacks: [{ step: 1, durationMs: 360, impactMs: 70, damage: 1, knockback: 0.18 }],
   },
   magic_focus: {
     combo: false,
@@ -2003,6 +2030,10 @@ export const AttackRequestSchema = z.object({
   actionAt: z.number().finite().optional(),
 });
 
+export const BowDrawRequestSchema = z.object({
+  active: z.boolean(),
+});
+
 export const DodgeRequestSchema = z.object({
   requestId: z.string().min(1).max(64),
   strafe: z.number().finite().min(-1).max(1),
@@ -2073,6 +2104,7 @@ export type MoveRequest = z.infer<typeof MoveRequestSchema>;
 export type ChunkRegionRequest = z.infer<typeof ChunkRegionRequestSchema>;
 export type MineBlockRequest = z.infer<typeof MineBlockRequestSchema>;
 export type AttackRequest = z.infer<typeof AttackRequestSchema>;
+export type BowDrawRequest = z.infer<typeof BowDrawRequestSchema>;
 export type DodgeRequest = z.infer<typeof DodgeRequestSchema>;
 export type DefenseRequest = z.infer<typeof DefenseRequestSchema>;
 export type PowerRequest = z.infer<typeof PowerRequestSchema>;

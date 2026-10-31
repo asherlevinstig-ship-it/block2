@@ -4768,6 +4768,9 @@ body:has(#floor-one-complete:not([hidden])) :is(#floor-one-run, #touch-controls,
 #attack-readiness[data-ready="true"] { opacity: .65; }
 #attack-readiness[data-ready="true"] i { background: #9ddeb8; }
 #attack-readiness[data-queued="true"] i { background: #72dbea; }
+#attack-readiness[data-drawing="true"] { width: 112px; color: #fff0b1; }
+#attack-readiness[data-drawing="true"] i { background: linear-gradient(90deg, #c8792c, #ffe58a); box-shadow: 0 0 8px #f5bd4c88; }
+#attack-readiness[data-drawing="true"][data-ready="true"] { opacity: 1; }
 #attack-outcome { position: absolute; bottom: 43px; left: 50%; transform: translateX(-50%); color: #fff1b5; font: 900 10px/1.2 system-ui; text-shadow: 0 2px 3px #000; white-space: nowrap; }
 #attack-outcome[data-outcome="miss"] { color: #becbc5; }
 #attack-outcome[data-outcome="blocked"] { color: #ffce7d; }

@@ -76,4 +76,17 @@ describe("first-person action presentation", () => {
     expect(cast.leftZ).toBeLessThan(-.7);
     expect(cast.rightZ).toBeLessThan(-.7);
   });
+
+  it("plants the bow hand and pulls the string hand back toward the cheek", () => {
+    const input = { timeSeconds: 0, moving: false, weaponKind: "bow" as const,
+      attackElapsedMs: null, attackDurationMs: 360, comboStep: 1,
+      castElapsedMs: null, castDurationMs: 600, bowDrawing: true };
+    const nocked = firstPersonActionPose({ ...input, bowDrawProgress: 0 });
+    const fullDraw = firstPersonActionPose({ ...input, bowDrawProgress: 1 });
+    expect(fullDraw.leftX).toBeCloseTo(nocked.leftX);
+    expect(fullDraw.leftZ).toBeCloseTo(nocked.leftZ);
+    expect(fullDraw.rightX).toBeGreaterThan(nocked.rightX + .1);
+    expect(fullDraw.rightY).toBeGreaterThan(nocked.rightY + .1);
+    expect(fullDraw.rightZ).toBeGreaterThan(nocked.rightZ + .18);
+  });
 });

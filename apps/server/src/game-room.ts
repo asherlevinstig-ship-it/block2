@@ -1,5 +1,6 @@
 import { Client, Room } from "@colyseus/core";
-import { aimedWeaponFlight, mobAttackBody, ENEMY_PROJECTILE_RADIUS } from "@blockcraft/protocol";
+import { aimedWeaponFlight, bowDrawCharge, bowShotDamage, bowShotRangeMultiplier, bowShotTravelMultiplier,
+  mobAttackBody, ENEMY_PROJECTILE_RADIUS } from "@blockcraft/protocol";
 import { PVP_MURDERER_DURATION_MS, pvpCombatAllowed, pvpMurdererUntil, withPvpMurdererUntil,
   type PvpHit, type PvpKill } from "@blockcraft/protocol";
 import { CROWNKEEPER_FORGE } from "@blockcraft/protocol";
@@ -132,6 +133,7 @@ import { miningDurationMs, miningLineClear } from "@blockcraft/voxel-world";
 import type { MineBlockRequest } from "@blockcraft/protocol";
 import {
   AttackRequestSchema,
+  BowDrawRequestSchema,
   playerMeleeStrike,
   mobMeleeStrike,
   mobMeleeImpactMs,
@@ -356,6 +358,7 @@ interface PendingAttack {
   mainHandId: MainHandId;
   yaw: number;
   elevation?: number;
+  bowCharge?: number;
   step: 1 | 2 | 3;
   impactAt: number;
   lastSweepAt?: number;
@@ -539,6 +542,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly verticalVelocities = new Map<string, number>();
   private readonly attackChains = new Map<string, AttackChainState>();
   private readonly pendingAttacks = new Map<string, PendingAttack>();
+  private readonly bowDrawStartedAt = new Map<string, number>();
   private readonly pendingMining = new Map<string, { client: Client; request: MineBlockRequest; block: number; completesAt: number; origin: { x: number; y: number; z: number } }>();
   private readonly pendingMobMelee = new Map<string, { targetId: string; yaw: number; impactAt: number; lastSweepAt?: number }>();
   private readonly pendingIncomingHits: PendingIncomingHit[] = [];
@@ -1100,6 +1104,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (pending && typeof payload === "object" && payload !== null && "requestId" in payload && payload.requestId === pending.request.requestId) this.pendingMining.delete(client.sessionId);
     });
     aliveMessage("attack", (client, payload) => this.handleAttack(client, payload));
+    aliveMessage("bow:draw", (client, payload) => this.handleBowDraw(client, payload));
     aliveMessage("dodge", (client, payload) => this.handleDodge(client, payload));
     aliveMessage("defense", (client, payload) => this.handleDefense(client, payload));
     aliveMessage("power", (client, payload) => this.handlePower(client, payload));
@@ -1412,6 +1417,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.verticalVelocities.delete(client.sessionId);
     this.attackChains.delete(client.sessionId);
     this.pendingAttacks.delete(client.sessionId);
+    this.bowDrawStartedAt.delete(client.sessionId);
     this.cancelWeaponProjectiles(client.sessionId);
     this.pendingPowers.delete(client.sessionId);
     this.specialMarks.delete(client.sessionId);
@@ -1517,6 +1523,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.orderedMovement.delete(id);
     this.pendingMining.delete(id);
     this.pendingAttacks.delete(id);
+    this.bowDrawStartedAt.delete(id);
     this.pendingPowers.delete(id);
     this.pendingResurrections.delete(id);
     this.cancelWeaponProjectiles(id);
@@ -2865,6 +2872,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       player.invulnerableUntil = Date.now() + 1_000;
       this.attackChains.delete(client.sessionId);
       this.pendingAttacks.delete(client.sessionId);
+      this.bowDrawStartedAt.delete(client.sessionId);
       this.cancelWeaponProjectiles(client.sessionId);
       this.rapidPracticePendingRewards.delete(client.sessionId);
       this.rapidPracticeWaveAdvanceAt = Date.now() + 700;
@@ -5844,6 +5852,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       } satisfies DefenseResolved, player);
     }
     if (!defeated) return true;
+    this.bowDrawStartedAt.delete(playerId);
     this.clearCallingEffects(playerId);
     this.mageCallingCasts.delete(playerId);
     this.clearFloorRunUpgrades(playerId);
@@ -7537,6 +7546,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const augmentId = selectedCallingAugment(state, abilityId);
     const definition = CALLING_ABILITY_OPTIONS.find(option => option.id === abilityId)!;
     const now = Date.now();
+    // A Calling cast replaces the two-handed bow stance. Clearing this on the
+    // authority prevents a delayed release packet from firing a stale arrow.
+    this.bowDrawStartedAt.delete(client.sessionId);
     const trainingAtEffigy = parsed.data.training === true && this.roomKind === "overworld"
       && player.y >= SURFACE_HEIGHT - 1
       && Math.hypot(player.x - 12.5, player.z - 12.5) <= 4;
@@ -10727,6 +10739,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const chain = previous ? nextDodgeChain(previous.chain, previous.lastAt, now) : 0;
     const cost = dodgeChainStaminaCost(chain);
     if (player.stamina < cost) return this.reject(client, { requestId: parsed.data.requestId, action: "dodge", reason: "stamina" });
+    this.bowDrawStartedAt.delete(client.sessionId);
     this.cancelPendingPower(client.sessionId, "dodge");
     const direction = dodgeDirection(parsed.data.strafe, parsed.data.forward, parsed.data.yaw);
     const next = resolveSweptHorizontalMotion(
@@ -10788,6 +10801,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (this.pendingPowers.has(client.sessionId) || this.pendingAttacks.has(client.sessionId)) {
       return this.reject(client, { requestId: parsed.data.requestId, action: "defense", reason: "rate" });
     }
+    this.bowDrawStartedAt.delete(client.sessionId);
     player.defending = true;
     player.defenseStartedAt = Date.now();
     this.sendCombatTiming(client.sessionId, { requestId: parsed.data.requestId, action: "defense", phase: "accepted", serverTime: player.defenseStartedAt });
@@ -10833,6 +10847,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     } else if (target) {
       return this.reject(client, { requestId: parsed.data.requestId, action: "power", reason: "payload" });
     }
+    this.bowDrawStartedAt.delete(client.sessionId);
     player.yaw = parsed.data.yaw;
     const mageRank = parseBuildPathState(player.huntLoadoutsJson).selectedPathId === "mage" ? this.buildPathRankFor(player, "mage") : 0;
     player.powerCooldownUntil = now + Math.round(definition.cooldownMs * (1 - Math.min(.2, mageRank * .05)));
@@ -11519,6 +11534,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (!baseTiming) return;
     const timing = rapidPracticeAttackTiming(baseTiming, this.rapidPractice,
       this.rapidPracticeUpgrades.get(client.sessionId)?.haste ?? 0);
+    const bowEquipped = mainHandId === "bow" || mainHandId === "forged_bow";
+    const bowStartedAt = this.bowDrawStartedAt.get(client.sessionId);
+    if (bowEquipped && bowStartedAt === undefined) {
+      return this.reject(client, { requestId: parsed.data.requestId, action: "attack", reason: "missing" });
+    }
+    const serverBowCharge = bowStartedAt === undefined ? undefined : bowDrawCharge(now - bowStartedAt);
+    this.bowDrawStartedAt.delete(client.sessionId);
     this.attackChains.set(client.sessionId, {
       step,
       mainHandId,
@@ -11532,6 +11554,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       step,
       impactAt: actionAt + timing.impactMs,
       elevation: this.rapidPractice ? parsed.data.elevation : undefined,
+      ...(serverBowCharge === undefined ? {} : { bowCharge: serverBowCharge }),
     });
     this.sendWeaponAttackState(client, parsed.data.requestId, true, actionAt);
     this.endStealth(client.sessionId);
@@ -11539,6 +11562,20 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     player.attackStep = step;
     player.actionSequence += 1;
     this.sendCombatTiming(client.sessionId, { requestId: parsed.data.requestId, action: "attack", phase: "accepted", serverTime: now, scheduledAt: actionAt + timing.impactMs });
+  }
+
+  private handleBowDraw(client: Client, payload: unknown): void {
+    const parsed = BowDrawRequestSchema.safeParse(payload);
+    if (!parsed.success) return;
+    if (!parsed.data.active) { this.bowDrawStartedAt.delete(client.sessionId); return; }
+    const player = this.state.players.get(client.sessionId);
+    if (!player || player.defending || this.pendingPowers.has(client.sessionId)) return;
+    const mainHandId = player.mainHandId as MainHandId;
+    if (mainHandId !== "bow" && mainHandId !== "forged_bow") return;
+    const chain = this.attackChains.get(client.sessionId);
+    const now = Date.now();
+    if (chain && now < chain.recoveryUntil) return;
+    this.bowDrawStartedAt.set(client.sessionId, now);
   }
 
   private clearMobAttackTimeline(mob: MobState): void {
@@ -11829,9 +11866,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       } satisfies PvpHit);
       return true;
     }
-    const baseDamage = timing.damage + ironSwordDamageBonus(attacker.blacksmithUpgrades, pending.mainHandId)
+    let baseDamage = timing.damage + ironSwordDamageBonus(attacker.blacksmithUpgrades, pending.mainHandId)
       + reforgeWeaponDamageBonus(equipmentReforgeRank(attacker.reforgeRanksJson, pending.mainHandId))
       + progressionAttackBonus(attacker) + (this.rapidPracticeUpgrades.get(attackerId)?.damage ?? 0);
+    if (pending.bowCharge !== undefined) baseDamage = bowShotDamage(baseDamage, pending.bowCharge);
     const defense = resolveDefense(baseDamage, target.defending, target.defenseStartedAt, now,
       isAttackInGuardArc(target, attacker));
     const damage = armouredDamage(defense.damage, target.armourId, projectile ? "projectile" : "melee",
@@ -11850,7 +11888,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.clearCallingEffects(targetId);
       this.clearFloorRunUpgrades(targetId);
       target.defending = false; target.momentumStacks = 0;
-      this.pendingAttacks.delete(targetId); this.cancelWeaponProjectiles(targetId);
+      this.pendingAttacks.delete(targetId); this.bowDrawStartedAt.delete(targetId); this.cancelWeaponProjectiles(targetId);
       this.pendingPowers.delete(targetId); this.specialMarks.delete(targetId); this.brambleSnares.delete(targetId);
       this.attackChains.delete(targetId);
       this.movementInputs.set(targetId, { request: idleMovementInput(), receivedAt: now });
@@ -11939,7 +11977,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const attackDefinition = WEAPON_ATTACK_DEFINITIONS[pending.mainHandId];
       const timing = attackDefinition.attacks[pending.step - 1] ?? attackDefinition.attacks[0];
       if (!timing) continue;
-      const effectiveRange = rapidWeapon?.range ?? attackDefinition.range;
+      const effectiveRange = (rapidWeapon?.range ?? attackDefinition.range)
+        * (pending.bowCharge === undefined ? 1 : bowShotRangeMultiplier(pending.bowCharge));
       const targets = [...this.state.mobs.entries()].map(([id, mob]) => ({
         id,
         x: mob.x,
@@ -11956,8 +11995,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         attackDefinition.minimumFacingDot,
       );
       if (attackDefinition.projectileTravelMs > 0 || rapidWeapon) {
-        const projectileTravelMs = rapidWeapon?.travelMs
-          ?? rapidPracticeProjectileTravelMs(attackDefinition.projectileTravelMs, this.rapidPractice);
+        const projectileTravelMs = (rapidWeapon?.travelMs
+          ?? rapidPracticeProjectileTravelMs(attackDefinition.projectileTravelMs, this.rapidPractice))
+          * (pending.bowCharge === undefined ? 1 : bowShotTravelMultiplier(pending.bowCharge));
         const radians = pending.yaw * Math.PI / 180;
         const endpoint = {
           x: player.x + Math.sin(radians) * effectiveRange,
@@ -12293,6 +12333,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         mob.armor,
       ) + traitBonusDamage + dodgeCounterBonus
         + (this.rapidPractice && mobId === TOWER_FLOOR_ONE_BOSS_ID && now < this.crownkeeperOpeningUntil ? CROWNKEEPER_OPENING_WEAPON_BONUS : 0);
+      if (pending.bowCharge !== undefined) damage = bowShotDamage(damage, pending.bowCharge);
       const cinderExposedUntil = this.cinderRamExposedUntil.get(mobId) ?? 0;
       const cinderExposed = mob.archetype === "cinder_ram" && now < cinderExposedUntil;
       const sourceX = source?.x ?? player.x, sourceZ = source?.z ?? player.z;

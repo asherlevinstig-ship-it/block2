@@ -2,6 +2,7 @@ import { greenwoodAtmosphere } from "./greenwood-atmosphere.js";
 import { greenwoodEmergence, greenwoodMobStyle, type GreenwoodMobStyle } from "./greenwood-mob-style.js";
 import { FAST_WORLD_TOWN_BOUNDS, FAST_WORLD_TOWN_ONLY, TOWER_FLOOR_ONE, TOWER_FLOOR_ONE_SOUTH_ATTENDANTS, TOWER_FLOOR_ONE_WARDENS, fastWorldGroundHeight, isInsideTowerFloorOne, isTowerFloorSafeZone, parseTowerProgress, pvpMurdererUntil, type TowerProgress } from "@blockcraft/protocol";
 import { parseGuildMembership } from "@blockcraft/protocol";
+import { BOW_DRAW_FULL_MS, BOW_DRAW_MAX_HOLD_MS, BOW_DRAW_MIN_MS, bowDrawCharge } from "@blockcraft/protocol";
 import { GREENWOOD_MAIN_TRAIL, GREENWOOD_CAMP_TRAIL, GREENWOOD_THICKETS, GREENWOOD_CLUSTER_PLANTS, GREENWOOD_VERGE_PLANTS, sampleWoodlandTrail } from "./greenwood-landscape.js";
 import * as pc from "playcanvas";
 import { facetedBoxMesh } from "./faceted-shapes.js";
@@ -5301,6 +5302,9 @@ interface FirstPersonActionRig {
   magicEdgeMaterial: pc.StandardMaterial;
   runeRing: pc.Entity;
   slashTrails: pc.Entity[];
+  bowArrow: pc.Entity;
+  bowStringUpper: pc.Entity;
+  bowStringLower: pc.Entity;
 }
 
 const createFirstPersonMaterial = (color: pc.Color, emissive?: pc.Color): pc.StandardMaterial => {
@@ -5387,7 +5391,8 @@ function createFirstPersonActionRig(): FirstPersonActionRig {
   rightHand.setLocalScale(.76, .76, .76);
   const weapons = Object.fromEntries((["unarmed", "sword", "dagger", "bow", "focus", "hammer"] as const)
     .map(kind => [kind, new pc.Entity(`first-person-${kind}`)])) as Record<FirstPersonWeaponKind, pc.Entity>;
-  for (const weapon of Object.values(weapons)) wrists.right.addChild(weapon);
+  for (const [kind, weapon] of Object.entries(weapons))
+    (kind === "bow" ? wrists.left : wrists.right).addChild(weapon);
 
   weapons.sword.setLocalPosition(-.025, .11, -.075);
   weapons.sword.setLocalEulerAngles(-10, -12, 13);
@@ -5465,11 +5470,18 @@ function createFirstPersonActionRig(): FirstPersonActionRig {
   bowUpper.setLocalEulerAngles(0, 0, 11);
   const bowLower = actionShape(weapons.bow, "bow-lower-limb", "box", wood, [.05, .28, .05], [-.035, -.19, 0]);
   bowLower.setLocalEulerAngles(0, 0, -11);
-  actionShape(weapons.bow, "bow-string", "box", steelEdge, [.006, .4, .006], [.11, 0, 0]);
-  const bowUpperTie = actionShape(weapons.bow, "bow-upper-tie", "box", steelEdge, [.006, .12, .006], [.05, .25, 0]);
-  bowUpperTie.setLocalEulerAngles(0, 0, -42);
-  const bowLowerTie = actionShape(weapons.bow, "bow-lower-tie", "box", steelEdge, [.006, .12, .006], [.05, -.25, 0]);
-  bowLowerTie.setLocalEulerAngles(0, 0, 42);
+  const bowStringUpper = actionShape(root, "bow-string-upper", "box", steelEdge, [.006, .34, .006], [-.27, -.02, -.94]);
+  const bowStringLower = actionShape(root, "bow-string-lower", "box", steelEdge, [.006, .34, .006], [-.27, -.34, -.94]);
+  const bowArrow = new pc.Entity("first-person-bow-arrow"); root.addChild(bowArrow);
+  actionShape(bowArrow, "nocked-arrow-shaft", "cylinder", wood, [.012, .62, .012], [0, .31, 0]);
+  actionShape(bowArrow, "nocked-arrow-head", "cone", steelEdge, [.035, .075, .035], [0, .66, 0]);
+  for (const side of [-1, 1]) {
+    const feather = actionShape(bowArrow, `nocked-arrow-feather-${side}`, "box", side < 0 ? arcane : arcaneEdge,
+      [.035, .07, .008], [side * .02, .07, 0]);
+    feather.setLocalEulerAngles(0, 0, side * 18);
+  }
+  bowArrow.setLocalEulerAngles(-90, 0, 0);
+  bowArrow.enabled = bowStringUpper.enabled = bowStringLower.enabled = false;
 
   weapons.focus.setLocalPosition(-.015, .13, -.05);
   weapons.focus.setLocalEulerAngles(-8, -8, 18);
@@ -5523,7 +5535,7 @@ function createFirstPersonActionRig(): FirstPersonActionRig {
   });
   root.enabled = false;
   return { root, viewCamera, leftHand, rightHand, wrists, fingers, skin, sleeve, weapons, tankShield, assassinOffhand, magic, magicCore,
-    magicCoreMaterial, magicEdgeMaterial, runeRing, slashTrails };
+    magicCoreMaterial, magicEdgeMaterial, runeRing, slashTrails, bowArrow, bowStringUpper, bowStringLower };
 }
 
 const firstPersonActionRig = createFirstPersonActionRig();
@@ -5538,8 +5550,8 @@ const FIRST_PERSON_AUTHORED_WEAPON_TRANSFORMS: Record<KayKitWeaponAssetId, {
 }> = {
   swordBasic: { rotation: [0, 0, 0], scale: .58 },
   swordForged: { rotation: [0, 0, 0], scale: .58 },
-  bowBasic: { rotation: [90, 0, 90], scale: .55 },
-  bowForged: { rotation: [90, 0, 90], scale: .55 },
+  bowBasic: { rotation: [90, 0, 90], scale: .48 },
+  bowForged: { rotation: [90, 0, 90], scale: .48 },
   daggerThief: { rotation: [0, 0, 0], scale: .66 },
   daggerAssassin: { rotation: [0, 0, 0], scale: .66 },
   wandMage: { rotation: [0, 0, 0], scale: .7 },
@@ -6887,6 +6899,15 @@ let firstPersonPreviousYaw: number | null = null;
 let firstPersonLookSway = 0;
 let firstPersonAppearanceKey = "";
 
+function positionBowStringSegment(entity: pc.Entity, start: pc.Vec3, end: pc.Vec3): void {
+  const dx = end.x - start.x, dy = end.y - start.y, dz = end.z - start.z;
+  const planar = Math.hypot(dx, dy);
+  entity.setLocalPosition((start.x + end.x) * .5, (start.y + end.y) * .5, (start.z + end.z) * .5);
+  entity.setLocalScale(.0035, Math.max(.01, Math.hypot(dx, dy, dz)), .0035);
+  entity.setLocalEulerAngles(Math.atan2(dz, Math.max(.001, planar)) * 180 / Math.PI,
+    0, -Math.atan2(dx, dy || .0001) * 180 / Math.PI);
+}
+
 function updateFirstPersonActionView(now: number, moving: boolean, actionElapsed: number | null,
   powerElapsed: number | null): void {
   if (cameraViewMode !== "first-person") { firstPersonLastFrame = 0; firstPersonPreviousYaw = null; return; }
@@ -6906,6 +6927,11 @@ function updateFirstPersonActionView(now: number, moving: boolean, actionElapsed
     firstPersonActionRig.sleeve.diffuse.copy(coatColor); firstPersonActionRig.sleeve.update();
   }
   const weaponKind = firstPersonWeaponKind(localMainHandId);
+  const bowDrawProgress = weaponKind === "bow" ? currentBowDrawCharge(now) : 0;
+  const drawnFov = FIRST_PERSON_FOV - bowDrawProgress * 5;
+  if (camera.camera) camera.camera.fov += (drawnFov - camera.camera.fov) * blend;
+  if (firstPersonActionRig.viewCamera.camera)
+    firstPersonActionRig.viewCamera.camera.fov += (drawnFov - firstPersonActionRig.viewCamera.camera.fov) * blend;
   const triggeredCastElapsed = firstPersonAbilityCastStartedAt === null ? null : now - firstPersonAbilityCastStartedAt;
   if (triggeredCastElapsed !== null && triggeredCastElapsed >= firstPersonAbilityCastDuration)
     firstPersonAbilityCastStartedAt = null;
@@ -6926,11 +6952,17 @@ function updateFirstPersonActionView(now: number, moving: boolean, actionElapsed
     comboStep: localActionStep,
     castElapsedMs: castElapsed,
     castDurationMs: castDuration,
+    bowDrawProgress,
+    bowDrawing: bowDrawStartedAt !== null,
   });
   firstPersonActionRig.leftHand.setLocalPosition(pose.leftX, pose.leftY, pose.leftZ);
   firstPersonActionRig.leftHand.setLocalEulerAngles(pose.leftPitch, pose.leftYaw, pose.leftRoll);
   firstPersonActionRig.rightHand.setLocalPosition(pose.rightX, pose.rightY, pose.rightZ);
   firstPersonActionRig.rightHand.setLocalEulerAngles(pose.rightPitch, pose.rightYaw, pose.rightRoll);
+  firstPersonActionRig.leftHand.setLocalScale(weaponKind === "bow" ? .66 : .76,
+    weaponKind === "bow" ? .66 : .76, weaponKind === "bow" ? .66 : .76);
+  firstPersonActionRig.rightHand.setLocalScale(weaponKind === "bow" ? .6 : .76,
+    weaponKind === "bow" ? .6 : .76, weaponKind === "bow" ? .6 : .76);
   firstPersonActionRig.wrists.left.setLocalEulerAngles(-pose.magicStrength * 22, pose.magicStrength * -15, 0);
   firstPersonActionRig.wrists.right.setLocalEulerAngles(pose.attackStrength * -10, 0, pose.magicStrength * 8);
   for (const finger of firstPersonActionRig.fingers) {
@@ -6943,6 +6975,19 @@ function updateFirstPersonActionView(now: number, moving: boolean, actionElapsed
     firstPersonActionRig.wrists[side].findByName(`${side}-thumb-joint`)?.setLocalEulerAngles(
       -25 - curl * 25, (side === "left" ? 1 : -1) * -25,
       (side === "left" ? -1 : 1) * (35 - curl * 90));
+  }
+  const bowVisible = weaponKind === "bow";
+  firstPersonActionRig.bowStringUpper.enabled = bowVisible;
+  firstPersonActionRig.bowStringLower.enabled = bowVisible;
+  const arrowVisible = bowVisible && bowDrawStartedAt !== null;
+  firstPersonActionRig.bowArrow.enabled = arrowVisible;
+  if (bowVisible) {
+    const nock = arrowVisible
+      ? new pc.Vec3(pose.rightX - .01, pose.rightY + .12, pose.rightZ - .025)
+      : new pc.Vec3(-.31, -.15, -.95);
+    positionBowStringSegment(firstPersonActionRig.bowStringUpper, new pc.Vec3(-.31, .17, -.95), nock);
+    positionBowStringSegment(firstPersonActionRig.bowStringLower, new pc.Vec3(-.31, -.47, -.95), nock);
+    if (arrowVisible) firstPersonActionRig.bowArrow.setLocalPosition(nock.x, nock.y, nock.z);
   }
   const magicVisible = pose.magicStrength > .025;
   firstPersonActionRig.magic.enabled = magicVisible;
@@ -7481,6 +7526,7 @@ function requestCallingAbility(slot: "power" | "special" = "power", aimedYaw?: n
   combatSync.start("calling", requestId, performance.now());
   const training = isAtTownOfBeginnings()
     && abilityPracticeDummyInRange(localPlayer.getPosition(), CALLING_EFFIGY_POSITION);
+  cancelBowDraw();
   room.send("calling:ability", { requestId, yaw: aimedYaw ?? cameraOrbit.yaw, slot, ...(training ? { training: true } : {}) });
 }
 
@@ -7508,6 +7554,7 @@ function requestSpecialEquip(specialId: SpecialId): void {
 }
 
 function updateMainHandLoadout(mainHandId: MainHandId): void {
+  if (mainHandId !== localMainHandId) cancelBowDraw();
   attackBuffer.clear();
   attackPredictions.clear();
   localAttackRecoveryUntil = 0;
@@ -12179,6 +12226,60 @@ let tabletCameraHintSeen = (() => {
 })();
 const tabletCameraHintEligibleAt = performance.now() + 1_800;
 let keyboardFireHeld = false;
+let bowDrawStartedAt: number | null = null;
+let bowDrawPointerId: number | null = null;
+let bowDrawAim: { aimWithPointer: boolean; tabletAim?: { yaw: number; targetId: string | null } } | null = null;
+
+const bowEquipped = (): boolean => localMainHandId === "bow" || localMainHandId === "forged_bow";
+
+function currentBowDrawCharge(now = performance.now()): number {
+  return bowDrawStartedAt === null ? 0 : bowDrawCharge(Math.min(BOW_DRAW_MAX_HOLD_MS, now - bowDrawStartedAt));
+}
+
+function beginBowDraw(aimWithPointer = true, tabletAim?: { yaw: number; targetId: string | null }, pointerId?: number): boolean {
+  if (!bowEquipped() || !weaponAttackInputAllowed() || bowDrawStartedAt !== null) return false;
+  const now = performance.now();
+  const readyAt = Math.max(localAttackRecoveryUntil,
+    localActionStartedAt === null ? 0 : localActionStartedAt + actionDuration(localActionStep));
+  if (now < readyAt) return false;
+  if (localDefending) requestDefense(false);
+  attackBuffer.clear();
+  keyboardFireHeld = false;
+  rangedFirePointer = null;
+  bowDrawStartedAt = now;
+  bowDrawPointerId = pointerId ?? null;
+  bowDrawAim = { aimWithPointer, ...(tabletAim ? { tabletAim } : {}) };
+  room?.send("bow:draw", { active: true });
+  combatAudio.play("bowDraw");
+  status.textContent = "Bow drawn · hold to steady, release to fire.";
+  return true;
+}
+
+function cancelBowDraw(reason = "Bow lowered."): void {
+  if (bowDrawStartedAt === null) return;
+  room?.send("bow:draw", { active: false });
+  bowDrawStartedAt = null;
+  bowDrawPointerId = null;
+  bowDrawAim = null;
+  status.textContent = reason;
+}
+
+function releaseBowDraw(tabletAim?: { yaw: number; targetId: string | null }): boolean {
+  if (bowDrawStartedAt === null) return false;
+  const elapsed = Math.min(BOW_DRAW_MAX_HOLD_MS, performance.now() - bowDrawStartedAt);
+  const aim = bowDrawAim ?? { aimWithPointer: true };
+  bowDrawStartedAt = null;
+  bowDrawPointerId = null;
+  bowDrawAim = null;
+  if (elapsed < BOW_DRAW_MIN_MS) room?.send("bow:draw", { active: false });
+  if (elapsed < BOW_DRAW_MIN_MS) {
+    status.textContent = "Draw a little farther before releasing the arrow.";
+    return true;
+  }
+  requestAttack(aim.aimWithPointer, tabletAim ?? aim.tabletAim);
+  room?.send("bow:draw", { active: false });
+  return true;
+}
 
 function completeTabletCameraHint(): void {
   if (tabletCameraHintSeen) return;
@@ -12227,7 +12328,7 @@ function mouseRangedYaw(fallback: number): number {
 function updateRangedReticle(): void {
   const continuous = continuousAttackEnabled(WEAPON_ATTACK_DEFINITIONS[localMainHandId].projectileTravelMs > 0, fastWorldRequested);
   const pointerActive = rangedPointer.active;
-  const active = (pointerActive || cameraViewMode === "first-person" || keyboardFireHeld || localActionStartedAt !== null)
+  const active = (pointerActive || cameraViewMode === "first-person" || keyboardFireHeld || bowDrawStartedAt !== null || localActionStartedAt !== null)
     && continuous && interactionMode === "combat" && worldReady && defeatScreen.hidden === true && inventoryPanel.hidden === true;
   combatReticle.hidden = !active;
   canvas.classList.toggle("ranged-aim", active);
@@ -16146,6 +16247,7 @@ function requestDefense(active: boolean): void {
   if (!defeatScreen.hidden) return;
   if (active && reportedProtectedDialog === true) return;
   if (!room || !worldReady || active === localDefending) return;
+  if (active) cancelBowDraw();
   if (active && (powerAimActive || specialAimActive || localPowerStartedAt !== null || localActionStartedAt !== null)) {
     status.textContent = "Finish or cancel the current action before guarding.";
     return;
@@ -16669,6 +16771,7 @@ function requestDodge(): void {
   if (!defeatScreen.hidden) return;
   if (reportedProtectedDialog === true) return;
   if (!room || !worldReady) return;
+  cancelBowDraw();
   if (performance.now() < localThornBoundUntil) {
     status.textContent = "Rooted by vines · attack to cut free.";
     return;
@@ -16894,6 +16997,7 @@ function cancelLocalPowerPresentation(): void {
 
 function castPower(yaw: number, target?: { x: number; y: number; z: number }): void {
   if (!room) return;
+  cancelBowDraw();
   const powerId = localEquippedPower;
   const definition = POWER_DEFINITIONS[powerId];
   const shape = activePowerShape(powerId);
@@ -17098,6 +17202,7 @@ function commitSpecialAim(): void {
 
 function requestModePrimaryAction(): void {
   if (localDefending) requestDefense(false);
+  if (bowEquipped()) { beginBowDraw(); return; }
   requestAttack();
 }
 
@@ -17495,9 +17600,12 @@ window.addEventListener("keydown", event => {
   if (event.code === "KeyJ") {
     event.preventDefault();
     if (!event.repeat) {
-      keyboardFireHeld = continuousAttackEnabled(WEAPON_ATTACK_DEFINITIONS[localMainHandId].projectileTravelMs > 0,
-        fastWorldRequested);
-      requestAttack(false);
+      if (bowEquipped()) beginBowDraw(false);
+      else {
+        keyboardFireHeld = continuousAttackEnabled(WEAPON_ATTACK_DEFINITIONS[localMainHandId].projectileTravelMs > 0,
+          fastWorldRequested);
+        requestAttack(false);
+      }
     }
   }
   if (WEAPON_TECHNIQUES_AVAILABLE && event.code === "KeyR") {
@@ -17520,7 +17628,10 @@ window.addEventListener("keydown", event => {
   }
 });
 window.addEventListener("keyup", event => {
-  if (event.code === "KeyJ") keyboardFireHeld = false;
+  if (event.code === "KeyJ") {
+    keyboardFireHeld = false;
+    releaseBowDraw();
+  }
   if (event.code === "KeyE") {
     releaseLootHold("keyboard");
     if (portalHold?.source === "keyboard") cancelPortalHold("released");
@@ -17535,7 +17646,7 @@ window.addEventListener("keyup", event => {
   if (event.code === powerAimKey) commitPowerAim();
   if (event.code === "KeyF") commitSpecialAim();
 });
-window.addEventListener("blur", () => { cancelLootHold("focus"); cancelPortalHold("focus"); cancelInnRoomHold("focus"); attackBuffer.clear(); keyboardFireHeld = false; });
+window.addEventListener("blur", () => { cancelLootHold("focus"); cancelPortalHold("focus"); cancelInnRoomHold("focus"); attackBuffer.clear(); keyboardFireHeld = false; cancelBowDraw(); });
 canvas.addEventListener("pointerdown", event => {
   if (popupQueue.active() !== null) return;
   canvas.focus({ preventScroll: true });
@@ -17582,16 +17693,19 @@ canvas.addEventListener("pointerdown", event => {
     return;
   }
   updateTarget();
-  requestPrimaryAction();
-  if (event.pointerType === "mouse" && rangedFireAllowed()) rangedFirePointer = event.pointerId;
+  if (bowEquipped()) beginBowDraw(true, undefined, event.pointerId);
+  else requestPrimaryAction();
+  if (!bowEquipped() && event.pointerType === "mouse" && rangedFireAllowed()) rangedFirePointer = event.pointerId;
 });
 window.addEventListener("pointerup", event => {
+  if (event.pointerId === bowDrawPointerId) releaseBowDraw();
   if (event.pointerId === rangedFirePointer) rangedFirePointer = null;
   releaseLootHold("touch");
   if (portalHold?.source === "touch" && (portalHold.pointerId === undefined || portalHold.pointerId === event.pointerId)) cancelPortalHold("released");
   if (innRoomHold?.source === "touch" && (innRoomHold.pointerId === undefined || innRoomHold.pointerId === event.pointerId)) cancelInnRoomHold("released");
 });
 window.addEventListener("pointercancel", event => {
+  if (event.pointerId === bowDrawPointerId) cancelBowDraw();
   if (event.pointerId === rangedFirePointer) rangedFirePointer = null;
   if (lootHold?.source === "touch") cancelLootHold("released");
   if (portalHold?.source === "touch" && (portalHold.pointerId === undefined || portalHold.pointerId === event.pointerId)) cancelPortalHold("released");
@@ -17823,11 +17937,17 @@ function updateTabletAttackAim(event: PointerEvent): void {
 
 mineButton.addEventListener("pointerdown", event => {
   event.preventDefault();
-  if (interactionMode !== "combat" || event.pointerType === "mouse") { requestModePrimaryAction(); return; }
+  if (interactionMode !== "combat") { requestModePrimaryAction(); return; }
+  if (event.pointerType === "mouse") {
+    if (bowEquipped()) beginBowDraw(false, undefined, event.pointerId);
+    else requestModePrimaryAction();
+    return;
+  }
   tabletAttackPointerId = event.pointerId;
   tabletAttackStart = { x: event.clientX, y: event.clientY };
   tabletAttackYaw = null;
   mineButton.setPointerCapture(event.pointerId);
+  if (bowEquipped()) beginBowDraw(false, undefined, event.pointerId);
 });
 mineButton.addEventListener("pointermove", updateTabletAttackAim);
 mineButton.addEventListener("pointerup", event => {
@@ -17841,9 +17961,10 @@ mineButton.addEventListener("pointerup", event => {
     ? movementYaw(target.visual.state.x - localPlayer.getPosition().x, target.visual.state.z - localPlayer.getPosition().z, localFacingYaw)
     : localFacingYaw);
   clearTabletAttackAim();
-  requestAttack(false, { yaw, targetId: target?.id ?? null });
+  const tabletAim = { yaw, targetId: target?.id ?? null };
+  if (!releaseBowDraw(tabletAim)) requestAttack(false, tabletAim);
 });
-mineButton.addEventListener("pointercancel", clearTabletAttackAim);
+mineButton.addEventListener("pointercancel", event => { clearTabletAttackAim(); if (event.pointerId === bowDrawPointerId) cancelBowDraw(); });
 contextButton.addEventListener("pointerdown", event => {
   event.preventDefault();
   requestContextAction(lootHoldSourceForPointer(event.pointerType) ?? "touch");
@@ -18780,8 +18901,14 @@ app.on("update", (dt: number) => {
     readiness.progress = Math.max(0, 1 - (localAttackRecoveryUntil - animationNow) / actionDuration(localComboStep));
     readiness.label = attackBuffer.hasQueued() ? "NEXT QUEUED" : "RECOVERING";
   }
+  const bowDrawing = bowDrawStartedAt !== null && bowEquipped();
+  if (bowDrawing) {
+    readiness.progress = currentBowDrawCharge(animationNow);
+    readiness.label = readiness.progress >= 1 ? "FULL DRAW · RELEASE" : "DRAWING";
+  }
   attackReadinessMeter.hidden = !weaponAttackInputAllowed();
   attackReadinessMeter.dataset.ready = String(readiness.progress >= 1);
+  attackReadinessMeter.dataset.drawing = String(bowDrawing);
   attackReadinessMeter.dataset.queued = String(attackBuffer.hasQueued());
   attackReadinessMeter.querySelector<HTMLElement>("i")!.style.transform = `scaleX(${readiness.progress})`;
   attackReadinessMeter.querySelector("small")!.textContent = readiness.label;
