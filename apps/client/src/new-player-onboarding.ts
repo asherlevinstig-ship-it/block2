@@ -8,8 +8,8 @@ export const ONBOARDING_STAGE = {
 } as const;
 
 export const ONBOARDING_STEPS = [
-  { title: "Collect your starter gear", detail: "Follow the gold dots to your personal bag. Hold E to take the sword and robes.", event: "picked_loot" },
-  { title: "Equip your first sword", detail: "Press I to open your inventory, select the Forged Sword, then choose EQUIP.", event: "equipped_starter" },
+  { title: "Collect your starter gear", detail: "Follow the gold dots to your personal bag. Hold E to take your Calling weapon and robes.", event: "picked_loot" },
+  { title: "Equip your first weapon", detail: "Press I to open your inventory, select your Calling weapon, then choose EQUIP.", event: "equipped_starter" },
   { title: "Head south", detail: "Follow the gold dots around the tavern and through the south gate. Stay on the road.", event: "left_town" },
   { title: "Defeat your first enemy", detail: "Follow the gold trail to the Southroad Crawler. Your weapon is always ready; press J or attack to strike.", event: "defeated_first_enemy" },
 ] as const satisfies readonly { title: string; detail: string; event: OnboardingEvent }[];
@@ -85,8 +85,9 @@ export function starterInventoryLesson(
   packOpenedWithKeyboard: boolean,
   equipmentRequired = false,
   mainHandId = "unarmed",
+  starterWeaponId = "forged_sword",
 ): StarterInventoryLesson {
-  if (mainHandId === "forged_sword") return "hidden";
+  if (mainHandId === starterWeaponId) return "hidden";
   // The starter bag must be collected before any inventory instruction appears.
   // A saved requirement can survive a reload, but it must never overtake the
   // current collect-gear step.
@@ -95,8 +96,9 @@ export function starterInventoryLesson(
   return packOpenedWithKeyboard ? "equip_sword" : "open_pack";
 }
 
-export function starterEquipmentRequired(savedState: string | null, _level: number, _swordOwned: number, mainHandId: string): boolean {
-  if (savedState === "complete" || mainHandId === "forged_sword") return false;
+export function starterEquipmentRequired(savedState: string | null, _level: number, _weaponOwned: number,
+  mainHandId: string, starterWeaponId = "forged_sword"): boolean {
+  if (savedState === "complete" || mainHandId === starterWeaponId) return false;
   return savedState === "required";
 }
 

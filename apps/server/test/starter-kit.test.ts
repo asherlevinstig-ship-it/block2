@@ -1,14 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Block } from "@blockcraft/voxel-world";
-import { decodeLootBagItems } from "@blockcraft/protocol";
+import { BUILD_PATH_STARTER_WEAPONS, decodeLootBagItems, type BuildPathId } from "@blockcraft/protocol";
 import { WorldRoom } from "../src/game-room.js";
 import { PlayerState, WorldState } from "../src/schema.js";
-import { STARTER_KIT_ITEMS, starterKitClaimed } from "../src/starter-kit.js";
+import { chooseBuildPath, parseBuildPathState } from "../src/build-paths.js";
+import { starterKitClaimed, starterKitItems } from "../src/starter-kit.js";
 
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 
 describe("new-character starter supplies", () => {
-  it("spawns a personal sword-and-robes bag, renews it if missed, and never repeats it after collection", () => {
+  it("waits for a Calling, then spawns its personal weapon-and-robes bag and never repeats it after collection", () => {
     vi.useFakeTimers(); vi.setSystemTime(10_000);
     const room = new WorldRoom(); room.setState(new WorldState());
     const internal = room as any;
@@ -19,9 +20,12 @@ describe("new-character starter supplies", () => {
     room.state.players.set("new-player", player);
     internal.ensureStarterKit("new-player", player, 10_000);
     const id = "starter-kit:new-player";
+    expect(room.state.lootDrops.has(id)).toBe(false);
+    player.huntLoadoutsJson = JSON.stringify({ buildPath: chooseBuildPath(parseBuildPathState("{}"), "ranger") });
+    internal.ensureStarterKit("new-player", player, 10_000);
     const first = room.state.lootDrops.get(id)!;
     expect({ x: first.x, z: first.z, ownerId: first.ownerId }).toEqual({ x: 8.5, z: 14, ownerId: "new-player" });
-    expect(decodeLootBagItems(first.contentsJson)).toEqual([...STARTER_KIT_ITEMS]);
+    expect(decodeLootBagItems(first.contentsJson)).toEqual(starterKitItems("ranger"));
     internal.ensureStarterKit("new-player", player, 10_001);
     expect(room.state.lootDrops.size).toBe(1);
 
@@ -30,7 +34,7 @@ describe("new-character starter supplies", () => {
     player.x = 8.5; player.z = 14;
     vi.setSystemTime(first.expiresAt + 1);
     internal.handleLootCollect({ sessionId: "new-player", send: vi.fn() }, { dropId: id, action: "keep" });
-    expect(player.inventory.get("forged_sword")?.quantity).toBe(1);
+    expect(player.inventory.get("forged_bow")?.quantity).toBe(1);
     expect(player.inventory.get("wanderer_robes")?.quantity).toBe(1);
     expect(starterKitClaimed(player.huntLoadoutsJson)).toBe(true);
     internal.setPlayerBuildData(player, []);
@@ -46,12 +50,23 @@ describe("new-character starter supplies", () => {
     const internal = room as any;
     internal.rapidPractice = true;
     const player = new PlayerState(); Object.assign(player, { x: 99.5, y: 8, z: 106.5 });
+    player.huntLoadoutsJson = JSON.stringify({ buildPath: chooseBuildPath(parseBuildPathState("{}"), "mage") });
     room.state.players.set("fast-new-player", player);
 
     internal.ensureStarterKit("fast-new-player", player, 20_000);
 
     const drop = room.state.lootDrops.get("starter-kit:fast-new-player")!;
     expect({ x: drop.x, y: drop.y, z: drop.z }).toEqual({ x: 99.5, y: 8.22, z: 112 });
-    expect(decodeLootBagItems(drop.contentsJson)).toEqual([...STARTER_KIT_ITEMS]);
+    expect(decodeLootBagItems(drop.contentsJson)).toEqual(starterKitItems("mage"));
   });
+
+  it.each(Object.entries(BUILD_PATH_STARTER_WEAPONS) as [BuildPathId, typeof BUILD_PATH_STARTER_WEAPONS[BuildPathId]][])(
+    "gives %s its intended %s starter weapon",
+    (pathId, weaponId) => {
+      expect(starterKitItems(pathId)).toEqual([
+        { itemId: weaponId, quantity: 1 },
+        { itemId: "wanderer_robes", quantity: 1 },
+      ]);
+    },
+  );
 });

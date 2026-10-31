@@ -17,11 +17,11 @@ describe("first combat training", () => {
 
   it("guarantees a useful first upgrade that matches the chosen Calling", () => {
     expect(firstCombatReward("tank")).toBe("leather_armour");
-    expect(firstCombatReward("ranger")).toBe("forged_bow");
-    expect(firstCombatReward("mage")).toBe("forged_focus");
-    expect(firstCombatReward("healer")).toBe("forged_focus");
-    expect(firstCombatReward("assassin")).toBe("fang_dagger");
-    expect(firstCombatReward("thief")).toBe("fang_dagger");
+    expect(firstCombatReward("ranger")).toBe("leather_armour");
+    expect(firstCombatReward("mage")).toBe("leather_armour");
+    expect(firstCombatReward("healer")).toBe("leather_armour");
+    expect(firstCombatReward("assassin")).toBe("leather_armour");
+    expect(firstCombatReward("thief")).toBe("leather_armour");
     expect(isFirstCombatSupport("south-causeway-scavenger-west")).toBe(true);
     expect(isFirstCombatSupport(FIRST_COMBAT_MOB_ID)).toBe(false);
   });

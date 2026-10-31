@@ -16,7 +16,7 @@ describe("first-play onboarding", () => {
     expect(advanceOnboarding(step, "equipped_starter")).toBe(ONBOARDING_DONE);
   });
 
-  it("requires the I-key lesson and the actual starter sword equip", () => {
+  it("requires the I-key lesson and the actual Calling weapon equip", () => {
     expect(starterInventoryLesson(ONBOARDING_STAGE.equipSword, false)).toBe("open_pack");
     expect(starterInventoryLesson(ONBOARDING_STAGE.equipSword, true)).toBe("equip_sword");
     expect(starterInventoryLesson(ONBOARDING_STAGE.headSouth, true)).toBe("hidden");
@@ -25,6 +25,8 @@ describe("first-play onboarding", () => {
     expect(starterInventoryLesson(ONBOARDING_DONE, true, true)).toBe("equip_sword");
     expect(starterInventoryLesson(ONBOARDING_STAGE.equipSword, true, true, "forged_sword")).toBe("hidden");
     expect(starterInventoryLesson(ONBOARDING_DONE, false, true, "forged_sword")).toBe("hidden");
+    expect(starterInventoryLesson(ONBOARDING_STAGE.equipSword, true, true, "forged_bow", "forged_bow")).toBe("hidden");
+    expect(starterInventoryLesson(ONBOARDING_STAGE.equipSword, true, true, "forged_sword", "forged_bow")).toBe("equip_sword");
     expect(advanceOnboarding(ONBOARDING_STAGE.equipSword, "picked_loot")).toBe(ONBOARDING_STAGE.equipSword);
     expect(advanceOnboarding(ONBOARDING_STAGE.equipSword, "equipped_starter")).toBe(ONBOARDING_STAGE.headSouth);
   });
@@ -50,6 +52,8 @@ describe("first-play onboarding", () => {
     expect(starterEquipmentRequired(null, 3, 1, "unarmed")).toBe(false);
     expect(starterEquipmentRequired("complete", 1, 1, "unarmed")).toBe(false);
     expect(starterEquipmentRequired("required", 1, 1, "forged_sword")).toBe(false);
+    expect(starterEquipmentRequired("required", 1, 1, "forged_bow", "forged_bow")).toBe(false);
+    expect(starterEquipmentRequired("required", 1, 1, "forged_sword", "forged_bow")).toBe(true);
     expect(starterEquipmentStorageKey("guest_a")).not.toBe(starterEquipmentStorageKey("guest_b"));
   });
 

@@ -1,9 +1,11 @@
-import type { ItemId } from "@blockcraft/protocol";
+import { starterWeaponForPath, type BuildPathId, type ItemId } from "@blockcraft/protocol";
 
-export const STARTER_KIT_ITEMS = [
-  { itemId: "forged_sword", quantity: 1 },
-  { itemId: "wanderer_robes", quantity: 1 },
-] as const satisfies readonly { itemId: ItemId; quantity: number }[];
+export function starterKitItems(pathId: BuildPathId): readonly { itemId: ItemId; quantity: number }[] {
+  return [
+    { itemId: starterWeaponForPath(pathId), quantity: 1 },
+    { itemId: "wanderer_robes", quantity: 1 },
+  ];
+}
 
 export function starterKitClaimed(raw: string): boolean {
   try {

@@ -9,15 +9,10 @@ export function isFirstCombatSupport(mobId: string): boolean {
 }
 
 export function firstCombatReward(pathId: BuildPathId | null): ItemId {
-  switch (pathId) {
-    case "tank": return "leather_armour";
-    case "ranger": return "forged_bow";
-    case "mage":
-    case "healer": return "forged_focus";
-    case "assassin":
-    case "thief": return "fang_dagger";
-    default: return "leather_armour";
-  }
+  void pathId;
+  // The Calling-matched weapon now comes from the starter bag. The first
+  // victory therefore expands the loadout instead of duplicating that weapon.
+  return "leather_armour";
 }
 
 export function firstCombatHealthAfterHit(mobId: string, playerLevel: number, completedDodge: boolean,

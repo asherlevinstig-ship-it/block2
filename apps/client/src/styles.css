@@ -2317,8 +2317,8 @@ button[data-previewing="true"] .calling-preview *, #calling-awakening:not([hidde
 #inventory-panel[data-tab="gear"] .inventory-grid article.equipment > em { position: absolute; top: 6px; right: 6px; min-width: 21px; height: 21px; font-size: .58rem; }
 #inventory-panel[data-tab="gear"] .inventory-grid article.equipment .inventory-item-actions { width: 100%; margin-top: auto; }
 #inventory-panel[data-tab="gear"] .inventory-grid article.equipment .inventory-item-actions button { min-height: 27px; padding: 4px 2px; font-size: .46rem; }
-#inventory-panel article[data-item="forged_sword"][data-starter-tutorial="true"] { z-index: 2; border-color: #ffe083 !important; box-shadow: 0 0 0 3px #f7c95d44, 0 0 28px #f7bd3b8c, inset 0 0 22px #f7c95d26 !important; animation: starter-sword-card 1.25s ease-in-out infinite; }
-#inventory-panel article[data-item="forged_sword"][data-starter-tutorial="true"] [data-equip-main-hand] { border-color: #fff0a8; background: #8b5d16; color: #fff5c9; box-shadow: 0 0 15px #ffc64a99; font-size: .56rem; }
+#inventory-panel article[data-starter-tutorial="true"] { z-index: 2; border-color: #ffe083 !important; box-shadow: 0 0 0 3px #f7c95d44, 0 0 28px #f7bd3b8c, inset 0 0 22px #f7c95d26 !important; animation: starter-sword-card 1.25s ease-in-out infinite; }
+#inventory-panel article[data-starter-tutorial="true"] [data-equip-main-hand] { border-color: #fff0a8; background: #8b5d16; color: #fff5c9; box-shadow: 0 0 15px #ffc64a99; font-size: .56rem; }
 #inventory-panel article[data-first-victory-reward="true"] { z-index: 3; border-color: #7ff2bd !important; box-shadow: 0 0 0 3px #53db9b44, 0 0 30px #42da9299, inset 0 0 24px #5be6a12b !important; animation: first-victory-reward-card 1.15s ease-in-out infinite; }
 #inventory-panel article[data-first-victory-reward="true"] .inventory-item-actions button { border-color: #b5ffda; background: #176846; color: #effff7; box-shadow: 0 0 16px #4ce1a099; }
 #inventory-panel:has(article[data-first-victory-reward="true"]) #inventory-decision-panel { border-color: #61e6a5; box-shadow: 0 0 26px #3dd99050; }

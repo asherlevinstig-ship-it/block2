@@ -265,7 +265,7 @@ import {
   type GeneratedChunk,
 } from "@blockcraft/voxel-world";
 import { InventoryItemState, LootDropState, MobState, PlayerState, WorldState } from "./schema.js";
-import { STARTER_KIT_ITEMS, starterKitClaimed, withStarterKitClaimed } from "./starter-kit.js";
+import { starterKitClaimed, starterKitItems, withStarterKitClaimed } from "./starter-kit.js";
 import { miningRejectionReason, movementRejectionReason, nextComboStep, selectAttackTarget } from "./action-rules.js";
 import { dodgeDirection, isInsideImpact, pursueTarget } from "./combat-rules.js";
 import { GUARD_MINIMUM_STAMINA, GUARD_STAMINA_DRAIN_PER_SECOND, PARRY_STAGGER_MS, isAttackInGuardArc, resolveDefense } from "./defense-rules.js";
@@ -4808,10 +4808,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
 
   private ensureStarterKit(playerId: string, player: PlayerState, now: number): void {
     if (starterKitClaimed(player.huntLoadoutsJson) || this.state.lootDrops.has(`starter-kit:${playerId}`)) return;
+    const pathId = parseBuildPathState(player.huntLoadoutsJson).selectedPathId;
+    if (!pathId) return;
+    const items = starterKitItems(pathId);
     const spawn = this.rapidPractice ? { x: 99.5, y: 8, z: 106.5 } : this.spawnPoint();
     const drop = new LootDropState();
-    Object.assign(drop, { ownerId: playerId, itemId: "forged_sword", quantity: 1,
-      contentsJson: encodeLootBagItems([...STARTER_KIT_ITEMS]), x: spawn.x, y: spawn.y + .22, z: spawn.z + 5.5,
+    Object.assign(drop, { ownerId: playerId, itemId: items[0]!.itemId, quantity: 1,
+      contentsJson: encodeLootBagItems(items), x: spawn.x, y: spawn.y + .22, z: spawn.z + 5.5,
       expiresAt: now + 30 * 60_000 });
     this.state.lootDrops.set(`starter-kit:${playerId}`, drop);
   }
@@ -7095,6 +7098,15 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const previous = parseBuildPathState(player.huntLoadoutsJson).selectedPathId;
     if (previous !== pathId) this.clearCallingEffects(client.sessionId);
     this.setPlayerBuildData(player, this.huntLoadouts(player), chooseBuildPath(parseBuildPathState(player.huntLoadoutsJson), pathId));
+    if (!starterKitClaimed(player.huntLoadoutsJson)) {
+      const dropId = `starter-kit:${client.sessionId}`;
+      this.state.lootDrops.delete(dropId);
+      this.ensureStarterKit(client.sessionId, player, Date.now());
+      const starter = this.state.lootDrops.get(dropId);
+      if (starter) client.send("loot:spawned", { dropId, ownerId: starter.ownerId,
+        itemId: starter.itemId, quantity: starter.quantity, contentsJson: starter.contentsJson,
+        x: starter.x, y: starter.y, z: starter.z, expiresAt: starter.expiresAt });
+    }
     if (player.level <= 2 && player.mainHandId === "longsword" && (pathId === "mage" || pathId === "ranger")) {
       const hand = MAIN_HAND_DEFINITIONS[pathId === "mage" ? "magic_focus" : "bow"];
       player.mainHandId = hand.id; player.mainHandTag = hand.tag;

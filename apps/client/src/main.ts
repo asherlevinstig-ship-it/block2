@@ -379,6 +379,7 @@ import {
   characterSpeedMultiplier,
   CHARACTER_MILESTONES,
   BUILD_PATHS,
+  starterWeaponForPath,
   BUILD_PATH_RANKS,
   BUILD_PATH_SPECIALIZATIONS,
   CALLING_ABILITY_OPTIONS,
@@ -899,6 +900,12 @@ function completeFirstVictoryReturn(): void {
   status.textContent = "Returned to Town · your first Calling ability is ready to reveal.";
   social.event("Returned to Town · Calling ability ready.");
 }
+function selectedStarterWeaponId(): ItemId {
+  return starterWeaponForPath(localBuildPathId);
+}
+function selectedStarterWeaponName(): string {
+  return ITEM_DEFINITIONS[selectedStarterWeaponId()].name;
+}
 function renderFirstSteps(): void {
   const index = firstStepsIndex;
   const onboardingActive = !callingFirstOnboardingPending && index !== null && index < ONBOARDING_DONE;
@@ -908,7 +915,10 @@ function renderFirstSteps(): void {
   firstSteps.hidden = !active;
   firstSteps.dataset.guidance = firstVictoryReward?.stage === "return_town" ? "return-town"
     : index === ONBOARDING_STAGE.headSouth ? "south-gate" : "";
-  const starterLesson = starterInventoryLesson(index, starterInventoryOpenedWithKeyboard, forcedStarterEquipment, localMainHandId);
+  const starterWeaponId = selectedStarterWeaponId();
+  const starterWeaponName = selectedStarterWeaponName();
+  const starterLesson = starterInventoryLesson(index, starterInventoryOpenedWithKeyboard, forcedStarterEquipment,
+    localMainHandId, starterWeaponId);
   const rewardInventoryLesson = rewardActive && (firstVictoryReward?.stage === "open_pack" || firstVictoryReward?.stage === "choose")
     ? firstVictoryReward.stage : null;
   firstStepsSkip.hidden = rewardActive || starterLesson !== "hidden";
@@ -923,15 +933,15 @@ function renderFirstSteps(): void {
     ? ITEM_DEFINITIONS[firstVictoryReward.itemId].name : "Calling upgrade";
   starterInventoryTitle.textContent = rewardInventoryLesson === "choose" ? `Choose what to do with ${rewardName}`
     : rewardInventoryLesson === "open_pack" ? "Open your pack"
-      : starterLesson === "equip_sword" ? "Equip the Forged Sword" : "Open your inventory";
+      : starterLesson === "equip_sword" ? `Equip the ${starterWeaponName}` : "Open your inventory";
   starterInventoryCopy.textContent = rewardInventoryLesson === "choose"
     ? "Compare the glowing reward, then choose EQUIP UPGRADE or KEEP FOR LATER. Either choice completes this lesson."
     : rewardInventoryLesson === "open_pack" ? `Press I to compare ${rewardName}, your first Calling-matched reward.`
       : starterLesson === "equip_sword"
-        ? "Select the glowing sword, then choose EQUIP. This lesson completes only when the sword is equipped."
-        : "Starter bag collected. Press I to open your inventory, then select and equip the Forged Sword.";
-  const starterCard = document.querySelector<HTMLElement>('[data-item="forged_sword"]');
-  if (starterCard) starterCard.dataset.starterTutorial = starterLesson === "equip_sword" ? "true" : "false";
+        ? `Select the glowing ${starterWeaponName}, then choose EQUIP. This lesson completes only when your weapon is equipped.`
+        : `Starter bag collected. Press I to open your inventory, then select and equip the ${starterWeaponName}.`;
+  for (const card of document.querySelectorAll<HTMLElement>("#inventory-panel article.equipment[data-item]"))
+    card.dataset.starterTutorial = String(starterLesson === "equip_sword" && card.dataset.item === starterWeaponId);
   for (const card of document.querySelectorAll<HTMLElement>("#inventory-panel article.equipment[data-item]"))
     card.dataset.firstVictoryReward = String(rewardInventoryLesson === "choose" && card.dataset.item === firstVictoryReward?.itemId);
   if (rewardActive && firstVictoryReward) {
@@ -997,7 +1007,7 @@ function nudgeStarterInventoryTutorial(): void {
   window.setTimeout(() => starterInventoryTutorial.classList.remove("nudge"), 420);
 }
 function requireStarterEquipment(): void {
-  if (localMainHandId === "forged_sword") return;
+  if (localMainHandId === selectedStarterWeaponId()) return;
   forcedStarterEquipment = true;
   starterInventoryOpenedWithKeyboard = false;
   try { window.localStorage.setItem(starterEquipmentKey, "required"); } catch { /* Storage may be unavailable. */ }
@@ -7355,11 +7365,12 @@ function updateMainHandLoadout(mainHandId: MainHandId): void {
   targetStateKey = "";
   refreshPowerCompatibility();
   refreshBackpackCapacity();
-  if (mainHandId === "forged_sword" && (firstStepsIndex === ONBOARDING_STAGE.equipSword || forcedStarterEquipment)) {
+  if (mainHandId === selectedStarterWeaponId() && (firstStepsIndex === ONBOARDING_STAGE.equipSword || forcedStarterEquipment)) {
+    const starterName = selectedStarterWeaponName();
     completeStarterEquipment();
     if (firstStepsIndex === ONBOARDING_STAGE.equipSword) noteFirstStep("equipped_starter");
-    showCombatFeedback("FORGED SWORD EQUIPPED", "dodge");
-    status.textContent = "Forged Sword equipped · your first loadout is ready.";
+    showCombatFeedback(`${starterName.toUpperCase()} EQUIPPED`, "dodge");
+    status.textContent = `${starterName} equipped · your first loadout is ready.`;
     if (!inventoryPanel.hidden) setInventoryOpen(false);
   }
   if (firstVictoryReward?.stage === "choose" && isItemId(firstVictoryReward.itemId)
@@ -11452,9 +11463,10 @@ function refreshEquipmentProgression(): void {
 
 function updateInventoryItem(itemId: ItemId, total: number): void {
   inventoryCounts.set(itemId, total);
-  if (itemId === "forged_sword" && starterEquipmentRequired(
+  const starterWeaponId = selectedStarterWeaponId();
+  if (itemId === starterWeaponId && starterEquipmentRequired(
     (() => { try { return window.localStorage.getItem(starterEquipmentKey); } catch { return null; } })(),
-    localCharacterProgression.level, total, localMainHandId,
+    localCharacterProgression.level, total, localMainHandId, starterWeaponId,
   )) requireStarterEquipment();
   if (itemId === "miners_lantern") localPlayerRig.minersLantern.enabled = total > 0;
   refreshOwnedInventory();
@@ -12621,7 +12633,8 @@ tavernDialogueNext.addEventListener("click", advanceTavernDialogue);
 tavernDialogueClose.addEventListener("click", closeTavernDialogue);
 
 function setInventoryOpen(open: boolean): void {
-  if (!open && localMainHandId === "forged_sword") {
+  const starterWeaponId = selectedStarterWeaponId();
+  if (!open && localMainHandId === starterWeaponId) {
     if (forcedStarterEquipment) completeStarterEquipment();
     if (firstStepsIndex === ONBOARDING_STAGE.equipSword) noteFirstStep("equipped_starter");
   }
@@ -12630,9 +12643,10 @@ function setInventoryOpen(open: boolean): void {
     starterInventoryOpenedWithKeyboard,
     forcedStarterEquipment,
     localMainHandId,
+    starterWeaponId,
   );
   if (open && starterLesson === "open_pack") {
-    status.textContent = "Press I to open your inventory and equip the starter sword.";
+    status.textContent = `Press I to open your inventory and equip the ${selectedStarterWeaponName()}.`;
     nudgeStarterInventoryTutorial();
     return;
   }
@@ -12673,7 +12687,7 @@ function setInventoryOpen(open: boolean): void {
     } else if (starterLesson === "equip_sword") {
       selectInventoryCategory("gear");
       window.setTimeout(() => {
-        const card = inventoryPanel.querySelector<HTMLElement>('[data-item="forged_sword"]');
+        const card = inventoryPanel.querySelector<HTMLElement>(`[data-item="${starterWeaponId}"]`);
         card?.click();
         card?.querySelector<HTMLButtonElement>("[data-equip-main-hand]")?.focus();
       }, 0);
@@ -17161,6 +17175,7 @@ window.addEventListener("keydown", event => {
     starterInventoryOpenedWithKeyboard,
     forcedStarterEquipment,
     localMainHandId,
+    selectedStarterWeaponId(),
   ) === "open_pack") {
     if (event.code === "KeyI") {
       starterInventoryOpenedWithKeyboard = true;
@@ -17168,7 +17183,7 @@ window.addEventListener("keydown", event => {
       setInventoryOpen(true);
     } else if (tutorialMovementKeys.has(event.code)) return;
     else if (tutorialGameplayKeys.has(event.code)) {
-      status.textContent = "Starter bag collected · press I to equip your sword before using another action.";
+      status.textContent = `Starter bag collected · press I to equip your ${selectedStarterWeaponName()} before using another action.`;
       nudgeStarterInventoryTutorial();
     } else return;
     event.preventDefault();

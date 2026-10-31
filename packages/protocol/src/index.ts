@@ -447,6 +447,19 @@ export const BUILD_PATHS = {
   healer: { name: "Healer", role: "Keep allies standing", passive: "Path ranks strengthen your nearby-ally heal.", adept: "FIELD MEND · Heal an injured ally on G; useful healing earns boss credit." },
 } as const;
 export type BuildPathId = keyof typeof BUILD_PATHS;
+export const BUILD_PATH_STARTER_WEAPONS = {
+  tank: "forged_sword",
+  mage: "forged_focus",
+  assassin: "fang_dagger",
+  thief: "fang_dagger",
+  ranger: "forged_bow",
+  healer: "forged_focus",
+} as const satisfies Record<BuildPathId, ItemId>;
+export type StarterWeaponItemId = typeof BUILD_PATH_STARTER_WEAPONS[BuildPathId];
+
+export function starterWeaponForPath(pathId: BuildPathId | null | undefined): StarterWeaponItemId {
+  return pathId ? BUILD_PATH_STARTER_WEAPONS[pathId] : "forged_sword";
+}
 export const CALLING_ABILITIES = {
   tank: { name: "Bulwark", cooldownMs: 18_000, description: "Brace for 5 seconds, reducing every incoming hit by 1." },
   mage: { name: "Arcane Surge", cooldownMs: 16_000, description: "Pulse nearby enemies and restore stamina." },
