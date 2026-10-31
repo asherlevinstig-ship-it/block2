@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { PRACTICE_ROOM, TAVERN_ROOM } from "@blockcraft/protocol";
 import { portalTransitionFrame, portalTravelUsesVeil, type PortalTransitionState } from "./portal-transition.js";
 describe("portal transition lifecycle", () => {
   const travelling: PortalTransitionState = { phase: "travelling", startedAt: 1000, charge: 1, arrived: false };
@@ -19,6 +20,8 @@ describe("portal transition lifecycle", () => {
   it("keeps tavern doors immediate while preserving portal travel effects elsewhere", () => {
     expect(portalTravelUsesVeil("practice", "tavern")).toBe(false);
     expect(portalTravelUsesVeil("tavern", "practice")).toBe(false);
+    expect(portalTravelUsesVeil(PRACTICE_ROOM, TAVERN_ROOM)).toBe(false);
+    expect(portalTravelUsesVeil(TAVERN_ROOM, PRACTICE_ROOM)).toBe(false);
     expect(portalTravelUsesVeil("practice", "silver-depths")).toBe(true);
   });
 });

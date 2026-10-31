@@ -1,7 +1,11 @@
 type Phase = "idle" | "charging" | "travelling" | "arriving";
 export interface PortalTransitionState { phase: Phase; startedAt: number; charge: number; arrived: boolean }
 export function portalTravelUsesVeil(fromRoom: string, toRoom: string): boolean {
-  return fromRoom !== "tavern" && toRoom !== "tavern";
+  // Transfers contain authoritative room IDs (for example
+  // "hearth-and-hammer-v4"), not the short `?room=tavern` URL alias.
+  // Treat both forms as the Tavern so its door remains an immediate cut.
+  const isTavern = (room: string) => room === "tavern" || room.startsWith("hearth-and-hammer-");
+  return !isTavern(fromRoom) && !isTavern(toRoom);
 }
 export function portalTransitionFrame(state: PortalTransitionState, now: number, ready: boolean) {
   const elapsed = Math.max(0, now - state.startedAt);
