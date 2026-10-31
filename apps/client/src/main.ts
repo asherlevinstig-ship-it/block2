@@ -153,7 +153,7 @@ import { loadTowerChronicleMonument } from "./tower-chronicle-asset.js";
 import { towerFloorOneAtmosphere } from "./tower-floor-one-atmosphere.js";
 import { portalInteractionPrompt, portalLabel, portalWorldLabel } from "./portal-labels.js";
 import { createFastWorldSky } from "./fast-world-sky.js";
-import { createTavernRoom, setTavernThirdPersonCutaway, setTavernTrophyProgress } from "./tavern-room.js";
+import { createTavernRoom, setTavernPreparedMeal, setTavernThirdPersonCutaway, setTavernTrophyProgress } from "./tavern-room.js";
 import { TavernAmbience } from "./tavern-ambience.js";
 import { rotatingTavernBounties } from "./tavern-services.js";
 import { createPaintedGroundMaterial, fitGroundTexture, fitOrganicGroundPatch, createWoodlandTrailMesh, woodlandFernMesh } from "./fast-world-texture.js";
@@ -12515,6 +12515,7 @@ let tavernMealState: "prepared" | "active" | null = null;
 
 function renderTavernMeal(): void {
   const meal = tavernMealId ? TAVERN_MEALS[tavernMealId] : null;
+  setTavernPreparedMeal(tavernRoomWorld, tavernMealId, tavernMealState);
   tavernBoonHud.hidden = !meal || !tavernMealState;
   if (meal && tavernMealState) {
     tavernBoonHud.dataset.state = tavernMealState;
@@ -12523,7 +12524,7 @@ function renderTavernMeal(): void {
     tavernBoonEffect.textContent = meal.effect;
     tavernMealStatus.textContent = tavernMealState === "active"
       ? `${meal.name} is active for this Floor 1 attempt.`
-      : `${meal.name} is packed and activates when you enter Floor 1.`;
+      : `${meal.name} is waiting on Mara's serving counter and activates when you enter Floor 1.`;
   } else {
     tavernBoonHud.removeAttribute("data-state");
     tavernMealStatus.textContent = "No meal prepared · choose one for your next climb.";

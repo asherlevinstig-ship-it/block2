@@ -2456,7 +2456,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         return;
       }
       const meal = TAVERN_MEALS[mealId];
-      message = `${meal.name} prepared · ${meal.effect}. It activates when you enter Floor 1.`;
+      message = `${meal.name} served on Mara's counter · ${meal.effect}. It activates when you enter Floor 1.`;
     }
     void this.persistPlayer(client.sessionId, player, true);
     this.sendTavernServiceState(client, message, action, true);

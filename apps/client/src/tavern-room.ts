@@ -1,4 +1,5 @@
 import * as pc from "playcanvas";
+import type { TavernMealId } from "@blockcraft/protocol";
 import { addCallingParticleLayers } from "./calling-particles.js";
 import { bindTownNpcRig, loadTownNpcAssets, TOWN_NPC_MODEL_YAW, transitionTownNpcRig } from "./town-npc-assets.js";
 import { tavernPatronSchedule, type TavernPatronPhase } from "./tavern-patron-schedule.js";
@@ -232,6 +233,10 @@ export function createTavernRoom(app: pc.Application): pc.Entity {
   const cardIvory = material(new pc.Color(.92, .84, .66), undefined, .28);
   const cardRed = material(new pc.Color(.58, .045, .035), undefined, .2);
   const cardBlack = material(new pc.Color(.045, .04, .038), undefined, .2);
+  const broth = material(new pc.Color(.38, .12, .025), new pc.Color(.08, .015, .004), .2);
+  const tea = material(new pc.Color(.38, .25, .055), new pc.Color(.04, .025, .005), .28);
+  const pastry = material(new pc.Color(.72, .38, .09), undefined, .18);
+  const vegetable = material(new pc.Color(.12, .42, .08), undefined, .12);
 
   box(root, "timber-floor", oakLight, [19.5, .22, 16.5], [0, 7.88, 0]);
   for (let x = -9; x <= 9; x += 1.5)
@@ -340,6 +345,34 @@ export function createTavernRoom(app: pc.Application): pc.Entity {
   box(lowerRoomShell, "entrance-frame-left", stone, [.52, 4.5, .65], [-1.65, 10.08, 7.82]);
   box(lowerRoomShell, "entrance-frame-right", stone, [.52, 4.5, .65], [1.65, 10.08, 7.82]);
   box(root, "entrance-runner", rugGreen, [3.2, .035, 5.2], [0, 8.02, 5.25]);
+
+  // Mara serves the local player's prepared meal on the counter. Each dish has
+  // a distinct silhouette so the selected one reads without relying on UI.
+  const mealService = new pc.Entity("tavern-prepared-meal");
+  mealService.setLocalPosition(-6.72, 9.22, -1.5); mealService.enabled = false; root.addChild(mealService);
+  cylinder(mealService, "meal-serving-plate", cardIvory, [.7, .045, .7], [0, 0, 0]);
+  const addMealRoot = (id: TavernMealId): pc.Entity => {
+    const entity = new pc.Entity(`tavern-meal-${id}`); entity.enabled = false;
+    mealService.addChild(entity); return entity;
+  };
+  const stew = addMealRoot("hearty_stew");
+  cylinder(stew, "stew-bowl", stoneLight, [.52, .22, .52], [0, .2, 0]);
+  cylinder(stew, "stew-broth", broth, [.43, .035, .43], [0, .42, 0]);
+  for (const [x, z, tint] of [[-.2, -.08, pastry], [.12, -.14, vegetable], [.18, .16, pastry], [-.12, .18, vegetable]] as const)
+    shape(stew, "stew-piece", "sphere", tint, [.1, .055, .1], [x, .47, z]);
+  const runnersTea = addMealRoot("runners_tea");
+  cylinder(runnersTea, "tea-cup", cardIvory, [.31, .34, .31], [0, .27, 0]);
+  cylinder(runnersTea, "tea-surface", tea, [.245, .025, .245], [0, .61, 0]);
+  box(runnersTea, "tea-handle", cardIvory, [.12, .22, .08], [.34, .31, 0]);
+  const fortunePie = addMealRoot("fortune_pie");
+  cylinder(fortunePie, "pie-crust", pastry, [.55, .17, .55], [0, .18, 0]);
+  cylinder(fortunePie, "pie-top", brass, [.49, .035, .49], [0, .37, 0]);
+  for (const angle of [-45, 45]) box(fortunePie, "pie-lattice", pastry, [.82, .045, .08], [0, .42, 0], [0, angle, 0]);
+  const mealSteam = new pc.Entity("tavern-meal-steam"); mealSteam.setLocalPosition(0, .55, 0); mealService.addChild(mealSteam);
+  addCallingParticleLayers(app, mealSteam, [
+    { kind: "smoke", texture: "smoke", count: 5, life: 2.2, radius: .18, speed: .025,
+      rise: .42, size: .2, color: [.84, .82, .74], opacity: .18 },
+  ], true, .42);
 
   // The asset-backed west-wall bar leaves the entrance-to-hearth axis open.
   box(lowerRoomShell, "bar-menu-board", iron, [.16, 1.5, 2.2], [-9.26, 12.05, -1.4]);
@@ -522,6 +555,18 @@ export function createTavernRoom(app: pc.Application): pc.Entity {
     }
   });
   return root;
+}
+
+export function setTavernPreparedMeal(root: pc.Entity | null, mealId: TavernMealId | null,
+  state: "prepared" | "active" | null): void {
+  const service = root?.findByName("tavern-prepared-meal");
+  if (!service) return;
+  const visible = state === "prepared" && mealId !== null;
+  service.enabled = visible;
+  for (const id of ["hearty_stew", "runners_tea", "fortune_pie"] as const) {
+    const dish = service.findByName(`tavern-meal-${id}`);
+    if (dish) dish.enabled = visible && id === mealId;
+  }
 }
 
 /** Opens the active storey as a clean third-person dollhouse. Collision remains
