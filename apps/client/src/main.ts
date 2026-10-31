@@ -1211,7 +1211,11 @@ const highLowPanel = document.querySelector<HTMLElement>("#tavern-high-low")!;
 const highLowBalance = document.querySelector<HTMLElement>("#high-low-balance")!;
 const highLowCurrentCard = document.querySelector<HTMLElement>("#high-low-current-card")!;
 const highLowNextCard = document.querySelector<HTMLElement>("#high-low-next-card")!;
+const highLowResult = document.querySelector<HTMLElement>("#high-low-result")!;
+const highLowResultTitle = document.querySelector<HTMLElement>("#high-low-result-title")!;
+const highLowResultDetail = document.querySelector<HTMLElement>("#high-low-result-detail")!;
 const highLowStreak = document.querySelector<HTMLElement>("#high-low-streak")!;
+const highLowStreakPips = document.querySelector<HTMLElement>("#high-low-streak-pips")!;
 const highLowPot = document.querySelector<HTMLElement>("#high-low-pot")!;
 const highLowMessage = document.querySelector<HTMLElement>("#high-low-message")!;
 const highLowStakes = document.querySelector<HTMLElement>("#high-low-stakes")!;
@@ -1571,7 +1575,8 @@ if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine
 if ([quizTablePrompt, tavernKeeperPrompt, tavernRest, tavernBind, tavernBindStatus, tavernBountyList, blacksmithPrompt, playerTradePrompt, playerTradeName, blacksmithPanel, blacksmithMessage, blacksmithOre, blacksmithGold, blacksmithPrice, blacksmithSell, blacksmithClose, haulEquipName, haulEquipDetail, haulEquip, haulSalvageCount, haulSalvageDetail, haulSalvage, haulStoreCount, haulStore, haulUpgradeName, haulUpgradeTrack, haulUpgradeDetail, haulRegionName, haulRegionDetail, haulTrackRegion, quizPanel, quizBalance, quizBalanceAmount, quizPotDisplay, quizPotLabel, quizWinToast, quizAnswerFeedback, quizFeedbackIcon, quizFeedbackTitle, quizFeedbackDetail, quizMessage, quizStakeHeading, quizStakes, quizQuestion, quizPot, quizPrompt, quizChoices, quizDecision, quizDouble, quizQuit, quizClose, tavernCoins].some(element => !element) || blacksmithUpgradeCards.length !== Object.keys(BLACKSMITH_UPGRADES).length) {
   throw new Error("Tavern quiz shell is missing required elements");
 }
-if ([highLowTablePrompt, highLowPanel, highLowBalance, highLowCurrentCard, highLowNextCard, highLowStreak,
+if ([highLowTablePrompt, highLowPanel, highLowBalance, highLowCurrentCard, highLowNextCard, highLowResult,
+  highLowResultTitle, highLowResultDetail, highLowStreak, highLowStreakPips,
   highLowPot, highLowMessage, highLowStakes, highLowChoices, highLowHigher, highLowLower, highLowCollect, highLowClose]
   .some(element => !element)) throw new Error("Higher or Lower shell is missing required elements");
 for (const bounty of rotatingTavernBounties()) {
@@ -13767,8 +13772,12 @@ const CARD_SUIT_SYMBOLS: Record<TavernCard["suit"], string> = {
 };
 let highLowCurrentCardCache: TavernCard | undefined;
 let highLowRevealTimer = 0;
+let highLowResultTimer = 0;
+let highLowLastPhase: TavernHighLowUpdate["phase"] = "idle";
+let highLowDisplayedPayout = 0;
 
 function renderTavernCard(element: HTMLElement, card?: TavernCard): void {
+  element.classList.remove("reveal", "dealt");
   element.classList.toggle("card-back", !card);
   element.classList.toggle("red", card?.suit === "hearts" || card?.suit === "diamonds");
   const rank = element.querySelector<HTMLElement>("b")!;
@@ -13780,10 +13789,112 @@ function renderTavernCard(element: HTMLElement, card?: TavernCard): void {
     : "Face-down card");
 }
 
+function tavernCardName(card?: TavernCard): string {
+  return card ? `${CARD_RANK_LABELS[card.rank] ?? card.rank}${CARD_SUIT_SYMBOLS[card.suit]}` : "the card";
+}
+
+function animateCardClass(element: HTMLElement, className: "reveal" | "dealt"): void {
+  element.classList.remove("reveal", "dealt");
+  void element.offsetWidth;
+  element.classList.add(className);
+}
+
+function showHighLowResult(kind: "correct" | "wrong" | "push" | "collected", title: string, detail: string): void {
+  window.clearTimeout(highLowResultTimer);
+  highLowResult.dataset.kind = kind;
+  highLowResultTitle.textContent = title;
+  highLowResultDetail.textContent = detail;
+  highLowResult.hidden = false;
+  highLowResult.classList.remove("show");
+  void highLowResult.offsetWidth;
+  highLowResult.classList.add("show");
+  highLowResultTimer = window.setTimeout(() => { highLowResult.hidden = true; }, kind === "wrong" ? 1_550 : 1_250);
+}
+
+function burstHighLowChips(kind: "correct" | "wrong" | "collected"): void {
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || highLowPanel.hidden) return;
+  const rect = highLowNextCard.getBoundingClientRect();
+  const x = rect.left + rect.width / 2;
+  const y = rect.top + rect.height / 2;
+  for (let index = 0; index < 12; index += 1) {
+    const angle = (Math.PI * 2 * index) / 12 - Math.PI / 2;
+    const distance = 58 + (index % 3) * 18;
+    const chip = document.createElement("i");
+    chip.className = `high-low-chip-burst${kind === "wrong" ? " wrong" : ""}`;
+    chip.textContent = kind === "wrong" ? "×" : "✦";
+    chip.setAttribute("aria-hidden", "true");
+    chip.style.left = `${x - 10}px`;
+    chip.style.top = `${y - 10}px`;
+    chip.style.setProperty("--chip-x", `${Math.cos(angle) * distance}px`);
+    chip.style.setProperty("--chip-y", `${Math.sin(angle) * distance}px`);
+    chip.style.setProperty("--chip-r", `${180 + index * 47}deg`);
+    chip.style.animationDelay = `${index * 18}ms`;
+    chip.addEventListener("animationend", () => chip.remove(), { once: true });
+    document.body.append(chip);
+  }
+}
+
+function animateHighLowPayout(payout: number): void {
+  if (payout <= 0 || highLowPanel.hidden || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const source = highLowPot.getBoundingClientRect();
+  const destination = highLowBalance.getBoundingClientRect();
+  for (let index = 0; index < 9; index += 1) {
+    const coin = document.createElement("span");
+    coin.className = "coin-fly";
+    coin.textContent = "✦";
+    coin.setAttribute("aria-hidden", "true");
+    const startX = source.left + source.width / 2 + (index - 4) * 7;
+    const startY = source.top + source.height / 2 + (index % 3 - 1) * 5;
+    coin.style.left = `${startX}px`;
+    coin.style.top = `${startY}px`;
+    coin.style.setProperty("--coin-dx", `${destination.left + destination.width / 2 - startX}px`);
+    coin.style.setProperty("--coin-dy", `${destination.top + destination.height / 2 - startY}px`);
+    coin.style.animationDelay = `${index * 42}ms`;
+    coin.addEventListener("animationend", () => coin.remove(), { once: true });
+    document.body.append(coin);
+  }
+}
+
+function presentHighLowOutcome(update: TavernHighLowUpdate, previousPhase: TavernHighLowUpdate["phase"], previousPayout: number): void {
+  if (update.result === "wrong") {
+    showHighLowResult("wrong", "THE HOUSE WINS", `${tavernCardName(update.revealedCard)} breaks the run · ${coinLabel(previousPayout)} lost`);
+    burstHighLowChips("wrong");
+    combatAudio.play("defeat");
+    return;
+  }
+  if (update.result === "push") {
+    showHighLowResult("push", "SAME RANK", `${tavernCardName(update.revealedCard)} · the pot is safe`);
+    combatAudio.play("weaponBlocked");
+    return;
+  }
+  if (update.result === "correct" && update.phase === "won") {
+    showHighLowResult("collected", "TABLE CLEARED!", `Six correct calls · ${coinLabel(update.payout ?? 0)} collected`);
+    burstHighLowChips("collected");
+    animateHighLowPayout(update.payout ?? 0);
+    combatAudio.play("townVictoryBell");
+    return;
+  }
+  if (update.result === "correct") {
+    const gain = Math.max(0, (update.payout ?? 0) - previousPayout);
+    showHighLowResult("correct", "GOOD CALL!", `${tavernCardName(update.revealedCard)} · +${coinLabel(gain)} in the pot`);
+    burstHighLowChips("correct");
+    combatAudio.play("lootPickup");
+    return;
+  }
+  if (update.phase === "won" && previousPhase === "guess") {
+    showHighLowResult("collected", "POT COLLECTED", `${coinLabel(update.payout ?? 0)} added to your purse`);
+    burstHighLowChips("collected");
+    animateHighLowPayout(update.payout ?? 0);
+    combatAudio.play("lootRare");
+  }
+}
+
 function finishHighLowReveal(update: TavernHighLowUpdate): void {
   if (update.phase === "guess") {
     renderTavernCard(highLowCurrentCard, update.currentCard);
     renderTavernCard(highLowNextCard);
+    highLowNextCard.classList.remove("reveal");
+    animateCardClass(highLowCurrentCard, "dealt");
   }
   highLowCurrentCardCache = update.currentCard;
   highLowPending = false;
@@ -13795,23 +13906,35 @@ function finishHighLowReveal(update: TavernHighLowUpdate): void {
 
 function renderHighLow(update: TavernHighLowUpdate): void {
   window.clearTimeout(highLowRevealTimer);
+  window.clearTimeout(highLowResultTimer);
+  const previousPhase = highLowLastPhase;
+  const previousPayout = highLowDisplayedPayout;
   highLowPanel.dataset.phase = update.phase;
-  if (update.result) highLowPanel.dataset.result = update.result;
+  const displayResult = update.result ?? (update.phase === "won" && previousPhase === "guess" ? "collected" : undefined);
+  if (displayResult) highLowPanel.dataset.result = displayResult;
   else delete highLowPanel.dataset.result;
   highLowMessage.textContent = update.message ?? "Place a stake, then predict the next card.";
   highLowStreak.textContent = `${update.streak ?? 0} / 6`;
   highLowPot.textContent = coinLabel(update.payout ?? 0);
+  const streak = update.streak ?? 0;
+  [...highLowStreakPips.children].forEach((pip, index) => pip.classList.toggle("active", index < streak));
+  highLowStreakPips.setAttribute("aria-label", `${streak} of six correct guesses`);
   const active = update.phase === "guess";
   highLowStakes.hidden = active;
   highLowChoices.hidden = !active;
   highLowCollect.hidden = !active || (update.streak ?? 0) < 1;
   highLowPending = false;
   updateTavernCoins(update.coins);
+  if (!update.result && !(update.phase === "won" && previousPhase === "guess")) highLowResult.hidden = true;
+  presentHighLowOutcome(update, previousPhase, previousPayout);
+  highLowLastPhase = update.phase;
+  highLowDisplayedPayout = update.payout ?? 0;
 
   const revealing = Boolean(update.revealedCard && update.result);
   if (revealing) {
     renderTavernCard(highLowCurrentCard, highLowCurrentCardCache ?? update.currentCard);
     renderTavernCard(highLowNextCard, update.revealedCard);
+    animateCardClass(highLowNextCard, "reveal");
     highLowHigher.disabled = true;
     highLowLower.disabled = true;
     highLowCollect.disabled = true;
@@ -13825,6 +13948,7 @@ function renderHighLow(update: TavernHighLowUpdate): void {
   }
   renderTavernCard(highLowCurrentCard, update.currentCard);
   renderTavernCard(highLowNextCard);
+  if (active && previousPhase !== "guess") animateCardClass(highLowCurrentCard, "dealt");
   highLowCurrentCardCache = update.currentCard;
 }
 

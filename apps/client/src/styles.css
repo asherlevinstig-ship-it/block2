@@ -1246,16 +1246,30 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#tavern-high-low:
 .high-low-header .eyebrow { margin: 0 0 4px; color: #d7a9a0; font-size: .59rem; letter-spacing: .14em; }
 .high-low-header h2 { margin: 0; color: #ffe4bd; font-family: Georgia, serif; font-size: clamp(1.55rem, 4.5vw, 2.1rem); line-height: 1; text-shadow: 0 2px 0 #651b20; }
 .high-low-header h2 span { color: #e7806c; font-size: .62em; font-style: italic; }
-.high-low-table-felt { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 16px; min-height: 190px; padding: 17px; border: 7px solid #5f281e; border-radius: 40% / 22%; background: radial-gradient(ellipse, #155b48, #092f2a 72%, #071f1d); box-shadow: inset 0 0 0 2px #c8944d, inset 0 0 32px #020d0a, 0 8px 18px #0008; }
+.high-low-table-felt { position: relative; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 16px; min-height: 190px; padding: 17px; overflow: hidden; border: 7px solid #5f281e; border-radius: 40% / 22%; background: radial-gradient(ellipse, #155b48, #092f2a 72%, #071f1d); box-shadow: inset 0 0 0 2px #c8944d, inset 0 0 32px #020d0a, 0 8px 18px #0008; }
 .high-low-card-slot { display: grid; place-items: center; gap: 7px; color: #c7d2b9; font: 900 .58rem/1 system-ui; letter-spacing: .13em; }
 .playing-card { position: relative; display: grid; place-items: center; width: 88px; height: 124px; border: 4px solid #eadcb7; border-radius: 10px; background: #f5e8cb; color: #291b18; box-shadow: 0 8px 18px #0009; transform-style: preserve-3d; }
 .playing-card b { font: 900 2rem/1 Georgia, serif; }
 .playing-card i { position: absolute; right: 10px; bottom: 9px; font: normal 1.55rem/1 serif; }
 .playing-card.red { color: #ad2730; }
 .playing-card.card-back { border-color: #d5b875; background: repeating-linear-gradient(45deg, #4f151e 0 7px, #7a2430 7px 14px); color: #f2d99a; }
+.playing-card.reveal { animation: high-low-card-flip .65s cubic-bezier(.18, .85, .25, 1.12) both; }
+.playing-card.dealt { animation: high-low-card-deal .42s cubic-bezier(.2, .9, .25, 1.1) both; }
 .high-low-card-arrow { color: #f3c66d; font-size: 1.35rem; text-shadow: 0 0 15px #ffb741; }
+.high-low-result { position: absolute; z-index: 3; left: 50%; top: 50%; display: grid; place-items: center; width: min(78%, 330px); padding: 13px 18px; border: 2px solid currentColor; border-radius: 12px; background: rgb(5 17 15 / 94%); box-shadow: 0 7px 25px #000c; text-align: center; transform: translate(-50%, -50%); pointer-events: none; }
+.high-low-result[hidden] { display: none; }
+.high-low-result strong { font: 1000 1.05rem/1 Georgia, serif; letter-spacing: .12em; }
+.high-low-result span { margin-top: 6px; color: #f7ead0; font-size: .69rem; font-weight: 750; }
+.high-low-result.show { animation: high-low-result-in .78s cubic-bezier(.16, .9, .25, 1.15) both; }
+.high-low-result[data-kind="correct"] { color: #9ef0ad; background: rgb(9 50 35 / 95%); }
+.high-low-result[data-kind="wrong"] { color: #ff9b83; background: rgb(68 17 20 / 96%); }
+.high-low-result[data-kind="push"] { color: #d8c7ff; background: rgb(37 27 61 / 96%); }
+.high-low-result[data-kind="collected"] { color: #ffe08a; background: rgb(68 45 12 / 96%); }
 .high-low-run { display: flex; justify-content: center; gap: 30px; margin: 12px 0 2px; color: #b9c9bd; font: 800 .65rem/1 system-ui; letter-spacing: .09em; }
 .high-low-run strong { margin-left: 5px; color: #ffe09a; }
+.high-low-streak-pips { display: flex; justify-content: center; gap: 7px; margin: 8px 0 2px; }
+.high-low-streak-pips i { width: 25px; height: 5px; border: 1px solid #94764f; border-radius: 8px; background: #1e2522; box-shadow: inset 0 1px 2px #000; transition: background .2s, box-shadow .2s, transform .2s; }
+.high-low-streak-pips i.active { background: #f2bd54; box-shadow: 0 0 9px #ffcd67; transform: scaleY(1.35); }
 #high-low-message { min-height: 2.5em; margin: 12px 5px 4px; color: #ffdbab; font-size: .84rem; font-weight: 750; line-height: 1.4; text-align: center; }
 .high-low-rules { margin: 0 8px 12px; color: #b7afa5; font-size: .69rem; line-height: 1.4; text-align: center; }
 #high-low-stakes { grid-template-columns: repeat(3, 1fr); }
@@ -1276,7 +1290,18 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#tavern-high-low:
 #high-low-collect { border-color: #e1bf65 !important; background: linear-gradient(#8a6425, #5b411d) !important; }
 #tavern-high-low[data-result="wrong"] .high-low-table-felt { animation: quiz-wrong-shake .42s ease-out; box-shadow: inset 0 0 0 2px #f29270, inset 0 0 30px #80362b, 0 0 18px #e0524244; }
 #tavern-high-low[data-result="correct"] .high-low-table-felt { box-shadow: inset 0 0 0 2px #dceca9, inset 0 0 30px #56c17b, 0 0 22px #93e79855; }
+#tavern-high-low[data-result="push"] .high-low-table-felt { box-shadow: inset 0 0 0 2px #b9a4ec, inset 0 0 30px #4c3f75, 0 0 18px #a68ff844; }
+#tavern-high-low[data-result="collected"] .high-low-table-felt { box-shadow: inset 0 0 0 2px #ffe49a, inset 0 0 34px #a86b1f, 0 0 25px #ffd66a66; }
+#tavern-high-low[data-result="correct"] #high-low-pot, #tavern-high-low[data-result="collected"] #high-low-pot { animation: high-low-pot-win .7s ease-out; }
+.high-low-chip-burst { position: fixed; z-index: 41; display: grid; place-items: center; width: 21px; height: 21px; border: 2px solid #fff0a3; border-radius: 50%; background: radial-gradient(circle at 30% 25%, #fff6a4, #d59024 65%, #783a0a); color: #fff3b5; font-size: .65rem; font-style: normal; font-weight: 1000; pointer-events: none; animation: high-low-chip-burst .72s cubic-bezier(.2, .7, .2, 1) forwards; }
+.high-low-chip-burst.wrong { border-color: #ff9f88; border-radius: 2px; background: #8b2830; color: #ffd2c9; }
+@keyframes high-low-card-flip { 0% { opacity: .25; transform: translateY(-16px) rotateY(88deg) scale(.82); } 55% { opacity: 1; transform: translateY(2px) rotateY(-8deg) scale(1.07); } 100% { transform: translateY(0) rotateY(0) scale(1); } }
+@keyframes high-low-card-deal { from { opacity: .2; transform: translateX(46px) rotate(6deg) scale(.84); } to { opacity: 1; transform: translateX(0) rotate(0) scale(1); } }
+@keyframes high-low-result-in { 0% { opacity: 0; transform: translate(-50%, -40%) scale(.65); } 30% { opacity: 1; transform: translate(-50%, -54%) scale(1.1); } 100% { transform: translate(-50%, -50%) scale(1); } }
+@keyframes high-low-pot-win { 45% { color: white; text-shadow: 0 0 18px #ffd46d; transform: scale(1.22); } }
+@keyframes high-low-chip-burst { 0% { opacity: 0; transform: translate(0, 0) rotate(0) scale(.4); } 18% { opacity: 1; } 100% { opacity: 0; transform: translate(var(--chip-x), var(--chip-y)) rotate(var(--chip-r)) scale(.72); } }
 @media (max-width: 520px) { .high-low-table-felt { gap: 8px; padding: 12px 8px; } .playing-card { width: 70px; height: 100px; } .high-low-header { align-items: flex-start; } }
+@media (prefers-reduced-motion: reduce) { .playing-card.reveal, .playing-card.dealt, .high-low-result.show, .high-low-chip-burst, #tavern-high-low[data-result="wrong"] .high-low-table-felt, #tavern-high-low[data-result="correct"] #high-low-pot, #tavern-high-low[data-result="collected"] #high-low-pot { animation: none; } }
 #blacksmith-panel {
   position: fixed;
   z-index: 24;

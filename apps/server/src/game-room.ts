@@ -1685,12 +1685,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.sendHighLowState(client, "Will the next card be higher or lower?");
   }
 
-  private settleHighLow(client: Client, player: PlayerState, round: HighLowRound, message: string): void {
+  private settleHighLow(client: Client, player: PlayerState, round: HighLowRound, message: string,
+    revealedCard?: HighLowRound["currentCard"], result?: TavernHighLowUpdate["result"]): void {
     player.coins = Math.min(1_000_000, player.coins + round.payout);
     this.highLowRounds.delete(client.sessionId);
     void this.persistPlayer(client.sessionId, player);
     client.send("high-low:update", { phase: "won", coins: player.coins, stake: round.stake,
-      payout: round.payout, streak: round.streak, currentCard: round.currentCard, message } satisfies TavernHighLowUpdate);
+      payout: round.payout, streak: round.streak, currentCard: round.currentCard, revealedCard, result, message } satisfies TavernHighLowUpdate);
   }
 
   private handleHighLowGuess(client: Client, payload: unknown): void {
@@ -1716,7 +1717,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     round.streak += 1;
     round.payout = highLowPayout(round.stake, round.streak);
     if (round.streak >= TAVERN_HIGH_LOW_MAX_STREAK) {
-      this.settleHighLow(client, player, round, "Six correct calls! You cleared the table and collected the maximum run.");
+      this.settleHighLow(client, player, round, "Six correct calls! You cleared the table and collected the maximum run.", next, result);
       return;
     }
     this.sendHighLowState(client, `Correct! Your pot is now ${round.payout} coins. Collect it or guess again.`, next, result);
