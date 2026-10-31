@@ -383,6 +383,10 @@ import {
   starterWeaponForPath,
   BUILD_PATH_RANKS,
   BUILD_PATH_SPECIALIZATIONS,
+  CALLING_WEAPON_PROGRESSION,
+  callingWeaponCompatible,
+  callingWeaponStage,
+  nextCallingWeaponStage,
   CALLING_ABILITY_OPTIONS,
   CALLING_ABILITY_AUGMENTS,
   blacksmithRequiredLevel,
@@ -1448,6 +1452,12 @@ const buildPathPanel = document.querySelector<HTMLElement>("#build-path-panel")!
 const buildPathName = document.querySelector<HTMLElement>("#build-path-name")!;
 const buildPathRank = document.querySelector<HTMLElement>("#build-path-rank")!;
 const buildPathMessage = document.querySelector<HTMLElement>("#build-path-message")!;
+const callingWeaponProgression = document.querySelector<HTMLElement>("#calling-weapon-progression")!;
+const callingWeaponName = document.querySelector<HTMLElement>("#calling-weapon-name")!;
+const callingWeaponTitle = document.querySelector<HTMLElement>("#calling-weapon-title")!;
+const callingWeaponMechanic = document.querySelector<HTMLElement>("#calling-weapon-mechanic")!;
+const callingWeaponStages = document.querySelector<HTMLElement>("#calling-weapon-stages")!;
+const callingWeaponNext = document.querySelector<HTMLElement>("#calling-weapon-next")!;
 const assassinJourneyPanel = document.querySelector<HTMLElement>("#assassin-journey")!;
 const assassinJourneyNext = document.querySelector<HTMLElement>("#assassin-journey-next")!;
 const assassinJourneyTrial = document.querySelector<HTMLElement>("#assassin-journey-trial")!;
@@ -7494,6 +7504,8 @@ function updateMainHandLoadout(mainHandId: MainHandId): void {
   localComboExpiresAt = 0;
   targetStateKey = "";
   refreshPowerCompatibility();
+  if (lastBuildPathUpdate?.selectedPathId)
+    renderCallingWeaponProgression(lastBuildPathUpdate.selectedPathId, lastBuildPathUpdate.rank);
   refreshBackpackCapacity();
   if (mainHandId === selectedStarterWeaponId() && (firstStepsIndex === ONBOARDING_STAGE.equipSword || forcedStarterEquipment)) {
     const starterName = selectedStarterWeaponName();
@@ -8054,6 +8066,28 @@ function beginCallingAwakening(pathId: BuildPathId, powerName: string): void {
 
 callingAwakeningContinue.addEventListener("click", closeCallingAwakening);
 
+function renderCallingWeaponProgression(pathId: BuildPathId, rank: number): void {
+  const weaponStage = callingWeaponStage(pathId, rank);
+  const nextWeaponStage = nextCallingWeaponStage(pathId, rank);
+  const compatible = callingWeaponCompatible(pathId, localMainHandId);
+  callingWeaponName.textContent = weaponStage.name.toUpperCase();
+  callingWeaponTitle.textContent = weaponStage.title.toUpperCase();
+  callingWeaponMechanic.textContent = weaponStage.mechanic;
+  callingWeaponProgression.dataset.compatible = String(compatible);
+  callingWeaponStages.replaceChildren(...CALLING_WEAPON_PROGRESSION[pathId].map(stage => {
+    const marker = document.createElement("span");
+    marker.dataset.unlocked = String(stage.rank <= rank);
+    marker.dataset.current = String(stage.rank === rank);
+    marker.title = `Rank ${stage.rank} · ${stage.name} — ${stage.mechanic}`;
+    marker.innerHTML = `<i>${stage.rank}</i><b>${stage.name}</b>`;
+    return marker;
+  }));
+  callingWeaponNext.textContent = !compatible
+    ? `INACTIVE · Equip a compatible ${pathId === "ranger" ? "bow" : pathId === "mage" || pathId === "healer" ? "focus" : "melee weapon"}.`
+    : nextWeaponStage ? `NEXT · RANK ${nextWeaponStage.rank} · ${nextWeaponStage.name} — ${nextWeaponStage.mechanic}`
+      : "MASTERED · Compatible weapon drops inherit this Calling's effect.";
+}
+
 function renderBuildPath(update: BuildPathUpdate): void {
   lastBuildPathUpdate = update;
   if (!callingFirstOnboardingPending
@@ -8093,6 +8127,8 @@ function renderBuildPath(update: BuildPathUpdate): void {
     ? BUILD_PATH_SPECIALIZATIONS[update.selectedPathId].find(option => option.id === update.selectedSpecializationId) : null;
   buildPathRank.textContent = selected ? `${rank.name.toUpperCase()} · RANK ${update.rank}${selectedSpecialization ? ` · ${selectedSpecialization.name.toUpperCase()}` : ""}`
     : "CHOOSE YOUR CALLING";
+  callingWeaponProgression.hidden = !update.selectedPathId;
+  if (update.selectedPathId) renderCallingWeaponProgression(update.selectedPathId, update.rank);
   const activeAbility = update.selectedCallingAbilityId
     ? CALLING_ABILITY_OPTIONS.find(option => option.id === update.selectedCallingAbilityId) : null;
   if (update.selectedPathId !== "assassin") buildPathMessage.textContent = selected && activeAbility

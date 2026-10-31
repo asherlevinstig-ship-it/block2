@@ -657,6 +657,69 @@ export const BUILD_PATH_RANKS = [
   { rank: 3, name: "Veteran", xp: 70 },
   { rank: 4, name: "Master", xp: 140 },
 ] as const;
+export type CallingWeaponRank = typeof BUILD_PATH_RANKS[number]["rank"];
+export type CallingWeaponStage = {
+  rank: CallingWeaponRank;
+  name: string;
+  title: string;
+  mechanic: string;
+};
+
+/** Permanent weapon identity earned through Calling mastery. The equipped item is never replaced or removed. */
+export const CALLING_WEAPON_PROGRESSION = {
+  tank: [
+    { rank: 0, name: "Recruit's Aegis", title: "Sword & shield", mechanic: "A dependable blade and directional guard." },
+    { rank: 1, name: "Warden Blade", title: "Initiate armament", mechanic: "Striking during an enemy windup deals +1 damage." },
+    { rank: 2, name: "Bastion Edge", title: "Adept armament", mechanic: "Windup strikes also interrupt for 0.25s longer." },
+    { rank: 3, name: "Oathguard Armament", title: "Veteran armament", mechanic: "Windup strikes deal +2 damage and carry the longer interrupt." },
+    { rank: 4, name: "Citadel Oathblade", title: "Master armament", mechanic: "Windup strikes deal +2 damage and interrupt for 0.45s longer." },
+  ],
+  mage: [
+    { rank: 0, name: "Apprentice Wand", title: "Arcane focus", mechanic: "Channels a steady arcane bolt from the casting hand." },
+    { rank: 1, name: "Channeling Wand", title: "Initiate focus", mechanic: "Every fourth focus hit surges for +1 damage." },
+    { rank: 2, name: "Runed Conduit", title: "Adept focus", mechanic: "Arcane Surge now triggers every third focus hit." },
+    { rank: 3, name: "Archmage Focus", title: "Veteran focus", mechanic: "Every third focus hit surges for +1 damage through your chosen discipline." },
+    { rank: 4, name: "Astral Scepter", title: "Master focus", mechanic: "Every third focus hit erupts for +2 damage." },
+  ],
+  assassin: [
+    { rank: 0, name: "Twin Fang Daggers", title: "Paired blades", mechanic: "Fast paired cuts built for precise executions." },
+    { rank: 1, name: "Nightfang Blades", title: "Initiate blades", mechanic: "Marked or weakened enemies take +1 damage." },
+    { rank: 2, name: "Veilpiercers", title: "Adept blades", mechanic: "Marked or weakened enemies take +1 damage; combine with Stealth and Death Mark." },
+    { rank: 3, name: "Eclipse Knives", title: "Veteran blades", mechanic: "Marked or weakened enemies take +2 damage." },
+    { rank: 4, name: "Sovereign Fangs", title: "Master blades", mechanic: "Execution strikes retain +2 damage and your mastered specialization." },
+  ],
+  thief: [
+    { rank: 0, name: "Wayfarer's Dagger", title: "Utility blade", mechanic: "A light blade made for movement and opportunity." },
+    { rank: 1, name: "Cutpurse Edge", title: "Initiate blade", mechanic: "Enemies attacking someone else take +1 damage." },
+    { rank: 2, name: "Smoke-Skiver", title: "Adept blade", mechanic: "Distracted enemies take +1 damage; Decoy and Smoke Bomb create openings." },
+    { rank: 3, name: "Ghostkey", title: "Veteran blade", mechanic: "Enemies attacking someone else take +2 damage." },
+    { rank: 4, name: "King's Key", title: "Master blade", mechanic: "Distracted enemies take +2 damage through your mastered trickery." },
+  ],
+  ranger: [
+    { rank: 0, name: "Trail Bow", title: "Hunting bow", mechanic: "A responsive bow for controlling distance." },
+    { rank: 1, name: "Warden Longbow", title: "Initiate bow", mechanic: "Every ranged weapon hit deals +1 damage." },
+    { rank: 2, name: "Pinning Bow", title: "Adept bow", mechanic: "Consecutive hits slow and then root the same target." },
+    { rank: 3, name: "Farstrider", title: "Veteran bow", mechanic: "Ranged hits deal +1 damage and inherit your specialization's precision." },
+    { rank: 4, name: "Horizon Bow", title: "Master bow", mechanic: "Every ranged weapon hit deals +2 damage." },
+  ],
+  healer: [
+    { rank: 0, name: "Pilgrim Staff", title: "Restoration focus", mechanic: "A focus for steady bolts and restorative magic." },
+    { rank: 1, name: "Mercy Staff", title: "Initiate staff", mechanic: "Every fourth focus hit restores 1 HP to the most injured nearby party member." },
+    { rank: 2, name: "Lifeline Staff", title: "Adept staff", mechanic: "The restorative pulse now triggers every third focus hit." },
+    { rank: 3, name: "Dawnbranch", title: "Veteran staff", mechanic: "Every third focus hit restores 1 HP through your chosen discipline." },
+    { rank: 4, name: "Saint's Beacon", title: "Master staff", mechanic: "Every third focus hit restores 2 HP to the most injured nearby party member." },
+  ],
+} as const satisfies Record<BuildPathId, readonly CallingWeaponStage[]>;
+
+export function callingWeaponStage(pathId: BuildPathId, rank: number): CallingWeaponStage {
+  const normalized = Math.max(0, Math.min(4, Math.floor(rank))) as CallingWeaponRank;
+  return CALLING_WEAPON_PROGRESSION[pathId][normalized]!;
+}
+
+export function nextCallingWeaponStage(pathId: BuildPathId, rank: number): CallingWeaponStage | null {
+  const nextRank = Math.max(0, Math.floor(rank)) + 1;
+  return nextRank > 4 ? null : CALLING_WEAPON_PROGRESSION[pathId][nextRank]!;
+}
 export const BuildPathRequestSchema = z.object({ action: z.enum(["sync", "choose", "specialize"]), pathId: z.enum(["tank", "mage", "assassin", "thief", "ranger", "healer"]).optional(), specializationId: z.enum(["guardian", "juggernaut", "arcanist", "elementalist", "spellguard", "pyromancer", "runebinder", "chronomancer", "executioner", "phantom", "trickster", "plunderer", "marksman", "trapper", "lifebinder", "field_medic"]).optional() }).strict();
 export type BuildPathAffinity = { pathId: BuildPathId; score: number; reasons: string[] };
 export type BuildPathUpdate = { selectedPathId: BuildPathId | null; rank: number; xp: number; nextRankXp: number | null;
@@ -1493,6 +1556,38 @@ export type MainHandId = keyof typeof MAIN_HAND_DEFINITIONS;
 export function equipmentForItem(itemId: string): MainHandId | null {
   return (Object.keys(MAIN_HAND_DEFINITIONS) as MainHandId[])
     .find(id => "requiredItemId" in MAIN_HAND_DEFINITIONS[id] && (MAIN_HAND_DEFINITIONS[id] as MainHandDefinition).requiredItemId === itemId) ?? null;
+}
+
+export function callingWeaponCompatible(pathId: BuildPathId, mainHandId: MainHandId): boolean {
+  const tag = MAIN_HAND_DEFINITIONS[mainHandId].tag;
+  return pathId === "ranger" ? tag === "ranged"
+    : pathId === "mage" || pathId === "healer" ? tag === "focus"
+      : tag === "melee" && mainHandId !== "unarmed";
+}
+
+export function callingWeaponPulseInterval(pathId: BuildPathId, rank: number): number {
+  if ((pathId !== "mage" && pathId !== "healer") || rank < 1) return 0;
+  return rank >= 2 ? 3 : 4;
+}
+
+export function callingWeaponDamageBonus(pathId: BuildPathId, rank: number, mainHandId: MainHandId,
+  opening: { windup?: boolean; markedOrWeakened?: boolean; distracted?: boolean; pulseReady?: boolean } = {}): number {
+  if (rank < 1 || !callingWeaponCompatible(pathId, mainHandId)) return 0;
+  if (pathId === "tank") return opening.windup ? rank >= 3 ? 2 : 1 : 0;
+  if (pathId === "mage") return opening.pulseReady ? rank >= 4 ? 2 : 1 : 0;
+  if (pathId === "assassin") return opening.markedOrWeakened ? rank >= 3 ? 2 : 1 : 0;
+  if (pathId === "thief") return opening.distracted ? rank >= 3 ? 2 : 1 : 0;
+  if (pathId === "ranger") return rank >= 4 ? 2 : 1;
+  return 0;
+}
+
+export function callingWeaponStaggerBonus(pathId: BuildPathId, rank: number, mainHandId: MainHandId, windup: boolean): number {
+  if (pathId !== "tank" || rank < 2 || !windup || !callingWeaponCompatible(pathId, mainHandId)) return 0;
+  return rank >= 4 ? 450 : 250;
+}
+
+export function callingWeaponHealAmount(pathId: BuildPathId, rank: number, mainHandId: MainHandId): number {
+  return pathId === "healer" && rank >= 1 && callingWeaponCompatible(pathId, mainHandId) ? rank >= 4 ? 2 : 1 : 0;
 }
 
 export const BACKPACK_BASE_SLOTS = 12;

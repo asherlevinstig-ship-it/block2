@@ -41,7 +41,7 @@ import { Guilds } from "./guilds.js";
 import { TradeRequestSchema } from "@blockcraft/protocol";
 import { FIELD_FORGE_RECIPES, FieldForgeSchema, type FieldForgeId } from "@blockcraft/protocol";
 import { Trading } from "./trading.js";
-import { BLACKSMITH_STOCK, BLACKSMITH_DISMANTLE, BLACKSMITH_REFORGE, REGIONAL_FORGE_RECIPES, ASHEN_FORGE_RECIPES, AshenForgeSchema, BlacksmithBuySchema, BlacksmithDismantleSchema, BlacksmithHaulSchema, BlacksmithReforgeSchema, RegionalForgeSchema, AttunementForgeSchema, EquipmentAffixHuntSchema, EQUIPMENT_HUNT_REGIONS, ITEM_DEFINITIONS, EQUIPMENT_AFFIXES, HUNT_EQUIPMENT_SETS, BUILD_PATHS, BUILD_PATH_SPECIALIZATIONS, CALLING_ABILITY_OPTIONS, CALLING_ABILITY_AUGMENTS, CALLING_AUGMENT_TRIALS, specializationCallingAbility, CallingAbilityRequestSchema, CallingAbilityEquipRequestSchema, CallingAugmentEquipRequestSchema, HuntCollectionRequestSchema, BuildPathRequestSchema, ArmourEquipSchema, armourStats, armouredDamage, reforgeWeaponDamageBonus, equipmentPerkStats, equipmentAffixResonanceForLoadout, type EquipmentPerkId, type BlacksmithDismantleItemId, type BlacksmithReforgeItemId, type RegionalForgeId, type AshenBlueprintId, type HuntCollectionUpdate, type HuntLoadoutSlot, type BuildPathId, type BuildPathUpdate, type BuildPathProc, type BuildPathSpecializationId, type CallingAbilityId, type CallingAugmentId, type CallingAbilityUpdate, type CallingAbilityEffect, type CallingStateUpdate, type EquipmentAffixId, type EquipmentAffixProc, type EquipmentAffixRoll, type EquipmentAffixOffers, type EquipmentAffixUpdate, type EquipmentHuntRegionId, type EquipmentHuntTarget } from "@blockcraft/protocol";
+import { BLACKSMITH_STOCK, BLACKSMITH_DISMANTLE, BLACKSMITH_REFORGE, REGIONAL_FORGE_RECIPES, ASHEN_FORGE_RECIPES, AshenForgeSchema, BlacksmithBuySchema, BlacksmithDismantleSchema, BlacksmithHaulSchema, BlacksmithReforgeSchema, RegionalForgeSchema, AttunementForgeSchema, EquipmentAffixHuntSchema, EQUIPMENT_HUNT_REGIONS, ITEM_DEFINITIONS, EQUIPMENT_AFFIXES, HUNT_EQUIPMENT_SETS, BUILD_PATHS, BUILD_PATH_SPECIALIZATIONS, CALLING_ABILITY_OPTIONS, CALLING_ABILITY_AUGMENTS, CALLING_AUGMENT_TRIALS, specializationCallingAbility, callingWeaponCompatible, callingWeaponDamageBonus, callingWeaponHealAmount, callingWeaponPulseInterval, callingWeaponStaggerBonus, CallingAbilityRequestSchema, CallingAbilityEquipRequestSchema, CallingAugmentEquipRequestSchema, HuntCollectionRequestSchema, BuildPathRequestSchema, ArmourEquipSchema, armourStats, armouredDamage, reforgeWeaponDamageBonus, equipmentPerkStats, equipmentAffixResonanceForLoadout, type EquipmentPerkId, type BlacksmithDismantleItemId, type BlacksmithReforgeItemId, type RegionalForgeId, type AshenBlueprintId, type HuntCollectionUpdate, type HuntLoadoutSlot, type BuildPathId, type BuildPathUpdate, type BuildPathProc, type BuildPathSpecializationId, type CallingAbilityId, type CallingAugmentId, type CallingAbilityUpdate, type CallingAbilityEffect, type CallingStateUpdate, type EquipmentAffixId, type EquipmentAffixProc, type EquipmentAffixRoll, type EquipmentAffixOffers, type EquipmentAffixUpdate, type EquipmentHuntRegionId, type EquipmentHuntTarget } from "@blockcraft/protocol";
 import { AREA_LEADER_RELIC_IDS, LEADER_FORGE_MARKS, LEADER_FORGE_RECIPES, LeaderForgeSchema,
   type AreaLeaderRelicId, type LeaderForgemarkId } from "@blockcraft/protocol";
 import { emberOreSale, weaponPurchase } from "./blacksmith.js";
@@ -562,6 +562,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly dodgeCounterUntil = new Map<string, number>();
   private readonly magePowerCasts = new Map<string, number>();
   private readonly mageCallingCasts = new Map<string, number>();
+  private readonly callingWeaponHits = new Map<string, number>();
   private readonly mageBurns = new Map<string, { ownerId: string; mobId: string; nextTickAt: number; ticks: number; damage: number }>();
   private readonly mageRuneMarks = new Map<string, { abilityId: string; until: number }>();
   private readonly mageChronomancerEncounters = new Map<string, { lastCombatAt: number; uses: number }>();
@@ -1419,6 +1420,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.activeDodgeWindows.delete(client.sessionId);
     this.dodgeCounterUntil.delete(client.sessionId);
     this.magePowerCasts.delete(client.sessionId);
+    for (const key of this.callingWeaponHits.keys()) if (key.startsWith(`${client.sessionId}:`)) this.callingWeaponHits.delete(key);
     this.clearCallingEffects(client.sessionId);
     this.mageCallingCasts.delete(client.sessionId);
     this.assassinShadowUntil.delete(client.sessionId);
@@ -8300,6 +8302,28 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const state = parseBuildPathState(player.huntLoadoutsJson);
     if (!state.selectedPathId) return 0;
     const rank = this.buildPathRankFor(player, state.selectedPathId);
+    const mainHandId = Object.hasOwn(MAIN_HAND_DEFINITIONS, player.mainHandId) ? player.mainHandId as MainHandId : "unarmed";
+    if (source === "weapon" && rank > 0 && state.selectedPathId === "tank") {
+      const bonus = callingWeaponDamageBonus("tank", rank, mainHandId, { windup: mob.combatState === "windup" });
+      if (bonus > 0) this.buildPathProc(playerId, "tank", "WARDEN STRIKE", `WINDUP BROKEN · +${bonus} DAMAGE`);
+      return bonus;
+    }
+    if (source === "weapon" && rank > 0 && state.selectedPathId === "mage" && callingWeaponCompatible("mage", mainHandId)) {
+      const interval = callingWeaponPulseInterval("mage", rank);
+      const key = `${playerId}:mage`, next = (this.callingWeaponHits.get(key) ?? 0) + 1;
+      const pulseReady = next >= interval;
+      if (pulseReady) this.callingWeaponHits.delete(key); else this.callingWeaponHits.set(key, next);
+      const bonus = callingWeaponDamageBonus("mage", rank, mainHandId, { pulseReady });
+      if (bonus > 0) this.buildPathProc(playerId, "mage", "ARCANE CONDUIT", `ARCANE SURGE · +${bonus} DAMAGE`);
+      return bonus;
+    }
+    if (source === "weapon" && rank > 0 && state.selectedPathId === "thief") {
+      const targetId = mob.targetId || this.mobAwareness.get(mobId)?.targetId || "";
+      const bonus = callingWeaponDamageBonus("thief", rank, mainHandId,
+        { distracted: Boolean(targetId && targetId !== playerId) });
+      if (bonus > 0) this.buildPathProc(playerId, "thief", "OPPORTUNIST", `DISTRACTED TARGET · +${bonus} DAMAGE`);
+      return bonus;
+    }
     if (state.selectedPathId === "ranger" && source === "weapon" && player.mainHandTag === "ranged") {
       const focusHits = this.rangerFieldFocusHits.get(playerId) ?? 0;
       const callingFocus = this.rangerCallingFocus.get(playerId);
@@ -8343,7 +8367,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       }
       const piercingTier = this.equipmentAffixTier(player, "piercing");
       if (piercingTier > 0) this.equipmentAffixProc(playerId, "piercing", `PIERCING +${Math.ceil(piercingTier / 2)}`, mob, now);
-      return (rank > 0 ? rank >= 4 ? 2 : 1 : 0) + Math.ceil(piercingTier / 2)
+      return callingWeaponDamageBonus("ranger", rank, mainHandId) + Math.ceil(piercingTier / 2)
         + (focusHits > 0 ? 1 : 0) + (callingFocus?.bonus ?? 0);
     }
     if (rank <= 0) return 0;
@@ -8353,9 +8377,39 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       && (mob.health <= Math.ceil(mob.maxHealth * .35) || marked)) {
       const lethalTier = this.equipmentAffixTier(player, "lethal");
       if (lethalTier > 0) this.equipmentAffixProc(playerId, "lethal", `LETHAL +${lethalTier}`, mob, now);
-      return (rank >= 4 ? 2 : 1) + lethalTier;
+      return callingWeaponDamageBonus("assassin", rank, mainHandId, { markedOrWeakened: true }) + lethalTier;
     }
     return 0;
+  }
+
+  private applyCallingWeaponSupport(playerId: string, player: PlayerState, now: number): void {
+    const state = parseBuildPathState(player.huntLoadoutsJson);
+    if (state.selectedPathId !== "healer") return;
+    const rank = this.buildPathRankFor(player, "healer");
+    const mainHandId = Object.hasOwn(MAIN_HAND_DEFINITIONS, player.mainHandId) ? player.mainHandId as MainHandId : "unarmed";
+    const heal = callingWeaponHealAmount("healer", rank, mainHandId);
+    const interval = callingWeaponPulseInterval("healer", rank);
+    if (heal <= 0 || interval <= 0) return;
+    const key = `${playerId}:healer`, next = (this.callingWeaponHits.get(key) ?? 0) + 1;
+    if (next < interval) { this.callingWeaponHits.set(key, next); return; }
+    this.callingWeaponHits.delete(key);
+    const candidates = this.parties.cohort(playerId).members
+      .map(id => [id, this.state.players.get(id)] as const)
+      .filter((entry): entry is readonly [string, PlayerState] => Boolean(entry[1]))
+      .filter(([, ally]) => ally.health > 0 && ally.health < ally.maxHealth
+        && Math.abs(ally.y - player.y) <= 2.5 && Math.hypot(ally.x - player.x, ally.z - player.z) <= 8
+        && hasCombatLineOfSight(player, ally, this.readWorldBlock))
+      .sort((a, b) => a[1].health / a[1].maxHealth - b[1].health / b[1].maxHealth
+        || Math.hypot(a[1].x - player.x, a[1].z - player.z) - Math.hypot(b[1].x - player.x, b[1].z - player.z));
+    const target = candidates[0];
+    if (!target) { this.buildPathProc(playerId, "healer", "MERCY PULSE", "NO INJURED ALLY IN RANGE"); return; }
+    const restored = Math.min(heal, target[1].maxHealth - target[1].health);
+    target[1].health += restored;
+    this.broadcast("healer:field-mend", { casterId: playerId, targetId: target[0], restored, staminaRestored: 0 });
+    this.buildPathProc(playerId, "healer", "MERCY PULSE", `${target[0] === playerId ? "SELF" : target[1].name || "ALLY"} +${restored} HP`);
+    if (target[0] !== playerId) this.clients.find(client => client.sessionId === target[0])?.send("chat:notice",
+      `${player.name || "A HEALER"}'s weapon restored ${restored} HP.`);
+    this.recordFastWorldHealingSupport(playerId, target[0], restored, now);
   }
 
   private playerOwns(player: PlayerState, itemId: ItemId): boolean {
@@ -12210,6 +12264,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         ? (this.buildSpecializationMastered(player, "marksman") ? 4 : 2) + this.equipmentAffixTier(player, "precise") : 0;
       const preciseTier = pinStacks >= 3 ? this.equipmentAffixTier(player, "precise") : 0;
       if (preciseTier > 0) this.equipmentAffixProc(sessionId, "precise", `PRECISE +${preciseTier}`, mob, now);
+      const callingWindupStrike = mob.combatState === "windup";
       let damage = damageAfterArmor(
         timing.damage + ironSwordDamageBonus(player.blacksmithUpgrades, pending.mainHandId)
           + this.floorRunWeaponBonus(sessionId, player, mob, now)
@@ -12236,6 +12291,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.combatContributions.record(mobId, sessionId, Math.min(mob.health, damage), now);
       mob.health = firstCombatHealthAfterHit(mobId, player.level,
         this.firstCombatPerfectDodges.has(sessionId), mob.health, damage);
+      this.applyCallingWeaponSupport(sessionId, player, now);
       if (cinderExposed) this.broadcast("combat:cinder-impact", {
         mobId, phase: "weakspot", exposedUntil: cinderExposedUntil,
         durationMs: Math.max(0, cinderExposedUntil - now),
@@ -12264,8 +12320,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       player.momentumStacks = gainMomentum(player.momentumStacks, player.equippedTrait as TraitId);
       const floorBreak = mob.combatState === "windup" && this.hasFloorUpgrade(sessionId, "tank_breaker")
         && this.floorRunProc(sessionId, "break", now, 3_000) ? 350 : 0;
+      const pathState = parseBuildPathState(player.huntLoadoutsJson);
+      const callingStagger = pathState.selectedPathId
+        ? callingWeaponStaggerBonus(pathState.selectedPathId, this.buildPathRankFor(player, pathState.selectedPathId),
+          pending.mainHandId, callingWindupStrike) : 0;
       const staggerDuration = northwatchPatrolInterruptDuration(mobId, mob.attackPattern,
-        Math.max(floorBreak, basicStaggerDuration(pending.mainHandId, pending.step, mob.archetype, mob.combatState, mob.isChampion)));
+        Math.max(floorBreak, basicStaggerDuration(pending.mainHandId, pending.step, mob.archetype, mob.combatState, mob.isChampion))
+          + callingStagger);
       const struckBloaterGland = mob.health > 0 && this.strikeFenBloaterGland(mobId, mob, sessionId, now);
       if (!struckBloaterGland && !cinderArmoured && this.staggerMob(mobId, mob, now, staggerDuration, false, sessionId)) {
         const stagger: CombatStagger = { attackerId: sessionId, mobId, durationMs: staggerDuration };

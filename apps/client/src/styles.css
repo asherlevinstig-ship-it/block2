@@ -1838,6 +1838,27 @@ html.first-person-camera canvas { cursor: crosshair; }
 #build-path-panel header strong { margin-top: 2px; color: #f0d182; font-size: .8rem; }
 #build-path-panel header b { color: #bfa66a; font-size: .5rem; letter-spacing: .07em; }
 #build-path-message { margin: 6px 0 7px; color: #91a096; font-size: .55rem; line-height: 1.35; }
+#calling-weapon-progression { margin: 8px 0 10px; padding: 9px; border: 1px solid #d2ac5961; border-radius: 8px; background: linear-gradient(145deg, #201a0e, #0b1712); box-shadow: inset 0 0 18px #c99f3210; }
+#calling-weapon-progression[hidden] { display: none; }
+#calling-weapon-progression > header { display: flex; align-items: start; justify-content: space-between; gap: 8px; }
+#calling-weapon-progression > header span { color: #d4af5c; font-size: .44rem; font-weight: 1000; letter-spacing: .13em; }
+#calling-weapon-progression > header strong { display: block; margin-top: 2px; color: #ffe3a0; font: 750 .72rem Georgia, serif; }
+#calling-weapon-progression > header b { color: #8dbda5; font-size: .43rem; letter-spacing: .08em; text-align: right; }
+#calling-weapon-mechanic { margin: 6px 0 8px; color: #bcc9be; font-size: .51rem; line-height: 1.4; }
+#calling-weapon-stages { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
+#calling-weapon-stages span { min-width: 0; padding: 5px 4px; border: 1px solid #52605755; border-radius: 5px; background: #08110d; opacity: .42; }
+#calling-weapon-stages span[data-unlocked="true"] { border-color: #9a7b3f80; background: #1b180e; opacity: .82; }
+#calling-weapon-stages span[data-current="true"] { border-color: #efc660; background: linear-gradient(145deg, #453516, #142019); box-shadow: 0 0 10px #d7ad3a2e; opacity: 1; }
+#calling-weapon-stages i, #calling-weapon-stages b { display: block; }
+#calling-weapon-stages i { color: #e6c66d; font-size: .42rem; font-style: normal; font-weight: 1000; }
+#calling-weapon-stages b { overflow: hidden; margin-top: 2px; color: #aebbb1; font-size: .39rem; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+#calling-weapon-next { display: block; margin-top: 7px; color: #80968a; font-size: .43rem; line-height: 1.35; }
+#calling-weapon-progression[data-compatible="false"] { border-color: #ad604f66; }
+#calling-weapon-progression[data-compatible="false"] #calling-weapon-next { color: #e58b72; }
+@media (max-width: 700px) {
+  #calling-weapon-stages { grid-template-columns: repeat(5, 42px); overflow-x: auto; padding-bottom: 3px; }
+  #calling-weapon-stages b { display: none; }
+}
 #assassin-journey { display: grid; gap: 4px; margin: 7px 0 9px; }
 #assassin-journey[hidden], #assassin-journey-trial[hidden] { display: none; }
 #assassin-journey p { margin: 0; padding: 6px 8px; border: 1px solid #9c5a634d; border-radius: 6px; background: #28191ba8; color: #f3c1bf; font-size: .52rem; line-height: 1.35; }
