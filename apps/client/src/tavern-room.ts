@@ -212,6 +212,10 @@ export function createTavernRoom(app: pc.Application): pc.Entity {
   app.root.addChild(root);
   const upperRoomShell = new pc.Entity("tavern-upper-room-shell");
   root.addChild(upperRoomShell);
+  const lowerRoomShell = new pc.Entity("tavern-lower-room-shell");
+  root.addChild(lowerRoomShell);
+  const lowerRoomRoof = new pc.Entity("tavern-lower-room-roof");
+  root.addChild(lowerRoomRoof);
 
   const oak = material(new pc.Color(.105, .045, .018), undefined, .14);
   const oakLight = material(new pc.Color(.31, .145, .045), undefined, .2);
@@ -238,22 +242,22 @@ export function createTavernRoom(app: pc.Application): pc.Entity {
     ["right-wall", [.35, 6.1, 16.5], [9.65, 11, 0]],
     ["front-wall-left", [8.25, 6.1, .35], [-5.55, 11, 8.15]],
     ["front-wall-right", [8.25, 6.1, .35], [5.55, 11, 8.15]],
-  ] as const) box(root, name, plaster, scale, position);
+  ] as const) box(lowerRoomShell, name, plaster, scale, position);
   for (const [scale, position] of [
     [[19.15, 1.05, .45], [0, 8.52, -7.93]], [[19.15, 1.05, .45], [0, 8.52, 7.93]],
     [[.45, 1.05, 15.7], [-9.43, 8.52, 0]], [[.45, 1.05, 15.7], [9.43, 8.52, 0]],
-  ] as const) box(root, "stone-wainscot", stone, scale, position);
-  addWallTimbers(root, oak);
+  ] as const) box(lowerRoomShell, "stone-wainscot", stone, scale, position);
+  addWallTimbers(lowerRoomShell, oak);
   // Frame the upper floor around a genuine stairwell. A single full slab made
   // the staircase visibly terminate in a ceiling even though travel worked.
-  box(root, "upper-floor-main", oak, [14.15, .3, 16.5], [-2.675, 14.85, 0]);
-  box(root, "upper-floor-east-rear", oak, [5.35, .3, 8.35], [7.075, 14.85, -4.075]);
-  box(root, "upper-floor-east-front", oak, [5.35, .3, 1], [7.075, 14.85, 7.75]);
-  box(root, "ceiling-rafter", oakLight, [19.75, .42, .46], [0, 13.72, -5.2]);
+  box(lowerRoomRoof, "upper-floor-main", oak, [14.15, .3, 16.5], [-2.675, 14.85, 0]);
+  box(lowerRoomRoof, "upper-floor-east-rear", oak, [5.35, .3, 8.35], [7.075, 14.85, -4.075]);
+  box(lowerRoomRoof, "upper-floor-east-front", oak, [5.35, .3, 1], [7.075, 14.85, 7.75]);
+  box(lowerRoomRoof, "ceiling-rafter", oakLight, [19.75, .42, .46], [0, 13.72, -5.2]);
   // The rafters beside the staircase stop at the well instead of forming a
   // waist-high bar across the player's view at the top step.
   for (const z of [0, 5.2])
-    box(root, "ceiling-rafter-trimmed", oakLight, [14.05, .42, .46], [-2.7, 13.72, z]);
+    box(lowerRoomRoof, "ceiling-rafter-trimmed", oakLight, [14.05, .42, .46], [-2.7, 13.72, z]);
 
   // The inn's upper floor is a real guest suite, reached from the stair landing.
   // It deliberately uses the same footprint as the common room so the building
@@ -329,18 +333,18 @@ export function createTavernRoom(app: pc.Application): pc.Entity {
   guestLight.addComponent("light", { type: "omni", color: new pc.Color(1, .62, .3), intensity: .82, range: 13, castShadows: false });
   guestLight.setLocalPosition(0, 18.4, -2.5); root.addChild(guestLight);
 
-  addWindow(root, "west-window-a", -9.42, -1.7, 0, oak, stoneLight, daylight);
-  addWindow(root, "west-window-b", -9.42, 3.8, 0, oak, stoneLight, daylight);
-  addWindow(root, "east-window", 9.42, -1.8, 180, oak, stoneLight, daylight);
-  box(root, "entrance-lintel", stoneLight, [3.45, .5, .55], [0, 12.7, 7.82]);
-  box(root, "entrance-frame-left", stone, [.52, 4.5, .65], [-1.65, 10.08, 7.82]);
-  box(root, "entrance-frame-right", stone, [.52, 4.5, .65], [1.65, 10.08, 7.82]);
+  addWindow(lowerRoomShell, "west-window-a", -9.42, -1.7, 0, oak, stoneLight, daylight);
+  addWindow(lowerRoomShell, "west-window-b", -9.42, 3.8, 0, oak, stoneLight, daylight);
+  addWindow(lowerRoomShell, "east-window", 9.42, -1.8, 180, oak, stoneLight, daylight);
+  box(lowerRoomShell, "entrance-lintel", stoneLight, [3.45, .5, .55], [0, 12.7, 7.82]);
+  box(lowerRoomShell, "entrance-frame-left", stone, [.52, 4.5, .65], [-1.65, 10.08, 7.82]);
+  box(lowerRoomShell, "entrance-frame-right", stone, [.52, 4.5, .65], [1.65, 10.08, 7.82]);
   box(root, "entrance-runner", rugGreen, [3.2, .035, 5.2], [0, 8.02, 5.25]);
 
   // The asset-backed west-wall bar leaves the entrance-to-hearth axis open.
-  box(root, "bar-menu-board", iron, [.16, 1.5, 2.2], [-9.26, 12.05, -1.4]);
+  box(lowerRoomShell, "bar-menu-board", iron, [.16, 1.5, 2.2], [-9.26, 12.05, -1.4]);
   for (let line = 0; line < 4; line++)
-    box(root, "bar-menu-line", brass, [.035, .045, 1.35 - line * .1], [-9.15, 12.42 - line * .28, -1.4]);
+    box(lowerRoomShell, "bar-menu-line", brass, [.035, .045, 1.35 - line * .1], [-9.15, 12.42 - line * .28, -1.4]);
 
   // A restrained stone hearth anchors the back wall without swallowing the room.
   const hearthX = 3.8;
@@ -389,9 +393,9 @@ export function createTavernRoom(app: pc.Application): pc.Entity {
   box(root, "quiz-rug", rugGreen, [4.35, .038, 3.55], [0, 8.022, 1.35]);
   box(root, "dining-rug", rugGreen, [4.5, .038, 3.8], [5.6, 8.022, 3.35]);
 
-  box(root, "notice-board", oak, [3.4, 2.25, .18], [-6.8, 10.55, 7.68]);
+  box(lowerRoomShell, "notice-board", oak, [3.4, 2.25, .18], [-6.8, 10.55, 7.68]);
   for (const [x, y, tint] of [[-7.65, 11.05, plaster], [-6.75, 10.42, brass], [-5.9, 11, plaster]] as const)
-    box(root, "notice-sheet", tint, [.58, .72, .045], [x, y, 7.55], [0, 0, x === -6.75 ? -7 : 4]);
+    box(lowerRoomShell, "notice-sheet", tint, [.58, .72, .045], [x, y, 7.55], [0, 0, x === -6.75 ? -7 : 4]);
 
   const maraFallback = new pc.Entity("mara-procedural-fallback");
   root.addChild(maraFallback);
@@ -444,7 +448,7 @@ export function createTavernRoom(app: pc.Application): pc.Entity {
   ]);
   loadProp(app, CRATE_URL, root, [{ position: [-8.25, 8.02, 6.4], yaw: 12, scale: 1.05 }]);
   loadProp(app, BUCKET_URL, root, [{ position: [7.95, 8.02, -6.6], yaw: -18, scale: 1.1 }]);
-  loadProp(app, TORCH_URL, root, [
+  loadProp(app, TORCH_URL, lowerRoomShell, [
     { position: [-9.25, 10.2, -4.2], yaw: 90, scale: 1.25 },
     { position: [9.25, 10.2, -4.2], yaw: -90, scale: 1.25 },
   ]);
@@ -520,12 +524,15 @@ export function createTavernRoom(app: pc.Application): pc.Entity {
   return root;
 }
 
-/** Opens the upper suite as a clean dollhouse view while the local player is
- * asleep. Collision remains authoritative; only the camera-blocking enclosure
- * and wall-mounted trophies are hidden. */
-export function setTavernSleepCutaway(root: pc.Entity | null, active: boolean): void {
-  const shell = root?.findByName("tavern-upper-room-shell");
-  if (shell) shell.enabled = !active;
+/** Opens the active storey as a clean third-person dollhouse. Collision remains
+ * authoritative: this only hides the camera-blocking roof and upper shell. */
+export function setTavernThirdPersonCutaway(root: pc.Entity | null, active: boolean, upstairs: boolean): void {
+  const upperShell = root?.findByName("tavern-upper-room-shell");
+  const lowerShell = root?.findByName("tavern-lower-room-shell");
+  const lowerRoof = root?.findByName("tavern-lower-room-roof");
+  if (upperShell) upperShell.enabled = !active;
+  if (lowerShell) lowerShell.enabled = !active || upstairs;
+  if (lowerRoof) lowerRoof.enabled = !active || upstairs;
 }
 
 export function setTavernTrophyProgress(root: pc.Entity | null, highestFloorCleared: number): void {
