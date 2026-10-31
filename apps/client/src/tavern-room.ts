@@ -174,6 +174,9 @@ export function createTavernRoom(app: pc.Application): pc.Entity {
   const daylight = material(new pc.Color(.12, .25, .34), new pc.Color(.06, .18, .28), .45);
   const fire = material(new pc.Color(1, .27, .025), new pc.Color(1, .12, .005), .15);
   const ember = material(new pc.Color(1, .62, .12), new pc.Color(.9, .22, .015), .1);
+  const cardIvory = material(new pc.Color(.92, .84, .66), undefined, .28);
+  const cardRed = material(new pc.Color(.58, .045, .035), undefined, .2);
+  const cardBlack = material(new pc.Color(.045, .04, .038), undefined, .2);
 
   box(root, "timber-floor", oakLight, [19.5, .22, 16.5], [0, 7.88, 0]);
   for (let x = -9; x <= 9; x += 1.5)
@@ -275,6 +278,12 @@ export function createTavernRoom(app: pc.Application): pc.Entity {
     { position: [0, 8.02, 1.35], yaw: 0, scale: 1.25 },
     { position: [5.6, 8.02, 3.35], yaw: 0, scale: 1.25 },
   ]);
+  // The eastern dining table doubles as the Higher or Lower card table.
+  box(root, "high-low-felt", rugRed, [2.75, .045, 1.55], [5.6, 9.075, 3.35]);
+  box(root, "high-low-card-red", cardIvory, [.62, .035, .9], [5.22, 9.105, 3.32], [0, -14, 0]);
+  box(root, "high-low-card-black", cardIvory, [.62, .035, .9], [5.96, 9.11, 3.34], [0, 12, 0]);
+  box(root, "high-low-heart", cardRed, [.18, .045, .18], [5.22, 9.145, 3.32], [0, -14, 0]);
+  box(root, "high-low-spade", cardBlack, [.18, .045, .18], [5.96, 9.15, 3.34], [0, 12, 0]);
   loadProp(app, CHAIR_URL, root, [
     { position: [-.85, 8.02, .25], yaw: 0, scale: 1.05 },
     { position: [.85, 8.02, 2.45], yaw: 180, scale: 1.05 },
@@ -290,15 +299,12 @@ export function createTavernRoom(app: pc.Application): pc.Entity {
     { position: [-6.82, 9.15, -1.25], yaw: -20, scale: 1.35 },
     { position: [-6.82, 9.15, 1.25], yaw: 8, scale: 1.35 },
     { position: [-.55, 9.08, 1.3], yaw: -15, scale: 1.25 },
-    { position: [5.05, 9.08, 3.3], yaw: 12, scale: 1.25 },
   ]);
   loadProp(app, PLATE_URL, root, [
     { position: [.55, 9.07, 1.35], yaw: 0, scale: 1.25 },
-    { position: [6.15, 9.07, 3.35], yaw: 0, scale: 1.25 },
   ]);
   loadProp(app, CANDLE_URL, root, [
     { position: [0, 9.07, 1.35], yaw: 0, scale: 1.05 },
-    { position: [5.6, 9.07, 3.35], yaw: 0, scale: 1.05 },
   ]);
   loadProp(app, BARREL_URL, root, [
     { position: [-8.35, 8.02, -6.35], yaw: 20, scale: 1.05 },

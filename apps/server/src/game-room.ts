@@ -163,6 +163,10 @@ import {
   TavernQuizStartSchema,
   TAVERN_QUIZ_MAX_PAYOUT,
   TAVERN_QUIZ_STARTING_COINS,
+  TavernHighLowStartSchema,
+  TavernHighLowGuessSchema,
+  TavernHighLowDecisionSchema,
+  TAVERN_HIGH_LOW_MAX_STREAK,
   type ActionRejected,
   type BlacksmithUpdate,
   type BlacksmithUpgradeId,
@@ -222,6 +226,7 @@ import {
   type LootPickedUp,
   type ResourceGathered,
   type TavernQuizUpdate,
+  type TavernHighLowUpdate,
   SILVER_DEPTHS_ROOM,
   TAVERN_ROOM,
   FAST_WORLD_TAVERN_ENTRANCE,
@@ -288,6 +293,7 @@ import { FOREST_PORTAL_POSITION, FOREST_DUNGEON_ENTRY, FOREST_DUNGEON_EXIT, FORE
 import { ForestPortalState } from "./schema.js";
 import { ROOT_LANE_DURATION_MS, ROOT_LANE_RADIUS, guardianCoverHit, rootLaneHazards } from "./root-guardian.js";
 import { canStartTavernQuiz, doubledPayout, drawQuizQuestion, mustSettleQuiz, type QuizRound } from "./tavern-quiz.js";
+import { canStartHighLow, drawTavernCard, highLowPayout, highLowResult, type HighLowRound } from "./tavern-high-low.js";
 import { blacksmithNextStep, buyDepthsReward, canTradeAtBlacksmith, forgeBlacksmithUpgrade, ironCapacity, mineralSale, ironSwordDamageBonus, minedIronQuantity, minedMineral, ownedBlacksmithUpgrades, ownedDepthsRewards, ownsBlacksmithUpgrade, ownsDepthsReward } from "./blacksmith.js";
 import { GREENWOOD_CRAWLER_HOMES, REALM_WARDEN_GATE_POSITION, REALM_WARDEN_HOME, STONE_BRUTE_ARENA_HOME, isInGreenwoodRegion, isInRealmWardenArena, isInStoneBruteArena, isInAshenReach, isInSouthernQuarry, wildernessTerritoryAt } from "@blockcraft/voxel-world";
 import { ASHEN_RELIQUARY_POSITION } from "@blockcraft/voxel-world";
@@ -667,6 +673,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly profileSaveFingerprints = new Map<string, string>();
   private readonly profileSaveQueues = new Map<string, Promise<void>>();
   private readonly quizRounds = new Map<string, QuizRound>();
+  private readonly highLowRounds = new Map<string, HighLowRound>();
   private readonly objectiveProgress = new Map<string, WorldObjectiveProgress>();
   private readonly normalLootCadence = new NormalLootCadence();
   private readonly ashenReliquary = new AshenReliquaryCycle();
@@ -1083,6 +1090,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     aliveMessage("quiz:start", (client, payload) => this.handleQuizStart(client, payload));
     aliveMessage("quiz:answer", (client, payload) => this.handleQuizAnswer(client, payload));
     aliveMessage("quiz:decision", (client, payload) => this.handleQuizDecision(client, payload));
+    this.onMessage("high-low:sync", client => this.sendHighLowState(client));
+    aliveMessage("high-low:start", (client, payload) => this.handleHighLowStart(client, payload));
+    aliveMessage("high-low:guess", (client, payload) => this.handleHighLowGuess(client, payload));
+    aliveMessage("high-low:decision", (client, payload) => this.handleHighLowDecision(client, payload));
     this.onMessage("blacksmith:sync", client => this.handleBlacksmithSync(client));
     this.onMessage("storage:sync", client => this.sendStorageState(client));
     this.onMessage("storage:transfer", (client, payload: unknown) => {
@@ -1395,6 +1406,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.profileTokens.delete(client.sessionId);
     this.profileSaveFingerprints.delete(client.sessionId);
     this.quizRounds.delete(client.sessionId);
+    this.highLowRounds.delete(client.sessionId);
     this.objectiveProgress.delete(client.sessionId);
     this.selectedRealmHunts.delete(client.sessionId);
     this.huntContracts.delete(client.sessionId);
@@ -1639,6 +1651,83 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     round.askedIds.push(question.id);
     round.phase = "question";
     this.sendQuizState(client, "Double or nothing. Here's your next question.");
+  }
+
+  private sendHighLowState(client: Client, message?: string, revealedCard?: HighLowRound["currentCard"],
+    result?: TavernHighLowUpdate["result"]): void {
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+    const round = this.highLowRounds.get(client.sessionId);
+    client.send("high-low:update", round ? {
+      phase: "guess", coins: player.coins, stake: round.stake, payout: round.payout, streak: round.streak,
+      currentCard: round.currentCard, revealedCard, result, message,
+    } : { phase: "idle", coins: player.coins, message } satisfies TavernHighLowUpdate);
+  }
+
+  private highLowError(client: Client, message: string): void {
+    if (this.highLowRounds.has(client.sessionId)) return this.sendHighLowState(client, message);
+    const player = this.state.players.get(client.sessionId);
+    client.send("high-low:update", { phase: "error", coins: player?.coins ?? 0, message } satisfies TavernHighLowUpdate);
+  }
+
+  private handleHighLowStart(client: Client, payload: unknown): void {
+    const parsed = TavernHighLowStartSchema.safeParse(payload);
+    const player = this.state.players.get(client.sessionId);
+    if (!parsed.success || !player) return this.highLowError(client, "Choose a stake of 1, 5, or 10 coins.");
+    if (this.highLowRounds.has(client.sessionId)) return this.sendHighLowState(client);
+    if (this.roomKind !== "tavern" || !canStartHighLow(player, player.coins, parsed.data.stake))
+      return this.highLowError(client, "Stand beside the Higher or Lower card table with enough coins to place that stake.");
+    player.coins -= parsed.data.stake;
+    this.highLowRounds.set(client.sessionId, {
+      stake: parsed.data.stake, payout: parsed.data.stake, streak: 0, currentCard: drawTavernCard(),
+    });
+    void this.persistPlayer(client.sessionId, player);
+    this.sendHighLowState(client, "Will the next card be higher or lower?");
+  }
+
+  private settleHighLow(client: Client, player: PlayerState, round: HighLowRound, message: string): void {
+    player.coins = Math.min(1_000_000, player.coins + round.payout);
+    this.highLowRounds.delete(client.sessionId);
+    void this.persistPlayer(client.sessionId, player);
+    client.send("high-low:update", { phase: "won", coins: player.coins, stake: round.stake,
+      payout: round.payout, streak: round.streak, currentCard: round.currentCard, message } satisfies TavernHighLowUpdate);
+  }
+
+  private handleHighLowGuess(client: Client, payload: unknown): void {
+    const parsed = TavernHighLowGuessSchema.safeParse(payload);
+    const player = this.state.players.get(client.sessionId);
+    const round = this.highLowRounds.get(client.sessionId);
+    if (!parsed.success || !player || !round) return this.highLowError(client, "Place a stake before choosing a card.");
+    const previous = round.currentCard;
+    const next = drawTavernCard();
+    const result = highLowResult(previous, next, parsed.data.guess);
+    if (result === "wrong") {
+      this.highLowRounds.delete(client.sessionId);
+      client.send("high-low:update", { phase: "lost", coins: player.coins, stake: round.stake, payout: 0,
+        streak: round.streak, currentCard: previous, revealedCard: next, result,
+        message: "Wrong call. The house takes the pot." } satisfies TavernHighLowUpdate);
+      return;
+    }
+    round.currentCard = next;
+    if (result === "push") {
+      this.sendHighLowState(client, "Same rank · your pot is safe. Guess again.", next, result);
+      return;
+    }
+    round.streak += 1;
+    round.payout = highLowPayout(round.stake, round.streak);
+    if (round.streak >= TAVERN_HIGH_LOW_MAX_STREAK) {
+      this.settleHighLow(client, player, round, "Six correct calls! You cleared the table and collected the maximum run.");
+      return;
+    }
+    this.sendHighLowState(client, `Correct! Your pot is now ${round.payout} coins. Collect it or guess again.`, next, result);
+  }
+
+  private handleHighLowDecision(client: Client, payload: unknown): void {
+    const parsed = TavernHighLowDecisionSchema.safeParse(payload);
+    const player = this.state.players.get(client.sessionId);
+    const round = this.highLowRounds.get(client.sessionId);
+    if (!parsed.success || !player || !round) return this.highLowError(client, "There is no active card run to collect.");
+    this.settleHighLow(client, player, round, "You collected the pot. The table remembers a wise gambler.");
   }
 
   private sendStorageState(client: Client, message?: string): void {

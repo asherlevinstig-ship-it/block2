@@ -224,6 +224,7 @@
     <div id="combat-reticle" hidden aria-hidden="true"><span></span></div>
     <div id="tablet-aim-guide" hidden aria-hidden="true"><span></span></div>
     <div id="quiz-table-prompt" hidden>DOUBLE OR QUIT <small>Press E to play</small></div>
+    <div id="high-low-table-prompt" hidden>HIGHER OR LOWER <small>Press E to play cards</small></div>
     <div id="tavern-keeper-prompt" hidden>MARA · INNKEEPER <small>Press E to rest and prepare</small></div>
     <div id="blacksmith-prompt" hidden>BLACKSMITH <small>Press E to trade or forge</small></div>
     <button id="player-trade-prompt" type="button" hidden>
@@ -282,6 +283,30 @@
         <button id="tavern-quiz-quit" type="button"><strong>COLLECT</strong><small>Keep the pot</small></button>
       </div>
       <div class="quiz-footer"><span>MAX POT · 1,024 COINS</span><button id="tavern-quiz-close" type="button">Leave table</button></div>
+    </section>
+    <section id="tavern-high-low" role="dialog" aria-label="Higher or Lower card table" data-phase="idle" hidden>
+      <header class="high-low-header">
+        <div><p class="eyebrow">THE HEARTH & HAMMER · CARD TABLE</p><h2>Higher <span>or</span> Lower</h2></div>
+        <div class="quiz-purse"><span class="quiz-coin" aria-hidden="true">✦</span><span><small>YOUR PURSE</small><strong id="high-low-balance">20</strong></span></div>
+      </header>
+      <div class="high-low-table-felt">
+        <div class="high-low-card-slot"><small>CURRENT CARD</small><div id="high-low-current-card" class="playing-card card-back"><b>?</b><i></i></div></div>
+        <div class="high-low-card-arrow" aria-hidden="true">◆</div>
+        <div class="high-low-card-slot"><small>NEXT CARD</small><div id="high-low-next-card" class="playing-card card-back"><b>?</b><i></i></div></div>
+      </div>
+      <div class="high-low-run"><span>STREAK <strong id="high-low-streak">0 / 6</strong></span><span>POT <strong id="high-low-pot">0 coins</strong></span></div>
+      <p id="high-low-message" aria-live="polite">Place a stake, then predict the next card.</p>
+      <p class="high-low-rules">A correct call doubles your pot. Equal ranks are a free redraw. Collect whenever you want; one wrong call loses the pot.</p>
+      <div id="high-low-stakes" class="tavern-quiz-actions">
+        <button type="button" data-high-low-stake="1"><small>STAKE</small><strong>1</strong><span>coin</span></button>
+        <button type="button" data-high-low-stake="5"><small>STAKE</small><strong>5</strong><span>coins</span></button>
+        <button type="button" data-high-low-stake="10"><small>STAKE</small><strong>10</strong><span>coins</span></button>
+      </div>
+      <div id="high-low-choices" class="high-low-choices" hidden>
+        <button id="high-low-higher" type="button"><span>▲</span><strong>HIGHER</strong><small>Next rank goes up</small></button>
+        <button id="high-low-lower" type="button"><span>▼</span><strong>LOWER</strong><small>Next rank goes down</small></button>
+      </div>
+      <div class="high-low-footer"><button id="high-low-collect" type="button" hidden>COLLECT POT</button><button id="high-low-close" type="button">Leave table</button></div>
     </section>
     <section id="blacksmith-panel" role="dialog" aria-label="Blacksmith trading and forging" hidden>
       <p class="eyebrow">TOWN OF BEGINNINGS · BLACKSMITH</p>

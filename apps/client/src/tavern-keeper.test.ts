@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canPlayAtTavernTable, canTalkToTavernKeeper, TAVERN_KEEPER,
+import { canPlayAtTavernTable, canPlayHigherOrLower, canTalkToTavernKeeper, TAVERN_HIGH_LOW_TABLE, TAVERN_KEEPER,
   TAVERN_ROOM_KEEPER, TAVERN_ROOM_QUIZ_TABLE } from "./tavern-keeper.js";
 
 describe("tavernkeeper interaction", () => {
@@ -31,5 +31,17 @@ describe("tavern quiz table interaction", () => {
 
   it("supports the dedicated room's blue-and-gold table", () => {
     expect(canPlayAtTavernTable({ x: 0, y: 8, z: 3.2 }, true, TAVERN_ROOM_QUIZ_TABLE)).toBe(true);
+  });
+});
+
+describe("higher or lower table interaction", () => {
+  it("can be reached from beside the tavern card table", () => {
+    expect(canPlayHigherOrLower({ x: TAVERN_HIGH_LOW_TABLE.x + 1.4, y: 9, z: TAVERN_HIGH_LOW_TABLE.z }, true)).toBe(true);
+  });
+
+  it("does not open across the room, on another floor, or when the room is hidden", () => {
+    expect(canPlayHigherOrLower({ x: -5, y: 9, z: -3 }, true)).toBe(false);
+    expect(canPlayHigherOrLower({ x: TAVERN_HIGH_LOW_TABLE.x, y: 6, z: TAVERN_HIGH_LOW_TABLE.z }, true)).toBe(false);
+    expect(canPlayHigherOrLower({ x: TAVERN_HIGH_LOW_TABLE.x, y: 9, z: TAVERN_HIGH_LOW_TABLE.z }, false)).toBe(false);
   });
 });

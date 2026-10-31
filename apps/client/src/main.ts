@@ -352,7 +352,9 @@ import {
   type ItemId,
   type LootPickedUp,
   type ResourceGathered,
+  type TavernCard,
   type TavernQuizUpdate,
+  type TavernHighLowUpdate,
   TAVERN_QUIZ_STARTING_COINS,
   type MainHandId,
   type MoveRequest,
@@ -519,7 +521,7 @@ import { CombatAudio, enemyCuePan, enemyCuesForTransition, type EnemyCue, type E
 import { LazySceneDressing } from "./lazy-scene-dressing.js";
 import { WARDEN_LOOT_BEAM_MS } from "./warden-victory-effects.js";
 import { advanceIndoorCameraBlend, indoorCameraOffset } from "./indoor-camera.js";
-import { canPlayAtTavernTable, canTalkToTavernKeeper, TAVERN_KEEPER, TAVERN_KEEPER_LINES, TAVERN_QUIZ_TABLE,
+import { canPlayAtTavernTable, canPlayHigherOrLower, canTalkToTavernKeeper, TAVERN_HIGH_LOW_TABLE, TAVERN_KEEPER, TAVERN_KEEPER_LINES, TAVERN_QUIZ_TABLE,
   TAVERN_ROOM_KEEPER, TAVERN_ROOM_QUIZ_TABLE } from "./tavern-keeper.js";
 import { BLACKSMITH_STALL, canTradeAtBlacksmithStall } from "./blacksmith.js";
 import { FAST_WORLD_BLACKSMITH_POSITION } from "@blockcraft/protocol";
@@ -1149,6 +1151,7 @@ const potionUse = document.querySelector<HTMLButtonElement>("#potion-use")!;
 const potionCount = document.querySelector<HTMLElement>("#potion-count")!;
 const potionShopStatus = document.querySelector<HTMLElement>("#potion-shop-status")!;
 const quizTablePrompt = document.querySelector<HTMLElement>("#quiz-table-prompt")!;
+const highLowTablePrompt = document.querySelector<HTMLElement>("#high-low-table-prompt")!;
 const tavernKeeperPrompt = document.querySelector<HTMLElement>("#tavern-keeper-prompt")!;
 const tavernRest = document.querySelector<HTMLButtonElement>("#tavern-rest")!;
 const tavernBind = document.querySelector<HTMLButtonElement>("#tavern-bind")!;
@@ -1204,6 +1207,19 @@ const quizDecision = document.querySelector<HTMLElement>("#tavern-quiz-decision"
 const quizDouble = document.querySelector<HTMLButtonElement>("#tavern-quiz-double")!;
 const quizQuit = document.querySelector<HTMLButtonElement>("#tavern-quiz-quit")!;
 const quizClose = document.querySelector<HTMLButtonElement>("#tavern-quiz-close")!;
+const highLowPanel = document.querySelector<HTMLElement>("#tavern-high-low")!;
+const highLowBalance = document.querySelector<HTMLElement>("#high-low-balance")!;
+const highLowCurrentCard = document.querySelector<HTMLElement>("#high-low-current-card")!;
+const highLowNextCard = document.querySelector<HTMLElement>("#high-low-next-card")!;
+const highLowStreak = document.querySelector<HTMLElement>("#high-low-streak")!;
+const highLowPot = document.querySelector<HTMLElement>("#high-low-pot")!;
+const highLowMessage = document.querySelector<HTMLElement>("#high-low-message")!;
+const highLowStakes = document.querySelector<HTMLElement>("#high-low-stakes")!;
+const highLowChoices = document.querySelector<HTMLElement>("#high-low-choices")!;
+const highLowHigher = document.querySelector<HTMLButtonElement>("#high-low-higher")!;
+const highLowLower = document.querySelector<HTMLButtonElement>("#high-low-lower")!;
+const highLowCollect = document.querySelector<HTMLButtonElement>("#high-low-collect")!;
+const highLowClose = document.querySelector<HTMLButtonElement>("#high-low-close")!;
 const tavernCoins = document.querySelector<HTMLElement>("#tavern-coins")!;
 const dangerZone = document.querySelector<HTMLElement>("#location-readout")!;
 const dangerZoneName = document.querySelector<HTMLElement>("#danger-zone-name")!;
@@ -1555,6 +1571,9 @@ if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine
 if ([quizTablePrompt, tavernKeeperPrompt, tavernRest, tavernBind, tavernBindStatus, tavernBountyList, blacksmithPrompt, playerTradePrompt, playerTradeName, blacksmithPanel, blacksmithMessage, blacksmithOre, blacksmithGold, blacksmithPrice, blacksmithSell, blacksmithClose, haulEquipName, haulEquipDetail, haulEquip, haulSalvageCount, haulSalvageDetail, haulSalvage, haulStoreCount, haulStore, haulUpgradeName, haulUpgradeTrack, haulUpgradeDetail, haulRegionName, haulRegionDetail, haulTrackRegion, quizPanel, quizBalance, quizBalanceAmount, quizPotDisplay, quizPotLabel, quizWinToast, quizAnswerFeedback, quizFeedbackIcon, quizFeedbackTitle, quizFeedbackDetail, quizMessage, quizStakeHeading, quizStakes, quizQuestion, quizPot, quizPrompt, quizChoices, quizDecision, quizDouble, quizQuit, quizClose, tavernCoins].some(element => !element) || blacksmithUpgradeCards.length !== Object.keys(BLACKSMITH_UPGRADES).length) {
   throw new Error("Tavern quiz shell is missing required elements");
 }
+if ([highLowTablePrompt, highLowPanel, highLowBalance, highLowCurrentCard, highLowNextCard, highLowStreak,
+  highLowPot, highLowMessage, highLowStakes, highLowChoices, highLowHigher, highLowLower, highLowCollect, highLowClose]
+  .some(element => !element)) throw new Error("Higher or Lower shell is missing required elements");
 for (const bounty of rotatingTavernBounties()) {
   const card = document.createElement("article");
   card.className = "tavern-bounty";
@@ -12833,6 +12852,7 @@ window.addEventListener("pageshow", () => { if (!inventoryPanel.hidden) refreshI
 
 let tavernCoinBalance = TAVERN_QUIZ_STARTING_COINS;
 let quizPending = false;
+let highLowPending = false;
 let coinCountAnimationActive = false;
 let coinCountAnimationFrame = 0;
 const coinLabel = (amount: number): string => `${amount} ${amount === 1 ? "coin" : "coins"}`;
@@ -12841,10 +12861,14 @@ function updateTavernCoins(coins: number): void {
   tavernCoinBalance = Math.max(0, Math.floor(coins));
   tavernCoins.textContent = tavernCoinBalance.toLocaleString();
   blacksmithGold.textContent = tavernCoinBalance.toLocaleString();
+  highLowBalance.textContent = tavernCoinBalance.toLocaleString();
   blacksmithSell.disabled = blacksmithPending || ((inventoryCounts.get("iron_ore") ?? 0) + (inventoryCounts.get("silver_ore") ?? 0)) <= 0 || tavernCoinBalance >= 1_000_000;
   if (!coinCountAnimationActive) quizBalanceAmount.textContent = tavernCoinBalance.toLocaleString();
   for (const button of quizStakes.querySelectorAll<HTMLButtonElement>("[data-quiz-stake]")) {
     button.disabled = quizPending || Number(button.dataset.quizStake) > tavernCoinBalance;
+  }
+  for (const button of highLowStakes.querySelectorAll<HTMLButtonElement>("[data-high-low-stake]")) {
+    button.disabled = highLowPending || Number(button.dataset.highLowStake) > tavernCoinBalance;
   }
 }
 
@@ -13713,6 +13737,7 @@ function renderTavernQuiz(update: TavernQuizUpdate): void {
 function openTavernQuiz(): void {
   closeTavernDialogue();
   setInventoryOpen(false);
+  highLowPanel.hidden = true;
   quizPanel.hidden = false;
   if (room) room.send("quiz:sync");
   else quizMessage.textContent = "Connecting to the quiz table...";
@@ -13735,6 +13760,110 @@ for (const [button, decision] of [[quizDouble, "double"], [quizQuit, "quit"]] as
     room.send("quiz:decision", { decision });
   });
 }
+
+const CARD_RANK_LABELS: Record<number, string> = { 11: "J", 12: "Q", 13: "K", 14: "A" };
+const CARD_SUIT_SYMBOLS: Record<TavernCard["suit"], string> = {
+  hearts: "♥", diamonds: "♦", clubs: "♣", spades: "♠",
+};
+let highLowCurrentCardCache: TavernCard | undefined;
+let highLowRevealTimer = 0;
+
+function renderTavernCard(element: HTMLElement, card?: TavernCard): void {
+  element.classList.toggle("card-back", !card);
+  element.classList.toggle("red", card?.suit === "hearts" || card?.suit === "diamonds");
+  const rank = element.querySelector<HTMLElement>("b")!;
+  const suit = element.querySelector<HTMLElement>("i")!;
+  rank.textContent = card ? (CARD_RANK_LABELS[card.rank] ?? String(card.rank)) : "?";
+  suit.textContent = card ? CARD_SUIT_SYMBOLS[card.suit] : "";
+  element.setAttribute("aria-label", card
+    ? `${CARD_RANK_LABELS[card.rank] ?? card.rank} of ${card.suit}`
+    : "Face-down card");
+}
+
+function finishHighLowReveal(update: TavernHighLowUpdate): void {
+  if (update.phase === "guess") {
+    renderTavernCard(highLowCurrentCard, update.currentCard);
+    renderTavernCard(highLowNextCard);
+  }
+  highLowCurrentCardCache = update.currentCard;
+  highLowPending = false;
+  highLowHigher.disabled = false;
+  highLowLower.disabled = false;
+  highLowCollect.disabled = false;
+  updateTavernCoins(update.coins);
+}
+
+function renderHighLow(update: TavernHighLowUpdate): void {
+  window.clearTimeout(highLowRevealTimer);
+  highLowPanel.dataset.phase = update.phase;
+  if (update.result) highLowPanel.dataset.result = update.result;
+  else delete highLowPanel.dataset.result;
+  highLowMessage.textContent = update.message ?? "Place a stake, then predict the next card.";
+  highLowStreak.textContent = `${update.streak ?? 0} / 6`;
+  highLowPot.textContent = coinLabel(update.payout ?? 0);
+  const active = update.phase === "guess";
+  highLowStakes.hidden = active;
+  highLowChoices.hidden = !active;
+  highLowCollect.hidden = !active || (update.streak ?? 0) < 1;
+  highLowPending = false;
+  updateTavernCoins(update.coins);
+
+  const revealing = Boolean(update.revealedCard && update.result);
+  if (revealing) {
+    renderTavernCard(highLowCurrentCard, highLowCurrentCardCache ?? update.currentCard);
+    renderTavernCard(highLowNextCard, update.revealedCard);
+    highLowHigher.disabled = true;
+    highLowLower.disabled = true;
+    highLowCollect.disabled = true;
+    if (active) highLowPending = true;
+    if (active) {
+      highLowRevealTimer = window.setTimeout(() => finishHighLowReveal(update), 700);
+    } else {
+      highLowCurrentCardCache = undefined;
+    }
+    return;
+  }
+  renderTavernCard(highLowCurrentCard, update.currentCard);
+  renderTavernCard(highLowNextCard);
+  highLowCurrentCardCache = update.currentCard;
+}
+
+function openHighLow(): void {
+  closeTavernDialogue();
+  setInventoryOpen(false);
+  quizPanel.hidden = true;
+  highLowPanel.hidden = false;
+  if (room) room.send("high-low:sync");
+  else highLowMessage.textContent = "Connecting to the card table...";
+}
+
+highLowClose.addEventListener("click", () => { highLowPanel.hidden = true; });
+for (const button of highLowStakes.querySelectorAll<HTMLButtonElement>("[data-high-low-stake]")) {
+  button.addEventListener("click", () => {
+    if (!room || highLowPending) return;
+    highLowPending = true;
+    updateTavernCoins(tavernCoinBalance);
+    room.send("high-low:start", { stake: Number(button.dataset.highLowStake) });
+  });
+}
+for (const [button, guess] of [[highLowHigher, "higher"], [highLowLower, "lower"]] as const) {
+  button.addEventListener("click", () => {
+    if (!room || highLowPending) return;
+    highLowPending = true;
+    highLowHigher.disabled = true;
+    highLowLower.disabled = true;
+    highLowCollect.disabled = true;
+    room.send("high-low:guess", { guess });
+  });
+}
+highLowCollect.addEventListener("click", () => {
+  if (!room || highLowPending) return;
+  highLowPending = true;
+  highLowHigher.disabled = true;
+  highLowLower.disabled = true;
+  highLowCollect.disabled = true;
+  room.send("high-low:decision", { decision: "collect" });
+});
 
 function updatePointerPosition(event: PointerEvent): void {
   rangedPointer.active = event.pointerType === "mouse";
@@ -14072,6 +14201,14 @@ function updateTarget(): void {
     quizTablePrompt.style.left = `${rect.left + screen.x * rect.width / canvas.width}px`;
     quizTablePrompt.style.top = `${rect.top + screen.y * rect.height / canvas.height}px`;
   }
+  const highLowNearby = tavernRoomRequested && canPlayHigherOrLower(player, true);
+  highLowTablePrompt.hidden = !highLowNearby || !highLowPanel.hidden;
+  if (!highLowTablePrompt.hidden) {
+    const screen = camera.camera.worldToScreen(new pc.Vec3(TAVERN_HIGH_LOW_TABLE.x, TAVERN_HIGH_LOW_TABLE.y + .5, TAVERN_HIGH_LOW_TABLE.z));
+    const rect = canvas.getBoundingClientRect();
+    highLowTablePrompt.style.left = `${rect.left + screen.x * rect.width / canvas.width}px`;
+    highLowTablePrompt.style.top = `${rect.top + screen.y * rect.height / canvas.height}px`;
+  }
   const keeperNearby = canTalkToTavernKeeper(player, tavernRoomRequested || sceneDressing.keeperVisible,
     tavernRoomRequested ? TAVERN_ROOM_KEEPER : TAVERN_KEEPER);
   tavernKeeperPrompt.hidden = !keeperNearby || !tavernDialogue.hidden;
@@ -14101,7 +14238,7 @@ function updateTarget(): void {
   const ashenReliquaryPreviewNearby = canPreviewAshenReliquary();
   const ashenReliquaryNearby = ashenReliquaryClaimNearby || ashenReliquaryPreviewNearby;
   if (!roadsideChoice.hidden && roadsideChoice.dataset.id !== roadsideEncounter?.id) closeRoadsideChoice();
-  updatePlayerTradePrompt(Boolean(nearbyLoot || ashenReliquaryNearby || nearbyForestPortal || roleOpportunity || roadsideEncounter || expeditionBoardNearby || blacksmithNearby || quizTableNearby || keeperNearby || chestNearby));
+  updatePlayerTradePrompt(Boolean(nearbyLoot || ashenReliquaryNearby || nearbyForestPortal || roleOpportunity || roadsideEncounter || expeditionBoardNearby || blacksmithNearby || highLowNearby || quizTableNearby || keeperNearby || chestNearby));
   const contextAction = tabletContextAction({
     tradePlayer: Boolean(nearbyTradePlayerId),
     recoveryBag: Boolean(nearbyRecoveryBag),
@@ -14114,7 +14251,7 @@ function updateTarget(): void {
     roadside: Boolean(roadsideEncounter),
     expeditionBoard: expeditionBoardNearby,
     blacksmith: blacksmithNearby,
-    quiz: quizTableNearby,
+    quiz: highLowNearby || quizTableNearby,
     keeper: keeperNearby,
   });
   contextButton.hidden = contextAction === null;
@@ -14127,7 +14264,7 @@ function updateTarget(): void {
     contextButton.style.setProperty("--context-progress", "0%");
     delete contextButton.dataset.hold;
   }
-  const nextKey = `${interactionMode}:${targetKey}:${currentTarget?.block ?? -1}:${availability}:${combatKey}:${keeperNearby}:${quizTableNearby}:${blacksmithNearby}:${expeditionBoardNearby}:${chestNearby}:${nearbyLoot}:${ashenReliquaryNearby}:${nearbyForestPortal}:${nearbyRecoveryBag}:${nearbyTradePlayerId}:${roleOpportunity?.id ?? "none"}:${roadsideEncounter?.id ?? "none"}`;
+  const nextKey = `${interactionMode}:${targetKey}:${currentTarget?.block ?? -1}:${availability}:${combatKey}:${keeperNearby}:${highLowNearby}:${quizTableNearby}:${blacksmithNearby}:${expeditionBoardNearby}:${chestNearby}:${nearbyLoot}:${ashenReliquaryNearby}:${nearbyForestPortal}:${nearbyRecoveryBag}:${nearbyTradePlayerId}:${roleOpportunity?.id ?? "none"}:${roadsideEncounter?.id ?? "none"}`;
   if (nextKey === targetStateKey) return;
   targetStateKey = nextKey;
   const tint = availability === "ready" ? hit?.block === Block.SilverOre ? new pc.Color(0.55, 0.88, 1) : new pc.Color(1, 0.73, 0.25) : new pc.Color(1, 0.25, 0.2);
@@ -14174,6 +14311,7 @@ function updateTarget(): void {
   }
   else if (expeditionBoardNearby) targetLabel.textContent = "Forest Dungeon Gate · press E to open a solo or party run";
   else if (blacksmithNearby) targetLabel.textContent = "Blacksmith stall · press E to trade ore or forge equipment";
+  else if (highLowNearby) targetLabel.textContent = "Higher or Lower table · press E or Play";
   else if (quizTableNearby) targetLabel.textContent = "Double or Quit table · press E or Play";
   else if (keeperNearby) targetLabel.textContent = `${TAVERN_KEEPER.name} · Tavernkeeper — press E or Talk`;
   else if (interactionMode === "combat" && combatMob) {
@@ -16457,6 +16595,10 @@ function requestWorldInteraction(): void {
   }
   if (canTradeAtBlacksmithStall(localPlayer.getPosition(), sceneDressing.blacksmithVisible, fastWorldRequested)) {
     openBlacksmith();
+    return;
+  }
+  if (tavernRoomRequested && canPlayHigherOrLower(localPlayer.getPosition(), true)) {
+    openHighLow();
     return;
   }
   if (canPlayAtTavernTable(localPlayer.getPosition(), tavernRoomRequested || sceneDressing.keeperVisible,
@@ -19989,6 +20131,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     status.textContent = `${mainHand.name} equipped · Attack: ${mainHand.attackName}.`;
   });
   room.onMessage("quiz:update", (update: TavernQuizUpdate) => renderTavernQuiz(update));
+  room.onMessage("high-low:update", (update: TavernHighLowUpdate) => renderHighLow(update));
   room.onMessage("blacksmith:update", (update: BlacksmithUpdate) => {
     renderBlacksmith(update);
     if (update.phase === "traded") status.textContent = update.message;

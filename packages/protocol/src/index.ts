@@ -657,6 +657,9 @@ export function equipmentAffixResonanceForLoadout(mainHandItemId: string | null,
 export const TAVERN_QUIZ_STARTING_COINS = 20;
 export const TAVERN_QUIZ_MAX_STAKE = 10;
 export const TAVERN_QUIZ_MAX_PAYOUT = 1024;
+export const TAVERN_HIGH_LOW_MAX_STREAK = 6;
+export const TAVERN_HIGH_LOW_MAX_PAYOUT = 640;
+export const TAVERN_HIGH_LOW_TABLE_POSITION = { x: 5.6, y: 9, z: 3.35 } as const;
 export const IRON_ORE_GOLD_PRICE = 3;
 export const SILVER_ORE_GOLD_PRICE = 8;
 export const EMBER_ORE_GOLD_PRICE = 10;
@@ -955,6 +958,21 @@ export type TavernQuizUpdate = {
   stake?: number;
   payout?: number;
   question?: { id: string; prompt: string; choices: string[] };
+  message?: string;
+};
+export const TavernHighLowStartSchema = z.object({ stake: z.union([z.literal(1), z.literal(5), z.literal(10)]) }).strict();
+export const TavernHighLowGuessSchema = z.object({ guess: z.enum(["higher", "lower"]) }).strict();
+export const TavernHighLowDecisionSchema = z.object({ decision: z.literal("collect") }).strict();
+export type TavernCard = { rank: number; suit: "hearts" | "diamonds" | "clubs" | "spades" };
+export type TavernHighLowUpdate = {
+  phase: "idle" | "guess" | "won" | "lost" | "error";
+  coins: number;
+  stake?: number;
+  payout?: number;
+  streak?: number;
+  currentCard?: TavernCard;
+  revealedCard?: TavernCard;
+  result?: "correct" | "wrong" | "push";
   message?: string;
 };
 
