@@ -8,7 +8,8 @@ export const TAVERN_KEEPER = {
 
 export const TAVERN_KEEPER_LINES = [
   "Welcome to the Hearth & Hammer. I'm Mara. Come in and warm yourself by the fire.",
-  "The east gate leads into rough country. Keep your weapon close and watch the road.",
+  "Rest here to restore your strength, or bind the inn as the room you'll return to after defeat.",
+  "Today's tower contracts are on the board. They rotate, so check them before every climb.",
   "Fancy a round of Double or Quit? Head to the blue-and-gold table and press E.",
 ] as const;
 

@@ -1,9 +1,11 @@
 import * as pc from "playcanvas";
 import { addCallingParticleLayers } from "./calling-particles.js";
-import { bindTownNpcRig, loadTownNpcAssets, TOWN_NPC_MODEL_YAW } from "./town-npc-assets.js";
+import { bindTownNpcRig, loadTownNpcAssets, TOWN_NPC_MODEL_YAW, transitionTownNpcRig } from "./town-npc-assets.js";
 
 const DUNGEON_ASSET_ROOT = "/assets/kaykit-dungeon";
 const TORCH_URL = `${DUNGEON_ASSET_ROOT}/torch_lit.gltf.glb`;
+const TROPHY_LOCKED_URL = `${DUNGEON_ASSET_ROOT}/sword_shield_broken.gltf.glb`;
+const TROPHY_VICTORY_URL = `${DUNGEON_ASSET_ROOT}/sword_shield_gold.gltf.glb`;
 const FANTASY_PROP_ROOT = "/assets/quaternius-fantasy-props";
 const propUrl = (name: string): string => `${FANTASY_PROP_ROOT}/${name}.gltf`;
 const CHAIR_URL = propUrl("Chair_1");
@@ -101,11 +103,16 @@ function addWallTimbers(parent: pc.Entity, oak: pc.Material): void {
   }
 }
 
-function loadTavernPeople(app: pc.Application, root: pc.Entity, proceduralMara: pc.Entity): void {
+interface TavernPersonMotion { entity: pc.Entity; nextGesture: number; gestureEnds: number }
+
+function loadTavernPeople(app: pc.Application, root: pc.Entity, proceduralMara: pc.Entity,
+  movingPeople: TavernPersonMotion[]): void {
   void loadTownNpcAssets(app).then(result => {
     const placements = [
-      { role: "vendor" as const, position: [-8.2, 8.02, -1.5] as [number, number, number], yaw: 90, phase: .2 },
-      { role: "resident" as const, position: [5.9, 8.02, 2.8] as [number, number, number], yaw: 210, phase: .8 },
+      { role: "vendor" as const, position: [-8.2, 8.02, -1.5] as [number, number, number], yaw: 90, phase: .2, seated: false },
+      { role: "resident" as const, position: [4.72, 7.6, 2.22] as [number, number, number], yaw: 0, phase: .8, seated: true },
+      { role: "resident" as const, position: [6.42, 7.6, 4.42] as [number, number, number], yaw: 180, phase: .45, seated: true },
+      { role: "healer" as const, position: [.95, 7.62, -4.88] as [number, number, number], yaw: 90, phase: .65, seated: true },
     ];
     for (const [index, placement] of placements.entries()) {
       const asset = result.loaded.get(placement.role);
@@ -115,12 +122,13 @@ function loadTavernPeople(app: pc.Application, root: pc.Entity, proceduralMara: 
       model.name = index === 0 ? "mara-innkeeper" : `tavern-patron-${index}`;
       model.setLocalPosition(...placement.position);
       model.setLocalEulerAngles(0, TOWN_NPC_MODEL_YAW + placement.yaw, 0);
-      model.setLocalScale(.86, .86, .86);
+      model.setLocalScale(placement.seated ? .8 : .86, placement.seated ? .8 : .86, placement.seated ? .8 : .86);
       root.addChild(model);
       if (!bindTownNpcRig(model, resource.animations, "Idle", placement.phase)) {
         model.destroy();
         continue;
       }
+      movingPeople.push({ entity: model, nextGesture: 4.5 + index * 2.4, gestureEnds: 0 });
       if (index === 0) proceduralMara.enabled = false;
     }
   });
@@ -191,6 +199,12 @@ export function createTavernRoom(app: pc.Application): pc.Entity {
   box(root, "hearth-corbel-right", stoneLight, [.72, .5, .95], [hearthX + 1.34, 10.55, -6.88], [0, 0, 22]);
   box(root, "hearth-mantle", stone, [4.75, .28, 1.22], [hearthX, 11.42, -6.88]);
   box(root, "hearth-chimney", stone, [2.25, 2.45, .74], [hearthX, 12.65, -7.52]);
+  const trophyLocked = new pc.Entity("tavern-trophy-locked");
+  trophyLocked.setLocalPosition(hearthX, 12.05, -6.72); root.addChild(trophyLocked);
+  const trophyVictory = new pc.Entity("tavern-trophy-victory");
+  trophyVictory.setLocalPosition(hearthX, 12.05, -6.72); trophyVictory.enabled = false; root.addChild(trophyVictory);
+  loadProp(app, TROPHY_LOCKED_URL, trophyLocked, [{ position: [0, 0, 0], yaw: 0, scale: 1.15 }]);
+  loadProp(app, TROPHY_VICTORY_URL, trophyVictory, [{ position: [0, 0, 0], yaw: 0, scale: 1.15 }]);
   for (const yaw of [-28, 28])
     cylinder(root, "hearth-log", oak, [.2, 1.08, .2], [hearthX, 8.46, -6.46], [0, 0, yaw]);
   for (const offset of [-.72, -.36, 0, .36, .72])
@@ -273,7 +287,8 @@ export function createTavernRoom(app: pc.Application): pc.Entity {
     { position: [-9.25, 10.2, -4.2], yaw: 90, scale: 1.25 },
     { position: [9.25, 10.2, -4.2], yaw: -90, scale: 1.25 },
   ]);
-  loadTavernPeople(app, root, maraFallback);
+  const movingPeople: TavernPersonMotion[] = [];
+  loadTavernPeople(app, root, maraFallback, movingPeople);
 
   const coolFill = new pc.Entity("tavern-cool-fill");
   coolFill.addComponent("light", { type: "omni", color: new pc.Color(.34, .46, .54), intensity: .36, range: 32, castShadows: false });
@@ -302,6 +317,22 @@ export function createTavernRoom(app: pc.Application): pc.Entity {
       flame.setLocalScale(width * (1 + Math.sin(elapsed * (6.4 + index)) * .09),
         height * (1 + Math.sin(elapsed * (7.2 + index * .7)) * .14), .19);
     });
+    for (const person of movingPeople) {
+      if (person.gestureEnds > 0 && elapsed >= person.gestureEnds) {
+        transitionTownNpcRig(person.entity, "Idle", .24);
+        person.gestureEnds = 0;
+      } else if (person.gestureEnds === 0 && elapsed >= person.nextGesture) {
+        if (transitionTownNpcRig(person.entity, "Interact", .2)) person.gestureEnds = elapsed + 1.55;
+        person.nextGesture = elapsed + 7 + Math.random() * 6;
+      }
+    }
   });
   return root;
+}
+
+export function setTavernTrophyProgress(root: pc.Entity | null, highestFloorCleared: number): void {
+  const locked = root?.findByName("tavern-trophy-locked");
+  const victory = root?.findByName("tavern-trophy-victory");
+  if (locked) locked.enabled = highestFloorCleared < 1;
+  if (victory) victory.enabled = highestFloorCleared >= 1;
 }

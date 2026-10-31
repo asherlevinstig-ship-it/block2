@@ -2,6 +2,7 @@ import { Client, Room } from "@colyseus/core";
 import { aimedWeaponFlight, mobAttackBody, ENEMY_PROJECTILE_RADIUS } from "@blockcraft/protocol";
 import { CROWNKEEPER_FORGE } from "@blockcraft/protocol";
 import { parseTowerProgress, withTowerFloorCleared } from "@blockcraft/protocol";
+import { tavernRoomFurnitureCellSolid } from "@blockcraft/protocol";
 import { crownkeeperFragments, withCrownkeeperFragments } from "./crownkeeper-progress.js";
 import { FloorRunUpgrades } from "./floor-run-upgrades.js";
 import { FLOOR_RUN_UPGRADES } from "@blockcraft/protocol";
@@ -110,8 +111,9 @@ import { DODGE_EXHAUSTION_MS, PERFECT_DODGE_COUNTER_MS, PERFECT_DODGE_STAMINA_RE
 import { BRUTE_SLAM, bruteSlamCenter, FRONTIER_BRUTE, frontierBrutePattern, bruteSmashHits, CRAWLER_RUSH_MS, crawlerRushDistance } from "@blockcraft/protocol";
 import { createSpitterPositioning, positionSpitter, type SpitterPositioning } from "./spitter-positioning.js";
 import { HEALING_POTION, backpackAddableQuantity, backpackCapacity, backpackSlotsUsed, lootCarryCapacity,
-  type ArmourId, type PotionUpdate } from "@blockcraft/protocol";
+  TavernServiceRequestSchema, type ArmourId, type PotionUpdate, type TavernServiceUpdate } from "@blockcraft/protocol";
 import { canBuyPotionAtKeeper, potionBuyError, potionUseError } from "./healing-potions.js";
+import { canUseTavernKeeperService, tavernReturnBound, withTavernReturnBound } from "./tavern-services.js";
 import { MINERAL_REGROWTH_MS, type MineralDepositStatus } from "@blockcraft/protocol";
 import { RENEWABLE_MINERAL_DEPOSITS, authoredMineralAt, SURFACE_HEIGHT, CAVE_SHALLOW_HOME, CAVE_DEEP_HOME, CAVE_HIDDEN_HOME, SILVER_DEPTHS_SPITTER_HOMES, CRYSTAL_MATRIARCH_HOME, SILVER_DEPTHS_COVER, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, SILVER_DEPTHS_CHECKPOINT_POSITION, SILVER_DEPTHS_GALLERY_GATE, SILVER_DEPTHS_BOSS_GATE, SILVER_DEPTHS_IRON_GATE, SILVER_DEPTHS_SILVER_GATE, SILVER_DEPTHS_WING_CACHES, TOWN_BLACKSMITH_STALL_POSITION, silverDepthsPingLocation, isMistfenToxicPool, isInMistfenMarsh } from "@blockcraft/voxel-world";
 import { ASHEN_REACH_ENCOUNTER_CHAIN, GREENWOOD_ENCOUNTER_CHAIN, MISTFEN_ENCOUNTER_CHAIN, NORTHWATCH_ENCOUNTER_CHAIN, SOUTHERN_QUARRY_ENCOUNTER_CHAIN, ROLE_FIELD_OPPORTUNITIES, nearestRoleFieldOpportunity, nearestRoadsideEncounter, parseRoadsideClaims, roadsideEncounterAt, withRoadsideClaim } from "@blockcraft/voxel-world";
@@ -1106,6 +1108,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     aliveMessage("blacksmith:depths-buy", (client, payload) => this.handleDepthsRewardBuy(client, payload));
     this.onMessage("potion:buy", client => this.handlePotion(client, true));
     this.onMessage("potion:use", client => this.handlePotion(client, false));
+    this.onMessage("tavern:sync", client => this.sendTavernServiceState(client));
+    this.onMessage("tavern:service", (client, payload) => this.handleTavernService(client, payload));
     if (this.movementShadowEnabled) {
       // Colyseus owns one simulation timer per room. Pilot and legacy clients
       // advance on this same fixed tick while older clients remain connected.
@@ -2280,7 +2284,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const now = Date.now();
     let item = player.inventory.get("healing_potion");
     const quantity = item?.quantity ?? 0;
-    const error = buying ? potionBuyError(player.health, player.coins, quantity, canBuyPotionAtKeeper(player))
+    const atKeeper = this.roomKind === "tavern" ? canUseTavernKeeperService(player) : canBuyPotionAtKeeper(player);
+    const error = buying ? potionBuyError(player.health, player.coins, quantity, atKeeper)
       : potionUseError(player.health, player.maxHealth, quantity, player.potionCooldownUntil, now);
     let healed = 0;
     if (!error) {
@@ -2299,6 +2304,43 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       quantity: item?.quantity ?? 0, gold: player.coins, health: player.health, maxHealth: player.maxHealth,
       cooldownUntil: player.potionCooldownUntil, healed };
     client.send("potion:update", update);
+  }
+
+  private sendTavernServiceState(client: Client, message = "Rest, prepare and choose your next climb.",
+    action: TavernServiceUpdate["action"] = "sync", ok = true): void {
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+    client.send("tavern:service", { action, ok, message, bound: tavernReturnBound(player.huntLoadoutsJson),
+      health: player.health, maxHealth: player.maxHealth, stamina: player.stamina, maxStamina: player.maxStamina } satisfies TavernServiceUpdate);
+  }
+
+  private handleTavernService(client: Client, payload: unknown): void {
+    const player = this.state.players.get(client.sessionId);
+    const parsed = TavernServiceRequestSchema.safeParse(payload);
+    if (!player || !parsed.success) return;
+    const action = parsed.data.action;
+    if (this.roomKind !== "tavern" || !canUseTavernKeeperService(player)) {
+      this.sendTavernServiceState(client, "Stand at Mara's counter to use the inn services.", action, false);
+      return;
+    }
+    if (player.health <= 0) {
+      this.sendTavernServiceState(client, "You cannot use inn services while defeated.", action, false);
+      return;
+    }
+    let message: string;
+    if (action === "rest") {
+      player.health = player.maxHealth;
+      player.stamina = player.maxStamina;
+      player.potionCooldownUntil = 0;
+      player.powerCooldownUntil = 0;
+      player.specialCooldownUntil = 0;
+      message = "Well rested · health, stamina and cooldowns restored.";
+    } else {
+      player.huntLoadoutsJson = withTavernReturnBound(player.huntLoadoutsJson);
+      message = "Return point bound · defeat will bring you back to the Hearth & Hammer.";
+    }
+    void this.persistPlayer(client.sessionId, player, true);
+    this.sendTavernServiceState(client, message, action, true);
   }
 
   private persistPlayer(sessionId: string, player: PlayerState, force = false): Promise<void> {
@@ -8690,6 +8732,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       client.send("portal:notice", "Expedition failed · returning to the Town of Beginnings.");
       client.send("room:transfer", { room: WORLD_ROOM, returnFrom: "silver-depths", retry: true,
         ...await this.expeditionReturnTicket(client.sessionId) } satisfies RoomTransfer);
+    } else if (this.rapidPractice && tavernReturnBound(player.huntLoadoutsJson)) {
+      client.send("portal:notice", "Returned to your bound room at the Hearth & Hammer.");
+      client.send("room:transfer", { room: TAVERN_ROOM, returnFrom: "practice" } satisfies RoomTransfer);
     } else {
       client.send("player:returned", spawn);
       this.sendBuildPath(client);
@@ -9448,7 +9493,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const wall = (Math.abs(x) >= 9 && Math.abs(x) <= 10 && z >= -8 && z <= 8.5)
         || (z <= -8 && z >= -9 && Math.abs(x) <= 10)
         || (z >= 8 && z <= 9 && Math.abs(x) >= 1.35 && Math.abs(x) <= 10);
-      return y < 8 || wall && y < 13 ? Block.Stone : Block.Air;
+      return y < 8 || wall && y < 13 || tavernRoomFurnitureCellSolid(x, y, z) ? Block.Stone : Block.Air;
     }
     if (this.rapidPractice) return FAST_WORLD_BLOCK_READER(x, y, z);
     if (y < 0) return Block.Bedrock;

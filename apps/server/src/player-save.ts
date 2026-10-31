@@ -38,6 +38,7 @@ import { starterKitClaimed, withStarterKitClaimed } from "./starter-kit.js";
 import { ashenBlueprints } from "./ashen-reliquary.js";
 import { parseAshenMastery } from "./ashen-mastery.js";
 import { parseLeaderCollectionState, type LeaderCollectionState } from "./leader-loot-collections.js";
+import { tavernReturnBound, withTavernReturnBound } from "./tavern-services.js";
 
 export const PLAYER_SAVE_VERSION = 1;
 export const PLAYER_SAVE_HASH = "blockcraft:player-saves:v1";
@@ -65,6 +66,7 @@ export interface PlayerSaveData {
   signaturePity?: SignaturePity;
   huntMastery?: HuntMasteryProgress;
   huntLoadouts?: HuntLoadoutSlot[];
+  tavernReturnBound?: boolean;
   roadsideClaims?: string[];
   huntCollectionRewardClaimed?: boolean;
   mistfenMastery?: number;
@@ -181,6 +183,7 @@ export function snapshotPlayerSave(player: PlayerState, now = Date.now()): Playe
     signaturePity: parseSignaturePity(player.signaturePityJson),
     huntMastery: parseHuntMastery(player.huntMasteryJson),
     huntLoadouts: parseHuntLoadouts(player.huntLoadoutsJson),
+    tavernReturnBound: tavernReturnBound(player.huntLoadoutsJson),
     roadsideClaims: [...parseRoadsideClaims(player.huntLoadoutsJson)],
     huntCollectionRewardClaimed: player.huntCollectionRewardClaimed,
     mistfenMastery: (() => { try { return Math.floor(finiteNumber((JSON.parse(player.huntLoadoutsJson) as { mistfen?: { points?: unknown } }).mistfen?.points, 0, 0, 150)); } catch { return 0; } })(),
@@ -286,6 +289,7 @@ export function parsePlayerSave(raw: string | null): PlayerSaveData | null {
     signaturePity: parseSignaturePity(value.signaturePity),
     huntMastery: parseHuntMastery(value.huntMastery),
     huntLoadouts: parseHuntLoadouts(value.huntLoadouts),
+    tavernReturnBound: value.tavernReturnBound === true,
     roadsideClaims: [...parseRoadsideClaims(JSON.stringify(value.roadsideClaims ?? []))],
     huntCollectionRewardClaimed: value.huntCollectionRewardClaimed === true,
     mistfenMastery: Math.floor(finiteNumber(value.mistfenMastery, 0, 0, 150)),
@@ -357,6 +361,7 @@ export function applyPlayerSave(player: PlayerState, save: PlayerSaveData): void
     ashenBlueprints: save.ashenBlueprints ?? [], ashenMastery: parseAshenMastery(save.ashenMastery),
     leaderCollections: parseLeaderCollectionState(save.leaderCollections) });
   player.huntLoadoutsJson = withStarterKitClaimed(JSON.stringify({ ...JSON.parse(player.huntLoadoutsJson), roadsideClaims: save.roadsideClaims ?? [] }), save.starterKitClaimed !== false);
+  if (save.tavernReturnBound === true) player.huntLoadoutsJson = withTavernReturnBound(player.huntLoadoutsJson);
   player.huntCollectionRewardClaimed = save.huntCollectionRewardClaimed === true;
   player.forestBestTimeMs = save.forestBestTimeMs ?? 0;
   player.silverDepthsBestTimeMs = save.silverDepthsBestTimeMs ?? 0;

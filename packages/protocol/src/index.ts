@@ -154,6 +154,18 @@ export type LootCollectResult = {
 };
 export const HEALING_POTION = { price: 5, heal: 2, capacity: 3, cooldownMs: 5000 } as const;
 export type PotionUpdate = { phase: "bought" | "healed" | "error"; message: string; quantity: number; gold: number; health: number; maxHealth: number; cooldownUntil: number; healed: number };
+export const TavernServiceRequestSchema = z.object({ action: z.enum(["rest", "bind"]) }).strict();
+export type TavernServiceAction = z.infer<typeof TavernServiceRequestSchema>["action"];
+export type TavernServiceUpdate = {
+  action: TavernServiceAction | "sync";
+  ok: boolean;
+  message: string;
+  bound: boolean;
+  health: number;
+  maxHealth: number;
+  stamina: number;
+  maxStamina: number;
+};
 export const MINERAL_REGROWTH_MS = 120_000;
 export interface MineralDepositStatus { id: string; available: number; total: number; readyAt: number | null }
 export const WORLD_BOOTSTRAP_CHUNK_RADIUS = 3;
@@ -238,6 +250,24 @@ export const ARCHIVED_FAST_WORLD_COLLISION_QUERY = createFastWorldObstacleQuery(
 /** Compatibility entry point for movement code crossing a rolling deploy. */
 export function rapidPracticeCollisionCellSolid(x: number, y: number, z: number): boolean {
   return FAST_WORLD_COLLISION_QUERY.cellSolid(x, y, z);
+}
+
+/** Curated solid footprints for the large tavern furnishings. Small chairs and
+ * decorations stay non-solid so a busy room never traps the player. */
+export const TAVERN_ROOM_FURNITURE_COLLIDERS = [
+  { id: "bar", minX: -9.6, maxX: -6.05, minZ: -5.05, maxZ: 2.55 },
+  { id: "hearth", minX: 1.25, maxX: 6.35, minZ: -8.05, maxZ: -5.75 },
+  { id: "quiz-table", minX: -1.95, maxX: 1.95, minZ: .65, maxZ: 2.05 },
+  { id: "dining-table", minX: 3.65, maxX: 7.55, minZ: 2.65, maxZ: 4.05 },
+  { id: "hearth-bench-west", minX: .45, maxX: 1.45, minZ: -5.7, maxZ: -3.75 },
+  { id: "hearth-bench-east", minX: 6.15, maxX: 7.15, minZ: -5.7, maxZ: -3.75 },
+] as const;
+
+export function tavernRoomFurnitureCellSolid(x: number, y: number, z: number): boolean {
+  if (y < 8 || y >= 11.5) return false;
+  const centerX = x + .5, centerZ = z + .5;
+  return TAVERN_ROOM_FURNITURE_COLLIDERS.some(collider => centerX >= collider.minX && centerX <= collider.maxX
+    && centerZ >= collider.minZ && centerZ <= collider.maxZ);
 }
 
 export type ServerPerformanceUpdate = {

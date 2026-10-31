@@ -14,7 +14,7 @@ import { ASHEN_REACH_HEAT_VENTS, ASHEN_REACH_NAVIGATION_LAVA_FISSURES, ASHEN_REA
   SOUTHERN_QUARRY_NAVIGATION_BOULDERS, SOUTHERN_QUARRY_NAVIGATION_RAMPS, SOUTHERN_QUARRY_NAVIGATION_TERRACES,
   fastWorldHeatVentPhase, greenwoodMasteryStatus, mistfenMasteryStatus,
   type FastWorldVisualTheme } from "@blockcraft/protocol";
-import { rapidPracticeCollisionCellSolid } from "@blockcraft/protocol";
+import { rapidPracticeCollisionCellSolid, tavernRoomFurnitureCellSolid } from "@blockcraft/protocol";
 import type { RegionalArmourProc } from "@blockcraft/protocol";
 import { isInMistfenMarsh, NORTHWATCH_SHARD_PATROL_SITE } from "@blockcraft/voxel-world";
 import { ASHEN_RELIQUARY_POSITION } from "@blockcraft/voxel-world";
@@ -151,7 +151,9 @@ import { loadTowerChronicleMonument } from "./tower-chronicle-asset.js";
 import { towerFloorOneAtmosphere } from "./tower-floor-one-atmosphere.js";
 import { portalInteractionPrompt, portalLabel, portalWorldLabel } from "./portal-labels.js";
 import { createFastWorldSky } from "./fast-world-sky.js";
-import { createTavernRoom } from "./tavern-room.js";
+import { createTavernRoom, setTavernTrophyProgress } from "./tavern-room.js";
+import { TavernAmbience } from "./tavern-ambience.js";
+import { rotatingTavernBounties } from "./tavern-services.js";
 import { createPaintedGroundMaterial, fitGroundTexture, fitOrganicGroundPatch, createWoodlandTrailMesh, woodlandFernMesh } from "./fast-world-texture.js";
 import {
   GREENWOOD_ASSET_PLACEMENTS,
@@ -306,6 +308,7 @@ import {
   type ItemRarity,
   HEALING_POTION,
   type PotionUpdate,
+  type TavernServiceUpdate,
   POWER_DEFINITIONS,
   WEAPON_TECHNIQUES_AVAILABLE,
   FIELD_TECHNIQUES_AVAILABLE,
@@ -1146,6 +1149,11 @@ const potionUse = document.querySelector<HTMLButtonElement>("#potion-use")!;
 const potionCount = document.querySelector<HTMLElement>("#potion-count")!;
 const potionShopStatus = document.querySelector<HTMLElement>("#potion-shop-status")!;
 const quizTablePrompt = document.querySelector<HTMLElement>("#quiz-table-prompt")!;
+const tavernKeeperPrompt = document.querySelector<HTMLElement>("#tavern-keeper-prompt")!;
+const tavernRest = document.querySelector<HTMLButtonElement>("#tavern-rest")!;
+const tavernBind = document.querySelector<HTMLButtonElement>("#tavern-bind")!;
+const tavernBindStatus = document.querySelector<HTMLElement>("#tavern-bind-status")!;
+const tavernBountyList = document.querySelector<HTMLElement>("#tavern-bounty-list")!;
 const blacksmithPrompt = document.querySelector<HTMLElement>("#blacksmith-prompt")!;
 const playerTradePrompt = document.querySelector<HTMLButtonElement>("#player-trade-prompt")!;
 const playerTradeName = document.querySelector<HTMLElement>("#player-trade-name")!;
@@ -1544,8 +1552,17 @@ const keyboardCameraKeys = [...keyboardCameraHint.querySelectorAll<HTMLElement>(
 if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !dangerZone || !dangerZoneName || !locationCoordinates || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !graphicsQualitySelect || !graphicsQualityStatus || !performanceCopyLog || !performanceClearLog || !performanceLogStatus || !inventoryPanel || !inventoryTotal || !inventoryToggle || !cameraModeToggle || !inventoryClose || !inventoryBadge || !inventoryEquipped || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== requiredInventoryMainHands || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !callingButton || !contextButton || !contextButtonLabel || !contextButtonHint || !tabletCameraHint || !keyboardCameraHint || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !controlsHelp || !combatReticle || !tabletAimGuide || !combatFeedback || !damageOverlay) {
   throw new Error("Game shell is missing required elements");
 }
-if ([quizTablePrompt, blacksmithPrompt, playerTradePrompt, playerTradeName, blacksmithPanel, blacksmithMessage, blacksmithOre, blacksmithGold, blacksmithPrice, blacksmithSell, blacksmithClose, haulEquipName, haulEquipDetail, haulEquip, haulSalvageCount, haulSalvageDetail, haulSalvage, haulStoreCount, haulStore, haulUpgradeName, haulUpgradeTrack, haulUpgradeDetail, haulRegionName, haulRegionDetail, haulTrackRegion, quizPanel, quizBalance, quizBalanceAmount, quizPotDisplay, quizPotLabel, quizWinToast, quizAnswerFeedback, quizFeedbackIcon, quizFeedbackTitle, quizFeedbackDetail, quizMessage, quizStakeHeading, quizStakes, quizQuestion, quizPot, quizPrompt, quizChoices, quizDecision, quizDouble, quizQuit, quizClose, tavernCoins].some(element => !element) || blacksmithUpgradeCards.length !== Object.keys(BLACKSMITH_UPGRADES).length) {
+if ([quizTablePrompt, tavernKeeperPrompt, tavernRest, tavernBind, tavernBindStatus, tavernBountyList, blacksmithPrompt, playerTradePrompt, playerTradeName, blacksmithPanel, blacksmithMessage, blacksmithOre, blacksmithGold, blacksmithPrice, blacksmithSell, blacksmithClose, haulEquipName, haulEquipDetail, haulEquip, haulSalvageCount, haulSalvageDetail, haulSalvage, haulStoreCount, haulStore, haulUpgradeName, haulUpgradeTrack, haulUpgradeDetail, haulRegionName, haulRegionDetail, haulTrackRegion, quizPanel, quizBalance, quizBalanceAmount, quizPotDisplay, quizPotLabel, quizWinToast, quizAnswerFeedback, quizFeedbackIcon, quizFeedbackTitle, quizFeedbackDetail, quizMessage, quizStakeHeading, quizStakes, quizQuestion, quizPot, quizPrompt, quizChoices, quizDecision, quizDouble, quizQuit, quizClose, tavernCoins].some(element => !element) || blacksmithUpgradeCards.length !== Object.keys(BLACKSMITH_UPGRADES).length) {
   throw new Error("Tavern quiz shell is missing required elements");
+}
+for (const bounty of rotatingTavernBounties()) {
+  const card = document.createElement("article");
+  card.className = "tavern-bounty";
+  const title = document.createElement("strong"); title.textContent = bounty.title;
+  const objective = document.createElement("span"); objective.textContent = bounty.objective;
+  const reward = document.createElement("em"); reward.textContent = bounty.reward;
+  card.append(title, objective, reward);
+  tavernBountyList.appendChild(card);
 }
 if ([worldObjective, objectiveTier, objectiveTitle, objectiveDetail, objectiveLoot, objectiveProgress, objectiveDistance, objectiveMarker, objectiveMarkerDistance, objectiveMarkerLabel, progressionNoticeHeading].some(element => !element)) {
   throw new Error("World objective shell is missing required elements");
@@ -1881,7 +1898,7 @@ const readCollisionWorldBlock = Object.assign(function (x: number, y: number, z:
     const wall = (Math.abs(x) >= 9 && Math.abs(x) <= 10 && z >= -8 && z <= 8.5)
       || (z <= -8 && z >= -9 && Math.abs(x) <= 10)
       || (z >= 8 && z <= 9 && Math.abs(x) >= 1.35 && Math.abs(x) <= 10);
-    return y < 8 || wall && y < 13 ? Block.Stone : Block.Air;
+    return y < 8 || wall && y < 13 || tavernRoomFurnitureCellSolid(x, y, z) ? Block.Stone : Block.Air;
   }
   if (fastWorldRequested) return rapidPracticeCollisionCellSolid(x, y, z) ? Block.Stone : Block.Air;
   if (y >= CHUNK_HEIGHT) return Block.Air;
@@ -2278,8 +2295,13 @@ function addBox(
 const rapidPrototypeRoot = new pc.Entity("rapid-2d-speed-lab");
 app.root.addChild(rapidPrototypeRoot);
 rapidPrototypeRoot.enabled = fastWorldRequested && !tavernRoomRequested;
+let tavernRoomWorld: pc.Entity | null = null;
+const tavernAmbience = tavernRoomRequested ? new TavernAmbience() : null;
 if (tavernRoomRequested) {
-  createTavernRoom(app);
+  tavernRoomWorld = createTavernRoom(app);
+  const startTavernAmbience = () => tavernAmbience?.start();
+  window.addEventListener("pointerdown", startTavernAmbience, { once: true });
+  window.addEventListener("keydown", startTavernAmbience, { once: true });
   app.scene.ambientLight = new pc.Color(.2, .14, .09);
   app.scene.fog.color = new pc.Color(.12, .075, .045);
   app.scene.fog.start = 20; app.scene.fog.end = 42;
@@ -2297,6 +2319,7 @@ let towerChronicleCelebrationUntil = 0;
 let pendingTowerChronicleCelebration: { floor: number; bossName: string } | null = null;
 function renderTowerChronicleProgress(source: string): void {
   towerChronicleProgress = parseTowerProgress(source);
+  setTavernTrophyProgress(tavernRoomWorld, towerChronicleProgress.highestFloorCleared);
   for (const slot of towerChronicleFloors) {
     const cleared = towerChronicleProgress.clearedFloors.includes(slot.floor);
     slot.victory.forEach(entity => { entity.enabled = cleared; });
@@ -12406,6 +12429,23 @@ let potionPendingUntil = 0;
 let potionHealth = 5;
 let potionMaxHealth = 5;
 let potionUiKey = "";
+let tavernServicePending = false;
+let tavernReturnBound = false;
+
+function refreshTavernServices(): void {
+  tavernRest.disabled = tavernServicePending || !room;
+  tavernBind.disabled = tavernServicePending || !room || tavernReturnBound;
+  tavernBindStatus.textContent = tavernReturnBound ? "Bound here · defeat returns you to the inn" : "Return here after defeat";
+  tavernBind.querySelector("strong")!.textContent = tavernReturnBound ? "RETURN POINT BOUND" : "BIND RETURN POINT";
+}
+
+function requestTavernService(action: "rest" | "bind"): void {
+  if (!room || tavernServicePending) return;
+  tavernServicePending = true;
+  potionShopStatus.textContent = action === "rest" ? "Mara is tending the hearth…" : "Binding your return point…";
+  refreshTavernServices();
+  room.send("tavern:service", { action });
+}
 
 function refreshPotionUi(): void {
   const quantity = inventoryCounts.get("healing_potion") ?? 0;
@@ -12435,6 +12475,8 @@ function requestPotion(buying = false): void {
 }
 potionBuy.addEventListener("click", () => requestPotion(true));
 potionUse.addEventListener("click", () => requestPotion());
+tavernRest.addEventListener("click", () => requestTavernService("rest"));
+tavernBind.addEventListener("click", () => requestTavernService("bind"));
 
 function closeTavernDialogue(): void {
   tavernDialogue.hidden = true;
@@ -12450,6 +12492,8 @@ function advanceTavernDialogue(): void {
   tavernDialogueLine.textContent = TAVERN_KEEPER_LINES[tavernDialogueIndex]!;
   tavernDialogueNext.textContent = tavernDialogueIndex === TAVERN_KEEPER_LINES.length - 1 ? "Goodbye" : "Continue";
   tavernDialogue.hidden = false;
+  room?.send("tavern:sync");
+  refreshTavernServices();
 }
 
 tavernDialogueNext.addEventListener("click", advanceTavernDialogue);
@@ -14030,6 +14074,14 @@ function updateTarget(): void {
   }
   const keeperNearby = canTalkToTavernKeeper(player, tavernRoomRequested || sceneDressing.keeperVisible,
     tavernRoomRequested ? TAVERN_ROOM_KEEPER : TAVERN_KEEPER);
+  tavernKeeperPrompt.hidden = !keeperNearby || !tavernDialogue.hidden;
+  if (!tavernKeeperPrompt.hidden) {
+    const keeper = tavernRoomRequested ? TAVERN_ROOM_KEEPER : TAVERN_KEEPER;
+    const screen = camera.camera.worldToScreen(new pc.Vec3(keeper.x, keeper.y + 1.35, keeper.z));
+    const rect = canvas.getBoundingClientRect();
+    tavernKeeperPrompt.style.left = `${rect.left + screen.x * rect.width / canvas.width}px`;
+    tavernKeeperPrompt.style.top = `${rect.top + screen.y * rect.height / canvas.height}px`;
+  }
   if (!keeperNearby && !tavernDialogue.hidden) closeTavernDialogue();
   const availability = hit ? miningAvailability(player, hit) : null;
   const inRange = availability !== "far";
@@ -20377,6 +20429,15 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     status.textContent = message.message;
     showCombatFeedback(message.phase === "healed" ? `+${message.healed} HP` : message.phase === "bought" ? "+1 POTION" : message.message, message.phase === "error" ? "hurt" : "dodge");
     refreshPotionUi();
+  });
+  room.onMessage("tavern:service", (message: TavernServiceUpdate) => {
+    tavernServicePending = false;
+    tavernReturnBound = message.bound;
+    updatePlayerHealth(message.health, message.maxHealth);
+    potionShopStatus.textContent = message.message;
+    status.textContent = message.message;
+    showCombatFeedback(message.ok ? (message.action === "rest" ? "RESTORED" : message.action === "bind" ? "RETURN BOUND" : "INN READY") : message.message, message.ok ? "dodge" : "hurt");
+    refreshTavernServices();
   });
   room.onMessage("combat:defense", (message: DefenseResolved) => {
     if (message.playerId !== room?.sessionId) return;

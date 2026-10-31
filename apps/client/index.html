@@ -224,6 +224,7 @@
     <div id="combat-reticle" hidden aria-hidden="true"><span></span></div>
     <div id="tablet-aim-guide" hidden aria-hidden="true"><span></span></div>
     <div id="quiz-table-prompt" hidden>DOUBLE OR QUIT <small>Press E to play</small></div>
+    <div id="tavern-keeper-prompt" hidden>MARA · INNKEEPER <small>Press E to rest and prepare</small></div>
     <div id="blacksmith-prompt" hidden>BLACKSMITH <small>Press E to trade or forge</small></div>
     <button id="player-trade-prompt" type="button" hidden>
       <span>NEARBY EXPLORER</span>
@@ -235,7 +236,15 @@
       <p class="eyebrow">HEARTH & HAMMER</p>
       <h2>Mara <small>Tavernkeeper</small></h2>
       <p id="tavern-dialogue-line"></p>
+      <div class="tavern-services" aria-label="Inn services">
+        <button id="tavern-rest" type="button"><strong>REST AT THE HEARTH</strong><small>Restore health, stamina and cooldowns</small></button>
+        <button id="tavern-bind" type="button"><strong>BIND RETURN POINT</strong><small id="tavern-bind-status">Return here after defeat</small></button>
+      </div>
       <div class="potion-shop"><strong>Healing Potion · 5 gold</strong><small>Restores 2 HP · carry 3 · H to drink</small><p id="potion-shop-status" aria-live="polite"></p><button id="potion-buy" type="button">BUY · 5 GOLD</button></div>
+      <section class="tavern-bounties" aria-label="Today's tower board">
+        <header><span>TODAY'S TOWER BOARD</span><small>Contracts rotate each day</small></header>
+        <div id="tavern-bounty-list"></div>
+      </section>
       <div class="tavern-dialogue-actions">
         <button id="tavern-dialogue-next" type="button">Continue</button>
         <button id="tavern-dialogue-close" type="button">Close</button>
