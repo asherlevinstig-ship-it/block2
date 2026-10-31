@@ -110,10 +110,12 @@ import { DODGE_EXHAUSTION_MS, PERFECT_DODGE_COUNTER_MS, PERFECT_DODGE_STAMINA_RE
   dodgeChainStaminaCost, nextDodgeChain, type DodgePressureUpdate } from "@blockcraft/protocol";
 import { BRUTE_SLAM, bruteSlamCenter, FRONTIER_BRUTE, frontierBrutePattern, bruteSmashHits, CRAWLER_RUSH_MS, crawlerRushDistance } from "@blockcraft/protocol";
 import { createSpitterPositioning, positionSpitter, type SpitterPositioning } from "./spitter-positioning.js";
-import { HEALING_POTION, backpackAddableQuantity, backpackCapacity, backpackSlotsUsed, lootCarryCapacity,
+import { HEALING_POTION, TAVERN_MEALS, backpackAddableQuantity, backpackCapacity, backpackSlotsUsed, lootCarryCapacity,
   TavernServiceRequestSchema, type ArmourId, type PotionUpdate, type TavernServiceUpdate } from "@blockcraft/protocol";
 import { canBuyPotionAtKeeper, potionBuyError, potionUseError } from "./healing-potions.js";
 import { canUseTavernKeeperService, tavernReturnBound, withTavernReturnBound } from "./tavern-services.js";
+import { activateTavernMeal, endTavernMeal, parseTavernMeal, prepareTavernMeal,
+  tavernMealEquipmentRoll, tavernMealStaminaRecoveryBonus } from "./tavern-meals.js";
 import { MINERAL_REGROWTH_MS, type MineralDepositStatus } from "@blockcraft/protocol";
 import { RENEWABLE_MINERAL_DEPOSITS, authoredMineralAt, SURFACE_HEIGHT, CAVE_SHALLOW_HOME, CAVE_DEEP_HOME, CAVE_HIDDEN_HOME, SILVER_DEPTHS_SPITTER_HOMES, CRYSTAL_MATRIARCH_HOME, SILVER_DEPTHS_COVER, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, SILVER_DEPTHS_CHECKPOINT_POSITION, SILVER_DEPTHS_GALLERY_GATE, SILVER_DEPTHS_BOSS_GATE, SILVER_DEPTHS_IRON_GATE, SILVER_DEPTHS_SILVER_GATE, SILVER_DEPTHS_WING_CACHES, TOWN_BLACKSMITH_STALL_POSITION, silverDepthsPingLocation, isMistfenToxicPool, isInMistfenMarsh } from "@blockcraft/voxel-world";
 import { ASHEN_REACH_ENCOUNTER_CHAIN, GREENWOOD_ENCOUNTER_CHAIN, MISTFEN_ENCOUNTER_CHAIN, NORTHWATCH_ENCOUNTER_CHAIN, SOUTHERN_QUARRY_ENCOUNTER_CHAIN, ROLE_FIELD_OPPORTUNITIES, nearestRoleFieldOpportunity, nearestRoadsideEncounter, parseRoadsideClaims, roadsideEncounterAt, withRoadsideClaim } from "@blockcraft/voxel-world";
@@ -2400,8 +2402,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     action: TavernServiceUpdate["action"] = "sync", ok = true): void {
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
+    const meal = parseTavernMeal(player.huntLoadoutsJson);
     client.send("tavern:service", { action, ok, message, bound: tavernReturnBound(player.huntLoadoutsJson),
-      health: player.health, maxHealth: player.maxHealth, stamina: player.stamina, maxStamina: player.maxStamina } satisfies TavernServiceUpdate);
+      health: player.health, maxHealth: player.maxHealth, stamina: player.stamina, maxStamina: player.maxStamina,
+      coins: player.coins,
+      mealId: meal?.id ?? null, mealState: meal?.state ?? null } satisfies TavernServiceUpdate);
   }
 
   private handleTavernService(client: Client, payload: unknown): void {
@@ -2425,9 +2430,19 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       player.powerCooldownUntil = 0;
       player.specialCooldownUntil = 0;
       message = "Well rested · health, stamina and cooldowns restored.";
-    } else {
+    } else if (action === "bind") {
       player.huntLoadoutsJson = withTavernReturnBound(player.huntLoadoutsJson);
       message = "Return point bound · defeat will bring you back to the Hearth & Hammer.";
+    } else {
+      const mealId = parsed.data.mealId;
+      if (!mealId) return;
+      const error = prepareTavernMeal(player, mealId);
+      if (error) {
+        this.sendTavernServiceState(client, error, action, false);
+        return;
+      }
+      const meal = TAVERN_MEALS[mealId];
+      message = `${meal.name} prepared · ${meal.effect}. It activates when you enter Floor 1.`;
     }
     void this.persistPlayer(client.sessionId, player, true);
     this.sendTavernServiceState(client, message, action, true);
@@ -4840,6 +4855,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     regionalRewardDrops: readonly { itemId: ItemId; quantity: number }[] = []): void {
     if (mobId === "forest-guardian") return;
     const rewardPlayer = ownerId ? this.state.players.get(ownerId) : undefined;
+    const equipmentRoll = (): number => tavernMealEquipmentRoll(rewardPlayer, Math.random());
     const firstCombatDrops: { itemId: ItemId; quantity: number }[] = mobId === FIRST_COMBAT_MOB_ID
       && rewardPlayer?.level === 1
       ? [{ itemId: firstCombatReward(parseBuildPathState(rewardPlayer.huntLoadoutsJson).selectedPathId), quantity: 1 }]
@@ -4970,11 +4986,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       : mobId === WILDERNESS_EVENT_ID ? [{ itemId: "acid_gland", quantity: 3 }, ...signatureDrops("venom_focus")]
       : isRealmEventId(mobId) ? [...(realmEventDefinition(mobId)?.rewards ?? []),
         ...(realmEventDefinition(mobId)?.signatureRewards ?? []).flatMap(itemId => signatureDrops(itemId as SignatureItemId))]
-      : isAreaMiniBoss(mobId) ? [...lootForArchetype(mob.archetype as MobArchetypeId, mobId, Math.random(), "miniboss", Math.random(), mob.difficultyTier)]
-      : mob.isChampion ? lootForArchetype(mob.archetype as MobArchetypeId, mobId, Math.random(), "champion")
+      : isAreaMiniBoss(mobId) ? [...lootForArchetype(mob.archetype as MobArchetypeId, mobId, equipmentRoll(), "miniboss", Math.random(), mob.difficultyTier)]
+      : mob.isChampion ? lootForArchetype(mob.archetype as MobArchetypeId, mobId, equipmentRoll(), "champion")
         .map(entry => isEquipmentItem(entry.itemId) ? entry : { ...entry, quantity: 3 })
-      : mob.isElite ? [...lootForArchetype(mob.archetype as MobArchetypeId, mobId, Math.random(), "elite", Math.random())]
-      : [...lootForArchetype(mob.archetype as MobArchetypeId, mobId, Math.random(), "normal", isSilverGuard(mobId) ? Math.random() : 1)];
+      : mob.isElite ? [...lootForArchetype(mob.archetype as MobArchetypeId, mobId, equipmentRoll(), "elite", Math.random())]
+      : [...lootForArchetype(mob.archetype as MobArchetypeId, mobId, equipmentRoll(), "normal", isSilverGuard(mobId) ? Math.random() : 1)];
     const selectedCalling = rewardPlayer ? parseBuildPathState(rewardPlayer.huntLoadoutsJson).selectedPathId : null;
     const callingGear: Record<BuildPathId, ItemId> = {
       tank: "stone_core_hammer", mage: "forged_focus", assassin: "fang_dagger",
@@ -5028,7 +5044,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       ...quarryFirstClearDrops,
       ...firstCombatDrops,
       ...regionalRewardDrops,
-      ...armourDropForMob(mob.archetype, mob.difficultyTier, Math.random()),
+      ...armourDropForMob(mob.archetype, mob.difficultyTier, equipmentRoll()),
     ];
     if (!leaderCollectionRoll && leaderReward && selectedCalling && !combinedDrops.some(entry => isEquipmentItem(entry.itemId)))
       combinedDrops.push({ itemId: callingGear[selectedCalling], quantity: 1 });
@@ -8755,7 +8771,17 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (entering) {
       this.floorRunUpgrades.start(client.sessionId);
       this.floorRunTimings.set(client.sessionId, { enteredAt: now });
-    } else this.floorRunTimings.delete(client.sessionId);
+      const activatedMeal = activateTavernMeal(player);
+      if (activatedMeal) {
+        const meal = TAVERN_MEALS[activatedMeal];
+        this.sendTavernServiceState(client, `${meal.name} active · ${meal.effect}.`, "sync", true);
+        client.send("chat:notice", `MARA'S MEAL · ${meal.name} is active for this Floor 1 attempt.`);
+      }
+    } else {
+      this.floorRunTimings.delete(client.sessionId);
+      const endedMeal = endTavernMeal(player);
+      if (endedMeal) this.sendTavernServiceState(client, `${TAVERN_MEALS[endedMeal].name} consumed · return to Mara to prepare another meal.`, "sync", true);
+    }
     this.forestTravelAt.set(client.sessionId, now);
     this.pendingMining.delete(client.sessionId); this.pendingAttacks.delete(client.sessionId);
     this.pendingPowers.delete(client.sessionId); this.cancelWeaponProjectiles(client.sessionId);
@@ -8803,6 +8829,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       : returningFromSilverDepths ? TOWN_SILVER_DEPTHS_PORTAL_POSITION : this.spawnPoint();
     this.silverDepthsRuns.delete(client.sessionId);
     this.forestReturns.delete(client.sessionId);
+    const endedMeal = this.rapidPractice ? endTavernMeal(player) : null;
     player.x = spawn.x; player.y = spawn.y; player.z = spawn.z;
     player.health = player.maxHealth;
     player.stamina = player.maxStamina;
@@ -8810,6 +8837,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     player.powerCooldownUntil = 0;
     player.specialCooldownUntil = 0;
     player.invulnerableUntil = now + 1500;
+    if (endedMeal) this.sendTavernServiceState(client, `${TAVERN_MEALS[endedMeal].name} consumed · return to Mara to prepare another meal.`, "sync", true);
     this.movementInputs.set(client.sessionId, { request: idleMovementInput(), receivedAt: now });
     this.verticalVelocities.set(client.sessionId, 0);
     if (this.rapidPractice && !RAPID_PRACTICE_FREE_ROAM) {
@@ -10443,7 +10471,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         const foragerRecovery = this.roomKind === "overworld"
           ? foragerRecoveryBonus(player.armourId, player.x, player.y, player.z) : 0;
         const recovering = player.stamina < player.maxStamina;
-        player.stamina = Math.min(player.maxStamina, player.stamina + (staminaRecoveryWithMomentum(18, player.momentumStacks, player.equippedTrait as TraitId) + rootstalkerRecovery + foragerRecovery) * deltaTime);
+        player.stamina = Math.min(player.maxStamina, player.stamina + (staminaRecoveryWithMomentum(18, player.momentumStacks, player.equippedTrait as TraitId)
+          + rootstalkerRecovery + foragerRecovery + tavernMealStaminaRecoveryBonus(player)) * deltaTime);
         if (recovering && foragerRecovery > 0 && now - (this.foragerCueAt.get(sessionId) ?? 0) >= 6_000) {
           this.foragerCueAt.set(sessionId, now);
           this.clients.find(client => client.sessionId === sessionId)?.send("armour:terrain-proc",

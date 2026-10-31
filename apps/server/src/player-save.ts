@@ -7,6 +7,7 @@ import {
   SPECIAL_DEFINITIONS,
   TRAIT_DEFINITIONS,
   TAVERN_QUIZ_STARTING_COINS,
+  TAVERN_MEALS,
   type ItemId,
   type MainHandId,
   type PowerId,
@@ -21,6 +22,7 @@ import {
   type EquipmentAffixOffers,
   type AshenBlueprintId,
   type AshenMasteryProgress,
+  type TavernMealId,
 } from "@blockcraft/protocol";
 import { parseRoadsideClaims } from "@blockcraft/voxel-world";
 import { canEquipMainHand } from "./equipment-rules.js";
@@ -39,6 +41,7 @@ import { ashenBlueprints } from "./ashen-reliquary.js";
 import { parseAshenMastery } from "./ashen-mastery.js";
 import { parseLeaderCollectionState, type LeaderCollectionState } from "./leader-loot-collections.js";
 import { tavernReturnBound, withTavernReturnBound } from "./tavern-services.js";
+import { parseTavernMeal } from "./tavern-meals.js";
 
 export const PLAYER_SAVE_VERSION = 1;
 export const PLAYER_SAVE_HASH = "blockcraft:player-saves:v1";
@@ -67,6 +70,8 @@ export interface PlayerSaveData {
   huntMastery?: HuntMasteryProgress;
   huntLoadouts?: HuntLoadoutSlot[];
   tavernReturnBound?: boolean;
+  tavernMealId?: TavernMealId;
+  tavernMealState?: "prepared" | "active";
   roadsideClaims?: string[];
   huntCollectionRewardClaimed?: boolean;
   mistfenMastery?: number;
@@ -159,14 +164,17 @@ export function snapshotPlayerSave(player: PlayerState, now = Date.now()): Playe
     attunementDust = Math.floor(finiteNumber(equipment.dust, 0, 0, 65_535));
     attunementOffers = parseEquipmentAffixOffers(equipment.offers);
   } catch { /* legacy */ }
+  const meal = parseTavernMeal(player.huntLoadoutsJson);
+  const mealHealthBonus = meal?.id === "hearty_stew" && meal.state === "active" ? 2 : 0;
+  const baseMaxHealth = Math.max(1, player.maxHealth - mealHealthBonus);
   return {
     version: PLAYER_SAVE_VERSION,
     savedAt: now,
     name: player.name,
     appearance: resolveAppearance({ skin: player.appearanceSkin, hair: player.appearanceHair, coat: player.appearanceCoat,
       hairStyle: player.appearanceHairStyle, coatStyle: player.appearanceCoatStyle }),
-    health: player.health,
-    maxHealth: player.maxHealth,
+    health: Math.min(baseMaxHealth, player.health),
+    maxHealth: baseMaxHealth,
     stamina: player.stamina,
     maxStamina: player.maxStamina,
     level: player.level,
@@ -184,6 +192,8 @@ export function snapshotPlayerSave(player: PlayerState, now = Date.now()): Playe
     huntMastery: parseHuntMastery(player.huntMasteryJson),
     huntLoadouts: parseHuntLoadouts(player.huntLoadoutsJson),
     tavernReturnBound: tavernReturnBound(player.huntLoadoutsJson),
+    tavernMealId: meal?.id,
+    tavernMealState: meal?.state,
     roadsideClaims: [...parseRoadsideClaims(player.huntLoadoutsJson)],
     huntCollectionRewardClaimed: player.huntCollectionRewardClaimed,
     mistfenMastery: (() => { try { return Math.floor(finiteNumber((JSON.parse(player.huntLoadoutsJson) as { mistfen?: { points?: unknown } }).mistfen?.points, 0, 0, 150)); } catch { return 0; } })(),
@@ -290,6 +300,10 @@ export function parsePlayerSave(raw: string | null): PlayerSaveData | null {
     huntMastery: parseHuntMastery(value.huntMastery),
     huntLoadouts: parseHuntLoadouts(value.huntLoadouts),
     tavernReturnBound: value.tavernReturnBound === true,
+    tavernMealId: isKeyOf(value.tavernMealId, TAVERN_MEALS) ? value.tavernMealId : undefined,
+    tavernMealState: isKeyOf(value.tavernMealId, TAVERN_MEALS)
+      && (value.tavernMealState === "prepared" || value.tavernMealState === "active")
+      ? value.tavernMealState : undefined,
     roadsideClaims: [...parseRoadsideClaims(JSON.stringify(value.roadsideClaims ?? []))],
     huntCollectionRewardClaimed: value.huntCollectionRewardClaimed === true,
     mistfenMastery: Math.floor(finiteNumber(value.mistfenMastery, 0, 0, 150)),
@@ -339,6 +353,10 @@ export function applyPlayerSave(player: PlayerState, save: PlayerSaveData): void
   player.appearanceCoatStyle = appearance.coatStyle;
   player.maxHealth = save.maxHealth;
   player.health = save.health;
+  if (save.tavernMealId === "hearty_stew" && save.tavernMealState === "active") {
+    player.maxHealth += 2;
+    player.health = Math.min(player.maxHealth, player.health + 2);
+  }
   player.maxStamina = save.maxStamina;
   player.level = save.level ?? 1;
   player.experience = save.experience ?? 0;
@@ -359,7 +377,8 @@ export function applyPlayerSave(player: PlayerState, save: PlayerSaveData): void
     greenwood: { points: save.greenwoodMastery ?? 0, discovered: save.greenwoodDiscovered === true, marks: save.greenwoodMarks ?? 0 },
     northwatch: { clears: save.northwatchClears ?? 0, marks: save.northwatchPatrolMarks ?? 0 },
     ashenBlueprints: save.ashenBlueprints ?? [], ashenMastery: parseAshenMastery(save.ashenMastery),
-    leaderCollections: parseLeaderCollectionState(save.leaderCollections) });
+    leaderCollections: parseLeaderCollectionState(save.leaderCollections),
+    ...(save.tavernMealId ? { tavernMeal: { id: save.tavernMealId, state: save.tavernMealState ?? "prepared" } } : {}) });
   player.huntLoadoutsJson = withStarterKitClaimed(JSON.stringify({ ...JSON.parse(player.huntLoadoutsJson), roadsideClaims: save.roadsideClaims ?? [] }), save.starterKitClaimed !== false);
   if (save.tavernReturnBound === true) player.huntLoadoutsJson = withTavernReturnBound(player.huntLoadoutsJson);
   player.huntCollectionRewardClaimed = save.huntCollectionRewardClaimed === true;

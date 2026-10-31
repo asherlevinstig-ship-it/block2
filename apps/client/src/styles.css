@@ -1108,6 +1108,30 @@ body:has(#combat-hud-shell[data-loadout-open="true"]) #player-trade-prompt { dis
 #tavern-dialogue h2 { margin: 4px 0 10px; font-size: 1.17rem; }
 #tavern-dialogue h2 small { margin-left: 8px; color: #d9a973; font-size: .72rem; font-weight: 600; }
 #tavern-dialogue-line { margin: 0; line-height: 1.5; }
+#tavern-boon-hud {
+  position: fixed;
+  z-index: 18;
+  top: 142px;
+  left: max(22px, env(safe-area-inset-left));
+  width: min(270px, calc(100vw - 44px));
+  box-sizing: border-box;
+  padding: 10px 13px 11px 48px;
+  border: 1px solid #d6a95299;
+  border-radius: 11px;
+  background: linear-gradient(105deg, rgb(30 19 11 / 96%), rgb(16 30 22 / 94%));
+  box-shadow: 0 9px 28px rgb(0 0 0 / 35%), inset 3px 0 #e8b957;
+  color: #f8e8bd;
+  pointer-events: none;
+}
+#tavern-boon-hud[hidden] { display: none; }
+#tavern-boon-hud::before { content: "♨"; position: absolute; left: 15px; top: 15px; color: #ffc65b; font-size: 1.25rem; text-shadow: 0 0 13px #ff9a3d; }
+#tavern-boon-hud[data-state="active"] { border-color: #84dba999; box-shadow: 0 9px 28px rgb(0 0 0 / 35%), inset 3px 0 #62d69a, 0 0 18px rgb(75 226 153 / 10%); }
+#tavern-boon-hud[data-state="active"]::before { color: #8ff0b9; text-shadow: 0 0 13px #53e5a0; }
+#tavern-boon-hud span, #tavern-boon-hud strong, #tavern-boon-hud small { display: block; }
+#tavern-boon-hud span { color: #d6a952; font: 900 .55rem/1.1 system-ui; letter-spacing: .13em; }
+#tavern-boon-hud[data-state="active"] span { color: #86e1af; }
+#tavern-boon-hud strong { margin-top: 3px; font: 900 .8rem/1.1 Georgia, serif; letter-spacing: .035em; }
+#tavern-boon-hud small { margin-top: 3px; color: #cdbf9f; font-size: .62rem; line-height: 1.25; }
 .tavern-services { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin-top: 14px; }
 .tavern-services button { min-height: 58px; padding: 10px 12px; border: 1px solid #d7aa60; border-radius: 9px; background: linear-gradient(180deg, #6e421e, #3c2719); color: #fff0ca; cursor: pointer; text-align: left; }
 .tavern-services button:hover:not(:disabled) { border-color: #ffe4a2; box-shadow: 0 0 18px rgb(255 193 83 / 24%); transform: translateY(-1px); }
@@ -1115,6 +1139,21 @@ body:has(#combat-hud-shell[data-loadout-open="true"]) #player-trade-prompt { dis
 .tavern-services strong, .tavern-services small { display: block; }
 .tavern-services strong { font: 900 .73rem/1.15 Georgia, serif; letter-spacing: .055em; }
 .tavern-services small { margin-top: 5px; color: #d9c5a5; font-size: .66rem; line-height: 1.25; }
+.tavern-meals { margin-top: 12px; padding: 11px; border: 1px solid #8c6c3e; border-radius: 10px; background: linear-gradient(145deg, #1d2119, #17140f); }
+.tavern-meals > header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; color: #f6d88e; font: 900 .68rem/1 Georgia, serif; letter-spacing: .07em; }
+.tavern-meals > header small { color: #a9b5a1; font: 600 .58rem/1.2 system-ui; letter-spacing: 0; text-align: right; }
+#tavern-meal-status { min-height: 1em; margin: 7px 0 9px; color: #c9b991; font-size: .64rem; }
+.tavern-meal-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.tavern-meal-grid button { position: relative; min-height: 102px; padding: 9px 8px 8px; border: 1px solid #6e5633; border-radius: 9px; background: radial-gradient(circle at 50% 10%, #49341d, #241b13 72%); color: #f7e4b8; cursor: pointer; text-align: center; }
+.tavern-meal-grid button:hover:not(:disabled) { border-color: #f2c969; transform: translateY(-2px); box-shadow: 0 7px 20px rgb(0 0 0 / 35%), 0 0 14px rgb(255 193 83 / 14%); }
+.tavern-meal-grid button:disabled { cursor: default; opacity: .52; }
+.tavern-meal-grid button[data-state="prepared"], .tavern-meal-grid button[data-state="active"] { opacity: 1; border-color: #e7bc58; box-shadow: inset 0 0 0 1px #e7bc5844, 0 0 16px #e7bc5818; }
+.tavern-meal-grid button[data-state="active"] { border-color: #6bd39b; box-shadow: inset 0 0 0 1px #6bd39b44, 0 0 16px #6bd39b18; }
+.tavern-meal-grid i, .tavern-meal-grid strong, .tavern-meal-grid small, .tavern-meal-grid em { display: block; }
+.tavern-meal-grid i { color: #ffc35f; font: normal 1.15rem/1 Georgia, serif; }
+.tavern-meal-grid strong { margin-top: 5px; font: 900 .6rem/1.12 Georgia, serif; letter-spacing: .04em; }
+.tavern-meal-grid small { margin-top: 5px; color: #cdbd9e; font-size: .56rem; line-height: 1.18; }
+.tavern-meal-grid em { margin-top: 6px; color: #f0c75d; font: 900 .54rem/1 system-ui; font-style: normal; letter-spacing: .07em; }
 .tavern-bounties { margin-top: 13px; padding: 11px; border: 1px solid #8c6c3e; border-radius: 10px; background: #171d18; }
 .tavern-bounties header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding-bottom: 8px; border-bottom: 1px solid #8c6c3e66; color: #f7d98c; font: 900 .7rem/1 Georgia, serif; letter-spacing: .08em; }
 .tavern-bounties header small { color: #9db2a1; font: 600 .6rem/1.2 system-ui; letter-spacing: 0; }
@@ -1123,7 +1162,7 @@ body:has(#combat-hud-shell[data-loadout-open="true"]) #player-trade-prompt { dis
 .tavern-bounty strong { color: #f5e4bf; font-size: .72rem; }
 .tavern-bounty span { color: #aebbad; font-size: .64rem; }
 .tavern-bounty em { grid-row: 1 / span 2; grid-column: 2; align-self: center; color: #f0c86e; font: 800 .62rem/1.1 system-ui; font-style: normal; white-space: nowrap; }
-@media (max-width: 560px) { .tavern-services { grid-template-columns: 1fr; } .tavern-bounties header { align-items: flex-start; flex-direction: column; } }
+@media (max-width: 560px) { .tavern-services { grid-template-columns: 1fr; } .tavern-meal-grid { grid-template-columns: 1fr; } .tavern-meal-grid button { min-height: 72px; padding-left: 46px; text-align: left; } .tavern-meal-grid i { position: absolute; left: 15px; top: 25px; } .tavern-meals > header, .tavern-bounties header { align-items: flex-start; flex-direction: column; } }
 .tavern-dialogue-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
 .tavern-dialogue-actions button {
   padding: 7px 12px;

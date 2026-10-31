@@ -307,7 +307,9 @@ import {
   huntSetForLoadout,
   type ItemRarity,
   HEALING_POTION,
+  TAVERN_MEALS,
   type PotionUpdate,
+  type TavernMealId,
   type TavernServiceUpdate,
   POWER_DEFINITIONS,
   WEAPON_TECHNIQUES_AVAILABLE,
@@ -1146,6 +1148,12 @@ if (initialGameExperience === "legacy-voxel") {
 }
 const targetLabel = document.querySelector<HTMLElement>("#target")!;
 const tavernDialogue = document.querySelector<HTMLElement>("#tavern-dialogue")!;
+const tavernBoonHud = document.querySelector<HTMLElement>("#tavern-boon-hud")!;
+const tavernBoonPhase = document.querySelector<HTMLElement>("#tavern-boon-phase")!;
+const tavernBoonName = document.querySelector<HTMLElement>("#tavern-boon-name")!;
+const tavernBoonEffect = document.querySelector<HTMLElement>("#tavern-boon-effect")!;
+const tavernMealStatus = document.querySelector<HTMLElement>("#tavern-meal-status")!;
+const tavernMealButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-tavern-meal]")];
 const potionBuy = document.querySelector<HTMLButtonElement>("#potion-buy")!;
 const potionUse = document.querySelector<HTMLButtonElement>("#potion-use")!;
 const potionCount = document.querySelector<HTMLElement>("#potion-count")!;
@@ -12455,20 +12463,51 @@ let potionMaxHealth = 5;
 let potionUiKey = "";
 let tavernServicePending = false;
 let tavernReturnBound = false;
+let tavernMealId: TavernMealId | null = null;
+let tavernMealState: "prepared" | "active" | null = null;
+
+function renderTavernMeal(): void {
+  const meal = tavernMealId ? TAVERN_MEALS[tavernMealId] : null;
+  tavernBoonHud.hidden = !meal || !tavernMealState;
+  if (meal && tavernMealState) {
+    tavernBoonHud.dataset.state = tavernMealState;
+    tavernBoonPhase.textContent = tavernMealState === "active" ? "ACTIVE · FLOOR 1" : "PREPARED · NEXT CLIMB";
+    tavernBoonName.textContent = meal.name;
+    tavernBoonEffect.textContent = meal.effect;
+    tavernMealStatus.textContent = tavernMealState === "active"
+      ? `${meal.name} is active for this Floor 1 attempt.`
+      : `${meal.name} is packed and activates when you enter Floor 1.`;
+  } else {
+    tavernBoonHud.removeAttribute("data-state");
+    tavernMealStatus.textContent = "No meal prepared · choose one for your next climb.";
+  }
+  for (const button of tavernMealButtons) {
+    const id = button.dataset.tavernMeal as TavernMealId;
+    const selected = id === tavernMealId && tavernMealState;
+    button.dataset.state = selected ? tavernMealState! : "";
+    button.disabled = tavernServicePending || !room || id === tavernMealId
+      || tavernCoinBalance < TAVERN_MEALS[id].price;
+    button.title = selected
+      ? `${TAVERN_MEALS[id].name} ${tavernMealState}`
+      : `Prepare ${TAVERN_MEALS[id].name} for ${TAVERN_MEALS[id].price} gold`;
+  }
+}
 
 function refreshTavernServices(): void {
   tavernRest.disabled = tavernServicePending || !room;
   tavernBind.disabled = tavernServicePending || !room || tavernReturnBound;
   tavernBindStatus.textContent = tavernReturnBound ? "Bound here · defeat returns you to the inn" : "Return here after defeat";
   tavernBind.querySelector("strong")!.textContent = tavernReturnBound ? "RETURN POINT BOUND" : "BIND RETURN POINT";
+  renderTavernMeal();
 }
 
-function requestTavernService(action: "rest" | "bind"): void {
+function requestTavernService(action: "rest" | "bind" | "meal", mealId?: TavernMealId): void {
   if (!room || tavernServicePending) return;
   tavernServicePending = true;
-  potionShopStatus.textContent = action === "rest" ? "Mara is tending the hearth…" : "Binding your return point…";
+  if (action === "meal" && mealId) tavernMealStatus.textContent = `Mara is preparing ${TAVERN_MEALS[mealId].name}…`;
+  else potionShopStatus.textContent = action === "rest" ? "Mara is tending the hearth…" : "Binding your return point…";
   refreshTavernServices();
-  room.send("tavern:service", { action });
+  room.send("tavern:service", mealId ? { action, mealId } : { action });
 }
 
 function refreshPotionUi(): void {
@@ -12501,6 +12540,10 @@ potionBuy.addEventListener("click", () => requestPotion(true));
 potionUse.addEventListener("click", () => requestPotion());
 tavernRest.addEventListener("click", () => requestTavernService("rest"));
 tavernBind.addEventListener("click", () => requestTavernService("bind"));
+for (const button of tavernMealButtons) button.addEventListener("click", () => {
+  const mealId = button.dataset.tavernMeal as TavernMealId;
+  requestTavernService("meal", mealId);
+});
 
 function closeTavernDialogue(): void {
   tavernDialogue.hidden = true;
@@ -12875,6 +12918,7 @@ function updateTavernCoins(coins: number): void {
   for (const button of highLowStakes.querySelectorAll<HTMLButtonElement>("[data-high-low-stake]")) {
     button.disabled = highLowPending || Number(button.dataset.highLowStake) > tavernCoinBalance;
   }
+  refreshTavernServices();
 }
 
 let blacksmithPending = false;
@@ -20699,12 +20743,19 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   room.onMessage("tavern:service", (message: TavernServiceUpdate) => {
     tavernServicePending = false;
     tavernReturnBound = message.bound;
+    tavernMealId = message.mealId;
+    tavernMealState = message.mealState;
+    updateTavernCoins(message.coins);
     updatePlayerHealth(message.health, message.maxHealth);
-    potionShopStatus.textContent = message.message;
-    status.textContent = message.message;
-    showCombatFeedback(message.ok ? (message.action === "rest" ? "RESTORED" : message.action === "bind" ? "RETURN BOUND" : "INN READY") : message.message, message.ok ? "dodge" : "hurt");
     refreshTavernServices();
+    if (message.action !== "sync") {
+      if (message.action === "meal") tavernMealStatus.textContent = message.message;
+      else potionShopStatus.textContent = message.message;
+      status.textContent = message.message;
+      showCombatFeedback(message.ok ? (message.action === "rest" ? "RESTORED" : message.action === "bind" ? "RETURN BOUND" : "MEAL PREPARED") : message.message, message.ok ? "dodge" : "hurt");
+    }
   });
+  room.send("tavern:sync");
   room.onMessage("combat:defense", (message: DefenseResolved) => {
     if (message.playerId !== room?.sessionId) return;
     updateMomentum(message.momentumStacks);

@@ -154,7 +154,16 @@ export type LootCollectResult = {
 };
 export const HEALING_POTION = { price: 5, heal: 2, capacity: 3, cooldownMs: 5000 } as const;
 export type PotionUpdate = { phase: "bought" | "healed" | "error"; message: string; quantity: number; gold: number; health: number; maxHealth: number; cooldownUntil: number; healed: number };
-export const TavernServiceRequestSchema = z.object({ action: z.enum(["rest", "bind"]) }).strict();
+export const TAVERN_MEALS = {
+  hearty_stew: { id: "hearty_stew", name: "Hearty Stew", price: 8, icon: "🍲", effect: "+2 maximum health for your next tower attempt" },
+  runners_tea: { id: "runners_tea", name: "Runner's Tea", price: 6, icon: "🍵", effect: "+33% stamina recovery for your next tower attempt" },
+  fortune_pie: { id: "fortune_pie", name: "Fortune Pie", price: 10, icon: "🥧", effect: "+25% equipment-drop chance for your next tower attempt" },
+} as const;
+export type TavernMealId = keyof typeof TAVERN_MEALS;
+export const TavernServiceRequestSchema = z.object({
+  action: z.enum(["rest", "bind", "meal"]),
+  mealId: z.enum(["hearty_stew", "runners_tea", "fortune_pie"]).optional(),
+}).strict().refine(value => value.action !== "meal" || value.mealId !== undefined);
 export type TavernServiceAction = z.infer<typeof TavernServiceRequestSchema>["action"];
 export type TavernServiceUpdate = {
   action: TavernServiceAction | "sync";
@@ -165,6 +174,9 @@ export type TavernServiceUpdate = {
   maxHealth: number;
   stamina: number;
   maxStamina: number;
+  coins: number;
+  mealId: TavernMealId | null;
+  mealState: "prepared" | "active" | null;
 };
 export const MINERAL_REGROWTH_MS = 120_000;
 export interface MineralDepositStatus { id: string; available: number; total: number; readyAt: number | null }

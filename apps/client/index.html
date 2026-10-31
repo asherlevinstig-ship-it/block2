@@ -233,6 +233,11 @@
       <small><kbd>E</kbd> INTERACT</small>
     </button>
     <div id="combat-feedback" aria-live="polite"></div>
+    <aside id="tavern-boon-hud" aria-live="polite" hidden>
+      <span id="tavern-boon-phase">NEXT CLIMB</span>
+      <strong id="tavern-boon-name">Mara's meal</strong>
+      <small id="tavern-boon-effect"></small>
+    </aside>
     <section id="tavern-dialogue" role="dialog" aria-label="Mara the Tavernkeeper" hidden>
       <p class="eyebrow">HEARTH & HAMMER</p>
       <h2>Mara <small>Tavernkeeper</small></h2>
@@ -241,6 +246,15 @@
         <button id="tavern-rest" type="button"><strong>REST AT THE HEARTH</strong><small>Restore health, stamina and cooldowns</small></button>
         <button id="tavern-bind" type="button"><strong>BIND RETURN POINT</strong><small id="tavern-bind-status">Return here after defeat</small></button>
       </div>
+      <section class="tavern-meals" aria-label="Mara's meals">
+        <header><span>MARA'S CLIMBER'S MENU</span><small>Choose one boon for your next Floor 1 attempt</small></header>
+        <p id="tavern-meal-status" aria-live="polite">No meal prepared.</p>
+        <div class="tavern-meal-grid">
+          <button type="button" data-tavern-meal="hearty_stew"><i aria-hidden="true">♨</i><strong>HEARTY STEW</strong><small>+2 maximum health</small><em>8 GOLD</em></button>
+          <button type="button" data-tavern-meal="runners_tea"><i aria-hidden="true">⌁</i><strong>RUNNER'S TEA</strong><small>+33% stamina recovery</small><em>6 GOLD</em></button>
+          <button type="button" data-tavern-meal="fortune_pie"><i aria-hidden="true">✦</i><strong>FORTUNE PIE</strong><small>+25% equipment-drop chance</small><em>10 GOLD</em></button>
+        </div>
+      </section>
       <div class="potion-shop"><strong>Healing Potion · 5 gold</strong><small>Restores 2 HP · carry 3 · H to drink</small><p id="potion-shop-status" aria-live="polite"></p><button id="potion-buy" type="button">BUY · 5 GOLD</button></div>
       <section class="tavern-bounties" aria-label="Today's tower board">
         <header><span>TODAY'S TOWER BOARD</span><small>Contracts rotate each day</small></header>

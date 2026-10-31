@@ -3,6 +3,7 @@ import { InventoryItemState, PlayerState } from "../src/schema.js";
 import { applyPlayerSave, parsePlayerSave, serializePlayerSave, snapshotPlayerSave } from "../src/player-save.js";
 import { parseNorthwatchProgress, withNorthwatchProgress } from "../src/northwatch-progress.js";
 import { starterKitClaimed, withStarterKitClaimed } from "../src/starter-kit.js";
+import { activateTavernMeal, parseTavernMeal, prepareTavernMeal } from "../src/tavern-meals.js";
 
 describe("player saves", () => {
   it("keeps starter supplies pending for new and untouched legacy characters", () => {
@@ -145,5 +146,22 @@ describe("player saves", () => {
     const restored = new PlayerState(); applyPlayerSave(restored, parsed);
     expect(JSON.parse(restored.huntLoadoutsJson).buildPath.selectedPathId).toBe("healer");
     expect(JSON.parse(restored.huntLoadoutsJson).loadouts[0].buildPathId).toBe("healer");
+  });
+
+  it("round-trips an active tavern meal without permanently inflating base health", () => {
+    const player = new PlayerState();
+    player.coins = 20;
+    expect(prepareTavernMeal(player, "hearty_stew")).toBeNull();
+    activateTavernMeal(player);
+    expect([player.health, player.maxHealth]).toEqual([7, 7]);
+
+    const saved = parsePlayerSave(serializePlayerSave(player))!;
+    expect([saved.health, saved.maxHealth]).toEqual([5, 5]);
+    expect([saved.tavernMealId, saved.tavernMealState]).toEqual(["hearty_stew", "active"]);
+
+    const restored = new PlayerState();
+    applyPlayerSave(restored, saved);
+    expect([restored.health, restored.maxHealth]).toEqual([7, 7]);
+    expect(parseTavernMeal(restored.huntLoadoutsJson)).toEqual({ id: "hearty_stew", state: "active" });
   });
 });
