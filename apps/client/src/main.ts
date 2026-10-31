@@ -1,6 +1,7 @@
 import { greenwoodAtmosphere } from "./greenwood-atmosphere.js";
 import { greenwoodEmergence, greenwoodMobStyle, type GreenwoodMobStyle } from "./greenwood-mob-style.js";
 import { FAST_WORLD_TOWN_BOUNDS, FAST_WORLD_TOWN_ONLY, TOWER_FLOOR_ONE, TOWER_FLOOR_ONE_SOUTH_ATTENDANTS, TOWER_FLOOR_ONE_WARDENS, fastWorldGroundHeight, isInsideTowerFloorOne, isTowerFloorSafeZone, parseTowerProgress, pvpMurdererUntil, type TowerProgress } from "@blockcraft/protocol";
+import { parseGuildMembership } from "@blockcraft/protocol";
 import { GREENWOOD_MAIN_TRAIL, GREENWOOD_CAMP_TRAIL, GREENWOOD_THICKETS, GREENWOOD_CLUSTER_PLANTS, GREENWOOD_VERGE_PLANTS, sampleWoodlandTrail } from "./greenwood-landscape.js";
 import * as pc from "playcanvas";
 import { facetedBoxMesh } from "./faceted-shapes.js";
@@ -5795,11 +5796,13 @@ const remotePlayers = new Map<string, RemotePlayerVisual>();
 const playerStealthUntil = new Map<string, number>();
 const social = createSocialUI((type, payload) => { if (!room || !worldReady) return false; room.send(type, payload); return true; }, () => { resetMovementControls(); requestDefense(false); cancelPowerAim(); cancelSpecialAim(); });
 const tradeUI = createTradeUI(request => { if (!room || !worldReady) return false; room.send("trade:request", request); return true; }, () => { resetMovementControls(); requestDefense(false); cancelPowerAim(); cancelSpecialAim(); });
-const partyUI = createPartyUI(request => { if (!room || !worldReady) return false; room.send("party:request", request); return true; }, () => { resetMovementControls(); requestDefense(false); cancelPowerAim(); cancelSpecialAim(); }, id => tradeUI.invite(id), () => room?.sessionId ?? "", name => { if (!room || !worldReady) return false; room.send("player:name", name); return true; });
+const partyUI = createPartyUI(request => { if (!room || !worldReady) return false; room.send("party:request", request); return true; }, () => { resetMovementControls(); requestDefense(false); cancelPowerAim(); cancelSpecialAim(); }, id => tradeUI.invite(id), () => room?.sessionId ?? "", name => { if (!room || !worldReady) return false; room.send("player:name", name); return true; }, request => { if (!room || !worldReady) return false; room.send("guild:request", request); return true; });
 const playerInteractionUI = createPlayerInteractionUI({
   stop: () => { resetMovementControls(); requestDefense(false); cancelPowerAim(); cancelSpecialAim(); },
   trade: id => tradeUI.invite(id),
   party: id => partyUI.invite(id),
+  guild: id => partyUI.guildInvite(id),
+  openGuild: () => partyUI.openGuild(),
 });
 let activeRealmEventId = "";
 let realmEventDisplayUntil = 0;
@@ -5828,6 +5831,8 @@ function playerInteractionView(id: string): PlayerInteractionView | null {
   const position = remote.entity.getPosition();
   const local = localPlayer.getPosition();
   const distance = Math.hypot(position.x - local.x, position.z - local.z);
+  const localGuild = parseGuildMembership((room.state.players as Map<string, NetworkPlayer>).get(room.sessionId)?.huntLoadoutsJson ?? "{}");
+  const targetGuild = parseGuildMembership(player.huntLoadoutsJson);
   const state = player.health <= 0 ? "Defeated"
     : player.defending ? "Guarding"
       : remote.actionStartedAt !== null || remote.powerStartedAt !== null ? "In combat"
@@ -5851,6 +5856,7 @@ function playerInteractionView(id: string): PlayerInteractionView | null {
     characterRoot: remote.rig.root,
     distance,
     partyState: distance > 4 ? "far" : partyUI.isMember(id) ? "member" : partyUI.isFull() ? "full" : "invite",
+    guildState: !localGuild ? "create" : targetGuild?.id === localGuild.id ? "member" : targetGuild ? "other" : distance > 4 ? "far" : "invite",
   };
 }
 
@@ -19720,7 +19726,7 @@ app.on("update", (dt: number) => {
       isElite: visual.state.isElite, isMiniBoss: visual.state.isMiniBoss })));
     if (now - lastNameplateSampleAt >= 100) {
     lastNameplateSampleAt = now;
-    const nameplates: { id: string; name: string; x: number; y: number; visible: boolean; local: boolean;
+    const nameplates: { id: string; name: string; guildName?: string; x: number; y: number; visible: boolean; local: boolean;
       murderer?: boolean; healHealth?: number; healMaxHealth?: number; healTarget?: boolean }[] = [];
     const healerActive = localBuildPathId === "healer";
     const fieldMendReady = localCallingAbilityId === "healer_field_mend";
@@ -19750,7 +19756,8 @@ app.on("update", (dt: number) => {
         const inHealRange = healerActive && !isLocal && Math.abs(pose.y - eye.y) <= 2.5
           && Math.hypot(pose.x - eye.x, pose.z - eye.z) <= 8
           && (player.health <= 0 || player.health / Math.max(1, player.maxHealth) <= .4 || id === healTargetId);
-        nameplates.push({ id, name: player.name, x: rect.left + screen.x, y: rect.top + screen.y, visible: Boolean(visible), local: isLocal,
+        nameplates.push({ id, name: player.name, guildName: parseGuildMembership(player.huntLoadoutsJson)?.name,
+          x: rect.left + screen.x, y: rect.top + screen.y, visible: Boolean(visible), local: isLocal,
           murderer: pvpMurdererUntil(player.huntLoadoutsJson) > Date.now(),
           healHealth: inHealRange ? player.health : undefined, healMaxHealth: inHealRange ? player.maxHealth : undefined,
           healTarget: id === healTargetId });
@@ -20353,6 +20360,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     if (update.message) social.event(update.message);
   });
   room.onMessage("party:update", update => partyUI.update(update));
+  room.onMessage("guild:update", update => partyUI.updateGuild(update));
   room.onMessage("realm:event", (update: RealmEventUpdate) => {
     if (update.phase === "active") {
       activeRealmEventId = update.eventId ?? "";

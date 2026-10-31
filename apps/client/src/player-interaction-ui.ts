@@ -20,12 +20,15 @@ export type PlayerInteractionView = {
   characterRoot: pc.Entity;
   distance: number;
   partyState: "invite" | "member" | "full" | "far";
+  guildState: "create" | "invite" | "member" | "other" | "far";
 };
 
 export function createPlayerInteractionUI(actions: {
   stop: () => void;
   trade: (targetId: string) => void;
   party: (targetId: string) => boolean;
+  guild: (targetId: string) => boolean;
+  openGuild: () => void;
 }) {
   const root = document.createElement("section");
   root.id = "player-interaction";
@@ -43,7 +46,7 @@ export function createPlayerInteractionUI(actions: {
     '<dl><div><dt>MAIN HAND</dt><dd data-player-field="weapon"></dd></div><div><dt>ARMOUR</dt><dd data-player-field="armour"></dd></div><div><dt>TRAIT</dt><dd data-player-field="trait"></dd></div><div><dt>STYLE</dt><dd data-player-field="appearance"></dd></div></dl>',
     '<p class="player-interaction-note">Equipment and combat status are public. Pack contents, gold and private progression remain hidden.</p>',
     '</section></div>',
-    '<div class="player-interaction-actions"><button class="player-interaction-party" type="button">INVITE TO PARTY</button><button class="player-interaction-trade" type="button">TRADE</button><button class="player-interaction-dismiss" type="button">CLOSE</button></div>',
+    '<div class="player-interaction-actions"><button class="player-interaction-party" type="button">INVITE TO PARTY</button><button class="player-interaction-guild" type="button">INVITE TO GUILD</button><button class="player-interaction-trade" type="button">TRADE</button><button class="player-interaction-dismiss" type="button">CLOSE</button></div>',
     '</div>',
   ].join("");
   document.body.append(root);
@@ -56,6 +59,7 @@ export function createPlayerInteractionUI(actions: {
   const health = root.querySelector<HTMLElement>(".player-interaction-health strong")!;
   const healthFill = root.querySelector<HTMLElement>(".player-interaction-health i b")!;
   const party = root.querySelector<HTMLButtonElement>(".player-interaction-party")!;
+  const guild = root.querySelector<HTMLButtonElement>(".player-interaction-guild")!;
   const trade = root.querySelector<HTMLButtonElement>(".player-interaction-trade")!;
   const closeButtons = [...root.querySelectorAll<HTMLButtonElement>(".player-interaction-close, .player-interaction-dismiss")];
   let current: PlayerInteractionView | null = null;
@@ -78,6 +82,13 @@ export function createPlayerInteractionUI(actions: {
     if (!current || current.partyState !== "invite") return;
     const id = current.id;
     if (actions.party(id)) close();
+  });
+  guild.addEventListener("click", () => {
+    if (!current) return;
+    if (current.guildState === "create") { close(); actions.openGuild(); return; }
+    if (current.guildState !== "invite") return;
+    const id = current.id;
+    if (actions.guild(id)) close();
   });
   root.addEventListener("keydown", event => {
     event.stopPropagation();
@@ -104,6 +115,9 @@ export function createPlayerInteractionUI(actions: {
       root.querySelector<HTMLElement>('[data-player-field="' + field + '"]')!.textContent = view[field];
     party.disabled = view.partyState !== "invite";
     party.textContent = view.partyState === "member" ? "IN YOUR PARTY" : view.partyState === "full" ? "PARTY FULL" : view.partyState === "far" ? "MOVE CLOSER" : "INVITE TO PARTY";
+    guild.disabled = !["create", "invite"].includes(view.guildState);
+    guild.textContent = view.guildState === "create" ? "FORM A GUILD" : view.guildState === "member" ? "GUILD MEMBER"
+      : view.guildState === "other" ? "IN ANOTHER GUILD" : view.guildState === "far" ? "MOVE CLOSER" : "INVITE TO GUILD";
     trade.disabled = view.distance > 4 || view.health <= 0;
     trade.textContent = view.health <= 0 ? "PLAYER DEFEATED" : view.distance > 4 ? "MOVE CLOSER TO TRADE" : "TRADE";
     if (!portrait || portraitTarget !== view.id) {

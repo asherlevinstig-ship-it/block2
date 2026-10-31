@@ -1067,7 +1067,7 @@ body:has(#combat-hud-shell[data-loadout-open="true"]) #player-trade-prompt { dis
 .player-interaction-details dt { margin-bottom: 7px; color: #69cbb6; font-size: 8px; }
 .player-interaction-details dd { overflow: hidden; margin: 0; color: #f4fff9; font: 800 13px/1.25 system-ui; text-overflow: ellipsis; }
 .player-interaction-note { margin: 0; color: #8fa8a0; font: 600 11px/1.45 system-ui; }
-.player-interaction-actions { display: grid; grid-template-columns: 1fr 1fr auto; gap: 9px; padding: 0 24px 23px; }
+.player-interaction-actions { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 9px; padding: 0 24px 23px; }
 .player-interaction-actions button {
   min-height: 44px;
   border: 1px solid #75d7c366;
@@ -1079,6 +1079,7 @@ body:has(#combat-hud-shell[data-loadout-open="true"]) #player-trade-prompt { dis
   letter-spacing: .09em;
 }
 .player-interaction-actions .player-interaction-trade { border-color: #d8b45277; background: linear-gradient(180deg, #76591b, #4e390c); color: #fff0b5; }
+.player-interaction-actions .player-interaction-guild { border-color: #b89aff77; background: linear-gradient(180deg, #59417d, #34234f); color: #eee1ff; }
 .player-interaction-actions .player-interaction-dismiss { padding-inline: 18px; background: #091d1a; color: #a8beb7; }
 .player-interaction-actions button:hover:not(:disabled), .player-interaction-close:hover { filter: brightness(1.18); transform: translateY(-1px); }
 .player-interaction-actions button:disabled { cursor: not-allowed; opacity: .42; }
@@ -3057,6 +3058,7 @@ html.boss-hud-active #world-objective { display: none !important; }
 .player-nameplate[data-local="true"] { color: #bde6a8; }
 .player-nameplate[data-murderer="true"] { color: #ff554c; border-color: #ff3e36aa; background: #260806e8; box-shadow: 0 0 13px #ff291f66; font-weight: 950; }
 .player-nameplate[data-heal-target="true"] { border-color: #8bffcc; box-shadow: 0 0 0 2px #49d6a455, 0 0 14px #49d6a488; color: #d8ffeb; }
+.player-nameplate .player-guild-name { display: block; margin-top: 1px; color: #cdb8ff; font: 800 9px system-ui; letter-spacing: .04em; text-align: center; }
 .player-heal-meter { display: block; width: 54px; height: 4px; margin: 3px auto 0; border-radius: 4px; overflow: hidden; background: #521e24; }
 .player-heal-meter i { display: block; height: 100%; background: #64df9d; }
 .player-heal-cue { display: block; margin-top: 2px; color: #a8ffd3; font-size: 9px; letter-spacing: .04em; }
@@ -3206,6 +3208,18 @@ html.boss-hud-active #world-objective { display: none !important; }
 #party-panel .party-rename label { display: block; margin-bottom: 5px; color: #b4c9b8; font-size: 10px; }
 #party-panel .party-rename > div { display: flex; gap: 5px; }
 #party-panel .party-rename input { min-width: 0; width: 100%; padding: 7px; border: 1px solid #ffffff33; border-radius: 5px; background: #14291f; color: #fff4db; }
+#party-panel :is(.party-group, .guild-group) { margin-top: 10px; padding: 10px; border: 1px solid #ffffff22; border-radius: 7px; background: #06110ed9; }
+#party-panel :is(.party-group, .guild-group) h3 { display: flex; justify-content: space-between; gap: 8px; margin: 0 0 5px; color: #e9d38b; font: 900 11px system-ui; letter-spacing: .1em; }
+#party-panel .guild-name { overflow: hidden; color: #cbb8f4; text-overflow: ellipsis; white-space: nowrap; }
+#party-panel :is(.guild-help, .party-help) { margin: 4px 0 8px; color: #9eaea4; font-size: 10px; }
+#party-panel :is(.guild-create, .guild-picker) { display: flex; gap: 5px; }
+#party-panel .guild-create input { min-width: 0; width: 100%; padding: 7px; border: 1px solid #9d7dd455; border-radius: 5px; background: #181326; color: #f4edff; }
+#party-panel .guild-members { display: grid; gap: 5px; margin: 7px 0; padding: 0; list-style: none; }
+#party-panel .guild-members li { display: grid; grid-template-columns: 1fr auto; gap: 7px; align-items: center; }
+#party-panel .guild-members small { color: #91a69a; }
+#party-panel .guild-invitation { margin: 8px 0; padding: 8px; border: 1px solid #d7b45566; border-radius: 6px; background: #382d16; }
+#party-panel .guild-invitation p { margin: 0 0 7px; }
+#party-panel .guild-leave { margin-top: 7px; }
 @media (pointer: coarse) { #event-log { bottom: calc(170px + env(safe-area-inset-bottom)); height: 150px; } #party-panel { bottom: calc(332px + env(safe-area-inset-bottom)); } }
 .minimap-danger { margin-top: 7px; }
 .minimap-danger span { flex: 1; padding: 4px 1px; text-align: center; border-radius: 3px; background: #234a3c; }

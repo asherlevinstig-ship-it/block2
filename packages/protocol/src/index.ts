@@ -26,10 +26,10 @@ export { DODGE_STAMINA_COST, DODGE_CHAIN_COST_STEP, DODGE_MAX_STAMINA_COST, DODG
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-warden-gate-v167";
-export const SILVER_DEPTHS_ROOM = "silver-depths-instance-v3";
-export const PRACTICE_ROOM = "calling-practice-v11";
-export const TAVERN_ROOM = "hearth-and-hammer-v3";
+export const WORLD_ROOM = "world-warden-gate-v168";
+export const SILVER_DEPTHS_ROOM = "silver-depths-instance-v4";
+export const PRACTICE_ROOM = "calling-practice-v12";
+export const TAVERN_ROOM = "hearth-and-hammer-v4";
 // The authored inn faces south (+Z). Keep the interaction anchor immediately
 // outside its visible front door rather than beside the building.
 export const FAST_WORLD_TAVERN_ENTRANCE = { x: 74.5, y: 8, z: 81.5 } as const;
@@ -48,6 +48,40 @@ export const PartyRequestSchema = z.discriminatedUnion("action", [
 export type PartyRequest = z.infer<typeof PartyRequestSchema>;
 export type PartyUpdate = { partyId: string | null; members: { id: string; name: string; health: number; maxHealth: number; distance: number; leader: boolean }[];
   nearby: { id: string; name: string }[]; invite: { id: string; name: string; expiresAt: number } | null };
+export const GuildNameSchema = z.string().trim().min(3).max(24)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9 '&-]*$/, "Use letters, numbers, spaces, apostrophes or hyphens.");
+export const GuildRequestSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("create"), name: GuildNameSchema }),
+  z.object({ action: z.literal("invite"), targetId: z.string().min(1).max(80) }),
+  z.object({ action: z.literal("respond"), inviteId: z.string().min(1).max(160), accept: z.boolean() }),
+  z.object({ action: z.literal("leave") }),
+]);
+export type GuildRequest = z.infer<typeof GuildRequestSchema>;
+export type GuildMembership = { id: string; name: string };
+export type GuildUpdate = { membership: GuildMembership | null;
+  members: { id: string; name: string; online: boolean; distance: number }[];
+  nearby: { id: string; name: string }[];
+  invite: { id: string; guildId: string; guildName: string; inviterName: string; expiresAt: number } | null };
+export function parseGuildMembership(source: string): GuildMembership | null {
+  try {
+    const raw = JSON.parse(source) as { guild?: unknown };
+    if (!raw || typeof raw !== "object" || Array.isArray(raw) || !raw.guild || typeof raw.guild !== "object" || Array.isArray(raw.guild)) return null;
+    const guild = raw.guild as Record<string, unknown>;
+    const name = GuildNameSchema.safeParse(guild.name);
+    if (typeof guild.id !== "string" || guild.id.length < 8 || guild.id.length > 80 || !name.success) return null;
+    return { id: guild.id, name: name.data };
+  } catch { return null; }
+}
+export function withGuildMembership(source: string, guild: GuildMembership | null): string {
+  let raw: Record<string, unknown> = {};
+  try {
+    const parsed = JSON.parse(source) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) raw = parsed as Record<string, unknown>;
+  } catch { /* Repair malformed legacy profile data. */ }
+  if (guild) return JSON.stringify({ ...raw, guild });
+  const { guild: _removed, ...rest } = raw;
+  return JSON.stringify(rest);
+}
 export type RealmEventUpdate = {
   phase: "idle" | "warning" | "active" | "cooldown";
   eventId: string | null;

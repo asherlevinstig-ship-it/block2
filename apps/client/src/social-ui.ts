@@ -33,7 +33,7 @@ export function createSocialUI(send: (type: string, payload: unknown) => boolean
     notice(text: string) { add("System", text, "notice"); },
     event(text: string) { add("World", text, "event"); },
     message(message: NearbyChatMessage) { add(message.name + ":", message.text, "chat"); },
-    update(now: number, players: { id: string; name: string; x: number; y: number; visible: boolean; local: boolean; murderer?: boolean;
+    update(now: number, players: { id: string; name: string; guildName?: string; x: number; y: number; visible: boolean; local: boolean; murderer?: boolean;
       healHealth?: number; healMaxHealth?: number; healTarget?: boolean }[]) {
       if (now - lastUpdate < 100) return; lastUpdate = now;
       const ids = new Set(players.map(player => player.id));
@@ -41,7 +41,12 @@ export function createSocialUI(send: (type: string, payload: unknown) => boolean
       for (const player of players) {
         let tag = tags.get(player.id);
         if (!tag) { tag = document.createElement("div"); tag.className = "player-nameplate"; document.body.append(tag); tags.set(player.id, tag); }
-        tag.replaceChildren(document.createTextNode(player.murderer ? `☠ ${player.name}` : player.name));
+        const playerName = document.createElement("span"); playerName.textContent = player.murderer ? `☠ ${player.name}` : player.name;
+        tag.replaceChildren(playerName);
+        if (player.guildName) {
+          const guild = document.createElement("small"); guild.className = "player-guild-name";
+          guild.textContent = `〈${player.guildName}〉`; tag.append(guild);
+        }
         if (player.healHealth !== undefined && player.healMaxHealth !== undefined) {
           const meter = document.createElement("span"); meter.className = "player-heal-meter";
           const fill = document.createElement("i");

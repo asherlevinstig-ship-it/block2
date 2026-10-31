@@ -35,8 +35,9 @@ import { ashenSentryTacticalPattern, ashenWarpackCooldownMultiplier, ashenWarpac
 import { BRUTE_VOLLEY, bruteVolleyReady, bruteRockEndpoints } from "@blockcraft/protocol";
 import { CHAMPION_CHARGE, CINDER_RAM_CHARGE, ChatSendSchema, QUICK_CHAT_PHRASES, PlayerNameSchema, AppearanceSchema, type NearbyChatMessage } from "@blockcraft/protocol";
 import { hearsNearbyChat } from "./nearby-chat.js";
-import { PartyRequestSchema } from "@blockcraft/protocol";
+import { GuildRequestSchema, parseGuildMembership, PartyRequestSchema } from "@blockcraft/protocol";
 import { Parties } from "./parties.js";
+import { Guilds } from "./guilds.js";
 import { TradeRequestSchema } from "@blockcraft/protocol";
 import { FIELD_FORGE_RECIPES, FieldForgeSchema, type FieldForgeId } from "@blockcraft/protocol";
 import { Trading } from "./trading.js";
@@ -660,6 +661,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly lastChatAt = new Map<string, number>();
   private readonly lastNameAt = new Map<string, number>();
   private readonly parties = new Parties();
+  private readonly guilds = new Guilds();
   private readonly expeditionTicketBySession = new Map<string, string>();
   private readonly combatContributions = new CombatContributions();
   private readonly silverGuardVolley = new SilverGuardVolley();
@@ -675,6 +677,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly forestReturns = new Map<string, { x: number; y: number; z: number }>();
   private readonly forestTravelAt = new Map<string, number>();
   private readonly lastPartyRequestAt = new Map<string, number>();
+  private readonly lastGuildRequestAt = new Map<string, number>();
   private lastPartyUpdateAt = -Infinity;
   private readonly trading = new Trading((a, b) => hasCombatLineOfSight(a, b, this.readWorldBlock));
   private readonly lastTradeRequestAt = new Map<string, number>();
@@ -900,6 +903,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           : "Training arena · select any ability, then use G. F uses your Calling Special. Your character will not be changed." });
       this.sendEquipmentAffixes(client);
       if (this.roomKind === "overworld") client.send("party:update", this.parties.snapshot(client.sessionId, this.state.players, Date.now()));
+      client.send("guild:update", this.guilds.snapshot(client.sessionId, this.state.players, Date.now()));
       if (this.roomKind === "overworld") for (const [key, lobby] of this.silverDepthsLobbies)
         if (lobby.members.includes(client.sessionId)) this.sendSilverDepthsLobby(key, lobby);
       client.send("mineral:status", this.mineralStatus());
@@ -982,6 +986,22 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (parsed.data.action === "leave") this.expeditionTicketBySession.delete(client.sessionId);
       this.validateSilverDepthsLobbies(Date.now());
       this.sendPartyUpdates(Date.now());
+    });
+    this.onMessage("guild:request", (client, payload: unknown) => {
+      const parsed = GuildRequestSchema.safeParse(payload);
+      if (!parsed.success || !this.state.players.has(client.sessionId)) return;
+      const now = Date.now();
+      if (now - (this.lastGuildRequestAt.get(client.sessionId) ?? -Infinity) < 300) return;
+      this.lastGuildRequestAt.set(client.sessionId, now);
+      const result = this.guilds.handle(client.sessionId, parsed.data, this.state.players, now, randomUUID);
+      client.send("chat:notice", result.message);
+      for (const id of result.changed) {
+        const changed = this.state.players.get(id);
+        if (changed) void this.persistPlayer(id, changed, true).catch(() => {
+          this.clients.find(other => other.sessionId === id)?.send("chat:notice", "Guild membership changed, but saving is delayed. Please stay connected.");
+        });
+      }
+      this.sendGuildUpdates(Date.now());
     });
     this.onMessage("player:name", (client, payload: unknown) => {
       const player = this.state.players.get(client.sessionId), name = PlayerNameSchema.safeParse(payload);
@@ -1347,6 +1367,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
     this.trading.disconnect(client.sessionId); this.lastTradeRequestAt.delete(client.sessionId);
     this.parties.disconnect(client.sessionId);
+    this.guilds.disconnect(client.sessionId); this.lastGuildRequestAt.delete(client.sessionId);
     for (const [key, lobby] of this.silverDepthsLobbies) if (lobby.members.includes(client.sessionId))
       this.closeSilverDepthsLobby(key, "Assembly cancelled · a teammate disconnected.");
     this.expeditionTicketBySession.delete(client.sessionId);
@@ -1521,6 +1542,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       client.send("trade:update", this.trading.snapshot(client.sessionId, this.state.players));
       client.send("realm:event", this.realmEventUpdateFor(client, now));
     }
+  }
+
+  private sendGuildUpdates(now: number): void {
+    for (const client of this.clients) if (this.state.players.has(client.sessionId))
+      client.send("guild:update", this.guilds.snapshot(client.sessionId, this.state.players, now));
   }
 
   private ownsOrHasPendingItem(playerId: string, itemId: ItemId): boolean {
@@ -6783,7 +6809,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       mistfen, greenwood, northwatch: parseNorthwatchProgress(player.huntLoadoutsJson), roadsideClaims: [...parseRoadsideClaims(player.huntLoadoutsJson)],
       ashenBlueprints: ashenBlueprints(player.huntLoadoutsJson), ashenMastery: parseAshenMastery(player.huntLoadoutsJson),
       leaderCollections: this.leaderCollectionState(player), crownkeeperFragments: crownkeeperFragments(player.huntLoadoutsJson),
-      towerProgress: parseTowerProgress(player.huntLoadoutsJson) });
+      towerProgress: parseTowerProgress(player.huntLoadoutsJson), guild: parseGuildMembership(player.huntLoadoutsJson) });
   }
 
   private equipmentAffixes(player: PlayerState): Partial<Record<ItemId, EquipmentAffixRoll>> {
@@ -6847,7 +6873,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       mistfen, greenwood, northwatch: parseNorthwatchProgress(player.huntLoadoutsJson), roadsideClaims: [...parseRoadsideClaims(player.huntLoadoutsJson)],
       ashenBlueprints: ashenBlueprints(player.huntLoadoutsJson), ashenMastery: parseAshenMastery(player.huntLoadoutsJson),
       leaderCollections: this.leaderCollectionState(player), crownkeeperFragments: crownkeeperFragments(player.huntLoadoutsJson),
-      towerProgress: parseTowerProgress(player.huntLoadoutsJson) });
+      towerProgress: parseTowerProgress(player.huntLoadoutsJson), guild: parseGuildMembership(player.huntLoadoutsJson) });
   }
 
   private sendEquipmentAffixes(client: Client, message = "Equipment attunements strengthen matching Calling mechanics."): void {
@@ -9817,6 +9843,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (Date.now() - this.lastPartyUpdateAt >= 500) {
       if (this.roomKind === "overworld") this.sendPartyUpdates(Date.now());
       else this.lastPartyUpdateAt = Date.now();
+      this.sendGuildUpdates(Date.now());
       for (const client of this.clients) this.sendObjectiveState(client);
       if (this.rapidPractice) for (const client of this.clients) this.sendFloorRunUpgrades(client);
       if (this.roomKind === "overworld") {
