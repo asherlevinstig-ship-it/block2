@@ -15,6 +15,14 @@ describe("tavern furniture collision", () => {
     expect(tavernRoomFurnitureCellSolid(0, 15, 2)).toBe(false);
     expect(tavernRoomFurnitureCellSolid(6, 15, 2)).toBe(false);
   });
+  it("builds seven physical stair levels flush with the upper landing", () => {
+    for (let z = 6; z >= 0; z--) {
+      const topY = 15 - z;
+      expect(tavernRoomFurnitureCellSolid(6, topY - 1, z)).toBe(true);
+      expect(tavernRoomFurnitureCellSolid(6, topY, z)).toBe(false);
+    }
+    expect(tavernRoomFurnitureCellSolid(3, 14, 0)).toBe(true);
+  });
   it("authorizes inn interactions only beside their furnishings", () => {
     expect(canUseTavernInnPoint({ x: TAVERN_INN_POINTS.rest.x, y: 15, z: TAVERN_INN_POINTS.rest.z }, "rest")).toBe(true);
     expect(canUseTavernInnPoint({ x: 8, y: 9, z: 6 }, "rest")).toBe(false);

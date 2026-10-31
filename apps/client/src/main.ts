@@ -14148,7 +14148,8 @@ function updateTavernDoorHold(now: number): void {
   if (tavernRoomRequested && worldReady && defeatScreen.hidden) {
     const player = localPlayer.getPosition();
     let nearest = Infinity;
-    for (const action of ["upstairs", "downstairs", "rest", "storage"] as const) {
+    // Stairs are physical traversal. Only actual furnishings use hold-E here.
+    for (const action of ["rest", "storage"] as const) {
       const point = TAVERN_INN_POINTS[action];
       const distance = Math.hypot(player.x - point.x, player.y - point.y, player.z - point.z);
       if (canUseTavernInnPoint(player, action) && distance < nearest) { nearest = distance; nearbyInnAction = action; }

@@ -201,9 +201,9 @@ export function createTavernRoom(app: pc.Application): pc.Entity {
   addWallTimbers(root, oak);
   // Frame the upper floor around a genuine stairwell. A single full slab made
   // the staircase visibly terminate in a ceiling even though travel worked.
-  box(root, "upper-floor-main", oak, [14.15, .3, 16.5], [-2.675, 14.18, 0]);
-  box(root, "upper-floor-east-rear", oak, [5.35, .3, 8.35], [7.075, 14.18, -4.075]);
-  box(root, "upper-floor-east-front", oak, [5.35, .3, 3], [7.075, 14.18, 6.75]);
+  box(root, "upper-floor-main", oak, [14.15, .3, 16.5], [-2.675, 14.85, 0]);
+  box(root, "upper-floor-east-rear", oak, [5.35, .3, 8.35], [7.075, 14.85, -4.075]);
+  box(root, "upper-floor-east-front", oak, [5.35, .3, 1], [7.075, 14.85, 7.75]);
   box(root, "ceiling-rafter", oakLight, [19.75, .42, .46], [0, 13.72, -5.2]);
   // The rafters beside the staircase stop at the well instead of forming a
   // waist-high bar across the player's view at the top step.
@@ -229,22 +229,22 @@ export function createTavernRoom(app: pc.Application): pc.Entity {
   // route into the guest room instead of opening into a wall.
   box(root, "guest-partition-east", oak, [2.8, 4.5, .3], [2.85, 17.25, 2.9]);
   box(root, "guest-door-lintel", oakLight, [2.9, .42, .46], [0, 19.2, 2.9]);
-  box(root, "upper-hall-runner", rugGreen, [11.2, .04, 3.15], [-3.3, 14.38, 5.2]);
-  box(root, "stairwell-frame-left", oakLight, [.28, .42, 5.2], [4.38, 14.38, 2.7]);
-  box(root, "stairwell-frame-rear", oakLight, [5.25, .42, .28], [7.02, 14.38, .18]);
-  box(root, "stairwell-frame-front", oakLight, [5.25, .42, .28], [7.02, 14.38, 5.22]);
-  for (const z of [.45, 2.7, 4.95])
-    box(root, "stairwell-rail-post", oakLight, [.18, 1.65, .18], [4.48, 15.2, z]);
-  box(root, "stairwell-handrail", oakLight, [.22, .22, 5.1], [4.48, 16.02, 2.7]);
-  box(root, "guest-room-rug", rugRed, [7.7, .04, 6.9], [0, 14.38, -3.65]);
+  box(root, "upper-hall-runner", rugGreen, [11.2, .04, 3.15], [-3.3, 15.02, 5.2]);
+  box(root, "stairwell-frame-left", oakLight, [.28, .42, 7.2], [4.38, 15.02, 3.7]);
+  box(root, "stairwell-frame-rear", oakLight, [5.25, .42, .28], [7.02, 15.02, .18]);
+  box(root, "stairwell-frame-front", oakLight, [5.25, .42, .28], [7.02, 15.02, 7.22]);
+  for (const z of [.45, 2.7, 4.95, 7.05])
+    box(root, "stairwell-rail-post", oakLight, [.18, 1.65, .18], [4.48, 15.84, z]);
+  box(root, "stairwell-handrail", oakLight, [.22, .22, 7.1], [4.48, 16.66, 3.7]);
+  box(root, "guest-room-rug", rugRed, [7.7, .04, 6.9], [0, 15.02, -3.65]);
 
   // A substantial, readable bed: resting here also binds the inn return point.
-  box(root, "guest-bed-frame", oak, [3.15, .55, 4.15], [0, 14.7, -4.55]);
-  box(root, "guest-bed-mattress", plaster, [2.82, .48, 3.75], [0, 15.13, -4.42]);
-  box(root, "guest-bed-blanket", rugGreen, [2.86, .18, 2.28], [0, 15.43, -3.85]);
-  for (const x of [-.72, .72]) shape(root, "guest-pillow", "sphere", cardIvory, [.65, .22, .48], [x, 15.43, -5.72]);
+  box(root, "guest-bed-frame", oak, [3.15, .55, 4.15], [0, 15.28, -4.55]);
+  box(root, "guest-bed-mattress", plaster, [2.82, .48, 3.75], [0, 15.71, -4.42]);
+  box(root, "guest-bed-blanket", rugGreen, [2.86, .18, 2.28], [0, 16.01, -3.85]);
+  for (const x of [-.72, .72]) shape(root, "guest-pillow", "sphere", cardIvory, [.65, .22, .48], [x, 16.01, -5.72]);
   for (const x of [-1.38, 1.38]) for (const z of [-6.28, -2.83])
-    cylinder(root, "guest-bed-post", oakLight, [.12, .8, .12], [x, 15.1, z]);
+    cylinder(root, "guest-bed-post", oakLight, [.12, .8, .12], [x, 15.4, z]);
 
   // Five trophy bays make future floors tangible even while still locked.
   for (let index = 0; index < 5; index++) {
@@ -262,14 +262,14 @@ export function createTavernRoom(app: pc.Application): pc.Entity {
   // Preserve the required six-metre rise while narrowing the oversized asset
   // to a believable inn staircase. Its top now passes through the open well.
   loadProp(app, STAIRS_URL, root, [
-    { position: [7.02, 8.02, 4.82], yaw: 180, scale: [.68, 1.16, 1.08] },
+    { position: [7.02, 8.02, 7.15], yaw: 180, scale: [.68, 1.37, 1.75] },
   ]);
-  loadProp(app, CHEST_URL, root, [{ position: [-6.25, 14.35, -4.85], yaw: 90, scale: 1.3 }]);
-  loadProp(app, CABINET_URL, root, [{ position: [6.35, 14.35, -6.55], yaw: 0, scale: 1.25 }]);
-  loadProp(app, BOOKCASE_URL, root, [{ position: [7.6, 14.35, -.5], yaw: 0, scale: 1.08 }]);
+  loadProp(app, CHEST_URL, root, [{ position: [-6.25, 15, -4.85], yaw: 90, scale: 1.3 }]);
+  loadProp(app, CABINET_URL, root, [{ position: [6.35, 15, -6.55], yaw: 0, scale: 1.25 }]);
+  loadProp(app, BOOKCASE_URL, root, [{ position: [7.6, 15, -.5], yaw: 0, scale: 1.08 }]);
   loadProp(app, CANDLE_URL, root, [
-    { position: [-3.15, 15.05, -5.6], yaw: 0, scale: 1.05 },
-    { position: [3.15, 15.05, -5.6], yaw: 0, scale: 1.05 },
+    { position: [-3.15, 15.7, -5.6], yaw: 0, scale: 1.05 },
+    { position: [3.15, 15.7, -5.6], yaw: 0, scale: 1.05 },
   ]);
   const guestLight = new pc.Entity("guest-room-light");
   guestLight.addComponent("light", { type: "omni", color: new pc.Color(1, .62, .3), intensity: .82, range: 13, castShadows: false });

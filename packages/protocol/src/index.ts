@@ -180,12 +180,14 @@ export type TavernServiceUpdate = {
   mealState: "prepared" | "active" | null;
 };
 export const TAVERN_INN_POINTS = {
-  upstairs: { x: 7.02, y: 8, z: 5.85, range: 2.8, target: { x: 3.8, y: 15, z: .75 } },
-  downstairs: { x: 4.15, y: 15, z: .75, range: 2.9, target: { x: 7.02, y: 8, z: 6.25 } },
+  // Retained for rolling clients. Current clients walk the physical staircase;
+  // these server-checked endpoints remain a safe compatibility fallback.
+  upstairs: { x: 7.02, y: 8, z: 7.45, range: 2.4, target: { x: 3.8, y: 15, z: .75 } },
+  downstairs: { x: 4.15, y: 15, z: .75, range: 2.9, target: { x: 7.02, y: 8, z: 7.55 } },
   rest: { x: 0, y: 15, z: -4.55, range: 2.6 },
   storage: { x: -6.25, y: 15, z: -4.85, range: 2.5 },
 } as const;
-export const TAVERN_INN_STAIRWELL = { minX: 4.35, maxX: 9.4, minZ: .15, maxZ: 5.25 } as const;
+export const TAVERN_INN_STAIRWELL = { minX: 4.35, maxX: 9.4, minZ: .15, maxZ: 7.25 } as const;
 export const TavernInnActionSchema = z.object({
   action: z.enum(["upstairs", "downstairs", "rest", "storage"]),
 }).strict();
@@ -303,6 +305,13 @@ export function tavernRoomFurnitureCellSolid(x: number, y: number, z: number): b
   const centerX = x + .5, centerZ = z + .5;
   const stairwell = centerX >= TAVERN_INN_STAIRWELL.minX && centerX <= TAVERN_INN_STAIRWELL.maxX
     && centerZ >= TAVERN_INN_STAIRWELL.minZ && centerZ <= TAVERN_INN_STAIRWELL.maxZ;
+  if (stairwell) {
+    // Seven server-owned one-block rises carry the player from the common-room
+    // floor (Y=8) to the upper landing (Y=15). The standard movement solver can
+    // therefore climb these exactly as it climbs any other voxel step.
+    const stairTopY = 9 + Math.max(0, Math.min(6, Math.floor(7.25 - centerZ)));
+    if (y >= 8 && y < stairTopY) return true;
+  }
   if (y >= 14 && y < 15 && centerX > -9.4 && centerX < 9.4 && centerZ > -7.9 && centerZ < 7.9)
     return !stairwell;
   return TAVERN_ROOM_FURNITURE_COLLIDERS.some(collider => centerX >= collider.minX && centerX <= collider.maxX
