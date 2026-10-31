@@ -7,6 +7,7 @@ describe("Hearth & Hammer room composition", () => {
     expect(TAVERN_ROOM_ZONES.entrance.z).toBeGreaterThan(4);
     expect(TAVERN_ROOM_ZONES.bar.x).toBeLessThan(-3);
     expect(TAVERN_ROOM_ZONES.hearth.x).toBeGreaterThan(3);
+    expect(TAVERN_ROOM_ZONES.guestRoom.y).toBe(15);
     expect(Math.hypot(
       TAVERN_ROOM_ZONES.bar.x - TAVERN_ROOM_ZONES.hearth.x,
       TAVERN_ROOM_ZONES.bar.z - TAVERN_ROOM_ZONES.hearth.z,

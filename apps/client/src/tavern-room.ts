@@ -6,6 +6,9 @@ const DUNGEON_ASSET_ROOT = "/assets/kaykit-dungeon";
 const TORCH_URL = `${DUNGEON_ASSET_ROOT}/torch_lit.gltf.glb`;
 const TROPHY_LOCKED_URL = `${DUNGEON_ASSET_ROOT}/sword_shield_broken.gltf.glb`;
 const TROPHY_VICTORY_URL = `${DUNGEON_ASSET_ROOT}/sword_shield_gold.gltf.glb`;
+const STAIRS_URL = `${DUNGEON_ASSET_ROOT}/stairs_wide.gltf.glb`;
+const CHEST_URL = `${DUNGEON_ASSET_ROOT}/chest.glb`;
+const VICTORY_BANNER_URL = `${DUNGEON_ASSET_ROOT}/banner_triple_yellow.gltf.glb`;
 const FANTASY_PROP_ROOT = "/assets/quaternius-fantasy-props";
 const propUrl = (name: string): string => `${FANTASY_PROP_ROOT}/${name}.gltf`;
 const CHAIR_URL = propUrl("Chair_1");
@@ -28,6 +31,7 @@ export const TAVERN_ROOM_ZONES = {
   bar: { x: -7.2, z: -1.5, radius: 3.2 },
   hearth: { x: 3.8, z: -6.2, radius: 3.1 },
   dining: { x: 4.6, z: 2.8, radius: 3.4 },
+  guestRoom: { x: 0, z: -3.4, y: 15, radius: 6.2 },
 } as const;
 
 function material(color: pc.Color, emissive?: pc.Color, gloss = .2): pc.StandardMaterial {
@@ -197,6 +201,62 @@ export function createTavernRoom(app: pc.Application): pc.Entity {
   for (const z of [-5.2, 0, 5.2])
     box(root, "ceiling-rafter", oakLight, [19.75, .42, .46], [0, 13.72, z]);
 
+  // The inn's upper floor is a real guest suite, reached from the stair landing.
+  // It deliberately uses the same footprint as the common room so the building
+  // reads as a coherent two-storey structure instead of a disconnected menu.
+  for (const [name, scale, position] of [
+    ["upper-back-wall", [19.5, 5.8, .35], [0, 17.25, -8.15]],
+    ["upper-left-wall", [.35, 5.8, 16.5], [-9.65, 17.25, 0]],
+    ["upper-right-wall", [.35, 5.8, 16.5], [9.65, 17.25, 0]],
+    ["upper-front-wall", [19.5, 5.8, .35], [0, 17.25, 8.15]],
+  ] as const) box(root, name, plaster, scale, position);
+  box(root, "upper-ceiling", oak, [19.5, .35, 16.5], [0, 20.2, 0]);
+  for (const z of [-7.7, 0, 7.7])
+    box(root, "upper-wall-beam", oak, [19.2, .34, .34], [0, 19.45, z]);
+  for (const x of [-9.25, 0, 9.25])
+    box(root, "upper-wall-post", oak, [.42, 5.35, .42], [x, 17.15, -7.72]);
+  box(root, "guest-partition-west", oak, [8.05, 4.5, .3], [-5.48, 17.25, 2.9]);
+  box(root, "guest-partition-east", oak, [8.05, 4.5, .3], [5.48, 17.25, 2.9]);
+  box(root, "guest-door-lintel", oakLight, [2.9, .42, .46], [0, 19.2, 2.9]);
+  box(root, "upper-hall-runner", rugGreen, [16.2, .04, 3.15], [0, 14.38, 5.2]);
+  box(root, "guest-room-rug", rugRed, [7.7, .04, 6.9], [0, 14.38, -3.65]);
+
+  // A substantial, readable bed: resting here also binds the inn return point.
+  box(root, "guest-bed-frame", oak, [3.15, .55, 4.15], [0, 14.7, -4.55]);
+  box(root, "guest-bed-mattress", plaster, [2.82, .48, 3.75], [0, 15.13, -4.42]);
+  box(root, "guest-bed-blanket", rugGreen, [2.86, .18, 2.28], [0, 15.43, -3.85]);
+  for (const x of [-.72, .72]) shape(root, "guest-pillow", "sphere", cardIvory, [.65, .22, .48], [x, 15.43, -5.72]);
+  for (const x of [-1.38, 1.38]) for (const z of [-6.28, -2.83])
+    cylinder(root, "guest-bed-post", oakLight, [.12, .8, .12], [x, 15.1, z]);
+
+  // Five trophy bays make future floors tangible even while still locked.
+  for (let index = 0; index < 5; index++) {
+    const x = -5.6 + index * 2.8;
+    box(root, `inn-trophy-plaque-${index + 1}`, stone, [2.15, 2.2, .24], [x, 17.55, -7.72]);
+    const locked = new pc.Entity(`inn-trophy-floor-${index + 1}-locked`);
+    locked.setLocalPosition(x, 17.55, -7.42); root.addChild(locked);
+    const victory = new pc.Entity(`inn-trophy-floor-${index + 1}-victory`);
+    victory.setLocalPosition(x, 17.55, -7.42); victory.enabled = false; root.addChild(victory);
+    loadProp(app, TROPHY_LOCKED_URL, locked, [{ position: [0, 0, 0], yaw: 0, scale: .78 }]);
+    loadProp(app, TROPHY_VICTORY_URL, victory, [{ position: [0, 0, 0], yaw: 0, scale: .78 }]);
+  }
+  const innBanner = new pc.Entity("inn-victory-banner"); innBanner.enabled = false; root.addChild(innBanner);
+  loadProp(app, VICTORY_BANNER_URL, innBanner, [{ position: [0, 18.85, -7.46], yaw: 0, scale: 1.15 }]);
+  loadProp(app, STAIRS_URL, root, [
+    { position: [7.35, 8.02, 4.75], yaw: 180, scale: 1.2 },
+    { position: [7.15, 14.34, 5.2], yaw: 0, scale: .92 },
+  ]);
+  loadProp(app, CHEST_URL, root, [{ position: [-6.25, 14.35, -4.85], yaw: 90, scale: 1.3 }]);
+  loadProp(app, CABINET_URL, root, [{ position: [6.35, 14.35, -6.55], yaw: 0, scale: 1.25 }]);
+  loadProp(app, BOOKCASE_URL, root, [{ position: [7.6, 14.35, -.5], yaw: 0, scale: 1.08 }]);
+  loadProp(app, CANDLE_URL, root, [
+    { position: [-3.15, 15.05, -5.6], yaw: 0, scale: 1.05 },
+    { position: [3.15, 15.05, -5.6], yaw: 0, scale: 1.05 },
+  ]);
+  const guestLight = new pc.Entity("guest-room-light");
+  guestLight.addComponent("light", { type: "omni", color: new pc.Color(1, .62, .3), intensity: .82, range: 13, castShadows: false });
+  guestLight.setLocalPosition(0, 18.4, -2.5); root.addChild(guestLight);
+
   addWindow(root, "west-window-a", -9.42, -1.7, 0, oak, stoneLight, daylight);
   addWindow(root, "west-window-b", -9.42, 3.8, 0, oak, stoneLight, daylight);
   addWindow(root, "east-window", 9.42, -1.8, 180, oak, stoneLight, daylight);
@@ -365,4 +425,12 @@ export function setTavernTrophyProgress(root: pc.Entity | null, highestFloorClea
   const victory = root?.findByName("tavern-trophy-victory");
   if (locked) locked.enabled = highestFloorCleared < 1;
   if (victory) victory.enabled = highestFloorCleared >= 1;
+  for (let floor = 1; floor <= 5; floor++) {
+    const roomLocked = root?.findByName(`inn-trophy-floor-${floor}-locked`);
+    const roomVictory = root?.findByName(`inn-trophy-floor-${floor}-victory`);
+    if (roomLocked) roomLocked.enabled = highestFloorCleared < floor;
+    if (roomVictory) roomVictory.enabled = highestFloorCleared >= floor;
+  }
+  const banner = root?.findByName("inn-victory-banner");
+  if (banner) banner.enabled = highestFloorCleared >= 1;
 }

@@ -29,7 +29,7 @@ export { DODGE_STAMINA_COST, DODGE_CHAIN_COST_STEP, DODGE_MAX_STAMINA_COST, DODG
 export const WORLD_ROOM = "world-warden-gate-v167";
 export const SILVER_DEPTHS_ROOM = "silver-depths-instance-v3";
 export const PRACTICE_ROOM = "calling-practice-v11";
-export const TAVERN_ROOM = "hearth-and-hammer-v2";
+export const TAVERN_ROOM = "hearth-and-hammer-v3";
 // The authored inn faces south (+Z). Keep the interaction anchor immediately
 // outside its visible front door rather than beside the building.
 export const FAST_WORLD_TAVERN_ENTRANCE = { x: 74.5, y: 8, z: 81.5 } as const;
@@ -179,6 +179,23 @@ export type TavernServiceUpdate = {
   mealId: TavernMealId | null;
   mealState: "prepared" | "active" | null;
 };
+export const TAVERN_INN_POINTS = {
+  upstairs: { x: 7.35, y: 9, z: 4.75, range: 2.25, target: { x: 7.15, y: 15, z: 5.2 } },
+  downstairs: { x: 7.15, y: 15, z: 5.2, range: 2.25, target: { x: 7.35, y: 9, z: 4.75 } },
+  rest: { x: 0, y: 15, z: -4.55, range: 2.6 },
+  storage: { x: -6.25, y: 15, z: -4.85, range: 2.5 },
+} as const;
+export const TavernInnActionSchema = z.object({
+  action: z.enum(["upstairs", "downstairs", "rest", "storage"]),
+}).strict();
+export type TavernInnAction = z.infer<typeof TavernInnActionSchema>["action"];
+export type TavernInnActionUpdate = { action: TavernInnAction; ok: boolean; message: string;
+  target?: { x: number; y: number; z: number } };
+export function canUseTavernInnPoint(player: { x: number; y: number; z: number }, action: TavernInnAction): boolean {
+  const point = TAVERN_INN_POINTS[action];
+  return Math.abs(player.y - point.y) <= 1.7
+    && Math.hypot(player.x - point.x, player.z - point.z) <= point.range;
+}
 export const MINERAL_REGROWTH_MS = 120_000;
 export interface MineralDepositStatus { id: string; available: number; total: number; readyAt: number | null }
 export const WORLD_BOOTSTRAP_CHUNK_RADIUS = 3;
@@ -268,19 +285,24 @@ export function rapidPracticeCollisionCellSolid(x: number, y: number, z: number)
 /** Curated solid footprints for the large tavern furnishings. Small chairs and
  * decorations stay non-solid so a busy room never traps the player. */
 export const TAVERN_ROOM_FURNITURE_COLLIDERS = [
-  { id: "bar", minX: -9.6, maxX: -6.05, minZ: -5.05, maxZ: 2.55 },
-  { id: "hearth", minX: 1.25, maxX: 6.35, minZ: -8.05, maxZ: -5.75 },
-  { id: "quiz-table", minX: -1.95, maxX: 1.95, minZ: .65, maxZ: 2.05 },
-  { id: "dining-table", minX: 3.65, maxX: 7.55, minZ: 2.65, maxZ: 4.05 },
-  { id: "hearth-bench-west", minX: .45, maxX: 1.45, minZ: -5.7, maxZ: -3.75 },
-  { id: "hearth-bench-east", minX: 6.15, maxX: 7.15, minZ: -5.7, maxZ: -3.75 },
+  { id: "bar", minX: -9.6, maxX: -6.05, minZ: -5.05, maxZ: 2.55, minY: 8, maxY: 11.5 },
+  { id: "hearth", minX: 1.25, maxX: 6.35, minZ: -8.05, maxZ: -5.75, minY: 8, maxY: 11.5 },
+  { id: "quiz-table", minX: -1.95, maxX: 1.95, minZ: .65, maxZ: 2.05, minY: 8, maxY: 11.5 },
+  { id: "dining-table", minX: 3.65, maxX: 7.55, minZ: 2.65, maxZ: 4.05, minY: 8, maxY: 11.5 },
+  { id: "hearth-bench-west", minX: .45, maxX: 1.45, minZ: -5.7, maxZ: -3.75, minY: 8, maxY: 11.5 },
+  { id: "hearth-bench-east", minX: 6.15, maxX: 7.15, minZ: -5.7, maxZ: -3.75, minY: 8, maxY: 11.5 },
+  { id: "inn-partition-west", minX: -9.5, maxX: -1.45, minZ: 2.35, maxZ: 3.45, minY: 15, maxY: 19.5 },
+  { id: "inn-partition-east", minX: 1.45, maxX: 9.5, minZ: 2.35, maxZ: 3.45, minY: 15, maxY: 19.5 },
+  { id: "inn-bed", minX: -1.45, maxX: 1.45, minZ: -6.25, maxZ: -2.65, minY: 15, maxY: 17 },
+  { id: "inn-chest", minX: -7.35, maxX: -5.15, minZ: -6.1, maxZ: -3.75, minY: 15, maxY: 17 },
+  { id: "inn-wardrobe", minX: 5.25, maxX: 7.5, minZ: -7.75, maxZ: -5.4, minY: 15, maxY: 18.5 },
 ] as const;
 
 export function tavernRoomFurnitureCellSolid(x: number, y: number, z: number): boolean {
-  if (y < 8 || y >= 11.5) return false;
   const centerX = x + .5, centerZ = z + .5;
+  if (y >= 14 && y < 15 && centerX > -9.4 && centerX < 9.4 && centerZ > -7.9 && centerZ < 7.9) return true;
   return TAVERN_ROOM_FURNITURE_COLLIDERS.some(collider => centerX >= collider.minX && centerX <= collider.maxX
-    && centerZ >= collider.minZ && centerZ <= collider.maxZ);
+    && centerZ >= collider.minZ && centerZ <= collider.maxZ && y >= collider.minY && y < collider.maxY);
 }
 
 export type ServerPerformanceUpdate = {

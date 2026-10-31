@@ -15,6 +15,8 @@ import { ASHEN_REACH_HEAT_VENTS, ASHEN_REACH_NAVIGATION_LAVA_FISSURES, ASHEN_REA
   fastWorldHeatVentPhase, greenwoodMasteryStatus, mistfenMasteryStatus,
   type FastWorldVisualTheme } from "@blockcraft/protocol";
 import { rapidPracticeCollisionCellSolid, tavernRoomFurnitureCellSolid } from "@blockcraft/protocol";
+import { TAVERN_INN_POINTS, canUseTavernInnPoint, type TavernInnAction,
+  type TavernInnActionUpdate } from "@blockcraft/protocol";
 import type { RegionalArmourProc } from "@blockcraft/protocol";
 import { isInMistfenMarsh, NORTHWATCH_SHARD_PATROL_SITE } from "@blockcraft/voxel-world";
 import { ASHEN_RELIQUARY_POSITION } from "@blockcraft/voxel-world";
@@ -94,7 +96,7 @@ import { FIELD_FORGE_RECIPES, CROWNKEEPER_FORGE, type FieldForgeId } from "@bloc
 import { haulUpgradeProgress, nextHaulRegion, nextHaulUpgrade, type HaulRegion } from "./blacksmith-haul.js";
 import { createStorageUI, type StorageUpdate } from "./storage-ui.js";
 import { lootVisibleToPlayer } from "./loot-ownership.js";
-import { lootHoldProgress, lootHoldSourceForPointer, type LootHold } from "./loot-hold.js";
+import { LOOT_HOLD_MS, lootHoldProgress, lootHoldSourceForPointer, type LootHold } from "./loot-hold.js";
 import { portalHoldProgress, type PortalHold } from "./portal-hold.js";
 import { createPortalTransition, portalTravelUsesVeil } from "./portal-transition.js";
 import { incomingLootAdvice, swapCandidateReason, swapCandidateScore } from "./loot-recommendation.js";
@@ -1932,7 +1934,7 @@ const readCollisionWorldBlock = Object.assign(function (x: number, y: number, z:
     const wall = (Math.abs(x) >= 9 && Math.abs(x) <= 10 && z >= -8 && z <= 8.5)
       || (z <= -8 && z >= -9 && Math.abs(x) <= 10)
       || (z >= 8 && z <= 9 && Math.abs(x) >= 1.35 && Math.abs(x) <= 10);
-    return y < 8 || wall && y < 13 || tavernRoomFurnitureCellSolid(x, y, z) ? Block.Stone : Block.Air;
+    return y < 8 || wall && y < 20 || tavernRoomFurnitureCellSolid(x, y, z) ? Block.Stone : Block.Air;
   }
   if (fastWorldRequested) return rapidPracticeCollisionCellSolid(x, y, z) ? Block.Stone : Block.Air;
   if (y >= CHUNK_HEIGHT) return Block.Air;
@@ -8195,6 +8197,7 @@ function showPlayerDamageImpact(mobId: string, damage: number, health: number,
   notificationDamageUntil = performance.now() + 1200;
   cancelLootHold(health > 0 ? "damage" : "defeated");
   cancelPortalHold(health > 0 ? "damage" : "defeated");
+  cancelInnRoomHold(health > 0 ? "damage" : "defeated");
   const now = performance.now();
   const attacker = attackerPosition ?? mobVisuals.get(mobId)?.entity.getPosition();
   const player = localPlayer.getPosition();
@@ -12765,7 +12768,9 @@ const storageUI = createStorageUI(document.querySelector<HTMLElement>("#storage-
 const storagePrompt = document.createElement("button"); storagePrompt.id = "storage-prompt"; storagePrompt.type = "button";
 storagePrompt.textContent = "PERSONAL CHEST · E"; storagePrompt.hidden = true; document.body.append(storagePrompt);
 function openPersonalStorage(): void {
-  if (!room || !worldReady || !isAtTownStorage(localPlayer.getPosition())) return;
+  const position = localPlayer.getPosition();
+  const atInnChest = tavernRoomRequested && canUseTavernInnPoint(position, "storage");
+  if (!room || !worldReady || !isAtTownStorage(position) && !atInnChest) return;
   blacksmithPanel.hidden = true; quizPanel.hidden = true;
   setInventoryOpen(true); inventoryPanel.dataset.storage = "true";
   document.querySelector("#inventory-title")!.textContent = "Personal Chest";
@@ -14130,29 +14135,54 @@ const tavernDoorRing = document.querySelector<HTMLElement>("#tavern-door-ring")!
 const tavernDoorAction = document.querySelector<HTMLElement>("#tavern-door-action")!;
 const tavernDoorDestination = document.querySelector<HTMLElement>("#tavern-door-destination")!;
 let portalHold: PortalHold | null = null;
+interface InnRoomHold { action: TavernInnAction; startedAt: number; source: "keyboard" | "touch"; pointerId?: number }
+let innRoomHold: InnRoomHold | null = null;
+let nearbyInnAction: TavernInnAction | null = null;
 let portalTravelPendingUntil = 0;
 function isTavernDoor(portalId: string | null): boolean {
   return portalId === "tavern-entry" || portalId === "tavern-exit";
 }
 function updateTavernDoorHold(now: number): void {
   const portalId = nearbyForestPortal;
-  const visible = isTavernDoor(portalId) && now >= portalTravelPendingUntil;
+  nearbyInnAction = null;
+  if (tavernRoomRequested && worldReady && defeatScreen.hidden) {
+    const player = localPlayer.getPosition();
+    let nearest = Infinity;
+    for (const action of ["upstairs", "downstairs", "rest", "storage"] as const) {
+      const point = TAVERN_INN_POINTS[action];
+      const distance = Math.hypot(player.x - point.x, player.y - point.y, player.z - point.z);
+      if (canUseTavernInnPoint(player, action) && distance < nearest) { nearest = distance; nearbyInnAction = action; }
+    }
+  }
+  const tavernPortal = isTavernDoor(portalId) && now >= portalTravelPendingUntil;
+  const visible = tavernPortal || nearbyInnAction !== null;
   tavernDoorHold.hidden = !visible;
-  if (!visible || !portalId) {
+  if (!visible) {
     tavernDoorRing.style.setProperty("--tavern-progress", "0%");
     tavernDoorHold.dataset.holding = "false";
     return;
   }
-  const holding = portalHold?.portalId === portalId;
-  const progress = holding && portalHold ? portalHoldProgress(portalHold, now, nearbyForestPortal) : 0;
+  const innAction = tavernPortal ? null : nearbyInnAction;
+  const holding = tavernPortal ? portalHold?.portalId === portalId : innRoomHold?.action === innAction;
+  const progress = tavernPortal && holding && portalHold ? portalHoldProgress(portalHold, now, nearbyForestPortal)
+    : holding && innRoomHold ? Math.max(0, Math.min(1, (now - innRoomHold.startedAt) / LOOT_HOLD_MS)) : 0;
   const entering = portalId === "tavern-entry";
   const coarse = window.matchMedia("(pointer: coarse)").matches;
+  const labels: Record<TavernInnAction, { action: string; destination: string }> = {
+    upstairs: { action: "GO UPSTAIRS", destination: "GUEST ROOMS" },
+    downstairs: { action: "GO DOWNSTAIRS", destination: "TAVERN COMMON ROOM" },
+    rest: { action: "REST & BIND", destination: "YOUR GUEST BED" },
+    storage: { action: "OPEN", destination: "PRIVATE ROOM CHEST" },
+  };
+  const presentation = innAction ? labels[innAction] : {
+    action: entering ? "ENTER" : "EXIT", destination: entering ? "THE HEARTH & HAMMER" : "TOWN OF BEGINNINGS",
+  };
   tavernDoorRing.style.setProperty("--tavern-progress", `${Math.round(progress * 100)}%`);
   tavernDoorRing.querySelector("kbd")!.textContent = coarse ? "✋" : "E";
   tavernDoorHold.dataset.holding = String(holding);
   tavernDoorAction.textContent = holding ? `KEEP HOLDING · ${Math.round(progress * 100)}%`
-    : `HOLD ${coarse ? "TO" : "E TO"} ${entering ? "ENTER" : "EXIT"}`;
-  tavernDoorDestination.textContent = entering ? "THE HEARTH & HAMMER" : "TOWN OF BEGINNINGS";
+    : `HOLD ${coarse ? "TO" : "E TO"} ${presentation.action}`;
+  tavernDoorDestination.textContent = presentation.destination;
 }
 function cancelPortalHold(reason?: HoldStopReason): void {
   if (portalHold && reason) interactionFeedback.show(holdStopMessage("portal", reason, portalHold.source === "touch"));
@@ -14162,10 +14192,35 @@ function cancelPortalHold(reason?: HoldStopReason): void {
   contextButton.style.setProperty("--context-progress", "0%");
 }
 function beginPortalHold(source: PortalHold["source"], portalId = nearbyForestPortal, pointerId?: number): void {
-  if (portalHold || lootHold || !worldReady || !room || !portalId || portalId !== nearbyForestPortal
+  if (portalHold || innRoomHold || lootHold || !worldReady || !room || !portalId || portalId !== nearbyForestPortal
     || performance.now() < portalTravelPendingUntil || !defeatScreen.hidden
     || activePresentedPopupId() || protectedDialogPresented()) return;
   portalHold = { portalId, startedAt: performance.now(), source, pointerId };
+}
+function cancelInnRoomHold(reason?: HoldStopReason): void {
+  if (innRoomHold && reason) interactionFeedback.show(holdStopMessage("interaction", reason, innRoomHold.source === "touch"));
+  innRoomHold = null;
+  tavernDoorRing.style.setProperty("--tavern-progress", "0%");
+  contextButton.style.setProperty("--context-progress", "0%");
+}
+function beginInnRoomHold(source: InnRoomHold["source"], pointerId?: number): void {
+  if (innRoomHold || portalHold || lootHold || !worldReady || !room || !nearbyInnAction
+    || !defeatScreen.hidden || activePresentedPopupId() || protectedDialogPresented()) return;
+  innRoomHold = { action: nearbyInnAction, startedAt: performance.now(), source, pointerId };
+}
+function updateInnRoomHold(now: number): void {
+  if (!innRoomHold) return;
+  const hold = innRoomHold;
+  const reason = holdStopReason({ connected: !!room && worldReady, defeated: !defeatScreen.hidden,
+    menuOpen: !!activePresentedPopupId() || protectedDialogPresented() || playerInteractionUI.isOpen(),
+    inRange: hold.action === nearbyInnAction, released: hold.source === "keyboard" && !keys.has("KeyE") });
+  if (!room || reason) { cancelInnRoomHold(reason ?? "connection"); return; }
+  const progress = Math.max(0, Math.min(1, (now - hold.startedAt) / LOOT_HOLD_MS));
+  contextButton.style.setProperty("--context-progress", `${progress * 100}%`);
+  if (progress < 1) return;
+  const action = hold.action;
+  cancelInnRoomHold();
+  room.send("tavern:inn-action", { action });
 }
 function updatePortalHold(now: number): void {
   if (!portalHold) return;
@@ -14359,6 +14414,7 @@ function updateForestPortals(): void {
   });
   updatePortalHold(performance.now());
   updateTavernDoorHold(performance.now());
+  updateInnRoomHold(performance.now());
 }
 function updateTarget(): void {
   updateForestPortals();
@@ -14445,7 +14501,7 @@ function updateTarget(): void {
   const ashenReliquaryPreviewNearby = canPreviewAshenReliquary();
   const ashenReliquaryNearby = ashenReliquaryClaimNearby || ashenReliquaryPreviewNearby;
   if (!roadsideChoice.hidden && roadsideChoice.dataset.id !== roadsideEncounter?.id) closeRoadsideChoice();
-  updatePlayerTradePrompt(Boolean(nearbyLoot || ashenReliquaryNearby || nearbyForestPortal || roleOpportunity || roadsideEncounter || expeditionBoardNearby || blacksmithNearby || highLowNearby || quizTableNearby || keeperNearby || chestNearby));
+  updatePlayerTradePrompt(Boolean(nearbyLoot || ashenReliquaryNearby || nearbyForestPortal || nearbyInnAction || roleOpportunity || roadsideEncounter || expeditionBoardNearby || blacksmithNearby || highLowNearby || quizTableNearby || keeperNearby || chestNearby));
   const contextAction = tabletContextAction({
     tradePlayer: Boolean(nearbyTradePlayerId),
     recoveryBag: Boolean(nearbyRecoveryBag),
@@ -16821,9 +16877,10 @@ function requestWorldInteraction(): void {
 
 function requestContextAction(source: LootHold["source"]): void {
   attackBuffer.clear();
-  if (portalHold) return;
+  if (portalHold || innRoomHold) return;
   if (nearestLootDrop()) { beginLootHold(source); return; }
   if (nearbyForestPortal) { beginPortalHold(source); return; }
+  if (nearbyInnAction) { beginInnRoomHold(source); return; }
   const visibleLoot = !lootWorldLabel.hidden && nearestVisibleLootDrop(8);
   if (visibleLoot) {
     status.textContent = `Move closer to the loot (${visibleLoot.distance.toFixed(1)} m away), then hold E to collect it.`;
@@ -17196,6 +17253,7 @@ window.addEventListener("keyup", event => {
   if (event.code === "KeyE") {
     releaseLootHold("keyboard");
     if (portalHold?.source === "keyboard") cancelPortalHold("released");
+    if (innRoomHold?.source === "keyboard") cancelInnRoomHold("released");
   }
   if (event.code === "KeyC") requestDefense(false);
   if (popupQueue.active() !== null) {
@@ -17206,7 +17264,7 @@ window.addEventListener("keyup", event => {
   if (event.code === powerAimKey) commitPowerAim();
   if (event.code === "KeyF") commitSpecialAim();
 });
-window.addEventListener("blur", () => { cancelLootHold("focus"); cancelPortalHold("focus"); attackBuffer.clear(); keyboardFireHeld = false; });
+window.addEventListener("blur", () => { cancelLootHold("focus"); cancelPortalHold("focus"); cancelInnRoomHold("focus"); attackBuffer.clear(); keyboardFireHeld = false; });
 canvas.addEventListener("pointerdown", event => {
   if (popupQueue.active() !== null) return;
   canvas.focus({ preventScroll: true });
@@ -17260,11 +17318,13 @@ window.addEventListener("pointerup", event => {
   if (event.pointerId === rangedFirePointer) rangedFirePointer = null;
   releaseLootHold("touch");
   if (portalHold?.source === "touch" && (portalHold.pointerId === undefined || portalHold.pointerId === event.pointerId)) cancelPortalHold("released");
+  if (innRoomHold?.source === "touch" && (innRoomHold.pointerId === undefined || innRoomHold.pointerId === event.pointerId)) cancelInnRoomHold("released");
 });
 window.addEventListener("pointercancel", event => {
   if (event.pointerId === rangedFirePointer) rangedFirePointer = null;
   if (lootHold?.source === "touch") cancelLootHold("released");
   if (portalHold?.source === "touch" && (portalHold.pointerId === undefined || portalHold.pointerId === event.pointerId)) cancelPortalHold("released");
+  if (innRoomHold?.source === "touch" && (innRoomHold.pointerId === undefined || innRoomHold.pointerId === event.pointerId)) cancelInnRoomHold("released");
 });
 canvas.addEventListener("pointerup", event => {
   if (event.pointerType === "touch" && touchCameraPoints.has(event.pointerId)) {
@@ -17518,6 +17578,10 @@ contextButton.addEventListener("pointerdown", event => {
   requestContextAction(lootHoldSourceForPointer(event.pointerType) ?? "touch");
   if (portalHold?.source === "touch") {
     portalHold.pointerId = event.pointerId;
+    contextButton.setPointerCapture(event.pointerId);
+  }
+  if (innRoomHold?.source === "touch") {
+    innRoomHold.pointerId = event.pointerId;
     contextButton.setPointerCapture(event.pointerId);
   }
 });
@@ -20840,6 +20904,31 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       else potionShopStatus.textContent = message.message;
       status.textContent = message.message;
       showCombatFeedback(message.ok ? (message.action === "rest" ? "RESTORED" : message.action === "bind" ? "RETURN BOUND" : "MEAL PREPARED") : message.message, message.ok ? "dodge" : "hurt");
+    }
+  });
+  room.onMessage("tavern:inn-action", (message: TavernInnActionUpdate) => {
+    status.textContent = message.message;
+    if (!message.ok) {
+      showCombatFeedback("INN ACTION BLOCKED", "hurt");
+      return;
+    }
+    if (message.target) {
+      localPlayer.setPosition(message.target.x, message.target.y, message.target.z);
+      cameraFollow = { x: message.target.x, z: message.target.z };
+      pendingPredictionFrames.length = 0; unsentMovementSteps.length = 0;
+      localNetworkVisualOffset = { x: 0, z: 0 }; localRecoveryVisualOffset = { x: 0, z: 0 };
+      localDodgeVisualOffset = { x: 0, z: 0 }; localVerticalVelocity = 0; localVisualVerticalOffset = 0;
+      snapFrameHistory.length = 0;
+      showCombatFeedback(message.action === "upstairs" ? "GUEST ROOM" : "COMMON ROOM", "dodge");
+      return;
+    }
+    if (message.action === "storage") {
+      openPersonalStorage();
+      return;
+    }
+    if (message.action === "rest") {
+      showCombatFeedback("WELL RESTED · RETURN BOUND", "dodge");
+      social.event("Guest room rested · the Hearth & Hammer is now your return point.");
     }
   });
   room.send("tavern:sync");

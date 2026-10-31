@@ -11,10 +11,10 @@ export const StorageTransferSchema = z.object({
 export function canUseStorage(player: { x: number; y: number; z: number }): boolean {
   return isAtTownStorage(player);
 }
-export function transferStoredItem(player: PlayerState, payload: unknown): string {
+export function transferStoredItem(player: PlayerState, payload: unknown, allowRemoteChest = false): string {
   const parsed = StorageTransferSchema.safeParse(payload);
   if (!parsed.success) return "Choose a valid item and quantity.";
-  if (player.health <= 0 || !canUseStorage(player)) return "Stand beside your town chest to transfer items.";
+  if (player.health <= 0 || !canUseStorage(player) && !allowRemoteChest) return "Stand beside your personal chest to transfer items.";
   const { itemId, direction, quantity } = parsed.data;
   if (itemId === "reinforced_pickaxe") return "Your permanent mining tool stays in your pack.";
   const deposit = direction === "deposit";

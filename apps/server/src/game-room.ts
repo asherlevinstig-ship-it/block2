@@ -5,6 +5,8 @@ import { PVP_MURDERER_DURATION_MS, pvpCombatAllowed, pvpMurdererUntil, withPvpMu
 import { CROWNKEEPER_FORGE } from "@blockcraft/protocol";
 import { parseTowerProgress, withTowerFloorCleared } from "@blockcraft/protocol";
 import { tavernRoomFurnitureCellSolid } from "@blockcraft/protocol";
+import { TAVERN_INN_POINTS, TavernInnActionSchema, canUseTavernInnPoint,
+  type TavernInnActionUpdate } from "@blockcraft/protocol";
 import { crownkeeperFragments, withCrownkeeperFragments } from "./crownkeeper-progress.js";
 import { FloorRunUpgrades } from "./floor-run-upgrades.js";
 import { FLOOR_RUN_UPGRADES } from "@blockcraft/protocol";
@@ -1103,7 +1105,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.onMessage("storage:transfer", (client, payload: unknown) => {
       const player = this.state.players.get(client.sessionId);
       if (!player) return;
-      const message = transferStoredItem(player, payload);
+      const innChest = this.roomKind === "tavern" && canUseTavernInnPoint(player, "storage");
+      const message = transferStoredItem(player, payload, innChest);
       void this.persistPlayer(client.sessionId, player);
       this.sendStorageState(client, message);
     });
@@ -1125,6 +1128,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.onMessage("potion:use", client => this.handlePotion(client, false));
     this.onMessage("tavern:sync", client => this.sendTavernServiceState(client));
     this.onMessage("tavern:service", (client, payload) => this.handleTavernService(client, payload));
+    this.onMessage("tavern:inn-action", (client, payload) => this.handleTavernInnAction(client, payload));
     if (this.movementShadowEnabled) {
       // Colyseus owns one simulation timer per room. Pilot and legacy clients
       // advance on this same fixed tick while older clients remain connected.
@@ -1224,9 +1228,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (this.roomKind === "practice" && typeof options === "object" && options && "worldRoomId" in options
       && typeof options.worldRoomId === "string") this.practiceReturnRoomId.set(client.sessionId, options.worldRoomId);
     const returningFromDepths = typeof options === "object" && options && "returnFrom" in options && options.returnFrom === "silver-depths";
+    const returningToBoundRoom = this.roomKind === "tavern" && tavernReturnBound(player.huntLoadoutsJson)
+      && typeof options === "object" && options && "returnFrom" in options && options.returnFrom === "practice";
     const instanceSpawn = SILVER_DEPTHS_PARTY_SPAWNS.find(candidate => [...this.state.players.values()]
       .every(other => Math.hypot(other.x - candidate.x, other.z - candidate.z) >= 1.25)) ?? SILVER_DEPTHS_ENTRY_POSITION;
-    const spawn = this.roomKind === "tavern" ? { x: 0, y: 8, z: 4.8 }
+    const spawn = this.roomKind === "tavern" ? returningToBoundRoom ? { x: TAVERN_INN_POINTS.rest.x, y: 15, z: -2 }
+      : { x: 0, y: 8, z: 4.8 }
       : this.roomKind === "practice" ? { x: 99.5, y: 8, z: 106.5 }
       : this.roomKind === "silver-depths" ? instanceSpawn
       : process.env.NODE_ENV !== "production" && requestedQaSpawn === "cave"
@@ -1739,8 +1746,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
     const items = (map: PlayerState["inventory"]) => Object.fromEntries([...map.entries()].filter(([, item]) => item.quantity > 0).map(([id, item]) => [id, item.quantity]));
+    const available = canUseStorage(player) || this.roomKind === "tavern" && canUseTavernInnPoint(player, "storage");
     client.send("storage:update", { carried: items(player.inventory), stored: items(player.storage),
-      message: message ?? (canUseStorage(player) ? "Your personal chest. Choose an item to deposit or withdraw." : "Stand beside the chest to transfer items.") });
+      message: message ?? (available ? "Your personal chest. Choose an item to deposit or withdraw." : "Stand beside your personal chest to transfer items.") });
   }
 
   private sendBlacksmithState(client: Client, message: string | undefined = undefined, phase: BlacksmithUpdate["phase"] = "idle", sold = 0, goldGranted = 0, purchasedUpgradeId?: BlacksmithUpgradeId, purchasedDepthsRewardId?: SilverDepthsRewardId,
@@ -2448,6 +2456,41 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
     void this.persistPlayer(client.sessionId, player, true);
     this.sendTavernServiceState(client, message, action, true);
+  }
+
+  private handleTavernInnAction(client: Client, payload: unknown): void {
+    const player = this.state.players.get(client.sessionId);
+    const parsed = TavernInnActionSchema.safeParse(payload);
+    if (!player || !parsed.success) return;
+    const action = parsed.data.action;
+    const send = (ok: boolean, message: string, target?: { x: number; y: number; z: number }) =>
+      client.send("tavern:inn-action", { action, ok, message, ...(target ? { target } : {}) } satisfies TavernInnActionUpdate);
+    if (this.roomKind !== "tavern" || !canUseTavernInnPoint(player, action)) {
+      send(false, "Move closer to the inn-room furnishing.");
+      return;
+    }
+    if (player.health <= 0) { send(false, "You cannot use your room while defeated."); return; }
+    if (action === "upstairs" || action === "downstairs") {
+      const target = TAVERN_INN_POINTS[action].target;
+      player.x = target.x; player.y = target.y; player.z = target.z;
+      player.pilotVy = 0; player.defending = false;
+      this.movementInputs.set(client.sessionId, { request: idleMovementInput(), receivedAt: Date.now() });
+      this.verticalVelocities.set(client.sessionId, 0);
+      send(true, action === "upstairs" ? "Your guest room is ready upstairs." : "Returned to the tavern common room.", target);
+      return;
+    }
+    if (action === "storage") {
+      this.sendStorageState(client, "Your private room chest. Stored equipment remains safe between climbs.");
+      send(true, "Private chest opened.");
+      return;
+    }
+    player.health = player.maxHealth;
+    player.stamina = player.maxStamina;
+    player.potionCooldownUntil = 0; player.powerCooldownUntil = 0; player.specialCooldownUntil = 0;
+    player.huntLoadoutsJson = withTavernReturnBound(player.huntLoadoutsJson);
+    void this.persistPlayer(client.sessionId, player, true);
+    this.sendTavernServiceState(client, "Well rested · this guest room is now your return point.", "rest", true);
+    send(true, "Well rested · health, stamina and cooldowns restored · return point bound.");
   }
 
   private persistPlayer(sessionId: string, player: PlayerState, force = false): Promise<void> {
@@ -9615,7 +9658,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const wall = (Math.abs(x) >= 9 && Math.abs(x) <= 10 && z >= -8 && z <= 8.5)
         || (z <= -8 && z >= -9 && Math.abs(x) <= 10)
         || (z >= 8 && z <= 9 && Math.abs(x) >= 1.35 && Math.abs(x) <= 10);
-      return y < 8 || wall && y < 13 || tavernRoomFurnitureCellSolid(x, y, z) ? Block.Stone : Block.Air;
+      return y < 8 || wall && y < 20 || tavernRoomFurnitureCellSolid(x, y, z) ? Block.Stone : Block.Air;
     }
     if (this.rapidPractice) return FAST_WORLD_BLOCK_READER(x, y, z);
     if (y < 0) return Block.Bedrock;

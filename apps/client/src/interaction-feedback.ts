@@ -12,9 +12,9 @@ export function holdStopReason(state: {
   return state.released ? "released" : null;
 }
 
-export function holdStopMessage(action: "loot" | "portal", reason: HoldStopReason, touch: boolean): string | null {
+export function holdStopMessage(action: "loot" | "portal" | "interaction", reason: HoldStopReason, touch: boolean): string | null {
   if (reason === "menu" || reason === "defeated") return null;
-  const target = action === "loot" ? "loot" : "portal";
+  const target = action === "loot" ? "loot" : action === "portal" ? "portal" : "inn furnishing";
   const retry = touch ? "Keep holding the button until it fills." : "Keep E held until it fills.";
   if (reason === "damage") return `Interrupted by a hit. Get to safety, then try the ${target} again.`;
   if (reason === "combat") return "Looting interrupted by combat. Get to safety, then hold to collect.";
