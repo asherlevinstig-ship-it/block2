@@ -5088,6 +5088,7 @@ function requestRigAuthoredWeapon(rig: VoxelCharacterRig, mainHandId: MainHandId
       if (child.render) child.enabled = false;
     }
     setRigMainHand(rig, mainHandId, pathId);
+    if (rig === localPlayerRig) syncLocalThirdPersonVisibility();
   }).catch(error => console.warn(`[weapon-assets] Keeping procedural ${mainHandId} fallback.`, error));
 }
 
@@ -5102,6 +5103,7 @@ function requestRigTankShield(rig: VoxelCharacterRig, mainHandId: MainHandId, pa
       if (!(child instanceof pc.Entity) || child === model) continue;
       if (child.render) child.enabled = false;
     }
+    if (rig === localPlayerRig) syncLocalThirdPersonVisibility();
   }).catch(error => console.warn("[weapon-assets] Keeping procedural Tank shield fallback.", error));
 }
 
@@ -5116,6 +5118,7 @@ function requestRigAssassinOffhand(rig: VoxelCharacterRig, mainHandId: MainHandI
       if (!(child instanceof pc.Entity) || child === model) continue;
       if (child.render) child.enabled = false;
     }
+    if (rig === localPlayerRig) syncLocalThirdPersonVisibility();
   }).catch(error => console.warn("[weapon-assets] Keeping procedural Assassin offhand fallback.", error));
 }
 
@@ -5294,7 +5297,14 @@ for (const side of [-1, 1]) {
   addStealthGhostPart("leg", side * .15, .32, 0, .22, .6, .26);
 }
 localStealthGhost.enabled = false;
-const localFirstPersonRenderers = localPlayerVisual.findComponents("render") as pc.RenderComponent[];
+function syncLocalThirdPersonVisibility(): void {
+  // Authored weapon assets load asynchronously. Query the rig at the moment
+  // visibility changes so late-loaded blades cannot leak into the first-person
+  // view on top of the dedicated hand/weapon presentation.
+  const enabled = cameraViewMode !== "first-person";
+  for (const renderer of localPlayerVisual.findComponents("render") as pc.RenderComponent[])
+    renderer.enabled = enabled;
+}
 
 interface FirstPersonActionRig {
   root: pc.Entity;
@@ -5681,7 +5691,7 @@ function setCameraViewMode(next: CameraViewMode, capturePointer = false): void {
   cameraModeToggle.title = firstPerson
     ? "First-person camera · press V to return to third-person"
     : "Third-person camera · press V for first-person";
-  for (const renderer of localFirstPersonRenderers) renderer.enabled = !firstPerson;
+  syncLocalThirdPersonVisibility();
   firstPersonActionRig.root.enabled = firstPerson;
   firstPersonActionRig.viewCamera.enabled = firstPerson;
   if (camera.camera) {
