@@ -35,6 +35,9 @@ describe("fast sword combat consistency", () => {
       release(weapon);
       expect(mob.health).toBeLessThan(30);
       expect(events.filter(event => event.type === "combat:hit")).toHaveLength(1);
+      expect(events.find(event => event.type === "combat:hit")?.payload).toMatchObject({
+        contactKind: "crescent", contactDistance: 3,
+      });
       expect(events.filter(event => event.type === "combat:miss")).toHaveLength(0);
       expect(events.find(event => event.type === "combat:projectile-resolved")?.payload).toMatchObject({ hitCount: 1 });
     });
@@ -45,6 +48,14 @@ describe("fast sword combat consistency", () => {
     expect(mob.health).toBe(28);
     expect(blocked.events.filter(event => event.type === "combat:miss")).toHaveLength(0);
     expect(blocked.events.find(event => event.type === "combat:projectile-resolved")?.payload).toMatchObject({ reason: "terrain", hitCount: 1 });
+  });
+  it("distinguishes physical blade contact from the outward crescent", () => {
+    for (const [distance, contactKind] of [[1.4, "blade"], [2.2, "blade"], [2.3, "crescent"], [3, "crescent"], [4.4, "crescent"]] as const) {
+      const f = fixture(); f.addMob(`target-${distance}`, 200 + distance); f.release();
+      const hit = f.events.find(event => event.type === "combat:hit")?.payload;
+      expect(hit, `${distance}m`).toMatchObject({ contactKind });
+      expect(hit.contactDistance).toBeCloseTo(distance);
+    }
   });
   it("still lets walls block a crescent before it damages an enemy", () => {
     const { addMob, release, events } = fixture(201); const mob = addMob("target", 203); release();

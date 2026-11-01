@@ -12481,6 +12481,19 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const cinderExposed = mob.archetype === "cinder_ram" && now < cinderExposedUntil;
       const sourceX = source?.x ?? player.x, sourceZ = source?.z ?? player.z;
       const sourceDistance = Math.hypot(sourceX - mob.x, sourceZ - mob.z);
+      const strikeProfile = playerMeleeStrike(pending.mainHandId, pending.step);
+      const swordFamily = pending.mainHandId === "longsword" || pending.mainHandId === "forged_sword"
+        || pending.mainHandId === "matriarch_edge" || pending.mainHandId === "cinderfang_blade"
+        || pending.mainHandId === "crownkeeper_blade";
+      const bladeContact = swordFamily && strikeProfile !== null && meleeSweepImpact(player, pending.yaw, strikeProfile, 0, 1, [{
+        id: mobId, x: mob.x, y: mob.y, z: mob.z,
+        radius: mob.archetype === "stone_brute" ? .55 : .38,
+        ...(this.rapidPractice ? mobAttackBody(mobId, mob) : {}),
+      }], this.readWorldBlock, pending.elevation) === mobId;
+      const contactKind = swordFamily
+        ? bladeContact ? "blade" as const : rapidPracticeWeaponProfile(pending.mainHandId, this.rapidPractice)?.style === "crescent"
+          ? "crescent" as const : undefined
+        : undefined;
       const facingRadians = mob.yaw * Math.PI / 180;
       const sourceInFront = sourceDistance > .001
         && ((sourceX - mob.x) / sourceDistance * Math.sin(facingRadians)
@@ -12590,6 +12603,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         setBonusDamage,
         staminaRestored,
         cooldownReducedMs,
+        contactKind,
+        contactDistance: contactKind ? sourceDistance : undefined,
       };
       this.broadcast("combat:hit", hit);
       if (pending.requestId?.startsWith("attack-"))

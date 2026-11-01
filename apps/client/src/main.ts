@@ -1157,6 +1157,7 @@ const canvas = document.querySelector<HTMLCanvasElement>("#game")!;
 const initialPageQuery = new URLSearchParams(window.location.search);
 const initialGameExperience = gameExperience(initialPageQuery);
 const fastWorldRequested = usesFastWorld(initialPageQuery);
+const swordContactDebug = initialPageQuery.get("sword-contact") === "1";
 const tavernRoomRequested = initialPageQuery.get("room") === "tavern";
 document.documentElement.classList.toggle("tavern-room-active", tavernRoomRequested);
 const fastWorldNavigationDebug = fastWorldRequested && initialPageQuery.get("navdebug") === "1";
@@ -21799,10 +21800,19 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       if (message.setBonus === "fang") status.textContent += ` · Fangstalker finisher${(message.setBonusDamage ?? 0) > 0 ? " executed a weakened enemy" : ""} · +${message.staminaRestored ?? 0} stamina.`;
       else if (message.setBonus === "venom") status.textContent += ` · Venomweave poison pool armed${(message.cooldownReducedMs ?? 0) > 0 ? ` · Special −${((message.cooldownReducedMs ?? 0) / 1000).toFixed(1)}s` : ""}.`;
       else if (message.setBonus === "crusher") status.textContent += " · Worldsplitter shockwave · +1 armour for 3s.";
+      if (swordContactDebug && firstPersonWeaponKind(message.mainHandId) === "sword" && message.contactKind) {
+        const distance = message.contactDistance ?? localPlayer.getPosition().distance(mob?.entity.getPosition() ?? localPlayer.getPosition());
+        const direct = message.contactKind === "blade";
+        showCombatFeedback(`${direct ? "BLADE CONTACT" : "CRESCENT HIT"} · ${distance.toFixed(2)}m`, direct ? "block" : "dodge");
+        status.textContent = `${direct ? "Physical blade contacted the mob" : "The outward crescent hit; the physical blade did not"} · ${distance.toFixed(2)} metres.`;
+        logMovementEvent(`SWORD CONTACT kind=${message.contactKind} distance=${distance.toFixed(3)} mob=${message.mobId}`);
+      }
     }
   });
   room.onMessage("combat:miss", (message: CombatMiss) => {
     if (message.attackerId !== room?.sessionId) return;
+    if (swordContactDebug && firstPersonWeaponKind(message.mainHandId) === "sword")
+      showCombatFeedback("NO SWORD CONTACT", "miss");
     if (WEAPON_ATTACK_DEFINITIONS[message.mainHandId].projectileTravelMs > 0) {
       // Empty fan lanes are normal: do not overwrite a confirmed hit with MISS.
       logMovementEvent(`MISS ${message.mainHandId} step=${message.comboStep}`);

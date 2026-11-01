@@ -2399,6 +2399,10 @@ export interface CombatHit {
   setBonusDamage?: number;
   staminaRestored?: number;
   cooldownReducedMs?: number;
+  /** Authoritative sword-contact classification. A crescent can hit beyond the physical blade. */
+  contactKind?: "blade" | "crescent";
+  /** Horizontal attacker-to-target distance at contact, before knockback. */
+  contactDistance?: number;
 }
 
 export const ROOTBOUND_FINISHER = { radius: 2.35, damage: 1, rootMs: 650 } as const;
