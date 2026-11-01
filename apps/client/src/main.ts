@@ -5513,14 +5513,15 @@ function createFirstPersonActionRig(): FirstPersonActionRig {
   const bowStringLower = actionShape(root, "bow-string-lower", "box", bowStringMaterial, [.004, .34, .004], [-.27, -.34, -.94]);
   const bowArrow = new pc.Entity("first-person-bow-arrow"); root.addChild(bowArrow);
   const fletching = createFirstPersonMaterial(new pc.Color(.12, .34, .2), new pc.Color(.008, .025, .012));
-  actionShape(bowArrow, "nocked-arrow-shaft", "cylinder", wood, [.016, .9, .016], [0, .45, 0]);
+  const arrowWood = createFirstPersonMaterial(new pc.Color(.48, .3, .11), new pc.Color(.018, .009, .002));
+  actionShape(bowArrow, "nocked-arrow-shaft", "cylinder", arrowWood, [.018, .9, .018], [0, .45, 0]);
   actionShape(bowArrow, "nocked-arrow-head", "cone", steelEdge, [.05, .1, .05], [0, .96, 0]);
   for (const side of [-1, 0, 1]) {
     const feather = actionShape(bowArrow, `nocked-arrow-feather-${side}`, "box", fletching,
       [.035, .1, .012], [side * .025, .11, 0]);
     feather.setLocalEulerAngles(0, 0, side * 38);
   }
-  bowArrow.setLocalEulerAngles(-90, 0, 0);
+  bowArrow.setLocalEulerAngles(0, 0, 0);
   bowArrow.enabled = bowStringUpper.enabled = bowStringLower.enabled = false;
 
   weapons.focus.setLocalPosition(-.015, .13, -.05);
@@ -5586,6 +5587,7 @@ let firstPersonHitKickUntil = 0;
 let firstPersonHitKickStrength = 0;
 let firstPersonEquippedAt = 0;
 let firstPersonEquippedId: MainHandId = "unarmed";
+const FIRST_PERSON_BOW_VIEW_SCALE = .44;
 const FIRST_PERSON_AUTHORED_WEAPON_TRANSFORMS: Record<KayKitWeaponAssetId, {
   rotation: readonly [number, number, number]; scale: number;
 }> = {
@@ -5593,8 +5595,8 @@ const FIRST_PERSON_AUTHORED_WEAPON_TRANSFORMS: Record<KayKitWeaponAssetId, {
   swordForged: { rotation: [0, 0, 0], scale: .58 },
   bowBasic: { rotation: [90, 0, 90], scale: .48 },
   bowForged: { rotation: [90, 0, 90], scale: .48 },
-  bowBasicView: { rotation: [90, 0, 90], scale: .5 },
-  bowForgedView: { rotation: [90, 0, 90], scale: .5 },
+  bowBasicView: { rotation: [90, 0, 90], scale: FIRST_PERSON_BOW_VIEW_SCALE },
+  bowForgedView: { rotation: [90, 0, 90], scale: FIRST_PERSON_BOW_VIEW_SCALE },
   daggerThief: { rotation: [0, 0, 0], scale: .66 },
   daggerAssassin: { rotation: [0, 0, 0], scale: .74 },
   wandMage: { rotation: [0, 0, 0], scale: .7 },
@@ -6951,6 +6953,14 @@ function positionBowStringSegment(entity: pc.Entity, start: pc.Vec3, end: pc.Vec
     0, -Math.atan2(dx, dy || .0001) * 180 / Math.PI);
 }
 
+function orientArrowFromNock(entity: pc.Entity, nock: pc.Vec3, target: pc.Vec3): void {
+  const dx = target.x - nock.x, dy = target.y - nock.y, dz = target.z - nock.z;
+  const planar = Math.hypot(dx, dy);
+  entity.setLocalPosition(nock.x, nock.y, nock.z);
+  entity.setLocalEulerAngles(Math.atan2(dz, Math.max(.001, planar)) * 180 / Math.PI,
+    0, -Math.atan2(dx, dy || .0001) * 180 / Math.PI);
+}
+
 function updateFirstPersonActionView(now: number, moving: boolean, actionElapsed: number | null,
   powerElapsed: number | null): void {
   if (cameraViewMode !== "first-person") { firstPersonLastFrame = 0; firstPersonPreviousYaw = null; return; }
@@ -7049,14 +7059,19 @@ function updateFirstPersonActionView(now: number, moving: boolean, actionElapsed
     const bowCenter = new pc.Vec3(pose.leftX + .025, pose.leftY + .12, pose.leftZ - .1);
     firstPersonActionRig.weapons.bow.setLocalPosition(bowCenter.x, bowCenter.y, bowCenter.z);
     firstPersonActionRig.weapons.bow.setLocalEulerAngles(0, 7, -2);
-    const upperTip = new pc.Vec3(bowCenter.x + .03, bowCenter.y + .49, bowCenter.z);
-    const lowerTip = new pc.Vec3(bowCenter.x + .03, bowCenter.y - .49, bowCenter.z);
+    // These offsets come from the authored meshes' actual tip vertices after
+    // their 90° X/Z viewmodel rotation—not from the bow entity's origin.
+    const forged = localMainHandId === "forged_bow";
+    const tipX = bowCenter.x + (forged ? -.218 : -.345) * FIRST_PERSON_BOW_VIEW_SCALE;
+    const tipY = (forged ? .957 : .979) * FIRST_PERSON_BOW_VIEW_SCALE;
+    const upperTip = new pc.Vec3(tipX, bowCenter.y + tipY, bowCenter.z);
+    const lowerTip = new pc.Vec3(tipX, bowCenter.y - tipY, bowCenter.z);
     const nock = arrowVisible
       ? new pc.Vec3(pose.rightX - .01, pose.rightY + .12, pose.rightZ - .025)
-      : new pc.Vec3(bowCenter.x + .03, bowCenter.y, bowCenter.z);
+      : new pc.Vec3(tipX, bowCenter.y, bowCenter.z);
     positionBowStringSegment(firstPersonActionRig.bowStringUpper, upperTip, nock);
     positionBowStringSegment(firstPersonActionRig.bowStringLower, lowerTip, nock);
-    if (arrowVisible) firstPersonActionRig.bowArrow.setLocalPosition(nock.x, nock.y, nock.z);
+    if (arrowVisible) orientArrowFromNock(firstPersonActionRig.bowArrow, nock, new pc.Vec3(0, -.015, -1.58));
   }
   const magicVisible = pose.magicStrength > .025 && firstPersonAbilityCastPath !== "assassin";
   firstPersonActionRig.magic.enabled = magicVisible;
