@@ -52,6 +52,10 @@ export interface FirstPersonActionPose {
   rightRoll: number;
   magicStrength: number;
   attackStrength: number;
+  /** Per-hand contact strength lets paired weapons alternate without hiding or
+   * moving the blade that is currently guarding. */
+  leftAttackStrength: number;
+  rightAttackStrength: number;
   attackProgress: number;
   leftCurl: number;
   rightCurl: number;
@@ -76,6 +80,7 @@ export function firstPersonActionPose(input: {
   castDurationMs: number;
   bowDrawProgress?: number;
   bowDrawing?: boolean;
+  dualWielding?: boolean;
 }): FirstPersonActionPose {
   const movement = Math.max(0, Math.min(1, input.movementWeight ?? (input.moving ? 1 : 0)));
   const guard = Math.max(0, Math.min(1, input.guarding ?? 0));
@@ -115,20 +120,41 @@ export function firstPersonActionPose(input: {
     rightRoll: 10 + side * (windup * 28 - strike * 76) + bowDraw * 14 + magicStrength * 6 + guard * 38,
     magicStrength,
     attackStrength: strike,
+    leftAttackStrength: 0,
+    rightAttackStrength: strike,
     attackProgress: attackT,
     leftCurl: .32 + guard * .55 - magicStrength * .28,
     rightCurl: input.weaponKind === "unarmed" ? .86 : .92,
   };
   if (input.weaponKind === "unarmed") {
     const left = input.comboStep === 2;
+    pose.leftAttackStrength = left ? strike : 0;
+    pose.rightAttackStrength = left ? 0 : strike;
     pose.rightYaw = 0; pose.rightRoll = 8; pose.rightPitch = -18 - (!left ? strike * 62 : 0);
     pose.rightX = .36 - (!left ? strike * .18 : 0); pose.rightZ = -.83 - (!left ? strike * .38 : 0);
     pose.leftCurl = .86;
     if (left) { pose.leftX += strike * .18; pose.leftZ -= strike * .38; pose.leftPitch -= strike * 62; }
   } else if (input.weaponKind === "dagger") {
-    pose.rightX = .38 - strike * .15; pose.rightZ = -.9 + windup * .04 - strike * .44;
-    pose.rightPitch = -12 - windup * 16 + strike * 58; pose.rightYaw = windup * 15 - strike * 22;
-    pose.rightRoll = 18 - strike * 12;
+    const paired = input.dualWielding === true;
+    const leftCut = paired && (input.comboStep === 2 || input.comboStep === 3);
+    const rightCut = !paired || input.comboStep !== 2;
+    pose.leftAttackStrength = leftCut ? strike : 0;
+    pose.rightAttackStrength = rightCut ? strike : 0;
+    // Low, inward-facing guard at rest. Each hand owns a different cut and the
+    // third hit crosses both wrists before driving both fangs through centre.
+    pose.leftX = -.32 + (input.comboStep === 2 ? strike * .28 : input.comboStep === 3 ? strike * .2 : 0);
+    pose.leftY = -.34 + windup * .08 + (leftCut ? strike * .12 : 0) - bob * .35;
+    pose.leftZ = -.8 - (leftCut ? strike * (input.comboStep === 3 ? .5 : .34) : 0);
+    pose.leftPitch = -18 - windup * 22 + (leftCut ? strike * 72 : 0);
+    pose.leftYaw = 12 + (input.comboStep === 2 ? windup * -42 + strike * 62 : input.comboStep === 3 ? windup * 34 - strike * 18 : 0);
+    pose.leftRoll = -28 + (input.comboStep === 2 ? windup * -36 + strike * 78 : input.comboStep === 3 ? windup * 52 - strike * 32 : 0);
+    pose.leftCurl = .92;
+    pose.rightX = .32 + (input.comboStep === 1 ? strike * -.28 : input.comboStep === 3 ? strike * -.2 : 0);
+    pose.rightY = -.34 + windup * .08 + (rightCut ? strike * .12 : 0) + bob * .35;
+    pose.rightZ = -.8 - (rightCut ? strike * (input.comboStep === 3 ? .5 : .34) : 0);
+    pose.rightPitch = -18 - windup * 22 + (rightCut ? strike * 72 : 0);
+    pose.rightYaw = -12 + (input.comboStep === 1 ? windup * 42 - strike * 62 : input.comboStep === 3 ? windup * -34 + strike * 18 : 0);
+    pose.rightRoll = 28 + (input.comboStep === 1 ? windup * 36 - strike * 78 : input.comboStep === 3 ? windup * -52 + strike * 32 : 0);
   } else if (input.weaponKind === "hammer" || input.comboStep === 3 && input.weaponKind === "sword") {
     pose.rightY += windup * .18 - strike * .12; pose.rightYaw *= .35;
     pose.rightRoll = 10 + windup * 10 - strike * 16;

@@ -60,6 +60,23 @@ describe("first-person action presentation", () => {
     expect(strike.rightZ).toBeLessThan(idle.rightZ);
   });
 
+  it("alternates paired Assassin blades and commits both hands on the finisher", () => {
+    const input = { timeSeconds: 0, moving: false, weaponKind: "dagger" as const,
+      attackDurationMs: 260, attackImpactMs: 90, castElapsedMs: null, castDurationMs: 600,
+      dualWielding: true };
+    const first = firstPersonActionPose({ ...input, comboStep: 1, attackElapsedMs: 90 });
+    const second = firstPersonActionPose({ ...input, comboStep: 2, attackElapsedMs: 90 });
+    const finisher = firstPersonActionPose({ ...input, comboStep: 3, attackElapsedMs: 90 });
+    expect(first.rightAttackStrength).toBeGreaterThan(.9);
+    expect(first.leftAttackStrength).toBe(0);
+    expect(second.leftAttackStrength).toBeGreaterThan(.9);
+    expect(second.rightAttackStrength).toBe(0);
+    expect(finisher.leftAttackStrength).toBeGreaterThan(.9);
+    expect(finisher.rightAttackStrength).toBeGreaterThan(.9);
+    expect(finisher.leftZ).toBeLessThan(first.leftZ);
+    expect(finisher.rightZ).toBeLessThan(second.rightZ);
+  });
+
   it("never renders the held melee weapon over its contact slash", () => {
     expect(firstPersonMeleePresentation("sword", 0)).toEqual({ weaponVisible: true, trailVisible: false });
     expect(firstPersonMeleePresentation("sword", .8)).toEqual({ weaponVisible: false, trailVisible: true });

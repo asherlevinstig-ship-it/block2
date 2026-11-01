@@ -54,20 +54,21 @@ export interface MeleeStrikeProfile {
 export function playerMeleeStrike(mainHandId: MainHandId, step: number): MeleeStrikeProfile | null {
   if (mainHandId !== "longsword" && mainHandId !== "forged_sword" && mainHandId !== "fang_dagger" && mainHandId !== "stone_core_hammer" && mainHandId !== "rootbound_hammer" && mainHandId !== "matriarch_edge") return null;
   const dagger = mainHandId === "fang_dagger";
+  const daggerFinisher = dagger && step === 3;
   const stoneHammer = mainHandId === "stone_core_hammer";
   const rootboundHammer = mainHandId === "rootbound_hammer";
   const hammer = stoneHammer || rootboundHammer;
-  const overhead = step === 3 || stoneHammer;
+  const overhead = step === 3 && !dagger || stoneHammer;
   const reverse = step === 2;
   return {
-    reach: dagger ? 1.25 : rootboundHammer ? 1.85 : hammer ? 1.72 : 1.7,
-    radius: hammer ? 0.24 : dagger ? 0.08 : 0.09,
-    startAngle: overhead ? 5 : reverse ? -58 : 58,
-    endAngle: overhead ? -5 : reverse ? 58 : -58,
-    startHeight: overhead ? 1.8 : 0.95,
-    endHeight: overhead ? 0.35 : 0.8,
-    beforeImpactMs: overhead ? 50 : 40,
-    afterImpactMs: dagger ? 65 : 90,
+    reach: daggerFinisher ? 1.72 : dagger ? 1.25 : rootboundHammer ? 1.85 : hammer ? 1.72 : 1.7,
+    radius: hammer ? 0.24 : daggerFinisher ? 0.12 : dagger ? 0.08 : 0.09,
+    startAngle: daggerFinisher ? 12 : overhead ? 5 : reverse ? -58 : 58,
+    endAngle: daggerFinisher ? -12 : overhead ? -5 : reverse ? 58 : -58,
+    startHeight: daggerFinisher ? 1.08 : overhead ? 1.8 : 0.95,
+    endHeight: daggerFinisher ? .92 : overhead ? 0.35 : 0.8,
+    beforeImpactMs: overhead || daggerFinisher ? 50 : 40,
+    afterImpactMs: daggerFinisher ? 78 : dagger ? 65 : 90,
     weaponLength: hammer ? 0.6 : dagger ? 0.61 : 0.63,
   };
 }

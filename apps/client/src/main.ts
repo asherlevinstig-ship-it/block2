@@ -5067,7 +5067,7 @@ const THIRD_PERSON_AUTHORED_WEAPON_TRANSFORMS: Record<KayKitWeaponAssetId, {
   bowBasic: { rotation: [90, 0, -90], scale: .55 },
   bowForged: { rotation: [90, 0, -90], scale: .55 },
   daggerThief: { rotation: [0, 0, 180], scale: .66 },
-  daggerAssassin: { rotation: [0, 0, 180], scale: .66 },
+  daggerAssassin: { rotation: [0, 0, 180], scale: .74 },
   wandMage: { rotation: [0, 0, 180], scale: .7 },
   staffHealer: { rotation: [0, 0, 180], scale: .68 },
   shieldTank: { rotation: [90, 0, 0], scale: .62 },
@@ -5197,8 +5197,15 @@ function animateVoxelCharacter(
     weapon.setLocalEulerAngles(0, 0, 0);
     weapon.setLocalScale(1, 1, 1);
   }
+  rig.assassinOffhand.setLocalPosition(.01, -.05, -.03);
+  rig.assassinOffhand.setLocalEulerAngles(0, 0, -18);
+  rig.assassinOffhand.setLocalScale(1, 1, 1);
   const strike = actionMainHandId ? playerMeleeStrike(actionMainHandId, actionStep) : null;
-  if (strike && actionMainHandId && actionElapsedMilliseconds !== null && !powerPose.active) {
+  // The paired dagger pose is authored through both arm chains. Pulling its
+  // right blade onto the generic sword spline made the left riposte look as if
+  // the weapon detached from the character.
+  if (strike && actionMainHandId && actionMainHandId !== "fang_dagger"
+    && actionElapsedMilliseconds !== null && !powerPose.active) {
     const timing = WEAPON_ATTACK_DEFINITIONS[actionMainHandId].attacks[actionStep - 1];
     if (timing) {
       const start = timing.impactMs - strike.beforeImpactMs;
@@ -5532,7 +5539,8 @@ function createFirstPersonActionRig(): FirstPersonActionRig {
     rune.setLocalEulerAngles(0, 0, -angle * 180 / Math.PI);
   }
   magic.enabled = false;
-  const slashTrails = Array.from({ length: 3 }, (_, index) => {
+  // Two groups of three let paired daggers leave independent contact streaks.
+  const slashTrails = Array.from({ length: 6 }, (_, index) => {
     const trail = actionShape(root, `first-person-slash-trail-${index}`, "box", trailMaterial,
       [.45 - index * .08, .022, .012], [.14, -.02, -1.22 - index * .012]);
     trail.enabled = false;
@@ -5546,6 +5554,7 @@ function createFirstPersonActionRig(): FirstPersonActionRig {
 const firstPersonActionRig = createFirstPersonActionRig();
 let firstPersonAbilityCastStartedAt: number | null = null;
 let firstPersonAbilityCastDuration = 700;
+let firstPersonAbilityCastPath: RoleFieldPath | null = null;
 let firstPersonHitKickUntil = 0;
 let firstPersonHitKickStrength = 0;
 let firstPersonEquippedAt = 0;
@@ -5558,7 +5567,7 @@ const FIRST_PERSON_AUTHORED_WEAPON_TRANSFORMS: Record<KayKitWeaponAssetId, {
   bowBasic: { rotation: [90, 0, 90], scale: .48 },
   bowForged: { rotation: [90, 0, 90], scale: .48 },
   daggerThief: { rotation: [0, 0, 0], scale: .66 },
-  daggerAssassin: { rotation: [0, 0, 0], scale: .66 },
+  daggerAssassin: { rotation: [0, 0, 0], scale: .74 },
   wandMage: { rotation: [0, 0, 0], scale: .7 },
   staffHealer: { rotation: [0, 0, 0], scale: .68 },
   shieldTank: { rotation: [90, 0, 180], scale: .62 },
@@ -6938,11 +6947,17 @@ function updateFirstPersonActionView(now: number, moving: boolean, actionElapsed
   if (firstPersonActionRig.viewCamera.camera)
     firstPersonActionRig.viewCamera.camera.fov += (drawnFov - firstPersonActionRig.viewCamera.camera.fov) * blend;
   const triggeredCastElapsed = firstPersonAbilityCastStartedAt === null ? null : now - firstPersonAbilityCastStartedAt;
-  if (triggeredCastElapsed !== null && triggeredCastElapsed >= firstPersonAbilityCastDuration)
+  if (triggeredCastElapsed !== null && triggeredCastElapsed >= firstPersonAbilityCastDuration) {
     firstPersonAbilityCastStartedAt = null;
+    firstPersonAbilityCastPath = null;
+  }
+  const assassinCastProgress = firstPersonAbilityCastPath === "assassin" && triggeredCastElapsed !== null
+    ? Math.max(0, Math.min(1, triggeredCastElapsed / Math.max(1, firstPersonAbilityCastDuration))) : 0;
+  const assassinCastStrength = Math.sin(assassinCastProgress * Math.PI);
   const focusAttack = weaponKind === "focus" ? actionElapsed : null;
-  const castElapsed = powerElapsed ?? focusAttack
-    ?? (firstPersonAbilityCastStartedAt === null ? null : now - firstPersonAbilityCastStartedAt);
+  const genericAbilityCastElapsed = firstPersonAbilityCastPath === "assassin" ? null
+    : firstPersonAbilityCastStartedAt === null ? null : now - firstPersonAbilityCastStartedAt;
+  const castElapsed = powerElapsed ?? focusAttack ?? genericAbilityCastElapsed;
   const castDuration = powerElapsed !== null ? Math.max(1, powerDuration(localActivePower))
     : focusAttack !== null ? Math.max(1, actionDuration(localActionStep)) : firstPersonAbilityCastDuration;
   const pose = firstPersonActionPose({
@@ -6959,7 +6974,17 @@ function updateFirstPersonActionView(now: number, moving: boolean, actionElapsed
     castDurationMs: castDuration,
     bowDrawProgress,
     bowDrawing: bowDrawStartedAt !== null,
+    dualWielding: weaponKind === "dagger" && localBuildPathId === "assassin",
   });
+  if (assassinCastStrength > 0) {
+    // Assassin abilities are a blade flourish, not a recoloured Mage orb.
+    pose.leftX += assassinCastStrength * .18; pose.leftY += assassinCastStrength * .13;
+    pose.leftZ -= assassinCastStrength * .24; pose.leftYaw -= assassinCastStrength * 28;
+    pose.leftRoll += assassinCastStrength * 46; pose.leftCurl = .92;
+    pose.rightX -= assassinCastStrength * .18; pose.rightY += assassinCastStrength * .13;
+    pose.rightZ -= assassinCastStrength * .24; pose.rightYaw += assassinCastStrength * 28;
+    pose.rightRoll -= assassinCastStrength * 46; pose.rightCurl = .92;
+  }
   firstPersonActionRig.leftHand.setLocalPosition(pose.leftX, pose.leftY, pose.leftZ);
   firstPersonActionRig.leftHand.setLocalEulerAngles(pose.leftPitch, pose.leftYaw, pose.leftRoll);
   firstPersonActionRig.rightHand.setLocalPosition(pose.rightX, pose.rightY, pose.rightZ);
@@ -6968,8 +6993,10 @@ function updateFirstPersonActionView(now: number, moving: boolean, actionElapsed
     weaponKind === "bow" ? .66 : .76, weaponKind === "bow" ? .66 : .76);
   firstPersonActionRig.rightHand.setLocalScale(weaponKind === "bow" ? .6 : .76,
     weaponKind === "bow" ? .6 : .76, weaponKind === "bow" ? .6 : .76);
-  firstPersonActionRig.wrists.left.setLocalEulerAngles(-pose.magicStrength * 22, pose.magicStrength * -15, 0);
-  firstPersonActionRig.wrists.right.setLocalEulerAngles(pose.attackStrength * -10, 0, pose.magicStrength * 8);
+  firstPersonActionRig.wrists.left.setLocalEulerAngles(-pose.magicStrength * 22 - pose.leftAttackStrength * 12,
+    pose.magicStrength * -15, pose.leftAttackStrength * 8);
+  firstPersonActionRig.wrists.right.setLocalEulerAngles(pose.rightAttackStrength * -12, 0,
+    pose.magicStrength * 8 - pose.rightAttackStrength * 8);
   for (const finger of firstPersonActionRig.fingers) {
     const curl = finger.side === "left" ? pose.leftCurl : pose.rightCurl;
     finger.base.setLocalEulerAngles(-curl * 78, 0, finger.spread * (1 - curl));
@@ -6994,7 +7021,7 @@ function updateFirstPersonActionView(now: number, moving: boolean, actionElapsed
     positionBowStringSegment(firstPersonActionRig.bowStringLower, new pc.Vec3(-.31, -.47, -.95), nock);
     if (arrowVisible) firstPersonActionRig.bowArrow.setLocalPosition(nock.x, nock.y, nock.z);
   }
-  const magicVisible = pose.magicStrength > .025;
+  const magicVisible = pose.magicStrength > .025 && firstPersonAbilityCastPath !== "assassin";
   firstPersonActionRig.magic.enabled = magicVisible;
   if (magicVisible) {
     firstPersonActionRig.magic.setLocalPosition(pose.leftX + .08, pose.leftY + .22, pose.leftZ - .16);
@@ -7006,18 +7033,31 @@ function updateFirstPersonActionView(now: number, moving: boolean, actionElapsed
   }
   const meleePresentation = firstPersonMeleePresentation(weaponKind, pose.attackStrength);
   const meleeTrail = meleePresentation.trailVisible;
-  firstPersonActionRig.weapons[weaponKind].enabled = meleePresentation.weaponVisible;
+  const assassinDualDaggers = weaponKind === "dagger" && localBuildPathId === "assassin";
+  const assassinFlourish = assassinDualDaggers ? assassinCastStrength : 0;
+  const rightBladeStrength = Math.max(pose.rightAttackStrength, assassinFlourish);
+  const leftBladeStrength = Math.max(pose.leftAttackStrength, assassinFlourish);
+  firstPersonActionRig.weapons[weaponKind].enabled = assassinDualDaggers
+    ? rightBladeStrength <= .06 : meleePresentation.weaponVisible;
+  firstPersonActionRig.assassinOffhand.enabled = assassinDualDaggers && leftBladeStrength <= .06;
   const trailSide = localActionStep === 2 ? -1 : 1;
   for (let index = 0; index < firstPersonActionRig.slashTrails.length; index++) {
     const trail = firstPersonActionRig.slashTrails[index]!;
-    trail.enabled = meleeTrail;
-    if (!meleeTrail) continue;
-    const delayedProgress = Math.max(0, Math.min(1, pose.attackProgress - index * .035));
-    trail.setLocalPosition(trailSide * (.18 - delayedProgress * .28), -.01 + delayedProgress * .08,
-      -1.24 - index * .012);
-    trail.setLocalEulerAngles(0, 0, trailSide * (72 - delayedProgress * 142 - index * 8));
-    const length = (.34 + pose.attackStrength * .3) * (1 - index * .14);
-    trail.setLocalScale(length, .024 - index * .004, .012);
+    const leftGroup = index >= 3, groupIndex = index % 3;
+    const daggerStrength = leftGroup ? leftBladeStrength : rightBladeStrength;
+    const visible = assassinDualDaggers ? daggerStrength > .06 : index < 3 && meleeTrail;
+    trail.enabled = visible;
+    if (!visible) continue;
+    const side = assassinDualDaggers ? leftGroup ? -1 : 1 : trailSide;
+    const flourishProgress = assassinFlourish > 0 ? assassinCastProgress : pose.attackProgress;
+    const delayedProgress = Math.max(0, Math.min(1, flourishProgress - groupIndex * .035));
+    trail.setLocalPosition(side * ((assassinDualDaggers ? .3 : .18) - delayedProgress * (assassinDualDaggers ? .48 : .28)),
+      -.01 + delayedProgress * (assassinDualDaggers ? .12 : .08), -1.24 - groupIndex * .012);
+    trail.setLocalEulerAngles(0, 0, side * ((assassinDualDaggers ? 64 : 72)
+      - delayedProgress * (assassinDualDaggers ? 128 : 142) - groupIndex * 8));
+    const length = ((assassinDualDaggers ? .22 : .34) + daggerStrength * (assassinDualDaggers ? .25 : .3))
+      * (1 - groupIndex * .14);
+    trail.setLocalScale(length, .024 - groupIndex * .004, .012);
   }
   const kickRemaining = Math.max(0, firstPersonHitKickUntil - now);
   if (kickRemaining <= 0) firstPersonHitKickStrength = 0;
@@ -7026,7 +7066,8 @@ function updateFirstPersonActionView(now: number, moving: boolean, actionElapsed
     : 0;
   const equipT = Math.min(1, Math.max(0, (now - firstPersonEquippedAt) / 240));
   const equipDip = (1 - equipT) * (1 - equipT) * .2;
-  firstPersonActionRig.root.setLocalPosition(firstPersonLookSway, -kick * .12 - equipDip, kick * .4);
+  const daggerExecutionDrive = assassinDualDaggers && localActionStep === 3 ? pose.attackStrength * .12 : 0;
+  firstPersonActionRig.root.setLocalPosition(firstPersonLookSway, -kick * .12 - equipDip, kick * .4 - daggerExecutionDrive);
 }
 // The onboarding renderer reads the equipped weapon. Run its initial pass only
 // after equipment state exists so a fresh profile cannot hit the temporal dead zone.
@@ -8680,6 +8721,7 @@ const callingAnticipationVisuals: CallingAnticipationVisual[] = [];
 interface CallingImpactVisual {
   casterId?: string;
   root: pc.Entity;
+  startedAt?: number;
   expiresAt: number;
   materials: pc.StandardMaterial[];
   abilityId: CallingAbilityId;
@@ -9372,7 +9414,9 @@ function createBladeDanceCuts(message: BladeDanceCutMessage): void {
     finalCut ||= Boolean(cut.final);
     previous = target.clone();
   }
-  callingImpactVisuals.push({ root, expiresAt: performance.now() + message.durationMs, materials: [blade, wound], abilityId: "assassin_blade_dance" });
+  const startedAt = performance.now();
+  callingImpactVisuals.push({ root, startedAt, expiresAt: startedAt + message.durationMs,
+    materials: [blade, wound], abilityId: "assassin_blade_dance" });
   for (const [mobId, damage] of totals) {
     const mob = mobVisuals.get(mobId); if (!mob) continue;
     createRangedPopup(new pc.Vec3(mob.state.x, mob.state.y + mob.healthBarY + .9, mob.state.z),
@@ -9770,6 +9814,7 @@ function createCallingImpact(effect: CallingAbilityEffect): void {
   if (effect.casterId === room?.sessionId) {
     firstPersonAbilityCastStartedAt = performance.now();
     firstPersonAbilityCastDuration = Math.max(520, Math.min(1_200, effect.durationMs ?? 700));
+    firstPersonAbilityCastPath = effect.pathId;
     setFirstPersonCallingPalette(effect.pathId);
   }
   createCallingCastFlourish(effect.casterId, effect.pathId, abilityId);
@@ -19609,6 +19654,14 @@ app.on("update", (dt: number) => {
   for (let index = callingImpactVisuals.length - 1; index >= 0; index -= 1) {
     const visual = callingImpactVisuals[index]!;
     if (!visual.stationary && (visual.abilityId === "mage_arcane_surge" || visual.abilityId === "mage_overload" || visual.abilityId === "healer_renewal")) visual.root.rotateLocal(0, frameTime * 105, 0);
+    if (visual.abilityId === "assassin_blade_dance" && visual.startedAt !== undefined) {
+      const duration = Math.max(1, visual.expiresAt - visual.startedAt);
+      const progress = Math.max(0, Math.min(1, (animationNow - visual.startedAt) / duration));
+      const flash = Math.sin(progress * Math.PI);
+      visual.materials[0]!.opacity = (1 - progress) * .92;
+      visual.materials[1]!.opacity = (1 - progress) * .78 + flash * .12;
+      visual.materials.forEach(material => material.update());
+    }
     if (animationNow >= visual.expiresAt) {
       visual.root.destroy();
       for (const material of visual.materials) material.destroy();
@@ -19618,6 +19671,8 @@ app.on("update", (dt: number) => {
   for (const [key, visual] of callingPersistentVisuals) {
     if (visual.abilityId === "mage_mana_shield" || visual.abilityId === "healer_resurrection") visual.root.rotateLocal(0, frameTime * 24, 0);
     else if (visual.abilityId === "mage_overload") visual.root.rotateLocal(0, frameTime * 92, 0);
+    else if (visual.abilityId === "assassin_vanish" || visual.abilityId === "assassin_blade_dance")
+      visual.root.rotateLocal(0, frameTime * 135, 0);
     if (Date.now() >= visual.expiresAt) {
       visual.root.destroy(); visual.materials.forEach(material => material.destroy()); callingPersistentVisuals.delete(key);
     }

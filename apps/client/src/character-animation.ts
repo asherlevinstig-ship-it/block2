@@ -173,6 +173,34 @@ export function primaryActionPose(elapsedMilliseconds: number | null, comboStep 
     rightArmPitch: -138 * strength,
     rightArmRoll: -12 * strength,
   };
+  if (mainHandId === "fang_dagger") {
+    // Twin Fang is a paired stance: right cut, left riposte, then a two-blade
+    // execution. This deliberately avoids the longsword's broad one-hand arc.
+    if (comboStep === 2) return {
+      active: true,
+      torsoYaw: 26 * strength - 18 * followThrough,
+      leftArmPitch: -118 * strength,
+      leftArmRoll: 72 * strength - 34 * followThrough,
+      rightArmPitch: -58 * strength,
+      rightArmRoll: -28 * strength,
+    };
+    if (comboStep === 3) return {
+      active: true,
+      torsoYaw: 6 * followThrough,
+      leftArmPitch: -132 * strength,
+      leftArmRoll: 34 * strength - 18 * followThrough,
+      rightArmPitch: -132 * strength,
+      rightArmRoll: -34 * strength + 18 * followThrough,
+    };
+    return {
+      active: true,
+      torsoYaw: -26 * strength + 18 * followThrough,
+      leftArmPitch: -58 * strength,
+      leftArmRoll: 28 * strength,
+      rightArmPitch: -118 * strength,
+      rightArmRoll: -72 * strength + 34 * followThrough,
+    };
+  }
   if (comboStep === 2) return {
     active: true,
     torsoYaw: (mainHandId === "rootbound_hammer" ? 26 : 18) * strength - 22 * followThrough,

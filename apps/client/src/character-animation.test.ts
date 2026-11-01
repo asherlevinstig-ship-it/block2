@@ -89,6 +89,18 @@ describe("voxel character animation", () => {
     expect(acidFocus.rightArmPitch).toBeLessThan(-120);
   });
 
+  it("alternates Twin Fang arms before a two-blade execution pose", () => {
+    const first = primaryActionPose(90, 1, "fang_dagger");
+    const second = primaryActionPose(105, 2, "fang_dagger");
+    const finisher = primaryActionPose(145, 3, "fang_dagger");
+    expect(first.rightArmPitch).toBeLessThan(first.leftArmPitch - 40);
+    expect(second.leftArmPitch).toBeLessThan(second.rightArmPitch - 40);
+    expect(finisher.leftArmPitch).toBeLessThan(-125);
+    expect(finisher.rightArmPitch).toBeLessThan(-125);
+    expect(first.torsoYaw).toBeLessThan(0);
+    expect(second.torsoYaw).toBeGreaterThan(0);
+  });
+
   it("brings the hammer down at impact then smoothly returns to rest", () => {
     const impact = primaryActionPose(430, 1, "stone_core_hammer");
     expect(impact.leftArmPitch).toBe(24);
