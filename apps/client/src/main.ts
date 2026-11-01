@@ -5539,8 +5539,7 @@ function createFirstPersonActionRig(): FirstPersonActionRig {
     rune.setLocalEulerAngles(0, 0, -angle * 180 / Math.PI);
   }
   magic.enabled = false;
-  // Two groups of three let paired daggers leave independent contact streaks.
-  const slashTrails = Array.from({ length: 6 }, (_, index) => {
+  const slashTrails = Array.from({ length: 3 }, (_, index) => {
     const trail = actionShape(root, `first-person-slash-trail-${index}`, "box", trailMaterial,
       [.45 - index * .08, .022, .012], [.14, -.02, -1.22 - index * .012]);
     trail.enabled = false;
@@ -7032,34 +7031,23 @@ function updateFirstPersonActionView(now: number, moving: boolean, actionElapsed
       .12 + pose.magicStrength * .08, .12 + pose.magicStrength * .08);
   }
   const assassinDualDaggers = weaponKind === "dagger" && localBuildPathId === "assassin";
-  // Paired Assassin blades are the action itself, so they must remain visibly
-  // attached to both hands. Their trails are accents rather than replacement
-  // weapon silhouettes.
+  // Paired Assassin blades are the action itself: keep them attached to the
+  // hands and do not draw a second weapon-shaped slash over the viewmodel.
   const meleePresentation = firstPersonMeleePresentation(weaponKind, pose.attackStrength, assassinDualDaggers);
   const meleeTrail = meleePresentation.trailVisible;
-  const assassinFlourish = assassinDualDaggers ? assassinCastStrength : 0;
-  const rightBladeStrength = Math.max(pose.rightAttackStrength, assassinFlourish);
-  const leftBladeStrength = Math.max(pose.leftAttackStrength, assassinFlourish);
   firstPersonActionRig.weapons[weaponKind].enabled = meleePresentation.weaponVisible;
   firstPersonActionRig.assassinOffhand.enabled = assassinDualDaggers;
   const trailSide = localActionStep === 2 ? -1 : 1;
   for (let index = 0; index < firstPersonActionRig.slashTrails.length; index++) {
     const trail = firstPersonActionRig.slashTrails[index]!;
-    const leftGroup = index >= 3, groupIndex = index % 3;
-    const daggerStrength = leftGroup ? leftBladeStrength : rightBladeStrength;
-    const visible = assassinDualDaggers ? daggerStrength > .06 : index < 3 && meleeTrail;
-    trail.enabled = visible;
-    if (!visible) continue;
-    const side = assassinDualDaggers ? leftGroup ? -1 : 1 : trailSide;
-    const flourishProgress = assassinFlourish > 0 ? assassinCastProgress : pose.attackProgress;
-    const delayedProgress = Math.max(0, Math.min(1, flourishProgress - groupIndex * .035));
-    trail.setLocalPosition(side * ((assassinDualDaggers ? .3 : .18) - delayedProgress * (assassinDualDaggers ? .48 : .28)),
-      -.01 + delayedProgress * (assassinDualDaggers ? .12 : .08), -1.24 - groupIndex * .012);
-    trail.setLocalEulerAngles(0, 0, side * ((assassinDualDaggers ? 64 : 72)
-      - delayedProgress * (assassinDualDaggers ? 128 : 142) - groupIndex * 8));
-    const length = ((assassinDualDaggers ? .22 : .34) + daggerStrength * (assassinDualDaggers ? .25 : .3))
-      * (1 - groupIndex * .14);
-    trail.setLocalScale(length, .024 - groupIndex * .004, .012);
+    trail.enabled = meleeTrail;
+    if (!meleeTrail) continue;
+    const delayedProgress = Math.max(0, Math.min(1, pose.attackProgress - index * .035));
+    trail.setLocalPosition(trailSide * (.18 - delayedProgress * .28), -.01 + delayedProgress * .08,
+      -1.24 - index * .012);
+    trail.setLocalEulerAngles(0, 0, trailSide * (72 - delayedProgress * 142 - index * 8));
+    const length = (.34 + pose.attackStrength * .3) * (1 - index * .14);
+    trail.setLocalScale(length, .024 - index * .004, .012);
   }
   const kickRemaining = Math.max(0, firstPersonHitKickUntil - now);
   if (kickRemaining <= 0) firstPersonHitKickStrength = 0;
@@ -9093,15 +9081,15 @@ function addCallingSignature(root: pc.Entity, abilityId: CallingAbilityId): pc.S
     return [sentence, blade];
   }
   if (abilityId === "assassin_blade_dance") {
-    const blade = callingSignatureMaterial(new pc.Color(1, .84, .9), .92, 1.2);
-    const wound = callingSignatureMaterial(new pc.Color(1, .06, .18), .78, 1.05);
-    for (let index = 0; index < 7; index += 1) {
-      const side = index % 2 ? -1 : 1;
-      addCallingSignaturePrimitive(root, "blade-dance-trail", "box", index % 3 === 0 ? wound : blade,
-        [.045, .06, .72 + index % 3 * .2], [side * (.22 + index * .08), .48 + index % 3 * .3, .18 - index * .13],
-        [side * (24 + index * 4), side * (18 + index * 11), side * 38]);
+    const shadow = callingSignatureMaterial(new pc.Color(.08, .025, .14), .42, .22);
+    const pulse = callingSignatureMaterial(new pc.Color(1, .08, .22), .72, .9);
+    addCallingSignaturePrimitive(root, "blade-dance-shadow-pulse", "cylinder", shadow, [.82, .025, .82], [0, .055, 0]);
+    for (let index = 0; index < 6; index += 1) {
+      const angle = index / 6 * Math.PI * 2;
+      addCallingSignaturePrimitive(root, "blade-dance-shadow-mote", "sphere", index % 2 ? shadow : pulse,
+        [.06, .06, .06], [Math.sin(angle) * .58, .3 + index % 3 * .23, Math.cos(angle) * .58]);
     }
-    return [blade, wound];
+    return [shadow, pulse];
   }
   if (abilityId === "thief_smoke_bomb") {
     const dark = callingSignatureMaterial(new pc.Color(.1, .13, .12), .58);
@@ -9385,8 +9373,8 @@ function createBladeDanceCuts(message: BladeDanceCutMessage): void {
   const caster = message.casterId === room?.sessionId ? localPlayer : remotePlayers.get(message.casterId)?.entity;
   if (!caster || message.cuts.length === 0) return;
   const root = new pc.Entity("blade-dance-cut-sequence"); app.root.addChild(root);
-  const blade = callingSignatureMaterial(new pc.Color(1, .86, .94), .94, 1.36);
-  const wound = callingSignatureMaterial(new pc.Color(1, .04, .16), .84, 1.2);
+  const blade = callingSignatureMaterial(new pc.Color(1, .86, .94), .68, 1.1);
+  const wound = callingSignatureMaterial(new pc.Color(1, .04, .16), .76, 1.05);
   const first = message.cuts[0]!;
   let previous = first.fromX !== undefined
     ? new pc.Vec3(first.fromX, first.fromY ?? caster.getPosition().y, first.fromZ ?? caster.getPosition().z)
@@ -9400,17 +9388,18 @@ function createBladeDanceCuts(message: BladeDanceCutMessage): void {
       : mob.entity.getPosition();
     const dx = target.x - previous.x, dz = target.z - previous.z;
     const length = Math.max(.2, Math.hypot(dx, dz)), yaw = Math.atan2(dx, dz) * 180 / Math.PI;
-    addCallingSignaturePrimitive(root, "blade-dance-dash-line", "box", cut.sequence % 2 ? wound : blade,
-      [cut.final ? .075 : .035, cut.final ? .075 : .035, length], [(previous.x + target.x) / 2, target.y + .8 + (cut.sequence % 2) * .18, (previous.z + target.z) / 2],
+    // This is only a thin movement trace. The actual weapons remain in the
+    // Assassin's hands, avoiding detached duplicate blades across the screen.
+    addCallingSignaturePrimitive(root, "blade-dance-movement-trace", "box", cut.sequence % 2 ? wound : blade,
+      [.018, .018, length], [(previous.x + target.x) / 2, target.y + .72, (previous.z + target.z) / 2],
       [cut.sequence % 2 ? 12 : -12, yaw, cut.sequence % 2 ? 24 : -24]);
-    for (const side of [-1, 1]) addCallingSignaturePrimitive(root, "blade-dance-aimed-cut", "box", side > 0 ? blade : wound,
-      [cut.final ? .075 : .035, cut.final ? .085 : .045, cut.final ? 1.05 : .72], [target.x + side * .15, target.y + .8 + (cut.sequence % 3) * .18, target.z],
-      [side * (28 + cut.sequence * 3), yaw + side * 22, side * 42]);
+    for (const side of [-1, 1]) addCallingSignaturePrimitive(root, "blade-dance-impact-spark", "sphere",
+      side > 0 ? blade : wound, cut.final ? [.14, .14, .14] : [.085, .085, .085],
+      [target.x + side * .13, target.y + .78 + (cut.sequence % 3) * .12, target.z]);
     if (cut.final) for (let index = 0; index < 8; index += 1) {
       const angle = index * Math.PI / 4;
-      addCallingSignaturePrimitive(root, "blade-dance-final-spark", "box", index % 2 ? wound : blade,
-        [.035, .035, .5], [target.x + Math.sin(angle) * .48, target.y + .85, target.z + Math.cos(angle) * .48],
-        [0, angle * 180 / Math.PI, 48]);
+      addCallingSignaturePrimitive(root, "blade-dance-final-spark", "sphere", index % 2 ? wound : blade,
+        [.055, .055, .055], [target.x + Math.sin(angle) * .48, target.y + .85, target.z + Math.cos(angle) * .48]);
     }
     totals.set(cut.mobId, (totals.get(cut.mobId) ?? 0) + cut.damage);
     finalCut ||= Boolean(cut.final);

@@ -81,7 +81,7 @@ describe("first-person action presentation", () => {
     expect(firstPersonMeleePresentation("sword", 0)).toEqual({ weaponVisible: true, trailVisible: false });
     expect(firstPersonMeleePresentation("sword", .8)).toEqual({ weaponVisible: false, trailVisible: true });
     expect(firstPersonMeleePresentation("dagger", .4)).toEqual({ weaponVisible: false, trailVisible: true });
-    expect(firstPersonMeleePresentation("dagger", .8, true)).toEqual({ weaponVisible: true, trailVisible: true });
+    expect(firstPersonMeleePresentation("dagger", .8, true)).toEqual({ weaponVisible: true, trailVisible: false });
     expect(firstPersonMeleePresentation("hammer", .4)).toEqual({ weaponVisible: false, trailVisible: true });
     expect(firstPersonMeleePresentation("bow", .8)).toEqual({ weaponVisible: true, trailVisible: false });
     expect(firstPersonMeleePresentation("focus", .8)).toEqual({ weaponVisible: true, trailVisible: false });
