@@ -27,6 +27,17 @@ const BARREL_URL = propUrl("Barrel");
 const CRATE_URL = propUrl("Crate_Wooden");
 const BUCKET_URL = propUrl("Bucket_Wooden_1");
 
+let tavernStaticBatchGroupId: number | null = null;
+const SHADOWLESS_PROP_URLS = new Set([SHELF_BOTTLES_URL, MUG_URL, PLATE_URL, CANDLE_URL, BUCKET_URL]);
+const unbatchedPrimitive = (name: string): boolean => name.startsWith("hearth-flame")
+  || name.startsWith("mara-") || name.startsWith("meal-") || name.startsWith("stew-")
+  || name.startsWith("tea-") || name.startsWith("pie-");
+const shadowlessPrimitive = (name: string): boolean => unbatchedPrimitive(name)
+  || name.startsWith("floor-board-seam") || name.startsWith("window-")
+  || name.startsWith("bar-menu-") || name.startsWith("high-low-")
+  || name.startsWith("hearth-ember") || name.startsWith("notice-sheet")
+  || name.startsWith("chandelier-candle");
+
 export const TAVERN_ROOM_ZONES = {
   entrance: { x: 0, z: 5.6, radius: 2.2 },
   bar: { x: -7.2, z: -1.5, radius: 3.2 },
@@ -49,7 +60,9 @@ function shape(parent: pc.Entity, name: string, type: "box" | "cylinder" | "sphe
   mat: pc.Material, scale: readonly [number, number, number], position: readonly [number, number, number],
   euler?: readonly [number, number, number]): pc.Entity {
   const entity = new pc.Entity(name);
-  entity.addComponent("render", { type, castShadows: true, receiveShadows: true });
+  entity.addComponent("render", { type, castShadows: !shadowlessPrimitive(name), receiveShadows: true,
+    ...(tavernStaticBatchGroupId !== null && !unbatchedPrimitive(name)
+      ? { batchGroupId: tavernStaticBatchGroupId } : {}) });
   if (entity.render) entity.render.material = mat;
   entity.setLocalScale(...scale);
   entity.setLocalPosition(...position);
@@ -75,7 +88,10 @@ function loadProp(app: pc.Application, url: string, parent: pc.Entity,
       return;
     }
     for (const placement of placements) {
-      const entity = resource.instantiateRenderEntity({ castShadows: true, receiveShadows: true });
+      const entity = resource.instantiateRenderEntity({ castShadows: !SHADOWLESS_PROP_URLS.has(url), receiveShadows: true });
+      if (tavernStaticBatchGroupId !== null)
+        for (const render of entity.findComponents("render") as pc.RenderComponent[])
+          render.batchGroupId = tavernStaticBatchGroupId;
       entity.setLocalPosition(...placement.position);
       entity.setLocalEulerAngles(0, placement.yaw ?? 0, 0);
       const scale = placement.scale ?? 1;
@@ -119,6 +135,8 @@ interface TavernSeatRig {
 interface TavernPersonMotion {
   entity: pc.Entity;
   route: readonly [number, number, number][];
+  routeLengths: readonly number[];
+  routeTotal: number;
   seat: readonly [number, number, number];
   seatYaw: number;
   scheduleOffset: number;
@@ -143,10 +161,14 @@ function applyTavernSeatPose(rig: TavernSeatRig): void {
   rig.lowerRight.setLocalEulerAngles(88, 0, -1);
 }
 
-function routePosition(route: readonly [number, number, number][], progress: number): pc.Vec3 {
+function routeMetrics(route: readonly [number, number, number][]): { lengths: number[]; total: number } {
   const lengths = route.slice(1).map((point, index) => Math.hypot(
     point[0] - route[index]![0], point[1] - route[index]![1], point[2] - route[index]![2]));
-  const total = lengths.reduce((sum, length) => sum + length, 0);
+  return { lengths, total: lengths.reduce((sum, length) => sum + length, 0) };
+}
+
+function routePosition(route: readonly [number, number, number][], lengths: readonly number[], total: number,
+  progress: number): pc.Vec3 {
   let distance = Math.max(0, Math.min(1, progress)) * total;
   for (let index = 0; index < lengths.length; index++) {
     const length = lengths[index]!;
@@ -183,7 +205,9 @@ function loadTavernPeople(app: pc.Application, root: pc.Entity, proceduralMara: 
       const asset = result.loaded.get(placement.role);
       const resource = asset?.resource as (pc.ContainerResource & { animations: pc.Asset[] }) | undefined;
       if (!resource) continue;
-      const model = resource.instantiateRenderEntity({ castShadows: true, receiveShadows: true });
+      // Mara remains the visual anchor. Seated background patrons receive the
+      // room's shadows but do not each submit a full skinned shadow rig.
+      const model = resource.instantiateRenderEntity({ castShadows: index === 0, receiveShadows: true });
       model.name = index === 0 ? "mara-innkeeper" : `tavern-patron-${index}`;
       model.setLocalPosition(...placement.position);
       model.setLocalEulerAngles(0, TOWN_NPC_MODEL_YAW + placement.yaw, 0);
@@ -197,8 +221,10 @@ function loadTavernPeople(app: pc.Application, root: pc.Entity, proceduralMara: 
       const route = "route" in placement ? placement.route : undefined;
       const scheduleOffset = "scheduleOffset" in placement ? placement.scheduleOffset : undefined;
       if (seatRig && route && scheduleOffset !== undefined) {
+        const metrics = routeMetrics(route);
         model.enabled = false;
         movingPeople.push({ entity: model, route, seat: placement.position,
+          routeLengths: metrics.lengths, routeTotal: metrics.total,
           seatYaw: placement.yaw, scheduleOffset, phase: null,
           nextGesture: 0, gestureEnds: 0, seatRig });
       }
@@ -209,6 +235,7 @@ function loadTavernPeople(app: pc.Application, root: pc.Entity, proceduralMara: 
 
 /** A composed, asset-backed RPG interior for the dedicated Hearth & Hammer room. */
 export function createTavernRoom(app: pc.Application): pc.Entity {
+  tavernStaticBatchGroupId = app.batcher.addGroup("tavern-static", false, 512).id;
   const root = new pc.Entity("hearth-and-hammer-room");
   app.root.addChild(root);
   const upperRoomShell = new pc.Entity("tavern-upper-room-shell");
@@ -419,7 +446,10 @@ export function createTavernRoom(app: pc.Application): pc.Entity {
     { kind: "smoke", texture: "smoke", count: 5, life: 2.5, radius: .4, speed: .05, rise: .52, size: .38, color: [.13, .12, .11], opacity: .2 },
   ], true, .72);
   const hearthLight = new pc.Entity("hearth-light");
-  hearthLight.addComponent("light", { type: "omni", color: new pc.Color(1, .36, .1), intensity: 1.75, range: 8, castShadows: true, shadowResolution: 512 });
+  // The previous shadowed omni light rendered six shadow-map faces every frame
+  // because its flicker changed continuously. Emissive flames and the room's
+  // static sun shadow retain depth without that seven-pass fireplace cost.
+  hearthLight.addComponent("light", { type: "omni", color: new pc.Color(1, .36, .1), intensity: 1.75, range: 8, castShadows: false });
   hearthLight.setLocalPosition(hearthX, 9.05, -5.9);
   root.addChild(hearthLight);
   box(root, "hearth-rug", rugRed, [5.25, .04, 2.55], [hearthX, 8.025, -4.75]);
@@ -533,10 +563,10 @@ export function createTavernRoom(app: pc.Application): pc.Entity {
       }
       if (walking) {
         const routeProgress = schedule.phase === "entering" ? schedule.progress : 1 - schedule.progress;
-        const position = routePosition(person.route, routeProgress);
+        const position = routePosition(person.route, person.routeLengths, person.routeTotal, routeProgress);
         const aheadProgress = schedule.phase === "entering"
           ? Math.min(1, routeProgress + .015) : Math.max(0, routeProgress - .015);
-        const ahead = routePosition(person.route, aheadProgress);
+        const ahead = routePosition(person.route, person.routeLengths, person.routeTotal, aheadProgress);
         person.entity.setLocalPosition(position);
         faceRoute(person.entity, position, ahead);
         continue;

@@ -2148,6 +2148,11 @@ function rebuildChunkAndNeighbors(chunk: ClientChunk, x: number, z: number): voi
 }
 
 function updateActiveChunkMeshes(position: { x: number; z: number }): void {
+  if (tavernRoomRequested) {
+    for (const chunk of chunks.values()) chunk.root.enabled = false;
+    queuedChunkRebuilds.clear();
+    return;
+  }
   const address = worldToChunk(position.x, position.z);
   const regionKey = chunkKey(address.chunkX, address.chunkZ);
   if (fastWorldRequested) {
@@ -2411,7 +2416,7 @@ function renderTowerChronicleProgress(source: string): void {
 }
 
 function updateTowerChronicleLabel(): void {
-  if (!fastWorldRequested || !worldReady || !camera.camera) { towerChronicleLabel.hidden = true; return; }
+  if (!fastWorldRequested || tavernRoomRequested || !worldReady || !camera.camera) { towerChronicleLabel.hidden = true; return; }
   const player = localPlayer.getPosition();
   const distance = Math.hypot(player.x - 67, player.z - 106);
   const screen = camera.camera.worldToScreen(new pc.Vec3(67, 17.4, 106));
@@ -2605,7 +2610,7 @@ let rapidWorldActiveVisualChunks = 0;
 let rapidWorldTotalVisualChunks = 0;
 const ashenVentVisuals: { entity: pc.Entity; material: pc.StandardMaterial; offsetMs: number; radius: number }[] = [];
 const ashenAshMotes: { entity: pc.Entity; baseY: number; phase: number }[] = [];
-if (fastWorldRequested) {
+if (fastWorldRequested && !tavernRoomRequested) {
   const townNpcFaceBatchGroup = app.batcher.addGroup("town-npc-faces", true, 32);
   const rapidWorldSceneryBatchGroup = app.batcher.addGroup("rapid-world-scenery", false, 512);
   const grass = createPaintedGroundMaterial(app, TOWN_TEXTURE_STYLES.meadow, [22, 17]);
@@ -15219,7 +15224,7 @@ function renderBootstrap(payload: WorldBootstrap): void {
   if (fastWorldRequested && FAST_WORLD_TOWN_ONLY && firstStepsIndex !== null
     && firstStepsIndex >= ONBOARDING_STAGE.headSouth && firstStepsIndex < ONBOARDING_DONE)
     setFirstSteps(ONBOARDING_DONE);
-  if (fastWorldRequested) window.setTimeout(() => {
+  if (fastWorldRequested && !tavernRoomRequested) window.setTimeout(() => {
     requestRapidTownAssets();
     requestRapidTownNpcAssets();
     if (!FAST_WORLD_TOWN_ONLY) requestGreenwoodAssets();
@@ -18467,7 +18472,7 @@ app.on("update", (dt: number) => {
   const customUpdateStartedAt = performance.now();
   portalTransition.ready(worldReady && pendingPortalDestination === null);
   crownGateLabel.hidden = true;
-  if (fastWorldRequested) {
+  if (fastWorldRequested && !tavernRoomRequested) {
     const townTime = customUpdateStartedAt * .001;
     const playerPosition = localPlayer.getPosition();
     const floorOneActive = Boolean(towerFloorOneWorld && isInsideTowerFloorOne(playerPosition.x, playerPosition.z));

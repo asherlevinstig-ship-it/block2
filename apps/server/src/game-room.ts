@@ -2710,10 +2710,15 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
 
   private bootstrapPayload(position = this.spawnPoint()): WorldBootstrap {
     const chunks: ChunkSnapshot[] = [];
-    const center = worldToChunk(position.x, position.z);
-    for (let chunkZ = -WORLD_BOOTSTRAP_CHUNK_RADIUS; chunkZ <= WORLD_BOOTSTRAP_CHUNK_RADIUS; chunkZ += 1) {
-      for (let chunkX = -WORLD_BOOTSTRAP_CHUNK_RADIUS; chunkX <= WORLD_BOOTSTRAP_CHUNK_RADIUS; chunkX += 1) {
-        chunks.push(this.snapshot(center.chunkX + chunkX, center.chunkZ + chunkZ));
+    // The dedicated tavern uses a tiny analytic collision volume on both
+    // client and server. Sending generated overworld chunks here cost roughly
+    // 600 KB per arrival even though none of those meshes could be displayed.
+    if (this.roomKind !== "tavern") {
+      const center = worldToChunk(position.x, position.z);
+      for (let chunkZ = -WORLD_BOOTSTRAP_CHUNK_RADIUS; chunkZ <= WORLD_BOOTSTRAP_CHUNK_RADIUS; chunkZ += 1) {
+        for (let chunkX = -WORLD_BOOTSTRAP_CHUNK_RADIUS; chunkX <= WORLD_BOOTSTRAP_CHUNK_RADIUS; chunkX += 1) {
+          chunks.push(this.snapshot(center.chunkX + chunkX, center.chunkZ + chunkZ));
+        }
       }
     }
     return {
@@ -2729,6 +2734,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const parsed = ChunkRegionRequestSchema.safeParse(payload);
     const player = this.state.players.get(client.sessionId);
     if (!parsed.success || !player) return;
+    if (this.roomKind === "tavern") {
+      client.send("world:chunks", { chunks: [] } satisfies ChunkRegion);
+      return;
+    }
     const playerChunk = worldToChunk(player.x, player.z);
     if (Math.abs(parsed.data.chunkX - playerChunk.chunkX) > 1
       || Math.abs(parsed.data.chunkZ - playerChunk.chunkZ) > 1) return;
