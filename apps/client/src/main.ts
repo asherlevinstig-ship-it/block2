@@ -1423,6 +1423,8 @@ levelUpCallingAction.addEventListener("click", () => {
   openCallingIntro();
 });
 const defenseSlot = document.querySelector<HTMLButtonElement>("#defense-slot")!;
+const tankResolveMeter = document.querySelector<HTMLElement>("#tank-resolve")!;
+const tankResolvePips = [...tankResolveMeter.querySelectorAll<HTMLElement>("i")];
 const dodgeHotbar = document.querySelector<HTMLButtonElement>("#dodge-hotbar")!;
 const traitSlot = document.querySelector<HTMLElement>("#trait-slot")!;
 const traitName = document.querySelector<HTMLElement>("#trait-name")!;
@@ -6939,6 +6941,7 @@ let localPredictedDodgeStaminaAt = 0;
 let localPredictedDodgeStaminaMaximum = 100;
 let localPredictedDodgeStaminaReady = false;
 let localDefending = false;
+let localTankResolve = 0;
 let localMomentumStacks = 0;
 let localTraitId: TraitId = "momentum";
 let localPowerStartedAt: number | null = null;
@@ -6959,6 +6962,7 @@ let firstPersonGuardWeight = 0;
 let firstPersonPreviousYaw: number | null = null;
 let firstPersonLookSway = 0;
 let firstPersonAppearanceKey = "";
+let firstPersonShieldCounterStartedAt: number | null = null;
 
 function positionBowStringSegment(entity: pc.Entity, start: pc.Vec3, end: pc.Vec3): void {
   const dx = end.x - start.x, dy = end.y - start.y, dz = end.z - start.z;
@@ -7056,6 +7060,21 @@ function updateFirstPersonActionView(now: number, moving: boolean, actionElapsed
     pose.leftYaw -= thiefWindup * 22;
     pose.leftRoll += thiefWindup * 32 - thiefRelease * 58;
     pose.leftCurl = .9 - thiefRelease * .35;
+  }
+  if (firstPersonShieldCounterStartedAt !== null) {
+    const counterProgress = Math.max(0, Math.min(1, (now - firstPersonShieldCounterStartedAt) / 560));
+    const thrust = Math.sin(counterProgress * Math.PI);
+    const impact = Math.sin(Math.min(1, counterProgress / .42) * Math.PI);
+    pose.leftX += thrust * .34;
+    pose.leftY += thrust * .18;
+    pose.leftZ -= thrust * .72;
+    pose.leftPitch -= thrust * 18;
+    pose.leftYaw += thrust * 22;
+    pose.leftRoll -= impact * 12;
+    pose.leftCurl = 1;
+    pose.rightX -= thrust * .1;
+    pose.rightZ += thrust * .18;
+    if (counterProgress >= 1) firstPersonShieldCounterStartedAt = null;
   }
   firstPersonActionRig.leftHand.setLocalPosition(pose.leftX, pose.leftY, pose.leftZ);
   firstPersonActionRig.leftHand.setLocalEulerAngles(pose.leftPitch, pose.leftYaw, pose.leftRoll);
@@ -8313,6 +8332,8 @@ function renderBuildPath(update: BuildPathUpdate): void {
   renderAssassinJourney(update);
   const previousPathId = localBuildPathId;
   localBuildPathId = update.selectedPathId;
+  if (localBuildPathId !== "tank") localTankResolve = 0;
+  updateTankResolvePresentation();
   document.documentElement.dataset.calling = update.selectedPathId ?? "unbound";
   setRigMainHand(localPlayerRig, localMainHandId, localBuildPathId);
   setFirstPersonMainHand(localMainHandId);
@@ -9489,6 +9510,34 @@ function createTankBlockImpact(playerId: string, mobId: string, prevented: numbe
   callingImpactVisuals.push({ root, expiresAt: performance.now() + 480, materials: [plate, edge], abilityId: "tank_bulwark" });
   combatAudio.play("shardDeflect", enemyCuePan(position.x, localPlayer.getPosition().x, 12));
   createRangedPopup(new pc.Vec3(position.x, position.y + 1.85, position.z), `BULWARK · −${prevented}`, "melee", false, [.48, .86, 1]);
+}
+
+function createTankShieldCounter(message: { playerId: string; mobId: string; damage: number; resolve: number;
+  push: number; wallImpact: boolean; x: number; y: number; z: number }): void {
+  const anchor = mobVisuals.get(message.mobId)?.entity;
+  if (!anchor) return;
+  const root = new pc.Entity("tank-shield-counter");
+  const position = anchor.getPosition();
+  root.setPosition(position.x, position.y + .05, position.z);
+  app.root.addChild(root);
+  const shock = callingSignatureMaterial(new pc.Color(.68, .93, 1), .92, 1.4);
+  const force = callingSignatureMaterial(message.wallImpact ? new pc.Color(1, .62, .2) : new pc.Color(.18, .55, .92), .7, 1.05);
+  for (let index = 0; index < 12; index += 1) {
+    const angle = index / 12 * Math.PI * 2;
+    addCallingSignaturePrimitive(root, "shield-counter-ring", "box", index % 3 === 0 ? shock : force,
+      [.045, .045, message.wallImpact ? .52 : .38], [Math.sin(angle) * .58, .82, Math.cos(angle) * .58],
+      [0, angle * 180 / Math.PI, message.wallImpact ? 24 : 10]);
+  }
+  for (let index = 0; index < 5; index += 1)
+    addCallingSignaturePrimitive(root, "shield-counter-force", "box", force, [.065, .065, .44 + index * .08],
+      [(index - 2) * .14, .42 + index * .16, 0], [index % 2 ? 18 : -18, 0, index % 2 ? -22 : 22]);
+  callingImpactVisuals.push({ root, expiresAt: performance.now() + (message.wallImpact ? 760 : 560),
+    materials: [shock, force], abilityId: "tank_bulwark" });
+  createRangedPopup(new pc.Vec3(position.x, position.y + 2.25, position.z),
+    `${message.wallImpact ? "SHIELD CRUSH" : "SHIELD COUNTER"} · ${message.damage}`, "melee", false,
+    message.wallImpact ? [1, .68, .28] : [.55, .9, 1]);
+  combatAudio.play(message.wallImpact ? "hammerImpact" : "shardDeflect",
+    enemyCuePan(position.x, localPlayer.getPosition().x, 12));
 }
 
 function createTankChallengeTargets(targetIds: string[]): void {
@@ -15759,6 +15808,9 @@ function renderDepthsPartyStatus(next: SilverDepthsPartyStatus | null): void {
   }
 }
 function clearDefeatCombat(): void {
+  localTankResolve = 0;
+  updateTankResolvePresentation();
+  firstPersonShieldCounterStartedAt = null;
   attackBuffer.clear();
   attackPredictions.clear(); localAttackRecoveryUntil = 0; localActionRequestId = null;
   attackOutcome.hidden = true;
@@ -16689,6 +16741,16 @@ function setDefensePresentation(active: boolean): void {
   defenseButton.classList.toggle("active", active);
 }
 
+function updateTankResolvePresentation(): void {
+  const tank = localBuildPathId === "tank";
+  tankResolveMeter.hidden = !tank;
+  tankResolvePips.forEach((pip, index) => pip.classList.toggle("filled", index < localTankResolve));
+  defenseSlot.dataset.counterReady = String(tank && localTankResolve > 0);
+  defenseSlot.title = tank && localTankResolve > 0
+    ? `Hold C to guard · attack while guarding to Shield Counter (${localTankResolve} Resolve)`
+    : "Hold C to guard and parry";
+}
+
 function requestDefense(active: boolean): void {
   if (active) attackBuffer.clear();
   if (!defeatScreen.hidden) return;
@@ -16708,6 +16770,26 @@ function requestDefense(active: boolean): void {
     showCombatFeedback("GUARD", "dodge");
     status.textContent = "Guarding · time the opening 0.24 seconds to parry frontal attacks.";
   }
+}
+
+function requestTankShieldCounter(now: number): boolean {
+  if (!room || !localDefending || localBuildPathId !== "tank" || localTankResolve <= 0) return false;
+  attackBuffer.clear();
+  attackSequence += 1;
+  const requestId = `shield-counter-${attackSequence}`;
+  const yaw = cameraViewMode === "first-person" ? firstPersonFacingYaw(cameraOrbit.yaw) : localFacingYaw;
+  localFacingYaw = yaw;
+  localPlayer.setEulerAngles(0, yaw, 0);
+  localAttackRecoveryUntil = now + 650;
+  firstPersonShieldCounterStartedAt = now;
+  setDefensePresentation(false);
+  combatSync.start("attack", requestId, now);
+  room.send("attack", { requestId, yaw, shieldCounter: true,
+    ...(serverClock.synchronized ? { actionAt: now + serverClock.offset } : {}) });
+  combatAudio.play("shardDeflect");
+  showCombatFeedback("SHIELD COUNTER", "block");
+  status.textContent = "Shield counter committed · driving the enemy back.";
+  return true;
 }
 
 function fixed(value: number, digits = 3): string {
@@ -17133,6 +17215,7 @@ function requestAttack(aimWithPointer = true, tabletAim?: { yaw: number; targetI
   releasedBowCharge?: number, releasedFocusCharge?: number): void {
   if (!weaponAttackInputAllowed() || !room) { attackBuffer.clear(); return; }
   const now = performance.now();
+  if (requestTankShieldCounter(now)) return;
   if (specialAimActive) { attackBuffer.clear(); return; }
   if (powerAimActive || (localPowerStartedAt !== null && now - localPowerStartedAt < powerDuration(localActivePower))) {
     status.textContent = `Committed to ${POWER_DEFINITIONS[localActivePower ?? localEquippedPower].name} · dodge to cancel.`;
@@ -21079,6 +21162,15 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   room.onMessage("tank:block-impact", (message: { playerId: string; mobId: string; prevented: number }) => {
     createTankBlockImpact(message.playerId, message.mobId, message.prevented);
   });
+  room.onMessage("tank:shield-counter", (message: { playerId: string; mobId: string; damage: number; resolve: number;
+    push: number; wallImpact: boolean; x: number; y: number; z: number }) => {
+    createTankShieldCounter(message);
+    if (message.playerId !== room?.sessionId) return;
+    localTankResolve = message.resolve;
+    updateTankResolvePresentation();
+    firstPersonShieldCounterStartedAt ??= performance.now();
+    status.textContent = `${message.wallImpact ? "Shield crush" : "Shield counter"} · ${message.damage} damage · ${message.resolve} Resolve remaining.`;
+  });
   room.onMessage("tank:challenge-targets", (message: { casterId: string; targetIds: string[] }) => {
     createTankChallengeTargets(message.targetIds);
   });
@@ -21926,8 +22018,12 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   room.onMessage("combat:defense", (message: DefenseResolved) => {
     if (message.playerId !== room?.sessionId) return;
     updateMomentum(message.momentumStacks);
+    localTankResolve = message.resolve ?? localTankResolve;
+    updateTankResolvePresentation();
     const attackerName = mobVisuals.get(message.mobId)?.state.name ?? "Enemy";
-    showCombatFeedback(message.parried ? "PARRY!" : message.damage > 0 ? `GUARD  −${message.damage}` : "BLOCK", "block");
+    showCombatFeedback(message.parried && localBuildPathId === "tank"
+      ? `PERFECT BLOCK · RESOLVE ${localTankResolve}/3`
+      : message.parried ? "PARRY!" : message.damage > 0 ? `GUARD  −${message.damage}` : "BLOCK", "block");
     if ((message.perkStaminaRestored ?? 0) > 0) showCombatFeedback(`LIVING GUARD  +${message.perkStaminaRestored} ST`, "block");
     status.textContent = message.parried
       ? localTraitId === "bulwark"

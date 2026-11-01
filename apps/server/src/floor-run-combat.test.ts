@@ -158,6 +158,37 @@ describe("class weapon and guard effects", () => {
     expect(f.internal.floorRunWeaponBonus("hero", f.player, f.mob, 10000)).toBe(2);
     expect(f.internal.floorRunWeaponBonus("hero", f.player, f.mob, 10000)).toBe(0);
   });
+  it("perfect blocks earn capped Tank Resolve and expose it to the client", () => {
+    const f = fixture("tank");
+    f.player.defending = true; f.player.defenseStartedAt = 9950;
+    for (let index = 0; index < 4; index += 1)
+      f.internal.damagePlayer("target", "hero", 3, 10000, true);
+    expect(f.internal.tankResolve.get("hero")).toBe(3);
+    expect(f.client.send).toHaveBeenCalledWith("combat:defense", expect.objectContaining({
+      playerId: "hero", parried: true, resolve: 3,
+    }));
+  });
+  it("spends Resolve on an authoritative frontal shield counter", () => {
+    const f = fixture("tank");
+    f.player.defending = true; f.player.defenseStartedAt = 9950;
+    f.internal.damagePlayer("target", "hero", 3, 10000, true);
+    const beforeX = f.mob.x;
+    f.internal.handleAttack(f.client, { requestId: "counter", yaw: 90, shieldCounter: true });
+    expect(f.internal.tankResolve.get("hero")).toBe(0);
+    expect(f.mob.health).toBeLessThan(50);
+    expect(f.mob.x).toBeGreaterThan(beforeX);
+    expect(f.mob.combatState).toBe("stagger");
+    expect(f.broadcast).toHaveBeenCalledWith("tank:shield-counter", expect.objectContaining({
+      playerId: "hero", mobId: "target", resolve: 0,
+    }));
+  });
+  it("rejects forged shield counters without earned Resolve", () => {
+    const f = fixture("tank"); f.player.defending = true;
+    f.internal.handleAttack(f.client, { requestId: "forged-counter", yaw: 90, shieldCounter: true });
+    expect(f.mob.health).toBe(50);
+    expect(f.internal.tankResolve.has("hero")).toBe(false);
+    expect(f.client.send).toHaveBeenCalledWith("action:rejected", expect.objectContaining({ requestId: "forged-counter" }));
+  });
 });
 
 describe("class ability upgrades", () => {

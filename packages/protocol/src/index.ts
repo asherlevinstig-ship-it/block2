@@ -2061,6 +2061,7 @@ export const AttackRequestSchema = z.object({
   yaw: z.number().finite(),
   elevation: z.number().finite().min(FIRST_PERSON_AIM_MIN).max(FIRST_PERSON_AIM_MAX).optional(),
   actionAt: z.number().finite().optional(),
+  shieldCounter: z.boolean().optional(),
 });
 
 export const BowDrawRequestSchema = z.object({
@@ -2579,6 +2580,7 @@ export interface DefenseResolved {
   stamina: number;
   momentumStacks: number;
   perkStaminaRestored?: number;
+  resolve?: number;
 }
 
 export interface CombatReward {

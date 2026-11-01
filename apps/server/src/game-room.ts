@@ -134,6 +134,7 @@ import { miningDurationMs, miningLineClear } from "@blockcraft/voxel-world";
 import type { MineBlockRequest } from "@blockcraft/protocol";
 import {
   AttackRequestSchema,
+  type AttackRequest,
   BowDrawRequestSchema,
   FocusChargeRequestSchema,
   playerMeleeStrike,
@@ -547,6 +548,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly pendingAttacks = new Map<string, PendingAttack>();
   private readonly bowDrawStartedAt = new Map<string, number>();
   private readonly focusChargeStartedAt = new Map<string, number>();
+  private readonly tankResolve = new Map<string, number>();
   private readonly pendingMining = new Map<string, { client: Client; request: MineBlockRequest; block: number; completesAt: number; origin: { x: number; y: number; z: number } }>();
   private readonly pendingMobMelee = new Map<string, { targetId: string; yaw: number; impactAt: number; lastSweepAt?: number }>();
   private readonly pendingIncomingHits: PendingIncomingHit[] = [];
@@ -1424,6 +1426,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.pendingAttacks.delete(client.sessionId);
     this.bowDrawStartedAt.delete(client.sessionId);
     this.focusChargeStartedAt.delete(client.sessionId);
+    this.tankResolve.delete(client.sessionId);
     this.cancelWeaponProjectiles(client.sessionId);
     this.pendingPowers.delete(client.sessionId);
     this.specialMarks.delete(client.sessionId);
@@ -5643,6 +5646,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       player.stamina = Math.max(0, player.stamina - cost);
       if (defense.parried) player.stamina = Math.min(player.maxStamina, player.stamina + parryStaminaRestore(traitId));
       if (defense.parried && this.hasFloorUpgrade(playerId, "tank_riposte")) this.floorRunReprisalUntil.set(playerId, now + 5_000);
+      if (defense.parried && parseBuildPathState(player.huntLoadoutsJson).selectedPathId === "tank") {
+        const resolve = Math.min(3, (this.tankResolve.get(playerId) ?? 0) + 1);
+        this.tankResolve.set(playerId, resolve);
+        this.buildPathProc(playerId, "tank", "PERFECT BLOCK", `RESOLVE ${resolve} / 3 · ATTACK WHILE GUARDING TO COUNTER`, 1_800);
+      }
     }
     let perkStaminaRestored = 0;
     if (defense.guarded && player.armourId === "rootguard_armour") {
@@ -5864,10 +5872,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         stamina: Math.round(player.stamina),
         momentumStacks: player.momentumStacks,
         perkStaminaRestored,
+        resolve: this.tankResolve.get(playerId) ?? 0,
       } satisfies DefenseResolved, player);
     }
     if (!defeated) return true;
     this.bowDrawStartedAt.delete(playerId);
+    this.tankResolve.delete(playerId);
     this.clearCallingEffects(playerId);
     this.mageCallingCasts.delete(playerId);
     this.clearFloorRunUpgrades(playerId);
@@ -11553,6 +11563,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (!parsed.success) return this.reject(client, { action: "attack", reason: "payload" });
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
+    if (parsed.data.shieldCounter) return this.handleTankShieldCounter(client, player, parsed.data);
     player.defending = false;
     if (this.pendingPowers.has(client.sessionId)) {
       return this.reject(client, { requestId: parsed.data.requestId, action: "attack", reason: "rate" });
@@ -11610,6 +11621,71 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     player.attackStep = step;
     player.actionSequence += 1;
     this.sendCombatTiming(client.sessionId, { requestId: parsed.data.requestId, action: "attack", phase: "accepted", serverTime: now, scheduledAt: actionAt + timing.impactMs });
+  }
+
+  private handleTankShieldCounter(client: Client, player: PlayerState, request: AttackRequest): void {
+    const now = Date.now();
+    const playerId = client.sessionId;
+    const resolve = this.tankResolve.get(playerId) ?? 0;
+    if (!player.defending || resolve <= 0
+      || parseBuildPathState(player.huntLoadoutsJson).selectedPathId !== "tank"
+      || this.pendingPowers.has(playerId)) {
+      return this.reject(client, { requestId: request.requestId, action: "attack", reason: "missing" });
+    }
+    // The counter commits the guard as soon as the server accepts the input;
+    // even a whiff must not leave an invisible authoritative guard behind.
+    player.defending = false;
+    const chain = this.attackChains.get(playerId);
+    if (chain && now < chain.recoveryUntil)
+      return this.reject(client, { requestId: request.requestId, action: "attack", reason: "rate" });
+    const yaw = request.yaw;
+    const radians = yaw * Math.PI / 180;
+    const facingX = Math.sin(radians), facingZ = Math.cos(radians);
+    const target = [...this.state.mobs.entries()].filter(([, mob]) => {
+      if (!mob.alive || Math.abs(mob.y - player.y) > 2.5) return false;
+      const dx = mob.x - player.x, dz = mob.z - player.z, distance = Math.hypot(dx, dz);
+      return distance <= 3.25 && distance > .001
+        && (facingX * dx + facingZ * dz) / distance >= .32
+        && hasCombatLineOfSight(player, mob, this.readWorldBlock);
+    }).sort(([, a], [, b]) => Math.hypot(a.x - player.x, a.z - player.z) - Math.hypot(b.x - player.x, b.z - player.z))[0];
+    if (!target) {
+      client.send("chat:notice", "SHIELD COUNTER · no enemy within shield reach.");
+      return this.reject(client, { requestId: request.requestId, action: "attack", reason: "missing" });
+    }
+    const [mobId, mob] = target;
+    this.tankResolve.set(playerId, resolve - 1);
+    player.yaw = yaw;
+    player.actionSequence += 1;
+    this.attackChains.set(playerId, { step: 1, mainHandId: player.mainHandId as MainHandId,
+      recoveryUntil: now + 650, comboExpiresAt: now + 650 });
+    this.endStealth(playerId);
+
+    const damage = damageAfterArmor(3 + Number(this.buildSpecializationFor(player, "tank") === "juggernaut"), mob.armor, true);
+    this.combatContributions.record(mobId, playerId, Math.min(mob.health, damage), now);
+    mob.health = Math.max(0, mob.health - damage);
+    mob.hitSequence += 1;
+    this.alertHitMob(mobId, playerId, now);
+    const pushDistance = mob.isMiniBoss ? .3 : mob.archetype === "stone_brute" ? .65 : 1.65;
+    const beforeX = mob.x, beforeZ = mob.z;
+    this.displaceMob(mobId, mob, { x: facingX * pushDistance, z: facingZ * pushDistance });
+    const pushed = Math.hypot(mob.x - beforeX, mob.z - beforeZ);
+    const wallImpact = !mob.isMiniBoss && pushed < pushDistance * .45;
+    if (wallImpact && mob.health > 0) {
+      const impactDamage = damageAfterArmor(1, mob.armor, true);
+      this.combatContributions.record(mobId, playerId, Math.min(mob.health, impactDamage), now);
+      mob.health = Math.max(0, mob.health - impactDamage);
+      mob.hitSequence += 1;
+    }
+    if (mob.health === 0) this.defeatMob(mobId, mob, playerId, now);
+    else this.staggerMob(mobId, mob, now, wallImpact ? 1_800 : mob.isMiniBoss ? 700 : 1_250, true, playerId);
+    this.broadcast("tank:shield-counter", { playerId, mobId, damage: damage + Number(wallImpact),
+      resolve: resolve - 1, push: pushed, wallImpact, x: mob.x, y: mob.y, z: mob.z });
+    this.buildPathProc(playerId, "tank", wallImpact ? "SHIELD CRUSH" : "SHIELD COUNTER",
+      `${damage + Number(wallImpact)} DAMAGE · ${resolve - 1} RESOLVE REMAINS`, 1_600);
+    this.sendCombatTiming(playerId, { requestId: request.requestId, action: "attack", phase: "accepted",
+      serverTime: now, scheduledAt: now });
+    this.sendCombatTiming(playerId, { requestId: request.requestId, action: "attack", phase: "resolved",
+      serverTime: now, scheduledAt: now });
   }
 
   private handleBowDraw(client: Client, payload: unknown): void {
