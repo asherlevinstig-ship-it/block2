@@ -81,6 +81,8 @@ export function firstPersonActionPose(input: {
   castDurationMs: number;
   bowDrawProgress?: number;
   bowDrawing?: boolean;
+  focusChargeProgress?: number;
+  focusCharging?: boolean;
   dualWielding?: boolean;
 }): FirstPersonActionPose {
   const movement = Math.max(0, Math.min(1, input.movementWeight ?? (input.moving ? 1 : 0)));
@@ -98,7 +100,11 @@ export function firstPersonActionPose(input: {
   const strike = attackT < windupEnd ? 0 : attackT < contactEnd ? smoothPulse((attackT - windupEnd) / (contactEnd - windupEnd))
     : 1 - smoothPulse((attackT - contactEnd) / (1 - contactEnd));
   const castT = input.castElapsedMs === null ? 0 : Math.max(0, Math.min(1, input.castElapsedMs / Math.max(1, input.castDurationMs)));
-  const magicStrength = input.castElapsedMs === null ? 0 : Math.sin(castT * Math.PI);
+  const castMagicStrength = input.castElapsedMs === null ? 0 : Math.sin(castT * Math.PI);
+  const focusCharge = input.weaponKind === "focus"
+    ? Math.max(0, Math.min(1, input.focusChargeProgress ?? 0)) : 0;
+  const magicStrength = Math.max(castMagicStrength,
+    input.focusCharging ? .16 + focusCharge * .84 : 0);
   const side = input.comboStep === 2 ? -1 : 1;
   const hammerWeight = input.weaponKind === "hammer" ? 1.25 : 1;
   const bowDraw = input.weaponKind === "bow" ? Math.max(0, Math.min(1, input.bowDrawProgress ?? 0)) : 0;
@@ -173,6 +179,23 @@ export function firstPersonActionPose(input: {
       pose.rightX = .34; pose.rightY = -.4; pose.rightZ = -.82;
       pose.rightPitch = -12; pose.rightYaw = -4; pose.rightRoll = 8; pose.rightCurl = .76;
     }
+  } else if (input.weaponKind === "focus" && input.focusCharging) {
+    // A Mage visibly weaves the spell between both hands. The focus remains a
+    // conduit in the right hand while the open left hand shapes the growing core.
+    pose.leftX = -.31 + focusCharge * .12;
+    pose.leftY = -.28 + focusCharge * .1 - bob * .2;
+    pose.leftZ = -.98 - focusCharge * .2;
+    pose.leftPitch = -28 - focusCharge * 22;
+    pose.leftYaw = -18 + focusCharge * 12;
+    pose.leftRoll = -22 - focusCharge * 12;
+    pose.leftCurl = .18 - focusCharge * .12;
+    pose.rightX = .31 - focusCharge * .08;
+    pose.rightY = -.3 + focusCharge * .08 + bob * .2;
+    pose.rightZ = -.9 - focusCharge * .16;
+    pose.rightPitch = -18 - focusCharge * 18;
+    pose.rightYaw = 16 - focusCharge * 10;
+    pose.rightRoll = 18 + focusCharge * 8;
+    pose.rightCurl = .78;
   }
   return pose;
 }

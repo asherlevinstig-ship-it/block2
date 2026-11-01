@@ -4,6 +4,7 @@ import { FAST_WORLD_TOWN_BOUNDS, FAST_WORLD_TOWN_ONLY, TOWER_FLOOR_ONE, TOWER_FL
 import { parseGuildMembership } from "@blockcraft/protocol";
 import { BOW_DRAW_FULL_MS, BOW_DRAW_MAX_HOLD_MS, BOW_DRAW_MIN_MS, bowDrawCharge,
   bowShotRangeMultiplier, bowShotTravelMultiplier } from "@blockcraft/protocol";
+import { FOCUS_CHARGE_MAX_HOLD_MS, focusCastCharge, focusCastRangeMultiplier } from "@blockcraft/protocol";
 import { GREENWOOD_MAIN_TRAIL, GREENWOOD_CAMP_TRAIL, GREENWOOD_THICKETS, GREENWOOD_CLUSTER_PLANTS, GREENWOOD_VERGE_PLANTS, sampleWoodlandTrail } from "./greenwood-landscape.js";
 import * as pc from "playcanvas";
 import { facetedBoxMesh } from "./faceted-shapes.js";
@@ -6983,6 +6984,7 @@ function updateFirstPersonActionView(now: number, moving: boolean, actionElapsed
   }
   const weaponKind = firstPersonWeaponKind(localMainHandId);
   const bowDrawProgress = weaponKind === "bow" ? currentBowDrawCharge(now) : 0;
+  const focusChargeProgress = weaponKind === "focus" ? currentFocusCharge(now) : 0;
   const drawnFov = FIRST_PERSON_FOV - bowDrawProgress * 5;
   if (camera.camera) camera.camera.fov += (drawnFov - camera.camera.fov) * blend;
   if (firstPersonActionRig.viewCamera.camera)
@@ -7015,6 +7017,8 @@ function updateFirstPersonActionView(now: number, moving: boolean, actionElapsed
     castDurationMs: castDuration,
     bowDrawProgress,
     bowDrawing: bowDrawStartedAt !== null,
+    focusChargeProgress,
+    focusCharging: focusChargeStartedAt !== null && mageFocusEquipped(),
     dualWielding: weaponKind === "dagger" && localBuildPathId === "assassin",
   });
   if (assassinCastStrength > 0) {
@@ -7078,12 +7082,21 @@ function updateFirstPersonActionView(now: number, moving: boolean, actionElapsed
   const magicVisible = pose.magicStrength > .025 && firstPersonAbilityCastPath !== "assassin";
   firstPersonActionRig.magic.enabled = magicVisible;
   if (magicVisible) {
-    firstPersonActionRig.magic.setLocalPosition(pose.leftX + .08, pose.leftY + .22, pose.leftZ - .16);
-    const scale = .3 + pose.magicStrength * .25;
+    const weavingFocus = focusChargeStartedAt !== null && mageFocusEquipped();
+    firstPersonActionRig.magic.setLocalPosition(
+      weavingFocus ? (pose.leftX + pose.rightX) * .5 : pose.leftX + .08,
+      weavingFocus ? (pose.leftY + pose.rightY) * .5 + .24 : pose.leftY + .22,
+      weavingFocus ? Math.min(pose.leftZ, pose.rightZ) - .2 : pose.leftZ - .16,
+    );
+    const unstablePulse = weavingFocus ? 1 + Math.sin(now * .035) * (.03 + focusChargeProgress * .07) : 1;
+    const scale = (.3 + pose.magicStrength * (weavingFocus ? .46 : .25)) * unstablePulse;
     firstPersonActionRig.magic.setLocalScale(scale, scale, scale);
-    firstPersonActionRig.runeRing.setLocalEulerAngles(0, 0, now * .12);
-    firstPersonActionRig.magicCore.setLocalScale(.12 + pose.magicStrength * .08,
-      .12 + pose.magicStrength * .08, .12 + pose.magicStrength * .08);
+    firstPersonActionRig.runeRing.setLocalEulerAngles(
+      weavingFocus ? 18 + focusChargeProgress * 24 : 0,
+      weavingFocus ? now * .06 : 0,
+      now * (weavingFocus ? .18 + focusChargeProgress * .16 : .12));
+    const coreScale = .12 + pose.magicStrength * (weavingFocus ? .16 : .08);
+    firstPersonActionRig.magicCore.setLocalScale(coreScale, coreScale, coreScale);
   }
   const assassinDualDaggers = weaponKind === "dagger" && localBuildPathId === "assassin";
   // Paired Assassin blades are the action itself: keep them attached to the
@@ -7618,6 +7631,7 @@ function requestCallingAbility(slot: "power" | "special" = "power", aimedYaw?: n
   const training = isAtTownOfBeginnings()
     && abilityPracticeDummyInRange(localPlayer.getPosition(), CALLING_EFFIGY_POSITION);
   cancelBowDraw();
+  cancelFocusCharge();
   room.send("calling:ability", { requestId, yaw: aimedYaw ?? cameraOrbit.yaw, slot, ...(training ? { training: true } : {}) });
 }
 
@@ -7645,7 +7659,7 @@ function requestSpecialEquip(specialId: SpecialId): void {
 }
 
 function updateMainHandLoadout(mainHandId: MainHandId): void {
-  if (mainHandId !== localMainHandId) cancelBowDraw();
+  if (mainHandId !== localMainHandId) { cancelBowDraw(); cancelFocusCharge(); }
   attackBuffer.clear();
   attackPredictions.clear();
   localAttackRecoveryUntil = 0;
@@ -8732,6 +8746,7 @@ interface WeaponProjectileVisual {
   startedAt: number;
   durationMs: number;
   rapidStyle?: WeaponAttackReleased["rapidStyle"];
+  focusCharge?: number;
   arrow?: boolean;
   locallyPredicted?: boolean;
 }
@@ -10288,6 +10303,7 @@ function createWeaponProjectile(message: WeaponAttackReleased): void {
     startedAt: flight.startedAt,
     durationMs: flight.durationMs,
     rapidStyle: message.rapidStyle,
+    focusCharge: message.focusCharge,
     arrow,
   });
 }
@@ -12512,8 +12528,13 @@ let keyboardFireHeld = false;
 let bowDrawStartedAt: number | null = null;
 let bowDrawPointerId: number | null = null;
 let bowDrawAim: { aimWithPointer: boolean; tabletAim?: { yaw: number; targetId: string | null } } | null = null;
+let focusChargeStartedAt: number | null = null;
+let focusChargePointerId: number | null = null;
+let focusChargeAim: { aimWithPointer: boolean; tabletAim?: { yaw: number; targetId: string | null } } | null = null;
 
 const bowEquipped = (): boolean => localMainHandId === "bow" || localMainHandId === "forged_bow";
+const mageFocusEquipped = (): boolean => localBuildPathId === "mage"
+  && MAIN_HAND_DEFINITIONS[localMainHandId].tag === "focus";
 
 function currentBowDrawCharge(now = performance.now()): number {
   return bowDrawStartedAt === null ? 0 : bowDrawCharge(Math.min(BOW_DRAW_MAX_HOLD_MS, now - bowDrawStartedAt));
@@ -12561,6 +12582,51 @@ function releaseBowDraw(tabletAim?: { yaw: number; targetId: string | null }): b
   }
   requestAttack(aim.aimWithPointer, tabletAim ?? aim.tabletAim, bowDrawCharge(elapsed));
   room?.send("bow:draw", { active: false });
+  return true;
+}
+
+function currentFocusCharge(now = performance.now()): number {
+  return focusChargeStartedAt === null ? 0
+    : focusCastCharge(Math.min(FOCUS_CHARGE_MAX_HOLD_MS, now - focusChargeStartedAt));
+}
+
+function beginFocusCharge(aimWithPointer = true,
+  tabletAim?: { yaw: number; targetId: string | null }, pointerId?: number): boolean {
+  if (!mageFocusEquipped() || !weaponAttackInputAllowed() || focusChargeStartedAt !== null) return false;
+  const now = performance.now();
+  const readyAt = Math.max(localAttackRecoveryUntil,
+    localActionStartedAt === null ? 0 : localActionStartedAt + actionDuration(localActionStep));
+  if (now < readyAt) return false;
+  if (localDefending) requestDefense(false);
+  attackBuffer.clear();
+  keyboardFireHeld = false;
+  rangedFirePointer = null;
+  focusChargeStartedAt = now;
+  focusChargePointerId = pointerId ?? null;
+  focusChargeAim = { aimWithPointer, ...(tabletAim ? { tabletAim } : {}) };
+  room?.send("focus:charge", { active: true });
+  status.textContent = "Arcane Spark forming · release now or hold to weave more power.";
+  return true;
+}
+
+function cancelFocusCharge(reason = "Arcane weave cancelled."): void {
+  if (focusChargeStartedAt === null) return;
+  room?.send("focus:charge", { active: false });
+  focusChargeStartedAt = null;
+  focusChargePointerId = null;
+  focusChargeAim = null;
+  status.textContent = reason;
+}
+
+function releaseFocusCharge(tabletAim?: { yaw: number; targetId: string | null }): boolean {
+  if (focusChargeStartedAt === null) return false;
+  const charge = currentFocusCharge();
+  const aim = focusChargeAim ?? { aimWithPointer: true };
+  focusChargeStartedAt = null;
+  focusChargePointerId = null;
+  focusChargeAim = null;
+  requestAttack(aim.aimWithPointer, tabletAim ?? aim.tabletAim, undefined, charge);
+  room?.send("focus:charge", { active: false });
   return true;
 }
 
@@ -12631,7 +12697,8 @@ function currentBowReticleState(): ReturnType<typeof bowReticleState> {
 function updateRangedReticle(): void {
   const continuous = continuousAttackEnabled(WEAPON_ATTACK_DEFINITIONS[localMainHandId].projectileTravelMs > 0, fastWorldRequested);
   const pointerActive = rangedPointer.active;
-  const active = (pointerActive || cameraViewMode === "first-person" || keyboardFireHeld || bowDrawStartedAt !== null || localActionStartedAt !== null)
+  const active = (pointerActive || cameraViewMode === "first-person" || keyboardFireHeld
+    || bowDrawStartedAt !== null || focusChargeStartedAt !== null || localActionStartedAt !== null)
     && continuous && interactionMode === "combat" && worldReady && defeatScreen.hidden === true && inventoryPanel.hidden === true;
   combatReticle.hidden = !active;
   canvas.classList.toggle("ranged-aim", active);
@@ -12639,9 +12706,12 @@ function updateRangedReticle(): void {
     combatReticle.style.left = cameraViewMode === "first-person" || !pointerActive ? "50vw" : `${rangedPointer.x}px`;
     combatReticle.style.top = cameraViewMode === "first-person" || !pointerActive ? "50vh" : `${rangedPointer.y}px`;
     const drawing = bowDrawStartedAt !== null && bowEquipped();
+    const focusCasting = focusChargeStartedAt !== null && mageFocusEquipped();
     combatReticle.dataset.state = currentBowReticleState();
-    combatReticle.dataset.drawing = String(drawing);
-    combatReticle.style.setProperty("--bow-charge", `${Math.round((drawing ? currentBowDrawCharge() : 1) * 360)}deg`);
+    combatReticle.dataset.drawing = String(drawing || focusCasting);
+    combatReticle.dataset.focusCasting = String(focusCasting);
+    combatReticle.style.setProperty("--bow-charge", `${Math.round((drawing ? currentBowDrawCharge()
+      : focusCasting ? currentFocusCharge() : 1) * 360)}deg`);
   }
 }
 let currentTarget: VoxelRaycastHit | null = null;
@@ -16554,7 +16624,7 @@ function requestDefense(active: boolean): void {
   if (!defeatScreen.hidden) return;
   if (active && reportedProtectedDialog === true) return;
   if (!room || !worldReady || active === localDefending) return;
-  if (active) cancelBowDraw();
+  if (active) { cancelBowDraw(); cancelFocusCharge(); }
   if (active && (powerAimActive || specialAimActive || localPowerStartedAt !== null || localActionStartedAt !== null)) {
     status.textContent = "Finish or cancel the current action before guarding.";
     return;
@@ -16989,7 +17059,8 @@ function weaponAttackInputAllowed(): boolean {
     && !(document.activeElement instanceof HTMLTextAreaElement);
 }
 
-function requestAttack(aimWithPointer = true, tabletAim?: { yaw: number; targetId: string | null }, releasedBowCharge?: number): void {
+function requestAttack(aimWithPointer = true, tabletAim?: { yaw: number; targetId: string | null },
+  releasedBowCharge?: number, releasedFocusCharge?: number): void {
   if (!weaponAttackInputAllowed() || !room) { attackBuffer.clear(); return; }
   const now = performance.now();
   if (specialAimActive) { attackBuffer.clear(); return; }
@@ -17009,7 +17080,8 @@ function requestAttack(aimWithPointer = true, tabletAim?: { yaw: number; targetI
   const player = localPlayer.getPosition();
   const firstPersonAimed = cameraViewMode === "first-person";
   const firstPersonRange = effectiveWeaponRange(localMainHandId, fastWorldRequested)
-    * (releasedBowCharge === undefined ? 1 : bowShotRangeMultiplier(releasedBowCharge));
+    * (releasedBowCharge === undefined ? 1 : bowShotRangeMultiplier(releasedBowCharge))
+    * (releasedFocusCharge === undefined ? 1 : focusCastRangeMultiplier(releasedFocusCharge));
   const selectedTabletVisual = tabletAim?.targetId ? mobVisuals.get(tabletAim.targetId) : null;
   const targetMob = selectedTabletVisual
     ? { id: tabletAim!.targetId!, visual: selectedTabletVisual,
@@ -17067,9 +17139,10 @@ function requestAttack(aimWithPointer = true, tabletAim?: { yaw: number; targetI
   const attackName = attackDefinition.combo
     ? `${MAIN_HAND_DEFINITIONS[localMainHandId].attackName} ${comboStep}`
     : MAIN_HAND_DEFINITIONS[localMainHandId].attackName;
+  const chargedCast = releasedFocusCharge !== undefined && releasedFocusCharge >= .98;
   status.textContent = firstPersonAimed
     ? targetMob ? `${attackName} · crosshair locked on ${targetMob.visual.state.name}.`
-      : `${attackName} · released through the crosshair.`
+      : `${chargedCast ? "CHARGED " : ""}${attackName} · released through the crosshair.`
     : pointerAimed
     ? attackDefinition.projectileTravelMs > 0 ? `${attackName} · firing toward your reticle.` : `${attackName} · swinging toward your pointer.`
     : targetMob
@@ -17085,6 +17158,7 @@ function requestDodge(): void {
   if (reportedProtectedDialog === true) return;
   if (!room || !worldReady) return;
   cancelBowDraw();
+  cancelFocusCharge();
   if (performance.now() < localThornBoundUntil) {
     status.textContent = "Rooted by vines · attack to cut free.";
     return;
@@ -17311,6 +17385,7 @@ function cancelLocalPowerPresentation(): void {
 function castPower(yaw: number, target?: { x: number; y: number; z: number }): void {
   if (!room) return;
   cancelBowDraw();
+  cancelFocusCharge();
   const powerId = localEquippedPower;
   const definition = POWER_DEFINITIONS[powerId];
   const shape = activePowerShape(powerId);
@@ -17516,6 +17591,7 @@ function commitSpecialAim(): void {
 function requestModePrimaryAction(): void {
   if (localDefending) requestDefense(false);
   if (bowEquipped()) { beginBowDraw(); return; }
+  if (mageFocusEquipped()) { beginFocusCharge(); return; }
   requestAttack();
 }
 
@@ -17914,6 +17990,7 @@ window.addEventListener("keydown", event => {
     event.preventDefault();
     if (!event.repeat) {
       if (bowEquipped()) beginBowDraw(false);
+      else if (mageFocusEquipped()) beginFocusCharge(false);
       else {
         keyboardFireHeld = continuousAttackEnabled(WEAPON_ATTACK_DEFINITIONS[localMainHandId].projectileTravelMs > 0,
           fastWorldRequested);
@@ -17943,7 +18020,7 @@ window.addEventListener("keydown", event => {
 window.addEventListener("keyup", event => {
   if (event.code === "KeyJ") {
     keyboardFireHeld = false;
-    releaseBowDraw();
+    if (!releaseBowDraw()) releaseFocusCharge();
   }
   if (event.code === "KeyE") {
     releaseLootHold("keyboard");
@@ -17959,7 +18036,7 @@ window.addEventListener("keyup", event => {
   if (event.code === powerAimKey) commitPowerAim();
   if (event.code === "KeyF") commitSpecialAim();
 });
-window.addEventListener("blur", () => { cancelLootHold("focus"); cancelPortalHold("focus"); cancelInnRoomHold("focus"); attackBuffer.clear(); keyboardFireHeld = false; cancelBowDraw(); });
+window.addEventListener("blur", () => { cancelLootHold("focus"); cancelPortalHold("focus"); cancelInnRoomHold("focus"); attackBuffer.clear(); keyboardFireHeld = false; cancelBowDraw(); cancelFocusCharge(); });
 canvas.addEventListener("pointerdown", event => {
   if (popupQueue.active() !== null) return;
   canvas.focus({ preventScroll: true });
@@ -18007,11 +18084,13 @@ canvas.addEventListener("pointerdown", event => {
   }
   updateTarget();
   if (bowEquipped()) beginBowDraw(true, undefined, event.pointerId);
+  else if (mageFocusEquipped()) beginFocusCharge(true, undefined, event.pointerId);
   else requestPrimaryAction();
-  if (!bowEquipped() && event.pointerType === "mouse" && rangedFireAllowed()) rangedFirePointer = event.pointerId;
+  if (!bowEquipped() && !mageFocusEquipped() && event.pointerType === "mouse" && rangedFireAllowed()) rangedFirePointer = event.pointerId;
 });
 window.addEventListener("pointerup", event => {
   if (event.pointerId === bowDrawPointerId) releaseBowDraw();
+  if (event.pointerId === focusChargePointerId) releaseFocusCharge();
   if (event.pointerId === rangedFirePointer) rangedFirePointer = null;
   releaseLootHold("touch");
   if (portalHold?.source === "touch" && (portalHold.pointerId === undefined || portalHold.pointerId === event.pointerId)) cancelPortalHold("released");
@@ -18019,6 +18098,7 @@ window.addEventListener("pointerup", event => {
 });
 window.addEventListener("pointercancel", event => {
   if (event.pointerId === bowDrawPointerId) cancelBowDraw();
+  if (event.pointerId === focusChargePointerId) cancelFocusCharge();
   if (event.pointerId === rangedFirePointer) rangedFirePointer = null;
   if (lootHold?.source === "touch") cancelLootHold("released");
   if (portalHold?.source === "touch" && (portalHold.pointerId === undefined || portalHold.pointerId === event.pointerId)) cancelPortalHold("released");
@@ -18253,6 +18333,7 @@ mineButton.addEventListener("pointerdown", event => {
   if (interactionMode !== "combat") { requestModePrimaryAction(); return; }
   if (event.pointerType === "mouse") {
     if (bowEquipped()) beginBowDraw(false, undefined, event.pointerId);
+    else if (mageFocusEquipped()) beginFocusCharge(false, undefined, event.pointerId);
     else requestModePrimaryAction();
     return;
   }
@@ -18261,6 +18342,7 @@ mineButton.addEventListener("pointerdown", event => {
   tabletAttackYaw = null;
   mineButton.setPointerCapture(event.pointerId);
   if (bowEquipped()) beginBowDraw(false, undefined, event.pointerId);
+  else if (mageFocusEquipped()) beginFocusCharge(false, undefined, event.pointerId);
 });
 mineButton.addEventListener("pointermove", updateTabletAttackAim);
 mineButton.addEventListener("pointerup", event => {
@@ -18275,9 +18357,13 @@ mineButton.addEventListener("pointerup", event => {
     : localFacingYaw);
   clearTabletAttackAim();
   const tabletAim = { yaw, targetId: target?.id ?? null };
-  if (!releaseBowDraw(tabletAim)) requestAttack(false, tabletAim);
+  if (!releaseBowDraw(tabletAim) && !releaseFocusCharge(tabletAim)) requestAttack(false, tabletAim);
 });
-mineButton.addEventListener("pointercancel", event => { clearTabletAttackAim(); if (event.pointerId === bowDrawPointerId) cancelBowDraw(); });
+mineButton.addEventListener("pointercancel", event => {
+  clearTabletAttackAim();
+  if (event.pointerId === bowDrawPointerId) cancelBowDraw();
+  if (event.pointerId === focusChargePointerId) cancelFocusCharge();
+});
 contextButton.addEventListener("pointerdown", event => {
   event.preventDefault();
   requestContextAction(lootHoldSourceForPointer(event.pointerType) ?? "touch");
@@ -19215,13 +19301,19 @@ app.on("update", (dt: number) => {
     readiness.label = attackBuffer.hasQueued() ? "NEXT QUEUED" : "RECOVERING";
   }
   const bowDrawing = bowDrawStartedAt !== null && bowEquipped();
+  const focusCasting = focusChargeStartedAt !== null && mageFocusEquipped();
   if (bowDrawing) {
     readiness.progress = currentBowDrawCharge(animationNow);
     readiness.label = readiness.progress >= 1 ? "FULL DRAW · RELEASE" : "DRAWING";
   }
+  if (focusCasting) {
+    readiness.progress = currentFocusCharge(animationNow);
+    readiness.label = readiness.progress >= 1 ? "ARCANE WEAVE · RELEASE" : "WEAVING ARCANA";
+  }
   attackReadinessMeter.hidden = !weaponAttackInputAllowed();
   attackReadinessMeter.dataset.ready = String(readiness.progress >= 1);
   attackReadinessMeter.dataset.drawing = String(bowDrawing);
+  attackReadinessMeter.dataset.casting = String(focusCasting);
   attackReadinessMeter.dataset.queued = String(attackBuffer.hasQueued());
   attackReadinessMeter.querySelector<HTMLElement>("i")!.style.transform = `scaleX(${readiness.progress})`;
   attackReadinessMeter.querySelector("small")!.textContent = readiness.label;
@@ -20092,7 +20184,8 @@ app.on("update", (dt: number) => {
       projectile.entity.setLocalScale(.72 * pulse, .07, .2 * pulse);
     } else if (projectile.rapidStyle === "orb") {
       const pulse = 1 + Math.sin(animationTime * 18) * .16;
-      projectile.entity.setLocalScale(.42 * pulse, .42 * pulse, .42 * pulse);
+      const chargeScale = 1 + (projectile.focusCharge ?? 0) * .9;
+      projectile.entity.setLocalScale(.42 * pulse * chargeScale, .42 * pulse * chargeScale, .42 * pulse * chargeScale);
     }
     if (projectile.enemy && projectile.sampled && !projectile.nearMissPlayed && !hit && worldReady && potionHealth > 0
       && !document.hidden && wildernessTerritoryAt(localPlayer.getPosition().x, localPlayer.getPosition().z) !== null) {

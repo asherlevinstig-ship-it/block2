@@ -73,6 +73,31 @@ describe("first-person elevation on authoritative attacks", () => {
     const release = events.find(event => event.type === "combat:projectile")!.payload;
     expect(release.origin.y).toBe(8.72); expect(release.end.y).toBe(8.72); expect(release.targetY).toBe(8);
   });
+  it("authoritatively turns a full Mage focus weave into a stronger, faster cast", () => {
+    const instant = fixture("forged_focus", 8);
+    instant.internal.handleAttack(instant.client, { requestId: "instant", yaw: 90 });
+    let contactAt = instant.internal.pendingAttacks.get("hero").impactAt;
+    for (let now = contactAt; now <= contactAt + 500; now += 10) {
+      instant.internal.resolvePendingAttacks(now); instant.internal.resolveWeaponProjectiles(now);
+    }
+    expect(instant.target.health).toBe(28);
+
+    const charged = fixture("forged_focus", 8);
+    charged.internal.state.players.get("hero").mainHandTag = "focus";
+    charged.internal.state.players.get("hero").huntLoadoutsJson = JSON.stringify({ selectedPathId: "mage" });
+    charged.internal.handleFocusCharge(charged.client, { active: true });
+    vi.advanceTimersByTime(900);
+    charged.internal.handleAttack(charged.client, { requestId: "charged", yaw: 90 });
+    contactAt = charged.internal.pendingAttacks.get("hero").impactAt;
+    for (let now = contactAt; now <= contactAt + 500; now += 10) {
+      charged.internal.resolvePendingAttacks(now); charged.internal.resolveWeaponProjectiles(now);
+    }
+    const instantRelease = instant.events.find(event => event.type === "combat:projectile")?.payload;
+    const chargedRelease = charged.events.find(event => event.type === "combat:projectile")?.payload;
+    expect(chargedRelease.focusCharge).toBe(1);
+    expect(chargedRelease.travelMs).toBeLessThan(instantRelease.travelMs);
+    expect(charged.target.health).toBe(26);
+  });
   it.each([7, 9])("lets a close-range dagger follow the view toward height %s", targetY => {
     const { target, fire } = fixture("fang_dagger", targetY, false, 1);
     fire(Math.atan2(targetY + .6 - (8 + 1.05), 1));

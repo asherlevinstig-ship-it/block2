@@ -95,6 +95,19 @@ describe("first-person action presentation", () => {
     expect(cast.rightZ).toBeLessThan(-.7);
   });
 
+  it("weaves a charged Mage spell between open, converging hands", () => {
+    const base = { timeSeconds: 0, moving: false, weaponKind: "focus" as const,
+      attackElapsedMs: null, attackDurationMs: 470, comboStep: 1,
+      castElapsedMs: null, castDurationMs: 600, focusCharging: true };
+    const spark = firstPersonActionPose({ ...base, focusChargeProgress: 0 });
+    const woven = firstPersonActionPose({ ...base, focusChargeProgress: 1 });
+    expect(woven.magicStrength).toBe(1);
+    expect(woven.leftX).toBeGreaterThan(spark.leftX);
+    expect(woven.rightX).toBeLessThan(spark.rightX);
+    expect(woven.leftCurl).toBeLessThan(.1);
+    expect(woven.leftZ).toBeLessThan(spark.leftZ);
+  });
+
   it("plants the bow hand and pulls the string hand back toward the cheek", () => {
     const input = { timeSeconds: 0, moving: false, weaponKind: "bow" as const,
       attackElapsedMs: null, attackDurationMs: 360, comboStep: 1,

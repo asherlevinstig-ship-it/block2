@@ -129,12 +129,14 @@ function MainHandLoadout() {
   const definition = MAIN_HAND_DEFINITIONS[selected];
   const name = selected === "longsword" && ironSwordOwned.value ? "Iron Sword · +1 DMG" : definition.name;
   const activeSet = huntSetForLoadout(selected, armour.value);
-  return h("div", { id: "main-hand-loadout", title: `${name} · Press J to attack`, "aria-label": `Main hand: ${name}. Press J to attack`,
+  const mageFocus = calling.value === "mage" && definition.tag === "focus";
+  const instruction = mageFocus ? "Tap J for Arcane Spark · hold J to weave a charged bolt" : "Press J to attack";
+  return h("div", { id: "main-hand-loadout", title: `${name} · ${instruction}`, "aria-label": `Main hand: ${name}. ${instruction}`,
     "data-icon": starterWeaponArtwork(selected, calling.value) },
     h("span", { class: "action-art" }, h(ActionGlyph, { kind: "weapon", weapon: selected })),
-    h("kbd", { title: "Press J to attack; hold J to fire ranged weapons" }, "J"),
+    h("kbd", { title: instruction }, "J"),
     h("strong", { id: "main-hand-name" }, name),
-    h("small", { id: "main-hand-attack" }, definition.attackName),
+    h("small", { id: "main-hand-attack" }, mageFocus ? "SPARK / ARCANE WEAVE" : definition.attackName),
     activeSet ? h("b", { id: "hunt-set-status", "data-set": activeSet }, `${HUNT_EQUIPMENT_SETS[activeSet].name.toUpperCase()} · SET ACTIVE`) : null,
   );
 }

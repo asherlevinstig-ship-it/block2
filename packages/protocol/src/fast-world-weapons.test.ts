@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { BOW_DRAW_FULL_MS, bowDrawCharge, bowShotDamage, bowShotRangeMultiplier,
-  bowShotTravelMultiplier, effectiveWeaponRange, fastWorldWeaponProfile, weaponFiresProjectile } from "./index.js";
+import { BOW_DRAW_FULL_MS, FOCUS_CHARGE_FULL_MS, bowDrawCharge, bowShotDamage, bowShotRangeMultiplier,
+  bowShotTravelMultiplier, effectiveWeaponRange, fastWorldWeaponProfile, focusCastCharge, focusCastDamage,
+  focusCastRangeMultiplier, focusCastTravelMultiplier, weaponFiresProjectile } from "./index.js";
 
 describe("shared fast weapon identity", () => {
   it.each(["longsword", "forged_sword", "matriarch_edge", "cinderfang_blade"] as const)("keeps %s a 4.6m piercing crescent", id => {
@@ -22,5 +23,15 @@ describe("shared fast weapon identity", () => {
     expect(bowShotTravelMultiplier(0)).toBeGreaterThan(bowShotTravelMultiplier(1));
     expect(bowShotDamage(2, 0)).toBe(1);
     expect(bowShotDamage(2, 1)).toBe(3);
+  });
+
+  it("keeps an instant Mage spark viable and rewards a full focus weave", () => {
+    expect(focusCastCharge(0)).toBe(0);
+    expect(focusCastCharge(FOCUS_CHARGE_FULL_MS / 2)).toBe(.5);
+    expect(focusCastCharge(FOCUS_CHARGE_FULL_MS * 2)).toBe(1);
+    expect(focusCastDamage(2, 0)).toBe(2);
+    expect(focusCastDamage(2, 1)).toBe(4);
+    expect(focusCastRangeMultiplier(1)).toBe(1.5);
+    expect(focusCastTravelMultiplier(1)).toBe(.7);
   });
 });

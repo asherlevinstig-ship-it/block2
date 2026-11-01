@@ -440,7 +440,7 @@ export type ProgressionUpdate = {
 
 export const BUILD_PATHS = {
   tank: { name: "Tank", role: "Hold the line", passive: "Path ranks reduce incoming damage while guarding.", adept: "FORTRESS GUARD · Guarding protects nearby allies." },
-  mage: { name: "Mage", role: "Shape raw power", passive: "Path ranks shorten G spell cooldowns by 5% each.", adept: "ARCANE ECHO · Every third Arcane Surge or Overload hit repeats at half strength." },
+  mage: { name: "Mage", role: "Shape raw power", passive: "Tap your focus for an Arcane Spark or hold it to weave a stronger, faster, longer-ranged bolt. Path ranks shorten G spell cooldowns by 5% each.", adept: "ARCANE ECHO · Every third Arcane Surge or Overload hit repeats at half strength." },
   assassin: { name: "Assassin", role: "Exploit vulnerability", passive: "Path ranks add damage against marked or weakened enemies.", adept: "SHADOWSTEP · A perfect dodge conceals you and empowers your next strike." },
   thief: { name: "Thief", role: "Escape with the prize", passive: "Path ranks improve perfect-dodge recovery and kill gold.", adept: "SMOKE DECOY · An exhausted dodge breaks nearby enemy pursuit." },
   ranger: { name: "Ranger", role: "Control the distance", passive: "Path ranks add damage to bow attacks.", adept: "PINNING SHOT · Consecutive bow hits slow, then root their target." },
@@ -675,7 +675,7 @@ export const CALLING_WEAPON_PROGRESSION = {
     { rank: 4, name: "Citadel Oathblade", title: "Master armament", mechanic: "Windup strikes deal +2 damage and interrupt for 0.45s longer." },
   ],
   mage: [
-    { rank: 0, name: "Apprentice Wand", title: "Arcane focus", mechanic: "Channels a steady arcane bolt from the casting hand." },
+    { rank: 0, name: "Apprentice Wand", title: "Arcane focus", mechanic: "Tap for an instant Arcane Spark; hold to visibly weave a stronger, faster, longer-ranged bolt." },
     { rank: 1, name: "Channeling Wand", title: "Initiate focus", mechanic: "Every fourth focus hit surges for +1 damage." },
     { rank: 2, name: "Runed Conduit", title: "Adept focus", mechanic: "Arcane Surge now triggers every third focus hit." },
     { rank: 3, name: "Archmage Focus", title: "Veteran focus", mechanic: "Every third focus hit surges for +1 damage through your chosen discipline." },
@@ -1719,6 +1719,29 @@ export function bowShotDamage(baseDamage: number, charge: number): number {
   return Math.max(1, Math.round(baseDamage * (.55 + amount * .7)));
 }
 
+/** Mage foci support both an immediate spark and a deliberate charged cast.
+ * The server times the hold, so a client cannot claim a stronger spell than
+ * the cast it visibly committed to. */
+export const FOCUS_CHARGE_FULL_MS = 900;
+export const FOCUS_CHARGE_MAX_HOLD_MS = 1_500;
+
+export function focusCastCharge(elapsedMs: number): number {
+  if (!Number.isFinite(elapsedMs)) return 0;
+  return Math.max(0, Math.min(1, elapsedMs / FOCUS_CHARGE_FULL_MS));
+}
+
+export function focusCastRangeMultiplier(charge: number): number {
+  return 1 + Math.max(0, Math.min(1, charge)) * .5;
+}
+
+export function focusCastTravelMultiplier(charge: number): number {
+  return 1 - Math.max(0, Math.min(1, charge)) * .3;
+}
+
+export function focusCastDamage(baseDamage: number, charge: number): number {
+  return Math.max(1, Math.round(baseDamage * (1 + Math.max(0, Math.min(1, charge)) * .75)));
+}
+
 export const WEAPON_ATTACK_DEFINITIONS = {
   unarmed: { combo: false, comboWindowMs: 0, range: 1.2, minimumFacingDot: .5, projectileTravelMs: 0,
     attacks: [{ step: 1, durationMs: 600, impactMs: 280, damage: 1, knockback: .05 }] },
@@ -2034,6 +2057,10 @@ export const BowDrawRequestSchema = z.object({
   active: z.boolean(),
 });
 
+export const FocusChargeRequestSchema = z.object({
+  active: z.boolean(),
+});
+
 export const DodgeRequestSchema = z.object({
   requestId: z.string().min(1).max(64),
   strafe: z.number().finite().min(-1).max(1),
@@ -2105,6 +2132,7 @@ export type ChunkRegionRequest = z.infer<typeof ChunkRegionRequestSchema>;
 export type MineBlockRequest = z.infer<typeof MineBlockRequestSchema>;
 export type AttackRequest = z.infer<typeof AttackRequestSchema>;
 export type BowDrawRequest = z.infer<typeof BowDrawRequestSchema>;
+export type FocusChargeRequest = z.infer<typeof FocusChargeRequestSchema>;
 export type DodgeRequest = z.infer<typeof DodgeRequestSchema>;
 export type DefenseRequest = z.infer<typeof DefenseRequestSchema>;
 export type PowerRequest = z.infer<typeof PowerRequestSchema>;
@@ -2407,6 +2435,8 @@ export interface WeaponAttackReleased {
   targetY: number;
   targetZ: number;
   travelMs: number;
+  /** Authoritative Mage focus charge, from instant spark (0) to full weave (1). */
+  focusCharge?: number;
   /** Fast World-only visual identity; absent in the archived voxel game. */
   rapidStyle?: "crescent" | "arrow" | "orb";
 }

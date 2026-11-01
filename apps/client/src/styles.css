@@ -828,6 +828,13 @@ html.onboarding-active #hud #target, html.onboarding-active #hud #players { disp
 #combat-reticle[data-drawing="true"] {
   background: conic-gradient(rgb(255 220 128 / 22%) var(--bow-charge), transparent 0);
 }
+#combat-reticle[data-focus-casting="true"] {
+  border-color: #aa91ff;
+  background: conic-gradient(rgb(130 103 255 / 28%) var(--bow-charge), transparent 0);
+  box-shadow: 0 0 0 4px rgb(89 54 190 / 24%), 0 0 20px rgb(117 216 255 / 28%);
+}
+#combat-reticle[data-focus-casting="true"] span,
+#combat-reticle[data-focus-casting="true"] span::before { background: #d8d0ff; }
 #combat-reticle[data-hit="true"] { border-color: #fff6c4; box-shadow: 0 0 0 4px #ffd86b55, 0 0 12px #ffd86b88; }
 #combat-reticle[data-hit="true"] span, #combat-reticle[data-hit="true"] span::before { background: #fff6c4; }
 #combat-reticle.hit-confirmed::before,
@@ -4809,6 +4816,8 @@ body:has(#floor-one-complete:not([hidden])) :is(#floor-one-run, #touch-controls,
 #attack-readiness[data-drawing="true"] { width: 112px; color: #fff0b1; }
 #attack-readiness[data-drawing="true"] i { background: linear-gradient(90deg, #c8792c, #ffe58a); box-shadow: 0 0 8px #f5bd4c88; }
 #attack-readiness[data-drawing="true"][data-ready="true"] { opacity: 1; }
+#attack-readiness[data-casting="true"] { width: 128px; color: #e5d8ff; opacity: 1; }
+#attack-readiness[data-casting="true"] i { background: linear-gradient(90deg, #6942d7, #75d8ff, #fff); box-shadow: 0 0 10px #8b72ffbb; }
 #attack-outcome { position: absolute; bottom: 43px; left: 50%; transform: translateX(-50%); color: #fff1b5; font: 900 10px/1.2 system-ui; text-shadow: 0 2px 3px #000; white-space: nowrap; }
 #attack-outcome[data-outcome="miss"] { color: #becbc5; }
 #attack-outcome[data-outcome="blocked"] { color: #ffce7d; }
