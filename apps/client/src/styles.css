@@ -808,6 +808,23 @@ html.onboarding-active #hud #target, html.onboarding-active #hud #players { disp
 }
 #combat-reticle[data-state="out-of-range"] span,
 #combat-reticle[data-state="out-of-range"] span::before { background: #f5cd82; }
+#combat-reticle small {
+  position: absolute;
+  top: 40px;
+  left: 50%;
+  display: none;
+  width: max-content;
+  padding: 3px 7px;
+  border: 1px solid rgb(240 182 79 / 52%);
+  border-radius: 4px;
+  background: rgb(30 20 7 / 82%);
+  color: #ffe0a0;
+  font: 700 .58rem/1.1 system-ui, sans-serif;
+  letter-spacing: .08em;
+  text-shadow: 0 1px 2px #000;
+  transform: translateX(-50%);
+}
+#combat-reticle[data-state="out-of-range"] small { display: block; }
 #combat-reticle[data-drawing="true"] {
   background: conic-gradient(rgb(255 220 128 / 22%) var(--bow-charge), transparent 0);
 }

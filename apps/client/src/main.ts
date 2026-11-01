@@ -69,7 +69,7 @@ import { equipmentForItem, armourForItem, utilityForItem, isEquipmentItem, EQUIP
 import { weaponComparison, armourComparison, comparisonTrend } from "./loot-comparison.js";
 import { createLazyCharacterPortrait } from "./lazy-character-portrait.js";
 import { rangedStyle } from "./ranged-style.js";
-import { bowMissCause, bowReticleState, bowVisibleRange, type BowReticleState } from "./bow-aim-feedback.js";
+import { bowMissCause, bowOutOfRangeDetectionRange, bowReticleState, bowVisibleRange, type BowReticleState } from "./bow-aim-feedback.js";
 import { projectileNearMiss } from "./projectile-near-miss.js";
 import { BRUTE_VOLLEY, bruteRockLanes } from "@blockcraft/protocol";
 import { projectilePresentation, readableProjectilePresentation } from "./projectile-clock.js";
@@ -12619,10 +12619,13 @@ function currentBowReticleState(): ReturnType<typeof bowReticleState> {
   const targetInRange = firstPersonCrosshairMob(player, visibleRange) !== null;
   const targetAtFullRange = targetInRange || visibleRange >= baseRange - .01
     ? targetInRange : firstPersonCrosshairMob(player, baseRange) !== null;
+  const targetBeyondMaximum = !targetInRange && !targetAtFullRange
+    && firstPersonCrosshairMob(player, bowOutOfRangeDetectionRange(baseRange)) !== null;
   const direction = firstPersonLookDirection(cameraOrbit.yaw, cameraOrbit.pitch);
   const origin = new pc.Vec3(player.x, player.y + FIRST_PERSON_EYE_HEIGHT, player.z);
   const terrainHit = voxelRaycast(origin, direction, visibleRange, readCollisionWorldBlock);
-  return bowReticleState({ targetInRange, targetAtFullRange, blockedInRange: terrainHit !== null, drawing });
+  return bowReticleState({ targetInRange, targetAtFullRange, targetBeyondMaximum,
+    blockedInRange: terrainHit !== null, drawing });
 }
 
 function updateRangedReticle(): void {

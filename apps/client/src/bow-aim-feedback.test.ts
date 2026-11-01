@@ -1,25 +1,30 @@
 import { describe, expect, it } from "vitest";
-import { bowMissCause, bowReticleState, bowVisibleRange } from "./bow-aim-feedback.js";
+import { bowMissCause, bowOutOfRangeDetectionRange, bowReticleState, bowVisibleRange } from "./bow-aim-feedback.js";
 
 describe("bow crosshair feedback", () => {
   it("shows the full potential range before drawing and charge range while drawing", () => {
     expect(bowVisibleRange(10, 0, false)).toBe(10);
     expect(bowVisibleRange(10, 0, true)).toBeCloseTo(4.2);
     expect(bowVisibleRange(10, 1, true)).toBe(10);
+    expect(bowOutOfRangeDetectionRange(11)).toBe(27.5);
+    expect(bowOutOfRangeDetectionRange(20)).toBe(30);
   });
 
-  it("prioritises a valid target, then obstruction, then insufficient draw", () => {
-    expect(bowReticleState({ targetInRange: true, blockedInRange: true, targetAtFullRange: true, drawing: true })).toBe("target");
-    expect(bowReticleState({ targetInRange: false, blockedInRange: true, targetAtFullRange: true, drawing: true })).toBe("blocked");
-    expect(bowReticleState({ targetInRange: false, blockedInRange: false, targetAtFullRange: true, drawing: true })).toBe("out-of-range");
-    expect(bowReticleState({ targetInRange: false, blockedInRange: false, targetAtFullRange: true, drawing: false })).toBe("neutral");
+  it("prioritises a valid target, then obstruction, then every out-of-range case", () => {
+    const base = { targetInRange: false, blockedInRange: false, targetAtFullRange: false,
+      targetBeyondMaximum: false, drawing: false };
+    expect(bowReticleState({ ...base, targetInRange: true, blockedInRange: true })).toBe("target");
+    expect(bowReticleState({ ...base, blockedInRange: true, targetAtFullRange: true, drawing: true })).toBe("blocked");
+    expect(bowReticleState({ ...base, targetAtFullRange: true, drawing: true })).toBe("out-of-range");
+    expect(bowReticleState({ ...base, targetBeyondMaximum: true })).toBe("out-of-range");
+    expect(bowReticleState({ ...base, targetAtFullRange: true })).toBe("neutral");
   });
 
   it("explains authoritative misses in actionable priority order", () => {
     const base = { hit: false, reason: "miss" as const, reticleState: "target" as const,
       hadTarget: true, targetMoved: 0, targetStillOnRay: true, originDelta: 0 };
     expect(bowMissCause({ ...base, reason: "terrain" })).toBe("terrain blocked");
-    expect(bowMissCause({ ...base, reticleState: "out-of-range" })).toBe("partial draw range");
+    expect(bowMissCause({ ...base, reticleState: "out-of-range" })).toBe("out of range");
     expect(bowMissCause({ ...base, targetMoved: .3, targetStillOnRay: false })).toBe("target moved");
     expect(bowMissCause({ ...base, originDelta: .3 })).toBe("player moved / network origin");
     expect(bowMissCause({ ...base, hadTarget: false, targetStillOnRay: false })).toBe("no target on release ray");
