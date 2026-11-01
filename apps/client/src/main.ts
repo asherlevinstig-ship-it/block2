@@ -70,7 +70,7 @@ import { createLazyCharacterPortrait } from "./lazy-character-portrait.js";
 import { rangedStyle } from "./ranged-style.js";
 import { projectileNearMiss } from "./projectile-near-miss.js";
 import { BRUTE_VOLLEY, bruteRockLanes } from "@blockcraft/protocol";
-import { projectilePresentation } from "./projectile-clock.js";
+import { projectilePresentation, readableProjectilePresentation } from "./projectile-clock.js";
 import { inventoryRenderDue } from "./inventory-render-budget.js";
 import { nextInventoryTab, type InventoryTab } from "./inventory-tabs.js";
 import { inventoryItemVisible } from "./inventory-ownership.js";
@@ -8724,11 +8724,13 @@ interface WeaponProjectileVisual {
   nearMissPlayed?: boolean;
   entity: pc.Entity;
   material: pc.StandardMaterial;
+  extraMaterials?: pc.StandardMaterial[];
   start: pc.Vec3;
   end: pc.Vec3;
   startedAt: number;
   durationMs: number;
   rapidStyle?: WeaponAttackReleased["rapidStyle"];
+  arrow?: boolean;
 }
 
 interface MobHazardVisual {
@@ -10058,6 +10060,46 @@ function updateCallingPersistentState(state: CallingStateUpdate): void {
   });
 }
 
+function addProjectilePrimitive(parent: pc.Entity, name: string, type: "box" | "cone",
+  material: pc.StandardMaterial, scale: readonly [number, number, number],
+  position: readonly [number, number, number], euler: readonly [number, number, number] = [0, 0, 0]): pc.Entity {
+  const part = new pc.Entity(name);
+  part.addComponent("render", { type, material, castShadows: false, receiveShadows: false });
+  part.setLocalScale(...scale); part.setLocalPosition(...position); part.setLocalEulerAngles(...euler);
+  parent.addChild(part);
+  return part;
+}
+
+/** A world arrow needs a real silhouette; the former single 4 cm box could
+ * disappear completely between foliage, dark floors and a single render frame. */
+function createArrowProjectileMesh(color: readonly number[]): {
+  entity: pc.Entity; material: pc.StandardMaterial; extraMaterials: pc.StandardMaterial[];
+} {
+  const entity = new pc.Entity("arrow-projectile");
+  const shaft = powerMaterial(new pc.Color(.56, .34, .12), 1);
+  const head = powerMaterial(new pc.Color(.78, .88, .92), 1);
+  const fletching = powerMaterial(new pc.Color(.12, .46, .24), .98);
+  const trail = powerMaterial(new pc.Color(color[0]!, color[1]!, color[2]!), .34);
+  for (const material of [shaft, head, fletching]) {
+    material.depthWrite = true; material.blendType = pc.BLEND_NORMAL; material.update();
+  }
+  trail.depthWrite = false; trail.update();
+  addProjectilePrimitive(entity, "arrow-shaft", "box", shaft, [.055, .055, 1.18], [0, 0, 0]);
+  // PlayCanvas cones point along +Y; -90° around X turns the point toward -Z,
+  // the same forward axis used by Entity.lookAt.
+  addProjectilePrimitive(entity, "arrow-head", "cone", head, [.14, .24, .14], [0, 0, -.68], [-90, 0, 0]);
+  addProjectilePrimitive(entity, "arrow-feather-horizontal", "box", fletching, [.18, .028, .22], [0, 0, .5]);
+  addProjectilePrimitive(entity, "arrow-feather-vertical", "box", fletching, [.028, .18, .22], [0, 0, .5]);
+  addProjectilePrimitive(entity, "arrow-flight-streak", "box", trail, [.025, .025, .72], [0, 0, .92]);
+  return { entity, material: shaft, extraMaterials: [head, fletching, trail] };
+}
+
+function destroyWeaponProjectileVisual(projectile: WeaponProjectileVisual): void {
+  projectile.entity.destroy();
+  projectile.material.destroy();
+  for (const material of projectile.extraMaterials ?? []) material.destroy();
+}
+
 function createWeaponProjectile(message: WeaponAttackReleased): void {
   projectileOwners.set(message.projectileId, message.attackerId);
   while (projectileOwners.size > 128) projectileOwners.delete(projectileOwners.keys().next().value!);
@@ -10065,14 +10107,22 @@ function createWeaponProjectile(message: WeaponAttackReleased): void {
   projectileRapidStyles.set(message.projectileId, message.rapidStyle);
   while (projectileWeapons.size > 128) projectileWeapons.delete(projectileWeapons.keys().next().value!);
   while (projectileRapidStyles.size > 128) projectileRapidStyles.delete(projectileRapidStyles.keys().next().value!);
-  const flight = projectilePresentation(message.releasedAt, serverClock.offset, performance.now(), message.travelMs);
+  const receivedAt = performance.now();
+  const arrow = message.rapidStyle === "arrow" || message.mainHandId === "bow" || message.mainHandId === "forged_bow";
+  const flight = arrow
+    ? readableProjectilePresentation(message.releasedAt, serverClock.offset, receivedAt, message.travelMs, 240)
+    : projectilePresentation(message.releasedAt, serverClock.offset, receivedAt, message.travelMs);
   if (flight.expired) return;
   const style = rangedStyle(message.mainHandId, message.rapidStyle);
-  const entity = new pc.Entity(`${message.mainHandId}-projectile`);
-  entity.addComponent("render", { type: style.shape });
-  const material = powerMaterial(new pc.Color(style.color[0]!, style.color[1]!, style.color[2]!), 0.96);
-  if (entity.render) entity.render.material = material;
-  entity.setLocalScale(style.scale[0]!, style.scale[1]!, style.scale[2]!);
+  const arrowMesh = arrow ? createArrowProjectileMesh(style.color) : null;
+  const entity = arrowMesh?.entity ?? new pc.Entity(`${message.mainHandId}-projectile`);
+  const material = arrowMesh?.material
+    ?? powerMaterial(new pc.Color(style.color[0]!, style.color[1]!, style.color[2]!), 0.96);
+  if (!arrowMesh) {
+    entity.addComponent("render", { type: style.shape });
+    if (entity.render) entity.render.material = material;
+    entity.setLocalScale(style.scale[0]!, style.scale[1]!, style.scale[2]!);
+  }
   const localFirstPersonRelease = cameraViewMode === "first-person" && message.attackerId === room?.sessionId;
   const start = message.origin ? new pc.Vec3(message.origin.x, message.origin.y, message.origin.z)
     : new pc.Vec3(message.x, message.y + 1.05, message.z);
@@ -10089,17 +10139,19 @@ function createWeaponProjectile(message: WeaponAttackReleased): void {
   const end = message.end ? new pc.Vec3(message.end.x, message.end.y, message.end.z)
     : new pc.Vec3(message.targetX, message.targetY + 0.72, message.targetZ);
   entity.setPosition(start);
-  if (style.shape === "box") entity.lookAt(end);
+  if (style.shape === "box" || arrow) entity.lookAt(end);
   app.root.addChild(entity);
   weaponProjectileVisuals.push({
     projectileId: message.projectileId,
     entity,
     material,
+    extraMaterials: arrowMesh?.extraMaterials,
     start,
     end,
     startedAt: flight.startedAt,
     durationMs: flight.durationMs,
     rapidStyle: message.rapidStyle,
+    arrow,
   });
 }
 
@@ -19858,11 +19910,16 @@ app.on("update", (dt: number) => {
     const next = new pc.Vec3().lerp(projectile.start, projectile.end, progress);
     const from = projectile.entity.getPosition().clone();
     const direction = next.clone().sub(from);
-    const coreHit = projectile.coreRadius ? projectileTerrainImpact(from, next, projectile.coreRadius, readCollisionWorldBlock) : null;
-    const hit = projectile.coreRadius ? coreHit ? { distance: coreHit.fraction * direction.length() } : null
+    // Player arrows end at the server-confirmed impact point. A client-side
+    // raycast used to erase them against nearby geometry before a frame was
+    // drawn, especially on close hits.
+    const coreHit = !projectile.arrow && projectile.coreRadius
+      ? projectileTerrainImpact(from, next, projectile.coreRadius, readCollisionWorldBlock) : null;
+    const hit = projectile.arrow ? null : projectile.coreRadius ? coreHit ? { distance: coreHit.fraction * direction.length() } : null
       : direction.length() > 0.00001 ? voxelRaycast(from, direction, direction.length(), readCollisionWorldBlock) : null;
     if (hit) next.copy(from).add(direction.normalize().mulScalar(hit.distance));
     projectile.entity.setPosition(next);
+    if (projectile.arrow && next.distance(projectile.end) > .001) projectile.entity.lookAt(projectile.end);
     if (projectile.rapidStyle === "crescent") {
       const pulse = 1 + Math.sin(animationTime * 28) * .12;
       projectile.entity.setLocalScale(.72 * pulse, .07, .2 * pulse);
@@ -19885,10 +19942,9 @@ app.on("update", (dt: number) => {
     }
     projectile.sampled = true;
     if (progress < 1 && !hit) continue;
-    projectile.material.opacity = 0;
-    projectile.material.update();
-    projectile.entity.destroy();
-    projectile.material.destroy();
+    projectile.material.opacity = 0; projectile.material.update();
+    for (const material of projectile.extraMaterials ?? []) { material.opacity = 0; material.update(); }
+    destroyWeaponProjectileVisual(projectile);
     weaponProjectileVisuals.splice(index, 1);
   }
   for (const [hazardId, hazard] of mobHazardVisuals) {
@@ -20966,9 +21022,19 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     if (cue && localPlayer.getPosition().distance(point) <= 18)
       createRangedPopup(point, cue === "enemy" ? style.glyph : "•", cue, false, cue === "enemy" ? style.color : undefined);
     if (index >= 0) {
-      weaponProjectileVisuals[index]!.entity.destroy();
-      weaponProjectileVisuals[index]!.material.destroy();
-      weaponProjectileVisuals.splice(index, 1);
+      const projectile = weaponProjectileVisuals[index]!;
+      if (projectile.arrow) {
+        const now = performance.now();
+        const remainingMs = Math.max(90, projectile.startedAt + projectile.durationMs - now);
+        projectile.start.copy(projectile.entity.getPosition());
+        projectile.end.copy(point);
+        projectile.startedAt = now;
+        projectile.durationMs = remainingMs;
+        projectile.entity.lookAt(point);
+      } else {
+        destroyWeaponProjectileVisual(projectile);
+        weaponProjectileVisuals.splice(index, 1);
+      }
     }
     logMovementEvent(`PROJECTILE ${message.reason.toUpperCase()} ${message.projectileId}`);
   });
@@ -21853,7 +21919,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     markPayoffVisuals.length = 0;
     for (const snare of brambleSnareVisuals.values()) snare.root.destroy();
     brambleSnareVisuals.clear();
-    for (const projectile of weaponProjectileVisuals) { projectile.entity.destroy(); projectile.material.destroy(); }
+    for (const projectile of weaponProjectileVisuals) destroyWeaponProjectileVisual(projectile);
     weaponProjectileVisuals.length = 0;
     for (const burst of firstPersonImpactBursts) { burst.root.destroy(); burst.material.destroy(); }
     firstPersonImpactBursts.length = 0;

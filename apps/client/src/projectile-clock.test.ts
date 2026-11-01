@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { WEAPON_ATTACK_DEFINITIONS, SPECIAL_DEFINITIONS } from "@blockcraft/protocol";
-import { projectilePresentation } from "./projectile-clock.js";
+import { projectilePresentation, readableProjectilePresentation } from "./projectile-clock.js";
 describe("authoritative projectile presentation", () => {
   it.each([150, 300, 600])("matches server flight at %s ms RTT for every ranged weapon and venom fan", rtt => {
     const release = 1_000_000, offset = 999_000, arrival = 1000 + rtt / 2;
@@ -19,5 +19,16 @@ describe("authoritative projectile presentation", () => {
     expect(projectilePresentation(undefined, 9000, 1000, 160).startedAt).toBe(1000);
     expect(projectilePresentation(NaN, 9000, 1000, 160).startedAt).toBe(1000);
     expect(projectilePresentation(10_010, 9000, 1000, 160).progress).toBe(0);
+  });
+  it("keeps a live fast arrow visible for at least one readable flight", () => {
+    const shot = readableProjectilePresentation(10_000, 9000, 1040, 160, 240);
+    expect(shot.expired).toBe(false);
+    expect(shot.startedAt).toBe(1040);
+    expect(shot.durationMs).toBe(240);
+    expect(shot.progress).toBe(0);
+  });
+  it("never revives a projectile whose authoritative flight already expired", () => {
+    const shot = readableProjectilePresentation(10_000, 9000, 1200, 160, 240);
+    expect(shot.expired).toBe(true);
   });
 });
