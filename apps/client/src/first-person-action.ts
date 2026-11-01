@@ -13,10 +13,11 @@ export interface FirstPersonMeleePresentation {
 export function firstPersonMeleePresentation(
   weaponKind: FirstPersonWeaponKind,
   attackStrength: number,
+  retainWeapon = false,
 ): FirstPersonMeleePresentation {
   const melee = weaponKind === "sword" || weaponKind === "dagger" || weaponKind === "hammer";
   const trailVisible = melee && attackStrength > .06;
-  return { weaponVisible: !trailVisible, trailVisible };
+  return { weaponVisible: retainWeapon || !trailVisible, trailVisible };
 }
 
 export const firstPersonWeaponKind = (mainHandId: MainHandId): FirstPersonWeaponKind => {

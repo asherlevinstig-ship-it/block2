@@ -7031,15 +7031,17 @@ function updateFirstPersonActionView(now: number, moving: boolean, actionElapsed
     firstPersonActionRig.magicCore.setLocalScale(.12 + pose.magicStrength * .08,
       .12 + pose.magicStrength * .08, .12 + pose.magicStrength * .08);
   }
-  const meleePresentation = firstPersonMeleePresentation(weaponKind, pose.attackStrength);
-  const meleeTrail = meleePresentation.trailVisible;
   const assassinDualDaggers = weaponKind === "dagger" && localBuildPathId === "assassin";
+  // Paired Assassin blades are the action itself, so they must remain visibly
+  // attached to both hands. Their trails are accents rather than replacement
+  // weapon silhouettes.
+  const meleePresentation = firstPersonMeleePresentation(weaponKind, pose.attackStrength, assassinDualDaggers);
+  const meleeTrail = meleePresentation.trailVisible;
   const assassinFlourish = assassinDualDaggers ? assassinCastStrength : 0;
   const rightBladeStrength = Math.max(pose.rightAttackStrength, assassinFlourish);
   const leftBladeStrength = Math.max(pose.leftAttackStrength, assassinFlourish);
-  firstPersonActionRig.weapons[weaponKind].enabled = assassinDualDaggers
-    ? rightBladeStrength <= .06 : meleePresentation.weaponVisible;
-  firstPersonActionRig.assassinOffhand.enabled = assassinDualDaggers && leftBladeStrength <= .06;
+  firstPersonActionRig.weapons[weaponKind].enabled = meleePresentation.weaponVisible;
+  firstPersonActionRig.assassinOffhand.enabled = assassinDualDaggers;
   const trailSide = localActionStep === 2 ? -1 : 1;
   for (let index = 0; index < firstPersonActionRig.slashTrails.length; index++) {
     const trail = firstPersonActionRig.slashTrails[index]!;
