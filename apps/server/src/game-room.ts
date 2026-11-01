@@ -7705,6 +7705,24 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       client.send("chat:notice", `${definition.name.toUpperCase()} · aim toward a visible enemy within 14m.`);
       return;
     }
+    const decoyPlacement = abilityId === "thief_decoy" ? (() => {
+      const maximumRange = 7;
+      const yaw = parsed.data.yaw ?? player.yaw;
+      const radians = yaw * Math.PI / 180;
+      const requested = parsed.data.target ?? {
+        x: player.x + Math.sin(radians) * 5.5,
+        y: player.y,
+        z: player.z + Math.cos(radians) * 5.5,
+      };
+      const dx = requested.x - player.x, dz = requested.z - player.z;
+      const requestedDistance = Math.hypot(dx, dz);
+      const scale = requestedDistance > maximumRange ? maximumRange / requestedDistance : 1;
+      return resolveSweptHorizontalMotion(
+        { x: player.x, y: player.y, z: player.z },
+        { x: dx * scale, z: dz * scale },
+        this.readWorldBlock,
+      );
+    })() : null;
     const cooldownUntil = now + Math.round(definition.cooldownMs * (pathId === "mage" && slot === "power" ? 1 - rank * .05 : 1));
     cooldowns.set(client.sessionId, cooldownUntil);
     if (abilityId !== "assassin_vanish") this.endStealth(client.sessionId);
@@ -8000,20 +8018,27 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     } else if (abilityId === "thief_decoy") {
       formationCountered = this.counterWarbandCrawlerCommitment(client.sessionId, now);
       durationMs = 3_500 + rank * 250 + (this.hasFloorUpgrade(client.sessionId, "thief_decoy") ? 2_000 : 0);
-      const targets = nearbyMobs(8 + rank * .5 + (augmentId === "decoy_wide_stage" ? 3 : 0));
+      const placement = decoyPlacement!;
+      const radius = 8 + rank * .5 + (augmentId === "decoy_wide_stage" ? 3 : 0);
+      const targets = [...this.state.mobs.entries()].filter(([, mob]) => mob.alive
+        && Math.abs(mob.y - placement.y) <= 2.5
+        && Math.hypot(mob.x - placement.x, mob.z - placement.z) <= radius
+        && hasCombatLineOfSight(placement, mob, this.readWorldBlock));
       const decoyId = `thief-decoy:${client.sessionId}`;
       const decoyHealth = 2 + rank + (this.hasFloorUpgrade(client.sessionId, "thief_decoy") ? 3 : 0);
-      this.thiefDecoys.set(decoyId, { ownerId: client.sessionId, x: player.x, y: player.y, z: player.z,
+      this.thiefDecoys.set(decoyId, { ownerId: client.sessionId, x: placement.x, y: placement.y, z: placement.z,
         yaw: parsed.data.yaw ?? player.yaw, until: now + durationMs, health: decoyHealth, maxHealth: decoyHealth });
       for (const [mobId, mob] of targets) {
         const awareness = createMobAwareness();
-        provokeMob(awareness, { id: decoyId, x: player.x, y: player.y, z: player.z, health: 1 }, now);
+        provokeMob(awareness, { id: decoyId, x: placement.x, y: placement.y, z: placement.z, health: 1 }, now);
         this.mobAwareness.set(mobId, awareness);
         mob.targetId = decoyId; mob.awarenessState = "search";
         this.staggerMob(mobId, mob, now, 700 + rank * 100 + (augmentId === "decoy_flash_charge" ? 800 : 0), true);
       }
       this.pathConcealedUntil.set(client.sessionId, now + durationMs);
-      detail = `${targets.length} ENEM${targets.length === 1 ? "Y" : "IES"} DECOYED · CONCEALED`;
+      effectPosition = placement;
+      const thrownDistance = Math.hypot(placement.x - player.x, placement.z - player.z);
+      detail = `${targets.length} ENEM${targets.length === 1 ? "Y" : "IES"} INVESTIGATING · ${thrownDistance.toFixed(1)}m THROW · CONCEALED`;
       this.grantCallingTrial(client.sessionId, "decoy_wide_stage", targets.length);
       this.grantCallingTrial(client.sessionId, "decoy_flash_charge", targets.length);
       if (targets.length > 0) {

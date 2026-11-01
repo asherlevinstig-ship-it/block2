@@ -5323,6 +5323,7 @@ interface FirstPersonActionRig {
   weapons: Record<FirstPersonWeaponKind, pc.Entity>;
   tankShield: pc.Entity;
   assassinOffhand: pc.Entity;
+  thiefTool: pc.Entity;
   magic: pc.Entity;
   magicCore: pc.Entity;
   magicCoreMaterial: pc.StandardMaterial;
@@ -5559,6 +5560,17 @@ function createFirstPersonActionRig(): FirstPersonActionRig {
   actionShape(assassinOffhand, "offhand-dagger-tip", "cone", steel, [.098, .12, .045], [0, .53, 0]);
   assassinOffhand.enabled = false;
 
+  const thiefTool = new pc.Entity("first-person-thief-noisemaker");
+  wrists.left.addChild(thiefTool);
+  thiefTool.setLocalPosition(.02, -.03, -.13);
+  thiefTool.setLocalEulerAngles(-12, 8, -18);
+  actionShape(thiefTool, "noisemaker-shell", "sphere", leather, [.19, .19, .19], [0, 0, 0]);
+  actionShape(thiefTool, "noisemaker-band", "cylinder", bronze, [.205, .055, .205], [0, 0, 0]);
+  actionShape(thiefTool, "noisemaker-cap", "cylinder", steelEdge, [.075, .07, .075], [0, -.2, 0]);
+  const thiefFuse = actionShape(thiefTool, "noisemaker-fuse", "box", arcaneEdge, [.018, .13, .018], [.045, -.29, 0]);
+  thiefFuse.setLocalEulerAngles(0, 0, -20);
+  thiefTool.enabled = false;
+
   const magic = new pc.Entity("first-person-triggered-magic"); root.addChild(magic); magic.setLocalPosition(0, -.12, -1.3);
   const magicCoreMaterial = createFirstPersonMaterial(new pc.Color(.34, .14, .92), new pc.Color(.26, .055, .82));
   const magicEdgeMaterial = createFirstPersonMaterial(new pc.Color(.65, .82, 1), new pc.Color(.25, .55, 1));
@@ -5578,7 +5590,7 @@ function createFirstPersonActionRig(): FirstPersonActionRig {
     return trail;
   });
   root.enabled = false;
-  return { root, viewCamera, leftHand, rightHand, wrists, fingers, skin, sleeve, weapons, tankShield, assassinOffhand, magic, magicCore,
+  return { root, viewCamera, leftHand, rightHand, wrists, fingers, skin, sleeve, weapons, tankShield, assassinOffhand, thiefTool, magic, magicCore,
     magicCoreMaterial, magicEdgeMaterial, runeRing, slashTrails, bowArrow, bowStringUpper, bowStringLower };
 }
 
@@ -5586,6 +5598,7 @@ const firstPersonActionRig = createFirstPersonActionRig();
 let firstPersonAbilityCastStartedAt: number | null = null;
 let firstPersonAbilityCastDuration = 700;
 let firstPersonAbilityCastPath: RoleFieldPath | null = null;
+let firstPersonAbilityCastAbilityId: CallingAbilityId | null = null;
 let firstPersonHitKickUntil = 0;
 let firstPersonHitKickStrength = 0;
 let firstPersonEquippedAt = 0;
@@ -6993,6 +7006,7 @@ function updateFirstPersonActionView(now: number, moving: boolean, actionElapsed
   if (triggeredCastElapsed !== null && triggeredCastElapsed >= firstPersonAbilityCastDuration) {
     firstPersonAbilityCastStartedAt = null;
     firstPersonAbilityCastPath = null;
+    firstPersonAbilityCastAbilityId = null;
   }
   const assassinCastProgress = firstPersonAbilityCastPath === "assassin" && triggeredCastElapsed !== null
     ? Math.max(0, Math.min(1, triggeredCastElapsed / Math.max(1, firstPersonAbilityCastDuration))) : 0;
@@ -7029,6 +7043,19 @@ function updateFirstPersonActionView(now: number, moving: boolean, actionElapsed
     pose.rightX -= assassinCastStrength * .18; pose.rightY += assassinCastStrength * .13;
     pose.rightZ -= assassinCastStrength * .24; pose.rightYaw += assassinCastStrength * 28;
     pose.rightRoll -= assassinCastStrength * 46; pose.rightCurl = .92;
+  }
+  const thiefCastProgress = firstPersonAbilityCastPath === "thief" && triggeredCastElapsed !== null
+    ? Math.max(0, Math.min(1, triggeredCastElapsed / Math.max(1, firstPersonAbilityCastDuration))) : 0;
+  const thiefWindup = Math.sin(Math.min(1, thiefCastProgress / .58) * Math.PI);
+  const thiefRelease = thiefCastProgress > .48 ? Math.sin(Math.min(1, (thiefCastProgress - .48) / .52) * Math.PI) : 0;
+  if (thiefWindup > 0 || thiefRelease > 0) {
+    pose.leftX += thiefWindup * .22 - thiefRelease * .11;
+    pose.leftY += thiefWindup * .2 + thiefRelease * .08;
+    pose.leftZ -= thiefWindup * .32 + thiefRelease * .28;
+    pose.leftPitch -= thiefWindup * 38 + thiefRelease * 46;
+    pose.leftYaw -= thiefWindup * 22;
+    pose.leftRoll += thiefWindup * 32 - thiefRelease * 58;
+    pose.leftCurl = .9 - thiefRelease * .35;
   }
   firstPersonActionRig.leftHand.setLocalPosition(pose.leftX, pose.leftY, pose.leftZ);
   firstPersonActionRig.leftHand.setLocalEulerAngles(pose.leftPitch, pose.leftYaw, pose.leftRoll);
@@ -7079,7 +7106,11 @@ function updateFirstPersonActionView(now: number, moving: boolean, actionElapsed
     positionBowStringSegment(firstPersonActionRig.bowStringLower, lowerTip, nock);
     if (arrowVisible) orientArrowFromNock(firstPersonActionRig.bowArrow, nock, new pc.Vec3(0, -.015, -1.58));
   }
-  const magicVisible = pose.magicStrength > .025 && firstPersonAbilityCastPath !== "assassin";
+  const thiefToolVisible = firstPersonAbilityCastPath === "thief" && firstPersonAbilityCastAbilityId !== null
+    && thiefCastProgress < .58;
+  firstPersonActionRig.thiefTool.enabled = thiefToolVisible;
+  const magicVisible = pose.magicStrength > .025
+    && firstPersonAbilityCastPath !== "assassin" && firstPersonAbilityCastPath !== "thief";
   firstPersonActionRig.magic.enabled = magicVisible;
   if (magicVisible) {
     const weavingFocus = focusChargeStartedAt !== null && mageFocusEquipped();
@@ -7620,6 +7651,8 @@ function requestCallingAbility(slot: "power" | "special" = "power", aimedYaw?: n
   createCallingAnticipation(localBuildPathId);
   firstPersonAbilityCastStartedAt = performance.now();
   firstPersonAbilityCastDuration = slot === "special" ? 900 : 700;
+  firstPersonAbilityCastPath = localBuildPathId;
+  firstPersonAbilityCastAbilityId = usedAbility?.id ?? null;
   const pendingSequence = callingAbilitySequence;
   window.setTimeout(() => {
     if (callingAbilitySequence === pendingSequence && performance.now() >= callingAbilityPendingUntil) {
@@ -7632,7 +7665,16 @@ function requestCallingAbility(slot: "power" | "special" = "power", aimedYaw?: n
     && abilityPracticeDummyInRange(localPlayer.getPosition(), CALLING_EFFIGY_POSITION);
   cancelBowDraw();
   cancelFocusCharge();
-  room.send("calling:ability", { requestId, yaw: aimedYaw ?? cameraOrbit.yaw, slot, ...(training ? { training: true } : {}) });
+  const castYaw = aimedYaw ?? (cameraViewMode === "first-person" ? firstPersonFacingYaw(cameraOrbit.yaw) : localFacingYaw);
+  const castRadians = castYaw * Math.PI / 180;
+  const player = localPlayer.getPosition();
+  const target = usedAbility?.id === "thief_decoy" ? {
+    x: player.x + Math.sin(castRadians) * 6.5,
+    y: player.y,
+    z: player.z + Math.cos(castRadians) * 6.5,
+  } : undefined;
+  room.send("calling:ability", { requestId, yaw: castYaw, slot,
+    ...(target ? { target } : {}), ...(training ? { training: true } : {}) });
 }
 
 function requestSpecialEquip(specialId: SpecialId): void {
@@ -8827,7 +8869,16 @@ interface FormationTelegraphVisual {
 }
 const formationTelegraphs = new Map<string, FormationTelegraphVisual>();
 const mageCastAnimations = new Map<string, { abilityId: MageAbilityId; startedAt: number; endsAt: number }>();
-const thiefDecoyVisuals = new Map<string, { root: pc.Entity; materials: pc.StandardMaterial[]; expiresAt: number; baseY: number }>();
+interface ThiefThrownToolVisual {
+  root: pc.Entity;
+  materials: pc.StandardMaterial[];
+  origin: pc.Vec3;
+  target: pc.Vec3;
+  startedAt: number;
+  expiresAt: number;
+}
+const thiefThrownToolVisuals: ThiefThrownToolVisual[] = [];
+const thiefDecoyVisuals = new Map<string, { root: pc.Entity; materials: pc.StandardMaterial[]; expiresAt: number; revealAt: number; baseY: number }>();
 const healerAllyCues = new Map<string, { root: pc.Entity; materials: pc.StandardMaterial[]; fallen: boolean }>();
 const powerDebrisVisuals: PowerDebrisVisual[] = [];
 const markPayoffVisuals: MarkPayoffVisual[] = [];
@@ -9898,6 +9949,7 @@ function createCallingImpact(effect: CallingAbilityEffect): void {
     firstPersonAbilityCastStartedAt = performance.now();
     firstPersonAbilityCastDuration = Math.max(520, Math.min(1_200, effect.durationMs ?? 700));
     firstPersonAbilityCastPath = effect.pathId;
+    firstPersonAbilityCastAbilityId = effect.abilityId;
     setFirstPersonCallingPalette(effect.pathId);
   }
   createCallingCastFlourish(effect.casterId, effect.pathId, abilityId);
@@ -9932,13 +9984,31 @@ function createCallingImpact(effect: CallingAbilityEffect): void {
   if (abilityId === "tank_earthbreaker") combatAudio.play("seismicImpact");
 }
 
+function createThrownThiefNoisemaker(effect: CallingAbilityEffect): number {
+  const caster = effect.casterId === room?.sessionId ? localPlayer : remotePlayers.get(effect.casterId)?.entity;
+  const casterPosition = caster?.getPosition() ?? new pc.Vec3(effect.x, effect.y, effect.z);
+  const origin = new pc.Vec3(casterPosition.x, casterPosition.y + 1.15, casterPosition.z);
+  const target = new pc.Vec3(effect.x, effect.y + .18, effect.z);
+  const root = new pc.Entity("thief-thrown-noisemaker"); root.setPosition(origin); app.root.addChild(root);
+  const shell = callingSignatureMaterial(new pc.Color(.12, .2, .16), .92, .08);
+  const signal = callingSignatureMaterial(new pc.Color(.55, 1, .5), .9, 1.2);
+  addCallingSignaturePrimitive(root, "thrown-noisemaker-shell", "sphere", shell, [.15, .15, .15], [0, 0, 0]);
+  addCallingSignaturePrimitive(root, "thrown-noisemaker-band", "cylinder", signal, [.16, .035, .16], [0, 0, 0]);
+  addCallingSignaturePrimitive(root, "thrown-noisemaker-signal", "sphere", signal, [.04, .04, .04], [.05, .17, 0]);
+  const startedAt = performance.now(), travelMs = 420;
+  thiefThrownToolVisuals.push({ root, materials: [shell, signal], origin, target, startedAt, expiresAt: startedAt + travelMs });
+  return startedAt + travelMs;
+}
+
 function createThiefDecoyImitation(effect: CallingAbilityEffect): void {
   const decoyId = `thief-decoy:${effect.casterId}`;
   const existing = thiefDecoyVisuals.get(decoyId);
   if (existing) { existing.root.destroy(); existing.materials.forEach(material => material.destroy()); }
   const rig = effect.casterId === room?.sessionId ? localPlayerRig : remotePlayers.get(effect.casterId)?.rig;
   if (!rig) return;
+  const revealAt = createThrownThiefNoisemaker(effect);
   const root = new pc.Entity("thief-player-decoy"); root.setPosition(effect.x, effect.y, effect.z); root.setEulerAngles(0, effect.yaw, 0); app.root.addChild(root);
+  root.enabled = false;
   const imitation = rig.root.clone(); imitation.name = "decoy-player-imitation"; imitation.setLocalPosition(0, 0, 0); root.addChild(imitation);
   const lure = callingSignatureMaterial(new pc.Color(.26, 1, .58), .38, .78);
   const edge = callingSignatureMaterial(new pc.Color(.72, 1, .86), .82, 1.18);
@@ -9948,7 +10018,7 @@ function createThiefDecoyImitation(effect: CallingAbilityEffect): void {
       [.04, .025, .22], [Math.sin(angle) * .68, .06, Math.cos(angle) * .68], [0, angle * 180 / Math.PI, 0]);
   }
   const expiresAt = performance.now() + (effect.durationMs ?? 4_000);
-  thiefDecoyVisuals.set(decoyId, { root, materials: [lure, edge], expiresAt, baseY: effect.y });
+  thiefDecoyVisuals.set(decoyId, { root, materials: [lure, edge], expiresAt, revealAt, baseY: effect.y });
 }
 
 function destroyThiefDecoyImitation(decoyId: string, shattered: boolean): void {
@@ -20032,7 +20102,22 @@ app.on("update", (dt: number) => {
       visual.root.destroy(); visual.materials.forEach(material => material.destroy()); callingPersistentVisuals.delete(key);
     }
   }
+  for (let index = thiefThrownToolVisuals.length - 1; index >= 0; index -= 1) {
+    const visual = thiefThrownToolVisuals[index]!;
+    const progress = Math.max(0, Math.min(1, (animationNow - visual.startedAt) / Math.max(1, visual.expiresAt - visual.startedAt)));
+    const eased = 1 - (1 - progress) ** 2;
+    visual.root.setPosition(
+      visual.origin.x + (visual.target.x - visual.origin.x) * eased,
+      visual.origin.y + (visual.target.y - visual.origin.y) * eased + Math.sin(progress * Math.PI) * 1.15,
+      visual.origin.z + (visual.target.z - visual.origin.z) * eased,
+    );
+    visual.root.rotateLocal(frameTime * 520, frameTime * 330, frameTime * 210);
+    if (progress >= 1) {
+      visual.root.destroy(); visual.materials.forEach(material => material.destroy()); thiefThrownToolVisuals.splice(index, 1);
+    }
+  }
   for (const [decoyId, visual] of thiefDecoyVisuals) {
+    visual.root.enabled = animationNow >= visual.revealAt;
     visual.root.setPosition(visual.root.getPosition().x, visual.baseY + Math.sin(animationTime * 4.5) * .035, visual.root.getPosition().z);
     if (animationNow >= visual.expiresAt) destroyThiefDecoyImitation(decoyId, false);
   }
@@ -22184,8 +22269,14 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     callingPersistentVisuals.clear(); callingEffectState.clear(); localCallingState = null; combatHud.setCallingState(null);
     for (const mobId of [...formationTelegraphs.keys()]) destroyFormationTelegraph(mobId);
     mageCastAnimations.clear();
+    for (const visual of thiefThrownToolVisuals) { visual.root.destroy(); visual.materials.forEach(material => material.destroy()); }
+    thiefThrownToolVisuals.length = 0;
     for (const visual of thiefDecoyVisuals.values()) { visual.root.destroy(); visual.materials.forEach(material => material.destroy()); }
     thiefDecoyVisuals.clear();
+    firstPersonAbilityCastStartedAt = null;
+    firstPersonAbilityCastPath = null;
+    firstPersonAbilityCastAbilityId = null;
+    firstPersonActionRig.thiefTool.enabled = false;
     pendingPortalDestination = null;
     pendingPortalArrival = null;
     social.clearNames();

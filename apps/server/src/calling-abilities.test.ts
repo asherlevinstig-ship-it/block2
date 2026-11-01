@@ -284,16 +284,29 @@ describe("hotbar Calling abilities", () => {
     internal.state.mobs.set("pursuer", mob);
     internal.mobAwareness.set("pursuer", { targetId: "hero", lastSeen: { x: 50, y: 8, z: 50 }, seenAt: 10_000 });
     internal.handleCallingAbilityEquip(client, { abilityId: "thief_decoy" });
-    internal.handleCallingAbility(client, { slot: "special", requestId: "throw-decoy" });
+    internal.handleCallingAbility(client, { slot: "special", requestId: "throw-decoy",
+      target: { x: player.x + 5, y: player.y, z: player.z } });
     const decoyId = "thief-decoy:hero";
-    expect(internal.thiefDecoys.get(decoyId)).toEqual({ ownerId: "hero", x: player.x, y: player.y, z: player.z,
+    const decoy = internal.thiefDecoys.get(decoyId);
+    expect(decoy).toMatchObject({ ownerId: "hero", y: player.y, z: player.z,
       yaw: player.yaw, until: 14_250, health: 5, maxHealth: 5 });
+    expect(decoy.x).toBeCloseTo(player.x + 5);
     expect(internal.mobAwareness.get("pursuer").targetId).toBe(decoyId);
     expect(mob.awarenessState).toBe("search");
     expect(broadcast).toHaveBeenCalledWith("thief:diverted-targets", {
       casterId: "hero", abilityId: "thief_decoy", targetIds: ["pursuer"],
     });
     expect(broadcast).toHaveBeenCalledWith("thief:diverted-targets", expect.objectContaining({ abilityId: "thief_decoy" }));
+  });
+
+  it("clamps a forged Decoy landing point to its seven metre throw range", () => {
+    const { internal, player, client } = fixture("thief", 70);
+    internal.handleCallingAbility(client, { slot: "special", requestId: "far-decoy",
+      target: { x: player.x + 70, y: player.y + 50, z: player.z } });
+    const decoy = internal.thiefDecoys.get("thief-decoy:hero");
+    expect(decoy.x).toBeCloseTo(player.x + 7);
+    expect(decoy.y).toBeCloseTo(player.y);
+    expect(decoy.z).toBeCloseTo(player.z);
   });
 
   it("lets enemies damage and shatter the Decoy without harming its owner", () => {

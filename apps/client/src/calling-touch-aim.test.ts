@@ -6,6 +6,7 @@ describe("calling touch aim", () => {
     expect(callingTouchAimProfile("assassin_death_mark")).toMatchObject({ kind: "line", range: 8, needsEnemy: true });
     expect(callingTouchAimProfile("assassin_blade_dance")).toMatchObject({ kind: "cone", range: 6 });
     expect(callingTouchAimProfile("mage_overload")).toMatchObject({ kind: "ground", range: 14 });
+    expect(callingTouchAimProfile("thief_decoy")).toMatchObject({ kind: "ground", range: 7, needsEnemy: false });
     expect(callingTouchAimProfile("ranger_disengage")).toMatchObject({ kind: "direction", needsEnemy: false });
     expect(callingTouchAimProfile("ranger_deadeye")).toMatchObject({ kind: "line", range: 18 });
   });

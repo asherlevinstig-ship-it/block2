@@ -14,6 +14,7 @@ const CALLING_TOUCH_AIM_PROFILES: Partial<Record<CallingAbilityId, CallingTouchA
   mage_overload: { kind: "ground", range: 14, width: 2.2, needsEnemy: true, halfConeDegrees: 25 },
   assassin_death_mark: { kind: "line", range: 8, width: .65, needsEnemy: true, halfConeDegrees: 49 },
   assassin_blade_dance: { kind: "cone", range: 6, width: 3.5, needsEnemy: true, halfConeDegrees: 98 },
+  thief_decoy: { kind: "ground", range: 7, width: 1.2, needsEnemy: false, halfConeDegrees: 0 },
   ranger_disengage: { kind: "direction", range: 3, width: .65, needsEnemy: false, halfConeDegrees: 0 },
   ranger_deadeye: { kind: "line", range: 18, width: .38, needsEnemy: true, halfConeDegrees: 14 },
 };

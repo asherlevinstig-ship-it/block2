@@ -491,7 +491,7 @@ export const CALLING_ABILITY_OPTIONS = [
   { id: "assassin_death_mark", pathId: "assassin", name: "Death Mark", category: "Utility", unlockRank: 2, cooldownMs: 16_000, description: "Aim at a visible enemy within 8m and mark it for execution." },
   { id: "assassin_blade_dance", pathId: "assassin", name: "Blade Dance", category: "Aggressive", unlockRank: 3, cooldownMs: 19_000, description: "Unleash rapid aimed cuts across nearby enemies." },
   { id: "thief_smoke_bomb", pathId: "thief", name: "Smoke Bomb", category: "Core", unlockRank: 0, cooldownMs: 18_000, description: "Divert nearby enemies, conceal, and recover stamina." },
-  { id: "thief_decoy", pathId: "thief", name: "Decoy", category: "Utility", unlockRank: 2, cooldownMs: 20_000, description: "Leave an attackable imitation that draws nearby enemies while you conceal yourself." },
+  { id: "thief_decoy", pathId: "thief", name: "Noisemaker Decoy", category: "Utility", unlockRank: 2, cooldownMs: 20_000, description: "Throw a noisemaker that creates an attackable imitation where it lands, drawing enemies away while you conceal yourself." },
   { id: "thief_escape_artist", pathId: "thief", name: "Escape Artist", category: "Aggressive", unlockRank: 3, cooldownMs: 16_000, description: "Reset dodge exhaustion and briefly evade all damage." },
   { id: "ranger_volley_focus", pathId: "ranger", name: "Volley Focus", category: "Core", unlockRank: 0, cooldownMs: 12_000, description: "Your next three bow attacks split toward nearby enemies." },
   { id: "ranger_disengage", pathId: "ranger", name: "Disengage", category: "Utility", unlockRank: 2, cooldownMs: 15_000, description: "Leap backward and empower your next two shots." },
@@ -575,7 +575,17 @@ export const CallingAbilityEquipRequestSchema = z.object({
 export const CallingAugmentEquipRequestSchema = z.object({
   augmentId: z.enum(CALLING_ABILITY_AUGMENTS.map(option => option.id) as [CallingAugmentId, ...CallingAugmentId[]]),
 }).strict();
-export const CallingAbilityRequestSchema = z.object({ requestId: z.string().min(1).max(80), yaw: z.number().finite().optional(), slot: z.enum(["power", "special"]).optional(), training: z.boolean().optional() }).strict();
+export const CallingAbilityRequestSchema = z.object({
+  requestId: z.string().min(1).max(80),
+  yaw: z.number().finite().optional(),
+  slot: z.enum(["power", "special"]).optional(),
+  training: z.boolean().optional(),
+  target: z.object({
+    x: z.number().finite(),
+    y: z.number().finite(),
+    z: z.number().finite(),
+  }).strict().optional(),
+}).strict();
 export type CallingAbilityUpdate = {
   requestId: string;
   pathId: BuildPathId;
