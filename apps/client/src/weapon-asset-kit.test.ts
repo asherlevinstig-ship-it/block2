@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { KAYKIT_WEAPON_ASSET_FILES, KAYKIT_WEAPON_BASE_URL, kayKitTankShieldAsset,
+import { KAYKIT_WEAPON_ASSET_FILES, KAYKIT_WEAPON_BASE_URL, kayKitFirstPersonWeaponAssetForMainHand, kayKitTankShieldAsset,
   kayKitWeaponAssetForMainHand } from "./weapon-asset-kit.js";
 
 describe("KayKit weapon asset library", () => {
@@ -19,6 +19,12 @@ describe("KayKit weapon asset library", () => {
   it("retains custom models for signature boss weapons", () => {
     for (const id of ["matriarch_edge", "rootbound_hammer", "cinderfang_blade", "crownkeeper_blade"] as const)
       expect(kayKitWeaponAssetForMainHand(id)).toBeNull();
+  });
+
+  it("uses stringless bow models for the animated first-person draw", () => {
+    expect(kayKitFirstPersonWeaponAssetForMainHand("bow", "ranger")).toBe("bowBasicView");
+    expect(kayKitFirstPersonWeaponAssetForMainHand("forged_bow", "ranger")).toBe("bowForgedView");
+    expect(kayKitFirstPersonWeaponAssetForMainHand("longsword", "tank")).toBe("swordBasic");
   });
 
   it("loads only local glTF assets from the licensed pack", () => {

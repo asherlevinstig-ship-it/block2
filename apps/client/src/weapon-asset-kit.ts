@@ -8,6 +8,8 @@ export const KAYKIT_WEAPON_ASSET_FILES = {
   swordForged: `${KAYKIT_WEAPON_BASE_URL}/sword_B.gltf`,
   bowBasic: `${KAYKIT_WEAPON_BASE_URL}/bow_A_withString.gltf`,
   bowForged: `${KAYKIT_WEAPON_BASE_URL}/bow_B_withString.gltf`,
+  bowBasicView: `${KAYKIT_WEAPON_BASE_URL}/bow_A.gltf`,
+  bowForgedView: `${KAYKIT_WEAPON_BASE_URL}/bow_B.gltf`,
   daggerThief: `${KAYKIT_WEAPON_BASE_URL}/dagger_A.gltf`,
   daggerAssassin: `${KAYKIT_WEAPON_BASE_URL}/dagger_B.gltf`,
   wandMage: `${KAYKIT_WEAPON_BASE_URL}/wand_A.gltf`,
@@ -28,6 +30,16 @@ export function kayKitWeaponAssetForMainHand(mainHandId: MainHandId,
   if (mainHandId === "forged_focus") return pathId === "healer" ? "staffHealer" : "wandMage";
   if (mainHandId === "stone_core_hammer") return "hammerStone";
   return null;
+}
+
+/** First-person bows use the stringless meshes because the viewmodel supplies
+ * a live string that follows the nocked arrow. Keeping the baked straight
+ * string would draw a second, rigid line through the player's hands. */
+export function kayKitFirstPersonWeaponAssetForMainHand(mainHandId: MainHandId,
+  pathId: BuildPathId | null = null): KayKitWeaponAssetId | null {
+  if (mainHandId === "bow") return "bowBasicView";
+  if (mainHandId === "forged_bow") return "bowForgedView";
+  return kayKitWeaponAssetForMainHand(mainHandId, pathId);
 }
 
 export function kayKitTankShieldAsset(mainHandId: MainHandId,
