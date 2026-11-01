@@ -18,9 +18,11 @@ describe("combat impact feedback", () => {
   it("confirms dealt damage through the reticle, enemy body, bar and number", () => {
     expect(css).toContain("#combat-reticle.hit-confirmed::before");
     expect(css).toContain(".ranged-popup-melee { color: #ffe2a0; font-size: 30px");
-    expect(main).toContain("confirmEnemyDamage(message.damage, message.defeated)");
+    expect(main).toContain("confirmEnemyDamage(message.damage, message.defeated, message.contactKind)");
     expect(main).toContain(".065 + hitStrength * .085");
-    expect(main).toContain("0.9 * hitStrength");
+    expect(main).toContain("1.25 * hitStrength");
+    expect(css).toContain("#combat-reticle.hit-confirmed.direct-contact");
+    expect(main).toContain("mob.localImpactStrength = impulse.mobReaction");
   });
 
   it("honours reduced-motion preferences for every new screen-space reaction", () => {

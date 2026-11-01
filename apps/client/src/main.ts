@@ -5988,6 +5988,9 @@ interface MobVisual {
   state: NetworkMob;
   lastHitSequence: number;
   hitAt: number;
+  localImpactAt: number;
+  localImpactDurationMs: number;
+  localImpactStrength: number;
   lastActionSequence: number;
   actionAt: number;
   lastImpactStartedAt: number;
@@ -8681,16 +8684,20 @@ function showPlayerDamageImpact(mobId: string, damage: number, health: number,
   cameraShakeUntil = Math.max(cameraShakeUntil, now + 220);
 }
 
-function confirmEnemyDamage(damage: number, defeated: boolean): void {
+function confirmEnemyDamage(damage: number, defeated: boolean, contactKind?: "blade" | "crescent"): void {
   showAttackOutcome(defeated ? "defeated" : "hit");
   rangedReticleHitUntil = Math.max(rangedReticleHitUntil, performance.now() + (defeated ? 250 : 180));
   combatReticle.dataset.damage = String(damage);
-  combatReticle.classList.remove("hit-confirmed", "defeated");
+  combatReticle.classList.remove("hit-confirmed", "defeated", "direct-contact", "crescent-contact");
   void combatReticle.offsetWidth;
   combatReticle.classList.toggle("defeated", defeated);
+  combatReticle.classList.toggle("direct-contact", contactKind === "blade");
+  combatReticle.classList.toggle("crescent-contact", contactKind === "crescent");
   combatReticle.classList.add("hit-confirmed");
   window.clearTimeout(hitMarkerTimer);
-  hitMarkerTimer = window.setTimeout(() => combatReticle.classList.remove("hit-confirmed", "defeated"), 260);
+  hitMarkerTimer = window.setTimeout(() => combatReticle.classList.remove(
+    "hit-confirmed", "defeated", "direct-contact", "crescent-contact",
+  ), 300);
 }
 
 let rangedReticleHitUntil = 0;
@@ -8911,6 +8918,8 @@ const bowShotDiagnostics = new Map<string, BowShotDiagnostic>();
 let latestBowShotDiagnostic = "none yet";
 interface FirstPersonImpactBurst {
   root: pc.Entity;
+  core: pc.Entity;
+  coreScale: number;
   material: pc.StandardMaterial;
   sparks: { entity: pc.Entity; velocity: pc.Vec3 }[];
   startedAt: number;
@@ -9047,7 +9056,13 @@ function createElderthornLeafStorm(mob: MobVisual, phase: 2 | 3): void {
     combatAudio.play("guardianPhase", enemyCuePan(point.x, playerPosition.x, 20));
 }
 
-function createFirstPersonHitBurst(mob: MobVisual, weaponKind: FirstPersonWeaponKind, defeated: boolean): void {
+function createFirstPersonHitBurst(
+  mob: MobVisual,
+  weaponKind: FirstPersonWeaponKind,
+  defeated: boolean,
+  intensity = 1,
+  contactKind?: "blade" | "crescent",
+): void {
   const root = new pc.Entity("first-person-hit-burst");
   const position = mob.entity.getPosition();
   root.setPosition(position.x, position.y + Math.max(.65, mob.healthBarY * .45), position.z);
@@ -9055,21 +9070,28 @@ function createFirstPersonHitBurst(mob: MobVisual, weaponKind: FirstPersonWeapon
   const color = weaponKind === "focus" ? new pc.Color(.55, .28, 1)
     : weaponKind === "bow" ? new pc.Color(.72, .92, 1)
       : weaponKind === "hammer" ? new pc.Color(1, .58, .16) : new pc.Color(1, .82, .42);
-  const material = powerMaterial(color, defeated ? .95 : .82);
-  const count = defeated ? 9 : weaponKind === "hammer" ? 7 : 5;
+  const material = powerMaterial(color, defeated ? 1 : contactKind === "blade" ? .96 : .82);
+  const core = new pc.Entity("first-person-impact-core");
+  core.addComponent("render", { type: "sphere", material, castShadows: false, receiveShadows: false });
+  const coreScale = .13 * intensity;
+  core.setLocalScale(coreScale, coreScale, coreScale);
+  root.addChild(core);
+  const baseCount = defeated ? 12 : weaponKind === "hammer" ? 10 : contactKind === "blade" ? 9 : 6;
+  const count = Math.max(5, Math.round(baseCount * Math.min(1.25, intensity)));
   const sparks = Array.from({ length: count }, (_, index) => {
     const angle = index / count * Math.PI * 2 + (weaponKind === "dagger" ? .35 : 0);
     const entity = new pc.Entity("first-person-hit-spark");
     entity.addComponent("render", { type: index % 3 === 0 ? "sphere" : "box", material,
       castShadows: false, receiveShadows: false });
-    const size = .035 + index % 3 * .012;
+    const size = (.035 + index % 3 * .012) * Math.min(1.35, intensity);
     entity.setLocalScale(size, size, index % 3 === 0 ? size : size * 2.4);
     root.addChild(entity);
-    return { entity, velocity: new pc.Vec3(Math.cos(angle) * (1.2 + index * .08),
-      .55 + (index % 3) * .28, Math.sin(angle) * (1.2 + index * .08)) };
+    return { entity, velocity: new pc.Vec3(Math.cos(angle) * (1.2 + index * .08) * intensity,
+      (.55 + (index % 3) * .28) * intensity, Math.sin(angle) * (1.2 + index * .08) * intensity) };
   });
   const startedAt = performance.now();
-  firstPersonImpactBursts.push({ root, material, sparks, startedAt, expiresAt: startedAt + (defeated ? 360 : 240) });
+  firstPersonImpactBursts.push({ root, core, coreScale, material, sparks, startedAt,
+    expiresAt: startedAt + (defeated ? 420 : contactKind === "blade" ? 300 : 240) });
 }
 
 function createCallingAnticipation(pathId: RoleFieldPath): void {
@@ -11623,6 +11645,9 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     turnLean: 0,
     lastHitSequence: mob.hitSequence,
     hitAt: 0,
+    localImpactAt: 0,
+    localImpactDurationMs: 0,
+    localImpactStrength: 0,
     lastActionSequence: mob.actionSequence,
     actionAt: 0,
     lastImpactStartedAt: 0,
@@ -19824,7 +19849,11 @@ app.on("update", (dt: number) => {
     if (mobRootPositionChanged(currentMobPosition, sampled)) mob.entity.setPosition(sampled.x, sampled.y, sampled.z);
     mob.renderYaw = sampled.yaw;
     trimMobSnapshots(mob.snapshots, animationNow);
-    const hitStrength = mob.hitAt > 0 ? Math.max(0, 1 - (animationNow - mob.hitAt) / 260) : 0;
+    const authoritativeHitStrength = mob.hitAt > 0 ? Math.max(0, 1 - (animationNow - mob.hitAt) / 260) : 0;
+    const localImpactProgress = mob.localImpactAt > 0
+      ? Math.max(0, 1 - (animationNow - mob.localImpactAt) / Math.max(1, mob.localImpactDurationMs)) : 0;
+    const localImpactStrength = localImpactProgress * mob.localImpactStrength;
+    const hitStrength = Math.max(authoritativeHitStrength, localImpactStrength);
     const visibleHealthFraction = Math.max(0, Math.min(1, mob.state.health / Math.max(1, mob.state.maxHealth)));
     mob.healthFill.setLocalScale(mob.healthWidth * visibleHealthFraction,
       .065 + hitStrength * .085, .09 + hitStrength * .045);
@@ -20072,14 +20101,19 @@ app.on("update", (dt: number) => {
     const bruteRecovery = bruteRecoveryPose(mob.state, animationNow + serverClock.offset);
     const bodySize = mobBodyScale(mob.entity.name.slice(4), mob.state);
     const emergence = mob.greenwoodStyle ? greenwoodEmergence(animationNow - mob.emergenceAt) : { y: 0, scaleY: 1 };
-    mob.bodyRoot.setLocalScale(bodySize * (1 + defeat * 0.13), bodySize * emergence.scaleY * (1 - defeat * (mob.isBrute ? 0.42 : 0.58)), bodySize * (1 + defeat * 0.1));
+    const impactSquash = Math.min(.16, localImpactStrength * .105);
+    mob.bodyRoot.setLocalScale(bodySize * (1 + defeat * 0.13 + impactSquash),
+      bodySize * emergence.scaleY * (1 - defeat * (mob.isBrute ? 0.42 : 0.58) - impactSquash * .75),
+      bodySize * (1 + defeat * 0.1 + impactSquash));
     mob.bodyRoot.setLocalPosition(
       0,
       gaitBob + emergence.y - woundedLimp * .075 - hitStrength * 0.035 - attackStrength * (mob.isBrute ? 0.07 : 0) - crawlerRecovery * 0.06 - bruteRecovery * .1,
-      attackStrength * (mob.isBrute ? 0.42 : mob.isSpitter ? -0.3 : 0.24) - windupStrength * (mob.isBrute ? 0.25 : mob.isSpitter ? -0.18 : 0.16),
+      attackStrength * (mob.isBrute ? 0.42 : mob.isSpitter ? -0.3 : 0.24)
+        - windupStrength * (mob.isBrute ? 0.25 : mob.isSpitter ? -0.18 : 0.16) + localImpactStrength * .22,
     );
     mob.bodyRoot.setLocalEulerAngles(
-      (mob.isBrute ? windupStrength * -11 + attackStrength * 18 + bruteRecovery * 14 : mob.isSpitter ? windupStrength * 12 - attackStrength * 20 : windupStrength * -7 + attackStrength * 9 + crawlerRecovery * 8) + defeat * (mob.isBrute ? 17 : 5) - mob.art.pursuit * mob.art.walk * (mob.isBrute ? 2 : 4),
+      (mob.isBrute ? windupStrength * -11 + attackStrength * 18 + bruteRecovery * 14 : mob.isSpitter ? windupStrength * 12 - attackStrength * 20 : windupStrength * -7 + attackStrength * 9 + crawlerRecovery * 8) + defeat * (mob.isBrute ? 17 : 5) - mob.art.pursuit * mob.art.walk * (mob.isBrute ? 2 : 4)
+        - localImpactStrength * 7,
       0,
       Math.sin(animationTime * 35) * staggerStrength * (mob.isBrute ? 7 : 12) + Math.sin(mob.art.phase) * mob.art.walk * (mob.isBrute ? 2.5 : 1.3)
         + woundedLimp * 7 + mob.turnLean * 4 + defeat * (mob.isBrute ? 7 : 12),
@@ -20098,9 +20132,9 @@ app.on("update", (dt: number) => {
       mob.bodyRoot.setLocalEulerAngles(deathPose.pitch, 0, deathPose.roll);
     }
     mob.bodyMaterial.emissive.set(
-      0.001 + (mob.state.isMiniBoss ? .2 : mob.state.isElite ? .12 : 0) + 0.9 * hitStrength + 0.34 * windupStrength,
-      0.001 + (mob.state.isMiniBoss ? .08 : mob.state.isElite ? .025 : 0) + 0.42 * hitStrength + 0.12 * windupStrength + 0.38 * staggerStrength,
-      0.001 + (mob.state.isMiniBoss ? .01 : mob.state.isElite ? .18 : 0) + 0.12 * hitStrength + 0.08 * windupStrength + 0.48 * staggerStrength,
+      0.001 + (mob.state.isMiniBoss ? .2 : mob.state.isElite ? .12 : 0) + 1.25 * hitStrength + 0.34 * windupStrength,
+      0.001 + (mob.state.isMiniBoss ? .08 : mob.state.isElite ? .025 : 0) + 0.68 * hitStrength + 0.12 * windupStrength + 0.38 * staggerStrength,
+      0.001 + (mob.state.isMiniBoss ? .01 : mob.state.isElite ? .18 : 0) + 0.24 * hitStrength + 0.08 * windupStrength + 0.48 * staggerStrength,
     );
     mob.bodyMaterial.update();
       mob.rigSettled = !rigActive;
@@ -20306,6 +20340,8 @@ app.on("update", (dt: number) => {
     }
     const elapsed = (animationNow - burst.startedAt) / 1_000;
     const remaining = Math.max(0, (burst.expiresAt - animationNow) / (burst.expiresAt - burst.startedAt));
+    const corePulse = burst.coreScale * (.35 + (1 - remaining) * 2.4);
+    burst.core.setLocalScale(corePulse, corePulse, corePulse);
     for (const spark of burst.sparks) spark.entity.setLocalPosition(
       spark.velocity.x * elapsed,
       spark.velocity.y * elapsed - 3.4 * elapsed * elapsed,
@@ -21709,7 +21745,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     }
     const mob = mobVisuals.get(message.mobId);
     if (message.attackerId === room?.sessionId && message.damage > 0) {
-      confirmEnemyDamage(message.damage, message.defeated);
+      confirmEnemyDamage(message.damage, message.defeated, message.contactKind);
       const family = firstPersonWeaponKind(message.mainHandId);
       if (family === "sword" || family === "dagger") combatAudio.play("swordImpact");
     }
@@ -21749,6 +21785,14 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       updateMomentum(message.momentumStacks);
       if ((message.dodgeCounterBonus ?? 0) > 0) showCombatFeedback(`DODGE COUNTER +${message.dodgeCounterBonus}`, "dodge");
       const comboStep = message.comboStep >= 1 && message.comboStep <= 3 ? message.comboStep : localActionStep || 1;
+      const weaponKind = firstPersonWeaponKind(message.mainHandId);
+      const impulse = firstPersonImpactImpulse(weaponKind, comboStep, message.defeated, message.contactKind);
+      if (mob && message.damage > 0) {
+        const now = performance.now();
+        mob.localImpactAt = now;
+        mob.localImpactDurationMs = Math.max(190, impulse.durationMs + 95);
+        mob.localImpactStrength = impulse.mobReaction;
+      }
       if (!rangedHit && mob && message.damage > 0) {
         const position = mob.entity.getPosition().clone(); position.y += mob.healthBarY + .35;
         createRangedPopup(position, `−${message.damage}`, "melee", message.defeated);
@@ -21756,15 +21800,13 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       if (!rangedHit) localHitPauseUntil = performance.now() + ((message.mainHandId === "stone_core_hammer" || message.mainHandId === "rootbound_hammer") ? 80 : comboStep === 3 ? 75 : 48);
       if (cameraViewMode === "first-person" && mob && message.damage > 0) {
         const now = performance.now();
-        const weaponKind = firstPersonWeaponKind(message.mainHandId);
-        const impulse = firstPersonImpactImpulse(weaponKind, comboStep, message.defeated);
         localHitPauseUntil = Math.max(localHitPauseUntil, now + impulse.hitPauseMs);
         cameraShakeStrength = Math.max(cameraShakeStrength, impulse.strength);
         cameraShakeUntil = Math.max(cameraShakeUntil, now + impulse.durationMs);
         firstPersonHitKickStrength = Math.max(firstPersonHitKickStrength, impulse.strength);
         firstPersonHitKickUntil = now + impulse.durationMs;
         rangedReticleHitUntil = now + 150;
-        createFirstPersonHitBurst(mob, weaponKind, message.defeated);
+        createFirstPersonHitBurst(mob, weaponKind, message.defeated, impulse.burstScale, message.contactKind);
       }
       const hitLabel = WEAPON_ATTACK_DEFINITIONS[message.mainHandId].combo && comboStep === 3
         ? `FINISHER  −${message.damage}`

@@ -852,11 +852,33 @@ html.onboarding-active #hud #target, html.onboarding-active #hud #players { disp
 #combat-reticle.hit-confirmed::before { transform: rotate(45deg); }
 #combat-reticle.hit-confirmed::after { transform: rotate(-45deg); }
 #combat-reticle.hit-confirmed { animation: confirmed-hit-marker 210ms ease-out; }
+#combat-reticle.hit-confirmed.direct-contact {
+  border-color: #fff4be;
+  box-shadow: 0 0 0 6px rgb(255 190 62 / 38%), 0 0 25px rgb(255 126 32 / 72%);
+  animation: direct-contact-marker 280ms cubic-bezier(.16,.9,.2,1.25);
+}
+#combat-reticle.hit-confirmed.direct-contact::before,
+#combat-reticle.hit-confirmed.direct-contact::after {
+  left: 3px;
+  width: 24px;
+  height: 4px;
+  background: #fffbe1;
+  box-shadow: 0 0 12px #ff8c26, 0 1px 3px #000;
+}
+#combat-reticle.hit-confirmed.crescent-contact {
+  border-color: #b8ebff;
+  box-shadow: 0 0 0 4px rgb(85 192 255 / 26%), 0 0 16px rgb(72 171 255 / 45%);
+}
 #combat-reticle.hit-confirmed.defeated::before,
 #combat-reticle.hit-confirmed.defeated::after { background: #ff9d62; box-shadow: 0 0 10px #ff4f30, 0 1px 2px #000; }
 @keyframes confirmed-hit-marker {
   0% { transform: translate(-50%, -50%) scale(.7); }
   42% { transform: translate(-50%, -50%) scale(1.34); }
+  100% { transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes direct-contact-marker {
+  0% { transform: translate(-50%, -50%) scale(.55) rotate(-5deg); }
+  38% { transform: translate(-50%, -50%) scale(1.55) rotate(2deg); }
   100% { transform: translate(-50%, -50%) scale(1); }
 }
 #damage-overlay {

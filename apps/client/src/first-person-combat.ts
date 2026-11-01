@@ -42,17 +42,30 @@ export function selectFirstPersonAimTarget(
   return best ? { id: best.id, distance: best.distance, angleDegrees: best.angleDegrees } : null;
 }
 
-export function firstPersonImpactImpulse(weaponKind: FirstPersonWeaponKind, comboStep: number, defeated: boolean): {
+export type WeaponContactKind = "blade" | "crescent" | undefined;
+
+export function firstPersonImpactImpulse(
+  weaponKind: FirstPersonWeaponKind,
+  comboStep: number,
+  defeated: boolean,
+  contactKind?: WeaponContactKind,
+): {
   strength: number;
   durationMs: number;
   hitPauseMs: number;
+  mobReaction: number;
+  burstScale: number;
 } {
   const finisher = comboStep === 3;
   const base = weaponKind === "hammer" ? .07 : weaponKind === "bow" || weaponKind === "focus" ? .025
     : weaponKind === "dagger" ? .032 : .04;
+  const contactScale = contactKind === "blade" ? 1.34 : contactKind === "crescent" ? .7 : 1;
   return {
-    strength: Math.min(.1, base + (finisher ? .018 : 0) + (defeated ? .018 : 0)),
-    durationMs: weaponKind === "hammer" || finisher ? 150 : 105,
-    hitPauseMs: weaponKind === "hammer" ? 74 : finisher ? 66 : weaponKind === "dagger" ? 34 : 46,
+    strength: Math.min(.12, (base + (finisher ? .018 : 0) + (defeated ? .018 : 0)) * contactScale),
+    durationMs: Math.round((weaponKind === "hammer" || finisher ? 150 : 105) * (contactKind === "blade" ? 1.12 : 1)),
+    hitPauseMs: Math.round((weaponKind === "hammer" ? 74 : finisher ? 66 : weaponKind === "dagger" ? 34 : 46) * contactScale),
+    mobReaction: Math.min(1.35, (weaponKind === "hammer" ? 1.2 : weaponKind === "dagger" ? .92 : 1)
+      * contactScale + (finisher ? .16 : 0) + (defeated ? .18 : 0)),
+    burstScale: Math.min(1.6, contactScale + (finisher ? .18 : 0) + (defeated ? .22 : 0)),
   };
 }

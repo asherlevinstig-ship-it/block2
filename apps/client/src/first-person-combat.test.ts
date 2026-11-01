@@ -24,6 +24,14 @@ describe("first-person combat", () => {
     const hammerFinisher = firstPersonImpactImpulse("hammer", 3, true);
     expect(hammerFinisher.strength).toBeGreaterThan(sword.strength);
     expect(hammerFinisher.durationMs).toBeGreaterThan(sword.durationMs);
-    expect(hammerFinisher.strength).toBeLessThanOrEqual(.1);
+    expect(hammerFinisher.strength).toBeLessThanOrEqual(.12);
+  });
+
+  it("makes physical blade contact punchier than an outward crescent hit", () => {
+    const blade = firstPersonImpactImpulse("sword", 1, false, "blade");
+    const crescent = firstPersonImpactImpulse("sword", 1, false, "crescent");
+    expect(blade.hitPauseMs).toBeGreaterThan(crescent.hitPauseMs);
+    expect(blade.mobReaction).toBeGreaterThan(crescent.mobReaction);
+    expect(blade.burstScale).toBeGreaterThan(crescent.burstScale);
   });
 });
