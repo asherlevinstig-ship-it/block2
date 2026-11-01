@@ -790,6 +790,27 @@ html.onboarding-active #hud #target, html.onboarding-active #hud #players { disp
   transform: translate(-50%, -50%);
 }
 #combat-reticle[hidden] { display: none; }
+#combat-reticle[data-state="target"] {
+  border-color: #8dffc0;
+  box-shadow: 0 0 0 4px rgb(31 125 72 / 24%), 0 0 18px rgb(92 255 157 / 38%);
+}
+#combat-reticle[data-state="target"] span,
+#combat-reticle[data-state="target"] span::before { background: #c9ffdc; }
+#combat-reticle[data-state="blocked"] {
+  border-color: #ff745f;
+  box-shadow: 0 0 0 4px rgb(112 20 12 / 34%), 0 0 18px rgb(255 74 48 / 36%);
+}
+#combat-reticle[data-state="blocked"] span { transform: rotate(45deg); }
+#combat-reticle[data-state="out-of-range"] {
+  border-color: #f0b64f;
+  border-style: dashed;
+  box-shadow: 0 0 0 4px rgb(99 66 10 / 24%), 0 0 14px rgb(240 182 79 / 26%);
+}
+#combat-reticle[data-state="out-of-range"] span,
+#combat-reticle[data-state="out-of-range"] span::before { background: #f5cd82; }
+#combat-reticle[data-drawing="true"] {
+  background: conic-gradient(rgb(255 220 128 / 22%) var(--bow-charge), transparent 0);
+}
 #combat-reticle[data-hit="true"] { border-color: #fff6c4; box-shadow: 0 0 0 4px #ffd86b55, 0 0 12px #ffd86b88; }
 #combat-reticle[data-hit="true"] span, #combat-reticle[data-hit="true"] span::before { background: #fff6c4; }
 #combat-reticle.hit-confirmed::before,

@@ -2,7 +2,8 @@ import { greenwoodAtmosphere } from "./greenwood-atmosphere.js";
 import { greenwoodEmergence, greenwoodMobStyle, type GreenwoodMobStyle } from "./greenwood-mob-style.js";
 import { FAST_WORLD_TOWN_BOUNDS, FAST_WORLD_TOWN_ONLY, TOWER_FLOOR_ONE, TOWER_FLOOR_ONE_SOUTH_ATTENDANTS, TOWER_FLOOR_ONE_WARDENS, fastWorldGroundHeight, isInsideTowerFloorOne, isTowerFloorSafeZone, parseTowerProgress, pvpMurdererUntil, type TowerProgress } from "@blockcraft/protocol";
 import { parseGuildMembership } from "@blockcraft/protocol";
-import { BOW_DRAW_FULL_MS, BOW_DRAW_MAX_HOLD_MS, BOW_DRAW_MIN_MS, bowDrawCharge } from "@blockcraft/protocol";
+import { BOW_DRAW_FULL_MS, BOW_DRAW_MAX_HOLD_MS, BOW_DRAW_MIN_MS, bowDrawCharge,
+  bowShotRangeMultiplier, bowShotTravelMultiplier } from "@blockcraft/protocol";
 import { GREENWOOD_MAIN_TRAIL, GREENWOOD_CAMP_TRAIL, GREENWOOD_THICKETS, GREENWOOD_CLUSTER_PLANTS, GREENWOOD_VERGE_PLANTS, sampleWoodlandTrail } from "./greenwood-landscape.js";
 import * as pc from "playcanvas";
 import { facetedBoxMesh } from "./faceted-shapes.js";
@@ -68,6 +69,7 @@ import { equipmentForItem, armourForItem, utilityForItem, isEquipmentItem, EQUIP
 import { weaponComparison, armourComparison, comparisonTrend } from "./loot-comparison.js";
 import { createLazyCharacterPortrait } from "./lazy-character-portrait.js";
 import { rangedStyle } from "./ranged-style.js";
+import { bowReticleState, bowVisibleRange } from "./bow-aim-feedback.js";
 import { projectileNearMiss } from "./projectile-near-miss.js";
 import { BRUTE_VOLLEY, bruteRockLanes } from "@blockcraft/protocol";
 import { projectilePresentation, readableProjectilePresentation } from "./projectile-clock.js";
@@ -8731,6 +8733,7 @@ interface WeaponProjectileVisual {
   durationMs: number;
   rapidStyle?: WeaponAttackReleased["rapidStyle"];
   arrow?: boolean;
+  locallyPredicted?: boolean;
 }
 
 interface MobHazardVisual {
@@ -10100,6 +10103,57 @@ function destroyWeaponProjectileVisual(projectile: WeaponProjectileVisual): void
   for (const material of projectile.extraMaterials ?? []) material.destroy();
 }
 
+function createPredictedBowProjectile(requestId: string, charge: number, yaw: number, elevation: number): void {
+  const player = localPlayer.getPosition();
+  const maximumRange = effectiveWeaponRange(localMainHandId, fastWorldRequested)
+    * bowShotRangeMultiplier(charge);
+  const flight = aimedWeaponFlight(player, yaw, elevation, maximumRange);
+  const nock = firstPersonActionRig.bowArrow.getPosition().clone();
+  // If the viewmodel has not produced a world transform yet, retain a safe
+  // shoulder-side launch instead of emitting an arrow from the camera centre.
+  const start = Number.isFinite(nock.x) && nock.distance(camera.getPosition()) < 2
+    ? nock : new pc.Vec3(flight.origin.x, flight.origin.y - .18, flight.origin.z);
+  let impactFraction = 1;
+  for (const [id, visual] of mobVisuals) {
+    if (!visual.state.alive || !undergroundMobVisible(visual.state.x, visual.state.y, visual.state.z)) continue;
+    const fraction = attackBodyIntersection(flight.origin, flight.end,
+      { x: visual.state.x, y: visual.state.y, z: visual.state.z, ...mobAttackBody(id, visual.state) });
+    if (fraction !== null) impactFraction = Math.min(impactFraction, fraction);
+  }
+  const rayDirection = new pc.Vec3(flight.end.x - flight.origin.x,
+    flight.end.y - flight.origin.y, flight.end.z - flight.origin.z);
+  const terrainHit = voxelRaycast(flight.origin, rayDirection, maximumRange, readCollisionWorldBlock);
+  if (terrainHit) impactFraction = Math.min(impactFraction, terrainHit.distance / maximumRange);
+  const end = new pc.Vec3(
+    flight.origin.x + (flight.end.x - flight.origin.x) * impactFraction,
+    flight.origin.y + (flight.end.y - flight.origin.y) * impactFraction,
+    flight.origin.z + (flight.end.z - flight.origin.z) * impactFraction,
+  );
+  const style = rangedStyle(localMainHandId, "arrow");
+  const mesh = createArrowProjectileMesh(style.color);
+  mesh.entity.setPosition(start); mesh.entity.lookAt(end); app.root.addChild(mesh.entity);
+  weaponProjectileVisuals.push({
+    projectileId: `predicted:${requestId}`,
+    entity: mesh.entity,
+    material: mesh.material,
+    extraMaterials: mesh.extraMaterials,
+    start,
+    end,
+    startedAt: performance.now(),
+    // The local arrow begins the instant the string is released, so include
+    // the short authoritative attack-release delay in its total flight. It
+    // then arrives on the same frame the server is expected to resolve it.
+    durationMs: Math.max(80,
+      rapidCombatImpact(WEAPON_ATTACK_DEFINITIONS[localMainHandId].attacks[0]?.impactMs ?? 0,
+        fastWorldRequested, rapidPracticeHaste)
+      + WEAPON_ATTACK_DEFINITIONS[localMainHandId].projectileTravelMs
+        * bowShotTravelMultiplier(charge) * impactFraction),
+    rapidStyle: "arrow",
+    arrow: true,
+    locallyPredicted: true,
+  });
+}
+
 function createWeaponProjectile(message: WeaponAttackReleased): void {
   projectileOwners.set(message.projectileId, message.attackerId);
   while (projectileOwners.size > 128) projectileOwners.delete(projectileOwners.keys().next().value!);
@@ -10109,6 +10163,17 @@ function createWeaponProjectile(message: WeaponAttackReleased): void {
   while (projectileRapidStyles.size > 128) projectileRapidStyles.delete(projectileRapidStyles.keys().next().value!);
   const receivedAt = performance.now();
   const arrow = message.rapidStyle === "arrow" || message.mainHandId === "bow" || message.mainHandId === "forged_bow";
+  const predicted = arrow && message.attackerId === room?.sessionId
+    ? weaponProjectileVisuals.find(projectile => projectile.locallyPredicted
+      && projectile.projectileId.startsWith("predicted:") && receivedAt - projectile.startedAt < 1_000)
+    : undefined;
+  if (predicted) {
+    predicted.projectileId = message.projectileId;
+    // The release packet carries the maximum ray endpoint, not its eventual
+    // collision. Preserve the locally swept endpoint until the authoritative
+    // resolved packet supplies the exact hit point.
+    return;
+  }
   const flight = arrow
     ? readableProjectilePresentation(message.releasedAt, serverClock.offset, receivedAt, message.travelMs, 240)
     : projectilePresentation(message.releasedAt, serverClock.offset, receivedAt, message.travelMs);
@@ -12422,7 +12487,7 @@ function releaseBowDraw(tabletAim?: { yaw: number; targetId: string | null }): b
     status.textContent = "Draw a little farther before releasing the arrow.";
     return true;
   }
-  requestAttack(aim.aimWithPointer, tabletAim ?? aim.tabletAim);
+  requestAttack(aim.aimWithPointer, tabletAim ?? aim.tabletAim, bowDrawCharge(elapsed));
   room?.send("bow:draw", { active: false });
   return true;
 }
@@ -12471,6 +12536,23 @@ function mouseRangedYaw(fallback: number): number {
   const x = rangedPointer.x - rect.left, y = rangedPointer.y - rect.top;
   return rangedAimYaw(camera.camera.screenToWorld(x, y, camera.camera.nearClip), camera.camera.screenToWorld(x, y, camera.camera.farClip), localPlayer.getPosition(), fallback);
 }
+
+function currentBowReticleState(): ReturnType<typeof bowReticleState> {
+  if (cameraViewMode !== "first-person" || !bowEquipped() || !fastWorldRequested) return "neutral";
+  const player = localPlayer.getPosition();
+  const baseRange = effectiveWeaponRange(localMainHandId, true);
+  const drawing = bowDrawStartedAt !== null;
+  const charge = drawing ? currentBowDrawCharge() : 1;
+  const visibleRange = bowVisibleRange(baseRange, charge, drawing);
+  const targetInRange = firstPersonCrosshairMob(player, visibleRange) !== null;
+  const targetAtFullRange = targetInRange || visibleRange >= baseRange - .01
+    ? targetInRange : firstPersonCrosshairMob(player, baseRange) !== null;
+  const direction = firstPersonLookDirection(cameraOrbit.yaw, cameraOrbit.pitch);
+  const origin = new pc.Vec3(player.x, player.y + FIRST_PERSON_EYE_HEIGHT, player.z);
+  const terrainHit = voxelRaycast(origin, direction, visibleRange, readCollisionWorldBlock);
+  return bowReticleState({ targetInRange, targetAtFullRange, blockedInRange: terrainHit !== null, drawing });
+}
+
 function updateRangedReticle(): void {
   const continuous = continuousAttackEnabled(WEAPON_ATTACK_DEFINITIONS[localMainHandId].projectileTravelMs > 0, fastWorldRequested);
   const pointerActive = rangedPointer.active;
@@ -12481,6 +12563,10 @@ function updateRangedReticle(): void {
   if (active) {
     combatReticle.style.left = cameraViewMode === "first-person" || !pointerActive ? "50vw" : `${rangedPointer.x}px`;
     combatReticle.style.top = cameraViewMode === "first-person" || !pointerActive ? "50vh" : `${rangedPointer.y}px`;
+    const drawing = bowDrawStartedAt !== null && bowEquipped();
+    combatReticle.dataset.state = currentBowReticleState();
+    combatReticle.dataset.drawing = String(drawing);
+    combatReticle.style.setProperty("--bow-charge", `${Math.round((drawing ? currentBowDrawCharge() : 1) * 360)}deg`);
   }
 }
 let currentTarget: VoxelRaycastHit | null = null;
@@ -16828,7 +16914,7 @@ function weaponAttackInputAllowed(): boolean {
     && !(document.activeElement instanceof HTMLTextAreaElement);
 }
 
-function requestAttack(aimWithPointer = true, tabletAim?: { yaw: number; targetId: string | null }): void {
+function requestAttack(aimWithPointer = true, tabletAim?: { yaw: number; targetId: string | null }, releasedBowCharge?: number): void {
   if (!weaponAttackInputAllowed() || !room) { attackBuffer.clear(); return; }
   const now = performance.now();
   if (specialAimActive) { attackBuffer.clear(); return; }
@@ -16847,12 +16933,14 @@ function requestAttack(aimWithPointer = true, tabletAim?: { yaw: number; targetI
   const attackDefinition = WEAPON_ATTACK_DEFINITIONS[localMainHandId];
   const player = localPlayer.getPosition();
   const firstPersonAimed = cameraViewMode === "first-person";
+  const firstPersonRange = effectiveWeaponRange(localMainHandId, fastWorldRequested)
+    * (releasedBowCharge === undefined ? 1 : bowShotRangeMultiplier(releasedBowCharge));
   const selectedTabletVisual = tabletAim?.targetId ? mobVisuals.get(tabletAim.targetId) : null;
   const targetMob = selectedTabletVisual
     ? { id: tabletAim!.targetId!, visual: selectedTabletVisual,
       distance: Math.hypot(selectedTabletVisual.state.x - player.x, selectedTabletVisual.state.y - player.y, selectedTabletVisual.state.z - player.z) }
     : tabletAim ? null : firstPersonAimed
-      ? firstPersonCrosshairMob(player, effectiveWeaponRange(localMainHandId, fastWorldRequested))
+      ? firstPersonCrosshairMob(player, firstPersonRange)
       : nearestLivingMob(player, effectiveWeaponRange(localMainHandId, fastWorldRequested));
   const practisingFollowUp = guidedAbilityPracticePhase === "follow_up" && guidedAbilityPracticeId
     && (localBuildPathId === "assassin" || localBuildPathId === "ranger")
@@ -16888,9 +16976,13 @@ function requestAttack(aimWithPointer = true, tabletAim?: { yaw: number; targetI
     combo: attackDefinition.combo, comboWindowMs: attackDefinition.comboWindowMs, beforeStep, beforeExpiresAt,
     durations: attackDefinition.attacks.map(timing => rapidCombatDuration(timing.durationMs, true, rapidPracticeHaste)) });
   combatSync.start("attack", requestId, now);
+  const firstPersonElevation = firstPersonAimed
+    ? Math.asin(firstPersonLookDirection(cameraOrbit.yaw, cameraOrbit.pitch).y) : 0;
   room.send("attack", { requestId, yaw: localActionFacingYaw,
-    ...(firstPersonAimed && fastWorldRequested ? { elevation: Math.asin(firstPersonLookDirection(cameraOrbit.yaw, cameraOrbit.pitch).y) } : {}),
+    ...(firstPersonAimed && fastWorldRequested ? { elevation: firstPersonElevation } : {}),
     ...(serverClock.synchronized ? { actionAt: now + serverClock.offset } : {}) });
+  if (firstPersonAimed && fastWorldRequested && bowEquipped() && releasedBowCharge !== undefined)
+    createPredictedBowProjectile(requestId, releasedBowCharge, localActionFacingYaw, firstPersonElevation);
   if (firstPersonAimed) {
     const weaponKind = firstPersonWeaponKind(localMainHandId);
     combatAudio.play(weaponKind === "bow" ? "bowRelease" : weaponKind === "focus" ? "focusRelease" : "swordSwing");
@@ -21025,7 +21117,8 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       const projectile = weaponProjectileVisuals[index]!;
       if (projectile.arrow) {
         const now = performance.now();
-        const remainingMs = Math.max(90, projectile.startedAt + projectile.durationMs - now);
+        const remainingMs = Math.max(projectile.locallyPredicted ? 1 : 90,
+          projectile.startedAt + projectile.durationMs - now);
         projectile.start.copy(projectile.entity.getPosition());
         projectile.end.copy(point);
         projectile.startedAt = now;
