@@ -69,7 +69,7 @@ import { equipmentForItem, armourForItem, utilityForItem, isEquipmentItem, EQUIP
 import { weaponComparison, armourComparison, comparisonTrend } from "./loot-comparison.js";
 import { createLazyCharacterPortrait } from "./lazy-character-portrait.js";
 import { rangedStyle } from "./ranged-style.js";
-import { bowReticleState, bowVisibleRange } from "./bow-aim-feedback.js";
+import { bowMissCause, bowReticleState, bowVisibleRange, type BowReticleState } from "./bow-aim-feedback.js";
 import { projectileNearMiss } from "./projectile-near-miss.js";
 import { BRUTE_VOLLEY, bruteRockLanes } from "@blockcraft/protocol";
 import { projectilePresentation, readableProjectilePresentation } from "./projectile-clock.js";
@@ -8736,6 +8736,23 @@ interface WeaponProjectileVisual {
   locallyPredicted?: boolean;
 }
 
+interface BowShotDiagnostic {
+  requestId: string;
+  projectileId: string;
+  firedAt: number;
+  charge: number;
+  range: number;
+  reticleState: BowReticleState;
+  targetId: string | null;
+  targetAtRelease: { x: number; y: number; z: number } | null;
+  clientOrigin: { x: number; y: number; z: number };
+  predictedEnd: { x: number; y: number; z: number };
+  terrainDistance: number | null;
+  serverOrigin?: { x: number; y: number; z: number };
+  serverEnd?: { x: number; y: number; z: number };
+  travelMs?: number;
+}
+
 interface MobHazardVisual {
   root: pc.Entity;
   material: pc.StandardMaterial;
@@ -8802,6 +8819,8 @@ const markPayoffVisuals: MarkPayoffVisual[] = [];
 const brambleSnareVisuals = new Map<string, BrambleSnareVisual>();
 const weaponProjectileVisuals: WeaponProjectileVisual[] = [];
 const projectileOwners = new Map<string, string>();
+const bowShotDiagnostics = new Map<string, BowShotDiagnostic>();
+let latestBowShotDiagnostic = "none yet";
 interface FirstPersonImpactBurst {
   root: pc.Entity;
   material: pc.StandardMaterial;
@@ -10114,16 +10133,24 @@ function createPredictedBowProjectile(requestId: string, charge: number, yaw: nu
   const start = Number.isFinite(nock.x) && nock.distance(camera.getPosition()) < 2
     ? nock : new pc.Vec3(flight.origin.x, flight.origin.y - .18, flight.origin.z);
   let impactFraction = 1;
+  let targetId: string | null = null;
+  let targetAtRelease: BowShotDiagnostic["targetAtRelease"] = null;
   for (const [id, visual] of mobVisuals) {
     if (!visual.state.alive || !undergroundMobVisible(visual.state.x, visual.state.y, visual.state.z)) continue;
     const fraction = attackBodyIntersection(flight.origin, flight.end,
       { x: visual.state.x, y: visual.state.y, z: visual.state.z, ...mobAttackBody(id, visual.state) });
-    if (fraction !== null) impactFraction = Math.min(impactFraction, fraction);
+    if (fraction !== null && fraction < impactFraction) {
+      impactFraction = fraction; targetId = id;
+      targetAtRelease = { x: visual.state.x, y: visual.state.y, z: visual.state.z };
+    }
   }
   const rayDirection = new pc.Vec3(flight.end.x - flight.origin.x,
     flight.end.y - flight.origin.y, flight.end.z - flight.origin.z);
   const terrainHit = voxelRaycast(flight.origin, rayDirection, maximumRange, readCollisionWorldBlock);
-  if (terrainHit) impactFraction = Math.min(impactFraction, terrainHit.distance / maximumRange);
+  if (terrainHit && terrainHit.distance / maximumRange <= impactFraction) {
+    impactFraction = terrainHit.distance / maximumRange;
+    targetId = null; targetAtRelease = null;
+  }
   const end = new pc.Vec3(
     flight.origin.x + (flight.end.x - flight.origin.x) * impactFraction,
     flight.origin.y + (flight.end.y - flight.origin.y) * impactFraction,
@@ -10132,8 +10159,9 @@ function createPredictedBowProjectile(requestId: string, charge: number, yaw: nu
   const style = rangedStyle(localMainHandId, "arrow");
   const mesh = createArrowProjectileMesh(style.color);
   mesh.entity.setPosition(start); mesh.entity.lookAt(end); app.root.addChild(mesh.entity);
+  const projectileId = `predicted:${requestId}`;
   weaponProjectileVisuals.push({
-    projectileId: `predicted:${requestId}`,
+    projectileId,
     entity: mesh.entity,
     material: mesh.material,
     extraMaterials: mesh.extraMaterials,
@@ -10152,6 +10180,47 @@ function createPredictedBowProjectile(requestId: string, charge: number, yaw: nu
     arrow: true,
     locallyPredicted: true,
   });
+  bowShotDiagnostics.set(projectileId, {
+    requestId,
+    projectileId,
+    firedAt: performance.now(),
+    charge,
+    range: maximumRange,
+    reticleState: (combatReticle.dataset.state as BowReticleState | undefined) ?? "neutral",
+    targetId,
+    targetAtRelease,
+    clientOrigin: { ...flight.origin },
+    predictedEnd: { x: end.x, y: end.y, z: end.z },
+    terrainDistance: terrainHit?.distance ?? null,
+  });
+  while (bowShotDiagnostics.size > 16) bowShotDiagnostics.delete(bowShotDiagnostics.keys().next().value!);
+  latestBowShotDiagnostic = `in flight · charge=${charge.toFixed(2)} range=${maximumRange.toFixed(2)}m reticle=${combatReticle.dataset.state ?? "unknown"} target=${targetId ?? "none"}`;
+}
+
+function bindBowShotDiagnostic(message: WeaponAttackReleased, predictedId?: string): BowShotDiagnostic | undefined {
+  let diagnostic = predictedId ? bowShotDiagnostics.get(predictedId) : undefined;
+  if (!diagnostic) {
+    const now = performance.now();
+    diagnostic = [...bowShotDiagnostics.values()].reverse().find(candidate =>
+      candidate.projectileId.startsWith("predicted:") && now - candidate.firedAt < 1_000);
+  }
+  if (!diagnostic) return undefined;
+  bowShotDiagnostics.delete(diagnostic.projectileId);
+  diagnostic.projectileId = message.projectileId;
+  diagnostic.serverOrigin = message.origin ? { ...message.origin }
+    : { x: message.x, y: message.y + 1.05, z: message.z };
+  diagnostic.serverEnd = message.end ? { ...message.end }
+    : { x: message.targetX, y: message.targetY + .72, z: message.targetZ };
+  diagnostic.travelMs = message.travelMs;
+  bowShotDiagnostics.set(message.projectileId, diagnostic);
+  const originDelta = Math.hypot(
+    diagnostic.serverOrigin.x - diagnostic.clientOrigin.x,
+    diagnostic.serverOrigin.y - diagnostic.clientOrigin.y,
+    diagnostic.serverOrigin.z - diagnostic.clientOrigin.z,
+  );
+  latestBowShotDiagnostic = `released · charge=${diagnostic.charge.toFixed(2)} range=${diagnostic.range.toFixed(2)}m target=${diagnostic.targetId ?? "none"} origin delta=${originDelta.toFixed(2)}m`;
+  logMovementEvent(`BOW RELEASE charge=${diagnostic.charge.toFixed(2)} range=${diagnostic.range.toFixed(2)} target=${diagnostic.targetId ?? "none"} terrain=${diagnostic.terrainDistance?.toFixed(2) ?? "clear"} originDelta=${originDelta.toFixed(2)}`);
+  return diagnostic;
 }
 
 function createWeaponProjectile(message: WeaponAttackReleased): void {
@@ -10168,12 +10237,15 @@ function createWeaponProjectile(message: WeaponAttackReleased): void {
       && projectile.projectileId.startsWith("predicted:") && receivedAt - projectile.startedAt < 1_000)
     : undefined;
   if (predicted) {
+    const predictedId = predicted.projectileId;
     predicted.projectileId = message.projectileId;
+    bindBowShotDiagnostic(message, predictedId);
     // The release packet carries the maximum ray endpoint, not its eventual
     // collision. Preserve the locally swept endpoint until the authoritative
     // resolved packet supplies the exact hit point.
     return;
   }
+  if (arrow && message.attackerId === room?.sessionId) bindBowShotDiagnostic(message);
   const flight = arrow
     ? readableProjectilePresentation(message.releasedAt, serverClock.offset, receivedAt, message.travelMs, 240)
     : projectilePresentation(message.releasedAt, serverClock.offset, receivedAt, message.travelMs);
@@ -20411,6 +20483,7 @@ app.on("update", (dt: number) => {
       `vertical   v=${localVerticalVelocity.toFixed(3)} visual=${localVisualVerticalOffset.toFixed(3)}`,
       `animation  weight=${localPlayerRig.locomotionWeight.toFixed(3)} phase=${localPlayerRig.locomotionPhase.toFixed(2)} bodyY=${bodyY.toFixed(3)}`,
       `camera     yaw=${(cameraOrbit.yaw * 180 / Math.PI).toFixed(1)} pitch=${(cameraOrbit.pitch * 180 / Math.PI).toFixed(1)} screen=${playerScreen ? `${playerScreen.x.toFixed(1)}, ${playerScreen.y.toFixed(1)}` : "n/a"}`,
+      `bow shot   ${latestBowShotDiagnostic}`,
       `mode       ${interactionMode} · click=${primaryActionForMode(interactionMode)}`,
       `trait      ${localTraitId} momentum=${localMomentumStacks}/${MOMENTUM_TRAIT.maxStacks} speed=${localMovementSpeed().toFixed(2)}`,
       `cutaway    ${cutawaySliceY === null ? "surface" : `slice=${cutawaySliceY}`} ref=${surfaceReferenceY?.toFixed(3) ?? "n/a"} underground=${undergroundClassification} excavation=${excavationClassification} return=${surfaceReturnClassification}`,
@@ -21099,6 +21172,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   });
   room.onMessage("combat:projectile-resolved", (message: ProjectileResolved) => {
     const owned = projectileOwners.get(message.projectileId) === room?.sessionId;
+    const bowDiagnostic = bowShotDiagnostics.get(message.projectileId);
     projectileOwners.delete(message.projectileId);
     if (owned && message.reason !== "hit" && !(message.hitCount && message.hitCount > 0)) {
       showAttackOutcome(message.reason === "terrain" ? "blocked" : "miss");
@@ -21106,6 +21180,40 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     }
     const cue = projectileImpactCue(message.projectileId, message.reason);
     const point = new pc.Vec3(message.x, message.y, message.z);
+    if (bowDiagnostic) {
+      const originDelta = bowDiagnostic.serverOrigin
+        ? Math.hypot(
+          bowDiagnostic.serverOrigin.x - bowDiagnostic.clientOrigin.x,
+          bowDiagnostic.serverOrigin.y - bowDiagnostic.clientOrigin.y,
+          bowDiagnostic.serverOrigin.z - bowDiagnostic.clientOrigin.z,
+        ) : 0;
+      const impactDelta = Math.hypot(
+        message.x - bowDiagnostic.predictedEnd.x,
+        message.y - bowDiagnostic.predictedEnd.y,
+        message.z - bowDiagnostic.predictedEnd.z,
+      );
+      const target = bowDiagnostic.targetId ? mobVisuals.get(bowDiagnostic.targetId) : undefined;
+      const targetMoved = target && bowDiagnostic.targetAtRelease
+        ? Math.hypot(
+          target.state.x - bowDiagnostic.targetAtRelease.x,
+          target.state.y - bowDiagnostic.targetAtRelease.y,
+          target.state.z - bowDiagnostic.targetAtRelease.z,
+        ) : 0;
+      const rayOrigin = bowDiagnostic.serverOrigin ?? bowDiagnostic.clientOrigin;
+      const rayEnd = bowDiagnostic.serverEnd ?? bowDiagnostic.predictedEnd;
+      const targetStillOnRay = target && bowDiagnostic.targetId
+        ? attackBodyIntersection(rayOrigin, rayEnd,
+          { x: target.state.x, y: target.state.y, z: target.state.z,
+            ...mobAttackBody(bowDiagnostic.targetId, target.state) }) !== null
+        : false;
+      const hit = message.reason === "hit" || Boolean(message.hitCount && message.hitCount > 0);
+      const cause = bowMissCause({ hit, reason: message.reason,
+        reticleState: bowDiagnostic.reticleState,
+        hadTarget: Boolean(bowDiagnostic.targetId), targetMoved, targetStillOnRay, originDelta });
+      latestBowShotDiagnostic = `${hit ? "HIT" : "MISS"} · ${cause} · charge=${bowDiagnostic.charge.toFixed(2)} range=${bowDiagnostic.range.toFixed(1)}m moved=${targetMoved.toFixed(2)}m origin delta=${originDelta.toFixed(2)}m impact delta=${impactDelta.toFixed(2)}m`;
+      logMovementEvent(`BOW RESULT ${hit ? "HIT" : "MISS"} cause=${cause} charge=${bowDiagnostic.charge.toFixed(2)} range=${bowDiagnostic.range.toFixed(2)} target=${bowDiagnostic.targetId ?? "none"} targetMoved=${targetMoved.toFixed(2)} originDelta=${originDelta.toFixed(2)} impactDelta=${impactDelta.toFixed(2)} travelMs=${bowDiagnostic.travelMs ?? 0}`);
+      bowShotDiagnostics.delete(message.projectileId);
+    }
     const index = weaponProjectileVisuals.findIndex(projectile => projectile.projectileId === message.projectileId);
     const weapon = projectileWeapons.get(message.projectileId);
     const style = rangedStyle(weapon ?? "magic_focus", projectileRapidStyles.get(message.projectileId));
@@ -21817,6 +21925,20 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     if (message.action === "attack") {
       attackBuffer.clear();
       if (message.requestId) applyAttackCorrection(message.requestId, attackPredictions.rejectLegacy(message.requestId));
+      if (message.requestId) {
+        const predictedId = `predicted:${message.requestId}`;
+        const diagnostic = bowShotDiagnostics.get(predictedId);
+        if (diagnostic) {
+          latestBowShotDiagnostic = `REJECTED · server ${message.reason} · charge=${diagnostic.charge.toFixed(2)} range=${diagnostic.range.toFixed(1)}m`;
+          logMovementEvent(`BOW RESULT REJECTED reason=${message.reason} charge=${diagnostic.charge.toFixed(2)} range=${diagnostic.range.toFixed(2)}`);
+          bowShotDiagnostics.delete(predictedId);
+          const projectileIndex = weaponProjectileVisuals.findIndex(projectile => projectile.projectileId === predictedId);
+          if (projectileIndex >= 0) {
+            destroyWeaponProjectileVisual(weaponProjectileVisuals[projectileIndex]!);
+            weaponProjectileVisuals.splice(projectileIndex, 1);
+          }
+        }
+      }
     }
     if (["attack", "dodge", "defense", "power", "special", "calling"].includes(message.action))
       combatSync.reject(message.requestId, message.action, message.reason, performance.now());
@@ -22014,6 +22136,8 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     brambleSnareVisuals.clear();
     for (const projectile of weaponProjectileVisuals) destroyWeaponProjectileVisual(projectile);
     weaponProjectileVisuals.length = 0;
+    bowShotDiagnostics.clear();
+    latestBowShotDiagnostic = "none yet";
     for (const burst of firstPersonImpactBursts) { burst.root.destroy(); burst.material.destroy(); }
     firstPersonImpactBursts.length = 0;
     for (const effect of greenwoodCombatEffects) { effect.root.destroy(); for (const material of effect.materials) material.destroy(); }

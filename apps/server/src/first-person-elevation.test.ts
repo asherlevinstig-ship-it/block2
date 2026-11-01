@@ -17,6 +17,8 @@ function fixture(mainHandId: MainHandId, targetY: number, wall = false, distance
   const events: { type: string; payload: any }[] = [];
   vi.spyOn(room, "broadcast").mockImplementation((type, payload) => { events.push({ type: String(type), payload }); });
   const fire = (elevation?: number) => {
+    if (mainHandId === "bow" || mainHandId === "forged_bow")
+      internal.handleBowDraw(client, { active: true });
     internal.handleAttack(client, { requestId: "attack-1", yaw: 90, ...(elevation === undefined ? {} : { elevation }) });
     const contactAt = internal.pendingAttacks.get("hero").impactAt;
     for (let now = contactAt - 50; now <= contactAt + 500; now += 10) {
