@@ -6993,6 +6993,9 @@ let localCallingSpecialCooldownUntil = 0;
 let localFieldSpecialSelected = false;
 let fieldSpecialSelectionBeforeEquip = false;
 let callingAbilityPendingUntil = 0;
+let callingAbilityAwaitingRequestId: string | null = null;
+let callingPowerKeyHeld = false;
+let callingSpecialKeyHeld = false;
 let localMainHandId: MainHandId = "unarmed";
 let localArmourId: ArmourId = "none";
 let firstPersonLastFrame = 0;
@@ -7692,7 +7695,7 @@ function requestCallingAbility(slot: "power" | "special" = "power", aimedYaw?: n
     showCombatFeedback(`${definition?.name.toUpperCase() ?? "CALLING"} RECHARGING`, "hurt");
     return;
   }
-  if (performance.now() < callingAbilityPendingUntil) return;
+  if (callingAbilityAwaitingRequestId !== null || performance.now() < callingAbilityPendingUntil) return;
   const usedAbility = slot === "special"
     ? CALLING_ABILITY_OPTIONS.find(option => option.id === localSpecialCallingAbilityId)
       ?? CALLING_ABILITY_OPTIONS.find(option => option.pathId === localBuildPathId && option.category === "Utility")
@@ -7705,6 +7708,8 @@ function requestCallingAbility(slot: "power" | "special" = "power", aimedYaw?: n
   }
   callingAbilityPendingUntil = performance.now() + 700;
   callingAbilitySequence += 1;
+  const requestId = `calling-${callingAbilitySequence}`;
+  callingAbilityAwaitingRequestId = requestId;
   if (slot === "power") combatHud.setCallingPending(true);
   createCallingAnticipation(localBuildPathId);
   firstPersonAbilityCastStartedAt = performance.now();
@@ -7713,11 +7718,11 @@ function requestCallingAbility(slot: "power" | "special" = "power", aimedYaw?: n
   firstPersonAbilityCastAbilityId = usedAbility?.id ?? null;
   const pendingSequence = callingAbilitySequence;
   window.setTimeout(() => {
-    if (callingAbilitySequence === pendingSequence && performance.now() >= callingAbilityPendingUntil) {
+    if (callingAbilitySequence === pendingSequence && callingAbilityAwaitingRequestId === null
+      && performance.now() >= callingAbilityPendingUntil) {
       combatHud.setCallingPending(false);
     }
   }, 720);
-  const requestId = `calling-${callingAbilitySequence}`;
   combatSync.start("calling", requestId, performance.now());
   const training = isAtTownOfBeginnings()
     && abilityPracticeDummyInRange(localPlayer.getPosition(), CALLING_EFFIGY_POSITION);
@@ -18242,15 +18247,26 @@ window.addEventListener("keydown", event => {
   }
   if (event.code === "KeyF") {
     event.preventDefault();
-    requestCallingAbility("special");
+    if (!callingSpecialKeyHeld) {
+      callingSpecialKeyHeld = true;
+      requestCallingAbility("special");
+    }
   }
-  if (event.code === "KeyG") { event.preventDefault(); requestCallingAbility(); }
+  if (event.code === "KeyG") {
+    event.preventDefault();
+    if (!callingPowerKeyHeld) {
+      callingPowerKeyHeld = true;
+      requestCallingAbility();
+    }
+  }
   if (event.code === "Space") {
     event.preventDefault();
     if (!event.repeat) requestDodge();
   }
 });
 window.addEventListener("keyup", event => {
+  if (event.code === "KeyG") callingPowerKeyHeld = false;
+  if (event.code === "KeyF") callingSpecialKeyHeld = false;
   if (event.code === "KeyJ") {
     keyboardFireHeld = false;
     if (!releaseBowDraw()) releaseFocusCharge();
@@ -21195,6 +21211,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   room.onMessage("hunt:collection", (update: HuntCollectionUpdate) => renderHuntCollection(update));
   room.onMessage("build:path", (update: BuildPathUpdate) => renderBuildPath(update));
   room.onMessage("calling:ability", (update: CallingAbilityUpdate) => {
+    if (callingAbilityAwaitingRequestId === update.requestId) callingAbilityAwaitingRequestId = null;
     callingAbilityPendingUntil = 0;
     combatHud.setCallingPending(false);
     if (update.slot === "special") localCallingSpecialCooldownUntil = update.cooldownUntil;
@@ -21212,6 +21229,21 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       refreshProgressionNotice();
     }
     if (update.slot === "special") status.textContent = `${update.ability} · ${update.detail.toLowerCase()}.`;
+  });
+  room.onMessage("calling:ability:rejected", (update: {
+    requestId: string;
+    slot: "power" | "special";
+    reason: string;
+    cooldownUntil: number;
+  }) => {
+    if (callingAbilityAwaitingRequestId !== update.requestId) return;
+    callingAbilityAwaitingRequestId = null;
+    callingAbilityPendingUntil = 0;
+    combatHud.setCallingPending(false);
+    if (update.slot === "special") localCallingSpecialCooldownUntil = Math.max(localCallingSpecialCooldownUntil, update.cooldownUntil);
+    else localCallingCooldownUntil = Math.max(localCallingCooldownUntil, update.cooldownUntil);
+    firstPersonAbilityCastStartedAt = null;
+    firstPersonAbilityCastAbilityId = null;
   });
   room.onMessage("calling:ability:effect", (effect: CallingAbilityEffect) => {
     if (callingEffectState.accept(effect)) createCallingImpact(effect);
@@ -22497,6 +22529,9 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     localFieldSpecialSelected = false;
     combatHud.setFieldSpecialSelected(false);
     callingAbilityPendingUntil = 0;
+    callingAbilityAwaitingRequestId = null;
+    callingPowerKeyHeld = false;
+    callingSpecialKeyHeld = false;
     combatHud.setCallingPending(false);
     localSilverDepthsRunStage = 0;
     localSilverDepthsWing = null;

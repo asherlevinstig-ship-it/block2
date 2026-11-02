@@ -787,10 +787,29 @@ describe("hotbar Calling abilities", () => {
     internal.handleCallingAbility(client, { requestId: "second" });
     expect(player.powerCooldownUntil).toBe(77_000);
     expect(client.send).toHaveBeenCalledWith("chat:notice", expect.stringContaining("recovers in 16s"));
+    expect(client.send).toHaveBeenCalledWith("calling:ability:rejected", {
+      requestId: "second", slot: "power", reason: "cooldown", cooldownUntil: 26_000,
+    });
 
     player.huntLoadoutsJson = "{}";
     internal.callingAbilityReadyAt.clear();
     internal.handleCallingAbility(client, { requestId: "unbound" });
     expect(client.send).toHaveBeenCalledWith("chat:notice", expect.stringContaining("Choose a Calling"));
+    expect(client.send).toHaveBeenCalledWith("calling:ability:rejected", {
+      requestId: "unbound", slot: "power", reason: "calling_unbound", cooldownUntil: 0,
+    });
+  });
+
+  it("rejects a repeated Field Mend without applying a second heal", () => {
+    const { internal, player, client } = fixture("healer");
+    player.health = 1;
+    internal.handleCallingAbility(client, { requestId: "mend-once" });
+    expect(player.health).toBe(3);
+
+    internal.handleCallingAbility(client, { requestId: "mend-held" });
+    expect(player.health).toBe(3);
+    expect(client.send).toHaveBeenCalledWith("calling:ability:rejected", {
+      requestId: "mend-held", slot: "power", reason: "cooldown", cooldownUntil: 25_000,
+    });
   });
 });

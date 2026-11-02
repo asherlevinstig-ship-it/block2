@@ -7590,15 +7590,25 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const parsed = CallingAbilityRequestSchema.safeParse(payload);
     const player = this.state.players.get(client.sessionId);
     if (!parsed.success || !player || player.health <= 0) return;
+    const slot = parsed.data.slot ?? "power";
+    const reject = (reason: string, cooldownUntil = 0): void => {
+      client.send("calling:ability:rejected", {
+        requestId: parsed.data.requestId,
+        slot,
+        reason,
+        cooldownUntil,
+      });
+    };
     const state = parseBuildPathState(player.huntLoadoutsJson);
     const pathId = state.selectedPathId;
     if (!pathId) {
       client.send("chat:notice", "Choose a Calling in Town before using a Calling ability.");
+      reject("calling_unbound");
       return;
     }
-    const slot = parsed.data.slot ?? "power";
     if (!milestoneUnlocked(player.level, slot === "special" ? "first_special" : "first_power")) {
       client.send("chat:notice", `${slot === "special" ? "Calling Special" : "Calling Power"} has not unlocked yet.`);
+      reject("locked");
       return;
     }
     const rank = this.buildPathRankFor(player, pathId);
@@ -7634,8 +7644,14 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       return;
     }
     if (abilityId === "healer_resurrection") {
-      if (this.buildPathRankFor(player, "healer") < 4) return;
-      if (this.pendingResurrections.has(client.sessionId)) return;
+      if (this.buildPathRankFor(player, "healer") < 4) {
+        reject("locked");
+        return;
+      }
+      if (this.pendingResurrections.has(client.sessionId)) {
+        reject("already_channeling");
+        return;
+      }
       const allies = this.rapidPractice ? [...this.state.players.keys()]
         : this.roomKind === "practice" ? ["practice-ally"]
         : this.roomKind === "silver-depths" ? [...this.silverDepthsRoster.keys()]
@@ -7650,11 +7666,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           - Math.hypot(b[1].x - player.x, b[1].z - player.z))[0];
       if (!target) {
         client.send("chat:notice", "RESURRECTION · no fallen party member within 3.5m and line of sight.");
+        reject("no_target");
         return;
       }
       const readyAt = this.callingAbilityReadyAt.get(client.sessionId) ?? 0;
       if (now < readyAt) {
         client.send("chat:notice", `RESURRECTION · recovers in ${Math.ceil((readyAt - now) / 1_000)}s.`);
+        reject("cooldown", readyAt);
         return;
       }
       const soulboundTier = this.equipmentAffixTier(player, "soulbound");
@@ -7677,6 +7695,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const readyAt = cooldowns.get(client.sessionId) ?? 0;
     if (now < readyAt) {
       client.send("chat:notice", `${definition.name.toUpperCase()} · recovers in ${Math.max(1, Math.ceil((readyAt - now) / 1_000))}s.`);
+      reject("cooldown", readyAt);
       return;
     }
     const healerThreatened = abilityId === "healer_field_mend" ? new Set([
@@ -7702,6 +7721,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     })() : undefined;
     if (abilityId === "healer_field_mend" && !healTarget) {
       client.send("chat:notice", "FIELD MEND · no injured ally or threatened ally under your aim within 8m.");
+      reject("no_target");
       return;
     }
     const consecratedTier = abilityId === "healer_renewal" ? this.equipmentAffixTier(player, "consecrated") : 0;
@@ -7712,6 +7732,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         && hasCombatLineOfSight(player, target, this.readWorldBlock)) : [];
     if (abilityId === "healer_renewal" && renewalTargets.length === 0) {
       client.send("chat:notice", `RENEWAL · no injured allies inside the ${renewalRadius.toFixed(1)}m sanctuary area.`);
+      reject("no_target");
       return;
     }
     const deathMarkTarget = abilityId === "assassin_death_mark"
@@ -7720,6 +7741,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           .map(([id, mob]) => ({ id, x: mob.x, y: mob.y, z: mob.z, alive: mob.alive }))) : null;
     if (abilityId === "assassin_death_mark" && !deathMarkTarget) {
       client.send("chat:notice", "DEATH MARK · aim at a visible enemy within 8m.");
+      reject("no_target");
       return;
     }
     const bladeDanceTargets = abilityId === "assassin_blade_dance"
@@ -7733,6 +7755,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         .slice(0, 4) : [];
     if (abilityId === "assassin_blade_dance" && bladeDanceTargets.length === 0) {
       client.send("chat:notice", `BLADE DANCE · aim toward an enemy within ${augmentId === "dance_long_step" ? 8 : 6}m.`);
+      reject("no_target");
       return;
     }
     const deadeyeTarget = abilityId === "ranger_deadeye"
@@ -7753,6 +7776,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       })[0] : undefined;
     if (abilityId === "ranger_deadeye" && !deadeyeTarget) {
       client.send("chat:notice", `DEADEYE · aim precisely at a visible enemy within ${(augmentId === "deadeye_eagle_eye" ? 22 : 18) + (this.hasFloorUpgrade(client.sessionId, "ranger_deadeye") ? 4 : 0)}m.`);
+      reject("no_target");
       return;
     }
     const aimedMageAbilities: CallingAbilityId[] = ["mage_overload", "mage_arcane_lance", "mage_mirror_cast",
@@ -7767,6 +7791,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       }).sort(([, a], [, b]) => Math.hypot(a.x - player.x, a.z - player.z) - Math.hypot(b.x - player.x, b.z - player.z))[0] : undefined;
     if (aimedMageAbilities.includes(abilityId) && !overloadTarget) {
       client.send("chat:notice", `${definition.name.toUpperCase()} · aim toward a visible enemy within 14m.`);
+      reject("no_target");
       return;
     }
     const decoyPlacement = abilityId === "thief_decoy" ? (() => {
