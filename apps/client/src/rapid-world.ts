@@ -1,6 +1,6 @@
-import { FAST_WORLD_REGION_DEFINITIONS, FAST_WORLD_TOWN_ONLY, TOWER_FLOOR_ONE, fastWorldRegionDefinitionAt } from "@blockcraft/protocol";
+import { FAST_WORLD_REGION_DEFINITIONS, FAST_WORLD_TOWN_ONLY, TOWER_FLOOR_ONE, TOWER_FLOOR_TWO, fastWorldRegionDefinitionAt } from "@blockcraft/protocol";
 
-export type RapidWorldRegionId = "town" | "tower-floor-1" | "greenwood" | "mistfen" | "sunken-coast" | "southern-quarry" | "ashen-reach" | "crossroads";
+export type RapidWorldRegionId = "town" | "tower-floor-1" | "tower-floor-2" | "greenwood" | "mistfen" | "sunken-coast" | "southern-quarry" | "ashen-reach" | "crossroads";
 
 export type RapidWorldRegion = {
   id: RapidWorldRegionId;
@@ -20,6 +20,10 @@ export const RAPID_WORLD_REGIONS: readonly RapidWorldRegion[] = [
     guidance: "Defeat both Root Wardens · challenge the Crownkeeper",
     minX: TOWER_FLOOR_ONE.bounds.minX, maxX: TOWER_FLOOR_ONE.bounds.maxX,
     minZ: TOWER_FLOOR_ONE.bounds.minZ, maxZ: TOWER_FLOOR_ONE.bounds.maxZ },
+  { id: "tower-floor-2", name: "Floor 2 · The Emberworks", levelLabel: "LV 4–8 · GREYBOX",
+    guidance: "Inspect the Intake Hall · Cooling Hub · both regulator loops · Crucible",
+    minX: TOWER_FLOOR_TWO.bounds.minX, maxX: TOWER_FLOOR_TWO.bounds.maxX,
+    minZ: TOWER_FLOOR_TWO.bounds.minZ, maxZ: TOWER_FLOOR_TWO.bounds.maxZ },
   ...FAST_WORLD_REGION_DEFINITIONS.filter(() => !FAST_WORLD_TOWN_ONLY).map(region => ({
     id: region.id,
     name: region.name,
@@ -35,7 +39,9 @@ export const RAPID_WORLD_REGIONS: readonly RapidWorldRegion[] = [
 export function rapidWorldRegionAt(x: number, z: number): RapidWorldRegion {
   const town = RAPID_WORLD_REGIONS[0]!;
   const towerFloor = RAPID_WORLD_REGIONS[1]!;
+  const towerFloorTwo = RAPID_WORLD_REGIONS[2]!;
   if (x >= towerFloor.minX && x <= towerFloor.maxX && z >= towerFloor.minZ && z <= towerFloor.maxZ) return towerFloor;
+  if (x >= towerFloorTwo.minX && x <= towerFloorTwo.maxX && z >= towerFloorTwo.minZ && z <= towerFloorTwo.maxZ) return towerFloorTwo;
   if (FAST_WORLD_TOWN_ONLY) return town;
   if (x >= town.minX && x <= town.maxX && z >= town.minZ && z <= town.maxZ) return town;
   const region = fastWorldRegionDefinitionAt(x, z);

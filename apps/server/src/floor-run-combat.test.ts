@@ -153,7 +153,7 @@ describe("class weapon and guard effects", () => {
   });
   it("Shared Vigor restores ally stamina, with a cooldown and no health gain", () => {
     const f = fixture("healer"); f.select("healer_vigor"); f.hit();
-    expect(f.ally.stamina).toBe(24); expect(f.ally.health).toBe(3);
+    expect(f.ally.stamina).toBe(24); expect(f.ally.health).toBe(1);
     f.internal.floorRunWeaponEffects("hero", f.player, "target", f.mob, 10200, 1);
     expect(f.ally.stamina).toBe(24);
   });

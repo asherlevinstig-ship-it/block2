@@ -1,4 +1,5 @@
 import { TOWER_FLOOR_ONE, isInsideTowerFloorOne } from "./tower-floor-one.js";
+import { isInsideTowerFloorTwo } from "./tower-floor-two.js";
 
 export const PVP_MURDERER_DURATION_MS = 3 * 24 * 60 * 60 * 1_000;
 
@@ -28,8 +29,8 @@ export function isTowerFloorSafeZone(position: PvpPosition): boolean {
 
 /** Floor 0, taverns and each floor's authored sanctuary are protected. */
 export function pvpEnabledAt(roomKind: PvpRoomKind, position: PvpPosition): boolean {
-  return roomKind === "practice" && isInsideTowerFloorOne(position.x, position.z, 1)
-    && !isTowerFloorSafeZone(position);
+  return roomKind === "practice" && (isInsideTowerFloorTwo(position.x, position.z, 1)
+    || isInsideTowerFloorOne(position.x, position.z, 1) && !isTowerFloorSafeZone(position));
 }
 
 export function pvpCombatAllowed(roomKind: PvpRoomKind, attacker: PvpPosition, target: PvpPosition): boolean {

@@ -121,7 +121,12 @@ export function createPartyUI(send: (request: PartyRequest) => boolean, stopMove
       requestGuild({ action: "invite", targetId }); return true;
     },
     guildMembership() { return currentGuild.membership; },
-    openGuild() { details.open = true; guildNameInput.focus(); },
+    openGuild(message?: string) {
+      details.open = true;
+      if (message) status.textContent = message;
+      if (currentGuild.membership) guildName.scrollIntoView({ block: "nearest" });
+      else guildNameInput.focus();
+    },
     notice(text: string) { status.textContent = text; },
     reset() { update({ partyId: null, members: [], nearby: [], invite: null }); updateGuild({ membership: null, members: [], nearby: [], invite: null }); status.textContent = "Disconnected. Parties are session-only; guild membership is saved to your character."; },
   };

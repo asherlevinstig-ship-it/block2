@@ -1,8 +1,7 @@
 import { HEALING_POTION } from "@blockcraft/protocol";
-import { TOWN_TAVERN_KEEPER_POSITION } from "@blockcraft/voxel-world";
+import { validateTownNpcInteraction } from "./town-npcs.js";
 export function canBuyPotionAtKeeper(player: { x: number; y: number; z: number }): boolean {
-  const keeper = TOWN_TAVERN_KEEPER_POSITION;
-  return Math.abs(player.y - keeper.y) <= 1.6 && Math.hypot(player.x - keeper.x, player.z - keeper.z) <= 2.6;
+  return validateTownNpcInteraction(player, "mara", "healing", "town").ok;
 }
 export function potionBuyError(health: number, gold: number, quantity: number, nearby: boolean): string | null {
   if (health <= 0) return "Return to town before buying potions.";

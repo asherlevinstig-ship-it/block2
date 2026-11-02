@@ -59,7 +59,7 @@ describe("player saves", () => {
     expect(restored.silverDepthsBestTimeMs).toBe(184_000);
     expect(restored.miningExpeditionStage).toBe(6);
     expect(parseNorthwatchProgress(restored.huntLoadoutsJson)).toEqual({ clears: 3, marks: 2 });
-    expect([restored.level, restored.experience, restored.unspentStatPoints]).toEqual([6, 31, 1]);
+    expect([restored.level, restored.experience, restored.unspentStatPoints]).toEqual([6, 31, 0]);
     expect([restored.powerPoints, restored.vitalityPoints, restored.agilityPoints, restored.miningPoints]).toEqual([2, 1, 1, 0]);
     expect(restored.mainHandId).toBe("fang_dagger");
     expect(restored.equippedPower).toBe("seismic_cleave");

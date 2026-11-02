@@ -28,6 +28,10 @@ import {
   fallbackMainHandForCalling,
   mainHandAllowedForCalling,
   starterWeaponForPath,
+  characterIntelligencePoints,
+  experienceToNextLevel,
+  MAX_CHARACTER_LEVEL,
+  MAX_CHARACTER_STAT_POINTS,
 } from "@blockcraft/protocol";
 import { parseRoadsideClaims } from "@blockcraft/voxel-world";
 import { canEquipMainHand } from "./equipment-rules.js";
@@ -66,6 +70,8 @@ export interface PlayerSaveData {
   powerPoints?: number;
   vitalityPoints?: number;
   agilityPoints?: number;
+  intelligencePoints?: number;
+  perceptionPoints?: number;
   miningPoints?: number;
   coins: number;
   murdererUntil?: number;
@@ -189,6 +195,8 @@ export function snapshotPlayerSave(player: PlayerState, now = Date.now()): Playe
     powerPoints: player.powerPoints,
     vitalityPoints: player.vitalityPoints,
     agilityPoints: player.agilityPoints,
+    intelligencePoints: characterIntelligencePoints(player.maxStamina),
+    perceptionPoints: player.miningPoints,
     miningPoints: player.miningPoints,
     coins: player.coins,
     murdererUntil: pvpMurdererUntil(player.huntLoadoutsJson),
@@ -292,13 +300,15 @@ export function parsePlayerSave(raw: string | null): PlayerSaveData | null {
     maxHealth,
     stamina: finiteNumber(value.stamina, maxStamina, 0, maxStamina),
     maxStamina,
-    level: Math.floor(finiteNumber(value.level, 1, 1, 20)),
+    level: Math.floor(finiteNumber(value.level, 1, 1, MAX_CHARACTER_LEVEL)),
     experience: Math.floor(finiteNumber(value.experience, 0, 0, 1_000_000)),
-    unspentStatPoints: Math.floor(finiteNumber(value.unspentStatPoints, 0, 0, 19)),
-    powerPoints: Math.floor(finiteNumber(value.powerPoints, 0, 0, 5)),
-    vitalityPoints: Math.floor(finiteNumber(value.vitalityPoints, 0, 0, 5)),
-    agilityPoints: Math.floor(finiteNumber(value.agilityPoints, 0, 0, 5)),
-    miningPoints: Math.floor(finiteNumber(value.miningPoints, 0, 0, 5)),
+    unspentStatPoints: Math.floor(finiteNumber(value.unspentStatPoints, 0, 0, 1)),
+    powerPoints: Math.floor(finiteNumber(value.powerPoints, 0, 0, MAX_CHARACTER_STAT_POINTS)),
+    vitalityPoints: Math.floor(finiteNumber(value.vitalityPoints, 0, 0, MAX_CHARACTER_STAT_POINTS)),
+    agilityPoints: Math.floor(finiteNumber(value.agilityPoints, 0, 0, MAX_CHARACTER_STAT_POINTS)),
+    intelligencePoints: Math.floor(finiteNumber(value.intelligencePoints, 0, 0, MAX_CHARACTER_STAT_POINTS)),
+    perceptionPoints: Math.floor(finiteNumber(value.perceptionPoints ?? value.miningPoints, 0, 0, MAX_CHARACTER_STAT_POINTS)),
+    miningPoints: Math.floor(finiteNumber(value.perceptionPoints ?? value.miningPoints, 0, 0, MAX_CHARACTER_STAT_POINTS)),
     coins: Math.floor(finiteNumber(value.coins, TAVERN_QUIZ_STARTING_COINS, 0, 1_000_000)),
     murdererUntil: finiteNumber(value.murdererUntil, 0, 0, Number.MAX_SAFE_INTEGER),
     potionCooldownUntil: finiteNumber(value.potionCooldownUntil, 0, 0, Number.MAX_SAFE_INTEGER),
@@ -365,14 +375,14 @@ export function applyPlayerSave(player: PlayerState, save: PlayerSaveData): void
     player.maxHealth += 2;
     player.health = Math.min(player.maxHealth, player.health + 2);
   }
-  player.maxStamina = save.maxStamina;
+  player.maxStamina = Math.max(save.maxStamina, 100 + (save.intelligencePoints ?? 0) * 5);
   player.level = save.level ?? 1;
   player.experience = save.experience ?? 0;
-  player.unspentStatPoints = save.unspentStatPoints ?? 0;
+  player.unspentStatPoints = player.level < MAX_CHARACTER_LEVEL && player.experience >= experienceToNextLevel(player.level) ? 1 : 0;
   player.powerPoints = save.powerPoints ?? 0;
   player.vitalityPoints = save.vitalityPoints ?? 0;
   player.agilityPoints = save.agilityPoints ?? 0;
-  player.miningPoints = save.miningPoints ?? 0;
+  player.miningPoints = save.perceptionPoints ?? save.miningPoints ?? 0;
   player.coins = save.coins;
   player.potionCooldownUntil = save.potionCooldownUntil ?? 0;
   player.blacksmithUpgrades = save.blacksmithUpgrades;

@@ -12,6 +12,7 @@ export interface TabletContextState {
   blacksmith?: boolean;
   quiz?: boolean;
   keeper?: boolean;
+  npcAction?: string | null;
 }
 
 export interface TabletContextAction {
@@ -33,5 +34,6 @@ export function tabletContextAction(state: TabletContextState): TabletContextAct
   if (state.blacksmith) return { label: "Trade", hold: false };
   if (state.quiz) return { label: "Play", hold: false };
   if (state.keeper) return { label: "Talk", hold: false };
+  if (state.npcAction) return { label: state.npcAction, hold: false };
   return null;
 }

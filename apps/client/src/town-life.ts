@@ -1,4 +1,4 @@
-import { FAST_WORLD_BLACKSMITH_POSITION } from "@blockcraft/protocol";
+import { TOWN_NPCS } from "@blockcraft/protocol";
 export type TownLifeRole = "guard" | "vendor" | "smith" | "healer" | "resident";
 
 export interface TownLifeActorDefinition {
@@ -36,10 +36,12 @@ export const SPEED_LAB_TOWN_ACTORS: readonly TownLifeActorDefinition[] = [
     facingYaw: 90, coat: [.54, .2, .12], accent: [.96, .72, .28] },
   { id: "south-market-keeper", role: "vendor", route: [[82.7, 120]], moveSpeed: 0, pauseSeconds: 0, phase: .65,
     facingYaw: 90, coat: [.2, .42, .28], accent: [.92, .55, .18] },
-  { id: "beginning-smith", role: "smith", route: [[FAST_WORLD_BLACKSMITH_POSITION.x, FAST_WORLD_BLACKSMITH_POSITION.z]], moveSpeed: 0, pauseSeconds: 0, phase: .3,
+  { id: TOWN_NPCS["smith-brom"].id, role: "smith", route: [[TOWN_NPCS["smith-brom"].anchor.x, TOWN_NPCS["smith-brom"].anchor.z]], moveSpeed: 0, pauseSeconds: 0, phase: .3,
     facingYaw: 90, coat: [.34, .18, .08], accent: [.96, .45, .08] },
-  { id: "town-healer", role: "healer", route: [[51, 108.5]], moveSpeed: 0, pauseSeconds: 0, phase: .8,
+  { id: TOWN_NPCS["healer-lyra"].id, role: "healer", route: [[TOWN_NPCS["healer-lyra"].anchor.x, TOWN_NPCS["healer-lyra"].anchor.z]], moveSpeed: 0, pauseSeconds: 0, phase: .8,
     facingYaw: 90, coat: [.18, .5, .42], accent: [.45, 1, .78] },
+  { id: TOWN_NPCS["guild-steward-elin"].id, role: "vendor", route: [[TOWN_NPCS["guild-steward-elin"].anchor.x, TOWN_NPCS["guild-steward-elin"].anchor.z]], moveSpeed: 0, pauseSeconds: 0, phase: .42,
+    facingYaw: 90, coat: [.28, .2, .48], accent: [.78, .65, 1] },
   { id: "well-runner", role: "resident", route: [[59, 96.5], [76, 96.5], [81, 93]], moveSpeed: 1.05, pauseSeconds: 2.4, phase: .25,
     facingYaw: 35, coat: [.42, .31, .5], accent: [.82, .68, .94] },
 ] as const;

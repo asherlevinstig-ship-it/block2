@@ -13,6 +13,6 @@ describe("UI source encoding", () => {
 
   it("keeps the HUD level separator as a real middle dot", () => {
     const source = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
-    expect(source).toContain("`${update.level} · ${update.experience}/${required} XP`");
+    expect(source).toContain("`${update.level} · ${update.experience}/${required} ESSENCE`");
   });
 });

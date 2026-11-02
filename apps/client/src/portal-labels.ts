@@ -1,7 +1,7 @@
 export type PortalLabel = {
   title: string;
   subtitle: string;
-  action: "ENTER" | "RETURN" | "CHALLENGE" | "SEALED";
+  action: "ENTER" | "RETURN" | "CHALLENGE" | "CHOOSE" | "SEALED";
   locked: boolean;
   tone: "forest" | "depths" | "ember" | "warden" | "tower" | "tavern";
 };
@@ -15,13 +15,22 @@ export function portalLabel(id: string, kind: string, wardenGateUnlocked = false
     title: "RETURN TO TOWN", subtitle: "LEAVE THE HEARTH & HAMMER", action: "RETURN", locked: false, tone: "tavern",
   };
   if (id === "tower-floor-1-entry") return {
-    title: "ENTER FLOOR 1", subtitle: "THE OVERGROWN RAMPART · LV 1–4", action: "ENTER", locked: false, tone: "tower",
+    title: "TOWER DIRECTORY", subtitle: "CHOOSE AN UNLOCKED FLOOR", action: "CHOOSE", locked: false, tone: "tower",
   };
   if (id === "tower-floor-1-return") return {
     title: "RETURN TO TOWN", subtitle: "TOWN OF BEGINNINGS · SAFE", action: "RETURN", locked: false, tone: "tower",
   };
   if (id === "tower-floor-2-locked") return {
     title: "FLOOR 2", subtitle: "ASCENT GATE · SEALED", action: "SEALED", locked: true, tone: "tower",
+  };
+  if (id === "tower-floor-2-entry") return {
+    title: "ENTER FLOOR 2", subtitle: "THE EMBERWORKS · LV 4–8", action: "ENTER", locked: false, tone: "ember",
+  };
+  if (id === "tower-floor-2-return") return {
+    title: "RETURN TO FLOOR 1", subtitle: "THE OVERGROWN RAMPART", action: "RETURN", locked: false, tone: "tower",
+  };
+  if (id === "tower-floor-3-locked") return {
+    title: "FLOOR 3", subtitle: "ASCENT GATE · SEALED", action: "SEALED", locked: true, tone: "tower",
   };
   if (id === "warden-gate") return wardenGateUnlocked ? {
     title: "WARDEN GATE", subtitle: "ASCENDANT CHALLENGE", action: "CHALLENGE", locked: false, tone: "warden",

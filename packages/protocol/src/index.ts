@@ -1,12 +1,17 @@
 export { fastWorldGroundHeight, fastWorldCoastShorelineZ } from "./fast-world-elevation.js";
 import { fastWorldGroundHeight } from "./fast-world-elevation.js";
-export const FAST_WORLD_BLACKSMITH_POSITION = { x: 79, y: 8, z: 136 } as const;
+export * from "./town-npcs.js";
+import { TOWN_NPCS } from "./town-npcs.js";
+/** @deprecated Resolve the smith through TOWN_NPCS instead. */
+export const FAST_WORLD_BLACKSMITH_POSITION = TOWN_NPCS["smith-brom"].anchor;
 export * from "./floor-run-upgrades.js";
 export * from "./crownkeeper-combat.js";
 export * from "./floor-attempt-summary.js";
 export * from "./tower-progress.js";
+export * from "./tower-floor-directory.js";
 import { createFastWorldObstacleQuery } from "./fast-world-obstacles.js";
 import { TOWER_FLOOR_ONE, TOWER_FLOOR_ONE_FORTRESS_COLLIDERS, isInsideTowerFloorOne } from "./tower-floor-one.js";
+import { TOWER_FLOOR_TWO, TOWER_FLOOR_TWO_COLLIDERS, isInsideTowerFloorTwo } from "./tower-floor-two.js";
 export * from "./fast-world-obstacles.js";
 import { z } from "zod";
 import { fastWorldWeaponProfile } from "./fast-world-weapons.js";
@@ -18,6 +23,7 @@ export * from "./fast-world-weapons.js";
 export * from "./fast-world-regions.js";
 export * from "./fast-world-navigation.js";
 export * from "./tower-floor-one.js";
+export * from "./tower-floor-two.js";
 export * from "./pvp.js";
 export { BRUTE_VOLLEY, bruteVolleyReady, bruteRockEndpoints, bruteRockLanes } from "./brute-volley.js";
 export { SPITTER_PATTERN, CRYSTAL_BURST_OFFSETS, VENOM_RING_OFFSETS, MATRIARCH_PHASE, matriarchEnraged, matriarchPattern, crystalMatriarchPattern, matriarchSecondVolleyYaw, matriarchWarningLanes, spitterPattern, spitterShotOffsets, spitterShotEndpoints, spitterWarningLanes } from "./spitter-patterns.js";
@@ -28,7 +34,7 @@ export { DODGE_STAMINA_COST, DODGE_CHAIN_COST_STEP, DODGE_MAX_STAMINA_COST, DODG
 // otherwise let a new client join a room still serving the old terrain.
 export const WORLD_ROOM = "world-warden-gate-v168";
 export const SILVER_DEPTHS_ROOM = "silver-depths-instance-v4";
-export const PRACTICE_ROOM = "calling-practice-v12";
+export const PRACTICE_ROOM = "calling-practice-v14";
 export const TAVERN_ROOM = "hearth-and-hammer-v4";
 // The authored inn faces south (+Z). Keep the interaction anchor immediately
 // outside its visible front door rather than beside the building.
@@ -295,20 +301,25 @@ const townOnlyCollisionQuery = createFastWorldObstacleQuery(
 const towerFloorCollisionQuery = createFastWorldObstacleQuery(
   { ...TOWER_FLOOR_ONE.bounds, floorY: RAPID_PRACTICE_ARENA.floorY, sealedBounds: true },
   [], fastWorldGroundHeight, TOWER_FLOOR_ONE_FORTRESS_COLLIDERS);
+const towerFloorTwoCollisionQuery = createFastWorldObstacleQuery(
+  { ...TOWER_FLOOR_TWO.bounds, floorY: RAPID_PRACTICE_ARENA.floorY, sealedBounds: true },
+  [], fastWorldGroundHeight, TOWER_FLOOR_TWO_COLLIDERS);
 
 /** Town and tower floors are separate sealed islands. The void between them is
  * solid to movement and can only be crossed by authoritative portal travel. */
 export const FAST_WORLD_COLLISION_QUERY = FAST_WORLD_TOWN_ONLY ? {
-  obstacles: [...townOnlyCollisionQuery.obstacles, ...towerFloorCollisionQuery.obstacles],
+  obstacles: [...townOnlyCollisionQuery.obstacles, ...towerFloorCollisionQuery.obstacles, ...towerFloorTwoCollisionQuery.obstacles],
   groundHeight: fastWorldGroundHeight,
   obstacleAt(x: number, y: number, z: number) {
-    return townOnlyCollisionQuery.obstacleAt(x, y, z) ?? towerFloorCollisionQuery.obstacleAt(x, y, z);
+    return townOnlyCollisionQuery.obstacleAt(x, y, z) ?? towerFloorCollisionQuery.obstacleAt(x, y, z)
+      ?? towerFloorTwoCollisionQuery.obstacleAt(x, y, z);
   },
   cellSolid(x: number, y: number, z: number) {
     if (x >= FAST_WORLD_TOWN_BOUNDS.minX && x <= FAST_WORLD_TOWN_BOUNDS.maxX
       && z >= FAST_WORLD_TOWN_BOUNDS.minZ && z <= FAST_WORLD_TOWN_BOUNDS.maxZ)
       return townOnlyCollisionQuery.cellSolid(x, y, z);
     if (isInsideTowerFloorOne(x, z)) return towerFloorCollisionQuery.cellSolid(x, y, z);
+    if (isInsideTowerFloorTwo(x, z)) return towerFloorTwoCollisionQuery.cellSolid(x, y, z);
     return Math.floor(y) >= RAPID_PRACTICE_ARENA.floorY;
   },
 } : createFastWorldObstacleQuery(RAPID_PRACTICE_ARENA, RAPID_PRACTICE_TOWN_COLLIDERS, fastWorldGroundHeight);
@@ -371,23 +382,30 @@ export type ServerPerformanceUpdate = {
 export const PlayerProfileTokenSchema = z.string().regex(/^guest_[a-f0-9]{32}$/);
 export type PlayerProfileToken = z.infer<typeof PlayerProfileTokenSchema>;
 
-export const MAX_CHARACTER_LEVEL = 20;
-export const MAX_CHARACTER_STAT_POINTS = 5;
+export const MAX_CHARACTER_LEVEL = 100;
+export const MAX_CHARACTER_STAT_POINTS = 60;
 export const CHARACTER_STATS = {
-  power: { name: "Power", detail: "+1 weapon and Power damage every 2 points" },
+  strength: { name: "Strength", detail: "+1 weapon damage every 2 points" },
   vitality: { name: "Vitality", detail: "+1 maximum health" },
-  agility: { name: "Agility", detail: "+2% movement speed" },
-  mining: { name: "Mining", detail: "+1 mineral yield every 2 points" },
+  agility: { name: "Agility", detail: "+1% movement speed before soft caps" },
+  intelligence: { name: "Intelligence", detail: "+5 stamina and faster Calling recovery" },
+  perception: { name: "Perception", detail: "+1 resource yield every 2 points" },
 } as const;
 export type CharacterStatId = keyof typeof CHARACTER_STATS;
-export const ProgressionChooseSchema = z.object({ stat: z.enum(["power", "vitality", "agility", "mining"]) });
+export const ProgressionChooseSchema = z.object({ stat: z.enum(["strength", "vitality", "agility", "intelligence", "perception"]) });
 export function experienceToNextLevel(level: number): number {
   const safe = Math.max(1, Math.min(MAX_CHARACTER_LEVEL, Math.floor(level)));
-  return safe >= MAX_CHARACTER_LEVEL ? 0 : 25 + safe * 15;
+  return safe >= MAX_CHARACTER_LEVEL ? 0 : Math.round(40 + 8 * safe + .65 * safe ** 2 + .018 * safe ** 3);
 }
-export function characterPowerBonus(points: number): number { return Math.floor(Math.max(0, points) / 2); }
-export function characterSpeedMultiplier(points: number): number { return 1 + Math.max(0, points) * .02; }
-export function characterMiningBonus(points: number): number { return Math.floor(Math.max(0, points) / 2); }
+export function characterSoftCappedValue(points: number): number {
+  const safe = Math.max(0, Math.min(MAX_CHARACTER_STAT_POINTS, points));
+  return Math.min(20, safe) + Math.min(20, Math.max(0, safe - 20)) * .6 + Math.max(0, safe - 40) * .25;
+}
+export function characterPowerBonus(points: number): number { return Math.floor(characterSoftCappedValue(points) / 2); }
+export function characterSpeedMultiplier(points: number): number { return 1 + characterSoftCappedValue(points) * .01; }
+export function characterMiningBonus(points: number): number { return Math.floor(characterSoftCappedValue(points) / 2); }
+export function characterIntelligenceCooldownMultiplier(points: number): number { return Math.max(.6, 1 - characterSoftCappedValue(points) * .01); }
+export function characterIntelligencePoints(maxStamina: number): number { return Math.max(0, Math.floor((maxStamina - 100) / 5)); }
 export const WORLD_LEVEL_RANGES = [
   { min: 1, max: 20, label: "SAFE" },
   { min: 1, max: 4, label: "LV 1–4" },
@@ -432,9 +450,14 @@ export type ProgressionUpdate = {
   experience: number;
   experienceRequired: number;
   unspentStatPoints: number;
+  strengthPoints: number;
+  /** Legacy wire alias retained while older clients migrate to Strength. */
   powerPoints: number;
   vitalityPoints: number;
   agilityPoints: number;
+  intelligencePoints: number;
+  perceptionPoints: number;
+  /** Legacy wire alias retained while older saves migrate to Perception. */
   miningPoints: number;
 };
 

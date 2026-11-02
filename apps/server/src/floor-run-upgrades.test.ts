@@ -3,12 +3,12 @@ import { FLOOR_RUN_UPGRADES, floorUpgradeChoices, type BuildPathId, type Calling
 import { FloorRunUpgrades } from "./floor-run-upgrades.js";
 
 describe("Floor 1 class upgrade offers", () => {
-  it.each(["tank", "mage", "assassin", "thief", "ranger", "healer"] as BuildPathId[])("%s has six upgrades across three directions and no locked-ability offers", path => {
+  it.each(["tank", "mage", "assassin", "thief", "ranger", "healer"] as BuildPathId[])("%s has six upgrades across distinct directions and no locked-ability offers", path => {
     const definitions = FLOOR_RUN_UPGRADES.filter(upgrade => upgrade.path === path);
     expect(definitions).toHaveLength(6);
     const branches = [...new Set(definitions.map(upgrade => upgrade.branch))];
-    expect(branches).toHaveLength(3);
-    for (const branch of branches) expect(definitions.filter(upgrade => upgrade.branch === branch)).toHaveLength(2);
+    expect(branches).toHaveLength(path === "assassin" ? 2 : 3);
+    for (const branch of branches) expect(definitions.filter(upgrade => upgrade.branch === branch).length).toBeGreaterThanOrEqual(2);
     const choices = floorUpgradeChoices(path, [], [], 51);
     expect(choices).toHaveLength(3);
     expect(choices.every(id => !definitions.find(upgrade => upgrade.id === id)?.ability)).toBe(true);

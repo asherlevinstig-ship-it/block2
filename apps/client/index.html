@@ -233,7 +233,9 @@
     <div id="quiz-table-prompt" hidden>DOUBLE OR QUIT <small>Press E to play</small></div>
     <div id="high-low-table-prompt" hidden>HIGHER OR LOWER <small>Press E to play cards</small></div>
     <div id="tavern-keeper-prompt" hidden>MARA · INNKEEPER <small>Press E to rest and prepare</small></div>
-    <div id="blacksmith-prompt" hidden>BLACKSMITH <small>Press E to trade or forge</small></div>
+    <div id="blacksmith-prompt" hidden>BROM · BEGINNING SMITH <small>Press E to trade or forge</small></div>
+    <div id="town-healer-prompt" hidden>LYRA · SANCTUARY HEALER <small>Press E for care and guidance</small></div>
+    <div id="guild-steward-prompt" hidden>ELIN · GUILD STEWARD <small>Press E to manage your guild</small></div>
     <div id="tavern-door-hold" role="status" aria-live="polite" hidden>
       <span id="tavern-door-ring" aria-hidden="true"><kbd>E</kbd></span>
       <span class="tavern-door-copy"><strong id="tavern-door-action">HOLD TO ENTER</strong><small id="tavern-door-destination">THE HEARTH &amp; HAMMER</small></span>
@@ -498,7 +500,7 @@
         <div><span>GOLD</span><strong id="tavern-coins">20</strong></div>
         <div><span>CARRIED</span><strong id="inventory-total">EMPTY</strong></div>
         <div><span>EQUIPPED</span><strong id="inventory-equipped">Longsword</strong></div>
-        <div><span>LEVEL</span><strong id="inventory-level">1 · 0 XP</strong></div>
+        <div><span>LEVEL</span><strong id="inventory-level">1 · 0 ESSENCE</strong></div>
       </div>
       <div id="inventory-capacity" class="inventory-capacity" aria-label="Backpack capacity">
         <div><span>BACKPACK</span><strong id="inventory-capacity-label">0 / 12 SLOTS</strong><small>Materials stack to 25 · equipped gear is free</small></div>
@@ -522,10 +524,11 @@
       </section>
       <details id="character-stats-drawer"><summary>Character stats <span>Show combat and gathering details</span></summary><section id="character-stats" aria-label="Character progression">
         <header><span>CHARACTER STATS</span><strong id="character-points">NO POINTS AVAILABLE</strong></header>
-        <div><span>ATTACK</span><strong id="stat-power">0 · +0 damage</strong></div>
-        <div><span>DEFENCE</span><strong id="stat-vitality">0 · 5 max HP</strong></div>
+        <div><span>STRENGTH</span><strong id="stat-power">0 · +0 weapon damage</strong></div>
+        <div><span>VITALITY</span><strong id="stat-vitality">0 · 5 max HP</strong></div>
         <div><span>AGILITY</span><strong id="stat-agility">0 · 100% speed</strong></div>
-        <div><span>MINING</span><strong id="stat-mining">0 · ×1 yield</strong></div>
+        <div><span>INTELLIGENCE</span><strong id="stat-intelligence">0 · +0 stamina</strong></div>
+        <div><span>PERCEPTION</span><strong id="stat-mining">0 · ×1 yield</strong></div>
       </section></details>
       <details id="character-milestones-drawer"><summary>Level unlocks <span>Show progression details</span></summary><section id="character-milestones" aria-label="Character milestone unlocks"></section></details>
       </details>
@@ -728,15 +731,27 @@
         <p class="defeat-note">Return with full health and stamina.</p>
       </div>
     </section>
+    <section id="tower-floor-selector" role="dialog" aria-modal="true" aria-labelledby="tower-floor-selector-title" hidden>
+      <div class="tower-floor-selector-card">
+        <header>
+          <div><span>TOWER DIRECTORY</span><h2 id="tower-floor-selector-title">Choose a Floor</h2></div>
+          <button id="tower-floor-selector-close" type="button" aria-label="Close tower floor directory">×</button>
+        </header>
+        <p>Select any floor you have unlocked. Cleared floors remain available for repeat runs.</p>
+        <div id="tower-floor-selector-list" class="tower-floor-selector-list"></div>
+        <small id="tower-floor-selector-progress">Highest floor cleared: none</small>
+      </div>
+    </section>
     <section id="level-up-panel" role="dialog" aria-modal="true" aria-labelledby="level-up-title" hidden>
       <div class="level-up-card">
-        <span>CHARACTER ADVANCEMENT</span><h2 id="level-up-title">Level Up!</h2>
-        <p id="level-up-message">Choose one permanent improvement.</p>
+        <span>CHANNEL ESSENCE</span><h2 id="level-up-title">Raise an Attribute</h2>
+        <p id="level-up-message">Spend your carried Essence to gain one level and one permanent improvement.</p>
         <div class="level-up-choices">
-          <button type="button" data-character-stat="power"><strong>POWER</strong><small>+1 damage every 2 points</small></button>
+          <button type="button" data-character-stat="strength"><strong>STRENGTH</strong><small>+1 weapon damage every 2 points</small></button>
           <button type="button" data-character-stat="vitality"><strong>VITALITY</strong><small>+1 maximum health</small></button>
-          <button type="button" data-character-stat="agility"><strong>AGILITY</strong><small>+2% movement speed</small></button>
-          <button type="button" data-character-stat="mining"><strong>MINING</strong><small>+1 mineral yield every 2 points</small></button>
+          <button type="button" data-character-stat="agility"><strong>AGILITY</strong><small>Movement speed · soft caps at 20 and 40</small></button>
+          <button type="button" data-character-stat="intelligence"><strong>INTELLIGENCE</strong><small>+5 stamina · faster Calling recovery</small></button>
+          <button type="button" data-character-stat="perception"><strong>PERCEPTION</strong><small>+1 resource yield every 2 points</small></button>
         </div>
         <small id="level-up-points">1 point available</small>
         <p id="level-up-calling-note" class="level-up-calling-note"></p>

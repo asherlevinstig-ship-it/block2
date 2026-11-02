@@ -99,6 +99,10 @@ describe("boss HUD", () => {
       ["floor1-court-briar-a", { alive: true }],
       ["floor1-court-briar-b", { alive: false }],
     ]))).toEqual({ active: 1, maximum: 2 });
+    expect(floorBossPhaseLabel("The Forgeheart", 1)).toContain("HAMMER CALIBRATION");
+    expect(floorBossPhaseLabel("The Forgeheart", 2)).toContain("FURNACE PRESSURE");
+    expect(floorBossPhaseLabel("The Forgeheart", 3)).toContain("FORGE OVERLOAD");
+    expect(floorBossPhaseLabel("The Forgeheart", 2, true)).toContain("CORE COOLING");
   });
   it("keeps Path Champion identity and phase mechanics beside the boss bar", () => {
     const champion = { ...boss, name: "Viridian Brood Oracle", isMiniBoss: true };

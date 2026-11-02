@@ -15,6 +15,11 @@ describe("tower PvP zones", () => {
     expect(pvpCombatAllowed("practice", rampart, sanctuary)).toBe(false);
     expect(pvpCombatAllowed("practice", rampart, { ...rampart, health: 0 })).toBe(false);
   });
+  it("keeps Floor 2 dangerous outside its temporary arrival protection", () => {
+    const emberworks = { x: 458, z: 106, health: 5 };
+    expect(pvpEnabledAt("practice", emberworks)).toBe(true);
+    expect(pvpCombatAllowed("practice", emberworks, { ...emberworks, x: 460 })).toBe(true);
+  });
   it("marks killers for exactly three days", () => {
     expect(PVP_MURDERER_DURATION_MS).toBe(259_200_000);
   });

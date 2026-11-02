@@ -1,4 +1,4 @@
-import { FAST_WORLD_REGION_DEFINITIONS, FAST_WORLD_TOWN_ONLY, TOWER_FLOOR_ONE, type FastWorldRegionId } from "@blockcraft/protocol";
+import { FAST_WORLD_REGION_DEFINITIONS, FAST_WORLD_TOWN_ONLY, TOWER_FLOOR_ONE, TOWER_FLOOR_TWO, type FastWorldRegionId } from "@blockcraft/protocol";
 import { GREENWOOD_LANDMARKS } from "./greenwood-visuals.js";
 import { MISTFEN_LANDMARKS } from "./mistfen-visuals.js";
 
@@ -47,8 +47,9 @@ export const FAST_WORLD_SIGNPOSTS: readonly FastWorldNavPoint[] = [
 ] as const;
 
 export function fastWorldMapPoint(x: number, z: number, width: number, height: number) {
-  const bounds = FAST_WORLD_TOWN_ONLY && x >= TOWER_FLOOR_ONE.bounds.minX - 4
-    ? TOWER_FLOOR_ONE.bounds : FAST_WORLD_MAP_BOUNDS;
+  const bounds = FAST_WORLD_TOWN_ONLY && x >= TOWER_FLOOR_TWO.bounds.minX - 4
+    ? TOWER_FLOOR_TWO.bounds
+    : FAST_WORLD_TOWN_ONLY && x >= TOWER_FLOOR_ONE.bounds.minX - 4 ? TOWER_FLOOR_ONE.bounds : FAST_WORLD_MAP_BOUNDS;
   return {
     x: (x - bounds.minX) / (bounds.maxX - bounds.minX) * width,
     y: (z - bounds.minZ) / (bounds.maxZ - bounds.minZ) * height,
@@ -65,6 +66,7 @@ export function discoverFastWorldLandmarks(
 
 export function fastWorldRegionTravelSummary(regionId: string): string {
   if (regionId === "tower-floor-1") return "Return portal ← Town · ascent gate → Floor 2";
+  if (regionId === "tower-floor-2") return "Return portal ← Floor 1 · Crucible route → Forgeheart";
   if (FAST_WORLD_TOWN_ONLY) return "Town of Beginnings · safe";
   if (regionId === "town") return "East gate → Greenwood";
   if (regionId === "crossroads") return "Roads connect every fixed-difficulty region";

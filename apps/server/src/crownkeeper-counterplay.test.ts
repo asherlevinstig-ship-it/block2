@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Block } from "@blockcraft/voxel-world";
 import { TOWER_FLOOR_ONE_BOSS_ID, TOWER_FLOOR_ONE_NORTH_WARDEN_ID, TOWER_FLOOR_ONE_SOUTH_WARDEN_ID,
-  TOWER_FLOOR_ONE, TOWER_FLOOR_ONE_SPAWNS, RAPID_PRACTICE_ARENA } from "@blockcraft/protocol";
+  TOWER_FLOOR_ONE, TOWER_FLOOR_TWO, TOWER_FLOOR_ONE_SPAWNS, RAPID_PRACTICE_ARENA } from "@blockcraft/protocol";
 import { WorldRoom } from "./game-room.js";
 import { ForestPortalState, InventoryItemState, MobState, PlayerState, WorldState } from "./schema.js";
 import { chooseBuildPath, grantBuildPathXp, parseBuildPathState, serializeBuildPathState } from "./build-paths.js";
@@ -129,7 +129,9 @@ describe("Crownkeeper earned counter openings", () => {
     vi.spyOn(f.internal, "refreshNearbyObjectives").mockImplementation(() => {});
     const entry = new ForestPortalState(); Object.assign(entry, TOWER_FLOOR_ONE.townPortal, { kind: "tower-entry" });
     const exit = new ForestPortalState(); Object.assign(exit, TOWER_FLOOR_ONE.returnPortal, { kind: "tower-return" });
+    const floorTwoReturn = new ForestPortalState(); Object.assign(floorTwoReturn, TOWER_FLOOR_TWO.returnPortal, { kind: "tower-return" });
     f.room.state.portals.set("tower-floor-1-entry", entry); f.room.state.portals.set("tower-floor-1-return", exit);
+    f.room.state.portals.set("tower-floor-2-return", floorTwoReturn);
     Object.assign(f.player, TOWER_FLOOR_ONE.townPortal);
     f.internal.useTowerPortal(f.client, "tower-floor-1-entry");
     expect(f.player.x).toBe(TOWER_FLOOR_ONE.entry.x); expect(f.internal.floorRunUpgrades.active("hero")).toBe(true);
@@ -164,6 +166,13 @@ describe("Crownkeeper earned counter openings", () => {
     expect(boss.alive).toBe(false);
     expect(crownkeeperFragments(f.player.huntLoadoutsJson)).toBe(1);
     expect([...f.room.state.lootDrops.values()].some(bag => bag.ownerId === "hero")).toBe(true);
+    expect(f.room.state.portals.has("tower-floor-2-entry")).toBe(true);
+    vi.setSystemTime(30_000); Object.assign(f.player, TOWER_FLOOR_ONE.ascentPortal);
+    f.internal.useTowerPortal(f.client, "tower-floor-2-entry");
+    expect(f.player).toMatchObject(TOWER_FLOOR_TWO.entry);
+    vi.setSystemTime(32_000); Object.assign(f.player, TOWER_FLOOR_TWO.returnPortal);
+    f.internal.useTowerPortal(f.client, "tower-floor-2-return");
+    expect(f.player.x).toBe(TOWER_FLOOR_ONE.ascentPortal.x - 3);
     const xp = f.player.experience, coins = f.player.coins;
     vi.setSystemTime(40000); Object.assign(f.player, TOWER_FLOOR_ONE.returnPortal);
     f.internal.useTowerPortal(f.client, "tower-floor-1-return");

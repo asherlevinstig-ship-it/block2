@@ -7,7 +7,7 @@ const stamina = signal(100);
 const maximumStamina = signal(100);
 const level = signal(1);
 const experience = signal(0);
-const experienceRequired = signal(40);
+const experienceRequired = signal(49);
 
 export function hudFraction(value: number, maximum: number): number {
   return Math.max(0, Math.min(1, value / Math.max(1, maximum)));
@@ -38,7 +38,7 @@ function LevelBar() {
   return h("button", { id: "player-level", type: "button", "aria-label": "Character level and experience" },
     h("span", null, "LV ", h("strong", { id: "player-level-value" }, String(level.value))),
     h("div", null, h("i", { id: "player-xp-fill", style: { width: experienceWidth.value } })),
-    h("em", { id: "player-xp-value" }, required > 0 ? `${experience.value} / ${required} XP` : "MAX LEVEL"),
+    h("em", { id: "player-xp-value" }, required > 0 ? `${experience.value} / ${required} ESSENCE` : "MAX LEVEL"),
   );
 }
 

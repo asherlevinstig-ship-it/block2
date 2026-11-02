@@ -1,10 +1,15 @@
-import { TOWN_TAVERN_KEEPER_POSITION, TOWN_TAVERN_QUIZ_TABLE_POSITION } from "@blockcraft/voxel-world";
-import { TAVERN_HIGH_LOW_TABLE_POSITION } from "@blockcraft/protocol";
+import { TOWN_TAVERN_QUIZ_TABLE_POSITION } from "@blockcraft/voxel-world";
+import { TAVERN_HIGH_LOW_TABLE_POSITION, TOWN_NPCS, canInteractWithTownNpc, townNpcLocation,
+  type TownNpcLocationId } from "@blockcraft/protocol";
+
+const MARA = TOWN_NPCS.mara;
+const MARA_TOWN = townNpcLocation(MARA, "town");
+const MARA_TAVERN = townNpcLocation(MARA, "tavern");
 
 export const TAVERN_KEEPER = {
-  name: "Mara",
-  ...TOWN_TAVERN_KEEPER_POSITION,
-  talkRange: 2.6,
+  name: MARA.name,
+  ...MARA_TOWN.anchor,
+  talkRange: MARA_TOWN.interactionRadius,
 } as const;
 
 export const TAVERN_KEEPER_LINES = [
@@ -15,7 +20,7 @@ export const TAVERN_KEEPER_LINES = [
 ] as const;
 
 export const TAVERN_QUIZ_TABLE = { ...TOWN_TAVERN_QUIZ_TABLE_POSITION, interactRange: 2.6 } as const;
-export const TAVERN_ROOM_KEEPER = { name: "Mara", x: -8.2, y: 9.5, z: -1.5, talkRange: 2.8 } as const;
+export const TAVERN_ROOM_KEEPER = { name: MARA.name, ...MARA_TAVERN.anchor, talkRange: MARA_TAVERN.interactionRadius } as const;
 export const TAVERN_HIGH_LOW_TABLE = { ...TAVERN_HIGH_LOW_TABLE_POSITION, interactRange: 2.8 } as const;
 
 export function canPlayHigherOrLower(player: { x: number; y: number; z: number }, tavernVisible: boolean): boolean {
@@ -34,9 +39,9 @@ export function canPlayAtTavernTable(player: { x: number; y: number; z: number }
 export function canTalkToTavernKeeper(
   player: { x: number; y: number; z: number },
   keeperVisible: boolean,
-  keeper: typeof TAVERN_KEEPER | typeof TAVERN_ROOM_KEEPER = TAVERN_KEEPER,
+  locationOrKeeper: TownNpcLocationId | typeof TAVERN_KEEPER | typeof TAVERN_ROOM_KEEPER = "town",
 ): boolean {
-  return keeperVisible
-    && Math.abs(player.y - keeper.y) <= 1.6
-    && Math.hypot(player.x - keeper.x, player.z - keeper.z) <= keeper.talkRange;
+  const location = typeof locationOrKeeper === "string" ? locationOrKeeper
+    : locationOrKeeper === TAVERN_ROOM_KEEPER ? "tavern" : "town";
+  return keeperVisible && canInteractWithTownNpc(player, MARA, location);
 }

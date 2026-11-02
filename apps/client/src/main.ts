@@ -1,6 +1,10 @@
 import { greenwoodAtmosphere } from "./greenwood-atmosphere.js";
 import { greenwoodEmergence, greenwoodMobStyle, type GreenwoodMobStyle } from "./greenwood-mob-style.js";
-import { FAST_WORLD_TOWN_BOUNDS, FAST_WORLD_TOWN_ONLY, TOWER_FLOOR_ONE, TOWER_FLOOR_ONE_SOUTH_ATTENDANTS, TOWER_FLOOR_ONE_WARDENS, fastWorldGroundHeight, isInsideTowerFloorOne, isTowerFloorSafeZone, parseTowerProgress, pvpMurdererUntil, type TowerProgress } from "@blockcraft/protocol";
+import { FAST_WORLD_TOWN_BOUNDS, FAST_WORLD_TOWN_ONLY, TOWER_FLOOR_ONE, TOWER_FLOOR_TWO,
+  TOWER_FLOOR_TWO_BOSS_ID, TOWER_FLOOR_TWO_REGULATORS, TOWER_FLOOR_ONE_SOUTH_ATTENDANTS,
+  TOWER_FLOOR_ONE_WARDENS, fastWorldGroundHeight, isInsideTowerFloorOne, isInsideTowerFloorTwo,
+  isTowerFloorSafeZone, parseTowerProgress, pvpMurdererUntil, towerFloorTwoForgeheartPhase,
+  type TowerFloorDirectoryUpdate, type TowerProgress } from "@blockcraft/protocol";
 import { parseGuildMembership } from "@blockcraft/protocol";
 import { BOW_DRAW_FULL_MS, BOW_DRAW_MAX_HOLD_MS, BOW_DRAW_MIN_MS, bowDrawCharge,
   bowShotRangeMultiplier, bowShotTravelMultiplier } from "@blockcraft/protocol";
@@ -150,6 +154,7 @@ import { advanceCameraFollow, advanceCameraHeight, advanceCameraPosition } from 
 import { populateTownAssetKit, readyTownFallbacks, SPEED_LAB_TOWN_ASSETS, type TownFallbackFamily } from "./town-asset-kit.js";
 import { createTownPortalLandmarks } from "./town-portal-landmarks.js";
 import { createTowerFloorOneWorld, updateTowerFloorOneProgress } from "./tower-floor-one-world-v2.js";
+import { createTowerFloorTwoWorld, updateTowerFloorTwoProgress } from "./tower-floor-two-world.js";
 import { crownGateStatus } from "./crown-gate.js";
 import { createFloorOneRunUI, type FloorOneBossState } from "./floor-one-run-flow.js";
 import { createInteractionFeedback, holdStopMessage, holdStopReason, type HoldStopReason } from "./interaction-feedback.js";
@@ -382,6 +387,8 @@ import {
   characterMiningBonus,
   characterPowerBonus,
   characterSpeedMultiplier,
+  characterIntelligenceCooldownMultiplier,
+  characterIntelligencePoints,
   CHARACTER_MILESTONES,
   BUILD_PATHS,
   starterWeaponForPath,
@@ -540,10 +547,10 @@ import { CombatAudio, enemyCuePan, enemyCuesForTransition, type EnemyCue, type E
 import { LazySceneDressing } from "./lazy-scene-dressing.js";
 import { WARDEN_LOOT_BEAM_MS } from "./warden-victory-effects.js";
 import { advanceIndoorCameraBlend, indoorCameraOffset } from "./indoor-camera.js";
-import { canPlayAtTavernTable, canPlayHigherOrLower, canTalkToTavernKeeper, TAVERN_HIGH_LOW_TABLE, TAVERN_KEEPER, TAVERN_KEEPER_LINES, TAVERN_QUIZ_TABLE,
-  TAVERN_ROOM_KEEPER } from "./tavern-keeper.js";
+import { canPlayAtTavernTable, canPlayHigherOrLower, TAVERN_HIGH_LOW_TABLE, TAVERN_KEEPER_LINES, TAVERN_QUIZ_TABLE } from "./tavern-keeper.js";
 import { BLACKSMITH_STALL, canTradeAtBlacksmithStall } from "./blacksmith.js";
-import { FAST_WORLD_BLACKSMITH_POSITION } from "@blockcraft/protocol";
+import { TOWN_NPCS, townNpcLocation, type TownNpcInteractionUpdate } from "@blockcraft/protocol";
+import { selectInteractionCandidate, townNpcInteractionCandidate } from "./interaction-candidates.js";
 import "./styles.css";
 
 function newGuestProfileToken() {
@@ -1169,6 +1176,39 @@ let rapidPracticeRewardTitle: HTMLElement | null = null;
 let rapidPracticeRewardDetail: HTMLElement | null = null;
 let rapidPracticeRewardChoices: HTMLElement | null = null;
 const status = document.querySelector<HTMLElement>("#status")!;
+const towerFloorSelector = document.querySelector<HTMLElement>("#tower-floor-selector")!;
+const towerFloorSelectorList = document.querySelector<HTMLElement>("#tower-floor-selector-list")!;
+const towerFloorSelectorProgress = document.querySelector<HTMLElement>("#tower-floor-selector-progress")!;
+const towerFloorSelectorClose = document.querySelector<HTMLButtonElement>("#tower-floor-selector-close")!;
+towerFloorSelectorClose.addEventListener("click", () => { towerFloorSelector.hidden = true; });
+function showTowerFloorDirectory(update: TowerFloorDirectoryUpdate): void {
+  towerFloorSelectorList.replaceChildren();
+  for (const entry of update.entries) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "tower-floor-choice";
+    button.dataset.status = entry.status;
+    button.disabled = !entry.unlocked;
+    const state = entry.status === "cleared" ? "CLEARED · REPLAY"
+      : entry.status === "available" ? "AVAILABLE"
+        : entry.status === "construction" ? "UNDER CONSTRUCTION" : `LOCKED · ${entry.requirement}`;
+    button.innerHTML = `<span class="tower-floor-choice-number">${entry.floor}</span>`
+      + `<span class="tower-floor-choice-copy"><strong>${entry.name}</strong><span>${entry.levelLabel}</span></span>`
+      + `<span class="tower-floor-choice-state">${state}</span>`;
+    if (entry.unlocked) button.addEventListener("click", () => {
+      if (!room) return;
+      towerFloorSelector.hidden = true;
+      portalTravelPendingUntil = performance.now() + 2_000;
+      portalTransition.depart();
+      status.textContent = `Travelling to Floor ${entry.floor} · ${entry.name}…`;
+      room.send("tower:floor-enter", { floor: entry.floor });
+    });
+    towerFloorSelectorList.append(button);
+  }
+  towerFloorSelectorProgress.textContent = update.highestFloorCleared > 0
+    ? `Highest floor cleared: ${update.highestFloorCleared}` : "Highest floor cleared: none";
+  towerFloorSelector.hidden = false;
+}
 const towerChronicleLabel = document.createElement("aside");
 towerChronicleLabel.id = "tower-chronicle-label";
 towerChronicleLabel.hidden = true;
@@ -1195,11 +1235,25 @@ const potionShopStatus = document.querySelector<HTMLElement>("#potion-shop-statu
 const quizTablePrompt = document.querySelector<HTMLElement>("#quiz-table-prompt")!;
 const highLowTablePrompt = document.querySelector<HTMLElement>("#high-low-table-prompt")!;
 const tavernKeeperPrompt = document.querySelector<HTMLElement>("#tavern-keeper-prompt")!;
+const maraNpcDefinition = TOWN_NPCS.mara;
+tavernKeeperPrompt.childNodes[0]!.textContent = `${maraNpcDefinition.name.toUpperCase()} · ${maraNpcDefinition.title.toUpperCase()} `;
+tavernKeeperPrompt.querySelector("small")!.textContent = `Press E to ${maraNpcDefinition.prompt.toLowerCase()}`;
 const tavernRest = document.querySelector<HTMLButtonElement>("#tavern-rest")!;
 const tavernBind = document.querySelector<HTMLButtonElement>("#tavern-bind")!;
 const tavernBindStatus = document.querySelector<HTMLElement>("#tavern-bind-status")!;
 const tavernBountyList = document.querySelector<HTMLElement>("#tavern-bounty-list")!;
 const blacksmithPrompt = document.querySelector<HTMLElement>("#blacksmith-prompt")!;
+const smithNpcDefinition = TOWN_NPCS["smith-brom"];
+blacksmithPrompt.childNodes[0]!.textContent = `${smithNpcDefinition.name.toUpperCase()} · ${smithNpcDefinition.title.toUpperCase()} `;
+blacksmithPrompt.querySelector("small")!.textContent = `Press E to ${smithNpcDefinition.prompt.toLowerCase()}`;
+const townHealerPrompt = document.querySelector<HTMLElement>("#town-healer-prompt")!;
+const healerNpcDefinition = TOWN_NPCS["healer-lyra"];
+townHealerPrompt.childNodes[0]!.textContent = `${healerNpcDefinition.name.toUpperCase()} · ${healerNpcDefinition.title.toUpperCase()} `;
+townHealerPrompt.querySelector("small")!.textContent = `Press E to ${healerNpcDefinition.prompt.toLowerCase()}`;
+const guildStewardPrompt = document.querySelector<HTMLElement>("#guild-steward-prompt")!;
+const guildStewardNpcDefinition = TOWN_NPCS["guild-steward-elin"];
+guildStewardPrompt.childNodes[0]!.textContent = `${guildStewardNpcDefinition.name.toUpperCase()} · ${guildStewardNpcDefinition.title.toUpperCase()} `;
+guildStewardPrompt.querySelector("small")!.textContent = `Press E to ${guildStewardNpcDefinition.prompt.toLowerCase()}`;
 const playerTradePrompt = document.querySelector<HTMLButtonElement>("#player-trade-prompt")!;
 const playerTradeName = document.querySelector<HTMLElement>("#player-trade-name")!;
 const blacksmithPanel = document.querySelector<HTMLElement>("#blacksmith-panel")!;
@@ -1294,6 +1348,7 @@ const characterPoints = document.querySelector<HTMLElement>("#character-points")
 const statPower = document.querySelector<HTMLElement>("#stat-power")!;
 const statVitality = document.querySelector<HTMLElement>("#stat-vitality")!;
 const statAgility = document.querySelector<HTMLElement>("#stat-agility")!;
+const statIntelligence = document.querySelector<HTMLElement>("#stat-intelligence")!;
 const statMining = document.querySelector<HTMLElement>("#stat-mining")!;
 const levelUpPanel = document.querySelector<HTMLElement>("#level-up-panel")!;
 const levelUpTitle = document.querySelector<HTMLElement>("#level-up-title")!;
@@ -1405,6 +1460,11 @@ progressionNoticeLater.addEventListener("click", () => {
 });
 const characterStatButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-character-stat]")];
 let pendingStatChoice: { stat: CharacterStatId; checkTimer: number; recoveryTimer: number | null } | null = null;
+function progressionStatPoints(update: ProgressionUpdate, stat: CharacterStatId): number {
+  if (stat === "strength") return update.strengthPoints;
+  if (stat === "perception") return update.perceptionPoints;
+  return update[`${stat}Points`];
+}
 function clearPendingStatChoice(): void {
   if (!pendingStatChoice) return;
   window.clearTimeout(pendingStatChoice.checkTimer);
@@ -1412,10 +1472,18 @@ function clearPendingStatChoice(): void {
   pendingStatChoice = null;
 }
 function refreshStatChoiceButtons(): void {
+  const recommendations = ({
+    tank: ["vitality", "strength"], mage: ["intelligence", "perception"],
+    assassin: ["agility", "strength"], thief: ["agility", "perception"],
+    ranger: ["perception", "agility"], healer: ["intelligence", "vitality"],
+  } as Record<BuildPathId, CharacterStatId[]>);
+  const preferred = new Set<CharacterStatId>(lastBuildPathUpdate?.selectedPathId
+    ? recommendations[lastBuildPathUpdate.selectedPathId] : []);
   for (const button of characterStatButtons) {
     const stat = button.dataset.characterStat as CharacterStatId;
+    button.dataset.recommended = String(preferred.has(stat));
     button.disabled = statChoiceDisabled(localCharacterProgression.unspentStatPoints,
-      localCharacterProgression[`${stat}Points`], pendingStatChoice !== null, MAX_CHARACTER_STAT_POINTS);
+      progressionStatPoints(localCharacterProgression, stat), pendingStatChoice !== null, MAX_CHARACTER_STAT_POINTS);
   }
 }
 levelUpCallingAction.addEventListener("click", () => {
@@ -1687,7 +1755,7 @@ if (
 ) {
   throw new Error("Silver Depths route shell is missing required elements");
 }
-if ([playerLevel, inventoryLevel, characterPoints, statPower, statVitality, statAgility, statMining, levelUpPanel, levelUpTitle, levelUpMessage, levelUpPoints].some(element => !element) || characterStatButtons.length !== 4) {
+if ([playerLevel, inventoryLevel, characterPoints, statPower, statVitality, statAgility, statIntelligence, statMining, levelUpPanel, levelUpTitle, levelUpMessage, levelUpPoints].some(element => !element) || characterStatButtons.length !== 5) {
   throw new Error("Character progression shell is missing required elements");
 }
 
@@ -2430,6 +2498,7 @@ if (tavernRoomRequested) {
   if (camera.camera) { camera.camera.clearColor = new pc.Color(.12, .075, .045); camera.camera.farClip = 48; }
 }
 let towerFloorOneWorld: pc.Entity | null = null;
+let towerFloorTwoWorld: pc.Entity | null = null;
 type TowerChronicleFloorVisual = { floor: number; victory: pc.Entity[]; locked: pc.Entity[] };
 const towerChronicleFloors: TowerChronicleFloorVisual[] = [];
 const towerChronicleProceduralCore: pc.Entity[] = [];
@@ -2569,7 +2638,7 @@ const drawFastWorldMap = (position: { x: number; z: number }, facingYawDegrees: 
   ctx.fillStyle = "#071511"; ctx.fillRect(0, 0, width, height);
   const palette: Record<string, string> = {
     town: "#315d49", greenwood: "#315b31", mistfen: "#274e4b", "sunken-coast": "#52634f",
-    "southern-quarry": "#6a4d31", "ashen-reach": "#593333",
+    "southern-quarry": "#6a4d31", "ashen-reach": "#593333", "tower-floor-2": "#67351f",
   };
   const drawRegion = (id: string, name: string, minX: number, maxX: number, minZ: number, maxZ: number): void => {
     const a = fastWorldMapPoint(minX, minZ, width, height);
@@ -2584,8 +2653,11 @@ const drawFastWorldMap = (position: { x: number; z: number }, facingYawDegrees: 
       ctx.textAlign = "center"; ctx.fillText(name.toUpperCase(), (a.x + b.x) / 2, a.y + 12);
     }
   };
-  const inTowerFloor = FAST_WORLD_TOWN_ONLY && position.x >= TOWER_FLOOR_ONE.bounds.minX - 4;
-  if (inTowerFloor) drawRegion("tower-floor-1", "Floor 1 · Overgrown Rampart",
+  const inTowerFloorTwo = FAST_WORLD_TOWN_ONLY && position.x >= TOWER_FLOOR_TWO.bounds.minX - 4;
+  const inTowerFloor = FAST_WORLD_TOWN_ONLY && !inTowerFloorTwo && position.x >= TOWER_FLOOR_ONE.bounds.minX - 4;
+  if (inTowerFloorTwo) drawRegion("tower-floor-2", "Floor 2 · The Emberworks",
+    TOWER_FLOOR_TWO.bounds.minX, TOWER_FLOOR_TWO.bounds.maxX, TOWER_FLOOR_TWO.bounds.minZ, TOWER_FLOOR_TWO.bounds.maxZ);
+  else if (inTowerFloor) drawRegion("tower-floor-1", "Floor 1 · Overgrown Rampart",
     TOWER_FLOOR_ONE.bounds.minX, TOWER_FLOOR_ONE.bounds.maxX, TOWER_FLOOR_ONE.bounds.minZ, TOWER_FLOOR_ONE.bounds.maxZ);
   else drawRegion("town", "Town", 40, 108, 66, 146);
   for (const region of FAST_WORLD_REGION_DEFINITIONS.filter(() => !FAST_WORLD_TOWN_ONLY))
@@ -4170,6 +4242,7 @@ if (fastWorldRequested && !tavernRoomRequested) {
   if (FAST_WORLD_TOWN_ONLY) {
     createTownPortalLandmarks(app, rapidPrototypeRoot);
     towerFloorOneWorld = createTowerFloorOneWorld(app, rapidPrototypeRoot);
+    towerFloorTwoWorld = createTowerFloorTwoWorld(app, rapidPrototypeRoot);
   }
 
   const badge = document.createElement("aside");
@@ -7228,8 +7301,9 @@ let localIronSwordOwned = false;
 let localDepthsRewardFlags = 0;
 let localIsAdmin = false;
 let localCharacterProgression: ProgressionUpdate = {
-  reason: "sync", level: 1, experience: 0, experienceRequired: 40, unspentStatPoints: 0,
-  powerPoints: 0, vitalityPoints: 0, agilityPoints: 0, miningPoints: 0,
+  reason: "sync", level: 1, experience: 0, experienceRequired: 49, unspentStatPoints: 0,
+  strengthPoints: 0, powerPoints: 0, vitalityPoints: 0, agilityPoints: 0,
+  intelligencePoints: 0, perceptionPoints: 0, miningPoints: 0,
 };
 let localEquippedPower: PowerId = "shockwave";
 let localPrimaryPower: PowerId = "shockwave";
@@ -7892,12 +7966,14 @@ function renderCharacterProgression(update: ProgressionUpdate, maximumHealth = p
   powerButton.disabled = !WEAPON_TECHNIQUES_AVAILABLE || update.level < 5;
   updateTouchAbilityVisibility();
   updateControlsHelp();
-  inventoryLevel.textContent = required > 0 ? `${update.level} · ${update.experience}/${required} XP` : `${update.level} · MAX`;
-  characterPoints.textContent = update.unspentStatPoints > 0 ? `${update.unspentStatPoints} POINT${update.unspentStatPoints === 1 ? "" : "S"} AVAILABLE` : "NO POINTS AVAILABLE";
-  statPower.textContent = `${update.powerPoints} · +${characterPowerBonus(update.powerPoints)} damage`;
+  inventoryLevel.textContent = required > 0 ? `${update.level} · ${update.experience}/${required} ESSENCE` : `${update.level} · MAX`;
+  characterPoints.textContent = update.unspentStatPoints > 0 ? "LEVEL READY · CHOOSE ATTRIBUTE"
+    : required > 0 ? `${Math.max(0, required - update.experience)} ESSENCE NEEDED` : "MAXIMUM LEVEL";
+  statPower.textContent = `${update.strengthPoints} · +${characterPowerBonus(update.strengthPoints)} weapon damage`;
   statVitality.textContent = `${update.vitalityPoints} · ${maximumHealth} max HP`;
   statAgility.textContent = `${update.agilityPoints} · ${Math.round(characterSpeedMultiplier(update.agilityPoints) * 100)}% speed`;
-  statMining.textContent = `${update.miningPoints} · ×${1 + characterMiningBonus(update.miningPoints)} yield`;
+  statIntelligence.textContent = `${update.intelligencePoints} · +${update.intelligencePoints * 5} stamina · ${Math.round((1 - characterIntelligenceCooldownMultiplier(update.intelligencePoints)) * 100)}% recovery`;
+  statMining.textContent = `${update.perceptionPoints} · ×${1 + characterMiningBonus(update.perceptionPoints)} yield`;
   characterMilestones.replaceChildren(...CHARACTER_MILESTONES.map(milestone => {
     const row = document.createElement("article");
     const unlocked = update.level >= milestone.level;
@@ -7906,9 +7982,11 @@ function renderCharacterProgression(update: ProgressionUpdate, maximumHealth = p
     return row;
   }));
   activatePowerSlot(activePowerSlot, false);
-  levelUpTitle.textContent = `Level ${update.level}!`;
-  levelUpMessage.textContent = update.reason === "level_up" ? `You earned ${update.experienceGranted ?? 0} XP from ${update.source ?? "adventuring"}. Spend a permanent stat point below.` : "Spend your permanent stat points below.";
-  levelUpPoints.textContent = `${update.unspentStatPoints} point${update.unspentStatPoints === 1 ? "" : "s"} available`;
+  levelUpTitle.textContent = update.unspentStatPoints > 0 ? `Raise to Level ${update.level + 1}` : `Level ${update.level}`;
+  levelUpMessage.textContent = update.unspentStatPoints > 0
+    ? "Choose one attribute. The Essence cost rises with your total level."
+    : `Carry ${Math.max(0, required - update.experience)} more Essence to earn your next level.`;
+  levelUpPoints.textContent = required > 0 ? `COST ${required} ESSENCE · CARRYING ${update.experience}` : "MAXIMUM LEVEL";
   playerLevel.dataset.points = String(update.unspentStatPoints > 0);
   refreshStatChoiceButtons();
   updateLevelUpCallingGuide();
@@ -7955,9 +8033,9 @@ function updateLevelCelebration(now: number): void {
     const calling = callingUnlockAnnouncement(celebration.level, localBuildPathId);
     const milestone = CHARACTER_MILESTONES.find(entry => entry.level === celebration.level);
     levelCelebrationDetail.textContent = calling
-      ? `${calling.title} · ${calling.detail} A permanent stat point is also ready.`
-      : milestone ? `${milestone.name} unlocked · a permanent stat point is ready.`
-        : `A permanent stat point is ready · +${celebration.experienceGranted} XP.`;
+      ? `${calling.title} · ${calling.detail}`
+      : milestone ? `${milestone.name} unlocked.`
+        : "Level secured. Your next attribute will require more Essence.";
   }
 }
 
@@ -8376,6 +8454,7 @@ function renderBuildPath(update: BuildPathUpdate): void {
   renderAssassinJourney(update);
   const previousPathId = localBuildPathId;
   localBuildPathId = update.selectedPathId;
+  refreshStatChoiceButtons();
   assassinEdgeHud.hidden = localBuildPathId !== "assassin";
   healerGraceHud.hidden = localBuildPathId !== "healer";
   if (localBuildPathId !== "tank") localTankResolve = 0;
@@ -8616,11 +8695,13 @@ function updateDangerZone(tierValue: number, position = localPlayer.getPosition(
   const depthsProfile = depthsZone ? SILVER_DEPTHS_ATMOSPHERES[depthsZone] : null;
   const emberVault = isInEmberVault(position.x, position.z);
   const towerFloor = isInsideTowerFloorOne(position.x, position.z);
+  const towerFloorTwo = isInsideTowerFloorTwo(position.x, position.z);
   const towerSafe = towerFloor && isTowerFloorSafeZone(position);
   const dungeonDetail = dungeonAtmosphere.room === 1 ? "Split the rootbound crawlers · the return portal remains behind you"
     : dungeonAtmosphere.room === 2 ? "Use stone cover · read aimed shots and fan gaps"
       : "Root volleys become committed charges below half health";
-  const label = towerFloor ? towerSafe
+  const label = towerFloorTwo ? { name: "FLOOR 2 · THE EMBERWORKS", detail: "Greybox traversal · PvP enabled · inspect every route and collision" }
+    : towerFloor ? towerSafe
     ? { name: "FLOOR 1 SANCTUARY", detail: "Safe zone · player damage is disabled" }
     : { name: "FLOOR 1 · PVP ENABLED", detail: "Players can damage one another · killers are marked for three days" }
     : emberVault ? { name: position.x >= 232 ? "COLOSSUS FORGE" : position.x >= 223 ? "EMBER CRUCIBLE" : "THE EMBER VAULT", detail: position.x >= 232 ? "Read the Colossus · dodge the committed smash · claim its forge loot" : "Use iron pillars as cover · clear each sealed forge chamber" }
@@ -8629,13 +8710,13 @@ function updateDangerZone(tierValue: number, position = localPlayer.getPosition(
     : camp ? { name: "GREENWOOD CRAWLER CAMP", detail: "Three roaming crawlers · exposed iron on the east edge · defeat mobs and collect item drops" } : greenwood
     ? { name: "GREENWOOD OUTSKIRTS", detail: "Ancient oaks · harvest timber · Briar Crawlers roam the camp" }
     : territory ?? DANGER_ZONE_LABELS[tier]!;
-  const recommendedLevel = towerFloor ? towerSafe ? "SAFE" : "LV 1–4 · PVP"
+  const recommendedLevel = towerFloorTwo ? "LV 4–8 · PVP" : towerFloor ? towerSafe ? "SAFE" : "LV 1–4 · PVP"
     : emberVault ? position.x >= 232 ? "LV 14–16" : "LV 12–14"
     : tier === 0 ? "SAFE"
       : silverDepths ? depthsZone === "arena" ? "LV 10–12" : "LV 7–10"
       : forestDungeon ? dungeonAtmosphere.room === 3 ? "LV 10–12" : dungeonAtmosphere.room === 2 ? "LV 8–10" : "LV 6–8"
         : frontierArena ? "LV 9–12" : silverGuard ? "LV 5–8" : arena ? "LV 4–6" : worldLevelRange(territory?.tier ?? tier).label;
-  const nextKey = `${tier}:${greenwood}:${camp}:${arena}:${silverGuard}:${frontierArena}:${dungeonAtmosphere.room}:${territory?.name ?? ""}:${depthsZone}:${emberVault}:${towerFloor}:${towerSafe}:${recommendedLevel}`;
+  const nextKey = `${tier}:${greenwood}:${camp}:${arena}:${silverGuard}:${frontierArena}:${dungeonAtmosphere.room}:${territory?.name ?? ""}:${depthsZone}:${emberVault}:${towerFloor}:${towerFloorTwo}:${towerSafe}:${recommendedLevel}`;
   if (nextKey === dangerZoneKey) return;
   dangerZoneKey = nextKey;
   dangerZone.dataset.tier = String(tier);
@@ -11351,6 +11432,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   const isNorthRootWarden = mobId === TOWER_FLOOR_ONE_WARDENS[0];
   const isSouthRootWarden = mobId === TOWER_FLOOR_ONE_WARDENS[1];
   const isCrownkeeper = mobId === TOWER_FLOOR_ONE_BOSS_ID;
+  const isForgeheart = mobId === TOWER_FLOOR_TWO_BOSS_ID;
   const isAshglass = mobId.startsWith("ashglass-sentry-");
   const isBriar = mob.archetype === "briar_crawler";
   const isNorthwatch = mob.archetype === "ridge_stalker" || mob.archetype === "shard_sentry";
@@ -11362,7 +11444,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     : mob.difficultyTier === 2
       ? new pc.Color(1, 0.62, 0.08)
       : new pc.Color(0.35, 0.9, 0.28);
-  const bodyColor = isCrownkeeper ? new pc.Color(.18, .16, .22) : isNorthRootWarden ? new pc.Color(.22, .19, .12) : rootGuardian ? new pc.Color(.28, .24, .16)
+  const bodyColor = isForgeheart ? new pc.Color(.16, .17, .18) : isCrownkeeper ? new pc.Color(.18, .16, .22) : isNorthRootWarden ? new pc.Color(.22, .19, .12) : rootGuardian ? new pc.Color(.28, .24, .16)
     : isWatchbreaker ? new pc.Color(.25, .35, .42) : isBrute ? new pc.Color(0.38, 0.43, 0.48) : mob.archetype === "shard_sentry" ? new pc.Color(.25, .43, .52)
       : mob.archetype === "ridge_stalker" ? new pc.Color(.44, .46, .39)
         : isAshglass ? new pc.Color(0.31, 0.22, 0.2) : isCinderRam ? new pc.Color(.27, .22, .19) : isEmberHound ? new pc.Color(.3, .13, .075) : isFenBloater ? new pc.Color(.24, .34, .12) : isThornbinder ? new pc.Color(.3, .24, .1) : isSpitter ? new pc.Color(0.34, 0.29, 0.43) : isBriar ? new pc.Color(0.31, 0.19, 0.12) : new pc.Color(0.28, 0.42, 0.21);
@@ -11371,7 +11453,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   // Keep the emissive shader feature active while varying cue intensity.
   bodyMaterial.emissive.set(0.001, 0.001, 0.001);
   bodyMaterial.update();
-  const midScale = isCrownkeeper ? 1.28 : rootGuardian ? 1.2 : mob.isMiniBoss ? 1.14 : mob.isChampion ? 1.08 : 1;
+  const midScale = isForgeheart ? 1.42 : isCrownkeeper ? 1.28 : rootGuardian ? 1.2 : mob.isMiniBoss ? 1.14 : mob.isChampion ? 1.08 : 1;
   const midBody = createMidDetailMob(mob.archetype, bodyColor, midScale);
   entity.addChild(midBody);
   const lodBody = new pc.Entity("mob-distant-silhouette");
@@ -11542,6 +11624,33 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
       .setLocalEulerAngles(-5, 0, -4);
     addBox(weaponParent, "crownkeeper-blade-rune", crownCore, [.13, .65, .135], [.02, -2.17, .205]);
   }
+  if (isForgeheart) {
+    const forgeIron = coloredMaterial(new pc.Color(.11, .12, .13));
+    forgeIron.metalness = .8; forgeIron.shininess = 62; forgeIron.update();
+    const hotSteel = coloredMaterial(new pc.Color(1, .22, .025));
+    hotSteel.emissive.set(.82, .08, .005); hotSteel.update();
+    const brassTrim = coloredMaterial(new pc.Color(.62, .38, .09));
+    brassTrim.metalness = .7; brassTrim.shininess = 68; brassTrim.update();
+    addBox(bodyRoot, "forgeheart-furnace-chest", forgeIron, [1.55, .92, 1.02], [0, 1.34, -.04]);
+    elderthornHeartMaterial = hotSteel;
+    elderthornHeart = addBox(bodyRoot, "forgeheart-molten-core", hotSteel, [.42, .52, .2], [0, 1.34, .54]);
+    elderthornHeart.setLocalEulerAngles(0, 0, 45);
+    for (const side of [-1, 1]) {
+      addBox(bodyRoot, `forgeheart-pauldron-${side}`, forgeIron, [.58, .8, .78], [side * 1.02, 1.65, -.04])
+        .setLocalEulerAngles(0, 0, side * -16);
+      addBox(bodyRoot, `forgeheart-vent-${side}`, hotSteel, [.16, .62, .2], [side * 1.04, 1.7, .37]);
+      addBox(bodyRoot, `forgeheart-piston-${side}`, brassTrim, [.18, .72, .18], [side * .76, .9, -.38])
+        .setLocalEulerAngles(side * 7, 0, 0);
+    }
+    addBox(bodyRoot, "forgeheart-crown-anvil", forgeIron, [1.02, .28, .62], [0, 2.3, 0]);
+    for (const x of [-.36, 0, .36]) addBox(bodyRoot, "forgeheart-crown-vent", hotSteel,
+      [.12, .48 + (x === 0 ? .2 : 0), .14], [x, 2.56 + (x === 0 ? .08 : 0), -.02]);
+    const hammerParent = art.arms.find(arm => arm.side > 0)?.knee ?? bodyRoot;
+    addBox(hammerParent, "forgeheart-hammer-haft", brassTrim, [.15, 1.6, .15], [.05, -.94, .2])
+      .setLocalEulerAngles(-8, 0, -7);
+    addBox(hammerParent, "forgeheart-hammer-head", forgeIron, [.85, .58, .58], [.03, -1.78, .2]);
+    addBox(hammerParent, "forgeheart-hammer-core", hotSteel, [.38, .3, .61], [.03, -1.78, .2]);
+  }
   if (isAshglass) {
     const glass = coloredMaterial(new pc.Color(0.95, 0.42, 0.11));
     glass.emissive.set(0.33, 0.08, 0.015); glass.update();
@@ -11551,7 +11660,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
       spike.setLocalEulerAngles(0, 0, side * -25);
     }
   }
-  if ((mob.isChampion || mob.isMiniBoss) && !matriarch && !rootGuardian && !isWatchbreaker && !isCrownkeeper) {
+  if ((mob.isChampion || mob.isMiniBoss) && !matriarch && !rootGuardian && !isWatchbreaker && !isCrownkeeper && !isForgeheart) {
     const crestMaterial = coloredMaterial(new pc.Color(.87, .58, .16));
     const crestY = mob.archetype === "shard_sentry" ? 1.77 : isSpitter ? 1.18 : 2.02;
     addBox(bodyRoot, "champion-stone-crest", crestMaterial, [.75, .22, .28], [0, crestY, 0]);
@@ -12437,8 +12546,9 @@ function bindPlayers(joinedRoom: Room): void {
       updateTavernCoins(player.coins);
       renderCharacterProgression({ reason: "sync", level: player.level, experience: player.experience,
         experienceRequired: experienceToNextLevel(player.level), unspentStatPoints: player.unspentStatPoints,
-        powerPoints: player.powerPoints, vitalityPoints: player.vitalityPoints,
-        agilityPoints: player.agilityPoints, miningPoints: player.miningPoints }, player.maxHealth);
+        strengthPoints: player.powerPoints, powerPoints: player.powerPoints, vitalityPoints: player.vitalityPoints,
+        agilityPoints: player.agilityPoints, intelligencePoints: characterIntelligencePoints(player.maxStamina),
+        perceptionPoints: player.miningPoints, miningPoints: player.miningPoints }, player.maxHealth);
       if (isMainHandId(player.mainHandId)) updateMainHandLoadout(player.mainHandId);
       if (isSeismicMasteryId(player.seismicMastery)) updateSeismicMastery(player.seismicMastery);
       powerServerReady = isPowerId(player.equippedPower);
@@ -12508,14 +12618,17 @@ function bindPlayers(joinedRoom: Room): void {
       if (pendingStatChoice) {
         const stat = pendingStatChoice.stat;
         if (player.unspentStatPoints < localCharacterProgression.unspentStatPoints
-          || player[`${stat}Points`] > localCharacterProgression[`${stat}Points`]) clearPendingStatChoice();
+          || (stat === "strength" ? player.powerPoints : stat === "perception" ? player.miningPoints
+            : stat === "intelligence" ? characterIntelligencePoints(player.maxStamina) : player[`${stat}Points`])
+            > progressionStatPoints(localCharacterProgression, stat)) clearPendingStatChoice();
       }
       renderCharacterProgression({ reason: "sync", level: player.level, experience: player.experience,
         experienceRequired: experienceToNextLevel(player.level), unspentStatPoints: player.unspentStatPoints,
-        powerPoints: player.powerPoints, vitalityPoints: player.vitalityPoints,
-        agilityPoints: player.agilityPoints, miningPoints: player.miningPoints }, player.maxHealth);
+        strengthPoints: player.powerPoints, powerPoints: player.powerPoints, vitalityPoints: player.vitalityPoints,
+        agilityPoints: player.agilityPoints, intelligencePoints: characterIntelligencePoints(player.maxStamina),
+        perceptionPoints: player.miningPoints, miningPoints: player.miningPoints }, player.maxHealth);
     };
-    if (isLocal) for (const field of ["level", "experience", "unspentStatPoints", "powerPoints", "vitalityPoints", "agilityPoints", "miningPoints"] as const)
+    if (isLocal) for (const field of ["level", "experience", "unspentStatPoints", "powerPoints", "vitalityPoints", "agilityPoints", "maxStamina", "miningPoints"] as const)
       playerCallbacks.listen(field, updateLocalProgression);
     playerCallbacks.listen("silverDepthsRunStage", () => {
       if (isLocal) localSilverDepthsRunStage = player.silverDepthsRunStage;
@@ -13467,8 +13580,8 @@ function refreshPotionUi(): void {
   const quantity = inventoryCounts.get("healing_potion") ?? 0;
   const remaining = Math.max(0, potionCooldownUntil - (performance.now() + serverClock.offset));
   const pending = performance.now() < potionPendingUntil;
-  const nearby = canTalkToTavernKeeper(localPlayer.getPosition(), tavernRoomRequested || sceneDressing.keeperVisible,
-    tavernRoomRequested ? TAVERN_ROOM_KEEPER : TAVERN_KEEPER);
+  const nearby = Boolean(townNpcInteractionCandidate(localPlayer.getPosition(), maraNpcDefinition,
+    tavernRoomRequested || sceneDressing.keeperVisible, tavernRoomRequested ? "tavern" : "town"));
   const key = `${quantity}:${Math.ceil(remaining / 1000)}:${pending}:${nearby}:${Boolean(room)}:${tavernCoinBalance}:${potionHealth}:${potionMaxHealth}`;
   if (key === potionUiKey) return;
   potionUiKey = key;
@@ -13482,8 +13595,8 @@ function refreshPotionUi(): void {
 }
 function requestPotion(buying = false): void {
   if (!room || performance.now() < potionPendingUntil) return;
-  if (buying && !canTalkToTavernKeeper(localPlayer.getPosition(), tavernRoomRequested || sceneDressing.keeperVisible,
-    tavernRoomRequested ? TAVERN_ROOM_KEEPER : TAVERN_KEEPER)) return;
+  if (buying && !townNpcInteractionCandidate(localPlayer.getPosition(), maraNpcDefinition,
+    tavernRoomRequested || sceneDressing.keeperVisible, tavernRoomRequested ? "tavern" : "town")) return;
   potionPendingUntil = performance.now() + 3000;
   potionShopStatus.textContent = buying ? "Buying potion…" : "Drinking potion…";
   room.send(buying ? "potion:buy" : "potion:use");
@@ -13687,6 +13800,11 @@ for (const button of characterStatButtons) button.addEventListener("click", () =
   if (pendingStatChoice || localCharacterProgression.unspentStatPoints <= 0) return;
   if (!room || !worldReady || !defeatScreen.hidden) {
     levelUpMessage.textContent = "Wait until your return to town finishes, then choose a stat.";
+    return;
+  }
+  const position = localPlayer.getPosition();
+  if (!tavernRoomRequested && !isAtTownOfBeginnings() && !isTowerFloorSafeZone(position)) {
+    levelUpMessage.textContent = "Your Essence is unbanked. Rest in Town or a floor sanctuary to raise an attribute.";
     return;
   }
   const choiceRoom = room;
@@ -15194,7 +15312,15 @@ function updatePortalHold(now: number): void {
   contextButton.style.setProperty("--context-progress", `${progress * 100}%`);
   if (progress >= 1) {
     const tavernDoor = isTavernDoor(hold.portalId);
+    const opensTowerDirectory = hold.portalId === "tower-floor-1-entry";
     cancelPortalHold();
+    if (opensTowerDirectory) {
+      portalTravelPendingUntil = now + 1_000;
+      portalTransition.cancel();
+      status.textContent = "Opening the Tower directory…";
+      room.send("tower:floor-directory");
+      return;
+    }
     portalTravelPendingUntil = now + 2000;
     if (!tavernDoor) portalTransition.depart();
     room.send("portal:use", { id: hold.portalId });
@@ -15393,7 +15519,19 @@ function updateTarget(): void {
     caveEntranceSign.style.left = `${bounds.left + caveSignScreen.x * bounds.width / canvas.width}px`;
     caveEntranceSign.style.top = `${bounds.top + caveSignScreen.y * bounds.height / canvas.height}px`;
   }
-  const blacksmithNearby = worldReady && room !== null && canTradeAtBlacksmithStall(player, sceneDressing.blacksmithVisible, fastWorldRequested);
+  const blacksmithInteraction = selectInteractionCandidate([
+    fastWorldRequested && townNpcInteractionCandidate(player, smithNpcDefinition, worldReady && room !== null),
+  ]);
+  const blacksmithNearby = fastWorldRequested ? Boolean(blacksmithInteraction)
+    : worldReady && room !== null && canTradeAtBlacksmithStall(player, sceneDressing.blacksmithVisible, false);
+  const healerInteraction = selectInteractionCandidate([
+    fastWorldRequested && townNpcInteractionCandidate(player, healerNpcDefinition, worldReady && room !== null),
+  ]);
+  const healerNearby = healerInteraction?.payload === "healer-lyra";
+  const guildStewardInteraction = selectInteractionCandidate([
+    fastWorldRequested && townNpcInteractionCandidate(player, guildStewardNpcDefinition, worldReady && room !== null),
+  ]);
+  const guildStewardNearby = guildStewardInteraction?.payload === "guild-steward-elin";
   const expeditionBoardNearby = worldReady && room !== null && Math.abs(player.y - TOWN_EXPEDITION_BOARD_POSITION.y) <= 1.6
     && Math.hypot(player.x - TOWN_EXPEDITION_BOARD_POSITION.x, player.z - TOWN_EXPEDITION_BOARD_POSITION.z) <= 3;
   const chestNearby = worldReady && room !== null && sceneDressing.blacksmithVisible && isAtTownStorage(player);
@@ -15407,11 +15545,27 @@ function updateTarget(): void {
   }
   blacksmithPrompt.hidden = !blacksmithNearby || !blacksmithPanel.hidden || chestNearby;
   if (!blacksmithPrompt.hidden) {
-    const stall = fastWorldRequested ? FAST_WORLD_BLACKSMITH_POSITION : BLACKSMITH_STALL;
+    const stall = fastWorldRequested ? smithNpcDefinition.anchor : BLACKSMITH_STALL;
     const screen = camera.camera.worldToScreen(new pc.Vec3(stall.x, stall.y + 2.35, stall.z));
     const rect = canvas.getBoundingClientRect();
     blacksmithPrompt.style.left = `${rect.left + screen.x * rect.width / canvas.width}px`;
     blacksmithPrompt.style.top = `${rect.top + screen.y * rect.height / canvas.height}px`;
+  }
+  townHealerPrompt.hidden = !healerNearby;
+  if (!townHealerPrompt.hidden) {
+    const healer = healerNpcDefinition.anchor;
+    const screen = camera.camera.worldToScreen(new pc.Vec3(healer.x, healer.y + 2.35, healer.z));
+    const rect = canvas.getBoundingClientRect();
+    townHealerPrompt.style.left = `${rect.left + screen.x * rect.width / canvas.width}px`;
+    townHealerPrompt.style.top = `${rect.top + screen.y * rect.height / canvas.height}px`;
+  }
+  guildStewardPrompt.hidden = !guildStewardNearby;
+  if (!guildStewardPrompt.hidden) {
+    const steward = guildStewardNpcDefinition.anchor;
+    const screen = camera.camera.worldToScreen(new pc.Vec3(steward.x, steward.y + 2.35, steward.z));
+    const rect = canvas.getBoundingClientRect();
+    guildStewardPrompt.style.left = `${rect.left + screen.x * rect.width / canvas.width}px`;
+    guildStewardPrompt.style.top = `${rect.top + screen.y * rect.height / canvas.height}px`;
   }
   const activeQuizTable = TAVERN_QUIZ_TABLE;
   const quizTableNearby = !tavernRoomRequested && canPlayAtTavernTable(player, sceneDressing.keeperVisible, activeQuizTable);
@@ -15430,11 +15584,15 @@ function updateTarget(): void {
     highLowTablePrompt.style.left = `${rect.left + screen.x * rect.width / canvas.width}px`;
     highLowTablePrompt.style.top = `${rect.top + screen.y * rect.height / canvas.height}px`;
   }
-  const keeperNearby = canTalkToTavernKeeper(player, tavernRoomRequested || sceneDressing.keeperVisible,
-    tavernRoomRequested ? TAVERN_ROOM_KEEPER : TAVERN_KEEPER);
+  const maraLocation = tavernRoomRequested ? "tavern" : "town";
+  const keeperInteraction = selectInteractionCandidate([
+    townNpcInteractionCandidate(player, maraNpcDefinition,
+      tavernRoomRequested || sceneDressing.keeperVisible, maraLocation),
+  ]);
+  const keeperNearby = keeperInteraction?.payload === "mara";
   tavernKeeperPrompt.hidden = !keeperNearby || !tavernDialogue.hidden;
   if (!tavernKeeperPrompt.hidden) {
-    const keeper = tavernRoomRequested ? TAVERN_ROOM_KEEPER : TAVERN_KEEPER;
+    const keeper = townNpcLocation(maraNpcDefinition, maraLocation).anchor;
     const screen = camera.camera.worldToScreen(new pc.Vec3(keeper.x, keeper.y + 1.35, keeper.z));
     const rect = canvas.getBoundingClientRect();
     tavernKeeperPrompt.style.left = `${rect.left + screen.x * rect.width / canvas.width}px`;
@@ -15459,7 +15617,7 @@ function updateTarget(): void {
   const ashenReliquaryPreviewNearby = canPreviewAshenReliquary();
   const ashenReliquaryNearby = ashenReliquaryClaimNearby || ashenReliquaryPreviewNearby;
   if (!roadsideChoice.hidden && roadsideChoice.dataset.id !== roadsideEncounter?.id) closeRoadsideChoice();
-  updatePlayerTradePrompt(Boolean(nearbyLoot || ashenReliquaryNearby || nearbyForestPortal || nearbyInnAction || roleOpportunity || roadsideEncounter || expeditionBoardNearby || blacksmithNearby || highLowNearby || quizTableNearby || keeperNearby || chestNearby));
+  updatePlayerTradePrompt(Boolean(nearbyLoot || ashenReliquaryNearby || nearbyForestPortal || nearbyInnAction || roleOpportunity || roadsideEncounter || expeditionBoardNearby || blacksmithNearby || healerNearby || guildStewardNearby || highLowNearby || quizTableNearby || keeperNearby || chestNearby));
   const contextAction = tabletContextAction({
     tradePlayer: Boolean(nearbyTradePlayerId),
     recoveryBag: Boolean(nearbyRecoveryBag),
@@ -15474,6 +15632,7 @@ function updateTarget(): void {
     blacksmith: blacksmithNearby,
     quiz: highLowNearby || quizTableNearby,
     keeper: keeperNearby,
+    npcAction: healerNearby ? "Receive Care" : guildStewardNearby ? "Guild" : null,
   });
   contextButton.hidden = contextAction === null;
   if (contextAction) {
@@ -15485,7 +15644,7 @@ function updateTarget(): void {
     contextButton.style.setProperty("--context-progress", "0%");
     delete contextButton.dataset.hold;
   }
-  const nextKey = `${interactionMode}:${targetKey}:${currentTarget?.block ?? -1}:${availability}:${combatKey}:${keeperNearby}:${highLowNearby}:${quizTableNearby}:${blacksmithNearby}:${expeditionBoardNearby}:${chestNearby}:${nearbyLoot}:${ashenReliquaryNearby}:${nearbyForestPortal}:${nearbyRecoveryBag}:${nearbyTradePlayerId}:${roleOpportunity?.id ?? "none"}:${roadsideEncounter?.id ?? "none"}`;
+  const nextKey = `${interactionMode}:${targetKey}:${currentTarget?.block ?? -1}:${availability}:${combatKey}:${keeperNearby}:${healerNearby}:${guildStewardNearby}:${highLowNearby}:${quizTableNearby}:${blacksmithNearby}:${expeditionBoardNearby}:${chestNearby}:${nearbyLoot}:${ashenReliquaryNearby}:${nearbyForestPortal}:${nearbyRecoveryBag}:${nearbyTradePlayerId}:${roleOpportunity?.id ?? "none"}:${roadsideEncounter?.id ?? "none"}`;
   if (nextKey === targetStateKey) return;
   targetStateKey = nextKey;
   const tint = availability === "ready" ? hit?.block === Block.SilverOre ? new pc.Color(0.55, 0.88, 1) : new pc.Color(1, 0.73, 0.25) : new pc.Color(1, 0.25, 0.2);
@@ -15532,9 +15691,11 @@ function updateTarget(): void {
   }
   else if (expeditionBoardNearby) targetLabel.textContent = "Forest Dungeon Gate · press E to open a solo or party run";
   else if (blacksmithNearby) targetLabel.textContent = "Blacksmith stall · press E to trade ore or forge equipment";
+  else if (healerNearby) targetLabel.textContent = `${healerNpcDefinition.name} · ${healerNpcDefinition.title} — press E for care and Calling guidance`;
+  else if (guildStewardNearby) targetLabel.textContent = `${guildStewardNpcDefinition.name} · ${guildStewardNpcDefinition.title} — press E to found or manage a guild`;
   else if (highLowNearby) targetLabel.textContent = "Higher or Lower table · press E or Play";
   else if (quizTableNearby) targetLabel.textContent = "Double or Quit table · press E or Play";
-  else if (keeperNearby) targetLabel.textContent = `${TAVERN_KEEPER.name} · Tavernkeeper — press E or Talk`;
+  else if (keeperNearby) targetLabel.textContent = `${maraNpcDefinition.name} · ${maraNpcDefinition.title} — press E or Talk`;
   else if (interactionMode === "combat" && combatMob) {
     const intent = combatMob.visual.state.combatState === "windup"
       ? combatMob.visual.state.aimCommitted ? " · AIM LOCKED — DODGE OR MOVE CLEAR" : " · ATTACK WINDUP"
@@ -16548,9 +16709,13 @@ function updateBossHud(now: number): void {
   const floorBossNearby = isInsideTowerFloorOne(position.x, position.z)
     && Math.hypot(position.x - TOWER_FLOOR_ONE.bossCourt.x, position.z - TOWER_FLOOR_ONE.bossCourt.z) <= 30
     && mobVisuals.has(TOWER_FLOOR_ONE_BOSS_ID);
+  const forgeheartNearby = isInsideTowerFloorTwo(position.x, position.z)
+    && Math.hypot(position.x - TOWER_FLOOR_TWO.bossCourt.x, position.z - TOWER_FLOOR_TWO.bossCourt.z) <= 32
+    && mobVisuals.has(TOWER_FLOOR_TWO_BOSS_ID);
   const trackedMiniBossId = currentWorldObjective?.kind === "miniboss" || currentWorldObjective?.kind === "hunt" ? currentWorldObjective.targetMobId : "";
   const nextBossId = inSilverDepths ? "crystal-matriarch" : isInForestDungeon(position.x, position.z) ? "forest-guardian"
     : floorBossNearby ? TOWER_FLOOR_ONE_BOSS_ID
+    : forgeheartNearby ? TOWER_FLOOR_TWO_BOSS_ID
     : isInRealmWardenArena(position.x, position.z) && mobVisuals.has("realm-stone-warden") ? "realm-stone-warden"
       : activeRealmEventId || trackedMiniBossId || "greenwood-venom-matriarch";
   const boss = mobVisuals.get(nextBossId)?.state;
@@ -16564,9 +16729,13 @@ function updateBossHud(now: number): void {
   const realmWarden = nextBossId === "realm-stone-warden";
   const realmPhase = boss ? realmBossHealthPhase(boss.health, boss.maxHealth) : 1;
   const pathChampion = Boolean(boss && /Razorhide Pack Sovereign|Viridian Brood Oracle|Worldsplitter Colossus/i.test(boss.name));
-  const floorBoss = Boolean(boss && /Crownkeeper/i.test(boss.name));
+  const floorOneBoss = nextBossId === TOWER_FLOOR_ONE_BOSS_ID;
+  const floorTwoBoss = nextBossId === TOWER_FLOOR_TWO_BOSS_ID;
+  const floorBoss = floorOneBoss || floorTwoBoss;
   const pathChampionPhase = boss ? realmBossHealthPhase(boss.health, boss.maxHealth) : 1;
-  const floorBossPhase = boss ? leaderHealthPhase(boss.health, boss.maxHealth) : 1;
+  const floorBossPhase = boss ? floorTwoBoss
+    ? towerFloorTwoForgeheartPhase(boss.health, boss.maxHealth)
+    : leaderHealthPhase(boss.health, boss.maxHealth) : 1;
   if (realmWarden && bossHudState.visible && boss?.alive && previous.alive !== true) {
     displayedRealmBossPhase = realmPhase;
     combatAudio.play("dungeonGate"); createDungeonBurst(boss.x, boss.z, "gate", boss.y + .08);
@@ -16608,18 +16777,21 @@ function updateBossHud(now: number): void {
   if (floorBoss && bossHudState.visible && boss?.alive && previous.alive !== true) {
     displayedFloorBossPhase = floorBossPhase;
     combatAudio.play("dungeonGate"); createDungeonBurst(boss.x, boss.z, "gate", boss.y + .08);
-    showCombatFeedback(floorBossPhaseTransitionMessage(floorBossPhase), "stagger");
+    showCombatFeedback(floorTwoBoss ? "THE FORGEHEART AWAKENS" : floorBossPhaseTransitionMessage(floorBossPhase), "stagger");
   } else if (floorBoss && bossHudState.visible && boss?.alive && floorBossPhase > displayedFloorBossPhase) {
     displayedFloorBossPhase = floorBossPhase;
     combatAudio.play("guardianPhase"); createDungeonBurst(boss.x, boss.z, "gate", boss.y + .08);
     cameraShakeStrength = Math.max(cameraShakeStrength, floorBossPhase === 3 ? .2 : .13);
     cameraShakeUntil = performance.now() + (floorBossPhase === 3 ? 420 : 280);
-    showCombatFeedback(floorBossPhaseTransitionMessage(floorBossPhase), "stagger");
+    showCombatFeedback(floorTwoBoss
+      ? floorBossPhase === 2 ? "PHASE 2 · FURNACE PRESSURE" : "FINAL PHASE · FORGE OVERLOAD"
+      : floorBossPhaseTransitionMessage(floorBossPhase), "stagger");
   }
   if (floorBoss && previous.alive === true && boss?.alive === false) {
     combatAudio.play("dungeonVictory"); createDungeonBurst(boss.x, boss.z, "victory", boss.y + .08);
     cameraShakeStrength = Math.max(cameraShakeStrength, .24); cameraShakeUntil = performance.now() + 520;
-    showCombatFeedback("CROWNKEEPER DEFEATED · FLOOR 1 CLEARED", "dodge");
+    showCombatFeedback(floorTwoBoss ? "FORGEHEART DEFEATED · FLOOR 2 CLEARED"
+      : "CROWNKEEPER DEFEATED · FLOOR 1 CLEARED", "dodge");
   }
   const crownOpeningLabel = nextBossId === TOWER_FLOOR_ONE_BOSS_ID && boss?.alive ? crownkeeperOpeningLabel(crownkeeperWeaponOpeningUntil, now) : "";
   const exposedLabel = crownOpeningLabel || (boss?.isMiniBoss && boss.alive ? leaderExposureLabel(leaderExposedUntil.get(nextBossId) ?? 0, now) : "");
@@ -16646,7 +16818,7 @@ function updateBossHud(now: number): void {
   const guardian = nextBossId === "forest-guardian";
   const realmBoss = /Realm Stone Warden/i.test(boss.name);
   const bruteEvent = /Stoneheart|Realm Stone Warden/i.test(boss.name);
-  bossEncounter.textContent = floorBoss ? "FLOOR 1 BOSS" : pathChampion ? "PATH CHAMPION" : boss.isMiniBoss ? "AREA MINI-BOSS" : crystal ? "SILVER DEPTHS BOSS" : guardian ? "FOREST DUNGEON BOSS" : realmBoss ? "REALM BOSS" : "SHARED WILDERNESS EVENT";
+  bossEncounter.textContent = floorTwoBoss ? "FLOOR 2 BOSS" : floorOneBoss ? "FLOOR 1 BOSS" : pathChampion ? "PATH CHAMPION" : boss.isMiniBoss ? "AREA MINI-BOSS" : crystal ? "SILVER DEPTHS BOSS" : guardian ? "FOREST DUNGEON BOSS" : realmBoss ? "REALM BOSS" : "SHARED WILDERNESS EVENT";
   const leaderPhase = leaderHealthPhase(boss.health, boss.maxHealth);
   const championPhase = realmBossHealthPhase(boss.health, boss.maxHealth);
   bossPhase.textContent = !boss.alive ? "DEFEATED" : floorBoss ? floorBossPhaseLabel(boss.name, leaderPhase, Boolean(exposedLabel)) : pathChampion ? pathChampionPhaseLabel(boss.name, championPhase, boss.combatState === "recover")
@@ -16677,10 +16849,11 @@ function updateBossHud(now: number): void {
     : "";
   bossAttackLabel.textContent = boss.alive
     ? crownOpeningLabel ? "PARTY OPENING · STRIKE OR REGROUP"
-      : floorBoss ? crownkeeperAttackCue(boss.attackPattern, boss.combatState, tabletControlsQuery.matches).label
+      : floorOneBoss ? crownkeeperAttackCue(boss.attackPattern, boss.combatState, tabletControlsQuery.matches).label
+        : floorTwoBoss ? leaderChargeGuidance(boss.attackPattern, boss.combatState, boss.targetId, room?.sessionId ?? "")
         : formationLabel || elderthornAttack || leaderChargeGuidance(boss.attackPattern, boss.combatState, boss.targetId, room?.sessionId ?? "")
     : "ENCOUNTER COMPLETE";
-  bossAttackLabel.dataset.response = floorBoss ? crownkeeperAttackCue(boss.attackPattern, boss.combatState, tabletControlsQuery.matches).response : "none";
+  bossAttackLabel.dataset.response = floorOneBoss ? crownkeeperAttackCue(boss.attackPattern, boss.combatState, tabletControlsQuery.matches).response : "none";
   bossAttackLabel.dataset.state = boss.combatState;
   bossHealthFill.style.transform = `scaleX(${Math.max(0, Math.min(1, boss.health / Math.max(1, boss.maxHealth)))})`;
   bossHealthText.textContent = `${Math.max(0, boss.health)} / ${boss.maxHealth}`;
@@ -17865,8 +18038,28 @@ function requestWorldInteraction(): void {
     && Math.hypot(boardPosition.x - TOWN_EXPEDITION_BOARD_POSITION.x, boardPosition.z - TOWN_EXPEDITION_BOARD_POSITION.z) <= 3) {
     openDungeonBoard(); return;
   }
-  if (canTradeAtBlacksmithStall(localPlayer.getPosition(), sceneDressing.blacksmithVisible, fastWorldRequested)) {
+  const smithInteraction = fastWorldRequested ? selectInteractionCandidate([
+    townNpcInteractionCandidate(localPlayer.getPosition(), smithNpcDefinition, worldReady && room !== null),
+  ]) : null;
+  if (smithInteraction?.payload === "smith-brom"
+    || (!fastWorldRequested && canTradeAtBlacksmithStall(localPlayer.getPosition(), sceneDressing.blacksmithVisible, false))) {
     openBlacksmith();
+    return;
+  }
+  const healerInteraction = fastWorldRequested ? selectInteractionCandidate([
+    townNpcInteractionCandidate(localPlayer.getPosition(), healerNpcDefinition, worldReady && room !== null),
+  ]) : null;
+  if (healerInteraction?.payload === "healer-lyra") {
+    room?.send("npc:interact", { npcId: "healer-lyra", action: "care" });
+    status.textContent = "Lyra is assessing your wounds…";
+    return;
+  }
+  const guildStewardInteraction = fastWorldRequested ? selectInteractionCandidate([
+    townNpcInteractionCandidate(localPlayer.getPosition(), guildStewardNpcDefinition, worldReady && room !== null),
+  ]) : null;
+  if (guildStewardInteraction?.payload === "guild-steward-elin") {
+    room?.send("npc:interact", { npcId: "guild-steward-elin", action: "guild" });
+    status.textContent = "Elin is opening the guild register…";
     return;
   }
   if (tavernRoomRequested && canPlayHigherOrLower(localPlayer.getPosition(), true)) {
@@ -17877,8 +18070,11 @@ function requestWorldInteraction(): void {
     openTavernQuiz();
     return;
   }
-  if (canTalkToTavernKeeper(localPlayer.getPosition(), tavernRoomRequested || sceneDressing.keeperVisible,
-    tavernRoomRequested ? TAVERN_ROOM_KEEPER : TAVERN_KEEPER)) {
+  const maraInteraction = selectInteractionCandidate([
+    townNpcInteractionCandidate(localPlayer.getPosition(), maraNpcDefinition,
+      tavernRoomRequested || sceneDressing.keeperVisible, tavernRoomRequested ? "tavern" : "town"),
+  ]);
+  if (maraInteraction?.payload === "mara") {
     advanceTavernDialogue();
     return;
   }
@@ -19125,6 +19321,7 @@ app.on("update", (dt: number) => {
   if (fastWorldRequested && !tavernRoomRequested) {
     const townTime = customUpdateStartedAt * .001;
     const playerPosition = localPlayer.getPosition();
+    if (towerFloorTwoWorld) towerFloorTwoWorld.enabled = isInsideTowerFloorTwo(playerPosition.x, playerPosition.z);
     const floorOneActive = Boolean(towerFloorOneWorld && isInsideTowerFloorOne(playerPosition.x, playerPosition.z));
     if (floorOneActive && towerFloorOneWorld) {
       const northAlive = mobVisuals.get(TOWER_FLOOR_ONE_WARDENS[0])?.state.alive !== false;
@@ -19163,6 +19360,35 @@ app.on("update", (dt: number) => {
       if (playerPosition.x >= 340) void requestTowerFloorOneFortressAssets(app, towerFloorOneWorld);
     } else floorOneRunUI.update({ active: false, x: playerPosition.x, z: playerPosition.z,
       northAlive: true, southAlive: true, bossState: "sealed" });
+    const floorTwoActive = Boolean(towerFloorTwoWorld && isInsideTowerFloorTwo(playerPosition.x, playerPosition.z));
+    if (floorTwoActive && towerFloorTwoWorld) {
+      const furnaceAlive = mobVisuals.get(TOWER_FLOOR_TWO_REGULATORS[0])?.state.alive !== false;
+      const quenchAlive = mobVisuals.get(TOWER_FLOOR_TWO_REGULATORS[1])?.state.alive !== false;
+      const forgeheart = mobVisuals.get(TOWER_FLOOR_TWO_BOSS_ID)?.state;
+      const forgeheartAlive = forgeheart?.alive === true;
+      updateTowerFloorTwoProgress(towerFloorTwoWorld, furnaceAlive, quenchAlive, forgeheartAlive);
+      const remaining = Number(furnaceAlive) + Number(quenchAlive);
+      const heading = crownGateLabel.querySelector("strong")!;
+      const detail = crownGateLabel.querySelector("span")!;
+      heading.textContent = remaining ? `CRUCIBLE SEALED · ${remaining} REGULATOR${remaining === 1 ? "" : "S"} REMAIN`
+        : forgeheart?.alive === false ? "FORGEHEART DEFEATED" : "CRUCIBLE OPEN · FORGEHEART AWAKENED";
+      detail.textContent = remaining
+        ? `${furnaceAlive ? "Furnace" : "Furnace secured"} · ${quenchAlive ? "Quench" : "Quench secured"}`
+        : "Enter the eastern court and defeat the Floor 2 boss.";
+      crownGateLabel.classList.toggle("open", remaining === 0);
+      const gateDistance = Math.hypot(playerPosition.x - TOWER_FLOOR_TWO.crucibleGate.x,
+        playerPosition.z - TOWER_FLOOR_TWO.crucibleGate.z);
+      if (gateDistance < 36 && camera.camera) {
+        const screen = camera.camera.worldToScreen(new pc.Vec3(TOWER_FLOOR_TWO.crucibleGate.x, 16.5,
+          TOWER_FLOOR_TWO.crucibleGate.z));
+        const rect = canvas.getBoundingClientRect();
+        if (screen.z > 0 && screen.x > 0 && screen.x < rect.width && screen.y > 0 && screen.y < rect.height) {
+          crownGateLabel.hidden = false;
+          crownGateLabel.style.left = `${rect.left + screen.x}px`;
+          crownGateLabel.style.top = `${rect.top + screen.y}px`;
+        }
+      }
+    }
     const coastWaterStartedAt = performance.now();
     animateCoastWater(dt, playerPosition.z > 140 && playerPosition.z < 200
       && playerPosition.x > 30 && playerPosition.x < 112);
@@ -21104,6 +21330,12 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       `${message.bossName} trophy raised in the Town Chronicle · highest floor ${message.highestFloorCleared}`, "landmark");
     social.event(`TOWER CHRONICLE · Floor ${message.floor} conquered · return to Town for the victory ceremony.`);
   });
+  room.onMessage("tower:floor-directory", (message: TowerFloorDirectoryUpdate) => {
+    if (!fastWorldRequested || message.entries.length === 0) return;
+    resetMovementControls();
+    portalTransition.cancel();
+    showTowerFloorDirectory(message);
+  });
   room.onMessage("floor:attempt-ended", (summary: FloorAttemptSummary) => {
     if (!fastWorldRequested || summary.floor !== 1) return;
     latestFloorAttemptSummary = summary;
@@ -21170,7 +21402,8 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     // travel veil lifts so J/click immediately drives the equipped weapon.
     if (fastWorldRequested && spawn.entering) restoreCombatMode();
     status.textContent = spawn.entering
-      ? spawn.x >= TOWER_FLOOR_ONE.bounds.minX ? "Floor 1 entered · defeat both Root Wardens, then challenge the Crownkeeper."
+      ? isInsideTowerFloorTwo(spawn.x, spawn.z) ? "Floor 2 entered · stabilise both regulators, then challenge the Forgeheart."
+        : spawn.x >= TOWER_FLOOR_ONE.bounds.minX ? "Floor 1 entered · defeat both Root Wardens, then challenge the Crownkeeper."
         : isInEmberVault(spawn.x, spawn.z) ? "Ember Vault entered · breach the forge chambers and defeat the Colossus."
         : spawn.y < 5 ? "Silver Depths entered · the dungeon clock is running." : "Forest Dungeon lobby · assemble, ready up, then begin the run."
       : isInEmberVault(spawn.x, spawn.z) ? "Returned to the Ember Vault."
@@ -21541,7 +21774,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     bossHudFingerprint = "";
   });
   room.onMessage("progression:update", (update: ProgressionUpdate) => {
-    if (pendingStatChoice && (update.reason === "choice" || update.reason === "sync")) clearPendingStatChoice();
+    if (pendingStatChoice && (update.reason === "choice" || update.reason === "level_up" || update.reason === "sync")) clearPendingStatChoice();
     renderCharacterProgression(update);
     if (update.reason === "sync" && levelUpPanel.hidden === false && update.unspentStatPoints > 0)
       levelUpMessage.textContent = "Your points are up to date. Choose a permanent stat improvement.";
@@ -21549,15 +21782,15 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       const milestone = CHARACTER_MILESTONES.find(entry => entry.level === update.level);
       const calling = callingUnlockAnnouncement(update.level, localBuildPathId);
       const callingReminder = !localBuildPathId && update.level >= 2 ? " · choose a Calling in Town for abilities" : "";
-      pendingLevelCelebrations.push({ level: update.level, experienceGranted: update.experienceGranted ?? 0 });
+      pendingLevelCelebrations.push({ level: update.level, experienceGranted: 0 });
       status.textContent = calling
         ? `Level ${update.level}! ${calling.title}. ${calling.detail}`
         : milestone && milestone.id !== "first_power" && milestone.id !== "first_special"
-        ? `Level ${update.level}! ${milestone.name} unlocked. Choose a permanent character improvement.`
-        : `Level ${update.level}! Choose a permanent character improvement${callingReminder}.`;
-      social.event(`Reached level ${update.level} · ${calling?.title ?? "stat point ready"}.`);
+        ? `Level ${update.level}! ${milestone.name} unlocked.`
+        : `Level ${update.level}! ${String(update.source ?? "ATTRIBUTE").toUpperCase()} increased${callingReminder}.`;
+      social.event(`Reached level ${update.level} · ${String(update.source ?? "attribute")} increased.`);
     } else if (update.reason === "experience" && update.experienceGranted) {
-      status.textContent = `+${update.experienceGranted} XP · ${update.source ?? "adventuring"}`;
+      status.textContent = `+${update.experienceGranted} ESSENCE · ${update.source ?? "adventuring"}`;
     } else if (update.reason === "choice") {
       showCombatFeedback(`${String(update.source ?? "STAT").toUpperCase()} IMPROVED`, "dodge");
     }
@@ -22139,6 +22372,22 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     status.textContent = message.message;
     showCombatFeedback(message.phase === "healed" ? `+${message.healed} HP` : message.phase === "bought" ? "+1 POTION" : message.message, message.phase === "error" ? "hurt" : "dodge");
     refreshPotionUi();
+  });
+  room.onMessage("npc:update", (message: TownNpcInteractionUpdate) => {
+    status.textContent = message.message;
+    if (message.health !== undefined && message.maxHealth !== undefined)
+      updatePlayerHealth(message.health, message.maxHealth);
+    if (message.stamina !== undefined && message.maxStamina !== undefined)
+      updatePlayerStamina(message.stamina, message.maxStamina);
+    showCombatFeedback(message.ok ? "SANCTUARY RESTORED" : "SERVICE UNAVAILABLE", message.ok ? "dodge" : "hurt");
+    if (message.practiceCalling === "healer") {
+      abilityPracticeCalling.value = "healer";
+      renderPracticeAbilities();
+      abilityPracticeOpen.dataset.recommended = "true";
+      abilityPracticeOpen.title = "Lyra recommends practising Field Mend, Renewal and Resurrection";
+      window.setTimeout(() => { delete abilityPracticeOpen.dataset.recommended; }, 8_000);
+    }
+    if (message.ok && message.openPanel === "guild") partyUI.openGuild(message.message);
   });
   room.onMessage("tavern:service", (message: TavernServiceUpdate) => {
     tavernServicePending = false;

@@ -203,6 +203,8 @@ export function pathChampionPhaseLabel(name: string, phase: 1 | 2 | 3, recoverin
 }
 
 export function floorBossPhaseLabel(name: string, phase: 1 | 2 | 3, recovering = false): string {
+  if (/Forgeheart/i.test(name)) return `PHASE ${phase} · ${recovering ? "CORE COOLING · PUNISH"
+    : phase === 1 ? "HAMMER CALIBRATION" : phase === 2 ? "FURNACE PRESSURE" : "FORGE OVERLOAD"}`;
   if (!/Crownkeeper/i.test(name)) return "";
   if (recovering) return `PHASE ${phase} · CROWN EXPOSED`;
   return `PHASE ${phase} · ${phase === 1 ? "ROYAL JUDGEMENT" : phase === 2 ? "BRIARS RALLY" : "THE LAST DECREE"}`;

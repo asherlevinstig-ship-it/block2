@@ -1,4 +1,5 @@
 import { towerFloorOneGroundHeight } from "./tower-floor-one.js";
+import { towerFloorTwoGroundHeight } from "./tower-floor-two.js";
 
 /** Shared authored heightfield. Keeping this in protocol means rendering,
  * movement, targeting and server reconciliation agree on the same terrain. */
@@ -42,6 +43,7 @@ export function fastWorldGroundHeight(x: number, z: number): number {
     return r2>=1?0:h*(1-r2)**3;
   };
   if (x >= 296 && x <= 392 && z >= 56 && z <= 156) return towerFloorOneGroundHeight(x, z);
+  if (x >= 410 && x <= 542 && z >= 42 && z <= 170) return towerFloorTwoGroundHeight(x, z);
   if (x >= 39 && x <= 109 && z >= 65 && z <= 147) return 8 + fastWorldTownTerraceOffset(x, z);
   if (x >= 40 && x <= 104 && z >= 148 && z <= 188) {
     // Low dune ridges frame the routes while the southern shore falls gently

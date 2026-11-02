@@ -1,4 +1,4 @@
-import { FAST_WORLD_TOWN_BOUNDS, RAPID_PRACTICE_ARENA, TOWER_FLOOR_ONE } from "@blockcraft/protocol";
+import { FAST_WORLD_TOWN_BOUNDS, RAPID_PRACTICE_ARENA, TOWER_FLOOR_ONE, TOWER_FLOOR_TWO } from "@blockcraft/protocol";
 import type { CameraOrbit } from "./camera-orbit.js";
 import { FIRST_PERSON_NEUTRAL_ORBIT_PITCH, type CameraViewMode } from "./camera-view.js";
 
@@ -15,6 +15,11 @@ export function towerPortalArrival(position: { x: number; y: number; z: number }
   if (near(TOWER_FLOOR_ONE.entry)) return {
     title: TOWER_FLOOR_ONE.name,
     detail: "Sanctuary · SAFE · Follow the causeway ahead to the first court. Return portal behind you.",
+    cameraYaw: Math.PI,
+  };
+  if (near(TOWER_FLOOR_TWO.entry)) return {
+    title: TOWER_FLOOR_TWO.name,
+    detail: "Greybox traversal · Intake Hall ahead · Cooling Hub connects both regulator loops.",
     cameraYaw: Math.PI,
   };
   if (near(RAPID_PRACTICE_ARENA.spawn)) {

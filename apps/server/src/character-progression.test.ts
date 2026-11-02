@@ -1,24 +1,28 @@
 import { describe, expect, it } from "vitest";
 import { PlayerState } from "./schema.js";
 import { chooseCharacterStat, grantCharacterExperience, mobExperience, progressionAttackBonus, progressionMiningBonus, progressionSpeedMultiplier } from "./character-progression.js";
-import { blacksmithRequiredLevel, enemyLevelForTier, enemyThreat, experienceLevelMultiplier, milestoneUnlocked, worldLevelRange } from "@blockcraft/protocol";
+import { blacksmithRequiredLevel, characterIntelligencePoints, enemyLevelForTier, enemyThreat, experienceLevelMultiplier, milestoneUnlocked, worldLevelRange } from "@blockcraft/protocol";
 
 describe("character progression", () => {
-  it("levels through multiple thresholds and grants one choice per level", () => {
+  it("banks Essence until the player buys one level and attribute", () => {
     const player = new PlayerState();
     const update = grantCharacterExperience(player, 100, "test");
-    expect(update).toMatchObject({ reason: "level_up", level: 3, experience: 5, unspentStatPoints: 2 });
+    expect(update).toMatchObject({ reason: "experience", level: 1, experience: 100, unspentStatPoints: 1 });
+    expect(chooseCharacterStat(player, "vitality")).toMatchObject({ reason: "level_up", level: 2, experience: 51 });
   });
 
   it("applies permanent bounded stat choices", () => {
-    const player = new PlayerState(); player.unspentStatPoints = 6;
-    expect(chooseCharacterStat(player, "vitality")).toMatchObject({ reason: "choice", vitalityPoints: 1 });
+    const player = new PlayerState(); player.experience = 100_000; player.unspentStatPoints = 1;
+    expect(chooseCharacterStat(player, "vitality")).toMatchObject({ reason: "level_up", vitalityPoints: 1 });
     expect([player.maxHealth, player.health]).toEqual([6, 6]);
-    chooseCharacterStat(player, "power"); chooseCharacterStat(player, "power");
-    chooseCharacterStat(player, "agility"); chooseCharacterStat(player, "mining"); chooseCharacterStat(player, "mining");
+    chooseCharacterStat(player, "strength"); chooseCharacterStat(player, "strength");
+    chooseCharacterStat(player, "agility"); chooseCharacterStat(player, "perception"); chooseCharacterStat(player, "perception");
+    chooseCharacterStat(player, "intelligence");
     expect(progressionAttackBonus(player)).toBe(1);
-    expect(progressionSpeedMultiplier(player)).toBeCloseTo(1.02);
+    expect(progressionSpeedMultiplier(player)).toBeCloseTo(1.01);
     expect(progressionMiningBonus(player)).toBe(1);
+    expect([player.maxStamina, player.stamina]).toEqual([105, 105]);
+    expect(characterIntelligencePoints(player.maxStamina)).toBe(1);
   });
 
   it("awards more experience for dangerous enemies", () => {

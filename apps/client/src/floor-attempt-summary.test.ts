@@ -19,8 +19,8 @@ describe("compact defeat summary copy", () => {
     expect(floorAttemptSummaryCopy({ ...summary, boss: { health: 25, maxHealth: 52, lastSeen: true } }).boss).toContain("last seen");
     expect(floorAttemptSummaryCopy({ ...summary, boss: { health: 0, maxHealth: 52 } }).boss).toContain("defeated");
   });
-  it("handles maximum level without showing a misleading 0/0 XP bar", () => {
-    const copy = floorAttemptSummaryCopy({ ...summary, kept: { ...summary.kept, level: 20, experience: 0, crownFragments: 1 } });
+  it("handles maximum level without showing a misleading 0/0 Essence bar", () => {
+    const copy = floorAttemptSummaryCopy({ ...summary, kept: { ...summary.kept, level: 100, experience: 0, crownFragments: 1 } });
     expect(copy.kept).toContain("MAX LEVEL"); expect(copy.kept).not.toContain("/0"); expect(copy.kept).toContain("1 Crown Fragment");
   });
   it.each(["smash", "slam", "charge", "rocks", "warden-barrage", "venom-ring", "unknown"])("offers one actionable tip for %s", pattern => {

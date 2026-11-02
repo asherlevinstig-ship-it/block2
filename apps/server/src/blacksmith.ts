@@ -1,7 +1,7 @@
 import { BLACKSMITH_UPGRADES, EMBER_ORE_GOLD_PRICE, IRON_ORE_GOLD_PRICE, SILVER_DEPTHS_REWARDS, SILVER_ORE_GOLD_PRICE, type BlacksmithUpgradeId, type MainHandId, type SilverDepthsRewardId } from "@blockcraft/protocol";
 import { Block, TOWN_BLACKSMITH_STALL_POSITION, type BlockId } from "@blockcraft/voxel-world";
 import { BLACKSMITH_STOCK, type BlacksmithStockId } from "@blockcraft/protocol";
-import { FAST_WORLD_BLACKSMITH_POSITION } from "@blockcraft/protocol";
+import { validateTownNpcInteraction } from "./town-npcs.js";
 
 export function weaponPurchase(gold: number, quantity: number, itemId: BlacksmithStockId) {
   const price = BLACKSMITH_STOCK[itemId].price;
@@ -105,9 +105,9 @@ export function minedMineral(block: BlockId): "iron_ore" | "silver_ore" | "moons
 }
 
 export function canTradeAtBlacksmith(player: { x: number; y: number; z: number }, fastWorld = false): boolean {
-  const stall = fastWorld ? FAST_WORLD_BLACKSMITH_POSITION : TOWN_BLACKSMITH_STALL_POSITION;
-  return Math.abs(player.y - stall.y) <= 1.6
-    && Math.hypot(player.x - stall.x, player.z - stall.z) <= 2.6;
+  if (fastWorld) return validateTownNpcInteraction(player, "smith-brom", "blacksmith").ok;
+  return Math.abs(player.y - TOWN_BLACKSMITH_STALL_POSITION.y) <= 1.6
+    && Math.hypot(player.x - TOWN_BLACKSMITH_STALL_POSITION.x, player.z - TOWN_BLACKSMITH_STALL_POSITION.z) <= 2.6;
 }
 
 export function ironOreSale(available: number, gold: number): { sold: number; goldGranted: number } {

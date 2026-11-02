@@ -1,6 +1,5 @@
 import { TAVERN_INN_SLEEP_POSITION, TAVERN_INN_WAKE_POSITION, TAVERN_REST_DURATION_MS } from "@blockcraft/protocol";
-
-const TAVERN_KEEPER = { x: -8.2, y: 9.5, z: -1.5, range: 3.1 } as const;
+import { validateTownNpcInteraction } from "./town-npcs.js";
 
 interface TavernRestPlayer {
   x: number; y: number; z: number; yaw: number;
@@ -28,8 +27,7 @@ export function withTavernReturnBound(source: string): string {
 }
 
 export function canUseTavernKeeperService(player: { x: number; y: number; z: number }): boolean {
-  return Math.abs(player.y - TAVERN_KEEPER.y) <= 1.8
-    && Math.hypot(player.x - TAVERN_KEEPER.x, player.z - TAVERN_KEEPER.z) <= TAVERN_KEEPER.range;
+  return validateTownNpcInteraction(player, "mara", "tavern", "tavern").ok;
 }
 
 export function tavernRestActive(sleepingUntil: number | undefined, now = Date.now()): boolean {

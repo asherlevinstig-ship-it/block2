@@ -10,7 +10,7 @@ describe("speed-lab town terrain", () => {
   });
 
   it("connects every major building to the roads with a forecourt", () => {
-    expect(SPEED_LAB_TOWN_TERRAIN.filter(patch => patch.material === "forecourt")).toHaveLength(6);
+    expect(SPEED_LAB_TOWN_TERRAIN.filter(patch => patch.material === "forecourt")).toHaveLength(11);
   });
 
   it("softens hard road edges with stones, grass and planted colour", () => {

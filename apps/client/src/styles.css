@@ -1046,7 +1046,7 @@ canvas.ranged-aim { cursor: none; }
   #realm-event-meter { top: 8px; width: min(360px, calc(100vw - 16px)); padding: 8px 10px; }
   .realm-event-detail { max-width: 260px; }
 }
-#quiz-table-prompt, #high-low-table-prompt, #tavern-keeper-prompt, #blacksmith-prompt {
+#quiz-table-prompt, #high-low-table-prompt, #tavern-keeper-prompt, #blacksmith-prompt, #town-healer-prompt, #guild-steward-prompt {
   position: fixed;
   z-index: 21;
   padding: 7px 10px;
@@ -1061,11 +1061,13 @@ canvas.ranged-aim { cursor: none; }
   pointer-events: none;
   transform: translate(-50%, -100%);
 }
-#quiz-table-prompt small, #high-low-table-prompt small, #tavern-keeper-prompt small, #blacksmith-prompt small { display: block; margin-top: 3px; color: white; font-size: .7rem; font-weight: 600; letter-spacing: 0; }
-#quiz-table-prompt[hidden], #high-low-table-prompt[hidden], #tavern-keeper-prompt[hidden], #blacksmith-prompt[hidden] { display: none; }
+#quiz-table-prompt small, #high-low-table-prompt small, #tavern-keeper-prompt small, #blacksmith-prompt small, #town-healer-prompt small, #guild-steward-prompt small { display: block; margin-top: 3px; color: white; font-size: .7rem; font-weight: 600; letter-spacing: 0; }
+#quiz-table-prompt[hidden], #high-low-table-prompt[hidden], #tavern-keeper-prompt[hidden], #blacksmith-prompt[hidden], #town-healer-prompt[hidden], #guild-steward-prompt[hidden] { display: none; }
 #high-low-table-prompt { border-color: #dd5353; color: #ffd4c0; background: rgb(36 13 17 / 95%); }
 #tavern-keeper-prompt { border-color: #ffd487; background: linear-gradient(180deg, rgb(54 33 19 / 96%), rgb(24 18 14 / 96%)); color: #ffe5a9; }
 #blacksmith-prompt { border-color: #f3aa63; color: #ffc88a; }
+#town-healer-prompt { border-color: #63e7bd; color: #a7ffe3; background: linear-gradient(180deg, rgb(17 56 47 / 96%), rgb(8 27 24 / 96%)); }
+#guild-steward-prompt { border-color: #b89aff; color: #e6dcff; background: linear-gradient(180deg, rgb(55 39 82 / 96%), rgb(24 17 40 / 96%)); }
 #player-trade-prompt {
   position: fixed;
   z-index: 24;
@@ -2913,7 +2915,8 @@ html.boss-hud-active #world-objective { display: none !important; }
 .level-up-card > span { color: #f0c96f; font-size: .65rem; font-weight: 1000; letter-spacing: .16em; }
 .level-up-card h2 { margin: 7px 0; font: 700 2.2rem Georgia, serif; color: #fff0b8; }
 .level-up-card p { color: #c7d2c5; }
-.level-up-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin: 20px 0 14px; }
+.level-up-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin: 20px 0 14px; }
+.level-up-choices button:last-child { grid-column: 1 / -1; }
 .level-up-choices button { padding: 14px; border: 1px solid #a98448; border-radius: 10px; background: #19281f; color: #f0dba7; cursor: pointer; }
 .level-up-choices button:hover, .level-up-choices button:focus-visible { border-color: #ffe092; background: #2b3d2e; transform: translateY(-1px); }
 .level-up-choices button:disabled { opacity: .35; cursor: not-allowed; transform: none; }
@@ -5122,10 +5125,13 @@ body:has(#floor-one-complete:not([hidden])) :is(#floor-one-run, #touch-controls,
   font: 900 23px/1 Georgia, serif;
   text-shadow: 0 0 14px #f0b84b66;
 }
-.level-up-choices button[data-character-stat="power"]::before { content: "⚔"; }
+.level-up-choices button[data-character-stat="strength"]::before { content: "⚔"; }
 .level-up-choices button[data-character-stat="vitality"]::before { content: "♥"; }
 .level-up-choices button[data-character-stat="agility"]::before { content: "✦"; }
-.level-up-choices button[data-character-stat="mining"]::before { content: "◆"; }
+.level-up-choices button[data-character-stat="intelligence"]::before { content: "✧"; }
+.level-up-choices button[data-character-stat="perception"]::before { content: "◉"; }
+.level-up-choices button[data-recommended="true"] { border-color: #74df9b; box-shadow: inset 0 0 0 1px #74df9b55; }
+.level-up-choices button[data-recommended="true"]::after { content: "CALLING MATCH"; display: block; margin-top: 8px; color: #74df9b; font-size: 9px; letter-spacing: .12em; }
 
 @media (prefers-reduced-motion: reduce) {
   :is(.level-up-choices, .floor-upgrade-choices, .rapid-reward-choices, #build-path-candidates) > button { transition: none; }
@@ -5352,4 +5358,72 @@ body:has(#floor-one-complete:not([hidden])) :is(#floor-one-run, #touch-controls,
   .inventory-tabs { top: 57px; }
   #inventory-panel[data-tab="gear"] #inventory-preview-drawer,
   #inventory-decision-panel { top: 116px; }
+}
+
+/* Tower portal directory -------------------------------------------------- */
+#tower-floor-selector {
+  position: fixed;
+  z-index: 2050;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
+  background: radial-gradient(circle at 50% 42%, rgb(33 57 50 / 48%), rgb(2 8 7 / 88%) 65%);
+  backdrop-filter: blur(7px);
+}
+#tower-floor-selector[hidden] { display: none; }
+.tower-floor-selector-card {
+  width: min(760px, 100%);
+  max-height: min(760px, calc(100dvh - 36px));
+  overflow: auto;
+  padding: clamp(18px, 3vw, 30px);
+  border: 2px solid #ba9550;
+  border-radius: 12px;
+  background:
+    linear-gradient(135deg, transparent 16px, #0b1713 0) top left,
+    linear-gradient(-45deg, transparent 16px, #0b1713 0) bottom right;
+  background-size: 55% 55%;
+  background-repeat: no-repeat;
+  box-shadow: 0 22px 70px #000d, inset 0 0 0 4px #263d2f, inset 0 0 42px #07100c;
+  color: #efe3bb;
+}
+.tower-floor-selector-card header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.tower-floor-selector-card header span { color: #75d3ad; font: 900 .68rem/1 system-ui; letter-spacing: .18em; }
+.tower-floor-selector-card h2 { margin: 5px 0 0; font: 900 clamp(1.65rem, 4vw, 2.45rem)/1.05 Georgia, serif; color: #ffe7a3; }
+.tower-floor-selector-card > p { margin: 13px 0 18px; color: #b7c8bd; }
+#tower-floor-selector-close { width: 42px; height: 42px; border: 1px solid #806f43; border-radius: 6px; background: #17231c; color: #ecdca9; font-size: 1.5rem; cursor: pointer; }
+.tower-floor-selector-list { display: grid; gap: 10px; }
+.tower-floor-choice {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 86px;
+  padding: 12px 15px;
+  border: 1px solid #57715f;
+  border-radius: 8px;
+  background: linear-gradient(100deg, #162b21, #0b1511);
+  color: #e9e1c3;
+  text-align: left;
+  cursor: pointer;
+}
+.tower-floor-choice:hover:not(:disabled), .tower-floor-choice:focus-visible { border-color: #e0b95d; background: linear-gradient(100deg, #254733, #101d17); box-shadow: 0 0 20px #d4a83b22; }
+.tower-floor-choice:disabled { cursor: not-allowed; opacity: .58; filter: saturate(.55); }
+.tower-floor-choice-number { display: grid; place-items: center; width: 52px; height: 52px; border: 1px solid #ad8d49; border-radius: 50%; color: #ffe29a; font: 900 1.2rem/1 Georgia, serif; }
+.tower-floor-choice-copy { display: grid; gap: 3px; min-width: 0; }
+.tower-floor-choice-copy strong { overflow: hidden; color: #fff0b9; font: 900 1rem/1.15 Georgia, serif; text-overflow: ellipsis; white-space: nowrap; }
+.tower-floor-choice-copy span { color: #9fb4a7; font: 800 .68rem/1.2 system-ui; letter-spacing: .08em; }
+.tower-floor-choice-state { color: #79d9a6; font: 900 .65rem/1 system-ui; letter-spacing: .1em; text-align: right; }
+.tower-floor-choice[data-status="locked"] .tower-floor-choice-state,
+.tower-floor-choice[data-status="construction"] .tower-floor-choice-state { color: #d39b77; }
+#tower-floor-selector-progress { display: block; margin-top: 15px; color: #8fa79a; text-align: center; }
+body:has(#tower-floor-selector:not([hidden])) #touch-controls { opacity: 0; pointer-events: none; }
+
+@media (max-width: 560px) {
+  #tower-floor-selector { padding: 8px; }
+  .tower-floor-selector-card { max-height: calc(100dvh - 16px); padding: 16px 12px; border-radius: 8px; }
+  .tower-floor-choice { grid-template-columns: 48px minmax(0, 1fr); min-height: 78px; padding: 10px; }
+  .tower-floor-choice-number { width: 44px; height: 44px; }
+  .tower-floor-choice-state { grid-column: 2; text-align: left; }
 }

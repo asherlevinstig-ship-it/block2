@@ -20,4 +20,8 @@ describe("tablet context action", () => {
   it("preserves the action name supplied by a role opportunity", () => {
     expect(tabletContextAction({ roleAction: "Track" })).toEqual({ label: "Track", hold: false });
   });
+
+  it("shows a functional Town NPC action", () => {
+    expect(tabletContextAction({ npcAction: "Receive Care" })).toEqual({ label: "Receive Care", hold: false });
+  });
 });

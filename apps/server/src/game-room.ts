@@ -2,10 +2,10 @@ import { Client, Room } from "@colyseus/core";
 import { aimedWeaponFlight, bowDrawCharge, bowShotDamage, bowShotRangeMultiplier, bowShotTravelMultiplier, FOCUS_CHARGE_MIN_MS,
   focusCastCharge, focusCastDamage, focusCastRangeMultiplier, focusCastTravelMultiplier,
   mobAttackBody, ENEMY_PROJECTILE_RADIUS } from "@blockcraft/protocol";
-import { PVP_MURDERER_DURATION_MS, pvpCombatAllowed, pvpMurdererUntil, withPvpMurdererUntil,
+import { PVP_MURDERER_DURATION_MS, isTowerFloorSafeZone, pvpCombatAllowed, pvpMurdererUntil, withPvpMurdererUntil,
   type PvpHit, type PvpKill } from "@blockcraft/protocol";
 import { CROWNKEEPER_FORGE } from "@blockcraft/protocol";
-import { parseTowerProgress, withTowerFloorCleared } from "@blockcraft/protocol";
+import { parseTowerProgress, towerFloorDirectory, towerFloorUnlocked, withTowerFloorCleared } from "@blockcraft/protocol";
 import { tavernRoomFurnitureCellSolid } from "@blockcraft/protocol";
 import { TAVERN_INN_POINTS, TavernInnActionSchema, canUseTavernInnPoint,
   type TavernInnActionUpdate } from "@blockcraft/protocol";
@@ -18,13 +18,17 @@ import { GREENWOOD_MASTERY_CAP, MISTFEN_MASTERY_CAP, greenwoodMasteryRank, mistf
 import { callingStarterAbility } from "@blockcraft/protocol";
 import { fallbackMainHandForCalling, mainHandAllowedForCalling, mainHandCallingLabel, starterWeaponForPath } from "@blockcraft/protocol";
 import { experienceToNextLevel } from "@blockcraft/protocol";
-import { FAST_WORLD_TOWN_BOUNDS, FAST_WORLD_TOWN_ONLY, PRACTICE_ROOM, TOWER_FLOOR_ONE,
+import { characterIntelligenceCooldownMultiplier, characterIntelligencePoints } from "@blockcraft/protocol";
+import { FAST_WORLD_TOWN_BOUNDS, FAST_WORLD_TOWN_ONLY, PRACTICE_ROOM, TOWER_FLOOR_ONE, TOWER_FLOOR_TWO,
   TOWER_FLOOR_ONE_BOSS_ID, TOWER_FLOOR_ONE_CROWNKEEPER_COMBAT, TOWER_FLOOR_ONE_NORTH_WARDEN_COMBAT, TOWER_FLOOR_ONE_NORTH_WARDEN_ID,
   TOWER_FLOOR_ONE_SOUTH_ATTENDANTS, TOWER_FLOOR_ONE_SOUTH_WARDEN_COMBAT, TOWER_FLOOR_ONE_SOUTH_WARDEN_ID,
   TOWER_FLOOR_ONE_SPAWNS, TOWER_FLOOR_ONE_WARDENS, isInsideTowerFloorOne,
   towerFloorOneAggroRange, towerFloorOneEncounterAllows, towerFloorOneNorthWardenAttackTiming,
   towerFloorOneCrownkeeperPattern, towerFloorOneNorthWardenPattern, towerFloorOneSouthWardenPattern,
-  towerFloorOneSouthWardenWindup } from "@blockcraft/protocol";
+  towerFloorOneSouthWardenWindup, TOWER_FLOOR_TWO_BOSS_ID, TOWER_FLOOR_TWO_FORGEHEART_COMBAT,
+  TOWER_FLOOR_TWO_REGULATORS, TOWER_FLOOR_TWO_SPAWNS, isInsideTowerFloorTwo,
+  towerFloorTwoEncounterAllows, towerFloorTwoEruptingVentAt, towerFloorTwoForgeheartPattern,
+  towerFloorTwoForgeheartPhase, towerFloorTwoGroundHeight } from "@blockcraft/protocol";
 import type { SchemaType } from "@colyseus/schema";
 import { ShadowMoveInput, stepShadowMovement, type ShadowPose } from "./movement-shadow.js";
 import { FIRST_COMBAT_MOB_ID, firstCombatExperience, firstCombatHealthAfterHit, firstCombatReward, isFirstCombatSupport } from "./first-combat-training.js";
@@ -89,7 +93,7 @@ import { EMPTY_RAPID_PRACTICE_UPGRADES, RAPID_PRACTICE_ARENA, RAPID_PRACTICE_BOS
   RAPID_PRACTICE_WEAPON_CHOICES, applyRapidPracticeUpgrade, rapidPracticeAttackTiming,
   rapidAshenLavaAt, rapidAshenVentEruptingAt, rapidMistfenToxicPoolAt, rapidPracticeGuardedReward,
   rapidPracticeMovementSpeed, rapidPracticeProjectileFan, rapidPracticeProjectileTravelMs,
-  rapidPracticeSpawnAllows, TOWER_FLOOR_ONE_ZONE,
+  rapidPracticeSpawnAllows, TOWER_FLOOR_ONE_ZONE, TOWER_FLOOR_TWO_ZONE,
   rapidPracticeWeaponProfile, type RapidPracticeProjectileStyle, type RapidPracticeUpgradeId,
   type RapidPracticeUpgrades, type RapidPracticeWeaponChoiceId } from "./rapid-practice.js";
 import type { ServerPerformanceUpdate } from "@blockcraft/protocol";
@@ -119,12 +123,15 @@ import { DODGE_EXHAUSTION_MS, PERFECT_DODGE_COUNTER_MS, PERFECT_DODGE_STAMINA_RE
 import { BRUTE_SLAM, bruteSlamCenter, FRONTIER_BRUTE, frontierBrutePattern, bruteSmashHits, CRAWLER_RUSH_MS, crawlerRushDistance } from "@blockcraft/protocol";
 import { createSpitterPositioning, positionSpitter, type SpitterPositioning } from "./spitter-positioning.js";
 import { HEALING_POTION, TAVERN_MEALS, backpackAddableQuantity, backpackCapacity, backpackSlotsUsed, lootCarryCapacity,
-  TavernServiceRequestSchema, type ArmourId, type PotionUpdate, type TavernServiceUpdate } from "@blockcraft/protocol";
+  TavernServiceRequestSchema, TownNpcInteractionRequestSchema, type ArmourId, type PotionUpdate,
+  type TavernServiceUpdate, type TownNpcInteractionUpdate } from "@blockcraft/protocol";
 import { canBuyPotionAtKeeper, potionBuyError, potionUseError } from "./healing-potions.js";
 import { beginTavernRest, canUseTavernKeeperService, completeTavernRest, tavernRestActive,
   tavernReturnBound, wakeTavernRestEarly, withTavernReturnBound } from "./tavern-services.js";
 import { activateTavernMeal, endTavernMeal, parseTavernMeal, prepareTavernMeal,
   tavernMealEquipmentRoll, tavernMealStaminaRecoveryBonus } from "./tavern-meals.js";
+import { validateTownNpcInteraction } from "./town-npcs.js";
+import { receiveTownHealerCare } from "./town-healer.js";
 import { MINERAL_REGROWTH_MS, type MineralDepositStatus } from "@blockcraft/protocol";
 import { RENEWABLE_MINERAL_DEPOSITS, authoredMineralAt, SURFACE_HEIGHT, CAVE_SHALLOW_HOME, CAVE_DEEP_HOME, CAVE_HIDDEN_HOME, SILVER_DEPTHS_SPITTER_HOMES, CRYSTAL_MATRIARCH_HOME, SILVER_DEPTHS_COVER, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, SILVER_DEPTHS_CHECKPOINT_POSITION, SILVER_DEPTHS_GALLERY_GATE, SILVER_DEPTHS_BOSS_GATE, SILVER_DEPTHS_IRON_GATE, SILVER_DEPTHS_SILVER_GATE, SILVER_DEPTHS_WING_CACHES, TOWN_BLACKSMITH_STALL_POSITION, silverDepthsPingLocation, isMistfenToxicPool, isInMistfenMarsh } from "@blockcraft/voxel-world";
 import { ASHEN_REACH_ENCOUNTER_CHAIN, GREENWOOD_ENCOUNTER_CHAIN, MISTFEN_ENCOUNTER_CHAIN, NORTHWATCH_ENCOUNTER_CHAIN, SOUTHERN_QUARRY_ENCOUNTER_CHAIN, ROLE_FIELD_OPPORTUNITIES, nearestRoleFieldOpportunity, nearestRoadsideEncounter, parseRoadsideClaims, roadsideEncounterAt, withRoadsideClaim } from "@blockcraft/voxel-world";
@@ -643,6 +650,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly cinderRamTrailLast = new Map<string, { x: number; z: number }>();
   private readonly mistfenPoolDamageAt = new Map<string, number>();
   private readonly ashenTerrainDamageAt = new Map<string, number>();
+  private readonly floorTwoVentDamageAt = new Map<string, number>();
   private readonly fenwalkerWardReadyAt = new Map<string, number>();
   private readonly northwatchShardWardReadyAt = new Map<string, number>();
   private readonly ashguardWardUntil = new Map<string, number>();
@@ -872,7 +880,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.state.mobs.clear(); this.mobHomes.clear(); this.state.portals.clear();
       if (this.rapidPractice) {
         for (const spawn of FAST_WORLD_TOWN_ONLY
-          ? RAPID_PRACTICE_SPAWNS.filter(candidate => candidate.zone === "tower-floor-1" && !candidate.floorBoss)
+          ? RAPID_PRACTICE_SPAWNS.filter(candidate => (candidate.zone === "tower-floor-1"
+              || candidate.zone === "tower-floor-2") && !candidate.floorBoss)
           : RAPID_PRACTICE_SPAWNS) {
           this.registerMob(spawn.id, spawn.archetype, spawn);
           this.configureRapidWorldMob(spawn.id, this.state.mobs.get(spawn.id)!);
@@ -890,6 +899,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           const ascent = new ForestPortalState();
           Object.assign(ascent, TOWER_FLOOR_ONE.ascentPortal, { kind: "tower-locked", expiresAt: 0 });
           this.state.portals.set("tower-floor-2-locked", ascent);
+          const floorTwoReturn = new ForestPortalState();
+          Object.assign(floorTwoReturn, TOWER_FLOOR_TWO.returnPortal, { kind: "tower-return", expiresAt: 0 });
+          this.state.portals.set("tower-floor-2-return", floorTwoReturn);
+          const floorThreeAscent = new ForestPortalState();
+          Object.assign(floorThreeAscent, TOWER_FLOOR_TWO.ascentPortal, { kind: "tower-locked", expiresAt: 0 });
+          this.state.portals.set("tower-floor-3-locked", floorThreeAscent);
         }
       } else {
         this.registerMob("practice-crawler", "moss_crawler", { x: 105.5, y: 8, z: 104.5 });
@@ -1092,6 +1107,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       else if (id.startsWith("tavern-")) this.useTavernPortal(client, id);
       else this.useForestPortal(client, payload);
     });
+    this.onMessage("tower:floor-directory", client => this.sendTowerFloorDirectory(client));
+    this.onMessage("tower:floor-enter", (client, payload: unknown) => {
+      const floor = payload && typeof payload === "object" && "floor" in payload
+        && typeof payload.floor === "number" && Number.isInteger(payload.floor) ? payload.floor : 0;
+      if (floor === 1 || floor === 2) this.useTowerPortal(client, "tower-floor-1-entry", floor);
+      else client.send("portal:notice", "THAT FLOOR IS NOT YET AVAILABLE.");
+    });
     this.onMessage("recovery:collect", (client, payload: unknown) => {
       const player = this.state.players.get(client.sessionId);
       if (!player || !payload || typeof payload !== "object" || !("bagId" in payload) || typeof payload.bagId !== "string" || payload.bagId.length > 80) return;
@@ -1179,6 +1201,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.onMessage("tavern:sync", client => this.sendTavernServiceState(client));
     this.onMessage("tavern:service", (client, payload) => this.handleTavernService(client, payload));
     this.onMessage("tavern:inn-action", (client, payload) => this.handleTavernInnAction(client, payload));
+    this.onMessage("npc:interact", (client, payload) => this.handleTownNpcInteraction(client, payload));
     if (this.movementShadowEnabled) {
       // Colyseus owns one simulation timer per room. Pilot and legacy clients
       // advance on this same fixed tick while older clients remain connected.
@@ -1375,6 +1398,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.northwatchPatrolContributors.delete(client.sessionId);
     this.mistfenPoolDamageAt.delete(client.sessionId);
     this.ashenTerrainDamageAt.delete(client.sessionId);
+    this.floorTwoVentDamageAt.delete(client.sessionId);
     this.fenwalkerWardReadyAt.delete(client.sessionId);
     this.northwatchShardWardReadyAt.delete(client.sessionId);
     this.foragerCueAt.delete(client.sessionId);
@@ -1892,6 +1916,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const player = this.state.players.get(client.sessionId);
     const parsed = ProgressionChooseSchema.safeParse(payload);
     if (!player || !parsed.success) return;
+    const atFloorSanctuary = this.roomKind === "practice" && isTowerFloorSafeZone(player);
+    if (!this.isCallingTown(player) && this.roomKind !== "tavern" && !atFloorSanctuary) {
+      client.send("chat:notice", "ESSENCE UNBANKED · Rest in Town or a floor sanctuary to raise an attribute.");
+      client.send("progression:update", progressionSnapshot(player));
+      return;
+    }
     const update = chooseCharacterStat(player, parsed.data.stat);
     client.send("progression:update", update ?? progressionSnapshot(player));
     if (update) void this.persistPlayer(client.sessionId, player);
@@ -2478,6 +2508,52 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     client.send("potion:update", update);
   }
 
+  private handleTownNpcInteraction(client: Client, payload: unknown): void {
+    const player = this.state.players.get(client.sessionId);
+    const parsed = TownNpcInteractionRequestSchema.safeParse(payload);
+    if (!player || !parsed.success) return;
+    const { npcId, action } = parsed.data;
+    if (this.roomKind !== "overworld") {
+      client.send("npc:update", { npcId, action, ok: false,
+        message: "That service is not available here." } satisfies TownNpcInteractionUpdate);
+      return;
+    }
+    if (action === "guild" && npcId === "guild-steward-elin") {
+      if (!validateTownNpcInteraction(player, npcId, "guild", "town").ok) {
+        client.send("npc:update", { npcId, action, ok: false,
+          message: "Move closer to Elin outside Founders' Hall." } satisfies TownNpcInteractionUpdate);
+        return;
+      }
+      const membership = parseGuildMembership(player.huntLoadoutsJson);
+      client.send("npc:update", { npcId, action, ok: true, openPanel: "guild",
+        message: membership
+          ? `Welcome back, member of ${membership.name}. Review your roster or invite a nearby guild-free explorer.`
+          : "Name your guild here. Once founded, invite nearby guild-free explorers from the roster or their character card."
+      } satisfies TownNpcInteractionUpdate);
+      client.send("guild:update", this.guilds.snapshot(client.sessionId, this.state.players, Date.now()));
+      return;
+    }
+    if (action !== "care" || npcId !== "healer-lyra") {
+      client.send("npc:update", { npcId, action, ok: false,
+        message: "That NPC does not provide this service." } satisfies TownNpcInteractionUpdate);
+      return;
+    }
+    if (!validateTownNpcInteraction(player, npcId, "healing", "town").ok) {
+      client.send("npc:update", { npcId, action, ok: false,
+        message: "Move closer to Lyra at the Sanctuary." } satisfies TownNpcInteractionUpdate);
+      return;
+    }
+    if (player.health <= 0) {
+      client.send("npc:update", { npcId, action, ok: false,
+        message: "Return from defeat before receiving Sanctuary care." } satisfies TownNpcInteractionUpdate);
+      return;
+    }
+    const pathId = parseBuildPathState(player.huntLoadoutsJson).selectedPathId;
+    const update = receiveTownHealerCare(player, pathId);
+    void this.persistPlayer(client.sessionId, player);
+    client.send("npc:update", update);
+  }
+
   private sendTavernServiceState(client: Client, message = "Rest, prepare and choose your next climb.",
     action: TavernServiceUpdate["action"] = "sync", ok = true): void {
     const player = this.state.players.get(client.sessionId);
@@ -2785,7 +2861,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private buildPracticeArena(): void {
     // This room has its own generated chunks; no block edits reach the shared world.
     const arenas = this.rapidPractice && FAST_WORLD_TOWN_ONLY
-      ? [{ ...FAST_WORLD_TOWN_BOUNDS, floorY: RAPID_PRACTICE_ARENA.floorY }, { ...TOWER_FLOOR_ONE.bounds, floorY: RAPID_PRACTICE_ARENA.floorY }]
+      ? [{ ...FAST_WORLD_TOWN_BOUNDS, floorY: RAPID_PRACTICE_ARENA.floorY },
+          { ...TOWER_FLOOR_ONE.bounds, floorY: RAPID_PRACTICE_ARENA.floorY },
+          { ...TOWER_FLOOR_TWO.bounds, floorY: RAPID_PRACTICE_ARENA.floorY }]
       : [this.rapidPractice ? RAPID_PRACTICE_ARENA : { minX: 94, maxX: 112, minZ: 98, maxZ: 114, floorY: 7 }];
     for (const bounds of arenas) for (let x = bounds.minX; x <= bounds.maxX; x++) for (let z = bounds.minZ; z <= bounds.maxZ; z++) {
       const address = worldToChunk(x, z);
@@ -3193,7 +3271,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const spawn = RAPID_PRACTICE_SPAWNS.find(candidate => candidate.id === mobId);
     if (!spawn) return;
     const areaLeader = areaMiniBossDefinition(mobId);
-    const tier = spawn.zone === "tower-floor-1" || spawn.zone === "greenwood" ? 1 : spawn.zone === "mistfen" || spawn.zone === "sunken-coast" ? 2
+    const tier = spawn.zone === "tower-floor-1" || spawn.zone === "greenwood" ? 1
+      : spawn.zone === "tower-floor-2" || spawn.zone === "mistfen" || spawn.zone === "sunken-coast" ? 2
       : spawn.zone === "southern-quarry" ? 3 : 4;
     mob.name = spawn.name;
     mob.level = spawn.level;
@@ -3231,6 +3310,20 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       mob.rewardMultiplier = 3;
       mob.attackPattern = towerFloorOneCrownkeeperPattern(0, 1);
     }
+    if ((TOWER_FLOOR_TWO_REGULATORS as readonly string[]).includes(mobId)) {
+      mob.maxHealth = mob.health = mobId === TOWER_FLOOR_TWO_REGULATORS[0] ? 42 : 46;
+      mob.attackDamage = 2;
+      mob.speedMultiplier = mobId === TOWER_FLOOR_TWO_REGULATORS[0] ? 1.2 : 1.12;
+      mob.rewardMultiplier = 2.5;
+    }
+    if (mobId === TOWER_FLOOR_TWO_BOSS_ID) {
+      mob.maxHealth = mob.health = TOWER_FLOOR_TWO_FORGEHEART_COMBAT.health;
+      mob.attackDamage = 3;
+      mob.armor = 2;
+      mob.speedMultiplier = 1.24;
+      mob.rewardMultiplier = 3.5;
+      mob.attackPattern = towerFloorTwoForgeheartPattern(0, 1);
+    }
     this.mobBaseNames.set(mobId, mob.name);
   }
 
@@ -3238,7 +3331,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
    * public floor resets completely after every player has left for five seconds. */
   private resetTowerFloorAfterDeparture(now: number): void {
     if (!this.rapidPractice || !FAST_WORLD_TOWN_ONLY) return;
-    const occupied = [...this.state.players.values()].some(player => isInsideTowerFloorOne(player.x, player.z));
+    const occupied = [...this.state.players.values()].some(player => isInsideTowerFloorOne(player.x, player.z)
+      || isInsideTowerFloorTwo(player.x, player.z));
     if (occupied) {
       this.towerFloorWasOccupied = true;
       this.towerFloorEmptySince = 0;
@@ -3249,7 +3343,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (now - this.towerFloorEmptySince < 5_000) return;
     this.towerFloorWasOccupied = false;
     this.towerFloorEmptySince = 0;
-    const floorMobIds = new Set(TOWER_FLOOR_ONE_SPAWNS.map(spawn => spawn.id));
+    const floorMobIds = new Set([...TOWER_FLOOR_ONE_SPAWNS, ...TOWER_FLOOR_TWO_SPAWNS].map(spawn => spawn.id));
     for (const mobId of floorMobIds) {
       const mob = this.state.mobs.get(mobId);
       if (mob) this.clearMobAttackTimeline(mob);
@@ -3269,10 +3363,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
     for (const [hazardId, hazard] of this.mobHazards) if (floorMobIds.has(hazard.mobId)) this.mobHazards.delete(hazardId);
     for (const [dropId, drop] of this.state.lootDrops)
-      if (isInsideTowerFloorOne(drop.x, drop.z)) this.state.lootDrops.delete(dropId);
+      if (isInsideTowerFloorOne(drop.x, drop.z) || isInsideTowerFloorTwo(drop.x, drop.z)) this.state.lootDrops.delete(dropId);
     this.crownkeeperOpeningUntil = 0;
     this.crownkeeperDisengagedAt.delete(TOWER_FLOOR_ONE_BOSS_ID);
-    for (const spawn of TOWER_FLOOR_ONE_SPAWNS) {
+    for (const spawn of [...TOWER_FLOOR_ONE_SPAWNS, ...TOWER_FLOOR_TWO_SPAWNS]) {
       if (spawn.floorBoss) continue;
       this.registerMob(spawn.id, spawn.archetype, spawn);
       const mob = this.state.mobs.get(spawn.id)!;
@@ -3286,7 +3380,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
     for (const client of this.clients) {
       const player = this.state.players.get(client.sessionId);
-      if (!player || isInsideTowerFloorOne(player.x, player.z)) continue;
+      if (!player || isInsideTowerFloorOne(player.x, player.z) || isInsideTowerFloorTwo(player.x, player.z)) continue;
       this.clearFloorRunUpgrades(client.sessionId);
       this.floorRunTimings.delete(client.sessionId);
       this.sendFloorRunUpgrades(client, true);
@@ -3473,12 +3567,15 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const rapidSpawn = this.rapidPractice ? RAPID_PRACTICE_SPAWNS.find(spawn => spawn.id === id) : undefined;
     if (rapidSpawn) {
       const zone = rapidSpawn.zone === "tower-floor-1" ? TOWER_FLOOR_ONE_ZONE
+        : rapidSpawn.zone === "tower-floor-2" ? TOWER_FLOOR_TWO_ZONE
         : RAPID_WORLD_ZONES.find(candidate => candidate.id === rapidSpawn.zone)!;
       const encounterAllows = rapidSpawn.zone === "tower-floor-1"
         // Floor 1 has authored terraces up to y=9.55. Its encounter rule
         // already validates the pose against that local ground height; the
         // old flat-world y=8 check rejected everyone in the Crownkeeper court.
         ? towerFloorOneEncounterAllows(id, pose)
+        : rapidSpawn.zone === "tower-floor-2"
+          ? towerFloorTwoEncounterAllows(id, pose)
         : Math.abs(pose.y - 8) <= 1.5 && fastWorldEncounterAllows(id, pose);
       return pose.x >= zone.minX - 3 && pose.x <= zone.maxX + 3
         && pose.z >= zone.minZ - 3 && pose.z <= zone.maxZ + 3
@@ -4025,7 +4122,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       // resetTowerFloorAfterDeparture() rebuilds the floor. In particular,
       // respawning a Root Warden used to silently restore its seal after 90s,
       // making players defeat both Wardens inside an undocumented timer.
-      mob.respawnAt = rapidSpawn?.zone === "tower-floor-1"
+      mob.respawnAt = rapidSpawn?.zone === "tower-floor-1" || rapidSpawn?.zone === "tower-floor-2"
         ? Number.MAX_SAFE_INTEGER
         : rapidSpawn ? now + rapidSpawn.respawnMs : now + 3_000;
       const credited = rapidSpawn?.leader
@@ -4082,6 +4179,21 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
               southMs: timing.southAt ? timing.southAt - timing.enteredAt : null });
           }
         }
+        if ((TOWER_FLOOR_TWO_REGULATORS as readonly string[]).includes(mobId)) {
+          const health = Math.max(2, Math.ceil(player.maxHealth * .3));
+          const before = player.health;
+          player.health = Math.min(player.maxHealth, player.health + health);
+          player.stamina = Math.min(player.maxStamina, player.stamina + 35);
+          recipientClient?.send("floor:recovery", { x: mob.x, y: mob.y, z: mob.z,
+            health: player.health - before, stamina: 35, splitMs: 0,
+            name: mobId === TOWER_FLOOR_TWO_REGULATORS[0] ? "Furnace Regulator" : "Quench Regulator" });
+        }
+        if (mobId === TOWER_FLOOR_TWO_BOSS_ID) {
+          const towerClear = withTowerFloorCleared(player.huntLoadoutsJson, 2);
+          player.huntLoadoutsJson = towerClear.json;
+          recipientClient?.send("tower:floor-cleared", { floor: 2, firstClear: towerClear.firstClear,
+            highestFloorCleared: towerClear.progress.highestFloorCleared, bossName: "The Forgeheart" });
+        }
         void this.persistPlayer(playerId, player);
         this.clients.find(client => client.sessionId === playerId)?.send("chat:notice",
           mobId === TOWER_FLOOR_ONE_BOSS_ID
@@ -4092,11 +4204,26 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
             ? "NORTH ROOT WARDEN FELLED · northern seal broken · cache landed · Calling upgrade banked in Kit."
             : mobId === TOWER_FLOOR_ONE_SOUTH_WARDEN_ID
               ? "SOUTH ROOT WARDEN FELLED · southern seal broken · cache landed · Calling upgrade banked in Kit."
+            : mobId === TOWER_FLOOR_TWO_REGULATORS[0]
+              ? "FURNACE OVERSEER DEFEATED · heat regulator stabilised · recovery pulse released."
+            : mobId === TOWER_FLOOR_TWO_REGULATORS[1]
+              ? "QUENCH WARDEN DEFEATED · coolant regulator stabilised · recovery pulse released."
+            : mobId === TOWER_FLOOR_TWO_BOSS_ID
+              ? "FORGEHEART DEFEATED · FLOOR 2 CLEARED · the Floor 3 ascent remains under construction."
             : rapidSpawn.leader
             ? `${mob.name.toUpperCase()} DEFEATED · leader loot landed · returns in ${Math.round(rapidSpawn.respawnMs / 1000)}s.`
             : guardedReward ? `${mob.name.replace(/ keeper$/i, "").toUpperCase()} SECURED · guarded loot landed · +${coinsGranted} gold.`
             : itemDrop ? `Enemy defeated · loot landed · +${coinsGranted} gold.` : `Enemy defeated · +${coinsGranted} gold and XP.`);
       }
+      if (mobId === TOWER_FLOOR_ONE_BOSS_ID) {
+        this.state.portals.delete("tower-floor-2-locked");
+        const floorTwoEntry = new ForestPortalState();
+        Object.assign(floorTwoEntry, TOWER_FLOOR_ONE.ascentPortal, { kind: "tower-entry", expiresAt: 0 });
+        this.state.portals.set("tower-floor-2-entry", floorTwoEntry);
+        this.broadcast("portal:notice", "THE EMBERWORKS AWAKENS · Floor 2 ascent is now open.");
+      }
+      if (mobId === TOWER_FLOOR_TWO_BOSS_ID)
+        this.broadcast("portal:notice", "THE EMBERWORKS FALLS SILENT · Floor 2 is cleared. Floor 3 remains sealed.");
       this.combatContributions.clear(mobId);
       this.openAreaLeaderAfterFollowerDefeat(mobId, now);
       if (mob.isMiniBoss) {
@@ -4112,6 +4239,15 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         this.registerMob(bossSpawn.id, bossSpawn.archetype, bossSpawn);
         this.configureRapidWorldMob(bossSpawn.id, this.state.mobs.get(bossSpawn.id)!);
         this.broadcast("chat:notice", "BOTH ROOT WARDENS DEFEATED · the Crownkeeper has awakened in the eastern court.");
+        this.refreshNearbyObjectives();
+      }
+      if (rapidSpawn && (TOWER_FLOOR_TWO_REGULATORS as readonly string[]).includes(mobId)
+        && TOWER_FLOOR_TWO_REGULATORS.every(id => this.state.mobs.get(id)?.alive === false)
+        && !this.state.mobs.has(TOWER_FLOOR_TWO_BOSS_ID)) {
+        const bossSpawn = TOWER_FLOOR_TWO_SPAWNS.find(spawn => spawn.id === TOWER_FLOOR_TWO_BOSS_ID)!;
+        this.registerMob(bossSpawn.id, bossSpawn.archetype, bossSpawn);
+        this.configureRapidWorldMob(bossSpawn.id, this.state.mobs.get(bossSpawn.id)!);
+        this.broadcast("chat:notice", "BOTH REGULATORS STABILISED · the Crucible gate unlocks · THE FORGEHEART AWAKENS.");
         this.refreshNearbyObjectives();
       }
       return;
@@ -7679,7 +7815,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const graceSpent = Math.min(2, this.healerGrace.get(client.sessionId) ?? 0);
       if (graceSpent > 0) this.updateHealerGrace(client.sessionId, -graceSpent, "REVIVAL", target[0]);
       const channelMs = Math.max(1_300, 2_500 - soulboundTier * 150 - graceSpent * 300);
-      const cooldownUntil = now + definition.cooldownMs;
+      const cooldownUntil = now + Math.round(definition.cooldownMs
+        * characterIntelligenceCooldownMultiplier(characterIntelligencePoints(player.maxStamina)));
       this.callingAbilityReadyAt.set(client.sessionId, cooldownUntil);
       this.pendingResurrections.set(client.sessionId, { targetId: target[0], completesAt: now + channelMs,
         x: player.x, y: player.y, z: player.z, health: player.health, graceSpent });
@@ -7812,7 +7949,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         this.readWorldBlock,
       );
     })() : null;
-    const cooldownUntil = now + Math.round(definition.cooldownMs * (pathId === "mage" && slot === "power" ? 1 - rank * .05 : 1));
+    const pathMultiplier = pathId === "mage" && slot === "power" ? 1 - rank * .05 : 1;
+    const cooldownUntil = now + Math.round(definition.cooldownMs * pathMultiplier
+      * characterIntelligenceCooldownMultiplier(characterIntelligencePoints(player.maxStamina)));
     cooldowns.set(client.sessionId, cooldownUntil);
     if (abilityId !== "assassin_vanish") this.endStealth(client.sessionId);
     let detail = "ACTIVATED";
@@ -9111,11 +9250,27 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     void this.persistPlayer(client.sessionId, player);
   }
 
-  private useTowerPortal(client: Client, id: string): void {
+  private sendTowerFloorDirectory(client: Client): void {
     if (!this.rapidPractice || !FAST_WORLD_TOWN_ONLY) return;
-    const player = this.state.players.get(client.sessionId), portal = this.state.portals.get(id), now = Date.now();
+    const player = this.state.players.get(client.sessionId);
+    const portal = this.state.portals.get("tower-floor-1-entry");
+    if (!player || !portal || !canUseForestPortal(player, portal, Date.now())) return;
+    client.send("tower:floor-directory", towerFloorDirectory(parseTowerProgress(player.huntLoadoutsJson)));
+  }
+
+  private useTowerPortal(client: Client, id: string, selectedFloor = 0): void {
+    if (!this.rapidPractice || !FAST_WORLD_TOWN_ONLY) return;
+    const sourceId = selectedFloor > 0 ? "tower-floor-1-entry" : id;
+    const player = this.state.players.get(client.sessionId), portal = this.state.portals.get(sourceId), now = Date.now();
     if (!player || !portal || !canUseForestPortal(player, portal, now)
       || now - (this.forestTravelAt.get(client.sessionId) ?? -Infinity) < 900) return;
+    if (selectedFloor > 0 && !towerFloorUnlocked(parseTowerProgress(player.huntLoadoutsJson), selectedFloor)) {
+      client.send("portal:notice", selectedFloor === 2
+        ? "FLOOR 2 LOCKED · defeat the Floor 1 Crownkeeper before travelling directly to the Emberworks."
+        : "THAT FLOOR IS NOT YET AVAILABLE.");
+      this.sendTowerFloorDirectory(client);
+      return;
+    }
     if (id === "tower-floor-2-locked") {
       const bossAlive = this.state.mobs.get(TOWER_FLOOR_ONE_BOSS_ID)?.alive !== false;
       client.send("portal:notice", bossAlive
@@ -9123,10 +9278,22 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         : "FLOOR 1 CLEARED · Floor 2 is being forged. The return portal remains open.");
       return;
     }
-    const entering = id === "tower-floor-1-entry";
-    const destination = entering ? TOWER_FLOOR_ONE.entry : RAPID_PRACTICE_ARENA.spawn;
+    if (id === "tower-floor-3-locked") {
+      client.send("portal:notice", "FLOOR 3 SEALED · this greybox review ends at the Forgeheart ascent.");
+      return;
+    }
+    const enteringFloorOne = selectedFloor === 1 || selectedFloor === 0 && id === "tower-floor-1-entry";
+    const leavingFloorOne = id === "tower-floor-1-return";
+    const enteringFloorTwo = selectedFloor === 2 || selectedFloor === 0 && id === "tower-floor-2-entry";
+    const leavingFloorTwo = id === "tower-floor-2-return";
+    if (!enteringFloorOne && !leavingFloorOne && !enteringFloorTwo && !leavingFloorTwo) return;
+    const destination = enteringFloorOne ? TOWER_FLOOR_ONE.entry
+      : leavingFloorOne ? RAPID_PRACTICE_ARENA.spawn
+        : enteringFloorTwo ? TOWER_FLOOR_TWO.entry
+          : { x: TOWER_FLOOR_ONE.ascentPortal.x - 3, y: TOWER_FLOOR_ONE.ascentPortal.y, z: TOWER_FLOOR_ONE.ascentPortal.z };
+    const entering = enteringFloorOne || enteringFloorTwo;
     this.clearFloorRunUpgrades(client.sessionId);
-    if (entering) {
+    if (enteringFloorOne) {
       this.floorRunUpgrades.start(client.sessionId);
       this.floorRunTimings.set(client.sessionId, { enteredAt: now });
       const activatedMeal = activateTavernMeal(player);
@@ -9135,7 +9302,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         this.sendTavernServiceState(client, `${meal.name} active · ${meal.effect}.`, "sync", true);
         client.send("chat:notice", `MARA'S MEAL · ${meal.name} is active for this Floor 1 attempt.`);
       }
-    } else {
+    } else if (leavingFloorOne) {
       this.floorRunTimings.delete(client.sessionId);
       const endedMeal = endTavernMeal(player);
       if (endedMeal) this.sendTavernServiceState(client, `${TAVERN_MEALS[endedMeal].name} consumed · return to Mara to prepare another meal.`, "sync", true);
@@ -9152,8 +9319,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     client.send("player:portal", { ...destination, entering });
     client.send("world:bootstrap", this.bootstrapPayload(destination));
     client.send("portal:notice", entering
-      ? "FLOOR 1 · THE OVERGROWN RAMPART · cross three courts, defeat both Root Wardens, then challenge the Crownkeeper."
-      : "Returned to the Town of Beginnings.");
+      ? enteringFloorTwo
+        ? "FLOOR 2 · THE EMBERWORKS · GREYBOX · inspect the Intake Hall, Cooling Hub, both regulator loops and Crucible route."
+        : "FLOOR 1 · THE OVERGROWN RAMPART · cross three courts, defeat both Root Wardens, then challenge the Crownkeeper."
+      : leavingFloorTwo ? "Returned to the Floor 1 ascent court." : "Returned to the Town of Beginnings.");
     this.refreshNearbyObjectives();
     void this.persistPlayer(client.sessionId, player);
   }
@@ -9475,6 +9644,18 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (now - lastDamageAt < 900) continue;
       if (this.damagePlayer(vent ? "ashen-heat-vent" : "ashen-lava", playerId, 1, now, false, "hazard"))
         this.ashenTerrainDamageAt.set(playerId, now);
+    }
+    if (this.rapidPractice) for (const [playerId, player] of this.state.players) {
+      if (player.health <= 0 || !isInsideTowerFloorTwo(player.x, player.z)) continue;
+      const vent = towerFloorTwoEruptingVentAt(player.x, player.z, now, group => group === "intake"
+        || group === "furnace" && this.state.mobs.get(TOWER_FLOOR_TWO_REGULATORS[0])?.alive !== false
+        || group === "quench" && this.state.mobs.get(TOWER_FLOOR_TWO_REGULATORS[1])?.alive !== false
+        || group === "boss" && this.state.mobs.get(TOWER_FLOOR_TWO_BOSS_ID)?.alive === true);
+      if (!vent || Math.abs(player.y - towerFloorTwoGroundHeight(player.x, player.z)) > 1.75) continue;
+      const lastDamageAt = this.floorTwoVentDamageAt.get(playerId) ?? 0;
+      if (now - lastDamageAt < 900) continue;
+      if (this.damagePlayer(`floor2-vent:${vent.id}`, playerId, 1, now, false, "hazard"))
+        this.floorTwoVentDamageAt.set(playerId, now);
     }
   }
 
@@ -10214,7 +10395,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       }
       let currentAreaLeaderPhase: AreaLeaderPhase = 1;
       if (mob.isMiniBoss && mob.alive) {
-        currentAreaLeaderPhase = huntChampion
+        currentAreaLeaderPhase = mobId === TOWER_FLOOR_TWO_BOSS_ID
+          ? towerFloorTwoForgeheartPhase(mob.health, mob.maxHealth)
+          : huntChampion
           ? huntChampionPhase(mob.health, mob.maxHealth)
           : areaLeaderPhase(mob.health, mob.maxHealth);
         const previousPhase = this.areaLeaderPhases.get(mobId);
@@ -10299,6 +10482,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         mob.attackPattern = towerFloorOneSouthWardenPattern(mob.actionSequence);
       if (mobId === TOWER_FLOOR_ONE_BOSS_ID && mob.combatState === "idle")
         mob.attackPattern = towerFloorOneCrownkeeperPattern(mob.actionSequence, currentAreaLeaderPhase);
+      if (mobId === TOWER_FLOOR_TWO_BOSS_ID && mob.combatState === "idle")
+        mob.attackPattern = towerFloorTwoForgeheartPattern(mob.actionSequence, currentAreaLeaderPhase);
       if (!huntChampion && mob.isMiniBoss && mob.combatState === "idle") {
         if (mob.leaderRematchTier > 0)
           mob.attackPattern = leaderRematchPattern(mob.attackPattern, mob.archetype, mob.actionSequence, mob.leaderModifier);
@@ -10613,8 +10798,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const awareness = this.mobAwareness.get(mobId) ?? createMobAwareness();
       this.mobAwareness.set(mobId, awareness);
       const previousTarget = awareness.targetId;
+      const aggroRange = mobId === TOWER_FLOOR_TWO_BOSS_ID ? TOWER_FLOOR_TWO.bossCourt.radius
+        : towerFloorOneAggroRange(mobId, definition.aggroRange);
       const target = this.roamingReturning.has(mobId) || this.mobReturning.has(mobId) || now < (this.mobUnreachableUntil.get(mobId) ?? 0)
-        ? null : awareMobTarget(mob, players, awareness, now, towerFloorOneAggroRange(mobId, definition.aggroRange),
+        ? null : awareMobTarget(mob, players, awareness, now, aggroRange,
         player => hasCombatLineOfSight(mob, player, this.readWorldBlock));
       const roaming = roamingMembership(mobId);
       const packDisruptedUntil = roaming ? this.roamingPackDisruptedUntil.get(roaming.pack.id) ?? 0 : 0;
@@ -10804,7 +10991,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           ? towerFloorOneNorthWardenAttackTiming(mob.attackPattern).windupMs
         : mobId === TOWER_FLOOR_ONE_SOUTH_WARDEN_ID
           ? towerFloorOneSouthWardenWindup(mob.attackPattern)
-        : (mobId === TOWER_FLOOR_ONE_BOSS_ID || mobId === "frontier-brute" || isAreaMiniBoss(mobId) && mob.archetype === "stone_brute") && mob.attackPattern === "smash"
+        : (mobId === TOWER_FLOOR_ONE_BOSS_ID || mobId === TOWER_FLOOR_TWO_BOSS_ID
+          || mobId === "frontier-brute" || isAreaMiniBoss(mobId) && mob.archetype === "stone_brute") && mob.attackPattern === "smash"
           ? FRONTIER_BRUTE.smash.windupMs : definition.windupMs;
       const rematchTiming = leaderRematchTiming(mob.leaderModifier);
       const huntTiming = huntDifficultyTiming(this.huntChampions.get(mobId)?.difficulty

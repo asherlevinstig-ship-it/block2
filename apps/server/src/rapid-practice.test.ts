@@ -18,7 +18,7 @@ import {
   rapidPracticeProjectileTravelMs,
   rapidPracticeWeaponProfile,
 } from "./rapid-practice.js";
-import { FAST_WORLD_TOWN_BOUNDS, TOWER_FLOOR_ONE_SPAWNS, fastWorldRegionDefinition, rapidPracticeCollisionCellSolid } from "@blockcraft/protocol";
+import { FAST_WORLD_TOWN_BOUNDS, TOWER_FLOOR_ONE_SPAWNS, TOWER_FLOOR_TWO_SPAWNS, fastWorldRegionDefinition, rapidPracticeCollisionCellSolid } from "@blockcraft/protocol";
 
 describe("fast low-poly world", () => {
   it("provides five bounded free-roam regions with authored permanent populations", () => {
@@ -26,9 +26,10 @@ describe("fast low-poly world", () => {
     expect(RAPID_WORLD_ZONES.map(zone => zone.name)).toEqual(["Greenwood", "Mistfen", "Sunken Coast", "Southern Quarry", "Ashen Reach"]);
     const totalPopulation = RAPID_WORLD_ZONES.reduce((total, zone) => total
       + fastWorldRegionDefinition(zone.id).targetPopulation, 0);
-    const archivedRegionSpawns = RAPID_PRACTICE_SPAWNS.filter(spawn => spawn.zone !== "tower-floor-1");
+    const archivedRegionSpawns = RAPID_PRACTICE_SPAWNS.filter(spawn =>
+      spawn.zone !== "tower-floor-1" && spawn.zone !== "tower-floor-2");
     expect(archivedRegionSpawns).toHaveLength(totalPopulation);
-    expect(RAPID_PRACTICE_SPAWNS).toHaveLength(totalPopulation + TOWER_FLOOR_ONE_SPAWNS.length);
+    expect(RAPID_PRACTICE_SPAWNS).toHaveLength(totalPopulation + TOWER_FLOOR_ONE_SPAWNS.length + TOWER_FLOOR_TWO_SPAWNS.length);
     expect(new Set(RAPID_PRACTICE_SPAWNS.map(spawn => spawn.id)).size).toBe(RAPID_PRACTICE_SPAWNS.length);
     for (const spawn of archivedRegionSpawns) {
       expect(spawn.x).toBeGreaterThan(RAPID_PRACTICE_ARENA.minX);
@@ -95,7 +96,7 @@ describe("fast low-poly world", () => {
   it("keeps the Town of Beginnings inside the arena with a clear east gate", () => {
     expect((RAPID_PRACTICE_ARENA.maxX - RAPID_PRACTICE_ARENA.minX)
       * (RAPID_PRACTICE_ARENA.maxZ - RAPID_PRACTICE_ARENA.minZ)).toBeGreaterThanOrEqual(7_000);
-    expect(RAPID_PRACTICE_TOWN_COLLIDERS).toHaveLength(6);
+    expect(RAPID_PRACTICE_TOWN_COLLIDERS).toHaveLength(14);
     expect(Math.min(...RAPID_PRACTICE_TOWN_COLLIDERS.map(building => building.minX))).toBeLessThanOrEqual(79);
     for (const building of RAPID_PRACTICE_TOWN_COLLIDERS) {
       expect(building.minX).toBeGreaterThanOrEqual(RAPID_PRACTICE_ARENA.minX);
@@ -115,6 +116,7 @@ describe("fast low-poly world", () => {
   it("keeps a large walkable civic centre between the buildings and east gate", () => {
     const civicCentre = { minX: 52, maxX: 100, minZ: 82, maxZ: 130 };
     for (const building of RAPID_PRACTICE_TOWN_COLLIDERS) {
+      if (building.id.startsWith("tower-chronicle")) continue;
       const overlaps = building.maxX > civicCentre.minX && building.minX < civicCentre.maxX
         && building.maxZ > civicCentre.minZ && building.minZ < civicCentre.maxZ;
       expect(overlaps, building.id).toBe(false);

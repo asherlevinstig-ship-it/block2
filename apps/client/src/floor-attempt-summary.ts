@@ -12,8 +12,8 @@ export function floorAttemptSummaryCopy(summary: FloorAttemptSummary) {
     build: `${summary.calling ? BUILD_PATHS[summary.calling].name : "Calling"} build`,
     upgrades: upgrades.length ? upgrades.join(" + ") : "No Warden upgrades chosen",
     unused: summary.unusedChoices > 0 ? `${summary.unusedChoices} unused choice${summary.unusedChoices === 1 ? "" : "s"}` : "",
-    kept: `Level ${summary.kept.level} · ${nextLevel > 0 ? summary.kept.experience + "/" + nextLevel + " XP" : "MAX LEVEL"} · ${summary.kept.gold} gold · ${summary.kept.crownFragments} Crown Fragment${summary.kept.crownFragments === 1 ? "" : "s"}`,
-    log: `Floor 1 attempt ended · ${summary.wardensDefeated}/2 Warden victories · ${boss}. XP, gear, gold and Crown Fragments kept.`,
+    kept: `Level ${summary.kept.level} · ${nextLevel > 0 ? summary.kept.experience + "/" + nextLevel + " Essence" : "MAX LEVEL"} · ${summary.kept.gold} gold · ${summary.kept.crownFragments} Crown Fragment${summary.kept.crownFragments === 1 ? "" : "s"}`,
+    log: `Floor 1 attempt ended · ${summary.wardensDefeated}/2 Warden victories · ${boss}. Essence, gear, gold and Crown Fragments kept.`,
   };
 }
 
