@@ -3,6 +3,7 @@ import { TOWER_FLOOR_TWO, TOWER_FLOOR_TWO_COLLIDERS, TOWER_FLOOR_TWO_ROOMS,
   TOWER_FLOOR_TWO_ROUTES, TOWER_FLOOR_TWO_VENTS, towerFloorTwoGroundHeight,
   towerFloorTwoVentPhase } from "@blockcraft/protocol";
 import { createPaintedGroundMaterial } from "./fast-world-texture.js";
+import { FLOOR_TWO_OBJECTIVE_LIGHTS, FLOOR_TWO_WALL_SCONCES } from "./tower-floor-two-lighting.js";
 
 function finish(colour: pc.Color, emissive = 0, opacity = 1): pc.StandardMaterial {
   const material = new pc.StandardMaterial();
@@ -63,6 +64,26 @@ function arch(parent: pc.Entity, name: string, x: number, z: number, yaw: number
     [x, y + height - .5, z], [0, yaw, 0], true);
 }
 
+function wallSconce(parent: pc.Entity, id: string, x: number, z: number, yaw: number,
+  iron: pc.Material, brass: pc.Material, flame: pc.Material): { flame: pc.Entity; light: pc.Entity | null } {
+  const mount = new pc.Entity(`floor2-sconce:${id}`);
+  mount.setLocalPosition(x, towerFloorTwoGroundHeight(x, z) + 3.7, z);
+  mount.setLocalEulerAngles(0, yaw, 0);
+  parent.addChild(mount);
+  shape(mount, `floor2-sconce-bracket:${id}`, "box", iron, [.18, .82, .18], [0, -.28, .24], [24, 0, 0]);
+  shape(mount, `floor2-sconce-collar:${id}`, "cylinder", brass, [.42, .18, .42], [0, .02, .57]);
+  const flameEntity = shape(mount, `floor2-sconce-flame:${id}`, "cone", flame,
+    [.34, .82, .34], [0, .52, .58]);
+  const spec = FLOOR_TWO_WALL_SCONCES.find(candidate => candidate.id === id)!;
+  if (!spec.castsLight) return { flame: flameEntity, light: null };
+  const light = new pc.Entity(`floor2-sconce-light:${id}`);
+  light.addComponent("light", { type: "omni", color: new pc.Color(1, .38, .1), intensity: .82,
+    range: 11, castShadows: false });
+  light.setLocalPosition(0, .58, .76);
+  mount.addChild(light);
+  return { flame: flameEntity, light };
+}
+
 /** Navigation-first representation of the Emberworks. Deliberately limited
  * to structural masses and landmarks until traversal and collision pass. */
 export function createTowerFloorTwoWorld(app: pc.Application, parent: pc.Entity): pc.Entity {
@@ -121,6 +142,11 @@ export function createTowerFloorTwoWorld(app: pc.Application, parent: pc.Entity)
       [(wall.minX + wall.maxX) * .5, wall.maxY + .14, (wall.minZ + wall.maxZ) * .5]);
   }
 
+  // Sconces create a readable breadcrumb trail through the dark floor. Every
+  // flame is emissive, while only alternating fixtures own a real omni light.
+  const sconces = FLOOR_TWO_WALL_SCONCES.map(spec =>
+    wallSconce(root, spec.id, spec.x, spec.z, spec.yaw, iron, brass, ember));
+
   // Entry framing keeps the arrival view clear while immediately showing the forge axis.
   arch(root, "floor2-pressure-door", 423, 106, 90, 7, 7, darkStone, hotIron);
   arch(root, "floor2-crucible-gate", TOWER_FLOOR_TWO.crucibleGate.x, TOWER_FLOOR_TWO.crucibleGate.z,
@@ -171,14 +197,28 @@ export function createTowerFloorTwoWorld(app: pc.Application, parent: pc.Entity)
     shape(root, "floor2-chimney-rim", "cylinder", iron, [4.2, .8, 4.2], [x, y + height, z]);
   }
 
-  const orangeLight = new pc.Entity("floor2-crucible-light");
-  orangeLight.addComponent("light", { type: "omni", color: new pc.Color(1, .25, .04), intensity: 1.1,
-    range: 35, castShadows: false });
-  orangeLight.setLocalPosition(510, 17, 106); root.addChild(orangeLight);
-  const blueLight = new pc.Entity("floor2-quench-light");
-  blueLight.addComponent("light", { type: "omni", color: new pc.Color(.08, .55, 1), intensity: .7,
-    range: 24, castShadows: false });
-  blueLight.setLocalPosition(480, 15, 142); root.addChild(blueLight);
+  const objectiveLights = FLOOR_TWO_OBJECTIVE_LIGHTS.map(spec => {
+    const objectiveLight = new pc.Entity(`floor2-objective-light:${spec.id}`);
+    objectiveLight.addComponent("light", { type: "omni", color: new pc.Color(...spec.colour),
+      intensity: spec.intensity, range: spec.range, castShadows: false });
+    objectiveLight.setLocalPosition(spec.x, spec.y, spec.z);
+    root.addChild(objectiveLight);
+    return { entity: objectiveLight, intensity: spec.intensity, phase: spec.x * .17 + spec.z * .11 };
+  });
+
+  let lightingElapsed = 0;
+  app.on("update", (dt: number) => {
+    if (!root.enabled) return;
+    lightingElapsed += dt;
+    for (const [index, sconce] of sconces.entries()) {
+      const pulse = 1 + Math.sin(lightingElapsed * (8.2 + index * .07) + index * 1.9) * .1;
+      sconce.flame.setLocalScale(.34 * pulse, .82 * (1 + (pulse - 1) * 1.5), .34 * pulse);
+      if (sconce.light?.light) sconce.light.light.intensity = .82 + (pulse - 1) * 1.8;
+    }
+    for (const objective of objectiveLights)
+      if (objective.entity.light) objective.entity.light.intensity = objective.intensity
+        * (1 + Math.sin(lightingElapsed * 2.1 + objective.phase) * .035);
+  });
 
   return root;
 }
