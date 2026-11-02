@@ -636,8 +636,9 @@ export const BUILD_PATH_SPECIALIZATIONS = {
     { id: "chronomancer", name: "Chronomancer", role: "Interrupt dangerous moments", effect: "Your first spell each encounter delays an enemy windup by 1.5 seconds.", trial: "Delay 5 dangerous enemy attacks.", trialTarget: 5, capstone: "SECOND HAND · Delay a second windup in each encounter." },
   ],
   assassin: [
-    { id: "executioner", name: "Executioner", role: "Commit to the kill", effect: "Shadowstep's empowered strike deals +4 damage.", trial: "Land 15 empowered killing blows.", trialTarget: 15, capstone: "DEATHBLOW · Empowered killing blows restore 20 stamina." },
-    { id: "phantom", name: "Phantom", role: "Disappear again", effect: "Shadowstep concealment lasts longer and hastens your Calling Power.", trial: "Strike from Shadowstep 20 times.", trialTarget: 20, capstone: "STEALTH · Shadowstep fully refreshes Calling Power." },
+    { id: "executioner", name: "Reaper", role: "The perfect executioner", effect: "Create openings, build Edge and unleash Final Judgement at five segments.", trial: "Land 15 empowered killing blows.", trialTarget: 15, capstone: "FINAL JUDGEMENT · Executions restore 20 stamina." },
+    { id: "phantom", name: "Bladedancer", role: "The uncatchable duelist", effect: "Perfect evasions create Flow Strikes, longer concealment and faster Calling recovery.", trial: "Strike from a perfect-evasion opening 20 times.", trialTarget: 20, capstone: "PHANTOM TEMPO · Flow Strikes fully refresh Calling Power." },
+    { id: "venomblade", name: "Venomblade", role: "The patient predator", effect: "Build three venom doses, then exploit an opening to trigger Catalytic Strike.", trial: "Trigger 15 Catalytic Strikes.", trialTarget: 15, capstone: "PERFECT CATALYST · Catalytic Strike deals +5 damage and heavily slows." },
   ],
   thief: [
     { id: "trickster", name: "Trickster", role: "Control the pursuit", effect: "Smoke Decoy reaches farther and conceals you longer.", trial: "Divert 40 pursuing enemies.", trialTarget: 40, capstone: "GRAND ILLUSION · Smoke Decoy also staggers diverted enemies." },
@@ -730,7 +731,7 @@ export function nextCallingWeaponStage(pathId: BuildPathId, rank: number): Calli
   const nextRank = Math.max(0, Math.floor(rank)) + 1;
   return nextRank > 4 ? null : CALLING_WEAPON_PROGRESSION[pathId][nextRank]!;
 }
-export const BuildPathRequestSchema = z.object({ action: z.enum(["sync", "choose", "specialize"]), pathId: z.enum(["tank", "mage", "assassin", "thief", "ranger", "healer"]).optional(), specializationId: z.enum(["guardian", "juggernaut", "arcanist", "elementalist", "spellguard", "pyromancer", "runebinder", "chronomancer", "executioner", "phantom", "trickster", "plunderer", "marksman", "trapper", "lifebinder", "field_medic"]).optional() }).strict();
+export const BuildPathRequestSchema = z.object({ action: z.enum(["sync", "choose", "specialize"]), pathId: z.enum(["tank", "mage", "assassin", "thief", "ranger", "healer"]).optional(), specializationId: z.enum(["guardian", "juggernaut", "arcanist", "elementalist", "spellguard", "pyromancer", "runebinder", "chronomancer", "executioner", "phantom", "venomblade", "trickster", "plunderer", "marksman", "trapper", "lifebinder", "field_medic"]).optional() }).strict();
 export type BuildPathAffinity = { pathId: BuildPathId; score: number; reasons: string[] };
 export type BuildPathUpdate = { selectedPathId: BuildPathId | null; rank: number; xp: number; nextRankXp: number | null;
   selectedCallingAbilityId: CallingAbilityId | null;
@@ -2403,6 +2404,15 @@ export interface CombatHit {
   contactKind?: "blade" | "crescent";
   /** Horizontal attacker-to-target distance at contact, before knockback. */
   contactDistance?: number;
+  /** Skill-created Assassin opening consumed by this hit. */
+  assassinOpening?: "ambush" | "counter" | "flank" | "interrupt" | "stagger" | "marked";
+  /** Current Assassin Edge resource after this hit. */
+  assassinEdge?: number;
+  assassinEdgeGained?: boolean;
+  assassinEdgeDecayAt?: number;
+  /** Path payoff triggered by this hit. */
+  assassinPayoff?: "final_judgement" | "flow_strike" | "catalytic_strike";
+  assassinVenomStacks?: number;
 }
 
 export const ROOTBOUND_FINISHER = { radius: 2.35, damage: 1, rootMs: 650 } as const;

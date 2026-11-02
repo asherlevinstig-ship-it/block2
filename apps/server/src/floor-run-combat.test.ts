@@ -4,7 +4,7 @@ import { CALLING_ABILITY_OPTIONS, FLOOR_RUN_UPGRADES, TOWER_FLOOR_ONE_NORTH_WARD
   type BuildPathId, type CallingAbilityId } from "@blockcraft/protocol";
 import { WorldRoom } from "./game-room.js";
 import { MobState, PlayerState, WorldState } from "./schema.js";
-import { chooseBuildPath, grantBuildPathXp, parseBuildPathState, serializeBuildPathState } from "./build-paths.js";
+import { chooseBuildPath, chooseBuildSpecialization, grantBuildPathXp, parseBuildPathState, serializeBuildPathState } from "./build-paths.js";
 
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 function fixture(path: BuildPathId = "assassin", ability?: CallingAbilityId) {
@@ -96,6 +96,31 @@ describe("authoritative Floor 1 upgrade rewards", () => {
 });
 
 describe("class weapon and guard effects", () => {
+  it("turns a fifth Reaper opening into Final Judgement", () => {
+    const f = fixture("assassin");
+    const build = chooseBuildSpecialization(parseBuildPathState(f.player.huntLoadoutsJson), "assassin", "executioner");
+    f.player.huntLoadoutsJson = serializeBuildPathState(build);
+    f.internal.assassinEdge.set("hero", { segments: 4, lastOpening: "counter", lastGainAt: 9_000 });
+    f.mob.combatState = "stagger";
+    f.hit();
+    expect(f.broadcast).toHaveBeenCalledWith("combat:hit", expect.objectContaining({
+      assassinOpening: "stagger", assassinPayoff: "final_judgement", assassinEdge: 0,
+    }));
+  });
+
+  it("makes Venomblade consume three doses only when it exploits an opening", () => {
+    const f = fixture("assassin");
+    const build = chooseBuildSpecialization(parseBuildPathState(f.player.huntLoadoutsJson), "assassin", "venomblade");
+    f.player.huntLoadoutsJson = serializeBuildPathState(build);
+    f.internal.assassinVenom.set("hero:target", { stacks: 2, expiresAt: 12_000 });
+    f.mob.combatState = "stagger";
+    f.hit();
+    expect(f.broadcast).toHaveBeenCalledWith("combat:hit", expect.objectContaining({
+      assassinOpening: "stagger", assassinPayoff: "catalytic_strike", assassinVenomStacks: 0,
+    }));
+    expect(f.internal.rangerSlows.get("target")).toMatchObject({ multiplier: .55 });
+  });
+
   it.each([
     ["assassin_flank", "assassin"], ["assassin_open", "assassin"], ["assassin_finish", "assassin"],
     ["thief_distraction", "thief"], ["thief_opening", "thief"], ["mage_distance", "mage"],

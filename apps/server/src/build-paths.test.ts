@@ -69,4 +69,11 @@ describe("hidden build paths", () => {
       expect(specialized.specializations.mage).toBe(specializationId);
     }
   });
+  it("offers Reaper, Bladedancer and Venomblade as permanent Assassin paths", () => {
+    for (const specializationId of ["executioner", "phantom", "venomblade"] as const) {
+      const veteran = grantBuildPathXp(chooseBuildPath(parseBuildPathState("{}"), "assassin"), 70).state;
+      expect(chooseBuildSpecialization(veteran, "assassin", specializationId).specializations.assassin)
+        .toBe(specializationId);
+    }
+  });
 });

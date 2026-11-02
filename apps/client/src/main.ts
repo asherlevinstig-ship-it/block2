@@ -1501,6 +1501,28 @@ const specialPickerButtons = [...document.querySelectorAll<HTMLButtonElement>("#
 const callingSpecialPicker = document.querySelector<HTMLButtonElement>("#special-picker [data-calling-special]")!;
 const controlsHelp = document.querySelector<HTMLElement>("#controls-help")!;
 const combatReticle = document.querySelector<HTMLElement>("#combat-reticle")!;
+const assassinEdgeHud = document.querySelector<HTMLElement>("#assassin-edge")!;
+const assassinEdgePips = [...assassinEdgeHud.querySelectorAll<HTMLElement>("i")];
+const assassinEdgeCount = assassinEdgeHud.querySelector<HTMLElement>("small")!;
+let localAssassinEdge = 0;
+let assassinEdgeDecayTimer = 0;
+function renderAssassinEdge(edge: number, gained = false): void {
+  localAssassinEdge = Math.max(0, Math.min(5, edge));
+  assassinEdgeCount.textContent = `${localAssassinEdge} / 5`;
+  assassinEdgeHud.setAttribute("aria-label", `Assassin Edge, ${localAssassinEdge} of five`);
+  assassinEdgePips.forEach((pip, index) => pip.classList.toggle("active", index < localAssassinEdge));
+  if (gained) {
+    assassinEdgeHud.classList.remove("gained"); void assassinEdgeHud.offsetWidth; assassinEdgeHud.classList.add("gained");
+  }
+}
+function scheduleAssassinEdgeDecay(decayAt?: number): void {
+  window.clearTimeout(assassinEdgeDecayTimer);
+  if (!decayAt || localAssassinEdge <= 0) return;
+  assassinEdgeDecayTimer = window.setTimeout(() => {
+    renderAssassinEdge(localAssassinEdge - 1);
+    scheduleAssassinEdgeDecay(Date.now() + 6_000);
+  }, Math.max(0, decayAt - Date.now()));
+}
 const tabletAimGuide = document.querySelector<HTMLElement>("#tablet-aim-guide")!;
 const combatFeedback = document.querySelector<HTMLElement>("#combat-feedback")!;
 const damageOverlay = document.querySelector<HTMLElement>("#damage-overlay")!;
@@ -8336,6 +8358,7 @@ function renderBuildPath(update: BuildPathUpdate): void {
   renderAssassinJourney(update);
   const previousPathId = localBuildPathId;
   localBuildPathId = update.selectedPathId;
+  assassinEdgeHud.hidden = localBuildPathId !== "assassin";
   if (localBuildPathId !== "tank") localTankResolve = 0;
   updateTankResolvePresentation();
   document.documentElement.dataset.calling = update.selectedPathId ?? "unbound";
@@ -21830,6 +21853,30 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
             ? `EXECUTION!  −${message.damage}`
           : hitLabel,
       );
+      if (message.assassinEdge !== undefined) {
+        const edge = Math.max(0, Math.min(5, message.assassinEdge));
+        assassinEdgeHud.hidden = false;
+        renderAssassinEdge(edge, message.assassinEdgeGained);
+        scheduleAssassinEdgeDecay(message.assassinEdgeDecayAt);
+      }
+      if (message.assassinOpening) {
+        const openingLabel = ({ ambush: "AMBUSH", counter: "COUNTER OPENING", flank: "EXPOSED FLANK",
+          interrupt: "INTERRUPTED", stagger: "STAGGER OPENING", marked: "MARKED WEAKNESS" } as const)[message.assassinOpening];
+        const payoffLabel = message.assassinPayoff === "final_judgement" ? "FINAL JUDGEMENT"
+          : message.assassinPayoff === "catalytic_strike" ? "CATALYTIC STRIKE"
+            : message.assassinPayoff === "flow_strike" ? "FLOW STRIKE" : openingLabel;
+        showCombatFeedback(`${payoffLabel}  −${message.damage}`,
+          message.assassinPayoff ? "stagger" : "dodge");
+        status.textContent += ` · ${openingLabel} · Edge ${message.assassinEdge ?? 0}/5.`;
+        if (message.assassinVenomStacks !== undefined && !message.assassinPayoff)
+          status.textContent += ` · Venom ${message.assassinVenomStacks}/3.`;
+        if (mob) createRangedPopup(new pc.Vec3(mob.state.x, mob.state.y + mob.healthBarY + .8, mob.state.z),
+          payoffLabel, message.assassinPayoff ? "stagger" : "melee", false,
+          message.assassinPayoff === "catalytic_strike" ? [.52, 1, .3] : [1, .22, .42]);
+      } else if (message.assassinVenomStacks !== undefined) {
+        status.textContent += ` · Venom ${message.assassinVenomStacks}/3 · create an opening to catalyse.`;
+        showCombatFeedback(`VENOM ${message.assassinVenomStacks}/3`, "dodge");
+      }
       if (localTraitId === "momentum") status.textContent += ` · Momentum ${message.momentumStacks}/${MOMENTUM_TRAIT.maxStacks}.`;
       else if ((message.traitBonusDamage ?? 0) > 0) status.textContent += ` · Executioner +${message.traitBonusDamage} damage.`;
       if (message.mainHandId === "venom_focus" && message.perk !== "venom_bloom") status.textContent += ` · Venom ${message.perkStacks ?? 0}/3.`;
@@ -22342,6 +22389,11 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     }
   });
   room.onLeave(() => {
+    if (assassinEdgeDecayTimer !== 0) window.clearTimeout(assassinEdgeDecayTimer);
+    assassinEdgeDecayTimer = 0;
+    localAssassinEdge = 0;
+    renderAssassinEdge(0);
+    assassinEdgeHud.hidden = true;
     clearPendingStatChoice();
     refreshStatChoiceButtons();
     if (!levelUpPanel.hidden) levelUpMessage.textContent = "Disconnected. Reload before spending a stat point.";

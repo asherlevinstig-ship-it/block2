@@ -29,4 +29,11 @@ describe("combat impact feedback", () => {
     expect(css).toContain("@media (prefers-reduced-motion: reduce)");
     expect(css).toContain("#damage-overlay.active");
   });
+
+  it("shows Assassin openings and the five-segment Edge resource", () => {
+    expect(html).toContain('id="assassin-edge"');
+    expect(css).toContain("#assassin-edge i.active");
+    expect(main).toContain('message.assassinPayoff === "final_judgement"');
+    expect(main).toContain("Assassin Edge, ${localAssassinEdge} of five");
+  });
 });

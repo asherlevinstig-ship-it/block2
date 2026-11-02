@@ -790,6 +790,36 @@ html.onboarding-active #hud #target, html.onboarding-active #hud #players { disp
   transform: translate(-50%, -50%);
 }
 #combat-reticle[hidden] { display: none; }
+#assassin-edge {
+  position: fixed;
+  z-index: 17;
+  top: calc(50% + 50px);
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 9px;
+  border: 1px solid rgb(255 75 120 / 44%);
+  border-radius: 999px;
+  background: rgb(17 5 13 / 76%);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 38%);
+  color: #ffc1d1;
+  font: 900 .58rem/1 system-ui, sans-serif;
+  letter-spacing: .09em;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+#assassin-edge[hidden] { display: none; }
+#assassin-edge > span { display: flex; gap: 3px; }
+#assassin-edge i { width: 13px; height: 5px; border-radius: 2px; background: #3d202c; box-shadow: inset 0 0 0 1px #7c4055; }
+#assassin-edge i.active { background: linear-gradient(90deg, #ff395f, #ff9b55); box-shadow: 0 0 8px #ff3f6e; }
+#assassin-edge small { min-width: 28px; color: #ffe2b8; font: inherit; }
+#assassin-edge.gained { animation: assassin-edge-gained 280ms ease-out; }
+@keyframes assassin-edge-gained {
+  0% { transform: translateX(-50%) scale(.86); filter: brightness(1); }
+  45% { transform: translateX(-50%) scale(1.12); filter: brightness(1.8); }
+  100% { transform: translateX(-50%) scale(1); filter: brightness(1); }
+}
 #combat-reticle[data-state="target"] {
   border-color: #8dffc0;
   box-shadow: 0 0 0 4px rgb(31 125 72 / 24%), 0 0 18px rgb(92 255 157 / 38%);
@@ -1637,7 +1667,7 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#tavern-high-low:
   100% { opacity: 0; transform: translate(-50%, -20px) scale(1); }
 }
 @media (prefers-reduced-motion: reduce) {
-  #combat-reticle.hit-confirmed, #damage-overlay.active, #player-hud-root.taking-damage,
+  #combat-reticle.hit-confirmed, #damage-overlay.active, #player-hud-root.taking-damage, #assassin-edge.gained,
   html.player-health-critical #player-health { animation-duration: 1ms; animation-iteration-count: 1; }
 }
 

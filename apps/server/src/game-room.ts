@@ -282,6 +282,8 @@ import { FENWALKER_POOL_WARD_COOLDOWN_MS, NORTHWATCH_SHARD_WARD_COOLDOWN_MS, fen
 import type { RegionalArmourProc } from "@blockcraft/protocol";
 import { compatiblePowerOrFallback, fracturedBlockResult, isGroundPowerTargetInRange, isPowerCompatible, isSeismicAftershockTarget, mobilityAdvanceDistance, powerDirection, powerEvadeDirection, seismicCleaveProfile, selectBurstPowerTargets, selectGroundPowerTargets, selectLinePowerTargets, selectMobilityPowerTarget, widenedLineFractureColumns } from "./power-rules.js";
 import { assassinMarkStrikeBonus, huntersMarkDamageBonus, huntersMarkPowerPayoff, isBrambleSnareTargetInRange, isInsideBrambleSnare, progressHuntersMark, selectDeathMarkTarget, selectHuntersMarkTarget, type ActiveSpecialMark } from "./special-rules.js";
+import { ASSASSIN_EDGE_DECAY_MS, ASSASSIN_EDGE_MAX, advanceAssassinEdge, assassinOpening, assassinOpeningLabel, venombladeStrike,
+  type AssassinEdgeState } from "./assassin-combat.js";
 import { inventoryTotal, isLootInPickupRange, lootForArchetype, armourDropForMob, LOOT_DESPAWN_MS, NormalLootCadence } from "./loot-rules.js";
 import { findLootLanding } from "./loot-placement.js";
 import { canEquipMainHand } from "./equipment-rules.js";
@@ -580,6 +582,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly assassinShadowUntil = new Map<string, number>();
   private readonly stealthUntil = new Map<string, number>();
   private readonly assassinShadowBonus = new Map<string, number>();
+  private readonly assassinEdge = new Map<string, AssassinEdgeState>();
+  private readonly assassinVenom = new Map<string, { stacks: number; expiresAt: number }>();
   private readonly pathConcealedUntil = new Map<string, number>();
   private readonly pendingBladeDances = new Map<string, {
     endsAt: number; nextCutAt: number; intervalMs: number; totalCuts: number; sequence: number;
@@ -1442,6 +1446,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.assassinShadowUntil.delete(client.sessionId);
     this.stealthUntil.delete(client.sessionId);
     this.assassinShadowBonus.delete(client.sessionId);
+    this.assassinEdge.delete(client.sessionId);
+    for (const key of this.assassinVenom.keys()) if (key.startsWith(`${client.sessionId}:`)) this.assassinVenom.delete(key);
     this.pendingBladeDances.delete(client.sessionId);
     this.pathConcealedUntil.delete(client.sessionId);
     this.assassinBossConcealedUntil.delete(client.sessionId);
@@ -5616,8 +5622,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
               this.mobAwareness.delete(targetMobId); targetMob.targetId = ""; targetMob.awarenessState = "search";
             }
           }
-          this.buildPathProc(playerId, "assassin", "SHADOWSTEP", phantom
-            ? "PHANTOM · CONCEALED · CALLING QUICKENED" : "CONCEALED · NEXT STRIKE +2", phantom ? 3_000 : 2_000);
+          this.buildPathProc(playerId, "assassin", phantom ? "FLOW STRIKE" : "SHADOWSTEP", phantom
+            ? "BLADEDANCER · CONCEALED · CALLING QUICKENED" : "CONCEALED · NEXT STRIKE +2", phantom ? 3_000 : 2_000);
         }
         player.stamina = Math.min(player.maxStamina, player.stamina + PERFECT_DODGE_STAMINA_RESTORE + thiefRecovery);
         this.clients.find(client => client.sessionId === playerId)?.send("dodge:pressure", {
@@ -12463,6 +12469,54 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const preciseTier = pinStacks >= 3 ? this.equipmentAffixTier(player, "precise") : 0;
       if (preciseTier > 0) this.equipmentAffixProc(sessionId, "precise", `PRECISE +${preciseTier}`, mob, now);
       const callingWindupStrike = mob.combatState === "windup";
+      const sourceX = source?.x ?? player.x, sourceZ = source?.z ?? player.z;
+      const sourceDistance = Math.hypot(sourceX - mob.x, sourceZ - mob.z);
+      const facingRadians = mob.yaw * Math.PI / 180;
+      const sourceInFront = sourceDistance > .001
+        && ((sourceX - mob.x) / sourceDistance * Math.sin(facingRadians)
+          + (sourceZ - mob.z) / sourceDistance * Math.cos(facingRadians)) >= -.05;
+      const assassinActive = parseBuildPathState(player.huntLoadoutsJson).selectedPathId === "assassin";
+      const opening = assassinActive ? assassinOpening({
+        concealed: shadowstepDamage > 0,
+        dodgeCounter: dodgeCounterBonus > 0,
+        behind: !sourceInFront,
+        interrupted: callingWindupStrike,
+        staggered: struckStaggered,
+        marked: assassinMark,
+      }) : null;
+      let assassinEdge = this.assassinEdge.get(sessionId) ?? { segments: 0, lastGainAt: now };
+      let assassinEdgeGained = false;
+      let assassinPayoff: CombatHit["assassinPayoff"];
+      let assassinBonusDamage = 0;
+      let assassinVenomStacks: number | undefined;
+      if (assassinActive) {
+        const advanced = advanceAssassinEdge(assassinEdge, opening, now);
+        assassinEdge = advanced.state;
+        assassinEdgeGained = advanced.gained;
+        if (assassinSpecialization === "executioner" && opening && advanced.gained
+          && assassinEdge.segments >= ASSASSIN_EDGE_MAX) {
+          assassinBonusDamage = this.buildSpecializationMastered(player, "executioner") ? 5 : 3;
+          assassinEdge = { ...assassinEdge, segments: 0 };
+          assassinPayoff = "final_judgement";
+        } else if (assassinSpecialization === "phantom" && opening === "counter") {
+          assassinPayoff = "flow_strike";
+        } else if (assassinSpecialization === "venomblade") {
+          const venomKey = `${sessionId}:${mobId}`;
+          const previousVenom = this.assassinVenom.get(venomKey);
+          const venom = venombladeStrike(now < (previousVenom?.expiresAt ?? 0) ? previousVenom!.stacks : 0, opening);
+          assassinVenomStacks = venom.stacks;
+          if (venom.stacks > 0) this.assassinVenom.set(venomKey, { stacks: venom.stacks, expiresAt: now + 7_000 });
+          else this.assassinVenom.delete(venomKey);
+          if (venom.catalytic) {
+            assassinBonusDamage = this.buildSpecializationMastered(player, "venomblade") ? 5 : venom.bonusDamage;
+            assassinPayoff = "catalytic_strike";
+            const slowMs = this.buildSpecializationMastered(player, "venomblade") ? 3_000 : 2_000;
+            this.rangerSlows.set(mobId, { until: now + slowMs, multiplier: .55 });
+            this.grantMasterTrial(sessionId, "venomblade");
+          }
+        }
+        this.assassinEdge.set(sessionId, assassinEdge);
+      }
       let damage = damageAfterArmor(
         timing.damage + ironSwordDamageBonus(player.blacksmithUpgrades, pending.mainHandId)
           + this.floorRunWeaponBonus(sessionId, player, mob, now)
@@ -12471,6 +12525,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           + reforgeWeaponDamageBonus(equipmentReforgeRank(player.reforgeRanksJson, pending.mainHandId))
           + progressionAttackBonus(player) + this.specialDamageBonus(sessionId, mobId, now) + perkBonusDamage + setBonusDamage
           + this.buildPathDamageBonus(player, mob, mobId, sessionId, now, "weapon") + shadowstepDamage + markStrikeBonus + pinBonusDamage
+          + assassinBonusDamage
           + this.northwatchAssassinOpening(player, mobId, now),
         mob.armor,
       ) + traitBonusDamage + dodgeCounterBonus
@@ -12479,8 +12534,6 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (pending.focusCharge !== undefined) damage = focusCastDamage(damage, pending.focusCharge);
       const cinderExposedUntil = this.cinderRamExposedUntil.get(mobId) ?? 0;
       const cinderExposed = mob.archetype === "cinder_ram" && now < cinderExposedUntil;
-      const sourceX = source?.x ?? player.x, sourceZ = source?.z ?? player.z;
-      const sourceDistance = Math.hypot(sourceX - mob.x, sourceZ - mob.z);
       const strikeProfile = playerMeleeStrike(pending.mainHandId, pending.step);
       const swordFamily = pending.mainHandId === "longsword" || pending.mainHandId === "forged_sword"
         || pending.mainHandId === "matriarch_edge" || pending.mainHandId === "cinderfang_blade"
@@ -12494,10 +12547,6 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         ? bladeContact ? "blade" as const : rapidPracticeWeaponProfile(pending.mainHandId, this.rapidPractice)?.style === "crescent"
           ? "crescent" as const : undefined
         : undefined;
-      const facingRadians = mob.yaw * Math.PI / 180;
-      const sourceInFront = sourceDistance > .001
-        && ((sourceX - mob.x) / sourceDistance * Math.sin(facingRadians)
-          + (sourceZ - mob.z) / sourceDistance * Math.cos(facingRadians)) >= -.05;
       const cinderArmoured = mob.archetype === "cinder_ram" && !cinderExposed;
       if (cinderArmoured && sourceInFront) damage = Math.max(1, Math.ceil(damage * .3));
       if (cinderExposed) damage += 2;
@@ -12524,7 +12573,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         if (this.buildSpecializationMastered(player, "executioner")) player.stamina = Math.min(player.maxStamina, player.stamina + 20);
       }
       if (mob.health === 0 && pinStacks >= 3 && rangerSpecialization === "marksman") this.grantMasterTrial(sessionId, "marksman");
-      if (shadowstepDamage > 0) this.buildPathProc(sessionId, "assassin", assassinSpecialization === "executioner" ? "EXECUTIONER" : "SHADOWSTEP",
+      if (shadowstepDamage > 0) this.buildPathProc(sessionId, "assassin", assassinSpecialization === "executioner" ? "REAPER" : assassinSpecialization === "phantom" ? "BLADEDANCER" : "SHADOWSTEP",
         `EMPOWERED STRIKE · +${shadowstepDamage} DAMAGE`);
       if (shadowstepDamage > 0 && selectedCallingAbility(parseBuildPathState(player.huntLoadoutsJson), "assassin") === "assassin_vanish")
         this.grantCallingTrial(sessionId, "vanish_killing_intent", 1);
@@ -12582,6 +12631,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         });
       }
       if (mob.health === 0) {
+        this.assassinVenom.delete(`${sessionId}:${mobId}`);
         this.defeatMob(mobId, mob, sessionId, now);
       }
       const hit: CombatHit = {
@@ -12605,7 +12655,18 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         cooldownReducedMs,
         contactKind,
         contactDistance: contactKind ? sourceDistance : undefined,
+        assassinOpening: opening ?? undefined,
+        assassinEdge: assassinActive ? assassinEdge.segments : undefined,
+        assassinEdgeGained: assassinActive ? assassinEdgeGained : undefined,
+        assassinEdgeDecayAt: assassinActive && assassinEdge.segments > 0
+          ? assassinEdge.lastGainAt + ASSASSIN_EDGE_DECAY_MS : undefined,
+        assassinPayoff,
+        assassinVenomStacks,
       };
+      if (opening && assassinActive) this.buildPathProc(sessionId, "assassin", assassinOpeningLabel(opening),
+        `${assassinPayoff === "final_judgement" ? `FINAL JUDGEMENT · +${assassinBonusDamage}`
+          : assassinPayoff === "catalytic_strike" ? `CATALYTIC STRIKE · +${assassinBonusDamage}`
+            : `EDGE ${assassinEdge.segments}/${ASSASSIN_EDGE_MAX}`}`);
       this.broadcast("combat:hit", hit);
       if (pending.requestId?.startsWith("attack-"))
         this.sendCombatTiming(sessionId, { requestId: pending.requestId, action: "attack", phase: "resolved", serverTime: now, outcome: "hit" });
