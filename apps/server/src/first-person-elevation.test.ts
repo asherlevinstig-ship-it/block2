@@ -119,9 +119,9 @@ describe("first-person elevation on authoritative attacks", () => {
     }));
 
     held.internal.handleFocusCharge(held.client, { active: true });
-    vi.advanceTimersByTime(450);
+    vi.advanceTimersByTime(700);
     held.internal.handleAttack(held.client, { requestId: "released-cast", yaw: 90 });
-    expect(held.internal.pendingAttacks.get("hero")?.focusCharge).toBe(.5);
+    expect(held.internal.pendingAttacks.get("hero")?.focusCharge).toBeCloseTo(7 / 9);
   });
   it.each([7, 9])("lets a close-range dagger follow the view toward height %s", targetY => {
     const { target, fire } = fixture("fang_dagger", targetY, false, 1);

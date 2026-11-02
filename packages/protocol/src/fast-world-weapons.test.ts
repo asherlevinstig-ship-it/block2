@@ -26,7 +26,7 @@ describe("shared fast weapon identity", () => {
   });
 
   it("keeps an instant Mage spark viable and rewards a full focus weave", () => {
-    expect(FOCUS_CHARGE_MIN_MS).toBeGreaterThanOrEqual(250);
+    expect(FOCUS_CHARGE_MIN_MS).toBeGreaterThanOrEqual(600);
     expect(FOCUS_CHARGE_MIN_MS).toBeLessThan(FOCUS_CHARGE_FULL_MS);
     expect(focusCastCharge(0)).toBe(0);
     expect(focusCastCharge(FOCUS_CHARGE_FULL_MS / 2)).toBe(.5);
