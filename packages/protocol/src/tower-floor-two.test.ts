@@ -4,7 +4,7 @@ import { TOWER_FLOOR_TWO, TOWER_FLOOR_TWO_COLLIDERS, TOWER_FLOOR_TWO_ROOMS,
   TOWER_FLOOR_TWO_ROUTES, TOWER_FLOOR_TWO_BOSS_ID, TOWER_FLOOR_TWO_ENCOUNTERS,
   TOWER_FLOOR_TWO_FORGEHEART_COMBAT, TOWER_FLOOR_TWO_REGULATORS, TOWER_FLOOR_TWO_SPAWNS,
   TOWER_FLOOR_TWO_VENTS, isInsideTowerFloorTwo, towerFloorTwoEncounterAllows,
-  towerFloorTwoEncounterBounds, towerFloorTwoEruptingVentAt, towerFloorTwoForgeheartPattern, towerFloorTwoForgeheartPhase,
+  towerFloorTwoEncounterBounds, towerFloorTwoProvokedEncounterAllows, towerFloorTwoEruptingVentAt, towerFloorTwoForgeheartPattern, towerFloorTwoForgeheartPhase,
   towerFloorTwoGroundHeight, towerFloorTwoVentPhase } from "./tower-floor-two.js";
 
 describe("Floor 2 Emberworks greybox", () => {
@@ -67,6 +67,15 @@ describe("Floor 2 Emberworks greybox", () => {
     expect(bounds.maxX - bounds.minX).toBeGreaterThan(20);
     expect(towerFloorTwoEncounterAllows(hound.id, { x: 486, y: towerFloorTwoGroundHeight(486, 86), z: 86 })).toBe(true);
     expect(towerFloorTwoEncounterAllows(hound.id, { x: 500, y: towerFloorTwoGroundHeight(500, 86), z: 86 })).toBe(false);
+  });
+
+  it("lets a struck enemy answer doorway fire without leaving the floor", () => {
+    const hound = TOWER_FLOOR_TWO_SPAWNS.find(spawn => spawn.id === "floor2-intake-hound")!;
+    const doorway = { x: 422, y: towerFloorTwoGroundHeight(422, 106), z: 106 };
+    expect(towerFloorTwoEncounterAllows(hound.id, doorway)).toBe(false);
+    expect(towerFloorTwoProvokedEncounterAllows(hound.id, doorway)).toBe(true);
+    expect(towerFloorTwoProvokedEncounterAllows(hound.id,
+      { x: TOWER_FLOOR_TWO.bounds.minX - 1, y: 8, z: 106 })).toBe(false);
   });
 
   it("gives the Forgeheart fixed learnable phases rather than random attacks", () => {

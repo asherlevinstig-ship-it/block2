@@ -236,6 +236,21 @@ export function towerFloorTwoEncounterAllows(id: string, position: { x: number; 
     && position.z >= bounds!.minZ && position.z <= bounds!.maxZ;
 }
 
+/** Temporary pursuit bounds after a real hit. They include the approach on
+ * either side of an encounter so a ranged player cannot deal damage from a
+ * doorway that the victim is forbidden to cross. The outer floor wall remains
+ * a hard boundary. */
+export function towerFloorTwoProvokedEncounterAllows(id: string,
+  position: { x: number; y: number; z: number }): boolean {
+  const spawn = towerFloorTwoSpawn(id);
+  const bounds = towerFloorTwoEncounterBounds(id);
+  const margin = 8;
+  return Boolean(spawn && bounds) && isInsideTowerFloorTwo(position.x, position.z, 2)
+    && Math.abs(position.y - towerFloorTwoGroundHeight(position.x, position.z)) <= 1.75
+    && position.x >= bounds!.minX - margin && position.x <= bounds!.maxX + margin
+    && position.z >= bounds!.minZ - margin && position.z <= bounds!.maxZ + margin;
+}
+
 function smoothStep(value: number): number {
   const clamped = Math.max(0, Math.min(1, value));
   return clamped * clamped * (3 - 2 * clamped);

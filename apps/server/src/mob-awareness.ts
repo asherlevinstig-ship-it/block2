@@ -15,7 +15,7 @@ export function provokeMob(state: MobAwareness, attacker: Combatant, now: number
   state.targetId = attacker.id;
   state.lastSeen = { x: attacker.x, y: attacker.y, z: attacker.z };
   state.seenAt = now;
-  state.provokedUntil = now + 6000;
+  state.provokedUntil = now + 10_000;
 }
 export function awareMobTarget(mob: Position, players: readonly Combatant[], state: MobAwareness,
   now: number, range: number, visible: (target: Combatant) => boolean): (Combatant & { visible: boolean }) | null {

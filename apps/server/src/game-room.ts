@@ -23,11 +23,11 @@ import { FAST_WORLD_TOWN_BOUNDS, FAST_WORLD_TOWN_ONLY, PRACTICE_ROOM, TOWER_FLOO
   TOWER_FLOOR_ONE_BOSS_ID, TOWER_FLOOR_ONE_CROWNKEEPER_COMBAT, TOWER_FLOOR_ONE_NORTH_WARDEN_COMBAT, TOWER_FLOOR_ONE_NORTH_WARDEN_ID,
   TOWER_FLOOR_ONE_SOUTH_ATTENDANTS, TOWER_FLOOR_ONE_SOUTH_WARDEN_COMBAT, TOWER_FLOOR_ONE_SOUTH_WARDEN_ID,
   TOWER_FLOOR_ONE_SPAWNS, TOWER_FLOOR_ONE_WARDENS, isInsideTowerFloorOne,
-  towerFloorOneAggroRange, towerFloorOneEncounterAllows, towerFloorOneNorthWardenAttackTiming,
+  towerFloorOneAggroRange, towerFloorOneEncounterAllows, towerFloorOneProvokedEncounterAllows, towerFloorOneNorthWardenAttackTiming,
   towerFloorOneCrownkeeperPattern, towerFloorOneNorthWardenPattern, towerFloorOneSouthWardenPattern,
   towerFloorOneSouthWardenWindup, TOWER_FLOOR_TWO_BOSS_ID, TOWER_FLOOR_TWO_FORGEHEART_COMBAT,
   TOWER_FLOOR_TWO_ENCOUNTERS, TOWER_FLOOR_TWO_REGULATORS, TOWER_FLOOR_TWO_SPAWNS, isInsideTowerFloorTwo,
-  towerFloorTwoEncounterAllows, towerFloorTwoEruptingVentAt, towerFloorTwoForgeheartPattern,
+  towerFloorTwoEncounterAllows, towerFloorTwoProvokedEncounterAllows, towerFloorTwoEruptingVentAt, towerFloorTwoForgeheartPattern,
   towerFloorTwoForgeheartPhase, towerFloorTwoGroundHeight, towerFloorTwoSpawn } from "@blockcraft/protocol";
 import type { SchemaType } from "@colyseus/schema";
 import { ShadowMoveInput, stepShadowMovement, type ShadowPose } from "./movement-shadow.js";
@@ -3455,6 +3455,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
 
   private readonly mobPositionAllowed = (position: { x: number; z: number }): boolean => this.rapidPractice
     ? FAST_WORLD_TOWN_ONLY ? isInsideTowerFloorOne(position.x, position.z, 1)
+      || isInsideTowerFloorTwo(position.x, position.z, 1)
       : position.x >= RAPID_PRACTICE_ARENA.minX + 1 && position.x <= RAPID_PRACTICE_ARENA.maxX - 1
         && position.z >= RAPID_PRACTICE_ARENA.minZ + 1 && position.z <= RAPID_PRACTICE_ARENA.maxZ - 1
       && !(position.x <= 108 && position.z >= 66 && position.z <= 146)
@@ -3582,13 +3583,14 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const zone = rapidSpawn.zone === "tower-floor-1" ? TOWER_FLOOR_ONE_ZONE
         : rapidSpawn.zone === "tower-floor-2" ? TOWER_FLOOR_TWO_ZONE
         : RAPID_WORLD_ZONES.find(candidate => candidate.id === rapidSpawn.zone)!;
+      const provoked = Date.now() < (this.mobAwareness.get(id)?.provokedUntil ?? 0);
       const encounterAllows = rapidSpawn.zone === "tower-floor-1"
         // Floor 1 has authored terraces up to y=9.55. Its encounter rule
         // already validates the pose against that local ground height; the
         // old flat-world y=8 check rejected everyone in the Crownkeeper court.
-        ? towerFloorOneEncounterAllows(id, pose)
+        ? provoked ? towerFloorOneProvokedEncounterAllows(id, pose) : towerFloorOneEncounterAllows(id, pose)
         : rapidSpawn.zone === "tower-floor-2"
-          ? towerFloorTwoEncounterAllows(id, pose)
+          ? provoked ? towerFloorTwoProvokedEncounterAllows(id, pose) : towerFloorTwoEncounterAllows(id, pose)
         : Math.abs(pose.y - 8) <= 1.5 && fastWorldEncounterAllows(id, pose);
       return pose.x >= zone.minX - 3 && pose.x <= zone.maxX + 3
         && pose.z >= zone.minZ - 3 && pose.z <= zone.maxZ + 3

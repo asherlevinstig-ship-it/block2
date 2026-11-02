@@ -264,6 +264,33 @@ describe("authoritative combat impacts", () => {
     internal.resolveWeaponProjectiles(10_180); expect(mob.health).toBe(29);
     internal.resolveWeaponProjectiles(10_300); expect(mob.health).toBe(29);
   });
+  it("makes a Floor 2 enemy pursue after a real arrow hit from the encounter doorway", () => {
+    const floor: WorldBlockReader = (_x, y) => y <= 7 ? Block.Stone : Block.Air;
+    const { room, player, mob, internal, release } = fixture(floor);
+    const server = room as any;
+    server.rapidPractice = true;
+    room.state.mobs.delete("mob");
+    room.state.mobs.set("floor2-intake-hound", mob);
+    Object.assign(player, { x: 422, y: 8, z: 106 });
+    Object.assign(mob, { x: 433, y: 8, z: 106, archetype: "ember_hound", health: 30, maxHealth: 30 });
+    server.mobHomes.set("floor2-intake-hound", { x: 433, y: 8, z: 106 });
+
+    release("bow");
+    internal.resolveWeaponProjectiles(10_110);
+    expect(mob.health).toBeLessThan(30);
+    expect(server.mobAwareness.get("floor2-intake-hound")?.targetId).toBe("player");
+
+    const before = mob.x;
+    for (let now = 10_120; now <= 10_780; now += 33) {
+      vi.setSystemTime(now);
+      internal.simulatePlayers(.033);
+    }
+    expect(mob.x, JSON.stringify({ awareness: server.mobAwareness.get("floor2-intake-hound"),
+      combatState: mob.combatState, awarenessState: mob.awarenessState,
+      unreachable: server.mobUnreachableUntil.get("floor2-intake-hound"),
+      returning: server.mobReturning.has("floor2-intake-hound") })).toBeLessThan(before);
+    expect(mob.awarenessState).toMatch(/engaged|press-ranged/);
+  });
   it.each(["bow", "magic_focus", "acid_gland_focus", "venom_focus"] as const)("blocks %s projectile damage with terrain", weapon => {
     const { mob, internal, events, release } = fixture((x, y, z) => x === 102 && y >= 1 && y <= 3 ? Block.Stone : flat(x, y, z));
     release(weapon); internal.resolveWeaponProjectiles(10_400);

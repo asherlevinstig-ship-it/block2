@@ -8,7 +8,7 @@ describe("mob awareness", () => {
     const state = createMobAwareness(); const attacker = { ...a, x: 110 };
     provokeMob(state, attacker, 100);
     expect(awareMobTarget(mob, [attacker], state, 133, 7, () => true)?.id).toBe("a");
-    expect(awareMobTarget(mob, [attacker], state, 6200, 7, () => true)).toBeNull();
+    expect(awareMobTarget(mob, [attacker], state, 10200, 7, () => true)).toBeNull();
   });
   it("retains an elevated archer after a real hit without passively detecting them", () => {
     const attacker = { ...a, y: mob.y + PROVOKED_ELEVATION_RANGE - .1 };
@@ -16,7 +16,7 @@ describe("mob awareness", () => {
     const state = createMobAwareness();
     provokeMob(state, attacker, 100);
     expect(awareMobTarget(mob, [attacker], state, 133, 7, () => true)).toMatchObject({ id: "a", visible: true });
-    expect(awareMobTarget(mob, [attacker], state, 6200, 7, () => true)).toBeNull();
+    expect(awareMobTarget(mob, [attacker], state, 10200, 7, () => true)).toBeNull();
   });
   it("does not retain a provoked target on a genuinely different floor", () => {
     const attacker = { ...a, y: mob.y + PROVOKED_ELEVATION_RANGE + .1 };

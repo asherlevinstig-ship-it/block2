@@ -262,3 +262,15 @@ export function towerFloorOneEncounterAllows(id: string, position: { x: number; 
     && isInsideTowerFloorOne(position.x, position.z, 2)
     && Math.hypot(position.x - spawn!.x, position.z - spawn!.z) <= (spawn!.floorBoss ? 14 : spawn!.leader ? 11 : 9);
 }
+
+/** A confirmed ranged hit may pull its victim through the nearby approach,
+ * but never off the authored floor. This prevents doorway sniping from a
+ * position where the victim was previously forbidden to answer. */
+export function towerFloorOneProvokedEncounterAllows(id: string,
+  position: { x: number; y: number; z: number }): boolean {
+  const spawn = towerFloorOneSpawn(id);
+  return Boolean(spawn) && Math.abs(position.y - towerFloorOneGroundHeight(position.x, position.z)) <= 1.75
+    && isInsideTowerFloorOne(position.x, position.z, 2)
+    && Math.hypot(position.x - spawn!.x, position.z - spawn!.z)
+      <= (spawn!.floorBoss ? 18 : spawn!.leader ? 17 : 17);
+}

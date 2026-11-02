@@ -41,7 +41,7 @@ describe("Floor 2 Emberworks encounter", () => {
 
     f.internal.rallyFloorTwoEncounter(first.id, "hero", 20_000);
 
-    expect(f.internal.mobAwareness.get(second.id)).toMatchObject({ targetId: "hero", provokedUntil: 26_000 });
+    expect(f.internal.mobAwareness.get(second.id)).toMatchObject({ targetId: "hero", provokedUntil: 30_000 });
     expect(f.room.state.mobs.get(second.id)?.awarenessState).toBe("formation:alert");
   });
 
