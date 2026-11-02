@@ -161,6 +161,7 @@ import { createInteractionFeedback, holdStopMessage, holdStopReason, type HoldSt
 import { requestTowerFloorOneFortressAssets } from "./tower-floor-one-asset-kit.js";
 import { loadTowerChronicleMonument } from "./tower-chronicle-asset.js";
 import { towerFloorOneAtmosphere } from "./tower-floor-one-atmosphere.js";
+import { TOWER_FLOOR_TWO_ATMOSPHERE } from "./tower-floor-two-atmosphere.js";
 import { portalInteractionPrompt, portalLabel, portalWorldLabel } from "./portal-labels.js";
 import { createFastWorldSky } from "./fast-world-sky.js";
 import { createTavernRoom, setTavernPreparedMeal, setTavernThirdPersonCutaway, setTavernTrophyProgress } from "./tavern-room.js";
@@ -1823,7 +1824,9 @@ camera.addComponent("camera", {
   toneMapping: pc.TONEMAP_ACES, gammaCorrection: pc.GAMMA_SRGB,
 });
 app.root.addChild(camera);
-if (fastWorldRequested && FAST_WORLD_TOWN_ONLY && !tavernRoomRequested) createFastWorldSky(app, camera);
+const fastWorldSky = fastWorldRequested && FAST_WORLD_TOWN_ONLY && !tavernRoomRequested
+  ? createFastWorldSky(app, camera)
+  : null;
 const CAMERA_ZOOM_STORAGE_KEY = "blockcraft-tablet-camera-zoom-v1";
 const storedCameraDistance = (() => {
   try { return Number(window.localStorage.getItem(CAMERA_ZOOM_STORAGE_KEY)) || undefined; } catch { return undefined; }
@@ -16501,6 +16504,7 @@ let surfaceRestoreStartSliceY: number | null = null;
 let undergroundLightingBlend = 0;
 let greenwoodLightingBlend = 0;
 let towerFloorLightingBlend = 0;
+let towerFloorTwoLightingBlend = 0;
 let forestDungeonLightingBlend = 0;
 let silverDepthsLightingBlend = 0;
 let emberVaultLightingBlend = 0;
@@ -17269,6 +17273,10 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
   const towerFloorTarget = !visibilityCutaway && isInsideTowerFloorOne(position.x, position.z) ? 1 : 0;
   towerFloorLightingBlend += (towerFloorTarget - towerFloorLightingBlend) * (1 - Math.exp(-Math.max(0, dt) * 2.8));
   if (Math.abs(towerFloorTarget - towerFloorLightingBlend) < 0.001) towerFloorLightingBlend = towerFloorTarget;
+  const towerFloorTwoTarget = !visibilityCutaway && isInsideTowerFloorTwo(position.x, position.z) ? 1 : 0;
+  towerFloorTwoLightingBlend += (towerFloorTwoTarget - towerFloorTwoLightingBlend) * (1 - Math.exp(-Math.max(0, dt) * 2.8));
+  if (Math.abs(towerFloorTwoTarget - towerFloorTwoLightingBlend) < 0.001) towerFloorTwoLightingBlend = towerFloorTwoTarget;
+  fastWorldSky?.setFloorTwoBlend(towerFloorTwoLightingBlend);
   const dungeon = forestDungeonAtmosphere(position.x, position.z);
   const dungeonTarget = !visibilityCutaway && dungeon.room > 0 ? 1 : 0;
   const dungeonResponse = 1 - Math.exp(-Math.max(0, dt) * 1.8);
@@ -17335,8 +17343,10 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
   const towerGrade = towerFloorOneAtmosphere(position.x, position.z);
   const outdoorSun = gradedSun + (towerGrade.sun - gradedSun) * towerFloorLightingBlend;
   const outdoorFill = gradedFill + (towerGrade.fill - gradedFill) * towerFloorLightingBlend;
-  if (light.light) light.light.intensity = (outdoorSun + (0.45 - outdoorSun) * undergroundLightingBlend) * (1 - .36 * forestDungeonLightingBlend) * (1 - .58 * silverDepthsLightingBlend) * (1 - .72 * emberVaultLightingBlend);
-  if (skyFill.light) skyFill.light.intensity = outdoorFill * (1 - undergroundLightingBlend) * (1 - .5 * forestDungeonLightingBlend) * (1 - .75 * emberVaultLightingBlend);
+  const floorTwoSun = outdoorSun + (TOWER_FLOOR_TWO_ATMOSPHERE.sun - outdoorSun) * towerFloorTwoLightingBlend;
+  const floorTwoFill = outdoorFill + (TOWER_FLOOR_TWO_ATMOSPHERE.fill - outdoorFill) * towerFloorTwoLightingBlend;
+  if (light.light) light.light.intensity = (floorTwoSun + (0.45 - floorTwoSun) * undergroundLightingBlend) * (1 - .36 * forestDungeonLightingBlend) * (1 - .58 * silverDepthsLightingBlend) * (1 - .72 * emberVaultLightingBlend);
+  if (skyFill.light) skyFill.light.intensity = floorTwoFill * (1 - undergroundLightingBlend) * (1 - .5 * forestDungeonLightingBlend) * (1 - .75 * emberVaultLightingBlend);
   if (caveLight.light) {
     const lanternOwned = (inventoryCounts.get("miners_lantern") ?? 0) > 0;
     const crystalLantern = (localDepthsRewardFlags & 32) !== 0 && silverDepthsLightingBlend > .2;
@@ -17361,10 +17371,13 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
   const finalAmbientR = depthsAmbientR + (.19 - depthsAmbientR) * emberVaultLightingBlend;
   const finalAmbientG = depthsAmbientG + (.055 - depthsAmbientG) * emberVaultLightingBlend;
   const finalAmbientB = depthsAmbientB + (.025 - depthsAmbientB) * emberVaultLightingBlend;
+  const towerAmbientR = finalAmbientR + (towerGrade.ambient[0] - finalAmbientR) * towerFloorLightingBlend;
+  const towerAmbientG = finalAmbientG + (towerGrade.ambient[1] - finalAmbientG) * towerFloorLightingBlend;
+  const towerAmbientB = finalAmbientB + (towerGrade.ambient[2] - finalAmbientB) * towerFloorLightingBlend;
   app.scene.ambientLight.set(
-    finalAmbientR + (towerGrade.ambient[0] - finalAmbientR) * towerFloorLightingBlend,
-    finalAmbientG + (towerGrade.ambient[1] - finalAmbientG) * towerFloorLightingBlend,
-    finalAmbientB + (towerGrade.ambient[2] - finalAmbientB) * towerFloorLightingBlend,
+    towerAmbientR + (TOWER_FLOOR_TWO_ATMOSPHERE.ambient[0] - towerAmbientR) * towerFloorTwoLightingBlend,
+    towerAmbientG + (TOWER_FLOOR_TWO_ATMOSPHERE.ambient[1] - towerAmbientG) * towerFloorTwoLightingBlend,
+    towerAmbientB + (TOWER_FLOOR_TWO_ATMOSPHERE.ambient[2] - towerAmbientB) * towerFloorTwoLightingBlend,
   );
   const greenwoodFogTarget = fastWorldRequested ? woodlandGrade.fog : { r: .11, g: .24, b: .2 };
   const surfaceFogR = surfaceFogBase.r + (greenwoodFogTarget.r - surfaceFogBase.r) * greenwoodLightingBlend;
@@ -17379,10 +17392,13 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
   const finalFogR = depthsFogR + (.12 - depthsFogR) * emberVaultLightingBlend;
   const finalFogG = depthsFogG + (.025 - depthsFogG) * emberVaultLightingBlend;
   const finalFogB = depthsFogB + (.012 - depthsFogB) * emberVaultLightingBlend;
+  const towerFogR = finalFogR + (towerGrade.fog[0] - finalFogR) * towerFloorLightingBlend;
+  const towerFogG = finalFogG + (towerGrade.fog[1] - finalFogG) * towerFloorLightingBlend;
+  const towerFogB = finalFogB + (towerGrade.fog[2] - finalFogB) * towerFloorLightingBlend;
   app.scene.fog.color.set(
-    finalFogR + (towerGrade.fog[0] - finalFogR) * towerFloorLightingBlend,
-    finalFogG + (towerGrade.fog[1] - finalFogG) * towerFloorLightingBlend,
-    finalFogB + (towerGrade.fog[2] - finalFogB) * towerFloorLightingBlend,
+    towerFogR + (TOWER_FLOOR_TWO_ATMOSPHERE.fog[0] - towerFogR) * towerFloorTwoLightingBlend,
+    towerFogG + (TOWER_FLOOR_TWO_ATMOSPHERE.fog[1] - towerFogG) * towerFloorTwoLightingBlend,
+    towerFogB + (TOWER_FLOOR_TWO_ATMOSPHERE.fog[2] - towerFogB) * towerFloorTwoLightingBlend,
   );
   const regionalSurfaceFogStart = surfaceFogStartBase + ((fastWorldRequested ? woodlandGrade.fogStart : 34) - surfaceFogStartBase) * greenwoodLightingBlend;
   const regionalSurfaceFogEnd = surfaceFogEndBase + ((fastWorldRequested ? woodlandGrade.fogEnd : 58) - surfaceFogEndBase) * greenwoodLightingBlend;
@@ -17392,8 +17408,10 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
   const mixedDepthsFogEnd = baseFogEnd + (depthsFogEnd - baseFogEnd) * silverDepthsLightingBlend;
   const finalFogStart = mixedDepthsFogStart + (19 - mixedDepthsFogStart) * emberVaultLightingBlend;
   const finalFogEnd = mixedDepthsFogEnd + (40 - mixedDepthsFogEnd) * emberVaultLightingBlend;
-  app.scene.fog.start = finalFogStart + (towerGrade.fogStart - finalFogStart) * towerFloorLightingBlend;
-  app.scene.fog.end = finalFogEnd + (towerGrade.fogEnd - finalFogEnd) * towerFloorLightingBlend;
+  const towerFogStart = finalFogStart + (towerGrade.fogStart - finalFogStart) * towerFloorLightingBlend;
+  const towerFogEnd = finalFogEnd + (towerGrade.fogEnd - finalFogEnd) * towerFloorLightingBlend;
+  app.scene.fog.start = towerFogStart + (TOWER_FLOOR_TWO_ATMOSPHERE.fogStart - towerFogStart) * towerFloorTwoLightingBlend;
+  app.scene.fog.end = towerFogEnd + (TOWER_FLOOR_TWO_ATMOSPHERE.fogEnd - towerFogEnd) * towerFloorTwoLightingBlend;
   camera.camera?.clearColor.copy(app.scene.fog.color);
   if (nextKey === cutawayStateKey) return;
   logMovementEvent(

@@ -1,4 +1,9 @@
 import * as pc from "playcanvas";
+import { TOWER_FLOOR_TWO_ATMOSPHERE } from "./tower-floor-two-atmosphere.js";
+
+export interface FastWorldSkyController {
+  setFloorTwoBlend(blend: number): void;
+}
 
 function skyTexture(device: pc.GraphicsDevice): pc.Texture {
   const canvas = document.createElement("canvas");
@@ -38,7 +43,7 @@ function sunTexture(device: pc.GraphicsDevice): pc.Texture {
 }
 
 /** Camera-centred sky keeps the suspended town's empty horizon free of a hard backdrop edge. */
-export function createFastWorldSky(app: pc.Application, camera: pc.Entity): void {
+export function createFastWorldSky(app: pc.Application, camera: pc.Entity): FastWorldSkyController {
   const sky = new pc.Entity("fast-world-sky");
   sky.addComponent("render", { type: "sphere", castShadows: false, receiveShadows: false });
   const skyMaterial = new pc.StandardMaterial();
@@ -80,4 +85,23 @@ export function createFastWorldSky(app: pc.Application, camera: pc.Entity): void
     sun.lookAt(position);
     sun.rotateLocal(90, 0, 0);
   });
+
+  return {
+    setFloorTwoBlend(blend: number): void {
+      const amount = Math.max(0, Math.min(1, blend));
+      const tint = TOWER_FLOOR_TWO_ATMOSPHERE.skyTint;
+      skyMaterial.emissive.set(
+        1 + (tint[0] - 1) * amount,
+        1 + (tint[1] - 1) * amount,
+        1 + (tint[2] - 1) * amount,
+      );
+      // The daylight disc becomes a faint furnace-haze glow rather than a
+      // bright sun hanging in Floor 2's dark interior sky.
+      sunMaterial.emissive.set(
+        1 + (.1 - 1) * amount,
+        .97 + (.055 - .97) * amount,
+        .9 + (.025 - .9) * amount,
+      );
+    },
+  };
 }
