@@ -1,5 +1,5 @@
 import { Client, Room } from "@colyseus/core";
-import { aimedWeaponFlight, bowDrawCharge, bowShotDamage, bowShotRangeMultiplier, bowShotTravelMultiplier,
+import { aimedWeaponFlight, bowDrawCharge, bowShotDamage, bowShotRangeMultiplier, bowShotTravelMultiplier, FOCUS_CHARGE_MIN_MS,
   focusCastCharge, focusCastDamage, focusCastRangeMultiplier, focusCastTravelMultiplier,
   mobAttackBody, ENEMY_PROJECTILE_RADIUS } from "@blockcraft/protocol";
 import { PVP_MURDERER_DURATION_MS, pvpCombatAllowed, pvpMurdererUntil, withPvpMurdererUntil,
@@ -11737,6 +11737,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const focusStartedAt = this.focusChargeStartedAt.get(client.sessionId);
     if (callingFocusEquipped && focusStartedAt === undefined) {
       return this.reject(client, { requestId: parsed.data.requestId, action: "attack", reason: "missing" });
+    }
+    if (callingFocusEquipped && focusStartedAt !== undefined && now - focusStartedAt < FOCUS_CHARGE_MIN_MS) {
+      this.focusChargeStartedAt.delete(client.sessionId);
+      return this.reject(client, { requestId: parsed.data.requestId, action: "attack", reason: "rate" });
     }
     const serverFocusCharge = !callingFocusEquipped || focusStartedAt === undefined
       ? undefined : focusCastCharge(now - focusStartedAt);

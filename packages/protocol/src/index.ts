@@ -1736,6 +1736,8 @@ export function bowShotDamage(baseDamage: number, charge: number): number {
  * the cast it visibly committed to. */
 export const FOCUS_CHARGE_FULL_MS = 900;
 export const FOCUS_CHARGE_MAX_HOLD_MS = 1_500;
+/** Minimum deliberate weave before a focus can release a projectile. */
+export const FOCUS_CHARGE_MIN_MS = 260;
 
 export function focusCastCharge(elapsedMs: number): number {
   if (!Number.isFinite(elapsedMs)) return 0;

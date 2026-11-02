@@ -4,7 +4,7 @@ import { FAST_WORLD_TOWN_BOUNDS, FAST_WORLD_TOWN_ONLY, TOWER_FLOOR_ONE, TOWER_FL
 import { parseGuildMembership } from "@blockcraft/protocol";
 import { BOW_DRAW_FULL_MS, BOW_DRAW_MAX_HOLD_MS, BOW_DRAW_MIN_MS, bowDrawCharge,
   bowShotRangeMultiplier, bowShotTravelMultiplier } from "@blockcraft/protocol";
-import { FOCUS_CHARGE_MAX_HOLD_MS, focusCastCharge, focusCastRangeMultiplier } from "@blockcraft/protocol";
+import { FOCUS_CHARGE_MAX_HOLD_MS, FOCUS_CHARGE_MIN_MS, focusCastCharge, focusCastRangeMultiplier } from "@blockcraft/protocol";
 import { GREENWOOD_MAIN_TRAIL, GREENWOOD_CAMP_TRAIL, GREENWOOD_THICKETS, GREENWOOD_CLUSTER_PLANTS, GREENWOOD_VERGE_PLANTS, sampleWoodlandTrail } from "./greenwood-landscape.js";
 import * as pc from "playcanvas";
 import { facetedBoxMesh } from "./faceted-shapes.js";
@@ -12824,11 +12824,18 @@ function cancelFocusCharge(reason = "Arcane weave cancelled."): void {
 
 function releaseFocusCharge(tabletAim?: { yaw: number; targetId: string | null }): boolean {
   if (focusChargeStartedAt === null) return false;
-  const charge = currentFocusCharge();
+  const elapsed = Math.min(FOCUS_CHARGE_MAX_HOLD_MS, performance.now() - focusChargeStartedAt);
+  const charge = focusCastCharge(elapsed);
   const aim = focusChargeAim ?? { aimWithPointer: true };
   focusChargeStartedAt = null;
   focusChargePointerId = null;
   focusChargeAim = null;
+  if (elapsed < FOCUS_CHARGE_MIN_MS) {
+    room?.send("focus:charge", { active: false });
+    status.textContent = "Focus not formed · hold briefly, then release to cast.";
+    showCombatFeedback("HOLD TO WEAVE", "hurt");
+    return true;
+  }
   requestAttack(aim.aimWithPointer, tabletAim ?? aim.tabletAim, undefined, charge);
   room?.send("focus:charge", { active: false });
   return true;

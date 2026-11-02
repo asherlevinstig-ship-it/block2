@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BOW_DRAW_FULL_MS, FOCUS_CHARGE_FULL_MS, bowDrawCharge, bowShotDamage, bowShotRangeMultiplier,
+import { BOW_DRAW_FULL_MS, FOCUS_CHARGE_FULL_MS, FOCUS_CHARGE_MIN_MS, bowDrawCharge, bowShotDamage, bowShotRangeMultiplier,
   bowShotTravelMultiplier, effectiveWeaponRange, fastWorldWeaponProfile, focusCastCharge, focusCastDamage,
   focusCastRangeMultiplier, focusCastTravelMultiplier, weaponFiresProjectile } from "./index.js";
 
@@ -26,6 +26,8 @@ describe("shared fast weapon identity", () => {
   });
 
   it("keeps an instant Mage spark viable and rewards a full focus weave", () => {
+    expect(FOCUS_CHARGE_MIN_MS).toBeGreaterThanOrEqual(250);
+    expect(FOCUS_CHARGE_MIN_MS).toBeLessThan(FOCUS_CHARGE_FULL_MS);
     expect(focusCastCharge(0)).toBe(0);
     expect(focusCastCharge(FOCUS_CHARGE_FULL_MS / 2)).toBe(.5);
     expect(focusCastCharge(FOCUS_CHARGE_FULL_MS * 2)).toBe(1);

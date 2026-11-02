@@ -111,6 +111,14 @@ describe("first-person elevation on authoritative attacks", () => {
     }));
 
     held.internal.handleFocusCharge(held.client, { active: true });
+    vi.advanceTimersByTime(100);
+    held.internal.handleAttack(held.client, { requestId: "gentle-tap", yaw: 90 });
+    expect(held.internal.pendingAttacks.has("hero")).toBe(false);
+    expect(held.client.send).toHaveBeenCalledWith("action:rejected", expect.objectContaining({
+      requestId: "gentle-tap", action: "attack", reason: "rate",
+    }));
+
+    held.internal.handleFocusCharge(held.client, { active: true });
     vi.advanceTimersByTime(450);
     held.internal.handleAttack(held.client, { requestId: "released-cast", yaw: 90 });
     expect(held.internal.pendingAttacks.get("hero")?.focusCharge).toBe(.5);
