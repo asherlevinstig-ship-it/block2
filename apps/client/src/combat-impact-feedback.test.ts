@@ -36,4 +36,11 @@ describe("combat impact feedback", () => {
     expect(main).toContain('message.assassinPayoff === "final_judgement"');
     expect(main).toContain("Assassin Edge, ${localAssassinEdge} of five");
   });
+
+  it("shows Healer Grace and Perfect Intercession feedback", () => {
+    expect(html).toContain('id="healer-grace"');
+    expect(css).toContain("#healer-grace i.active");
+    expect(main).toContain('room.onMessage("healer:intercession-impact"');
+    expect(main).toContain("Healer Grace, ${localHealerGrace} of three");
+  });
 });

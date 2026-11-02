@@ -647,7 +647,7 @@ describe("hotbar Calling abilities", () => {
     }));
   });
 
-  it("Field Medic restores stamina to an injured ally", () => {
+  it("keeps legacy Field Medic saves as Oracle and restores stamina to an injured ally", () => {
     const { room, internal, player, client } = fixture("healer", 70);
     player.huntLoadoutsJson = serializeBuildPathState(chooseBuildSpecialization(parseBuildPathState(player.huntLoadoutsJson), "healer", "field_medic"));
     const ally = new PlayerState(); Object.assign(ally, { x: 52, y: 8, z: 50, health: 3, maxHealth: 5, stamina: 40, maxStamina: 100 });
@@ -655,6 +655,45 @@ describe("hotbar Calling abilities", () => {
     internal.handleCallingAbility(client, { requestId: "field-medic" });
     expect(ally.health).toBe(5); expect(ally.stamina).toBe(50);
     expect(parseBuildPathState(player.huntLoadoutsJson).trials.field_medic).toBe(10);
+  });
+
+  it("lets Oracle place Divine Intercession and earn Grace on a perfectly timed impact", () => {
+    const { room, internal, player, client, broadcast } = fixture("healer", 70);
+    player.huntLoadoutsJson = serializeBuildPathState(chooseBuildSpecialization(parseBuildPathState(player.huntLoadoutsJson), "healer", "field_medic"));
+    const ally = new PlayerState(); Object.assign(ally, { x: 52, y: 8, z: 50, health: 5, maxHealth: 5 });
+    const attacker = new MobState(); Object.assign(attacker, { x: 54, y: 8, z: 50, alive: true, health: 20, maxHealth: 20 });
+    room.state.players.set("ally", ally); room.state.mobs.set("attacker", attacker);
+    internal.pendingMobMelee.set("attacker", { targetId: "ally", yaw: 270, impactAt: 10_700 });
+    internal.handleCallingAbility(client, { requestId: "intercede", yaw: 90 });
+    expect(internal.healerIntercessions.get("ally")).toEqual(expect.objectContaining({ casterId: "hero", strength: 3 }));
+    internal.damagePlayer("attacker", "ally", 5, 10_700, false);
+    expect(ally.health).toBe(3);
+    expect(internal.healerGrace.get("hero")).toBe(1);
+    expect(broadcast).toHaveBeenCalledWith("healer:intercession-impact", expect.objectContaining({
+      casterId: "hero", targetId: "ally", prevented: 3, perfect: true, grace: 1,
+    }));
+  });
+
+  it("turns a timely Field Mend into Perfect Healing and Grace", () => {
+    const { room, internal, client } = fixture("healer", 70);
+    const ally = new PlayerState(); Object.assign(ally, { x: 52, y: 8, z: 50, health: 1, maxHealth: 6 });
+    room.state.players.set("ally", ally); internal.healerDamageWindows.set("ally", 11_250);
+    internal.handleCallingAbility(client, { requestId: "perfect-heal", yaw: 90 });
+    expect(ally.health).toBe(5);
+    expect(internal.healerGrace.get("hero")).toBe(1);
+    expect(client.send).toHaveBeenCalledWith("healer:vitalis", expect.objectContaining({ label: "PERFECT HEALING", grace: 1 }));
+  });
+
+  it("lets Soulweaver turn a weapon hit into nearby ally healing", () => {
+    const { room, internal, player, broadcast } = fixture("healer", 70);
+    player.huntLoadoutsJson = serializeBuildPathState(chooseBuildSpecialization(parseBuildPathState(player.huntLoadoutsJson), "healer", "soulweaver"));
+    const ally = new PlayerState(); Object.assign(ally, { x: 52, y: 8, z: 50, health: 2, maxHealth: 5 });
+    room.state.players.set("ally", ally);
+    internal.applySoulweaverBond("hero", player, 10_000);
+    expect(ally.health).toBe(3);
+    expect(broadcast).toHaveBeenCalledWith("healer:field-mend", expect.objectContaining({
+      casterId: "hero", targetId: "ally", restored: 1, source: "symbiotic_bond",
+    }));
   });
 
   it("publishes persistent charges and clears them as they are consumed", () => {

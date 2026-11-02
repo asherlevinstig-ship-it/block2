@@ -1523,6 +1523,19 @@ function scheduleAssassinEdgeDecay(decayAt?: number): void {
     scheduleAssassinEdgeDecay(Date.now() + 6_000);
   }, Math.max(0, decayAt - Date.now()));
 }
+const healerGraceHud = document.querySelector<HTMLElement>("#healer-grace")!;
+const healerGracePips = [...healerGraceHud.querySelectorAll<HTMLElement>("i")];
+const healerGraceCount = healerGraceHud.querySelector<HTMLElement>("small")!;
+let localHealerGrace = 0;
+function renderHealerGrace(grace: number, animate = false): void {
+  localHealerGrace = Math.max(0, Math.min(3, grace));
+  healerGraceCount.textContent = `${localHealerGrace} / 3`;
+  healerGraceHud.setAttribute("aria-label", `Healer Grace, ${localHealerGrace} of three`);
+  healerGracePips.forEach((pip, index) => pip.classList.toggle("active", index < localHealerGrace));
+  if (animate) {
+    healerGraceHud.classList.remove("gained"); void healerGraceHud.offsetWidth; healerGraceHud.classList.add("gained");
+  }
+}
 const tabletAimGuide = document.querySelector<HTMLElement>("#tablet-aim-guide")!;
 const combatFeedback = document.querySelector<HTMLElement>("#combat-feedback")!;
 const damageOverlay = document.querySelector<HTMLElement>("#damage-overlay")!;
@@ -8359,6 +8372,7 @@ function renderBuildPath(update: BuildPathUpdate): void {
   const previousPathId = localBuildPathId;
   localBuildPathId = update.selectedPathId;
   assassinEdgeHud.hidden = localBuildPathId !== "assassin";
+  healerGraceHud.hidden = localBuildPathId !== "healer";
   if (localBuildPathId !== "tank") localTankResolve = 0;
   updateTankResolvePresentation();
   document.documentElement.dataset.calling = update.selectedPathId ?? "unbound";
@@ -9911,6 +9925,23 @@ function createHealerLink(casterId: string, targetId: string, abilityId: "healer
         start.z + dz * progress], [0, yaw, 0]);
   }
   callingImpactVisuals.push({ root, expiresAt: performance.now() + lifetimeMs, materials: [life, blessing], abilityId, casterId, stationary: true });
+}
+
+function createIntercessionWard(targetId: string, lifetimeMs: number): void {
+  const target = targetId === room?.sessionId ? localPlayer : remotePlayers.get(targetId)?.entity;
+  if (!target) return;
+  const root = new pc.Entity("divine-intercession-ward"); target.addChild(root);
+  const gold = callingSignatureMaterial(new pc.Color(1, .82, .24), .84, 1.35);
+  const life = callingSignatureMaterial(new pc.Color(.32, 1, .68), .62, 1.05);
+  for (let index = 0; index < 16; index += 1) {
+    const angle = index / 16 * Math.PI * 2;
+    addCallingSignaturePrimitive(root, "intercession-aegis", "box", index % 4 === 0 ? life : gold,
+      [.035, .22, .075], [Math.sin(angle) * .68, 1 + Math.sin(index * 1.7) * .12, Math.cos(angle) * .68],
+      [0, angle * 180 / Math.PI, index % 2 ? 16 : -16]);
+  }
+  addCallingSignaturePrimitive(root, "intercession-halo", "cylinder", gold, [.78, .018, .78], [0, 1.62, 0]);
+  callingImpactVisuals.push({ root, expiresAt: performance.now() + lifetimeMs, materials: [gold, life],
+    abilityId: "healer_field_mend", stationary: true });
 }
 
 function createFieldMendFeedback(message: { casterId: string; targetId: string; restored: number; staminaRestored: number }): void {
@@ -21285,6 +21316,30 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   room.onMessage("healer:field-mend", (message: { casterId: string; targetId: string; restored: number; staminaRestored: number }) => {
     createFieldMendFeedback(message);
   });
+  room.onMessage("healer:vitalis", (message: { kind: "grace" | "spent"; grace: number; label: string; targetId?: string }) => {
+    healerGraceHud.hidden = false;
+    renderHealerGrace(message.grace, message.kind === "grace");
+    showCombatFeedback(`${message.label} · GRACE ${message.grace}/3`, message.kind === "grace" ? "dodge" : "hit");
+  });
+  room.onMessage("healer:intercession-cast", (message: { casterId: string; targetId: string; until: number; strength: number }) => {
+    const lifetimeMs = Math.max(350, message.until - Date.now());
+    createHealerLink(message.casterId, message.targetId, "healer_field_mend", lifetimeMs);
+    createIntercessionWard(message.targetId, lifetimeMs);
+    const target = message.targetId === room?.sessionId ? localPlayer : remotePlayers.get(message.targetId)?.entity;
+    if (target) {
+      const position = target.getPosition();
+      createRangedPopup(new pc.Vec3(position.x, position.y + 2.25, position.z), "INTERCESSION READY", "landmark", false, [1, .9, .38]);
+    }
+  });
+  room.onMessage("healer:intercession-impact", (message: { casterId: string; targetId: string; prevented: number; perfect: boolean; grace: number }) => {
+    const target = message.targetId === room?.sessionId ? localPlayer : remotePlayers.get(message.targetId)?.entity;
+    if (target) {
+      const position = target.getPosition();
+      createRangedPopup(new pc.Vec3(position.x, position.y + 2.3, position.z),
+        `${message.perfect ? "PERFECT " : ""}INTERCESSION · ${message.prevented} BLOCKED`, "landmark", false, [1, .82, .28]);
+    }
+    if (message.casterId === room?.sessionId) showCombatFeedback(message.perfect ? "PERFECT INTERCESSION" : "ALLY PROTECTED", "block");
+  });
   room.onMessage("healer:renewal-targets", (message: { casterId: string; targets: { targetId: string; restored: number; staminaRestored?: number; bulwark?: true }[] }) => {
     createRenewalFeedback(message.targets);
   });
@@ -22394,6 +22449,9 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     localAssassinEdge = 0;
     renderAssassinEdge(0);
     assassinEdgeHud.hidden = true;
+    localHealerGrace = 0;
+    renderHealerGrace(0);
+    healerGraceHud.hidden = true;
     clearPendingStatChoice();
     refreshStatChoiceButtons();
     if (!levelUpPanel.hidden) levelUpMessage.textContent = "Disconnected. Reload before spending a stat point.";

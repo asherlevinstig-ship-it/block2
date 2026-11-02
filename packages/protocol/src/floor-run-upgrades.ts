@@ -37,11 +37,11 @@ export const FLOOR_RUN_UPGRADES: readonly FloorUpgradeDefinition[] = [
   { id: "ranger_leap", path: "ranger", name: "Long Retreat", branch: "Trapper", ability: "ranger_disengage", detail: "Disengage leaps 1.5m farther, respecting walls and terrain." },
   { id: "ranger_deadeye", path: "ranger", name: "Eagle's Reach", branch: "Deadeye", ability: "ranger_deadeye", detail: "Deadeye can acquire precise, visible targets 4m farther away." },
   { id: "healer_protect", path: "healer", name: "Defend the Wounded", branch: "Lifebinder", detail: "Deal +1 weapon damage to an enemy targeting another player below half health." },
-  { id: "healer_vigor", path: "healer", name: "Shared Vigor", branch: "Renewalist", detail: "A weapon hit restores 4 stamina to the nearest visible ally within 6m, or yourself. 2s cooldown." },
-  { id: "healer_guard", path: "healer", name: "Sanctuary Guard", branch: "Sanctuary", detail: "Blocking costs 4 less stamina so you can hold your position." },
+  { id: "healer_vigor", path: "healer", name: "Shared Vigor", branch: "Soulweaver", detail: "A weapon hit restores 4 stamina to the nearest visible ally within 6m, or yourself. 2s cooldown." },
+  { id: "healer_guard", path: "healer", name: "Foresight Guard", branch: "Oracle", detail: "Blocking costs 4 less stamina so you can survive while preparing an intervention." },
   { id: "healer_rescue", path: "healer", name: "Rescue Surge", branch: "Lifebinder", ability: "healer_field_mend", detail: "Field Mend restores 2 extra health when its target was below half health." },
-  { id: "healer_field", path: "healer", name: "Wide Sanctuary", branch: "Sanctuary", ability: "healer_renewal", detail: "Renewal's healing field grows by 1.5m." },
-  { id: "healer_renew", path: "healer", name: "Enduring Renewal", branch: "Renewalist", ability: "healer_renewal", detail: "Renewal lasts 2s longer, delivering two additional healing pulses." },
+  { id: "healer_field", path: "healer", name: "Wide Sanctuary", branch: "Oracle", ability: "healer_renewal", detail: "Renewal's healing field grows by 1.5m." },
+  { id: "healer_renew", path: "healer", name: "Enduring Renewal", branch: "Soulweaver", ability: "healer_renewal", detail: "Renewal lasts 2s longer, delivering two additional healing pulses." },
 ];
 export interface FloorRunUpgradeState {
   active: boolean; path: BuildPathId | null; earned: number; pending: number;

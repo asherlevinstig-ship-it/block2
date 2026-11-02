@@ -496,7 +496,7 @@ export const CALLING_ABILITY_OPTIONS = [
   { id: "ranger_volley_focus", pathId: "ranger", name: "Volley Focus", category: "Core", unlockRank: 0, cooldownMs: 12_000, description: "Your next three bow attacks split toward nearby enemies." },
   { id: "ranger_disengage", pathId: "ranger", name: "Disengage", category: "Utility", unlockRank: 2, cooldownMs: 15_000, description: "Leap backward and empower your next two shots." },
   { id: "ranger_deadeye", pathId: "ranger", name: "Deadeye", category: "Aggressive", unlockRank: 3, cooldownMs: 18_000, description: "Fire one precise shot at the enemy under your aim. Long shots deal more damage." },
-  { id: "healer_field_mend", pathId: "healer", name: "Field Mend", category: "Core", unlockRank: 0, cooldownMs: 15_000, description: "Heal the most injured nearby ally; self-heal if no ally needs help." },
+  { id: "healer_field_mend", pathId: "healer", name: "Field Mend", category: "Core", unlockRank: 0, cooldownMs: 15_000, description: "Aim at an injured or threatened ally to heal them, or protect them with Divine Intercession before impact." },
   { id: "healer_renewal", pathId: "healer", name: "Renewal", category: "Utility", unlockRank: 2, cooldownMs: 24_000, description: "Create a healing sanctuary that restores allies who hold their ground inside it." },
   { id: "healer_resurrection", pathId: "healer", name: "Resurrection", category: "Master", unlockRank: 4, cooldownMs: 90_000, description: "Channel for 2.5s beside a fallen party member to revive them with low health. Moving or taking damage interrupts the cast." },
 ] as const;
@@ -649,8 +649,9 @@ export const BUILD_PATH_SPECIALIZATIONS = {
     { id: "trapper", name: "Trapper", role: "Hold the battlefield", effect: "Pinning slow is stronger and its root lasts 1.8 seconds.", trial: "Defeat 20 rooted enemies.", trialTarget: 20, capstone: "IRON SNARE · Roots last 2.5 seconds." },
   ],
   healer: [
-    { id: "lifebinder", name: "Lifebinder", role: "Restore more health", effect: "Field Mend restores 1 additional HP.", trial: "Restore 30 HP to injured allies.", trialTarget: 30, capstone: "DEEP RESTORATION · Field Mend restores 1 more HP." },
-    { id: "field_medic", name: "Field Medic", role: "Restore stamina too", effect: "Field Mend also restores 10 stamina.", trial: "Restore 100 ally stamina with Field Mend.", trialTarget: 100, capstone: "SECOND WIND · Field Mend restores 20 stamina." },
+    { id: "lifebinder", name: "Lifebinder", role: "Master emergency restoration", effect: "Critical Field Mends create Lifeline and recover faster.", trial: "Restore 30 HP to injured allies.", trialTarget: 30, capstone: "SECOND DAWN · Perfect emergency healing restores more and stabilises momentum." },
+    { id: "field_medic", name: "Oracle", role: "Predict and prevent lethal damage", effect: "Field Mend can place Divine Intercession on an ally under an incoming attack.", trial: "Prevent 100 damage or strain through timely support.", trialTarget: 100, capstone: "GUARDIAN CONSTELLATION · Perfect Intercession is stronger and restores Grace." },
+    { id: "soulweaver", name: "Soulweaver", role: "Turn offence into restoration", effect: "Controlled weapon hits siphon vitality into a nearby injured ally.", trial: "Restore 40 health through Symbiotic Bond.", trialTarget: 40, capstone: "SOUL CONVERGENCE · Symbiotic healing reaches a second wounded ally." },
   ],
 } as const;
 export type BuildPathSpecializationId = typeof BUILD_PATH_SPECIALIZATIONS[BuildPathId][number]["id"];
@@ -731,7 +732,7 @@ export function nextCallingWeaponStage(pathId: BuildPathId, rank: number): Calli
   const nextRank = Math.max(0, Math.floor(rank)) + 1;
   return nextRank > 4 ? null : CALLING_WEAPON_PROGRESSION[pathId][nextRank]!;
 }
-export const BuildPathRequestSchema = z.object({ action: z.enum(["sync", "choose", "specialize"]), pathId: z.enum(["tank", "mage", "assassin", "thief", "ranger", "healer"]).optional(), specializationId: z.enum(["guardian", "juggernaut", "arcanist", "elementalist", "spellguard", "pyromancer", "runebinder", "chronomancer", "executioner", "phantom", "venomblade", "trickster", "plunderer", "marksman", "trapper", "lifebinder", "field_medic"]).optional() }).strict();
+export const BuildPathRequestSchema = z.object({ action: z.enum(["sync", "choose", "specialize"]), pathId: z.enum(["tank", "mage", "assassin", "thief", "ranger", "healer"]).optional(), specializationId: z.enum(["guardian", "juggernaut", "arcanist", "elementalist", "spellguard", "pyromancer", "runebinder", "chronomancer", "executioner", "phantom", "venomblade", "trickster", "plunderer", "marksman", "trapper", "lifebinder", "field_medic", "soulweaver"]).optional() }).strict();
 export type BuildPathAffinity = { pathId: BuildPathId; score: number; reasons: string[] };
 export type BuildPathUpdate = { selectedPathId: BuildPathId | null; rank: number; xp: number; nextRankXp: number | null;
   selectedCallingAbilityId: CallingAbilityId | null;

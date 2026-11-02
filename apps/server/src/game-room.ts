@@ -284,6 +284,8 @@ import { compatiblePowerOrFallback, fracturedBlockResult, isGroundPowerTargetInR
 import { assassinMarkStrikeBonus, huntersMarkDamageBonus, huntersMarkPowerPayoff, isBrambleSnareTargetInRange, isInsideBrambleSnare, progressHuntersMark, selectDeathMarkTarget, selectHuntersMarkTarget, type ActiveSpecialMark } from "./special-rules.js";
 import { ASSASSIN_EDGE_DECAY_MS, ASSASSIN_EDGE_MAX, advanceAssassinEdge, assassinOpening, assassinOpeningLabel, venombladeStrike,
   type AssassinEdgeState } from "./assassin-combat.js";
+import { HEALER_GRACE_MAX, INTERCESSION_DURATION_MS, PERFECT_HEAL_WINDOW_MS, aimedSupportScore, healerGrace,
+  intercessionImpact, isPerfectHealing } from "./healer-combat.js";
 import { inventoryTotal, isLootInPickupRange, lootForArchetype, armourDropForMob, LOOT_DESPAWN_MS, NormalLootCadence } from "./loot-rules.js";
 import { findLootLanding } from "./loot-placement.js";
 import { canEquipMainHand } from "./equipment-rules.js";
@@ -599,8 +601,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly callingAbilityReadyAt = new Map<string, number>();
   private readonly callingSpecialReadyAt = new Map<string, number>();
   private readonly resurrectionWindows = new Map<string, number>();
-  private readonly pendingResurrections = new Map<string, { targetId: string; completesAt: number; x: number; y: number; z: number; health: number }>();
+  private readonly pendingResurrections = new Map<string, { targetId: string; completesAt: number; x: number; y: number; z: number; health: number; graceSpent?: number }>();
   private readonly renewalFields = new Map<string, { ownerId: string; x: number; y: number; z: number; radius: number; heal: number; expiresAt: number; nextPulseAt: number }>();
+  private readonly healerGrace = new Map<string, number>();
+  private readonly healerDamageWindows = new Map<string, number>();
+  private readonly healerIntercessions = new Map<string, { casterId: string; placedAt: number; expiresAt: number; strength: number }>();
+  private readonly healerLifelines = new Map<string, number>();
   private renewalFieldSequence = 0;
   private readonly tankBulwarkUntil = new Map<string, number>();
   private readonly tankChallengeUntil = new Map<string, number>();
@@ -1458,6 +1464,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.callingSpecialReadyAt.delete(client.sessionId);
     this.resurrectionWindows.delete(client.sessionId);
     this.pendingResurrections.delete(client.sessionId);
+    this.healerGrace.delete(client.sessionId);
+    this.healerDamageWindows.delete(client.sessionId);
+    this.healerIntercessions.delete(client.sessionId);
+    for (const [targetId, ward] of this.healerIntercessions) if (ward.casterId === client.sessionId) this.healerIntercessions.delete(targetId);
+    for (const key of this.healerLifelines.keys()) if (key.startsWith(`${client.sessionId}:`) || key.endsWith(`:${client.sessionId}`)) this.healerLifelines.delete(key);
     for (const [casterId, cast] of this.pendingResurrections)
       if (cast.targetId === client.sessionId) this.pendingResurrections.delete(casterId);
     this.tankBulwarkUntil.delete(client.sessionId);
@@ -5835,8 +5846,29 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (defense.damage > 0 && kind !== "melee" && ownsDepthsReward(player.blacksmithUpgrades, "matriarch_guard")) {
       defense.damage = Math.max(1, defense.damage - 1);
     }
+    const intercession = this.healerIntercessions.get(playerId);
+    if (defense.damage > 0 && intercession) {
+      if (now <= intercession.expiresAt) {
+        const impact = intercessionImpact(defense.damage, intercession.placedAt, now, intercession.strength);
+        defense.damage = impact.damage;
+        this.healerIntercessions.delete(playerId);
+        const caster = this.state.players.get(intercession.casterId);
+        if (impact.perfect) {
+          this.updateHealerGrace(intercession.casterId, 1, "PERFECT INTERCESSION", playerId);
+          this.callingAbilityReadyAt.set(intercession.casterId,
+            Math.max(now, (this.callingAbilityReadyAt.get(intercession.casterId) ?? now) - 7_500));
+        }
+        if (caster && this.buildSpecializationFor(caster, "healer") === "field_medic")
+          this.grantMasterTrial(intercession.casterId, "field_medic", impact.prevented);
+        this.broadcast("healer:intercession-impact", { casterId: intercession.casterId, targetId: playerId,
+          mobId, prevented: impact.prevented, perfect: impact.perfect, grace: this.healerGrace.get(intercession.casterId) ?? 0 });
+        this.buildPathProc(intercession.casterId, "healer", impact.perfect ? "PERFECT INTERCESSION" : "DIVINE INTERCESSION",
+          `${impact.prevented} DAMAGE PREVENTED${impact.perfect ? " · +1 GRACE · RECOVERY REFUNDED" : ""}`);
+      } else this.healerIntercessions.delete(playerId);
+    }
     player.momentumStacks = momentumAfterDefense(player.momentumStacks, defense.damage, defense.parried, traitId);
     player.health = Math.max(this.roomKind === "practice" && !this.rapidPractice ? 1 : 0, player.health - defense.damage);
+    if (defense.damage >= 2) this.healerDamageWindows.set(playerId, now + PERFECT_HEAL_WINDOW_MS);
     const interruptedResurrection = defense.damage > 0 ? this.pendingResurrections.get(playerId) : undefined;
     if (interruptedResurrection) {
       this.pendingResurrections.delete(playerId);
@@ -7626,11 +7658,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         return;
       }
       const soulboundTier = this.equipmentAffixTier(player, "soulbound");
-      const channelMs = Math.max(1_700, 2_500 - soulboundTier * 150);
+      const graceSpent = Math.min(2, this.healerGrace.get(client.sessionId) ?? 0);
+      if (graceSpent > 0) this.updateHealerGrace(client.sessionId, -graceSpent, "REVIVAL", target[0]);
+      const channelMs = Math.max(1_300, 2_500 - soulboundTier * 150 - graceSpent * 300);
       const cooldownUntil = now + definition.cooldownMs;
       this.callingAbilityReadyAt.set(client.sessionId, cooldownUntil);
       this.pendingResurrections.set(client.sessionId, { targetId: target[0], completesAt: now + channelMs,
-        x: player.x, y: player.y, z: player.z, health: player.health });
+        x: player.x, y: player.y, z: player.z, health: player.health, graceSpent });
       this.broadcast("healer:resurrection-channel", { casterId: client.sessionId, targetId: target[0], until: now + channelMs });
       client.send("calling:ability", { requestId: parsed.data.requestId, pathId, abilityId,
         ability: definition.name, detail: `CHANNELING · ${target[1].name || "ALLY"} · ${(channelMs / 1_000).toFixed(2)}s`, cooldownUntil,
@@ -7645,15 +7679,29 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       client.send("chat:notice", `${definition.name.toUpperCase()} · recovers in ${Math.max(1, Math.ceil((readyAt - now) / 1_000))}s.`);
       return;
     }
-    const healTarget = abilityId === "healer_field_mend"
-      ? [...this.state.players.entries()].filter(([, target]) => target.health > 0 && target.health < target.maxHealth
+    const healerThreatened = abilityId === "healer_field_mend" ? new Set([
+      ...[...this.pendingMobMelee.values()].filter(pending => pending.impactAt >= now && pending.impactAt <= now + 2_000)
+        .map(pending => pending.targetId),
+      ...[...this.pendingMobProjectiles.values()].filter(projectile => projectile.impactAt >= now && projectile.impactAt <= now + 2_000)
+        .flatMap(projectile => [...this.state.players.entries()].filter(([, target]) => Math.abs(target.y - projectile.end.y) <= 2.5
+          && Math.hypot(target.x - projectile.end.x, target.z - projectile.end.z) <= Math.max(1.5, projectile.hazardRadius ?? 0))
+          .map(([targetId]) => targetId)),
+    ]) : new Set<string>();
+    const healTarget = abilityId === "healer_field_mend" ? (() => {
+      const candidates = [...this.state.players.entries()].filter(([targetId, target]) => target.health > 0
+        && (target.health < target.maxHealth || healerThreatened.has(targetId))
         && Math.abs(target.y - player.y) <= 2.5 && Math.hypot(target.x - player.x, target.z - player.z) <= 8
-        && hasCombatLineOfSight(player, target, this.readWorldBlock))
-        .sort(([idA, a], [idB, b]) => Number(idA === client.sessionId) - Number(idB === client.sessionId)
-          || a.health / a.maxHealth - b.health / b.maxHealth
-          || Math.hypot(a.x - player.x, a.z - player.z) - Math.hypot(b.x - player.x, b.z - player.z))[0] : undefined;
+        && hasCombatLineOfSight(player, target, this.readWorldBlock));
+      const aimed = parsed.data.yaw === undefined ? [] : candidates.filter(([targetId, target]) => targetId !== client.sessionId
+        && aimedSupportScore(player, target, parsed.data.yaw!) >= .72)
+        .sort(([, a], [, b]) => aimedSupportScore(player, b, parsed.data.yaw!) - aimedSupportScore(player, a, parsed.data.yaw!));
+      return aimed[0] ?? candidates.sort(([idA, a], [idB, b]) => Number(idA === client.sessionId) - Number(idB === client.sessionId)
+        || Number(healerThreatened.has(idB)) - Number(healerThreatened.has(idA))
+        || a.health / a.maxHealth - b.health / b.maxHealth
+        || Math.hypot(a.x - player.x, a.z - player.z) - Math.hypot(b.x - player.x, b.z - player.z))[0];
+    })() : undefined;
     if (abilityId === "healer_field_mend" && !healTarget) {
-      client.send("chat:notice", "FIELD MEND · no injured ally within 8m and line of sight.");
+      client.send("chat:notice", "FIELD MEND · no injured ally or threatened ally under your aim within 8m.");
       return;
     }
     const consecratedTier = abilityId === "healer_renewal" ? this.equipmentAffixTier(player, "consecrated") : 0;
@@ -7918,10 +7966,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     } else if (abilityId === "healer_renewal") {
       const fieldId = `renewal:${client.sessionId}:${++this.renewalFieldSequence}`;
       const radius = renewalRadius, durationMsValue = 6_000 + consecratedTier * 500 + (this.hasFloorUpgrade(client.sessionId, "healer_renew") ? 2_000 : 0);
+      const resurgence = (this.healerGrace.get(client.sessionId) ?? 0) >= HEALER_GRACE_MAX;
+      if (resurgence) this.updateHealerGrace(client.sessionId, -HEALER_GRACE_MAX, "RESURGENCE");
       durationMs = durationMsValue;
       this.renewalFields.set(fieldId, { ownerId: client.sessionId, x: player.x, y: player.y, z: player.z,
-        radius, heal: 1, expiresAt: now + durationMsValue, nextPulseAt: now + 500 });
-      detail = `SANCTUARY PLACED · ${radius.toFixed(1)}m · ${Math.floor(durationMsValue / 1_000)} HEALING PULSES`;
+        radius, heal: resurgence ? 2 : 1, expiresAt: now + durationMsValue, nextPulseAt: now + 500 });
+      detail = `${resurgence ? "RESURGENCE" : "SANCTUARY PLACED"} · ${radius.toFixed(1)}m · ${Math.floor(durationMsValue / 1_000)} HEALING PULSES`;
       this.broadcast("healer:renewal-field", { fieldId, casterId: client.sessionId, x: player.x, y: player.y,
         z: player.z, radius, expiresAt: now + durationMsValue });
       if (consecratedTier > 0) this.equipmentAffixProc(client.sessionId, "consecrated",
@@ -7930,8 +7980,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const [targetId, target] = healTarget!;
       const specialization = this.buildSpecializationFor(player, "healer");
       const mendingTier = this.equipmentAffixTier(player, "mending");
+      const critical = target.health <= target.maxHealth * .4;
+      const perfect = isPerfectHealing(this.healerDamageWindows.get(targetId), now, target.maxHealth - target.health);
+      const lifelineKey = `${client.sessionId}:${targetId}`;
+      const lifelineFollowUp = specialization === "lifebinder" && now <= (this.healerLifelines.get(lifelineKey) ?? 0);
       const heal = 2 + (rank >= 2 ? 1 : 0) + (rank >= 4 ? 1 : 0)
         + (specialization === "lifebinder" ? 1 + Number(this.buildSpecializationMastered(player, "lifebinder")) : 0)
+        + Number(perfect) + Number(lifelineFollowUp)
         + Math.ceil(mendingTier / 2) + (this.hasFloorUpgrade(client.sessionId, "healer_rescue") && target.health < target.maxHealth / 2 ? 2 : 0);
       const restored = Math.min(heal, target.maxHealth - target.health);
       target.health += restored;
@@ -7939,8 +7994,28 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (specialization === "field_medic") target.stamina = Math.min(target.maxStamina, target.stamina
         + (this.buildSpecializationMastered(player, "field_medic") ? 20 : 10));
       const staminaRestored = Math.round(target.stamina - staminaBefore);
+      const threatened = healerThreatened.has(targetId);
+      if (threatened) {
+        const oracle = specialization === "field_medic";
+        const strength = oracle ? (this.buildSpecializationMastered(player, "field_medic") ? 4 : 3) : 1;
+        this.healerIntercessions.set(targetId, { casterId: client.sessionId, placedAt: now,
+          expiresAt: now + INTERCESSION_DURATION_MS, strength });
+        this.broadcast("healer:intercession-cast", { casterId: client.sessionId, targetId,
+          until: now + INTERCESSION_DURATION_MS, strength });
+      }
+      if (perfect) {
+        this.healerDamageWindows.delete(targetId);
+        this.updateHealerGrace(client.sessionId, 1, "PERFECT HEALING", targetId);
+      }
+      if (specialization === "lifebinder" && critical && restored > 0) {
+        this.healerLifelines.set(lifelineKey, now + 9_000);
+        this.callingAbilityReadyAt.set(client.sessionId, Math.max(now,
+          (this.callingAbilityReadyAt.get(client.sessionId) ?? now) - 7_000));
+      } else if (lifelineFollowUp) this.healerLifelines.delete(lifelineKey);
       effectTargetId = targetId; effectPosition = target;
-      detail = `${targetId === client.sessionId ? "SELF" : target.name || "ALLY"} +${restored} HP${staminaRestored ? ` · +${staminaRestored} STAMINA` : ""}`;
+      detail = `${perfect ? "PERFECT HEAL · " : ""}${targetId === client.sessionId ? "SELF" : target.name || "ALLY"} +${restored} HP`
+        + `${threatened ? " · INTERCESSION READY" : ""}${critical && specialization === "lifebinder" ? " · LIFELINE" : ""}`
+        + `${staminaRestored ? ` · +${staminaRestored} STAMINA` : ""}`;
       this.broadcast("healer:field-mend", { casterId: client.sessionId, targetId, restored, staminaRestored });
       if (mendingTier > 0 && restored > 0) this.equipmentAffixProc(client.sessionId, "mending",
         `MENDING +${Math.ceil(mendingTier / 2)} HP`, target, now, 0);
@@ -9145,7 +9220,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.pendingResurrections.delete(casterId);
       this.resurrectionWindows.delete(cast.targetId);
       const soulboundTier = this.equipmentAffixTier(caster, "soulbound");
-      target.health = Math.max(1, Math.ceil(target.maxHealth * (.25 + soulboundTier * .05)));
+      target.health = Math.max(1, Math.ceil(target.maxHealth * (.25 + soulboundTier * .05 + (cast.graceSpent ?? 0) * .1)));
       this.recordFastWorldHealingSupport(casterId, cast.targetId, target.health, now);
       target.stamina = Math.min(target.maxStamina, Math.max(target.stamina, 25 + soulboundTier * 5));
       target.invulnerableUntil = now + 1_500 + soulboundTier * 250;
@@ -9592,6 +9667,38 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           bonus: restored + staminaRestored });
       }
       if (targets.length > 0) this.broadcast("healer:renewal-targets", { fieldId, casterId: field.ownerId, targets });
+    }
+  }
+
+  private updateHealerGrace(casterId: string, delta: number, label: string, targetId?: string): number {
+    const grace = healerGrace(this.healerGrace.get(casterId) ?? 0, delta);
+    this.healerGrace.set(casterId, grace);
+    this.clients.find(client => client.sessionId === casterId)?.send("healer:vitalis", {
+      kind: delta > 0 ? "grace" : "spent", grace, label, targetId,
+    });
+    return grace;
+  }
+
+  private applySoulweaverBond(casterId: string, caster: PlayerState, now: number): void {
+    if (this.buildSpecializationFor(caster, "healer") !== "soulweaver"
+      || !this.floorRunProc(casterId, "soulweaver-bond", now, 1_200)) return;
+    const limit = this.buildSpecializationMastered(caster, "soulweaver") ? 2 : 1;
+    const targets = [...this.state.players.entries()].filter(([, target]) => target.health > 0 && target.health < target.maxHealth
+      && Math.abs(target.y - caster.y) <= 2.5 && Math.hypot(target.x - caster.x, target.z - caster.z) <= 8
+      && hasCombatLineOfSight(caster, target, this.readWorldBlock))
+      .sort(([idA, a], [idB, b]) => a.health / a.maxHealth - b.health / b.maxHealth
+        || Number(idA === casterId) - Number(idB === casterId)).slice(0, limit);
+    if (targets.length === 0) return;
+    let total = 0;
+    for (const [targetId, target] of targets) {
+      const restored = Math.min(1, target.maxHealth - target.health);
+      target.health += restored; total += restored;
+      this.recordFastWorldHealingSupport(casterId, targetId, restored, now);
+      this.broadcast("healer:field-mend", { casterId, targetId, restored, staminaRestored: 0, source: "symbiotic_bond" });
+    }
+    if (total > 0) {
+      this.grantMasterTrial(casterId, "soulweaver", total);
+      this.buildPathProc(casterId, "healer", "SYMBIOTIC BOND", `${total} VITALITY TRANSFERRED`);
     }
   }
 
@@ -12595,6 +12702,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         this.broadcast("combat:stagger", stagger);
       }
       this.floorRunWeaponEffects(sessionId, player, mobId, mob, now, pending.step);
+      if (damage > 0) this.applySoulweaverBond(sessionId, player, now);
       if (mob.health > 0 && rangerActive) {
         if (pinStacks >= 3) {
           const snaringTier = this.equipmentAffixTier(player, "snaring");

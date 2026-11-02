@@ -76,4 +76,11 @@ describe("hidden build paths", () => {
         .toBe(specializationId);
     }
   });
+  it("offers Lifebinder, Oracle and Soulweaver as permanent Healer paths", () => {
+    for (const specializationId of ["lifebinder", "field_medic", "soulweaver"] as const) {
+      const veteran = grantBuildPathXp(chooseBuildPath(parseBuildPathState("{}"), "healer"), 70).state;
+      expect(chooseBuildSpecialization(veteran, "healer", specializationId).specializations.healer)
+        .toBe(specializationId);
+    }
+  });
 });

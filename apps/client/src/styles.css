@@ -815,6 +815,18 @@ html.onboarding-active #hud #target, html.onboarding-active #hud #players { disp
 #assassin-edge i.active { background: linear-gradient(90deg, #ff395f, #ff9b55); box-shadow: 0 0 8px #ff3f6e; }
 #assassin-edge small { min-width: 28px; color: #ffe2b8; font: inherit; }
 #assassin-edge.gained { animation: assassin-edge-gained 280ms ease-out; }
+#healer-grace {
+  position: fixed; z-index: 17; top: calc(50% + 50px); left: 50%; display: flex; align-items: center; gap: 7px;
+  padding: 5px 9px; border: 1px solid rgb(255 220 92 / 52%); border-radius: 999px;
+  background: rgb(6 26 20 / 82%); box-shadow: 0 4px 16px rgb(0 0 0 / 38%); color: #fff0a8;
+  font: 900 .58rem/1 system-ui, sans-serif; letter-spacing: .09em; pointer-events: none; transform: translateX(-50%);
+}
+#healer-grace[hidden] { display: none; }
+#healer-grace > span { display: flex; gap: 4px; }
+#healer-grace i { width: 17px; height: 6px; border-radius: 3px; background: #173e32; box-shadow: inset 0 0 0 1px #3c7864; }
+#healer-grace i.active { background: linear-gradient(90deg, #43f6a0, #ffe56f); box-shadow: 0 0 9px #7dffc1; }
+#healer-grace small { min-width: 28px; color: #efffc8; font: inherit; }
+#healer-grace.gained { animation: assassin-edge-gained 280ms ease-out; }
 @keyframes assassin-edge-gained {
   0% { transform: translateX(-50%) scale(.86); filter: brightness(1); }
   45% { transform: translateX(-50%) scale(1.12); filter: brightness(1.8); }
@@ -1667,7 +1679,7 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#tavern-high-low:
   100% { opacity: 0; transform: translate(-50%, -20px) scale(1); }
 }
 @media (prefers-reduced-motion: reduce) {
-  #combat-reticle.hit-confirmed, #damage-overlay.active, #player-hud-root.taking-damage, #assassin-edge.gained,
+  #combat-reticle.hit-confirmed, #damage-overlay.active, #player-hud-root.taking-damage, #assassin-edge.gained, #healer-grace.gained,
   html.player-health-critical #player-health { animation-duration: 1ms; animation-iteration-count: 1; }
 }
 
