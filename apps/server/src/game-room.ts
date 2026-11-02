@@ -11731,10 +11731,14 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
     const serverBowCharge = bowStartedAt === undefined ? undefined : bowDrawCharge(now - bowStartedAt);
     this.bowDrawStartedAt.delete(client.sessionId);
-    const mageFocusEquipped = player.mainHandTag === "focus"
-      && parseBuildPathState(player.huntLoadoutsJson).selectedPathId === "mage";
+    const focusCalling = parseBuildPathState(player.huntLoadoutsJson).selectedPathId;
+    const callingFocusEquipped = player.mainHandTag === "focus"
+      && (focusCalling === "mage" || focusCalling === "healer");
     const focusStartedAt = this.focusChargeStartedAt.get(client.sessionId);
-    const serverFocusCharge = !mageFocusEquipped || focusStartedAt === undefined
+    if (callingFocusEquipped && focusStartedAt === undefined) {
+      return this.reject(client, { requestId: parsed.data.requestId, action: "attack", reason: "missing" });
+    }
+    const serverFocusCharge = !callingFocusEquipped || focusStartedAt === undefined
       ? undefined : focusCastCharge(now - focusStartedAt);
     this.focusChargeStartedAt.delete(client.sessionId);
     this.attackChains.set(client.sessionId, {
@@ -11845,9 +11849,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (!parsed.success) return;
     if (!parsed.data.active) { this.focusChargeStartedAt.delete(client.sessionId); return; }
     const player = this.state.players.get(client.sessionId);
+    const pathId = player ? parseBuildPathState(player.huntLoadoutsJson).selectedPathId : null;
     if (!player || player.defending || this.pendingPowers.has(client.sessionId)
       || player.mainHandTag !== "focus"
-      || parseBuildPathState(player.huntLoadoutsJson).selectedPathId !== "mage") return;
+      || (pathId !== "mage" && pathId !== "healer")) return;
     const chain = this.attackChains.get(client.sessionId);
     const now = Date.now();
     if (chain && now < chain.recoveryUntil) return;

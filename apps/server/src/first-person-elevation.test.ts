@@ -98,6 +98,23 @@ describe("first-person elevation on authoritative attacks", () => {
     expect(chargedRelease.travelMs).toBeLessThan(instantRelease.travelMs);
     expect(charged.target.health).toBe(26);
   });
+  it("requires Healers to release a focus charge instead of accepting held auto-fire", () => {
+    const held = fixture("forged_focus", 8);
+    const player = held.internal.state.players.get("hero");
+    player.mainHandTag = "focus";
+    player.huntLoadoutsJson = JSON.stringify({ selectedPathId: "healer" });
+
+    held.internal.handleAttack(held.client, { requestId: "held-auto-fire", yaw: 90 });
+    expect(held.internal.pendingAttacks.has("hero")).toBe(false);
+    expect(held.client.send).toHaveBeenCalledWith("action:rejected", expect.objectContaining({
+      requestId: "held-auto-fire", action: "attack", reason: "missing",
+    }));
+
+    held.internal.handleFocusCharge(held.client, { active: true });
+    vi.advanceTimersByTime(450);
+    held.internal.handleAttack(held.client, { requestId: "released-cast", yaw: 90 });
+    expect(held.internal.pendingAttacks.get("hero")?.focusCharge).toBe(.5);
+  });
   it.each([7, 9])("lets a close-range dagger follow the view toward height %s", targetY => {
     const { target, fire } = fixture("fang_dagger", targetY, false, 1);
     fire(Math.atan2(targetY + .6 - (8 + 1.05), 1));

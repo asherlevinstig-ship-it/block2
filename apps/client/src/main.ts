@@ -7078,7 +7078,7 @@ function updateFirstPersonActionView(now: number, moving: boolean, actionElapsed
     bowDrawProgress,
     bowDrawing: bowDrawStartedAt !== null,
     focusChargeProgress,
-    focusCharging: focusChargeStartedAt !== null && mageFocusEquipped(),
+    focusCharging: focusChargeStartedAt !== null && callingFocusEquipped(),
     dualWielding: weaponKind === "dagger" && localBuildPathId === "assassin",
   });
   if (assassinCastStrength > 0) {
@@ -7174,7 +7174,7 @@ function updateFirstPersonActionView(now: number, moving: boolean, actionElapsed
     && firstPersonAbilityCastPath !== "assassin" && firstPersonAbilityCastPath !== "thief";
   firstPersonActionRig.magic.enabled = magicVisible;
   if (magicVisible) {
-    const weavingFocus = focusChargeStartedAt !== null && mageFocusEquipped();
+    const weavingFocus = focusChargeStartedAt !== null && callingFocusEquipped();
     firstPersonActionRig.magic.setLocalPosition(
       weavingFocus ? (pose.leftX + pose.rightX) * .5 : pose.leftX + .08,
       weavingFocus ? (pose.leftY + pose.rightY) * .5 + .24 : pose.leftY + .22,
@@ -12737,7 +12737,7 @@ let focusChargePointerId: number | null = null;
 let focusChargeAim: { aimWithPointer: boolean; tabletAim?: { yaw: number; targetId: string | null } } | null = null;
 
 const bowEquipped = (): boolean => localMainHandId === "bow" || localMainHandId === "forged_bow";
-const mageFocusEquipped = (): boolean => localBuildPathId === "mage"
+const callingFocusEquipped = (): boolean => (localBuildPathId === "mage" || localBuildPathId === "healer")
   && MAIN_HAND_DEFINITIONS[localMainHandId].tag === "focus";
 
 function currentBowDrawCharge(now = performance.now()): number {
@@ -12796,7 +12796,7 @@ function currentFocusCharge(now = performance.now()): number {
 
 function beginFocusCharge(aimWithPointer = true,
   tabletAim?: { yaw: number; targetId: string | null }, pointerId?: number): boolean {
-  if (!mageFocusEquipped() || !weaponAttackInputAllowed() || focusChargeStartedAt !== null) return false;
+  if (!callingFocusEquipped() || !weaponAttackInputAllowed() || focusChargeStartedAt !== null) return false;
   const now = performance.now();
   const readyAt = Math.max(localAttackRecoveryUntil,
     localActionStartedAt === null ? 0 : localActionStartedAt + actionDuration(localActionStep));
@@ -12910,7 +12910,7 @@ function updateRangedReticle(): void {
     combatReticle.style.left = cameraViewMode === "first-person" || !pointerActive ? "50vw" : `${rangedPointer.x}px`;
     combatReticle.style.top = cameraViewMode === "first-person" || !pointerActive ? "50vh" : `${rangedPointer.y}px`;
     const drawing = bowDrawStartedAt !== null && bowEquipped();
-    const focusCasting = focusChargeStartedAt !== null && mageFocusEquipped();
+    const focusCasting = focusChargeStartedAt !== null && callingFocusEquipped();
     combatReticle.dataset.state = currentBowReticleState();
     combatReticle.dataset.drawing = String(drawing || focusCasting);
     combatReticle.dataset.focusCasting = String(focusCasting);
@@ -17829,7 +17829,7 @@ function commitSpecialAim(): void {
 function requestModePrimaryAction(): void {
   if (localDefending) requestDefense(false);
   if (bowEquipped()) { beginBowDraw(); return; }
-  if (mageFocusEquipped()) { beginFocusCharge(); return; }
+  if (callingFocusEquipped()) { beginFocusCharge(); return; }
   requestAttack();
 }
 
@@ -18228,7 +18228,7 @@ window.addEventListener("keydown", event => {
     event.preventDefault();
     if (!event.repeat) {
       if (bowEquipped()) beginBowDraw(false);
-      else if (mageFocusEquipped()) beginFocusCharge(false);
+      else if (callingFocusEquipped()) beginFocusCharge(false);
       else {
         keyboardFireHeld = continuousAttackEnabled(WEAPON_ATTACK_DEFINITIONS[localMainHandId].projectileTravelMs > 0,
           fastWorldRequested);
@@ -18333,9 +18333,9 @@ canvas.addEventListener("pointerdown", event => {
   }
   updateTarget();
   if (bowEquipped()) beginBowDraw(true, undefined, event.pointerId);
-  else if (mageFocusEquipped()) beginFocusCharge(true, undefined, event.pointerId);
+  else if (callingFocusEquipped()) beginFocusCharge(true, undefined, event.pointerId);
   else requestPrimaryAction();
-  if (!bowEquipped() && !mageFocusEquipped() && event.pointerType === "mouse" && rangedFireAllowed()) rangedFirePointer = event.pointerId;
+  if (!bowEquipped() && !callingFocusEquipped() && event.pointerType === "mouse" && rangedFireAllowed()) rangedFirePointer = event.pointerId;
 });
 window.addEventListener("pointerup", event => {
   if (event.pointerId === bowDrawPointerId) releaseBowDraw();
@@ -18582,7 +18582,7 @@ mineButton.addEventListener("pointerdown", event => {
   if (interactionMode !== "combat") { requestModePrimaryAction(); return; }
   if (event.pointerType === "mouse") {
     if (bowEquipped()) beginBowDraw(false, undefined, event.pointerId);
-    else if (mageFocusEquipped()) beginFocusCharge(false, undefined, event.pointerId);
+    else if (callingFocusEquipped()) beginFocusCharge(false, undefined, event.pointerId);
     else requestModePrimaryAction();
     return;
   }
@@ -18591,7 +18591,7 @@ mineButton.addEventListener("pointerdown", event => {
   tabletAttackYaw = null;
   mineButton.setPointerCapture(event.pointerId);
   if (bowEquipped()) beginBowDraw(false, undefined, event.pointerId);
-  else if (mageFocusEquipped()) beginFocusCharge(false, undefined, event.pointerId);
+  else if (callingFocusEquipped()) beginFocusCharge(false, undefined, event.pointerId);
 });
 mineButton.addEventListener("pointermove", updateTabletAttackAim);
 mineButton.addEventListener("pointerup", event => {
@@ -19550,7 +19550,7 @@ app.on("update", (dt: number) => {
     readiness.label = attackBuffer.hasQueued() ? "NEXT QUEUED" : "RECOVERING";
   }
   const bowDrawing = bowDrawStartedAt !== null && bowEquipped();
-  const focusCasting = focusChargeStartedAt !== null && mageFocusEquipped();
+  const focusCasting = focusChargeStartedAt !== null && callingFocusEquipped();
   if (bowDrawing) {
     readiness.progress = currentBowDrawCharge(animationNow);
     readiness.label = readiness.progress >= 1 ? "FULL DRAW · RELEASE" : "DRAWING";
