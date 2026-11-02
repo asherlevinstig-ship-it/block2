@@ -15,6 +15,7 @@ interface Limb {
 /** Art-only rig: the authoritative mob's transform and combat clock stay outside it. */
 export interface MobArtRig {
   kind: MobKind;
+  variant: "crownkeeper" | "forgeheart" | null;
   head: pc.Entity;
   jaw: pc.Entity;
   limbs: Limb[];
@@ -105,7 +106,8 @@ function pivot(parent: pc.Entity, name: string, at: Triple): pc.Entity {
   return result;
 }
 
-export function createMobArt(parent: pc.Entity, archetype: string, body: pc.StandardMaterial, matriarch = false, rootGuardian = false, faceted = false): MobArtRig {
+export function createMobArt(parent: pc.Entity, archetype: string, body: pc.StandardMaterial, matriarch = false,
+  rootGuardian = false, faceted = false, variant: MobArtRig["variant"] = null): MobArtRig {
   const box = (parent: pc.Entity, name: string, surface: pc.StandardMaterial, size: Triple, at: Triple, angle?: Triple) =>
     addMobPart(parent, name, surface, size, at, angle, faceted);
   const kind: MobKind = archetype === "stone_brute" ? "stone_brute" : archetype === "cave_spitter" ? "cave_spitter"
@@ -116,7 +118,8 @@ export function createMobArt(parent: pc.Entity, archetype: string, body: pc.Stan
     : kind === "thornbinder" ? [0, 1.72, .04] : kind === "fen_bloater" ? [0, .76, .58]
       : kind === "cinder_ram" ? [0, .95, .88] : kind === "ridge_stalker" || kind === "ember_hound" ? [0, .69, .56] : kind === "cave_spitter" ? [0, 0.56, 0.56] : [0, 0.53, 0.48]);
   const jaw = pivot(head, "jaw-joint", kind === "stone_brute" ? [0, -0.2, 0.14] : [0, -0.11, 0.27]);
-  const rig: MobArtRig = { kind, head, jaw, limbs: [], arms: [], sacs: [], phase: 0, walk: 0, pursuit: 0, matriarch, rootGuardian, phaseSurfaces: [], enraged: false, defeated: false, glowSurfaces: [] };
+  const rig: MobArtRig = { kind, variant, head, jaw, limbs: [], arms: [], sacs: [], phase: 0, walk: 0, pursuit: 0,
+    matriarch, rootGuardian, phaseSurfaces: [], enraged: false, defeated: false, glowSurfaces: [] };
 
   if (kind === "cinder_ram") {
     box(parent, "furnace-torso", cinderHide, [1.16, .78, 1.72], [0, .82, -.18]);
@@ -393,14 +396,27 @@ export function animateMobArt(rig: MobArtRig, dt: number, time: number, speed: n
     if (brute) {
       leg.pivot.setLocalEulerAngles(stride * rig.walk * strideScale * 23 - defeat * 16, 0, leg.side * defeat * 14);
     } else {
-      leg.pivot.setLocalEulerAngles(stride * rig.walk * strideScale * 16 + defeat * 35, stride * rig.walk * 15, leg.side * (lift * rig.walk * 21 + windup * 11 - defeat * 68));
-      leg.knee?.setLocalEulerAngles(lift * rig.walk * -22 - defeat * 40, 0, leg.side * windup * -10);
+      const strideDegrees = rig.kind === "cinder_ram" ? 27 : rig.kind === "ember_hound" || rig.kind === "ridge_stalker" ? 25
+        : rig.kind === "fen_bloater" ? 12 : rig.kind === "shard_sentry" ? 9 : 16;
+      const liftDegrees = rig.kind === "cinder_ram" ? 32 : rig.kind === "ember_hound" || rig.kind === "ridge_stalker" ? 29
+        : rig.kind === "fen_bloater" ? 14 : rig.kind === "shard_sentry" ? 8 : 21;
+      const yawDegrees = rig.kind === "cinder_ram" ? 6 : rig.kind === "ember_hound" || rig.kind === "ridge_stalker" ? 9
+        : rig.kind === "shard_sentry" ? 4 : 15;
+      leg.pivot.setLocalEulerAngles(stride * rig.walk * strideScale * strideDegrees + defeat * 35,
+        stride * rig.walk * yawDegrees, leg.side * (lift * rig.walk * liftDegrees + windup * 11 - defeat * 68));
+      leg.knee?.setLocalEulerAngles(lift * rig.walk * -(liftDegrees + 3) - defeat * 40, 0,
+        leg.side * windup * (rig.kind === "cinder_ram" ? -17 : -10));
     }
   }
   for (const arm of rig.arms) {
     const stride = Math.sin(rig.phase + arm.offset) * rig.walk;
-    arm.pivot.setLocalEulerAngles(stride * -22 - windup * 118 + attack * 50 + hurt * 12, 0, arm.side * (8 + windup * 13 + defeat * 19));
-    arm.knee?.setLocalEulerAngles(-windup * 32 - attack * 14 - defeat * 24, 0, 0);
+    const windupAngle = rig.variant === "forgeheart" ? 138 : rig.variant === "crownkeeper" ? 108 : 118;
+    const strikeAngle = rig.variant === "forgeheart" ? 76 : rig.variant === "crownkeeper" ? 64 : 50;
+    arm.pivot.setLocalEulerAngles(stride * -22 - windup * windupAngle + attack * strikeAngle + hurt * 12,
+      rig.variant === "crownkeeper" ? arm.side * (windup * 9 - attack * 6) : 0,
+      arm.side * (8 + windup * (rig.variant === "forgeheart" ? 19 : 13) + defeat * 19));
+    arm.knee?.setLocalEulerAngles(-windup * (rig.variant === "forgeheart" ? 44 : 32)
+      - attack * (rig.variant === "crownkeeper" ? 24 : 14) - defeat * 24, 0, 0);
   }
   rig.head.setLocalEulerAngles(
     (brute ? -windup * 12 + attack * 20 : spitter ? -windup * 20 + attack * 25 : windup * 13 - attack * 18) - hurt * 14 + defeat * 27 - rig.pursuit * rig.walk * 3,
@@ -411,6 +427,13 @@ export function animateMobArt(rig: MobArtRig, dt: number, time: number, speed: n
     : windup * 32 - attack * 28) + defeat * 18, 0, 0);
   for (let index = 0; index < rig.sacs.length; index += 1) {
     const inflate = 1 + Math.sin(time * 2.5 + index * 0.4) * 0.035 + windup * 0.22 - attack * 0.16;
-    rig.sacs[index]!.setLocalScale(inflate, inflate * (1 - defeat * 0.3), inflate);
+    if (rig.kind === "ember_hound") {
+      rig.sacs[index]!.setLocalEulerAngles(-24 + Math.sin(time * 7 + index) * (8 + rig.pursuit * 9),
+        Math.sin(time * 5 + index) * 11, 0);
+    } else if (rig.kind === "shard_sentry") {
+      rig.sacs[index]!.setLocalEulerAngles(0, time * (index % 2 ? -85 : 85),
+        (index % 2 ? -1 : 1) * (20 + windup * 18));
+      rig.sacs[index]!.setLocalScale(1 + windup * .13, 1 + windup * .2, 1 + windup * .13);
+    } else rig.sacs[index]!.setLocalScale(inflate, inflate * (1 - defeat * 0.3), inflate);
   }
 }

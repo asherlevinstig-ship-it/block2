@@ -253,6 +253,7 @@ import {
   predictedDodgeRecoveryElapsed,
 } from "./dodge-input.js";
 import { animateMobArt, createMobArt, setMobArtEnraged, setMobArtDefeated, type MobArtRig } from "./mob-art";
+import { mobBodyMotionProfile } from "./mob-animation-profile.js";
 import { defeatDuration, leaderDefeatKind, mobDefeatPose, lootSourceMob, lootMarkerScale } from "./mob-defeat.js";
 import { matriarchBodyPose, matriarchRecoil } from "./matriarch-art.js";
 import { Client, Predict, getStateCallbacks, type InputHandle, type Room } from "@colyseus/sdk";
@@ -11489,7 +11490,8 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   markMaterial.depthWrite = false;
   markMaterial.update();
   if (rootGuardian) bodyRoot.setLocalScale(1.16, 1.16, 1.16);
-  const art = createMobArt(bodyRoot, mob.archetype, bodyMaterial, matriarch, rootGuardian, fastWorldRequested);
+  const art = createMobArt(bodyRoot, mob.archetype, bodyMaterial, matriarch, rootGuardian, fastWorldRequested,
+    isCrownkeeper ? "crownkeeper" : isForgeheart ? "forgeheart" : null);
   const elderthornBranches: pc.Entity[] = [];
   let elderthornHeart: pc.Entity | null = null;
   let elderthornHeartMaterial: pc.StandardMaterial | null = null;
@@ -20414,30 +20416,36 @@ app.on("update", (dt: number) => {
         rigActive ? mob.state.awarenessState : "patrol", rigActive ? windupStrength : 0,
         rigActive ? attackStrength : 0, rigActive ? hitStrength : 0, rigActive ? staggerStrength : 0,
         rigActive ? defeat : 0);
-    const crawlerRecovery = !mob.isBrute && !mob.isSpitter && presentation.phase === "recover"
+    const recoveryStrength = presentation.phase === "recover"
       ? Math.sin(Math.PI * Math.min(1, Math.max(0, (animationNow + serverClock.offset - mob.state.attackContactEndAt)
         / Math.max(1, mob.state.attackRecoveryEndAt - mob.state.attackContactEndAt)))) : 0;
+    const crawlerRecovery = !mob.isBrute && !mob.isSpitter ? recoveryStrength : 0;
     const gaitBob = Math.abs(Math.sin(mob.art.phase)) * mob.art.walk * (mob.isBrute ? 0.026 : 0.018);
     const woundedLimp = mob.state.name === "Wounded Wilds Stalker" ? Math.max(0, Math.sin(mob.art.phase)) * mob.art.walk : 0;
     const bruteRecovery = bruteRecoveryPose(mob.state, animationNow + serverClock.offset);
     const bodySize = mobBodyScale(mob.entity.name.slice(4), mob.state);
     const emergence = mob.greenwoodStyle ? greenwoodEmergence(animationNow - mob.emergenceAt) : { y: 0, scaleY: 1 };
     const impactSquash = Math.min(.16, localImpactStrength * .105);
-    mob.bodyRoot.setLocalScale(bodySize * (1 + defeat * 0.13 + impactSquash),
-      bodySize * emergence.scaleY * (1 - defeat * (mob.isBrute ? 0.42 : 0.58) - impactSquash * .75),
-      bodySize * (1 + defeat * 0.1 + impactSquash));
+    const bodyMotion = mobBodyMotionProfile(mob.state.archetype, mob.mobId, mob.art.phase, mob.art.walk,
+      mob.art.pursuit, windupStrength, attackStrength, recoveryStrength, animationTime);
+    const bespokeMotion = mob.mobId === TOWER_FLOOR_ONE_BOSS_ID || mob.mobId === TOWER_FLOOR_TWO_BOSS_ID
+      || ["stone_brute", "cinder_ram", "ember_hound", "ridge_stalker", "shard_sentry", "fen_bloater"].includes(mob.state.archetype);
+    mob.bodyRoot.setLocalScale(bodySize * (1 + defeat * 0.13 + impactSquash) * bodyMotion.scaleX,
+      bodySize * emergence.scaleY * (1 - defeat * (mob.isBrute ? 0.42 : 0.58) - impactSquash * .75) * bodyMotion.scaleY,
+      bodySize * (1 + defeat * 0.1 + impactSquash) * bodyMotion.scaleZ);
     mob.bodyRoot.setLocalPosition(
-      0,
-      gaitBob + emergence.y - woundedLimp * .075 - hitStrength * 0.035 - attackStrength * (mob.isBrute ? 0.07 : 0) - crawlerRecovery * 0.06 - bruteRecovery * .1,
-      attackStrength * (mob.isBrute ? 0.42 : mob.isSpitter ? -0.3 : 0.24)
-        - windupStrength * (mob.isBrute ? 0.25 : mob.isSpitter ? -0.18 : 0.16) + localImpactStrength * .22,
+      bodyMotion.x,
+      (bespokeMotion ? 0 : gaitBob) + bodyMotion.y + emergence.y - woundedLimp * .075 - hitStrength * 0.035
+        - (bespokeMotion ? 0 : attackStrength * (mob.isBrute ? 0.07 : 0) + crawlerRecovery * 0.06 + bruteRecovery * .1),
+      bodyMotion.z + (bespokeMotion ? 0 : attackStrength * (mob.isBrute ? 0.42 : mob.isSpitter ? -0.3 : 0.24)
+        - windupStrength * (mob.isBrute ? 0.25 : mob.isSpitter ? -0.18 : 0.16)) + localImpactStrength * .22,
     );
     mob.bodyRoot.setLocalEulerAngles(
-      (mob.isBrute ? windupStrength * -11 + attackStrength * 18 + bruteRecovery * 14 : mob.isSpitter ? windupStrength * 12 - attackStrength * 20 : windupStrength * -7 + attackStrength * 9 + crawlerRecovery * 8) + defeat * (mob.isBrute ? 17 : 5) - mob.art.pursuit * mob.art.walk * (mob.isBrute ? 2 : 4)
+      (bespokeMotion ? bodyMotion.pitch : mob.isBrute ? windupStrength * -11 + attackStrength * 18 + bruteRecovery * 14 : mob.isSpitter ? windupStrength * 12 - attackStrength * 20 : windupStrength * -7 + attackStrength * 9 + crawlerRecovery * 8) + defeat * (mob.isBrute ? 17 : 5) - mob.art.pursuit * mob.art.walk * (mob.isBrute ? 2 : 4)
         - localImpactStrength * 7,
       0,
-      Math.sin(animationTime * 35) * staggerStrength * (mob.isBrute ? 7 : 12) + Math.sin(mob.art.phase) * mob.art.walk * (mob.isBrute ? 2.5 : 1.3)
-        + woundedLimp * 7 + mob.turnLean * 4 + defeat * (mob.isBrute ? 7 : 12),
+      Math.sin(animationTime * 35) * staggerStrength * (mob.isBrute ? 7 : 12) + (bespokeMotion ? 0 : Math.sin(mob.art.phase) * mob.art.walk * (mob.isBrute ? 2.5 : 1.3))
+        + bodyMotion.roll + woundedLimp * 7 + mob.turnLean * 4 + defeat * (mob.isBrute ? 7 : 12),
     );
     if (mob.art.matriarch) {
       const pose = matriarchBodyPose(defeat, attackStrength);
