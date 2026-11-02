@@ -4,7 +4,7 @@ import { TOWER_FLOOR_TWO, TOWER_FLOOR_TWO_COLLIDERS, TOWER_FLOOR_TWO_ROOMS,
   TOWER_FLOOR_TWO_ROUTES, TOWER_FLOOR_TWO_BOSS_ID, TOWER_FLOOR_TWO_ENCOUNTERS,
   TOWER_FLOOR_TWO_FORGEHEART_COMBAT, TOWER_FLOOR_TWO_REGULATORS, TOWER_FLOOR_TWO_SPAWNS,
   TOWER_FLOOR_TWO_VENTS, isInsideTowerFloorTwo, towerFloorTwoEncounterAllows,
-  towerFloorTwoEruptingVentAt, towerFloorTwoForgeheartPattern, towerFloorTwoForgeheartPhase,
+  towerFloorTwoEncounterBounds, towerFloorTwoEruptingVentAt, towerFloorTwoForgeheartPattern, towerFloorTwoForgeheartPhase,
   towerFloorTwoGroundHeight, towerFloorTwoVentPhase } from "./tower-floor-two.js";
 
 describe("Floor 2 Emberworks greybox", () => {
@@ -62,6 +62,11 @@ describe("Floor 2 Emberworks greybox", () => {
       for (const id of encounter.memberIds) expect(TOWER_FLOOR_TWO_SPAWNS.some(spawn => spawn.id === id), id).toBe(true);
     for (const spawn of TOWER_FLOOR_TWO_SPAWNS)
       expect(towerFloorTwoEncounterAllows(spawn.id, spawn), spawn.id).toBe(true);
+    const hound = TOWER_FLOOR_TWO_SPAWNS.find(spawn => spawn.id === "floor2-bellows-hound-a")!;
+    const bounds = towerFloorTwoEncounterBounds(hound.id)!;
+    expect(bounds.maxX - bounds.minX).toBeGreaterThan(20);
+    expect(towerFloorTwoEncounterAllows(hound.id, { x: 486, y: towerFloorTwoGroundHeight(486, 86), z: 86 })).toBe(true);
+    expect(towerFloorTwoEncounterAllows(hound.id, { x: 500, y: towerFloorTwoGroundHeight(500, 86), z: 86 })).toBe(false);
   });
 
   it("gives the Forgeheart fixed learnable phases rather than random attacks", () => {

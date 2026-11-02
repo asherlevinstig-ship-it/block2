@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { awareMobTarget, createMobAwareness, MOB_MEMORY_MS, provokeMob } from "../src/mob-awareness.js";
+import { awareMobTarget, createMobAwareness, MOB_MEMORY_MS, PROVOKED_ELEVATION_RANGE, provokeMob } from "../src/mob-awareness.js";
 const mob = { x: 100, y: 1, z: 100 };
 const a = { ...mob, x: 105, id: "a", health: 5 };
 const b = { ...mob, x: 106, id: "b", health: 5 };
@@ -9,6 +9,20 @@ describe("mob awareness", () => {
     provokeMob(state, attacker, 100);
     expect(awareMobTarget(mob, [attacker], state, 133, 7, () => true)?.id).toBe("a");
     expect(awareMobTarget(mob, [attacker], state, 6200, 7, () => true)).toBeNull();
+  });
+  it("retains an elevated archer after a real hit without passively detecting them", () => {
+    const attacker = { ...a, y: mob.y + PROVOKED_ELEVATION_RANGE - .1 };
+    expect(awareMobTarget(mob, [attacker], createMobAwareness(), 100, 7, () => true)).toBeNull();
+    const state = createMobAwareness();
+    provokeMob(state, attacker, 100);
+    expect(awareMobTarget(mob, [attacker], state, 133, 7, () => true)).toMatchObject({ id: "a", visible: true });
+    expect(awareMobTarget(mob, [attacker], state, 6200, 7, () => true)).toBeNull();
+  });
+  it("does not retain a provoked target on a genuinely different floor", () => {
+    const attacker = { ...a, y: mob.y + PROVOKED_ELEVATION_RANGE + .1 };
+    const state = createMobAwareness();
+    provokeMob(state, attacker, 100);
+    expect(awareMobTarget(mob, [attacker], state, 133, 7, () => true)).toBeNull();
   });
   it("remembers a hit source but cannot attack a hidden attacker", () => {
     const state = createMobAwareness(); provokeMob(state, a, 100);

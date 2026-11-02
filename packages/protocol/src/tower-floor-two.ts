@@ -201,11 +201,39 @@ export function towerFloorTwoSpawn(id: string): TowerFloorTwoSpawn | undefined {
   return TOWER_FLOOR_TWO_SPAWNS.find(spawn => spawn.id === id);
 }
 
+export function towerFloorTwoEncounterForMember(id: string): TowerFloorTwoEncounter | undefined {
+  return TOWER_FLOOR_TWO_ENCOUNTERS.find(encounter => encounter.memberIds.includes(id));
+}
+
+/**
+ * Encounter-wide combat bounds prevent ranged players from abusing the old
+ * ten-metre leash around each individual spawn. The margin leaves room for
+ * flanking and retreat without letting one pull roam into another room.
+ */
+export function towerFloorTwoEncounterBounds(id: string) {
+  const encounter = towerFloorTwoEncounterForMember(id);
+  if (!encounter) return null;
+  const members = encounter.memberIds
+    .map(memberId => towerFloorTwoSpawn(memberId))
+    .filter((spawn): spawn is TowerFloorTwoSpawn => Boolean(spawn));
+  if (!members.length) return null;
+  const margin = encounter.kind === "boss" ? TOWER_FLOOR_TWO.bossCourt.radius
+    : encounter.kind === "regulator" ? 9 : 10;
+  return {
+    minX: Math.min(...members.map(spawn => spawn.x)) - margin,
+    maxX: Math.max(...members.map(spawn => spawn.x)) + margin,
+    minZ: Math.min(...members.map(spawn => spawn.z)) - margin,
+    maxZ: Math.max(...members.map(spawn => spawn.z)) + margin,
+  };
+}
+
 export function towerFloorTwoEncounterAllows(id: string, position: { x: number; y: number; z: number }): boolean {
   const spawn = towerFloorTwoSpawn(id);
-  return Boolean(spawn) && isInsideTowerFloorTwo(position.x, position.z, 2)
+  const bounds = towerFloorTwoEncounterBounds(id);
+  return Boolean(spawn && bounds) && isInsideTowerFloorTwo(position.x, position.z, 2)
     && Math.abs(position.y - towerFloorTwoGroundHeight(position.x, position.z)) <= 1.75
-    && Math.hypot(position.x - spawn!.x, position.z - spawn!.z) <= (spawn!.floorBoss ? 16 : spawn!.leader ? 12 : 10);
+    && position.x >= bounds!.minX && position.x <= bounds!.maxX
+    && position.z >= bounds!.minZ && position.z <= bounds!.maxZ;
 }
 
 function smoothStep(value: number): number {

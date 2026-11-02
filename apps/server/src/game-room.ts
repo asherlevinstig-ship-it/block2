@@ -26,9 +26,9 @@ import { FAST_WORLD_TOWN_BOUNDS, FAST_WORLD_TOWN_ONLY, PRACTICE_ROOM, TOWER_FLOO
   towerFloorOneAggroRange, towerFloorOneEncounterAllows, towerFloorOneNorthWardenAttackTiming,
   towerFloorOneCrownkeeperPattern, towerFloorOneNorthWardenPattern, towerFloorOneSouthWardenPattern,
   towerFloorOneSouthWardenWindup, TOWER_FLOOR_TWO_BOSS_ID, TOWER_FLOOR_TWO_FORGEHEART_COMBAT,
-  TOWER_FLOOR_TWO_REGULATORS, TOWER_FLOOR_TWO_SPAWNS, isInsideTowerFloorTwo,
+  TOWER_FLOOR_TWO_ENCOUNTERS, TOWER_FLOOR_TWO_REGULATORS, TOWER_FLOOR_TWO_SPAWNS, isInsideTowerFloorTwo,
   towerFloorTwoEncounterAllows, towerFloorTwoEruptingVentAt, towerFloorTwoForgeheartPattern,
-  towerFloorTwoForgeheartPhase, towerFloorTwoGroundHeight } from "@blockcraft/protocol";
+  towerFloorTwoForgeheartPhase, towerFloorTwoGroundHeight, towerFloorTwoSpawn } from "@blockcraft/protocol";
 import type { SchemaType } from "@colyseus/schema";
 import { ShadowMoveInput, stepShadowMovement, type ShadowPose } from "./movement-shadow.js";
 import { FIRST_COMBAT_MOB_ID, firstCombatExperience, firstCombatHealthAfterHit, firstCombatReward, isFirstCombatSupport } from "./first-combat-training.js";
@@ -53,6 +53,8 @@ import { AREA_LEADER_RELIC_IDS, LEADER_FORGE_MARKS, LEADER_FORGE_RECIPES, Leader
   type AreaLeaderRelicId, type LeaderForgemarkId } from "@blockcraft/protocol";
 import { emberOreSale, weaponPurchase } from "./blacksmith.js";
 import { awareMobTarget, createMobAwareness, provokeMob, type MobAwareness } from "./mob-awareness.js";
+import { XStateEncounterDirector } from "./encounter-director.js";
+import { antiCampSpeedMultiplier, canPressureHealer, heldGuardBreak, isRangedCombatHand } from "./combat-style-counterplay.js";
 import { spacedMobDesired, mobPersonalSpace } from "./mob-spacing.js";
 import { turnBruteAim } from "./brute-aim.js";
 import { meleeSlotsFull, meleeWaitingGoal } from "./melee-coordination.js";
@@ -617,6 +619,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private renewalFieldSequence = 0;
   private readonly tankBulwarkUntil = new Map<string, number>();
   private readonly tankChallengeUntil = new Map<string, number>();
+  private readonly mobDistantPressure = new Map<string, { targetId: string; startedAt: number; lastAt: number }>();
+  private readonly mobHealerPressureAt = new Map<string, number>();
+  private readonly mobHealerThreat = new Map<string, { score: number; expiresAt: number }>();
+  private readonly mobNavigationRetries = new Map<string, { count: number; lastAt: number }>();
   private readonly northwatchExposedUntil = new Map<string, number>();
   private readonly northwatchPatrolContributors = new Set<string>();
   private readonly mageBarrierHits = new Map<string, number>();
@@ -696,6 +702,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly combatContributions = new CombatContributions();
   private readonly silverGuardVolley = new SilverGuardVolley();
   private readonly attackCoordination = new AttackCoordination();
+  private readonly floorTwoEncounterIntelligence = new XStateEncounterDirector(TOWER_FLOOR_TWO_ENCOUNTERS);
   private readonly realmEvents = new RealmEventDirector();
   private readonly forestPortalCycle = new ForestPortalCycle();
   private forestDungeonActive = false;
@@ -1555,6 +1562,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   }
 
   override async onDispose(): Promise<void> {
+    this.floorTwoEncounterIntelligence.stop();
     await Promise.allSettled([...this.profileSaveQueues.values(), this.flushWorldDeltaWrites()]);
   }
 
@@ -3343,8 +3351,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (now - this.towerFloorEmptySince < 5_000) return;
     this.towerFloorWasOccupied = false;
     this.towerFloorEmptySince = 0;
+    this.floorTwoEncounterIntelligence.reset();
     const floorMobIds = new Set([...TOWER_FLOOR_ONE_SPAWNS, ...TOWER_FLOOR_TWO_SPAWNS].map(spawn => spawn.id));
     for (const mobId of floorMobIds) {
+      this.mobDistantPressure.delete(mobId);
+      this.mobHealerPressureAt.delete(mobId);
+      this.mobNavigationRetries.delete(mobId);
+      for (const key of this.mobHealerThreat.keys()) if (key.startsWith(`${mobId}:`)) this.mobHealerThreat.delete(key);
       const mob = this.state.mobs.get(mobId);
       if (mob) this.clearMobAttackTimeline(mob);
       this.state.mobs.delete(mobId); this.mobHomes.delete(mobId); this.mobNavigation.delete(mobId);
@@ -4107,10 +4120,17 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const masterTrialTag = this.masterTrialMobTags.get(mobId);
     this.masterTrialMobTags.delete(mobId);
     this.rangerSlows.delete(mobId);
+    this.mobDistantPressure.delete(mobId);
+    this.mobHealerPressureAt.delete(mobId);
+    this.mobNavigationRetries.delete(mobId);
+    for (const key of this.mobHealerThreat.keys()) if (key.startsWith(`${mobId}:`)) this.mobHealerThreat.delete(key);
     if (this.roomKind === "practice") {
       const rapidSpawn = this.rapidPractice ? RAPID_PRACTICE_SPAWNS.find(candidate => candidate.id === mobId) : null;
       mob.health = 0;
       mob.alive = false;
+      const floorTwoDirective = this.floorTwoEncounterIntelligence.directive(mobId, now);
+      if (floorTwoDirective?.members.every(id => this.state.mobs.get(id)?.alive === false))
+        this.floorTwoEncounterIntelligence.secure(mobId);
       mob.combatState = "idle";
       mob.targetId = "";
       mob.aimCommitted = false;
@@ -5797,6 +5817,14 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const floorGuard = ["tank_guard", "thief_guard", "healer_guard"].some(upgrade => this.hasFloorUpgrade(playerId, upgrade)) ? 4 : 0;
       const cost = Math.max(0, guardStaminaCost(defense.parried ? 8 : 14, traitId) - floorGuard);
       player.stamina = Math.max(0, player.stamina - cost);
+      const guardBreak = heldGuardBreak(true, contact?.defenseStartedAt ?? player.defenseStartedAt,
+        contact?.contactAt ?? now);
+      if (guardBreak.active && !defense.parried) {
+        player.stamina = Math.max(0, player.stamina - guardBreak.extraStaminaDamage);
+        if (mob) mob.awarenessState = "tactic:break-guard";
+        if (towerFloorTwoSpawn(mobId))
+          this.floorTwoEncounterIntelligence.signal(mobId, "break-guard", playerId, now, 2_500);
+      }
       if (defense.parried) player.stamina = Math.min(player.maxStamina, player.stamina + parryStaminaRestore(traitId));
       if (defense.parried && this.hasFloorUpgrade(playerId, "tank_riposte")) this.floorRunReprisalUntil.set(playerId, now + 5_000);
       if (defense.parried && parseBuildPathState(player.huntLoadoutsJson).selectedPathId === "tank") {
@@ -9774,6 +9802,31 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         || mob.targetId === targetId || this.mobAwareness.get(mobId)?.targetId === targetId;
       if (!fighting) continue;
       this.combatContributions.recordSupport(mobId, casterId, restored, now);
+      const threatKey = `${mobId}:${casterId}`;
+      const previousThreat = this.mobHealerThreat.get(threatKey);
+      const threatScore = (previousThreat && now < previousThreat.expiresAt ? previousThreat.score : 0) + restored;
+      this.mobHealerThreat.set(threatKey, { score: threatScore, expiresAt: now + 5_000 });
+      const awareness = this.mobAwareness.get(mobId) ?? createMobAwareness();
+      const challengedTarget = this.state.players.get(awareness.targetId);
+      const challenged = Boolean(challengedTarget && now < (this.tankChallengeUntil.get(awareness.targetId) ?? 0));
+      const concealed = now < (this.stealthUntil.get(casterId) ?? 0)
+        || now < (this.pathConcealedUntil.get(casterId) ?? 0);
+      const healerDistance = Math.hypot(mob.x - caster.x, mob.z - caster.z);
+      const canSwitch = threatScore >= 4 && now - (this.mobHealerPressureAt.get(mobId) ?? 0) >= 4_000
+        && canPressureHealer({ restored, distance: healerDistance,
+          sameElevation: Math.abs(mob.y - caster.y) <= 1.75,
+          visible: hasCombatLineOfSight(mob, caster, this.readWorldBlock), concealed, challenged });
+      if (canSwitch) {
+        provokeMob(awareness, { id: casterId, x: caster.x, y: caster.y, z: caster.z, health: caster.health }, now);
+        this.mobAwareness.set(mobId, awareness);
+        this.mobHealerPressureAt.set(mobId, now);
+        this.mobHealerThreat.delete(threatKey);
+        mob.awarenessState = "tactic:punish-healer";
+        if (towerFloorTwoSpawn(mobId)) {
+          this.floorTwoEncounterIntelligence.signal(mobId, "punish-healer", casterId, now, 3_000);
+          this.rallyFloorTwoEncounter(mobId, casterId, now);
+        }
+      }
       bossSupported ||= mob.isMiniBoss;
     }
     return bossSupported;
@@ -10809,9 +10862,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (roaming && packDisruptedUntil > 0 && now >= packDisruptedUntil)
         this.roamingPackDisruptedUntil.delete(roaming.pack.id);
       if (!target) {
+        this.mobDistantPressure.delete(mobId);
+        this.mobNavigationRetries.delete(mobId);
         if (mob.isMiniBoss && previousTarget && now < (this.assassinBossConcealedUntil.get(previousTarget) ?? 0)) {
           // Keep the encounter alive during Stealth; the boss resumes pursuit after it ends.
           mob.awarenessState = "search";
+          if (towerFloorTwoSpawn(mobId))
+            this.floorTwoEncounterIntelligence.signal(mobId, "search-stealth", previousTarget, now, 2_500);
           continue;
         }
         if (mobId === TOWER_FLOOR_ONE_BOSS_ID && this.miniBossEngagedAt.has(mobId)) {
@@ -10874,6 +10931,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       }
       if (target.visible && previousTarget !== target.id) mob.alertUntil = now + 900;
       mob.awarenessState = target.visible ? "engaged" : "search";
+      if (!target.visible && towerFloorTwoSpawn(mobId))
+        this.floorTwoEncounterIntelligence.signal(mobId, "break-cover", target.id, now, 2_500);
       if (packDisrupted) {
         mob.awarenessState = "disrupted";
         mob.alertUntil = packDisruptedUntil;
@@ -10885,14 +10944,33 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         this.rallyNorthwatchShardPatrol(mobId, target.id, now);
       if (target.visible && previousTarget !== target.id && isAshenMob(mobId))
         this.rallyAshenCombatGroup(mobId, target.id, now);
+      if (target.visible && previousTarget !== target.id && towerFloorTwoSpawn(mobId))
+        this.rallyFloorTwoEncounter(mobId, target.id, now);
       if (roamingMembership(mobId)) this.roamingEngaged.add(mobId);
       if (this.mobPatrols.delete(mobId)) this.mobNavigation.set(mobId, createMobNavigationState());
       const positioning = this.spitterPositioning.get(mobId) ?? createSpitterPositioning();
       if (definition.attackKind === "projectile") this.spitterPositioning.set(mobId, positioning);
       const rangerSlow = this.rangerSlows.get(mobId);
+      const targetDistance = Math.hypot(target.x - mob.x, target.z - mob.z);
+      const targetPlayer = this.state.players.get(target.id);
+      let distantPressureStartedAt = 0;
+      if (target.visible && targetPlayer && isRangedCombatHand(targetPlayer.mainHandId)
+        && targetDistance > definition.stopDistance + 2.5) {
+        const previousPressure = this.mobDistantPressure.get(mobId);
+        const pressure = previousPressure?.targetId === target.id
+          ? { ...previousPressure, lastAt: now }
+          : { targetId: target.id, startedAt: now, lastAt: now };
+        this.mobDistantPressure.set(mobId, pressure);
+        distantPressureStartedAt = pressure.startedAt;
+        if (towerFloorTwoSpawn(mobId) && now - pressure.startedAt >= 1_500)
+          this.floorTwoEncounterIntelligence.signal(mobId, "press-ranged", target.id, now, 2_500);
+      } else this.mobDistantPressure.delete(mobId);
+      const antiCampMultiplier = antiCampSpeedMultiplier(targetDistance, definition.stopDistance,
+        distantPressureStartedAt, now);
       const baseMovementSpeed = definition.speed * mob.speedMultiplier
         * (isAshenMob(mobId) ? ashenWarpackSpeedMultiplier(mobId, this.ashenWarpackActiveTactic) : 1)
-        * (roaming ? regionalPackSpeedMultiplier(roaming.pack.id, mob.archetype as MobArchetypeId, packDisrupted) : 1);
+        * (roaming ? regionalPackSpeedMultiplier(roaming.pack.id, mob.archetype as MobArchetypeId, packDisrupted) : 1)
+        * antiCampMultiplier;
       const movementSpeed = (mob.isMiniBoss && mob.archetype === "stone_brute"
         ? bruteLeaderPursuitSpeed(baseMovementSpeed, currentAreaLeaderPhase) : baseMovementSpeed)
         * (now < (rangerSlow?.until ?? 0) ? rangerSlow!.multiplier : 1);
@@ -10971,12 +11049,25 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         && this.roamingAllowed(mobId, pose) && caveEncounterAllows(mobId, pose)
         && (!rangedPursuit?.retreating || Math.hypot(pose.x - home.x, pose.z - home.z) <= 6), !waiting);
       if (stuck) {
+        const floorTwoDirective = this.floorTwoEncounterIntelligence.directive(mobId, now);
+        const retry = this.mobNavigationRetries.get(mobId);
+        const retryCount = retry && now - retry.lastAt <= 6_000 ? retry.count : 0;
+        if (floorTwoDirective?.phase === "engaged" && target.visible && retryCount < 2) {
+          this.mobNavigationRetries.set(mobId, { count: retryCount + 1, lastAt: now });
+          this.mobNavigation.set(mobId, createMobNavigationState());
+          this.floorTwoEncounterIntelligence.signal(mobId, "break-cover", target.id, now, 3_000);
+          mob.awarenessState = "tactic:break-cover";
+          continue;
+        }
         this.mobAwareness.delete(mobId); this.crawlerPositioning.delete(mobId); this.spitterPositioning.delete(mobId);
+        this.mobNavigationRetries.delete(mobId);
         this.mobUnreachableUntil.set(mobId, now + 6000);
         if (roamingMembership(mobId)) this.roamingReturning.add(mobId); else this.mobReturning.add(mobId);
         mob.awarenessState = "return";
         continue;
       }
+      this.mobNavigationRetries.delete(mobId);
+      if (antiCampMultiplier > 1) mob.awarenessState = "tactic:press-ranged";
       // A ranged mob may walk backwards, but still aims its attacks at the player.
       if (target.visible && (definition.attackKind === "projectile" || pursuit.inAttackRange)) {
         mob.yaw = waiting ? Math.atan2(target.x - mob.x, target.z - mob.z) * 180 / Math.PI : pursuit.yaw;
@@ -11004,7 +11095,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         positioning.sidestepPending = true;
         continue;
       }
-      const actualDistance = Math.hypot(target.x - mob.x, target.z - mob.z);
+      const actualDistance = targetDistance;
       const inAttackRange = definition.attackKind === "projectile"
         ? (rangedPursuit?.cornered || actualDistance >= definition.minimumAttackRange - 0.05) && actualDistance <= definition.stopDistance + 0.05
         : actualDistance <= definition.stopDistance + 0.05;
@@ -12644,6 +12735,27 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
   }
 
+  private rallyFloorTwoEncounter(mobId: string, playerId: string, now: number): void {
+    const caller = this.state.mobs.get(mobId);
+    const player = this.state.players.get(playerId);
+    if (!caller || !player || player.health <= 0 || now < (this.pathConcealedUntil.get(playerId) ?? 0)) return;
+    const directive = this.floorTwoEncounterIntelligence.contact(mobId, playerId, now);
+    if (!directive || directive.phase === "secured") return;
+    for (const allyId of directive.members) {
+      if (allyId === mobId) continue;
+      const ally = this.state.mobs.get(allyId);
+      if (!ally?.alive || ally.combatState !== "idle" || Math.abs(ally.y - player.y) > 1.75
+        || Math.hypot(ally.x - caller.x, ally.z - caller.z) > 24
+        || !towerFloorTwoEncounterAllows(allyId, player)) continue;
+      const awareness = this.mobAwareness.get(allyId) ?? createMobAwareness();
+      if (awareness.targetId && awareness.targetId !== playerId) continue;
+      provokeMob(awareness, { id: playerId, x: player.x, y: player.y, z: player.z, health: player.health }, now);
+      this.mobAwareness.set(allyId, awareness);
+      ally.alertUntil = now + 900;
+      ally.awarenessState = directive.phase === "alert" ? "formation:alert" : "formation:engaged";
+    }
+  }
+
   private alertHitMob(mobId: string, sessionId: string, now: number, source?: { x: number; y?: number; z: number }): void {
     const player = this.state.players.get(sessionId);
     if (!player || player.health <= 0 || isInsideTownSafeZone(player)) return;
@@ -12659,6 +12771,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.mobUnreachableUntil.delete(mobId); this.mobReturning.delete(mobId);
     this.roamingReturning.delete(mobId);
     if (isAshenMob(mobId)) this.rallyAshenCombatGroup(mobId, sessionId, now);
+    if (towerFloorTwoSpawn(mobId)) this.rallyFloorTwoEncounter(mobId, sessionId, now);
     if (!mob || now - (this.mobAssistAt.get(mobId) ?? -Infinity) < MOB_ASSIST_COOLDOWN_MS) return;
     this.mobAssistAt.set(mobId, now);
     const victimPack = roamingMembership(mobId);

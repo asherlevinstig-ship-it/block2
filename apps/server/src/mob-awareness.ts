@@ -1,6 +1,13 @@
 import type { Combatant } from "./combat-rules.js";
 import type { Position } from "./action-rules.js";
 export const MOB_MEMORY_MS = 3000;
+/**
+ * A projectile can legitimately connect across terraces that are taller than
+ * passive sight acquisition permits.  Once struck, the victim may retain that
+ * attacker across one authored elevation change; encounter bounds still stop
+ * mobs from pulling between floors or rooms.
+ */
+export const PROVOKED_ELEVATION_RANGE = 5.5;
 export interface MobAwareness { targetId: string; lastSeen: Position | null; seenAt: number; provokedUntil?: number }
 export const createMobAwareness = (): MobAwareness => ({ targetId: "", lastSeen: null, seenAt: 0 });
 /** A real hit alerts the victim, even beyond its passive detection radius. */
@@ -12,10 +19,15 @@ export function provokeMob(state: MobAwareness, attacker: Combatant, now: number
 }
 export function awareMobTarget(mob: Position, players: readonly Combatant[], state: MobAwareness,
   now: number, range: number, visible: (target: Combatant) => boolean): (Combatant & { visible: boolean }) | null {
-  const eligible = (p: Combatant, limit: number) => p.health > 0 && Math.abs(p.y - mob.y) <= 1.75 && Math.hypot(p.x - mob.x, p.z - mob.z) <= limit;
+  const eligible = (p: Combatant, limit: number, elevation = 1.75) => p.health > 0
+    && Math.abs(p.y - mob.y) <= elevation && Math.hypot(p.x - mob.x, p.z - mob.z) <= limit;
   const current = players.find(p => p.id === state.targetId);
   const provoked = now < (state.provokedUntil ?? 0);
-  if (current && eligible(current, provoked ? Math.max(12, range + 2) : range + 2)) {
+  // A player who has already attacked cannot drop aggro merely by taking one
+  // step beyond passive detection. Encounter geometry still supplies the hard
+  // pursuit boundary, so this does not permit cross-room pulling.
+  if (current && eligible(current, provoked ? Math.max(18, range + 8) : range + 2,
+    provoked ? PROVOKED_ELEVATION_RANGE : 1.75)) {
     if (visible(current)) {
       state.lastSeen = { x: current.x, y: current.y, z: current.z }; state.seenAt = now;
       return { ...current, visible: true };

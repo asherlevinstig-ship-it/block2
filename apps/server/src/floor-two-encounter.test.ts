@@ -28,6 +28,23 @@ function fixture() {
 }
 
 describe("Floor 2 Emberworks encounter", () => {
+  it("uses shared XState encounter memory to rally nearby authored allies", () => {
+    const f = fixture();
+    const first = TOWER_FLOOR_TWO_SPAWNS.find(spawn => spawn.id === "floor2-bellows-hound-a")!;
+    const second = TOWER_FLOOR_TWO_SPAWNS.find(spawn => spawn.id === "floor2-bellows-hound-b")!;
+    for (const spawn of [first, second]) {
+      const mob = new MobState();
+      Object.assign(mob, spawn, { alive: true, health: 12, maxHealth: 12, combatState: "idle" });
+      f.room.state.mobs.set(spawn.id, mob);
+    }
+    Object.assign(f.player, { x: first.x, y: first.y, z: first.z });
+
+    f.internal.rallyFloorTwoEncounter(first.id, "hero", 20_000);
+
+    expect(f.internal.mobAwareness.get(second.id)).toMatchObject({ targetId: "hero", provokedUntil: 26_000 });
+    expect(f.room.state.mobs.get(second.id)?.awarenessState).toBe("formation:alert");
+  });
+
   it("damages inside a telegraphed active vent and disables branch vents after regulation", () => {
     const active = fixture();
     Object.assign(active.player, { x: 442, y: towerFloorTwoGroundHeight(442, 106), z: 106 });
@@ -40,6 +57,30 @@ describe("Floor 2 Emberworks encounter", () => {
     Object.assign(secured.player, { x: 465, y: towerFloorTwoGroundHeight(465, 72), z: 72 });
     secured.internal.resolveMobHazards(4_400);
     expect(secured.player.health).toBe(30);
+  });
+
+  it("builds healer threat from meaningful support but preserves an active tank Challenge", () => {
+    const f = fixture();
+    const spawn = TOWER_FLOOR_TWO_SPAWNS.find(candidate => candidate.id === "floor2-intake-hound")!;
+    const mob = new MobState(); Object.assign(mob, spawn, { alive: true, health: 12, maxHealth: 12, combatState: "idle" });
+    f.room.state.mobs.set(spawn.id, mob);
+    Object.assign(f.player, { x: spawn.x + 2, y: spawn.y, z: spawn.z });
+    const healer = new PlayerState(); Object.assign(healer, { x: spawn.x + 4, y: spawn.y, z: spawn.z,
+      health: 20, maxHealth: 20, mainHandId: "magic_focus" });
+    f.room.state.players.set("healer", healer);
+    f.internal.combatContributions.record(spawn.id, "hero", 2, 20_000);
+    f.internal.alertHitMob(spawn.id, "hero", 20_000);
+
+    expect(f.internal.recordFastWorldHealingSupport("healer", "hero", 4, 20_100)).toBe(false);
+    expect(f.internal.mobAwareness.get(spawn.id)?.targetId).toBe("healer");
+    expect(f.internal.floorTwoEncounterIntelligence.directive(spawn.id, 20_100)).toMatchObject({
+      tactic: "punish-healer", tacticTargetId: "healer",
+    });
+
+    f.internal.tankChallengeUntil.set("hero", 30_000);
+    f.internal.alertHitMob(spawn.id, "hero", 21_000);
+    f.internal.recordFastWorldHealingSupport("healer", "hero", 8, 25_000);
+    expect(f.internal.mobAwareness.get(spawn.id)?.targetId).toBe("hero");
   });
 
   it("requires both regulators, awakens the Forgeheart, banks Floor 2 and fully resets", () => {
