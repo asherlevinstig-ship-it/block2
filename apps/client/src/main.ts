@@ -1556,6 +1556,7 @@ const callingIntroCopy = document.querySelector<HTMLElement>("#calling-intro-cop
 const callingIntroStatus = document.querySelector<HTMLElement>("#calling-intro-status")!;
 const callingIntroClose = document.querySelector<HTMLButtonElement>("#calling-intro-close")!;
 const callingIntroLater = document.querySelector<HTMLButtonElement>("#calling-intro-later")!;
+const callingIntroConfirm = document.querySelector<HTMLButtonElement>("#calling-intro-confirm")!;
 const callingAwakeningPanel = document.querySelector<HTMLElement>("#calling-awakening")!;
 const callingAwakeningPreview = document.querySelector<HTMLElement>("#calling-awakening-preview")!;
 const callingAwakeningTitle = document.querySelector<HTMLElement>("#calling-awakening-title")!;
@@ -1564,6 +1565,7 @@ const callingAwakeningPower = document.querySelector<HTMLElement>("#calling-awak
 const callingAwakeningUnlock = document.querySelector<HTMLElement>("#calling-awakening-unlock")!;
 const callingAwakeningContinue = document.querySelector<HTMLButtonElement>("#calling-awakening-continue")!;
 let pendingCallingChoicePathId: BuildPathId | null = null;
+let previewedCallingPathId: BuildPathId | null = null;
 let callingAwakeningTimer = 0;
 const mainHandPickerButtons = [...document.querySelectorAll<HTMLButtonElement>("#main-hand-picker [data-main-hand]")];
 const seismicUpgrades = document.querySelector<HTMLElement>("#seismic-upgrades")!;
@@ -8382,8 +8384,23 @@ function renderAssassinJourney(update: BuildPathUpdate): void {
 }
 
 function focusCallingPreview(button: HTMLButtonElement): void {
-  for (const candidate of buildPathCandidates.querySelectorAll<HTMLButtonElement>("button"))
-    candidate.dataset.previewing = String(candidate === button);
+  const pathId = button.dataset.path as BuildPathId | undefined;
+  if (!pathId) return;
+  previewedCallingPathId = pathId;
+  for (const candidate of buildPathCandidates.querySelectorAll<HTMLButtonElement>("button")) {
+    const selected = candidate === button;
+    candidate.dataset.previewing = String(selected);
+    candidate.setAttribute("aria-pressed", String(selected));
+  }
+  const definition = BUILD_PATHS[pathId];
+  const awakening = callingAwakening(pathId);
+  const isCurrent = pathId === lastBuildPathUpdate?.selectedPathId;
+  callingIntroConfirm.style.setProperty("--calling-colour", awakening.colour);
+  callingIntroConfirm.disabled = !lastBuildPathUpdate?.canChoose || isCurrent;
+  callingIntroConfirm.textContent = isCurrent ? "CURRENT CALLING" : `BECOME ${definition.name.toUpperCase()}`;
+  callingIntroStatus.textContent = isCurrent
+    ? `${definition.name} is your current Calling.`
+    : `${definition.name} selected for preview. Confirm when ready.`;
 }
 
 function closeCallingAwakening(): void {
@@ -8515,6 +8532,8 @@ function renderBuildPath(update: BuildPathUpdate): void {
   const callingRequired = !update.selectedPathId;
   callingIntroClose.hidden = callingRequired;
   callingIntroLater.hidden = callingRequired;
+  const preferredPreview = update.candidates.some(candidate => candidate.pathId === previewedCallingPathId)
+    ? previewedCallingPathId : update.selectedPathId ?? update.candidates[0]?.pathId ?? null;
   buildPathCandidates.replaceChildren();
   const specializationList = buildPathSpecializations.querySelector<HTMLElement>("div")!;
   specializationList.replaceChildren();
@@ -8582,23 +8601,27 @@ function renderBuildPath(update: BuildPathUpdate): void {
     button.innerHTML = `<em>${candidate.pathId === update.selectedPathId ? "CURRENT" : index === 0 ? "RECOMMENDED" : "OPTION"}</em>${callingPreviewMarkup(candidate.pathId, definition.name)}<span><strong>${definition.name}</strong><small>${definition.role}</small></span><p class="calling-preview-caption">${awakening.action}</p><b>${starter.name} · unlocks at LV 2</b><small>${starter.description}</small>`;
     button.style.setProperty("--calling-colour", awakening.colour);
     button.style.setProperty("--calling-accent", awakening.accent);
-    button.dataset.previewing = String(index === 0);
+    button.dataset.previewing = String(candidate.pathId === preferredPreview);
+    button.setAttribute("aria-pressed", String(candidate.pathId === preferredPreview));
     button.disabled = !update.canChoose || Boolean(update.selectedPathId && !update.inTown);
-    button.title = button.disabled ? "Return to Town to change your Calling" : `Choose ${definition.name}`;
+    button.title = button.disabled ? "Return to Town to change your Calling" : `Preview ${definition.name}`;
     button.addEventListener("pointerenter", () => focusCallingPreview(button));
     button.addEventListener("focus", () => focusCallingPreview(button));
     button.addEventListener("click", () => {
-      if (!room || !update.canChoose || (update.selectedPathId && !update.inTown)) return;
-      for (const candidateButton of buildPathCandidates.querySelectorAll<HTMLButtonElement>("button")) candidateButton.disabled = true;
-      callingIntroStatus.textContent = `Accepting the ${definition.name} Calling…`;
-      pendingCallingChoicePathId = candidate.pathId;
-      room.send("build:path", { action: "choose", pathId: candidate.pathId as BuildPathId });
+      if (!update.canChoose || (update.selectedPathId && !update.inTown)) return;
+      focusCallingPreview(button);
     });
     buildPathCandidates.append(button);
   });
-  callingIntroStatus.textContent = !update.selectedPathId
-    ? "Choose your first Calling now. Future changes are made in Town."
-    : "Recommended reflects the gear and stats you use now. You can change later in Town.";
+  const preferredButton = preferredPreview
+    ? buildPathCandidates.querySelector<HTMLButtonElement>(`button[data-path="${preferredPreview}"]`) : null;
+  if (preferredButton) focusCallingPreview(preferredButton);
+  else {
+    previewedCallingPathId = null;
+    callingIntroConfirm.disabled = true;
+    callingIntroConfirm.textContent = "SELECT A CALLING";
+    callingIntroStatus.textContent = "Select a Calling to inspect its combat identity.";
+  }
   if (update.selectedPathId && previousPathId !== update.selectedPathId) {
     callingIntro.hidden = true;
     sessionStorage.setItem("calling-intro-seen-v1", "true");
@@ -8638,12 +8661,24 @@ function closeCallingIntro(): void {
 buildPathOpen.addEventListener("click", openCallingIntro);
 callingIntroClose.addEventListener("click", closeCallingIntro);
 callingIntroLater.addEventListener("click", closeCallingIntro);
+callingIntroConfirm.addEventListener("click", () => {
+  const update = lastBuildPathUpdate;
+  const pathId = previewedCallingPathId;
+  if (!room || !update?.canChoose || !pathId || pathId === update.selectedPathId || (update.selectedPathId && !update.inTown)) return;
+  for (const candidateButton of buildPathCandidates.querySelectorAll<HTMLButtonElement>("button")) candidateButton.disabled = true;
+  const definition = BUILD_PATHS[pathId];
+  callingIntroConfirm.disabled = true;
+  callingIntroConfirm.textContent = "BINDING CALLING…";
+  callingIntroStatus.textContent = `Accepting the ${definition.name} Calling…`;
+  pendingCallingChoicePathId = pathId;
+  room.send("build:path", { action: "choose", pathId });
+});
 buildPathCandidates.addEventListener("keydown", event => {
   if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.code)) return;
   const buttons = [...buildPathCandidates.querySelectorAll<HTMLButtonElement>("button:not(:disabled)")];
   const current = buttons.indexOf(document.activeElement as HTMLButtonElement);
   if (current < 0 || buttons.length < 2) return;
-  const columns = window.matchMedia("(max-width: 720px)").matches ? 1 : 3;
+  const columns = window.matchMedia("(max-width: 620px)").matches ? 1 : 2;
   const offset = event.code === "ArrowLeft" ? -1 : event.code === "ArrowRight" ? 1
     : event.code === "ArrowUp" ? -columns : columns;
   buttons[(current + offset + buttons.length) % buttons.length]?.focus();
