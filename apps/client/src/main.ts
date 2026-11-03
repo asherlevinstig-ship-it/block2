@@ -256,6 +256,7 @@ import {
 } from "./dodge-input.js";
 import { animateMobArt, createMobArt, setMobArtEnraged, setMobArtDefeated, type MobArtRig } from "./mob-art";
 import { mobBodyMotionProfile } from "./mob-animation-profile.js";
+import { animateFloorTwoMobArt, createFloorTwoMobArt, type FloorTwoMobRig } from "./floor-two-mob-art.js";
 import { defeatDuration, leaderDefeatKind, mobDefeatPose, lootSourceMob, lootMarkerScale } from "./mob-defeat.js";
 import { matriarchBodyPose, matriarchRecoil } from "./matriarch-art.js";
 import { Client, Predict, getStateCallbacks, type InputHandle, type Room } from "@colyseus/sdk";
@@ -6067,6 +6068,7 @@ interface MobVisual {
   nextLabelPresentationAt: number;
   bodyMaterial: pc.StandardMaterial;
   art: MobArtRig;
+  floorTwoArt: FloorTwoMobRig | null;
   rigSettled: boolean;
   statusRoot: pc.Entity;
   frameAlive: boolean;
@@ -11495,6 +11497,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   if (rootGuardian) bodyRoot.setLocalScale(1.16, 1.16, 1.16);
   const art = createMobArt(bodyRoot, mob.archetype, bodyMaterial, matriarch, rootGuardian, fastWorldRequested,
     isCrownkeeper ? "crownkeeper" : isForgeheart ? "forgeheart" : null);
+  const floorTwoArt = createFloorTwoMobArt(bodyRoot, mobId, mob.archetype);
   const elderthornBranches: pc.Entity[] = [];
   let elderthornHeart: pc.Entity | null = null;
   let elderthornHeartMaterial: pc.StandardMaterial | null = null;
@@ -11791,6 +11794,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     nextLabelPresentationAt: 0,
     bodyMaterial,
     art,
+    floorTwoArt,
     rigSettled: false,
     statusRoot,
     frameAlive: mob.alive,
@@ -20441,6 +20445,8 @@ app.on("update", (dt: number) => {
     const recoveryStrength = presentation.phase === "recover"
       ? Math.sin(Math.PI * Math.min(1, Math.max(0, (animationNow + serverClock.offset - mob.state.attackContactEndAt)
         / Math.max(1, mob.state.attackRecoveryEndAt - mob.state.attackContactEndAt)))) : 0;
+    if (mob.floorTwoArt) animateFloorTwoMobArt(mob.floorTwoArt, animationTime, mob.state.attackPattern,
+      rigActive ? windupStrength : 0, rigActive ? attackStrength : 0, rigActive ? recoveryStrength : 0);
     const crawlerRecovery = !mob.isBrute && !mob.isSpitter ? recoveryStrength : 0;
     const gaitBob = Math.abs(Math.sin(mob.art.phase)) * mob.art.walk * (mob.isBrute ? 0.026 : 0.018);
     const woundedLimp = mob.state.name === "Wounded Wilds Stalker" ? Math.max(0, Math.sin(mob.art.phase)) * mob.art.walk : 0;
