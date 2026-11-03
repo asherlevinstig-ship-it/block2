@@ -162,6 +162,7 @@ import { requestTowerFloorOneFortressAssets } from "./tower-floor-one-asset-kit.
 import { loadTowerChronicleMonument } from "./tower-chronicle-asset.js";
 import { towerFloorOneAtmosphere } from "./tower-floor-one-atmosphere.js";
 import { TOWER_FLOOR_TWO_ATMOSPHERE } from "./tower-floor-two-atmosphere.js";
+import { floorTwoTelegraphStyle } from "./floor-two-telegraphs.js";
 import { portalInteractionPrompt, portalLabel, portalWorldLabel } from "./portal-labels.js";
 import { createFastWorldSky } from "./fast-world-sky.js";
 import { createTavernRoom, setTavernPreparedMeal, setTavernThirdPersonCutaway, setTavernTrophyProgress } from "./tavern-room.js";
@@ -20080,9 +20081,11 @@ app.on("update", (dt: number) => {
     const defeat = mob.state.alive ? 0 : deathPose.collapse;
     const mobDistance = Math.hypot(mob.state.x - playerEye.x, mob.state.y - playerEye.y, mob.state.z - playerEye.z);
     const combatActive = mob.state.alive && mob.state.combatState !== "idle";
-    const presentationDetail = mobPresentationDetail(
-      undergroundMobVisible(mob.state.x, mob.state.y, mob.state.z), mobDistance, combatActive,
-    );
+    const floorTwoTell = floorTwoTelegraphStyle(mobId, mob.state.archetype, mob.state.attackPattern);
+    const mobWorldVisible = undergroundMobVisible(mob.state.x, mob.state.y, mob.state.z);
+    const presentationDetail = floorTwoTell && mobWorldVisible && combatActive && mobDistance <= floorTwoTell.range
+      ? "full"
+      : mobPresentationDetail(mobWorldVisible, mobDistance, combatActive);
     const visible = presentationDetail !== "hidden"
       && (mob.state.alive || deathPose.visible || materializing || Boolean(respawnIndicator)
         || trackedArenaPresentation?.phase === "respawning");
@@ -20291,7 +20294,7 @@ app.on("update", (dt: number) => {
         setWorldOverlayPosition(mob.levelTag, rect.left + screen.x, rect.top + screen.y);
       }
     }
-    const cueVisible = cue.visible && Math.hypot(sampled.x - playerEye.x, sampled.y - playerEye.y, sampled.z - playerEye.z) <= 14
+    const cueVisible = cue.visible && sampledMobDistance <= (floorTwoTell?.range ?? 14)
       && enemyCueLineClear({ x: playerEye.x, y: playerEye.y + .8, z: playerEye.z },
         { x: sampled.x, y: sampled.y + .8, z: sampled.z }, readCollisionWorldBlock);
     mob.recovery.enabled = cueVisible && cue.recovery;
@@ -20367,7 +20370,16 @@ app.on("update", (dt: number) => {
         mob.warningMaterial.diffuse.set(color[0], color[1], color[2]);
         mob.warningMaterial.emissive.copy(mob.warningMaterial.diffuse);
       }
-      mob.warningMaterial.opacity = presentation.aimLocked ? mob.state.isMiniBoss ? .78 : .65 : mob.state.isMiniBoss ? .5 : .38;
+      if (floorTwoTell) {
+        const color = presentation.aimLocked ? floorTwoTell.lockedColor : floorTwoTell.color;
+        mob.warningMaterial.diffuse.set(color[0], color[1], color[2]);
+        mob.warningMaterial.emissive.copy(mob.warningMaterial.diffuse);
+      }
+      const floorTwoPulse = floorTwoTell
+        ? Math.sin(animationTime * Math.PI * 2 * floorTwoTell.pulseHz) * .09 : 0;
+      mob.warningMaterial.opacity = Math.max(.28, Math.min(.9,
+        (presentation.aimLocked ? mob.state.isMiniBoss ? .78 : .65 : mob.state.isMiniBoss ? .5 : .38)
+        + (floorTwoTell ? cue.progress * .13 + floorTwoPulse : 0)));
       mob.warningMaterial.update();
     }
     mob.eliteAura.enabled = mob.state.alive && (mob.state.isElite || mob.state.isMiniBoss);
@@ -20460,10 +20472,16 @@ app.on("update", (dt: number) => {
       mob.bodyRoot.setLocalPosition(0, deathPose.y, 0);
       mob.bodyRoot.setLocalEulerAngles(deathPose.pitch, 0, deathPose.roll);
     }
+    const floorTwoBodyPulse = floorTwoTell && presentation.phase === "windup"
+      ? (.35 + cue.progress * .45 + Math.max(0, Math.sin(animationTime * Math.PI * 2 * floorTwoTell.pulseHz)) * .2)
+        * floorTwoTell.bodyGlow : 0;
     mob.bodyMaterial.emissive.set(
-      0.001 + (mob.state.isMiniBoss ? .2 : mob.state.isElite ? .12 : 0) + 1.25 * hitStrength + 0.34 * windupStrength,
-      0.001 + (mob.state.isMiniBoss ? .08 : mob.state.isElite ? .025 : 0) + 0.68 * hitStrength + 0.12 * windupStrength + 0.38 * staggerStrength,
-      0.001 + (mob.state.isMiniBoss ? .01 : mob.state.isElite ? .18 : 0) + 0.24 * hitStrength + 0.08 * windupStrength + 0.48 * staggerStrength,
+      0.001 + (mob.state.isMiniBoss ? .2 : mob.state.isElite ? .12 : 0) + 1.25 * hitStrength + 0.34 * windupStrength
+        + (floorTwoTell?.color[0] ?? 0) * floorTwoBodyPulse,
+      0.001 + (mob.state.isMiniBoss ? .08 : mob.state.isElite ? .025 : 0) + 0.68 * hitStrength + 0.12 * windupStrength + 0.38 * staggerStrength
+        + (floorTwoTell?.color[1] ?? 0) * floorTwoBodyPulse,
+      0.001 + (mob.state.isMiniBoss ? .01 : mob.state.isElite ? .18 : 0) + 0.24 * hitStrength + 0.08 * windupStrength + 0.48 * staggerStrength
+        + (floorTwoTell?.color[2] ?? 0) * floorTwoBodyPulse,
     );
     mob.bodyMaterial.update();
       mob.rigSettled = !rigActive;

@@ -34,7 +34,7 @@ export { DODGE_STAMINA_COST, DODGE_CHAIN_COST_STEP, DODGE_MAX_STAMINA_COST, DODG
 // otherwise let a new client join a room still serving the old terrain.
 export const WORLD_ROOM = "world-warden-gate-v168";
 export const SILVER_DEPTHS_ROOM = "silver-depths-instance-v4";
-export const PRACTICE_ROOM = "calling-practice-v15";
+export const PRACTICE_ROOM = "calling-practice-v16";
 export const TAVERN_ROOM = "hearth-and-hammer-v4";
 // The authored inn faces south (+Z). Keep the interaction anchor immediately
 // outside its visible front door rather than beside the building.

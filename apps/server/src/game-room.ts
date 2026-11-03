@@ -12232,7 +12232,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       mob.attackRecoveryEndAt = mob.attackContactEndAt + timing.recoveryMs;
       return;
     }
-    if (mobId === "frontier-brute" || (mobId === TOWER_FLOOR_ONE_BOSS_ID || isAreaMiniBoss(mobId))
+    if (mobId === "frontier-brute" || (mobId === TOWER_FLOOR_ONE_BOSS_ID || mobId === TOWER_FLOOR_TWO_BOSS_ID || isAreaMiniBoss(mobId))
       && mob.archetype === "stone_brute" && mob.attackPattern === "smash") {
       const timing = FRONTIER_BRUTE[mob.attackPattern === "smash" ? "smash" : "slam"];
       mob.attackContactAt = releaseAt + timing.impactMs;

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Block } from "@blockcraft/voxel-world";
-import { BRUTE_SLAM, FRONTIER_BRUTE, TOWER_FLOOR_ONE_BOSS_ID, TOWER_FLOOR_ONE_NORTH_WARDEN_ID } from "@blockcraft/protocol";
+import { BRUTE_SLAM, FRONTIER_BRUTE, TOWER_FLOOR_ONE_BOSS_ID, TOWER_FLOOR_ONE_NORTH_WARDEN_ID,
+  TOWER_FLOOR_TWO_BOSS_ID } from "@blockcraft/protocol";
 import { WorldRoom } from "./game-room.js";
 import { MobState, PlayerState, WorldState } from "./schema.js";
 
@@ -24,6 +25,7 @@ function fixture(id: string, archetype = "stone_brute", pattern = "slam", wall =
 
 describe("Fast World enemy attack fairness", () => {
   it.each([["brute", "stone_brute", "slam"], [TOWER_FLOOR_ONE_BOSS_ID, "stone_brute", "smash"],
+    [TOWER_FLOOR_TWO_BOSS_ID, "stone_brute", "smash"],
     [TOWER_FLOOR_ONE_NORTH_WARDEN_ID, "stone_brute", "root-slam"], ["crawler", "moss_crawler", "bite"]])(
     "%s only hits during contact, once, and leaves recovery harmless", (id, archetype, pattern) => {
       const { internal, player, mob } = fixture(id, archetype, pattern);
@@ -33,6 +35,7 @@ describe("Fast World enemy attack fairness", () => {
       internal.resolveMobMelee(mob.attackRecoveryEndAt - 1); expect(player.health).toBe(18);
     });
   it.each([["brute", "stone_brute", "slam"], [TOWER_FLOOR_ONE_BOSS_ID, "stone_brute", "smash"],
+    [TOWER_FLOOR_TWO_BOSS_ID, "stone_brute", "smash"],
     [TOWER_FLOOR_ONE_NORTH_WARDEN_ID, "stone_brute", "root-slam"], ["crawler", "moss_crawler", "bite"]])(
     "%s cannot hit someone entering the danger area after an expired attack", (id, archetype, pattern) => {
       const { internal, player, mob } = fixture(id, archetype, pattern);
