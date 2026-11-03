@@ -15,6 +15,11 @@ describe("tablet navigation", () => {
     expect(main).toContain("popup && !requiredPopup(popup.id)");
   });
 
+  it("does not create a hidden-attribute observer loop", () => {
+    expect(main).toContain("if (tabletBackButton.hidden !== shouldHide) tabletBackButton.hidden = shouldHide");
+    expect(main).toContain("if (!tabletBackButton.hidden) tabletBackButton.hidden = true");
+  });
+
   it("localizes both initial and dynamically inserted guidance", () => {
     expect(main).toContain("localizeTouchGuidance(document.body)");
     expect(main).toContain("localizeTouchGuidance(record.target)");

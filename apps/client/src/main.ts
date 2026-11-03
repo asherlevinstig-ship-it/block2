@@ -18344,10 +18344,14 @@ function closePopupFromEscape(popup: HTMLElement): boolean {
 }
 
 function syncTabletBackButton(): void {
-  if (!tabletControlsQuery.matches) { tabletBackButton.hidden = true; return; }
+  if (!tabletControlsQuery.matches) {
+    if (!tabletBackButton.hidden) tabletBackButton.hidden = true;
+    return;
+  }
   const popup = activePopupElement();
   const dismissible = Boolean(popup && !requiredPopup(popup.id));
-  tabletBackButton.hidden = !dismissible;
+  const shouldHide = !dismissible;
+  if (tabletBackButton.hidden !== shouldHide) tabletBackButton.hidden = shouldHide;
   if (!popup || !dismissible) {
     tabletBackButton.removeAttribute("aria-controls");
     return;
