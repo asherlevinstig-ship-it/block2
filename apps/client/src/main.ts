@@ -8605,7 +8605,6 @@ function renderBuildPath(update: BuildPathUpdate): void {
     button.setAttribute("aria-pressed", String(candidate.pathId === preferredPreview));
     button.disabled = !update.canChoose || Boolean(update.selectedPathId && !update.inTown);
     button.title = button.disabled ? "Return to Town to change your Calling" : `Preview ${definition.name}`;
-    button.addEventListener("pointerenter", () => focusCallingPreview(button));
     button.addEventListener("focus", () => focusCallingPreview(button));
     button.addEventListener("click", () => {
       if (!update.canChoose || (update.selectedPathId && !update.inTown)) return;
@@ -8641,11 +8640,18 @@ function renderBuildPath(update: BuildPathUpdate): void {
 
 function openCallingIntro(): void {
   if (buildPathOpen.disabled) return;
+  const wasHidden = callingIntro.hidden;
   if (!inventoryPanel.hidden) setInventoryOpen(false);
   callingIntro.hidden = false;
   sessionStorage.setItem("calling-intro-seen-v1", "true");
   resetMovementControls();
-  window.setTimeout(() => buildPathCandidates.querySelector<HTMLButtonElement>('button[data-recommended="true"]')?.focus(), 0);
+  if (wasHidden) window.setTimeout(() => {
+    const previewed = previewedCallingPathId
+      ? buildPathCandidates.querySelector<HTMLButtonElement>(`button[data-path="${previewedCallingPathId}"]`)
+      : null;
+    (previewed ?? buildPathCandidates.querySelector<HTMLButtonElement>('button[data-recommended="true"]'))
+      ?.focus({ preventScroll: true });
+  }, 0);
 }
 
 function closeCallingIntro(): void {

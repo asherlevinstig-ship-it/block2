@@ -13,6 +13,13 @@ describe("professional Calling selector", () => {
     expect(main).toContain('room.send("build:path", { action: "choose", pathId })');
   });
 
+  it("does not change Calling from pointer movement or repeated state renders", () => {
+    expect(main).not.toContain('button.addEventListener("pointerenter", () => focusCallingPreview(button))');
+    expect(main).toContain("const wasHidden = callingIntro.hidden");
+    expect(main).toContain("if (wasHidden) window.setTimeout(() => {");
+    expect(main).toContain("previewed ?? buildPathCandidates.querySelector");
+  });
+
   it("features one Calling while keeping the alternatives compact", () => {
     expect(styles).toContain("/* Calling selector v3");
     expect(styles).toContain('button[data-previewing="true"]');
