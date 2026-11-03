@@ -4493,6 +4493,228 @@ body:has(#loot-pack-decision:not([hidden])) #waypoint-guide { display: none; }
 #tablet-camera-hint { display: none; }
 #tablet-camera-hint[hidden] { display: none !important; }
 
+/* RPG HUD chrome: vector-like CSS framing stays sharp from phone to 4K. */
+:root {
+  --rpg-hud-ink: #061713;
+  --rpg-hud-ink-soft: #0c2620;
+  --rpg-hud-gold: #bd9140;
+  --rpg-hud-gold-bright: #f4d77d;
+  --rpg-hud-gold-dark: #5c3d17;
+  --rpg-hud-teal: #39e0bd;
+  --rpg-hud-teal-dark: #0b695b;
+  --rpg-hud-line: rgb(244 215 125 / 72%);
+  --rpg-hud-shadow: 0 14px 34px rgb(0 0 0 / 52%);
+}
+
+#fast-world-badge,
+#fast-world-map,
+#world-objective,
+#player-hud-root,
+#combat-action-bar {
+  isolation: isolate;
+  border-color: var(--rpg-hud-line);
+  background:
+    linear-gradient(135deg, rgb(255 255 255 / 6%), transparent 30%),
+    linear-gradient(180deg, rgb(8 32 27 / 96%), rgb(4 17 14 / 96%));
+  box-shadow:
+    var(--rpg-hud-shadow),
+    inset 0 0 0 1px rgb(4 11 9 / 92%),
+    inset 0 0 24px rgb(50 218 181 / 5%);
+}
+
+#fast-world-badge::before,
+#fast-world-map::before,
+#world-objective::before,
+#player-hud-root::before,
+#combat-action-bar::before {
+  position: absolute;
+  z-index: -1;
+  inset: 3px;
+  border: 1px solid rgb(244 215 125 / 22%);
+  border-radius: inherit;
+  pointer-events: none;
+  content: "";
+}
+
+#fast-world-badge {
+  position: fixed;
+  z-index: 18;
+  top: 68px;
+  left: 18px;
+  display: grid;
+  grid-template-columns: 50px minmax(0, 1fr);
+  align-items: stretch;
+  width: min(470px, calc(100vw - 36px));
+  box-sizing: border-box;
+  padding: 8px 14px 8px 9px;
+  border: 1px solid var(--rpg-hud-gold);
+  border-radius: 3px 14px 14px 3px;
+  color: #ecf8ef;
+  pointer-events: none;
+}
+#fast-world-badge::after {
+  position: absolute;
+  right: -7px;
+  bottom: -7px;
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--rpg-hud-gold-bright);
+  background: linear-gradient(135deg, var(--rpg-hud-teal), #087066);
+  box-shadow: 0 0 10px rgb(57 224 189 / 55%);
+  transform: rotate(45deg);
+  content: "";
+}
+.fast-world-badge-emblem {
+  display: grid;
+  place-items: center;
+  margin: -3px 10px -3px -4px;
+  border: 1px solid var(--rpg-hud-gold);
+  background:
+    radial-gradient(circle at 50% 32%, rgb(57 224 189 / 30%), transparent 43%),
+    linear-gradient(180deg, #123c33, #071b17);
+  color: var(--rpg-hud-gold-bright);
+  font: 900 24px/1 Georgia, serif;
+  clip-path: polygon(50% 0, 94% 16%, 94% 72%, 50% 100%, 6% 72%, 6% 16%);
+  filter: drop-shadow(0 4px 6px rgb(0 0 0 / 55%));
+}
+#fast-world-badge > div { display: grid; align-content: center; gap: 2px; min-width: 0; }
+#fast-world-badge strong {
+  overflow: hidden;
+  color: #fff7dc;
+  font: 800 clamp(13px, 1.25vw, 17px)/1.15 Georgia, serif;
+  letter-spacing: .035em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#fast-world-badge strong::first-letter { color: var(--rpg-hud-gold-bright); }
+#fast-world-badge span { overflow: hidden; color: #b9d0c5; font: italic 650 10px/1.25 system-ui; text-overflow: ellipsis; white-space: nowrap; }
+#fast-world-metrics { color: #67d7cf; font: 800 9px/1.2 system-ui; letter-spacing: .025em; }
+
+#fast-world-map {
+  width: 250px;
+  border: 1px solid var(--rpg-hud-gold);
+  border-radius: 14px 14px 5px 14px;
+  overflow: visible;
+}
+#fast-world-map::after {
+  position: absolute;
+  top: -17px;
+  left: 50%;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--rpg-hud-gold-bright);
+  background: linear-gradient(135deg, #17362e, #071813);
+  color: var(--rpg-hud-gold-bright);
+  box-shadow: 0 4px 12px #000a;
+  font: 900 14px/1 Georgia, serif;
+  transform: translateX(-50%) rotate(45deg);
+  content: "N";
+  text-shadow: 0 1px #000;
+}
+#fast-world-map header,
+#fast-world-map footer,
+#fast-world-map .fast-world-nearby-leader { position: relative; z-index: 1; background-color: var(--rpg-hud-ink); }
+#fast-world-map header { padding: 12px 13px 8px; border-radius: 13px 13px 0 0; }
+#fast-world-map header strong { color: var(--rpg-hud-gold-bright); font: 800 12px/1 Georgia, serif; }
+#fast-world-map canvas { position: relative; z-index: 1; border-color: rgb(244 215 125 / 45%); background: #0b251e; }
+#fast-world-map footer { border-radius: 0 0 4px 13px; color: #9db7aa; }
+
+#world-objective {
+  border: 1px solid var(--rpg-hud-gold);
+  border-radius: 3px 13px 13px 13px;
+}
+#world-objective header { padding-bottom: 7px; border-bottom: 1px solid rgb(244 215 125 / 30%); }
+#world-objective header span { color: var(--rpg-hud-gold-bright); font-family: Georgia, serif; }
+#world-objective h2 { color: #fff0bf; font-family: Georgia, serif; }
+#world-objective #objective-tier { color: var(--rpg-hud-teal); }
+#world-objective footer { padding-top: 7px; border-top: 1px solid rgb(244 215 125 / 18%); }
+
+#player-hud-root {
+  overflow: visible;
+  border-color: var(--rpg-hud-gold);
+  background:
+    radial-gradient(circle at 50% 0, rgb(57 224 189 / 9%), transparent 48%),
+    linear-gradient(180deg, #0a221df5, #061511f5);
+}
+#player-hud-root::after {
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--rpg-hud-gold-bright);
+  background: linear-gradient(135deg, #6bfff0, #008f7b 58%, #063e38);
+  box-shadow: 0 0 16px rgb(57 224 189 / 65%);
+  transform: translateX(-50%) rotate(45deg);
+  content: "";
+}
+#player-level > span { color: #fff0bd; font-family: Georgia, serif; text-shadow: 0 2px #000; }
+#player-health > span, #player-stamina > span { color: #f0d899; }
+#player-health > div, #player-stamina > div, #player-level > div {
+  border-color: rgb(244 215 125 / 42%);
+  background: #020a08;
+  box-shadow: inset 0 2px 4px #000c, 0 0 0 1px rgb(0 0 0 / 50%);
+}
+#player-health-fill { background: linear-gradient(90deg, #f34d4c, #ff8764 70%, #ffd0a4); box-shadow: 0 0 8px rgb(255 95 77 / 48%); }
+#player-stamina-fill { background: linear-gradient(90deg, #11a9c9, #5ee8ed 70%, #b7ffff); box-shadow: 0 0 8px rgb(71 221 232 / 42%); }
+#player-xp-fill { background: linear-gradient(90deg, #b07f29, #f0ca66); }
+
+#combat-action-bar {
+  border-color: var(--rpg-hud-gold);
+  background:
+    linear-gradient(90deg, transparent, rgb(57 224 189 / 5%) 48%, transparent),
+    linear-gradient(180deg, #0a221df5, #05130ff8);
+}
+#main-hand-loadout, #calling-slot, #special-slot,
+#combat-action-bar #defense-slot, #combat-action-bar #dodge-hotbar, #combat-action-bar #potion-use,
+#loadout-toggle {
+  border-color: color-mix(in srgb, var(--slot-edge, var(--rpg-hud-gold)) 58%, var(--rpg-hud-gold));
+  background:
+    linear-gradient(135deg, rgb(255 255 255 / 7%), transparent 35%),
+    radial-gradient(circle at 50% 20%, var(--slot-glow, #244c3f), #081712 78%);
+  box-shadow: inset 0 0 0 2px #06120f, 0 3px 10px #000a;
+}
+#main-hand-loadout:hover, #calling-slot:hover, #special-slot:hover,
+#combat-action-bar #defense-slot:hover, #combat-action-bar #dodge-hotbar:hover,
+#combat-action-bar #potion-use:hover, #loadout-toggle:hover {
+  filter: brightness(1.14);
+  box-shadow: inset 0 0 0 2px #06120f, 0 0 14px color-mix(in srgb, var(--slot-edge, var(--rpg-hud-teal)) 50%, transparent);
+}
+#combat-action-bar kbd, #combat-hud-shell > kbd,
+#combat-hud-shell #main-hand-loadout kbd, #combat-hud-shell #calling-slot kbd, #combat-hud-shell #special-slot kbd {
+  border-color: var(--rpg-hud-gold-bright);
+  background: #10231d;
+  color: #fff0bf;
+}
+
+@media (min-width: 821px) and (pointer: fine) {
+  html.fast-world-active #world-objective {
+    top: 375px;
+    right: 18px;
+    left: auto;
+    width: 250px;
+  }
+  #player-hud-root { border-radius: 18px 18px 0 0; }
+  #combat-action-bar { border-top-color: rgb(244 215 125 / 30%); border-radius: 0 0 18px 18px; }
+}
+
+@media (max-width: 760px) {
+  #fast-world-badge { grid-template-columns: 37px minmax(0, 1fr); width: min(330px, calc(100vw - 84px)); padding: 6px 10px 6px 7px; }
+  .fast-world-badge-emblem { margin-right: 7px; font-size: 18px; }
+  #fast-world-badge strong { font-size: 12px; }
+  #fast-world-badge span { display: none; }
+  #fast-world-map { width: 182px; }
+  html.fast-world-active #world-objective { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #main-hand-loadout, #calling-slot, #special-slot,
+  #combat-action-bar #defense-slot, #combat-action-bar #dodge-hotbar, #combat-action-bar #potion-use,
+  #loadout-toggle { transition: none; }
+}
+
 @media (pointer: coarse) and (orientation: landscape) {
   #tablet-camera-hint {
     position: fixed;
@@ -5426,4 +5648,50 @@ body:has(#tower-floor-selector:not([hidden])) #touch-controls { opacity: 0; poin
   .tower-floor-choice { grid-template-columns: 48px minmax(0, 1fr); min-height: 78px; padding: 10px; }
   .tower-floor-choice-number { width: 44px; height: 44px; }
   .tower-floor-choice-state { grid-column: 2; text-align: left; }
+}
+
+/* Final HUD cascade: fast-world rules above predate the shared RPG chrome. */
+#fast-world-map {
+  width: 250px;
+  overflow: visible;
+  border: 1px solid var(--rpg-hud-gold);
+  border-radius: 14px 14px 5px 14px;
+  background:
+    linear-gradient(135deg, rgb(255 255 255 / 6%), transparent 30%),
+    linear-gradient(180deg, rgb(8 32 27 / 96%), rgb(4 17 14 / 96%));
+  box-shadow: var(--rpg-hud-shadow), inset 0 0 0 1px #040b09, inset 0 0 24px rgb(50 218 181 / 5%);
+}
+#fast-world-map::after {
+  z-index: 4;
+  top: -17px;
+  width: 32px;
+  height: 32px;
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+  transform: translateX(-50%);
+}
+#fast-world-map header { padding: 12px 13px 8px; border-radius: 13px 13px 0 0; background: var(--rpg-hud-ink); }
+#fast-world-map header strong { color: var(--rpg-hud-gold-bright); font: 800 12px/1 Georgia, serif; }
+#fast-world-map canvas { border-color: rgb(244 215 125 / 50%); background: #0b251e; }
+#fast-world-map footer { border-radius: 0 0 4px 13px; background: var(--rpg-hud-ink); color: #9db7aa; }
+
+#inventory-toggle,
+#camera-mode-toggle,
+#performance-toggle {
+  border-color: rgb(244 215 125 / 72%);
+  background:
+    linear-gradient(135deg, rgb(255 255 255 / 7%), transparent 38%),
+    linear-gradient(180deg, #102c25f5, #061713f5);
+  color: #f6e6ae;
+  box-shadow: 0 7px 18px #0008, inset 0 0 0 1px #07100d;
+}
+#inventory-toggle:hover,
+#camera-mode-toggle:hover,
+#performance-toggle:hover {
+  border-color: var(--rpg-hud-gold-bright);
+  color: #fff7d9;
+  box-shadow: 0 7px 18px #0008, 0 0 12px rgb(57 224 189 / 25%);
+}
+
+@media (max-width: 760px) {
+  #fast-world-map { width: 182px; }
 }

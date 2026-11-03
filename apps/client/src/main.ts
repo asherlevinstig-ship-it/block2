@@ -4255,12 +4255,7 @@ if (fastWorldRequested && !tavernRoomRequested) {
 
   const badge = document.createElement("aside");
   badge.id = "fast-world-badge";
-  badge.innerHTML = "<strong>TOWN OF BEGINNINGS · SAFE</strong><span>Explore town · choose a Calling · collect starter gear</span><small id=\"fast-world-metrics\">Measuring frame and input timing…</small>";
-  badge.style.cssText = "position:fixed;left:18px;top:68px;z-index:18;display:grid;gap:2px;padding:9px 13px;border:1px solid rgba(117,242,180,.55);border-radius:10px;background:rgba(6,18,14,.86);color:#d9ffdf;font:700 12px/1.2 system-ui;letter-spacing:.08em;pointer-events:none;box-shadow:0 7px 24px rgba(0,0,0,.32)";
-  const detail = badge.querySelector("span") as HTMLElement;
-  detail.style.cssText = "color:#9fc6ac;font-size:10px;font-weight:600;letter-spacing:.02em";
-  const metrics = badge.querySelector("small") as HTMLElement;
-  metrics.style.cssText = "color:#75cde8;font-size:9px;font-weight:700;letter-spacing:.02em";
+  badge.innerHTML = "<i class=\"fast-world-badge-emblem\" aria-hidden=\"true\">♜</i><div><strong>TOWN OF BEGINNINGS · SAFE</strong><span>Explore town · choose a Calling · collect starter gear</span><small id=\"fast-world-metrics\">Measuring frame and input timing…</small></div>";
   document.body.appendChild(badge);
 
   fastWorldRegionReveal = document.createElement("aside");
