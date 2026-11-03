@@ -2991,8 +2991,32 @@ html.boss-hud-active #world-objective { display: none !important; }
 
 /* Tablet HUD: gameplay stays in the thumb zones while menus own the screen. */
 #tablet-orientation-prompt { display: none; }
+#tablet-back-button { display: none; }
 
 @media (pointer: coarse), (max-width: 820px) {
+  #tablet-back-button:not([hidden]) {
+    position: fixed;
+    z-index: 5000;
+    top: calc(10px + env(safe-area-inset-top));
+    left: calc(10px + env(safe-area-inset-left));
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-width: 94px;
+    min-height: 48px;
+    padding: 8px 15px;
+    border: 1px solid #e4c47599;
+    border-radius: 12px;
+    background: linear-gradient(180deg, #1b3028f5, #0a1713f7);
+    box-shadow: 0 8px 24px #0008, inset 0 1px #ffffff12;
+    color: #f5e0a6;
+    font: 900 12px/1 system-ui;
+    letter-spacing: .1em;
+    touch-action: manipulation;
+  }
+  #tablet-back-button > span { font-size: 24px; line-height: .7; }
+  #tablet-back-button:active { transform: scale(.96); background: #29483bfa; }
   #inventory-panel,
   .calling-intro-card,
   .calling-awakening-card,
@@ -5543,7 +5567,8 @@ body:has(#floor-one-complete:not([hidden])) :is(#floor-one-run, #touch-controls,
   .inventory-header-actions button,
   #inventory-close,
   .inventory-tabs button,
-  .inventory-selection-actions button { min-height: 46px; }
+  .inventory-selection-actions button { min-height: 48px; }
+  #inventory-close { width: 48px; height: 48px; flex: 0 0 48px; }
 }
 
 @media (max-width: 560px) {

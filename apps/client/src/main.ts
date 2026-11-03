@@ -53,6 +53,7 @@ import { callingAimReleaseCancels, callingTouchAimProfile, type CallingTouchAimP
 import { ExclusivePopupQueue, gameplayBlockedByPopup, popupFocusIndex, popupIsPresented } from "./popup-queue.js";
 import { createPopupInputGuard, popupInputBlocked, type PopupInputGuard } from "./popup-input-guard.js";
 import { normalizedMovementCode, shouldCaptureMovementKey } from "./keyboard-movement.js";
+import { localizeTouchGuidance } from "./touch-guidance.js";
 import { COORDINATED_BRUTE_FOLLOWERS, COORDINATED_SPITTER_FOLLOWERS, activeCombatNearby, advanceBossHud, floorBossPhaseLabel, floorBossPhaseTransitionMessage, initialBossHud, leaderArmourSegments, leaderChargeGuidance, leaderExposureLabel, leaderExposureRoleLabel, leaderFormationLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
 import { formationLanePoints, formationMarkerPoints, formationRingPoints, formationTargetStyle, formationVfxStyle,
   type FormationTactic, type FormationTargetRole } from "./formation-vfx.js";
@@ -1726,10 +1727,11 @@ const callingButton = document.querySelector<HTMLButtonElement>("#calling-button
 const contextButton = document.querySelector<HTMLButtonElement>("#context-button")!;
 const contextButtonLabel = contextButton.querySelector<HTMLElement>("span")!;
 const contextButtonHint = contextButton.querySelector<HTMLElement>("small")!;
+const tabletBackButton = document.querySelector<HTMLButtonElement>("#tablet-back-button")!;
 const tabletCameraHint = document.querySelector<HTMLElement>("#tablet-camera-hint")!;
 const keyboardCameraHint = document.querySelector<HTMLElement>("#keyboard-camera-hint")!;
 const keyboardCameraKeys = [...keyboardCameraHint.querySelectorAll<HTMLElement>("kbd[data-key]")];
-if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !dangerZone || !dangerZoneName || !locationCoordinates || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !graphicsQualitySelect || !graphicsQualityStatus || !performanceCopyLog || !performanceClearLog || !performanceLogStatus || !inventoryPanel || !inventoryTotal || !inventoryToggle || !cameraModeToggle || !inventoryClose || !inventoryBadge || !inventoryEquipped || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== requiredInventoryMainHands || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !callingButton || !contextButton || !contextButtonLabel || !contextButtonHint || !tabletCameraHint || !keyboardCameraHint || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !controlsHelp || !combatReticle || !tabletAimGuide || !combatFeedback || !damageOverlay) {
+if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !dangerZone || !dangerZoneName || !locationCoordinates || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !graphicsQualitySelect || !graphicsQualityStatus || !performanceCopyLog || !performanceClearLog || !performanceLogStatus || !inventoryPanel || !inventoryTotal || !inventoryToggle || !cameraModeToggle || !inventoryClose || !inventoryBadge || !inventoryEquipped || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== requiredInventoryMainHands || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !callingButton || !contextButton || !contextButtonLabel || !contextButtonHint || !tabletBackButton || !tabletCameraHint || !keyboardCameraHint || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !controlsHelp || !combatReticle || !tabletAimGuide || !combatFeedback || !damageOverlay) {
   throw new Error("Game shell is missing required elements");
 }
 if ([quizTablePrompt, tavernKeeperPrompt, tavernRest, tavernBind, tavernBindStatus, tavernBountyList, blacksmithPrompt, playerTradePrompt, playerTradeName, blacksmithPanel, blacksmithMessage, blacksmithOre, blacksmithGold, blacksmithPrice, blacksmithSell, blacksmithClose, haulEquipName, haulEquipDetail, haulEquip, haulSalvageCount, haulSalvageDetail, haulSalvage, haulStoreCount, haulStore, haulUpgradeName, haulUpgradeTrack, haulUpgradeDetail, haulRegionName, haulRegionDetail, haulTrackRegion, quizPanel, quizBalance, quizBalanceAmount, quizPotDisplay, quizPotLabel, quizWinToast, quizAnswerFeedback, quizFeedbackIcon, quizFeedbackTitle, quizFeedbackDetail, quizMessage, quizStakeHeading, quizStakes, quizQuestion, quizPot, quizPrompt, quizChoices, quizDecision, quizDouble, quizQuit, quizClose, tavernCoins].some(element => !element) || blacksmithUpgradeCards.length !== Object.keys(BLACKSMITH_UPGRADES).length) {
@@ -1775,6 +1777,14 @@ function applyDefensePose(rig: VoxelCharacterRig): void {
 const tabletControlsQuery = window.matchMedia("(pointer: coarse), (max-width: 820px)");
 if (tabletControlsQuery.matches) {
   movementDebug.open = false;
+  document.documentElement.dataset.inputMode = "touch";
+  localizeTouchGuidance(document.body);
+  new MutationObserver(records => {
+    for (const record of records) {
+      if (record.type === "characterData") localizeTouchGuidance(record.target);
+      else for (const node of record.addedNodes) localizeTouchGuidance(node);
+    }
+  }).observe(document.body, { subtree: true, childList: true, characterData: true });
 }
 let tabletHudCombatActive = false;
 let tabletHudCombatCheckedAt = -Infinity;
@@ -18332,6 +18342,34 @@ function closePopupFromEscape(popup: HTMLElement): boolean {
   }
   return true;
 }
+
+function syncTabletBackButton(): void {
+  if (!tabletControlsQuery.matches) { tabletBackButton.hidden = true; return; }
+  const popup = activePopupElement();
+  const dismissible = Boolean(popup && !requiredPopup(popup.id));
+  tabletBackButton.hidden = !dismissible;
+  if (!popup || !dismissible) {
+    tabletBackButton.removeAttribute("aria-controls");
+    return;
+  }
+  tabletBackButton.setAttribute("aria-controls", popup.id);
+  const title = popup.querySelector<HTMLElement>("h1, h2, [aria-label]")?.textContent?.trim();
+  tabletBackButton.setAttribute("aria-label", title ? `Back from ${title}` : "Back from current screen");
+}
+
+tabletBackButton.addEventListener("click", () => {
+  const popup = activePopupElement();
+  if (!popup) { syncTabletBackButton(); return; }
+  if (!closePopupFromEscape(popup)) explainRequiredPopup(popup);
+  syncTabletBackButton();
+});
+
+new MutationObserver(() => queueMicrotask(syncTabletBackButton)).observe(document.body, {
+  subtree: true, childList: true, attributes: true,
+  attributeFilter: ["hidden", "data-expanded", "aria-hidden", "open"],
+});
+syncTabletBackButton();
+
 const tutorialGameplayKeys = new Set([
   "KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
   "Space", "KeyE", "KeyJ", "KeyQ", "KeyV", "KeyC", "KeyR", "KeyF", "KeyG", "KeyH", "Enter",
