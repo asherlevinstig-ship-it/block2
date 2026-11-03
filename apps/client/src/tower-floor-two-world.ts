@@ -4,6 +4,22 @@ import { TOWER_FLOOR_TWO, TOWER_FLOOR_TWO_COLLIDERS, TOWER_FLOOR_TWO_ROOMS,
   towerFloorTwoVentPhase } from "@blockcraft/protocol";
 import { createPaintedGroundMaterial } from "./fast-world-texture.js";
 import { FLOOR_TWO_OBJECTIVE_LIGHTS, FLOOR_TWO_WALL_SCONCES } from "./tower-floor-two-lighting.js";
+import { towerFloorTwoRenderPolicy } from "./tower-floor-two-render-policy.js";
+
+let floorTwoStaticBatchGroupId = -1;
+let floorTwoShapeCount = 0;
+let floorTwoShadowCasterCount = 0;
+
+interface FloorTwoRuntime {
+  sealedSignal: pc.Entity;
+  openSignal: pc.Entity;
+  regulators: Readonly<Record<"furnace" | "quench", { core: pc.Entity; ring: pc.Entity }>>;
+  vents: ReadonlyMap<string, { warning: pc.Entity; jet: pc.Entity }>;
+  lastProgressAt: number;
+  lastProgressKey: string;
+}
+
+const floorTwoRuntimes = new WeakMap<pc.Entity, FloorTwoRuntime>();
 
 function finish(colour: pc.Color, emissive = 0, opacity = 1): pc.StandardMaterial {
   const material = new pc.StandardMaterial();
@@ -21,8 +37,15 @@ function shape(parent: pc.Entity, name: string, type: "box" | "cylinder" | "cone
   material: pc.Material, scale: [number, number, number], position: [number, number, number],
   rotation: [number, number, number] = [0, 0, 0], castShadows = false): pc.Entity {
   const entity = new pc.Entity(name);
-  entity.addComponent("render", { type, castShadows, receiveShadows: true });
-  if (entity.render) entity.render.material = material;
+  const policy = towerFloorTwoRenderPolicy(name);
+  const ownsShadow = castShadows && policy.castShadows;
+  entity.addComponent("render", { type, castShadows: ownsShadow, receiveShadows: policy.receiveShadows });
+  if (entity.render) {
+    entity.render.material = material;
+    if (!policy.dynamic && floorTwoStaticBatchGroupId >= 0) entity.render.batchGroupId = floorTwoStaticBatchGroupId;
+  }
+  floorTwoShapeCount++;
+  if (ownsShadow) floorTwoShadowCasterCount++;
   entity.setLocalScale(...scale);
   entity.setLocalPosition(...position);
   entity.setLocalEulerAngles(...rotation);
@@ -77,8 +100,8 @@ function wallSconce(parent: pc.Entity, id: string, x: number, z: number, yaw: nu
   const spec = FLOOR_TWO_WALL_SCONCES.find(candidate => candidate.id === id)!;
   if (!spec.castsLight) return { flame: flameEntity, light: null };
   const light = new pc.Entity(`floor2-sconce-light:${id}`);
-  light.addComponent("light", { type: "omni", color: new pc.Color(1, .38, .1), intensity: .82,
-    range: 11, castShadows: false });
+  light.addComponent("light", { type: "omni", color: new pc.Color(1, .42, .13), intensity: 1.18,
+    range: 14, castShadows: false });
   light.setLocalPosition(0, .58, .76);
   mount.addChild(light);
   return { flame: flameEntity, light };
@@ -90,14 +113,19 @@ export function createTowerFloorTwoWorld(app: pc.Application, parent: pc.Entity)
   const root = new pc.Entity("tower-floor-2-world");
   parent.addChild(root);
 
-  const floor = createPaintedGroundMaterial(app, { name: "floor2-forge-floor", base: "#34383b",
-    mottles: ["#454b4e", "#25292b", "#5a4a39"], litter: ["#191b1c", "#7a4b28"], seed: 921,
+  const staticBatch = app.batcher.addGroup("tower-floor-two-static", false, 36);
+  floorTwoStaticBatchGroupId = staticBatch.id;
+  floorTwoShapeCount = 0;
+  floorTwoShadowCasterCount = 0;
+
+  const floor = createPaintedGroundMaterial(app, { name: "floor2-forge-floor", base: "#454a4d",
+    mottles: ["#555d60", "#303538", "#685442"], litter: ["#202426", "#95552a"], seed: 921,
     roughness: .9, pattern: "stone" }, [2.6, 2.6]);
-  const darkStone = createPaintedGroundMaterial(app, { name: "floor2-forge-wall", base: "#25282b",
-    mottles: ["#33383b", "#17191b", "#49382d"], litter: ["#60676a", "#140d09"], seed: 922,
+  const darkStone = createPaintedGroundMaterial(app, { name: "floor2-forge-wall", base: "#34383b",
+    mottles: ["#454b4e", "#25292b", "#5a4637"], litter: ["#70777a", "#21130d"], seed: 922,
     roughness: .94, pattern: "stone" }, [2.2, 2.2]);
-  const iron = finish(new pc.Color(.16, .18, .19));
-  const hotIron = finish(new pc.Color(.52, .18, .045), .22);
+  const iron = finish(new pc.Color(.23, .25, .26));
+  const hotIron = finish(new pc.Color(.67, .23, .055), .34);
   const ember = finish(new pc.Color(1, .22, .025), .95, .88);
   const coolant = finish(new pc.Color(.06, .62, .86), .65, .78);
   const brass = finish(new pc.Color(.58, .38, .1), .12);
@@ -108,7 +136,11 @@ export function createTowerFloorTwoWorld(app: pc.Application, parent: pc.Entity)
   shape(root, "floor2-abyss", "box", voidMaterial, [150, 4, 146], [centreX, 1.8, centreZ]);
   shape(root, "floor2-foundation", "box", darkStone, [132, 1.2, 128], [centreX, 7.35, centreZ]);
 
-  for (const route of TOWER_FLOOR_TWO_ROUTES) routeSlab(root, route, floor, iron);
+  for (const route of TOWER_FLOOR_TWO_ROUTES) {
+    const routeEdge = route.id.includes("furnace") || route.id.includes("bellows") ? hotIron
+      : route.id.includes("quench") ? coolant : route.id.includes("boss") || route.id.includes("crucible") ? brass : iron;
+    routeSlab(root, route, floor, routeEdge);
+  }
 
   for (const room of TOWER_FLOOR_TWO_ROOMS) {
     const y = towerFloorTwoGroundHeight(room.x, room.z);
@@ -120,6 +152,7 @@ export function createTowerFloorTwoWorld(app: pc.Application, parent: pc.Entity)
   }
 
   const ventWarning = finish(new pc.Color(1, .57, .06), .72, .78);
+  const ventEntities = new Map<string, { warning: pc.Entity; jet: pc.Entity }>();
   for (const vent of TOWER_FLOOR_TWO_VENTS) {
     const y = towerFloorTwoGroundHeight(vent.x, vent.z);
     shape(root, `floor2-vent-grate:${vent.id}`, "cylinder", iron,
@@ -131,6 +164,7 @@ export function createTowerFloorTwoWorld(app: pc.Application, parent: pc.Entity)
     const jet = shape(root, `floor2-vent-jet:${vent.id}`, "cone", activeMaterial,
       [vent.radius * 1.35, 4.2, vent.radius * 1.35], [vent.x, y + 2.05, vent.z]);
     jet.enabled = false;
+    ventEntities.set(vent.id, { warning, jet });
   }
 
   // Visible wall runs are generated from the same boxes used by authority.
@@ -152,7 +186,7 @@ export function createTowerFloorTwoWorld(app: pc.Application, parent: pc.Entity)
   arch(root, "floor2-crucible-gate", TOWER_FLOOR_TWO.crucibleGate.x, TOWER_FLOOR_TWO.crucibleGate.z,
     90, 8, 9, darkStone, hotIron);
   const gateY = towerFloorTwoGroundHeight(TOWER_FLOOR_TWO.crucibleGate.x, TOWER_FLOOR_TWO.crucibleGate.z);
-  shape(root, "floor2-crucible-sealed-signal", "box", ember, [5.8, .32, .4],
+  const sealedSignal = shape(root, "floor2-crucible-sealed-signal", "box", ember, [5.8, .32, .4],
     [TOWER_FLOOR_TWO.crucibleGate.x, gateY + 7.15, TOWER_FLOOR_TWO.crucibleGate.z]);
   const openSignal = shape(root, "floor2-crucible-open-signal", "box", coolant, [5.8, .32, .4],
     [TOWER_FLOOR_TWO.crucibleGate.x, gateY + 7.15, TOWER_FLOOR_TWO.crucibleGate.z]);
@@ -171,14 +205,16 @@ export function createTowerFloorTwoWorld(app: pc.Application, parent: pc.Entity)
       [0, blade * 45, blade % 2 ? 38 : -38]);
 
   // The regulators read from the hub before detailed machinery is added.
+  const regulators = {} as Record<"furnace" | "quench", { core: pc.Entity; ring: pc.Entity }>;
   for (const [name, x, z, material] of [
     ["furnace", 480, 70, ember], ["quench", 480, 142, coolant],
   ] as const) {
     const y = towerFloorTwoGroundHeight(x, z);
     shape(root, `floor2-${name}-regulator-base`, "cylinder", iron, [7, 1.1, 7], [x, y + .5, z]);
-    shape(root, `floor2-${name}-regulator-ring`, "cylinder", material, [5.4, .22, 5.4], [x, y + 1.12, z]);
+    const ring = shape(root, `floor2-${name}-regulator-ring`, "cylinder", material, [5.4, .22, 5.4], [x, y + 1.12, z]);
     shape(root, `floor2-${name}-regulator-column`, "cylinder", brass, [2.1, 6, 2.1], [x, y + 3.4, z]);
-    shape(root, `floor2-${name}-regulator-core`, "sphere", material, [1.45, 1.45, 1.45], [x, y + 6.7, z]);
+    const core = shape(root, `floor2-${name}-regulator-core`, "sphere", material, [1.45, 1.45, 1.45], [x, y + 6.7, z]);
+    regulators[name] = { core, ring };
   }
 
   // The court stays visibly dormant until the authoritative boss awakens.
@@ -206,14 +242,30 @@ export function createTowerFloorTwoWorld(app: pc.Application, parent: pc.Entity)
     return { entity: objectiveLight, intensity: spec.intensity, phase: spec.x * .17 + spec.z * .11 };
   });
 
+  floorTwoRuntimes.set(root, {
+    sealedSignal, openSignal,
+    regulators, vents: ventEntities, lastProgressAt: 0, lastProgressKey: "",
+  });
+
+  // Generate the batch after the complete structural greybox exists. Dynamic
+  // hazard, flame and objective-state pieces deliberately remain independent.
+  app.batcher.generate([staticBatch.id]);
+  console.info(`[floor2-performance] ${floorTwoShapeCount} primitives; `
+    + `${floorTwoShadowCasterCount} shadow casters; static scenery batched in 36m cells.`);
+  floorTwoStaticBatchGroupId = -1;
+
   let lightingElapsed = 0;
+  let lightingAccumulator = 0;
   app.on("update", (dt: number) => {
     if (!root.enabled) return;
-    lightingElapsed += dt;
+    lightingAccumulator += dt;
+    if (lightingAccumulator < 1 / 30) return;
+    lightingElapsed += lightingAccumulator;
+    lightingAccumulator = 0;
     for (const [index, sconce] of sconces.entries()) {
       const pulse = 1 + Math.sin(lightingElapsed * (8.2 + index * .07) + index * 1.9) * .1;
       sconce.flame.setLocalScale(.34 * pulse, .82 * (1 + (pulse - 1) * 1.5), .34 * pulse);
-      if (sconce.light?.light) sconce.light.light.intensity = .82 + (pulse - 1) * 1.8;
+      if (sconce.light?.light) sconce.light.light.intensity = 1.18 + (pulse - 1) * 1.8;
     }
     for (const objective of objectiveLights)
       if (objective.entity.light) objective.entity.light.intensity = objective.intensity
@@ -227,31 +279,30 @@ export function createTowerFloorTwoWorld(app: pc.Application, parent: pc.Entity)
  * state without introducing a cosmetic barrier the player can collide with. */
 export function updateTowerFloorTwoProgress(root: pc.Entity, furnaceAlive: boolean, quenchAlive: boolean,
   bossAlive: boolean): void {
-  const sealed = furnaceAlive || quenchAlive;
-  const sealedSignal = root.findByName("floor2-crucible-sealed-signal");
-  const openSignal = root.findByName("floor2-crucible-open-signal");
-  if (sealedSignal) sealedSignal.enabled = sealed;
-  if (openSignal) openSignal.enabled = !sealed;
-  for (const [name, alive] of [["furnace", furnaceAlive], ["quench", quenchAlive]] as const) {
-    const core = root.findByName(`floor2-${name}-regulator-core`);
-    const ring = root.findByName(`floor2-${name}-regulator-ring`);
-    if (core) core.enabled = alive;
-    if (ring) ring.enabled = alive;
-  }
+  const runtime = floorTwoRuntimes.get(root);
+  if (!runtime) return;
   const now = Date.now();
+  const progressKey = `${Number(furnaceAlive)}${Number(quenchAlive)}${Number(bossAlive)}`;
+  if (progressKey === runtime.lastProgressKey && now - runtime.lastProgressAt < 50) return;
+  runtime.lastProgressKey = progressKey;
+  runtime.lastProgressAt = now;
+  const sealed = furnaceAlive || quenchAlive;
+  runtime.sealedSignal.enabled = sealed;
+  runtime.openSignal.enabled = !sealed;
+  for (const [name, alive] of [["furnace", furnaceAlive], ["quench", quenchAlive]] as const) {
+    runtime.regulators[name].core.enabled = alive;
+    runtime.regulators[name].ring.enabled = alive;
+  }
   for (const vent of TOWER_FLOOR_TWO_VENTS) {
     const groupEnabled = vent.group === "intake" || vent.group === "furnace" && furnaceAlive
       || vent.group === "quench" && quenchAlive || vent.group === "boss" && bossAlive;
     const phase = towerFloorTwoVentPhase(vent.offsetMs, now);
-    const warning = root.findByName(`floor2-vent-warning:${vent.id}`);
-    const jet = root.findByName(`floor2-vent-jet:${vent.id}`);
-    if (warning) warning.enabled = groupEnabled && phase === "warning";
-    if (jet) {
-      jet.enabled = groupEnabled && phase === "erupting";
-      if (jet.enabled) {
+    const visual = runtime.vents.get(vent.id)!;
+    visual.warning.enabled = groupEnabled && phase === "warning";
+    visual.jet.enabled = groupEnabled && phase === "erupting";
+    if (visual.jet.enabled) {
         const pulse = .9 + Math.sin(now * .018 + vent.offsetMs) * .1;
-        jet.setLocalScale(vent.radius * 1.35 * pulse, 4.2 * pulse, vent.radius * 1.35 * pulse);
-      }
+        visual.jet.setLocalScale(vent.radius * 1.35 * pulse, 4.2 * pulse, vent.radius * 1.35 * pulse);
     }
   }
 }

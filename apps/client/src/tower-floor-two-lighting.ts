@@ -27,10 +27,10 @@ export const FLOOR_TWO_WALL_SCONCES: readonly FloorTwoWallSconce[] = [
 ] as const;
 
 export const FLOOR_TWO_OBJECTIVE_LIGHTS = [
-  { id: "entry", x: 423, y: 13, z: 106, colour: [1, .48, .16] as const, intensity: .8, range: 18 },
-  { id: "hub", x: 458, y: 14, z: 106, colour: [.12, .58, 1] as const, intensity: .9, range: 21 },
-  { id: "furnace", x: 480, y: 15, z: 70, colour: [1, .22, .035] as const, intensity: 1.15, range: 24 },
-  { id: "quench", x: 480, y: 15, z: 142, colour: [.08, .55, 1] as const, intensity: .92, range: 24 },
-  { id: "crucible", x: 510, y: 17, z: 106, colour: [1, .2, .025] as const, intensity: 1.2, range: 31 },
-  { id: "boss", x: 525, y: 16, z: 106, colour: [.72, .11, .035] as const, intensity: .76, range: 20 },
+  { id: "entry", x: 423, y: 12, z: 106, colour: [1, .52, .2] as const, intensity: 1.55, range: 22 },
+  { id: "hub", x: 458, y: 13, z: 106, colour: [.2, .68, 1] as const, intensity: 1.7, range: 27 },
+  { id: "furnace", x: 480, y: 14, z: 70, colour: [1, .28, .055] as const, intensity: 1.85, range: 28 },
+  { id: "quench", x: 480, y: 14, z: 142, colour: [.12, .65, 1] as const, intensity: 1.7, range: 28 },
+  { id: "crucible", x: 510, y: 15, z: 106, colour: [1, .26, .045] as const, intensity: 2.05, range: 35 },
+  { id: "boss", x: 525, y: 14, z: 106, colour: [.92, .2, .055] as const, intensity: 1.45, range: 26 },
 ] as const;

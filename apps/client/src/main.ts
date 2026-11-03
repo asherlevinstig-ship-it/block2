@@ -155,6 +155,7 @@ import { populateTownAssetKit, readyTownFallbacks, SPEED_LAB_TOWN_ASSETS, type T
 import { createTownPortalLandmarks } from "./town-portal-landmarks.js";
 import { createTowerFloorOneWorld, updateTowerFloorOneProgress } from "./tower-floor-one-world-v2.js";
 import { createTowerFloorTwoWorld, updateTowerFloorTwoProgress } from "./tower-floor-two-world.js";
+import { requestTowerFloorTwoAssets } from "./tower-floor-two-asset-kit.js";
 import { crownGateStatus } from "./crown-gate.js";
 import { createFloorOneRunUI, type FloorOneBossState } from "./floor-one-run-flow.js";
 import { createInteractionFeedback, holdStopMessage, holdStopReason, type HoldStopReason } from "./interaction-feedback.js";
@@ -2504,6 +2505,7 @@ if (tavernRoomRequested) {
 }
 let towerFloorOneWorld: pc.Entity | null = null;
 let towerFloorTwoWorld: pc.Entity | null = null;
+let towerFloorTwoAssetsStarted = false;
 type TowerChronicleFloorVisual = { floor: number; victory: pc.Entity[]; locked: pc.Entity[] };
 const towerChronicleFloors: TowerChronicleFloorVisual[] = [];
 const towerChronicleProceduralCore: pc.Entity[] = [];
@@ -17221,8 +17223,12 @@ function isInOpenExcavation(position: pc.Vec3): boolean {
 }
 
 function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
-  const underground = indoorRoofBuilding === null && hasCeilingAbove(position);
-  const excavating = indoorRoofBuilding === null && !underground && isInOpenExcavation(position);
+  // The authored tower floors never use voxel ceilings or excavation. Avoid
+  // hundreds of chunk lookups every frame merely to rediscover that fact.
+  const authoredTowerSurface = fastWorldRequested
+    && (isInsideTowerFloorOne(position.x, position.z) || isInsideTowerFloorTwo(position.x, position.z));
+  const underground = !authoredTowerSurface && indoorRoofBuilding === null && hasCeilingAbove(position);
+  const excavating = !authoredTowerSurface && indoorRoofBuilding === null && !underground && isInOpenExcavation(position);
   undergroundClassification = underground;
   excavationClassification = excavating;
   if (surfaceReferenceY === null) surfaceReferenceY = SURFACE_HEIGHT + 1;
@@ -19383,6 +19389,10 @@ app.on("update", (dt: number) => {
       northAlive: true, southAlive: true, bossState: "sealed" });
     const floorTwoActive = Boolean(towerFloorTwoWorld && isInsideTowerFloorTwo(playerPosition.x, playerPosition.z));
     if (floorTwoActive && towerFloorTwoWorld) {
+      if (!towerFloorTwoAssetsStarted) {
+        towerFloorTwoAssetsStarted = true;
+        void requestTowerFloorTwoAssets(app, towerFloorTwoWorld);
+      }
       const furnaceAlive = mobVisuals.get(TOWER_FLOOR_TWO_REGULATORS[0])?.state.alive !== false;
       const quenchAlive = mobVisuals.get(TOWER_FLOOR_TWO_REGULATORS[1])?.state.alive !== false;
       const forgeheart = mobVisuals.get(TOWER_FLOOR_TWO_BOSS_ID)?.state;
@@ -20896,8 +20906,12 @@ app.on("update", (dt: number) => {
   const renderedPlayerPosition = new pc.Vec3(player.x + localPowerVisualOffset.x + localNetworkVisualOffset.x + localRecoveryVisualOffset.x + localDodgeVisualOffset.x, player.y + localVisualVerticalOffset + bodyY, player.z + localPowerVisualOffset.z + localNetworkVisualOffset.z + localRecoveryVisualOffset.z + localDodgeVisualOffset.z);
   const playerScreen = camera.camera?.worldToScreen(renderedPlayerPosition);
   updateUndergroundPresentation(player, frameTime);
-  updateIndoorRoof(player);
-  updateCaveDiscovery(player, performance.now());
+  const inAuthoredTower = fastWorldRequested
+    && (isInsideTowerFloorOne(player.x, player.z) || isInsideTowerFloorTwo(player.x, player.z));
+  if (!inAuthoredTower) {
+    updateIndoorRoof(player);
+    updateCaveDiscovery(player, performance.now());
+  }
   updateTarget();
 
   const now = performance.now();
