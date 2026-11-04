@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SPEED_LAB_TOWN_ACTORS, SPEED_LAB_TOWN_LIGHTS, SPEED_LAB_TOWN_SIGNS, townLifeActorPose,
-  townLifeAnimation, townNpcAnimationActive } from "./town-life.js";
+  townLifeAnimation, townNpcAnimationActive, townNpcAnimationBudget } from "./town-life.js";
 
 describe("speed-lab town life", () => {
   it("gives every major destination a sign and warm square lighting", () => {
@@ -65,5 +65,8 @@ describe("speed-lab town life", () => {
     expect(townNpcAnimationActive(30, "medium")).toBe(true);
     expect(townNpcAnimationActive(40, "medium")).toBe(false);
     expect(townNpcAnimationActive(40, "high")).toBe(true);
+    expect(townNpcAnimationBudget("low")).toBe(2);
+    expect(townNpcAnimationBudget("medium")).toBe(4);
+    expect(townNpcAnimationBudget("high")).toBe(SPEED_LAB_TOWN_ACTORS.length);
   });
 });

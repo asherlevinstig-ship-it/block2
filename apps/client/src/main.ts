@@ -202,7 +202,7 @@ import {
 } from "./sunken-coast-visuals.js";
 import { createCoastOceanMesh, createCoastWaterAnimator, createCoastWaterNormalMap } from "./sunken-coast-water.js";
 import { SPEED_LAB_TOWN_ACTORS, SPEED_LAB_TOWN_LIGHTS, SPEED_LAB_TOWN_SIGNS, townLifeActorPose, townLifeAnimation,
-  townNpcAnimationActive, type TownLifeActorDefinition } from "./town-life.js";
+  townNpcAnimationActive, townNpcAnimationBudget, type TownLifeActorDefinition } from "./town-life.js";
 import { townNpcFaceStyle, type TownNpcMouthExpression } from "./town-npc-appearance.js";
 import { bindTownNpcRig, loadTownNpcAssets, TOWN_NPC_MODEL_YAW, transitionTownNpcRig } from "./town-npc-assets.js";
 import { SPEED_LAB_TOWN_TERRAIN, SPEED_LAB_TOWN_TERRAIN_DETAILS,
@@ -4200,15 +4200,6 @@ if (fastWorldRequested && !tavernRoomRequested) {
     void populateTownAssetKit(app, rapidPrototypeRoot,
       SPEED_LAB_TOWN_ASSETS.filter(asset => townVisualInsideBounds(asset.position[0], asset.position[2], 4)))
       .then(result => {
-        // The imported village is immutable scenery. Assigning every render
-        // node to the static batch group merges repeated benches, fences,
-        // rocks and building materials instead of submitting each placement.
-        for (const entity of result.entities) for (const render of entity.findComponents("render") as pc.RenderComponent[])
-          render.batchGroupId = rapidWorldSceneryBatchGroup.id;
-        // These models arrive after the initial scene batch pass. Generate the
-        // group now so they do not remain as individual draw submissions until
-        // some unrelated scene mutation happens to rebuild it.
-        app.batcher.generate([rapidWorldSceneryBatchGroup.id]);
         for (const family of readyTownFallbacks(result.loadedIds)) hideRapidTownFallback(family);
         console.info(`[town-assets] ${result.entities.length} placements ready; ${result.failedIds.size} model types kept their fallback.`);
       });
@@ -19615,6 +19606,16 @@ app.on("update", (dt: number) => {
         : towerChronicleProgress.highestFloorCleared > 0 ? .92 + Math.sin(customUpdateStartedAt * .004) * .12 : .62;
       towerChronicleBeacon.setLocalScale(pulse, pulse, pulse);
     }
+    const townAnimationBudget = townNpcAnimationBudget(appliedGraphicsQualityTier);
+    const animatedTownActors = new Set(rapidTownActors
+      .filter(actor => actor.model?.anim)
+      .map(actor => {
+        const anchor = actor.root.getLocalPosition();
+        return { actor, distance: Math.hypot(playerPosition.x - anchor.x, playerPosition.z - anchor.z) };
+      })
+      .sort((left, right) => left.distance - right.distance)
+      .slice(0, townAnimationBudget)
+      .map(candidate => candidate.actor));
     for (const actor of rapidTownActors) {
       const pose = townLifeActorPose(actor.definition, townTime);
       const walk = pose.stride * 34;
@@ -19622,8 +19623,8 @@ app.on("update", (dt: number) => {
       actor.root.setLocalPosition(pose.x, fastWorldGroundHeight(pose.x, pose.z) + .15 + bob, pose.z);
       actor.root.setLocalEulerAngles(0, pose.yaw, 0);
       if (actor.model?.anim) {
-        const animateRig = townNpcAnimationActive(Math.hypot(playerPosition.x - pose.x, playerPosition.z - pose.z),
-          appliedGraphicsQualityTier);
+        const animateRig = animatedTownActors.has(actor) && townNpcAnimationActive(
+          Math.hypot(playerPosition.x - pose.x, playerPosition.z - pose.z), appliedGraphicsQualityTier);
         if (actor.model.anim.enabled !== animateRig) {
           actor.model.anim.enabled = animateRig;
           // Re-enter through a short transition rather than resuming a stale

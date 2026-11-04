@@ -34,6 +34,13 @@ export function townNpcAnimationActive(distance: number, quality: TownNpcAnimati
   return distance <= radius;
 }
 
+/** Keep full character motion where it is noticeable. Low quality animates
+ * the two closest residents, medium keeps a small social group alive, and
+ * high retains the complete authored population. */
+export function townNpcAnimationBudget(quality: TownNpcAnimationQuality): number {
+  return quality === "high" ? SPEED_LAB_TOWN_ACTORS.length : quality === "medium" ? 4 : 2;
+}
+
 /** Client-only town life. These routes deliberately avoid the well, pavilion,
  * buildings and server-owned collision footprints. They create movement and
  * role readability without adding network entities or simulation load. */
