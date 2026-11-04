@@ -7,6 +7,7 @@ describe("towerFloorOneRenderPolicy", () => {
       dynamic: false, castShadows: true, receiveShadows: true,
     });
     expect(towerFloorOneRenderPolicy("floor1-ancient-trunk").castShadows).toBe(true);
+    expect(towerFloorOneRenderPolicy("floor1-boss-fortress").castShadows).toBe(true);
   });
 
   it("removes tiny surface details from the expensive shadow pass", () => {
@@ -15,6 +16,9 @@ describe("towerFloorOneRenderPolicy", () => {
     });
     expect(towerFloorOneRenderPolicy("floor1-north-route-flagstone").castShadows).toBe(false);
     expect(towerFloorOneRenderPolicy("floor1-wall-moss-322-92").castShadows).toBe(false);
+    expect(towerFloorOneRenderPolicy("floor1-north-rubble").castShadows).toBe(false);
+    expect(towerFloorOneRenderPolicy("floor1-broken-cart-bed").castShadows).toBe(false);
+    expect(towerFloorOneRenderPolicy("floor1-canopy").castShadows).toBe(false);
   });
 
   it("does not batch animated or fading encounter visuals", () => {

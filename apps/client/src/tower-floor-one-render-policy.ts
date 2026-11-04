@@ -13,9 +13,13 @@ export function towerFloorOneRenderPolicy(name: string): FloorOneRenderPolicy {
   const dynamic = /(?:warden-seal|seal-chain|seal-barrier|ground-mist|spore|falling-leaf)/.test(name);
   const unlitDetail = /(?:light-shaft|ground-mist|spore|seal-barrier)/.test(name);
   const noShadow = /(?:ivy-|flagstone|wall-moss|root-moss|fern|falling-leaf|earth|rune|sigil|glow|flame|bloom|inlay|banner|cloth|strap|chain)/.test(name);
+  // Only major vertical silhouettes justify a shadow-map draw. Ground slabs,
+  // rubble, props and foliage crowns still receive the resulting shadows but
+  // no longer submit hundreds of redundant casters.
+  const majorSilhouette = /(?:ancient-trunk|curved-tower-wall|wall-buttress|sanctuary-foundation|opening-foundation|terrace-base|root-pylon|south-shrine|ruined-wall|boss-fortress|crown-pillar|crown-throne|broken-watch-pier|-pier|-lintel)/.test(name);
   return {
     dynamic,
-    castShadows: !dynamic && !unlitDetail && !noShadow,
+    castShadows: !dynamic && !unlitDetail && !noShadow && majorSilhouette,
     receiveShadows: !unlitDetail,
   };
 }

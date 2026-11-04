@@ -114,6 +114,7 @@ import { undergroundThreatVisible } from "./underground-threat-visibility.js";
 import { mobPresentationDetail, mobPresentationInitialDelay, mobPresentationIntervalMs, mobRigNeedsAnimation } from "./mob-presentation-budget.js";
 import { mobMidDetailParts } from "./mob-mid-detail.js";
 import { advanceWorldUiSchedule } from "./world-ui-budget.js";
+import { dungeonFarClip, dungeonMinimapUpdateDue } from "./dungeon-performance-policy.js";
 import { nearestQueuedChunkKey } from "./chunk-rebuild-queue.js";
 import { advanceAutoQuality, GRAPHICS_QUALITY_PROFILES, initialAutoQualityTier, parseGraphicsQualityMode,
   type AutoQualityState, type GraphicsQualityMode, type GraphicsQualityTier } from "./graphics-quality.js";
@@ -2532,6 +2533,20 @@ if (tavernRoomRequested) {
 let towerFloorOneWorld: pc.Entity | null = null;
 let towerFloorTwoWorld: pc.Entity | null = null;
 let towerFloorTwoAssetsStarted = false;
+function ensureTowerFloorOneWorld(): pc.Entity {
+  if (!towerFloorOneWorld) {
+    towerFloorOneWorld = createTowerFloorOneWorld(app, rapidPrototypeRoot);
+    towerFloorOneWorld.enabled = false;
+  }
+  return towerFloorOneWorld;
+}
+function ensureTowerFloorTwoWorld(): pc.Entity {
+  if (!towerFloorTwoWorld) {
+    towerFloorTwoWorld = createTowerFloorTwoWorld(app, rapidPrototypeRoot);
+    towerFloorTwoWorld.enabled = false;
+  }
+  return towerFloorTwoWorld;
+}
 type TowerChronicleFloorVisual = { floor: number; victory: pc.Entity[]; locked: pc.Entity[] };
 const towerChronicleFloors: TowerChronicleFloorVisual[] = [];
 const towerChronicleProceduralCore: pc.Entity[] = [];
@@ -4286,8 +4301,6 @@ if (fastWorldRequested && !tavernRoomRequested) {
   }
   if (FAST_WORLD_TOWN_ONLY) {
     createTownPortalLandmarks(app, rapidPrototypeRoot);
-    towerFloorOneWorld = createTowerFloorOneWorld(app, rapidPrototypeRoot);
-    towerFloorTwoWorld = createTowerFloorTwoWorld(app, rapidPrototypeRoot);
   }
 
   const badge = document.createElement("aside");
@@ -6200,6 +6213,7 @@ let realmEventDisplayUntil = 0;
 let lastNameplateSampleAt = -Infinity;
 let lastWorldUiSliceAt = -Infinity;
 let currentWorldUiSlice = -1;
+let lastMinimapUpdateAt = -Infinity;
 let nearbyTradePlayerId: string | null = null;
 
 function playerInteractionView(id: string): PlayerInteractionView | null {
@@ -17377,6 +17391,8 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
   towerFloorTwoLightingBlend += (towerFloorTwoTarget - towerFloorTwoLightingBlend) * (1 - Math.exp(-Math.max(0, dt) * 2.8));
   if (Math.abs(towerFloorTwoTarget - towerFloorTwoLightingBlend) < 0.001) towerFloorTwoLightingBlend = towerFloorTwoTarget;
   fastWorldSky?.setFloorTwoBlend(towerFloorTwoLightingBlend);
+  if (fastWorldRequested && !tavernRoomRequested && camera.camera)
+    camera.camera.farClip = dungeonFarClip(towerFloorTarget > .5, towerFloorTwoTarget > .5);
   const dungeon = forestDungeonAtmosphere(position.x, position.z);
   const dungeonTarget = !visibilityCutaway && dungeon.room > 0 ? 1 : 0;
   const dungeonResponse = 1 - Math.exp(-Math.max(0, dt) * 1.8);
@@ -19471,8 +19487,12 @@ app.on("update", (dt: number) => {
   if (fastWorldRequested && !tavernRoomRequested) {
     const townTime = customUpdateStartedAt * .001;
     const playerPosition = localPlayer.getPosition();
-    if (towerFloorTwoWorld) towerFloorTwoWorld.enabled = isInsideTowerFloorTwo(playerPosition.x, playerPosition.z);
-    const floorOneActive = Boolean(towerFloorOneWorld && isInsideTowerFloorOne(playerPosition.x, playerPosition.z));
+    const floorOneActive = isInsideTowerFloorOne(playerPosition.x, playerPosition.z);
+    const floorTwoActive = isInsideTowerFloorTwo(playerPosition.x, playerPosition.z);
+    if (floorOneActive) ensureTowerFloorOneWorld();
+    if (floorTwoActive) ensureTowerFloorTwoWorld();
+    if (towerFloorOneWorld) towerFloorOneWorld.enabled = floorOneActive;
+    if (towerFloorTwoWorld) towerFloorTwoWorld.enabled = floorTwoActive;
     if (floorOneActive && towerFloorOneWorld) {
       const northAlive = mobVisuals.get(TOWER_FLOOR_ONE_WARDENS[0])?.state.alive !== false;
       const southAlive = mobVisuals.get(TOWER_FLOOR_ONE_WARDENS[1])?.state.alive !== false;
@@ -19510,7 +19530,6 @@ app.on("update", (dt: number) => {
       if (playerPosition.x >= 340) void requestTowerFloorOneFortressAssets(app, towerFloorOneWorld);
     } else floorOneRunUI.update({ active: false, x: playerPosition.x, z: playerPosition.z,
       northAlive: true, southAlive: true, bossState: "sealed" });
-    const floorTwoActive = Boolean(towerFloorTwoWorld && isInsideTowerFloorTwo(playerPosition.x, playerPosition.z));
     if (floorTwoActive && towerFloorTwoWorld) {
       if (!towerFloorTwoAssetsStarted) {
         towerFloorTwoAssetsStarted = true;
@@ -21236,7 +21255,15 @@ app.on("update", (dt: number) => {
     social.update(now, nameplates);
     }
     }
-    minimap.update(localPlayer.getPosition(), localFacingYaw, now, minimapPanel.open && Boolean(performancePanel.hidden) && Boolean(defeatScreen.hidden), cameraOrbit.yaw, Boolean(defeatScreen.hidden));
+    const minimapPosition = localPlayer.getPosition();
+    const towerMinimap = isInsideTowerFloorOne(minimapPosition.x, minimapPosition.z)
+      || isInsideTowerFloorTwo(minimapPosition.x, minimapPosition.z);
+    if (dungeonMinimapUpdateDue(now, lastMinimapUpdateAt, towerMinimap)) {
+      lastMinimapUpdateAt = now;
+      minimap.update(minimapPosition, localFacingYaw, now,
+        minimapPanel.open && Boolean(performancePanel.hidden) && Boolean(defeatScreen.hidden),
+        cameraOrbit.yaw, Boolean(defeatScreen.hidden));
+    }
   }
   lastWorldUiMs = performance.now() - worldUiStartedAt;
   capturePerformancePeak("worldUiMs", lastWorldUiMs);
@@ -21597,6 +21624,10 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   });
   room.onMessage("player:portal", (spawn: { x: number; y: number; z: number; entering: boolean }) => {
     latestFloorAttemptSummary = null; updateDefeatAttemptSummary();
+    // Build only the destination floor while the travel veil is still active.
+    // Town startup no longer pays to construct and batch every dungeon.
+    if (fastWorldRequested && isInsideTowerFloorOne(spawn.x, spawn.z)) ensureTowerFloorOneWorld();
+    if (fastWorldRequested && isInsideTowerFloorTwo(spawn.x, spawn.z)) ensureTowerFloorTwoWorld();
     portalTransition.arrive();
     pendingPortalArrival = fastWorldRequested ? towerPortalArrival(spawn) : null;
     clearDefeatCombat(); closeLoot();
