@@ -66,13 +66,16 @@ export function callingAwakeningCanContinue(elapsedMs: number): boolean {
 export function callingPreviewMarkup(pathId: BuildPathId, label: string): string {
   const awakening = callingAwakening(pathId);
   return `<div class="calling-preview" data-calling="${pathId}" style="--calling-colour:${awakening.colour};--calling-accent:${awakening.accent}" aria-label="${label} ability preview" role="img">
+    <span class="calling-preview-backdrop"><i></i><i></i><i></i></span>
     <span class="calling-preview-ground"></span>
-    <span class="calling-preview-target"><i></i></span>
-    <span class="calling-preview-decoy"><i></i></span>
-    <span class="calling-preview-hero"><i class="calling-preview-head"></i><i class="calling-preview-body"></i><i class="calling-preview-arm calling-preview-arm-a"></i><i class="calling-preview-arm calling-preview-arm-b"></i></span>
+    <span class="calling-preview-target"><i class="calling-preview-target-head"></i><i class="calling-preview-target-body"></i><i class="calling-preview-target-arm calling-preview-target-arm-a"></i><i class="calling-preview-target-arm calling-preview-target-arm-b"></i><i class="calling-preview-target-leg calling-preview-target-leg-a"></i><i class="calling-preview-target-leg calling-preview-target-leg-b"></i><i class="calling-preview-health"><b></b></i></span>
+    <span class="calling-preview-decoy"><i class="calling-preview-decoy-head"></i><i class="calling-preview-decoy-body"></i></span>
+    <span class="calling-preview-hero"><i class="calling-preview-cape"></i><i class="calling-preview-head"></i><i class="calling-preview-body"></i><i class="calling-preview-arm calling-preview-arm-a"></i><i class="calling-preview-arm calling-preview-arm-b"></i><i class="calling-preview-leg calling-preview-leg-a"></i><i class="calling-preview-leg calling-preview-leg-b"></i><i class="calling-preview-weapon"></i></span>
     <span class="calling-preview-prop"></span>
     <span class="calling-preview-effect calling-preview-effect-a"></span>
     <span class="calling-preview-effect calling-preview-effect-b"></span>
     <span class="calling-preview-effect calling-preview-effect-c"></span>
+    <span class="calling-preview-impact"><i></i><i></i><i></i><i></i></span>
+    <span class="calling-preview-motes"><i></i><i></i><i></i><i></i><i></i></span>
   </div>`;
 }

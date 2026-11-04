@@ -14,6 +14,11 @@ describe("Calling choice presentation", () => {
     const markup = callingPreviewMarkup("assassin", "Assassin");
     expect(markup).toContain('data-calling="assassin"');
     expect(markup).toContain('aria-label="Assassin ability preview"');
+    expect(markup).toContain('class="calling-preview-leg calling-preview-leg-a"');
+    expect(markup).toContain('class="calling-preview-weapon"');
+    expect(markup).toContain('class="calling-preview-health"');
+    expect(markup).toContain('class="calling-preview-impact"');
+    expect(markup).toContain('class="calling-preview-motes"');
   });
 
   it("holds the awakening long enough to read before continuing", () => {

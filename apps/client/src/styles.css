@@ -5935,3 +5935,182 @@ body:has(#tower-floor-selector:not([hidden])) #touch-controls { opacity: 0; poin
   .calling-intro-actions { display: grid; grid-template-columns: 1fr; }
   #calling-intro-confirm { min-width: 0; }
 }
+
+/* Calling preview v4: readable combat vignettes with anticipation, action,
+   impact and recovery instead of glowing mannequin poses. */
+.calling-preview {
+  isolation: isolate;
+  perspective: 260px;
+  background:
+    linear-gradient(180deg, transparent 48%, #020706c9 49%),
+    radial-gradient(ellipse at 50% 82%, color-mix(in srgb, var(--calling-colour) 22%, transparent), transparent 55%),
+    linear-gradient(145deg, #101b18, #030806 74%);
+}
+.calling-preview::before {
+  content: "";
+  position: absolute;
+  z-index: 8;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 26px #000b, inset 0 1px rgb(255 255 255 / 8%);
+  pointer-events: none;
+}
+.calling-preview::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  right: 0;
+  bottom: 26%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--calling-colour) 34%, transparent), transparent);
+}
+.calling-preview-backdrop { z-index: 0; inset: 0; opacity: .46; }
+.calling-preview-backdrop > i { bottom: 26%; width: 8%; border: 1px solid color-mix(in srgb, var(--calling-colour) 18%, transparent); border-bottom: 0; background: linear-gradient(90deg, #050a08, #13221a, #050a08); }
+.calling-preview-backdrop > i:nth-child(1) { left: 8%; height: 48%; transform: skewY(-8deg); }
+.calling-preview-backdrop > i:nth-child(2) { left: 48%; height: 66%; opacity: .48; transform: skewY(5deg); }
+.calling-preview-backdrop > i:nth-child(3) { right: 7%; height: 42%; transform: skewY(9deg); }
+.calling-preview-ground { z-index: 0; left: 8%; right: 8%; bottom: 11%; height: 13%; border: 0; background: radial-gradient(ellipse, color-mix(in srgb, var(--calling-colour) 17%, #06100b), #010302 72%); box-shadow: 0 -1px color-mix(in srgb, var(--calling-colour) 26%, transparent); transform: perspective(80px) rotateX(66deg); }
+
+.calling-preview-hero, .calling-preview-target { z-index: 3; width: 18px; height: 46px; transform-origin: 50% 100%; }
+.calling-preview-hero { left: 29%; bottom: 18%; filter: drop-shadow(0 0 6px color-mix(in srgb, var(--calling-colour) 70%, transparent)); }
+.calling-preview-head, .calling-preview-target-head { left: 30%; top: 0; width: 40%; height: 17%; border: 1px solid rgb(255 255 255 / 28%); border-radius: 38% 38% 28% 28%; background: var(--calling-accent); box-shadow: inset -2px -2px rgb(0 0 0 / 18%); }
+.calling-preview-body, .calling-preview-target-body { left: 18%; top: 17%; width: 64%; height: 47%; border: 1px solid rgb(255 255 255 / 16%); border-radius: 22% 22% 12% 12%; background: linear-gradient(110deg, color-mix(in srgb, var(--calling-colour) 48%, #13251d), var(--calling-colour)); box-shadow: inset -4px 0 rgb(0 0 0 / 18%); }
+.calling-preview-arm, .calling-preview-target-arm { top: 21%; width: 17%; height: 42%; border-radius: 999px; background: color-mix(in srgb, var(--calling-accent) 82%, var(--calling-colour)); transform-origin: 50% 10%; }
+.calling-preview-arm-a, .calling-preview-target-arm-a { left: 5%; transform: rotate(12deg); }
+.calling-preview-arm-b, .calling-preview-target-arm-b { right: 5%; transform: rotate(-12deg); }
+.calling-preview-leg, .calling-preview-target-leg { top: 61%; width: 21%; height: 37%; border-radius: 0 0 999px 999px; background: color-mix(in srgb, var(--calling-colour) 48%, #07100d); transform-origin: 50% 5%; }
+.calling-preview-leg-a, .calling-preview-target-leg-a { left: 25%; transform: rotate(3deg); }
+.calling-preview-leg-b, .calling-preview-target-leg-b { right: 25%; transform: rotate(-3deg); }
+.calling-preview-cape { z-index: -1; left: 12%; top: 20%; width: 76%; height: 53%; clip-path: polygon(16% 0, 84% 0, 100% 100%, 0 88%); background: color-mix(in srgb, var(--calling-colour) 42%, #07100d); opacity: .76; transform-origin: 50% 8%; }
+.calling-preview-weapon { z-index: 2; left: 83%; top: 23%; width: 3px; height: 45%; border-radius: 4px; background: var(--calling-accent); box-shadow: 0 0 5px var(--calling-colour); transform: rotate(-18deg); transform-origin: 50% 86%; }
+
+.calling-preview-target { right: 15%; bottom: 18%; opacity: .9; filter: drop-shadow(0 3px 4px #0009); }
+.calling-preview-target::before { display: none; }
+.calling-preview-target > i { position: absolute; box-sizing: border-box; }
+.calling-preview-target-head { background: #e9a08f; }
+.calling-preview-target-body { background: linear-gradient(110deg, #6f2f36, #a2474e); }
+.calling-preview-target-arm { background: #d98d80; }
+.calling-preview-target-leg { background: #3d2429; }
+.calling-preview-health { left: -15%; top: -16%; width: 130%; height: 5%; overflow: hidden; border-radius: 999px; background: #24080b; box-shadow: 0 0 0 1px #000c; }
+.calling-preview-health > b { position: absolute; display: block; left: 0; top: 0; width: 72%; height: 100%; border-radius: inherit; background: #ef5161; box-shadow: 0 0 4px #ef5161; }
+/* Beat the legacy `.calling-preview-target i` rule which otherwise collapses
+   every articulated target part into the same red rectangle. */
+.calling-preview .calling-preview-target > .calling-preview-target-head { left: 30%; top: 0; width: 40%; height: 17%; border: 1px solid rgb(255 255 255 / 28%); border-radius: 38% 38% 28% 28%; background: #e9a08f; }
+.calling-preview .calling-preview-target > .calling-preview-target-body { left: 18%; top: 17%; width: 64%; height: 47%; border: 1px solid rgb(255 255 255 / 16%); border-radius: 22% 22% 12% 12%; background: linear-gradient(110deg, #6f2f36, #a2474e); }
+.calling-preview .calling-preview-target > .calling-preview-target-arm { top: 21%; width: 17%; height: 42%; border-radius: 999px; background: #d98d80; transform-origin: 50% 10%; }
+.calling-preview .calling-preview-target > .calling-preview-target-arm-a { left: 5%; transform: rotate(12deg); }
+.calling-preview .calling-preview-target > .calling-preview-target-arm-b { right: 5%; left: auto; transform: rotate(-12deg); }
+.calling-preview .calling-preview-target > .calling-preview-target-leg { top: 61%; width: 21%; height: 37%; border-radius: 0 0 999px 999px; background: #3d2429; transform-origin: 50% 5%; }
+.calling-preview .calling-preview-target > .calling-preview-target-leg-a { left: 25%; transform: rotate(3deg); }
+.calling-preview .calling-preview-target > .calling-preview-target-leg-b { right: 25%; left: auto; transform: rotate(-3deg); }
+.calling-preview .calling-preview-target > .calling-preview-health { left: -15%; top: -16%; width: 130%; height: 5%; overflow: hidden; border: 0; border-radius: 999px; background: #24080b; box-shadow: 0 0 0 1px #000c; }
+
+.calling-preview-decoy { z-index: 2; left: 29%; bottom: 18%; width: 18px; height: 46px; border: 0; background: none; }
+.calling-preview-decoy > i { position: absolute; box-sizing: border-box; }
+.calling-preview-decoy-head { left: 30%; top: 0; width: 40%; height: 17%; border: 1px dashed var(--calling-accent); border-radius: 35%; background: color-mix(in srgb, var(--calling-colour) 28%, transparent); }
+.calling-preview-decoy-body { left: 18%; top: 17%; width: 64%; height: 79%; border: 1px dashed var(--calling-accent); border-radius: 22% 22% 10% 10%; background: color-mix(in srgb, var(--calling-colour) 18%, transparent); clip-path: polygon(0 0, 100% 0, 86% 100%, 12% 100%); }
+.calling-preview-prop, .calling-preview-effect, .calling-preview-impact, .calling-preview-motes { z-index: 4; pointer-events: none; }
+.calling-preview-impact { right: 14%; top: 33%; width: 28px; height: 28px; opacity: 0; }
+.calling-preview-impact > i { left: 48%; top: 0; width: 2px; height: 50%; border-radius: 4px; background: var(--calling-accent); box-shadow: 0 0 5px var(--calling-colour); transform-origin: 50% 100%; }
+.calling-preview-impact > i:nth-child(2) { transform: rotate(90deg); }.calling-preview-impact > i:nth-child(3) { transform: rotate(45deg); }.calling-preview-impact > i:nth-child(4) { transform: rotate(-45deg); }
+.calling-preview-motes { inset: 0; opacity: 0; }
+.calling-preview-motes > i { width: 3px; height: 3px; border-radius: 50%; background: var(--calling-accent); box-shadow: 0 0 5px var(--calling-colour); }
+.calling-preview-motes > i:nth-child(1) { left: 23%; bottom: 23%; }.calling-preview-motes > i:nth-child(2) { left: 38%; bottom: 34%; }.calling-preview-motes > i:nth-child(3) { left: 53%; bottom: 26%; }.calling-preview-motes > i:nth-child(4) { left: 69%; bottom: 39%; }.calling-preview-motes > i:nth-child(5) { left: 82%; bottom: 25%; }
+
+/* Tank: enemy commitment, planted brace, shield impact, recovery. */
+.calling-preview[data-calling="tank"] .calling-preview-prop { left: 34%; bottom: 27%; width: 19px; height: 31px; opacity: 1; border: 2px solid var(--calling-accent); border-radius: 50% 50% 30% 30%; background: linear-gradient(120deg, color-mix(in srgb, var(--calling-colour) 58%, #0d1b24), #102734); box-shadow: inset -4px -3px #0004, 0 0 9px color-mix(in srgb, var(--calling-colour) 62%, transparent); transform-origin: 50% 100%; animation: preview4-tank-shield 3.2s cubic-bezier(.2,.8,.25,1) infinite; }
+.calling-preview[data-calling="tank"] .calling-preview-hero { animation: preview4-tank-hero 3.2s ease-in-out infinite; }
+.calling-preview[data-calling="tank"] .calling-preview-target { animation: preview4-tank-target 3.2s ease-in-out infinite; }
+.calling-preview[data-calling="tank"] .calling-preview-effect-a { left: 24%; bottom: 12%; width: 42%; height: 76%; border: 2px solid var(--calling-colour); border-bottom: 0; border-radius: 50% 50% 0 0; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--calling-colour) 16%, transparent), transparent); animation: preview4-tank-wall 3.2s ease-out infinite; }
+.calling-preview[data-calling="tank"] .calling-preview-impact { left: 49%; right: auto; animation: preview4-impact 3.2s ease-out infinite; }
+@keyframes preview4-tank-hero { 0%,18%,100% { transform: translateX(0) rotate(0); } 32%,72% { transform: translateX(6%) rotate(5deg) scaleY(.94); } 78% { transform: translateX(2%) rotate(-2deg); } }
+@keyframes preview4-tank-target { 0%,22%,100% { transform: translateX(0); } 45% { transform: translateX(-115%); } 52% { transform: translateX(-88%) rotate(10deg); } 68% { transform: translateX(-46%); } }
+@keyframes preview4-tank-shield { 0%,21%,100% { opacity: .4; transform: scale(.72) rotate(-10deg); } 34%,72% { opacity: 1; transform: scale(1.12) rotate(0); } 78% { transform: scale(.92) rotate(-4deg); } }
+@keyframes preview4-tank-wall { 0%,27%,100% { opacity: 0; transform: scale(.2,.65); } 39%,69% { opacity: .8; transform: scale(1); } 78% { opacity: 0; transform: scale(1.08); } }
+
+/* Mage: two-hand weave, convergence, projectile, enemy recoil. */
+.calling-preview[data-calling="mage"] .calling-preview-weapon { opacity: 0; }
+.calling-preview[data-calling="mage"] .calling-preview-arm-a { animation: preview4-mage-left 3.25s ease-in-out infinite; }
+.calling-preview[data-calling="mage"] .calling-preview-arm-b { animation: preview4-mage-right 3.25s ease-in-out infinite; }
+.calling-preview[data-calling="mage"] .calling-preview-effect-a, .calling-preview[data-calling="mage"] .calling-preview-effect-b { top: 42%; width: 10px; height: 10px; opacity: 0; border: 1px solid #fff8; border-radius: 50%; background: var(--calling-accent); box-shadow: 0 0 12px 5px var(--calling-colour); animation: preview4-mage-orb 3.25s ease-in-out infinite; }
+.calling-preview[data-calling="mage"] .calling-preview-effect-a { left: 25%; }.calling-preview[data-calling="mage"] .calling-preview-effect-b { left: 32%; animation-delay: -.08s; }
+.calling-preview[data-calling="mage"] .calling-preview-effect-c { left: 32%; top: 43%; width: 13px; height: 13px; border: 2px solid var(--calling-accent); border-radius: 50%; background: var(--calling-colour); box-shadow: 0 0 15px 6px var(--calling-colour); animation: preview4-mage-bolt 3.25s cubic-bezier(.2,.75,.25,1) infinite; }
+.calling-preview[data-calling="mage"] .calling-preview-target { animation: preview4-mage-target 3.25s ease-out infinite; }
+.calling-preview[data-calling="mage"] .calling-preview-impact { animation: preview4-impact 3.25s ease-out infinite; }
+.calling-preview[data-calling="mage"] .calling-preview-motes { animation: preview4-motes 3.25s ease-out infinite; }
+@keyframes preview4-mage-left { 0%,15%,100% { transform: rotate(12deg); } 31%,58% { transform: rotate(-56deg) translateY(-8%); } 68% { transform: rotate(-34deg); } }
+@keyframes preview4-mage-right { 0%,15%,100% { transform: rotate(-12deg); } 31%,58% { transform: rotate(56deg) translateY(-8%); } 68% { transform: rotate(34deg); } }
+@keyframes preview4-mage-orb { 0%,17%,78%,100% { opacity: 0; transform: scale(.15); } 34%,55% { opacity: 1; transform: translate(30%, -38%) scale(1); } 64% { opacity: .95; transform: translate(80%, -20%) scale(.5); } }
+@keyframes preview4-mage-bolt { 0%,57%,100% { opacity: 0; transform: translateX(0) scale(.3); } 62% { opacity: 1; transform: translateX(0) scale(1); } 75% { opacity: 1; transform: translateX(940%) scale(.66); } 78% { opacity: 0; transform: translateX(980%) scale(1.8); } }
+@keyframes preview4-mage-target { 0%,73%,100% { transform: none; filter: none; } 78% { transform: translateX(15%) rotate(11deg); filter: brightness(2); } 88% { transform: translateX(5%) rotate(-3deg); } }
+
+/* Assassin: vanish, reappear behind the mark, cross-cut, settle. */
+.calling-preview[data-calling="assassin"] .calling-preview-weapon { height: 34%; transform: rotate(-42deg); }
+.calling-preview[data-calling="assassin"] .calling-preview-hero { animation: preview4-assassin-hero 3.15s cubic-bezier(.2,.8,.2,1) infinite; }
+.calling-preview[data-calling="assassin"] .calling-preview-target { animation: preview4-assassin-target 3.15s ease-out infinite; }
+.calling-preview[data-calling="assassin"] .calling-preview-effect-a, .calling-preview[data-calling="assassin"] .calling-preview-effect-b { left: 64%; top: 27%; width: 4px; height: 65%; border-radius: 5px; background: var(--calling-accent); box-shadow: 0 0 9px var(--calling-colour); transform-origin: 50% 50%; animation: preview4-assassin-cut-a 3.15s ease-out infinite; }
+.calling-preview[data-calling="assassin"] .calling-preview-effect-b { transform: rotate(-52deg); animation-name: preview4-assassin-cut-b; }
+.calling-preview[data-calling="assassin"] .calling-preview-effect-c { left: 23%; bottom: 10%; width: 42px; height: 54px; border-radius: 50%; background: radial-gradient(circle, #5f506caa, #201b2a88 52%, transparent 72%); animation: preview4-assassin-smoke 3.15s ease-out infinite; }
+.calling-preview[data-calling="assassin"] .calling-preview-impact { animation: preview4-impact 3.15s ease-out infinite; }
+@keyframes preview4-assassin-hero { 0%,16%,100% { left: 29%; opacity: 1; transform: scaleX(1); } 28% { left: 31%; opacity: .08; transform: scale(.86); } 47% { left: 76%; opacity: .04; transform: scaleX(-1); } 55%,78% { left: 76%; opacity: 1; transform: scaleX(-1); } 88% { left: 66%; opacity: .5; transform: scaleX(-1); } }
+@keyframes preview4-assassin-smoke { 0%,12%,100% { opacity: 0; transform: scale(.15); } 26% { opacity: .95; transform: scale(1); } 48% { opacity: 0; transform: translateY(-16%) scale(1.55); } }
+@keyframes preview4-assassin-cut-a { 0%,56%,100% { opacity: 0; transform: rotate(52deg) scaleY(.1); } 63% { opacity: 1; transform: rotate(52deg) scaleY(1); } 76% { opacity: 0; transform: rotate(52deg) scaleY(1.35); } }
+@keyframes preview4-assassin-cut-b { 0%,62%,100% { opacity: 0; transform: rotate(-52deg) scaleY(.1); } 69% { opacity: 1; transform: rotate(-52deg) scaleY(1); } 81% { opacity: 0; transform: rotate(-52deg) scaleY(1.35); } }
+@keyframes preview4-assassin-target { 0%,61%,100% { transform: none; filter: none; } 70% { transform: translateY(-4%) rotate(-8deg); filter: brightness(1.9); } 84% { transform: translateY(4%) rotate(4deg); } }
+
+/* Thief: smoke, persistent decoy, enemy commits to the fake, hero escapes. */
+.calling-preview[data-calling="thief"] .calling-preview-weapon { top: 42%; width: 7px; height: 7px; border-radius: 50%; transform: none; }
+.calling-preview[data-calling="thief"] .calling-preview-decoy { display: block !important; animation: preview4-thief-decoy 3.35s ease-out infinite; }
+.calling-preview[data-calling="thief"] .calling-preview-hero { animation: preview4-thief-hero 3.35s ease-in-out infinite; }
+.calling-preview[data-calling="thief"] .calling-preview-target { animation: preview4-thief-target 3.35s ease-in-out infinite; }
+.calling-preview[data-calling="thief"] .calling-preview-effect-a, .calling-preview[data-calling="thief"] .calling-preview-effect-b, .calling-preview[data-calling="thief"] .calling-preview-effect-c { left: 23%; bottom: 12%; width: 38px; height: 38px; border-radius: 50%; background: radial-gradient(circle, #e5dec3c7, #6e6a618c 45%, transparent 72%); animation: preview4-thief-smoke 3.35s ease-out infinite; }
+.calling-preview[data-calling="thief"] .calling-preview-effect-b { left: 31%; animation-delay: .1s; }.calling-preview[data-calling="thief"] .calling-preview-effect-c { left: 38%; animation-delay: .18s; }
+@keyframes preview4-thief-hero { 0%,17%,100% { left: 29%; opacity: 1; transform: none; } 32% { left: 28%; opacity: .1; transform: scale(.82); } 46% { left: 17%; opacity: .15; } 58%,83% { left: 12%; opacity: 1; transform: scaleX(-1); } 91% { opacity: .35; } }
+@keyframes preview4-thief-decoy { 0%,22%,100% { opacity: 0; transform: scale(.65); } 36%,79% { opacity: .92; transform: scale(1); } 90% { opacity: 0; transform: scale(1.08); } }
+@keyframes preview4-thief-target { 0%,35%,100% { right: 15%; transform: scaleX(1); } 52%,78% { right: 42%; transform: scaleX(1); } 84% { right: 39%; transform: rotate(6deg); } }
+@keyframes preview4-thief-smoke { 0%,18%,100% { opacity: 0; transform: scale(.2); } 34% { opacity: .9; transform: scale(1); } 64% { opacity: 0; transform: translateY(-28%) scale(1.55); } }
+
+/* Ranger: planted bow, visible draw, arrow travel, clean hit reaction. */
+.calling-preview[data-calling="ranger"] .calling-preview-hero { animation: preview4-ranger-hero 3.25s ease-in-out infinite; }
+.calling-preview[data-calling="ranger"] .calling-preview-prop { left: 34%; top: 25%; width: 19px; height: 43px; opacity: 1; border-right: 3px solid var(--calling-accent); border-radius: 50%; filter: drop-shadow(0 0 5px var(--calling-colour)); transform-origin: 50% 50%; animation: preview4-ranger-bow 3.25s ease-in-out infinite; }
+.calling-preview[data-calling="ranger"] .calling-preview-effect-a { left: 39%; top: 48%; width: 8px; height: 2px; border-radius: 4px; background: var(--calling-accent); box-shadow: 0 0 7px var(--calling-colour); transform-origin: 0 50%; animation: preview4-ranger-arrow 3.25s cubic-bezier(.16,.8,.2,1) infinite; }
+.calling-preview[data-calling="ranger"] .calling-preview-target { animation: preview4-ranger-target 3.25s ease-out infinite; }
+.calling-preview[data-calling="ranger"] .calling-preview-impact { animation: preview4-impact 3.25s ease-out infinite; }
+@keyframes preview4-ranger-hero { 0%,16%,100% { left: 29%; transform: none; } 32%,72% { left: 22%; transform: rotate(-4deg); } 82% { left: 25%; transform: rotate(2deg); } }
+@keyframes preview4-ranger-bow { 0%,24%,100% { transform: translateX(0) rotate(-7deg) scale(.78); } 42%,68% { transform: translateX(-8%) rotate(-7deg) scale(1); } 74% { transform: translateX(4%) rotate(-4deg) scale(.96); } }
+@keyframes preview4-ranger-arrow { 0%,54%,100% { opacity: 0; transform: translateX(0) scaleX(.2); } 60% { opacity: 1; transform: translateX(0) scaleX(1); } 73% { opacity: 1; transform: translateX(1120%) scaleX(2.4); } 77% { opacity: 0; transform: translateX(1160%) scaleX(.4); } }
+@keyframes preview4-ranger-target { 0%,71%,100% { transform: none; filter: none; } 76% { transform: translateX(12%) rotate(9deg); filter: brightness(1.8); } 88% { transform: translateX(3%) rotate(-2deg); } }
+
+/* Healer: wounded ally, directed cast, field bloom, visible health recovery. */
+.calling-preview[data-calling="healer"] .calling-preview-target-head { background: #d7fff1; }
+.calling-preview[data-calling="healer"] .calling-preview-target-body { background: linear-gradient(110deg, #175844, #47a981); }
+.calling-preview[data-calling="healer"] .calling-preview-target-arm { background: #b7efdc; }.calling-preview[data-calling="healer"] .calling-preview-target-leg { background: #123c30; }
+.calling-preview[data-calling="healer"] .calling-preview-health { background: #10261e; }.calling-preview[data-calling="healer"] .calling-preview-health > b { width: 24%; background: #65edb5; box-shadow: 0 0 4px #65edb5; animation: preview4-healer-health 3.4s ease-out infinite; }
+.calling-preview[data-calling="healer"] .calling-preview-weapon { height: 67%; top: 8%; border-radius: 4px 4px 0 0; transform: rotate(-8deg); }
+.calling-preview[data-calling="healer"] .calling-preview-weapon::before { content: ""; position: absolute; left: 50%; top: -4px; width: 8px; height: 8px; border: 2px solid var(--calling-accent); border-radius: 50%; transform: translateX(-50%); box-shadow: 0 0 7px var(--calling-colour); }
+.calling-preview[data-calling="healer"] .calling-preview-target { animation: preview4-healer-ally 3.4s ease-in-out infinite; }
+.calling-preview[data-calling="healer"] .calling-preview-ground { animation: preview4-healer-field 3.4s ease-out infinite; }
+.calling-preview[data-calling="healer"] .calling-preview-effect-a { left: 38%; top: 42%; width: 36%; height: 3px; border-radius: 5px; background: linear-gradient(90deg, var(--calling-accent), var(--calling-colour), transparent); box-shadow: 0 0 7px var(--calling-colour); transform-origin: 0 50%; animation: preview4-healer-beam 3.4s ease-out infinite; }
+.calling-preview[data-calling="healer"] .calling-preview-effect-b, .calling-preview[data-calling="healer"] .calling-preview-effect-c { right: 18%; top: 29%; width: 3px; height: 19px; border-radius: 4px; background: var(--calling-accent); box-shadow: 0 0 8px var(--calling-colour); animation: preview4-healer-cross 3.4s ease-out infinite; }
+.calling-preview[data-calling="healer"] .calling-preview-effect-c { transform: rotate(90deg); animation-name: preview4-healer-cross-rotated; }
+.calling-preview[data-calling="healer"] .calling-preview-motes { animation: preview4-healer-motes 3.4s ease-out infinite; }
+@keyframes preview4-healer-ally { 0%,20%,100% { transform: translateY(8%) scaleY(.78) rotate(4deg); filter: saturate(.5); } 48%,82% { transform: none; filter: saturate(1.2) brightness(1.1); } 91% { transform: translateY(-2%); } }
+@keyframes preview4-healer-health { 0%,26%,100% { width: 24%; } 51%,84% { width: 100%; } }
+@keyframes preview4-healer-field { 0%,23%,100% { opacity: .18; transform: perspective(80px) rotateX(66deg) scale(.32); } 46%,82% { opacity: 1; box-shadow: 0 0 18px var(--calling-colour); transform: perspective(80px) rotateX(66deg) scale(1.08); } }
+@keyframes preview4-healer-beam { 0%,27%,100% { opacity: 0; transform: scaleX(.08); } 38%,59% { opacity: 1; transform: scaleX(1); } 70% { opacity: 0; transform: scaleX(1); } }
+@keyframes preview4-healer-cross { 0%,35%,100% { opacity: 0; transform: scale(.2); } 48%,73% { opacity: 1; transform: scale(1); } 84% { opacity: 0; transform: translateY(-12px) scale(1.2); } }
+@keyframes preview4-healer-cross-rotated { 0%,35%,100% { opacity: 0; transform: rotate(90deg) scale(.2); } 48%,73% { opacity: 1; transform: rotate(90deg) scale(1); } 84% { opacity: 0; transform: translateY(-12px) rotate(90deg) scale(1.2); } }
+@keyframes preview4-healer-motes { 0%,32%,100% { opacity: 0; transform: translateY(8px); } 48%,74% { opacity: 1; transform: translateY(-8px); } 88% { opacity: 0; transform: translateY(-18px); } }
+
+@keyframes preview4-impact { 0%,69%,100% { opacity: 0; transform: scale(.15) rotate(0); } 76% { opacity: 1; transform: scale(1) rotate(22deg); } 86% { opacity: 0; transform: scale(1.55) rotate(38deg); } }
+@keyframes preview4-motes { 0%,58%,100% { opacity: 0; transform: translateY(7px); } 72% { opacity: .9; transform: translateY(-6px); } 88% { opacity: 0; transform: translateY(-17px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .calling-preview .calling-preview-hero,
+  .calling-preview .calling-preview-target,
+  .calling-preview .calling-preview-prop,
+  .calling-preview .calling-preview-effect,
+  .calling-preview .calling-preview-impact,
+  .calling-preview .calling-preview-motes { animation: none !important; }
+}
