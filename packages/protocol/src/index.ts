@@ -1,5 +1,6 @@
 export { fastWorldGroundHeight, fastWorldCoastShorelineZ } from "./fast-world-elevation.js";
 import { fastWorldGroundHeight } from "./fast-world-elevation.js";
+export * from "./interaction-test-player.js";
 export * from "./town-npcs.js";
 import { TOWN_NPCS } from "./town-npcs.js";
 /** @deprecated Resolve the smith through TOWN_NPCS instead. */

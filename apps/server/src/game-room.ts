@@ -4,6 +4,7 @@ import { aimedWeaponFlight, bowDrawCharge, bowShotDamage, bowShotRangeMultiplier
   mobAttackBody, ENEMY_PROJECTILE_RADIUS } from "@blockcraft/protocol";
 import { PVP_MURDERER_DURATION_MS, isTowerFloorSafeZone, pvpCombatAllowed, pvpMurdererUntil, withPvpMurdererUntil,
   type PvpHit, type PvpKill } from "@blockcraft/protocol";
+import { INTERACTION_TEST_PLAYER, INTERACTION_TEST_PLAYER_ID } from "@blockcraft/protocol";
 import { CROWNKEEPER_FORGE } from "@blockcraft/protocol";
 import { parseTowerProgress, towerFloorDirectory, towerFloorUnlocked, withTowerFloorCleared } from "@blockcraft/protocol";
 import { tavernRoomFurnitureCellSolid } from "@blockcraft/protocol";
@@ -318,6 +319,8 @@ import { ForestPortalCycle } from "./forest-portal-cycle.js";
 import { FOREST_PORTAL_LIFETIME_MS, canUseForestPortal } from "@blockcraft/protocol";
 import { FOREST_PORTAL_POSITION, FOREST_DUNGEON_ENTRY, FOREST_DUNGEON_EXIT, FOREST_DUNGEON_MOBS, FOREST_DUNGEON_COVER, TOWN_EXPEDITION_BOARD_POSITION, TOWN_EXPEDITION_PORTAL_POSITION, TOWN_SILVER_DEPTHS_PORTAL_POSITION, SILVER_DEPTHS_ENTRY_POSITION, SILVER_DEPTHS_PARTY_SPAWNS, SILVER_DEPTHS_EXIT_POSITION, isInForestDungeon, EMBER_VAULT_PORTAL_POSITION, EMBER_VAULT_ENTRY, EMBER_VAULT_EXIT, EMBER_VAULT_MOBS, isInEmberVault } from "@blockcraft/voxel-world";
 import { ForestPortalState } from "./schema.js";
+import { createInteractionTestPlayerState, INTERACTION_TEST_PLAYER_RESET_MS,
+  resetInteractionTestPlayerState } from "./interaction-test-player.js";
 import { ROOT_LANE_DURATION_MS, ROOT_LANE_RADIUS, guardianCoverHit, rootLaneHazards } from "./root-guardian.js";
 import { canStartTavernQuiz, doubledPayout, drawQuizQuestion, mustSettleQuiz, type QuizRound } from "./tavern-quiz.js";
 import { canStartHighLow, drawTavernCard, highLowPayout, highLowResult, type HighLowRound } from "./tavern-high-low.js";
@@ -545,6 +548,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly floorRunTimings = new Map<string, { enteredAt: number; northAt?: number; southAt?: number; bossAt?: number }>();
   private towerFloorWasOccupied = false;
   private towerFloorEmptySince = 0;
+  private interactionTestPlayerResetAt = 0;
+  private interactionTestPlayerFacingAt = 0;
   private floorDefeatSequence = 0;
   private readonly performanceSubscribers = new Set<string>();
   private readonly simulationTickSamples: number[] = [];
@@ -824,6 +829,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       }
     }
     this.setState(new WorldState());
+    if (this.roomKind === "practice" && this.rapidPractice)
+      this.state.players.set(INTERACTION_TEST_PLAYER_ID, createInteractionTestPlayerState());
     if (this.roomKind === "practice") this.buildPracticeArena();
     const depthsEntry = new ForestPortalState();
     Object.assign(depthsEntry, TOWN_SILVER_DEPTHS_PORTAL_POSITION, { kind: "entry" });
@@ -10350,6 +10357,39 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
   }
 
+  private maintainInteractionTestPlayer(now: number): void {
+    if (this.roomKind !== "practice" || !this.rapidPractice) return;
+    let testPlayer = this.state.players.get(INTERACTION_TEST_PLAYER_ID);
+    if (!testPlayer) {
+      testPlayer = createInteractionTestPlayerState();
+      this.state.players.set(INTERACTION_TEST_PLAYER_ID, testPlayer);
+    }
+    if (now >= this.interactionTestPlayerFacingAt) {
+      this.interactionTestPlayerFacingAt = now + 250;
+      const nearest = this.clients.map(client => this.state.players.get(client.sessionId))
+        .filter((player): player is PlayerState => Boolean(player))
+        .sort((a, b) => Math.hypot(a.x - testPlayer!.x, a.z - testPlayer!.z)
+          - Math.hypot(b.x - testPlayer!.x, b.z - testPlayer!.z))[0];
+      if (nearest && Math.hypot(nearest.x - testPlayer.x, nearest.z - testPlayer.z) <= 12) {
+        const desiredYaw = Math.atan2(nearest.x - testPlayer.x, nearest.z - testPlayer.z) * 180 / Math.PI;
+        const yawDelta = ((desiredYaw - testPlayer.yaw + 540) % 360) - 180;
+        if (Math.abs(yawDelta) >= 2) testPlayer.yaw = desiredYaw;
+      }
+    }
+
+    const changed = testPlayer.health !== INTERACTION_TEST_PLAYER.health
+      || testPlayer.x !== INTERACTION_TEST_PLAYER.x || testPlayer.y !== INTERACTION_TEST_PLAYER.y
+      || testPlayer.z !== INTERACTION_TEST_PLAYER.z || testPlayer.defending;
+    if (!changed) {
+      this.interactionTestPlayerResetAt = 0;
+      return;
+    }
+    if (!this.interactionTestPlayerResetAt) this.interactionTestPlayerResetAt = now + INTERACTION_TEST_PLAYER_RESET_MS;
+    if (now < this.interactionTestPlayerResetAt) return;
+    resetInteractionTestPlayerState(testPlayer);
+    this.interactionTestPlayerResetAt = 0;
+  }
+
   private simulatePlayers(deltaTime: number): void {
     if (this.roomKind === "overworld") for (const [playerId, player] of this.state.players) this.discoverMistfen(playerId, player);
     if (this.roomKind === "overworld") for (const [playerId, player] of this.state.players) this.discoverGreenwood(playerId, player);
@@ -10369,6 +10409,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       }
     }
     const now = Date.now();
+    this.maintainInteractionTestPlayer(now);
     this.advanceRapidPracticeWaves(now);
     if (this.roomKind === "overworld" && this.silverDepthsLobbies.size) this.validateSilverDepthsLobbies(now);
     this.resolvePendingIncomingHits(now);

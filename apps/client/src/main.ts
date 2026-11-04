@@ -5,7 +5,7 @@ import { FAST_WORLD_TOWN_BOUNDS, FAST_WORLD_TOWN_ONLY, TOWER_FLOOR_ONE, TOWER_FL
   TOWER_FLOOR_ONE_WARDENS, fastWorldGroundHeight, isInsideTowerFloorOne, isInsideTowerFloorTwo,
   isTowerFloorSafeZone, parseTowerProgress, pvpMurdererUntil, towerFloorTwoForgeheartPhase,
   type TowerFloorDirectoryUpdate, type TowerProgress } from "@blockcraft/protocol";
-import { parseGuildMembership } from "@blockcraft/protocol";
+import { isInteractionTestPlayer, parseGuildMembership } from "@blockcraft/protocol";
 import { BOW_DRAW_FULL_MS, BOW_DRAW_MAX_HOLD_MS, BOW_DRAW_MIN_MS, bowDrawCharge,
   bowShotRangeMultiplier, bowShotTravelMultiplier } from "@blockcraft/protocol";
 import { FOCUS_CHARGE_MAX_HOLD_MS, FOCUS_CHARGE_MIN_MS, focusCastCharge, focusCastRangeMultiplier } from "@blockcraft/protocol";
@@ -6199,7 +6199,8 @@ function playerInteractionView(id: string): PlayerInteractionView | null {
   const distance = Math.hypot(position.x - local.x, position.z - local.z);
   const localGuild = parseGuildMembership((room.state.players as Map<string, NetworkPlayer>).get(room.sessionId)?.huntLoadoutsJson ?? "{}");
   const targetGuild = parseGuildMembership(player.huntLoadoutsJson);
-  const state = player.health <= 0 ? "Defeated"
+  const state = isInteractionTestPlayer(id) ? "Interaction test player"
+    : player.health <= 0 ? "Defeated"
     : player.defending ? "Guarding"
       : remote.actionStartedAt !== null || remote.powerStartedAt !== null ? "In combat"
         : player.health < player.maxHealth ? "Recovering" : "Exploring";
@@ -11447,7 +11448,7 @@ function createBruteSlamImpact(mob: MobVisual): void {
 }
 
 function updatePlayerCount(): void {
-  const count = room ? remotePlayers.size + 1 : 0;
+  const count = room ? [...remotePlayers.keys()].filter(id => !isInteractionTestPlayer(id)).length + 1 : 0;
   social.setOnlineCount(count);
 }
 
