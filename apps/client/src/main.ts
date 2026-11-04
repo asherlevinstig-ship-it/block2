@@ -147,6 +147,7 @@ import { miningAvailability, miningReach, miningProgress, miningDurationMs, mini
 import type { MineralDepositStatus } from "@blockcraft/protocol";
 import { advanceMobMotion, advanceMobTurnLean, mobRootPositionChanged, mobRootYawChanged, trimMobSnapshots, visibleMobGaitSpeed } from "./mob-motion.js";
 import { createServerClock, sampleServerClock, enemyAttackPresentation, enemyAttackStrength } from "./enemy-timeline.js";
+import { createGameLoadingScreen } from "./loading-screen.js";
 import { thornBindingDeadline } from "./thorn-binding.js";
 import { bruteRecoveryPose, enemyAwarenessCue, enemyCombatCue, enemyCueLineClear, enemyShotGuideLength } from "./enemy-combat-cues.js";
 import { confirmPredictedDodges, removeRejectedDodge, replayPendingMovement, type PredictionFrame } from "./prediction-replay.js";
@@ -1182,6 +1183,18 @@ let rapidPracticeRewardTitle: HTMLElement | null = null;
 let rapidPracticeRewardDetail: HTMLElement | null = null;
 let rapidPracticeRewardChoices: HTMLElement | null = null;
 const status = document.querySelector<HTMLElement>("#status")!;
+const loadingScreen = createGameLoadingScreen(document);
+let initialWorldVisualsReady = false;
+let initialTownAssetsReady = !fastWorldRequested || tavernRoomRequested;
+let initialTownNpcsReady = !fastWorldRequested || tavernRoomRequested;
+let initialLoadingCompleted = false;
+function finishInitialLoadingIfReady(): void {
+  if (initialLoadingCompleted || !initialWorldVisualsReady || !initialTownAssetsReady || !initialTownNpcsReady) return;
+  initialLoadingCompleted = true;
+  loadingScreen.complete(tavernRoomRequested ? "The Hearth & Hammer is ready."
+    : fastWorldRequested ? "The Town of Beginnings is ready." : "Your world is ready.");
+}
+loadingScreen.stage({ progress: 18, label: "Preparing your journey", detail: "Warming the renderer and gathering your saved adventure…" });
 const towerFloorSelector = document.querySelector<HTMLElement>("#tower-floor-selector")!;
 const towerFloorSelectorList = document.querySelector<HTMLElement>("#tower-floor-selector-list")!;
 const towerFloorSelectorProgress = document.querySelector<HTMLElement>("#tower-floor-selector-progress")!;
@@ -3177,6 +3190,7 @@ if (fastWorldRequested && !tavernRoomRequested) {
   requestRapidTownNpcAssets = (): void => {
     if (townNpcAssetsStarted) return;
     townNpcAssetsStarted = true;
+    loadingScreen.stage({ progress: 88, label: "Welcoming the townsfolk", detail: "Preparing residents, merchants and their animations…" });
     void loadTownNpcAssets(app).then(result => {
       let animatedActors = 0;
       for (const actor of rapidTownActors) {
@@ -3202,7 +3216,12 @@ if (fastWorldRequested && !tavernRoomRequested) {
       }
       console.info(`[town-npcs] ${animatedActors}/${rapidTownActors.length} animated actors ready; ` +
         `${rapidTownActors.length - animatedActors} procedural fallbacks retained (${result.loaded.size} role assets loaded).`);
-    });
+    }).catch(error => console.warn("[town-npcs] Authored residents unavailable; retaining procedural townsfolk.", error))
+      .finally(() => {
+        initialTownNpcsReady = true;
+        loadingScreen.stage({ progress: 96, label: "Townsfolk ready", detail: "Finishing the last details of your arrival…" });
+        finishInitialLoadingIfReady();
+      });
   };
 
   const signSymbol = new pc.StandardMaterial();
@@ -4197,12 +4216,18 @@ if (fastWorldRequested && !tavernRoomRequested) {
   requestRapidTownAssets = () => {
     if (townAssetsStarted) return;
     townAssetsStarted = true;
+    loadingScreen.stage({ progress: 30, label: "Gathering Town landmarks", detail: "Loading streets, buildings and market scenery…" });
     void populateTownAssetKit(app, rapidPrototypeRoot,
       SPEED_LAB_TOWN_ASSETS.filter(asset => townVisualInsideBounds(asset.position[0], asset.position[2], 4)))
       .then(result => {
         for (const family of readyTownFallbacks(result.loadedIds)) hideRapidTownFallback(family);
         console.info(`[town-assets] ${result.entities.length} placements ready; ${result.failedIds.size} model types kept their fallback.`);
-      });
+      }).catch(error => console.warn("[town-assets] Authored Town unavailable; retaining safe fallbacks.", error))
+        .finally(() => {
+          initialTownAssetsReady = true;
+          loadingScreen.stage({ progress: 76, label: "Town landmarks ready", detail: "Preparing your arrival and the nearby townsfolk…" });
+          finishInitialLoadingIfReady();
+        });
     void loadTowerChronicleMonument(app, rapidPrototypeRoot).then(() => {
       towerChronicleProceduralCore.forEach(entity => { entity.enabled = false; });
       console.info("[tower-chronicle] Authored Quaternius monument ready; procedural core retired.");
@@ -16036,6 +16061,9 @@ function renderBootstrap(payload: WorldBootstrap): void {
     `WORLD REFRESH ${previousSliceY === null ? "surface" : `slice:${previousSliceY}`} → ${cutawayStateKey} y=${initialPosition.y.toFixed(3)} surface=${surfaceReferenceY.toFixed(3)} stateGap=${statePoseGap?.toFixed(3) ?? "missing"} chunks=${payload.chunks.length} setup=${bootstrapSetupMs.toFixed(1)}ms queued=${queuedChunkRebuilds.size}`,
   );
   worldReady = true;
+  initialWorldVisualsReady = true;
+  loadingScreen.stage({ progress: 84, label: "Building your arrival", detail: "Placing the plaza, portals and nearby explorers…" });
+  finishInitialLoadingIfReady();
   if (fastWorldRequested && FAST_WORLD_TOWN_ONLY && firstStepsIndex !== null
     && firstStepsIndex >= ONBOARDING_STAGE.headSouth && firstStepsIndex < ONBOARDING_DONE)
     setFirstSteps(ONBOARDING_DONE);
@@ -21305,6 +21333,7 @@ function applyBlockChange(message: BlockChanged): void {
 }
 
 async function connect(initialCharacter?: { name: string; appearance: Appearance }): Promise<void> {
+  loadingScreen.begin({ progress: 34, label: "Contacting the realm", detail: "Finding a healthy route to the shared world…" });
   const localHost = ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname);
   const configuredEndpoint = import.meta.env.VITE_GAME_SERVER_URL;
   const endpoint = configuredEndpoint
@@ -21366,6 +21395,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
         : client.create(activeRoomName, joinOptions);
     },
     (attempt, delay) => {
+      loadingScreen.stage({ progress: 46, label: "The realm is waking", detail: `Connection delayed · retrying in ${Math.round(delay / 1000)} seconds…` });
       status.textContent = attempt === 2 && fallbackEnabled
         ? `Cloudflare matchmaking is delayed. Connecting directly to the game server in ${Math.round(delay / 1000)}s…`
         : `Game server is restarting. Reconnecting in ${Math.round(delay / 1000)}s… (attempt ${attempt}/5)`;
@@ -21379,6 +21409,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     }
     throw error;
   });
+  loadingScreen.stage({ progress: 58, label: "Realm found", detail: "Joining your room and synchronising its inhabitants…" });
   saveReconnectToken();
   bindNetworkPerformance(room);
   room.send("performance:subscribe", { enabled: true });
@@ -21428,6 +21459,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   updatePlayerCount();
   status.textContent = "Connected. Loading the authoritative world...";
   room.onMessage("world:bootstrap", (payload: WorldBootstrap) => {
+    loadingScreen.stage({ progress: 68, label: "Opening the gates", detail: "Receiving the authoritative world and your character state…" });
     renderBootstrap(payload);
     if (retryFromDepths) depthsRetryPrompt.hidden = false;
     if (retryFromDepths && partyTicket) depthsRetryPrompt.querySelector("span")!.textContent = "Your party will regroup here as members return. Enter together when ready.";
@@ -23081,6 +23113,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
 }
 
 function showCharacterCreator(): void {
+  loadingScreen.dismiss();
   const panel = document.querySelector<HTMLElement>("#character-creator")!;
   const form = document.querySelector<HTMLFormElement>("#creator-form")!;
   const nameInput = document.querySelector<HTMLInputElement>("#creator-name")!;
@@ -23131,6 +23164,7 @@ function showCharacterCreator(): void {
     errorLabel.textContent = "";
     enterButton.disabled = true;
     enterButton.textContent = "ENTERING THE WORLD…";
+    loadingScreen.begin({ progress: 28, label: "Beginning your story", detail: "Saving your explorer and opening the way to Town…" });
     try {
       await connect({ name: name.data, appearance });
       try { finishCharacterCreation(window.localStorage); } catch { /* Private browsing may prevent storage. */ }
@@ -23148,6 +23182,7 @@ function showCharacterCreator(): void {
       } else if (lastBuildPathUpdate?.canChoose) openCallingIntro();
       room?.send("build:path", { action: "sync" });
     } catch (error) {
+      loadingScreen.dismiss();
       errorLabel.textContent = `Could not enter the world: ${error instanceof Error ? error.message : String(error)}`;
       enterButton.disabled = false;
       enterButton.textContent = "TRY AGAIN →";
@@ -23157,5 +23192,7 @@ function showCharacterCreator(): void {
 
 if (characterCreationRequired) showCharacterCreator();
 else connect().catch(error => {
-  status.textContent = `Connection failed: ${error instanceof Error ? error.message : String(error)}`;
+  const message = error instanceof Error ? error.message : String(error);
+  status.textContent = `Connection failed: ${message}`;
+  loadingScreen.fail(`${message}. Check your connection, then try again.`);
 });
