@@ -5618,7 +5618,7 @@ function createFirstPersonActionRig(): FirstPersonActionRig {
   actionShape(weapons.hammer, "hammer-core", "box", arcane, [.14, .205, .23], [0, .67, 0]);
 
   weapons.bow.setLocalPosition(-.28, -.08, -1.04);
-  weapons.bow.setLocalEulerAngles(0, 7, -2);
+  weapons.bow.setLocalEulerAngles(0, 24, -7);
   actionShape(weapons.bow, "bow-grip", "box", leather, [.082, .18, .09], [0, 0, 0]);
   actionShape(weapons.bow, "bow-riser", "box", bronze, [.055, .32, .072], [.018, 0, .006]);
   const addBowLimb = (side: -1 | 1): void => {
@@ -5730,6 +5730,17 @@ let firstPersonHitKickStrength = 0;
 let firstPersonEquippedAt = 0;
 let firstPersonEquippedId: MainHandId = "unarmed";
 const FIRST_PERSON_BOW_VIEW_SCALE = .44;
+const FIRST_PERSON_BOW_VIEW_ROTATION = [0, 24, -7] as const;
+const FIRST_PERSON_BOW_VIEW_QUATERNION = new pc.Quat().setFromEulerAngles(...FIRST_PERSON_BOW_VIEW_ROTATION);
+const firstPersonBowTipOffsets = (x: number, y: number) => ({
+  upper: FIRST_PERSON_BOW_VIEW_QUATERNION.transformVector(new pc.Vec3(x, y, 0)),
+  lower: FIRST_PERSON_BOW_VIEW_QUATERNION.transformVector(new pc.Vec3(x, -y, 0)),
+  rest: FIRST_PERSON_BOW_VIEW_QUATERNION.transformVector(new pc.Vec3(x, 0, 0)),
+});
+const FIRST_PERSON_BOW_TIP_OFFSETS = {
+  basic: firstPersonBowTipOffsets(-.345 * FIRST_PERSON_BOW_VIEW_SCALE, .979 * FIRST_PERSON_BOW_VIEW_SCALE),
+  forged: firstPersonBowTipOffsets(-.218 * FIRST_PERSON_BOW_VIEW_SCALE, .957 * FIRST_PERSON_BOW_VIEW_SCALE),
+} as const;
 const FIRST_PERSON_AUTHORED_WEAPON_TRANSFORMS: Record<KayKitWeaponAssetId, {
   rotation: readonly [number, number, number]; scale: number;
 }> = {
@@ -7241,17 +7252,18 @@ function updateFirstPersonActionView(now: number, moving: boolean, actionElapsed
     // its limb tips give the animated string stable, visible anchors.
     const bowCenter = new pc.Vec3(pose.leftX + .025, pose.leftY + .12, pose.leftZ - .1);
     firstPersonActionRig.weapons.bow.setLocalPosition(bowCenter.x, bowCenter.y, bowCenter.z);
-    firstPersonActionRig.weapons.bow.setLocalEulerAngles(0, 7, -2);
+    firstPersonActionRig.weapons.bow.setLocalEulerAngles(...FIRST_PERSON_BOW_VIEW_ROTATION);
     // These offsets come from the authored meshes' actual tip vertices after
     // their 90° X/Z viewmodel rotation—not from the bow entity's origin.
     const forged = localMainHandId === "forged_bow";
-    const tipX = bowCenter.x + (forged ? -.218 : -.345) * FIRST_PERSON_BOW_VIEW_SCALE;
-    const tipY = (forged ? .957 : .979) * FIRST_PERSON_BOW_VIEW_SCALE;
-    const upperTip = new pc.Vec3(tipX, bowCenter.y + tipY, bowCenter.z);
-    const lowerTip = new pc.Vec3(tipX, bowCenter.y - tipY, bowCenter.z);
+    // Rotate the independently animated string anchors with the stave. Without
+    // this, any useful inward bow angle makes the string visibly detach.
+    const tipOffsets = forged ? FIRST_PERSON_BOW_TIP_OFFSETS.forged : FIRST_PERSON_BOW_TIP_OFFSETS.basic;
+    const upperTip = bowCenter.clone().add(tipOffsets.upper);
+    const lowerTip = bowCenter.clone().add(tipOffsets.lower);
     const nock = arrowVisible
       ? new pc.Vec3(pose.rightX - .01, pose.rightY + .12, pose.rightZ - .025)
-      : new pc.Vec3(tipX, bowCenter.y, bowCenter.z);
+      : bowCenter.clone().add(tipOffsets.rest);
     positionBowStringSegment(firstPersonActionRig.bowStringUpper, upperTip, nock);
     positionBowStringSegment(firstPersonActionRig.bowStringLower, lowerTip, nock);
     if (arrowVisible) orientArrowFromNock(firstPersonActionRig.bowArrow, nock, new pc.Vec3(0, -.015, -1.58));
