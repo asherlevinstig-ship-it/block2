@@ -24,6 +24,16 @@ export interface TownLifeActorPose {
   turn: number;
 }
 
+export type TownNpcAnimationQuality = "high" | "medium" | "low";
+
+/** Skeletal animation is the Town's largest continuous CPU cost. Preserve it
+ * around the player, while distant residents hold their last readable pose.
+ * The model and route remain visible, so this never pops an NPC out. */
+export function townNpcAnimationActive(distance: number, quality: TownNpcAnimationQuality): boolean {
+  const radius = quality === "high" ? 46 : quality === "medium" ? 34 : 24;
+  return distance <= radius;
+}
+
 /** Client-only town life. These routes deliberately avoid the well, pavilion,
  * buildings and server-owned collision footprints. They create movement and
  * role readability without adding network entities or simulation load. */

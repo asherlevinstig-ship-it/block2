@@ -202,7 +202,7 @@ import {
 } from "./sunken-coast-visuals.js";
 import { createCoastOceanMesh, createCoastWaterAnimator, createCoastWaterNormalMap } from "./sunken-coast-water.js";
 import { SPEED_LAB_TOWN_ACTORS, SPEED_LAB_TOWN_LIGHTS, SPEED_LAB_TOWN_SIGNS, townLifeActorPose, townLifeAnimation,
-  type TownLifeActorDefinition } from "./town-life.js";
+  townNpcAnimationActive, type TownLifeActorDefinition } from "./town-life.js";
 import { townNpcFaceStyle, type TownNpcMouthExpression } from "./town-npc-appearance.js";
 import { bindTownNpcRig, loadTownNpcAssets, TOWN_NPC_MODEL_YAW, transitionTownNpcRig } from "./town-npc-assets.js";
 import { SPEED_LAB_TOWN_TERRAIN, SPEED_LAB_TOWN_TERRAIN_DETAILS,
@@ -4205,6 +4205,10 @@ if (fastWorldRequested && !tavernRoomRequested) {
         // rocks and building materials instead of submitting each placement.
         for (const entity of result.entities) for (const render of entity.findComponents("render") as pc.RenderComponent[])
           render.batchGroupId = rapidWorldSceneryBatchGroup.id;
+        // These models arrive after the initial scene batch pass. Generate the
+        // group now so they do not remain as individual draw submissions until
+        // some unrelated scene mutation happens to rebuild it.
+        app.batcher.generate([rapidWorldSceneryBatchGroup.id]);
         for (const family of readyTownFallbacks(result.loadedIds)) hideRapidTownFallback(family);
         console.info(`[town-assets] ${result.entities.length} placements ready; ${result.failedIds.size} model types kept their fallback.`);
       });
@@ -19618,6 +19622,15 @@ app.on("update", (dt: number) => {
       actor.root.setLocalPosition(pose.x, fastWorldGroundHeight(pose.x, pose.z) + .15 + bob, pose.z);
       actor.root.setLocalEulerAngles(0, pose.yaw, 0);
       if (actor.model?.anim) {
+        const animateRig = townNpcAnimationActive(Math.hypot(playerPosition.x - pose.x, playerPosition.z - pose.z),
+          appliedGraphicsQualityTier);
+        if (actor.model.anim.enabled !== animateRig) {
+          actor.model.anim.enabled = animateRig;
+          // Re-enter through a short transition rather than resuming a stale
+          // action when the player approaches this resident again.
+          if (animateRig) actor.animationName = "";
+        }
+        if (!animateRig) continue;
         const animationName = townLifeAnimation(actor.definition, pose);
         if (animationName !== actor.animationName) {
           actor.model.anim.speed = pose.motion === "walk" ? .92 + actor.definition.moveSpeed * .08 : 1;

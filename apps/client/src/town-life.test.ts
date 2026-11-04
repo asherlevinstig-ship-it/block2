@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SPEED_LAB_TOWN_ACTORS, SPEED_LAB_TOWN_LIGHTS, SPEED_LAB_TOWN_SIGNS, townLifeActorPose,
-  townLifeAnimation } from "./town-life.js";
+  townLifeAnimation, townNpcAnimationActive } from "./town-life.js";
 
 describe("speed-lab town life", () => {
   it("gives every major destination a sign and warm square lighting", () => {
@@ -57,5 +57,13 @@ describe("speed-lab town life", () => {
         .find(pose => pose.motion === "work")!;
       expect(townLifeAnimation(actor, workPose)).toMatch(role === "smith" ? /Attack_Chop/ : role === "healer" ? /Spell/ : /Interact|Cheer/);
     }
+  });
+
+  it("keeps nearby NPC rigs animated while scaling distant work by quality", () => {
+    expect(townNpcAnimationActive(20, "low")).toBe(true);
+    expect(townNpcAnimationActive(30, "low")).toBe(false);
+    expect(townNpcAnimationActive(30, "medium")).toBe(true);
+    expect(townNpcAnimationActive(40, "medium")).toBe(false);
+    expect(townNpcAnimationActive(40, "high")).toBe(true);
   });
 });
