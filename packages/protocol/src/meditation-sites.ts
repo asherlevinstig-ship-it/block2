@@ -3,7 +3,7 @@ import { TOWER_FLOOR_ONE } from "./tower-floor-one.js";
 import { TOWER_FLOOR_TWO } from "./tower-floor-two.js";
 
 export const MEDITATION_HOLD_MS = 1_850;
-export const MEDITATION_USE_RANGE = 2.65;
+export const MEDITATION_USE_RANGE = 4.5;
 
 export const MeditationSiteIdSchema = z.enum([
   "town-waystone",
@@ -26,11 +26,11 @@ export type MeditationSite = {
  * positions are shared by rendering and the authoritative interaction check. */
 export const MEDITATION_SITES: readonly MeditationSite[] = [
   { id: "town-waystone", name: "Waystone of Beginnings", location: "town",
-    x: 91, y: 8.16, z: 113, colour: [1, .82, .3] },
+    x: 91, y: 8, z: 113, colour: [1, .82, .3] },
   { id: "floor-1-waystone", name: "Rampart Sanctuary Waystone", location: "floor-1",
-    x: 310.5, y: 9.16, z: 116, colour: [1, .74, .2] },
+    x: 310.5, y: 9, z: 116, colour: [1, .74, .2] },
   { id: "floor-2-waystone", name: "Emberworks Refuge Waystone", location: "floor-2",
-    x: 418.5, y: 8.16, z: 111.5, colour: [1, .58, .14] },
+    x: 418.5, y: 8, z: 111.5, colour: [1, .58, .14] },
 ] as const;
 
 export const MeditationRestRequestSchema = z.object({ siteId: MeditationSiteIdSchema });
