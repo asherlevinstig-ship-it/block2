@@ -6,6 +6,8 @@ import { FAST_WORLD_TOWN_BOUNDS, FAST_WORLD_TOWN_ONLY, TOWER_FLOOR_ONE, TOWER_FL
   isTowerFloorSafeZone, parseTowerProgress, pvpMurdererUntil, towerFloorTwoForgeheartPhase,
   type TowerFloorDirectoryUpdate, type TowerProgress } from "@blockcraft/protocol";
 import { isInteractionTestPlayer, parseGuildMembership } from "@blockcraft/protocol";
+import { MEDITATION_HOLD_MS, nearestMeditationSite, type MeditationRestUpdate, type MeditationSite,
+  type MeditationSiteId } from "@blockcraft/protocol";
 import { BOW_DRAW_FULL_MS, BOW_DRAW_MAX_HOLD_MS, BOW_DRAW_MIN_MS, bowDrawCharge,
   bowShotRangeMultiplier, bowShotTravelMultiplier } from "@blockcraft/protocol";
 import { FOCUS_CHARGE_MAX_HOLD_MS, FOCUS_CHARGE_MIN_MS, focusCastCharge, focusCastRangeMultiplier } from "@blockcraft/protocol";
@@ -158,6 +160,7 @@ import { populateTownAssetKit, readyTownFallbacks, SPEED_LAB_TOWN_ASSETS, type T
 import { createTownPortalLandmarks } from "./town-portal-landmarks.js";
 import { createTowerFloorOneWorld, updateTowerFloorOneProgress } from "./tower-floor-one-world-v2.js";
 import { createTowerFloorTwoWorld, updateTowerFloorTwoProgress } from "./tower-floor-two-world.js";
+import { celebrateMeditationSite, createMeditationSiteVisuals, updateMeditationSiteVisuals } from "./meditation-sites.js";
 import { requestTowerFloorTwoAssets } from "./tower-floor-two-asset-kit.js";
 import { crownGateStatus } from "./crown-gate.js";
 import { createFloorOneRunUI, type FloorOneBossState } from "./floor-one-run-flow.js";
@@ -2513,6 +2516,7 @@ function addBox(
 const rapidPrototypeRoot = new pc.Entity("rapid-2d-speed-lab");
 app.root.addChild(rapidPrototypeRoot);
 rapidPrototypeRoot.enabled = fastWorldRequested && !tavernRoomRequested;
+const meditationSiteVisuals = createMeditationSiteVisuals(app, rapidPrototypeRoot);
 let tavernRoomWorld: pc.Entity | null = null;
 let tavernCutawayState = "off";
 const tavernAmbience = tavernRoomRequested ? new TavernAmbience() : null;
@@ -15308,11 +15312,21 @@ const tavernDoorDestination = document.querySelector<HTMLElement>("#tavern-door-
 const innSleepHud = document.querySelector<HTMLElement>("#inn-sleep-hud")!;
 const innSleepTime = document.querySelector<HTMLElement>("#inn-sleep-time")!;
 const innSleepProgress = document.querySelector<HTMLElement>("#inn-sleep-progress")!;
+const meditationHoldHud = document.querySelector<HTMLElement>("#meditation-hold")!;
+const meditationRing = document.querySelector<HTMLElement>("#meditation-ring")!;
+const meditationAction = document.querySelector<HTMLElement>("#meditation-action")!;
+const meditationName = document.querySelector<HTMLElement>("#meditation-name")!;
+const meditationRestEffect = document.querySelector<HTMLElement>("#meditation-rest-effect")!;
+const meditationRestName = document.querySelector<HTMLElement>("#meditation-rest-name")!;
 let localSleepingUntil = 0;
 let portalHold: PortalHold | null = null;
 interface InnRoomHold { action: TavernInnAction; startedAt: number; source: "keyboard" | "touch"; pointerId?: number }
 let innRoomHold: InnRoomHold | null = null;
 let nearbyInnAction: TavernInnAction | null = null;
+interface MeditationHold { siteId: MeditationSiteId; startedAt: number; source: "keyboard" | "touch"; pointerId?: number }
+let meditationHold: MeditationHold | null = null;
+let nearbyMeditation: MeditationSite | null = null;
+let meditationEffectTimer = 0;
 let portalTravelPendingUntil = 0;
 function isTavernDoor(portalId: string | null): boolean {
   return portalId === "tavern-entry" || portalId === "tavern-exit";
@@ -15378,7 +15392,7 @@ function cancelPortalHold(reason?: HoldStopReason): void {
   contextButton.style.setProperty("--context-progress", "0%");
 }
 function beginPortalHold(source: PortalHold["source"], portalId = nearbyForestPortal, pointerId?: number): void {
-  if (portalHold || innRoomHold || lootHold || !worldReady || !room || !portalId || portalId !== nearbyForestPortal
+  if (portalHold || innRoomHold || meditationHold || lootHold || !worldReady || !room || !portalId || portalId !== nearbyForestPortal
     || performance.now() < portalTravelPendingUntil || !defeatScreen.hidden
     || activePresentedPopupId() || protectedDialogPresented()) return;
   portalHold = { portalId, startedAt: performance.now(), source, pointerId };
@@ -15390,7 +15404,7 @@ function cancelInnRoomHold(reason?: HoldStopReason): void {
   contextButton.style.setProperty("--context-progress", "0%");
 }
 function beginInnRoomHold(source: InnRoomHold["source"], pointerId?: number): void {
-  if (innRoomHold || portalHold || lootHold || !worldReady || !room || !nearbyInnAction
+  if (innRoomHold || portalHold || meditationHold || lootHold || !worldReady || !room || !nearbyInnAction
     || !defeatScreen.hidden || activePresentedPopupId() || protectedDialogPresented()) return;
   innRoomHold = { action: nearbyInnAction, startedAt: performance.now(), source, pointerId };
 }
@@ -15407,6 +15421,48 @@ function updateInnRoomHold(now: number): void {
   const action = hold.action;
   cancelInnRoomHold();
   room.send("tavern:inn-action", { action });
+}
+function cancelMeditationHold(reason?: HoldStopReason): void {
+  if (meditationHold && reason) interactionFeedback.show(holdStopMessage("interaction", reason, meditationHold.source === "touch"));
+  meditationHold = null;
+  meditationRing.style.setProperty("--meditation-progress", "0%");
+  meditationHoldHud.dataset.holding = "false";
+  contextButton.style.setProperty("--context-progress", "0%");
+}
+function beginMeditationHold(source: MeditationHold["source"], pointerId?: number): void {
+  if (meditationHold || innRoomHold || portalHold || lootHold || !worldReady || !room || !nearbyMeditation
+    || !defeatScreen.hidden || activePresentedPopupId() || protectedDialogPresented()) return;
+  meditationHold = { siteId: nearbyMeditation.id, startedAt: performance.now(), source, pointerId };
+}
+function updateMeditationSites(now: number): void {
+  const player = localPlayer.getPosition();
+  nearbyMeditation = worldReady && fastWorldRequested && !tavernRoomRequested
+    ? nearestMeditationSite(player) : null;
+  const progress = meditationHold ? Math.max(0, Math.min(1, (now - meditationHold.startedAt) / MEDITATION_HOLD_MS)) : 0;
+  updateMeditationSiteVisuals(meditationSiteVisuals, now, player, meditationHold?.siteId ?? null, progress);
+  meditationHoldHud.hidden = !nearbyMeditation;
+  if (nearbyMeditation) {
+    const coarse = window.matchMedia("(pointer: coarse)").matches;
+    meditationRing.style.setProperty("--meditation-progress", `${Math.round(progress * 100)}%`);
+    meditationRing.querySelector("kbd")!.textContent = coarse ? "✋" : "E";
+    meditationHoldHud.dataset.holding = String(Boolean(meditationHold));
+    meditationAction.textContent = meditationHold ? `SETTLING · ${Math.round(progress * 100)}%`
+      : `HOLD ${coarse ? "TO" : "E TO"} MEDITATE`;
+    meditationName.textContent = nearbyMeditation.name;
+  }
+  if (!meditationHold) return;
+  const hold = meditationHold;
+  const reason = holdStopReason({ connected: !!room && worldReady, defeated: !defeatScreen.hidden,
+    menuOpen: !!activePresentedPopupId() || protectedDialogPresented() || playerInteractionUI.isOpen(),
+    inRange: hold.siteId === nearbyMeditation?.id,
+    released: hold.source === "keyboard" && !keys.has("KeyE") });
+  if (!room || reason) { cancelMeditationHold(reason ?? "connection"); return; }
+  contextButton.style.setProperty("--context-progress", `${progress * 100}%`);
+  if (progress < 1) return;
+  const siteId = hold.siteId;
+  cancelMeditationHold();
+  status.textContent = "Attuning to the Waystone…";
+  room.send("meditation:rest", { siteId });
 }
 function updatePortalHold(now: number): void {
   if (!portalHold) return;
@@ -15609,6 +15665,7 @@ function updateForestPortals(): void {
   updatePortalHold(performance.now());
   updateTavernDoorHold(performance.now());
   updateInnRoomHold(performance.now());
+  updateMeditationSites(performance.now());
 }
 function updateTarget(): void {
   updateForestPortals();
@@ -15727,8 +15784,8 @@ function updateTarget(): void {
   const ashenReliquaryPreviewNearby = canPreviewAshenReliquary();
   const ashenReliquaryNearby = ashenReliquaryClaimNearby || ashenReliquaryPreviewNearby;
   if (!roadsideChoice.hidden && roadsideChoice.dataset.id !== roadsideEncounter?.id) closeRoadsideChoice();
-  updatePlayerTradePrompt(Boolean(nearbyLoot || ashenReliquaryNearby || nearbyForestPortal || nearbyInnAction || roleOpportunity || roadsideEncounter || expeditionBoardNearby || blacksmithNearby || healerNearby || guildStewardNearby || highLowNearby || quizTableNearby || keeperNearby || chestNearby));
-  const contextAction = tabletContextAction({
+  updatePlayerTradePrompt(Boolean(nearbyLoot || ashenReliquaryNearby || nearbyMeditation || nearbyForestPortal || nearbyInnAction || roleOpportunity || roadsideEncounter || expeditionBoardNearby || blacksmithNearby || healerNearby || guildStewardNearby || highLowNearby || quizTableNearby || keeperNearby || chestNearby));
+  const contextAction = nearbyMeditation ? { label: "Meditate", hold: true } : tabletContextAction({
     tradePlayer: Boolean(nearbyTradePlayerId),
     recoveryBag: Boolean(nearbyRecoveryBag),
     storage: chestNearby,
@@ -15754,7 +15811,7 @@ function updateTarget(): void {
     contextButton.style.setProperty("--context-progress", "0%");
     delete contextButton.dataset.hold;
   }
-  const nextKey = `${interactionMode}:${targetKey}:${currentTarget?.block ?? -1}:${availability}:${combatKey}:${keeperNearby}:${healerNearby}:${guildStewardNearby}:${highLowNearby}:${quizTableNearby}:${blacksmithNearby}:${expeditionBoardNearby}:${chestNearby}:${nearbyLoot}:${ashenReliquaryNearby}:${nearbyForestPortal}:${nearbyRecoveryBag}:${nearbyTradePlayerId}:${roleOpportunity?.id ?? "none"}:${roadsideEncounter?.id ?? "none"}`;
+  const nextKey = `${interactionMode}:${targetKey}:${currentTarget?.block ?? -1}:${availability}:${combatKey}:${keeperNearby}:${healerNearby}:${guildStewardNearby}:${highLowNearby}:${quizTableNearby}:${blacksmithNearby}:${expeditionBoardNearby}:${chestNearby}:${nearbyLoot}:${ashenReliquaryNearby}:${nearbyMeditation?.id ?? "none"}:${nearbyForestPortal}:${nearbyRecoveryBag}:${nearbyTradePlayerId}:${roleOpportunity?.id ?? "none"}:${roadsideEncounter?.id ?? "none"}`;
   if (nextKey === targetStateKey) return;
   targetStateKey = nextKey;
   const tint = availability === "ready" ? hit?.block === Block.SilverOre ? new pc.Color(0.55, 0.88, 1) : new pc.Color(1, 0.73, 0.25) : new pc.Color(1, 0.25, 0.2);
@@ -18216,8 +18273,9 @@ function requestWorldInteraction(): void {
 
 function requestContextAction(source: LootHold["source"]): void {
   attackBuffer.clear();
-  if (portalHold || innRoomHold) return;
+  if (portalHold || innRoomHold || meditationHold) return;
   if (nearestLootDrop()) { beginLootHold(source); return; }
+  if (nearbyMeditation) { beginMeditationHold(source); return; }
   if (nearbyForestPortal) { beginPortalHold(source); return; }
   if (nearbyInnAction) { beginInnRoomHold(source); return; }
   const visibleLoot = !lootWorldLabel.hidden && nearestVisibleLootDrop(8);
@@ -18644,6 +18702,7 @@ window.addEventListener("keyup", event => {
     releaseLootHold("keyboard");
     if (portalHold?.source === "keyboard") cancelPortalHold("released");
     if (innRoomHold?.source === "keyboard") cancelInnRoomHold("released");
+    if (meditationHold?.source === "keyboard") cancelMeditationHold("released");
   }
   if (event.code === "KeyC") requestDefense(false);
   if (popupQueue.active() !== null) {
@@ -18654,7 +18713,7 @@ window.addEventListener("keyup", event => {
   if (event.code === powerAimKey) commitPowerAim();
   if (event.code === "KeyF") commitSpecialAim();
 });
-window.addEventListener("blur", () => { cancelLootHold("focus"); cancelPortalHold("focus"); cancelInnRoomHold("focus"); attackBuffer.clear(); keyboardFireHeld = false; cancelBowDraw(); cancelFocusCharge(); });
+window.addEventListener("blur", () => { cancelLootHold("focus"); cancelPortalHold("focus"); cancelInnRoomHold("focus"); cancelMeditationHold("focus"); attackBuffer.clear(); keyboardFireHeld = false; cancelBowDraw(); cancelFocusCharge(); });
 canvas.addEventListener("pointerdown", event => {
   if (popupQueue.active() !== null) return;
   canvas.focus({ preventScroll: true });
@@ -18713,6 +18772,7 @@ window.addEventListener("pointerup", event => {
   releaseLootHold("touch");
   if (portalHold?.source === "touch" && (portalHold.pointerId === undefined || portalHold.pointerId === event.pointerId)) cancelPortalHold("released");
   if (innRoomHold?.source === "touch" && (innRoomHold.pointerId === undefined || innRoomHold.pointerId === event.pointerId)) cancelInnRoomHold("released");
+  if (meditationHold?.source === "touch" && (meditationHold.pointerId === undefined || meditationHold.pointerId === event.pointerId)) cancelMeditationHold("released");
 });
 window.addEventListener("pointercancel", event => {
   if (event.pointerId === bowDrawPointerId) cancelBowDraw();
@@ -18721,6 +18781,7 @@ window.addEventListener("pointercancel", event => {
   if (lootHold?.source === "touch") cancelLootHold("released");
   if (portalHold?.source === "touch" && (portalHold.pointerId === undefined || portalHold.pointerId === event.pointerId)) cancelPortalHold("released");
   if (innRoomHold?.source === "touch" && (innRoomHold.pointerId === undefined || innRoomHold.pointerId === event.pointerId)) cancelInnRoomHold("released");
+  if (meditationHold?.source === "touch" && (meditationHold.pointerId === undefined || meditationHold.pointerId === event.pointerId)) cancelMeditationHold("released");
 });
 canvas.addEventListener("pointerup", event => {
   if (event.pointerType === "touch" && touchCameraPoints.has(event.pointerId)) {
@@ -18991,6 +19052,10 @@ contextButton.addEventListener("pointerdown", event => {
   }
   if (innRoomHold?.source === "touch") {
     innRoomHold.pointerId = event.pointerId;
+    contextButton.setPointerCapture(event.pointerId);
+  }
+  if (meditationHold?.source === "touch") {
+    meditationHold.pointerId = event.pointerId;
     contextButton.setPointerCapture(event.pointerId);
   }
 });
@@ -21666,6 +21731,25 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     showFastWorldReveal(message.name, `Recovery pulse · +${message.health} health · +${message.stamina} stamina`, "gate");
     showCombatFeedback(`RECOVERED · +${message.health} HP`, "dodge");
   });
+  room.onMessage("meditation:rest", (message: MeditationRestUpdate) => {
+    status.textContent = message.message;
+    if (!message.ok) { showCombatFeedback("MEDITATION INTERRUPTED", "hurt"); return; }
+    if (message.health !== undefined && message.maxHealth !== undefined) updatePlayerHealth(message.health, message.maxHealth);
+    if (message.stamina !== undefined && message.maxStamina !== undefined) {
+      updatePlayerStamina(message.stamina, message.maxStamina);
+      syncPredictedDodgeStamina(message.stamina, message.maxStamina);
+    }
+    celebrateMeditationSite(meditationSiteVisuals, message.siteId);
+    combatAudio.play("guardianPhase");
+    showCombatFeedback("WAYSTONE ATTUNED · RESTORED", "dodge");
+    social.event(`${message.name} · health, stamina and abilities restored.`);
+    meditationRestName.textContent = message.name;
+    meditationRestEffect.hidden = true;
+    void meditationRestEffect.offsetWidth;
+    meditationRestEffect.hidden = false;
+    window.clearTimeout(meditationEffectTimer);
+    meditationEffectTimer = window.setTimeout(() => { meditationRestEffect.hidden = true; }, 2_600);
+  });
   room.onMessage("floor:timing", (message: { elapsedMs: number }) => floorOneRunUI.timing(message));
   room.onMessage("dungeon:run", (update: DungeonRunUpdate) => {
     if (update.phase === "started" && update.dungeon === "silver-depths") {
@@ -22969,6 +23053,10 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     }
   });
   room.onLeave(() => {
+    cancelMeditationHold();
+    nearbyMeditation = null;
+    meditationHoldHud.hidden = true;
+    meditationRestEffect.hidden = true;
     if (assassinEdgeDecayTimer !== 0) window.clearTimeout(assassinEdgeDecayTimer);
     assassinEdgeDecayTimer = 0;
     localAssassinEdge = 0;

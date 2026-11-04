@@ -15,7 +15,8 @@ describe("tower PvP zones", () => {
     expect(pvpCombatAllowed("practice", rampart, sanctuary)).toBe(false);
     expect(pvpCombatAllowed("practice", rampart, { ...rampart, health: 0 })).toBe(false);
   });
-  it("keeps Floor 2 dangerous outside its temporary arrival protection", () => {
+  it("keeps Floor 2 dangerous outside its protected arrival sanctuary", () => {
+    expect(pvpEnabledAt("practice", { x: 417, z: 106, health: 5 })).toBe(false);
     const emberworks = { x: 458, z: 106, health: 5 };
     expect(pvpEnabledAt("practice", emberworks)).toBe(true);
     expect(pvpCombatAllowed("practice", emberworks, { ...emberworks, x: 460 })).toBe(true);

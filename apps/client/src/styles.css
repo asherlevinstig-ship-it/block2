@@ -71,6 +71,37 @@ body:has(#inventory-panel:not([hidden])) .forest-portal-label { display: none; }
 #tavern-door-destination { color: #cdbb9b; font: 850 9px/1.2 system-ui; letter-spacing: .09em; }
 #tavern-door-hold[data-holding="true"] { border-color: #ffd875; filter: brightness(1.12); }
 #tavern-door-hold[data-holding="true"] #tavern-door-ring { box-shadow: 0 0 0 1px #fff0b9, 0 0 22px #f0a22d99; }
+
+#meditation-hold {
+  --meditation-progress: 0%;
+  position: fixed; z-index: 38; top: 54%; left: 50%; display: flex; align-items: center; gap: 12px;
+  min-width: 250px; padding: 10px 16px 10px 10px; border: 1px solid #79e9bd99; border-radius: 12px;
+  background: linear-gradient(135deg, #071814ee, #0d2821e8); color: #e3fff2;
+  box-shadow: 0 10px 34px #0009, 0 0 26px #55eeb437; transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+#meditation-hold[hidden] { display: none; }
+#meditation-ring {
+  position: relative; display: grid; place-items: center; width: 48px; height: 48px; flex: 0 0 48px; border-radius: 50%;
+  background: conic-gradient(#7bffd0 var(--meditation-progress), #17352d var(--meditation-progress));
+  box-shadow: 0 0 18px #60f0ba44;
+}
+#meditation-ring::after { content: ""; position: absolute; width: 37px; height: 37px; border-radius: 50%; background: #0a1b17; }
+#meditation-ring kbd { position: relative; z-index: 1; color: #eafff6; font: 900 13px Georgia,serif; }
+.meditation-copy { display: grid; gap: 3px; }
+.meditation-copy strong { color: #dffff1; font: 950 11px/1.2 system-ui,sans-serif; letter-spacing: .12em; }
+.meditation-copy small { color: #7de7bc; font: 800 9px/1.2 system-ui,sans-serif; letter-spacing: .08em; }
+#meditation-hold[data-holding="true"] { border-color: #c7ffe5; filter: brightness(1.12); }
+#meditation-rest-effect {
+  position: fixed; z-index: 74; inset: 0; display: grid; place-content: center; justify-items: center; gap: 8px;
+  color: #e7fff4; background: radial-gradient(circle at 50% 70%, #65ffc72c, transparent 42%);
+  pointer-events: none; animation: meditation-rest 2.6s ease-out both;
+}
+#meditation-rest-effect[hidden] { display: none; }
+#meditation-rest-effect i { width: 86px; height: 86px; border: 2px solid #a5ffdb; border-radius: 50%; box-shadow: 0 0 34px #5cffbd, inset 0 0 24px #5cffbd55; }
+#meditation-rest-effect small { color: #83ecc2; font: 900 10px system-ui; letter-spacing: .22em; text-shadow: 0 2px 8px #000; }
+#meditation-rest-effect strong { color: #fff4c7; font: 950 21px Georgia,serif; text-shadow: 0 2px 12px #000; }
+@keyframes meditation-rest { 0% { opacity: 0; filter: blur(4px); } 18%,72% { opacity: 1; filter: blur(0); } 100% { opacity: 0; } }
 #inn-sleep-hud {
   position: fixed; z-index: 42; left: 50%; top: 12%; transform: translateX(-50%);
   display: grid; justify-items: center; gap: 5px; width: min(420px, calc(100vw - 32px));

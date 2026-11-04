@@ -1,5 +1,5 @@
 import { TOWER_FLOOR_ONE, isInsideTowerFloorOne } from "./tower-floor-one.js";
-import { isInsideTowerFloorTwo } from "./tower-floor-two.js";
+import { TOWER_FLOOR_TWO, isInsideTowerFloorTwo } from "./tower-floor-two.js";
 
 export const PVP_MURDERER_DURATION_MS = 3 * 24 * 60 * 60 * 1_000;
 
@@ -23,13 +23,15 @@ export function withPvpMurdererUntil(source: string, murdererUntil: number): str
 
 export function isTowerFloorSafeZone(position: PvpPosition): boolean {
   const safe = TOWER_FLOOR_ONE.sanctuary;
-  return position.x >= safe.minX && position.x <= safe.maxX
-    && position.z >= safe.minZ && position.z <= safe.maxZ;
+  if (position.x >= safe.minX && position.x <= safe.maxX
+    && position.z >= safe.minZ && position.z <= safe.maxZ) return true;
+  const floorTwoSafe = TOWER_FLOOR_TWO.sanctuary;
+  return Math.hypot(position.x - floorTwoSafe.x, position.z - floorTwoSafe.z) <= floorTwoSafe.radius;
 }
 
 /** Floor 0, taverns and each floor's authored sanctuary are protected. */
 export function pvpEnabledAt(roomKind: PvpRoomKind, position: PvpPosition): boolean {
-  return roomKind === "practice" && (isInsideTowerFloorTwo(position.x, position.z, 1)
+  return roomKind === "practice" && (isInsideTowerFloorTwo(position.x, position.z, 1) && !isTowerFloorSafeZone(position)
     || isInsideTowerFloorOne(position.x, position.z, 1) && !isTowerFloorSafeZone(position));
 }
 

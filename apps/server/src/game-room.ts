@@ -10,6 +10,8 @@ import { parseTowerProgress, towerFloorDirectory, towerFloorUnlocked, withTowerF
 import { tavernRoomFurnitureCellSolid } from "@blockcraft/protocol";
 import { TAVERN_INN_POINTS, TavernInnActionSchema, canUseTavernInnPoint,
   type TavernInnActionUpdate } from "@blockcraft/protocol";
+import type { MeditationRestUpdate } from "@blockcraft/protocol";
+import { restAtMeditationSite } from "./meditation-rest.js";
 import { crownkeeperFragments, withCrownkeeperFragments } from "./crownkeeper-progress.js";
 import { FloorRunUpgrades } from "./floor-run-upgrades.js";
 import { FLOOR_RUN_UPGRADES } from "@blockcraft/protocol";
@@ -1215,6 +1217,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.onMessage("tavern:sync", client => this.sendTavernServiceState(client));
     this.onMessage("tavern:service", (client, payload) => this.handleTavernService(client, payload));
     this.onMessage("tavern:inn-action", (client, payload) => this.handleTavernInnAction(client, payload));
+    this.onMessage("meditation:rest", (client, payload) => this.handleMeditationRest(client, payload));
     this.onMessage("npc:interact", (client, payload) => this.handleTownNpcInteraction(client, payload));
     if (this.movementShadowEnabled) {
       // Colyseus owns one simulation timer per room. Pilot and legacy clients
@@ -2664,6 +2667,21 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.broadcast("tavern:inn-action", { action, ok: true,
       message: "Resting for five real minutes · hold E again to wake early without the reward.", playerId: client.sessionId,
       target: { x: player.x, y: player.y, z: player.z }, sleepingUntil, restCompleted: false } satisfies TavernInnActionUpdate);
+  }
+
+  private handleMeditationRest(client: Client, payload: unknown): void {
+    const player = this.state.players.get(client.sessionId);
+    if (!player || this.roomKind !== "practice" || !this.rapidPractice) return;
+    const update = restAtMeditationSite(player, payload);
+    if (!update) return;
+    if (update.ok) {
+      player.pilotVy = 0;
+      this.movementInputs.set(client.sessionId, { request: idleMovementInput(), receivedAt: Date.now() });
+      this.verticalVelocities.set(client.sessionId, 0);
+      this.movementShadows.set(client.sessionId, { x: player.x, y: player.y, z: player.z, verticalVelocity: 0 });
+      void this.persistPlayer(client.sessionId, player, true);
+    }
+    client.send("meditation:rest", update satisfies MeditationRestUpdate);
   }
 
   private resolveCompletedInnRests(now: number): void {

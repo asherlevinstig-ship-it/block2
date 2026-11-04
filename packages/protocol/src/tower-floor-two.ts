@@ -9,6 +9,7 @@ export const TOWER_FLOOR_TWO = {
   bounds: { minX: 410, maxX: 542, minZ: 42, maxZ: 170 },
   entry: { x: 416.5, y: 8, z: 106.5 },
   returnPortal: { x: 413.5, y: 8, z: 106.5 },
+  sanctuary: { x: 417, z: 106, radius: 8 },
   ascentPortal: { x: 538.5, y: 9.25, z: 106.5 },
   coolingHub: { x: 458, z: 106, radius: 13 },
   northRegulator: { x: 480, z: 70, radius: 11 },
