@@ -22,16 +22,15 @@ export type MeditationSite = {
   colour: readonly [number, number, number];
 };
 
-/** Original Waystones provide the recovery role of a rest point without
- * borrowing another game's visual language. Their positions are shared by
- * rendering and the authoritative interaction check. */
+/** Original Waystones provide a strong golden rest-point silhouette. Their
+ * positions are shared by rendering and the authoritative interaction check. */
 export const MEDITATION_SITES: readonly MeditationSite[] = [
   { id: "town-waystone", name: "Waystone of Beginnings", location: "town",
-    x: 91, y: 8.16, z: 113, colour: [.22, 1, .76] },
+    x: 91, y: 8.16, z: 113, colour: [1, .82, .3] },
   { id: "floor-1-waystone", name: "Rampart Sanctuary Waystone", location: "floor-1",
-    x: 310.5, y: 9.16, z: 116, colour: [.62, 1, .28] },
+    x: 310.5, y: 9.16, z: 116, colour: [1, .74, .2] },
   { id: "floor-2-waystone", name: "Emberworks Refuge Waystone", location: "floor-2",
-    x: 418.5, y: 8.16, z: 111.5, colour: [1, .38, .12] },
+    x: 418.5, y: 8.16, z: 111.5, colour: [1, .58, .14] },
 ] as const;
 
 export const MeditationRestRequestSchema = z.object({ siteId: MeditationSiteIdSchema });
