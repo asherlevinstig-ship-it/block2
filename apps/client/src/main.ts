@@ -4200,6 +4200,11 @@ if (fastWorldRequested && !tavernRoomRequested) {
     void populateTownAssetKit(app, rapidPrototypeRoot,
       SPEED_LAB_TOWN_ASSETS.filter(asset => townVisualInsideBounds(asset.position[0], asset.position[2], 4)))
       .then(result => {
+        // The imported village is immutable scenery. Assigning every render
+        // node to the static batch group merges repeated benches, fences,
+        // rocks and building materials instead of submitting each placement.
+        for (const entity of result.entities) for (const render of entity.findComponents("render") as pc.RenderComponent[])
+          render.batchGroupId = rapidWorldSceneryBatchGroup.id;
         for (const family of readyTownFallbacks(result.loadedIds)) hideRapidTownFallback(family);
         console.info(`[town-assets] ${result.entities.length} placements ready; ${result.failedIds.size} model types kept their fallback.`);
       });

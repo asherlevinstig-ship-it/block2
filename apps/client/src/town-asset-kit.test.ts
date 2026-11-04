@@ -6,7 +6,7 @@ import {
   RAPID_PRACTICE_TOWN_COLLIDERS,
 } from "@blockcraft/protocol";
 import { Block, playerCollides } from "@blockcraft/voxel-world";
-import { SPEED_LAB_TOWN_ASSETS, TOWN_ASSET_FILES, readyTownFallbacks, townAssetUrl, type TownAssetId } from "./town-asset-kit.js";
+import { SPEED_LAB_TOWN_ASSETS, TOWN_ASSET_FILES, readyTownFallbacks, townAssetCastsShadows, townAssetUrl, type TownAssetId } from "./town-asset-kit.js";
 
 describe("town asset kit", () => {
   it("serves every declared asset from one of the curated town libraries", () => {
@@ -19,6 +19,17 @@ describe("town asset kit", () => {
     expect(readyTownFallbacks(new Set<TownAssetId>(["marketStandA"]))).not.toContain("market-stalls");
     expect(readyTownFallbacks(new Set<TownAssetId>(["marketStandA", "marketStandB"]))).toContain("market-stalls");
     expect(readyTownFallbacks(new Set<TownAssetId>(["rockLarge"]))).not.toContain("rocks");
+  });
+
+  it("keeps landmark shadows but removes repeated small-prop shadow draws", () => {
+    const building = SPEED_LAB_TOWN_ASSETS.find(asset => asset.id === "wayfarerInn")!;
+    const tree = SPEED_LAB_TOWN_ASSETS.find(asset => asset.id === "treeCrooked")!;
+    const bench = SPEED_LAB_TOWN_ASSETS.find(asset => asset.id === "bench")!;
+    const fence = SPEED_LAB_TOWN_ASSETS.find(asset => asset.id === "fence")!;
+    expect(townAssetCastsShadows(building)).toBe(true);
+    expect(townAssetCastsShadows(tree)).toBe(true);
+    expect(townAssetCastsShadows(bench)).toBe(false);
+    expect(townAssetCastsShadows(fence)).toBe(false);
   });
 
   it("uses complete buildings around an open, widely-spaced town centre", () => {

@@ -43,7 +43,19 @@ export interface TownAssetPlacement {
   position: readonly [number, number, number];
   yaw?: number;
   scale?: number;
+  castsShadows?: boolean;
   woodlandShape?: WoodlandTreeShape;
+}
+
+/** Small repeated street props add a disproportionate number of shadow draws.
+ * Buildings, market silhouettes and trees retain shadows; these low-profile
+ * details receive the town's lighting but do not render into shadow maps. */
+const NON_SHADOW_TOWN_ASSETS = new Set<TownAssetId>([
+  "bench", "barrel", "crate", "hay", "lantern", "hedge", "fence", "rockLarge", "rockSmall",
+]);
+
+export function townAssetCastsShadows(placement: TownAssetPlacement): boolean {
+  return placement.castsShadows ?? !NON_SHADOW_TOWN_ASSETS.has(placement.id);
 }
 
 /** The authored buildings sit exactly over the server-owned collision
@@ -178,7 +190,8 @@ export async function populateTownAssetKit(
     const asset = loaded.get(placement.id);
     const resource = asset?.resource as pc.ContainerResource | undefined;
     if (!resource) continue;
-    const entity = resource.instantiateRenderEntity({ castShadows: true, receiveShadows: true });
+    const castShadows = townAssetCastsShadows(placement);
+    const entity = resource.instantiateRenderEntity({ castShadows, receiveShadows: true });
     if (townAssetUrl(placement.id).startsWith(QUATERNIUS_TOWN_ASSET_BASE_URL)) finishBuildingMaterials(app, entity);
     if (placement.woodlandShape) shapeWoodlandTree(app.graphicsDevice, entity, placement.woodlandShape);
     entity.name = `${namePrefix}:${placement.name}`;
@@ -186,6 +199,10 @@ export async function populateTownAssetKit(
     entity.setLocalEulerAngles(0, placement.yaw ?? 0, 0);
     const scale = placement.scale ?? 1;
     entity.setLocalScale(scale, scale, scale);
+    for (const render of entity.findComponents("render") as pc.RenderComponent[]) {
+      render.castShadows = castShadows;
+      render.receiveShadows = true;
+    }
     parent.addChild(entity);
     entities.push(entity);
     if (index > 0 && index % 16 === 0) await new Promise<void>(resolve => window.setTimeout(resolve, 0));
