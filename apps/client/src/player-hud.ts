@@ -35,10 +35,17 @@ function StaminaBar() {
 
 function LevelBar() {
   const required = experienceRequired.value;
-  return h("button", { id: "player-level", type: "button", "aria-label": "Character level and experience" },
+  return h("button", { id: "player-level", type: "button", "aria-label": "Character level and banked Essence" },
     h("span", null, "LV ", h("strong", { id: "player-level-value" }, String(level.value))),
+    h("span", { id: "player-essence-bank" },
+      h("b", { "aria-hidden": "true" }, "◆"),
+      h("strong", { id: "player-essence-value" }, String(experience.value)),
+      h("small", null, "BANKED"),
+    ),
     h("div", null, h("i", { id: "player-xp-fill", style: { width: experienceWidth.value } })),
-    h("em", { id: "player-xp-value" }, required > 0 ? `${experience.value} / ${required} ESSENCE` : "MAX LEVEL"),
+    h("em", { id: "player-xp-value" }, required <= 0 ? "MAX LEVEL"
+      : experience.value >= required ? "UPGRADE READY"
+        : `NEXT UPGRADE · ${required}`),
   );
 }
 

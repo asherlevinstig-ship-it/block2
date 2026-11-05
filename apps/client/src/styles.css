@@ -392,6 +392,10 @@ html.onboarding-active #hud #target, html.onboarding-active #hud #players { disp
 #player-level > div { height: 6px; overflow: hidden; border-radius: 999px; background: #493415; }
 #player-xp-fill { display: block; width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #c98b31, #ffe18a); transition: width 350ms ease; }
 #player-level em { color: #c8b98e; font-size: .56rem; font-style: normal; white-space: nowrap; }
+#player-essence-bank { display: inline-flex; align-items: baseline; justify-content: center; gap: 4px; color: #ffe08a; }
+#player-essence-bank b { color: #e8af35; font-size: .62rem; filter: drop-shadow(0 0 5px #f4bb3e99); }
+#player-essence-bank strong { color: #fff2b8; font-size: .82rem; font-variant-numeric: tabular-nums; }
+#player-essence-bank small { color: #c2a96f; font-size: .43rem; letter-spacing: .08em; }
 #defense-slot {
   display: grid;
   grid-template-columns: auto 1fr auto;
@@ -3748,7 +3752,7 @@ body:has(#progression-notice:not([hidden])) #resource-toasts { display: none; }
   bottom: calc(82px + env(safe-area-inset-bottom));
   left: 50%;
   display: grid;
-  grid-template: auto auto / 76px minmax(270px, 440px);
+  grid-template: auto auto / 118px minmax(270px, 440px);
   gap: 3px 10px;
   width: min(536px, calc(100vw - 38px));
   padding: 7px 10px;
@@ -3768,7 +3772,7 @@ body:has(#progression-notice:not([hidden])) #resource-toasts { display: none; }
   grid-row: 1 / 3;
   grid-column: 1;
   display: grid;
-  grid-template: auto auto / 1fr;
+  grid-template: auto auto auto auto / 1fr;
   gap: 2px;
   place-content: center;
   margin: 0;
@@ -3776,7 +3780,11 @@ body:has(#progression-notice:not([hidden])) #resource-toasts { display: none; }
   text-align: center;
 }
 #player-level > div { order: 3; height: 4px; }
-#player-level em { font-size: .43rem; }
+#player-level > span:first-child { order: 1; }
+#player-level em { order: 4; font-size: .43rem; }
+#player-level #player-essence-bank { order: 2; }
+#player-level #player-essence-bank strong { font-size: .88rem; }
+#player-level #player-essence-bank small { font-size: .39rem; }
 
 #trait-slot { margin-top: 7px; padding: 6px 8px; }
 #trait-slot > span, #trait-slot > small { font-size: .48rem; }
@@ -3918,7 +3926,7 @@ body:has(#combat-hud-shell[data-loadout-open="true"]) #blacksmith-prompt { displ
   #trait-slot > small, #trait-picker { display: none !important; }
   #combat-hud-root, #defense-slot { display: none; }
   #build-path-proc { left: 50%; bottom: calc(142px + env(safe-area-inset-bottom)); }
-  #player-hud-root { bottom: calc(142px + env(safe-area-inset-bottom)); width: min(380px, calc(100vw - 28px)); grid-template-columns: 65px minmax(190px, 1fr); }
+  #player-hud-root { bottom: calc(142px + env(safe-area-inset-bottom)); width: min(430px, calc(100vw - 28px)); grid-template-columns: 104px minmax(190px, 1fr); }
 }
 
 @media (max-width: 520px) {
