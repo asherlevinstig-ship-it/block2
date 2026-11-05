@@ -84,3 +84,4 @@
 @keyframes wallet-float{0%{opacity:0;transform:translateY(7px)}15%{opacity:1}75%{opacity:1}100%{opacity:0;transform:translateY(-12px)}}
 @media(max-width:690px){.transactions{top:auto;bottom:18px;right:16px;width:min(310px,calc(100vw - 32px))}}
 @media(prefers-reduced-motion:reduce){.transaction-card{animation:transaction-leave .01s linear 5.1s forwards}.wallet-delta{animation:none}}
+.trade-actions{display:flex;gap:5px}.trade-actions button{flex:1;width:auto}.trade-empty{display:block;margin-top:7px;color:#a9bbc5;font-size:10px;line-height:1.4}#tradeStatus{font-size:12px;line-height:1.4;color:#f2d7ae;margin:0}
