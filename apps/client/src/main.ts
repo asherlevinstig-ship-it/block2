@@ -208,7 +208,7 @@ import {
 import { createCoastOceanMesh, createCoastWaterAnimator, createCoastWaterNormalMap } from "./sunken-coast-water.js";
 import { SPEED_LAB_TOWN_ACTORS, SPEED_LAB_TOWN_LIGHTS, SPEED_LAB_TOWN_SIGNS, townLifeActorPose, townLifeAnimation,
   townNpcAnimationActive, townNpcAnimationBudget, type TownLifeActorDefinition } from "./town-life.js";
-import { townNpcFaceStyle, type TownNpcMouthExpression } from "./town-npc-appearance.js";
+import { townNpcFaceStyle } from "./town-npc-appearance.js";
 import { bindTownNpcRig, loadTownNpcAssets, TOWN_NPC_MODEL_YAW, transitionTownNpcRig } from "./town-npc-assets.js";
 import { SPEED_LAB_TOWN_TERRAIN, SPEED_LAB_TOWN_TERRAIN_DETAILS,
   type TownTerrainMaterial } from "./town-terrain.js";
@@ -2776,7 +2776,6 @@ let rapidWorldTotalVisualChunks = 0;
 const ashenVentVisuals: { entity: pc.Entity; material: pc.StandardMaterial; offsetMs: number; radius: number }[] = [];
 const ashenAshMotes: { entity: pc.Entity; baseY: number; phase: number }[] = [];
 if (fastWorldRequested && !tavernRoomRequested) {
-  const townNpcFaceBatchGroup = app.batcher.addGroup("town-npc-faces", true, 32);
   const rapidWorldSceneryBatchGroup = app.batcher.addGroup("rapid-world-scenery", false, 512);
   const grass = createPaintedGroundMaterial(app, TOWN_TEXTURE_STYLES.meadow, [22, 17]);
   const grassLight = coloredMaterial(new pc.Color(.26, .46, .25));
@@ -3049,11 +3048,8 @@ if (fastWorldRequested && !tavernRoomRequested) {
 
   const skin = coloredMaterial(new pc.Color(.72, .49, .31));
   const darkHair = coloredMaterial(new pc.Color(.12, .07, .04));
-  const warmHair = coloredMaterial(new pc.Color(.23, .1, .045));
   const eyeWhite = coloredMaterial(new pc.Color(.94, .9, .78));
   const faceInk = coloredMaterial(new pc.Color(.055, .035, .025));
-  const faceScar = coloredMaterial(new pc.Color(.42, .11, .075));
-  const healerGem = coloredMaterial(new pc.Color(.18, .9, .72));
   const trouser = coloredMaterial(new pc.Color(.16, .16, .18));
   const actorMaterials = new Map<string, { coat: pc.StandardMaterial; accent: pc.StandardMaterial }>();
   for (const definition of SPEED_LAB_TOWN_ACTORS) {
@@ -3131,72 +3127,11 @@ if (fastWorldRequested && !tavernRoomRequested) {
     healer: new Set(["Spellbook_open", "1H_Wand"]),
     vendor: new Set(), smith: new Set(), resident: new Set(),
   };
-  const addTownFaceShape = (parent: pc.Entity, name: string, type: "box" | "sphere",
-    material: pc.StandardMaterial, scale: [number, number, number], position: [number, number, number],
-    euler?: [number, number, number]): pc.Entity => {
-    const shape = new pc.Entity(name);
-    shape.addComponent("render", { type, castShadows: false, receiveShadows: false,
-      batchGroupId: townNpcFaceBatchGroup.id });
-    if (shape.render) shape.render.material = material;
-    shape.setLocalScale(...scale);
-    shape.setLocalPosition(...position);
-    if (euler) shape.setLocalEulerAngles(...euler);
-    parent.addChild(shape);
-    return shape;
-  };
-  const addTownNpcMouth = (head: pc.Entity, expression: TownNpcMouthExpression): void => {
-    if (expression === "calm" || expression === "stern") {
-      addTownFaceShape(head, `npc-mouth-${expression}`, "box", faceInk,
-        [expression === "stern" ? .15 : .12, .022, .018], [0, .265, .535]);
-      return;
-    }
-    addTownFaceShape(head, "npc-smile-left", "box", faceInk, [.075, .022, .018], [-.06, .282, .535], [0, 0, -12]);
-    addTownFaceShape(head, "npc-smile-right", "box", faceInk, [.075, .022, .018], [.06, .282, .535], [0, 0, 12]);
-  };
-  const addTownNpcFace = (actor: RapidTownActorVisual, model: pc.Entity): void => {
-    const head = model.findByName("head") as pc.Entity | null;
-    if (!head) {
-      console.warn(`[town-npcs] ${actor.definition.role} model has no animated head bone for facial details.`);
-      return;
-    }
-    const style = townNpcFaceStyle(actor.definition.role);
-    const iris = npcIrisMaterials.get(actor.definition.role)!;
-    const face = new pc.Entity(`npc-face:${actor.definition.id}`);
-    head.addChild(face);
-    for (const side of [-1, 1] as const) {
-      const x = side * .16;
-      addTownFaceShape(face, `npc-eye-white-${side}`, "sphere", eyeWhite, [.115, .068, .035], [x, .54, .505]);
-      addTownFaceShape(face, `npc-iris-${side}`, "sphere", iris, [.052, .052, .025], [x, .54, .542]);
-      addTownFaceShape(face, `npc-pupil-${side}`, "sphere", faceInk, [.021, .028, .014], [x, .54, .565]);
-      addTownFaceShape(face, `npc-brow-${side}`, "box", faceInk, [.13, .028, .025],
-        [x, .665, .535], [0, 0, side * style.browTilt]);
-    }
-    addTownFaceShape(face, "npc-nose", "sphere", skin, [.06, .105, .065], [0, .405, .54]);
-    addTownNpcMouth(face, style.mouth);
-
-    if (style.scar)
-      addTownFaceShape(face, "npc-warden-scar", "box", faceScar, [.018, .115, .017], [.285, .37, .538], [0, 0, -20]);
-    if (style.beard) {
-      addTownFaceShape(face, "npc-smith-beard", "sphere", warmHair, [.31, .245, .075], [0, .17, .47]);
-      addTownFaceShape(face, "npc-smith-moustache-left", "box", warmHair, [.1, .035, .025], [-.08, .31, .555], [0, 0, -10]);
-      addTownFaceShape(face, "npc-smith-moustache-right", "box", warmHair, [.1, .035, .025], [.08, .31, .555], [0, 0, 10]);
-    }
-    if (style.circlet) {
-      addTownFaceShape(face, "npc-healer-circlet", "box", bannerGold, [.37, .025, .025], [0, .76, .515]);
-      addTownFaceShape(face, "npc-healer-gem", "sphere", healerGem, [.055, .065, .025], [0, .755, .548]);
-    }
-    if (style.freckles) {
-      for (const side of [-1, 1] as const) {
-        for (let index = 0; index < 3; index++)
-          addTownFaceShape(face, `npc-freckle-${side}-${index}`, "sphere", warmHair, [.014, .014, .01],
-            [side * (.205 + index * .032), .37 + (index % 2) * .035, .545]);
-      }
-    }
-  };
   const decorateLoadedTownNpc = (actor: RapidTownActorVisual, model: pc.Entity): void => {
     const visible = visibleNpcAccessories[actor.definition.role];
     for (const node of model.find(candidate => townNpcAccessories.has(candidate.name))) node.enabled = visible.has(node.name);
-    addTownNpcFace(actor, model);
+    // KayKit residents already ship with authored eyes and facial features.
+    // Do not layer procedural face geometry over their textured faces.
     if (actor.definition.role !== "smith") return;
     const hand = model.findByName("handslot.r") as pc.Entity | null;
     if (!hand) return;
