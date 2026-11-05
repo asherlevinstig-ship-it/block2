@@ -51,7 +51,7 @@ const retiredTables=hasGamingLayout?[]:(savedLounge??[]).filter(item=>item.type=
 let loungeFurniture=initial;
 if(savedLounge)loungeFurniture=hasGamingLayout?savedLounge:installGamingTables(savedLounge.filter(item=>!retiredTables.includes(item)));
 let homeFurniture = savedPlayerState?.homeFurniture??[];
-const credits = savedPlayerState?.credits??100;
+let credits = savedPlayerState?.credits??100;
 const countFurniture = (items,type)=>items.filter(item=>item.type===type).length;
 const previousStock = savedPlayerState?.ownedFurniture??{};
 const hasBedStarter = Object.hasOwn(previousStock,'bed');
@@ -70,6 +70,8 @@ const adventure={lantern:false,groveTrail:false,bridge:false,shrine:false,shortc
 const playerStats={patienceXp:adventure.silverfin*10,...savedPlayerState?.stats};
 const PATIENCE_XP_PER_CATCH=10, PATIENCE_XP_PER_LEVEL=50;
 const patienceLevel=()=>1+Math.floor(playerStats.patienceXp/PATIENCE_XP_PER_LEVEL);
+const fishingGear={ownedRods:['reed'],equippedRod:'reed',bait:10,...savedPlayerState?.fishingGear};
+let fishingDuration=4500;
 let fishingStarted=null;
 let lanternLit=false;
 let nextId = Math.max(0,...[...loungeFurniture,...homeFurniture].map(item=>item.id).filter(Number.isInteger))+1;
@@ -92,12 +94,20 @@ const courtyardFurniture=[
   ['streetlamp',11,10],['bench',3,8],['bench',10,3,1],['bench',9,9,2],
   ['plant',0,1],['plant',0,10],['plant',13,1],['plant',13,10]
 ].map(([type,x,y,rot=0],id)=>({id,type,x,y,rot}));
+const storeFurniture=[
+  {id:'merchant',type:'tackleCounter',x:3,y:2,rot:0},
+  {id:'rods',type:'rodRack',x:7,y:1,rot:0},
+  {id:'bait',type:'baitCrates',x:7,y:4,rot:0},
+  {id:'fern',type:'plant',x:1,y:1,rot:0},
+  {id:'stool',type:'stool',x:4,y:4,rot:0}
+];
 let currentRoom='home';
 const atHome=()=>currentRoom==='home';
 const canDecorate=()=>atHome()||currentRoom==='lounge';
 function roomFurniture(){
   if(atHome())return homeFurniture;
   if(currentRoom==='lounge')return loungeFurniture;
+  if(currentRoom==='store')return storeFurniture;
   if(moonwood.has(currentRoom))return moonwood.layouts[currentRoom].scenery;
   return currentRoom==='hub'?hubFurniture:courtyardFurniture;
 }
@@ -109,15 +119,18 @@ const homeExit={to:'hub',side:'left',tile:{x:0,y:5},start:4.88,end:6.12,height:4
 const hubDoors=[
   {to:'home',side:'left',tile:{x:0,y:6},start:5.72,end:7.28,height:51,label:'HOME'},
   {to:'lounge',side:'right',tile:{x:14,y:0},start:13.6,end:15.4,height:51,label:'LOUNGE'},
+  {to:'store',side:'left',tile:{x:0,y:10},start:9.4,end:11.3,height:51,label:'FISHING'},
   {to:'outside',side:'front',tile:{x:8,y:15},start:7.24,end:9.76,label:'OUTSIDE'}
 ];
 const towerEntrance={to:'hub',side:'left',tile:{x:0,y:5},start:4.58,end:6.42,height:54,label:'TOWER'};
 const moonwoodEntrance={to:'trail',side:'front',tile:{x:6,y:11},arrival:{x:1,y:5},start:5.03,end:7.62,label:'MOONWOOD'};
-const roomDoors={home:[homeExit],hub:hubDoors,lounge:[],outside:[towerEntrance,moonwoodEntrance],...moonwood.doors};
+const storeExit={to:'hub',side:'left',tile:{x:0,y:5},start:4.6,end:6.4,height:49,label:'LOBBY'};
+const roomDoors={home:[homeExit],hub:hubDoors,lounge:[],store:[storeExit],outside:[towerEntrance,moonwoodEntrance],...moonwood.doors};
 const roomDetails={
   home:{number:'00',name:'Entry Room',description:'Walk through the exit to reach the Grand Lobby.',badge:'ROOM NO. 00',floor:'Private room'},
   hub:{number:'01',name:'The Grand Lobby',description:'Meet at reception, settle into a seating area, or head to another room.',badge:'MAIN HUB',floor:'Ground floor'},
   lounge:{number:'02',name:'The Sunset Lounge',description:'Find blackjack and roulette on the gaming floor, or take a seat by the bar.',badge:'GAMING LOUNGE',floor:'Ground floor'},
+  store:{number:'11',name:'Silverfin Outfitters',description:'Stock up on bait, find a better rod, and sell your catch.',badge:'FISHING STORE',floor:'Tower shops'},
   outside:{number:'03',name:'The Courtyard',description:'Rest by the fountain, or follow the Moonwood steps into the forest.',badge:'OUTSIDE',floor:'Tower grounds'},
   ...moonwood.areas
 };
@@ -385,7 +398,7 @@ function drawGrandLobby(){
   wallText('left',2.65,46,'BEGINNINGS','bold 7px monospace','#d6a694',53);
   wall('left',1.3,4.03,24,35,'#372d42');
   for(let i=0;i<8;i++)wall('left',1.42+i*.31,1.50+i*.31,27,31,'#e1ae7f');
-  for(const [a,b] of [[9.37,11.85],[13.32,14.84]]){
+  for(const [a,b] of [[13.32,14.84]]){
     wall('left',a,b,29,61,'#c38d7b');
     wall('left',a+.1,b-.1,31,59,'#55475e');
     wall('left',a+.22,b-.22,34,56,'#786984');
@@ -483,9 +496,38 @@ function drawCourtyard(){
     wall('left',u+.025,u+.13,32,37,'#ffd89b');
   }
 }
+function drawFishingStore(){
+  block(0,0,10,10,-8,8,['#998b83','#53465c','#443c53']);
+  for(let y=0;y<10;y++)for(let x=0;x<10;x++){
+    surface(x,y,1,1,0,(x+y)%2?'#aa9485':'#a08b80','#7f6d71');
+    surface(x+.14,y+.28,.69,.025,.1,'#c0a38b');
+  }
+  wall('left',0,10,0,70,'#46606a');
+  wall('right',0,10,0,70,'#5b7680');
+  for(const side of ['left','right']){
+    wall(side,0,10,0,15,'#384e5a');
+    wall(side,0,10,14,17,'#bd9e81');
+    wall(side,0,10,66,71,'#b7967e');
+    for(let i=.3;i<10;i+=.4)wall(side,i,i+.04,1,14,'#708891');
+  }
+  wall('right',1.25,5.6,37,61,'#d1ac86');
+  wall('right',1.36,5.49,39,59,'#314e5c');
+  wallText('right',3.42,49,'SILVERFIN','bold 8px monospace','#fae0ae',65);
+  wallText('right',3.42,42,'OUTFITTERS','bold 6px monospace','#bfd5ce',65);
+  wall('left',1.3,3.5,30,56,'#c4a284');
+  wall('left',1.42,3.38,32,54,'#395767');
+  wall('left',1.49,3.31,33,46,'#7b9da3');
+  wall('left',1.51,3.29,33,37,'#b5c1b0');
+  surface(3.1,4.9,3.8,3.7,.3,'#516d74');
+  surface(3.22,5.02,3.56,3.46,.35,'#c3aa89');
+  surface(3.35,5.15,3.3,3.2,.4,'#526e73');
+  for(let i=0;i<5;i++)surface(3.54,5.4+i*.54,2.9,.035,.45,'#779395');
+  drawDoor(storeExit);
+}
 function dimensions(item) {
   if(item.type==='sofa'||item.type==='bed'||item.type==='bench'||isGamingTable(item))return item.rot%2?[1,2]:[2,1];
-  if(item.type==='reception')return [3,1];
+  if(item.type==='reception'||item.type==='tackleCounter')return [3,1];
+  if(item.type==='rodRack')return [2,1];
   if(item.type==='fountain')return [2,2];
   return item.type==='bar'?[1.5,4.1]:item.type==='shelf'?[.35,3.5]:[1,1];
 }
@@ -585,7 +627,21 @@ function object(item,highlight=false,time=0) {
       }
       part(1.66,.74,.105,.10,16,1.4,'gold');
     }
-  } else if(type==='reception'){
+  } else if(type==='rodRack'){
+    part(.06,.26,1.88,.49,0,4,'wood');
+    part(.1,.33,.14,.15,4,31,'wood');part(1.75,.33,.14,.15,4,31,'wood');
+    part(.1,.33,1.79,.15,29,3,'wood');
+    for(let i=0;i<4;i++){
+      const [rx,ry]=point(x+.38+i*.39,y+.56,3);
+      rect(rx,ry-32,1,33,['#c7af8c','#cf9568','#b6d6d4','#d1aedc'][i]);
+      rect(rx-1,ry-5,3,5,'#42394d');
+      rect(rx+1,ry-12,2,3,'#cfbda7');
+    }
+  } else if(type==='baitCrates'){
+    part(.08,.1,.84,.8,0,10,'wood');
+    part(.11,.13,.78,.74,10,1,'gold');
+    for(let i=0;i<3;i++)part(.22+i*.20,.26,.13,.4,11,5,i%2?'blue':'cream');
+  } else if(type==='reception'||type==='tackleCounter'){
     const [sx,sy]=point(x+1.46,y-.2,2);
     sprite(ctx,sx,sy,{outfit:4,hair:1});
     part(.06,.08,2.88,.87,0,19,'wood');
@@ -783,7 +839,8 @@ const worldDrawing={point,polygon,surface,block,rect};
 const roomLayers={
   hub:makeRoomLayer(drawGrandLobby,hubView),
   lounge:makeRoomLayer(room),
-  outside:makeRoomLayer(drawCourtyard,courtyardView)
+  outside:makeRoomLayer(drawCourtyard,courtyardView),
+  store:makeRoomLayer(drawFishingStore)
 };
 for(const id of Object.keys(moonwood.areas)){
   roomLayers[id]=makeRoomLayer(()=>moonwood.drawGround(id,worldDrawing),moonwood.view);
@@ -876,7 +933,7 @@ function draw(time){
     object(item,editing&&(selection?.id===item.id||hoverItem?.id===item.id)&&!fixed(item),time);
     ctx.globalAlpha=1;
     if(item===ghost||(fixed(item)&&!isGamingTable(item)))continue;
-    const [w,d]=dimensions(item), h=moonwood.heights[item.type]??{blackjack:19,roulette:22,reception:32,bed:24,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39,bench:22,streetlamp:55,fountain:37}[item.type];
+    const [w,d]=dimensions(item), h=moonwood.heights[item.type]??{tackleCounter:32,rodRack:36,baitCrates:16,blackjack:19,roulette:22,reception:32,bed:24,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39,bench:22,streetlamp:55,fountain:37}[item.type];
     const shape=[point(item.x,item.y+d),point(item.x+w,item.y+d),point(item.x+w,item.y),point(item.x+w,item.y,h),point(item.x,item.y,h),point(item.x,item.y+d,h)];
     hitboxes.push({item,shape});
   }
@@ -967,7 +1024,7 @@ function note(message){
   noticeUntil=performance.now()+3000;
 }
 function setHint(){
-  const guide={home:'Click a tile to walk · Click the exit to visit the lobby',hub:'Click a doorway or the Outside steps to travel',lounge:defaultHint,outside:'Click the Moonwood steps to explore · Tower returns indoors'};
+  const guide={home:'Click a tile to walk · Click the exit to visit the lobby',hub:'Click a doorway or the Outside steps to travel',lounge:defaultHint,outside:'Click the Moonwood steps to explore · Tower returns indoors',store:'Buy supplies at the counter · Use Lobby to leave'};
   const message=editing?'Choose furniture to place or select a piece in the room':guide[currentRoom]??'Follow marked trails · Use the field journal for routes';
   $('hint').textContent='✦  '+message;
 }
@@ -1012,7 +1069,13 @@ function seatAnchor(item){
 function finishInteraction(){
   const item=interaction;interaction=null;
   if(item.type==='fishingPost'){
+    if(fishingGear.bait<1){note('You need bait. Visit Silverfin Outfitters in the tower.');return;}
+    const rod=fishingCatalog.rods[fishingGear.equippedRod];
+    if(!fishingGear.ownedRods.includes(fishingGear.equippedRod)||patienceLevel()<rod.patience){
+      note('Equip a rod that matches your Patience level.');return;
+    }
     player.direction='right';player.back=false;
+    fishingDuration=rod.duration;
     fishingStarted=performance.now();
     updateAdventurePanel();
     note('Line cast. Watch the float…');
@@ -1029,6 +1092,8 @@ function finishInteraction(){
     adventure.shortcut=true;
     ownedFurniture.moonbloom=(ownedFurniture.moonbloom??0)+1;
     recordAdventure('Moonbloom added to inventory. The root passage opens.');
+  }else if(['tackleCounter','rodRack','baitCrates'].includes(item.type)){
+    note('Welcome to Silverfin Outfitters. Choose supplies from the shop panel.');
   }else if(item.type==='reception'){
     $('receptionMessage').textContent='Good evening, '+avatar.name+'! Your room is through the Home door. The front steps lead to the courtyard.';
     note('The concierge welcomes you to Tower of Beginnings.');
@@ -1041,8 +1106,9 @@ function finishInteraction(){
   }
 }
 function animation(time){
-  if(fishingStarted!==null&&time-fishingStarted>=4500){
+  if(fishingStarted!==null&&time-fishingStarted>=fishingDuration){
     fishingStarted=null;
+    fishingGear.bait--;
     adventure.silverfin++;
     playerStats.patienceXp+=PATIENCE_XP_PER_CATCH;
     recordAdventure('Caught a Silverfin! +10 Patience XP · Patience '+patienceLevel()+'.');
@@ -1071,6 +1137,7 @@ function animation(time){
 }
 function updateInventory(){
   updatePlayerStats();
+  updateFishingShop();
   let total=0;
   for(const type of Object.keys(types)){
     const available=availableFurniture(type);
@@ -1093,10 +1160,59 @@ function updatePlayerStats(){
   $('patienceProgress').value=xp;
   $('patienceProgress').setAttribute('aria-label','Patience '+level+', '+xp+' of 50 XP toward the next level');
   $('patienceXp').textContent=xp+' / 50 XP to level '+(level+1);
-  $('fishingStats').textContent='Patience '+level+' · '+xp+'/50 XP · Silverfin ×'+adventure.silverfin;
+  $('fishingStats').textContent='Patience '+level+' · '+xp+'/50 XP · Bait '+fishingGear.bait+' · Silverfin ×'+adventure.silverfin;
+}
+function equipFishingRod(id){
+  const rod=fishingCatalog.rods[id];
+  if(!rod||!fishingGear.ownedRods.includes(id)||patienceLevel()<rod.patience)return;
+  cancelFishing();
+  fishingGear.equippedRod=id;
+  savePlayerState();
+  updateAdventurePanel();
+}
+function buyFishingRod(id){
+  const rod=fishingCatalog.rods[id];
+  if(currentRoom!=='store'||!rod)return;
+  if(fishingGear.ownedRods.includes(id)){equipFishingRod(id);return;}
+  if(patienceLevel()<rod.patience||credits<rod.price){
+    $('shopStatus').textContent='You need '+rod.price+' credits and Patience '+rod.patience+'.';return;
+  }
+  credits-=rod.price;
+  fishingGear.ownedRods.push(id);
+  fishingGear.equippedRod=id;
+  savePlayerState();
+  $('shopStatus').textContent=rod.name+' purchased and equipped.';
+}
+function updateFishingShop(){
+  $('credits').textContent=new Intl.NumberFormat().format(credits);
+  $('shopBalance').textContent=credits+' credits · Patience '+patienceLevel()+' · Bait '+fishingGear.bait;
+  $('fishingEquipment').textContent='Equipped: '+fishingCatalog.rods[fishingGear.equippedRod].name+' · Bait ×'+fishingGear.bait;
+  const selector=$('equippedFishingRod');
+  selector.replaceChildren();
+  for(const id of fishingGear.ownedRods){
+    const option=document.createElement('option');
+    option.value=id;option.textContent=fishingCatalog.rods[id].name;selector.append(option);
+  }
+  selector.value=fishingGear.equippedRod;
+  const offers=$('rodOffers');offers.replaceChildren();
+  for(const [id,rod] of Object.entries(fishingCatalog.rods)){
+    const card=document.createElement('div'),title=document.createElement('b'),detail=document.createElement('p'),button=document.createElement('button');
+    card.className='rod-offer';card.dataset.rod=id;
+    title.textContent=rod.name;
+    detail.textContent=rod.quality+' · '+rod.duration/1000+'s per catch · Patience '+rod.patience;
+    const owned=fishingGear.ownedRods.includes(id),equipped=fishingGear.equippedRod===id;
+    const skill=patienceLevel()>=rod.patience,afford=credits>=rod.price;
+    button.textContent=equipped?'Equipped':owned?'Equip':rod.price+' credits'+(!skill?' · Patience '+rod.patience+' required':!afford?' · Need more credits':' · Buy');
+    button.disabled=equipped||!skill||(!owned&&!afford);
+    button.onclick=()=>buyFishingRod(id);
+    card.append(title,detail,button);offers.append(card);
+  }
+  $('buyBait').disabled=credits<fishingCatalog.bait.price;
+  $('sellFish').disabled=adventure.silverfin<1;
+  $('sellFish').textContent=adventure.silverfin?'Sell '+adventure.silverfin+' Silverfin · '+adventure.silverfin*fishingCatalog.fishPrice+' credits':'Sell Silverfin · 5 credits each';
 }
 function savePlayerState(){
-  save('player-state',{credits,ownedFurniture,furniture:loungeFurniture,homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats});
+  save('player-state',{credits,ownedFurniture,furniture:loungeFurniture,homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats,fishingGear});
   updateInventory();
 }
 function editStatus(message){
@@ -1128,13 +1244,15 @@ function switchMode(next){
   }
   $('editorPanel').hidden=!editing;
   $('directoryPanel').hidden=currentRoom!=='hub';
+  $('fishingShop').hidden=currentRoom!=='store';
   const exploring=moonwood.has(currentRoom);
   $('adventurePanel').hidden=!exploring;
-  $('panelTitle').textContent=editing?(atHome()?'Home editor':'Room editor'):currentRoom==='hub'?'Tower directory':exploring?'Field journal':'Room chat';
+  $('panelTitle').textContent=editing?(atHome()?'Home editor':'Room editor'):currentRoom==='hub'?'Tower directory':currentRoom==='store'?'Fishing supplies':exploring?'Field journal':'Room chat';
   $('panelSub').textContent=editing?(atHome()?'YOUR HOME':'FURNITURE & DECOR'):roomDetails[currentRoom].name.toUpperCase();
   $('resetRoom').textContent=atHome()?'Clear home furniture':'Restore original room';
   $('mode').textContent=editing?'DECORATE':currentRoom==='hub'?'MAIN HUB':currentRoom==='outside'?'OPEN AIR':exploring?'EXPLORING':'FREE ROAM';
   updateAdventurePanel();
+  updateFishingShop();
   noticeUntil=0;setHint();cancelSelection();
 }
 function updateAdventurePanel(){
@@ -1151,7 +1269,7 @@ function updateAdventurePanel(){
     shrine:adventure.shrine?'You recorded the Moth Shrine in your journal.':'Approach the altar to examine the moths.',
     ruins:adventure.shortcut?'The root passage is open. Your Moonbloom is in inventory.':'Search the Moonwell for a keepsake and a shortcut back.',
     roots:'Follow the roots back to Lantern Trail.',
-    pond:fishingStarted!==null?'Your line is in the water. Wait for the float to dip.':'Cast from the jetty. Silverfin caught: '+adventure.silverfin+'.'
+    pond:fishingStarted!==null?'Your line is in the water. Wait for the float to dip.':fishingGear.bait<1?'Out of bait. Visit Silverfin Outfitters through the Fishing door in the Grand Lobby.':'Cast with your '+fishingCatalog.rods[fishingGear.equippedRod].name+'. Bait: '+fishingGear.bait+'. Silverfin: '+adventure.silverfin+'.'
   };
   $('adventureStatus').textContent=fieldNotes[currentRoom];
   $('fishingStats').hidden=currentRoom!=='pond';
@@ -1160,7 +1278,7 @@ function updateAdventurePanel(){
   const landmark=$('adventureLandmark');
   const action={trail:!adventure.lantern?'Take lantern':'',shrine:!adventure.shrine?'Examine altar':'',ruins:!adventure.shortcut?'Search Moonwell':'',pond:fishingStarted===null?'Cast a line':'Fishing…'}[currentRoom];
   landmark.hidden=!action;
-  landmark.disabled=fishingStarted!==null;
+  landmark.disabled=fishingStarted!==null||(currentRoom==='pond'&&fishingGear.bait<1);
   landmark.textContent=action??'';
   const links=$('adventureRoutes');
   links.replaceChildren();
@@ -1250,6 +1368,21 @@ for(const [type,name] of Object.entries(types)){
   row.append(thumbnail(type),label,quantity,placeButton);$('inventoryItems').append(row);
 }
 $('credits').textContent=new Intl.NumberFormat().format(credits);
+$('equippedFishingRod').onchange=event=>equipFishingRod(event.target.value);
+$('buyBait').onclick=()=>{
+  if(currentRoom!=='store'||credits<fishingCatalog.bait.price)return;
+  credits-=fishingCatalog.bait.price;
+  fishingGear.bait+=fishingCatalog.bait.quantity;
+  savePlayerState();
+  $('shopStatus').textContent='Bought 10 Riverworms.';
+};
+$('sellFish').onclick=()=>{
+  if(currentRoom!=='store'||adventure.silverfin<1)return;
+  const earned=adventure.silverfin*fishingCatalog.fishPrice;
+  credits+=earned;adventure.silverfin=0;
+  savePlayerState();
+  $('shopStatus').textContent='Catch sold for '+earned+' credits.';
+};
 if(hasBedStarter&&hasGamingLayout)updateInventory();else savePlayerState();
 $('inventory').onclick=()=>{
   $('inventoryGuide').textContent=!canDecorate()
@@ -1417,7 +1550,8 @@ function updateRoomLabel(){
     home:'The wall sign reads Your Home, '+avatar.name+'. Use the exit to reach the Grand Lobby.',
     hub:'Use a doorway, the Outside steps, or the Tower directory to travel.',
     lounge:'Click furniture to interact. Use the Lobby button to go back.',
-    outside:'Use the Moonwood steps to explore or the Tower door to return indoors.'
+    outside:'Use the Moonwood steps to explore or the Tower door to return indoors.',
+    store:'Buy bait and rods from Fishing supplies. Use Lobby to return.'
   };
   canvas.setAttribute('aria-label',roomDetails[currentRoom].name+'. Click a floor tile or use arrow keys to walk. '+(landmarks[currentRoom]??'Use the marked trails or the field journal to travel.'));
 }
@@ -1448,7 +1582,7 @@ function enterRoom(next,arrival){
   $('footerRoom').textContent='ROOM '+number;
   $('gridSize').textContent=view.cols+' × '+view.rows;
   $('exitRoom').hidden=!atHome();
-  $('returnLobby').hidden=next!=='lounge'&&next!=='outside';
+  $('returnLobby').hidden=!['lounge','outside','store'].includes(next);
   $('enterMoonwood').hidden=next!=='outside';
   $('edit').hidden=!canDecorate();
   $('bubble').hidden=true;
