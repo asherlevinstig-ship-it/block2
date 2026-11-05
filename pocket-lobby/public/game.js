@@ -66,7 +66,8 @@ const ownedFurniture = hasBedStarter&&hasGamingLayout?previousStock:Object.fromE
   })
 );
 const availableFurniture = type=>(ownedFurniture[type]??0)-countFurniture(loungeFurniture,type)-countFurniture(homeFurniture,type);
-const adventure={lantern:false,groveTrail:false,bridge:false,shrine:false,shortcut:false,discovered:[],...savedPlayerState?.adventure};
+const adventure={lantern:false,groveTrail:false,bridge:false,shrine:false,shortcut:false,discovered:[],silverfin:0,...savedPlayerState?.adventure};
+let fishingStarted=null;
 let lanternLit=false;
 let nextId = Math.max(0,...[...loungeFurniture,...homeFurniture].map(item=>item.id).filter(Number.isInteger))+1;
 let avatar = {...defaultAvatar,...load('avatar',defaultAvatar)};
@@ -784,7 +785,8 @@ const roomLayers={
 for(const id of Object.keys(moonwood.areas)){
   roomLayers[id]=makeRoomLayer(()=>moonwood.drawGround(id,worldDrawing),moonwood.view);
 }
-function drawMoonwoodDetails(){
+function drawMoonwoodDetails(time){
+  moonwood.drawWater(currentRoom,time,{...worldDrawing,ctx,reduced:reducedMotion.matches});
   if(currentRoom==='grove'&&adventure.groveTrail){
     for(const [x,y] of moonwood.layouts.grove.hiddenTrail){
       surface(x+.06,y+.06,.88,.88,.25,'#6d8195','#8fb6b9');
@@ -815,7 +817,7 @@ function draw(time){
   ctx.setTransform(1,0,0,1,0,0);
   ctx.clearRect(0,0,width,height);ctx.translate(centerX,centerY);ctx.scale(zoom,zoom);ctx.translate(-centerX,-centerY);
   ctx.imageSmoothingEnabled=false;ctx.drawImage(roomLayers[currentRoom],0,0);
-  if(moonwood.has(currentRoom))drawMoonwoodDetails();
+  if(moonwood.has(currentRoom))drawMoonwoodDetails(time);
   if(target)surface(target.x+.1,target.y+.1,.8,.8,1,'#fff3bc30','#ffcf8f');
   if(hover){
     const [w,d]=editing&&selection?dimensions(selection):[1,1];
@@ -843,6 +845,12 @@ function draw(time){
     const cycle=step?(player.stride%2)+Math.min(1,(time-step.started)/STEP_MS):0;
     const wave=player.waveStarted===null?null:(time-player.waveStarted)/WAVE_MS;
     sprite(ctx,x,y,avatar,{direction:player.direction,back:player.back,cycle,seated:!!seat,wave,time});
+    if(fishingStarted!==null){
+      const [bx,by]=point(7.4,5.45);
+      ctx.beginPath();ctx.moveTo(x+5,y-16);ctx.lineTo(x+19,y-32);ctx.lineTo(bx,by-1);
+      ctx.strokeStyle='#e7d2aa';ctx.lineWidth=1;ctx.stroke();
+      rect(bx-1,by-3+(reducedMotion.matches?0:Math.round(Math.sin(time/220))),3,3,'#f2a3a0');
+    }
     if(!step&&!seat){
       rect(x-2,y-44,5,2,'#ffe2a7');rect(x-1,y-42,3,1,'#ffe2a7');rect(x,y-41,1,1,'#ffe2a7');
     }
@@ -965,6 +973,7 @@ function walkTo(tile){
   if(blocked(tile.x,tile.y)){note('That tile is occupied.');return;}
   const path=findPath(startPosition(),tile);
   if(!path){note('There’s no clear path to that tile.');return;}
+  cancelFishing();
   player.seat=null;player.waveStarted=null;
   route=path;interaction=null;target=path.length?tile:null;
 }
@@ -978,6 +987,7 @@ function travelDoor(door){
   else walkTo(door.tile);
 }
 function use(item){
+  cancelFishing();
   const start=startPosition(),[w,d]=dimensions(item);
   let shortest=null;
   for(let y=Math.floor(item.y)-1;y<=Math.ceil(item.y+d);y++){
@@ -998,7 +1008,12 @@ function seatAnchor(item){
 }
 function finishInteraction(){
   const item=interaction;interaction=null;
-  if(item.type==='lanternStand'){
+  if(item.type==='fishingPost'){
+    player.direction='right';player.back=false;
+    fishingStarted=performance.now();
+    updateAdventurePanel();
+    note('Line cast. Watch the float…');
+  }else if(item.type==='lanternStand'){
     if(adventure.lantern){note('You already carry the waystone lantern.');return;}
     adventure.lantern=true;
     lanternLit=true;
@@ -1023,6 +1038,11 @@ function finishInteraction(){
   }
 }
 function animation(time){
+  if(fishingStarted!==null&&time-fishingStarted>=4500){
+    fishingStarted=null;
+    adventure.silverfin++;
+    recordAdventure('You caught a Silverfin! Find it in your inventory.');
+  }
   if(!step&&route.length){
     const to=route.shift(),from={x:player.cx,y:player.cy};
     player.direction=(to.x-from.x)-(to.y-from.y)>0?'right':'left';
@@ -1059,6 +1079,8 @@ function updateInventory(){
     row.querySelector('button').hidden=!canDecorate();
   }
   $('inventoryCount').textContent=total?total+(total===1?' item in storage':' items in storage'):'Storage is empty';
+  $('fishInventory').hidden=adventure.silverfin===0;
+  $('fishInventory').textContent='Silverfin ×'+adventure.silverfin+' · Caught at Silverfin Pond';
 }
 function savePlayerState(){
   save('player-state',{credits,ownedFurniture,furniture:loungeFurniture,homeFurniture,loungeLayout:'gaming',adventure});
@@ -1076,6 +1098,7 @@ function choose(item){
 }
 function cancelSelection(){selection=null;editStatus('Select a piece to get started.');}
 function switchMode(next){
+  cancelFishing();
   editing=next&&canDecorate();
   route=[];target=null;interaction=null;player.seat=null;player.waveStarted=null;hover=null;hoverItem=null;
   bounds=null;
@@ -1114,13 +1137,15 @@ function updateAdventurePanel(){
     creek:adventure.bridge?'Moonlit stepping stones cross the creek.':'Light your lantern to reveal a way across the creek.',
     shrine:adventure.shrine?'You recorded the Moth Shrine in your journal.':'Approach the altar to examine the moths.',
     ruins:adventure.shortcut?'The root passage is open. Your Moonbloom is in inventory.':'Search the Moonwell for a keepsake and a shortcut back.',
-    roots:'Follow the roots back to Lantern Trail.'
+    roots:'Follow the roots back to Lantern Trail.',
+    pond:fishingStarted!==null?'Your line is in the water. Wait for the float to dip.':'Cast from the jetty. Silverfin caught: '+adventure.silverfin+'.'
   };
   $('adventureStatus').textContent=fieldNotes[currentRoom];
   $('adventureProgress').textContent=adventure.discovered.length+' of '+Object.keys(moonwood.areas).length+' places discovered';
   const landmark=$('adventureLandmark');
-  const action={trail:!adventure.lantern?'Take lantern':'',shrine:!adventure.shrine?'Examine altar':'',ruins:!adventure.shortcut?'Search Moonwell':''}[currentRoom];
+  const action={trail:!adventure.lantern?'Take lantern':'',shrine:!adventure.shrine?'Examine altar':'',ruins:!adventure.shortcut?'Search Moonwell':'',pond:fishingStarted===null?'Cast a line':'Fishing…'}[currentRoom];
   landmark.hidden=!action;
+  landmark.disabled=fishingStarted!==null;
   landmark.textContent=action??'';
   const links=$('adventureRoutes');
   links.replaceChildren();
@@ -1139,6 +1164,11 @@ function recordAdventure(message){
   savePlayerState();
   updateAdventurePanel();
   note(message);
+}
+function cancelFishing(){
+  if(fishingStarted===null)return;
+  fishingStarted=null;
+  updateAdventurePanel();
 }
 function revealByLantern(){
   if(!lanternLit)return;
@@ -1377,6 +1407,7 @@ function updateRoomLabel(){
   canvas.setAttribute('aria-label',roomDetails[currentRoom].name+'. Click a floor tile or use arrow keys to walk. '+(landmarks[currentRoom]??'Use the marked trails or the field journal to travel.'));
 }
 function enterRoom(next,arrival){
+  cancelFishing();
   const focusRoom=!!document.activeElement.closest('[data-room-link]');
   currentRoom=next;
   const exploring=moonwood.has(next);

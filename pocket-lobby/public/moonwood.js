@@ -9,9 +9,10 @@ const moonwood=(()=>{
     creek:{number:'06',name:'Glass Creek',description:'A band of dark water cuts across the path. Look for stones beneath the surface.',badge:'MOONWOOD',floor:'Creek crossing',center:[4,4],palette:['#32535b','#4a666c','#82928d']},
     shrine:{number:'07',name:'Moth Shrine',description:'Pale moths circle a stone altar in a quiet clearing.',badge:'MOONWOOD',floor:'Hidden landmark',center:[5,4],palette:['#3c4862','#4f5773','#8f85a3'],landmark:['mothAltar',6,4,5,4],authored:[['pillar',4,2],['pillar',8,2],['pillar',4,6],['pillar',8,6],['wildtree',1,1],['wildtree',10,7],['wildbloom',5,2],['wildbloom',7,6]]},
     ruins:{number:'08',name:'Moonwell Ruins',description:'An old well glows among the ruins. A root-covered arch stands at the far end.',badge:'MOONWOOD',floor:'Ancient landmark',center:[5,4],palette:['#444258','#57536b','#8d8194'],landmark:['moonwell',6,4,5,4],authored:[['pillar',3,2],['pillar',8,2],['pillar',3,6],['pillar',8,6],['wildrock',9,6],['wildbloom',4,3],['wildtree',1,8],['wildtree',10,1]]},
-    roots:{number:'09',name:'Root Passage',description:'A living tunnel winds beneath Moonwood, linking the ruins back to Lantern Trail.',badge:'MOONWOOD',floor:'Forest shortcut',center:[6,5],palette:['#363847','#4b4357','#766274'],authored:[['wildtree',1,2],['wildtree',3,6],['wildtree',6,2],['wildtree',8,7],['wildtree',10,2],['wildbloom',4,3],['wildbloom',8,6]]}
+    roots:{number:'09',name:'Root Passage',description:'A living tunnel winds beneath Moonwood, linking the ruins back to Lantern Trail.',badge:'MOONWOOD',floor:'Forest shortcut',center:[6,5],palette:['#363847','#4b4357','#766274'],authored:[['wildtree',1,2],['wildtree',3,6],['wildtree',6,2],['wildtree',8,7],['wildtree',10,2],['wildbloom',4,3],['wildbloom',8,6]]},
+    pond:{number:'10',name:'Silverfin Pond',description:'Cast a line from the old jetty and watch the moonlight ripple over the water.',badge:'MOONWOOD',floor:'Fishing pond',center:[3,5],palette:['#334f59','#486570','#8b9296'],landmark:['fishingPost',5,5,4,5],authored:[['wildtree',1,1],['wildtree',3,1],['wildtree',1,8],['wildtree',4,8],['wildrock',4,2],['wildbloom',3,7],['wildbloom',4,3]]}
   };
-  const heights={wildtree:51,wildrock:13,wildbloom:22,pillar:28,lanternStand:31,mothAltar:24,moonwell:35,moonbloom:29};
+  const heights={wildtree:51,wildrock:13,wildbloom:22,pillar:28,lanternStand:31,mothAltar:24,moonwell:35,moonbloom:29,fishingPost:26};
   const doors=Object.fromEntries(Object.keys(areas).map(id=>[id,[]]));
   const coordinate=([x,y])=>({x,y});
   function connect(a,b,from,to,gate){
@@ -24,13 +25,14 @@ const moonwood=(()=>{
   connect('trail','creek',[11,4,10,4,'TRAIL'],[0,4,1,4,'CREEK']);
   connect('grove','shrine',[11,4,10,4,'GROVE'],[0,4,1,4,'SHRINE'],'groveTrail');
   connect('creek','ruins',[11,4,10,4,'CREEK'],[0,4,1,4,'RUINS']);
+  connect('creek','pond',[2,9,2,8,'CREEK'],[0,5,1,5,'POND']);
   connect('ruins','roots',[11,5,10,5,'RUINS'],[0,4,1,4,'ROOTS'],'shortcut');
   connect('roots','trail',[11,5,10,5,'ROOTS'],[5,9,5,8,'TRAIL'],'shortcut');
   doors.trail.unshift({to:'outside',side:'wild',tile:{x:0,y:5},inside:{x:1,y:5},arrival:{x:6,y:10},label:'TOWER'});
   const key=(x,y)=>x+','+y;
   const has=id=>Object.hasOwn(areas,id);
-  const isWater=(id,x)=>id==='creek'&&x===5;
-  const blocked=(id,x,y,progress)=>isWater(id,x)&&!(y===4&&progress.bridge);
+  const isWater=(id,x)=>id==='pond'?x>=6:id==='creek'&&x===5;
+  const blocked=(id,x,y,progress)=>isWater(id,x)&&!(id==='creek'&&y===4&&progress.bridge);
   const open=(door,progress)=>!door.gate||Boolean(progress[door.gate]);
 
   function rngFor(id){
@@ -113,6 +115,31 @@ const moonwood=(()=>{
       polygon([[x,y-19],[x+27,y],[x,y+19],[x-27,y]],'#55536f');
       rect(x-1,y-6,2,12,'#c9b3b6');rect(x-9,y-1,18,2,'#c9b3b6');
     }
+    if(id==='pond'){
+      for(let x=3;x<6;x++){
+        block(x,4.95,1,.94,0,3,['#a38b83','#5c5065','#7d6874']);
+        for(let i=.1;i<1;i+=.23)surface(x+i,5.02,.025,.8,3.2,'#c5a98e');
+      }
+    }
+  }
+  function drawWater(id,time,{point,surface,ctx,reduced}){
+    if(id!=='creek'&&id!=='pond')return;
+    const phase=reduced?0:time/1700;
+    for(let y=0;y<view.rows;y++)for(let x=0;x<view.cols;x++){
+      if(!isWater(id,x))continue;
+      const drift=(phase+x*.19+y*.27)%1;
+      surface(x+.08+drift*.35,y+.18,.34,.028,.22,'#9bced16b');
+      surface(x+.2+(1-drift)*.31,y+.65,.29,.035,.22,'#80bcc67a');
+      if((x+y)%3===0)surface(x+.42,y+.36,.055,.07,.24,'#d5e4d6a0');
+    }
+    if(id==='pond'){
+      for(let i=0;i<3;i++){
+        const wave=(phase*.62+i/3)%1;
+        const [x,y]=point(8.4,5.6,.4);
+        ctx.beginPath();ctx.ellipse(x,y,4+wave*25,2+wave*11,0,0,Math.PI*2);
+        ctx.strokeStyle='rgba(178,219,220,'+((1-wave)*.36)+')';ctx.lineWidth=1;ctx.stroke();
+      }
+    }
   }
 
   function drawProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,progress}){
@@ -135,6 +162,12 @@ const moonwood=(()=>{
       part(.20,.22,.59,.53,0,7,stone);
       part(.25,.24,.44,.36,7,4,stone);
       part(.35,.28,.20,.16,11,.4,aqua);
+    }else if(type==='fishingPost'){
+      part(.30,.34,.19,.19,0,16,['#c1a385','#65566a','#927984']);
+      part(.19,.27,.54,.34,16,3,['#d9c2a1','#85778a','#a59c9e']);
+      rect(px-3,py-20,2,2,'#d2e6da');
+      rect(px-1,py-21,4,1,'#a8c7c8');
+      rect(px+3,py-22,2,3,'#aac8c8');
     }else if(type==='pillar'){
       part(.21,.23,.59,.57,0,4,stone);
       part(.30,.32,.42,.39,4,19,stone);
@@ -183,5 +216,5 @@ const moonwood=(()=>{
       }
     }
   }
-  return {view,areas,doors,heights,layouts,has,blocked,open,drawGround,drawProp};
+  return {view,areas,doors,heights,layouts,has,blocked,open,drawGround,drawProp,drawWater};
 })();
