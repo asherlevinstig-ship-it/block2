@@ -67,6 +67,9 @@ const ownedFurniture = hasBedStarter&&hasGamingLayout?previousStock:Object.fromE
 );
 const availableFurniture = type=>(ownedFurniture[type]??0)-countFurniture(loungeFurniture,type)-countFurniture(homeFurniture,type);
 const adventure={lantern:false,groveTrail:false,bridge:false,shrine:false,shortcut:false,discovered:[],silverfin:0,...savedPlayerState?.adventure};
+const playerStats={patienceXp:adventure.silverfin*10,...savedPlayerState?.stats};
+const PATIENCE_XP_PER_CATCH=10, PATIENCE_XP_PER_LEVEL=50;
+const patienceLevel=()=>1+Math.floor(playerStats.patienceXp/PATIENCE_XP_PER_LEVEL);
 let fishingStarted=null;
 let lanternLit=false;
 let nextId = Math.max(0,...[...loungeFurniture,...homeFurniture].map(item=>item.id).filter(Number.isInteger))+1;
@@ -1041,7 +1044,8 @@ function animation(time){
   if(fishingStarted!==null&&time-fishingStarted>=4500){
     fishingStarted=null;
     adventure.silverfin++;
-    recordAdventure('You caught a Silverfin! Find it in your inventory.');
+    playerStats.patienceXp+=PATIENCE_XP_PER_CATCH;
+    recordAdventure('Caught a Silverfin! +10 Patience XP · Patience '+patienceLevel()+'.');
   }
   if(!step&&route.length){
     const to=route.shift(),from={x:player.cx,y:player.cy};
@@ -1066,6 +1070,7 @@ function animation(time){
   requestAnimationFrame(animation);
 }
 function updateInventory(){
+  updatePlayerStats();
   let total=0;
   for(const type of Object.keys(types)){
     const available=availableFurniture(type);
@@ -1079,11 +1084,19 @@ function updateInventory(){
     row.querySelector('button').hidden=!canDecorate();
   }
   $('inventoryCount').textContent=total?total+(total===1?' item in storage':' items in storage'):'Storage is empty';
-  $('fishInventory').hidden=adventure.silverfin===0;
   $('fishInventory').textContent='Silverfin ×'+adventure.silverfin+' · Caught at Silverfin Pond';
 }
+function updatePlayerStats(){
+  const level=patienceLevel(),xp=playerStats.patienceXp%PATIENCE_XP_PER_LEVEL;
+  $('patienceValue').textContent=level;
+  $('patienceLevel').textContent='Patience '+level;
+  $('patienceProgress').value=xp;
+  $('patienceProgress').setAttribute('aria-label','Patience '+level+', '+xp+' of 50 XP toward the next level');
+  $('patienceXp').textContent=xp+' / 50 XP to level '+(level+1);
+  $('fishingStats').textContent='Patience '+level+' · '+xp+'/50 XP · Silverfin ×'+adventure.silverfin;
+}
 function savePlayerState(){
-  save('player-state',{credits,ownedFurniture,furniture:loungeFurniture,homeFurniture,loungeLayout:'gaming',adventure});
+  save('player-state',{credits,ownedFurniture,furniture:loungeFurniture,homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats});
   updateInventory();
 }
 function editStatus(message){
@@ -1141,6 +1154,8 @@ function updateAdventurePanel(){
     pond:fishingStarted!==null?'Your line is in the water. Wait for the float to dip.':'Cast from the jetty. Silverfin caught: '+adventure.silverfin+'.'
   };
   $('adventureStatus').textContent=fieldNotes[currentRoom];
+  $('fishingStats').hidden=currentRoom!=='pond';
+  updatePlayerStats();
   $('adventureProgress').textContent=adventure.discovered.length+' of '+Object.keys(moonwood.areas).length+' places discovered';
   const landmark=$('adventureLandmark');
   const action={trail:!adventure.lantern?'Take lantern':'',shrine:!adventure.shrine?'Examine altar':'',ruins:!adventure.shortcut?'Search Moonwell':'',pond:fishingStarted===null?'Cast a line':'Fishing…'}[currentRoom];
