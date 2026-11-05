@@ -87,6 +87,8 @@ const tradeCatalog={
 let fishingDuration=4500;
 let castProfile=null;
 let fishingStarted=null;
+let fishingSession=null,catchReveal=null,patienceTween=null;
+let fishingSound=load('fishing-sound',false)===true;
 let lanternLit=false;
 let nextId = Math.max(0,...[...loungeFurniture,...homeFurniture].map(item=>item.id).filter(Number.isInteger))+1;
 let avatar = {...defaultAvatar,...load('avatar',defaultAvatar)};
@@ -789,7 +791,7 @@ function pixelHead(target,appearance,back,blink){
   p(4,-21,2,1,'#994f56');
   p(-1,-22,2,1,'#f6c3a0');
 }
-function sprite(target,x,y,appearance,{direction='right',back=false,cycle=0,seated=false,wave=null,time=0}={}){
+function sprite(target,x,y,appearance,{direction='right',back=false,cycle=0,seated=false,wave=null,fishing=false,time=0}={}){
   const p=(x,y,w,h,color)=>{target.fillStyle=color;target.fillRect(x,y,w,h);};
   const jacket=outfits[appearance.outfit]??outfits[0];
   const shade=jacketShadows[appearance.outfit]??jacketShadows[0];
@@ -840,6 +842,10 @@ function sprite(target,x,y,appearance,{direction='right',back=false,cycle=0,seat
     p(8,-23,4,7,outline);p(9,-23,2,6,jacket);
     p(8+reach,-27,5,5,outline);p(9+reach,-27,3,4,'#f2bb92');
     p(9+reach,-28,2,1,'#ffd4aa');
+  }else if(fishing){
+    const crank=fishing==='landing'&&!lowMotion?Math.round(Math.sin(time/70)):0;
+    p(4,-19,4,4,outline);p(5,-18,3,2,jacket);
+    p(6,-17+crank,5,3,outline);p(7,-17+crank,3,2,'#f2bb92');
   }else{
     p(5+nearArm,-19,4,9,outline);
     p(5+nearArm,-18,3,6,jacket);
@@ -928,13 +934,9 @@ function draw(time){
     }
     const cycle=step?(player.stride%2)+Math.min(1,(time-step.started)/STEP_MS):0;
     const wave=player.waveStarted===null?null:(time-player.waveStarted)/WAVE_MS;
-    sprite(ctx,x,y,avatar,{direction:player.direction,back:player.back,cycle,seated:!!seat,wave,time});
-    if(fishingStarted!==null){
-      const [bx,by]=point(7.4,5.45);
-      ctx.beginPath();ctx.moveTo(x+5,y-16);ctx.lineTo(x+19,y-32);ctx.lineTo(bx,by-1);
-      ctx.strokeStyle='#e7d2aa';ctx.lineWidth=1;ctx.stroke();
-      rect(bx-1,by-3+(reducedMotion.matches?0:Math.round(Math.sin(time/220))),3,3,'#f2a3a0');
-    }
+    sprite(ctx,x,y,avatar,{direction:player.direction,back:player.back,cycle,seated:!!seat,wave,fishing:fishingSession?fishingMoments.phase(fishingSession,time):null,time});
+    if(fishingSession)drawFishingMoment(x,y,time);
+    drawCatchReveal(x,y,time);
     if(!step&&!seat){
       rect(x-2,y-44,5,2,'#ffe2a7');rect(x-1,y-42,3,1,'#ffe2a7');rect(x,y-41,1,1,'#ffe2a7');
     }
@@ -1071,6 +1073,7 @@ function travelDoor(door){
   else walkTo(door.tile);
 }
 function use(item){
+  if(item.type==='fishingPost'&&fishingSession){reelFish();return;}
   cancelFishing();
   const start=startPosition(),[w,d]=dimensions(item);
   let shortest=null;
@@ -1090,6 +1093,109 @@ function seatAnchor(item){
   const [x,y]=offsets[item.rot];
   return point(item.x+x,item.y+y,item.type==='stool'?17:13);
 }
+function reelFish(){
+  if(!fishingSession||!fishingMoments.reel(fishingSession,performance.now()))return;
+  fishingMoments.sound('reel');
+  note('Well timed! Reeling in · +5 bonus Patience XP.');
+  updateAdventurePanel();
+}
+function drawFishingMoment(x,y,time){
+  const session=fishingSession,phase=fishingMoments.phase(session,time);
+  const still=reducedMotion.matches;
+  const [waterX,waterY]=point(7.4,5.45);
+  let bx=waterX,by=waterY;
+  let tipX=x+19,tipY=y-33;
+  if(phase==='casting'&&!still){
+    const t=Math.min(1,(time-session.started)/fishingMoments.CAST_MS);
+    tipX=x+7+Math.sin(t*Math.PI)*14;tipY=y-31-Math.sin(t*Math.PI)*8;
+    bx=x+9+(waterX-x-9)*t;by=y-16+(waterY-y+16)*t-Math.sin(t*Math.PI)*24;
+  }
+  if(phase==='bite'){
+    tipY+=still?2:Math.sin(time/80)*2;
+    by+=4;bx+=still?0:Math.sin(time/70)*2;
+  }else if(phase==='twitch'){
+    bx+=still?0:Math.sin(time/50)*2;
+  }else if(phase==='waiting'){
+    by+=still?0:Math.sin(time/250)*1.5;
+  }
+  if(phase==='landing'){
+    const t=still?1:Math.min(1,(time-session.landAt)/fishingMoments.LAND_MS);
+    bx=waterX+(x+11-waterX)*t;
+    by=waterY+(y-21-waterY)*t-(still?0:Math.sin(t*Math.PI)*39);
+    tipX=x+12;tipY=y-42;
+    const fish=fishProducts[session.fishId];
+    fishingMoments.drawFish(ctx,bx,by,session.fishId,fish.quality);
+  }
+  ctx.beginPath();ctx.moveTo(x+9,y-17);
+  ctx.quadraticCurveTo(x+20,y-23,tipX,tipY);
+  ctx.strokeStyle='#c8a77e';ctx.lineWidth=2;ctx.stroke();
+  ctx.beginPath();ctx.moveTo(tipX,tipY);ctx.lineTo(bx,by);
+  ctx.strokeStyle='#d7e0ce';ctx.lineWidth=1;ctx.stroke();
+  if(phase!=='landing')rect(bx-1,by-3,3,phase==='bite'?2:4,phase==='bite'?'#ffc091':'#efadac');
+  const splash=phase==='bite'||phase==='twitch'||(phase==='waiting'&&time-session.castEnds<450);
+  if(splash){
+    const pulse=still?.5:(time%420)/420;
+    ctx.beginPath();ctx.ellipse(waterX,waterY+1,5+pulse*10,2+pulse*4,0,0,2*Math.PI);
+    ctx.strokeStyle='#c2e2df';ctx.lineWidth=1;ctx.stroke();
+    if(phase==='bite'){
+      for(const side of [-1,1])rect(waterX+side*7,waterY-5-(still?0:Math.round(pulse*5)),2,2,'#dfefe0');
+      ctx.save();ctx.textAlign='center';ctx.fillStyle='#ffe0a4';ctx.font='bold 10px monospace';
+      ctx.fillText('BITE!',waterX,waterY-16);ctx.restore();
+    }
+  }
+}
+function drawCatchReveal(x,y,time){
+  const element=$('catchReveal');
+  if(!catchReveal||time>catchReveal.until){element.hidden=true;catchReveal=null;return;}
+  const p=canvasBounds(),cx=view.width/2,cy=view.height/2-4;
+  const anchorX=p.x+((x-cx)*zoom+cx)*p.scale;
+  const anchorY=p.y+((y-53-cy)*zoom+cy)*p.scale;
+  const half=element.offsetWidth/2||95;
+  element.style.left=Math.max(half+8,Math.min(canvas.clientWidth-half-8,anchorX))+'px';
+  element.style.top=Math.max(element.offsetHeight+8,anchorY)+'px';
+}
+function finishFishing(time){
+  const session=fishingSession;
+  fishingSession=null;fishingStarted=null;
+  fishingGear.bait--;
+  const fishId=session.fishId,fish=fishProducts[fishId];
+  fishStock[fishId]=(fishStock[fishId]??0)+1;
+  const before=playerStats.patienceXp,oldLevel=patienceLevel(),earned=PATIENCE_XP_PER_CATCH+session.bonus;
+  playerStats.patienceXp+=earned;
+  patienceTween={from:before,to:playerStats.patienceXp,started:time};
+  recordAdventure('Caught '+fish.name+'! +'+earned+' Patience XP.');
+  const levelUp=patienceLevel()>oldLevel;
+  $('catchTier').textContent=fishingCatalog.qualities[fish.quality].name+' catch';
+  $('catchName').textContent=fish.name;
+  $('catchReward').textContent='+1 fish · +'+earned+' Patience XP'+(session.bonus?' · Well timed!':'');
+  $('catchLevel').textContent='Patience increased to '+patienceLevel();
+  $('catchLevel').hidden=!levelUp;
+  const reveal=$('catchReveal');
+  reveal.className='catch-reveal quality-'+fish.quality;reveal.hidden=false;
+  const picture=$('catchPicture'),pictureContext=picture.getContext('2d');
+  pictureContext.clearRect(0,0,picture.width,picture.height);
+  fishingMoments.drawFish(pictureContext,30,15,fishId,fish.quality,2);
+  catchReveal={until:time+4000};
+  fishingMoments.sound(levelUp?'level':fish.quality==='rare'?'rare':'catch');
+  showTransaction(levelUp?'Patience level '+patienceLevel()+'!':'Catch landed',[
+    {text:'+1 '+fish.name,icon:'⋈'},{text:'+'+earned+' Patience XP'+(session.bonus?' · Reel bonus':''),icon:'✦'}
+  ]);
+}
+function updateFishingMoment(time){
+  if(!fishingSession)return;
+  const session=fishingSession,phase=fishingMoments.phase(session,time);
+  if((phase==='landing'||phase==='complete')&&!session.fishId){
+    session.fishId=rollFishingCatch(castProfile.level,castProfile.rod);
+  }
+  if(phase==='complete'){finishFishing(time);return;}
+  if(phase!==session.stage){
+    session.stage=phase;
+    if(phase==='waiting')fishingMoments.sound('splash');
+    if(phase==='bite'){fishingMoments.sound('bite');note('Bite! Reel now for +5 Patience XP, or let your character reel automatically.');}
+    if(phase==='landing')fishingMoments.sound('reel');
+    updateAdventurePanel();
+  }
+}
 function finishInteraction(){
   const item=interaction;interaction=null;
   if(item.type==='fishingPost'){
@@ -1102,6 +1208,9 @@ function finishInteraction(){
     fishingDuration=rod.duration;
     castProfile={level:patienceLevel(),rod:fishingGear.equippedRod};
     fishingStarted=performance.now();
+    fishingSession=fishingMoments.create(fishingStarted,fishingDuration);
+    catchReveal=null;$('catchReveal').hidden=true;
+    fishingMoments.sound('cast');
     updateAdventurePanel();
     note('Line cast. Watch the float…');
   }else if(item.type==='lanternStand'){
@@ -1133,21 +1242,20 @@ function finishInteraction(){
   }
 }
 function animation(time){
+  updateFishingMoment(time);
+  if(patienceTween){
+    const t=reducedMotion.matches?1:Math.min(1,(time-patienceTween.started)/1000);
+    const absolute=patienceTween.from+(patienceTween.to-patienceTween.from)*t;
+    const remainder=absolute%PATIENCE_XP_PER_LEVEL;
+    $('patienceProgress').value=remainder;
+    $('catchXpFill').style.width=(remainder/PATIENCE_XP_PER_LEVEL*100)+'%';
+    if(t>=1)patienceTween=null;
+  }
   if(walletTween){
     const progress=Math.min(1,Math.max(0,(time-walletTween.started)/650));
     displayedCredits=Math.round(walletTween.from+(credits-walletTween.from)*(1-Math.pow(1-progress,3)));
     $('credits').textContent=new Intl.NumberFormat().format(displayedCredits);
     if(progress===1)walletTween=null;
-  }
-  if(fishingStarted!==null&&time-fishingStarted>=fishingDuration){
-    fishingStarted=null;
-    fishingGear.bait--;
-    const fishId=rollFishingCatch(castProfile.level,castProfile.rod);
-    const fish=fishProducts[fishId];
-    fishStock[fishId]=(fishStock[fishId]??0)+1;
-    playerStats.patienceXp+=PATIENCE_XP_PER_CATCH;
-    recordAdventure('Caught '+fish.name+'! +10 Patience XP · Patience '+patienceLevel()+'.');
-    showTransaction(fishingCatalog.qualities[fish.quality].name+' catch',[{text:'+1 '+fish.name,icon:'⋈'},{text:'+10 Patience XP',icon:'✦'}]);
   }
   if(!step&&route.length){
     const to=route.shift(),from={x:player.cx,y:player.cy};
@@ -1383,6 +1491,7 @@ function switchMode(next){
   noticeUntil=0;setHint();cancelSelection();
 }
 function updateAdventurePanel(){
+  $('wave').disabled=editing||!!fishingSession;
   const exploring=moonwood.has(currentRoom);
   const lantern=$('lantern');
   lantern.hidden=!exploring||!adventure.lantern;
@@ -1396,16 +1505,18 @@ function updateAdventurePanel(){
     shrine:adventure.shrine?'You recorded the Moth Shrine in your journal.':'Approach the altar to examine the moths.',
     ruins:adventure.shortcut?'The root passage is open. Your Moonbloom is in inventory.':'Search the Moonwell for a keepsake and a shortcut back.',
     roots:'Follow the roots back to Lantern Trail.',
-    pond:fishingStarted!==null?'Your line is in the water. Wait for the float to dip.':fishingGear.bait<1?'Out of bait. Visit Silverfin Outfitters through the Fishing door in the Grand Lobby.':'Cast with your '+fishingCatalog.rods[fishingGear.equippedRod].name+'. Better rods and Patience improve catch quality. Fish in inventory: '+caughtFishCount()+'.'
+    pond:fishingSession?({casting:'Casting your line…',waiting:'Watch the float. Your character will reel automatically.',twitch:'A nibble! Keep watching the float…',bite:'Bite! Reel now for +5 Patience XP. Your character will also reel automatically.',landing:'Reeling in your catch…'}[fishingMoments.phase(fishingSession,performance.now())]):fishingGear.bait<1?'Out of bait. Visit Silverfin Outfitters through the Fishing door in the Grand Lobby.':'Cast with your '+fishingCatalog.rods[fishingGear.equippedRod].name+'. Better rods and Patience improve catch quality. Fish in inventory: '+caughtFishCount()+'.'
   };
   $('adventureStatus').textContent=fieldNotes[currentRoom];
   $('fishingStats').hidden=currentRoom!=='pond';
   updatePlayerStats();
   $('adventureProgress').textContent=adventure.discovered.length+' of '+Object.keys(moonwood.areas).length+' places discovered';
   const landmark=$('adventureLandmark');
-  const action={trail:!adventure.lantern?'Take lantern':'',shrine:!adventure.shrine?'Examine altar':'',ruins:!adventure.shortcut?'Search Moonwell':'',pond:fishingStarted===null?'Cast a line':'Fishing…'}[currentRoom];
+  const bite=!!fishingSession&&fishingMoments.phase(fishingSession,performance.now())==='bite';
+  const action={trail:!adventure.lantern?'Take lantern':'',shrine:!adventure.shrine?'Examine altar':'',ruins:!adventure.shortcut?'Search Moonwell':'',pond:bite?'Reel! +5 Patience XP':fishingSession?'Fishing…':'Cast a line'}[currentRoom];
   landmark.hidden=!action;
-  landmark.disabled=fishingStarted!==null||(currentRoom==='pond'&&fishingGear.bait<1);
+  landmark.disabled=(!!fishingSession&&!bite)||(currentRoom==='pond'&&fishingGear.bait<1);
+  landmark.classList.toggle('bite-ready',bite);
   landmark.textContent=action??'';
   const links=$('adventureRoutes');
   links.replaceChildren();
@@ -1427,7 +1538,7 @@ function recordAdventure(message){
 }
 function cancelFishing(){
   if(fishingStarted===null)return;
-  fishingStarted=null;
+  fishingStarted=null;fishingSession=null;
   updateAdventurePanel();
 }
 function revealByLantern(){
@@ -1541,6 +1652,8 @@ $('lantern').onclick=()=>{
   revealByLantern();
 };
 $('adventureLandmark').onclick=()=>{
+  if(fishingSound)fishingMoments.enable(true);
+  if(fishingSession){reelFish();return;}
   const landmark=roomFurniture().find(item=>item.id==='landmark');
   if(landmark)use(landmark);
 };
@@ -1575,6 +1688,7 @@ canvas.addEventListener('pointermove',e=>{
 });
 canvas.addEventListener('pointerleave',()=>{hover=null;hoverItem=null;});
 canvas.addEventListener('click',e=>{
+  if(fishingSound)fishingMoments.enable(true);
   const {tile,item,door}=pointer(e);
   if(!editing){if(door)travelDoor(door);else if(item)use(item);else if(tile)walkTo(tile);return;}
   if(item&&!fixed(item)&&selection?.id!==null&&item.id!==selection?.id){choose(item);return;}
@@ -1589,6 +1703,11 @@ function waveHello(){
   note(avatar.name+' waves hello!');
 }
 canvas.addEventListener('keydown',e=>{
+  if(e.code==='Space'&&fishingSession){
+    e.preventDefault();
+    if(!e.repeat)reelFish();
+    return;
+  }
   const delta=arrows[e.key];
   if(!editing&&e.code==='Space'){
     e.preventDefault();
@@ -1689,6 +1808,7 @@ function updateRoomLabel(){
 }
 function enterRoom(next,arrival){
   cancelFishing();
+  catchReveal=null;$('catchReveal').hidden=true;
   const focusRoom=!!document.activeElement.closest('[data-room-link]');
   currentRoom=next;
   const exploring=moonwood.has(next);
@@ -1716,6 +1836,7 @@ function enterRoom(next,arrival){
   $('exitRoom').hidden=!atHome();
   $('returnLobby').hidden=!['lounge','outside','store','market'].includes(next);
   $('enterMoonwood').hidden=next!=='outside';
+  $('fishingSound').hidden=next!=='pond';
   $('edit').hidden=!canDecorate();
   $('bubble').hidden=true;
   updateRoomLabel();
@@ -1741,4 +1862,14 @@ function movePlayerToSpawn(arrival){
   const {x,y}=openTiles.find(tile=>!atHome()||findPath(tile,homeExit.tile)!==null)??spawn;
   Object.assign(player,{x,y,cx:x,cy:y,direction:'right',back:false,stride:0});
 }
+$('fishingSound').textContent=fishingSound?'Sound on':'Sound off';
+$('fishingSound').setAttribute('aria-pressed',String(fishingSound));
+$('fishingSound').onclick=()=>{
+  fishingSound=!fishingSound;
+  save('fishing-sound',fishingSound);
+  fishingMoments.enable(fishingSound);
+  $('fishingSound').textContent=fishingSound?'Sound on':'Sound off';
+  $('fishingSound').setAttribute('aria-pressed',String(fishingSound));
+  if(fishingSound)fishingMoments.sound('catch');
+};
 movePlayerToSpawn();updateName();switchMode(false);requestAnimationFrame(animation);

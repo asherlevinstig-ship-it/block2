@@ -87,3 +87,25 @@
 .trade-actions{display:flex;gap:5px}.trade-actions button{flex:1;width:auto}.trade-empty{display:block;margin-top:7px;color:#a9bbc5;font-size:10px;line-height:1.4}#tradeStatus{font-size:12px;line-height:1.4;color:#f2d7ae;margin:0}
 
 #fishInventory,.fishing-stats{white-space:pre-line;line-height:1.6}
+
+
+.catch-reveal{position:absolute;z-index:5;transform:translate(-50%,-100%);width:205px;max-width:calc(100% - 16px);padding:10px 12px;text-align:center;border:1px solid #82b2b4;border-radius:12px;background:linear-gradient(145deg,#304a54f5,#1d293df5);box-shadow:0 12px 30px #06101c85;pointer-events:none;animation:catch-arrive .35s ease-out}
+.catch-tier{font:650 9px/1.4 ui-monospace,Consolas,monospace;color:#b5d5cf;text-transform:uppercase;letter-spacing:.12em}
+.catch-reveal canvas{display:block;width:72px;height:36px;margin:2px auto;image-rendering:pixelated}
+.catch-reveal>b{display:block;color:#eff4dc;font-size:15px;line-height:1.25}
+.catch-reveal>span{display:block;color:#c7d8cf;font-size:10px;margin-top:5px;line-height:1.45}
+.catch-reveal.quality-fine{border-color:#d4b578;box-shadow:0 0 23px #d4b57830,0 12px 30px #06101c85}
+.catch-reveal.quality-fine .catch-tier{color:#f0d297}
+.catch-reveal.quality-rare{border-color:#c6a0e4;box-shadow:0 0 27px #c6a0e445,0 12px 30px #06101c85}
+.catch-reveal.quality-rare .catch-tier{color:#dfc0ef}
+.catch-reveal.quality-fine::after,.catch-reveal.quality-rare::after{content:'✦';position:absolute;top:7px;right:11px;color:#e9d7b4;font-size:13px;animation:catch-glint 1.6s ease-in-out 2}
+.catch-reveal.quality-rare::after{color:#e8c8f4}
+.catch-xp{height:5px;background:#152332;border-radius:5px;overflow:hidden;margin-top:9px}
+.catch-xp i{display:block;height:100%;width:0;background:#acd6b8}
+#catchLevel{display:block;margin-top:8px;padding-top:7px;border-top:1px solid #f7d19c66;color:#ffdda3;font-size:12px;animation:catch-level .5s ease-out}
+#adventureLandmark.bite-ready{background:#ebbd7d;border-color:#ffe4aa;color:#312c37;font-weight:800;box-shadow:0 0 15px #ebbd7d45;animation:bite-pulse .7s ease-in-out infinite}
+@keyframes catch-arrive{from{opacity:0;transform:translate(-50%,calc(-100% + 12px)) scale(.92)}to{opacity:1;transform:translate(-50%,-100%) scale(1)}}
+@keyframes catch-glint{0%,100%{opacity:.4;transform:scale(.8)}50%{opacity:1;transform:scale(1.2)}}
+@keyframes catch-level{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:scale(1)}}
+@keyframes bite-pulse{50%{box-shadow:0 0 22px #ebbd7d85}}
+@media(prefers-reduced-motion:reduce){.catch-reveal,.catch-reveal::after,#catchLevel,#adventureLandmark.bite-ready{animation:none}}
