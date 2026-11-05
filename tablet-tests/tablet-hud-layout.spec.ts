@@ -62,3 +62,23 @@ test("collapses the minimap during combat and restores it during exploration whe
   await page.evaluate(() => document.documentElement.classList.remove("tablet-combat-active"));
   expect(await page.locator("#minimap-canvas").isVisible()).toBe(viewport.height > 620);
 });
+
+test("keeps NPC conversations readable and touchable on every tablet viewport", async ({ page }) => {
+  await page.locator("#npc-service-dialogue").evaluate((element: HTMLElement) => {
+    element.hidden = false;
+    element.dataset.npc = "guild-steward-elin";
+  });
+  const viewport = page.viewportSize()!;
+  const panel = await box(page, "#npc-service-dialogue");
+  expect(panel.left).toBeGreaterThanOrEqual(0);
+  expect(panel.right).toBeLessThanOrEqual(viewport.width);
+  expect(panel.top).toBeGreaterThanOrEqual(0);
+  expect(panel.bottom).toBeLessThanOrEqual(viewport.height);
+  for (const selector of ["#npc-service-close", "#npc-service-primary", "#npc-service-secondary", "#npc-service-leave"]) {
+    const action = await box(page, selector);
+    expect(action.width, `${selector} width`).toBeGreaterThanOrEqual(48);
+    expect(action.height, `${selector} height`).toBeGreaterThanOrEqual(48);
+  }
+  await expect(page.locator("#touch-controls")).toHaveCSS("opacity", "0");
+  await expect(page.locator("#touch-controls")).toHaveCSS("pointer-events", "none");
+});

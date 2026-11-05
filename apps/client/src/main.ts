@@ -1278,6 +1278,16 @@ const guildStewardPrompt = document.querySelector<HTMLElement>("#guild-steward-p
 const guildStewardNpcDefinition = TOWN_NPCS["guild-steward-elin"];
 guildStewardPrompt.childNodes[0]!.textContent = `${guildStewardNpcDefinition.name.toUpperCase()} · ${guildStewardNpcDefinition.title.toUpperCase()} `;
 guildStewardPrompt.querySelector("small")!.textContent = `Press E to ${guildStewardNpcDefinition.prompt.toLowerCase()}`;
+const npcServiceDialogue = document.querySelector<HTMLElement>("#npc-service-dialogue")!;
+const npcServiceIcon = document.querySelector<HTMLElement>("#npc-service-icon")!;
+const npcServiceRole = document.querySelector<HTMLElement>("#npc-service-role")!;
+const npcServiceName = document.querySelector<HTMLElement>("#npc-service-name")!;
+const npcServiceLine = document.querySelector<HTMLElement>("#npc-service-line")!;
+const npcServiceDetail = document.querySelector<HTMLElement>("#npc-service-detail")!;
+const npcServicePrimary = document.querySelector<HTMLButtonElement>("#npc-service-primary")!;
+const npcServiceSecondary = document.querySelector<HTMLButtonElement>("#npc-service-secondary")!;
+const npcServiceClose = document.querySelector<HTMLButtonElement>("#npc-service-close")!;
+const npcServiceLeave = document.querySelector<HTMLButtonElement>("#npc-service-leave")!;
 const playerTradePrompt = document.querySelector<HTMLButtonElement>("#player-trade-prompt")!;
 const playerTradeName = document.querySelector<HTMLElement>("#player-trade-name")!;
 const blacksmithPanel = document.querySelector<HTMLElement>("#blacksmith-panel")!;
@@ -13756,6 +13766,106 @@ function advanceTavernDialogue(): void {
 tavernDialogueNext.addEventListener("click", advanceTavernDialogue);
 tavernDialogueClose.addEventListener("click", closeTavernDialogue);
 
+type ServiceNpcId = "smith-brom" | "healer-lyra" | "guild-steward-elin";
+type ServiceNpcConversation = {
+  icon: string;
+  role: string;
+  name: string;
+  line: string;
+  detail: string;
+  primary: string;
+  primaryHint: string;
+  secondary: string;
+  secondaryHint: string;
+  lore: string;
+};
+let activeServiceNpcId: ServiceNpcId | null = null;
+
+function serviceNpcConversation(npcId: ServiceNpcId): ServiceNpcConversation {
+  if (npcId === "smith-brom") return {
+    icon: "⚒", role: "BEGINNING SMITH", name: "Brom",
+    line: "Steel remembers every climb. Bring me what the tower gave you, and we'll make it worthy of the next one.",
+    detail: "Brom can sell, reforge, attune and dismantle equipment without changing your Calling.",
+    primary: "OPEN THE FORGE", primaryHint: "Trade, improve or dismantle equipment",
+    secondary: "HOW DOES FORGING WORK?", secondaryHint: "Ask Brom for advice",
+    lore: "Ore becomes gold. Duplicate gear becomes materials. Reforging strengthens a weapon you already own; attunement gives it a more specialised purpose.",
+  };
+  if (npcId === "healer-lyra") {
+    const injured = potionHealth < potionMaxHealth;
+    return {
+      icon: "✚", role: "SANCTUARY HEALER", name: "Lyra",
+      line: injured ? "You're carrying the tower in your shoulders. Be still—I can mend what followed you home."
+        : "Your body is whole, but technique can still fail you. The training ward is always open.",
+      detail: injured ? `${potionHealth} / ${potionMaxHealth} health · care restores health and stamina.`
+        : "You are fully restored · Lyra can still guide you toward the practice arena.",
+      primary: injured ? "RECEIVE CARE" : "RENEW AT THE SANCTUARY", primaryHint: "Restore health and stamina",
+      secondary: "ASK ABOUT ABILITIES", secondaryHint: "Learn where to practise safely",
+      lore: "Use the practice dummy near the sanctuary to identify each ability. For a full trial, open your Pack and choose Try Abilities to enter the private arena.",
+    };
+  }
+  const membership = partyUI.guildMembership();
+  return {
+    icon: "◇", role: "GUILD STEWARD", name: "Elin",
+    line: "A guild is more than a name. It is who answers when the tower calls—and who remembers those who did not return.",
+    detail: membership ? `Your guild: ${membership.name}` : "You have not founded or joined a guild yet.",
+    primary: "OPEN GUILD REGISTER", primaryHint: "Found a guild, view its roster or invite allies",
+    secondary: "WHAT IS A GUILD?", secondaryHint: "Ask Elin about guilds",
+    lore: "Guilds persist with your character. Found one here, then invite a nearby guild-free explorer. Guild identity appears with members wherever the tower takes you.",
+  };
+}
+
+function closeServiceNpcDialogue(): void {
+  npcServiceDialogue.hidden = true;
+  activeServiceNpcId = null;
+}
+
+function openServiceNpcDialogue(npcId: ServiceNpcId): void {
+  const copy = serviceNpcConversation(npcId);
+  setInventoryOpen(false);
+  quizPanel.hidden = true;
+  blacksmithPanel.hidden = true;
+  closeTavernDialogue();
+  activeServiceNpcId = npcId;
+  npcServiceDialogue.dataset.npc = npcId;
+  npcServiceIcon.textContent = copy.icon;
+  npcServiceRole.textContent = copy.role;
+  npcServiceName.textContent = copy.name;
+  npcServiceLine.textContent = copy.line;
+  npcServiceDetail.textContent = copy.detail;
+  npcServicePrimary.querySelector("strong")!.textContent = copy.primary;
+  npcServicePrimary.querySelector("small")!.textContent = copy.primaryHint;
+  npcServiceSecondary.hidden = false;
+  npcServiceSecondary.querySelector("strong")!.textContent = copy.secondary;
+  npcServiceSecondary.querySelector("small")!.textContent = copy.secondaryHint;
+  npcServiceDialogue.hidden = false;
+}
+
+npcServicePrimary.addEventListener("click", () => {
+  const npcId = activeServiceNpcId;
+  if (!npcId) return;
+  closeServiceNpcDialogue();
+  if (npcId === "smith-brom") { openBlacksmith(); return; }
+  if (npcId === "healer-lyra") {
+    room?.send("npc:interact", { npcId, action: "care" });
+    status.textContent = "Lyra is assessing your wounds…";
+    return;
+  }
+  room?.send("npc:interact", { npcId, action: "guild" });
+  status.textContent = "Elin is opening the guild register…";
+});
+npcServiceSecondary.addEventListener("click", () => {
+  if (!activeServiceNpcId) return;
+  const copy = serviceNpcConversation(activeServiceNpcId);
+  npcServiceLine.textContent = copy.lore;
+  npcServiceDetail.textContent = activeServiceNpcId === "healer-lyra"
+    ? "The practice arena is private: no death penalty, no lost progress."
+    : activeServiceNpcId === "smith-brom"
+      ? "Brom will never dismantle your last copy of an item."
+      : "Parties last for a session; guild membership persists.";
+  npcServiceSecondary.hidden = true;
+});
+for (const button of [npcServiceClose, npcServiceLeave]) button.addEventListener("click", closeServiceNpcDialogue);
+
 function setInventoryOpen(open: boolean): void {
   const starterWeaponId = selectedStarterWeaponId();
   if (!open && localMainHandId === starterWeaponId) {
@@ -15720,20 +15830,23 @@ function updateTarget(): void {
     storagePrompt.style.left = `${rect.left + screen.x * rect.width / canvas.width}px`;
     storagePrompt.style.top = `${rect.top + screen.y * rect.height / canvas.height}px`;
   }
-  blacksmithPrompt.hidden = !blacksmithNearby || !blacksmithPanel.hidden || chestNearby;
+  blacksmithPrompt.hidden = !blacksmithNearby || !blacksmithPanel.hidden || !npcServiceDialogue.hidden || chestNearby;
   if (!blacksmithPrompt.hidden) {
     const target = fastWorldRequested ? townNpcPromptTarget(smithNpcDefinition)
       : new pc.Vec3(BLACKSMITH_STALL.x, BLACKSMITH_STALL.y + 2.35, BLACKSMITH_STALL.z);
     if (!placeWorldPrompt(blacksmithPrompt, target)) blacksmithPrompt.hidden = true;
   }
-  townHealerPrompt.hidden = !healerNearby;
+  townHealerPrompt.hidden = !healerNearby || !npcServiceDialogue.hidden;
   if (!townHealerPrompt.hidden) {
     if (!placeWorldPrompt(townHealerPrompt, townNpcPromptTarget(healerNpcDefinition))) townHealerPrompt.hidden = true;
   }
-  guildStewardPrompt.hidden = !guildStewardNearby;
+  guildStewardPrompt.hidden = !guildStewardNearby || !npcServiceDialogue.hidden;
   if (!guildStewardPrompt.hidden) {
     if (!placeWorldPrompt(guildStewardPrompt, townNpcPromptTarget(guildStewardNpcDefinition))) guildStewardPrompt.hidden = true;
   }
+  if (activeServiceNpcId === "smith-brom" && !blacksmithNearby) closeServiceNpcDialogue();
+  if (activeServiceNpcId === "healer-lyra" && !healerNearby) closeServiceNpcDialogue();
+  if (activeServiceNpcId === "guild-steward-elin" && !guildStewardNearby) closeServiceNpcDialogue();
   const activeQuizTable = TAVERN_QUIZ_TABLE;
   const quizTableNearby = !tavernRoomRequested && canPlayAtTavernTable(player, sceneDressing.keeperVisible, activeQuizTable);
   quizTablePrompt.hidden = !quizTableNearby || !quizPanel.hidden;
@@ -16034,6 +16147,7 @@ function renderBootstrap(payload: WorldBootstrap): void {
   pendingMine = null;
   miningHud.hidden = true;
   closeTavernDialogue();
+  closeServiceNpcDialogue();
   blacksmithPanel.hidden = true;
   inventoryPanel.hidden = true;
   inventoryToggle.setAttribute("aria-expanded", "false");
@@ -16273,7 +16387,7 @@ function showDefeat(attackerName: string): void {
   closeLoot();
   clearDefeatCombat();
   if (rapidPracticeRewardPanel) rapidPracticeRewardPanel.hidden = true;
-  quizPanel.hidden = true; blacksmithPanel.hidden = true; setInventoryOpen(false); closeTavernDialogue();
+  quizPanel.hidden = true; blacksmithPanel.hidden = true; setInventoryOpen(false); closeTavernDialogue(); closeServiceNpcDialogue();
   defeatDetail.textContent = fastWorldRequested
     ? latestFloorAttemptSummary ? `${latestFloorAttemptSummary.cause.name} ended this attempt.`
       : `${attackerName} ended the attempt. Floor upgrades are cleared. Your character progression, equipment and banked Crown Fragments are kept.`
@@ -18231,23 +18345,22 @@ function requestWorldInteraction(): void {
   ]) : null;
   if (smithInteraction?.payload === "smith-brom"
     || (!fastWorldRequested && canTradeAtBlacksmithStall(localPlayer.getPosition(), sceneDressing.blacksmithVisible, false))) {
-    openBlacksmith();
+    if (fastWorldRequested) openServiceNpcDialogue("smith-brom");
+    else openBlacksmith();
     return;
   }
   const healerInteraction = fastWorldRequested ? selectInteractionCandidate([
     townNpcInteractionCandidate(localPlayer.getPosition(), healerNpcDefinition, worldReady && room !== null),
   ]) : null;
   if (healerInteraction?.payload === "healer-lyra") {
-    room?.send("npc:interact", { npcId: "healer-lyra", action: "care" });
-    status.textContent = "Lyra is assessing your wounds…";
+    openServiceNpcDialogue("healer-lyra");
     return;
   }
   const guildStewardInteraction = fastWorldRequested ? selectInteractionCandidate([
     townNpcInteractionCandidate(localPlayer.getPosition(), guildStewardNpcDefinition, worldReady && room !== null),
   ]) : null;
   if (guildStewardInteraction?.payload === "guild-steward-elin") {
-    room?.send("npc:interact", { npcId: "guild-steward-elin", action: "guild" });
-    status.textContent = "Elin is opening the guild register…";
+    openServiceNpcDialogue("guild-steward-elin");
     return;
   }
   if (tavernRoomRequested && canPlayHigherOrLower(localPlayer.getPosition(), true)) {
@@ -18439,6 +18552,7 @@ function closePopupFromEscape(popup: HTMLElement): boolean {
     case "loot-panel": closeLoot(); break;
     case "inventory-panel": setInventoryOpen(false); break;
     case "blacksmith-panel": popup.hidden = true; break;
+    case "npc-service-dialogue": closeServiceNpcDialogue(); break;
     case "tavern-quiz": popup.hidden = true; break;
     case "tavern-dialogue": closeTavernDialogue(); break;
     case "roadside-choice": closeRoadsideChoice(); break;
@@ -18610,6 +18724,11 @@ window.addEventListener("keydown", event => {
   }
   if (popupIsPresented(blacksmithPanel)) {
     if (event.code === "Escape") blacksmithPanel.hidden = true;
+    if (["Escape", "Space", "KeyE", "KeyQ", "KeyR", "KeyF", "KeyG", "KeyC"].includes(event.code)) event.preventDefault();
+    return;
+  }
+  if (popupIsPresented(npcServiceDialogue)) {
+    if (event.code === "Escape") closeServiceNpcDialogue();
     if (["Escape", "Space", "KeyE", "KeyQ", "KeyR", "KeyF", "KeyG", "KeyC"].includes(event.code)) event.preventDefault();
     return;
   }

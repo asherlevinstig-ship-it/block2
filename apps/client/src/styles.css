@@ -1306,6 +1306,53 @@ body:has(#combat-hud-shell[data-loadout-open="true"]) #player-trade-prompt { dis
   transform: translateX(-50%);
 }
 #tavern-dialogue[hidden] { display: none; }
+#npc-service-dialogue {
+  --npc-accent: #d9b75e;
+  position: fixed;
+  z-index: 25;
+  left: 50%;
+  bottom: max(24px, env(safe-area-inset-bottom));
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  gap: 17px;
+  width: min(720px, calc(100vw - 32px));
+  box-sizing: border-box;
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--npc-accent) 72%, #fff 10%);
+  border-radius: 15px;
+  background: linear-gradient(120deg, rgb(8 24 20 / 98%), rgb(7 16 14 / 98%));
+  box-shadow: 0 24px 70px rgb(0 0 0 / 65%), inset 4px 0 var(--npc-accent), 0 0 30px color-mix(in srgb, var(--npc-accent) 12%, transparent);
+  color: #f4ecd6;
+  transform: translateX(-50%);
+}
+#npc-service-dialogue[hidden] { display: none; }
+#npc-service-dialogue[data-npc="smith-brom"] { --npc-accent: #e0944e; }
+#npc-service-dialogue[data-npc="healer-lyra"] { --npc-accent: #67e5bb; }
+#npc-service-dialogue[data-npc="guild-steward-elin"] { --npc-accent: #b398ee; }
+.npc-service-sigil { display: grid; place-items: center; width: 78px; height: 78px; border: 1px solid color-mix(in srgb, var(--npc-accent) 68%, #fff 8%); border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--npc-accent) 24%, transparent), transparent 68%); box-shadow: inset 0 0 22px color-mix(in srgb, var(--npc-accent) 18%, transparent); }
+.npc-service-sigil span { color: var(--npc-accent); font: 900 2rem/1 Georgia, serif; text-shadow: 0 0 16px var(--npc-accent); }
+.npc-service-content header { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; }
+.npc-service-content .eyebrow { margin: 0; color: var(--npc-accent); font: 900 .62rem/1 system-ui; letter-spacing: .16em; }
+.npc-service-content h2 { margin: 4px 0 0; color: #fff0c5; font: 900 1.55rem/1.05 Georgia, serif; }
+#npc-service-close { width: 48px; min-width: 48px; height: 48px; border: 1px solid #ffffff2e; border-radius: 8px; background: #15241f; color: #d6ded8; cursor: pointer; font-size: 1.2rem; }
+.npc-service-line { margin: 13px 0 6px; color: #f2e6cc; font: 600 .94rem/1.48 Georgia, serif; }
+.npc-service-detail { margin: 0; color: #9fb2a8; font-size: .7rem; line-height: 1.4; }
+.npc-service-actions { display: grid; grid-template-columns: 1.15fr 1fr auto; gap: 9px; margin-top: 16px; }
+.npc-service-actions button { min-height: 52px; padding: 9px 12px; border: 1px solid #ffffff25; border-radius: 9px; background: #14241e; color: #e7eee9; cursor: pointer; text-align: left; }
+.npc-service-actions button:hover, .npc-service-actions button:focus-visible { border-color: var(--npc-accent); box-shadow: 0 0 18px color-mix(in srgb, var(--npc-accent) 18%, transparent); outline: none; }
+#npc-service-primary { border-color: color-mix(in srgb, var(--npc-accent) 72%, #fff 5%); background: linear-gradient(180deg, color-mix(in srgb, var(--npc-accent) 27%, #10221c), #10211b); }
+.npc-service-actions strong, .npc-service-actions small { display: block; }
+.npc-service-actions strong { color: #fff0c5; font: 900 .68rem/1.1 system-ui; letter-spacing: .055em; }
+.npc-service-actions small { margin-top: 4px; color: #aebdb5; font-size: .59rem; line-height: 1.25; }
+#npc-service-leave { min-width: 78px; text-align: center; }
+body:has(#npc-service-dialogue:not([hidden])) #touch-controls { opacity: 0; pointer-events: none; }
+@media (max-width: 650px) {
+  #npc-service-dialogue { grid-template-columns: 54px minmax(0, 1fr); gap: 12px; max-height: calc(100dvh - 28px); overflow-y: auto; padding: 14px; }
+  .npc-service-sigil { width: 52px; height: 52px; }
+  .npc-service-sigil span { font-size: 1.4rem; }
+  .npc-service-actions { grid-template-columns: 1fr; }
+  .npc-service-actions button { min-height: 48px; }
+}
 #tavern-dialogue h2 { margin: 4px 0 10px; font-size: 1.17rem; }
 #tavern-dialogue h2 small { margin-left: 8px; color: #d9a973; font-size: .72rem; font-weight: 600; }
 #tavern-dialogue-line { margin: 0; line-height: 1.5; }

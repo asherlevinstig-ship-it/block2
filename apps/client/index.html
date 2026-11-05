@@ -254,6 +254,22 @@
     <div id="blacksmith-prompt" hidden>BROM · BEGINNING SMITH <small>Press E to trade or forge</small></div>
     <div id="town-healer-prompt" hidden>LYRA · SANCTUARY HEALER <small>Press E for care and guidance</small></div>
     <div id="guild-steward-prompt" hidden>ELIN · GUILD STEWARD <small>Press E to manage your guild</small></div>
+    <section id="npc-service-dialogue" role="dialog" aria-modal="true" aria-labelledby="npc-service-name" hidden>
+      <div class="npc-service-sigil" aria-hidden="true"><span id="npc-service-icon">✦</span></div>
+      <div class="npc-service-content">
+        <header>
+          <div><p id="npc-service-role" class="eyebrow">TOWN SERVICE</p><h2 id="npc-service-name">Townsperson</h2></div>
+          <button id="npc-service-close" type="button" aria-label="Close conversation">×</button>
+        </header>
+        <p id="npc-service-line" class="npc-service-line"></p>
+        <p id="npc-service-detail" class="npc-service-detail"></p>
+        <div class="npc-service-actions">
+          <button id="npc-service-primary" type="button" autofocus><strong>CONTINUE</strong><small></small></button>
+          <button id="npc-service-secondary" type="button"><strong>ASK ABOUT THIS</strong><small></small></button>
+          <button id="npc-service-leave" type="button">LEAVE</button>
+        </div>
+      </div>
+    </section>
     <div id="tavern-door-hold" role="status" aria-live="polite" hidden>
       <span id="tavern-door-ring" aria-hidden="true"><kbd>E</kbd></span>
       <span class="tavern-door-copy"><strong id="tavern-door-action">HOLD TO ENTER</strong><small id="tavern-door-destination">THE HEARTH &amp; HAMMER</small></span>
