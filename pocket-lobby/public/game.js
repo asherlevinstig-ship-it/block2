@@ -35,7 +35,8 @@ const initial = [
 ].map(([type,x,y,rot=0],id)=>({id,type,x,y,rot}));
 const fixed = item => item.type==='bar'||item.type==='shelf';
 const savedPlayerState = load('player-state',null);
-let furniture = savedPlayerState?.furniture??load('room',initial);
+let loungeFurniture = savedPlayerState?.furniture??load('room',initial);
+let homeFurniture = savedPlayerState?.homeFurniture??[];
 const credits = savedPlayerState?.credits??100;
 const countFurniture = (items,type)=>items.filter(item=>item.type===type).length;
 const previousStock = savedPlayerState?.ownedFurniture??{};
@@ -45,11 +46,11 @@ const ownedFurniture = hasBedStarter?previousStock:Object.fromEntries(
     if(type==='bed')return [type,1];
     // Retire the old starter copy while keeping placed and collected furniture.
     const baseline=previousStock[type]===undefined?countFurniture(initial,type):previousStock[type]-1;
-    return [type,Math.max(baseline,countFurniture(furniture,type))];
+    return [type,Math.max(baseline,countFurniture(loungeFurniture,type))];
   })
 );
-const availableFurniture = type=>ownedFurniture[type]-countFurniture(furniture,type);
-let nextId = Math.max(0,...furniture.map(o=>o.id))+1;
+const availableFurniture = type=>ownedFurniture[type]-countFurniture(loungeFurniture,type)-countFurniture(homeFurniture,type);
+let nextId = Math.max(0,...[...loungeFurniture,...homeFurniture].map(item=>item.id))+1;
 let avatar = {...defaultAvatar,...load('avatar',defaultAvatar)};
 let draft;
 let messages = load('chat',[]);
@@ -57,6 +58,11 @@ const player = {x:5,y:7,cx:5,cy:7,direction:'right',back:false,seat:null,stride:
 let route=[],step=null,interaction=null,hover=null,hoverItem=null,target=null;
 let editing=false,selection=null,zoom=1,hitboxes=[],bounds=null,bubbleUntil=0,noticeUntil=0;
 let inEntryRoom=true;
+const roomFurniture=()=>inEntryRoom?homeFurniture:loungeFurniture;
+function setRoomFurniture(items){
+  if(inEntryRoom)homeFurniture=items;
+  else loungeFurniture=items;
+}
 const exitTile={x:0,y:5};
 const exitEdges={start:4.88,end:6.12,height:49};
 const exitShape=[
@@ -417,7 +423,7 @@ function draw(time){
   if(editing&&selection&&hover&&canPlace({...selection,...hover})){
     ghost={...selection,...hover,id:-1};
   }
-  const items=inEntryRoom?[]:[...furniture];
+  const items=[...roomFurniture()];
   if(ghost)items.push(ghost);
   const drawPlayer = ()=>{
     const seat=player.seat;
@@ -464,17 +470,18 @@ function overlap(a,b){
   return a.x<b.x+bw&&a.x+aw>b.x&&a.y<b.y+bd&&a.y+ad>b.y;
 }
 function inRoom(x,y){return x>=0&&y>=0&&x<SIZE&&y<SIZE;}
-function blocked(x,y){
-  return !inRoom(x,y)||(!inEntryRoom&&furniture.some(item=>item.type!=='shelf'&&overlap(item,{x,y})));
+function blocked(x,y,items=roomFurniture()){
+  return !inRoom(x,y)||items.some(item=>item.type!=='shelf'&&overlap(item,{x,y}));
 }
 function canPlace(item){
   const [w,d]=dimensions(item);
   return inRoom(item.x,item.y)&&item.x+w<=SIZE&&item.y+d<=SIZE&&
     !overlap(item,{x:player.cx,y:player.cy})&&(!step||!overlap(item,step.to))&&
-    !furniture.some(other=>other.id!==item.id&&other.type!=='shelf'&&overlap(item,other));
+    (!inEntryRoom||!overlap(item,exitTile))&&
+    !roomFurniture().some(other=>other.id!==item.id&&other.type!=='shelf'&&overlap(item,other));
 }
 const directions=[[1,0],[0,1],[-1,0],[0,-1]];
-function findPath(start,goal){
+function findPath(start,goal,items=roomFurniture()){
   const estimate=(x,y)=>Math.abs(x-goal.x)+Math.abs(y-goal.y);
   const open=[{...start,g:0,f:estimate(start.x,start.y),previous:null}];
   const best=new Map([[tileKey(start.x,start.y),0]]);
@@ -488,7 +495,7 @@ function findPath(start,goal){
     }
     for(const [dx,dy] of directions){
       const x=node.x+dx,y=node.y+dy,k=tileKey(x,y),g=node.g+1;
-      if(blocked(x,y)||g>=(best.get(k)??Infinity))continue;
+      if(blocked(x,y,items)||g>=(best.get(k)??Infinity))continue;
       best.set(k,g);open.push({x,y,g,f:g+estimate(x,y),previous:node});
     }
   }
@@ -522,7 +529,7 @@ function note(message){
   noticeUntil=performance.now()+3000;
 }
 function setHint(){
-  const message=inEntryRoom?'Click a tile to walk · Click the exit to leave':editing?'Choose furniture to place or select a piece in the room':defaultHint;
+  const message=editing?'Choose furniture to place or select a piece in the room':inEntryRoom?'Click a tile to walk · Click the exit to leave':defaultHint;
   $('hint').textContent='✦  '+message;
 }
 function startPosition(){return step?.to??{x:player.cx,y:player.cy};}
@@ -595,13 +602,11 @@ function updateInventory(){
     const row=$('inventoryItems').querySelector('[data-type="'+type+'"]');
     row.hidden=available===0;
     row.querySelector('.quantity').textContent='×'+available;
-    const placeButton=row.querySelector('button');
-    placeButton.hidden=inEntryRoom;
   }
   $('inventoryCount').textContent=total?total+(total===1?' item in storage':' items in storage'):'Storage is empty';
 }
 function savePlayerState(){
-  save('player-state',{credits,ownedFurniture,furniture});
+  save('player-state',{credits,ownedFurniture,furniture:loungeFurniture,homeFurniture});
   updateInventory();
 }
 function editStatus(message){
@@ -616,23 +621,33 @@ function choose(item){
 }
 function cancelSelection(){selection=null;editStatus('Select a piece to get started.');}
 function switchMode(next){
-  editing=next&&!inEntryRoom;
+  editing=next;
   route=[];target=null;interaction=null;player.seat=null;player.waveStarted=null;hover=null;hoverItem=null;
   $('wave').disabled=editing;
   $('edit').classList.toggle('active',editing);$('walk').classList.toggle('active',!editing);
   $('edit').setAttribute('aria-pressed',String(editing));$('walk').setAttribute('aria-pressed',String(!editing));
-  $('chatPanel').hidden=editing;$('editorPanel').hidden=!editing;
-  $('panelTitle').textContent=editing?'Room editor':'Room chat';
-  $('panelSub').textContent=editing?'FURNITURE & DECOR':'THE SUNSET LOUNGE';
+  $('roomLayout').classList.toggle('decorating',editing);
+  $('roomSide').hidden=inEntryRoom&&!editing;
+  $('chatPanel').hidden=editing||inEntryRoom;$('editorPanel').hidden=!editing;
+  $('panelTitle').textContent=editing?(inEntryRoom?'Home editor':'Room editor'):'Room chat';
+  $('panelSub').textContent=editing?(inEntryRoom?'YOUR HOME':'FURNITURE & DECOR'):'THE SUNSET LOUNGE';
+  $('resetRoom').textContent=inEntryRoom?'Clear home furniture':'Restore original room';
   $('mode').textContent=editing?'DECORATE':'FREE ROAM';
   noticeUntil=0;setHint();cancelSelection();
+}
+function keepsExitClear(item){
+  if(!inEntryRoom)return true;
+  const proposed=homeFurniture.filter(other=>other.id!==item.id);
+  proposed.push(item);
+  return findPath(startPosition(),exitTile,proposed)!==null;
 }
 function place(tile){
   const item={...selection,...tile};
   if(item.id===null&&availableFurniture(item.type)===0){editStatus('There are none left in your inventory.');return;}
   if(!canPlace(item)){editStatus('That spot is occupied or outside the room.');return;}
-  if(item.id===null){item.id=nextId++;furniture.push(item);}
-  else furniture=furniture.map(other=>other.id===item.id?item:other);
+  if(!keepsExitClear(item)){editStatus('Keep a walkable path to the exit.');return;}
+  if(item.id===null){item.id=nextId++;roomFurniture().push(item);}
+  else setRoomFurniture(roomFurniture().map(other=>other.id===item.id?item:other));
   savePlayerState();selection=null;editStatus(types[item.type]+' placed.');
 }
 function rotate(){
@@ -640,7 +655,8 @@ function rotate(){
   const rotated={...selection,rot:(selection.rot+1)%4};
   if(rotated.id!==null){
     if(!canPlace(rotated)){editStatus('This piece needs more space to rotate.');return;}
-    furniture=furniture.map(other=>other.id===rotated.id?rotated:other);savePlayerState();
+    if(!keepsExitClear(rotated)){editStatus('Keep a walkable path to the exit.');return;}
+    setRoomFurniture(roomFurniture().map(other=>other.id===rotated.id?rotated:other));savePlayerState();
   }
   selection=rotated;editStatus(types[rotated.type]+' rotated '+(rotated.rot*90)+'°.');
 }
@@ -674,29 +690,34 @@ for(const [type,name] of Object.entries(types)){
 $('credits').textContent=new Intl.NumberFormat().format(credits);
 if(hasBedStarter)updateInventory();else savePlayerState();
 $('inventory').onclick=()=>{
-  $('inventoryGuide').textContent=inEntryRoom
-    ?'Your furniture is in storage. Exit to the Sunset Lounge to place it.'
-    :'Choose a piece to place it. Pick up furniture in Decorate mode to return it here.';
+  $('inventoryGuide').textContent='Choose a piece to place it in '+(inEntryRoom?'your home':'the Sunset Lounge')+'. Pick it up in Decorate mode to return it here.';
   updateInventory();
   $('inventoryDialog').showModal();
 };
 $('walk').onclick=()=>switchMode(false);
 $('edit').onclick=()=>switchMode(true);
-$('exitRoom').onclick=()=>{if(inEntryRoom)walkTo(exitTile);};
+$('exitRoom').onclick=()=>{
+  if(!inEntryRoom)return;
+  if(editing)switchMode(false);
+  walkTo(exitTile);
+};
 $('wave').onclick=waveHello;
 $('rotate').onclick=rotate;
 $('cancelEdit').onclick=cancelSelection;
 $('remove').onclick=()=>{
   if(!selection||selection.id===null)return;
   const name=types[selection.type];
-  furniture=furniture.filter(item=>item.id!==selection.id);savePlayerState();
+  setRoomFurniture(roomFurniture().filter(item=>item.id!==selection.id));savePlayerState();
   selection=null;editStatus(name+' returned to your inventory.');
 };
 $('resetRoom').onclick=()=>{
-  if(!confirm('Restore the original lounge furniture?'))return;
-  furniture=initial.map(item=>({...item}));nextId=furniture.length;savePlayerState();
-  step=null;route=[];player.seat=null;Object.assign(player,{x:5,y:7,cx:5,cy:7});selection=null;
-  editStatus('The original lounge has been restored.');
+  if(!inEntryRoom&&Object.keys(types).some(type=>countFurniture(homeFurniture,type)+countFurniture(initial,type)>ownedFurniture[type])){
+    editStatus('Pick up furniture from your home before restoring the lounge.');return;
+  }
+  if(!confirm(inEntryRoom?'Return all home furniture to your inventory?':'Restore the original lounge furniture?'))return;
+  setRoomFurniture(inEntryRoom?[]:initial.map(item=>({...item})));savePlayerState();
+  step=null;route=[];player.seat=null;movePlayerToSpawn();selection=null;
+  editStatus(inEntryRoom?'Home furniture returned to your inventory.':'The original lounge has been restored.');
 };
 canvas.addEventListener('pointermove',e=>{
   const p=pointer(e);hover=p.tile;hoverItem=p.item;
@@ -815,19 +836,21 @@ function enterLounge(){
   $('sceneNumber').textContent='01';
   $('footerRoom').textContent='ROOM 01';
   $('exitRoom').hidden=true;
-  $('edit').hidden=false;
-  $('roomSide').hidden=false;
   canvas.setAttribute('aria-label','Isometric room. Click a floor tile or use arrow keys to walk. Click furniture to interact.');
   document.title='Pocket Lobby • The Sunset Lounge';
-
-  const openTiles=[];
-  for(let y=0;y<SIZE;y++)for(let x=0;x<SIZE;x++)if(!blocked(x,y))openTiles.push({x,y});
-  const distance=tile=>Math.abs(tile.x-5)+Math.abs(tile.y-7);
-  openTiles.sort((a,b)=>distance(a)-distance(b));
-  const {x,y}=openTiles[0]??{x:5,y:7};
-  Object.assign(player,{x,y,cx:x,cy:y,direction:'right',back:false,stride:0});
+  movePlayerToSpawn();
   bounds=null;
   switchMode(false);
   if(focusRoom)canvas.focus();
 }
-updateName();switchMode(false);requestAnimationFrame(animation);
+function movePlayerToSpawn(){
+  const openTiles=[];
+  for(let y=0;y<SIZE;y++)for(let x=0;x<SIZE;x++){
+    if(!blocked(x,y)&&(!inEntryRoom||x!==exitTile.x||y!==exitTile.y))openTiles.push({x,y});
+  }
+  const distance=tile=>Math.abs(tile.x-5)+Math.abs(tile.y-7);
+  openTiles.sort((a,b)=>distance(a)-distance(b));
+  const {x,y}=openTiles.find(tile=>!inEntryRoom||findPath(tile,exitTile)!==null)??{x:5,y:7};
+  Object.assign(player,{x,y,cx:x,cy:y,direction:'right',back:false,stride:0});
+}
+movePlayerToSpawn();updateName();switchMode(false);requestAnimationFrame(animation);
