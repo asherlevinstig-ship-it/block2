@@ -38,3 +38,5 @@
 .destination>span:last-child{color:#e4b981;font-size:12px}
 @media(max-width:690px){.hub .side{min-height:0}}
 @media(min-width:691px) and (max-width:1000px){.hub .directory{padding:9px;gap:6px}.hub .directory-welcome{padding:8px}}
+
+@media(min-width:691px){.hub #game{max-height:min(75vh,630px)}}

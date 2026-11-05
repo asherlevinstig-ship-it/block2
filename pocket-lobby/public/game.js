@@ -2,8 +2,10 @@
 const $ = id => document.getElementById(id);
 const canvas = $('game');
 let ctx = canvas.getContext('2d');
-const W = 480, H = 310, SIZE = 10;
-const point = (x,y,z=0) => [240+(x-y)*18,94+(x+y)*9-z];
+const standardView={width:480,height:310,cols:10,rows:10,originX:240,originY:94};
+const hubView={width:720,height:465,cols:18,rows:16,originX:342,originY:115};
+let view=standardView;
+const point = (x,y,z=0) => [view.originX+(x-y)*18,view.originY+(x+y)*9-z];
 const tileKey = (x,y) => x+','+y;
 const shades = {
   wood:['#ba754c','#75424a','#995547'], gold:['#ffd289','#9b674f','#c38756'],
@@ -58,14 +60,13 @@ const player = {x:5,y:7,cx:5,cy:7,direction:'right',back:false,seat:null,stride:
 let route=[],step=null,interaction=null,hover=null,hoverItem=null,target=null;
 let editing=false,selection=null,zoom=1,hitboxes=[],bounds=null,bubbleUntil=0,noticeUntil=0;
 const hubFurniture=[
-  {id:'reception',type:'reception',x:1,y:2,rot:0},
-  {id:'left-palm',type:'plant',x:0,y:8,rot:0},
-  {id:'right-palm',type:'plant',x:9,y:0,rot:0},
-  {id:'bench',type:'sofa',x:7,y:3,rot:0},
-  {id:'lamp',type:'lamp',x:9,y:3,rot:0},
-  {id:'table',type:'table',x:8,y:5,rot:1},
-  {id:'chair',type:'chair',x:7,y:6,rot:1}
-];
+  ['reception',3,2],['plant',0,8],['plant',17,0],['plant',1,14],['plant',16,14],
+  ['stool',2,3],['stool',3,4],['stool',4,4],['stool',5,4],
+  ['sofa',2,7],['sofa',2,12,2],['chair',1,9,1],['chair',4,9,3],
+  ['chair',1,11,1],['chair',4,11,3],['table',3,9],['table',3,11,1],['lamp',1,7],
+  ['sofa',13,4],['sofa',13,11,2],['chair',12,6,1],['chair',15,6,3],
+  ['chair',12,9,1],['chair',15,9,3],['table',14,6],['table',14,9,1],['lamp',16,11]
+].map(([type,x,y,rot=0],id)=>({id,type,x,y,rot}));
 let currentRoom='home';
 const atHome=()=>currentRoom==='home';
 const roomFurniture=()=>atHome()?homeFurniture:currentRoom==='hub'?hubFurniture:loungeFurniture;
@@ -76,12 +77,12 @@ function setRoomFurniture(items){
 const homeExit={to:'hub',side:'left',tile:{x:0,y:5},start:4.88,end:6.12,height:49,label:'EXIT'};
 const hubDoors=[
   {to:'home',side:'left',tile:{x:0,y:6},start:5.72,end:7.28,height:51,label:'HOME'},
-  {to:'lounge',side:'right',tile:{x:7,y:0},start:6.6,end:8.4,height:51,label:'LOUNGE'}
+  {to:'lounge',side:'right',tile:{x:14,y:0},start:13.6,end:15.4,height:51,label:'LOUNGE'}
 ];
 const roomDoors={home:[homeExit],hub:hubDoors,lounge:[]};
 const roomDetails={
   home:{number:'00',name:'Entry Room',description:'Walk through the exit to reach the Grand Lobby.',badge:'ROOM NO. 00',floor:'Private room'},
-  hub:{number:'01',name:'The Grand Lobby',description:'Check in at reception or choose where to go next.',badge:'MAIN HUB',floor:'Ground floor'},
+  hub:{number:'01',name:'The Grand Lobby',description:'Meet at reception, settle into a seating area, or head to another room.',badge:'MAIN HUB',floor:'Ground floor'},
   lounge:{number:'02',name:'The Sunset Lounge',description:'Check in, find a seat, and make yourself at home.',badge:'LOUNGE NO. 02',floor:'Ground floor'}
 };
 const defaultHint = 'Click a tile to walk · Click furniture to interact';
@@ -140,7 +141,7 @@ function room(empty=false){
   polygon([[240,106],[430,191],[244,291],[51,198]],'#10142168');
   const floors=empty?['#8b8191','#918696','#897f90','#94899a','#8e8394']:['#b47c68','#bd826a','#b77a64','#bb7c64','#c4866d'];
   block(0,0,10,10,-7,7,empty?['#8b8191','#494355','#3b354a']:['#ac745c','#624250','#4d394d']);
-  for(let y=0;y<SIZE;y++)for(let x=0;x<SIZE;x++){
+  for(let y=0;y<view.rows;y++)for(let x=0;x<view.cols;x++){
     surface(x,y,1,1,0,floors[(x*7+y*13)%5],empty?'#776c80':'#9f675d');
     if(empty)continue;
     for(let i=0;i<3;i++){
@@ -246,40 +247,46 @@ function drawHomeSign(){
   ctx.restore();
 }
 function drawGrandLobby(){
-  polygon([[240,102],[431,190],[244,292],[49,195]],'#1210208c');
-  block(0,0,10,10,-9,9,['#ad9793','#6d4f62','#4e3b55']);
+  const {cols,rows}=view;
+  polygon([point(-.25,-.25,-8),point(cols+.44,-.25,-9),point(cols+.44,rows+.46,-10),point(-.25,rows+.46,-9)],'#1210208c');
+  block(0,0,cols,rows,-9,9,['#ad9793','#6d4f62','#4e3b55']);
   const stone=['#c3a99d','#b49aa0','#cbb0a2','#ae929c'];
-  for(let y=0;y<SIZE;y++)for(let x=0;x<SIZE;x++){
+  for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){
     surface(x,y,1,1,0,stone[(x+2*y)%4],'#907580');
     surface(x+.10,y+.16,.15,.025,.1,'#e1c4ad');
     surface(x+.56,y+.75,.12,.025,.1,'#9b7f8b');
   }
-  for(const edge of [.32,9.6]){
-    surface(edge,.32,.085,9.36,.25,'#7a5263');
-    surface(.32,edge,9.36,.085,.25,'#7a5263');
+  for(const edge of [.32,cols-.4])surface(edge,.32,.085,rows-.64,.25,'#7a5263');
+  for(const edge of [.32,rows-.4])surface(.32,edge,cols-.64,.085,.25,'#7a5263');
+  for(const [x,y,w,d] of [[1.05,6.72,4.12,6.62],[11.75,3.74,4.54,8.61]]){
+    surface(x,y,w,d,.32,'#64465a');
+    surface(x+.10,y+.1,w-.2,d-.2,.36,'#ce947b');
+    surface(x+.18,y+.18,w-.36,d-.36,.4,'#7c5c75');
+    for(let stripe=.46;stripe<d-.33;stripe+=.46)surface(x+.25,y+stripe,w-.5,.028,.43,'#967186');
   }
-  surface(3.55,3.4,4.12,5.25,.4,'#604359');
-  surface(3.65,3.5,3.92,5.05,.45,'#d79973');
-  surface(3.76,3.61,3.7,4.83,.5,'#804b64');
-  surface(3.88,3.73,3.46,4.59,.6,'#6c405c');
-  for(const x of [4.02,7.02])for(let y=3.92;y<8.2;y+=.47){
+  surface(6.12,3.18,4.82,11.43,.4,'#604359');
+  surface(6.23,3.29,4.6,11.21,.45,'#d79973');
+  surface(6.35,3.41,4.36,10.97,.5,'#804b64');
+  surface(6.49,3.55,4.08,10.69,.6,'#6c405c');
+  for(const x of [6.69,10.2])for(let y=3.74;y<14.12;y+=.47){
     surface(x,y,.17,.17,.7,'#b97d76');
   }
-  surface(4.47,4.62,2.25,2.25,.75,'#e5ad79');
-  surface(4.58,4.73,2.03,2.03,.8,'#51394f');
-  surface(4.72,4.87,1.75,1.75,.85,'#b87876');
-  const [cx,cy]=point(5.595,5.745,1);
+  surface(7.23,7.67,2.61,2.61,.75,'#e5ad79');
+  surface(7.34,7.78,2.39,2.39,.8,'#51394f');
+  surface(7.48,7.92,2.11,2.11,.85,'#b87876');
+  const [cx,cy]=point(8.535,8.975,1);
   polygon([[cx,cy-17],[cx+5,cy-4],[cx+24,cy],[cx+5,cy+4],[cx,cy+17],[cx-5,cy+4],[cx-24,cy],[cx-5,cy-4]],'#f2bf87');
   polygon([[cx,cy-8],[cx+10,cy],[cx,cy+8],[cx-10,cy]],'#6e4b62');
   polygon([[cx,cy-5],[cx+6,cy],[cx,cy+5],[cx-6,cy]],'#ffe0a2');
   for(const side of ['left','right']){
-    wall(side,0,10,0,80,side==='left'?'#4e405b':'#644c65');
-    wall(side,0,10,77,82,'#bb8b83');
-    wall(side,0,10,73,76,'#8f6778');
-    wall(side,0,10,0,16,side==='left'?'#382d47':'#49334e');
-    wall(side,0,10,14,17,'#a7776e');
-    for(let i=.25;i<10;i+=.45)wall(side,i,i+.045,0,14,'#99687b');
-    for(const u of (side==='left'?[.45,4.85,8.65]:[.36,5.7,9.16])){
+    const length=side==='left'?rows:cols;
+    wall(side,0,length,0,80,side==='left'?'#4e405b':'#644c65');
+    wall(side,0,length,77,82,'#bb8b83');
+    wall(side,0,length,73,76,'#8f6778');
+    wall(side,0,length,0,16,side==='left'?'#382d47':'#49334e');
+    wall(side,0,length,14,17,'#a7776e');
+    for(let i=.25;i<length;i+=.45)wall(side,i,i+.045,0,14,'#99687b');
+    for(const u of (side==='left'?[.45,4.85,8.65,12.55,15.22]:[.36,5.54,11.03,16.88])){
       wall(side,u,u+.38,0,73,'#49364f');
       wall(side,u+.04,u+.22,1,72,'#875e73');
       wall(side,u+.08,u+.13,3,70,'#bd8c83');
@@ -287,14 +294,14 @@ function drawGrandLobby(){
       wall(side,u-.08,u+.43,4,10,'#a57070');
     }
   }
-  for(let pane=0;pane<3;pane++){
-    const x=1.02+pane*1.5,end=x+1.38;
+  for(let pane=0;pane<7;pane++){
+    const x=1.02+pane*1.65,end=x+1.32;
     wall('right',x,end,20,68,'#bd8c82');
     wall('right',x+.07,end-.07,22,66,'#333148');
     wall('right',x+.12,end-.12,23,64,'#6b647f');
     wall('right',x+.12,end-.12,23,49,'#9a6d88');
     wall('right',x+.12,end-.12,23,37,'#dc958d');
-    if(pane===1)wall('right',x+.42,x+.77,36,43,'#ffd0a0');
+    if(pane===3)wall('right',x+.42,x+.77,36,43,'#ffd0a0');
     for(let j=0;j<5;j++){
       const u=x+.14+j*.225;
       const roof=30+(j*11+pane*7)%11;
@@ -312,11 +319,22 @@ function drawGrandLobby(){
   wallText('left',2.65,46,'H O T E L','bold 6px monospace','#d6a694');
   wall('left',1.3,4.03,24,35,'#372d42');
   for(let i=0;i<8;i++)wall('left',1.42+i*.31,1.50+i*.31,27,31,'#e1ae7f');
+  for(const [a,b] of [[9.37,11.85],[13.32,14.84]]){
+    wall('left',a,b,29,61,'#c38d7b');
+    wall('left',a+.1,b-.1,31,59,'#55475e');
+    wall('left',a+.22,b-.22,34,56,'#786984');
+    wall('left',a+.22,b-.22,34,45,'#be8791');
+    for(let u=a+.28;u<b-.35;u+=.25)wall('left',u,u+.21,34,40+(Math.round(u*27)%9),'#544661');
+  }
   hubDoors.forEach(drawDoor);
-  for(const [x,y] of [[88,80],[112,58],[342,56],[393,85],[419,117]]){
+  for(const [u,y] of [[-152,80],[-128,58],[102,56],[153,85],[179,117],[252,129],[-231,129]]){
+    const x=view.originX+u;
     rect(x,y,3,1,'#af817e62');rect(x+1,y-1,1,3,'#c3928662');
   }
+  ctx.save();
+  ctx.translate(view.originX-240,view.originY-94);
   drawChandelier();
+  ctx.restore();
 }
 function drawChandelier(){
   const glow=ctx.createRadialGradient(240,74,5,240,74,53);
@@ -532,16 +550,20 @@ function sprite(target,x,y,appearance,{direction='right',back=false,cycle=0,seat
   pixelHead(target,appearance,back,blink);
   target.restore();
 }
-function makeRoomLayer(drawLayer){
+function makeRoomLayer(drawLayer,layerView=standardView){
   const layer=document.createElement('canvas');
-  layer.width=W;layer.height=H;
-  const previous=ctx;ctx=layer.getContext('2d');drawLayer();ctx=previous;
+  layer.width=layerView.width;layer.height=layerView.height;
+  const previousContext=ctx,previousView=view;
+  ctx=layer.getContext('2d');view=layerView;
+  drawLayer();
+  ctx=previousContext;view=previousView;
   return layer;
 }
-const roomLayers={hub:makeRoomLayer(drawGrandLobby),lounge:makeRoomLayer(room)};
+const roomLayers={hub:makeRoomLayer(drawGrandLobby,hubView),lounge:makeRoomLayer(room)};
 function draw(time){
+  const {width,height}=view,centerX=width/2,centerY=height/2-4;
   ctx.setTransform(1,0,0,1,0,0);
-  ctx.clearRect(0,0,W,H);ctx.translate(W/2,151);ctx.scale(zoom,zoom);ctx.translate(-W/2,-151);
+  ctx.clearRect(0,0,width,height);ctx.translate(centerX,centerY);ctx.scale(zoom,zoom);ctx.translate(-centerX,-centerY);
   ctx.imageSmoothingEnabled=false;ctx.drawImage(roomLayers[currentRoom],0,0);
   if(target)surface(target.x+.1,target.y+.1,.8,.8,1,'#fff3bc30','#ffcf8f');
   if(hover){
@@ -572,8 +594,8 @@ function draw(time){
       if(time>bubbleUntil)$('bubble').hidden=true;
       else{
         const p=canvasBounds();
-        $('bubble').style.left=(p.x+((x-W/2)*zoom+W/2)*p.scale)+'px';
-        $('bubble').style.top=(p.y+((y-49-151)*zoom+151)*p.scale)+'px';
+        $('bubble').style.left=(p.x+((x-centerX)*zoom+centerX)*p.scale)+'px';
+        $('bubble').style.top=(p.y+((y-49-centerY)*zoom+centerY)*p.scale)+'px';
       }
     }
   };
@@ -599,13 +621,13 @@ function overlap(a,b){
   const [aw,ad]=dimensions(a),[bw,bd]=dimensions(b);
   return a.x<b.x+bw&&a.x+aw>b.x&&a.y<b.y+bd&&a.y+ad>b.y;
 }
-function inRoom(x,y){return x>=0&&y>=0&&x<SIZE&&y<SIZE;}
+function inRoom(x,y){return x>=0&&y>=0&&x<view.cols&&y<view.rows;}
 function blocked(x,y,items=roomFurniture()){
   return !inRoom(x,y)||items.some(item=>item.type!=='shelf'&&overlap(item,{x,y}));
 }
 function canPlace(item){
   const [w,d]=dimensions(item);
-  return inRoom(item.x,item.y)&&item.x+w<=SIZE&&item.y+d<=SIZE&&
+  return inRoom(item.x,item.y)&&item.x+w<=view.cols&&item.y+d<=view.rows&&
     !overlap(item,{x:player.cx,y:player.cy})&&(!step||!overlap(item,step.to))&&
     (!atHome()||!overlap(item,homeExit.tile))&&
     !roomFurniture().some(other=>other.id!==item.id&&other.type!=='shelf'&&overlap(item,other));
@@ -633,8 +655,9 @@ function findPath(start,goal,items=roomFurniture()){
 }
 function canvasBounds(){
   if(bounds)return bounds;
-  const box=canvas.getBoundingClientRect(),scale=Math.min(box.width/W,box.height/H);
-  return bounds={left:box.left,top:box.top,x:(box.width-W*scale)/2,y:(box.height-H*scale)/2,scale};
+  const {width,height}=view;
+  const box=canvas.getBoundingClientRect(),scale=Math.min(box.width/width,box.height/height);
+  return bounds={left:box.left,top:box.top,x:(box.width-width*scale)/2,y:(box.height-height*scale)/2,scale};
 }
 function inShape(x,y,shape){
   let inside=false;
@@ -647,10 +670,11 @@ function inShape(x,y,shape){
 function pointer(e){
   bounds=null;
   const p=canvasBounds();
-  const x=((e.clientX-p.left-p.x)/p.scale-W/2)/zoom+W/2;
-  const y=((e.clientY-p.top-p.y)/p.scale-151)/zoom+151;
-  const gx=Math.floor(((x-240)/18+(y-94)/9)/2);
-  const gy=Math.floor(((y-94)/9-(x-240)/18)/2);
+  const centerX=view.width/2,centerY=view.height/2-4;
+  const x=((e.clientX-p.left-p.x)/p.scale-centerX)/zoom+centerX;
+  const y=((e.clientY-p.top-p.y)/p.scale-centerY)/zoom+centerY;
+  const gx=Math.floor(((x-view.originX)/18+(y-view.originY)/9)/2);
+  const gy=Math.floor(((y-view.originY)/9-(x-view.originX)/18)/2);
   const door=roomDoors[currentRoom].find(({side,start,end,height})=>inShape(x,y,wallFace(side,start-.09,end+.09,0,height+15)));
   return {tile:door?.tile??(inRoom(gx,gy)?{x:gx,y:gy}:null),door,item:hitboxes.findLast(h=>inShape(x,y,h.shape))?.item??null};
 }
@@ -985,6 +1009,13 @@ function updateRoomLabel(){
 function enterRoom(next){
   const focusRoom=!!document.activeElement.closest('[data-room-link]');
   currentRoom=next;
+  const nextView=next==='hub'?hubView:standardView;
+  if(view!==nextView){
+    view=nextView;
+    canvas.width=view.width;
+    canvas.height=view.height;
+    setZoom(1);
+  }
   const {number,name,description,badge,floor}=roomDetails[next];
   $('roomLayout').classList.toggle('entry',atHome());
   $('roomLayout').classList.toggle('hub',next==='hub');
@@ -996,6 +1027,7 @@ function enterRoom(next){
   $('roomLabel').textContent=name.toUpperCase();
   $('sceneNumber').textContent=number;
   $('footerRoom').textContent='ROOM '+number;
+  $('gridSize').textContent=view.cols+' × '+view.rows;
   $('exitRoom').hidden=!atHome();
   $('returnLobby').hidden=next!=='lounge';
   $('edit').hidden=next==='hub';
@@ -1009,12 +1041,13 @@ function enterRoom(next){
 function movePlayerToSpawn(){
   const openTiles=[];
   const doors=roomDoors[currentRoom];
-  for(let y=0;y<SIZE;y++)for(let x=0;x<SIZE;x++){
+  for(let y=0;y<view.rows;y++)for(let x=0;x<view.cols;x++){
     if(!blocked(x,y)&&!doors.some(({tile})=>tile.x===x&&tile.y===y))openTiles.push({x,y});
   }
-  const distance=tile=>Math.abs(tile.x-5)+Math.abs(tile.y-7);
+  const spawn=currentRoom==='hub'?{x:8,y:12}:{x:5,y:7};
+  const distance=tile=>Math.abs(tile.x-spawn.x)+Math.abs(tile.y-spawn.y);
   openTiles.sort((a,b)=>distance(a)-distance(b));
-  const {x,y}=openTiles.find(tile=>!atHome()||findPath(tile,homeExit.tile)!==null)??{x:5,y:7};
+  const {x,y}=openTiles.find(tile=>!atHome()||findPath(tile,homeExit.tile)!==null)??spawn;
   Object.assign(player,{x,y,cx:x,cy:y,direction:'right',back:false,stride:0});
 }
 movePlayerToSpawn();updateName();switchMode(false);requestAnimationFrame(animation);
