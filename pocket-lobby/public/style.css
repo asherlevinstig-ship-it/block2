@@ -44,3 +44,19 @@
 .gaming-guide{display:flex;flex-wrap:wrap;gap:5px;padding:9px 10px;border-bottom:1px solid var(--line);background:#251f30}.gaming-guide>span{width:100%;font:650 8px/1.2 ui-monospace,Consolas,monospace;letter-spacing:.12em;color:#d6ad91}.gaming-guide button{padding:4px 7px;font-size:11px;border-color:#674b55;background:#392c3b;color:#f1cfad}.gaming-guide button:hover{background:#503848}.gaming-guide button span{color:#efb478}
 
 .layout.outside{grid-template-columns:minmax(0,1fr)}.outside .scene{background:radial-gradient(ellipse at 47% 47%,#31435a,#1b283e 57%,#141b2d)}.outside .play-head i{background:#a5c8d5;box-shadow:0 0 9px #9ec0d475}.destination-icon.outside-icon{background:#35465a;color:#c5e0df}
+
+.moonwood .scene{background:radial-gradient(ellipse at 47% 43%,#344158,#1c293e 63%,#151b2c)}
+.moonwood .play-head i{background:#a2d1c8;box-shadow:0 0 10px #a2d1c875}
+.moonwood #mode{color:#b8d9d0}
+.adventure{gap:9px;padding:12px;overflow:auto}
+.field-card{background:linear-gradient(145deg,#304651,#232a40);border:1px solid #48666f;border-radius:9px;padding:11px}
+.field-card .eyebrow{color:#bddad5;font-size:8px}
+.field-card h3{font-size:16px;margin:3px 0 0}
+.field-card p{font-size:12px;line-height:1.45;color:#d0dddf;margin:5px 0 8px}
+.field-card button{padding:6px 8px;color:#f9d7a2;background:#4d4145;border-color:#8c7062;font-size:11px}
+.field-card button:hover{background:#614d50}
+.adventure-progress{margin:0;color:#b5ceca;font:650 10px/1.35 ui-monospace,Consolas,monospace}
+.adventure-routes{display:grid;gap:6px}
+.adventure-route{display:flex;align-items:center;justify-content:space-between;text-align:left;padding:8px 9px;font-size:12px;color:#e0eceb;border-color:#3f5564;background:#253345}
+.adventure-route::after{content:'↗';color:#a2d1c8;margin-left:6px}
+@media(max-width:690px){.moonwood .side{min-height:0}}

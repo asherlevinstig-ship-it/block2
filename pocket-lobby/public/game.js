@@ -15,7 +15,7 @@ const shades = {
   cream:['#ffe0a5','#bd8d71','#e8b182'], green:['#81b486','#365e58','#518366'],
   clay:['#d5896b','#8c4c59','#ab5f5b'], black:['#3d344c','#211f33','#302a43']
 };
-const types = {bed:'Single bed', sofa:'Velvet sofa', stool:'Bar stool', plant:'Potted palm', table:'Coffee table', lamp:'Floor lamp', chair:'Club chair'};
+const types = {bed:'Single bed', moonbloom:'Moonbloom', sofa:'Velvet sofa', stool:'Bar stool', plant:'Potted palm', table:'Coffee table', lamp:'Floor lamp', chair:'Club chair'};
 const outfits = ['#edaa66','#6da9be','#e58aa0','#91ba85','#af93d9'];
 const jacketShadows = ['#a85e49','#3d667e','#a34e73','#527c61','#7655a2'];
 const hairColors = ['#533343','#2b2a3d','#9c4f3d','#e6ae65','#786293'];
@@ -65,7 +65,9 @@ const ownedFurniture = hasBedStarter&&hasGamingLayout?previousStock:Object.fromE
     return [type,Math.max(baseline-oldStarter-retired,placed)];
   })
 );
-const availableFurniture = type=>ownedFurniture[type]-countFurniture(loungeFurniture,type)-countFurniture(homeFurniture,type);
+const availableFurniture = type=>(ownedFurniture[type]??0)-countFurniture(loungeFurniture,type)-countFurniture(homeFurniture,type);
+const adventure={lantern:false,groveTrail:false,bridge:false,shrine:false,shortcut:false,discovered:[],...savedPlayerState?.adventure};
+let lanternLit=false;
 let nextId = Math.max(0,...[...loungeFurniture,...homeFurniture].map(item=>item.id).filter(Number.isInteger))+1;
 let avatar = {...defaultAvatar,...load('avatar',defaultAvatar)};
 let draft;
@@ -92,6 +94,7 @@ const canDecorate=()=>atHome()||currentRoom==='lounge';
 function roomFurniture(){
   if(atHome())return homeFurniture;
   if(currentRoom==='lounge')return loungeFurniture;
+  if(moonwood.has(currentRoom))return moonwood.layouts[currentRoom].scenery;
   return currentRoom==='hub'?hubFurniture:courtyardFurniture;
 }
 function setRoomFurniture(items){
@@ -105,12 +108,14 @@ const hubDoors=[
   {to:'outside',side:'front',tile:{x:8,y:15},start:7.24,end:9.76,label:'OUTSIDE'}
 ];
 const hotelEntrance={to:'hub',side:'left',tile:{x:0,y:5},start:4.58,end:6.42,height:54,label:'HOTEL'};
-const roomDoors={home:[homeExit],hub:hubDoors,lounge:[],outside:[hotelEntrance]};
+const moonwoodEntrance={to:'trail',side:'front',tile:{x:6,y:11},arrival:{x:1,y:5},start:5.03,end:7.62,label:'MOONWOOD'};
+const roomDoors={home:[homeExit],hub:hubDoors,lounge:[],outside:[hotelEntrance,moonwoodEntrance],...moonwood.doors};
 const roomDetails={
   home:{number:'00',name:'Entry Room',description:'Walk through the exit to reach the Grand Lobby.',badge:'ROOM NO. 00',floor:'Private room'},
   hub:{number:'01',name:'The Grand Lobby',description:'Meet at reception, settle into a seating area, or head to another room.',badge:'MAIN HUB',floor:'Ground floor'},
   lounge:{number:'02',name:'The Sunset Lounge',description:'Find blackjack and roulette on the gaming floor, or take a seat by the bar.',badge:'GAMING LOUNGE',floor:'Ground floor'},
-  outside:{number:'03',name:'The Courtyard',description:'Take in the evening air by the fountain, just outside Pocket Hotel.',badge:'OUTSIDE',floor:'Hotel grounds'}
+  outside:{number:'03',name:'The Courtyard',description:'Rest by the fountain, or follow the Moonwood steps into the forest.',badge:'OUTSIDE',floor:'Hotel grounds'},
+  ...moonwood.areas
 };
 const defaultHint = 'Click a tile to walk · Click furniture to interact';
 
@@ -266,6 +271,11 @@ function doorHitShape({side,start,end,height}){
   if(side!=='front')return wallFace(side,start-.09,end+.09,0,height+15);
   const y=view.rows;
   return [point(start,y-.93),point(end,y-.93),point(end,y+.75,-10),point(start,y+.75,-10)];
+}
+function hitDoor(x,y,door){
+  if(door.side!=='wild')return inShape(x,y,doorHitShape(door));
+  const [px,py]=point(door.tile.x+.5,door.tile.y+.5);
+  return Math.abs(x-px)<20&&y>py-24&&y<py+10;
 }
 function drawOutsideSteps({start,end,label}){
   const y=view.rows,span=end-start;
@@ -463,6 +473,7 @@ function drawCourtyard(){
     wall('left',a-.07,a+1.17,23,26,'#cb9b91');
   }
   drawDoor(hotelEntrance);
+  drawDoor(moonwoodEntrance);
   for(const u of [4.26,6.69]){
     wall('left',u,u+.16,30,39,'#493c52');
     wall('left',u+.025,u+.13,32,37,'#ffd89b');
@@ -478,6 +489,10 @@ function object(item,highlight=false,time=0) {
   const {x,y,type,rot}=item;
   const [w,d]=dimensions(item);
   if(highlight)surface(x,y,w,d,1,'#f9c48968','#ffd18a');
+  if(Object.hasOwn(moonwood.heights,type)){
+    moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,progress:adventure});
+    return;
+  }
   if(type!=='bar'&&type!=='shelf')surface(x+.04,y+.08,w-.04,d-.03,.3,'#4931434a');
   const part=(u,v,a,b,z,h,c)=>{
     const p=rot%2?[v,u,b,a]:[u,v,a,b];
@@ -760,16 +775,47 @@ function makeRoomLayer(drawLayer,layerView=standardView){
   ctx=previousContext;view=previousView;
   return layer;
 }
+const worldDrawing={point,polygon,surface,block,rect};
 const roomLayers={
   hub:makeRoomLayer(drawGrandLobby,hubView),
   lounge:makeRoomLayer(room),
   outside:makeRoomLayer(drawCourtyard,courtyardView)
 };
+for(const id of Object.keys(moonwood.areas)){
+  roomLayers[id]=makeRoomLayer(()=>moonwood.drawGround(id,worldDrawing),moonwood.view);
+}
+function drawMoonwoodDetails(){
+  if(currentRoom==='grove'&&adventure.groveTrail){
+    for(const [x,y] of moonwood.layouts.grove.hiddenTrail){
+      surface(x+.06,y+.06,.88,.88,.25,'#6d8195','#8fb6b9');
+      surface(x+.42,y+.42,.16,.16,.35,'#bedace');
+    }
+  }
+  if(currentRoom==='creek'&&adventure.bridge){
+    for(let i=0;i<3;i++){
+      block(5.05+i*.31,4.25+(i%2)*.07,.26,.50,-1,3,['#afc9c7','#577489','#779da7']);
+      surface(5.10+i*.31,4.32+(i%2)*.07,.12,.15,2.2,'#e0ded0');
+    }
+  }
+  for(const door of roomDoors[currentRoom]){
+    if(!moonwood.open(door,adventure))continue;
+    const {x,y}=door.tile;
+    surface(x+.09,y+.09,.82,.82,.55,'#638c9a','#a5c7c7');
+    const [px,py]=point(x+.5,y+.5);
+    const label=door.label,width=label.length*4+8;
+    rect(px-1,py-12,2,12,'#597984');
+    rect(px-width/2,py-23,width,11,'#233646');
+    rect(px-width/2,py-23,width,1,'#85b4b3');
+    ctx.save();ctx.textAlign='center';ctx.font='bold 7px monospace';ctx.fillStyle='#d9eee2';
+    ctx.fillText(label,px,py-15,width-4);ctx.restore();
+  }
+}
 function draw(time){
   const {width,height}=view,centerX=width/2,centerY=height/2-4;
   ctx.setTransform(1,0,0,1,0,0);
   ctx.clearRect(0,0,width,height);ctx.translate(centerX,centerY);ctx.scale(zoom,zoom);ctx.translate(-centerX,-centerY);
   ctx.imageSmoothingEnabled=false;ctx.drawImage(roomLayers[currentRoom],0,0);
+  if(moonwood.has(currentRoom))drawMoonwoodDetails();
   if(target)surface(target.x+.1,target.y+.1,.8,.8,1,'#fff3bc30','#ffcf8f');
   if(hover){
     const [w,d]=editing&&selection?dimensions(selection):[1,1];
@@ -785,6 +831,11 @@ function draw(time){
   const drawPlayer = ()=>{
     const seat=player.seat;
     const [x,y]=seat?seatAnchor(seat):point(player.x+.5,player.y+.5,0);
+    if(moonwood.has(currentRoom)&&lanternLit){
+      const glow=ctx.createRadialGradient(x,y-8,3,x,y-8,34);
+      glow.addColorStop(0,'#ffe5aa60');glow.addColorStop(1,'#ffe5aa00');
+      ctx.fillStyle=glow;ctx.fillRect(x-34,y-42,68,68);
+    }
     if(!seat){
       surface(player.x+.17,player.y+.23,.71,.61,.2,'#43324452');
       surface(player.x+.27,player.y+.34,.50,.38,.3,'#43324462');
@@ -814,7 +865,7 @@ function draw(time){
     object(item,editing&&(selection?.id===item.id||hoverItem?.id===item.id)&&!fixed(item),time);
     ctx.globalAlpha=1;
     if(item===ghost||(fixed(item)&&!isGamingTable(item)))continue;
-    const [w,d]=dimensions(item), h={blackjack:19,roulette:22,reception:32,bed:24,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39,bench:22,streetlamp:55,fountain:37}[item.type];
+    const [w,d]=dimensions(item), h=moonwood.heights[item.type]??{blackjack:19,roulette:22,reception:32,bed:24,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39,bench:22,streetlamp:55,fountain:37}[item.type];
     const shape=[point(item.x,item.y+d),point(item.x+w,item.y+d),point(item.x+w,item.y),point(item.x+w,item.y,h),point(item.x,item.y,h),point(item.x,item.y+d,h)];
     hitboxes.push({item,shape});
   }
@@ -845,7 +896,7 @@ function installGamingTables(items){
 }
 function inRoom(x,y){return x>=0&&y>=0&&x<view.cols&&y<view.rows;}
 function blocked(x,y,items=roomFurniture()){
-  return !inRoom(x,y)||items.some(item=>item.type!=='shelf'&&overlap(item,{x,y}));
+  return !inRoom(x,y)||moonwood.blocked(currentRoom,x,y,adventure)||items.some(item=>item.type!=='shelf'&&overlap(item,{x,y}));
 }
 function canPlace(item){
   const [w,d]=dimensions(item);
@@ -897,7 +948,7 @@ function pointer(e){
   const y=((e.clientY-p.top-p.y)/p.scale-centerY)/zoom+centerY;
   const gx=Math.floor(((x-view.originX)/18+(y-view.originY)/9)/2);
   const gy=Math.floor(((y-view.originY)/9-(x-view.originX)/18)/2);
-  const door=roomDoors[currentRoom].find(portal=>inShape(x,y,doorHitShape(portal)));
+  const door=roomDoors[currentRoom].find(portal=>moonwood.open(portal,adventure)&&hitDoor(x,y,portal));
   return {tile:door?.tile??(inRoom(gx,gy)?{x:gx,y:gy}:null),door,item:hitboxes.findLast(h=>inShape(x,y,h.shape))?.item??null};
 }
 function note(message){
@@ -905,8 +956,8 @@ function note(message){
   noticeUntil=performance.now()+3000;
 }
 function setHint(){
-  const guide={home:'Click a tile to walk · Click the exit to visit the lobby',hub:'Click a doorway or the Outside steps to travel',lounge:defaultHint,outside:'Click a bench to sit · The Hotel door returns to the lobby'};
-  const message=editing?'Choose furniture to place or select a piece in the room':guide[currentRoom];
+  const guide={home:'Click a tile to walk · Click the exit to visit the lobby',hub:'Click a doorway or the Outside steps to travel',lounge:defaultHint,outside:'Click the Moonwood steps to explore · Hotel returns indoors'};
+  const message=editing?'Choose furniture to place or select a piece in the room':guide[currentRoom]??'Follow marked trails · Use the field journal for routes';
   $('hint').textContent='✦  '+message;
 }
 function startPosition(){return step?.to??{x:player.cx,y:player.cy};}
@@ -916,6 +967,15 @@ function walkTo(tile){
   if(!path){note('There’s no clear path to that tile.');return;}
   player.seat=null;player.waveStarted=null;
   route=path;interaction=null;target=path.length?tile:null;
+}
+function travelDoor(door){
+  if(currentRoom==='creek'&&door.to==='ruins'&&!adventure.bridge){
+    note('Light your lantern to reveal a crossing.');
+    return;
+  }
+  if(!moonwood.open(door,adventure))return;
+  if(!step&&player.cx===door.tile.x&&player.cy===door.tile.y)enterRoom(door.to,door.arrival);
+  else walkTo(door.tile);
 }
 function use(item){
   const start=startPosition(),[w,d]=dimensions(item);
@@ -938,7 +998,20 @@ function seatAnchor(item){
 }
 function finishInteraction(){
   const item=interaction;interaction=null;
-  if(item.type==='reception'){
+  if(item.type==='lanternStand'){
+    if(adventure.lantern){note('You already carry the waystone lantern.');return;}
+    adventure.lantern=true;
+    lanternLit=true;
+    recordAdventure('You take the waystone lantern. Its light reveals hidden paths.');
+  }else if(item.type==='mothAltar'){
+    adventure.shrine=true;
+    recordAdventure('The moths circle your lantern. You record the shrine in your journal.');
+  }else if(item.type==='moonwell'){
+    if(adventure.shortcut){note('The Moonwell glows. The root passage is open.');return;}
+    adventure.shortcut=true;
+    ownedFurniture.moonbloom=(ownedFurniture.moonbloom??0)+1;
+    recordAdventure('Moonbloom added to inventory. The root passage opens.');
+  }else if(item.type==='reception'){
     $('receptionMessage').textContent='Good evening, '+avatar.name+'! Your room is through the Home door. The front steps lead to the courtyard.';
     note('The concierge welcomes you to Pocket Hotel.');
   }else if(['sofa','chair','stool','bench'].includes(item.type)){
@@ -946,7 +1019,7 @@ function finishInteraction(){
     note('You took a seat. Click a tile to stand up.');
   }else{
     const descriptions={blackjack:'Blackjack table · Green felt, cards, and chips.',roulette:'Roulette table · A brass wheel and a red-and-black betting layout.',bed:'A neatly made bed.',plant:'The palm is enjoying the evening light.',lamp:'A warm glow from the floor lamp.',table:'A fresh cup of coffee and a book.',fountain:'The fountain ripples in the evening light.',streetlamp:'A warm light over the courtyard.'};
-    note(descriptions[item.type]);
+    note(descriptions[item.type]??'Moonwood glows quietly around you.');
   }
 }
 function animation(time){
@@ -961,8 +1034,8 @@ function animation(time){
     player.x=from.x+(to.x-from.x)*progress;player.y=from.y+(to.y-from.y)*progress;
     if(progress===1){
       player.cx=to.x;player.cy=to.y;player.stride++;step=null;
-      const door=roomDoors[currentRoom].find(({tile})=>tile.x===to.x&&tile.y===to.y);
-      if(door)enterRoom(door.to);
+      const door=roomDoors[currentRoom].find(portal=>portal.tile.x===to.x&&portal.tile.y===to.y&&moonwood.open(portal,adventure));
+      if(door)enterRoom(door.to,door.arrival);
     }
   }
   if(!step&&!route.length){target=null;if(interaction)finishInteraction();}
@@ -988,7 +1061,7 @@ function updateInventory(){
   $('inventoryCount').textContent=total?total+(total===1?' item in storage':' items in storage'):'Storage is empty';
 }
 function savePlayerState(){
-  save('player-state',{credits,ownedFurniture,furniture:loungeFurniture,homeFurniture,loungeLayout:'gaming'});
+  save('player-state',{credits,ownedFurniture,furniture:loungeFurniture,homeFurniture,loungeLayout:'gaming',adventure});
   updateInventory();
 }
 function editStatus(message){
@@ -1019,11 +1092,63 @@ function switchMode(next){
   }
   $('editorPanel').hidden=!editing;
   $('directoryPanel').hidden=currentRoom!=='hub';
-  $('panelTitle').textContent=editing?(atHome()?'Home editor':'Room editor'):currentRoom==='hub'?'Hotel directory':'Room chat';
+  const exploring=moonwood.has(currentRoom);
+  $('adventurePanel').hidden=!exploring;
+  $('panelTitle').textContent=editing?(atHome()?'Home editor':'Room editor'):currentRoom==='hub'?'Hotel directory':exploring?'Field journal':'Room chat';
   $('panelSub').textContent=editing?(atHome()?'YOUR HOME':'FURNITURE & DECOR'):roomDetails[currentRoom].name.toUpperCase();
   $('resetRoom').textContent=atHome()?'Clear home furniture':'Restore original room';
-  $('mode').textContent=editing?'DECORATE':currentRoom==='hub'?'MAIN HUB':currentRoom==='outside'?'OPEN AIR':'FREE ROAM';
+  $('mode').textContent=editing?'DECORATE':currentRoom==='hub'?'MAIN HUB':currentRoom==='outside'?'OPEN AIR':exploring?'EXPLORING':'FREE ROAM';
+  updateAdventurePanel();
   noticeUntil=0;setHint();cancelSelection();
+}
+function updateAdventurePanel(){
+  const exploring=moonwood.has(currentRoom);
+  const lantern=$('lantern');
+  lantern.hidden=!exploring||!adventure.lantern;
+  lantern.setAttribute('aria-pressed',String(lanternLit));
+  lantern.classList.toggle('active',lanternLit);
+  if(!exploring)return;
+  const fieldNotes={
+    trail:adventure.lantern?'Your lantern reveals hidden trails and crossings.':'Take the lantern from the waystone before heading deeper.',
+    grove:adventure.groveTrail?'The lantern revealed a trail to the Moth Shrine.':'Light your lantern to look for a trail through the grove.',
+    creek:adventure.bridge?'Moonlit stepping stones cross the creek.':'Light your lantern to reveal a way across the creek.',
+    shrine:adventure.shrine?'You recorded the Moth Shrine in your journal.':'Approach the altar to examine the moths.',
+    ruins:adventure.shortcut?'The root passage is open. Your Moonbloom is in inventory.':'Search the Moonwell for a keepsake and a shortcut back.',
+    roots:'Follow the roots back to Lantern Trail.'
+  };
+  $('adventureStatus').textContent=fieldNotes[currentRoom];
+  $('adventureProgress').textContent=adventure.discovered.length+' of '+Object.keys(moonwood.areas).length+' places discovered';
+  const landmark=$('adventureLandmark');
+  const action={trail:!adventure.lantern?'Take lantern':'',shrine:!adventure.shrine?'Examine altar':'',ruins:!adventure.shortcut?'Search Moonwell':''}[currentRoom];
+  landmark.hidden=!action;
+  landmark.textContent=action??'';
+  const links=$('adventureRoutes');
+  links.replaceChildren();
+  for(const door of roomDoors[currentRoom].filter(item=>moonwood.open(item,adventure))){
+    const button=document.createElement('button');
+    button.type='button';
+    button.className='adventure-route';
+    button.dataset.roomLink=door.to;
+    button.textContent=roomDetails[door.to].name;
+    button.setAttribute('aria-label',button.textContent);
+    button.onclick=()=>travelDoor(door);
+    links.append(button);
+  }
+}
+function recordAdventure(message){
+  savePlayerState();
+  updateAdventurePanel();
+  note(message);
+}
+function revealByLantern(){
+  if(!lanternLit)return;
+  if(currentRoom==='grove'&&!adventure.groveTrail){
+    adventure.groveTrail=true;
+    recordAdventure('A hidden trail to the Moth Shrine appears.');
+  }else if(currentRoom==='creek'&&!adventure.bridge){
+    adventure.bridge=true;
+    recordAdventure('Stepping stones shine through the water.');
+  }
 }
 function keepsExitClear(item){
   if(!atHome())return true;
@@ -1095,10 +1220,21 @@ for(const button of document.querySelectorAll('[data-room-link]')){
     const to=button.dataset.roomLink;
     const door=roomDoors[currentRoom].find(portal=>portal.to===to);
     if(editing)switchMode(false);
-    if(door)walkTo(door.tile);
+    if(door)travelDoor(door);
     else if(currentRoom==='lounge'&&to==='hub')enterRoom(to);
   };
 }
+$('lantern').onclick=()=>{
+  if(!adventure.lantern||!moonwood.has(currentRoom))return;
+  lanternLit=!lanternLit;
+  updateAdventurePanel();
+  note(lanternLit?'Lantern lit.':'Lantern dimmed.');
+  revealByLantern();
+};
+$('adventureLandmark').onclick=()=>{
+  const landmark=roomFurniture().find(item=>item.id==='landmark');
+  if(landmark)use(landmark);
+};
 $('reception').onclick=()=>use(hubFurniture[0]);
 for(const button of $('gamingGuide').querySelectorAll('[data-game-table]')){
   button.onclick=()=>{
@@ -1131,7 +1267,7 @@ canvas.addEventListener('pointermove',e=>{
 canvas.addEventListener('pointerleave',()=>{hover=null;hoverItem=null;});
 canvas.addEventListener('click',e=>{
   const {tile,item,door}=pointer(e);
-  if(!editing){if(door)walkTo(door.tile);else if(item)use(item);else if(tile)walkTo(tile);return;}
+  if(!editing){if(door)travelDoor(door);else if(item)use(item);else if(tile)walkTo(tile);return;}
   if(item&&!fixed(item)&&selection?.id!==null&&item.id!==selection?.id){choose(item);return;}
   if(selection&&tile)place(tile);
 });
@@ -1236,14 +1372,15 @@ function updateRoomLabel(){
     home:'The wall sign reads Your Home, '+avatar.name+'. Use the exit to reach the Grand Lobby.',
     hub:'Use a doorway, the Outside steps, or the Hotel directory to travel.',
     lounge:'Click furniture to interact. Use the Lobby button to go back.',
-    outside:'Click benches to sit. Use the Hotel door or Lobby button to return indoors.'
+    outside:'Use the Moonwood steps to explore or the Hotel door to return indoors.'
   };
-  canvas.setAttribute('aria-label',roomDetails[currentRoom].name+'. Click a floor tile or use arrow keys to walk. '+landmarks[currentRoom]);
+  canvas.setAttribute('aria-label',roomDetails[currentRoom].name+'. Click a floor tile or use arrow keys to walk. '+(landmarks[currentRoom]??'Use the marked trails or the field journal to travel.'));
 }
-function enterRoom(next){
+function enterRoom(next,arrival){
   const focusRoom=!!document.activeElement.closest('[data-room-link]');
   currentRoom=next;
-  const nextView=next==='hub'?hubView:next==='outside'?courtyardView:standardView;
+  const exploring=moonwood.has(next);
+  const nextView=exploring?moonwood.view:next==='hub'?hubView:next==='outside'?courtyardView:standardView;
   if(view!==nextView){
     view=nextView;
     canvas.width=view.width;
@@ -1254,6 +1391,7 @@ function enterRoom(next){
   $('roomLayout').classList.toggle('entry',atHome());
   $('roomLayout').classList.toggle('hub',next==='hub');
   $('roomLayout').classList.toggle('outside',next==='outside');
+  $('roomLayout').classList.toggle('moonwood',exploring);
   $('roomNumber').textContent=number;
   $('roomName').textContent=name;
   $('roomDescription').textContent=description;
@@ -1265,21 +1403,27 @@ function enterRoom(next){
   $('gridSize').textContent=view.cols+' × '+view.rows;
   $('exitRoom').hidden=!atHome();
   $('returnLobby').hidden=next!=='lounge'&&next!=='outside';
+  $('enterMoonwood').hidden=next!=='outside';
   $('edit').hidden=!canDecorate();
   $('bubble').hidden=true;
   updateRoomLabel();
   document.title='Pocket Lobby • '+name;
-  movePlayerToSpawn();
+  movePlayerToSpawn(arrival);
+  if(exploring&&!adventure.discovered.includes(next)){
+    adventure.discovered.push(next);
+    savePlayerState();
+  }
   switchMode(false);
+  if(exploring)revealByLantern();
   if(focusRoom)canvas.focus();
 }
-function movePlayerToSpawn(){
+function movePlayerToSpawn(arrival){
   const openTiles=[];
   const doors=roomDoors[currentRoom];
   for(let y=0;y<view.rows;y++)for(let x=0;x<view.cols;x++){
     if(!blocked(x,y)&&!doors.some(({tile})=>tile.x===x&&tile.y===y))openTiles.push({x,y});
   }
-  const spawn=currentRoom==='hub'?{x:8,y:12}:currentRoom==='outside'?{x:2,y:5}:{x:5,y:7};
+  const spawn=arrival??(currentRoom==='hub'?{x:8,y:12}:currentRoom==='outside'?{x:2,y:5}:{x:5,y:7});
   const distance=tile=>Math.abs(tile.x-spawn.x)+Math.abs(tile.y-spawn.y);
   openTiles.sort((a,b)=>distance(a)-distance(b));
   const {x,y}=openTiles.find(tile=>!atHome()||findPath(tile,homeExit.tile)!==null)??spawn;
