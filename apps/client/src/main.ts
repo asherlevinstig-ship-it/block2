@@ -210,6 +210,8 @@ import { SPEED_LAB_TOWN_ACTORS, SPEED_LAB_TOWN_LIGHTS, SPEED_LAB_TOWN_SIGNS, tow
   townNpcAnimationActive, townNpcAnimationBudget, type TownLifeActorDefinition } from "./town-life.js";
 import { townNpcFaceStyle } from "./town-npc-appearance.js";
 import { bindTownNpcRig, loadTownNpcAssets, TOWN_NPC_MODEL_YAW, transitionTownNpcRig } from "./town-npc-assets.js";
+import { serviceNpcAnimation, serviceNpcFacingYaw, serviceNpcPerformanceDuration, serviceNpcPerformanceFor,
+  type ServiceNpcId, type ServiceNpcPerformanceKind } from "./town-npc-interaction-presentation.js";
 import { SPEED_LAB_TOWN_TERRAIN, SPEED_LAB_TOWN_TERRAIN_DETAILS,
   type TownTerrainMaterial } from "./town-terrain.js";
 import { TOWN_ATMOSPHERE_PARTICLES, TOWN_ATMOSPHERE_PATCHES, TOWN_GATE_EMBANKMENTS,
@@ -2630,6 +2632,72 @@ interface RapidTownActorVisual {
   rightLeg: pc.Entity;
 }
 const rapidTownActors: RapidTownActorVisual[] = [];
+type TownNpcGesture = {
+  npcId: ServiceNpcId;
+  kind: ServiceNpcPerformanceKind;
+  startedAt: number;
+  until: number;
+};
+type TownNpcServiceEffect = {
+  npcId: ServiceNpcId;
+  kind: Exclude<ServiceNpcPerformanceKind, "greet">;
+  startedAt: number;
+  until: number;
+  particles: { entity: pc.Entity; phase: number }[];
+};
+let townNpcGesture: TownNpcGesture | null = null;
+const townNpcServiceEffects: TownNpcServiceEffect[] = [];
+const townNpcServiceMaterials = new Map<Exclude<ServiceNpcPerformanceKind, "greet">, pc.StandardMaterial>();
+
+function townNpcServiceMaterial(kind: Exclude<ServiceNpcPerformanceKind, "greet">): pc.StandardMaterial {
+  const cached = townNpcServiceMaterials.get(kind);
+  if (cached) return cached;
+  const colour = kind === "forge" ? new pc.Color(1, .32, .045)
+    : kind === "heal" ? new pc.Color(.3, 1, .68) : new pc.Color(.68, .42, 1);
+  const material = coloredMaterial(colour);
+  material.emissive.copy(colour);
+  material.emissiveIntensity = 3.4;
+  material.useLighting = false;
+  material.blendType = pc.BLEND_ADDITIVE;
+  material.depthWrite = false;
+  material.update();
+  townNpcServiceMaterials.set(kind, material);
+  return material;
+}
+
+function beginTownNpcGesture(npcId: ServiceNpcId, kind: ServiceNpcPerformanceKind): void {
+  const startedAt = performance.now();
+  townNpcGesture = { npcId, kind, startedAt, until: startedAt + serviceNpcPerformanceDuration(kind) };
+  const actor = rapidTownActors.find(candidate => candidate.definition.id === npcId);
+  if (actor) actor.animationName = "";
+  if (kind === "greet") return;
+  const material = townNpcServiceMaterial(kind);
+  const particles = Array.from({ length: kind === "heal" ? 12 : 9 }, (_, index) => {
+    const entity = new pc.Entity(`npc-service-${kind}-${index}`);
+    entity.addComponent("render", { type: kind === "guild" ? "box" : "sphere", castShadows: false });
+    if (entity.render) entity.render.material = material;
+    entity.setLocalScale(.07, .07, .07);
+    app.root.addChild(entity);
+    return { entity, phase: index / (kind === "heal" ? 12 : 9) };
+  });
+  townNpcServiceEffects.push({ npcId, kind, startedAt, until: startedAt + serviceNpcPerformanceDuration(kind), particles });
+  combatAudio.play(kind === "forge" ? "hammerImpact" : kind === "heal" ? "callingMage" : "discovery");
+}
+
+function clearTownNpcServiceEffects(): void {
+  townNpcGesture = null;
+  for (const effect of townNpcServiceEffects) for (const particle of effect.particles) particle.entity.destroy();
+  townNpcServiceEffects.length = 0;
+}
+
+function cancelTownNpcServiceEffects(npcId: ServiceNpcId): void {
+  for (let index = townNpcServiceEffects.length - 1; index >= 0; index--) {
+    const effect = townNpcServiceEffects[index]!;
+    if (effect.npcId !== npcId) continue;
+    for (const particle of effect.particles) particle.entity.destroy();
+    townNpcServiceEffects.splice(index, 1);
+  }
+}
 function townNpcPromptTarget(definition: TownNpcDefinition, location: TownNpcLocationId = "town"): pc.Vec3 {
   if (location === "town") {
     const actor = rapidTownActors.find(candidate => candidate.definition.id === definition.id);
@@ -13766,7 +13834,6 @@ function advanceTavernDialogue(): void {
 tavernDialogueNext.addEventListener("click", advanceTavernDialogue);
 tavernDialogueClose.addEventListener("click", closeTavernDialogue);
 
-type ServiceNpcId = "smith-brom" | "healer-lyra" | "guild-steward-elin";
 type ServiceNpcConversation = {
   icon: string;
   role: string;
@@ -13780,6 +13847,7 @@ type ServiceNpcConversation = {
   lore: string;
 };
 let activeServiceNpcId: ServiceNpcId | null = null;
+let serviceNpcCommitTimer: ReturnType<typeof setTimeout> | null = null;
 
 function serviceNpcConversation(npcId: ServiceNpcId): ServiceNpcConversation {
   if (npcId === "smith-brom") return {
@@ -13814,7 +13882,20 @@ function serviceNpcConversation(npcId: ServiceNpcId): ServiceNpcConversation {
   };
 }
 
-function closeServiceNpcDialogue(): void {
+function setServiceNpcDialogueControlsEnabled(enabled: boolean): void {
+  for (const button of [npcServicePrimary, npcServiceSecondary, npcServiceClose, npcServiceLeave]) button.disabled = !enabled;
+}
+
+function closeServiceNpcDialogue(preservePerformance = false): void {
+  if (serviceNpcCommitTimer !== null) {
+    clearTimeout(serviceNpcCommitTimer);
+    serviceNpcCommitTimer = null;
+  }
+  if (!preservePerformance && activeServiceNpcId) {
+    if (townNpcGesture?.npcId === activeServiceNpcId) townNpcGesture = null;
+    cancelTownNpcServiceEffects(activeServiceNpcId);
+  }
+  setServiceNpcDialogueControlsEnabled(true);
   npcServiceDialogue.hidden = true;
   activeServiceNpcId = null;
 }
@@ -13837,21 +13918,35 @@ function openServiceNpcDialogue(npcId: ServiceNpcId): void {
   npcServiceSecondary.hidden = false;
   npcServiceSecondary.querySelector("strong")!.textContent = copy.secondary;
   npcServiceSecondary.querySelector("small")!.textContent = copy.secondaryHint;
+  setServiceNpcDialogueControlsEnabled(true);
   npcServiceDialogue.hidden = false;
+  beginTownNpcGesture(npcId, "greet");
 }
 
 npcServicePrimary.addEventListener("click", () => {
   const npcId = activeServiceNpcId;
-  if (!npcId) return;
-  closeServiceNpcDialogue();
-  if (npcId === "smith-brom") { openBlacksmith(); return; }
-  if (npcId === "healer-lyra") {
-    room?.send("npc:interact", { npcId, action: "care" });
-    status.textContent = "Lyra is assessing your wounds…";
-    return;
-  }
-  room?.send("npc:interact", { npcId, action: "guild" });
-  status.textContent = "Elin is opening the guild register…";
+  if (!npcId || serviceNpcCommitTimer !== null) return;
+  const performanceKind = serviceNpcPerformanceFor(npcId);
+  beginTownNpcGesture(npcId, performanceKind);
+  setServiceNpcDialogueControlsEnabled(false);
+  npcServiceLine.textContent = npcId === "smith-brom" ? "Let's see what the tower has put in your hands."
+    : npcId === "healer-lyra" ? "Be still. Breathe. Let the sanctuary carry the weight."
+      : "One moment. The register remembers every oath.";
+  npcServiceDetail.textContent = npcId === "smith-brom" ? "Brom turns to the forge."
+    : npcId === "healer-lyra" ? "Restoration gathers around you."
+      : "Elin opens the guild ledger.";
+  serviceNpcCommitTimer = setTimeout(() => {
+    serviceNpcCommitTimer = null;
+    closeServiceNpcDialogue(true);
+    if (npcId === "smith-brom") { openBlacksmith(); return; }
+    if (npcId === "healer-lyra") {
+      room?.send("npc:interact", { npcId, action: "care" });
+      status.textContent = "Lyra restores your health and stamina.";
+      return;
+    }
+    room?.send("npc:interact", { npcId, action: "guild" });
+    status.textContent = "Elin opens the guild register.";
+  }, 850);
 });
 npcServiceSecondary.addEventListener("click", () => {
   if (!activeServiceNpcId) return;
@@ -13864,7 +13959,7 @@ npcServiceSecondary.addEventListener("click", () => {
       : "Parties last for a session; guild membership persists.";
   npcServiceSecondary.hidden = true;
 });
-for (const button of [npcServiceClose, npcServiceLeave]) button.addEventListener("click", closeServiceNpcDialogue);
+for (const button of [npcServiceClose, npcServiceLeave]) button.addEventListener("click", () => closeServiceNpcDialogue());
 
 function setInventoryOpen(open: boolean): void {
   const starterWeaponId = selectedStarterWeaponId();
@@ -16140,6 +16235,7 @@ function bindNetworkPerformance(joinedRoom: Room): void {
 
 function renderBootstrap(payload: WorldBootstrap): void {
   clearPendingStatChoice();
+  clearTownNpcServiceEffects();
   caveDiscoverySampleKey = "";
   caveFogViewKey = "";
   caveDiscoveryRevision++;
@@ -19835,6 +19931,7 @@ app.on("update", (dt: number) => {
       towerChronicleBeacon.setLocalScale(pulse, pulse, pulse);
     }
     const townAnimationBudget = townNpcAnimationBudget(appliedGraphicsQualityTier);
+    if (townNpcGesture && customUpdateStartedAt >= townNpcGesture.until) townNpcGesture = null;
     const animatedTownActors = new Set(rapidTownActors
       .filter(actor => actor.model?.anim)
       .map(actor => {
@@ -19846,13 +19943,20 @@ app.on("update", (dt: number) => {
       .map(candidate => candidate.actor));
     for (const actor of rapidTownActors) {
       const pose = townLifeActorPose(actor.definition, townTime);
+      const gesture = townNpcGesture?.npcId === actor.definition.id ? townNpcGesture : null;
+      const conversing = activeServiceNpcId === actor.definition.id;
+      const facingPlayer = Boolean(gesture || conversing);
       const walk = pose.stride * 34;
       const bob = actor.model ? 0 : pose.moving ? Math.abs(pose.stride) * .028 : Math.sin(townTime * 1.6 + actor.definition.phase * 5) * .01;
       actor.root.setLocalPosition(pose.x, fastWorldGroundHeight(pose.x, pose.z) + .15 + bob, pose.z);
-      actor.root.setLocalEulerAngles(0, pose.yaw, 0);
+      const targetYaw = facingPlayer ? serviceNpcFacingYaw(pose, playerPosition, pose.yaw) : pose.yaw;
+      const actorYaw = facingPlayer
+        ? approachYaw(actor.root.getLocalEulerAngles().y, targetYaw, Math.min(dt, .05), 420)
+        : pose.yaw;
+      actor.root.setLocalEulerAngles(0, actorYaw, 0);
       if (actor.model?.anim) {
-        const animateRig = animatedTownActors.has(actor) && townNpcAnimationActive(
-          Math.hypot(playerPosition.x - pose.x, playerPosition.z - pose.z), appliedGraphicsQualityTier);
+        const animateRig = facingPlayer || (animatedTownActors.has(actor) && townNpcAnimationActive(
+          Math.hypot(playerPosition.x - pose.x, playerPosition.z - pose.z), appliedGraphicsQualityTier));
         if (actor.model.anim.enabled !== animateRig) {
           actor.model.anim.enabled = animateRig;
           // Re-enter through a short transition rather than resuming a stale
@@ -19860,9 +19964,11 @@ app.on("update", (dt: number) => {
           if (animateRig) actor.animationName = "";
         }
         if (!animateRig) continue;
-        const animationName = townLifeAnimation(actor.definition, pose);
+        const animationName = gesture ? serviceNpcAnimation(gesture.kind)
+          : conversing ? "Idle" : townLifeAnimation(actor.definition, pose);
         if (animationName !== actor.animationName) {
-          actor.model.anim.speed = pose.motion === "walk" ? .92 + actor.definition.moveSpeed * .08 : 1;
+          actor.model.anim.speed = gesture ? (gesture.kind === "forge" ? 1.2 : .92)
+            : pose.motion === "walk" ? .92 + actor.definition.moveSpeed * .08 : 1;
           if (transitionTownNpcRig(actor.model, animationName, .2)) actor.animationName = animationName;
         }
         continue;
@@ -19875,7 +19981,23 @@ app.on("update", (dt: number) => {
         pose.moving ? pose.stride * 1.8 : pose.turn * 3.5);
       actor.head.setLocalEulerAngles(0, pose.moving ? Math.sin(townTime * .7 + actor.definition.phase * 8) * 3
         : Math.sin(townTime * .45 + actor.definition.phase * 8) * 9, 0);
-      if (actor.definition.role === "smith" && pose.motion === "work") {
+      if (gesture) {
+        const gesturePhase = (customUpdateStartedAt - gesture.startedAt) * .012;
+        if (gesture.kind === "forge") {
+          actor.rightArm.setLocalEulerAngles(-48 - Math.max(0, Math.sin(gesturePhase)) * 82, 0, -8);
+          actor.leftArm.setLocalEulerAngles(-22, 0, 12);
+        } else if (gesture.kind === "heal") {
+          const lift = Math.sin(gesturePhase) * 10;
+          actor.leftArm.setLocalEulerAngles(-54 - lift, 0, 32);
+          actor.rightArm.setLocalEulerAngles(-54 - lift, 0, -32);
+        } else {
+          actor.rightArm.setLocalEulerAngles(-42 - Math.sin(gesturePhase) * 24, 0, -34);
+          actor.head.setLocalEulerAngles(0, Math.sin(gesturePhase * .5) * 5, 0);
+        }
+      } else if (conversing) {
+        actor.rightArm.setLocalEulerAngles(-12, 0, -10);
+        actor.leftArm.setLocalEulerAngles(-8, 0, 8);
+      } else if (actor.definition.role === "smith" && pose.motion === "work") {
         actor.rightArm.setLocalEulerAngles(-34 - pose.activity * 82, 0, -8);
         actor.leftArm.setLocalEulerAngles(-18, 0, 12);
       } else if (actor.definition.role === "vendor" && pose.motion === "work") {
@@ -19883,6 +20005,43 @@ app.on("update", (dt: number) => {
       } else if (actor.definition.role === "healer" && pose.motion === "work") {
         actor.leftArm.setLocalEulerAngles(-18 - pose.activity * 16, 0, 18);
         actor.rightArm.setLocalEulerAngles(-18 - pose.activity * 16, 0, -18);
+      }
+    }
+    for (let effectIndex = townNpcServiceEffects.length - 1; effectIndex >= 0; effectIndex--) {
+      const effect = townNpcServiceEffects[effectIndex]!;
+      if (customUpdateStartedAt >= effect.until) {
+        for (const particle of effect.particles) particle.entity.destroy();
+        townNpcServiceEffects.splice(effectIndex, 1);
+        continue;
+      }
+      const actor = rapidTownActors.find(candidate => candidate.definition.id === effect.npcId);
+      if (!actor) continue;
+      const anchor = actor.root.getPosition();
+      const duration = effect.until - effect.startedAt;
+      const progress = Math.max(0, Math.min(1, (customUpdateStartedAt - effect.startedAt) / duration));
+      for (const particle of effect.particles) {
+        const angle = particle.phase * Math.PI * 2 + progress * (effect.kind === "forge" ? 5 : 9);
+        const fade = Math.sin(Math.min(1, progress * 1.7) * Math.PI) * Math.min(1, (1 - progress) * 4);
+        if (effect.kind === "forge") {
+          const burst = .16 + progress * 1.15;
+          particle.entity.setPosition(anchor.x + Math.cos(angle) * burst,
+            anchor.y + .75 + Math.sin(particle.phase * Math.PI) * .55 - progress * .28,
+            anchor.z + Math.sin(angle) * burst);
+        } else if (effect.kind === "heal") {
+          const playerBlend = Math.max(0, Math.min(1, (progress - .18) / .66));
+          const radius = .4 * (1 - playerBlend) + .1;
+          particle.entity.setPosition(anchor.x + (playerPosition.x - anchor.x) * playerBlend + Math.cos(angle) * radius,
+            anchor.y + .5 + (playerPosition.y + 1.1 - anchor.y) * playerBlend + particle.phase * .75,
+            anchor.z + (playerPosition.z - anchor.z) * playerBlend + Math.sin(angle) * radius);
+        } else {
+          const row = particle.phase < .5 ? -.18 : .18;
+          particle.entity.setPosition(anchor.x + Math.cos(angle) * .38,
+            anchor.y + 1.05 + row + Math.sin(angle * 2) * .12,
+            anchor.z + Math.sin(angle) * .38);
+          particle.entity.setLocalEulerAngles(0, progress * 220 + particle.phase * 90, 0);
+        }
+        const scale = (.04 + fade * .095) * (effect.kind === "guild" ? 1.2 : 1);
+        particle.entity.setLocalScale(scale, scale, scale);
       }
     }
     for (const lantern of rapidTownLights) {
