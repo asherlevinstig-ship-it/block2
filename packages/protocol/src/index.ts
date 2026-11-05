@@ -58,6 +58,10 @@ export type PartyUpdate = { partyId: string | null; members: { id: string; name:
   nearby: { id: string; name: string }[]; invite: { id: string; name: string; expiresAt: number } | null };
 export const GuildNameSchema = z.string().trim().min(3).max(24)
   .regex(/^[A-Za-z0-9][A-Za-z0-9 '&-]*$/, "Use letters, numbers, spaces, apostrophes or hyphens.");
+/** Founding a persistent guild is a deliberate account-level milestone. The
+ * server owns this price and performs the deduction in the same transaction
+ * that writes membership, so clients cannot create a guild for free. */
+export const GUILD_LICENSE_GOLD_COST = 100;
 export const GuildRequestSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("create"), name: GuildNameSchema }),
   z.object({ action: z.literal("invite"), targetId: z.string().min(1).max(80) }),
@@ -67,6 +71,8 @@ export const GuildRequestSchema = z.discriminatedUnion("action", [
 export type GuildRequest = z.infer<typeof GuildRequestSchema>;
 export type GuildMembership = { id: string; name: string };
 export type GuildUpdate = { membership: GuildMembership | null;
+  gold: number;
+  licenseCost: number;
   members: { id: string; name: string; online: boolean; distance: number }[];
   nearby: { id: string; name: string }[];
   invite: { id: string; guildId: string; guildName: string; inviterName: string; expiresAt: number } | null };

@@ -1,8 +1,8 @@
-import { GuildNameSchema, PlayerNameSchema, type GuildRequest, type GuildUpdate, type PartyRequest, type PartyUpdate } from "@blockcraft/protocol";
+import { GUILD_LICENSE_GOLD_COST, GuildNameSchema, PlayerNameSchema, type GuildRequest, type GuildUpdate, type PartyRequest, type PartyUpdate } from "@blockcraft/protocol";
 export function createPartyUI(send: (request: PartyRequest) => boolean, stopMovement: () => void, trade: (targetId: string) => void = () => {}, localId: () => string = () => "", rename: (name: string) => boolean = () => false,
   sendGuild: (request: GuildRequest) => boolean = () => false) {
   const root = document.createElement("section"); root.id = "party-panel"; root.setAttribute("aria-label", "Party controls");
-  root.innerHTML = '<details><summary>SOCIAL <span class="party-count">Solo</span></summary><section class="party-group"><h3>PARTY</h3><p class="party-help">Up to 4 players · loot unchanged · groups last for this session</p><ul class="party-members" aria-label="Party members"></ul><div class="party-invitation" hidden><p></p><button type="button" class="party-accept">Accept</button><button type="button" class="party-decline">Decline</button></div><div class="party-picker"><select aria-label="Nearby player to invite"><option value="">No nearby players</option></select><button type="button" class="party-invite">Invite</button></div><button type="button" class="party-leave" hidden>Leave party</button></section><section class="guild-group"><h3>GUILD <span class="guild-name">Not joined</span></h3><p class="guild-help">Persistent community · guild name appears beneath members</p><form class="guild-create"><input maxlength="24" minlength="3" placeholder="Guild name" autocomplete="off" aria-label="New guild name"><button type="submit">Found guild</button></form><div class="guild-invitation" hidden><p></p><button type="button" class="guild-accept">Join</button><button type="button" class="guild-decline">Decline</button></div><ul class="guild-members" aria-label="Online guild members"></ul><div class="guild-picker" hidden><select aria-label="Nearby player to invite to guild"><option value="">No nearby explorers</option></select><button type="button" class="guild-invite">Invite</button></div><button type="button" class="guild-leave" hidden>Leave guild</button></section><form class="party-rename"><label for="party-player-name">Change character name</label><div><input id="party-player-name" maxlength="20" minlength="2" placeholder="New name" autocomplete="off"><button type="submit">Rename</button></div></form><p class="party-status" role="status">Invite a nearby player on your level.</p></details>';
+  root.innerHTML = '<details><summary>SOCIAL <span class="party-count">Solo</span></summary><section class="party-group"><h3>PARTY</h3><p class="party-help">Up to 4 players · loot unchanged · groups last for this session</p><ul class="party-members" aria-label="Party members"></ul><div class="party-invitation" hidden><p></p><button type="button" class="party-accept">Accept</button><button type="button" class="party-decline">Decline</button></div><div class="party-picker"><select aria-label="Nearby player to invite"><option value="">No nearby players</option></select><button type="button" class="party-invite">Invite</button></div><button type="button" class="party-leave" hidden>Leave party</button></section><section class="guild-group"><h3>GUILD <span class="guild-name">Not joined</span></h3><p class="guild-help">Persistent community · guild name appears beneath members</p><div class="guild-license"><span>GUILD LICENCE</span><strong><b class="guild-license-cost">100</b> GOLD</strong><small class="guild-license-balance">You hold 0 gold</small></div><form class="guild-create"><input maxlength="24" minlength="3" placeholder="Guild name" autocomplete="off" aria-label="New guild name"><button type="submit">Buy licence & found</button></form><div class="guild-invitation" hidden><p></p><button type="button" class="guild-accept">Join</button><button type="button" class="guild-decline">Decline</button></div><ul class="guild-members" aria-label="Online guild members"></ul><div class="guild-picker" hidden><select aria-label="Nearby player to invite to guild"><option value="">No nearby explorers</option></select><button type="button" class="guild-invite">Invite</button></div><button type="button" class="guild-leave" hidden>Leave guild</button></section><form class="party-rename"><label for="party-player-name">Change character name</label><div><input id="party-player-name" maxlength="20" minlength="2" placeholder="New name" autocomplete="off"><button type="submit">Rename</button></div></form><p class="party-status" role="status">Invite a nearby player on your level.</p></details>';
   document.body.append(root);
   const details = root.querySelector("details")!, count = root.querySelector(".party-count")!, members = root.querySelector("ul")!;
   const select = root.querySelector("select")!, inviteButton = root.querySelector<HTMLButtonElement>(".party-invite")!;
@@ -15,12 +15,14 @@ export function createPartyUI(send: (request: PartyRequest) => boolean, stopMove
   const nameForm = root.querySelector<HTMLFormElement>(".party-rename")!, nameInput = root.querySelector<HTMLInputElement>("#party-player-name")!;
   const guildName = root.querySelector<HTMLElement>(".guild-name")!, guildCreate = root.querySelector<HTMLFormElement>(".guild-create")!;
   const guildNameInput = guildCreate.querySelector<HTMLInputElement>("input")!, guildMembers = root.querySelector<HTMLElement>(".guild-members")!;
+  const guildCreateButton = guildCreate.querySelector<HTMLButtonElement>("button")!, guildLicense = root.querySelector<HTMLElement>(".guild-license")!;
+  const guildLicenseCost = root.querySelector<HTMLElement>(".guild-license-cost")!, guildLicenseBalance = root.querySelector<HTMLElement>(".guild-license-balance")!;
   const guildInvitation = root.querySelector<HTMLElement>(".guild-invitation")!, guildInvitationText = guildInvitation.querySelector("p")!;
   const guildAccept = root.querySelector<HTMLButtonElement>(".guild-accept")!, guildDecline = root.querySelector<HTMLButtonElement>(".guild-decline")!;
   const guildPicker = root.querySelector<HTMLElement>(".guild-picker")!, guildSelect = guildPicker.querySelector<HTMLSelectElement>("select")!;
   const guildInvite = root.querySelector<HTMLButtonElement>(".guild-invite")!, guildLeave = root.querySelector<HTMLButtonElement>(".guild-leave")!;
   let current: PartyUpdate = { partyId: null, members: [], nearby: [], invite: null }, choicesKey = "", previousParty: string | null = null, previousInvite: string | null = null;
-  let currentGuild: GuildUpdate = { membership: null, members: [], nearby: [], invite: null }, guildChoicesKey = "", previousGuild = "", previousGuildInvite = "";
+  let currentGuild: GuildUpdate = { membership: null, gold: 0, licenseCost: GUILD_LICENSE_GOLD_COST, members: [], nearby: [], invite: null }, guildChoicesKey = "", previousGuild = "", previousGuildInvite = "";
   const request = (value: PartyRequest) => { status.textContent = send(value) ? "Waiting for the server…" : "Connect to the world first."; };
   const requestGuild = (value: GuildRequest) => { status.textContent = sendGuild(value) ? "Waiting for the server…" : "Connect to the world first."; };
   inviteButton.addEventListener("click", () => { if (select.value) request({ action: "invite", targetId: select.value }); inviteButton.blur(); });
@@ -31,6 +33,10 @@ export function createPartyUI(send: (request: PartyRequest) => boolean, stopMove
     event.preventDefault();
     const parsed = GuildNameSchema.safeParse(guildNameInput.value);
     if (!parsed.success) { status.textContent = "Guild names need 3–24 letters or numbers; spaces, apostrophes and hyphens are allowed."; return; }
+    if (currentGuild.gold < currentGuild.licenseCost) {
+      status.textContent = `A guild licence costs ${currentGuild.licenseCost} gold. You need ${currentGuild.licenseCost - currentGuild.gold} more.`;
+      return;
+    }
     requestGuild({ action: "create", name: parsed.data }); guildNameInput.blur();
   });
   guildAccept.addEventListener("click", () => { if (currentGuild.invite) requestGuild({ action: "respond", inviteId: currentGuild.invite.id, accept: true }); });
@@ -81,6 +87,17 @@ export function createPartyUI(send: (request: PartyRequest) => boolean, stopMove
     previousGuild = membershipId; previousGuildInvite = inviteId;
     guildName.textContent = value.membership?.name ?? "Not joined";
     guildCreate.hidden = Boolean(value.membership);
+    guildLicense.hidden = Boolean(value.membership);
+    guildLicenseCost.textContent = String(value.licenseCost);
+    guildLicenseBalance.textContent = `You hold ${value.gold} gold`;
+    guildLicense.dataset.affordable = String(value.gold >= value.licenseCost);
+    guildCreateButton.disabled = value.gold < value.licenseCost;
+    guildCreateButton.textContent = value.gold >= value.licenseCost
+      ? "Buy licence & found"
+      : `Need ${value.licenseCost - value.gold} more`;
+    guildCreateButton.title = value.gold >= value.licenseCost
+      ? `Purchase the guild licence for ${value.licenseCost} gold and found this guild.`
+      : `You need ${value.licenseCost - value.gold} more gold.`;
     guildInvitation.hidden = !value.invite;
     guildInvitationText.textContent = value.invite ? `${value.invite.inviterName} invites you to ${value.invite.guildName}. Accept within 30 seconds.` : "";
     guildMembers.replaceChildren(...value.members.map(member => {
@@ -128,6 +145,6 @@ export function createPartyUI(send: (request: PartyRequest) => boolean, stopMove
       else guildNameInput.focus();
     },
     notice(text: string) { status.textContent = text; },
-    reset() { update({ partyId: null, members: [], nearby: [], invite: null }); updateGuild({ membership: null, members: [], nearby: [], invite: null }); status.textContent = "Disconnected. Parties are session-only; guild membership is saved to your character."; },
+    reset() { update({ partyId: null, members: [], nearby: [], invite: null }); updateGuild({ membership: null, gold: 0, licenseCost: GUILD_LICENSE_GOLD_COST, members: [], nearby: [], invite: null }); status.textContent = "Disconnected. Parties are session-only; guild membership is saved to your character."; },
   };
 }

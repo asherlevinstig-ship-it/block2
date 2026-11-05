@@ -45,7 +45,7 @@ import { ashenSentryTacticalPattern, ashenWarpackCooldownMultiplier, ashenWarpac
 import { BRUTE_VOLLEY, bruteVolleyReady, bruteRockEndpoints } from "@blockcraft/protocol";
 import { CHAMPION_CHARGE, CINDER_RAM_CHARGE, ChatSendSchema, QUICK_CHAT_PHRASES, PlayerNameSchema, AppearanceSchema, type NearbyChatMessage } from "@blockcraft/protocol";
 import { hearsNearbyChat } from "./nearby-chat.js";
-import { GuildRequestSchema, parseGuildMembership, PartyRequestSchema } from "@blockcraft/protocol";
+import { GUILD_LICENSE_GOLD_COST, GuildRequestSchema, parseGuildMembership, PartyRequestSchema } from "@blockcraft/protocol";
 import { Parties } from "./parties.js";
 import { Guilds } from "./guilds.js";
 import { TradeRequestSchema } from "@blockcraft/protocol";
@@ -2550,7 +2550,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       client.send("npc:update", { npcId, action, ok: true, openPanel: "guild",
         message: membership
           ? `Welcome back, member of ${membership.name}. Review your roster or invite a nearby guild-free explorer.`
-          : "Name your guild here. Once founded, invite nearby guild-free explorers from the roster or their character card."
+          : `Purchase a guild licence for ${GUILD_LICENSE_GOLD_COST} gold, name your guild, then invite nearby guild-free explorers.`
       } satisfies TownNpcInteractionUpdate);
       client.send("guild:update", this.guilds.snapshot(client.sessionId, this.state.players, Date.now()));
       return;

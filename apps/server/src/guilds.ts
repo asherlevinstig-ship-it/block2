@@ -1,7 +1,7 @@
-import { parseGuildMembership, withGuildMembership,
+import { GUILD_LICENSE_GOLD_COST, parseGuildMembership, withGuildMembership,
   type GuildRequest, type GuildUpdate } from "@blockcraft/protocol";
 
-type Player = { x: number; y: number; z: number; name: string; huntLoadoutsJson: string };
+type Player = { x: number; y: number; z: number; name: string; coins: number; huntLoadoutsJson: string };
 type Players = Pick<Map<string, Player>, "get" | "entries">;
 type Invite = { id: string; from: string; guildId: string; guildName: string; expiresAt: number };
 export type GuildResult = { message: string; changed: string[] };
@@ -29,9 +29,14 @@ export class Guilds {
     const membership = parseGuildMembership(player.huntLoadoutsJson);
     if (request.action === "create") {
       if (membership) return { message: `You already belong to ${membership.name}.`, changed: [] };
+      if (player.coins < GUILD_LICENSE_GOLD_COST) {
+        const shortfall = GUILD_LICENSE_GOLD_COST - player.coins;
+        return { message: `Elin's guild licence costs ${GUILD_LICENSE_GOLD_COST} gold. You need ${shortfall} more gold.`, changed: [] };
+      }
       const guild = { id: `guild-${createId()}`, name: request.name };
+      player.coins -= GUILD_LICENSE_GOLD_COST;
       player.huntLoadoutsJson = withGuildMembership(player.huntLoadoutsJson, guild);
-      return { message: `${guild.name} founded. Invite nearby explorers from their character card.`, changed: [id] };
+      return { message: `${guild.name} founded. Guild licence purchased for ${GUILD_LICENSE_GOLD_COST} gold. Invite nearby explorers from their character card.`, changed: [id] };
     }
     if (request.action === "leave") {
       if (!membership) return { message: "You are not in a guild.", changed: [] };
@@ -80,6 +85,8 @@ export class Guilds {
     const inviter = invite ? players.get(invite.from) : null;
     return {
       membership,
+      gold: player?.coins ?? 0,
+      licenseCost: GUILD_LICENSE_GOLD_COST,
       members: !player || !membership ? [] : [...players.entries()].flatMap(([memberId, member]) => {
         const otherGuild = parseGuildMembership(member.huntLoadoutsJson);
         return otherGuild?.id === membership.id ? [{ id: memberId, name: member.name, online: true,

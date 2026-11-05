@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { parseGuildMembership } from "@blockcraft/protocol";
+import { GUILD_LICENSE_GOLD_COST, parseGuildMembership } from "@blockcraft/protocol";
 import { Guilds } from "./guilds.js";
 
-type TestPlayer = { x: number; y: number; z: number; name: string; huntLoadoutsJson: string };
+type TestPlayer = { x: number; y: number; z: number; name: string; coins: number; huntLoadoutsJson: string };
 
-const player = (name: string, x = 0): TestPlayer => ({
-  x, y: 8, z: 0, name, huntLoadoutsJson: "{}",
+const player = (name: string, x = 0, coins = GUILD_LICENSE_GOLD_COST): TestPlayer => ({
+  x, y: 8, z: 0, name, coins, huntLoadoutsJson: "{}",
 });
 
 describe("guild progression", () => {
@@ -18,6 +18,7 @@ describe("guild progression", () => {
       () => "fixed-id");
 
     expect(result.changed).toEqual(["aria"]);
+    expect(founder.coins).toBe(0);
     expect(parseGuildMembership(founder.huntLoadoutsJson)).toEqual({
       id: "guild-fixed-id",
       name: "Dawn Ward",
@@ -25,6 +26,33 @@ describe("guild progression", () => {
     expect(guilds.snapshot("aria", players, 1_000).members).toEqual([
       { id: "aria", name: "Aria", online: true, distance: 0 },
     ]);
+  });
+
+  it("refuses a guild licence without enough gold and does not partially create or charge it", () => {
+    const guilds = new Guilds();
+    const founder = player("Aria", 0, GUILD_LICENSE_GOLD_COST - 1);
+    const players = new Map([["aria", founder]]);
+
+    const result = guilds.handle("aria", { action: "create", name: "Dawn Ward" }, players, 1_000,
+      () => "fixed-id");
+
+    expect(result.changed).toEqual([]);
+    expect(result.message).toContain("need 1 more gold");
+    expect(founder.coins).toBe(GUILD_LICENSE_GOLD_COST - 1);
+    expect(parseGuildMembership(founder.huntLoadoutsJson)).toBeNull();
+  });
+
+  it("charges the licence exactly once when a repeated create request arrives", () => {
+    const guilds = new Guilds();
+    const founder = player("Aria", 0, GUILD_LICENSE_GOLD_COST * 2);
+    const players = new Map([["aria", founder]]);
+
+    guilds.handle("aria", { action: "create", name: "Dawn Ward" }, players, 1_000, () => "fixed-id");
+    const repeated = guilds.handle("aria", { action: "create", name: "Second Ward" }, players, 1_400, () => "second-id");
+
+    expect(founder.coins).toBe(GUILD_LICENSE_GOLD_COST);
+    expect(repeated.changed).toEqual([]);
+    expect(parseGuildMembership(founder.huntLoadoutsJson)?.name).toBe("Dawn Ward");
   });
 
   it("requires a nearby invitation and explicit acceptance before another player joins", () => {
