@@ -26,7 +26,7 @@ export type MeditationSite = {
  * positions are shared by rendering and the authoritative interaction check. */
 export const MEDITATION_SITES: readonly MeditationSite[] = [
   { id: "town-waystone", name: "Waystone of Beginnings", location: "town",
-    x: 91, y: 8, z: 113, colour: [1, .82, .3] },
+    x: 59.5, y: 8, z: 119.5, colour: [1, .82, .3] },
   { id: "floor-1-waystone", name: "Rampart Sanctuary Waystone", location: "floor-1",
     x: 310.5, y: 9, z: 116, colour: [1, .74, .2] },
   { id: "floor-2-waystone", name: "Emberworks Refuge Waystone", location: "floor-2",

@@ -109,6 +109,8 @@ const TOWN_DECORATIONS: readonly TownAssetPlacement[] = [
   { id: "treeCrooked", name: "south-road-tree", position: [110, 8.15, 138], yaw: -72, scale: 1.5 },
   { id: "treeHighRound", name: "weavers-tree", position: [41.5, 8.15, 88], yaw: 18, scale: 1.48 },
   { id: "treeCrooked", name: "healers-tree", position: [41.5, 8.15, 116], yaw: 84, scale: 1.56 },
+  { id: "treeCrooked", name: "meditation-clearing-tree", position: [54.4, 8.15, 121.8], yaw: 36, scale: 1.3 },
+  { id: "rockLarge", name: "meditation-clearing-rock", position: [56.1, 8.15, 123.4], yaw: -18, scale: .62 },
   { id: "treeHighRound", name: "lodge-tree", position: [41.5, 8.15, 140], yaw: -36, scale: 1.48 },
   { id: "rockLarge", name: "north-gate-rock", position: [104, 8.15, 96], yaw: 18, scale: .86 },
   { id: "rockSmall", name: "east-road-rock", position: [123, 8.15, 97], yaw: -28, scale: .76 },

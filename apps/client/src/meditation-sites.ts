@@ -40,12 +40,14 @@ function shape(parent: pc.Entity, name: string, type: "box" | "cylinder" | "sphe
   return entity;
 }
 
-/** A broad, grounded meditation hearth with a physical stone ring, logs,
- * golden fire and rising embers. Animation is transform-only, keeping the
- * effect tablet-friendly. */
+/** A grounded meditation hearth set into worn earth. The uneven low stone ring
+ * and restrained light keep the flame as the focal point rather than making
+ * the site read as a circular game platform. Animation is transform-only. */
 export function createMeditationSiteVisuals(app: pc.Application, parent: pc.Entity): MeditationSiteVisuals {
   const stone = material(new pc.Color(.19, .17, .12));
   const stoneLight = material(new pc.Color(.39, .33, .21));
+  const charredEarth = material(new pc.Color(.14, .105, .055));
+  const wornEarth = material(new pc.Color(.31, .235, .12));
   const sites = MEDITATION_SITES.map(site => {
     const colour = new pc.Color(site.colour[0], site.colour[1], site.colour[2]);
     const glow = material(colour, 4.2, .84);
@@ -53,21 +55,33 @@ export function createMeditationSiteVisuals(app: pc.Application, parent: pc.Enti
     const softGlow = material(colour, 2.5, .2);
     const root = new pc.Entity(`meditation:${site.id}`);
     root.setPosition(site.x, site.y, site.z); parent.addChild(root);
-    shape(root, "meditation-hearth-foundation", "cylinder", stone, [6.4, .12, 6.4], [0, .06, 0]);
-    shape(root, "meditation-hearth-inlay", "cylinder", stoneLight, [5.65, .06, 5.65], [0, .15, 0]);
-    const halo = shape(root, "meditation-golden-groundlight", "cylinder", softGlow, [4.7, .025, 4.7], [0, .205, 0]);
-    for (let i = 0; i < 12; i++) {
-      const angle = i / 12 * Math.PI * 2;
-      const slab = shape(root, "meditation-hearth-stone", "box", i % 2 ? stone : stoneLight, [.92, .48, 1.25],
-        [Math.cos(angle) * 2.25, .42 + (i % 2) * .035, Math.sin(angle) * 2.25]);
-      slab.setLocalEulerAngles(0, -angle * 180 / Math.PI + 90, 0);
+    const earthA = shape(root, "meditation-charred-earth", "cylinder", charredEarth, [5.1, .025, 4.1], [0, .035, 0]);
+    earthA.setLocalEulerAngles(0, 17, 0);
+    const earthB = shape(root, "meditation-worn-earth", "cylinder", wornEarth, [3.7, .018, 4.8], [-.48, .055, .28]);
+    earthB.setLocalEulerAngles(0, -23, 0);
+    for (const [x, z, sx, sz, yaw] of [[2.45, .05, 1.35, .78, 8], [3.35, -.08, 1.15, .66, -11],
+      [4.12, .12, .9, .5, 17]] as const) {
+      const step = shape(root, "meditation-worn-approach", "cylinder", wornEarth, [sx, .012, sz], [x, .045, z]);
+      step.setLocalEulerAngles(0, yaw, 0);
     }
+    const halo = shape(root, "meditation-golden-groundlight", "cylinder", softGlow, [2.45, .014, 2.05], [0, .095, 0]);
+    for (let i = 0; i < 9; i++) {
+      const angle = i / 9 * Math.PI * 2 + .12;
+      const radius = 1.48 + Math.sin(i * 2.17) * .13;
+      const sx = .52 + i % 3 * .08, sy = .25 + (i + 1) % 3 * .04, sz = .4 + (i * 2) % 3 * .07;
+      const hearthStone = shape(root, "meditation-hearth-stone", "sphere", i % 3 ? stone : stoneLight,
+        [sx, sy, sz], [Math.cos(angle) * radius, .2 + sy * .18, Math.sin(angle) * radius]);
+      hearthStone.setLocalEulerAngles(i * 11 % 18 - 9, -angle * 180 / Math.PI, i * 17 % 14 - 7);
+    }
+    for (const [x, z, sx, sy, sz] of [[-2.7, 1.55, 1.05, .48, .78], [-2.85, -.9, .8, .34, .62],
+      [-2.15, -1.7, .6, .27, .48]] as const)
+      shape(root, "meditation-clearing-boulder", "sphere", stone, [sx, sy, sz], [x, sy * .45, z]);
     const logMaterial = material(new pc.Color(.18, .075, .025));
     for (const [yaw, y] of [[45, .55], [-45, .63], [90, .71]] as const) {
-      const log = shape(root, "meditation-hearth-log", "box", logMaterial, [2.35, .3, .34], [0, y, 0]);
+      const log = shape(root, "meditation-hearth-log", "box", logMaterial, [1.8, .24, .28], [0, y, 0]);
       log.setLocalEulerAngles(0, yaw, 0);
     }
-    const coal = shape(root, "meditation-golden-coals", "cylinder", glow, [2.3, .16, 2.3], [0, .42, 0]);
+    const coal = shape(root, "meditation-golden-coals", "cylinder", glow, [1.45, .12, 1.45], [0, .38, 0]);
     coal.setLocalEulerAngles(0, 0, 0);
     const core = shape(root, "meditation-spectral-fire", "cone", hotGlow, [1.25, 2.45, 1.25], [0, 1.75, 0]);
     const flames = [
@@ -76,7 +90,7 @@ export function createMeditationSiteVisuals(app: pc.Application, parent: pc.Enti
       shape(root, "meditation-flame-high", "cone", hotGlow, [.58, 2.75, .58], [.08, 2.12, .05]),
     ];
     flames[0]!.setLocalEulerAngles(0, 0, -16); flames[1]!.setLocalEulerAngles(0, 0, 18);
-    const embers = shape(root, "meditation-ember-column", "cylinder", softGlow, [1.5, 4.2, 1.5], [0, 2.45, 0]);
+    const embers = shape(root, "meditation-ember-column", "cylinder", softGlow, [1.05, 3.45, 1.05], [0, 2.18, 0]);
     const runes = new pc.Entity("meditation-golden-spiral"); root.addChild(runes);
     const threads: pc.Entity[] = [];
     for (let i = 0; i < 18; i++) {
@@ -112,10 +126,10 @@ export function updateMeditationSiteVisuals(visuals: MeditationSiteVisuals, now:
     const energy = completing ? 1 : holding ? holdProgress : 0;
     visual.runes.setLocalEulerAngles(0, now * (.022 + energy * .065), 0);
     const pulse = 1 + Math.sin(now / 330) * .1 + energy * .3;
-    visual.halo.setLocalScale(4.7 * pulse, .025, 4.7 * pulse);
+    visual.halo.setLocalScale(2.45 * pulse, .014, 2.05 * pulse);
     visual.core.setLocalScale(1.25 * (1 + Math.sin(now / 145) * .12 + energy * .28),
       2.45 * (1 + Math.sin(now / 210) * .09 + energy * .24), 1.25 * (1 + Math.sin(now / 145) * .12 + energy * .28));
-    visual.embers.setLocalScale(1.5 * (1 + energy * .28), 4.2 * (1 + energy * .32), 1.5 * (1 + energy * .28));
+    visual.embers.setLocalScale(1.05 * (1 + energy * .28), 3.45 * (1 + energy * .32), 1.05 * (1 + energy * .28));
     visual.flames.forEach((flame, index) => {
       const flicker = 1 + Math.sin(now / (120 + index * 31) + index * 2) * .16 + energy * .3;
       const base: readonly [number, number, number] = index === 2 ? [.58, 2.75, .58]
