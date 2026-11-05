@@ -623,6 +623,7 @@ function cancelSelection(){selection=null;editStatus('Select a piece to get star
 function switchMode(next){
   editing=next;
   route=[];target=null;interaction=null;player.seat=null;player.waveStarted=null;hover=null;hoverItem=null;
+  bounds=null;
   $('wave').disabled=editing;
   $('edit').classList.toggle('active',editing);$('walk').classList.toggle('active',!editing);
   $('edit').setAttribute('aria-pressed',String(editing));$('walk').setAttribute('aria-pressed',String(!editing));
@@ -648,7 +649,9 @@ function place(tile){
   if(!keepsExitClear(item)){editStatus('Keep a walkable path to the exit.');return;}
   if(item.id===null){item.id=nextId++;roomFurniture().push(item);}
   else setRoomFurniture(roomFurniture().map(other=>other.id===item.id?item:other));
-  savePlayerState();selection=null;editStatus(types[item.type]+' placed.');
+  savePlayerState();
+  switchMode(false);
+  note(types[item.type]+' placed. Click a tile to walk.');
 }
 function rotate(){
   if(!selection)return;
@@ -752,7 +755,11 @@ canvas.addEventListener('keydown',e=>{
 document.addEventListener('keydown',e=>{
   if(!editing||e.target.matches('input')||document.querySelector('dialog[open]'))return;
   if(e.key.toLowerCase()==='r'){e.preventDefault();rotate();}
-  if(e.key==='Escape')cancelSelection();
+  if(e.key==='Escape'){
+    if(selection)cancelSelection();
+    else switchMode(false);
+    canvas.focus({preventScroll:true});
+  }
 });
 function setZoom(value){
   zoom=Math.max(.75,Math.min(1.5,value));hover=null;hoverItem=null;
