@@ -12,7 +12,7 @@ const shades = {
   cream:['#ffe0a5','#bd8d71','#e8b182'], green:['#81b486','#365e58','#518366'],
   clay:['#d5896b','#8c4c59','#ab5f5b'], black:['#3d344c','#211f33','#302a43']
 };
-const types = {sofa:'Velvet sofa', stool:'Bar stool', plant:'Potted palm', table:'Coffee table', lamp:'Floor lamp', chair:'Club chair'};
+const types = {bed:'Single bed', sofa:'Velvet sofa', stool:'Bar stool', plant:'Potted palm', table:'Coffee table', lamp:'Floor lamp', chair:'Club chair'};
 const outfits = ['#edaa66','#6da9be','#e58aa0','#91ba85','#af93d9'];
 const jacketShadows = ['#a85e49','#3d667e','#a34e73','#527c61','#7655a2'];
 const hairColors = ['#533343','#2b2a3d','#9c4f3d','#e6ae65','#786293'];
@@ -38,9 +38,15 @@ const savedPlayerState = load('player-state',null);
 let furniture = savedPlayerState?.furniture??load('room',initial);
 const credits = savedPlayerState?.credits??100;
 const countFurniture = (items,type)=>items.filter(item=>item.type===type).length;
-// Retain furniture from rooms saved before inventory was introduced.
-const ownedFurniture = savedPlayerState?.ownedFurniture??Object.fromEntries(
-  Object.keys(types).map(type=>[type,1+Math.max(countFurniture(initial,type),countFurniture(furniture,type))])
+const previousStock = savedPlayerState?.ownedFurniture??{};
+const hasBedStarter = Object.hasOwn(previousStock,'bed');
+const ownedFurniture = hasBedStarter?previousStock:Object.fromEntries(
+  Object.keys(types).map(type=>{
+    if(type==='bed')return [type,1];
+    // Retire the old starter copy while keeping placed and collected furniture.
+    const baseline=previousStock[type]===undefined?countFurniture(initial,type):previousStock[type]-1;
+    return [type,Math.max(baseline,countFurniture(furniture,type))];
+  })
 );
 const availableFurniture = type=>ownedFurniture[type]-countFurniture(furniture,type);
 let nextId = Math.max(0,...furniture.map(o=>o.id))+1;
@@ -207,7 +213,8 @@ function drawHomeSign(){
   ctx.restore();
 }
 function dimensions(item) {
-  return item.type==='sofa'?(item.rot%2?[1,2]:[2,1]):item.type==='bar'?[1.5,4.1]:item.type==='shelf'?[.35,3.5]:[1,1];
+  if(item.type==='sofa'||item.type==='bed')return item.rot%2?[1,2]:[2,1];
+  return item.type==='bar'?[1.5,4.1]:item.type==='shelf'?[.35,3.5]:[1,1];
 }
 function object(item,highlight=false) {
   const {x,y,type,rot}=item;
@@ -232,6 +239,16 @@ function object(item,highlight=false) {
       part(1.43,.32,.33,.27,13,5,'cream');
       part(.99,.33,.035,.55,13,.3,'trim');
     }else part(.24,.34,.25,.2,13,5,'cream');
+  } else if(type==='bed'){
+    for(const i of [.13,1.75])for(const j of [.12,.76])part(i,j,.12,.12,0,4,'black');
+    part(.02,.02,1.95,.94,3,5,'wood');
+    part(.13,.075,1.73,.83,8,4,'cream');
+    part(.04,.045,.12,.9,7,16,'wood');
+    part(.03,.028,.16,.94,23,1,'gold');
+    part(.25,.19,.42,.6,12,3,['#ffebc9','#bc938e','#dec0a9']);
+    part(.76,.08,1.12,.83,12,2,'blue');
+    part(.75,.08,.16,.83,14,1,'trim');
+    part(1.55,.105,.04,.78,14,.3,'trim');
   } else if(type==='table'){
     for(const i of [.15,.7])for(const j of [.14,.72])part(i,j,.09,.09,0,10,'black');
     part(.065,.075,.86,.85,10,3,'wood');
@@ -434,7 +451,7 @@ function draw(time){
     object(item,editing&&(selection?.id===item.id||hoverItem?.id===item.id)&&!fixed(item));
     ctx.globalAlpha=1;
     if(item===ghost||fixed(item))continue;
-    const [w,d]=dimensions(item), h={sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39}[item.type];
+    const [w,d]=dimensions(item), h={bed:24,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39}[item.type];
     const shape=[point(item.x,item.y+d),point(item.x+w,item.y+d),point(item.x+w,item.y),point(item.x+w,item.y,h),point(item.x,item.y,h),point(item.x,item.y+d,h)];
     hitboxes.push({item,shape});
   }
@@ -541,7 +558,7 @@ function finishInteraction(){
     player.seat=item;player.back=item.rot>=2;player.direction=item.rot%2?'right':'left';
     note('You took a seat. Click a tile to stand up.');
   }else{
-    const descriptions={plant:'The palm is enjoying the evening light.',lamp:'A warm glow from the floor lamp.',table:'A fresh cup of coffee and a book.'};
+    const descriptions={bed:'A neatly made bed.',plant:'The palm is enjoying the evening light.',lamp:'A warm glow from the floor lamp.',table:'A fresh cup of coffee and a book.'};
     note(descriptions[item.type]);
   }
 }
@@ -574,14 +591,14 @@ function updateInventory(){
     total+=available;
     const editorButton=$('catalog').querySelector('[data-type="'+type+'"]');
     editorButton.querySelector('.quantity').textContent=available+' available';
-    editorButton.disabled=available===0;
+    editorButton.hidden=available===0;
     const row=$('inventoryItems').querySelector('[data-type="'+type+'"]');
+    row.hidden=available===0;
     row.querySelector('.quantity').textContent='×'+available;
     const placeButton=row.querySelector('button');
-    placeButton.disabled=available===0;
     placeButton.hidden=inEntryRoom;
   }
-  $('inventoryCount').textContent=total+(total===1?' item in storage':' items in storage');
+  $('inventoryCount').textContent=total?total+(total===1?' item in storage':' items in storage'):'Storage is empty';
 }
 function savePlayerState(){
   save('player-state',{credits,ownedFurniture,furniture});
@@ -631,7 +648,9 @@ function thumbnail(type){
   const el=document.createElement('canvas');
   el.width=54;el.height=44;el.setAttribute('aria-hidden','true');
   const previous=ctx;ctx=el.getContext('2d');
-  ctx.translate(-216,-55);object({type,x:0,y:0,rot:0});
+  const item={type,x:0,y:0,rot:0};
+  const [w,d]=dimensions(item);
+  ctx.translate(27-point(w/2,d/2)[0],40-point(w,d)[1]);object(item);
   ctx=previous;
   return el;
 }
@@ -653,7 +672,7 @@ for(const [type,name] of Object.entries(types)){
   row.append(thumbnail(type),label,quantity,placeButton);$('inventoryItems').append(row);
 }
 $('credits').textContent=new Intl.NumberFormat().format(credits);
-if(savedPlayerState)updateInventory();else savePlayerState();
+if(hasBedStarter)updateInventory();else savePlayerState();
 $('inventory').onclick=()=>{
   $('inventoryGuide').textContent=inEntryRoom
     ?'Your furniture is in storage. Exit to the Sunset Lounge to place it.'
