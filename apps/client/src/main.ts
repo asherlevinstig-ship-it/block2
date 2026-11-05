@@ -214,6 +214,7 @@ import { serviceNpcAnimation, serviceNpcFacingYaw, serviceNpcPerformanceDuration
   type ServiceNpcId, type ServiceNpcPerformanceKind } from "./town-npc-interaction-presentation.js";
 import { townNpcProgressionCopy, townVictoryAnimation } from "./town-npc-progression.js";
 import { townSocialBeat, type TownSocialBeat } from "./town-social-life.js";
+import { TownAmbience } from "./town-ambience.js";
 import { SPEED_LAB_TOWN_TERRAIN, SPEED_LAB_TOWN_TERRAIN_DETAILS,
   type TownTerrainMaterial } from "./town-terrain.js";
 import { TOWN_ATMOSPHERE_PARTICLES, TOWN_ATMOSPHERE_PATCHES, TOWN_GATE_EMBANKMENTS,
@@ -2535,6 +2536,12 @@ const meditationSiteVisuals = createMeditationSiteVisuals(app, rapidPrototypeRoo
 let tavernRoomWorld: pc.Entity | null = null;
 let tavernCutawayState = "off";
 const tavernAmbience = tavernRoomRequested ? new TavernAmbience() : null;
+const townAmbience = fastWorldRequested && !tavernRoomRequested ? new TownAmbience() : null;
+if (townAmbience) {
+  const startTownAmbience = () => townAmbience.start();
+  window.addEventListener("pointerdown", startTownAmbience, { once: true });
+  window.addEventListener("keydown", startTownAmbience, { once: true });
+}
 if (tavernRoomRequested) {
   tavernRoomWorld = createTavernRoom(app);
   if (cameraViewMode === "third-person") {
@@ -19983,8 +19990,10 @@ app.on("update", (dt: number) => {
       .sort((left, right) => left.distance - right.distance)
       .slice(0, townAnimationBudget)
       .map(candidate => candidate.actor));
+    const townAudioWalkers: { x: number; z: number }[] = [];
     for (const actor of rapidTownActors) {
       const pose = townLifeActorPose(actor.definition, townTime);
+      if (pose.moving) townAudioWalkers.push({ x: pose.x, z: pose.z });
       const gesture = townNpcGesture?.npcId === actor.definition.id ? townNpcGesture : null;
       const conversing = activeServiceNpcId === actor.definition.id;
       const celebratingVictory = customUpdateStartedAt < towerChronicleCelebrationUntil;
@@ -20072,6 +20081,17 @@ app.on("update", (dt: number) => {
       }
     }
     updateTownSpeechBubble(activeTownSocialBeat, playerPosition);
+    const playerInsideTown = playerPosition.x >= FAST_WORLD_TOWN_BOUNDS.minX
+      && playerPosition.x <= FAST_WORLD_TOWN_BOUNDS.maxX
+      && playerPosition.z >= FAST_WORLD_TOWN_BOUNDS.minZ
+      && playerPosition.z <= FAST_WORLD_TOWN_BOUNDS.maxZ;
+    townAmbience?.update({
+      active: playerInsideTown && worldReady,
+      listener: { x: playerPosition.x, z: playerPosition.z },
+      walkers: townAudioWalkers,
+      celebration: customUpdateStartedAt < towerChronicleCelebrationUntil,
+      guardCallKey: activeTownSocialBeat?.speakerId.includes("warden") ? activeTownSocialBeat.key : undefined,
+    });
     for (let effectIndex = townNpcServiceEffects.length - 1; effectIndex >= 0; effectIndex--) {
       const effect = townNpcServiceEffects[effectIndex]!;
       if (customUpdateStartedAt >= effect.until) {
