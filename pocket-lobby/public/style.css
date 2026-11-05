@@ -40,3 +40,5 @@
 @media(min-width:691px) and (max-width:1000px){.hub .directory{padding:9px;gap:6px}.hub .directory-welcome{padding:8px}}
 
 @media(min-width:691px){.hub #game{max-height:min(75vh,630px)}}
+
+.gaming-guide{display:flex;flex-wrap:wrap;gap:5px;padding:9px 10px;border-bottom:1px solid var(--line);background:#251f30}.gaming-guide>span{width:100%;font:650 8px/1.2 ui-monospace,Consolas,monospace;letter-spacing:.12em;color:#d6ad91}.gaming-guide button{padding:4px 7px;font-size:11px;border-color:#674b55;background:#392c3b;color:#f1cfad}.gaming-guide button:hover{background:#503848}.gaming-guide button span{color:#efb478}

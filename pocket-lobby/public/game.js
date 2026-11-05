@@ -29,30 +29,43 @@ function load(key,fallback) {
 function save(key,value) {
   try { localStorage.setItem('pocket-lobby:'+key,JSON.stringify(value)); } catch {}
 }
-const initial = [
+const classicLounge = [
   ['bar',.05,.25],['shelf',.02,.48],['plant',.3,8.7],['plant',8.9,.2],
   ['sofa',5,1,0],['chair',8,3,1],['table',6,3,0],['lamp',8,1,0],
   ['stool',2,1],['stool',2,2],['stool',2,3],['chair',2,6,1],
   ['table',3,7,1],['chair',4,8,0],['lamp',1,6],['plant',7,8],['plant',.3,4.9]
 ].map(([type,x,y,rot=0],id)=>({id,type,x,y,rot}));
-const fixed = item => item.type==='bar'||item.type==='shelf';
+const gamingTables=[
+  {id:'blackjack',type:'blackjack',x:6,y:3,rot:0},
+  {id:'roulette',type:'roulette',x:3,y:7,rot:1}
+];
+const isGamingTable=item=>item.type==='blackjack'||item.type==='roulette';
+const initial=[...classicLounge.filter(item=>item.type!=='table'),...gamingTables];
+const fixed = item => item.type==='bar'||item.type==='shelf'||isGamingTable(item);
 const savedPlayerState = load('player-state',null);
-let loungeFurniture = savedPlayerState?.furniture??load('room',initial);
+const hasGamingLayout=savedPlayerState?.loungeLayout==='gaming';
+const savedLounge=savedPlayerState?.furniture??load('room',null);
+const retiredTables=hasGamingLayout?[]:(savedLounge??[]).filter(item=>item.type==='table'&&
+  classicLounge.some(old=>old.type==='table'&&old.id===item.id&&old.x===item.x&&old.y===item.y&&old.rot===item.rot));
+let loungeFurniture=initial;
+if(savedLounge)loungeFurniture=hasGamingLayout?savedLounge:installGamingTables(savedLounge.filter(item=>!retiredTables.includes(item)));
 let homeFurniture = savedPlayerState?.homeFurniture??[];
 const credits = savedPlayerState?.credits??100;
 const countFurniture = (items,type)=>items.filter(item=>item.type===type).length;
 const previousStock = savedPlayerState?.ownedFurniture??{};
 const hasBedStarter = Object.hasOwn(previousStock,'bed');
-const ownedFurniture = hasBedStarter?previousStock:Object.fromEntries(
+const ownedFurniture = hasBedStarter&&hasGamingLayout?previousStock:Object.fromEntries(
   Object.keys(types).map(type=>{
-    if(type==='bed')return [type,1];
-    // Retire the old starter copy while keeping placed and collected furniture.
-    const baseline=previousStock[type]===undefined?countFurniture(initial,type):previousStock[type]-1;
-    return [type,Math.max(baseline,countFurniture(loungeFurniture,type))];
+    if(type==='bed'&&!hasBedStarter)return [type,1];
+    const baseline=previousStock[type]??countFurniture(savedLounge?classicLounge:initial,type);
+    const oldStarter=!hasBedStarter&&Object.hasOwn(previousStock,type)?1:0;
+    const retired=type==='table'?retiredTables.length:0;
+    const placed=countFurniture(loungeFurniture,type)+countFurniture(homeFurniture,type);
+    return [type,Math.max(baseline-oldStarter-retired,placed)];
   })
 );
 const availableFurniture = type=>ownedFurniture[type]-countFurniture(loungeFurniture,type)-countFurniture(homeFurniture,type);
-let nextId = Math.max(0,...[...loungeFurniture,...homeFurniture].map(item=>item.id))+1;
+let nextId = Math.max(0,...[...loungeFurniture,...homeFurniture].map(item=>item.id).filter(Number.isInteger))+1;
 let avatar = {...defaultAvatar,...load('avatar',defaultAvatar)};
 let draft;
 let messages = load('chat',[]);
@@ -83,7 +96,7 @@ const roomDoors={home:[homeExit],hub:hubDoors,lounge:[]};
 const roomDetails={
   home:{number:'00',name:'Entry Room',description:'Walk through the exit to reach the Grand Lobby.',badge:'ROOM NO. 00',floor:'Private room'},
   hub:{number:'01',name:'The Grand Lobby',description:'Meet at reception, settle into a seating area, or head to another room.',badge:'MAIN HUB',floor:'Ground floor'},
-  lounge:{number:'02',name:'The Sunset Lounge',description:'Check in, find a seat, and make yourself at home.',badge:'LOUNGE NO. 02',floor:'Ground floor'}
+  lounge:{number:'02',name:'The Sunset Lounge',description:'Find blackjack and roulette on the gaming floor, or take a seat by the bar.',badge:'GAMING LOUNGE',floor:'Ground floor'}
 };
 const defaultHint = 'Click a tile to walk · Click furniture to interact';
 
@@ -354,7 +367,7 @@ function drawChandelier(){
   rect(239,69,2,12,'#fff2b9');
 }
 function dimensions(item) {
-  if(item.type==='sofa'||item.type==='bed')return item.rot%2?[1,2]:[2,1];
+  if(item.type==='sofa'||item.type==='bed'||isGamingTable(item))return item.rot%2?[1,2]:[2,1];
   if(item.type==='reception')return [3,1];
   return item.type==='bar'?[1.5,4.1]:item.type==='shelf'?[.35,3.5]:[1,1];
 }
@@ -381,6 +394,35 @@ function object(item,highlight=false) {
       part(1.43,.32,.33,.27,13,5,'cream');
       part(.99,.33,.035,.55,13,.3,'trim');
     }else part(.24,.34,.25,.2,13,5,'cream');
+  } else if(isGamingTable(item)){
+    for(const i of [.19,1.68])for(const j of [.20,.68])part(i,j,.13,.13,0,10,'black');
+    part(.13,.14,1.74,.72,6,4,'wood');
+    part(.045,.075,1.91,.85,10,4,'wood');
+    part(.09,.10,1.82,.80,14,1,'gold');
+    part(.16,.155,1.68,.69,15,1,type==='blackjack'
+      ?['#477f69','#2f5d58','#36665a']
+      :['#95586f','#58354d','#70445c']);
+    if(type==='blackjack'){
+      for(const x of [.46,.92,1.38]){
+        part(x,.60,.20,.16,16,.3,'cream');
+        part(x+.03,.62,.14,.12,16.3,.3,'green');
+      }
+      part(.71,.26,.15,.19,16,.8,'cream');
+      part(.84,.30,.15,.19,16,.8,'cream');
+      part(.88,.34,.045,.035,16.8,.4,'coral');
+      part(1.51,.25,.20,.21,16,2.6,'black');
+      part(1.50,.28,.11,.15,18.6,.45,'cream');
+      part(.27,.28,.12,.12,16,1.5,'coral');
+      part(.32,.43,.11,.11,16,1.8,'blue');
+    }else{
+      const [u,v]=rot%2?[.50,.53]:[.53,.50];
+      drawRouletteWheel(...point(x+(rot>=2?w-u:u),y+(rot>=2?d-v:v),19));
+      part(.85,.26,.84,.47,16,.35,'trim');
+      for(let row=0;row<3;row++)for(let col=0;col<5;col++){
+        part(.88+col*.156,.282+row*.142,.129,.108,16.4,.25,(row+col)%2?'coral':'black');
+      }
+      part(1.66,.74,.105,.10,16,1.4,'gold');
+    }
   } else if(type==='reception'){
     const [sx,sy]=point(x+1.46,y-.2,2);
     sprite(ctx,sx,sy,{outfit:4,hair:1});
@@ -453,6 +495,22 @@ function object(item,highlight=false) {
       }
     }
   }
+}
+function drawRouletteWheel(x,y){
+  const ellipse=(rx,ry,color,offset=0)=>{
+    ctx.beginPath();ctx.ellipse(x,y+offset,rx,ry,0,0,2*Math.PI);ctx.fillStyle=color;ctx.fill();
+  };
+  ellipse(9,4.9,'#39293e',2);
+  ellipse(9,4.8,'#e7ad73');
+  ellipse(7.5,3.9,'#4f3146');
+  for(let i=0;i<12;i++){
+    ctx.beginPath();ctx.moveTo(x,y);
+    ctx.ellipse(x,y,6.5,3.2,0,i*Math.PI/6,(i+1)*Math.PI/6);
+    ctx.closePath();ctx.fillStyle=i===0?'#638e75':i%2?'#cb787c':'#3a3044';ctx.fill();
+  }
+  ellipse(3.3,1.6,'#a26858');
+  rect(x-1,y-2,2,2,'#ffd193');
+  rect(x+4,y-2,1,1,'#fff1d7');
 }
 function pixelHead(target,appearance,back,blink){
   const hair=hairColors[appearance.hair]??hairColors[0];
@@ -608,8 +666,8 @@ function draw(time){
     ctx.globalAlpha=item===ghost?.52:ghost&&selection?.id===item.id?.4:1;
     object(item,editing&&(selection?.id===item.id||hoverItem?.id===item.id)&&!fixed(item));
     ctx.globalAlpha=1;
-    if(item===ghost||fixed(item))continue;
-    const [w,d]=dimensions(item), h={reception:32,bed:24,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39}[item.type];
+    if(item===ghost||(fixed(item)&&!isGamingTable(item)))continue;
+    const [w,d]=dimensions(item), h={blackjack:19,roulette:22,reception:32,bed:24,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39}[item.type];
     const shape=[point(item.x,item.y+d),point(item.x+w,item.y+d),point(item.x+w,item.y),point(item.x+w,item.y,h),point(item.x,item.y,h),point(item.x,item.y+d,h)];
     hitboxes.push({item,shape});
   }
@@ -620,6 +678,23 @@ function draw(time){
 function overlap(a,b){
   const [aw,ad]=dimensions(a),[bw,bd]=dimensions(b);
   return a.x<b.x+bw&&a.x+aw>b.x&&a.y<b.y+bd&&a.y+ad>b.y;
+}
+function installGamingTables(items){
+  const layout=[...items];
+  for(const table of gamingTables){
+    const candidates=[table];
+    for(let y=0;y<standardView.rows;y++)for(let x=0;x<standardView.cols;x++){
+      candidates.push({...table,x,y},{...table,x,y,rot:(table.rot+1)%4});
+    }
+    candidates.sort((a,b)=>Math.abs(a.x-table.x)+Math.abs(a.y-table.y)-Math.abs(b.x-table.x)-Math.abs(b.y-table.y));
+    const spot=candidates.find(item=>{
+      const [w,d]=dimensions(item);
+      return item.x+w<=standardView.cols&&item.y+d<=standardView.rows&&
+        !overlap(item,{x:5,y:7})&&!layout.some(other=>other.type!=='shelf'&&overlap(item,other));
+    });
+    if(spot)layout.push(spot);
+  }
+  return layout;
 }
 function inRoom(x,y){return x>=0&&y>=0&&x<view.cols&&y<view.rows;}
 function blocked(x,y,items=roomFurniture()){
@@ -723,7 +798,7 @@ function finishInteraction(){
     player.seat=item;player.back=item.rot>=2;player.direction=item.rot%2?'right':'left';
     note('You took a seat. Click a tile to stand up.');
   }else{
-    const descriptions={bed:'A neatly made bed.',plant:'The palm is enjoying the evening light.',lamp:'A warm glow from the floor lamp.',table:'A fresh cup of coffee and a book.'};
+    const descriptions={blackjack:'Blackjack table · Green felt, cards, and chips.',roulette:'Roulette table · A brass wheel and a red-and-black betting layout.',bed:'A neatly made bed.',plant:'The palm is enjoying the evening light.',lamp:'A warm glow from the floor lamp.',table:'A fresh cup of coffee and a book.'};
     note(descriptions[item.type]);
   }
 }
@@ -766,7 +841,7 @@ function updateInventory(){
   $('inventoryCount').textContent=total?total+(total===1?' item in storage':' items in storage'):'Storage is empty';
 }
 function savePlayerState(){
-  save('player-state',{credits,ownedFurniture,furniture:loungeFurniture,homeFurniture});
+  save('player-state',{credits,ownedFurniture,furniture:loungeFurniture,homeFurniture,loungeLayout:'gaming'});
   updateInventory();
 }
 function editStatus(message){
@@ -790,6 +865,11 @@ function switchMode(next){
   $('roomLayout').classList.toggle('decorating',editing);
   $('roomSide').hidden=atHome()&&!editing;
   $('chatPanel').hidden=editing||currentRoom!=='lounge';
+  if(currentRoom==='lounge'){
+    for(const button of $('gamingGuide').querySelectorAll('[data-game-table]')){
+      button.hidden=!loungeFurniture.some(item=>item.type===button.dataset.gameTable);
+    }
+  }
   $('editorPanel').hidden=!editing;
   $('directoryPanel').hidden=currentRoom!=='hub';
   $('panelTitle').textContent=editing?(atHome()?'Home editor':'Room editor'):currentRoom==='hub'?'Hotel directory':'Room chat';
@@ -853,7 +933,7 @@ for(const [type,name] of Object.entries(types)){
   row.append(thumbnail(type),label,quantity,placeButton);$('inventoryItems').append(row);
 }
 $('credits').textContent=new Intl.NumberFormat().format(credits);
-if(hasBedStarter)updateInventory();else savePlayerState();
+if(hasBedStarter&&hasGamingLayout)updateInventory();else savePlayerState();
 $('inventory').onclick=()=>{
   $('inventoryGuide').textContent=currentRoom==='hub'
     ?'Take the Home or Lounge door to place furniture from storage.'
@@ -873,6 +953,12 @@ for(const button of document.querySelectorAll('[data-room-link]')){
   };
 }
 $('reception').onclick=()=>use(hubFurniture[0]);
+for(const button of $('gamingGuide').querySelectorAll('[data-game-table]')){
+  button.onclick=()=>{
+    const destination=loungeFurniture.find(item=>item.type===button.dataset.gameTable);
+    if(destination)use(destination);
+  };
+}
 $('wave').onclick=waveHello;
 $('rotate').onclick=rotate;
 $('cancelEdit').onclick=cancelSelection;
@@ -899,7 +985,7 @@ canvas.addEventListener('pointerleave',()=>{hover=null;hoverItem=null;});
 canvas.addEventListener('click',e=>{
   const {tile,item,door}=pointer(e);
   if(!editing){if(door)walkTo(door.tile);else if(item)use(item);else if(tile)walkTo(tile);return;}
-  if(item&&selection?.id!==null&&item.id!==selection?.id){choose(item);return;}
+  if(item&&!fixed(item)&&selection?.id!==null&&item.id!==selection?.id){choose(item);return;}
   if(selection&&tile)place(tile);
 });
 const arrows={ArrowRight:[1,0],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowUp:[0,-1]};
