@@ -1325,7 +1325,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       .every(other => Math.hypot(other.x - candidate.x, other.z - candidate.z) >= 1.25)) ?? SILVER_DEPTHS_ENTRY_POSITION;
     const spawn = this.roomKind === "tavern" ? returningToBoundRoom ? { x: TAVERN_INN_POINTS.rest.x, y: 15, z: -2 }
       : { x: 0, y: 8, z: 4.8 }
-      : this.roomKind === "practice" ? { x: 99.5, y: 8, z: 106.5 }
+      : this.roomKind === "practice" ? process.env.NODE_ENV !== "production" && requestedQaSpawn === "elin"
+        ? { x: 55, y: 9.45, z: 75.4 }
+        : { x: 99.5, y: 8, z: 106.5 }
       : this.roomKind === "silver-depths" ? instanceSpawn
       : process.env.NODE_ENV !== "production" && requestedQaSpawn === "cave"
       ? { x: 37.5, y: 3, z: 8.5 }

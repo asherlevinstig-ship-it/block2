@@ -216,6 +216,7 @@ import { serviceNpcAnimation, serviceNpcFacingYaw, serviceNpcPerformanceDuration
 import { townNpcProgressionCopy, townVictoryAnimation } from "./town-npc-progression.js";
 import { townSocialBeat, type TownSocialBeat } from "./town-social-life.js";
 import { TownAmbience } from "./town-ambience.js";
+import { worldPromptCssPoint, worldPromptProjectionVisible } from "./world-prompt-placement.js";
 import { SPEED_LAB_TOWN_TERRAIN, SPEED_LAB_TOWN_TERRAIN_DETAILS,
   type TownTerrainMaterial } from "./town-terrain.js";
 import { TOWN_ATMOSPHERE_PARTICLES, TOWN_ATMOSPHERE_PATCHES, TOWN_GATE_EMBANKMENTS,
@@ -2719,6 +2720,7 @@ function cancelTownNpcServiceEffects(npcId: ServiceNpcId): void {
     townNpcServiceEffects.splice(index, 1);
   }
 }
+
 function townNpcPromptTarget(definition: TownNpcDefinition, location: TownNpcLocationId = "town"): pc.Vec3 {
   if (location === "town") {
     const actor = rapidTownActors.find(candidate => candidate.definition.id === definition.id);
@@ -2753,11 +2755,15 @@ function placeWorldPrompt(prompt: HTMLElement, target: pc.Vec3, verticalGap = 12
   if (!camera.camera) return false;
   const screen = camera.camera.worldToScreen(target);
   const rect = canvas.getBoundingClientRect();
-  if (screen.z <= 0 || screen.x < 0 || screen.x > canvas.width || screen.y < 0 || screen.y > canvas.height) return false;
+  // CameraComponent.worldToScreen already returns CSS-pixel coordinates based
+  // on GraphicsDevice.clientRect. Scaling by the backing-buffer dimensions a
+  // second time makes prompts drift whenever render resolution differs from CSS.
+  if (!worldPromptProjectionVisible(screen, rect)) return false;
   const width = Math.max(150, prompt.offsetWidth);
   const height = Math.max(48, prompt.offsetHeight);
-  const rawX = rect.left + screen.x * rect.width / canvas.width;
-  const rawY = rect.top + screen.y * rect.height / canvas.height - verticalGap;
+  const raw = worldPromptCssPoint(screen, rect, verticalGap);
+  const rawX = raw.x;
+  const rawY = raw.y;
   prompt.style.left = `${Math.max(rect.left + width / 2 + 8, Math.min(rect.right - width / 2 - 8, rawX))}px`;
   prompt.style.top = `${Math.max(rect.top + height + 8, Math.min(rect.bottom - 8, rawY))}px`;
   return true;
