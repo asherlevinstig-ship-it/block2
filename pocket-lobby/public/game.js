@@ -52,6 +52,7 @@ let loungeFurniture=initial;
 if(savedLounge)loungeFurniture=hasGamingLayout?savedLounge:installGamingTables(savedLounge.filter(item=>!retiredTables.includes(item)));
 let homeFurniture = savedPlayerState?.homeFurniture??[];
 let credits = savedPlayerState?.credits??100;
+let displayedCredits=credits,walletTween=null;
 const countFurniture = (items,type)=>items.filter(item=>item.type===type).length;
 const previousStock = savedPlayerState?.ownedFurniture??{};
 const hasBedStarter = Object.hasOwn(previousStock,'bed');
@@ -1106,12 +1107,19 @@ function finishInteraction(){
   }
 }
 function animation(time){
+  if(walletTween){
+    const progress=Math.min(1,Math.max(0,(time-walletTween.started)/650));
+    displayedCredits=Math.round(walletTween.from+(credits-walletTween.from)*(1-Math.pow(1-progress,3)));
+    $('credits').textContent=new Intl.NumberFormat().format(displayedCredits);
+    if(progress===1)walletTween=null;
+  }
   if(fishingStarted!==null&&time-fishingStarted>=fishingDuration){
     fishingStarted=null;
     fishingGear.bait--;
     adventure.silverfin++;
     playerStats.patienceXp+=PATIENCE_XP_PER_CATCH;
     recordAdventure('Caught a Silverfin! +10 Patience XP · Patience '+patienceLevel()+'.');
+    showTransaction('Catch landed',[{text:'+1 Silverfin',icon:'⋈'},{text:'+10 Patience XP',icon:'✦'}]);
   }
   if(!step&&route.length){
     const to=route.shift(),from={x:player.cx,y:player.cy};
@@ -1182,9 +1190,47 @@ function buyFishingRod(id){
   fishingGear.equippedRod=id;
   savePlayerState();
   $('shopStatus').textContent=rod.name+' purchased and equipped.';
+  showTransaction('Rod purchased',[{text:'+1 '+rod.name,icon:'♓'},{text:'Equipped and ready',icon:'✓'}],-rod.price);
+}
+function showTransaction(title,items,creditChange=0){
+  const card=document.createElement('div'),heading=document.createElement('b');
+  card.className='transaction-card';
+  heading.textContent=title;card.append(heading);
+  for(const {text,icon} of items){
+    const row=document.createElement('div'),symbol=document.createElement('span'),label=document.createElement('span');
+    row.className='transaction-item';symbol.className='transaction-icon';
+    symbol.textContent=icon;symbol.setAttribute('aria-hidden','true');label.textContent=text;
+    row.append(symbol,label);card.append(row);
+  }
+  if(creditChange!==0){
+    const gain=creditChange>0;
+    const delta=document.createElement('div');
+    delta.className='transaction-credits '+(gain?'credit-gain':'credit-spend');
+    delta.textContent=(gain?'+':'−')+new Intl.NumberFormat().format(Math.abs(creditChange))+' credits';
+    const balance=document.createElement('small');
+    balance.textContent='Balance '+new Intl.NumberFormat().format(credits);
+    delta.append(balance);card.append(delta);
+    if(reducedMotion.matches){
+      displayedCredits=credits;walletTween=null;
+    }else{
+      walletTween={from:displayedCredits,started:performance.now()};
+    }
+    $('credits').textContent=new Intl.NumberFormat().format(displayedCredits);
+    for(const previous of $('creditWallet').querySelectorAll('.wallet-delta'))previous.remove();
+    const burst=document.createElement('span');
+    burst.className='wallet-delta '+(gain?'credit-gain':'credit-spend');
+    burst.textContent=(gain?'+':'−')+Math.abs(creditChange);
+    burst.setAttribute('aria-hidden','true');
+    $('creditWallet').append(burst);
+    setTimeout(()=>burst.remove(),1400);
+  }
+  const notices=$('transactions');
+  while(notices.children.length>=4)notices.children[0].remove();
+  notices.append(card);
+  setTimeout(()=>card.remove(),5200);
 }
 function updateFishingShop(){
-  $('credits').textContent=new Intl.NumberFormat().format(credits);
+  if(!walletTween)$('credits').textContent=new Intl.NumberFormat().format(credits);
   $('shopBalance').textContent=credits+' credits · Patience '+patienceLevel()+' · Bait '+fishingGear.bait;
   $('fishingEquipment').textContent='Equipped: '+fishingCatalog.rods[fishingGear.equippedRod].name+' · Bait ×'+fishingGear.bait;
   const selector=$('equippedFishingRod');
@@ -1375,13 +1421,16 @@ $('buyBait').onclick=()=>{
   fishingGear.bait+=fishingCatalog.bait.quantity;
   savePlayerState();
   $('shopStatus').textContent='Bought 10 Riverworms.';
+  showTransaction('Bait purchased',[{text:'+10 Riverworms',icon:'≋'}],-fishingCatalog.bait.price);
 };
 $('sellFish').onclick=()=>{
   if(currentRoom!=='store'||adventure.silverfin<1)return;
+  const quantity=adventure.silverfin;
   const earned=adventure.silverfin*fishingCatalog.fishPrice;
   credits+=earned;adventure.silverfin=0;
   savePlayerState();
   $('shopStatus').textContent='Catch sold for '+earned+' credits.';
+  showTransaction('Catch sold',[{text:'−'+quantity+' Silverfin',icon:'⋈'}],earned);
 };
 if(hasBedStarter&&hasGamingLayout)updateInventory();else savePlayerState();
 $('inventory').onclick=()=>{
