@@ -42,3 +42,5 @@
 @media(min-width:691px){.hub #game{max-height:min(75vh,630px)}}
 
 .gaming-guide{display:flex;flex-wrap:wrap;gap:5px;padding:9px 10px;border-bottom:1px solid var(--line);background:#251f30}.gaming-guide>span{width:100%;font:650 8px/1.2 ui-monospace,Consolas,monospace;letter-spacing:.12em;color:#d6ad91}.gaming-guide button{padding:4px 7px;font-size:11px;border-color:#674b55;background:#392c3b;color:#f1cfad}.gaming-guide button:hover{background:#503848}.gaming-guide button span{color:#efb478}
+
+.layout.outside{grid-template-columns:minmax(0,1fr)}.outside .scene{background:radial-gradient(ellipse at 47% 47%,#31435a,#1b283e 57%,#141b2d)}.outside .play-head i{background:#a5c8d5;box-shadow:0 0 9px #9ec0d475}.destination-icon.outside-icon{background:#35465a;color:#c5e0df}
