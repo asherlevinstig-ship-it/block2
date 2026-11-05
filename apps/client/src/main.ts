@@ -211,6 +211,7 @@ import { SPEED_LAB_TOWN_ACTORS, SPEED_LAB_TOWN_LIGHTS, SPEED_LAB_TOWN_SIGNS, tow
 import { townNpcFaceStyle } from "./town-npc-appearance.js";
 import { bindTownNpcRig, loadTownNpcAssets, TOWN_NPC_MODEL_YAW, transitionTownNpcRig } from "./town-npc-assets.js";
 import { serviceNpcAnimation, serviceNpcFacingYaw, serviceNpcPerformanceDuration, serviceNpcPerformanceFor,
+  serviceNpcPromptWorldAnchor,
   type ServiceNpcId, type ServiceNpcPerformanceKind } from "./town-npc-interaction-presentation.js";
 import { townNpcProgressionCopy, townVictoryAnimation } from "./town-npc-progression.js";
 import { townSocialBeat, type TownSocialBeat } from "./town-social-life.js";
@@ -2721,23 +2722,17 @@ function cancelTownNpcServiceEffects(npcId: ServiceNpcId): void {
 function townNpcPromptTarget(definition: TownNpcDefinition, location: TownNpcLocationId = "town"): pc.Vec3 {
   if (location === "town") {
     const actor = rapidTownActors.find(candidate => candidate.definition.id === definition.id);
-    const authoredHead = actor?.model?.findByName("head") as pc.Entity | null | undefined;
-    const visualHead = authoredHead ?? actor?.head;
-    if (visualHead) {
-      const target = visualHead.getPosition().clone();
-      target.y += authoredHead ? .34 : .48;
-      return target;
+    if (actor) {
+      const anchor = serviceNpcPromptWorldAnchor(actor.root.getPosition(), Boolean(actor.model));
+      return new pc.Vec3(anchor.x, anchor.y, anchor.z);
     }
   }
   const anchor = townNpcLocation(definition, location).anchor;
   return new pc.Vec3(anchor.x, anchor.y + 2.05, anchor.z);
 }
 function townActorSpeechTarget(actor: RapidTownActorVisual): pc.Vec3 {
-  const authoredHead = actor.model?.findByName("head") as pc.Entity | null | undefined;
-  const visualHead = authoredHead ?? actor.head;
-  const target = visualHead.getPosition().clone();
-  target.y += authoredHead ? .42 : .56;
-  return target;
+  const anchor = serviceNpcPromptWorldAnchor(actor.root.getPosition(), Boolean(actor.model));
+  return new pc.Vec3(anchor.x, anchor.y, anchor.z);
 }
 function updateTownSpeechBubble(beat: TownSocialBeat | null, playerPosition: pc.Vec3): void {
   const speaker = beat ? rapidTownActors.find(actor => actor.definition.id === beat.speakerId) : null;

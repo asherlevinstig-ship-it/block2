@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { serviceNpcAnimation, serviceNpcFacingYaw, serviceNpcPerformanceDuration,
-  serviceNpcPerformanceFor } from "./town-npc-interaction-presentation.js";
+  serviceNpcPerformanceFor, serviceNpcPromptWorldAnchor } from "./town-npc-interaction-presentation.js";
 
 describe("town NPC interaction presentation", () => {
   it("turns NPCs toward the player in the town coordinate convention", () => {
@@ -21,5 +21,14 @@ describe("town NPC interaction presentation", () => {
     expect(serviceNpcPerformanceDuration("greet")).toBeGreaterThanOrEqual(1_000);
     expect(serviceNpcPerformanceDuration("forge")).toBeLessThanOrEqual(1_600);
     expect(serviceNpcPerformanceDuration("heal")).toBeGreaterThan(serviceNpcPerformanceDuration("forge"));
+  });
+
+  it("anchors UI above the stable actor root without horizontal bone drift", () => {
+    const authored = serviceNpcPromptWorldAnchor({ x: 55, y: 9.45, z: 73 }, true);
+    expect(authored).toMatchObject({ x: 55, z: 73 });
+    expect(authored.y).toBeCloseTo(11.87);
+    const fallback = serviceNpcPromptWorldAnchor({ x: 79, y: 8.15, z: 136 }, false);
+    expect(fallback).toMatchObject({ x: 79, z: 136 });
+    expect(fallback.y).toBeCloseTo(10.27);
   });
 });

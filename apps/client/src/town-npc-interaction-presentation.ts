@@ -6,6 +6,16 @@ export interface TownNpcFacingPoint {
   z: number;
 }
 
+export interface TownNpcWorldRoot extends TownNpcFacingPoint {
+  y: number;
+}
+
+/** Imported rigs can expose bone nodes with model-space offsets. UI must be
+ * anchored to the stable actor root, never a named bone from the asset. */
+export function serviceNpcPromptWorldAnchor(root: TownNpcWorldRoot, authoredModel: boolean): TownNpcWorldRoot {
+  return { x: root.x, y: root.y + (authoredModel ? 2.42 : 2.12), z: root.z };
+}
+
 /** Face the player using the same +Z-forward convention as town-life routes. */
 export function serviceNpcFacingYaw(
   actor: TownNpcFacingPoint,
