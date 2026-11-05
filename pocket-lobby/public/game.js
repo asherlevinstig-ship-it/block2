@@ -57,18 +57,33 @@ let messages = load('chat',[]);
 const player = {x:5,y:7,cx:5,cy:7,direction:'right',back:false,seat:null,stride:0,waveStarted:null};
 let route=[],step=null,interaction=null,hover=null,hoverItem=null,target=null;
 let editing=false,selection=null,zoom=1,hitboxes=[],bounds=null,bubbleUntil=0,noticeUntil=0;
-let inEntryRoom=true;
-const roomFurniture=()=>inEntryRoom?homeFurniture:loungeFurniture;
+const hubFurniture=[
+  {id:'reception',type:'reception',x:1,y:2,rot:0},
+  {id:'left-palm',type:'plant',x:0,y:8,rot:0},
+  {id:'right-palm',type:'plant',x:9,y:0,rot:0},
+  {id:'bench',type:'sofa',x:7,y:3,rot:0},
+  {id:'lamp',type:'lamp',x:9,y:3,rot:0},
+  {id:'table',type:'table',x:8,y:5,rot:1},
+  {id:'chair',type:'chair',x:7,y:6,rot:1}
+];
+let currentRoom='home';
+const atHome=()=>currentRoom==='home';
+const roomFurniture=()=>atHome()?homeFurniture:currentRoom==='hub'?hubFurniture:loungeFurniture;
 function setRoomFurniture(items){
-  if(inEntryRoom)homeFurniture=items;
+  if(atHome())homeFurniture=items;
   else loungeFurniture=items;
 }
-const exitTile={x:0,y:5};
-const exitEdges={start:4.88,end:6.12,height:49};
-const exitShape=[
-  point(0,exitEdges.start),point(0,exitEdges.end),
-  point(0,exitEdges.end,exitEdges.height),point(0,exitEdges.start,exitEdges.height)
+const homeExit={to:'hub',side:'left',tile:{x:0,y:5},start:4.88,end:6.12,height:49,label:'EXIT'};
+const hubDoors=[
+  {to:'home',side:'left',tile:{x:0,y:6},start:5.72,end:7.28,height:51,label:'HOME'},
+  {to:'lounge',side:'right',tile:{x:7,y:0},start:6.6,end:8.4,height:51,label:'LOUNGE'}
 ];
+const roomDoors={home:[homeExit],hub:hubDoors,lounge:[]};
+const roomDetails={
+  home:{number:'00',name:'Entry Room',description:'Walk through the exit to reach the Grand Lobby.',badge:'ROOM NO. 00',floor:'Private room'},
+  hub:{number:'01',name:'The Grand Lobby',description:'Check in at reception or choose where to go next.',badge:'MAIN HUB',floor:'Ground floor'},
+  lounge:{number:'02',name:'The Sunset Lounge',description:'Check in, find a seat, and make yourself at home.',badge:'LOUNGE NO. 02',floor:'Ground floor'}
+};
 const defaultHint = 'Click a tile to walk · Click furniture to interact';
 
 function polygon(points,color,line) {
@@ -88,9 +103,12 @@ function block(x,y,w,d,bottom,height,colors) {
   polygon([point(x+w,y,z),point(x+w,y+d,z),point(x+w,y+d,bottom),point(x+w,y,bottom)],right);
   surface(x,y,w,d,z,top);
 }
+function wallFace(side,a,b,lo,hi){
+  const at=(u,z)=>side==='right'?point(u,0,z):point(0,u,z);
+  return [at(a,lo),at(b,lo),at(b,hi),at(a,hi)];
+}
 function wall(side,a,b,lo,hi,c) {
-  const p=(u,z)=>side==='right'?point(u,0,z):point(0,u,z);
-  polygon([p(a,lo),p(b,lo),p(b,hi),p(a,hi)],c);
+  polygon(wallFace(side,a,b,lo,hi),c);
 }
 function windows(){
   for(let pane=0;pane<3;pane++){
@@ -191,17 +209,26 @@ function drawEntryWalls(){
   wall('left',0,10,0,4,'#49475e');
   wall('right',0,10,0,4,'#58536c');
   drawHomeSign();
-  const {start,end,height}=exitEdges;
-  polygon(exitShape,'#39374c');
-  wall('left',start+.1,end-.1,0,height-4,'#242839');
-  wall('left',start+.12,start+.24,0,height-4,'#3d4859');
-  wall('left',end-.2,end-.1,0,height-4,'#535065');
-  surface(0,start,.24,end-start,.5,'#5e8b83');
-  surface(.24,start,.055,end-start,.6,'#a1c6ad');
-  wall('left',start-.015,end+.015,height+3,height+15,'#35534f');
-  const [x,y]=point(0,end-.04,height+6);
-  ctx.save();ctx.transform(1,-.5,0,1,x,y);
-  ctx.font='bold 7px monospace';ctx.fillStyle='#c4ebcf';ctx.fillText('EXIT',2,0);ctx.restore();
+  drawDoor(homeExit);
+}
+function wallText(side,position,height,label,font,color,maxWidth){
+  const right=side==='right';
+  const [x,y]=right?point(position,0,height):point(0,position,height);
+  ctx.save();ctx.transform(1,right ? .5 : -.5,0,1,x,y);
+  ctx.textAlign='center';ctx.font=font;ctx.fillStyle=color;ctx.fillText(label,0,0,maxWidth);ctx.restore();
+}
+function drawDoor(door){
+  const {side,start,end,height,label}=door;
+  const brass=door!==homeExit;
+  wall(side,start-.09,end+.09,0,height+2,brass?'#bc8862':'#39374c');
+  wall(side,start+.09,end-.09,0,height-3,'#242839');
+  wall(side,start+.12,start+.24,0,height-4,brass?'#634857':'#3d4859');
+  wall(side,end-.23,end-.1,0,height-4,brass?'#765561':'#535065');
+  wall(side,start+.27,end-.27,1,3,brass?'#f3b97a':'#a1c6ad');
+  if(side==='left')surface(0,start,.29,end-start,.55,brass?'#bd946e':'#5e8b83');
+  else surface(start,0,end-start,.29,.55,'#bd946e');
+  wall(side,start-.025,end+.025,height+4,height+15,brass?'#493044':'#35534f');
+  wallText(side,(start+end)/2,height+7,label,'bold 7px monospace',brass?'#ffdb9d':'#c4ebcf',(end-start)*17);
 }
 function drawHomeSign(){
   const left=2.45,right=7.55,top=59;
@@ -218,8 +245,99 @@ function drawHomeSign(){
   ctx.font='bold 10px monospace';ctx.fillStyle='#f8eadb';ctx.fillText(avatar.name,0,23,74);
   ctx.restore();
 }
+function drawGrandLobby(){
+  polygon([[240,102],[431,190],[244,292],[49,195]],'#1210208c');
+  block(0,0,10,10,-9,9,['#ad9793','#6d4f62','#4e3b55']);
+  const stone=['#c3a99d','#b49aa0','#cbb0a2','#ae929c'];
+  for(let y=0;y<SIZE;y++)for(let x=0;x<SIZE;x++){
+    surface(x,y,1,1,0,stone[(x+2*y)%4],'#907580');
+    surface(x+.10,y+.16,.15,.025,.1,'#e1c4ad');
+    surface(x+.56,y+.75,.12,.025,.1,'#9b7f8b');
+  }
+  for(const edge of [.32,9.6]){
+    surface(edge,.32,.085,9.36,.25,'#7a5263');
+    surface(.32,edge,9.36,.085,.25,'#7a5263');
+  }
+  surface(3.55,3.4,4.12,5.25,.4,'#604359');
+  surface(3.65,3.5,3.92,5.05,.45,'#d79973');
+  surface(3.76,3.61,3.7,4.83,.5,'#804b64');
+  surface(3.88,3.73,3.46,4.59,.6,'#6c405c');
+  for(const x of [4.02,7.02])for(let y=3.92;y<8.2;y+=.47){
+    surface(x,y,.17,.17,.7,'#b97d76');
+  }
+  surface(4.47,4.62,2.25,2.25,.75,'#e5ad79');
+  surface(4.58,4.73,2.03,2.03,.8,'#51394f');
+  surface(4.72,4.87,1.75,1.75,.85,'#b87876');
+  const [cx,cy]=point(5.595,5.745,1);
+  polygon([[cx,cy-17],[cx+5,cy-4],[cx+24,cy],[cx+5,cy+4],[cx,cy+17],[cx-5,cy+4],[cx-24,cy],[cx-5,cy-4]],'#f2bf87');
+  polygon([[cx,cy-8],[cx+10,cy],[cx,cy+8],[cx-10,cy]],'#6e4b62');
+  polygon([[cx,cy-5],[cx+6,cy],[cx,cy+5],[cx-6,cy]],'#ffe0a2');
+  for(const side of ['left','right']){
+    wall(side,0,10,0,80,side==='left'?'#4e405b':'#644c65');
+    wall(side,0,10,77,82,'#bb8b83');
+    wall(side,0,10,73,76,'#8f6778');
+    wall(side,0,10,0,16,side==='left'?'#382d47':'#49334e');
+    wall(side,0,10,14,17,'#a7776e');
+    for(let i=.25;i<10;i+=.45)wall(side,i,i+.045,0,14,'#99687b');
+    for(const u of (side==='left'?[.45,4.85,8.65]:[.36,5.7,9.16])){
+      wall(side,u,u+.38,0,73,'#49364f');
+      wall(side,u+.04,u+.22,1,72,'#875e73');
+      wall(side,u+.08,u+.13,3,70,'#bd8c83');
+      wall(side,u-.08,u+.43,65,71,'#b47d75');
+      wall(side,u-.08,u+.43,4,10,'#a57070');
+    }
+  }
+  for(let pane=0;pane<3;pane++){
+    const x=1.02+pane*1.5,end=x+1.38;
+    wall('right',x,end,20,68,'#bd8c82');
+    wall('right',x+.07,end-.07,22,66,'#333148');
+    wall('right',x+.12,end-.12,23,64,'#6b647f');
+    wall('right',x+.12,end-.12,23,49,'#9a6d88');
+    wall('right',x+.12,end-.12,23,37,'#dc958d');
+    if(pane===1)wall('right',x+.42,x+.77,36,43,'#ffd0a0');
+    for(let j=0;j<5;j++){
+      const u=x+.14+j*.225;
+      const roof=30+(j*11+pane*7)%11;
+      wall('right',u,u+.20,23,roof,'#594961');
+      if(j%2)wall('right',u+.04,u+.09,26,27,'#f2ad81');
+    }
+    wall('right',x+.08,end-.08,45,47,'#615069');
+    wall('right',x+.65,x+.71,23,65,'#8a697e');
+    wall('right',x-.05,end+.05,20,23,'#e0a88b');
+  }
+  wall('left',.95,4.36,37,66,'#382d45');
+  wall('left',1.03,4.28,40,65,'#c3917a');
+  wall('left',1.12,4.19,42,63,'#563b51');
+  wallText('left',2.65,55,'POCKET','bold 10px monospace','#ffce95');
+  wallText('left',2.65,46,'H O T E L','bold 6px monospace','#d6a694');
+  wall('left',1.3,4.03,24,35,'#372d42');
+  for(let i=0;i<8;i++)wall('left',1.42+i*.31,1.50+i*.31,27,31,'#e1ae7f');
+  hubDoors.forEach(drawDoor);
+  for(const [x,y] of [[88,80],[112,58],[342,56],[393,85],[419,117]]){
+    rect(x,y,3,1,'#af817e62');rect(x+1,y-1,1,3,'#c3928662');
+  }
+  drawChandelier();
+}
+function drawChandelier(){
+  const glow=ctx.createRadialGradient(240,74,5,240,74,53);
+  glow.addColorStop(0,'#ffc37658');glow.addColorStop(1,'#ffc37600');
+  ctx.fillStyle=glow;ctx.fillRect(185,20,110,108);
+  rect(237,14,7,4,'#f0bb82');rect(239,18,3,27,'#be886c');
+  rect(240,18,1,27,'#ffde9e');
+  polygon([[240,39],[270,56],[255,71],[225,71],[210,56]],'#926476');
+  polygon([[240,42],[266,57],[252,66],[228,66],[214,57]],'#dba376');
+  polygon([[240,47],[256,56],[240,64],[224,56]],'#664459');
+  for(const [x,y] of [[214,57],[225,65],[239,68],[253,65],[265,57],[240,47]]){
+    rect(x-2,y-5,5,8,'#e7a46e');rect(x-1,y-6,3,6,'#fff0b3');
+    rect(x,y+3,1,8,'#d5a5a4');rect(x-1,y+10,3,3,'#e9c2ad');
+  }
+  polygon([[240,63],[250,71],[240,88],[230,71]],'#c68780');
+  polygon([[240,64],[245,72],[240,85],[235,72]],'#f9d2a0');
+  rect(239,69,2,12,'#fff2b9');
+}
 function dimensions(item) {
   if(item.type==='sofa'||item.type==='bed')return item.rot%2?[1,2]:[2,1];
+  if(item.type==='reception')return [3,1];
   return item.type==='bar'?[1.5,4.1]:item.type==='shelf'?[.35,3.5]:[1,1];
 }
 function object(item,highlight=false) {
@@ -245,6 +363,19 @@ function object(item,highlight=false) {
       part(1.43,.32,.33,.27,13,5,'cream');
       part(.99,.33,.035,.55,13,.3,'trim');
     }else part(.24,.34,.25,.2,13,5,'cream');
+  } else if(type==='reception'){
+    const [sx,sy]=point(x+1.46,y-.2,2);
+    sprite(ctx,sx,sy,{outfit:4,hair:1});
+    part(.06,.08,2.88,.87,0,19,'wood');
+    part(.13,.91,2.73,.045,4,11,'black');
+    for(let i=.25;i<2.85;i+=.23)part(i,.938,.055,.025,3,13,'gold');
+    part(.01,.025,2.98,.97,19,4,'black');
+    part(.08,.07,2.84,.87,23,.65,'pink');
+    part(.28,.43,.46,.29,23,1,'cream');
+    part(1.63,.63,.20,.19,23,3,'gold');
+    part(1.68,.68,.09,.08,26,1,'cream');
+    part(2.4,.27,.32,.42,23,7,'trim');
+    part(2.39,.25,.34,.41,30,1,'blue');
   } else if(type==='bed'){
     for(const i of [.13,1.75])for(const j of [.12,.76])part(i,j,.12,.12,0,4,'black');
     part(.02,.02,1.95,.94,3,5,'wood');
@@ -401,18 +532,17 @@ function sprite(target,x,y,appearance,{direction='right',back=false,cycle=0,seat
   pixelHead(target,appearance,back,blink);
   target.restore();
 }
-function makeRoomLayer(empty){
+function makeRoomLayer(drawLayer){
   const layer=document.createElement('canvas');
   layer.width=W;layer.height=H;
-  const previous=ctx;ctx=layer.getContext('2d');room(empty);ctx=previous;
+  const previous=ctx;ctx=layer.getContext('2d');drawLayer();ctx=previous;
   return layer;
 }
-let entryLayer;
-const loungeLayer=makeRoomLayer(false);
+const roomLayers={hub:makeRoomLayer(drawGrandLobby),lounge:makeRoomLayer(room)};
 function draw(time){
   ctx.setTransform(1,0,0,1,0,0);
   ctx.clearRect(0,0,W,H);ctx.translate(W/2,151);ctx.scale(zoom,zoom);ctx.translate(-W/2,-151);
-  ctx.imageSmoothingEnabled=false;ctx.drawImage(inEntryRoom?entryLayer:loungeLayer,0,0);
+  ctx.imageSmoothingEnabled=false;ctx.drawImage(roomLayers[currentRoom],0,0);
   if(target)surface(target.x+.1,target.y+.1,.8,.8,1,'#fff3bc30','#ffcf8f');
   if(hover){
     const [w,d]=editing&&selection?dimensions(selection):[1,1];
@@ -457,7 +587,7 @@ function draw(time){
     object(item,editing&&(selection?.id===item.id||hoverItem?.id===item.id)&&!fixed(item));
     ctx.globalAlpha=1;
     if(item===ghost||fixed(item))continue;
-    const [w,d]=dimensions(item), h={bed:24,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39}[item.type];
+    const [w,d]=dimensions(item), h={reception:32,bed:24,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39}[item.type];
     const shape=[point(item.x,item.y+d),point(item.x+w,item.y+d),point(item.x+w,item.y),point(item.x+w,item.y,h),point(item.x,item.y,h),point(item.x,item.y+d,h)];
     hitboxes.push({item,shape});
   }
@@ -477,7 +607,7 @@ function canPlace(item){
   const [w,d]=dimensions(item);
   return inRoom(item.x,item.y)&&item.x+w<=SIZE&&item.y+d<=SIZE&&
     !overlap(item,{x:player.cx,y:player.cy})&&(!step||!overlap(item,step.to))&&
-    (!inEntryRoom||!overlap(item,exitTile))&&
+    (!atHome()||!overlap(item,homeExit.tile))&&
     !roomFurniture().some(other=>other.id!==item.id&&other.type!=='shelf'&&overlap(item,other));
 }
 const directions=[[1,0],[0,1],[-1,0],[0,-1]];
@@ -521,15 +651,16 @@ function pointer(e){
   const y=((e.clientY-p.top-p.y)/p.scale-151)/zoom+151;
   const gx=Math.floor(((x-240)/18+(y-94)/9)/2);
   const gy=Math.floor(((y-94)/9-(x-240)/18)/2);
-  const exit=inEntryRoom&&inShape(x,y,exitShape);
-  return {tile:exit?exitTile:inRoom(gx,gy)?{x:gx,y:gy}:null,exit,item:hitboxes.findLast(h=>inShape(x,y,h.shape))?.item??null};
+  const door=roomDoors[currentRoom].find(({side,start,end,height})=>inShape(x,y,wallFace(side,start-.09,end+.09,0,height+15)));
+  return {tile:door?.tile??(inRoom(gx,gy)?{x:gx,y:gy}:null),door,item:hitboxes.findLast(h=>inShape(x,y,h.shape))?.item??null};
 }
 function note(message){
   $('hint').textContent='✦  '+message;
   noticeUntil=performance.now()+3000;
 }
 function setHint(){
-  const message=editing?'Choose furniture to place or select a piece in the room':inEntryRoom?'Click a tile to walk · Click the exit to leave':defaultHint;
+  const guide={home:'Click a tile to walk · Click the exit to visit the lobby',hub:'Click a doorway to travel · Visit the reception desk',lounge:defaultHint};
+  const message=editing?'Choose furniture to place or select a piece in the room':guide[currentRoom];
   $('hint').textContent='✦  '+message;
 }
 function startPosition(){return step?.to??{x:player.cx,y:player.cy};}
@@ -561,7 +692,10 @@ function seatAnchor(item){
 }
 function finishInteraction(){
   const item=interaction;interaction=null;
-  if(['sofa','chair','stool'].includes(item.type)){
+  if(item.type==='reception'){
+    $('receptionMessage').textContent='Good evening, '+avatar.name+'! Your room is through the Home door. The Sunset Lounge is just across the lobby.';
+    note('The concierge welcomes you to Pocket Hotel.');
+  }else if(['sofa','chair','stool'].includes(item.type)){
     player.seat=item;player.back=item.rot>=2;player.direction=item.rot%2?'right':'left';
     note('You took a seat. Click a tile to stand up.');
   }else{
@@ -581,7 +715,8 @@ function animation(time){
     player.x=from.x+(to.x-from.x)*progress;player.y=from.y+(to.y-from.y)*progress;
     if(progress===1){
       player.cx=to.x;player.cy=to.y;player.stride++;step=null;
-      if(inEntryRoom&&to.x===exitTile.x&&to.y===exitTile.y)enterLounge();
+      const door=roomDoors[currentRoom].find(({tile})=>tile.x===to.x&&tile.y===to.y);
+      if(door)enterRoom(door.to);
     }
   }
   if(!step&&!route.length){target=null;if(interaction)finishInteraction();}
@@ -602,6 +737,7 @@ function updateInventory(){
     const row=$('inventoryItems').querySelector('[data-type="'+type+'"]');
     row.hidden=available===0;
     row.querySelector('.quantity').textContent='×'+available;
+    row.querySelector('button').hidden=currentRoom==='hub';
   }
   $('inventoryCount').textContent=total?total+(total===1?' item in storage':' items in storage'):'Storage is empty';
 }
@@ -621,26 +757,28 @@ function choose(item){
 }
 function cancelSelection(){selection=null;editStatus('Select a piece to get started.');}
 function switchMode(next){
-  editing=next;
+  editing=next&&currentRoom!=='hub';
   route=[];target=null;interaction=null;player.seat=null;player.waveStarted=null;hover=null;hoverItem=null;
   bounds=null;
   $('wave').disabled=editing;
   $('edit').classList.toggle('active',editing);$('walk').classList.toggle('active',!editing);
   $('edit').setAttribute('aria-pressed',String(editing));$('walk').setAttribute('aria-pressed',String(!editing));
   $('roomLayout').classList.toggle('decorating',editing);
-  $('roomSide').hidden=inEntryRoom&&!editing;
-  $('chatPanel').hidden=editing||inEntryRoom;$('editorPanel').hidden=!editing;
-  $('panelTitle').textContent=editing?(inEntryRoom?'Home editor':'Room editor'):'Room chat';
-  $('panelSub').textContent=editing?(inEntryRoom?'YOUR HOME':'FURNITURE & DECOR'):'THE SUNSET LOUNGE';
-  $('resetRoom').textContent=inEntryRoom?'Clear home furniture':'Restore original room';
-  $('mode').textContent=editing?'DECORATE':'FREE ROAM';
+  $('roomSide').hidden=atHome()&&!editing;
+  $('chatPanel').hidden=editing||currentRoom!=='lounge';
+  $('editorPanel').hidden=!editing;
+  $('directoryPanel').hidden=currentRoom!=='hub';
+  $('panelTitle').textContent=editing?(atHome()?'Home editor':'Room editor'):currentRoom==='hub'?'Hotel directory':'Room chat';
+  $('panelSub').textContent=editing?(atHome()?'YOUR HOME':'FURNITURE & DECOR'):roomDetails[currentRoom].name.toUpperCase();
+  $('resetRoom').textContent=atHome()?'Clear home furniture':'Restore original room';
+  $('mode').textContent=editing?'DECORATE':currentRoom==='hub'?'MAIN HUB':'FREE ROAM';
   noticeUntil=0;setHint();cancelSelection();
 }
 function keepsExitClear(item){
-  if(!inEntryRoom)return true;
+  if(!atHome())return true;
   const proposed=homeFurniture.filter(other=>other.id!==item.id);
   proposed.push(item);
-  return findPath(startPosition(),exitTile,proposed)!==null;
+  return findPath(startPosition(),homeExit.tile,proposed)!==null;
 }
 function place(tile){
   const item={...selection,...tile};
@@ -693,17 +831,24 @@ for(const [type,name] of Object.entries(types)){
 $('credits').textContent=new Intl.NumberFormat().format(credits);
 if(hasBedStarter)updateInventory();else savePlayerState();
 $('inventory').onclick=()=>{
-  $('inventoryGuide').textContent='Choose a piece to place it in '+(inEntryRoom?'your home':'the Sunset Lounge')+'. Pick it up in Decorate mode to return it here.';
+  $('inventoryGuide').textContent=currentRoom==='hub'
+    ?'Take the Home or Lounge door to place furniture from storage.'
+    :'Choose a piece to place it in '+(atHome()?'your home':'the Sunset Lounge')+'. Pick it up in Decorate mode to return it here.';
   updateInventory();
   $('inventoryDialog').showModal();
 };
 $('walk').onclick=()=>switchMode(false);
 $('edit').onclick=()=>switchMode(true);
-$('exitRoom').onclick=()=>{
-  if(!inEntryRoom)return;
-  if(editing)switchMode(false);
-  walkTo(exitTile);
-};
+for(const button of document.querySelectorAll('[data-room-link]')){
+  button.onclick=()=>{
+    const to=button.dataset.roomLink;
+    const door=roomDoors[currentRoom].find(portal=>portal.to===to);
+    if(editing)switchMode(false);
+    if(door)walkTo(door.tile);
+    else if(currentRoom==='lounge'&&to==='hub')enterRoom(to);
+  };
+}
+$('reception').onclick=()=>use(hubFurniture[0]);
 $('wave').onclick=waveHello;
 $('rotate').onclick=rotate;
 $('cancelEdit').onclick=cancelSelection;
@@ -714,22 +859,22 @@ $('remove').onclick=()=>{
   selection=null;editStatus(name+' returned to your inventory.');
 };
 $('resetRoom').onclick=()=>{
-  if(!inEntryRoom&&Object.keys(types).some(type=>countFurniture(homeFurniture,type)+countFurniture(initial,type)>ownedFurniture[type])){
+  if(!atHome()&&Object.keys(types).some(type=>countFurniture(homeFurniture,type)+countFurniture(initial,type)>ownedFurniture[type])){
     editStatus('Pick up furniture from your home before restoring the lounge.');return;
   }
-  if(!confirm(inEntryRoom?'Return all home furniture to your inventory?':'Restore the original lounge furniture?'))return;
-  setRoomFurniture(inEntryRoom?[]:initial.map(item=>({...item})));savePlayerState();
+  if(!confirm(atHome()?'Return all home furniture to your inventory?':'Restore the original lounge furniture?'))return;
+  setRoomFurniture(atHome()?[]:initial.map(item=>({...item})));savePlayerState();
   step=null;route=[];player.seat=null;movePlayerToSpawn();selection=null;
-  editStatus(inEntryRoom?'Home furniture returned to your inventory.':'The original lounge has been restored.');
+  editStatus(atHome()?'Home furniture returned to your inventory.':'The original lounge has been restored.');
 };
 canvas.addEventListener('pointermove',e=>{
   const p=pointer(e);hover=p.tile;hoverItem=p.item;
-  canvas.style.cursor=p.item||p.exit?'pointer':'crosshair';
+  canvas.style.cursor=p.item||p.door?'pointer':'crosshair';
 });
 canvas.addEventListener('pointerleave',()=>{hover=null;hoverItem=null;});
 canvas.addEventListener('click',e=>{
-  const {tile,item}=pointer(e);
-  if(!editing){if(item)use(item);else if(tile)walkTo(tile);return;}
+  const {tile,item,door}=pointer(e);
+  if(!editing){if(door)walkTo(door.tile);else if(item)use(item);else if(tile)walkTo(tile);return;}
   if(item&&selection?.id!==null&&item.id!==selection?.id){choose(item);return;}
   if(selection&&tile)place(tile);
 });
@@ -816,10 +961,8 @@ function openAvatar(){
 }
 function updateName(){
   $('profile').children[1].firstChild.textContent=avatar.name;
-  if(inEntryRoom){
-    entryLayer=makeRoomLayer(true);
-    canvas.setAttribute('aria-label','Entry Room. The wall sign reads Your Home, '+avatar.name+'. Click a floor tile or use arrow keys to walk. Click the exit or use the Exit room button to leave.');
-  }
+  roomLayers.home=makeRoomLayer(()=>room(true));
+  if(atHome())updateRoomLabel();
   const portrait=$('portrait').getContext('2d');
   portrait.clearRect(0,0,24,24);
   portrait.save();portrait.translate(12,39);pixelHead(portrait,avatar,false,false);portrait.restore();
@@ -831,33 +974,47 @@ $('saveAvatar').onclick=()=>{
   avatar={...draft,name:$('guestName').value.trim()||'Guest'};
   save('avatar',avatar);updateName();$('avatarDialog').close();
 };
-function enterLounge(){
-  const focusRoom=document.activeElement===$('exitRoom');
-  inEntryRoom=false;
-  $('roomLayout').classList.remove('entry');
-  $('roomNumber').textContent='01';
-  $('roomName').textContent='The Sunset Lounge';
-  $('roomDescription').textContent='Check in, find a seat, and make yourself at home.';
-  $('roomBadge').textContent='LOUNGE NO. 01';
-  $('roomLabel').textContent='THE SUNSET LOUNGE';
-  $('sceneNumber').textContent='01';
-  $('footerRoom').textContent='ROOM 01';
-  $('exitRoom').hidden=true;
-  canvas.setAttribute('aria-label','Isometric room. Click a floor tile or use arrow keys to walk. Click furniture to interact.');
-  document.title='Pocket Lobby • The Sunset Lounge';
+function updateRoomLabel(){
+  const landmarks={
+    home:'The wall sign reads Your Home, '+avatar.name+'. Use the exit to reach the Grand Lobby.',
+    hub:'Use the Home or Lounge doorway to travel, or use the Hotel directory.',
+    lounge:'Click furniture to interact. Use the Lobby button to go back.'
+  };
+  canvas.setAttribute('aria-label',roomDetails[currentRoom].name+'. Click a floor tile or use arrow keys to walk. '+landmarks[currentRoom]);
+}
+function enterRoom(next){
+  const focusRoom=!!document.activeElement.closest('[data-room-link]');
+  currentRoom=next;
+  const {number,name,description,badge,floor}=roomDetails[next];
+  $('roomLayout').classList.toggle('entry',atHome());
+  $('roomLayout').classList.toggle('hub',next==='hub');
+  $('roomNumber').textContent=number;
+  $('roomName').textContent=name;
+  $('roomDescription').textContent=description;
+  $('roomBadge').textContent=badge;
+  $('roomFloor').textContent=floor;
+  $('roomLabel').textContent=name.toUpperCase();
+  $('sceneNumber').textContent=number;
+  $('footerRoom').textContent='ROOM '+number;
+  $('exitRoom').hidden=!atHome();
+  $('returnLobby').hidden=next!=='lounge';
+  $('edit').hidden=next==='hub';
+  $('bubble').hidden=true;
+  updateRoomLabel();
+  document.title='Pocket Lobby • '+name;
   movePlayerToSpawn();
-  bounds=null;
   switchMode(false);
   if(focusRoom)canvas.focus();
 }
 function movePlayerToSpawn(){
   const openTiles=[];
+  const doors=roomDoors[currentRoom];
   for(let y=0;y<SIZE;y++)for(let x=0;x<SIZE;x++){
-    if(!blocked(x,y)&&(!inEntryRoom||x!==exitTile.x||y!==exitTile.y))openTiles.push({x,y});
+    if(!blocked(x,y)&&!doors.some(({tile})=>tile.x===x&&tile.y===y))openTiles.push({x,y});
   }
   const distance=tile=>Math.abs(tile.x-5)+Math.abs(tile.y-7);
   openTiles.sort((a,b)=>distance(a)-distance(b));
-  const {x,y}=openTiles.find(tile=>!inEntryRoom||findPath(tile,exitTile)!==null)??{x:5,y:7};
+  const {x,y}=openTiles.find(tile=>!atHome()||findPath(tile,homeExit.tile)!==null)??{x:5,y:7};
   Object.assign(player,{x,y,cx:x,cy:y,direction:'right',back:false,stride:0});
 }
 movePlayerToSpawn();updateName();switchMode(false);requestAnimationFrame(animation);

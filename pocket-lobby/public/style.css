@@ -17,3 +17,24 @@
 .inventory-items .quantity{color:var(--gold);font:700 11px/1.2 ui-monospace,Consolas,monospace}
 .inventory-items button{grid-column:1/-1;padding:4px;margin-top:2px;font-size:11px}
 @media(max-width:560px){.toolbar{flex-wrap:wrap}.toolbar .divider,.mast .preview{display:none}.profile>span:nth-child(2){max-width:clamp(46px,16vw,90px)}.coin{width:20px;height:20px}}
+
+.hub .scene{background:radial-gradient(ellipse at 50% 42%,#3c3149,#202236 63%,#171a28)}
+.hub .play-head i{background:var(--gold);box-shadow:0 0 9px #f5bb7375}
+.directory{gap:9px;padding:12px;overflow:auto}
+.directory-welcome{display:grid;grid-template-columns:30px 1fr;align-items:center;gap:6px 9px;padding:11px;border:1px solid #77565a;border-radius:9px;background:radial-gradient(ellipse at 5% 0%,#58404d,#272438 75%)}
+.directory-mark{display:grid;place-content:center;width:29px;height:29px;color:#ffcf91;border:1px solid #b38569;border-radius:8px;background:#4c3544;font-size:16px}
+.directory-welcome .eyebrow{color:#edbd8b;font-size:8px}
+.directory-welcome h3{margin:1px 0 0;font-size:17px;letter-spacing:-.035em;line-height:1.15}
+.directory-welcome p{grid-column:1/-1;margin:3px 0;color:#dfcfd3;font-size:11px;line-height:1.45}
+.directory-welcome button{grid-column:1/-1;padding:6px 8px;text-align:left;font-size:11px;color:#ffd59a;background:#513846;border-color:#835e60}
+.directory-welcome button:hover{background:#644659}
+.directory-welcome button span{float:right}
+.directory-caption{color:#c6a99e;font:650 9px/1.3 ui-monospace,Consolas,monospace;letter-spacing:.12em;margin-top:3px}
+.destination{display:grid;grid-template-columns:31px 1fr auto;align-items:center;gap:8px;text-align:left;padding:7px;color:#f2e5dc}
+.destination b,.destination small{display:block}
+.destination b{font-size:12px}.destination small{margin-top:2px;color:var(--muted);font-size:10px}
+.destination-icon{display:grid;place-content:center;width:29px;height:29px;border-radius:7px;background:#314947;color:#a7d3bc;font-size:17px}
+.destination-icon.lounge-icon{background:#4e384e;color:#eac09a}
+.destination>span:last-child{color:#e4b981;font-size:12px}
+@media(max-width:690px){.hub .side{min-height:0}}
+@media(min-width:691px) and (max-width:1000px){.hub .directory{padding:9px;gap:6px}.hub .directory-welcome{padding:8px}}
