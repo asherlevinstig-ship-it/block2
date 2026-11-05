@@ -62,12 +62,6 @@ export function createMeditationSiteVisuals(app: pc.Application, parent: pc.Enti
         [Math.cos(angle) * 2.25, .42 + (i % 2) * .035, Math.sin(angle) * 2.25]);
       slab.setLocalEulerAngles(0, -angle * 180 / Math.PI + 90, 0);
     }
-    for (let i = 0; i < 4; i++) {
-      const angle = i / 4 * Math.PI * 2;
-      const seat = shape(root, "meditation-kneeling-stone", "box", stoneLight, [1.55, .18, .92],
-        [Math.cos(angle) * 3.75, .12, Math.sin(angle) * 3.75]);
-      seat.setLocalEulerAngles(0, -angle * 180 / Math.PI + 90, 0);
-    }
     const logMaterial = material(new pc.Color(.18, .075, .025));
     for (const [yaw, y] of [[45, .55], [-45, .63], [90, .71]] as const) {
       const log = shape(root, "meditation-hearth-log", "box", logMaterial, [2.35, .3, .34], [0, y, 0]);
