@@ -1103,6 +1103,18 @@ canvas.ranged-aim { cursor: none; }
 #blacksmith-prompt { border-color: #f3aa63; color: #ffc88a; }
 #town-healer-prompt { border-color: #63e7bd; color: #a7ffe3; background: linear-gradient(180deg, rgb(17 56 47 / 96%), rgb(8 27 24 / 96%)); }
 #guild-steward-prompt { border-color: #b89aff; color: #e6dcff; background: linear-gradient(180deg, rgb(55 39 82 / 96%), rgb(24 17 40 / 96%)); }
+#blacksmith-prompt::after, #town-healer-prompt::after, #guild-steward-prompt::after, #tavern-keeper-prompt::after {
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  width: 9px;
+  height: 9px;
+  border-right: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+  background: inherit;
+  content: "";
+  transform: translateX(-50%) rotate(45deg);
+}
 #player-trade-prompt {
   position: fixed;
   z-index: 24;

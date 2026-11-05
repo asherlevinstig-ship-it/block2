@@ -560,7 +560,8 @@ import { WARDEN_LOOT_BEAM_MS } from "./warden-victory-effects.js";
 import { advanceIndoorCameraBlend, indoorCameraOffset } from "./indoor-camera.js";
 import { canPlayAtTavernTable, canPlayHigherOrLower, TAVERN_HIGH_LOW_TABLE, TAVERN_KEEPER_LINES, TAVERN_QUIZ_TABLE } from "./tavern-keeper.js";
 import { BLACKSMITH_STALL, canTradeAtBlacksmithStall } from "./blacksmith.js";
-import { TOWN_NPCS, townNpcLocation, type TownNpcInteractionUpdate } from "@blockcraft/protocol";
+import { TOWN_NPCS, townNpcLocation, type TownNpcDefinition, type TownNpcInteractionUpdate,
+  type TownNpcLocationId } from "@blockcraft/protocol";
 import { selectInteractionCandidate, townNpcInteractionCandidate } from "./interaction-candidates.js";
 import "./styles.css";
 
@@ -2619,6 +2620,33 @@ interface RapidTownActorVisual {
   rightLeg: pc.Entity;
 }
 const rapidTownActors: RapidTownActorVisual[] = [];
+function townNpcPromptTarget(definition: TownNpcDefinition, location: TownNpcLocationId = "town"): pc.Vec3 {
+  if (location === "town") {
+    const actor = rapidTownActors.find(candidate => candidate.definition.id === definition.id);
+    const authoredHead = actor?.model?.findByName("head") as pc.Entity | null | undefined;
+    const visualHead = authoredHead ?? actor?.head;
+    if (visualHead) {
+      const target = visualHead.getPosition().clone();
+      target.y += authoredHead ? .34 : .48;
+      return target;
+    }
+  }
+  const anchor = townNpcLocation(definition, location).anchor;
+  return new pc.Vec3(anchor.x, anchor.y + 2.05, anchor.z);
+}
+function placeWorldPrompt(prompt: HTMLElement, target: pc.Vec3, verticalGap = 12): boolean {
+  if (!camera.camera) return false;
+  const screen = camera.camera.worldToScreen(target);
+  const rect = canvas.getBoundingClientRect();
+  if (screen.z <= 0 || screen.x < 0 || screen.x > canvas.width || screen.y < 0 || screen.y > canvas.height) return false;
+  const width = Math.max(150, prompt.offsetWidth);
+  const height = Math.max(48, prompt.offsetHeight);
+  const rawX = rect.left + screen.x * rect.width / canvas.width;
+  const rawY = rect.top + screen.y * rect.height / canvas.height - verticalGap;
+  prompt.style.left = `${Math.max(rect.left + width / 2 + 8, Math.min(rect.right - width / 2 - 8, rawX))}px`;
+  prompt.style.top = `${Math.max(rect.top + height + 8, Math.min(rect.bottom - 8, rawY))}px`;
+  return true;
+}
 const rapidTownLights: { entity: pc.Entity; phase: number }[] = [];
 const rapidTownSparks: { entity: pc.Entity; phase: number }[] = [];
 const rapidGreenwoodMotes: { entity: pc.Entity; x: number; y: number; z: number; phase: number }[] = [];
@@ -15694,27 +15722,17 @@ function updateTarget(): void {
   }
   blacksmithPrompt.hidden = !blacksmithNearby || !blacksmithPanel.hidden || chestNearby;
   if (!blacksmithPrompt.hidden) {
-    const stall = fastWorldRequested ? smithNpcDefinition.anchor : BLACKSMITH_STALL;
-    const screen = camera.camera.worldToScreen(new pc.Vec3(stall.x, stall.y + 2.35, stall.z));
-    const rect = canvas.getBoundingClientRect();
-    blacksmithPrompt.style.left = `${rect.left + screen.x * rect.width / canvas.width}px`;
-    blacksmithPrompt.style.top = `${rect.top + screen.y * rect.height / canvas.height}px`;
+    const target = fastWorldRequested ? townNpcPromptTarget(smithNpcDefinition)
+      : new pc.Vec3(BLACKSMITH_STALL.x, BLACKSMITH_STALL.y + 2.35, BLACKSMITH_STALL.z);
+    if (!placeWorldPrompt(blacksmithPrompt, target)) blacksmithPrompt.hidden = true;
   }
   townHealerPrompt.hidden = !healerNearby;
   if (!townHealerPrompt.hidden) {
-    const healer = healerNpcDefinition.anchor;
-    const screen = camera.camera.worldToScreen(new pc.Vec3(healer.x, healer.y + 2.35, healer.z));
-    const rect = canvas.getBoundingClientRect();
-    townHealerPrompt.style.left = `${rect.left + screen.x * rect.width / canvas.width}px`;
-    townHealerPrompt.style.top = `${rect.top + screen.y * rect.height / canvas.height}px`;
+    if (!placeWorldPrompt(townHealerPrompt, townNpcPromptTarget(healerNpcDefinition))) townHealerPrompt.hidden = true;
   }
   guildStewardPrompt.hidden = !guildStewardNearby;
   if (!guildStewardPrompt.hidden) {
-    const steward = guildStewardNpcDefinition.anchor;
-    const screen = camera.camera.worldToScreen(new pc.Vec3(steward.x, steward.y + 2.35, steward.z));
-    const rect = canvas.getBoundingClientRect();
-    guildStewardPrompt.style.left = `${rect.left + screen.x * rect.width / canvas.width}px`;
-    guildStewardPrompt.style.top = `${rect.top + screen.y * rect.height / canvas.height}px`;
+    if (!placeWorldPrompt(guildStewardPrompt, townNpcPromptTarget(guildStewardNpcDefinition))) guildStewardPrompt.hidden = true;
   }
   const activeQuizTable = TAVERN_QUIZ_TABLE;
   const quizTableNearby = !tavernRoomRequested && canPlayAtTavernTable(player, sceneDressing.keeperVisible, activeQuizTable);
@@ -15741,11 +15759,8 @@ function updateTarget(): void {
   const keeperNearby = keeperInteraction?.payload === "mara";
   tavernKeeperPrompt.hidden = !keeperNearby || !tavernDialogue.hidden;
   if (!tavernKeeperPrompt.hidden) {
-    const keeper = townNpcLocation(maraNpcDefinition, maraLocation).anchor;
-    const screen = camera.camera.worldToScreen(new pc.Vec3(keeper.x, keeper.y + 1.35, keeper.z));
-    const rect = canvas.getBoundingClientRect();
-    tavernKeeperPrompt.style.left = `${rect.left + screen.x * rect.width / canvas.width}px`;
-    tavernKeeperPrompt.style.top = `${rect.top + screen.y * rect.height / canvas.height}px`;
+    if (!placeWorldPrompt(tavernKeeperPrompt, townNpcPromptTarget(maraNpcDefinition, maraLocation)))
+      tavernKeeperPrompt.hidden = true;
   }
   if (!keeperNearby && !tavernDialogue.hidden) closeTavernDialogue();
   const availability = hit ? miningAvailability(player, hit) : null;
