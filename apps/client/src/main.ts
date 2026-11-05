@@ -8654,7 +8654,7 @@ function renderBuildPath(update: BuildPathUpdate): void {
   callingIntroEyebrow.textContent = selected ? `${selected.name.toUpperCase()} · ${rank.name.toUpperCase()}` : "YOUR PLAYSTYLE HAS AWAKENED";
   callingIntroCopy.textContent = selected
     ? "Review gear-based paths, or choose Healer for team support. Changes are allowed only in Town."
-    : "Choose your first combat style here. Its Power unlocks at level 2 and Special at level 4. Changes later require Town.";
+    : "Preview each Calling's combat loop, identity and first Power. Your Power unlocks at level 2, your Special at level 4, and you can retrain later in Town.";
   update.candidates.forEach((candidate, index) => {
     const definition = BUILD_PATHS[candidate.pathId];
     const starter = CALLING_ABILITY_OPTIONS.find(option => option.pathId === candidate.pathId && option.unlockRank === 0)!;
@@ -8662,9 +8662,8 @@ function renderBuildPath(update: BuildPathUpdate): void {
     button.dataset.path = candidate.pathId;
     button.dataset.active = String(candidate.pathId === update.selectedPathId);
     button.dataset.recommended = String(index === 0);
-    const why = candidate.reasons.length ? candidate.reasons.join(" · ") : "a flexible starting loadout";
     const awakening = callingAwakening(candidate.pathId);
-    button.innerHTML = `<em>${candidate.pathId === update.selectedPathId ? "CURRENT" : index === 0 ? "RECOMMENDED" : "OPTION"}</em>${callingPreviewMarkup(candidate.pathId, definition.name)}<span><strong>${definition.name}</strong><small>${definition.role}</small></span><p class="calling-preview-caption">${awakening.action}</p><b>${starter.name} · unlocks at LV 2</b><small>${starter.description}</small>`;
+    button.innerHTML = `<em>${candidate.pathId === update.selectedPathId ? "CURRENT" : index === 0 ? "RECOMMENDED" : "OPTION"}</em>${callingPreviewMarkup(candidate.pathId, definition.name)}<span><strong>${definition.name}</strong><small>${definition.role}</small></span><p class="calling-preview-caption">${awakening.action}</p><b>${starter.name} · unlocks at LV 2</b><small>${starter.description}</small><dl class="calling-choice-details"><div><dt>IDENTITY</dt><dd>${awakening.identity}</dd></div><div><dt>PATH PASSIVE</dt><dd>${definition.passive}</dd></div></dl>`;
     button.style.setProperty("--calling-colour", awakening.colour);
     button.style.setProperty("--calling-accent", awakening.accent);
     button.dataset.previewing = String(candidate.pathId === preferredPreview);
