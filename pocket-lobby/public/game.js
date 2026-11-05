@@ -170,6 +170,7 @@ function drawEntryWalls(){
   wall('right',0,10,66,71,'#9791a6');
   wall('left',0,10,0,4,'#49475e');
   wall('right',0,10,0,4,'#58536c');
+  drawHomeSign();
   const {start,end,height}=exitEdges;
   polygon(exitShape,'#39374c');
   wall('left',start+.1,end-.1,0,height-4,'#242839');
@@ -181,6 +182,21 @@ function drawEntryWalls(){
   const [x,y]=point(0,end-.04,height+6);
   ctx.save();ctx.transform(1,-.5,0,1,x,y);
   ctx.font='bold 7px monospace';ctx.fillStyle='#c4ebcf';ctx.fillText('EXIT',2,0);ctx.restore();
+}
+function drawHomeSign(){
+  const left=2.45,right=7.55,top=59;
+  wall('right',left+.07,right+.07,28,top-1,'#48445a');
+  wall('right',left,right,30,top,'#ab8b75');
+  wall('right',left+.12,right-.12,32,top-2,'#403948');
+  wall('right',left+.3,left+.42,44,46,'#cea98b');
+  wall('right',right-.42,right-.3,44,46,'#cea98b');
+  const [x,y]=point((left+right)/2,0,top);
+  ctx.save();
+  ctx.transform(1,.5,0,1,x,y);
+  ctx.textAlign='center';
+  ctx.font='bold 8px monospace';ctx.fillStyle='#efc58e';ctx.fillText('Your Home',0,11);
+  ctx.font='bold 10px monospace';ctx.fillStyle='#f8eadb';ctx.fillText(avatar.name,0,23,74);
+  ctx.restore();
 }
 function dimensions(item) {
   return item.type==='sofa'?(item.rot%2?[1,2]:[2,1]):item.type==='bar'?[1.5,4.1]:item.type==='shelf'?[.35,3.5]:[1,1];
@@ -360,7 +376,8 @@ function makeRoomLayer(empty){
   const previous=ctx;ctx=layer.getContext('2d');room(empty);ctx=previous;
   return layer;
 }
-const entryLayer=makeRoomLayer(true), loungeLayer=makeRoomLayer(false);
+let entryLayer;
+const loungeLayer=makeRoomLayer(false);
 function draw(time){
   ctx.setTransform(1,0,0,1,0,0);
   ctx.clearRect(0,0,W,H);ctx.translate(W/2,151);ctx.scale(zoom,zoom);ctx.translate(-W/2,-151);
@@ -700,6 +717,10 @@ function openAvatar(){
 }
 function updateName(){
   $('profile').children[1].firstChild.textContent=avatar.name;
+  if(inEntryRoom){
+    entryLayer=makeRoomLayer(true);
+    canvas.setAttribute('aria-label','Entry Room. The wall sign reads Your Home, '+avatar.name+'. Click a floor tile or use arrow keys to walk. Click the exit or use the Exit room button to leave.');
+  }
   const portrait=$('portrait').getContext('2d');
   portrait.clearRect(0,0,24,24);
   portrait.save();portrait.translate(12,39);pixelHead(portrait,avatar,false,false);portrait.restore();
