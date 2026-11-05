@@ -1,3 +1,5 @@
+import { handlePlayerApi } from "../pocket-lobby/server/player-api.mjs";
+
 const GAME_PREFIX = "/game";
 const COLYSEUS_ORIGIN = "https://us-mia-ea26ba04.colyseus.cloud";
 const LEGACY_ASSET_REDIRECTS = new Map([
@@ -25,6 +27,7 @@ export function isAllowedGameRequest(request) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if(url.pathname.startsWith("/api/player/"))return handlePlayerApi(request,env);
     const currentAsset = LEGACY_ASSET_REDIRECTS.get(url.pathname);
     if (currentAsset) {
       url.pathname = currentAsset;

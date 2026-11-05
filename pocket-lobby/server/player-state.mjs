@@ -1,0 +1,101 @@
+import { fishingCatalog, fishProducts, rollFishingCatch } from "../public/fishing.js";
+
+export const MAX_PLAN_HOURS=8;
+const counts=(input={})=>{
+  if(!input||Array.isArray(input)||typeof input!=="object")throw new Error("Invalid inventory.");
+  const result={};
+  for(const [id,value] of Object.entries(input)){
+    if(id.length>60||!Number.isSafeInteger(value)||value<0||value>1000000)throw new Error("Invalid item count.");
+    result[id]=value;
+  }
+  return result;
+};
+function furniture(items){
+  if(items===undefined)return undefined;
+  if(!Array.isArray(items)||items.length>300)throw new Error("Invalid room.");
+  const allowed=new Set(["bar","shelf","plant","sofa","chair","table","lamp","stool","bed","moonbloom","blackjack","roulette"]);
+  return items.map(item=>{
+    if(!allowed.has(item.type)||!Number.isFinite(item.x)||!Number.isFinite(item.y)||item.x<0||item.y<0||item.x>=10||item.y>=10||!Number.isInteger(item.rot)||item.rot<0||item.rot>3)throw new Error("Invalid furniture.");
+    if(!(Number.isSafeInteger(item.id)||typeof item.id==="string"&&item.id.length<=60))throw new Error("Invalid item ID.");
+    return {id:item.id,type:item.type,x:item.x,y:item.y,rot:item.rot};
+  });
+}
+const locations=new Set(["home","hub","lounge","outside","store","market","trail","grove","creek","shrine","ruins","roots","pond"]);
+export function normalizeState(input={}){
+  if(!input||typeof input!=="object"||Array.isArray(input))throw new Error("Invalid character.");
+  const credits=input.credits??100;
+  if(!Number.isSafeInteger(credits)||credits<0||credits>100000000)throw new Error("Invalid balance.");
+  const stats=input.stats??{patienceXp:(input.adventure?.silverfin??0)*10};
+  if(!Number.isSafeInteger(stats.patienceXp)||stats.patienceXp<0||stats.patienceXp>100000000)throw new Error("Invalid Patience.");
+  const gear=input.fishingGear??{ownedRods:["reed"],equippedRod:"reed",bait:10};
+  const ownedRods=[...new Set(gear.ownedRods??[])];
+  if(!ownedRods.length||ownedRods.some(id=>!fishingCatalog.rods[id])||!ownedRods.includes(gear.equippedRod)||!Number.isSafeInteger(gear.bait)||gear.bait<0||gear.bait>1000000)throw new Error("Invalid fishing gear.");
+  const fishStock=counts(input.fishStock??(input.adventure?.silverfin?{silverfin:input.adventure.silverfin}:{}));
+  if(Object.keys(fishStock).some(id=>!fishProducts[id]))throw new Error("Unknown fish.");
+  const a=input.adventure??{};
+  const adventure={};
+  for(const id of ["lantern","groveTrail","bridge","shrine","shortcut"])adventure[id]=a[id]===true;
+  adventure.discovered=[...new Set((Array.isArray(a.discovered)?a.discovered:[]).filter(id=>["trail","grove","creek","shrine","ruins","roots","pond"].includes(id)))];
+  const avatar=input.avatar??{name:"Guest",outfit:0,hair:0};
+  if(typeof avatar.name!=="string"||avatar.name.length>20||!Number.isInteger(avatar.outfit)||avatar.outfit<0||avatar.outfit>4||!Number.isInteger(avatar.hair)||avatar.hair<0||avatar.hair>4)throw new Error("Invalid appearance.");
+  const position=input.position;
+  const state={
+    credits,stats:{patienceXp:stats.patienceXp},fishingGear:{ownedRods,equippedRod:gear.equippedRod,bait:gear.bait},
+    fishStock,huntingLoot:counts(input.huntingLoot),adventure,
+    avatar:{name:avatar.name.trim()||"Guest",outfit:avatar.outfit,hair:avatar.hair},
+    location:locations.has(input.location)?input.location:"home",
+    position:position&&Number.isInteger(position.x)&&Number.isInteger(position.y)&&position.x>=0&&position.y>=0&&position.x<18&&position.y<16?{x:position.x,y:position.y}:null,
+    furniture:furniture(input.furniture),homeFurniture:furniture(input.homeFurniture??[])
+  };
+  if(input.ownedFurniture!==undefined)state.ownedFurniture=counts(input.ownedFurniture);
+  if(input.loungeLayout==="gaming")state.loungeLayout="gaming";
+  return state;
+}
+export function startPlan(state,{hours,baitLimit},now){
+  if(state.plan)throw new Error("A fishing plan is already running.");
+  if(state.report)throw new Error("Read your previous fishing report first.");
+  if(state.location!=="pond")throw new Error("Travel to Silverfin Pond to start this plan.");
+  if(![1,2,4,8].includes(hours))throw new Error("Choose one, two, four, or eight hours.");
+  if(!Number.isInteger(baitLimit)||baitLimit<1||baitLimit>state.fishingGear.bait||baitLimit>1000)throw new Error("Choose a bait limit within your inventory, up to 1,000.");
+  const rod=fishingCatalog.rods[state.fishingGear.equippedRod];
+  if(1+Math.floor(state.stats.patienceXp/50)<rod.patience)throw new Error("Your Patience is too low for this rod.");
+  // Offline casts take longer than direct fishing and never receive the Reel bonus.
+  const interval=Math.round(60000*rod.duration/4500);
+  state.plan={
+    startedAt:now,endAt:now+hours*3600000,nextCatchAt:now+interval,interval,
+    baitLimit,rod:state.fishingGear.equippedRod,catches:{},baitUsed:0,xp:0,
+    patienceBefore:1+Math.floor(state.stats.patienceXp/50)
+  };
+  state.location="pond";state.position={x:4,y:5};
+  return state;
+}
+function finishPlan(state,reason,endedAt){
+  const plan=state.plan;
+  state.report={...plan,reason,endedAt,patienceAfter:1+Math.floor(state.stats.patienceXp/50)};
+  delete state.plan;
+  state.location="home";state.position={x:5,y:7};
+}
+export function settlePlan(state,now,{stop=false,random=Math.random}={}){
+  const plan=state.plan;
+  if(!plan)return false;
+  let changed=false;
+  while(plan.nextCatchAt<=Math.min(now,plan.endAt)&&plan.baitUsed<plan.baitLimit&&state.fishingGear.bait>0){
+    const level=1+Math.floor(state.stats.patienceXp/50);
+    const fish=rollFishingCatch(level,plan.rod,random);
+    state.fishStock[fish]=(state.fishStock[fish]??0)+1;
+    state.fishingGear.bait--;state.stats.patienceXp+=10;
+    plan.catches[fish]=(plan.catches[fish]??0)+1;
+    plan.baitUsed++;plan.xp+=10;
+    const caughtAt=plan.nextCatchAt;
+    plan.nextCatchAt+=plan.interval;changed=true;
+    if(plan.baitUsed>=plan.baitLimit||state.fishingGear.bait===0){
+      finishPlan(state,state.fishingGear.bait===0?"out-of-bait":"bait-limit",caughtAt);
+      return true;
+    }
+  }
+  if(now>=plan.endAt||stop){
+    finishPlan(state,stop?"stopped":"time-limit",Math.min(now,plan.endAt));
+    return true;
+  }
+  return changed;
+}

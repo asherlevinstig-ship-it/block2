@@ -109,3 +109,19 @@
 @keyframes catch-level{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:scale(1)}}
 @keyframes bite-pulse{50%{box-shadow:0 0 22px #ebbd7d85}}
 @media(prefers-reduced-motion:reduce){.catch-reveal,.catch-reveal::after,#catchLevel,#adventureLandmark.bite-ready{animation:none}}
+
+
+#saveStatus{font:600 9px/1.3 ui-monospace,Consolas,monospace;color:#b7d8cc;max-width:140px}
+.offline-plan{padding:10px;background:#26383e;border:1px solid #48666b;border-radius:9px;margin-top:9px}
+.offline-plan p{font-size:11px;line-height:1.5;color:#c2d4cf;margin:6px 0}
+.offline-plan label{display:block;font-size:11px;color:#ecdfc6;margin:8px 0 3px}
+.offline-plan select,.offline-plan input{width:100%;background:#182635;color:#dceae1;border:1px solid #46606a;border-radius:6px;padding:6px;font:inherit;font-size:12px}
+.offline-plan button{width:100%;padding:8px;font-size:11px;background:#a9ccba;color:#20323b;font-weight:750;border-color:#bfdcc9}
+.offline-plan button:hover{background:#c6dfcd}
+#planError,#offlineError{color:#f3c294}
+#cloudGate h2,#offlineDialog h2{font-size:24px;letter-spacing:-.035em;margin:5px 0 10px}
+#cloudGate p,#offlineDialog p{font-size:13px;line-height:1.5;color:#c5d8d2}
+#offlineCatches{padding:10px 10px 10px 28px;border:1px solid #405766;border-radius:8px;background:#192536;max-height:220px;overflow:auto;color:#d6e5da;font-size:13px;line-height:1.7}
+#offlineTotals{font-size:13px;color:#f2d19d}
+
+.server-save-note{font-size:11px;line-height:1.45;color:#afc7c2}

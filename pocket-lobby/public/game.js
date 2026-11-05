@@ -43,7 +43,7 @@ const gamingTables=[
 const isGamingTable=item=>item.type==='blackjack'||item.type==='roulette';
 const initial=[...classicLounge.filter(item=>item.type!=='table'),...gamingTables];
 const fixed = item => item.type==='bar'||item.type==='shelf'||isGamingTable(item);
-const savedPlayerState = load('player-state',null);
+const savedPlayerState = window.towerInitialState??load('player-state',null);
 const hasGamingLayout=savedPlayerState?.loungeLayout==='gaming';
 const savedLounge=savedPlayerState?.furniture??load('room',null);
 const retiredTables=hasGamingLayout?[]:(savedLounge??[]).filter(item=>item.type==='table'&&
@@ -91,7 +91,7 @@ let fishingSession=null,catchReveal=null,patienceTween=null;
 let fishingSound=load('fishing-sound',false)===true;
 let lanternLit=false;
 let nextId = Math.max(0,...[...loungeFurniture,...homeFurniture].map(item=>item.id).filter(Number.isInteger))+1;
-let avatar = {...defaultAvatar,...load('avatar',defaultAvatar)};
+let avatar = {...defaultAvatar,...(savedPlayerState?.avatar??load('avatar',defaultAvatar))};
 let draft;
 let messages = load('chat',[]);
 const player = {x:5,y:7,cx:5,cy:7,direction:'right',back:false,seat:null,stride:0,waveStarted:null};
@@ -1270,6 +1270,7 @@ function animation(time){
       player.cx=to.x;player.cy=to.y;player.stride++;step=null;
       const door=roomDoors[currentRoom].find(portal=>portal.tile.x===to.x&&portal.tile.y===to.y&&moonwood.open(portal,adventure));
       if(door)enterRoom(door.to,door.arrival);
+      else if(!route.length)savePlayerState();
     }
   }
   if(!step&&!route.length){target=null;if(interaction)finishInteraction();}
@@ -1445,7 +1446,9 @@ function updateTradingPost(){
   }
 }
 function savePlayerState(){
-  save('player-state',{credits,ownedFurniture,furniture:loungeFurniture,homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats,fishingGear,huntingLoot,fishStock});
+  const snapshot={credits,ownedFurniture,furniture:loungeFurniture,homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats,fishingGear,huntingLoot,fishStock,avatar,location:currentRoom,position:{x:player.cx,y:player.cy}};
+  save('player-state',snapshot);
+  if(window.playerCloud)window.playerCloud.enqueue(JSON.parse(JSON.stringify(snapshot)));
   updateInventory();
 }
 function editStatus(message){
@@ -1509,6 +1512,10 @@ function updateAdventurePanel(){
   };
   $('adventureStatus').textContent=fieldNotes[currentRoom];
   $('fishingStats').hidden=currentRoom!=='pond';
+  $('offlinePlanPanel').hidden=currentRoom!=='pond';
+  $('startOfflineFishing').disabled=fishingGear.bait<1||!!fishingSession;
+  $('planBait').max=fishingGear.bait;
+  $('planPace').textContent='One catch about every '+Math.round(60*fishingCatalog.rods[fishingGear.equippedRod].duration/4500)+' seconds with your '+fishingCatalog.rods[fishingGear.equippedRod].name+'. Each catch uses one bait and earns 10 Patience XP.';
   updatePlayerStats();
   $('adventureProgress').textContent=adventure.discovered.length+' of '+Object.keys(moonwood.areas).length+' places discovered';
   const landmark=$('adventureLandmark');
@@ -1793,7 +1800,7 @@ $('help').onclick=()=>$('helpDialog').showModal();
 for(const button of document.querySelectorAll('dialog .close'))button.onclick=()=>button.closest('dialog').close();
 $('saveAvatar').onclick=()=>{
   avatar={...draft,name:$('guestName').value.trim()||'Guest'};
-  save('avatar',avatar);updateName();$('avatarDialog').close();
+  save('avatar',avatar);updateName();savePlayerState();$('avatarDialog').close();
 };
 function updateRoomLabel(){
   const landmarks={
@@ -1847,6 +1854,7 @@ function enterRoom(next,arrival){
     savePlayerState();
   }
   switchMode(false);
+  savePlayerState();
   if(exploring)revealByLantern();
   if(focusRoom)canvas.focus();
 }
@@ -1872,4 +1880,9 @@ $('fishingSound').onclick=()=>{
   $('fishingSound').setAttribute('aria-pressed',String(fishingSound));
   if(fishingSound)fishingMoments.sound('catch');
 };
-movePlayerToSpawn();updateName();switchMode(false);requestAnimationFrame(animation);
+movePlayerToSpawn();updateName();switchMode(false);
+if(savedPlayerState?.location&&roomDetails[savedPlayerState.location])enterRoom(savedPlayerState.location,savedPlayerState.position);
+window.towerSaveNow=savePlayerState;
+window.towerHasActiveCast=()=>!!fishingSession;
+if(window.playerCloud)window.playerCloud.attach();
+requestAnimationFrame(animation);

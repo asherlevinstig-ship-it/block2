@@ -39,3 +39,5 @@ function rollFishingCatch(level,rodId,random=Math.random){
   const quality=qualityRoll<chances.rare?'rare':qualityRoll<chances.rare+chances.fine?'fine':'common';
   return quality==='common'?species:species+'_'+quality;
 }
+
+export { fishingCatalog, fishProducts, fishingChances, rollFishingCatch };
