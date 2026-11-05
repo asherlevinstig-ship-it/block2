@@ -213,6 +213,7 @@ import { bindTownNpcRig, loadTownNpcAssets, TOWN_NPC_MODEL_YAW, transitionTownNp
 import { serviceNpcAnimation, serviceNpcFacingYaw, serviceNpcPerformanceDuration, serviceNpcPerformanceFor,
   type ServiceNpcId, type ServiceNpcPerformanceKind } from "./town-npc-interaction-presentation.js";
 import { townNpcProgressionCopy, townVictoryAnimation } from "./town-npc-progression.js";
+import { townSocialBeat, type TownSocialBeat } from "./town-social-life.js";
 import { SPEED_LAB_TOWN_TERRAIN, SPEED_LAB_TOWN_TERRAIN_DETAILS,
   type TownTerrainMaterial } from "./town-terrain.js";
 import { TOWN_ATMOSPHERE_PARTICLES, TOWN_ATMOSPHERE_PATCHES, TOWN_GATE_EMBANKMENTS,
@@ -2635,6 +2636,15 @@ interface RapidTownActorVisual {
   rightLeg: pc.Entity;
 }
 const rapidTownActors: RapidTownActorVisual[] = [];
+const townSpeechBubble = document.createElement("aside");
+townSpeechBubble.id = "town-speech-bubble";
+townSpeechBubble.hidden = true;
+townSpeechBubble.setAttribute("aria-hidden", "true");
+townSpeechBubble.innerHTML = "<strong></strong><span></span>";
+document.body.append(townSpeechBubble);
+const townSpeechName = townSpeechBubble.querySelector<HTMLElement>("strong")!;
+const townSpeechLine = townSpeechBubble.querySelector<HTMLElement>("span")!;
+let renderedTownSocialKey = "";
 type TownNpcGesture = {
   npcId: ServiceNpcId;
   kind: ServiceNpcPerformanceKind;
@@ -2714,6 +2724,28 @@ function townNpcPromptTarget(definition: TownNpcDefinition, location: TownNpcLoc
   }
   const anchor = townNpcLocation(definition, location).anchor;
   return new pc.Vec3(anchor.x, anchor.y + 2.05, anchor.z);
+}
+function townActorSpeechTarget(actor: RapidTownActorVisual): pc.Vec3 {
+  const authoredHead = actor.model?.findByName("head") as pc.Entity | null | undefined;
+  const visualHead = authoredHead ?? actor.head;
+  const target = visualHead.getPosition().clone();
+  target.y += authoredHead ? .42 : .56;
+  return target;
+}
+function updateTownSpeechBubble(beat: TownSocialBeat | null, playerPosition: pc.Vec3): void {
+  const speaker = beat ? rapidTownActors.find(actor => actor.definition.id === beat.speakerId) : null;
+  const speakerPosition = speaker?.root.getPosition();
+  const obscured = !npcServiceDialogue.hidden || !blacksmithPanel.hidden || !inventoryPanel.hidden || !quizPanel.hidden;
+  townSpeechBubble.hidden = !beat || !speaker || !speakerPosition || obscured
+    || Math.hypot(playerPosition.x - speakerPosition.x, playerPosition.z - speakerPosition.z) > 24;
+  if (townSpeechBubble.hidden || !beat || !speaker) return;
+  if (renderedTownSocialKey !== beat.key) {
+    renderedTownSocialKey = beat.key;
+    townSpeechName.textContent = beat.speakerName;
+    townSpeechLine.textContent = beat.line;
+    townSpeechBubble.dataset.tone = beat.tone;
+  }
+  if (!placeWorldPrompt(townSpeechBubble, townActorSpeechTarget(speaker), 18)) townSpeechBubble.hidden = true;
 }
 function placeWorldPrompt(prompt: HTMLElement, target: pc.Vec3, verticalGap = 12): boolean {
   if (!camera.camera) return false;
@@ -19937,6 +19969,11 @@ app.on("update", (dt: number) => {
     }
     const townAnimationBudget = townNpcAnimationBudget(appliedGraphicsQualityTier);
     if (townNpcGesture && customUpdateStartedAt >= townNpcGesture.until) townNpcGesture = null;
+    const localTownPlayer = (room?.state.players as Map<string, NetworkPlayer> | undefined)?.get(room?.sessionId ?? "");
+    const activeTownSocialBeat = townSocialBeat(customUpdateStartedAt, {
+      highestFloorCleared: towerChronicleProgress.highestFloorCleared,
+      localPlayerIsMurderer: pvpMurdererUntil(localTownPlayer?.huntLoadoutsJson ?? "{}") > Date.now(),
+    });
     const animatedTownActors = new Set(rapidTownActors
       .filter(actor => actor.model?.anim)
       .map(actor => {
@@ -19951,17 +19988,26 @@ app.on("update", (dt: number) => {
       const gesture = townNpcGesture?.npcId === actor.definition.id ? townNpcGesture : null;
       const conversing = activeServiceNpcId === actor.definition.id;
       const celebratingVictory = customUpdateStartedAt < towerChronicleCelebrationUntil;
+      const socialPeerId = activeTownSocialBeat?.speakerId === actor.definition.id ? activeTownSocialBeat.listenerId
+        : activeTownSocialBeat?.listenerId === actor.definition.id ? activeTownSocialBeat.speakerId : undefined;
+      const socialPeer = socialPeerId ? rapidTownActors.find(candidate => candidate.definition.id === socialPeerId) : null;
+      const socialPeerPosition = socialPeer?.root.getLocalPosition();
+      const socialWarning = activeTownSocialBeat?.speakerId === actor.definition.id && activeTownSocialBeat.tone === "warning";
+      const socialFacing = !pose.moving && (socialWarning || Boolean(socialPeerPosition
+        && Math.hypot(socialPeerPosition.x - pose.x, socialPeerPosition.z - pose.z) <= 8));
       const facingPlayer = Boolean(gesture || conversing);
       const walk = pose.stride * 34;
       const bob = actor.model ? 0 : pose.moving ? Math.abs(pose.stride) * .028 : Math.sin(townTime * 1.6 + actor.definition.phase * 5) * .01;
       actor.root.setLocalPosition(pose.x, fastWorldGroundHeight(pose.x, pose.z) + .15 + bob, pose.z);
-      const targetYaw = facingPlayer ? serviceNpcFacingYaw(pose, playerPosition, pose.yaw) : pose.yaw;
-      const actorYaw = facingPlayer
+      const socialTarget = socialWarning ? playerPosition : socialPeerPosition;
+      const targetYaw = facingPlayer ? serviceNpcFacingYaw(pose, playerPosition, pose.yaw)
+        : socialFacing && socialTarget ? serviceNpcFacingYaw(pose, socialTarget, pose.yaw) : pose.yaw;
+      const actorYaw = facingPlayer || socialFacing
         ? approachYaw(actor.root.getLocalEulerAngles().y, targetYaw, Math.min(dt, .05), 420)
         : pose.yaw;
       actor.root.setLocalEulerAngles(0, actorYaw, 0);
       if (actor.model?.anim) {
-        const animateRig = facingPlayer || (animatedTownActors.has(actor) && townNpcAnimationActive(
+        const animateRig = facingPlayer || socialFacing || (animatedTownActors.has(actor) && townNpcAnimationActive(
           Math.hypot(playerPosition.x - pose.x, playerPosition.z - pose.z), appliedGraphicsQualityTier));
         if (actor.model.anim.enabled !== animateRig) {
           actor.model.anim.enabled = animateRig;
@@ -20025,6 +20071,7 @@ app.on("update", (dt: number) => {
         actor.rightArm.setLocalEulerAngles(-18 - pose.activity * 16, 0, -18);
       }
     }
+    updateTownSpeechBubble(activeTownSocialBeat, playerPosition);
     for (let effectIndex = townNpcServiceEffects.length - 1; effectIndex >= 0; effectIndex--) {
       const effect = townNpcServiceEffects[effectIndex]!;
       if (customUpdateStartedAt >= effect.until) {

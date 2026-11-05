@@ -14,6 +14,7 @@ describe("speed-lab town life", () => {
     const roles = new Set(SPEED_LAB_TOWN_ACTORS.map(actor => actor.role));
     expect(roles).toEqual(new Set(["guard", "vendor", "smith", "healer", "resident"]));
     expect(SPEED_LAB_TOWN_ACTORS.filter(actor => actor.role === "guard")).toHaveLength(2);
+    expect(SPEED_LAB_TOWN_ACTORS.filter(actor => actor.role === "resident").length).toBeGreaterThanOrEqual(5);
   });
 
   it("moves patrols smoothly and keeps workers at their stations", () => {
@@ -67,6 +68,6 @@ describe("speed-lab town life", () => {
     expect(townNpcAnimationActive(40, "high")).toBe(true);
     expect(townNpcAnimationBudget("low")).toBe(2);
     expect(townNpcAnimationBudget("medium")).toBe(4);
-    expect(townNpcAnimationBudget("high")).toBe(SPEED_LAB_TOWN_ACTORS.length);
+    expect(townNpcAnimationBudget("high")).toBe(Math.min(8, SPEED_LAB_TOWN_ACTORS.length));
   });
 });

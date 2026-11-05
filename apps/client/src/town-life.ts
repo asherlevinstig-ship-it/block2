@@ -38,7 +38,7 @@ export function townNpcAnimationActive(distance: number, quality: TownNpcAnimati
  * the two closest residents, medium keeps a small social group alive, and
  * high retains the complete authored population. */
 export function townNpcAnimationBudget(quality: TownNpcAnimationQuality): number {
-  return quality === "high" ? SPEED_LAB_TOWN_ACTORS.length : quality === "medium" ? 4 : 2;
+  return quality === "high" ? Math.min(8, SPEED_LAB_TOWN_ACTORS.length) : quality === "medium" ? 4 : 2;
 }
 
 /** Client-only town life. These routes deliberately avoid the well, pavilion,
@@ -61,6 +61,14 @@ export const SPEED_LAB_TOWN_ACTORS: readonly TownLifeActorDefinition[] = [
     facingYaw: 90, coat: [.28, .2, .48], accent: [.78, .65, 1] },
   { id: "well-runner", role: "resident", route: [[59, 96.5], [76, 96.5], [81, 93]], moveSpeed: 1.05, pauseSeconds: 2.4, phase: .25,
     facingYaw: 35, coat: [.42, .31, .5], accent: [.82, .68, .94] },
+  { id: "plaza-patron-a", role: "resident", route: [[55, 99], [75, 99], [82, 92]], moveSpeed: .92, pauseSeconds: 2.7, phase: .08,
+    facingYaw: 65, coat: [.38, .3, .2], accent: [.92, .64, .28] },
+  { id: "plaza-patron-b", role: "resident", route: [[55, 100.2], [75, 100.2], [82, 93.2]], moveSpeed: .92, pauseSeconds: 2.7, phase: .08,
+    facingYaw: 65, coat: [.24, .38, .46], accent: [.55, .82, .94] },
+  { id: "sanctuary-visitor", role: "resident", route: [[56, 113.5], [68, 116], [80, 119]], moveSpeed: .78, pauseSeconds: 3.1, phase: .44,
+    facingYaw: -70, coat: [.48, .34, .4], accent: [.86, .72, .78] },
+  { id: "forge-runner", role: "resident", route: [[79.5, 131], [80, 122], [82, 114]], moveSpeed: 1.08, pauseSeconds: 2.1, phase: .7,
+    facingYaw: 180, coat: [.28, .24, .2], accent: [.96, .48, .12] },
 ] as const;
 
 export const SPEED_LAB_TOWN_LIGHTS: readonly (readonly [number, number, number])[] = [

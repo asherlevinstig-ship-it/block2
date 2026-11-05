@@ -132,6 +132,15 @@ body:has(#inventory-panel:not([hidden])) .forest-portal-label { display: none; }
 .loot-panel[hidden] { display: none; }
 #loot-world-label { position: fixed; z-index: 26; left: 0; top: 0; transform: translate(-50%, calc(-100% - 12px)); box-sizing: border-box; width: min(210px, calc(100vw - 24px)); padding: 8px 10px; border: 1px solid var(--rarity, #efd07a); border-radius: 10px; background: linear-gradient(180deg, #1c2d24f5, #09130ff8); color: #fff0bd; pointer-events: none; box-shadow: 0 4px 15px #0009, 0 0 18px color-mix(in srgb, var(--rarity, #efd07a) 35%, transparent); font: 800 11px/1.25 system-ui; text-align: left; }
 #loot-world-label[hidden] { display: none; }
+#town-speech-bubble { position: fixed; z-index: 24; left: 0; top: 0; transform: translate(-50%, -100%); box-sizing: border-box; width: min(270px, calc(100vw - 24px)); padding: 9px 12px 10px; border: 1px solid #b8c7b688; border-radius: 12px 12px 12px 3px; background: linear-gradient(160deg, #102019f4, #07100df5); color: #edf5e9; pointer-events: none; box-shadow: 0 7px 22px #0008; font: 600 12px/1.35 system-ui; animation: town-speech-arrive .2s ease-out; }
+#town-speech-bubble[hidden] { display: none; }
+#town-speech-bubble::after { content: ""; position: absolute; left: 19px; bottom: -6px; width: 11px; height: 11px; transform: rotate(45deg); border-right: 1px solid #b8c7b688; border-bottom: 1px solid #b8c7b688; background: #07100d; }
+#town-speech-bubble strong { display: block; margin-bottom: 2px; color: #f4dfa0; font: 900 10px/1.2 system-ui; letter-spacing: .09em; text-transform: uppercase; }
+#town-speech-bubble span { display: block; }
+#town-speech-bubble[data-tone="victory"] { border-color: #e3bd50aa; box-shadow: 0 7px 22px #0008, 0 0 17px #e3bd5026; }
+#town-speech-bubble[data-tone="warning"] { border-color: #f05f62cc; background: linear-gradient(160deg, #311315f4, #13090af7); }
+#town-speech-bubble[data-tone="service"] { border-color: #68d9b5aa; }
+@keyframes town-speech-arrive { from { opacity: 0; transform: translate(-50%, calc(-100% + 5px)) scale(.97); } to { opacity: 1; transform: translate(-50%, -100%) scale(1); } }
 #loot-world-label::after { content: ""; position: absolute; left: calc(50% + var(--tail-shift, 0px) - 6px); bottom: -7px; width: 12px; height: 12px; transform: rotate(45deg); border-right: 1px solid var(--rarity); border-bottom: 1px solid var(--rarity); background: #09130f; }
 #loot-world-label strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--rarity); font-size: 12px; letter-spacing: .02em; }
 #loot-world-attunement { display: block; margin-top: 4px; color: #fff0bd !important; line-height: 1.35; }
