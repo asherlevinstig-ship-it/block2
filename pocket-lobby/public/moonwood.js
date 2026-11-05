@@ -26,7 +26,7 @@ const moonwood=(()=>{
   connect('creek','ruins',[11,4,10,4,'CREEK'],[0,4,1,4,'RUINS']);
   connect('ruins','roots',[11,5,10,5,'RUINS'],[0,4,1,4,'ROOTS'],'shortcut');
   connect('roots','trail',[11,5,10,5,'ROOTS'],[5,9,5,8,'TRAIL'],'shortcut');
-  doors.trail.unshift({to:'outside',side:'wild',tile:{x:0,y:5},inside:{x:1,y:5},arrival:{x:6,y:10},label:'HOTEL'});
+  doors.trail.unshift({to:'outside',side:'wild',tile:{x:0,y:5},inside:{x:1,y:5},arrival:{x:6,y:10},label:'TOWER'});
   const key=(x,y)=>x+','+y;
   const has=id=>Object.hasOwn(areas,id);
   const isWater=(id,x)=>id==='creek'&&x===5;

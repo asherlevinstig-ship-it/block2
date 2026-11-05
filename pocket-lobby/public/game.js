@@ -107,14 +107,14 @@ const hubDoors=[
   {to:'lounge',side:'right',tile:{x:14,y:0},start:13.6,end:15.4,height:51,label:'LOUNGE'},
   {to:'outside',side:'front',tile:{x:8,y:15},start:7.24,end:9.76,label:'OUTSIDE'}
 ];
-const hotelEntrance={to:'hub',side:'left',tile:{x:0,y:5},start:4.58,end:6.42,height:54,label:'HOTEL'};
+const towerEntrance={to:'hub',side:'left',tile:{x:0,y:5},start:4.58,end:6.42,height:54,label:'TOWER'};
 const moonwoodEntrance={to:'trail',side:'front',tile:{x:6,y:11},arrival:{x:1,y:5},start:5.03,end:7.62,label:'MOONWOOD'};
-const roomDoors={home:[homeExit],hub:hubDoors,lounge:[],outside:[hotelEntrance,moonwoodEntrance],...moonwood.doors};
+const roomDoors={home:[homeExit],hub:hubDoors,lounge:[],outside:[towerEntrance,moonwoodEntrance],...moonwood.doors};
 const roomDetails={
   home:{number:'00',name:'Entry Room',description:'Walk through the exit to reach the Grand Lobby.',badge:'ROOM NO. 00',floor:'Private room'},
   hub:{number:'01',name:'The Grand Lobby',description:'Meet at reception, settle into a seating area, or head to another room.',badge:'MAIN HUB',floor:'Ground floor'},
   lounge:{number:'02',name:'The Sunset Lounge',description:'Find blackjack and roulette on the gaming floor, or take a seat by the bar.',badge:'GAMING LOUNGE',floor:'Ground floor'},
-  outside:{number:'03',name:'The Courtyard',description:'Rest by the fountain, or follow the Moonwood steps into the forest.',badge:'OUTSIDE',floor:'Hotel grounds'},
+  outside:{number:'03',name:'The Courtyard',description:'Rest by the fountain, or follow the Moonwood steps into the forest.',badge:'OUTSIDE',floor:'Tower grounds'},
   ...moonwood.areas
 };
 const defaultHint = 'Click a tile to walk · Click furniture to interact';
@@ -377,8 +377,8 @@ function drawGrandLobby(){
   wall('left',.95,4.36,37,66,'#382d45');
   wall('left',1.03,4.28,40,65,'#c3917a');
   wall('left',1.12,4.19,42,63,'#563b51');
-  wallText('left',2.65,55,'POCKET','bold 10px monospace','#ffce95');
-  wallText('left',2.65,46,'H O T E L','bold 6px monospace','#d6a694');
+  wallText('left',2.65,55,'TOWER OF','bold 8px monospace','#ffce95',53);
+  wallText('left',2.65,46,'BEGINNINGS','bold 7px monospace','#d6a694',53);
   wall('left',1.3,4.03,24,35,'#372d42');
   for(let i=0;i<8;i++)wall('left',1.42+i*.31,1.50+i*.31,27,31,'#e1ae7f');
   for(const [a,b] of [[9.37,11.85],[13.32,14.84]]){
@@ -472,7 +472,7 @@ function drawCourtyard(){
     wall('left',a+.12,a+.98,37,39,'#96687a');
     wall('left',a-.07,a+1.17,23,26,'#cb9b91');
   }
-  drawDoor(hotelEntrance);
+  drawDoor(towerEntrance);
   drawDoor(moonwoodEntrance);
   for(const u of [4.26,6.69]){
     wall('left',u,u+.16,30,39,'#493c52');
@@ -956,7 +956,7 @@ function note(message){
   noticeUntil=performance.now()+3000;
 }
 function setHint(){
-  const guide={home:'Click a tile to walk · Click the exit to visit the lobby',hub:'Click a doorway or the Outside steps to travel',lounge:defaultHint,outside:'Click the Moonwood steps to explore · Hotel returns indoors'};
+  const guide={home:'Click a tile to walk · Click the exit to visit the lobby',hub:'Click a doorway or the Outside steps to travel',lounge:defaultHint,outside:'Click the Moonwood steps to explore · Tower returns indoors'};
   const message=editing?'Choose furniture to place or select a piece in the room':guide[currentRoom]??'Follow marked trails · Use the field journal for routes';
   $('hint').textContent='✦  '+message;
 }
@@ -1013,7 +1013,7 @@ function finishInteraction(){
     recordAdventure('Moonbloom added to inventory. The root passage opens.');
   }else if(item.type==='reception'){
     $('receptionMessage').textContent='Good evening, '+avatar.name+'! Your room is through the Home door. The front steps lead to the courtyard.';
-    note('The concierge welcomes you to Pocket Hotel.');
+    note('The concierge welcomes you to Tower of Beginnings.');
   }else if(['sofa','chair','stool','bench'].includes(item.type)){
     player.seat=item;player.back=item.rot>=2;player.direction=item.rot%2?'right':'left';
     note('You took a seat. Click a tile to stand up.');
@@ -1094,7 +1094,7 @@ function switchMode(next){
   $('directoryPanel').hidden=currentRoom!=='hub';
   const exploring=moonwood.has(currentRoom);
   $('adventurePanel').hidden=!exploring;
-  $('panelTitle').textContent=editing?(atHome()?'Home editor':'Room editor'):currentRoom==='hub'?'Hotel directory':exploring?'Field journal':'Room chat';
+  $('panelTitle').textContent=editing?(atHome()?'Home editor':'Room editor'):currentRoom==='hub'?'Tower directory':exploring?'Field journal':'Room chat';
   $('panelSub').textContent=editing?(atHome()?'YOUR HOME':'FURNITURE & DECOR'):roomDetails[currentRoom].name.toUpperCase();
   $('resetRoom').textContent=atHome()?'Clear home furniture':'Restore original room';
   $('mode').textContent=editing?'DECORATE':currentRoom==='hub'?'MAIN HUB':currentRoom==='outside'?'OPEN AIR':exploring?'EXPLORING':'FREE ROAM';
@@ -1370,9 +1370,9 @@ $('saveAvatar').onclick=()=>{
 function updateRoomLabel(){
   const landmarks={
     home:'The wall sign reads Your Home, '+avatar.name+'. Use the exit to reach the Grand Lobby.',
-    hub:'Use a doorway, the Outside steps, or the Hotel directory to travel.',
+    hub:'Use a doorway, the Outside steps, or the Tower directory to travel.',
     lounge:'Click furniture to interact. Use the Lobby button to go back.',
-    outside:'Use the Moonwood steps to explore or the Hotel door to return indoors.'
+    outside:'Use the Moonwood steps to explore or the Tower door to return indoors.'
   };
   canvas.setAttribute('aria-label',roomDetails[currentRoom].name+'. Click a floor tile or use arrow keys to walk. '+(landmarks[currentRoom]??'Use the marked trails or the field journal to travel.'));
 }
@@ -1407,7 +1407,7 @@ function enterRoom(next,arrival){
   $('edit').hidden=!canDecorate();
   $('bubble').hidden=true;
   updateRoomLabel();
-  document.title='Pocket Lobby • '+name;
+  document.title='Tower of Beginnings • '+name;
   movePlayerToSpawn(arrival);
   if(exploring&&!adventure.discovered.includes(next)){
     adventure.discovered.push(next);
