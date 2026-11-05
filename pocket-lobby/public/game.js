@@ -34,7 +34,15 @@ const initial = [
   ['table',3,7,1],['chair',4,8,0],['lamp',1,6],['plant',7,8],['plant',.3,4.9]
 ].map(([type,x,y,rot=0],id)=>({id,type,x,y,rot}));
 const fixed = item => item.type==='bar'||item.type==='shelf';
-let furniture = load('room',initial);
+const savedPlayerState = load('player-state',null);
+let furniture = savedPlayerState?.furniture??load('room',initial);
+const credits = savedPlayerState?.credits??100;
+const countFurniture = (items,type)=>items.filter(item=>item.type===type).length;
+// Retain furniture from rooms saved before inventory was introduced.
+const ownedFurniture = savedPlayerState?.ownedFurniture??Object.fromEntries(
+  Object.keys(types).map(type=>[type,1+Math.max(countFurniture(initial,type),countFurniture(furniture,type))])
+);
+const availableFurniture = type=>ownedFurniture[type]-countFurniture(furniture,type);
 let nextId = Math.max(0,...furniture.map(o=>o.id))+1;
 let avatar = {...defaultAvatar,...load('avatar',defaultAvatar)};
 let draft;
@@ -559,7 +567,26 @@ function animation(time){
   if($('avatarDialog').open)drawAvatarPreview(time);
   requestAnimationFrame(animation);
 }
-function saveRoom(){save('room',furniture);}
+function updateInventory(){
+  let total=0;
+  for(const type of Object.keys(types)){
+    const available=availableFurniture(type);
+    total+=available;
+    const editorButton=$('catalog').querySelector('[data-type="'+type+'"]');
+    editorButton.querySelector('.quantity').textContent=available+' available';
+    editorButton.disabled=available===0;
+    const row=$('inventoryItems').querySelector('[data-type="'+type+'"]');
+    row.querySelector('.quantity').textContent='×'+available;
+    const placeButton=row.querySelector('button');
+    placeButton.disabled=available===0;
+    placeButton.hidden=inEntryRoom;
+  }
+  $('inventoryCount').textContent=total+(total===1?' item in storage':' items in storage');
+}
+function savePlayerState(){
+  save('player-state',{credits,ownedFurniture,furniture});
+  updateInventory();
+}
 function editStatus(message){
   $('editStatus').textContent=message;
   $('rotate').disabled=!selection;$('remove').disabled=!selection||selection.id===null;
@@ -567,6 +594,7 @@ function editStatus(message){
   for(const button of $('catalog').children)button.classList.toggle('selected',selection?.id===null&&selection.type===button.dataset.type);
 }
 function choose(item){
+  if(item.id===null&&availableFurniture(item.type)===0)return;
   selection={...item};editStatus(types[item.type]+' selected. Click a clear tile to '+(item.id===null?'place':'move')+' it.');
 }
 function cancelSelection(){selection=null;editStatus('Select a piece to get started.');}
@@ -584,32 +612,55 @@ function switchMode(next){
 }
 function place(tile){
   const item={...selection,...tile};
+  if(item.id===null&&availableFurniture(item.type)===0){editStatus('There are none left in your inventory.');return;}
   if(!canPlace(item)){editStatus('That spot is occupied or outside the room.');return;}
   if(item.id===null){item.id=nextId++;furniture.push(item);}
   else furniture=furniture.map(other=>other.id===item.id?item:other);
-  saveRoom();selection=null;editStatus(types[item.type]+' placed.');
+  savePlayerState();selection=null;editStatus(types[item.type]+' placed.');
 }
 function rotate(){
   if(!selection)return;
   const rotated={...selection,rot:(selection.rot+1)%4};
   if(rotated.id!==null){
     if(!canPlace(rotated)){editStatus('This piece needs more space to rotate.');return;}
-    furniture=furniture.map(other=>other.id===rotated.id?rotated:other);saveRoom();
+    furniture=furniture.map(other=>other.id===rotated.id?rotated:other);savePlayerState();
   }
   selection=rotated;editStatus(types[rotated.type]+' rotated '+(rotated.rot*90)+'°.');
 }
-function thumbnail(type,el){
+function thumbnail(type){
+  const el=document.createElement('canvas');
+  el.width=54;el.height=44;el.setAttribute('aria-hidden','true');
   const previous=ctx;ctx=el.getContext('2d');
-  ctx.clearRect(0,0,54,44);
   ctx.translate(-216,-55);object({type,x:0,y:0,rot:0});
   ctx=previous;
+  return el;
 }
 for(const [type,name] of Object.entries(types)){
-  const button=document.createElement('button'),preview=document.createElement('canvas');
-  preview.width=54;preview.height=44;preview.setAttribute('aria-hidden','true');
-  button.dataset.type=type;button.append(preview,name);
-  button.onclick=()=>choose({type,id:null,rot:0});$('catalog').append(button);thumbnail(type,preview);
+  const item={type,id:null,rot:0};
+  const button=document.createElement('button'),editorQuantity=document.createElement('small');
+  editorQuantity.className='quantity';
+  button.dataset.type=type;button.append(thumbnail(type),name,editorQuantity);
+  button.onclick=()=>choose(item);$('catalog').append(button);
+
+  const row=document.createElement('li'),label=document.createElement('b');
+  const quantity=document.createElement('span'),placeButton=document.createElement('button');
+  row.dataset.type=type;label.textContent=name;quantity.className='quantity';
+  placeButton.textContent='Place';placeButton.setAttribute('aria-label','Place '+name);
+  placeButton.onclick=()=>{
+    $('inventoryDialog').close();
+    switchMode(true);choose(item);canvas.focus();
+  };
+  row.append(thumbnail(type),label,quantity,placeButton);$('inventoryItems').append(row);
 }
+$('credits').textContent=new Intl.NumberFormat().format(credits);
+if(savedPlayerState)updateInventory();else savePlayerState();
+$('inventory').onclick=()=>{
+  $('inventoryGuide').textContent=inEntryRoom
+    ?'Your furniture is in storage. Exit to the Sunset Lounge to place it.'
+    :'Choose a piece to place it. Pick up furniture in Decorate mode to return it here.';
+  updateInventory();
+  $('inventoryDialog').showModal();
+};
 $('walk').onclick=()=>switchMode(false);
 $('edit').onclick=()=>switchMode(true);
 $('exitRoom').onclick=()=>{if(inEntryRoom)walkTo(exitTile);};
@@ -618,12 +669,13 @@ $('rotate').onclick=rotate;
 $('cancelEdit').onclick=cancelSelection;
 $('remove').onclick=()=>{
   if(!selection||selection.id===null)return;
-  furniture=furniture.filter(item=>item.id!==selection.id);saveRoom();
-  selection=null;editStatus('Furniture removed.');
+  const name=types[selection.type];
+  furniture=furniture.filter(item=>item.id!==selection.id);savePlayerState();
+  selection=null;editStatus(name+' returned to your inventory.');
 };
 $('resetRoom').onclick=()=>{
   if(!confirm('Restore the original lounge furniture?'))return;
-  furniture=initial.map(item=>({...item}));nextId=furniture.length;saveRoom();
+  furniture=initial.map(item=>({...item}));nextId=furniture.length;savePlayerState();
   step=null;route=[];player.seat=null;Object.assign(player,{x:5,y:7,cx:5,cy:7});selection=null;
   editStatus('The original lounge has been restored.');
 };

@@ -2,3 +2,18 @@
 .portrait{image-rendering:pixelated} #wave span{font-size:13px} @media(max-width:390px){.toolbar{flex-wrap:wrap}.toolbar .divider{display:none}.tool{padding-inline:5px}}
 
 .layout.entry{grid-template-columns:minmax(0,1fr)}h1 #roomName{color:inherit}.exit-tool{background:#273c3b;border-color:#46675c;color:#c4ebcf}.exit-tool span{color:#a1d9b5}.exit-tool:hover{background:#344e48;border-color:#78a48b}
+
+.wallet{display:flex;align-items:center;gap:7px;color:#ffd494;white-space:nowrap;font-size:13px;font-variant-numeric:tabular-nums}
+.wallet small{display:block;color:#d9ba92;font:650 8px/1.2 ui-monospace,Consolas,monospace;letter-spacing:.07em;text-transform:uppercase}
+.coin{display:grid;place-items:center;width:23px;height:23px;border:1px solid #d5a263;border-radius:50%;background:#694935;color:#ffd494;box-shadow:inset 0 0 0 2px #3f2d31;font:750 12px/1 ui-monospace,Consolas,monospace}
+.profile>span:nth-child(2){min-width:0;max-width:138px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.catalog .quantity{font:600 9px/1.2 ui-monospace,Consolas,monospace;color:var(--muted)}
+#inventoryDialog{width:min(93vw,450px)}
+.inventory-summary{background:#151b2a;border:1px solid var(--line);border-radius:8px;padding:10px 11px;margin:0 0 10px;color:#f5bb73;font-size:12px}
+.inventory-summary p{color:var(--muted);margin:4px 0 0;font-size:12px;line-height:1.45}
+.inventory-items{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:0;padding:0;list-style:none}
+.inventory-items li{display:grid;grid-template-columns:1fr auto;align-items:center;gap:4px 8px;padding:8px;border:1px solid var(--line);border-radius:8px;background:#22283a;font-size:12px}
+.inventory-items canvas{grid-column:1/-1;justify-self:center;width:54px;height:44px;image-rendering:pixelated}
+.inventory-items .quantity{color:var(--gold);font:700 11px/1.2 ui-monospace,Consolas,monospace}
+.inventory-items button{grid-column:1/-1;padding:4px;margin-top:2px;font-size:11px}
+@media(max-width:560px){.toolbar{flex-wrap:wrap}.toolbar .divider,.mast .preview{display:none}.profile>span:nth-child(2){max-width:clamp(46px,16vw,90px)}.coin{width:20px;height:20px}}
