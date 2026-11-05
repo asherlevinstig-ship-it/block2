@@ -212,6 +212,7 @@ import { townNpcFaceStyle } from "./town-npc-appearance.js";
 import { bindTownNpcRig, loadTownNpcAssets, TOWN_NPC_MODEL_YAW, transitionTownNpcRig } from "./town-npc-assets.js";
 import { serviceNpcAnimation, serviceNpcFacingYaw, serviceNpcPerformanceDuration, serviceNpcPerformanceFor,
   type ServiceNpcId, type ServiceNpcPerformanceKind } from "./town-npc-interaction-presentation.js";
+import { townNpcProgressionCopy, townVictoryAnimation } from "./town-npc-progression.js";
 import { SPEED_LAB_TOWN_TERRAIN, SPEED_LAB_TOWN_TERRAIN_DETAILS,
   type TownTerrainMaterial } from "./town-terrain.js";
 import { TOWN_ATMOSPHERE_PARTICLES, TOWN_ATMOSPHERE_PATCHES, TOWN_GATE_EMBANKMENTS,
@@ -2572,6 +2573,7 @@ let towerChronicleBeacon: pc.Entity | null = null;
 let towerChronicleProgress: TowerProgress = { highestFloorCleared: 0, clearedFloors: [] };
 let towerChronicleBellSwingUntil = 0;
 let towerChronicleCelebrationUntil = 0;
+let towerChronicleCelebrationFloor = 0;
 let pendingTowerChronicleCelebration: { floor: number; bossName: string } | null = null;
 function renderTowerChronicleProgress(source: string): void {
   towerChronicleProgress = parseTowerProgress(source);
@@ -2606,6 +2608,7 @@ function beginTowerChronicleTownCelebration(): void {
   if (!pendingTowerChronicleCelebration) return;
   const victory = pendingTowerChronicleCelebration;
   pendingTowerChronicleCelebration = null;
+  towerChronicleCelebrationFloor = victory.floor;
   towerChronicleBellSwingUntil = performance.now() + 4_200;
   towerChronicleCelebrationUntil = performance.now() + 6_000;
   combatAudio.play("townVictoryBell");
@@ -13848,37 +13851,38 @@ type ServiceNpcConversation = {
 };
 let activeServiceNpcId: ServiceNpcId | null = null;
 let serviceNpcCommitTimer: ReturnType<typeof setTimeout> | null = null;
+const completedServiceNpcInteractions = new Set<ServiceNpcId>();
 
 function serviceNpcConversation(npcId: ServiceNpcId): ServiceNpcConversation {
+  const progression = townNpcProgressionCopy(npcId, towerChronicleProgress, completedServiceNpcInteractions.has(npcId));
   if (npcId === "smith-brom") return {
     icon: "⚒", role: "BEGINNING SMITH", name: "Brom",
-    line: "Steel remembers every climb. Bring me what the tower gave you, and we'll make it worthy of the next one.",
-    detail: "Brom can sell, reforge, attune and dismantle equipment without changing your Calling.",
+    line: progression.line,
+    detail: `${progression.progress} · Brom can sell, reforge, attune and dismantle equipment without changing your Calling.`,
     primary: "OPEN THE FORGE", primaryHint: "Trade, improve or dismantle equipment",
     secondary: "HOW DOES FORGING WORK?", secondaryHint: "Ask Brom for advice",
-    lore: "Ore becomes gold. Duplicate gear becomes materials. Reforging strengthens a weapon you already own; attunement gives it a more specialised purpose.",
+    lore: progression.lore,
   };
   if (npcId === "healer-lyra") {
     const injured = potionHealth < potionMaxHealth;
     return {
       icon: "✚", role: "SANCTUARY HEALER", name: "Lyra",
-      line: injured ? "You're carrying the tower in your shoulders. Be still—I can mend what followed you home."
-        : "Your body is whole, but technique can still fail you. The training ward is always open.",
-      detail: injured ? `${potionHealth} / ${potionMaxHealth} health · care restores health and stamina.`
-        : "You are fully restored · Lyra can still guide you toward the practice arena.",
+      line: progression.line,
+      detail: injured ? `${progression.progress} · ${potionHealth} / ${potionMaxHealth} health · care restores health and stamina.`
+        : `${progression.progress} · You are fully restored · Lyra can still guide you toward the practice arena.`,
       primary: injured ? "RECEIVE CARE" : "RENEW AT THE SANCTUARY", primaryHint: "Restore health and stamina",
       secondary: "ASK ABOUT ABILITIES", secondaryHint: "Learn where to practise safely",
-      lore: "Use the practice dummy near the sanctuary to identify each ability. For a full trial, open your Pack and choose Try Abilities to enter the private arena.",
+      lore: progression.lore,
     };
   }
   const membership = partyUI.guildMembership();
   return {
     icon: "◇", role: "GUILD STEWARD", name: "Elin",
-    line: "A guild is more than a name. It is who answers when the tower calls—and who remembers those who did not return.",
-    detail: membership ? `Your guild: ${membership.name}` : "You have not founded or joined a guild yet.",
+    line: progression.line,
+    detail: `${progression.progress} · ${membership ? `Your guild: ${membership.name}` : "You have not founded or joined a guild yet."}`,
     primary: "OPEN GUILD REGISTER", primaryHint: "Found a guild, view its roster or invite allies",
     secondary: "WHAT IS A GUILD?", secondaryHint: "Ask Elin about guilds",
-    lore: "Guilds persist with your character. Found one here, then invite a nearby guild-free explorer. Guild identity appears with members wherever the tower takes you.",
+    lore: progression.lore,
   };
 }
 
@@ -13938,6 +13942,7 @@ npcServicePrimary.addEventListener("click", () => {
   serviceNpcCommitTimer = setTimeout(() => {
     serviceNpcCommitTimer = null;
     closeServiceNpcDialogue(true);
+    completedServiceNpcInteractions.add(npcId);
     if (npcId === "smith-brom") { openBlacksmith(); return; }
     if (npcId === "healer-lyra") {
       room?.send("npc:interact", { npcId, action: "care" });
@@ -19945,6 +19950,7 @@ app.on("update", (dt: number) => {
       const pose = townLifeActorPose(actor.definition, townTime);
       const gesture = townNpcGesture?.npcId === actor.definition.id ? townNpcGesture : null;
       const conversing = activeServiceNpcId === actor.definition.id;
+      const celebratingVictory = customUpdateStartedAt < towerChronicleCelebrationUntil;
       const facingPlayer = Boolean(gesture || conversing);
       const walk = pose.stride * 34;
       const bob = actor.model ? 0 : pose.moving ? Math.abs(pose.stride) * .028 : Math.sin(townTime * 1.6 + actor.definition.phase * 5) * .01;
@@ -19965,7 +19971,8 @@ app.on("update", (dt: number) => {
         }
         if (!animateRig) continue;
         const animationName = gesture ? serviceNpcAnimation(gesture.kind)
-          : conversing ? "Idle" : townLifeAnimation(actor.definition, pose);
+          : celebratingVictory ? townVictoryAnimation(actor.definition.role, towerChronicleCelebrationFloor)
+            : conversing ? "Idle" : townLifeAnimation(actor.definition, pose);
         if (animationName !== actor.animationName) {
           actor.model.anim.speed = gesture ? (gesture.kind === "forge" ? 1.2 : .92)
             : pose.motion === "walk" ? .92 + actor.definition.moveSpeed * .08 : 1;
@@ -19993,6 +20000,17 @@ app.on("update", (dt: number) => {
         } else {
           actor.rightArm.setLocalEulerAngles(-42 - Math.sin(gesturePhase) * 24, 0, -34);
           actor.head.setLocalEulerAngles(0, Math.sin(gesturePhase * .5) * 5, 0);
+        }
+      } else if (celebratingVictory) {
+        const celebrationPhase = customUpdateStartedAt * .012 + actor.definition.phase * Math.PI * 2;
+        if (actor.definition.role === "smith") {
+          actor.rightArm.setLocalEulerAngles(-52 - Math.max(0, Math.sin(celebrationPhase)) * 70, 0, -8);
+        } else if (actor.definition.role === "healer") {
+          actor.leftArm.setLocalEulerAngles(-68, 0, 36);
+          actor.rightArm.setLocalEulerAngles(-68, 0, -36);
+        } else {
+          actor.leftArm.setLocalEulerAngles(-72 + Math.sin(celebrationPhase) * 16, 0, 38);
+          actor.rightArm.setLocalEulerAngles(-72 - Math.sin(celebrationPhase) * 16, 0, -38);
         }
       } else if (conversing) {
         actor.rightArm.setLocalEulerAngles(-12, 0, -10);
