@@ -42,6 +42,13 @@ let messages = load('chat',[]);
 const player = {x:5,y:7,cx:5,cy:7,direction:'right',back:false,seat:null,stride:0,waveStarted:null};
 let route=[],step=null,interaction=null,hover=null,hoverItem=null,target=null;
 let editing=false,selection=null,zoom=1,hitboxes=[],bounds=null,bubbleUntil=0,noticeUntil=0;
+let inEntryRoom=true;
+const exitTile={x:0,y:5};
+const exitEdges={start:4.88,end:6.12,height:49};
+const exitShape=[
+  point(0,exitEdges.start),point(0,exitEdges.end),
+  point(0,exitEdges.end,exitEdges.height),point(0,exitEdges.start,exitEdges.height)
+];
 const defaultHint = 'Click a tile to walk · Click furniture to interact';
 
 function polygon(points,color,line) {
@@ -91,16 +98,21 @@ function windows(){
     wall('right',a+1.16,a+1.23,24,60,'#5c435d');
   }
 }
-function room(){
+function room(empty=false){
   polygon([[240,106],[430,191],[244,291],[51,198]],'#10142168');
-  block(0,0,10,10,-7,7,['#ac745c','#624250','#4d394d']);
+  const floors=empty?['#8b8191','#918696','#897f90','#94899a','#8e8394']:['#b47c68','#bd826a','#b77a64','#bb7c64','#c4866d'];
+  block(0,0,10,10,-7,7,empty?['#8b8191','#494355','#3b354a']:['#ac745c','#624250','#4d394d']);
   for(let y=0;y<SIZE;y++)for(let x=0;x<SIZE;x++){
-    const floors=['#b47c68','#bd826a','#b77a64','#bb7c64','#c4866d'];
-    surface(x,y,1,1,0,floors[(x*7+y*13)%5],'#9f675d');
+    surface(x,y,1,1,0,floors[(x*7+y*13)%5],empty?'#776c80':'#9f675d');
+    if(empty)continue;
     for(let i=0;i<3;i++){
       const u=(x*7+y*13+i*11)%53/100+.11;
       surface(x+u,y+.23+i*.24,.19,.026,.02,i===0?'#ce9477':'#a56c62');
     }
+  }
+  if(empty){
+    drawEntryWalls();
+    return;
   }
   wall('left',0,10,0,70,'#56445d');
   wall('right',0,10,0,70,'#735469');
@@ -150,6 +162,25 @@ function room(){
   for(let i=0;i<5;i++)surface(1.87,6.17+i*.64,3.35,.04,.8,'#8e7482');
   block(8,9.7,1.45,.32,-1,2,shades.black);
   surface(8.12,9.73,1.2,.21,1.1,'#a16c71');
+}
+function drawEntryWalls(){
+  wall('left',0,10,0,70,'#595970');
+  wall('right',0,10,0,70,'#69677e');
+  wall('left',0,10,66,71,'#85829a');
+  wall('right',0,10,66,71,'#9791a6');
+  wall('left',0,10,0,4,'#49475e');
+  wall('right',0,10,0,4,'#58536c');
+  const {start,end,height}=exitEdges;
+  polygon(exitShape,'#39374c');
+  wall('left',start+.1,end-.1,0,height-4,'#242839');
+  wall('left',start+.12,start+.24,0,height-4,'#3d4859');
+  wall('left',end-.2,end-.1,0,height-4,'#535065');
+  surface(0,start,.24,end-start,.5,'#5e8b83');
+  surface(.24,start,.055,end-start,.6,'#a1c6ad');
+  wall('left',start-.015,end+.015,height+3,height+15,'#35534f');
+  const [x,y]=point(0,end-.04,height+6);
+  ctx.save();ctx.transform(1,-.5,0,1,x,y);
+  ctx.font='bold 7px monospace';ctx.fillStyle='#c4ebcf';ctx.fillText('EXIT',2,0);ctx.restore();
 }
 function dimensions(item) {
   return item.type==='sofa'?(item.rot%2?[1,2]:[2,1]):item.type==='bar'?[1.5,4.1]:item.type==='shelf'?[.35,3.5]:[1,1];
@@ -323,13 +354,17 @@ function sprite(target,x,y,appearance,{direction='right',back=false,cycle=0,seat
   pixelHead(target,appearance,back,blink);
   target.restore();
 }
-const roomLayer=document.createElement('canvas');
-roomLayer.width=W;roomLayer.height=H;
-ctx=roomLayer.getContext('2d');room();ctx=canvas.getContext('2d');
+function makeRoomLayer(empty){
+  const layer=document.createElement('canvas');
+  layer.width=W;layer.height=H;
+  const previous=ctx;ctx=layer.getContext('2d');room(empty);ctx=previous;
+  return layer;
+}
+const entryLayer=makeRoomLayer(true), loungeLayer=makeRoomLayer(false);
 function draw(time){
   ctx.setTransform(1,0,0,1,0,0);
   ctx.clearRect(0,0,W,H);ctx.translate(W/2,151);ctx.scale(zoom,zoom);ctx.translate(-W/2,-151);
-  ctx.imageSmoothingEnabled=false;ctx.drawImage(roomLayer,0,0);
+  ctx.imageSmoothingEnabled=false;ctx.drawImage(inEntryRoom?entryLayer:loungeLayer,0,0);
   if(target)surface(target.x+.1,target.y+.1,.8,.8,1,'#fff3bc30','#ffcf8f');
   if(hover){
     const [w,d]=editing&&selection?dimensions(selection):[1,1];
@@ -340,7 +375,7 @@ function draw(time){
   if(editing&&selection&&hover&&canPlace({...selection,...hover})){
     ghost={...selection,...hover,id:-1};
   }
-  const items=[...furniture];
+  const items=inEntryRoom?[]:[...furniture];
   if(ghost)items.push(ghost);
   const drawPlayer = ()=>{
     const seat=player.seat;
@@ -388,7 +423,7 @@ function overlap(a,b){
 }
 function inRoom(x,y){return x>=0&&y>=0&&x<SIZE&&y<SIZE;}
 function blocked(x,y){
-  return !inRoom(x,y)||furniture.some(item=>item.type!=='shelf'&&overlap(item,{x,y}));
+  return !inRoom(x,y)||(!inEntryRoom&&furniture.some(item=>item.type!=='shelf'&&overlap(item,{x,y})));
 }
 function canPlace(item){
   const [w,d]=dimensions(item);
@@ -437,14 +472,16 @@ function pointer(e){
   const y=((e.clientY-p.top-p.y)/p.scale-151)/zoom+151;
   const gx=Math.floor(((x-240)/18+(y-94)/9)/2);
   const gy=Math.floor(((y-94)/9-(x-240)/18)/2);
-  return {tile:inRoom(gx,gy)?{x:gx,y:gy}:null,item:hitboxes.findLast(h=>inShape(x,y,h.shape))?.item??null};
+  const exit=inEntryRoom&&inShape(x,y,exitShape);
+  return {tile:exit?exitTile:inRoom(gx,gy)?{x:gx,y:gy}:null,exit,item:hitboxes.findLast(h=>inShape(x,y,h.shape))?.item??null};
 }
 function note(message){
   $('hint').textContent='✦  '+message;
   noticeUntil=performance.now()+3000;
 }
 function setHint(){
-  $('hint').textContent='✦  '+(editing?'Choose furniture to place or select a piece in the room':defaultHint);
+  const message=inEntryRoom?'Click a tile to walk · Click the exit to leave':editing?'Choose furniture to place or select a piece in the room':defaultHint;
+  $('hint').textContent='✦  '+message;
 }
 function startPosition(){return step?.to??{x:player.cx,y:player.cy};}
 function walkTo(tile){
@@ -493,7 +530,10 @@ function animation(time){
   if(step){
     const {from,to,started}=step,progress=Math.min(1,(time-started)/STEP_MS);
     player.x=from.x+(to.x-from.x)*progress;player.y=from.y+(to.y-from.y)*progress;
-    if(progress===1){player.cx=to.x;player.cy=to.y;player.stride++;step=null;}
+    if(progress===1){
+      player.cx=to.x;player.cy=to.y;player.stride++;step=null;
+      if(inEntryRoom&&to.x===exitTile.x&&to.y===exitTile.y)enterLounge();
+    }
   }
   if(!step&&!route.length){target=null;if(interaction)finishInteraction();}
   if(player.waveStarted!==null&&time>=player.waveStarted+WAVE_MS)player.waveStarted=null;
@@ -514,7 +554,7 @@ function choose(item){
 }
 function cancelSelection(){selection=null;editStatus('Select a piece to get started.');}
 function switchMode(next){
-  editing=next;
+  editing=next&&!inEntryRoom;
   route=[];target=null;interaction=null;player.seat=null;player.waveStarted=null;hover=null;hoverItem=null;
   $('wave').disabled=editing;
   $('edit').classList.toggle('active',editing);$('walk').classList.toggle('active',!editing);
@@ -555,6 +595,7 @@ for(const [type,name] of Object.entries(types)){
 }
 $('walk').onclick=()=>switchMode(false);
 $('edit').onclick=()=>switchMode(true);
+$('exitRoom').onclick=()=>{if(inEntryRoom)walkTo(exitTile);};
 $('wave').onclick=waveHello;
 $('rotate').onclick=rotate;
 $('cancelEdit').onclick=cancelSelection;
@@ -571,7 +612,7 @@ $('resetRoom').onclick=()=>{
 };
 canvas.addEventListener('pointermove',e=>{
   const p=pointer(e);hover=p.tile;hoverItem=p.item;
-  canvas.style.cursor=p.item?'pointer':'crosshair';
+  canvas.style.cursor=p.item||p.exit?'pointer':'crosshair';
 });
 canvas.addEventListener('pointerleave',()=>{hover=null;hoverItem=null;});
 canvas.addEventListener('click',e=>{
@@ -670,12 +711,31 @@ $('saveAvatar').onclick=()=>{
   avatar={...draft,name:$('guestName').value.trim()||'Guest'};
   save('avatar',avatar);updateName();$('avatarDialog').close();
 };
-if(blocked(player.cx,player.cy)){
+function enterLounge(){
+  const focusRoom=document.activeElement===$('exitRoom');
+  inEntryRoom=false;
+  $('roomLayout').classList.remove('entry');
+  $('roomNumber').textContent='01';
+  $('roomName').textContent='The Sunset Lounge';
+  $('roomDescription').textContent='Check in, find a seat, and make yourself at home.';
+  $('roomBadge').textContent='LOUNGE NO. 01';
+  $('roomLabel').textContent='THE SUNSET LOUNGE';
+  $('sceneNumber').textContent='01';
+  $('footerRoom').textContent='ROOM 01';
+  $('exitRoom').hidden=true;
+  $('edit').hidden=false;
+  $('roomSide').hidden=false;
+  canvas.setAttribute('aria-label','Isometric room. Click a floor tile or use arrow keys to walk. Click furniture to interact.');
+  document.title='Pocket Lobby • The Sunset Lounge';
+
   const openTiles=[];
   for(let y=0;y<SIZE;y++)for(let x=0;x<SIZE;x++)if(!blocked(x,y))openTiles.push({x,y});
-  openTiles.sort((a,b)=>Math.abs(a.x-5)+Math.abs(a.y-7)-Math.abs(b.x-5)-Math.abs(b.y-7));
-  if(openTiles.length){
-    const {x,y}=openTiles[0];Object.assign(player,{x,y,cx:x,cy:y});
-  }
+  const distance=tile=>Math.abs(tile.x-5)+Math.abs(tile.y-7);
+  openTiles.sort((a,b)=>distance(a)-distance(b));
+  const {x,y}=openTiles[0]??{x:5,y:7};
+  Object.assign(player,{x,y,cx:x,cy:y,direction:'right',back:false,stride:0});
+  bounds=null;
+  switchMode(false);
+  if(focusRoom)canvas.focus();
 }
 updateName();switchMode(false);requestAnimationFrame(animation);
