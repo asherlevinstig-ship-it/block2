@@ -43,6 +43,8 @@ export type MeditationRestUpdate = {
   maxHealth?: number;
   stamina?: number;
   maxStamina?: number;
+  bankedEssence?: number;
+  upgradeReady?: boolean;
 };
 
 export function meditationSite(id: MeditationSiteId): MeditationSite {

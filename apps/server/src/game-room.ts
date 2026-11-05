@@ -10,7 +10,7 @@ import { parseTowerProgress, towerFloorDirectory, towerFloorUnlocked, withTowerF
 import { tavernRoomFurnitureCellSolid } from "@blockcraft/protocol";
 import { TAVERN_INN_POINTS, TavernInnActionSchema, canUseTavernInnPoint,
   type TavernInnActionUpdate } from "@blockcraft/protocol";
-import type { MeditationRestUpdate } from "@blockcraft/protocol";
+import { nearestMeditationSite, type MeditationRestUpdate } from "@blockcraft/protocol";
 import { restAtMeditationSite } from "./meditation-rest.js";
 import { crownkeeperFragments, withCrownkeeperFragments } from "./crownkeeper-progress.js";
 import { FloorRunUpgrades } from "./floor-run-upgrades.js";
@@ -1920,11 +1920,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     } satisfies BlacksmithUpdate);
   }
 
-  private grantProgression(sessionId: string, amount: number, source: string): ProgressionUpdate | null {
+  private grantProgression(sessionId: string, amount: number, source: string,
+    rewardOrigin?: { x: number; y: number; z: number }): ProgressionUpdate | null {
     const player = this.state.players.get(sessionId);
     if (!player) return null;
     const update = grantCharacterExperience(player, amount, source);
     if (!update) return null;
+    if (rewardOrigin) update.rewardOrigin = rewardOrigin;
     this.clients.find(candidate => candidate.sessionId === sessionId)?.send("progression:update", update);
     void this.persistPlayer(sessionId, player);
     return update;
@@ -1934,9 +1936,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const player = this.state.players.get(client.sessionId);
     const parsed = ProgressionChooseSchema.safeParse(payload);
     if (!player || !parsed.success) return;
-    const atFloorSanctuary = this.roomKind === "practice" && isTowerFloorSafeZone(player);
-    if (!this.isCallingTown(player) && this.roomKind !== "tavern" && !atFloorSanctuary) {
-      client.send("chat:notice", "ESSENCE UNBANKED · Rest in Town or a floor sanctuary to raise an attribute.");
+    const waystone = this.roomKind === "practice" && this.rapidPractice ? nearestMeditationSite(player) : null;
+    if (!waystone) {
+      client.send("chat:notice", "WAYSTONE REQUIRED · Meditate beside a Waystone to spend banked Essence.");
       client.send("progression:update", progressionSnapshot(player));
       return;
     }
@@ -2679,6 +2681,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.movementInputs.set(client.sessionId, { request: idleMovementInput(), receivedAt: Date.now() });
       this.verticalVelocities.set(client.sessionId, 0);
       this.movementShadows.set(client.sessionId, { x: player.x, y: player.y, z: player.z, verticalVelocity: 0 });
+      update.bankedEssence = player.experience;
+      update.upgradeReady = player.unspentStatPoints > 0;
+      update.message = update.upgradeReady
+        ? `${update.name} attuned · ${player.experience} banked Essence · an upgrade is ready.`
+        : `${update.name} attuned · ${player.experience} banked Essence.`;
       void this.persistPlayer(client.sessionId, player, true);
     }
     client.send("meditation:rest", update satisfies MeditationRestUpdate);
@@ -4191,7 +4198,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           : guardedReward ? 4 : 1 + Math.floor(rapidSpawn.level / 4);
         player.coins = Math.min(1_000_000, player.coins + coinsGranted);
         const experience = mobExperience(mob.archetype, mob.rewardMultiplier, Boolean(rapidSpawn.leader), player.level, mob.level);
-        this.grantProgression(playerId, experience, mob.name);
+        this.grantProgression(playerId, experience, mob.name, { x: mob.x, y: mob.y + 1.05, z: mob.z });
         this.grantBuildProgress(playerId, rapidSpawn.leader ? 3 : 1);
         if (mobId === TOWER_FLOOR_ONE_NORTH_WARDEN_ID || mobId === TOWER_FLOOR_ONE_SOUTH_WARDEN_ID) {
           if (!this.floorRunUpgrades.active(playerId)) this.floorRunUpgrades.start(playerId);
@@ -4602,7 +4609,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const earnedExperience = mobExperience(mob.archetype, mob.rewardMultiplier, mob.isChampion || wasElite, player.level, mob.level);
       const rewardedExperience = firstCombatExperience(mobId, player.level, player.experience,
         experienceToNextLevel(player.level), disruptedWarband ? Math.ceil(earnedExperience * 1.25) : earnedExperience);
-      this.grantProgression(playerId, rewardedExperience, mob.name);
+      this.grantProgression(playerId, rewardedExperience, mob.name, { x: mob.x, y: mob.y + 1.05, z: mob.z });
       this.grantBuildProgress(playerId, mobId === "mistfen-behemoth" ? 5 : Boolean(areaMainMob) || mob.isChampion || wasElite ? 3 : 1);
       if (isMistfenMob(mobId)) {
         this.grantMistfenMastery(playerId, mobId === "mistfen-behemoth" ? 18 : 3);

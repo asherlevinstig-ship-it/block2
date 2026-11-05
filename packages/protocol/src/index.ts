@@ -448,6 +448,8 @@ export type ProgressionUpdate = {
   reason: "sync" | "experience" | "level_up" | "choice";
   source?: string;
   experienceGranted?: number;
+  /** World-space origin for rewards that should visibly travel to the player. */
+  rewardOrigin?: { x: number; y: number; z: number };
   level: number;
   experience: number;
   experienceRequired: number;

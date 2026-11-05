@@ -13242,10 +13242,13 @@ const caveEntranceSign = document.querySelector<HTMLElement>("#cave-entrance")!;
 let miningSwing: { cell: MiningCell; startedAt: number; requestId: string; stage: number; origin: pc.Vec3 } | null = null;
 let pendingMine: { requestId: string; startedAt: number } | null = null;
 const miningChips: { entity: pc.Entity; origin: pc.Vec3; velocity: pc.Vec3; startedAt: number }[] = [];
+const essenceWisps: { entity: pc.Entity; origin: pc.Vec3; startedAt: number; delay: number;
+  duration: number; phase: number }[] = [];
 const chipStoneMaterial = coloredMaterial(new pc.Color(0.45, 0.53, 0.56));
 const chipIronMaterial = coloredMaterial(new pc.Color(0.94, 0.56, 0.22));
 const chipSilverMaterial = coloredMaterial(new pc.Color(0.68, 0.9, 1));
 const levelGoldMaterial = coloredMaterial(new pc.Color(1, .82, .35));
+const essenceWispMaterial = powerMaterial(new pc.Color(1, .72, .12), 1);
 const foragerCueMaterial = coloredMaterial(new pc.Color(.6, .82, .28));
 const fenwalkerCueMaterial = coloredMaterial(new pc.Color(.28, .95, .7));
 const northwatchCueMaterial = coloredMaterial(new pc.Color(.56, .87, 1));
@@ -13593,6 +13596,51 @@ function showLandmarkDiscovery(name: string): void {
   social.notice(`${name} discovered · added to your explorer map.`);
 }
 
+function createEssenceRewardVfx(origin: { x: number; y: number; z: number }, amount = 1): void {
+  const count = Math.min(16, Math.max(7, 6 + Math.ceil(Math.sqrt(Math.max(1, amount)))));
+  while (essenceWisps.length + count > 42) essenceWisps.shift()?.entity.destroy();
+  const startedAt = performance.now();
+  for (let index = 0; index < count; index++) {
+    const phase = index / count * Math.PI * 2;
+    const radius = .18 + (index % 4) * .07;
+    const particleOrigin = new pc.Vec3(origin.x + Math.cos(phase) * radius,
+      origin.y + .1 + (index % 3) * .12, origin.z + Math.sin(phase) * radius);
+    const entity = addBox(app.root, `banked-essence-${index}`, essenceWispMaterial,
+      [.09, .09, .09], [particleOrigin.x, particleOrigin.y, particleOrigin.z]);
+    entity.setEulerAngles(45, index * 37, 45);
+    essenceWisps.push({ entity, origin: particleOrigin, startedAt, delay: index * 34,
+      duration: 720 + (index % 4) * 70, phase });
+  }
+}
+
+function updateEssenceWisps(now: number): void {
+  for (let index = essenceWisps.length - 1; index >= 0; index--) {
+    const wisp = essenceWisps[index]!;
+    const elapsed = now - wisp.startedAt - wisp.delay;
+    if (elapsed < 0) {
+      const pulse = .8 + Math.sin(now * .012 + wisp.phase) * .22;
+      wisp.entity.setLocalScale(.09 * pulse, .09 * pulse, .09 * pulse);
+      continue;
+    }
+    const progress = Math.min(1, elapsed / wisp.duration);
+    if (progress >= 1) {
+      wisp.entity.destroy(); essenceWisps.splice(index, 1); continue;
+    }
+    const eased = progress * progress * (3 - 2 * progress);
+    const target = localPlayer.getPosition();
+    const remaining = 1 - eased;
+    const spiral = Math.sin(progress * Math.PI) * .42 * remaining;
+    const x = wisp.origin.x + (target.x - wisp.origin.x) * eased + Math.cos(wisp.phase + progress * 8) * spiral;
+    const y = wisp.origin.y + (target.y + 1.05 - wisp.origin.y) * eased
+      + Math.sin(progress * Math.PI) * (1.25 + .25 * Math.sin(wisp.phase));
+    const z = wisp.origin.z + (target.z - wisp.origin.z) * eased + Math.sin(wisp.phase + progress * 8) * spiral;
+    wisp.entity.setPosition(x, y, z);
+    const scale = .07 + Math.sin(progress * Math.PI) * .08;
+    wisp.entity.setLocalScale(scale, scale, scale);
+    wisp.entity.rotate(3.5, 5.5, 2.5);
+  }
+}
+
 function updateMining(now: number): void {
   for (let i = miningChips.length - 1; i >= 0; i--) {
     const chip = miningChips[i]!;
@@ -13917,8 +13965,8 @@ for (const button of characterStatButtons) button.addEventListener("click", () =
     return;
   }
   const position = localPlayer.getPosition();
-  if (!tavernRoomRequested && !isAtTownOfBeginnings() && !isTowerFloorSafeZone(position)) {
-    levelUpMessage.textContent = "Your Essence is unbanked. Rest in Town or a floor sanctuary to raise an attribute.";
+  if (!nearestMeditationSite(position)) {
+    levelUpMessage.textContent = "Meditate beside a Waystone to spend your banked Essence.";
     return;
   }
   const choiceRoom = room;
@@ -21144,6 +21192,7 @@ app.on("update", (dt: number) => {
 
   const now = performance.now();
   updateMining(now);
+  updateEssenceWisps(now);
   const cameraWorldPosition = camera.getPosition();
   const rightArmPitch = localPlayerRig.rightArm.getLocalEulerAngles().x;
   const leftLegPitch = localPlayerRig.leftLeg.getLocalEulerAngles().x;
@@ -21749,6 +21798,9 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     meditationRestEffect.hidden = false;
     window.clearTimeout(meditationEffectTimer);
     meditationEffectTimer = window.setTimeout(() => { meditationRestEffect.hidden = true; }, 2_600);
+    if (message.upgradeReady) window.setTimeout(() => {
+      if (nearestMeditationSite(localPlayer.getPosition()) && levelUpPanel.hidden) openLevelUpPanel();
+    }, 700);
   });
   room.onMessage("floor:timing", (message: { elapsedMs: number }) => floorOneRunUI.timing(message));
   room.onMessage("dungeon:run", (update: DungeonRunUpdate) => {
@@ -22111,6 +22163,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
         : `Level ${update.level}! ${String(update.source ?? "ATTRIBUTE").toUpperCase()} increased${callingReminder}.`;
       social.event(`Reached level ${update.level} · ${String(update.source ?? "attribute")} increased.`);
     } else if (update.reason === "experience" && update.experienceGranted) {
+      if (update.rewardOrigin) createEssenceRewardVfx(update.rewardOrigin, update.experienceGranted);
       status.textContent = `+${update.experienceGranted} ESSENCE · ${update.source ?? "adventuring"}`;
     } else if (update.reason === "choice") {
       showCombatFeedback(`${String(update.source ?? "STAT").toUpperCase()} IMPROVED`, "dodge");
