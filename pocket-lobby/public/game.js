@@ -1660,28 +1660,23 @@ function buyArmoryWeapon(id){
 }
 function updateArmoryShop(){
   const equipped=weaponCatalog[combatGear.equippedWeapon],current=huntingAttributes(playerStats,combatGear.equippedWeapon);
-  $('armoryBalance').textContent=credits+' gold · Strength '+(1+Math.floor(playerStats.strengthXp/50))+' · Agility '+(1+Math.floor(playerStats.agilityXp/50));
-  $('armoryComparison').textContent=equipped?'Equipped: '+equipped.name+' · '+current.damage+'–'+(current.damage+4)+' damage · '+(current.attackInterval/1000).toFixed(1)+'s per attack':'No weapon equipped. Your free Training Sword is in Inventory.';
+  const strength=1+Math.floor(playerStats.strengthXp/50),agility=1+Math.floor(playerStats.agilityXp/50);
+  $('armoryBalance').textContent=new Intl.NumberFormat().format(credits)+' G';
+  $('armoryStats').textContent='Strength '+strength+' · Agility '+agility;
+  $('armoryComparison').textContent=equipped?equipped.name+' · '+current.damage+'–'+(current.damage+4)+' damage · '+(current.attackInterval/1000).toFixed(1)+'s / attack':'Nothing equipped · Your free Training Sword is in Inventory';
   const offers=$('weaponOffers');offers.replaceChildren();
   for(const [id,weapon] of Object.entries(weaponCatalog).filter(([,weapon])=>weapon.price)){
-    const card=document.createElement('article'),title=document.createElement('b'),description=document.createElement('p'),numbers=document.createElement('p'),requirements=document.createElement('small'),button=document.createElement('button');
-    card.className='weapon-offer';card.dataset.weapon=id;
-    title.textContent=(id==='huntingSpear'?'↟ ':id==='quickDagger'?'† ':'⚔ ')+weapon.name;
-    description.textContent=weapon.description;
-    const damage=huntingAttributes(playerStats,id).damage;
-    numbers.className='weapon-numbers';numbers.textContent=damage+'–'+(damage+4)+' damage at your Strength · '+(weapon.interval/1000).toFixed(1)+'s per attack';
     const owned=combatGear.ownedWeapons.includes(id),active=combatGear.equippedWeapon===id,skill=canUseWeapon(playerStats,id);
-    requirements.textContent='Requires Strength '+weapon.strength+' · Agility '+weapon.agility;
-    requirements.className=skill?'requirements-met':'requirements-locked';
-    button.textContent=active?'Equipped':owned?'Equip':weapon.price+' gold · Buy & equip';
-    button.disabled=active||!skill||(!owned&&credits<weapon.price);
-    button.onclick=()=>buyArmoryWeapon(id);
-    const availability=document.createElement('small');
-    availability.textContent=!skill?'Train your attributes to unlock this weapon.':owned?'Owned · No cost to equip again.':credits<weapon.price?'Sell fish or hunting spoils to earn more gold.':'Purchase once. Yours to keep.';
-    card.append(title,description,numbers,requirements,button,availability);offers.append(card);
+    const damage=huntingAttributes(playerStats,id).damage,difference=damage-current.damage,speed=(current.attackInterval-weapon.interval)/1000;
+    const missing=[strength<weapon.strength?'Strength +'+(weapon.strength-strength):'',agility<weapon.agility?'Agility +'+(weapon.agility-agility):''].filter(Boolean);
+    const reason=!skill?'Need '+missing.join(' and '):!owned&&credits<weapon.price?'Need '+(weapon.price-credits)+' more gold':active?'Ready for your next fight':owned?'Yours to keep · Free to equip':'Purchased gear equips automatically';
+    const deltas=active?[{text:'Your equipped weapon',tone:'neutral'}]:[
+      {text:(difference>0?'+':'')+difference+' damage',tone:difference>0?'up':difference<0?'down':'neutral'},
+      {text:speed===0?'Same attack speed':Math.abs(speed).toFixed(1)+'s '+(speed>0?'faster':'slower'),tone:speed>0?'up':speed<0?'down':'neutral'}
+    ];
+    offers.append(renderShopCard({document,id,name:weapon.name,category:id==='huntingSpear'?'HEAVY':id==='quickDagger'?'QUICK':'BALANCED',price:weapon.price,owned,equipped:active,stats:[['DAMAGE',damage+'–'+(damage+4)],['PER ATTACK',(weapon.interval/1000).toFixed(1)+'s']],deltas,requirements:'STR '+weapon.strength+'  ·  AGI '+weapon.agility,reason,action:active?'Equipped':!skill?'Stats required':owned?'Equip weapon':credits<weapon.price?'Not enough gold':'Buy & equip',disabled:active||!skill||(!owned&&credits<weapon.price),onBuy:()=>buyArmoryWeapon(id)}));
   }
 }
-
 function buyFishingRod(id){
   const rod=fishingCatalog.rods[id];
   if(currentRoom!=='store'||!rod)return;
@@ -1735,7 +1730,11 @@ function showTransaction(title,items,creditChange=0){
 }
 function updateFishingShop(){
   if(!walletTween)$('credits').textContent=new Intl.NumberFormat().format(credits);
-  $('shopBalance').textContent=credits+' credits · Patience '+patienceLevel()+' · Bait '+fishingGear.bait;
+  $('shopBalance').textContent=new Intl.NumberFormat().format(credits)+' G';
+  $('shopSkill').textContent='Patience '+patienceLevel();
+  $('shopRodSummary').textContent=fishingCatalog.rods[fishingGear.equippedRod].name+' · '+(fishingCatalog.rods[fishingGear.equippedRod].duration/1000).toFixed(1)+'s / catch';
+  $('shopBaitCount').textContent=fishingGear.bait+' bait in your bag · One per catch';
+  $('shopCatchSummary').textContent=caughtFishCount()+' fish in your bag · Worth '+caughtFishValue()+' G';
   $('fishingEquipment').textContent='Equipped: '+fishingCatalog.rods[fishingGear.equippedRod].name+' · Bait ×'+fishingGear.bait;
   const selector=$('equippedFishingRod');
   selector.replaceChildren();
@@ -1745,22 +1744,20 @@ function updateFishingShop(){
   }
   selector.value=fishingGear.equippedRod;
   const offers=$('rodOffers');offers.replaceChildren();
+  const currentRod=fishingCatalog.rods[fishingGear.equippedRod],currentOdds=fishingChances(patienceLevel(),fishingGear.equippedRod);
   for(const [id,rod] of Object.entries(fishingCatalog.rods)){
-    const card=document.createElement('div'),title=document.createElement('b'),detail=document.createElement('p'),button=document.createElement('button');
-    card.className='rod-offer';card.dataset.rod=id;
-    title.textContent=rod.name;
-    const odds=fishingChances(patienceLevel(),id);
-    detail.textContent=(id==='reed'?'Free starter rod · Already in your inventory. ':'')+rod.quality+' · '+rod.duration/1000+'s per catch · Patience '+rod.patience+' required. At your Patience: Fine '+odds.fine.toFixed(1)+'% · Rare '+odds.rare.toFixed(1)+'%.';
-    const owned=fishingGear.ownedRods.includes(id),equipped=fishingGear.equippedRod===id;
+    const odds=fishingChances(patienceLevel(),id),owned=fishingGear.ownedRods.includes(id),equipped=fishingGear.equippedRod===id;
     const skill=patienceLevel()>=rod.patience,afford=credits>=rod.price;
-    button.textContent=equipped?'Equipped':owned?'Equip':rod.price+' credits'+(!skill?' · Patience '+rod.patience+' required':!afford?' · Need more credits':' · Buy');
-    button.disabled=equipped||!skill||(!owned&&!afford);
-    button.onclick=()=>buyFishingRod(id);
-    card.append(title,detail,button);offers.append(card);
+    const speed=(currentRod.duration-rod.duration)/1000,quality=odds.fine+odds.rare-currentOdds.fine-currentOdds.rare;
+    const deltas=equipped?[{text:'Your equipped rod',tone:'neutral'}]:[
+      {text:speed===0?'Same catch speed':Math.abs(speed).toFixed(1)+'s '+(speed>0?'faster':'slower'),tone:speed>0?'up':speed<0?'down':'neutral'},
+      {text:(quality>0?'+':'')+quality.toFixed(1)+'% better-quality fish',tone:quality>0?'up':quality<0?'down':'neutral'}
+    ];
+    offers.append(renderShopCard({document,id,name:rod.name,category:rod.quality.toUpperCase(),price:rod.price,owned,equipped,stats:[['PER CATCH',(rod.duration/1000).toFixed(1)+'s'],['FINE / RARE',odds.fine.toFixed(0)+' / '+odds.rare.toFixed(0)+'%']],deltas,requirements:'PATIENCE '+rod.patience,reason:!skill?'Need '+(rod.patience-patienceLevel())+' more Patience levels':!owned&&!afford?'Need '+(rod.price-credits)+' more gold':equipped?'Ready to cast · Uses one bait':owned?'Owned · Free to equip':'Quality chances at your current Patience',action:equipped?'Equipped':!skill?'Patience required':owned?'Equip rod':!afford?'Not enough gold':'Buy & equip',disabled:equipped||!skill||(!owned&&!afford),onBuy:()=>buyFishingRod(id)}));
   }
   $('buyBait').disabled=credits<fishingCatalog.bait.price;
   $('sellFish').disabled=caughtFishCount()<1;
-  $('sellFish').textContent=caughtFishCount()?'Sell '+caughtFishCount()+' fish · '+caughtFishValue()+' credits':'Sell your fish';
+  $('sellFish').textContent=caughtFishCount()?'Sell all · '+caughtFishValue()+' G':'No fish to sell';
 }
 function tradeQuantity(id){
   return fishProducts[id]?fishStock[id]??0:huntingLoot[id]??0;
@@ -1833,6 +1830,7 @@ function switchMode(next){
   $('edit').classList.toggle('active',editing);$('walk').classList.toggle('active',!editing);
   $('edit').setAttribute('aria-pressed',String(editing));$('walk').setAttribute('aria-pressed',String(!editing));
   $('roomLayout').classList.toggle('decorating',editing);
+  $('roomLayout').classList.toggle('shopping',['store','armory'].includes(currentRoom));
   $('roomSide').hidden=(atHome()&&!editing)||currentRoom==='outside';
   $('chatPanel').hidden=editing||currentRoom!=='lounge';
   if(currentRoom==='lounge'){
