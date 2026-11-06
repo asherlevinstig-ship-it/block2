@@ -18,7 +18,7 @@ function worker(){return normalizeState({location:'logging',woodcutting:{axeOwne
 test('three cuts fell a persistent tree, which only pays again after regrowing',()=>{
   const state=worker(),wood=state.woodcutting;
   assert.equal(cutTimberTree(wood,5000),1);
-  assert.equal(normalizeState(state).woodcutting.tree.cuts,1);
+  assert.equal(timberTreeState(normalizeState(state).woodcutting,5000).cuts,1);
   assert.equal(cutTimberTree(wood,10000),1);
   assert.equal(cutTimberTree(wood,15000),1);
   const reloaded=normalizeState(state).woodcutting;
@@ -27,7 +27,22 @@ test('three cuts fell a persistent tree, which only pays again after regrowing',
   assert.equal(reloaded.xp,30);
   assert.deepEqual(timberTreeState(reloaded,45000),{cuts:0,regrowsAt:0});
   assert.equal(cutTimberTree(reloaded,45000),1);
-  assert.equal(reloaded.tree.cuts,1);
+  assert.equal(timberTreeState(reloaded,45000).cuts,1);
+});
+
+test('tree progress is independent across rooms and the old marked tree save migrates',()=>{
+  const wood=normalizeWoodcutting({axeOwned:true,equipped:true,tree:{cuts:2,regrowsAt:0}});
+  const trail='trail:6,5',grove='grove:6,5';
+  assert.equal(timberTreeState(wood,1000).cuts,2);
+  cutTimberTree(wood,1000);
+  assert.equal(cutTimberTree(wood,1000,trail),1);
+  assert.equal(timberTreeState(wood,1000,grove).cuts,0);
+  assert.equal(timberTreeState(wood,1000,trail).cuts,1);
+  assert.equal(timberTreeState(wood,1000).regrowsAt,31000);
+  const restored=normalizeWoodcutting(wood);
+  assert.equal(cutTimberTree(restored,2000),0);
+  assert.equal(cutTimberTree(restored,2000,grove),1);
+  assert.throws(()=>normalizeWoodcutting({trees:{'home:6,5':{cuts:1,regrowsAt:0}}}),/location/);
 });
 
 test('axe swings face the timber from all four adjacent tiles',()=>{

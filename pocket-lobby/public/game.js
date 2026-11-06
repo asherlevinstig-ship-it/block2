@@ -87,18 +87,25 @@ let castProfile=null;
 let fishingStarted=null;
 let fishingSession=null,catchReveal=null,patienceTween=null;
 const woodcutting=normalizeWoodcutting(savedPlayerState?.woodcutting);
-let woodSession=null,treeFall=null,lastTreeCountdown=-1;
+let woodSession=null,treeFall=null,lastTreeCountdown=-1,selectedTimber=null;
 function timberTree(){return moonwood.layouts.logging.scenery.find(item=>item.type==='timberTree');}
+const timberKey=item=>currentRoom+':'+item.x+','+item.y;
+const treeState=item=>timberTreeState(woodcutting,Date.now(),timberKey(item));
+const focusedTimber=()=>selectedTimber??(currentRoom==='logging'?timberTree():null);
+const treeCountdown=item=>item?Math.max(0,Math.ceil((treeState(item).regrowsAt-Date.now())/1000)):0;
 function updateTreeStatus(){
-  if(currentRoom!=='logging')return;
-  const tree=timberTreeState(woodcutting),seconds=Math.max(0,Math.ceil((tree.regrowsAt-Date.now())/1000));
-  $('woodTreeStatus').textContent=seconds?'Tree felled · Regrows in '+seconds+'s':'Tree · '+(timberTreeRules.cuts-tree.cuts)+' cuts left';
+  const item=focusedTimber(),seconds=treeCountdown(item);
+  $('woodTreeStatus').textContent=seconds?'Tree felled · Regrows in '+seconds+'s':item?'Tree · '+(timberTreeRules.cuts-treeState(item).cuts)+' cuts left':'Click a tree to start chopping.';
   lastTreeCountdown=seconds;
 }
 function updateWoodPanel(){
   const level=woodcuttingLevel(woodcutting),busy=!!woodSession;
-  const regrowing=!!timberTreeState(woodcutting).regrowsAt;
-  $('woodPanel').hidden=currentRoom!=='logging';
+  const logging=currentRoom==='logging',item=focusedTimber();
+  const regrowing=!!item&&!!treeState(item).regrowsAt;
+  $('woodPanel').hidden=!moonwood.has(currentRoom)||(!logging&&!woodcutting.axeOwned);
+  $('openWorkbench').hidden=!logging;
+  $('woodOfflineControls').hidden=!logging;
+  $('woodAction').hidden=!logging&&(!woodcutting.equipped?false:!item);
   $('woodInventory').hidden=!woodcutting.axeOwned;
   $('woodInventoryText').textContent='Timber ×'+woodcutting.timber+' · Sell for '+woodRules.price+' gold each at the Trading Post';
   $('woodAxeStatus').textContent=(woodcutting.equipped?'Equipped':'In inventory')+' · Woodcutting '+level+' · '+woodcutting.xp%50+' / 50 XP';
@@ -117,31 +124,31 @@ function equipAxe(){
   woodcutting.equipped=!woodcutting.equipped;savePlayerState();
 }
 function cancelWoodcutting(){if(!woodSession)return;woodSession=null;updateWoodPanel();}
-function beginChopping(tree=timberTree()){
-  if(currentRoom!=='logging'||woodSession||health<=0)return;
+function beginChopping(tree=focusedTimber()){
+  if(!moonwood.has(currentRoom)||!isTimberTree(tree)||woodSession||unavailable()||health<=0)return;
   if(!woodcutting.axeOwned){note('Meet the woodcutter for your free basic axe.');return;}
   if(!woodcutting.equipped){note('Equip your basic axe in Inventory or the work panel.');return;}
   if(woodcutting.timber>=1000000){note('Sell some timber before gathering more.');return;}
-  if(timberTreeState(woodcutting).regrowsAt){note('The tree is regrowing. Try again shortly.');return;}
+  if(treeState(tree).regrowsAt){note('The tree is regrowing. Try again shortly.');return;}
+  selectedTimber=tree;
   Object.assign(player,timberFacing(player,tree));
   woodSession={tree,started:performance.now(),duration:choppingDuration(woodcutting)};
   $('woodChopProgress').value=0;
   updateWoodPanel();note('Keep chopping until the tree falls. Walk away to stop.');
 }
 function updateWoodMoment(time){
-  if(currentRoom==='logging'){
-    const seconds=Math.max(0,Math.ceil((timberTreeState(woodcutting).regrowsAt-Date.now())/1000));
+  if(moonwood.has(currentRoom)){
+    const seconds=treeCountdown(focusedTimber());
     if(seconds!==lastTreeCountdown)updateWoodPanel();
   }
   if(!woodSession)return;
   const progress=Math.max(0,Math.min(1,(time-woodSession.started)/woodSession.duration));
   $('woodChopProgress').value=progress*100;
   if(progress<1)return;
-  const {tree}=woodSession,oldLevel=woodcuttingLevel(woodcutting),amount=cutTimberTree(woodcutting);
-  const felled=amount>0&&!!timberTreeState(woodcutting).regrowsAt;
+  const {tree}=woodSession,key=timberKey(tree),oldLevel=woodcuttingLevel(woodcutting);
+  const amount=cutTimberTree(woodcutting,Date.now(),key),felled=amount>0&&!!treeState(tree).regrowsAt;
   if(felled){
-    treeFall={started:time,direction:player.direction==='right'?1:-1};
-    worldLabelKey='';
+    treeFall={key,started:time,direction:player.direction==='right'?1:-1};
   }
   woodSession=amount&&!felled&&woodcutting.timber<1000000?{tree,started:time,duration:choppingDuration(woodcutting)}:null;
   if(woodSession)$('woodChopProgress').value=0;
@@ -153,13 +160,15 @@ function updateWoodMoment(time){
   note(felled?'Timber! The tree will regrow in 30 seconds.':'Timber +'+amount+' · +'+woodRules.xp*amount+' Woodcutting XP.');
 }
 function woodAction(){
-  if(currentRoom!=='logging')return;
-  if(!woodcutting.axeOwned)use(roomFurniture().find(item=>item.type==='woodcutter'));
+  if(!moonwood.has(currentRoom))return;
+  if(!woodcutting.axeOwned){
+    if(currentRoom==='logging')use(roomFurniture().find(item=>item.type==='woodcutter'));
+  }
   else if(!woodcutting.equipped)equipAxe();
-  else use(roomFurniture().find(item=>item.type==='timberTree'));
+  else if(focusedTimber())use(focusedTimber());
 }
 function drawWoodEffects(time){
-  if(currentRoom!=='logging'||!woodSession||reducedMotion.matches)return;
+  if(!woodSession||reducedMotion.matches)return;
   const phase=((time-woodSession.started)%700)/700;
   if(phase<.55||phase>.9)return;
   const scatter=(phase-.55)/.35,side=player.direction==='right'?-1:1;
@@ -170,11 +179,11 @@ function drawWoodEffects(time){
 }
 
 function drawTimberTree(item,time){
-  const tree=timberTreeState(woodcutting);
+  const tree=treeState(item);
   const [x,y]=point(item.x+.5,item.y+.5);
   const drawTree=()=>moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,progress:adventure});
   if(tree.regrowsAt){
-    const fall=treeFall?Math.min(1,Math.max(0,(time-treeFall.started)/timberTreeRules.fallMs)):1;
+    const fall=treeFall?.key===timberKey(item)?Math.min(1,Math.max(0,(time-treeFall.started)/timberTreeRules.fallMs)):1;
     if(fall<1&&!reducedMotion.matches){
       ctx.save();
       ctx.translate(x,y-5);
@@ -188,7 +197,7 @@ function drawTimberTree(item,time){
     rect(x-3,y-7,6,1,'#aa7a50');
     return;
   }
-  const phase=woodSession?((time-woodSession.started)%700)/700:0;
+  const phase=woodSession?.tree===item?((time-woodSession.started)%700)/700:0;
   const impact=phase>=.55&&phase<.72&&!reducedMotion.matches;
   ctx.save();
   if(impact)ctx.translate(player.direction==='right'?1:-1,0);
@@ -887,7 +896,7 @@ function object(item,highlight=false,time=0) {
     return;
   }
   if(Object.hasOwn(moonwood.heights,type)){
-    if(type==='timberTree'){
+    if(isTimberTree(item)){
       drawTimberTree(item,time);
     }else if(type==='wildboar'){
       const pose=boarCombatPose({time,now:Date.now(),encounter:player.inCombat?hunting.encounter:null,events:combatArt,reduced:reducedMotion.matches,defeated:!!item.defeated});
@@ -1305,7 +1314,7 @@ function drawMoonwoodDetails(time){
 let worldLabelKey='';
 function updateWorldLabels(){
   const p=canvasBounds(),doors=roomDoors[currentRoom].filter(door=>moonwood.open(door,adventure));
-  const stump=currentRoom==='logging'&&!!timberTreeState(woodcutting).regrowsAt;
+  const stump=currentRoom==='logging'&&!!treeState(timberTree()).regrowsAt;
   const key=[currentRoom,stump,doors.map(door=>door.to).join(','),avatar.name,questStage(quest),zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
   if(key===worldLabelKey)return;
   worldLabelKey=key;
@@ -1428,11 +1437,12 @@ function draw(time){
     if(item.type==='remotePlayer'){drawRemote(item.peer,time);continue;}
     ctx.globalAlpha=item===ghost?.52:ghost&&selection?.id===item.id?.4:1;
 
-    object(item,editing&&(selection?.id===item.id||hoverItem?.id===item.id)&&!fixed(item),time);
+    const treeHover=isTimberTree(item)&&item===hoverItem&&!treeState(item).regrowsAt;
+    object(item,treeHover||editing&&(selection?.id===item.id||hoverItem?.id===item.id)&&!fixed(item),time);
     ctx.globalAlpha=1;
     if(item.defeated||item===ghost||(fixed(item)&&!isGamingTable(item)))continue;
     const [w,d]=dimensions(item), h=moonwood.heights[item.type]??{armoryCounter:32,weaponRack:37,anvil:19,brazier:25,workbench:23,woodStool:13,woodTable:18,bookcase:37,woodcutter:43,warden:43,tradeCounter:32,harvestCrates:16,tackleCounter:32,rodRack:36,baitCrates:16,blackjack:19,roulette:22,reception:32,bed:24,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39,bench:22,streetlamp:55,fountain:37}[item.type];
-    const height=item.type==='timberTree'&&timberTreeState(woodcutting).regrowsAt?6:h;
+    const height=isTimberTree(item)&&treeState(item).regrowsAt?6:h;
     const shape=[point(item.x,item.y+d),point(item.x+w,item.y+d),point(item.x+w,item.y),point(item.x+w,item.y,height),point(item.x,item.y,height),point(item.x,item.y+d,height)];
     hitboxes.push({item,shape});
   }
@@ -1479,7 +1489,7 @@ function canPlace(item){
     !roomFurniture().some(other=>other.id!==item.id&&other.type!=='shelf'&&overlap(item,other));
 }
 const directions=[[1,0],[0,1],[-1,0],[0,-1]];
-function findPath(start,goal,items=roomFurniture()){
+function findPath(start,goal,items=roomFurniture(),avoid=null){
   const estimate=(x,y)=>Math.abs(x-goal.x)+Math.abs(y-goal.y);
   const open=[{...start,g:0,f:estimate(start.x,start.y),previous:null}];
   const best=new Map([[tileKey(start.x,start.y),0]]);
@@ -1493,7 +1503,7 @@ function findPath(start,goal,items=roomFurniture()){
     }
     for(const [dx,dy] of directions){
       const x=node.x+dx,y=node.y+dy,k=tileKey(x,y),g=node.g+1;
-      if(blocked(x,y,items)||g>=(best.get(k)??Infinity))continue;
+      if(avoid?.has(k)||blocked(x,y,items)||g>=(best.get(k)??Infinity))continue;
       best.set(k,g);open.push({x,y,g,f:g+estimate(x,y),previous:node});
     }
   }
@@ -1554,17 +1564,22 @@ function travelDoor(door){
   else walkTo(door.tile);
 }
 function use(item){
-  if(item.type==='timberTree'&&woodSession){note('Your chop is already in progress.');return;}
-  if(item.type==='timberTree'&&timberTreeState(woodcutting).regrowsAt){note('The tree is regrowing. Try again shortly.');return;}
+  if(isTimberTree(item)){
+    if(woodSession?.tree===item){note('Your chop is already in progress.');return;}
+    if(treeState(item).regrowsAt){note('The tree is regrowing. Try again shortly.');return;}
+    if(!woodcutting.axeOwned&&currentRoom!=='logging'){note('Get your free axe from the woodcutter at Timber Hollow.');return;}
+  }
   if(unavailable())return;
   if(item.type==='fishingPost'&&fishingSession){reelFish();return;}
   cancelFishing();
   const start=startPosition(),[w,d]=dimensions(item);
+  const items=roomFurniture();
+  const exits=new Set(roomDoors[currentRoom].filter(door=>moonwood.open(door,adventure)).map(({tile})=>tileKey(tile.x,tile.y)));
   let shortest=null;
   for(let y=Math.floor(item.y)-1;y<=Math.ceil(item.y+d);y++){
     for(let x=Math.floor(item.x)-1;x<=Math.ceil(item.x+w);x++){
-      if(blocked(x,y)||!directions.some(([dx,dy])=>overlap(item,{x:x+dx,y:y+dy})))continue;
-      const path=findPath(start,{x,y});
+      if(exits.has(tileKey(x,y))||blocked(x,y,items)||!directions.some(([dx,dy])=>overlap(item,{x:x+dx,y:y+dy})))continue;
+      const path=findPath(start,{x,y},items,exits);
       if(path&&(!shortest||path.length<shortest.length))shortest=path;
     }
   }
@@ -1690,7 +1705,7 @@ function finishInteraction(){
       savePlayerState();showTransaction('A gift from the woodcutter',[{icon:'⚒',text:'Basic Axe · Free · Equipped'}]);
       note('Your basic axe is ready. Click the marked tree or Chop timber to begin.');
     }else note('You already have your basic axe. Equip it in Inventory to gather timber.');
-  }else if(item.type==='timberTree'){
+  }else if(isTimberTree(item)){
     beginChopping(item);
   }else if(item.type==='warden'){
     openQuest();
@@ -2518,7 +2533,7 @@ function updateRoomLabel(){
 }
 function enterRoom(next,arrival){
   if(player.inCombat||(hunting.recoveryUntil&&next!=="hub"&&next!=="home")){note("Finish combat or recovery before travelling.");return;}
-  cancelFishing();resetCombatArt();
+  cancelFishing();selectedTimber=null;resetCombatArt();
   catchReveal=null;$('catchReveal').hidden=true;
   const focusRoom=!!document.activeElement.closest('[data-room-link]');
   currentRoom=next;

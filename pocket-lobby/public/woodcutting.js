@@ -1,19 +1,29 @@
 export const woodRules={price:4,xp:10,offlineInterval:60000};
 export const timberTreeRules={cuts:3,regrowMs:30000,fallMs:1050};
+const firstTreeKey='logging:6,5';
+const treeKeyPattern=/^(logging|clearing|trail|grove|creek|shrine|ruins|roots|pond):(?:[0-9]|1[01]),[0-9]$/;
 
-export function timberTreeState(wood,now=Date.now()){
-  const tree=wood.tree;
+export function isTimberTree(item){
+  return item?.type==='wildtree'||item?.type==='timberTree';
+}
+
+export function timberTreeState(wood,now=Date.now(),key=firstTreeKey){
+  const tree=wood.trees?.[key];
   if(!tree||tree.regrowsAt&&tree.regrowsAt<=now)return {cuts:0,regrowsAt:0};
   return tree;
 }
 
-export function cutTimberTree(wood,now=Date.now()){
-  const tree=timberTreeState(wood,now);
+export function cutTimberTree(wood,now=Date.now(),key=firstTreeKey){
+  const tree=timberTreeState(wood,now,key);
   if(tree.regrowsAt)return 0;
   const amount=harvestTimber(wood);
   if(!amount)return 0;
   const cuts=tree.cuts+1;
-  wood.tree={cuts,regrowsAt:cuts===timberTreeRules.cuts?now+timberTreeRules.regrowMs:0};
+  wood.trees??={};
+  for(const [savedKey,savedTree] of Object.entries(wood.trees)){
+    if(savedTree.regrowsAt&&savedTree.regrowsAt<=now)delete wood.trees[savedKey];
+  }
+  wood.trees[key]={cuts,regrowsAt:cuts===timberTreeRules.cuts?now+timberTreeRules.regrowMs:0};
   return amount;
 }
 
@@ -27,10 +37,17 @@ export function normalizeWoodcutting(input={}){
   const {axeOwned=false,equipped=false,xp=0,timber=0}=input;
   if(typeof axeOwned!=='boolean'||typeof equipped!=='boolean'||equipped&&!axeOwned||!Number.isSafeInteger(xp)||xp<0||xp>100000000||!Number.isSafeInteger(timber)||timber<0||timber>1000000)throw new Error('Invalid woodcutting progress.');
   const result={axeOwned,equipped,xp,timber};
-  if(input.tree!==undefined){
-    const {cuts,regrowsAt}=input.tree??{};
+  const trees=input.trees??{};
+  if(typeof trees!=='object'||Array.isArray(trees))throw new Error('Invalid timber tree progress.');
+  const entries=Object.entries(trees);
+  if(input.tree!==undefined&&!Object.hasOwn(trees,firstTreeKey))entries.push([firstTreeKey,input.tree]);
+  if(entries.length>1080)throw new Error('Invalid timber tree progress.');
+  for(const [key,tree] of entries){
+    const {cuts,regrowsAt}=tree??{};
+    if(!treeKeyPattern.test(key))throw new Error('Invalid timber tree location.');
     if(!Number.isInteger(cuts)||cuts<0||cuts>timberTreeRules.cuts||!Number.isSafeInteger(regrowsAt)||regrowsAt<0||(cuts===timberTreeRules.cuts)!==(regrowsAt>0))throw new Error('Invalid timber tree progress.');
-    result.tree={cuts,regrowsAt};
+    result.trees??={};
+    result.trees[key]={cuts,regrowsAt};
   }
   return result;
 }

@@ -38,6 +38,12 @@ const moonwood=(()=>{
   const isWater=(id,x)=>id==='pond'?x>=6:id==='creek'&&x===5;
   const blocked=(id,x,y,progress)=>isWater(id,x)&&!(id==='creek'&&y===4&&progress.bridge);
   const open=(door,progress)=>!door.gate||Boolean(progress[door.gate]);
+  // Give trees boxed in by the seeded scenery a reachable side.
+  const reachableTreeSites={
+    trail:{'10,0':[9,1],'11,0':[10,2]},
+    grove:{'10,0':[8,0],'11,1':[10,2],'0,0':[4,0],'11,9':[9,7],'0,4':[2,2]},
+    creek:{'2,0':[3,1],'4,0':[6,2]}
+  };
 
   function rngFor(id){
     let value=2166136261;
@@ -82,7 +88,8 @@ const moonwood=(()=>{
         const roll=random();
         if(roll<(edge ? .67 : .23)){
           const type=roll<(edge ? .46 : .13)?'wildtree':roll<(edge ? .59 : .18)?'wildrock':'wildbloom';
-          scenery.push({id:key(x,y),type,x,y,rot:0});
+          const [propX,propY]=(type==='wildtree'&&reachableTreeSites[id]?.[key(x,y)])||[x,y];
+          scenery.push({id:key(propX,propY),type,x:propX,y:propY,rot:0});
         }
       }
     }
