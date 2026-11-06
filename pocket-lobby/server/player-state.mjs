@@ -1,3 +1,4 @@
+import {normalizeWardrobe,outfitAppearance} from '../public/wardrobe.js';
 import {normalizeCharacterRules} from '../public/character-rules.js';
 import {normalizeRootstone} from '../public/rootstone.js';
 import {depthsStages,normalizeDepthsRun} from '../public/depths.js';
@@ -51,6 +52,7 @@ export function normalizeState(input={}){
   if(a.rootstone!==undefined)adventure.rootstone=normalizeRootstone(a.rootstone);
   const avatar=input.avatar??{name:"Guest",outfit:0,hair:0};
   if(typeof avatar.name!=="string"||avatar.name.length>20||!Number.isInteger(avatar.outfit)||avatar.outfit<0||avatar.outfit>4||!Number.isInteger(avatar.hair)||avatar.hair<0||avatar.hair>4)throw new Error("Invalid appearance.");
+  const wardrobe=normalizeWardrobe(input.wardrobe,avatar);
   const combatGear=normalizeCombatGear(input.combatGear);
   if(combatGear.equippedWeapon&&!canUseWeapon(stats,combatGear.equippedWeapon))throw new Error("Invalid weapon requirements.");
   const hunting=normalizeHunting(input.hunting);
@@ -61,7 +63,7 @@ export function normalizeState(input={}){
   const state={
     characterRules:normalizeCharacterRules(input.characterRules),credits,health:Math.min(health,maxHealth),stats:{strengthXp:stats.strengthXp,agilityXp:stats.agilityXp,vitalityXp:stats.vitalityXp,patienceXp:stats.patienceXp},fishingGear:{ownedRods,equippedRod:gear.equippedRod,bait:gear.bait},
     woodcutting:normalizeWoodcutting(input.woodcutting),history:normalizeHistory(input),quest:normalizeQuest(input.quest),combatGear,hunting,fishStock,huntingLoot:counts(input.huntingLoot),adventure,
-    avatar:{name:avatar.name.trim()||"Guest",outfit:avatar.outfit,hair:avatar.hair},
+    wardrobe,avatar:outfitAppearance(wardrobe,{name:avatar.name.trim()||"Guest",hair:avatar.hair}),
     location:locations.has(input.location)?input.location:"home",
     position:position&&Number.isInteger(position.x)&&Number.isInteger(position.y)&&position.x>=0&&position.y>=0&&position.x<18&&position.y<16?{x:position.x,y:position.y}:null,
     furniture:furniture(input.furniture),homeFurniture:furniture(input.homeFurniture??[])

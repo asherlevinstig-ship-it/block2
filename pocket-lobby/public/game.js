@@ -315,6 +315,8 @@ let fishingSound=load('fishing-sound',false)===true;
 let lanternLit=false;
 let nextId = Math.max(0,...[...loungeFurniture,...homeFurniture].map(item=>item.id).filter(Number.isInteger))+1;
 let avatar = {...defaultAvatar,...(savedPlayerState?.avatar??load('avatar',defaultAvatar))};
+const wardrobe=normalizeWardrobe(savedPlayerState?.wardrobe,avatar);
+avatar=outfitAppearance(wardrobe,avatar);
 let draft;
 let messages = [];
 let multiplayer=null;
@@ -333,7 +335,7 @@ function drawRemote(peer,time){
   const [x,y]=peer.seat?seatAnchor(peer.seat):point(peer.rx+.5,peer.ry+.5);
   surface(peer.rx+.2,peer.ry+.25,.6,.55,.2,'#43324452');
   const moving=Math.hypot(peer.x-peer.rx,peer.y-peer.ry)>.03,waveAge=Date.now()-(peer.waveAt??0);
-  sprite(ctx,x,y,{outfit:peer.outfit,hair:peer.hair},{direction:peer.direction,back:peer.back,cycle:moving?time/STEP_MS:0,seated:!!peer.seat,wave:waveAge>=0&&waveAge<WAVE_MS?waveAge/WAVE_MS:null,sheathed:!!peer.weapon,weaponTier:peer.weapon,time});
+  sprite(ctx,x,y,{outfit:peer.outfit,trousers:peer.trousers,boots:peer.boots,hair:peer.hair},{direction:peer.direction,back:peer.back,cycle:moving?time/STEP_MS:0,seated:!!peer.seat,wave:waveAge>=0&&waveAge<WAVE_MS?waveAge/WAVE_MS:null,sheathed:!!peer.weapon,weaponTier:peer.weapon,time});
 }
 function updatePeerLabels(time){
   const p=canvasBounds(),cx=view.width/2,cy=view.height/2-4;
@@ -1521,7 +1523,9 @@ function sprite(target,x,y,appearance,{direction='right',back=false,cycle=0,seat
   const p=(x,y,w,h,color)=>{target.fillStyle=color;target.fillRect(x,y,w,h);};
   const jacket=outfits[appearance.outfit]??outfits[0];
   const shade=jacketShadows[appearance.outfit]??jacketShadows[0];
-  const outline='#282337', denim='#3b4565', denimLight='#626c88';
+  const trousers=Object.values(clothingCatalog).find(item=>item.slot==='trousers'&&item.index===(appearance.trousers??0))??clothingCatalog.charcoalTrousers;
+  const boots=Object.values(clothingCatalog).find(item=>item.slot==='boots'&&item.index===(appearance.boots??0))??clothingCatalog.canvasBoots;
+  const outline='#282337',denim=trousers.color,denimLight=trousers.light;
   const lowMotion=reducedMotion.matches;
   const swing=lowMotion?0:Math.round(Math.sin(cycle*Math.PI)*3);
   const bounce=cycle?Math.round(Math.abs(Math.sin(cycle*Math.PI))*2):0;
@@ -1537,12 +1541,12 @@ function sprite(target,x,y,appearance,{direction='right',back=false,cycle=0,seat
     p(-6,-5,12,7,outline);p(-5,-4,9,5,denim);p(1,-4,5,3,denimLight);
     p(-1,0,4,5,denim);p(4,-1,4,5,outline);p(4,0,3,3,denimLight);
     p(-1,4,6,2,outline);p(4,3,6,2,outline);
-    p(0,4,4,1,'#ebd5bc');p(5,3,4,1,'#f6e2c4');
+    p(0,4,4,1,boots.color);p(5,3,4,1,boots.light);
   }else{
     for(const [side,base,ink] of [[-1,-5,denim],[1,1,denimLight]]){
       const offset=side*swing+(pose.ready?side*2:0),lift=Math.max(0,-side*swing);
       p(base+offset,-4-lift,6,4,outline);
-      p(base+offset+1,-3-lift,5,2,'#e5c9ad');
+      p(base+offset+1,-3-lift,5,2,boots.color);
       p(base+Math.trunc(offset/2),-11,5,8-lift,outline);
       p(base+Math.trunc(offset/2)+1,-10,3,6-lift,ink);
       p(base+offset+1,-5-lift,3,2,ink);
@@ -2250,7 +2254,7 @@ function animation(time){
   requestAnimationFrame(animation);
 }
 
-var bagCategory='all',bagSelection=null;
+var bagCategory='all',bagSelection=null,bagOutfitTarget=null;
 function windowItemArt(kind){
   if(kind==='axe')return '<svg viewBox="0 0 64 64" aria-hidden="true" shape-rendering="crispEdges"><path d="M18 52l24-38 5 3-24 38z" fill="#ba855c"/><path d="M30 13l14-5 12 9-8 13-17-6z" fill="#a8c4dc"/><path d="M30 13l2 10 16 7-3-11z" fill="#e4eee1"/></svg>';
   if(kind==='timber')return '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M12 26l29-13 13 13-29 17z" fill="#9d684b" stroke="#e4b778" stroke-width="2"/><path d="M12 39l29-13 13 13-29 17z" fill="#85583f" stroke="#d6a168" stroke-width="2"/><ellipse cx="23" cy="43" rx="11" ry="12" fill="#e2b77a"/><ellipse cx="23" cy="43" rx="6" ry="7" fill="none" stroke="#ac744c" stroke-width="2"/></svg>';
@@ -2261,16 +2265,21 @@ function windowItemArt(kind){
 }
 function bagEntries(){
   const entries=[];
+  const outfit=wardrobe.outfits.find(outfit=>outfit.id===bagOutfitTarget)??wardrobe.outfits.find(outfit=>outfit.id===wardrobe.active);
   for(const id of combatGear.ownedWeapons){
     const w=weaponProfile(id,combatGear.activeSwordUpgrade),equipped=combatGear.equippedWeapon===id;
-    entries.push({key:'weapon:'+id,name:w.name,category:'gear',art:shopItemArt(id),quantity:1,equipped,description:w.description,stats:w.damage+' base damage · '+attackSeconds(w.interval)+' per attack',action:equipped?'Unequip weapon':'Equip weapon',disabled:player.inCombat||!canUseWeapon(playerStats,id),note:player.inCombat?'Finish combat before changing equipment.':'Drawn automatically in combat.',run:()=>{$('weaponSelect').value=id;toggleWeapon();}});
+    entries.push({key:'weapon:'+id,name:w.name,category:'gear',art:shopItemArt(id),quantity:1,equipped,description:w.description,stats:w.damage+' base damage Â· '+attackSeconds(w.interval)+' per attack',action:equipped?'Unequip weapon':'Equip weapon',disabled:player.inCombat||!canUseWeapon(playerStats,id),note:player.inCombat?'Finish combat before changing equipment.':'Drawn automatically in combat.',run:()=>{$('weaponSelect').value=id;toggleWeapon();}});
   }
   for(const id of fishingGear.ownedRods){
     const rod=fishingCatalog.rods[id],equipped=fishingGear.equippedRod===id,odds=fishingChances(patienceLevel(),id);
-    entries.push({key:'rod:'+id,name:rod.name,category:'gear',art:shopItemArt(id),quantity:1,equipped,description:rod.quality+' fishing rod. Uses one bait per catch.',stats:(rod.duration/1000).toFixed(1)+'s / catch · '+odds.fine.toFixed(1)+'% fine · '+odds.rare.toFixed(1)+'% rare',action:equipped?'Equipped':'Equip rod',disabled:equipped||patienceLevel()<rod.patience,note:'Requires Patience '+rod.patience,run:()=>equipFishingRod(id)});
+    entries.push({key:'rod:'+id,name:rod.name,category:'gear',art:shopItemArt(id),quantity:1,equipped,description:rod.quality+' fishing rod. Uses one bait per catch.',stats:(rod.duration/1000).toFixed(1)+'s / catch Â· '+odds.fine.toFixed(1)+'% fine Â· '+odds.rare.toFixed(1)+'% rare',action:equipped?'Equipped':'Equip rod',disabled:equipped||patienceLevel()<rod.patience,note:'Requires Patience '+rod.patience,run:()=>equipFishingRod(id)});
   }
   if(woodcutting.axeOwned)entries.push({key:'axe',name:'Basic Axe',category:'gear',art:windowItemArt('axe'),quantity:1,equipped:woodcutting.equipped,description:'Your trusty tool for felling trees.',stats:'Train Woodcutting with every log.',action:woodcutting.equipped?'Unequip axe':'Equip axe',disabled:unavailable(),run:()=>$('equipAxe').onclick()});
-  if(combatGear.stonebackVestOwned)entries.push({key:'vest',name:'Stoneback Vest',category:'gear',art:windowItemArt('vest'),quantity:1,equipped:combatGear.stonebackVestEquipped,description:'Crafted from the Stoneback Beetle’s shell.',stats:'Absorbs 4 damage · Dodge costs 50 stamina',action:combatGear.stonebackVestEquipped?'Remove vest':'Equip vest',disabled:unavailable(),run:toggleStonebackVest});
+  if(combatGear.stonebackVestOwned)entries.push({key:'vest',name:'Stoneback Vest',category:'gear',art:windowItemArt('vest'),quantity:1,equipped:combatGear.stonebackVestEquipped,description:'Crafted from the Stoneback Beetleâ€™s shell.',stats:'Absorbs 4 damage Â· Dodge costs 50 stamina',action:combatGear.stonebackVestEquipped?'Remove vest':'Equip vest',disabled:unavailable(),run:toggleStonebackVest});
+  for(const id of wardrobe.owned){
+    const item=clothingCatalog[id],included=outfit[item.slot]===id;
+    entries.push({key:'clothing:'+id,name:item.name,category:'clothing',art:clothingArt(id),quantity:1,equipped:wardrobe.outfits.find(look=>look.id===wardrobe.active)[item.slot]===id,description:'Starter clothing. Yours to keep and reuse in any outfit.',stats:item.slot[0].toUpperCase()+item.slot.slice(1)+' slot'+(!included?' Â· Replaces '+clothingCatalog[outfit[item.slot]].name:''),action:included?'In '+outfit.name:'Add to '+outfit.name,disabled:included,note:outfit.id===wardrobe.active?'You are wearing this outfit. Changes appear immediately.':'Wear this look from Wardrobe when you are ready.',run:()=>{addClothingToOutfit(wardrobe,outfit.id,id);applyWornOutfit();}});
+  }
   for(const [type,name] of Object.entries(types)){
     const quantity=availableFurniture(type);if(!quantity)continue;
     entries.push({key:'furniture:'+type,name,category:'furniture',type,quantity,description:'Make a space that feels like yours.',stats:quantity+' available in storage',action:'Place in room',disabled:!canDecorate(),note:canDecorate()?'Choose Place, then click a clear floor tile.':'Visit your home to place furniture.',run:()=>{$('inventoryDialog').close();switchMode(true);choose({type,id:null,rot:0});canvas.focus();}});
@@ -2278,21 +2287,21 @@ function bagEntries(){
   if(fishingGear.bait)entries.push({key:'bait',name:'Riverworms',category:'materials',art:windowItemArt('bait'),quantity:fishingGear.bait,description:'Bait for your next fishing trip.',stats:'One used per catch',note:'Used automatically while fishing.'});
   if(woodcutting.timber)entries.push({key:'timber',name:'Timber',category:'materials',art:windowItemArt('timber'),quantity:woodcutting.timber,description:'Gathered by chopping trees.',stats:tradeCatalog.timber.price+' gold each',note:'Craft at the Timber Hollow workbench or sell at the Trading Post.'});
   for(const [id,quantity] of Object.entries(fishStock))if(quantity&&fishProducts[id]){
-    const fish=fishProducts[id];entries.push({key:'fish:'+id,name:fish.name,category:'materials',quality:fish.quality,art:windowItemArt('fish'),quantity,description:'Caught in the waters of Silverfin Pond.',stats:fish.price+' gold each · '+quantity*fish.price+' gold total',note:'Sell at the Trading Post or Silverfin Outfitters.'});
+    const fish=fishProducts[id];entries.push({key:'fish:'+id,name:fish.name,category:'materials',quality:fish.quality,art:windowItemArt('fish'),quantity,description:'Caught in the waters of Silverfin Pond.',stats:fish.price+' gold each Â· '+quantity*fish.price+' gold total',note:'Sell at the Trading Post or Silverfin Outfitters.'});
   }
   for(const [id,quantity] of Object.entries(huntingLoot))if(quantity&&tradeCatalog[id])entries.push({key:'loot:'+id,name:tradeCatalog[id].name,category:'materials',art:windowItemArt('loot'),quantity,description:'Spoils from your adventures.',stats:tradeCatalog[id].price+' gold each',note:'Sell at the Trading Post. Some loot is used in crafting.'});
   return entries;
 }
 function renderBag(){
   const entries=bagEntries(),visible=entries.filter(item=>bagCategory==='all'||item.category===bagCategory);
-  const selected=visible.find(item=>item.key===bagSelection)??visible[0];bagSelection=selected?.key??null;
+  const selected=visible.find(item=>item.key===bagSelection)??(bagCategory==='all'?visible.find(item=>item.category==='gear'):null)??visible[0];bagSelection=selected?.key??null;
   const grid=$('bagGrid');grid.replaceChildren();
   for(const item of visible){
     const slot=document.createElement('button'),art=document.createElement('div'),name=document.createElement('span'),count=document.createElement('small');
     slot.type='button';slot.className='bag-slot'+(item.equipped?' is-equipped':'')+(item.quality?' quality-'+item.quality:'');slot.dataset.item=item.key;
     slot.setAttribute('aria-pressed',String(item.key===bagSelection));slot.setAttribute('aria-label',item.name+', '+item.quantity+(item.equipped?', equipped':''));
     art.className='bag-slot-art';if(item.type)art.append(thumbnail(item.type));else art.innerHTML=item.art;
-    name.textContent=item.name;count.textContent=item.equipped?'Equipped':'×'+item.quantity;
+    name.textContent=item.name;count.textContent=item.equipped?'Equipped':'Ã—'+item.quantity;
     slot.append(art,name,count);slot.onclick=()=>{bagSelection=item.key;renderBag();$('bagGrid').querySelector('[data-item="'+item.key+'"]')?.focus({preventScroll:true});};grid.append(slot);
   }
   $('bagEmpty').hidden=visible.length>0;
@@ -2300,13 +2309,17 @@ function renderBag(){
   $('bagPlayerName').textContent=avatar.name;
   const loadout=$('bagLoadout');loadout.replaceChildren();
   for(const [label,key] of [['Weapon','weapon:'+combatGear.equippedWeapon],['Rod','rod:'+fishingGear.equippedRod],['Armour',combatGear.stonebackVestEquipped?'vest':null]]){
-    const item=entries.find(item=>item.key===key),button=document.createElement('button');button.type='button';button.textContent=label+' · '+(item?.name??'None equipped');button.disabled=!item;button.onclick=()=>{bagCategory='gear';bagSelection=key;renderBag();};loadout.append(button);
+    const item=entries.find(item=>item.key===key),button=document.createElement('button');button.type='button';button.textContent=label+' Â· '+(item?.name??'None equipped');button.disabled=!item;button.onclick=()=>{bagCategory='gear';bagSelection=key;renderBag();};loadout.append(button);
   }
   const picture=$('bagAvatar'),ink=picture.getContext('2d');ink.clearRect(0,0,56,62);sprite(ink,28,54,avatar,{time:performance.now()});
-  for(const category of ['all','gear','materials','furniture'])$('bagTab'+category[0].toUpperCase()+category.slice(1)).setAttribute('aria-pressed',String(category===bagCategory));
+  for(const category of ['all','gear','clothing','materials','furniture'])$('bagTab'+category[0].toUpperCase()+category.slice(1)).setAttribute('aria-pressed',String(category===bagCategory));
   const art=$('bagDetailArt');art.replaceChildren();
   if(selected?.type)art.append(thumbnail(selected.type));else art.innerHTML=selected?.art??windowItemArt('bag');
-  $('bagDetailCategory').textContent=selected?(selected.equipped?'EQUIPPED':selected.category==='gear'?'EQUIPMENT':selected.category==='furniture'?'HOME FURNITURE':'LOOT & SUPPLIES'):'';
+  $('bagOutfitField').hidden=selected?.category!=='clothing';
+  const outfitSelect=$('bagOutfitTarget');outfitSelect.replaceChildren();
+  for(const outfit of wardrobe.outfits){const option=document.createElement('option');option.value=outfit.id;option.textContent=outfit.name+(outfit.id===wardrobe.active?' (wearing)':'');outfitSelect.append(option);}
+  outfitSelect.value=bagOutfitTarget??wardrobe.active;
+  $('bagDetailCategory').textContent=selected?(selected.equipped?'EQUIPPED':selected.category==='clothing'?'CLOTHING':selected.category==='gear'?'EQUIPMENT':selected.category==='furniture'?'HOME FURNITURE':'LOOT & SUPPLIES'):'';
   $('bagDetailName').textContent=selected?.name??'Your bag is empty';$('bagDetailText').textContent=selected?.description??'Find something on your next adventure.';
   $('bagDetailStats').textContent=selected?.stats??'';$('bagDetailNote').textContent=selected?.note??'';
   const action=$('bagAction');action.hidden=!selected?.action;action.textContent=selected?.action??'';action.disabled=!!selected?.disabled;
@@ -2632,7 +2645,7 @@ function updateTradingPost(){
   }
 }
 function savePlayerState(){
-  const snapshot={credits,health,woodcutting,history,quest,combatGear,hunting,depthsRun,ownedFurniture,furniture:[],homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats,fishingGear,huntingLoot,fishStock,avatar,location:currentRoom,position:{x:player.cx,y:player.cy}};
+  const snapshot={credits,health,woodcutting,history,quest,combatGear,hunting,depthsRun,ownedFurniture,furniture:[],homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats,fishingGear,huntingLoot,fishStock,avatar,wardrobe,location:currentRoom,position:{x:player.cx,y:player.cy}};
   save('player-state',snapshot);
   if(window.playerCloud)window.playerCloud.enqueue(JSON.parse(JSON.stringify(snapshot)));
   updateInventory();
@@ -2910,9 +2923,15 @@ function showFirstEquipment(room){
   openInventory(room);
 }
 
+
+$('bagOutfitTarget').onchange=()=>{bagOutfitTarget=$('bagOutfitTarget').value;renderBag();};
+$('bagManageOutfits').onclick=()=>{$('inventoryDialog').close();openAvatar();};
+$('wardrobeInventory').onclick=()=>openClothingInventory(wardrobe.active);
+$('createOutfitForm').onsubmit=event=>{event.preventDefault();try{const outfit=createSavedOutfit(wardrobe,$('newOutfitName').value);$('newOutfitName').value='';savePlayerState();renderWardrobe();$('wardrobeStatus').textContent=outfit.name+' saved. Choose Edit clothing to build this look.';}catch(error){$('wardrobeStatus').textContent=error.message;}};
+
 $('merchantEntry').onclick=openMerchant;
 $('bagAppearance').onclick=()=>{$('inventoryDialog').close();openAvatar();};
-for(const category of ['all','gear','materials','furniture'])$('bagTab'+category[0].toUpperCase()+category.slice(1)).onclick=()=>{bagCategory=category;bagSelection=null;renderBag();};
+for(const category of ['all','gear','clothing','materials','furniture'])$('bagTab'+category[0].toUpperCase()+category.slice(1)).onclick=()=>{bagCategory=category;bagSelection=null;renderBag();};
 for(const name of ['Furniture','Weapons','Armour'])$('craftTab'+name).onclick=()=>{for(const page of ['Furniture','Weapons','Armour']){$('craftPage'+page).hidden=page!==name;$('craftTab'+page).setAttribute('aria-pressed',String(page===name));}};
 for(const activity of ['rest','fishing','woodcutting'])$('routine'+activity[0].toUpperCase()+activity.slice(1)).onclick=()=>{$('rulesActivity').value=activity;updateCharacterRulesPreview();};
 
@@ -3178,12 +3197,11 @@ function drawAvatarPreview(time){
 }
 function updateAvatarPreview(){
   drawAvatarPreview(performance.now());
-  for(const group of ['outfits','hair']){
+  for(const group of ['hair']){
     for(const [index,button] of Array.from($(group).children).entries())button.setAttribute('aria-pressed',String(draft[group==='outfits'?'outfit':'hair']===index));
   }
 }
 for(const [group,key,colors,names] of [
-  ['outfits','outfit',outfits,['Amber','Sky','Rose','Sage','Lavender']],
   ['hair','hair',hairColors,['Chestnut','Midnight','Copper','Honey','Violet']]
 ]){
   colors.forEach((color,index)=>{
@@ -3192,8 +3210,30 @@ for(const [group,key,colors,names] of [
     button.style.setProperty('--swatch',color);button.onclick=()=>{draft[key]=index;updateAvatarPreview();};$(group).append(button);
   });
 }
+
+function applyWornOutfit(){
+  avatar=outfitAppearance(wardrobe,avatar);save('avatar',avatar);updateName();savePlayerState();
+}
+function openClothingInventory(id){
+  if($('avatarDialog').open)$('avatarDialog').close();
+  openInventory();bagCategory='clothing';bagSelection=null;bagOutfitTarget=id;renderBag();
+}
+function renderWardrobe(){
+  $('wearingOutfitName').textContent=wardrobe.outfits.find(outfit=>outfit.id===wardrobe.active).name;
+  const list=$('wardrobeOutfits');list.replaceChildren();
+  for(const outfit of wardrobe.outfits){
+    const card=document.createElement('article'),picture=document.createElement('canvas'),name=document.createElement('b'),items=document.createElement('p'),wear=document.createElement('button'),edit=document.createElement('button'),actions=document.createElement('div');
+    const active=outfit.id===wardrobe.active;card.className='saved-outfit'+(active?' is-worn':'');card.dataset.outfit=outfit.id;
+    picture.width=56;picture.height=62;picture.setAttribute('aria-hidden','true');sprite(picture.getContext('2d'),28,54,outfitAppearance(wardrobe,avatar,outfit.id),{time:performance.now()});
+    name.textContent=outfit.name;items.textContent=clothingSlots.map(slot=>clothingCatalog[outfit[slot]].name).join(' Â· ');
+    wear.type='button';wear.textContent=active?'Wearing':'Wear outfit';wear.disabled=active;wear.onclick=()=>{wearSavedOutfit(wardrobe,outfit.id);applyWornOutfit();draft=outfitAppearance(wardrobe,draft);renderWardrobe();updateAvatarPreview();$('wardrobeStatus').textContent='Now wearing '+outfit.name+'.';};
+    edit.type='button';edit.textContent='Edit clothing';edit.onclick=()=>openClothingInventory(outfit.id);actions.className='outfit-actions';actions.append(wear,edit);card.append(picture,name,items,actions);list.append(card);
+  }
+  $('outfitCapacity').textContent=wardrobe.outfits.length+' / 6 saved outfits. Clothing can be reused.';$('createOutfit').disabled=wardrobe.outfits.length>=6;
+}
+
 function openAvatar(){
-  draft={...avatar};$('guestName').value=draft.name;updateAvatarPreview();$('avatarDialog').showModal();
+  draft={...avatar};$('guestName').value=draft.name;$('wardrobeStatus').textContent='';renderWardrobe();updateAvatarPreview();$('avatarDialog').showModal();
 }
 function updateName(){
   $('profile').children[1].firstChild.textContent=avatar.name;
@@ -3208,7 +3248,7 @@ $('attributes').onclick=()=>{const ink=$('statsAvatar').getContext('2d');ink.cle
 $('help').onclick=()=>$('helpDialog').showModal();
 for(const button of document.querySelectorAll('dialog .close'))button.onclick=()=>button.closest('dialog').close();
 $('saveAvatar').onclick=()=>{
-  avatar={...draft,name:$('guestName').value.trim()||'Guest'};
+  avatar=outfitAppearance(wardrobe,{...draft,name:$('guestName').value.trim()||'Guest'});
   save('avatar',avatar);updateName();savePlayerState();$('avatarDialog').close();
 };
 function updateRoomLabel(){

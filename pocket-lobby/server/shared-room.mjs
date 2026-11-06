@@ -2,7 +2,7 @@ import {resolveIdentity,tokenHash} from './identity.mjs';
 import {socialRooms,roomBoxes,validRoomTile,reachableMove,roomSeats} from '../public/shared-world.js';
 
 const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store'}});
-export function publicPeer(meta){return {id:meta.id,name:meta.name,outfit:meta.outfit,hair:meta.hair,weapon:meta.weapon,x:meta.x,y:meta.y,direction:meta.direction,back:meta.back,seat:meta.seat??null,waveAt:meta.waveAt??0};}
+export function publicPeer(meta){return {id:meta.id,name:meta.name,outfit:meta.outfit,trousers:meta.trousers??0,boots:meta.boots??0,hair:meta.hair,weapon:meta.weapon,x:meta.x,y:meta.y,direction:meta.direction,back:meta.back,seat:meta.seat??null,waveAt:meta.waveAt??0};}
 export async function handleWorldConnect(request,env){
   const url=new URL(request.url),room=url.searchParams.get('room');
   if(request.method!=='GET'||request.headers.get('Upgrade')?.toLowerCase()!=='websocket')return json({error:'A WebSocket connection is required.'},426);
@@ -16,7 +16,7 @@ export async function handleWorldConnect(request,env){
   const boxes=roomBoxes(room,state.homeFurniture),position=state.position??{x:5,y:7};
   if(!validRoomTile(room,position.x,position.y,boxes))return json({error:'Move to an open tile and try again.'},409);
   const profile={playerId:identity.playerId,id:(await tokenHash('public:'+identity.playerId)).slice(0,24),sessionHash:identity.sessionHash??null,expiresAt:identity.expiresAt,room,
-    name:state.avatar?.name??'Guest',outfit:state.avatar?.outfit??0,hair:state.avatar?.hair??0,weapon:state.combatGear?.equippedWeapon??null,x:position.x,y:position.y,direction:'right',back:false};
+    name:state.avatar?.name??'Guest',outfit:state.avatar?.outfit??0,trousers:state.avatar?.trousers??0,boots:state.avatar?.boots??0,hair:state.avatar?.hair??0,weapon:state.combatGear?.equippedWeapon??null,x:position.x,y:position.y,direction:'right',back:false};
   const namespace=room==='home'?'home:'+identity.playerId:'public:'+room;
   const stub=env.SHARED_ROOMS.get(env.SHARED_ROOMS.idFromName(namespace));
   return stub.fetch(new Request('https://room.internal/connect',{headers:{Upgrade:'websocket','X-Tower-Profile':encodeURIComponent(JSON.stringify(profile))}}));
@@ -78,7 +78,7 @@ export class SharedRoom{
     if(message?.type==='profile'){
       const row=await this.env.TOWER_DB.prepare('SELECT state_json FROM tower_players WHERE player_id = ?').bind(meta.playerId).first();if(!row)return;
       const state=JSON.parse(row.state_json);if(state.location!==meta.room)return;
-      meta.name=state.avatar.name;meta.outfit=state.avatar.outfit;meta.hair=state.avatar.hair;meta.weapon=state.combatGear?.equippedWeapon??null;
+      meta.name=state.avatar.name;meta.outfit=state.avatar.outfit;meta.trousers=state.avatar.trousers??0;meta.boots=state.avatar.boots??0;meta.hair=state.avatar.hair;meta.weapon=state.combatGear?.equippedWeapon??null;
       if(meta.room==='home'){meta.boxes=roomBoxes('home',state.homeFurniture);meta.seats=roomSeats('home',state.homeFurniture);}
       ws.serializeAttachment(meta);this.snapshot();return;
     }

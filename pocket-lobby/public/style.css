@@ -216,7 +216,7 @@
 .hub .world-label-sign small{color:#f5d69b}
 .hub .world-label-npc{color:#ffe2a2;border-color:#bd9b64}
 @media(max-width:480px){.hub .world-label{padding:4px 5px}.hub .toolbar .tool{color:#e1e3eb}}
-/* Tower HUD — viewport composition */
+/* Tower HUD â€” viewport composition */
 :root{--hud-gold:#f5c85e;--hud-edge:#536789;--hud-panel:#0c172dec;--gold:#f5c85e}
 .hud-atlas{position:absolute;width:0;height:0;overflow:hidden}.hud-icon{width:30px;height:30px;fill:#829bc033;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none;filter:drop-shadow(0 3px 1px #020713)}
 body{background:#071329 url('./hud-night.svg') center top/cover fixed no-repeat;overflow:hidden}

@@ -80,7 +80,7 @@ export async function handlePlayerApi(request,env){
     switch(path){
       case "/api/player/save":
         if(state.plan)return json({error:"Stop the work plan before playing.",...packet(row)},409);
-        state={...normalizeState(body.state),carpenterOrderComplete:state.carpenterOrderComplete===true,characterRules:state.characterRules??normalizeCharacterRules(),routineLastSeen:state.routineLastSeen,activityLog:state.activityLog??[],...(state.report?{report:state.report}:{})};
+        state={...normalizeState({...body.state,wardrobe:body.state?.wardrobe??state.wardrobe}),carpenterOrderComplete:state.carpenterOrderComplete===true,characterRules:state.characterRules??normalizeCharacterRules(),routineLastSeen:state.routineLastSeen,activityLog:state.activityLog??[],...(state.report?{report:state.report}:{})};
         break;
       case "/api/player/commissions/carpenter":
         deliverCarpenterOrder(state);
