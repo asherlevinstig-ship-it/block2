@@ -68,7 +68,7 @@ const ownedFurniture = hasBedStarter&&hasGamingLayout?previousStock:Object.fromE
 );
 const availableFurniture = type=>(ownedFurniture[type]??0)-countFurniture(loungeFurniture,type)-countFurniture(homeFurniture,type);
 const adventure={lantern:false,groveTrail:false,bridge:false,shrine:false,shortcut:false,discovered:[],silverfin:0,...savedPlayerState?.adventure};
-const playerStats={patienceXp:adventure.silverfin*10,...savedPlayerState?.stats};
+const playerStats={strengthXp:0,agilityXp:0,vitalityXp:0,patienceXp:adventure.silverfin*10,...savedPlayerState?.stats};
 const PATIENCE_XP_PER_CATCH=10, PATIENCE_XP_PER_LEVEL=50;
 const patienceLevel=()=>1+Math.floor(playerStats.patienceXp/PATIENCE_XP_PER_LEVEL);
 const fishingGear={ownedRods:['reed'],equippedRod:'reed',bait:10,...savedPlayerState?.fishingGear};
@@ -1304,6 +1304,14 @@ function updateInventory(){
   $('huntingInventory').textContent=spoils.map(([id,count])=>tradeCatalog[id].name+' ×'+count).join(' · ');
 }
 function updatePlayerStats(){
+  for(const [id,name] of [['strength','Strength'],['agility','Agility'],['vitality','Vitality'],['patience','Patience']]){
+    const experience=playerStats[id+'Xp'],rank=1+Math.floor(experience/50),towardNext=experience%50;
+    $('attribute-'+id+'-level').textContent=rank;
+    $('attribute-'+id+'-xp').textContent=towardNext+' / 50 XP';
+    $('attribute-'+id+'-progress').value=towardNext;
+    $('attribute-'+id+'-progress').setAttribute('aria-label',name+' level '+rank+', '+towardNext+' of 50 XP toward the next level');
+  }
+  $('attributeName').textContent=avatar.name;
   const level=patienceLevel(),xp=playerStats.patienceXp%PATIENCE_XP_PER_LEVEL;
   $('patienceValue').textContent=level;
   $('patienceLevel').textContent='Patience '+level;
@@ -1796,6 +1804,7 @@ function updateName(){
   portrait.save();portrait.translate(12,39);pixelHead(portrait,avatar,false,false);portrait.restore();
 }
 $('profile').onclick=openAvatar;$('looks').onclick=openAvatar;
+$('attributes').onclick=()=>{updatePlayerStats();$('attributesDialog').showModal();};
 $('help').onclick=()=>$('helpDialog').showModal();
 for(const button of document.querySelectorAll('dialog .close'))button.onclick=()=>button.closest('dialog').close();
 $('saveAvatar').onclick=()=>{

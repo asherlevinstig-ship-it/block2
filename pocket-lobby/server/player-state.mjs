@@ -25,8 +25,10 @@ export function normalizeState(input={}){
   if(!input||typeof input!=="object"||Array.isArray(input))throw new Error("Invalid character.");
   const credits=input.credits??100;
   if(!Number.isSafeInteger(credits)||credits<0||credits>100000000)throw new Error("Invalid balance.");
-  const stats=input.stats??{patienceXp:(input.adventure?.silverfin??0)*10};
-  if(!Number.isSafeInteger(stats.patienceXp)||stats.patienceXp<0||stats.patienceXp>100000000)throw new Error("Invalid Patience.");
+  const stats={strengthXp:0,agilityXp:0,vitalityXp:0,patienceXp:(input.adventure?.silverfin??0)*10,...input.stats};
+  for(const id of ["strengthXp","agilityXp","vitalityXp","patienceXp"]){
+    if(!Number.isSafeInteger(stats[id])||stats[id]<0||stats[id]>100000000)throw new Error("Invalid attribute progress.");
+  }
   const gear=input.fishingGear??{ownedRods:["reed"],equippedRod:"reed",bait:10};
   const ownedRods=[...new Set(gear.ownedRods??[])];
   if(!ownedRods.length||ownedRods.some(id=>!fishingCatalog.rods[id])||!ownedRods.includes(gear.equippedRod)||!Number.isSafeInteger(gear.bait)||gear.bait<0||gear.bait>1000000)throw new Error("Invalid fishing gear.");
@@ -40,7 +42,7 @@ export function normalizeState(input={}){
   if(typeof avatar.name!=="string"||avatar.name.length>20||!Number.isInteger(avatar.outfit)||avatar.outfit<0||avatar.outfit>4||!Number.isInteger(avatar.hair)||avatar.hair<0||avatar.hair>4)throw new Error("Invalid appearance.");
   const position=input.position;
   const state={
-    credits,stats:{patienceXp:stats.patienceXp},fishingGear:{ownedRods,equippedRod:gear.equippedRod,bait:gear.bait},
+    credits,stats:{strengthXp:stats.strengthXp,agilityXp:stats.agilityXp,vitalityXp:stats.vitalityXp,patienceXp:stats.patienceXp},fishingGear:{ownedRods,equippedRod:gear.equippedRod,bait:gear.bait},
     fishStock,huntingLoot:counts(input.huntingLoot),adventure,
     avatar:{name:avatar.name.trim()||"Guest",outfit:avatar.outfit,hair:avatar.hair},
     location:locations.has(input.location)?input.location:"home",
