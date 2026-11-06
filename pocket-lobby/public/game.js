@@ -371,9 +371,16 @@ let route=[],step=null,interaction=null,hover=null,hoverItem=null,target=null;
 const combatGear=normalizeCombatGear(savedPlayerState?.combatGear);
 const hunting=normalizeHunting(savedPlayerState?.hunting);
 const quest=normalizeQuest(savedPlayerState?.quest);
+function lobbyRoutesOpen(){return quest.accepted||adventure.discovered.length>0||history.fishCaught||history.boarDefeated;}
 function nearWarden(){return currentRoom==='hub'&&Math.abs(player.cx-10)+Math.abs(player.cy-3)<=1;}
 function updateQuestUI(){
   const stage=questStage(quest);
+  const routesOpen=lobbyRoutesOpen();
+  $('lobbyDestinations').hidden=!routesOpen;
+  $('lobbyFirstVisit').hidden=routesOpen;
+  $('receptionMessage').hidden=!routesOpen;
+  $('openJobBoard').hidden=!routesOpen;
+  $('reception').hidden=!routesOpen;
   const objectives=[
     'Speak to the Tower Warden in the Grand Lobby to begin.',
     'Catch fish at Silverfin Pond · '+quest.fish+' / 3 · Moonwood → Glass Creek → Pond',
@@ -407,7 +414,14 @@ function openQuest(){updateQuestUI();if(!$('questDialog').open)$('questDialog').
 function questAction(){
   if(!nearWarden()||unavailable())return;
   if(questStage(quest)===0){
-    quest.accepted=true;savePlayerState();note('First Steps accepted. Catch 3 fish at Silverfin Pond.');return;
+    const unlocksLobby=!lobbyRoutesOpen();
+    quest.accepted=true;
+    savePlayerState();
+    if(unlocksLobby){
+      $('questDialog').close();
+      note('The lobby doors are open. Head outside to find Silverfin Pond.');
+    }else note('First Steps accepted. Catch 3 fish at Silverfin Pond.');
+    return;
   }
   if(credits>100000000-firstQuestReward.gold)return;
   const reward=claimFirstQuest(quest);if(!reward)return;
@@ -915,7 +929,7 @@ function drawHomeSign(){
   wall('right',left+.3,left+.42,44,46,'#cea98b');
   wall('right',right-.42,right-.3,44,46,'#cea98b');
 }
-function drawGrandLobby(){
+function drawGrandLobby(showDoors=true){
   const {cols,rows}=view;
   polygon([point(-.25,-.25,-8),point(cols+.44,-.25,-9),point(cols+.44,rows+.46,-10),point(-.25,rows+.46,-9)],'#1210208c');
   block(0,0,cols,rows,-9,9,['#b8a79c','#716574','#514959']);
@@ -955,7 +969,7 @@ function drawGrandLobby(){
   wall('left',1,4.4,39,65,'#303d49');
   wall('left',1.08,4.32,40,64,'#a79680');
   wall('left',1.16,4.24,41,63,'#414d59');
-  hubDoors.forEach(drawDoor);
+  if(showDoors)hubDoors.forEach(drawDoor);
 }
 function drawChandelier(){
   const glow=ctx.createRadialGradient(240,74,5,240,74,53);
@@ -1474,7 +1488,8 @@ function makeRoomLayer(drawLayer,layerView=standardView){
 }
 const worldDrawing={point,polygon,surface,block,rect};
 const roomLayers={
-  hub:makeRoomLayer(drawGrandLobby,hubView),
+  hub:makeRoomLayer(()=>drawGrandLobby(),hubView),
+  hubIntro:makeRoomLayer(()=>drawGrandLobby(false),hubView),
   lounge:makeRoomLayer(room),
   outside:makeRoomLayer(drawCourtyard,courtyardView),
   store:makeRoomLayer(drawFishingStore),
@@ -1511,7 +1526,7 @@ function drawMoonwoodDetails(time){
 }
 let worldLabelKey='';
 function updateWorldLabels(){
-  const p=canvasBounds(),doors=roomDoors[currentRoom].filter(door=>moonwood.open(door,adventure));
+  const p=canvasBounds(),doors=roomDoors[currentRoom].filter(door=>doorAvailable(door));
   const stump=currentRoom==='logging'&&!!treeState(timberTree()).regrowsAt;
   const key=[currentRoom,stump,doors.map(door=>door.to).join(','),avatar.name,questStage(quest),zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
   if(key===worldLabelKey)return;
@@ -1540,7 +1555,7 @@ function updateWorldLabels(){
   }
   if(currentRoom==='home')add('Your Home',...point(5,0,43),'sign',null,avatar.name);
   if(currentRoom==='hub'){
-    add('Job board',...point(4.5,2,39),'npc',openJobBoard);
+    if(lobbyRoutesOpen())add('Job board',...point(4.5,2,39),'npc',openJobBoard);
     add('TOWER OF',...point(0,2.7,51),'sign',null,'BEGINNINGS');
     const symbol=questStage(quest)===0?'! ':questStage(quest)===4?'? ':'';
     add(symbol+'Tower Warden',...point(10.5,3.5,43),'npc',()=>use(hubFurniture.find(item=>item.type==='warden')));
@@ -1568,7 +1583,8 @@ function draw(time){
   ctx.clearRect(0,0,width,height);
   const [shakeX,shakeY]=enemy?combatShake(time,combatArt,reducedMotion.matches):[0,0];
   ctx.translate(shakeX,shakeY);ctx.translate(centerX,centerY);ctx.scale(zoom,zoom);ctx.translate(-centerX,-centerY);
-  ctx.imageSmoothingEnabled=false;ctx.drawImage(roomLayers[currentRoom],0,0);
+  const layer=currentRoom==='hub'&&!lobbyRoutesOpen()?'hubIntro':currentRoom;
+  ctx.imageSmoothingEnabled=false;ctx.drawImage(roomLayers[layer],0,0);
   if(moonwood.has(currentRoom))drawMoonwoodDetails(time);
   if(enemy)drawCombatGroundFx({ctx,point,time,now:Date.now(),encounter:hunting.encounter,player,reduced:reducedMotion.matches});
   if(target)surface(target.x+.1,target.y+.1,.8,.8,1,'#fff3bc30','#ffcf8f');
@@ -1735,7 +1751,7 @@ function pointer(e){
   const y=((e.clientY-p.top-p.y)/p.scale-centerY)/zoom+centerY;
   const gx=Math.floor(((x-view.originX)/18+(y-view.originY)/9)/2);
   const gy=Math.floor(((y-view.originY)/9-(x-view.originX)/18)/2);
-  const door=roomDoors[currentRoom].find(portal=>moonwood.open(portal,adventure)&&hitDoor(x,y,portal));
+  const door=roomDoors[currentRoom].find(portal=>doorAvailable(portal)&&hitDoor(x,y,portal));
   return {tile:door?.tile??(inRoom(gx,gy)?{x:gx,y:gy}:null),door,item:hitboxes.findLast(h=>inShape(x,y,h.shape))?.item??null};
 }
 function note(message){
@@ -1744,7 +1760,7 @@ function note(message){
 }
 function setHint(){
   const guide={home:'Click a tile to walk · Click the exit to visit the lobby',hub:'Click a doorway or the Outside steps to travel',lounge:defaultHint,outside:'Click the Moonwood steps to explore · Tower returns indoors',store:'Buy supplies at the counter · Use Lobby to leave',armory:'Compare damage, attack speed and requirements · Buy & equip from the Armory panel',market:'Sell fish and hunting loot at the counter · Use Lobby to leave',creek:'Tap Cross to the Ruins to walk across the creek.'};
-  const message=editing?'Choose furniture to place or select a piece in the room':guide[currentRoom]??'Follow marked trails · Use the field journal for routes';
+  const message=editing?'Choose furniture to place or select a piece in the room':currentRoom==='hub'&&!lobbyRoutesOpen()?'Talk to the Tower Warden to open the lobby doors.':guide[currentRoom]??'Follow marked trails · Use the field journal for routes';
   $('hint').textContent='✦  '+message;
 }
 function startPosition(){return step?.to??{x:player.cx,y:player.cy};}
@@ -1757,14 +1773,15 @@ function walkTo(tile){
   player.seat=null;player.waveStarted=null;
   route=path;interaction=null;target=path.length?tile:null;
 }
+function doorAvailable(door){return (currentRoom!=='hub'||lobbyRoutesOpen())&&moonwood.open(door,adventure);}
 function travelDoor(door){
   if(unavailable()){note(player.inCombat?"Use Flee to leave combat.":"Your hearts are recovering.");return;}
+  if(!doorAvailable(door))return;
   if(currentRoom==='creek'&&door.to==='ruins'&&!adventure.bridge){
     adventure.lantern=true;
     lanternLit=true;
     revealByLantern();
   }
-  if(!moonwood.open(door,adventure))return;
   if(!step&&player.cx===door.tile.x&&player.cy===door.tile.y)enterRoom(door.to,door.arrival);
   else walkTo(door.tile);
 }
@@ -1956,6 +1973,7 @@ function finishInteraction(){
   }else if(['tackleCounter','rodRack','baitCrates'].includes(item.type)){
     note('Welcome to Silverfin Outfitters. Choose supplies from the shop panel.');
   }else if(item.type==='reception'){
+    if(!lobbyRoutesOpen()){note('The Tower Warden is waiting to welcome you.');return;}
     $('receptionMessage').textContent='Welcome, '+avatar.name+'! Choose a shift at the job board, then return home with your earnings.';openJobBoard();
     note('The concierge welcomes you to Tower of Beginnings.');
   }else if(['sofa','chair','stool','woodStool','bench'].includes(item.type)){
@@ -1995,7 +2013,7 @@ function animation(time){
     player.x=from.x+(to.x-from.x)*progress;player.y=from.y+(to.y-from.y)*progress;
     if(progress===1){
       player.cx=to.x;player.cy=to.y;player.stride++;step=null;
-      const door=roomDoors[currentRoom].find(portal=>portal.tile.x===to.x&&portal.tile.y===to.y&&moonwood.open(portal,adventure));
+      const door=roomDoors[currentRoom].find(portal=>portal.tile.x===to.x&&portal.tile.y===to.y&&doorAvailable(portal));
       if(door)enterRoom(door.to,door.arrival);
       else if(!route.length)savePlayerState();
     }
@@ -2695,7 +2713,7 @@ function updateJobBoard(){
   $('jobStart').disabled=startingJob||!preview.allowed||currentRoom!=='hub'||!window.playerCloud;
 }
 function openJobBoard(){
-  if(currentRoom!=='hub'||unavailable())return;
+  if(currentRoom!=='hub'||!lobbyRoutesOpen()||unavailable())return;
   route=[];step=null;interaction=null;target=null;player.x=player.cx;player.y=player.cy;
   $('jobBait').value=Math.min(10,fishingGear.bait);$('jobError').textContent='';updateJobBoard();$('jobBoardDialog').showModal();
 }
