@@ -442,8 +442,6 @@ function room(empty=false){
   wall('left',.69,3.93,42,61,'#3d334b');
   wall('left',.78,3.83,44,59,'#b77382');
   wall('left',.86,3.75,45,58,'#58405c');
-  ctx.save();ctx.transform(1,-.5,0,1,174,78);
-  ctx.font='bold 7px monospace';ctx.fillStyle='#ffc880';ctx.fillText('SUNSET',4,0);ctx.restore();
   wall('left',5.75,7.51,28,55,'#3a3047');
   wall('left',5.84,7.42,30,53,'#cf9b8e');
   wall('left',5.98,7.28,33,50,'#84738e');
@@ -480,12 +478,6 @@ function drawEntryWalls(){
   drawHomeSign();
   drawDoor(homeExit);
 }
-function wallText(side,position,height,label,font,color,maxWidth){
-  const right=side==='right';
-  const [x,y]=right?point(position,0,height):point(0,position,height);
-  ctx.save();ctx.transform(1,right ? .5 : -.5,0,1,x,y);
-  ctx.textAlign='center';ctx.font=font;ctx.fillStyle=color;ctx.fillText(label,0,0,maxWidth);ctx.restore();
-}
 function drawDoor(door){
   const {side,start,end,height,label}=door;
   if(side==='front'){
@@ -501,7 +493,6 @@ function drawDoor(door){
   if(side==='left')surface(0,start,.29,end-start,.55,brass?'#bd946e':'#5e8b83');
   else surface(start,0,end-start,.29,.55,'#bd946e');
   wall(side,start-.025,end+.025,height+4,height+15,brass?'#493044':'#35534f');
-  wallText(side,(start+end)/2,height+7,label,'bold 7px monospace',brass?'#ffdb9d':'#c4ebcf',(end-start)*17);
 }
 function doorHitShape({side,start,end,height}){
   if(side!=='front')return wallFace(side,start-.09,end+.09,0,height+15);
@@ -520,9 +511,6 @@ function drawOutsideSteps({start,end,label}){
   surface(start+.11,y-.91,span-.22,.84,.62,'#e4b180');
   surface(start+.17,y-.85,span-.34,.72,.66,'#50364b');
   const [x,sy]=point((start+end)/2,y-.45,1);
-  ctx.save();ctx.transform(1,.5,-1,.5,x,sy);
-  ctx.textAlign='center';ctx.font='bold 8px monospace';ctx.fillStyle='#ffe0a4';ctx.fillText(label,0,2,37);
-  ctx.restore();
   for(const u of [start-.09,end+.02]){
     block(u,y-.33,.13,.18,0,18,shades.black);
     block(u-.045,y-.38,.22,.27,18,5,shades.gold);
@@ -536,13 +524,6 @@ function drawHomeSign(){
   wall('right',left+.12,right-.12,32,top-2,'#403948');
   wall('right',left+.3,left+.42,44,46,'#cea98b');
   wall('right',right-.42,right-.3,44,46,'#cea98b');
-  const [x,y]=point((left+right)/2,0,top);
-  ctx.save();
-  ctx.transform(1,.5,0,1,x,y);
-  ctx.textAlign='center';
-  ctx.font='bold 8px monospace';ctx.fillStyle='#efc58e';ctx.fillText('Your Home',0,11);
-  ctx.font='bold 10px monospace';ctx.fillStyle='#f8eadb';ctx.fillText(avatar.name,0,23,74);
-  ctx.restore();
 }
 function drawGrandLobby(){
   const {cols,rows}=view;
@@ -584,8 +565,6 @@ function drawGrandLobby(){
   wall('left',1,4.4,39,65,'#303d49');
   wall('left',1.08,4.32,40,64,'#a79680');
   wall('left',1.16,4.24,41,63,'#414d59');
-  wallText('left',2.7,55,'TOWER OF','bold 8px monospace','#ead7b1',53);
-  wallText('left',2.7,46,'BEGINNINGS','bold 7px monospace','#c8bca4',53);
   hubDoors.forEach(drawDoor);
 }
 function drawChandelier(){
@@ -686,8 +665,6 @@ function drawFishingStore(market=false){
   }
   wall('right',1.25,5.6,37,61,'#d1ac86');
   wall('right',1.36,5.49,39,59,'#314e5c');
-  wallText('right',3.42,49,armory?'TOWER':market?'MOONWOOD':'SILVERFIN','bold 8px monospace','#fae0ae',65);
-  wallText('right',3.42,42,armory?'ARMORY':market?'TRADING POST':'OUTFITTERS','bold 6px monospace','#bfd5ce',65);
   wall('left',1.3,3.5,30,56,'#c4a284');
   wall('left',1.42,3.38,32,54,'#395767');
   wall('left',1.49,3.31,33,46,'#7b9da3');
@@ -714,9 +691,7 @@ function object(item,highlight=false,time=0) {
     surface(x+.14,y+.14,.72,.72,.3,'#9ab7a73c');
     sprite(ctx,wx,wy,{outfit:1,hair:1},{direction:'left',time});
     rect(wx-7,wy-34,13,3,'#809f9b');rect(wx-4,wy-36,7,2,'#bdc6ad');rect(wx-2,wy-34,3,3,'#e6c385');
-    ctx.save();ctx.textAlign='center';ctx.font='bold 8px monospace';ctx.fillStyle='#f2d695';
-    ctx.fillText(questStage(quest)===0?'!':questStage(quest)===4?'?':'✦',wx,wy-43);
-    ctx.font='6px monospace';ctx.fillText('WARDEN',wx,wy+11);ctx.restore();return;
+    return;
   }
   if(Object.hasOwn(moonwood.heights,type)){
     if(type==='wildboar'){
@@ -1104,8 +1079,45 @@ function drawMoonwoodDetails(time){
     rect(px-1,py-12,2,12,'#597984');
     rect(px-width/2,py-23,width,11,'#233646');
     rect(px-width/2,py-23,width,1,'#85b4b3');
-    ctx.save();ctx.textAlign='center';ctx.font='bold 7px monospace';ctx.fillStyle='#d9eee2';
-    ctx.fillText(label,px,py-15,width-4);ctx.restore();
+  }
+}
+let worldLabelKey='';
+function updateWorldLabels(){
+  const p=canvasBounds(),doors=roomDoors[currentRoom].filter(door=>moonwood.open(door,adventure));
+  const key=[currentRoom,doors.map(door=>door.to).join(','),avatar.name,questStage(quest),zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
+  if(key===worldLabelKey)return;
+  worldLabelKey=key;
+  const container=$('worldLabels');container.replaceChildren();
+  const add=(text,x,y,kind='door',action=null,subtitle='')=>{
+    const label=document.createElement(action?'button':'div');label.className='world-label world-label-'+kind;
+    if(action){label.type='button';label.onclick=action;label.setAttribute('aria-label',kind==='door'?'Go to '+text:text);}
+    const title=document.createElement('span');title.textContent=text;label.append(title);
+    if(subtitle){const detail=document.createElement('small');detail.textContent=subtitle;label.append(detail);}
+    label.title=text+(subtitle?' · '+subtitle:'');container.append(label);
+    const centerX=view.width/2,centerY=view.height/2-4;
+    const screenX=p.x+((x-centerX)*zoom+centerX)*p.scale,screenY=p.y+((y-centerY)*zoom+centerY)*p.scale;
+    const width=label.offsetWidth||text.length*7+16,height=label.offsetHeight||(subtitle?30:19);
+    const availableWidth=canvas.clientWidth||view.width*p.scale,availableHeight=canvas.clientHeight||view.height*p.scale;
+    label.style.left=Math.round(Math.max(5,Math.min(availableWidth-width-5,screenX-width/2)))+'px';
+    label.style.top=Math.round(Math.max(5,Math.min(availableHeight-height-5,screenY-height/2)))+'px';
+  };
+  for(const door of doors){
+    let anchor;
+    if(door.side==='wild'){anchor=point(door.tile.x+.5,door.tile.y+.5,18);}
+    else if(door.side==='front'){anchor=point((door.start+door.end)/2,view.rows-.45,12);}
+    else anchor=door.side==='right'?point((door.start+door.end)/2,0,door.height+9):point(0,(door.start+door.end)/2,door.height+9);
+    add(door.label,...anchor,'door',()=>travelDoor(door));
+  }
+  if(currentRoom==='home')add('Your Home',...point(5,0,43),'sign',null,avatar.name);
+  if(currentRoom==='hub'){
+    add('TOWER OF',...point(0,2.7,51),'sign',null,'BEGINNINGS');
+    const symbol=questStage(quest)===0?'! ':questStage(quest)===4?'? ':'';
+    add(symbol+'Tower Warden',...point(10.5,3.5,43),'npc',()=>use(hubFurniture.find(item=>item.type==='warden')));
+  }
+  if(currentRoom==='lounge')add('SUNSET LOUNGE',...point(0,2.3,51),'sign');
+  if(['store','market','armory'].includes(currentRoom)){
+    const names={store:['SILVERFIN','OUTFITTERS'],market:['MOONWOOD','TRADING POST'],armory:['TOWER','ARMORY']};
+    add(names[currentRoom][0],...point(3.42,0,46),'sign',null,names[currentRoom][1]);
   }
 }
 function draw(time){
@@ -1190,6 +1202,7 @@ function draw(time){
   if(currentRoom==='clearing')drawCombatWorldFx({ctx,point,time,events:combatArt,player,reduced:reducedMotion.matches});
   drawCombatFeedback(time);
   if(currentRoom==='clearing')drawCombatOverlayFx({ctx,width,height,time,now:Date.now(),events:combatArt,encounter:hunting.encounter,health,reduced:reducedMotion.matches});
+  updateWorldLabels();
 }
 
 
@@ -2213,6 +2226,7 @@ function enterRoom(next,arrival){
   switchMode(false);
   savePlayerState();
   if(exploring)revealByLantern();
+  bounds=null;worldLabelKey='';$('worldLabels').replaceChildren();
   showFirstEquipment(next);
   if(focusRoom&&!$('inventoryDialog').open)canvas.focus();
 }
