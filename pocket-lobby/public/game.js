@@ -102,6 +102,7 @@ function setPlayerCombat(active){
   $('healthHud').hidden=!player.inCombat;
 }
 let route=[],step=null,interaction=null,hover=null,hoverItem=null,target=null;
+const combatGear=normalizeCombatGear(savedPlayerState?.combatGear);
 const hunting=normalizeHunting(savedPlayerState?.hunting);
 let combatMessage='',combatFeedback=null,lastCombatUi=0;
 const unavailable=()=>player.inCombat||hunting.recoveryUntil>0;
@@ -111,6 +112,7 @@ function stopForCombat(){
 }
 function startBoarEncounter(){
   if(currentRoom!=='clearing'||unavailable())return;
+  if(!combatGear.equippedWeapon){note('Equip your Training Sword in Inventory before hunting.');return;}
   if(health<=0){note('Return to the Tower and rest to restore your hearts.');return;}
   if(Date.now()<hunting.respawnAt){note('The clearing is quiet. Another boar will arrive shortly.');return;}
   stopForCombat();
@@ -159,6 +161,7 @@ function restAtTower(){
 }
 function updateCombatPanel(){
   const now=Date.now(),encounter=hunting.encounter;
+  $('equipWeapon').disabled=player.inCombat;
   $('wave').disabled=editing||!!fishingSession||unavailable();
   $('combatPanel').hidden=currentRoom!=='clearing';
   $('scene').classList.toggle('in-combat',player.inCombat);
@@ -177,10 +180,10 @@ function updateCombatPanel(){
   $('combatCooldown').textContent=encounter?'Next strike '+Math.max(0,(encounter.nextPlayerAt-now)/1000).toFixed(1)+'s · Boar '+Math.max(0,(encounter.nextBoarAt-now)/1000).toFixed(1)+'s'+(remaining?' · Flee '+(remaining/1000).toFixed(1)+'s':' · F: Flee'):'Click the boar to engage. Combat runs in real time.';
   $('combatLog').textContent=combatMessage||'The boar watches the trail. It will not attack until you approach.';
   const attributes=huntingAttributes(playerStats);
-  $('combatGuide').textContent='Attack '+attributes.damage+'–'+(attributes.damage+4)+' · Dodge '+Math.round(attributes.dodge*100)+'% · Escape '+Math.round(attributes.escape*100)+'% · Armor '+attributes.armor;
+  $('combatGuide').textContent=(weaponCatalog[combatGear.equippedWeapon]?.name??'No weapon equipped')+' · Attack '+attributes.damage+'–'+(attributes.damage+4)+' · Dodge '+Math.round(attributes.dodge*100)+'% · Escape '+Math.round(attributes.escape*100)+'% · Armor '+attributes.armor;
   $('adventureLandmark').hidden=!!encounter||now<hunting.respawnAt;
   $('adventureLandmark').textContent='Approach boar';
-  $('adventureLandmark').disabled=health<=0||unavailable();
+  $('adventureLandmark').disabled=health<=0||unavailable()||!combatGear.equippedWeapon;
 }
 function updateCombatMoment(time){
   if(player.inCombat&&currentRoom==='clearing')applyCombatResult(advanceHunt(hunting.encounter,health,playerStats,Date.now()));
@@ -899,7 +902,7 @@ function pixelHead(target,appearance,back,blink){
   p(4,-21,2,1,'#994f56');
   p(-1,-22,2,1,'#f6c3a0');
 }
-function sprite(target,x,y,appearance,{direction='right',back=false,cycle=0,seated=false,wave=null,fishing=false,time=0}={}){
+function sprite(target,x,y,appearance,{direction='right',back=false,cycle=0,seated=false,wave=null,fishing=false,weapon=false,strike=0,time=0}={}){
   const p=(x,y,w,h,color)=>{target.fillStyle=color;target.fillRect(x,y,w,h);};
   const jacket=outfits[appearance.outfit]??outfits[0];
   const shade=jacketShadows[appearance.outfit]??jacketShadows[0];
@@ -944,7 +947,16 @@ function sprite(target,x,y,appearance,{direction='right',back=false,cycle=0,seat
     p(0,-17,1,6,'#fff1d4');
     p(-3,-14,2,1,shade);p(2,-14,2,1,shade);
   }
-  if(wave!==null){
+  if(weapon){
+    p(5,-19,4,5,outline);p(6,-18,3,3,jacket);
+    p(7,-16,5,3,outline);p(8,-15,4,2,'#f2bb92');
+    target.save();target.translate(12,-14);target.rotate(-.35+strike*1.8);
+    p(-2,-17,4,14,outline);p(-1,-16,2,12,'#bacbd3');p(-1,-16,1,10,'#eef2da');
+    p(-1,-19,2,3,outline);p(0,-18,1,2,'#dae5dc');
+    p(-4,-4,8,2,outline);p(-3,-4,6,1,'#d8b079');
+    p(-1,-2,2,5,'#875b50');p(-2,2,4,2,'#d8b079');
+    target.restore();
+  }else if(wave!==null){
     const reach=lowMotion?1:Math.round(Math.sin(wave*Math.PI*6)*2);
     p(4,-19,6,5,outline);p(5,-18,4,3,jacket);
     p(8,-23,4,7,outline);p(9,-23,2,6,jacket);
@@ -1045,7 +1057,7 @@ function draw(time){
     const strikeAge=combatFeedback?time-combatFeedback.started:Infinity;
     const lunge=!reducedMotion.matches&&combatFeedback?.damage&&strikeAge<220?Math.sin(strikeAge/220*Math.PI)*5:0;
     const [enemyX,enemyY]=point(6.5,5.5);
-    sprite(ctx,x+Math.sign(enemyX-x)*lunge,y+Math.sign(enemyY-y)*lunge,avatar,{direction:player.direction,back:player.back,cycle,seated:!!seat,wave,fishing:fishingSession?fishingMoments.phase(fishingSession,time):null,time});
+    sprite(ctx,x+Math.sign(enemyX-x)*lunge,y+Math.sign(enemyY-y)*lunge,avatar,{direction:player.direction,back:player.back,cycle,seated:!!seat,wave,weapon:player.inCombat&&combatGear.equippedWeapon==='trainingSword',strike:lunge/5,fishing:fishingSession?fishingMoments.phase(fishingSession,time):null,time});
     if(fishingSession)drawFishingMoment(x,y,time);
     drawCatchReveal(x,y,time);
     if(player.inCombat){
@@ -1405,7 +1417,23 @@ function animation(time){
   if($('avatarDialog').open)drawAvatarPreview(time);
   requestAnimationFrame(animation);
 }
+function updateWeaponInventory(){
+  const owned=combatGear.ownedWeapons.includes('trainingSword');
+  $('weaponCard').hidden=!owned;
+  const equipped=combatGear.equippedWeapon==='trainingSword';
+  $('weaponStatus').textContent=equipped?'Equipped · 14 base damage + Strength':'In inventory · Equip before hunting';
+  $('equipWeapon').textContent=equipped?'Unequip':'Equip sword';
+  $('equipWeapon').disabled=player.inCombat;
+  $('weaponHelp').textContent=player.inCombat?'Finish combat before changing your weapon.':'Your sword is drawn automatically during combat.';
+}
+function toggleWeapon(){
+  if(player.inCombat)return;
+  combatGear.equippedWeapon=combatGear.equippedWeapon?null:'trainingSword';
+  if(combatGear.equippedWeapon&&!combatGear.ownedWeapons.includes(combatGear.equippedWeapon)){combatGear.equippedWeapon=null;return;}
+  updateWeaponInventory();updateCombatPanel();savePlayerState();
+}
 function updateInventory(){
+  updateWeaponInventory();
   updatePlayerStats();
   updateFishingShop();
   updateTradingPost();
@@ -1591,7 +1619,7 @@ function updateTradingPost(){
   }
 }
 function savePlayerState(){
-  const snapshot={credits,health,hunting,ownedFurniture,furniture:loungeFurniture,homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats,fishingGear,huntingLoot,fishStock,avatar,location:currentRoom,position:{x:player.cx,y:player.cy}};
+  const snapshot={credits,health,combatGear,hunting,ownedFurniture,furniture:loungeFurniture,homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats,fishingGear,huntingLoot,fishStock,avatar,location:currentRoom,position:{x:player.cx,y:player.cy}};
   save('player-state',snapshot);
   if(window.playerCloud)window.playerCloud.enqueue(JSON.parse(JSON.stringify(snapshot)));
   updateInventory();
@@ -1812,6 +1840,7 @@ $('adventureLandmark').onclick=()=>{
   if(landmark)use(landmark);
 };
 $('combatFlee').onclick=()=>combatAction('flee');
+$('equipWeapon').onclick=toggleWeapon;
 $('restAtTower').onclick=restAtTower;
 $('reception').onclick=()=>use(hubFurniture[0]);
 for(const button of $('gamingGuide').querySelectorAll('[data-game-table]')){
@@ -2040,7 +2069,7 @@ $('fishingSound').onclick=()=>{
 movePlayerToSpawn();updateName();switchMode(false);
 if(savedPlayerState?.location&&roomDetails[savedPlayerState.location])enterRoom(savedPlayerState.location,savedPlayerState.position);
 if(hunting.encounter){
-  if(currentRoom==='clearing'){
+  if(currentRoom==='clearing'&&combatGear.equippedWeapon){
     hunting.encounter=resumeHunt(hunting.encounter,Date.now());
     setPlayerCombat(true);combatMessage='Combat resumes! Both fighters attack automatically. Flee if you need to escape.';
   }else hunting.encounter=null;

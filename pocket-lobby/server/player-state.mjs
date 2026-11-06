@@ -1,4 +1,4 @@
-import { normalizeHunting } from "../public/hunting.js";
+import { normalizeHunting, normalizeCombatGear } from "../public/hunting.js";
 import { fishingCatalog, fishProducts, rollFishingCatch } from "../public/fishing.js";
 
 export const MAX_PLAN_HOURS=8;
@@ -44,12 +44,14 @@ export function normalizeState(input={}){
   adventure.discovered=[...new Set((Array.isArray(a.discovered)?a.discovered:[]).filter(id=>["trail","grove","creek","shrine","ruins","roots","pond","clearing"].includes(id)))];
   const avatar=input.avatar??{name:"Guest",outfit:0,hair:0};
   if(typeof avatar.name!=="string"||avatar.name.length>20||!Number.isInteger(avatar.outfit)||avatar.outfit<0||avatar.outfit>4||!Number.isInteger(avatar.hair)||avatar.hair<0||avatar.hair>4)throw new Error("Invalid appearance.");
+  const combatGear=normalizeCombatGear(input.combatGear);
   const hunting=normalizeHunting(input.hunting);
+  if(hunting.encounter&&!combatGear.equippedWeapon)throw new Error("Invalid unarmed encounter.");
   if(hunting.encounter&&(input.location!=="clearing"||health===0))throw new Error("Invalid encounter location.");
   const position=input.position;
   const state={
     credits,health:Math.min(health,maxHealth),stats:{strengthXp:stats.strengthXp,agilityXp:stats.agilityXp,vitalityXp:stats.vitalityXp,patienceXp:stats.patienceXp},fishingGear:{ownedRods,equippedRod:gear.equippedRod,bait:gear.bait},
-    hunting,fishStock,huntingLoot:counts(input.huntingLoot),adventure,
+    combatGear,hunting,fishStock,huntingLoot:counts(input.huntingLoot),adventure,
     avatar:{name:avatar.name.trim()||"Guest",outfit:avatar.outfit,hair:avatar.hair},
     location:locations.has(input.location)?input.location:"home",
     position:position&&Number.isInteger(position.x)&&Number.isInteger(position.y)&&position.x>=0&&position.y>=0&&position.x<18&&position.y<16?{x:position.x,y:position.y}:null,

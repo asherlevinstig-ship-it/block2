@@ -1,8 +1,18 @@
 export const boarRules={health:70,playerInterval:1100,boarInterval:1900,fleeCooldown:1800,respawn:30000,recovery:12000};
+export const weaponCatalog={trainingSword:{name:'Training Sword',damage:14,description:'A simple iron blade issued to new adventurers.'}};
+export function normalizeCombatGear(input){
+  if(input===undefined)return {ownedWeapons:['trainingSword'],equippedWeapon:'trainingSword'};
+  if(!input||typeof input!=='object'||!Array.isArray(input.ownedWeapons))throw new Error('Invalid combat equipment.');
+  const ownedWeapons=[...new Set(input.ownedWeapons)];
+  if(ownedWeapons.some(id=>!Object.hasOwn(weaponCatalog,id)))throw new Error('Invalid weapon.');
+  const equippedWeapon=input.equippedWeapon??null;
+  if(equippedWeapon!==null&&!ownedWeapons.includes(equippedWeapon))throw new Error('Invalid equipped weapon.');
+  return {ownedWeapons,equippedWeapon};
+}
 const level=xp=>1+Math.floor((xp??0)/50);
 export function huntingAttributes(stats){
   return {
-    damage:14+Math.min(30,(level(stats.strengthXp)-1)*2),
+    damage:weaponCatalog.trainingSword.damage+Math.min(30,(level(stats.strengthXp)-1)*2),
     dodge:Math.min(.3,.08+(level(stats.agilityXp)-1)*.02),
     escape:Math.min(.95,.7+(level(stats.agilityXp)-1)*.025),
     armor:Math.min(10,level(stats.vitalityXp)-1)

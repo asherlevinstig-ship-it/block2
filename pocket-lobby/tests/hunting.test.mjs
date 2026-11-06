@@ -2,8 +2,18 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-import {boarRules,huntingTurn,huntingAttributes,normalizeHunting,createHunt,resumeHunt,advanceHunt} from '../public/hunting.js';
+import {boarRules,huntingTurn,huntingAttributes,normalizeHunting,normalizeCombatGear,weaponCatalog,createHunt,resumeHunt,advanceHunt} from '../public/hunting.js';
 import {normalizeState,startPlan} from '../server/player-state.mjs';
+
+test('new and existing characters receive one equipped sword, while unequipped choices persist',()=>{
+  const starter=normalizeState({});
+  assert.deepEqual(starter.combatGear,{ownedWeapons:['trainingSword'],equippedWeapon:'trainingSword'});
+  assert.deepEqual(normalizeState(starter).combatGear,starter.combatGear);
+  const unequipped=normalizeState({...starter,combatGear:{ownedWeapons:['trainingSword'],equippedWeapon:null}});
+  assert.equal(normalizeState(unequipped).combatGear.equippedWeapon,null);
+  assert.throws(()=>normalizeCombatGear({ownedWeapons:[],equippedWeapon:'trainingSword'}),/Invalid/);
+  assert.throws(()=>normalizeState({...unequipped,location:'clearing',hunting:{encounter:createHunt(0)}}),/unarmed/);
+});
 
 test('fighters attack independently on their own clocks, without input',()=>{
   let encounter=createHunt(0);
@@ -60,7 +70,7 @@ function gameHarness(){
   };
   const source=fs.readFileSync(new URL('../public/game.js',import.meta.url),'utf8');
   const context=vm.createContext({
-    normalizeHunting,boarRules,huntingAttributes,createHunt,resumeHunt,
+    normalizeHunting,normalizeCombatGear,weaponCatalog,boarRules,huntingAttributes,createHunt,resumeHunt,
     advanceHunt:(...args)=>advanceHunt(...args,()=>.5),
     huntingTurn:(...args)=>huntingTurn(...args,()=>.5),
     savedPlayerState:null,player:{cx:5,cy:5,inCombat:false},health:100,
@@ -70,11 +80,11 @@ function gameHarness(){
     note:message=>messages.push(message),showTransaction:(...args)=>receipts.push(args),
     updateInventory(){},updatePlayerStats(){},
     enterRoom:next=>{context.currentRoom=next;},
-    savePlayerState:()=>{saves.push(normalizeState(JSON.parse(vm.runInContext('JSON.stringify({health,hunting,location:currentRoom,stats:playerStats,huntingLoot})',context))));}
+    savePlayerState:()=>{saves.push(normalizeState(JSON.parse(vm.runInContext('JSON.stringify({health,combatGear,hunting,location:currentRoom,stats:playerStats,huntingLoot})',context))));}
   });
   const setStart=source.indexOf('function setPlayerCombat('),setEnd=source.indexOf('let route=',setStart);
   vm.runInContext(source.slice(setStart,setEnd),context);
-  const start=source.indexOf('const hunting=normalizeHunting('),end=source.indexOf('let editing=',start);
+  const start=source.indexOf('const combatGear=normalizeCombatGear('),end=source.indexOf('let editing=',start);
   vm.runInContext(source.slice(start,end),context);
   return {context,get,messages,receipts,saves,tick:ms=>{now+=ms;context.updateCombatMoment(now);},state:()=>JSON.parse(vm.runInContext('JSON.stringify({health,hunting,playerStats,huntingLoot})',context))};
 }
