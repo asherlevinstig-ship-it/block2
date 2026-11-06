@@ -76,7 +76,7 @@ function gameHarness(){
     huntingTurn:(e,h,s,a,n,_r,w)=>huntingTurn(e,h,s,a,n,()=>.5,w),
     history:{fishCaught:false,boarDefeated:false},savedPlayerState:null,player:{cx:5,cy:5,inCombat:false},health:100,
     currentRoom:'clearing',playerStats:{strengthXp:0,agilityXp:0,vitalityXp:0},huntingLoot:{boar:0},
-    editing:false,fishingSession:null,route:[],step:null,interaction:null,target:null,
+    editing:false,fishingSession:null,woodSession:null,route:[],step:null,interaction:null,target:null,
     $:get,Date:{now:()=>now},performance:{now:()=>now},
     note:message=>messages.push(message),showTransaction:(...args)=>receipts.push(args),
     updateInventory(){},updatePlayerStats(){},

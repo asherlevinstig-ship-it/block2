@@ -93,23 +93,24 @@
   function showReport(state){
     const dialog=document.getElementById('offlineDialog'),plan=state.plan??state.report;
     if(!plan)return;
-    const running=!!state.plan;
-    document.getElementById('offlineTitle').textContent=running?'Fishing at Silverfin Pond':'Welcome back.';
+    const running=!!state.plan,wood=plan.kind==='woodcutting';
+    document.getElementById('offlineTitle').textContent=running?(wood?'Woodcutting at Timber Hollow':'Fishing at Silverfin Pond'):'Welcome back.';
     document.getElementById('offlineDescription').textContent=running
-      ?'Your server fishing plan is running. You can close the game and return later.'
-      :'Your character returned home after the fishing plan.';
+      ?(wood?'Your woodcutting shift is running. You can close the game and return later.':'Your server fishing plan is running. You can close the game and return later.')
+      :'Your character returned home after the work plan.';
     const rows=document.getElementById('offlineCatches');rows.replaceChildren();
-    for(const [id,count] of Object.entries(plan.catches)){
+    if(wood){const row=document.createElement('li');row.textContent='Timber ×'+plan.timber;rows.append(row);}
+    for(const [id,count] of Object.entries(plan.catches??{})){
       const row=document.createElement('li');row.textContent=fishProducts[id].name+' ×'+count;rows.append(row);
     }
     if(!rows.children.length){const row=document.createElement('li');row.textContent='No catches yet.';rows.append(row);}
-    document.getElementById('offlineTotals').textContent=plan.baitUsed+' bait used · +'+plan.xp+' Patience XP';
-    const reason={'out-of-bait':'All bait used','bait-limit':'Bait limit reached','time-limit':'Time limit reached',stopped:'Plan stopped'};
-    document.getElementById('offlineReason').textContent=running
-      ?'Rod: '+fishingCatalog.rods[plan.rod].name+' · Up to '+plan.baitLimit+' bait · Ends '+new Date(plan.endAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})
-      :(reason[plan.reason]??'Plan finished')+' · Patience '+plan.patienceBefore+' → '+plan.patienceAfter;
+    document.getElementById('offlineTotals').textContent=wood?'+'+plan.xp+' Woodcutting XP':plan.baitUsed+' bait used · +'+plan.xp+' Patience XP';
+    const reason={'out-of-bait':'All bait used','bait-limit':'Bait limit reached','time-limit':'Time limit reached',stopped:'Plan stopped','inventory-full':'Timber inventory full'};
+    document.getElementById('offlineReason').textContent=wood
+      ?(running?'Basic Axe · One timber per minute · Ends '+new Date(plan.endAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):(reason[plan.reason]??'Shift finished')+' · Woodcutting '+plan.levelBefore+' → '+plan.levelAfter)
+      :running?'Rod: '+fishingCatalog.rods[plan.rod].name+' · Up to '+plan.baitLimit+' bait · Ends '+new Date(plan.endAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):(reason[plan.reason]??'Plan finished')+' · Patience '+plan.patienceBefore+' → '+plan.patienceAfter;
     const button=document.getElementById('offlineContinue');
-    button.textContent=running?'Stop fishing and return home':'Return to game';
+    button.textContent=running?'Stop work and return home':'Return to game';
     button.onclick=async()=>{
       button.disabled=true;
       try{
@@ -136,6 +137,17 @@
         location.reload();
       }catch(error){message.textContent=error.message;}
       finally{button.disabled=false;}
+    };
+    const woodButton=document.getElementById('startOfflineWoodcutting');
+    woodButton.onclick=async()=>{
+      woodButton.disabled=true;const message=document.getElementById('woodPlanError');message.textContent='';
+      try{
+        if(window.towerHasActiveCast?.())throw new Error('Finish your current action or walk away before starting work.');
+        window.towerSaveNow?.();await flush();
+        await action('plan/start',{kind:'woodcutting',hours:Number(document.getElementById('woodPlanHours').value)});
+        location.reload();
+      }catch(error){message.textContent=error.message;}
+      finally{woodButton.disabled=false;}
     };
     document.getElementById('planBait').max=packet.state.fishingGear.bait;
     document.getElementById('planBait').value=Math.min(10,packet.state.fishingGear.bait);
@@ -191,7 +203,8 @@
       const quests=await import('./quests.js');
       const historyRules=await import('./first-visit.js');
       const shopUI=await import('./shop-ui.js');
-      Object.assign(window,rules,hunting,art,fx,quests,historyRules,shopUI);
+      const woodRules=await import('./woodcutting.js');
+      Object.assign(window,rules,hunting,art,fx,quests,historyRules,shopUI,woodRules);
       window.towerInitialState=packet.state;
       window.playerCloud={enqueue,flush,attach,get initial(){return packet.state;}};
       const script=document.createElement('script');script.src='game.js';

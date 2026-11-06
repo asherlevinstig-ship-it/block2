@@ -4,6 +4,7 @@ const moonwood=(()=>{
   const view={width:540,height:349,cols:12,rows:10,originX:252,originY:105};
   const seed='moonwood-01';
   const areas={
+    logging:{number:'15',name:'Timber Hollow',description:'Meet the woodcutter, collect your first axe, and gather timber for the Tower.',badge:'WOODCUTTING',floor:'Woodland worksite',center:[5,5],palette:['#3b5050','#4e665c','#92917d'],landmark:['timberTree',6,5,5,5],authored:[['woodcutter',4,3],['wildtree',1,1],['wildtree',10,1],['wildtree',9,7],['wildtree',2,8],['wildrock',8,3],['wildbloom',4,7]]},
     clearing:{number:'13',name:'Bramble Clearing',description:'A wild boar guards a moonlit clearing. Approach carefully, and flee if your hearts run low.',badge:'HUNTING GROUNDS',floor:'Boar territory',center:[5,5],palette:['#3c5050','#50645b','#918b7e'],landmark:['wildboar',6,5,5,5],authored:[['wildtree',1,1],['wildtree',9,1],['wildtree',10,7],['wildtree',2,8],['wildrock',8,7],['wildbloom',4,2],['wildbloom',8,3]]},
     trail:{number:'04',name:'Lantern Trail',description:'Follow the old trail into Moonwood. A lantern waits at the first waystone.',badge:'MOONWOOD',floor:'Forest trail',center:[5,5],palette:['#324957','#3e5460','#788285'],landmark:['lanternStand',5,4,5,5]},
     grove:{number:'05',name:'Whispering Grove',description:'The trees crowd around a trail that only a lantern can reveal.',badge:'MOONWOOD',floor:'Hidden grove',center:[5,5],palette:['#36465d','#4c4c6a','#777294']},
@@ -13,7 +14,7 @@ const moonwood=(()=>{
     roots:{number:'09',name:'Root Passage',description:'A living tunnel winds beneath Moonwood, linking the ruins back to Lantern Trail.',badge:'MOONWOOD',floor:'Forest shortcut',center:[6,5],palette:['#363847','#4b4357','#766274'],authored:[['wildtree',1,2],['wildtree',3,6],['wildtree',6,2],['wildtree',8,7],['wildtree',10,2],['wildbloom',4,3],['wildbloom',8,6]]},
     pond:{number:'10',name:'Silverfin Pond',description:'Cast a line from the old jetty and watch the moonlight ripple over the water.',badge:'MOONWOOD',floor:'Fishing pond',center:[3,5],palette:['#334f59','#486570','#8b9296'],landmark:['fishingPost',5,5,4,5],authored:[['wildtree',1,1],['wildtree',3,1],['wildtree',1,8],['wildtree',4,8],['wildrock',4,2],['wildbloom',3,7],['wildbloom',4,3]]}
   };
-  const heights={wildboar:22,wildtree:51,wildrock:13,wildbloom:22,pillar:28,lanternStand:31,mothAltar:24,moonwell:35,moonbloom:29,fishingPost:26};
+  const heights={timberTree:51,wildboar:22,wildtree:51,wildrock:13,wildbloom:22,pillar:28,lanternStand:31,mothAltar:24,moonwell:35,moonbloom:29,fishingPost:26};
   const doors=Object.fromEntries(Object.keys(areas).map(id=>[id,[]]));
   const coordinate=([x,y])=>({x,y});
   function connect(a,b,from,to,gate){
@@ -22,6 +23,7 @@ const moonwood=(()=>{
     doors[a].push({to:b,side:'wild',tile:{x:ax,y:ay},inside:{x:inx,y:iny},arrival:{x:outx,y:outy},label,gate});
     doors[b].push({to:a,side:'wild',tile:{x:bx,y:by},inside:{x:outx,y:outy},arrival:{x:inx,y:iny},label:backLabel,gate});
   }
+  connect('trail','logging',[9,9,9,8,'TRAIL'],[0,5,1,5,'TIMBER']);
   connect('trail','clearing',[7,0,7,1,'TRAIL'],[0,5,1,5,'HUNT']);
   connect('trail','grove',[4,0,4,1,'TRAIL'],[0,5,1,5,'GROVE']);
   connect('trail','creek',[11,4,10,4,'TRAIL'],[0,4,1,4,'CREEK']);
@@ -175,7 +177,7 @@ const moonwood=(()=>{
       rect(px+6,py-3-bob,2,4,'#e8cba9');rect(px+5,py-4-bob,2,2,'#fff0c7');
       for(let i=0;i<5;i++)rect(px-9+i*2,py-17-bob-(i%2),2,3,'#443744');
       rect(px-14,py-10-bob,4,1,'#89676c');rect(px-15,py-13-bob,1,4,'#89676c');rect(px-14,py-14-bob,3,1,'#b18a80');
-    }else if(type==='wildtree'){
+    }else if(type==='wildtree'||type==='timberTree'){
       const tint=(x*3+y)%3;
       const foliage=[['#3f777a','#2e5d6a','#274c5d'],['#50778c','#355d76','#294d69'],['#5c748b','#435b76','#344862']][tint];
       part(.39,.43,.22,.22,0,24,['#796071','#493e57','#5e4a61']);

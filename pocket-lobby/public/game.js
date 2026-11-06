@@ -85,12 +85,70 @@ const tradeCatalog={
   ...fishProducts,
   rabbit:{name:'Rabbit',price:12,icon:'♧',group:'hunting'},
   boar:{name:'Boar Meat',price:30,icon:'♧',group:'hunting'},
+  timber:{name:'Timber',price:4,icon:'▤',group:'materials'},
   deer:{name:'Forest deer',price:24,icon:'♧',group:'hunting'}
 };
 let fishingDuration=4500;
 let castProfile=null;
 let fishingStarted=null;
 let fishingSession=null,catchReveal=null,patienceTween=null;
+const woodcutting=normalizeWoodcutting(savedPlayerState?.woodcutting);
+let woodSession=null;
+function updateWoodPanel(){
+  const level=woodcuttingLevel(woodcutting),busy=!!woodSession;
+  $('woodPanel').hidden=currentRoom!=='logging';
+  $('woodInventory').hidden=!woodcutting.axeOwned;
+  $('woodInventoryText').textContent='Timber ×'+woodcutting.timber+' · Sell for '+woodRules.price+' gold each at the Trading Post';
+  $('woodAxeStatus').textContent=(woodcutting.equipped?'Equipped':'In inventory')+' · Woodcutting '+level+' · '+woodcutting.xp%50+' / 50 XP';
+  $('equipAxe').textContent=woodcutting.equipped?'Unequip axe':'Equip axe';$('equipAxe').disabled=busy;
+  $('woodSkill').textContent='Woodcutting '+level+' · '+woodcutting.xp%50+' / 50 XP';
+  $('woodTimber').textContent=woodcutting.timber+' timber in your bag · '+woodcutting.timber*woodRules.price+' gold value';
+  $('woodAction').textContent=!woodcutting.axeOwned?'Meet woodcutter · Free axe':!woodcutting.equipped?'Equip basic axe':busy?'Chopping…':'Chop timber · '+(choppingDuration(woodcutting)/1000).toFixed(1)+'s';
+  $('woodAction').disabled=busy||health<=0||woodcutting.timber>=1000000;
+  $('woodChopProgress').hidden=!busy;
+  $('startOfflineWoodcutting').disabled=!woodcutting.axeOwned||!woodcutting.equipped||busy||health<=0||woodcutting.timber>=1000000;
+  $('attribute-wood-level').textContent=level;$('attribute-wood-progress').value=woodcutting.xp%50;$('attribute-wood-xp').textContent=woodcutting.xp%50+' / 50 XP';
+}
+function equipAxe(){
+  if(!woodcutting.axeOwned||woodSession)return;
+  woodcutting.equipped=!woodcutting.equipped;savePlayerState();
+}
+function cancelWoodcutting(){if(!woodSession)return;woodSession=null;updateWoodPanel();}
+function beginChopping(){
+  if(currentRoom!=='logging'||woodSession||health<=0)return;
+  if(!woodcutting.axeOwned){note('Meet the woodcutter for your free basic axe.');return;}
+  if(!woodcutting.equipped){note('Equip your basic axe in Inventory or the work panel.');return;}
+  if(woodcutting.timber>=1000000){note('Sell some timber before gathering more.');return;}
+  player.direction='right';player.back=false;
+  woodSession={started:performance.now(),duration:choppingDuration(woodcutting)};
+  $('woodChopProgress').value=0;
+  updateWoodPanel();note('Chopping timber. Walk away to cancel.');
+}
+function updateWoodMoment(time){
+  if(!woodSession)return;
+  const progress=Math.min(1,(time-woodSession.started)/woodSession.duration);
+  $('woodChopProgress').value=progress*100;
+  if(progress<1)return;
+  woodSession=null;const oldLevel=woodcuttingLevel(woodcutting),amount=harvestTimber(woodcutting);
+  savePlayerState();
+  showTransaction(woodcuttingLevel(woodcutting)>oldLevel?'Woodcutting level '+woodcuttingLevel(woodcutting)+'!':'Timber gathered',[{icon:'▤',text:'Timber +'+amount},{icon:'✦',text:'+'+woodRules.xp*amount+' Woodcutting XP'}]);
+  note('Timber +'+amount+' · +'+woodRules.xp*amount+' Woodcutting XP. Sell timber at the Trading Post.');
+}
+function woodAction(){
+  if(currentRoom!=='logging')return;
+  if(!woodcutting.axeOwned)use(roomFurniture().find(item=>item.type==='woodcutter'));
+  else if(!woodcutting.equipped)equipAxe();
+  else use(roomFurniture().find(item=>item.type==='timberTree'));
+}
+function drawWoodEffects(time){
+  if(currentRoom!=='logging'||!woodSession||reducedMotion.matches)return;
+  const phase=((time-woodSession.started)%700)/700;
+  if(phase>.45)return;
+  const [x,y]=point(6.5,5.5,17);ctx.save();ctx.globalAlpha=1-phase*2;ctx.fillStyle='#d6b786';
+  for(let i=0;i<5;i++)ctx.fillRect(Math.round(x-3-(phase*23+i*2)),Math.round(y-6+phase*phase*30-i*2),2,1);
+  ctx.restore();
+}
+
 let fishingSound=load('fishing-sound',false)===true;
 let lanternLit=false;
 let nextId = Math.max(0,...[...loungeFurniture,...homeFurniture].map(item=>item.id).filter(Number.isInteger))+1;
@@ -230,7 +288,7 @@ function restAtTower(){
 function updateCombatPanel(){
   const now=Date.now(),encounter=hunting.encounter;
   $('equipWeapon').disabled=player.inCombat||!canUseWeapon(playerStats,$('weaponSelect').value||combatGear.equippedWeapon||'trainingSword');
-  $('wave').disabled=editing||!!fishingSession||unavailable();
+  $('wave').disabled=editing||!!fishingSession||!!woodSession||unavailable();
   $('combatPanel').hidden=currentRoom!=='clearing';
   $('scene').classList.toggle('in-combat',player.inCombat);
   $('restAtTower').hidden=!['hub','home'].includes(currentRoom)||health>=100&&!hunting.recoveryUntil;
@@ -686,6 +744,10 @@ function object(item,highlight=false,time=0) {
   const {x,y,type,rot}=item;
   const [w,d]=dimensions(item);
   if(highlight)surface(x,y,w,d,1,'#f9c48968','#ffd18a');
+  if(type==='woodcutter'){
+    const [wx,wy]=point(x+.5,y+.5);
+    sprite(ctx,wx,wy,{outfit:3,hair:2},{direction:'right',time,weapon:true,weaponTier:'basicAxe',pose:{angle:-.4}});return;
+  }
   if(type==='warden'){
     const [wx,wy]=point(x+.5,y+.5);
     surface(x+.14,y+.14,.72,.72,.3,'#9ab7a73c');
@@ -1003,7 +1065,9 @@ function sprite(target,x,y,appearance,{direction='right',back=false,cycle=0,seat
     p(5,-19,4,5,outline);p(6,-18,3,3,jacket);
     p(7,-16,5,3,outline);p(8,-15,4,2,'#f2bb92');
     target.save();target.translate(12,-14);target.rotate(weaponTier==='huntingSpear'?1.1-(pose.lunge??0)*.035:pose.angle??(-.35+strike*1.8));
-    if(weaponTier==='huntingSpear'){
+    if(weaponTier==='basicAxe'){
+      p(-1,-19,2,26,'#674e49');p(0,-19,1,24,'#bb8d62');p(-5,-20,10,7,'#4b596a');p(1,-20,6,7,'#c5d8d2');p(5,-19,2,5,'#f0e8c8');
+    }else if(weaponTier==='huntingSpear'){
       p(-1,-29,2,38,outline);p(0,-25,1,33,'#b18864');p(-2,-29,4,9,'#adc5c7');p(-1,-32,2,5,'#eef0d0');p(-3,-21,6,2,'#c69b69');
     }else if(weaponTier==='quickDagger'){
       p(-2,-11,4,9,outline);p(-1,-11,2,8,'#d5e4df');p(-3,-3,6,2,'#91bcc1');p(-1,-1,2,5,'#7b637c');
@@ -1114,6 +1178,10 @@ function updateWorldLabels(){
     const symbol=questStage(quest)===0?'! ':questStage(quest)===4?'? ':'';
     add(symbol+'Tower Warden',...point(10.5,3.5,43),'npc',()=>use(hubFurniture.find(item=>item.type==='warden')));
   }
+  if(currentRoom==='logging'){
+    add('Woodcutter',...point(4.5,3.5,43),'npc',()=>use(roomFurniture().find(item=>item.type==='woodcutter')));
+    add('Timber',...point(6.5,5.5,54),'npc',()=>use(roomFurniture().find(item=>item.type==='timberTree')));
+  }
   if(currentRoom==='lounge')add('SUNSET LOUNGE',...point(0,2.3,51),'sign');
   if(['store','market','armory'].includes(currentRoom)){
     const names={store:['SILVERFIN','OUTFITTERS'],market:['MOONWOOD','TRADING POST'],armory:['TOWER','ARMORY']};
@@ -1160,9 +1228,10 @@ function draw(time){
     const cycle=step?(player.stride%2)+Math.min(1,(time-step.started)/STEP_MS):0;
     const wave=player.waveStarted===null?null:(time-player.waveStarted)/WAVE_MS;
     const pose=playerCombatPose({time,now:Date.now(),encounter:player.inCombat?hunting.encounter:null,events:combatArt,reduced:reducedMotion.matches});
+    const spritePose=woodSession?{...pose,angle:-.9+Math.sin((time-woodSession.started)/220)*1.25}:pose;
     const [enemyX,enemyY]=point(6.5,5.5);
     const thrust=currentRoom==='clearing'?pose.lunge-pose.recoil:0;
-    sprite(ctx,x+Math.sign(enemyX-x)*thrust-pose.dodge,y+Math.sign(enemyY-y)*thrust+pose.dodge*.4,avatar,{direction:player.direction,back:player.back,cycle,seated:!!seat,wave,weapon:pose.armed&&!!combatGear.equippedWeapon,weaponTier:combatGear.equippedWeapon,pose,fishing:fishingSession?fishingMoments.phase(fishingSession,time):null,time});
+    sprite(ctx,x+Math.sign(enemyX-x)*thrust-pose.dodge,y+Math.sign(enemyY-y)*thrust+pose.dodge*.4,avatar,{direction:player.direction,back:player.back,cycle,seated:!!seat,wave,weapon:!!woodSession||pose.armed&&!!combatGear.equippedWeapon,weaponTier:woodSession?'basicAxe':combatGear.equippedWeapon,pose:spritePose,fishing:fishingSession?fishingMoments.phase(fishingSession,time):null,time});
     if(fishingSession)drawFishingMoment(x,y,time);
     drawCatchReveal(x,y,time);
     if(player.inCombat){
@@ -1194,12 +1263,13 @@ function draw(time){
     object(item,editing&&(selection?.id===item.id||hoverItem?.id===item.id)&&!fixed(item),time);
     ctx.globalAlpha=1;
     if(item.defeated||item===ghost||(fixed(item)&&!isGamingTable(item)))continue;
-    const [w,d]=dimensions(item), h=moonwood.heights[item.type]??{armoryCounter:32,weaponRack:37,anvil:19,brazier:25,warden:43,tradeCounter:32,harvestCrates:16,tackleCounter:32,rodRack:36,baitCrates:16,blackjack:19,roulette:22,reception:32,bed:24,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39,bench:22,streetlamp:55,fountain:37}[item.type];
+    const [w,d]=dimensions(item), h=moonwood.heights[item.type]??{armoryCounter:32,weaponRack:37,anvil:19,brazier:25,woodcutter:43,warden:43,tradeCounter:32,harvestCrates:16,tackleCounter:32,rodRack:36,baitCrates:16,blackjack:19,roulette:22,reception:32,bed:24,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39,bench:22,streetlamp:55,fountain:37}[item.type];
     const shape=[point(item.x,item.y+d),point(item.x+w,item.y+d),point(item.x+w,item.y),point(item.x+w,item.y,h),point(item.x,item.y,h),point(item.x,item.y+d,h)];
     hitboxes.push({item,shape});
   }
   if(!drawn)drawPlayer();
   if(currentRoom==='clearing')drawCombatWorldFx({ctx,point,time,events:combatArt,player,reduced:reducedMotion.matches});
+  drawWoodEffects(time);
   drawCombatFeedback(time);
   if(currentRoom==='clearing')drawCombatOverlayFx({ctx,width,height,time,now:Date.now(),events:combatArt,encounter:hunting.encounter,health,reduced:reducedMotion.matches});
   updateWorldLabels();
@@ -1314,6 +1384,7 @@ function travelDoor(door){
   else walkTo(door.tile);
 }
 function use(item){
+  if(item.type==='timberTree'&&woodSession){note('Your chop is already in progress.');return;}
   if(unavailable())return;
   if(item.type==='fishingPost'&&fishingSession){reelFish();return;}
   cancelFishing();
@@ -1441,7 +1512,14 @@ function updateFishingMoment(time){
 }
 function finishInteraction(){
   const item=interaction;interaction=null;
-  if(item.type==='warden'){
+  if(item.type==='woodcutter'){
+    if(grantBasicAxe(woodcutting)){
+      savePlayerState();showTransaction('A gift from the woodcutter',[{icon:'⚒',text:'Basic Axe · Free · Equipped'}]);
+      note('Your basic axe is ready. Click the marked tree or Chop timber to begin.');
+    }else note('You already have your basic axe. Equip it in Inventory to gather timber.');
+  }else if(item.type==='timberTree'){
+    beginChopping();
+  }else if(item.type==='warden'){
     openQuest();
   }else if(item.type==='wildboar'){
     startBoarEncounter();
@@ -1491,6 +1569,7 @@ function finishInteraction(){
   }
 }
 function animation(time){
+  updateWoodMoment(time);
   updateCombatMoment(time);
   updateFishingMoment(time);
   if(patienceTween){
@@ -1557,6 +1636,7 @@ function toggleWeapon(){
   updateWeaponInventory();updateCombatPanel();savePlayerState();
 }
 function updateInventory(){
+  updateWoodPanel();
   $('starterSwordStatus').textContent='Owned ×1'+(combatGear.equippedWeapon==='trainingSword'?' · Equipped':'');
   $('starterRodStatus').textContent='Owned ×1'+(fishingGear.equippedRod==='reed'?' · Equipped':'');
   updateQuestUI();
@@ -1733,7 +1813,7 @@ function updateFishingShop(){
   $('sellFish').textContent=caughtFishCount()?'Sell all · '+caughtFishValue()+' G':'No fish to sell';
 }
 function tradeQuantity(id){
-  return fishProducts[id]?fishStock[id]??0:huntingLoot[id]??0;
+  return id==='timber'?woodcutting.timber:fishProducts[id]?fishStock[id]??0:huntingLoot[id]??0;
 }
 function sellTradeLoot(id,quantity,statusId='tradeStatus'){
   const item=tradeCatalog[id];
@@ -1741,10 +1821,11 @@ function sellTradeLoot(id,quantity,statusId='tradeStatus'){
   if(currentRoom!=='market'&&!(currentRoom==='store'&&item.group==='fish'))return;
   const earned=quantity*item.price;
   if(!Number.isSafeInteger(earned)||!Number.isSafeInteger(credits+earned))return;
-  if(item.group==='fish')fishStock[id]-=quantity;
+  if(id==='timber')woodcutting.timber-=quantity;
+  else if(item.group==='fish')fishStock[id]-=quantity;
   else huntingLoot[id]-=quantity;
   credits+=earned;
-  if(currentRoom==='market')recordQuest(quest,'marketSale',quantity);
+  if(currentRoom==='market'&&item.group!=='materials')recordQuest(quest,'marketSale',quantity);
   savePlayerState();
   $(statusId).textContent='Sold '+quantity+' '+item.name+' for '+earned+' credits.';
   showTransaction('Trade completed',[{text:'−'+quantity+' '+item.name,icon:item.icon}],earned);
@@ -1778,7 +1859,7 @@ function updateTradingPost(){
   }
 }
 function savePlayerState(){
-  const snapshot={credits,health,history,quest,combatGear,hunting,ownedFurniture,furniture:loungeFurniture,homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats,fishingGear,huntingLoot,fishStock,avatar,location:currentRoom,position:{x:player.cx,y:player.cy}};
+  const snapshot={credits,health,woodcutting,history,quest,combatGear,hunting,ownedFurniture,furniture:loungeFurniture,homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats,fishingGear,huntingLoot,fishStock,avatar,location:currentRoom,position:{x:player.cx,y:player.cy}};
   save('player-state',snapshot);
   if(window.playerCloud)window.playerCloud.enqueue(JSON.parse(JSON.stringify(snapshot)));
   updateInventory();
@@ -1830,8 +1911,9 @@ function switchMode(next){
   noticeUntil=0;setHint();cancelSelection();
 }
 function updateAdventurePanel(){
+  updateWoodPanel();
   updateCombatPanel();
-  $('wave').disabled=editing||!!fishingSession||unavailable();
+  $('wave').disabled=editing||!!fishingSession||!!woodSession||unavailable();
   const exploring=moonwood.has(currentRoom);
   const lantern=$('lantern');
   lantern.hidden=!exploring||!adventure.lantern;
@@ -1839,6 +1921,7 @@ function updateAdventurePanel(){
   lantern.classList.toggle('active',lanternLit);
   if(!exploring)return;
   const fieldNotes={
+    logging:!woodcutting.axeOwned?'Meet the woodcutter for a free basic axe. Then chop the marked tree, or set a timed offline shift.':'Chop timber to gain Woodcutting XP. Each timber sells for 4 gold at the Trading Post.',
     clearing:'A Wild Boar guards this clearing. Approach to hunt. Rest in the Tower to refill your hearts.',
     trail:adventure.lantern?'Your lantern reveals hidden trails and crossings.':'Take the lantern from the waystone before heading deeper.',
     grove:adventure.groveTrail?'The lantern revealed a trail to the Moth Shrine.':'Light your lantern to look for a trail through the grove.',
@@ -1882,6 +1965,7 @@ function recordAdventure(message){
   note(message);
 }
 function cancelFishing(){
+  cancelWoodcutting();
   if(fishingStarted===null)return;
   fishingStarted=null;fishingSession=null;
   updateAdventurePanel();
@@ -2018,6 +2102,8 @@ $('adventureLandmark').onclick=()=>{
 };
 $('combatFlee').onclick=()=>combatAction('flee');
 $('combatDodge').onclick=()=>combatAction('dodge');
+$('woodAction').onclick=woodAction;
+$('equipAxe').onclick=equipAxe;
 $('equipWeapon').onclick=toggleWeapon;
 $('weaponSelect').onchange=updateWeaponInventory;
 $('questJournal').onclick=openQuest;
@@ -2063,13 +2149,14 @@ canvas.addEventListener('click',e=>{
 });
 const arrows={ArrowRight:[1,0],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowUp:[0,-1]};
 function waveHello(){
-  if(editing||unavailable())return;
+  if(editing||woodSession||unavailable())return;
   if(step||route.length){note('Stop walking to wave.');return;}
   if(!player.seat)player.back=false;
   player.waveStarted=performance.now();
   note(avatar.name+' waves hello!');
 }
 canvas.addEventListener('keydown',e=>{
+  if(e.code==='Space'&&woodSession){e.preventDefault();return;}
   if(e.code==='Space'&&fishingSession){
     e.preventDefault();
     if(!e.repeat)reelFish();
@@ -2263,6 +2350,6 @@ if(hunting.encounter){
 if(hunting.recoveryUntil&&!['hub','home'].includes(currentRoom))enterRoom('hub');
 updateCombatPanel();
 window.towerSaveNow=savePlayerState;
-window.towerHasActiveCast=()=>!!fishingSession;
+window.towerHasActiveCast=()=>!!fishingSession||!!woodSession;
 if(window.playerCloud)window.playerCloud.attach();
 requestAnimationFrame(animation);

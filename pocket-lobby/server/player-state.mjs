@@ -1,3 +1,5 @@
+import { normalizeWoodcutting } from "../public/woodcutting.js";
+import { startWoodcuttingPlan,settleWoodcuttingPlan } from "./woodcutting-plan.mjs";
 import { normalizeHistory } from "../public/first-visit.js";
 import { normalizeQuest,recordQuest } from "../public/quests.js";
 import { normalizeHunting, normalizeCombatGear,canUseWeapon } from "../public/hunting.js";
@@ -23,7 +25,7 @@ function furniture(items){
     return {id:item.id,type:item.type,x:item.x,y:item.y,rot:item.rot};
   });
 }
-const locations=new Set(["home","hub","lounge","outside","store","market","trail","grove","creek","shrine","ruins","roots","pond","clearing","armory"]);
+const locations=new Set(["home","hub","lounge","outside","store","market","trail","grove","creek","shrine","ruins","roots","pond","clearing","armory","logging"]);
 export function normalizeState(input={}){
   if(!input||typeof input!=="object"||Array.isArray(input))throw new Error("Invalid character.");
   const credits=input.credits??100;
@@ -41,7 +43,7 @@ export function normalizeState(input={}){
   const a=input.adventure??{};
   const adventure={};
   for(const id of ["lantern","groveTrail","bridge","shrine","shortcut"])adventure[id]=a[id]===true;
-  adventure.discovered=[...new Set((Array.isArray(a.discovered)?a.discovered:[]).filter(id=>["trail","grove","creek","shrine","ruins","roots","pond","clearing"].includes(id)))];
+  adventure.discovered=[...new Set((Array.isArray(a.discovered)?a.discovered:[]).filter(id=>["trail","grove","creek","shrine","ruins","roots","pond","clearing","logging"].includes(id)))];
   const avatar=input.avatar??{name:"Guest",outfit:0,hair:0};
   if(typeof avatar.name!=="string"||avatar.name.length>20||!Number.isInteger(avatar.outfit)||avatar.outfit<0||avatar.outfit>4||!Number.isInteger(avatar.hair)||avatar.hair<0||avatar.hair>4)throw new Error("Invalid appearance.");
   const combatGear=normalizeCombatGear(input.combatGear);
@@ -52,7 +54,7 @@ export function normalizeState(input={}){
   const position=input.position;
   const state={
     credits,health:Math.min(health,maxHealth),stats:{strengthXp:stats.strengthXp,agilityXp:stats.agilityXp,vitalityXp:stats.vitalityXp,patienceXp:stats.patienceXp},fishingGear:{ownedRods,equippedRod:gear.equippedRod,bait:gear.bait},
-    history:normalizeHistory(input),quest:normalizeQuest(input.quest),combatGear,hunting,fishStock,huntingLoot:counts(input.huntingLoot),adventure,
+    woodcutting:normalizeWoodcutting(input.woodcutting),history:normalizeHistory(input),quest:normalizeQuest(input.quest),combatGear,hunting,fishStock,huntingLoot:counts(input.huntingLoot),adventure,
     avatar:{name:avatar.name.trim()||"Guest",outfit:avatar.outfit,hair:avatar.hair},
     location:locations.has(input.location)?input.location:"home",
     position:position&&Number.isInteger(position.x)&&Number.isInteger(position.y)&&position.x>=0&&position.y>=0&&position.x<18&&position.y<16?{x:position.x,y:position.y}:null,
@@ -62,7 +64,8 @@ export function normalizeState(input={}){
   if(input.loungeLayout==="gaming")state.loungeLayout="gaming";
   return state;
 }
-export function startPlan(state,{hours,baitLimit},now){
+export function startPlan(state,{hours,baitLimit,kind},now){
+  if(kind==='woodcutting')return startWoodcuttingPlan(state,{hours},now);
   if(state.hunting?.encounter||state.hunting?.recoveryUntil||state.health===0)throw new Error("Invalid fishing plan while fighting or recovering.");
   if(state.plan)throw new Error("A fishing plan is already running.");
   if(state.report)throw new Error("Read your previous fishing report first.");
@@ -90,6 +93,7 @@ function finishPlan(state,reason,endedAt){
 export function settlePlan(state,now,{stop=false,random=Math.random}={}){
   const plan=state.plan;
   if(!plan)return false;
+  if(plan.kind==='woodcutting')return settleWoodcuttingPlan(state,now,{stop});
   let changed=false;
   while(plan.nextCatchAt<=Math.min(now,plan.endAt)&&plan.baitUsed<plan.baitLimit&&state.fishingGear.bait>0){
     const level=1+Math.floor(state.stats.patienceXp/50);

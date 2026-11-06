@@ -78,7 +78,7 @@ export async function handlePlayerApi(request,env){
     let state=JSON.parse(row.state_json);
     switch(path){
       case "/api/player/save":
-        if(state.plan)return json({error:"Stop the fishing plan before playing.",...packet(row)},409);
+        if(state.plan)return json({error:"Stop the work plan before playing.",...packet(row)},409);
         state={...normalizeState(body.state),...(state.report?{report:state.report}:{})};
         break;
       case "/api/player/plan/start":
