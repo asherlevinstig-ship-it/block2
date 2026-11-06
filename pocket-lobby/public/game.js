@@ -80,6 +80,7 @@ delete adventure.silverfin;
 const caughtFishCount=()=>Object.values(fishStock).reduce((total,count)=>total+count,0);
 const caughtFishValue=()=>Object.entries(fishStock).reduce((total,[id,count])=>total+count*(fishProducts[id]?.price??0),0);
 const huntingLoot={rabbit:0,boar:0,deer:0,...savedPlayerState?.huntingLoot};
+const history=normalizeHistory({...savedPlayerState,stats:playerStats,fishStock,huntingLoot});
 const tradeCatalog={
   ...fishProducts,
   rabbit:{name:'Rabbit',price:12,icon:'♧',group:'hunting'},
@@ -196,7 +197,7 @@ function applyCombatResult(result){
   if(result.outcome==='victory'){
     hunting.respawnAt=Date.now()+boarRules.respawn;
     huntingLoot.boar=(huntingLoot.boar??0)+1;
-    recordQuest(quest,'boar');
+    recordQuest(quest,'boar');history.boarDefeated=true;
     playerStats.strengthXp+=15;playerStats.agilityXp+=10;playerStats.vitalityXp+=15;
     combatMessage='Victory! Boar Meat added to inventory. Take it to the Trading Post.';
     showTransaction('Wild Boar defeated',[{icon:'✦',text:'Boar Meat ×1 · sell for 30 credits'},{icon:'⚔',text:'+15 Strength XP · +10 Agility XP · +15 Vitality XP'}]);
@@ -1381,7 +1382,7 @@ function finishFishing(time){
   fishingGear.bait--;
   const fishId=session.fishId,fish=fishProducts[fishId];
   fishStock[fishId]=(fishStock[fishId]??0)+1;
-  recordQuest(quest,'fish');
+  recordQuest(quest,'fish');history.fishCaught=true;
   const before=playerStats.patienceXp,oldLevel=patienceLevel(),earned=PATIENCE_XP_PER_CATCH+session.bonus;
   playerStats.patienceXp+=earned;
   patienceTween={from:before,to:playerStats.patienceXp,started:time};
@@ -1722,7 +1723,7 @@ function updateTradingPost(){
   }
 }
 function savePlayerState(){
-  const snapshot={credits,health,quest,combatGear,hunting,ownedFurniture,furniture:loungeFurniture,homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats,fishingGear,huntingLoot,fishStock,avatar,location:currentRoom,position:{x:player.cx,y:player.cy}};
+  const snapshot={credits,health,history,quest,combatGear,hunting,ownedFurniture,furniture:loungeFurniture,homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats,fishingGear,huntingLoot,fishStock,avatar,location:currentRoom,position:{x:player.cx,y:player.cy}};
   save('player-state',snapshot);
   if(window.playerCloud)window.playerCloud.enqueue(JSON.parse(JSON.stringify(snapshot)));
   updateInventory();
@@ -1911,13 +1912,27 @@ $('sellFish').onclick=()=>{
   showTransaction('Catch sold',[{text:'−'+count+' fish · All qualities',icon:'⋈'}],earned);
 };
 if(hasBedStarter&&hasGamingLayout)updateInventory();else savePlayerState();
-$('inventory').onclick=()=>{
+function openInventory(equipmentRoom=null){
+  $('inventoryTitle').textContent=equipmentRoom==='pond'?'Equip for fishing':equipmentRoom==='clearing'?'Equip for hunting':'Inventory';
+  $('weaponCard').classList.toggle('onboarding-focus',equipmentRoom==='clearing');
+  $('fishingGearCard').classList.toggle('onboarding-focus',equipmentRoom==='pond');
   $('inventoryGuide').textContent=!canDecorate()
     ?'Visit your home or the Sunset Lounge to place furniture from storage.'
     :'Choose a piece to place it in '+(atHome()?'your home':'the Sunset Lounge')+'. Pick it up in Decorate mode to return it here.';
+  if(equipmentRoom==='pond')$('inventoryGuide').textContent='Before your first catch, choose a fishing rod below. Your free Reed Rod is '+(fishingGear.equippedRod==='reed'?'already equipped.':'in your inventory.');
+  if(equipmentRoom==='clearing')$('inventoryGuide').textContent='Before your first boar hunt, equip a sword below. '+(combatGear.equippedWeapon?'Your '+weaponCatalog[combatGear.equippedWeapon].name+' is already equipped.':'Choose a sword, then press Equip sword.');
   updateInventory();
-  $('inventoryDialog').showModal();
-};
+  if(!$('inventoryDialog').open)$('inventoryDialog').showModal();
+  if(equipmentRoom){
+    const control=$(equipmentRoom==='pond'?'equippedFishingRod':combatGear.equippedWeapon?'weaponSelect':'equipWeapon');
+    control.focus({preventScroll:true});control.scrollIntoView({block:'center',behavior:'instant'});
+  }
+}
+function showFirstEquipment(room){
+  if(!needsEquipmentGuide(room,history)||hunting.encounter||hunting.recoveryUntil||savedPlayerState?.plan||savedPlayerState?.report)return;
+  openInventory(room);
+}
+$('inventory').onclick=()=>openInventory();
 $('walk').onclick=()=>switchMode(false);
 $('edit').onclick=()=>switchMode(true);
 for(const button of document.querySelectorAll('[data-room-link]')){
@@ -2149,7 +2164,8 @@ function enterRoom(next,arrival){
   switchMode(false);
   savePlayerState();
   if(exploring)revealByLantern();
-  if(focusRoom)canvas.focus();
+  showFirstEquipment(next);
+  if(focusRoom&&!$('inventoryDialog').open)canvas.focus();
 }
 function movePlayerToSpawn(arrival){
   const openTiles=[];

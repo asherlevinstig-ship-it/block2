@@ -1,3 +1,4 @@
+import { normalizeHistory } from "../public/first-visit.js";
 import { normalizeQuest,recordQuest } from "../public/quests.js";
 import { normalizeHunting, normalizeCombatGear } from "../public/hunting.js";
 import { fishingCatalog, fishProducts, rollFishingCatch, normalizeFishingGear } from "../public/fishing.js";
@@ -50,7 +51,7 @@ export function normalizeState(input={}){
   const position=input.position;
   const state={
     credits,health:Math.min(health,maxHealth),stats:{strengthXp:stats.strengthXp,agilityXp:stats.agilityXp,vitalityXp:stats.vitalityXp,patienceXp:stats.patienceXp},fishingGear:{ownedRods,equippedRod:gear.equippedRod,bait:gear.bait},
-    quest:normalizeQuest(input.quest),combatGear,hunting,fishStock,huntingLoot:counts(input.huntingLoot),adventure,
+    history:normalizeHistory(input),quest:normalizeQuest(input.quest),combatGear,hunting,fishStock,huntingLoot:counts(input.huntingLoot),adventure,
     avatar:{name:avatar.name.trim()||"Guest",outfit:avatar.outfit,hair:avatar.hair},
     location:locations.has(input.location)?input.location:"home",
     position:position&&Number.isInteger(position.x)&&Number.isInteger(position.y)&&position.x>=0&&position.y>=0&&position.x<18&&position.y<16?{x:position.x,y:position.y}:null,
@@ -93,6 +94,7 @@ export function settlePlan(state,now,{stop=false,random=Math.random}={}){
     const level=1+Math.floor(state.stats.patienceXp/50);
     const fish=rollFishingCatch(level,plan.rod,random);
     state.fishStock[fish]=(state.fishStock[fish]??0)+1;
+    state.history=normalizeHistory(state);state.history.fishCaught=true;
     state.quest=normalizeQuest(state.quest);recordQuest(state.quest,"fish");
     state.fishingGear.bait--;state.stats.patienceXp+=10;
     plan.catches[fish]=(plan.catches[fish]??0)+1;

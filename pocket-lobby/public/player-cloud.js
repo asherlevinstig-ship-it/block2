@@ -189,7 +189,8 @@
       const art=await import('./combat-art.js');
       const fx=await import('./combat-fx.js');
       const quests=await import('./quests.js');
-      Object.assign(window,rules,hunting,art,fx,quests);
+      const historyRules=await import('./first-visit.js');
+      Object.assign(window,rules,hunting,art,fx,quests,historyRules);
       window.towerInitialState=packet.state;
       window.playerCloud={enqueue,flush,attach,get initial(){return packet.state;}};
       const script=document.createElement('script');script.src='game.js';
