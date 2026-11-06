@@ -29,6 +29,9 @@ export function normalizeState(input={}){
   for(const id of ["strengthXp","agilityXp","vitalityXp","patienceXp"]){
     if(!Number.isSafeInteger(stats[id])||stats[id]<0||stats[id]>100000000)throw new Error("Invalid attribute progress.");
   }
+  const maxHealth=100+Math.floor(stats.vitalityXp/50)*10;
+  const health=input.health??maxHealth;
+  if(!Number.isSafeInteger(health)||health<0)throw new Error("Invalid health.");
   const gear=input.fishingGear??{ownedRods:["reed"],equippedRod:"reed",bait:10};
   const ownedRods=[...new Set(gear.ownedRods??[])];
   if(!ownedRods.length||ownedRods.some(id=>!fishingCatalog.rods[id])||!ownedRods.includes(gear.equippedRod)||!Number.isSafeInteger(gear.bait)||gear.bait<0||gear.bait>1000000)throw new Error("Invalid fishing gear.");
@@ -42,7 +45,7 @@ export function normalizeState(input={}){
   if(typeof avatar.name!=="string"||avatar.name.length>20||!Number.isInteger(avatar.outfit)||avatar.outfit<0||avatar.outfit>4||!Number.isInteger(avatar.hair)||avatar.hair<0||avatar.hair>4)throw new Error("Invalid appearance.");
   const position=input.position;
   const state={
-    credits,stats:{strengthXp:stats.strengthXp,agilityXp:stats.agilityXp,vitalityXp:stats.vitalityXp,patienceXp:stats.patienceXp},fishingGear:{ownedRods,equippedRod:gear.equippedRod,bait:gear.bait},
+    credits,health:Math.min(health,maxHealth),stats:{strengthXp:stats.strengthXp,agilityXp:stats.agilityXp,vitalityXp:stats.vitalityXp,patienceXp:stats.patienceXp},fishingGear:{ownedRods,equippedRod:gear.equippedRod,bait:gear.bait},
     fishStock,huntingLoot:counts(input.huntingLoot),adventure,
     avatar:{name:avatar.name.trim()||"Guest",outfit:avatar.outfit,hair:avatar.hair},
     location:locations.has(input.location)?input.location:"home",

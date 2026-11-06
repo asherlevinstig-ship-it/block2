@@ -71,6 +71,8 @@ const adventure={lantern:false,groveTrail:false,bridge:false,shrine:false,shortc
 const playerStats={strengthXp:0,agilityXp:0,vitalityXp:0,patienceXp:adventure.silverfin*10,...savedPlayerState?.stats};
 const PATIENCE_XP_PER_CATCH=10, PATIENCE_XP_PER_LEVEL=50;
 const patienceLevel=()=>1+Math.floor(playerStats.patienceXp/PATIENCE_XP_PER_LEVEL);
+const maxHealth=()=>100+Math.floor(playerStats.vitalityXp/50)*10;
+let health=Math.min(maxHealth(),Math.max(0,savedPlayerState?.health??maxHealth()));
 const fishingGear={ownedRods:['reed'],equippedRod:'reed',bait:10,...savedPlayerState?.fishingGear};
 const fishStock={...savedPlayerState?.fishStock};
 if(!savedPlayerState?.fishStock&&adventure.silverfin>0)fishStock.silverfin=adventure.silverfin;
@@ -937,9 +939,11 @@ function draw(time){
     sprite(ctx,x,y,avatar,{direction:player.direction,back:player.back,cycle,seated:!!seat,wave,fishing:fishingSession?fishingMoments.phase(fishingSession,time):null,time});
     if(fishingSession)drawFishingMoment(x,y,time);
     drawCatchReveal(x,y,time);
-    if(!step&&!seat){
-      rect(x-2,y-44,5,2,'#ffe2a7');rect(x-1,y-42,3,1,'#ffe2a7');rect(x,y-41,1,1,'#ffe2a7');
-    }
+    const healthRatio=health/maxHealth();
+    rect(x-16,y-44,32,6,'#162032');
+    rect(x-15,y-43,30,4,'#3d3445');
+    rect(x-15,y-43,Math.round(30*healthRatio),4,healthRatio>.5?'#9bd5ac':healthRatio>.25?'#edc187':'#eb9199');
+    rect(x-15,y-43,Math.round(30*healthRatio),1,'#ffffff35');
     if(!$('bubble').hidden){
       if(time>bubbleUntil)$('bubble').hidden=true;
       else{
@@ -1304,6 +1308,15 @@ function updateInventory(){
   $('huntingInventory').textContent=spoils.map(([id,count])=>tradeCatalog[id].name+' ×'+count).join(' · ');
 }
 function updatePlayerStats(){
+  health=Math.min(health,maxHealth());
+  const totalHealth=maxHealth(),ratio=health/totalHealth;
+  $('healthValue').textContent=health+' / '+totalHealth+' HP';
+  $('healthProgress').max=totalHealth;
+  $('healthProgress').value=health;
+  $('healthProgress').setAttribute('aria-label','Health '+health+' of '+totalHealth);
+  $('healthHudValue').textContent=health+' / '+totalHealth;
+  $('healthHud').classList.toggle('health-warning',ratio<=.5&&ratio>.25);
+  $('healthHud').classList.toggle('health-critical',ratio<=.25);
   for(const [id,name] of [['strength','Strength'],['agility','Agility'],['vitality','Vitality'],['patience','Patience']]){
     const experience=playerStats[id+'Xp'],rank=1+Math.floor(experience/50),towardNext=experience%50;
     $('attribute-'+id+'-level').textContent=rank;
@@ -1454,7 +1467,7 @@ function updateTradingPost(){
   }
 }
 function savePlayerState(){
-  const snapshot={credits,ownedFurniture,furniture:loungeFurniture,homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats,fishingGear,huntingLoot,fishStock,avatar,location:currentRoom,position:{x:player.cx,y:player.cy}};
+  const snapshot={credits,health,ownedFurniture,furniture:loungeFurniture,homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats,fishingGear,huntingLoot,fishStock,avatar,location:currentRoom,position:{x:player.cx,y:player.cy}};
   save('player-state',snapshot);
   if(window.playerCloud)window.playerCloud.enqueue(JSON.parse(JSON.stringify(snapshot)));
   updateInventory();
