@@ -10,11 +10,11 @@ const moonwood=(()=>{
     grove:{number:'05',name:'Whispering Grove',description:'The trees crowd around a trail that only a lantern can reveal.',badge:'MOONWOOD',floor:'Hidden grove',center:[5,5],palette:['#36465d','#4c4c6a','#777294']},
     creek:{number:'06',name:'Glass Creek',description:'A band of dark water cuts across the path. Look for stones beneath the surface.',badge:'MOONWOOD',floor:'Creek crossing',center:[4,4],palette:['#32535b','#4a666c','#82928d']},
     shrine:{number:'07',name:'Moth Shrine',description:'Pale moths circle a stone altar in a quiet clearing.',badge:'MOONWOOD',floor:'Hidden landmark',center:[5,4],palette:['#3c4862','#4f5773','#8f85a3'],landmark:['mothAltar',6,4,5,4],authored:[['pillar',4,2],['pillar',8,2],['pillar',4,6],['pillar',8,6],['wildtree',1,1],['wildtree',10,7],['wildbloom',5,2],['wildbloom',7,6]]},
-    ruins:{number:'08',name:'Moonwell Ruins',description:'An old well glows among the ruins. A root-covered arch stands at the far end.',badge:'MOONWOOD',floor:'Ancient landmark',center:[5,4],palette:['#444258','#57536b','#8d8194'],landmark:['moonwell',6,4,5,4],authored:[['pillar',3,2],['pillar',8,2],['pillar',3,6],['pillar',8,6],['wildrock',9,6],['wildbloom',4,3],['wildtree',1,8],['wildtree',10,1]]},
+    ruins:{number:'08',name:'Moonwell Ruins',description:'An old well glows among the ruins. A Stoneback Beetle guards the nearby stones.',badge:'MOONWOOD',floor:'Ancient landmark',center:[5,4],palette:['#444258','#57536b','#8d8194'],landmark:['moonwell',6,4,5,4],authored:[['stonebackBeetle',6,5],['pillar',3,2],['pillar',8,2],['pillar',3,6],['pillar',8,6],['wildrock',9,6],['wildbloom',4,3],['wildtree',1,8],['wildtree',10,1]]},
     roots:{number:'09',name:'Root Passage',description:'A living tunnel winds beneath Moonwood, linking the ruins back to Lantern Trail.',badge:'MOONWOOD',floor:'Forest shortcut',center:[6,5],palette:['#363847','#4b4357','#766274'],authored:[['wildtree',1,2],['wildtree',3,6],['wildtree',6,2],['wildtree',8,7],['wildtree',10,2],['wildbloom',4,3],['wildbloom',8,6]]},
     pond:{number:'10',name:'Silverfin Pond',description:'Cast a line from the old jetty and watch the moonlight ripple over the water.',badge:'MOONWOOD',floor:'Fishing pond',center:[3,5],palette:['#334f59','#486570','#8b9296'],landmark:['fishingPost',5,5,4,5],authored:[['wildtree',1,1],['wildtree',3,1],['wildtree',1,8],['wildtree',4,8],['wildrock',4,2],['wildbloom',3,7],['wildbloom',4,3]]}
   };
-  const heights={timberTree:51,wildboar:22,wildtree:51,wildrock:13,wildbloom:22,pillar:28,lanternStand:31,mothAltar:24,moonwell:35,moonbloom:29,fishingPost:26};
+  const heights={timberTree:51,wildboar:22,stonebackBeetle:28,wildtree:51,wildrock:13,wildbloom:22,pillar:28,lanternStand:31,mothAltar:24,moonwell:35,moonbloom:29,fishingPost:26};
   const doors=Object.fromEntries(Object.keys(areas).map(id=>[id,[]]));
   const coordinate=([x,y])=>({x,y});
   function connect(a,b,from,to,gate){
@@ -160,7 +160,29 @@ const moonwood=(()=>{
     const stone=['#9a9ab2','#50536c','#71738d'];
     const aqua=['#91bdbb','#3e6271','#568b93'];
     surface(x+.08,y+.1,.86,.82,.14,'#16293776');
-    if(type==='wildboar'){
+    if(type==='stonebackBeetle'){
+      const flipped=pose.defeated||(combat?.exposedUntil??0)>Date.now();
+      const rise=flipped||reduced?0:Math.round((pose.windup??0)*8-(pose.charge??0)*.45);
+      const shell=pose.hit?['#c1a692','#5c5366','#887b80']:['#8a9b9a','#3b4c59','#586a72'];
+      for(const [u,v] of [[.13,.22],[.13,.48],[.13,.73],[.69,.22],[.69,.48],[.69,.73]]){
+        part(u,v,.19,.10,flipped?6:0,flipped?5:4,['#687b77','#263948','#41545b']);
+      }
+      if(flipped){
+        part(.15,.16,.72,.70,1,5,shell);
+        part(.24,.25,.52,.49,6,5,['#a7cb80','#527865','#718f66']);
+        rect(px-4,py-12,7,2,'#eddf9c');
+        rect(px-2,py-14,3,6,'#d7d88e');
+      }else{
+        part(.18,.14,.65,.68,4,9,shell);
+        part(.25,.21,.50,.52,13,5,shell);
+        part(.35,.34,.29,.26,18,2,['#abbab0','#55666d','#708486']);
+        part(.65,.54,.25,.29,4+rise,7,['#748886','#3b4a56','#4d6266']);
+        rect(px+4,py-10-rise,2,2,pose.windup>.4?'#ffb576':'#b7d69d');
+        rect(px+10,py-7-rise,2,2,pose.windup>.4?'#ffb576':'#b7d69d');
+        rect(px-3,py-17,2,5,'#455a60');
+        rect(px-8,py-12,5,1,'#91a5a0');
+      }
+    }else if(type==='wildboar'){
       const untilStrike=combat?combat.nextBoarAt-Date.now():Infinity;
       if(untilStrike>=0&&untilStrike<450)surface(x-.08,y-.08,1.16,1.16,.4,'#f2a36b66','#ffc18b');
       const bob=reduced||pose.defeated?0:Math.sin(time/380)*.65;

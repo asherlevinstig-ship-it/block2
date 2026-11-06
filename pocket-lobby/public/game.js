@@ -80,6 +80,7 @@ const tradeCatalog={
   ...fishProducts,
   rabbit:{name:'Rabbit',price:12,icon:'♧',group:'hunting'},
   boar:{name:'Boar Meat',price:30,icon:'♧',group:'hunting'},
+  stonebackShell:{name:huntEnemies.beetle.lootName,price:huntEnemies.beetle.sellPrice,icon:'⬡',group:'hunting'},
   timber:{name:'Timber',price:4,icon:'▤',group:'materials'},
   deer:{name:'Forest deer',price:24,icon:'♧',group:'hunting'}
 };
@@ -397,29 +398,33 @@ function questAction(){
 
 let combatMessage='',combatFeedback=null,lastCombatUi=0;
 const combatArt={strikeAt:-Infinity,hurtAt:-Infinity,dodgeAt:-Infinity,boarAttackAt:-Infinity,boarHitAt:-Infinity,victoryAt:-Infinity};
-function resetCombatArt(){for(const key of Object.keys(combatArt))combatArt[key]=-Infinity;}
+function resetCombatArt(){
+  for(const key of Object.keys(combatArt))combatArt[key]=-Infinity;
+  combatFeedback=null;
+}
 
 const unavailable=()=>player.inCombat||hunting.recoveryUntil>0;
 function stopForCombat(){
   route=[];step=null;interaction=null;target=null;
   player.x=player.cx;player.y=player.cy;player.seat=null;player.waveStarted=null;
 }
-function startBoarEncounter(){
-  if(currentRoom!=='clearing'||unavailable())return;
+function startBoarEncounter(){startMonsterEncounter(huntEnemies.boar);}
+function startMonsterEncounter(enemy){
+  if(currentRoom!==enemy.room||unavailable())return;
   if(combatGear.equippedWeapon&&!canUseWeapon(playerStats,combatGear.equippedWeapon)){note('Your stats do not meet this weapon’s requirements.');return;}
   if(!combatGear.equippedWeapon){note('Equip your Training Sword in Inventory before hunting.');return;}
   if(health<=0){note('Return to the Tower and rest to restore your hearts.');return;}
-  if(Date.now()<hunting.respawnAt){note('The clearing is quiet. Another boar will arrive shortly.');return;}
+  if(Date.now()<huntRespawnAt(hunting,enemy)){note('The '+enemy.name+' will return shortly.');return;}
   stopForCombat();resetCombatArt();
   player.direction=(6-player.cx)-(5-player.cy)>=0?'right':'left';player.back=11<player.cx+player.cy;
-  hunting.encounter=createHunt(Date.now());
+  hunting.encounter=createHunt(Date.now(),enemy.health,enemy.id);
   setPlayerCombat(true);
-  combatMessage='You engage the boar. Both fighters attack automatically. Dodge the charge with Space, or Flee.';
+  combatMessage='You engage the '+enemy.name+'. Dodge the '+enemy.move+' with Space, or Flee.';
   updateCombatPanel();savePlayerState();
-  note('Combat is live! Press Space just before the charge lands to dodge. F flees.');
+  note('Press Space just before the '+enemy.move+' lands. F flees.');
 }
 function combatAction(action){
-  if(!player.inCombat||currentRoom!=='clearing'||!['flee','dodge'].includes(action))return;
+  if(!player.inCombat||!['flee','dodge'].includes(action))return;
   const result=huntingTurn(hunting.encounter,health,playerStats,action,Date.now(),Math.random,combatGear.equippedWeapon,combatGear.activeSwordUpgrade);
   if(!result&&action==='dodge'){
     combatMessage=combatStamina(hunting.encounter,playerStats,Date.now())<boarRules.dodgeCost?'Not enough stamina. Let it recover.':'Your dodge is recovering.';
@@ -428,20 +433,21 @@ function combatAction(action){
   applyCombatResult(result);
 }
 function useRootbind(){
-  if(!player.inCombat||currentRoom!=='clearing'||rootstone.power!=='rootbind')return;
+  if(!player.inCombat||rootstone.power!=='rootbind')return;
+  const enemy=huntEnemy(hunting.encounter);
   if(!castRootbind(rootstone,hunting.encounter,Date.now())){
-    combatMessage='Wait for the charge warning and for Rootbind to recover.';
+    combatMessage='Wait for the '+enemy.move+' warning and for Rootbind to recover.';
     updateCombatPanel();
     return;
   }
-  combatMessage='Rootbind interrupted the charge. The boar is pinned for 2 seconds.';
+  combatMessage='Rootbind interrupted the '+enemy.move+'. The '+enemy.name+' is pinned for 2 seconds.';
   savePlayerState();
   updateCombatPanel();
   note(combatMessage);
 }
 function applyCombatResult(result){
   if(!result)return;
-  const action=result.action,artTime=performance.now();
+  const action=result.action,artTime=performance.now(),enemy=huntEnemy(hunting.encounter);
   if(result.damage){combatArt.strikeAt=artTime;combatArt.boarHitAt=artTime;}
   if(action==='enemy')combatArt.boarAttackAt=artTime;
   if(result.taken)combatArt.hurtAt=artTime;
@@ -449,24 +455,27 @@ function applyCombatResult(result){
   if(result.outcome==='victory')combatArt.victoryAt=artTime;
   hunting.encounter=result.encounter;health=result.health;
   combatFeedback={started:performance.now(),damage:result.damage,taken:result.taken,dodged:result.dodged};
-  combatMessage=(result.damage?'You hit for '+result.damage+'. ':action==='flee'&&result.outcome!=='escaped'?'Your escape was blocked. ':'')+(result.dodged?'You dodge the boar’s attack.':result.taken?'The boar hits for '+result.taken+'.':'');
-  if(result.dodgeStarted)combatMessage='You sidestep. Time your dodge just before the charge lands!';
-  if(result.timedDodge)combatMessage='Perfect dodge! You avoided the charge.';
+  combatMessage=(result.damage?'You hit for '+result.damage+(result.shellGuarded?' through the shell.':'. '):action==='flee'&&result.outcome!=='escaped'?'Your escape was blocked. ':'')+(result.dodged?'You dodge the attack.':result.taken?'The '+enemy.name+' hits for '+result.taken+'.':'');
+  if(result.dodgeStarted)combatMessage='You sidestep. Time your dodge just before the '+enemy.move+' lands!';
+  if(result.timedDodge)combatMessage=result.shellExposed?'Perfect dodge! The beetle flips. Its weak spot is exposed.':'Perfect dodge! You avoided the charge.';
   if(result.taken){
     $('healthHud').classList.remove('injured');void $('healthHud').offsetWidth;$('healthHud').classList.add('injured');
   }
   if(result.outcome!=='fighting')setPlayerCombat(false);
   if(result.outcome==='victory'){
-    hunting.respawnAt=Date.now()+boarRules.respawn;
-    huntingLoot.boar=(huntingLoot.boar??0)+1;
-    recordQuest(quest,'boar');history.boarDefeated=true;
-    playerStats.strengthXp+=15;playerStats.agilityXp+=10;playerStats.vitalityXp+=15;
-    combatMessage='Victory! Boar Meat added to inventory. Take it to the Trading Post.';
-    showTransaction('Wild Boar defeated',[{icon:'✦',text:'Boar Meat ×1 · sell for 30 credits'},{icon:'⚔',text:'+15 Strength XP · +10 Agility XP · +15 Vitality XP'}]);
+    hunting[enemy.id==='beetle'?'beetleRespawnAt':'respawnAt']=Date.now()+enemy.respawn;
+    huntingLoot[enemy.loot]=(huntingLoot[enemy.loot]??0)+1;
+    if(enemy.id==='boar'){recordQuest(quest,'boar');history.boarDefeated=true;}
+    const [strength,agility,vitality]=enemy.xp;
+    playerStats.strengthXp+=strength;playerStats.agilityXp+=agility;playerStats.vitalityXp+=vitality;
+    combatMessage='Victory! '+enemy.lootName+' added to Inventory.';
+    showTransaction(enemy.name+' defeated',[{icon:'✦',text:enemy.lootName+' ×1 · sell for '+enemy.sellPrice+' gold'},{icon:'⚔',text:'+'+strength+' Strength XP · +'+agility+' Agility XP · +'+vitality+' Vitality XP'}]);
     updateInventory();
   }else if(result.outcome==='escaped'){
-    combatMessage='You escape to Lantern Trail. Your remaining hearts are saved.';
-    enterRoom('trail',{x:7,y:1});
+    const beetle=enemy.id==='beetle';
+    combatMessage='You escape to '+(beetle?'Glass Creek':'Lantern Trail')+'. Your remaining hearts are saved.';
+    if(beetle)enterRoom('creek',{x:10,y:4});
+    else enterRoom('trail',{x:7,y:1});
   }else if(result.outcome==='defeat'){
     hunting.recoveryUntil=Date.now()+boarRules.recovery;
     combatMessage='The Tower wardens bring you home. Resting restores all five hearts.';
@@ -482,9 +491,10 @@ function restAtTower(){
 }
 function updateCombatPanel(){
   const now=Date.now(),encounter=hunting.encounter;
+  const enemy=huntEnemyForRoom(currentRoom);
   $('equipWeapon').disabled=player.inCombat||!canUseWeapon(playerStats,$('weaponSelect').value||combatGear.equippedWeapon||'trainingSword');
   $('wave').disabled=editing||!!fishingSession||!!woodSession||unavailable();
-  $('combatPanel').hidden=currentRoom!=='clearing';
+  $('combatPanel').hidden=!enemy;
   $('scene').classList.toggle('in-combat',player.inCombat);
   $('restAtTower').hidden=!['hub','home'].includes(currentRoom)||health>=100&&!hunting.recoveryUntil;
   $('restAtTower').disabled=!!hunting.recoveryUntil;
@@ -492,10 +502,25 @@ function updateCombatPanel(){
   const notice=$('combatNotice');
   notice.hidden=!hunting.recoveryUntil;
   if(hunting.recoveryUntil)notice.textContent='Recovering at the Tower · '+Math.max(0,Math.ceil((hunting.recoveryUntil-now)/1000))+'s · Five hearts restored after rest';
-  if(currentRoom!=='clearing')return;
+  if(!enemy)return;
+  const beetle=enemy.id==='beetle',respawn=huntRespawnAt(hunting,enemy);
+  $('combatTitle').textContent=enemy.name;
+  $('combatChapter').textContent=beetle?'MOONWELL RUINS':'FIRST HUNT';
+  const [strength,agility,vitality]=enemy.xp;
+  $('combatReward').textContent='Victory: '+enemy.lootName+' ×1 · +'+strength+' Strength, +'+agility+' Agility, +'+vitality+' Vitality XP. Sell loot for '+enemy.sellPrice+' gold.';
+  const approach=$('approachBeetle');
+  approach.hidden=!beetle||!!encounter||now<respawn;
+  approach.disabled=health<=0||unavailable()||!combatGear.equippedWeapon;
+  const shell=$('beetleShell');
+  shell.hidden=!beetle||now<respawn;
+  const opening=Math.max(0,((encounter?.exposedUntil??0)-now)/1000);
+  shell.textContent=opening?'Weak spot exposed · '+opening.toFixed(1)+'s':'Armored shell · Dodge the slam to expose its weak spot.';
+  shell.classList.toggle('exposed',opening>0);
+  $('boarProgress').max=enemy.health;
+  $('boarProgress').setAttribute('aria-label',enemy.name+' health');
   const remaining=Math.max(0,(encounter?.nextFleeAt??0)-now);
-  $('boarHealth').textContent=encounter?encounter.health+' / '+boarRules.health+' HP':now<hunting.respawnAt?'Boar returns in '+Math.ceil((hunting.respawnAt-now)/1000)+'s':boarRules.health+' / '+boarRules.health+' HP';
-  $('boarProgress').value=encounter?.health??(now<hunting.respawnAt?0:boarRules.health);
+  $('boarHealth').textContent=encounter?encounter.health+' / '+enemy.health+' HP':now<respawn?'Returns in '+Math.ceil((respawn-now)/1000)+'s':enemy.health+' / '+enemy.health+' HP';
+  $('boarProgress').value=encounter?.health??(now<respawn?0:enemy.health);
   $('combatAttack').textContent=encounter?'Auto-attacking':'Auto-attack';
   $('combatFlee').disabled=!encounter||remaining>0;
   const stamina=encounter?combatStamina(encounter,playerStats,now):100;
@@ -509,17 +534,20 @@ function updateCombatPanel(){
   bindButton.textContent=bind==='recovering'?'Rootbind · '+Math.ceil((rootstone.nextCastAt-now)/1000)+'s':bind==='ready'?'Rootbind now! · E':'Rootbind · E';
   $('combatDodge').classList.toggle('dodge-ready',timing&&!$('combatDodge').disabled);
   $('combatDodge').textContent=encounter&&stamina<boarRules.dodgeCost?'Dodge · Low stamina':encounter&&now<(encounter.nextDodgeAt??0)?'Dodge · Recovering':timing?'Dodge now! · Space':'Dodge · Space';
-  $('combatCooldown').textContent=encounter?'Next strike '+Math.max(0,(encounter.nextPlayerAt-now)/1000).toFixed(1)+'s · Boar '+Math.max(0,(encounter.nextBoarAt-now)/1000).toFixed(1)+'s'+(remaining?' · Flee '+(remaining/1000).toFixed(1)+'s':' · F: Flee'):'Click the boar to engage. Combat runs in real time.';
-  $('combatLog').textContent=combatMessage||'The boar watches the trail. It will not attack until you approach.';
+  $('combatCooldown').textContent=encounter?'Next strike '+Math.max(0,(encounter.nextPlayerAt-now)/1000).toFixed(1)+'s · '+(beetle?'Slam':'Charge')+' '+Math.max(0,(encounter.nextBoarAt-now)/1000).toFixed(1)+'s'+(remaining?' · Flee '+(remaining/1000).toFixed(1)+'s':' · F: Flee'):'Click the '+enemy.name+' to engage. Combat runs in real time.';
+  $('combatLog').textContent=combatMessage||'The '+enemy.name+' waits. It attacks when you approach.';
   const weapon=weaponProfile(combatGear.equippedWeapon,combatGear.activeSwordUpgrade);
   const attributes=huntingAttributes(playerStats,combatGear.equippedWeapon,combatGear.activeSwordUpgrade);
   $('combatGuide').textContent=(weapon?.name??'No weapon equipped')+(weapon?.upgradeName?' · '+weapon.upgradeName:'')+' · Attack '+attributes.damage+'–'+(attributes.damage+4)+' every '+attackSeconds(attributes.attackInterval)+' · Dodge '+Math.round(attributes.dodge*100)+'% · Escape '+Math.round(attributes.escape*100)+'% · Armor '+attributes.armor;
-  $('adventureLandmark').hidden=!!encounter||now<hunting.respawnAt;
-  $('adventureLandmark').textContent='Approach boar';
-  $('adventureLandmark').disabled=health<=0||unavailable()||!combatGear.equippedWeapon;
+  if(beetle)$('adventureLandmark').hidden=!!encounter;
+  else{
+    $('adventureLandmark').hidden=!!encounter||now<respawn;
+    $('adventureLandmark').textContent='Approach boar';
+    $('adventureLandmark').disabled=health<=0||unavailable()||!combatGear.equippedWeapon;
+  }
 }
 function updateCombatMoment(time){
-  if(player.inCombat&&currentRoom==='clearing')applyCombatResult(advanceHunt(hunting.encounter,health,playerStats,Date.now(),Math.random,combatGear.equippedWeapon,combatGear.activeSwordUpgrade));
+  if(player.inCombat)applyCombatResult(advanceHunt(hunting.encounter,health,playerStats,Date.now(),Math.random,combatGear.equippedWeapon,combatGear.activeSwordUpgrade));
   if(hunting.recoveryUntil&&Date.now()>=hunting.recoveryUntil){
     hunting.recoveryUntil=0;health=100;
     combatMessage='All five hearts restored. You are ready to explore again.';
@@ -528,7 +556,7 @@ function updateCombatMoment(time){
   if(time-lastCombatUi>100){lastCombatUi=time;updateCombatPanel();}
 }
 function drawCombatFeedback(time){
-  if(!combatFeedback||currentRoom!=='clearing')return;
+  if(!combatFeedback||!huntEnemyForRoom(currentRoom))return;
   const age=time-combatFeedback.started;
   if(age>900){combatFeedback=null;return;}
   const offset=reducedMotion.matches?0:age/70;
@@ -582,7 +610,10 @@ function roomFurniture(){
   if(currentRoom==='store')return storeFurniture;
   if(currentRoom==='market')return marketFurniture;
   if(currentRoom==='armory')return armoryFurniture;
-  if(moonwood.has(currentRoom))return moonwood.layouts[currentRoom].scenery.filter(item=>item.type!=='wildboar'||Date.now()>=hunting.respawnAt);
+  if(moonwood.has(currentRoom)){
+    const enemy=huntEnemyForRoom(currentRoom);
+    return moonwood.layouts[currentRoom].scenery.filter(item=>item.type!==enemy?.prop||Date.now()>=huntRespawnAt(hunting,enemy));
+  }
   return currentRoom==='hub'?hubFurniture:courtyardFurniture;
 }
 function setRoomFurniture(items){
@@ -959,10 +990,10 @@ function object(item,highlight=false,time=0) {
   if(Object.hasOwn(moonwood.heights,type)){
     if(isTimberTree(item)){
       drawTimberTree(item,time);
-    }else if(type==='wildboar'){
+    }else if(type==='wildboar'||type==='stonebackBeetle'){
       const pose=boarCombatPose({time,now:Date.now(),encounter:player.inCombat?hunting.encounter:null,events:combatArt,reduced:reducedMotion.matches,defeated:!!item.defeated});
       const [bx,by]=point(x+.5,y+.5),[px,py]=point(player.x+.5,player.y+.5);
-      const shift=pose.charge-pose.recoil;
+      const shift=(type==='wildboar'?pose.charge:0)-pose.recoil;
       ctx.save();ctx.globalAlpha*=pose.alpha;
       ctx.translate(bx+Math.sign(px-bx)*shift,by+Math.sign(py-by)*shift+pose.fall);
       ctx.scale((px<bx?-1:1)*(1+(1-pose.squash)*.25),pose.squash);ctx.translate(-bx,-by);
@@ -1425,13 +1456,14 @@ function updateWorldLabels(){
 }
 function draw(time){
   const {width,height}=view,centerX=width/2,centerY=height/2-4;
+  const enemy=huntEnemyForRoom(currentRoom);
   ctx.setTransform(1,0,0,1,0,0);
   ctx.clearRect(0,0,width,height);
-  const [shakeX,shakeY]=currentRoom==='clearing'?combatShake(time,combatArt,reducedMotion.matches):[0,0];
+  const [shakeX,shakeY]=enemy?combatShake(time,combatArt,reducedMotion.matches):[0,0];
   ctx.translate(shakeX,shakeY);ctx.translate(centerX,centerY);ctx.scale(zoom,zoom);ctx.translate(-centerX,-centerY);
   ctx.imageSmoothingEnabled=false;ctx.drawImage(roomLayers[currentRoom],0,0);
   if(moonwood.has(currentRoom))drawMoonwoodDetails(time);
-  if(currentRoom==='clearing')drawCombatGroundFx({ctx,point,time,now:Date.now(),encounter:hunting.encounter,player,reduced:reducedMotion.matches});
+  if(enemy)drawCombatGroundFx({ctx,point,time,now:Date.now(),encounter:hunting.encounter,player,reduced:reducedMotion.matches});
   if(target)surface(target.x+.1,target.y+.1,.8,.8,1,'#fff3bc30','#ffcf8f');
   if(hover){
     const [w,d]=editing&&selection?dimensions(selection):[1,1];
@@ -1447,9 +1479,9 @@ function draw(time){
     peer.rx+=(peer.x-peer.rx)*amount;peer.ry+=(peer.y-peer.ry)*amount;peer.lastFrame=time;
   }
   const items=[...roomFurniture(),...[...remotePeers.values()].map(peer=>({type:'remotePlayer',x:peer.rx,y:peer.ry,peer}))];
-  if(currentRoom==='clearing'&&time-combatArt.victoryAt>=0&&time-combatArt.victoryAt<1300){
-    const boar=moonwood.layouts.clearing.scenery.find(item=>item.type==='wildboar');
-    items.push({...boar,id:'defeated-boar',defeated:true});
+  if(enemy&&time-combatArt.victoryAt>=0&&time-combatArt.victoryAt<1300){
+    const monster=moonwood.layouts[currentRoom].scenery.find(item=>item.type===enemy.prop);
+    items.push({...monster,id:'defeated-'+enemy.id,defeated:true});
   }
   if(ghost)items.push(ghost);
   const drawPlayer = ()=>{
@@ -1471,7 +1503,7 @@ function draw(time){
     const swingAngle=swingPhase<.55?-1.5+2.8*(swingPhase/.55)**3:1.3-2.8*((swingPhase-.55)/.45);
     const spritePose=woodSession?{...pose,angle:reducedMotion.matches?.75:swingAngle}:pose;
     const [enemyX,enemyY]=point(6.5,5.5);
-    const thrust=currentRoom==='clearing'?pose.lunge-pose.recoil:0;
+    const thrust=enemy?pose.lunge-pose.recoil:0;
     sprite(ctx,x+Math.sign(enemyX-x)*thrust-pose.dodge,y+Math.sign(enemyY-y)*thrust+pose.dodge*.4,avatar,{direction:player.direction,back:player.back,cycle,seated:!!seat,wave,weapon:!!woodSession||pose.armed&&!!combatGear.equippedWeapon,sheathed:!woodSession&&!pose.armed&&Object.hasOwn(socialRooms,currentRoom)&&!!combatGear.equippedWeapon,weaponTier:woodSession?'basicAxe':combatGear.equippedWeapon,pose:spritePose,fishing:fishingSession?fishingMoments.phase(fishingSession,time):null,time});
     if(fishingSession)drawFishingMoment(x,y,time);
     drawCatchReveal(x,y,time);
@@ -1512,10 +1544,10 @@ function draw(time){
     hitboxes.push({item,shape});
   }
   if(!drawn)drawPlayer();
-  if(currentRoom==='clearing')drawCombatWorldFx({ctx,point,time,events:combatArt,player,reduced:reducedMotion.matches});
+  if(enemy)drawCombatWorldFx({ctx,point,time,events:combatArt,player,reduced:reducedMotion.matches,enemy});
   drawWoodEffects(time);
   drawCombatFeedback(time);
-  if(currentRoom==='clearing')drawCombatOverlayFx({ctx,width,height,time,now:Date.now(),events:combatArt,encounter:hunting.encounter,health,reduced:reducedMotion.matches});
+  if(enemy)drawCombatOverlayFx({ctx,width,height,time,now:Date.now(),events:combatArt,encounter:hunting.encounter,health,reduced:reducedMotion.matches,enemy});
   updateWorldLabels();
   updatePeerLabels(time);
 }
@@ -1776,6 +1808,8 @@ function finishInteraction(){
     openQuest();
   }else if(item.type==='wildboar'){
     startBoarEncounter();
+  }else if(item.type==='stonebackBeetle'){
+    startMonsterEncounter(huntEnemies.beetle);
   }else if(item.type==='fishingPost'){
     if(fishingGear.bait<1){note('You need bait. Visit Silverfin Outfitters in the tower.');return;}
     const rod=fishingCatalog.rods[fishingGear.equippedRod];
@@ -2273,7 +2307,7 @@ function updateAdventurePanel(){
     grove:adventure.groveTrail?'The lantern revealed a trail to the Moth Shrine.':'Light your lantern to look for a trail through the grove.',
     creek:adventure.bridge?'Moonlit stepping stones cross the creek.':'Light your lantern to reveal a way across the creek.',
     shrine:adventure.shrine?'Read the Rootstone clue again or attune a power at the altar.':'Approach the altar to examine the moths and uncover the Rootstone clue.',
-    ruins:adventure.shortcut?'The root passage is open. Your Moonbloom is in inventory.':'Search the Moonwell for a keepsake and a shortcut back.',
+    ruins:adventure.shortcut?'The root passage is open. Approach the Stoneback Beetle when you’re ready to hunt.':'Search the Moonwell for a shortcut, or approach the Stoneback Beetle to hunt.',
     roots:'Follow the roots back to Lantern Trail.',
     pond:fishingSession?({casting:'Casting your line…',waiting:'Watch the float. Your character will reel automatically.',twitch:'A nibble! Keep watching the float…',bite:'Bite! Reel now for +5 Patience XP. Your character will also reel automatically.',landing:'Reeling in your catch…'}[fishingMoments.phase(fishingSession,performance.now())]):fishingGear.bait<1?'Out of bait. Visit Silverfin Outfitters through the Fishing door in the Grand Lobby.':'Cast with your '+fishingCatalog.rods[fishingGear.equippedRod].name+'. Better rods and Patience improve catch quality. Fish in inventory: '+caughtFishCount()+'.'
   };
@@ -2288,7 +2322,7 @@ function updateAdventurePanel(){
   const landmark=$('adventureLandmark');
   const bite=!!fishingSession&&fishingMoments.phase(fishingSession,performance.now())==='bite';
   const action={clearing:!player.inCombat&&Date.now()>=hunting.respawnAt?'Approach boar':'',trail:!adventure.lantern?'Take lantern':'',shrine:'Examine altar',ruins:'Search Moonwell',pond:bite?'Reel! +5 Patience XP':fishingSession?'Fishing…':'Cast a line'}[currentRoom];
-  landmark.hidden=!action;
+  landmark.hidden=!action||player.inCombat;
   landmark.disabled=(!!fishingSession&&!bite)||(currentRoom==='pond'&&fishingGear.bait<1);
   landmark.classList.toggle('bite-ready',bite);
   landmark.textContent=action??'';
@@ -2448,6 +2482,10 @@ $('adventureLandmark').onclick=()=>{
 };
 $('combatFlee').onclick=()=>combatAction('flee');
 $('combatDodge').onclick=()=>combatAction('dodge');
+$('approachBeetle').onclick=()=>{
+  const beetle=roomFurniture().find(item=>item.type==='stonebackBeetle');
+  if(beetle)use(beetle);
+};
 $('combatRootbind').onclick=useRootbind;
 $('openRootstone').onclick=()=>openRootstone('journal');
 for(const [rune,id] of [['moth','rootRuneMoth'],['wave','rootRuneWave'],['root','rootRuneRoot']])$(id).onclick=()=>touchRootstoneRune(rune);
@@ -2702,6 +2740,7 @@ function updateRoomLabel(){
 function enterRoom(next,arrival){
   if(player.inCombat||(hunting.recoveryUntil&&next!=="hub"&&next!=="home")){note("Finish combat or recovery before travelling.");return;}
   cancelFishing();selectedTimber=null;resetCombatArt();
+  if(next!==currentRoom&&huntEnemyForRoom(next))combatMessage='';
   catchReveal=null;$('catchReveal').hidden=true;
   const focusRoom=!!document.activeElement.closest('[data-room-link]');
   currentRoom=next;
@@ -2773,7 +2812,7 @@ $('fishingSound').onclick=()=>{
 movePlayerToSpawn();updateName();switchMode(false);
 if(savedPlayerState?.location&&roomDetails[savedPlayerState.location])enterRoom(savedPlayerState.location,savedPlayerState.position);
 if(hunting.encounter){
-  if(currentRoom==='clearing'&&combatGear.equippedWeapon){
+  if(currentRoom===huntEnemy(hunting.encounter).room&&combatGear.equippedWeapon){
     hunting.encounter=resumeHunt(hunting.encounter,Date.now(),playerStats);
     setPlayerCombat(true);combatMessage='Combat resumes! Both fighters attack automatically. Flee if you need to escape.';
   }else hunting.encounter=null;

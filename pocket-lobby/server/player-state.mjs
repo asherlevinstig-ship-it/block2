@@ -5,7 +5,7 @@ import { normalizeWoodcutting } from "../public/woodcutting.js";
 import { startWoodcuttingPlan,settleWoodcuttingPlan } from "./woodcutting-plan.mjs";
 import { normalizeHistory } from "../public/first-visit.js";
 import { normalizeQuest,recordQuest } from "../public/quests.js";
-import { normalizeHunting, normalizeCombatGear,canUseWeapon } from "../public/hunting.js";
+import { normalizeHunting, normalizeCombatGear,canUseWeapon,huntEnemy } from "../public/hunting.js";
 import { fishingCatalog, fishProducts, rollFishingCatch, normalizeFishingGear } from "../public/fishing.js";
 
 export const MAX_PLAN_HOURS=8;
@@ -54,7 +54,7 @@ export function normalizeState(input={}){
   if(combatGear.equippedWeapon&&!canUseWeapon(stats,combatGear.equippedWeapon))throw new Error("Invalid weapon requirements.");
   const hunting=normalizeHunting(input.hunting);
   if(hunting.encounter&&!combatGear.equippedWeapon)throw new Error("Invalid unarmed encounter.");
-  if(hunting.encounter&&(input.location!=="clearing"||health===0))throw new Error("Invalid encounter location.");
+  if(hunting.encounter&&(input.location!==huntEnemy(hunting.encounter).room||health===0))throw new Error("Invalid encounter location.");
   const position=input.position;
   const state={
     characterRules:normalizeCharacterRules(input.characterRules),credits,health:Math.min(health,maxHealth),stats:{strengthXp:stats.strengthXp,agilityXp:stats.agilityXp,vitalityXp:stats.vitalityXp,patienceXp:stats.patienceXp},fishingGear:{ownedRods,equippedRod:gear.equippedRod,bait:gear.bait},
