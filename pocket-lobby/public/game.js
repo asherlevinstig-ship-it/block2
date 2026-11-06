@@ -62,6 +62,7 @@ const ownedFurniture=Object.fromEntries(Object.keys(types).map(type=>{
 }));
 const availableFurniture=type=>(ownedFurniture[type]??0)-countFurniture(homeFurniture,type);
 const adventure={lantern:false,groveTrail:false,bridge:false,shrine:false,shortcut:false,discovered:[],silverfin:0,...savedPlayerState?.adventure};
+let depthsRun=savedPlayerState?.depthsRun??null;
 const rootstone=adventure.rootstone=normalizeRootstone(adventure.rootstone);
 const playerStats={strengthXp:0,agilityXp:0,vitalityXp:0,patienceXp:adventure.silverfin*10,...savedPlayerState?.stats};
 const PATIENCE_XP_PER_CATCH=10, PATIENCE_XP_PER_LEVEL=50;
@@ -104,7 +105,7 @@ function updateWoodPanel(){
   const level=woodcuttingLevel(woodcutting),busy=!!woodSession;
   const logging=currentRoom==='logging',item=focusedTimber();
   const regrowing=!!item&&!!treeState(item).regrowsAt;
-  $('woodPanel').hidden=!moonwood.has(currentRoom)||(!logging&&!woodcutting.axeOwned);
+  $('woodPanel').hidden=!moonwood.has(currentRoom)||depthsStageIndex(currentRoom)>=0||(!logging&&!woodcutting.axeOwned);
   $('openWorkbench').hidden=!logging;
   $('woodOfflineControls').hidden=!logging;
   $('woodAction').hidden=!logging&&(!woodcutting.equipped?false:!item);
@@ -430,9 +431,60 @@ function stopForCombat(){
   route=[];step=null;interaction=null;target=null;
   player.x=player.cx;player.y=player.cy;player.seat=null;player.waveStarted=null;
 }
-function startBoarEncounter(){startMonsterEncounter(huntEnemies.boar);}
+function enterMoonwellDepths(){
+  if(currentRoom!=='ruins'||depthsRun||unavailable()||health<=0||!combatGear.equippedWeapon)return;
+  depthsRun={cleared:0};
+  enterRoom(depthsStages[0].room);
+  note('Moonwell Depths. Your current health carries through all three chambers.');
+}
+function advanceMoonwellDepths(){
+  const index=depthsStageIndex(currentRoom);
+  if(unavailable()||!depthsRun||index<0||depthsRun.cleared!==index+1)return;
+  const next=depthsStages[index+1];
+  if(next)enterRoom(next.room);
+}
+function leaveMoonwellDepths(){
+  const index=depthsStageIndex(currentRoom);
+  if(unavailable()||!depthsRun||index<0)return;
+  if(depthsRun.cleared===0){
+    depthsRun=null;
+    enterRoom('ruins',{x:5,y:7});
+    return;
+  }
+  try{
+    const state={depthsRun,location:currentRoom,health,hunting,credits,huntingLoot};
+    const spoils=bankDepthsSpoils(state);
+    credits=state.credits;depthsRun=state.depthsRun;
+    enterRoom(state.location,state.position);
+    const items=Object.entries(spoils.loot).map(([id,count])=>({icon:'✦',text:tradeCatalog[id].name+' ×'+count}));
+    showTransaction('Moonwell Depths spoils banked',items,spoils.gold);
+    note('Spoils banked. You return to the ruins with your remaining health.');
+  }catch(error){note(error.message);}
+}
+function updateDepthsPanel(){
+  const index=depthsStageIndex(currentRoom),inDepths=index>=0&&!!depthsRun;
+  $('depthsEntrance').hidden=currentRoom!=='ruins'||unavailable();
+  $('enterDepths').disabled=!combatGear.equippedWeapon||health<=0;
+  $('depthsPanel').hidden=!inDepths;
+  if(!inDepths)return;
+  const cleared=index<depthsRun.cleared;
+  const next=depthsStages[index+1];
+  const {gold,loot}=depthsSpoils(depthsRun);
+  const items=Object.entries(loot).map(([id,count])=>tradeCatalog[id].name+' ×'+count);
+  $('depthsTitle').textContent=depthsStages[index].name;
+  $('depthsStatus').textContent='Chamber '+(index+1)+' / '+depthsStages.length+' · '+health+' / 100 HP';
+  $('depthsSpoils').textContent=items.length?gold+' gold · '+items.join(' · '):'No unbanked spoils yet.';
+  $('depthsPreview').textContent=cleared
+    ?next?'Next: '+huntEnemies[next.enemy].name+' ('+huntEnemies[next.enemy].health+' HP) · '+next.gold+' gold and 1 '+next.lootName+'.':'All three chambers cleared. Bank your spoils to leave the vault.'
+    :'Clear this chamber for '+depthsStages[index].gold+' gold and 1 '+depthsStages[index].lootName+'.';
+  $('depthsNext').hidden=!cleared||!next||player.inCombat;
+  $('depthsLeave').hidden=player.inCombat||(!cleared&&depthsRun.cleared>0);
+  $('depthsLeave').textContent=cleared?'Bank spoils & leave':'Return to the ruins';
+}
 function startMonsterEncounter(enemy){
   if(currentRoom!==enemy.room||unavailable())return;
+  const index=depthsStageIndex(currentRoom);
+  if(index>=0&&(!depthsRun||depthsRun.cleared!==index))return;
   if(combatGear.equippedWeapon&&!canUseWeapon(playerStats,combatGear.equippedWeapon)){note('Your stats do not meet this weapon’s requirements.');return;}
   if(!combatGear.equippedWeapon){note('Equip your Training Sword in Inventory before hunting.');return;}
   if(health<=0){note('Return to the Tower and rest to restore your hearts.');return;}
@@ -486,22 +538,38 @@ function applyCombatResult(result){
   }
   if(result.outcome!=='fighting')setPlayerCombat(false);
   if(result.outcome==='victory'){
-    hunting[enemy.id==='beetle'?'beetleRespawnAt':'respawnAt']=Date.now()+enemy.respawn;
-    huntingLoot[enemy.loot]=(huntingLoot[enemy.loot]??0)+1;
-    if(enemy.id==='boar'){recordQuest(quest,'boar');history.boarDefeated=true;}
     const [strength,agility,vitality]=enemy.xp;
     playerStats.strengthXp+=strength;playerStats.agilityXp+=agility;playerStats.vitalityXp+=vitality;
-    combatMessage='Victory! '+enemy.lootName+' added to Inventory.';
-    showTransaction(enemy.name+' defeated',[{icon:'✦',text:enemy.lootName+' ×1 · sell for '+enemy.sellPrice+' gold'},{icon:'⚔',text:'+'+strength+' Strength XP · +'+agility+' Agility XP · +'+vitality+' Vitality XP'}]);
+    const xpReceipt={icon:'⚔',text:'+'+strength+' Strength XP · +'+agility+' Agility XP · +'+vitality+' Vitality XP'};
+    if(depthsRun){
+      clearDepthsStage(depthsRun,currentRoom);
+      combatMessage=depthsRun.cleared===depthsStages.length?'Vault cleared. Bank your spoils.':'Chamber cleared. Bank your spoils or press deeper.';
+      showTransaction('Chamber cleared',[{icon:'✦',text:'Spoils held until you bank them'},xpReceipt]);
+    }else{
+      hunting[enemy.id==='beetle'?'beetleRespawnAt':'respawnAt']=Date.now()+enemy.respawn;
+      huntingLoot[enemy.loot]=(huntingLoot[enemy.loot]??0)+1;
+      if(enemy.id==='boar'){recordQuest(quest,'boar');history.boarDefeated=true;}
+      combatMessage='Victory! '+enemy.lootName+' added to Inventory.';
+      showTransaction(enemy.name+' defeated',[{icon:'✦',text:enemy.lootName+' ×1 · sell for '+enemy.sellPrice+' gold'},xpReceipt]);
+    }
     updateInventory();
   }else if(result.outcome==='escaped'){
-    const beetle=enemy.id==='beetle';
-    combatMessage='You escape to '+(beetle?'Glass Creek':'Lantern Trail')+'. Your remaining hearts are saved.';
-    if(beetle)enterRoom('creek',{x:10,y:4});
-    else enterRoom('trail',{x:7,y:1});
+    if(depthsRun){
+      const previous=depthsStages[depthsRun.cleared-1];
+      if(previous)enterRoom(previous.room);
+      else{depthsRun=null;enterRoom('ruins',{x:5,y:7});}
+      combatMessage='You retreat with your remaining health and any earned spoils.';
+    }else{
+      const beetle=enemy.id==='beetle';
+      combatMessage='You escape to '+(beetle?'Glass Creek':'Lantern Trail')+'. Your remaining hearts are saved.';
+      if(beetle)enterRoom('creek',{x:10,y:4});
+      else enterRoom('trail',{x:7,y:1});
+    }
   }else if(result.outcome==='defeat'){
+    const lostSpoils=!!depthsRun?.cleared;
+    depthsRun=null;
     hunting.recoveryUntil=Date.now()+boarRules.recovery;
-    combatMessage='The Tower wardens bring you home. Resting restores all five hearts.';
+    combatMessage=lostSpoils?'The wardens bring you back. The unbanked spoils from this run were lost.':'The Tower wardens bring you home. Resting restores all five hearts.';
     enterRoom('hub');
   }
   updatePlayerStats();updateCombatPanel();savePlayerState();note(combatMessage);
@@ -515,10 +583,12 @@ function restAtTower(){
 function updateCombatPanel(){
   const now=Date.now(),encounter=hunting.encounter;
   const enemy=huntEnemyForRoom(currentRoom);
+  const stage=depthsStageIndex(currentRoom),chamberCleared=stage>=0&&stage<(depthsRun?.cleared??0);
+  updateDepthsPanel();
   $('equipStonebackVest').disabled=unavailable();
   $('equipWeapon').disabled=player.inCombat||!canUseWeapon(playerStats,$('weaponSelect').value||combatGear.equippedWeapon||'trainingSword');
   $('wave').disabled=editing||!!fishingSession||!!woodSession||unavailable();
-  $('combatPanel').hidden=!enemy;
+  $('combatPanel').hidden=!enemy||chamberCleared;
   $('scene').classList.toggle('in-combat',player.inCombat);
   $('restAtTower').hidden=!['hub','home'].includes(currentRoom)||health>=100&&!hunting.recoveryUntil;
   $('restAtTower').disabled=!!hunting.recoveryUntil;
@@ -526,14 +596,15 @@ function updateCombatPanel(){
   const notice=$('combatNotice');
   notice.hidden=!hunting.recoveryUntil;
   if(hunting.recoveryUntil)notice.textContent='Recovering at the Tower · '+Math.max(0,Math.ceil((hunting.recoveryUntil-now)/1000))+'s · Five hearts restored after rest';
-  if(!enemy)return;
-  const beetle=enemy.id==='beetle',respawn=huntRespawnAt(hunting,enemy);
+  if(!enemy||chamberCleared)return;
+  const beetle=!!enemy.shellArmor,respawn=stage>=0?0:huntRespawnAt(hunting,enemy);
   $('combatTitle').textContent=enemy.name;
-  $('combatChapter').textContent=beetle?'MOONWELL RUINS':'FIRST HUNT';
+  $('combatChapter').textContent=stage>=0?'MOONWELL DEPTHS':beetle?'MOONWELL RUINS':'FIRST HUNT';
   const [strength,agility,vitality]=enemy.xp;
-  $('combatReward').textContent='Victory: '+enemy.lootName+' ×1 · +'+strength+' Strength, +'+agility+' Agility, +'+vitality+' Vitality XP. Sell loot for '+enemy.sellPrice+' gold.';
+  $('combatReward').textContent=stage>=0?'Combat XP is kept after a win. Gold and items are held until you bank them.':'Victory: '+enemy.lootName+' ×1 · +'+strength+' Strength, +'+agility+' Agility, +'+vitality+' Vitality XP. Sell loot for '+enemy.sellPrice+' gold.';
   const approach=$('approachBeetle');
-  approach.hidden=!beetle||!!encounter||now<respawn;
+  approach.hidden=(!beetle&&stage<0)||!!encounter||now<respawn;
+  approach.textContent='Approach '+enemy.name;
   approach.disabled=health<=0||unavailable()||!combatGear.equippedWeapon;
   const shell=$('beetleShell');
   shell.hidden=!beetle||now<respawn;
@@ -565,7 +636,8 @@ function updateCombatPanel(){
   const weapon=weaponProfile(combatGear.equippedWeapon,combatGear.activeSwordUpgrade);
   const attributes=huntingAttributes(playerStats,combatGear.equippedWeapon,combatGear.activeSwordUpgrade);
   $('combatGuide').textContent=(weapon?.name??'No weapon equipped')+(weapon?.upgradeName?' · '+weapon.upgradeName:'')+' · Attack '+attributes.damage+'–'+(attributes.damage+4)+' every '+attackSeconds(attributes.attackInterval)+' · Dodge '+Math.round(attributes.dodge*100)+'% · Escape '+Math.round(attributes.escape*100)+'% · Armor '+attributes.armor;
-  if(beetle)$('adventureLandmark').hidden=!!encounter;
+  if(stage>=0)$('adventureLandmark').hidden=true;
+  else if(beetle)$('adventureLandmark').hidden=!!encounter;
   else{
     $('adventureLandmark').hidden=!!encounter||now<respawn;
     $('adventureLandmark').textContent='Approach boar';
@@ -638,7 +710,9 @@ function roomFurniture(){
   if(currentRoom==='armory')return armoryFurniture;
   if(moonwood.has(currentRoom)){
     const enemy=huntEnemyForRoom(currentRoom);
-    return moonwood.layouts[currentRoom].scenery.filter(item=>item.type!==enemy?.prop||Date.now()>=huntRespawnAt(hunting,enemy));
+    const index=depthsStageIndex(currentRoom);
+    const available=index>=0?index===depthsRun?.cleared:!enemy||Date.now()>=huntRespawnAt(hunting,enemy);
+    return moonwood.layouts[currentRoom].scenery.filter(item=>item.type!==enemy?.prop||available);
   }
   return currentRoom==='hub'?hubFurniture:courtyardFurniture;
 }
@@ -1838,10 +1912,8 @@ function finishInteraction(){
     beginChopping(item);
   }else if(item.type==='warden'){
     openQuest();
-  }else if(item.type==='wildboar'){
-    startBoarEncounter();
-  }else if(item.type==='stonebackBeetle'){
-    startMonsterEncounter(huntEnemies.beetle);
+  }else if(item.type===huntEnemyForRoom(currentRoom)?.prop){
+    startMonsterEncounter(huntEnemyForRoom(currentRoom));
   }else if(item.type==='fishingPost'){
     if(fishingGear.bait<1){note('You need bait. Visit Silverfin Outfitters in the tower.');return;}
     const rod=fishingCatalog.rods[fishingGear.equippedRod];
@@ -2229,7 +2301,7 @@ function updateTradingPost(){
   }
 }
 function savePlayerState(){
-  const snapshot={credits,health,woodcutting,history,quest,combatGear,hunting,ownedFurniture,furniture:[],homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats,fishingGear,huntingLoot,fishStock,avatar,location:currentRoom,position:{x:player.cx,y:player.cy}};
+  const snapshot={credits,health,woodcutting,history,quest,combatGear,hunting,depthsRun,ownedFurniture,furniture:[],homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats,fishingGear,huntingLoot,fishStock,avatar,location:currentRoom,position:{x:player.cx,y:player.cy}};
   save('player-state',snapshot);
   if(window.playerCloud)window.playerCloud.enqueue(JSON.parse(JSON.stringify(snapshot)));
   updateInventory();
@@ -2353,14 +2425,16 @@ function updateAdventurePanel(){
     roots:'Follow the roots back to Lantern Trail.',
     pond:fishingSession?({casting:'Casting your line…',waiting:'Watch the float. Your character will reel automatically.',twitch:'A nibble! Keep watching the float…',bite:'Bite! Reel now for +5 Patience XP. Your character will also reel automatically.',landing:'Reeling in your catch…'}[fishingMoments.phase(fishingSession,performance.now())]):fishingGear.bait<1?'Out of bait. Visit Silverfin Outfitters through the Fishing door in the Grand Lobby.':'Cast with your '+fishingCatalog.rods[fishingGear.equippedRod].name+'. Better rods and Patience improve catch quality. Fish in inventory: '+caughtFishCount()+'.'
   };
-  $('adventureStatus').textContent=fieldNotes[currentRoom];
+  const depthsIndex=depthsStageIndex(currentRoom);
+  $('adventureStatus').textContent=fieldNotes[currentRoom]??roomDetails[currentRoom].description;
   $('fishingStats').hidden=currentRoom!=='pond';
   $('offlinePlanPanel').hidden=currentRoom!=='pond';
   $('startOfflineFishing').disabled=fishingGear.bait<1||!!fishingSession;
   $('planBait').max=fishingGear.bait;
   $('planPace').textContent='One catch about every '+Math.round(60*fishingCatalog.rods[fishingGear.equippedRod].duration/4500)+' seconds with your '+fishingCatalog.rods[fishingGear.equippedRod].name+'. Each catch uses one bait and earns 10 Patience XP.';
   updatePlayerStats();
-  $('adventureProgress').textContent=adventure.discovered.length+' of '+Object.keys(moonwood.areas).length+' places discovered';
+  $('adventureProgress').hidden=depthsIndex>=0;
+  $('adventureProgress').textContent=adventure.discovered.length+' of '+(Object.keys(moonwood.areas).length-depthsStages.length)+' places discovered';
   const landmark=$('adventureLandmark');
   const bite=!!fishingSession&&fishingMoments.phase(fishingSession,performance.now())==='bite';
   const action={clearing:!player.inCombat&&Date.now()>=hunting.respawnAt?'Approach boar':'',trail:!adventure.lantern?'Take lantern':'',shrine:'Examine altar',ruins:'Search Moonwell',pond:bite?'Reel! +5 Patience XP':fishingSession?'Fishing…':'Cast a line'}[currentRoom];
@@ -2525,9 +2599,12 @@ $('adventureLandmark').onclick=()=>{
 $('combatFlee').onclick=()=>combatAction('flee');
 $('combatDodge').onclick=()=>combatAction('dodge');
 $('approachBeetle').onclick=()=>{
-  const beetle=roomFurniture().find(item=>item.type==='stonebackBeetle');
-  if(beetle)use(beetle);
+  const monster=roomFurniture().find(item=>item.type===huntEnemyForRoom(currentRoom)?.prop);
+  if(monster)use(monster);
 };
+$('enterDepths').onclick=enterMoonwellDepths;
+$('depthsNext').onclick=advanceMoonwellDepths;
+$('depthsLeave').onclick=leaveMoonwellDepths;
 $('combatRootbind').onclick=useRootbind;
 $('openRootstone').onclick=()=>openRootstone('journal');
 for(const [rune,id] of [['moth','rootRuneMoth'],['wave','rootRuneWave'],['root','rootRuneRoot']])$(id).onclick=()=>touchRootstoneRune(rune);
@@ -2559,7 +2636,8 @@ function updateCharacterRulesPreview(){
       detail=activity==='woodcutting'&&woodcutting.timber>=rules.timberTarget?'Your timber target is already met. Your character will rest.':activity==='fishing'&&bait===0?'Your bait reserve is already reached. Your character will rest.':preview.allowed?'Ready with your current equipment. Supplies stay in Inventory until you sell or use them.':'Will rest with current equipment: '+preview.reason;
       if(activity==='woodcutting'&&rootstone.power==='deepRoots'&&preview.allowed)detail+=' Deep Roots: one timber every 45 seconds while away.';
     }
-    $('rulesRequirements').textContent=detail;$('rulesSave').disabled=savingRules||!window.playerCloud;
+    $('rulesRequirements').textContent=depthsRun?'Away routines pause while you’re in Moonwell Depths. '+detail:detail;
+    $('rulesSave').disabled=savingRules||!window.playerCloud;
   }catch(error){$('rulesPreview').textContent=error.message;$('rulesSave').disabled=true;}
 }
 function openCharacterRules(){
@@ -2783,6 +2861,8 @@ function updateRoomLabel(){
 }
 function enterRoom(next,arrival){
   if(player.inCombat||(hunting.recoveryUntil&&next!=="hub"&&next!=="home")){note("Finish combat or recovery before travelling.");return;}
+  const depthsIndex=depthsStageIndex(next);
+  if(depthsRun?!canVisitDepthsStage(depthsRun,depthsIndex):depthsIndex>=0)return;
   cancelFishing();selectedTimber=null;resetCombatArt();
   if(next!==currentRoom&&huntEnemyForRoom(next))combatMessage='';
   catchReveal=null;$('catchReveal').hidden=true;
@@ -2819,7 +2899,7 @@ function enterRoom(next,arrival){
   updateRoomLabel();
   document.title='Tower of Beginnings • '+name;
   movePlayerToSpawn(arrival);
-  if(exploring&&!adventure.discovered.includes(next)){
+  if(exploring&&depthsIndex<0&&!adventure.discovered.includes(next)){
     adventure.discovered.push(next);
     savePlayerState();
   }

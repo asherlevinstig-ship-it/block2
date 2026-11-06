@@ -2,8 +2,10 @@ import {normalizeCharacterRules,AWAY_GRACE_MS,AWAY_CAP_MS,describeCharacterRules
 import {startPlan,settlePlan} from './player-state.mjs';
 import {jobPreview} from '../public/jobs.js';
 import {deepRootsInterval,normalizeRootstone} from '../public/rootstone.js';
+import {depthsStageIndex} from '../public/depths.js';
 export function touchPresence(state,now,{random=Math.random}={}){
   const last=state.routineLastSeen;state.routineLastSeen=now;
+  if(depthsStageIndex(state.location)>=0)return;
   const rules=normalizeCharacterRules(state.characterRules);
   if(!rules.enabled||!Number.isFinite(last)||now-last<AWAY_GRACE_MS||state.plan||state.report)return;
   const startedAt=last+AWAY_GRACE_MS,until=Math.min(now,startedAt+AWAY_CAP_MS);

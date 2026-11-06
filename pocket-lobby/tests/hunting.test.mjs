@@ -1,5 +1,6 @@
 import * as questRules from '../public/quests.js';
 import * as stoneRules from '../public/rootstone.js';
+import * as depthsRules from '../public/depths.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -72,7 +73,7 @@ function gameHarness(){
   };
   const source=fs.readFileSync(new URL('../public/game.js',import.meta.url),'utf8');
   const context=vm.createContext({
-    ...questRules,...stoneRules,rootstone:stoneRules.normalizeRootstone(),normalizeHunting,normalizeCombatGear,weaponCatalog,weaponProfile,attackSeconds,boarRules,huntingAttributes,createHunt,resumeHunt,combatStamina,canUseWeapon,
+    ...questRules,...stoneRules,...depthsRules,depthsRun:null,rootstone:stoneRules.normalizeRootstone(),normalizeHunting,normalizeCombatGear,weaponCatalog,weaponProfile,attackSeconds,boarRules,huntingAttributes,createHunt,resumeHunt,combatStamina,canUseWeapon,
     huntEnemies,huntEnemy,huntEnemyForRoom,huntRespawnAt,combatDodgeCost,
     advanceHunt:(e,h,s,n,_r,w,upgrade,vest)=>advanceHunt(e,h,s,n,()=>.5,w,upgrade,vest),
     huntingTurn:(e,h,s,a,n,_r,w,upgrade,vest)=>huntingTurn(e,h,s,a,n,()=>.5,w,upgrade,vest),
@@ -94,20 +95,20 @@ function gameHarness(){
 
 test('combat continues to victory without clicks, gives one reward and preserves wounds',()=>{
   const h=gameHarness(),c=h.context;
-  c.startBoarEncounter();assert(c.player.inCombat);assert.equal(h.get('healthHud').hidden,false);
+  c.startMonsterEncounter(huntEnemies.boar);assert(c.player.inCombat);assert.equal(h.get('healthHud').hidden,false);
   const initial=h.state();c.combatAction('attack');assert.deepEqual(h.state(),initial);
   for(let i=0;i<50;i++)h.tick(100);
   assert.equal(h.state().huntingLoot.boar,1);assert.equal(h.state().health,70);
   assert.equal(h.state().playerStats.strengthXp,15);assert.equal(h.receipts.length,1);
   assert.equal(c.player.inCombat,false);assert.equal(h.get('healthHud').hidden,true);
-  h.tick(1000);c.startBoarEncounter();assert.equal(h.state().huntingLoot.boar,1);assert.equal(c.player.inCombat,false);
-  h.tick(boarRules.respawn);c.startBoarEncounter();assert(c.player.inCombat);
+  h.tick(1000);c.startMonsterEncounter(huntEnemies.boar);assert.equal(h.state().huntingLoot.boar,1);assert.equal(c.player.inCombat,false);
+  h.tick(boarRules.respawn);c.startMonsterEncounter(huntEnemies.boar);assert(c.player.inCombat);
   assert.equal(h.state().health,70);assert(h.saves.length>0);
 });
 
 test('defeat returns to the Tower, recovery survives saves and fully restores five hearts',()=>{
   const h=gameHarness(),c=h.context;c.health=1;
-  c.startBoarEncounter();h.tick(450);h.tick(850);
+  c.startMonsterEncounter(huntEnemies.boar);h.tick(450);h.tick(850);
   assert.equal(c.currentRoom,'hub');assert.equal(h.state().health,0);assert.equal(h.state().huntingLoot.boar,0);
   assert.equal(c.player.inCombat,false);assert(h.state().hunting.recoveryUntil>0);
   assert.equal(h.saves.at(-1).hunting.recoveryUntil,h.state().hunting.recoveryUntil);
@@ -119,7 +120,7 @@ test('defeat returns to the Tower, recovery survives saves and fully restores fi
 
 test('successful escape preserves wounds, gives no loot, and hides combat hearts',()=>{
   const h=gameHarness(),c=h.context;c.health=37;
-  c.startBoarEncounter();c.combatAction('flee');
+  c.startMonsterEncounter(huntEnemies.boar);c.combatAction('flee');
   assert.equal(c.currentRoom,'trail');assert.equal(h.state().health,37);
   assert.equal(h.state().huntingLoot.boar,0);assert.equal(h.state().hunting.encounter,null);
   assert.equal(c.player.inCombat,false);assert.equal(h.get('healthHud').hidden,true);

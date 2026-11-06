@@ -255,10 +255,11 @@
       const characterRules=await import('./character-rules.js');
       const commissions=await import('./commissions.js');
       const rootstone=await import('./rootstone.js');
+      const depths=await import('./depths.js');
       const jobs=await import('./jobs.js');
       const shared=await import('./shared-world.js');
       const multiplayer=await import('./multiplayer.js');
-      Object.assign(window,rules,hunting,art,fx,quests,historyRules,shopUI,woodRules,crafting,characterRules,commissions,rootstone,jobs,shared,multiplayer);
+      Object.assign(window,rules,hunting,art,fx,quests,historyRules,shopUI,woodRules,crafting,characterRules,commissions,rootstone,depths,jobs,shared,multiplayer);
       window.towerInitialState=packet.state;
       window.playerCloud={enqueue,flush,attach,deliverCarpenter:async()=>{await flush();return (await action('commissions/carpenter')).state;},saveRules:async rules=>{await flush();return (await action('rules/save',{rules})).state;},startJob:async options=>{await flush();await action('plan/start',{...options,source:'board'});window.towerMultiplayer?.disconnect();location.reload();},invalidate:conflict,get initial(){return packet.state;}};
       const script=document.createElement('script');script.src='game.js';

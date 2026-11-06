@@ -33,7 +33,7 @@ export function drawCombatGroundFx({ctx,point,time,now,encounter,player,reduced}
   const dx=px-bx,dy=py-by,length=Math.hypot(dx,dy)||1,nx=-dy/length*6,ny=dx/length*6;
   ctx.save();ctx.fillStyle='#ef9a6540';ctx.strokeStyle='#ffc38a';ctx.lineWidth=1;
   ctx.beginPath();
-  if(encounter.enemy==='beetle')ctx.ellipse(bx,by,38,20,0,0,Math.PI*2);
+  if(encounter.exposedUntil!==undefined)ctx.ellipse(bx,by,38,20,0,0,Math.PI*2);
   else{ctx.moveTo(bx+nx,by+ny);ctx.lineTo(px+nx,py+ny);ctx.lineTo(px-nx,py-ny);ctx.lineTo(bx-nx,by-ny);ctx.closePath();}
   ctx.fill();ctx.stroke();
   ctx.beginPath();ctx.ellipse(bx,by,18,9,0,-Math.PI/2,-Math.PI/2+Math.PI*2*amount);ctx.stroke();
@@ -61,7 +61,7 @@ export function drawCombatWorldFx({ctx,point,time,events,player,reduced,enemy}){
   }
   sparks(ctx,bx,by,time,events.boarHitAt,'#ffe2a0',reduced);
   sparks(ctx,px,py,time,events.hurtAt,'#f4a0a0',reduced,6);
-  if(enemy?.id==='beetle'&&active(time,events.boarAttackAt,380)){
+  if(enemy?.move==='slam'&&active(time,events.boarAttackAt,380)){
     const t=progress(time,events.boarAttackAt,380),[x,y]=point(6.5,5.5,1),radius=reduced?29:12+t*26;
     ctx.save();ctx.globalAlpha=1-t;ctx.strokeStyle='#e9b184';ctx.lineWidth=2;
     ctx.beginPath();ctx.ellipse(x,y,radius,radius*.52,0,0,Math.PI*2);ctx.stroke();ctx.restore();
@@ -93,7 +93,7 @@ export function drawCombatOverlayFx({ctx,width,height,time,now,events,encounter,
     ctx.fillStyle='#252538ed';ctx.fillRect(x-w/2,y,w,victory?37:25);
     ctx.fillStyle=victory?'#f2ce8a':exposed?'#bed88f':'#f2aa7c';ctx.fillRect(x-w/2,y,w,1);
     const victoryTitle='✦ '+(enemy?.name??'Wild Boar').toUpperCase()+' DEFEATED ✦';
-    const warningTitle=enemy?.id==='beetle'?'! SLAM INCOMING !':'! BOAR CHARGING !';
+    const warningTitle=enemy?.move==='slam'?'! SLAM INCOMING !':'! BOAR CHARGING !';
     ctx.font='bold 10px monospace';ctx.textAlign='center';
     ctx.fillText(victory?victoryTitle:exposed?'WEAK SPOT EXPOSED':encounter.nextBoarAt-now<=350?'DODGE NOW · SPACE':warningTitle,x,y+13);
     ctx.font='7px monospace';ctx.fillStyle='#e2d7c4';

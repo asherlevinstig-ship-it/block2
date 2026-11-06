@@ -1,5 +1,6 @@
 import {normalizeCharacterRules} from '../public/character-rules.js';
 import {normalizeRootstone} from '../public/rootstone.js';
+import {depthsStages,normalizeDepthsRun} from '../public/depths.js';
 import {jobPreview} from '../public/jobs.js';
 import { normalizeWoodcutting } from "../public/woodcutting.js";
 import { startWoodcuttingPlan,settleWoodcuttingPlan } from "./woodcutting-plan.mjs";
@@ -28,7 +29,7 @@ function furniture(items){
     return {id:item.id,type:item.type,x:item.x,y:item.y,rot:item.rot};
   });
 }
-const locations=new Set(["home","hub","lounge","outside","store","market","trail","grove","creek","shrine","ruins","roots","pond","clearing","armory","logging"]);
+const locations=new Set(["home","hub","lounge","outside","store","market","trail","grove","creek","shrine","ruins","roots","pond","clearing","armory","logging",...depthsStages.map(stage=>stage.room)]);
 export function normalizeState(input={}){
   if(!input||typeof input!=="object"||Array.isArray(input))throw new Error("Invalid character.");
   const credits=input.credits??100;
@@ -55,6 +56,7 @@ export function normalizeState(input={}){
   const hunting=normalizeHunting(input.hunting);
   if(hunting.encounter&&!combatGear.equippedWeapon)throw new Error("Invalid unarmed encounter.");
   if(hunting.encounter&&(input.location!==huntEnemy(hunting.encounter).room||health===0))throw new Error("Invalid encounter location.");
+  const depthsRun=normalizeDepthsRun(input.depthsRun,input.location,hunting.encounter);
   const position=input.position;
   const state={
     characterRules:normalizeCharacterRules(input.characterRules),credits,health:Math.min(health,maxHealth),stats:{strengthXp:stats.strengthXp,agilityXp:stats.agilityXp,vitalityXp:stats.vitalityXp,patienceXp:stats.patienceXp},fishingGear:{ownedRods,equippedRod:gear.equippedRod,bait:gear.bait},
@@ -65,6 +67,7 @@ export function normalizeState(input={}){
     furniture:furniture(input.furniture),homeFurniture:furniture(input.homeFurniture??[])
   };
   if(input.ownedFurniture!==undefined)state.ownedFurniture=counts(input.ownedFurniture);
+  if(depthsRun)state.depthsRun=depthsRun;
   if(input.loungeLayout==="gaming")state.loungeLayout="gaming";
   return state;
 }

@@ -1,13 +1,17 @@
 export const boarRules={health:70,playerInterval:1100,boarInterval:1900,fleeCooldown:1800,respawn:30000,recovery:12000,dodgeCost:40,dodgeWindow:350,dodgeCooldown:700};
 export const stonebackVest={name:'Stoneback Vest',absorption:4,dodgeCost:50,timber:8,fragment:'stonebackShell'};
 export const combatDodgeCost=vestEquipped=>vestEquipped?stonebackVest.dodgeCost:boarRules.dodgeCost;
+const boar={id:'boar',name:'Wild Boar',room:'clearing',prop:'wildboar',move:'charge',health:boarRules.health,firstAttack:1300,interval:boarRules.boarInterval,damage:12,respawn:boarRules.respawn,loot:'boar',lootName:'Boar Meat',sellPrice:30,xp:[15,10,15]};
+const beetle={id:'beetle',name:'Stoneback Beetle',room:'ruins',prop:'stonebackBeetle',move:'slam',health:96,firstAttack:2300,interval:3500,damage:22,respawn:45000,shellArmor:8,exposureMs:2200,exposedBonus:5,loot:'stonebackShell',lootName:'Shell Fragment',sellPrice:45,xp:[20,15,20]};
 export const huntEnemies={
-  boar:{id:'boar',name:'Wild Boar',room:'clearing',prop:'wildboar',move:'charge',health:boarRules.health,firstAttack:1300,interval:boarRules.boarInterval,damage:12,respawn:boarRules.respawn,loot:'boar',lootName:'Boar Meat',sellPrice:30,xp:[15,10,15]},
-  beetle:{id:'beetle',name:'Stoneback Beetle',room:'ruins',prop:'stonebackBeetle',move:'slam',health:96,firstAttack:2300,interval:3500,damage:22,respawn:45000,shellArmor:8,exposureMs:2200,exposedBonus:5,loot:'stonebackShell',lootName:'Shell Fragment',sellPrice:45,xp:[20,15,20]}
+  boar,beetle,
+  depthsBoar:{...boar,id:'depthsBoar',room:'depthsGate',name:'Gate Boar',health:62,damage:11},
+  depthsBeetle:{...beetle,id:'depthsBeetle',room:'depthsGallery',name:'Gallery Beetle',health:84,damage:19},
+  depthsGuardian:{...beetle,id:'depthsGuardian',room:'depthsVault',name:'Vault Guardian',health:118,damage:25,shellArmor:9}
 };
 const enemiesByRoom=Object.fromEntries(Object.values(huntEnemies).map(enemy=>[enemy.room,enemy]));
 export const huntEnemyForRoom=room=>enemiesByRoom[room];
-export const huntEnemy=encounter=>encounter?.enemy==='beetle'?huntEnemies.beetle:huntEnemies.boar;
+export const huntEnemy=encounter=>Object.hasOwn(huntEnemies,encounter?.enemy)?huntEnemies[encounter.enemy]:boar;
 export const huntRespawnAt=(hunting,enemy)=>enemy===huntEnemies.beetle?hunting.beetleRespawnAt??0:hunting.respawnAt;
 export const weaponCatalog={
   trainingSword:{name:'Training Sword',damage:14,interval:1100,strength:1,agility:1,description:'A simple iron blade issued to new adventurers.'},
@@ -84,7 +88,7 @@ export function normalizeHunting(input={}){
   if(input.beetleRespawnAt!==undefined)result.beetleRespawnAt=time(input.beetleRespawnAt);
   if(input.encounter){
     const enemy=input.encounter.enemy;
-    if(enemy!==undefined&&enemy!=='boar'&&enemy!=='beetle')throw new Error('Invalid encounter enemy.');
+    if(enemy!==undefined&&(typeof enemy!=='string'||!Object.hasOwn(huntEnemies,enemy)))throw new Error('Invalid encounter enemy.');
     const hp=input.encounter.health;
     if(!Number.isSafeInteger(hp)||hp<1||hp>huntEnemy(input.encounter).health)throw new Error('Invalid enemy health.');
     if(result.recoveryUntil)throw new Error('Invalid recovering encounter.');
@@ -92,10 +96,8 @@ export function normalizeHunting(input={}){
     if(!Number.isFinite(stamina)||stamina<0||stamina>100)throw new Error('Invalid stamina.');
     result.encounter={stamina,staminaAt:time(input.encounter.staminaAt),dodgeUntil:time(input.encounter.dodgeUntil),nextDodgeAt:time(input.encounter.nextDodgeAt),health:hp,nextPlayerAt:time(input.encounter.nextPlayerAt??input.encounter.nextActionAt),nextBoarAt:time(input.encounter.nextBoarAt??input.encounter.nextActionAt),nextFleeAt:time(input.encounter.nextFleeAt)};
     if(input.encounter.rootboundUntil!==undefined)result.encounter.rootboundUntil=time(input.encounter.rootboundUntil);
-    if(enemy==='beetle'){
-      result.encounter.enemy='beetle';
-      result.encounter.exposedUntil=time(input.encounter.exposedUntil);
-    }
+    if(enemy&&enemy!=='boar')result.encounter.enemy=enemy;
+    if(huntEnemy(input.encounter).shellArmor)result.encounter.exposedUntil=time(input.encounter.exposedUntil);
   }
   return result;
 }
@@ -103,7 +105,9 @@ export function normalizeHunting(input={}){
 export function createHunt(now,health,enemy='boar'){
   const profile=huntEnemy({enemy});
   const encounter={health:health??profile.health,stamina:100,staminaAt:now,dodgeUntil:0,nextDodgeAt:0,nextPlayerAt:now+450,nextBoarAt:now+profile.firstAttack,nextFleeAt:0};
-  return enemy==='beetle'?{...encounter,enemy,exposedUntil:0}:encounter;
+  if(enemy!=='boar')encounter.enemy=enemy;
+  if(profile.shellArmor)encounter.exposedUntil=0;
+  return encounter;
 }
 export function combatStamina(encounter,stats,now){
   return Math.min(100,(encounter.stamina??100)+Math.max(0,now-(encounter.staminaAt??now))/1000*huntingAttributes(stats).staminaRegen);
@@ -138,7 +142,7 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
   if(action==='attack'){
     result.encounter.nextPlayerAt=now+attributes.attackInterval;
     result.damage=attributes.damage+Math.floor(random()*5);
-    if(enemy===huntEnemies.beetle){
+    if(enemy.shellArmor){
       const exposed=now<encounter.exposedUntil;
       result.damage=exposed?result.damage+enemy.exposedBonus:Math.max(1,result.damage-enemy.shellArmor);
       result.shellGuarded=!exposed;
@@ -149,7 +153,7 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
     result.encounter.nextBoarAt=now+enemy.interval;
     result.timedDodge=encounter.dodgeUntil>0&&encounter.nextBoarAt<=encounter.dodgeUntil&&encounter.nextBoarAt>=encounter.dodgeUntil-boarRules.dodgeWindow;
     result.dodged=result.timedDodge||random()<attributes.dodge;
-    if(enemy===huntEnemies.beetle&&result.timedDodge){
+    if(enemy.shellArmor&&result.timedDodge){
       result.encounter.exposedUntil=now+enemy.exposureMs;
       result.shellExposed=true;
     }
