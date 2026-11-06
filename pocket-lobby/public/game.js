@@ -1045,9 +1045,12 @@ function drawMoonwoodDetails(time){
 function draw(time){
   const {width,height}=view,centerX=width/2,centerY=height/2-4;
   ctx.setTransform(1,0,0,1,0,0);
-  ctx.clearRect(0,0,width,height);ctx.translate(centerX,centerY);ctx.scale(zoom,zoom);ctx.translate(-centerX,-centerY);
+  ctx.clearRect(0,0,width,height);
+  const [shakeX,shakeY]=currentRoom==='clearing'?combatShake(time,combatArt,reducedMotion.matches):[0,0];
+  ctx.translate(shakeX,shakeY);ctx.translate(centerX,centerY);ctx.scale(zoom,zoom);ctx.translate(-centerX,-centerY);
   ctx.imageSmoothingEnabled=false;ctx.drawImage(roomLayers[currentRoom],0,0);
   if(moonwood.has(currentRoom))drawMoonwoodDetails(time);
+  if(currentRoom==='clearing')drawCombatGroundFx({ctx,point,time,now:Date.now(),encounter:hunting.encounter,player,reduced:reducedMotion.matches});
   if(target)surface(target.x+.1,target.y+.1,.8,.8,1,'#fff3bc30','#ffcf8f');
   if(hover){
     const [w,d]=editing&&selection?dimensions(selection):[1,1];
@@ -1118,7 +1121,9 @@ function draw(time){
     hitboxes.push({item,shape});
   }
   if(!drawn)drawPlayer();
+  if(currentRoom==='clearing')drawCombatWorldFx({ctx,point,time,events:combatArt,player,reduced:reducedMotion.matches});
   drawCombatFeedback(time);
+  if(currentRoom==='clearing')drawCombatOverlayFx({ctx,width,height,time,now:Date.now(),events:combatArt,encounter:hunting.encounter,health,reduced:reducedMotion.matches});
 }
 
 
