@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-import {boarRules,huntingTurn,huntingAttributes,normalizeHunting,normalizeCombatGear,weaponCatalog,createHunt,resumeHunt,advanceHunt} from '../public/hunting.js';
+import {boarRules,huntingTurn,huntingAttributes,normalizeHunting,normalizeCombatGear,weaponCatalog,createHunt,resumeHunt,advanceHunt,combatStamina} from '../public/hunting.js';
 import {normalizeState,startPlan} from '../server/player-state.mjs';
 
 test('new and existing characters receive one equipped sword, while unequipped choices persist',()=>{
@@ -52,7 +52,7 @@ test('flee has an independent cooldown and never delays enemy attacks',()=>{
 test('saved encounters retain health and cooldown; invalid state and offline plans are rejected',()=>{
   const state=normalizeState({location:'clearing',health:37,hunting:{encounter:{health:22,nextActionAt:9000}},huntingLoot:{boar:1}});
   assert.equal(state.location,'clearing');assert.equal(state.health,37);
-  assert.deepEqual(state.hunting.encounter,{health:22,nextPlayerAt:9000,nextBoarAt:9000,nextFleeAt:0});
+  assert.deepEqual(state.hunting.encounter,{health:22,nextPlayerAt:9000,nextBoarAt:9000,nextFleeAt:0,stamina:100,staminaAt:0,dodgeUntil:0,nextDodgeAt:0});
   assert.deepEqual(normalizeState(JSON.parse(JSON.stringify(state))),state);
   assert.throws(()=>normalizeState({...state,location:'pond'}),/Invalid/);
   assert.throws(()=>normalizeState({...state,health:0}),/Invalid/);
@@ -71,7 +71,7 @@ function gameHarness(){
   };
   const source=fs.readFileSync(new URL('../public/game.js',import.meta.url),'utf8');
   const context=vm.createContext({
-    ...questRules,normalizeHunting,normalizeCombatGear,weaponCatalog,boarRules,huntingAttributes,createHunt,resumeHunt,
+    ...questRules,normalizeHunting,normalizeCombatGear,weaponCatalog,boarRules,huntingAttributes,createHunt,resumeHunt,combatStamina,
     advanceHunt:(e,h,s,n,_r,w)=>advanceHunt(e,h,s,n,()=>.5,w),
     huntingTurn:(e,h,s,a,n,_r,w)=>huntingTurn(e,h,s,a,n,()=>.5,w),
     history:{fishCaught:false,boarDefeated:false},savedPlayerState:null,player:{cx:5,cy:5,inCombat:false},health:100,

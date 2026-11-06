@@ -171,13 +171,18 @@ function startBoarEncounter(){
   player.direction=(6-player.cx)-(5-player.cy)>=0?'right':'left';player.back=11<player.cx+player.cy;
   hunting.encounter=createHunt(Date.now());
   setPlayerCombat(true);
-  combatMessage='You engage the boar. Both fighters attack automatically. Flee if your hearts run low.';
+  combatMessage='You engage the boar. Both fighters attack automatically. Dodge the charge with Space, or Flee.';
   updateCombatPanel();savePlayerState();
-  note('Combat is live! You and the boar attack continuously. Use Flee to escape.');
+  note('Combat is live! Press Space just before the charge lands to dodge. F flees.');
 }
 function combatAction(action){
-  if(!player.inCombat||currentRoom!=='clearing'||action!=='flee')return;
-  applyCombatResult(huntingTurn(hunting.encounter,health,playerStats,'flee',Date.now(),Math.random,combatGear.equippedWeapon));
+  if(!player.inCombat||currentRoom!=='clearing'||!['flee','dodge'].includes(action))return;
+  const result=huntingTurn(hunting.encounter,health,playerStats,action,Date.now(),Math.random,combatGear.equippedWeapon);
+  if(!result&&action==='dodge'){
+    combatMessage=combatStamina(hunting.encounter,playerStats,Date.now())<boarRules.dodgeCost?'Not enough stamina. Let it recover.':'Your dodge is recovering.';
+    updateCombatPanel();return;
+  }
+  applyCombatResult(result);
 }
 function applyCombatResult(result){
   if(!result)return;
@@ -185,11 +190,13 @@ function applyCombatResult(result){
   if(result.damage){combatArt.strikeAt=artTime;combatArt.boarHitAt=artTime;}
   if(action==='enemy')combatArt.boarAttackAt=artTime;
   if(result.taken)combatArt.hurtAt=artTime;
-  if(result.dodged)combatArt.dodgeAt=artTime;
+  if(result.dodgeStarted||(result.dodged&&!result.timedDodge))combatArt.dodgeAt=artTime;
   if(result.outcome==='victory')combatArt.victoryAt=artTime;
   hunting.encounter=result.encounter;health=result.health;
   combatFeedback={started:performance.now(),damage:result.damage,taken:result.taken,dodged:result.dodged};
   combatMessage=(result.damage?'You hit for '+result.damage+'. ':action==='flee'&&result.outcome!=='escaped'?'Your escape was blocked. ':'')+(result.dodged?'You dodge the boar’s attack.':result.taken?'The boar hits for '+result.taken+'.':'');
+  if(result.dodgeStarted)combatMessage='You sidestep. Time your dodge just before the charge lands!';
+  if(result.timedDodge)combatMessage='Perfect dodge! You avoided the charge.';
   if(result.taken){
     $('healthHud').classList.remove('injured');void $('healthHud').offsetWidth;$('healthHud').classList.add('injured');
   }
@@ -236,6 +243,12 @@ function updateCombatPanel(){
   $('boarProgress').value=encounter?.health??(now<hunting.respawnAt?0:boarRules.health);
   $('combatAttack').textContent=encounter?'Auto-attacking':'Auto-attack';
   $('combatFlee').disabled=!encounter||remaining>0;
+  const stamina=encounter?combatStamina(encounter,playerStats,now):100;
+  $('combatStamina').value=stamina;$('combatStaminaValue').textContent=Math.floor(stamina)+' / 100';
+  $('combatDodge').disabled=!encounter||now<(encounter.nextDodgeAt??0)||stamina<boarRules.dodgeCost;
+  const timing=!!encounter&&encounter.nextBoarAt-now>0&&encounter.nextBoarAt-now<=boarRules.dodgeWindow;
+  $('combatDodge').classList.toggle('dodge-ready',timing&&!$('combatDodge').disabled);
+  $('combatDodge').textContent=encounter&&stamina<boarRules.dodgeCost?'Dodge · Low stamina':encounter&&now<(encounter.nextDodgeAt??0)?'Dodge · Recovering':timing?'Dodge now! · Space':'Dodge · Space';
   $('combatCooldown').textContent=encounter?'Next strike '+Math.max(0,(encounter.nextPlayerAt-now)/1000).toFixed(1)+'s · Boar '+Math.max(0,(encounter.nextBoarAt-now)/1000).toFixed(1)+'s'+(remaining?' · Flee '+(remaining/1000).toFixed(1)+'s':' · F: Flee'):'Click the boar to engage. Combat runs in real time.';
   $('combatLog').textContent=combatMessage||'The boar watches the trail. It will not attack until you approach.';
   const attributes=huntingAttributes(playerStats,combatGear.equippedWeapon);
@@ -1958,6 +1971,7 @@ $('adventureLandmark').onclick=()=>{
   if(landmark)use(landmark);
 };
 $('combatFlee').onclick=()=>combatAction('flee');
+$('combatDodge').onclick=()=>combatAction('dodge');
 $('equipWeapon').onclick=toggleWeapon;
 $('weaponSelect').onchange=updateWeaponInventory;
 $('questJournal').onclick=openQuest;
@@ -2016,9 +2030,7 @@ canvas.addEventListener('keydown',e=>{
     return;
   }
   const delta=arrows[e.key];
-  if(player.inCombat&&['Space','KeyF'].includes(e.code)){
-    e.preventDefault();if(!e.repeat&&e.code==='KeyF')combatAction('flee');return;
-  }
+
   if(!editing&&e.code==='Space'){
     e.preventDefault();
     if(!e.repeat)waveHello();
@@ -2029,6 +2041,10 @@ canvas.addEventListener('keydown',e=>{
   }
 });
 document.addEventListener('keydown',e=>{
+  if(player.inCombat&&['Space','KeyF'].includes(e.code)&&!e.target.matches('input,textarea,select')&&!document.querySelector('dialog[open]')){
+    if(e.code==='Space'&&e.target.matches('button'))return;
+    e.preventDefault();if(!e.repeat)combatAction(e.code==='Space'?'dodge':'flee');return;
+  }
   if(!editing||e.target.matches('input')||document.querySelector('dialog[open]'))return;
   if(e.key.toLowerCase()==='r'){e.preventDefault();rotate();}
   if(e.key==='Escape'){
@@ -2046,7 +2062,7 @@ $('minus').onclick=()=>setZoom(zoom-.125);
 $('resetView').onclick=()=>setZoom(1);
 window.addEventListener('resize',()=>{bounds=null;});
 document.addEventListener('visibilitychange',()=>{
-  if(!document.hidden&&player.inCombat)hunting.encounter=resumeHunt(hunting.encounter,Date.now());
+  if(!document.hidden&&player.inCombat)hunting.encounter=resumeHunt(hunting.encounter,Date.now(),playerStats);
 });
 function showMessage(msg){
   const row=document.createElement('div');row.className='message';
@@ -2193,7 +2209,7 @@ movePlayerToSpawn();updateName();switchMode(false);
 if(savedPlayerState?.location&&roomDetails[savedPlayerState.location])enterRoom(savedPlayerState.location,savedPlayerState.position);
 if(hunting.encounter){
   if(currentRoom==='clearing'&&combatGear.equippedWeapon){
-    hunting.encounter=resumeHunt(hunting.encounter,Date.now());
+    hunting.encounter=resumeHunt(hunting.encounter,Date.now(),playerStats);
     setPlayerCombat(true);combatMessage='Combat resumes! Both fighters attack automatically. Flee if you need to escape.';
   }else hunting.encounter=null;
 }

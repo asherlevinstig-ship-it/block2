@@ -1,4 +1,4 @@
-export const boarRules={health:70,playerInterval:1100,boarInterval:1900,fleeCooldown:1800,respawn:30000,recovery:12000};
+export const boarRules={health:70,playerInterval:1100,boarInterval:1900,fleeCooldown:1800,respawn:30000,recovery:12000,dodgeCost:40,dodgeWindow:350,dodgeCooldown:700};
 export const weaponCatalog={trainingSword:{name:'Training Sword',damage:14,description:'A simple iron blade issued to new adventurers.'},wardenSword:{name:'Warden’s Blade',damage:18,description:'A gold-trimmed blade awarded for completing First Steps.'}};
 export function normalizeCombatGear(input){
   if(input===undefined)return {ownedWeapons:['trainingSword'],equippedWeapon:'trainingSword'};
@@ -16,6 +16,7 @@ export function huntingAttributes(stats,weapon='trainingSword'){
     damage:(weaponCatalog[weapon]?.damage??0)+Math.min(30,(level(stats.strengthXp)-1)*2),
     dodge:Math.min(.3,.08+(level(stats.agilityXp)-1)*.02),
     escape:Math.min(.95,.7+(level(stats.agilityXp)-1)*.025),
+    staminaRegen:Math.min(25,12+(level(stats.agilityXp)-1)*1.5),
     armor:Math.min(10,level(stats.vitalityXp)-1)
   };
 }
@@ -27,24 +28,37 @@ export function normalizeHunting(input={}){
     const hp=input.encounter.health;
     if(!Number.isSafeInteger(hp)||hp<1||hp>boarRules.health)throw new Error('Invalid boar health.');
     if(result.recoveryUntil)throw new Error('Invalid recovering encounter.');
-    result.encounter={health:hp,nextPlayerAt:time(input.encounter.nextPlayerAt??input.encounter.nextActionAt),nextBoarAt:time(input.encounter.nextBoarAt??input.encounter.nextActionAt),nextFleeAt:time(input.encounter.nextFleeAt)};
+    const stamina=input.encounter.stamina??100;
+    if(!Number.isFinite(stamina)||stamina<0||stamina>100)throw new Error('Invalid stamina.');
+    result.encounter={stamina,staminaAt:time(input.encounter.staminaAt),dodgeUntil:time(input.encounter.dodgeUntil),nextDodgeAt:time(input.encounter.nextDodgeAt),health:hp,nextPlayerAt:time(input.encounter.nextPlayerAt??input.encounter.nextActionAt),nextBoarAt:time(input.encounter.nextBoarAt??input.encounter.nextActionAt),nextFleeAt:time(input.encounter.nextFleeAt)};
   }
   return result;
 }
 // Each fighter has its own clock. Fleeing never postpones either attack.
 export function createHunt(now,health=boarRules.health){
-  return {health,nextPlayerAt:now+450,nextBoarAt:now+1300,nextFleeAt:0};
+  return {health,stamina:100,staminaAt:now,dodgeUntil:0,nextDodgeAt:0,nextPlayerAt:now+450,nextBoarAt:now+1300,nextFleeAt:0};
 }
-export function resumeHunt(encounter,now){
-  return {...encounter,nextPlayerAt:now+450,nextBoarAt:now+1300,nextFleeAt:Math.min(encounter.nextFleeAt,now+boarRules.fleeCooldown)};
+export function combatStamina(encounter,stats,now){
+  return Math.min(100,(encounter.stamina??100)+Math.max(0,now-(encounter.staminaAt??now))/1000*huntingAttributes(stats).staminaRegen);
+}
+export function resumeHunt(encounter,now,stats={}){
+  return {...encounter,stamina:combatStamina(encounter,stats,now),staminaAt:now,dodgeUntil:0,nextDodgeAt:Math.min(encounter.nextDodgeAt??0,now+boarRules.dodgeCooldown),nextPlayerAt:now+450,nextBoarAt:now+1300,nextFleeAt:Math.min(encounter.nextFleeAt,now+boarRules.fleeCooldown)};
 }
 export function huntingTurn(encounter,health,stats,action,now,random=Math.random,weapon='trainingSword'){
-  if(!['attack','enemy','flee'].includes(action))throw new Error('Invalid combat action.');
+  if(!['attack','enemy','flee','dodge'].includes(action))throw new Error('Invalid combat action.');
   if(!encounter||health<=0)throw new Error('No active encounter.');
-  const clock=action==='attack'?'nextPlayerAt':action==='enemy'?'nextBoarAt':'nextFleeAt';
+  const clock=action==='attack'?'nextPlayerAt':action==='enemy'?'nextBoarAt':action==='dodge'?'nextDodgeAt':'nextFleeAt';
   if(now<encounter[clock])return null;
   const attributes=huntingAttributes(stats,weapon);
-  const result={encounter:{...encounter},health,damage:0,taken:0,dodged:false,outcome:'fighting',action};
+  const stamina=combatStamina(encounter,stats,now);
+  if(action==='dodge'&&stamina<boarRules.dodgeCost)return null;
+  const result={encounter:{...encounter,stamina,staminaAt:now},health,damage:0,taken:0,dodged:false,outcome:'fighting',action};
+  if(action==='dodge'){
+    result.encounter.stamina-=boarRules.dodgeCost;
+    result.encounter.dodgeUntil=now+boarRules.dodgeWindow;
+    result.encounter.nextDodgeAt=now+boarRules.dodgeCooldown;
+    result.dodgeStarted=true;return result;
+  }
   if(action==='flee'){
     result.encounter.nextFleeAt=now+boarRules.fleeCooldown;
     if(random()<attributes.escape){result.outcome='escaped';result.encounter=null;}
@@ -57,7 +71,8 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
     if(!result.encounter.health){result.outcome='victory';result.encounter=null;}
   }else{
     result.encounter.nextBoarAt=now+boarRules.boarInterval;
-    result.dodged=random()<attributes.dodge;
+    result.timedDodge=encounter.dodgeUntil>0&&encounter.nextBoarAt<=encounter.dodgeUntil&&encounter.nextBoarAt>=encounter.dodgeUntil-boarRules.dodgeWindow;
+    result.dodged=result.timedDodge||random()<attributes.dodge;
     result.taken=result.dodged?0:Math.max(4,12+Math.floor(random()*6)-attributes.armor);
     result.health=Math.max(0,health-result.taken);
     if(!result.health){result.outcome='defeat';result.encounter=null;}

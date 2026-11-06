@@ -63,7 +63,7 @@ export function drawCombatOverlayFx({ctx,width,height,time,now,events,encounter,
     ctx.globalAlpha=victory?1-progress(time,events.victoryAt+1700,500):1;
     ctx.fillStyle='#252538ed';ctx.fillRect(x-w/2,y,w,victory?37:25);
     ctx.fillStyle=victory?'#f2ce8a':'#f2aa7c';ctx.fillRect(x-w/2,y,w,1);
-    ctx.font='bold 10px monospace';ctx.textAlign='center';ctx.fillText(victory?'✦ WILD BOAR DEFEATED ✦':'! BOAR CHARGING !',x,y+13);
+    ctx.font='bold 10px monospace';ctx.textAlign='center';ctx.fillText(victory?'✦ WILD BOAR DEFEATED ✦':encounter.nextBoarAt-now<=350?'DODGE NOW · SPACE':'! BOAR CHARGING !',x,y+13);
     ctx.font='7px monospace';ctx.fillStyle='#e2d7c4';
     if(victory)ctx.fillText('Boar Meat +1  ·  Hunting XP +40',x,y+27);
     else{ctx.fillStyle='#b17e63';ctx.fillRect(x-w/2+10,y+19,(w-20)*(1-(encounter.nextBoarAt-now)/600),2);}
