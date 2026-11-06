@@ -1,5 +1,25 @@
 export const boarRules={health:70,playerInterval:1100,boarInterval:1900,fleeCooldown:1800,respawn:30000,recovery:12000,dodgeCost:40,dodgeWindow:350,dodgeCooldown:700};
-export const weaponCatalog={trainingSword:{name:'Training Sword',damage:14,description:'A simple iron blade issued to new adventurers.'},wardenSword:{name:'Warden’s Blade',damage:18,description:'A gold-trimmed blade awarded for completing First Steps.'}};
+export const weaponCatalog={
+  trainingSword:{name:'Training Sword',damage:14,interval:1100,strength:1,agility:1,description:'A simple iron blade issued to new adventurers.'},
+  wardenSword:{name:'Warden’s Blade',damage:18,interval:1100,strength:1,agility:1,description:'A gold-trimmed blade awarded for completing First Steps.'},
+  ironSword:{name:'Iron Sword',damage:20,interval:1200,strength:2,agility:1,price:150,description:'A dependable blade with a steady rhythm.'},
+  huntingSpear:{name:'Hunting Spear',damage:30,interval:1700,strength:3,agility:1,price:260,description:'Heavy thrusts with a longer recovery between attacks.'},
+  quickDagger:{name:'Quick Dagger',damage:12,interval:700,strength:1,agility:3,price:240,description:'A light blade for rapid, precise strikes.'}
+};
+export function canUseWeapon(stats,id){
+  const weapon=weaponCatalog[id];
+  return !!weapon&&1+Math.floor((stats.strengthXp??0)/50)>=weapon.strength&&1+Math.floor((stats.agilityXp??0)/50)>=weapon.agility;
+}
+export function purchaseWeapon(state,id){
+  const weapon=weaponCatalog[id];
+  if(state.location!=='armory'||!weapon?.price||state.hunting?.encounter)throw new Error('Visit the Armory to buy weapons.');
+  if(!canUseWeapon(state.stats,id))throw new Error('Requires Strength '+weapon.strength+' and Agility '+weapon.agility+'.');
+  const owned=state.combatGear.ownedWeapons.includes(id),spent=owned?0:weapon.price;
+  if(state.credits<spent)throw new Error('You need '+weapon.price+' gold to buy this weapon.');
+  if(!owned)state.combatGear.ownedWeapons.push(id);
+  state.credits-=spent;state.combatGear.equippedWeapon=id;
+  return {spent,name:weapon.name};
+}
 export function normalizeCombatGear(input){
   if(input===undefined)return {ownedWeapons:['trainingSword'],equippedWeapon:'trainingSword'};
   if(!input||typeof input!=='object'||!Array.isArray(input.ownedWeapons))throw new Error('Invalid combat equipment.');
@@ -13,6 +33,7 @@ export function normalizeCombatGear(input){
 const level=xp=>1+Math.floor((xp??0)/50);
 export function huntingAttributes(stats,weapon='trainingSword'){
   return {
+    attackInterval:weaponCatalog[weapon]?.interval??1100,
     damage:(weaponCatalog[weapon]?.damage??0)+Math.min(30,(level(stats.strengthXp)-1)*2),
     dodge:Math.min(.3,.08+(level(stats.agilityXp)-1)*.02),
     escape:Math.min(.95,.7+(level(stats.agilityXp)-1)*.025),
@@ -65,7 +86,7 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
     return result;
   }
   if(action==='attack'){
-    result.encounter.nextPlayerAt=now+boarRules.playerInterval;
+    result.encounter.nextPlayerAt=now+attributes.attackInterval;
     result.damage=attributes.damage+Math.floor(random()*5);
     result.encounter.health=Math.max(0,encounter.health-result.damage);
     if(!result.encounter.health){result.outcome='victory';result.encounter=null;}

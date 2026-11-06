@@ -164,6 +164,7 @@ function stopForCombat(){
 }
 function startBoarEncounter(){
   if(currentRoom!=='clearing'||unavailable())return;
+  if(combatGear.equippedWeapon&&!canUseWeapon(playerStats,combatGear.equippedWeapon)){note('Your stats do not meet this weapon’s requirements.');return;}
   if(!combatGear.equippedWeapon){note('Equip your Training Sword in Inventory before hunting.');return;}
   if(health<=0){note('Return to the Tower and rest to restore your hearts.');return;}
   if(Date.now()<hunting.respawnAt){note('The clearing is quiet. Another boar will arrive shortly.');return;}
@@ -227,7 +228,7 @@ function restAtTower(){
 }
 function updateCombatPanel(){
   const now=Date.now(),encounter=hunting.encounter;
-  $('equipWeapon').disabled=player.inCombat;
+  $('equipWeapon').disabled=player.inCombat||!canUseWeapon(playerStats,$('weaponSelect').value||combatGear.equippedWeapon||'trainingSword');
   $('wave').disabled=editing||!!fishingSession||unavailable();
   $('combatPanel').hidden=currentRoom!=='clearing';
   $('scene').classList.toggle('in-combat',player.inCombat);
@@ -252,7 +253,7 @@ function updateCombatPanel(){
   $('combatCooldown').textContent=encounter?'Next strike '+Math.max(0,(encounter.nextPlayerAt-now)/1000).toFixed(1)+'s · Boar '+Math.max(0,(encounter.nextBoarAt-now)/1000).toFixed(1)+'s'+(remaining?' · Flee '+(remaining/1000).toFixed(1)+'s':' · F: Flee'):'Click the boar to engage. Combat runs in real time.';
   $('combatLog').textContent=combatMessage||'The boar watches the trail. It will not attack until you approach.';
   const attributes=huntingAttributes(playerStats,combatGear.equippedWeapon);
-  $('combatGuide').textContent=(weaponCatalog[combatGear.equippedWeapon]?.name??'No weapon equipped')+' · Attack '+attributes.damage+'–'+(attributes.damage+4)+' · Dodge '+Math.round(attributes.dodge*100)+'% · Escape '+Math.round(attributes.escape*100)+'% · Armor '+attributes.armor;
+  $('combatGuide').textContent=(weaponCatalog[combatGear.equippedWeapon]?.name??'No weapon equipped')+' · Attack '+attributes.damage+'–'+(attributes.damage+4)+' every '+(attributes.attackInterval/1000).toFixed(1)+'s · Dodge '+Math.round(attributes.dodge*100)+'% · Escape '+Math.round(attributes.escape*100)+'% · Armor '+attributes.armor;
   $('adventureLandmark').hidden=!!encounter||now<hunting.respawnAt;
   $('adventureLandmark').textContent='Approach boar';
   $('adventureLandmark').disabled=health<=0||unavailable()||!combatGear.equippedWeapon;
@@ -307,6 +308,13 @@ const marketFurniture=[
   {id:'plant',type:'plant',x:1,y:1,rot:0},
   {id:'stool',type:'stool',x:4,y:4,rot:0}
 ];
+const armoryFurniture=[
+  {id:'smith',type:'armoryCounter',x:3,y:2,rot:0},
+  {id:'weapons',type:'weaponRack',x:7,y:1,rot:0},
+  {id:'anvil',type:'anvil',x:7,y:5,rot:0},
+  {id:'forge',type:'brazier',x:1,y:1,rot:0},
+  {id:'stool',type:'stool',x:4,y:4,rot:0}
+];
 let currentRoom='home';
 const atHome=()=>currentRoom==='home';
 const canDecorate=()=>atHome()||currentRoom==='lounge';
@@ -315,6 +323,7 @@ function roomFurniture(){
   if(currentRoom==='lounge')return loungeFurniture;
   if(currentRoom==='store')return storeFurniture;
   if(currentRoom==='market')return marketFurniture;
+  if(currentRoom==='armory')return armoryFurniture;
   if(moonwood.has(currentRoom))return moonwood.layouts[currentRoom].scenery.filter(item=>item.type!=='wildboar'||Date.now()>=hunting.respawnAt);
   return currentRoom==='hub'?hubFurniture:courtyardFurniture;
 }
@@ -325,6 +334,7 @@ function setRoomFurniture(items){
 const homeExit={to:'hub',side:'left',tile:{x:0,y:5},start:4.88,end:6.12,height:49,label:'EXIT'};
 const hubDoors=[
   {to:'home',side:'left',tile:{x:0,y:6},start:5.72,end:7.28,height:51,label:'HOME'},
+  {to:'armory',side:'right',tile:{x:3,y:0},start:2.35,end:4.65,height:51,label:'ARMORY'},
   {to:'lounge',side:'right',tile:{x:14,y:0},start:13.6,end:15.4,height:51,label:'LOUNGE'},
   {to:'store',side:'left',tile:{x:0,y:10},start:9.4,end:11.3,height:51,label:'FISHING'},
   {to:'market',side:'left',tile:{x:0,y:14},start:13.25,end:15.15,height:51,label:'MARKET'},
@@ -333,12 +343,13 @@ const hubDoors=[
 const towerEntrance={to:'hub',side:'left',tile:{x:0,y:5},start:4.58,end:6.42,height:54,label:'TOWER'};
 const moonwoodEntrance={to:'trail',side:'front',tile:{x:6,y:11},arrival:{x:1,y:5},start:5.03,end:7.62,label:'MOONWOOD'};
 const storeExit={to:'hub',side:'left',tile:{x:0,y:5},start:4.6,end:6.4,height:49,label:'LOBBY'};
-const roomDoors={home:[homeExit],hub:hubDoors,lounge:[],store:[storeExit],market:[storeExit],outside:[towerEntrance,moonwoodEntrance],...moonwood.doors};
+const roomDoors={home:[homeExit],hub:hubDoors,lounge:[],store:[storeExit],market:[storeExit],armory:[{...storeExit,arrival:{x:3,y:1}}],outside:[towerEntrance,moonwoodEntrance],...moonwood.doors};
 const roomDetails={
   home:{number:'00',name:'Entry Room',description:'Walk through the exit to reach the Grand Lobby.',badge:'ROOM NO. 00',floor:'Private room'},
   hub:{number:'01',name:'The Grand Lobby',description:'Meet at reception, settle into a seating area, or head to another room.',badge:'MAIN HUB',floor:'Ground floor'},
   lounge:{number:'02',name:'The Sunset Lounge',description:'Find blackjack and roulette on the gaming floor, or take a seat by the bar.',badge:'GAMING LOUNGE',floor:'Ground floor'},
   store:{number:'11',name:'Silverfin Outfitters',description:'Stock up on bait, find a better rod, and sell your catch.',badge:'FISHING STORE',floor:'Tower shops'},
+  armory:{number:'14',name:'The Tower Armory',description:'Trade your earnings for a weapon that suits your fighting style.',badge:'ARMORY',floor:'Tower shops'},
   market:{number:'12',name:'Moonwood Trading Post',description:'Bring your catch and hunting spoils to the tower’s traders.',badge:'TRADING POST',floor:'Tower market'},
   outside:{number:'03',name:'The Courtyard',description:'Rest by the fountain, or follow the Moonwood steps into the forest.',badge:'OUTSIDE',floor:'Tower grounds'},
   ...moonwood.areas
@@ -699,6 +710,7 @@ function drawCourtyard(){
   }
 }
 function drawFishingStore(market=false){
+  const armory=market==='armory';
   block(0,0,10,10,-8,8,['#998b83','#53465c','#443c53']);
   for(let y=0;y<10;y++)for(let x=0;x<10;x++){
     surface(x,y,1,1,0,(x+y)%2?'#aa9485':'#a08b80','#7f6d71');
@@ -714,8 +726,8 @@ function drawFishingStore(market=false){
   }
   wall('right',1.25,5.6,37,61,'#d1ac86');
   wall('right',1.36,5.49,39,59,'#314e5c');
-  wallText('right',3.42,49,market?'MOONWOOD':'SILVERFIN','bold 8px monospace','#fae0ae',65);
-  wallText('right',3.42,42,market?'TRADING POST':'OUTFITTERS','bold 6px monospace','#bfd5ce',65);
+  wallText('right',3.42,49,armory?'TOWER':market?'MOONWOOD':'SILVERFIN','bold 8px monospace','#fae0ae',65);
+  wallText('right',3.42,42,armory?'ARMORY':market?'TRADING POST':'OUTFITTERS','bold 6px monospace','#bfd5ce',65);
   wall('left',1.3,3.5,30,56,'#c4a284');
   wall('left',1.42,3.38,32,54,'#395767');
   wall('left',1.49,3.31,33,46,'#7b9da3');
@@ -728,8 +740,8 @@ function drawFishingStore(market=false){
 }
 function dimensions(item) {
   if(item.type==='sofa'||item.type==='bed'||item.type==='bench'||isGamingTable(item))return item.rot%2?[1,2]:[2,1];
-  if(item.type==='reception'||item.type==='tackleCounter'||item.type==='tradeCounter')return [3,1];
-  if(item.type==='rodRack')return [2,1];
+  if(item.type==='armoryCounter'||item.type==='reception'||item.type==='tackleCounter'||item.type==='tradeCounter')return [3,1];
+  if(item.type==='rodRack'||item.type==='weaponRack')return [2,1];
   if(item.type==='fountain')return [2,2];
   return item.type==='bar'?[1.5,4.1]:item.type==='shelf'?[.35,3.5]:[1,1];
 }
@@ -847,6 +859,21 @@ function object(item,highlight=false,time=0) {
       }
       part(1.66,.74,.105,.10,16,1.4,'gold');
     }
+  } else if(type==='anvil'){
+    part(.23,.21,.54,.58,0,8,'wood');part(.34,.3,.32,.34,8,7,'black');
+    part(.12,.18,.76,.56,15,4,['#bcc4bd','#4f5364','#818995']);
+    part(.80,.31,.18,.20,16,2,['#d2d7c9','#596070','#9ca8ae']);
+  } else if(type==='brazier'){
+    part(.2,.2,.6,.6,0,5,'black');part(.3,.3,.4,.4,5,7,'trim');
+    const [fx,fy]=point(x+.5,y+.5,12),flicker=reducedMotion.matches?0:Math.round(Math.sin(time/130)*2);
+    rect(fx-5,fy-6,10,6,'#c77558');rect(fx-3,fy-12-flicker,6,11+flicker,'#f3b36e');rect(fx-1,fy-9,3,8,'#ffe2a0');
+  } else if(type==='weaponRack'){
+    part(.04,.07,1.90,.83,0,3,'wood');part(.08,.12,1.82,.12,3,30,'wood');
+    for(let i=0;i<3;i++){
+      const [rx,ry]=point(x+.35+i*.55,y+.5,3);
+      rect(rx-1,ry-30,2,29,'#826153');rect(rx-2,ry-31,4,15-i*4,'#c4d4d0');
+      rect(rx-4,ry-16+i*4,8,2,'#e1bf82');
+    }
   } else if(type==='rodRack'){
     part(.06,.26,1.88,.49,0,4,'wood');
     part(.1,.33,.14,.15,4,31,'wood');part(1.75,.33,.14,.15,4,31,'wood');
@@ -867,7 +894,7 @@ function object(item,highlight=false,time=0) {
     part(.08,.1,.84,.8,0,10,'wood');
     part(.11,.13,.78,.74,10,1,'gold');
     for(let i=0;i<3;i++)part(.22+i*.20,.26,.13,.4,11,5,i%2?'blue':'cream');
-  } else if(type==='reception'||type==='tackleCounter'||type==='tradeCounter'){
+  } else if(type==='armoryCounter'||type==='reception'||type==='tackleCounter'||type==='tradeCounter'){
     const [sx,sy]=point(x+1.46,y-.2,2);
     sprite(ctx,sx,sy,{outfit:4,hair:1});
     part(.06,.08,2.88,.87,0,19,'wood');
@@ -1040,11 +1067,17 @@ function sprite(target,x,y,appearance,{direction='right',back=false,cycle=0,seat
   if(weapon){
     p(5,-19,4,5,outline);p(6,-18,3,3,jacket);
     p(7,-16,5,3,outline);p(8,-15,4,2,'#f2bb92');
-    target.save();target.translate(12,-14);target.rotate(pose.angle??(-.35+strike*1.8));
-    p(-2,-17,4,14,outline);p(-1,-16,2,12,weaponTier==='wardenSword'?'#a9cbbd':'#bacbd3');p(-1,-16,1,10,weaponTier==='wardenSword'?'#eef4c9':'#eef2da');p(0,-12,1,5,'#8cabbc');
-    p(-1,-19,2,3,outline);p(0,-18,1,2,'#dae5dc');
-    p(-4,-4,8,2,outline);p(-3,-4,6,1,weaponTier==='wardenSword'?'#f2cf7e':'#d8b079');
-    p(-1,-2,2,5,'#875b50');p(-2,2,4,2,'#d8b079');
+    target.save();target.translate(12,-14);target.rotate(weaponTier==='huntingSpear'?1.1-(pose.lunge??0)*.035:pose.angle??(-.35+strike*1.8));
+    if(weaponTier==='huntingSpear'){
+      p(-1,-29,2,38,outline);p(0,-25,1,33,'#b18864');p(-2,-29,4,9,'#adc5c7');p(-1,-32,2,5,'#eef0d0');p(-3,-21,6,2,'#c69b69');
+    }else if(weaponTier==='quickDagger'){
+      p(-2,-11,4,9,outline);p(-1,-11,2,8,'#d5e4df');p(-3,-3,6,2,'#91bcc1');p(-1,-1,2,5,'#7b637c');
+    }else{
+      p(-2,-17,4,14,outline);p(-1,-16,2,12,weaponTier==='wardenSword'?'#a9cbbd':weaponTier==='ironSword'?'#8dabb8':'#bacbd3');p(-1,-16,1,10,weaponTier==='wardenSword'?'#eef4c9':'#eef2da');p(0,-12,1,5,'#8cabbc');
+      p(-1,-19,2,3,outline);p(0,-18,1,2,'#dae5dc');
+      p(-4,-4,8,2,outline);p(-3,-4,6,1,weaponTier==='wardenSword'?'#f2cf7e':'#d8b079');
+      p(-1,-2,2,5,'#875b50');p(-2,2,4,2,'#d8b079');
+    }
     target.restore();
   }else if(wave!==null){
     const reach=lowMotion?1:Math.round(Math.sin(wave*Math.PI*6)*2);
@@ -1082,7 +1115,8 @@ const roomLayers={
   lounge:makeRoomLayer(room),
   outside:makeRoomLayer(drawCourtyard,courtyardView),
   store:makeRoomLayer(drawFishingStore),
-  market:makeRoomLayer(()=>drawFishingStore(true))
+  market:makeRoomLayer(()=>drawFishingStore(true)),
+  armory:makeRoomLayer(()=>drawFishingStore('armory'))
 };
 for(const id of Object.keys(moonwood.areas)){
   roomLayers[id]=makeRoomLayer(()=>moonwood.drawGround(id,worldDrawing),moonwood.view);
@@ -1188,7 +1222,7 @@ function draw(time){
     object(item,editing&&(selection?.id===item.id||hoverItem?.id===item.id)&&!fixed(item),time);
     ctx.globalAlpha=1;
     if(item.defeated||item===ghost||(fixed(item)&&!isGamingTable(item)))continue;
-    const [w,d]=dimensions(item), h=moonwood.heights[item.type]??{warden:43,tradeCounter:32,harvestCrates:16,tackleCounter:32,rodRack:36,baitCrates:16,blackjack:19,roulette:22,reception:32,bed:24,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39,bench:22,streetlamp:55,fountain:37}[item.type];
+    const [w,d]=dimensions(item), h=moonwood.heights[item.type]??{armoryCounter:32,weaponRack:37,anvil:19,brazier:25,warden:43,tradeCounter:32,harvestCrates:16,tackleCounter:32,rodRack:36,baitCrates:16,blackjack:19,roulette:22,reception:32,bed:24,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39,bench:22,streetlamp:55,fountain:37}[item.type];
     const shape=[point(item.x,item.y+d),point(item.x+w,item.y+d),point(item.x+w,item.y),point(item.x+w,item.y,h),point(item.x,item.y,h),point(item.x,item.y+d,h)];
     hitboxes.push({item,shape});
   }
@@ -1282,7 +1316,7 @@ function note(message){
   noticeUntil=performance.now()+3000;
 }
 function setHint(){
-  const guide={home:'Click a tile to walk · Click the exit to visit the lobby',hub:'Click a doorway or the Outside steps to travel',lounge:defaultHint,outside:'Click the Moonwood steps to explore · Tower returns indoors',store:'Buy supplies at the counter · Use Lobby to leave',market:'Sell fish and hunting loot at the counter · Use Lobby to leave'};
+  const guide={home:'Click a tile to walk · Click the exit to visit the lobby',hub:'Click a doorway or the Outside steps to travel',lounge:defaultHint,outside:'Click the Moonwood steps to explore · Tower returns indoors',store:'Buy supplies at the counter · Use Lobby to leave',armory:'Compare damage, attack speed and requirements · Buy & equip from the Armory panel',market:'Sell fish and hunting loot at the counter · Use Lobby to leave'};
   const message=editing?'Choose furniture to place or select a piece in the room':guide[currentRoom]??'Follow marked trails · Use the field journal for routes';
   $('hint').textContent='✦  '+message;
 }
@@ -1466,6 +1500,8 @@ function finishInteraction(){
     adventure.shortcut=true;
     ownedFurniture.moonbloom=(ownedFurniture.moonbloom??0)+1;
     recordAdventure('Moonbloom added to inventory. The root passage opens.');
+  }else if(['armoryCounter','weaponRack','anvil','brazier'].includes(item.type)){
+    note('Welcome to the Armory. Compare weapons and choose Buy & equip in the shop panel.');
   }else if(item.type==='tradeCounter'||item.type==='harvestCrates'||(currentRoom==='market'&&item.type==='baitCrates')){
     note('The trader offers credits for fish and hunting spoils. Choose what to sell in the market panel.');
   }else if(['tackleCounter','rodRack','baitCrates'].includes(item.type)){
@@ -1533,15 +1569,17 @@ function updateWeaponInventory(){
   selector.value=selected;selector.disabled=player.inCombat;
   const weapon=weaponCatalog[selected],equipped=combatGear.equippedWeapon===selected;
   $('weaponName').textContent=weapon.name;
-  $('weaponStatus').textContent=(equipped?'Equipped':'In inventory')+' · '+weapon.damage+' base damage + Strength';
-  $('equipWeapon').textContent=equipped?'Unequip':'Equip sword';
-  $('equipWeapon').disabled=player.inCombat;
+  $('weaponPicture').innerHTML=selected==='huntingSpear'?'<path d="M11 8h2v21h-2z" fill="#bd9064"/><path d="M12 1l4 8-4 3-4-3z" fill="#c5dcd7"/>':selected==='quickDagger'?'<path d="M11 7l4 7-2 6h-3l-1-6z" fill="#d4e6de"/><path d="M7 20h10v2H7z" fill="#8dbec4"/><path d="M11 22h2v6h-2z" fill="#99779d"/>':'<path d="M10 2h4v16h-4z" fill="#bacbd3"/><path d="M10 2h2v15h-2z" fill="#eef2da"/><path d="M7 18h10v3H7z" fill="#d8b079"/><path d="M11 21h2v6h-2z" fill="#986b59"/><path d="M10 27h4v2h-4z" fill="#d8b079"/>';
+
+  $('weaponStatus').textContent=(equipped?'Equipped':'In inventory')+' · '+weapon.damage+' base damage + Strength · '+(weapon.interval/1000).toFixed(1)+'s per attack';
+  $('equipWeapon').textContent=equipped?'Unequip':'Equip weapon';
+  $('equipWeapon').disabled=player.inCombat||!canUseWeapon(playerStats,selected);
   $('weaponHelp').textContent=player.inCombat?'Finish combat before changing your weapon.':weapon.description+' Drawn automatically during combat.';
 }
 function toggleWeapon(){
   if(player.inCombat)return;
   const selected=$('weaponSelect').value;
-  if(!combatGear.ownedWeapons.includes(selected))return;
+  if(!combatGear.ownedWeapons.includes(selected)||!canUseWeapon(playerStats,selected))return;
   combatGear.equippedWeapon=combatGear.equippedWeapon===selected?null:selected;
   updateWeaponInventory();updateCombatPanel();savePlayerState();
 }
@@ -1553,6 +1591,7 @@ function updateInventory(){
   updatePlayerStats();
   updateFishingShop();
   updateTradingPost();
+  updateArmoryShop();
   let total=0;
   for(const type of Object.keys(types)){
     const available=availableFurniture(type);
@@ -1610,6 +1649,39 @@ function equipFishingRod(id){
   savePlayerState();
   updateAdventurePanel();
 }
+function buyArmoryWeapon(id){
+  const state={credits,combatGear,stats:playerStats,location:currentRoom,hunting};
+  try{
+    const result=purchaseWeapon(state,id);credits=state.credits;
+    $('weaponSelect').value='';savePlayerState();
+    $('armoryStatus').textContent=result.name+' equipped.';
+    showTransaction(result.spent?'Weapon purchased':'Weapon equipped',[{icon:'⚔',text:result.name+' · Equipped'}],-result.spent);
+  }catch(error){$('armoryStatus').textContent=error.message;}
+}
+function updateArmoryShop(){
+  const equipped=weaponCatalog[combatGear.equippedWeapon],current=huntingAttributes(playerStats,combatGear.equippedWeapon);
+  $('armoryBalance').textContent=credits+' gold · Strength '+(1+Math.floor(playerStats.strengthXp/50))+' · Agility '+(1+Math.floor(playerStats.agilityXp/50));
+  $('armoryComparison').textContent=equipped?'Equipped: '+equipped.name+' · '+current.damage+'–'+(current.damage+4)+' damage · '+(current.attackInterval/1000).toFixed(1)+'s per attack':'No weapon equipped. Your free Training Sword is in Inventory.';
+  const offers=$('weaponOffers');offers.replaceChildren();
+  for(const [id,weapon] of Object.entries(weaponCatalog).filter(([,weapon])=>weapon.price)){
+    const card=document.createElement('article'),title=document.createElement('b'),description=document.createElement('p'),numbers=document.createElement('p'),requirements=document.createElement('small'),button=document.createElement('button');
+    card.className='weapon-offer';card.dataset.weapon=id;
+    title.textContent=(id==='huntingSpear'?'↟ ':id==='quickDagger'?'† ':'⚔ ')+weapon.name;
+    description.textContent=weapon.description;
+    const damage=huntingAttributes(playerStats,id).damage;
+    numbers.className='weapon-numbers';numbers.textContent=damage+'–'+(damage+4)+' damage at your Strength · '+(weapon.interval/1000).toFixed(1)+'s per attack';
+    const owned=combatGear.ownedWeapons.includes(id),active=combatGear.equippedWeapon===id,skill=canUseWeapon(playerStats,id);
+    requirements.textContent='Requires Strength '+weapon.strength+' · Agility '+weapon.agility;
+    requirements.className=skill?'requirements-met':'requirements-locked';
+    button.textContent=active?'Equipped':owned?'Equip':weapon.price+' gold · Buy & equip';
+    button.disabled=active||!skill||(!owned&&credits<weapon.price);
+    button.onclick=()=>buyArmoryWeapon(id);
+    const availability=document.createElement('small');
+    availability.textContent=!skill?'Train your attributes to unlock this weapon.':owned?'Owned · No cost to equip again.':credits<weapon.price?'Sell fish or hunting spoils to earn more gold.':'Purchase once. Yours to keep.';
+    card.append(title,description,numbers,requirements,button,availability);offers.append(card);
+  }
+}
+
 function buyFishingRod(id){
   const rod=fishingCatalog.rods[id];
   if(currentRoom!=='store'||!rod)return;
@@ -1772,15 +1844,17 @@ function switchMode(next){
   $('directoryPanel').hidden=currentRoom!=='hub';
   $('fishingShop').hidden=currentRoom!=='store';
   $('tradingPost').hidden=currentRoom!=='market';
+  $('armoryShop').hidden=currentRoom!=='armory';
   const exploring=moonwood.has(currentRoom);
   $('adventurePanel').hidden=!exploring;
-  $('panelTitle').textContent=editing?(atHome()?'Home editor':'Room editor'):currentRoom==='hub'?'Tower directory':currentRoom==='store'?'Fishing supplies':currentRoom==='market'?'Trade your spoils':exploring?'Field journal':'Room chat';
+  $('panelTitle').textContent=editing?(atHome()?'Home editor':'Room editor'):currentRoom==='hub'?'Tower directory':currentRoom==='store'?'Fishing supplies':currentRoom==='market'?'Trade your spoils':currentRoom==='armory'?'Choose your weapon':exploring?'Field journal':'Room chat';
   $('panelSub').textContent=editing?(atHome()?'YOUR HOME':'FURNITURE & DECOR'):roomDetails[currentRoom].name.toUpperCase();
   $('resetRoom').textContent=atHome()?'Clear home furniture':'Restore original room';
   $('mode').textContent=editing?'DECORATE':currentRoom==='hub'?'MAIN HUB':currentRoom==='outside'?'OPEN AIR':exploring?'EXPLORING':'FREE ROAM';
   updateAdventurePanel();
   updateFishingShop();
   updateTradingPost();
+  updateArmoryShop();
   noticeUntil=0;setHint();cancelSelection();
 }
 function updateAdventurePanel(){
@@ -1933,7 +2007,7 @@ function openInventory(equipmentRoom=null){
     ?'Visit your home or the Sunset Lounge to place furniture from storage.'
     :'Choose a piece to place it in '+(atHome()?'your home':'the Sunset Lounge')+'. Pick it up in Decorate mode to return it here.';
   if(equipmentRoom==='pond')$('inventoryGuide').textContent='Before your first catch, choose a fishing rod below. Your free Reed Rod is '+(fishingGear.equippedRod==='reed'?'already equipped.':'in your inventory.');
-  if(equipmentRoom==='clearing')$('inventoryGuide').textContent='Before your first boar hunt, equip a sword below. '+(combatGear.equippedWeapon?'Your '+weaponCatalog[combatGear.equippedWeapon].name+' is already equipped.':'Choose a sword, then press Equip sword.');
+  if(equipmentRoom==='clearing')$('inventoryGuide').textContent='Before your first boar hunt, equip a sword below. '+(combatGear.equippedWeapon?'Your '+weaponCatalog[combatGear.equippedWeapon].name+' is already equipped.':'Choose a sword, then press Equip weapon.');
   updateInventory();
   if(!$('inventoryDialog').open)$('inventoryDialog').showModal();
   if(equipmentRoom){
@@ -2165,7 +2239,7 @@ function enterRoom(next,arrival){
   $('footerRoom').textContent='ROOM '+number;
   $('gridSize').textContent=view.cols+' × '+view.rows;
   $('exitRoom').hidden=!atHome();
-  $('returnLobby').hidden=!['lounge','outside','store','market'].includes(next);
+  $('returnLobby').hidden=!['lounge','outside','store','market','armory'].includes(next);
   $('enterMoonwood').hidden=next!=='outside';
   $('fishingSound').hidden=next!=='pond';
   $('edit').hidden=!canDecorate();

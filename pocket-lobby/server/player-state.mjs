@@ -1,6 +1,6 @@
 import { normalizeHistory } from "../public/first-visit.js";
 import { normalizeQuest,recordQuest } from "../public/quests.js";
-import { normalizeHunting, normalizeCombatGear } from "../public/hunting.js";
+import { normalizeHunting, normalizeCombatGear,canUseWeapon } from "../public/hunting.js";
 import { fishingCatalog, fishProducts, rollFishingCatch, normalizeFishingGear } from "../public/fishing.js";
 
 export const MAX_PLAN_HOURS=8;
@@ -23,7 +23,7 @@ function furniture(items){
     return {id:item.id,type:item.type,x:item.x,y:item.y,rot:item.rot};
   });
 }
-const locations=new Set(["home","hub","lounge","outside","store","market","trail","grove","creek","shrine","ruins","roots","pond","clearing"]);
+const locations=new Set(["home","hub","lounge","outside","store","market","trail","grove","creek","shrine","ruins","roots","pond","clearing","armory"]);
 export function normalizeState(input={}){
   if(!input||typeof input!=="object"||Array.isArray(input))throw new Error("Invalid character.");
   const credits=input.credits??100;
@@ -45,6 +45,7 @@ export function normalizeState(input={}){
   const avatar=input.avatar??{name:"Guest",outfit:0,hair:0};
   if(typeof avatar.name!=="string"||avatar.name.length>20||!Number.isInteger(avatar.outfit)||avatar.outfit<0||avatar.outfit>4||!Number.isInteger(avatar.hair)||avatar.hair<0||avatar.hair>4)throw new Error("Invalid appearance.");
   const combatGear=normalizeCombatGear(input.combatGear);
+  if(combatGear.equippedWeapon&&!canUseWeapon(stats,combatGear.equippedWeapon))throw new Error("Invalid weapon requirements.");
   const hunting=normalizeHunting(input.hunting);
   if(hunting.encounter&&!combatGear.equippedWeapon)throw new Error("Invalid unarmed encounter.");
   if(hunting.encounter&&(input.location!=="clearing"||health===0))throw new Error("Invalid encounter location.");

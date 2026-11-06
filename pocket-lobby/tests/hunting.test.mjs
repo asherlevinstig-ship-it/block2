@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-import {boarRules,huntingTurn,huntingAttributes,normalizeHunting,normalizeCombatGear,weaponCatalog,createHunt,resumeHunt,advanceHunt,combatStamina} from '../public/hunting.js';
+import {boarRules,huntingTurn,huntingAttributes,normalizeHunting,normalizeCombatGear,weaponCatalog,createHunt,resumeHunt,advanceHunt,combatStamina,canUseWeapon} from '../public/hunting.js';
 import {normalizeState,startPlan} from '../server/player-state.mjs';
 
 test('new and existing characters receive one equipped sword, while unequipped choices persist',()=>{
@@ -71,7 +71,7 @@ function gameHarness(){
   };
   const source=fs.readFileSync(new URL('../public/game.js',import.meta.url),'utf8');
   const context=vm.createContext({
-    ...questRules,normalizeHunting,normalizeCombatGear,weaponCatalog,boarRules,huntingAttributes,createHunt,resumeHunt,combatStamina,
+    ...questRules,normalizeHunting,normalizeCombatGear,weaponCatalog,boarRules,huntingAttributes,createHunt,resumeHunt,combatStamina,canUseWeapon,
     advanceHunt:(e,h,s,n,_r,w)=>advanceHunt(e,h,s,n,()=>.5,w),
     huntingTurn:(e,h,s,a,n,_r,w)=>huntingTurn(e,h,s,a,n,()=>.5,w),
     history:{fishCaught:false,boarDefeated:false},savedPlayerState:null,player:{cx:5,cy:5,inCombat:false},health:100,
