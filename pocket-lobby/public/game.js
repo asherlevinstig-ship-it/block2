@@ -1535,7 +1535,8 @@ function updateWorldLabels(){
     if(door.side==='wild'){anchor=point(door.tile.x+.5,door.tile.y+.5,18);}
     else if(door.side==='front'){anchor=point((door.start+door.end)/2,view.rows-.45,12);}
     else anchor=door.side==='right'?point((door.start+door.end)/2,0,door.height+9):point(0,(door.start+door.end)/2,door.height+9);
-    add(door.label,...anchor,'door',()=>travelDoor(door));
+    const label=currentRoom==='creek'&&door.to==='ruins'?'Cross to the Ruins':door.label;
+    add(label,...anchor,'door',()=>travelDoor(door));
   }
   if(currentRoom==='home')add('Your Home',...point(5,0,43),'sign',null,avatar.name);
   if(currentRoom==='hub'){
@@ -1742,7 +1743,7 @@ function note(message){
   noticeUntil=performance.now()+3000;
 }
 function setHint(){
-  const guide={home:'Click a tile to walk · Click the exit to visit the lobby',hub:'Click a doorway or the Outside steps to travel',lounge:defaultHint,outside:'Click the Moonwood steps to explore · Tower returns indoors',store:'Buy supplies at the counter · Use Lobby to leave',armory:'Compare damage, attack speed and requirements · Buy & equip from the Armory panel',market:'Sell fish and hunting loot at the counter · Use Lobby to leave'};
+  const guide={home:'Click a tile to walk · Click the exit to visit the lobby',hub:'Click a doorway or the Outside steps to travel',lounge:defaultHint,outside:'Click the Moonwood steps to explore · Tower returns indoors',store:'Buy supplies at the counter · Use Lobby to leave',armory:'Compare damage, attack speed and requirements · Buy & equip from the Armory panel',market:'Sell fish and hunting loot at the counter · Use Lobby to leave',creek:'Tap Cross to the Ruins to walk across the creek.'};
   const message=editing?'Choose furniture to place or select a piece in the room':guide[currentRoom]??'Follow marked trails · Use the field journal for routes';
   $('hint').textContent='✦  '+message;
 }
@@ -1759,8 +1760,9 @@ function walkTo(tile){
 function travelDoor(door){
   if(unavailable()){note(player.inCombat?"Use Flee to leave combat.":"Your hearts are recovering.");return;}
   if(currentRoom==='creek'&&door.to==='ruins'&&!adventure.bridge){
-    note('Light your lantern to reveal a crossing.');
-    return;
+    adventure.lantern=true;
+    lanternLit=true;
+    revealByLantern();
   }
   if(!moonwood.open(door,adventure))return;
   if(!step&&player.cx===door.tile.x&&player.cy===door.tile.y)enterRoom(door.to,door.arrival);
@@ -2419,7 +2421,7 @@ function updateAdventurePanel(){
     clearing:'A Wild Boar guards this clearing. Approach to hunt. Rest in the Tower to refill your hearts.',
     trail:adventure.lantern?'Your lantern reveals hidden trails and crossings.':'Take the lantern from the waystone before heading deeper.',
     grove:adventure.groveTrail?'The lantern revealed a trail to the Moth Shrine.':'Light your lantern to look for a trail through the grove.',
-    creek:adventure.bridge?'Moonlit stepping stones cross the creek.':'Light your lantern to reveal a way across the creek.',
+    creek:adventure.bridge?'Tap the button to walk across the stepping stones.':'Tap the button to light the way and walk across. There’s a spare lantern if you need one.',
     shrine:adventure.shrine?'Read the Rootstone clue again or attune a power at the altar.':'Approach the altar to examine the moths and uncover the Rootstone clue.',
     ruins:adventure.shortcut?'The root passage is open. Approach the Stoneback Beetle when you’re ready to hunt.':'Search the Moonwell for a shortcut, or approach the Stoneback Beetle to hunt.',
     roots:'Follow the roots back to Lantern Trail.',
@@ -2437,14 +2439,16 @@ function updateAdventurePanel(){
   $('adventureProgress').textContent=adventure.discovered.length+' of '+(Object.keys(moonwood.areas).length-depthsStages.length)+' places discovered';
   const landmark=$('adventureLandmark');
   const bite=!!fishingSession&&fishingMoments.phase(fishingSession,performance.now())==='bite';
-  const action={clearing:!player.inCombat&&Date.now()>=hunting.respawnAt?'Approach boar':'',trail:!adventure.lantern?'Take lantern':'',shrine:'Examine altar',ruins:'Search Moonwell',pond:bite?'Reel! +5 Patience XP':fishingSession?'Fishing…':'Cast a line'}[currentRoom];
+  const action={clearing:!player.inCombat&&Date.now()>=hunting.respawnAt?'Approach boar':'',trail:!adventure.lantern?'Take lantern':'',shrine:'Examine altar',creek:'Cross to the Ruins',ruins:'Search Moonwell',pond:bite?'Reel! +5 Patience XP':fishingSession?'Fishing…':'Cast a line'}[currentRoom];
   landmark.hidden=!action||player.inCombat;
   landmark.disabled=(!!fishingSession&&!bite)||(currentRoom==='pond'&&fishingGear.bait<1);
   landmark.classList.toggle('bite-ready',bite);
+  landmark.classList.toggle('cross-creek',currentRoom==='creek');
   landmark.textContent=action??'';
   const links=$('adventureRoutes');
   links.replaceChildren();
   for(const door of roomDoors[currentRoom].filter(item=>moonwood.open(item,adventure))){
+    if(currentRoom==='creek'&&door.to==='ruins')continue;
     const button=document.createElement('button');
     button.type='button';
     button.className='adventure-route';
@@ -2473,7 +2477,7 @@ function revealByLantern(){
     recordAdventure('A hidden trail to the Moth Shrine appears.');
   }else if(currentRoom==='creek'&&!adventure.bridge){
     adventure.bridge=true;
-    recordAdventure('Stepping stones shine through the water.');
+    recordAdventure('The stepping stones light up. Follow them to the ruins.');
   }
 }
 function keepsExitClear(item){
@@ -2591,6 +2595,10 @@ $('lantern').onclick=()=>{
   revealByLantern();
 };
 $('adventureLandmark').onclick=()=>{
+  if(currentRoom==='creek'){
+    travelDoor(roomDoors.creek.find(door=>door.to==='ruins'));
+    return;
+  }
   if(fishingSound)fishingMoments.enable(true);
   if(fishingSession){reelFish();return;}
   const landmark=roomFurniture().find(item=>item.id==='landmark');
