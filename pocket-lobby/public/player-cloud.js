@@ -17,7 +17,7 @@
     const response=await fetch('/api/player/'+path,{
       method:body?'POST':'GET',credentials:'same-origin',cache:'no-store',
       headers:body?{'Content-Type':'application/json'}:{},
-      body:body?JSON.stringify(body):undefined,keepalive:!!body,
+      body:body?JSON.stringify({...body,...(packet?.characterKey?{characterKey:packet.characterKey}:{})}):undefined,keepalive:!!body,
       signal:AbortSignal.timeout(15000)
     });
     const data=await response.json();
@@ -33,6 +33,7 @@
       if(pendingSave)localStorage.setItem('pocket-lobby:cloud-conflict',pendingSave);
       localStorage.removeItem('pocket-lobby:cloud-pending');
     }catch{}
+    window.towerMultiplayer?.disconnect();
     conflicted=true;setStatus('Another tab changed your character');
     gateText.textContent=message+' Reload to use the latest server save. Your pending changes are backed up in this browser.';
     retry.textContent='Reload latest character';retry.onclick=()=>location.reload();
@@ -44,7 +45,7 @@
     pending={state,operation:crypto.randomUUID()};
     ownOperations.push(pending.operation);
     if(ownOperations.length>64)ownOperations.shift();
-    backup({state,baseRevision:packet.revision,operations:ownOperations});
+    backup({state,characterKey:packet.characterKey,baseRevision:packet.revision,operations:ownOperations});
     setStatus('Saving…');
     drain();
   }
@@ -62,7 +63,7 @@
           if(!pending)backup(null);
         }catch(error){
           retryJob=job;
-          if(error.status===409){conflict(error.message);return;}
+          if(error.status===409||error.status===401){conflict(error.message);return;}
           setStatus('Save pending · Retrying');
           clearTimeout(timer);timer=setTimeout(drain,5000);
           return;
@@ -115,7 +116,7 @@
       button.disabled=true;
       try{
         if(running){await action('plan/stop');location.reload();}
-        else{await action('report/ack',{startedAt:plan.startedAt});dialog.close();setStatus('Server saved');}
+        else{await action('report/ack',{startedAt:plan.startedAt});dialog.close();setStatus('Server saved');window.towerJoinRoom?.();}
       }catch(error){document.getElementById('offlineError').textContent=error.message;}
       finally{button.disabled=false;}
     };
@@ -177,6 +178,11 @@
       try{packet=await request('state');}
       catch(error){
         if(error.status!==401)throw error;
+        if(error.data?.reauthenticate){
+          window.towerAuthRequired=true;
+          gateText.textContent='Sign in to continue your saved character.';
+          const signIn=document.getElementById('cloudSignIn');signIn.hidden=false;signIn.onclick=()=>window.towerAccounts.open('login');return;
+        }
         const legacy=readLocal('player-state',{});
         legacy.avatar=readLocal('avatar',{name:'Guest',outfit:0,hair:0});
         if(!legacy.furniture){
@@ -187,6 +193,7 @@
       }
       const recovery=readLocal('cloud-pending',null);
       if(recovery?.state&&!packet.state.plan&&!packet.state.report){
+        if(recovery.characterKey&&recovery.characterKey!==packet.characterKey){conflict("Pending changes belong to a different character.");return;}
         const ownWrite=recovery.operations?.includes(packet.lastOperation);
         if(packet.revision===recovery.baseRevision||ownWrite){
           packet=await request('save',{state:recovery.state,revision:packet.revision,operation:crypto.randomUUID()});
@@ -205,9 +212,11 @@
       const shopUI=await import('./shop-ui.js');
       const woodRules=await import('./woodcutting.js');
       const crafting=await import('./crafting.js');
-      Object.assign(window,rules,hunting,art,fx,quests,historyRules,shopUI,woodRules,crafting);
+      const shared=await import('./shared-world.js');
+      const multiplayer=await import('./multiplayer.js');
+      Object.assign(window,rules,hunting,art,fx,quests,historyRules,shopUI,woodRules,crafting,shared,multiplayer);
       window.towerInitialState=packet.state;
-      window.playerCloud={enqueue,flush,attach,get initial(){return packet.state;}};
+      window.playerCloud={enqueue,flush,attach,invalidate:conflict,get initial(){return packet.state;}};
       const script=document.createElement('script');script.src='game.js';
       script.onload=()=>{
         if(!(pending||retryJob||sending))setStatus('Server saved');

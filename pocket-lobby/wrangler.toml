@@ -1,14 +1,22 @@
 name = "block2"
 compatibility_date = "2026-09-30"
+compatibility_flags = ["nodejs_compat"]
 workers_dev = true
 main = "../worker/index.js"
 
 [assets]
 directory = "./public"
 binding = "ASSETS"
-run_worker_first = ["/game", "/game/*", "/api/player/*"]
+run_worker_first = ["/game", "/game/*", "/api/player/*", "/api/account/*", "/api/world/*"]
 [[d1_databases]]
 binding = "TOWER_DB"
 database_name = "tower-beginnings-players"
 database_id = "394c79bf-90af-4e76-8e62-b6261e6911b5"
 migrations_dir = "migrations"
+[[durable_objects.bindings]]
+name = "SHARED_ROOMS"
+class_name = "SharedRoom"
+
+[[migrations]]
+tag = "tower-shared-rooms-v1"
+new_sqlite_classes = ["SharedRoom"]

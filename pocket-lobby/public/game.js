@@ -56,17 +56,11 @@ let displayedCredits=credits,walletTween=null;
 const countFurniture = (items,type)=>items.filter(item=>item.type===type).length;
 const previousStock = savedPlayerState?.ownedFurniture??{};
 const hasBedStarter = Object.hasOwn(previousStock,'bed');
-const ownedFurniture = hasBedStarter&&hasGamingLayout?previousStock:Object.fromEntries(
-  Object.keys(types).map(type=>{
-    if(type==='bed'&&!hasBedStarter)return [type,1];
-    const baseline=previousStock[type]??countFurniture(savedLounge?classicLounge:initial,type);
-    const oldStarter=!hasBedStarter&&Object.hasOwn(previousStock,type)?1:0;
-    const retired=type==='table'?retiredTables.length:0;
-    const placed=countFurniture(loungeFurniture,type)+countFurniture(homeFurniture,type);
-    return [type,Math.max(baseline-oldStarter-retired,placed)];
-  })
-);
-const availableFurniture = type=>(ownedFurniture[type]??0)-countFurniture(loungeFurniture,type)-countFurniture(homeFurniture,type);
+const ownedFurniture=Object.fromEntries(Object.keys(types).map(type=>{
+  const placed=countFurniture(homeFurniture,type),oldLounge=savedLounge?countFurniture(savedLounge,type):0;
+  return [type,Math.max(previousStock[type]??(type==='bed'?1:0),placed+oldLounge)];
+}));
+const availableFurniture=type=>(ownedFurniture[type]??0)-countFurniture(homeFurniture,type);
 const adventure={lantern:false,groveTrail:false,bridge:false,shrine:false,shortcut:false,discovered:[],silverfin:0,...savedPlayerState?.adventure};
 const playerStats={strengthXp:0,agilityXp:0,vitalityXp:0,patienceXp:adventure.silverfin*10,...savedPlayerState?.stats};
 const PATIENCE_XP_PER_CATCH=10, PATIENCE_XP_PER_LEVEL=50;
@@ -188,7 +182,52 @@ let lanternLit=false;
 let nextId = Math.max(0,...[...loungeFurniture,...homeFurniture].map(item=>item.id).filter(Number.isInteger))+1;
 let avatar = {...defaultAvatar,...(savedPlayerState?.avatar??load('avatar',defaultAvatar))};
 let draft;
-let messages = load('chat',[]);
+let messages = [];
+let multiplayer=null;
+const remotePeers=new Map();
+function receivePeers(peers){
+  const keep=new Set();
+  for(const peer of peers.slice(0,20)){
+    if(!peer.id||!Number.isFinite(peer.x)||!Number.isFinite(peer.y))continue;
+    keep.add(peer.id);const old=remotePeers.get(peer.id);
+    if(old)Object.assign(old,peer);
+    else remotePeers.set(peer.id,{...peer,rx:peer.x,ry:peer.y,lastFrame:performance.now(),label:null});
+  }
+  for(const [id,peer] of remotePeers)if(!keep.has(id)){peer.label?.remove();remotePeers.delete(id);}
+}
+function drawRemote(peer,time){
+  const [x,y]=peer.seat?seatAnchor(peer.seat):point(peer.rx+.5,peer.ry+.5);
+  surface(peer.rx+.2,peer.ry+.25,.6,.55,.2,'#43324452');
+  const moving=Math.hypot(peer.x-peer.rx,peer.y-peer.ry)>.03,waveAge=Date.now()-(peer.waveAt??0);
+  sprite(ctx,x,y,{outfit:peer.outfit,hair:peer.hair},{direction:peer.direction,back:peer.back,cycle:moving?time/STEP_MS:0,seated:!!peer.seat,wave:waveAge>=0&&waveAge<WAVE_MS?waveAge/WAVE_MS:null,sheathed:!!peer.weapon,weaponTier:peer.weapon,time});
+}
+function updatePeerLabels(time){
+  const p=canvasBounds(),cx=view.width/2,cy=view.height/2-4;
+  for(const peer of remotePeers.values()){
+    if(!peer.label){peer.label=document.createElement('span');peer.label.className='player-label';$('playerLabels').append(peer.label);}
+    const caption=peer.name+'|'+peer.weapon;
+    if(peer.caption!==caption){peer.caption=caption;peer.label.textContent=peer.name;peer.label.title=peer.name+(peer.weapon?' · '+(weaponCatalog[peer.weapon]?.name??peer.weapon):'');peer.labelWidth=peer.label.offsetWidth||Math.min(120,peer.name.length*6+10);}
+    const [x,y]=peer.seat?seatAnchor(peer.seat):point(peer.rx+.5,peer.ry+.5);
+    peer.label.style.left=Math.round(p.x+((x-cx)*zoom+cx)*p.scale-(peer.labelWidth??60)/2)+'px';
+    peer.label.style.top=Math.round(p.y+((y-43-cy)*zoom+cy)*p.scale)+'px';
+  }
+}
+function connectRoom(){
+  if(!multiplayer)return;
+  const state=window.playerCloud?.initial;
+  if(state?.plan||state?.report){multiplayer.disconnect();$('networkStatus').textContent='Away · Work plan';return;}
+  multiplayer.join(currentRoom);
+}
+function receiveRoomChat(message){
+  if(!message||typeof message.text!=='string'||typeof message.name!=='string')return;
+  showMessage(message);showMessage(message,'roomChatMessages');
+  if(message.player===multiplayer?.selfId){$('bubble').textContent=message.text;$('bubble').hidden=false;bubbleUntil=performance.now()+4500;}
+}
+function sendRoomChat(input){
+  const text=input.value.trim();if(!text)return;
+  if(multiplayer?.sendChat(text))input.value='';else note('Join a shared social room to chat.');
+}
+
 const player = {x:5,y:7,cx:5,cy:7,direction:'right',back:false,seat:null,stride:0,waveStarted:null,inCombat:false};
 function setPlayerCombat(active){
   player.inCombat=active===true;
@@ -408,10 +447,10 @@ const armoryFurniture=[
 ];
 let currentRoom='home';
 const atHome=()=>currentRoom==='home';
-const canDecorate=()=>atHome()||currentRoom==='lounge';
+const canDecorate=()=>atHome();
 function roomFurniture(){
   if(atHome())return homeFurniture;
-  if(currentRoom==='lounge')return loungeFurniture;
+  if(currentRoom==='lounge')return initial;
   if(currentRoom==='store')return storeFurniture;
   if(currentRoom==='market')return marketFurniture;
   if(currentRoom==='armory')return armoryFurniture;
@@ -1070,7 +1109,7 @@ function pixelHead(target,appearance,back,blink){
   p(4,-21,2,1,'#994f56');
   p(-1,-22,2,1,'#f6c3a0');
 }
-function sprite(target,x,y,appearance,{direction='right',back=false,cycle=0,seated=false,wave=null,fishing=false,weapon=false,weaponTier=null,strike=0,pose={},time=0}={}){
+function sprite(target,x,y,appearance,{direction='right',back=false,cycle=0,seated=false,wave=null,fishing=false,weapon=false,sheathed=false,weaponTier=null,strike=0,pose={},time=0}={}){
   const p=(x,y,w,h,color)=>{target.fillStyle=color;target.fillRect(x,y,w,h);};
   const jacket=outfits[appearance.outfit]??outfits[0];
   const shade=jacketShadows[appearance.outfit]??jacketShadows[0];
@@ -1082,6 +1121,10 @@ function sprite(target,x,y,appearance,{direction='right',back=false,cycle=0,seat
   target.save();
   target.translate(Math.round(x),Math.round(y));
   target.scale(direction==='right'?1:-1,1);
+  if(sheathed){
+    const length=weaponTier==='huntingSpear'?30:weaponTier==='quickDagger'?15:22;
+    p(-9,-27,3,length,outline);p(-8,-27,1,length-1,weaponTier==='huntingSpear'?'#b18967':'#a7bfc1');p(-11,-24,7,2,'#d2ad73');
+  }
   if(seated){
     p(-6,-5,12,7,outline);p(-5,-4,9,5,denim);p(1,-4,5,3,denimLight);
     p(-1,0,4,5,denim);p(4,-1,4,5,outline);p(4,0,3,3,denimLight);
@@ -1262,7 +1305,11 @@ function draw(time){
   if(editing&&selection&&hover&&canPlace({...selection,...hover})){
     ghost={...selection,...hover,id:-1};
   }
-  const items=[...roomFurniture()];
+  for(const peer of remotePeers.values()){
+    const amount=reducedMotion.matches?1:Math.min(1,Math.max(0,time-peer.lastFrame)/90);
+    peer.rx+=(peer.x-peer.rx)*amount;peer.ry+=(peer.y-peer.ry)*amount;peer.lastFrame=time;
+  }
+  const items=[...roomFurniture(),...[...remotePeers.values()].map(peer=>({type:'remotePlayer',x:peer.rx,y:peer.ry,peer}))];
   if(currentRoom==='clearing'&&time-combatArt.victoryAt>=0&&time-combatArt.victoryAt<1300){
     const boar=moonwood.layouts.clearing.scenery.find(item=>item.type==='wildboar');
     items.push({...boar,id:'defeated-boar',defeated:true});
@@ -1286,7 +1333,7 @@ function draw(time){
     const spritePose=woodSession?{...pose,angle:-.9+Math.sin((time-woodSession.started)/220)*1.25}:pose;
     const [enemyX,enemyY]=point(6.5,5.5);
     const thrust=currentRoom==='clearing'?pose.lunge-pose.recoil:0;
-    sprite(ctx,x+Math.sign(enemyX-x)*thrust-pose.dodge,y+Math.sign(enemyY-y)*thrust+pose.dodge*.4,avatar,{direction:player.direction,back:player.back,cycle,seated:!!seat,wave,weapon:!!woodSession||pose.armed&&!!combatGear.equippedWeapon,weaponTier:woodSession?'basicAxe':combatGear.equippedWeapon,pose:spritePose,fishing:fishingSession?fishingMoments.phase(fishingSession,time):null,time});
+    sprite(ctx,x+Math.sign(enemyX-x)*thrust-pose.dodge,y+Math.sign(enemyY-y)*thrust+pose.dodge*.4,avatar,{direction:player.direction,back:player.back,cycle,seated:!!seat,wave,weapon:!!woodSession||pose.armed&&!!combatGear.equippedWeapon,sheathed:!woodSession&&!pose.armed&&Object.hasOwn(socialRooms,currentRoom)&&!!combatGear.equippedWeapon,weaponTier:woodSession?'basicAxe':combatGear.equippedWeapon,pose:spritePose,fishing:fishingSession?fishingMoments.phase(fishingSession,time):null,time});
     if(fishingSession)drawFishingMoment(x,y,time);
     drawCatchReveal(x,y,time);
     if(player.inCombat){
@@ -1307,12 +1354,13 @@ function draw(time){
       }
     }
   };
-  const depth=item=>item.x+item.y+dimensions(item).reduce((a,b)=>a+b,0)-.55;
+  const depth=item=>item.type==='remotePlayer'?(item.peer.seat?depth(item.peer.seat)+.001:item.x+item.y+1):item.x+item.y+dimensions(item).reduce((a,b)=>a+b,0)-.55;
   items.sort((a,b)=>depth(a)-depth(b));
   const playerDepth=player.seat?depth(player.seat)+.001:player.x+player.y+1;
   let drawn=false;hitboxes=[];
   for(const item of items){
     if(!drawn&&playerDepth<depth(item)){drawPlayer();drawn=true;}
+    if(item.type==='remotePlayer'){drawRemote(item.peer,time);continue;}
     ctx.globalAlpha=item===ghost?.52:ghost&&selection?.id===item.id?.4:1;
 
     object(item,editing&&(selection?.id===item.id||hoverItem?.id===item.id)&&!fixed(item),time);
@@ -1328,6 +1376,7 @@ function draw(time){
   drawCombatFeedback(time);
   if(currentRoom==='clearing')drawCombatOverlayFx({ctx,width,height,time,now:Date.now(),events:combatArt,encounter:hunting.encounter,health,reduced:reducedMotion.matches});
   updateWorldLabels();
+  updatePeerLabels(time);
 }
 
 
@@ -1917,7 +1966,7 @@ function updateTradingPost(){
   }
 }
 function savePlayerState(){
-  const snapshot={credits,health,woodcutting,history,quest,combatGear,hunting,ownedFurniture,furniture:loungeFurniture,homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats,fishingGear,huntingLoot,fishStock,avatar,location:currentRoom,position:{x:player.cx,y:player.cy}};
+  const snapshot={credits,health,woodcutting,history,quest,combatGear,hunting,ownedFurniture,furniture:[],homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats,fishingGear,huntingLoot,fishStock,avatar,location:currentRoom,position:{x:player.cx,y:player.cy}};
   save('player-state',snapshot);
   if(window.playerCloud)window.playerCloud.enqueue(JSON.parse(JSON.stringify(snapshot)));
   updateInventory();
@@ -2118,7 +2167,7 @@ function openInventory(equipmentRoom=null){
   $('weaponCard').classList.toggle('onboarding-focus',equipmentRoom==='clearing');
   $('fishingGearCard').classList.toggle('onboarding-focus',equipmentRoom==='pond');
   $('inventoryGuide').textContent=!canDecorate()
-    ?'Visit your home or the Sunset Lounge to place furniture from storage.'
+    ?'Visit your home to place furniture from storage.'
     :'Choose a piece to place it in '+(atHome()?'your home':'the Sunset Lounge')+'. Pick it up in Decorate mode to return it here.';
   if(equipmentRoom==='pond')$('inventoryGuide').textContent='Before your first catch, choose a fishing rod below. Your free Reed Rod is '+(fishingGear.equippedRod==='reed'?'already equipped.':'in your inventory.');
   if(equipmentRoom==='clearing')$('inventoryGuide').textContent='Before your first boar hunt, equip a sword below. '+(combatGear.equippedWeapon?'Your '+weaponCatalog[combatGear.equippedWeapon].name+' is already equipped.':'Choose a sword, then press Equip weapon.');
@@ -2211,7 +2260,7 @@ function waveHello(){
   if(editing||woodSession||unavailable())return;
   if(step||route.length){note('Stop walking to wave.');return;}
   if(!player.seat)player.back=false;
-  player.waveStarted=performance.now();
+  player.waveStarted=performance.now();multiplayer?.wave();
   note(avatar.name+' waves hello!');
 }
 canvas.addEventListener('keydown',e=>{
@@ -2256,26 +2305,17 @@ window.addEventListener('resize',()=>{bounds=null;});
 document.addEventListener('visibilitychange',()=>{
   if(!document.hidden&&player.inCombat)hunting.encounter=resumeHunt(hunting.encounter,Date.now(),playerStats);
 });
-function showMessage(msg){
+function showMessage(msg,targetId='messages'){
   const row=document.createElement('div');row.className='message';
   const icon=document.createElement('div');icon.className='bot';icon.textContent='☺';
   const body=document.createElement('div'),name=document.createElement('b'),text=document.createElement('p');
   name.textContent=msg.name;text.textContent=msg.text;body.append(name,text);row.append(icon,body);
-  $('messages').append(row);
+  const target=$(targetId);target.append(row);while(target.children.length>40)target.children[0].remove();target.scrollTop=target.scrollHeight;
 }
 for(const msg of messages)showMessage(msg);
-$('chatForm').addEventListener('submit',e=>{
-  e.preventDefault();
-  const input=$('chatInput'),text=input.value.trim();
-  if(!text)return;
-  const msg={name:avatar.name,text};
-  messages.push(msg);messages=messages.slice(-60);save('chat',messages);showMessage(msg);
-  const rows=$('messages').querySelectorAll('.message');
-  if(rows.length>61)rows[1].remove();
-  $('messages').scrollTop=$('messages').scrollHeight;
-  $('bubble').textContent=text;$('bubble').hidden=false;bubbleUntil=performance.now()+4500;
-  input.value='';
-});
+$('chatForm').addEventListener('submit',e=>{e.preventDefault();sendRoomChat($('chatInput'));});
+$('roomChatForm').addEventListener('submit',e=>{e.preventDefault();sendRoomChat($('roomChatInput'));});
+$('openRoomChat').onclick=()=>{$('roomChatTitle').textContent=roomDetails[currentRoom].name;$('roomChatDialog').showModal();};
 function drawAvatarPreview(time){
   const preview=$('avatarPreview'), target=preview.getContext('2d');
   target.clearRect(0,0,preview.width,preview.height);
@@ -2373,6 +2413,7 @@ function enterRoom(next,arrival){
   savePlayerState();
   if(exploring)revealByLantern();
   bounds=null;worldLabelKey='';$('worldLabels').replaceChildren();
+  connectRoom();
   showFirstEquipment(next);
   if(focusRoom&&!$('inventoryDialog').open)canvas.focus();
 }
@@ -2408,7 +2449,23 @@ if(hunting.encounter){
 }
 if(hunting.recoveryUntil&&!['hub','home'].includes(currentRoom))enterRoom('hub');
 updateCombatPanel();
+window.towerPauseForAccount=()=>{
+  if(player.inCombat)throw new Error('Finish combat before changing accounts.');
+  cancelFishing();route=[];step=null;interaction=null;target=null;player.x=player.cx;player.y=player.cy;
+};
 window.towerSaveNow=savePlayerState;
+window.towerJoinRoom=connectRoom;
 window.towerHasActiveCast=()=>!!fishingSession||!!woodSession;
 if(window.playerCloud)window.playerCloud.attach();
+if(window.playerCloud&&typeof WebSocket!=='undefined'){
+  multiplayer=createRoomConnection({
+    getLocal:()=>({room:currentRoom,x:player.cx,y:player.cy,direction:player.direction,back:player.back,seat:player.seat?{type:player.seat.type,x:player.seat.x,y:player.seat.y,rot:player.seat.rot}:null,profileKey:JSON.stringify([avatar,combatGear.equippedWeapon,homeFurniture])}),
+    flush:()=>window.playerCloud.flush(),onPeers:receivePeers,onChat:receiveRoomChat,
+    onHistory:history=>{$('messages').replaceChildren();$('roomChatMessages').replaceChildren();for(const message of history)receiveRoomChat(message);},
+    onStatus:text=>{$('networkStatus').textContent=text;$('roomChatStatus').textContent=text;$('openRoomChat').disabled=!Object.hasOwn(socialRooms,currentRoom);},
+    onCorrection:position=>{route=[];step=null;player.x=player.cx=position.x;player.y=player.cy=position.y;player.seat=null;savePlayerState();},
+    onUnseat:()=>{player.seat=null;},onSessionChanged:message=>window.playerCloud.invalidate?.(message)
+  });
+  window.towerMultiplayer=multiplayer;connectRoom();
+}else $('networkStatus').textContent='Local preview';
 requestAnimationFrame(animation);

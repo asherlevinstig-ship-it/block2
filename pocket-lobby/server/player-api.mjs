@@ -1,20 +1,15 @@
+import { resolveIdentity } from "./identity.mjs";
 import { normalizeState, startPlan, settlePlan } from "./player-state.mjs";
 
 const COOKIE="__Host-tower-character";
 const COOKIE_AGE=31536000;
 const json=(data,status=200,extra={})=>Response.json(data,{status,headers:{"Cache-Control":"no-store","X-Content-Type-Options":"nosniff",...extra}});
-const packet=row=>({state:JSON.parse(row.state_json),revision:row.revision,lastOperation:row.last_request,serverTime:Date.now()});
-async function playerId(request){
-  const raw=request.headers.get("Cookie")?.split(";").map(value=>value.trim()).find(value=>value.startsWith(COOKIE+"="))?.slice(COOKIE.length+1);
-  if(!raw||!/^[a-f0-9]{64}$/.test(raw))return null;
-  const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(raw));
-  return [...new Uint8Array(digest)].map(value=>value.toString(16).padStart(2,"0")).join("");
-}
+const packet=row=>({state:JSON.parse(row.state_json),characterKey:row.player_id,revision:row.revision,lastOperation:row.last_request,serverTime:Date.now()});
 async function read(db,id){
-  return db.prepare("SELECT state_json, revision, last_request FROM tower_players WHERE player_id = ?").bind(id).first();
+  return db.prepare("SELECT player_id, state_json, revision, last_request FROM tower_players WHERE player_id = ?").bind(id).first();
 }
 async function write(db,id,revision,state,operation){
-  return db.prepare("UPDATE tower_players SET state_json = ?, revision = revision + 1, last_request = ?, updated_at = ? WHERE player_id = ? AND revision = ? RETURNING state_json, revision, last_request")
+  return db.prepare("UPDATE tower_players SET state_json = ?, revision = revision + 1, last_request = ?, updated_at = ? WHERE player_id = ? AND revision = ? RETURNING player_id, state_json, revision, last_request")
     .bind(JSON.stringify(state),operation,Date.now(),id,revision).first();
 }
 async function settled(db,id){
@@ -50,7 +45,9 @@ export async function handlePlayerApi(request,env){
     }
   }
   try{
-    let id=await playerId(request);
+    const identity=await resolveIdentity(request,env);
+    if(identity?.expired)return json({error:"Your account session expired. Sign in to continue.",reauthenticate:true},401);
+    let id=identity?.playerId;
     if(path==="/api/player/session"&&request.method==="POST"){
       const existing=id&&await settled(env.TOWER_DB,id);
       if(existing)return json(packet(existing));
@@ -61,7 +58,7 @@ export async function handlePlayerApi(request,env){
       id=[...new Uint8Array(digest)].map(value=>value.toString(16).padStart(2,"0")).join("");
       await env.TOWER_DB.prepare("INSERT INTO tower_players (player_id, state_json, revision, last_request, updated_at) VALUES (?, ?, 1, ?, ?)")
         .bind(id,JSON.stringify(state),"create",Date.now()).run();
-      return json({state,revision:1,serverTime:Date.now()},200,{"Set-Cookie":COOKIE+"="+token+"; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age="+COOKIE_AGE});
+      return json({state,characterKey:id,revision:1,serverTime:Date.now()},200,{"Set-Cookie":COOKIE+"="+token+"; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age="+COOKIE_AGE});
     }
     if(!id)return json({error:"Load your character first."},401);
     if(path==="/api/player/state"&&request.method==="GET"){
@@ -70,6 +67,7 @@ export async function handlePlayerApi(request,env){
     }
     if(request.method!=="POST")return json({error:"Not found."},404);
     const body=await bodyOf(request);
+    if((body.characterKey!==undefined||identity.account)&&body.characterKey!==id)return json({error:"This tab belongs to a different character. Reload to continue."},409);
     if(typeof body.operation!=="string"||body.operation.length>80||!Number.isInteger(body.revision))return json({error:"Missing save revision."},400);
     const row=await settled(env.TOWER_DB,id);
     if(!row)return json({error:"Character not found."},401);

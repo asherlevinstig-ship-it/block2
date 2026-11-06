@@ -1,0 +1,25 @@
+export const socialRooms={hub:[18,16],lounge:[10,10],outside:[14,12],store:[10,10],market:[10,10],armory:[10,10],home:[10,10]};
+const layouts={
+  hub:[['reception',3,2],['warden',10,3],['plant',1,1],['plant',16,1],['sofa',2,10],['bench',2,12],['sofa',13,8,2],['bench',13,10,2]],
+  lounge:[['bar',.05,.25],['shelf',.02,.48],['plant',.3,8.7],['plant',8.9,.2],['sofa',5,1],['chair',8,3,1],['lamp',8,1],['stool',2,1],['stool',2,2],['stool',2,3],['chair',2,6,1],['chair',4,8],['lamp',1,6],['plant',7,8],['plant',.3,4.9],['blackjack',6,3],['roulette',3,7,1]],
+  outside:[['fountain',6,5],['streetlamp',1,3],['streetlamp',1,8],['streetlamp',11,1],['streetlamp',11,10],['bench',3,8],['bench',10,3,1],['bench',9,9,2],['plant',0,1],['plant',0,10],['plant',13,1],['plant',13,10]],
+  store:[['tackleCounter',3,2],['rodRack',7,1],['baitCrates',7,4],['plant',1,1],['stool',4,4]],
+  market:[['tradeCounter',3,2],['harvestCrates',7,3],['baitCrates',7,5],['plant',1,1],['stool',4,4]],
+  armory:[['armoryCounter',3,2],['weaponRack',7,1],['anvil',7,5],['brazier',1,1],['stool',4,4]]
+};
+export function furnitureBox(item){
+  const {type,x,y,rot=0}=item;
+  const wide=['bookcase','workbench','sofa','bed','bench','blackjack','roulette'].includes(type);
+  const [w,d]=wide?(rot%2?[1,2]:[2,1]):['reception','tackleCounter','tradeCounter','armoryCounter'].includes(type)?[3,1]:['rodRack','weaponRack'].includes(type)?[2,1]:type==='fountain'?[2,2]:type==='bar'?[1.5,4.1]:[1,1];
+  return {x,y,w,d};
+}
+export function roomBoxes(room,homeFurniture=[]){return (room==='home'?homeFurniture:(layouts[room]??[]).map(([type,x,y,rot])=>({type,x,y,rot}))).filter(item=>item.type!=='shelf').map(furnitureBox);}
+export function validRoomTile(room,x,y,boxes=[]){const size=socialRooms[room];return !!size&&Number.isInteger(x)&&Number.isInteger(y)&&x>=0&&y>=0&&x<size[0]&&y<size[1]&&!boxes.some(b=>x<b.x+b.w&&x+1>b.x&&y<b.y+b.d&&y+1>b.y);}
+export function reachableMove(room,from,to,boxes,maxSteps){
+  if(!validRoomTile(room,to.x,to.y,boxes))return false;
+  const queue=[{x:from.x,y:from.y,n:0}],seen=new Set();
+  while(queue.length){const p=queue.shift(),key=p.x+','+p.y;if(seen.has(key))continue;seen.add(key);if(p.x===to.x&&p.y===to.y)return true;if(p.n>=maxSteps)continue;for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]])if(validRoomTile(room,p.x+dx,p.y+dy,boxes))queue.push({x:p.x+dx,y:p.y+dy,n:p.n+1});}
+  return false;
+}
+
+export function roomSeats(room,homeFurniture=[]){return (room==='home'?homeFurniture:(layouts[room]??[]).map(([type,x,y,rot=0])=>({type,x,y,rot}))).filter(item=>['sofa','chair','stool','woodStool','bench'].includes(item.type));}
