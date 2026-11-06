@@ -255,10 +255,32 @@ function makeSwordUpgrade(id){
     $('swordUpgradeChoices').querySelector('[data-upgrade="'+id+'"]')?.focus();
   }catch(error){$('craftStatus').textContent=error.message;}
 }
+function updateVestWorkbench(ready){
+  const owned=combatGear.stonebackVestOwned;
+  const fragments=huntingLoot[stonebackVest.fragment]??0;
+  const button=$('craftStonebackVest');
+  $('vestMaterials').textContent=owned?'Already crafted · Equip or remove it in Inventory.':fragments+' / 1 Shell Fragment · '+woodcutting.timber+' / '+stonebackVest.timber+' timber';
+  button.disabled=!ready||owned||fragments<1||woodcutting.timber<stonebackVest.timber;
+  button.textContent=owned?'Crafted ✓':'Craft vest';
+}
+function makeStonebackVest(){
+  if(unavailable()||woodSession)return;
+  try{
+    const crafted=craftStonebackVest({...craftingState(),combatGear,hunting,huntingLoot});
+    if(!crafted)return;
+    savePlayerState();
+    $('craftStatus').textContent='Stoneback Vest crafted. Equip it from Inventory.';
+    showTransaction('Stoneback Vest crafted',[
+      {icon:'⬡',text:'Stoneback Vest · In inventory'},
+      {icon:'▤',text:'−1 Shell Fragment · −'+stonebackVest.timber+' timber'}
+    ]);
+  }catch(error){$('craftStatus').textContent=error.message;}
+}
 function updateCraftingUI(){
   $('craftTimber').textContent=woodcutting.timber+' timber';
   const ready=isAtWorkbench(craftingState())&&!unavailable()&&!woodSession;
   updateSwordWorkbench(ready);
+  updateVestWorkbench(ready);
   const recipes=$('craftRecipes');recipes.replaceChildren();
   for(const [id,recipe] of Object.entries(craftingRecipes)){
     const card=document.createElement('article');card.className='craft-recipe';card.dataset.recipe=id;card.tabIndex=-1;
@@ -275,7 +297,7 @@ function updateCraftingUI(){
 }
 function openCrafting(){
   if(!isAtWorkbench(craftingState())||unavailable())return;
-  updateCraftingUI();$('craftStatus').textContent='Choose a sword fitting or a piece of furniture.';
+  updateCraftingUI();$('craftStatus').textContent='Choose a sword fitting, armor, or a piece of furniture.';
   if(!$('craftDialog').open)$('craftDialog').showModal();
 }
 function makeFurniture(id){
@@ -425,9 +447,9 @@ function startMonsterEncounter(enemy){
 }
 function combatAction(action){
   if(!player.inCombat||!['flee','dodge'].includes(action))return;
-  const result=huntingTurn(hunting.encounter,health,playerStats,action,Date.now(),Math.random,combatGear.equippedWeapon,combatGear.activeSwordUpgrade);
+  const result=huntingTurn(hunting.encounter,health,playerStats,action,Date.now(),Math.random,combatGear.equippedWeapon,combatGear.activeSwordUpgrade,combatGear.stonebackVestEquipped);
   if(!result&&action==='dodge'){
-    combatMessage=combatStamina(hunting.encounter,playerStats,Date.now())<boarRules.dodgeCost?'Not enough stamina. Let it recover.':'Your dodge is recovering.';
+    combatMessage=combatStamina(hunting.encounter,playerStats,Date.now())<combatDodgeCost(combatGear.stonebackVestEquipped)?'Not enough stamina. Let it recover.':'Your dodge is recovering.';
     updateCombatPanel();return;
   }
   applyCombatResult(result);
@@ -456,6 +478,7 @@ function applyCombatResult(result){
   hunting.encounter=result.encounter;health=result.health;
   combatFeedback={started:performance.now(),damage:result.damage,taken:result.taken,dodged:result.dodged};
   combatMessage=(result.damage?'You hit for '+result.damage+(result.shellGuarded?' through the shell.':'. '):action==='flee'&&result.outcome!=='escaped'?'Your escape was blocked. ':'')+(result.dodged?'You dodge the attack.':result.taken?'The '+enemy.name+' hits for '+result.taken+'.':'');
+  if(result.absorbed)combatMessage+=(combatMessage?' ':'')+'Your vest absorbed '+result.absorbed+' damage.';
   if(result.dodgeStarted)combatMessage='You sidestep. Time your dodge just before the '+enemy.move+' lands!';
   if(result.timedDodge)combatMessage=result.shellExposed?'Perfect dodge! The beetle flips. Its weak spot is exposed.':'Perfect dodge! You avoided the charge.';
   if(result.taken){
@@ -492,6 +515,7 @@ function restAtTower(){
 function updateCombatPanel(){
   const now=Date.now(),encounter=hunting.encounter;
   const enemy=huntEnemyForRoom(currentRoom);
+  $('equipStonebackVest').disabled=unavailable();
   $('equipWeapon').disabled=player.inCombat||!canUseWeapon(playerStats,$('weaponSelect').value||combatGear.equippedWeapon||'trainingSword');
   $('wave').disabled=editing||!!fishingSession||!!woodSession||unavailable();
   $('combatPanel').hidden=!enemy;
@@ -524,8 +548,10 @@ function updateCombatPanel(){
   $('combatAttack').textContent=encounter?'Auto-attacking':'Auto-attack';
   $('combatFlee').disabled=!encounter||remaining>0;
   const stamina=encounter?combatStamina(encounter,playerStats,now):100;
+  const dodgeCost=combatDodgeCost(combatGear.stonebackVestEquipped);
   $('combatStamina').value=stamina;$('combatStaminaValue').textContent=Math.floor(stamina)+' / 100';
-  $('combatDodge').disabled=!encounter||now<(encounter.nextDodgeAt??0)||stamina<boarRules.dodgeCost;
+  $('combatDodgeHelp').textContent='Dodge costs '+dodgeCost+' stamina'+(combatGear.stonebackVestEquipped?' with the Stoneback Vest':'')+'. Time it just before impact. Agility improves recovery.';
+  $('combatDodge').disabled=!encounter||now<(encounter.nextDodgeAt??0)||stamina<dodgeCost;
   const timing=!!encounter&&encounter.nextBoarAt-now>0&&encounter.nextBoarAt-now<=boarRules.dodgeWindow;
   const bind=rootbindStatus(rootstone,encounter,now),bindButton=$('combatRootbind');
   bindButton.hidden=rootstone.power!=='rootbind';
@@ -533,7 +559,7 @@ function updateCombatPanel(){
   bindButton.classList.toggle('rootbind-ready',bind==='ready');
   bindButton.textContent=bind==='recovering'?'Rootbind · '+Math.ceil((rootstone.nextCastAt-now)/1000)+'s':bind==='ready'?'Rootbind now! · E':'Rootbind · E';
   $('combatDodge').classList.toggle('dodge-ready',timing&&!$('combatDodge').disabled);
-  $('combatDodge').textContent=encounter&&stamina<boarRules.dodgeCost?'Dodge · Low stamina':encounter&&now<(encounter.nextDodgeAt??0)?'Dodge · Recovering':timing?'Dodge now! · Space':'Dodge · Space';
+  $('combatDodge').textContent=encounter&&stamina<dodgeCost?'Dodge · Low stamina':encounter&&now<(encounter.nextDodgeAt??0)?'Dodge · Recovering':timing?'Dodge now! · Space':'Dodge · Space';
   $('combatCooldown').textContent=encounter?'Next strike '+Math.max(0,(encounter.nextPlayerAt-now)/1000).toFixed(1)+'s · '+(beetle?'Slam':'Charge')+' '+Math.max(0,(encounter.nextBoarAt-now)/1000).toFixed(1)+'s'+(remaining?' · Flee '+(remaining/1000).toFixed(1)+'s':' · F: Flee'):'Click the '+enemy.name+' to engage. Combat runs in real time.';
   $('combatLog').textContent=combatMessage||'The '+enemy.name+' waits. It attacks when you approach.';
   const weapon=weaponProfile(combatGear.equippedWeapon,combatGear.activeSwordUpgrade);
@@ -547,7 +573,7 @@ function updateCombatPanel(){
   }
 }
 function updateCombatMoment(time){
-  if(player.inCombat)applyCombatResult(advanceHunt(hunting.encounter,health,playerStats,Date.now(),Math.random,combatGear.equippedWeapon,combatGear.activeSwordUpgrade));
+  if(player.inCombat)applyCombatResult(advanceHunt(hunting.encounter,health,playerStats,Date.now(),Math.random,combatGear.equippedWeapon,combatGear.activeSwordUpgrade,combatGear.stonebackVestEquipped));
   if(hunting.recoveryUntil&&Date.now()>=hunting.recoveryUntil){
     hunting.recoveryUntil=0;health=100;
     combatMessage='All five hearts restored. You are ready to explore again.';
@@ -1270,7 +1296,7 @@ function pixelHead(target,appearance,back,blink){
   p(4,-21,2,1,'#994f56');
   p(-1,-22,2,1,'#f6c3a0');
 }
-function sprite(target,x,y,appearance,{direction='right',back=false,cycle=0,seated=false,wave=null,fishing=false,weapon=false,sheathed=false,weaponTier=null,strike=0,pose={},time=0}={}){
+function sprite(target,x,y,appearance,{direction='right',back=false,cycle=0,seated=false,wave=null,fishing=false,weapon=false,sheathed=false,weaponTier=null,strike=0,pose={},time=0,vest=false}={}){
   const p=(x,y,w,h,color)=>{target.fillStyle=color;target.fillRect(x,y,w,h);};
   const jacket=outfits[appearance.outfit]??outfits[0];
   const shade=jacketShadows[appearance.outfit]??jacketShadows[0];
@@ -1310,7 +1336,13 @@ function sprite(target,x,y,appearance,{direction='right',back=false,cycle=0,seat
   p(-5,-20,10,9,shade);
   p(-4,-19,8,6,jacket);
   p(-5,-11,10,2,'#3d3248');
-  if(back){
+  if(vest){
+    p(-5,-20,10,8,'#3e5052');
+    p(-4,-19,8,3,'#91a39a');
+    p(-3,-16,6,2,'#6a8380');
+    p(-3,-14,6,1,'#a0ad92');
+    p(back?-1:1,-19,1,6,'#c6c9a2');
+  }else if(back){
     p(-2,-19,5,3,shade);p(-1,-18,3,1,'#fff2d855');
     p(-3,-14,7,1,'#fff2d840');
   }else{
@@ -1504,7 +1536,7 @@ function draw(time){
     const spritePose=woodSession?{...pose,angle:reducedMotion.matches?.75:swingAngle}:pose;
     const [enemyX,enemyY]=point(6.5,5.5);
     const thrust=enemy?pose.lunge-pose.recoil:0;
-    sprite(ctx,x+Math.sign(enemyX-x)*thrust-pose.dodge,y+Math.sign(enemyY-y)*thrust+pose.dodge*.4,avatar,{direction:player.direction,back:player.back,cycle,seated:!!seat,wave,weapon:!!woodSession||pose.armed&&!!combatGear.equippedWeapon,sheathed:!woodSession&&!pose.armed&&Object.hasOwn(socialRooms,currentRoom)&&!!combatGear.equippedWeapon,weaponTier:woodSession?'basicAxe':combatGear.equippedWeapon,pose:spritePose,fishing:fishingSession?fishingMoments.phase(fishingSession,time):null,time});
+    sprite(ctx,x+Math.sign(enemyX-x)*thrust-pose.dodge,y+Math.sign(enemyY-y)*thrust+pose.dodge*.4,avatar,{direction:player.direction,back:player.back,cycle,seated:!!seat,wave,weapon:!!woodSession||pose.armed&&!!combatGear.equippedWeapon,sheathed:!woodSession&&!pose.armed&&Object.hasOwn(socialRooms,currentRoom)&&!!combatGear.equippedWeapon,weaponTier:woodSession?'basicAxe':combatGear.equippedWeapon,pose:spritePose,vest:combatGear.stonebackVestEquipped,fishing:fishingSession?fishingMoments.phase(fishingSession,time):null,time});
     if(fishingSession)drawFishingMoment(x,y,time);
     drawCatchReveal(x,y,time);
     if(player.inCombat){
@@ -1927,6 +1959,12 @@ function toggleWeapon(){
   combatGear.equippedWeapon=combatGear.equippedWeapon===selected?null:selected;
   updateWeaponInventory();updateCombatPanel();savePlayerState();
 }
+function toggleStonebackVest(){
+  if(unavailable()||!combatGear.stonebackVestOwned)return;
+  combatGear.stonebackVestEquipped=!combatGear.stonebackVestEquipped;
+  savePlayerState();
+  updateCombatPanel();
+}
 function updateInventory(){
   if($('craftDialog').open)updateCraftingUI();
   updateWoodPanel();
@@ -1934,6 +1972,10 @@ function updateInventory(){
   $('starterRodStatus').textContent='Owned ×1'+(fishingGear.equippedRod==='reed'?' · Equipped':'');
   updateQuestUI();
   updateWeaponInventory();
+  $('vestInventory').hidden=!combatGear.stonebackVestOwned;
+  $('vestInventoryStatus').textContent=combatGear.stonebackVestEquipped?'Equipped':'In inventory';
+  $('equipStonebackVest').textContent=combatGear.stonebackVestEquipped?'Remove vest':'Equip vest';
+  $('equipStonebackVest').disabled=unavailable();
   updatePlayerStats();
   updateFishingShop();
   updateTradingPost();
@@ -2495,6 +2537,8 @@ $('woodAction').onclick=woodAction;
 $('openWorkbench').onclick=()=>{if(currentRoom==='logging')use(roomFurniture().find(item=>item.type==='workbench'));};
 $('carpenterDeliver').onclick=handInCarpenterOrder;
 $('equipAxe').onclick=equipAxe;
+$('craftStonebackVest').onclick=makeStonebackVest;
+$('equipStonebackVest').onclick=toggleStonebackVest;
 $('equipWeapon').onclick=toggleWeapon;
 $('weaponSelect').onchange=updateWeaponInventory;
 $('questJournal').onclick=openQuest;

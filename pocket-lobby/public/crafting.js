@@ -1,4 +1,4 @@
-import {swordUpgrades} from './hunting.js';
+import {stonebackVest,swordUpgrades} from './hunting.js';
 
 export const craftingRecipes={
   woodStool:{name:'Wooden Stool',cost:5,description:'A simple wooden seat for your home.'},
@@ -34,4 +34,15 @@ export function fitSwordUpgrade(state,id){
   state.credits-=gold;
   combatGear.activeSwordUpgrade=id;
   return {name:upgrade.name,timber,gold};
+}
+
+export function craftStonebackVest(state){
+  if(!isAtWorkbench(state)||state.plan||state.hunting?.encounter||state.hunting?.recoveryUntil)throw new Error('Visit the Timber Hollow workbench to craft a vest.');
+  const {combatGear,woodcutting,huntingLoot}=state;
+  if(combatGear.stonebackVestOwned)return false;
+  if((huntingLoot[stonebackVest.fragment]??0)<1||woodcutting.timber<stonebackVest.timber)throw new Error('Bring 1 Shell Fragment and '+stonebackVest.timber+' timber.');
+  huntingLoot[stonebackVest.fragment]--;
+  woodcutting.timber-=stonebackVest.timber;
+  combatGear.stonebackVestOwned=true;
+  return true;
 }
