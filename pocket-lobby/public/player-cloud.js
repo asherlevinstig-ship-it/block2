@@ -185,7 +185,8 @@
         }
       }
       const rules=await import('./fishing.js');
-      Object.assign(window,rules);
+      const hunting=await import('./hunting.js');
+      Object.assign(window,rules,hunting);
       window.towerInitialState=packet.state;
       window.playerCloud={enqueue,flush,attach,get initial(){return packet.state;}};
       const script=document.createElement('script');script.src='game.js';

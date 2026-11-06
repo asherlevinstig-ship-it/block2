@@ -1,3 +1,4 @@
+import { normalizeHunting } from "../public/hunting.js";
 import { fishingCatalog, fishProducts, rollFishingCatch } from "../public/fishing.js";
 
 export const MAX_PLAN_HOURS=8;
@@ -20,7 +21,7 @@ function furniture(items){
     return {id:item.id,type:item.type,x:item.x,y:item.y,rot:item.rot};
   });
 }
-const locations=new Set(["home","hub","lounge","outside","store","market","trail","grove","creek","shrine","ruins","roots","pond"]);
+const locations=new Set(["home","hub","lounge","outside","store","market","trail","grove","creek","shrine","ruins","roots","pond","clearing"]);
 export function normalizeState(input={}){
   if(!input||typeof input!=="object"||Array.isArray(input))throw new Error("Invalid character.");
   const credits=input.credits??100;
@@ -40,13 +41,15 @@ export function normalizeState(input={}){
   const a=input.adventure??{};
   const adventure={};
   for(const id of ["lantern","groveTrail","bridge","shrine","shortcut"])adventure[id]=a[id]===true;
-  adventure.discovered=[...new Set((Array.isArray(a.discovered)?a.discovered:[]).filter(id=>["trail","grove","creek","shrine","ruins","roots","pond"].includes(id)))];
+  adventure.discovered=[...new Set((Array.isArray(a.discovered)?a.discovered:[]).filter(id=>["trail","grove","creek","shrine","ruins","roots","pond","clearing"].includes(id)))];
   const avatar=input.avatar??{name:"Guest",outfit:0,hair:0};
   if(typeof avatar.name!=="string"||avatar.name.length>20||!Number.isInteger(avatar.outfit)||avatar.outfit<0||avatar.outfit>4||!Number.isInteger(avatar.hair)||avatar.hair<0||avatar.hair>4)throw new Error("Invalid appearance.");
+  const hunting=normalizeHunting(input.hunting);
+  if(hunting.encounter&&(input.location!=="clearing"||health===0))throw new Error("Invalid encounter location.");
   const position=input.position;
   const state={
     credits,health:Math.min(health,maxHealth),stats:{strengthXp:stats.strengthXp,agilityXp:stats.agilityXp,vitalityXp:stats.vitalityXp,patienceXp:stats.patienceXp},fishingGear:{ownedRods,equippedRod:gear.equippedRod,bait:gear.bait},
-    fishStock,huntingLoot:counts(input.huntingLoot),adventure,
+    hunting,fishStock,huntingLoot:counts(input.huntingLoot),adventure,
     avatar:{name:avatar.name.trim()||"Guest",outfit:avatar.outfit,hair:avatar.hair},
     location:locations.has(input.location)?input.location:"home",
     position:position&&Number.isInteger(position.x)&&Number.isInteger(position.y)&&position.x>=0&&position.y>=0&&position.x<18&&position.y<16?{x:position.x,y:position.y}:null,
@@ -57,6 +60,7 @@ export function normalizeState(input={}){
   return state;
 }
 export function startPlan(state,{hours,baitLimit},now){
+  if(state.hunting?.encounter||state.hunting?.recoveryUntil||state.health===0)throw new Error("Invalid fishing plan while fighting or recovering.");
   if(state.plan)throw new Error("A fishing plan is already running.");
   if(state.report)throw new Error("Read your previous fishing report first.");
   if(state.location!=="pond")throw new Error("Travel to Silverfin Pond to start this plan.");

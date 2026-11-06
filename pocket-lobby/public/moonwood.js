@@ -4,6 +4,7 @@ const moonwood=(()=>{
   const view={width:540,height:349,cols:12,rows:10,originX:252,originY:105};
   const seed='moonwood-01';
   const areas={
+    clearing:{number:'13',name:'Bramble Clearing',description:'A wild boar guards a moonlit clearing. Approach carefully, and flee if your hearts run low.',badge:'HUNTING GROUNDS',floor:'Boar territory',center:[5,5],palette:['#3c5050','#50645b','#918b7e'],landmark:['wildboar',6,5,5,5],authored:[['wildtree',1,1],['wildtree',9,1],['wildtree',10,7],['wildtree',2,8],['wildrock',8,7],['wildbloom',4,2],['wildbloom',8,3]]},
     trail:{number:'04',name:'Lantern Trail',description:'Follow the old trail into Moonwood. A lantern waits at the first waystone.',badge:'MOONWOOD',floor:'Forest trail',center:[5,5],palette:['#324957','#3e5460','#788285'],landmark:['lanternStand',5,4,5,5]},
     grove:{number:'05',name:'Whispering Grove',description:'The trees crowd around a trail that only a lantern can reveal.',badge:'MOONWOOD',floor:'Hidden grove',center:[5,5],palette:['#36465d','#4c4c6a','#777294']},
     creek:{number:'06',name:'Glass Creek',description:'A band of dark water cuts across the path. Look for stones beneath the surface.',badge:'MOONWOOD',floor:'Creek crossing',center:[4,4],palette:['#32535b','#4a666c','#82928d']},
@@ -12,7 +13,7 @@ const moonwood=(()=>{
     roots:{number:'09',name:'Root Passage',description:'A living tunnel winds beneath Moonwood, linking the ruins back to Lantern Trail.',badge:'MOONWOOD',floor:'Forest shortcut',center:[6,5],palette:['#363847','#4b4357','#766274'],authored:[['wildtree',1,2],['wildtree',3,6],['wildtree',6,2],['wildtree',8,7],['wildtree',10,2],['wildbloom',4,3],['wildbloom',8,6]]},
     pond:{number:'10',name:'Silverfin Pond',description:'Cast a line from the old jetty and watch the moonlight ripple over the water.',badge:'MOONWOOD',floor:'Fishing pond',center:[3,5],palette:['#334f59','#486570','#8b9296'],landmark:['fishingPost',5,5,4,5],authored:[['wildtree',1,1],['wildtree',3,1],['wildtree',1,8],['wildtree',4,8],['wildrock',4,2],['wildbloom',3,7],['wildbloom',4,3]]}
   };
-  const heights={wildtree:51,wildrock:13,wildbloom:22,pillar:28,lanternStand:31,mothAltar:24,moonwell:35,moonbloom:29,fishingPost:26};
+  const heights={wildboar:22,wildtree:51,wildrock:13,wildbloom:22,pillar:28,lanternStand:31,mothAltar:24,moonwell:35,moonbloom:29,fishingPost:26};
   const doors=Object.fromEntries(Object.keys(areas).map(id=>[id,[]]));
   const coordinate=([x,y])=>({x,y});
   function connect(a,b,from,to,gate){
@@ -21,6 +22,7 @@ const moonwood=(()=>{
     doors[a].push({to:b,side:'wild',tile:{x:ax,y:ay},inside:{x:inx,y:iny},arrival:{x:outx,y:outy},label,gate});
     doors[b].push({to:a,side:'wild',tile:{x:bx,y:by},inside:{x:outx,y:outy},arrival:{x:inx,y:iny},label:backLabel,gate});
   }
+  connect('trail','clearing',[7,0,7,1,'TRAIL'],[0,5,1,5,'HUNT']);
   connect('trail','grove',[4,0,4,1,'TRAIL'],[0,5,1,5,'GROVE']);
   connect('trail','creek',[11,4,10,4,'TRAIL'],[0,4,1,4,'CREEK']);
   connect('grove','shrine',[11,4,10,4,'GROVE'],[0,4,1,4,'SHRINE'],'groveTrail');
@@ -149,7 +151,17 @@ const moonwood=(()=>{
     const stone=['#9a9ab2','#50536c','#71738d'];
     const aqua=['#91bdbb','#3e6271','#568b93'];
     surface(x+.08,y+.1,.86,.82,.14,'#16293776');
-    if(type==='wildtree'){
+    if(type==='wildboar'){
+      const bob=reduced?0:Math.sin(time/380)*.6;
+      part(.21,.26,.14,.16,0,6,['#795d58','#3d3543','#56434b']);
+      part(.65,.59,.14,.16,0,6,['#795d58','#3d3543','#56434b']);
+      part(.18,.2,.62,.58,5+bob,11,['#9b7c70','#594451','#755762']);
+      part(.52,.55,.44,.38,7+bob,9,['#a78a7a','#654c55','#89666a']);
+      part(.81,.72,.23,.22,7+bob,5,['#bf9b87','#7e5f66','#a87b79']);
+      rect(px+4,py-16-bob,3,4,'#543444');rect(px+10,py-11-bob,2,2,'#ffce92');
+      rect(px+12,py-5-bob,2,4,'#f4d8b3');rect(px+7,py-3-bob,2,3,'#f4d8b3');
+      rect(px-8,py-16-bob,10,2,'#443744');
+    }else if(type==='wildtree'){
       const tint=(x*3+y)%3;
       const foliage=[['#3f777a','#2e5d6a','#274c5d'],['#50778c','#355d76','#294d69'],['#5c748b','#435b76','#344862']][tint];
       part(.39,.43,.22,.22,0,24,['#796071','#493e57','#5e4a61']);

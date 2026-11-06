@@ -83,7 +83,7 @@ const huntingLoot={rabbit:0,boar:0,deer:0,...savedPlayerState?.huntingLoot};
 const tradeCatalog={
   ...fishProducts,
   rabbit:{name:'Rabbit',price:12,icon:'♧',group:'hunting'},
-  boar:{name:'Wild boar',price:30,icon:'♧',group:'hunting'},
+  boar:{name:'Boar Meat',price:30,icon:'♧',group:'hunting'},
   deer:{name:'Forest deer',price:24,icon:'♧',group:'hunting'}
 };
 let fishingDuration=4500;
@@ -102,6 +102,104 @@ function setPlayerCombat(active){
   $('healthHud').hidden=!player.inCombat;
 }
 let route=[],step=null,interaction=null,hover=null,hoverItem=null,target=null;
+const hunting=normalizeHunting(savedPlayerState?.hunting);
+let combatMessage='',combatFeedback=null,lastCombatUi=0;
+const unavailable=()=>player.inCombat||hunting.recoveryUntil>0;
+function stopForCombat(){
+  route=[];step=null;interaction=null;target=null;
+  player.x=player.cx;player.y=player.cy;player.seat=null;player.waveStarted=null;
+}
+function startBoarEncounter(){
+  if(currentRoom!=='clearing'||unavailable())return;
+  if(health<=0){note('Return to the Tower and rest to restore your hearts.');return;}
+  if(Date.now()<hunting.respawnAt){note('The clearing is quiet. Another boar will arrive shortly.');return;}
+  stopForCombat();
+  hunting.encounter={health:boarRules.health,nextActionAt:0};
+  setPlayerCombat(true);
+  combatMessage='The boar lowers its tusks. Choose Attack or Flee.';
+  updateCombatPanel();savePlayerState();
+  note('Wild Boar encountered! Attack or Flee in the hunting panel.');
+}
+function combatAction(action){
+  if(!player.inCombat||currentRoom!=='clearing')return;
+  const result=huntingTurn(hunting.encounter,health,playerStats,action,Date.now());
+  if(!result)return;
+  hunting.encounter=result.encounter;health=result.health;
+  combatFeedback={started:performance.now(),damage:result.damage,taken:result.taken,dodged:result.dodged};
+  combatMessage=(result.damage?'You hit for '+result.damage+'. ':action==='flee'&&result.outcome!=='escaped'?'Your escape was blocked. ':'')+(result.dodged?'You dodge the counterattack.':result.taken?'The boar hits for '+result.taken+'.':'');
+  if(result.taken){
+    $('healthHud').classList.remove('injured');void $('healthHud').offsetWidth;$('healthHud').classList.add('injured');
+  }
+  if(result.outcome!=='fighting')setPlayerCombat(false);
+  if(result.outcome==='victory'){
+    hunting.respawnAt=Date.now()+boarRules.respawn;
+    huntingLoot.boar=(huntingLoot.boar??0)+1;
+    playerStats.strengthXp+=15;playerStats.agilityXp+=10;playerStats.vitalityXp+=15;
+    combatMessage='Victory! Boar Meat added to inventory. Take it to the Trading Post.';
+    showTransaction('Wild Boar defeated',[{icon:'✦',text:'Boar Meat ×1 · sell for 30 credits'},{icon:'⚔',text:'+15 Strength XP · +10 Agility XP · +15 Vitality XP'}]);
+    updateInventory();
+  }else if(result.outcome==='escaped'){
+    combatMessage='You escape to Lantern Trail. Your remaining hearts are saved.';
+    enterRoom('trail',{x:7,y:1});
+  }else if(result.outcome==='defeat'){
+    hunting.recoveryUntil=Date.now()+boarRules.recovery;
+    combatMessage='The Tower wardens bring you home. Resting restores all five hearts.';
+    enterRoom('hub');
+  }
+  updatePlayerStats();updateCombatPanel();savePlayerState();note(combatMessage);
+}
+function restAtTower(){
+  if(!['hub','home'].includes(currentRoom)||unavailable()||health>=100)return;
+  stopForCombat();hunting.recoveryUntil=Date.now()+boarRules.recovery;
+  combatMessage='Resting at the Tower. Your hearts will be restored shortly.';
+  updateCombatPanel();savePlayerState();
+}
+function updateCombatPanel(){
+  const now=Date.now(),encounter=hunting.encounter;
+  $('wave').disabled=editing||!!fishingSession||unavailable();
+  $('combatPanel').hidden=currentRoom!=='clearing';
+  $('scene').classList.toggle('in-combat',player.inCombat);
+  $('restAtTower').hidden=!['hub','home'].includes(currentRoom)||health>=100&&!hunting.recoveryUntil;
+  $('restAtTower').disabled=!!hunting.recoveryUntil;
+  $('restAtTower').textContent=hunting.recoveryUntil?'Resting · '+Math.max(0,Math.ceil((hunting.recoveryUntil-now)/1000))+'s':'Rest · restore hearts';
+  const notice=$('combatNotice');
+  notice.hidden=!hunting.recoveryUntil;
+  if(hunting.recoveryUntil)notice.textContent='Recovering at the Tower · '+Math.max(0,Math.ceil((hunting.recoveryUntil-now)/1000))+'s · Five hearts restored after rest';
+  if(currentRoom!=='clearing')return;
+  const remaining=Math.max(0,(encounter?.nextActionAt??0)-now);
+  $('boarHealth').textContent=encounter?encounter.health+' / '+boarRules.health+' HP':now<hunting.respawnAt?'Boar returns in '+Math.ceil((hunting.respawnAt-now)/1000)+'s':boarRules.health+' / '+boarRules.health+' HP';
+  $('boarProgress').value=encounter?.health??(now<hunting.respawnAt?0:boarRules.health);
+  $('combatAttack').disabled=!encounter||remaining>0;
+  $('combatFlee').disabled=!encounter||remaining>0;
+  $('combatCooldown').textContent=remaining?'Ready in '+(remaining/1000).toFixed(1)+'s':encounter?'Ready · Space: Attack · F: Flee':'Click the boar or choose Approach boar to begin.';
+  $('combatLog').textContent=combatMessage||'The boar watches the trail. It will not attack until you approach.';
+  const attributes=huntingAttributes(playerStats);
+  $('combatGuide').textContent='Attack '+attributes.damage+'–'+(attributes.damage+4)+' · Dodge '+Math.round(attributes.dodge*100)+'% · Escape '+Math.round(attributes.escape*100)+'% · Armor '+attributes.armor;
+  $('adventureLandmark').hidden=!!encounter||now<hunting.respawnAt;
+  $('adventureLandmark').textContent='Approach boar';
+  $('adventureLandmark').disabled=health<=0||unavailable();
+}
+function updateCombatMoment(time){
+  if(hunting.recoveryUntil&&Date.now()>=hunting.recoveryUntil){
+    hunting.recoveryUntil=0;health=100;
+    combatMessage='All five hearts restored. You are ready to explore again.';
+    updatePlayerStats();savePlayerState();note(combatMessage);
+  }
+  if(time-lastCombatUi>100){lastCombatUi=time;updateCombatPanel();}
+}
+function drawCombatFeedback(time){
+  if(!combatFeedback||currentRoom!=='clearing')return;
+  const age=time-combatFeedback.started;
+  if(age>900){combatFeedback=null;return;}
+  const offset=reducedMotion.matches?0:age/70;
+  ctx.save();ctx.globalAlpha=1-age/1000;ctx.font='bold 9px monospace';ctx.textAlign='center';
+  const [bx,by]=point(6.5,5.5,30),[px,py]=point(player.x+.5,player.y+.5,52);
+  if(combatFeedback.damage){ctx.fillStyle='#ffe0a6';ctx.fillText('−'+combatFeedback.damage,bx,by-offset);}
+  ctx.fillStyle=combatFeedback.dodged?'#bce5d0':'#ff9eaf';
+  if(combatFeedback.taken||combatFeedback.dodged)ctx.fillText(combatFeedback.dodged?'DODGE':'−'+combatFeedback.taken,px,py-offset);
+  ctx.restore();
+}
+
 let editing=false,selection=null,zoom=1,hitboxes=[],bounds=null,bubbleUntil=0,noticeUntil=0;
 const hubFurniture=[
   ['reception',3,2],['plant',0,8],['plant',17,0],['plant',1,14],['plant',16,14],
@@ -138,7 +236,7 @@ function roomFurniture(){
   if(currentRoom==='lounge')return loungeFurniture;
   if(currentRoom==='store')return storeFurniture;
   if(currentRoom==='market')return marketFurniture;
-  if(moonwood.has(currentRoom))return moonwood.layouts[currentRoom].scenery;
+  if(moonwood.has(currentRoom))return moonwood.layouts[currentRoom].scenery.filter(item=>item.type!=='wildboar'||Date.now()>=hunting.respawnAt);
   return currentRoom==='hub'?hubFurniture:courtyardFurniture;
 }
 function setRoomFurniture(items){
@@ -940,7 +1038,10 @@ function draw(time){
     }
     const cycle=step?(player.stride%2)+Math.min(1,(time-step.started)/STEP_MS):0;
     const wave=player.waveStarted===null?null:(time-player.waveStarted)/WAVE_MS;
-    sprite(ctx,x,y,avatar,{direction:player.direction,back:player.back,cycle,seated:!!seat,wave,fishing:fishingSession?fishingMoments.phase(fishingSession,time):null,time});
+    const strikeAge=combatFeedback?time-combatFeedback.started:Infinity;
+    const lunge=!reducedMotion.matches&&combatFeedback?.damage&&strikeAge<220?Math.sin(strikeAge/220*Math.PI)*5:0;
+    const [enemyX,enemyY]=point(6.5,5.5);
+    sprite(ctx,x+Math.sign(enemyX-x)*lunge,y+Math.sign(enemyY-y)*lunge,avatar,{direction:player.direction,back:player.back,cycle,seated:!!seat,wave,fishing:fishingSession?fishingMoments.phase(fishingSession,time):null,time});
     if(fishingSession)drawFishingMoment(x,y,time);
     drawCatchReveal(x,y,time);
     if(player.inCombat){
@@ -968,6 +1069,7 @@ function draw(time){
   for(const item of items){
     if(!drawn&&playerDepth<depth(item)){drawPlayer();drawn=true;}
     ctx.globalAlpha=item===ghost?.52:ghost&&selection?.id===item.id?.4:1;
+    if(item.type==='wildboar'&&!reducedMotion.matches&&combatFeedback?.damage&&time-combatFeedback.started<240&&Math.floor((time-combatFeedback.started)/60)%2===0)ctx.globalAlpha=.45;
     object(item,editing&&(selection?.id===item.id||hoverItem?.id===item.id)&&!fixed(item),time);
     ctx.globalAlpha=1;
     if(item===ghost||(fixed(item)&&!isGamingTable(item)))continue;
@@ -976,6 +1078,7 @@ function draw(time){
     hitboxes.push({item,shape});
   }
   if(!drawn)drawPlayer();
+  drawCombatFeedback(time);
 }
 
 
@@ -1068,6 +1171,7 @@ function setHint(){
 }
 function startPosition(){return step?.to??{x:player.cx,y:player.cy};}
 function walkTo(tile){
+  if(unavailable()){note(player.inCombat?"Choose Attack or Flee before moving.":"Rest until your hearts recover.");return;}
   if(blocked(tile.x,tile.y)){note('That tile is occupied.');return;}
   const path=findPath(startPosition(),tile);
   if(!path){note('There’s no clear path to that tile.');return;}
@@ -1076,6 +1180,7 @@ function walkTo(tile){
   route=path;interaction=null;target=path.length?tile:null;
 }
 function travelDoor(door){
+  if(unavailable()){note(player.inCombat?"Use Flee to leave combat.":"Your hearts are recovering.");return;}
   if(currentRoom==='creek'&&door.to==='ruins'&&!adventure.bridge){
     note('Light your lantern to reveal a crossing.');
     return;
@@ -1085,6 +1190,7 @@ function travelDoor(door){
   else walkTo(door.tile);
 }
 function use(item){
+  if(unavailable())return;
   if(item.type==='fishingPost'&&fishingSession){reelFish();return;}
   cancelFishing();
   const start=startPosition(),[w,d]=dimensions(item);
@@ -1210,7 +1316,9 @@ function updateFishingMoment(time){
 }
 function finishInteraction(){
   const item=interaction;interaction=null;
-  if(item.type==='fishingPost'){
+  if(item.type==='wildboar'){
+    startBoarEncounter();
+  }else if(item.type==='fishingPost'){
     if(fishingGear.bait<1){note('You need bait. Visit Silverfin Outfitters in the tower.');return;}
     const rod=fishingCatalog.rods[fishingGear.equippedRod];
     if(!fishingGear.ownedRods.includes(fishingGear.equippedRod)||patienceLevel()<rod.patience){
@@ -1254,6 +1362,7 @@ function finishInteraction(){
   }
 }
 function animation(time){
+  updateCombatMoment(time);
   updateFishingMoment(time);
   if(patienceTween){
     const t=reducedMotion.matches?1:Math.min(1,(time-patienceTween.started)/1000);
@@ -1478,7 +1587,7 @@ function updateTradingPost(){
   }
 }
 function savePlayerState(){
-  const snapshot={credits,health,ownedFurniture,furniture:loungeFurniture,homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats,fishingGear,huntingLoot,fishStock,avatar,location:currentRoom,position:{x:player.cx,y:player.cy}};
+  const snapshot={credits,health,hunting,ownedFurniture,furniture:loungeFurniture,homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats,fishingGear,huntingLoot,fishStock,avatar,location:currentRoom,position:{x:player.cx,y:player.cy}};
   save('player-state',snapshot);
   if(window.playerCloud)window.playerCloud.enqueue(JSON.parse(JSON.stringify(snapshot)));
   updateInventory();
@@ -1526,7 +1635,8 @@ function switchMode(next){
   noticeUntil=0;setHint();cancelSelection();
 }
 function updateAdventurePanel(){
-  $('wave').disabled=editing||!!fishingSession;
+  updateCombatPanel();
+  $('wave').disabled=editing||!!fishingSession||unavailable();
   const exploring=moonwood.has(currentRoom);
   const lantern=$('lantern');
   lantern.hidden=!exploring||!adventure.lantern;
@@ -1534,6 +1644,7 @@ function updateAdventurePanel(){
   lantern.classList.toggle('active',lanternLit);
   if(!exploring)return;
   const fieldNotes={
+    clearing:'A Wild Boar guards this clearing. Approach to hunt. Rest in the Tower to refill your hearts.',
     trail:adventure.lantern?'Your lantern reveals hidden trails and crossings.':'Take the lantern from the waystone before heading deeper.',
     grove:adventure.groveTrail?'The lantern revealed a trail to the Moth Shrine.':'Light your lantern to look for a trail through the grove.',
     creek:adventure.bridge?'Moonlit stepping stones cross the creek.':'Light your lantern to reveal a way across the creek.',
@@ -1552,7 +1663,7 @@ function updateAdventurePanel(){
   $('adventureProgress').textContent=adventure.discovered.length+' of '+Object.keys(moonwood.areas).length+' places discovered';
   const landmark=$('adventureLandmark');
   const bite=!!fishingSession&&fishingMoments.phase(fishingSession,performance.now())==='bite';
-  const action={trail:!adventure.lantern?'Take lantern':'',shrine:!adventure.shrine?'Examine altar':'',ruins:!adventure.shortcut?'Search Moonwell':'',pond:bite?'Reel! +5 Patience XP':fishingSession?'Fishing…':'Cast a line'}[currentRoom];
+  const action={clearing:!player.inCombat&&Date.now()>=hunting.respawnAt?'Approach boar':'',trail:!adventure.lantern?'Take lantern':'',shrine:!adventure.shrine?'Examine altar':'',ruins:!adventure.shortcut?'Search Moonwell':'',pond:bite?'Reel! +5 Patience XP':fishingSession?'Fishing…':'Cast a line'}[currentRoom];
   landmark.hidden=!action;
   landmark.disabled=(!!fishingSession&&!bite)||(currentRoom==='pond'&&fishingGear.bait<1);
   landmark.classList.toggle('bite-ready',bite);
@@ -1696,6 +1807,9 @@ $('adventureLandmark').onclick=()=>{
   const landmark=roomFurniture().find(item=>item.id==='landmark');
   if(landmark)use(landmark);
 };
+$('combatAttack').onclick=()=>combatAction('attack');
+$('combatFlee').onclick=()=>combatAction('flee');
+$('restAtTower').onclick=restAtTower;
 $('reception').onclick=()=>use(hubFurniture[0]);
 for(const button of $('gamingGuide').querySelectorAll('[data-game-table]')){
   button.onclick=()=>{
@@ -1735,7 +1849,7 @@ canvas.addEventListener('click',e=>{
 });
 const arrows={ArrowRight:[1,0],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowUp:[0,-1]};
 function waveHello(){
-  if(editing)return;
+  if(editing||unavailable())return;
   if(step||route.length){note('Stop walking to wave.');return;}
   if(!player.seat)player.back=false;
   player.waveStarted=performance.now();
@@ -1748,6 +1862,9 @@ canvas.addEventListener('keydown',e=>{
     return;
   }
   const delta=arrows[e.key];
+  if(player.inCombat&&['Space','KeyF'].includes(e.code)){
+    e.preventDefault();if(!e.repeat)combatAction(e.code==='KeyF'?'flee':'attack');return;
+  }
   if(!editing&&e.code==='Space'){
     e.preventDefault();
     if(!e.repeat)waveHello();
@@ -1847,6 +1964,7 @@ function updateRoomLabel(){
   canvas.setAttribute('aria-label',roomDetails[currentRoom].name+'. Click a floor tile or use arrow keys to walk. '+(landmarks[currentRoom]??'Use the marked trails or the field journal to travel.'));
 }
 function enterRoom(next,arrival){
+  if(player.inCombat||(hunting.recoveryUntil&&next!=="hub"&&next!=="home")){note("Finish combat or recovery before travelling.");return;}
   cancelFishing();
   catchReveal=null;$('catchReveal').hidden=true;
   const focusRoom=!!document.activeElement.closest('[data-room-link]');
@@ -1915,6 +2033,13 @@ $('fishingSound').onclick=()=>{
 };
 movePlayerToSpawn();updateName();switchMode(false);
 if(savedPlayerState?.location&&roomDetails[savedPlayerState.location])enterRoom(savedPlayerState.location,savedPlayerState.position);
+if(hunting.encounter){
+  if(currentRoom==='clearing'){
+    setPlayerCombat(true);combatMessage='Your encounter resumes. Choose Attack or Flee.';
+  }else hunting.encounter=null;
+}
+if(hunting.recoveryUntil&&!['hub','home'].includes(currentRoom))enterRoom('hub');
+updateCombatPanel();
 window.towerSaveNow=savePlayerState;
 window.towerHasActiveCast=()=>!!fishingSession;
 if(window.playerCloud)window.playerCloud.attach();
