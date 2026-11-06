@@ -73,7 +73,7 @@ const PATIENCE_XP_PER_CATCH=10, PATIENCE_XP_PER_LEVEL=50;
 const patienceLevel=()=>1+Math.floor(playerStats.patienceXp/PATIENCE_XP_PER_LEVEL);
 const maxHealth=()=>100;
 let health=Math.min(maxHealth(),Math.max(0,savedPlayerState?.health??maxHealth()));
-const fishingGear={ownedRods:['reed'],equippedRod:'reed',bait:10,...savedPlayerState?.fishingGear};
+const fishingGear=normalizeFishingGear(savedPlayerState?.fishingGear);
 const fishStock={...savedPlayerState?.fishStock};
 if(!savedPlayerState?.fishStock&&adventure.silverfin>0)fishStock.silverfin=adventure.silverfin;
 delete adventure.silverfin;
@@ -1532,6 +1532,8 @@ function toggleWeapon(){
   updateWeaponInventory();updateCombatPanel();savePlayerState();
 }
 function updateInventory(){
+  $('starterSwordStatus').textContent='Owned ×1'+(combatGear.equippedWeapon==='trainingSword'?' · Equipped':'');
+  $('starterRodStatus').textContent='Owned ×1'+(fishingGear.equippedRod==='reed'?' · Equipped':'');
   updateQuestUI();
   updateWeaponInventory();
   updatePlayerStats();
@@ -1662,7 +1664,7 @@ function updateFishingShop(){
     card.className='rod-offer';card.dataset.rod=id;
     title.textContent=rod.name;
     const odds=fishingChances(patienceLevel(),id);
-    detail.textContent=rod.quality+' · '+rod.duration/1000+'s per catch · Patience '+rod.patience+' required. At your Patience: Fine '+odds.fine.toFixed(1)+'% · Rare '+odds.rare.toFixed(1)+'%.';
+    detail.textContent=(id==='reed'?'Free starter rod · Already in your inventory. ':'')+rod.quality+' · '+rod.duration/1000+'s per catch · Patience '+rod.patience+' required. At your Patience: Fine '+odds.fine.toFixed(1)+'% · Rare '+odds.rare.toFixed(1)+'%.';
     const owned=fishingGear.ownedRods.includes(id),equipped=fishingGear.equippedRod===id;
     const skill=patienceLevel()>=rod.patience,afford=credits>=rod.price;
     button.textContent=equipped?'Equipped':owned?'Equip':rod.price+' credits'+(!skill?' · Patience '+rod.patience+' required':!afford?' · Need more credits':' · Buy');

@@ -12,7 +12,7 @@ test('new and existing characters receive one equipped sword, while unequipped c
   assert.deepEqual(normalizeState(starter).combatGear,starter.combatGear);
   const unequipped=normalizeState({...starter,combatGear:{ownedWeapons:['trainingSword'],equippedWeapon:null}});
   assert.equal(normalizeState(unequipped).combatGear.equippedWeapon,null);
-  assert.throws(()=>normalizeCombatGear({ownedWeapons:[],equippedWeapon:'trainingSword'}),/Invalid/);
+  assert.deepEqual(normalizeCombatGear({ownedWeapons:[],equippedWeapon:'trainingSword'}).ownedWeapons,['trainingSword']);
   assert.throws(()=>normalizeState({...unequipped,location:'clearing',hunting:{encounter:createHunt(0)}}),/unarmed/);
 });
 

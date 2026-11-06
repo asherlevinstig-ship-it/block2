@@ -5,6 +5,7 @@ export function normalizeCombatGear(input){
   if(!input||typeof input!=='object'||!Array.isArray(input.ownedWeapons))throw new Error('Invalid combat equipment.');
   const ownedWeapons=[...new Set(input.ownedWeapons)];
   if(ownedWeapons.some(id=>!Object.hasOwn(weaponCatalog,id)))throw new Error('Invalid weapon.');
+  if(!ownedWeapons.includes('trainingSword'))ownedWeapons.unshift('trainingSword');
   const equippedWeapon=input.equippedWeapon??null;
   if(equippedWeapon!==null&&!ownedWeapons.includes(equippedWeapon))throw new Error('Invalid equipped weapon.');
   return {ownedWeapons,equippedWeapon};

@@ -1,6 +1,6 @@
 import { normalizeQuest,recordQuest } from "../public/quests.js";
 import { normalizeHunting, normalizeCombatGear } from "../public/hunting.js";
-import { fishingCatalog, fishProducts, rollFishingCatch } from "../public/fishing.js";
+import { fishingCatalog, fishProducts, rollFishingCatch, normalizeFishingGear } from "../public/fishing.js";
 
 export const MAX_PLAN_HOURS=8;
 const counts=(input={})=>{
@@ -34,9 +34,7 @@ export function normalizeState(input={}){
   const maxHealth=100;
   const health=input.health??maxHealth;
   if(!Number.isSafeInteger(health)||health<0)throw new Error("Invalid health.");
-  const gear=input.fishingGear??{ownedRods:["reed"],equippedRod:"reed",bait:10};
-  const ownedRods=[...new Set(gear.ownedRods??[])];
-  if(!ownedRods.length||ownedRods.some(id=>!fishingCatalog.rods[id])||!ownedRods.includes(gear.equippedRod)||!Number.isSafeInteger(gear.bait)||gear.bait<0||gear.bait>1000000)throw new Error("Invalid fishing gear.");
+  const gear=normalizeFishingGear(input.fishingGear),ownedRods=gear.ownedRods;
   const fishStock=counts(input.fishStock??(input.adventure?.silverfin?{silverfin:input.adventure.silverfin}:{}));
   if(Object.keys(fishStock).some(id=>!fishProducts[id]))throw new Error("Unknown fish.");
   const a=input.adventure??{};

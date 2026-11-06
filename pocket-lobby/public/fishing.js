@@ -40,4 +40,15 @@ function rollFishingCatch(level,rodId,random=Math.random){
   return quality==='common'?species:species+'_'+quality;
 }
 
-export { fishingCatalog, fishProducts, fishingChances, rollFishingCatch };
+function normalizeFishingGear(input){
+  if(input===undefined)return {ownedRods:['reed'],equippedRod:'reed',bait:10};
+  if(!input||typeof input!=='object'||!Array.isArray(input.ownedRods))throw new Error('Invalid fishing gear.');
+  const ownedRods=[...new Set(input.ownedRods)];
+  if(ownedRods.some(id=>!Object.hasOwn(fishingCatalog.rods,id)))throw new Error('Invalid fishing rod.');
+  if(!ownedRods.includes('reed'))ownedRods.unshift('reed');
+  const equippedRod=input.equippedRod??'reed',bait=input.bait??10;
+  if(!ownedRods.includes(equippedRod)||!Number.isSafeInteger(bait)||bait<0||bait>1000000)throw new Error('Invalid fishing gear.');
+  return {ownedRods,equippedRod,bait};
+}
+
+export { fishingCatalog, fishProducts, fishingChances, rollFishingCatch, normalizeFishingGear };
