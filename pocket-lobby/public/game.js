@@ -2004,6 +2004,40 @@ function updateFishingShop(){
 function tradeQuantity(id){
   return id==='timber'?woodcutting.timber:fishProducts[id]?fishStock[id]??0:huntingLoot[id]??0;
 }
+let deliveringCarpenterOrder=false;
+function updateCarpenterOrder(){
+  const complete=window.playerCloud?.initial?.carpenterOrderComplete===true;
+  const ready=woodcutting.timber>=carpenterOrder.timber;
+  $('carpenterProgress').value=complete?carpenterOrder.timber:Math.min(carpenterOrder.timber,woodcutting.timber);
+  $('carpenterCount').textContent=complete?'Order fulfilled':Math.min(carpenterOrder.timber,woodcutting.timber)+' / '+carpenterOrder.timber+' timber ready';
+  $('carpenterDeliver').textContent=complete?'Delivered ✓':deliveringCarpenterOrder?'Delivering…':ready?'Deliver 12 timber':'Gather '+(carpenterOrder.timber-woodcutting.timber)+' more timber';
+  $('carpenterDeliver').disabled=complete||!ready||deliveringCarpenterOrder||!window.playerCloud?.deliverCarpenter;
+}
+async function handInCarpenterOrder(){
+  if(currentRoom!=='market'||$('carpenterDeliver').disabled)return;
+  deliveringCarpenterOrder=true;
+  const shell=$('gameShell'),status=$('carpenterStatus');
+  shell.inert=true;
+  status.textContent='Delivering your timber…';
+  updateCarpenterOrder();
+  try{
+    window.towerPauseForAccount();
+    const state=await window.playerCloud.deliverCarpenter();
+    credits=state.credits;
+    woodcutting.timber=state.woodcutting.timber;
+    status.textContent='Order complete. The carpenter paid you '+carpenterOrder.reward+' gold.';
+    showTransaction('Carpenter’s Order delivered',[{text:'−'+carpenterOrder.timber+' timber',icon:'▤'}],carpenterOrder.reward);
+    updateInventory();
+  }catch(error){
+    status.textContent=error.message;
+  }finally{
+    deliveringCarpenterOrder=false;
+    shell.inert=false;
+    updateCarpenterOrder();
+    if(!$('carpenterDeliver').disabled)$('carpenterDeliver').focus();
+    else $('carpenterTitle').focus();
+  }
+}
 function sellTradeLoot(id,quantity,statusId='tradeStatus'){
   const item=tradeCatalog[id];
   if(!item||!Number.isSafeInteger(quantity)||quantity<1||quantity>tradeQuantity(id))return;
@@ -2021,6 +2055,7 @@ function sellTradeLoot(id,quantity,statusId='tradeStatus'){
 }
 function updateTradingPost(){
   $('tradeBalance').textContent='Your wallet · '+new Intl.NumberFormat().format(credits)+' credits';
+  updateCarpenterOrder();
   const offers=$('tradeOffers');offers.replaceChildren();
   for(const [id,item] of Object.entries(tradeCatalog)){
     const quantity=tradeQuantity(id),card=document.createElement('div');
@@ -2293,6 +2328,7 @@ $('combatFlee').onclick=()=>combatAction('flee');
 $('combatDodge').onclick=()=>combatAction('dodge');
 $('woodAction').onclick=woodAction;
 $('openWorkbench').onclick=()=>{if(currentRoom==='logging')use(roomFurniture().find(item=>item.type==='workbench'));};
+$('carpenterDeliver').onclick=handInCarpenterOrder;
 $('equipAxe').onclick=equipAxe;
 $('equipWeapon').onclick=toggleWeapon;
 $('weaponSelect').onchange=updateWeaponInventory;

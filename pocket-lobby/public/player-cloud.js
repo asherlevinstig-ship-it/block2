@@ -85,6 +85,11 @@
         packet=await request(path,{...body,revision:packet.revision,operation});
         return packet;
       }catch(error){
+        if(path==='commissions/carpenter'){
+          if(error.status===undefined&&attempt<2)continue;
+          if(error.status===409||error.status===401||error.status===undefined)conflict('Reload to confirm the status of your delivery.');
+          throw error;
+        }
         if(error.status!==409||!error.data?.state)throw error;
         if(path==='presence'){if(error.data.lastOperation===operation){packet=error.data;return packet;}conflict('Your character changed in another window.');throw error;}
         packet=error.data;
@@ -248,12 +253,13 @@
       const woodRules=await import('./woodcutting.js');
       const crafting=await import('./crafting.js');
       const characterRules=await import('./character-rules.js');
+      const commissions=await import('./commissions.js');
       const jobs=await import('./jobs.js');
       const shared=await import('./shared-world.js');
       const multiplayer=await import('./multiplayer.js');
-      Object.assign(window,rules,hunting,art,fx,quests,historyRules,shopUI,woodRules,crafting,characterRules,jobs,shared,multiplayer);
+      Object.assign(window,rules,hunting,art,fx,quests,historyRules,shopUI,woodRules,crafting,characterRules,commissions,jobs,shared,multiplayer);
       window.towerInitialState=packet.state;
-      window.playerCloud={enqueue,flush,attach,saveRules:async rules=>{await flush();return (await action('rules/save',{rules})).state;},startJob:async options=>{await flush();await action('plan/start',{...options,source:'board'});window.towerMultiplayer?.disconnect();location.reload();},invalidate:conflict,get initial(){return packet.state;}};
+      window.playerCloud={enqueue,flush,attach,deliverCarpenter:async()=>{await flush();return (await action('commissions/carpenter')).state;},saveRules:async rules=>{await flush();return (await action('rules/save',{rules})).state;},startJob:async options=>{await flush();await action('plan/start',{...options,source:'board'});window.towerMultiplayer?.disconnect();location.reload();},invalidate:conflict,get initial(){return packet.state;}};
       const script=document.createElement('script');script.src='game.js';
       script.onload=()=>{
         if(!(pending||retryJob||sending))setStatus('Server saved');
