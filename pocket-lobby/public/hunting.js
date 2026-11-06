@@ -1,5 +1,5 @@
 export const boarRules={health:70,playerInterval:1100,boarInterval:1900,fleeCooldown:1800,respawn:30000,recovery:12000};
-export const weaponCatalog={trainingSword:{name:'Training Sword',damage:14,description:'A simple iron blade issued to new adventurers.'}};
+export const weaponCatalog={trainingSword:{name:'Training Sword',damage:14,description:'A simple iron blade issued to new adventurers.'},wardenSword:{name:'Warden’s Blade',damage:18,description:'A gold-trimmed blade awarded for completing First Steps.'}};
 export function normalizeCombatGear(input){
   if(input===undefined)return {ownedWeapons:['trainingSword'],equippedWeapon:'trainingSword'};
   if(!input||typeof input!=='object'||!Array.isArray(input.ownedWeapons))throw new Error('Invalid combat equipment.');
@@ -10,9 +10,9 @@ export function normalizeCombatGear(input){
   return {ownedWeapons,equippedWeapon};
 }
 const level=xp=>1+Math.floor((xp??0)/50);
-export function huntingAttributes(stats){
+export function huntingAttributes(stats,weapon='trainingSword'){
   return {
-    damage:weaponCatalog.trainingSword.damage+Math.min(30,(level(stats.strengthXp)-1)*2),
+    damage:(weaponCatalog[weapon]?.damage??0)+Math.min(30,(level(stats.strengthXp)-1)*2),
     dodge:Math.min(.3,.08+(level(stats.agilityXp)-1)*.02),
     escape:Math.min(.95,.7+(level(stats.agilityXp)-1)*.025),
     armor:Math.min(10,level(stats.vitalityXp)-1)
@@ -37,12 +37,12 @@ export function createHunt(now,health=boarRules.health){
 export function resumeHunt(encounter,now){
   return {...encounter,nextPlayerAt:now+450,nextBoarAt:now+1300,nextFleeAt:Math.min(encounter.nextFleeAt,now+boarRules.fleeCooldown)};
 }
-export function huntingTurn(encounter,health,stats,action,now,random=Math.random){
+export function huntingTurn(encounter,health,stats,action,now,random=Math.random,weapon='trainingSword'){
   if(!['attack','enemy','flee'].includes(action))throw new Error('Invalid combat action.');
   if(!encounter||health<=0)throw new Error('No active encounter.');
   const clock=action==='attack'?'nextPlayerAt':action==='enemy'?'nextBoarAt':'nextFleeAt';
   if(now<encounter[clock])return null;
-  const attributes=huntingAttributes(stats);
+  const attributes=huntingAttributes(stats,weapon);
   const result={encounter:{...encounter},health,damage:0,taken:0,dodged:false,outcome:'fighting',action};
   if(action==='flee'){
     result.encounter.nextFleeAt=now+boarRules.fleeCooldown;
@@ -63,8 +63,8 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
   }
   return result;
 }
-export function advanceHunt(encounter,health,stats,now,random=Math.random){
+export function advanceHunt(encounter,health,stats,now,random=Math.random,weapon='trainingSword'){
   if(!encounter||health<=0)return null;
   const action=encounter.nextPlayerAt<=encounter.nextBoarAt?'attack':'enemy';
-  return huntingTurn(encounter,health,stats,action,now,random);
+  return huntingTurn(encounter,health,stats,action,now,random,weapon);
 }

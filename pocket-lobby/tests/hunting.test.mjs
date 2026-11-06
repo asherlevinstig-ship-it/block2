@@ -1,3 +1,4 @@
+import * as questRules from '../public/quests.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -70,9 +71,9 @@ function gameHarness(){
   };
   const source=fs.readFileSync(new URL('../public/game.js',import.meta.url),'utf8');
   const context=vm.createContext({
-    normalizeHunting,normalizeCombatGear,weaponCatalog,boarRules,huntingAttributes,createHunt,resumeHunt,
-    advanceHunt:(...args)=>advanceHunt(...args,()=>.5),
-    huntingTurn:(...args)=>huntingTurn(...args,()=>.5),
+    ...questRules,normalizeHunting,normalizeCombatGear,weaponCatalog,boarRules,huntingAttributes,createHunt,resumeHunt,
+    advanceHunt:(e,h,s,n,_r,w)=>advanceHunt(e,h,s,n,()=>.5,w),
+    huntingTurn:(e,h,s,a,n,_r,w)=>huntingTurn(e,h,s,a,n,()=>.5,w),
     savedPlayerState:null,player:{cx:5,cy:5,inCombat:false},health:100,
     currentRoom:'clearing',playerStats:{strengthXp:0,agilityXp:0,vitalityXp:0},huntingLoot:{boar:0},
     editing:false,fishingSession:null,route:[],step:null,interaction:null,target:null,

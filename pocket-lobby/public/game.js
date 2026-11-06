@@ -104,6 +104,54 @@ function setPlayerCombat(active){
 let route=[],step=null,interaction=null,hover=null,hoverItem=null,target=null;
 const combatGear=normalizeCombatGear(savedPlayerState?.combatGear);
 const hunting=normalizeHunting(savedPlayerState?.hunting);
+const quest=normalizeQuest(savedPlayerState?.quest);
+function nearWarden(){return currentRoom==='hub'&&Math.abs(player.cx-10)+Math.abs(player.cy-3)<=1;}
+function updateQuestUI(){
+  const stage=questStage(quest);
+  const objectives=[
+    'Speak to the Tower Warden in the Grand Lobby to begin.',
+    'Catch fish at Silverfin Pond · '+quest.fish+' / 3 · Moonwood → Glass Creek → Pond',
+    'Defeat a Wild Boar · '+quest.boars+' / 1 · Lantern Trail → Bramble Clearing',
+    'Sell fish or Boar Meat at the Trading Post in the Tower.',
+    'Your tasks are complete. Return to the Tower Warden in the Grand Lobby.',
+    'First Steps complete · Warden’s Blade earned. Keep exploring Moonwood.'
+  ];
+  $('questTrackerTitle').textContent=stage===5?'First Steps · Complete':'First Steps';
+  $('questTrackerText').textContent=objectives[stage];
+  $('wardenMessage').textContent=[
+    'Welcome, adventurer. Learn to provide for yourself, stand against Moonwood’s beasts, and trade with our people. Complete these tasks in order and I will reward you with gold and my blade.',
+    'Start at Silverfin Pond. Catch three fish of any quality. Your offline fishing plan counts too.',
+    'Now test your courage against a Wild Boar in Bramble Clearing. Equip your sword, and return to the Tower to rest if you are wounded.',
+    'Take your spoils to the Moonwood Trading Post. Sell at least one fish or piece of Boar Meat there.',
+    'You have earned your place here. Speak to me in the Grand Lobby to receive your gold and Warden’s Blade.',
+    'Well done, adventurer. Your Warden’s Blade is yours to keep. May it serve you well in Moonwood.'
+  ][stage];
+  const rows=[['questFish','Catch 3 fish · '+quest.fish+' / 3',quest.fish===3],['questBoar','Defeat 1 Wild Boar · '+quest.boars+' / 1',quest.boars===1],['questTrade','Sell spoils at the Trading Post',quest.sold],['questReturn','Return to the Tower Warden',quest.claimed]];
+  for(let i=0;i<rows.length;i++){
+    const [id,text,done]=rows[i];$(id).textContent=(done?'✓ ':'')+text;
+    $(id).classList.toggle('done',done);$(id).classList.toggle('current',stage===i+1);
+  }
+  const canSpeak=nearWarden()&&!unavailable();
+  $('questAction').disabled=!canSpeak||![0,4].includes(stage);
+  $('questAction').textContent=stage===0?'Accept quest':stage===4?'Claim 75 gold + Warden’s Blade':stage===5?'Reward received':'Quest in progress';
+  $('questStatus').textContent=stage===5?'Reward saved to your character.':!canSpeak?'Visit the Warden in the Grand Lobby to accept or claim your quest.':stage===0?'Only progress made after accepting counts.':stage===4?'Your new blade will be equipped automatically.':objectives[stage];
+}
+function openQuest(){updateQuestUI();if(!$('questDialog').open)$('questDialog').showModal();}
+function questAction(){
+  if(!nearWarden()||unavailable())return;
+  if(questStage(quest)===0){
+    quest.accepted=true;savePlayerState();note('First Steps accepted. Catch 3 fish at Silverfin Pond.');return;
+  }
+  if(credits>100000000-firstQuestReward.gold)return;
+  const reward=claimFirstQuest(quest);if(!reward)return;
+  credits+=reward.gold;
+  if(!combatGear.ownedWeapons.includes(reward.weapon))combatGear.ownedWeapons.push(reward.weapon);
+  combatGear.equippedWeapon=reward.weapon;$('weaponSelect').value='';
+  savePlayerState();
+  showTransaction('First Steps complete!',[{icon:'⚔',text:'Warden’s Blade · equipped'},{icon:'✦',text:'18 base damage · Thank you, adventurer.'}],reward.gold);
+  note('Quest complete! +75 gold and Warden’s Blade.');
+}
+
 let combatMessage='',combatFeedback=null,lastCombatUi=0;
 const combatArt={strikeAt:-Infinity,hurtAt:-Infinity,dodgeAt:-Infinity,boarAttackAt:-Infinity,boarHitAt:-Infinity,victoryAt:-Infinity};
 function resetCombatArt(){for(const key of Object.keys(combatArt))combatArt[key]=-Infinity;}
@@ -128,7 +176,7 @@ function startBoarEncounter(){
 }
 function combatAction(action){
   if(!player.inCombat||currentRoom!=='clearing'||action!=='flee')return;
-  applyCombatResult(huntingTurn(hunting.encounter,health,playerStats,'flee',Date.now()));
+  applyCombatResult(huntingTurn(hunting.encounter,health,playerStats,'flee',Date.now(),Math.random,combatGear.equippedWeapon));
 }
 function applyCombatResult(result){
   if(!result)return;
@@ -148,6 +196,7 @@ function applyCombatResult(result){
   if(result.outcome==='victory'){
     hunting.respawnAt=Date.now()+boarRules.respawn;
     huntingLoot.boar=(huntingLoot.boar??0)+1;
+    recordQuest(quest,'boar');
     playerStats.strengthXp+=15;playerStats.agilityXp+=10;playerStats.vitalityXp+=15;
     combatMessage='Victory! Boar Meat added to inventory. Take it to the Trading Post.';
     showTransaction('Wild Boar defeated',[{icon:'✦',text:'Boar Meat ×1 · sell for 30 credits'},{icon:'⚔',text:'+15 Strength XP · +10 Agility XP · +15 Vitality XP'}]);
@@ -188,14 +237,14 @@ function updateCombatPanel(){
   $('combatFlee').disabled=!encounter||remaining>0;
   $('combatCooldown').textContent=encounter?'Next strike '+Math.max(0,(encounter.nextPlayerAt-now)/1000).toFixed(1)+'s · Boar '+Math.max(0,(encounter.nextBoarAt-now)/1000).toFixed(1)+'s'+(remaining?' · Flee '+(remaining/1000).toFixed(1)+'s':' · F: Flee'):'Click the boar to engage. Combat runs in real time.';
   $('combatLog').textContent=combatMessage||'The boar watches the trail. It will not attack until you approach.';
-  const attributes=huntingAttributes(playerStats);
+  const attributes=huntingAttributes(playerStats,combatGear.equippedWeapon);
   $('combatGuide').textContent=(weaponCatalog[combatGear.equippedWeapon]?.name??'No weapon equipped')+' · Attack '+attributes.damage+'–'+(attributes.damage+4)+' · Dodge '+Math.round(attributes.dodge*100)+'% · Escape '+Math.round(attributes.escape*100)+'% · Armor '+attributes.armor;
   $('adventureLandmark').hidden=!!encounter||now<hunting.respawnAt;
   $('adventureLandmark').textContent='Approach boar';
   $('adventureLandmark').disabled=health<=0||unavailable()||!combatGear.equippedWeapon;
 }
 function updateCombatMoment(time){
-  if(player.inCombat&&currentRoom==='clearing')applyCombatResult(advanceHunt(hunting.encounter,health,playerStats,Date.now()));
+  if(player.inCombat&&currentRoom==='clearing')applyCombatResult(advanceHunt(hunting.encounter,health,playerStats,Date.now(),Math.random,combatGear.equippedWeapon));
   if(hunting.recoveryUntil&&Date.now()>=hunting.recoveryUntil){
     hunting.recoveryUntil=0;health=100;
     combatMessage='All five hearts restored. You are ready to explore again.';
@@ -218,7 +267,7 @@ function drawCombatFeedback(time){
 
 let editing=false,selection=null,zoom=1,hitboxes=[],bounds=null,bubbleUntil=0,noticeUntil=0;
 const hubFurniture=[
-  ['reception',3,2],['plant',0,8],['plant',17,0],['plant',1,14],['plant',16,14],
+  ['reception',3,2],['warden',10,3],['plant',0,8],['plant',17,0],['plant',1,14],['plant',16,14],
   ['stool',2,3],['stool',3,4],['stool',4,4],['stool',5,4],
   ['sofa',2,7],['sofa',2,12,2],['chair',1,9,1],['chair',4,9,3],
   ['chair',1,11,1],['chair',4,11,3],['table',3,9],['table',3,11,1],['lamp',1,7],
@@ -674,6 +723,15 @@ function object(item,highlight=false,time=0) {
   const {x,y,type,rot}=item;
   const [w,d]=dimensions(item);
   if(highlight)surface(x,y,w,d,1,'#f9c48968','#ffd18a');
+  if(type==='warden'){
+    const [wx,wy]=point(x+.5,y+.5);
+    surface(x+.14,y+.14,.72,.72,.3,'#9ab7a73c');
+    sprite(ctx,wx,wy,{outfit:1,hair:1},{direction:'left',time});
+    rect(wx-7,wy-34,13,3,'#809f9b');rect(wx-4,wy-36,7,2,'#bdc6ad');rect(wx-2,wy-34,3,3,'#e6c385');
+    ctx.save();ctx.textAlign='center';ctx.font='bold 8px monospace';ctx.fillStyle='#f2d695';
+    ctx.fillText(questStage(quest)===0?'!':questStage(quest)===4?'?':'✦',wx,wy-43);
+    ctx.font='6px monospace';ctx.fillText('WARDEN',wx,wy+11);ctx.restore();return;
+  }
   if(Object.hasOwn(moonwood.heights,type)){
     if(type==='wildboar'){
       const pose=boarCombatPose({time,now:Date.now(),encounter:player.inCombat?hunting.encounter:null,events:combatArt,reduced:reducedMotion.matches,defeated:!!item.defeated});
@@ -920,7 +978,7 @@ function pixelHead(target,appearance,back,blink){
   p(4,-21,2,1,'#994f56');
   p(-1,-22,2,1,'#f6c3a0');
 }
-function sprite(target,x,y,appearance,{direction='right',back=false,cycle=0,seated=false,wave=null,fishing=false,weapon=false,strike=0,pose={},time=0}={}){
+function sprite(target,x,y,appearance,{direction='right',back=false,cycle=0,seated=false,wave=null,fishing=false,weapon=false,weaponTier=null,strike=0,pose={},time=0}={}){
   const p=(x,y,w,h,color)=>{target.fillStyle=color;target.fillRect(x,y,w,h);};
   const jacket=outfits[appearance.outfit]??outfits[0];
   const shade=jacketShadows[appearance.outfit]??jacketShadows[0];
@@ -969,9 +1027,9 @@ function sprite(target,x,y,appearance,{direction='right',back=false,cycle=0,seat
     p(5,-19,4,5,outline);p(6,-18,3,3,jacket);
     p(7,-16,5,3,outline);p(8,-15,4,2,'#f2bb92');
     target.save();target.translate(12,-14);target.rotate(pose.angle??(-.35+strike*1.8));
-    p(-2,-17,4,14,outline);p(-1,-16,2,12,'#bacbd3');p(-1,-16,1,10,'#eef2da');p(0,-12,1,5,'#8cabbc');
+    p(-2,-17,4,14,outline);p(-1,-16,2,12,weaponTier==='wardenSword'?'#a9cbbd':'#bacbd3');p(-1,-16,1,10,weaponTier==='wardenSword'?'#eef4c9':'#eef2da');p(0,-12,1,5,'#8cabbc');
     p(-1,-19,2,3,outline);p(0,-18,1,2,'#dae5dc');
-    p(-4,-4,8,2,outline);p(-3,-4,6,1,'#d8b079');
+    p(-4,-4,8,2,outline);p(-3,-4,6,1,weaponTier==='wardenSword'?'#f2cf7e':'#d8b079');
     p(-1,-2,2,5,'#875b50');p(-2,2,4,2,'#d8b079');
     target.restore();
   }else if(wave!==null){
@@ -1084,7 +1142,7 @@ function draw(time){
     const pose=playerCombatPose({time,now:Date.now(),encounter:player.inCombat?hunting.encounter:null,events:combatArt,reduced:reducedMotion.matches});
     const [enemyX,enemyY]=point(6.5,5.5);
     const thrust=currentRoom==='clearing'?pose.lunge-pose.recoil:0;
-    sprite(ctx,x+Math.sign(enemyX-x)*thrust-pose.dodge,y+Math.sign(enemyY-y)*thrust+pose.dodge*.4,avatar,{direction:player.direction,back:player.back,cycle,seated:!!seat,wave,weapon:pose.armed&&combatGear.equippedWeapon==='trainingSword',pose,fishing:fishingSession?fishingMoments.phase(fishingSession,time):null,time});
+    sprite(ctx,x+Math.sign(enemyX-x)*thrust-pose.dodge,y+Math.sign(enemyY-y)*thrust+pose.dodge*.4,avatar,{direction:player.direction,back:player.back,cycle,seated:!!seat,wave,weapon:pose.armed&&!!combatGear.equippedWeapon,weaponTier:combatGear.equippedWeapon,pose,fishing:fishingSession?fishingMoments.phase(fishingSession,time):null,time});
     if(fishingSession)drawFishingMoment(x,y,time);
     drawCatchReveal(x,y,time);
     if(player.inCombat){
@@ -1116,7 +1174,7 @@ function draw(time){
     object(item,editing&&(selection?.id===item.id||hoverItem?.id===item.id)&&!fixed(item),time);
     ctx.globalAlpha=1;
     if(item.defeated||item===ghost||(fixed(item)&&!isGamingTable(item)))continue;
-    const [w,d]=dimensions(item), h=moonwood.heights[item.type]??{tradeCounter:32,harvestCrates:16,tackleCounter:32,rodRack:36,baitCrates:16,blackjack:19,roulette:22,reception:32,bed:24,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39,bench:22,streetlamp:55,fountain:37}[item.type];
+    const [w,d]=dimensions(item), h=moonwood.heights[item.type]??{warden:43,tradeCounter:32,harvestCrates:16,tackleCounter:32,rodRack:36,baitCrates:16,blackjack:19,roulette:22,reception:32,bed:24,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39,bench:22,streetlamp:55,fountain:37}[item.type];
     const shape=[point(item.x,item.y+d),point(item.x+w,item.y+d),point(item.x+w,item.y),point(item.x+w,item.y,h),point(item.x,item.y,h),point(item.x,item.y+d,h)];
     hitboxes.push({item,shape});
   }
@@ -1323,6 +1381,7 @@ function finishFishing(time){
   fishingGear.bait--;
   const fishId=session.fishId,fish=fishProducts[fishId];
   fishStock[fishId]=(fishStock[fishId]??0)+1;
+  recordQuest(quest,'fish');
   const before=playerStats.patienceXp,oldLevel=patienceLevel(),earned=PATIENCE_XP_PER_CATCH+session.bonus;
   playerStats.patienceXp+=earned;
   patienceTween={from:before,to:playerStats.patienceXp,started:time};
@@ -1361,7 +1420,9 @@ function updateFishingMoment(time){
 }
 function finishInteraction(){
   const item=interaction;interaction=null;
-  if(item.type==='wildboar'){
+  if(item.type==='warden'){
+    openQuest();
+  }else if(item.type==='wildboar'){
     startBoarEncounter();
   }else if(item.type==='fishingPost'){
     if(fishingGear.bait<1){note('You need bait. Visit Silverfin Outfitters in the tower.');return;}
@@ -1447,21 +1508,31 @@ function animation(time){
   requestAnimationFrame(animation);
 }
 function updateWeaponInventory(){
-  const owned=combatGear.ownedWeapons.includes('trainingSword');
-  $('weaponCard').hidden=!owned;
-  const equipped=combatGear.equippedWeapon==='trainingSword';
-  $('weaponStatus').textContent=equipped?'Equipped · 14 base damage + Strength':'In inventory · Equip before hunting';
+  $('weaponCard').hidden=combatGear.ownedWeapons.length===0;
+  if(!combatGear.ownedWeapons.length)return;
+  const selector=$('weaponSelect'),previous=selector.value;
+  selector.replaceChildren();
+  for(const id of combatGear.ownedWeapons){
+    const option=document.createElement('option');option.value=id;option.textContent=weaponCatalog[id].name;selector.append(option);
+  }
+  const selected=combatGear.ownedWeapons.includes(previous)?previous:combatGear.equippedWeapon??combatGear.ownedWeapons[0];
+  selector.value=selected;selector.disabled=player.inCombat;
+  const weapon=weaponCatalog[selected],equipped=combatGear.equippedWeapon===selected;
+  $('weaponName').textContent=weapon.name;
+  $('weaponStatus').textContent=(equipped?'Equipped':'In inventory')+' · '+weapon.damage+' base damage + Strength';
   $('equipWeapon').textContent=equipped?'Unequip':'Equip sword';
   $('equipWeapon').disabled=player.inCombat;
-  $('weaponHelp').textContent=player.inCombat?'Finish combat before changing your weapon.':'Your sword is drawn automatically during combat.';
+  $('weaponHelp').textContent=player.inCombat?'Finish combat before changing your weapon.':weapon.description+' Drawn automatically during combat.';
 }
 function toggleWeapon(){
   if(player.inCombat)return;
-  combatGear.equippedWeapon=combatGear.equippedWeapon?null:'trainingSword';
-  if(combatGear.equippedWeapon&&!combatGear.ownedWeapons.includes(combatGear.equippedWeapon)){combatGear.equippedWeapon=null;return;}
+  const selected=$('weaponSelect').value;
+  if(!combatGear.ownedWeapons.includes(selected))return;
+  combatGear.equippedWeapon=combatGear.equippedWeapon===selected?null:selected;
   updateWeaponInventory();updateCombatPanel();savePlayerState();
 }
 function updateInventory(){
+  updateQuestUI();
   updateWeaponInventory();
   updatePlayerStats();
   updateFishingShop();
@@ -1615,6 +1686,7 @@ function sellTradeLoot(id,quantity,statusId='tradeStatus'){
   if(item.group==='fish')fishStock[id]-=quantity;
   else huntingLoot[id]-=quantity;
   credits+=earned;
+  if(currentRoom==='market')recordQuest(quest,'marketSale',quantity);
   savePlayerState();
   $(statusId).textContent='Sold '+quantity+' '+item.name+' for '+earned+' credits.';
   showTransaction('Trade completed',[{text:'−'+quantity+' '+item.name,icon:item.icon}],earned);
@@ -1648,7 +1720,7 @@ function updateTradingPost(){
   }
 }
 function savePlayerState(){
-  const snapshot={credits,health,combatGear,hunting,ownedFurniture,furniture:loungeFurniture,homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats,fishingGear,huntingLoot,fishStock,avatar,location:currentRoom,position:{x:player.cx,y:player.cy}};
+  const snapshot={credits,health,quest,combatGear,hunting,ownedFurniture,furniture:loungeFurniture,homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats,fishingGear,huntingLoot,fishStock,avatar,location:currentRoom,position:{x:player.cx,y:player.cy}};
   save('player-state',snapshot);
   if(window.playerCloud)window.playerCloud.enqueue(JSON.parse(JSON.stringify(snapshot)));
   updateInventory();
@@ -1870,6 +1942,10 @@ $('adventureLandmark').onclick=()=>{
 };
 $('combatFlee').onclick=()=>combatAction('flee');
 $('equipWeapon').onclick=toggleWeapon;
+$('weaponSelect').onchange=updateWeaponInventory;
+$('questJournal').onclick=openQuest;
+$('questAction').onclick=questAction;
+$('visitWarden').onclick=()=>use(hubFurniture.find(item=>item.type==='warden'));
 $('restAtTower').onclick=restAtTower;
 $('reception').onclick=()=>use(hubFurniture[0]);
 for(const button of $('gamingGuide').querySelectorAll('[data-game-table]')){
