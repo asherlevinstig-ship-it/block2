@@ -96,7 +96,11 @@ let nextId = Math.max(0,...[...loungeFurniture,...homeFurniture].map(item=>item.
 let avatar = {...defaultAvatar,...(savedPlayerState?.avatar??load('avatar',defaultAvatar))};
 let draft;
 let messages = load('chat',[]);
-const player = {x:5,y:7,cx:5,cy:7,direction:'right',back:false,seat:null,stride:0,waveStarted:null};
+const player = {x:5,y:7,cx:5,cy:7,direction:'right',back:false,seat:null,stride:0,waveStarted:null,inCombat:false};
+function setPlayerCombat(active){
+  player.inCombat=active===true;
+  $('healthHud').hidden=!player.inCombat;
+}
 let route=[],step=null,interaction=null,hover=null,hoverItem=null,target=null;
 let editing=false,selection=null,zoom=1,hitboxes=[],bounds=null,bubbleUntil=0,noticeUntil=0;
 const hubFurniture=[
@@ -939,11 +943,13 @@ function draw(time){
     sprite(ctx,x,y,avatar,{direction:player.direction,back:player.back,cycle,seated:!!seat,wave,fishing:fishingSession?fishingMoments.phase(fishingSession,time):null,time});
     if(fishingSession)drawFishingMoment(x,y,time);
     drawCatchReveal(x,y,time);
-    const heartPixels=['0110110','1111111','1111111','0111110','0011100','0001000'];
-    for(let heart=0;heart<5;heart++){
-      const filled=Math.max(0,Math.min(1,(health-heart*20)/20));
-      for(let row=0;row<heartPixels.length;row++)for(let col=0;col<7;col++){
-        if(heartPixels[row][col]==='1')rect(x-22+heart*9+col,y-44+row,1,1,col<7*filled?'#f07891':'#49364d');
+    if(player.inCombat){
+      const heartPixels=['0110110','1111111','1111111','0111110','0011100','0001000'];
+      for(let heart=0;heart<5;heart++){
+        const filled=Math.max(0,Math.min(1,(health-heart*20)/20));
+        for(let row=0;row<heartPixels.length;row++)for(let col=0;col<7;col++){
+          if(heartPixels[row][col]==='1')rect(x-22+heart*9+col,y-44+row,1,1,col<7*filled?'#f07891':'#49364d');
+        }
       }
     }
     if(!$('bubble').hidden){
