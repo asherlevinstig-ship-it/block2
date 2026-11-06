@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {normalizeWoodcutting,grantBasicAxe,harvestTimber,woodcuttingLevel,choppingDuration} from '../public/woodcutting.js';
+import {normalizeWoodcutting,grantBasicAxe,harvestTimber,woodcuttingLevel,choppingDuration,cutTimberTree,timberTreeState,timberFacing} from '../public/woodcutting.js';
 import {normalizeState,startPlan,settlePlan} from '../server/player-state.mjs';
 
 test('starter axe is granted once; harvesting requires equipment and levels improve speed',()=>{
@@ -14,6 +14,28 @@ test('starter axe is granted once; harvesting requires equipment and levels impr
 });
 
 function worker(){return normalizeState({location:'logging',woodcutting:{axeOwned:true,equipped:true}});}
+
+test('three cuts fell a persistent tree, which only pays again after regrowing',()=>{
+  const state=worker(),wood=state.woodcutting;
+  assert.equal(cutTimberTree(wood,5000),1);
+  assert.equal(normalizeState(state).woodcutting.tree.cuts,1);
+  assert.equal(cutTimberTree(wood,10000),1);
+  assert.equal(cutTimberTree(wood,15000),1);
+  const reloaded=normalizeState(state).woodcutting;
+  assert.equal(cutTimberTree(reloaded,44999),0);
+  assert.equal(reloaded.timber,3);
+  assert.equal(reloaded.xp,30);
+  assert.deepEqual(timberTreeState(reloaded,45000),{cuts:0,regrowsAt:0});
+  assert.equal(cutTimberTree(reloaded,45000),1);
+  assert.equal(reloaded.tree.cuts,1);
+});
+
+test('axe swings face the timber from all four adjacent tiles',()=>{
+  const tree={x:6,y:5};
+  for(const [cx,cy,direction,back] of [[5,5,'right',false],[7,5,'left',true],[6,4,'left',false],[6,6,'right',true]]){
+    assert.deepEqual(timberFacing({cx,cy},tree),{direction,back});
+  }
+});
 test('offline shifts settle once, preserve other inventories, cap at eight hours and return home',()=>{
   const state=worker(),bait=state.fishingGear.bait;
   startPlan(state,{kind:'woodcutting',hours:8},0);
