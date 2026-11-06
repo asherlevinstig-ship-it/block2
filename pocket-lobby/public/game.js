@@ -213,9 +213,51 @@ function drawTimberTree(item,time){
 
 
 function craftingState(){return {location:currentRoom,position:{x:player.cx,y:player.cy},woodcutting,ownedFurniture,plan:savedPlayerState?.plan};}
+function updateSwordWorkbench(ready){
+  const active=combatGear.activeSwordUpgrade;
+  const current=weaponProfile('trainingSword',active);
+  $('swordUpgradeCurrent').textContent=(current.upgradeName??'Standard fittings')+' · '+current.damage+' base damage · '+attackSeconds(current.interval)+' per attack';
+  $('swordUpgradeGold').textContent=credits+' gold';
+  const choices=$('swordUpgradeChoices');
+  choices.replaceChildren();
+  for(const [id,upgrade] of Object.entries(swordUpgrades)){
+    const owned=combatGear.swordUpgrades?.includes(id),fitted=active===id;
+    const card=document.createElement('article');
+    card.className='sword-upgrade-card';
+    card.dataset.upgrade=id;
+    card.tabIndex=-1;
+    const title=document.createElement('h4'),stats=document.createElement('p'),cost=document.createElement('small'),button=document.createElement('button');
+    title.textContent=upgrade.name;
+    stats.textContent=upgrade.damage+' base damage · '+attackSeconds(upgrade.interval)+' per attack';
+    cost.textContent=owned?'Crafted · Free to refit':upgrade.timber+' timber + '+upgrade.gold+' gold';
+    button.type='button';
+    button.textContent=fitted?'Fitted ✓':owned?'Refit for free':'Craft & fit';
+    button.disabled=!ready||fitted||(!owned&&(woodcutting.timber<upgrade.timber||credits<upgrade.gold));
+    button.setAttribute('aria-label',button.textContent+' · '+upgrade.name);
+    button.onclick=()=>makeSwordUpgrade(id);
+    card.append(title,stats,cost,button);
+    choices.append(card);
+  }
+}
+function makeSwordUpgrade(id){
+  if(unavailable()||woodSession)return;
+  try{
+    const state={...craftingState(),credits,combatGear,hunting};
+    const result=fitSwordUpgrade(state,id);
+    if(!result)return;
+    credits=state.credits;
+    savePlayerState();
+    $('craftStatus').textContent=result.name+' fitted to your Training Sword.';
+    const details=[{icon:'⚔',text:result.name+' · Training Sword'}];
+    if(result.timber)details.push({icon:'▤',text:'−'+result.timber+' timber'});
+    showTransaction(result.timber?'Sword upgrade crafted':'Sword upgrade refitted',details,-result.gold);
+    $('swordUpgradeChoices').querySelector('[data-upgrade="'+id+'"]')?.focus();
+  }catch(error){$('craftStatus').textContent=error.message;}
+}
 function updateCraftingUI(){
   $('craftTimber').textContent=woodcutting.timber+' timber';
   const ready=isAtWorkbench(craftingState())&&!unavailable()&&!woodSession;
+  updateSwordWorkbench(ready);
   const recipes=$('craftRecipes');recipes.replaceChildren();
   for(const [id,recipe] of Object.entries(craftingRecipes)){
     const card=document.createElement('article');card.className='craft-recipe';card.dataset.recipe=id;card.tabIndex=-1;
@@ -232,7 +274,7 @@ function updateCraftingUI(){
 }
 function openCrafting(){
   if(!isAtWorkbench(craftingState())||unavailable())return;
-  updateCraftingUI();$('craftStatus').textContent='Choose a recipe. Crafting uses timber, with no gold charge.';
+  updateCraftingUI();$('craftStatus').textContent='Choose a sword fitting or a piece of furniture.';
   if(!$('craftDialog').open)$('craftDialog').showModal();
 }
 function makeFurniture(id){
@@ -378,7 +420,7 @@ function startBoarEncounter(){
 }
 function combatAction(action){
   if(!player.inCombat||currentRoom!=='clearing'||!['flee','dodge'].includes(action))return;
-  const result=huntingTurn(hunting.encounter,health,playerStats,action,Date.now(),Math.random,combatGear.equippedWeapon);
+  const result=huntingTurn(hunting.encounter,health,playerStats,action,Date.now(),Math.random,combatGear.equippedWeapon,combatGear.activeSwordUpgrade);
   if(!result&&action==='dodge'){
     combatMessage=combatStamina(hunting.encounter,playerStats,Date.now())<boarRules.dodgeCost?'Not enough stamina. Let it recover.':'Your dodge is recovering.';
     updateCombatPanel();return;
@@ -469,14 +511,15 @@ function updateCombatPanel(){
   $('combatDodge').textContent=encounter&&stamina<boarRules.dodgeCost?'Dodge · Low stamina':encounter&&now<(encounter.nextDodgeAt??0)?'Dodge · Recovering':timing?'Dodge now! · Space':'Dodge · Space';
   $('combatCooldown').textContent=encounter?'Next strike '+Math.max(0,(encounter.nextPlayerAt-now)/1000).toFixed(1)+'s · Boar '+Math.max(0,(encounter.nextBoarAt-now)/1000).toFixed(1)+'s'+(remaining?' · Flee '+(remaining/1000).toFixed(1)+'s':' · F: Flee'):'Click the boar to engage. Combat runs in real time.';
   $('combatLog').textContent=combatMessage||'The boar watches the trail. It will not attack until you approach.';
-  const attributes=huntingAttributes(playerStats,combatGear.equippedWeapon);
-  $('combatGuide').textContent=(weaponCatalog[combatGear.equippedWeapon]?.name??'No weapon equipped')+' · Attack '+attributes.damage+'–'+(attributes.damage+4)+' every '+(attributes.attackInterval/1000).toFixed(1)+'s · Dodge '+Math.round(attributes.dodge*100)+'% · Escape '+Math.round(attributes.escape*100)+'% · Armor '+attributes.armor;
+  const weapon=weaponProfile(combatGear.equippedWeapon,combatGear.activeSwordUpgrade);
+  const attributes=huntingAttributes(playerStats,combatGear.equippedWeapon,combatGear.activeSwordUpgrade);
+  $('combatGuide').textContent=(weapon?.name??'No weapon equipped')+(weapon?.upgradeName?' · '+weapon.upgradeName:'')+' · Attack '+attributes.damage+'–'+(attributes.damage+4)+' every '+attackSeconds(attributes.attackInterval)+' · Dodge '+Math.round(attributes.dodge*100)+'% · Escape '+Math.round(attributes.escape*100)+'% · Armor '+attributes.armor;
   $('adventureLandmark').hidden=!!encounter||now<hunting.respawnAt;
   $('adventureLandmark').textContent='Approach boar';
   $('adventureLandmark').disabled=health<=0||unavailable()||!combatGear.equippedWeapon;
 }
 function updateCombatMoment(time){
-  if(player.inCombat&&currentRoom==='clearing')applyCombatResult(advanceHunt(hunting.encounter,health,playerStats,Date.now(),Math.random,combatGear.equippedWeapon));
+  if(player.inCombat&&currentRoom==='clearing')applyCombatResult(advanceHunt(hunting.encounter,health,playerStats,Date.now(),Math.random,combatGear.equippedWeapon,combatGear.activeSwordUpgrade));
   if(hunting.recoveryUntil&&Date.now()>=hunting.recoveryUntil){
     hunting.recoveryUntil=0;health=100;
     combatMessage='All five hearts restored. You are ready to explore again.';
@@ -1834,11 +1877,11 @@ function updateWeaponInventory(){
   }
   const selected=combatGear.ownedWeapons.includes(previous)?previous:combatGear.equippedWeapon??combatGear.ownedWeapons[0];
   selector.value=selected;selector.disabled=player.inCombat;
-  const weapon=weaponCatalog[selected],equipped=combatGear.equippedWeapon===selected;
+  const weapon=weaponProfile(selected,combatGear.activeSwordUpgrade),equipped=combatGear.equippedWeapon===selected;
   $('weaponName').textContent=weapon.name;
   $('weaponPicture').innerHTML=selected==='huntingSpear'?'<path d="M11 8h2v21h-2z" fill="#bd9064"/><path d="M12 1l4 8-4 3-4-3z" fill="#c5dcd7"/>':selected==='quickDagger'?'<path d="M11 7l4 7-2 6h-3l-1-6z" fill="#d4e6de"/><path d="M7 20h10v2H7z" fill="#8dbec4"/><path d="M11 22h2v6h-2z" fill="#99779d"/>':'<path d="M10 2h4v16h-4z" fill="#bacbd3"/><path d="M10 2h2v15h-2z" fill="#eef2da"/><path d="M7 18h10v3H7z" fill="#d8b079"/><path d="M11 21h2v6h-2z" fill="#986b59"/><path d="M10 27h4v2h-4z" fill="#d8b079"/>';
 
-  $('weaponStatus').textContent=(equipped?'Equipped':'In inventory')+' · '+weapon.damage+' base damage + Strength · '+(weapon.interval/1000).toFixed(1)+'s per attack';
+  $('weaponStatus').textContent=(equipped?'Equipped':'In inventory')+(weapon.upgradeName?' · '+weapon.upgradeName:'')+' · '+weapon.damage+' base damage + Strength · '+attackSeconds(weapon.interval)+' per attack';
   $('equipWeapon').textContent=equipped?'Unequip':'Equip weapon';
   $('equipWeapon').disabled=player.inCombat||!canUseWeapon(playerStats,selected);
   $('weaponHelp').textContent=player.inCombat?'Finish combat before changing your weapon.':weapon.description+' Drawn automatically during combat.';
@@ -1928,11 +1971,11 @@ function buyArmoryWeapon(id){
   }catch(error){$('armoryStatus').textContent=error.message;}
 }
 function updateArmoryShop(){
-  const equipped=weaponCatalog[combatGear.equippedWeapon],current=huntingAttributes(playerStats,combatGear.equippedWeapon);
+  const equipped=weaponProfile(combatGear.equippedWeapon,combatGear.activeSwordUpgrade),current=huntingAttributes(playerStats,combatGear.equippedWeapon,combatGear.activeSwordUpgrade);
   const strength=1+Math.floor(playerStats.strengthXp/50),agility=1+Math.floor(playerStats.agilityXp/50);
   $('armoryBalance').textContent=new Intl.NumberFormat().format(credits)+' G';
   $('armoryStats').textContent='Strength '+strength+' · Agility '+agility;
-  $('armoryComparison').textContent=equipped?equipped.name+' · '+current.damage+'–'+(current.damage+4)+' damage · '+(current.attackInterval/1000).toFixed(1)+'s / attack':'Nothing equipped · Your free Training Sword is in Inventory';
+  $('armoryComparison').textContent=equipped?equipped.name+(equipped.upgradeName?' · '+equipped.upgradeName:'')+' · '+current.damage+'–'+(current.damage+4)+' damage · '+attackSeconds(current.attackInterval)+' / attack':'Nothing equipped · Your free Training Sword is in Inventory';
   const offers=$('weaponOffers');offers.replaceChildren();
   for(const [id,weapon] of Object.entries(weaponCatalog).filter(([,weapon])=>weapon.price)){
     const owned=combatGear.ownedWeapons.includes(id),active=combatGear.equippedWeapon===id,skill=canUseWeapon(playerStats,id);
@@ -1941,7 +1984,7 @@ function updateArmoryShop(){
     const reason=!skill?'Need '+missing.join(' and '):!owned&&credits<weapon.price?'Need '+(weapon.price-credits)+' more gold':active?'Ready for your next fight':owned?'Yours to keep · Free to equip':'Purchased gear equips automatically';
     const deltas=active?[{text:'Your equipped weapon',tone:'neutral'}]:[
       {text:(difference>0?'+':'')+difference+' damage',tone:difference>0?'up':difference<0?'down':'neutral'},
-      {text:speed===0?'Same attack speed':Math.abs(speed).toFixed(1)+'s '+(speed>0?'faster':'slower'),tone:speed>0?'up':speed<0?'down':'neutral'}
+      {text:speed===0?'Same attack speed':attackSeconds(Math.abs(current.attackInterval-weapon.interval))+' '+(speed>0?'faster':'slower'),tone:speed>0?'up':speed<0?'down':'neutral'}
     ];
     offers.append(renderShopCard({document,id,name:weapon.name,category:id==='huntingSpear'?'HEAVY':id==='quickDagger'?'QUICK':'BALANCED',price:weapon.price,owned,equipped:active,stats:[['DAMAGE',damage+'–'+(damage+4)],['PER ATTACK',(weapon.interval/1000).toFixed(1)+'s']],deltas,requirements:'STR '+weapon.strength+'  ·  AGI '+weapon.agility,reason,action:active?'Equipped':!skill?'Stats required':owned?'Equip weapon':credits<weapon.price?'Not enough gold':'Buy & equip',disabled:active||!skill||(!owned&&credits<weapon.price),onBuy:()=>buyArmoryWeapon(id)}));
   }

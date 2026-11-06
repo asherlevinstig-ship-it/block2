@@ -6,6 +6,17 @@ export const weaponCatalog={
   huntingSpear:{name:'Hunting Spear',damage:30,interval:1700,strength:3,agility:1,price:260,description:'Heavy thrusts with a longer recovery between attacks.'},
   quickDagger:{name:'Quick Dagger',damage:12,interval:700,strength:1,agility:3,price:240,description:'A light blade for rapid, precise strikes.'}
 };
+export const swordUpgrades={
+  balancedGrip:{name:'Balanced Grip',damage:12,interval:850,timber:8,gold:20},
+  weightedHilt:{name:'Weighted Hilt',damage:20,interval:1400,timber:8,gold:20}
+};
+export function weaponProfile(id,upgrade){
+  const weapon=Object.hasOwn(weaponCatalog,id)?weaponCatalog[id]:null;
+  if(id!=='trainingSword'||!Object.hasOwn(swordUpgrades,upgrade))return weapon;
+  const {name,damage,interval}=swordUpgrades[upgrade];
+  return {...weapon,damage,interval,upgradeName:name};
+}
+export const attackSeconds=ms=>String(ms/1000)+'s';
 export function canUseWeapon(stats,id){
   const weapon=weaponCatalog[id];
   return !!weapon&&1+Math.floor((stats.strengthXp??0)/50)>=weapon.strength&&1+Math.floor((stats.agilityXp??0)/50)>=weapon.agility;
@@ -28,13 +39,23 @@ export function normalizeCombatGear(input){
   if(!ownedWeapons.includes('trainingSword'))ownedWeapons.unshift('trainingSword');
   const equippedWeapon=input.equippedWeapon??null;
   if(equippedWeapon!==null&&!ownedWeapons.includes(equippedWeapon))throw new Error('Invalid equipped weapon.');
-  return {ownedWeapons,equippedWeapon};
+  const gear={ownedWeapons,equippedWeapon};
+  if(input.swordUpgrades!==undefined){
+    if(!Array.isArray(input.swordUpgrades)||input.swordUpgrades.some(id=>typeof id!=='string'||!Object.hasOwn(swordUpgrades,id)))throw new Error('Invalid sword upgrades.');
+    gear.swordUpgrades=[...new Set(input.swordUpgrades)];
+  }
+  if(input.activeSwordUpgrade!=null){
+    if(!gear.swordUpgrades?.includes(input.activeSwordUpgrade))throw new Error('Invalid active sword upgrade.');
+    gear.activeSwordUpgrade=input.activeSwordUpgrade;
+  }
+  return gear;
 }
 const level=xp=>1+Math.floor((xp??0)/50);
-export function huntingAttributes(stats,weapon='trainingSword'){
+export function huntingAttributes(stats,weapon='trainingSword',upgrade=null){
+  const profile=weaponProfile(weapon,upgrade);
   return {
-    attackInterval:weaponCatalog[weapon]?.interval??1100,
-    damage:(weaponCatalog[weapon]?.damage??0)+Math.min(30,(level(stats.strengthXp)-1)*2),
+    attackInterval:profile?.interval??1100,
+    damage:(profile?.damage??0)+Math.min(30,(level(stats.strengthXp)-1)*2),
     dodge:Math.min(.3,.08+(level(stats.agilityXp)-1)*.02),
     escape:Math.min(.95,.7+(level(stats.agilityXp)-1)*.025),
     staminaRegen:Math.min(25,12+(level(stats.agilityXp)-1)*1.5),
@@ -67,12 +88,12 @@ export function resumeHunt(encounter,now,stats={}){
   const nextBoarAt=(encounter.rootboundUntil??0)>now?Math.max(now+1300,encounter.nextBoarAt):now+1300;
   return {...encounter,stamina:combatStamina(encounter,stats,now),staminaAt:now,dodgeUntil:0,nextDodgeAt:Math.min(encounter.nextDodgeAt??0,now+boarRules.dodgeCooldown),nextPlayerAt:now+450,nextBoarAt,nextFleeAt:Math.min(encounter.nextFleeAt,now+boarRules.fleeCooldown)};
 }
-export function huntingTurn(encounter,health,stats,action,now,random=Math.random,weapon='trainingSword'){
+export function huntingTurn(encounter,health,stats,action,now,random=Math.random,weapon='trainingSword',upgrade=null){
   if(!['attack','enemy','flee','dodge'].includes(action))throw new Error('Invalid combat action.');
   if(!encounter||health<=0)throw new Error('No active encounter.');
   const clock=action==='attack'?'nextPlayerAt':action==='enemy'?'nextBoarAt':action==='dodge'?'nextDodgeAt':'nextFleeAt';
   if(now<encounter[clock])return null;
-  const attributes=huntingAttributes(stats,weapon);
+  const attributes=huntingAttributes(stats,weapon,upgrade);
   const stamina=combatStamina(encounter,stats,now);
   if(action==='dodge'&&stamina<boarRules.dodgeCost)return null;
   const result={encounter:{...encounter,stamina,staminaAt:now},health,damage:0,taken:0,dodged:false,outcome:'fighting',action};
@@ -102,8 +123,8 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
   }
   return result;
 }
-export function advanceHunt(encounter,health,stats,now,random=Math.random,weapon='trainingSword'){
+export function advanceHunt(encounter,health,stats,now,random=Math.random,weapon='trainingSword',upgrade=null){
   if(!encounter||health<=0)return null;
   const action=encounter.nextPlayerAt<=encounter.nextBoarAt?'attack':'enemy';
-  return huntingTurn(encounter,health,stats,action,now,random,weapon);
+  return huntingTurn(encounter,health,stats,action,now,random,weapon,upgrade);
 }
