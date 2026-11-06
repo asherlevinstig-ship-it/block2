@@ -105,6 +105,9 @@ let route=[],step=null,interaction=null,hover=null,hoverItem=null,target=null;
 const combatGear=normalizeCombatGear(savedPlayerState?.combatGear);
 const hunting=normalizeHunting(savedPlayerState?.hunting);
 let combatMessage='',combatFeedback=null,lastCombatUi=0;
+const combatArt={strikeAt:-Infinity,hurtAt:-Infinity,dodgeAt:-Infinity,boarAttackAt:-Infinity,boarHitAt:-Infinity,victoryAt:-Infinity};
+function resetCombatArt(){for(const key of Object.keys(combatArt))combatArt[key]=-Infinity;}
+
 const unavailable=()=>player.inCombat||hunting.recoveryUntil>0;
 function stopForCombat(){
   route=[];step=null;interaction=null;target=null;
@@ -115,7 +118,8 @@ function startBoarEncounter(){
   if(!combatGear.equippedWeapon){note('Equip your Training Sword in Inventory before hunting.');return;}
   if(health<=0){note('Return to the Tower and rest to restore your hearts.');return;}
   if(Date.now()<hunting.respawnAt){note('The clearing is quiet. Another boar will arrive shortly.');return;}
-  stopForCombat();
+  stopForCombat();resetCombatArt();
+  player.direction=(6-player.cx)-(5-player.cy)>=0?'right':'left';player.back=11<player.cx+player.cy;
   hunting.encounter=createHunt(Date.now());
   setPlayerCombat(true);
   combatMessage='You engage the boar. Both fighters attack automatically. Flee if your hearts run low.';
@@ -128,7 +132,12 @@ function combatAction(action){
 }
 function applyCombatResult(result){
   if(!result)return;
-  const action=result.action;
+  const action=result.action,artTime=performance.now();
+  if(result.damage){combatArt.strikeAt=artTime;combatArt.boarHitAt=artTime;}
+  if(action==='enemy')combatArt.boarAttackAt=artTime;
+  if(result.taken)combatArt.hurtAt=artTime;
+  if(result.dodged)combatArt.dodgeAt=artTime;
+  if(result.outcome==='victory')combatArt.victoryAt=artTime;
   hunting.encounter=result.encounter;health=result.health;
   combatFeedback={started:performance.now(),damage:result.damage,taken:result.taken,dodged:result.dodged};
   combatMessage=(result.damage?'You hit for '+result.damage+'. ':action==='flee'&&result.outcome!=='escaped'?'Your escape was blocked. ':'')+(result.dodged?'You dodge the boar’s attack.':result.taken?'The boar hits for '+result.taken+'.':'');
@@ -666,7 +675,16 @@ function object(item,highlight=false,time=0) {
   const [w,d]=dimensions(item);
   if(highlight)surface(x,y,w,d,1,'#f9c48968','#ffd18a');
   if(Object.hasOwn(moonwood.heights,type)){
-    moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,progress:adventure,combat:player.inCombat?hunting.encounter:null});
+    if(type==='wildboar'){
+      const pose=boarCombatPose({time,now:Date.now(),encounter:player.inCombat?hunting.encounter:null,events:combatArt,reduced:reducedMotion.matches,defeated:!!item.defeated});
+      const [bx,by]=point(x+.5,y+.5),[px,py]=point(player.x+.5,player.y+.5);
+      const shift=pose.charge-pose.recoil;
+      ctx.save();ctx.globalAlpha*=pose.alpha;
+      ctx.translate(bx+Math.sign(px-bx)*shift,by+Math.sign(py-by)*shift+pose.fall);
+      ctx.scale((px<bx?-1:1)*(1+(1-pose.squash)*.25),pose.squash);ctx.translate(-bx,-by);
+      moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,progress:adventure,combat:player.inCombat?hunting.encounter:null,pose});
+      ctx.restore();
+    }else moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,progress:adventure});
     return;
   }
   if(type!=='bar'&&type!=='shelf')surface(x+.04,y+.08,w-.04,d-.03,.3,'#4931434a');
@@ -902,7 +920,7 @@ function pixelHead(target,appearance,back,blink){
   p(4,-21,2,1,'#994f56');
   p(-1,-22,2,1,'#f6c3a0');
 }
-function sprite(target,x,y,appearance,{direction='right',back=false,cycle=0,seated=false,wave=null,fishing=false,weapon=false,strike=0,time=0}={}){
+function sprite(target,x,y,appearance,{direction='right',back=false,cycle=0,seated=false,wave=null,fishing=false,weapon=false,strike=0,pose={},time=0}={}){
   const p=(x,y,w,h,color)=>{target.fillStyle=color;target.fillRect(x,y,w,h);};
   const jacket=outfits[appearance.outfit]??outfits[0];
   const shade=jacketShadows[appearance.outfit]??jacketShadows[0];
@@ -910,7 +928,7 @@ function sprite(target,x,y,appearance,{direction='right',back=false,cycle=0,seat
   const lowMotion=reducedMotion.matches;
   const swing=lowMotion?0:Math.round(Math.sin(cycle*Math.PI)*3);
   const bounce=cycle?Math.round(Math.abs(Math.sin(cycle*Math.PI))*2):0;
-  const breath=Number(!cycle&&!lowMotion&&time%2300>1430);
+  const breath=Number(!cycle&&!pose.ready&&!lowMotion&&time%2300>1430);
   target.save();
   target.translate(Math.round(x),Math.round(y));
   target.scale(direction==='right'?1:-1,1);
@@ -921,7 +939,7 @@ function sprite(target,x,y,appearance,{direction='right',back=false,cycle=0,seat
     p(0,4,4,1,'#ebd5bc');p(5,3,4,1,'#f6e2c4');
   }else{
     for(const [side,base,ink] of [[-1,-5,denim],[1,1,denimLight]]){
-      const offset=side*swing,lift=Math.max(0,-offset);
+      const offset=side*swing+(pose.ready?side*2:0),lift=Math.max(0,-side*swing);
       p(base+offset,-4-lift,6,4,outline);
       p(base+offset+1,-3-lift,5,2,'#e5c9ad');
       p(base+Math.trunc(offset/2),-11,5,8-lift,outline);
@@ -929,7 +947,7 @@ function sprite(target,x,y,appearance,{direction='right',back=false,cycle=0,seat
       p(base+offset+1,-5-lift,3,2,ink);
     }
   }
-  target.translate(0,(seated?6:0)-(lowMotion?0:bounce)-breath);
+  target.translate(0,(seated?6:0)-(lowMotion?0:bounce)-breath+(pose.crouch??0)-(pose.lift??0));
   const farArm=-Math.round(swing/2), nearArm=Math.round(swing/2);
   p(-8+farArm,-19,4,9,outline);
   p(-8+farArm,-18,3,6,shade);
@@ -950,8 +968,8 @@ function sprite(target,x,y,appearance,{direction='right',back=false,cycle=0,seat
   if(weapon){
     p(5,-19,4,5,outline);p(6,-18,3,3,jacket);
     p(7,-16,5,3,outline);p(8,-15,4,2,'#f2bb92');
-    target.save();target.translate(12,-14);target.rotate(-.35+strike*1.8);
-    p(-2,-17,4,14,outline);p(-1,-16,2,12,'#bacbd3');p(-1,-16,1,10,'#eef2da');
+    target.save();target.translate(12,-14);target.rotate(pose.angle??(-.35+strike*1.8));
+    p(-2,-17,4,14,outline);p(-1,-16,2,12,'#bacbd3');p(-1,-16,1,10,'#eef2da');p(0,-12,1,5,'#8cabbc');
     p(-1,-19,2,3,outline);p(0,-18,1,2,'#dae5dc');
     p(-4,-4,8,2,outline);p(-3,-4,6,1,'#d8b079');
     p(-1,-2,2,5,'#875b50');p(-2,2,4,2,'#d8b079');
@@ -973,6 +991,8 @@ function sprite(target,x,y,appearance,{direction='right',back=false,cycle=0,seat
   }
   const blink=!lowMotion&&time%3700>3530&&time%3700<3660;
   pixelHead(target,appearance,back,blink);
+  if(pose.ready&&!back){p(2,-27,3,1,outline);p(7,-26,2,1,outline);}
+
   target.restore();
 }
 function makeRoomLayer(drawLayer,layerView=standardView){
@@ -1039,6 +1059,10 @@ function draw(time){
     ghost={...selection,...hover,id:-1};
   }
   const items=[...roomFurniture()];
+  if(currentRoom==='clearing'&&time-combatArt.victoryAt>=0&&time-combatArt.victoryAt<1300){
+    const boar=moonwood.layouts.clearing.scenery.find(item=>item.type==='wildboar');
+    items.push({...boar,id:'defeated-boar',defeated:true});
+  }
   if(ghost)items.push(ghost);
   const drawPlayer = ()=>{
     const seat=player.seat;
@@ -1054,10 +1078,10 @@ function draw(time){
     }
     const cycle=step?(player.stride%2)+Math.min(1,(time-step.started)/STEP_MS):0;
     const wave=player.waveStarted===null?null:(time-player.waveStarted)/WAVE_MS;
-    const strikeAge=combatFeedback?time-combatFeedback.started:Infinity;
-    const lunge=!reducedMotion.matches&&combatFeedback?.damage&&strikeAge<220?Math.sin(strikeAge/220*Math.PI)*5:0;
+    const pose=playerCombatPose({time,now:Date.now(),encounter:player.inCombat?hunting.encounter:null,events:combatArt,reduced:reducedMotion.matches});
     const [enemyX,enemyY]=point(6.5,5.5);
-    sprite(ctx,x+Math.sign(enemyX-x)*lunge,y+Math.sign(enemyY-y)*lunge,avatar,{direction:player.direction,back:player.back,cycle,seated:!!seat,wave,weapon:player.inCombat&&combatGear.equippedWeapon==='trainingSword',strike:lunge/5,fishing:fishingSession?fishingMoments.phase(fishingSession,time):null,time});
+    const thrust=currentRoom==='clearing'?pose.lunge-pose.recoil:0;
+    sprite(ctx,x+Math.sign(enemyX-x)*thrust-pose.dodge,y+Math.sign(enemyY-y)*thrust+pose.dodge*.4,avatar,{direction:player.direction,back:player.back,cycle,seated:!!seat,wave,weapon:pose.armed&&combatGear.equippedWeapon==='trainingSword',pose,fishing:fishingSession?fishingMoments.phase(fishingSession,time):null,time});
     if(fishingSession)drawFishingMoment(x,y,time);
     drawCatchReveal(x,y,time);
     if(player.inCombat){
@@ -1085,10 +1109,10 @@ function draw(time){
   for(const item of items){
     if(!drawn&&playerDepth<depth(item)){drawPlayer();drawn=true;}
     ctx.globalAlpha=item===ghost?.52:ghost&&selection?.id===item.id?.4:1;
-    if(item.type==='wildboar'&&!reducedMotion.matches&&combatFeedback?.damage&&time-combatFeedback.started<240&&Math.floor((time-combatFeedback.started)/60)%2===0)ctx.globalAlpha=.45;
+
     object(item,editing&&(selection?.id===item.id||hoverItem?.id===item.id)&&!fixed(item),time);
     ctx.globalAlpha=1;
-    if(item===ghost||(fixed(item)&&!isGamingTable(item)))continue;
+    if(item.defeated||item===ghost||(fixed(item)&&!isGamingTable(item)))continue;
     const [w,d]=dimensions(item), h=moonwood.heights[item.type]??{tradeCounter:32,harvestCrates:16,tackleCounter:32,rodRack:36,baitCrates:16,blackjack:19,roulette:22,reception:32,bed:24,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39,bench:22,streetlamp:55,fountain:37}[item.type];
     const shape=[point(item.x,item.y+d),point(item.x+w,item.y+d),point(item.x+w,item.y),point(item.x+w,item.y,h),point(item.x,item.y,h),point(item.x,item.y+d,h)];
     hitboxes.push({item,shape});
@@ -2000,7 +2024,7 @@ function updateRoomLabel(){
 }
 function enterRoom(next,arrival){
   if(player.inCombat||(hunting.recoveryUntil&&next!=="hub"&&next!=="home")){note("Finish combat or recovery before travelling.");return;}
-  cancelFishing();
+  cancelFishing();resetCombatArt();
   catchReveal=null;$('catchReveal').hidden=true;
   const focusRoom=!!document.activeElement.closest('[data-room-link]');
   currentRoom=next;

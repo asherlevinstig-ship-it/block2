@@ -144,7 +144,7 @@ const moonwood=(()=>{
     }
   }
 
-  function drawProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,progress,combat}){
+  function drawProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,progress,combat,pose={}}){
     const {x,y,type}=item;
     const [px,py]=point(x+.5,y+.5);
     const part=(u,v,w,d,z,h,c)=>block(x+u,y+v,w,d,z,h,c);
@@ -154,15 +154,27 @@ const moonwood=(()=>{
     if(type==='wildboar'){
       const untilStrike=combat?combat.nextBoarAt-Date.now():Infinity;
       if(untilStrike>=0&&untilStrike<450)surface(x-.08,y-.08,1.16,1.16,.4,'#f2a36b66','#ffc18b');
-      const bob=reduced?0:Math.sin(time/380)*.6;
-      part(.21,.26,.14,.16,0,6,['#795d58','#3d3543','#56434b']);
-      part(.65,.59,.14,.16,0,6,['#795d58','#3d3543','#56434b']);
-      part(.18,.2,.62,.58,5+bob,11,['#9b7c70','#594451','#755762']);
-      part(.52,.55,.44,.38,7+bob,9,['#a78a7a','#654c55','#89666a']);
-      part(.81,.72,.23,.22,7+bob,5,['#bf9b87','#7e5f66','#a87b79']);
-      rect(px+4,py-16-bob,3,4,'#543444');rect(px+10,py-11-bob,2,2,'#ffce92');
-      rect(px+12,py-5-bob,2,4,'#f4d8b3');rect(px+7,py-3-bob,2,3,'#f4d8b3');
-      rect(px-8,py-16-bob,10,2,'#443744');
+      const bob=reduced||pose.defeated?0:Math.sin(time/380)*.65;
+      const hide=pose.hit?['#d2a08b','#785464','#ac7c7c']:['#a78a77','#594451','#7a5963'];
+      const leg=pose.defeated?0:!reduced&&pose.windup>.3?Math.round(Math.sin(time/65)):0;
+      for(const [u,v] of [[.18,.24],[.65,.24],[.18,.66],[.65,.66]]){
+        part(u,v,.14,.15,0,6+(u>.5?leg:-leg),['#795d58','#3d3543','#56434b']);
+        part(u-.015,v-.015,.17,.18,0,2,['#49404a','#2b2938','#3b3141']);
+      }
+      part(.09,.16,.69,.66,5+bob,10,hide);
+      part(.19,.2,.48,.45,15+bob,3,[hide[0],'#6d4c58','#91676a']);
+      part(.57,.5,.37,.38,6+bob,10,hide);
+      part(.8,.69,.25,.24,6+bob,5,['#bf9b87','#7e5f66','#a87b79']);
+      rect(px+11,py-4-bob,2,1,'#654352');rect(px+14,py-3-bob,2,1,'#654352');
+      const ear=!reduced&&!pose.defeated&&time%2900>2500?1:0;
+      rect(px+1,py-18-bob-ear,4,5,'#503642');rect(px+2,py-17-bob-ear,2,3,'#bb827e');
+      rect(px+7,py-16-bob+ear,3,4,'#503642');rect(px+8,py-15-bob+ear,1,2,'#bb827e');
+      if(pose.defeated){rect(px+9,py-10-bob,3,1,'#3c303f');}
+      else{rect(px+9,py-12-bob,3,3,'#352b3b');rect(px+10,py-12-bob,1,1,pose.windup>.5?'#ffac7e':'#f9d1a0');}
+      rect(px+13,py-4-bob,2,5,'#f4d8b3');rect(px+12,py-6-bob,2,3,'#fff0c7');
+      rect(px+6,py-3-bob,2,4,'#e8cba9');rect(px+5,py-4-bob,2,2,'#fff0c7');
+      for(let i=0;i<5;i++)rect(px-9+i*2,py-17-bob-(i%2),2,3,'#443744');
+      rect(px-14,py-10-bob,4,1,'#89676c');rect(px-15,py-13-bob,1,4,'#89676c');rect(px-14,py-14-bob,3,1,'#b18a80');
     }else if(type==='wildtree'){
       const tint=(x*3+y)%3;
       const foliage=[['#3f777a','#2e5d6a','#274c5d'],['#50778c','#355d76','#294d69'],['#5c748b','#435b76','#344862']][tint];
