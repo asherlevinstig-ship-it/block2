@@ -29,7 +29,7 @@ export function normalizeState(input={}){
   for(const id of ["strengthXp","agilityXp","vitalityXp","patienceXp"]){
     if(!Number.isSafeInteger(stats[id])||stats[id]<0||stats[id]>100000000)throw new Error("Invalid attribute progress.");
   }
-  const maxHealth=100+Math.floor(stats.vitalityXp/50)*10;
+  const maxHealth=100;
   const health=input.health??maxHealth;
   if(!Number.isSafeInteger(health)||health<0)throw new Error("Invalid health.");
   const gear=input.fishingGear??{ownedRods:["reed"],equippedRod:"reed",bait:10};

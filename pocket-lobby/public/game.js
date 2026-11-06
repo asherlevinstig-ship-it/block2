@@ -71,7 +71,7 @@ const adventure={lantern:false,groveTrail:false,bridge:false,shrine:false,shortc
 const playerStats={strengthXp:0,agilityXp:0,vitalityXp:0,patienceXp:adventure.silverfin*10,...savedPlayerState?.stats};
 const PATIENCE_XP_PER_CATCH=10, PATIENCE_XP_PER_LEVEL=50;
 const patienceLevel=()=>1+Math.floor(playerStats.patienceXp/PATIENCE_XP_PER_LEVEL);
-const maxHealth=()=>100+Math.floor(playerStats.vitalityXp/50)*10;
+const maxHealth=()=>100;
 let health=Math.min(maxHealth(),Math.max(0,savedPlayerState?.health??maxHealth()));
 const fishingGear={ownedRods:['reed'],equippedRod:'reed',bait:10,...savedPlayerState?.fishingGear};
 const fishStock={...savedPlayerState?.fishStock};
@@ -939,11 +939,13 @@ function draw(time){
     sprite(ctx,x,y,avatar,{direction:player.direction,back:player.back,cycle,seated:!!seat,wave,fishing:fishingSession?fishingMoments.phase(fishingSession,time):null,time});
     if(fishingSession)drawFishingMoment(x,y,time);
     drawCatchReveal(x,y,time);
-    const healthRatio=health/maxHealth();
-    rect(x-16,y-44,32,6,'#162032');
-    rect(x-15,y-43,30,4,'#3d3445');
-    rect(x-15,y-43,Math.round(30*healthRatio),4,healthRatio>.5?'#9bd5ac':healthRatio>.25?'#edc187':'#eb9199');
-    rect(x-15,y-43,Math.round(30*healthRatio),1,'#ffffff35');
+    const heartPixels=['0110110','1111111','1111111','0111110','0011100','0001000'];
+    for(let heart=0;heart<5;heart++){
+      const filled=Math.max(0,Math.min(1,(health-heart*20)/20));
+      for(let row=0;row<heartPixels.length;row++)for(let col=0;col<7;col++){
+        if(heartPixels[row][col]==='1')rect(x-22+heart*9+col,y-44+row,1,1,col<7*filled?'#f07891':'#49364d');
+      }
+    }
     if(!$('bubble').hidden){
       if(time>bubbleUntil)$('bubble').hidden=true;
       else{
@@ -1309,14 +1311,17 @@ function updateInventory(){
 }
 function updatePlayerStats(){
   health=Math.min(health,maxHealth());
-  const totalHealth=maxHealth(),ratio=health/totalHealth;
+  const totalHealth=maxHealth();
+  const hearts=Array.from({length:5},(_,i)=>{
+    const fill=Math.max(0,Math.min(1,(health-i*20)/20));
+    return '<span class="health-heart" aria-hidden="true">&#9829;<i style="clip-path:inset(0 '+((1-fill)*100)+'% 0 0)">&#9829;</i></span>';
+  }).join('');
   $('healthValue').textContent=health+' / '+totalHealth+' HP';
-  $('healthProgress').max=totalHealth;
-  $('healthProgress').value=health;
-  $('healthProgress').setAttribute('aria-label','Health '+health+' of '+totalHealth);
-  $('healthHudValue').textContent=health+' / '+totalHealth;
-  $('healthHud').classList.toggle('health-warning',ratio<=.5&&ratio>.25);
-  $('healthHud').classList.toggle('health-critical',ratio<=.25);
+  for(const id of ['healthHud','healthHearts']){
+    $(id).innerHTML=hearts;
+    $(id).setAttribute('aria-label','Health '+health+' of '+totalHealth+'. Five hearts, 20 HP each.');
+    $(id).title=health+' / '+totalHealth+' HP - 20 HP per heart';
+  }
   for(const [id,name] of [['strength','Strength'],['agility','Agility'],['vitality','Vitality'],['patience','Patience']]){
     const experience=playerStats[id+'Xp'],rank=1+Math.floor(experience/50),towardNext=experience%50;
     $('attribute-'+id+'-level').textContent=rank;
