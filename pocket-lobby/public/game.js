@@ -1805,6 +1805,7 @@ function draw(time){
   drawCombatFeedback(time);
   if(enemy)drawCombatOverlayFx({ctx,width,height,time,now:Date.now(),events:combatArt,encounter:hunting.encounter,health,reduced:reducedMotion.matches,enemy});
   updateWorldLabels();
+  drawHudMiniMap();
   updatePeerLabels(time);
 }
 
@@ -1906,7 +1907,7 @@ function walkTo(tile){
   player.seat=null;player.waveStarted=null;
   route=path;interaction=null;target=path.length?tile:null;
 }
-function doorAvailable(door){return (currentRoom!=='hub'||lobbyRoutesOpen())&&moonwood.open(door,adventure);}
+function doorAvailable(door,room=currentRoom){return (room!=='hub'||lobbyRoutesOpen())&&moonwood.open(door,adventure);}
 function travelDoor(door){
   if(unavailable()){note(player.inCombat?"Use Flee to leave combat.":"Your hearts are recovering.");return;}
   if(!doorAvailable(door))return;
@@ -1917,6 +1918,95 @@ function travelDoor(door){
   }
   if(!step&&player.cx===door.tile.x&&player.cy===door.tile.y)enterRoom(door.to,door.arrival);
   else walkTo(door.tile);
+}
+function hudRoomExits(room){
+  if(room==='lounge')return [{to:'hub',loungeExit:true}];
+  return (roomDoors[room]??[]).filter(door=>doorAvailable(door,room));
+}
+function hudNextDoor(destination){
+  const visited=new Set([currentRoom]),queue=[{room:currentRoom,first:null}];
+  for(const {room,first} of queue){
+    for(const door of hudRoomExits(room)){
+      if(visited.has(door.to))continue;
+      const next=first??door;
+      if(door.to===destination)return next;
+      visited.add(door.to);
+      queue.push({room:door.to,first:next});
+    }
+  }
+  return null;
+}
+function followHudDoor(door){
+  if(unavailable()){note('Finish combat or rest before travelling.');return;}
+  if(editing)switchMode(false);
+  if(door.loungeExit){enterRoom('hub');return;}
+  travelDoor(door);
+}
+function navigateHud(destination){
+  if(currentRoom===destination){canvas.focus();return;}
+  const next=hudNextDoor(destination);
+  if(next?.to===destination){followHudDoor(next);return;}
+  showHudMap(destination);
+}
+function showHudMap(destination=null){
+  const dialog=$('hudMapDialog'),routes=$('hudMapRoutes'),shops=destination==='shops';
+  const next=destination&&!shops?hudNextDoor(destination):null;
+  $('hudMapTitle').textContent=shops?'Tower shops':roomDetails[currentRoom].name;
+  $('hudMapIntro').textContent=shops
+    ?'Choose a shop to see the way there.'
+    :next?'To reach '+roomDetails[destination].name+', start with '+roomDetails[next.to].name+'.'
+    :depthsRun?'Use the chamber controls to bank your spoils or go deeper.'
+    :currentRoom==='hub'&&!lobbyRoutesOpen()?'Talk to the Tower Warden to open the lobby doors.'
+    :destination?'There’s no open route to '+roomDetails[destination].name+' from here.':'Choose an open exit from this room.';
+  routes.replaceChildren();
+  const add=(label,action,highlight=false)=>{
+    const button=document.createElement('button');
+    button.type='button';
+    button.textContent=label;
+    button.classList.toggle('route-next',highlight);
+    button.onclick=()=>{dialog.close();action();};
+    routes.append(button);
+  };
+  if(shops&&lobbyRoutesOpen()){
+    for(const [room,label] of [['armory','Armory'],['store','Fishing supplies'],['market','Trading Post']])add(label,()=>navigateHud(room));
+  }else if(!shops){
+    for(const door of hudRoomExits(currentRoom))add(roomDetails[door.to].name,()=>followHudDoor(door),door.to===next?.to);
+  }
+  if(!dialog.open)dialog.showModal();
+}
+let hudMapKey='';
+function drawHudMiniMap(){
+  const doors=hudRoomExits(currentRoom);
+  const key=[currentRoom,player.cx,player.cy,doors.map(door=>door.to).join(','),lobbyRoutesOpen()].join('|');
+  if(key===hudMapKey)return;
+  hudMapKey=key;
+  $('hudHome').hidden=currentRoom==='hub'&&!lobbyRoutesOpen();
+  $('hudShops').hidden=!lobbyRoutesOpen();
+  for(const [id,room] of [['hudHome','home'],['hudLobby','hub']]){
+    const button=$(id);
+    if(currentRoom===room)button.setAttribute('aria-current','location');
+    else button.removeAttribute('aria-current');
+  }
+  const mini=$('hudMiniMap'),ink=mini.getContext('2d');
+  const unit=Math.min(86/(view.cols+view.rows),48/((view.cols+view.rows)*.52));
+  const at=(x,y)=>[55+(x-y-(view.cols-view.rows)/2)*unit,5+(x+y)*unit*.52];
+  const trace=points=>{
+    ink.beginPath();
+    points.forEach(([x,y],index)=>index?ink.lineTo(x,y):ink.moveTo(x,y));
+    ink.closePath();
+  };
+  ink.clearRect(0,0,110,58);
+  trace([at(0,0),at(view.cols,0),at(view.cols,view.rows),at(0,view.rows)]);
+  ink.fillStyle='#273d65';ink.fill();ink.strokeStyle='#6e8db8';ink.stroke();
+  for(const door of doors){
+    if(!door.tile)continue;
+    const [x,y]=at(door.tile.x+.5,door.tile.y+.5);
+    ink.fillStyle='#8ed4db';ink.fillRect(x-1.5,y-1,3,2);
+  }
+  const [x,y]=at(player.cx+.5,player.cy+.5);
+  trace([[x,y-5],[x+4,y+2],[x,y+1],[x-4,y+2]]);
+  ink.fillStyle='#ffe2a0';ink.fill();
+  ink.strokeStyle='#72583b';ink.stroke();
 }
 function use(item){
   if(isTimberTree(item)){
@@ -2778,6 +2868,12 @@ $('equipStonebackVest').onclick=toggleStonebackVest;
 $('equipWeapon').onclick=toggleWeapon;
 $('weaponSelect').onchange=updateWeaponInventory;
 $('questJournal').onclick=openQuest;
+$('hudQuests').onclick=openQuest;
+$('hudHome').onclick=()=>navigateHud('home');
+$('hudLobby').onclick=()=>navigateHud('hub');
+$('hudMap').onclick=()=>showHudMap();
+$('hudMapPreview').onclick=()=>showHudMap();
+$('hudShops').onclick=()=>showHudMap('shops');
 $('questAction').onclick=questAction;
 $('visitWarden').onclick=()=>use(hubFurniture.find(item=>item.type==='warden'));
 $('restAtTower').onclick=restAtTower;
