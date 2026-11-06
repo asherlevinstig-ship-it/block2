@@ -52,6 +52,7 @@ export function normalizeHunting(input={}){
     const stamina=input.encounter.stamina??100;
     if(!Number.isFinite(stamina)||stamina<0||stamina>100)throw new Error('Invalid stamina.');
     result.encounter={stamina,staminaAt:time(input.encounter.staminaAt),dodgeUntil:time(input.encounter.dodgeUntil),nextDodgeAt:time(input.encounter.nextDodgeAt),health:hp,nextPlayerAt:time(input.encounter.nextPlayerAt??input.encounter.nextActionAt),nextBoarAt:time(input.encounter.nextBoarAt??input.encounter.nextActionAt),nextFleeAt:time(input.encounter.nextFleeAt)};
+    if(input.encounter.rootboundUntil!==undefined)result.encounter.rootboundUntil=time(input.encounter.rootboundUntil);
   }
   return result;
 }
@@ -63,7 +64,8 @@ export function combatStamina(encounter,stats,now){
   return Math.min(100,(encounter.stamina??100)+Math.max(0,now-(encounter.staminaAt??now))/1000*huntingAttributes(stats).staminaRegen);
 }
 export function resumeHunt(encounter,now,stats={}){
-  return {...encounter,stamina:combatStamina(encounter,stats,now),staminaAt:now,dodgeUntil:0,nextDodgeAt:Math.min(encounter.nextDodgeAt??0,now+boarRules.dodgeCooldown),nextPlayerAt:now+450,nextBoarAt:now+1300,nextFleeAt:Math.min(encounter.nextFleeAt,now+boarRules.fleeCooldown)};
+  const nextBoarAt=(encounter.rootboundUntil??0)>now?Math.max(now+1300,encounter.nextBoarAt):now+1300;
+  return {...encounter,stamina:combatStamina(encounter,stats,now),staminaAt:now,dodgeUntil:0,nextDodgeAt:Math.min(encounter.nextDodgeAt??0,now+boarRules.dodgeCooldown),nextPlayerAt:now+450,nextBoarAt,nextFleeAt:Math.min(encounter.nextFleeAt,now+boarRules.fleeCooldown)};
 }
 export function huntingTurn(encounter,health,stats,action,now,random=Math.random,weapon='trainingSword'){
   if(!['attack','enemy','flee','dodge'].includes(action))throw new Error('Invalid combat action.');

@@ -7,6 +7,26 @@ export function combatShake(time,events,reduced=false){
 }
 export function drawCombatGroundFx({ctx,point,time,now,encounter,player,reduced}){
   if(!encounter)return;
+  if(now<(encounter.rootboundUntil??0)){
+    const [x,y]=point(6.5,5.5,2);
+    ctx.save();
+    ctx.strokeStyle='#c3d88c';
+    ctx.fillStyle='#83b87b55';
+    ctx.lineWidth=2;
+    ctx.beginPath();
+    ctx.ellipse(x,y,20,9,0,0,Math.PI*2);
+    ctx.fill();
+    for(let i=0;i<5;i++){
+      const dx=(i-2)*7;
+      ctx.beginPath();
+      ctx.moveTo(x+dx,y+4);
+      ctx.lineTo(x+dx*.75,y-2);
+      ctx.lineTo(x+dx*.4,y-8-(reduced?0:Math.sin(time/100+i)*2));
+      ctx.stroke();
+    }
+    ctx.restore();
+    return;
+  }
   const remaining=encounter.nextBoarAt-now;
   if(remaining<0||remaining>600)return;
   const amount=1-remaining/600,[bx,by]=point(6.5,5.5,1),[px,py]=point(player.x+.5,player.y+.5,1);

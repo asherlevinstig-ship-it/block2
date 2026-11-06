@@ -62,6 +62,7 @@ const ownedFurniture=Object.fromEntries(Object.keys(types).map(type=>{
 }));
 const availableFurniture=type=>(ownedFurniture[type]??0)-countFurniture(homeFurniture,type);
 const adventure={lantern:false,groveTrail:false,bridge:false,shrine:false,shortcut:false,discovered:[],silverfin:0,...savedPlayerState?.adventure};
+const rootstone=adventure.rootstone=normalizeRootstone(adventure.rootstone);
 const playerStats={strengthXp:0,agilityXp:0,vitalityXp:0,patienceXp:adventure.silverfin*10,...savedPlayerState?.stats};
 const PATIENCE_XP_PER_CATCH=10, PATIENCE_XP_PER_LEVEL=50;
 const patienceLevel=()=>1+Math.floor(playerStats.patienceXp/PATIENCE_XP_PER_LEVEL);
@@ -384,6 +385,18 @@ function combatAction(action){
   }
   applyCombatResult(result);
 }
+function useRootbind(){
+  if(!player.inCombat||currentRoom!=='clearing'||rootstone.power!=='rootbind')return;
+  if(!castRootbind(rootstone,hunting.encounter,Date.now())){
+    combatMessage='Wait for the charge warning and for Rootbind to recover.';
+    updateCombatPanel();
+    return;
+  }
+  combatMessage='Rootbind interrupted the charge. The boar is pinned for 2 seconds.';
+  savePlayerState();
+  updateCombatPanel();
+  note(combatMessage);
+}
 function applyCombatResult(result){
   if(!result)return;
   const action=result.action,artTime=performance.now();
@@ -447,6 +460,11 @@ function updateCombatPanel(){
   $('combatStamina').value=stamina;$('combatStaminaValue').textContent=Math.floor(stamina)+' / 100';
   $('combatDodge').disabled=!encounter||now<(encounter.nextDodgeAt??0)||stamina<boarRules.dodgeCost;
   const timing=!!encounter&&encounter.nextBoarAt-now>0&&encounter.nextBoarAt-now<=boarRules.dodgeWindow;
+  const bind=rootbindStatus(rootstone,encounter,now),bindButton=$('combatRootbind');
+  bindButton.hidden=rootstone.power!=='rootbind';
+  bindButton.disabled=bind!=='ready';
+  bindButton.classList.toggle('rootbind-ready',bind==='ready');
+  bindButton.textContent=bind==='recovering'?'Rootbind · '+Math.ceil((rootstone.nextCastAt-now)/1000)+'s':bind==='ready'?'Rootbind now! · E':'Rootbind · E';
   $('combatDodge').classList.toggle('dodge-ready',timing&&!$('combatDodge').disabled);
   $('combatDodge').textContent=encounter&&stamina<boarRules.dodgeCost?'Dodge · Low stamina':encounter&&now<(encounter.nextDodgeAt??0)?'Dodge · Recovering':timing?'Dodge now! · Space':'Dodge · Space';
   $('combatCooldown').textContent=encounter?'Next strike '+Math.max(0,(encounter.nextPlayerAt-now)/1000).toFixed(1)+'s · Boar '+Math.max(0,(encounter.nextBoarAt-now)/1000).toFixed(1)+'s'+(remaining?' · Flee '+(remaining/1000).toFixed(1)+'s':' · F: Flee'):'Click the boar to engage. Combat runs in real time.';
@@ -1352,6 +1370,10 @@ function updateWorldLabels(){
     if(stump)add('Regrowing',...point(6.5,5.5,13),'sign');
     else add('Timber',...point(6.5,5.5,54),'npc',()=>use(timberTree()));
   }
+  if(currentRoom==='shrine'||currentRoom==='ruins'){
+    const landmark=roomFurniture().find(item=>item.id==='landmark');
+    add(currentRoom==='shrine'?'Moth Shrine':'Moonwell',...point(landmark.x+.5,landmark.y+.5,35),'npc',()=>use(landmark));
+  }
   if(currentRoom==='lounge')add('SUNSET LOUNGE',...point(0,2.3,51),'sign');
   if(['store','market','armory'].includes(currentRoom)){
     const names={store:['SILVERFIN','OUTFITTERS'],market:['MOONWOOD','TRADING POST'],armory:['TOWER','ARMORY']};
@@ -1732,13 +1754,18 @@ function finishInteraction(){
     lanternLit=true;
     recordAdventure('You take the waystone lantern. Its light reveals hidden paths.');
   }else if(item.type==='mothAltar'){
-    adventure.shrine=true;
-    recordAdventure('The moths circle your lantern. You record the shrine in your journal.');
+    if(!adventure.shrine){
+      adventure.shrine=true;
+      recordAdventure('The shrine reveals a clue to the Rootstone.');
+    }
+    openRootstone('shrine');
   }else if(item.type==='moonwell'){
-    if(adventure.shortcut){note('The Moonwell glows. The root passage is open.');return;}
-    adventure.shortcut=true;
-    ownedFurniture.moonbloom=(ownedFurniture.moonbloom??0)+1;
-    recordAdventure('Moonbloom added to inventory. The root passage opens.');
+    if(!adventure.shortcut){
+      adventure.shortcut=true;
+      ownedFurniture.moonbloom=(ownedFurniture.moonbloom??0)+1;
+      recordAdventure('Moonbloom added to inventory. The root passage opens.');
+    }
+    openRootstone('well');
   }else if(['armoryCounter','weaponRack','anvil','brazier'].includes(item.type)){
     note('Welcome to the Armory. Compare weapons and choose Buy & equip in the shop panel.');
   }else if(item.type==='tradeCounter'||item.type==='harvestCrates'||(currentRoom==='market'&&item.type==='baitCrates')){
@@ -2134,6 +2161,58 @@ function switchMode(next){
   updateArmoryShop();
   noticeUntil=0;setHint();cancelSelection();
 }
+let rootstoneContext='journal',enteredRunes=[];
+const runeLabels={moth:'Moth',wave:'Wave',root:'Root'};
+function updateRootstoneDialog(){
+  const atShrine=rootstoneContext==='shrine'&&currentRoom==='shrine';
+  const atWell=rootstoneContext==='well'&&currentRoom==='ruins';
+  const puzzle=atWell&&adventure.shrine&&adventure.bridge&&!rootstone.awakened;
+  const canAttune=rootstone.awakened&&(atShrine||(atWell&&!rootstone.power));
+  $('rootstoneClue').hidden=!adventure.shrine;
+  $('rootstonePuzzle').hidden=!puzzle;
+  $('rootstonePowers').hidden=!rootstone.awakened;
+  $('rootstoneSequence').textContent=enteredRunes.length?enteredRunes.map(rune=>runeLabels[rune]).join(' → '):'Choose the first rune.';
+  $('rootstoneIntro').textContent=rootstone.awakened
+    ? rootstone.power?'Attuned to '+rootstonePowers[rootstone.power].name+'. Return to the Moth Shrine to change powers.':'The Rootstone is awake. Choose a power here or at the Moth Shrine.'
+    : puzzle?'Three runes circle the Moonwell. Touch them in the order shown by the shrine.':atWell?'The stone lies dormant. Look for a clue at the Moth Shrine.':'A stone sleeps beneath the Moonwell. Use your lantern in Whispering Grove to find the Moth Shrine.';
+  for(const [power,id] of [['rootbind','attuneRootbind'],['deepRoots','attuneDeepRoots']]){
+    const button=$(id);
+    button.disabled=!canAttune||rootstone.power===power;
+    button.textContent=rootstone.power===power?'Attuned':canAttune?'Attune '+rootstonePowers[power].name:'Attune at the shrine';
+  }
+}
+function openRootstone(context){
+  if(player.inCombat){note('Finish the hunt before opening the Rootstone journal.');return;}
+  rootstoneContext=context;
+  enteredRunes=[];
+  $('rootstoneStatus').textContent='';
+  updateRootstoneDialog();
+  $('rootstoneDialog').showModal();
+}
+function touchRootstoneRune(rune){
+  if(rootstoneContext!=='well'||rootstone.awakened||currentRoom!=='ruins'||!adventure.shrine||!adventure.bridge)return;
+  enteredRunes.push(rune);
+  if(enteredRunes.length===rootstoneRunes.length){
+    if(canAwakenRootstone(adventure,currentRoom,enteredRunes)){
+      rootstone.awakened=true;
+      recordAdventure('The Rootstone awakens. Choose one of its two powers.');
+      showTransaction('Ability Stone discovered',[{icon:'✦',text:'Rootstone · Choose a power'}]);
+      $('rootstoneStatus').textContent='The runes light up. The Rootstone is yours.';
+    }else $('rootstoneStatus').textContent='The runes go dark. Check the clue and try again.';
+    enteredRunes=[];
+  }else $('rootstoneStatus').textContent='';
+  updateRootstoneDialog();
+}
+function attuneRootstone(power){
+  const atShrine=rootstoneContext==='shrine'&&currentRoom==='shrine';
+  const firstAttunement=rootstoneContext==='well'&&currentRoom==='ruins'&&!rootstone.power;
+  if(!rootstone.awakened||!Object.hasOwn(rootstonePowers,power)||(!atShrine&&!firstAttunement))return;
+  rootstone.power=power;
+  const name=rootstonePowers[power].name;
+  recordAdventure('Rootstone attuned to '+name+'.');
+  $('rootstoneStatus').textContent=name+' is now active.';
+  updateRootstoneDialog();
+}
 function updateAdventurePanel(){
   updateWoodPanel();
   updateCombatPanel();
@@ -2150,7 +2229,7 @@ function updateAdventurePanel(){
     trail:adventure.lantern?'Your lantern reveals hidden trails and crossings.':'Take the lantern from the waystone before heading deeper.',
     grove:adventure.groveTrail?'The lantern revealed a trail to the Moth Shrine.':'Light your lantern to look for a trail through the grove.',
     creek:adventure.bridge?'Moonlit stepping stones cross the creek.':'Light your lantern to reveal a way across the creek.',
-    shrine:adventure.shrine?'You recorded the Moth Shrine in your journal.':'Approach the altar to examine the moths.',
+    shrine:adventure.shrine?'Read the Rootstone clue again or attune a power at the altar.':'Approach the altar to examine the moths and uncover the Rootstone clue.',
     ruins:adventure.shortcut?'The root passage is open. Your Moonbloom is in inventory.':'Search the Moonwell for a keepsake and a shortcut back.',
     roots:'Follow the roots back to Lantern Trail.',
     pond:fishingSession?({casting:'Casting your line…',waiting:'Watch the float. Your character will reel automatically.',twitch:'A nibble! Keep watching the float…',bite:'Bite! Reel now for +5 Patience XP. Your character will also reel automatically.',landing:'Reeling in your catch…'}[fishingMoments.phase(fishingSession,performance.now())]):fishingGear.bait<1?'Out of bait. Visit Silverfin Outfitters through the Fishing door in the Grand Lobby.':'Cast with your '+fishingCatalog.rods[fishingGear.equippedRod].name+'. Better rods and Patience improve catch quality. Fish in inventory: '+caughtFishCount()+'.'
@@ -2165,7 +2244,7 @@ function updateAdventurePanel(){
   $('adventureProgress').textContent=adventure.discovered.length+' of '+Object.keys(moonwood.areas).length+' places discovered';
   const landmark=$('adventureLandmark');
   const bite=!!fishingSession&&fishingMoments.phase(fishingSession,performance.now())==='bite';
-  const action={clearing:!player.inCombat&&Date.now()>=hunting.respawnAt?'Approach boar':'',trail:!adventure.lantern?'Take lantern':'',shrine:!adventure.shrine?'Examine altar':'',ruins:!adventure.shortcut?'Search Moonwell':'',pond:bite?'Reel! +5 Patience XP':fishingSession?'Fishing…':'Cast a line'}[currentRoom];
+  const action={clearing:!player.inCombat&&Date.now()>=hunting.respawnAt?'Approach boar':'',trail:!adventure.lantern?'Take lantern':'',shrine:'Examine altar',ruins:'Search Moonwell',pond:bite?'Reel! +5 Patience XP':fishingSession?'Fishing…':'Cast a line'}[currentRoom];
   landmark.hidden=!action;
   landmark.disabled=(!!fishingSession&&!bite)||(currentRoom==='pond'&&fishingGear.bait<1);
   landmark.classList.toggle('bite-ready',bite);
@@ -2326,6 +2405,11 @@ $('adventureLandmark').onclick=()=>{
 };
 $('combatFlee').onclick=()=>combatAction('flee');
 $('combatDodge').onclick=()=>combatAction('dodge');
+$('combatRootbind').onclick=useRootbind;
+$('openRootstone').onclick=()=>openRootstone('journal');
+for(const [rune,id] of [['moth','rootRuneMoth'],['wave','rootRuneWave'],['root','rootRuneRoot']])$(id).onclick=()=>touchRootstoneRune(rune);
+$('attuneRootbind').onclick=()=>attuneRootstone('rootbind');
+$('attuneDeepRoots').onclick=()=>attuneRootstone('deepRoots');
 $('woodAction').onclick=woodAction;
 $('openWorkbench').onclick=()=>{if(currentRoom==='logging')use(roomFurniture().find(item=>item.type==='workbench'));};
 $('carpenterDeliver').onclick=handInCarpenterOrder;
@@ -2348,6 +2432,7 @@ function updateCharacterRulesPreview(){
       const bait=Math.min(1000,Math.max(0,fishingGear.bait-rules.keepBait));
       const preview=jobPreview(jobState(),activity,8,bait);
       detail=activity==='woodcutting'&&woodcutting.timber>=rules.timberTarget?'Your timber target is already met. Your character will rest.':activity==='fishing'&&bait===0?'Your bait reserve is already reached. Your character will rest.':preview.allowed?'Ready with your current equipment. Supplies stay in Inventory until you sell or use them.':'Will rest with current equipment: '+preview.reason;
+      if(activity==='woodcutting'&&rootstone.power==='deepRoots'&&preview.allowed)detail+=' Deep Roots: one timber every 45 seconds while away.';
     }
     $('rulesRequirements').textContent=detail;$('rulesSave').disabled=savingRules||!window.playerCloud;
   }catch(error){$('rulesPreview').textContent=error.message;$('rulesSave').disabled=true;}
@@ -2481,7 +2566,11 @@ canvas.addEventListener('keydown',e=>{
   }
 });
 document.addEventListener('keydown',e=>{
-  if(player.inCombat&&['Space','KeyF'].includes(e.code)&&!e.target.matches('input,textarea,select')&&!document.querySelector('dialog[open]')){
+  if(player.inCombat&&['Space','KeyF','KeyE'].includes(e.code)&&!e.target.matches('input,textarea,select')&&!document.querySelector('dialog[open]')){
+    if(e.code==='KeyE'){
+      if(rootstone.power==='rootbind'){e.preventDefault();if(!e.repeat)useRootbind();}
+      return;
+    }
     if(e.code==='Space'&&e.target.matches('button'))return;
     e.preventDefault();if(!e.repeat)combatAction(e.code==='Space'?'dodge':'flee');return;
   }

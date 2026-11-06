@@ -1,4 +1,5 @@
 import * as questRules from '../public/quests.js';
+import * as stoneRules from '../public/rootstone.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -71,7 +72,7 @@ function gameHarness(){
   };
   const source=fs.readFileSync(new URL('../public/game.js',import.meta.url),'utf8');
   const context=vm.createContext({
-    ...questRules,normalizeHunting,normalizeCombatGear,weaponCatalog,boarRules,huntingAttributes,createHunt,resumeHunt,combatStamina,canUseWeapon,
+    ...questRules,...stoneRules,rootstone:stoneRules.normalizeRootstone(),normalizeHunting,normalizeCombatGear,weaponCatalog,boarRules,huntingAttributes,createHunt,resumeHunt,combatStamina,canUseWeapon,
     advanceHunt:(e,h,s,n,_r,w)=>advanceHunt(e,h,s,n,()=>.5,w),
     huntingTurn:(e,h,s,a,n,_r,w)=>huntingTurn(e,h,s,a,n,()=>.5,w),
     history:{fishCaught:false,boarDefeated:false},savedPlayerState:null,player:{cx:5,cy:5,inCombat:false},health:100,

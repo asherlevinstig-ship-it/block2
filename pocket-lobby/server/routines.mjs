@@ -1,6 +1,7 @@
 import {normalizeCharacterRules,AWAY_GRACE_MS,AWAY_CAP_MS,describeCharacterRules} from '../public/character-rules.js';
 import {startPlan,settlePlan} from './player-state.mjs';
 import {jobPreview} from '../public/jobs.js';
+import {deepRootsInterval,normalizeRootstone} from '../public/rootstone.js';
 export function touchPresence(state,now,{random=Math.random}={}){
   const last=state.routineLastSeen;state.routineLastSeen=now;
   const rules=normalizeCharacterRules(state.characterRules);
@@ -20,7 +21,14 @@ export function touchPresence(state,now,{random=Math.random}={}){
       if(preview.allowed){
         state.location='hub';
         startPlan(state,{source:'board',kind:rules.activity,hours:8,baitLimit},startedAt);
-        if(rules.activity==='woodcutting')state.plan.endAt=Math.min(state.plan.endAt,startedAt+needed*state.plan.interval);
+        if(rules.activity==='woodcutting'){
+          if(normalizeRootstone(state.adventure.rootstone).power==='deepRoots'){
+            state.plan.interval=deepRootsInterval;
+            state.plan.nextCutAt=startedAt+deepRootsInterval;
+            state.plan.deepRoots=true;
+          }
+          state.plan.endAt=Math.min(state.plan.endAt,startedAt+needed*state.plan.interval);
+        }
         settlePlan(state,until,{stop:true,random});
         const report=state.report;report.source='rules';report.ruleSummary=log.summary;
         if(rules.activity==='woodcutting'&&state.woodcutting.timber>=rules.timberTarget)report.reason='target-reached';
