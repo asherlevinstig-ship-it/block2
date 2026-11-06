@@ -119,6 +119,7 @@ function updateQuestUI(){
   ];
   $('questTrackerTitle').textContent=stage===5?'First Steps · Complete':'First Steps';
   $('questTrackerText').textContent=objectives[stage];
+  $('wardenDirectoryStatus').textContent=stage===0?'First Steps · Quest available':stage===4?'First Steps · Claim your reward':stage===5?'First Steps · Completed':'First Steps · Quest in progress';
   $('wardenMessage').textContent=[
     'Welcome, adventurer. Learn to provide for yourself, stand against Moonwood’s beasts, and trade with our people. Complete these tasks in order and I will reward you with gold and my blade.',
     'Start at Silverfin Pond. Catch three fish of any quality. Your offline fishing plan counts too.',
@@ -282,12 +283,10 @@ function drawCombatFeedback(time){
 
 let editing=false,selection=null,zoom=1,hitboxes=[],bounds=null,bubbleUntil=0,noticeUntil=0;
 const hubFurniture=[
-  ['reception',3,2],['warden',10,3],['plant',0,8],['plant',17,0],['plant',1,14],['plant',16,14],
-  ['stool',2,3],['stool',3,4],['stool',4,4],['stool',5,4],
-  ['sofa',2,7],['sofa',2,12,2],['chair',1,9,1],['chair',4,9,3],
-  ['chair',1,11,1],['chair',4,11,3],['table',3,9],['table',3,11,1],['lamp',1,7],
-  ['sofa',13,4],['sofa',13,11,2],['chair',12,6,1],['chair',15,6,3],
-  ['chair',12,9,1],['chair',15,9,3],['table',14,6],['table',14,9,1],['lamp',16,11]
+  ['reception',3,2],['warden',10,3],
+  ['plant',1,1],['plant',16,1],
+  ['sofa',2,10],['bench',2,12],
+  ['sofa',13,8,2],['bench',13,10,2]
 ].map(([type,x,y,rot=0],id)=>({id,type,x,y,rot}));
 const courtyardFurniture=[
   ['fountain',6,5],['streetlamp',1,3],['streetlamp',1,8],['streetlamp',11,1],
@@ -346,7 +345,7 @@ const storeExit={to:'hub',side:'left',tile:{x:0,y:5},start:4.6,end:6.4,height:49
 const roomDoors={home:[homeExit],hub:hubDoors,lounge:[],store:[storeExit],market:[storeExit],armory:[{...storeExit,arrival:{x:3,y:1}}],outside:[towerEntrance,moonwoodEntrance],...moonwood.doors};
 const roomDetails={
   home:{number:'00',name:'Entry Room',description:'Walk through the exit to reach the Grand Lobby.',badge:'ROOM NO. 00',floor:'Private room'},
-  hub:{number:'01',name:'The Grand Lobby',description:'Meet at reception, settle into a seating area, or head to another room.',badge:'MAIN HUB',floor:'Ground floor'},
+  hub:{number:'01',name:'The Grand Lobby',description:'Visit the Warden, browse the shops, or head outside into Moonwood.',badge:'MAIN HUB',floor:'Ground floor'},
   lounge:{number:'02',name:'The Sunset Lounge',description:'Find blackjack and roulette on the gaming floor, or take a seat by the bar.',badge:'GAMING LOUNGE',floor:'Ground floor'},
   store:{number:'11',name:'Silverfin Outfitters',description:'Stock up on bait, find a better rod, and sell your catch.',badge:'FISHING STORE',floor:'Tower shops'},
   armory:{number:'14',name:'The Tower Armory',description:'Trade your earnings for a weapon that suits your fighting style.',badge:'ARMORY',floor:'Tower shops'},
@@ -548,85 +547,46 @@ function drawHomeSign(){
 function drawGrandLobby(){
   const {cols,rows}=view;
   polygon([point(-.25,-.25,-8),point(cols+.44,-.25,-9),point(cols+.44,rows+.46,-10),point(-.25,rows+.46,-9)],'#1210208c');
-  block(0,0,cols,rows,-9,9,['#ad9793','#6d4f62','#4e3b55']);
-  const stone=['#c3a99d','#b49aa0','#cbb0a2','#ae929c'];
+  block(0,0,cols,rows,-9,9,['#b8a79c','#716574','#514959']);
   for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){
-    surface(x,y,1,1,0,stone[(x+2*y)%4],'#907580');
-    surface(x+.10,y+.16,.15,.025,.1,'#e1c4ad');
-    surface(x+.56,y+.75,.12,.025,.1,'#9b7f8b');
+    surface(x,y,1,1,0,(x+y)%2?'#b8aaa0':'#bcaea3','#a39692');
+    if((x*7+y*3)%5===0)surface(x+.32,y+.46,.24,.02,.1,'#d0bfb0');
   }
-  for(const edge of [.32,cols-.4])surface(edge,.32,.085,rows-.64,.25,'#7a5263');
-  for(const edge of [.32,rows-.4])surface(.32,edge,cols-.64,.085,.25,'#7a5263');
-  for(const [x,y,w,d] of [[1.05,6.72,4.12,6.62],[11.75,3.74,4.54,8.61]]){
-    surface(x,y,w,d,.32,'#64465a');
-    surface(x+.10,y+.1,w-.2,d-.2,.36,'#ce947b');
-    surface(x+.18,y+.18,w-.36,d-.36,.4,'#7c5c75');
-    for(let stripe=.46;stripe<d-.33;stripe+=.46)surface(x+.25,y+stripe,w-.5,.028,.43,'#967186');
-  }
-  surface(6.12,3.18,4.82,11.43,.4,'#604359');
-  surface(6.23,3.29,4.6,11.21,.45,'#d79973');
-  surface(6.35,3.41,4.36,10.97,.5,'#804b64');
-  surface(6.49,3.55,4.08,10.69,.6,'#6c405c');
-  for(const x of [6.69,10.2])for(let y=3.74;y<14.12;y+=.47){
-    surface(x,y,.17,.17,.7,'#b97d76');
-  }
-  surface(7.23,7.67,2.61,2.61,.75,'#e5ad79');
-  surface(7.34,7.78,2.39,2.39,.8,'#51394f');
-  surface(7.48,7.92,2.11,2.11,.85,'#b87876');
-  const [cx,cy]=point(8.535,8.975,1);
-  polygon([[cx,cy-17],[cx+5,cy-4],[cx+24,cy],[cx+5,cy+4],[cx,cy+17],[cx-5,cy+4],[cx-24,cy],[cx-5,cy-4]],'#f2bf87');
-  polygon([[cx,cy-8],[cx+10,cy],[cx,cy+8],[cx-10,cy]],'#6e4b62');
-  polygon([[cx,cy-5],[cx+6,cy],[cx,cy+5],[cx-6,cy]],'#ffe0a2');
+  for(const edge of [.35,cols-.4])surface(edge,.35,.06,rows-.7,.2,'#91827f');
+  for(const edge of [.35,rows-.4])surface(.35,edge,cols-.7,.06,.2,'#91827f');
+  surface(7,4,3,10.5,.25,'#9c8d83');
+  surface(7.10,4.10,2.8,10.3,.3,'#6d7775');
+  surface(7.19,4.19,2.62,10.12,.35,'#68736f');
+  const [cx,cy]=point(8.5,9,1);
+  polygon([[cx,cy-11],[cx+14,cy],[cx,cy+11],[cx-14,cy]],'#b8aa87');
+  polygon([[cx,cy-7],[cx+9,cy],[cx,cy+7],[cx-9,cy]],'#68736f');
+  rect(cx-1,cy-4,2,8,'#d3c099');rect(cx-4,cy-1,8,2,'#d3c099');
   for(const side of ['left','right']){
     const length=side==='left'?rows:cols;
-    wall(side,0,length,0,80,side==='left'?'#4e405b':'#644c65');
-    wall(side,0,length,77,82,'#bb8b83');
-    wall(side,0,length,73,76,'#8f6778');
-    wall(side,0,length,0,16,side==='left'?'#382d47':'#49334e');
-    wall(side,0,length,14,17,'#a7776e');
-    for(let i=.25;i<length;i+=.45)wall(side,i,i+.045,0,14,'#99687b');
-    for(const u of (side==='left'?[.45,4.85,8.65,12.55,15.22]:[.36,5.54,11.03,16.88])){
-      wall(side,u,u+.38,0,73,'#49364f');
-      wall(side,u+.04,u+.22,1,72,'#875e73');
-      wall(side,u+.08,u+.13,3,70,'#bd8c83');
-      wall(side,u-.08,u+.43,65,71,'#b47d75');
-      wall(side,u-.08,u+.43,4,10,'#a57070');
+    wall(side,0,length,0,80,side==='left'?'#4c515e':'#606572');
+    wall(side,0,length,77,81,'#a6988e');
+    wall(side,0,length,0,15,side==='left'?'#373e4c':'#48505e');
+    wall(side,0,length,14,16,'#a59584');
+    for(const u of (side==='left'?[.35,8.05,12.1,15.5]:[.3,6,12.2,17.3])){
+      wall(side,u,u+.17,1,76,'#777881');
+      wall(side,u+.03,u+.08,3,74,'#a39b96');
     }
   }
-  for(let pane=0;pane<7;pane++){
-    const x=1.02+pane*1.65,end=x+1.32;
-    wall('right',x,end,20,68,'#bd8c82');
-    wall('right',x+.07,end-.07,22,66,'#333148');
-    wall('right',x+.12,end-.12,23,64,'#6b647f');
-    wall('right',x+.12,end-.12,23,49,'#9a6d88');
-    wall('right',x+.12,end-.12,23,37,'#dc958d');
-    if(pane===3)wall('right',x+.42,x+.77,36,43,'#ffd0a0');
-    for(let j=0;j<5;j++){
-      const u=x+.14+j*.225;
-      const roof=30+(j*11+pane*7)%11;
-      wall('right',u,u+.20,23,roof,'#594961');
-      if(j%2)wall('right',u+.04,u+.09,26,27,'#f2ad81');
-    }
-    wall('right',x+.08,end-.08,45,47,'#615069');
-    wall('right',x+.65,x+.71,23,65,'#8a697e');
-    wall('right',x-.05,end+.05,20,23,'#e0a88b');
+  for(const [start,end] of [[6.55,8.6],[9.25,11.3]]){
+    wall('right',start,end,28,66,'#a59b93');
+    wall('right',start+.09,end-.09,30,64,'#536477');
+    wall('right',start+.09,end-.09,30,47,'#829193');
+    wall('right',start+.09,end-.09,30,36,'#b7aca0');
+    wall('right',(start+end)/2-.025,(start+end)/2+.025,30,64,'#9ca9aa');
+    wall('right',start,end,45,46,'#9ca9aa');
+    wall('right',start-.05,end+.05,26,29,'#c3b19d');
   }
-  wall('left',.95,4.36,37,66,'#382d45');
-  wall('left',1.03,4.28,40,65,'#c3917a');
-  wall('left',1.12,4.19,42,63,'#563b51');
-  wallText('left',2.65,55,'TOWER OF','bold 8px monospace','#ffce95',53);
-  wallText('left',2.65,46,'BEGINNINGS','bold 7px monospace','#d6a694',53);
-  wall('left',1.3,4.03,24,35,'#372d42');
-  for(let i=0;i<8;i++)wall('left',1.42+i*.31,1.50+i*.31,27,31,'#e1ae7f');
+  wall('left',1,4.4,39,65,'#303d49');
+  wall('left',1.08,4.32,40,64,'#a79680');
+  wall('left',1.16,4.24,41,63,'#414d59');
+  wallText('left',2.7,55,'TOWER OF','bold 8px monospace','#ead7b1',53);
+  wallText('left',2.7,46,'BEGINNINGS','bold 7px monospace','#c8bca4',53);
   hubDoors.forEach(drawDoor);
-  for(const [u,y] of [[-152,80],[-128,58],[102,56],[153,85],[179,117],[252,129],[-231,129]]){
-    const x=view.originX+u;
-    rect(x,y,3,1,'#af817e62');rect(x+1,y-1,1,3,'#c3928662');
-  }
-  ctx.save();
-  ctx.translate(view.originX-240,view.originY-94);
-  drawChandelier();
-  ctx.restore();
 }
 function drawChandelier(){
   const glow=ctx.createRadialGradient(240,74,5,240,74,53);
@@ -1831,6 +1791,7 @@ function switchMode(next){
   $('edit').setAttribute('aria-pressed',String(editing));$('walk').setAttribute('aria-pressed',String(!editing));
   $('roomLayout').classList.toggle('decorating',editing);
   $('roomLayout').classList.toggle('shopping',['store','armory'].includes(currentRoom));
+  $('questTracker').hidden=currentRoom==='hub';
   $('roomSide').hidden=(atHome()&&!editing)||currentRoom==='outside';
   $('chatPanel').hidden=editing||currentRoom!=='lounge';
   if(currentRoom==='lounge'){
