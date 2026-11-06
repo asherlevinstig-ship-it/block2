@@ -1,3 +1,4 @@
+import {normalizeCharacterRules} from '../public/character-rules.js';
 import {jobPreview} from '../public/jobs.js';
 import { normalizeWoodcutting } from "../public/woodcutting.js";
 import { startWoodcuttingPlan,settleWoodcuttingPlan } from "./woodcutting-plan.mjs";
@@ -54,7 +55,7 @@ export function normalizeState(input={}){
   if(hunting.encounter&&(input.location!=="clearing"||health===0))throw new Error("Invalid encounter location.");
   const position=input.position;
   const state={
-    credits,health:Math.min(health,maxHealth),stats:{strengthXp:stats.strengthXp,agilityXp:stats.agilityXp,vitalityXp:stats.vitalityXp,patienceXp:stats.patienceXp},fishingGear:{ownedRods,equippedRod:gear.equippedRod,bait:gear.bait},
+    characterRules:normalizeCharacterRules(input.characterRules),credits,health:Math.min(health,maxHealth),stats:{strengthXp:stats.strengthXp,agilityXp:stats.agilityXp,vitalityXp:stats.vitalityXp,patienceXp:stats.patienceXp},fishingGear:{ownedRods,equippedRod:gear.equippedRod,bait:gear.bait},
     woodcutting:normalizeWoodcutting(input.woodcutting),history:normalizeHistory(input),quest:normalizeQuest(input.quest),combatGear,hunting,fishStock,huntingLoot:counts(input.huntingLoot),adventure,
     avatar:{name:avatar.name.trim()||"Guest",outfit:avatar.outfit,hair:avatar.hair},
     location:locations.has(input.location)?input.location:"home",

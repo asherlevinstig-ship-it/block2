@@ -5,6 +5,7 @@
   const gateText=document.getElementById('cloudGateText');
   const retry=document.getElementById('cloudRetry');
   let packet=null,pending=null,retryJob=null,sending=null,timer=null,conflicted=false;
+  let presenceBusy=null,acting=0;
   const ownOperations=[];
   const readLocal=(key,fallback)=>{
     try{return JSON.parse(localStorage.getItem('pocket-lobby:'+key))??fallback;}catch{return fallback;}
@@ -50,6 +51,7 @@
     drain();
   }
   function drain(){
+    if(presenceBusy)return presenceBusy.then(()=>drain());
     if(sending)return sending;
     if(conflicted)return Promise.resolve();
     sending=(async()=>{
@@ -76,7 +78,7 @@
     await drain();
     if(conflicted||pending||retryJob)throw new Error('Wait for Server saved before starting a plan.');
   }
-  async function action(path,body={}){
+  async function performAction(path,body={}){
     const operation=crypto.randomUUID();
     for(let attempt=0;attempt<3;attempt++){
       try{
@@ -84,6 +86,7 @@
         return packet;
       }catch(error){
         if(error.status!==409||!error.data?.state)throw error;
+        if(path==='presence'){if(error.data.lastOperation===operation){packet=error.data;return packet;}conflict('Your character changed in another window.');throw error;}
         packet=error.data;
         if(path==='plan/start'&&packet.state.plan)return packet;
         if(path==='plan/stop'&&!packet.state.plan)return packet;
@@ -91,12 +94,33 @@
     }
     throw new Error('Your character changed. Please reload and try again.');
   }
+  async function action(path,body={}){
+    if(path!=='presence'&&presenceBusy)await presenceBusy;
+    acting++;try{return await performAction(path,body);}finally{acting--;}
+  }
+  async function pulse(){
+    if(document.hidden||conflicted||presenceBusy||acting||!packet?.state.characterRules?.enabled||packet.state.plan||packet.state.report)return;
+    await flush();if(presenceBusy||acting||conflicted)return;
+    presenceBusy=(async()=>{
+      try{
+        await action('presence');
+        if(packet.state.report?.source==='rules'){
+          pending=retryJob=null;
+          backup(null);
+          window.towerMultiplayer?.disconnect();
+          location.reload();
+        }
+      }
+      catch(error){if(error.status===401)conflict('Sign in again to continue.');else if(!conflicted)setStatus('Away rules waiting for connection');}
+    })().finally(()=>{presenceBusy=null;if(pending||retryJob)drain();});
+    return presenceBusy;
+  }
   function showReport(state){
     const dialog=document.getElementById('offlineDialog'),plan=state.plan??state.report;
     if(!plan)return;
-    const running=!!state.plan,wood=plan.kind==='woodcutting';
-    document.getElementById('offlineTitle').textContent=running?(wood?'Woodcutting at Timber Hollow':'Fishing at Silverfin Pond'):'Welcome back.';
-    document.getElementById('offlineDescription').textContent=running
+    const running=!!state.plan,wood=plan.kind==='woodcutting',rest=plan.kind==='rest';
+    document.getElementById('offlineTitle').textContent=rest?'Your character rested.':running?(wood?'Woodcutting at Timber Hollow':'Fishing at Silverfin Pond'):'Welcome back.';
+    document.getElementById('offlineDescription').textContent=plan.source==='rules'?plan.ruleSummary:running
       ?(wood?'Your woodcutting shift is running. You can close the game and return later.':'Your server fishing plan is running. You can close the game and return later.')
       :'Your character returned home after the work plan.';
     const rows=document.getElementById('offlineCatches');rows.replaceChildren();
@@ -104,18 +128,18 @@
     for(const [id,count] of Object.entries(plan.catches??{})){
       const row=document.createElement('li');row.textContent=fishProducts[id].name+' ×'+count;rows.append(row);
     }
-    if(!rows.children.length){const row=document.createElement('li');row.textContent='No catches yet.';rows.append(row);}
-    document.getElementById('offlineTotals').textContent=wood?'+'+plan.xp+' Woodcutting XP':plan.baitUsed+' bait used · +'+plan.xp+' Patience XP';
-    const reason={'out-of-bait':'All bait used','bait-limit':'Bait limit reached','time-limit':'Time limit reached',stopped:'Plan stopped','inventory-full':'Timber inventory full'};
-    document.getElementById('offlineReason').textContent=wood
+    if(!rows.children.length){const row=document.createElement('li');row.textContent=rest?'Rested at home · No supplies used.':'No catches yet.';rows.append(row);}
+    document.getElementById('offlineTotals').textContent=rest?'Rest · No gold spent':wood?'+'+plan.xp+' Woodcutting XP':plan.baitUsed+' bait used · +'+plan.xp+' Patience XP';
+    const reason={'bait-reserve':'Bait reserve protected','target-reached':'Timber target reached','away-cap':'Eight-hour away cap reached',returned:'Returned to the game',rest:'Rested at home',requirements:'Work requirements not met · Rested at home','out-of-bait':'All bait used','bait-limit':'Bait limit reached','time-limit':'Time limit reached',stopped:'Plan stopped','inventory-full':'Timber inventory full'};
+    document.getElementById('offlineReason').textContent=rest?(reason[plan.reason]??'Rested at home'):wood
       ?(running?'Basic Axe · One timber per minute · Ends '+new Date(plan.endAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):(reason[plan.reason]??'Shift finished')+' · Woodcutting '+plan.levelBefore+' → '+plan.levelAfter)
       :running?'Rod: '+fishingCatalog.rods[plan.rod].name+' · Up to '+plan.baitLimit+' bait · Ends '+new Date(plan.endAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):(reason[plan.reason]??'Plan finished')+' · Patience '+plan.patienceBefore+' → '+plan.patienceAfter;
-    const expectedEnd=wood?plan.endAt:Math.min(plan.endAt,plan.startedAt+plan.baitLimit*plan.interval);
+    const expectedEnd=wood||rest?plan.endAt:Math.min(plan.endAt,plan.startedAt+plan.baitLimit*plan.interval);
     const progress=document.getElementById('offlineProgress');progress.value=running?Math.max(0,Math.min(100,(Date.now()-plan.startedAt)/Math.max(1,expectedEnd-plan.startedAt)*100)):100;
     const elapsed=Math.max(0,(Math.min(Date.now(),plan.endedAt??Date.now())-plan.startedAt)/60000);
     document.getElementById('offlineDuration').textContent=(running?'Time worked: ':'Shift completed: ')+Math.floor(elapsed/60)+'h '+Math.floor(elapsed%60)+'m'+(running?' · Ends '+new Date(plan.endAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'');
     const saleValue=wood?(plan.timber??0)*4:Object.entries(plan.catches??{}).reduce((sum,[id,count])=>sum+(fishProducts[id]?.price??0)*count,0);
-    document.getElementById('offlineValue').textContent='Supplies in Inventory · '+saleValue+' gold if sold at the Trading Post. No gold has been added yet.';
+    document.getElementById('offlineValue').textContent=rest?'No items purchased, sold or consumed.':'Supplies in Inventory · '+saleValue+' gold if sold at the Trading Post. No gold has been added yet.';
     const button=document.getElementById('offlineContinue');
     button.textContent=running?'Stop work and return home':'Return to game';
     button.onclick=async()=>{
@@ -170,12 +194,16 @@
       setTimeout(poll,15000);
     }
     window.addEventListener('online',()=>drain());
+    const tick=async()=>{try{await pulse();}catch{}setTimeout(tick,20000);};
+    setTimeout(tick,20000);
     document.addEventListener('visibilitychange',()=>{
-      if(!document.hidden&&!(pending||retryJob||sending)&&!packet.state.plan){
-        request('state').then(latest=>{
-          if(latest.revision!==packet.revision)conflict('Your server character changed while this tab was away.');
-        }).catch(()=>{setStatus('Checking connection…');});
-      }
+      if(document.hidden)return;
+      if(packet.state.characterRules?.enabled){pulse().catch(()=>{});return;}
+      if(pending||retryJob||sending||packet.state.plan)return;
+      const revision=packet.revision;
+      request('state').then(latest=>{
+        if(packet.revision===revision&&latest.revision!==revision)conflict('Your server character changed while this tab was away.');
+      }).catch(()=>setStatus('Checking connection…'));
     });
   }
   async function initialize(){
@@ -209,6 +237,7 @@
           return;
         }
       }
+      if(packet.state.characterRules?.enabled&&!packet.state.plan&&!packet.state.report)await action('presence');
       const rules=await import('./fishing.js');
       const hunting=await import('./hunting.js');
       const art=await import('./combat-art.js');
@@ -218,12 +247,13 @@
       const shopUI=await import('./shop-ui.js');
       const woodRules=await import('./woodcutting.js');
       const crafting=await import('./crafting.js');
+      const characterRules=await import('./character-rules.js');
       const jobs=await import('./jobs.js');
       const shared=await import('./shared-world.js');
       const multiplayer=await import('./multiplayer.js');
-      Object.assign(window,rules,hunting,art,fx,quests,historyRules,shopUI,woodRules,crafting,jobs,shared,multiplayer);
+      Object.assign(window,rules,hunting,art,fx,quests,historyRules,shopUI,woodRules,crafting,characterRules,jobs,shared,multiplayer);
       window.towerInitialState=packet.state;
-      window.playerCloud={enqueue,flush,attach,startJob:async options=>{await flush();await action('plan/start',{...options,source:'board'});window.towerMultiplayer?.disconnect();location.reload();},invalidate:conflict,get initial(){return packet.state;}};
+      window.playerCloud={enqueue,flush,attach,saveRules:async rules=>{await flush();return (await action('rules/save',{rules})).state;},startJob:async options=>{await flush();await action('plan/start',{...options,source:'board'});window.towerMultiplayer?.disconnect();location.reload();},invalidate:conflict,get initial(){return packet.state;}};
       const script=document.createElement('script');script.src='game.js';
       script.onload=()=>{
         if(!(pending||retryJob||sending))setStatus('Server saved');

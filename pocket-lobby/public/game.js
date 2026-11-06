@@ -2220,6 +2220,49 @@ $('questAction').onclick=questAction;
 $('visitWarden').onclick=()=>use(hubFurniture.find(item=>item.type==='warden'));
 $('restAtTower').onclick=restAtTower;
 
+let savingRules=false;
+function draftCharacterRules(){return normalizeCharacterRules({enabled:$('rulesEnabled').checked,activity:$('rulesActivity').value,keepBait:Number($('rulesKeepBait').value),timberTarget:Number($('rulesTimberTarget').value)});}
+function updateCharacterRulesPreview(){
+  const activity=$('rulesActivity').value;$('rulesBaitField').hidden=activity!=='fishing';$('rulesTimberField').hidden=activity!=='woodcutting';
+  try{
+    const rules=draftCharacterRules();$('rulesPreview').textContent=describeCharacterRules(rules);
+    let detail='You keep control while playing. The eight-hour cap applies to each period away.';
+    if(rules.enabled&&activity!=='rest'){
+      const bait=Math.min(1000,Math.max(0,fishingGear.bait-rules.keepBait));
+      const preview=jobPreview(jobState(),activity,8,bait);
+      detail=activity==='woodcutting'&&woodcutting.timber>=rules.timberTarget?'Your timber target is already met. Your character will rest.':activity==='fishing'&&bait===0?'Your bait reserve is already reached. Your character will rest.':preview.allowed?'Ready with your current equipment. Supplies stay in Inventory until you sell or use them.':'Will rest with current equipment: '+preview.reason;
+    }
+    $('rulesRequirements').textContent=detail;$('rulesSave').disabled=savingRules||!window.playerCloud;
+  }catch(error){$('rulesPreview').textContent=error.message;$('rulesSave').disabled=true;}
+}
+function openCharacterRules(){
+  if(player.inCombat){note('Finish combat before changing your away rules.');return;}
+  window.towerPauseForAccount();
+  const state=window.playerCloud?.initial??savedPlayerState??{},rules=normalizeCharacterRules(state.characterRules);
+  $('rulesEnabled').checked=rules.enabled;$('rulesActivity').value=rules.activity;$('rulesKeepBait').value=rules.keepBait;$('rulesTimberTarget').value=rules.timberTarget;$('rulesStatus').textContent='';
+  const log=$('rulesActivityLog');log.replaceChildren();
+  for(const item of [...(state.activityLog??[])].reverse()){
+    const row=document.createElement('li'),title=document.createElement('b'),detail=document.createElement('p');
+    title.textContent=item.kind==='rest'?'Rest at home':item.kind==='fishing'?'Fishing':'Woodcutting';
+    detail.textContent=(item.kind==='rest'?'':item.count+' '+(item.kind==='fishing'?'fish':'timber')+' · +'+item.xp+' XP · ')+({'bait-reserve':'Bait reserve protected','target-reached':'Timber target reached','away-cap':'Eight-hour cap reached',returned:'Returned to game',combat:'Skipped during combat / recovery',requirements:item.summary,rest:'Rested at home'}[item.reason]??item.reason);
+    row.append(title,detail);log.append(row);
+  }
+  if(!log.children.length){const row=document.createElement('li');row.textContent='Your next away routine will appear here.';log.append(row);}
+  updateCharacterRulesPreview();$('characterRulesDialog').showModal();
+}
+$('openCharacterRules').onclick=openCharacterRules;
+for(const id of ['rulesEnabled','rulesActivity','rulesKeepBait','rulesTimberTarget'])$(id).oninput=updateCharacterRulesPreview;
+$('characterRulesDialog').oncancel=event=>{if(savingRules)event.preventDefault();};
+$('characterRulesForm').onsubmit=async event=>{
+  event.preventDefault();if(savingRules)return;
+  try{
+    const rules=draftCharacterRules();savingRules=true;updateCharacterRulesPreview();$('characterRulesDialog').querySelector('.close').disabled=true;
+    window.towerPauseForAccount();savePlayerState();await window.playerCloud.saveRules(rules);
+    $('rulesStatus').textContent=rules.enabled?'Rules saved. Your character will follow them next time you’re away.':'Away actions switched off.';
+  }catch(error){$('rulesStatus').textContent=error.message;}
+  finally{savingRules=false;updateCharacterRulesPreview();$('characterRulesDialog').querySelector('.close').disabled=false;}
+};
+
 let selectedJob='fishing',startingJob=false;
 function jobState(){return {location:currentRoom,health,hunting,woodcutting,fishingGear,stats:playerStats,adventure,history,...(window.playerCloud?.initial?.plan?{plan:window.playerCloud.initial.plan}:{}),...(window.playerCloud?.initial?.report?{report:window.playerCloud.initial.report}:{})};}
 function updateJobBoard(){

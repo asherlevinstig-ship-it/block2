@@ -1,3 +1,5 @@
+import {touchPresence} from './routines.mjs';
+import {normalizeCharacterRules} from '../public/character-rules.js';
 import { resolveIdentity } from "./identity.mjs";
 import { normalizeState, startPlan, settlePlan } from "./player-state.mjs";
 
@@ -77,7 +79,15 @@ export async function handlePlayerApi(request,env){
     switch(path){
       case "/api/player/save":
         if(state.plan)return json({error:"Stop the work plan before playing.",...packet(row)},409);
-        state={...normalizeState(body.state),...(state.report?{report:state.report}:{})};
+        state={...normalizeState(body.state),characterRules:state.characterRules??normalizeCharacterRules(),routineLastSeen:state.routineLastSeen,activityLog:state.activityLog??[],...(state.report?{report:state.report}:{})};
+        break;
+      case "/api/player/presence":
+        if(!state.characterRules?.enabled||state.plan||state.report)return json(packet(row));
+        touchPresence(state,Date.now());
+        break;
+      case "/api/player/rules/save":
+        if(state.plan||state.report)return json({error:"Read your work report before changing rules.",...packet(row)},409);
+        state.characterRules=normalizeCharacterRules(body.rules);state.routineLastSeen=Date.now();
         break;
       case "/api/player/plan/start":
         startPlan(state,body,Date.now());
@@ -86,7 +96,10 @@ export async function handlePlayerApi(request,env){
         settlePlan(state,Date.now(),{stop:true});
         break;
       case "/api/player/report/ack":
-        if(state.report?.startedAt===body.startedAt)delete state.report;
+        if(state.report?.startedAt===body.startedAt){
+          delete state.report;
+          state.routineLastSeen=Date.now();
+        }
         break;
       default:return json({error:"Not found."},404);
     }
