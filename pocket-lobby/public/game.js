@@ -410,7 +410,7 @@ function updateQuestUI(){
   $('questAction').textContent=stage===0?'Accept quest':stage===4?'Claim 75 gold + Wardenâ€™s Blade':stage===5?'Reward received':'Quest in progress';
   $('questStatus').textContent=stage===5?'Reward saved to your character.':!canSpeak?'Visit the Warden in the Grand Lobby to accept or claim your quest.':stage===0?'Only progress made after accepting counts.':stage===4?'Your new blade will be equipped automatically.':objectives[stage];
 }
-function openQuest(){updateQuestUI();if(!$('questDialog').open)$('questDialog').showModal();}
+function openQuest(){$('questRewardArt').innerHTML=shopItemArt('wardenSword');updateQuestUI();if(!$('questDialog').open)$('questDialog').showModal();}
 function questAction(){
   if(!nearWarden()||unavailable())return;
   if(questStage(quest)===0){
@@ -1972,6 +1972,7 @@ function showHudMap(destination=null){
   }else if(!shops){
     for(const door of hudRoomExits(currentRoom))add(roomDetails[door.to].name,()=>followHudDoor(door),door.to===next?.to);
   }
+  renderWorldMap();
   if(!dialog.open)dialog.showModal();
 }
 let hudMapKey='';
@@ -2248,6 +2249,92 @@ function animation(time){
   if($('avatarDialog').open)drawAvatarPreview(time);
   requestAnimationFrame(animation);
 }
+
+var bagCategory='all',bagSelection=null;
+function windowItemArt(kind){
+  if(kind==='axe')return '<svg viewBox="0 0 64 64" aria-hidden="true" shape-rendering="crispEdges"><path d="M18 52l24-38 5 3-24 38z" fill="#ba855c"/><path d="M30 13l14-5 12 9-8 13-17-6z" fill="#a8c4dc"/><path d="M30 13l2 10 16 7-3-11z" fill="#e4eee1"/></svg>';
+  if(kind==='timber')return '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M12 26l29-13 13 13-29 17z" fill="#9d684b" stroke="#e4b778" stroke-width="2"/><path d="M12 39l29-13 13 13-29 17z" fill="#85583f" stroke="#d6a168" stroke-width="2"/><ellipse cx="23" cy="43" rx="11" ry="12" fill="#e2b77a"/><ellipse cx="23" cy="43" rx="6" ry="7" fill="none" stroke="#ac744c" stroke-width="2"/></svg>';
+  if(kind==='fish')return '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M11 32L3 21v22z" fill="#5f98bd"/><path d="M10 32c9-23 32-23 47 0-15 23-38 23-47 0z" fill="#96d2d8" stroke="#d9ece2" stroke-width="2"/><path d="M26 18l10-10 7 12M25 46l9 9 8-10" fill="#69a5bb"/><circle cx="45" cy="29" r="3" fill="#182a43"/></svg>';
+  if(kind==='bait')return '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M17 20h30l-3 34H20z" fill="#866147" stroke="#d8af74" stroke-width="2"/><path d="M15 16h34v8H15z" fill="#caa369"/><path d="M27 17c-10-16 18-15 8-3s15 11 6 20" fill="none" stroke="#e7a59e" stroke-width="5" stroke-linecap="round"/></svg>';
+  if(kind==='vest')return '<svg viewBox="0 0 64 64" aria-hidden="true" shape-rendering="crispEdges"><path d="M22 9l10 5 10-5 13 13-9 9-3 25H21l-3-25-9-9z" fill="#6f9d9c" stroke="#d1e3d4" stroke-width="2"/><path d="M26 15v36h12V15l-6 4z" fill="#446e80"/><path d="M23 30h18v6H23z" fill="#bcba83"/></svg>';
+  return '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M18 18h28l7 32-21 8-21-8z" fill="#a78050" stroke="#edca87" stroke-width="2"/><path d="M24 18V9h16v9M12 34h40" fill="none" stroke="#edca87" stroke-width="3"/></svg>';
+}
+function bagEntries(){
+  const entries=[];
+  for(const id of combatGear.ownedWeapons){
+    const w=weaponProfile(id,combatGear.activeSwordUpgrade),equipped=combatGear.equippedWeapon===id;
+    entries.push({key:'weapon:'+id,name:w.name,category:'gear',art:shopItemArt(id),quantity:1,equipped,description:w.description,stats:w.damage+' base damage · '+attackSeconds(w.interval)+' per attack',action:equipped?'Unequip weapon':'Equip weapon',disabled:player.inCombat||!canUseWeapon(playerStats,id),note:player.inCombat?'Finish combat before changing equipment.':'Drawn automatically in combat.',run:()=>{$('weaponSelect').value=id;toggleWeapon();}});
+  }
+  for(const id of fishingGear.ownedRods){
+    const rod=fishingCatalog.rods[id],equipped=fishingGear.equippedRod===id,odds=fishingChances(patienceLevel(),id);
+    entries.push({key:'rod:'+id,name:rod.name,category:'gear',art:shopItemArt(id),quantity:1,equipped,description:rod.quality+' fishing rod. Uses one bait per catch.',stats:(rod.duration/1000).toFixed(1)+'s / catch · '+odds.fine.toFixed(1)+'% fine · '+odds.rare.toFixed(1)+'% rare',action:equipped?'Equipped':'Equip rod',disabled:equipped||patienceLevel()<rod.patience,note:'Requires Patience '+rod.patience,run:()=>equipFishingRod(id)});
+  }
+  if(woodcutting.axeOwned)entries.push({key:'axe',name:'Basic Axe',category:'gear',art:windowItemArt('axe'),quantity:1,equipped:woodcutting.equipped,description:'Your trusty tool for felling trees.',stats:'Train Woodcutting with every log.',action:woodcutting.equipped?'Unequip axe':'Equip axe',disabled:unavailable(),run:()=>$('equipAxe').onclick()});
+  if(combatGear.stonebackVestOwned)entries.push({key:'vest',name:'Stoneback Vest',category:'gear',art:windowItemArt('vest'),quantity:1,equipped:combatGear.stonebackVestEquipped,description:'Crafted from the Stoneback Beetle’s shell.',stats:'Absorbs 4 damage · Dodge costs 50 stamina',action:combatGear.stonebackVestEquipped?'Remove vest':'Equip vest',disabled:unavailable(),run:toggleStonebackVest});
+  for(const [type,name] of Object.entries(types)){
+    const quantity=availableFurniture(type);if(!quantity)continue;
+    entries.push({key:'furniture:'+type,name,category:'furniture',type,quantity,description:'Make a space that feels like yours.',stats:quantity+' available in storage',action:'Place in room',disabled:!canDecorate(),note:canDecorate()?'Choose Place, then click a clear floor tile.':'Visit your home to place furniture.',run:()=>{$('inventoryDialog').close();switchMode(true);choose({type,id:null,rot:0});canvas.focus();}});
+  }
+  if(fishingGear.bait)entries.push({key:'bait',name:'Riverworms',category:'materials',art:windowItemArt('bait'),quantity:fishingGear.bait,description:'Bait for your next fishing trip.',stats:'One used per catch',note:'Used automatically while fishing.'});
+  if(woodcutting.timber)entries.push({key:'timber',name:'Timber',category:'materials',art:windowItemArt('timber'),quantity:woodcutting.timber,description:'Gathered by chopping trees.',stats:tradeCatalog.timber.price+' gold each',note:'Craft at the Timber Hollow workbench or sell at the Trading Post.'});
+  for(const [id,quantity] of Object.entries(fishStock))if(quantity&&fishProducts[id]){
+    const fish=fishProducts[id];entries.push({key:'fish:'+id,name:fish.name,category:'materials',quality:fish.quality,art:windowItemArt('fish'),quantity,description:'Caught in the waters of Silverfin Pond.',stats:fish.price+' gold each · '+quantity*fish.price+' gold total',note:'Sell at the Trading Post or Silverfin Outfitters.'});
+  }
+  for(const [id,quantity] of Object.entries(huntingLoot))if(quantity&&tradeCatalog[id])entries.push({key:'loot:'+id,name:tradeCatalog[id].name,category:'materials',art:windowItemArt('loot'),quantity,description:'Spoils from your adventures.',stats:tradeCatalog[id].price+' gold each',note:'Sell at the Trading Post. Some loot is used in crafting.'});
+  return entries;
+}
+function renderBag(){
+  const entries=bagEntries(),visible=entries.filter(item=>bagCategory==='all'||item.category===bagCategory);
+  const selected=visible.find(item=>item.key===bagSelection)??visible[0];bagSelection=selected?.key??null;
+  const grid=$('bagGrid');grid.replaceChildren();
+  for(const item of visible){
+    const slot=document.createElement('button'),art=document.createElement('div'),name=document.createElement('span'),count=document.createElement('small');
+    slot.type='button';slot.className='bag-slot'+(item.equipped?' is-equipped':'')+(item.quality?' quality-'+item.quality:'');slot.dataset.item=item.key;
+    slot.setAttribute('aria-pressed',String(item.key===bagSelection));slot.setAttribute('aria-label',item.name+', '+item.quantity+(item.equipped?', equipped':''));
+    art.className='bag-slot-art';if(item.type)art.append(thumbnail(item.type));else art.innerHTML=item.art;
+    name.textContent=item.name;count.textContent=item.equipped?'Equipped':'×'+item.quantity;
+    slot.append(art,name,count);slot.onclick=()=>{bagSelection=item.key;renderBag();$('bagGrid').querySelector('[data-item="'+item.key+'"]')?.focus({preventScroll:true});};grid.append(slot);
+  }
+  $('bagEmpty').hidden=visible.length>0;
+  $('bagCount').textContent=entries.length+' item types';$('bagGold').textContent=new Intl.NumberFormat().format(credits)+' gold';
+  $('bagPlayerName').textContent=avatar.name;
+  const loadout=$('bagLoadout');loadout.replaceChildren();
+  for(const [label,key] of [['Weapon','weapon:'+combatGear.equippedWeapon],['Rod','rod:'+fishingGear.equippedRod],['Armour',combatGear.stonebackVestEquipped?'vest':null]]){
+    const item=entries.find(item=>item.key===key),button=document.createElement('button');button.type='button';button.textContent=label+' · '+(item?.name??'None equipped');button.disabled=!item;button.onclick=()=>{bagCategory='gear';bagSelection=key;renderBag();};loadout.append(button);
+  }
+  const picture=$('bagAvatar'),ink=picture.getContext('2d');ink.clearRect(0,0,56,62);sprite(ink,28,54,avatar,{time:performance.now()});
+  for(const category of ['all','gear','materials','furniture'])$('bagTab'+category[0].toUpperCase()+category.slice(1)).setAttribute('aria-pressed',String(category===bagCategory));
+  const art=$('bagDetailArt');art.replaceChildren();
+  if(selected?.type)art.append(thumbnail(selected.type));else art.innerHTML=selected?.art??windowItemArt('bag');
+  $('bagDetailCategory').textContent=selected?(selected.equipped?'EQUIPPED':selected.category==='gear'?'EQUIPMENT':selected.category==='furniture'?'HOME FURNITURE':'LOOT & SUPPLIES'):'';
+  $('bagDetailName').textContent=selected?.name??'Your bag is empty';$('bagDetailText').textContent=selected?.description??'Find something on your next adventure.';
+  $('bagDetailStats').textContent=selected?.stats??'';$('bagDetailNote').textContent=selected?.note??'';
+  const action=$('bagAction');action.hidden=!selected?.action;action.textContent=selected?.action??'';action.disabled=!!selected?.disabled;
+  action.onclick=()=>{if(!selected?.run||selected.disabled)return;selected.run();if($('inventoryDialog').open)updateInventory();};
+}
+function openMerchant(){
+  if(!['store','armory','market'].includes(currentRoom))return;
+  updateFishingShop();updateArmoryShop();updateTradingPost();
+  $('merchantTitle').textContent=roomDetails[currentRoom].name;
+  if(!$('merchantDialog').open)$('merchantDialog').showModal();
+}
+function renderWorldMap(){
+  const positions={home:[75,65],hub:[240,110],store:[75,160],armory:[240,30],market:[400,65],lounge:[400,160],outside:[240,220],trail:[240,310],logging:[80,310],clearing:[80,405],grove:[410,310],shrine:[550,310],creek:[360,405],pond:[550,405],ruins:[360,500],depthsGate:[80,500],depthsGallery:[80,570],depthsVault:[240,570]};
+  const rooms=Object.keys(positions).filter(room=>roomDetails[room]&&(room===currentRoom||hudNextDoor(room)));
+  let links='',nodes='';const linked=new Set();
+  for(const room of rooms){
+    const [x,y]=positions[room];
+    for(const door of hudRoomExits(room)){
+      if(!rooms.includes(door.to))continue;const key=[room,door.to].sort().join('|');if(linked.has(key))continue;linked.add(key);
+      const [dx,dy]=positions[door.to];links+='<path d="M'+x+' '+y+'L'+dx+' '+dy+'"/>';
+    }
+    const name=room==='home'?'Your Home':roomDetails[room].name.replace(/^The /,'');
+    nodes+='<g class="map-place'+(room===currentRoom?' map-current':'')+'"><circle cx="'+x+'" cy="'+y+'" r="'+(room===currentRoom?13:8)+'"/><text x="'+x+'" y="'+(y+29)+'" text-anchor="middle">'+name+'</text>'+(room===currentRoom?'<text class="map-you" x="'+x+'" y="'+(y-22)+'" text-anchor="middle">YOU ARE HERE</text>':'')+'</g>';
+  }
+  const ys=rooms.map(room=>positions[room][1]),bottom=Math.max(240,...ys)+48;
+  $('worldMap').innerHTML='<svg viewBox="0 0 640 '+bottom+'" role="img" aria-label="Open routes around the Tower. You are in '+roomDetails[currentRoom].name+'."><g class="map-links">'+links+'</g>'+nodes+'</svg>';
+}
+
 function updateWeaponInventory(){
   $('weaponCard').hidden=combatGear.ownedWeapons.length===0;
   if(!combatGear.ownedWeapons.length)return;
@@ -2426,7 +2513,7 @@ function showTransaction(title,items,creditChange=0){
     $('creditWallet').append(burst);
     setTimeout(()=>burst.remove(),1400);
   }
-  const notices=$('transactions');
+  const notices=$('merchantDialog').open?$('merchantTransactions'):$('craftDialog').open?$('craftTransactions'):$('transactions');
   while(notices.children.length>=4)notices.children[0].remove();
   notices.append(card);
   setTimeout(()=>card.remove(),5200);
@@ -2493,7 +2580,7 @@ async function handInCarpenterOrder(){
     status.textContent=error.message;
   }finally{
     deliveringCarpenterOrder=false;
-    shell.inert=false;
+    shell.inert=false;$('merchantDialog').inert=false;
     updateCarpenterOrder();
     if(!$('carpenterDeliver').disabled)$('carpenterDeliver').focus();
     else $('carpenterTitle').focus();
@@ -2522,7 +2609,8 @@ function updateTradingPost(){
     const quantity=tradeQuantity(id),card=document.createElement('div');
     if(item.group==='fish'&&item.quality!=='common'&&quantity===0)continue;
     const title=document.createElement('b'),detail=document.createElement('p'),actions=document.createElement('div');
-    card.className='rod-offer';card.dataset.loot=id;
+    card.className='rod-offer trade-card';card.dataset.loot=id;
+    const art=document.createElement('div');art.className='trade-art';art.innerHTML=windowItemArt(item.group==='fish'?'fish':id==='timber'?'timber':'loot');card.append(art);
     title.textContent=item.name;
     detail.textContent=item.price+' credits each Â· '+quantity+' in inventory';
     actions.className='trade-actions';
@@ -2571,7 +2659,9 @@ function switchMode(next){
   $('roomLayout').classList.toggle('decorating',editing);
   $('roomLayout').classList.toggle('shopping',['store','armory'].includes(currentRoom));
   $('questTracker').hidden=currentRoom==='hub';
-  $('roomSide').hidden=(atHome()&&!editing)||currentRoom==='outside';
+  $('roomSide').hidden=(atHome()&&!editing)||['outside','store','armory','market'].includes(currentRoom);
+  $('merchantEntry').hidden=!['store','armory','market'].includes(currentRoom);
+  $('merchantEntryTitle').textContent=currentRoom==='market'?'Sell your spoils':'Browse equipment';
   $('hudHomeDecor').hidden=!atHome()||editing;
   $('chatPanel').hidden=editing||currentRoom!=='lounge';
   if(currentRoom==='lounge'){
@@ -2798,6 +2888,7 @@ $('sellFish').onclick=()=>{
 };
 if(hasBedStarter&&hasGamingLayout)updateInventory();else savePlayerState();
 function openInventory(equipmentRoom=null){
+  bagCategory=equipmentRoom?'gear':'all';bagSelection=equipmentRoom==='pond'?'rod:'+fishingGear.equippedRod:equipmentRoom==='clearing'?'weapon:'+(combatGear.equippedWeapon??'trainingSword'):null;
   $('inventoryTitle').textContent=equipmentRoom==='pond'?'Equip for fishing':equipmentRoom==='clearing'?'Equip for hunting':'Inventory';
   $('weaponCard').classList.toggle('onboarding-focus',equipmentRoom==='clearing');
   $('fishingGearCard').classList.toggle('onboarding-focus',equipmentRoom==='pond');
@@ -2807,9 +2898,10 @@ function openInventory(equipmentRoom=null){
   if(equipmentRoom==='pond')$('inventoryGuide').textContent='Before your first catch, choose a fishing rod below. Your free Reed Rod is '+(fishingGear.equippedRod==='reed'?'already equipped.':'in your inventory.');
   if(equipmentRoom==='clearing')$('inventoryGuide').textContent='Before your first boar hunt, equip a sword below. '+(combatGear.equippedWeapon?'Your '+weaponCatalog[combatGear.equippedWeapon].name+' is already equipped.':'Choose a sword, then press Equip weapon.');
   updateInventory();
+  $('bagHint').textContent=$('inventoryGuide').textContent;renderBag();
   if(!$('inventoryDialog').open)$('inventoryDialog').showModal();
   if(equipmentRoom){
-    const control=$(equipmentRoom==='pond'?'equippedFishingRod':combatGear.equippedWeapon?'weaponSelect':'equipWeapon');
+    const control=$('bagAction').disabled?$('bagGrid').querySelector('[data-item="'+bagSelection+'"]'):$('bagAction');
     control.focus({preventScroll:true});control.scrollIntoView({block:'center',behavior:'instant'});
   }
 }
@@ -2817,6 +2909,13 @@ function showFirstEquipment(room){
   if(!needsEquipmentGuide(room,history)||hunting.encounter||hunting.recoveryUntil||savedPlayerState?.plan||savedPlayerState?.report)return;
   openInventory(room);
 }
+
+$('merchantEntry').onclick=openMerchant;
+$('bagAppearance').onclick=()=>{$('inventoryDialog').close();openAvatar();};
+for(const category of ['all','gear','materials','furniture'])$('bagTab'+category[0].toUpperCase()+category.slice(1)).onclick=()=>{bagCategory=category;bagSelection=null;renderBag();};
+for(const name of ['Furniture','Weapons','Armour'])$('craftTab'+name).onclick=()=>{for(const page of ['Furniture','Weapons','Armour']){$('craftPage'+page).hidden=page!==name;$('craftTab'+page).setAttribute('aria-pressed',String(page===name));}};
+for(const activity of ['rest','fishing','woodcutting'])$('routine'+activity[0].toUpperCase()+activity.slice(1)).onclick=()=>{$('rulesActivity').value=activity;updateCharacterRulesPreview();};
+
 $('inventory').onclick=()=>openInventory();
 $('walk').onclick=()=>switchMode(false);
 $('edit').onclick=()=>switchMode(true);
@@ -2888,7 +2987,9 @@ $('restAtTower').onclick=restAtTower;
 let savingRules=false;
 function draftCharacterRules(){return normalizeCharacterRules({enabled:$('rulesEnabled').checked,activity:$('rulesActivity').value,keepBait:Number($('rulesKeepBait').value),timberTarget:Number($('rulesTimberTarget').value)});}
 function updateCharacterRulesPreview(){
-  const activity=$('rulesActivity').value;$('rulesBaitField').hidden=activity!=='fishing';$('rulesTimberField').hidden=activity!=='woodcutting';
+  const activity=$('rulesActivity').value;
+  for(const name of ['rest','fishing','woodcutting'])$('routine'+name[0].toUpperCase()+name.slice(1)).setAttribute('aria-pressed',String(activity===name));
+  $('rulesBaitField').hidden=activity!=='fishing';$('rulesTimberField').hidden=activity!=='woodcutting';
   try{
     const rules=draftCharacterRules();$('rulesPreview').textContent=describeCharacterRules(rules);
     let detail='You keep control while playing. The eight-hour cap applies to each period away.';
@@ -3103,7 +3204,7 @@ function updateName(){
   portrait.save();portrait.translate(12,39);pixelHead(portrait,avatar,false,false);portrait.restore();
 }
 $('profile').onclick=openAvatar;$('looks').onclick=openAvatar;
-$('attributes').onclick=()=>{updatePlayerStats();$('attributesDialog').showModal();};
+$('attributes').onclick=()=>{const ink=$('statsAvatar').getContext('2d');ink.clearRect(0,0,56,62);sprite(ink,28,54,avatar,{time:performance.now()});updatePlayerStats();$('attributesDialog').showModal();};
 $('help').onclick=()=>$('helpDialog').showModal();
 for(const button of document.querySelectorAll('dialog .close'))button.onclick=()=>button.closest('dialog').close();
 $('saveAvatar').onclick=()=>{
@@ -3138,6 +3239,7 @@ function enterRoom(next,arrival){
     canvas.height=view.height;
     setZoom(1);
   }
+  if($('merchantDialog').open)$('merchantDialog').close();
   const {number,name,description,badge,floor}=roomDetails[next];
   $('roomLayout').classList.toggle('entry',atHome());
   $('roomLayout').classList.toggle('hub',next==='hub');
@@ -3171,6 +3273,7 @@ function enterRoom(next,arrival){
   bounds=null;worldLabelKey='';$('worldLabels').replaceChildren();
   connectRoom();
   showFirstEquipment(next);
+  if(['store','armory','market'].includes(next))openMerchant();
   if(focusRoom&&!$('inventoryDialog').open)canvas.focus();
 }
 function movePlayerToSpawn(arrival){
