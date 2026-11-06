@@ -192,3 +192,27 @@
 .depths-panel{padding:14px;margin:0 0 12px;border:1px solid #90857d;border-radius:8px;background:linear-gradient(145deg,#403849,#293640);color:#e4dbc8}.depths-panel .eyebrow,.depths-spoils b{font-size:8px;letter-spacing:1.3px;color:#d7c29c}.depths-panel h3{margin:5px 0 9px;font-size:17px;color:#f0dfbf}.depths-panel p{font-size:11px;line-height:1.55;color:#d0d6cf;margin:6px 0 10px}.depths-panel>small{display:block;font-size:10px;line-height:1.55;color:#bbc4bd;margin-top:9px}.depths-spoils{padding:9px 10px;border:1px solid #9a927a75;border-radius:6px;background:#292e37}.depths-spoils p{margin:4px 0 0;color:#f0d5a3}.depths-actions{display:grid;gap:6px}.depths-panel button{padding:8px 10px;text-align:center;background:#d7ba82;color:#302d32;border-color:#e7cc9b;font-size:11px;font-weight:700}.depths-panel #depthsNext{background:#57495c;color:#f2dfc1;border-color:#ac939d}.depths-panel button:disabled{opacity:.55}.depths-panel #enterDepths{width:100%}
 .field-card .cross-creek{width:100%;min-height:44px;margin-top:3px;padding:9px 12px;background:#e1c58e;color:#273a3a;border-color:#f3dbad;font-size:13px;font-weight:750}.field-card .cross-creek:hover{background:#f0d8a5}.field-card .cross-creek:focus-visible{outline:2px solid #f8dea4;outline-offset:3px}
 .lobby-destinations{display:grid;gap:inherit}.lobby-intro #lobbyFirstVisit{color:#dce2ca}
+/* Grand Lobby: midnight stone and brass */
+.hub .play,.hub .side{border-color:#455572;background:#121e33;box-shadow:0 15px 32px #070f244f}
+.hub .scene{background:radial-gradient(ellipse at 52% 40%,#263c67,#101b33 71%,#0d172b)}
+.hub .play-head{background:linear-gradient(90deg,#172742,#1a263c);border-color:#455572;color:#f2deb3}
+.hub .toolbar{background:linear-gradient(180deg,#14213b,#101a2d);border-color:#3d4c66}
+.hub .toolbar button{color:#d9dfed}
+.hub .toolbar .tool.active{background:#44392e;border-color:#ab8553;color:#ffe5a4}
+.hub .lobby-directory{background:radial-gradient(ellipse at 5% 0,#293650,#151f34 73%)}
+.hub .lobby-directory h3{color:#f4e3bd}
+.hub .lobby-intro .eyebrow,.hub .directory-caption{color:#c9ae80}
+.hub .lobby-warden{background:linear-gradient(120deg,#4b3b34,#293247);border-color:#ad8b5e}
+.hub .lobby-warden:hover{background:linear-gradient(120deg,#594632,#354258);border-color:#e4bb80}
+.hub .lobby-warden b{color:#f3dfb9}
+.hub .lobby-directory .destination{background:#202e48;border-color:#52638078}
+.hub .lobby-directory .destination:hover{background:#2f4363;border-color:#9c885f}
+.hub .lobby-directory .destination b{color:#e8e7ed}
+.hub .lobby-directory .destination small{color:#afbdcd}
+.hub .lobby-outside{background:linear-gradient(110deg,#4b3b31,#373744);border-color:#a28153}
+.hub .world-label{color:#ffedc9;background:#111a2cee;border-color:#9c8059;box-shadow:0 2px 0 #0b1322aa}
+.hub .world-label-door{color:#f5ebd7;border-color:#a38a68}
+.hub .world-label-door:hover,.hub .world-label-npc:hover{background:#394258;color:#fff0cd;border-color:#ebbf7e}
+.hub .world-label-sign small{color:#f5d69b}
+.hub .world-label-npc{color:#ffe2a2;border-color:#bd9b64}
+@media(max-width:480px){.hub .world-label{padding:4px 5px}.hub .toolbar .tool{color:#e1e3eb}}
