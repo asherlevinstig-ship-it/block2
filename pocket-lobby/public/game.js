@@ -114,19 +114,22 @@ function startBoarEncounter(){
   if(health<=0){note('Return to the Tower and rest to restore your hearts.');return;}
   if(Date.now()<hunting.respawnAt){note('The clearing is quiet. Another boar will arrive shortly.');return;}
   stopForCombat();
-  hunting.encounter={health:boarRules.health,nextActionAt:0};
+  hunting.encounter=createHunt(Date.now());
   setPlayerCombat(true);
-  combatMessage='The boar lowers its tusks. Choose Attack or Flee.';
+  combatMessage='You engage the boar. Both fighters attack automatically. Flee if your hearts run low.';
   updateCombatPanel();savePlayerState();
-  note('Wild Boar encountered! Attack or Flee in the hunting panel.');
+  note('Combat is live! You and the boar attack continuously. Use Flee to escape.');
 }
 function combatAction(action){
-  if(!player.inCombat||currentRoom!=='clearing')return;
-  const result=huntingTurn(hunting.encounter,health,playerStats,action,Date.now());
+  if(!player.inCombat||currentRoom!=='clearing'||action!=='flee')return;
+  applyCombatResult(huntingTurn(hunting.encounter,health,playerStats,'flee',Date.now()));
+}
+function applyCombatResult(result){
   if(!result)return;
+  const action=result.action;
   hunting.encounter=result.encounter;health=result.health;
   combatFeedback={started:performance.now(),damage:result.damage,taken:result.taken,dodged:result.dodged};
-  combatMessage=(result.damage?'You hit for '+result.damage+'. ':action==='flee'&&result.outcome!=='escaped'?'Your escape was blocked. ':'')+(result.dodged?'You dodge the counterattack.':result.taken?'The boar hits for '+result.taken+'.':'');
+  combatMessage=(result.damage?'You hit for '+result.damage+'. ':action==='flee'&&result.outcome!=='escaped'?'Your escape was blocked. ':'')+(result.dodged?'You dodge the boar’s attack.':result.taken?'The boar hits for '+result.taken+'.':'');
   if(result.taken){
     $('healthHud').classList.remove('injured');void $('healthHud').offsetWidth;$('healthHud').classList.add('injured');
   }
@@ -166,12 +169,12 @@ function updateCombatPanel(){
   notice.hidden=!hunting.recoveryUntil;
   if(hunting.recoveryUntil)notice.textContent='Recovering at the Tower · '+Math.max(0,Math.ceil((hunting.recoveryUntil-now)/1000))+'s · Five hearts restored after rest';
   if(currentRoom!=='clearing')return;
-  const remaining=Math.max(0,(encounter?.nextActionAt??0)-now);
+  const remaining=Math.max(0,(encounter?.nextFleeAt??0)-now);
   $('boarHealth').textContent=encounter?encounter.health+' / '+boarRules.health+' HP':now<hunting.respawnAt?'Boar returns in '+Math.ceil((hunting.respawnAt-now)/1000)+'s':boarRules.health+' / '+boarRules.health+' HP';
   $('boarProgress').value=encounter?.health??(now<hunting.respawnAt?0:boarRules.health);
-  $('combatAttack').disabled=!encounter||remaining>0;
+  $('combatAttack').textContent=encounter?'Auto-attacking':'Auto-attack';
   $('combatFlee').disabled=!encounter||remaining>0;
-  $('combatCooldown').textContent=remaining?'Ready in '+(remaining/1000).toFixed(1)+'s':encounter?'Ready · Space: Attack · F: Flee':'Click the boar or choose Approach boar to begin.';
+  $('combatCooldown').textContent=encounter?'Next strike '+Math.max(0,(encounter.nextPlayerAt-now)/1000).toFixed(1)+'s · Boar '+Math.max(0,(encounter.nextBoarAt-now)/1000).toFixed(1)+'s'+(remaining?' · Flee '+(remaining/1000).toFixed(1)+'s':' · F: Flee'):'Click the boar to engage. Combat runs in real time.';
   $('combatLog').textContent=combatMessage||'The boar watches the trail. It will not attack until you approach.';
   const attributes=huntingAttributes(playerStats);
   $('combatGuide').textContent='Attack '+attributes.damage+'–'+(attributes.damage+4)+' · Dodge '+Math.round(attributes.dodge*100)+'% · Escape '+Math.round(attributes.escape*100)+'% · Armor '+attributes.armor;
@@ -180,6 +183,7 @@ function updateCombatPanel(){
   $('adventureLandmark').disabled=health<=0||unavailable();
 }
 function updateCombatMoment(time){
+  if(player.inCombat&&currentRoom==='clearing')applyCombatResult(advanceHunt(hunting.encounter,health,playerStats,Date.now()));
   if(hunting.recoveryUntil&&Date.now()>=hunting.recoveryUntil){
     hunting.recoveryUntil=0;health=100;
     combatMessage='All five hearts restored. You are ready to explore again.';
@@ -659,7 +663,7 @@ function object(item,highlight=false,time=0) {
   const [w,d]=dimensions(item);
   if(highlight)surface(x,y,w,d,1,'#f9c48968','#ffd18a');
   if(Object.hasOwn(moonwood.heights,type)){
-    moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,progress:adventure});
+    moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,progress:adventure,combat:player.inCombat?hunting.encounter:null});
     return;
   }
   if(type!=='bar'&&type!=='shelf')surface(x+.04,y+.08,w-.04,d-.03,.3,'#4931434a');
@@ -1171,7 +1175,7 @@ function setHint(){
 }
 function startPosition(){return step?.to??{x:player.cx,y:player.cy};}
 function walkTo(tile){
-  if(unavailable()){note(player.inCombat?"Choose Attack or Flee before moving.":"Rest until your hearts recover.");return;}
+  if(unavailable()){note(player.inCombat?"Combat is live. Use Flee to escape.":"Rest until your hearts recover.");return;}
   if(blocked(tile.x,tile.y)){note('That tile is occupied.');return;}
   const path=findPath(startPosition(),tile);
   if(!path){note('There’s no clear path to that tile.');return;}
@@ -1807,7 +1811,6 @@ $('adventureLandmark').onclick=()=>{
   const landmark=roomFurniture().find(item=>item.id==='landmark');
   if(landmark)use(landmark);
 };
-$('combatAttack').onclick=()=>combatAction('attack');
 $('combatFlee').onclick=()=>combatAction('flee');
 $('restAtTower').onclick=restAtTower;
 $('reception').onclick=()=>use(hubFurniture[0]);
@@ -1863,7 +1866,7 @@ canvas.addEventListener('keydown',e=>{
   }
   const delta=arrows[e.key];
   if(player.inCombat&&['Space','KeyF'].includes(e.code)){
-    e.preventDefault();if(!e.repeat)combatAction(e.code==='KeyF'?'flee':'attack');return;
+    e.preventDefault();if(!e.repeat&&e.code==='KeyF')combatAction('flee');return;
   }
   if(!editing&&e.code==='Space'){
     e.preventDefault();
@@ -1891,6 +1894,9 @@ $('plus').onclick=()=>setZoom(zoom+.125);
 $('minus').onclick=()=>setZoom(zoom-.125);
 $('resetView').onclick=()=>setZoom(1);
 window.addEventListener('resize',()=>{bounds=null;});
+document.addEventListener('visibilitychange',()=>{
+  if(!document.hidden&&player.inCombat)hunting.encounter=resumeHunt(hunting.encounter,Date.now());
+});
 function showMessage(msg){
   const row=document.createElement('div');row.className='message';
   const icon=document.createElement('div');icon.className='bot';icon.textContent='☺';
@@ -2035,7 +2041,8 @@ movePlayerToSpawn();updateName();switchMode(false);
 if(savedPlayerState?.location&&roomDetails[savedPlayerState.location])enterRoom(savedPlayerState.location,savedPlayerState.position);
 if(hunting.encounter){
   if(currentRoom==='clearing'){
-    setPlayerCombat(true);combatMessage='Your encounter resumes. Choose Attack or Flee.';
+    hunting.encounter=resumeHunt(hunting.encounter,Date.now());
+    setPlayerCombat(true);combatMessage='Combat resumes! Both fighters attack automatically. Flee if you need to escape.';
   }else hunting.encounter=null;
 }
 if(hunting.recoveryUntil&&!['hub','home'].includes(currentRoom))enterRoom('hub');

@@ -144,7 +144,7 @@ const moonwood=(()=>{
     }
   }
 
-  function drawProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,progress}){
+  function drawProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,progress,combat}){
     const {x,y,type}=item;
     const [px,py]=point(x+.5,y+.5);
     const part=(u,v,w,d,z,h,c)=>block(x+u,y+v,w,d,z,h,c);
@@ -152,6 +152,8 @@ const moonwood=(()=>{
     const aqua=['#91bdbb','#3e6271','#568b93'];
     surface(x+.08,y+.1,.86,.82,.14,'#16293776');
     if(type==='wildboar'){
+      const untilStrike=combat?combat.nextBoarAt-Date.now():Infinity;
+      if(untilStrike>=0&&untilStrike<450)surface(x-.08,y-.08,1.16,1.16,.4,'#f2a36b66','#ffc18b');
       const bob=reduced?0:Math.sin(time/380)*.6;
       part(.21,.26,.14,.16,0,6,['#795d58','#3d3543','#56434b']);
       part(.65,.59,.14,.16,0,6,['#795d58','#3d3543','#56434b']);
