@@ -1980,7 +1980,7 @@ function drawHudMiniMap(){
   const key=[currentRoom,player.cx,player.cy,doors.map(door=>door.to).join(','),lobbyRoutesOpen()].join('|');
   if(key===hudMapKey)return;
   hudMapKey=key;
-  $('hudHome').hidden=currentRoom==='hub'&&!lobbyRoutesOpen();
+  $('railHome').hidden=$('hudHome').hidden=currentRoom==='hub'&&!lobbyRoutesOpen();
   $('hudShops').hidden=!lobbyRoutesOpen();
   for(const [id,room] of [['hudHome','home'],['hudLobby','hub']]){
     const button=$(id);
@@ -2572,6 +2572,7 @@ function switchMode(next){
   $('roomLayout').classList.toggle('shopping',['store','armory'].includes(currentRoom));
   $('questTracker').hidden=currentRoom==='hub';
   $('roomSide').hidden=(atHome()&&!editing)||currentRoom==='outside';
+  $('hudHomeDecor').hidden=!atHome()||editing;
   $('chatPanel').hidden=editing||currentRoom!=='lounge';
   if(currentRoom==='lounge'){
     for(const button of $('gamingGuide').querySelectorAll('[data-game-table]')){
@@ -2874,6 +2875,12 @@ $('hudLobby').onclick=()=>navigateHud('hub');
 $('hudMap').onclick=()=>showHudMap();
 $('hudMapPreview').onclick=()=>showHudMap();
 $('hudShops').onclick=()=>showHudMap('shops');
+$('railHome').onclick=()=>navigateHud('home');
+$('railInventory').onclick=()=>$('inventory').onclick();
+$('railWardrobe').onclick=()=>$('looks').onclick();
+$('railDecorate').onclick=()=>$('edit').onclick();
+$('hudHomeDecor').onclick=()=>$('edit').onclick();
+$('hudChatPrompt').onclick=()=>$('openRoomChat').onclick();
 $('questAction').onclick=questAction;
 $('visitWarden').onclick=()=>use(hubFurniture.find(item=>item.type==='warden'));
 $('restAtTower').onclick=restAtTower;
@@ -3149,7 +3156,7 @@ function enterRoom(next,arrival){
   $('returnLobby').hidden=!['lounge','outside','store','market','armory'].includes(next);
   $('enterMoonwood').hidden=next!=='outside';
   $('fishingSound').hidden=next!=='pond';
-  $('edit').hidden=!canDecorate();
+  $('railDecorate').hidden=$('edit').hidden=!canDecorate();
   $('bubble').hidden=true;
   updateRoomLabel();
   document.title='Tower of Beginnings • '+name;
