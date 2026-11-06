@@ -19,3 +19,7 @@ Use Node 22.17+ for tests (the database tests use `node:sqlite`). Run all `tests
 Before the first account-enabled deployment, apply the additive D1 migrations using Wrangler with `--config pocket-lobby/wrangler.toml` from the repository root. Use `--local` for a separate development database and `--remote` for production. Deploy the same config; its SQLite Durable Object migration creates the social-room namespace. Do not remove the D1 or Durable Object bindings on later releases.
 
 The current config enables `nodejs_compat` for native password hashing. Test this on the target Workers runtime before changing the password format or compatibility flags. Do not lower password hashing work factors to work around runtime limits.
+
+## Tower job board
+
+The lobby directory and the reception's Job board sign open a unified shift planner. Players choose fishing or woodcutting and 1, 2, 4 or 8 hours. The preview uses the same rod pacing and timber interval as settlement, caps fishing by bait and timber by inventory space, and labels sale values separately from gold earned. Fishing requires a prior visit to the pond; woodcutting requires the woodcutter's axe. Dispatch is validated from `hub` on the server, moves the saved character to its work area, and uses the existing one-plan-at-a-time revision/idempotency checks. Field-started plans remain available. Return reports show elapsed time, supplies, XP, level changes and sale value; the report must be acknowledged before play resumes.

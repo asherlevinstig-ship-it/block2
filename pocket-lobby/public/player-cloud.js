@@ -110,6 +110,12 @@
     document.getElementById('offlineReason').textContent=wood
       ?(running?'Basic Axe · One timber per minute · Ends '+new Date(plan.endAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):(reason[plan.reason]??'Shift finished')+' · Woodcutting '+plan.levelBefore+' → '+plan.levelAfter)
       :running?'Rod: '+fishingCatalog.rods[plan.rod].name+' · Up to '+plan.baitLimit+' bait · Ends '+new Date(plan.endAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):(reason[plan.reason]??'Plan finished')+' · Patience '+plan.patienceBefore+' → '+plan.patienceAfter;
+    const expectedEnd=wood?plan.endAt:Math.min(plan.endAt,plan.startedAt+plan.baitLimit*plan.interval);
+    const progress=document.getElementById('offlineProgress');progress.value=running?Math.max(0,Math.min(100,(Date.now()-plan.startedAt)/Math.max(1,expectedEnd-plan.startedAt)*100)):100;
+    const elapsed=Math.max(0,(Math.min(Date.now(),plan.endedAt??Date.now())-plan.startedAt)/60000);
+    document.getElementById('offlineDuration').textContent=(running?'Time worked: ':'Shift completed: ')+Math.floor(elapsed/60)+'h '+Math.floor(elapsed%60)+'m'+(running?' · Ends '+new Date(plan.endAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'');
+    const saleValue=wood?(plan.timber??0)*4:Object.entries(plan.catches??{}).reduce((sum,[id,count])=>sum+(fishProducts[id]?.price??0)*count,0);
+    document.getElementById('offlineValue').textContent='Supplies in Inventory · '+saleValue+' gold if sold at the Trading Post. No gold has been added yet.';
     const button=document.getElementById('offlineContinue');
     button.textContent=running?'Stop work and return home':'Return to game';
     button.onclick=async()=>{
@@ -212,11 +218,12 @@
       const shopUI=await import('./shop-ui.js');
       const woodRules=await import('./woodcutting.js');
       const crafting=await import('./crafting.js');
+      const jobs=await import('./jobs.js');
       const shared=await import('./shared-world.js');
       const multiplayer=await import('./multiplayer.js');
-      Object.assign(window,rules,hunting,art,fx,quests,historyRules,shopUI,woodRules,crafting,shared,multiplayer);
+      Object.assign(window,rules,hunting,art,fx,quests,historyRules,shopUI,woodRules,crafting,jobs,shared,multiplayer);
       window.towerInitialState=packet.state;
-      window.playerCloud={enqueue,flush,attach,invalidate:conflict,get initial(){return packet.state;}};
+      window.playerCloud={enqueue,flush,attach,startJob:async options=>{await flush();await action('plan/start',{...options,source:'board'});window.towerMultiplayer?.disconnect();location.reload();},invalidate:conflict,get initial(){return packet.state;}};
       const script=document.createElement('script');script.src='game.js';
       script.onload=()=>{
         if(!(pending||retryJob||sending))setStatus('Server saved');

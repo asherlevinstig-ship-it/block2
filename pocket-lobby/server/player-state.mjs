@@ -1,3 +1,4 @@
+import {jobPreview} from '../public/jobs.js';
 import { normalizeWoodcutting } from "../public/woodcutting.js";
 import { startWoodcuttingPlan,settleWoodcuttingPlan } from "./woodcutting-plan.mjs";
 import { normalizeHistory } from "../public/first-visit.js";
@@ -64,12 +65,18 @@ export function normalizeState(input={}){
   if(input.loungeLayout==="gaming")state.loungeLayout="gaming";
   return state;
 }
-export function startPlan(state,{hours,baitLimit,kind},now){
-  if(kind==='woodcutting')return startWoodcuttingPlan(state,{hours},now);
+export function startPlan(state,{hours,baitLimit,kind,source},now){
+  if(kind!==undefined&&!['fishing','woodcutting'].includes(kind))throw new Error("Unknown job.");
+  if(source==='board'){
+    if(state.location!=='hub')throw new Error("Travel to the Tower job board first.");
+    const preview=jobPreview(state,kind??'fishing',hours,baitLimit);
+    if(!preview.allowed)throw new Error("Invalid job: "+preview.reason);
+  }
+  if(kind==='woodcutting')return startWoodcuttingPlan(state,{hours,fromBoard:source==='board'},now);
   if(state.hunting?.encounter||state.hunting?.recoveryUntil||state.health===0)throw new Error("Invalid fishing plan while fighting or recovering.");
   if(state.plan)throw new Error("A fishing plan is already running.");
   if(state.report)throw new Error("Read your previous fishing report first.");
-  if(state.location!=="pond")throw new Error("Travel to Silverfin Pond to start this plan.");
+  if(state.location!=="pond"&&source!=='board')throw new Error("Travel to Silverfin Pond to start this plan.");
   if(![1,2,4,8].includes(hours))throw new Error("Choose one, two, four, or eight hours.");
   if(!Number.isInteger(baitLimit)||baitLimit<1||baitLimit>state.fishingGear.bait||baitLimit>1000)throw new Error("Choose a bait limit within your inventory, up to 1,000.");
   const rod=fishingCatalog.rods[state.fishingGear.equippedRod];

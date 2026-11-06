@@ -1271,6 +1271,7 @@ function updateWorldLabels(){
   }
   if(currentRoom==='home')add('Your Home',...point(5,0,43),'sign',null,avatar.name);
   if(currentRoom==='hub'){
+    add('Job board',...point(4.5,2,39),'npc',openJobBoard);
     add('TOWER OF',...point(0,2.7,51),'sign',null,'BEGINNINGS');
     const symbol=questStage(quest)===0?'! ':questStage(quest)===4?'? ':'';
     add(symbol+'Tower Warden',...point(10.5,3.5,43),'npc',()=>use(hubFurniture.find(item=>item.type==='warden')));
@@ -1664,7 +1665,7 @@ function finishInteraction(){
   }else if(['tackleCounter','rodRack','baitCrates'].includes(item.type)){
     note('Welcome to Silverfin Outfitters. Choose supplies from the shop panel.');
   }else if(item.type==='reception'){
-    $('receptionMessage').textContent='Good evening, '+avatar.name+'! Your room is through the Home door. The front steps lead to the courtyard.';
+    $('receptionMessage').textContent='Welcome, '+avatar.name+'! Choose a shift at the job board, then return home with your earnings.';openJobBoard();
     note('The concierge welcomes you to Tower of Beginnings.');
   }else if(['sofa','chair','stool','woodStool','bench'].includes(item.type)){
     player.seat=item;player.back=item.rot>=2;player.direction=item.rot%2?'right':'left';
@@ -2218,6 +2219,44 @@ $('questJournal').onclick=openQuest;
 $('questAction').onclick=questAction;
 $('visitWarden').onclick=()=>use(hubFurniture.find(item=>item.type==='warden'));
 $('restAtTower').onclick=restAtTower;
+
+let selectedJob='fishing',startingJob=false;
+function jobState(){return {location:currentRoom,health,hunting,woodcutting,fishingGear,stats:playerStats,adventure,history,...(window.playerCloud?.initial?.plan?{plan:window.playerCloud.initial.plan}:{}),...(window.playerCloud?.initial?.report?{report:window.playerCloud.initial.report}:{})};}
+function updateJobBoard(){
+  for(const id of ['jobFishing','jobWoodcutting','jobHours','jobBait'])$(id).disabled=startingJob;
+  $('jobBoardDialog').querySelector('.close').disabled=startingJob;
+  const wood=selectedJob==='woodcutting',hours=Number($('jobHours').value)||1,bait=Number($('jobBait').value);
+  const preview=jobPreview(jobState(),selectedJob,hours,bait);
+  $('jobFishing').setAttribute('aria-pressed',String(!wood));$('jobWoodcutting').setAttribute('aria-pressed',String(wood));
+  $('jobBaitField').hidden=wood;$('jobBait').max=Math.min(1000,fishingGear.bait);
+  $('jobEstimate').textContent=preview.count.toLocaleString()+(wood?' timber':' fish');
+  $('jobExperience').textContent='+'+preview.xp.toLocaleString()+' '+preview.skill+' XP';
+  $('jobTool').textContent=preview.tool+' · '+Math.round(preview.interval/1000)+' seconds per '+(wood?'timber':'catch');
+  const minutes=Math.ceil(preview.duration/60000);
+  $('jobValue').textContent='Sale value: '+preview.valueMin.toLocaleString()+(wood?'':'–'+preview.valueMax.toLocaleString())+' gold · About '+minutes+' minutes of work. '+(!wood?'Ends early when the bait limit is reached.':'');
+  $('jobRequirement').textContent=preview.reason||(wood?'Ready · Equipped axe · No supplies consumed':'Ready · Equipped rod · Uses up to '+preview.count+' bait');
+  $('jobRequirement').className=preview.allowed?'job-ready':'job-locked';
+  $('jobStart').disabled=startingJob||!preview.allowed||currentRoom!=='hub'||!window.playerCloud;
+}
+function openJobBoard(){
+  if(currentRoom!=='hub'||unavailable())return;
+  route=[];step=null;interaction=null;target=null;player.x=player.cx;player.y=player.cy;
+  $('jobBait').value=Math.min(10,fishingGear.bait);$('jobError').textContent='';updateJobBoard();$('jobBoardDialog').showModal();
+}
+$('openJobBoard').onclick=openJobBoard;
+$('jobBoardDialog').oncancel=event=>{if(startingJob)event.preventDefault();};
+$('jobFishing').onclick=()=>{selectedJob='fishing';updateJobBoard();};
+$('jobWoodcutting').onclick=()=>{selectedJob='woodcutting';updateJobBoard();};
+$('jobHours').onchange=updateJobBoard;$('jobBait').oninput=updateJobBoard;
+$('jobStart').onclick=async()=>{
+  if(startingJob||currentRoom!=='hub')return;
+  const options={kind:selectedJob,hours:Number($('jobHours').value),baitLimit:Number($('jobBait').value)};
+  if(!jobPreview(jobState(),options.kind,options.hours,options.baitLimit).allowed)return;
+  startingJob=true;updateJobBoard();$('jobError').textContent='Preparing your shift…';
+  try{window.towerPauseForAccount();savePlayerState();await window.playerCloud.startJob(options);}
+  catch(error){$('jobError').textContent=error.message;startingJob=false;updateJobBoard();}
+};
+
 $('reception').onclick=()=>use(hubFurniture[0]);
 for(const button of $('gamingGuide').querySelectorAll('[data-game-table]')){
   button.onclick=()=>{
