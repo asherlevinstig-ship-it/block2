@@ -204,7 +204,8 @@
       const historyRules=await import('./first-visit.js');
       const shopUI=await import('./shop-ui.js');
       const woodRules=await import('./woodcutting.js');
-      Object.assign(window,rules,hunting,art,fx,quests,historyRules,shopUI,woodRules);
+      const crafting=await import('./crafting.js');
+      Object.assign(window,rules,hunting,art,fx,quests,historyRules,shopUI,woodRules,crafting);
       window.towerInitialState=packet.state;
       window.playerCloud={enqueue,flush,attach,get initial(){return packet.state;}};
       const script=document.createElement('script');script.src='game.js';
