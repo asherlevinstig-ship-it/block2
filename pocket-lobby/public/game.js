@@ -381,18 +381,18 @@ function updateQuestUI(){
   $('openJobBoard').hidden=!routesOpen;
   $('reception').hidden=!routesOpen;
   const objectives=[
-    'Speak to the Tower Warden in the Grand Lobby to begin.',
+    'Your aim: earn as much gold as possible. Visit the Tower Warden in the Grand Lobby to get started.',
     'Catch fish at Silverfin Pond · '+quest.fish+' / 3 · Moonwood → Glass Creek → Pond',
     'Defeat a Wild Boar · '+quest.boars+' / 1 · Lantern Trail → Bramble Clearing',
     'Sell fish or Boar Meat at the Trading Post in the Tower.',
     'Your tasks are complete. Return to the Tower Warden in the Grand Lobby.',
-    'First Steps complete · Warden’s Blade earned. Keep exploring Moonwood.'
+    'Keep growing your gold: sell fish, timber and hunting spoils at the Trading Post.'
   ];
   $('questTrackerTitle').textContent=stage===5?'First Steps · Complete':'First Steps';
   $('questTrackerText').textContent=objectives[stage];
   $('wardenDirectoryStatus').textContent=stage===0?'First Steps · Quest available':stage===4?'First Steps · Claim your reward':stage===5?'First Steps · Completed':'First Steps · Quest in progress';
   $('wardenMessage').textContent=[
-    'Welcome, adventurer. Learn to provide for yourself, stand against Moonwood’s beasts, and trade with our people. Complete these tasks in order and I will reward you with gold and my blade.',
+    'Welcome, adventurer! Your aim is to earn as much gold as possible. Catch fish, chop trees and hunt monsters, then sell what you gather at the Trading Post. Spend wisely on better gear to earn more. Start with these tasks and I will reward you with 75 gold and my blade.',
     'Start at Silverfin Pond. Catch three fish of any quality. Your offline fishing plan counts too.',
     'Now test your courage against a Wild Boar in Bramble Clearing. Equip your sword, and return to the Tower to rest if you are wounded.',
     'Take your spoils to the Moonwood Trading Post. Sell at least one fish or piece of Boar Meat there.',
@@ -747,7 +747,7 @@ const moonwoodEntrance={to:'trail',side:'front',tile:{x:6,y:11},arrival:{x:1,y:5
 const storeExit={to:'hub',side:'left',tile:{x:0,y:5},start:4.6,end:6.4,height:49,label:'LOBBY'};
 const roomDoors={home:[homeExit],hub:hubDoors,lounge:[],store:[storeExit],market:[storeExit],armory:[{...storeExit,arrival:{x:3,y:1}}],outside:[towerEntrance,moonwoodEntrance],...moonwood.doors};
 const roomDetails={
-  home:{number:'00',name:'Entry Room',description:'Walk through the exit to reach the Grand Lobby.',badge:'ROOM NO. 00',floor:'Private room'},
+  home:{number:'00',name:'Entry Room',description:'Your aim: earn as much gold as possible. Use the exit and meet the Tower Warden to get started.',badge:'ROOM NO. 00',floor:'Private room'},
   hub:{number:'01',name:'The Grand Lobby',description:'Visit the Warden, browse the shops, or head outside into Moonwood.',badge:'MAIN HUB',floor:'Ground floor'},
   lounge:{number:'02',name:'The Sunset Lounge',description:'Find blackjack and roulette on the gaming floor, or take a seat by the bar.',badge:'GAMING LOUNGE',floor:'Ground floor'},
   store:{number:'11',name:'Silverfin Outfitters',description:'Stock up on bait, find a better rod, and sell your catch.',badge:'FISHING STORE',floor:'Tower shops'},
