@@ -1678,11 +1678,22 @@ function drawMoonwoodDetails(time){
     rect(px-width/2,py-23,width,1,'#85b4b3');
   }
 }
+const explorationRegions={
+  'The Tower':['home','hub','outside','lounge','market','armory','store'],
+  Moonwood:['trail','logging','clearing','grove','shrine','creek','pond','ruins','roots']
+};
+let trackedDestination=null;
+function explorationName(room){
+  return {home:'Your Home',hub:'Grand Lobby',market:'Trading Post',store:'Silverfin Outfitters',outside:'Tower Courtyard'}[room]??roomDetails[room].name;
+}
+function nextExplorationDoor(){
+  return trackedDestination&&!depthsRun?hudNextDoor(trackedDestination):null;
+}
 let worldLabelKey='';
 function updateWorldLabels(){
   const p=canvasBounds(),doors=roomDoors[currentRoom].filter(door=>doorAvailable(door));
   const stump=currentRoom==='logging'&&!!treeState(timberTree()).regrowsAt;
-  const key=[currentRoom,stump,doors.map(door=>door.to).join(','),avatar.name,questStage(quest),depthsDiscovered,player.inCombat,firstUpgrade.choice,firstUpgrade.complete,firstUpgrade.oakTrialPending,firstUpgrade.unlocked,firstUpgradeDestination()?.to,tradingPostGuideComplete,bedLessonComplete,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
+  const key=[currentRoom,stump,doors.map(door=>door.to).join(','),avatar.name,questStage(quest),depthsDiscovered,player.inCombat,firstUpgrade.choice,firstUpgrade.complete,firstUpgrade.oakTrialPending,firstUpgrade.unlocked,firstUpgradeDestination()?.to,tradingPostGuideComplete,bedLessonComplete,trackedDestination,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
   if(key===worldLabelKey)return;
   worldLabelKey=key;
   const container=$('worldLabels');container.replaceChildren();container.dataset.room=currentRoom;
@@ -1692,7 +1703,7 @@ function updateWorldLabels(){
     const title=document.createElement('span');title.textContent=text;label.append(title);
     if(subtitle){const detail=document.createElement('small');detail.textContent=subtitle;label.append(detail);}
     label.title=text+(subtitle?' · '+subtitle:'');
-    if(kind==='door'&&text===(tradingGuideActive()?tradingGuideDestination():firstUpgradeDestination())?.label)label.dataset.guided='true';
+
     container.append(label);
     const centerX=view.width/2,centerY=view.height/2-4;
     const screenX=p.x+((x-centerX)*zoom+centerX)*p.scale,screenY=p.y+((y-centerY)*zoom+centerY)*p.scale;
@@ -1718,14 +1729,17 @@ function updateWorldLabels(){
     const availableWidth=canvas.clientWidth||view.width*p.scale,availableHeight=canvas.clientHeight||view.height*p.scale;
     label.style.left=Math.round(Math.max(5,Math.min(availableWidth-width-5,screenX-width/2)))+'px';
     label.style.top=Math.round(Math.max(5,Math.min(availableHeight-height-5,screenY-height/2)))+'px';
+    return label;
   };
+  const guidedDoor=nextExplorationDoor()??(tradingGuideActive()?tradingGuideDestination():firstUpgradeDestination());
   for(const door of doors){
     let anchor;
     if(door.side==='wild'){anchor=point(door.tile.x+.5,door.tile.y+.5,18);}
     else if(door.side==='front'){anchor=point((door.start+door.end)/2,view.rows-.45,12);}
     else anchor=door.side==='right'?point((door.start+door.end)/2,0,door.height+9):point(0,(door.start+door.end)/2,door.height+9);
-    const label=currentRoom==='creek'&&door.to==='ruins'?'Cross to the Ruins':door.label;
-    add(label,...anchor,'door',()=>travelDoor(door),'',currentRoom!=='home'&&['left','right'].includes(door.side)?{side:door.side,width:(door.end-door.start+.08)*18,font:5.6}:null);
+    const label=currentRoom==='creek'&&door.to==='ruins'?'Cross to the Ruins':door.side==='wild'?explorationName(door.to):door.label;
+    const sign=add(label,...anchor,'door',()=>travelDoor(door),'',currentRoom!=='home'&&['left','right'].includes(door.side)?{side:door.side,width:(door.end-door.start+.08)*18,font:5.6}:null);
+    if(door.to===guidedDoor?.to)sign.dataset.guided='true';
   }
   if(currentRoom==='home')add('YOUR HOME',...point(5,0,44),'sign',null,avatar.name);
   if(currentRoom==='hub'){
@@ -2161,7 +2175,8 @@ function updateTradeGuide(){
 }
 function drawTradingGuide(time){
   if(editing||unavailable())return;
-  const destination=tradingGuideActive()?tradingGuideDestination():firstUpgradeDestination();if(!destination?.tile)return;
+  const destination=nextExplorationDoor()??(tradingGuideActive()?tradingGuideDestination():firstUpgradeDestination());
+  if(!destination?.tile)return;
   // Before crossing, guide players to the near bank. The crossing action opens the stones.
   const goal=currentRoom==='creek'&&destination.to==='ruins'&&!adventure.bridge?{x:4,y:4}:destination.tile;
   const start=startPosition();
@@ -2177,18 +2192,45 @@ function drawTradingGuide(time){
   const pulse=reducedMotion.matches?1:.65+Math.sin(time/450)*.22;
   ctx.save();ctx.globalAlpha=pulse;surface(goal.x+.06,goal.y+.06,.88,.88,.8,'#ffd78b22','#f8d58b');ctx.restore();
 }
-function hudNextDoor(destination){
-  const visited=new Set([currentRoom]),queue=[{room:currentRoom,first:null}];
-  for(const {room,first} of queue){
+function hudRoute(destination){
+  if(depthsRun||currentRoom===destination)return [];
+  const visited=new Set([currentRoom]);
+  const queue=[{room:currentRoom,path:[]}];
+  for(const {room,path} of queue){
     for(const door of hudRoomExits(room)){
       if(visited.has(door.to))continue;
-      const next=first??door;
+      const next=[...path,door];
       if(door.to===destination)return next;
       visited.add(door.to);
-      queue.push({room:door.to,first:next});
+      queue.push({room:door.to,path:next});
     }
   }
-  return null;
+  return [];
+}
+function hudNextDoor(destination){return hudRoute(destination)[0]??null;}
+function updateExplorationNav(){
+  const next=nextExplorationDoor();
+  const outside=explorationRegions.Moonwood.includes(currentRoom)||currentRoom==='outside';
+  const nav=$('explorationNav');
+  nav.hidden=!!depthsRun||(!outside&&!trackedDestination);
+  if(nav.hidden)return;
+  $('explorationRegion').textContent=explorationRegions.Moonwood.includes(currentRoom)?'MOONWOOD':'THE TOWER';
+  $('explorationPlace').textContent=explorationName(currentRoom);
+  let guidance='Choose a destination on the map';
+  if(next)guidance='Next: '+explorationName(next.to)+' · Heading to '+explorationName(trackedDestination);
+  else if(trackedDestination===currentRoom)guidance='Arrived at '+explorationName(currentRoom);
+  else if(trackedDestination)guidance='No open route to '+explorationName(trackedDestination)+' from here';
+  $('explorationNext').textContent=guidance;
+  $('explorationReturn').hidden=!outside||!!next||!hudNextDoor('hub');
+  $('explorationFollow').hidden=!next;
+  $('explorationFollow').textContent=next?'Walk to '+explorationName(next.to):'';
+  $('explorationClear').hidden=!trackedDestination;
+}
+function setExplorationDestination(destination){
+  if(destination&&!hudRoute(destination).length)return;
+  trackedDestination=destination;
+  worldLabelKey='';
+  updateExplorationNav();
 }
 function followHudDoor(door){
   if(unavailable()){note('Finish combat or rest before travelling.');return;}
@@ -2202,10 +2244,17 @@ function navigateHud(destination){
   if(next?.to===destination){followHudDoor(next);return;}
   showHudMap(destination);
 }
+function previewMapRoute(){
+  const destination=$('mapDestination').value;
+  const path=destination?hudRoute(destination):[];
+  $('mapTrack').disabled=!path.length;
+  $('mapJourney').textContent=path.length?[currentRoom,...path.map(door=>door.to)].map(explorationName).join(' → '):'Select a place to preview the full route.';
+  renderWorldMap(path);
+}
 function showHudMap(destination=null){
   const dialog=$('hudMapDialog'),routes=$('hudMapRoutes'),shops=destination==='shops';
   const next=destination&&!shops?hudNextDoor(destination):null;
-  $('hudMapTitle').textContent=shops?'Tower shops':roomDetails[currentRoom].name;
+  $('hudMapTitle').textContent=shops?'Tower shops':'World map';
   $('hudMapIntro').textContent=shops
     ?'Choose a shop to see the way there.'
     :next?'To reach '+roomDetails[destination].name+', start with '+roomDetails[next.to].name+'.'
@@ -2226,7 +2275,25 @@ function showHudMap(destination=null){
   }else if(!shops){
     for(const door of hudRoomExits(currentRoom))add(roomDetails[door.to].name,()=>followHudDoor(door),door.to===next?.to);
   }
-  renderWorldMap();
+  const picker=$('mapDestination');
+  picker.replaceChildren();
+  $('mapPlanner').hidden=shops||!!depthsRun;
+  const placeholder=document.createElement('option');
+  placeholder.value='';placeholder.textContent='Select a place';
+  picker.append(placeholder);
+  for(const [region,rooms] of Object.entries(explorationRegions)){
+    const group=document.createElement('optgroup');group.label=region;
+    for(const room of rooms){
+      if(!hudNextDoor(room))continue;
+      const option=document.createElement('option');
+      option.value=room;option.textContent=explorationName(room);
+      group.append(option);
+    }
+    if(group.children.length)picker.append(group);
+  }
+  const preferred=destination&&!shops?destination:trackedDestination;
+  picker.value=preferred&&hudNextDoor(preferred)?preferred:'';
+  previewMapRoute();
   if(!dialog.open)dialog.showModal();
 }
 let hudMapKey='';
@@ -2594,21 +2661,28 @@ function openMerchant(){
   }
 }
 
-function renderWorldMap(){
-  const positions={home:[75,65],hub:[240,110],store:[75,160],armory:[240,30],market:[400,65],lounge:[400,160],outside:[240,220],trail:[240,310],logging:[80,310],clearing:[80,405],grove:[410,310],shrine:[550,310],creek:[360,405],pond:[550,405],ruins:[360,500],depthsGate:[80,500],depthsGallery:[80,570],depthsVault:[240,570]};
+function renderWorldMap(route=[]){
+  const positions={home:[100,55],hub:[340,110],armory:[265,48],market:[465,48],lounge:[580,75],store:[118,133],
+    outside:[340,205],trail:[340,315],logging:[107,288],clearing:[109,380],grove:[563,274],shrine:[563,354],
+    creek:[338,423],pond:[138,497],ruins:[340,549],roots:[549,493],depthsGate:[340,120],depthsGallery:[340,120],depthsVault:[340,120]};
   const rooms=Object.keys(positions).filter(room=>roomDetails[room]&&(room===currentRoom||hudNextDoor(room)));
-  let links='',nodes='';const linked=new Set();
+  let links='',nodes='';
+  const linked=new Set();
+  const routeEdges=new Set(route.map((door,index)=>[index?route[index-1].to:currentRoom,door.to].sort().join('|')));
   for(const room of rooms){
     const [x,y]=positions[room];
     for(const door of hudRoomExits(room)){
       if(!rooms.includes(door.to))continue;const key=[room,door.to].sort().join('|');if(linked.has(key))continue;linked.add(key);
-      const [dx,dy]=positions[door.to];links+='<path d="M'+x+' '+y+'L'+dx+' '+dy+'"/>';
+      const [dx,dy]=positions[door.to];links+='<path class="'+(routeEdges.has(key)?'map-route-line':'')+'" d="M'+x+' '+y+'L'+dx+' '+dy+'"/>';
     }
-    const name=room==='home'?'Your Home':roomDetails[room].name.replace(/^The /,'');
+    const name=explorationName(room);
     nodes+='<g class="map-place'+(room===currentRoom?' map-current':'')+'"><circle cx="'+x+'" cy="'+y+'" r="'+(room===currentRoom?13:8)+'"/><text x="'+x+'" y="'+(y+29)+'" text-anchor="middle">'+name+'</text>'+(room===currentRoom?'<text class="map-you" x="'+x+'" y="'+(y-22)+'" text-anchor="middle">YOU ARE HERE</text>':'')+'</g>';
   }
-  const ys=rooms.map(room=>positions[room][1]),bottom=Math.max(240,...ys)+48;
-  $('worldMap').innerHTML='<svg viewBox="0 0 640 '+bottom+'" role="img" aria-label="Open routes around the Tower. You are in '+roomDetails[currentRoom].name+'."><g class="map-links">'+links+'</g>'+nodes+'</svg>';
+  const ys=rooms.map(room=>positions[room][1]),bottom=Math.max(160,...ys)+48;
+  const regions=rooms.some(room=>explorationRegions.Moonwood.includes(room))
+    ?'<path class="map-region-divider" d="M30 251H610"/><text class="map-region-text" x="30" y="241">THE TOWER</text><text class="map-region-text" x="30" y="266">MOONWOOD</text>':'';
+
+  $('worldMap').innerHTML='<svg viewBox="0 0 640 '+bottom+'" role="img" aria-label="Open routes around the Tower. You are in '+roomDetails[currentRoom].name+'.">'+regions+'<g class="map-links">'+links+'</g>'+nodes+'</svg>';
 }
 
 function updateWeaponInventory(){
@@ -3029,6 +3103,7 @@ function attuneRootstone(power){
   updateRootstoneDialog();
 }
 function updateAdventurePanel(){
+  updateExplorationNav();
   updateWoodPanel();
   updateCombatPanel();
   $('wave').disabled=editing||!!fishingSession||!!woodSession||unavailable();
@@ -3273,6 +3348,18 @@ $('questJournal').onclick=openQuest;
 $('hudQuests').onclick=openQuest;
 $('hudHome').onclick=()=>navigateHud('home');
 $('hudLobby').onclick=()=>navigateHud('hub');
+$('mapDestination').onchange=previewMapRoute;
+$('mapTrack').onclick=()=>{
+  const destination=$('mapDestination').value;
+  if(!destination||!hudRoute(destination).length)return;
+  setExplorationDestination(destination);
+  $('hudMapDialog').close();
+  canvas.focus();
+};
+$('explorationMap').onclick=()=>showHudMap();
+$('explorationReturn').onclick=()=>setExplorationDestination('hub');
+$('explorationClear').onclick=()=>setExplorationDestination(null);
+$('explorationFollow').onclick=()=>{const next=nextExplorationDoor();if(next)followHudDoor(next);};
 $('hudMap').onclick=()=>showHudMap();
 $('hudMapPreview').onclick=()=>showHudMap();
 $('hudShops').onclick=()=>showHudMap('shops');
