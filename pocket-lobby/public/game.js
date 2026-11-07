@@ -64,6 +64,9 @@ const ownedFurniture=Object.fromEntries(Object.keys(types).map(type=>{
 const availableFurniture=type=>(ownedFurniture[type]??0)-countFurniture(homeFurniture,type);
 const adventure={lantern:false,groveTrail:false,bridge:false,shrine:false,shortcut:false,discovered:[],silverfin:0,...savedPlayerState?.adventure};
 let depthsRun=savedPlayerState?.depthsRun??null;
+let depthsDiscovered=savedPlayerState?.depthsDiscovered===true||!!depthsRun
+  ||savedPlayerState?.hunting?.beetleRespawnAt>0||savedPlayerState?.huntingLoot?.stonebackShell>0
+  ||savedPlayerState?.combatGear?.stonebackVestOwned===true;
 const rootstone=adventure.rootstone=normalizeRootstone(adventure.rootstone);
 const playerStats={strengthXp:0,agilityXp:0,vitalityXp:0,patienceXp:adventure.silverfin*10,...savedPlayerState?.stats};
 const PATIENCE_XP_PER_CATCH=10, PATIENCE_XP_PER_LEVEL=50;
@@ -470,7 +473,7 @@ function stopForCombat(){
   player.x=player.cx;player.y=player.cy;player.seat=null;player.waveStarted=null;
 }
 function enterMoonwellDepths(){
-  if(currentRoom!=='ruins'||depthsRun||unavailable()||health<=0||!combatGear.equippedWeapon)return;
+  if(currentRoom!=='ruins'||!depthsDiscovered||depthsRun||unavailable()||health<=0||!combatGear.equippedWeapon)return;
   depthsRun={cleared:0};
   enterRoom(depthsStages[0].room);
   note('Moonwell Depths. Your current health carries through all three chambers.');
@@ -497,27 +500,73 @@ function leaveMoonwellDepths(){
     const items=Object.entries(spoils.loot).map(([id,count])=>({icon:'✦',text:tradeCatalog[id].name+' ×'+count}));
     showTransaction('Moonwell Depths spoils banked',items,spoils.gold);
     note('Spoils banked. You return to the ruins with your remaining health.');
-  }catch(error){note(error.message);}
+  }catch(error){
+    const feedback=$('depthsBankError');
+    feedback.textContent=error.message;
+    feedback.hidden=false;
+  }
+}
+function formatDepthsSpoils({gold,loot}){
+  const items=Object.entries(loot).map(([id,count])=>tradeCatalog[id].name+' ×'+count);
+  return [gold+' gold',...items].join(' · ');
+}
+function reviewDepthsEntrance(){
+  if($('depthsEntrance').hidden)return;
+  $('depthsEntryTitle').scrollIntoView({block:'nearest'});
+  $('depthsEntryTitle').focus({preventScroll:true});
 }
 function updateDepthsPanel(){
-  const index=depthsStageIndex(currentRoom),inDepths=index>=0&&!!depthsRun;
-  $('depthsEntrance').hidden=currentRoom!=='ruins'||unavailable();
-  $('enterDepths').disabled=!combatGear.equippedWeapon||health<=0;
-  $('depthsPanel').hidden=!inDepths;
+  const index=depthsStageIndex(currentRoom);
+  const inDepths=index>=0&&!!depthsRun;
+  const showEntrance=currentRoom==='ruins'&&depthsDiscovered&&!unavailable();
+  const entrance=$('depthsEntrance');
+  entrance.hidden=!showEntrance;
+  if(showEntrance){
+    const weapon=weaponProfile(combatGear.equippedWeapon,combatGear.activeSwordUpgrade);
+    $('depthsEntryHealth').textContent=health+' / '+maxHealth()+' HP';
+    $('depthsEntryWeapon').textContent=weapon?weapon.name+(weapon.upgradeName?' · '+weapon.upgradeName:''):'None equipped';
+    $('depthsEntryArmour').textContent=combatGear.stonebackVestEquipped?'Stoneback Vest':'None equipped';
+    $('depthsEntryReward').textContent=formatDepthsSpoils(depthsSpoils({cleared:depthsStages.length}));
+    $('depthsEntryAdvice').textContent=!weapon?'Equip a weapon in Inventory to enter.':health<maxHealth()
+      ?'Your current health carries in. You can rest at the Tower before entering.'
+      :'Health carries between fights. Defeat costs the spoils you haven’t banked.';
+    $('enterDepths').disabled=!weapon||health<=0;
+  }
+
+  const cleared=inDepths&&index<depthsRun.cleared;
+  const canDecide=cleared&&!unavailable();
+  const decision=$('depthsDecision');
+  const newlyCleared=canDecide&&decision.hidden;
+  if(!canDecide)$('depthsBankError').hidden=true;
+  decision.hidden=!canDecide;
+  $('depthsPanel').hidden=!inDepths||canDecide;
   if(!inDepths)return;
-  const cleared=index<depthsRun.cleared;
+
+  const stage=depthsStages[index];
   const next=depthsStages[index+1];
-  const {gold,loot}=depthsSpoils(depthsRun);
-  const items=Object.entries(loot).map(([id,count])=>tradeCatalog[id].name+' ×'+count);
-  $('depthsTitle').textContent=depthsStages[index].name;
-  $('depthsStatus').textContent='Chamber '+(index+1)+' / '+depthsStages.length+' · '+health+' / 100 HP';
-  $('depthsSpoils').textContent=items.length?gold+' gold · '+items.join(' · '):'No unbanked spoils yet.';
-  $('depthsPreview').textContent=cleared
-    ?next?'Next: '+huntEnemies[next.enemy].name+' ('+huntEnemies[next.enemy].health+' HP) · '+next.gold+' gold and 1 '+next.lootName+'.':'All three chambers cleared. Bank your spoils to leave the vault.'
-    :'Clear this chamber for '+depthsStages[index].gold+' gold and 1 '+depthsStages[index].lootName+'.';
-  $('depthsNext').hidden=!cleared||!next||player.inCombat;
-  $('depthsLeave').hidden=player.inCombat||(!cleared&&depthsRun.cleared>0);
-  $('depthsLeave').textContent=cleared?'Bank spoils & leave':'Return to the ruins';
+  const spoils=depthsSpoils(depthsRun);
+  $('depthsTitle').textContent=stage.name;
+  $('depthsStatus').textContent='Chamber '+(index+1)+' / '+depthsStages.length+' · '+health+' / '+maxHealth()+' HP';
+  $('depthsSpoils').textContent=spoils.gold?formatDepthsSpoils(spoils):'No unbanked spoils yet.';
+  const preview=next?'Next: '+huntEnemies[next.enemy].name+' ('+huntEnemies[next.enemy].health+' HP) · '+next.gold+' gold and 1 '+next.lootName+'.':'All three chambers cleared. Bank your spoils to leave the vault.';
+  $('depthsPreview').textContent=cleared?preview:'Clear this chamber for '+stage.gold+' gold and 1 '+stage.lootName+'.';
+  $('depthsRetreat').hidden=unavailable()||depthsRun.cleared!==0;
+  $('depthsNext').hidden=!canDecide||!next;
+  $('depthsLeave').hidden=!canDecide;
+  if(!canDecide)return;
+
+  $('depthsDecisionStep').textContent='MOONWELL DEPTHS · '+depthsRun.cleared+' / '+depthsStages.length+' CLEARED';
+  $('depthsDecisionTitle').textContent=next?stage.name+' cleared':'Expedition complete';
+  $('depthsBankNow').textContent=formatDepthsSpoils(spoils);
+  $('depthsDecisionHealth').textContent=health+' / '+maxHealth()+' HP · Your health carries into the next fight.';
+  if(!next)$('depthsDecisionHealth').textContent=health+' / '+maxHealth()+' HP remaining.';
+  $('depthsRisk').hidden=!next;
+  if(next){
+    $('depthsNextReward').textContent='Earn +'+next.gold+' gold · '+next.lootName+' ×1';
+    $('depthsNextEnemy').textContent=next.name+' · '+huntEnemies[next.enemy].name+' · '+huntEnemies[next.enemy].health+' HP';
+    $('depthsRiskText').textContent='If you fall, you lose the unbanked spoils above. A successful flee returns you to this chamber.';
+  }
+  if(newlyCleared)$('depthsDecisionTitle').focus({preventScroll:true});
 }
 function startMonsterEncounter(enemy){
   if(currentRoom!==enemy.room||unavailable())return;
@@ -586,6 +635,10 @@ function applyCombatResult(result){
     }else{
       hunting[enemy.id==='beetle'?'beetleRespawnAt':'respawnAt']=Date.now()+enemy.respawn;
       huntingLoot[enemy.loot]=(huntingLoot[enemy.loot]??0)+1;
+      if(enemy.id==='beetle'&&!depthsDiscovered){
+        depthsDiscovered=true;
+        showTransaction('Expedition unlocked',[{icon:'✦',text:'Review the Moonwell Depths entrance when you’re ready.'}]);
+      }
       if(enemy.id==='boar'){recordQuest(quest,'boar');history.boarDefeated=true;}
       combatMessage='Victory! '+enemy.lootName+' added to Inventory.';
       const ironTrial=firstUpgrade.ironTrialPending&&enemy.id==='beetle'&&combatGear.equippedWeapon==='ironSword';
@@ -1629,7 +1682,7 @@ let worldLabelKey='';
 function updateWorldLabels(){
   const p=canvasBounds(),doors=roomDoors[currentRoom].filter(door=>doorAvailable(door));
   const stump=currentRoom==='logging'&&!!treeState(timberTree()).regrowsAt;
-  const key=[currentRoom,stump,doors.map(door=>door.to).join(','),avatar.name,questStage(quest),firstUpgrade.choice,firstUpgrade.complete,firstUpgrade.oakTrialPending,firstUpgrade.unlocked,firstUpgradeDestination()?.to,tradingPostGuideComplete,bedLessonComplete,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
+  const key=[currentRoom,stump,doors.map(door=>door.to).join(','),avatar.name,questStage(quest),depthsDiscovered,player.inCombat,firstUpgrade.choice,firstUpgrade.complete,firstUpgrade.oakTrialPending,firstUpgrade.unlocked,firstUpgradeDestination()?.to,tradingPostGuideComplete,bedLessonComplete,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
   if(key===worldLabelKey)return;
   worldLabelKey=key;
   const container=$('worldLabels');container.replaceChildren();container.dataset.room=currentRoom;
@@ -1690,6 +1743,9 @@ function updateWorldLabels(){
   if(currentRoom==='shrine'||currentRoom==='ruins'){
     const landmark=roomFurniture().find(item=>item.id==='landmark');
     add(currentRoom==='shrine'?'Moth Shrine':'Moonwell',...point(landmark.x+.5,landmark.y+.5,35),'npc',()=>use(landmark));
+  }
+  if(currentRoom==='ruins'&&depthsDiscovered&&!unavailable()){
+    add('Moonwell Depths',...point(7.4,3.4,19),'npc',reviewDepthsEntrance,'Review expedition');
   }
   if(currentRoom==='lounge')add('SUNSET LOUNGE',...point(0,2.3,51),'sign',null,'',{side:'left',width:48,font:5.2});
   if(['store','market','armory'].includes(currentRoom)){
@@ -2861,7 +2917,7 @@ function updateTradingPost(){
   }
 }
 function savePlayerState(){
-  const snapshot={firstUpgrade,tradingPostGuideComplete,bedLessonComplete,credits,health,woodcutting,history,quest,combatGear,hunting,depthsRun,ownedFurniture,furniture:[],homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats,fishingGear,huntingLoot,fishStock,avatar,wardrobe,location:currentRoom,position:{x:player.cx,y:player.cy}};
+  const snapshot={firstUpgrade,tradingPostGuideComplete,bedLessonComplete,credits,health,woodcutting,history,quest,combatGear,hunting,depthsRun,depthsDiscovered,ownedFurniture,furniture:[],homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats,fishingGear,huntingLoot,fishStock,avatar,wardrobe,location:currentRoom,position:{x:player.cx,y:player.cy}};
   save('player-state',snapshot);
   if(window.playerCloud)window.playerCloud.enqueue(JSON.parse(JSON.stringify(snapshot)));
   updateInventory();
@@ -3199,6 +3255,7 @@ $('approachBeetle').onclick=()=>{
 $('enterDepths').onclick=enterMoonwellDepths;
 $('depthsNext').onclick=advanceMoonwellDepths;
 $('depthsLeave').onclick=leaveMoonwellDepths;
+$('depthsRetreat').onclick=leaveMoonwellDepths;
 $('combatRootbind').onclick=useRootbind;
 $('openRootstone').onclick=()=>openRootstone('journal');
 for(const [rune,id] of [['moth','rootRuneMoth'],['wave','rootRuneWave'],['root','rootRuneRoot']])$(id).onclick=()=>touchRootstoneRune(rune);

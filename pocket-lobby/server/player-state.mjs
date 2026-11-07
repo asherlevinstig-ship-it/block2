@@ -80,6 +80,7 @@ export function normalizeState(input={}){
   };
   if(input.ownedFurniture!==undefined)state.ownedFurniture=counts(input.ownedFurniture);
   if(depthsRun)state.depthsRun=depthsRun;
+  if(input.depthsDiscovered===true||depthsRun)state.depthsDiscovered=true;
   if(input.loungeLayout==="gaming")state.loungeLayout="gaming";
   return state;
 }
