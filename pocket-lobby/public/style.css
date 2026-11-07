@@ -271,3 +271,9 @@ body{background:#071329 url('./hud-night.svg') center top/cover fixed no-repeat;
 .world-labels[data-room=hub] .world-label-npc:hover{background:#3e3b37;border-color:#ffe0a0}
 .world-labels[data-room=hub] .world-label-sign{padding:7px 13px;max-width:190px;border:1px solid #bc9c63;background:#14243bec;font:800 11px/1.25 system-ui;letter-spacing:.09em;border-radius:4px}
 .world-labels[data-room=hub] .world-label-sign small{font:800 12px/1.4 system-ui;color:#f7d28e;letter-spacing:.06em}
+
+/* Wall-mounted lettering shares the perspective of its architectural plaque. */
+.world-labels[data-room] .world-label[data-wall]{box-sizing:border-box;min-height:0;background:transparent;border:0;border-radius:0;box-shadow:none;text-shadow:0 1px 1px #071524;font-family:system-ui,sans-serif;font-weight:800;letter-spacing:.045em;color:#ffe5ac;transform-origin:center}
+.world-labels[data-room] .world-label[data-wall] small{font-family:system-ui,sans-serif;font-weight:800;letter-spacing:.035em;color:#ffe5ac}
+.world-labels[data-room] .world-label-door[data-wall]:hover{background:#f0ca7320;color:#fff7df;box-shadow:0 0 12px #e6bc7022}
+.world-labels[data-room] .world-label-door[data-wall]:focus-visible{outline:2px solid #f3d398;outline-offset:4px}

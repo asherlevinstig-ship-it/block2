@@ -1048,7 +1048,10 @@ function drawLobbyPortal(door){
     for(let col=0;col<line.length;col++)if(line[col]==='1')rect(x-7+col*2,y-8+row*2,2,2,light);
   }
   wall(side,start+.12,end-.12,0,2,light);
+  wall(side,start-.16,end+.16,height+3,height+15,'#b99a68');
+  wall(side,start-.11,end+.11,height+4,height+14,'#14243b');
 }
+
 function drawLobbyCrest(x,y){
   polygon([[x-14,y-9],[x+14,y-9],[x+13,y+2],[x,y+11],[x-13,y+2]],'#bb9459');
   polygon([[x-11,y-7],[x+11,y-7],[x+10,y+1],[x,y+8],[x-10,y+1]],'#1e3963');
@@ -1587,7 +1590,7 @@ function updateWorldLabels(){
   if(key===worldLabelKey)return;
   worldLabelKey=key;
   const container=$('worldLabels');container.replaceChildren();container.dataset.room=currentRoom;
-  const add=(text,x,y,kind='door',action=null,subtitle='')=>{
+  const add=(text,x,y,kind='door',action=null,subtitle='',mount=null)=>{
     const label=document.createElement(action?'button':'div');label.className='world-label world-label-'+kind;
     if(action){label.type='button';label.onclick=action;label.setAttribute('aria-label',kind==='door'?'Go to '+text:text);}
     const title=document.createElement('span');title.textContent=text;label.append(title);
@@ -1606,6 +1609,13 @@ function updateWorldLabels(){
       label.style.transform=sign?'skewY(26.565deg)':'skewY(-26.565deg)';
       if(subtitle){label.children[1].style.fontSize=Math.max(12,Math.round(8*scale))+'px';label.children[1].style.lineHeight='1.3';}
     }
+    if(mount){
+      const scale=p.scale*zoom;label.dataset.wall=mount.side;
+      label.style.width=Math.round(mount.width*scale)+'px';label.style.maxWidth='none';
+      label.style.padding='0';label.style.fontSize=Math.max(9,Math.round((mount.font??6)*scale))+'px';
+      label.style.lineHeight='1.2';label.style.transform=mount.side==='right'?'skewY(26.565deg)':'skewY(-26.565deg)';
+      if(subtitle){label.children[1].style.fontSize=Math.max(9,Math.round((mount.font??6)*scale))+'px';label.children[1].style.lineHeight='1.2';}
+    }
     const width=label.offsetWidth||text.length*7+16,height=label.offsetHeight||(subtitle?30:19);
     const availableWidth=canvas.clientWidth||view.width*p.scale,availableHeight=canvas.clientHeight||view.height*p.scale;
     label.style.left=Math.round(Math.max(5,Math.min(availableWidth-width-5,screenX-width/2)))+'px';
@@ -1617,12 +1627,12 @@ function updateWorldLabels(){
     else if(door.side==='front'){anchor=point((door.start+door.end)/2,view.rows-.45,12);}
     else anchor=door.side==='right'?point((door.start+door.end)/2,0,door.height+9):point(0,(door.start+door.end)/2,door.height+9);
     const label=currentRoom==='creek'&&door.to==='ruins'?'Cross to the Ruins':door.label;
-    add(label,...anchor,'door',()=>travelDoor(door));
+    add(label,...anchor,'door',()=>travelDoor(door),'',currentRoom!=='home'&&['left','right'].includes(door.side)?{side:door.side,width:(door.end-door.start+.08)*18,font:5.6}:null);
   }
   if(currentRoom==='home')add('YOUR HOME',...point(5,0,44),'sign',null,avatar.name);
   if(currentRoom==='hub'){
     if(lobbyRoutesOpen())add('Job board',...point(4.5,2,39),'npc',openJobBoard);
-    add('TOWER OF',...point(0,2.7,51),'sign',null,'BEGINNINGS');
+    add('TOWER OF',...point(0,2.7,52),'sign',null,'BEGINNINGS',{side:'left',width:51,font:6});
     const symbol=questStage(quest)===0?'! ':questStage(quest)===4?'? ':'';
     add(symbol+'Tower Warden',...point(10.5,3.5,46),'npc',()=>use(hubFurniture.find(item=>item.type==='warden')),questStage(quest)===0?'Start here · Earn your first gold':'');
   }
@@ -1636,10 +1646,10 @@ function updateWorldLabels(){
     const landmark=roomFurniture().find(item=>item.id==='landmark');
     add(currentRoom==='shrine'?'Moth Shrine':'Moonwell',...point(landmark.x+.5,landmark.y+.5,35),'npc',()=>use(landmark));
   }
-  if(currentRoom==='lounge')add('SUNSET LOUNGE',...point(0,2.3,51),'sign');
+  if(currentRoom==='lounge')add('SUNSET LOUNGE',...point(0,2.3,51),'sign',null,'',{side:'left',width:48,font:5.2});
   if(['store','market','armory'].includes(currentRoom)){
     const names={store:['SILVERFIN','OUTFITTERS'],market:['MOONWOOD','TRADING POST'],armory:['TOWER','ARMORY']};
-    add(names[currentRoom][0],...point(3.42,0,46),'sign',null,names[currentRoom][1]);
+    add(names[currentRoom][0],...point(3.42,0,46),'sign',null,names[currentRoom][1],{side:'right',width:58,font:5.7});
   }
 }
 function draw(time){
