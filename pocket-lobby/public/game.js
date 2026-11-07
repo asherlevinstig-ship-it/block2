@@ -72,7 +72,7 @@ let depthsDiscovered=savedPlayerState?.depthsDiscovered===true||!!depthsRun
   ||savedPlayerState?.hunting?.beetleRespawnAt>0||savedPlayerState?.huntingLoot?.stonebackShell>0
   ||savedPlayerState?.combatGear?.stonebackVestOwned===true;
 const rootstone=adventure.rootstone=normalizeRootstone(adventure.rootstone);
-const playerStats={strengthXp:0,agilityXp:0,vitalityXp:0,patienceXp:adventure.silverfin*10,...savedPlayerState?.stats};
+const playerStats={strengthXp:0,agilityXp:0,vitalityXp:0,luckXp:0,patienceXp:adventure.silverfin*10,...savedPlayerState?.stats};
 const PATIENCE_XP_PER_CATCH=10, PATIENCE_XP_PER_LEVEL=50;
 const patienceLevel=()=>1+Math.floor(playerStats.patienceXp/PATIENCE_XP_PER_LEVEL);
 const maxHealth=()=>100;
@@ -2593,7 +2593,9 @@ function updateFishingMoment(time){
 }
 function finishInteraction(){
   const item=interaction;interaction=null;
-  if(item.type==='workbench'){
+  if(isGamingTable(item)&&currentRoom==='lounge'){
+    openLoungeGame(item.type);
+  }else if(item.type==='workbench'){
     openCrafting();
   }else if(item.type==='woodcutter'){
     if(window.playerCloud?.gameplay){
@@ -2917,7 +2919,7 @@ function updatePlayerStats(){
     $(id).setAttribute('aria-label','Health '+health+' of '+totalHealth+'. Five hearts, 20 HP each.');
     $(id).title=health+' / '+totalHealth+' HP - 20 HP per heart';
   }
-  for(const [id,name] of [['strength','Strength'],['agility','Agility'],['vitality','Vitality'],['patience','Patience']]){
+  for(const [id,name] of [['strength','Strength'],['agility','Agility'],['vitality','Vitality'],['patience','Patience'],['luck','Luck']]){
     const experience=playerStats[id+'Xp'],rank=1+Math.floor(experience/50),towardNext=experience%50;
     $('attribute-'+id+'-level').textContent=rank;
     $('attribute-'+id+'-xp').textContent=towardNext+' / 50 XP';
@@ -2940,6 +2942,7 @@ function applyServerGameplay(state){
   for(const id of Object.keys(fishStock))delete fishStock[id];
   Object.assign(fishStock,state.fishStock);
   Object.assign(playerStats,state.stats);
+  loungeRound=state.gambling?.round??null;
   health=state.health;
   Object.assign(hunting,state.hunting);
   depthsRun=state.depthsRun??null;depthsDiscovered=state.depthsDiscovered===true;
@@ -2996,6 +2999,97 @@ async function sendServerCombat(input){
     const queued=pendingCombatInput;pendingCombatInput=null;
     if(queued&&player.inCombat)sendServerCombat(queued);
   }
+}
+let loungeTable='blackjack',loungeRound=savedPlayerState?.gambling?.round??null;
+let loungeBusy=false,loungeTimer=null,loungeClockOffset=0;
+const loungeNames={blackjack:'Blackjack',roulette:'Roulette'};
+function openLoungeGame(table){
+  if(unavailable())return;
+  if(!window.playerCloud?.gameplay){note('Connect to the game server to play at the lounge.');return;}
+  loungeTable=table;
+  loungeClockOffset=0;
+  const dialog=$('loungeGameDialog');
+  renderLoungeGame();
+  if(!dialog.open)dialog.showModal();
+}
+function loungeHand(label,cards){
+  const row=document.createElement('section');
+  const heading=document.createElement('strong');
+  heading.textContent=label;
+  const hand=document.createElement('div');
+  hand.className='lounge-hand';
+  for(const card of cards){
+    const tile=document.createElement('span');
+    tile.className='lounge-card';
+    if(card){
+      tile.textContent=({1:'A',11:'J',12:'Q',13:'K'}[card.rank]??card.rank)+' '+['♠','♥','♣','♦'][card.suit];
+      if(card.suit%2)tile.classList.add('red');
+    }else{
+      tile.textContent='◆';
+      tile.classList.add('card-back');
+      tile.setAttribute('aria-label','Face-down card');
+    }
+    hand.append(tile);
+  }
+  row.append(heading,hand);
+  return row;
+}
+function renderLoungeGame(message){
+  clearTimeout(loungeTimer);
+  const otherTable=loungeRound?.status==='playing'&&loungeRound.game!==loungeTable;
+  const round=loungeRound?.game===loungeTable?loungeRound:null;
+  const playing=round?.status==='playing',blackjack=loungeTable==='blackjack';
+  const now=Date.now()+loungeClockOffset;
+  const xp=playerStats.luckXp??0;
+  const board=$('loungeGameBoard');
+  $('loungeGameTitle').textContent=loungeNames[loungeTable];
+  $('loungeGameEmblem').textContent=blackjack?'♠':'◉';
+  $('loungeGameGold').textContent=credits.toLocaleString()+' G';
+  $('loungeGameLuck').textContent='Lv. '+(1+Math.floor(xp/50))+' · '+xp%50+' / 50 XP';
+  $('loungeGameLuckBar').value=xp%50;
+  board.replaceChildren();
+  if(blackjack&&round)board.append(loungeHand('Dealer',round.dealer),loungeHand('Your hand',round.player));
+  else if(round){
+    const wheel=document.createElement('div');
+    wheel.className='lounge-wheel '+(playing?'spinning':round.resultColor);
+    wheel.textContent=playing?'◉':round.number;
+    wheel.setAttribute('aria-label',playing?'Wheel spinning':round.resultColor+' '+round.number);
+    board.append(wheel);
+  }else board.textContent=blackjack?'Get closer to 21 than the dealer without going over.':'Pick red or black. A match pays twice your stake. Green 0 wins neither color.';
+  const result=round?.status==='complete'?(round.outcome==='win'?'Won '+(round.payout-round.bet)+' gold':round.outcome==='push'?'Draw · stake returned':'Lost '+round.bet+' gold')+(round.luckXp?' · +'+round.luckXp+' Luck XP':'')+
+    (round.luckXp&&Math.floor(round.luckBefore/50)<Math.floor(xp/50)?' · Luck level '+(1+Math.floor(xp/50))+'!':''):'';
+  $('loungeGameResult').textContent=message??(otherTable?'Finish your round at the '+loungeNames[loungeRound.game]+' table first.':result||(playing?(blackjack?'Hit for another card, or stand to keep your hand.':'Wheel spinning · '+round.bet+' gold on '+round.color):'Choose your stake.'));
+  $('loungeGameBet').hidden=playing||otherTable;
+  $('loungeGameColorField').hidden=blackjack;
+  const retrySpin=playing&&!blackjack&&!!message;
+  $('loungeGameActions').hidden=!playing||(!blackjack&&!retrySpin);
+  $('loungeGameHit').hidden=$('loungeGameStand').hidden=!blackjack;
+  $('loungeGameReveal').hidden=!retrySpin;
+  $('loungeGameHit').disabled=$('loungeGameStand').disabled=loungeBusy;
+  const wait=Math.max(0,(loungeRound?.startedAt??0)+5000-now);
+  $('loungeGameStart').disabled=loungeBusy||!!wait||credits<Number($('loungeGameStake').value);
+  $('loungeGameStart').textContent=loungeBusy?'Please wait…':wait?'Next round shortly':blackjack?'Deal':'Spin';
+  if(!loungeBusy&&wait&&!playing)loungeTimer=setTimeout(()=>renderLoungeGame(),wait+30);
+  if(!loungeBusy&&playing&&!blackjack&&!message)loungeTimer=setTimeout(()=>{
+    if($('loungeGameDialog').open)playLoungeRound('reveal');
+  },Math.max(0,round.revealAt-now)+100);
+}
+async function playLoungeRound(move){
+  if(loungeBusy)return;
+  loungeBusy=true;
+  renderLoungeGame();
+  let errorText;
+  try{
+    const packet=move
+      ?await serverGameplay('gambleMove',{roundId:loungeRound?.id,move})
+      :await serverGameplay('gamble',{game:loungeTable,bet:Number($('loungeGameStake').value),color:$('loungeGameColor').value});
+    loungeClockOffset=packet.serverTime-Date.now();
+    // Update the HUD even while the native table dialog covers the scene.
+    displayedCredits=credits;walletTween=null;
+    $('credits').textContent=credits.toLocaleString();
+    updatePlayerStats();
+  }catch(error){errorText=error.message;}
+  finally{loungeBusy=false;renderLoungeGame(errorText);}
 }
 function restoreServerCast(cast,serverTime){
   const offset=performance.now()-serverTime;
@@ -3319,7 +3413,7 @@ function switchMode(next){
   $('chatPanel').hidden=editing||currentRoom!=='lounge';
   if(currentRoom==='lounge'){
     for(const button of $('gamingGuide').querySelectorAll('[data-game-table]')){
-      button.hidden=!loungeFurniture.some(item=>item.type===button.dataset.gameTable);
+      button.hidden=!roomFurniture().some(item=>item.type===button.dataset.gameTable);
     }
   }
   $('editorPanel').hidden=!editing;
@@ -3847,10 +3941,16 @@ $('jobStart').onclick=async()=>{
   catch(error){$('jobError').textContent=error.message;startingJob=false;updateJobBoard();}
 };
 
+$('loungeGameStart').onclick=()=>playLoungeRound();
+$('loungeGameHit').onclick=()=>playLoungeRound('hit');
+$('loungeGameStand').onclick=()=>playLoungeRound('stand');
+$('loungeGameReveal').onclick=()=>playLoungeRound('reveal');
+$('loungeGameStake').onchange=()=>renderLoungeGame();
+$('loungeGameDialog').addEventListener('close',()=>clearTimeout(loungeTimer));
 $('reception').onclick=()=>use(hubFurniture[0]);
 for(const button of $('gamingGuide').querySelectorAll('[data-game-table]')){
   button.onclick=()=>{
-    const destination=loungeFurniture.find(item=>item.type===button.dataset.gameTable);
+    const destination=roomFurniture().find(item=>item.type===button.dataset.gameTable);
     if(destination)use(destination);
   };
 }

@@ -1,5 +1,6 @@
 import {applyGameplayAction,protectFishingState} from './gameplay.mjs';
 import {settleActivities} from './activities.mjs';
+import {publicPlayerState} from './gambling.mjs';
 import {readRankings} from './rankings.mjs';
 import {touchPresence} from './routines.mjs';
 import {deliverCarpenterOrder} from '../public/commissions.js';
@@ -10,7 +11,7 @@ import { normalizeState, startPlan, settlePlan } from "./player-state.mjs";
 const COOKIE="__Host-tower-character";
 const COOKIE_AGE=31536000;
 const json=(data,status=200,extra={})=>Response.json(data,{status,headers:{"Cache-Control":"no-store","X-Content-Type-Options":"nosniff",...extra}});
-const packet=row=>({state:JSON.parse(row.state_json),characterKey:row.player_id,revision:row.revision,lastOperation:row.last_request,serverTime:Date.now()});
+const packet=row=>({state:publicPlayerState(JSON.parse(row.state_json)),characterKey:row.player_id,revision:row.revision,lastOperation:row.last_request,serverTime:Date.now()});
 async function read(db,id){
   return db.prepare("SELECT player_id, state_json, revision, last_request FROM tower_players WHERE player_id = ?").bind(id).first();
 }
@@ -61,6 +62,7 @@ export async function handlePlayerApi(request,env){
       const existing=id&&await settled(env.TOWER_DB,id,true);
       if(existing)return json(packet(existing));
       const body=await bodyOf(request),state=normalizeState({...body.legacy,...(body.newCharacter===true?{characterCreated:false,welcomeSeen:false}:{})});
+      state.stats.luckXp=0;
       const bytes=crypto.getRandomValues(new Uint8Array(32));
       const token=[...bytes].map(value=>value.toString(16).padStart(2,"0")).join("");
       const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(token));

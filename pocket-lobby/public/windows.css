@@ -61,3 +61,27 @@
 
 .rankings-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}.rankings-heading small{font-size:10px;letter-spacing:.1em;color:#d8b87b}.rankings-heading h3{font-size:21px;color:#fff0c5;margin:6px 0}.rankings-heading button,.rankings-consent button{padding:8px 13px;background:#273e58;border:1px solid #7285a1;color:#f1d4a0;border-radius:8px}.ranking-list{list-style:none;padding:0;margin:12px 0;display:grid;gap:8px}.ranking-row{display:grid;grid-template-columns:40px minmax(0,1fr) auto;align-items:center;gap:5px 12px;background:#102139;border:1px solid #445b78;border-radius:9px;padding:12px}.ranking-row.is-you{border-color:#d9b76f;background:#2a3648}.ranking-position{color:#e9c984;font-size:17px}.ranking-row>div>small{display:block;font-size:10px;color:#9fb4cb;margin-top:4px}.ranking-row>div>b{font-size:13px;color:#e9e9dd;overflow-wrap:anywhere}.ranking-score{text-align:right}.ranking-row .ranking-score b{font-size:19px;color:#f6d38a}.ranking-extra{grid-column:2/-1;font-size:10px;color:#aebfd3;margin-top:5px}.ranking-extra summary{min-height:0!important;padding:4px 0!important;font-size:11px!important}.ranking-extra ul{padding-left:16px;line-height:1.7}.rankings-consent{padding-top:10px;border-top:1px solid #536780}.rankings-consent p,#rankingsStatus{font-size:11px!important}.ranking-empty{padding:26px 16px;border:1px dashed #657a90;border-radius:10px;text-align:center}
 @media(max-width:480px){.ranking-row{grid-template-columns:30px minmax(0,1fr) auto;gap:5px 8px;padding:10px}.ranking-row .ranking-score b{font-size:17px}}
+
+.lounge-game.game-window { width: min(480px, calc(100vw - 24px)); }
+.lounge-game-summary { display:grid; grid-template-columns:1fr 1.4fr; gap:10px; margin:14px 0; }
+.lounge-game-summary > div { display:grid; gap:5px; padding:10px 12px; border:1px solid #51637c; border-radius:10px; background:#101e32; min-width:0; }
+.lounge-game-summary small { font-size:10px; color:#e1bd7e; letter-spacing:.12em; }
+.lounge-game-summary strong { color:#fce2a6; font-size:15px; }
+.lounge-game-summary progress, .attribute-luck progress { accent-color:#8ed6aa; width:100%; }
+.lounge-felt { display:grid; gap:12px; align-content:center; min-height:130px; padding:14px; border:2px solid #b38850; border-radius:16px; background:radial-gradient(ellipse at top,#236251,#102e2b); color:#edf3df; }
+.lounge-felt section > strong { display:block; font-size:11px; text-transform:uppercase; letter-spacing:.12em; margin-bottom:6px; }
+.lounge-hand { display:flex; gap:6px; flex-wrap:wrap; }
+.lounge-card { display:grid; place-items:center; min-width:40px; height:54px; padding:0 5px; background:#f9ecd5; border:1px solid #fff6dc; box-shadow:0 2px 0 #786e5d; border-radius:6px; color:#1a2232; font-weight:800; }
+.lounge-card.red { color:#a52837; }
+.lounge-card.card-back { color:#ffe2a0; background:repeating-linear-gradient(45deg,#2f4267 0 5px,#253656 5px 10px); border-color:#cbad70; }
+.lounge-wheel { display:grid; place-items:center; width:72px; height:72px; margin:auto; border:4px double #e9c68a; border-radius:50%; background:#172336; color:white; font-size:28px; font-weight:800; }
+.lounge-wheel.red { background:#8e2534; }.lounge-wheel.black { background:#131a25; }.lounge-wheel.green { background:#28684f; }
+.lounge-wheel.spinning { animation:lounge-spin .85s linear infinite; border-style:dashed; }
+@keyframes lounge-spin { to { transform:rotate(1turn); } }
+@media(prefers-reduced-motion:reduce) { .lounge-wheel.spinning { animation:none; } }
+.lounge-bet,.lounge-game-actions { display:flex; align-items:end; gap:10px; flex-wrap:wrap; }
+.lounge-game [hidden] { display:none!important; }
+.lounge-bet label { display:grid; gap:4px; font-size:12px; color:#d8e2ef; }
+.lounge-bet select,.lounge-game-actions button { padding:8px 12px; border:1px solid #667d99; border-radius:7px; background:#172842; color:#f9e3b5; }
+.lounge-game #loungeGameResult { min-height:2.7em; color:#fae4b3; }
+.lounge-game .lounge-game-note { font-size:12px; margin-bottom:0; }

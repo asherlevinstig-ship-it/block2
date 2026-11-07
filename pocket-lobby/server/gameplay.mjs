@@ -4,6 +4,7 @@ import {purchaseWeapon} from '../public/hunting.js';
 import {fitSwordUpgrade,craftFurniture,craftStonebackVest} from '../public/crafting.js';
 import {bankDepthsSpoils} from '../public/depths.js';
 import {activityAction,settleActivities} from './activities.mjs';
+import {gamblingAction} from './gambling.mjs';
 
 const prices={boar:30,rabbit:12,deer:24,stonebackShell:45,timber:4};
 const earn=(state,gold)=>{
@@ -23,6 +24,7 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
   // Combat requests advance their own clocks so their receipt includes all events.
   if(action!=='combat')settleActivities(state,now,random);
   if(activityAction(state,action,body,now,random))return;
+  if(gamblingAction(state,action,body,now,random===Math.random?undefined:random))return;
   if(action==='furniture'||action==='vest'){
     available(state);
     if(action==='furniture')craftFurniture(state,body.id);
@@ -154,6 +156,7 @@ export function protectFishingState(previous,next){
   next.fishStock=previous.fishStock;
   next.fishingGear=previous.fishingGear;
   next.stats=previous.stats;
+  if(previous.gambling)next.gambling=previous.gambling;else delete next.gambling;
   next.history=previous.history;
   next.quest={...previous.quest,...next.quest,fish:previous.quest.fish};
   if(previous.quest.accepted)next.quest.accepted=true;
