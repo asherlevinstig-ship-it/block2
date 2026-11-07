@@ -221,9 +221,11 @@ function drawWoodEffects(time){
   if(phase<.55||phase>.9)return;
   const scatter=(phase-.55)/.35,side=player.direction==='right'?-1:1;
   const tree=woodSession.tree,[x,y]=point(tree.x+.5,tree.y+.5,12);
-  ctx.save();ctx.globalAlpha=1-scatter;ctx.fillStyle='#e3bb83';
-  for(let i=0;i<5;i++)ctx.fillRect(Math.round(x+side*(3+scatter*(12+i*3))),Math.round(y-6+scatter*scatter*12-i*2),2,1);
-  ctx.restore();
+  ctx.save();
+  try{
+    ctx.globalAlpha=1-scatter;ctx.fillStyle='#e3bb83';
+    for(let i=0;i<5;i++)ctx.fillRect(Math.round(x+side*(3+scatter*(12+i*3))),Math.round(y-6+scatter*scatter*12-i*2),2,1);
+  }finally{ctx.restore();}
 }
 
 function drawTimberTree(item,time){
@@ -234,12 +236,13 @@ function drawTimberTree(item,time){
     const fall=treeFall?.key===timberKey(item)?Math.min(1,Math.max(0,(time-treeFall.started)/timberTreeRules.fallMs)):1;
     if(fall<1&&!reducedMotion.matches){
       ctx.save();
-      ctx.translate(x,y-5);
-      ctx.rotate(treeFall.direction*Math.PI/2*fall*fall);
-      ctx.translate(-x,-y+5);
-      ctx.globalAlpha=1-Math.max(0,(fall-.7)/.3);
-      drawTree();
-      ctx.restore();
+      try{
+        ctx.translate(x,y-5);
+        ctx.rotate(treeFall.direction*Math.PI/2*fall*fall);
+        ctx.translate(-x,-y+5);
+        ctx.globalAlpha=1-Math.max(0,(fall-.7)/.3);
+        drawTree();
+      }finally{ctx.restore();}
     }
     block(item.x+.30,item.y+.31,.40,.38,0,6,['#ddba84','#785741','#9d7252']);
     rect(x-3,y-7,6,1,'#aa7a50');
@@ -248,14 +251,15 @@ function drawTimberTree(item,time){
   const phase=woodSession?.tree===item?((time-woodSession.started)%700)/700:0;
   const impact=phase>=.55&&phase<.72&&!reducedMotion.matches;
   ctx.save();
-  if(impact)ctx.translate(player.direction==='right'?1:-1,0);
-  drawTree();
-  if(tree.cuts||impact){
-    const width=Math.min(7,2+tree.cuts*2);
-    rect(x-Math.floor(width/2),y-12,width,2,'#eac38b');
-    rect(x-Math.floor(width/2),y-10,width,1,'#734d42');
-  }
-  ctx.restore();
+  try{
+    if(impact)ctx.translate(player.direction==='right'?1:-1,0);
+    drawTree();
+    if(tree.cuts||impact){
+      const width=Math.min(7,2+tree.cuts*2);
+      rect(x-Math.floor(width/2),y-12,width,2,'#eac38b');
+      rect(x-Math.floor(width/2),y-10,width,1,'#734d42');
+    }
+  }finally{ctx.restore();}
 }
 
 
@@ -2958,10 +2962,15 @@ function animation(time){
   try{advanceAnimation(time);lastFrameError='';}
   catch(error){
     const message=String(error?.stack??error);
-    window.towerLastFrameError={message,room:currentRoom,at:Date.now(),fishing:!!fishingSession,catchFeedback:!!catchReveal||!!patienceTween};
+    window.towerLastFrameError={message,room:currentRoom,at:Date.now(),fishing:!!fishingSession,chopping:!!woodSession,treeFalling:!!treeFall,catchFeedback:!!catchReveal||!!patienceTween};
     if(message!==lastFrameError){console.error('Game animation error',error);lastFrameError=message;}
-    // A failed catch panel must not keep breaking every subsequent frame.
+    // Stop transient activity visuals so the next frame can process movement.
+    // Server receipts already applied stay awarded; an interrupted cut pays nothing.
     catchReveal=null;patienceTween=null;$('catchReveal').hidden=true;
+    if(woodSession||treeFall){
+      woodSession=null;treeFall=null;
+      try{updateWoodPanel();updateAdventurePanel();note('Chopping paused. You can move or choose a tree to continue.');}catch{}
+    }
   }
 }
 function advanceAnimation(time){
