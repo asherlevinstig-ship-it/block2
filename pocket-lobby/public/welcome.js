@@ -1,0 +1,9 @@
+export function welcomePlayer({name,confirm}){
+ return new Promise(resolve=>{
+  const dialog=document.createElement('dialog');dialog.className='game-window tower-welcome';dialog.setAttribute('aria-labelledby','welcomeTitle');
+  dialog.innerHTML=`<div class="welcome-crest" aria-hidden="true"><svg viewBox="0 0 64 64"><path d="M8 8h48v25L32 57 8 33z" fill="#203d63" stroke="#d2ac62" stroke-width="3"/><path d="M19 21h6v7h4V17h6v11h4v-7h6v19H19z" fill="#e6c67f"/><path d="M29 33h6v7h-6z" fill="#203d63"/></svg></div><div class="eyebrow">WELCOME TO TOWER OF BEGINNINGS</div><h2 id="welcomeTitle"></h2><p class="welcome-aim">Become the richest and most powerful player in the game.</p><div class="welcome-paths"><article><span aria-hidden="true">✦</span><h3>Build your fortune</h3><p>Catch fish, gather timber and sell your spoils. Choose your upgrades wisely to earn more gold.</p></article><article><span aria-hidden="true">⚔</span><h3>Grow your power</h3><p>Train your skills, equip better weapons and armour, and take on stronger monsters.</p></article></div><div class="welcome-first"><small>YOUR FIRST STEP</small><p>Leave your home through the EXIT and speak to the Tower Warden in the Grand Lobby. He will help you get started.</p></div><button type="button" class="primary">Let’s begin</button><p class="welcome-status" role="status"></p>`;
+  dialog.querySelector('h2').textContent='Welcome, '+name+'!';const button=dialog.querySelector('button'),status=dialog.querySelector('.welcome-status');
+  button.onclick=async()=>{button.disabled=true;status.textContent='Preparing your adventure…';try{await confirm();dialog.close();dialog.remove();resolve();}catch(error){status.textContent=error.message;button.disabled=false;}};
+  dialog.oncancel=event=>event.preventDefault();document.body.append(dialog);dialog.showModal();button.focus();
+ });
+}

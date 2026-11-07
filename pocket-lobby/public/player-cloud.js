@@ -258,6 +258,10 @@
         const {createCharacter}=await import('./character-creation.js');gate.close();
         await createCharacter({renderer:towerCharacterArt,initial:packet.state.avatar,save:async design=>{await action('create',design);}});
       }
+      if(packet.state.welcomeSeen===false){
+        const {welcomePlayer}=await import('./welcome.js');gate.close();
+        await welcomePlayer({name:packet.state.avatar.name,confirm:()=>action('welcome/ack')});
+      }
       const woodRules=await import('./woodcutting.js');
       const crafting=await import('./crafting.js');
       const characterRules=await import('./character-rules.js');
