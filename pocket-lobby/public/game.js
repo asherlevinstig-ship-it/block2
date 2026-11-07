@@ -1611,7 +1611,7 @@ let worldLabelKey='';
 function updateWorldLabels(){
   const p=canvasBounds(),doors=roomDoors[currentRoom].filter(door=>doorAvailable(door));
   const stump=currentRoom==='logging'&&!!treeState(timberTree()).regrowsAt;
-  const key=[currentRoom,stump,doors.map(door=>door.to).join(','),avatar.name,questStage(quest),firstUpgrade.choice,firstUpgrade.complete,firstUpgrade.unlocked,firstUpgrade.choice?upgradePlan()?.destination:'',tradingPostGuideComplete,bedLessonComplete,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
+  const key=[currentRoom,stump,doors.map(door=>door.to).join(','),avatar.name,questStage(quest),firstUpgrade.choice,firstUpgrade.complete,firstUpgrade.oakTrialPending,firstUpgrade.unlocked,firstUpgradeDestination()?.to,tradingPostGuideComplete,bedLessonComplete,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
   if(key===worldLabelKey)return;
   worldLabelKey=key;
   const container=$('worldLabels');container.replaceChildren();container.dataset.room=currentRoom;
@@ -1947,15 +1947,44 @@ function chooseFirstUpgrade(path){
   $('upgradeDialog').close();if($('merchantDialog').open)$('merchantDialog').close();
   savePlayerState();updateUpgradeGuide();
 }
+function oakTrialDestination(){
+  if(fishingGear.equippedRod!=='oak')return currentRoom;
+  return fishingGear.bait>0?'pond':'store';
+}
 function firstUpgradeDestination(){
+  if(depthsRun||tradingGuideActive())return null;
+  if(firstUpgrade.oakTrialPending){
+    const destination=oakTrialDestination();
+    return currentRoom===destination?null:hudNextDoor(destination);
+  }
   if(!firstUpgrade.unlocked||firstUpgrade.complete||!firstUpgrade.choice||depthsRun||tradingGuideActive())return null;
   const plan=upgradePlan();return currentRoom===plan.destination?null:hudNextDoor(plan.destination);
 }
 function updateUpgradeGuide(){
-  const active=firstUpgrade.unlocked&&!firstUpgrade.complete&&!tradingGuideActive()&&!editing&&!depthsRun&&!player.inCombat;
+  const pendingTrial=firstUpgrade.oakTrialPending&&!fishingSession;
+  const choosingUpgrade=firstUpgrade.unlocked&&!firstUpgrade.complete;
+  const active=(pendingTrial||choosingUpgrade)&&!tradingGuideActive()&&!editing&&!depthsRun&&!player.inCombat;
+  if(!active&&!tradingGuideActive())$('scene').dataset.bedTutorial=String(!$('bedGuide').hidden);
   $('upgradeGuide').hidden=!active;
   if(!active)return;
   $('bedGuide').hidden=true;$('scene').dataset.bedTutorial='true';
+  if(pendingTrial){
+    const destination=oakTrialDestination();
+    $('upgradeChange').hidden=true;
+    $('upgradeGuideArt').innerHTML=shopItemArt('oak');
+    $('upgradeGuideTitle').textContent='Land your first Oak Rod catch';
+    if(fishingGear.equippedRod!=='oak'){
+      $('upgradeGuideText').textContent='Equip the Oak Rod from Inventory to try it out.';
+      $('upgradeGuideAction').textContent='Equip Oak Rod';
+    }else if(destination==='store'){
+      $('upgradeGuideText').textContent='Pick up Riverworms at Silverfin Outfitters before casting.';
+      $('upgradeGuideAction').textContent=currentRoom==='store'?'View bait supplies':'Head to Silverfin Outfitters';
+    }else{
+      $('upgradeGuideText').textContent='Catch a fish with your Oak Rod at Silverfin Pond to see what your upgrade does.';
+      $('upgradeGuideAction').textContent=currentRoom==='pond'?'Cast with Oak Rod':'Head to Silverfin Pond';
+    }
+    return;
+  }
   const plan=upgradePlan();$('upgradeChange').hidden=!plan;
   $('upgradeGuideArt').innerHTML=plan?shopItemArt(plan.id):'✦';
   if(!plan){$('upgradeGuideTitle').textContent='Make your first upgrade';$('upgradeGuideText').textContent='Your first sale earned gold. Choose better fishing gear or a stronger weapon.';$('upgradeGuideAction').textContent='Choose my upgrade';return;}
@@ -1964,6 +1993,24 @@ function updateUpgradeGuide(){
   $('upgradeGuideAction').textContent=plan.needsBait&&currentRoom==='store'?'View bait supplies':currentRoom===plan.shop&&!plan.missingXp&&!plan.missingGold?'View '+plan.item.name:currentRoom===plan.destination?(plan.destination==='market'?'Open trading window':plan.fishing?'Go fishing':'Approach boar'):'Head to '+roomDetails[plan.destination].name;
 }
 function followFirstUpgrade(){
+  if(firstUpgrade.oakTrialPending){
+    if(unavailable())return;
+    if(fishingGear.equippedRod!=='oak'){
+      openInventory();bagCategory='gear';bagSelection='rod:oak';renderBag();
+      return;
+    }
+    const destination=oakTrialDestination();
+    if(currentRoom!==destination){
+      const door=firstUpgradeDestination();
+      if(door)followHudDoor(door);
+    }else if(destination==='store'){
+      openMerchant();$('buyBait').focus();
+    }else if(!fishingSession){
+      const post=roomFurniture().find(item=>item.type==='fishingPost');
+      if(post)use(post);
+    }
+    return;
+  }
   const plan=upgradePlan();if(!plan){openUpgradeChoice();return;}
   if(unavailable())return;
   if(currentRoom!==plan.destination){const door=firstUpgradeDestination();if(door)followHudDoor(door);return;}
@@ -2202,6 +2249,8 @@ function finishFishing(time){
   const before=playerStats.patienceXp,oldLevel=patienceLevel(),earned=PATIENCE_XP_PER_CATCH+session.bonus;
   playerStats.patienceXp+=earned;
   patienceTween={from:before,to:playerStats.patienceXp,started:time};
+  const oakTrial=firstUpgrade.oakTrialPending&&castProfile?.rod==='oak'&&currentRoom==='pond';
+  if(oakTrial)firstUpgrade.oakTrialPending=false;
   recordAdventure('Caught '+fish.name+'! +'+earned+' Patience XP.');
   const levelUp=patienceLevel()>oldLevel;
   $('catchTier').textContent=fishingCatalog.qualities[fish.quality].name+' catch';
@@ -2214,10 +2263,13 @@ function finishFishing(time){
   const picture=$('catchPicture'),pictureContext=picture.getContext('2d');
   pictureContext.clearRect(0,0,picture.width,picture.height);
   fishingMoments.drawFish(pictureContext,30,15,fishId,fish.quality,2);
-  catchReveal={until:time+4000};
+  const oakBiteSavings=((fishingCatalog.rods.reed.duration-fishingCatalog.rods.oak.duration)/1000).toFixed(1);
+  if(oakTrial)$('catchReward').textContent=oakBiteSavings+'s shorter average bite wait · Sells for '+fish.price+' gold';
+  catchReveal={until:time+(oakTrial?6500:4000)};
   fishingMoments.sound(levelUp?'level':fish.quality==='rare'?'rare':'catch');
-  showTransaction(levelUp?'Patience level '+patienceLevel()+'!':'Catch landed',[
-    {text:'+1 '+fish.name,icon:'⋈'},{text:'+'+earned+' Patience XP'+(session.bonus?' · Reel bonus':''),icon:'✦'}
+  showTransaction(oakTrial?'First Oak Rod catch!':levelUp?'Patience level '+patienceLevel()+'!':'Catch landed',[
+    {text:'+1 '+fish.name,icon:'⋈'},{text:'+'+earned+' Patience XP'+(session.bonus?' · Reel bonus':''),icon:'✦'},
+    ...(oakTrial?[{text:oakBiteSavings+'s shorter average bite wait than Reed Rod',icon:'♓'},{text:'Sells for '+fish.price+' gold at the Trading Post',icon:'◈'}]:[])
   ]);
 }
 function updateFishingMoment(time){
@@ -2261,6 +2313,7 @@ function finishInteraction(){
     castProfile={level:patienceLevel(),rod:fishingGear.equippedRod};
     fishingStarted=performance.now();
     fishingSession=fishingMoments.create(fishingStarted,fishingDuration);
+    if(firstUpgrade.oakTrialPending)updateUpgradeGuide();
     catchReveal=null;$('catchReveal').hidden=true;
     fishingMoments.sound('cast');
     updateAdventurePanel();
@@ -2585,9 +2638,13 @@ function buyFishingRod(id){
   credits-=rod.price;
   fishingGear.ownedRods.push(id);
   fishingGear.equippedRod=id;
-  const upgraded=finishFirstUpgrade('fishing',id);savePlayerState();
-  $('shopStatus').textContent=rod.name+' purchased and equipped.';
-  showTransaction(upgraded?'First upgrade complete!':'Rod purchased',[{text:'+1 '+rod.name,icon:'♓'},{text:upgraded?'3.8s per catch · Better-quality fish chances':'Equipped and ready',icon:'✓'}],-rod.price);
+  const upgraded=finishFirstUpgrade('fishing',id);
+  const includedBait=upgraded&&fishingGear.bait===0;
+  if(upgraded)firstUpgrade.oakTrialPending=true;
+  if(includedBait)fishingGear.bait=1;
+  savePlayerState();
+  $('shopStatus').textContent=rod.name+' purchased and equipped.'+(upgraded?' Next, try it at Silverfin Pond.':'')+(includedBait?' One Riverworm included for your first cast.':'');
+  showTransaction(upgraded?'First upgrade complete!':'Rod purchased',[{text:'+1 '+rod.name,icon:'♓'},{text:upgraded?'3.8s per catch · Better-quality fish chances':'Equipped and ready',icon:'✓'},...(includedBait?[{text:'1 Riverworm for your first cast',icon:'≋'}]:[])],-rod.price);
 }
 function showTransaction(title,items,creditChange=0){
   const card=document.createElement('div'),heading=document.createElement('b');
@@ -2915,6 +2972,7 @@ function cancelFishing(){
   cancelWoodcutting();
   if(fishingStarted===null)return;
   fishingStarted=null;fishingSession=null;
+  if(firstUpgrade.oakTrialPending)updateUpgradeGuide();
   updateAdventurePanel();
 }
 function revealByLantern(){

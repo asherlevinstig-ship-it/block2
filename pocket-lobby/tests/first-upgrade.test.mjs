@@ -15,3 +15,12 @@ test('upgrade saves reject invalid goals and sale totals',()=>{
  assert.throws(()=>normalizeState({firstUpgrade:{...base,sale:{...base.sale,gold:-30}}}),/Invalid first sale/);
  assert.throws(()=>normalizeState({firstUpgrade:{...base,sale:{...base.sale,quantity:1.5}}}),/Invalid first sale/);
 });
+
+test('an Oak Rod trial survives a save until the catch clears it',()=>{
+ const firstUpgrade={unlocked:true,choice:'fishing',complete:true,sale:null,oakTrialPending:true};
+ const pending=normalizeState({firstUpgrade});
+ assert.equal(pending.firstUpgrade.oakTrialPending,true);
+ const finished=normalizeState({...pending,firstUpgrade:{...firstUpgrade,oakTrialPending:false}});
+ assert.equal(finished.firstUpgrade.oakTrialPending,undefined);
+ assert.equal(normalizeState({firstUpgrade:{...firstUpgrade,choice:'combat'}}).firstUpgrade.oakTrialPending,undefined);
+});

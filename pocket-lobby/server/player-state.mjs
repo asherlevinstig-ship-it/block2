@@ -36,7 +36,7 @@ function normalizeFirstUpgrade(input){
   if(!input||typeof input!=='object'||Array.isArray(input)||typeof input.unlocked!=='boolean'||typeof input.complete!=='boolean'||![null,'fishing','combat'].includes(input.choice))throw new Error('Invalid first upgrade.');
   let sale=null;
   if(input.sale!=null){const {name,quantity,gold}=input.sale;if(typeof name!=='string'||!name.trim()||name.length>60||!Number.isSafeInteger(quantity)||quantity<1||quantity>1000000||!Number.isSafeInteger(gold)||gold<1||gold>100000000)throw new Error('Invalid first sale.');sale={name,quantity,gold};}
-  return {unlocked:input.unlocked,choice:input.choice,complete:input.complete,sale};
+  return {unlocked:input.unlocked,choice:input.choice,complete:input.complete,sale,...(input.oakTrialPending===true&&input.complete&&input.choice==='fishing'?{oakTrialPending:true}:{})};
 }
 export function normalizeState(input={}){
   if(!input||typeof input!=="object"||Array.isArray(input))throw new Error("Invalid character.");
