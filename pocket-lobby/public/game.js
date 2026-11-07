@@ -699,7 +699,7 @@ function updateDepthsPanel(){
   const cleared=inDepths&&!depthsEnemyAvailable(depthsRun,currentRoom);
   const canVisitCache=currentRoom==='depthsGallery'&&depthsRun?.cleared===2;
   $('depthsCacheRoute').hidden=unavailable()||!(cacheRoom||canVisitCache);
-  $('depthsCacheRoute').textContent=cacheRoom?'Return to Shell Gallery':'Explore the Essence Cache chamber';
+  $('depthsCacheRoute').textContent=cacheRoom?'Return to Shell Gallery':'Elite cache · '+essenceCacheGold+' gold + stone';
   $('depthsOpenCache').hidden=!cacheRoom||!cleared||!!depthsRun?.finds?.includes('essenceCache');
   const atCamp=cleared&&!unavailable();
   const canDecide=atCamp&&!depthsExploring;
@@ -752,14 +752,14 @@ function startMonsterEncounter(enemy){
     serverGameplay('fight').then(packet=>{
       serverCombatId=packet.state.combatId;setPlayerCombat(true);nextCombatPoll=0;
       combatMessage='You engage the '+enemy.name+'. Dodge with Space, or Flee.';
-      updateCombatPanel();note('Press Space just before the '+enemy.move+' lands. F flees.');
+      updateCombatPanel();note('Press Space just before the '+enemyAttack(hunting.encounter,enemy).name+' lands. F flees.');
     }).catch(error=>note(error.message));return;
   }
   hunting.encounter=createHunt(Date.now(),enemy.health,enemy.id);
   setPlayerCombat(true);
-  combatMessage='You engage the '+enemy.name+'. Dodge the '+enemy.move+' with Space, or Flee.';
+  combatMessage='You engage the '+enemy.name+'. Dodge '+enemyAttack(hunting.encounter,enemy).name+' with Space, or Flee.';
   updateCombatPanel();savePlayerState();
-  note('Press Space just before the '+enemy.move+' lands. F flees.');
+  note('Press Space just before the '+enemyAttack(hunting.encounter,enemy).name+' lands. F flees.');
 }
 function combatAction(action){
   if(!player.inCombat||!['flee','dodge'].includes(action))return;
@@ -879,13 +879,17 @@ function updateCombatPanel(){
     notice.hidden=false;
     if(notice.textContent!==cue)notice.textContent=cue;
     notice.dataset.cue=dodgeNow?'dodge':exposed?'exposed':'watch';
+  }else if(enemy?.elite&&!encounter&&!chamberCleared){
+    notice.hidden=false;notice.dataset.cue='watch';
+    notice.textContent='Elite guardian · Strike → Runic Slam → open shell. Reward '+essenceCacheGold+' gold + a stone.';
   }else notice.dataset.cue='';
   if(!enemy||chamberCleared)return;
   const beetle=!!enemy.shellArmor,respawn=stage>=0?0:huntRespawnAt(hunting,enemy);
   $('combatTitle').textContent=enemy.name;
-  $('combatChapter').textContent=stage>=0?'MOONWELL DEPTHS':beetle?'MOONWELL RUINS':'FIRST HUNT';
+  $('combatChapter').textContent=enemy.elite?'ELITE · ESSENCE CACHE':stage>=0?'MOONWELL DEPTHS':beetle?'MOONWELL RUINS':'FIRST HUNT';
   const [strength,agility,vitality]=enemy.xp;
   $('combatReward').textContent=stage>=0?(magicState?.picks.length?'Combat XP and Awakening Stones are kept after a win. Bank your gold and loot.':'Combat XP is kept after a win. Gold and items are held until you bank them.'):'Victory: '+enemy.lootName+' ×1 · +'+strength+' Strength, +'+agility+' Agility, +'+vitality+' Vitality XP. Sell loot for '+enemy.sellPrice+' gold.';
+  if(enemy.elite)$('combatReward').textContent='Open the cache after victory for '+essenceCacheGold+' gold + an Awakening Stone. Your collected cache rewards are yours to keep.';
   const approach=$('approachBeetle');
   approach.hidden=(!beetle&&stage<0)||!!encounter||now<respawn;
   approach.textContent='Approach '+enemy.name;
@@ -893,7 +897,7 @@ function updateCombatPanel(){
   const shell=$('beetleShell');
   shell.hidden=!beetle||now<respawn;
   const opening=Math.max(0,((encounter?.exposedUntil??0)-now)/1000);
-  shell.textContent=opening?'Weak spot exposed · '+opening.toFixed(1)+'s':'Armored shell · Dodge the slam to expose its weak spot.';
+  shell.textContent=opening?'Weak spot exposed · '+opening.toFixed(1)+'s':enemy.elite?'Armoured shell · Dodge Runic Slam, then attack during recovery. A Storm interrupt opens it early.':'Armored shell · Dodge the slam to expose its weak spot.';
   shell.classList.toggle('exposed',opening>0);
   $('boarProgress').max=enemy.health;
   $('boarProgress').setAttribute('aria-label',enemy.name+' health');
@@ -1929,6 +1933,8 @@ function updateWorldLabels(){
     else add('Timber',...point(6.5,5.5,54),'npc',()=>use(timberTree()));
   }
   if(depthsRun&&!player.inCombat){
+    const elite=huntEnemyForRoom(currentRoom);
+    if(elite?.elite&&roomFurniture().some(item=>item.type===elite.prop))add('Elite Cache Guardian',...point(6.5,5.5,45),'npc',()=>use(roomFurniture().find(item=>item.type===elite.prop)));
     const passage=roomFurniture().find(item=>item.type==='cachePassage');
     if(passage&&(currentRoom===depthsCacheRoom||depthsRun.cleared===2))add(currentRoom===depthsCacheRoom?'Shell Gallery ←':'Essence Cache →',...point(passage.x+.5,passage.y+.5,38),'npc',()=>use(passage));
     for(const item of roomFurniture()){

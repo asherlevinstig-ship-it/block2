@@ -6,7 +6,7 @@ export const moonwood=(()=>{
   const areas={
     depthsGate:{number:'D1',name:'Flooded Gate',description:'An old sluice feeds a rushing channel. Look for the lever by the entrance.',badge:'MOONWELL DEPTHS',floor:'Chamber 1',center:[4,5],palette:['#31454e','#405961','#7a8a89'],landmark:['wildboar',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['wildrock',2,7],['wildrock',9,7],['sluiceLever',3,4],['gateSupply',10,4]]},
     depthsGallery:{number:'D2',name:'Shell Gallery',description:'Green light spills from the fungi. A shell hangs from a weathered chime stand.',badge:'MOONWELL DEPTHS',floor:'Chamber 2',center:[4,5],palette:['#344b45','#4a6054','#84947b'],landmark:['stonebackBeetle',6,5,5,5],authored:[['pillar',2,3],['pillar',8,3],['wildrock',3,7],['wildrock',7,7],['glowFungus',4,2],['glowFungus',9,3],['glowFungus',5,8],['shellChime',3,3],['galleryCache',9,6],['cachePassage',10,4]]},
-    depthsCache:{number:'D2+',name:'The Sealed Alcove',description:'An optional chamber off Shell Gallery. Defeat the Cache Guardian to unlock its Essence Cache.',badge:'MOONWELL DEPTHS',floor:'Optional cache chamber',center:[4,5],palette:['#3b3956','#504664','#927fa5'],landmark:['stonebackBeetle',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['pillar',8,7],['vaultCrystal',9,3],['glowFungus',3,7],['cachePassage',2,5],['essenceCache',9,5]]},
+    depthsCache:{number:'D2+',name:'The Sealed Alcove',description:'An elite Cache Guardian protects 50 gold and an Awakening Stone. Watch for Runic Slam, then strike its open shell.',badge:'MOONWELL DEPTHS',floor:'Optional cache chamber',center:[4,5],palette:['#3b3956','#504664','#927fa5'],landmark:['stonebackBeetle',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['pillar',8,7],['vaultCrystal',9,3],['glowFungus',3,7],['cachePassage',2,5],['essenceCache',9,5]]},
     depthsVault:{number:'D3',name:'The Sunken Vault',description:'The vault glitters beneath the waterline. Read the relief before facing its Guardian.',badge:'MOONWELL DEPTHS',floor:'Chamber 3',center:[4,5],palette:['#453c50','#5d4962','#a48b8e'],landmark:['stonebackBeetle',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['pillar',3,8],['pillar',8,8],['wildrock',9,4],['vaultCrystal',9,2],['vaultCrystal',8,7],['vaultRelief',3,3]]},
     logging:{number:'15',name:'Timber Hollow',description:'Meet the woodcutter, collect your first axe, and gather timber for the Tower.',badge:'WOODCUTTING',floor:'Woodland worksite',center:[5,5],palette:['#3b5050','#4e665c','#92917d'],landmark:['timberTree',6,5,5,5],authored:[['woodcutter',4,3],['workbench',5,3],['wildtree',1,1],['wildtree',10,1],['wildtree',9,7],['wildtree',2,8],['wildrock',8,3],['wildbloom',4,7]]},
     clearing:{number:'13',name:'Bramble Clearing',description:'A wild boar guards a moonlit clearing. Approach carefully, and flee if your hearts run low.',badge:'HUNTING GROUNDS',floor:'Boar territory',center:[5,5],palette:['#3c5050','#50645b','#918b7e'],landmark:['wildboar',6,5,5,5],authored:[['wildtree',1,1],['wildtree',9,1],['wildtree',10,7],['wildtree',2,8],['wildrock',8,7],['wildbloom',4,2],['wildbloom',8,3]]},
@@ -276,7 +276,7 @@ export const moonwood=(()=>{
       const flipped=pose.defeated||(combat?.exposedUntil??0)>Date.now();
       const rise=flipped||reduced?0:Math.round((pose.windup??0)*8-(pose.charge??0)*.45);
       const gilded=item.cacheGuardian===true;
-        const shell=pose.hit?['#c1a692','#5c5366','#887b80']:gilded?['#d6b983','#65516c','#95806e']:['#8a9b9a','#3b4c59','#586a72'];
+      const shell=pose.hit?['#c1a692','#5c5366','#887b80']:gilded?['#d6b983','#65516c','#95806e']:['#8a9b9a','#3b4c59','#586a72'];
       for(const [u,v] of [[.13,.22],[.13,.48],[.13,.73],[.69,.22],[.69,.48],[.69,.73]]){
         part(u,v,.19,.10,flipped?6:0,flipped?5:4,['#687b77','#263948','#41545b']);
       }
@@ -292,6 +292,11 @@ export const moonwood=(()=>{
         part(.65,.54,.25,.29,4+rise,7,['#748886','#3b4a56','#4d6266']);
         rect(px+4,py-10-rise,2,2,pose.windup>.4?'#ffb576':'#b7d69d');
         rect(px+10,py-7-rise,2,2,pose.windup>.4?'#ffb576':'#b7d69d');
+        if(gilded){
+          part(.28,.28,.44,.39,19,3,['#e5c77e','#785c69','#b29469']);
+          polygon([[px,py-31],[px+4,py-25],[px,py-20],[px-4,py-25]],'#a9edec');
+          rect(px-10,py-24,2,7,'#e5c77e');rect(px+8,py-24,2,7,'#e5c77e');
+        }
         rect(px-3,py-17,2,5,'#455a60');
         rect(px-8,py-12,5,1,'#91a5a0');
       }

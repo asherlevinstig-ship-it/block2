@@ -220,3 +220,39 @@ test('beetles telegraph heavier slams and the Guardian queues one separately dod
   assert.equal(aftershock.encounter.exposedUntil,quake.encounter.exposedUntil);
   assert.equal(enemyAttack(aftershock.encounter).name,'Slam');
 });
+
+
+test('elite cache guardian repeats Strike, Runic Slam and a punishable recovery window',()=>{
+  const roll=()=>.5;
+  let encounter=createHunt(1000,undefined,'cacheGuardian');
+  assert.equal(encounter.health,104);
+  assert.equal(enemyAttack(encounter).name,'Sentinel Strike');
+  const strike=huntingTurn(encounter,100,{},'enemy',3600,roll);
+  assert.equal(strike.encounter.nextBoarAt,6400);
+  assert.equal(enemyAttack(strike.encounter).name,'Runic Slam');
+  assert.equal(enemyAttack(strike.encounter).tell,1300);
+  const saved=normalizeHunting({encounter:strike.encounter});
+  assert.equal(enemyAttack(saved.encounter).name,'Runic Slam');
+  const slam=huntingTurn(saved.encounter,strike.health,{},'enemy',6400,roll);
+  assert.equal(slam.encounter.exposedUntil,8800);
+  assert.equal(slam.encounter.nextBoarAt,10600);
+  assert.equal(enemyAttack(slam.encounter).name,'Sentinel Strike');
+  const hit=huntingTurn(slam.encounter,slam.health,{},'attack',6500,roll);
+  assert.equal(hit.shellGuarded,false);
+  assert.equal(hit.damage,21);
+  const again=huntingTurn(slam.encounter,slam.health,{},'enemy',10600,roll);
+  assert.equal(enemyAttack(again.encounter).name,'Runic Slam');
+  assert.equal(again.encounter.nextBoarAt,13400);
+  const evade=huntingTurn(strike.encounter,strike.health,{},'dodge',6200,roll);
+  const perfect=huntingTurn(evade.encounter,evade.health,{},'enemy',6400,roll);
+  assert.equal(perfect.taken,0);
+  assert.equal(perfect.encounter.exposedUntil,9200);
+});
+
+test('saved cache guardian encounters from before the elite upgrade can finish their pending slam',()=>{
+  const old=normalizeHunting({encounter:{...createHunt(1000,70,'cacheGuardian'),enemyMove:'crush',desperateUsed:true}});
+  assert.equal(enemyAttack(old.encounter).name,'Crushing Slam');
+  const hit=huntingTurn(old.encounter,100,{},'enemy',old.encounter.nextBoarAt,()=>.5);
+  assert.equal(enemyAttack(hit.encounter).name,'Sentinel Strike');
+  assert(hit.encounter.exposedUntil>old.encounter.nextBoarAt);
+});

@@ -10,7 +10,7 @@ export const huntEnemies={
   boar,beetle,
   depthsBoar:{...boar,id:'depthsBoar',room:'depthsGate',name:'Gate Boar',health:62,damage:11},
   depthsBeetle:{...beetle,id:'depthsBeetle',room:'depthsGallery',name:'Gallery Beetle',health:84,damage:19},
-  cacheGuardian:{...beetle,id:'cacheGuardian',room:'depthsCache',name:'Cache Guardian',health:70,damage:16,shellArmor:5,xp:[12,10,12]},
+  cacheGuardian:{...beetle,id:'cacheGuardian',room:'depthsCache',name:'Cache Guardian',elite:true,move:'sentinelStrike',health:104,firstAttack:2600,interval:4200,damage:12,shellArmor:6,exposureMs:2400,xp:[20,15,20]},
   depthsGuardian:{...beetle,id:'depthsGuardian',room:'depthsVault',name:'Vault Guardian',health:118,damage:25,shellArmor:9}
 };
 const enemiesByRoom=Object.fromEntries(Object.values(huntEnemies).map(enemy=>[enemy.room,enemy]));
@@ -25,17 +25,22 @@ const enemyMoves={
   wildCharge:{id:'wildCharge',name:'Wild Charge',tell:1050,delay:1550,damage:4,shape:'lane',opensShell:false},
   crush:{id:'crush',name:'Crushing Slam',tell:1250,delay:3050,damage:5,shape:'ring',opensShell:true},
   quake:{id:'quake',name:'Vault Quake',tell:1350,delay:3400,damage:5,shape:'ring',opensShell:true},
+  sentinelStrike:{id:'sentinelStrike',name:'Sentinel Strike',tell:650,damage:0,shape:'arc',opensShell:false},
+  runicSlam:{id:'runicSlam',name:'Runic Slam',tell:1300,delay:2800,damage:8,shape:'ring',opensShell:true},
   aftershock:{id:'aftershock',name:'Aftershock',tell:900,delay:1350,damage:-10,shape:'ring',opensShell:false}
 };
 export function enemyAttack(encounter,enemy=huntEnemy(encounter)){
   const move=Object.hasOwn(enemyMoves,encounter?.enemyMove)?enemyMoves[encounter.enemyMove]:null;
-  const allowed=enemy.id==='depthsGuardian'?['quake','aftershock']:enemy.shellArmor?['crush']:['sweep','wildCharge'];
+  const allowed=enemy.id==='cacheGuardian'?['runicSlam','crush']:enemy.id==='depthsGuardian'?['quake','aftershock']:enemy.shellArmor?['crush']:['sweep','wildCharge'];
   return allowed.includes(move?.id)?move:enemyMoves[enemy.move];
 }
 function scheduleEnemyResponse(next,enemy,move,timedDodge,now){
   delete next.enemyMove;
   let response;
-  if(move.id==='quake')response=enemyMoves.aftershock;
+  if(enemy.id==='cacheGuardian'){
+    if(move.id===enemy.move)response=enemyMoves.runicSlam;
+    else next.exposedUntil=Math.max(next.exposedUntil??0,now+enemy.exposureMs);
+  }else if(move.id==='quake')response=enemyMoves.aftershock;
   else if(!next.desperateUsed&&next.health<=enemy.health*.55&&move.id===enemy.move){
     response=enemyMoves[enemy.id==='depthsGuardian'?'quake':enemy.shellArmor?'crush':'wildCharge'];
     next.desperateUsed=true;

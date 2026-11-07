@@ -1,6 +1,6 @@
 import {normalizeMagic,awardAwakeningStone,stoneForms} from './essences.js';
 
-export const essenceCacheGold=25;
+export const essenceCacheGold=50;
 export const depthsCacheRoom='depthsCache';
 export const moonwellShard={id:'moonwellShard',name:'Moonwell Shard',price:100};
 

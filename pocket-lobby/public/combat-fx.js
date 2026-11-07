@@ -280,7 +280,7 @@ export function drawCombatOverlayFx({ctx,width,height,time,now,events,encounter,
     ctx.font='bold 10px monospace';ctx.textAlign='center';
     ctx.fillText(victory?victoryTitle:warning?warningTitle:'WEAK SPOT EXPOSED',x,y+13);
     ctx.font='7px monospace';ctx.fillStyle='#e2d7c4';
-    if(victory)ctx.fillText((enemy?.lootName??'Boar Meat')+' +1  ·  Hunting XP +'+(enemy?.xp.reduce((sum,xp)=>sum+xp,0)??40),x,y+27);
+    if(victory)ctx.fillText((enemy?.elite?'Essence Cache unlocked':(enemy?.lootName??'Boar Meat')+' +1')+' · Combat XP +'+(enemy?.xp.reduce((sum,xp)=>sum+xp,0)??40),x,y+27);
     else if(warning){ctx.fillStyle='#b17e63';ctx.fillRect(x-w/2+10,y+19,(w-20)*(1-remaining/move.tell),2);}
   }
   ctx.restore();

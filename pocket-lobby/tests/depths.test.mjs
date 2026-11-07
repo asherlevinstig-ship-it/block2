@@ -132,14 +132,14 @@ test('the optional cache needs its own guardian victory, pays once, and preserve
   assert.deepEqual(normalizeState(state).depthsRun,state.depthsRun);
   act('depthsInspect',{id:'essenceCache'});
   assert.equal(state.magic.stones.shield,1);
-  assert.equal(state.credits,125);
+  assert.equal(state.credits,100+essenceCacheGold);
   act('depthsCacheLeave');act('depthsCacheEnter');
   assert.equal(state.depthsRun.cacheGuardDefeated,true);
   act('depthsCacheLeave');act('depthsNext');
   assert.equal(state.location,'depthsVault');
   win();act('bank');
-  assert.equal(state.credits,206);
-  assert.equal(state.goldEarned,106);
+  assert.equal(state.credits,181+essenceCacheGold);
+  assert.equal(state.goldEarned,81+essenceCacheGold);
   assert.equal(state.magic.stones.shield,1);
   assert.equal(state.depthsRun,null);
   act('depthsEnter');
@@ -166,7 +166,7 @@ test('cache capacity failures preserve the sealed reward, and claimed rewards su
   applyGameplayAction(state,'combat',{combatId:state.combatId},3500,()=>.5);
   assert.equal(state.location,'hub');
   assert.equal(state.depthsRun,null);
-  assert.equal(state.credits,125);
+  assert.equal(state.credits,100+essenceCacheGold);
   assert.equal(state.magic.stones.shield,1);
 });
 
@@ -193,11 +193,29 @@ test('cache API retries and concurrent claims cannot pay twice',async t=>{
   const first=await claim(operation);assert.equal(first.status,200);
   const awarded=await first.json();
   const retry=await claim(operation);assert.equal(retry.status,200);
-  assert.equal((await retry.json()).state.credits,125);
+  assert.equal((await retry.json()).state.credits,100+essenceCacheGold);
   const [a,b]=await Promise.all([claim(crypto.randomUUID(),awarded.revision),claim(crypto.randomUUID(),awarded.revision)]);
   assert.deepEqual([a.status,b.status].sort(),[200,409]);
   const row=sql.prepare('SELECT state_json FROM tower_players WHERE player_id=?').get(packet.characterKey);
   const final=JSON.parse(row.state_json);
-  assert.equal(final.credits,125);
+  assert.equal(final.credits,100+essenceCacheGold);
   assert.equal(final.magic.stones.shield,1);
+});
+
+
+test('elite cache guardian remains beatable with the starter sword, no magic and no upgrades',()=>{
+  assert.equal(essenceCacheGold,50);
+  for(const roll of [0,.1,.5,.99]){
+    const s=normalizeState({location:depthsCacheRoom,depthsRun:{cleared:2},position:{x:5,y:5}});
+    applyGameplayAction(s,'fight',{},1000,()=>roll);
+    applyGameplayAction(s,'combat',{combatId:s.combatId},30000,()=>roll);
+    assert.equal(s.hunting.encounter,null);
+    assert.equal(s.depthsRun?.cacheGuardDefeated,true);
+    assert(s.health>0);
+    assert.equal(s.combatGear.equippedWeapon,'trainingSword');
+    assert.equal(s.magic,undefined);
+    assert.equal(s.credits,100);
+    s.position={x:8,y:5};applyGameplayAction(s,'depthsInspect',{id:'essenceCache'},30000,()=>roll);
+    assert.equal(s.credits,150);
+  }
 });

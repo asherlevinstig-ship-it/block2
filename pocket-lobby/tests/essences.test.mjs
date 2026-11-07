@@ -333,3 +333,29 @@ test('Storm cancels a warned guardian follow-up but cannot undo an attack that h
   assert(!late.combatReceipt.events.some(event=>event.interrupted));
   assert.equal(late.hunting.encounter.interruptResistUntil,undefined);
 });
+
+
+test('each base element has a useful response to the elite guardian pattern',()=>{
+  const setup=(id)=>{
+    const s=character();act(s,'bondEssences',{picks:id.startsWith('storm')?['fire','shadow','storm']:gems});
+    s.magic.stones.shield=1;act(s,'awakenPower',{id});
+    s.location='depthsCache';s.depthsRun={cleared:2};s.position={x:5,y:5};act(s,'fight');
+    s.hunting.encounter.nextPlayerAt=100000;return s;
+  };
+  const fire=setup('fire:sword');
+  act(fire,'combat',{combatId:fire.combatId,input:'essence'},1100);
+  assert.equal(fire.combatReceipt.events[0].damage,17);
+  act(fire,'combat',{combatId:fire.combatId},2100);
+  assert.equal(fire.combatReceipt.events[0].action,'burn');
+  assert.equal(fire.combatReceipt.events[0].damage,3);
+  for(const [id,check] of Object.entries({
+    'ice:shield':s=>{assert.equal(s.hunting.encounter.nextBoarAt,7100);assert.equal(s.hunting.encounter.enemyMove,'runicSlam');},
+    'shadow:shield':s=>{act(s,'combat',{combatId:s.combatId},6400);assert(s.combatReceipt.events[0].weakened>0);assert(s.combatReceipt.events[0].warded>0);},
+    'storm:shield':s=>{assert.equal(s.combatReceipt.events[0].interrupted,true);assert.equal(s.hunting.encounter.exposedUntil,8600);assert.equal(s.hunting.encounter.enemyMove,undefined);assert.equal(s.hunting.encounter.nextBoarAt,10400);}
+  })){
+    const s=setup(id);
+    act(s,'combat',{combatId:s.combatId},3600);
+    assert.equal(s.hunting.encounter.enemyMove,'runicSlam');
+    act(s,'combat',{combatId:s.combatId,input:'essence'},6200);check(s);
+  }
+});

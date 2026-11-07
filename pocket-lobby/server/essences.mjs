@@ -98,8 +98,8 @@ export function castEssencePower(state,now,slot='q'){
     event.effect+=' and weakened the enemy’s next hit';
   }
   if(event.encounter&&power.gem==='storm'){
-    const enemy=huntEnemy(encounter),remaining=encounter.nextBoarAt-now;
-    const windingUp=remaining>0&&remaining<=enemyAttack(encounter,enemy).tell;
+    const enemy=huntEnemy(encounter),attack=enemyAttack(encounter,enemy),remaining=encounter.nextBoarAt-now;
+    const windingUp=remaining>0&&remaining<=attack.tell;
     if(windingUp&&now<(encounter.interruptResistUntil??0)){
       event.interruptResisted=true;
       event.effect+=' but the enemy resisted the interrupt';
@@ -108,7 +108,12 @@ export function castEssencePower(state,now,slot='q'){
       delete next.enemyMove;
       next.interruptResistUntil=now+essenceEffects.storm.duration;
       event.interrupted=true;
-      event.effect+=' and interrupted '+enemyAttack(encounter,enemy).name;
+      event.effect+=' and interrupted '+attack.name;
+      if(enemy.elite&&attack.opensShell){
+        next.exposedUntil=Math.max(next.exposedUntil??0,now+enemy.exposureMs);
+        event.shellExposed=true;
+        event.effect+=', exposing its shell';
+      }
     }else event.effect+='. Cast during an attack warning to interrupt';
   }
   magic.cooldowns[power.id]=now+power.cooldown;
