@@ -453,7 +453,7 @@ function questAction(){
   showTransaction('First Steps complete!',[{icon:'⚔',text:'Warden’s Blade · equipped'},{icon:'✦',text:'18 base damage · Thank you, adventurer.'}],reward.gold);
   $('questDialog').close();
   updateTradeGuide();
-  note('Quest complete! Follow the golden trail to the Trading Post.');
+  note('Quest complete! +75 gold and Warden’s Blade.');
 }
 
 let combatMessage='',combatFeedback=null,lastCombatUi=0;
@@ -1905,8 +1905,8 @@ function hudRoomExits(room){
   if(room==='lounge')return [{to:'hub',loungeExit:true}];
   return (roomDoors[room]??[]).filter(door=>doorAvailable(door,room));
 }
-function tradingGuideEligible(){return questStage(quest)===3||quest.claimed===true;}
-function tradingGuideActive(){return tradingGuideEligible()&&(questStage(quest)===3||!tradingPostGuideComplete)&&currentRoom!=='market'&&!depthsRun;}
+function tradingGuideEligible(){return questStage(quest)===3;}
+function tradingGuideActive(){return tradingGuideEligible()&&currentRoom!=='market'&&!depthsRun;}
 function tradingGuideDestination(){
   if(!tradingGuideActive())return null;
   if(currentRoom==='hub'&&!lobbyRoutesOpen())return {warden:true,tile:{x:10,y:4},label:'Tower Warden'};
