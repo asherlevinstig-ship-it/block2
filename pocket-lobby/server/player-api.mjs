@@ -117,7 +117,7 @@ export async function handlePlayerApi(request,env){
     const body=await bodyOf(request);
     if((body.characterKey!==undefined||identity.account)&&body.characterKey!==id)return json({error:"This tab belongs to a different character. Reload to continue."},409);
     if(typeof body.operation!=="string"||body.operation.length>80||!Number.isInteger(body.revision))return json({error:"Missing save revision."},400);
-    const row=await settled(env.TOWER_DB,id);
+    const row=path==="/api/player/presence"?await read(env.TOWER_DB,id):await settled(env.TOWER_DB,id);
     if(!row)return json({error:"Character not found."},401);
     if(row.last_request===body.operation)return json(packet(row));
     if(row.revision!==body.revision)return json({error:"Your character changed in another tab or completed an offline action.",...packet(row)},409);
@@ -153,8 +153,11 @@ export async function handlePlayerApi(request,env){
         deliverCarpenterOrder(state);
         break;
       case "/api/player/presence":
-        if(!state.characterRules?.enabled||state.plan||state.report||state.fishingCast||state.timberCut||state.hunting?.encounter||state.hunting?.recoveryUntil)return json(packet(row));
-        touchPresence(state,Date.now());
+        if(body.active!==undefined&&typeof body.active!=='boolean'||body.idleForMs!==undefined&&(!Number.isInteger(body.idleForMs)||body.idleForMs<0||body.idleForMs>60000))throw new Error('Invalid activity status.');
+        if(!state.characterRules?.enabled||state.plan&&state.plan.source!=='rules'||state.report)return json(packet(row));
+        settleActivities(state,Date.now());
+        touchPresence(state,Date.now(),{active:body.active!==false,activityAt:Date.now()-(body.idleForMs??0)});
+        settleActivities(state,Date.now());
         break;
       case "/api/player/rules/save":
         if(state.hunting?.encounter)return json({error:"Finish combat before changing character rules.",...packet(row)},409);

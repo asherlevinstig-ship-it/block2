@@ -4442,7 +4442,7 @@ function updateCharacterRulesPreview(){
     $('rulesCombatPreview').textContent=rules.combat.enabled
       ?'Tactics run online and offline in encounters you enter. '+(rules.combat.fleeBelow?'Attempt to flee at '+rules.combat.fleeBelow+' HP or lower.':'Keep fighting until the encounter ends.')
       :'Combat is under your manual control.';
-    let detail='Away work begins after a minute away and follows the eight-hour cap.';
+    let detail='Your saved routine begins after a minute without input, including while the game is open. It runs for up to eight hours.';
     if(rules.enabled&&activity!=='rest'){
       const bait=Math.min(1000,Math.max(0,fishingGear.bait-rules.keepBait));
       const preview=jobPreview(jobState(),activity,8,bait);
@@ -4805,6 +4805,12 @@ window.towerPauseForAccount=()=>{
 window.towerSaveNow=savePlayerState;
 window.towerJoinRoom=connectRoom;
 window.towerHasActiveCast=()=>!!fishingSession||!!woodSession;
+window.towerApplyRoutineState=state=>{
+  fishingSession=null;fishingStarted=null;woodSession=null;treeFall=null;catchReveal=null;patienceTween=null;
+  $('catchReveal').hidden=true;route=[];step=null;interaction=null;target=null;
+  applyServerGameplay(state);
+  enterRoom(state.location,state.position);updateInventory();updateAdventurePanel();
+};
 if(window.playerCloud)window.playerCloud.attach();
 if(window.playerCloud&&typeof WebSocket!=='undefined'){
   multiplayer=createRoomConnection({

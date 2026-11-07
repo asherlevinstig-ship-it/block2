@@ -5,7 +5,9 @@
   const gateText=document.getElementById('cloudGateText');
   const retry=document.getElementById('cloudRetry');
   let packet=null,pending=null,retryJob=null,sending=null,timer=null,conflicted=false;
-  let presenceBusy=null,acting=0,gameplayBusy=false;
+  let presenceBusy=null,acting=0,gameplayBusy=false,lastInputAt=Date.now(),lastReportedInputAt=0;
+  const recordInput=event=>{if(event.isTrusted)lastInputAt=Date.now();};
+  for(const name of ['pointerdown','keydown','touchstart','wheel'])document.addEventListener(name,recordInput,{capture:true,passive:true});
   const ownOperations=[];
   const readLocal=(key,fallback)=>{
     try{return JSON.parse(localStorage.getItem('pocket-lobby:'+key))??fallback;}catch{return fallback;}
@@ -97,6 +99,7 @@
           if(error.status===409||error.status===401||error.status===undefined)conflict('Reload to confirm the status of your delivery.');
           throw error;
         }
+        if(path==='presence'&&error.status===undefined&&attempt<2)continue;
         if(error.status!==409||!error.data?.state)throw error;
         if(path==='presence'){if(error.data.lastOperation===operation){packet=error.data;return packet;}conflict('Your character changed in another window.');throw error;}
         packet=error.data;
@@ -111,19 +114,23 @@
     acting++;try{return await performAction(path,body);}finally{acting--;}
   }
   async function pulse(){
-    if(document.hidden||conflicted||presenceBusy||acting||!packet?.state.characterRules?.enabled||packet.state.plan||packet.state.report)return;
-    await flush();if(presenceBusy||acting||conflicted)return;
+    if(conflicted||presenceBusy||acting||gameplayBusy||!packet?.state.characterRules?.enabled||packet.state.plan&&packet.state.plan.source!=='rules'||packet.state.report)return;
+    await flush();if(presenceBusy||acting||gameplayBusy||conflicted)return;
+    const inputAt=lastInputAt,active=!document.hidden&&inputAt>lastReportedInputAt;
     presenceBusy=(async()=>{
       try{
-        await action('presence');
-        if(packet.state.report?.source==='rules'){
-          pending=retryJob=null;
-          backup(null);
+        await action('presence',{active,idleForMs:Math.max(0,Math.min(60000,Date.now()-inputAt))});
+        if(active)lastReportedInputAt=inputAt;
+        if(packet.state.plan?.source==='rules'||packet.state.report?.source==='rules'){
+          pending=retryJob=null;backup(null);
           window.towerMultiplayer?.disconnect();
-          location.reload();
+          window.towerApplyRoutineState?.(packet.state);
+          showReport(packet.state);
         }
+      }catch(error){
+        if(error.status===401)conflict('Sign in again to continue.');
+        else if(!conflicted)setStatus('Away rules waiting for connection');
       }
-      catch(error){if(error.status===401)conflict('Sign in again to continue.');else if(!conflicted)setStatus('Away rules waiting for connection');}
     })().finally(()=>{presenceBusy=null;if(pending||retryJob)drain();});
     return presenceBusy;
   }
@@ -131,8 +138,8 @@
     const dialog=document.getElementById('offlineDialog'),plan=state.plan??state.report;
     if(!plan)return;
     const running=!!state.plan,wood=plan.kind==='woodcutting',rest=plan.kind==='rest';
-    document.getElementById('offlineTitle').textContent=rest?'Your character rested.':running?(wood?'Woodcutting at Timber Hollow':'Fishing at Silverfin Pond'):'Welcome back.';
-    document.getElementById('offlineDescription').textContent=plan.source==='rules'?plan.ruleSummary:running
+    document.getElementById('offlineTitle').textContent=rest?(running?'Resting at home':'Your character rested.'):running?(wood?'Woodcutting at Timber Hollow':'Fishing at Silverfin Pond'):'Welcome back.';
+    document.getElementById('offlineDescription').textContent=plan.source==='rules'?(running?'Following your saved rules. '+plan.ruleSummary:plan.ruleSummary):running
       ?(wood?'Your woodcutting shift is running. You can close the game and return later.':'Your server fishing plan is running. You can close the game and return later.')
       :'Your character returned home after the work plan.';
     const rows=document.getElementById('offlineCatches');rows.replaceChildren();
@@ -153,12 +160,17 @@
     const saleValue=wood?(plan.timber??0)*4:Object.entries(plan.catches??{}).reduce((sum,[id,count])=>sum+(fishProducts[id]?.price??0)*count,0);
     document.getElementById('offlineValue').textContent=rest?'No items purchased, sold or consumed.':'Supplies in Inventory · '+saleValue+' gold if sold at the Trading Post. No gold has been added yet.';
     const button=document.getElementById('offlineContinue');
-    button.textContent=running?'Stop work and return home':'Return to game';
+    button.textContent=running?(plan.source==='rules'?'I’m back · Stop routine':'Stop work and return home'):'Return to game';
     button.onclick=async()=>{
       button.disabled=true;
       try{
-        if(running){await action('plan/stop');location.reload();}
-        else{await action('report/ack',{startedAt:plan.startedAt});dialog.close();setStatus('Server saved');window.towerJoinRoom?.();}
+        lastInputAt=Date.now();
+        if(running&&plan.source==='rules'){
+          if(presenceBusy)await presenceBusy;
+          await action('presence',{active:true});lastReportedInputAt=lastInputAt;
+          window.towerApplyRoutineState?.(packet.state);showReport(packet.state);
+        }else if(running){await action('plan/stop');location.reload();}
+        else{await action('report/ack',{startedAt:plan.startedAt});dialog.close();window.towerApplyRoutineState?.(packet.state);setStatus('Server saved');window.towerJoinRoom?.();}
       }catch(error){document.getElementById('offlineError').textContent=error.message;}
       finally{button.disabled=false;}
     };
@@ -195,7 +207,7 @@
     document.getElementById('planBait').max=packet.state.fishingGear.bait;
     document.getElementById('planBait').value=Math.min(10,packet.state.fishingGear.bait);
     showReport(packet.state);
-    if(packet.state.plan){
+    if(packet.state.plan&&packet.state.plan.source!=='rules'){
       const poll=async()=>{
         try{
           packet=await request('state');showReport(packet.state);
@@ -210,6 +222,7 @@
     setTimeout(tick,20000);
     document.addEventListener('visibilitychange',()=>{
       if(document.hidden)return;
+      lastInputAt=Date.now();
       if(packet.state.characterRules?.enabled){pulse().catch(()=>{});return;}
       if(pending||retryJob||sending||packet.state.plan)return;
       const revision=packet.revision;
@@ -249,7 +262,7 @@
           return;
         }
       }
-      if(packet.state.characterRules?.enabled&&!packet.state.plan&&!packet.state.report)await action('presence');
+      if(packet.state.characterRules?.enabled&&(!packet.state.plan||packet.state.plan.source==='rules')&&!packet.state.report){await action('presence',{active:true});lastReportedInputAt=lastInputAt;}
       const {moonwood}=await import('./moonwood.js');
       window.moonwood=moonwood;
       const rules=await import('./fishing.js');

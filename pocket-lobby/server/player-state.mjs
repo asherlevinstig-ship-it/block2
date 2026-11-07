@@ -1,3 +1,4 @@
+import {finishRoutineReport} from './routine-report.mjs';
 import {skillLevel,progressionVersion,MAX_SKILL_XP} from '../public/skill-curve.js';
 import {normalizeMagic} from '../public/essences.js';
 import {mealRecipes} from '../public/cooking.js';
@@ -124,9 +125,17 @@ function finishPlan(state,reason,endedAt){
   delete state.plan;
   state.location="home";state.position={x:5,y:7};
 }
-export function settlePlan(state,now,{stop=false,random=Math.random}={}){
+function settleWorkPlan(state,now,{stop=false,random=Math.random}={}){
   const plan=state.plan;
   if(!plan)return false;
+  if(plan.kind==='rest'){
+    if(now>=plan.endAt||stop){
+      if(now>=plan.endAt)state.health=100;
+      state.report={...plan,endedAt:Math.min(now,plan.endAt),reason:now>=plan.endAt?(plan.restReason??'rest'):'returned'};
+      delete state.plan;state.location='home';state.position={x:5,y:7};return true;
+    }
+    return false;
+  }
   if(plan.kind==='woodcutting')return settleWoodcuttingPlan(state,now,{stop});
   let changed=false;
   while(plan.nextCatchAt<=Math.min(now,plan.endAt)&&plan.baitUsed<plan.baitLimit&&state.fishingGear.bait>0){
@@ -149,5 +158,11 @@ export function settlePlan(state,now,{stop=false,random=Math.random}={}){
     finishPlan(state,stop?"stopped":"time-limit",Math.min(now,plan.endAt));
     return true;
   }
+  return changed;
+}
+
+export function settlePlan(state,now,options={}){
+  const changed=settleWorkPlan(state,now,options);
+  if(changed)finishRoutineReport(state,now);
   return changed;
 }
