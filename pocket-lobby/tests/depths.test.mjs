@@ -219,3 +219,92 @@ test('elite cache guardian remains beatable with the starter sword, no magic and
     assert.equal(s.credits,150);
   }
 });
+
+
+const forkReady=()=>normalizeState({location:'depthsGate',depthsRun:{cleared:1,routeChoice:'pending'},health:65,position:{x:4,y:5},stats:{strengthXp:1000,vitalityXp:1000}});
+const passageAction=(state,name,body={},now=1000)=>applyGameplayAction(state,name,body,now,()=>.5);
+
+test('the safe passage heals and pays once, rejoins the gallery and locks out the elite route',()=>{
+  const s=forkReady();
+  assert.throws(()=>passageAction(s,'depthsNext'),/Choose the safe/);
+  assert.throws(()=>passageAction(s,'depthsCacheEnter'),/Clear Shell Gallery/);
+  passageAction(s,'depthsPassage',{choice:'safe'});
+  assert.equal(s.location,'depthsGallery');assert.equal(s.health,85);assert.equal(s.credits,110);
+  assert.equal(s.goldEarned,10);assert.equal(s.depthsRun.routeChoice,'safe');
+  assert.equal(normalizeState(s).depthsRun.routeChoice,'safe');
+  assert.throws(()=>passageAction(s,'depthsPassage',{choice:'safe'}),/Choose an available/);
+  assert.throws(()=>passageAction(s,'depthsCacheEnter'),/Clear Shell Gallery/);
+  assert.equal(s.credits,110);
+  s.position={x:5,y:5};passageAction(s,'fight');
+  passageAction(s,'combat',{combatId:s.combatId},20000);
+  assert.equal(s.depthsRun.cleared,2);
+  assert.throws(()=>passageAction(s,'depthsCacheEnter'),/Clear Shell Gallery/);
+  passageAction(s,'bank');
+  assert.equal(s.credits,146);assert.equal(s.depthsRun,null);
+  passageAction(s,'depthsEnter');
+  assert.equal(s.depthsRun.routeChoice,'pending');
+});
+
+test('dangerous passage survives fleeing, requires the elite and rejoins the same main route',()=>{
+  const s=forkReady();passageAction(s,'depthsPassage',{choice:'dangerous'});
+  assert.equal(s.location,depthsCacheRoom);assert.equal(s.health,65);assert.equal(s.credits,100);
+  assert.equal(normalizeState(s).depthsRun.routeChoice,'dangerous');
+  s.position={x:5,y:5};passageAction(s,'fight',{},2000);
+  passageAction(s,'combat',{combatId:s.combatId,input:'flee'},2100);
+  assert.equal(s.location,'depthsGate');assert.equal(s.depthsRun.routeChoice,'dangerous');
+  assert.throws(()=>passageAction(s,'depthsNext'),/face its guardian/);
+  assert.throws(()=>passageAction(s,'depthsPassage',{choice:'safe'}),/Choose an available/);
+  const forged=protectFishingState(s,{...s,depthsRun:{cleared:1,routeChoice:'safe',cacheGuardDefeated:true}});
+  assert.equal(forged.depthsRun.routeChoice,'dangerous');assert.equal(forged.depthsRun.cacheGuardDefeated,undefined);
+  passageAction(s,'depthsCacheEnter');
+  s.position={x:5,y:5};passageAction(s,'fight',{},3000);
+  passageAction(s,'combat',{combatId:s.combatId},23000);
+  assert.equal(s.depthsRun.cacheGuardDefeated,true);assert.equal(s.depthsRun.cleared,1);
+  s.position={x:8,y:5};passageAction(s,'depthsInspect',{id:'essenceCache'},23000);
+  assert.equal(s.credits,150);assert.equal(s.magic.stones.shield,1);
+  passageAction(s,'depthsCacheLeave');
+  assert.equal(s.location,'depthsGallery');assert.equal(s.depthsRun.cleared,1);
+  assert.equal(normalizeState(s).location,'depthsGallery');
+  passageAction(s,'depthsCacheEnter');
+  assert.equal(s.depthsRun.cacheGuardDefeated,true);
+  passageAction(s,'depthsCacheLeave');
+  s.position={x:5,y:5};passageAction(s,'fight',{},24000);
+  passageAction(s,'combat',{combatId:s.combatId},44000);
+  passageAction(s,'depthsNext');assert.equal(s.location,'depthsVault');
+});
+
+test('passages cap healing, preserve pending choices on capacity failure and leave old runs playable',()=>{
+  const full=forkReady();full.health=100;passageAction(full,'depthsPassage',{choice:'safe'});
+  assert.equal(full.health,100);assert.equal(full.credits,110);
+  const capped=forkReady();capped.credits=100000000;
+  assert.throws(()=>passageAction(capped,'depthsPassage',{choice:'safe'}),/Make room/);
+  assert.equal(capped.health,65);assert.equal(capped.depthsRun.routeChoice,'pending');
+  assert.throws(()=>passageAction(capped,'depthsPassage',{choice:'other'}),/Choose/);
+  const legacy=normalizeState({location:'depthsGate',depthsRun:{cleared:1}});
+  passageAction(legacy,'depthsNext');assert.equal(legacy.location,'depthsGallery');
+  legacy.depthsRun.cleared=2;passageAction(legacy,'depthsCacheEnter');
+  assert.equal(legacy.location,depthsCacheRoom);
+  assert.throws(()=>normalizeState({...capped,depthsRun:{cleared:1,routeChoice:'other'}}),/Invalid dungeon passage/);
+});
+
+test('concurrent passage choices and retries commit only one route and one reward',async t=>{
+  const {db,sql}=testDatabase();t.after(()=>sql.close());
+  const origin='https://tower.test';
+  const session=await handlePlayerApi(new Request(origin+'/api/player/session',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({legacy:{location:'depthsGate',health:95,depthsRun:{cleared:1,routeChoice:'pending'}}})}),{TOWER_DB:db});
+  const packet=await session.json(),cookie=session.headers.get('set-cookie').split(';')[0];
+  const safeOperation=crypto.randomUUID(),dangerOperation=crypto.randomUUID();
+  const choose=(choice,operation)=>handlePlayerApi(new Request(origin+'/api/player/gameplay/depthsPassage',{
+    method:'POST',headers:{Cookie:cookie,Origin:origin,'Content-Type':'application/json'},
+    body:JSON.stringify({choice,characterKey:packet.characterKey,revision:packet.revision,operation})
+  }),{TOWER_DB:db});
+  const [safe,danger]=await Promise.all([choose('safe',safeOperation),choose('dangerous',dangerOperation)]);
+  assert.deepEqual([safe.status,danger.status].sort(),[200,409]);
+  const winner=await (safe.status===200?safe:danger).json();
+  const choice=winner.state.depthsRun.routeChoice;
+  const retry=await choose(choice,choice==='safe'?safeOperation:dangerOperation);
+  assert.equal(retry.status,200);
+  const retried=await retry.json();
+  assert.equal(retried.state.depthsRun.routeChoice,choice);
+  assert.equal(retried.state.credits,choice==='safe'?110:100);
+  assert.equal(retried.state.health,choice==='safe'?100:95);
+});

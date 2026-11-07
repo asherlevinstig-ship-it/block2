@@ -3,7 +3,7 @@ import {awardAwakeningStone} from '../public/essences.js';
 import {moonwood} from '../public/moonwood.js';
 import {isTimberTree,timberTreeState,cutTimberTree,choppingDuration,grantBasicAxe} from '../public/woodcutting.js';
 import {huntEnemyForRoom,huntEnemy,huntRespawnAt,canUseWeapon,createHunt,advanceHunt,huntingTurn,boarRules} from '../public/hunting.js';
-import {depthsStages,depthsStageIndex,clearDepthsStage,inspectDepthsFind,depthsCacheRoom,depthsEnemyAvailable} from '../public/depths.js';
+import {depthsStages,depthsStageIndex,clearDepthsStage,inspectDepthsFind,depthsCacheRoom,depthsEnemyAvailable,chooseDepthsPassage,canEnterDepthsCache,depthsCacheReturn,canVisitDepthsRoom} from '../public/depths.js';
 import {recordQuest} from '../public/quests.js';
 
 const adjacent=(state,item)=>state.position&&Math.abs(state.position.x-item.x)+Math.abs(state.position.y-item.y)===1;
@@ -121,21 +121,27 @@ export function activityAction(state,action,body,now,random){
     inspectDepthsFind(state,item);
     return true;
   }
+  if(action==='depthsPassage'){
+    idle(state);delete state.timberCut;chooseDepthsPassage(state,body.choice);return true;
+  }
   if(action==='depthsCacheEnter'||action==='depthsCacheLeave'){
     idle(state);delete state.timberCut;
     const entering=action==='depthsCacheEnter';
-    if(state.location!==(entering?'depthsGallery':depthsCacheRoom)||state.depthsRun?.cleared!==2)throw new Error('Clear Shell Gallery to reach the cache chamber.');
-    move(state,entering?depthsCacheRoom:'depthsGallery',entering?{x:3,y:5}:{x:9,y:5});
+    if(entering?!canEnterDepthsCache(state.depthsRun,state.location):state.location!==depthsCacheRoom||!canVisitDepthsRoom(state.depthsRun,state.location))throw new Error('Clear Shell Gallery or choose the dangerous passage to reach the cache chamber.');
+    const destination=entering?depthsCacheRoom:depthsCacheReturn(state.depthsRun);
+    move(state,destination,entering?{x:3,y:5}:destination==='depthsGate'?{x:4,y:5}:{x:9,y:5});
     return true;
   }
   if(action==='depthsEnter'||action==='depthsNext'||action==='depthsLeave'){
     idle(state);delete state.timberCut;
     if(action==='depthsEnter'){
       if(state.location!=='ruins'||!state.depthsDiscovered||state.depthsRun||!state.combatGear.equippedWeapon)throw new Error('Invalid expedition entrance. Defeat the Stoneback Beetle first.');
-      state.depthsRun={cleared:0};move(state,depthsStages[0].room,{x:4,y:5});
+      state.depthsRun={cleared:0,routeChoice:'pending'};move(state,depthsStages[0].room,{x:4,y:5});
     }else if(action==='depthsNext'){
       const index=depthsStageIndex(state.location),next=depthsStages[index+1];
       if(state.location===depthsCacheRoom||index<0||!next||state.depthsRun?.cleared!==index+1)throw new Error('Invalid expedition. Clear this chamber first.');
+      if(index===0&&state.depthsRun.routeChoice==='pending')throw new Error('Choose the safe or dangerous passage before continuing.');
+      if(index===0&&state.depthsRun.routeChoice==='dangerous'&&!state.depthsRun.cacheGuardDefeated)throw new Error('Choose the dangerous passage to face its guardian, or bank your spoils.');
       move(state,next.room,{x:4,y:5});
     }else{
       if(depthsStageIndex(state.location)<0||state.depthsRun?.cleared!==0)throw new Error('Choose bank spoils to leave this expedition.');

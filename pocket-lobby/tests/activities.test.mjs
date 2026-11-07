@@ -83,15 +83,16 @@ test('dungeon progress and banking require server victories; crafting consumes r
     s.position={x:5,y:5};action(s,'fight',{},now);
     now+=20000;action(s,'combat',{combatId:s.combatId},now);
     assert.equal(s.depthsRun.cleared,i+1);
-    if(i<2)action(s,'depthsNext',{},now);
+    if(i===0)action(s,'depthsPassage',{choice:'safe'},now);
+    else if(i<2)action(s,'depthsNext',{},now);
   }
   assert.equal(s.huntingLoot.moonwellShard,undefined);
   assert.equal(normalizeState(s).depthsRun.shardEarned,true);
-  action(s,'bank',{},now);assert.equal(s.credits,181);assert.equal(s.goldEarned,81);
+  action(s,'bank',{},now);assert.equal(s.credits,191);assert.equal(s.goldEarned,91);
   assert.equal(s.huntingLoot.moonwellShard,1);
   const merchant=structuredClone(s);merchant.location='market';
   action(merchant,'sell',{id:'moonwellShard',quantity:1},now);
-  assert.equal(merchant.credits,281);assert.equal(merchant.huntingLoot.moonwellShard,0);
+  assert.equal(merchant.credits,291);assert.equal(merchant.huntingLoot.moonwellShard,0);
   assert.throws(()=>action(merchant,'sell',{id:'moonwellShard',quantity:1},now),/quantity/);
   const crafter=structuredClone(s);crafter.location='logging';crafter.position={x:5,y:4};
   action(crafter,'charm',{},now);

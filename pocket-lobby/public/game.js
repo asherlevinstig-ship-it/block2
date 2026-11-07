@@ -575,16 +575,33 @@ function stopForCombat(){
 function enterMoonwellDepths(){
   if(currentRoom!=='ruins'||!depthsDiscovered||depthsRun||unavailable()||health<=0||!combatGear.equippedWeapon)return;
   if(window.playerCloud?.gameplay){serverTravel('depthsEnter');return;}
-  depthsRun={cleared:0};
+  depthsRun={cleared:0,routeChoice:'pending'};
   enterRoom(depthsStages[0].room);
   note('Moonwell Depths. Your current health carries through all three chambers.');
 }
+async function chooseDungeonPassage(choice){
+  if(unavailable()||serverActionBusy||depthsRun?.routeChoice!=='pending')return;
+  const before=health;
+  try{
+    if(window.playerCloud?.gameplay){
+      const packet=await serverGameplay('depthsPassage',{choice});enterRoom(packet.state.location,packet.state.position);
+    }else{
+      const state={depthsRun,location:currentRoom,health,credits,goldEarned};
+      chooseDepthsPassage(state,choice);health=state.health;credits=state.credits;goldEarned=state.goldEarned;
+      enterRoom(state.location,state.position);savePlayerState();
+    }
+    if(choice==='safe')showTransaction('Safe passage',[{icon:'♥',text:health>before?'Restored '+(health-before)+' HP':'Hearts already full'}],depthsSafePassage.gold);
+    else note('Dangerous passage. Defeat the elite guardian and open its cache, then continue to Shell Gallery.',8000);
+    updatePlayerStats();updateDepthsPanel();
+  }catch(error){$('depthsBankError').textContent=error.message;$('depthsBankError').hidden=false;}
+}
 function visitDepthsCache(){
-  if(unavailable()||depthsRun?.cleared!==2)return;
-  const entering=currentRoom==='depthsGallery';
-  if(!entering&&currentRoom!==depthsCacheRoom)return;
+  if(unavailable()||!depthsRun)return;
+  const entering=currentRoom!==depthsCacheRoom;
+  if(entering&&!canEnterDepthsCache(depthsRun,currentRoom))return;
+  const destination=entering?depthsCacheRoom:depthsCacheReturn(depthsRun);
   if(window.playerCloud?.gameplay)serverTravel(entering?'depthsCacheEnter':'depthsCacheLeave');
-  else enterRoom(entering?depthsCacheRoom:'depthsGallery',entering?{x:3,y:5}:{x:9,y:5});
+  else enterRoom(destination,entering?{x:3,y:5}:destination==='depthsGate'?{x:4,y:5}:{x:9,y:5});
 }
 function revealEssenceCache(){
   const stone=depthsRun?.cacheStone;
@@ -600,6 +617,7 @@ function revealEssenceCache(){
 function advanceMoonwellDepths(){
   const index=depthsStageIndex(currentRoom);
   if(unavailable()||currentRoom===depthsCacheRoom||!depthsRun||index<0||depthsRun.cleared!==index+1)return;
+  if(index===0&&(depthsRun.routeChoice==='pending'||depthsRun.routeChoice==='dangerous'&&!depthsRun.cacheGuardDefeated))return;
   const next=depthsStages[index+1];
   if(next){if(window.playerCloud?.gameplay)serverTravel('depthsNext');else enterRoom(next.room);}
 }
@@ -697,9 +715,20 @@ function updateDepthsPanel(){
 
   const cacheRoom=currentRoom===depthsCacheRoom;
   const cleared=inDepths&&!depthsEnemyAvailable(depthsRun,currentRoom);
-  const canVisitCache=currentRoom==='depthsGallery'&&depthsRun?.cleared===2;
+  const canVisitCache=canEnterDepthsCache(depthsRun,currentRoom);
+  const choosingPassage=currentRoom==='depthsGate'&&depthsRun?.cleared===1&&depthsRun.routeChoice==='pending';
+  const pendingGuardian=currentRoom==='depthsGate'&&depthsRun?.routeChoice==='dangerous'&&!depthsRun.cacheGuardDefeated;
+  $('depthsFork').hidden=!choosingPassage;
+  $('depthsMainOptions').hidden=choosingPassage;
+  $('depthsExplore').hidden=choosingPassage;
+  $('depthsSafeReward').textContent='+'+Math.min(depthsSafePassage.healing,maxHealth()-health)+' HP · +'+depthsSafePassage.gold+' gold';
+  $('depthsDangerReward').textContent=essenceCacheGold+' gold + Awakening Stone';
+  $('depthsDangerEnemy').textContent='Cache Guardian · '+huntEnemies.cacheGuardian.health+' HP · Elite';
+  $('depthsForkSpoils').textContent='Unbanked · '+formatDepthsSpoils(depthsSpoils(depthsRun));
+  $('depthsForkBank').textContent='Bank spoils & leave';
+  $('depthsSafePassage').disabled=$('depthsDangerPassage').disabled=unavailable();
   $('depthsCacheRoute').hidden=unavailable()||!(cacheRoom||canVisitCache);
-  $('depthsCacheRoute').textContent=cacheRoom?'Return to Shell Gallery':'Elite cache · '+essenceCacheGold+' gold + stone';
+  $('depthsCacheRoute').textContent=cacheRoom?(depthsCacheReturn(depthsRun)==='depthsGate'?'Back to Flooded Gate':'Continue to Shell Gallery'):pendingGuardian?'Return to the dangerous passage':'Elite cache · '+essenceCacheGold+' gold + stone';
   $('depthsOpenCache').hidden=!cacheRoom||!cleared||!!depthsRun?.finds?.includes('essenceCache');
   const atCamp=cleared&&!unavailable();
   const canDecide=atCamp&&!depthsExploring;
@@ -720,16 +749,16 @@ function updateDepthsPanel(){
   const preview=cacheRoom?'Return to Shell Gallery to continue the expedition.':next?'Next: '+huntEnemies[next.enemy].name+' ('+huntEnemies[next.enemy].health+' HP) · '+formatDepthsSpoils(depthsStageSpoils(next))+'.':'All three chambers cleared. Bank your spoils to leave the vault.';
   $('depthsPreview').textContent=cleared?preview:roomDetails[currentRoom].description;
   $('depthsRetreat').hidden=unavailable()||depthsRun.cleared!==0;
-  $('depthsNext').hidden=!canDecide||!next;
+  $('depthsNext').hidden=!canDecide||!next||choosingPassage||pendingGuardian;
   $('depthsLeave').hidden=!canDecide;
   if(!canDecide)return;
 
   $('depthsDecisionStep').textContent='MOONWELL DEPTHS · '+depthsRun.cleared+' / '+depthsStages.length+' CLEARED';
-  $('depthsDecisionTitle').textContent=cacheRoom?(depthsRun.finds?.includes('essenceCache')?'Essence Cache collected':'The seal is broken'):(next?stage.name+' cleared':'Expedition complete');
+  $('depthsDecisionTitle').textContent=choosingPassage?'Choose your passage':cacheRoom?(depthsRun.finds?.includes('essenceCache')?'Essence Cache collected':'The seal is broken'):(next?stage.name+' cleared':'Expedition complete');
   $('depthsBankNow').textContent=formatDepthsSpoils(spoils);
   $('depthsDecisionHealth').textContent=health+' / '+maxHealth()+' HP · Your health carries into the next fight.';
   if(!next)$('depthsDecisionHealth').textContent=health+' / '+maxHealth()+' HP remaining.';
-  $('depthsRisk').hidden=!next;
+  $('depthsRisk').hidden=!next||choosingPassage||pendingGuardian;
   $('depthsMeal').hidden=!next||health>=maxHealth()||!Object.values(meals).some(count=>count>0);
   if(next){
     $('depthsNextReward').textContent='Earn '+formatDepthsSpoils(depthsStageSpoils(next));
@@ -1936,7 +1965,7 @@ function updateWorldLabels(){
     const elite=huntEnemyForRoom(currentRoom);
     if(elite?.elite&&roomFurniture().some(item=>item.type===elite.prop))add('Elite Cache Guardian',...point(6.5,5.5,45),'npc',()=>use(roomFurniture().find(item=>item.type===elite.prop)));
     const passage=roomFurniture().find(item=>item.type==='cachePassage');
-    if(passage&&(currentRoom===depthsCacheRoom||depthsRun.cleared===2))add(currentRoom===depthsCacheRoom?'Shell Gallery ←':'Essence Cache →',...point(passage.x+.5,passage.y+.5,38),'npc',()=>use(passage));
+    if(passage&&(currentRoom===depthsCacheRoom||canEnterDepthsCache(depthsRun,currentRoom)))add(currentRoom===depthsCacheRoom?(depthsCacheReturn(depthsRun)==='depthsGate'?'Flooded Gate ←':'Shell Gallery →'):'Essence Cache →',...point(passage.x+.5,passage.y+.5,38),'npc',()=>use(passage));
     for(const item of roomFurniture()){
       const find=Object.hasOwn(depthsFinds,item.type)?depthsFinds[item.type]:null;
       if(!find||depthsRun.finds?.includes(item.type)&&item.type!=='vaultRelief')continue;
@@ -4073,6 +4102,9 @@ $('approachBeetle').onclick=()=>{
   if(monster)use(monster);
 };
 $('enterDepths').onclick=enterMoonwellDepths;
+$('depthsSafePassage').onclick=()=>chooseDungeonPassage('safe');
+$('depthsDangerPassage').onclick=()=>chooseDungeonPassage('dangerous');
+$('depthsForkBank').onclick=leaveMoonwellDepths;
 $('depthsCacheRoute').onclick=visitDepthsCache;
 $('depthsOpenCache').onclick=()=>{depthsExploring=true;updateDepthsPanel();use(roomFurniture().find(item=>item.type==='essenceCache'));};
 $('cacheRewardContinue').onclick=()=>$('cacheRewardDialog').close();

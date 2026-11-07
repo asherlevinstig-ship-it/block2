@@ -1,6 +1,7 @@
 import {normalizeMagic,awardAwakeningStone,stoneForms} from './essences.js';
 
 export const essenceCacheGold=50;
+export const depthsSafePassage={gold:10,healing:20};
 export const depthsCacheRoom='depthsCache';
 export const moonwellShard={id:'moonwellShard',name:'Moonwell Shard',price:100};
 
@@ -46,13 +47,36 @@ export function inspectDepthsFind(state,item){
   depthsRun.finds=[...found,item.type];
 }
 
-// The optional cache chamber branches from the gallery without advancing the main route.
+export function chooseDepthsPassage(state,choice){
+  const run=state.depthsRun;
+  if(state.location!=='depthsGate'||run?.cleared!==1||run.routeChoice!=='pending'||!['safe','dangerous'].includes(choice))throw new Error('Choose an available passage after clearing Flooded Gate.');
+  if(choice==='safe'){
+    if(state.credits+depthsSafePassage.gold>100000000)throw new Error('Make room in your wallet before taking the safe passage.');
+    state.health=Math.min(100,state.health+depthsSafePassage.healing);
+    state.credits+=depthsSafePassage.gold;
+    state.goldEarned=Math.min(Number.MAX_SAFE_INTEGER,(state.goldEarned??0)+depthsSafePassage.gold);
+  }
+  run.routeChoice=choice;
+  state.location=choice==='safe'?'depthsGallery':depthsCacheRoom;
+  state.position=choice==='safe'?{x:4,y:5}:{x:3,y:5};
+}
+export function canEnterDepthsCache(run,room){
+  if(!run||['pending','safe'].includes(run.routeChoice))return false;
+  if(run.routeChoice==='dangerous'&&run.cleared===1)return room==='depthsGate'||room==='depthsGallery'&&run.cacheGuardDefeated===true;
+  return room==='depthsGallery'&&run.cleared===2;
+}
+export function depthsCacheReturn(run){
+  return run?.routeChoice==='dangerous'&&run.cleared===1&&!run.cacheGuardDefeated?'depthsGate':'depthsGallery';
+}
+// The cache chamber is an optional branch and never advances the main route.
+
 export const depthsStageIndex=room=>room===depthsCacheRoom?1:depthsStages.findIndex(stage=>stage.room===room);
 export function depthsEnemyAvailable(run,room){
-  return room===depthsCacheRoom?run?.cleared===2&&!run.cacheGuardDefeated:!!run&&depthsStageIndex(room)===run.cleared;
+  return room===depthsCacheRoom?canVisitDepthsRoom(run,room)&&!run.cacheGuardDefeated:!!run&&depthsStageIndex(room)===run.cleared;
 }
 export function canVisitDepthsRoom(run,room){
-  return room===depthsCacheRoom?run?.cleared===2:canVisitDepthsStage(run,depthsStageIndex(room));
+  if(room===depthsCacheRoom)return !!run&&(run.cleared===2||run.cleared===1&&run.routeChoice==='dangerous')&&!['safe','pending'].includes(run.routeChoice);
+  return canVisitDepthsStage(run,depthsStageIndex(room));
 }
 
 export function canVisitDepthsStage(run,index){
@@ -62,10 +86,12 @@ export function canVisitDepthsStage(run,index){
 export function normalizeDepthsRun(input,room,encounter){
   const index=depthsStageIndex(room);
   if(input==null&&index<0)return null;
+  if(input?.routeChoice!==undefined&&!['pending','safe','dangerous'].includes(input.routeChoice))throw new Error('Invalid dungeon passage.');
+  if(input?.routeChoice==='pending'&&(input.cleared>1||room!=='depthsGate'))throw new Error('Invalid unchosen dungeon passage.');
   if(!Number.isInteger(input?.cleared)||!canVisitDepthsRoom(input,room))throw new Error('Invalid Moonwell Depths progress.');
   if(encounter&&(!depthsEnemyAvailable(input,room)||encounter.enemy!==(room===depthsCacheRoom?'cacheGuardian':depthsStages[index].enemy)))throw new Error('Invalid Moonwell Depths encounter.');
   const finds=[...new Set(Array.isArray(input.finds)?input.finds.filter(id=>Object.hasOwn(depthsFinds,id)):[])];
-  return {cleared:input.cleared,...(input.cleared===depthsStages.length&&input.shardEarned===true?{shardEarned:true}:{}),...(finds.length?{finds}:{}),
+  return {cleared:input.cleared,...(input.routeChoice!==undefined?{routeChoice:input.routeChoice}:{}),...(input.cleared===depthsStages.length&&input.shardEarned===true?{shardEarned:true}:{}),...(finds.length?{finds}:{}),
     ...(input.cacheGuardDefeated===true?{cacheGuardDefeated:true}:{}),
     ...(finds.includes('essenceCache')&&Object.hasOwn(stoneForms,input.cacheStone)?{cacheStone:input.cacheStone}:{})};
 }
@@ -102,7 +128,7 @@ export function depthsSpoils(run){
 export function bankDepthsSpoils(state){
   const {depthsRun,location,health,hunting,credits,huntingLoot}=state;
   const index=depthsStageIndex(location);
-  if(!canVisitDepthsStage(depthsRun,index)||index>=depthsRun.cleared||health<=0||hunting?.encounter)throw new Error('Clear this chamber before banking its spoils.');
+  if(!canVisitDepthsRoom(depthsRun,location)||(location!==depthsCacheRoom&&index>=depthsRun.cleared)||health<=0||hunting?.encounter)throw new Error('Clear this chamber before banking its spoils.');
   const spoils=depthsSpoils(depthsRun);
   if(credits+spoils.gold>100000000||Object.entries(spoils.loot).some(([id,count])=>(huntingLoot[id]??0)+count>1000000))throw new Error('Make room before banking your spoils.');
   for(const [id,count] of Object.entries(spoils.loot))huntingLoot[id]=(huntingLoot[id]??0)+count;

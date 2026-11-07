@@ -204,3 +204,14 @@
 @media(prefers-reduced-motion:reduce) { .cache-reward-art svg { animation:none; } }
 
 .combat-panel .enemy-effects { padding:8px 10px; border:1px solid #84759b; border-radius:7px; background:#242d43; color:#e5daf9; font-size:12px; line-height:1.6; }
+
+.depths-fork[hidden],#depthsMainOptions[hidden] { display:none; }
+.depths-fork h3 { margin:7px 0; color:#f4e8ca; font-size:17px; }
+.depths-fork .depths-route-safe { border-color:#6d9a87; background:#1c383b; }
+.depths-fork .depths-route-danger { border-color:#bc8a62; background:#392d3b; }
+.depths-fork .depths-option { display:flex; flex-direction:column; }
+.depths-fork .depths-option button { margin-top:auto; }
+.depths-fork>small { display:block; margin:10px 0; color:#bdcbdc; line-height:1.5; }
+.depths-fork>button { padding:8px 12px; }
+
+@media(max-width:640px) { .depths-fork .depths-options { grid-template-columns:1fr; } }
