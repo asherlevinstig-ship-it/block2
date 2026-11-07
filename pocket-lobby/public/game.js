@@ -48,6 +48,8 @@ const retiredTables=hasGamingLayout?[]:(savedLounge??[]).filter(item=>item.type=
 let loungeFurniture=initial;
 if(savedLounge)loungeFurniture=hasGamingLayout?savedLounge:installGamingTables(savedLounge.filter(item=>!retiredTables.includes(item)));
 let homeFurniture = savedPlayerState?.homeFurniture??[];
+let tradingPostGuideComplete=savedPlayerState?.tradingPostGuideComplete===true||(savedPlayerState?.location==='market'&&savedPlayerState?.quest?.claimed===true);
+let tradeGuideRouteCache=null;
 let bedLessonComplete=savedPlayerState?.bedLessonComplete===true||homeFurniture.some(item=>item.type==='bed');
 let credits = savedPlayerState?.credits??100;
 let displayedCredits=credits,walletTween=null;
@@ -392,7 +394,7 @@ function updateBedGuide(){
   $('bedGuideAction').hidden=placing;$('bedGuideAction').textContent=bedLessonComplete?'Next: visit the lobby':'Open Inventory';
 }
 function updateQuestUI(){
-  updateBedGuide();
+  updateBedGuide();updateTradeGuide();
   const stage=questStage(quest);
   const routesOpen=lobbyRoutesOpen();
   $('lobbyDestinations').hidden=!routesOpen;
@@ -449,7 +451,9 @@ function questAction(){
   combatGear.equippedWeapon=reward.weapon;$('weaponSelect').value='';
   savePlayerState();
   showTransaction('First Steps complete!',[{icon:'⚔',text:'Warden’s Blade · equipped'},{icon:'✦',text:'18 base damage · Thank you, adventurer.'}],reward.gold);
-  note('Quest complete! +75 gold and Warden’s Blade.');
+  $('questDialog').close();
+  updateTradeGuide();
+  note('Quest complete! Follow the golden trail to the Trading Post.');
 }
 
 let combatMessage='',combatFeedback=null,lastCombatUi=0;
@@ -1606,7 +1610,7 @@ let worldLabelKey='';
 function updateWorldLabels(){
   const p=canvasBounds(),doors=roomDoors[currentRoom].filter(door=>doorAvailable(door));
   const stump=currentRoom==='logging'&&!!treeState(timberTree()).regrowsAt;
-  const key=[currentRoom,stump,doors.map(door=>door.to).join(','),avatar.name,questStage(quest),zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
+  const key=[currentRoom,stump,doors.map(door=>door.to).join(','),avatar.name,questStage(quest),tradingPostGuideComplete,bedLessonComplete,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
   if(key===worldLabelKey)return;
   worldLabelKey=key;
   const container=$('worldLabels');container.replaceChildren();container.dataset.room=currentRoom;
@@ -1615,7 +1619,9 @@ function updateWorldLabels(){
     if(action){label.type='button';label.onclick=action;label.setAttribute('aria-label',kind==='door'?'Go to '+text:text);}
     const title=document.createElement('span');title.textContent=text;label.append(title);
     if(subtitle){const detail=document.createElement('small');detail.textContent=subtitle;label.append(detail);}
-    label.title=text+(subtitle?' · '+subtitle:'');container.append(label);
+    label.title=text+(subtitle?' · '+subtitle:'');
+    if(tradingGuideActive()&&kind==='door'&&text===tradingGuideDestination()?.label)label.dataset.guided='true';
+    container.append(label);
     const centerX=view.width/2,centerY=view.height/2-4;
     const screenX=p.x+((x-centerX)*zoom+centerX)*p.scale,screenY=p.y+((y-centerY)*zoom+centerY)*p.scale;
     if(currentRoom==='home'){
@@ -1689,6 +1695,7 @@ function draw(time){
     surface(10.06,3.06,.88,.88,.5,'#f5cf7d12','#dfbb76');
     ctx.restore();
   }
+  drawTradingGuide(time);
   if(moonwood.has(currentRoom))drawMoonwoodDetails(time);
   if(enemy)drawCombatGroundFx({ctx,point,time,now:Date.now(),encounter:hunting.encounter,player,reduced:reducedMotion.matches});
   if(target)surface(target.x+.1,target.y+.1,.8,.8,1,currentRoom==='home'?'#b7e9e220':'#fff3bc30',currentRoom==='home'?'#98cec9':'#ffcf8f');
@@ -1897,6 +1904,36 @@ function travelDoor(door){
 function hudRoomExits(room){
   if(room==='lounge')return [{to:'hub',loungeExit:true}];
   return (roomDoors[room]??[]).filter(door=>doorAvailable(door,room));
+}
+function tradingGuideEligible(){return quest.claimed===true;}
+function tradingGuideActive(){return tradingGuideEligible()&&!tradingPostGuideComplete&&currentRoom!=='market'&&!depthsRun;}
+function tradingGuideDestination(){
+  if(!tradingGuideActive())return null;
+  if(currentRoom==='hub'&&!lobbyRoutesOpen())return {warden:true,tile:{x:10,y:4},label:'Tower Warden'};
+  return hudNextDoor('market');
+}
+function updateTradeGuide(){
+  const active=tradingGuideActive(),destination=tradingGuideDestination();
+  $('tradeGuide').hidden=!active||!destination||editing||player.inCombat||!!hunting.recoveryUntil;
+  if(!active||!destination)return;
+  $('bedGuide').hidden=true;$('scene').dataset.bedTutorial='true';
+  $('tradeGuideTitle').textContent=destination.warden?'First, meet the Warden':'Follow the golden trail';
+  $('tradeGuideText').textContent=destination.warden?'Speak to the Tower Warden to open the Trading Post doors.':destination.to==='market'?'The MARKET door leads to the Trading Post. Follow the gold markers to reach it.':'Follow the gold markers to '+(destination.label??roomDetails[destination.to]?.name??'the lobby')+'. Your route continues from there.';
+  $('tradeGuideAction').textContent=destination.warden?'Walk to the Warden':'Walk to '+(destination.label??'next exit');
+}
+function drawTradingGuide(time){
+  if(!tradingGuideActive()||editing||unavailable())return;
+  const destination=tradingGuideDestination();if(!destination?.tile)return;
+  const start=startPosition(),goal=destination.tile;
+  const key=[currentRoom,start.x,start.y,goal.x,goal.y,roomFurniture().map(item=>[item.id,item.x,item.y,item.rot].join(':')).join(';')].join('|');
+  if(tradeGuideRouteCache?.key!==key)tradeGuideRouteCache={key,path:findPath(start,goal)??[]};
+  const path=tradeGuideRouteCache.path;
+  for(let i=0;i<path.length;i++){
+    const tile=path[i],bright=reducedMotion.matches?true:Math.floor(time/160)%Math.max(1,path.length)===i;
+    surface(tile.x+.39,tile.y+.39,.22,.22,.7,bright?'#ffdf8e':'#d6ab68aa');
+  }
+  const pulse=reducedMotion.matches?1:.65+Math.sin(time/450)*.22;
+  ctx.save();ctx.globalAlpha=pulse;surface(goal.x+.06,goal.y+.06,.88,.88,.8,'#ffd78b22','#f8d58b');ctx.restore();
 }
 function hudNextDoor(destination){
   const visited=new Set([currentRoom]),queue=[{room:currentRoom,first:null}];
@@ -2618,7 +2655,7 @@ function updateTradingPost(){
   }
 }
 function savePlayerState(){
-  const snapshot={bedLessonComplete,credits,health,woodcutting,history,quest,combatGear,hunting,depthsRun,ownedFurniture,furniture:[],homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats,fishingGear,huntingLoot,fishStock,avatar,wardrobe,location:currentRoom,position:{x:player.cx,y:player.cy}};
+  const snapshot={tradingPostGuideComplete,bedLessonComplete,credits,health,woodcutting,history,quest,combatGear,hunting,depthsRun,ownedFurniture,furniture:[],homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats,fishingGear,huntingLoot,fishStock,avatar,wardrobe,location:currentRoom,position:{x:player.cx,y:player.cy}};
   save('player-state',snapshot);
   if(window.playerCloud)window.playerCloud.enqueue(JSON.parse(JSON.stringify(snapshot)));
   updateInventory();
@@ -2675,7 +2712,7 @@ function switchMode(next){
   updateFishingShop();
   updateTradingPost();
   updateArmoryShop();
-  noticeUntil=0;setHint();cancelSelection();updateBedGuide();
+  noticeUntil=0;setHint();cancelSelection();updateBedGuide();updateTradeGuide();
 }
 let rootstoneContext='journal',enteredRunes=[];
 const runeLabels={moth:'Moth',wave:'Wave',root:'Root'};
@@ -2979,6 +3016,7 @@ $('railInventory').onclick=()=>$('inventory').onclick();
 $('railWardrobe').onclick=()=>$('looks').onclick();
 $('railDecorate').onclick=()=>$('edit').onclick();
 $('hudHomeDecor').onclick=()=>$('edit').onclick();
+$('tradeGuideAction').onclick=()=>{const destination=tradingGuideDestination();if(!destination)return;if(destination.warden)use(hubFurniture.find(item=>item.type==='warden'));else followHudDoor(destination);};
 $('inventoryDialog').addEventListener('close',updateBedGuide);
 $('bedGuideAction').onclick=()=>{if(bedLessonComplete)travelDoor(homeExit);else openInventory();};
 $('hudChatPrompt').onclick=()=>$('openRoomChat').onclick();
@@ -3253,6 +3291,7 @@ function enterRoom(next,arrival){
   if(next!==currentRoom&&huntEnemyForRoom(next))combatMessage='';
   catchReveal=null;$('catchReveal').hidden=true;
   const focusRoom=!!document.activeElement.closest('[data-room-link]');
+  if(next==='market'&&tradingGuideActive()){tradingPostGuideComplete=true;tradeGuideRouteCache=null;}
   currentRoom=next;
   const exploring=moonwood.has(next);
   const nextView=exploring?moonwood.view:next==='hub'?hubView:next==='outside'?courtyardView:standardView;
