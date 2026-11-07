@@ -315,6 +315,9 @@ body{background:#071329 url('./hud-night.svg') center top/cover fixed no-repeat;
 /* The route bar occupies its own row, keeping room controls clear. */
 .shell .play:has(>.exploration-nav:not([hidden])){display:flex;flex-direction:column;gap:8px}
 .play:has(>.exploration-nav:not([hidden]))>.play-head{display:none}
-.shell .play>.exploration-nav{position:static;inset:auto;transform:none;flex:0 0 auto;width:100%;max-width:none;margin:0;z-index:auto}
+.shell .play>.exploration-nav{position:static;inset:auto;transform:none;flex:0 0 auto;align-self:flex-end;width:min(560px,calc(100% - 180px));max-width:none;margin:0 40px 0 0;z-index:auto}
 .shell .play:has(>.exploration-nav:not([hidden]))>.scene{flex:1 1 0;height:0;min-height:0}
 @media(max-width:620px){.shell .play>.exploration-nav{padding:8px 10px}.shell .play:has(>.exploration-nav:not([hidden])){gap:5px}}
+
+/* On narrow screens, start below the portrait before using the full room width. */
+@media(max-width:900px){.shell .play>.exploration-nav{align-self:stretch;width:100%;margin:108px 0 0}}
