@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-import {boarRules,huntingTurn,huntingAttributes,normalizeHunting,normalizeCombatGear,weaponCatalog,weaponProfile,attackSeconds,createHunt,resumeHunt,advanceHunt,combatStamina,combatDodgeCost,canUseWeapon,huntEnemies,huntEnemy,huntEnemyForRoom,huntRespawnAt} from '../public/hunting.js';
+import {boarRules,huntingTurn,huntingAttributes,normalizeHunting,normalizeCombatGear,weaponCatalog,weaponProfile,attackSeconds,createHunt,resumeHunt,advanceHunt,combatStamina,combatDodgeCost,canUseWeapon,huntEnemies,huntEnemy,huntEnemyForRoom,huntRespawnAt,stonebackVest} from '../public/hunting.js';
 import {normalizeState,startPlan} from '../server/player-state.mjs';
 
 test('new and existing characters receive one equipped sword, while unequipped choices persist',()=>{
@@ -68,16 +68,16 @@ function gameHarness(){
   let now=100000;
   const nodes=new Map(),messages=[],receipts=[],saves=[];
   const get=id=>{
-    if(!nodes.has(id))nodes.set(id,{hidden:false,classList:{toggle(){},add(){},remove(){}},setAttribute(){}});
+    if(!nodes.has(id))nodes.set(id,{hidden:false,dataset:{},classList:{toggle(){},add(){},remove(){}},setAttribute(){}});
     return nodes.get(id);
   };
   const source=fs.readFileSync(new URL('../public/game.js',import.meta.url),'utf8');
   const context=vm.createContext({
     ...questRules,...stoneRules,...depthsRules,depthsRun:null,rootstone:stoneRules.normalizeRootstone(),normalizeHunting,normalizeCombatGear,weaponCatalog,weaponProfile,attackSeconds,boarRules,huntingAttributes,createHunt,resumeHunt,combatStamina,canUseWeapon,
-    huntEnemies,huntEnemy,huntEnemyForRoom,huntRespawnAt,combatDodgeCost,
+    huntEnemies,huntEnemy,huntEnemyForRoom,huntRespawnAt,combatDodgeCost,stonebackVest,
     advanceHunt:(e,h,s,n,_r,w,upgrade,vest)=>advanceHunt(e,h,s,n,()=>.5,w,upgrade,vest),
     huntingTurn:(e,h,s,a,n,_r,w,upgrade,vest)=>huntingTurn(e,h,s,a,n,()=>.5,w,upgrade,vest),
-    history:{fishCaught:false,boarDefeated:false},adventure:{discovered:[]},savedPlayerState:null,player:{cx:5,cy:5,inCombat:false},health:100,
+    firstUpgrade:{},history:{fishCaught:false,boarDefeated:false},adventure:{discovered:[]},savedPlayerState:null,player:{cx:5,cy:5,inCombat:false},health:100,
     currentRoom:'clearing',playerStats:{strengthXp:0,agilityXp:0,vitalityXp:0},huntingLoot:{boar:0},
     editing:false,fishingSession:null,woodSession:null,route:[],step:null,interaction:null,target:null,
     $:get,Date:{now:()=>now},performance:{now:()=>now},
@@ -137,4 +137,25 @@ test('clearing has a reachable boar and a reciprocal trail exit',()=>{
   const blocked=new Set(items.map(i=>i.x+','+i.y)),visited=new Set(),queue=[exit.inside];
   while(queue.length){const {x,y}=queue.shift(),k=x+','+y;if(x<0||y<0||x>=12||y>=10||blocked.has(k)||visited.has(k))continue;visited.add(k);for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]])queue.push({x:x+dx,y:y+dy});}
   assert(visited.has('5,5'));
+});
+
+
+test('the Iron Sword trial cues a timed dodge and explains the shell reward once',()=>{
+  const h=gameHarness(),c=h.context;
+  c.currentRoom='ruins';
+  c.playerStats.strengthXp=50;
+  Object.assign(c.firstUpgrade,{unlocked:true,choice:'combat',complete:true,ironTrialPending:true});
+  vm.runInContext("combatGear.ownedWeapons.push('ironSword');combatGear.equippedWeapon='ironSword'",c);
+  c.startMonsterEncounter(huntEnemies.beetle);
+  h.tick(2050);
+  assert.equal(h.get('combatNotice').dataset.cue,'dodge');
+  c.combatAction('dodge');
+  h.tick(250);
+  assert.equal(h.get('combatNotice').dataset.cue,'exposed');
+  assert.equal(c.health,100);
+  vm.runInContext('hunting.encounter.health=1;hunting.encounter.nextPlayerAt=Date.now()',c);
+  h.tick(100);
+  assert.equal(c.firstUpgrade.ironTrialPending,false);
+  assert.equal(c.huntingLoot.stonebackShell,1);
+  assert.match(h.receipts.at(-1)[1].map(row=>row.text).join(' '),/45 gold.*Stoneback Vest.*8 timber/);
 });

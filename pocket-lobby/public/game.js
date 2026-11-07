@@ -588,7 +588,14 @@ function applyCombatResult(result){
       huntingLoot[enemy.loot]=(huntingLoot[enemy.loot]??0)+1;
       if(enemy.id==='boar'){recordQuest(quest,'boar');history.boarDefeated=true;}
       combatMessage='Victory! '+enemy.lootName+' added to Inventory.';
-      showTransaction(enemy.name+' defeated',[{icon:'✦',text:enemy.lootName+' ×1 · sell for '+enemy.sellPrice+' gold'},xpReceipt]);
+      const ironTrial=firstUpgrade.ironTrialPending&&enemy.id==='beetle'&&combatGear.equippedWeapon==='ironSword';
+      if(ironTrial)firstUpgrade.ironTrialPending=false;
+      const receipt=[{icon:'✦',text:enemy.lootName+' ×1 · sell for '+enemy.sellPrice+' gold'},xpReceipt];
+      if(ironTrial){
+        combatMessage='Iron Sword trial complete! Sell the Shell Fragment for '+enemy.sellPrice+' gold or save it for a Stoneback Vest.';
+        receipt.push({icon:'⬡',text:'Or keep it for a Stoneback Vest · add '+stonebackVest.timber+' timber at the Timber Hollow workbench'});
+      }
+      showTransaction(ironTrial?'Iron Sword trial complete!':enemy.name+' defeated',receipt);
     }
     updateInventory();
   }else if(result.outcome==='escaped'){
@@ -634,6 +641,17 @@ function updateCombatPanel(){
   const notice=$('combatNotice');
   notice.hidden=!hunting.recoveryUntil;
   if(hunting.recoveryUntil)notice.textContent='Recovering at the Tower · '+Math.max(0,Math.ceil((hunting.recoveryUntil-now)/1000))+'s · Five hearts restored after rest';
+  const ironTrialFight=firstUpgrade.ironTrialPending&&encounter?.enemy==='beetle'&&combatGear.equippedWeapon==='ironSword';
+  if(ironTrialFight){
+    const untilSlam=encounter.nextBoarAt-now;
+    const exposed=encounter.exposedUntil>now;
+    const dodgeNow=untilSlam>0&&untilSlam<=boarRules.dodgeWindow
+      &&now>=encounter.nextDodgeAt&&combatStamina(encounter,playerStats,now)>=combatDodgeCost(combatGear.stonebackVestEquipped);
+    const cue=dodgeNow?'Dodge now! Press Space or tap Dodge.':exposed?'Shell open! Your next auto-strike hits the weak spot.':'Watch for the slam. Dodge just before it lands.';
+    notice.hidden=false;
+    if(notice.textContent!==cue)notice.textContent=cue;
+    notice.dataset.cue=dodgeNow?'dodge':exposed?'exposed':'watch';
+  }else notice.dataset.cue='';
   if(!enemy||chamberCleared)return;
   const beetle=!!enemy.shellArmor,respawn=stage>=0?0:huntRespawnAt(hunting,enemy);
   $('combatTitle').textContent=enemy.name;
@@ -1951,8 +1969,15 @@ function oakTrialDestination(){
   if(fishingGear.equippedRod!=='oak')return currentRoom;
   return fishingGear.bait>0?'pond':'store';
 }
+function ironTrialDestination(){
+  return combatGear.equippedWeapon==='ironSword'?'ruins':currentRoom;
+}
 function firstUpgradeDestination(){
   if(depthsRun||tradingGuideActive())return null;
+  if(firstUpgrade.ironTrialPending){
+    const destination=ironTrialDestination();
+    return currentRoom===destination?null:hudNextDoor(destination);
+  }
   if(firstUpgrade.oakTrialPending){
     const destination=oakTrialDestination();
     return currentRoom===destination?null:hudNextDoor(destination);
@@ -1963,11 +1988,27 @@ function firstUpgradeDestination(){
 function updateUpgradeGuide(){
   const pendingTrial=firstUpgrade.oakTrialPending&&!fishingSession;
   const choosingUpgrade=firstUpgrade.unlocked&&!firstUpgrade.complete;
-  const active=(pendingTrial||choosingUpgrade)&&!tradingGuideActive()&&!editing&&!depthsRun&&!player.inCombat;
+  const pendingHunt=firstUpgrade.ironTrialPending&&!hunting.recoveryUntil;
+  const active=(pendingTrial||pendingHunt||choosingUpgrade)&&!tradingGuideActive()&&!editing&&!depthsRun&&!player.inCombat;
   if(!active&&!tradingGuideActive())$('scene').dataset.bedTutorial=String(!$('bedGuide').hidden);
   $('upgradeGuide').hidden=!active;
   if(!active)return;
   $('bedGuide').hidden=true;$('scene').dataset.bedTutorial='true';
+  if(pendingHunt){
+    $('upgradeChange').hidden=true;
+    $('upgradeGuideArt').innerHTML=shopItemArt('ironSword');
+    $('upgradeGuideTitle').textContent='Test your Iron Sword';
+    const needsSword=combatGear.equippedWeapon!=='ironSword';
+    const atRuins=currentRoom==='ruins';
+    const atCreek=currentRoom==='creek'&&!adventure.bridge;
+    $('upgradeGuideText').textContent=needsSword
+      ?'Equip your Iron Sword from Inventory to take it into the ruins.'
+      :atRuins?'Wait for the slam cue, then dodge. Your sword strikes automatically while the shell is open.'
+      :atCreek?'Cross Glass Creek on the stepping stones to reach the Stoneback Beetle.'
+      :'Follow the gold markers to Moonwell Ruins and face the Stoneback Beetle.';
+    $('upgradeGuideAction').textContent=needsSword?'Equip Iron Sword':atRuins?'Approach Stoneback Beetle':atCreek?'Cross to the Ruins':'Head to Moonwell Ruins';
+    return;
+  }
   if(pendingTrial){
     const destination=oakTrialDestination();
     $('upgradeChange').hidden=true;
@@ -1993,6 +2034,22 @@ function updateUpgradeGuide(){
   $('upgradeGuideAction').textContent=plan.needsBait&&currentRoom==='store'?'View bait supplies':currentRoom===plan.shop&&!plan.missingXp&&!plan.missingGold?'View '+plan.item.name:currentRoom===plan.destination?(plan.destination==='market'?'Open trading window':plan.fishing?'Go fishing':'Approach boar'):'Head to '+roomDetails[plan.destination].name;
 }
 function followFirstUpgrade(){
+  if(firstUpgrade.ironTrialPending){
+    if(unavailable())return;
+    if(combatGear.equippedWeapon!=='ironSword'){
+      openInventory();
+      bagCategory='gear';
+      bagSelection='weapon:ironSword';
+      renderBag();
+    }else if(currentRoom==='ruins'){
+      const beetle=roomFurniture().find(item=>item.type===huntEnemies.beetle.prop);
+      if(beetle)use(beetle);
+    }else{
+      const door=firstUpgradeDestination();
+      if(door)followHudDoor(door);
+    }
+    return;
+  }
   if(firstUpgrade.oakTrialPending){
     if(unavailable())return;
     if(fishingGear.equippedRod!=='oak'){
@@ -2049,7 +2106,9 @@ function updateTradeGuide(){
 function drawTradingGuide(time){
   if(editing||unavailable())return;
   const destination=tradingGuideActive()?tradingGuideDestination():firstUpgradeDestination();if(!destination?.tile)return;
-  const start=startPosition(),goal=destination.tile;
+  // Before crossing, guide players to the near bank. The crossing action opens the stones.
+  const goal=currentRoom==='creek'&&destination.to==='ruins'&&!adventure.bridge?{x:4,y:4}:destination.tile;
+  const start=startPosition();
   const key=[currentRoom,start.x,start.y,goal.x,goal.y,roomFurniture().map(item=>[item.id,item.x,item.y,item.rot].join(':')).join(';')].join('|');
   if(tradeGuideRouteCache?.key!==key)tradeGuideRouteCache={key,path:findPath(start,goal)??[]};
   const path=tradeGuideRouteCache.path;
@@ -2431,7 +2490,7 @@ function bagEntries(){
   for(const [id,quantity] of Object.entries(fishStock))if(quantity&&fishProducts[id]){
     const fish=fishProducts[id];entries.push({key:'fish:'+id,name:fish.name,category:'materials',quality:fish.quality,art:windowItemArt('fish'),quantity,description:'Caught in the waters of Silverfin Pond.',stats:fish.price+' gold each · '+quantity*fish.price+' gold total',note:'Sell at the Trading Post or Silverfin Outfitters.'});
   }
-  for(const [id,quantity] of Object.entries(huntingLoot))if(quantity&&tradeCatalog[id])entries.push({key:'loot:'+id,name:tradeCatalog[id].name,category:'materials',art:windowItemArt('loot'),quantity,description:'Spoils from your adventures.',stats:tradeCatalog[id].price+' gold each',note:'Sell at the Trading Post. Some loot is used in crafting.'});
+  for(const [id,quantity] of Object.entries(huntingLoot))if(quantity&&tradeCatalog[id])entries.push({key:'loot:'+id,name:tradeCatalog[id].name,category:'materials',art:windowItemArt('loot'),quantity,description:'Spoils from your adventures.',stats:tradeCatalog[id].price+' gold each',note:id===stonebackVest.fragment?'Sell at the Trading Post, or combine with '+stonebackVest.timber+' timber at the Timber Hollow workbench to craft a Stoneback Vest.':'Sell at the Trading Post. Some loot is used in crafting.'});
   return entries;
 }
 function renderBag(){
@@ -2604,9 +2663,12 @@ function buyArmoryWeapon(id){
   const state={credits,combatGear,stats:playerStats,location:currentRoom,hunting};
   try{
     const result=purchaseWeapon(state,id);credits=state.credits;
-    $('weaponSelect').value='';const upgraded=finishFirstUpgrade('combat',id);savePlayerState();
-    $('armoryStatus').textContent=result.name+' equipped.';
-    showTransaction(upgraded?'First upgrade complete!':result.spent?'Weapon purchased':'Weapon equipped',[{icon:'⚔',text:result.name+' · Equipped'},{icon:'✦',text:upgraded?'20 base damage · Ready for your next hunt':'Ready for combat'}],-result.spent);
+    $('weaponSelect').value='';
+    const upgraded=finishFirstUpgrade('combat',id);
+    if(upgraded)firstUpgrade.ironTrialPending=true;
+    savePlayerState();
+    $('armoryStatus').textContent=result.name+' equipped.'+(upgraded?' Next, test it against the Stoneback Beetle in Moonwell Ruins.':'');
+    showTransaction(upgraded?'First upgrade complete!':result.spent?'Weapon purchased':'Weapon equipped',[{icon:'⚔',text:result.name+' · Equipped'},{icon:'✦',text:upgraded?'Next hunt · Stoneback Beetle at Moonwell Ruins':'Ready for combat'}],-result.spent);
   }catch(error){$('armoryStatus').textContent=error.message;}
 }
 function updateArmoryShop(){

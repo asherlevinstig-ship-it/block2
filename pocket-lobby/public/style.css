@@ -289,3 +289,6 @@ body{background:#071329 url('./hud-night.svg') center top/cover fixed no-repeat;
 .scene .trade-guide{bottom:24px}.scene .trade-guide .bed-guide-emblem{font-size:28px}.world-labels[data-room] .world-label[data-guided=true]{color:#fff3bf;text-shadow:0 0 9px #f9cc72,0 1px 2px #071524;outline:1px solid #d4b37a;outline-offset:5px}
 
 .scene .upgrade-guide{bottom:24px}.scene .upgrade-guide .bed-guide-emblem svg{width:42px;height:42px}.scene .upgrade-guide .upgrade-change{display:inline-block;margin:8px 0 0;padding:4px 0;min-height:26px;border:0;background:none;color:#c2d2e7;box-shadow:none;font-size:11px;text-decoration:underline}.scene .upgrade-guide .upgrade-change:hover{color:#ffe5ab}
+
+.combat-notice[data-cue=dodge]{background:#5e292e;border-color:#ffc48b;color:#fff4dc;font-weight:800}
+.combat-notice[data-cue=exposed]{background:#17473f;border-color:#a0e0b9;color:#e8ffed;font-weight:800}
