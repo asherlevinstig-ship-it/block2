@@ -19,7 +19,7 @@ test('weapon purchases enforce stats, gold, and location before changing invento
 });
 
 test('each weapon uses its listed damage and attack speed; saved equipment retains requirements',()=>{
-  const stats={strengthXp:100,agilityXp:100};
+  const stats={strengthXp:125,agilityXp:125};
   for(const id of ['ironSword','huntingSpear','quickDagger']){
     assert(canUseWeapon(stats,id));
     const turn=huntingTurn(createHunt(0),100,stats,'attack',500,()=>0,id);

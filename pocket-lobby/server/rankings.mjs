@@ -1,3 +1,4 @@
+import {migrateProgression} from '../public/skill-curve.js';
 import {normalizeState} from './player-state.mjs';
 import {playerPower} from '../public/progression.js';
 
@@ -8,7 +9,8 @@ export async function readRankings(db,playerId,account){
   const players=[];
   for(const row of results){
     try{
-      const state=normalizeState(JSON.parse(row.state_json));
+      const saved=JSON.parse(row.state_json);migrateProgression(saved);
+      const state=normalizeState(saved);
       if(state.characterCreated===false)continue;
       const power=playerPower(state.stats,state.combatGear);
       players.push({

@@ -1,3 +1,4 @@
+import {skillLevel} from './skill-curve.js';
 import {essenceEffects,essenceGems,essencePower} from './essences.js';
 
 export const boarRules={health:70,playerInterval:1100,boarInterval:1900,fleeCooldown:1800,respawn:30000,recovery:12000,dodgeCost:40,dodgeWindow:350,dodgeCooldown:700};
@@ -5,13 +6,13 @@ export const stonebackVest={name:'Stoneback Vest',absorption:4,dodgeCost:50,timb
 export const moonwellCharm={name:'Moonwell Charm',staminaRegen:3,timber:4,power:10};
 export const combatDodgeCost=vestEquipped=>vestEquipped?stonebackVest.dodgeCost:boarRules.dodgeCost;
 const boar={id:'boar',name:'Wild Boar',room:'clearing',prop:'wildboar',move:'charge',health:boarRules.health,firstAttack:1300,interval:boarRules.boarInterval,damage:12,respawn:boarRules.respawn,loot:'boar',lootName:'Boar Meat',sellPrice:30,xp:[15,10,15]};
-const beetle={id:'beetle',name:'Stoneback Beetle',room:'ruins',prop:'stonebackBeetle',move:'slam',health:96,firstAttack:2300,interval:3500,damage:22,respawn:45000,shellArmor:8,exposureMs:2200,exposedBonus:5,loot:'stonebackShell',lootName:'Shell Fragment',sellPrice:45,xp:[20,15,20]};
+const beetle={id:'beetle',name:'Stoneback Beetle',room:'ruins',prop:'stonebackBeetle',move:'slam',health:96,firstAttack:2300,interval:3500,damage:22,respawn:45000,shellArmor:8,exposureMs:2200,exposedBonus:5,loot:'stonebackShell',lootName:'Shell Fragment',sellPrice:45,xp:[25,20,25],masteryXp:15};
 export const huntEnemies={
   boar,beetle,
-  depthsBoar:{...boar,id:'depthsBoar',room:'depthsGate',name:'Gate Boar',health:62,damage:11},
-  depthsBeetle:{...beetle,id:'depthsBeetle',room:'depthsGallery',name:'Gallery Beetle',health:84,damage:19},
-  cacheGuardian:{...beetle,id:'cacheGuardian',room:'depthsCache',name:'Cache Guardian',elite:true,move:'sentinelStrike',health:104,firstAttack:2600,interval:4200,damage:12,shellArmor:6,exposureMs:2400,xp:[20,15,20]},
-  depthsGuardian:{...beetle,id:'depthsGuardian',room:'depthsVault',name:'Vault Guardian',health:118,damage:25,shellArmor:9}
+  depthsBoar:{...boar,id:'depthsBoar',room:'depthsGate',name:'Gate Boar',health:100,damage:12,xp:[30,20,30],masteryXp:20},
+  depthsBeetle:{...beetle,id:'depthsBeetle',room:'depthsGallery',name:'Gallery Beetle',health:150,damage:20,xp:[45,35,45],masteryXp:30},
+  cacheGuardian:{...beetle,id:'cacheGuardian',room:'depthsCache',name:'Cache Guardian',elite:true,move:'sentinelStrike',health:180,firstAttack:2600,interval:4200,damage:18,shellArmor:6,exposureMs:2400,xp:[55,40,55],masteryXp:40},
+  depthsGuardian:{...beetle,id:'depthsGuardian',room:'depthsVault',name:'Vault Guardian',health:240,damage:27,shellArmor:9,xp:[75,55,75],masteryXp:50}
 };
 const enemiesByRoom=Object.fromEntries(Object.values(huntEnemies).map(enemy=>[enemy.room,enemy]));
 export const huntEnemyForRoom=room=>enemiesByRoom[room];
@@ -55,17 +56,17 @@ export const weaponCatalog={
   trainingSword:{name:'Training Sword',damage:14,interval:1100,strength:1,agility:1,description:'A simple iron blade issued to new adventurers.'},
   wardenSword:{name:'Warden’s Blade',damage:18,interval:1100,strength:1,agility:1,description:'A gold-trimmed blade awarded for completing First Steps.'},
   ironSword:{name:'Iron Sword',damage:20,interval:1200,strength:2,agility:1,price:150,description:'A dependable blade with a steady rhythm.'},
-  huntingSpear:{name:'Hunting Spear',damage:30,interval:1700,strength:3,agility:1,price:260,description:'Heavy thrusts with a longer recovery between attacks.'},
-  quickDagger:{name:'Quick Dagger',damage:12,interval:700,strength:1,agility:3,price:240,description:'A light blade for rapid, precise strikes.'}
+  huntingSpear:{name:'Hunting Spear',damage:30,interval:1700,strength:3,agility:1,price:600,description:'Heavy thrusts with a longer recovery between attacks.'},
+  quickDagger:{name:'Quick Dagger',damage:12,interval:700,strength:1,agility:3,price:550,description:'A light blade for rapid, precise strikes.'}
 };
 export const swordUpgrades={
   balancedGrip:{name:'Balanced Grip',damage:12,interval:850,timber:8,gold:20},
   weightedHilt:{name:'Weighted Hilt',damage:20,interval:1400,timber:8,gold:20}
 };
 export const weaponEnchantments=[
-  {gold:100,shards:1,damage:2},
-  {gold:250,shards:2,damage:4},
-  {gold:500,shards:3,damage:6}
+  {gold:150,shards:1,damage:2},
+  {gold:600,shards:3,damage:4},
+  {gold:1800,shards:6,damage:6}
 ];
 export function weaponProfile(id,upgrade,enchantments={}){
   let weapon=Object.hasOwn(weaponCatalog,id)?weaponCatalog[id]:null;
@@ -81,7 +82,7 @@ export function weaponProfile(id,upgrade,enchantments={}){
 export const attackSeconds=ms=>String(ms/1000)+'s';
 export function canUseWeapon(stats,id){
   const weapon=weaponCatalog[id];
-  return !!weapon&&1+Math.floor((stats.strengthXp??0)/50)>=weapon.strength&&1+Math.floor((stats.agilityXp??0)/50)>=weapon.agility;
+  return !!weapon&&skillLevel(stats.strengthXp)>=weapon.strength&&skillLevel(stats.agilityXp)>=weapon.agility;
 }
 export function purchaseWeapon(state,id){
   const weapon=weaponCatalog[id];
@@ -128,7 +129,7 @@ export function normalizeCombatGear(input){
   }
   return gear;
 }
-const level=xp=>1+Math.floor((xp??0)/50);
+const level=skillLevel;
 export function huntingAttributes(stats,weapon='trainingSword',upgrade=null,charmEquipped=false,enchantments={}){
   const profile=weaponProfile(weapon,upgrade,enchantments);
   return {

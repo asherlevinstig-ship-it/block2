@@ -1,3 +1,4 @@
+import {MAX_SKILL_XP} from '../public/skill-curve.js';
 import {roomBoxes} from '../public/shared-world.js';
 
 export const luckRules={xp:2,interval:30000,levelXp:50};
@@ -29,7 +30,7 @@ function finish(state,round,outcome,payout,now){
   state.credits+=payout;
   state.goldEarned=Math.min(Number.MAX_SAFE_INTEGER,(state.goldEarned??0)+Math.max(0,payout-round.bet));
   const before=state.stats.luckXp??0;
-  const xp=gambling.lastXpAt==null||now-gambling.lastXpAt>=luckRules.interval?Math.min(luckRules.xp,100000000-before):0;
+  const xp=gambling.lastXpAt==null||now-gambling.lastXpAt>=luckRules.interval?Math.min(luckRules.xp,MAX_SKILL_XP-before):0;
   if(xp){state.stats.luckXp=before+xp;gambling.lastXpAt=now;}
   round.luckXp=xp;round.luckBefore=before;
 }

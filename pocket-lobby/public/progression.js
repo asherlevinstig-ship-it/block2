@@ -1,9 +1,11 @@
+import {skillLevel} from './skill-curve.js';
+export * from './skill-curve.js';
 import {weaponProfile,moonwellCharm} from './hunting.js';
 
 export function playerPower(stats={},gear={}){
-  const strength=1+Math.floor((stats.strengthXp??0)/50);
-  const agility=1+Math.floor((stats.agilityXp??0)/50);
-  const vitality=1+Math.floor((stats.vitalityXp??0)/50);
+  const strength=skillLevel(stats.strengthXp);
+  const agility=skillLevel(stats.agilityXp);
+  const vitality=skillLevel(stats.vitalityXp);
   const weapon=weaponProfile(gear.equippedWeapon,gear.activeSwordUpgrade,gear.weaponEnchantments);
   const parts=[
     {name:'Combat attributes',points:10*(strength+agility+vitality),detail:'10 per Strength, Agility and Vitality level'},

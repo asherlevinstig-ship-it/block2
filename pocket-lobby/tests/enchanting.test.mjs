@@ -7,14 +7,14 @@ import {playerPower} from '../public/progression.js';
 import {applyGameplayAction} from '../server/gameplay.mjs';
 import {handlePlayerApi} from '../server/player-api.mjs';
 import {testDatabase} from './db-helper.mjs';
-const ready=()=>normalizeState({location:'armory',position:{x:5,y:5},credits:1000,huntingLoot:{moonwellShard:6}});
+const ready=()=>normalizeState({location:'armory',position:{x:5,y:5},credits:1000,huntingLoot:{moonwellShard:10}});
 const act=(s,name,body={},now=1000)=>applyGameplayAction(s,name,body,now,()=>.5);
 
 test('three enchantment levels consume exact resources and preserve fittings and other weapons',()=>{
- const s=ready();s.credits=850;s.combatGear.swordUpgrades=['balancedGrip'];s.combatGear.activeSwordUpgrade='balancedGrip';s.combatGear.ownedWeapons.push('ironSword');
+ const s=ready();s.credits=2550;s.combatGear.swordUpgrades=['balancedGrip'];s.combatGear.activeSwordUpgrade='balancedGrip';s.combatGear.ownedWeapons.push('ironSword');
  const first=enchantWeapon(s,'trainingSword',1);
  assert.equal(first.before,12);assert.equal(first.after,14);
- assert.equal(s.credits,750);assert.equal(s.huntingLoot.moonwellShard,5);
+ assert.equal(s.credits,2400);assert.equal(s.huntingLoot.moonwellShard,9);
  enchantWeapon(s,'trainingSword',2);enchantWeapon(s,'trainingSword',3);
  assert.equal(s.credits,0);assert.equal(s.huntingLoot.moonwellShard,0);
  assert.equal(s.combatGear.weaponEnchantments.trainingSword,3);
@@ -86,11 +86,11 @@ test('API prevents forged enchantments and double charges from concurrent purcha
  assert.deepEqual([first.status,second.status].sort(),[200,409]);
  const winning=first.status===200?a:b;
  const retry=await buy(winning);assert.equal(retry.status,200);
- assert.equal(packet.state.credits,900);assert.equal(packet.state.huntingLoot.moonwellShard,5);
+ assert.equal(packet.state.credits,850);assert.equal(packet.state.huntingLoot.moonwellShard,9);
  assert.equal(packet.state.combatGear.weaponEnchantments.trainingSword,1);
  const stale=await call('gameplay/enchant',{revision:packet.revision,operation:crypto.randomUUID(),id:'trainingSword',level:1});
  assert.equal(stale.status,400);
  await call('save',{revision:packet.revision,operation:crypto.randomUUID(),state:{...packet.state,credits:1000,huntingLoot:{moonwellShard:999},combatGear:{...packet.state.combatGear,weaponEnchantments:{trainingSword:3}}}});
- assert.equal(packet.state.credits,900);assert.equal(packet.state.huntingLoot.moonwellShard,5);
+ assert.equal(packet.state.credits,850);assert.equal(packet.state.huntingLoot.moonwellShard,9);
  assert.equal(packet.state.combatGear.weaponEnchantments.trainingSword,1);
 });

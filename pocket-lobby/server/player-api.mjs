@@ -1,3 +1,4 @@
+import {migrateProgression,progressionVersion} from '../public/skill-curve.js';
 import {normalizeMagic} from '../public/essences.js';
 import {applyGameplayAction,protectFishingState} from './gameplay.mjs';
 import {settleActivities} from './activities.mjs';
@@ -14,6 +15,7 @@ const COOKIE_AGE=31536000;
 const json=(data,status=200,extra={})=>Response.json(data,{status,headers:{"Cache-Control":"no-store","X-Content-Type-Options":"nosniff",...extra}});
 function readPlayerState(row){
   const state=JSON.parse(row.state_json);
+  migrateProgression(state);
   if(state.magic)state.magic=normalizeMagic(state.magic);
   // Existing shifts keep their scheduled pace until they finish.
   if(state.adventure)delete state.adventure.rootstone;
@@ -38,7 +40,8 @@ async function settled(db,id,activities=false){
     const now=Date.now();
     const planChanged=settlePlan(state,now);
     const activityChanged=activities&&settleActivities(state,now);
-    if(!planChanged&&!activityChanged)return row;
+    const migrated=JSON.parse(row.state_json).progressionVersion!==progressionVersion;
+    if(!planChanged&&!activityChanged&&!migrated)return row;
     const updated=await write(db,id,row.revision,state,"settle:"+crypto.randomUUID());
     if(updated)return updated;
   }
@@ -72,7 +75,8 @@ export async function handlePlayerApi(request,env){
     if(path==="/api/player/session"&&request.method==="POST"){
       const existing=id&&await settled(env.TOWER_DB,id,true);
       if(existing)return json(packet(existing));
-      const body=await bodyOf(request),state=normalizeState({...body.legacy,meals:{},magic:undefined,...(body.newCharacter===true?{characterCreated:false,welcomeSeen:false}:{})});
+      const body=await bodyOf(request),legacy={...body.legacy};migrateProgression(legacy);
+      const state=normalizeState({...legacy,meals:{},magic:undefined,...(body.newCharacter===true?{characterCreated:false,welcomeSeen:false}:{})});
       state.stats.luckXp=0;
       delete state.combatGear.weaponEnchantments;
       if(state.hunting.encounter){

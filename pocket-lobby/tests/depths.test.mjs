@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {skillXpForLevel} from '../public/skill-curve.js';
 import assert from 'node:assert/strict';
 import {bankDepthsSpoils,clearDepthsStage,depthsStages,depthsSpoils,essenceCacheGold,depthsCacheRoom} from '../public/depths.js';
 import {createHunt,huntEnemy,huntingTurn} from '../public/hunting.js';
@@ -103,10 +104,10 @@ test('the hidden cache requires a chime and pays once on banking, while the vaul
 
 
 test('the optional cache needs its own guardian victory, pays once, and preserves main dungeon progress',()=>{
-  const state=normalizeState({location:'depthsGate',depthsRun:{cleared:0},stats:{strengthXp:1000,vitalityXp:1000}});
+  const state=normalizeState({location:'depthsGate',depthsRun:{cleared:0},stats:{strengthXp:skillXpForLevel(21),vitalityXp:skillXpForLevel(21)}});
   let now=1000;
   const act=(name,body={})=>applyGameplayAction(state,name,body,now,()=>.5);
-  const win=()=>{state.position={x:5,y:5};act('fight');now+=20000;act('combat',{combatId:state.combatId});};
+  const win=()=>{state.position={x:5,y:5};act('fight');now+=60000;act('combat',{combatId:state.combatId});};
   assert.throws(()=>act('depthsCacheEnter'),/Clear Shell Gallery/);
   win();act('depthsNext');
   assert.throws(()=>act('depthsCacheEnter'),/Clear Shell Gallery/);
@@ -203,16 +204,16 @@ test('cache API retries and concurrent claims cannot pay twice',async t=>{
 });
 
 
-test('elite cache guardian remains beatable with the starter sword, no magic and no upgrades',()=>{
+test('elite cache guardian rewards a prepared build across low and high combat rolls',()=>{
   assert.equal(essenceCacheGold,50);
   for(const roll of [0,.1,.5,.99]){
-    const s=normalizeState({location:depthsCacheRoom,depthsRun:{cleared:2},position:{x:5,y:5}});
+    const s=normalizeState({location:depthsCacheRoom,depthsRun:{cleared:2},position:{x:5,y:5},stats:{strengthXp:skillXpForLevel(5),agilityXp:skillXpForLevel(5),vitalityXp:skillXpForLevel(5)},combatGear:{ownedWeapons:['trainingSword','ironSword'],equippedWeapon:'ironSword',stonebackVestOwned:true,stonebackVestEquipped:true}});
     applyGameplayAction(s,'fight',{},1000,()=>roll);
     applyGameplayAction(s,'combat',{combatId:s.combatId},30000,()=>roll);
     assert.equal(s.hunting.encounter,null);
     assert.equal(s.depthsRun?.cacheGuardDefeated,true);
     assert(s.health>0);
-    assert.equal(s.combatGear.equippedWeapon,'trainingSword');
+    assert.equal(s.combatGear.equippedWeapon,'ironSword');
     assert.equal(s.magic,undefined);
     assert.equal(s.credits,100);
     s.position={x:8,y:5};applyGameplayAction(s,'depthsInspect',{id:'essenceCache'},30000,()=>roll);
@@ -221,7 +222,7 @@ test('elite cache guardian remains beatable with the starter sword, no magic and
 });
 
 
-const forkReady=()=>normalizeState({location:'depthsGate',depthsRun:{cleared:1,routeChoice:'pending'},health:65,position:{x:4,y:5},stats:{strengthXp:1000,vitalityXp:1000}});
+const forkReady=()=>normalizeState({location:'depthsGate',depthsRun:{cleared:1,routeChoice:'pending'},health:65,position:{x:4,y:5},stats:{strengthXp:skillXpForLevel(21),vitalityXp:skillXpForLevel(21)}});
 const passageAction=(state,name,body={},now=1000)=>applyGameplayAction(state,name,body,now,()=>.5);
 
 test('the safe passage heals and pays once, rejoins the gallery and locks out the elite route',()=>{

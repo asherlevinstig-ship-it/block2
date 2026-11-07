@@ -1,3 +1,4 @@
+import {skillLevel,progressionVersion,MAX_SKILL_XP} from '../public/skill-curve.js';
 import {fishingCatalog,fishProducts,rollFishingCatch} from '../public/fishing.js';
 import {recordQuest,claimFirstQuest} from '../public/quests.js';
 import {purchaseWeapon} from '../public/hunting.js';
@@ -80,7 +81,7 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
     const rod=state.fishingGear.equippedRod;
     const profile=fishingCatalog.rods[rod];
     if(state.fishingGear.bait<1)throw new Error('Choose bait before casting.');
-    if(1+Math.floor(state.stats.patienceXp/50)<profile.patience)throw new Error('Patience is too low for this rod.');
+    if(skillLevel(state.stats.patienceXp)<profile.patience)throw new Error('Patience is too low for this rod.');
     const biteAt=now+450+Math.round(profile.duration*(.85+random()*.30));
     state.fishingCast={id:crypto.randomUUID(),rod,started:now,castEnds:now+450,biteAt,landAt:biteAt+1800,bonus:0};
     return;
@@ -105,11 +106,11 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
     if(now<cast.landAt+900)throw new Error('Invalid catch timing. Wait for the fish to land.');
     if(state.fishingGear.bait<1)throw new Error('Choose bait before casting.');
     const before=state.stats.patienceXp;
-    const fish=rollFishingCatch(1+Math.floor(before/50),cast.rod,random,state.stats.luckXp);
+    const fish=rollFishingCatch(skillLevel(before),cast.rod,random,state.stats.luckXp);
     if((state.fishStock[fish]??0)>=1000000)throw new Error('Invalid inventory. Sell some fish first.');
     state.fishingGear.bait--;
     state.fishStock[fish]=(state.fishStock[fish]??0)+1;
-    state.stats.patienceXp=Math.min(100000000,before+10+cast.bonus);
+    state.stats.patienceXp=Math.min(MAX_SKILL_XP,before+10+cast.bonus);
     state.history.fishCaught=true;
     recordQuest(state.quest,'fish');
     state.fishingReceipt={castId:cast.id,fish,rod:cast.rod,before,xp:state.stats.patienceXp-before,bonus:cast.bonus};
@@ -122,7 +123,7 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
     if(!rod)throw new Error('Choose a valid fishing rod.');
     const owned=state.fishingGear.ownedRods.includes(body.id);
     if(!owned)location(state,['store']);
-    if(1+Math.floor(state.stats.patienceXp/50)<rod.patience)throw new Error('Patience is too low for this rod.');
+    if(skillLevel(state.stats.patienceXp)<rod.patience)throw new Error('Patience is too low for this rod.');
     if(!owned&&state.credits<rod.price)throw new Error('Invalid balance. Earn more gold first.');
     if(!owned){
       state.credits-=rod.price;state.fishingGear.ownedRods.push(body.id);
@@ -193,6 +194,7 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
 // Snapshots retain movement, appearance and equipment choices. Progression,
 // rewards and active encounters can only change through server actions.
 export function protectFishingState(previous,next){
+  next.progressionVersion=progressionVersion;
   next.credits=previous.credits;
   next.goldEarned=previous.goldEarned??0;
   next.fishStock=previous.fishStock;

@@ -1,6 +1,7 @@
+import {MAX_SKILL_XP} from '../public/skill-curve.js';
 import {nextCombatTactic} from '../public/character-rules.js';
 import {castEssencePower} from './essences.mjs';
-import {awardAwakeningStone,awardEssenceMastery} from '../public/essences.js';
+import {awardBattleStone,awardEssenceMastery} from '../public/essences.js';
 import {moonwood} from '../public/moonwood.js';
 import {isTimberTree,timberTreeState,cutTimberTree,choppingDuration,grantBasicAxe} from '../public/woodcutting.js';
 import {huntEnemyForRoom,huntEnemy,huntRespawnAt,canUseWeapon,createHunt,advanceHunt,huntingTurn,boarRules,normalizeCombatSummary} from '../public/hunting.js';
@@ -29,11 +30,11 @@ function result(state,event,now){
   if(event.encounter&&Number.isSafeInteger(encounter.tacticsAt))event.encounter.tacticsAt=now;
   state.hunting.encounter=event.encounter;state.health=event.health;
   if(event.outcome==='victory'){
-    if(state.combatId)event.mastery=awardEssenceMastery(state.magic,[...(encounter.usedEssences??[]),event.masteryGem]);
-    if(state.location!==depthsCacheRoom&&state.combatId&&state.magic?.picks.length)event.stone=awardAwakeningStone(state.magic);
+    if(state.combatId)event.mastery=awardEssenceMastery(state.magic,[...(encounter.usedEssences??[]),event.masteryGem],enemy.masteryXp??10);
+    if(state.location!==depthsCacheRoom&&state.combatId&&state.magic?.picks.length)event.stone=awardBattleStone(state.magic,enemy.id==='depthsGuardian');
     rewards.xp={};
     for(const [i,key] of ['strengthXp','agilityXp','vitalityXp'].entries()){
-      const before=state.stats[key];state.stats[key]=Math.min(100000000,before+enemy.xp[i]);rewards.xp[key]=state.stats[key]-before;
+      const before=state.stats[key];state.stats[key]=Math.min(MAX_SKILL_XP,before+enemy.xp[i]);rewards.xp[key]=state.stats[key]-before;
     }
     rewards.mastery=event.mastery??[];
     if(event.stone)rewards.stones={[event.stone]:1};

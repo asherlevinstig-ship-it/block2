@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {skillXpForLevel} from '../public/skill-curve.js';
 import assert from 'node:assert/strict';
 import {normalizeState,startPlan} from '../server/player-state.mjs';
 import {applyGameplayAction,protectFishingState} from '../server/gameplay.mjs';
@@ -74,14 +75,14 @@ test('dodge, flee, defeat and rest are governed by server time',()=>{
 });
 
 test('dungeon progress and banking require server victories; crafting consumes real materials',()=>{
-  const s=fighter({location:'ruins',stats:{strengthXp:1000,vitalityXp:1000},depthsDiscovered:true,woodcutting:{timber:8}});
+  const s=fighter({location:'ruins',stats:{strengthXp:skillXpForLevel(21),vitalityXp:skillXpForLevel(21)},depthsDiscovered:true,woodcutting:{timber:8}});
   action(s,'depthsEnter');assert.equal(s.depthsRun.cleared,0);
   assert.throws(()=>action(s,'depthsNext'),/Clear|clear/);
   assert.throws(()=>action(s,'bank'),/Clear/);
   let now=2000;
   for(let i=0;i<3;i++){
     s.position={x:5,y:5};action(s,'fight',{},now);
-    now+=20000;action(s,'combat',{combatId:s.combatId},now);
+    now+=60000;action(s,'combat',{combatId:s.combatId},now);
     assert.equal(s.depthsRun.cleared,i+1);
     if(i===0)action(s,'depthsPassage',{choice:'safe'},now);
     else if(i<2)action(s,'depthsNext',{},now);
@@ -106,7 +107,7 @@ test('dungeon progress and banking require server victories; crafting consumes r
   action(crafter,'fight',{},now);
   action(crafter,'combat',{combatId:crafter.combatId,input:'dodge'},now);
   action(crafter,'combat',{combatId:crafter.combatId},now+450);
-  assert.equal(crafter.hunting.encounter.stamina,66.75);
+  assert.equal(crafter.hunting.encounter.stamina,67.425);
   assert.throws(()=>action(crafter,'wearCharm',{equipped:false},now+450),/fighting/);
   assert.equal(s.huntingLoot.stonebackShell,2);
   assert.throws(()=>action(s,'bank',{},now),/Clear/);

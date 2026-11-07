@@ -34,7 +34,7 @@ test('fighters attack independently on their own clocks, without input',()=>{
   const kill=huntingTurn({...encounter,health:1},1,{},'attack',450,()=>.5);
   assert.equal(kill.outcome,'victory');assert.equal(kill.health,1);
   assert.equal(huntingTurn(encounter,1,{},'enemy',1300,()=>.5).outcome,'defeat');
-  const skilled=huntingAttributes({strengthXp:100,agilityXp:100,vitalityXp:100});
+  const skilled=huntingAttributes({strengthXp:125,agilityXp:125,vitalityXp:125});
   assert(skilled.damage>14);assert(skilled.dodge>.08);assert(skilled.escape>.7);assert.equal(skilled.armor,2);
 });
 
@@ -226,7 +226,7 @@ test('beetles telegraph heavier slams and the Guardian queues one separately dod
 test('elite cache guardian repeats Strike, Runic Slam and a punishable recovery window',()=>{
   const roll=()=>.5;
   let encounter=createHunt(1000,undefined,'cacheGuardian');
-  assert.equal(encounter.health,104);
+  assert.equal(encounter.health,180);
   assert.equal(enemyAttack(encounter).name,'Sentinel Strike');
   const strike=huntingTurn(encounter,100,{},'enemy',3600,roll);
   assert.equal(strike.encounter.nextBoarAt,6400);

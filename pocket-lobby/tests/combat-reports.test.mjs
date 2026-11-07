@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {skillXpForLevel} from '../public/skill-curve.js';
 import assert from 'node:assert/strict';
 import {normalizeState} from '../server/player-state.mjs';
 import {applyGameplayAction,protectFishingState} from '../server/gameplay.mjs';
@@ -52,7 +53,7 @@ test('flee attempts and defeat retain their outcome and final health through rec
 
 test('dungeon spoils are reported as unbanked and cache unlocks do not claim their contents',()=>{
  for(const [room,cleared] of [['depthsGate',0],['depthsVault',2],['depthsCache',2]]){
-  const s=normalizeState({location:room,position:{x:5,y:5},depthsRun:{cleared},stats:{strengthXp:1000,vitalityXp:1000}});
+  const s=normalizeState({location:room,position:{x:5,y:5},depthsRun:{cleared},stats:{strengthXp:skillXpForLevel(21),vitalityXp:skillXpForLevel(21)}});
   act(s,'fight');advanceServerCombat(s,20000,()=>.5);
   const report=s.combatReports[0];assert.equal(s.credits,100);
   assert.equal(report.rewards.loot,undefined);

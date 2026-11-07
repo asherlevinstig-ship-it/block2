@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {skillXpForLevel,masteryThresholds} from '../public/skill-curve.js';
 import assert from 'node:assert/strict';
 import {confluence,bondedEssences,essencePower,stoneForms,normalizeMagic,essenceMastery,powerDescription} from '../public/essences.js';
 import {normalizeState} from '../server/player-state.mjs';
@@ -21,7 +22,7 @@ test('three distinct base Gems form an order-independent fourth, with five power
   assert.equal(confluence(['fire','ice','eclipse']),null);
   const powers=bondedEssences(gems).flatMap(gem=>Object.keys(stoneForms).map(form=>essencePower(gem+':'+form)));
   assert.equal(new Set(powers.map(power=>power.name)).size,20);
-  assert(essencePower('fire:sword',{strengthXp:150}).value>essencePower('fire:sword').value);
+  assert(essencePower('fire:sword',{strengthXp:skillXpForLevel(4)}).value>essencePower('fire:sword').value);
 });
 
 test('server bonds once, spends typed stones once, preserves unlocks across gem changes, and blocks forged snapshots',()=>{
@@ -375,9 +376,9 @@ test('mastery starts at level one, caps at five and survives changing Gems',()=>
   const old=normalizeMagic({picks:gems,unlocked:['fire:sword'],equipped:'fire:sword'});
   assert.deepEqual(old.mastery,{fire:0,ice:0,shadow:0,storm:0});
   assert.equal(essenceMastery(old,'fire').level,1);
-  assert.equal(essenceMastery({mastery:{fire:20}},'fire').level,2);
-  assert.equal(essenceMastery({mastery:{fire:60}},'fire').level,3);
-  assert.equal(essenceMastery({mastery:{fire:120}},'fire').level,4);
+  assert.equal(essenceMastery({mastery:{fire:30}},'fire').level,2);
+  assert.equal(essenceMastery({mastery:{fire:150}},'fire').level,3);
+  assert.equal(essenceMastery({mastery:{fire:600}},'fire').level,4);
   assert.equal(essenceMastery({mastery:{fire:99999}},'fire').level,5);
   assert.equal(essenceMastery({mastery:{fire:-1}},'fire').xp,0);
   const s=character();s.magic=normalizeMagic({picks:gems,mastery:{fire:20,shadow:60}});
@@ -415,30 +416,30 @@ test('unused Gems, rejected casts, fleeing and defeat do not award mastery',()=>
 });
 
 test('level-up receipts are emitted at thresholds and maximum mastery caps further awards',()=>{
-  const s=masteryFighter(['fire:sword']);s.magic.mastery.fire=10;castMastery(s);finishMasteryFight(s);
+  const s=masteryFighter(['fire:sword']);s.magic.mastery.fire=20;castMastery(s);finishMasteryFight(s);
   assert.deepEqual(s.combatReceipt.events.at(-1).mastery,[{gem:'fire',xp:10,level:2,leveled:true}]);
-  const capped=masteryFighter(['fire:sword']);capped.magic.mastery.fire=190;castMastery(capped);finishMasteryFight(capped);
-  assert.equal(capped.magic.mastery.fire,200);assert.equal(essenceMastery(capped.magic,'fire').level,5);
-  const maxed=masteryFighter(['fire:sword']);maxed.magic.mastery.fire=200;castMastery(maxed);finishMasteryFight(maxed);
-  assert.equal(maxed.magic.mastery.fire,200);assert.deepEqual(maxed.combatReceipt.events.at(-1).mastery,[]);
+  const capped=masteryFighter(['fire:sword']);capped.magic.mastery.fire=1990;castMastery(capped);finishMasteryFight(capped);
+  assert.equal(capped.magic.mastery.fire,2000);assert.equal(essenceMastery(capped.magic,'fire').level,5);
+  const maxed=masteryFighter(['fire:sword']);maxed.magic.mastery.fire=2000;castMastery(maxed);finishMasteryFight(maxed);
+  assert.equal(maxed.magic.mastery.fire,2000);assert.deepEqual(maxed.combatReceipt.events.at(-1).mastery,[]);
 });
 
 test('mastery bonuses alter each element while old in-flight effects keep their saved strength',()=>{
-  const fire=masteryFighter(['fire:shield']);fire.magic.mastery.fire=200;fire.stats.strengthXp=1000;castMastery(fire);
+  const fire=masteryFighter(['fire:shield']);fire.magic.mastery.fire=2000;fire.stats.strengthXp=skillXpForLevel(21);castMastery(fire);
   assert.equal(fire.hunting.encounter.burn.damage,12);
   assert.equal(normalizeState(fire).hunting.encounter.burn.damage,12);
-  const ice=masteryFighter(['ice:shield']);ice.magic.mastery.ice=200;castMastery(ice);
+  const ice=masteryFighter(['ice:shield']);ice.magic.mastery.ice=2000;castMastery(ice);
   assert.equal(ice.hunting.encounter.nextBoarAt,3400);
   assert.match(powerDescription(essencePower('ice:shield',ice.stats,ice.magic)),/1.1 seconds/);
-  const shadow=masteryFighter(['shadow:sword']);shadow.magic.mastery.shadow=200;castMastery(shadow);
+  const shadow=masteryFighter(['shadow:sword']);shadow.magic.mastery.shadow=2000;castMastery(shadow);
   assert.equal(normalizeState(shadow).hunting.encounter.weakenPercent,35);
   act(shadow,'combat',{combatId:shadow.combatId},2300);
   assert.equal(shadow.combatReceipt.events[0].weakened,5);
-  const storm=masteryFighter(['storm:sword'],['fire','shadow','storm']);storm.magic.mastery.storm=200;
+  const storm=masteryFighter(['storm:sword'],['fire','shadow','storm']);storm.magic.mastery.storm=2000;
   castMastery(storm,'q',1800);assert.equal(storm.hunting.encounter.nextBoarAt,4300);
   assert.equal(storm.hunting.encounter.interruptResistUntil,7800);
   const snare=masteryFighter(['storm:focus'],['fire','shadow','storm']);
-  snare.magic.mastery.storm=200;snare.stats.strengthXp=1000;
+  snare.magic.mastery.storm=2000;snare.stats.strengthXp=skillXpForLevel(21);
   castMastery(snare,'q',1800);
   assert.equal(snare.hunting.encounter.nextBoarAt,4700);
   const old=masteryFighter(['shadow:sword']);castMastery(old);delete old.hunting.encounter.weakenPercent;
@@ -480,5 +481,5 @@ test('saved mastery and contribution cannot be forged, and concurrent victory re
   const winning=a.status===200?first:second;
   const retry=await call('gameplay/combat',{revision,combatId,operation:winning});
   assert.equal(retry.status,200);assert.equal(retry.state.magic.mastery.fire,20);
-  assert.equal(retry.state.combatReceipt.events[0].mastery[0].leveled,true);
+  assert.equal(retry.state.combatReceipt.events[0].mastery[0].leveled,false);
 });

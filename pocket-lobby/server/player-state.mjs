@@ -1,3 +1,4 @@
+import {skillLevel,progressionVersion,MAX_SKILL_XP} from '../public/skill-curve.js';
 import {normalizeMagic} from '../public/essences.js';
 import {mealRecipes} from '../public/cooking.js';
 import {normalizeWardrobe,outfitAppearance} from '../public/wardrobe.js';
@@ -50,7 +51,7 @@ export function normalizeState(input={}){
   if(!Number.isSafeInteger(goldEarned)||goldEarned<0)throw new Error("Invalid lifetime earnings.");
   const stats={strengthXp:0,agilityXp:0,vitalityXp:0,luckXp:0,patienceXp:(input.adventure?.silverfin??0)*10,...input.stats};
   for(const id of ["strengthXp","agilityXp","vitalityXp","patienceXp","luckXp"]){
-    if(!Number.isSafeInteger(stats[id])||stats[id]<0||stats[id]>100000000)throw new Error("Invalid attribute progress.");
+    if(!Number.isSafeInteger(stats[id])||stats[id]<0||stats[id]>MAX_SKILL_XP)throw new Error("Invalid attribute progress.");
   }
   const maxHealth=100;
   const health=input.health??maxHealth;
@@ -73,7 +74,7 @@ export function normalizeState(input={}){
   const depthsRun=normalizeDepthsRun(input.depthsRun,input.location,hunting.encounter);
   const position=input.position;
   const state={
-    goldEarned,firstUpgrade:normalizeFirstUpgrade(input.firstUpgrade),tradingPostGuideComplete:input.tradingPostGuideComplete===true,bedLessonComplete:input.bedLessonComplete===true||(Array.isArray(input.homeFurniture)&&input.homeFurniture.some(item=>item?.type==='bed')),welcomeSeen:input.welcomeSeen!==false,characterCreated:input.characterCreated!==false,characterRules:normalizeCharacterRules(input.characterRules),credits,health:Math.min(health,maxHealth),stats:{strengthXp:stats.strengthXp,agilityXp:stats.agilityXp,vitalityXp:stats.vitalityXp,patienceXp:stats.patienceXp,luckXp:stats.luckXp},fishingGear:{ownedRods,equippedRod:gear.equippedRod,bait:gear.bait},
+    progressionVersion,goldEarned,firstUpgrade:normalizeFirstUpgrade(input.firstUpgrade),tradingPostGuideComplete:input.tradingPostGuideComplete===true,bedLessonComplete:input.bedLessonComplete===true||(Array.isArray(input.homeFurniture)&&input.homeFurniture.some(item=>item?.type==='bed')),welcomeSeen:input.welcomeSeen!==false,characterCreated:input.characterCreated!==false,characterRules:normalizeCharacterRules(input.characterRules),credits,health:Math.min(health,maxHealth),stats:{strengthXp:stats.strengthXp,agilityXp:stats.agilityXp,vitalityXp:stats.vitalityXp,patienceXp:stats.patienceXp,luckXp:stats.luckXp},fishingGear:{ownedRods,equippedRod:gear.equippedRod,bait:gear.bait},
     woodcutting:normalizeWoodcutting(input.woodcutting),history:normalizeHistory(input),quest:normalizeQuest(input.quest),combatGear,hunting,fishStock,huntingLoot:counts(input.huntingLoot),adventure,
     wardrobe,avatar:outfitAppearance(wardrobe,{name:avatar.name.trim()||"Guest",hair:avatar.hair}),
     location:locations.has(input.location)?input.location:"home",
@@ -106,20 +107,20 @@ export function startPlan(state,{hours,baitLimit,kind,source},now){
   if(![1,2,4,8].includes(hours))throw new Error("Choose one, two, four, or eight hours.");
   if(!Number.isInteger(baitLimit)||baitLimit<1||baitLimit>state.fishingGear.bait||baitLimit>1000)throw new Error("Choose a bait limit within your inventory, up to 1,000.");
   const rod=fishingCatalog.rods[state.fishingGear.equippedRod];
-  if(1+Math.floor(state.stats.patienceXp/50)<rod.patience)throw new Error("Your Patience is too low for this rod.");
+  if(skillLevel(state.stats.patienceXp)<rod.patience)throw new Error("Your Patience is too low for this rod.");
   // Offline casts take longer than direct fishing and never receive the Reel bonus.
   const interval=Math.round(60000*rod.duration/4500);
   state.plan={
     startedAt:now,endAt:now+hours*3600000,nextCatchAt:now+interval,interval,
     baitLimit,rod:state.fishingGear.equippedRod,catches:{},baitUsed:0,xp:0,
-    patienceBefore:1+Math.floor(state.stats.patienceXp/50)
+    patienceBefore:skillLevel(state.stats.patienceXp)
   };
   state.location="pond";state.position={x:4,y:5};
   return state;
 }
 function finishPlan(state,reason,endedAt){
   const plan=state.plan;
-  state.report={...plan,reason,endedAt,patienceAfter:1+Math.floor(state.stats.patienceXp/50)};
+  state.report={...plan,reason,endedAt,patienceAfter:skillLevel(state.stats.patienceXp)};
   delete state.plan;
   state.location="home";state.position={x:5,y:7};
 }
@@ -129,12 +130,12 @@ export function settlePlan(state,now,{stop=false,random=Math.random}={}){
   if(plan.kind==='woodcutting')return settleWoodcuttingPlan(state,now,{stop});
   let changed=false;
   while(plan.nextCatchAt<=Math.min(now,plan.endAt)&&plan.baitUsed<plan.baitLimit&&state.fishingGear.bait>0){
-    const level=1+Math.floor(state.stats.patienceXp/50);
+    const level=skillLevel(state.stats.patienceXp);
     const fish=rollFishingCatch(level,plan.rod,random,state.stats.luckXp);
     state.fishStock[fish]=(state.fishStock[fish]??0)+1;
     state.history=normalizeHistory(state);state.history.fishCaught=true;
     state.quest=normalizeQuest(state.quest);recordQuest(state.quest,"fish");
-    state.fishingGear.bait--;state.stats.patienceXp+=10;
+    state.fishingGear.bait--;state.stats.patienceXp=Math.min(MAX_SKILL_XP,state.stats.patienceXp+10);
     plan.catches[fish]=(plan.catches[fish]??0)+1;
     plan.baitUsed++;plan.xp+=10;
     const caughtAt=plan.nextCatchAt;

@@ -1,3 +1,5 @@
+import {skillLevel,masteryThresholds} from './skill-curve.js';
+export {masteryThresholds} from './skill-curve.js';
 export const essenceEffects={
   fire:{name:'Burning',duration:3000,interval:1000,masteryBonus:1,color:'#ffac71'},
   ice:{name:'Chilled',duration:3000,delay:700,masteryBonus:100,color:'#a8e9ff'},
@@ -33,7 +35,6 @@ export function bondedEssences(picks){
   const fusion=confluence(picks);
   return fusion?[...picks,fusion.id]:[];
 }
-export const masteryThresholds=[0,20,60,120,200];
 export const masteryXpPerWin=10;
 export function essenceMastery(magic,gem){
   if(!Object.hasOwn(essenceGems,gem))return null;
@@ -51,20 +52,20 @@ export function masteryBenefit(gem,level){
   if(gem==='storm')return 'Extra recovery after an interrupt +'+(bonus*essenceEffects.storm.masteryBonus/1000).toFixed(2)+'s.';
   return '';
 }
-export function awardEssenceMastery(magic,used){
+export function awardEssenceMastery(magic,used,xp=masteryXpPerWin){
   if(!magic)return [];
   const awards=[];
   for(const gem of new Set(used)){
     const before=essenceMastery(magic,gem);
     if(!before||before.level===masteryThresholds.length)continue;
     magic.mastery??={};
-    magic.mastery[gem]=Math.min(masteryThresholds.at(-1),before.xp+masteryXpPerWin);
+    magic.mastery[gem]=Math.min(masteryThresholds.at(-1),before.xp+xp);
     const after=essenceMastery(magic,gem);
     awards.push({gem,xp:after.xp-before.xp,level:after.level,leveled:after.level>before.level});
   }
   return awards;
 }
-export const magicRank=({strengthXp=0,agilityXp=0,vitalityXp=0}={})=>1+Math.min(5,Math.floor((strengthXp+agilityXp+vitalityXp)/150));
+export const magicRank=({strengthXp=0,agilityXp=0,vitalityXp=0}={})=>1+Math.min(5,Math.floor(((skillLevel(strengthXp)-1)+(skillLevel(agilityXp)-1)+(skillLevel(vitalityXp)-1))/3));
 export function essencePower(id,stats,magic){
   if(typeof id!=='string')return null;
   const [gem,form,extra]=id.split(':');
@@ -108,6 +109,7 @@ export function normalizeMagic(input){
   const mastery=Object.fromEntries(Object.keys(essenceGems).map(gem=>[gem,essenceMastery(input,gem).xp]));
   return {picks,unlocked,stones,mastery,
     slots:{q,e},cooldowns,
+    battleWins:Number.isSafeInteger(input?.battleWins)&&input.battleWins>=0?Math.min(input.battleWins,100000000):0,
     nextStone:Number.isInteger(input?.nextStone)&&input.nextStone>=0&&input.nextStone<forms.length?input.nextStone:1};
 }
 export function awardAwakeningStone(magic){
@@ -116,4 +118,10 @@ export function awardAwakeningStone(magic){
   if(magic.stones[form]>=9999)return null;
   magic.stones[form]++;
   return form;
+}
+
+// Predictable progress: first victory, then every fifth, with a guaranteed Vault reward.
+export function awardBattleStone(magic,guaranteed=false){
+  magic.battleWins=Math.min(100000000,(magic.battleWins??0)+1);
+  return guaranteed||magic.battleWins===1||magic.battleWins%5===0?awardAwakeningStone(magic):null;
 }

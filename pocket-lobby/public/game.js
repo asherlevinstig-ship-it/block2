@@ -41,6 +41,7 @@ const isGamingTable=item=>item.type==='blackjack'||item.type==='roulette';
 const initial=[...classicLounge.filter(item=>item.type!=='table'),...gamingTables];
 const fixed = item => item.type==='bar'||item.type==='shelf'||isGamingTable(item);
 const savedPlayerState = window.towerInitialState??load('player-state',null);
+if(savedPlayerState)migrateProgression(savedPlayerState);
 const hasGamingLayout=savedPlayerState?.loungeLayout==='gaming';
 const savedLounge=savedPlayerState?.furniture??load('room',null);
 const retiredTables=hasGamingLayout?[]:(savedLounge??[]).filter(item=>item.type==='table'&&
@@ -73,8 +74,8 @@ let depthsDiscovered=savedPlayerState?.depthsDiscovered===true||!!depthsRun
   ||savedPlayerState?.hunting?.beetleRespawnAt>0||savedPlayerState?.huntingLoot?.stonebackShell>0
   ||savedPlayerState?.combatGear?.stonebackVestOwned===true;
 const playerStats={strengthXp:0,agilityXp:0,vitalityXp:0,luckXp:0,patienceXp:adventure.silverfin*10,...savedPlayerState?.stats};
-const PATIENCE_XP_PER_CATCH=10, PATIENCE_XP_PER_LEVEL=50;
-const patienceLevel=()=>1+Math.floor(playerStats.patienceXp/PATIENCE_XP_PER_LEVEL);
+const PATIENCE_XP_PER_CATCH=10;
+const patienceLevel=()=>skillLevel(playerStats.patienceXp);
 const maxHealth=()=>100;
 let health=Math.min(maxHealth(),Math.max(0,savedPlayerState?.health??maxHealth()));
 const fishingGear=normalizeFishingGear(savedPlayerState?.fishingGear);
@@ -114,7 +115,7 @@ function updateTreeStatus(){
   lastTreeCountdown=seconds;
 }
 function updateWoodPanel(){
-  const level=woodcuttingLevel(woodcutting),busy=!!woodSession;
+  const {level,progress,target}=skillProgress(woodcutting.xp),busy=!!woodSession;
   const logging=currentRoom==='logging',item=focusedTimber();
   const regrowing=!!item&&!!treeState(item).regrowsAt;
   $('woodPanel').hidden=!moonwood.has(currentRoom)||depthsStageIndex(currentRoom)>=0||(!logging&&!woodcutting.axeOwned);
@@ -123,16 +124,16 @@ function updateWoodPanel(){
   $('woodAction').hidden=!logging&&(!woodcutting.equipped?false:!item);
   $('woodInventory').hidden=!woodcutting.axeOwned;
   $('woodInventoryText').textContent='Timber ×'+woodcutting.timber+' · Sell for '+woodRules.price+' gold each at the Trading Post';
-  $('woodAxeStatus').textContent=(woodcutting.equipped?'Equipped':'In inventory')+' · Woodcutting '+level+' · '+woodcutting.xp%50+' / 50 XP';
+  $('woodAxeStatus').textContent=(woodcutting.equipped?'Equipped':'In inventory')+' · Woodcutting '+level+' · '+progress+' / '+target+' XP';
   $('equipAxe').textContent=woodcutting.equipped?'Unequip axe':'Equip axe';$('equipAxe').disabled=busy;
-  $('woodSkill').textContent='Woodcutting '+level+' · '+woodcutting.xp%50+' / 50 XP';
+  $('woodSkill').textContent='Woodcutting '+level+' · '+progress+' / '+target+' XP';
   $('woodTimber').textContent=woodcutting.timber+' timber in your bag · '+woodcutting.timber*woodRules.price+' gold value';
   $('woodAction').textContent=!woodcutting.axeOwned?'Meet woodcutter · Free axe':!woodcutting.equipped?'Equip basic axe':busy?'Chopping…':regrowing?'Waiting for regrowth':'Chop timber';
   $('woodAction').disabled=busy||(regrowing&&woodcutting.equipped)||health<=0||woodcutting.timber>=1000000;
   updateTreeStatus();
   $('woodChopProgress').hidden=!busy;
   $('startOfflineWoodcutting').disabled=!woodcutting.axeOwned||!woodcutting.equipped||busy||health<=0||woodcutting.timber>=1000000;
-  $('attribute-wood-level').textContent=level;$('attribute-wood-progress').value=woodcutting.xp%50;$('attribute-wood-xp').textContent=woodcutting.xp%50+' / 50 XP';
+  $('attribute-wood-level').textContent=level;$('attribute-wood-progress').max=target;$('attribute-wood-progress').value=progress;$('attribute-wood-xp').textContent=progress+' / '+target+' XP';
 }
 function equipAxe(){
   if(!woodcutting.axeOwned||woodSession)return;
@@ -2377,7 +2378,7 @@ function upgradePlan(path=firstUpgrade.choice){
   const fishing=path==='fishing',id=fishing?'oak':'ironSword',item=fishing?fishingCatalog.rods[id]:weaponCatalog[id];
   const owned=fishing?fishingGear.ownedRods.includes(id):combatGear.ownedWeapons.includes(id);
   const xp=playerStats[fishing?'patienceXp':'strengthXp'],required=fishing?item.patience:item.strength;
-  const missingXp=Math.max(0,(required-1)*50-xp),missingGold=Math.max(0,item.price-credits);
+  const missingXp=Math.max(0,skillXpForLevel(required)-xp),missingGold=Math.max(0,item.price-credits);
   const loot=caughtFishCount()+Object.values(huntingLoot).reduce((sum,n)=>sum+n,0)+woodcutting.timber;
   const activity=fishing?'pond':'clearing',shop=fishing?'store':'armory';
   const needsBait=fishing&&fishingGear.bait<1&&(missingXp>0||missingGold>0&&!loot);
@@ -2826,7 +2827,7 @@ function finishFishing(time){
     recordQuest(quest,'fish');history.fishCaught=true;
   }
   const before=receipt?.before??playerStats.patienceXp;
-  const oldLevel=1+Math.floor(before/PATIENCE_XP_PER_LEVEL);
+  const oldLevel=skillLevel(before);
   const earned=receipt?.xp??PATIENCE_XP_PER_CATCH+session.bonus;
   if(!receipt)playerStats.patienceXp+=earned;
   patienceTween={from:before,to:playerStats.patienceXp,started:time};
@@ -2959,9 +2960,10 @@ function animation(time){
   if(patienceTween){
     const t=reducedMotion.matches?1:Math.min(1,(time-patienceTween.started)/1000);
     const absolute=patienceTween.from+(patienceTween.to-patienceTween.from)*t;
-    const remainder=absolute%PATIENCE_XP_PER_LEVEL;
+    const {progress:remainder,target}=skillProgress(absolute);
+    $('patienceProgress').max=target;
     $('patienceProgress').value=remainder;
-    $('catchXpFill').style.width=(remainder/PATIENCE_XP_PER_LEVEL*100)+'%';
+    $('catchXpFill').style.width=(remainder/target*100)+'%';
     if(t>=1)patienceTween=null;
   }
   if(walletTween){
@@ -3286,24 +3288,24 @@ function updatePlayerStats(){
     $(id).title=health+' / '+totalHealth+' HP - 20 HP per heart';
   }
   for(const [id,name] of [['strength','Strength'],['agility','Agility'],['vitality','Vitality'],['patience','Patience'],['luck','Luck']]){
-    const experience=playerStats[id+'Xp'],rank=1+Math.floor(experience/50),towardNext=experience%50;
+    const {level:rank,progress:towardNext,target}=skillProgress(playerStats[id+'Xp']);
     $('attribute-'+id+'-level').textContent=rank;
-    $('attribute-'+id+'-xp').textContent=towardNext+' / 50 XP';
-    $('attribute-'+id+'-progress').value=towardNext;
-    $('attribute-'+id+'-progress').setAttribute('aria-label',name+' level '+rank+', '+towardNext+' of 50 XP toward the next level');
+    $('attribute-'+id+'-xp').textContent=towardNext+' / '+target+' XP';
+    $('attribute-'+id+'-progress').max=target;$('attribute-'+id+'-progress').value=towardNext;
+    $('attribute-'+id+'-progress').setAttribute('aria-label',name+' level '+rank+', '+towardNext+' of '+target+' XP toward the next level');
   }
   $('attributeName').textContent=avatar.name;
-  const level=patienceLevel(),xp=playerStats.patienceXp%PATIENCE_XP_PER_LEVEL;
+  const {level,progress:xp,target}=skillProgress(playerStats.patienceXp);
   $('patienceValue').textContent=level;
   $('patienceLevel').textContent='Patience '+level;
-  $('patienceProgress').value=xp;
-  $('patienceProgress').setAttribute('aria-label','Patience '+level+', '+xp+' of 50 XP toward the next level');
-  $('patienceXp').textContent=xp+' / 50 XP to level '+(level+1);
+  $('patienceProgress').max=target;$('patienceProgress').value=xp;
+  $('patienceProgress').setAttribute('aria-label','Patience '+level+', '+xp+' of '+target+' XP toward the next level');
+  $('patienceXp').textContent=xp+' / '+target+' XP to level '+(level+1);
   const odds=fishingChances(level,fishingGear.equippedRod,playerStats.luckXp);
   const luck=fishingLuckBonus(playerStats.luckXp);
   const luckText='+'+luck.fine.toFixed(1)+' fine / +'+luck.rare.toFixed(1)+' rare percentage points';
   $('attribute-luck-fishing').textContent=luck.rare?'Fishing bonus · '+luckText:'Higher Luck improves fish quality. Train it at the Sunset Lounge.';
-  $('fishingStats').textContent='Patience '+level+' · '+xp+'/50 XP · Bait '+fishingGear.bait+' · Fish '+caughtFishCount()+'\nQuality chances · Common '+odds.common.toFixed(1)+'% · Fine '+odds.fine.toFixed(1)+'% · Rare '+odds.rare.toFixed(1)+'%'+(luck.rare?'\nLuck bonus · '+luckText:'');
+  $('fishingStats').textContent='Patience '+level+' · '+xp+'/'+target+' XP · Bait '+fishingGear.bait+' · Fish '+caughtFishCount()+'\nQuality chances · Common '+odds.common.toFixed(1)+'% · Fine '+odds.fine.toFixed(1)+'% · Rare '+odds.rare.toFixed(1)+'%'+(luck.rare?'\nLuck bonus · '+luckText:'');
 }
 function applyServerGameplay(state){
   credits=state.credits;goldEarned=state.goldEarned??0;
@@ -3422,8 +3424,8 @@ function renderLoungeGame(message){
   $('loungeGameTitle').textContent=loungeNames[loungeTable];
   $('loungeGameEmblem').textContent=blackjack?'♠':'◉';
   $('loungeGameGold').textContent=credits.toLocaleString()+' G';
-  $('loungeGameLuck').textContent='Lv. '+(1+Math.floor(xp/50))+' · '+xp%50+' / 50 XP';
-  $('loungeGameLuckBar').value=xp%50;
+  $('loungeGameLuck').textContent='Lv. '+skillLevel(xp)+' · '+skillProgress(xp).progress+' / '+skillProgress(xp).target+' XP';
+  $('loungeGameLuckBar').max=skillProgress(xp).target;$('loungeGameLuckBar').value=skillProgress(xp).progress;
   board.replaceChildren();
   if(blackjack&&round)board.append(loungeHand('Dealer',round.dealer),loungeHand('Your hand',round.player));
   else if(round){
@@ -3434,7 +3436,7 @@ function renderLoungeGame(message){
     board.append(wheel);
   }else board.textContent=blackjack?'Get closer to 21 than the dealer without going over.':'Pick red or black. A match pays twice your stake. Green 0 wins neither color.';
   const result=round?.status==='complete'?(round.outcome==='win'?'Won '+(round.payout-round.bet)+' gold':round.outcome==='push'?'Draw · stake returned':'Lost '+round.bet+' gold')+(round.luckXp?' · +'+round.luckXp+' Luck XP':'')+
-    (round.luckXp&&Math.floor(round.luckBefore/50)<Math.floor(xp/50)?' · Luck level '+(1+Math.floor(xp/50))+'!':''):'';
+    (round.luckXp&&skillLevel(round.luckBefore)<skillLevel(xp)?' · Luck level '+skillLevel(xp)+'!':''):'';
   $('loungeGameResult').textContent=message??(otherTable?'Finish your round at the '+loungeNames[loungeRound.game]+' table first.':result||(playing?(blackjack?'Hit for another card, or stand to keep your hand.':'Wheel spinning · '+round.bet+' gold on '+round.color):'Choose your stake.'));
   $('loungeGameBet').hidden=playing||otherTable;
   $('loungeGameColorField').hidden=blackjack;
@@ -3536,7 +3538,7 @@ function buyArmoryWeapon(id){
 }
 function updateArmoryShop(){
   const equipped=weaponProfile(combatGear.equippedWeapon,combatGear.activeSwordUpgrade,combatGear.weaponEnchantments),current=huntingAttributes(playerStats,combatGear.equippedWeapon,combatGear.activeSwordUpgrade,false,combatGear.weaponEnchantments);
-  const strength=1+Math.floor(playerStats.strengthXp/50),agility=1+Math.floor(playerStats.agilityXp/50);
+  const strength=skillLevel(playerStats.strengthXp),agility=skillLevel(playerStats.agilityXp);
   $('armoryBalance').textContent=new Intl.NumberFormat().format(credits)+' G';
   $('armoryStats').textContent='Strength '+strength+' · Agility '+agility;
   $('armoryComparison').textContent=equipped?equipped.name+(equipped.upgradeName?' · '+equipped.upgradeName:'')+' · '+current.damage+'–'+(current.damage+4)+' damage · '+attackSeconds(current.attackInterval)+' / attack':'Nothing equipped · Your free Training Sword is in Inventory';
@@ -3622,7 +3624,7 @@ function showTransaction(title,items,creditChange=0){
 function updateFishingShop(){
   if(!walletTween)$('credits').textContent=new Intl.NumberFormat().format(credits);
   $('shopBalance').textContent=new Intl.NumberFormat().format(credits)+' G';
-  $('shopSkill').textContent='Patience '+patienceLevel()+' · Luck '+(1+Math.floor(playerStats.luckXp/50));
+  $('shopSkill').textContent='Patience '+patienceLevel()+' · Luck '+skillLevel(playerStats.luckXp);
   $('shopRodSummary').textContent=fishingCatalog.rods[fishingGear.equippedRod].name+' · '+(fishingCatalog.rods[fishingGear.equippedRod].duration/1000).toFixed(1)+'s / catch';
   $('shopBaitCount').textContent=fishingGear.bait+' bait in your bag · One per catch';
   $('shopCatchSummary').textContent=caughtFishCount()+' fish in your bag · Worth '+caughtFishValue()+' G';
@@ -3757,7 +3759,7 @@ function updateTradingPost(){
 }
 function savePlayerState(){
   if(activityBusy)return;
-  const snapshot={goldEarned,firstUpgrade,tradingPostGuideComplete,bedLessonComplete,credits,health,woodcutting,history,quest,combatGear,hunting,depthsRun,depthsDiscovered,ownedFurniture,furniture:[],homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats,fishingGear,huntingLoot,fishStock,avatar,wardrobe,location:currentRoom,position:{x:player.cx,y:player.cy}};
+  const snapshot={progressionVersion,goldEarned,firstUpgrade,tradingPostGuideComplete,bedLessonComplete,credits,health,woodcutting,history,quest,combatGear,hunting,depthsRun,depthsDiscovered,ownedFurniture,furniture:[],homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats,fishingGear,huntingLoot,fishStock,avatar,wardrobe,location:currentRoom,position:{x:player.cx,y:player.cy}};
   save('player-state',snapshot);
   if(window.playerCloud)window.playerCloud.enqueue(JSON.parse(JSON.stringify(snapshot)));
   updateInventory();
@@ -3843,7 +3845,7 @@ function renderEssences(){
   const changed=gemDraft.length!==magic.picks.length||gemDraft.some(id=>!magic.picks.includes(id));
   const altar=['ruins','shrine'].includes(currentRoom)&&Math.abs(player.cx-6)+Math.abs(player.cy-4)===1;
   const canBond=altar&&currentRoom===(bonded.length?'shrine':'ruins');
-  $('essenceIntro').textContent=canBond?'Bond three Gems to form a fourth. Awakening Stones unlock one power from a bonded Gem.':'Win fights to earn Awakening Stones. Visit the Moth Shrine to change which Gems you use.';
+  $('essenceIntro').textContent=canBond?'Bond three Gems to form a fourth. Awakening Stones unlock one power from a bonded Gem.':'Your first bonded victory and every fifth victory earn a Stone. Vault Guardians and Essence Caches guarantee Stones. Visit the Moth Shrine to change Gems.';
   $('essenceBuild').hidden=!canBond;
   const choices=$('essenceChoices');choices.replaceChildren();
   if(canBond){
@@ -3870,7 +3872,7 @@ function renderEssences(){
     button.disabled=essenceBusy;
     button.onclick=()=>{essenceSlot=slot;renderEssences();};
   }
-  $('essenceProgress').textContent=count+' / 20 awakened · Magic rank '+magicRank(playerStats);
+  $('essenceProgress').textContent=count+' / 20 awakened · Magic rank '+magicRank(playerStats)+' · Next victory Stone in '+(magic.battleWins===0?1:5-magic.battleWins%5)+' victories';
   $('essenceEquipped').textContent='Choose Q or E, then equip an awakened power. Each spell has its own cooldown.';
   const tabs=$('essenceTabs');tabs.replaceChildren();
   for(const id of bonded)tabs.append(essenceGemButton(allEssences[id],id===viewedEssence,()=>{viewedEssence=id;renderEssences();}));
@@ -3881,7 +3883,7 @@ function renderEssences(){
   const progress=$('essenceMasteryProgress');progress.hidden=!mastery;
   if(mastery){progress.max=mastery.target;progress.value=mastery.progress;progress.setAttribute('aria-label',gem.name+' mastery level '+mastery.level+', '+$('essenceMasteryXp').textContent);}
   $('essenceMasteryBonus').textContent=mastery?masteryBenefit(viewedEssence,mastery.level):'Confluence powers grow with your combat attributes.';
-  $('essenceMasteryHint').textContent=mastery?'Use this Gem in a winning fight to earn '+masteryXpPerWin+' mastery XP.':'';
+  $('essenceMasteryHint').textContent=mastery?'Use this Gem in a victory: Boar +10 mastery XP · Beetle +15 · Depths +20 to +50. Later mastery levels take longer.':'';
   const list=$('essencePowerList');list.replaceChildren();
   for(const [form,stone] of Object.entries(stoneForms)){
     const id=viewedEssence+':'+form,power=essencePower(id,playerStats,magic);

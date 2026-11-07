@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {skillXpForLevel} from '../public/skill-curve.js';
 import assert from 'node:assert/strict';
 import {testDatabase} from './db-helper.mjs';
 import {handlePlayerApi} from '../server/player-api.mjs';
@@ -130,5 +131,5 @@ test('Luck improves quality for live catches and away shifts, with a cap',()=>{
  const boosted=fishingChances(1,'reed',50);
  assert.deepEqual(Object.values(boosted).map(odds=>odds.toFixed(1)),['76.4','20.4','3.2']);
  assert.deepEqual(fishingLuckBonus(10000),{fine:2,rare:1});
- assert.deepEqual(fishingChances(7,'moon',10000),fishingChances(7,'moon',250));
+ assert.deepEqual(fishingChances(7,'moon',10000),fishingChances(7,'moon',skillXpForLevel(6)));
 });
