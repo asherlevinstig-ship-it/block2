@@ -54,7 +54,7 @@ export async function handlePlayerApi(request,env){
     if(path==="/api/player/session"&&request.method==="POST"){
       const existing=id&&await settled(env.TOWER_DB,id);
       if(existing)return json(packet(existing));
-      const body=await bodyOf(request),state=normalizeState(body.legacy??{});
+      const body=await bodyOf(request),state=normalizeState({...body.legacy,...(body.newCharacter===true?{characterCreated:false}:{})});
       const bytes=crypto.getRandomValues(new Uint8Array(32));
       const token=[...bytes].map(value=>value.toString(16).padStart(2,"0")).join("");
       const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(token));
@@ -78,13 +78,18 @@ export async function handlePlayerApi(request,env){
     if(row.revision!==body.revision)return json({error:"Your character changed in another tab or completed an offline action.",...packet(row)},409);
     let state=JSON.parse(row.state_json);
     switch(path){
+      case "/api/player/create":
+        if(state.characterCreated!==false)return json({error:"Your character is already created."},400);
+        if(typeof body.avatar?.name!=="string"||!body.avatar.name.trim()||body.avatar.name.trim().length>20)return json({error:"Choose a name using 1 to 20 characters."},400);
+        state=normalizeState({...state,avatar:body.avatar,wardrobe:body.wardrobe,characterCreated:true});
+        break;
       case "/api/player/testing/reset":
         if(body.confirm!=="RESET"||body.testing!==true)return json({error:"Choose testing mode and confirm the reset."},400);
-        state=normalizeState({avatar:{name:state.avatar.name,outfit:0,hair:state.avatar.hair},furniture:[],ownedFurniture:{bed:1}});
+        state=normalizeState({avatar:{name:state.avatar.name,outfit:0,hair:state.avatar.hair},furniture:[],ownedFurniture:{bed:1},characterCreated:false});
         break;
       case "/api/player/save":
         if(state.plan)return json({error:"Stop the work plan before playing.",...packet(row)},409);
-        state={...normalizeState({...body.state,wardrobe:body.state?.wardrobe??state.wardrobe}),carpenterOrderComplete:state.carpenterOrderComplete===true,characterRules:state.characterRules??normalizeCharacterRules(),routineLastSeen:state.routineLastSeen,activityLog:state.activityLog??[],...(state.report?{report:state.report}:{})};
+        state={...normalizeState({...body.state,wardrobe:body.state?.wardrobe??state.wardrobe}),characterCreated:state.characterCreated!==false,carpenterOrderComplete:state.carpenterOrderComplete===true,characterRules:state.characterRules??normalizeCharacterRules(),routineLastSeen:state.routineLastSeen,activityLog:state.activityLog??[],...(state.report?{report:state.report}:{})};
         break;
       case "/api/player/commissions/carpenter":
         deliverCarpenterOrder(state);

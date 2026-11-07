@@ -1,0 +1,19 @@
+import {clothingCatalog,normalizeWardrobe,outfitAppearance} from './wardrobe.js';
+export function createCharacter({renderer,initial={},save}){
+ return new Promise(resolve=>{
+  const dialog=document.createElement('dialog');dialog.className='game-window character-creation';dialog.setAttribute('aria-labelledby','creationTitle');
+  dialog.innerHTML=`<div class="eyebrow">YOUR STORY STARTS HERE</div><h2 id="creationTitle">Create your adventurer</h2><p class="creation-goal">Your aim: earn as much gold as possible.</p><form id="creationForm"><div class="creation-layout"><div class="creation-preview"><canvas width="300" height="300" aria-label="Your character preview"></canvas><button type="button" id="creationTurn">Turn character</button><p>Your first outfit · All choices are free</p></div><div class="creation-options"><label for="creationName">What should we call you?</label><input id="creationName" maxlength="20" required autocomplete="nickname" placeholder="Choose your character name"><label for="creationHair">Hair colour</label><select id="creationHair"></select><label for="creationJacket">Jacket</label><select id="creationJacket"></select><label for="creationTrousers">Trousers</label><select id="creationTrousers"></select><label for="creationBoots">Boots</label><select id="creationBoots"></select></div></div><p id="creationStatus" role="status">You can change your look later in Wardrobe.</p><button class="primary" type="submit">Begin my adventure</button></form>`;
+  document.body.append(dialog);const find=id=>dialog.querySelector('#'+id),wardrobe=normalizeWardrobe(undefined,{outfit:0});let hair=initial.hair??0,view=0,busy=false;
+  const name=find('creationName');name.value=initial.name==='Guest'?'':initial.name??'';
+  const hairSelect=find('creationHair');['Chestnut','Midnight','Copper','Honey','Violet'].forEach((label,index)=>{const option=document.createElement('option');option.value=index;option.textContent=label;hairSelect.append(option);});hairSelect.value=hair;
+  for(const [slot,id] of [['jacket','creationJacket'],['trousers','creationTrousers'],['boots','creationBoots']]){
+   const select=find(id);for(const [key,item] of Object.entries(clothingCatalog)){if(item.slot!==slot)continue;const option=document.createElement('option');option.value=key;option.textContent=item.name;select.append(option);}select.value=wardrobe.outfits[0][slot];select.onchange=()=>{wardrobe.outfits[0][slot]=select.value;};
+  }
+  hairSelect.onchange=()=>{hair=Number(hairSelect.value);};find('creationTurn').onclick=()=>{view=(view+1)%4;};
+  const canvas=dialog.querySelector('canvas'),ctx=canvas.getContext('2d'),reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function draw(time){if(!dialog.open)return;ctx.clearRect(0,0,300,300);ctx.fillStyle='#0d192c';ctx.fillRect(0,0,300,300);ctx.fillStyle='#22334a';ctx.beginPath();ctx.ellipse(150,255,57,17,0,0,Math.PI*2);ctx.fill();ctx.save();ctx.scale(3,3);renderer.draw(ctx,50,85,outfitAppearance(wardrobe,{hair}),{direction:view===0||view===3?'right':'left',back:view>=2,time,reduced});ctx.restore();requestAnimationFrame(draw);}
+  dialog.oncancel=event=>event.preventDefault();
+  find('creationForm').onsubmit=async event=>{event.preventDefault();if(busy)return;const trimmed=name.value.trim();if(!trimmed){name.setCustomValidity('Please choose a name.');name.reportValidity();return;}name.setCustomValidity('');busy=true;const controls=[...dialog.querySelectorAll('input,select,button')];controls.forEach(control=>control.disabled=true);find('creationStatus').textContent='Saving your character…';try{await save({avatar:outfitAppearance(wardrobe,{name:trimmed,hair}),wardrobe});dialog.close();dialog.remove();resolve();}catch(error){find('creationStatus').textContent=error.message;controls.forEach(control=>control.disabled=false);busy=false;}};
+  name.oninput=()=>name.setCustomValidity('');dialog.showModal();requestAnimationFrame(draw);name.focus();
+ });
+}

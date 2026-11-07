@@ -229,7 +229,7 @@
           const oldRoom=readLocal('room',null);
           if(oldRoom)legacy.furniture=oldRoom;
         }
-        packet=await request('session',{legacy});
+        packet=await request('session',{legacy,newCharacter:!readLocal('player-state',null)&&!readLocal('avatar',null)});
       }
       const recovery=readLocal('cloud-pending',null);
       if(recovery?.state&&!packet.state.plan&&!packet.state.report){
@@ -254,6 +254,10 @@
       const clothing=await import('./wardrobe.js');
       const characterArt=await import('./character-art.js');
       const towerCharacterArt=await characterArt.loadTowerCharacter();
+      if(packet.state.characterCreated===false){
+        const {createCharacter}=await import('./character-creation.js');gate.close();
+        await createCharacter({renderer:towerCharacterArt,initial:packet.state.avatar,save:async design=>{await action('create',design);}});
+      }
       const woodRules=await import('./woodcutting.js');
       const crafting=await import('./crafting.js');
       const characterRules=await import('./character-rules.js');
