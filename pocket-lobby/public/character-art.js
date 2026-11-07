@@ -46,6 +46,25 @@ function drawTool(ctx,kind,angle,x,y){
   }
   ctx.restore();
 }
+export function carriedTowerEquipment(metadata,x,y,options={}){
+  const selection=towerCharacterPose(metadata,options),side=options.direction==='left'?1:-1;
+  const native=selection.detail.carry??[metadata.pivot[0]+side*13,43];
+  const anchor={x:x+(native[0]-metadata.pivot[0])*metadata.scale,y:y+(native[1]-metadata.pivot[1])*metadata.scale,angle:side*.42,side};
+  if(options.weaponTier==='quickDagger'){anchor.y+=11;anchor.x+=side;anchor.angle=side*.24;}
+  if(options.weaponTier==='huntingSpear'){anchor.y+=15;anchor.x+=side*4;anchor.angle=side*.12;}
+  return anchor;
+}
+function drawCarriedEquipment(ctx,kind,anchor){
+  if(kind==='huntingSpear'){drawTool(ctx,kind,anchor.angle,anchor.x,anchor.y);return;}
+  const p=(x,y,w,h,color)=>{ctx.fillStyle=color;ctx.fillRect(x,y,w,h);};
+  const length=kind==='quickDagger'?8:14;
+  ctx.save();ctx.translate(anchor.x,anchor.y);ctx.rotate(anchor.angle);
+  // Grip at the shoulder, enclosed blade pointing down along the back.
+  p(-1,-4,3,6,'#302d3b');p(0,-3,1,4,'#a77d55');p(-1,-5,3,1,'#d4b779');
+  p(-3,1,7,2,'#453c3e');p(-2,1,5,1,kind==='wardenSword'?'#f0ce7f':'#c6a66e');
+  p(-1,3,3,length,'#292b38');p(0,3,2,length-1,'#745a46');p(0,4,1,length-3,'#a1845a');p(-1,length+2,3,2,'#b79861');
+  ctx.restore();
+}
 export function createTowerCharacterRenderer({metadata,atlases,createCanvas=(width,height)=>{const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;return canvas;}}){
   const meta=metadata,cache=new Map(),[width,height]=meta.cell;
   function frameImage(appearance,selection,vest){
@@ -68,9 +87,11 @@ export function createTowerCharacterRenderer({metadata,atlases,createCanvas=(wid
   function draw(ctx,x,y,appearance={},options={}){
     const selection=towerCharacterPose(meta,options),image=frameImage(appearance,selection,options.vest);
     const [gx,gy]=grip(x,y,options);ctx.save();ctx.imageSmoothingEnabled=false;
-    if(options.sheathed&&!options.weapon){drawTool(ctx,options.weaponTier,-.5,x-4,y-20);}
+    const carried=options.sheathed&&!options.weapon?carriedTowerEquipment(meta,x,y,options):null;
+    if(carried&&!options.back)drawCarriedEquipment(ctx,options.weaponTier,carried);
     if(options.weapon&&options.back)drawTool(ctx,options.weaponTier,selection.detail.toolAngle,gx,gy);
     ctx.drawImage(image,Math.round(x-meta.pivot[0]*meta.scale),Math.round(y-meta.pivot[1]*meta.scale),width*meta.scale,height*meta.scale);
+    if(carried&&options.back)drawCarriedEquipment(ctx,options.weaponTier,carried);
     if(options.weapon&&!options.back)drawTool(ctx,options.weaponTier,selection.detail.toolAngle,gx,gy);
     ctx.restore();return selection;
   }

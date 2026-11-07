@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {towerCharacterPose,tintTowerPixel,createTowerCharacterRenderer,loadTowerCharacter} from '../public/character-art.js';
+import {towerCharacterPose,carriedTowerEquipment,tintTowerPixel,createTowerCharacterRenderer,loadTowerCharacter} from '../public/character-art.js';
 const root=new URL('../public/art/',import.meta.url),meta=JSON.parse(fs.readFileSync(new URL('tower-adventurer.json',root),'utf8'));
 
 test('character atlases cover all actions and directions with valid attached hand positions',()=>{
@@ -45,4 +45,18 @@ test('art loading verifies images before the game starts and reports missing ass
   await assert.rejects(loadTowerCharacter({fetchImpl:async()=>({ok:false}),ImageImpl:MockImage,documentImpl}),/artwork could not load/);
   class WrongImage extends MockImage{constructor(){super();this.width=1;}}
   await assert.rejects(loadTowerCharacter({fetchImpl:async()=>({ok:true,json:async()=>meta}),ImageImpl:WrongImage,documentImpl}),/out of date/);
+});
+
+test('sheathed equipment stays below the head and follows the torso in every direction',()=>{
+  for(const [direction,back] of [['left',false],['right',false],['right',true],['left',true]]){
+    for(const state of ['idle','walk','sit']){
+      const options={direction,back,state,frame:0,weaponTier:'trainingSword'},selection=towerCharacterPose(meta,options),carry=carriedTowerEquipment(meta,0,0,options);
+      assert.equal(carry.x,(selection.detail.carry[0]-meta.pivot[0])*.5);
+      assert.equal(carry.y,(selection.detail.carry[1]-meta.pivot[1])*.5);
+      assert(carry.y>-24,'The sword grip should be at the shoulder, below the face');
+      assert(carry.y-6>-31,'No carried sword should extend above the character head');
+      assert.equal(Math.sign(carry.angle),direction==='left'?1:-1);
+      const dagger=carriedTowerEquipment(meta,0,0,{...options,weaponTier:'quickDagger'});assert(dagger.y>carry.y);
+    }
+  }
 });
