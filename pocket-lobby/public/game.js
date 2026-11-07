@@ -48,6 +48,7 @@ const retiredTables=hasGamingLayout?[]:(savedLounge??[]).filter(item=>item.type=
 let loungeFurniture=initial;
 if(savedLounge)loungeFurniture=hasGamingLayout?savedLounge:installGamingTables(savedLounge.filter(item=>!retiredTables.includes(item)));
 let homeFurniture = savedPlayerState?.homeFurniture??[];
+let bedLessonComplete=savedPlayerState?.bedLessonComplete===true||homeFurniture.some(item=>item.type==='bed');
 let credits = savedPlayerState?.credits??100;
 let displayedCredits=credits,walletTween=null;
 const countFurniture = (items,type)=>items.filter(item=>item.type===type).length;
@@ -372,7 +373,20 @@ const hunting=normalizeHunting(savedPlayerState?.hunting);
 const quest=normalizeQuest(savedPlayerState?.quest);
 function lobbyRoutesOpen(){return quest.accepted||adventure.discovered.length>0||history.fishCaught||history.boarDefeated;}
 function nearWarden(){return currentRoom==='hub'&&Math.abs(player.cx-10)+Math.abs(player.cy-3)<=1;}
+function bedLessonApplies(){return (savedPlayerState?.bedLessonComplete!==undefined||savedPlayerState?.characterCreated===true&&savedPlayerState?.welcomeSeen===true)&&!quest.accepted&&!history.fishCaught&&!history.boarDefeated;}
+function needsBedLesson(){return atHome()&&bedLessonApplies()&&!bedLessonComplete&&availableFurniture('bed')>0;}
+function updateBedGuide(){
+  const visible=atHome()&&bedLessonApplies();$('bedGuide').hidden=!visible;
+  if(!visible)return;
+  const placing=editing&&selection?.type==='bed';
+  $('questTracker').hidden=true;$('hudHomeDecor').hidden=true;
+  $('bedGuideTitle').textContent=bedLessonComplete?'Your bed is ready!':'Place your free bed';
+  $('bedGuideText').textContent=bedLessonComplete?'Step 1 complete. Next, leave through EXIT and meet the Tower Warden.':placing?'Move the bed preview over the floor and click to place it. Press R to rotate; Escape cancels.':'Your starter bed is waiting in Inventory. Let’s give it a home.';
+  for(const [id,done] of [['bedStepInventory',placing||bedLessonComplete],['bedStepPlace',placing||bedLessonComplete],['bedStepFloor',bedLessonComplete]])$(id).classList.toggle('done',done);
+  $('bedGuideAction').hidden=placing;$('bedGuideAction').textContent=bedLessonComplete?'Next: visit the lobby':'Open Inventory';
+}
 function updateQuestUI(){
+  updateBedGuide();
   const stage=questStage(quest);
   const routesOpen=lobbyRoutesOpen();
   $('lobbyDestinations').hidden=!routesOpen;
@@ -1849,7 +1863,7 @@ function setHint(){
   const guide={home:homeNavigationLearned?'Next: select EXIT to visit the Grand Lobby':'Click the floor to move your character',hub:'Click a doorway or the Outside steps to travel',lounge:defaultHint,outside:'Click the Moonwood steps to explore · Tower returns indoors',store:'Buy supplies at the counter · Use Lobby to leave',armory:'Compare damage, attack speed and requirements · Buy & equip from the Armory panel',market:'Sell fish and hunting loot at the counter · Use Lobby to leave',creek:'Tap Cross to the Ruins to walk across the creek.'};
   const message=editing?'Choose furniture to place or select a piece in the room':currentRoom==='hub'&&!lobbyRoutesOpen()?'Talk to the Tower Warden to open the lobby doors.':guide[currentRoom]??'Follow marked trails · Use the field journal for routes';
   $('hint').dataset.kind=currentRoom==='home'&&!editing?'movement':'guide';
-  $('hint').textContent=message;
+  $('hint').textContent=needsBedLesson()?(editing?'Place your bed on a clear floor spot · R to rotate':'Step 1: open Inventory to place your free bed'):message;
 }
 function startPosition(){return step?.to??{x:player.cx,y:player.cy};}
 function walkTo(tile){
@@ -2597,7 +2611,7 @@ function updateTradingPost(){
   }
 }
 function savePlayerState(){
-  const snapshot={credits,health,woodcutting,history,quest,combatGear,hunting,depthsRun,ownedFurniture,furniture:[],homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats,fishingGear,huntingLoot,fishStock,avatar,wardrobe,location:currentRoom,position:{x:player.cx,y:player.cy}};
+  const snapshot={bedLessonComplete,credits,health,woodcutting,history,quest,combatGear,hunting,depthsRun,ownedFurniture,furniture:[],homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats,fishingGear,huntingLoot,fishStock,avatar,wardrobe,location:currentRoom,position:{x:player.cx,y:player.cy}};
   save('player-state',snapshot);
   if(window.playerCloud)window.playerCloud.enqueue(JSON.parse(JSON.stringify(snapshot)));
   updateInventory();
@@ -2611,6 +2625,11 @@ function editStatus(message){
 function choose(item){
   if(item.id===null&&availableFurniture(item.type)===0)return;
   selection={...item};editStatus(types[item.type]+' selected. Click a clear tile to '+(item.id===null?'place':'move')+' it.');
+  if(needsBedLesson()&&item.type==='bed'){
+    for(let y=1;y<7&&!hover;y++)for(let x=1;x<7&&!hover;x++)if(canPlace({...selection,x,y})&&keepsExitClear({...selection,x,y}))hover={x,y};
+    note('Click a clear floor spot to place your bed · R rotates it.');
+  }
+  updateBedGuide();
 }
 function cancelSelection(){selection=null;editStatus('Select a piece to get started.');}
 function switchMode(next){
@@ -2649,7 +2668,7 @@ function switchMode(next){
   updateFishingShop();
   updateTradingPost();
   updateArmoryShop();
-  noticeUntil=0;setHint();cancelSelection();
+  noticeUntil=0;setHint();cancelSelection();updateBedGuide();
 }
 let rootstoneContext='journal',enteredRunes=[];
 const runeLabels={moth:'Moth',wave:'Wave',root:'Root'};
@@ -2790,6 +2809,7 @@ function place(tile){
   if(!keepsExitClear(item)){editStatus('Keep a walkable path to the exit.');return;}
   if(item.id===null){item.id=nextId++;roomFurniture().push(item);}
   else setRoomFurniture(roomFurniture().map(other=>other.id===item.id?item:other));
+  if(atHome()&&item.type==='bed')bedLessonComplete=true;
   savePlayerState();
   switchMode(false);
   note(types[item.type]+' placed. Click a tile to walk.');
@@ -2860,6 +2880,7 @@ function openInventory(equipmentRoom=null){
   $('inventoryGuide').textContent=!canDecorate()
     ?'Visit your home to place furniture from storage.'
     :'Choose a piece to place it in '+(atHome()?'your home':'the Sunset Lounge')+'. Pick it up in Decorate mode to return it here.';
+  if(!equipmentRoom&&needsBedLesson()){bagCategory='furniture';bagSelection='furniture:bed';$('inventoryTitle').textContent='Step 1 · Your starter bed';$('inventoryGuide').textContent='Your free Single bed is selected. Choose Place in room, then click a clear floor spot. R rotates the preview.';}
   if(equipmentRoom==='pond')$('inventoryGuide').textContent='Before your first catch, choose a fishing rod below. Your free Reed Rod is '+(fishingGear.equippedRod==='reed'?'already equipped.':'in your inventory.');
   if(equipmentRoom==='clearing')$('inventoryGuide').textContent='Before your first boar hunt, equip a sword below. '+(combatGear.equippedWeapon?'Your '+weaponCatalog[combatGear.equippedWeapon].name+' is already equipped.':'Choose a sword, then press Equip weapon.');
   updateInventory();
@@ -2950,6 +2971,7 @@ $('railInventory').onclick=()=>$('inventory').onclick();
 $('railWardrobe').onclick=()=>$('looks').onclick();
 $('railDecorate').onclick=()=>$('edit').onclick();
 $('hudHomeDecor').onclick=()=>$('edit').onclick();
+$('bedGuideAction').onclick=()=>{if(bedLessonComplete)travelDoor(homeExit);else openInventory();};
 $('hudChatPrompt').onclick=()=>$('openRoomChat').onclick();
 $('questAction').onclick=questAction;
 $('visitWarden').onclick=()=>use(hubFurniture.find(item=>item.type==='warden'));
