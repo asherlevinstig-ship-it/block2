@@ -8,5 +8,6 @@ export function deliverCarpenterOrder(state){
   if(state.credits+carpenterOrder.reward>100000000)throw new Error('Invalid delivery. Make room in your wallet first.');
   state.woodcutting.timber-=carpenterOrder.timber;
   state.credits+=carpenterOrder.reward;
+  state.goldEarned=Math.min(Number.MAX_SAFE_INTEGER,(state.goldEarned??0)+carpenterOrder.reward);
   state.carpenterOrderComplete=true;
 }

@@ -53,6 +53,8 @@ let tradingPostGuideComplete=savedPlayerState?.tradingPostGuideComplete===true||
 let tradeGuideRouteCache=null;
 let bedLessonComplete=savedPlayerState?.bedLessonComplete===true||homeFurniture.some(item=>item.type==='bed');
 let credits = savedPlayerState?.credits??100;
+let goldEarned=savedPlayerState?.goldEarned??0;
+function recordGoldEarned(amount){goldEarned=Math.min(Number.MAX_SAFE_INTEGER,goldEarned+amount);}
 let displayedCredits=credits,walletTween=null;
 const countFurniture = (items,type)=>items.filter(item=>item.type===type).length;
 const previousStock = savedPlayerState?.ownedFurniture??{};
@@ -452,6 +454,7 @@ function questAction(){
   if(credits>100000000-firstQuestReward.gold)return;
   const reward=claimFirstQuest(quest);if(!reward)return;
   credits+=reward.gold;
+  recordGoldEarned(reward.gold);
   if(!combatGear.ownedWeapons.includes(reward.weapon))combatGear.ownedWeapons.push(reward.weapon);
   combatGear.equippedWeapon=reward.weapon;$('weaponSelect').value='';
   savePlayerState();
@@ -496,7 +499,7 @@ function leaveMoonwellDepths(){
   try{
     const state={depthsRun,location:currentRoom,health,hunting,credits,huntingLoot};
     const spoils=bankDepthsSpoils(state);
-    credits=state.credits;depthsRun=state.depthsRun;
+    credits=state.credits;recordGoldEarned(spoils.gold);depthsRun=state.depthsRun;
     enterRoom(state.location,state.position);
     const items=Object.entries(spoils.loot).map(([id,count])=>({icon:'✦',text:tradeCatalog[id].name+' ×'+count}));
     showTransaction('Moonwell Depths spoils banked',items,spoils.gold);
@@ -2754,6 +2757,30 @@ function updateInventory(){
   $('huntingInventory').hidden=spoils.length===0;
   $('huntingInventory').textContent=spoils.map(([id,count])=>tradeCatalog[id].name+' ×'+count).join(' · ');
 }
+function renderProgress(){
+  $('progressGold').textContent=new Intl.NumberFormat().format(credits);
+  $('progressEarned').textContent=new Intl.NumberFormat().format(goldEarned);
+  const power=playerPower(playerStats,combatGear,rootstone);
+  $('progressPower').textContent=power.total;
+  const breakdown=$('powerBreakdown');
+  breakdown.replaceChildren();
+  for(const part of power.parts){
+    const row=document.createElement('div'),name=document.createElement('dt'),value=document.createElement('dd'),detail=document.createElement('small');
+    name.textContent=part.name;value.textContent='+'+part.points;detail.textContent=part.detail;
+    row.append(name,value,detail);breakdown.append(row);
+  }
+  const milestones=progressMilestones({goldEarned,bedLessonComplete,quest,firstUpgrade,combatGear,fishingGear,depthsDiscovered});
+  const next=milestones.find(item=>!item.done);
+  $('progressNextTitle').textContent=next?.name??'Milestones complete';
+  $('progressNextText').textContent=next?.detail??'Keep growing your wealth and combat skills.';
+  const progress=$('progressNextBar');progress.hidden=!next?.max;
+  if(next?.max){progress.max=next.max;progress.value=next.value;}
+  const completed=$('progressMilestones');completed.replaceChildren();
+  for(const milestone of milestones.filter(item=>item.done)){
+    const row=document.createElement('li');row.textContent='✓ '+milestone.name;completed.append(row);
+  }
+  $('progressMilestonesEmpty').hidden=completed.children.length>0;
+}
 function updatePlayerStats(){
   health=Math.min(health,maxHealth());
   const totalHealth=maxHealth();
@@ -2932,6 +2959,7 @@ async function handInCarpenterOrder(){
     window.towerPauseForAccount();
     const state=await window.playerCloud.deliverCarpenter();
     credits=state.credits;
+    goldEarned=state.goldEarned??goldEarned;
     woodcutting.timber=state.woodcutting.timber;
     status.textContent='Order complete. The carpenter paid you '+carpenterOrder.reward+' gold.';
     showTransaction('Carpenter’s Order delivered',[{text:'−'+carpenterOrder.timber+' timber',icon:'▤'}],carpenterOrder.reward);
@@ -2956,6 +2984,7 @@ function sellTradeLoot(id,quantity,statusId='tradeStatus'){
   else if(item.group==='fish')fishStock[id]-=quantity;
   else huntingLoot[id]-=quantity;
   credits+=earned;
+  recordGoldEarned(earned);
   const firstSale=unlockFirstUpgrade(item.name,quantity,earned);
   if(currentRoom==='market'&&item.group!=='materials')recordQuest(quest,'marketSale',quantity);
   savePlayerState();
@@ -2994,7 +3023,7 @@ function updateTradingPost(){
   }
 }
 function savePlayerState(){
-  const snapshot={firstUpgrade,tradingPostGuideComplete,bedLessonComplete,credits,health,woodcutting,history,quest,combatGear,hunting,depthsRun,depthsDiscovered,ownedFurniture,furniture:[],homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats,fishingGear,huntingLoot,fishStock,avatar,wardrobe,location:currentRoom,position:{x:player.cx,y:player.cy}};
+  const snapshot={goldEarned,firstUpgrade,tradingPostGuideComplete,bedLessonComplete,credits,health,woodcutting,history,quest,combatGear,hunting,depthsRun,depthsDiscovered,ownedFurniture,furniture:[],homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats,fishingGear,huntingLoot,fishStock,avatar,wardrobe,location:currentRoom,position:{x:player.cx,y:player.cy}};
   save('player-state',snapshot);
   if(window.playerCloud)window.playerCloud.enqueue(JSON.parse(JSON.stringify(snapshot)));
   updateInventory();
@@ -3308,6 +3337,7 @@ $('sellFish').onclick=()=>{
   if(count<1||!Number.isSafeInteger(earned)||!Number.isSafeInteger(credits+earned))return;
   for(const id of Object.keys(fishStock))fishStock[id]=0;
   credits+=earned;
+  recordGoldEarned(earned);
   const firstSale=unlockFirstUpgrade('Fish',count,earned);savePlayerState();
   $('shopStatus').textContent='Sold '+count+' fish for '+earned+' credits.';
   showTransaction('Catch sold',[{text:'−'+count+' fish · All qualities',icon:'⋈'}],earned);
@@ -3688,7 +3718,7 @@ function updateName(){
   portrait.save();portrait.translate(12,39);pixelHead(portrait,avatar,false,false);portrait.restore();
 }
 $('profile').onclick=openAvatar;$('looks').onclick=openAvatar;
-$('attributes').onclick=()=>{const ink=$('statsAvatar').getContext('2d');ink.clearRect(0,0,56,62);sprite(ink,28,54,avatar,{time:performance.now()});updatePlayerStats();$('attributesDialog').showModal();};
+$('attributes').onclick=()=>{const ink=$('statsAvatar').getContext('2d');ink.clearRect(0,0,56,62);sprite(ink,28,54,avatar,{time:performance.now()});updatePlayerStats();renderProgress();$('attributesDialog').showModal();};
 $('help').onclick=()=>$('helpDialog').showModal();
 for(const button of document.querySelectorAll('dialog .close'))button.onclick=()=>button.closest('dialog').close();
 $('saveAvatar').onclick=()=>{

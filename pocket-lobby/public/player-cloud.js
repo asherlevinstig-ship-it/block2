@@ -252,6 +252,7 @@
       const historyRules=await import('./first-visit.js');
       const shopUI=await import('./shop-ui.js');
       const clothing=await import('./wardrobe.js');
+      const progression=await import('./progression.js');
       const characterArt=await import('./character-art.js');
       const towerCharacterArt=await characterArt.loadTowerCharacter();
       if(packet.state.characterCreated===false){
@@ -271,7 +272,7 @@
       const jobs=await import('./jobs.js');
       const shared=await import('./shared-world.js');
       const multiplayer=await import('./multiplayer.js');
-      Object.assign(window,{towerCharacterArt},rules,hunting,art,fx,quests,historyRules,shopUI,clothing,woodRules,crafting,characterRules,commissions,rootstone,depths,jobs,shared,multiplayer);
+      Object.assign(window,{towerCharacterArt},rules,hunting,art,fx,quests,historyRules,shopUI,clothing,progression,woodRules,crafting,characterRules,commissions,rootstone,depths,jobs,shared,multiplayer);
       window.towerInitialState=packet.state;
       window.playerCloud={enqueue,flush,attach,resetCharacter:async()=>{await flush();conflicted=true;window.towerMultiplayer?.disconnect();try{localStorage.setItem("pocket-lobby:before-testing-reset",JSON.stringify(packet.state));await action("testing/reset",{testing:true,confirm:"RESET"});localStorage.removeItem("pocket-lobby:player-state");localStorage.removeItem("pocket-lobby:movement-learned");localStorage.removeItem("pocket-lobby:cloud-pending");location.reload();}catch(error){conflicted=false;throw error;}},deliverCarpenter:async()=>{await flush();return (await action('commissions/carpenter')).state;},saveRules:async rules=>{await flush();return (await action('rules/save',{rules})).state;},startJob:async options=>{await flush();await action('plan/start',{...options,source:'board'});window.towerMultiplayer?.disconnect();location.reload();},invalidate:conflict,get initial(){return packet.state;}};
       const script=document.createElement('script');script.src='game.js';
