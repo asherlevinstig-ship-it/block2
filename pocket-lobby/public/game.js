@@ -1932,6 +1932,8 @@ function draw(time){
     ctx.restore();
   }
   if(moonwood.has(currentRoom))drawMoonwoodDetails(time);
+  drawEnvironmentFx({room:currentRoom,ctx,point,time,reduced:reducedMotion.matches,inCombat:player.inCombat,
+    sluiceOpen:depthsRun?.finds?.includes('sluiceLever')});
   drawTradingGuide(time);
   if(enemy)drawCombatGroundFx({ctx,point,time,now:Date.now(),encounter:hunting.encounter,player,reduced:reducedMotion.matches});
   if(target)surface(target.x+.1,target.y+.1,.8,.8,1,currentRoom==='home'?'#b7e9e220':'#fff3bc30',currentRoom==='home'?'#98cec9':'#ffcf8f');
