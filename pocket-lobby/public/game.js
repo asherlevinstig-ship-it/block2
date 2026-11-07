@@ -400,6 +400,7 @@ function updateBedGuide(){
 function updateQuestUI(){
   updateBedGuide();updateTradeGuide();updateUpgradeGuide();
   const stage=questStage(quest);
+  $('questTracker').hidden=stage===5||currentRoom==='hub'||!$('bedGuide').hidden;
   const routesOpen=lobbyRoutesOpen();
   $('lobbyDestinations').hidden=!routesOpen;
   $('lobbyFirstVisit').hidden=routesOpen;
@@ -3022,7 +3023,7 @@ function switchMode(next){
   $('edit').setAttribute('aria-pressed',String(editing));$('walk').setAttribute('aria-pressed',String(!editing));
   $('roomLayout').classList.toggle('decorating',editing);
   $('roomLayout').classList.toggle('shopping',['store','armory'].includes(currentRoom));
-  $('questTracker').hidden=currentRoom==='hub';
+  $('questTracker').hidden=currentRoom==='hub'||quest.claimed;
   $('roomSide').hidden=(atHome()&&!editing)||['outside','store','armory','market'].includes(currentRoom);
   $('merchantEntry').hidden=!['store','armory','market'].includes(currentRoom);
   $('merchantEntryTitle').textContent=currentRoom==='market'?'Sell your spoils':'Browse equipment';
@@ -3040,7 +3041,7 @@ function switchMode(next){
   $('armoryShop').hidden=currentRoom!=='armory';
   const exploring=moonwood.has(currentRoom);
   $('adventurePanel').hidden=!exploring;
-  $('panelTitle').textContent=editing?(atHome()?'Home editor':'Room editor'):currentRoom==='hub'?'Tower directory':currentRoom==='store'?'Fishing supplies':currentRoom==='market'?'Trade your spoils':currentRoom==='armory'?'Choose your weapon':exploring?'Field journal':'Room chat';
+  $('panelTitle').textContent=editing?(atHome()?'Home editor':'Room editor'):currentRoom==='hub'?'Tower directory':currentRoom==='store'?'Fishing supplies':currentRoom==='market'?'Trade your spoils':currentRoom==='armory'?'Choose your weapon':exploring?'Activities':'Room chat';
   $('panelSub').textContent=editing?(atHome()?'YOUR HOME':'FURNITURE & DECOR'):roomDetails[currentRoom].name.toUpperCase();
   $('resetRoom').textContent=atHome()?'Clear home furniture':'Restore original room';
   $('mode').textContent=editing?'DECORATE':currentRoom==='hub'?'MAIN HUB':currentRoom==='outside'?'OPEN AIR':exploring?'EXPLORING':'FREE ROAM';
