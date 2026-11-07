@@ -192,6 +192,8 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
   }else{
     const move=enemyAttack(encounter,enemy);
     result.move=move.name;
+    result.attackShape=move.shape;
+    result.heavy=move.damage>0;
     result.timedDodge=encounter.dodgeUntil>0&&encounter.nextBoarAt<=encounter.dodgeUntil&&encounter.nextBoarAt>=encounter.dodgeUntil-boarRules.dodgeWindow;
     result.dodged=result.timedDodge||random()<attributes.dodge;
     if(move.opensShell&&result.timedDodge){

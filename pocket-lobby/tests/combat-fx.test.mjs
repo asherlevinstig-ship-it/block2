@@ -1,16 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {combatShake,drawCombatGroundFx,drawCombatWorldFx,drawCombatOverlayFx} from '../public/combat-fx.js';
+import {combatShake,recordCombatFx,drawCombatGroundFx,drawCombatWorldFx,drawCombatOverlayFx} from '../public/combat-fx.js';
 
 function canvas(){
   const calls=[];let depth=0;
-  const ctx=new Proxy({}, {
-    get:(_,key)=>(...args)=>{
+  const ctx=new Proxy({globalAlpha:1}, {
+    get:(target,key)=>key in target?target[key]:(...args)=>{
       for(const value of args)if(typeof value==='number')assert(Number.isFinite(value),'Invalid '+String(key)+' coordinate');
       if(key==='save')depth++;if(key==='restore')depth--;
       assert(depth>=0);calls.push([key,...args]);
     },
-    set:(_,key,value)=>{if(typeof value==='number')assert(Number.isFinite(value));return true;}
+    set:(target,key,value)=>{if(typeof value==='number')assert(Number.isFinite(value));target[key]=value;return true;}
   });
   return {ctx,calls,balanced:()=>assert.equal(depth,0)};
 }
@@ -35,8 +35,11 @@ test('charge warnings and victory show at the right times; reduced motion remove
   assert.deepEqual(combatShake(2050,events,true),[0,0]);
   assert.deepEqual(combatShake(2500,events,false),[0,0]);
   assert(combatShake(2050,events,false).every(n=>Math.abs(n)<=1.5));
-  const c=canvas();drawCombatWorldFx({ctx:c.ctx,point,time:1100,events,player:{x:5,y:5},reduced:true});
+  const c=canvas(),attack={...events};
+  recordCombatFx(attack,{action:'attack',damage:16},1000);
+  drawCombatWorldFx({ctx:c.ctx,point,time:1100,events:attack,player:{x:5,y:5},reduced:true});
   assert.equal(c.calls.filter(([method])=>method==='fillRect').length,2);
+  assert(c.calls.some(([method,text])=>method==='fillText'&&text==='−16'));
 });
 
 test('the aftershock warning stays visible during the Guardian’s exposed window',()=>{
@@ -45,4 +48,39 @@ test('the aftershock warning stays visible during the Guardian’s exposed windo
   drawCombatOverlayFx({ctx:c.ctx,width:540,height:349,time,now:time,events,encounter,health:100,reduced:true});
   assert(c.calls.some(([method,text])=>method==='fillText'&&text==='AFTERSHOCK INCOMING'));
   c.balanced();
+});
+
+test('hit, guard and spell feedback survive one receipt and expire without obscuring later fights',()=>{
+  const state={};
+  recordCombatFx(state,{action:'attack',damage:9,shellGuarded:true},1000);
+  recordCombatFx(state,{action:'enemy',taken:7,warded:12,attackShape:'ring',heavy:true},1000);
+  recordCombatFx(state,{action:'essence',power:'Ice Mend',powerForm:'renewal',powerColor:'#92e5ff',healed:12},1000);
+  assert.equal(state.strikeAt,1000);assert.equal(state.hurtAt,1000);assert.equal(state.castAt,1000);
+  const frame={point,events:state,player:{x:5,y:5},time:1100};
+  for(const reduced of [false,true]){
+    const c=canvas();
+    drawCombatWorldFx({...frame,ctx:c.ctx,reduced});
+    const text=c.calls.filter(([method])=>method==='fillText').map(([,text])=>text);
+    assert(text.includes('−9 SHELL'));
+    assert(text.includes('−7'));
+    assert(text.includes('+12 HP'));
+    c.balanced();
+  }
+  const expired=canvas();
+  drawCombatWorldFx({...frame,ctx:expired.ctx,time:1900,reduced:false});
+  assert.equal(expired.calls.length,0);
+});
+
+test('spell forms draw distinct shapes and a live ward remains visible after the cast',()=>{
+  const effects={sword:'ellipse',shield:'closePath',speed:'lineTo',focus:'fillRect',renewal:'fillRect'};
+  for(const [powerForm,method] of Object.entries(effects)){
+    const c=canvas(),record={};
+    recordCombatFx(record,{action:'essence',power:'Test Power',powerForm,powerColor:'#ff9b62'},1000);
+    assert.equal(record.strikeAt,undefined);
+    drawCombatWorldFx({ctx:c.ctx,point,time:1150,now:1150,events:record,player:{x:5,y:5},reduced:false});
+    assert(c.calls.some(([name])=>name===method),powerForm);c.balanced();
+  }
+  const ward=canvas();
+  drawCombatWorldFx({ctx:ward.ctx,point,time:2400,now:2400,events:{},player:{x:5,y:5},reduced:true,encounter:{magicWard:12,magicWardUntil:3000}});
+  assert(ward.calls.some(([method])=>method==='closePath'));ward.balanced();
 });

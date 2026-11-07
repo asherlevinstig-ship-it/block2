@@ -561,11 +561,10 @@ function questAction(){
   note('Quest complete! +75 gold and Warden’s Blade.');
 }
 
-let combatMessage='',combatFeedback=null,lastCombatUi=0;
-const combatArt={strikeAt:-Infinity,hurtAt:-Infinity,dodgeAt:-Infinity,boarAttackAt:-Infinity,boarHitAt:-Infinity,victoryAt:-Infinity};
+let combatMessage='',lastCombatUi=0;
+const combatArt={strikeAt:-Infinity,castAt:-Infinity,hurtAt:-Infinity,dodgeAt:-Infinity,boarAttackAt:-Infinity,boarHitAt:-Infinity,victoryAt:-Infinity,bursts:[]};
 function resetCombatArt(){
-  for(const key of Object.keys(combatArt))combatArt[key]=-Infinity;
-  combatFeedback=null;
+  for(const key of Object.keys(combatArt))combatArt[key]=key==='bursts'?[]:-Infinity;
 }
 
 const unavailable=()=>serverActionBusy||activityBusy||player.inCombat||hunting.recoveryUntil>0;
@@ -743,16 +742,11 @@ function combatAction(action){
   }
   applyCombatResult(result);
 }
-function applyCombatResult(result,authoritative=null){
+function applyCombatResult(result,authoritative=null,playEffects=true){
   if(!result)return;
-  const action=result.action,artTime=performance.now(),enemy=result.enemyId?huntEnemies[result.enemyId]:huntEnemy(hunting.encounter);
-  if(result.damage){combatArt.strikeAt=artTime;combatArt.boarHitAt=artTime;}
-  if(action==='enemy')combatArt.boarAttackAt=artTime;
-  if(result.taken)combatArt.hurtAt=artTime;
-  if(result.dodgeStarted||(result.dodged&&!result.timedDodge))combatArt.dodgeAt=artTime;
-  if(result.outcome==='victory')combatArt.victoryAt=artTime;
+  const action=result.action,enemy=result.enemyId?huntEnemies[result.enemyId]:huntEnemy(hunting.encounter);
+  if(playEffects)recordCombatFx(combatArt,result,performance.now());
   hunting.encounter=result.encounter;health=result.health;
-  combatFeedback={started:performance.now(),damage:result.damage,taken:result.taken,dodged:result.dodged,power:result.power,powerColor:result.powerColor};
   combatMessage=(result.damage?'You hit for '+result.damage+(result.shellGuarded?' through the shell.':'. '):action==='flee'&&result.outcome!=='escaped'?'Your escape was blocked. ':'')+(result.dodged?'You dodge the attack.':result.taken?(result.move??enemy.name)+' hits for '+result.taken+'.':'');
   if(result.power)combatMessage=result.power+' '+result.effect+'.';
   if(result.warded)combatMessage+=(combatMessage?' ':'')+'Your ward blocked '+result.warded+' damage.';
@@ -760,7 +754,7 @@ function applyCombatResult(result,authoritative=null){
   if(result.dodgeStarted)combatMessage='You sidestep. Time your dodge just before the '+enemy.move+' lands!';
   if(result.timedDodge)combatMessage=result.shellExposed?'Perfect dodge! The shell flips open.':'Perfect dodge! You avoided '+(result.move??'the attack')+'.';
   if(result.nextMove&&result.outcome==='fighting')combatMessage+=(combatMessage?' ':'')+'Next: '+result.nextMove+'.';
-  if(result.taken){
+  if(result.taken&&playEffects){
     $('healthHud').classList.remove('injured');void $('healthHud').offsetWidth;$('healthHud').classList.add('injured');
   }
   if(result.outcome!=='fighting')setPlayerCombat(false);
@@ -913,30 +907,6 @@ function updateCombatMoment(time){
   }
   if(time-lastCombatUi>100){lastCombatUi=time;updateCombatPanel();}
 }
-function drawCombatFeedback(time){
-  if(!combatFeedback||!huntEnemyForRoom(currentRoom))return;
-  const age=time-combatFeedback.started;
-  if(age>900){combatFeedback=null;return;}
-  const offset=reducedMotion.matches?0:age/70;
-  ctx.save();ctx.globalAlpha=1-age/1000;ctx.font='bold 9px monospace';ctx.textAlign='center';
-  const [bx,by]=point(6.5,5.5,30),[px,py]=point(player.x+.5,player.y+.5,52);
-  if(combatFeedback.power){
-    ctx.fillStyle=combatFeedback.powerColor;
-    ctx.fillText(combatFeedback.power,px,py-offset-10);
-    const [footX,footY]=point(player.x+.5,player.y+.5,1);
-    const radius=10+(reducedMotion.matches?0:age/50);
-    ctx.strokeStyle=combatFeedback.powerColor;ctx.lineWidth=2;
-    ctx.beginPath();
-    ctx.moveTo(footX-radius,footY);ctx.lineTo(footX,footY-radius/2);
-    ctx.lineTo(footX+radius,footY);ctx.lineTo(footX,footY+radius/2);
-    ctx.closePath();ctx.stroke();
-  }
-  if(combatFeedback.damage){ctx.fillStyle='#ffe0a6';ctx.fillText('−'+combatFeedback.damage,bx,by-offset);}
-  ctx.fillStyle=combatFeedback.dodged?'#bce5d0':'#ff9eaf';
-  if(combatFeedback.taken||combatFeedback.dodged)ctx.fillText(combatFeedback.dodged?'DODGE':'−'+combatFeedback.taken,px,py-offset);
-  ctx.restore();
-}
-
 let editing=false,selection=null,zoom=1,hitboxes=[],bounds=null,bubbleUntil=0,noticeUntil=0;
 const hubFurniture=[
   ['reception',3,2],['warden',10,3],
@@ -2044,9 +2014,8 @@ function draw(time){
     hitboxes.push({item,shape});
   }
   if(!drawn)drawPlayer();
-  if(enemy)drawCombatWorldFx({ctx,point,time,events:combatArt,player,reduced:reducedMotion.matches,enemy});
+  if(enemy)drawCombatWorldFx({ctx,point,time,now:Date.now(),events:combatArt,player,reduced:reducedMotion.matches,encounter:hunting.encounter});
   drawWoodEffects(time);
-  drawCombatFeedback(time);
   if(enemy)drawCombatOverlayFx({ctx,width,height,time,now:Date.now(),events:combatArt,encounter:hunting.encounter,health,reduced:reducedMotion.matches,enemy});
   updateWorldLabels();
   drawHudMiniMap();
@@ -3150,7 +3119,8 @@ async function sendServerCombat(input){
     if(receipt&&receipt.id!==lastCombatReceipt){
       lastCombatReceipt=receipt.id;
       for(const event of receipt.events){
-        applyCombatResult(event,packet.state);
+        const recent=event.at===undefined||packet.serverTime-event.at<=750;
+        applyCombatResult(event,packet.state,recent||event.outcome==='victory');
       }
     }
     applyServerGameplay(packet.state);

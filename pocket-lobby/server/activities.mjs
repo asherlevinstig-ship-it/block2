@@ -34,7 +34,7 @@ function result(state,event,now){
     }else if(enemy.id==='beetle')move(state,'creek',{x:10,y:4});
     else move(state,'trail',{x:7,y:1});
   }
-  return {...event,enemyId:enemy.id};
+  return {...event,enemyId:enemy.id,at:now};
 }
 
 // Replay each due strike at its scheduled time. Closing or slowing the client

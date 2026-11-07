@@ -1,3 +1,4 @@
+import {recordCombatFx} from '../public/combat-fx.js';
 import * as questRules from '../public/quests.js';
 import * as depthsRules from '../public/depths.js';
 import test from 'node:test';
@@ -72,7 +73,7 @@ function gameHarness(){
   };
   const source=fs.readFileSync(new URL('../public/game.js',import.meta.url),'utf8');
   const context=vm.createContext({
-    ...questRules,...depthsRules,depthsRun:null,depthsExploring:false,depthsDiscovered:false,maxHealth:()=>100,normalizeHunting,normalizeCombatGear,weaponCatalog,weaponProfile,attackSeconds,boarRules,huntingAttributes,createHunt,resumeHunt,combatStamina,canUseWeapon,
+    recordCombatFx,...questRules,...depthsRules,depthsRun:null,depthsExploring:false,depthsDiscovered:false,maxHealth:()=>100,normalizeHunting,normalizeCombatGear,weaponCatalog,weaponProfile,attackSeconds,boarRules,huntingAttributes,createHunt,resumeHunt,combatStamina,canUseWeapon,
     huntEnemies,huntEnemy,huntEnemyForRoom,huntRespawnAt,enemyAttack,combatDodgeCost,stonebackVest,moonwellCharm,
     advanceHunt:(e,h,s,n,_r,w,upgrade,vest)=>advanceHunt(e,h,s,n,()=>.5,w,upgrade,vest),
     huntingTurn:(e,h,s,a,n,_r,w,upgrade,vest)=>huntingTurn(e,h,s,a,n,()=>.5,w,upgrade,vest),

@@ -45,7 +45,7 @@ export function castEssencePower(state,now){
   const {form,value}=power;
   if(form==='renewal'&&state.health>=100)return null;
   const next={...encounter};
-  const event={action:'essence',power:power.name,powerColor:power.color,encounter:next,health:state.health,damage:0,taken:0,outcome:'fighting'};
+  const event={action:'essence',power:power.name,powerColor:power.color,powerForm:form,encounter:next,health:state.health,damage:0,taken:0,outcome:'fighting'};
   if(form==='sword'){
     const enemy=huntEnemy(encounter);
     const armor=now<(encounter.exposedUntil??0)?0:enemy.shellArmor??0;
@@ -55,18 +55,21 @@ export function castEssencePower(state,now){
     event.effect='dealt '+event.damage+' damage';
   }else if(form==='shield'){
     next.magicWard=value;next.magicWardUntil=now+5000;
+    event.ward=value;
     event.effect='raised a '+value+' point ward';
   }else if(form==='speed'){
     const stamina=combatStamina(encounter,state.stats,now,state.combatGear.moonwellCharmEquipped);
     next.stamina=Math.min(100,stamina+value);next.staminaAt=now;
     next.nextPlayerAt=Math.max(now,next.nextPlayerAt-300);
-    event.effect='restored '+Math.round(next.stamina-stamina)+' stamina and quickened your strike';
+    event.staminaRestored=Math.round(next.stamina-stamina);
+    event.effect='restored '+event.staminaRestored+' stamina and quickened your strike';
   }else if(form==='focus'){
     next.nextBoarAt+=value;
     event.effect='delayed the enemy strike';
   }else{
     event.health=Math.min(100,state.health+value);
-    event.effect='restored '+(event.health-state.health)+' HP';
+    event.healed=event.health-state.health;
+    event.effect='restored '+event.healed+' HP';
   }
   magic.nextCastAt=now+power.cooldown;
   return event;
