@@ -54,6 +54,7 @@ let tradeGuideRouteCache=null;
 let bedLessonComplete=savedPlayerState?.bedLessonComplete===true||homeFurniture.some(item=>item.type==='bed');
 let serverActionBusy=false,activityBusy=false,pendingCombatInputs=[],nextCombatPoll=0;
 let serverCombatId=savedPlayerState?.combatId,lastCombatReceipt=null;
+let combatReports=savedPlayerState?.combatReports??[],activeCombatRecap=null,combatRecapBusy=false,combatRecapKey='';
 let credits = savedPlayerState?.credits??100;
 let goldEarned=savedPlayerState?.goldEarned??0;
 function recordGoldEarned(amount){goldEarned=Math.min(Number.MAX_SAFE_INTEGER,goldEarned+amount);}
@@ -636,6 +637,82 @@ function resetCombatArt(){
 }
 
 const unavailable=()=>serverActionBusy||activityBusy||player.inCombat||hunting.recoveryUntil>0;
+function combatRecapAction(report){
+  if(hunting.recoveryUntil)return null;
+  if(depthsRun&&depthsStageIndex(currentRoom)>=0){
+    if(currentRoom===depthsCacheRoom&&depthsRun.cacheGuardDefeated&&!depthsRun.finds?.includes('essenceCache'))return {type:'cache',label:'Open Essence Cache'};
+    return {type:'expedition',label:'Continue expedition'};
+  }
+  if(health<maxHealth()){
+    if(['hub','home'].includes(currentRoom))return {type:'rest',label:'Rest at the Tower'};
+    if(hudNextDoor('hub'))return {type:'tower',label:'Return to the Tower'};
+  }
+  return report.outcome==='victory'?{type:'inventory',label:'Open Inventory'}:null;
+}
+function renderCombatRecap(report){
+  const enemy=huntEnemies[report.enemy]?.name??'Creature',summary=report.summary,rewards=report.rewards;
+  $('combatRecapDialog').dataset.outcome=report.outcome;
+  $('combatRecapTitle').textContent=({victory:'Victory against ',escaped:'Escaped from ',defeat:'Defeated by '}[report.outcome]??'Encounter with ')+enemy;
+  $('combatRecapEmblem').textContent=report.outcome==='victory'?'✦':report.outcome==='escaped'?'↗':'♥';
+  $('combatRecapHealth').textContent=health+' / '+maxHealth()+' HP now'+(hunting.recoveryUntil?' · Recovering':'');
+  $('combatRecapEndHealth').hidden=health===report.endedHealth;
+  $('combatRecapEndHealth').textContent=report.endedHealth+' HP when the encounter ended';
+  const list=$('combatRecapRewards');list.replaceChildren();
+  const row=text=>{const item=document.createElement('li');item.textContent=text;list.append(item);};
+  for(const [id,count] of Object.entries(rewards.loot??{}))row('Inventory · '+(tradeCatalog[id]?.name??id)+' ×'+count);
+  const xp=Object.entries(rewards.xp??{}).filter(([,value])=>value>0).map(([key,value])=>'+'+value+' '+({strengthXp:'Strength',agilityXp:'Agility',vitalityXp:'Vitality'}[key]??key));
+  if(xp.length)row('Combat XP · '+xp.join(' · '));
+  for(const [form,count] of Object.entries(rewards.stones??{}))row('Inventory · '+stoneForms[form].name+' Awakening Stone ×'+count);
+  for(const award of rewards.mastery??[])row(essenceGems[award.gem].name+' Mastery · +'+award.xp+' XP'+(award.leveled?' · Level '+award.level+'!':''));
+  if(rewards.held&&(rewards.held.gold||Object.keys(rewards.held.loot).length))row('Unbanked · '+formatDepthsSpoils(rewards.held));
+  if(rewards.cacheUnlocked)row('Essence Cache unlocked · '+essenceCacheGold+' gold + an Awakening Stone to collect');
+  if(report.lostSpoils&&(report.lostSpoils.gold||Object.keys(report.lostSpoils.loot).length))row('Unbanked spoils lost · '+formatDepthsSpoils(report.lostSpoils));
+  if(!list.children.length)row('Rewards · 0');
+  $('combatRecapSpells').textContent=Object.entries(summary.spells).map(([id,count])=>essencePower(id).name+' ×'+count).join(' · ')||'Recorded spell casts · 0';
+  $('combatRecapInterrupts').textContent=summary.interrupts;
+  $('combatRecapBlocked').textContent=summary.prevented;
+  $('combatRecapDodges').textContent=summary.dodges;
+  $('combatRecapAutomatic').textContent=summary.automaticCasts+' automatic spell casts · '+summary.fleeAttempts+' flee attempts ('+summary.automaticFlees+' automatic)';
+  $('combatRecapDuration').textContent=summary.partial?'Recorded from the latest update.':'Encounter duration · '+Math.max(0,Math.round((report.endedAt-summary.startedAt)/1000))+'s';
+  const action=combatRecapAction(report);
+  $('combatRecapNext').hidden=!action;
+  $('combatRecapNext').textContent=action?.label??'';
+  $('combatRecapClose').classList.toggle('primary',!action);
+}
+function showPendingCombatRecap(){
+  const state=window.playerCloud?.initial??savedPlayerState??{};
+  if(document.hidden||player.inCombat||activityBusy||serverActionBusy||state.plan||state.report)return;
+  const dialog=$('combatRecapDialog');
+  if(!dialog.open){
+    if(document.querySelector('dialog[open]')||!combatReports.length)return;
+    activeCombatRecap=combatReports[0];combatRecapKey='';$('combatRecapError').textContent='';
+    renderCombatRecap(activeCombatRecap);dialog.showModal();
+  }
+  const key=[activeCombatRecap.id,health,currentRoom,hunting.recoveryUntil,depthsRun?.cleared,depthsRun?.finds?.join(',')].join('|');
+  if(key!==combatRecapKey){combatRecapKey=key;renderCombatRecap(activeCombatRecap);}
+}
+async function dismissCombatRecap(takeNext=false){
+  if(combatRecapBusy||!activeCombatRecap)return;
+  combatRecapBusy=true;
+  for(const id of ['combatRecapDismiss','combatRecapClose','combatRecapNext'])$(id).disabled=true;
+  const report=activeCombatRecap;
+  try{
+    if(window.playerCloud?.gameplay)await serverGameplay('combatReportAck',{id:report.id});
+    else combatReports=combatReports.filter(item=>item.id!==report.id);
+    $('combatRecapDialog').close();activeCombatRecap=null;combatRecapKey='';
+    const action=takeNext?combatRecapAction(report):null;
+    if(action?.type==='cache')$('depthsOpenCache').onclick();
+    else if(action?.type==='expedition'){depthsExploring=false;updateDepthsPanel();}
+    else if(action?.type==='rest')restAtTower();
+    else if(action?.type==='tower')navigateHud('hub');
+    else if(action?.type==='inventory')openInventory();
+    else canvas.focus();
+  }catch(error){$('combatRecapError').textContent=error.message;}
+  finally{
+    combatRecapBusy=false;
+    for(const id of ['combatRecapDismiss','combatRecapClose','combatRecapNext'])$(id).disabled=false;
+  }
+}
 function stopForCombat(){
   route=[];step=null;interaction=null;target=null;
   player.x=player.cx;player.y=player.cy;player.seat=null;player.waveStarted=null;
@@ -2874,6 +2951,7 @@ function finishInteraction(){
   }
 }
 function animation(time){
+  showPendingCombatRecap();
   if(serverActionBusy){draw(time);requestAnimationFrame(animation);return;}
   updateWoodMoment(time);
   updateCombatMoment(time);
@@ -3230,6 +3308,7 @@ function updatePlayerStats(){
 function applyServerGameplay(state){
   credits=state.credits;goldEarned=state.goldEarned??0;
   characterRules=normalizeCharacterRules(state.characterRules);
+  combatReports=state.combatReports??[];
   Object.assign(fishingGear,state.fishingGear);
   for(const id of Object.keys(fishStock))delete fishStock[id];
   Object.assign(fishStock,state.fishStock);
@@ -3277,7 +3356,7 @@ async function sendServerCombat(input,slot){
   if(serverActionBusy||!player.inCombat)return;
   activityBusy=true;
   try{
-    const packet=await window.playerCloud.gameplay('combat',{combatId:serverCombatId,input,slot});
+    const packet=await window.playerCloud.gameplay('combat',{combatId:serverCombatId,input,slot,reviewing:!document.hidden});
     const receipt=packet.state.combatReceipt;
     if(receipt&&receipt.id!==lastCombatReceipt){
       lastCombatReceipt=receipt.id;
@@ -4197,6 +4276,10 @@ $('approachBeetle').onclick=()=>{
   if(monster)use(monster);
 };
 $('enterDepths').onclick=enterMoonwellDepths;
+$('combatRecapDismiss').onclick=()=>dismissCombatRecap();
+$('combatRecapClose').onclick=()=>dismissCombatRecap();
+$('combatRecapNext').onclick=()=>dismissCombatRecap(true);
+$('combatRecapDialog').oncancel=event=>{event.preventDefault();dismissCombatRecap();};
 $('enchantWeapon').onchange=()=>{enchantSelection=$('enchantWeapon').value;$('enchantFeedback').textContent='';renderEnchanter();};
 $('enchantBuy').onclick=buyEnchantment;
 $('visitEnchanter').onclick=()=>{$('merchantDialog').close();use(roomFurniture().find(item=>item.type==='enchanter'));};

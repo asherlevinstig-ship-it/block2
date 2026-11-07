@@ -216,6 +216,8 @@ export function protectFishingState(previous,next){
   if(!previous.combatGear.stonebackVestOwned)next.combatGear.stonebackVestEquipped=false;
   if(!next.combatGear.swordUpgrades?.includes(next.combatGear.activeSwordUpgrade))delete next.combatGear.activeSwordUpgrade;
   next.health=previous.health;
+  if(previous.combatReports?.length)next.combatReports=previous.combatReports;
+  else delete next.combatReports;
   next.hunting=previous.hunting;
   next.huntingLoot=previous.huntingLoot;
   next.woodcutting={...previous.woodcutting,equipped:previous.woodcutting.axeOwned&&next.woodcutting?.equipped===true};

@@ -1,4 +1,4 @@
-import {essenceEffects,essenceGems} from './essences.js';
+import {essenceEffects,essenceGems,essencePower} from './essences.js';
 
 export const boarRules={health:70,playerInterval:1100,boarInterval:1900,fleeCooldown:1800,respawn:30000,recovery:12000,dodgeCost:40,dodgeWindow:350,dodgeCooldown:700};
 export const stonebackVest={name:'Stoneback Vest',absorption:4,dodgeCost:50,timber:8,fragment:'stonebackShell'};
@@ -140,6 +140,12 @@ export function huntingAttributes(stats,weapon='trainingSword',upgrade=null,char
     armor:Math.min(10,level(stats.vitalityXp)-1)
   };
 }
+export function normalizeCombatSummary(input){
+  if(!input||!Number.isSafeInteger(input.startedAt)||input.startedAt<0)return null;
+  const count=value=>Number.isSafeInteger(value)&&value>0?Math.min(value,1000000):0;
+  const spells=Object.fromEntries(Object.entries(input.spells??{}).filter(([id,value])=>essencePower(id)&&count(value)>0).map(([id,value])=>[id,count(value)]));
+  return {startedAt:input.startedAt,partial:input.partial===true,spells,interrupts:count(input.interrupts),prevented:count(input.prevented),dodges:count(input.dodges),automaticCasts:count(input.automaticCasts),fleeAttempts:count(input.fleeAttempts),automaticFlees:count(input.automaticFlees)};
+}
 export function normalizeHunting(input={}){
   if(!input||typeof input!=='object'||Array.isArray(input))throw new Error('Invalid hunting state.');
   const time=value=>{if(value===undefined)return 0;if(!Number.isSafeInteger(value)||value<0)throw new Error('Invalid hunting time.');return value;};
@@ -169,6 +175,8 @@ export function normalizeHunting(input={}){
     if(Number.isFinite(input.encounter.weakenPercent)&&input.encounter.weakenPercent>=25&&input.encounter.weakenPercent<=35)result.encounter.weakenPercent=input.encounter.weakenPercent;
     const used=Array.isArray(input.encounter.usedEssences)?[...new Set(input.encounter.usedEssences.filter(gem=>Object.hasOwn(essenceGems,gem)))]:[];
     if(used.length)result.encounter.usedEssences=used;
+    const summary=normalizeCombatSummary(input.encounter.summary);
+    if(summary)result.encounter.summary=summary;
     if(enemy&&enemy!=='boar')result.encounter.enemy=enemy;
     const move=enemyAttack(input.encounter);
     if(move.id===input.encounter.enemyMove)result.encounter.enemyMove=move.id;

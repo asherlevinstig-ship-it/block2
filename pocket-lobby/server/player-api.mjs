@@ -83,6 +83,7 @@ export async function handlePlayerApi(request,env){
         delete state.hunting.encounter.weakenedUntil;
         delete state.hunting.encounter.weakenPercent;
         delete state.hunting.encounter.usedEssences;
+        delete state.hunting.encounter.summary;
         delete state.hunting.encounter.tacticsAt;
         delete state.hunting.encounter.interruptResistUntil;
       }

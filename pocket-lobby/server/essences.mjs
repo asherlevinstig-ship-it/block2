@@ -54,7 +54,7 @@ export function castEssencePower(state,now,slot='q'){
   const {form,value}=power,masteryBonus=power.masteryLevel-1;
   if(form==='renewal'&&state.health>=100)return null;
   const next={...encounter};
-  const event={action:'essence',power:power.name,powerColor:power.color,powerForm:form,encounter:next,health:state.health,damage:0,taken:0,outcome:'fighting'};
+  const event={action:'essence',powerId:power.id,power:power.name,powerColor:power.color,powerForm:form,encounter:next,health:state.health,damage:0,taken:0,outcome:'fighting'};
   if(form==='sword'){
     const enemy=huntEnemy(encounter);
     const armor=now<(encounter.exposedUntil??0)?0:enemy.shellArmor??0;

@@ -3,8 +3,8 @@ import {castEssencePower} from './essences.mjs';
 import {awardAwakeningStone,awardEssenceMastery} from '../public/essences.js';
 import {moonwood} from '../public/moonwood.js';
 import {isTimberTree,timberTreeState,cutTimberTree,choppingDuration,grantBasicAxe} from '../public/woodcutting.js';
-import {huntEnemyForRoom,huntEnemy,huntRespawnAt,canUseWeapon,createHunt,advanceHunt,huntingTurn,boarRules} from '../public/hunting.js';
-import {depthsStages,depthsStageIndex,clearDepthsStage,inspectDepthsFind,depthsCacheRoom,depthsEnemyAvailable,chooseDepthsPassage,canEnterDepthsCache,depthsCacheReturn,canVisitDepthsRoom} from '../public/depths.js';
+import {huntEnemyForRoom,huntEnemy,huntRespawnAt,canUseWeapon,createHunt,advanceHunt,huntingTurn,boarRules,normalizeCombatSummary} from '../public/hunting.js';
+import {depthsStages,depthsStageIndex,clearDepthsStage,inspectDepthsFind,depthsCacheRoom,depthsEnemyAvailable,chooseDepthsPassage,canEnterDepthsCache,depthsCacheReturn,canVisitDepthsRoom,depthsSpoils} from '../public/depths.js';
 import {recordQuest} from '../public/quests.js';
 
 const adjacent=(state,item)=>state.position&&Math.abs(state.position.x-item.x)+Math.abs(state.position.y-item.y)===1;
@@ -14,16 +14,40 @@ function idle(state){
 function move(state,room,position={x:5,y:7}){state.location=room;state.position=position;}
 function result(state,event,now){
   const encounter=state.hunting.encounter,enemy=huntEnemy(encounter);
+  const room=state.location,heldBefore=state.depthsRun?depthsSpoils(state.depthsRun):null;
+  const summary=normalizeCombatSummary(encounter.summary)??normalizeCombatSummary({startedAt:now,partial:true});
+  if(event.powerId){
+    summary.spells[event.powerId]=(summary.spells[event.powerId]??0)+1;
+    if(event.automatic)summary.automaticCasts++;
+  }
+  if(event.action==='flee'){summary.fleeAttempts++;if(event.automatic)summary.automaticFlees++;}
+  if(event.interrupted)summary.interrupts++;
+  if(event.dodged)summary.dodges++;
+  summary.prevented+=(event.weakened??0)+(event.warded??0)+(event.absorbed??0);
+  if(event.encounter)event.encounter.summary=summary;
+  const rewards={};
   if(event.encounter&&Number.isSafeInteger(encounter.tacticsAt))event.encounter.tacticsAt=now;
   state.hunting.encounter=event.encounter;state.health=event.health;
   if(event.outcome==='victory'){
     if(state.combatId)event.mastery=awardEssenceMastery(state.magic,[...(encounter.usedEssences??[]),event.masteryGem]);
     if(state.location!==depthsCacheRoom&&state.combatId&&state.magic?.picks.length)event.stone=awardAwakeningStone(state.magic);
-    for(const [i,key] of ['strengthXp','agilityXp','vitalityXp'].entries())state.stats[key]=Math.min(100000000,state.stats[key]+enemy.xp[i]);
-    if(state.depthsRun)clearDepthsStage(state.depthsRun,state.location,!!state.combatId);
+    rewards.xp={};
+    for(const [i,key] of ['strengthXp','agilityXp','vitalityXp'].entries()){
+      const before=state.stats[key];state.stats[key]=Math.min(100000000,before+enemy.xp[i]);rewards.xp[key]=state.stats[key]-before;
+    }
+    rewards.mastery=event.mastery??[];
+    if(event.stone)rewards.stones={[event.stone]:1};
+    if(state.depthsRun){
+      clearDepthsStage(state.depthsRun,state.location,!!state.combatId);
+      const held=depthsSpoils(state.depthsRun);
+      rewards.held={gold:held.gold-heldBefore.gold,loot:Object.fromEntries(Object.entries(held.loot).map(([id,count])=>[id,count-(heldBefore.loot[id]??0)]).filter(([,count])=>count>0))};
+      if(state.location===depthsCacheRoom)rewards.cacheUnlocked=true;
+    }
     else{
       state.hunting[enemy.id==='beetle'?'beetleRespawnAt':'respawnAt']=now+enemy.respawn;
-      state.huntingLoot[enemy.loot]=Math.min(1000000,(state.huntingLoot[enemy.loot]??0)+1);
+      const before=state.huntingLoot[enemy.loot]??0;
+      state.huntingLoot[enemy.loot]=Math.min(1000000,before+1);
+      if(state.huntingLoot[enemy.loot]>before)rewards.loot={[enemy.loot]:state.huntingLoot[enemy.loot]-before};
       if(enemy.id==='beetle')state.depthsDiscovered=true;
       if(enemy.id==='boar'){recordQuest(state.quest,'boar');state.history.boarDefeated=true;}
     }
@@ -36,6 +60,11 @@ function result(state,event,now){
       else{state.depthsRun=null;move(state,'ruins');}
     }else if(enemy.id==='beetle')move(state,'creek',{x:10,y:4});
     else move(state,'trail',{x:7,y:1});
+  }
+  if(event.outcome!=='fighting'&&state.combatId){
+    const report={id:state.combatId,enemy:enemy.id,room,outcome:event.outcome,endedAt:now,endedHealth:event.health,summary,rewards};
+    if(event.outcome==='defeat'&&heldBefore)report.lostSpoils=heldBefore;
+    state.combatReports=[...(state.combatReports??[]).filter(item=>item.id!==report.id),report].slice(-10);
   }
   return {...event,enemyId:enemy.id,at:now};
 }
@@ -70,6 +99,12 @@ export function settleActivities(state,now,random=Math.random){
 }
 
 export function activityAction(state,action,body,now,random){
+  if(action==='combatReportAck'){
+    if(typeof body.id!=='string')throw new Error('Choose a combat recap to dismiss.');
+    state.combatReports=(state.combatReports??[]).filter(report=>report.id!==body.id);
+    if(!state.combatReports.length)delete state.combatReports;
+    return true;
+  }
   if(action==='axe'){
     idle(state);
     const npc=moonwood.layouts.logging.scenery.find(item=>item.type==='woodcutter');
@@ -102,6 +137,7 @@ export function activityAction(state,action,body,now,random){
     delete state.timberCut;
     state.combatId=crypto.randomUUID();state.combatReceipt={id:crypto.randomUUID(),events:[]};
     state.hunting.encounter=createHunt(now,enemy.health,enemy.id);
+    state.hunting.encounter.summary=normalizeCombatSummary({startedAt:now});
     if(state.characterRules?.combat?.enabled)state.hunting.encounter.tacticsAt=now;
     return true;
   }
@@ -117,7 +153,12 @@ export function activityAction(state,action,body,now,random){
         if(event)events.push(result(state,event,now));
       }
     }
-    state.combatReceipt={id:crypto.randomUUID(),events};return true;
+    state.combatReceipt={id:crypto.randomUUID(),events};
+    if(body.reviewing===true){
+      state.combatReports=(state.combatReports??[]).filter(report=>report.id!==body.combatId||now-report.endedAt>1500);
+      if(!state.combatReports.length)delete state.combatReports;
+    }
+    return true;
   }
   if(action==='rest'||action==='recover'){
     if(action==='rest'){
