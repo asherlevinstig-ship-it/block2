@@ -3391,70 +3391,103 @@ function openLoungeGame(table){
   renderLoungeGame();
   if(!dialog.open)dialog.showModal();
 }
-function loungeHand(label,cards){
-  const row=document.createElement('section');
-  const heading=document.createElement('strong');
-  heading.textContent=label;
-  const hand=document.createElement('div');
-  hand.className='lounge-hand';
-  for(const card of cards){
-    const tile=document.createElement('span');
-    tile.className='lounge-card';
+function loungeHand(label,cards,animateFrom=cards.length){
+  const row=document.createElement('section'),heading=document.createElement('strong'),total=document.createElement('b');
+  row.className='lounge-hand-row';heading.textContent=label;
+  const score=loungeHandValue(cards);total.textContent=score===null?'Hidden':score>21?score+' · Bust':score===21?'21':String(score);
+  total.className='lounge-total'+(score>21?' is-bust':'');
+  const header=document.createElement('div');header.className='lounge-hand-heading';header.append(heading,total);
+  const hand=document.createElement('div');hand.className='lounge-hand';
+  cards.forEach((card,index)=>{
+    const tile=document.createElement('span');tile.className='lounge-card';
+    if(index>=animateFrom){tile.classList.add('is-dealt');tile.style.setProperty('--deal-delay',((index-animateFrom)*75)+'ms');}
     if(card){
-      tile.textContent=({1:'A',11:'J',12:'Q',13:'K'}[card.rank]??card.rank)+' '+['♠','♥','♣','♦'][card.suit];
+      const rank=({1:'A',11:'J',12:'Q',13:'K'}[card.rank]??card.rank),suit=['♠','♥','♣','♦'][card.suit];
+      const corner=document.createElement('small'),symbol=document.createElement('b');corner.textContent=rank+' '+suit;symbol.textContent=suit;
+      tile.append(corner,symbol);tile.setAttribute('aria-label',rank+' of '+['spades','hearts','clubs','diamonds'][card.suit]);
       if(card.suit%2)tile.classList.add('red');
-    }else{
-      tile.textContent='◆';
-      tile.classList.add('card-back');
-      tile.setAttribute('aria-label','Face-down card');
-    }
+    }else{tile.textContent='◆';tile.classList.add('card-back');tile.setAttribute('aria-label','Face-down card');}
     hand.append(tile);
-  }
-  row.append(heading,hand);
-  return row;
+  });
+  row.append(header,hand);return row;
+}
+let loungeBoardKey='',loungeBoardRound=null,loungeSound=load('lounge-sound',false)===true,loungeAudio=null;
+const loungeCelebrated=new Set(loungeRound?.status==='complete'?[loungeRound.id]:[]);
+function loungeSoundReady(){
+  if(!loungeSound)return;
+  try{const Audio=window.AudioContext||window.webkitAudioContext;if(!Audio)return;loungeAudio??=new Audio();if(loungeAudio.state==='suspended')loungeAudio.resume().catch(()=>{});}catch{}
+}
+function celebrateLoungeRound(round){
+  if(round?.status!=='complete'||loungeCelebrated.has(round.id))return;
+  loungeCelebrated.add(round.id);if(loungeCelebrated.size>60)loungeCelebrated.delete(loungeCelebrated.values().next().value);
+  const banner=$('loungeOutcome');banner.classList.remove('is-revealed');void banner.offsetWidth;banner.classList.add('is-revealed');
+  if(!loungeSound||!loungeAudio||document.hidden)return;
+  try{
+    const notes=round.outcome==='win'?[440,554,659]:round.outcome==='push'?[392,392]:[294,247];
+    notes.forEach((frequency,index)=>{const osc=loungeAudio.createOscillator(),gain=loungeAudio.createGain(),at=loungeAudio.currentTime+index*.12;
+      osc.type='sine';osc.frequency.value=frequency;gain.gain.setValueAtTime(0,at);gain.gain.linearRampToValueAtTime(.045,at+.015);gain.gain.exponentialRampToValueAtTime(.001,at+.22);
+      osc.connect(gain);gain.connect(loungeAudio.destination);osc.start(at);osc.stop(at+.24);
+    });
+  }catch{}
 }
 function renderLoungeGame(message){
   clearTimeout(loungeTimer);
   const otherTable=loungeRound?.status==='playing'&&loungeRound.game!==loungeTable;
   const round=loungeRound?.game===loungeTable?loungeRound:null;
-  const playing=round?.status==='playing',blackjack=loungeTable==='blackjack';
-  const now=Date.now()+loungeClockOffset;
-  const xp=playerStats.luckXp??0;
-  const board=$('loungeGameBoard');
-  $('loungeGameTitle').textContent=loungeNames[loungeTable];
-  $('loungeGameEmblem').textContent=blackjack?'♠':'◉';
-  $('loungeGameGold').textContent=credits.toLocaleString()+' G';
-  $('loungeGameLuck').textContent='Lv. '+skillLevel(xp)+' · '+skillProgress(xp).progress+' / '+skillProgress(xp).target+' XP';
+  const playing=round?.status==='playing',blackjack=loungeTable==='blackjack',complete=round?.status==='complete';
+  const now=Date.now()+loungeClockOffset,xp=playerStats.luckXp??0,stake=Number($('loungeGameStake').value)||5;
+  $('loungeGameTitle').textContent=loungeNames[loungeTable];$('loungeGameEmblem').textContent=blackjack?'♠':'◉';
+  $('loungeGameIntro').textContent=blackjack?'A hand of cards. A little luck. Your call.':'Choose your color and watch the wheel settle.';
+  $('loungeGameGold').textContent=credits.toLocaleString()+' gold';
+  $('loungeGameLuck').textContent='Level '+skillLevel(xp)+' · '+skillProgress(xp).progress+' / '+skillProgress(xp).target+' XP';
   $('loungeGameLuckBar').max=skillProgress(xp).target;$('loungeGameLuckBar').value=skillProgress(xp).progress;
-  board.replaceChildren();
-  if(blackjack&&round)board.append(loungeHand('Dealer',round.dealer),loungeHand('Your hand',round.player));
-  else if(round){
-    const wheel=document.createElement('div');
-    wheel.className='lounge-wheel '+(playing?'spinning':round.resultColor);
-    wheel.textContent=playing?'◉':round.number;
-    wheel.setAttribute('aria-label',playing?'Wheel spinning':round.resultColor+' '+round.number);
-    board.append(wheel);
-  }else board.textContent=blackjack?'Get closer to 21 than the dealer without going over.':'Pick red or black. A match pays twice your stake. Green 0 wins neither color.';
-  const result=round?.status==='complete'?(round.outcome==='win'?'Won '+(round.payout-round.bet)+' gold':round.outcome==='push'?'Draw · stake returned':'Lost '+round.bet+' gold')+(round.luckXp?' · +'+round.luckXp+' Luck XP':'')+
-    (round.luckXp&&skillLevel(round.luckBefore)<skillLevel(xp)?' · Luck level '+skillLevel(xp)+'!':''):'';
-  $('loungeGameResult').textContent=message??(otherTable?'Finish your round at the '+loungeNames[loungeRound.game]+' table first.':result||(playing?(blackjack?'Hit for another card, or stand to keep your hand.':'Wheel spinning · '+round.bet+' gold on '+round.color):'Choose your stake.'));
-  $('loungeGameBet').hidden=playing||otherTable;
-  $('loungeGameColorField').hidden=blackjack;
+  $('loungeLuckAward').textContent=complete?(round.luckXp?'+'+round.luckXp+' Luck XP'+(skillLevel(round.luckBefore)<skillLevel(xp)?' · Level up!':''):'No Luck XP this round · 30-second XP cooldown'):playing?'Luck XP is checked when the round ends.':'Up to +2 Luck XP per completed round';
+  $('loungeTablePhase').textContent=playing?(blackjack?'YOUR MOVE':'WHEEL SPINNING'):complete?'ROUND COMPLETE':'TAKE A SEAT';
+  $('loungeTableStake').textContent=round?round.bet+' gold stake'+(!blackjack?' · '+round.color:''):'No stake placed';
+  const board=$('loungeGameBoard'),key=JSON.stringify([loungeTable,round?.id,round?.status,round?.player,round?.dealer,round?.number]);
+  if(key!==loungeBoardKey){
+    const before=loungeBoardRound?.id===round?.id?loungeBoardRound:null;board.replaceChildren();
+    if(blackjack&&round){
+      const dealerFrom=before?(before.dealer?.some(c=>!c)&&complete?1:before.dealer?.length??0):0;
+      board.append(loungeHand('Dealer',round.dealer,dealerFrom),loungeHand('Your hand',round.player,before?.player?.length??0));
+    }else if(round){
+      const wheel=document.createElement('div'),disc=document.createElement('span'),number=document.createElement('strong'),caption=document.createElement('p');
+      wheel.className='lounge-wheel '+(playing?'spinning':round.resultColor);disc.className='lounge-wheel-disc';disc.setAttribute('aria-hidden','true');
+      number.textContent=playing?'?':round.number;wheel.append(disc,number);wheel.setAttribute('aria-label',playing?'Wheel spinning':round.number+' '+round.resultColor);
+      caption.className='lounge-wheel-caption';caption.textContent=playing?'Your stake is on '+round.color:round.number+' · '+round.resultColor;board.append(wheel,caption);
+    }else{
+      const mark=document.createElement('div'),title=document.createElement('b'),hint=document.createElement('p');mark.className='lounge-empty-mark';mark.textContent=blackjack?'♠ ♥ ♣ ♦':'◉';
+      title.textContent=blackjack?'The table is yours':'Red or black?';hint.textContent=blackjack?'Choose a stake. Aim for 21 without going over.':'Pick a color. Green 0 wins neither color.';board.append(mark,title,hint);
+    }
+    loungeBoardKey=key;loungeBoardRound=round?JSON.parse(JSON.stringify(round)):null;
+  }
+  const feedback=loungeRoundFeedback(round),outcome=$('loungeOutcome');outcome.hidden=!feedback;
+  $('loungeSettlement').hidden=!feedback;
+  if(feedback){
+    outcome.dataset.outcome=feedback.outcome;$('loungeOutcomeIcon').textContent=feedback.outcome==='win'?'✦':feedback.outcome==='push'?'↔':'−';
+    $('loungeOutcomeTitle').textContent=feedback.title;$('loungeOutcomeAmount').textContent=feedback.amount;$('loungeOutcomeDetail').textContent=feedback.detail;
+    $('loungeWager').textContent=feedback.bet+' gold';$('loungeReturn').textContent=feedback.payout+' gold';$('loungeNet').textContent=feedback.net>0?'+'+feedback.net+' gold':feedback.net<0?'−'+Math.abs(feedback.net)+' gold':'0 gold';
+    $('loungeWinSparks').hidden=feedback.outcome!=='win';
+  }else outcome.classList.remove('is-revealed');
+  $('loungeGameBet').hidden=playing||otherTable;$('loungeGameColorField').hidden=blackjack;
+  for(const value of [5,10,25]){const button=$('loungeStake'+value);button.setAttribute('aria-pressed',String(value===stake));button.disabled=loungeBusy||credits<value;}
+  for(const color of ['red','black']){$('loungeColor'+(color==='red'?'Red':'Black')).setAttribute('aria-pressed',String($('loungeGameColor').value===color));$('loungeColor'+(color==='red'?'Red':'Black')).disabled=loungeBusy;}
+  $('loungePayoutPreview').textContent=blackjack?'Stake '+stake+' gold · A standard win pays back '+stake*2+' gold.':'Stake '+stake+' gold · A matching color pays back '+stake*2+' gold.';
   const retrySpin=playing&&!blackjack&&!!message;
-  $('loungeGameActions').hidden=!playing||(!blackjack&&!retrySpin);
-  $('loungeGameHit').hidden=$('loungeGameStand').hidden=!blackjack;
-  $('loungeGameReveal').hidden=!retrySpin;
-  $('loungeGameHit').disabled=$('loungeGameStand').disabled=loungeBusy;
+  $('loungeGameActions').hidden=!playing||(!blackjack&&!retrySpin);$('loungeGameHit').hidden=$('loungeGameStand').hidden=!blackjack;$('loungeGameReveal').hidden=!retrySpin;
+  $('loungeGameHit').disabled=$('loungeGameStand').disabled=$('loungeGameReveal').disabled=loungeBusy;
   const wait=Math.max(0,(loungeRound?.startedAt??0)+5000-now);
-  $('loungeGameStart').disabled=loungeBusy||!!wait||credits<Number($('loungeGameStake').value);
-  $('loungeGameStart').textContent=loungeBusy?'Please wait…':wait?'Next round shortly':blackjack?'Deal':'Spin';
+  $('loungeGameStart').disabled=loungeBusy||!!wait||credits<stake;
+  $('loungeGameStart').textContent=loungeBusy?'Placing stake…':wait?'Table ready shortly':(blackjack?'Deal':'Spin')+' · '+stake+' gold';
+  $('loungeGameResult').textContent=message??(otherTable?'Finish your round at the '+loungeNames[loungeRound.game]+' table first.':loungeBusy?'Waiting for the table…':playing?(blackjack?'Hit for another card, or Stand to reveal the dealer’s hand.':'The wheel is spinning. Your result arrives shortly.'):credits<stake?'Choose a stake within your wallet balance.':complete?'Round settled. You can leave the table or choose another stake.':'Your stake is deducted when the round begins.');
+  $('loungeGameResult').dataset.error=String(!!message);
+  $('loungeTableRules').textContent=blackjack?'Get closer to 21 than the dealer without going over. Aces count as 1 or 11. The dealer draws to 17. A standard win pays back 2× your stake. A two-card 21 pays back 2.5×, rounded down. Equal totals return your stake.':'A single-zero wheel has 18 red, 18 black and one green number. A matching color pays back 2× your stake. Green 0 loses both color bets. Each spin is independent.';
   if(!loungeBusy&&wait&&!playing)loungeTimer=setTimeout(()=>renderLoungeGame(),wait+30);
-  if(!loungeBusy&&playing&&!blackjack&&!message)loungeTimer=setTimeout(()=>{
-    if($('loungeGameDialog').open)playLoungeRound('reveal');
-  },Math.max(0,round.revealAt-now)+100);
+  if(!loungeBusy&&playing&&!blackjack&&!message)loungeTimer=setTimeout(()=>{if($('loungeGameDialog').open)playLoungeRound('reveal');},Math.max(0,round.revealAt-now)+100);
 }
 async function playLoungeRound(move){
   if(loungeBusy)return;
+  loungeSoundReady();
   loungeBusy=true;
   renderLoungeGame();
   let errorText;
@@ -3468,7 +3501,7 @@ async function playLoungeRound(move){
     $('credits').textContent=credits.toLocaleString();
     updatePlayerStats();
   }catch(error){errorText=error.message;}
-  finally{loungeBusy=false;renderLoungeGame(errorText);}
+  finally{loungeBusy=false;renderLoungeGame(errorText);if(!errorText)celebrateLoungeRound(loungeRound);}
 }
 function restoreServerCast(cast,serverTime){
   const offset=performance.now()-serverTime;
@@ -4468,6 +4501,11 @@ $('loungeGameHit').onclick=()=>playLoungeRound('hit');
 $('loungeGameStand').onclick=()=>playLoungeRound('stand');
 $('loungeGameReveal').onclick=()=>playLoungeRound('reveal');
 $('loungeGameStake').onchange=()=>renderLoungeGame();
+for(const value of [5,10,25])$('loungeStake'+value).onclick=()=>{$('loungeGameStake').value=String(value);renderLoungeGame();};
+for(const color of ['red','black'])$('loungeColor'+(color==='red'?'Red':'Black')).onclick=()=>{$('loungeGameColor').value=color;renderLoungeGame();};
+$('loungeSound').setAttribute('aria-pressed',String(loungeSound));
+$('loungeSound').textContent=loungeSound?'Sound on':'Sound off';
+$('loungeSound').onclick=()=>{loungeSound=!loungeSound;save('lounge-sound',loungeSound);$('loungeSound').setAttribute('aria-pressed',String(loungeSound));$('loungeSound').textContent=loungeSound?'Sound on':'Sound off';loungeSoundReady();};
 $('loungeGameDialog').addEventListener('close',()=>clearTimeout(loungeTimer));
 $('reception').onclick=()=>use(hubFurniture[0]);
 for(const button of $('gamingGuide').querySelectorAll('[data-game-table]')){

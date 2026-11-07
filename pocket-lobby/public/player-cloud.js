@@ -254,6 +254,7 @@
       window.moonwood=moonwood;
       const rules=await import('./fishing.js');
       const hunting=await import('./hunting.js');
+      const loungeUI=await import('./lounge-ui.js');
       const art=await import('./combat-art.js');
       const fx=await import('./combat-fx.js');
       const environment=await import('./environment-fx.js');
@@ -282,7 +283,7 @@
       const jobs=await import('./jobs.js');
       const shared=await import('./shared-world.js');
       const multiplayer=await import('./multiplayer.js');
-      Object.assign(window,{towerCharacterArt},rules,hunting,art,fx,environment,quests,historyRules,shopUI,clothing,progression,woodRules,crafting,cooking,characterRules,commissions,essences,depths,jobs,shared,multiplayer);
+      Object.assign(window,{towerCharacterArt},rules,hunting,loungeUI,art,fx,environment,quests,historyRules,shopUI,clothing,progression,woodRules,crafting,cooking,characterRules,commissions,essences,depths,jobs,shared,multiplayer);
       window.towerInitialState=packet.state;
       window.playerCloud={enqueue,flush,attach,gameplay:async(name,body={})=>{
         if(gameplayBusy)throw new Error('Wait for your current action to finish.');
