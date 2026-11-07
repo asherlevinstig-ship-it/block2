@@ -67,7 +67,7 @@ const ownedFurniture=Object.fromEntries(Object.keys(types).map(type=>{
 }));
 const availableFurniture=type=>(ownedFurniture[type]??0)-countFurniture(homeFurniture,type);
 const adventure={lantern:false,groveTrail:false,bridge:false,shrine:false,shortcut:false,discovered:[],silverfin:0,...savedPlayerState?.adventure};
-let depthsRun=savedPlayerState?.depthsRun??null;
+let depthsRun=savedPlayerState?.depthsRun??null,depthsExploring=false;
 let depthsDiscovered=savedPlayerState?.depthsDiscovered===true||!!depthsRun
   ||savedPlayerState?.hunting?.beetleRespawnAt>0||savedPlayerState?.huntingLoot?.stonebackShell>0
   ||savedPlayerState?.combatGear?.stonebackVestOwned===true;
@@ -630,6 +630,29 @@ function reviewDepthsEntrance(){
   $('depthsEntryTitle').scrollIntoView({block:'nearest'});
   $('depthsEntryTitle').focus({preventScroll:true});
 }
+async function examineDepths(item){
+  if(unavailable()||!depthsRun)return;
+  const find=depthsFinds[item.type],already=depthsRun.finds?.includes(item.type);
+  const before=health;
+  try{
+    if(!already){
+      if(window.playerCloud?.gameplay)await serverGameplay('depthsInspect',{id:item.type});
+      else{
+        const state={depthsRun,location:currentRoom,position:{x:player.cx,y:player.cy},health};
+        inspectDepthsFind(state,item);
+        health=state.health;
+      }
+      savePlayerState();
+    }
+    updateDepthsPanel();
+    if(find.healing){
+      note(already?'The chest is empty.':find.text+' Restored '+(health-before)+' HP.',7000);
+    }else{
+      note(find.text,8000);
+    }
+    if(!already&&find.gold)showTransaction('Hidden cache discovered',[{icon:'✦',text:find.gold+' gold added to unbanked spoils'}]);
+  }catch(error){note(error.message,6500);}
+}
 function updateDepthsPanel(){
   const index=depthsStageIndex(currentRoom);
   const inDepths=index>=0&&!!depthsRun;
@@ -650,12 +673,14 @@ function updateDepthsPanel(){
   }
 
   const cleared=inDepths&&index<depthsRun.cleared;
-  const canDecide=cleared&&!unavailable();
+  const atCamp=cleared&&!unavailable();
+  const canDecide=atCamp&&!depthsExploring;
+  $('depthsCampRibbon').hidden=!atCamp||!depthsExploring;
   const decision=$('depthsDecision');
   const newlyCleared=canDecide&&decision.hidden;
   if(!canDecide)$('depthsBankError').hidden=true;
   decision.hidden=!canDecide;
-  $('depthsPanel').hidden=!inDepths||canDecide;
+  $('depthsPanel').hidden=!inDepths||atCamp;
   if(!inDepths)return;
 
   const stage=depthsStages[index];
@@ -665,7 +690,7 @@ function updateDepthsPanel(){
   $('depthsStatus').textContent='Chamber '+(index+1)+' / '+depthsStages.length+' · '+health+' / '+maxHealth()+' HP';
   $('depthsSpoils').textContent=spoils.gold?formatDepthsSpoils(spoils):'No unbanked spoils yet.';
   const preview=next?'Next: '+huntEnemies[next.enemy].name+' ('+huntEnemies[next.enemy].health+' HP) · '+formatDepthsSpoils(depthsStageSpoils(next))+'.':'All three chambers cleared. Bank your spoils to leave the vault.';
-  $('depthsPreview').textContent=cleared?preview:'Clear this chamber for '+formatDepthsSpoils(depthsStageSpoils(stage))+'.';
+  $('depthsPreview').textContent=cleared?preview:roomDetails[currentRoom].description;
   $('depthsRetreat').hidden=unavailable()||depthsRun.cleared!==0;
   $('depthsNext').hidden=!canDecide||!next;
   $('depthsLeave').hidden=!canDecide;
@@ -958,7 +983,11 @@ function roomFurniture(){
     const enemy=huntEnemyForRoom(currentRoom);
     const index=depthsStageIndex(currentRoom);
     const available=index>=0?index===depthsRun?.cleared:!enemy||Date.now()>=huntRespawnAt(hunting,enemy);
-    return moonwood.layouts[currentRoom].scenery.filter(item=>item.type!==enemy?.prop||available);
+    return moonwood.layouts[currentRoom].scenery.filter(item=>{
+      if(item.type===enemy?.prop)return available;
+      if(item.type==='galleryCache')return !!depthsRun?.finds?.includes('shellChime');
+      return true;
+    });
   }
   return currentRoom==='hub'?hubFurniture:courtyardFurniture;
 }
@@ -1525,7 +1554,7 @@ function object(item,highlight=false,time=0) {
       ctx.scale((px<bx?-1:1)*(1+(1-pose.squash)*.25),pose.squash);ctx.translate(-bx,-by);
       moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,progress:adventure,combat:player.inCombat?hunting.encounter:null,pose});
       ctx.restore();
-    }else moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,progress:adventure});
+    }else moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,progress:adventure,depthsRun});
     return;
   }
   if(type!=='bar'&&type!=='shelf')surface(x+.04,y+.08,w-.04,d-.03,.3,'#4931434a');
@@ -1791,7 +1820,7 @@ for(const id of Object.keys(moonwood.areas)){
   roomLayers[id]=makeRoomLayer(()=>moonwood.drawGround(id,worldDrawing),moonwood.view);
 }
 function drawMoonwoodDetails(time){
-  moonwood.drawWater(currentRoom,time,{...worldDrawing,ctx,reduced:reducedMotion.matches});
+  moonwood.drawWater(currentRoom,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,depthsRun});
   if(currentRoom==='grove'&&adventure.groveTrail){
     for(const [x,y] of moonwood.layouts.grove.hiddenTrail){
       surface(x+.06,y+.06,.88,.88,.25,'#6d8195','#8fb6b9');
@@ -1830,7 +1859,7 @@ let worldLabelKey='';
 function updateWorldLabels(){
   const p=canvasBounds(),doors=roomDoors[currentRoom].filter(door=>doorAvailable(door));
   const stump=currentRoom==='logging'&&!!treeState(timberTree()).regrowsAt;
-  const key=[currentRoom,stump,doors.map(door=>door.to).join(','),avatar.name,questStage(quest),depthsDiscovered,player.inCombat,firstUpgrade.choice,firstUpgrade.complete,firstUpgrade.oakTrialPending,firstUpgrade.unlocked,firstUpgradeDestination()?.to,tradingPostGuideComplete,bedLessonComplete,trackedDestination,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
+  const key=[currentRoom,stump,depthsRun?.finds?.join(','),doors.map(door=>door.to).join(','),avatar.name,questStage(quest),depthsDiscovered,player.inCombat,firstUpgrade.choice,firstUpgrade.complete,firstUpgrade.oakTrialPending,firstUpgrade.unlocked,firstUpgradeDestination()?.to,tradingPostGuideComplete,bedLessonComplete,trackedDestination,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
   if(key===worldLabelKey)return;
   worldLabelKey=key;
   const container=$('worldLabels');container.replaceChildren();container.dataset.room=currentRoom;
@@ -1894,6 +1923,13 @@ function updateWorldLabels(){
     add('Woodcutter',...point(4.5,3.5,43),'npc',()=>use(roomFurniture().find(item=>item.type==='woodcutter')));
     if(stump)add('Regrowing',...point(6.5,5.5,13),'sign');
     else add('Timber',...point(6.5,5.5,54),'npc',()=>use(timberTree()));
+  }
+  if(depthsRun&&!player.inCombat){
+    for(const item of roomFurniture()){
+      const find=Object.hasOwn(depthsFinds,item.type)?depthsFinds[item.type]:null;
+      if(!find||depthsRun.finds?.includes(item.type)&&item.type!=='vaultRelief')continue;
+      add(find.label,...point(item.x+.5,item.y+.5,moonwood.heights[item.type]+8),'npc',()=>use(item));
+    }
   }
   if(currentRoom==='shrine'||currentRoom==='ruins'){
     const landmark=roomFurniture().find(item=>item.id==='landmark');
@@ -2041,7 +2077,7 @@ function installGamingTables(items){
 }
 function inRoom(x,y){return x>=0&&y>=0&&x<view.cols&&y<view.rows;}
 function blocked(x,y,items=roomFurniture()){
-  return !inRoom(x,y)||moonwood.blocked(currentRoom,x,y,adventure)||items.some(item=>item.type!=='shelf'&&overlap(item,{x,y}));
+  return !inRoom(x,y)||moonwood.blocked(currentRoom,x,y,adventure,depthsRun)||items.some(item=>item.type!=='shelf'&&overlap(item,{x,y}));
 }
 function canPlace(item){
   const [w,d]=dimensions(item);
@@ -2097,10 +2133,10 @@ function pointer(e){
   return {tile:door?.tile??(inRoom(gx,gy)?{x:gx,y:gy}:null),door,item:hitboxes.findLast(h=>inShape(x,y,h.shape))?.item??null};
 }
 let homeNavigationLearned=load('movement-learned',false);
-function note(message){
+function note(message,duration=3000){
   $('hint').dataset.kind='notice';
   $('hint').textContent='✦  '+message;
-  noticeUntil=performance.now()+3000;
+  noticeUntil=performance.now()+duration;
 }
 function setHint(){
   const guide={home:homeNavigationLearned?'Next: select EXIT to visit the Grand Lobby':'Click the floor to move your character',hub:'Click a doorway or the Outside steps to travel',lounge:defaultHint,outside:'Click the Moonwood steps to explore · Tower returns indoors',store:'Buy supplies at the counter · Use Lobby to leave',armory:'Compare damage, attack speed and requirements · Buy & equip from the Armory panel',market:'Sell fish and hunting loot at the counter · Use Lobby to leave',creek:'Tap Cross to the Ruins to walk across the creek.'};
@@ -2633,7 +2669,9 @@ function updateFishingMoment(time){
 }
 function finishInteraction(){
   const item=interaction;interaction=null;
-  if(item.type==='campfire'){
+  if(Object.hasOwn(depthsFinds,item.type)){
+    examineDepths(item);
+  }else if(item.type==='campfire'){
     openCampfire();
   }else if(isGamingTable(item)&&currentRoom==='lounge'){
     openLoungeGame(item.type);
@@ -4003,6 +4041,15 @@ $('approachBeetle').onclick=()=>{
 };
 $('enterDepths').onclick=enterMoonwellDepths;
 $('depthsNext').onclick=advanceMoonwellDepths;
+$('depthsExplore').onclick=()=>{
+  depthsExploring=true;
+  updateDepthsPanel();
+  $('depthsCampRibbon').focus({preventScroll:true});
+};
+$('depthsCampRibbon').onclick=()=>{
+  depthsExploring=false;
+  updateDepthsPanel();
+};
 $('depthsLeave').onclick=leaveMoonwellDepths;
 $('depthsRetreat').onclick=leaveMoonwellDepths;
 $('essenceHotbarPower').onclick=()=>{
@@ -4335,6 +4382,7 @@ function enterRoom(next,arrival){
   const focusRoom=!!document.activeElement.closest('[data-room-link]');
   if(next==='market'&&tradingGuideActive()){if(quest.claimed)tradingPostGuideComplete=true;tradeGuideRouteCache=null;}
   currentRoom=next;
+  depthsExploring=false;
   const exploring=moonwood.has(next);
   const nextView=exploring?moonwood.view:next==='hub'?hubView:next==='outside'?courtyardView:standardView;
   if(view!==nextView){
@@ -4349,6 +4397,7 @@ function enterRoom(next,arrival){
   $('roomLayout').classList.toggle('hub',next==='hub');
   $('roomLayout').classList.toggle('outside',next==='outside');
   $('roomLayout').classList.toggle('moonwood',exploring);
+  $('roomLayout').dataset.depths=depthsIndex>=0?next:'';
   $('roomNumber').textContent=number;
   $('roomName').textContent=name;
   $('roomDescription').textContent=description;
@@ -4366,6 +4415,8 @@ function enterRoom(next,arrival){
   $('bubble').hidden=true;
   updateRoomLabel();
   document.title='Tower of Beginnings • '+name;
+  // Older saves can be standing beyond the new flooded channel.
+  if(next==='depthsGate'&&arrival?.x>=8&&!depthsRun.finds?.includes('sluiceLever'))arrival={x:7,y:4};
   movePlayerToSpawn(arrival);
   if(exploring&&depthsIndex<0&&!adventure.discovered.includes(next)){
     adventure.discovered.push(next);

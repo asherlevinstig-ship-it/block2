@@ -4,9 +4,9 @@ export const moonwood=(()=>{
   const view={width:540,height:349,cols:12,rows:10,originX:252,originY:105};
   const seed='moonwood-01';
   const areas={
-    depthsGate:{number:'D1',name:'Flooded Gate',description:'Below the Moonwell, a boar roots among the broken sluice gates.',badge:'MOONWELL DEPTHS',floor:'Chamber 1',center:[4,5],palette:['#31454e','#405961','#7a8a89'],landmark:['wildboar',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['wildrock',2,7],['wildrock',9,7]]},
-    depthsGallery:{number:'D2',name:'Shell Gallery',description:'Empty shells litter the gallery. One begins to move.',badge:'MOONWELL DEPTHS',floor:'Chamber 2',center:[4,5],palette:['#344b45','#4a6054','#84947b'],landmark:['stonebackBeetle',6,5,5,5],authored:[['pillar',2,3],['pillar',8,3],['wildrock',3,7],['wildrock',7,7],['wildbloom',4,2]]},
-    depthsVault:{number:'D3',name:'The Sunken Vault',description:'The largest beetle bars the way to the vault’s hoard.',badge:'MOONWELL DEPTHS',floor:'Chamber 3',center:[4,5],palette:['#453c50','#5d4962','#a48b8e'],landmark:['stonebackBeetle',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['pillar',3,8],['pillar',8,8],['wildrock',9,4],['wildbloom',5,2]]},
+    depthsGate:{number:'D1',name:'Flooded Gate',description:'An old sluice feeds a rushing channel. Look for the lever by the entrance.',badge:'MOONWELL DEPTHS',floor:'Chamber 1',center:[4,5],palette:['#31454e','#405961','#7a8a89'],landmark:['wildboar',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['wildrock',2,7],['wildrock',9,7],['sluiceLever',3,4],['gateSupply',10,4]]},
+    depthsGallery:{number:'D2',name:'Shell Gallery',description:'Green light spills from the fungi. A shell hangs from a weathered chime stand.',badge:'MOONWELL DEPTHS',floor:'Chamber 2',center:[4,5],palette:['#344b45','#4a6054','#84947b'],landmark:['stonebackBeetle',6,5,5,5],authored:[['pillar',2,3],['pillar',8,3],['wildrock',3,7],['wildrock',7,7],['glowFungus',4,2],['glowFungus',9,3],['glowFungus',5,8],['shellChime',3,3],['galleryCache',9,6]]},
+    depthsVault:{number:'D3',name:'The Sunken Vault',description:'The vault glitters beneath the waterline. Read the relief before facing its Guardian.',badge:'MOONWELL DEPTHS',floor:'Chamber 3',center:[4,5],palette:['#453c50','#5d4962','#a48b8e'],landmark:['stonebackBeetle',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['pillar',3,8],['pillar',8,8],['wildrock',9,4],['vaultCrystal',9,2],['vaultCrystal',8,7],['vaultRelief',3,3]]},
     logging:{number:'15',name:'Timber Hollow',description:'Meet the woodcutter, collect your first axe, and gather timber for the Tower.',badge:'WOODCUTTING',floor:'Woodland worksite',center:[5,5],palette:['#3b5050','#4e665c','#92917d'],landmark:['timberTree',6,5,5,5],authored:[['woodcutter',4,3],['workbench',5,3],['wildtree',1,1],['wildtree',10,1],['wildtree',9,7],['wildtree',2,8],['wildrock',8,3],['wildbloom',4,7]]},
     clearing:{number:'13',name:'Bramble Clearing',description:'A wild boar guards a moonlit clearing. Approach carefully, and flee if your hearts run low.',badge:'HUNTING GROUNDS',floor:'Boar territory',center:[5,5],palette:['#3c5050','#50645b','#918b7e'],landmark:['wildboar',6,5,5,5],authored:[['wildtree',1,1],['wildtree',9,1],['wildtree',10,7],['wildtree',2,8],['wildrock',8,7],['wildbloom',4,2],['wildbloom',8,3]]},
     trail:{number:'04',name:'Lantern Trail',description:'Follow the old trail into Moonwood. A lantern waits at the first waystone.',badge:'MOONWOOD',floor:'Forest trail',center:[5,5],palette:['#324957','#3e5460','#788285'],landmark:['lanternStand',5,4,5,5]},
@@ -17,7 +17,7 @@ export const moonwood=(()=>{
     roots:{number:'09',name:'Root Passage',description:'A living tunnel winds beneath Moonwood, linking the ruins back to Lantern Trail.',badge:'MOONWOOD',floor:'Forest shortcut',center:[6,5],palette:['#363847','#4b4357','#766274'],authored:[['wildtree',1,2],['wildtree',3,6],['wildtree',6,2],['wildtree',8,7],['wildtree',10,2],['wildbloom',4,3],['wildbloom',8,6]]},
     pond:{number:'10',name:'Silverfin Pond',description:'Cast a line from the old jetty and watch the moonlight ripple over the water.',badge:'MOONWOOD',floor:'Fishing pond',center:[3,5],palette:['#334f59','#486570','#8b9296'],landmark:['fishingPost',5,5,4,5],authored:[['wildtree',1,1],['wildtree',3,1],['wildtree',1,8],['wildtree',4,8],['wildrock',4,2],['wildbloom',3,7],['wildbloom',4,3]]}
   };
-  const heights={campfire:24,timberTree:51,wildboar:22,stonebackBeetle:28,wildtree:51,wildrock:13,wildbloom:22,pillar:28,lanternStand:31,mothAltar:24,moonwell:35,moonbloom:29,fishingPost:26};
+  const heights={sluiceLever:20,gateSupply:12,shellChime:27,galleryCache:13,vaultRelief:28,glowFungus:20,vaultCrystal:30,campfire:24,timberTree:51,wildboar:22,stonebackBeetle:28,wildtree:51,wildrock:13,wildbloom:22,pillar:28,lanternStand:31,mothAltar:24,moonwell:35,moonbloom:29,fishingPost:26};
   const doors=Object.fromEntries(Object.keys(areas).map(id=>[id,[]]));
   const coordinate=([x,y])=>({x,y});
   function connect(a,b,from,to,gate){
@@ -38,8 +38,10 @@ export const moonwood=(()=>{
   doors.trail.unshift({to:'outside',side:'wild',tile:{x:0,y:5},inside:{x:1,y:5},arrival:{x:6,y:10},label:'TOWER'});
   const key=(x,y)=>x+','+y;
   const has=id=>Object.hasOwn(areas,id);
-  const isWater=(id,x)=>id==='pond'?x>=6:id==='creek'&&x===5;
-  const blocked=(id,x,y,progress)=>isWater(id,x)&&!(id==='creek'&&y===4&&progress.bridge);
+  const isWater=(id,x)=>id==='pond'?x>=6:id==='creek'?x===5:id==='depthsGate'&&x===8;
+  const blocked=(id,x,y,progress,depthsRun)=>isWater(id,x)&&!(y===4&&(
+    id==='creek'&&progress.bridge||id==='depthsGate'&&depthsRun?.finds?.includes('sluiceLever')
+  ));
   const open=(door,progress)=>!door.gate||Boolean(progress[door.gate]);
   // Give trees boxed in by the seeded scenery a reachable side.
   const reachableTreeSites={
@@ -82,6 +84,9 @@ export const moonwood=(()=>{
     const visiblePath=new Set(path);
     for(const door of doors[id].filter(door=>door.gate))connectPath(door);
     if(id==='creek')for(let x=0;x<view.cols;x++)path.add(key(x,4));
+    if(id==='depthsGate')for(let x=4;x<10;x++)path.add(key(x,4));
+    if(id==='depthsGallery')carve({x:3,y:4},center);
+    if(id==='depthsVault')carve({x:3,y:4},center);
     const hiddenTrail=id==='grove'?[...path].filter(tile=>!visiblePath.has(tile)).map(tile=>tile.split(',').map(Number)):[];
     const scenery=authored.map(([type,x,y])=>({id:key(x,y),type,x,y,rot:0}));
     if(!area.authored){
@@ -137,11 +142,17 @@ export const moonwood=(()=>{
       }
     }
   }
-  function drawWater(id,time,{point,surface,ctx,reduced}){
-    if(id!=='creek'&&id!=='pond')return;
+  function drawWater(id,time,{point,surface,ctx,reduced,depthsRun}){
+    if(!['creek','pond','depthsGate'].includes(id))return;
+    const drained=id==='depthsGate'&&depthsRun?.finds?.includes('sluiceLever');
     const phase=reduced?0:time/1700;
     for(let y=0;y<view.rows;y++)for(let x=0;x<view.cols;x++){
       if(!isWater(id,x))continue;
+      if(drained){
+        surface(x+.025,y+.025,.95,.95,.2,y===4?'#a4a08a':'#25363d','#657b80');
+        if(y===4)surface(x+.12,y+.19,.76,.06,.28,'#d8c7a0');
+        continue;
+      }
       const drift=(phase+x*.19+y*.27)%1;
       surface(x+.08+drift*.35,y+.18,.34,.028,.22,'#9bced16b');
       surface(x+.2+(1-drift)*.31,y+.65,.29,.035,.22,'#80bcc67a');
@@ -157,14 +168,62 @@ export const moonwood=(()=>{
     }
   }
 
-  function drawProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,progress,combat,pose={}}){
+  function drawProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,progress,combat,depthsRun,pose={}}){
     const {x,y,type}=item;
     const [px,py]=point(x+.5,y+.5);
     const part=(u,v,w,d,z,h,c)=>block(x+u,y+v,w,d,z,h,c);
     const stone=['#9a9ab2','#50536c','#71738d'];
     const aqua=['#91bdbb','#3e6271','#568b93'];
     surface(x+.08,y+.1,.86,.82,.14,'#16293776');
-    if(type==='campfire'){
+    if(['sluiceLever','gateSupply','shellChime','galleryCache','vaultRelief','glowFungus','vaultCrystal'].includes(type)){
+      const found=depthsRun?.finds?.includes(type);
+      const color=type==='vaultCrystal'||type==='vaultRelief'?'#c5b0f4':type==='glowFungus'||type==='shellChime'?'#9be2ba':'#f8cd81';
+      const flicker=reduced?0:Math.sin(time/320+x*.7+y);
+      if(!found||type==='vaultCrystal'||type==='glowFungus'){
+        ctx.save();ctx.globalAlpha=.13+flicker*.04;
+        surface(x-.18,y-.18,1.36,1.36,.25,color);
+        ctx.restore();
+      }
+      if(type==='sluiceLever'){
+        part(.19,.23,.63,.55,0,6,stone);
+        part(.36,.4,.24,.25,6,5,['#8a7b63','#455460','#686967']);
+        polygon([[px-2,py-10],[px+1,py-10],[px+(found?8:-8),py-21],[px+(found?5:-11),py-21]],'#dba765');
+        rect(px+(found?4:-12),py-22,8,3,color);
+      }else if(type==='gateSupply'||type==='galleryCache'){
+        part(.12,.22,.76,.59,0,8,['#9d7854','#56454b','#73564d']);
+        part(.11,.20,.78,.63,8,found?2:4,found?['#6d6656','#474447','#595252']:['#c39462','#755343','#996c50']);
+        rect(px-2,py-9,4,4,found?'#879094':color);
+        if(!found)rect(px-1,py-8,2,2,'#fff1b5');
+      }else if(type==='shellChime'){
+        part(.14,.24,.72,.56,0,4,stone);
+        rect(px-8,py-25,3,23,'#a89976');rect(px+6,py-25,3,23,'#806f65');
+        rect(px-8,py-25,17,2,'#d1b687');
+        rect(px,py-23,1,6,'#e3cfaa');
+        const swing=found?Math.round(flicker*2):0;
+        polygon([[px+swing-5,py-17],[px+swing+4,py-17],[px+swing+6,py-13],[px+swing,py-8],[px+swing-6,py-13]],color);
+      }else if(type==='vaultRelief'){
+        part(.13,.19,.74,.61,0,6,stone);
+        part(.25,.27,.52,.44,6,20,['#a193b4','#625570','#7c6f96']);
+        polygon([[px,py-24],[px+5,py-20],[px,py-14],[px-5,py-20]],color);
+        rect(px-5,py-11,10,1,'#e2c49b');
+      }else if(type==='glowFungus'){
+        for(const [i,shift] of [[0,-7],[1,2],[2,8]]){
+          const cap=10+i*3;
+          rect(px+shift,py-cap,2,cap,'#7bba9d');
+          polygon([[px+shift-5,py-cap],[px+shift-2,py-cap-4],[px+shift+4,py-cap-3],[px+shift+5,py-cap]],color);
+        }
+      }else{
+        part(.18,.25,.64,.52,0,4,stone);
+        polygon([[px-6,py-10],[px-5,py-23],[px+1,py-31],[px+7,py-21],[px+6,py-10],[px,py-5]],'#786ac3');
+        polygon([[px+1,py-31],[px+7,py-21],[px+6,py-10],[px,py-5]],color);
+      }
+      if(!reduced&&!found&&['galleryCache','glowFungus','vaultCrystal'].includes(type)){
+        for(let i=0;i<3;i++){
+          const drift=(time/66+i*10+x*3)%30;
+          rect(px-9+i*8+Math.round(Math.sin(drift/8)*2),py-9-Math.round(drift),i===1?2:1,1,color);
+        }
+      }
+    }else if(type==='campfire'){
       const flicker=reduced?0:Math.floor(time/135)%3;
       surface(x+.01,y+.01,.98,.98,.18,'#d3803340');
       surface(x+.16,y+.15,.69,.70,.26,'#ffb25335');

@@ -76,7 +76,7 @@ export async function handlePlayerApi(request,env){
         delete state.hunting.encounter.magicWard;
         delete state.hunting.encounter.magicWardUntil;
       }
-      if(state.depthsRun)delete state.depthsRun.shardEarned;
+      if(state.depthsRun){delete state.depthsRun.shardEarned;delete state.depthsRun.finds;}
       delete state.huntingLoot.moonwellShard;
       delete state.combatGear.moonwellCharmOwned;
       delete state.combatGear.moonwellCharmEquipped;
@@ -164,7 +164,7 @@ export async function handlePlayerApi(request,env){
     return json(packet(updated));
   }catch(error){
     if(error instanceof SyntaxError)return json({error:"Invalid request."},400);
-    if(/Invalid|Choose|Travel|Awaken|Patience|already|Read your|Unknown/.test(error.message))return json({error:error.message},400);
+    if(/Invalid|Choose|Travel|Your hearts are already full|Awaken|Patience|already|Read your|Unknown/.test(error.message))return json({error:error.message},400);
     console.error("Tower player service error",error.name);
     return json({error:"Your save could not be completed. Please retry."},503);
   }

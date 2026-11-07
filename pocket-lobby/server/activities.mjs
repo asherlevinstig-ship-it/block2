@@ -3,7 +3,7 @@ import {awardAwakeningStone} from '../public/essences.js';
 import {moonwood} from '../public/moonwood.js';
 import {isTimberTree,timberTreeState,cutTimberTree,choppingDuration,grantBasicAxe} from '../public/woodcutting.js';
 import {huntEnemyForRoom,huntEnemy,huntRespawnAt,canUseWeapon,createHunt,advanceHunt,huntingTurn,boarRules} from '../public/hunting.js';
-import {depthsStages,depthsStageIndex,clearDepthsStage} from '../public/depths.js';
+import {depthsStages,depthsStageIndex,clearDepthsStage,inspectDepthsFind} from '../public/depths.js';
 import {recordQuest} from '../public/quests.js';
 
 const adjacent=(state,item)=>state.position&&Math.abs(state.position.x-item.x)+Math.abs(state.position.y-item.y)===1;
@@ -113,6 +113,12 @@ export function activityAction(state,action,body,now,random){
       if(!['home','hub'].includes(state.location))throw new Error('Travel to the Tower to rest.');
       if(state.health<100)state.hunting.recoveryUntil=now+boarRules.recovery;
     }else settleActivities(state,now,random);
+    return true;
+  }
+  if(action==='depthsInspect'){
+    idle(state);
+    const item=moonwood.layouts[state.location]?.scenery.find(prop=>prop.type===body.id);
+    inspectDepthsFind(state,item);
     return true;
   }
   if(action==='depthsEnter'||action==='depthsNext'||action==='depthsLeave'){

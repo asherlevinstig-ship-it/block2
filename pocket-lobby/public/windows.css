@@ -161,3 +161,21 @@
   .essence-hotbar-power { gap:4px; }
   .essence-hotbar-power kbd { display:none; }
 }
+
+.depths-decision-tools { display:flex; flex-wrap:wrap; gap:7px; margin-top:9px; }
+.scene .depths-decision-tools button,.scene .depths-camp-ribbon {
+  min-height:38px; padding:7px 11px; border:1px solid #8c86ac; border-radius:7px;
+  background:#292c4a; color:#eee8f7; font-weight:750; font-size:11px;
+}
+.scene .depths-decision-tools button:hover,.scene .depths-camp-ribbon:hover { border-color:#efcb88; color:#fff0c7; }
+.scene .depths-camp-ribbon { position:absolute; top:38px; right:43px; z-index:5; box-shadow:0 5px 15px #02091c75; }
+.scene .depths-camp-ribbon[hidden] { display:none; }
+@media(max-width:900px){.scene .depths-camp-ribbon{top:90px;right:38px}}
+
+.shell .layout[data-depths^="depths"] {
+  --cavern-light:#1d4455;
+  background: url('./depths-cavern.svg') center/cover no-repeat,
+    radial-gradient(ellipse at 50% 47%,var(--cavern-light),#101d32 51%,#050a16 95%);
+}
+.shell .layout[data-depths="depthsGallery"] { --cavern-light:#254a42; }
+.shell .layout[data-depths="depthsVault"] { --cavern-light:#40355c; }

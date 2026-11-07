@@ -6,6 +6,30 @@ export const depthsStages=[
   {room:'depthsVault',name:'The Sunken Vault',enemy:'depthsGuardian',gold:45,loot:'stonebackShell',treasure:moonwellShard.id}
 ];
 
+export const depthsFinds={
+  sluiceLever:{label:'Sluice lever',title:'The old sluice',room:'depthsGate',text:'The channel drops below an old stone crossing. A supply chest waits on the far bank.'},
+  gateSupply:{label:'Supply chest',title:'A dry supply chest',room:'depthsGate',requires:'sluiceLever',healing:15,text:'A sealed flask of spring water survived the flood.'},
+  shellChime:{label:'Shell chime',title:'A chime in the dark',room:'depthsGallery',text:'The hollow shell rings. Green light traces a hidden cache across the gallery.'},
+  galleryCache:{label:'Hidden cache',title:'The gallery’s hidden cache',room:'depthsGallery',requires:'shellChime',gold:18,text:'You found 18 gold. It is held with your expedition spoils until you bank them.'},
+  vaultRelief:{label:'Vault relief',title:'A warning carved in stone',room:'depthsVault',text:'When wounded, the Guardian can call a Vault Quake. Dodge as it lands, then watch for the Aftershock. Each hit has its own warning.'}
+};
+
+export function inspectDepthsFind(state,item){
+  const {depthsRun,location,position}=state;
+  const find=item&&Object.hasOwn(depthsFinds,item.type)?depthsFinds[item.type]:null;
+  if(!depthsRun||!find||find.room!==location||!position||Math.abs(position.x-item.x)+Math.abs(position.y-item.y)!==1){
+    throw new Error('Travel beside the discovery to examine it.');
+  }
+  const found=depthsRun.finds??[];
+  if(find.requires&&!found.includes(find.requires))throw new Error('Choose a discovery you can reach.');
+  if(found.includes(item.type))return;
+  if(find.healing){
+    if(state.health>=100)throw new Error('Your hearts are already full. The flask is here if you need it later.');
+    state.health=Math.min(100,state.health+find.healing);
+  }
+  depthsRun.finds=[...found,item.type];
+}
+
 export const depthsStageIndex=room=>depthsStages.findIndex(stage=>stage.room===room);
 
 export function canVisitDepthsStage(run,index){
@@ -17,7 +41,8 @@ export function normalizeDepthsRun(input,room,encounter){
   if(input==null&&index<0)return null;
   if(!Number.isInteger(input?.cleared)||!canVisitDepthsStage(input,index))throw new Error('Invalid Moonwell Depths progress.');
   if(encounter&&(index!==input.cleared||encounter.enemy!==depthsStages[index].enemy))throw new Error('Invalid Moonwell Depths encounter.');
-  return {cleared:input.cleared,...(input.cleared===depthsStages.length&&input.shardEarned===true?{shardEarned:true}:{})};
+  const finds=[...new Set(Array.isArray(input.finds)?input.finds.filter(id=>Object.hasOwn(depthsFinds,id)):[])];
+  return {cleared:input.cleared,...(input.cleared===depthsStages.length&&input.shardEarned===true?{shardEarned:true}:{}),...(finds.length?{finds}:{})};
 }
 
 export function clearDepthsStage(run,room,awardTreasure=true){
@@ -36,7 +61,7 @@ export function depthsStageSpoils(stage,includeTreasure=true){
 
 export function depthsSpoils(run){
   const loot={};
-  let gold=0;
+  let gold=run?.finds?.includes('galleryCache')?depthsFinds.galleryCache.gold:0;
   for(const stage of depthsStages.slice(0,run?.cleared??0)){
     const reward=depthsStageSpoils(stage,run.shardEarned===true);
     gold+=reward.gold;
