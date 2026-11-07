@@ -250,6 +250,8 @@
         }
       }
       if(packet.state.characterRules?.enabled&&!packet.state.plan&&!packet.state.report)await action('presence');
+      const {moonwood}=await import('./moonwood.js');
+      window.moonwood=moonwood;
       const rules=await import('./fishing.js');
       const hunting=await import('./hunting.js');
       const art=await import('./combat-art.js');

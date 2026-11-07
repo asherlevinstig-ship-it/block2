@@ -1,6 +1,6 @@
 'use strict';
 
-const moonwood=(()=>{
+export const moonwood=(()=>{
   const view={width:540,height:349,cols:12,rows:10,originX:252,originY:105};
   const seed='moonwood-01';
   const areas={

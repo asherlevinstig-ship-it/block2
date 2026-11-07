@@ -25,7 +25,12 @@ test('the carpenter accepts existing timber once, with atomic inventory and wall
   const short=await call('save',{revision:created.revision,operation:'enter-market',state:{...created.state,location:'market',carpenterOrderComplete:true}});
   assert.equal(short.state.carpenterOrderComplete,false);
   assert.equal((await submit(short.revision)).status,400);
-  const ready=await call('save',{revision:short.revision,operation:'bring-timber',state:{...short.state,woodcutting:{...short.state.woodcutting,timber:14}}});
+  const forged=await call('save',{revision:short.revision,operation:'bring-timber',state:{...short.state,woodcutting:{...short.state.woodcutting,timber:14}}});
+  assert.equal(forged.state.woodcutting.timber,11);
+  // Model three already completed server work ticks, not a client inventory edit.
+  const earned={...forged.state,woodcutting:{...forged.state.woodcutting,timber:14}};
+  sql.prepare('UPDATE tower_players SET state_json=? WHERE player_id=?').run(JSON.stringify(earned),characterKey);
+  const ready=await call('state');
   const action={revision:ready.revision,operation:'carpenter-delivery'};
   const concurrent=await Promise.all([call('commissions/carpenter',action),submit(ready.revision)]);
   assert.deepEqual(concurrent.map(result=>result.status).sort(),[200,409]);

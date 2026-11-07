@@ -80,7 +80,7 @@ export function normalizeState(input={}){
     position:position&&Number.isInteger(position.x)&&Number.isInteger(position.y)&&position.x>=0&&position.y>=0&&position.x<18&&position.y<16?{x:position.x,y:position.y}:null,
     furniture:furniture(input.furniture),homeFurniture:furniture(input.homeFurniture??[])
   };
-  if(input.ownedFurniture!==undefined)state.ownedFurniture=counts(input.ownedFurniture);
+  state.ownedFurniture=counts(input.ownedFurniture??{bed:1});
   if(depthsRun)state.depthsRun=depthsRun;
   if(input.depthsDiscovered===true||depthsRun)state.depthsDiscovered=true;
   if(input.loungeLayout==="gaming")state.loungeLayout="gaming";
@@ -88,6 +88,7 @@ export function normalizeState(input={}){
 }
 export function startPlan(state,{hours,baitLimit,kind,source},now){
   if(state.fishingCast)throw new Error("Invalid work plan during an active cast.");
+  if(state.timberCut)throw new Error("Invalid work plan while chopping. Walk away from the tree first.");
   if(kind!==undefined&&!['fishing','woodcutting'].includes(kind))throw new Error("Unknown job.");
   if(source==='board'){
     if(state.location!=='hub')throw new Error("Travel to the Tower job board first.");

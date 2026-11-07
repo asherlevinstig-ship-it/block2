@@ -52,7 +52,8 @@ const firstUpgrade={unlocked:false,choice:null,complete:false,sale:null,...saved
 let tradingPostGuideComplete=savedPlayerState?.tradingPostGuideComplete===true||(savedPlayerState?.location==='market'&&savedPlayerState?.quest?.claimed===true);
 let tradeGuideRouteCache=null;
 let bedLessonComplete=savedPlayerState?.bedLessonComplete===true||homeFurniture.some(item=>item.type==='bed');
-let serverActionBusy=false;
+let serverActionBusy=false,activityBusy=false,pendingCombatInput=null,nextCombatPoll=0;
+let serverCombatId=savedPlayerState?.combatId,lastCombatReceipt=null;
 let credits = savedPlayerState?.credits??100;
 let goldEarned=savedPlayerState?.goldEarned??0;
 function recordGoldEarned(amount){goldEarned=Math.min(Number.MAX_SAFE_INTEGER,goldEarned+amount);}
@@ -134,12 +135,43 @@ function equipAxe(){
   woodcutting.equipped=!woodcutting.equipped;savePlayerState();
 }
 function cancelWoodcutting(){if(!woodSession)return;woodSession=null;updateWoodPanel();}
+async function beginServerChopping(tree){
+  try{
+    const packet=await serverGameplay('chop',{x:tree.x,y:tree.y});
+    restoreServerTimber(packet.state.timberCut,packet.serverTime,tree);
+  }catch(error){note(error.message);}
+}
+function restoreServerTimber(cut,serverTime,tree){
+  if(!cut)return;
+  selectedTimber=tree;
+  Object.assign(player,timberFacing(player,tree));
+  woodSession={tree,cutId:cut.id,started:performance.now()+cut.started-serverTime,duration:cut.endsAt-cut.started};
+  updateWoodPanel();
+}
+async function completeServerTimber(session,time){
+  if(session.completing)return;
+  session.completing=true;
+  const oldLevel=woodcuttingLevel(woodcutting),key=timberKey(session.tree);
+  try{
+    const packet=await serverGameplay('cut',{cutId:session.cutId,x:session.tree.x,y:session.tree.y});
+    if(woodSession!==session)return;
+    const amount=packet.state.timberReceipt.amount,felled=!!treeState(session.tree).regrowsAt;
+    woodSession=null;
+    if(felled)treeFall={key,started:performance.now(),direction:player.direction==='right'?1:-1};
+    else restoreServerTimber(packet.state.timberCut,packet.serverTime,session.tree);
+    showTransaction(felled?'Timber! Tree felled':woodcuttingLevel(woodcutting)>oldLevel?'Woodcutting level '+woodcuttingLevel(woodcutting)+'!':'Timber gathered',[
+      {icon:'▤',text:'Timber +'+amount},{icon:'✦',text:'+'+woodRules.xp*amount+' Woodcutting XP'}]);
+    note(felled?'Timber! The tree will regrow in 30 seconds.':'Timber +'+amount+' · +'+woodRules.xp*amount+' Woodcutting XP.');
+    savePlayerState();
+  }catch(error){woodSession=null;updateWoodPanel();note(error.message);}
+}
 function beginChopping(tree=focusedTimber()){
   if(!moonwood.has(currentRoom)||!isTimberTree(tree)||woodSession||unavailable()||health<=0)return;
   if(!woodcutting.axeOwned){note('Meet the woodcutter for your free basic axe.');return;}
   if(!woodcutting.equipped){note('Equip your basic axe in Inventory or the work panel.');return;}
   if(woodcutting.timber>=1000000){note('Sell some timber before gathering more.');return;}
   if(treeState(tree).regrowsAt){note('The tree is regrowing. Try again shortly.');return;}
+  if(window.playerCloud?.gameplay){beginServerChopping(tree);return;}
   selectedTimber=tree;
   Object.assign(player,timberFacing(player,tree));
   woodSession={tree,started:performance.now(),duration:choppingDuration(woodcutting)};
@@ -155,6 +187,7 @@ function updateWoodMoment(time){
   const progress=Math.max(0,Math.min(1,(time-woodSession.started)/woodSession.duration));
   $('woodChopProgress').value=progress*100;
   if(progress<1)return;
+  if(woodSession.cutId){completeServerTimber(woodSession,time);return;}
   const {tree}=woodSession,key=timberKey(tree),oldLevel=woodcuttingLevel(woodcutting);
   const amount=cutTimberTree(woodcutting,Date.now(),key),felled=amount>0&&!!treeState(tree).regrowsAt;
   if(felled){
@@ -281,6 +314,12 @@ function updateVestWorkbench(ready){
 }
 function makeStonebackVest(){
   if(unavailable()||woodSession)return;
+  if(window.playerCloud?.gameplay){
+    serverGameplay('vest').then(()=>{
+      savePlayerState();$('craftStatus').textContent='Stoneback Vest crafted. Equip it from Inventory.';
+      showTransaction('Stoneback Vest crafted',[{icon:'⬡',text:'Stoneback Vest · In inventory'},{icon:'▤',text:'−1 Shell Fragment · −'+stonebackVest.timber+' timber'}]);
+    }).catch(error=>{$('craftStatus').textContent=error.message;});return;
+  }
   try{
     const crafted=craftStonebackVest({...craftingState(),combatGear,hunting,huntingLoot});
     if(!crafted)return;
@@ -318,6 +357,12 @@ function openCrafting(){
 }
 function makeFurniture(id){
   if(unavailable()||woodSession)return;
+  if(window.playerCloud?.gameplay){
+    serverGameplay('furniture',{id}).then(()=>{
+      savePlayerState();$('craftStatus').textContent=craftingRecipes[id].name+' crafted! Place it from Inventory at home.';
+      showTransaction('Furniture crafted',[{icon:'▤',text:'−'+craftingRecipes[id].cost+' timber'},{icon:'✦',text:craftingRecipes[id].name+' +1 · In inventory'}]);
+    }).catch(error=>{$('craftStatus').textContent=error.message;});return;
+  }
   try{
     const result=craftFurniture(craftingState(),id);savePlayerState();
     $('craftStatus').textContent=result.name+' crafted! Open Inventory in your home and choose Place.';
@@ -487,13 +532,14 @@ function resetCombatArt(){
   combatFeedback=null;
 }
 
-const unavailable=()=>serverActionBusy||player.inCombat||hunting.recoveryUntil>0;
+const unavailable=()=>serverActionBusy||activityBusy||player.inCombat||hunting.recoveryUntil>0;
 function stopForCombat(){
   route=[];step=null;interaction=null;target=null;
   player.x=player.cx;player.y=player.cy;player.seat=null;player.waveStarted=null;
 }
 function enterMoonwellDepths(){
   if(currentRoom!=='ruins'||!depthsDiscovered||depthsRun||unavailable()||health<=0||!combatGear.equippedWeapon)return;
+  if(window.playerCloud?.gameplay){serverTravel('depthsEnter');return;}
   depthsRun={cleared:0};
   enterRoom(depthsStages[0].room);
   note('Moonwell Depths. Your current health carries through all three chambers.');
@@ -502,12 +548,13 @@ function advanceMoonwellDepths(){
   const index=depthsStageIndex(currentRoom);
   if(unavailable()||!depthsRun||index<0||depthsRun.cleared!==index+1)return;
   const next=depthsStages[index+1];
-  if(next)enterRoom(next.room);
+  if(next){if(window.playerCloud?.gameplay)serverTravel('depthsNext');else enterRoom(next.room);}
 }
 function leaveMoonwellDepths(){
   const index=depthsStageIndex(currentRoom);
   if(unavailable()||!depthsRun||index<0)return;
   if(depthsRun.cleared===0){
+    if(window.playerCloud?.gameplay){serverTravel('depthsLeave');return;}
     depthsRun=null;
     enterRoom('ruins',{x:5,y:7});
     return;
@@ -607,9 +654,16 @@ function startMonsterEncounter(enemy){
   if(combatGear.equippedWeapon&&!canUseWeapon(playerStats,combatGear.equippedWeapon)){note('Your stats do not meet this weapon’s requirements.');return;}
   if(!combatGear.equippedWeapon){note('Equip your Training Sword in Inventory before hunting.');return;}
   if(health<=0){note('Return to the Tower and rest to restore your hearts.');return;}
-  if(Date.now()<huntRespawnAt(hunting,enemy)){note('The '+enemy.name+' will return shortly.');return;}
+  if(index<0&&Date.now()<huntRespawnAt(hunting,enemy)){note('The '+enemy.name+' will return shortly.');return;}
   stopForCombat();resetCombatArt();
   player.direction=(6-player.cx)-(5-player.cy)>=0?'right':'left';player.back=11<player.cx+player.cy;
+  if(window.playerCloud?.gameplay){
+    serverGameplay('fight').then(packet=>{
+      serverCombatId=packet.state.combatId;setPlayerCombat(true);nextCombatPoll=0;
+      combatMessage='You engage the '+enemy.name+'. Dodge with Space, or Flee.';
+      updateCombatPanel();note('Press Space just before the '+enemy.move+' lands. F flees.');
+    }).catch(error=>note(error.message));return;
+  }
   hunting.encounter=createHunt(Date.now(),enemy.health,enemy.id);
   setPlayerCombat(true);
   combatMessage='You engage the '+enemy.name+'. Dodge the '+enemy.move+' with Space, or Flee.';
@@ -618,6 +672,7 @@ function startMonsterEncounter(enemy){
 }
 function combatAction(action){
   if(!player.inCombat||!['flee','dodge'].includes(action))return;
+  if(window.playerCloud?.gameplay){sendServerCombat(action);return;}
   const result=huntingTurn(hunting.encounter,health,playerStats,action,Date.now(),Math.random,combatGear.equippedWeapon,combatGear.activeSwordUpgrade,combatGear.stonebackVestEquipped);
   if(!result&&action==='dodge'){
     combatMessage=combatStamina(hunting.encounter,playerStats,Date.now())<combatDodgeCost(combatGear.stonebackVestEquipped)?'Not enough stamina. Let it recover.':'Your dodge is recovering.';
@@ -627,6 +682,7 @@ function combatAction(action){
 }
 function useRootbind(){
   if(!player.inCombat||rootstone.power!=='rootbind')return;
+  if(window.playerCloud?.gameplay){sendServerCombat('rootbind');return;}
   const enemy=huntEnemy(hunting.encounter);
   if(!castRootbind(rootstone,hunting.encounter,Date.now())){
     combatMessage='Wait for the '+enemy.move+' warning and for Rootbind to recover.';
@@ -638,9 +694,9 @@ function useRootbind(){
   updateCombatPanel();
   note(combatMessage);
 }
-function applyCombatResult(result){
+function applyCombatResult(result,authoritative=null){
   if(!result)return;
-  const action=result.action,artTime=performance.now(),enemy=huntEnemy(hunting.encounter);
+  const action=result.action,artTime=performance.now(),enemy=result.enemyId?huntEnemies[result.enemyId]:huntEnemy(hunting.encounter);
   if(result.damage){combatArt.strikeAt=artTime;combatArt.boarHitAt=artTime;}
   if(action==='enemy')combatArt.boarAttackAt=artTime;
   if(result.taken)combatArt.hurtAt=artTime;
@@ -658,20 +714,20 @@ function applyCombatResult(result){
   if(result.outcome!=='fighting')setPlayerCombat(false);
   if(result.outcome==='victory'){
     const [strength,agility,vitality]=enemy.xp;
-    playerStats.strengthXp+=strength;playerStats.agilityXp+=agility;playerStats.vitalityXp+=vitality;
+    if(!authoritative){playerStats.strengthXp+=strength;playerStats.agilityXp+=agility;playerStats.vitalityXp+=vitality;}
     const xpReceipt={icon:'⚔',text:'+'+strength+' Strength XP · +'+agility+' Agility XP · +'+vitality+' Vitality XP'};
     if(depthsRun){
-      clearDepthsStage(depthsRun,currentRoom);
+      if(authoritative)depthsRun=authoritative.depthsRun;else clearDepthsStage(depthsRun,currentRoom);
       combatMessage=depthsRun.cleared===depthsStages.length?'Vault cleared. Bank your spoils.':'Chamber cleared. Bank your spoils or press deeper.';
       showTransaction('Chamber cleared',[{icon:'✦',text:'Spoils held until you bank them'},xpReceipt]);
     }else{
-      hunting[enemy.id==='beetle'?'beetleRespawnAt':'respawnAt']=Date.now()+enemy.respawn;
-      huntingLoot[enemy.loot]=(huntingLoot[enemy.loot]??0)+1;
+      if(!authoritative){hunting[enemy.id==='beetle'?'beetleRespawnAt':'respawnAt']=Date.now()+enemy.respawn;
+      huntingLoot[enemy.loot]=(huntingLoot[enemy.loot]??0)+1;}
       if(enemy.id==='beetle'&&!depthsDiscovered){
         depthsDiscovered=true;
         showTransaction('Expedition unlocked',[{icon:'✦',text:'Review the Moonwell Depths entrance when you’re ready.'}]);
       }
-      if(enemy.id==='boar'){recordQuest(quest,'boar');history.boarDefeated=true;}
+      if(!authoritative&&enemy.id==='boar'){recordQuest(quest,'boar');history.boarDefeated=true;}
       combatMessage='Victory! '+enemy.lootName+' added to Inventory.';
       const ironTrial=firstUpgrade.ironTrialPending&&enemy.id==='beetle'&&combatGear.equippedWeapon==='ironSword';
       if(ironTrial)firstUpgrade.ironTrialPending=false;
@@ -684,7 +740,8 @@ function applyCombatResult(result){
     }
     updateInventory();
   }else if(result.outcome==='escaped'){
-    if(depthsRun){
+    if(authoritative){depthsRun=authoritative.depthsRun??null;enterRoom(authoritative.location,authoritative.position);combatMessage='You escaped with your remaining hearts.';}
+    else if(depthsRun){
       const previous=depthsStages[depthsRun.cleared-1];
       if(previous)enterRoom(previous.room);
       else{depthsRun=null;enterRoom('ruins',{x:5,y:7});}
@@ -698,7 +755,7 @@ function applyCombatResult(result){
   }else if(result.outcome==='defeat'){
     const lostSpoils=!!depthsRun?.cleared;
     depthsRun=null;
-    hunting.recoveryUntil=Date.now()+boarRules.recovery;
+    hunting.recoveryUntil=authoritative?authoritative.hunting.recoveryUntil:Date.now()+boarRules.recovery;
     combatMessage=lostSpoils?'The wardens bring you back. The unbanked spoils from this run were lost.':'The Tower wardens bring you home. Resting restores all five hearts.';
     enterRoom('hub');
   }
@@ -706,6 +763,9 @@ function applyCombatResult(result){
 }
 function restAtTower(){
   if(!['hub','home'].includes(currentRoom)||unavailable()||health>=100)return;
+  if(window.playerCloud?.gameplay){
+    serverGameplay('rest').then(()=>{combatMessage='Resting at the Tower. Your hearts will be restored shortly.';updateCombatPanel();savePlayerState();}).catch(error=>note(error.message));return;
+  }
   stopForCombat();hunting.recoveryUntil=Date.now()+boarRules.recovery;
   combatMessage='Resting at the Tower. Your hearts will be restored shortly.';
   updateCombatPanel();savePlayerState();
@@ -786,6 +846,15 @@ function updateCombatPanel(){
   }
 }
 function updateCombatMoment(time){
+  if(window.playerCloud?.gameplay){
+    const due=hunting.encounter?Math.min(hunting.encounter.nextPlayerAt,hunting.encounter.nextBoarAt):Infinity;
+    if(player.inCombat&&Date.now()>=due&&time>=nextCombatPoll)sendServerCombat();
+    if(hunting.recoveryUntil&&Date.now()>=hunting.recoveryUntil&&!serverActionBusy&&!activityBusy){
+      serverGameplay('recover').then(()=>{updatePlayerStats();updateCombatPanel();savePlayerState();}).catch(error=>note(error.message));
+    }
+    if(time-lastCombatUi>100){lastCombatUi=time;updateCombatPanel();}
+    return;
+  }
   if(player.inCombat)applyCombatResult(advanceHunt(hunting.encounter,health,playerStats,Date.now(),Math.random,combatGear.equippedWeapon,combatGear.activeSwordUpgrade,combatGear.stonebackVestEquipped));
   if(hunting.recoveryUntil&&Date.now()>=hunting.recoveryUntil){
     hunting.recoveryUntil=0;health=100;
@@ -2527,6 +2596,10 @@ function finishInteraction(){
   if(item.type==='workbench'){
     openCrafting();
   }else if(item.type==='woodcutter'){
+    if(window.playerCloud?.gameplay){
+      const owned=woodcutting.axeOwned;
+      serverGameplay('axe').then(()=>{savePlayerState();if(!owned)showTransaction('A gift from the woodcutter',[{icon:'⚒',text:'Basic Axe · Free · Equipped'}]);note('Your basic axe is ready. Click a tree to begin.');}).catch(error=>note(error.message));return;
+    }
     if(grantBasicAxe(woodcutting)){
       savePlayerState();showTransaction('A gift from the woodcutter',[{icon:'⚒',text:'Basic Axe · Free · Equipped'}]);
       note('Your basic axe is ready. Click the marked tree or Chop timber to begin.');
@@ -2866,10 +2939,16 @@ function applyServerGameplay(state){
   Object.assign(fishingGear,state.fishingGear);
   for(const id of Object.keys(fishStock))delete fishStock[id];
   Object.assign(fishStock,state.fishStock);
-  playerStats.patienceXp=state.stats.patienceXp;
+  Object.assign(playerStats,state.stats);
+  health=state.health;
+  Object.assign(hunting,state.hunting);
+  depthsRun=state.depthsRun??null;depthsDiscovered=state.depthsDiscovered===true;
+  Object.assign(rootstone,normalizeRootstone(state.adventure.rootstone));
   Object.assign(quest,state.quest);Object.assign(history,state.history);
   Object.assign(combatGear,state.combatGear);
-  woodcutting.timber=state.woodcutting.timber;
+  for(const key of Object.keys(woodcutting))delete woodcutting[key];
+  Object.assign(woodcutting,state.woodcutting);
+  for(const key of Object.keys(ownedFurniture))ownedFurniture[key]=state.ownedFurniture?.[key]??0;
   for(const id of Object.keys(huntingLoot))delete huntingLoot[id];
   Object.assign(huntingLoot,state.huntingLoot);
 }
@@ -2887,6 +2966,35 @@ async function serverGameplay(name,body={}){
     serverActionBusy=false;
     $('gameShell').inert=false;
     updateInventory();
+  }
+}
+async function serverTravel(action){
+  try{const packet=await serverGameplay(action);enterRoom(packet.state.location,packet.state.position);}
+  catch(error){note(error.message);}
+}
+async function sendServerCombat(input){
+  if(activityBusy){if(input&&!pendingCombatInput)pendingCombatInput=input;return;}
+  if(serverActionBusy||!player.inCombat)return;
+  activityBusy=true;
+  try{
+    const packet=await window.playerCloud.gameplay('combat',{combatId:serverCombatId,input});
+    const receipt=packet.state.combatReceipt;
+    if(receipt&&receipt.id!==lastCombatReceipt){
+      lastCombatReceipt=receipt.id;
+      for(const event of receipt.events){
+        if(event.action==='rootbind'){combatMessage='Rootbind interrupted the attack. The creature is pinned for 2 seconds.';continue;}
+        applyCombatResult(event,packet.state);
+      }
+    }
+    applyServerGameplay(packet.state);
+    setPlayerCombat(!!hunting.encounter);updatePlayerStats();updateCombatPanel();
+    nextCombatPoll=performance.now()+80;
+  }catch(error){nextCombatPoll=performance.now()+1000;note(error.message);}
+  finally{
+    activityBusy=false;
+    if(!player.inCombat)savePlayerState();
+    const queued=pendingCombatInput;pendingCombatInput=null;
+    if(queued&&player.inCombat)sendServerCombat(queued);
   }
 }
 function restoreServerCast(cast,serverTime){
@@ -3095,7 +3203,9 @@ async function handInCarpenterOrder(){
     const state=await window.playerCloud.deliverCarpenter();
     credits=state.credits;
     goldEarned=state.goldEarned??goldEarned;
-    woodcutting.timber=state.woodcutting.timber;
+    for(const key of Object.keys(woodcutting))delete woodcutting[key];
+  Object.assign(woodcutting,state.woodcutting);
+  for(const key of Object.keys(ownedFurniture))ownedFurniture[key]=state.ownedFurniture?.[key]??0;
     status.textContent='Order complete. The carpenter paid you '+carpenterOrder.reward+' gold.';
     showTransaction('Carpenter’s Order delivered',[{text:'−'+carpenterOrder.timber+' timber',icon:'▤'}],carpenterOrder.reward);
     updateInventory();
@@ -3169,6 +3279,7 @@ function updateTradingPost(){
   }
 }
 function savePlayerState(){
+  if(activityBusy)return;
   const snapshot={goldEarned,firstUpgrade,tradingPostGuideComplete,bedLessonComplete,credits,health,woodcutting,history,quest,combatGear,hunting,depthsRun,depthsDiscovered,ownedFurniture,furniture:[],homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats,fishingGear,huntingLoot,fishStock,avatar,wardrobe,location:currentRoom,position:{x:player.cx,y:player.cy}};
   save('player-state',snapshot);
   if(window.playerCloud)window.playerCloud.enqueue(JSON.parse(JSON.stringify(snapshot)));
@@ -3261,6 +3372,13 @@ function touchRootstoneRune(rune){
   enteredRunes.push(rune);
   if(enteredRunes.length===rootstoneRunes.length){
     if(canAwakenRootstone(adventure,currentRoom,enteredRunes)){
+      if(window.playerCloud?.gameplay){
+        serverGameplay('awaken',{runes:[...enteredRunes]}).then(()=>{
+          recordAdventure('The Rootstone awakens. Choose one of its two powers.');
+          showTransaction('Ability Stone discovered',[{icon:'✦',text:'Rootstone · Choose a power'}]);updateRootstoneDialog();
+        }).catch(error=>{$('rootstoneStatus').textContent=error.message;});
+        enteredRunes=[];return;
+      }
       rootstone.awakened=true;
       recordAdventure('The Rootstone awakens. Choose one of its two powers.');
       showTransaction('Ability Stone discovered',[{icon:'✦',text:'Rootstone · Choose a power'}]);
@@ -3274,6 +3392,9 @@ function attuneRootstone(power){
   const atShrine=rootstoneContext==='shrine'&&currentRoom==='shrine';
   const firstAttunement=rootstoneContext==='well'&&currentRoom==='ruins'&&!rootstone.power;
   if(!rootstone.awakened||!Object.hasOwn(rootstonePowers,power)||(!atShrine&&!firstAttunement))return;
+  if(window.playerCloud?.gameplay){
+    serverGameplay('attune',{power}).then(()=>{recordAdventure('Rootstone attuned to '+rootstonePowers[power].name+'.');updateRootstoneDialog();}).catch(error=>{$('rootstoneStatus').textContent=error.message;});return;
+  }
   rootstone.power=power;
   const name=rootstonePowers[power].name;
   recordAdventure('Rootstone attuned to '+name+'.');
@@ -3815,7 +3936,7 @@ $('minus').onclick=()=>setZoom(zoom-.125);
 $('resetView').onclick=()=>setZoom(1);
 window.addEventListener('resize',()=>{bounds=null;});
 document.addEventListener('visibilitychange',()=>{
-  if(!document.hidden&&player.inCombat)hunting.encounter=resumeHunt(hunting.encounter,Date.now(),playerStats);
+  if(!document.hidden&&player.inCombat){if(window.playerCloud?.gameplay)sendServerCombat();else hunting.encounter=resumeHunt(hunting.encounter,Date.now(),playerStats);}
 });
 function showMessage(msg,targetId='messages'){
   const row=document.createElement('div');row.className='message';
@@ -3982,9 +4103,14 @@ movePlayerToSpawn();updateName();switchMode(false);
 if(savedPlayerState?.location&&roomDetails[savedPlayerState.location])enterRoom(savedPlayerState.location,savedPlayerState.position);
 if(hunting.encounter){
   if(currentRoom===huntEnemy(hunting.encounter).room&&combatGear.equippedWeapon){
-    hunting.encounter=resumeHunt(hunting.encounter,Date.now(),playerStats);
+    if(!window.playerCloud?.gameplay)hunting.encounter=resumeHunt(hunting.encounter,Date.now(),playerStats);
     setPlayerCombat(true);combatMessage='Combat resumes! Both fighters attack automatically. Flee if you need to escape.';
   }else hunting.encounter=null;
+}
+if(savedPlayerState?.timberCut){
+  const cut=savedPlayerState.timberCut;
+  const tree=moonwood.layouts[currentRoom]?.scenery.find(item=>timberKey(item)===cut.key);
+  if(tree)restoreServerTimber(cut,window.playerCloud?.serverTime??Date.now(),tree);
 }
 if(hunting.recoveryUntil&&!['hub','home'].includes(currentRoom))enterRoom('hub');
 updateCombatPanel();

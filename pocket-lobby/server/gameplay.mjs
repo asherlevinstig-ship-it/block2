@@ -1,8 +1,9 @@
 import {fishingCatalog,fishProducts,rollFishingCatch} from '../public/fishing.js';
 import {recordQuest,claimFirstQuest} from '../public/quests.js';
 import {purchaseWeapon} from '../public/hunting.js';
-import {fitSwordUpgrade} from '../public/crafting.js';
+import {fitSwordUpgrade,craftFurniture,craftStonebackVest} from '../public/crafting.js';
 import {bankDepthsSpoils} from '../public/depths.js';
+import {activityAction,settleActivities} from './activities.mjs';
 
 const prices={boar:30,rabbit:12,deer:24,stonebackShell:45,timber:4};
 const earn=(state,gold)=>{
@@ -19,6 +20,15 @@ function location(state,rooms){
 }
 
 export function applyGameplayAction(state,action,body,now=Date.now(),random=Math.random){
+  // Combat requests advance their own clocks so their receipt includes all events.
+  if(action!=='combat')settleActivities(state,now,random);
+  if(activityAction(state,action,body,now,random))return;
+  if(action==='furniture'||action==='vest'){
+    available(state);
+    if(action==='furniture')craftFurniture(state,body.id);
+    else craftStonebackVest(state);
+    return;
+  }
   if(action==='cast'){
     location(state,['pond']);
     if(state.fishingCast)return;
@@ -136,24 +146,44 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
   throw new Error('Unknown gameplay action.');
 }
 
-// Client snapshots retain movement, appearance and the activities still being migrated.
-// Fishing progression and the wallet are accepted only from server actions.
+// Snapshots retain movement, appearance and equipment choices. Progression,
+// rewards and active encounters can only change through server actions.
 export function protectFishingState(previous,next){
   next.credits=previous.credits;
   next.goldEarned=previous.goldEarned??0;
   next.fishStock=previous.fishStock;
   next.fishingGear=previous.fishingGear;
-  next.stats={...previous.stats,...next.stats,patienceXp:previous.stats.patienceXp};
-  next.history={...previous.history,...next.history,fishCaught:previous.history.fishCaught};
+  next.stats=previous.stats;
+  next.history=previous.history;
   next.quest={...previous.quest,...next.quest,fish:previous.quest.fish};
   if(previous.quest.accepted)next.quest.accepted=true;
-  if(previous.quest.fish<3)next.quest.boars=0;
+  next.quest.boars=previous.quest.boars;
   next.quest.sold=previous.quest.sold;
   next.quest.claimed=previous.quest.claimed;
   next.combatGear={...previous.combatGear,...next.combatGear,ownedWeapons:previous.combatGear.ownedWeapons};
   if(!next.combatGear.ownedWeapons.includes(next.combatGear.equippedWeapon))next.combatGear.equippedWeapon=previous.combatGear.equippedWeapon;
   next.combatGear.swordUpgrades=previous.combatGear.swordUpgrades;
+  next.combatGear.stonebackVestOwned=previous.combatGear.stonebackVestOwned;
+  if(!previous.combatGear.stonebackVestOwned)next.combatGear.stonebackVestEquipped=false;
   if(!next.combatGear.swordUpgrades?.includes(next.combatGear.activeSwordUpgrade))delete next.combatGear.activeSwordUpgrade;
+  next.health=previous.health;
+  next.hunting=previous.hunting;
+  next.huntingLoot=previous.huntingLoot;
+  next.woodcutting={...previous.woodcutting,equipped:previous.woodcutting.axeOwned&&next.woodcutting?.equipped===true};
+  next.ownedFurniture=previous.ownedFurniture??{bed:1};
+  next.depthsRun=previous.depthsRun??null;
+  next.depthsDiscovered=previous.depthsDiscovered===true;
+  next.adventure={...next.adventure,rootstone:previous.adventure.rootstone};
+  if(previous.depthsRun&&next.location!==previous.location){next.location=previous.location;next.position=previous.position;}
+  if(previous.hunting.encounter||previous.hunting.recoveryUntil){
+    next.location=previous.location;next.position=previous.position;
+    next.combatGear=previous.combatGear;
+    next.woodcutting=previous.woodcutting;
+  }
+  for(const key of ['combatId','combatReceipt','timberReceipt'])if(previous[key])next[key]=previous[key];
+  const cut=previous.timberCut;
+  if(cut&&next.location===previous.location&&next.position?.x===previous.position?.x&&next.position?.y===previous.position?.y&&next.woodcutting.equipped)next.timberCut=cut;
+  else delete next.timberCut;
   if(previous.fishingCast&&next.location==='pond')next.fishingCast=previous.fishingCast;
   if(previous.fishingReceipt)next.fishingReceipt=previous.fishingReceipt;
   if(previous.tradeReceipt)next.tradeReceipt=previous.tradeReceipt;

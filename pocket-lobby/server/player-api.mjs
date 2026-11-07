@@ -1,4 +1,5 @@
 import {applyGameplayAction,protectFishingState} from './gameplay.mjs';
+import {settleActivities} from './activities.mjs';
 import {readRankings} from './rankings.mjs';
 import {touchPresence} from './routines.mjs';
 import {deliverCarpenterOrder} from '../public/commissions.js';
@@ -17,12 +18,15 @@ async function write(db,id,revision,state,operation){
   return db.prepare("UPDATE tower_players SET state_json = ?, revision = revision + 1, last_request = ?, updated_at = ? WHERE player_id = ? AND revision = ? RETURNING player_id, state_json, revision, last_request")
     .bind(JSON.stringify(state),operation,Date.now(),id,revision).first();
 }
-async function settled(db,id){
+async function settled(db,id,activities=false){
   for(let attempt=0;attempt<5;attempt++){
     const row=await read(db,id);
     if(!row)return null;
     const state=JSON.parse(row.state_json);
-    if(!settlePlan(state,Date.now()))return row;
+    const now=Date.now();
+    const planChanged=settlePlan(state,now);
+    const activityChanged=activities&&settleActivities(state,now);
+    if(!planChanged&&!activityChanged)return row;
     const updated=await write(db,id,row.revision,state,"settle:"+crypto.randomUUID());
     if(updated)return updated;
   }
@@ -54,7 +58,7 @@ export async function handlePlayerApi(request,env){
     if(identity?.expired)return json({error:"Your account session expired. Sign in to continue.",reauthenticate:true},401);
     let id=identity?.playerId;
     if(path==="/api/player/session"&&request.method==="POST"){
-      const existing=id&&await settled(env.TOWER_DB,id);
+      const existing=id&&await settled(env.TOWER_DB,id,true);
       if(existing)return json(packet(existing));
       const body=await bodyOf(request),state=normalizeState({...body.legacy,...(body.newCharacter===true?{characterCreated:false,welcomeSeen:false}:{})});
       const bytes=crypto.getRandomValues(new Uint8Array(32));
@@ -67,7 +71,7 @@ export async function handlePlayerApi(request,env){
     }
     if(!id)return json({error:"Load your character first."},401);
     if(path==="/api/player/state"&&request.method==="GET"){
-      const row=await settled(env.TOWER_DB,id);
+      const row=await settled(env.TOWER_DB,id,true);
       return row?json(packet(row)):json({error:"Character not found."},401);
     }
     if(path==="/api/player/rankings"&&request.method==="GET"){
@@ -115,7 +119,7 @@ export async function handlePlayerApi(request,env){
         deliverCarpenterOrder(state);
         break;
       case "/api/player/presence":
-        if(!state.characterRules?.enabled||state.plan||state.report||state.fishingCast)return json(packet(row));
+        if(!state.characterRules?.enabled||state.plan||state.report||state.fishingCast||state.timberCut||state.hunting?.encounter||state.hunting?.recoveryUntil)return json(packet(row));
         touchPresence(state,Date.now());
         break;
       case "/api/player/rules/save":
