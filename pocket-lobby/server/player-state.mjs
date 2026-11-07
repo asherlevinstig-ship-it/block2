@@ -87,6 +87,7 @@ export function normalizeState(input={}){
   return state;
 }
 export function startPlan(state,{hours,baitLimit,kind,source},now){
+  if(state.fishingCast)throw new Error("Invalid work plan during an active cast.");
   if(kind!==undefined&&!['fishing','woodcutting'].includes(kind))throw new Error("Unknown job.");
   if(source==='board'){
     if(state.location!=='hub')throw new Error("Travel to the Tower job board first.");

@@ -5,7 +5,7 @@
   const gateText=document.getElementById('cloudGateText');
   const retry=document.getElementById('cloudRetry');
   let packet=null,pending=null,retryJob=null,sending=null,timer=null,conflicted=false;
-  let presenceBusy=null,acting=0;
+  let presenceBusy=null,acting=0,gameplayBusy=false;
   const ownOperations=[];
   const readLocal=(key,fallback)=>{
     try{return JSON.parse(localStorage.getItem('pocket-lobby:'+key))??fallback;}catch{return fallback;}
@@ -42,7 +42,7 @@
     if(!gate.open)gate.showModal();
   }
   function enqueue(state){
-    if(packet.state.plan||packet.state.report||conflicted)return;
+    if(packet.state.plan||packet.state.report||conflicted||gameplayBusy)return;
     pending={state,operation:crypto.randomUUID()};
     ownOperations.push(pending.operation);
     if(ownOperations.length>64)ownOperations.shift();
@@ -85,6 +85,12 @@
         packet=await request(path,{...body,revision:packet.revision,operation});
         return packet;
       }catch(error){
+        if(path.startsWith('gameplay/')){
+          if(error.status===undefined&&attempt<2)continue;
+          if(error.status===409&&error.data?.lastOperation===operation){packet=error.data;return packet;}
+          if(error.status===409||error.status===401||error.status===undefined)conflict('Reload to confirm the result of your action.');
+          throw error;
+        }
         if(path==='testing/reset'){if(error.status===undefined&&attempt<2)continue;conflict('Reload to confirm whether your character reset.');throw error;}
         if(path==='commissions/carpenter'){
           if(error.status===undefined&&attempt<2)continue;
@@ -274,7 +280,13 @@
       const multiplayer=await import('./multiplayer.js');
       Object.assign(window,{towerCharacterArt},rules,hunting,art,fx,quests,historyRules,shopUI,clothing,progression,woodRules,crafting,characterRules,commissions,rootstone,depths,jobs,shared,multiplayer);
       window.towerInitialState=packet.state;
-      window.playerCloud={enqueue,flush,attach,readRankings:async()=>{await flush();return request('rankings');},setRankingParticipation:async joined=>{await flush();return action('rankings/participation',{joined});},resetCharacter:async()=>{await flush();conflicted=true;window.towerMultiplayer?.disconnect();try{localStorage.setItem("pocket-lobby:before-testing-reset",JSON.stringify(packet.state));await action("testing/reset",{testing:true,confirm:"RESET"});localStorage.removeItem("pocket-lobby:player-state");localStorage.removeItem("pocket-lobby:movement-learned");localStorage.removeItem("pocket-lobby:cloud-pending");location.reload();}catch(error){conflicted=false;throw error;}},deliverCarpenter:async()=>{await flush();return (await action('commissions/carpenter')).state;},saveRules:async rules=>{await flush();return (await action('rules/save',{rules})).state;},startJob:async options=>{await flush();await action('plan/start',{...options,source:'board'});window.towerMultiplayer?.disconnect();location.reload();},invalidate:conflict,get initial(){return packet.state;}};
+      window.playerCloud={enqueue,flush,attach,gameplay:async(name,body={})=>{
+        if(gameplayBusy)throw new Error('Wait for your current action to finish.');
+        await flush();
+        gameplayBusy=true;
+        try{return await action('gameplay/'+name,body);}
+        finally{gameplayBusy=false;}
+      },get serverTime(){return packet.serverTime;},readRankings:async()=>{await flush();return request('rankings');},setRankingParticipation:async joined=>{await flush();return action('rankings/participation',{joined});},resetCharacter:async()=>{await flush();conflicted=true;window.towerMultiplayer?.disconnect();try{localStorage.setItem("pocket-lobby:before-testing-reset",JSON.stringify(packet.state));await action("testing/reset",{testing:true,confirm:"RESET"});localStorage.removeItem("pocket-lobby:player-state");localStorage.removeItem("pocket-lobby:movement-learned");localStorage.removeItem("pocket-lobby:cloud-pending");location.reload();}catch(error){conflicted=false;throw error;}},deliverCarpenter:async()=>{await flush();return (await action('commissions/carpenter')).state;},saveRules:async rules=>{await flush();return (await action('rules/save',{rules})).state;},startJob:async options=>{await flush();await action('plan/start',{...options,source:'board'});window.towerMultiplayer?.disconnect();location.reload();},invalidate:conflict,get initial(){return packet.state;}};
       const {initializeRankings}=await import('./rankings.js');
       initializeRankings(window.playerCloud,document,window);
       const script=document.createElement('script');script.src='game.js';

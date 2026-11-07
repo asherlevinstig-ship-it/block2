@@ -52,6 +52,7 @@ const firstUpgrade={unlocked:false,choice:null,complete:false,sale:null,...saved
 let tradingPostGuideComplete=savedPlayerState?.tradingPostGuideComplete===true||(savedPlayerState?.location==='market'&&savedPlayerState?.quest?.claimed===true);
 let tradeGuideRouteCache=null;
 let bedLessonComplete=savedPlayerState?.bedLessonComplete===true||homeFurniture.some(item=>item.type==='bed');
+let serverActionBusy=false;
 let credits = savedPlayerState?.credits??100;
 let goldEarned=savedPlayerState?.goldEarned??0;
 function recordGoldEarned(amount){goldEarned=Math.min(Number.MAX_SAFE_INTEGER,goldEarned+amount);}
@@ -249,6 +250,14 @@ function updateSwordWorkbench(ready){
 }
 function makeSwordUpgrade(id){
   if(unavailable()||woodSession)return;
+  if(window.playerCloud?.gameplay){
+    const owned=combatGear.swordUpgrades?.includes(id);
+    serverGameplay('sword',{id}).then(()=>{
+      savePlayerState();$('craftStatus').textContent=swordUpgrades[id].name+' fitted.';
+      showTransaction('Sword upgrade fitted',[{text:swordUpgrades[id].name,icon:'⚔'}],owned?0:-swordUpgrades[id].gold);
+    }).catch(error=>{$('craftStatus').textContent=error.message;});
+    return;
+  }
   try{
     const state={...craftingState(),credits,combatGear,hunting};
     const result=fitSwordUpgrade(state,id);
@@ -451,6 +460,13 @@ function questAction(){
     }else note('First Steps accepted. Catch 3 fish at Silverfin Pond.');
     return;
   }
+  if(window.playerCloud?.gameplay){
+    serverGameplay('quest').then(()=>{
+      savePlayerState();$('questDialog').close();
+      showTransaction('First Steps complete!',[{icon:'⚔',text:'Warden’s Blade · Equipped'}],firstQuestReward.gold);
+    }).catch(error=>note(error.message));
+    return;
+  }
   if(credits>100000000-firstQuestReward.gold)return;
   const reward=claimFirstQuest(quest);if(!reward)return;
   credits+=reward.gold;
@@ -471,7 +487,7 @@ function resetCombatArt(){
   combatFeedback=null;
 }
 
-const unavailable=()=>player.inCombat||hunting.recoveryUntil>0;
+const unavailable=()=>serverActionBusy||player.inCombat||hunting.recoveryUntil>0;
 function stopForCombat(){
   route=[];step=null;interaction=null;target=null;
   player.x=player.cx;player.y=player.cy;player.seat=null;player.waveStarted=null;
@@ -494,6 +510,18 @@ function leaveMoonwellDepths(){
   if(depthsRun.cleared===0){
     depthsRun=null;
     enterRoom('ruins',{x:5,y:7});
+    return;
+  }
+  if(window.playerCloud?.gameplay){
+    const reward=depthsSpoils(depthsRun);
+    serverGameplay('bank').then(result=>{
+      depthsRun=null;
+      enterRoom(result.state.location,result.state.position);
+      showTransaction('Moonwell Depths spoils banked',Object.entries(reward.loot).map(([id,count])=>({icon:'✦',text:tradeCatalog[id].name+' ×'+count})),reward.gold);
+    }).catch(error=>{
+      $('depthsBankError').textContent=error.message;
+      $('depthsBankError').hidden=false;
+    });
     return;
   }
   try{
@@ -2365,6 +2393,20 @@ function seatAnchor(item){
   return point(item.x+x,item.y+y,item.type==='woodStool'?12:item.type==='stool'?17:13);
 }
 function reelFish(){
+  if(fishingSession?.serverCastId){
+    if(serverActionBusy)return;
+    const session=fishingSession;
+    serverGameplay('reel',{castId:session.serverCastId}).then(result=>{
+      if(fishingSession!==session)return;
+      const cast=result.state.fishingCast;
+      if(!cast)return;
+      const offset=performance.now()-result.serverTime;
+      session.landAt=cast.landAt+offset;session.bonus=cast.bonus;
+      if(cast.bonus){fishingMoments.sound('reel');note('Well timed! +5 bonus Patience XP.');}
+      updateAdventurePanel();
+    }).catch(error=>note(error.message));
+    return;
+  }
   if(!fishingSession||!fishingMoments.reel(fishingSession,performance.now()))return;
   fishingMoments.sound('reel');
   note('Well timed! Reeling in · +5 bonus Patience XP.');
@@ -2428,13 +2470,19 @@ function drawCatchReveal(x,y,time){
 }
 function finishFishing(time){
   const session=fishingSession;
+  if(session.serverCastId&&!session.serverResult){completeServerCast(session);return;}
   fishingSession=null;fishingStarted=null;
-  fishingGear.bait--;
+  if(!session.serverResult)fishingGear.bait--;
   const fishId=session.fishId,fish=fishProducts[fishId];
-  fishStock[fishId]=(fishStock[fishId]??0)+1;
-  recordQuest(quest,'fish');history.fishCaught=true;
-  const before=playerStats.patienceXp,oldLevel=patienceLevel(),earned=PATIENCE_XP_PER_CATCH+session.bonus;
-  playerStats.patienceXp+=earned;
+  const receipt=session.serverResult;
+  if(!receipt){
+    fishStock[fishId]=(fishStock[fishId]??0)+1;
+    recordQuest(quest,'fish');history.fishCaught=true;
+  }
+  const before=receipt?.before??playerStats.patienceXp;
+  const oldLevel=1+Math.floor(before/PATIENCE_XP_PER_LEVEL);
+  const earned=receipt?.xp??PATIENCE_XP_PER_CATCH+session.bonus;
+  if(!receipt)playerStats.patienceXp+=earned;
   patienceTween={from:before,to:playerStats.patienceXp,started:time};
   const oakTrial=firstUpgrade.oakTrialPending&&castProfile?.rod==='oak'&&currentRoom==='pond';
   if(oakTrial)firstUpgrade.oakTrialPending=false;
@@ -2463,7 +2511,7 @@ function updateFishingMoment(time){
   if(!fishingSession)return;
   const session=fishingSession,phase=fishingMoments.phase(session,time);
   if((phase==='landing'||phase==='complete')&&!session.fishId){
-    session.fishId=rollFishingCatch(castProfile.level,castProfile.rod);
+    session.fishId=session.serverCastId?'silverfin':rollFishingCatch(castProfile.level,castProfile.rod);
   }
   if(phase==='complete'){finishFishing(time);return;}
   if(phase!==session.stage){
@@ -2490,6 +2538,7 @@ function finishInteraction(){
   }else if(item.type===huntEnemyForRoom(currentRoom)?.prop){
     startMonsterEncounter(huntEnemyForRoom(currentRoom));
   }else if(item.type==='fishingPost'){
+    if(window.playerCloud?.gameplay){startServerCast();return;}
     if(fishingGear.bait<1){note('You need bait. Visit Silverfin Outfitters in the tower.');return;}
     const rod=fishingCatalog.rods[fishingGear.equippedRod];
     if(!fishingGear.ownedRods.includes(fishingGear.equippedRod)||patienceLevel()<rod.patience){
@@ -2542,6 +2591,7 @@ function finishInteraction(){
   }
 }
 function animation(time){
+  if(serverActionBusy){draw(time);requestAnimationFrame(animation);return;}
   updateWoodMoment(time);
   updateCombatMoment(time);
   updateFishingMoment(time);
@@ -2811,7 +2861,71 @@ function updatePlayerStats(){
   const odds=fishingChances(level,fishingGear.equippedRod);
   $('fishingStats').textContent='Patience '+level+' · '+xp+'/50 XP · Bait '+fishingGear.bait+' · Fish '+caughtFishCount()+'\nQuality chances · Common '+odds.common.toFixed(1)+'% · Fine '+odds.fine.toFixed(1)+'% · Rare '+odds.rare.toFixed(1)+'%';
 }
+function applyServerGameplay(state){
+  credits=state.credits;goldEarned=state.goldEarned??0;
+  Object.assign(fishingGear,state.fishingGear);
+  for(const id of Object.keys(fishStock))delete fishStock[id];
+  Object.assign(fishStock,state.fishStock);
+  playerStats.patienceXp=state.stats.patienceXp;
+  Object.assign(quest,state.quest);Object.assign(history,state.history);
+  Object.assign(combatGear,state.combatGear);
+  woodcutting.timber=state.woodcutting.timber;
+  for(const id of Object.keys(huntingLoot))delete huntingLoot[id];
+  Object.assign(huntingLoot,state.huntingLoot);
+}
+async function serverGameplay(name,body={}){
+  if(serverActionBusy)throw new Error('Wait for the current action.');
+  serverActionBusy=true;
+  route=[];step=null;interaction=null;target=null;
+  player.x=player.cx;player.y=player.cy;
+  $('gameShell').inert=true;
+  try{
+    const result=await window.playerCloud.gameplay(name,body);
+    applyServerGameplay(result.state);
+    return result;
+  }finally{
+    serverActionBusy=false;
+    $('gameShell').inert=false;
+    updateInventory();
+  }
+}
+function restoreServerCast(cast,serverTime){
+  const offset=performance.now()-serverTime;
+  fishingSession={...cast,serverCastId:cast.id,started:cast.started+offset,castEnds:cast.castEnds+offset,
+    biteAt:cast.biteAt+offset,landAt:cast.landAt+offset,stage:'casting',fishId:null};
+  fishingStarted=fishingSession.started;
+  fishingDuration=fishingCatalog.rods[cast.rod].duration;
+  castProfile={rod:cast.rod,level:patienceLevel()};
+}
+async function startServerCast(){
+  try{
+    const result=await serverGameplay('cast');
+    restoreServerCast(result.state.fishingCast,result.serverTime);
+    fishingMoments.sound('cast');
+    catchReveal=null;$('catchReveal').hidden=true;
+    updateAdventurePanel();updateUpgradeGuide();
+  }catch(error){note(error.message);}
+}
+async function completeServerCast(session){
+  if(session.completing)return;
+  session.completing=true;
+  try{
+    const result=await serverGameplay('catch',{castId:session.serverCastId});
+    if(fishingSession!==session)return;
+    const receipt=result.state.fishingReceipt;
+    session.serverResult=receipt;
+    session.fishId=receipt.fish;session.bonus=receipt.bonus;
+    finishFishing(performance.now());
+  }catch(error){
+    session.completing=false;
+    cancelFishing();note(error.message);
+  }
+}
 function equipFishingRod(id){
+  if(window.playerCloud?.gameplay){
+    serverGameplay('rod',{id}).then(()=>{fishingSession=null;fishingStarted=null;savePlayerState();updateAdventurePanel();}).catch(error=>note(error.message));
+    return;
+  }
   const rod=fishingCatalog.rods[id];
   if(!rod||!fishingGear.ownedRods.includes(id)||patienceLevel()<rod.patience)return;
   cancelFishing();
@@ -2820,6 +2934,16 @@ function equipFishingRod(id){
   updateAdventurePanel();
 }
 function buyArmoryWeapon(id){
+  if(window.playerCloud?.gameplay){
+    const owned=combatGear.ownedWeapons.includes(id);
+    serverGameplay('weapon',{id}).then(()=>{
+      const upgraded=finishFirstUpgrade('combat',id);
+      if(upgraded)firstUpgrade.ironTrialPending=true;
+      savePlayerState();$('armoryStatus').textContent=weaponCatalog[id].name+' equipped.';
+      showTransaction(upgraded?'First upgrade complete!':'Weapon equipped',[{text:weaponCatalog[id].name+' · Equipped',icon:'⚔'}],owned?0:-weaponCatalog[id].price);
+    }).catch(error=>{$('armoryStatus').textContent=error.message;});
+    return;
+  }
   const state={credits,combatGear,stats:playerStats,location:currentRoom,hunting};
   try{
     const result=purchaseWeapon(state,id);credits=state.credits;
@@ -2851,6 +2975,17 @@ function updateArmoryShop(){
   }
 }
 function buyFishingRod(id){
+  if(window.playerCloud?.gameplay){
+    const owned=fishingGear.ownedRods.includes(id),rod=fishingCatalog.rods[id];
+    if(!rod)return;
+    serverGameplay('rod',{id}).then(()=>{
+      const upgraded=finishFirstUpgrade('fishing',id);
+      if(upgraded)firstUpgrade.oakTrialPending=true;
+      savePlayerState();$('shopStatus').textContent=rod.name+' equipped.';
+      showTransaction(upgraded?'First upgrade complete!':owned?'Rod equipped':'Rod purchased',[{text:rod.name+' · Equipped',icon:'♓'}],owned?0:-rod.price);
+    }).catch(error=>{$('shopStatus').textContent=error.message;});
+    return;
+  }
   const rod=fishingCatalog.rods[id];
   if(currentRoom!=='store'||!rod)return;
   if(fishingGear.ownedRods.includes(id)){equipFishingRod(id);return;}
@@ -2978,6 +3113,17 @@ function sellTradeLoot(id,quantity,statusId='tradeStatus'){
   const item=tradeCatalog[id];
   if(!item||!Number.isSafeInteger(quantity)||quantity<1||quantity>tradeQuantity(id))return;
   if(currentRoom!=='market'&&!(currentRoom==='store'&&item.group==='fish'))return;
+  if(window.playerCloud?.gameplay){
+    serverGameplay('sell',{id,quantity}).then(result=>{
+      const receipt=result.state.tradeReceipt;
+      const firstSale=unlockFirstUpgrade(item.name,receipt.quantity,receipt.gold);
+      savePlayerState();
+      $(statusId).textContent='Sold '+receipt.quantity+' '+item.name+' for '+receipt.gold+' gold.';
+      showTransaction('Trade completed',[{text:'−'+receipt.quantity+' '+item.name,icon:item.icon}],receipt.gold);
+      if(firstSale)openUpgradeChoice();
+    }).catch(error=>{$(statusId).textContent=error.message;});
+    return;
+  }
   const earned=quantity*item.price;
   if(!Number.isSafeInteger(earned)||!Number.isSafeInteger(credits+earned))return;
   if(id==='timber')woodcutting.timber-=quantity;
@@ -3252,7 +3398,11 @@ function recordAdventure(message){
 function cancelFishing(){
   cancelWoodcutting();
   if(fishingStarted===null)return;
+  const castId=fishingSession?.serverCastId;
   fishingStarted=null;fishingSession=null;
+  if(castId&&window.playerCloud?.gameplay){
+    serverGameplay('cancel',{castId}).catch(error=>note(error.message));
+  }
   if(firstUpgrade.oakTrialPending)updateUpgradeGuide();
   updateAdventurePanel();
 }
@@ -3324,6 +3474,12 @@ for(const [type,name] of Object.entries(types)){
 $('credits').textContent=new Intl.NumberFormat().format(credits);
 $('equippedFishingRod').onchange=event=>equipFishingRod(event.target.value);
 $('buyBait').onclick=()=>{
+  if(window.playerCloud?.gameplay){
+    serverGameplay('bait').then(()=>{
+      savePlayerState();showTransaction('Bait purchased',[{text:'+10 Riverworms',icon:'≋'}],-fishingCatalog.bait.price);
+    }).catch(error=>{$('shopStatus').textContent=error.message;});
+    return;
+  }
   if(currentRoom!=='store'||credits<fishingCatalog.bait.price)return;
   credits-=fishingCatalog.bait.price;
   fishingGear.bait+=fishingCatalog.bait.quantity;
@@ -3332,6 +3488,15 @@ $('buyBait').onclick=()=>{
   showTransaction('Bait purchased',[{text:'+10 Riverworms',icon:'≋'}],-fishingCatalog.bait.price);
 };
 $('sellFish').onclick=()=>{
+  if(window.playerCloud?.gameplay){
+    serverGameplay('sell',{id:'allFish'}).then(result=>{
+      const receipt=result.state.tradeReceipt;
+      const firstSale=unlockFirstUpgrade('Fish',receipt.quantity,receipt.gold);
+      savePlayerState();showTransaction('Catch sold',[{text:'−'+receipt.quantity+' fish',icon:'⋈'}],receipt.gold);
+      if(firstSale)openUpgradeChoice();
+    }).catch(error=>{$('shopStatus').textContent=error.message;});
+    return;
+  }
   if(currentRoom!=='store')return;
   const count=caughtFishCount(),earned=caughtFishValue();
   if(count<1||!Number.isSafeInteger(earned)||!Number.isSafeInteger(credits+earned))return;
@@ -3842,4 +4007,7 @@ if(window.playerCloud&&typeof WebSocket!=='undefined'){
   });
   window.towerMultiplayer=multiplayer;connectRoom();
 }else $('networkStatus').textContent='Local preview';
+if(window.playerCloud?.initial?.fishingCast&&currentRoom==='pond'){
+  restoreServerCast(window.playerCloud.initial.fishingCast,window.playerCloud.serverTime);
+}
 requestAnimationFrame(animation);

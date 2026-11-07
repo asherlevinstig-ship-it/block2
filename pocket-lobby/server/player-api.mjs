@@ -1,3 +1,4 @@
+import {applyGameplayAction,protectFishingState} from './gameplay.mjs';
 import {readRankings} from './rankings.mjs';
 import {touchPresence} from './routines.mjs';
 import {deliverCarpenterOrder} from '../public/commissions.js';
@@ -83,7 +84,11 @@ export async function handlePlayerApi(request,env){
     if(row.last_request===body.operation)return json(packet(row));
     if(row.revision!==body.revision)return json({error:"Your character changed in another tab or completed an offline action.",...packet(row)},409);
     let state=JSON.parse(row.state_json);
-    switch(path){
+    if(path.startsWith('/api/player/gameplay/')){
+      if(state.characterCreated===false)return json({error:'Finish creating your character first.'},400);
+      Object.assign(state,normalizeState(state));
+      applyGameplayAction(state,path.slice('/api/player/gameplay/'.length),body);
+    }else switch(path){
       case "/api/player/rankings/participation":
         if(!identity.account)return json({error:"Create an account to join the rankings."},400);
         if(typeof body.joined!=="boolean")return json({error:"Choose whether to join the rankings."},400);
@@ -104,13 +109,13 @@ export async function handlePlayerApi(request,env){
         break;
       case "/api/player/save":
         if(state.plan)return json({error:"Stop the work plan before playing.",...packet(row)},409);
-        state={...normalizeState({...body.state,wardrobe:body.state?.wardrobe??state.wardrobe}),rankingJoined:state.rankingJoined===true,goldEarned:Math.max(state.goldEarned??0,body.state?.goldEarned??0),welcomeSeen:state.welcomeSeen!==false,characterCreated:state.characterCreated!==false,carpenterOrderComplete:state.carpenterOrderComplete===true,characterRules:state.characterRules??normalizeCharacterRules(),routineLastSeen:state.routineLastSeen,activityLog:state.activityLog??[],...(state.report?{report:state.report}:{})};
+        state={...protectFishingState(state,normalizeState(protectFishingState(state,{...body.state,wardrobe:body.state?.wardrobe??state.wardrobe}))),rankingJoined:state.rankingJoined===true,goldEarned:state.goldEarned??0,welcomeSeen:state.welcomeSeen!==false,characterCreated:state.characterCreated!==false,carpenterOrderComplete:state.carpenterOrderComplete===true,characterRules:state.characterRules??normalizeCharacterRules(),routineLastSeen:state.routineLastSeen,activityLog:state.activityLog??[],...(state.report?{report:state.report}:{})};
         break;
       case "/api/player/commissions/carpenter":
         deliverCarpenterOrder(state);
         break;
       case "/api/player/presence":
-        if(!state.characterRules?.enabled||state.plan||state.report)return json(packet(row));
+        if(!state.characterRules?.enabled||state.plan||state.report||state.fishingCast)return json(packet(row));
         touchPresence(state,Date.now());
         break;
       case "/api/player/rules/save":
