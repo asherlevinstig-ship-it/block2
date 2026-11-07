@@ -987,12 +987,17 @@ function drawLobbyBanner(side,at){
   const tip=(u,z)=>lobbyWallPoint(side,at+u,z);
   polygon([tip(-.53,66),tip(.53,66),tip(.53,27),tip(0,21),tip(-.53,27)],'#213657','#98734e');
   polygon([tip(-.43,63),tip(.43,63),tip(.43,29),tip(0,24),tip(-.43,29)],'#24416c','#b9945d');
-  polygon([tip(0,55),tip(.22,46),tip(.1,40),tip(0,36),tip(-.1,40),tip(-.22,46)],'#d7b577');
+  polygon([tip(-.28,47),tip(.28,47),tip(.25,38),tip(0,33),tip(-.25,38)],'#bd9a59');
+  polygon([tip(-.21,46),tip(.21,46),tip(.18,39),tip(0,35),tip(-.18,39)],'#1a3153');
+  wall(side,at-.13,at+.13,40,45,'#f0ce83');
+  for(const u of [-.13,-.025,.08])wall(side,at+u,at+u+.05,44,48,'#f0ce83');
+  wall(side,at-.02,at+.025,40,42,'#1a3153');
   wall(side,at-.64,at+.64,65,68,'#c7a476');
 }
 function drawLobbySconce(side,u){
   const [x,y]=lobbyWallPoint(side,u,37);
-  lobbyLight(x,y,27,'#ffc68061');
+  lobbyLight(x,y,37,'#ffc68088');
+  const floor=lobbyWallPoint(side,u,0);lobbyLight(floor[0],floor[1],34,'#fbc58048',.48);
   rect(x-4,y-6,8,13,'#39303c');
   rect(x-3,y-5,6,10,'#bb8051');
   rect(x-2,y-4,4,8,'#ffe6a8');
@@ -1071,9 +1076,10 @@ function drawGrandLobby(showDoors=true){
   block(0,0,cols,rows,-13,13,['#9f9ca1','#555568','#363e55']);
   block(0,rows-.07,cols,.08,-10,2,['#9a785d','#b79265','#72584d']);
   block(cols-.07,0,.08,rows,-10,2,['#9a785d','#846750','#a4805c']);
-  const stone=['#a9a6aa','#a19da6','#a6a1a7','#9d9ca6'];
+  const stone=['#b0a69c','#aaa195','#ada499','#a69d94'];
   for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){
-    surface(x,y,1,1,0,stone[(x*7+y*3)%stone.length],'#807d8a');
+    const border=x===0||y===0||x===cols-1||y===rows-1;
+    surface(x,y,1,1,0,border?'#646779':stone[(x*7+y*3)%stone.length],border?'#55596c':'#948c89');
     surface(x+.04,y+.05,.92,.033,.08,'#d1c8c32e');
     if((x*3+y*7)%6===0)surface(x+.34,y+.54,.28,.025,.1,'#d4ccca64');
   }
@@ -1086,9 +1092,21 @@ function drawGrandLobby(showDoors=true){
   for(const y of [4.58,13.68])for(const x of [7.32,9.34]){
     surface(x,y,.33,.08,.4,'#d5b071');surface(x,y,.08,.33,.4,'#d5b071');
   }
-  drawLobbyCrest(...point(8.5,9.15,1));
+  // The embroidered shield follows the carpet plane, rather than facing the camera.
+  const crest=(x,y)=>point(x,y,.6);
+  polygon([crest(7.72,8.45),crest(9.28,8.45),crest(9.18,9.2),crest(8.5,9.9),crest(7.82,9.2)],'#cba968');
+  polygon([crest(7.86,8.58),crest(9.14,8.58),crest(9.04,9.16),crest(8.5,9.72),crest(7.96,9.16)],'#1e3557');
+  surface(8.13,8.9,.74,.33,.7,'#e4c583');
+  for(const x of [8.13,8.43,8.73])surface(x,8.62,.14,.36,.7,'#e4c583');
+  surface(8.44,9.05,.13,.18,.75,'#1e3557');
+  for(let y=4.8;y<13.5;y+=.42){surface(7.18,y,.035,.12,.5,'#caa465');surface(9.78,y,.035,.12,.5,'#caa465');}
+  // Seating bays use architectural inlays, leaving all existing walking tiles free.
+  for(const [x,y] of [[1.4,9.55],[12.4,7.55]]){
+    surface(x,y,3.6,3.7,.15,'#8d909c','#bbad93');
+    surface(x+.12,y+.12,3.36,3.46,.18,'#9696a0');
+  }
   for(const [x,y] of [[2.3,2.9],[4.4,4.1],[12.9,8.5],[6.7,14.2]]){
-    lobbyLight(...point(x,y),42,'#ffd19a3d',.47);
+    lobbyLight(...point(x,y),63,'#ffd39a60',.47);
   }
   if(showDoors)for(const door of hubDoors){
     const middle=(door.start+door.end)/2;
@@ -1097,10 +1115,10 @@ function drawGrandLobby(showDoors=true){
   }
   for(const side of ['left','right']){
     const length=side==='left'?rows:cols;
-    wall(side,0,length,0,80,side==='left'?'#354059':'#4a5069');
+    wall(side,0,length,0,80,side==='left'?'#303c54':'#44516a');
     for(let course=0;course<5;course++){
       const bottom=15+course*12;
-      wall(side,0,length,bottom,bottom+1,'#242c44');
+      wall(side,0,length,bottom,bottom+.45,'#27334a');
       for(let u=course%2?.6:1.6;u<length;u+=2)wall(side,u,u+.035,bottom,bottom+12,'#2c364f');
     }
     wall(side,0,length,0,13,'#292f45');
@@ -1109,7 +1127,10 @@ function drawGrandLobby(showDoors=true){
     wall(side,0,length,79,81,'#c0ab99');
     for(const u of (side==='left'?[.20,4.4,8,12.05,15.54]:[.20,5.6,12.0,17.5])){
       wall(side,u,u+.25,1,76,'#2b354d');
-      wall(side,u+.04,u+.18,3,76,'#666d81');
+      wall(side,u+.04,u+.18,3,76,'#718096');
+      wall(side,u+.04,u+.065,8,71,'#9ba5b4');
+      wall(side,u-.10,u+.34,72,74,'#c7ae86');
+      wall(side,u-.10,u+.34,5,7,'#bc9f78');
       wall(side,u-.04,u+.28,71,77,'#a88d77');
       wall(side,u-.04,u+.28,2,8,'#8d7769');
     }
@@ -1603,7 +1624,7 @@ function updateWorldLabels(){
     if(lobbyRoutesOpen())add('Job board',...point(4.5,2,39),'npc',openJobBoard);
     add('TOWER OF',...point(0,2.7,51),'sign',null,'BEGINNINGS');
     const symbol=questStage(quest)===0?'! ':questStage(quest)===4?'? ':'';
-    add(symbol+'Tower Warden',...point(10.5,3.5,43),'npc',()=>use(hubFurniture.find(item=>item.type==='warden')));
+    add(symbol+'Tower Warden',...point(10.5,3.5,46),'npc',()=>use(hubFurniture.find(item=>item.type==='warden')),questStage(quest)===0?'Start here · Earn your first gold':'');
   }
   if(currentRoom==='logging'){
     add('Workbench',...point(6,3.5,26),'npc',()=>use(roomFurniture().find(item=>item.type==='workbench')));
@@ -1630,6 +1651,14 @@ function draw(time){
   ctx.translate(shakeX,shakeY);ctx.translate(centerX,centerY);ctx.scale(zoom,zoom);ctx.translate(-centerX,-centerY);
   const layer=currentRoom==='hub'&&!lobbyRoutesOpen()?'hubIntro':currentRoom;
   ctx.imageSmoothingEnabled=false;ctx.drawImage(roomLayers[layer],0,0);
+  if(currentRoom==='hub'&&!lobbyRoutesOpen()){
+    const [wx,wy]=point(10.5,3.5);
+    lobbyLight(wx,wy,25,'#efc87955',.48);
+    const pulse=reducedMotion.matches?1:.72+Math.sin(time/600)*.18;
+    ctx.save();ctx.globalAlpha=pulse;
+    surface(10.06,3.06,.88,.88,.5,'#f5cf7d12','#dfbb76');
+    ctx.restore();
+  }
   if(moonwood.has(currentRoom))drawMoonwoodDetails(time);
   if(enemy)drawCombatGroundFx({ctx,point,time,now:Date.now(),encounter:hunting.encounter,player,reduced:reducedMotion.matches});
   if(target)surface(target.x+.1,target.y+.1,.8,.8,1,currentRoom==='home'?'#b7e9e220':'#fff3bc30',currentRoom==='home'?'#98cec9':'#ffcf8f');
