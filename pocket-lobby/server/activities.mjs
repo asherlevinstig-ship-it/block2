@@ -98,7 +98,7 @@ export function activityAction(state,action,body,now,random){
     const events=advanceServerCombat(state,now,random);
     if(state.hunting.encounter&&['dodge','flee','essence'].includes(body.input)){
       if(body.input==='essence'){
-        const event=castEssencePower(state,now);
+        const event=castEssencePower(state,now,body.slot);
         if(event)events.push(result(state,event,now));
       }else{
         const event=huntingTurn(state.hunting.encounter,state.health,state.stats,body.input,now,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,state.combatGear.stonebackVestEquipped,state.combatGear.moonwellCharmEquipped);

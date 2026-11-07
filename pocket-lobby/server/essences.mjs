@@ -6,7 +6,9 @@ export function essenceAction(state,action,body){
   if(state.plan||state.report||state.fishingCast||state.timberCut||state.hunting.encounter||state.hunting.recoveryUntil||state.health<=0){
     throw new Error('Invalid activity. Finish your current activity first.');
   }
-  const magic=state.magic??=normalizeMagic();
+  const magic=state.magic=normalizeMagic(state.magic);
+  const slot=body.slot??'q';
+  if(action==='equipPower'&&!['q','e'].includes(slot))throw new Error('Choose the Q or E power slot.');
   if(action==='bondEssences'){
     if(!confluence(body.picks))throw new Error('Choose three different Magic Gems.');
     const {location,position}=state;
@@ -17,9 +19,11 @@ export function essenceAction(state,action,body){
     }
     if(!magic.picks.length)magic.stones.sword++;
     magic.picks=[...body.picks];
-    if(magic.equipped&&!bondedEssences(magic.picks).includes(essencePower(magic.equipped)?.gem))magic.equipped=null;
+    for(const key of ['q','e']){
+      if(!bondedEssences(magic.picks).includes(essencePower(magic.slots[key])?.gem))magic.slots[key]=null;
+    }
   }else{
-    if(action==='equipPower'&&body.id===null){magic.equipped=null;return true;}
+    if(action==='equipPower'&&body.id===null){magic.slots[slot]=null;return true;}
     const power=essencePower(body.id,state.stats);
     if(!power||!bondedEssences(magic.picks).includes(power.gem))throw new Error('Choose a power from one of your bonded Gems.');
     const known=magic.unlocked.includes(power.id);
@@ -28,19 +32,24 @@ export function essenceAction(state,action,body){
       if(!magic.stones[power.form])throw new Error('Choose a power with a matching Awakening Stone in your journal.');
       magic.stones[power.form]--;
       magic.unlocked.push(power.id);
-      magic.equipped??=power.id;
+      const empty=['q','e'].find(key=>!magic.slots[key]);
+      if(empty)magic.slots[empty]=power.id;
     }else{
       if(!known)throw new Error('Awaken this power before equipping it.');
-      magic.equipped=power.id;
+      const other=slot==='q'?'e':'q';
+      if(magic.slots[other]===power.id)magic.slots[other]=magic.slots[slot];
+      magic.slots[slot]=power.id;
     }
   }
   return true;
 }
 
-export function castEssencePower(state,now){
+export function castEssencePower(state,now,slot='q'){
+  if(!['q','e'].includes(slot))throw new Error('Choose the Q or E power slot.');
   const magic=state.magic,encounter=state.hunting.encounter;
-  if(!encounter||!magic?.equipped||now<magic.nextCastAt||!magic.unlocked.includes(magic.equipped))return null;
-  const power=essencePower(magic.equipped,state.stats);
+  const id=magic?.slots[slot];
+  if(!encounter||!id||now<(magic.cooldowns[id]??0)||!magic.unlocked.includes(id))return null;
+  const power=essencePower(id,state.stats);
   if(!power||!bondedEssences(magic.picks).includes(power.gem))return null;
   const {form,value}=power;
   if(form==='renewal'&&state.health>=100)return null;
@@ -71,6 +80,6 @@ export function castEssencePower(state,now){
     event.healed=event.health-state.health;
     event.effect='restored '+event.healed+' HP';
   }
-  magic.nextCastAt=now+power.cooldown;
+  magic.cooldowns[power.id]=now+power.cooldown;
   return event;
 }

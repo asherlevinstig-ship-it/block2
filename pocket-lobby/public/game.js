@@ -52,7 +52,7 @@ const firstUpgrade={unlocked:false,choice:null,complete:false,sale:null,...saved
 let tradingPostGuideComplete=savedPlayerState?.tradingPostGuideComplete===true||(savedPlayerState?.location==='market'&&savedPlayerState?.quest?.claimed===true);
 let tradeGuideRouteCache=null;
 let bedLessonComplete=savedPlayerState?.bedLessonComplete===true||homeFurniture.some(item=>item.type==='bed');
-let serverActionBusy=false,activityBusy=false,pendingCombatInput=null,nextCombatPoll=0;
+let serverActionBusy=false,activityBusy=false,pendingCombatInputs=[],nextCombatPoll=0;
 let serverCombatId=savedPlayerState?.combatId,lastCombatReceipt=null;
 let credits = savedPlayerState?.credits??100;
 let goldEarned=savedPlayerState?.goldEarned??0;
@@ -84,7 +84,7 @@ const caughtFishCount=()=>Object.values(fishStock).reduce((total,count)=>total+c
 const caughtFishValue=()=>Object.entries(fishStock).reduce((total,[id,count])=>total+count*(fishProducts[id]?.price??0),0);
 const huntingLoot={rabbit:0,boar:0,deer:0,...savedPlayerState?.huntingLoot};
 let meals={...savedPlayerState?.meals};
-let magicState=savedPlayerState?.magic??null;
+let magicState=savedPlayerState?.magic?normalizeMagic(savedPlayerState.magic):null;
 const history=normalizeHistory({...savedPlayerState,stats:playerStats,fishStock,huntingLoot});
 const tradeCatalog={
   ...fishProducts,
@@ -3079,7 +3079,7 @@ function applyServerGameplay(state){
   loungeRound=state.gambling?.round??null;
   health=state.health;
   meals={...state.meals};
-  magicState=state.magic??null;
+  magicState=state.magic?normalizeMagic(state.magic):null;
   Object.assign(hunting,state.hunting);
   depthsRun=state.depthsRun??null;depthsDiscovered=state.depthsDiscovered===true;
   Object.assign(quest,state.quest);Object.assign(history,state.history);
@@ -3111,12 +3111,15 @@ async function serverTravel(action){
   try{const packet=await serverGameplay(action);enterRoom(packet.state.location,packet.state.position);}
   catch(error){note(error.message);}
 }
-async function sendServerCombat(input){
-  if(activityBusy){if(input&&!pendingCombatInput)pendingCombatInput=input;return;}
+async function sendServerCombat(input,slot){
+  if(activityBusy){
+    if(input&&pendingCombatInputs.length<3&&!pendingCombatInputs.some(queued=>queued.input===input&&queued.slot===slot))pendingCombatInputs.push({input,slot});
+    return;
+  }
   if(serverActionBusy||!player.inCombat)return;
   activityBusy=true;
   try{
-    const packet=await window.playerCloud.gameplay('combat',{combatId:serverCombatId,input});
+    const packet=await window.playerCloud.gameplay('combat',{combatId:serverCombatId,input,slot});
     const receipt=packet.state.combatReceipt;
     if(receipt&&receipt.id!==lastCombatReceipt){
       lastCombatReceipt=receipt.id;
@@ -3132,8 +3135,9 @@ async function sendServerCombat(input){
   finally{
     activityBusy=false;
     if(!player.inCombat)savePlayerState();
-    const queued=pendingCombatInput;pendingCombatInput=null;
-    if(queued&&player.inCombat)sendServerCombat(queued);
+    const queued=pendingCombatInputs.shift();
+    if(queued&&player.inCombat)sendServerCombat(queued.input,queued.slot);
+    if(!player.inCombat)pendingCombatInputs=[];
   }
 }
 let loungeTable='blackjack',loungeRound=savedPlayerState?.gambling?.round??null;
@@ -3575,10 +3579,11 @@ function switchMode(next){
   updateArmoryShop();
   noticeUntil=0;setHint();cancelSelection();updateBedGuide();updateTradeGuide();updateUpgradeGuide();
 }
-let gemDraft=[],viewedEssence=null,essenceBusy=false;
-function openEssences(gem=null){
+let gemDraft=[],viewedEssence=null,essenceBusy=false,essenceSlot='q';
+function openEssences(gem=null,slot='q'){
   if(unavailable())return;
   if(!window.playerCloud?.gameplay){note('Connect to the game server to manage Essences.');return;}
+  essenceSlot=slot;
   gemDraft=[...(magicState?.picks??[])];
   viewedEssence=typeof gem==='string'?gem:gemDraft[0]??null;
   if($('inventoryDialog').open)$('inventoryDialog').close();
@@ -3621,23 +3626,30 @@ function renderEssences(){
   if(!bonded.length){if(!canBond)$('essenceIntro').textContent='Visit the Moonwell in Moonwell Ruins to choose your first three Gems.';return;}
   if(!bonded.includes(viewedEssence))viewedEssence=bonded[0];
   const count=magic.unlocked.filter(id=>bonded.includes(essencePower(id)?.gem)).length;
-  const equipped=essencePower(magic.equipped,playerStats);
+  for(const slot of ['q','e']){
+    const button=$('essenceSlot'+slot.toUpperCase());
+    button.textContent=slot.toUpperCase()+' · '+(essencePower(magic.slots[slot],playerStats)?.name??'Empty slot');
+    button.setAttribute('aria-pressed',String(slot===essenceSlot));
+    button.disabled=essenceBusy;
+    button.onclick=()=>{essenceSlot=slot;renderEssences();};
+  }
   $('essenceProgress').textContent=count+' / 20 awakened · Magic rank '+magicRank(playerStats);
-  $('essenceEquipped').textContent=equipped?'Equipped · '+equipped.name+' (Q)':'Equip one power to cast in combat with Q.';
+  $('essenceEquipped').textContent='Choose Q or E, then equip an awakened power. Each spell has its own cooldown.';
   const tabs=$('essenceTabs');tabs.replaceChildren();
   for(const id of bonded)tabs.append(essenceGemButton(allEssences[id],id===viewedEssence,()=>{viewedEssence=id;renderEssences();}));
   const list=$('essencePowerList');list.replaceChildren();
   for(const [form,stone] of Object.entries(stoneForms)){
     const id=viewedEssence+':'+form,power=essencePower(id,playerStats);
-    const awakened=magic.unlocked.includes(id),active=magic.equipped===id;
+    const awakened=magic.unlocked.includes(id),active=magic.slots[essenceSlot]===id;
+    const assigned=['q','e'].find(slot=>magic.slots[slot]===id);
     const row=document.createElement('article'),info=document.createElement('div');
     const title=document.createElement('strong'),description=document.createElement('small'),button=document.createElement('button');
-    title.textContent=awakened?power.name:stone.name+' power · Locked';
+    title.textContent=awakened?power.name+(assigned?' · '+assigned.toUpperCase():''):stone.name+' power · Locked';
     description.textContent=awakened?powerDescription(power)+' · '+power.cooldown/1000+'s cooldown':magic.stones[form]+' '+stone.name+' Stones in your bag';
     info.append(title,description);
-    button.type='button';button.textContent=active?'Unequip':awakened?'Equip':'Awaken';
+    button.type='button';button.textContent=active?'Unequip '+essenceSlot.toUpperCase():awakened?(assigned?'Swap to ':'Equip ')+essenceSlot.toUpperCase():'Awaken';
     button.disabled=essenceBusy||!awakened&&!magic.stones[form];
-    button.onclick=()=>changeEssences(awakened?'equipPower':'awakenPower',{id:active?null:id});
+    button.onclick=()=>changeEssences(awakened?'equipPower':'awakenPower',{id:active?null:id,slot:essenceSlot});
     row.append(info,button);list.append(row);
   }
 }
@@ -3649,15 +3661,15 @@ async function changeEssences(action,body){
     $('essenceStatus').textContent=action==='bondEssences'
       ?confluence(magicState.picks).name+' formed from your three Gems. Win fights to earn more Awakening Stones.'
       :action==='awakenPower'?'Awakened '+essencePower(body.id,playerStats).name+'.'
-      :body.id?essencePower(body.id,playerStats).name+' equipped.':'Power unequipped.';
+      :body.id?essencePower(body.id,playerStats).name+' equipped to '+body.slot.toUpperCase()+'.':'Slot '+body.slot.toUpperCase()+' cleared.';
   }catch(error){$('essenceStatus').textContent=error.message;}
   finally{essenceBusy=false;renderEssences();}
 }
 const hotbarPowerSymbols={sword:'⚔',shield:'⬡',speed:'ϟ',focus:'✧',renewal:'✚'};
 let hotbarGemsKey='';
-function equippedEssenceStatus(now){
-  const power=magicState?.equipped?essencePower(magicState.equipped,playerStats):null;
-  const remaining=Math.max(0,(magicState?.nextCastAt??0)-now);
+function equippedEssenceStatus(now,slot='q'){
+  const power=essencePower(magicState?.slots[slot],playerStats);
+  const remaining=Math.max(0,(magicState?.cooldowns[power?.id]??0)-now);
   const fullHealth=power?.form==='renewal'&&health>=maxHealth();
   return {power,remaining,fullHealth,canCast:!!power&&player.inCombat&&!!hunting.encounter&&!remaining&&!fullHealth};
 }
@@ -3665,41 +3677,45 @@ function updateEssenceHotbar(now=Date.now()){
   const bar=$('essenceHotbar');
   bar.hidden=!magicState?.picks.length||editing;
   if(bar.hidden)return;
-  const {power,remaining,fullHealth,canCast}=equippedEssenceStatus(now);
+  const activeGems=['q','e'].map(slot=>equippedEssenceStatus(now,slot).power?.gem);
   const gems=bondedEssences(magicState.picks);
-  const key=[gems.join(','),power?.gem,player.inCombat].join('|');
+  const key=[gems.join(','),activeGems.join(','),player.inCombat].join('|');
   if(key!==hotbarGemsKey){
     hotbarGemsKey=key;
     const slots=gems.map((id,index)=>{
       const gem=allEssences[id],fusion=index===3;
-      const slot=essenceGemButton(gem,id===power?.gem,()=>openEssences(id));
+      const slot=essenceGemButton(gem,activeGems.includes(id),()=>openEssences(id));
       slot.dataset.fusion=String(fusion);
       slot.title=gem.name+(fusion?' · Confluence Gem':' Essence');
-      slot.setAttribute('aria-label',slot.title+(id===power?.gem?' · source of equipped power':''));
+      slot.setAttribute('aria-label',slot.title+(activeGems.includes(id)?' · source of an equipped power':''));
       slot.disabled=player.inCombat;
       return slot;
     });
     $('essenceHotbarGems').replaceChildren(...slots);
   }
-  const button=$('essenceHotbarPower');
-  const status=!power?(player.inCombat?'Equip between fights':'Open Essences'):remaining?'Recharging · '+Math.ceil(remaining/1000)+'s'
-    :!player.inCombat?allEssences[power.gem].name+' · Cast in combat'
-    :fullHealth?'Hearts are full':allEssences[power.gem].name+' · Ready';
-  button.dataset.ready=String(canCast);
-  button.dataset.equipped=String(!!power);
-  button.disabled=player.inCombat&&!canCast;
-  button.style.setProperty('--power-color',power?.color??'#b7a4ed');
-  button.title=power?powerDescription(power):'Open Essences to equip a power';
-  button.setAttribute('aria-label',power?(canCast?'Cast ':'')+power.name+' · '+status:'Equip a power in Essences');
-  const name=$('essenceHotbarName'),label=$('essenceHotbarStatus'),symbol=$('essenceHotbarSymbol');
-  if(name.textContent!==(power?.name??'Equip a power'))name.textContent=power?.name??'Equip a power';
-  if(label.textContent!==status)label.textContent=status;
-  const glyph=power?hotbarPowerSymbols[power.form]:'✦';
-  if(symbol.textContent!==glyph)symbol.textContent=glyph;
-  $('essenceHotbarMeter').style.transform='scaleX('+(power?Math.max(0,1-remaining/power.cooldown):0)+')';
+  for(const slot of ['q','e']){
+    const suffix=slot==='q'?'':'E';
+    const {power,remaining,fullHealth,canCast}=equippedEssenceStatus(now,slot);
+    const button=$('essenceHotbarPower'+suffix);
+    const status=!power?(player.inCombat?'Equip between fights':'Open Essences'):remaining?'Recharging · '+Math.ceil(remaining/1000)+'s'
+      :!player.inCombat?allEssences[power.gem].name+' · Cast in combat'
+      :fullHealth?'Hearts are full':allEssences[power.gem].name+' · Ready';
+    button.dataset.ready=String(canCast);
+    button.dataset.equipped=String(!!power);
+    button.disabled=player.inCombat&&!canCast;
+    button.style.setProperty('--power-color',power?.color??'#b7a4ed');
+    button.title=power?powerDescription(power):'Open Essences to equip a power';
+    button.setAttribute('aria-label',power?(canCast?'Cast ':'')+power.name+' · '+status:'Equip a power in Essences');
+    const name=$('essenceHotbarName'+suffix),label=$('essenceHotbarStatus'+suffix),symbol=$('essenceHotbarSymbol'+suffix);
+    if(name.textContent!==(power?.name??'Equip a power'))name.textContent=power?.name??'Equip a power';
+    if(label.textContent!==status)label.textContent=status;
+    const glyph=power?hotbarPowerSymbols[power.form]:'✦';
+    if(symbol.textContent!==glyph)symbol.textContent=glyph;
+    $('essenceHotbarMeter'+suffix).style.transform='scaleX('+(power?Math.max(0,1-remaining/power.cooldown):0)+')';
+  }
 }
-function castEquippedEssence(){
-  if(equippedEssenceStatus(Date.now()).canCast)sendServerCombat('essence');
+function castEquippedEssence(slot='q'){
+  if(equippedEssenceStatus(Date.now(),slot).canCast)sendServerCombat('essence',slot);
 }
 function currentActivityPrompt(){
   if(currentRoom==='hub'&&!lobbyRoutesOpen()){
@@ -4024,9 +4040,9 @@ $('depthsCampRibbon').onclick=()=>{
 };
 $('depthsLeave').onclick=leaveMoonwellDepths;
 $('depthsRetreat').onclick=leaveMoonwellDepths;
-$('essenceHotbarPower').onclick=()=>{
-  if(player.inCombat)castEquippedEssence();
-  else openEssences(equippedEssenceStatus(Date.now()).power?.gem);
+for(const slot of ['q','e'])$('essenceHotbarPower'+(slot==='q'?'':'E')).onclick=()=>{
+  if(player.inCombat)castEquippedEssence(slot);
+  else openEssences(equippedEssenceStatus(Date.now(),slot).power?.gem,slot);
 };
 $('openEssences').onclick=()=>openEssences();
 $('essenceBond').onclick=()=>changeEssences('bondEssences',{picks:[...gemDraft]});
@@ -4236,8 +4252,8 @@ canvas.addEventListener('keydown',e=>{
   }
 });
 document.addEventListener('keydown',e=>{
-  if(player.inCombat&&['Space','KeyF','KeyQ'].includes(e.code)&&!e.target.matches('input,textarea,select')&&!document.querySelector('dialog[open]')){
-    if(e.code==='KeyQ'){e.preventDefault();if(!e.repeat)castEquippedEssence();return;}
+  if(player.inCombat&&['Space','KeyF','KeyQ','KeyE'].includes(e.code)&&!e.target.matches('input,textarea,select')&&!document.querySelector('dialog[open]')){
+    if(['KeyQ','KeyE'].includes(e.code)){e.preventDefault();if(!e.repeat)castEquippedEssence(e.code==='KeyQ'?'q':'e');return;}
     if(e.code==='Space'&&e.target.matches('button'))return;
     e.preventDefault();if(!e.repeat)combatAction(e.code==='Space'?'dodge':'flee');return;
   }

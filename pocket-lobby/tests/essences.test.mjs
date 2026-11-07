@@ -35,7 +35,7 @@ test('server bonds once, spends typed stones once, preserves unlocks across gem 
   assert.throws(()=>act(s,'awakenPower',{id:'storm:sword'}),/bonded/);
   assert.throws(()=>act(s,'awakenPower',{id:'ice:shield'}),/matching/);
   act(s,'awakenPower',{id:'eclipse:sword'});
-  assert.equal(s.magic.equipped,'eclipse:sword');
+  assert.equal(s.magic.slots.q,'eclipse:sword');
   assert.equal(s.magic.stones.sword,0);
   assert.throws(()=>act(s,'awakenPower',{id:'eclipse:sword'}),/already/);
   assert.throws(()=>act(s,'equipPower',{id:'ice:sword'}),/Awaken/);
@@ -44,7 +44,7 @@ test('server bonds once, spends typed stones once, preserves unlocks across gem 
   s.location='shrine';
   act(s,'bondEssences',{picks:['fire','ice','storm']});
   assert.equal(s.magic.stones.sword,0);
-  assert.equal(s.magic.equipped,null);
+  assert.equal(s.magic.slots.q,null);
   assert.deepEqual(s.magic.unlocked,['eclipse:sword']);
 });
 
@@ -61,7 +61,7 @@ test('server spell damage respects cooldown and awards a typed stone on a magic 
   act(s,'combat',spell,1200);
   assert.equal(s.hunting.encounter.health,47);
   assert.equal(s.combatReceipt.events.length,0);
-  s.magic.nextCastAt=0;
+  s.magic.cooldowns['fire:sword']=0;
   s.hunting.encounter.health=20;
   act(s,'combat',spell,1250);
   assert.equal(s.huntingLoot.boar,1);
@@ -128,4 +128,60 @@ test('old saves shed the retired magic while retaining Essence powers and an alr
   assert.equal(packet.state.plan.interval,60000);
   assert.equal(packet.state.adventure.rootstone,undefined);
   assert.deepEqual(packet.state.magic,magic);
+});
+
+
+test('legacy spell and cooldown migrate to Q, with unique slots and cooldowns surviving swaps',()=>{
+  const legacy={picks:gems,unlocked:['fire:sword','ice:shield'],equipped:'fire:sword',nextCastAt:9000};
+  const magic=normalizeMagic(legacy);
+  assert.deepEqual(magic.slots,{q:'fire:sword',e:null});
+  assert.equal(magic.cooldowns['fire:sword'],9000);
+  assert.deepEqual(normalizeMagic({...legacy,slots:{q:null,e:null}}).slots,{q:null,e:null});
+  assert.equal(normalizeMagic({...legacy,slots:{q:'fire:sword',e:'fire:sword'}}).slots.e,null);
+  const s=character();s.magic=magic;
+  act(s,'equipPower',{id:'ice:shield',slot:'e'});
+  act(s,'equipPower',{id:'fire:sword',slot:'e'});
+  assert.deepEqual(s.magic.slots,{q:'ice:shield',e:'fire:sword'});
+  assert.equal(s.magic.cooldowns['fire:sword'],9000);
+  assert.throws(()=>act(s,'equipPower',{id:null,slot:'other'}),/Q or E/);
+  act(s,'equipPower',{id:null,slot:'q'});
+  assert.deepEqual(s.magic.slots,{q:null,e:'fire:sword'});
+});
+
+test('Ice Aegis and Fire Blade cast independently while both cooldowns are enforced',()=>{
+  const s=character();
+  act(s,'bondEssences',{picks:gems});
+  act(s,'awakenPower',{id:'fire:sword'});
+  s.magic.stones.shield=1;
+  act(s,'awakenPower',{id:'ice:shield'});
+  assert.deepEqual(s.magic.slots,{q:'fire:sword',e:'ice:shield'});
+  s.location='clearing';s.position={x:5,y:5};
+  act(s,'fight');
+  const cast=slot=>act(s,'combat',{combatId:s.combatId,input:'essence',slot},1100);
+  cast('e');cast('q');
+  assert.equal(s.hunting.encounter.magicWard,24);
+  assert.equal(s.hunting.encounter.health,47);
+  assert.equal(s.magic.cooldowns['fire:sword'],7600);
+  assert.equal(s.magic.cooldowns['ice:shield'],9600);
+  cast('q');cast('e');
+  assert.equal(s.combatReceipt.events.length,0);
+  act(s,'combat',{combatId:s.combatId},2300);
+  assert(s.combatReceipt.events.some(event=>event.warded>0));
+});
+
+test('Shadow Snare and Storm Rush chain before the enemy next attacks',()=>{
+  const s=character();
+  act(s,'bondEssences',{picks:['fire','shadow','storm']});
+  s.magic.stones.focus=1;s.magic.stones.speed=1;
+  act(s,'awakenPower',{id:'shadow:focus'});
+  act(s,'awakenPower',{id:'storm:speed'});
+  s.location='clearing';s.position={x:5,y:5};
+  act(s,'fight');s.hunting.encounter.stamina=50;
+  const before=s.hunting.encounter.nextBoarAt;
+  for(const slot of ['q','e'])act(s,'combat',{combatId:s.combatId,input:'essence',slot},1100);
+  assert.equal(s.hunting.encounter.nextBoarAt,before+1300);
+  assert(s.hunting.encounter.stamina>85);
+  assert.equal(s.hunting.encounter.nextPlayerAt,1150);
+  assert.equal(s.magic.cooldowns['shadow:focus'],10100);
+  assert.equal(s.magic.cooldowns['storm:speed'],8100);
 });

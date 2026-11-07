@@ -51,11 +51,18 @@ export function normalizeMagic(input){
     const count=input?.stones?.[form];
     return [form,Number.isSafeInteger(count)&&count>=0?Math.min(count,9999):0];
   }));
-  const active=essencePower(input?.equipped);
+  const available=id=>unlocked.includes(id)&&bondedEssences(picks).includes(essencePower(id)?.gem);
+  const savedSlots=input?.slots??{q:input?.equipped};
+  const q=available(savedSlots.q)?savedSlots.q:null;
+  const e=available(savedSlots.e)&&savedSlots.e!==q?savedSlots.e:null;
+  const cooldowns={};
+  for(const id of unlocked){
+    const until=input?.cooldowns?.[id]??(id===input?.equipped?input?.nextCastAt:0);
+    if(Number.isSafeInteger(until)&&until>0)cooldowns[id]=until;
+  }
   return {picks,unlocked,stones,
-    equipped:active&&unlocked.includes(active.id)&&bondedEssences(picks).includes(active.gem)?active.id:null,
-    nextStone:Number.isInteger(input?.nextStone)&&input.nextStone>=0&&input.nextStone<forms.length?input.nextStone:1,
-    nextCastAt:Number.isSafeInteger(input?.nextCastAt)&&input.nextCastAt>=0?input.nextCastAt:0};
+    slots:{q,e},cooldowns,
+    nextStone:Number.isInteger(input?.nextStone)&&input.nextStone>=0&&input.nextStone<forms.length?input.nextStone:1};
 }
 export function awardAwakeningStone(magic){
   const form=forms[magic.nextStone];

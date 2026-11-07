@@ -122,11 +122,15 @@
 .shell:has(.essence-hotbar:not([hidden])) :is(.layout,.layout.entry:not(.decorating),.layout.shopping) { padding-bottom:171px; }
 .essence-hotbar {
   grid-column:1/-1; grid-row:1; justify-self:center;
-  display:grid; grid-template-columns:minmax(144px,190px) auto; gap:6px; padding:5px;
+  display:grid; grid-template-columns:minmax(280px,380px) auto; gap:6px; padding:5px;
   max-width:100%; border:1px solid #7771a1; border-radius:12px;
   background:linear-gradient(165deg,#24263fec,#0d1a30f5); box-shadow:0 5px 18px #0209199e;
 }
 .essence-hotbar[hidden] { display:none; }
+.essence-hotbar-spells,.essence-loadout { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; min-width:0; }
+.essence-loadout { margin:12px 0; }
+.essence-loadout button { min-height:42px; padding:8px; border:1px solid #657998; border-radius:8px; background:#14233b; color:#dce6fa; }
+.essence-loadout button[aria-pressed="true"] { border-color:#e6bf72; color:#ffe6a6; background:#33344b; }
 .essence-hotbar-power {
   position:relative; display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:6px;
   min-width:0; min-height:44px; padding:4px 6px 6px; overflow:hidden; text-align:left;
@@ -154,12 +158,13 @@
 @media(max-width:900px) {
   .shell:has(.essence-hotbar:not([hidden])) :is(.layout,.layout.entry:not(.decorating),.layout.shopping) { padding-bottom:198px; }
 }
-@media(max-width:520px) {
-  .essence-hotbar { grid-template-columns:minmax(106px,1fr) auto; gap:4px; padding:4px; }
+@media(max-width:600px) {
+  .shell:has(.essence-hotbar:not([hidden])) :is(.layout,.layout.entry:not(.decorating),.layout.shopping) { padding-bottom:245px; }
+  .essence-hotbar { grid-template-columns:minmax(0,1fr); width:min(100%,380px); gap:4px; padding:4px; }
   .essence-hotbar-gems { grid-template-columns:repeat(4,minmax(39px,1fr)); gap:2px; }
   .essence-hotbar-gems button { font-size:8px; padding-inline:2px; }
   .essence-hotbar-power { gap:4px; }
-  .essence-hotbar-power kbd { display:none; }
+  .essence-hotbar-power kbd { display:block; }
 }
 
 .depths-decision-tools { display:flex; flex-wrap:wrap; gap:7px; margin-top:9px; }

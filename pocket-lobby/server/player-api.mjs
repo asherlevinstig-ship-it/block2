@@ -1,3 +1,4 @@
+import {normalizeMagic} from '../public/essences.js';
 import {applyGameplayAction,protectFishingState} from './gameplay.mjs';
 import {settleActivities} from './activities.mjs';
 import {publicPlayerState} from './gambling.mjs';
@@ -13,6 +14,7 @@ const COOKIE_AGE=31536000;
 const json=(data,status=200,extra={})=>Response.json(data,{status,headers:{"Cache-Control":"no-store","X-Content-Type-Options":"nosniff",...extra}});
 function readPlayerState(row){
   const state=JSON.parse(row.state_json);
+  if(state.magic)state.magic=normalizeMagic(state.magic);
   // Existing shifts keep their scheduled pace until they finish.
   if(state.adventure)delete state.adventure.rootstone;
   if(state.hunting?.encounter)delete state.hunting.encounter.rootboundUntil;
