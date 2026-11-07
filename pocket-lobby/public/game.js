@@ -16,10 +16,7 @@ const shades = {
   clay:['#d5896b','#8c4c59','#ab5f5b'], black:['#3d344c','#211f33','#302a43']
 };
 const types = {woodStool:'Wooden Stool',woodTable:'Small Table',bookcase:'Bookshelf',bed:'Single bed', moonbloom:'Moonbloom', sofa:'Velvet sofa', stool:'Bar stool', plant:'Potted palm', table:'Coffee table', lamp:'Floor lamp', chair:'Club chair'};
-const outfits = ['#edaa66','#6da9be','#e58aa0','#91ba85','#af93d9'];
-const jacketShadows = ['#a85e49','#3d667e','#a34e73','#527c61','#7655a2'];
-const hairColors = ['#533343','#2b2a3d','#9c4f3d','#e6ae65','#786293'];
-const hairLights = ['#9c604c','#55516d','#d58259','#ffe09a','#ae91b9'];
+const hairColors = ['#704832','#383848','#a15a39','#d6ac60','#7b638a'];
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const STEP_MS = 141, WAVE_MS = 1100;
 const defaultAvatar = {name:'Guest',outfit:0,hair:0};
@@ -1483,136 +1480,9 @@ function drawRouletteWheel(x,y){
   rect(x-1,y-2,2,2,'#ffd193');
   rect(x+4,y-2,1,1,'#fff1d7');
 }
-function pixelHead(target,appearance,back,blink){
-  const hair=hairColors[appearance.hair]??hairColors[0];
-  const shine=hairLights[appearance.hair]??hairLights[0];
-  const p=(x,y,w,h,color)=>{target.fillStyle=color;target.fillRect(x,y,w,h);};
-  p(-6,-35,12,3,'#282337');
-  p(-9,-32,17,11,'#282337');
-  p(-6,-21,14,3,'#382638');
-  p(-5,-34,10,2,hair);
-  p(-8,-32,15,9,hair);
-  p(-6,-33,8,1,shine);
-  p(-7,-31,5,1,shine);
-  p(-7,-29,2,2,shine);
-  if(back){
-    p(-7,-25,13,4,hair);
-    p(-5,-21,9,2,hair);
-    p(1,-20,4,1,'#d79476');
-    p(6,-25,2,4,'#e8a686');
-    p(-6,-22,4,1,'#ffffff25');
-    return;
-  }
-  p(-6,-26,3,4,'#d58f78');
-  p(-5,-25,2,1,'#ffcf9e');
-  p(-3,-28,10,7,'#f2bb92');
-  p(-3,-29,4,2,hair);
-  p(1,-29,5,1,shine);
-  p(-2,-23,9,3,'#e6a17f');
-  p(0,-21,6,2,'#f3b38a');
-  p(7,-25,2,3,'#e7a984');
-  p(7,-24,2,1,'#ffd4aa');
-  p(-1,-27,3,1,'#9f685f');
-  p(4,-27,2,1,'#9f685f');
-  p(0,-25,blink?2:1,blink?1:2,'#3c2d3d');
-  p(5,-25,blink?2:1,blink?1:2,'#3c2d3d');
-  p(4,-21,2,1,'#994f56');
-  p(-1,-22,2,1,'#f6c3a0');
-}
-function sprite(target,x,y,appearance,{direction='right',back=false,cycle=0,seated=false,wave=null,fishing=false,weapon=false,sheathed=false,weaponTier=null,strike=0,pose={},time=0,vest=false}={}){
-  const p=(x,y,w,h,color)=>{target.fillStyle=color;target.fillRect(x,y,w,h);};
-  const jacket=outfits[appearance.outfit]??outfits[0];
-  const shade=jacketShadows[appearance.outfit]??jacketShadows[0];
-  const trousers=Object.values(clothingCatalog).find(item=>item.slot==='trousers'&&item.index===(appearance.trousers??0))??clothingCatalog.charcoalTrousers;
-  const boots=Object.values(clothingCatalog).find(item=>item.slot==='boots'&&item.index===(appearance.boots??0))??clothingCatalog.canvasBoots;
-  const outline='#282337',denim=trousers.color,denimLight=trousers.light;
-  const lowMotion=reducedMotion.matches;
-  const swing=lowMotion?0:Math.round(Math.sin(cycle*Math.PI)*3);
-  const bounce=cycle?Math.round(Math.abs(Math.sin(cycle*Math.PI))*2):0;
-  const breath=Number(!cycle&&!pose.ready&&!lowMotion&&time%2300>1430);
-  target.save();
-  target.translate(Math.round(x),Math.round(y));
-  target.scale(direction==='right'?1:-1,1);
-  if(sheathed){
-    const length=weaponTier==='huntingSpear'?30:weaponTier==='quickDagger'?15:22;
-    p(-9,-27,3,length,outline);p(-8,-27,1,length-1,weaponTier==='huntingSpear'?'#b18967':'#a7bfc1');p(-11,-24,7,2,'#d2ad73');
-  }
-  if(seated){
-    p(-6,-5,12,7,outline);p(-5,-4,9,5,denim);p(1,-4,5,3,denimLight);
-    p(-1,0,4,5,denim);p(4,-1,4,5,outline);p(4,0,3,3,denimLight);
-    p(-1,4,6,2,outline);p(4,3,6,2,outline);
-    p(0,4,4,1,boots.color);p(5,3,4,1,boots.light);
-  }else{
-    for(const [side,base,ink] of [[-1,-5,denim],[1,1,denimLight]]){
-      const offset=side*swing+(pose.ready?side*2:0),lift=Math.max(0,-side*swing);
-      p(base+offset,-4-lift,6,4,outline);
-      p(base+offset+1,-3-lift,5,2,boots.color);
-      p(base+Math.trunc(offset/2),-11,5,8-lift,outline);
-      p(base+Math.trunc(offset/2)+1,-10,3,6-lift,ink);
-      p(base+offset+1,-5-lift,3,2,ink);
-    }
-  }
-  target.translate(0,(seated?6:0)-(lowMotion?0:bounce)-breath+(pose.crouch??0)-(pose.lift??0));
-  const farArm=-Math.round(swing/2), nearArm=Math.round(swing/2);
-  p(-8+farArm,-19,4,9,outline);
-  p(-8+farArm,-18,3,6,shade);
-  p(-8+farArm,-12,3,2,'#cb846c');
-  p(-6,-21,12,12,outline);
-  p(-5,-20,10,9,shade);
-  p(-4,-19,8,6,jacket);
-  p(-5,-11,10,2,'#3d3248');
-  if(vest){
-    p(-5,-20,10,8,'#3e5052');
-    p(-4,-19,8,3,'#91a39a');
-    p(-3,-16,6,2,'#6a8380');
-    p(-3,-14,6,1,'#a0ad92');
-    p(back?-1:1,-19,1,6,'#c6c9a2');
-  }else if(back){
-    p(-2,-19,5,3,shade);p(-1,-18,3,1,'#fff2d855');
-    p(-3,-14,7,1,'#fff2d840');
-  }else{
-    p(-2,-21,5,2,'#d78f76');
-    p(-3,-19,2,2,'#f8e2bf');p(2,-19,2,2,'#f8e2bf');
-    p(0,-17,1,6,'#fff1d4');
-    p(-3,-14,2,1,shade);p(2,-14,2,1,shade);
-  }
-  if(weapon){
-    p(5,-19,4,5,outline);p(6,-18,3,3,jacket);
-    p(7,-16,5,3,outline);p(8,-15,4,2,'#f2bb92');
-    target.save();target.translate(12,-14);target.rotate(weaponTier==='huntingSpear'?1.1-(pose.lunge??0)*.035:pose.angle??(-.35+strike*1.8));
-    if(weaponTier==='basicAxe'){
-      p(-1,-19,2,26,'#674e49');p(0,-19,1,24,'#bb8d62');p(-5,-20,10,7,'#4b596a');p(1,-20,6,7,'#c5d8d2');p(5,-19,2,5,'#f0e8c8');
-    }else if(weaponTier==='huntingSpear'){
-      p(-1,-29,2,38,outline);p(0,-25,1,33,'#b18864');p(-2,-29,4,9,'#adc5c7');p(-1,-32,2,5,'#eef0d0');p(-3,-21,6,2,'#c69b69');
-    }else if(weaponTier==='quickDagger'){
-      p(-2,-11,4,9,outline);p(-1,-11,2,8,'#d5e4df');p(-3,-3,6,2,'#91bcc1');p(-1,-1,2,5,'#7b637c');
-    }else{
-      p(-2,-17,4,14,outline);p(-1,-16,2,12,weaponTier==='wardenSword'?'#a9cbbd':weaponTier==='ironSword'?'#8dabb8':'#bacbd3');p(-1,-16,1,10,weaponTier==='wardenSword'?'#eef4c9':'#eef2da');p(0,-12,1,5,'#8cabbc');
-      p(-1,-19,2,3,outline);p(0,-18,1,2,'#dae5dc');
-      p(-4,-4,8,2,outline);p(-3,-4,6,1,weaponTier==='wardenSword'?'#f2cf7e':'#d8b079');
-      p(-1,-2,2,5,'#875b50');p(-2,2,4,2,'#d8b079');
-    }
-    target.restore();
-  }else if(wave!==null){
-    const reach=lowMotion?1:Math.round(Math.sin(wave*Math.PI*6)*2);
-    p(4,-19,6,5,outline);p(5,-18,4,3,jacket);
-    p(8,-23,4,7,outline);p(9,-23,2,6,jacket);
-    p(8+reach,-27,5,5,outline);p(9+reach,-27,3,4,'#f2bb92');
-    p(9+reach,-28,2,1,'#ffd4aa');
-  }else if(fishing){
-    const crank=fishing==='landing'&&!lowMotion?Math.round(Math.sin(time/70)):0;
-    p(4,-19,4,4,outline);p(5,-18,3,2,jacket);
-    p(6,-17+crank,5,3,outline);p(7,-17+crank,3,2,'#f2bb92');
-  }else{
-    p(5+nearArm,-19,4,9,outline);
-    p(5+nearArm,-18,3,6,jacket);
-    p(6+nearArm,-12,3,2,'#f2bb92');
-  }
-  const blink=!lowMotion&&time%3700>3530&&time%3700<3660;
-  pixelHead(target,appearance,back,blink);
-  if(pose.ready&&!back){p(2,-27,3,1,outline);p(7,-26,2,1,outline);}
-
-  target.restore();
+function pixelHead(target,appearance,back,blink){window.towerCharacterArt.head(target,appearance,back,blink);}
+function sprite(target,x,y,appearance,options={}){
+  return window.towerCharacterArt.draw(target,x,y,appearance,{...options,reduced:reducedMotion.matches});
 }
 function makeRoomLayer(drawLayer,layerView=standardView){
   const layer=document.createElement('canvas');
@@ -1760,11 +1630,10 @@ function draw(time){
     const wave=player.waveStarted===null?null:(time-player.waveStarted)/WAVE_MS;
     const pose=playerCombatPose({time,now:Date.now(),encounter:player.inCombat?hunting.encounter:null,events:combatArt,reduced:reducedMotion.matches});
     const swingPhase=woodSession?((time-woodSession.started)%700)/700:0;
-    const swingAngle=swingPhase<.55?-1.5+2.8*(swingPhase/.55)**3:1.3-2.8*((swingPhase-.55)/.45);
-    const spritePose=woodSession?{...pose,angle:reducedMotion.matches?.75:swingAngle}:pose;
+    const spritePose=woodSession?{...pose,chop:swingPhase}:pose;
     const [enemyX,enemyY]=point(6.5,5.5);
     const thrust=enemy?pose.lunge-pose.recoil:0;
-    sprite(ctx,x+Math.sign(enemyX-x)*thrust-pose.dodge,y+Math.sign(enemyY-y)*thrust+pose.dodge*.4,avatar,{direction:player.direction,back:player.back,cycle,seated:!!seat,wave,weapon:!!woodSession||pose.armed&&!!combatGear.equippedWeapon,sheathed:!woodSession&&!pose.armed&&Object.hasOwn(socialRooms,currentRoom)&&!!combatGear.equippedWeapon,weaponTier:woodSession?'basicAxe':combatGear.equippedWeapon,pose:spritePose,vest:combatGear.stonebackVestEquipped,fishing:fishingSession?fishingMoments.phase(fishingSession,time):null,time});
+    sprite(ctx,x+Math.sign(enemyX-x)*thrust-pose.dodge,y+Math.sign(enemyY-y)*thrust+pose.dodge*.4,avatar,{direction:player.direction,back:player.back,cycle,seated:!!seat,wave,weapon:!!woodSession||pose.armed&&!!combatGear.equippedWeapon,sheathed:!woodSession&&!pose.armed&&Object.hasOwn(socialRooms,currentRoom)&&!!combatGear.equippedWeapon,weaponTier:woodSession?'basicAxe':combatGear.equippedWeapon,pose:spritePose,vest:combatGear.stonebackVestEquipped,fishing:fishingSession?fishingMoments.phase(fishingSession,time):null,fishingAge:fishingSession?time-fishingSession.started:0,time});
     if(fishingSession)drawFishingMoment(x,y,time);
     drawCatchReveal(x,y,time);
     if(player.inCombat){
@@ -2075,8 +1944,9 @@ function drawFishingMoment(x,y,time){
     const fish=fishProducts[session.fishId];
     fishingMoments.drawFish(ctx,bx,by,session.fishId,fish.quality);
   }
-  ctx.beginPath();ctx.moveTo(x+9,y-17);
-  ctx.quadraticCurveTo(x+20,y-23,tipX,tipY);
+  const [gripX,gripY]=window.towerCharacterArt.grip(x,y,{direction:player.direction,back:player.back,fishing:phase,fishingAge:time-session.started,time,reduced:still});
+  ctx.beginPath();ctx.moveTo(gripX,gripY);
+  ctx.quadraticCurveTo((gripX+tipX)/2+3,(gripY+tipY)/2,tipX,tipY);
   ctx.strokeStyle='#c8a77e';ctx.lineWidth=2;ctx.stroke();
   ctx.beginPath();ctx.moveTo(tipX,tipY);ctx.lineTo(bx,by);
   ctx.strokeStyle='#d7e0ce';ctx.lineWidth=1;ctx.stroke();
@@ -3198,7 +3068,7 @@ function drawAvatarPreview(time){
 function updateAvatarPreview(){
   drawAvatarPreview(performance.now());
   for(const group of ['hair']){
-    for(const [index,button] of Array.from($(group).children).entries())button.setAttribute('aria-pressed',String(draft[group==='outfits'?'outfit':'hair']===index));
+    for(const [index,button] of Array.from($(group).children).entries())button.setAttribute('aria-pressed',String(draft.hair===index));
   }
 }
 for(const [group,key,colors,names] of [

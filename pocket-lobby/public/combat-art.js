@@ -10,7 +10,7 @@ export function playerCombatPose({time,now,encounter,events,reduced=false}){
   const strike=swing?clamp(strikeAge/140):0;
   const recover=swing?clamp((strikeAge-140)/220):0;
   return {
-    armed:ready||victory,ready,victory,
+    armed:ready||victory,ready,victory,attack:swing?clamp(strikeAge/360):null,
     angle:reduced?-.45:victory?-1.05:swing?-.95+strike*2.55-recover*1.95:-.45-windup*.7,
     lunge:reduced?0:pulse(strikeAge,340)*5,
     recoil:reduced?0:pulse(time-events.hurtAt,280)*4,

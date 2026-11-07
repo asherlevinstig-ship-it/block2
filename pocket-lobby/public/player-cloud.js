@@ -251,6 +251,8 @@
       const historyRules=await import('./first-visit.js');
       const shopUI=await import('./shop-ui.js');
       const clothing=await import('./wardrobe.js');
+      const characterArt=await import('./character-art.js');
+      const towerCharacterArt=await characterArt.loadTowerCharacter();
       const woodRules=await import('./woodcutting.js');
       const crafting=await import('./crafting.js');
       const characterRules=await import('./character-rules.js');
@@ -260,7 +262,7 @@
       const jobs=await import('./jobs.js');
       const shared=await import('./shared-world.js');
       const multiplayer=await import('./multiplayer.js');
-      Object.assign(window,rules,hunting,art,fx,quests,historyRules,shopUI,clothing,woodRules,crafting,characterRules,commissions,rootstone,depths,jobs,shared,multiplayer);
+      Object.assign(window,{towerCharacterArt},rules,hunting,art,fx,quests,historyRules,shopUI,clothing,woodRules,crafting,characterRules,commissions,rootstone,depths,jobs,shared,multiplayer);
       window.towerInitialState=packet.state;
       window.playerCloud={enqueue,flush,attach,deliverCarpenter:async()=>{await flush();return (await action('commissions/carpenter')).state;},saveRules:async rules=>{await flush();return (await action('rules/save',{rules})).state;},startJob:async options=>{await flush();await action('plan/start',{...options,source:'board'});window.towerMultiplayer?.disconnect();location.reload();},invalidate:conflict,get initial(){return packet.state;}};
       const script=document.createElement('script');script.src='game.js';
