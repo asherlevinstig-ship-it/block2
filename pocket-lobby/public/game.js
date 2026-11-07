@@ -779,6 +779,7 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
   combatMessage=(result.damage?'You hit for '+result.damage+(result.shellGuarded?' through the shell.':'. '):action==='flee'&&result.outcome!=='escaped'?'Your escape was blocked. ':'')+(result.dodged?'You dodge the attack.':result.taken?(result.move??enemy.name)+' hits for '+result.taken+'.':'');
   if(action==='burn')combatMessage='Burn deals '+result.damage+' damage.';
   if(result.power)combatMessage=result.power+' '+result.effect+'.';
+  if(result.weakened)combatMessage+=(combatMessage?' ':'')+'Shadow prevented '+result.weakened+' damage.';
   if(result.warded)combatMessage+=(combatMessage?' ':'')+'Your ward blocked '+result.warded+' damage.';
   if(result.absorbed)combatMessage+=(combatMessage?' ':'')+'Your vest absorbed '+result.absorbed+' damage.';
   if(result.dodgeStarted)combatMessage='You sidestep. Time your dodge just before the '+enemy.move+' lands!';
@@ -3737,7 +3738,7 @@ function updateEssenceHotbar(now=Date.now()){
     const button=$('essenceHotbarPower'+suffix);
     const status=!power?(player.inCombat?'Equip between fights':'Open Essences'):remaining?'Recharging · '+Math.ceil(remaining/1000)+'s'
       :!player.inCombat?allEssences[power.gem].name+' · Cast in combat'
-      :fullHealth?'Hearts are full':allEssences[power.gem].name+' · Ready';
+      :fullHealth?'Hearts are full':power.gem==='storm'?(now<(hunting.encounter?.interruptResistUntil??0)?'Enemy resists interrupts':'Ready · Interrupt during warning'):allEssences[power.gem].name+' · Ready';
     button.dataset.ready=String(canCast);
     button.dataset.equipped=String(!!power);
     button.disabled=player.inCombat&&!canCast;

@@ -247,3 +247,89 @@ test('Ice delays the guardian attack once per Chill and preserves its attack war
   act(s,'combat',{combatId:s.combatId},before+700);
   assert.equal(s.combatReceipt.events[0].move,'Aftershock');
 });
+
+
+test('Shadow weakens one hit, survives a dodge, and expires without reducing later attacks',()=>{
+  const setup=()=>{
+    const s=character();act(s,'bondEssences',{picks:gems});act(s,'awakenPower',{id:'shadow:sword'});
+    s.location='clearing';s.position={x:5,y:5};act(s,'fight');
+    s.hunting.encounter.nextPlayerAt=100000;
+    act(s,'combat',{combatId:s.combatId,input:'essence'},1100);return s;
+  };
+  const s=setup();
+  assert.equal(s.hunting.encounter.weakenedUntil,7100);
+  assert.equal(normalizeState(s).hunting.encounter.weakenedUntil,7100);
+  const regular=setup();delete regular.hunting.encounter.weakenedUntil;
+  act(regular,'combat',{combatId:regular.combatId},2300);
+  act(s,'combat',{combatId:s.combatId},2300);
+  const hit=s.combatReceipt.events[0],raw=regular.combatReceipt.events[0];
+  assert.equal(hit.weakened,Math.floor(raw.taken*.25));
+  assert.equal(hit.taken,raw.taken-hit.weakened);
+  assert.equal(s.hunting.encounter.weakenedUntil,undefined);
+  act(s,'combat',{combatId:s.combatId},4200);
+  assert.equal(s.combatReceipt.events[0].weakened,undefined);
+  const dodged=setup();
+  act(dodged,'combat',{combatId:dodged.combatId,input:'dodge'},2200);
+  act(dodged,'combat',{combatId:dodged.combatId},2300);
+  assert.equal(dodged.combatReceipt.events[0].dodged,true);
+  assert.equal(dodged.hunting.encounter.weakenedUntil,7100);
+  const expired=setup();expired.hunting.encounter.nextBoarAt=7200;
+  act(expired,'combat',{combatId:expired.combatId},7200);
+  assert.equal(expired.combatReceipt.events[0].weakened,undefined);
+});
+
+test('Shadow reduction precedes armour and wards and repeated Shadow spells do not stack',()=>{
+  const s=character();act(s,'bondEssences',{picks:gems});act(s,'awakenPower',{id:'shadow:sword'});
+  s.magic.stones.shield=1;act(s,'awakenPower',{id:'shadow:shield'});
+  s.location='clearing';s.position={x:5,y:5};act(s,'fight');s.hunting.encounter.nextPlayerAt=100000;
+  act(s,'combat',{combatId:s.combatId,input:'essence',slot:'q'},1100);
+  act(s,'combat',{combatId:s.combatId,input:'essence',slot:'e'},1200);
+  assert.equal(s.hunting.encounter.weakenedUntil,7200);
+  act(s,'combat',{combatId:s.combatId},2300);
+  const hit=s.combatReceipt.events[0];
+  assert.equal(hit.weakened,3);assert.equal(hit.warded,12);assert.equal(hit.taken,0);
+  assert.equal(s.health,100);assert.equal(s.hunting.encounter.weakenedUntil,undefined);
+});
+
+test('Storm interrupts a warning, prevents chained interrupts, and permits them after resistance ends',()=>{
+  const s=character();act(s,'bondEssences',{picks:['fire','shadow','storm']});
+  act(s,'awakenPower',{id:'storm:sword'});s.magic.stones.shield=1;act(s,'awakenPower',{id:'storm:shield'});
+  s.location='clearing';s.position={x:5,y:5};act(s,'fight');s.hunting.encounter.nextPlayerAt=100000;
+  act(s,'combat',{combatId:s.combatId,input:'essence',slot:'q'},1800);
+  assert.equal(s.combatReceipt.events[0].interrupted,true);
+  assert.equal(s.hunting.encounter.nextBoarAt,3700);
+  assert.equal(s.hunting.encounter.interruptResistUntil,7800);
+  assert.equal(normalizeState(s).hunting.encounter.interruptResistUntil,7800);
+  act(s,'combat',{combatId:s.combatId,input:'essence',slot:'e'},3200);
+  assert.equal(s.combatReceipt.events[0].interruptResisted,true);
+  assert.equal(s.hunting.encounter.nextBoarAt,3700);
+  assert.equal(s.hunting.encounter.magicWard,12);
+  assert.equal(s.hunting.encounter.interruptResistUntil,7800);
+  s.hunting.encounter.nextBoarAt=9000;
+  act(s,'combat',{combatId:s.combatId,input:'essence',slot:'q'},8500);
+  assert.equal(s.combatReceipt.events[0].interrupted,true);
+  assert.equal(s.hunting.encounter.interruptResistUntil,14500);
+});
+
+test('Storm cancels a warned guardian follow-up but cannot undo an attack that has landed',()=>{
+  const setup=()=>{
+    const s=character();act(s,'bondEssences',{picks:['fire','shadow','storm']});
+    s.magic.stones.shield=1;act(s,'awakenPower',{id:'storm:shield'});
+    s.location='depthsVault';s.position={x:5,y:5};s.depthsRun={cleared:2};act(s,'fight');
+    s.hunting.encounter.nextPlayerAt=100000;s.hunting.encounter.enemyMove='aftershock';return s;
+  };
+  const s=setup();
+  act(s,'combat',{combatId:s.combatId,input:'essence'},2600);
+  assert.equal(s.combatReceipt.events[0].interrupted,true);
+  assert.equal(s.hunting.encounter.enemyMove,undefined);
+  assert.equal(s.hunting.encounter.nextBoarAt,6100);
+  act(s,'combat',{combatId:s.combatId},3300);
+  assert.equal(s.combatReceipt.events.length,0);
+  assert.equal(s.health,100);
+  const late=setup();
+  act(late,'combat',{combatId:late.combatId,input:'essence'},3300);
+  assert.equal(late.combatReceipt.events[0].action,'enemy');
+  assert(late.health<100);
+  assert(!late.combatReceipt.events.some(event=>event.interrupted));
+  assert.equal(late.hunting.encounter.interruptResistUntil,undefined);
+});

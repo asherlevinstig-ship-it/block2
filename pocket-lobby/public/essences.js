@@ -1,6 +1,8 @@
 export const essenceEffects={
   fire:{name:'Burning',duration:3000,interval:1000,color:'#ffac71'},
-  ice:{name:'Chilled',duration:3000,delay:700,color:'#a8e9ff'}
+  ice:{name:'Chilled',duration:3000,delay:700,color:'#a8e9ff'},
+  shadow:{name:'Weakened',duration:6000,reduction:.25,color:'#d0a5ff'},
+  storm:{name:'Resolute',duration:6000,color:'#ffe49a'}
 };
 export const essenceGems={
   fire:{name:'Fire',color:'#ff9960',values:[23,13,24,850,9]},
@@ -41,7 +43,12 @@ export function essencePower(id,stats){
   return {id,gem,form,rank,value,name:essence.name+' '+stone.power,color:essence.color,cooldown:stone.cooldown};
 }
 export function powerDescription(power){
-  return powerActionDescription(power)+(power.gem==='fire'?' Burns for '+(power.rank+2)+' damage per second for 3 seconds. Recasting refreshes the burn.':power.gem==='ice'?' Delays the next enemy attack by 0.7 seconds. Recasting refreshes 3-second Chill without stacking the delay.':'');
+  const description=powerActionDescription(power);
+  if(power.gem==='fire')return description+' Burns for '+(power.rank+2)+' damage per second for 3 seconds. Recasting refreshes the burn.';
+  if(power.gem==='ice')return description+' Delays the next enemy attack by 0.7 seconds. Recasting refreshes 3-second Chill without stacking the delay.';
+  if(power.gem==='shadow')return description+' Weakens the next enemy hit by 25% within 6 seconds. Dodging preserves the effect.';
+  if(power.gem==='storm')return description+' Interrupts an attack during its warning. The enemy then resists interrupts for 6 seconds.';
+  return description;
 }
 function powerActionDescription(power){
   const {form,value}=power;

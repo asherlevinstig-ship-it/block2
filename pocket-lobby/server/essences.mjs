@@ -1,5 +1,5 @@
 import {bondedEssences,confluence,essencePower,normalizeMagic,essenceEffects} from '../public/essences.js';
-import {combatStamina,huntEnemy} from '../public/hunting.js';
+import {combatStamina,huntEnemy,enemyAttack} from '../public/hunting.js';
 
 export function essenceAction(state,action,body){
   if(!['bondEssences','awakenPower','equipPower'].includes(action))return false;
@@ -92,6 +92,24 @@ export function castEssencePower(state,now,slot='q'){
     if(!chilled)next.nextBoarAt+=effect.delay;
     next.chilledUntil=now+effect.duration;
     event.effect+=chilled?' and refreshed Chill':' and delayed the enemy attack by 0.7 seconds';
+  }
+  if(event.encounter&&power.gem==='shadow'){
+    next.weakenedUntil=now+essenceEffects.shadow.duration;
+    event.effect+=' and weakened the enemy’s next hit';
+  }
+  if(event.encounter&&power.gem==='storm'){
+    const enemy=huntEnemy(encounter),remaining=encounter.nextBoarAt-now;
+    const windingUp=remaining>0&&remaining<=enemyAttack(encounter,enemy).tell;
+    if(windingUp&&now<(encounter.interruptResistUntil??0)){
+      event.interruptResisted=true;
+      event.effect+=' but the enemy resisted the interrupt';
+    }else if(windingUp){
+      next.nextBoarAt=Math.max(next.nextBoarAt,now+enemy.interval);
+      delete next.enemyMove;
+      next.interruptResistUntil=now+essenceEffects.storm.duration;
+      event.interrupted=true;
+      event.effect+=' and interrupted '+enemyAttack(encounter,enemy).name;
+    }else event.effect+='. Cast during an attack warning to interrupt';
   }
   magic.cooldowns[power.id]=now+power.cooldown;
   return event;

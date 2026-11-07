@@ -100,3 +100,20 @@ test('burn and Chill show timers above the enemy and disappear when expired, inc
     expired.balanced();
   }
 });
+
+
+test('Shadow reduction, Storm interrupts and resistance have distinct feedback in both motion modes',()=>{
+  for(const reduced of [false,true]){
+    const events={};
+    recordCombatFx(events,{action:'essence',power:'Storm Blade',powerColor:'#ffe49a',powerForm:'sword',interrupted:true},1000);
+    recordCombatFx(events,{action:'essence',power:'Storm Aegis',powerColor:'#ffe49a',powerForm:'shield',interruptResisted:true},1100);
+    recordCombatFx(events,{action:'enemy',weakened:3,taken:9},1200);
+    const c=canvas();
+    drawCombatWorldFx({ctx:c.ctx,point,time:1300,now:1300,events,player:{x:5,y:5},reduced,
+      encounter:{weakenedUntil:5000,interruptResistUntil:5000}});
+    const text=c.calls.filter(([method])=>method==='fillText').map(([,value])=>value);
+    assert(text.includes('INTERRUPTED'));assert(text.includes('INTERRUPT RESISTED'));
+    assert(text.includes('SHADOW −3'));assert(text.includes('Weakened 4s'));assert(text.includes('Resolute 4s'));
+    c.balanced();
+  }
+});

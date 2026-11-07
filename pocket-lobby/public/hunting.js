@@ -142,7 +142,9 @@ export function normalizeHunting(input={}){
       const nextAt=time(burn.nextAt),until=time(burn.until);
       if(nextAt>0&&nextAt<=until)result.encounter.burn={damage:burn.damage,nextAt,until};
     }
-    if(input.encounter.chilledUntil!==undefined)result.encounter.chilledUntil=time(input.encounter.chilledUntil);
+    for(const key of ['chilledUntil','weakenedUntil','interruptResistUntil']){
+      if(input.encounter[key]!==undefined)result.encounter[key]=time(input.encounter[key]);
+    }
     if(enemy&&enemy!=='boar')result.encounter.enemy=enemy;
     const move=enemyAttack(input.encounter);
     if(move.id===input.encounter.enemyMove)result.encounter.enemyMove=move.id;
@@ -210,6 +212,11 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
       result.shellExposed=true;
     }
     result.taken=result.dodged?0:Math.max(4,enemy.damage+move.damage+Math.floor(random()*6)-attributes.armor);
+    if(result.taken&&now<(encounter.weakenedUntil??0)){
+      result.weakened=Math.floor(result.taken*essenceEffects.shadow.reduction);
+      result.taken-=result.weakened;
+      delete result.encounter.weakenedUntil;
+    }
     if(vestEquipped&&result.taken){
       result.absorbed=Math.min(stonebackVest.absorption,result.taken);
       result.taken-=result.absorbed;
@@ -232,6 +239,8 @@ export function enemyStatusEffects(encounter,now){
   const effects=[];
   if(encounter.burn&&now<encounter.burn.until)effects.push({kind:'fire',name:'Burning',color:essenceEffects.fire.color,remaining:encounter.burn.until-now,detail:encounter.burn.damage+' damage / sec'});
   if(now<(encounter.chilledUntil??0))effects.push({kind:'ice',name:'Chilled',color:essenceEffects.ice.color,remaining:encounter.chilledUntil-now,detail:'Next attack delayed'});
+  if(now<(encounter.weakenedUntil??0))effects.push({kind:'shadow',name:essenceEffects.shadow.name,color:essenceEffects.shadow.color,remaining:encounter.weakenedUntil-now,detail:'Next hit −25%'});
+  if(now<(encounter.interruptResistUntil??0))effects.push({kind:'storm',name:essenceEffects.storm.name,color:essenceEffects.storm.color,remaining:encounter.interruptResistUntil-now,detail:'Resists interrupts'});
   return effects;
 }
 export function advanceHunt(encounter,health,stats,now,random=Math.random,weapon='trainingSword',upgrade=null,vestEquipped=false,charmEquipped=false){

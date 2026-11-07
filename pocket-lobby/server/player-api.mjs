@@ -79,6 +79,8 @@ export async function handlePlayerApi(request,env){
         delete state.hunting.encounter.magicWardUntil;
         delete state.hunting.encounter.burn;
         delete state.hunting.encounter.chilledUntil;
+        delete state.hunting.encounter.weakenedUntil;
+        delete state.hunting.encounter.interruptResistUntil;
       }
       if(state.depthsRun){delete state.depthsRun.shardEarned;delete state.depthsRun.finds;delete state.depthsRun.cacheGuardDefeated;delete state.depthsRun.cacheStone;}
       delete state.huntingLoot.moonwellShard;

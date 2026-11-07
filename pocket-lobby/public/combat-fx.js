@@ -35,7 +35,7 @@ const color={
 
 export function recordCombatFx(events,result,time){
   const {action,damage,taken,dodged,dodgeStarted,warded,absorbed,move,attackShape,heavy,
-    shellGuarded,power,powerForm,powerColor,ward,healed,staminaRestored}=result;
+    shellGuarded,power,powerForm,powerColor,ward,healed,staminaRestored,interrupted,interruptResisted,weakened}=result;
   if(action==='attack'&&damage)events.strikeAt=time;
   if(damage)events.boarHitAt=time;
   if(action==='enemy')events.boarAttackAt=time;
@@ -43,10 +43,10 @@ export function recordCombatFx(events,result,time){
   if(dodgeStarted||(dodged&&!result.timedDodge))events.dodgeAt=time;
   if(power)events.castAt=time;
   if(result.outcome==='victory')events.victoryAt=time;
-  if(!power&&!damage&&!taken&&!dodged&&!warded&&!absorbed&&action!=='enemy')return;
+  if(!power&&!damage&&!taken&&!dodged&&!warded&&!absorbed&&!weakened&&action!=='enemy')return;
   const live=(events.bursts??[]).filter(effect=>time-effect.time<feedbackLife);
   events.bursts=[...live,{time,action,damage,taken,dodged,warded,absorbed,move,attackShape,heavy,
-    shellGuarded,power,powerForm,powerColor,ward,healed,staminaRestored}].slice(-6);
+    shellGuarded,power,powerForm,powerColor,ward,healed,staminaRestored,interrupted,interruptResisted,weakened}].slice(-6);
 }
 function line(ctx,x1,y1,x2,y2){
   ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
@@ -175,12 +175,14 @@ function drawCombatNumbers(ctx,effects,time,{bx,by,px,py},reduced){
       const tint=effect.powerColor??(effect.shellGuarded?color.shell:effect.shellGuarded===false?color.exposed:color.sword);
       popup(ctx,'−'+effect.damage+suffix,bx,by-22-rise-enemyRow++*13,t,tint,suffix?10:13);
     }
+    if((effect.interrupted||effect.interruptResisted)&&enemyRow<3)popup(ctx,effect.interrupted?'INTERRUPTED':'INTERRUPT RESISTED',bx,by-22-rise-enemyRow++*13,t,'#ffe49a',9);
     const blocks=(effect.warded??0)+(effect.absorbed??0);
     const playerText=effect.taken?'−'+effect.taken:effect.dodged?'DODGE':effect.healed?'+'+effect.healed+' HP'
       :effect.staminaRestored?'+'+effect.staminaRestored+' STAMINA':blocks?'BLOCK '+blocks:effect.ward?'WARD '+effect.ward:'';
     const tint=effect.taken?color.hurt:effect.healed?color.heal:effect.dodged?color.evade:effect.powerColor??color.ward;
     if(playerText&&playerRow<3)popup(ctx,playerText,px,py-34-rise-playerRow++*13,t,tint,effect.taken?13:10);
     if(effect.taken&&blocks&&playerRow<3)popup(ctx,'BLOCK '+blocks,px,py-34-rise-playerRow++*13,t,color.ward,9);
+    if(effect.weakened&&playerRow<3)popup(ctx,'SHADOW −'+effect.weakened,px,py-34-rise-playerRow++*13,t,'#d0a5ff',9);
     if(effect.power&&playerRow<3)popup(ctx,effect.power,px,py-34-rise-playerRow++*13,t,effect.powerColor??'#cab6ff',9);
   }
 }
@@ -210,8 +212,9 @@ export function drawCombatWorldFx({ctx,point,time,now,events,player,reduced,enco
     particles(ctx,bx,by,Math.sqrt(progress(time,events.victoryAt,1200)),color.sword,false,34,14);
   }
   drawCombatNumbers(ctx,effects,time,points,reduced);
-  for(const [index,effect] of enemyStatusEffects(encounter,now).entries()){
-    const x=bx-36,y=by-65+index*13;
+  const statuses=enemyStatusEffects(encounter,now);
+  for(const [index,effect] of statuses.entries()){
+    const x=statuses.length>1?bx-74+index%2*76:bx-36,y=by-65+Math.floor(index/2)*13;
     ctx.save();ctx.fillStyle=effect.color;ctx.strokeStyle=effect.color;ctx.lineWidth=1;
     if(effect.kind==='fire'){
       for(let i=0;i<3;i++){
@@ -219,9 +222,16 @@ export function drawCombatWorldFx({ctx,point,time,now,events,player,reduced,enco
         ctx.globalAlpha=.8-rise/50;
         ctx.fillRect(Math.round(bx-9+i*8),Math.round(by+3-rise),2,i===1?3:2);
       }
-    }else{
+    }else if(effect.kind==='ice'){
       ctx.globalAlpha=.55;ring(ctx,bgX,bgY,16);
       for(let i=0;i<3;i++)cross(ctx,bx-11+i*11,by+3-i%2*5,1);
+    }else if(effect.kind==='shadow'){
+      ctx.globalAlpha=.5;
+      const drift=reduced?0:Math.sin(time/230)*2;
+      ring(ctx,bx,by+drift,10,.7);
+    }else{
+      ctx.globalAlpha=.55;
+      hex(ctx,bx,by+2,14);
     }
     ctx.globalAlpha=1;ctx.fillStyle='#101a30ed';ctx.fillRect(x,y,72,11);
     ctx.strokeStyle=effect.color;ctx.lineWidth=.7;ctx.strokeRect(x,y,72,11);
@@ -229,8 +239,12 @@ export function drawCombatWorldFx({ctx,point,time,now,events,player,reduced,enco
     if(effect.kind==='fire'){
       const flicker=reduced?0:Math.sin(time/100)*1.5;
       ctx.beginPath();ctx.moveTo(x+3,y+8);ctx.lineTo(x+5,y+2+flicker);ctx.lineTo(x+8,y+8);ctx.fill();
-    }else{
+    }else if(effect.kind==='ice'){
       line(ctx,x+3,y+3,x+9,y+8);line(ctx,x+3,y+8,x+9,y+3);line(ctx,x+6,y+2,x+6,y+9);
+    }else if(effect.kind==='shadow'){
+      ctx.beginPath();ctx.moveTo(x+6,y+2);ctx.lineTo(x+9,y+5);ctx.lineTo(x+6,y+9);ctx.lineTo(x+3,y+5);ctx.closePath();ctx.fill();
+    }else{
+      line(ctx,x+7,y+2,x+4,y+6);line(ctx,x+4,y+6,x+8,y+6);line(ctx,x+8,y+6,x+5,y+9);
     }
     ctx.fillText(effect.name+' '+Math.ceil(effect.remaining/1000)+'s',x+12,y+8);
     ctx.restore();
