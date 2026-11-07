@@ -2951,9 +2951,22 @@ function finishInteraction(){
     note(descriptions[item.type]??'Moonwood glows quietly around you.');
   }
 }
+let lastFrameError='';
 function animation(time){
+  // Keep the next frame alive even if optional feedback fails in this one.
+  requestAnimationFrame(animation);
+  try{advanceAnimation(time);lastFrameError='';}
+  catch(error){
+    const message=String(error?.stack??error);
+    window.towerLastFrameError={message,room:currentRoom,at:Date.now(),fishing:!!fishingSession,catchFeedback:!!catchReveal||!!patienceTween};
+    if(message!==lastFrameError){console.error('Game animation error',error);lastFrameError=message;}
+    // A failed catch panel must not keep breaking every subsequent frame.
+    catchReveal=null;patienceTween=null;$('catchReveal').hidden=true;
+  }
+}
+function advanceAnimation(time){
   showPendingCombatRecap();
-  if(serverActionBusy){draw(time);requestAnimationFrame(animation);return;}
+  if(serverActionBusy){draw(time);return;}
   updateWoodMoment(time);
   updateCombatMoment(time);
   updateFishingMoment(time);
@@ -2994,7 +3007,6 @@ function animation(time){
   updateActivityPrompt();
   draw(time);
   if($('avatarDialog').open)drawAvatarPreview(time);
-  requestAnimationFrame(animation);
 }
 
 var bagCategory='all',bagSelection=null,bagOutfitTarget=null;
