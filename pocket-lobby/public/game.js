@@ -91,6 +91,7 @@ const tradeCatalog={
   rabbit:{name:'Rabbit',price:12,icon:'♧',group:'hunting'},
   boar:{name:'Boar Meat',price:30,icon:'♧',group:'hunting'},
   stonebackShell:{name:huntEnemies.beetle.lootName,price:huntEnemies.beetle.sellPrice,icon:'⬡',group:'hunting'},
+  [moonwellShard.id]:{...moonwellShard,icon:'✦',group:'materials'},
   timber:{name:'Timber',price:4,icon:'▤',group:'materials'},
   deer:{name:'Forest deer',price:24,icon:'♧',group:'hunting'}
 };
@@ -332,11 +333,45 @@ function makeStonebackVest(){
     ]);
   }catch(error){$('craftStatus').textContent=error.message;}
 }
+function updateCharmWorkbench(ready){
+  const owned=combatGear.moonwellCharmOwned;
+  const shards=huntingLoot[moonwellShard.id]??0;
+  const button=$('craftMoonwellCharm');
+  $('moonwellCharmBenefit').textContent='Recover '+moonwellCharm.staminaRegen+' more dodge stamina per second.';
+  $('moonwellCharmMaterials').textContent=owned?'Crafted · Manage your charm in Inventory.':shards+' / 1 Moonwell Shard · '+woodcutting.timber+' / '+moonwellCharm.timber+' timber';
+  button.disabled=!ready||owned||shards<1||woodcutting.timber<moonwellCharm.timber;
+  button.textContent=owned?'Crafted ✓':'Craft & equip';
+}
+async function makeMoonwellCharm(){
+  if(unavailable()||woodSession||fishingSession)return;
+  try{
+    if(window.playerCloud?.gameplay)await serverGameplay('charm');
+    else craftMoonwellCharm({...craftingState(),combatGear,huntingLoot});
+    savePlayerState();
+    $('craftStatus').textContent='Moonwell Charm crafted and equipped.';
+    showTransaction('Moonwell Charm equipped',[
+      {icon:'✦',text:'+'+moonwellCharm.staminaRegen+' stamina per second'},
+      {icon:'▤',text:'−1 Moonwell Shard · −'+moonwellCharm.timber+' timber'}
+    ]);
+  }catch(error){$('craftStatus').textContent=error.message;}
+}
+async function toggleMoonwellCharm(){
+  if(unavailable()||woodSession||fishingSession||!combatGear.moonwellCharmOwned)return;
+  const equipped=!combatGear.moonwellCharmEquipped;
+  try{
+    if(window.playerCloud?.gameplay)await serverGameplay('wearCharm',{equipped});
+    else combatGear.moonwellCharmEquipped=equipped;
+    savePlayerState();
+    if($('inventoryDialog').open)renderBag();
+    note(equipped?'Moonwell Charm equipped. Dodge stamina recovers faster.':'Moonwell Charm removed.');
+  }catch(error){note(error.message);}
+}
 function updateCraftingUI(){
   $('craftTimber').textContent=woodcutting.timber+' timber';
   const ready=isAtWorkbench(craftingState())&&!unavailable()&&!woodSession;
   updateSwordWorkbench(ready);
   updateVestWorkbench(ready);
+  updateCharmWorkbench(ready);
   const recipes=$('craftRecipes');recipes.replaceChildren();
   for(const [id,recipe] of Object.entries(craftingRecipes)){
     const card=document.createElement('article');card.className='craft-recipe';card.dataset.recipe=id;card.tabIndex=-1;
@@ -606,7 +641,8 @@ function updateDepthsPanel(){
     $('depthsEntryHealth').textContent=health+' / '+maxHealth()+' HP';
     $('depthsEntryWeapon').textContent=weapon?weapon.name+(weapon.upgradeName?' · '+weapon.upgradeName:''):'None equipped';
     $('depthsEntryArmour').textContent=combatGear.stonebackVestEquipped?'Stoneback Vest':'None equipped';
-    $('depthsEntryReward').textContent=formatDepthsSpoils(depthsSpoils({cleared:depthsStages.length}));
+    $('depthsEntryReward').textContent=formatDepthsSpoils(depthsSpoils({cleared:depthsStages.length,shardEarned:true}));
+    $('depthsShardChoice').textContent='Vault treasure · Sell the Moonwell Shard for '+moonwellShard.price+' gold, or craft a Moonwell Charm with '+moonwellCharm.timber+' timber for +'+moonwellCharm.staminaRegen+' dodge stamina per second.';
     $('depthsEntryAdvice').textContent=!weapon?'Equip a weapon in Inventory to enter.':health<maxHealth()
       ?'Your current health carries in. You can rest at the Tower before entering.'
       :'Health carries between fights. Defeat costs the spoils you haven’t banked.';
@@ -628,8 +664,8 @@ function updateDepthsPanel(){
   $('depthsTitle').textContent=stage.name;
   $('depthsStatus').textContent='Chamber '+(index+1)+' / '+depthsStages.length+' · '+health+' / '+maxHealth()+' HP';
   $('depthsSpoils').textContent=spoils.gold?formatDepthsSpoils(spoils):'No unbanked spoils yet.';
-  const preview=next?'Next: '+huntEnemies[next.enemy].name+' ('+huntEnemies[next.enemy].health+' HP) · '+next.gold+' gold and 1 '+next.lootName+'.':'All three chambers cleared. Bank your spoils to leave the vault.';
-  $('depthsPreview').textContent=cleared?preview:'Clear this chamber for '+stage.gold+' gold and 1 '+stage.lootName+'.';
+  const preview=next?'Next: '+huntEnemies[next.enemy].name+' ('+huntEnemies[next.enemy].health+' HP) · '+formatDepthsSpoils(depthsStageSpoils(next))+'.':'All three chambers cleared. Bank your spoils to leave the vault.';
+  $('depthsPreview').textContent=cleared?preview:'Clear this chamber for '+formatDepthsSpoils(depthsStageSpoils(stage))+'.';
   $('depthsRetreat').hidden=unavailable()||depthsRun.cleared!==0;
   $('depthsNext').hidden=!canDecide||!next;
   $('depthsLeave').hidden=!canDecide;
@@ -643,7 +679,7 @@ function updateDepthsPanel(){
   $('depthsRisk').hidden=!next;
   $('depthsMeal').hidden=!next||health>=maxHealth()||!Object.values(meals).some(count=>count>0);
   if(next){
-    $('depthsNextReward').textContent='Earn +'+next.gold+' gold · '+next.lootName+' ×1';
+    $('depthsNextReward').textContent='Earn '+formatDepthsSpoils(depthsStageSpoils(next));
     $('depthsNextEnemy').textContent=next.name+' · '+huntEnemies[next.enemy].name+' · '+huntEnemies[next.enemy].health+' HP';
     $('depthsRiskText').textContent='If you fall, you lose the unbanked spoils above. A successful flee returns you to this chamber.';
   }
@@ -675,9 +711,9 @@ function startMonsterEncounter(enemy){
 function combatAction(action){
   if(!player.inCombat||!['flee','dodge'].includes(action))return;
   if(window.playerCloud?.gameplay){sendServerCombat(action);return;}
-  const result=huntingTurn(hunting.encounter,health,playerStats,action,Date.now(),Math.random,combatGear.equippedWeapon,combatGear.activeSwordUpgrade,combatGear.stonebackVestEquipped);
+  const result=huntingTurn(hunting.encounter,health,playerStats,action,Date.now(),Math.random,combatGear.equippedWeapon,combatGear.activeSwordUpgrade,combatGear.stonebackVestEquipped,combatGear.moonwellCharmEquipped);
   if(!result&&action==='dodge'){
-    combatMessage=combatStamina(hunting.encounter,playerStats,Date.now())<combatDodgeCost(combatGear.stonebackVestEquipped)?'Not enough stamina. Let it recover.':'Your dodge is recovering.';
+    combatMessage=combatStamina(hunting.encounter,playerStats,Date.now(),combatGear.moonwellCharmEquipped)<combatDodgeCost(combatGear.stonebackVestEquipped)?'Not enough stamina. Let it recover.':'Your dodge is recovering.';
     updateCombatPanel();return;
   }
   applyCombatResult(result);
@@ -793,7 +829,7 @@ function updateCombatPanel(){
     const untilSlam=encounter.nextBoarAt-now;
     const exposed=encounter.exposedUntil>now;
     const dodgeNow=untilSlam>0&&untilSlam<=boarRules.dodgeWindow
-      &&now>=encounter.nextDodgeAt&&combatStamina(encounter,playerStats,now)>=combatDodgeCost(combatGear.stonebackVestEquipped);
+      &&now>=encounter.nextDodgeAt&&combatStamina(encounter,playerStats,now,combatGear.moonwellCharmEquipped)>=combatDodgeCost(combatGear.stonebackVestEquipped);
     const cue=dodgeNow?'Dodge now! Press Space or tap Dodge.':exposed?'Shell open! Your next auto-strike hits the weak spot.':'Watch for the slam. Dodge just before it lands.';
     notice.hidden=false;
     if(notice.textContent!==cue)notice.textContent=cue;
@@ -821,10 +857,10 @@ function updateCombatPanel(){
   $('boarProgress').value=encounter?.health??(now<respawn?0:enemy.health);
   $('combatAttack').textContent=encounter?'Auto-attacking':'Auto-attack';
   $('combatFlee').disabled=!encounter||remaining>0;
-  const stamina=encounter?combatStamina(encounter,playerStats,now):100;
+  const stamina=encounter?combatStamina(encounter,playerStats,now,combatGear.moonwellCharmEquipped):100;
   const dodgeCost=combatDodgeCost(combatGear.stonebackVestEquipped);
   $('combatStamina').value=stamina;$('combatStaminaValue').textContent=Math.floor(stamina)+' / 100';
-  $('combatDodgeHelp').textContent='Dodge costs '+dodgeCost+' stamina'+(combatGear.stonebackVestEquipped?' with the Stoneback Vest':'')+'. Time it just before impact. Agility improves recovery.';
+  $('combatDodgeHelp').textContent='Dodge costs '+dodgeCost+' stamina'+(combatGear.stonebackVestEquipped?' with the Stoneback Vest':'')+'. Time it just before impact.'+(combatGear.moonwellCharmEquipped?' Moonwell Charm: +'+moonwellCharm.staminaRegen+' stamina per second.':' Agility improves recovery.');
   $('combatDodge').disabled=!encounter||now<(encounter.nextDodgeAt??0)||stamina<dodgeCost;
   const timing=!!encounter&&encounter.nextBoarAt-now>0&&encounter.nextBoarAt-now<=boarRules.dodgeWindow;
   const bind=rootbindStatus(rootstone,encounter,now),bindButton=$('combatRootbind');
@@ -857,7 +893,7 @@ function updateCombatMoment(time){
     if(time-lastCombatUi>100){lastCombatUi=time;updateCombatPanel();}
     return;
   }
-  if(player.inCombat)applyCombatResult(advanceHunt(hunting.encounter,health,playerStats,Date.now(),Math.random,combatGear.equippedWeapon,combatGear.activeSwordUpgrade,combatGear.stonebackVestEquipped));
+  if(player.inCombat)applyCombatResult(advanceHunt(hunting.encounter,health,playerStats,Date.now(),Math.random,combatGear.equippedWeapon,combatGear.activeSwordUpgrade,combatGear.stonebackVestEquipped,combatGear.moonwellCharmEquipped));
   if(hunting.recoveryUntil&&Date.now()>=hunting.recoveryUntil){
     hunting.recoveryUntil=0;health=100;
     combatMessage='All five hearts restored. You are ready to explore again.';
@@ -2719,6 +2755,7 @@ function animation(time){
 
 var bagCategory='all',bagSelection=null,bagOutfitTarget=null;
 function windowItemArt(kind){
+  if(kind==='shard'||kind==='charm')return '<svg viewBox="0 0 64 64" aria-hidden="true">'+(kind==='charm'?'<path d="M16 12q16 15 32 0M20 14l12 16 12-16" fill="none" stroke="#debc82" stroke-width="3"/>':'')+'<path d="m32 10 14 14-5 23-10 8-12-13 2-20z" fill="#6386cf" stroke="#c1e5ff" stroke-width="2"/><path d="m32 10 5 19-6 26m-12-13 18-13 9-5" fill="none" stroke="#ace8fa" stroke-width="2"/></svg>';
   if(kind==='axe')return '<svg viewBox="0 0 64 64" aria-hidden="true" shape-rendering="crispEdges"><path d="M18 52l24-38 5 3-24 38z" fill="#ba855c"/><path d="M30 13l14-5 12 9-8 13-17-6z" fill="#a8c4dc"/><path d="M30 13l2 10 16 7-3-11z" fill="#e4eee1"/></svg>';
   if(kind==='timber')return '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M12 26l29-13 13 13-29 17z" fill="#9d684b" stroke="#e4b778" stroke-width="2"/><path d="M12 39l29-13 13 13-29 17z" fill="#85583f" stroke="#d6a168" stroke-width="2"/><ellipse cx="23" cy="43" rx="11" ry="12" fill="#e2b77a"/><ellipse cx="23" cy="43" rx="6" ry="7" fill="none" stroke="#ac744c" stroke-width="2"/></svg>';
   if(kind==='fish')return '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M11 32L3 21v22z" fill="#5f98bd"/><path d="M10 32c9-23 32-23 47 0-15 23-38 23-47 0z" fill="#96d2d8" stroke="#d9ece2" stroke-width="2"/><path d="M26 18l10-10 7 12M25 46l9 9 8-10" fill="#69a5bb"/><circle cx="45" cy="29" r="3" fill="#182a43"/></svg>';
@@ -2811,6 +2848,10 @@ function bagEntries(){
   for(const [id,quantity] of Object.entries(fishStock))if(quantity&&fishProducts[id]){
     const fish=fishProducts[id];entries.push({key:'fish:'+id,name:fish.name,category:'materials',quality:fish.quality,art:windowItemArt('fish'),quantity,description:'Caught in the waters of Silverfin Pond.',stats:fish.price+' gold each · '+quantity*fish.price+' gold total',note:'Sell at the Trading Post or Silverfin Outfitters.'});
   }
+  if(combatGear.moonwellCharmOwned)entries.push({key:'charm',name:moonwellCharm.name,category:'gear',art:windowItemArt('charm'),quantity:1,
+    equipped:combatGear.moonwellCharmEquipped,description:'A piece of the Moonwell’s magic, shaped at the Timber Hollow workbench.',
+    stats:'+'+moonwellCharm.staminaRegen+' dodge stamina per second',action:combatGear.moonwellCharmEquipped?'Remove charm':'Equip charm',
+    disabled:unavailable()||!!woodSession||!!fishingSession,run:toggleMoonwellCharm});
   for(const [id,quantity] of Object.entries(meals)){
     const recipe=mealRecipes[id];
     if(!quantity||!recipe)continue;
@@ -2820,7 +2861,7 @@ function bagEntries(){
       note:busy?'Finish your current activity before eating.':'Eat between fights.',
       action:health>=100?'Hearts are full':'Eat meal',disabled:busy||health>=100||!window.playerCloud?.gameplay,run:()=>eatMeal(id)});
   }
-  for(const [id,quantity] of Object.entries(huntingLoot))if(quantity&&tradeCatalog[id])entries.push({key:'loot:'+id,name:tradeCatalog[id].name,category:'materials',art:windowItemArt('loot'),quantity,description:'Spoils from your adventures.',stats:tradeCatalog[id].price+' gold each',note:id===stonebackVest.fragment?'Sell at the Trading Post, or combine with '+stonebackVest.timber+' timber at the Timber Hollow workbench to craft a Stoneback Vest.':'Sell at the Trading Post. Some loot is used in crafting.'});
+  for(const [id,quantity] of Object.entries(huntingLoot))if(quantity&&tradeCatalog[id])entries.push({key:'loot:'+id,name:tradeCatalog[id].name,category:'materials',art:windowItemArt(id===moonwellShard.id?'shard':'loot'),quantity,description:'Spoils from your adventures.',stats:tradeCatalog[id].price+' gold each',note:id===moonwellShard.id?'Sell for '+moonwellShard.price+' gold or craft a Moonwell Charm with '+moonwellCharm.timber+' timber.':id===stonebackVest.fragment?'Sell at the Trading Post, or combine with '+stonebackVest.timber+' timber at the Timber Hollow workbench to craft a Stoneback Vest.':'Sell at the Trading Post. Some loot is used in crafting.'});
   return entries;
 }
 function renderBag(){
@@ -2839,7 +2880,7 @@ function renderBag(){
   $('bagCount').textContent=entries.length+' item types';$('bagGold').textContent=new Intl.NumberFormat().format(credits)+' gold';
   $('bagPlayerName').textContent=avatar.name;
   const loadout=$('bagLoadout');loadout.replaceChildren();
-  for(const [label,key] of [['Weapon','weapon:'+combatGear.equippedWeapon],['Rod','rod:'+fishingGear.equippedRod],['Armour',combatGear.stonebackVestEquipped?'vest':null]]){
+  for(const [label,key] of [['Weapon','weapon:'+combatGear.equippedWeapon],['Rod','rod:'+fishingGear.equippedRod],['Armour',combatGear.stonebackVestEquipped?'vest':null],...(combatGear.moonwellCharmOwned?[['Charm','charm']]:[])]){
     const item=entries.find(item=>item.key===key),button=document.createElement('button');button.type='button';button.textContent=label+' · '+(item?.name??'None equipped');button.disabled=!item;button.onclick=()=>{bagCategory='gear';bagSelection=key;renderBag();};loadout.append(button);
   }
   const picture=$('bagAvatar'),ink=picture.getContext('2d');ink.clearRect(0,0,56,62);sprite(ink,28,54,avatar,{time:performance.now()});
@@ -3428,10 +3469,10 @@ function updateTradingPost(){
   const offers=$('tradeOffers');offers.replaceChildren();
   for(const [id,item] of Object.entries(tradeCatalog)){
     const quantity=tradeQuantity(id),card=document.createElement('div');
-    if(item.group==='fish'&&item.quality!=='common'&&quantity===0)continue;
+    if(quantity===0&&(item.group==='fish'&&item.quality!=='common'||id===moonwellShard.id))continue;
     const title=document.createElement('b'),detail=document.createElement('p'),actions=document.createElement('div');
     card.className='rod-offer trade-card';card.dataset.loot=id;
-    const art=document.createElement('div');art.className='trade-art';art.innerHTML=windowItemArt(item.group==='fish'?'fish':id==='timber'?'timber':'loot');card.append(art);
+    const art=document.createElement('div');art.className='trade-art';art.innerHTML=windowItemArt(item.group==='fish'?'fish':id==='timber'?'timber':id===moonwellShard.id?'shard':'loot');card.append(art);
     title.textContent=item.name;
     detail.textContent=item.price+' credits each · '+quantity+' in inventory';
     actions.className='trade-actions';
@@ -3444,6 +3485,12 @@ function updateTradingPost(){
       actions.append(button);
     }
     card.append(title,detail,actions);
+    if(id===moonwellShard.id){
+      const hint=document.createElement('small');
+      hint.className='trade-empty';
+      hint.textContent='Keep one to craft a Moonwell Charm at the Timber Hollow workbench.';
+      card.append(hint);
+    }
     if(item.group==='hunting'&&quantity===0){
       const empty=document.createElement('small');
       empty.className='trade-empty';empty.textContent='Bring this hunting loot to sell it here.';
@@ -3907,6 +3954,7 @@ $('openWorkbench').onclick=()=>{if(currentRoom==='logging')use(roomFurniture().f
 $('carpenterDeliver').onclick=handInCarpenterOrder;
 $('equipAxe').onclick=equipAxe;
 $('craftStonebackVest').onclick=makeStonebackVest;
+$('craftMoonwellCharm').onclick=makeMoonwellCharm;
 $('equipStonebackVest').onclick=toggleStonebackVest;
 $('equipWeapon').onclick=toggleWeapon;
 $('weaponSelect').onchange=updateWeaponInventory;
@@ -4125,7 +4173,7 @@ $('minus').onclick=()=>setZoom(zoom-.125);
 $('resetView').onclick=()=>setZoom(1);
 window.addEventListener('resize',()=>{bounds=null;});
 document.addEventListener('visibilitychange',()=>{
-  if(!document.hidden&&player.inCombat){if(window.playerCloud?.gameplay)sendServerCombat();else hunting.encounter=resumeHunt(hunting.encounter,Date.now(),playerStats);}
+  if(!document.hidden&&player.inCombat){if(window.playerCloud?.gameplay)sendServerCombat();else hunting.encounter=resumeHunt(hunting.encounter,Date.now(),playerStats,combatGear.moonwellCharmEquipped);}
 });
 function showMessage(msg,targetId='messages'){
   const row=document.createElement('div');row.className='message';
@@ -4292,7 +4340,7 @@ movePlayerToSpawn();updateName();switchMode(false);
 if(savedPlayerState?.location&&roomDetails[savedPlayerState.location])enterRoom(savedPlayerState.location,savedPlayerState.position);
 if(hunting.encounter){
   if(currentRoom===huntEnemy(hunting.encounter).room&&combatGear.equippedWeapon){
-    if(!window.playerCloud?.gameplay)hunting.encounter=resumeHunt(hunting.encounter,Date.now(),playerStats);
+    if(!window.playerCloud?.gameplay)hunting.encounter=resumeHunt(hunting.encounter,Date.now(),playerStats,combatGear.moonwellCharmEquipped);
     setPlayerCombat(true);combatMessage='Combat resumes! Both fighters attack automatically. Flee if you need to escape.';
   }else hunting.encounter=null;
 }

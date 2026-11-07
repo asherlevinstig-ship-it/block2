@@ -1,4 +1,5 @@
-import {stonebackVest,swordUpgrades} from './hunting.js';
+import {stonebackVest,swordUpgrades,moonwellCharm} from './hunting.js';
+import {moonwellShard} from './depths.js';
 
 export const craftingRecipes={
   woodStool:{name:'Wooden Stool',cost:5,description:'A simple wooden seat for your home.'},
@@ -34,6 +35,19 @@ export function fitSwordUpgrade(state,id){
   state.credits-=gold;
   combatGear.activeSwordUpgrade=id;
   return {name:upgrade.name,timber,gold};
+}
+
+export function craftMoonwellCharm(state){
+  if(!isAtWorkbench(state))throw new Error('Travel to the Timber Hollow workbench to craft the charm.');
+  const {combatGear,woodcutting,huntingLoot}=state;
+  if(combatGear.moonwellCharmOwned)throw new Error('You already crafted your Moonwell Charm.');
+  if((huntingLoot[moonwellShard.id]??0)<1||woodcutting.timber<moonwellCharm.timber){
+    throw new Error('Invalid materials. Bring 1 Moonwell Shard and '+moonwellCharm.timber+' timber.');
+  }
+  huntingLoot[moonwellShard.id]--;
+  woodcutting.timber-=moonwellCharm.timber;
+  combatGear.moonwellCharmOwned=true;
+  combatGear.moonwellCharmEquipped=true;
 }
 
 export function craftStonebackVest(state){

@@ -1,4 +1,4 @@
-import {weaponProfile} from './hunting.js';
+import {weaponProfile,moonwellCharm} from './hunting.js';
 
 export function playerPower(stats={},gear={},rootstone={}){
   const strength=1+Math.floor((stats.strengthXp??0)/50);
@@ -11,6 +11,7 @@ export function playerPower(stats={},gear={},rootstone={}){
     {name:'Armour',points:gear.stonebackVestEquipped?20:0,detail:gear.stonebackVestEquipped?'Stoneback Vest equipped':'No armour equipped'},
     {name:'Combat ability',points:rootstone.power==='rootbind'?15:0,detail:rootstone.power==='rootbind'?'Rootbind attuned':'Attune Rootbind to add combat power'}
   ];
+  if(gear.moonwellCharmEquipped)parts.push({name:moonwellCharm.name,points:moonwellCharm.power,detail:'+'+moonwellCharm.staminaRegen+' dodge stamina recovered per second'});
   return {total:parts.reduce((sum,part)=>sum+part.points,0),parts};
 }
 

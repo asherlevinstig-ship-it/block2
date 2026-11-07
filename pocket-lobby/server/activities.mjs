@@ -15,7 +15,7 @@ function result(state,event,now){
   state.hunting.encounter=event.encounter;state.health=event.health;
   if(event.outcome==='victory'){
     for(const [i,key] of ['strengthXp','agilityXp','vitalityXp'].entries())state.stats[key]=Math.min(100000000,state.stats[key]+enemy.xp[i]);
-    if(state.depthsRun)clearDepthsStage(state.depthsRun,state.location);
+    if(state.depthsRun)clearDepthsStage(state.depthsRun,state.location,!!state.combatId);
     else{
       state.hunting[enemy.id==='beetle'?'beetleRespawnAt':'respawnAt']=now+enemy.respawn;
       state.huntingLoot[enemy.loot]=Math.min(1000000,(state.huntingLoot[enemy.loot]??0)+1);
@@ -43,7 +43,7 @@ export function advanceServerCombat(state,now,random=Math.random){
     const encounter=state.hunting.encounter;
     const due=Math.min(encounter.nextPlayerAt,encounter.nextBoarAt);
     if(due>now)break;
-    const event=advanceHunt(encounter,state.health,state.stats,due,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,state.combatGear.stonebackVestEquipped);
+    const event=advanceHunt(encounter,state.health,state.stats,due,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,state.combatGear.stonebackVestEquipped,state.combatGear.moonwellCharmEquipped);
     if(!event)break;
     events.push(result(state,event,due));
   }
@@ -99,7 +99,7 @@ export function activityAction(state,action,body,now,random){
         state.adventure.rootstone??=normalizeRootstone();
         if(castRootbind(state.adventure.rootstone,state.hunting.encounter,now))events.push({action:'rootbind',outcome:'fighting',encounter:structuredClone(state.hunting.encounter),health:state.health,enemyId:huntEnemy(state.hunting.encounter).id});
       }else{
-        const event=huntingTurn(state.hunting.encounter,state.health,state.stats,body.input,now,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,state.combatGear.stonebackVestEquipped);
+        const event=huntingTurn(state.hunting.encounter,state.health,state.stats,body.input,now,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,state.combatGear.stonebackVestEquipped,state.combatGear.moonwellCharmEquipped);
         if(event)events.push(result(state,event,now));
       }
     }

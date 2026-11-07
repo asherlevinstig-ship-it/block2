@@ -1,5 +1,6 @@
 export const boarRules={health:70,playerInterval:1100,boarInterval:1900,fleeCooldown:1800,respawn:30000,recovery:12000,dodgeCost:40,dodgeWindow:350,dodgeCooldown:700};
 export const stonebackVest={name:'Stoneback Vest',absorption:4,dodgeCost:50,timber:8,fragment:'stonebackShell'};
+export const moonwellCharm={name:'Moonwell Charm',staminaRegen:3,timber:4,power:10};
 export const combatDodgeCost=vestEquipped=>vestEquipped?stonebackVest.dodgeCost:boarRules.dodgeCost;
 const boar={id:'boar',name:'Wild Boar',room:'clearing',prop:'wildboar',move:'charge',health:boarRules.health,firstAttack:1300,interval:boarRules.boarInterval,damage:12,respawn:boarRules.respawn,loot:'boar',lootName:'Boar Meat',sellPrice:30,xp:[15,10,15]};
 const beetle={id:'beetle',name:'Stoneback Beetle',room:'ruins',prop:'stonebackBeetle',move:'slam',health:96,firstAttack:2300,interval:3500,damage:22,respawn:45000,shellArmor:8,exposureMs:2200,exposedBonus:5,loot:'stonebackShell',lootName:'Shell Fragment',sellPrice:45,xp:[20,15,20]};
@@ -67,17 +68,22 @@ export function normalizeCombatGear(input){
     if(typeof stonebackVestOwned!=='boolean'||typeof stonebackVestEquipped!=='boolean'||stonebackVestEquipped&&!stonebackVestOwned)throw new Error('Invalid Stoneback Vest equipment.');
     Object.assign(gear,{stonebackVestOwned,stonebackVestEquipped});
   }
+  if(input.moonwellCharmOwned!==undefined||input.moonwellCharmEquipped!==undefined){
+    const {moonwellCharmOwned=false,moonwellCharmEquipped=false}=input;
+    if(typeof moonwellCharmOwned!=='boolean'||typeof moonwellCharmEquipped!=='boolean'||moonwellCharmEquipped&&!moonwellCharmOwned)throw new Error('Invalid Moonwell Charm equipment.');
+    Object.assign(gear,{moonwellCharmOwned,moonwellCharmEquipped});
+  }
   return gear;
 }
 const level=xp=>1+Math.floor((xp??0)/50);
-export function huntingAttributes(stats,weapon='trainingSword',upgrade=null){
+export function huntingAttributes(stats,weapon='trainingSword',upgrade=null,charmEquipped=false){
   const profile=weaponProfile(weapon,upgrade);
   return {
     attackInterval:profile?.interval??1100,
     damage:(profile?.damage??0)+Math.min(30,(level(stats.strengthXp)-1)*2),
     dodge:Math.min(.3,.08+(level(stats.agilityXp)-1)*.02),
     escape:Math.min(.95,.7+(level(stats.agilityXp)-1)*.025),
-    staminaRegen:Math.min(25,12+(level(stats.agilityXp)-1)*1.5),
+    staminaRegen:Math.min(25,12+(level(stats.agilityXp)-1)*1.5)+(charmEquipped?moonwellCharm.staminaRegen:0),
     armor:Math.min(10,level(stats.vitalityXp)-1)
   };
 }
@@ -109,22 +115,22 @@ export function createHunt(now,health,enemy='boar'){
   if(profile.shellArmor)encounter.exposedUntil=0;
   return encounter;
 }
-export function combatStamina(encounter,stats,now){
-  return Math.min(100,(encounter.stamina??100)+Math.max(0,now-(encounter.staminaAt??now))/1000*huntingAttributes(stats).staminaRegen);
+export function combatStamina(encounter,stats,now,charmEquipped=false){
+  return Math.min(100,(encounter.stamina??100)+Math.max(0,now-(encounter.staminaAt??now))/1000*huntingAttributes(stats,undefined,null,charmEquipped).staminaRegen);
 }
-export function resumeHunt(encounter,now,stats={}){
+export function resumeHunt(encounter,now,stats={},charmEquipped=false){
   const firstAttack=now+huntEnemy(encounter).firstAttack;
   const nextBoarAt=(encounter.rootboundUntil??0)>now?Math.max(firstAttack,encounter.nextBoarAt):firstAttack;
-  return {...encounter,stamina:combatStamina(encounter,stats,now),staminaAt:now,dodgeUntil:0,nextDodgeAt:Math.min(encounter.nextDodgeAt??0,now+boarRules.dodgeCooldown),nextPlayerAt:now+450,nextBoarAt,nextFleeAt:Math.min(encounter.nextFleeAt,now+boarRules.fleeCooldown)};
+  return {...encounter,stamina:combatStamina(encounter,stats,now,charmEquipped),staminaAt:now,dodgeUntil:0,nextDodgeAt:Math.min(encounter.nextDodgeAt??0,now+boarRules.dodgeCooldown),nextPlayerAt:now+450,nextBoarAt,nextFleeAt:Math.min(encounter.nextFleeAt,now+boarRules.fleeCooldown)};
 }
-export function huntingTurn(encounter,health,stats,action,now,random=Math.random,weapon='trainingSword',upgrade=null,vestEquipped=false){
+export function huntingTurn(encounter,health,stats,action,now,random=Math.random,weapon='trainingSword',upgrade=null,vestEquipped=false,charmEquipped=false){
   if(!['attack','enemy','flee','dodge'].includes(action))throw new Error('Invalid combat action.');
   if(!encounter||health<=0)throw new Error('No active encounter.');
   const clock=action==='attack'?'nextPlayerAt':action==='enemy'?'nextBoarAt':action==='dodge'?'nextDodgeAt':'nextFleeAt';
   if(now<encounter[clock])return null;
-  const attributes=huntingAttributes(stats,weapon,upgrade);
+  const attributes=huntingAttributes(stats,weapon,upgrade,charmEquipped);
   const enemy=huntEnemy(encounter);
-  const stamina=combatStamina(encounter,stats,now);
+  const stamina=combatStamina(encounter,stats,now,charmEquipped);
   const dodgeCost=combatDodgeCost(vestEquipped);
   if(action==='dodge'&&stamina<dodgeCost)return null;
   const result={encounter:{...encounter,stamina,staminaAt:now},health,damage:0,taken:0,dodged:false,outcome:'fighting',action};
@@ -167,8 +173,8 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
   }
   return result;
 }
-export function advanceHunt(encounter,health,stats,now,random=Math.random,weapon='trainingSword',upgrade=null,vestEquipped=false){
+export function advanceHunt(encounter,health,stats,now,random=Math.random,weapon='trainingSword',upgrade=null,vestEquipped=false,charmEquipped=false){
   if(!encounter||health<=0)return null;
   const action=encounter.nextPlayerAt<=encounter.nextBoarAt?'attack':'enemy';
-  return huntingTurn(encounter,health,stats,action,now,random,weapon,upgrade,vestEquipped);
+  return huntingTurn(encounter,health,stats,action,now,random,weapon,upgrade,vestEquipped,charmEquipped);
 }

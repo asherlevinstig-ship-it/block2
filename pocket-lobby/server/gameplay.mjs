@@ -1,14 +1,14 @@
 import {fishingCatalog,fishProducts,rollFishingCatch} from '../public/fishing.js';
 import {recordQuest,claimFirstQuest} from '../public/quests.js';
 import {purchaseWeapon} from '../public/hunting.js';
-import {fitSwordUpgrade,craftFurniture,craftStonebackVest} from '../public/crafting.js';
-import {bankDepthsSpoils} from '../public/depths.js';
+import {fitSwordUpgrade,craftFurniture,craftStonebackVest,craftMoonwellCharm} from '../public/crafting.js';
+import {bankDepthsSpoils,moonwellShard} from '../public/depths.js';
 import {activityAction,settleActivities} from './activities.mjs';
 import {gamblingAction} from './gambling.mjs';
 import {mealRecipes,cookingIngredient} from '../public/cooking.js';
 import {moonwood} from '../public/moonwood.js';
 
-const prices={boar:30,rabbit:12,deer:24,stonebackShell:45,timber:4};
+const prices={boar:30,rabbit:12,deer:24,stonebackShell:45,timber:4,[moonwellShard.id]:moonwellShard.price};
 const earn=(state,gold)=>{
   if(state.credits+gold>100000000)throw new Error('Invalid balance. Make room in your wallet.');
   state.credits+=gold;
@@ -52,6 +52,16 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
       if(count===1)delete meals[body.id];
       else meals[body.id]=count-1;
       state.health=Math.min(100,state.health+recipe.healing);
+    }
+    return;
+  }
+  if(action==='charm'||action==='wearCharm'){
+    available(state);
+    if(state.timberCut||state.fishingCast)throw new Error('Invalid activity. Finish fishing or chopping first.');
+    if(action==='charm')craftMoonwellCharm(state);
+    else{
+      if(!state.combatGear.moonwellCharmOwned||typeof body.equipped!=='boolean')throw new Error('Choose a charm you own.');
+      state.combatGear.moonwellCharmEquipped=body.equipped;
     }
     return;
   }
@@ -147,7 +157,7 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
       if(product.id==='timber')state.woodcutting.timber-=product.quantity;
       else if(fishProducts[product.id])state.fishStock[product.id]-=product.quantity;
       else state.huntingLoot[product.id]-=product.quantity;
-      if(state.location==='market'&&product.id!=='timber')recordQuest(state.quest,'marketSale',product.quantity);
+      if(state.location==='market'&&product.id!=='timber'&&product.id!==moonwellShard.id)recordQuest(state.quest,'marketSale',product.quantity);
     }
     state.tradeReceipt={id:body.id,quantity,gold};
     return;
@@ -197,6 +207,8 @@ export function protectFishingState(previous,next){
   if(!next.combatGear.ownedWeapons.includes(next.combatGear.equippedWeapon))next.combatGear.equippedWeapon=previous.combatGear.equippedWeapon;
   next.combatGear.swordUpgrades=previous.combatGear.swordUpgrades;
   next.combatGear.stonebackVestOwned=previous.combatGear.stonebackVestOwned;
+  next.combatGear.moonwellCharmOwned=previous.combatGear.moonwellCharmOwned;
+  next.combatGear.moonwellCharmEquipped=previous.combatGear.moonwellCharmEquipped;
   if(!previous.combatGear.stonebackVestOwned)next.combatGear.stonebackVestEquipped=false;
   if(!next.combatGear.swordUpgrades?.includes(next.combatGear.activeSwordUpgrade))delete next.combatGear.activeSwordUpgrade;
   next.health=previous.health;

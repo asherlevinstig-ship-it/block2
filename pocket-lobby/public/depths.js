@@ -1,7 +1,9 @@
+export const moonwellShard={id:'moonwellShard',name:'Moonwell Shard',price:100};
+
 export const depthsStages=[
-  {room:'depthsGate',name:'Flooded Gate',enemy:'depthsBoar',gold:12,loot:'boar',lootName:'Boar Meat'},
-  {room:'depthsGallery',name:'Shell Gallery',enemy:'depthsBeetle',gold:24,loot:'stonebackShell',lootName:'Shell Fragment'},
-  {room:'depthsVault',name:'The Sunken Vault',enemy:'depthsGuardian',gold:45,loot:'stonebackShell',lootName:'Shell Fragment'}
+  {room:'depthsGate',name:'Flooded Gate',enemy:'depthsBoar',gold:12,loot:'boar'},
+  {room:'depthsGallery',name:'Shell Gallery',enemy:'depthsBeetle',gold:24,loot:'stonebackShell'},
+  {room:'depthsVault',name:'The Sunken Vault',enemy:'depthsGuardian',gold:45,loot:'stonebackShell',treasure:moonwellShard.id}
 ];
 
 export const depthsStageIndex=room=>depthsStages.findIndex(stage=>stage.room===room);
@@ -15,22 +17,30 @@ export function normalizeDepthsRun(input,room,encounter){
   if(input==null&&index<0)return null;
   if(!Number.isInteger(input?.cleared)||!canVisitDepthsStage(input,index))throw new Error('Invalid Moonwell Depths progress.');
   if(encounter&&(index!==input.cleared||encounter.enemy!==depthsStages[index].enemy))throw new Error('Invalid Moonwell Depths encounter.');
-  return {cleared:input.cleared};
+  return {cleared:input.cleared,...(input.cleared===depthsStages.length&&input.shardEarned===true?{shardEarned:true}:{})};
 }
 
-export function clearDepthsStage(run,room){
+export function clearDepthsStage(run,room,awardTreasure=true){
   const index=depthsStageIndex(room);
   if(!run||index<0||index!==run.cleared)return false;
   run.cleared++;
+  if(awardTreasure&&depthsStages[index].treasure)run.shardEarned=true;
   return true;
+}
+
+export function depthsStageSpoils(stage,includeTreasure=true){
+  const loot={[stage.loot]:1};
+  if(stage.treasure&&includeTreasure)loot[stage.treasure]=1;
+  return {gold:stage.gold,loot};
 }
 
 export function depthsSpoils(run){
   const loot={};
   let gold=0;
   for(const stage of depthsStages.slice(0,run?.cleared??0)){
-    gold+=stage.gold;
-    loot[stage.loot]=(loot[stage.loot]??0)+1;
+    const reward=depthsStageSpoils(stage,run.shardEarned===true);
+    gold+=reward.gold;
+    for(const [id,count] of Object.entries(reward.loot))loot[id]=(loot[id]??0)+count;
   }
   return {gold,loot};
 }

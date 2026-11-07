@@ -22,6 +22,10 @@ test('three chambers gate progress and bank only the cleared rewards once',()=>{
   assert.equal(state.huntingLoot.boar,2);
   assert.throws(()=>bankDepthsSpoils(state),/Clear this chamber/);
   assert.deepEqual(depthsSpoils({cleared:3}),{gold:81,loot:{boar:1,stonebackShell:2}});
+  const finalRun={cleared:2};
+  assert.equal(depthsSpoils(finalRun).loot.moonwellShard,undefined);
+  assert.equal(clearDepthsStage(finalRun,'depthsVault'),true);
+  assert.deepEqual(depthsSpoils(finalRun),{gold:81,loot:{boar:1,stonebackShell:2,moonwellShard:1}});
 });
 
 test('every chamber enemy resumes in its own room and only a live chamber accepts an encounter',()=>{
