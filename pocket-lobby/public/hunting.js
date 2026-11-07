@@ -14,6 +14,35 @@ const enemiesByRoom=Object.fromEntries(Object.values(huntEnemies).map(enemy=>[en
 export const huntEnemyForRoom=room=>enemiesByRoom[room];
 export const huntEnemy=encounter=>Object.hasOwn(huntEnemies,encounter?.enemy)?huntEnemies[encounter.enemy]:boar;
 export const huntRespawnAt=(hunting,enemy)=>enemy===huntEnemies.beetle?hunting.beetleRespawnAt??0:hunting.respawnAt;
+
+const enemyMoves={
+  charge:{id:'charge',name:'Charge',tell:600,damage:0,shape:'lane',opensShell:false},
+  slam:{id:'slam',name:'Slam',tell:600,damage:0,shape:'ring',opensShell:true},
+  sweep:{id:'sweep',name:'Tusk Sweep',tell:780,delay:1350,damage:-6,shape:'arc',opensShell:false},
+  wildCharge:{id:'wildCharge',name:'Wild Charge',tell:1050,delay:1550,damage:4,shape:'lane',opensShell:false},
+  crush:{id:'crush',name:'Crushing Slam',tell:1250,delay:3050,damage:5,shape:'ring',opensShell:true},
+  quake:{id:'quake',name:'Vault Quake',tell:1350,delay:3400,damage:5,shape:'ring',opensShell:true},
+  aftershock:{id:'aftershock',name:'Aftershock',tell:900,delay:1350,damage:-10,shape:'ring',opensShell:false}
+};
+export function enemyAttack(encounter,enemy=huntEnemy(encounter)){
+  const move=Object.hasOwn(enemyMoves,encounter?.enemyMove)?enemyMoves[encounter.enemyMove]:null;
+  const allowed=enemy.id==='depthsGuardian'?['quake','aftershock']:enemy.shellArmor?['crush']:['sweep','wildCharge'];
+  return allowed.includes(move?.id)?move:enemyMoves[enemy.move];
+}
+function scheduleEnemyResponse(next,enemy,move,timedDodge,now){
+  delete next.enemyMove;
+  let response;
+  if(move.id==='quake')response=enemyMoves.aftershock;
+  else if(!next.desperateUsed&&next.health<=enemy.health*.55&&move.id===enemy.move){
+    response=enemyMoves[enemy.id==='depthsGuardian'?'quake':enemy.shellArmor?'crush':'wildCharge'];
+    next.desperateUsed=true;
+  }else if(move.id==='charge'&&timedDodge)response=enemyMoves.sweep;
+  if(response)next.enemyMove=response.id;
+  // A perfect dodge of a shell attack always leaves time to punish the opening.
+  const delay=response?.delay??enemy.interval;
+  next.nextBoarAt=now+(timedDodge&&move.opensShell&&response?.id!=='aftershock'?Math.max(delay,enemy.exposureMs+650):delay);
+  return response;
+}
 export const weaponCatalog={
   trainingSword:{name:'Training Sword',damage:14,interval:1100,strength:1,agility:1,description:'A simple iron blade issued to new adventurers.'},
   wardenSword:{name:'Warden’s Blade',damage:18,interval:1100,strength:1,agility:1,description:'A gold-trimmed blade awarded for completing First Steps.'},
@@ -106,6 +135,9 @@ export function normalizeHunting(input={}){
       result.encounter.magicWardUntil=time(input.encounter.magicWardUntil);
     }
     if(enemy&&enemy!=='boar')result.encounter.enemy=enemy;
+    const move=enemyAttack(input.encounter);
+    if(move.id===input.encounter.enemyMove)result.encounter.enemyMove=move.id;
+    if(input.encounter.desperateUsed===true)result.encounter.desperateUsed=true;
     if(huntEnemy(input.encounter).shellArmor)result.encounter.exposedUntil=time(input.encounter.exposedUntil);
   }
   return result;
@@ -122,7 +154,7 @@ export function combatStamina(encounter,stats,now,charmEquipped=false){
   return Math.min(100,(encounter.stamina??100)+Math.max(0,now-(encounter.staminaAt??now))/1000*huntingAttributes(stats,undefined,null,charmEquipped).staminaRegen);
 }
 export function resumeHunt(encounter,now,stats={},charmEquipped=false){
-  const nextBoarAt=now+huntEnemy(encounter).firstAttack;
+  const nextBoarAt=now+Math.max(huntEnemy(encounter).firstAttack,enemyAttack(encounter).tell);
   return {...encounter,stamina:combatStamina(encounter,stats,now,charmEquipped),staminaAt:now,dodgeUntil:0,nextDodgeAt:Math.min(encounter.nextDodgeAt??0,now+boarRules.dodgeCooldown),nextPlayerAt:now+450,nextBoarAt,nextFleeAt:Math.min(encounter.nextFleeAt,now+boarRules.fleeCooldown)};
 }
 export function huntingTurn(encounter,health,stats,action,now,random=Math.random,weapon='trainingSword',upgrade=null,vestEquipped=false,charmEquipped=false){
@@ -158,14 +190,15 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
     result.encounter.health=Math.max(0,encounter.health-result.damage);
     if(!result.encounter.health){result.outcome='victory';result.encounter=null;}
   }else{
-    result.encounter.nextBoarAt=now+enemy.interval;
+    const move=enemyAttack(encounter,enemy);
+    result.move=move.name;
     result.timedDodge=encounter.dodgeUntil>0&&encounter.nextBoarAt<=encounter.dodgeUntil&&encounter.nextBoarAt>=encounter.dodgeUntil-boarRules.dodgeWindow;
     result.dodged=result.timedDodge||random()<attributes.dodge;
-    if(enemy.shellArmor&&result.timedDodge){
-      result.encounter.exposedUntil=now+enemy.exposureMs;
+    if(move.opensShell&&result.timedDodge){
+      result.encounter.exposedUntil=now+enemy.exposureMs+(move.id===enemy.move?0:400);
       result.shellExposed=true;
     }
-    result.taken=result.dodged?0:Math.max(4,enemy.damage+Math.floor(random()*6)-attributes.armor);
+    result.taken=result.dodged?0:Math.max(4,enemy.damage+move.damage+Math.floor(random()*6)-attributes.armor);
     if(vestEquipped&&result.taken){
       result.absorbed=Math.min(stonebackVest.absorption,result.taken);
       result.taken-=result.absorbed;
@@ -176,6 +209,8 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
       delete result.encounter.magicWard;
       delete result.encounter.magicWardUntil;
     }
+    const response=scheduleEnemyResponse(result.encounter,enemy,move,result.timedDodge,now);
+    if(response)result.nextMove=response.name;
     result.health=Math.max(0,health-result.taken);
     if(!result.health){result.outcome='defeat';result.encounter=null;}
   }

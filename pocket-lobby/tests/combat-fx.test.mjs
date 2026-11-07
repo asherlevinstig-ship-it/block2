@@ -28,7 +28,7 @@ test('effects expire, preserve game data and balance canvas transforms',()=>{
   assert.equal(c.calls.length,0);
 });
 test('charge warnings and victory show at the right times; reduced motion removes shaking',()=>{
-  for(const [time,label] of [[1000,'! BOAR CHARGING !'],[4500,'✦ WILD BOAR DEFEATED ✦']]){
+  for(const [time,label] of [[1000,'CHARGE INCOMING'],[4500,'✦ WILD BOAR DEFEATED ✦']]){
     const c=canvas();drawCombatOverlayFx({ctx:c.ctx,width:540,height:349,time,now:time,events,encounter:{nextBoarAt:1500},health:100,reduced:true});
     assert(c.calls.some(([method,text])=>method==='fillText'&&text===label));c.balanced();
   }
@@ -37,4 +37,12 @@ test('charge warnings and victory show at the right times; reduced motion remove
   assert(combatShake(2050,events,false).every(n=>Math.abs(n)<=1.5));
   const c=canvas();drawCombatWorldFx({ctx:c.ctx,point,time:1100,events,player:{x:5,y:5},reduced:true});
   assert.equal(c.calls.filter(([method])=>method==='fillRect').length,2);
+});
+
+test('the aftershock warning stays visible during the Guardian’s exposed window',()=>{
+  const c=canvas(),time=1000;
+  const encounter={enemy:'depthsGuardian',enemyMove:'aftershock',nextBoarAt:1800,exposedUntil:2000};
+  drawCombatOverlayFx({ctx:c.ctx,width:540,height:349,time,now:time,events,encounter,health:100,reduced:true});
+  assert(c.calls.some(([method,text])=>method==='fillText'&&text==='AFTERSHOCK INCOMING'));
+  c.balanced();
 });

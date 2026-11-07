@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-import {boarRules,huntingTurn,huntingAttributes,normalizeHunting,normalizeCombatGear,weaponCatalog,weaponProfile,attackSeconds,createHunt,resumeHunt,advanceHunt,combatStamina,combatDodgeCost,canUseWeapon,huntEnemies,huntEnemy,huntEnemyForRoom,huntRespawnAt,stonebackVest,moonwellCharm} from '../public/hunting.js';
+import {boarRules,huntingTurn,huntingAttributes,normalizeHunting,normalizeCombatGear,weaponCatalog,weaponProfile,attackSeconds,createHunt,resumeHunt,advanceHunt,combatStamina,combatDodgeCost,canUseWeapon,huntEnemies,huntEnemy,huntEnemyForRoom,huntRespawnAt,enemyAttack,stonebackVest,moonwellCharm} from '../public/hunting.js';
 import {normalizeState,startPlan} from '../server/player-state.mjs';
 
 test('new and existing characters receive one equipped sword, while unequipped choices persist',()=>{
@@ -73,7 +73,7 @@ function gameHarness(){
   const source=fs.readFileSync(new URL('../public/game.js',import.meta.url),'utf8');
   const context=vm.createContext({
     ...questRules,...depthsRules,depthsRun:null,depthsDiscovered:false,maxHealth:()=>100,normalizeHunting,normalizeCombatGear,weaponCatalog,weaponProfile,attackSeconds,boarRules,huntingAttributes,createHunt,resumeHunt,combatStamina,canUseWeapon,
-    huntEnemies,huntEnemy,huntEnemyForRoom,huntRespawnAt,combatDodgeCost,stonebackVest,moonwellCharm,
+    huntEnemies,huntEnemy,huntEnemyForRoom,huntRespawnAt,enemyAttack,combatDodgeCost,stonebackVest,moonwellCharm,
     advanceHunt:(e,h,s,n,_r,w,upgrade,vest)=>advanceHunt(e,h,s,n,()=>.5,w,upgrade,vest),
     huntingTurn:(e,h,s,a,n,_r,w,upgrade,vest)=>huntingTurn(e,h,s,a,n,()=>.5,w,upgrade,vest),
     window:{},activityBusy:false,serverActionBusy:false,meals:{},magicState:null,firstUpgrade:{},tradeCatalog:{boar:{name:'Boar Meat'},stonebackShell:{name:'Shell Fragment'},moonwellShard:depthsRules.moonwellShard},history:{fishCaught:false,boarDefeated:false},adventure:{discovered:[]},savedPlayerState:null,player:{cx:5,cy:5,inCombat:false},health:100,
@@ -97,12 +97,13 @@ test('combat continues to victory without clicks, gives one reward and preserves
   c.startMonsterEncounter(huntEnemies.boar);assert(c.player.inCombat);assert.equal(h.get('healthHud').hidden,false);
   const initial=h.state();c.combatAction('attack');assert.deepEqual(h.state(),initial);
   for(let i=0;i<50;i++)h.tick(100);
-  assert.equal(h.state().huntingLoot.boar,1);assert.equal(h.state().health,70);
+  assert.equal(h.state().huntingLoot.boar,1);
+  const healthAfterHunt=h.state().health;assert(healthAfterHunt>0&&healthAfterHunt<100);
   assert.equal(h.state().playerStats.strengthXp,15);assert.equal(h.receipts.length,1);
   assert.equal(c.player.inCombat,false);assert.equal(h.get('healthHud').hidden,true);
   h.tick(1000);c.startMonsterEncounter(huntEnemies.boar);assert.equal(h.state().huntingLoot.boar,1);assert.equal(c.player.inCombat,false);
   h.tick(boarRules.respawn);c.startMonsterEncounter(huntEnemies.boar);assert(c.player.inCombat);
-  assert.equal(h.state().health,70);assert(h.saves.length>0);
+  assert.equal(h.state().health,healthAfterHunt);assert(h.saves.length>0);
 });
 
 test('defeat returns to the Tower, recovery survives saves and fully restores five hearts',()=>{
@@ -157,4 +158,64 @@ test('the Iron Sword trial cues a timed dodge and explains the shell reward once
   assert.equal(c.firstUpgrade.ironTrialPending,false);
   assert.equal(c.huntingLoot.stonebackShell,1);
   assert.match(h.receipts.at(-1)[1].map(row=>row.text).join(' '),/45 gold.*Stoneback Vest.*8 timber/);
+});
+
+test('boars respond to a timed dodge with a light sweep and commit to one wild charge at low health',()=>{
+  const roll=()=>.5;
+  const boar=createHunt(0);
+  const dodge=huntingTurn(boar,100,{},'dodge',1100,roll);
+  const missed=huntingTurn(dodge.encounter,100,{},'enemy',1300,roll);
+  assert.equal(missed.nextMove,'Tusk Sweep');
+  assert.equal(enemyAttack(missed.encounter).name,'Tusk Sweep');
+  const sweep=huntingTurn(missed.encounter,100,{},'enemy',missed.encounter.nextBoarAt,roll);
+  assert.equal(sweep.taken,9);
+  assert.equal(enemyAttack(sweep.encounter).name,'Charge');
+  const low={...sweep.encounter,health:30};
+  const normal=huntingTurn(low,100,{},'enemy',low.nextBoarAt,roll);
+  const reloaded=normalizeState({location:'clearing',hunting:{encounter:normal.encounter}}).hunting.encounter;
+  assert.equal(enemyAttack(reloaded).name,'Wild Charge');
+  const wild=huntingTurn(reloaded,100,{},'enemy',reloaded.nextBoarAt,roll);
+  assert.equal(wild.taken,19);
+  const next=huntingTurn(wild.encounter,100,{},'enemy',wild.encounter.nextBoarAt,roll);
+  assert.equal(enemyAttack(next.encounter).name,'Charge');
+});
+
+test('an unassisted starter boar hunt remains winnable even with minimum hits and maximum damage taken',()=>{
+  let encounter=createHunt(0),health=100;
+  for(let i=0;i<20&&encounter;i++){
+    const due=Math.min(encounter.nextPlayerAt,encounter.nextBoarAt);
+    const playerStrike=encounter.nextPlayerAt<=encounter.nextBoarAt;
+    const turn=advanceHunt(encounter,health,{},due,()=>playerStrike?0:.99);
+    encounter=turn.encounter;health=turn.health;
+    if(!encounter)assert.equal(turn.outcome,'victory');
+  }
+  assert.equal(encounter,null);
+  assert(health>=40);
+});
+
+test('beetles telegraph heavier slams and the Guardian queues one separately dodgeable aftershock',()=>{
+  const roll=()=>.5;
+  const beetle=createHunt(0,40,'beetle');
+  const ordinary=huntingTurn(beetle,100,{},'enemy',beetle.nextBoarAt,roll);
+  assert.equal(enemyAttack(ordinary.encounter).name,'Crushing Slam');
+  const crushAt=ordinary.encounter.nextBoarAt;
+  const dodge=huntingTurn(ordinary.encounter,100,{},'dodge',crushAt-200,roll);
+  const crush=huntingTurn(dodge.encounter,100,{},'enemy',crushAt,roll);
+  assert.equal(crush.shellExposed,true);
+  assert(crush.encounter.exposedUntil-crushAt>huntEnemies.beetle.exposureMs);
+  const guardian=createHunt(0,60,'depthsGuardian');
+  const opening=huntingTurn(guardian,100,{},'enemy',guardian.nextBoarAt,roll);
+  assert.equal(enemyAttack(opening.encounter).name,'Vault Quake');
+  const quakeAt=opening.encounter.nextBoarAt;
+  const evade=huntingTurn(opening.encounter,100,{},'dodge',quakeAt-200,roll);
+  const quake=huntingTurn(evade.encounter,100,{},'enemy',quakeAt,roll);
+  assert.equal(quake.shellExposed,true);
+  assert.equal(enemyAttack(quake.encounter).name,'Aftershock');
+  const aftershockAt=quake.encounter.nextBoarAt;
+  const jump=huntingTurn(quake.encounter,100,{},'dodge',aftershockAt-200,roll);
+  const aftershock=huntingTurn(jump.encounter,100,{},'enemy',aftershockAt,roll);
+  assert.equal(aftershock.timedDodge,true);
+  assert.equal(aftershock.shellExposed,undefined);
+  assert.equal(aftershock.encounter.exposedUntil,quake.encounter.exposedUntil);
+  assert.equal(enemyAttack(aftershock.encounter).name,'Slam');
 });

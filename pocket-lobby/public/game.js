@@ -728,12 +728,13 @@ function applyCombatResult(result,authoritative=null){
   if(result.outcome==='victory')combatArt.victoryAt=artTime;
   hunting.encounter=result.encounter;health=result.health;
   combatFeedback={started:performance.now(),damage:result.damage,taken:result.taken,dodged:result.dodged,power:result.power,powerColor:result.powerColor};
-  combatMessage=(result.damage?'You hit for '+result.damage+(result.shellGuarded?' through the shell.':'. '):action==='flee'&&result.outcome!=='escaped'?'Your escape was blocked. ':'')+(result.dodged?'You dodge the attack.':result.taken?'The '+enemy.name+' hits for '+result.taken+'.':'');
+  combatMessage=(result.damage?'You hit for '+result.damage+(result.shellGuarded?' through the shell.':'. '):action==='flee'&&result.outcome!=='escaped'?'Your escape was blocked. ':'')+(result.dodged?'You dodge the attack.':result.taken?(result.move??enemy.name)+' hits for '+result.taken+'.':'');
   if(result.power)combatMessage=result.power+' '+result.effect+'.';
   if(result.warded)combatMessage+=(combatMessage?' ':'')+'Your ward blocked '+result.warded+' damage.';
   if(result.absorbed)combatMessage+=(combatMessage?' ':'')+'Your vest absorbed '+result.absorbed+' damage.';
   if(result.dodgeStarted)combatMessage='You sidestep. Time your dodge just before the '+enemy.move+' lands!';
-  if(result.timedDodge)combatMessage=result.shellExposed?'Perfect dodge! The beetle flips. Its weak spot is exposed.':'Perfect dodge! You avoided the charge.';
+  if(result.timedDodge)combatMessage=result.shellExposed?'Perfect dodge! The shell flips open.':'Perfect dodge! You avoided '+(result.move??'the attack')+'.';
+  if(result.nextMove&&result.outcome==='fighting')combatMessage+=(combatMessage?' ':'')+'Next: '+result.nextMove+'.';
   if(result.taken){
     $('healthHud').classList.remove('injured');void $('healthHud').offsetWidth;$('healthHud').classList.add('injured');
   }
@@ -814,13 +815,14 @@ function updateCombatPanel(){
   const notice=$('combatNotice');
   notice.hidden=!hunting.recoveryUntil;
   if(hunting.recoveryUntil)notice.textContent='Recovering at the Tower · '+Math.max(0,Math.ceil((hunting.recoveryUntil-now)/1000))+'s · Five hearts restored after rest';
+  const attack=enemyAttack(encounter,enemy);
   const ironTrialFight=firstUpgrade.ironTrialPending&&encounter?.enemy==='beetle'&&combatGear.equippedWeapon==='ironSword';
   if(ironTrialFight){
     const untilSlam=encounter.nextBoarAt-now;
     const exposed=encounter.exposedUntil>now;
     const dodgeNow=untilSlam>0&&untilSlam<=boarRules.dodgeWindow
       &&now>=encounter.nextDodgeAt&&combatStamina(encounter,playerStats,now,combatGear.moonwellCharmEquipped)>=combatDodgeCost(combatGear.stonebackVestEquipped);
-    const cue=dodgeNow?'Dodge now! Press Space or tap Dodge.':exposed?'Shell open! Your next auto-strike hits the weak spot.':'Watch for the slam. Dodge just before it lands.';
+    const cue=dodgeNow?'Dodge '+attack.name+' now! Press Space or tap Dodge.':exposed?'Shell open! Your next auto-strike hits the weak spot.':'Watch for '+attack.name+'. Dodge just before it lands.';
     notice.hidden=false;
     if(notice.textContent!==cue)notice.textContent=cue;
     notice.dataset.cue=dodgeNow?'dodge':exposed?'exposed':'watch';
@@ -852,10 +854,10 @@ function updateCombatPanel(){
   $('combatStamina').value=stamina;$('combatStaminaValue').textContent=Math.floor(stamina)+' / 100';
   $('combatDodgeHelp').textContent='Dodge costs '+dodgeCost+' stamina'+(combatGear.stonebackVestEquipped?' with the Stoneback Vest':'')+'. Time it just before impact.'+(combatGear.moonwellCharmEquipped?' Moonwell Charm: +'+moonwellCharm.staminaRegen+' stamina per second.':' Agility improves recovery.');
   $('combatDodge').disabled=!encounter||now<(encounter.nextDodgeAt??0)||stamina<dodgeCost;
-  const timing=!!encounter&&encounter.nextBoarAt-now>0&&encounter.nextBoarAt-now<=boarRules.dodgeWindow;
+  const timing=!!encounter&&encounter.nextBoarAt-now>=0&&encounter.nextBoarAt-now<=boarRules.dodgeWindow;
   $('combatDodge').classList.toggle('dodge-ready',timing&&!$('combatDodge').disabled);
   $('combatDodge').textContent=encounter&&stamina<dodgeCost?'Dodge · Low stamina':encounter&&now<(encounter.nextDodgeAt??0)?'Dodge · Recovering':timing?'Dodge now! · Space':'Dodge · Space';
-  $('combatCooldown').textContent=encounter?'Next strike '+Math.max(0,(encounter.nextPlayerAt-now)/1000).toFixed(1)+'s · '+(beetle?'Slam':'Charge')+' '+Math.max(0,(encounter.nextBoarAt-now)/1000).toFixed(1)+'s'+(remaining?' · Flee '+(remaining/1000).toFixed(1)+'s':' · F: Flee'):'Click the '+enemy.name+' to engage. Combat runs in real time.';
+  $('combatCooldown').textContent=encounter?'Next strike '+Math.max(0,(encounter.nextPlayerAt-now)/1000).toFixed(1)+'s · '+attack.name+' '+Math.max(0,(encounter.nextBoarAt-now)/1000).toFixed(1)+'s'+(remaining?' · Flee '+(remaining/1000).toFixed(1)+'s':' · F: Flee'):'Click the '+enemy.name+' to engage. Combat runs in real time.';
   $('combatLog').textContent=combatMessage||'The '+enemy.name+' waits. It attacks when you approach.';
   const weapon=weaponProfile(combatGear.equippedWeapon,combatGear.activeSwordUpgrade);
   const attributes=huntingAttributes(playerStats,combatGear.equippedWeapon,combatGear.activeSwordUpgrade);

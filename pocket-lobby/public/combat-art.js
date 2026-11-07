@@ -1,3 +1,5 @@
+import {enemyAttack} from './hunting.js';
+
 const clamp=value=>Math.max(0,Math.min(1,value));
 const pulse=(age,duration)=>age>=0&&age<duration?Math.sin(age/duration*Math.PI):0;
 export function playerCombatPose({time,now,encounter,events,reduced=false}){
@@ -22,7 +24,7 @@ export function playerCombatPose({time,now,encounter,events,reduced=false}){
 export function boarCombatPose({time,now,encounter,events,reduced=false,defeated=false}){
   const age=time-events.victoryAt;
   const death=defeated?clamp(age/430):0;
-  const windup=encounter?clamp(1-(encounter.nextBoarAt-now)/450):0;
+  const windup=encounter?clamp(1-(encounter.nextBoarAt-now)/Math.min(850,enemyAttack(encounter).tell)):0;
   return {
     windup,
     charge:reduced?0:pulse(time-events.boarAttackAt,340)*8,
