@@ -810,11 +810,18 @@ function windows(){
 }
 function room(empty=false){
   polygon([[240,106],[430,191],[244,291],[51,198]],'#10142168');
-  const floors=empty?['#8b8191','#918696','#897f90','#94899a','#8e8394']:['#b47c68','#bd826a','#b77a64','#bb7c64','#c4866d'];
-  block(0,0,10,10,-7,7,empty?['#8b8191','#494355','#3b354a']:['#ac745c','#624250','#4d394d']);
+  const floors=empty?['#8c6555','#956e5a','#896252','#9b735e','#906854']:['#b47c68','#bd826a','#b77a64','#bb7c64','#c4866d'];
+  block(0,0,10,10,-7,7,empty?['#966c56','#43384b','#302d41']:['#ac745c','#624250','#4d394d']);
   for(let y=0;y<view.rows;y++)for(let x=0;x<view.cols;x++){
-    surface(x,y,1,1,0,floors[(x*7+y*13)%5],empty?'#776c80':'#9f675d');
-    if(empty)continue;
+    if(empty){
+      // Long staggered boards keep the floor readable without a heavy square grid.
+      surface(x,y,1,1,0,floors[(x*3+Math.floor(y/2)*7)%5]);
+      surface(x+.96,y,.035,1,.02,'#604a4544');
+      if(y%2===x%2)surface(x,y+.96,.96,.025,.025,'#604a4566');
+      if((x+y)%3===0)surface(x+.14,y+.22,.018,.55,.03,'#d5a17540');
+      continue;
+    }
+    surface(x,y,1,1,0,floors[(x*7+y*13)%5],'#9f675d');
     for(let i=0;i<3;i++){
       const u=(x*7+y*13+i*11)%53/100+.11;
       surface(x+u,y+.23+i*.24,.19,.026,.02,i===0?'#ce9477':'#a56c62');
@@ -822,6 +829,12 @@ function room(empty=false){
   }
   if(empty){
     drawEntryWalls();
+    // Inlaid perimeter and door light are part of the room, not inventory furniture.
+    surface(.12,.12,9.76,.035,.08,'#dbb878');
+    surface(.12,.12,.035,9.76,.08,'#dbb878');
+    surface(.12,9.82,9.76,.035,.08,'#d0a675');
+    surface(9.82,.12,.035,9.76,.08,'#d0a675');
+    for(let i=0;i<7;i++)surface(.2+i*.16,homeExit.start+.08,.16,homeExit.end-homeExit.start-.16,.1,'#7ed5c0'+['22','1d','18','13','0e','09','04'][i]);
     return;
   }
   wall('left',0,10,0,70,'#56445d');
@@ -872,12 +885,26 @@ function room(empty=false){
   surface(8.12,9.73,1.2,.21,1.1,'#a16c71');
 }
 function drawEntryWalls(){
-  wall('left',0,10,0,70,'#595970');
-  wall('right',0,10,0,70,'#69677e');
-  wall('left',0,10,66,71,'#85829a');
-  wall('right',0,10,66,71,'#9791a6');
-  wall('left',0,10,0,4,'#49475e');
-  wall('right',0,10,0,4,'#58536c');
+  wall('left',0,10,0,70,'#354359');
+  wall('right',0,10,0,70,'#44516a');
+  // Plaster above inset panelling, with narrow brass rails and capped masonry.
+  for(const side of ['left','right']){
+    const lit=side==='right';
+    wall(side,0,10,0,18,lit?'#26364e':'#1e2d43');
+    for(let u=.18;u<10;u+=1.4){
+      wall(side,u,Math.min(u+1.17,9.85),3,15,lit?'#35465e':'#2b3b52');
+      wall(side,u,Math.min(u+.025,9.85),3,15,'#728099');
+    }
+    wall(side,0,10,17,19,'#ad9164');
+    wall(side,0,10,19,20,'#dbba7f');
+    wall(side,0,10,0,2,'#131e31');
+    wall(side,0,10,65,68,lit?'#738199':'#65738a');
+    wall(side,0,10,68,71,lit?'#a5acba':'#8e9bad');
+    wall(side,0,10,64,65,'#ceb17b');
+    // Subtle plaster seams retain detail without competing with the home plaque.
+    for(let u=1.4;u<10;u+=1.4)wall(side,u,u+.018,23,62,lit?'#546179':'#435168');
+  }
+  wall('left',0,.13,0,68,'#65758e');wall('right',0,.13,0,68,'#7a89a0');
   drawHomeSign();
   drawDoor(homeExit);
 }
@@ -922,9 +949,9 @@ function drawOutsideSteps({start,end,label}){
 }
 function drawHomeSign(){
   const left=2.45,right=7.55,top=59;
-  wall('right',left+.07,right+.07,28,top-1,'#48445a');
-  wall('right',left,right,30,top,'#ab8b75');
-  wall('right',left+.12,right-.12,32,top-2,'#403948');
+  wall('right',left+.07,right+.07,28,top-1,'#1d293e');
+  wall('right',left,right,30,top,'#bd9b61');
+  wall('right',left+.12,right-.12,32,top-2,'#14253d');
   wall('right',left+.3,left+.42,44,46,'#cea98b');
   wall('right',right-.42,right-.3,44,46,'#cea98b');
 }
@@ -1594,11 +1621,12 @@ function draw(time){
   ctx.imageSmoothingEnabled=false;ctx.drawImage(roomLayers[layer],0,0);
   if(moonwood.has(currentRoom))drawMoonwoodDetails(time);
   if(enemy)drawCombatGroundFx({ctx,point,time,now:Date.now(),encounter:hunting.encounter,player,reduced:reducedMotion.matches});
-  if(target)surface(target.x+.1,target.y+.1,.8,.8,1,'#fff3bc30','#ffcf8f');
+  if(target)surface(target.x+.1,target.y+.1,.8,.8,1,currentRoom==='home'?'#b7e9e220':'#fff3bc30',currentRoom==='home'?'#98cec9':'#ffcf8f');
   if(hover){
     const [w,d]=editing&&selection?dimensions(selection):[1,1];
     const valid=editing&&selection?canPlace({...selection,x:hover.x,y:hover.y}):!blocked(hover.x,hover.y);
-    surface(hover.x+.035,hover.y+.035,w-.07,d-.07,1,valid?'#fff3bc34':'#eb6c7144',valid?'#ffe0a3':'#e58b87');
+    const homeHover=currentRoom==='home'&&!editing;
+    surface(hover.x+.035,hover.y+.035,w-.07,d-.07,1,valid?(homeHover?'#c8e5e81c':'#fff3bc34'):'#eb6c7144',valid?(homeHover?'#acd2d8':'#ffe0a3'):'#e58b87');
   }
   let ghost;
   if(editing&&selection&&hover&&canPlace({...selection,...hover})){
