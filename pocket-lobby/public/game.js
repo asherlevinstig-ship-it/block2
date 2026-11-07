@@ -1695,8 +1695,8 @@ function draw(time){
     surface(10.06,3.06,.88,.88,.5,'#f5cf7d12','#dfbb76');
     ctx.restore();
   }
-  drawTradingGuide(time);
   if(moonwood.has(currentRoom))drawMoonwoodDetails(time);
+  drawTradingGuide(time);
   if(enemy)drawCombatGroundFx({ctx,point,time,now:Date.now(),encounter:hunting.encounter,player,reduced:reducedMotion.matches});
   if(target)surface(target.x+.1,target.y+.1,.8,.8,1,currentRoom==='home'?'#b7e9e220':'#fff3bc30',currentRoom==='home'?'#98cec9':'#ffcf8f');
   if(hover){
@@ -1905,8 +1905,8 @@ function hudRoomExits(room){
   if(room==='lounge')return [{to:'hub',loungeExit:true}];
   return (roomDoors[room]??[]).filter(door=>doorAvailable(door,room));
 }
-function tradingGuideEligible(){return quest.claimed===true;}
-function tradingGuideActive(){return tradingGuideEligible()&&!tradingPostGuideComplete&&currentRoom!=='market'&&!depthsRun;}
+function tradingGuideEligible(){return questStage(quest)===3||quest.claimed===true;}
+function tradingGuideActive(){return tradingGuideEligible()&&(questStage(quest)===3||!tradingPostGuideComplete)&&currentRoom!=='market'&&!depthsRun;}
 function tradingGuideDestination(){
   if(!tradingGuideActive())return null;
   if(currentRoom==='hub'&&!lobbyRoutesOpen())return {warden:true,tile:{x:10,y:4},label:'Tower Warden'};
@@ -1930,7 +1930,9 @@ function drawTradingGuide(time){
   const path=tradeGuideRouteCache.path;
   for(let i=0;i<path.length;i++){
     const tile=path[i],bright=reducedMotion.matches?true:Math.floor(time/160)%Math.max(1,path.length)===i;
-    surface(tile.x+.39,tile.y+.39,.22,.22,.7,bright?'#ffdf8e':'#d6ab68aa');
+    surface(tile.x+.30,tile.y+.30,.40,.40,.7,'#4a341dcc');
+    surface(tile.x+.34,tile.y+.34,.32,.32,.8,bright?'#fff0ab':'#edc46d');
+    if(bright){const [px,py]=point(tile.x+.5,tile.y+.5,1);lobbyLight(px,py,9,'#ffdb8055',.5);}
   }
   const pulse=reducedMotion.matches?1:.65+Math.sin(time/450)*.22;
   ctx.save();ctx.globalAlpha=pulse;surface(goal.x+.06,goal.y+.06,.88,.88,.8,'#ffd78b22','#f8d58b');ctx.restore();
@@ -3291,7 +3293,7 @@ function enterRoom(next,arrival){
   if(next!==currentRoom&&huntEnemyForRoom(next))combatMessage='';
   catchReveal=null;$('catchReveal').hidden=true;
   const focusRoom=!!document.activeElement.closest('[data-room-link]');
-  if(next==='market'&&tradingGuideActive()){tradingPostGuideComplete=true;tradeGuideRouteCache=null;}
+  if(next==='market'&&tradingGuideActive()){if(quest.claimed)tradingPostGuideComplete=true;tradeGuideRouteCache=null;}
   currentRoom=next;
   const exploring=moonwood.has(next);
   const nextView=exploring?moonwood.view:next==='hub'?hubView:next==='outside'?courtyardView:standardView;
