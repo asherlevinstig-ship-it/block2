@@ -2574,6 +2574,7 @@ function animation(time){
   if(!step&&!route.length){target=null;if(interaction)finishInteraction();}
   if(player.waveStarted!==null&&time>=player.waveStarted+WAVE_MS)player.waveStarted=null;
   if(noticeUntil&&time>noticeUntil){noticeUntil=0;setHint();}
+  updateActivityPrompt();
   draw(time);
   if($('avatarDialog').open)drawAvatarPreview(time);
   requestAnimationFrame(animation);
@@ -3103,6 +3104,62 @@ function attuneRootstone(power){
   $('rootstoneStatus').textContent=name+' is now active.';
   updateRootstoneDialog();
 }
+function currentActivityPrompt(){
+  if(currentRoom==='hub'&&!lobbyRoutesOpen()){
+    return {label:'YOUR NEXT STEP',title:'Meet the Tower Warden',text:'Speak to the Warden to begin your adventure.',action:'visitWarden'};
+  }
+  if(currentRoom==='logging'){
+    const tree=focusedTimber();
+    if(woodSession)return {label:'WOODCUTTING',title:'Chopping timber',text:'Walk away to stop. Each cut earns timber and Woodcutting XP.'};
+    if(!woodcutting.axeOwned)return {label:'START WOODCUTTING',title:'Collect your free axe',text:'The woodcutter will give you an axe to start gathering timber.',action:'woodAction'};
+    if(!woodcutting.equipped)return {label:'WOODCUTTING',title:'Equip your axe',text:'Get your axe ready before chopping a tree.',action:'woodAction'};
+    if(tree&&treeState(tree).regrowsAt)return {label:'TREE FELLED',title:'Choose another tree',text:'Click another tree to keep gathering while this stump regrows.'};
+    return {label:'WOODCUTTING',title:'Gather some timber',text:'Three cuts fell a tree. Your timber can be sold or used for crafting.',action:'woodAction'};
+  }
+  if(currentRoom==='pond'){
+    if(fishingSession){
+      const phase=fishingMoments.phase(fishingSession,performance.now());
+      if(phase==='bite')return {label:'FISH ON!',title:'Reel now',text:'Reel in time for bonus Patience XP.',action:'adventureLandmark'};
+      return null;
+    }
+    if(fishingGear.bait<1)return {label:'FISHING SUPPLIES',title:'You need bait',text:'Riverworms are sold at Silverfin Outfitters in the Tower.',action:'baitRoute'};
+    return {label:'FISHING',title:'Cast a line',text:'Watch the float. Reel when you see a bite for bonus Patience XP.',action:'adventureLandmark'};
+  }
+  if(currentRoom==='creek'&&!adventure.bridge)return {label:'CREEK CROSSING',title:'Continue to the ruins',text:'Use the stepping stones to cross Glass Creek.',action:'adventureLandmark'};
+  if(currentRoom==='trail'&&!adventure.lantern)return {label:'EXPLORATION',title:'Take the waystone lantern',text:'Its light reveals hidden paths through Moonwood.',action:'adventureLandmark'};
+  if(currentRoom==='shrine'&&!adventure.shrine)return {label:'DISCOVERY',title:'Examine the Moth Shrine',text:'The altar holds a clue to the ruins.',action:'adventureLandmark'};
+  if(currentRoom==='clearing'&&Date.now()>=hunting.respawnAt){
+    if(!combatGear.equippedWeapon)return {label:'PREPARE TO HUNT',title:'Equip a weapon',text:'Open Inventory and equip a sword before approaching the boar.',action:'equipHunting'};
+    return {label:'HUNTING',title:'Wild Boar ahead',text:'Approach when you’re ready. Dodge its charge and flee if your hearts run low.',action:'adventureLandmark'};
+  }
+  return null;
+}
+let activityPromptKey='';
+function updateActivityPrompt(){
+  const blocked=editing||unavailable()||depthsRun||trackedDestination||step||route.length||interaction
+    ||!$('bedGuide').hidden||!$('tradeGuide').hidden||!$('upgradeGuide').hidden
+    ||!$('depthsDecision').hidden||document.querySelector('dialog[open]');
+  const prompt=blocked?null:currentActivityPrompt();
+  const visible=!!prompt;
+  $('contextGuide').hidden=!visible;
+  $('roomLayout').dataset.contextual=String(visible);
+  const proxyControl=prompt?.action&&!['baitRoute','equipHunting'].includes(prompt.action)?$(prompt.action):null;
+  $('contextGuideAction').disabled=proxyControl?.disabled===true;
+  const key=prompt?JSON.stringify(prompt):'';
+  if(key===activityPromptKey)return;
+  activityPromptKey=key;
+  if(!prompt)return;
+  $('contextGuideLabel').textContent=prompt.label;
+  $('contextGuideTitle').textContent=prompt.title;
+  $('contextGuideText').textContent=prompt.text;
+  const button=$('contextGuideAction');
+  button.hidden=!prompt.action;
+  if(!prompt.action)return;
+  if(prompt.action==='baitRoute')button.textContent='Show route to bait shop';
+  else if(prompt.action==='equipHunting')button.textContent='Open Inventory';
+  else if(prompt.action==='visitWarden')button.textContent='Speak to the Warden';
+  else button.textContent=$(prompt.action).textContent||prompt.title;
+}
 function updateAdventurePanel(){
   updateExplorationNav();
   updateWoodPanel();
@@ -3337,6 +3394,14 @@ $('openRootstone').onclick=()=>openRootstone('journal');
 for(const [rune,id] of [['moth','rootRuneMoth'],['wave','rootRuneWave'],['root','rootRuneRoot']])$(id).onclick=()=>touchRootstoneRune(rune);
 $('attuneRootbind').onclick=()=>attuneRootstone('rootbind');
 $('attuneDeepRoots').onclick=()=>attuneRootstone('deepRoots');
+$('contextGuideAction').onclick=()=>{
+  const prompt=currentActivityPrompt();
+  if(!prompt?.action||unavailable())return;
+  if(prompt.action==='baitRoute')setExplorationDestination('store');
+  else if(prompt.action==='equipHunting')openInventory('clearing');
+  else if(!$(prompt.action).disabled)$(prompt.action).onclick();
+  updateActivityPrompt();
+};
 $('woodAction').onclick=woodAction;
 $('openWorkbench').onclick=()=>{if(currentRoom==='logging')use(roomFurniture().find(item=>item.type==='workbench'));};
 $('carpenterDeliver').onclick=handInCarpenterOrder;
