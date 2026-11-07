@@ -1,5 +1,5 @@
 import {castEssencePower} from './essences.mjs';
-import {awardAwakeningStone} from '../public/essences.js';
+import {awardAwakeningStone,awardEssenceMastery} from '../public/essences.js';
 import {moonwood} from '../public/moonwood.js';
 import {isTimberTree,timberTreeState,cutTimberTree,choppingDuration,grantBasicAxe} from '../public/woodcutting.js';
 import {huntEnemyForRoom,huntEnemy,huntRespawnAt,canUseWeapon,createHunt,advanceHunt,huntingTurn,boarRules} from '../public/hunting.js';
@@ -12,9 +12,10 @@ function idle(state){
 }
 function move(state,room,position={x:5,y:7}){state.location=room;state.position=position;}
 function result(state,event,now){
-  const enemy=huntEnemy(state.hunting.encounter);
+  const encounter=state.hunting.encounter,enemy=huntEnemy(encounter);
   state.hunting.encounter=event.encounter;state.health=event.health;
   if(event.outcome==='victory'){
+    if(state.combatId)event.mastery=awardEssenceMastery(state.magic,[...(encounter.usedEssences??[]),event.masteryGem]);
     if(state.location!==depthsCacheRoom&&state.combatId&&state.magic?.picks.length)event.stone=awardAwakeningStone(state.magic);
     for(const [i,key] of ['strengthXp','agilityXp','vitalityXp'].entries())state.stats[key]=Math.min(100000000,state.stats[key]+enemy.xp[i]);
     if(state.depthsRun)clearDepthsStage(state.depthsRun,state.location,!!state.combatId);

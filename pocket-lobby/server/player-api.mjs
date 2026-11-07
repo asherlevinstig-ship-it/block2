@@ -80,6 +80,8 @@ export async function handlePlayerApi(request,env){
         delete state.hunting.encounter.burn;
         delete state.hunting.encounter.chilledUntil;
         delete state.hunting.encounter.weakenedUntil;
+        delete state.hunting.encounter.weakenPercent;
+        delete state.hunting.encounter.usedEssences;
         delete state.hunting.encounter.interruptResistUntil;
       }
       if(state.depthsRun){delete state.depthsRun.shardEarned;delete state.depthsRun.finds;delete state.depthsRun.cacheGuardDefeated;delete state.depthsRun.cacheStone;}

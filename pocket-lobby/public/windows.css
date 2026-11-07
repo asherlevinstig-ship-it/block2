@@ -215,3 +215,12 @@
 .depths-fork>button { padding:8px 12px; }
 
 @media(max-width:640px) { .depths-fork .depths-options { grid-template-columns:1fr; } }
+
+.essence-mastery { margin:12px 0; padding:12px 14px; border:1px solid #706184; border-radius:10px; background:#25283e; }
+.essence-mastery>div { display:flex; justify-content:space-between; flex-wrap:wrap; gap:5px 12px; }
+.essence-mastery strong { color:var(--mastery-color,#e4cef8); font-size:13px; }
+.essence-mastery span { font-size:11px; color:#ccdaed; }
+.essence-mastery progress { display:block; width:100%; height:8px; margin:10px 0; accent-color:var(--mastery-color,#d0a5ff); }
+.essence-mastery progress[hidden] { display:none; }
+.game-window .essence-mastery p { margin:6px 0; color:#efe5d5; font-size:12px; }
+.essence-mastery small { display:block; color:#b1c0d6; font-size:11px; }

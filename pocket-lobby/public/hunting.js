@@ -1,4 +1,4 @@
-import {essenceEffects} from './essences.js';
+import {essenceEffects,essenceGems} from './essences.js';
 
 export const boarRules={health:70,playerInterval:1100,boarInterval:1900,fleeCooldown:1800,respawn:30000,recovery:12000,dodgeCost:40,dodgeWindow:350,dodgeCooldown:700};
 export const stonebackVest={name:'Stoneback Vest',absorption:4,dodgeCost:50,timber:8,fragment:'stonebackShell'};
@@ -143,13 +143,16 @@ export function normalizeHunting(input={}){
       result.encounter.magicWardUntil=time(input.encounter.magicWardUntil);
     }
     const burn=input.encounter.burn;
-    if(burn&&Number.isInteger(burn.damage)&&burn.damage>=1&&burn.damage<=8){
+    if(burn&&Number.isInteger(burn.damage)&&burn.damage>=1&&burn.damage<=12){
       const nextAt=time(burn.nextAt),until=time(burn.until);
       if(nextAt>0&&nextAt<=until)result.encounter.burn={damage:burn.damage,nextAt,until};
     }
     for(const key of ['chilledUntil','weakenedUntil','interruptResistUntil']){
       if(input.encounter[key]!==undefined)result.encounter[key]=time(input.encounter[key]);
     }
+    if(Number.isFinite(input.encounter.weakenPercent)&&input.encounter.weakenPercent>=25&&input.encounter.weakenPercent<=35)result.encounter.weakenPercent=input.encounter.weakenPercent;
+    const used=Array.isArray(input.encounter.usedEssences)?[...new Set(input.encounter.usedEssences.filter(gem=>Object.hasOwn(essenceGems,gem)))]:[];
+    if(used.length)result.encounter.usedEssences=used;
     if(enemy&&enemy!=='boar')result.encounter.enemy=enemy;
     const move=enemyAttack(input.encounter);
     if(move.id===input.encounter.enemyMove)result.encounter.enemyMove=move.id;
@@ -218,9 +221,10 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
     }
     result.taken=result.dodged?0:Math.max(4,enemy.damage+move.damage+Math.floor(random()*6)-attributes.armor);
     if(result.taken&&now<(encounter.weakenedUntil??0)){
-      result.weakened=Math.floor(result.taken*essenceEffects.shadow.reduction);
+      result.weakened=Math.floor(result.taken*(encounter.weakenPercent??essenceEffects.shadow.reduction*100)/100);
       result.taken-=result.weakened;
       delete result.encounter.weakenedUntil;
+      delete result.encounter.weakenPercent;
     }
     if(vestEquipped&&result.taken){
       result.absorbed=Math.min(stonebackVest.absorption,result.taken);
@@ -244,7 +248,7 @@ export function enemyStatusEffects(encounter,now){
   const effects=[];
   if(encounter.burn&&now<encounter.burn.until)effects.push({kind:'fire',name:'Burning',color:essenceEffects.fire.color,remaining:encounter.burn.until-now,detail:encounter.burn.damage+' damage / sec'});
   if(now<(encounter.chilledUntil??0))effects.push({kind:'ice',name:'Chilled',color:essenceEffects.ice.color,remaining:encounter.chilledUntil-now,detail:'Next attack delayed'});
-  if(now<(encounter.weakenedUntil??0))effects.push({kind:'shadow',name:essenceEffects.shadow.name,color:essenceEffects.shadow.color,remaining:encounter.weakenedUntil-now,detail:'Next hit −25%'});
+  if(now<(encounter.weakenedUntil??0))effects.push({kind:'shadow',name:essenceEffects.shadow.name,color:essenceEffects.shadow.color,remaining:encounter.weakenedUntil-now,detail:'Next hit −'+(encounter.weakenPercent??essenceEffects.shadow.reduction*100)+'%'});
   if(now<(encounter.interruptResistUntil??0))effects.push({kind:'storm',name:essenceEffects.storm.name,color:essenceEffects.storm.color,remaining:encounter.interruptResistUntil-now,detail:'Resists interrupts'});
   return effects;
 }

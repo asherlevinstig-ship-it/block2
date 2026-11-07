@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {confluence,bondedEssences,essencePower,stoneForms,normalizeMagic} from '../public/essences.js';
+import {confluence,bondedEssences,essencePower,stoneForms,normalizeMagic,essenceMastery,powerDescription} from '../public/essences.js';
 import {normalizeState} from '../server/player-state.mjs';
 import {handlePlayerApi} from '../server/player-api.mjs';
 import {testDatabase} from './db-helper.mjs';
@@ -221,6 +221,7 @@ test('burn settles on its scheduled clock and grants a single victory when the p
   assert.equal(away.combatReceipt.events.at(-1).at,3100);
   assert.equal(away.combatReceipt.events.at(-1).outcome,'victory');
   assert.equal(away.huntingLoot.boar,1);
+  assert.equal(away.magic.mastery.fire,10);
   assert.deepEqual(away.hunting,online.hunting);
   assert.deepEqual(away.stats,online.stats);
   assert.deepEqual(away.magic,online.magic);
@@ -358,4 +359,126 @@ test('each base element has a useful response to the elite guardian pattern',()=
     assert.equal(s.hunting.encounter.enemyMove,'runicSlam');
     act(s,'combat',{combatId:s.combatId,input:'essence'},6200);check(s);
   }
+});
+
+
+function masteryFighter(ids,picks=gems){
+  const s=character();act(s,'bondEssences',{picks});
+  for(const id of ids){s.magic.stones[id.split(':')[1]]=1;act(s,'awakenPower',{id});}
+  s.location='clearing';s.position={x:5,y:5};act(s,'fight');
+  s.hunting.encounter.nextPlayerAt=100000;return s;
+}
+const castMastery=(s,slot='q',now=1100)=>act(s,'combat',{combatId:s.combatId,input:'essence',slot},now);
+function finishMasteryFight(s,now=2000){s.hunting.encounter.health=1;s.hunting.encounter.nextPlayerAt=now;act(s,'combat',{combatId:s.combatId},now);}
+
+test('mastery starts at level one, caps at five and survives changing Gems',()=>{
+  const old=normalizeMagic({picks:gems,unlocked:['fire:sword'],equipped:'fire:sword'});
+  assert.deepEqual(old.mastery,{fire:0,ice:0,shadow:0,storm:0});
+  assert.equal(essenceMastery(old,'fire').level,1);
+  assert.equal(essenceMastery({mastery:{fire:20}},'fire').level,2);
+  assert.equal(essenceMastery({mastery:{fire:60}},'fire').level,3);
+  assert.equal(essenceMastery({mastery:{fire:120}},'fire').level,4);
+  assert.equal(essenceMastery({mastery:{fire:99999}},'fire').level,5);
+  assert.equal(essenceMastery({mastery:{fire:-1}},'fire').xp,0);
+  const s=character();s.magic=normalizeMagic({picks:gems,mastery:{fire:20,shadow:60}});
+  s.location='shrine';act(s,'bondEssences',{picks:['fire','ice','storm']});
+  assert.equal(s.magic.mastery.shadow,60);assert.equal(s.magic.mastery.fire,20);
+});
+
+test('victory awards each used base Gem once, including a spell finishing blow',()=>{
+  const s=masteryFighter(['fire:sword','fire:shield']);
+  castMastery(s);castMastery(s,'e',1200);finishMasteryFight(s);
+  assert.equal(s.magic.mastery.fire,10);
+  assert.deepEqual(s.combatReceipt.events.at(-1).mastery,[{gem:'fire',xp:10,level:1,leveled:false}]);
+  act(s,'combat',{combatId:s.combatId},3000);assert.equal(s.magic.mastery.fire,10);
+  const two=masteryFighter(['fire:sword','ice:shield']);
+  castMastery(two);castMastery(two,'e',1200);finishMasteryFight(two);
+  assert.equal(two.magic.mastery.fire,10);assert.equal(two.magic.mastery.ice,10);assert.equal(two.magic.mastery.shadow,0);
+  const finishing=masteryFighter(['shadow:sword']);finishing.hunting.encounter.health=1;
+  castMastery(finishing);
+  assert.equal(finishing.hunting.encounter,null);assert.equal(finishing.magic.mastery.shadow,10);
+});
+
+test('unused Gems, rejected casts, fleeing and defeat do not award mastery',()=>{
+  const unused=masteryFighter(['shadow:sword']);finishMasteryFight(unused);
+  assert.equal(unused.magic.mastery.shadow,0);
+  const cooling=masteryFighter(['shadow:sword']);cooling.magic.cooldowns['shadow:sword']=100000;
+  castMastery(cooling);finishMasteryFight(cooling);assert.equal(cooling.magic.mastery.shadow,0);
+  const full=masteryFighter(['ice:renewal']);castMastery(full);finishMasteryFight(full);
+  assert.equal(full.magic.mastery.ice,0);
+  const escaped=masteryFighter(['shadow:sword']);castMastery(escaped);
+  act(escaped,'combat',{combatId:escaped.combatId,input:'flee'},1200);
+  assert.equal(escaped.hunting.encounter,null);assert.equal(escaped.magic.mastery.shadow,0);
+  const lost=masteryFighter(['fire:sword']);lost.health=1;castMastery(lost);
+  act(lost,'combat',{combatId:lost.combatId},2300);
+  assert.equal(lost.hunting.encounter,null);assert.equal(lost.magic.mastery.fire,0);
+});
+
+test('level-up receipts are emitted at thresholds and maximum mastery caps further awards',()=>{
+  const s=masteryFighter(['fire:sword']);s.magic.mastery.fire=10;castMastery(s);finishMasteryFight(s);
+  assert.deepEqual(s.combatReceipt.events.at(-1).mastery,[{gem:'fire',xp:10,level:2,leveled:true}]);
+  const capped=masteryFighter(['fire:sword']);capped.magic.mastery.fire=190;castMastery(capped);finishMasteryFight(capped);
+  assert.equal(capped.magic.mastery.fire,200);assert.equal(essenceMastery(capped.magic,'fire').level,5);
+  const maxed=masteryFighter(['fire:sword']);maxed.magic.mastery.fire=200;castMastery(maxed);finishMasteryFight(maxed);
+  assert.equal(maxed.magic.mastery.fire,200);assert.deepEqual(maxed.combatReceipt.events.at(-1).mastery,[]);
+});
+
+test('mastery bonuses alter each element while old in-flight effects keep their saved strength',()=>{
+  const fire=masteryFighter(['fire:shield']);fire.magic.mastery.fire=200;fire.stats.strengthXp=1000;castMastery(fire);
+  assert.equal(fire.hunting.encounter.burn.damage,12);
+  assert.equal(normalizeState(fire).hunting.encounter.burn.damage,12);
+  const ice=masteryFighter(['ice:shield']);ice.magic.mastery.ice=200;castMastery(ice);
+  assert.equal(ice.hunting.encounter.nextBoarAt,3400);
+  assert.match(powerDescription(essencePower('ice:shield',ice.stats,ice.magic)),/1.1 seconds/);
+  const shadow=masteryFighter(['shadow:sword']);shadow.magic.mastery.shadow=200;castMastery(shadow);
+  assert.equal(normalizeState(shadow).hunting.encounter.weakenPercent,35);
+  act(shadow,'combat',{combatId:shadow.combatId},2300);
+  assert.equal(shadow.combatReceipt.events[0].weakened,5);
+  const storm=masteryFighter(['storm:sword'],['fire','shadow','storm']);storm.magic.mastery.storm=200;
+  castMastery(storm,'q',1800);assert.equal(storm.hunting.encounter.nextBoarAt,4300);
+  assert.equal(storm.hunting.encounter.interruptResistUntil,7800);
+  const snare=masteryFighter(['storm:focus'],['fire','shadow','storm']);
+  snare.magic.mastery.storm=200;snare.stats.strengthXp=1000;
+  castMastery(snare,'q',1800);
+  assert.equal(snare.hunting.encounter.nextBoarAt,4700);
+  const old=masteryFighter(['shadow:sword']);castMastery(old);delete old.hunting.encounter.weakenPercent;
+  act(old,'combat',{combatId:old.combatId},2300);assert.equal(old.combatReceipt.events[0].weakened,3);
+});
+
+test('saved mastery and contribution cannot be forged, and concurrent victory retries award once',async t=>{
+  const {db,sql}=testDatabase();t.after(()=>sql.close());
+  const origin='https://tower.test';let cookie='',packet;
+  async function call(path,body){
+    const response=await handlePlayerApi(new Request(origin+'/api/player/'+path,{method:body?'POST':'GET',headers:{Cookie:cookie,Origin:origin,'Content-Type':'application/json'},body:body?JSON.stringify({...body,characterKey:packet?.characterKey}):undefined}),{TOWER_DB:db});
+    cookie=response.headers.get('set-cookie')?.split(';')[0]??cookie;
+    const data=await response.json();if(response.ok)packet=data;
+    return {status:response.status,...data};
+  }
+  await call('session',{legacy:{location:'ruins',position:{x:5,y:4}}});
+  const send=(name,body={})=>call(name,{...body,revision:packet.revision,operation:crypto.randomUUID()});
+  await send('gameplay/bondEssences',{picks:gems});await send('gameplay/awakenPower',{id:'fire:sword'});
+  const seed=structuredClone(packet.state);
+  seed.location='clearing';seed.position={x:5,y:5};seed.combatId=crypto.randomUUID();
+  seed.hunting.encounter={health:1,nextPlayerAt:Date.now()+60000,nextBoarAt:Date.now()+60000,nextFleeAt:0,usedEssences:['fire']};
+  sql.prepare('UPDATE tower_players SET state_json=? WHERE player_id=?').run(JSON.stringify(seed),packet.characterKey);
+  await call('state');
+  await send('save',{state:{...packet.state,magic:{...packet.state.magic,mastery:{fire:200}},hunting:{...packet.state.hunting,encounter:{...packet.state.hunting.encounter,usedEssences:['fire','ice']}}}});
+  assert.equal(packet.state.magic.mastery.fire,0);
+  assert.deepEqual(packet.state.hunting.encounter.usedEssences,['fire']);
+  const due=structuredClone(packet.state);due.hunting.encounter.nextPlayerAt=1;
+  sql.prepare('UPDATE tower_players SET state_json=? WHERE player_id=?').run(JSON.stringify(due),packet.characterKey);
+  await call('state'); // The away victory is settled through the ordinary read path.
+  assert.equal(packet.state.magic.mastery.fire,10);
+  const forged={...packet.state,magic:{...packet.state.magic,mastery:{fire:200,ice:200}}};
+  await send('save',{state:forged});assert.equal(packet.state.magic.mastery.fire,10);assert.equal(packet.state.magic.mastery.ice,0);
+  const next=structuredClone(packet.state);next.hunting.encounter={health:1,nextPlayerAt:1,nextBoarAt:Date.now()+60000,nextFleeAt:0,usedEssences:['fire']};next.combatId=crypto.randomUUID();
+  sql.prepare('UPDATE tower_players SET state_json=? WHERE player_id=?').run(JSON.stringify(next),packet.characterKey);
+  const revision=packet.revision,combatId=next.combatId,first=crypto.randomUUID(),second=crypto.randomUUID();
+  const fight=operation=>call('gameplay/combat',{revision,combatId,operation});
+  const [a,b]=await Promise.all([fight(first),fight(second)]);
+  assert.deepEqual([a.status,b.status].sort(),[200,409]);
+  const winning=a.status===200?first:second;
+  const retry=await call('gameplay/combat',{revision,combatId,operation:winning});
+  assert.equal(retry.status,200);assert.equal(retry.state.magic.mastery.fire,20);
+  assert.equal(retry.state.combatReceipt.events[0].mastery[0].leveled,true);
 });

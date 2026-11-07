@@ -1,4 +1,4 @@
-import {bondedEssences,confluence,essencePower,normalizeMagic,essenceEffects} from '../public/essences.js';
+import {bondedEssences,confluence,essencePower,normalizeMagic,essenceEffects,essenceGems} from '../public/essences.js';
 import {combatStamina,huntEnemy,enemyAttack} from '../public/hunting.js';
 
 export function essenceAction(state,action,body){
@@ -49,9 +49,9 @@ export function castEssencePower(state,now,slot='q'){
   const magic=state.magic,encounter=state.hunting.encounter;
   const id=magic?.slots[slot];
   if(!encounter||!id||now<(magic.cooldowns[id]??0)||!magic.unlocked.includes(id))return null;
-  const power=essencePower(id,state.stats);
+  const power=essencePower(id,state.stats,magic);
   if(!power||!bondedEssences(magic.picks).includes(power.gem))return null;
-  const {form,value}=power;
+  const {form,value}=power,masteryBonus=power.masteryLevel-1;
   if(form==='renewal'&&state.health>=100)return null;
   const next={...encounter};
   const event={action:'essence',power:power.name,powerColor:power.color,powerForm:form,encounter:next,health:state.health,damage:0,taken:0,outcome:'fighting'};
@@ -81,7 +81,7 @@ export function castEssencePower(state,now,slot='q'){
     event.effect='restored '+event.healed+' HP';
   }
   if(event.encounter&&power.gem==='fire'){
-    const effect=essenceEffects.fire,damage=power.rank+2;
+    const effect=essenceEffects.fire,damage=power.rank+2+masteryBonus*effect.masteryBonus;
     const burning=encounter.burn&&encounter.burn.until>=now;
     next.burn={damage:burning?Math.max(damage,encounter.burn.damage):damage,
       nextAt:burning?encounter.burn.nextAt:now+effect.interval,until:now+effect.duration};
@@ -89,12 +89,14 @@ export function castEssencePower(state,now,slot='q'){
   }
   if(event.encounter&&power.gem==='ice'){
     const effect=essenceEffects.ice,chilled=now<(encounter.chilledUntil??0);
-    if(!chilled)next.nextBoarAt+=effect.delay;
+    const delay=effect.delay+masteryBonus*effect.masteryBonus;
+    if(!chilled)next.nextBoarAt+=delay;
     next.chilledUntil=now+effect.duration;
-    event.effect+=chilled?' and refreshed Chill':' and delayed the enemy attack by 0.7 seconds';
+    event.effect+=chilled?' and refreshed Chill':' and delayed the enemy attack by '+(delay/1000).toFixed(1)+' seconds';
   }
   if(event.encounter&&power.gem==='shadow'){
     next.weakenedUntil=now+essenceEffects.shadow.duration;
+    next.weakenPercent=100*essenceEffects.shadow.reduction+masteryBonus*essenceEffects.shadow.masteryBonus;
     event.effect+=' and weakened the enemy’s next hit';
   }
   if(event.encounter&&power.gem==='storm'){
@@ -104,7 +106,7 @@ export function castEssencePower(state,now,slot='q'){
       event.interruptResisted=true;
       event.effect+=' but the enemy resisted the interrupt';
     }else if(windingUp){
-      next.nextBoarAt=Math.max(next.nextBoarAt,now+enemy.interval);
+      next.nextBoarAt=Math.max(next.nextBoarAt,now+enemy.interval)+masteryBonus*essenceEffects.storm.masteryBonus;
       delete next.enemyMove;
       next.interruptResistUntil=now+essenceEffects.storm.duration;
       event.interrupted=true;
@@ -115,6 +117,10 @@ export function castEssencePower(state,now,slot='q'){
         event.effect+=', exposing its shell';
       }
     }else event.effect+='. Cast during an attack warning to interrupt';
+  }
+  if(Object.hasOwn(essenceGems,power.gem)){
+    event.masteryGem=power.gem;
+    if(event.encounter)next.usedEssences=[...new Set([...(encounter.usedEssences??[]),power.gem])];
   }
   magic.cooldowns[power.id]=now+power.cooldown;
   return event;

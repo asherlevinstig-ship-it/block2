@@ -823,10 +823,11 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
     if(!authoritative){playerStats.strengthXp+=strength;playerStats.agilityXp+=agility;playerStats.vitalityXp+=vitality;}
     const xpReceipt={icon:'⚔',text:'+'+strength+' Strength XP · +'+agility+' Agility XP · +'+vitality+' Vitality XP'};
     const stoneReceipt=result.stone?[{icon:'◆',text:stoneForms[result.stone].name+' Awakening Stone · +1'}]:[];
+    const masteryReceipt=(result.mastery??[]).map(award=>({icon:'◆',text:essenceGems[award.gem].name+' · +'+award.xp+' Mastery XP'}));
     if(depthsRun){
       if(authoritative)depthsRun=authoritative.depthsRun;else clearDepthsStage(depthsRun,currentRoom);
       combatMessage=currentRoom===depthsCacheRoom?'The guardian’s seal is broken. Open the Essence Cache.':depthsRun.cleared===depthsStages.length?'Vault cleared. Bank your spoils.':'Chamber cleared. Bank your spoils or press deeper.';
-      showTransaction(currentRoom===depthsCacheRoom?'Essence Cache unlocked':'Chamber cleared',[{icon:'✦',text:currentRoom===depthsCacheRoom?'Open the glowing cache to claim its gold and stone':'Spoils held until you bank them'},xpReceipt,...stoneReceipt]);
+      showTransaction(currentRoom===depthsCacheRoom?'Essence Cache unlocked':'Chamber cleared',[{icon:'✦',text:currentRoom===depthsCacheRoom?'Open the glowing cache to claim its gold and stone':'Spoils held until you bank them'},xpReceipt,...stoneReceipt,...masteryReceipt]);
     }else{
       if(!authoritative){hunting[enemy.id==='beetle'?'beetleRespawnAt':'respawnAt']=Date.now()+enemy.respawn;
       huntingLoot[enemy.loot]=(huntingLoot[enemy.loot]??0)+1;}
@@ -838,13 +839,14 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
       combatMessage='Victory! '+enemy.lootName+' added to Inventory.';
       const ironTrial=firstUpgrade.ironTrialPending&&enemy.id==='beetle'&&combatGear.equippedWeapon==='ironSword';
       if(ironTrial)firstUpgrade.ironTrialPending=false;
-      const receipt=[{icon:'✦',text:enemy.lootName+' ×1 · sell for '+enemy.sellPrice+' gold'},xpReceipt,...stoneReceipt];
+      const receipt=[{icon:'✦',text:enemy.lootName+' ×1 · sell for '+enemy.sellPrice+' gold'},xpReceipt,...stoneReceipt,...masteryReceipt];
       if(ironTrial){
         combatMessage='Iron Sword trial complete! Sell the Shell Fragment for '+enemy.sellPrice+' gold or save it for a Stoneback Vest.';
         receipt.push({icon:'⬡',text:'Or keep it for a Stoneback Vest · add '+stonebackVest.timber+' timber at the Timber Hollow workbench'});
       }
       showTransaction(ironTrial?'Iron Sword trial complete!':enemy.name+' defeated',receipt);
     }
+    for(const award of (result.mastery??[]).filter(item=>item.leveled))showTransaction(essenceGems[award.gem].name+' Mastery · Level '+award.level+'!',[{icon:'◆',text:masteryBenefit(award.gem,award.level)}]);
     updateInventory();
   }else if(result.outcome==='escaped'){
     if(authoritative){depthsRun=authoritative.depthsRun??null;enterRoom(authoritative.location,authoritative.position);combatMessage='You escaped with your remaining hearts.';}
@@ -3702,7 +3704,7 @@ function renderEssences(){
   const count=magic.unlocked.filter(id=>bonded.includes(essencePower(id)?.gem)).length;
   for(const slot of ['q','e']){
     const button=$('essenceSlot'+slot.toUpperCase());
-    button.textContent=slot.toUpperCase()+' · '+(essencePower(magic.slots[slot],playerStats)?.name??'Empty slot');
+    button.textContent=slot.toUpperCase()+' · '+(essencePower(magic.slots[slot],playerStats,magic)?.name??'Empty slot');
     button.setAttribute('aria-pressed',String(slot===essenceSlot));
     button.disabled=essenceBusy;
     button.onclick=()=>{essenceSlot=slot;renderEssences();};
@@ -3711,9 +3713,17 @@ function renderEssences(){
   $('essenceEquipped').textContent='Choose Q or E, then equip an awakened power. Each spell has its own cooldown.';
   const tabs=$('essenceTabs');tabs.replaceChildren();
   for(const id of bonded)tabs.append(essenceGemButton(allEssences[id],id===viewedEssence,()=>{viewedEssence=id;renderEssences();}));
+  const mastery=essenceMastery(magic,viewedEssence),gem=allEssences[viewedEssence];
+  $('essenceMastery').style.setProperty('--mastery-color',gem.color);
+  $('essenceMasteryTitle').textContent=mastery?gem.name+' Mastery · Level '+mastery.level+' / 5':gem.name+' Confluence · Magic rank '+magicRank(playerStats);
+  $('essenceMasteryXp').textContent=mastery?(mastery.level===5?'Mastered · '+mastery.xp+' XP':mastery.progress+' / '+mastery.target+' XP to level '+(mastery.level+1)):'';
+  const progress=$('essenceMasteryProgress');progress.hidden=!mastery;
+  if(mastery){progress.max=mastery.target;progress.value=mastery.progress;progress.setAttribute('aria-label',gem.name+' mastery level '+mastery.level+', '+$('essenceMasteryXp').textContent);}
+  $('essenceMasteryBonus').textContent=mastery?masteryBenefit(viewedEssence,mastery.level):'Confluence powers grow with your combat attributes.';
+  $('essenceMasteryHint').textContent=mastery?'Use this Gem in a winning fight to earn '+masteryXpPerWin+' mastery XP.':'';
   const list=$('essencePowerList');list.replaceChildren();
   for(const [form,stone] of Object.entries(stoneForms)){
-    const id=viewedEssence+':'+form,power=essencePower(id,playerStats);
+    const id=viewedEssence+':'+form,power=essencePower(id,playerStats,magic);
     const awakened=magic.unlocked.includes(id),active=magic.slots[essenceSlot]===id;
     const assigned=['q','e'].find(slot=>magic.slots[slot]===id);
     const row=document.createElement('article'),info=document.createElement('div');
@@ -3734,15 +3744,15 @@ async function changeEssences(action,body){
     await serverGameplay(action,body);
     $('essenceStatus').textContent=action==='bondEssences'
       ?confluence(magicState.picks).name+' formed from your three Gems. Win fights to earn more Awakening Stones.'
-      :action==='awakenPower'?'Awakened '+essencePower(body.id,playerStats).name+'.'
-      :body.id?essencePower(body.id,playerStats).name+' equipped to '+body.slot.toUpperCase()+'.':'Slot '+body.slot.toUpperCase()+' cleared.';
+      :action==='awakenPower'?'Awakened '+essencePower(body.id,playerStats,magicState).name+'.'
+      :body.id?essencePower(body.id,playerStats,magicState).name+' equipped to '+body.slot.toUpperCase()+'.':'Slot '+body.slot.toUpperCase()+' cleared.';
   }catch(error){$('essenceStatus').textContent=error.message;}
   finally{essenceBusy=false;renderEssences();}
 }
 const hotbarPowerSymbols={sword:'⚔',shield:'⬡',speed:'ϟ',focus:'✧',renewal:'✚'};
 let hotbarGemsKey='';
 function equippedEssenceStatus(now,slot='q'){
-  const power=essencePower(magicState?.slots[slot],playerStats);
+  const power=essencePower(magicState?.slots[slot],playerStats,magicState);
   const remaining=Math.max(0,(magicState?.cooldowns[power?.id]??0)-now);
   const fullHealth=power?.form==='renewal'&&health>=maxHealth();
   return {power,remaining,fullHealth,canCast:!!power&&player.inCombat&&!!hunting.encounter&&!remaining&&!fullHealth};
