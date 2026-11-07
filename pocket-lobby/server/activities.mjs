@@ -1,3 +1,4 @@
+import {nextCombatTactic} from '../public/character-rules.js';
 import {castEssencePower} from './essences.mjs';
 import {awardAwakeningStone,awardEssenceMastery} from '../public/essences.js';
 import {moonwood} from '../public/moonwood.js';
@@ -13,6 +14,7 @@ function idle(state){
 function move(state,room,position={x:5,y:7}){state.location=room;state.position=position;}
 function result(state,event,now){
   const encounter=state.hunting.encounter,enemy=huntEnemy(encounter);
+  if(event.encounter&&Number.isSafeInteger(encounter.tacticsAt))event.encounter.tacticsAt=now;
   state.hunting.encounter=event.encounter;state.health=event.health;
   if(event.outcome==='victory'){
     if(state.combatId)event.mastery=awardEssenceMastery(state.magic,[...(encounter.usedEssences??[]),event.masteryGem]);
@@ -44,9 +46,16 @@ export function advanceServerCombat(state,now,random=Math.random){
   const events=[];
   for(let i=0;state.hunting.encounter&&i<2048;i++){
     const encounter=state.hunting.encounter;
-    const due=Math.min(encounter.nextPlayerAt,encounter.nextBoarAt,encounter.burn?.nextAt??Infinity);
+    const coreDue=Math.min(encounter.nextPlayerAt,encounter.nextBoarAt,encounter.burn?.nextAt??Infinity);
+    const tactic=nextCombatTactic(state),automatic=tactic&&tactic.at<coreDue;
+    const due=automatic?tactic.at:coreDue;
     if(due>now)break;
-    const event=advanceHunt(encounter,state.health,state.stats,due,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,state.combatGear.stonebackVestEquipped,state.combatGear.moonwellCharmEquipped,state.combatGear.weaponEnchantments);
+    let event;
+    if(automatic){
+      if(tactic.action==='essence')event=castEssencePower(state,due,tactic.slot);
+      else event=huntingTurn(encounter,state.health,state.stats,'flee',due,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,state.combatGear.stonebackVestEquipped,state.combatGear.moonwellCharmEquipped,state.combatGear.weaponEnchantments);
+      if(event)event.automatic=true;
+    }else event=advanceHunt(encounter,state.health,state.stats,due,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,state.combatGear.stonebackVestEquipped,state.combatGear.moonwellCharmEquipped,state.combatGear.weaponEnchantments);
     if(!event)break;
     events.push(result(state,event,due));
   }
@@ -92,7 +101,9 @@ export function activityAction(state,action,body,now,random){
     if(index>=0?!depthsEnemyAvailable(state.depthsRun,state.location):now<huntRespawnAt(state.hunting,enemy))throw new Error('Invalid encounter. Wait for the creature to return.');
     delete state.timberCut;
     state.combatId=crypto.randomUUID();state.combatReceipt={id:crypto.randomUUID(),events:[]};
-    state.hunting.encounter=createHunt(now,enemy.health,enemy.id);return true;
+    state.hunting.encounter=createHunt(now,enemy.health,enemy.id);
+    if(state.characterRules?.combat?.enabled)state.hunting.encounter.tacticsAt=now;
+    return true;
   }
   if(action==='combat'){
     if(body.combatId!==state.combatId)throw new Error('Invalid encounter. Reload your character.');

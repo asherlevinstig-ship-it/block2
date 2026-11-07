@@ -85,6 +85,7 @@ const caughtFishValue=()=>Object.entries(fishStock).reduce((total,[id,count])=>t
 const huntingLoot={rabbit:0,boar:0,deer:0,...savedPlayerState?.huntingLoot};
 let meals={...savedPlayerState?.meals};
 let magicState=savedPlayerState?.magic?normalizeMagic(savedPlayerState.magic):null;
+let characterRules=normalizeCharacterRules(savedPlayerState?.characterRules);
 const history=normalizeHistory({...savedPlayerState,stats:playerStats,fishStock,huntingLoot});
 const tradeCatalog={
   ...fishProducts,
@@ -880,6 +881,7 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
   if(result.absorbed)combatMessage+=(combatMessage?' ':'')+'Your vest absorbed '+result.absorbed+' damage.';
   if(result.dodgeStarted)combatMessage='You sidestep. Time your dodge just before the '+enemy.move+' lands!';
   if(result.timedDodge)combatMessage=result.shellExposed?'Perfect dodge! The shell flips open.':'Perfect dodge! You avoided '+(result.move??'the attack')+'.';
+  if(result.automatic)combatMessage='Tactic · '+combatMessage;
   if(result.nextMove&&result.outcome==='fighting')combatMessage+=(combatMessage?' ':'')+'Next: '+result.nextMove+'.';
   if(result.taken&&playEffects){
     $('healthHud').classList.remove('injured');void $('healthHud').offsetWidth;$('healthHud').classList.add('injured');
@@ -1002,7 +1004,7 @@ function updateCombatPanel(){
   const remaining=Math.max(0,(encounter?.nextFleeAt??0)-now);
   $('boarHealth').textContent=encounter?encounter.health+' / '+enemy.health+' HP':now<respawn?'Returns in '+Math.ceil((respawn-now)/1000)+'s':enemy.health+' / '+enemy.health+' HP';
   $('boarProgress').value=encounter?.health??(now<respawn?0:enemy.health);
-  $('combatAttack').textContent=encounter?'Auto-attacking':'Auto-attack';
+  $('combatAttack').textContent=encounter?(characterRules.combat.enabled?'Auto-attack · Tactics active':'Auto-attacking'):'Auto-attack';
   $('combatFlee').disabled=!encounter||remaining>0;
   const stamina=encounter?combatStamina(encounter,playerStats,now,combatGear.moonwellCharmEquipped):100;
   const dodgeCost=combatDodgeCost(combatGear.stonebackVestEquipped);
@@ -1027,7 +1029,8 @@ function updateCombatPanel(){
 }
 function updateCombatMoment(time){
   if(window.playerCloud?.gameplay){
-    const due=hunting.encounter?Math.min(hunting.encounter.nextPlayerAt,hunting.encounter.nextBoarAt,hunting.encounter.burn?.nextAt??Infinity):Infinity;
+    const tactic=nextCombatTactic({hunting,health,stats:playerStats,combatGear,magic:magicState,characterRules});
+    const due=hunting.encounter?Math.min(hunting.encounter.nextPlayerAt,hunting.encounter.nextBoarAt,hunting.encounter.burn?.nextAt??Infinity,tactic?.at??Infinity):Infinity;
     if(player.inCombat&&Date.now()>=due&&time>=nextCombatPoll)sendServerCombat();
     if(hunting.recoveryUntil&&Date.now()>=hunting.recoveryUntil&&!serverActionBusy&&!activityBusy){
       serverGameplay('recover').then(()=>{updatePlayerStats();updateCombatPanel();savePlayerState();}).catch(error=>note(error.message));
@@ -3226,6 +3229,7 @@ function updatePlayerStats(){
 }
 function applyServerGameplay(state){
   credits=state.credits;goldEarned=state.goldEarned??0;
+  characterRules=normalizeCharacterRules(state.characterRules);
   Object.assign(fishingGear,state.fishingGear);
   for(const id of Object.keys(fishStock))delete fishStock[id];
   Object.assign(fishStock,state.fishStock);
@@ -3859,14 +3863,17 @@ function updateEssenceHotbar(now=Date.now()){
     const suffix=slot==='q'?'':'E';
     const {power,remaining,fullHealth,canCast}=equippedEssenceStatus(now,slot);
     const button=$('essenceHotbarPower'+suffix);
-    const status=!power?(player.inCombat?'Equip between fights':'Open Essences'):remaining?'Recharging · '+Math.ceil(remaining/1000)+'s'
+    let status=!power?(player.inCombat?'Equip between fights':'Open Essences'):remaining?'Recharging · '+Math.ceil(remaining/1000)+'s'
       :!player.inCombat?allEssences[power.gem].name+' · Cast in combat'
       :fullHealth?'Hearts are full':power.gem==='storm'?(now<(hunting.encounter?.interruptResistUntil??0)?'Enemy resists interrupts':'Ready · Interrupt during warning'):allEssences[power.gem].name+' · Ready';
+    const automated=characterRules.combat.enabled&&characterRules.combat[slot];
+    if(automated&&player.inCombat&&power&&!remaining&&!fullHealth)status='Auto · Waiting for tactic';
+    button.dataset.automatic=String(automated);
     button.dataset.ready=String(canCast);
     button.dataset.equipped=String(!!power);
     button.disabled=player.inCombat&&!canCast;
     button.style.setProperty('--power-color',power?.color??'#b7a4ed');
-    button.title=power?powerDescription(power):'Open Essences to equip a power';
+    button.title=power?powerDescription(power)+(automated?' '+describeCombatSpell(power):''):'Open Essences to equip a power';
     button.setAttribute('aria-label',power?(canCast?'Cast ':'')+power.name+' · '+status:'Equip a power in Essences');
     const name=$('essenceHotbarName'+suffix),label=$('essenceHotbarStatus'+suffix),symbol=$('essenceHotbarSymbol'+suffix);
     if(name.textContent!==(power?.name??'Equip a power'))name.textContent=power?.name??'Equip a power';
@@ -4276,14 +4283,25 @@ $('visitWarden').onclick=()=>use(hubFurniture.find(item=>item.type==='warden'));
 $('restAtTower').onclick=restAtTower;
 
 let savingRules=false;
-function draftCharacterRules(){return normalizeCharacterRules({enabled:$('rulesEnabled').checked,activity:$('rulesActivity').value,keepBait:Number($('rulesKeepBait').value),timberTarget:Number($('rulesTimberTarget').value)});}
+function draftCharacterRules(){return normalizeCharacterRules({enabled:$('rulesEnabled').checked,activity:$('rulesActivity').value,keepBait:Number($('rulesKeepBait').value),timberTarget:Number($('rulesTimberTarget').value),combat:{enabled:$('rulesCombatEnabled').checked,q:$('rulesAutoQ').checked,e:$('rulesAutoE').checked,fleeBelow:Number($('rulesCombatFlee').value)}});}
 function updateCharacterRulesPreview(){
   const activity=$('rulesActivity').value;
   for(const name of ['rest','fishing','woodcutting'])$('routine'+name[0].toUpperCase()+name.slice(1)).setAttribute('aria-pressed',String(activity===name));
   $('rulesBaitField').hidden=activity!=='fishing';$('rulesTimberField').hidden=activity!=='woodcutting';
   try{
     const rules=draftCharacterRules();$('rulesPreview').textContent=describeCharacterRules(rules);
-    let detail='You keep control while playing. The eight-hour cap applies to each period away.';
+    $('rulesCombatEnabled').disabled=savingRules;
+    $('rulesCombatFlee').disabled=savingRules||!rules.combat.enabled;
+    for(const slot of ['q','e']){
+      const key=slot.toUpperCase(),power=essencePower(magicState?.slots?.[slot],playerStats,magicState);
+      $('rulesAuto'+key).disabled=savingRules||!rules.combat.enabled||!power;
+      $('rules'+key+'Power').textContent=key+' · '+(power?.name??'Empty slot');
+      $('rules'+key+'Policy').textContent=describeCombatSpell(power);
+    }
+    $('rulesCombatPreview').textContent=rules.combat.enabled
+      ?'Tactics run online and offline in encounters you enter. '+(rules.combat.fleeBelow?'Attempt to flee at '+rules.combat.fleeBelow+' HP or lower.':'Keep fighting until the encounter ends.')
+      :'Combat is under your manual control.';
+    let detail='Away work begins after a minute away and follows the eight-hour cap.';
     if(rules.enabled&&activity!=='rest'){
       const bait=Math.min(1000,Math.max(0,fishingGear.bait-rules.keepBait));
       const preview=jobPreview(jobState(),activity,8,bait);
@@ -4294,10 +4312,11 @@ function updateCharacterRulesPreview(){
   }catch(error){$('rulesPreview').textContent=error.message;$('rulesSave').disabled=true;}
 }
 function openCharacterRules(){
-  if(player.inCombat){note('Finish combat before changing your away rules.');return;}
+  if(player.inCombat){note('Finish combat before changing your character rules.');return;}
   window.towerPauseForAccount();
-  const state=window.playerCloud?.initial??savedPlayerState??{},rules=normalizeCharacterRules(state.characterRules);
+  const state=window.playerCloud?.initial??savedPlayerState??{},rules=normalizeCharacterRules(characterRules);
   $('rulesEnabled').checked=rules.enabled;$('rulesActivity').value=rules.activity;$('rulesKeepBait').value=rules.keepBait;$('rulesTimberTarget').value=rules.timberTarget;$('rulesStatus').textContent='';
+  $('rulesCombatEnabled').checked=rules.combat.enabled;$('rulesAutoQ').checked=rules.combat.q;$('rulesAutoE').checked=rules.combat.e;$('rulesCombatFlee').value=rules.combat.fleeBelow;
   const log=$('rulesActivityLog');log.replaceChildren();
   for(const item of [...(state.activityLog??[])].reverse()){
     const row=document.createElement('li'),title=document.createElement('b'),detail=document.createElement('p');
@@ -4309,14 +4328,15 @@ function openCharacterRules(){
   updateCharacterRulesPreview();$('characterRulesDialog').showModal();
 }
 $('openCharacterRules').onclick=openCharacterRules;
-for(const id of ['rulesEnabled','rulesActivity','rulesKeepBait','rulesTimberTarget'])$(id).oninput=updateCharacterRulesPreview;
+for(const id of ['rulesEnabled','rulesActivity','rulesKeepBait','rulesTimberTarget','rulesCombatEnabled','rulesAutoQ','rulesAutoE','rulesCombatFlee'])$(id).oninput=updateCharacterRulesPreview;
 $('characterRulesDialog').oncancel=event=>{if(savingRules)event.preventDefault();};
 $('characterRulesForm').onsubmit=async event=>{
   event.preventDefault();if(savingRules)return;
   try{
     const rules=draftCharacterRules();savingRules=true;updateCharacterRulesPreview();$('characterRulesDialog').querySelector('.close').disabled=true;
-    window.towerPauseForAccount();savePlayerState();await window.playerCloud.saveRules(rules);
-    $('rulesStatus').textContent=rules.enabled?'Rules saved. Your character will follow them next time you’re away.':'Away actions switched off.';
+    window.towerPauseForAccount();savePlayerState();const state=await window.playerCloud.saveRules(rules);
+    characterRules=normalizeCharacterRules(state?.characterRules??rules);
+    $('rulesStatus').textContent=rules.combat.enabled?'Rules saved. Combat tactics are ready for the next encounter.':'Character rules saved.';
   }catch(error){$('rulesStatus').textContent=error.message;}
   finally{savingRules=false;updateCharacterRulesPreview();$('characterRulesDialog').querySelector('.close').disabled=false;}
 };

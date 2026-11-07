@@ -83,6 +83,7 @@ export async function handlePlayerApi(request,env){
         delete state.hunting.encounter.weakenedUntil;
         delete state.hunting.encounter.weakenPercent;
         delete state.hunting.encounter.usedEssences;
+        delete state.hunting.encounter.tacticsAt;
         delete state.hunting.encounter.interruptResistUntil;
       }
       if(state.depthsRun){delete state.depthsRun.shardEarned;delete state.depthsRun.finds;delete state.depthsRun.cacheGuardDefeated;delete state.depthsRun.cacheStone;}
@@ -151,8 +152,11 @@ export async function handlePlayerApi(request,env){
         touchPresence(state,Date.now());
         break;
       case "/api/player/rules/save":
+        if(state.hunting?.encounter)return json({error:"Finish combat before changing character rules.",...packet(row)},409);
         if(state.plan||state.report)return json({error:"Read your work report before changing rules.",...packet(row)},409);
-        state.characterRules=normalizeCharacterRules(body.rules);state.routineLastSeen=Date.now();
+        const rules=normalizeCharacterRules(body.rules);
+        if(body.rules?.combat===undefined)rules.combat=normalizeCharacterRules(state.characterRules).combat;
+        state.characterRules=rules;state.routineLastSeen=Date.now();
         break;
       case "/api/player/plan/start":
         startPlan(state,body,Date.now());
