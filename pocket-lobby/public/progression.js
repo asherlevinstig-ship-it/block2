@@ -4,7 +4,7 @@ export function playerPower(stats={},gear={}){
   const strength=1+Math.floor((stats.strengthXp??0)/50);
   const agility=1+Math.floor((stats.agilityXp??0)/50);
   const vitality=1+Math.floor((stats.vitalityXp??0)/50);
-  const weapon=weaponProfile(gear.equippedWeapon,gear.activeSwordUpgrade);
+  const weapon=weaponProfile(gear.equippedWeapon,gear.activeSwordUpgrade,gear.weaponEnchantments);
   const parts=[
     {name:'Combat attributes',points:10*(strength+agility+vitality),detail:'10 per Strength, Agility and Vitality level'},
     {name:weapon?.name??'Weapon',points:weapon?weapon.damage*2+Math.round(10000/weapon.interval):0,detail:weapon?'Base damage ×2 + attack speed score':'Equip a weapon to add its power'},

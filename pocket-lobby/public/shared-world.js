@@ -5,7 +5,7 @@ const layouts={
   outside:[['fountain',6,5],['streetlamp',1,3],['streetlamp',1,8],['streetlamp',11,1],['streetlamp',11,10],['bench',3,8],['bench',10,3,1],['bench',9,9,2],['plant',0,1],['plant',0,10],['plant',13,1],['plant',13,10]],
   store:[['tackleCounter',3,2],['rodRack',7,1],['baitCrates',7,4],['plant',1,1],['stool',4,4]],
   market:[['tradeCounter',3,2],['harvestCrates',7,3],['baitCrates',7,5],['plant',1,1],['stool',4,4]],
-  armory:[['armoryCounter',3,2],['weaponRack',7,1],['anvil',7,5],['brazier',1,1],['stool',4,4]]
+  armory:[['armoryCounter',3,2],['weaponRack',7,1],['anvil',7,5],['enchanter',6,5],['brazier',1,1],['stool',4,4]]
 };
 export function furnitureBox(item){
   const {type,x,y,rot=0}=item;

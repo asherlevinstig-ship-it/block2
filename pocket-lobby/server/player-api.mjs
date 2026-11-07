@@ -74,6 +74,7 @@ export async function handlePlayerApi(request,env){
       if(existing)return json(packet(existing));
       const body=await bodyOf(request),state=normalizeState({...body.legacy,meals:{},magic:undefined,...(body.newCharacter===true?{characterCreated:false,welcomeSeen:false}:{})});
       state.stats.luckXp=0;
+      delete state.combatGear.weaponEnchantments;
       if(state.hunting.encounter){
         delete state.hunting.encounter.magicWard;
         delete state.hunting.encounter.magicWardUntil;

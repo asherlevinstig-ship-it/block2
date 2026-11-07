@@ -1,4 +1,4 @@
-import {stonebackVest,swordUpgrades,moonwellCharm} from './hunting.js';
+import {stonebackVest,swordUpgrades,moonwellCharm,weaponEnchantments,weaponProfile} from './hunting.js';
 import {moonwellShard} from './depths.js';
 
 export const craftingRecipes={
@@ -6,6 +6,27 @@ export const craftingRecipes={
   woodTable:{name:'Small Table',cost:10,description:'A compact table with a natural wood finish.'},
   bookcase:{name:'Bookshelf',cost:15,description:'A freestanding shelf with room for books and keepsakes.'}
 };
+export function isAtEnchanter(state){
+  if(state.location!=='armory'||!state.position)return false;
+  const {x,y}=state.position;
+  return Number.isInteger(x)&&Number.isInteger(y)&&(Math.abs(x-6)+Math.abs(y-5)===1||Math.abs(x-7)+Math.abs(y-5)===1);
+}
+export function enchantWeapon(state,id,targetLevel){
+  if(!isAtEnchanter(state))throw new Error('Travel beside the Enchanter or anvil in the Tower Armory.');
+  if(state.plan||state.report||state.fishingCast||state.timberCut||state.hunting?.encounter||state.hunting?.recoveryUntil||state.health<=0)throw new Error('Invalid activity. Finish your current activity before enchanting.');
+  const gear=state.combatGear;
+  if(!gear?.ownedWeapons.includes(id))throw new Error('Choose a weapon you own.');
+  const level=gear.weaponEnchantments?.[id]??0;
+  if(level>=weaponEnchantments.length)throw new Error('This weapon is already fully enchanted.');
+  if(targetLevel!==level+1)throw new Error('Choose the next enchantment level. Your weapon may have changed.');
+  const cost=weaponEnchantments[level];
+  if(state.credits<cost.gold||(state.huntingLoot[moonwellShard.id]??0)<cost.shards)throw new Error('Invalid materials. You need '+cost.gold+' gold and '+cost.shards+' Moonwell Shard'+(cost.shards===1?'':'s')+'.');
+  const before=weaponProfile(id,gear.activeSwordUpgrade,gear.weaponEnchantments);
+  state.credits-=cost.gold;state.huntingLoot[moonwellShard.id]-=cost.shards;
+  gear.weaponEnchantments={...gear.weaponEnchantments,[id]:targetLevel};
+  const after=weaponProfile(id,gear.activeSwordUpgrade,gear.weaponEnchantments);
+  return {name:after.name,level:targetLevel,gold:cost.gold,shards:cost.shards,before:before.damage,after:after.damage};
+}
 export function isAtWorkbench(state){
   if(state.location!=='logging'||!state.position)return false;
   const {x,y}=state.position;

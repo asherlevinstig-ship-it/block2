@@ -259,7 +259,7 @@ function drawTimberTree(item,time){
 function craftingState(){return {location:currentRoom,position:{x:player.cx,y:player.cy},woodcutting,ownedFurniture,plan:savedPlayerState?.plan};}
 function updateSwordWorkbench(ready){
   const active=combatGear.activeSwordUpgrade;
-  const current=weaponProfile('trainingSword',active);
+  const current=weaponProfile('trainingSword',active,combatGear.weaponEnchantments);
   $('swordUpgradeCurrent').textContent=(current.upgradeName??'Standard fittings')+' · '+current.damage+' base damage · '+attackSeconds(current.interval)+' per attack';
   $('swordUpgradeGold').textContent=credits+' gold';
   const choices=$('swordUpgradeChoices');
@@ -272,7 +272,7 @@ function updateSwordWorkbench(ready){
     card.tabIndex=-1;
     const title=document.createElement('h4'),stats=document.createElement('p'),cost=document.createElement('small'),button=document.createElement('button');
     title.textContent=upgrade.name;
-    stats.textContent=upgrade.damage+' base damage · '+attackSeconds(upgrade.interval)+' per attack';
+    stats.textContent=weaponProfile('trainingSword',id,combatGear.weaponEnchantments).damage+' base damage · '+attackSeconds(upgrade.interval)+' per attack';
     cost.textContent=owned?'Crafted · Free to refit':upgrade.timber+' timber + '+upgrade.gold+' gold';
     button.type='button';
     button.textContent=fitted?'Fitted ✓':owned?'Refit for free':'Craft & fit';
@@ -385,6 +385,73 @@ function updateCraftingUI(){
     const hint=document.createElement('small');hint.className='craft-hint';hint.textContent=!ready?'Use the workbench to craft.':woodcutting.timber<recipe.cost?'Need '+(recipe.cost-woodcutting.timber)+' more timber':'Added to inventory · Ready to place at home';
     card.append(art,name,description,cost,stock,button,hint);recipes.append(card);
   }
+}
+let enchantSelection=null,enchantBusy=false;
+function openEnchanter(){
+  if(unavailable())return;
+  if(!isAtEnchanter({location:currentRoom,position:{x:player.cx,y:player.cy}})){note('Visit the Enchanter beside the Armory anvil.');return;}
+  if($('merchantDialog').open)$('merchantDialog').close();
+  $('enchantFeedback').textContent='';renderEnchanter();$('enchantDialog').showModal();
+}
+function renderEnchanter(){
+  const owned=combatGear.ownedWeapons;
+  if(!owned.includes(enchantSelection))enchantSelection=combatGear.equippedWeapon??owned[0];
+  const selector=$('enchantWeapon');selector.replaceChildren();
+  for(const id of owned){
+    const option=document.createElement('option');option.value=id;
+    option.textContent=weaponCatalog[id].name+(combatGear.weaponEnchantments?.[id]?' · Enchantment '+combatGear.weaponEnchantments[id]:'');selector.append(option);
+  }
+  selector.value=enchantSelection;selector.disabled=enchantBusy;
+  const id=enchantSelection,level=combatGear.weaponEnchantments?.[id]??0,cost=weaponEnchantments[level];
+  const before=weaponProfile(id,combatGear.activeSwordUpgrade,combatGear.weaponEnchantments);
+  const future={...combatGear.weaponEnchantments,[id]:Math.min(3,level+1)};
+  const after=weaponProfile(id,combatGear.activeSwordUpgrade,future);
+  const current=huntingAttributes(playerStats,id,combatGear.activeSwordUpgrade,false,combatGear.weaponEnchantments);
+  const next=huntingAttributes(playerStats,id,combatGear.activeSwordUpgrade,false,future);
+  $('enchantGold').textContent=credits.toLocaleString()+' gold';
+  $('enchantShards').textContent=(huntingLoot[moonwellShard.id]??0)+' Moonwell Shards';
+  $('enchantArt').innerHTML=shopItemArt(id);
+  $('enchantName').textContent=before.name+' · '+(level?'Enchantment '+level:'Unenchanted');
+  $('enchantDamage').textContent=cost?'Weapon damage '+before.damage+' → '+after.damage+' (+2)':'Weapon damage '+before.damage+' · Fully enchanted';
+  $('enchantHit').textContent=cost?'Your hit '+current.damage+'–'+(current.damage+4)+' → '+next.damage+'–'+(next.damage+4):'Your hit '+current.damage+'–'+(current.damage+4);
+  $('enchantSpeed').textContent=attackSeconds(before.interval)+' per strike'+(before.upgradeName?' · '+before.upgradeName:'');
+  for(const [index,upgrade] of weaponEnchantments.entries()){
+    const item=$('enchantLevel'+(index+1));
+    item.textContent='Level '+(index+1)+' · +'+upgrade.damage+' damage';
+    const price=document.createElement('small');price.textContent=upgrade.gold+' gold + '+upgrade.shards+' shard'+(upgrade.shards===1?'':'s');item.append(price);
+    item.dataset.earned=String(level>index);item.setAttribute('aria-current',level===index?'step':'false');
+  }
+  const missing=[],shards=huntingLoot[moonwellShard.id]??0;
+  if(cost&&credits<cost.gold)missing.push((cost.gold-credits)+' more gold');
+  if(cost&&shards<cost.shards){
+    const needed=cost.shards-shards;
+    missing.push(needed+' more Moonwell Shard'+(needed===1?'':'s'));
+  }
+  $('enchantCost').textContent=cost?'Cost for this level · '+cost.gold+' gold + '+cost.shards+' Moonwell Shard'+(cost.shards===1?'':'s'):'All three enchantments complete.';
+  $('enchantRequirements').textContent=missing.length?'You need '+missing.join(' and ')+'.':'Moonwell Shards are found in the Sunken Vault.';
+  $('enchantBuy').textContent=enchantBusy?'Enchanting…':cost?'Enchant to level '+(level+1):'Fully enchanted';
+  $('enchantBuy').disabled=enchantBusy||!cost||missing.length>0||unavailable();
+}
+async function buyEnchantment(){
+  if(enchantBusy||unavailable())return;
+  const id=enchantSelection,level=(combatGear.weaponEnchantments?.[id]??0)+1,cost=weaponEnchantments[level-1];
+  if(!cost)return;
+  const before=weaponProfile(id,combatGear.activeSwordUpgrade,combatGear.weaponEnchantments);
+  enchantBusy=true;renderEnchanter();
+  try{
+    if(window.playerCloud?.gameplay)await serverGameplay('enchant',{id,level});
+    else{
+      const state={location:currentRoom,position:{x:player.cx,y:player.cy},combatGear,health,credits,hunting,huntingLoot,plan:savedPlayerState?.plan};
+      enchantWeapon(state,id,level);credits=state.credits;savePlayerState();
+    }
+    const after=weaponProfile(id,combatGear.activeSwordUpgrade,combatGear.weaponEnchantments);
+    $('enchantFeedback').textContent=after.name+' enchanted to level '+level+'. Damage '+before.damage+' → '+after.damage+'.';
+    updateInventory();updateArmoryShop();
+    showTransaction('Enchantment complete',[{icon:'⚔',text:after.name+' · Enchantment '+level+' · +2 damage'},{icon:'◆',text:'−'+cost.shards+' Moonwell Shard'+(cost.shards===1?'':'s')}],-cost.gold);
+    const preview=$('enchantPreview');preview.classList.remove('enchant-success');void preview.offsetWidth;preview.classList.add('enchant-success');
+    setTimeout(()=>preview.classList.remove('enchant-success'),1000);
+  }catch(error){$('enchantFeedback').textContent=error.message;}
+  finally{enchantBusy=false;renderEnchanter();}
 }
 function openCrafting(){
   if(!isAtWorkbench(craftingState())||unavailable())return;
@@ -701,7 +768,7 @@ function updateDepthsPanel(){
   const entrance=$('depthsEntrance');
   entrance.hidden=!showEntrance;
   if(showEntrance){
-    const weapon=weaponProfile(combatGear.equippedWeapon,combatGear.activeSwordUpgrade);
+    const weapon=weaponProfile(combatGear.equippedWeapon,combatGear.activeSwordUpgrade,combatGear.weaponEnchantments);
     $('depthsEntryHealth').textContent=health+' / '+maxHealth()+' HP';
     $('depthsEntryWeapon').textContent=weapon?weapon.name+(weapon.upgradeName?' · '+weapon.upgradeName:''):'None equipped';
     $('depthsEntryArmour').textContent=combatGear.stonebackVestEquipped?'Stoneback Vest':'None equipped';
@@ -793,7 +860,7 @@ function startMonsterEncounter(enemy){
 function combatAction(action){
   if(!player.inCombat||!['flee','dodge'].includes(action))return;
   if(window.playerCloud?.gameplay){sendServerCombat(action);return;}
-  const result=huntingTurn(hunting.encounter,health,playerStats,action,Date.now(),Math.random,combatGear.equippedWeapon,combatGear.activeSwordUpgrade,combatGear.stonebackVestEquipped,combatGear.moonwellCharmEquipped);
+  const result=huntingTurn(hunting.encounter,health,playerStats,action,Date.now(),Math.random,combatGear.equippedWeapon,combatGear.activeSwordUpgrade,combatGear.stonebackVestEquipped,combatGear.moonwellCharmEquipped,combatGear.weaponEnchantments);
   if(!result&&action==='dodge'){
     combatMessage=combatStamina(hunting.encounter,playerStats,Date.now(),combatGear.moonwellCharmEquipped)<combatDodgeCost(combatGear.stonebackVestEquipped)?'Not enough stamina. Let it recover.':'Your dodge is recovering.';
     updateCombatPanel();return;
@@ -947,8 +1014,8 @@ function updateCombatPanel(){
   $('combatDodge').textContent=encounter&&stamina<dodgeCost?'Dodge · Low stamina':encounter&&now<(encounter.nextDodgeAt??0)?'Dodge · Recovering':timing?'Dodge now! · Space':'Dodge · Space';
   $('combatCooldown').textContent=encounter?'Next strike '+Math.max(0,(encounter.nextPlayerAt-now)/1000).toFixed(1)+'s · '+attack.name+' '+Math.max(0,(encounter.nextBoarAt-now)/1000).toFixed(1)+'s'+(remaining?' · Flee '+(remaining/1000).toFixed(1)+'s':' · F: Flee'):'Click the '+enemy.name+' to engage. Combat runs in real time.';
   $('combatLog').textContent=combatMessage||'The '+enemy.name+' waits. It attacks when you approach.';
-  const weapon=weaponProfile(combatGear.equippedWeapon,combatGear.activeSwordUpgrade);
-  const attributes=huntingAttributes(playerStats,combatGear.equippedWeapon,combatGear.activeSwordUpgrade);
+  const weapon=weaponProfile(combatGear.equippedWeapon,combatGear.activeSwordUpgrade,combatGear.weaponEnchantments);
+  const attributes=huntingAttributes(playerStats,combatGear.equippedWeapon,combatGear.activeSwordUpgrade,false,combatGear.weaponEnchantments);
   $('combatGuide').textContent=(weapon?.name??'No weapon equipped')+(weapon?.upgradeName?' · '+weapon.upgradeName:'')+' · Attack '+attributes.damage+'–'+(attributes.damage+4)+' every '+attackSeconds(attributes.attackInterval)+' · Dodge '+Math.round(attributes.dodge*100)+'% · Escape '+Math.round(attributes.escape*100)+'% · Armor '+attributes.armor;
   if(stage>=0)$('adventureLandmark').hidden=true;
   else if(beetle)$('adventureLandmark').hidden=!!encounter;
@@ -968,7 +1035,7 @@ function updateCombatMoment(time){
     if(time-lastCombatUi>100){lastCombatUi=time;updateCombatPanel();}
     return;
   }
-  if(player.inCombat)applyCombatResult(advanceHunt(hunting.encounter,health,playerStats,Date.now(),Math.random,combatGear.equippedWeapon,combatGear.activeSwordUpgrade,combatGear.stonebackVestEquipped,combatGear.moonwellCharmEquipped));
+  if(player.inCombat)applyCombatResult(advanceHunt(hunting.encounter,health,playerStats,Date.now(),Math.random,combatGear.equippedWeapon,combatGear.activeSwordUpgrade,combatGear.stonebackVestEquipped,combatGear.moonwellCharmEquipped,combatGear.weaponEnchantments));
   if(hunting.recoveryUntil&&Date.now()>=hunting.recoveryUntil){
     hunting.recoveryUntil=0;health=100;
     combatMessage='All five hearts restored. You are ready to explore again.';
@@ -1006,6 +1073,7 @@ const armoryFurniture=[
   {id:'smith',type:'armoryCounter',x:3,y:2,rot:0},
   {id:'weapons',type:'weaponRack',x:7,y:1,rot:0},
   {id:'anvil',type:'anvil',x:7,y:5,rot:0},
+  {id:'enchanter',type:'enchanter',x:6,y:5,rot:0},
   {id:'forge',type:'brazier',x:1,y:1,rot:0},
   {id:'stool',type:'stool',x:4,y:4,rot:0}
 ];
@@ -1570,6 +1638,13 @@ function object(item,highlight=false,time=0) {
   if(currentRoom==='hub'&&type==='plant'&&x===16&&y===1){
     drawLobbyCrystal(x,y,time);return;
   }
+  if(type==='enchanter'){
+    const [ex,ey]=point(x+.5,y+.5);
+    sprite(ctx,ex,ey,{outfit:4,hair:1},{direction:'left',time});
+    rect(ex+9,ey-25,2,25,'#b99668');
+    polygon([[ex+10,ey-34],[ex+14,ey-28],[ex+10,ey-22],[ex+6,ey-28]],'#b8a4f4');
+    rect(ex+9,ey-30,1,5,'#fff0d0');return;
+  }
   if(type==='woodcutter'){
     const [wx,wy]=point(x+.5,y+.5);
     sprite(ctx,wx,wy,{outfit:3,hair:2},{direction:'right',time,weapon:true,weaponTier:'basicAxe',pose:{angle:-.4}});return;
@@ -1957,6 +2032,7 @@ function updateWorldLabels(){
     const campfire=roomFurniture().find(item=>item.type==='campfire');
     add('Campfire',...point(campfire.x+.5,campfire.y+.5,32),'npc',()=>use(campfire));
   }
+  if(currentRoom==='armory')add('Enchanter',...point(6.5,5.5,45),'npc',()=>use(roomFurniture().find(item=>item.type==='enchanter')));
   if(currentRoom==='logging'){
     add('Workbench',...point(6,3.5,26),'npc',()=>use(roomFurniture().find(item=>item.type==='workbench')));
     add('Woodcutter',...point(4.5,3.5,43),'npc',()=>use(roomFurniture().find(item=>item.type==='woodcutter')));
@@ -2084,7 +2160,7 @@ function draw(time){
     object(item,treeHover||editing&&(selection?.id===item.id||hoverItem?.id===item.id)&&!fixed(item),time);
     ctx.globalAlpha=1;
     if(item.defeated||item===ghost||(fixed(item)&&!isGamingTable(item)))continue;
-    const [w,d]=dimensions(item), h=moonwood.heights[item.type]??{armoryCounter:32,weaponRack:37,anvil:19,brazier:25,workbench:23,woodStool:13,woodTable:18,bookcase:37,woodcutter:43,warden:43,tradeCounter:32,harvestCrates:16,tackleCounter:32,rodRack:36,baitCrates:16,blackjack:19,roulette:22,reception:32,bed:24,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39,bench:22,streetlamp:55,fountain:37}[item.type];
+    const [w,d]=dimensions(item), h=moonwood.heights[item.type]??{armoryCounter:32,weaponRack:37,anvil:19,brazier:25,workbench:23,woodStool:13,woodTable:18,bookcase:37,woodcutter:43,warden:43,enchanter:43,tradeCounter:32,harvestCrates:16,tackleCounter:32,rodRack:36,baitCrates:16,blackjack:19,roulette:22,reception:32,bed:24,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39,bench:22,streetlamp:55,fountain:37}[item.type];
     const height=isTimberTree(item)&&treeState(item).regrowsAt?6:h;
     const shape=[point(item.x,item.y+d),point(item.x+w,item.y+d),point(item.x+w,item.y),point(item.x+w,item.y,height),point(item.x,item.y,height),point(item.x,item.y+d,height)];
     hitboxes.push({item,shape});
@@ -2226,7 +2302,7 @@ function upgradePlan(path=firstUpgrade.choice){
   const activity=fishing?'pond':'clearing',shop=fishing?'store':'armory';
   const needsBait=fishing&&fishingGear.bait<1&&(missingXp>0||missingGold>0&&!loot);
   const destination=needsBait?'store':missingXp?activity:missingGold?(loot?'market':activity):shop;
-  const current=fishing?fishingCatalog.rods[fishingGear.equippedRod]:weaponProfile(combatGear.equippedWeapon,combatGear.activeSwordUpgrade);
+  const current=fishing?fishingCatalog.rods[fishingGear.equippedRod]:weaponProfile(combatGear.equippedWeapon,combatGear.activeSwordUpgrade,combatGear.weaponEnchantments);
   let benefit;
   if(fishing){const before=fishingChances(patienceLevel(),fishingGear.equippedRod,playerStats.luckXp),after=fishingChances(patienceLevel(),id,playerStats.luckXp);benefit=(current.duration/1000).toFixed(1)+'s → '+(item.duration/1000).toFixed(1)+'s per catch · '+(after.fine+after.rare-before.fine-before.rare).toFixed(1)+' percentage points for fine / rare fish.';}
   else benefit=(current?.damage??0)+' → '+item.damage+' base damage · '+((current?.interval??0)/1000).toFixed(1)+'s → '+(item.interval/1000).toFixed(1)+'s per attack.';
@@ -2774,7 +2850,9 @@ function finishInteraction(){
       recordAdventure('Moonbloom added to inventory. The root passage opens.');
     }
     openEssences();
-  }else if(['armoryCounter','weaponRack','anvil','brazier'].includes(item.type)){
+  }else if(item.type==='enchanter'||currentRoom==='armory'&&item.type==='anvil'){
+    openEnchanter();
+  }else if(['armoryCounter','weaponRack','brazier'].includes(item.type)){
     note('Welcome to the Armory. Compare weapons and choose Buy & equip in the shop panel.');
   }else if(item.type==='tradeCounter'||item.type==='harvestCrates'||(currentRoom==='market'&&item.type==='baitCrates')){
     note('The trader offers credits for fish and hunting spoils. Choose what to sell in the market panel.');
@@ -2909,8 +2987,8 @@ function bagEntries(){
   const entries=[];
   const outfit=wardrobe.outfits.find(outfit=>outfit.id===bagOutfitTarget)??wardrobe.outfits.find(outfit=>outfit.id===wardrobe.active);
   for(const id of combatGear.ownedWeapons){
-    const w=weaponProfile(id,combatGear.activeSwordUpgrade),equipped=combatGear.equippedWeapon===id;
-    entries.push({key:'weapon:'+id,name:w.name,category:'gear',art:shopItemArt(id),quantity:1,equipped,description:w.description,stats:w.damage+' base damage · '+attackSeconds(w.interval)+' per attack',action:equipped?'Unequip weapon':'Equip weapon',disabled:player.inCombat||!canUseWeapon(playerStats,id),note:player.inCombat?'Finish combat before changing equipment.':'Drawn automatically in combat.',run:()=>{$('weaponSelect').value=id;toggleWeapon();}});
+    const w=weaponProfile(id,combatGear.activeSwordUpgrade,combatGear.weaponEnchantments),equipped=combatGear.equippedWeapon===id;
+    entries.push({key:'weapon:'+id,name:w.name+(w.enchantmentLevel?' · Enchantment '+w.enchantmentLevel:''),category:'gear',art:shopItemArt(id),quantity:1,equipped,description:w.description,stats:w.damage+' base damage · '+attackSeconds(w.interval)+' per attack',action:equipped?'Unequip weapon':'Equip weapon',disabled:player.inCombat||!canUseWeapon(playerStats,id),note:player.inCombat?'Finish combat before changing equipment.':'Drawn automatically in combat.',run:()=>{$('weaponSelect').value=id;toggleWeapon();}});
   }
   for(const id of fishingGear.ownedRods){
     const rod=fishingCatalog.rods[id],equipped=fishingGear.equippedRod===id,odds=fishingChances(patienceLevel(),id,playerStats.luckXp);
@@ -2951,7 +3029,7 @@ function bagEntries(){
       note:busy?'Finish your current activity before eating.':'Eat between fights.',
       action:health>=100?'Hearts are full':'Eat meal',disabled:busy||health>=100||!window.playerCloud?.gameplay,run:()=>eatMeal(id)});
   }
-  for(const [id,quantity] of Object.entries(huntingLoot))if(quantity&&tradeCatalog[id])entries.push({key:'loot:'+id,name:tradeCatalog[id].name,category:'materials',art:windowItemArt(id===moonwellShard.id?'shard':'loot'),quantity,description:'Spoils from your adventures.',stats:tradeCatalog[id].price+' gold each',note:id===moonwellShard.id?'Sell for '+moonwellShard.price+' gold or craft a Moonwell Charm with '+moonwellCharm.timber+' timber.':id===stonebackVest.fragment?'Sell at the Trading Post, or combine with '+stonebackVest.timber+' timber at the Timber Hollow workbench to craft a Stoneback Vest.':'Sell at the Trading Post. Some loot is used in crafting.'});
+  for(const [id,quantity] of Object.entries(huntingLoot))if(quantity&&tradeCatalog[id])entries.push({key:'loot:'+id,name:tradeCatalog[id].name,category:'materials',art:windowItemArt(id===moonwellShard.id?'shard':'loot'),quantity,description:'Spoils from your adventures.',stats:tradeCatalog[id].price+' gold each',note:id===moonwellShard.id?'Enchant weapons at the Tower Armory, sell for '+moonwellShard.price+' gold, or craft a Moonwell Charm with '+moonwellCharm.timber+' timber.':id===stonebackVest.fragment?'Sell at the Trading Post, or combine with '+stonebackVest.timber+' timber at the Timber Hollow workbench to craft a Stoneback Vest.':'Sell at the Trading Post. Some loot is used in crafting.'});
   return entries;
 }
 function renderBag(){
@@ -3029,12 +3107,12 @@ function updateWeaponInventory(){
   const selector=$('weaponSelect'),previous=selector.value;
   selector.replaceChildren();
   for(const id of combatGear.ownedWeapons){
-    const option=document.createElement('option');option.value=id;option.textContent=weaponCatalog[id].name;selector.append(option);
+    const option=document.createElement('option');option.value=id;option.textContent=weaponCatalog[id].name+(combatGear.weaponEnchantments?.[id]?' · Enchantment '+combatGear.weaponEnchantments[id]:'');selector.append(option);
   }
   const selected=combatGear.ownedWeapons.includes(previous)?previous:combatGear.equippedWeapon??combatGear.ownedWeapons[0];
   selector.value=selected;selector.disabled=player.inCombat;
-  const weapon=weaponProfile(selected,combatGear.activeSwordUpgrade),equipped=combatGear.equippedWeapon===selected;
-  $('weaponName').textContent=weapon.name;
+  const weapon=weaponProfile(selected,combatGear.activeSwordUpgrade,combatGear.weaponEnchantments),equipped=combatGear.equippedWeapon===selected;
+  $('weaponName').textContent=weapon.name+(weapon.enchantmentLevel?' · Enchantment '+weapon.enchantmentLevel:'');
   $('weaponPicture').innerHTML=selected==='huntingSpear'?'<path d="M11 8h2v21h-2z" fill="#bd9064"/><path d="M12 1l4 8-4 3-4-3z" fill="#c5dcd7"/>':selected==='quickDagger'?'<path d="M11 7l4 7-2 6h-3l-1-6z" fill="#d4e6de"/><path d="M7 20h10v2H7z" fill="#8dbec4"/><path d="M11 22h2v6h-2z" fill="#99779d"/>':'<path d="M10 2h4v16h-4z" fill="#bacbd3"/><path d="M10 2h2v15h-2z" fill="#eef2da"/><path d="M7 18h10v3H7z" fill="#d8b079"/><path d="M11 21h2v6h-2z" fill="#986b59"/><path d="M10 27h4v2h-4z" fill="#d8b079"/>';
 
   $('weaponStatus').textContent=(equipped?'Equipped':'In inventory')+(weapon.upgradeName?' · '+weapon.upgradeName:'')+' · '+weapon.damage+' base damage + Strength · '+attackSeconds(weapon.interval)+' per attack';
@@ -3374,7 +3452,7 @@ function buyArmoryWeapon(id){
   }catch(error){$('armoryStatus').textContent=error.message;}
 }
 function updateArmoryShop(){
-  const equipped=weaponProfile(combatGear.equippedWeapon,combatGear.activeSwordUpgrade),current=huntingAttributes(playerStats,combatGear.equippedWeapon,combatGear.activeSwordUpgrade);
+  const equipped=weaponProfile(combatGear.equippedWeapon,combatGear.activeSwordUpgrade,combatGear.weaponEnchantments),current=huntingAttributes(playerStats,combatGear.equippedWeapon,combatGear.activeSwordUpgrade,false,combatGear.weaponEnchantments);
   const strength=1+Math.floor(playerStats.strengthXp/50),agility=1+Math.floor(playerStats.agilityXp/50);
   $('armoryBalance').textContent=new Intl.NumberFormat().format(credits)+' G';
   $('armoryStats').textContent='Strength '+strength+' · Agility '+agility;
@@ -3382,7 +3460,7 @@ function updateArmoryShop(){
   const offers=$('weaponOffers');offers.replaceChildren();
   for(const [id,weapon] of Object.entries(weaponCatalog).filter(([,weapon])=>weapon.price)){
     const owned=combatGear.ownedWeapons.includes(id),active=combatGear.equippedWeapon===id,skill=canUseWeapon(playerStats,id);
-    const damage=huntingAttributes(playerStats,id).damage,difference=damage-current.damage,speed=(current.attackInterval-weapon.interval)/1000;
+    const damage=huntingAttributes(playerStats,id,combatGear.activeSwordUpgrade,false,combatGear.weaponEnchantments).damage,difference=damage-current.damage,speed=(current.attackInterval-weapon.interval)/1000;
     const missing=[strength<weapon.strength?'Strength +'+(weapon.strength-strength):'',agility<weapon.agility?'Agility +'+(weapon.agility-agility):''].filter(Boolean);
     const reason=!skill?'Need '+missing.join(' and '):!owned&&credits<weapon.price?'Need '+(weapon.price-credits)+' more gold':active?'Ready for your next fight':owned?'Yours to keep · Free to equip':'Purchased gear equips automatically';
     const deltas=active?[{text:'Your equipped weapon',tone:'neutral'}]:[
@@ -3453,7 +3531,7 @@ function showTransaction(title,items,creditChange=0){
     $('creditWallet').append(burst);
     setTimeout(()=>burst.remove(),1400);
   }
-  const notices=$('merchantDialog').open?$('merchantTransactions'):$('craftDialog').open?$('craftTransactions'):$('transactions');
+  const notices=$('enchantDialog').open?$('enchantTransactions'):$('merchantDialog').open?$('merchantTransactions'):$('craftDialog').open?$('craftTransactions'):$('transactions');
   while(notices.children.length>=4)notices.children[0].remove();
   notices.append(card);
   setTimeout(()=>card.remove(),5200);
@@ -4112,6 +4190,9 @@ $('approachBeetle').onclick=()=>{
   if(monster)use(monster);
 };
 $('enterDepths').onclick=enterMoonwellDepths;
+$('enchantWeapon').onchange=()=>{enchantSelection=$('enchantWeapon').value;$('enchantFeedback').textContent='';renderEnchanter();};
+$('enchantBuy').onclick=buyEnchantment;
+$('visitEnchanter').onclick=()=>{$('merchantDialog').close();use(roomFurniture().find(item=>item.type==='enchanter'));};
 $('depthsSafePassage').onclick=()=>chooseDungeonPassage('safe');
 $('depthsDangerPassage').onclick=()=>chooseDungeonPassage('dangerous');
 $('depthsForkBank').onclick=leaveMoonwellDepths;

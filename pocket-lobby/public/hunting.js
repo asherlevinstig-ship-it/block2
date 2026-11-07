@@ -62,11 +62,21 @@ export const swordUpgrades={
   balancedGrip:{name:'Balanced Grip',damage:12,interval:850,timber:8,gold:20},
   weightedHilt:{name:'Weighted Hilt',damage:20,interval:1400,timber:8,gold:20}
 };
-export function weaponProfile(id,upgrade){
-  const weapon=Object.hasOwn(weaponCatalog,id)?weaponCatalog[id]:null;
-  if(id!=='trainingSword'||!Object.hasOwn(swordUpgrades,upgrade))return weapon;
-  const {name,damage,interval}=swordUpgrades[upgrade];
-  return {...weapon,damage,interval,upgradeName:name};
+export const weaponEnchantments=[
+  {gold:100,shards:1,damage:2},
+  {gold:250,shards:2,damage:4},
+  {gold:500,shards:3,damage:6}
+];
+export function weaponProfile(id,upgrade,enchantments={}){
+  let weapon=Object.hasOwn(weaponCatalog,id)?weaponCatalog[id]:null;
+  if(!weapon)return null;
+  if(id==='trainingSword'&&Object.hasOwn(swordUpgrades,upgrade)){
+    const {name,damage,interval}=swordUpgrades[upgrade];
+    weapon={...weapon,damage,interval,upgradeName:name};
+  }
+  const level=enchantments?.[id]??0;
+  if(!Number.isInteger(level)||level<1||level>weaponEnchantments.length)return weapon;
+  return {...weapon,damage:weapon.damage+weaponEnchantments[level-1].damage,enchantmentLevel:level};
 }
 export const attackSeconds=ms=>String(ms/1000)+'s';
 export function canUseWeapon(stats,id){
@@ -92,6 +102,12 @@ export function normalizeCombatGear(input){
   const equippedWeapon=input.equippedWeapon??null;
   if(equippedWeapon!==null&&!ownedWeapons.includes(equippedWeapon))throw new Error('Invalid equipped weapon.');
   const gear={ownedWeapons,equippedWeapon};
+  if(input.weaponEnchantments!==undefined){
+    if(!input.weaponEnchantments||typeof input.weaponEnchantments!=='object'||Array.isArray(input.weaponEnchantments))throw new Error('Invalid weapon enchantments.');
+    const entries=Object.entries(input.weaponEnchantments);
+    if(entries.some(([id,value])=>!ownedWeapons.includes(id)||!Number.isInteger(value)||value<0||value>weaponEnchantments.length))throw new Error('Invalid weapon enchantment level.');
+    gear.weaponEnchantments=Object.fromEntries(entries.filter(([,value])=>value>0));
+  }
   if(input.swordUpgrades!==undefined){
     if(!Array.isArray(input.swordUpgrades)||input.swordUpgrades.some(id=>typeof id!=='string'||!Object.hasOwn(swordUpgrades,id)))throw new Error('Invalid sword upgrades.');
     gear.swordUpgrades=[...new Set(input.swordUpgrades)];
@@ -113,8 +129,8 @@ export function normalizeCombatGear(input){
   return gear;
 }
 const level=xp=>1+Math.floor((xp??0)/50);
-export function huntingAttributes(stats,weapon='trainingSword',upgrade=null,charmEquipped=false){
-  const profile=weaponProfile(weapon,upgrade);
+export function huntingAttributes(stats,weapon='trainingSword',upgrade=null,charmEquipped=false,enchantments={}){
+  const profile=weaponProfile(weapon,upgrade,enchantments);
   return {
     attackInterval:profile?.interval??1100,
     damage:(profile?.damage??0)+Math.min(30,(level(stats.strengthXp)-1)*2),
@@ -176,12 +192,12 @@ export function resumeHunt(encounter,now,stats={},charmEquipped=false){
   const nextBoarAt=now+Math.max(huntEnemy(encounter).firstAttack,enemyAttack(encounter).tell);
   return {...encounter,stamina:combatStamina(encounter,stats,now,charmEquipped),staminaAt:now,dodgeUntil:0,nextDodgeAt:Math.min(encounter.nextDodgeAt??0,now+boarRules.dodgeCooldown),nextPlayerAt:now+450,nextBoarAt,nextFleeAt:Math.min(encounter.nextFleeAt,now+boarRules.fleeCooldown)};
 }
-export function huntingTurn(encounter,health,stats,action,now,random=Math.random,weapon='trainingSword',upgrade=null,vestEquipped=false,charmEquipped=false){
+export function huntingTurn(encounter,health,stats,action,now,random=Math.random,weapon='trainingSword',upgrade=null,vestEquipped=false,charmEquipped=false,enchantments={}){
   if(!['attack','enemy','flee','dodge'].includes(action))throw new Error('Invalid combat action.');
   if(!encounter||health<=0)throw new Error('No active encounter.');
   const clock=action==='attack'?'nextPlayerAt':action==='enemy'?'nextBoarAt':action==='dodge'?'nextDodgeAt':'nextFleeAt';
   if(now<encounter[clock])return null;
-  const attributes=huntingAttributes(stats,weapon,upgrade,charmEquipped);
+  const attributes=huntingAttributes(stats,weapon,upgrade,charmEquipped,enchantments);
   const enemy=huntEnemy(encounter);
   const stamina=combatStamina(encounter,stats,now,charmEquipped);
   const dodgeCost=combatDodgeCost(vestEquipped);
@@ -252,7 +268,7 @@ export function enemyStatusEffects(encounter,now){
   if(now<(encounter.interruptResistUntil??0))effects.push({kind:'storm',name:essenceEffects.storm.name,color:essenceEffects.storm.color,remaining:encounter.interruptResistUntil-now,detail:'Resists interrupts'});
   return effects;
 }
-export function advanceHunt(encounter,health,stats,now,random=Math.random,weapon='trainingSword',upgrade=null,vestEquipped=false,charmEquipped=false){
+export function advanceHunt(encounter,health,stats,now,random=Math.random,weapon='trainingSword',upgrade=null,vestEquipped=false,charmEquipped=false,enchantments={}){
   if(!encounter||health<=0)return null;
   const burn=encounter.burn;
   if(burn&&burn.nextAt<=burn.until&&burn.nextAt<=Math.min(encounter.nextPlayerAt,encounter.nextBoarAt)){
@@ -265,5 +281,5 @@ export function advanceHunt(encounter,health,stats,now,random=Math.random,weapon
       encounter:next.health?next:null,outcome:next.health?'fighting':'victory'};
   }
   const action=encounter.nextPlayerAt<=encounter.nextBoarAt?'attack':'enemy';
-  return huntingTurn(encounter,health,stats,action,now,random,weapon,upgrade,vestEquipped,charmEquipped);
+  return huntingTurn(encounter,health,stats,action,now,random,weapon,upgrade,vestEquipped,charmEquipped,enchantments);
 }

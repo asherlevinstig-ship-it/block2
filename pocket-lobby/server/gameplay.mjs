@@ -1,7 +1,7 @@
 import {fishingCatalog,fishProducts,rollFishingCatch} from '../public/fishing.js';
 import {recordQuest,claimFirstQuest} from '../public/quests.js';
 import {purchaseWeapon} from '../public/hunting.js';
-import {fitSwordUpgrade,craftFurniture,craftStonebackVest,craftMoonwellCharm} from '../public/crafting.js';
+import {fitSwordUpgrade,craftFurniture,craftStonebackVest,craftMoonwellCharm,enchantWeapon} from '../public/crafting.js';
 import {bankDepthsSpoils,moonwellShard} from '../public/depths.js';
 import {activityAction,settleActivities} from './activities.mjs';
 import {essenceAction} from './essences.mjs';
@@ -163,6 +163,7 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
     state.tradeReceipt={id:body.id,quantity,gold};
     return;
   }
+  if(action==='enchant'){available(state);enchantWeapon(state,body.id,body.level);return;}
   if(action==='weapon'){
     available(state);purchaseWeapon(state,body.id);return;
   }
@@ -206,6 +207,8 @@ export function protectFishingState(previous,next){
   next.quest.claimed=previous.quest.claimed;
   next.combatGear={...previous.combatGear,...next.combatGear,ownedWeapons:previous.combatGear.ownedWeapons};
   if(!next.combatGear.ownedWeapons.includes(next.combatGear.equippedWeapon))next.combatGear.equippedWeapon=previous.combatGear.equippedWeapon;
+  if(previous.combatGear.weaponEnchantments)next.combatGear.weaponEnchantments=previous.combatGear.weaponEnchantments;
+  else delete next.combatGear.weaponEnchantments;
   next.combatGear.swordUpgrades=previous.combatGear.swordUpgrades;
   next.combatGear.stonebackVestOwned=previous.combatGear.stonebackVestOwned;
   next.combatGear.moonwellCharmOwned=previous.combatGear.moonwellCharmOwned;
