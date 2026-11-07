@@ -1565,7 +1565,7 @@ function updateWorldLabels(){
   const key=[currentRoom,stump,doors.map(door=>door.to).join(','),avatar.name,questStage(quest),zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
   if(key===worldLabelKey)return;
   worldLabelKey=key;
-  const container=$('worldLabels');container.replaceChildren();
+  const container=$('worldLabels');container.replaceChildren();container.dataset.room=currentRoom;
   const add=(text,x,y,kind='door',action=null,subtitle='')=>{
     const label=document.createElement(action?'button':'div');label.className='world-label world-label-'+kind;
     if(action){label.type='button';label.onclick=action;label.setAttribute('aria-label',kind==='door'?'Go to '+text:text);}
@@ -1574,6 +1574,17 @@ function updateWorldLabels(){
     label.title=text+(subtitle?' · '+subtitle:'');container.append(label);
     const centerX=view.width/2,centerY=view.height/2-4;
     const screenX=p.x+((x-centerX)*zoom+centerX)*p.scale,screenY=p.y+((y-centerY)*zoom+centerY)*p.scale;
+    if(currentRoom==='home'){
+      const scale=p.scale*zoom;
+      label.dataset.wall=kind==='sign'?'right':'left';
+      const sign=kind==='sign';
+      label.style.width=Math.round((sign?79:20)*scale)+'px';
+      label.style.maxWidth='none';label.style.padding='0';
+      label.style.fontSize=Math.max(9,Math.round((sign?5.2:6)*scale))+'px';
+      label.style.lineHeight='1.25';
+      label.style.transform=sign?'skewY(26.565deg)':'skewY(-26.565deg)';
+      if(subtitle){label.children[1].style.fontSize=Math.max(12,Math.round(8*scale))+'px';label.children[1].style.lineHeight='1.3';}
+    }
     const width=label.offsetWidth||text.length*7+16,height=label.offsetHeight||(subtitle?30:19);
     const availableWidth=canvas.clientWidth||view.width*p.scale,availableHeight=canvas.clientHeight||view.height*p.scale;
     label.style.left=Math.round(Math.max(5,Math.min(availableWidth-width-5,screenX-width/2)))+'px';
@@ -1587,7 +1598,7 @@ function updateWorldLabels(){
     const label=currentRoom==='creek'&&door.to==='ruins'?'Cross to the Ruins':door.label;
     add(label,...anchor,'door',()=>travelDoor(door));
   }
-  if(currentRoom==='home')add('Your Home',...point(5,0,43),'sign',null,avatar.name);
+  if(currentRoom==='home')add('YOUR HOME',...point(5,0,44),'sign',null,avatar.name);
   if(currentRoom==='hub'){
     if(lobbyRoutesOpen())add('Job board',...point(4.5,2,39),'npc',openJobBoard);
     add('TOWER OF',...point(0,2.7,51),'sign',null,'BEGINNINGS');
@@ -1789,14 +1800,17 @@ function pointer(e){
   const door=roomDoors[currentRoom].find(portal=>doorAvailable(portal)&&hitDoor(x,y,portal));
   return {tile:door?.tile??(inRoom(gx,gy)?{x:gx,y:gy}:null),door,item:hitboxes.findLast(h=>inShape(x,y,h.shape))?.item??null};
 }
+let homeNavigationLearned=load('movement-learned',false);
 function note(message){
+  $('hint').dataset.kind='notice';
   $('hint').textContent='✦  '+message;
   noticeUntil=performance.now()+3000;
 }
 function setHint(){
-  const guide={home:'Click a tile to walk · Click the exit to visit the lobby',hub:'Click a doorway or the Outside steps to travel',lounge:defaultHint,outside:'Click the Moonwood steps to explore · Tower returns indoors',store:'Buy supplies at the counter · Use Lobby to leave',armory:'Compare damage, attack speed and requirements · Buy & equip from the Armory panel',market:'Sell fish and hunting loot at the counter · Use Lobby to leave',creek:'Tap Cross to the Ruins to walk across the creek.'};
+  const guide={home:homeNavigationLearned?'Next: select EXIT to visit the Grand Lobby':'Click the floor to move your character',hub:'Click a doorway or the Outside steps to travel',lounge:defaultHint,outside:'Click the Moonwood steps to explore · Tower returns indoors',store:'Buy supplies at the counter · Use Lobby to leave',armory:'Compare damage, attack speed and requirements · Buy & equip from the Armory panel',market:'Sell fish and hunting loot at the counter · Use Lobby to leave',creek:'Tap Cross to the Ruins to walk across the creek.'};
   const message=editing?'Choose furniture to place or select a piece in the room':currentRoom==='hub'&&!lobbyRoutesOpen()?'Talk to the Tower Warden to open the lobby doors.':guide[currentRoom]??'Follow marked trails · Use the field journal for routes';
-  $('hint').textContent='✦  '+message;
+  $('hint').dataset.kind=currentRoom==='home'&&!editing?'movement':'guide';
+  $('hint').textContent=message;
 }
 function startPosition(){return step?.to??{x:player.cx,y:player.cy};}
 function walkTo(tile){
@@ -1807,6 +1821,7 @@ function walkTo(tile){
   cancelFishing();
   player.seat=null;player.waveStarted=null;
   route=path;interaction=null;target=path.length?tile:null;
+  if(currentRoom==='home'&&path.length&&!homeNavigationLearned){homeNavigationLearned=true;save('movement-learned',true);setHint();}
 }
 function doorAvailable(door,room=currentRoom){return (room!=='hub'||lobbyRoutesOpen())&&moonwood.open(door,adventure);}
 function travelDoor(door){
