@@ -55,18 +55,13 @@ test('server combat replays both clocks, awards victory once, and keeps damage a
   assert.throws(()=>action(s,'combat',{combatId:id},respawn+500),/Invalid encounter/);
 });
 
-test('dodge, Rootbind, flee, defeat and rest are governed by server time',()=>{
-  const s=fighter({adventure:{rootstone:{awakened:true,power:'rootbind',nextCastAt:0}}});
+test('dodge, flee, defeat and rest are governed by server time',()=>{
+  const s=fighter();
   action(s,'fight',{},1000);
   action(s,'combat',{combatId:s.combatId,input:'dodge'},2100);
   assert.equal(s.hunting.encounter.stamina,60);
   action(s,'combat',{combatId:s.combatId},2300);
   assert(s.combatReceipt.events.some(e=>e.timedDodge));assert.equal(s.health,100);
-  action(s,'combat',{combatId:s.combatId,input:'rootbind'},3800);
-  assert.equal(s.adventure.rootstone.nextCastAt,15800);
-  const delayed=s.hunting.encounter.nextBoarAt;
-  action(s,'combat',{combatId:s.combatId,input:'rootbind'},3801);
-  assert.equal(s.hunting.encounter.nextBoarAt,delayed);
   action(s,'combat',{combatId:s.combatId,input:'flee'},3900,()=>0);
   assert.equal(s.location,'trail');assert.equal(s.huntingLoot.boar??0,0);
   const doomed=fighter({health:1});action(doomed,'fight',{},1000);

@@ -2,7 +2,6 @@ import {normalizeMagic} from '../public/essences.js';
 import {mealRecipes} from '../public/cooking.js';
 import {normalizeWardrobe,outfitAppearance} from '../public/wardrobe.js';
 import {normalizeCharacterRules} from '../public/character-rules.js';
-import {normalizeRootstone} from '../public/rootstone.js';
 import {depthsStages,normalizeDepthsRun} from '../public/depths.js';
 import {jobPreview} from '../public/jobs.js';
 import { normalizeWoodcutting } from "../public/woodcutting.js";
@@ -63,7 +62,6 @@ export function normalizeState(input={}){
   const adventure={};
   for(const id of ["lantern","groveTrail","bridge","shrine","shortcut"])adventure[id]=a[id]===true;
   adventure.discovered=[...new Set((Array.isArray(a.discovered)?a.discovered:[]).filter(id=>["trail","grove","creek","shrine","ruins","roots","pond","clearing","logging"].includes(id)))];
-  if(a.rootstone!==undefined)adventure.rootstone=normalizeRootstone(a.rootstone);
   const avatar=input.avatar??{name:"Guest",outfit:0,hair:0};
   if(typeof avatar.name!=="string"||avatar.name.length>20||!Number.isInteger(avatar.outfit)||avatar.outfit<0||avatar.outfit>4||!Number.isInteger(avatar.hair)||avatar.hair<0||avatar.hair>4)throw new Error("Invalid appearance.");
   const wardrobe=normalizeWardrobe(input.wardrobe,avatar);

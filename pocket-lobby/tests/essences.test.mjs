@@ -2,11 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {confluence,bondedEssences,essencePower,stoneForms,normalizeMagic} from '../public/essences.js';
 import {normalizeState} from '../server/player-state.mjs';
+import {handlePlayerApi} from '../server/player-api.mjs';
+import {testDatabase} from './db-helper.mjs';
 import {applyGameplayAction,protectFishingState} from '../server/gameplay.mjs';
 
 const gems=['fire','ice','shadow'];
 const character=()=>normalizeState({
-  location:'ruins',position:{x:5,y:4},adventure:{rootstone:{awakened:true,power:'rootbind'}}
+  location:'ruins',position:{x:5,y:4}
 });
 const act=(s,name,body={},now=1000)=>applyGameplayAction(s,name,body,now,()=>.5);
 
@@ -25,6 +27,9 @@ test('three distinct base Gems form an order-independent fourth, with five power
 test('server bonds once, spends typed stones once, preserves unlocks across gem changes, and blocks forged snapshots',()=>{
   const s=character();
   assert.throws(()=>act(s,'bondEssences',{picks:['fire','fire','ice']}),/three/);
+  s.location='shrine';
+  assert.throws(()=>act(s,'bondEssences',{picks:gems}),/Moonwell/);
+  s.location='ruins';
   act(s,'bondEssences',{picks:gems});
   assert.equal(s.magic.stones.sword,1);
   assert.throws(()=>act(s,'awakenPower',{id:'storm:sword'}),/bonded/);
@@ -83,4 +88,44 @@ test('shield, speed, focus and renewal alter actual combat state',()=>{
     act(s,'combat',{combatId:s.combatId,input:'essence'},1100);
     check(s);
   }
+});
+
+test('old saves shed the retired magic while retaining Essence powers and an already scheduled woodcutting shift',async t=>{
+  const {db,sql}=testDatabase();
+  t.after(()=>sql.close());
+  const origin='https://tower.test';
+  let cookie='',packet;
+  async function call(path,body,status=200){
+    const response=await handlePlayerApi(new Request(origin+'/api/player/'+path,{
+      method:body?'POST':'GET',headers:{Cookie:cookie,Origin:origin,'Content-Type':'application/json'},
+      body:body?JSON.stringify({...body,characterKey:packet?.characterKey}):undefined
+    }),{TOWER_DB:db});
+    assert.equal(response.status,status);
+    cookie=response.headers.get('set-cookie')?.split(';')[0]??cookie;
+    if(response.ok)packet=await response.json();
+  }
+  await call('session',{legacy:{location:'ruins',position:{x:5,y:4},woodcutting:{axeOwned:true,equipped:true}}});
+  const send=(path,body)=>call(path,{...body,revision:packet.revision,operation:crypto.randomUUID()});
+  await send('gameplay/bondEssences',{picks:gems});
+  await send('gameplay/awakenPower',{id:'fire:sword'});
+  const magic=structuredClone(packet.state.magic);
+  const legacy=packet.state;
+  legacy.adventure.rootstone={awakened:true,power:'deepRoots'};
+  const now=Date.now();
+  legacy.location='logging';
+  legacy.plan={kind:'woodcutting',deepRoots:true,startedAt:now,endAt:now+60000,nextCutAt:now+45000,interval:45000,timber:0,xp:0,levelBefore:1};
+  sql.prepare('UPDATE tower_players SET state_json=? WHERE player_id=?').run(JSON.stringify(legacy),packet.characterKey);
+  await call('state');
+  assert.equal(packet.state.adventure.rootstone,undefined);
+  assert.equal(packet.state.plan.deepRoots,undefined);
+  assert.equal(packet.state.plan.interval,45000);
+  assert.deepEqual(packet.state.magic,magic);
+  await send('plan/stop');
+  assert.equal(packet.state.report.deepRoots,undefined);
+  await send('report/ack',{startedAt:packet.state.report.startedAt});
+  await send('save',{state:{...packet.state,location:'logging',adventure:{rootstone:{awakened:true,power:'deepRoots'}}}});
+  await send('plan/start',{kind:'woodcutting',hours:1});
+  assert.equal(packet.state.plan.interval,60000);
+  assert.equal(packet.state.adventure.rootstone,undefined);
+  assert.deepEqual(packet.state.magic,magic);
 });

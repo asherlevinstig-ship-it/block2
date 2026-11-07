@@ -105,7 +105,6 @@ export function normalizeHunting(input={}){
       result.encounter.magicWard=Math.min(100,input.encounter.magicWard);
       result.encounter.magicWardUntil=time(input.encounter.magicWardUntil);
     }
-    if(input.encounter.rootboundUntil!==undefined)result.encounter.rootboundUntil=time(input.encounter.rootboundUntil);
     if(enemy&&enemy!=='boar')result.encounter.enemy=enemy;
     if(huntEnemy(input.encounter).shellArmor)result.encounter.exposedUntil=time(input.encounter.exposedUntil);
   }
@@ -123,8 +122,7 @@ export function combatStamina(encounter,stats,now,charmEquipped=false){
   return Math.min(100,(encounter.stamina??100)+Math.max(0,now-(encounter.staminaAt??now))/1000*huntingAttributes(stats,undefined,null,charmEquipped).staminaRegen);
 }
 export function resumeHunt(encounter,now,stats={},charmEquipped=false){
-  const firstAttack=now+huntEnemy(encounter).firstAttack;
-  const nextBoarAt=(encounter.rootboundUntil??0)>now?Math.max(firstAttack,encounter.nextBoarAt):firstAttack;
+  const nextBoarAt=now+huntEnemy(encounter).firstAttack;
   return {...encounter,stamina:combatStamina(encounter,stats,now,charmEquipped),staminaAt:now,dodgeUntil:0,nextDodgeAt:Math.min(encounter.nextDodgeAt??0,now+boarRules.dodgeCooldown),nextPlayerAt:now+450,nextBoarAt,nextFleeAt:Math.min(encounter.nextFleeAt,now+boarRules.fleeCooldown)};
 }
 export function huntingTurn(encounter,health,stats,action,now,random=Math.random,weapon='trainingSword',upgrade=null,vestEquipped=false,charmEquipped=false){

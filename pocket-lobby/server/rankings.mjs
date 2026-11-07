@@ -10,7 +10,7 @@ export async function readRankings(db,playerId,account){
     try{
       const state=normalizeState(JSON.parse(row.state_json));
       if(state.characterCreated===false)continue;
-      const power=playerPower(state.stats,state.combatGear,state.adventure.rootstone);
+      const power=playerPower(state.stats,state.combatGear);
       players.push({
         id:row.player_id,
         name:state.avatar.name,

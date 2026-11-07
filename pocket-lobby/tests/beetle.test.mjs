@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHunt,huntingTurn,advanceHunt,normalizeHunting,huntEnemies,huntRespawnAt} from '../public/hunting.js';
-import {castRootbind,normalizeRootstone} from '../public/rootstone.js';
 import {normalizeState} from '../server/player-state.mjs';
 
 const turn=(encounter,action,now,upgrade,roll=0.5)=>huntingTurn(encounter,100,{},action,now,()=>roll,'trainingSword',upgrade);
@@ -31,17 +30,12 @@ test('shell favors heavy hits, and a timed dodge gives faster fittings more swin
   }
 });
 
-test('ordinary dodge and Rootbind avoid or postpone the slam without exposing the shell',()=>{
+test('a passive dodge avoids the slam without exposing the shell',()=>{
   const beetle=createHunt(0,undefined,'beetle');
   const passive=turn(beetle,'enemy',2300,null,0);
   assert.equal(passive.dodged,true);
   assert.equal(passive.encounter.exposedUntil,0);
   assert.equal(turn(beetle,'enemy',2300,null,0.5).taken,25);
-  const stone=normalizeRootstone({awakened:true,power:'rootbind'});
-  assert.equal(castRootbind(stone,beetle,1800),true);
-  assert.equal(turn(beetle,'enemy',2300),null);
-  assert.equal(beetle.exposedUntil,0);
-  assert.equal(beetle.rootboundUntil,3800);
 });
 
 test('beetle saves validate the ruins, preserve an opening, and track respawn apart from the boar',()=>{

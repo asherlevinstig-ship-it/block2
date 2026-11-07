@@ -6,13 +6,15 @@ export function essenceAction(state,action,body){
   if(state.plan||state.report||state.fishingCast||state.timberCut||state.hunting.encounter||state.hunting.recoveryUntil||state.health<=0){
     throw new Error('Invalid activity. Finish your current activity first.');
   }
-  if(!state.adventure.rootstone?.awakened)throw new Error('Awaken the Rootstone at the Moonwell to unlock Essences.');
   const magic=state.magic??=normalizeMagic();
   if(action==='bondEssences'){
     if(!confluence(body.picks))throw new Error('Choose three different Magic Gems.');
     const {location,position}=state;
-    const atAltar=['shrine','ruins'].includes(location)&&position&&Math.abs(position.x-6)+Math.abs(position.y-4)===1;
-    if(!atAltar||magic.picks.length&&location!=='shrine')throw new Error('Travel beside the Moth Shrine to change your Gems.');
+    const changing=magic.picks.length>0;
+    const atLandmark=position&&Math.abs(position.x-6)+Math.abs(position.y-4)===1;
+    if(!atLandmark||location!==(changing?'shrine':'ruins')){
+      throw new Error(changing?'Travel beside the Moth Shrine to change your Gems.':'Travel beside the Moonwell in Moonwell Ruins to bond your first Gems.');
+    }
     if(!magic.picks.length)magic.stones.sword++;
     magic.picks=[...body.picks];
     if(magic.equipped&&!bondedEssences(magic.picks).includes(essencePower(magic.equipped)?.gem))magic.equipped=null;

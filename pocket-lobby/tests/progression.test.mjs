@@ -4,14 +4,14 @@ import {playerPower,progressMilestones} from '../public/progression.js';
 import {normalizeState} from '../server/player-state.mjs';
 import {deliverCarpenterOrder} from '../public/commissions.js';
 
-test('combat power responds to equipment, combat attributes and attuned combat ability',()=>{
+test('combat power responds to equipment and combat attributes',()=>{
   const basic=playerPower({}, {equippedWeapon:'trainingSword'});
-  const stronger=playerPower({strengthXp:50},{equippedWeapon:'ironSword',stonebackVestEquipped:true},{power:'rootbind'});
+  const stronger=playerPower({strengthXp:50},{equippedWeapon:'ironSword',stonebackVestEquipped:true});
   assert.equal(basic.total,basic.parts.reduce((sum,part)=>sum+part.points,0));
   assert(stronger.total>basic.total);
   assert.equal(playerPower({patienceXp:1000},{equippedWeapon:'trainingSword'}).total,basic.total);
   assert.equal(playerPower({},{equippedWeapon:null}).parts[1].points,0);
-  assert.equal(playerPower({},{equippedWeapon:'ironSword'},{power:'deepRoots'}).parts[3].points,0);
+  assert.equal(playerPower({},{equippedWeapon:'ironSword'}).parts.length,3);
 });
 test('older characters start earnings at zero and commission earnings cannot be collected twice',()=>{
   assert.equal(normalizeState({credits:1000}).goldEarned,0);

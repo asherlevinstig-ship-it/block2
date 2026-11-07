@@ -221,7 +221,6 @@ export function protectFishingState(previous,next){
   next.magic=previous.magic;
   next.depthsRun=previous.depthsRun??null;
   next.depthsDiscovered=previous.depthsDiscovered===true;
-  next.adventure={...next.adventure,rootstone:previous.adventure.rootstone};
   if(previous.depthsRun&&next.location!==previous.location){next.location=previous.location;next.position=previous.position;}
   if(previous.hunting.encounter||previous.hunting.recoveryUntil){
     next.location=previous.location;next.position=previous.position;

@@ -1,6 +1,6 @@
 import {weaponProfile,moonwellCharm} from './hunting.js';
 
-export function playerPower(stats={},gear={},rootstone={}){
+export function playerPower(stats={},gear={}){
   const strength=1+Math.floor((stats.strengthXp??0)/50);
   const agility=1+Math.floor((stats.agilityXp??0)/50);
   const vitality=1+Math.floor((stats.vitalityXp??0)/50);
@@ -8,8 +8,7 @@ export function playerPower(stats={},gear={},rootstone={}){
   const parts=[
     {name:'Combat attributes',points:10*(strength+agility+vitality),detail:'10 per Strength, Agility and Vitality level'},
     {name:weapon?.name??'Weapon',points:weapon?weapon.damage*2+Math.round(10000/weapon.interval):0,detail:weapon?'Base damage ×2 + attack speed score':'Equip a weapon to add its power'},
-    {name:'Armour',points:gear.stonebackVestEquipped?20:0,detail:gear.stonebackVestEquipped?'Stoneback Vest equipped':'No armour equipped'},
-    {name:'Combat ability',points:rootstone.power==='rootbind'?15:0,detail:rootstone.power==='rootbind'?'Rootbind attuned':'Attune Rootbind to add combat power'}
+    {name:'Armour',points:gear.stonebackVestEquipped?20:0,detail:gear.stonebackVestEquipped?'Stoneback Vest equipped':'No armour equipped'}
   ];
   if(gear.moonwellCharmEquipped)parts.push({name:moonwellCharm.name,points:moonwellCharm.power,detail:'+'+moonwellCharm.staminaRegen+' dodge stamina recovered per second'});
   return {total:parts.reduce((sum,part)=>sum+part.points,0),parts};

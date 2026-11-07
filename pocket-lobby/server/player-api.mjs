@@ -11,7 +11,16 @@ import { normalizeState, startPlan, settlePlan } from "./player-state.mjs";
 const COOKIE="__Host-tower-character";
 const COOKIE_AGE=31536000;
 const json=(data,status=200,extra={})=>Response.json(data,{status,headers:{"Cache-Control":"no-store","X-Content-Type-Options":"nosniff",...extra}});
-const packet=row=>({state:publicPlayerState(JSON.parse(row.state_json)),characterKey:row.player_id,revision:row.revision,lastOperation:row.last_request,serverTime:Date.now()});
+function readPlayerState(row){
+  const state=JSON.parse(row.state_json);
+  // Existing shifts keep their scheduled pace until they finish.
+  if(state.adventure)delete state.adventure.rootstone;
+  if(state.hunting?.encounter)delete state.hunting.encounter.rootboundUntil;
+  if(state.plan)delete state.plan.deepRoots;
+  if(state.report)delete state.report.deepRoots;
+  return state;
+}
+const packet=row=>({state:publicPlayerState(readPlayerState(row)),characterKey:row.player_id,revision:row.revision,lastOperation:row.last_request,serverTime:Date.now()});
 async function read(db,id){
   return db.prepare("SELECT player_id, state_json, revision, last_request FROM tower_players WHERE player_id = ?").bind(id).first();
 }
@@ -23,7 +32,7 @@ async function settled(db,id,activities=false){
   for(let attempt=0;attempt<5;attempt++){
     const row=await read(db,id);
     if(!row)return null;
-    const state=JSON.parse(row.state_json);
+    const state=readPlayerState(row);
     const now=Date.now();
     const planChanged=settlePlan(state,now);
     const activityChanged=activities&&settleActivities(state,now);
@@ -97,7 +106,7 @@ export async function handlePlayerApi(request,env){
     if(!row)return json({error:"Character not found."},401);
     if(row.last_request===body.operation)return json(packet(row));
     if(row.revision!==body.revision)return json({error:"Your character changed in another tab or completed an offline action.",...packet(row)},409);
-    let state=JSON.parse(row.state_json);
+    let state=readPlayerState(row);
     if(path.startsWith('/api/player/gameplay/')){
       if(state.characterCreated===false)return json({error:'Finish creating your character first.'},400);
       Object.assign(state,normalizeState(state));

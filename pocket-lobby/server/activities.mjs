@@ -4,7 +4,6 @@ import {moonwood} from '../public/moonwood.js';
 import {isTimberTree,timberTreeState,cutTimberTree,choppingDuration,grantBasicAxe} from '../public/woodcutting.js';
 import {huntEnemyForRoom,huntEnemy,huntRespawnAt,canUseWeapon,createHunt,advanceHunt,huntingTurn,boarRules} from '../public/hunting.js';
 import {depthsStages,depthsStageIndex,clearDepthsStage} from '../public/depths.js';
-import {castRootbind,normalizeRootstone,canAwakenRootstone,rootstonePowers} from '../public/rootstone.js';
 import {recordQuest} from '../public/quests.js';
 
 const adjacent=(state,item)=>state.position&&Math.abs(state.position.x-item.x)+Math.abs(state.position.y-item.y)===1;
@@ -97,13 +96,10 @@ export function activityAction(state,action,body,now,random){
   if(action==='combat'){
     if(body.combatId!==state.combatId)throw new Error('Invalid encounter. Reload your character.');
     const events=advanceServerCombat(state,now,random);
-    if(state.hunting.encounter&&['dodge','flee','rootbind','essence'].includes(body.input)){
+    if(state.hunting.encounter&&['dodge','flee','essence'].includes(body.input)){
       if(body.input==='essence'){
         const event=castEssencePower(state,now);
         if(event)events.push(result(state,event,now));
-      }else if(body.input==='rootbind'){
-        state.adventure.rootstone??=normalizeRootstone();
-        if(castRootbind(state.adventure.rootstone,state.hunting.encounter,now))events.push({action:'rootbind',outcome:'fighting',encounter:structuredClone(state.hunting.encounter),health:state.health,enemyId:huntEnemy(state.hunting.encounter).id});
       }else{
         const event=huntingTurn(state.hunting.encounter,state.health,state.stats,body.input,now,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,state.combatGear.stonebackVestEquipped,state.combatGear.moonwellCharmEquipped);
         if(event)events.push(result(state,event,now));
@@ -131,19 +127,6 @@ export function activityAction(state,action,body,now,random){
     }else{
       if(depthsStageIndex(state.location)<0||state.depthsRun?.cleared!==0)throw new Error('Choose bank spoils to leave this expedition.');
       state.depthsRun=null;move(state,'ruins');
-    }
-    return true;
-  }
-  if(action==='awaken'||action==='attune'){
-    idle(state);
-    state.adventure.rootstone??=normalizeRootstone();
-    const stone=state.adventure.rootstone;
-    if(action==='awaken'){
-      if(stone.awakened||!Array.isArray(body.runes)||!canAwakenRootstone(state.adventure,state.location,body.runes))throw new Error('Invalid Rootstone awakening.');
-      stone.awakened=true;
-    }else{
-      if(!stone.awakened||!Object.hasOwn(rootstonePowers,body.power)||!(state.location==='shrine'||state.location==='ruins'&&!stone.power))throw new Error('Travel to the shrine to attune your Rootstone.');
-      stone.power=body.power;
     }
     return true;
   }

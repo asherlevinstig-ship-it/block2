@@ -141,7 +141,7 @@
       const row=document.createElement('li');row.textContent=fishProducts[id].name+' ×'+count;rows.append(row);
     }
     if(!rows.children.length){const row=document.createElement('li');row.textContent=rest?'Rested at home · No supplies used.':'No catches yet.';rows.append(row);}
-    document.getElementById('offlineTotals').textContent=rest?'Rest · No gold spent':wood?'+'+plan.xp+' Woodcutting XP'+(plan.deepRoots?' · Deep Roots':''):plan.baitUsed+' bait used · +'+plan.xp+' Patience XP';
+    document.getElementById('offlineTotals').textContent=rest?'Rest · No gold spent':wood?'+'+plan.xp+' Woodcutting XP':plan.baitUsed+' bait used · +'+plan.xp+' Patience XP';
     const reason={'bait-reserve':'Bait reserve protected','target-reached':'Timber target reached','away-cap':'Eight-hour away cap reached',returned:'Returned to the game',rest:'Rested at home',requirements:'Work requirements not met · Rested at home','out-of-bait':'All bait used','bait-limit':'Bait limit reached','time-limit':'Time limit reached',stopped:'Plan stopped','inventory-full':'Timber inventory full'};
     document.getElementById('offlineReason').textContent=rest?(reason[plan.reason]??'Rested at home'):wood
       ?(running?'Basic Axe · One timber per minute · Ends '+new Date(plan.endAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):(reason[plan.reason]??'Shift finished')+' · Woodcutting '+plan.levelBefore+' → '+plan.levelAfter)
@@ -276,13 +276,12 @@
       const cooking=await import('./cooking.js');
       const characterRules=await import('./character-rules.js');
       const commissions=await import('./commissions.js');
-      const rootstone=await import('./rootstone.js');
       const essences=await import('./essences.js');
       const depths=await import('./depths.js');
       const jobs=await import('./jobs.js');
       const shared=await import('./shared-world.js');
       const multiplayer=await import('./multiplayer.js');
-      Object.assign(window,{towerCharacterArt},rules,hunting,art,fx,quests,historyRules,shopUI,clothing,progression,woodRules,crafting,cooking,characterRules,commissions,rootstone,essences,depths,jobs,shared,multiplayer);
+      Object.assign(window,{towerCharacterArt},rules,hunting,art,fx,quests,historyRules,shopUI,clothing,progression,woodRules,crafting,cooking,characterRules,commissions,essences,depths,jobs,shared,multiplayer);
       window.towerInitialState=packet.state;
       window.playerCloud={enqueue,flush,attach,gameplay:async(name,body={})=>{
         if(gameplayBusy)throw new Error('Wait for your current action to finish.');
