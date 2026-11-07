@@ -31,6 +31,13 @@ function furniture(items){
   });
 }
 const locations=new Set(["home","hub","lounge","outside","store","market","trail","grove","creek","shrine","ruins","roots","pond","clearing","armory","logging",...depthsStages.map(stage=>stage.room)]);
+function normalizeFirstUpgrade(input){
+  if(input===undefined)return {unlocked:false,choice:null,complete:false,sale:null};
+  if(!input||typeof input!=='object'||Array.isArray(input)||typeof input.unlocked!=='boolean'||typeof input.complete!=='boolean'||![null,'fishing','combat'].includes(input.choice))throw new Error('Invalid first upgrade.');
+  let sale=null;
+  if(input.sale!=null){const {name,quantity,gold}=input.sale;if(typeof name!=='string'||!name.trim()||name.length>60||!Number.isSafeInteger(quantity)||quantity<1||quantity>1000000||!Number.isSafeInteger(gold)||gold<1||gold>100000000)throw new Error('Invalid first sale.');sale={name,quantity,gold};}
+  return {unlocked:input.unlocked,choice:input.choice,complete:input.complete,sale};
+}
 export function normalizeState(input={}){
   if(!input||typeof input!=="object"||Array.isArray(input))throw new Error("Invalid character.");
   const credits=input.credits??100;
@@ -61,7 +68,7 @@ export function normalizeState(input={}){
   const depthsRun=normalizeDepthsRun(input.depthsRun,input.location,hunting.encounter);
   const position=input.position;
   const state={
-    tradingPostGuideComplete:input.tradingPostGuideComplete===true,bedLessonComplete:input.bedLessonComplete===true||(Array.isArray(input.homeFurniture)&&input.homeFurniture.some(item=>item?.type==='bed')),welcomeSeen:input.welcomeSeen!==false,characterCreated:input.characterCreated!==false,characterRules:normalizeCharacterRules(input.characterRules),credits,health:Math.min(health,maxHealth),stats:{strengthXp:stats.strengthXp,agilityXp:stats.agilityXp,vitalityXp:stats.vitalityXp,patienceXp:stats.patienceXp},fishingGear:{ownedRods,equippedRod:gear.equippedRod,bait:gear.bait},
+    firstUpgrade:normalizeFirstUpgrade(input.firstUpgrade),tradingPostGuideComplete:input.tradingPostGuideComplete===true,bedLessonComplete:input.bedLessonComplete===true||(Array.isArray(input.homeFurniture)&&input.homeFurniture.some(item=>item?.type==='bed')),welcomeSeen:input.welcomeSeen!==false,characterCreated:input.characterCreated!==false,characterRules:normalizeCharacterRules(input.characterRules),credits,health:Math.min(health,maxHealth),stats:{strengthXp:stats.strengthXp,agilityXp:stats.agilityXp,vitalityXp:stats.vitalityXp,patienceXp:stats.patienceXp},fishingGear:{ownedRods,equippedRod:gear.equippedRod,bait:gear.bait},
     woodcutting:normalizeWoodcutting(input.woodcutting),history:normalizeHistory(input),quest:normalizeQuest(input.quest),combatGear,hunting,fishStock,huntingLoot:counts(input.huntingLoot),adventure,
     wardrobe,avatar:outfitAppearance(wardrobe,{name:avatar.name.trim()||"Guest",hair:avatar.hair}),
     location:locations.has(input.location)?input.location:"home",

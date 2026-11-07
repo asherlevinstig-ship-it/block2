@@ -48,6 +48,7 @@ const retiredTables=hasGamingLayout?[]:(savedLounge??[]).filter(item=>item.type=
 let loungeFurniture=initial;
 if(savedLounge)loungeFurniture=hasGamingLayout?savedLounge:installGamingTables(savedLounge.filter(item=>!retiredTables.includes(item)));
 let homeFurniture = savedPlayerState?.homeFurniture??[];
+const firstUpgrade={unlocked:false,choice:null,complete:false,sale:null,...savedPlayerState?.firstUpgrade};
 let tradingPostGuideComplete=savedPlayerState?.tradingPostGuideComplete===true||(savedPlayerState?.location==='market'&&savedPlayerState?.quest?.claimed===true);
 let tradeGuideRouteCache=null;
 let bedLessonComplete=savedPlayerState?.bedLessonComplete===true||homeFurniture.some(item=>item.type==='bed');
@@ -394,7 +395,7 @@ function updateBedGuide(){
   $('bedGuideAction').hidden=placing;$('bedGuideAction').textContent=bedLessonComplete?'Next: visit the lobby':'Open Inventory';
 }
 function updateQuestUI(){
-  updateBedGuide();updateTradeGuide();
+  updateBedGuide();updateTradeGuide();updateUpgradeGuide();
   const stage=questStage(quest);
   const routesOpen=lobbyRoutesOpen();
   $('lobbyDestinations').hidden=!routesOpen;
@@ -1610,7 +1611,7 @@ let worldLabelKey='';
 function updateWorldLabels(){
   const p=canvasBounds(),doors=roomDoors[currentRoom].filter(door=>doorAvailable(door));
   const stump=currentRoom==='logging'&&!!treeState(timberTree()).regrowsAt;
-  const key=[currentRoom,stump,doors.map(door=>door.to).join(','),avatar.name,questStage(quest),tradingPostGuideComplete,bedLessonComplete,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
+  const key=[currentRoom,stump,doors.map(door=>door.to).join(','),avatar.name,questStage(quest),firstUpgrade.choice,firstUpgrade.complete,firstUpgrade.unlocked,firstUpgrade.choice?upgradePlan()?.destination:'',tradingPostGuideComplete,bedLessonComplete,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
   if(key===worldLabelKey)return;
   worldLabelKey=key;
   const container=$('worldLabels');container.replaceChildren();container.dataset.room=currentRoom;
@@ -1620,7 +1621,7 @@ function updateWorldLabels(){
     const title=document.createElement('span');title.textContent=text;label.append(title);
     if(subtitle){const detail=document.createElement('small');detail.textContent=subtitle;label.append(detail);}
     label.title=text+(subtitle?' · '+subtitle:'');
-    if(tradingGuideActive()&&kind==='door'&&text===tradingGuideDestination()?.label)label.dataset.guided='true';
+    if(kind==='door'&&text===(tradingGuideActive()?tradingGuideDestination():firstUpgradeDestination())?.label)label.dataset.guided='true';
     container.append(label);
     const centerX=view.width/2,centerY=view.height/2-4;
     const screenX=p.x+((x-centerX)*zoom+centerX)*p.scale,screenY=p.y+((y-centerY)*zoom+centerY)*p.scale;
@@ -1905,6 +1906,83 @@ function hudRoomExits(room){
   if(room==='lounge')return [{to:'hub',loungeExit:true}];
   return (roomDoors[room]??[]).filter(door=>doorAvailable(door,room));
 }
+function upgradePlan(path=firstUpgrade.choice){
+  if(!['fishing','combat'].includes(path))return null;
+  const fishing=path==='fishing',id=fishing?'oak':'ironSword',item=fishing?fishingCatalog.rods[id]:weaponCatalog[id];
+  const owned=fishing?fishingGear.ownedRods.includes(id):combatGear.ownedWeapons.includes(id);
+  const xp=playerStats[fishing?'patienceXp':'strengthXp'],required=fishing?item.patience:item.strength;
+  const missingXp=Math.max(0,(required-1)*50-xp),missingGold=Math.max(0,item.price-credits);
+  const loot=caughtFishCount()+Object.values(huntingLoot).reduce((sum,n)=>sum+n,0)+woodcutting.timber;
+  const activity=fishing?'pond':'clearing',shop=fishing?'store':'armory';
+  const needsBait=fishing&&fishingGear.bait<1&&(missingXp>0||missingGold>0&&!loot);
+  const destination=needsBait?'store':missingXp?activity:missingGold?(loot?'market':activity):shop;
+  const current=fishing?fishingCatalog.rods[fishingGear.equippedRod]:weaponProfile(combatGear.equippedWeapon,combatGear.activeSwordUpgrade);
+  let benefit;
+  if(fishing){const before=fishingChances(patienceLevel(),fishingGear.equippedRod),after=fishingChances(patienceLevel(),id);benefit=(current.duration/1000).toFixed(1)+'s → '+(item.duration/1000).toFixed(1)+'s per catch · '+(after.fine+after.rare-before.fine-before.rare).toFixed(1)+' percentage points for fine / rare fish.';}
+  else benefit=(current?.damage??0)+' → '+item.damage+' base damage · '+((current?.interval??0)/1000).toFixed(1)+'s → '+(item.interval/1000).toFixed(1)+'s per attack.';
+  const needs=[missingXp?missingXp+' '+(fishing?'Patience':'Strength')+' XP to reach level '+required:'Stats ready',missingGold?missingGold+' more gold':'Gold ready'].join(' · ');
+  return {path,fishing,id,item,owned,missingXp,missingGold,needsBait,activity,shop,destination,benefit,needs};
+}
+function unlockFirstUpgrade(name,quantity,gold){
+  if(firstUpgrade.unlocked)return false;
+  Object.assign(firstUpgrade,{unlocked:true,sale:{name,quantity,gold}});
+  if(fishingGear.ownedRods.includes('oak')&&combatGear.ownedWeapons.includes('ironSword'))firstUpgrade.complete=true;
+  return !firstUpgrade.complete;
+}
+function openUpgradeChoice(){
+  if(!firstUpgrade.unlocked||firstUpgrade.complete)return;
+  const sale=firstUpgrade.sale;$('upgradeSale').textContent=sale?sale.quantity+' × '+sale.name+' → +'+sale.gold+' gold':'Turn your earnings into better equipment';
+  $('upgradeWallet').textContent='Your wallet: '+credits+' gold';
+  for(const [path,prefix] of [['fishing','upgradeFishing'],['combat','upgradeCombat']]){
+    const plan=upgradePlan(path);$(prefix).disabled=plan.owned;
+    $(prefix+'Art').innerHTML=shopItemArt(plan.id);
+    $(prefix+'Needs').textContent=plan.owned?'Already owned':plan.needs;
+    $(prefix).querySelector('p').textContent=plan.benefit;
+  }
+  if(!$('upgradeDialog').open)$('upgradeDialog').showModal();
+}
+function chooseFirstUpgrade(path){
+  const plan=upgradePlan(path);if(!firstUpgrade.unlocked||!plan||plan.owned)return;
+  firstUpgrade.choice=path;tradeGuideRouteCache=null;worldLabelKey='';
+  $('upgradeDialog').close();if($('merchantDialog').open)$('merchantDialog').close();
+  savePlayerState();updateUpgradeGuide();
+}
+function firstUpgradeDestination(){
+  if(!firstUpgrade.unlocked||firstUpgrade.complete||!firstUpgrade.choice||depthsRun||tradingGuideActive())return null;
+  const plan=upgradePlan();return currentRoom===plan.destination?null:hudNextDoor(plan.destination);
+}
+function updateUpgradeGuide(){
+  const active=firstUpgrade.unlocked&&!firstUpgrade.complete&&!tradingGuideActive()&&!editing&&!depthsRun&&!player.inCombat;
+  $('upgradeGuide').hidden=!active;
+  if(!active)return;
+  $('bedGuide').hidden=true;$('scene').dataset.bedTutorial='true';
+  const plan=upgradePlan();$('upgradeChange').hidden=!plan;
+  $('upgradeGuideArt').innerHTML=plan?shopItemArt(plan.id):'✦';
+  if(!plan){$('upgradeGuideTitle').textContent='Make your first upgrade';$('upgradeGuideText').textContent='Your first sale earned gold. Choose better fishing gear or a stronger weapon.';$('upgradeGuideAction').textContent='Choose my upgrade';return;}
+  $('upgradeGuideTitle').textContent='Work toward '+plan.item.name;
+  $('upgradeGuideText').textContent=plan.item.price+' gold · '+plan.needs+'. '+(plan.needsBait?'Buy Riverworms at Silverfin Outfitters before training.':plan.missingXp?'Train by '+(plan.fishing?'catching fish.':'hunting boars.'):plan.missingGold?'Sell your supplies or gather more to afford it.':plan.benefit);
+  $('upgradeGuideAction').textContent=plan.needsBait&&currentRoom==='store'?'View bait supplies':currentRoom===plan.shop&&!plan.missingXp&&!plan.missingGold?'View '+plan.item.name:currentRoom===plan.destination?(plan.destination==='market'?'Open trading window':plan.fishing?'Go fishing':'Approach boar'):'Head to '+roomDetails[plan.destination].name;
+}
+function followFirstUpgrade(){
+  const plan=upgradePlan();if(!plan){openUpgradeChoice();return;}
+  if(unavailable())return;
+  if(currentRoom!==plan.destination){const door=firstUpgradeDestination();if(door)followHudDoor(door);return;}
+  if(['store','armory','market'].includes(currentRoom)){
+    openMerchant();const offer=$(plan.fishing?'rodOffers':'weaponOffers').querySelector('[data-item="'+plan.id+'"]');
+    if(plan.needsBait){$('buyBait').focus();return;}
+    if(offer&&currentRoom===plan.shop&&!plan.missingXp&&!plan.missingGold){offer.classList.add('recommended-upgrade');offer.scrollIntoView({block:'center',behavior:reducedMotion.matches?'instant':'smooth'});offer.focus({preventScroll:true});}
+    return;
+  }
+  if(plan.fishing){if(!fishingGear.bait){note('Buy Riverworms at Silverfin Outfitters before fishing.');return;}const post=roomFurniture().find(item=>item.type==='fishingPost');if(post)use(post);}
+  else{if(!combatGear.equippedWeapon){openInventory('clearing');return;}const boar=roomFurniture().find(item=>item.type==='wildboar');if(boar)use(boar);}
+}
+function finishFirstUpgrade(path,id){
+  const plan=upgradePlan(path);
+  if(!firstUpgrade.unlocked||firstUpgrade.complete||firstUpgrade.choice!==path||id!==plan?.id)return false;
+  firstUpgrade.complete=true;tradeGuideRouteCache=null;worldLabelKey='';
+  note('First upgrade complete! '+plan.item.name+' is equipped.');return true;
+}
+
 function tradingGuideEligible(){return questStage(quest)===3;}
 function tradingGuideActive(){return tradingGuideEligible()&&currentRoom!=='market'&&!depthsRun;}
 function tradingGuideDestination(){
@@ -1922,8 +2000,8 @@ function updateTradeGuide(){
   $('tradeGuideAction').textContent=destination.warden?'Walk to the Warden':'Walk to '+(destination.label??'next exit');
 }
 function drawTradingGuide(time){
-  if(!tradingGuideActive()||editing||unavailable())return;
-  const destination=tradingGuideDestination();if(!destination?.tile)return;
+  if(editing||unavailable())return;
+  const destination=tradingGuideActive()?tradingGuideDestination():firstUpgradeDestination();if(!destination?.tile)return;
   const start=startPosition(),goal=destination.tile;
   const key=[currentRoom,start.x,start.y,goal.x,goal.y,roomFurniture().map(item=>[item.id,item.x,item.y,item.rot].join(':')).join(';')].join('|');
   if(tradeGuideRouteCache?.key!==key)tradeGuideRouteCache={key,path:findPath(start,goal)??[]};
@@ -2342,7 +2420,12 @@ function openMerchant(){
   updateFishingShop();updateArmoryShop();updateTradingPost();
   $('merchantTitle').textContent=roomDetails[currentRoom].name;
   if(!$('merchantDialog').open)$('merchantDialog').showModal();
+  if(firstUpgrade.choice&&!firstUpgrade.complete){
+    const plan=upgradePlan();
+    if(currentRoom===plan.shop&&!plan.missingXp&&!plan.missingGold){const offer=$(plan.fishing?'rodOffers':'weaponOffers').querySelector('[data-item="'+plan.id+'"]');if(offer){offer.classList.add('recommended-upgrade');offer.scrollIntoView({block:'nearest',behavior:'instant'});}}
+  }
 }
+
 function renderWorldMap(){
   const positions={home:[75,65],hub:[240,110],store:[75,160],armory:[240,30],market:[400,65],lounge:[400,160],outside:[240,220],trail:[240,310],logging:[80,310],clearing:[80,405],grove:[410,310],shrine:[550,310],creek:[360,405],pond:[550,405],ruins:[360,500],depthsGate:[80,500],depthsGallery:[80,570],depthsVault:[240,570]};
   const rooms=Object.keys(positions).filter(room=>roomDetails[room]&&(room===currentRoom||hudNextDoor(room)));
@@ -2468,9 +2551,9 @@ function buyArmoryWeapon(id){
   const state={credits,combatGear,stats:playerStats,location:currentRoom,hunting};
   try{
     const result=purchaseWeapon(state,id);credits=state.credits;
-    $('weaponSelect').value='';savePlayerState();
+    $('weaponSelect').value='';const upgraded=finishFirstUpgrade('combat',id);savePlayerState();
     $('armoryStatus').textContent=result.name+' equipped.';
-    showTransaction(result.spent?'Weapon purchased':'Weapon equipped',[{icon:'⚔',text:result.name+' · Equipped'}],-result.spent);
+    showTransaction(upgraded?'First upgrade complete!':result.spent?'Weapon purchased':'Weapon equipped',[{icon:'⚔',text:result.name+' · Equipped'},{icon:'✦',text:upgraded?'20 base damage · Ready for your next hunt':'Ready for combat'}],-result.spent);
   }catch(error){$('armoryStatus').textContent=error.message;}
 }
 function updateArmoryShop(){
@@ -2502,9 +2585,9 @@ function buyFishingRod(id){
   credits-=rod.price;
   fishingGear.ownedRods.push(id);
   fishingGear.equippedRod=id;
-  savePlayerState();
+  const upgraded=finishFirstUpgrade('fishing',id);savePlayerState();
   $('shopStatus').textContent=rod.name+' purchased and equipped.';
-  showTransaction('Rod purchased',[{text:'+1 '+rod.name,icon:'♓'},{text:'Equipped and ready',icon:'✓'}],-rod.price);
+  showTransaction(upgraded?'First upgrade complete!':'Rod purchased',[{text:'+1 '+rod.name,icon:'♓'},{text:upgraded?'3.8s per catch · Better-quality fish chances':'Equipped and ready',icon:'✓'}],-rod.price);
 }
 function showTransaction(title,items,creditChange=0){
   const card=document.createElement('div'),heading=document.createElement('b');
@@ -2621,10 +2704,12 @@ function sellTradeLoot(id,quantity,statusId='tradeStatus'){
   else if(item.group==='fish')fishStock[id]-=quantity;
   else huntingLoot[id]-=quantity;
   credits+=earned;
+  const firstSale=unlockFirstUpgrade(item.name,quantity,earned);
   if(currentRoom==='market'&&item.group!=='materials')recordQuest(quest,'marketSale',quantity);
   savePlayerState();
   $(statusId).textContent='Sold '+quantity+' '+item.name+' for '+earned+' credits.';
   showTransaction('Trade completed',[{text:'−'+quantity+' '+item.name,icon:item.icon}],earned);
+  if(firstSale)openUpgradeChoice();
 }
 function updateTradingPost(){
   $('tradeBalance').textContent='Your wallet · '+new Intl.NumberFormat().format(credits)+' credits';
@@ -2657,7 +2742,7 @@ function updateTradingPost(){
   }
 }
 function savePlayerState(){
-  const snapshot={tradingPostGuideComplete,bedLessonComplete,credits,health,woodcutting,history,quest,combatGear,hunting,depthsRun,ownedFurniture,furniture:[],homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats,fishingGear,huntingLoot,fishStock,avatar,wardrobe,location:currentRoom,position:{x:player.cx,y:player.cy}};
+  const snapshot={firstUpgrade,tradingPostGuideComplete,bedLessonComplete,credits,health,woodcutting,history,quest,combatGear,hunting,depthsRun,ownedFurniture,furniture:[],homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats,fishingGear,huntingLoot,fishStock,avatar,wardrobe,location:currentRoom,position:{x:player.cx,y:player.cy}};
   save('player-state',snapshot);
   if(window.playerCloud)window.playerCloud.enqueue(JSON.parse(JSON.stringify(snapshot)));
   updateInventory();
@@ -2714,7 +2799,7 @@ function switchMode(next){
   updateFishingShop();
   updateTradingPost();
   updateArmoryShop();
-  noticeUntil=0;setHint();cancelSelection();updateBedGuide();updateTradeGuide();
+  noticeUntil=0;setHint();cancelSelection();updateBedGuide();updateTradeGuide();updateUpgradeGuide();
 }
 let rootstoneContext='journal',enteredRunes=[];
 const runeLabels={moth:'Moth',wave:'Wave',root:'Root'};
@@ -2913,9 +2998,10 @@ $('sellFish').onclick=()=>{
   if(count<1||!Number.isSafeInteger(earned)||!Number.isSafeInteger(credits+earned))return;
   for(const id of Object.keys(fishStock))fishStock[id]=0;
   credits+=earned;
-  savePlayerState();
+  const firstSale=unlockFirstUpgrade('Fish',count,earned);savePlayerState();
   $('shopStatus').textContent='Sold '+count+' fish for '+earned+' credits.';
   showTransaction('Catch sold',[{text:'−'+count+' fish · All qualities',icon:'⋈'}],earned);
+  if(firstSale)openUpgradeChoice();
 };
 if(hasBedStarter&&hasGamingLayout)updateInventory();else savePlayerState();
 function openInventory(equipmentRoom=null){
@@ -3018,6 +3104,10 @@ $('railInventory').onclick=()=>$('inventory').onclick();
 $('railWardrobe').onclick=()=>$('looks').onclick();
 $('railDecorate').onclick=()=>$('edit').onclick();
 $('hudHomeDecor').onclick=()=>$('edit').onclick();
+$('upgradeFishing').onclick=()=>chooseFirstUpgrade('fishing');
+$('upgradeCombat').onclick=()=>chooseFirstUpgrade('combat');
+$('upgradeChange').onclick=openUpgradeChoice;
+$('upgradeGuideAction').onclick=followFirstUpgrade;
 $('tradeGuideAction').onclick=()=>{const destination=tradingGuideDestination();if(!destination)return;if(destination.warden)use(hubFurniture.find(item=>item.type==='warden'));else followHudDoor(destination);};
 $('inventoryDialog').addEventListener('close',updateBedGuide);
 $('bedGuideAction').onclick=()=>{if(bedLessonComplete)travelDoor(homeExit);else openInventory();};
