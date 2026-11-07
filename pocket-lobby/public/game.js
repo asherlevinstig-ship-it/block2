@@ -2210,6 +2210,7 @@ function hudRoute(destination){
 }
 function hudNextDoor(destination){return hudRoute(destination)[0]??null;}
 function updateExplorationNav(){
+  bounds=null;
   const next=nextExplorationDoor();
   const outside=explorationRegions.Moonwood.includes(currentRoom)||currentRoom==='outside';
   const nav=$('explorationNav');
