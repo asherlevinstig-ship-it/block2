@@ -64,7 +64,7 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
     if(now<cast.landAt+900)throw new Error('Invalid catch timing. Wait for the fish to land.');
     if(state.fishingGear.bait<1)throw new Error('Choose bait before casting.');
     const before=state.stats.patienceXp;
-    const fish=rollFishingCatch(1+Math.floor(before/50),cast.rod,random);
+    const fish=rollFishingCatch(1+Math.floor(before/50),cast.rod,random,state.stats.luckXp);
     if((state.fishStock[fish]??0)>=1000000)throw new Error('Invalid inventory. Sell some fish first.');
     state.fishingGear.bait--;
     state.fishStock[fish]=(state.fishStock[fish]??0)+1;

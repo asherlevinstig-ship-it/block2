@@ -127,7 +127,7 @@ export function settlePlan(state,now,{stop=false,random=Math.random}={}){
   let changed=false;
   while(plan.nextCatchAt<=Math.min(now,plan.endAt)&&plan.baitUsed<plan.baitLimit&&state.fishingGear.bait>0){
     const level=1+Math.floor(state.stats.patienceXp/50);
-    const fish=rollFishingCatch(level,plan.rod,random);
+    const fish=rollFishingCatch(level,plan.rod,random,state.stats.luckXp);
     state.fishStock[fish]=(state.fishStock[fish]??0)+1;
     state.history=normalizeHistory(state);state.history.fishCaught=true;
     state.quest=normalizeQuest(state.quest);recordQuest(state.quest,"fish");

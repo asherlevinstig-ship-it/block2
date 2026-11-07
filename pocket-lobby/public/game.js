@@ -2107,7 +2107,7 @@ function upgradePlan(path=firstUpgrade.choice){
   const destination=needsBait?'store':missingXp?activity:missingGold?(loot?'market':activity):shop;
   const current=fishing?fishingCatalog.rods[fishingGear.equippedRod]:weaponProfile(combatGear.equippedWeapon,combatGear.activeSwordUpgrade);
   let benefit;
-  if(fishing){const before=fishingChances(patienceLevel(),fishingGear.equippedRod),after=fishingChances(patienceLevel(),id);benefit=(current.duration/1000).toFixed(1)+'s → '+(item.duration/1000).toFixed(1)+'s per catch · '+(after.fine+after.rare-before.fine-before.rare).toFixed(1)+' percentage points for fine / rare fish.';}
+  if(fishing){const before=fishingChances(patienceLevel(),fishingGear.equippedRod,playerStats.luckXp),after=fishingChances(patienceLevel(),id,playerStats.luckXp);benefit=(current.duration/1000).toFixed(1)+'s → '+(item.duration/1000).toFixed(1)+'s per catch · '+(after.fine+after.rare-before.fine-before.rare).toFixed(1)+' percentage points for fine / rare fish.';}
   else benefit=(current?.damage??0)+' → '+item.damage+' base damage · '+((current?.interval??0)/1000).toFixed(1)+'s → '+(item.interval/1000).toFixed(1)+'s per attack.';
   const needs=[missingXp?missingXp+' '+(fishing?'Patience':'Strength')+' XP to reach level '+required:'Stats ready',missingGold?missingGold+' more gold':'Gold ready'].join(' · ');
   return {path,fishing,id,item,owned,missingXp,missingGold,needsBait,activity,shop,destination,benefit,needs};
@@ -2580,7 +2580,7 @@ function updateFishingMoment(time){
   if(!fishingSession)return;
   const session=fishingSession,phase=fishingMoments.phase(session,time);
   if((phase==='landing'||phase==='complete')&&!session.fishId){
-    session.fishId=session.serverCastId?'silverfin':rollFishingCatch(castProfile.level,castProfile.rod);
+    session.fishId=session.serverCastId?'silverfin':rollFishingCatch(castProfile.level,castProfile.rod,Math.random,playerStats.luckXp);
   }
   if(phase==='complete'){finishFishing(time);return;}
   if(phase!==session.stage){
@@ -2726,7 +2726,7 @@ function bagEntries(){
     entries.push({key:'weapon:'+id,name:w.name,category:'gear',art:shopItemArt(id),quantity:1,equipped,description:w.description,stats:w.damage+' base damage · '+attackSeconds(w.interval)+' per attack',action:equipped?'Unequip weapon':'Equip weapon',disabled:player.inCombat||!canUseWeapon(playerStats,id),note:player.inCombat?'Finish combat before changing equipment.':'Drawn automatically in combat.',run:()=>{$('weaponSelect').value=id;toggleWeapon();}});
   }
   for(const id of fishingGear.ownedRods){
-    const rod=fishingCatalog.rods[id],equipped=fishingGear.equippedRod===id,odds=fishingChances(patienceLevel(),id);
+    const rod=fishingCatalog.rods[id],equipped=fishingGear.equippedRod===id,odds=fishingChances(patienceLevel(),id,playerStats.luckXp);
     entries.push({key:'rod:'+id,name:rod.name,category:'gear',art:shopItemArt(id),quantity:1,equipped,description:rod.quality+' fishing rod. Uses one bait per catch.',stats:(rod.duration/1000).toFixed(1)+'s / catch · '+odds.fine.toFixed(1)+'% fine · '+odds.rare.toFixed(1)+'% rare',action:equipped?'Equipped':'Equip rod',disabled:equipped||patienceLevel()<rod.patience,note:'Requires Patience '+rod.patience,run:()=>equipFishingRod(id)});
   }
   if(woodcutting.axeOwned)entries.push({key:'axe',name:'Basic Axe',category:'gear',art:windowItemArt('axe'),quantity:1,equipped:woodcutting.equipped,description:'Your trusty tool for felling trees.',stats:'Train Woodcutting with every log.',action:woodcutting.equipped?'Unequip axe':'Equip axe',disabled:unavailable(),run:()=>$('equipAxe').onclick()});
@@ -2933,8 +2933,11 @@ function updatePlayerStats(){
   $('patienceProgress').value=xp;
   $('patienceProgress').setAttribute('aria-label','Patience '+level+', '+xp+' of 50 XP toward the next level');
   $('patienceXp').textContent=xp+' / 50 XP to level '+(level+1);
-  const odds=fishingChances(level,fishingGear.equippedRod);
-  $('fishingStats').textContent='Patience '+level+' · '+xp+'/50 XP · Bait '+fishingGear.bait+' · Fish '+caughtFishCount()+'\nQuality chances · Common '+odds.common.toFixed(1)+'% · Fine '+odds.fine.toFixed(1)+'% · Rare '+odds.rare.toFixed(1)+'%';
+  const odds=fishingChances(level,fishingGear.equippedRod,playerStats.luckXp);
+  const luck=fishingLuckBonus(playerStats.luckXp);
+  const luckText='+'+luck.fine.toFixed(1)+' fine / +'+luck.rare.toFixed(1)+' rare percentage points';
+  $('attribute-luck-fishing').textContent=luck.rare?'Fishing bonus · '+luckText:'Higher Luck improves fish quality. Train it at the Sunset Lounge.';
+  $('fishingStats').textContent='Patience '+level+' · '+xp+'/50 XP · Bait '+fishingGear.bait+' · Fish '+caughtFishCount()+'\nQuality chances · Common '+odds.common.toFixed(1)+'% · Fine '+odds.fine.toFixed(1)+'% · Rare '+odds.rare.toFixed(1)+'%'+(luck.rare?'\nLuck bonus · '+luckText:'');
 }
 function applyServerGameplay(state){
   credits=state.credits;goldEarned=state.goldEarned??0;
@@ -3245,7 +3248,7 @@ function showTransaction(title,items,creditChange=0){
 function updateFishingShop(){
   if(!walletTween)$('credits').textContent=new Intl.NumberFormat().format(credits);
   $('shopBalance').textContent=new Intl.NumberFormat().format(credits)+' G';
-  $('shopSkill').textContent='Patience '+patienceLevel();
+  $('shopSkill').textContent='Patience '+patienceLevel()+' · Luck '+(1+Math.floor(playerStats.luckXp/50));
   $('shopRodSummary').textContent=fishingCatalog.rods[fishingGear.equippedRod].name+' · '+(fishingCatalog.rods[fishingGear.equippedRod].duration/1000).toFixed(1)+'s / catch';
   $('shopBaitCount').textContent=fishingGear.bait+' bait in your bag · One per catch';
   $('shopCatchSummary').textContent=caughtFishCount()+' fish in your bag · Worth '+caughtFishValue()+' G';
@@ -3258,16 +3261,16 @@ function updateFishingShop(){
   }
   selector.value=fishingGear.equippedRod;
   const offers=$('rodOffers');offers.replaceChildren();
-  const currentRod=fishingCatalog.rods[fishingGear.equippedRod],currentOdds=fishingChances(patienceLevel(),fishingGear.equippedRod);
+  const currentRod=fishingCatalog.rods[fishingGear.equippedRod],currentOdds=fishingChances(patienceLevel(),fishingGear.equippedRod,playerStats.luckXp);
   for(const [id,rod] of Object.entries(fishingCatalog.rods)){
-    const odds=fishingChances(patienceLevel(),id),owned=fishingGear.ownedRods.includes(id),equipped=fishingGear.equippedRod===id;
+    const odds=fishingChances(patienceLevel(),id,playerStats.luckXp),owned=fishingGear.ownedRods.includes(id),equipped=fishingGear.equippedRod===id;
     const skill=patienceLevel()>=rod.patience,afford=credits>=rod.price;
     const speed=(currentRod.duration-rod.duration)/1000,quality=odds.fine+odds.rare-currentOdds.fine-currentOdds.rare;
     const deltas=equipped?[{text:'Your equipped rod',tone:'neutral'}]:[
       {text:speed===0?'Same catch speed':Math.abs(speed).toFixed(1)+'s '+(speed>0?'faster':'slower'),tone:speed>0?'up':speed<0?'down':'neutral'},
       {text:(quality>0?'+':'')+quality.toFixed(1)+'% better-quality fish',tone:quality>0?'up':quality<0?'down':'neutral'}
     ];
-    offers.append(renderShopCard({document,id,name:rod.name,category:rod.quality.toUpperCase(),price:rod.price,owned,equipped,stats:[['PER CATCH',(rod.duration/1000).toFixed(1)+'s'],['FINE / RARE',odds.fine.toFixed(0)+' / '+odds.rare.toFixed(0)+'%']],deltas,requirements:'PATIENCE '+rod.patience,reason:!skill?'Need '+(rod.patience-patienceLevel())+' more Patience levels':!owned&&!afford?'Need '+(rod.price-credits)+' more gold':equipped?'Ready to cast · Uses one bait':owned?'Owned · Free to equip':'Quality chances at your current Patience',action:equipped?'Equipped':!skill?'Patience required':owned?'Equip rod':!afford?'Not enough gold':'Buy & equip',disabled:equipped||!skill||(!owned&&!afford),onBuy:()=>buyFishingRod(id)}));
+    offers.append(renderShopCard({document,id,name:rod.name,category:rod.quality.toUpperCase(),price:rod.price,owned,equipped,stats:[['PER CATCH',(rod.duration/1000).toFixed(1)+'s'],['FINE / RARE',odds.fine.toFixed(1)+'% / '+odds.rare.toFixed(1)+'%']],deltas,requirements:'PATIENCE '+rod.patience,reason:!skill?'Need '+(rod.patience-patienceLevel())+' more Patience levels':!owned&&!afford?'Need '+(rod.price-credits)+' more gold':equipped?'Ready to cast · Uses one bait':owned?'Owned · Free to equip':'Quality chances with your Patience and Luck',action:equipped?'Equipped':!skill?'Patience required':owned?'Equip rod':!afford?'Not enough gold':'Buy & equip',disabled:equipped||!skill||(!owned&&!afford),onBuy:()=>buyFishingRod(id)}));
   }
   $('buyBait').disabled=credits<fishingCatalog.bait.price;
   $('sellFish').disabled=caughtFishCount()<1;

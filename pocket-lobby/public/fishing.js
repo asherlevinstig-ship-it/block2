@@ -25,17 +25,22 @@ const fishProducts=Object.fromEntries(Object.entries(fishingCatalog.species).fla
     return [id,{name:(quality==='common'?'':tier.name+' ')+fish.name,price:fish.price+tier.premium,icon:'⋈',group:'fish',quality}];
   })
 ));
-function fishingChances(level,rodId){
+function fishingLuckBonus(luckXp=0){
+  const levels=Math.min(5,Math.max(0,Math.floor(luckXp/50)));
+  return {fine:levels*.4,rare:levels*.2};
+}
+function fishingChances(level,rodId,luckXp=0){
   const practice=Math.min(10,Math.max(0,level-1));
   const bonus=fishingCatalog.rods[rodId].qualityBonus;
-  const fine=20+Math.min(15,practice+bonus);
-  const rare=3+Math.min(5,practice*.25+bonus*.35);
+  const luck=fishingLuckBonus(luckXp);
+  const fine=20+Math.min(15,practice+bonus)+luck.fine;
+  const rare=3+Math.min(5,practice*.25+bonus*.35)+luck.rare;
   return {common:100-fine-rare,fine,rare};
 }
-function rollFishingCatch(level,rodId,random=Math.random){
+function rollFishingCatch(level,rodId,random=Math.random,luckXp=0){
   const speciesRoll=random()*100,qualityRoll=random()*100;
   const species=speciesRoll<65?'silverfin':speciesRoll<95?'perch':'trout';
-  const chances=fishingChances(level,rodId);
+  const chances=fishingChances(level,rodId,luckXp);
   const quality=qualityRoll<chances.rare?'rare':qualityRoll<chances.rare+chances.fine?'fine':'common';
   return quality==='common'?species:species+'_'+quality;
 }
@@ -51,4 +56,4 @@ function normalizeFishingGear(input){
   return {ownedRods,equippedRod,bait};
 }
 
-export { fishingCatalog, fishProducts, fishingChances, rollFishingCatch, normalizeFishingGear };
+export { fishingCatalog, fishProducts, fishingLuckBonus, fishingChances, rollFishingCatch, normalizeFishingGear };

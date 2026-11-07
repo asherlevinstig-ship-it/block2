@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {testDatabase} from './db-helper.mjs';
 import {handlePlayerApi} from '../server/player-api.mjs';
-import {normalizeState} from '../server/player-state.mjs';
+import {normalizeState,startPlan,settlePlan} from '../server/player-state.mjs';
+import {fishingChances,fishingLuckBonus} from '../public/fishing.js';
 import {applyGameplayAction} from '../server/gameplay.mjs';
 
 test('server cast timing, reel bonus and one-time catch use server values',()=>{
@@ -110,4 +111,24 @@ test('parallel commerce requests cannot spend the same revision twice',async()=>
  assert.equal(state.credits,90);
  assert.equal(state.fishingGear.bait,20);
  sql.close();
+});
+
+test('Luck improves quality for live catches and away shifts, with a cap',()=>{
+ const basic=normalizeState({location:'pond',position:{x:4,y:5},stats:{luckXp:49}});
+ const lucky=normalizeState({...basic,stats:{luckXp:50}});
+ const pickFish=()=>{const rolls=[.1,.031];return ()=>rolls.shift();};
+ for(const [state,expected] of [[basic,'silverfin_fine'],[lucky,'silverfin_rare']]){
+   applyGameplayAction(state,'cast',{},1000,()=>.5);
+   const cast=state.fishingCast;
+   applyGameplayAction(state,'catch',{castId:cast.id,luckXp:10000},cast.landAt+900,pickFish());
+   assert.equal(state.fishingReceipt.fish,expected);
+   startPlan(state,{hours:1,baitLimit:1},20000);
+   settlePlan(state,state.plan.nextCatchAt,{random:pickFish()});
+   assert.equal(state.fishStock[expected],2);
+ }
+ assert.deepEqual(fishingChances(1,'reed'),{common:77,fine:20,rare:3});
+ const boosted=fishingChances(1,'reed',50);
+ assert.deepEqual(Object.values(boosted).map(odds=>odds.toFixed(1)),['76.4','20.4','3.2']);
+ assert.deepEqual(fishingLuckBonus(10000),{fine:2,rare:1});
+ assert.deepEqual(fishingChances(7,'moon',10000),fishingChances(7,'moon',250));
 });
