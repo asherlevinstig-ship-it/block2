@@ -1,3 +1,4 @@
+import {readRankings} from './rankings.mjs';
 import {touchPresence} from './routines.mjs';
 import {deliverCarpenterOrder} from '../public/commissions.js';
 import {normalizeCharacterRules} from '../public/character-rules.js';
@@ -68,6 +69,11 @@ export async function handlePlayerApi(request,env){
       const row=await settled(env.TOWER_DB,id);
       return row?json(packet(row)):json({error:"Character not found."},401);
     }
+    if(path==="/api/player/rankings"&&request.method==="GET"){
+      const row=await settled(env.TOWER_DB,id);
+      if(!row)return json({error:"Character not found."},401);
+      return json(await readRankings(env.TOWER_DB,id,identity.account));
+    }
     if(request.method!=="POST")return json({error:"Not found."},404);
     const body=await bodyOf(request);
     if((body.characterKey!==undefined||identity.account)&&body.characterKey!==id)return json({error:"This tab belongs to a different character. Reload to continue."},409);
@@ -78,6 +84,12 @@ export async function handlePlayerApi(request,env){
     if(row.revision!==body.revision)return json({error:"Your character changed in another tab or completed an offline action.",...packet(row)},409);
     let state=JSON.parse(row.state_json);
     switch(path){
+      case "/api/player/rankings/participation":
+        if(!identity.account)return json({error:"Create an account to join the rankings."},400);
+        if(typeof body.joined!=="boolean")return json({error:"Choose whether to join the rankings."},400);
+        if(state.characterCreated===false)return json({error:"Finish creating your character first."},400);
+        state.rankingJoined=body.joined;
+        break;
       case "/api/player/welcome/ack":
         state.welcomeSeen=true;
         break;
@@ -92,7 +104,7 @@ export async function handlePlayerApi(request,env){
         break;
       case "/api/player/save":
         if(state.plan)return json({error:"Stop the work plan before playing.",...packet(row)},409);
-        state={...normalizeState({...body.state,wardrobe:body.state?.wardrobe??state.wardrobe}),goldEarned:Math.max(state.goldEarned??0,body.state?.goldEarned??0),welcomeSeen:state.welcomeSeen!==false,characterCreated:state.characterCreated!==false,carpenterOrderComplete:state.carpenterOrderComplete===true,characterRules:state.characterRules??normalizeCharacterRules(),routineLastSeen:state.routineLastSeen,activityLog:state.activityLog??[],...(state.report?{report:state.report}:{})};
+        state={...normalizeState({...body.state,wardrobe:body.state?.wardrobe??state.wardrobe}),rankingJoined:state.rankingJoined===true,goldEarned:Math.max(state.goldEarned??0,body.state?.goldEarned??0),welcomeSeen:state.welcomeSeen!==false,characterCreated:state.characterCreated!==false,carpenterOrderComplete:state.carpenterOrderComplete===true,characterRules:state.characterRules??normalizeCharacterRules(),routineLastSeen:state.routineLastSeen,activityLog:state.activityLog??[],...(state.report?{report:state.report}:{})};
         break;
       case "/api/player/commissions/carpenter":
         deliverCarpenterOrder(state);
