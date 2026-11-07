@@ -376,12 +376,18 @@ function nearWarden(){return currentRoom==='hub'&&Math.abs(player.cx-10)+Math.ab
 function bedLessonApplies(){return (savedPlayerState?.bedLessonComplete!==undefined||savedPlayerState?.characterCreated===true&&savedPlayerState?.welcomeSeen===true)&&!quest.accepted&&!history.fishCaught&&!history.boarDefeated;}
 function needsBedLesson(){return atHome()&&bedLessonApplies()&&!bedLessonComplete&&availableFurniture('bed')>0;}
 function updateBedGuide(){
-  const visible=atHome()&&bedLessonApplies();$('bedGuide').hidden=!visible;
+  const visible=atHome()&&bedLessonApplies(),inBag=$('inventoryDialog').open===true;
+  $('bedGuide').hidden=!visible||inBag;$('scene').dataset.bedTutorial=String(visible);
+  $('railInventory').classList.toggle('tutorial-focus',visible&&!bedLessonComplete&&!editing&&!inBag);
+  $('bedInventoryGuide').hidden=!visible||bedLessonComplete;
+  $('bagAction').classList.toggle('tutorial-focus',visible&&!bedLessonComplete&&bagSelection==='furniture:bed');
   if(!visible)return;
   const placing=editing&&selection?.type==='bed';
+  $('bedGuide').dataset.phase=bedLessonComplete?'complete':placing?'placing':'inventory';
   $('questTracker').hidden=true;$('hudHomeDecor').hidden=true;
-  $('bedGuideTitle').textContent=bedLessonComplete?'Your bed is ready!':'Place your free bed';
-  $('bedGuideText').textContent=bedLessonComplete?'Step 1 complete. Next, leave through EXIT and meet the Tower Warden.':placing?'Move the bed preview over the floor and click to place it. Press R to rotate; Escape cancels.':'Your starter bed is waiting in Inventory. Let’s give it a home.';
+  $('bedGuideStep').textContent=bedLessonComplete?'MAKE YOURSELF AT HOME · COMPLETE':placing?'MAKE YOURSELF AT HOME · 3 / 3':'MAKE YOURSELF AT HOME · 1 / 3';
+  $('bedGuideTitle').textContent=bedLessonComplete?'Your bed is ready!':placing?'Choose the perfect spot':'Open your inventory';
+  $('bedGuideText').textContent=bedLessonComplete?'Nicely done! Head to the lobby and meet the Tower Warden.':placing?'Click a clear floor tile to place your bed. Press R to turn it.':'A free bed is waiting for you. Open your bag to find it.';
   for(const [id,done] of [['bedStepInventory',placing||bedLessonComplete],['bedStepPlace',placing||bedLessonComplete],['bedStepFloor',bedLessonComplete]])$(id).classList.toggle('done',done);
   $('bedGuideAction').hidden=placing;$('bedGuideAction').textContent=bedLessonComplete?'Next: visit the lobby':'Open Inventory';
 }
@@ -2290,6 +2296,7 @@ function renderBag(){
   $('bagDetailStats').textContent=selected?.stats??'';$('bagDetailNote').textContent=selected?.note??'';
   const action=$('bagAction');action.hidden=!selected?.action;action.textContent=selected?.action??'';action.disabled=!!selected?.disabled;
   action.onclick=()=>{if(!selected?.run||selected.disabled)return;selected.run();if($('inventoryDialog').open)updateInventory();};
+  updateBedGuide();
 }
 function openMerchant(){
   if(!['store','armory','market'].includes(currentRoom))return;
@@ -2886,6 +2893,7 @@ function openInventory(equipmentRoom=null){
   updateInventory();
   $('bagHint').textContent=$('inventoryGuide').textContent;renderBag();
   if(!$('inventoryDialog').open)$('inventoryDialog').showModal();
+  updateBedGuide();
   if(equipmentRoom){
     const control=$('bagAction').disabled?$('bagGrid').querySelector('[data-item="'+bagSelection+'"]'):$('bagAction');
     control.focus({preventScroll:true});control.scrollIntoView({block:'center',behavior:'instant'});
@@ -2971,6 +2979,7 @@ $('railInventory').onclick=()=>$('inventory').onclick();
 $('railWardrobe').onclick=()=>$('looks').onclick();
 $('railDecorate').onclick=()=>$('edit').onclick();
 $('hudHomeDecor').onclick=()=>$('edit').onclick();
+$('inventoryDialog').addEventListener('close',updateBedGuide);
 $('bedGuideAction').onclick=()=>{if(bedLessonComplete)travelDoor(homeExit);else openInventory();};
 $('hudChatPrompt').onclick=()=>$('openRoomChat').onclick();
 $('questAction').onclick=questAction;
