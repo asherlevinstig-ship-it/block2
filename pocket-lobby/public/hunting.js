@@ -1,3 +1,5 @@
+import {essenceEffects} from './essences.js';
+
 export const boarRules={health:70,playerInterval:1100,boarInterval:1900,fleeCooldown:1800,respawn:30000,recovery:12000,dodgeCost:40,dodgeWindow:350,dodgeCooldown:700};
 export const stonebackVest={name:'Stoneback Vest',absorption:4,dodgeCost:50,timber:8,fragment:'stonebackShell'};
 export const moonwellCharm={name:'Moonwell Charm',staminaRegen:3,timber:4,power:10};
@@ -135,6 +137,12 @@ export function normalizeHunting(input={}){
       result.encounter.magicWard=Math.min(100,input.encounter.magicWard);
       result.encounter.magicWardUntil=time(input.encounter.magicWardUntil);
     }
+    const burn=input.encounter.burn;
+    if(burn&&Number.isInteger(burn.damage)&&burn.damage>=1&&burn.damage<=8){
+      const nextAt=time(burn.nextAt),until=time(burn.until);
+      if(nextAt>0&&nextAt<=until)result.encounter.burn={damage:burn.damage,nextAt,until};
+    }
+    if(input.encounter.chilledUntil!==undefined)result.encounter.chilledUntil=time(input.encounter.chilledUntil);
     if(enemy&&enemy!=='boar')result.encounter.enemy=enemy;
     const move=enemyAttack(input.encounter);
     if(move.id===input.encounter.enemyMove)result.encounter.enemyMove=move.id;
@@ -219,8 +227,25 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
   }
   return result;
 }
+export function enemyStatusEffects(encounter,now){
+  if(!encounter)return [];
+  const effects=[];
+  if(encounter.burn&&now<encounter.burn.until)effects.push({kind:'fire',name:'Burning',color:essenceEffects.fire.color,remaining:encounter.burn.until-now,detail:encounter.burn.damage+' damage / sec'});
+  if(now<(encounter.chilledUntil??0))effects.push({kind:'ice',name:'Chilled',color:essenceEffects.ice.color,remaining:encounter.chilledUntil-now,detail:'Next attack delayed'});
+  return effects;
+}
 export function advanceHunt(encounter,health,stats,now,random=Math.random,weapon='trainingSword',upgrade=null,vestEquipped=false,charmEquipped=false){
   if(!encounter||health<=0)return null;
+  const burn=encounter.burn;
+  if(burn&&burn.nextAt<=burn.until&&burn.nextAt<=Math.min(encounter.nextPlayerAt,encounter.nextBoarAt)){
+    if(now<burn.nextAt)return null;
+    const damage=Math.min(encounter.health,burn.damage);
+    const next={...encounter,health:encounter.health-damage};
+    if(burn.nextAt+essenceEffects.fire.interval<=burn.until)next.burn={...burn,nextAt:burn.nextAt+essenceEffects.fire.interval};
+    else delete next.burn;
+    return {action:'burn',damage,taken:0,health,powerColor:essenceEffects.fire.color,
+      encounter:next.health?next:null,outcome:next.health?'fighting':'victory'};
+  }
   const action=encounter.nextPlayerAt<=encounter.nextBoarAt?'attack':'enemy';
   return huntingTurn(encounter,health,stats,action,now,random,weapon,upgrade,vestEquipped,charmEquipped);
 }

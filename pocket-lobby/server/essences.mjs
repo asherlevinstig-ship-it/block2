@@ -1,4 +1,4 @@
-import {bondedEssences,confluence,essencePower,normalizeMagic} from '../public/essences.js';
+import {bondedEssences,confluence,essencePower,normalizeMagic,essenceEffects} from '../public/essences.js';
 import {combatStamina,huntEnemy} from '../public/hunting.js';
 
 export function essenceAction(state,action,body){
@@ -79,6 +79,19 @@ export function castEssencePower(state,now,slot='q'){
     event.health=Math.min(100,state.health+value);
     event.healed=event.health-state.health;
     event.effect='restored '+event.healed+' HP';
+  }
+  if(event.encounter&&power.gem==='fire'){
+    const effect=essenceEffects.fire,damage=power.rank+2;
+    const burning=encounter.burn&&encounter.burn.until>=now;
+    next.burn={damage:burning?Math.max(damage,encounter.burn.damage):damage,
+      nextAt:burning?encounter.burn.nextAt:now+effect.interval,until:now+effect.duration};
+    event.effect+=' and ignited the enemy';
+  }
+  if(event.encounter&&power.gem==='ice'){
+    const effect=essenceEffects.ice,chilled=now<(encounter.chilledUntil??0);
+    if(!chilled)next.nextBoarAt+=effect.delay;
+    next.chilledUntil=now+effect.duration;
+    event.effect+=chilled?' and refreshed Chill':' and delayed the enemy attack by 0.7 seconds';
   }
   magic.cooldowns[power.id]=now+power.cooldown;
   return event;

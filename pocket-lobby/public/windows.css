@@ -202,3 +202,5 @@
 .game-window .cache-reward-actions .primary { margin-top:0; }
 @keyframes cache-reward-in { from { opacity:0; transform:translateY(8px) scale(.9); } to { opacity:1; transform:none; } }
 @media(prefers-reduced-motion:reduce) { .cache-reward-art svg { animation:none; } }
+
+.combat-panel .enemy-effects { padding:8px 10px; border:1px solid #84759b; border-radius:7px; background:#242d43; color:#e5daf9; font-size:12px; line-height:1.6; }

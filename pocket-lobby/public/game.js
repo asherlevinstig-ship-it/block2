@@ -777,6 +777,7 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
   if(playEffects)recordCombatFx(combatArt,result,performance.now());
   hunting.encounter=result.encounter;health=result.health;
   combatMessage=(result.damage?'You hit for '+result.damage+(result.shellGuarded?' through the shell.':'. '):action==='flee'&&result.outcome!=='escaped'?'Your escape was blocked. ':'')+(result.dodged?'You dodge the attack.':result.taken?(result.move??enemy.name)+' hits for '+result.taken+'.':'');
+  if(action==='burn')combatMessage='Burn deals '+result.damage+' damage.';
   if(result.power)combatMessage=result.power+' '+result.effect+'.';
   if(result.warded)combatMessage+=(combatMessage?' ':'')+'Your ward blocked '+result.warded+' damage.';
   if(result.absorbed)combatMessage+=(combatMessage?' ':'')+'Your vest absorbed '+result.absorbed+' damage.';
@@ -848,6 +849,9 @@ function restAtTower(){
 }
 function updateCombatPanel(){
   const now=Date.now(),encounter=hunting.encounter;
+  const status=enemyStatusEffects(encounter,now).map(effect=>effect.name+' '+Math.ceil(effect.remaining/1000)+'s · '+effect.detail).join('  /  ');
+  $('enemyEffects').hidden=!status;
+  if($('enemyEffects').textContent!==status)$('enemyEffects').textContent=status;
   updateEssenceHotbar(now);
   const enemy=huntEnemyForRoom(currentRoom);
   const stage=depthsStageIndex(currentRoom),chamberCleared=stage>=0&&!depthsEnemyAvailable(depthsRun,currentRoom);
@@ -920,7 +924,7 @@ function updateCombatPanel(){
 }
 function updateCombatMoment(time){
   if(window.playerCloud?.gameplay){
-    const due=hunting.encounter?Math.min(hunting.encounter.nextPlayerAt,hunting.encounter.nextBoarAt):Infinity;
+    const due=hunting.encounter?Math.min(hunting.encounter.nextPlayerAt,hunting.encounter.nextBoarAt,hunting.encounter.burn?.nextAt??Infinity):Infinity;
     if(player.inCombat&&Date.now()>=due&&time>=nextCombatPoll)sendServerCombat();
     if(hunting.recoveryUntil&&Date.now()>=hunting.recoveryUntil&&!serverActionBusy&&!activityBusy){
       serverGameplay('recover').then(()=>{updatePlayerStats();updateCombatPanel();savePlayerState();}).catch(error=>note(error.message));

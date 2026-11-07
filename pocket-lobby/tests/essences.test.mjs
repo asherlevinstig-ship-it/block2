@@ -73,9 +73,9 @@ test('server spell damage respects cooldown and awards a typed stone on a magic 
 
 test('shield, speed, focus and renewal alter actual combat state',()=>{
   for(const [form,check] of Object.entries({
-    shield:s=>{assert.equal(s.hunting.encounter.magicWard,24);act(s,'combat',{combatId:s.combatId},2300);assert.equal(s.health,50);assert(s.combatReceipt.events.some(e=>e.warded>0));},
+    shield:s=>{assert.equal(s.hunting.encounter.magicWard,24);act(s,'combat',{combatId:s.combatId},3000);assert.equal(s.health,50);assert(s.combatReceipt.events.some(e=>e.warded>0));},
     speed:s=>{assert(s.hunting.encounter.stamina>75);assert.equal(s.hunting.encounter.nextPlayerAt,1150);},
-    focus:s=>assert.equal(s.hunting.encounter.nextBoarAt,3850),
+    focus:s=>assert.equal(s.hunting.encounter.nextBoarAt,4550),
     renewal:s=>assert.equal(s.health,62)
   })){
     const s=character();
@@ -165,7 +165,7 @@ test('Ice Aegis and Fire Blade cast independently while both cooldowns are enfor
   assert.equal(s.magic.cooldowns['ice:shield'],9600);
   cast('q');cast('e');
   assert.equal(s.combatReceipt.events.length,0);
-  act(s,'combat',{combatId:s.combatId},2300);
+  act(s,'combat',{combatId:s.combatId},3000);
   assert(s.combatReceipt.events.some(event=>event.warded>0));
 });
 
@@ -184,4 +184,66 @@ test('Shadow Snare and Storm Rush chain before the enemy next attacks',()=>{
   assert.equal(s.hunting.encounter.nextPlayerAt,1150);
   assert.equal(s.magic.cooldowns['shadow:focus'],10100);
   assert.equal(s.magic.cooldowns['storm:speed'],8100);
+});
+
+
+test('Fire refreshes one burn without postponing its next tick or stacking damage',()=>{
+  const s=character();act(s,'bondEssences',{picks:gems});
+  act(s,'awakenPower',{id:'fire:sword'});s.magic.stones.shield=1;
+  act(s,'awakenPower',{id:'fire:shield'});
+  s.location='clearing';s.position={x:5,y:5};act(s,'fight');
+  s.hunting.encounter.nextPlayerAt=100000;s.hunting.encounter.nextBoarAt=100000;
+  const cast=(slot,now)=>act(s,'combat',{combatId:s.combatId,input:'essence',slot},now);
+  cast('q',1100);cast('e',1600);
+  assert.deepEqual(s.hunting.encounter.burn,{damage:3,nextAt:2100,until:4600});
+  act(s,'combat',{combatId:s.combatId},2100);
+  assert.equal(s.hunting.encounter.health,44);
+  assert.equal(s.combatReceipt.events[0].action,'burn');
+  assert.deepEqual(normalizeState(s).hunting.encounter.burn,s.hunting.encounter.burn);
+  act(s,'combat',{combatId:s.combatId},6000);
+  assert.equal(s.hunting.encounter.health,38);
+  assert.equal(s.hunting.encounter.burn,undefined);
+});
+
+test('burn settles on its scheduled clock and grants a single victory when the player is away',()=>{
+  const setup=()=>{
+    const s=character();act(s,'bondEssences',{picks:gems});s.magic.stones.shield=1;
+    act(s,'awakenPower',{id:'fire:shield'});
+    s.location='clearing';s.position={x:5,y:5};act(s,'fight');
+    s.hunting.encounter.health=5;s.hunting.encounter.nextPlayerAt=100000;s.hunting.encounter.nextBoarAt=100000;
+    act(s,'combat',{combatId:s.combatId,input:'essence'},1100);return s;
+  };
+  const away=setup(),online=setup();
+  act(away,'combat',{combatId:away.combatId},10000);
+  act(online,'combat',{combatId:online.combatId},2100);
+  act(online,'combat',{combatId:online.combatId},3100);
+  assert.equal(away.hunting.encounter,null);
+  assert.equal(away.combatReceipt.events.at(-1).at,3100);
+  assert.equal(away.combatReceipt.events.at(-1).outcome,'victory');
+  assert.equal(away.huntingLoot.boar,1);
+  assert.deepEqual(away.hunting,online.hunting);
+  assert.deepEqual(away.stats,online.stats);
+  assert.deepEqual(away.magic,online.magic);
+  act(away,'combat',{combatId:away.combatId},20000);
+  assert.equal(away.huntingLoot.boar,1);
+  assert.equal(away.magic.stones.shield,1);
+});
+
+test('Ice delays the guardian attack once per Chill and preserves its attack warning and move',()=>{
+  const s=character();act(s,'bondEssences',{picks:gems});s.magic.stones.shield=1;
+  act(s,'awakenPower',{id:'ice:sword'});act(s,'awakenPower',{id:'ice:shield'});
+  s.location='depthsVault';s.depthsRun={cleared:2};s.position={x:5,y:5};act(s,'fight');
+  s.hunting.encounter.nextPlayerAt=100000;
+  s.hunting.encounter.enemyMove='aftershock';
+  const before=s.hunting.encounter.nextBoarAt;
+  act(s,'combat',{combatId:s.combatId,input:'essence',slot:'q'},1100);
+  act(s,'combat',{combatId:s.combatId,input:'essence',slot:'e'},1200);
+  assert.equal(s.hunting.encounter.nextBoarAt,before+700);
+  assert.equal(s.hunting.encounter.chilledUntil,4200);
+  assert.equal(s.hunting.encounter.enemyMove,'aftershock');
+  assert.equal(normalizeState(s).hunting.encounter.chilledUntil,4200);
+  act(s,'combat',{combatId:s.combatId},before);
+  assert.equal(s.combatReceipt.events.length,0);
+  act(s,'combat',{combatId:s.combatId},before+700);
+  assert.equal(s.combatReceipt.events[0].move,'Aftershock');
 });

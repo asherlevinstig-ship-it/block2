@@ -1,3 +1,7 @@
+export const essenceEffects={
+  fire:{name:'Burning',duration:3000,interval:1000,color:'#ffac71'},
+  ice:{name:'Chilled',duration:3000,delay:700,color:'#a8e9ff'}
+};
 export const essenceGems={
   fire:{name:'Fire',color:'#ff9960',values:[23,13,24,850,9]},
   ice:{name:'Ice',color:'#92e5ff',values:[16,24,20,1550,12]},
@@ -37,6 +41,9 @@ export function essencePower(id,stats){
   return {id,gem,form,rank,value,name:essence.name+' '+stone.power,color:essence.color,cooldown:stone.cooldown};
 }
 export function powerDescription(power){
+  return powerActionDescription(power)+(power.gem==='fire'?' Burns for '+(power.rank+2)+' damage per second for 3 seconds. Recasting refreshes the burn.':power.gem==='ice'?' Delays the next enemy attack by 0.7 seconds. Recasting refreshes 3-second Chill without stacking the delay.':'');
+}
+function powerActionDescription(power){
   const {form,value}=power;
   if(form==='sword')return 'Deal '+value+' magic damage.';
   if(form==='shield')return 'Block up to '+value+' damage from the next hit within 5 seconds.';

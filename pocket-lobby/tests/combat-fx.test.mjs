@@ -84,3 +84,19 @@ test('spell forms draw distinct shapes and a live ward remains visible after the
   drawCombatWorldFx({ctx:ward.ctx,point,time:2400,now:2400,events:{},player:{x:5,y:5},reduced:true,encounter:{magicWard:12,magicWardUntil:3000}});
   assert(ward.calls.some(([method])=>method==='closePath'));ward.balanced();
 });
+
+
+test('burn and Chill show timers above the enemy and disappear when expired, including reduced motion',()=>{
+  const encounter={burn:{damage:3,nextAt:2000,until:4000},chilledUntil:4000};
+  for(const reduced of [false,true]){
+    const active=canvas();
+    drawCombatWorldFx({ctx:active.ctx,point,time:1500,now:1500,events:{},player:{x:5,y:5},reduced,encounter});
+    assert(active.calls.some(([method,text])=>method==='fillText'&&text==='Burning 3s'));
+    assert(active.calls.some(([method,text])=>method==='fillText'&&text==='Chilled 3s'));
+    active.balanced();
+    const expired=canvas();
+    drawCombatWorldFx({ctx:expired.ctx,point,time:4500,now:4500,events:{},player:{x:5,y:5},reduced,encounter});
+    assert(!expired.calls.some(([method,text])=>method==='fillText'&&/Burning|Chilled/.test(text)));
+    expired.balanced();
+  }
+});

@@ -1,4 +1,4 @@
-import {enemyAttack,boarRules} from './hunting.js';
+import {enemyAttack,boarRules,enemyStatusEffects} from './hunting.js';
 
 const progress=(time,start,duration)=>Math.max(0,Math.min(1,(time-start)/duration));
 const active=(time,start,duration)=>time>=start&&time<start+duration;
@@ -171,7 +171,7 @@ function drawCombatNumbers(ctx,effects,time,{bx,by,px,py},reduced){
   for(const effect of effects.slice(-4).reverse()){
     const t=progress(time,effect.time,feedbackLife),rise=reduced?0:t*13;
     if(effect.damage&&enemyRow<3){
-      const suffix=effect.shellGuarded?' SHELL':effect.shellGuarded===false?' EXPOSED':'';
+      const suffix=effect.action==='burn'?' BURN':effect.shellGuarded?' SHELL':effect.shellGuarded===false?' EXPOSED':'';
       const tint=effect.powerColor??(effect.shellGuarded?color.shell:effect.shellGuarded===false?color.exposed:color.sword);
       popup(ctx,'−'+effect.damage+suffix,bx,by-22-rise-enemyRow++*13,t,tint,suffix?10:13);
     }
@@ -210,6 +210,31 @@ export function drawCombatWorldFx({ctx,point,time,now,events,player,reduced,enco
     particles(ctx,bx,by,Math.sqrt(progress(time,events.victoryAt,1200)),color.sword,false,34,14);
   }
   drawCombatNumbers(ctx,effects,time,points,reduced);
+  for(const [index,effect] of enemyStatusEffects(encounter,now).entries()){
+    const x=bx-36,y=by-65+index*13;
+    ctx.save();ctx.fillStyle=effect.color;ctx.strokeStyle=effect.color;ctx.lineWidth=1;
+    if(effect.kind==='fire'){
+      for(let i=0;i<3;i++){
+        const rise=reduced?i*3:(time/65+i*7)%22;
+        ctx.globalAlpha=.8-rise/50;
+        ctx.fillRect(Math.round(bx-9+i*8),Math.round(by+3-rise),2,i===1?3:2);
+      }
+    }else{
+      ctx.globalAlpha=.55;ring(ctx,bgX,bgY,16);
+      for(let i=0;i<3;i++)cross(ctx,bx-11+i*11,by+3-i%2*5,1);
+    }
+    ctx.globalAlpha=1;ctx.fillStyle='#101a30ed';ctx.fillRect(x,y,72,11);
+    ctx.strokeStyle=effect.color;ctx.lineWidth=.7;ctx.strokeRect(x,y,72,11);
+    ctx.fillStyle=effect.color;ctx.font='bold 8px monospace';ctx.textAlign='left';
+    if(effect.kind==='fire'){
+      const flicker=reduced?0:Math.sin(time/100)*1.5;
+      ctx.beginPath();ctx.moveTo(x+3,y+8);ctx.lineTo(x+5,y+2+flicker);ctx.lineTo(x+8,y+8);ctx.fill();
+    }else{
+      line(ctx,x+3,y+3,x+9,y+8);line(ctx,x+3,y+8,x+9,y+3);line(ctx,x+6,y+2,x+6,y+9);
+    }
+    ctx.fillText(effect.name+' '+Math.ceil(effect.remaining/1000)+'s',x+12,y+8);
+    ctx.restore();
+  }
 }
 
 export function drawCombatOverlayFx({ctx,width,height,time,now,events,encounter,health,reduced,enemy}){

@@ -43,7 +43,7 @@ export function advanceServerCombat(state,now,random=Math.random){
   const events=[];
   for(let i=0;state.hunting.encounter&&i<2048;i++){
     const encounter=state.hunting.encounter;
-    const due=Math.min(encounter.nextPlayerAt,encounter.nextBoarAt);
+    const due=Math.min(encounter.nextPlayerAt,encounter.nextBoarAt,encounter.burn?.nextAt??Infinity);
     if(due>now)break;
     const event=advanceHunt(encounter,state.health,state.stats,due,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,state.combatGear.stonebackVestEquipped,state.combatGear.moonwellCharmEquipped);
     if(!event)break;
