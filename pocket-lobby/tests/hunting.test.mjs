@@ -82,7 +82,7 @@ function gameHarness(){
     editing:false,fishingSession:null,woodSession:null,route:[],step:null,interaction:null,target:null,
     $:get,Date:{now:()=>now},performance:{now:()=>now},
     note:message=>messages.push(message),showTransaction:(...args)=>receipts.push(args),
-    updateInventory(){},updatePlayerStats(){},
+    updateInventory(){},updatePlayerStats(){},updateEssenceHotbar(){},
     enterRoom:next=>{context.currentRoom=next;},
     savePlayerState:()=>{saves.push(normalizeState(JSON.parse(vm.runInContext('JSON.stringify({health,combatGear,hunting,location:currentRoom,stats:playerStats,huntingLoot})',context))));}
   });

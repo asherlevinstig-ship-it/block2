@@ -814,6 +814,7 @@ function restAtTower(){
 }
 function updateCombatPanel(){
   const now=Date.now(),encounter=hunting.encounter;
+  updateEssenceHotbar(now);
   const enemy=huntEnemyForRoom(currentRoom);
   const stage=depthsStageIndex(currentRoom),chamberCleared=stage>=0&&stage<(depthsRun?.cleared??0);
   updateDepthsPanel();
@@ -867,12 +868,6 @@ function updateCombatPanel(){
   $('combatDodgeHelp').textContent='Dodge costs '+dodgeCost+' stamina'+(combatGear.stonebackVestEquipped?' with the Stoneback Vest':'')+'. Time it just before impact.'+(combatGear.moonwellCharmEquipped?' Moonwell Charm: +'+moonwellCharm.staminaRegen+' stamina per second.':' Agility improves recovery.');
   $('combatDodge').disabled=!encounter||now<(encounter.nextDodgeAt??0)||stamina<dodgeCost;
   const timing=!!encounter&&encounter.nextBoarAt-now>0&&encounter.nextBoarAt-now<=boarRules.dodgeWindow;
-  const cast=magicState?.equipped?essencePower(magicState.equipped,playerStats):null;
-  const castButton=$('combatEssence');
-  const magicWait=Math.max(0,(magicState?.nextCastAt??0)-now);
-  castButton.hidden=!cast||!encounter;
-  castButton.disabled=!cast||!encounter||magicWait>0||(cast.form==='renewal'&&health>=100);
-  if(cast)castButton.textContent=cast.name+(magicWait?' · '+Math.ceil(magicWait/1000)+'s':' · Q');
   const bind=rootbindStatus(rootstone,encounter,now),bindButton=$('combatRootbind');
   bindButton.hidden=rootstone.power!=='rootbind';
   bindButton.disabled=bind!=='ready';
@@ -3104,6 +3099,7 @@ function applyServerGameplay(state){
   for(const key of Object.keys(ownedFurniture))ownedFurniture[key]=state.ownedFurniture?.[key]??0;
   for(const id of Object.keys(huntingLoot))delete huntingLoot[id];
   Object.assign(huntingLoot,state.huntingLoot);
+  updateEssenceHotbar();
 }
 async function serverGameplay(name,body={}){
   if(serverActionBusy)throw new Error('Wait for the current action.');
@@ -3653,11 +3649,11 @@ function attuneRootstone(power){
   updateRootstoneDialog();
 }
 let gemDraft=[],viewedEssence=null,essenceBusy=false;
-function openEssences(){
+function openEssences(gem=null){
   if(unavailable())return;
   if(!window.playerCloud?.gameplay){note('Connect to the game server to manage Essences.');return;}
   gemDraft=[...(magicState?.picks??[])];
-  viewedEssence=gemDraft[0]??null;
+  viewedEssence=typeof gem==='string'?gem:gemDraft[0]??null;
   $('rootstoneDialog').close();
   if($('inventoryDialog').open)$('inventoryDialog').close();
   $('essenceStatus').textContent='';
@@ -3731,8 +3727,53 @@ async function changeEssences(action,body){
   }catch(error){$('essenceStatus').textContent=error.message;}
   finally{essenceBusy=false;renderEssences();}
 }
+const hotbarPowerSymbols={sword:'⚔',shield:'⬡',speed:'ϟ',focus:'✧',renewal:'✚'};
+let hotbarGemsKey='';
+function equippedEssenceStatus(now){
+  const power=magicState?.equipped?essencePower(magicState.equipped,playerStats):null;
+  const remaining=Math.max(0,(magicState?.nextCastAt??0)-now);
+  const fullHealth=power?.form==='renewal'&&health>=maxHealth();
+  return {power,remaining,fullHealth,canCast:!!power&&player.inCombat&&!!hunting.encounter&&!remaining&&!fullHealth};
+}
+function updateEssenceHotbar(now=Date.now()){
+  const bar=$('essenceHotbar');
+  bar.hidden=!magicState?.picks.length||editing;
+  if(bar.hidden)return;
+  const {power,remaining,fullHealth,canCast}=equippedEssenceStatus(now);
+  const gems=bondedEssences(magicState.picks);
+  const key=[gems.join(','),power?.gem,player.inCombat].join('|');
+  if(key!==hotbarGemsKey){
+    hotbarGemsKey=key;
+    const slots=gems.map((id,index)=>{
+      const gem=allEssences[id],fusion=index===3;
+      const slot=essenceGemButton(gem,id===power?.gem,()=>openEssences(id));
+      slot.dataset.fusion=String(fusion);
+      slot.title=gem.name+(fusion?' · Confluence Gem':' Essence');
+      slot.setAttribute('aria-label',slot.title+(id===power?.gem?' · source of equipped power':''));
+      slot.disabled=player.inCombat;
+      return slot;
+    });
+    $('essenceHotbarGems').replaceChildren(...slots);
+  }
+  const button=$('essenceHotbarPower');
+  const status=!power?(player.inCombat?'Equip between fights':'Open Essences'):remaining?'Recharging · '+Math.ceil(remaining/1000)+'s'
+    :!player.inCombat?allEssences[power.gem].name+' · Cast in combat'
+    :fullHealth?'Hearts are full':allEssences[power.gem].name+' · Ready';
+  button.dataset.ready=String(canCast);
+  button.dataset.equipped=String(!!power);
+  button.disabled=player.inCombat&&!canCast;
+  button.style.setProperty('--power-color',power?.color??'#b7a4ed');
+  button.title=power?powerDescription(power):'Open Essences to equip a power';
+  button.setAttribute('aria-label',power?(canCast?'Cast ':'')+power.name+' · '+status:'Equip a power in Essences');
+  const name=$('essenceHotbarName'),label=$('essenceHotbarStatus'),symbol=$('essenceHotbarSymbol');
+  if(name.textContent!==(power?.name??'Equip a power'))name.textContent=power?.name??'Equip a power';
+  if(label.textContent!==status)label.textContent=status;
+  const glyph=power?hotbarPowerSymbols[power.form]:'✦';
+  if(symbol.textContent!==glyph)symbol.textContent=glyph;
+  $('essenceHotbarMeter').style.transform='scaleX('+(power?Math.max(0,1-remaining/power.cooldown):0)+')';
+}
 function castEquippedEssence(){
-  if(player.inCombat&&!$('combatEssence').disabled)sendServerCombat('essence');
+  if(equippedEssenceStatus(Date.now()).canCast)sendServerCombat('essence');
 }
 function currentActivityPrompt(){
   if(currentRoom==='hub'&&!lobbyRoutesOpen()){
@@ -4049,8 +4090,11 @@ $('depthsNext').onclick=advanceMoonwellDepths;
 $('depthsLeave').onclick=leaveMoonwellDepths;
 $('depthsRetreat').onclick=leaveMoonwellDepths;
 $('combatRootbind').onclick=useRootbind;
-$('combatEssence').onclick=castEquippedEssence;
-$('openEssences').onclick=openEssences;
+$('essenceHotbarPower').onclick=()=>{
+  if(player.inCombat)castEquippedEssence();
+  else openEssences(equippedEssenceStatus(Date.now()).power?.gem);
+};
+$('openEssences').onclick=()=>openEssences();
 $('essenceBond').onclick=()=>changeEssences('bondEssences',{picks:[...gemDraft]});
 $('openRootstone').onclick=()=>openRootstone('journal');
 for(const [rune,id] of [['moth','rootRuneMoth'],['wave','rootRuneWave'],['root','rootRuneRoot']])$(id).onclick=()=>touchRootstoneRune(rune);

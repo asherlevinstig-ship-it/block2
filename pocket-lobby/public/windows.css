@@ -116,3 +116,49 @@
 .essence-powers button,#openEssences { padding:8px 10px; border:1px solid #8c7d66; border-radius:8px; background:#233850; color:#ffe2a9; }
 .essence-window button:disabled { opacity:.48; }
 #essenceStatus { min-height:1.4em; color:#ffe0a1; margin-bottom:0; }
+
+/* A dedicated dock row keeps the power controls clear of the room and tools. */
+.hud-bottom:has(>.essence-hotbar:not([hidden])) { row-gap:7px; }
+.hud-bottom:has(>.essence-hotbar:not([hidden])) > :is(.hud-chat-prompt,.hud-quickbar,.hud-actionbar) { grid-row:2; }
+.shell:has(.essence-hotbar:not([hidden])) :is(.layout,.layout.entry:not(.decorating),.layout.shopping) { padding-bottom:171px; }
+.essence-hotbar {
+  grid-column:1/-1; grid-row:1; justify-self:center;
+  display:grid; grid-template-columns:minmax(144px,190px) auto; gap:6px; padding:5px;
+  max-width:100%; border:1px solid #7771a1; border-radius:12px;
+  background:linear-gradient(165deg,#24263fec,#0d1a30f5); box-shadow:0 5px 18px #0209199e;
+}
+.essence-hotbar[hidden] { display:none; }
+.essence-hotbar-power {
+  position:relative; display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:6px;
+  min-width:0; min-height:44px; padding:4px 6px 6px; overflow:hidden; text-align:left;
+  border:1px solid #7d749c; border-radius:7px; color:#f6e9ff; background:#222e4c;
+}
+.essence-hotbar-power[data-ready="true"] { border-color:var(--power-color); box-shadow:inset 0 0 10px #b694ff28; }
+.essence-hotbar-symbol { color:var(--power-color); font-size:20px; }
+.essence-hotbar-copy strong,.essence-hotbar-copy small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.essence-hotbar-copy strong { font-size:12px; }
+.essence-hotbar-copy small { color:#c8c7df; font-size:9px; margin-top:3px; }
+.essence-hotbar-power kbd { border:1px solid #7b80a4; border-radius:4px; padding:2px 4px; color:#f1dcff; font-size:10px; }
+.essence-hotbar-power[data-equipped="false"] kbd { display:none; }
+.essence-hotbar-meter { position:absolute; inset:auto 0 0; height:2px; background:var(--power-color); transform-origin:left; }
+.essence-hotbar-gems { display:grid; grid-template-columns:repeat(4,minmax(52px,1fr)); gap:3px; }
+.essence-hotbar-gems button {
+  display:grid; place-items:center; align-content:center; gap:3px; min-width:0; padding:3px;
+  border:1px solid #556785; border-radius:7px; color:#dde5f8; background:#14233b; font-size:9px;
+}
+.essence-hotbar-gems button[data-fusion="true"] { border-color:#9c80c0; background:#29233f; }
+.essence-hotbar-gems button[aria-pressed="true"] { border-color:#f4ce8a; background:#3a354a; color:#ffe8b5; }
+.essence-hotbar-gems .essence-gem { width:15px; height:18px; }
+.essence-hotbar button:hover:not(:disabled) { filter:brightness(1.18); }
+.essence-hotbar button:focus-visible { outline:2px solid #fff0be; outline-offset:2px; }
+.essence-hotbar button:disabled { cursor:default; }
+@media(max-width:900px) {
+  .shell:has(.essence-hotbar:not([hidden])) :is(.layout,.layout.entry:not(.decorating),.layout.shopping) { padding-bottom:198px; }
+}
+@media(max-width:520px) {
+  .essence-hotbar { grid-template-columns:minmax(106px,1fr) auto; gap:4px; padding:4px; }
+  .essence-hotbar-gems { grid-template-columns:repeat(4,minmax(39px,1fr)); gap:2px; }
+  .essence-hotbar-gems button { font-size:8px; padding-inline:2px; }
+  .essence-hotbar-power { gap:4px; }
+  .essence-hotbar-power kbd { display:none; }
+}
