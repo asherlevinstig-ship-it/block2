@@ -3,7 +3,7 @@ import {awardAwakeningStone} from '../public/essences.js';
 import {moonwood} from '../public/moonwood.js';
 import {isTimberTree,timberTreeState,cutTimberTree,choppingDuration,grantBasicAxe} from '../public/woodcutting.js';
 import {huntEnemyForRoom,huntEnemy,huntRespawnAt,canUseWeapon,createHunt,advanceHunt,huntingTurn,boarRules} from '../public/hunting.js';
-import {depthsStages,depthsStageIndex,clearDepthsStage,inspectDepthsFind} from '../public/depths.js';
+import {depthsStages,depthsStageIndex,clearDepthsStage,inspectDepthsFind,depthsCacheRoom,depthsEnemyAvailable} from '../public/depths.js';
 import {recordQuest} from '../public/quests.js';
 
 const adjacent=(state,item)=>state.position&&Math.abs(state.position.x-item.x)+Math.abs(state.position.y-item.y)===1;
@@ -15,7 +15,7 @@ function result(state,event,now){
   const enemy=huntEnemy(state.hunting.encounter);
   state.hunting.encounter=event.encounter;state.health=event.health;
   if(event.outcome==='victory'){
-    if(state.combatId&&state.magic?.picks.length)event.stone=awardAwakeningStone(state.magic);
+    if(state.location!==depthsCacheRoom&&state.combatId&&state.magic?.picks.length)event.stone=awardAwakeningStone(state.magic);
     for(const [i,key] of ['strengthXp','agilityXp','vitalityXp'].entries())state.stats[key]=Math.min(100000000,state.stats[key]+enemy.xp[i]);
     if(state.depthsRun)clearDepthsStage(state.depthsRun,state.location,!!state.combatId);
     else{
@@ -88,7 +88,7 @@ export function activityAction(state,action,body,now,random){
     const enemy=huntEnemyForRoom(state.location),index=depthsStageIndex(state.location);
     if(!enemy||!adjacent(state,{x:6,y:5}))throw new Error('Travel beside the creature before fighting.');
     if(!state.combatGear.equippedWeapon||!canUseWeapon(state.stats,state.combatGear.equippedWeapon))throw new Error('Choose a weapon you can use before fighting.');
-    if(index>=0?state.depthsRun?.cleared!==index:now<huntRespawnAt(state.hunting,enemy))throw new Error('Invalid encounter. Wait for the creature to return.');
+    if(index>=0?!depthsEnemyAvailable(state.depthsRun,state.location):now<huntRespawnAt(state.hunting,enemy))throw new Error('Invalid encounter. Wait for the creature to return.');
     delete state.timberCut;
     state.combatId=crypto.randomUUID();state.combatReceipt={id:crypto.randomUUID(),events:[]};
     state.hunting.encounter=createHunt(now,enemy.health,enemy.id);return true;
@@ -121,6 +121,13 @@ export function activityAction(state,action,body,now,random){
     inspectDepthsFind(state,item);
     return true;
   }
+  if(action==='depthsCacheEnter'||action==='depthsCacheLeave'){
+    idle(state);delete state.timberCut;
+    const entering=action==='depthsCacheEnter';
+    if(state.location!==(entering?'depthsGallery':depthsCacheRoom)||state.depthsRun?.cleared!==2)throw new Error('Clear Shell Gallery to reach the cache chamber.');
+    move(state,entering?depthsCacheRoom:'depthsGallery',entering?{x:3,y:5}:{x:9,y:5});
+    return true;
+  }
   if(action==='depthsEnter'||action==='depthsNext'||action==='depthsLeave'){
     idle(state);delete state.timberCut;
     if(action==='depthsEnter'){
@@ -128,7 +135,7 @@ export function activityAction(state,action,body,now,random){
       state.depthsRun={cleared:0};move(state,depthsStages[0].room,{x:4,y:5});
     }else if(action==='depthsNext'){
       const index=depthsStageIndex(state.location),next=depthsStages[index+1];
-      if(index<0||!next||state.depthsRun?.cleared!==index+1)throw new Error('Invalid expedition. Clear this chamber first.');
+      if(state.location===depthsCacheRoom||index<0||!next||state.depthsRun?.cleared!==index+1)throw new Error('Invalid expedition. Clear this chamber first.');
       move(state,next.room,{x:4,y:5});
     }else{
       if(depthsStageIndex(state.location)<0||state.depthsRun?.cleared!==0)throw new Error('Choose bank spoils to leave this expedition.');

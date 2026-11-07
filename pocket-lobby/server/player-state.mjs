@@ -2,7 +2,7 @@ import {normalizeMagic} from '../public/essences.js';
 import {mealRecipes} from '../public/cooking.js';
 import {normalizeWardrobe,outfitAppearance} from '../public/wardrobe.js';
 import {normalizeCharacterRules} from '../public/character-rules.js';
-import {depthsStages,normalizeDepthsRun} from '../public/depths.js';
+import {depthsStages,depthsCacheRoom,normalizeDepthsRun} from '../public/depths.js';
 import {jobPreview} from '../public/jobs.js';
 import { normalizeWoodcutting } from "../public/woodcutting.js";
 import { startWoodcuttingPlan,settleWoodcuttingPlan } from "./woodcutting-plan.mjs";
@@ -31,7 +31,7 @@ function furniture(items){
     return {id:item.id,type:item.type,x:item.x,y:item.y,rot:item.rot};
   });
 }
-const locations=new Set(["home","hub","lounge","outside","store","market","trail","grove","creek","shrine","ruins","roots","pond","clearing","armory","logging",...depthsStages.map(stage=>stage.room)]);
+const locations=new Set(["home","hub","lounge","outside","store","market","trail","grove","creek","shrine","ruins","roots","pond","clearing","armory","logging",...depthsStages.map(stage=>stage.room),depthsCacheRoom]);
 function normalizeFirstUpgrade(input){
   if(input===undefined)return {unlocked:false,choice:null,complete:false,sale:null};
   if(!input||typeof input!=='object'||Array.isArray(input)||typeof input.unlocked!=='boolean'||typeof input.complete!=='boolean'||![null,'fishing','combat'].includes(input.choice))throw new Error('Invalid first upgrade.');

@@ -21,6 +21,7 @@ const rooms={
   roots:{mist:[[4.5,3.2,35],[8.6,6.1,36]],fireflies:{color:violet,count:6,area:[2,2,10,8]}},
   depthsGate:{mist:[[8.4,2.1,33],[8.4,7.4,38]]},
   depthsGallery:{fireflies:{color:['#b5f3be','#74dabc'],count:8,area:[2,2,10,8]},lights:[[4.5,2.5,30,'#a1e8ba'],[9.5,3.5,30,'#8ee0a8']]},
+  depthsCache:{dust:{color:gold,count:10,area:[3,2,10,8]},lights:[[9.5,5.5,40,'#e8c994'],[9.5,3.5,30,'#bda4ef']]},
   depthsVault:{dust:{color:violet,count:10,area:[2,2,10,8]},lights:[[9.5,2.5,36,'#b19cf1'],[8.5,7.5,32,'#bea4ff']]}
 };
 

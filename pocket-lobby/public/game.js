@@ -579,9 +579,27 @@ function enterMoonwellDepths(){
   enterRoom(depthsStages[0].room);
   note('Moonwell Depths. Your current health carries through all three chambers.');
 }
+function visitDepthsCache(){
+  if(unavailable()||depthsRun?.cleared!==2)return;
+  const entering=currentRoom==='depthsGallery';
+  if(!entering&&currentRoom!==depthsCacheRoom)return;
+  if(window.playerCloud?.gameplay)serverTravel(entering?'depthsCacheEnter':'depthsCacheLeave');
+  else enterRoom(entering?depthsCacheRoom:'depthsGallery',entering?{x:3,y:5}:{x:9,y:5});
+}
+function revealEssenceCache(){
+  const stone=depthsRun?.cacheStone;
+  if(!stone)return;
+  $('cacheRewardGold').textContent='+'+essenceCacheGold+' gold';
+  $('cacheRewardStone').textContent=stoneForms[stone].name+' Awakening Stone';
+  $('cacheRewardHelp').textContent=magicState?.picks.length
+    ?'Use this stone to awaken a '+stoneForms[stone].power+' power in any bonded Gem. Equip it to Q or E.'
+    :'Keep the stone in Inventory. Bond your first Gems at the Moonwell to unlock its magic.';
+  $('cacheRewardAwaken').hidden=!magicState?.picks.length;
+  $('cacheRewardDialog').showModal();
+}
 function advanceMoonwellDepths(){
   const index=depthsStageIndex(currentRoom);
-  if(unavailable()||!depthsRun||index<0||depthsRun.cleared!==index+1)return;
+  if(unavailable()||currentRoom===depthsCacheRoom||!depthsRun||index<0||depthsRun.cleared!==index+1)return;
   const next=depthsStages[index+1];
   if(next){if(window.playerCloud?.gameplay)serverTravel('depthsNext');else enterRoom(next.room);}
 }
@@ -637,13 +655,19 @@ async function examineDepths(item){
     if(!already){
       if(window.playerCloud?.gameplay)await serverGameplay('depthsInspect',{id:item.type});
       else{
-        const state={depthsRun,location:currentRoom,position:{x:player.cx,y:player.cy},health};
+        const state={depthsRun,location:currentRoom,position:{x:player.cx,y:player.cy},health,credits,goldEarned,magic:magicState};
         inspectDepthsFind(state,item);
-        health=state.health;
+        health=state.health;credits=state.credits;goldEarned=state.goldEarned;magicState=state.magic;
       }
       savePlayerState();
     }
     updateDepthsPanel();
+    if(item.type==='essenceCache'){
+      if(already){note('The Essence Cache is empty. You’ve collected this run’s reward.');return;}
+      updatePlayerStats();updateEssenceHotbar();
+      showTransaction('Essence Cache opened',[{icon:'◆',text:'+1 '+stoneForms[depthsRun.cacheStone].name+' Awakening Stone'}],essenceCacheGold);
+      revealEssenceCache();return;
+    }
     if(find.healing){
       note(already?'The chest is empty.':find.text+' Restored '+(health-before)+' HP.',7000);
     }else{
@@ -671,7 +695,12 @@ function updateDepthsPanel(){
     $('enterDepths').disabled=!weapon||health<=0;
   }
 
-  const cleared=inDepths&&index<depthsRun.cleared;
+  const cacheRoom=currentRoom===depthsCacheRoom;
+  const cleared=inDepths&&!depthsEnemyAvailable(depthsRun,currentRoom);
+  const canVisitCache=currentRoom==='depthsGallery'&&depthsRun?.cleared===2;
+  $('depthsCacheRoute').hidden=unavailable()||!(cacheRoom||canVisitCache);
+  $('depthsCacheRoute').textContent=cacheRoom?'Return to Shell Gallery':'Explore the Essence Cache chamber';
+  $('depthsOpenCache').hidden=!cacheRoom||!cleared||!!depthsRun?.finds?.includes('essenceCache');
   const atCamp=cleared&&!unavailable();
   const canDecide=atCamp&&!depthsExploring;
   $('depthsCampRibbon').hidden=!atCamp||!depthsExploring;
@@ -683,12 +712,12 @@ function updateDepthsPanel(){
   if(!inDepths)return;
 
   const stage=depthsStages[index];
-  const next=depthsStages[index+1];
+  const next=cacheRoom?null:depthsStages[index+1];
   const spoils=depthsSpoils(depthsRun);
-  $('depthsTitle').textContent=stage.name;
-  $('depthsStatus').textContent='Chamber '+(index+1)+' / '+depthsStages.length+' · '+health+' / '+maxHealth()+' HP';
+  $('depthsTitle').textContent=cacheRoom?'The Sealed Alcove':stage.name;
+  $('depthsStatus').textContent=(cacheRoom?'Optional chamber':'Chamber '+(index+1)+' / '+depthsStages.length)+' · '+health+' / '+maxHealth()+' HP';
   $('depthsSpoils').textContent=spoils.gold?formatDepthsSpoils(spoils):'No unbanked spoils yet.';
-  const preview=next?'Next: '+huntEnemies[next.enemy].name+' ('+huntEnemies[next.enemy].health+' HP) · '+formatDepthsSpoils(depthsStageSpoils(next))+'.':'All three chambers cleared. Bank your spoils to leave the vault.';
+  const preview=cacheRoom?'Return to Shell Gallery to continue the expedition.':next?'Next: '+huntEnemies[next.enemy].name+' ('+huntEnemies[next.enemy].health+' HP) · '+formatDepthsSpoils(depthsStageSpoils(next))+'.':'All three chambers cleared. Bank your spoils to leave the vault.';
   $('depthsPreview').textContent=cleared?preview:roomDetails[currentRoom].description;
   $('depthsRetreat').hidden=unavailable()||depthsRun.cleared!==0;
   $('depthsNext').hidden=!canDecide||!next;
@@ -696,7 +725,7 @@ function updateDepthsPanel(){
   if(!canDecide)return;
 
   $('depthsDecisionStep').textContent='MOONWELL DEPTHS · '+depthsRun.cleared+' / '+depthsStages.length+' CLEARED';
-  $('depthsDecisionTitle').textContent=next?stage.name+' cleared':'Expedition complete';
+  $('depthsDecisionTitle').textContent=cacheRoom?(depthsRun.finds?.includes('essenceCache')?'Essence Cache collected':'The seal is broken'):(next?stage.name+' cleared':'Expedition complete');
   $('depthsBankNow').textContent=formatDepthsSpoils(spoils);
   $('depthsDecisionHealth').textContent=health+' / '+maxHealth()+' HP · Your health carries into the next fight.';
   if(!next)$('depthsDecisionHealth').textContent=health+' / '+maxHealth()+' HP remaining.';
@@ -712,7 +741,7 @@ function updateDepthsPanel(){
 function startMonsterEncounter(enemy){
   if(currentRoom!==enemy.room||unavailable())return;
   const index=depthsStageIndex(currentRoom);
-  if(index>=0&&(!depthsRun||depthsRun.cleared!==index))return;
+  if(index>=0&&!depthsEnemyAvailable(depthsRun,currentRoom))return;
   if(combatGear.equippedWeapon&&!canUseWeapon(playerStats,combatGear.equippedWeapon)){note('Your stats do not meet this weapon’s requirements.');return;}
   if(!combatGear.equippedWeapon){note('Equip your Training Sword in Inventory before hunting.');return;}
   if(health<=0){note('Return to the Tower and rest to restore your hearts.');return;}
@@ -765,8 +794,8 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
     const stoneReceipt=result.stone?[{icon:'◆',text:stoneForms[result.stone].name+' Awakening Stone · +1'}]:[];
     if(depthsRun){
       if(authoritative)depthsRun=authoritative.depthsRun;else clearDepthsStage(depthsRun,currentRoom);
-      combatMessage=depthsRun.cleared===depthsStages.length?'Vault cleared. Bank your spoils.':'Chamber cleared. Bank your spoils or press deeper.';
-      showTransaction('Chamber cleared',[{icon:'✦',text:'Spoils held until you bank them'},xpReceipt,...stoneReceipt]);
+      combatMessage=currentRoom===depthsCacheRoom?'The guardian’s seal is broken. Open the Essence Cache.':depthsRun.cleared===depthsStages.length?'Vault cleared. Bank your spoils.':'Chamber cleared. Bank your spoils or press deeper.';
+      showTransaction(currentRoom===depthsCacheRoom?'Essence Cache unlocked':'Chamber cleared',[{icon:'✦',text:currentRoom===depthsCacheRoom?'Open the glowing cache to claim its gold and stone':'Spoils held until you bank them'},xpReceipt,...stoneReceipt]);
     }else{
       if(!authoritative){hunting[enemy.id==='beetle'?'beetleRespawnAt':'respawnAt']=Date.now()+enemy.respawn;
       huntingLoot[enemy.loot]=(huntingLoot[enemy.loot]??0)+1;}
@@ -821,7 +850,7 @@ function updateCombatPanel(){
   const now=Date.now(),encounter=hunting.encounter;
   updateEssenceHotbar(now);
   const enemy=huntEnemyForRoom(currentRoom);
-  const stage=depthsStageIndex(currentRoom),chamberCleared=stage>=0&&stage<(depthsRun?.cleared??0);
+  const stage=depthsStageIndex(currentRoom),chamberCleared=stage>=0&&!depthsEnemyAvailable(depthsRun,currentRoom);
   updateDepthsPanel();
   $('equipStonebackVest').disabled=unavailable();
   $('equipWeapon').disabled=player.inCombat||!canUseWeapon(playerStats,$('weaponSelect').value||combatGear.equippedWeapon||'trainingSword');
@@ -952,7 +981,7 @@ function roomFurniture(){
   if(moonwood.has(currentRoom)){
     const enemy=huntEnemyForRoom(currentRoom);
     const index=depthsStageIndex(currentRoom);
-    const available=index>=0?index===depthsRun?.cleared:!enemy||Date.now()>=huntRespawnAt(hunting,enemy);
+    const available=index>=0?depthsEnemyAvailable(depthsRun,currentRoom):!enemy||Date.now()>=huntRespawnAt(hunting,enemy);
     return moonwood.layouts[currentRoom].scenery.filter(item=>{
       if(item.type===enemy?.prop)return available;
       if(item.type==='galleryCache')return !!depthsRun?.finds?.includes('shellChime');
@@ -1895,10 +1924,13 @@ function updateWorldLabels(){
     else add('Timber',...point(6.5,5.5,54),'npc',()=>use(timberTree()));
   }
   if(depthsRun&&!player.inCombat){
+    const passage=roomFurniture().find(item=>item.type==='cachePassage');
+    if(passage&&(currentRoom===depthsCacheRoom||depthsRun.cleared===2))add(currentRoom===depthsCacheRoom?'Shell Gallery ←':'Essence Cache →',...point(passage.x+.5,passage.y+.5,38),'npc',()=>use(passage));
     for(const item of roomFurniture()){
       const find=Object.hasOwn(depthsFinds,item.type)?depthsFinds[item.type]:null;
       if(!find||depthsRun.finds?.includes(item.type)&&item.type!=='vaultRelief')continue;
-      add(find.label,...point(item.x+.5,item.y+.5,moonwood.heights[item.type]+8),'npc',()=>use(item));
+      const label=item.type==='essenceCache'&&!depthsRun.cacheGuardDefeated?'Essence Cache · Sealed':find.label;
+      add(label,...point(item.x+.5,item.y+.5,moonwood.heights[item.type]+8),'npc',()=>use(item));
     }
   }
   if(currentRoom==='shrine'||currentRoom==='ruins'){
@@ -2640,7 +2672,9 @@ function updateFishingMoment(time){
 }
 function finishInteraction(){
   const item=interaction;interaction=null;
-  if(Object.hasOwn(depthsFinds,item.type)){
+  if(item.type==='cachePassage'){
+    visitDepthsCache();
+  }else if(Object.hasOwn(depthsFinds,item.type)){
     examineDepths(item);
   }else if(item.type==='campfire'){
     openCampfire();
@@ -2926,7 +2960,7 @@ function openMerchant(){
 function renderWorldMap(route=[]){
   const positions={home:[100,55],hub:[340,110],armory:[265,48],market:[465,48],lounge:[580,75],store:[118,133],
     outside:[340,205],trail:[340,315],logging:[107,288],clearing:[109,380],grove:[563,274],shrine:[563,354],
-    creek:[338,423],pond:[138,497],ruins:[340,549],roots:[549,493],depthsGate:[340,120],depthsGallery:[340,120],depthsVault:[340,120]};
+    creek:[338,423],pond:[138,497],ruins:[340,549],roots:[549,493],depthsGate:[340,120],depthsGallery:[340,120],depthsCache:[340,120],depthsVault:[340,120]};
   const rooms=Object.keys(positions).filter(room=>roomDetails[room]&&(room===currentRoom||hudNextDoor(room)));
   let links='',nodes='';
   const linked=new Set();
@@ -3804,7 +3838,7 @@ function updateAdventurePanel(){
   $('planPace').textContent='One catch about every '+Math.round(60*fishingCatalog.rods[fishingGear.equippedRod].duration/4500)+' seconds with your '+fishingCatalog.rods[fishingGear.equippedRod].name+'. Each catch uses one bait and earns 10 Patience XP.';
   updatePlayerStats();
   $('adventureProgress').hidden=depthsIndex>=0;
-  $('adventureProgress').textContent=adventure.discovered.length+' of '+(Object.keys(moonwood.areas).length-depthsStages.length)+' places discovered';
+  $('adventureProgress').textContent=adventure.discovered.length+' of '+Object.keys(moonwood.areas).filter(room=>depthsStageIndex(room)<0).length+' places discovered';
   const landmark=$('adventureLandmark');
   const bite=!!fishingSession&&fishingMoments.phase(fishingSession,performance.now())==='bite';
   const action={clearing:!player.inCombat&&Date.now()>=hunting.respawnAt?'Approach boar':'',trail:!adventure.lantern?'Take lantern':'',shrine:'Examine altar',creek:'Cross to the Ruins',ruins:'Visit the Moonwell',pond:bite?'Reel! +5 Patience XP':fishingSession?'Fishing…':'Cast a line'}[currentRoom];
@@ -4028,6 +4062,14 @@ $('approachBeetle').onclick=()=>{
   if(monster)use(monster);
 };
 $('enterDepths').onclick=enterMoonwellDepths;
+$('depthsCacheRoute').onclick=visitDepthsCache;
+$('depthsOpenCache').onclick=()=>{depthsExploring=true;updateDepthsPanel();use(roomFurniture().find(item=>item.type==='essenceCache'));};
+$('cacheRewardContinue').onclick=()=>$('cacheRewardDialog').close();
+$('cacheRewardAwaken').onclick=()=>{
+  const stone=depthsRun?.cacheStone;
+  $('cacheRewardDialog').close();openEssences();
+  if(stone)$('essenceStatus').textContent='Choose a bonded Gem, then awaken its '+stoneForms[stone].name+' power with your new stone.';
+};
 $('depthsNext').onclick=advanceMoonwellDepths;
 $('depthsExplore').onclick=()=>{
   depthsExploring=true;
@@ -4363,7 +4405,7 @@ function updateRoomLabel(){
 function enterRoom(next,arrival){
   if(player.inCombat||(hunting.recoveryUntil&&next!=="hub"&&next!=="home")){note("Finish combat or recovery before travelling.");return;}
   const depthsIndex=depthsStageIndex(next);
-  if(depthsRun?!canVisitDepthsStage(depthsRun,depthsIndex):depthsIndex>=0)return;
+  if(depthsRun?!canVisitDepthsRoom(depthsRun,next):depthsIndex>=0)return;
   cancelFishing();selectedTimber=null;resetCombatArt();
   if(next!==currentRoom&&huntEnemyForRoom(next))combatMessage='';
   catchReveal=null;$('catchReveal').hidden=true;
