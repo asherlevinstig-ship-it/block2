@@ -98,3 +98,21 @@
 .campfire-recipe button:disabled { opacity:.55; }
 .game-window .meal-status { color:#ffdfa2; font-size:13px; min-height:1.4em; margin:10px 0 0; }
 @media(max-width:440px) { .campfire-recipe { grid-template-columns:45px minmax(0,1fr); } .campfire-recipe button { grid-column:2; justify-self:start; } }
+
+.essence-window.game-window { width:min(630px,calc(100vw - 24px)); }
+.essence-build,.essence-summary { margin:12px 0; }
+.essence-build { border:1px solid #5c6283; padding:12px; border-radius:12px; background:#152038; }
+.essence-gems { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; }
+.essence-gems button { display:grid; place-items:center; gap:7px; min-width:0; padding:9px 3px; border:1px solid #617592; border-radius:9px; color:#ebeff9; background:#1a2b43; font-size:12px; overflow-wrap:anywhere; }
+.essence-gems button[aria-pressed="true"] { border-color:#efca83; color:#ffe1a2; background:#343447; }
+.essence-gem { width:23px; height:28px; clip-path:polygon(50% 0,93% 28%,86% 75%,50% 100%,12% 75%,7% 28%); background:linear-gradient(120deg,#faf0df 0 15%,var(--gem-color) 30% 64%,#566387 66%); }
+.essence-fusion,.essence-summary { display:flex; gap:8px 15px; flex-wrap:wrap; align-items:center; justify-content:space-between; color:#efcf99; font-size:13px; }
+.essence-fusion { margin-top:12px; }
+.essence-summary span { color:#c8d7ec; }
+.essence-powers { display:grid; gap:7px; margin-top:10px; }
+.essence-powers article { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:center; border:1px solid #425776; border-radius:8px; padding:8px 10px; background:#142337; }
+.essence-powers strong { display:block; font-size:14px; color:#f7e7c9; }
+.essence-powers small { display:block; margin-top:3px; color:#c2d1e2; }
+.essence-powers button,#openEssences { padding:8px 10px; border:1px solid #8c7d66; border-radius:8px; background:#233850; color:#ffe2a9; }
+.essence-window button:disabled { opacity:.48; }
+#essenceStatus { min-height:1.4em; color:#ffe0a1; margin-bottom:0; }

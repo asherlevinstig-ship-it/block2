@@ -85,6 +85,7 @@ const caughtFishCount=()=>Object.values(fishStock).reduce((total,count)=>total+c
 const caughtFishValue=()=>Object.entries(fishStock).reduce((total,[id,count])=>total+count*(fishProducts[id]?.price??0),0);
 const huntingLoot={rabbit:0,boar:0,deer:0,...savedPlayerState?.huntingLoot};
 let meals={...savedPlayerState?.meals};
+let magicState=savedPlayerState?.magic??null;
 const history=normalizeHistory({...savedPlayerState,stats:playerStats,fishStock,huntingLoot});
 const tradeCatalog={
   ...fishProducts,
@@ -741,8 +742,10 @@ function applyCombatResult(result,authoritative=null){
   if(result.dodgeStarted||(result.dodged&&!result.timedDodge))combatArt.dodgeAt=artTime;
   if(result.outcome==='victory')combatArt.victoryAt=artTime;
   hunting.encounter=result.encounter;health=result.health;
-  combatFeedback={started:performance.now(),damage:result.damage,taken:result.taken,dodged:result.dodged};
+  combatFeedback={started:performance.now(),damage:result.damage,taken:result.taken,dodged:result.dodged,power:result.power,powerColor:result.powerColor};
   combatMessage=(result.damage?'You hit for '+result.damage+(result.shellGuarded?' through the shell.':'. '):action==='flee'&&result.outcome!=='escaped'?'Your escape was blocked. ':'')+(result.dodged?'You dodge the attack.':result.taken?'The '+enemy.name+' hits for '+result.taken+'.':'');
+  if(result.power)combatMessage=result.power+' '+result.effect+'.';
+  if(result.warded)combatMessage+=(combatMessage?' ':'')+'Your ward blocked '+result.warded+' damage.';
   if(result.absorbed)combatMessage+=(combatMessage?' ':'')+'Your vest absorbed '+result.absorbed+' damage.';
   if(result.dodgeStarted)combatMessage='You sidestep. Time your dodge just before the '+enemy.move+' lands!';
   if(result.timedDodge)combatMessage=result.shellExposed?'Perfect dodge! The beetle flips. Its weak spot is exposed.':'Perfect dodge! You avoided the charge.';
@@ -754,10 +757,11 @@ function applyCombatResult(result,authoritative=null){
     const [strength,agility,vitality]=enemy.xp;
     if(!authoritative){playerStats.strengthXp+=strength;playerStats.agilityXp+=agility;playerStats.vitalityXp+=vitality;}
     const xpReceipt={icon:'⚔',text:'+'+strength+' Strength XP · +'+agility+' Agility XP · +'+vitality+' Vitality XP'};
+    const stoneReceipt=result.stone?[{icon:'◆',text:stoneForms[result.stone].name+' Awakening Stone · +1'}]:[];
     if(depthsRun){
       if(authoritative)depthsRun=authoritative.depthsRun;else clearDepthsStage(depthsRun,currentRoom);
       combatMessage=depthsRun.cleared===depthsStages.length?'Vault cleared. Bank your spoils.':'Chamber cleared. Bank your spoils or press deeper.';
-      showTransaction('Chamber cleared',[{icon:'✦',text:'Spoils held until you bank them'},xpReceipt]);
+      showTransaction('Chamber cleared',[{icon:'✦',text:'Spoils held until you bank them'},xpReceipt,...stoneReceipt]);
     }else{
       if(!authoritative){hunting[enemy.id==='beetle'?'beetleRespawnAt':'respawnAt']=Date.now()+enemy.respawn;
       huntingLoot[enemy.loot]=(huntingLoot[enemy.loot]??0)+1;}
@@ -769,7 +773,7 @@ function applyCombatResult(result,authoritative=null){
       combatMessage='Victory! '+enemy.lootName+' added to Inventory.';
       const ironTrial=firstUpgrade.ironTrialPending&&enemy.id==='beetle'&&combatGear.equippedWeapon==='ironSword';
       if(ironTrial)firstUpgrade.ironTrialPending=false;
-      const receipt=[{icon:'✦',text:enemy.lootName+' ×1 · sell for '+enemy.sellPrice+' gold'},xpReceipt];
+      const receipt=[{icon:'✦',text:enemy.lootName+' ×1 · sell for '+enemy.sellPrice+' gold'},xpReceipt,...stoneReceipt];
       if(ironTrial){
         combatMessage='Iron Sword trial complete! Sell the Shell Fragment for '+enemy.sellPrice+' gold or save it for a Stoneback Vest.';
         receipt.push({icon:'⬡',text:'Or keep it for a Stoneback Vest · add '+stonebackVest.timber+' timber at the Timber Hollow workbench'});
@@ -840,7 +844,7 @@ function updateCombatPanel(){
   $('combatTitle').textContent=enemy.name;
   $('combatChapter').textContent=stage>=0?'MOONWELL DEPTHS':beetle?'MOONWELL RUINS':'FIRST HUNT';
   const [strength,agility,vitality]=enemy.xp;
-  $('combatReward').textContent=stage>=0?'Combat XP is kept after a win. Gold and items are held until you bank them.':'Victory: '+enemy.lootName+' ×1 · +'+strength+' Strength, +'+agility+' Agility, +'+vitality+' Vitality XP. Sell loot for '+enemy.sellPrice+' gold.';
+  $('combatReward').textContent=stage>=0?(magicState?.picks.length?'Combat XP and Awakening Stones are kept after a win. Bank your gold and loot.':'Combat XP is kept after a win. Gold and items are held until you bank them.'):'Victory: '+enemy.lootName+' ×1 · +'+strength+' Strength, +'+agility+' Agility, +'+vitality+' Vitality XP. Sell loot for '+enemy.sellPrice+' gold.';
   const approach=$('approachBeetle');
   approach.hidden=(!beetle&&stage<0)||!!encounter||now<respawn;
   approach.textContent='Approach '+enemy.name;
@@ -863,6 +867,12 @@ function updateCombatPanel(){
   $('combatDodgeHelp').textContent='Dodge costs '+dodgeCost+' stamina'+(combatGear.stonebackVestEquipped?' with the Stoneback Vest':'')+'. Time it just before impact.'+(combatGear.moonwellCharmEquipped?' Moonwell Charm: +'+moonwellCharm.staminaRegen+' stamina per second.':' Agility improves recovery.');
   $('combatDodge').disabled=!encounter||now<(encounter.nextDodgeAt??0)||stamina<dodgeCost;
   const timing=!!encounter&&encounter.nextBoarAt-now>0&&encounter.nextBoarAt-now<=boarRules.dodgeWindow;
+  const cast=magicState?.equipped?essencePower(magicState.equipped,playerStats):null;
+  const castButton=$('combatEssence');
+  const magicWait=Math.max(0,(magicState?.nextCastAt??0)-now);
+  castButton.hidden=!cast||!encounter;
+  castButton.disabled=!cast||!encounter||magicWait>0||(cast.form==='renewal'&&health>=100);
+  if(cast)castButton.textContent=cast.name+(magicWait?' · '+Math.ceil(magicWait/1000)+'s':' · Q');
   const bind=rootbindStatus(rootstone,encounter,now),bindButton=$('combatRootbind');
   bindButton.hidden=rootstone.power!=='rootbind';
   bindButton.disabled=bind!=='ready';
@@ -908,6 +918,17 @@ function drawCombatFeedback(time){
   const offset=reducedMotion.matches?0:age/70;
   ctx.save();ctx.globalAlpha=1-age/1000;ctx.font='bold 9px monospace';ctx.textAlign='center';
   const [bx,by]=point(6.5,5.5,30),[px,py]=point(player.x+.5,player.y+.5,52);
+  if(combatFeedback.power){
+    ctx.fillStyle=combatFeedback.powerColor;
+    ctx.fillText(combatFeedback.power,px,py-offset-10);
+    const [footX,footY]=point(player.x+.5,player.y+.5,1);
+    const radius=10+(reducedMotion.matches?0:age/50);
+    ctx.strokeStyle=combatFeedback.powerColor;ctx.lineWidth=2;
+    ctx.beginPath();
+    ctx.moveTo(footX-radius,footY);ctx.lineTo(footX,footY-radius/2);
+    ctx.lineTo(footX+radius,footY);ctx.lineTo(footX,footY+radius/2);
+    ctx.closePath();ctx.stroke();
+  }
   if(combatFeedback.damage){ctx.fillStyle='#ffe0a6';ctx.fillText('−'+combatFeedback.damage,bx,by-offset);}
   ctx.fillStyle=combatFeedback.dodged?'#bce5d0':'#ff9eaf';
   if(combatFeedback.taken||combatFeedback.dodged)ctx.fillText(combatFeedback.dodged?'DODGE':'−'+combatFeedback.taken,px,py-offset);
@@ -2852,6 +2873,13 @@ function bagEntries(){
     equipped:combatGear.moonwellCharmEquipped,description:'A piece of the Moonwell’s magic, shaped at the Timber Hollow workbench.',
     stats:'+'+moonwellCharm.staminaRegen+' dodge stamina per second',action:combatGear.moonwellCharmEquipped?'Remove charm':'Equip charm',
     disabled:unavailable()||!!woodSession||!!fishingSession,run:toggleMoonwellCharm});
+  for(const [form,quantity] of Object.entries(magicState?.stones??{})){
+    if(!quantity)continue;
+    const stone=stoneForms[form];
+    entries.push({key:'awakening:'+form,name:stone.name+' Awakening Stone',category:'materials',art:windowItemArt('shard'),quantity,
+      description:'Awakens one '+stone.name.toLowerCase()+' power in a bonded Magic Gem.',stats:'Use it in your Essences journal.',
+      action:'Open Essences',disabled:unavailable(),run:openEssences});
+  }
   for(const [id,quantity] of Object.entries(meals)){
     const recipe=mealRecipes[id];
     if(!quantity||!recipe)continue;
@@ -3065,6 +3093,7 @@ function applyServerGameplay(state){
   loungeRound=state.gambling?.round??null;
   health=state.health;
   meals={...state.meals};
+  magicState=state.magic??null;
   Object.assign(hunting,state.hunting);
   depthsRun=state.depthsRun??null;depthsDiscovered=state.depthsDiscovered===true;
   Object.assign(rootstone,normalizeRootstone(state.adventure.rootstone));
@@ -3570,6 +3599,7 @@ function updateRootstoneDialog(){
   $('rootstoneClue').hidden=!adventure.shrine;
   $('rootstonePuzzle').hidden=!puzzle;
   $('rootstonePowers').hidden=!rootstone.awakened;
+  $('openEssences').hidden=!rootstone.awakened;
   $('rootstoneSequence').textContent=enteredRunes.length?enteredRunes.map(rune=>runeLabels[rune]).join(' → '):'Choose the first rune.';
   $('rootstoneIntro').textContent=rootstone.awakened
     ? rootstone.power?'Attuned to '+rootstonePowers[rootstone.power].name+'. Return to the Moth Shrine to change powers.':'The Rootstone is awake. Choose a power here or at the Moth Shrine.'
@@ -3621,6 +3651,88 @@ function attuneRootstone(power){
   recordAdventure('Rootstone attuned to '+name+'.');
   $('rootstoneStatus').textContent=name+' is now active.';
   updateRootstoneDialog();
+}
+let gemDraft=[],viewedEssence=null,essenceBusy=false;
+function openEssences(){
+  if(unavailable())return;
+  if(!window.playerCloud?.gameplay){note('Connect to the game server to manage Essences.');return;}
+  gemDraft=[...(magicState?.picks??[])];
+  viewedEssence=gemDraft[0]??null;
+  $('rootstoneDialog').close();
+  if($('inventoryDialog').open)$('inventoryDialog').close();
+  $('essenceStatus').textContent='';
+  renderEssences();
+  $('essenceDialog').showModal();
+}
+function essenceGemButton(gem,selected,click){
+  const button=document.createElement('button'),icon=document.createElement('span');
+  button.type='button';
+  button.setAttribute('aria-pressed',String(selected));
+  icon.className='essence-gem';icon.style.setProperty('--gem-color',gem.color);icon.setAttribute('aria-hidden','true');
+  button.append(icon,gem.name);button.onclick=click;
+  return button;
+}
+function renderEssences(){
+  const magic=magicState??normalizeMagic();
+  const fusion=confluence(gemDraft);
+  const bonded=bondedEssences(magic.picks);
+  const changed=gemDraft.length!==magic.picks.length||gemDraft.some(id=>!magic.picks.includes(id));
+  const altar=['ruins','shrine'].includes(currentRoom)&&Math.abs(player.cx-6)+Math.abs(player.cy-4)===1;
+  const canBond=altar&&(!bonded.length||currentRoom==='shrine');
+  $('essenceIntro').textContent=canBond?'Bond three Gems to form a fourth. Awakening Stones unlock one power from a bonded Gem.':'Win fights to earn Awakening Stones. Visit the Moth Shrine to change which Gems you use.';
+  $('essenceBuild').hidden=!canBond;
+  const choices=$('essenceChoices');choices.replaceChildren();
+  if(canBond){
+    for(const [id,gem] of Object.entries(essenceGems)){
+      const selected=gemDraft.includes(id);
+      const button=essenceGemButton(gem,selected,()=>{
+        gemDraft=selected?gemDraft.filter(pick=>pick!==id):[...gemDraft,id];
+        renderEssences();
+      });
+      button.disabled=essenceBusy||!selected&&gemDraft.length===3;choices.append(button);
+    }
+  }
+  $('essenceFusion').textContent=fusion?fusion.name+' · Confluence Gem':gemDraft.length+' / 3 Gems selected';
+  $('essenceBond').textContent=bonded.length?'Change Gems':'Bond Gems · Get a Sword Stone';
+  $('essenceBond').disabled=essenceBusy||!canBond||!fusion||!changed;
+  $('essencePowers').hidden=!bonded.length;
+  if(!bonded.length){if(!canBond)$('essenceIntro').textContent='Visit the Moonwell or Moth Shrine to choose your first three Gems.';return;}
+  if(!bonded.includes(viewedEssence))viewedEssence=bonded[0];
+  const count=magic.unlocked.filter(id=>bonded.includes(essencePower(id)?.gem)).length;
+  const equipped=essencePower(magic.equipped,playerStats);
+  $('essenceProgress').textContent=count+' / 20 awakened · Magic rank '+magicRank(playerStats);
+  $('essenceEquipped').textContent=equipped?'Equipped · '+equipped.name+' (Q)':'Equip one power to cast in combat with Q.';
+  const tabs=$('essenceTabs');tabs.replaceChildren();
+  for(const id of bonded)tabs.append(essenceGemButton(allEssences[id],id===viewedEssence,()=>{viewedEssence=id;renderEssences();}));
+  const list=$('essencePowerList');list.replaceChildren();
+  for(const [form,stone] of Object.entries(stoneForms)){
+    const id=viewedEssence+':'+form,power=essencePower(id,playerStats);
+    const awakened=magic.unlocked.includes(id),active=magic.equipped===id;
+    const row=document.createElement('article'),info=document.createElement('div');
+    const title=document.createElement('strong'),description=document.createElement('small'),button=document.createElement('button');
+    title.textContent=awakened?power.name:stone.name+' power · Locked';
+    description.textContent=awakened?powerDescription(power)+' · '+power.cooldown/1000+'s cooldown':magic.stones[form]+' '+stone.name+' Stones in your bag';
+    info.append(title,description);
+    button.type='button';button.textContent=active?'Unequip':awakened?'Equip':'Awaken';
+    button.disabled=essenceBusy||!awakened&&!magic.stones[form];
+    button.onclick=()=>changeEssences(awakened?'equipPower':'awakenPower',{id:active?null:id});
+    row.append(info,button);list.append(row);
+  }
+}
+async function changeEssences(action,body){
+  if(essenceBusy||unavailable())return;
+  essenceBusy=true;renderEssences();
+  try{
+    await serverGameplay(action,body);
+    $('essenceStatus').textContent=action==='bondEssences'
+      ?confluence(magicState.picks).name+' formed from your three Gems. Win fights to earn more Awakening Stones.'
+      :action==='awakenPower'?'Awakened '+essencePower(body.id,playerStats).name+'.'
+      :body.id?essencePower(body.id,playerStats).name+' equipped.':'Power unequipped.';
+  }catch(error){$('essenceStatus').textContent=error.message;}
+  finally{essenceBusy=false;renderEssences();}
+}
+function castEquippedEssence(){
+  if(player.inCombat&&!$('combatEssence').disabled)sendServerCombat('essence');
 }
 function currentActivityPrompt(){
   if(currentRoom==='hub'&&!lobbyRoutesOpen()){
@@ -3937,6 +4049,9 @@ $('depthsNext').onclick=advanceMoonwellDepths;
 $('depthsLeave').onclick=leaveMoonwellDepths;
 $('depthsRetreat').onclick=leaveMoonwellDepths;
 $('combatRootbind').onclick=useRootbind;
+$('combatEssence').onclick=castEquippedEssence;
+$('openEssences').onclick=openEssences;
+$('essenceBond').onclick=()=>changeEssences('bondEssences',{picks:[...gemDraft]});
 $('openRootstone').onclick=()=>openRootstone('journal');
 for(const [rune,id] of [['moth','rootRuneMoth'],['wave','rootRuneWave'],['root','rootRuneRoot']])$(id).onclick=()=>touchRootstoneRune(rune);
 $('attuneRootbind').onclick=()=>attuneRootstone('rootbind');
@@ -4148,7 +4263,8 @@ canvas.addEventListener('keydown',e=>{
   }
 });
 document.addEventListener('keydown',e=>{
-  if(player.inCombat&&['Space','KeyF','KeyE'].includes(e.code)&&!e.target.matches('input,textarea,select')&&!document.querySelector('dialog[open]')){
+  if(player.inCombat&&['Space','KeyF','KeyE','KeyQ'].includes(e.code)&&!e.target.matches('input,textarea,select')&&!document.querySelector('dialog[open]')){
+    if(e.code==='KeyQ'){e.preventDefault();if(!e.repeat)castEquippedEssence();return;}
     if(e.code==='KeyE'){
       if(rootstone.power==='rootbind'){e.preventDefault();if(!e.repeat)useRootbind();}
       return;

@@ -4,6 +4,7 @@ import {purchaseWeapon} from '../public/hunting.js';
 import {fitSwordUpgrade,craftFurniture,craftStonebackVest,craftMoonwellCharm} from '../public/crafting.js';
 import {bankDepthsSpoils,moonwellShard} from '../public/depths.js';
 import {activityAction,settleActivities} from './activities.mjs';
+import {essenceAction} from './essences.mjs';
 import {gamblingAction} from './gambling.mjs';
 import {mealRecipes,cookingIngredient} from '../public/cooking.js';
 import {moonwood} from '../public/moonwood.js';
@@ -25,7 +26,7 @@ function location(state,rooms){
 export function applyGameplayAction(state,action,body,now=Date.now(),random=Math.random){
   // Combat requests advance their own clocks so their receipt includes all events.
   if(action!=='combat')settleActivities(state,now,random);
-  if(activityAction(state,action,body,now,random))return;
+  if(activityAction(state,action,body,now,random)||essenceAction(state,action,body))return;
   if(gamblingAction(state,action,body,now,random===Math.random?undefined:random))return;
   if(action==='cook'||action==='eat'){
     available(state);
@@ -217,6 +218,7 @@ export function protectFishingState(previous,next){
   next.woodcutting={...previous.woodcutting,equipped:previous.woodcutting.axeOwned&&next.woodcutting?.equipped===true};
   next.ownedFurniture=previous.ownedFurniture??{bed:1};
   next.meals=previous.meals??{};
+  next.magic=previous.magic;
   next.depthsRun=previous.depthsRun??null;
   next.depthsDiscovered=previous.depthsDiscovered===true;
   next.adventure={...next.adventure,rootstone:previous.adventure.rootstone};

@@ -61,8 +61,12 @@ export async function handlePlayerApi(request,env){
     if(path==="/api/player/session"&&request.method==="POST"){
       const existing=id&&await settled(env.TOWER_DB,id,true);
       if(existing)return json(packet(existing));
-      const body=await bodyOf(request),state=normalizeState({...body.legacy,meals:{},...(body.newCharacter===true?{characterCreated:false,welcomeSeen:false}:{})});
+      const body=await bodyOf(request),state=normalizeState({...body.legacy,meals:{},magic:undefined,...(body.newCharacter===true?{characterCreated:false,welcomeSeen:false}:{})});
       state.stats.luckXp=0;
+      if(state.hunting.encounter){
+        delete state.hunting.encounter.magicWard;
+        delete state.hunting.encounter.magicWardUntil;
+      }
       if(state.depthsRun)delete state.depthsRun.shardEarned;
       delete state.huntingLoot.moonwellShard;
       delete state.combatGear.moonwellCharmOwned;
@@ -151,7 +155,7 @@ export async function handlePlayerApi(request,env){
     return json(packet(updated));
   }catch(error){
     if(error instanceof SyntaxError)return json({error:"Invalid request."},400);
-    if(/Invalid|Choose|Travel|Patience|already|Read your|Unknown/.test(error.message))return json({error:error.message},400);
+    if(/Invalid|Choose|Travel|Awaken|Patience|already|Read your|Unknown/.test(error.message))return json({error:error.message},400);
     console.error("Tower player service error",error.name);
     return json({error:"Your save could not be completed. Please retry."},503);
   }

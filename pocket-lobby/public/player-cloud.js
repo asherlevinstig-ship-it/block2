@@ -277,11 +277,12 @@
       const characterRules=await import('./character-rules.js');
       const commissions=await import('./commissions.js');
       const rootstone=await import('./rootstone.js');
+      const essences=await import('./essences.js');
       const depths=await import('./depths.js');
       const jobs=await import('./jobs.js');
       const shared=await import('./shared-world.js');
       const multiplayer=await import('./multiplayer.js');
-      Object.assign(window,{towerCharacterArt},rules,hunting,art,fx,quests,historyRules,shopUI,clothing,progression,woodRules,crafting,cooking,characterRules,commissions,rootstone,depths,jobs,shared,multiplayer);
+      Object.assign(window,{towerCharacterArt},rules,hunting,art,fx,quests,historyRules,shopUI,clothing,progression,woodRules,crafting,cooking,characterRules,commissions,rootstone,essences,depths,jobs,shared,multiplayer);
       window.towerInitialState=packet.state;
       window.playerCloud={enqueue,flush,attach,gameplay:async(name,body={})=>{
         if(gameplayBusy)throw new Error('Wait for your current action to finish.');

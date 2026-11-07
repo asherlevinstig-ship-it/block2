@@ -1,3 +1,5 @@
+import {castEssencePower} from './essences.mjs';
+import {awardAwakeningStone} from '../public/essences.js';
 import {moonwood} from '../public/moonwood.js';
 import {isTimberTree,timberTreeState,cutTimberTree,choppingDuration,grantBasicAxe} from '../public/woodcutting.js';
 import {huntEnemyForRoom,huntEnemy,huntRespawnAt,canUseWeapon,createHunt,advanceHunt,huntingTurn,boarRules} from '../public/hunting.js';
@@ -14,6 +16,7 @@ function result(state,event,now){
   const enemy=huntEnemy(state.hunting.encounter);
   state.hunting.encounter=event.encounter;state.health=event.health;
   if(event.outcome==='victory'){
+    if(state.combatId&&state.magic?.picks.length)event.stone=awardAwakeningStone(state.magic);
     for(const [i,key] of ['strengthXp','agilityXp','vitalityXp'].entries())state.stats[key]=Math.min(100000000,state.stats[key]+enemy.xp[i]);
     if(state.depthsRun)clearDepthsStage(state.depthsRun,state.location,!!state.combatId);
     else{
@@ -94,8 +97,11 @@ export function activityAction(state,action,body,now,random){
   if(action==='combat'){
     if(body.combatId!==state.combatId)throw new Error('Invalid encounter. Reload your character.');
     const events=advanceServerCombat(state,now,random);
-    if(state.hunting.encounter&&['dodge','flee','rootbind'].includes(body.input)){
-      if(body.input==='rootbind'){
+    if(state.hunting.encounter&&['dodge','flee','rootbind','essence'].includes(body.input)){
+      if(body.input==='essence'){
+        const event=castEssencePower(state,now);
+        if(event)events.push(result(state,event,now));
+      }else if(body.input==='rootbind'){
         state.adventure.rootstone??=normalizeRootstone();
         if(castRootbind(state.adventure.rootstone,state.hunting.encounter,now))events.push({action:'rootbind',outcome:'fighting',encounter:structuredClone(state.hunting.encounter),health:state.health,enemyId:huntEnemy(state.hunting.encounter).id});
       }else{

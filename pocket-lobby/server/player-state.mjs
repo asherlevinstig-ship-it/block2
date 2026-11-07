@@ -1,3 +1,4 @@
+import {normalizeMagic} from '../public/essences.js';
 import {mealRecipes} from '../public/cooking.js';
 import {normalizeWardrobe,outfitAppearance} from '../public/wardrobe.js';
 import {normalizeCharacterRules} from '../public/character-rules.js';
@@ -82,6 +83,7 @@ export function normalizeState(input={}){
     furniture:furniture(input.furniture),homeFurniture:furniture(input.homeFurniture??[])
   };
   state.ownedFurniture=counts(input.ownedFurniture??{bed:1});
+  if(input.magic!==undefined)state.magic=normalizeMagic(input.magic);
   state.meals=counts(input.meals);
   if(Object.keys(state.meals).some(id=>!Object.hasOwn(mealRecipes,id)))throw new Error('Invalid meal inventory.');
   if(depthsRun)state.depthsRun=depthsRun;

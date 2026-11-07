@@ -101,6 +101,10 @@ export function normalizeHunting(input={}){
     const stamina=input.encounter.stamina??100;
     if(!Number.isFinite(stamina)||stamina<0||stamina>100)throw new Error('Invalid stamina.');
     result.encounter={stamina,staminaAt:time(input.encounter.staminaAt),dodgeUntil:time(input.encounter.dodgeUntil),nextDodgeAt:time(input.encounter.nextDodgeAt),health:hp,nextPlayerAt:time(input.encounter.nextPlayerAt??input.encounter.nextActionAt),nextBoarAt:time(input.encounter.nextBoarAt??input.encounter.nextActionAt),nextFleeAt:time(input.encounter.nextFleeAt)};
+    if(Number.isSafeInteger(input.encounter.magicWard)&&input.encounter.magicWard>0){
+      result.encounter.magicWard=Math.min(100,input.encounter.magicWard);
+      result.encounter.magicWardUntil=time(input.encounter.magicWardUntil);
+    }
     if(input.encounter.rootboundUntil!==undefined)result.encounter.rootboundUntil=time(input.encounter.rootboundUntil);
     if(enemy&&enemy!=='boar')result.encounter.enemy=enemy;
     if(huntEnemy(input.encounter).shellArmor)result.encounter.exposedUntil=time(input.encounter.exposedUntil);
@@ -167,6 +171,12 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
     if(vestEquipped&&result.taken){
       result.absorbed=Math.min(stonebackVest.absorption,result.taken);
       result.taken-=result.absorbed;
+    }
+    if(result.taken&&encounter.magicWardUntil>now){
+      result.warded=Math.min(encounter.magicWard,result.taken);
+      result.taken-=result.warded;
+      delete result.encounter.magicWard;
+      delete result.encounter.magicWardUntil;
     }
     result.health=Math.max(0,health-result.taken);
     if(!result.health){result.outcome='defeat';result.encounter=null;}
