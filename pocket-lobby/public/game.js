@@ -84,6 +84,7 @@ delete adventure.silverfin;
 const caughtFishCount=()=>Object.values(fishStock).reduce((total,count)=>total+count,0);
 const caughtFishValue=()=>Object.entries(fishStock).reduce((total,[id,count])=>total+count*(fishProducts[id]?.price??0),0);
 const huntingLoot={rabbit:0,boar:0,deer:0,...savedPlayerState?.huntingLoot};
+let meals={...savedPlayerState?.meals};
 const history=normalizeHistory({...savedPlayerState,stats:playerStats,fishStock,huntingLoot});
 const tradeCatalog={
   ...fishProducts,
@@ -640,6 +641,7 @@ function updateDepthsPanel(){
   $('depthsDecisionHealth').textContent=health+' / '+maxHealth()+' HP · Your health carries into the next fight.';
   if(!next)$('depthsDecisionHealth').textContent=health+' / '+maxHealth()+' HP remaining.';
   $('depthsRisk').hidden=!next;
+  $('depthsMeal').hidden=!next||health>=maxHealth()||!Object.values(meals).some(count=>count>0);
   if(next){
     $('depthsNextReward').textContent='Earn +'+next.gold+' gold · '+next.lootName+' ×1';
     $('depthsNextEnemy').textContent=next.name+' · '+huntEnemies[next.enemy].name+' · '+huntEnemies[next.enemy].health+' HP';
@@ -1849,6 +1851,10 @@ function updateWorldLabels(){
     const symbol=questStage(quest)===0?'! ':questStage(quest)===4?'? ':'';
     add(symbol+'Tower Warden',...point(10.5,3.5,46),'npc',()=>use(hubFurniture.find(item=>item.type==='warden')),questStage(quest)===0?'Start here · Earn your first gold':'');
   }
+  if(currentRoom==='trail'){
+    const campfire=roomFurniture().find(item=>item.type==='campfire');
+    add('Campfire',...point(campfire.x+.5,campfire.y+.5,32),'npc',()=>use(campfire));
+  }
   if(currentRoom==='logging'){
     add('Workbench',...point(6,3.5,26),'npc',()=>use(roomFurniture().find(item=>item.type==='workbench')));
     add('Woodcutter',...point(4.5,3.5,43),'npc',()=>use(roomFurniture().find(item=>item.type==='woodcutter')));
@@ -2593,7 +2599,9 @@ function updateFishingMoment(time){
 }
 function finishInteraction(){
   const item=interaction;interaction=null;
-  if(isGamingTable(item)&&currentRoom==='lounge'){
+  if(item.type==='campfire'){
+    openCampfire();
+  }else if(isGamingTable(item)&&currentRoom==='lounge'){
     openLoungeGame(item.type);
   }else if(item.type==='workbench'){
     openCrafting();
@@ -2718,6 +2726,65 @@ function windowItemArt(kind){
   if(kind==='vest')return '<svg viewBox="0 0 64 64" aria-hidden="true" shape-rendering="crispEdges"><path d="M22 9l10 5 10-5 13 13-9 9-3 25H21l-3-25-9-9z" fill="#6f9d9c" stroke="#d1e3d4" stroke-width="2"/><path d="M26 15v36h12V15l-6 4z" fill="#446e80"/><path d="M23 30h18v6H23z" fill="#bcba83"/></svg>';
   return '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M18 18h28l7 32-21 8-21-8z" fill="#a78050" stroke="#edca87" stroke-width="2"/><path d="M24 18V9h16v9M12 34h40" fill="none" stroke="#edca87" stroke-width="3"/></svg>';
 }
+function mealArt(id){
+  const fish='<path d="M8 35 3 23l13 5q15-16 37-2l6 6-6 6Q32 50 16 36L3 41z" fill="#83b2c5" stroke="#d5e6dc" stroke-width="2"/><path d="m26 25 4 14m6-16 4 15" stroke="#416d7d" stroke-width="3"/><circle cx="49" cy="31" r="2" fill="#243443"/>';
+  const stew='<path d="M9 29h46l-5 17q-18 13-36 0z" fill="#b57557" stroke="#edb787" stroke-width="2"/><ellipse cx="32" cy="29" rx="23" ry="8" fill="#835142" stroke="#edb787" stroke-width="2"/><path d="m21 29 5-3 4 4-5 2zm13-2 5-2 5 4-6 2z" fill="#e4ae62"/><path d="M25 17q-5-4 0-9m12 10q-5-4 0-10" fill="none" stroke="#e4dcc2" stroke-width="2"/>';
+  return '<svg viewBox="0 0 64 64" aria-hidden="true">'+(id==='boarStew'?stew:fish)+'</svg>';
+}
+function openCampfire(){
+  if(unavailable())return;
+  const dialog=$('campfireDialog');
+  renderCampfire();
+  $('campfireStatus').textContent='';
+  if(!dialog.open)dialog.showModal();
+}
+function renderCampfire(){
+  const cards=$('campfireRecipes');
+  cards.replaceChildren();
+  for(const [id,recipe] of Object.entries(mealRecipes)){
+    const ingredient=cookingIngredient(id,fishStock,huntingLoot);
+    const card=document.createElement('article');
+    card.className='campfire-recipe';
+    const art=document.createElement('div');
+    art.className='campfire-meal-art';art.innerHTML=mealArt(id);
+    const content=document.createElement('div');
+    const title=document.createElement('h3');title.textContent=recipe.name;
+    const cost=document.createElement('p');
+    cost.textContent='1 '+(ingredient?.name??recipe.ingredient)+' + 1 timber';
+    const supply=document.createElement('small');
+    supply.textContent=!ingredient?'Bring '+recipe.ingredient+' to cook this.':woodcutting.timber<1?'Bring timber for the fire.':(meals[id]??0)+' in Inventory';
+    content.append(title,cost,supply);
+    const button=document.createElement('button');
+    button.type='button';button.textContent='Cook · '+recipe.healing+' HP';
+    button.setAttribute('aria-label','Cook '+recipe.name+' to restore up to '+recipe.healing+' HP');
+    button.disabled=!ingredient||woodcutting.timber<1||!window.playerCloud?.gameplay;
+    button.onclick=()=>cookMeal(id,button);
+    card.append(art,content,button);
+    cards.append(card);
+  }
+}
+async function cookMeal(id,button){
+  if(unavailable())return;
+  button.disabled=true;
+  try{
+    await serverGameplay('cook',{id});
+    $('campfireStatus').textContent=mealRecipes[id].name+' added to Inventory.';
+  }catch(error){$('campfireStatus').textContent=error.message;}
+  finally{renderCampfire();}
+}
+async function eatMeal(id){
+  if(unavailable()||health>=100)return;
+  const status=$('bagMealStatus');
+  const before=health;
+  status.hidden=false;
+  try{
+    await serverGameplay('eat',{id});
+    updateDepthsPanel();
+    const message=mealRecipes[id].name+' restored '+(health-before)+' HP. '+health+' / 100 HP.';
+    status.textContent=message;
+    note(message);
+  }catch(error){status.textContent=error.message;}
+}
 function bagEntries(){
   const entries=[];
   const outfit=wardrobe.outfits.find(outfit=>outfit.id===bagOutfitTarget)??wardrobe.outfits.find(outfit=>outfit.id===wardrobe.active);
@@ -2743,6 +2810,15 @@ function bagEntries(){
   if(woodcutting.timber)entries.push({key:'timber',name:'Timber',category:'materials',art:windowItemArt('timber'),quantity:woodcutting.timber,description:'Gathered by chopping trees.',stats:tradeCatalog.timber.price+' gold each',note:'Craft at the Timber Hollow workbench or sell at the Trading Post.'});
   for(const [id,quantity] of Object.entries(fishStock))if(quantity&&fishProducts[id]){
     const fish=fishProducts[id];entries.push({key:'fish:'+id,name:fish.name,category:'materials',quality:fish.quality,art:windowItemArt('fish'),quantity,description:'Caught in the waters of Silverfin Pond.',stats:fish.price+' gold each · '+quantity*fish.price+' gold total',note:'Sell at the Trading Post or Silverfin Outfitters.'});
+  }
+  for(const [id,quantity] of Object.entries(meals)){
+    const recipe=mealRecipes[id];
+    if(!quantity||!recipe)continue;
+    const busy=unavailable()||!!woodSession||!!fishingSession;
+    entries.push({key:'meal:'+id,name:recipe.name,category:'materials',quantity,art:mealArt(id),
+      description:recipe.description,stats:'Restores up to '+recipe.healing+' HP · '+health+' / 100 HP now',
+      note:busy?'Finish your current activity before eating.':'Eat between fights.',
+      action:health>=100?'Hearts are full':'Eat meal',disabled:busy||health>=100||!window.playerCloud?.gameplay,run:()=>eatMeal(id)});
   }
   for(const [id,quantity] of Object.entries(huntingLoot))if(quantity&&tradeCatalog[id])entries.push({key:'loot:'+id,name:tradeCatalog[id].name,category:'materials',art:windowItemArt('loot'),quantity,description:'Spoils from your adventures.',stats:tradeCatalog[id].price+' gold each',note:id===stonebackVest.fragment?'Sell at the Trading Post, or combine with '+stonebackVest.timber+' timber at the Timber Hollow workbench to craft a Stoneback Vest.':'Sell at the Trading Post. Some loot is used in crafting.'});
   return entries;
@@ -2947,6 +3023,7 @@ function applyServerGameplay(state){
   Object.assign(playerStats,state.stats);
   loungeRound=state.gambling?.round??null;
   health=state.health;
+  meals={...state.meals};
   Object.assign(hunting,state.hunting);
   depthsRun=state.depthsRun??null;depthsDiscovered=state.depthsDiscovered===true;
   Object.assign(rootstone,normalizeRootstone(state.adventure.rootstone));
@@ -3728,6 +3805,8 @@ $('sellFish').onclick=()=>{
 };
 if(hasBedStarter&&hasGamingLayout)updateInventory();else savePlayerState();
 function openInventory(equipmentRoom=null){
+  $('bagMealStatus').hidden=true;
+  $('bagMealStatus').textContent='';
   bagCategory=equipmentRoom?'gear':'all';bagSelection=equipmentRoom==='pond'?'rod:'+fishingGear.equippedRod:equipmentRoom==='clearing'?'weapon:'+(combatGear.equippedWeapon??'trainingSword'):null;
   $('inventoryTitle').textContent=equipmentRoom==='pond'?'Equip for fishing':equipmentRoom==='clearing'?'Equip for hunting':'Inventory';
   $('weaponCard').classList.toggle('onboarding-focus',equipmentRoom==='clearing');
@@ -3765,6 +3844,13 @@ for(const name of ['Furniture','Weapons','Armour'])$('craftTab'+name).onclick=()
 for(const activity of ['rest','fishing','woodcutting'])$('routine'+activity[0].toUpperCase()+activity.slice(1)).onclick=()=>{$('rulesActivity').value=activity;updateCharacterRulesPreview();};
 
 $('inventory').onclick=()=>openInventory();
+$('depthsMeal').onclick=()=>{
+  const id=Object.keys(meals).find(key=>meals[key]>0);
+  if(!id)return;
+  openInventory();
+  bagCategory='materials';bagSelection='meal:'+id;renderBag();
+  $('bagAction').focus({preventScroll:true});
+};
 $('walk').onclick=()=>switchMode(false);
 $('edit').onclick=()=>switchMode(true);
 for(const button of document.querySelectorAll('[data-room-link]')){

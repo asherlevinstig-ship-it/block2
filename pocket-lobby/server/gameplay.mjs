@@ -5,6 +5,8 @@ import {fitSwordUpgrade,craftFurniture,craftStonebackVest} from '../public/craft
 import {bankDepthsSpoils} from '../public/depths.js';
 import {activityAction,settleActivities} from './activities.mjs';
 import {gamblingAction} from './gambling.mjs';
+import {mealRecipes,cookingIngredient} from '../public/cooking.js';
+import {moonwood} from '../public/moonwood.js';
 
 const prices={boar:30,rabbit:12,deer:24,stonebackShell:45,timber:4};
 const earn=(state,gold)=>{
@@ -25,6 +27,34 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
   if(action!=='combat')settleActivities(state,now,random);
   if(activityAction(state,action,body,now,random))return;
   if(gamblingAction(state,action,body,now,random===Math.random?undefined:random))return;
+  if(action==='cook'||action==='eat'){
+    available(state);
+    if(state.fishingCast||state.timberCut)throw new Error('Invalid activity. Finish fishing or chopping first.');
+    if(!Object.hasOwn(mealRecipes,body.id))throw new Error('Choose a meal from the recipe list.');
+    const recipe=mealRecipes[body.id],meals=state.meals??={};
+    const count=meals[body.id]??0;
+    if(action==='cook'){
+      const campfire=moonwood.layouts.trail.scenery.find(item=>item.type==='campfire');
+      const position=state.position;
+      if(state.location!=='trail'||!position||Math.abs(position.x-campfire.x)+Math.abs(position.y-campfire.y)!==1){
+        throw new Error('Travel beside the campfire on Lantern Trail.');
+      }
+      const ingredient=cookingIngredient(body.id,state.fishStock,state.huntingLoot);
+      if(!ingredient||state.woodcutting.timber<1)throw new Error('Invalid ingredients. Bring 1 '+recipe.ingredient+' and 1 timber.');
+      if(count>=1000000)throw new Error('Invalid meal inventory. Make room for another meal.');
+      const stock=body.id==='boarStew'?state.huntingLoot:state.fishStock;
+      stock[ingredient.id]--;
+      state.woodcutting.timber--;
+      meals[body.id]=count+1;
+    }else{
+      if(count<1)throw new Error('Choose a meal you have in Inventory.');
+      if(state.health>=100)throw new Error('Invalid meal use. Your hearts are already full.');
+      if(count===1)delete meals[body.id];
+      else meals[body.id]=count-1;
+      state.health=Math.min(100,state.health+recipe.healing);
+    }
+    return;
+  }
   if(action==='furniture'||action==='vest'){
     available(state);
     if(action==='furniture')craftFurniture(state,body.id);
@@ -174,6 +204,7 @@ export function protectFishingState(previous,next){
   next.huntingLoot=previous.huntingLoot;
   next.woodcutting={...previous.woodcutting,equipped:previous.woodcutting.axeOwned&&next.woodcutting?.equipped===true};
   next.ownedFurniture=previous.ownedFurniture??{bed:1};
+  next.meals=previous.meals??{};
   next.depthsRun=previous.depthsRun??null;
   next.depthsDiscovered=previous.depthsDiscovered===true;
   next.adventure={...next.adventure,rootstone:previous.adventure.rootstone};

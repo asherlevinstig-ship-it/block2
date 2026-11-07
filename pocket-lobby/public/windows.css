@@ -85,3 +85,16 @@
 .lounge-bet select,.lounge-game-actions button { padding:8px 12px; border:1px solid #667d99; border-radius:7px; background:#172842; color:#f9e3b5; }
 .lounge-game #loungeGameResult { min-height:2.7em; color:#fae4b3; }
 .lounge-game .lounge-game-note { font-size:12px; margin-bottom:0; }
+
+.campfire-window.game-window { width:min(520px, calc(100vw - 24px)); }
+.campfire-recipes { display:grid; gap:10px; }
+.campfire-recipe { display:grid; grid-template-columns:52px minmax(0,1fr) auto; align-items:center; gap:10px; border:1px solid #756247; border-radius:12px; padding:10px; background:linear-gradient(120deg,#322a29,#14253a); }
+.campfire-recipe h3 { margin:0; color:#fff0c7; font-size:16px; }
+.game-window .campfire-recipe p { margin:4px 0; font-size:13px; color:#e6cba1; }
+.campfire-recipe small { display:block; color:#c2c9d3; font-size:11px; }
+.campfire-meal-art { border-radius:9px; background:#111f30; border:1px solid #7a654c; }
+.campfire-meal-art svg { display:block; width:100%; }
+.campfire-recipe button { border:1px solid #bc905c; background:#4d372e; color:#ffe5b3; border-radius:8px; padding:10px 11px; font-weight:750; }
+.campfire-recipe button:disabled { opacity:.55; }
+.game-window .meal-status { color:#ffdfa2; font-size:13px; min-height:1.4em; margin:10px 0 0; }
+@media(max-width:440px) { .campfire-recipe { grid-template-columns:45px minmax(0,1fr); } .campfire-recipe button { grid-column:2; justify-self:start; } }

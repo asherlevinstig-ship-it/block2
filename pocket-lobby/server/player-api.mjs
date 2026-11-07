@@ -61,7 +61,7 @@ export async function handlePlayerApi(request,env){
     if(path==="/api/player/session"&&request.method==="POST"){
       const existing=id&&await settled(env.TOWER_DB,id,true);
       if(existing)return json(packet(existing));
-      const body=await bodyOf(request),state=normalizeState({...body.legacy,...(body.newCharacter===true?{characterCreated:false,welcomeSeen:false}:{})});
+      const body=await bodyOf(request),state=normalizeState({...body.legacy,meals:{},...(body.newCharacter===true?{characterCreated:false,welcomeSeen:false}:{})});
       state.stats.luckXp=0;
       const bytes=crypto.getRandomValues(new Uint8Array(32));
       const token=[...bytes].map(value=>value.toString(16).padStart(2,"0")).join("");

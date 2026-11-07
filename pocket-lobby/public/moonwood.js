@@ -17,7 +17,7 @@ export const moonwood=(()=>{
     roots:{number:'09',name:'Root Passage',description:'A living tunnel winds beneath Moonwood, linking the ruins back to Lantern Trail.',badge:'MOONWOOD',floor:'Forest shortcut',center:[6,5],palette:['#363847','#4b4357','#766274'],authored:[['wildtree',1,2],['wildtree',3,6],['wildtree',6,2],['wildtree',8,7],['wildtree',10,2],['wildbloom',4,3],['wildbloom',8,6]]},
     pond:{number:'10',name:'Silverfin Pond',description:'Cast a line from the old jetty and watch the moonlight ripple over the water.',badge:'MOONWOOD',floor:'Fishing pond',center:[3,5],palette:['#334f59','#486570','#8b9296'],landmark:['fishingPost',5,5,4,5],authored:[['wildtree',1,1],['wildtree',3,1],['wildtree',1,8],['wildtree',4,8],['wildrock',4,2],['wildbloom',3,7],['wildbloom',4,3]]}
   };
-  const heights={timberTree:51,wildboar:22,stonebackBeetle:28,wildtree:51,wildrock:13,wildbloom:22,pillar:28,lanternStand:31,mothAltar:24,moonwell:35,moonbloom:29,fishingPost:26};
+  const heights={campfire:24,timberTree:51,wildboar:22,stonebackBeetle:28,wildtree:51,wildrock:13,wildbloom:22,pillar:28,lanternStand:31,mothAltar:24,moonwell:35,moonbloom:29,fishingPost:26};
   const doors=Object.fromEntries(Object.keys(areas).map(id=>[id,[]]));
   const coordinate=([x,y])=>({x,y});
   function connect(a,b,from,to,gate){
@@ -97,6 +97,7 @@ export const moonwood=(()=>{
       }
     }
     if(landmarkType)scenery.push({id:'landmark',type:landmarkType,x:lx,y:ly,rot:0});
+    if(id==='trail')scenery.push({id:'campfire',type:'campfire',x:3,y:4,rot:0});
     return {path:id==='grove'?visiblePath:path,scenery,hiddenTrail};
   }
   const layouts=Object.fromEntries(Object.keys(areas).map(id=>[id,generate(id)]));
@@ -163,7 +164,25 @@ export const moonwood=(()=>{
     const stone=['#9a9ab2','#50536c','#71738d'];
     const aqua=['#91bdbb','#3e6271','#568b93'];
     surface(x+.08,y+.1,.86,.82,.14,'#16293776');
-    if(type==='stonebackBeetle'){
+    if(type==='campfire'){
+      const flicker=reduced?0:Math.floor(time/135)%3;
+      surface(x+.01,y+.01,.98,.98,.18,'#d3803340');
+      surface(x+.16,y+.15,.69,.70,.26,'#ffb25335');
+      for(const [u,v] of [[.17,.37],[.31,.64],[.59,.64],[.68,.35],[.43,.18]]){
+        part(u,v,.20,.17,0,3,stone);
+      }
+      part(.30,.40,.40,.13,1,3,['#95604b','#563432','#6a4238']);
+      part(.43,.27,.13,.43,2,3,['#b07d5b','#563432','#75473a']);
+      polygon([[px-7,py-5],[px-7,py-11],[px-3,py-9],[px-1,py-20-flicker],[px+3,py-13],[px+7,py-15],[px+6,py-7],[px+3,py-4]],'#e8753b');
+      polygon([[px-4,py-5],[px-3,py-10],[px,py-15-flicker],[px+2,py-9],[px+4,py-10],[px+3,py-5]],'#ffc763');
+      rect(px-1,py-8,3,3,'#fff1bb');
+      if(!reduced){
+        for(let i=0;i<3;i++){
+          const drift=(time/44+i*8)%22;
+          if(drift<17)rect(px-5+i*5+Math.floor(drift/7),py-16-Math.floor(drift),1,1,drift<9?'#ffd085':'#ad755c');
+        }
+      }
+    }else if(type==='stonebackBeetle'){
       const flipped=pose.defeated||(combat?.exposedUntil??0)>Date.now();
       const rise=flipped||reduced?0:Math.round((pose.windup??0)*8-(pose.charge??0)*.45);
       const shell=pose.hit?['#c1a692','#5c5366','#887b80']:['#8a9b9a','#3b4c59','#586a72'];

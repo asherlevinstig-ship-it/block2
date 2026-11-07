@@ -1,3 +1,4 @@
+import {mealRecipes} from '../public/cooking.js';
 import {normalizeWardrobe,outfitAppearance} from '../public/wardrobe.js';
 import {normalizeCharacterRules} from '../public/character-rules.js';
 import {normalizeRootstone} from '../public/rootstone.js';
@@ -81,6 +82,8 @@ export function normalizeState(input={}){
     furniture:furniture(input.furniture),homeFurniture:furniture(input.homeFurniture??[])
   };
   state.ownedFurniture=counts(input.ownedFurniture??{bed:1});
+  state.meals=counts(input.meals);
+  if(Object.keys(state.meals).some(id=>!Object.hasOwn(mealRecipes,id)))throw new Error('Invalid meal inventory.');
   if(depthsRun)state.depthsRun=depthsRun;
   if(input.depthsDiscovered===true||depthsRun)state.depthsDiscovered=true;
   if(input.loungeLayout==="gaming")state.loungeLayout="gaming";
