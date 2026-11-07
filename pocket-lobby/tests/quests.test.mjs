@@ -2,24 +2,33 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {normalizeQuest,recordQuest,questStage,claimFirstQuest} from '../public/quests.js';
 import {normalizeState,startPlan,settlePlan} from '../server/player-state.mjs';
+import {applyGameplayAction} from '../server/gameplay.mjs';
 import {huntingTurn,createHunt,normalizeCombatGear} from '../public/hunting.js';
 
-test('quest advances in order after acceptance and rewards only once',()=>{
-  const quest=normalizeQuest();
-  assert.equal(recordQuest(quest,'fish',3),false);assert.equal(claimFirstQuest(quest),null);
-  quest.accepted=true;
-  assert.equal(recordQuest(quest,'boar'),false);assert.equal(recordQuest(quest,'marketSale'),false);
-  recordQuest(quest,'fish',2);assert.equal(questStage(quest),1);
-  const saved=normalizeQuest(JSON.parse(JSON.stringify(quest)));assert.equal(saved.fish,2);
-  recordQuest(quest,'fish',5);assert.equal(quest.fish,3);assert.equal(questStage(quest),2);
-  recordQuest(quest,'marketSale');assert.equal(quest.sold,false);
-  recordQuest(quest,'boar');assert.equal(questStage(quest),3);
-  recordQuest(quest,'marketSale');assert.equal(questStage(quest),4);
-  assert.deepEqual(claimFirstQuest(quest),{gold:75,weapon:'wardenSword'});
+test('all six objective orders count independently, survive saves and reward once',()=>{
+ const orders=[['fish','boar','marketSale'],['fish','marketSale','boar'],['boar','fish','marketSale'],['boar','marketSale','fish'],['marketSale','fish','boar'],['marketSale','boar','fish']];
+ for(const order of orders){
+  let quest=normalizeQuest();
+  for(const event of order)assert.equal(recordQuest(quest,event,3),false);
+  assert.equal(claimFirstQuest(quest),null);quest.accepted=true;
+  order.forEach((event,index)=>{
+   assert.equal(recordQuest(quest,event,event==='fish'?3:1),true);
+   quest=normalizeQuest(JSON.parse(JSON.stringify(quest)));
+   if(index<2)assert.equal(claimFirstQuest(quest),null);
+  });
+  assert.equal(questStage(quest),4);assert.deepEqual(claimFirstQuest(quest),{gold:75,weapon:'wardenSword'});
   assert.equal(claimFirstQuest(quest),null);assert.equal(questStage(normalizeQuest(quest)),5);
-  assert.equal(recordQuest(quest,'fish'),false);
-  assert.throws(()=>normalizeQuest({accepted:false,fish:3}),/Invalid/);
-  assert.throws(()=>normalizeQuest({accepted:true,claimed:true}),/Invalid/);
+  for(const event of order)assert.equal(recordQuest(quest,event),false);
+ }
+ assert.throws(()=>normalizeQuest({accepted:false,fish:3}),/Invalid/);
+ assert.throws(()=>normalizeQuest({accepted:true,claimed:true}),/Invalid/);
+});
+
+test('selling and hunting before the final fish persist through offline fishing',()=>{
+ const state=normalizeState({location:'pond',quest:{accepted:true,fish:1,boars:1,sold:true}});
+ startPlan(state,{hours:1,baitLimit:2},1000);settlePlan(state,121000,{random:()=>.5});
+ assert.equal(questStage(state.quest),4);assert.deepEqual(normalizeState(state).quest,{accepted:true,fish:3,boars:1,sold:true,claimed:false});
+ assert.equal(recordQuest(state.quest,'fish'),false);assert.equal(recordQuest(state.quest,'boar'),false);assert.equal(recordQuest(state.quest,'marketSale'),false);
 });
 
 test('offline fishing contributes three catches once and preserves progress on repeated settlement',()=>{
@@ -40,4 +49,22 @@ test('Warden blade survives equipment saves and increases actual combat damage',
   const training=huntingTurn(encounter,100,{},'attack',500,()=>.5,'trainingSword');
   const warden=huntingTurn(encounter,100,{},'attack',500,()=>.5,'wardenSword');
   assert.equal(warden.damage-training.damage,4);
+});
+
+
+test('real hunting, market sale and catches complete First Steps in that order',()=>{
+ const s=normalizeState({location:'clearing',position:{x:5,y:5},quest:{accepted:true}});
+ const act=(name,body={},now=1000)=>applyGameplayAction(s,name,body,now,()=>.5);
+ act('fight');act('combat',{combatId:s.combatId},12000);
+ assert.equal(s.quest.boars,1);assert.equal(s.quest.fish,0);
+ s.location='market';act('sell',{id:'boar',quantity:1},12000);
+ assert.equal(s.quest.sold,true);assert.equal(s.credits,130);
+ s.location='pond';s.position={x:4,y:5};let now=13000;
+ for(let i=0;i<3;i++){
+  act('cast',{},now);now=s.fishingCast.landAt+901;act('catch',{castId:s.fishingCast.id},now);now++;
+ }
+ assert.equal(questStage(s.quest),4);
+ s.location='hub';s.position={x:10,y:4};act('quest',{},now);
+ assert.equal(s.credits,205);assert.equal(s.combatGear.equippedWeapon,'wardenSword');assert.equal(s.quest.claimed,true);
+ assert.throws(()=>act('quest',{},now),/quest reward/);assert.equal(s.credits,205);
 });

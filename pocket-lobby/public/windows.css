@@ -359,3 +359,8 @@
 @media(prefers-reduced-motion:reduce) {
  .lounge-card.is-dealt,.lounge-wheel.spinning .lounge-wheel-disc,.lounge-outcome.is-revealed,.is-revealed .lounge-win-sparks i { animation:none; }
 }
+
+/* First Steps is an unordered checklist. */
+.game-window#questDialog .quest-objectives li:before { content:"◇"; }
+.game-window#questDialog .quest-objectives li.done:before { content:"✓"; color:#b2e1c1; border-color:#6a9e85; }
+.game-window#questDialog .quest-objectives li.done { border-color:#5d9483; color:#aadac1; }

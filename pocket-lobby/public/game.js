@@ -582,7 +582,8 @@ function updateQuestUI(){
     'Keep growing your gold: sell fish, timber and hunting spoils at the Trading Post.'
   ];
   $('questTrackerTitle').textContent=stage===5?'First Steps · Complete':'First Steps';
-  $('questTrackerText').textContent=objectives[stage];
+  const checklist='Any order · Fish '+quest.fish+'/3 · Boar '+quest.boars+'/1 · Sale '+(quest.sold?'complete':'needed');
+  $('questTrackerText').textContent=stage>0&&stage<4?checklist:objectives[stage];
   $('wardenDirectoryStatus').textContent=stage===0?'First Steps · Quest available':stage===4?'First Steps · Claim your reward':stage===5?'First Steps · Completed':'First Steps · Quest in progress';
   $('wardenMessage').textContent=[
     'Welcome, adventurer! Your aim is to become the richest and most powerful player in the game. Catch fish, chop trees and hunt monsters, then sell what you gather at the Trading Post. Spend wisely on better gear to earn more. Start with these tasks and I will reward you with 75 gold and my blade.',
@@ -592,15 +593,16 @@ function updateQuestUI(){
     'You have earned your place here. Speak to me in the Grand Lobby to receive your gold and Warden’s Blade.',
     'Well done, adventurer. Your Warden’s Blade is yours to keep. May it serve you well in Moonwood.'
   ][stage];
+  if(stage>0&&stage<4)$('wardenMessage').textContent='Complete these tasks in any order: catch three fish at Silverfin Pond, defeat a Wild Boar in Bramble Clearing, and sell fish or Boar Meat at the Trading Post. Offline fishing counts too. Come back when all three are done.';
   const rows=[['questFish','Catch 3 fish · '+quest.fish+' / 3',quest.fish===3],['questBoar','Defeat 1 Wild Boar · '+quest.boars+' / 1',quest.boars===1],['questTrade','Sell spoils at the Trading Post',quest.sold],['questReturn','Return to the Tower Warden',quest.claimed]];
   for(let i=0;i<rows.length;i++){
     const [id,text,done]=rows[i];$(id).textContent=(done?'✓ ':'')+text;
-    $(id).classList.toggle('done',done);$(id).classList.toggle('current',stage===i+1);
+    $(id).classList.toggle('done',done);$(id).classList.toggle('current',stage>0&&!done&&(i<3?stage<4:stage===4));
   }
   const canSpeak=nearWarden()&&!unavailable();
   $('questAction').disabled=!canSpeak||![0,4].includes(stage);
   $('questAction').textContent=stage===0?'Accept quest':stage===4?'Claim 75 gold + Warden’s Blade':stage===5?'Reward received':'Quest in progress';
-  $('questStatus').textContent=stage===5?'Reward saved to your character.':!canSpeak?'Visit the Warden in the Grand Lobby to accept or claim your quest.':stage===0?'Only progress made after accepting counts.':stage===4?'Your new blade will be equipped automatically.':objectives[stage];
+  $('questStatus').textContent=stage===5?'Reward saved to your character.':!canSpeak?'Visit the Warden in the Grand Lobby to accept or claim your quest.':stage===0?'Only progress made after accepting counts.':stage===4?'Your new blade will be equipped automatically.':checklist;
 }
 function openQuest(){$('questRewardArt').innerHTML=shopItemArt('wardenSword');updateQuestUI();if(!$('questDialog').open)$('questDialog').showModal();}
 function questAction(){
@@ -611,8 +613,8 @@ function questAction(){
     savePlayerState();
     if(unlocksLobby){
       $('questDialog').close();
-      note('The lobby doors are open. Head outside to find Silverfin Pond.');
-    }else note('First Steps accepted. Catch 3 fish at Silverfin Pond.');
+      note('The lobby doors are open. Fish, hunt and trade in any order.');
+    }else note('First Steps accepted. Catch 3 fish, defeat a boar and sell spoils in any order.');
     return;
   }
   if(window.playerCloud?.gameplay){
