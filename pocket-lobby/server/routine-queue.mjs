@@ -1,3 +1,4 @@
+import {applyAutoFood} from './auto-food.mjs';
 import {roomBoxes,validRoomTile} from '../public/shared-world.js';
 import {cookingQueueRecipes,mealRecipes,homeStove,cookingPlan,prepareMeal} from '../public/cooking.js';
 import {homeRestDuration} from '../public/bed-rest.js';
@@ -64,6 +65,9 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
       if(p.returnRequested)return finish(state,p,p.stopReason,report.endedAt);
       if(p.stepCount>=p.queue.steps[p.stepIndex].amount)nextStep(p,report.endedAt,'Won '+p.stepCount+' fights');
       continue;
+    }
+    if(!stop&&p.cursorAt<=until&&p.cursorAt<p.endAt&&(p.adaptive||p.cycle<p.queue.repeats)&&p.queue.steps[p.stepIndex]?.type!=='rest'){
+      const food=applyAutoFood(state,p,p.cursorAt);if(food.used)changed=true;if(food.returnHome)return finish(state,p,'food-reserve',p.cursorAt);
     }
     if(!p.adaptive&&resolveQueueGoal(state,p,p.cursorAt))return finish(state,p,'goal-reached',p.cursorAt);
     if(p.adaptive&&p.nextAt===null&&p.stepCount===0){
