@@ -568,6 +568,34 @@ function updateBedGuide(){
   for(const [id,done] of [['bedStepInventory',placing||bedLessonComplete],['bedStepPlace',placing||bedLessonComplete],['bedStepFloor',bedLessonComplete]])$(id).classList.toggle('done',done);
   $('bedGuideAction').hidden=placing;$('bedGuideAction').textContent=bedLessonComplete?'Next: visit the lobby':'Open Inventory';
 }
+function needsAutoLesson(){return (window.playerCloud?.initial??savedPlayerState)?.autoLesson==='required';}
+function updateAutoLessonGuide(){
+  const visible=needsAutoLesson()&&quest.accepted&&!routineControlled()&&!player.inCombat&&!editing&&$('bedGuide').hidden&&!document.querySelector('dialog[open]');
+  $('autoLessonGuide').hidden=!visible;
+  $('autoStart').classList.toggle('tutorial-focus',visible);
+  if(visible){$('questTracker').hidden=true;$('contextGuide').hidden=true;}
+}
+function openAutoLesson(){
+  if(player.inCombat||routineControlled()){note('Finish your current activity before setting your first Auto job.');return;}
+  window.towerPauseForAccount();
+  $('autoLessonStatus').textContent=quest.accepted?'Required quest · Set up once, then choose how you play.':'Meet the Tower Warden in the lobby to start this quest.';
+  $('autoLessonStart').disabled=!quest.accepted;
+  if(!$('autoLessonDialog').open)$('autoLessonDialog').showModal();
+}
+let startingAutoLesson=false;
+$('autoLessonOpen').onclick=openAutoLesson;
+$('autoLessonDialog').oncancel=event=>{if(startingAutoLesson)event.preventDefault();};
+$('autoLessonStart').onclick=async()=>{
+  if(startingAutoLesson)return;
+  startingAutoLesson=true;$('autoLessonStart').disabled=true;$('autoLessonDialog').querySelector('.close').disabled=true;
+  $('autoLessonStatus').textContent='Saving your exploration job…';
+  try{
+    window.towerPauseForAccount();savePlayerState();await window.playerCloud.setupExplorer();
+    $('autoLessonDialog').close();updateAutoLessonGuide();
+    showTransaction('First Auto job · Quest complete',[{icon:'↻',text:'Explore the map saved · Idle start ON'},{icon:'✦',text:'Take control whenever you want to play.'}]);
+  }catch(error){$('autoLessonStatus').textContent=error.message;}
+  finally{startingAutoLesson=false;$('autoLessonStart').disabled=false;$('autoLessonDialog').querySelector('.close').disabled=false;}
+};
 function updateQuestUI(){
   updateBedGuide();updateTradeGuide();updateUpgradeGuide();
   const stage=questStage(quest);
@@ -606,19 +634,20 @@ function updateQuestUI(){
   }
   const canSpeak=nearWarden()&&!unavailable();
   $('questAction').disabled=!canSpeak||![0,4].includes(stage);
-  $('questAction').textContent=stage===0?'Accept quest':stage===4?'Claim 75 gold + Warden’s Blade':stage===5?'Reward received':'Quest in progress';
+  $('questAction').textContent=stage===0?'Accept quest':stage===4?(needsAutoLesson()?'Set your first Auto job':'Claim 75 gold + Warden’s Blade'):stage===5?'Reward received':'Quest in progress';
   $('questStatus').textContent=stage===5?'Reward saved to your character.':!canSpeak?'Visit the Warden in the Grand Lobby to accept or claim your quest.':stage===0?'Only progress made after accepting counts.':stage===4?'Your new blade will be equipped automatically.':checklist;
 }
 function openQuest(){$('questRewardArt').innerHTML=shopItemArt('wardenSword');updateQuestUI();if(!$('questDialog').open)$('questDialog').showModal();}
 function questAction(){
   if(!nearWarden()||unavailable())return;
+  if(questStage(quest)===4&&needsAutoLesson()){$('questDialog').close();openAutoLesson();return;}
   if(questStage(quest)===0){
     const unlocksLobby=!lobbyRoutesOpen();
     quest.accepted=true;
     savePlayerState();
     if(unlocksLobby){
       $('questDialog').close();
-      note('The lobby doors are open. Fish, hunt and trade in any order.');
+      note(needsAutoLesson()?'The lobby doors are open. Set your first Auto job, then fish, hunt and trade in any order.':'The lobby doors are open. Fish, hunt and trade in any order.');
     }else note('First Steps accepted. Catch 3 fish, defeat a boar and sell spoils in any order.');
     return;
   }
@@ -3571,7 +3600,7 @@ function applyServerGameplay(state){
   magicState=state.magic?normalizeMagic(state.magic):null;
   Object.assign(hunting,state.hunting);
   depthsRun=state.depthsRun??null;depthsDiscovered=state.depthsDiscovered===true;
-  Object.assign(quest,state.quest);Object.assign(history,state.history);
+  Object.assign(quest,state.quest);Object.assign(history,state.history);Object.assign(adventure,state.adventure);
   Object.assign(combatGear,state.combatGear);
   for(const key of Object.keys(woodcutting))delete woodcutting[key];
   Object.assign(woodcutting,state.woodcutting);
@@ -4288,8 +4317,9 @@ function currentActivityPrompt(){
 }
 let activityPromptKey='';
 function updateActivityPrompt(){
+  updateAutoLessonGuide();
   const blocked=editing||unavailable()||depthsRun||trackedDestination||step||route.length||interaction
-    ||!$('bedGuide').hidden||!$('tradeGuide').hidden||!$('upgradeGuide').hidden
+    ||!$('autoLessonGuide').hidden||!$('bedGuide').hidden||!$('tradeGuide').hidden||!$('upgradeGuide').hidden
     ||!$('depthsDecision').hidden||document.querySelector('dialog[open]');
   const prompt=blocked?null:currentActivityPrompt();
   const visible=!!prompt;
@@ -4524,7 +4554,7 @@ for(const id of ['furnitureShopInventory','furnitureShopHome','furnitureShopEdit
 $('bagAppearance').onclick=()=>{$('inventoryDialog').close();openAvatar();};
 for(const category of ['all','gear','clothing','materials','furniture'])$('bagTab'+category[0].toUpperCase()+category.slice(1)).onclick=()=>{bagCategory=category;bagSelection=null;renderBag();};
 for(const name of ['Furniture','Weapons','Armour'])$('craftTab'+name).onclick=()=>{for(const page of ['Furniture','Weapons','Armour']){$('craftPage'+page).hidden=page!==name;$('craftTab'+page).setAttribute('aria-pressed',String(page===name));}};
-for(const activity of ['rest','fishing','woodcutting'])$('routine'+activity[0].toUpperCase()+activity.slice(1)).onclick=()=>{$('rulesActivity').value=activity;updateCharacterRulesPreview();};
+for(const activity of ['rest','fishing','woodcutting','exploring'])$('routine'+activity[0].toUpperCase()+activity.slice(1)).onclick=()=>{$('rulesActivity').value=activity;updateCharacterRulesPreview();};
 
 $('inventory').onclick=()=>openInventory();
 $('depthsMeal').onclick=()=>{
@@ -4737,8 +4767,8 @@ function selectAutoModePage(page){
 function renderAutoModeSummary(rules){
   const running=routineControlled(),queued=rules.strategy==='routine'&&rules.queue?.enabled;
   $('autoModeState').textContent=running?'Session in progress':rules.enabled?'Idle start enabled':'Manual start';$('autoModeState').dataset.active=String(rules.enabled);
-  $('autoPlanName').textContent=rules.strategy==='earnGold'?'Earn gold':rules.strategy==='gambling'?'Table session':queued?'Your activity queue':rules.activity==='fishing'?'Go fishing':rules.activity==='woodcutting'?'Chop timber':'Rest at home';
-  $('autoPlanAction').textContent=rules.strategy==='earnGold'?'Choose safe work, sell surplus and protect your reserves.':rules.strategy==='gambling'?(rules.gambling.game==='roulette'?'Roulette':'Blackjack')+' · '+rules.gambling.bet+' gold per round':queued?rules.queue.steps.length+' steps · '+rules.queue.repeats+' cycle'+(rules.queue.repeats===1?'':'s'):rules.activity==='fishing'?'Keep '+rules.keepBait+' bait, then return home.':rules.activity==='woodcutting'?'Gather up to '+rules.timberTarget.toLocaleString()+' timber.':'Return home and recover your hearts.';
+  $('autoPlanName').textContent=rules.strategy==='earnGold'?'Earn gold':rules.strategy==='gambling'?'Table session':queued?'Your activity queue':rules.activity==='exploring'?'Explore the map':rules.activity==='fishing'?'Go fishing':rules.activity==='woodcutting'?'Chop timber':'Rest at home';
+  $('autoPlanAction').textContent=rules.strategy==='earnGold'?'Choose safe work, sell surplus and protect your reserves.':rules.strategy==='gambling'?(rules.gambling.game==='roulette'?'Roulette':'Blackjack')+' · '+rules.gambling.bet+' gold per round':queued?rules.queue.steps.length+' steps · '+rules.queue.repeats+' cycle'+(rules.queue.repeats===1?'':'s'):rules.activity==='exploring'?'Walk peaceful trails and return home. No gold or gear needed.':rules.activity==='fishing'?'Keep '+rules.keepBait+' bait, then return home.':rules.activity==='woodcutting'?'Gather up to '+rules.timberTarget.toLocaleString()+' timber.':'Return home and recover your hearts.';
   $('autoPlanFood').textContent=rules.food?.enabled?'Eat below '+rules.food.eatBelow+' HP · Keep '+rules.food.keepMeals:'Use meals manually';
   $('autoPlanCombat').textContent=rules.combat.enabled?combatStyles[rules.combat.style].name+(rules.combat.dodge?' · Auto dodge':''): 'Manual tactics';
   $('autoPlanStart').textContent=rules.enabled?'After 3 minutes idle or offline':'When you choose Auto';
@@ -4751,7 +4781,7 @@ for(const page of ['activity','food','combat','history']){const button=$('autoMo
 for(const button of $('characterRulesDialog').querySelectorAll('[data-auto-strategy]'))button.onclick=()=>{$('rulesStrategy').value=button.dataset.autoStrategy;updateCharacterRulesPreview();};
 function updateCharacterRulesPreview(){
   const activity=$('rulesActivity').value;
-  for(const name of ['rest','fishing','woodcutting'])$('routine'+name[0].toUpperCase()+name.slice(1)).setAttribute('aria-pressed',String(activity===name));
+  for(const name of ['rest','fishing','woodcutting','exploring'])$('routine'+name[0].toUpperCase()+name.slice(1)).setAttribute('aria-pressed',String(activity===name));
   const adaptive=$('rulesStrategy').value==='earnGold',gambling=$('rulesStrategy').value==='gambling',queued=$('rulesUseQueue').checked;
   $('rulesGoldPolicy').hidden=!adaptive;$('rulesGamblingPolicy').hidden=!gambling;$('gambleAutoColorField').hidden=$('gambleAutoGame').value!=='roulette';
   $('rulesExactQueue').hidden=adaptive||gambling;
@@ -4776,11 +4806,12 @@ function updateCharacterRulesPreview(){
       ?combatStyles[rules.combat.style].name+' tactics run online and offline. '+(rules.combat.dodge?'Automatic dodging is enabled. ':'Automatic dodging is off. ')+(rules.combat.fleeBelow?'Attempt to flee at '+rules.combat.fleeBelow+' HP or lower.':'Keep fighting until the encounter ends.')
       :'Combat is under your manual control.';
     let detail='Choose Auto to start now. Your saved routine also begins after three minutes without input, including while the game is open. It runs for up to eight hours.';
-    if(rules.enabled&&!rules.queue?.enabled&&activity!=='rest'){
+    if(rules.enabled&&!rules.queue?.enabled&&!['rest','exploring'].includes(activity)){
       const bait=Math.min(1000,Math.max(0,fishingGear.bait-rules.keepBait));
       const preview=jobPreview(jobState(),activity,8,bait);
       detail=activity==='woodcutting'&&woodcutting.timber>=rules.timberTarget?'Your timber target is already met. Your character will rest.':activity==='fishing'&&bait===0?'Your bait reserve is already reached. Your character will rest.':preview.allowed?'Ready with your current equipment. Supplies stay in Inventory until you sell or use them.':'Will rest with current equipment: '+preview.reason;
     }
+    if(activity==='exploring'&&!rules.queue?.enabled)detail='Explore five peaceful stops in about four minutes, then return home. No combat, equipment or supplies required. Starts after three minutes idle or offline when enabled.';
     if(rules.queue?.enabled)detail='Choose Auto to start now, or enable idle start to start after three minutes idle. It stops when you return, a limit is reached, or all cycles finish. Unsold supplies stay in Inventory. Hunting uses your equipped weapon and flee threshold. Returning during a fight finishes that fight before stopping.';
     if(adaptive)detail='Auto starts now or after three minutes idle when enabled. It sells only surplus fish, timber, Boar Meat and Shell Fragments; buys bait only within your limits; and reassesses after each batch or fight. If gear or health makes hunting unsafe, it gathers or rests instead.';
     if(gambling)detail='Auto starts your table session now; enabling away actions also starts it after three minutes idle. The session ends at the first loss, reserve, profit, round or eight-hour limit. It never switches to Earn gold safely or raises the bet.';
@@ -4789,6 +4820,7 @@ function updateCharacterRulesPreview(){
   }catch(error){$('rulesPreview').textContent=error.message;$('rulesSave').disabled=true;}
 }
 function openCharacterRules({focusGoal=false}={}){
+  if(needsAutoLesson()){openAutoLesson();return;}
   if(player.inCombat){note('Finish combat before changing your Auto Mode settings.');return;}
   window.towerPauseForAccount();
   const state=window.playerCloud?.initial??savedPlayerState??{},rules=normalizeCharacterRules(characterRules);
@@ -4804,8 +4836,8 @@ function openCharacterRules({focusGoal=false}={}){
   const log=$('rulesActivityLog');log.replaceChildren();
   for(const item of [...(state.activityLog??[])].reverse()){
     const row=document.createElement('li'),title=document.createElement('b'),detail=document.createElement('p');
-    title.textContent=item.kind==='gambling'?'Auto gambling':item.kind==='queue'?'Activity queue':item.kind==='rest'?'Rest at home':item.kind==='fishing'?'Fishing':'Woodcutting';
-    detail.textContent=(item.cookedMeals?'Cooked '+Object.entries(item.cookedMeals).map(([id,n])=>n+' × '+mealRecipes[id].name).join(', ')+' · ':'')+(item.kind==='rest'?'':item.count+' '+(item.kind==='gambling'?'rounds':item.kind==='queue'?'items gathered':item.kind==='fishing'?'fish':'timber')+' · +'+item.xp+' XP · ')+({'gamble-loss-limit':'Total-loss limit reached','gamble-profit-target':'Net profit target reached','gamble-round-limit':'Round limit reached','beetle-trial-required':'Win a Stoneback Beetle fight yourself first','goal-reached':'Upgrade goal reached','queue-complete':'All queue cycles complete','spending-limit':'Queue spending limit reached','gold-reserve':'Gold reserve protected','wallet-full':'Wallet is full','bait-reserve':'Bait reserve protected','target-reached':'Timber target reached','away-cap':'Eight-hour cap reached',returned:'Returned to game',combat:'Skipped during combat / recovery',requirements:item.summary,rest:'Rested at home'}[item.reason]??item.reason);
+    title.textContent=item.kind==='exploring'?'Explored the map':item.kind==='gambling'?'Auto gambling':item.kind==='queue'?'Activity queue':item.kind==='rest'?'Rest at home':item.kind==='fishing'?'Fishing':'Woodcutting';
+    detail.textContent=(item.cookedMeals?'Cooked '+Object.entries(item.cookedMeals).map(([id,n])=>n+' × '+mealRecipes[id].name).join(', ')+' · ':'')+(item.kind==='exploring'?item.count+' peaceful stops · No gold spent · ':item.kind==='rest'?'':item.count+' '+(item.kind==='gambling'?'rounds':item.kind==='queue'?'items gathered':item.kind==='fishing'?'fish':'timber')+' · +'+item.xp+' XP · ')+({'exploration-complete':'Peaceful tour complete','gamble-loss-limit':'Total-loss limit reached','gamble-profit-target':'Net profit target reached','gamble-round-limit':'Round limit reached','beetle-trial-required':'Win a Stoneback Beetle fight yourself first','goal-reached':'Upgrade goal reached','queue-complete':'All queue cycles complete','spending-limit':'Queue spending limit reached','gold-reserve':'Gold reserve protected','wallet-full':'Wallet is full','bait-reserve':'Bait reserve protected','target-reached':'Timber target reached','away-cap':'Eight-hour cap reached',returned:'Returned to game',combat:'Skipped during combat / recovery',requirements:item.summary,rest:'Rested at home'}[item.reason]??item.reason);
     if(item.foodUsed)detail.textContent+=' · Ate '+Object.values(item.foodUsed).reduce((a,b)=>a+b,0)+' meals, restored '+item.foodHealed+' HP';
     if(item.storedItems)detail.textContent+=' · '+Object.values(item.storedItems).reduce((a,b)=>a+b,0)+' items stored in vault';
     if(item.bankedGold)detail.textContent+=' · Saved to bank '+item.bankedGold+' gold';

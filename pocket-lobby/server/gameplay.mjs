@@ -190,6 +190,7 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
     available(state);if(state.bank?.vault?.items?.['weapon:'+body.id])throw new Error('Choose a weapon from your bag. Withdraw this weapon from the vault first.');purchaseWeapon(state,body.id);return;
   }
   if(action==='quest'){
+    if(state.autoLesson==='required')throw new Error('Choose your First Auto Job before claiming the Warden reward.');
     location(state,['hub']);
     const position=state.position;
     if(!position||Math.abs(position.x-10)+Math.abs(position.y-3)>1)throw new Error('Travel to the Warden to claim your reward.');
@@ -216,6 +217,7 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
 // rewards and active encounters can only change through server actions.
 export function protectFishingState(previous,next){
   next.bank=previous.bank;
+  if(previous.autoLesson)next.autoLesson=previous.autoLesson;else delete next.autoLesson;
   if(previous.autoConfigured===true)next.autoConfigured=true;else delete next.autoConfigured;
   if(previous.bedRest){next.bedRest=previous.bedRest;next.homeFurniture=previous.homeFurniture;}else delete next.bedRest;
   next.safeVersion=1;

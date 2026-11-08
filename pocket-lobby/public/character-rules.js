@@ -26,7 +26,7 @@ export function describeRoutineQueue(queue){
 export function normalizeCharacterRules(input={}){
   if(!input||typeof input!=='object'||Array.isArray(input))throw new Error('Invalid character rules.');
   const {enabled=false,activity='rest',keepBait=5,timberTarget=100}=input;
-  if(typeof enabled!=='boolean'||!['rest','fishing','woodcutting'].includes(activity)||!Number.isInteger(keepBait)||keepBait<0||keepBait>1000||!Number.isInteger(timberTarget)||timberTarget<1||timberTarget>1000000)throw new Error('Invalid character rules. Choose 0–1,000 bait to keep and a timber target from 1 to 1,000,000.');
+  if(typeof enabled!=='boolean'||!['rest','fishing','woodcutting','exploring'].includes(activity)||!Number.isInteger(keepBait)||keepBait<0||keepBait>1000||!Number.isInteger(timberTarget)||timberTarget<1||timberTarget>1000000)throw new Error('Invalid character rules. Choose 0–1,000 bait to keep and a timber target from 1 to 1,000,000.');
   const strategy=input.strategy??'routine';if(!['routine','earnGold','gambling'].includes(strategy))throw new Error('Choose a valid Auto goal.');
   const g=input.gambling??{};if(!g||typeof g!=='object'||Array.isArray(g))throw new Error('Choose valid automatic gambling limits.');
   const gambling={game:g.game??'roulette',color:g.color??'red',bet:g.bet??5,lossLimit:g.lossLimit??25,reserveGold:g.reserveGold??100,profitTarget:g.profitTarget??25,maxRounds:g.maxRounds??20};
@@ -48,6 +48,7 @@ export function describeCharacterRules(input){
   if(r.strategy==='gambling')return 'Auto '+r.gambling.game+' · Fixed '+r.gambling.bet+' gold bet · Stop before total losses exceed '+r.gambling.lossLimit+' gold, keep '+r.gambling.reserveGold+' gold, stop at +'+r.gambling.profitTarget+' net gold or '+r.gambling.maxRounds+' rounds. Winnings do not reset the loss limit.';
   if(r.strategy==='earnGold')return 'Earn gold safely: choose work from your gear and health, sell surplus, keep your item reserves, spend at most '+r.goldPolicy.budget+' gold and protect '+r.goldPolicy.reserveGold+' gold.';
   if(r.queue?.enabled)return 'While I’m away: '+describeRoutineQueue(r.queue);
+  if(r.activity==='exploring')return 'While I’m away, explore peaceful trails, discover the pond and Timber Hollow, then return home. No battles or gold spent.';
   if(r.activity==='rest')return 'While I’m away, return home and rest.';
   return r.activity==='fishing'?'While I’m away, fish until I have '+r.keepBait+' bait left, then return home and rest.':'While I’m away, chop wood until my inventory holds '+r.timberTarget.toLocaleString()+' timber, then return home and rest.';
 }

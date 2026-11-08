@@ -226,7 +226,15 @@
     if(!plan)return;
     dialog.dataset.queue=String(plan.kind==='queue');
     const running=!!state.plan,wood=plan.kind==='woodcutting',rest=plan.kind==='rest';
-    if(plan.kind==='gambling')showGamblingReport(state,plan,running);
+    if(plan.kind==='exploring'){
+      const info=autoStatus(state);document.getElementById('offlineTitle').textContent=info.current;document.getElementById('offlineDescription').textContent=plan.ruleSummary;
+      const rows=document.getElementById('offlineCatches');rows.replaceChildren();
+      for(const room of plan.visited??[]){const row=document.createElement('li');row.textContent=({outside:'Tower courtyard',trail:'Lantern Trail',creek:'Glass Creek',pond:'Silverfin Pond',logging:'Timber Hollow'})[room]??room;rows.append(row);}
+      if(!rows.children.length){const row=document.createElement('li');row.textContent='Walking to the first peaceful stop.';rows.append(row);}
+      document.getElementById('offlineTotals').textContent=info.earned;document.getElementById('offlineProgress').value=info.progress;
+      document.getElementById('offlineDuration').textContent='About four minutes per tour';document.getElementById('offlineValue').textContent='Map discoveries are saved. No harvesting, combat, rewards or supplies used.';document.getElementById('offlineReason').textContent=info.reason||info.decision;
+    }
+    else if(plan.kind==='gambling')showGamblingReport(state,plan,running);
     else if(plan.kind==='queue')showQueueReport(state,plan,running);
     else{
     document.getElementById('offlineTitle').textContent=rest?(running?'Resting at home':'Your character rested.'):running?(wood?'Woodcutting at Timber Hollow':'Fishing at Silverfin Pond'):'Welcome back.';
@@ -407,7 +415,7 @@
         gameplayBusy=true;
         try{return await action('gameplay/'+name,body);}
         finally{gameplayBusy=false;}
-      },get serverTime(){return packet.serverTime;},readRankings:async()=>{await flush();return request('rankings');},setRankingParticipation:async joined=>{await flush();return action('rankings/participation',{joined});},resetCharacter:async()=>{await flush();conflicted=true;window.towerMultiplayer?.disconnect();try{localStorage.setItem("pocket-lobby:before-testing-reset",JSON.stringify(packet.state));await action("testing/reset",{testing:true,confirm:"RESET"});localStorage.removeItem("pocket-lobby:player-state");localStorage.removeItem("pocket-lobby:movement-learned");localStorage.removeItem("pocket-lobby:cloud-pending");location.reload();}catch(error){conflicted=false;throw error;}},deliverCarpenter:async()=>{await flush();return (await action('commissions/carpenter')).state;},saveRules:async rules=>{await flush();return (await action('rules/save',{rules})).state;},startJob:async options=>{await flush();await action('plan/start',{...options,source:'board'});window.towerMultiplayer?.disconnect();location.reload();},invalidate:conflict,get initial(){return packet.state;}};
+      },setupExplorer:async()=>{await flush();await action('auto/explore/setup');pending=retryJob=null;backup(null);lastInputAt=Date.now();lastReportedInputAt=lastInputAt;window.towerMultiplayer?.disconnect();window.towerApplyRoutineState?.(packet.state);showReport(packet.state);schedulePresence(150);return packet.state;},get serverTime(){return packet.serverTime;},readRankings:async()=>{await flush();return request('rankings');},setRankingParticipation:async joined=>{await flush();return action('rankings/participation',{joined});},resetCharacter:async()=>{await flush();conflicted=true;window.towerMultiplayer?.disconnect();try{localStorage.setItem("pocket-lobby:before-testing-reset",JSON.stringify(packet.state));await action("testing/reset",{testing:true,confirm:"RESET"});localStorage.removeItem("pocket-lobby:player-state");localStorage.removeItem("pocket-lobby:movement-learned");localStorage.removeItem("pocket-lobby:cloud-pending");location.reload();}catch(error){conflicted=false;throw error;}},deliverCarpenter:async()=>{await flush();return (await action('commissions/carpenter')).state;},saveRules:async rules=>{await flush();return (await action('rules/save',{rules})).state;},startJob:async options=>{await flush();await action('plan/start',{...options,source:'board'});window.towerMultiplayer?.disconnect();location.reload();},invalidate:conflict,get initial(){return packet.state;}};
       const {initializeRankings}=await import('./rankings.js');
       initializeRankings(window.playerCloud,document,window);
       const script=document.createElement('script');script.src='game.js';
