@@ -14,7 +14,7 @@ import {bankDepthsSpoils,moonwellShard} from '../public/depths.js';
 import {activityAction,settleActivities} from './activities.mjs';
 import {essenceAction} from './essences.mjs';
 import {gamblingAction} from './gambling.mjs';
-import {mealRecipes,prepareMeal,homeStove} from '../public/cooking.js';
+import {mealRecipes,prepareMeal} from '../public/cooking.js';
 import {moonwood} from '../public/moonwood.js';
 
 const prices={boar:30,rabbit:12,deer:24,stonebackShell:45,timber:4,[moonwellShard.id]:moonwellShard.price};
@@ -64,7 +64,7 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
     if(action==='cook'){
       const campfire=moonwood.layouts.trail.scenery.find(item=>item.type==='campfire');
       const position=state.position;
-      const stove=homeStove(state),atStove=state.location==='home'&&stove&&position&&Math.abs(position.x-stove.x)+Math.abs(position.y-stove.y)===1;
+      const atStove=state.location==='home'&&state.ownedFurniture?.stove>0&&position&&(state.homeFurniture??[]).some(stove=>stove.type==='stove'&&Math.abs(position.x-stove.x)+Math.abs(position.y-stove.y)===1);
       const atCamp=state.location==='trail'&&position&&Math.abs(position.x-campfire.x)+Math.abs(position.y-campfire.y)===1;
       if(!atStove&&!atCamp)throw new Error('Travel beside the campfire on Lantern Trail or your placed home cooking stove.');
       prepareMeal(state,body.id);

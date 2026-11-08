@@ -29,3 +29,7 @@ test('Auto respects reserves, never withdraws ingredients, and reports missing s
  const blocked=auto({homeFurniture:[{id:10,type:'stove',x:3,y:3,rot:0},...[{x:2,y:3},{x:4,y:3},{x:3,y:2},{x:3,y:4}].map((p,id)=>({id:id+11,type:'chair',rot:0,...p}))]});settlePlan(blocked,31000);assert.equal(blocked.report.reason,'stove-unreachable');
  const partial=auto({},'cookStew',10);settlePlan(partial,16000);assert.equal(partial.meals.boarStew,1);settlePlan(partial,17000,{stop:true});assert.equal(partial.report.reason,'returned');assert.equal(partial.report.cookedMeals.boarStew,1);
 });
+
+test('each placed owned stove can cook, rather than only the first placed stove',()=>{
+ const s=setup({homeFurniture:[{id:1,type:'stove',x:1,y:1,rot:0},{id:2,type:'stove',x:3,y:3,rot:0}],ownedFurniture:{stove:2},position:{x:3,y:4}});applyGameplayAction(s,'cook',{id:'boarStew'},1000);assert.equal(s.meals.boarStew,1);
+});

@@ -3283,7 +3283,7 @@ function renderCampfire(){
 }
 async function cookMeal(id,button){
   if(unavailable())return;
-  const station=atHome()?homeFurniture.find(i=>i.type==='stove'):moonwood.layouts.trail.scenery.find(i=>i.type==='campfire');
+  const station=atHome()?(homeFurniture.find(i=>i.type==='stove'&&Math.abs(player.cx-i.x)+Math.abs(player.cy-i.y)===1)??homeFurniture.find(i=>i.type==='stove')):moonwood.layouts.trail.scenery.find(i=>i.type==='campfire');
   if(station&&Math.abs(player.cx-station.x)+Math.abs(player.cy-station.y)!==1){pendingCookingId=id;$('campfireDialog').close();use(station);note('Walking back to the stove to prepare your meal.');return;}
   if(button)button.disabled=true;savePlayerState();
   try{
