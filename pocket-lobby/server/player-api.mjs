@@ -5,6 +5,7 @@ import {applyGameplayAction,protectFishingState} from './gameplay.mjs';
 import {settleActivities} from './activities.mjs';
 import {publicPlayerState} from './gambling.mjs';
 import {readRankings} from './rankings.mjs';
+import {upgradeGoalProgress} from '../public/upgrade-goals.js';
 import {touchPresence} from './routines.mjs';
 import {deliverCarpenterOrder} from '../public/commissions.js';
 import {normalizeCharacterRules,AWAY_GRACE_MS} from '../public/character-rules.js';
@@ -77,7 +78,7 @@ export async function handlePlayerApi(request,env){
       const existing=id&&await settled(env.TOWER_DB,id,true);
       if(existing)return json(packet(existing));
       const body=await bodyOf(request),legacy={...body.legacy};migrateProgression(legacy);
-      const state=normalizeState({...legacy,meals:{},magic:undefined,...(body.newCharacter===true?{characterCreated:false,welcomeSeen:false}:{})});
+      const state=normalizeState({...legacy,controlMode:'play',meals:{},magic:undefined,...(body.newCharacter===true?{characterCreated:false,welcomeSeen:false}:{})});
       state.stats.luckXp=0;
       delete state.combatGear.weaponEnchantments;
       if(state.hunting.encounter){
@@ -148,18 +149,33 @@ export async function handlePlayerApi(request,env){
         break;
       case "/api/player/save":
         if(state.plan)return json({error:"Stop the work plan before playing.",...packet(row)},409);
-        state={...protectFishingState(state,normalizeState(protectFishingState(state,{...body.state,wardrobe:body.state?.wardrobe??state.wardrobe}))),rankingJoined:state.rankingJoined===true,goldEarned:state.goldEarned??0,welcomeSeen:state.welcomeSeen!==false,characterCreated:state.characterCreated!==false,carpenterOrderComplete:state.carpenterOrderComplete===true,characterRules:state.characterRules??normalizeCharacterRules(),routineLastSeen:state.routineLastSeen,activityLog:state.activityLog??[],...(state.report?{report:state.report}:{})};
+        state={...protectFishingState(state,normalizeState(protectFishingState(state,{...body.state,wardrobe:body.state?.wardrobe??state.wardrobe}))),rankingJoined:state.rankingJoined===true,goldEarned:state.goldEarned??0,welcomeSeen:state.welcomeSeen!==false,characterCreated:state.characterCreated!==false,carpenterOrderComplete:state.carpenterOrderComplete===true,characterRules:state.characterRules??normalizeCharacterRules(),controlMode:state.controlMode??'play',routineLastSeen:state.routineLastSeen,activityLog:state.activityLog??[],...(state.report?{report:state.report}:{})};
         break;
       case "/api/player/commissions/carpenter":
         deliverCarpenterOrder(state);
         break;
       case "/api/player/presence":
         if(body.active!==undefined&&typeof body.active!=='boolean'||body.idleForMs!==undefined&&(!Number.isInteger(body.idleForMs)||body.idleForMs<0||body.idleForMs>AWAY_GRACE_MS))throw new Error('Invalid activity status.');
-        if(!state.characterRules?.enabled||state.plan&&state.plan.source!=='rules'||state.report)return json(packet(row));
+        if((!state.characterRules?.enabled&&state.controlMode!=='auto'&&!state.plan)||(state.plan&&state.plan.source!=='rules')||state.report)return json(packet(row));
         settleActivities(state,Date.now());
         touchPresence(state,Date.now(),{active:body.active!==false,activityAt:Date.now()-(body.idleForMs??0)});
         settleActivities(state,Date.now());
         break;
+      case "/api/player/control":{
+        if(!['play','auto'].includes(body.mode))throw new Error('Choose Play or Auto.');
+        const now=Date.now();settlePlan(state,now);
+        if(body.mode==='auto'){
+          if(state.controlMode==='auto'&&state.plan?.source==='rules')break;
+          if(state.characterCreated===false||state.plan||state.report||state.depthsRun||state.hunting?.encounter||state.hunting?.recoveryUntil||state.health<=0||state.gambling?.round?.status==='playing'||state.fishingCast||state.timberCut)throw new Error('Choose Auto after finishing your activity, reading your report and leaving the dungeon.');
+          if(upgradeGoalProgress(state)?.receipt)throw new Error('Choose a new upgrade goal in Rules before starting Auto.');
+          state.controlMode='auto';state.routineLastSeen=now;touchPresence(state,now,{active:false,forceStart:true});
+        }else{
+          if(state.plan&&state.plan.source!=='rules')throw new Error('Choose Stop work to finish your job-board shift.');
+          state.controlMode='play';state.routineLastSeen=now;
+          if(state.plan?.source==='rules')settlePlan(state,now,{stop:true});
+        }
+        break;
+      }
       case "/api/player/rules/save":
         if(state.hunting?.encounter)return json({error:"Finish combat before changing character rules.",...packet(row)},409);
         if(state.plan||state.report)return json({error:"Read your work report before changing rules.",...packet(row)},409);

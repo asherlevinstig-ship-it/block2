@@ -1,6 +1,7 @@
 'use strict';
 (async()=>{
   const {createCombatClock}=await import('./combat-clock.js');const combatClock=createCombatClock();
+  const {autoStatus}=await import('./auto-mode.js');
   const {AWAY_GRACE_MS}=await import('./character-rules.js');
   const status=document.getElementById('saveStatus');
   const gate=document.getElementById('cloudGate');
@@ -90,7 +91,7 @@
         packet=await request(path,{...body,revision:packet.revision,operation});
         return packet;
       }catch(error){
-        if(path.startsWith('gameplay/')){
+        if(path.startsWith('gameplay/')||path==='control'){
           if(error.status===undefined&&attempt<2)continue;
           if(error.status===409&&error.data?.lastOperation===operation){packet=error.data;return packet;}
           if(error.status===409||error.status===401||error.status===undefined)conflict('Reload to confirm the result of your action.');
@@ -117,9 +118,9 @@
     acting++;try{return await performAction(path,body);}finally{acting--;}
   }
   async function pulse(){
-    if(conflicted||presenceBusy||acting||gameplayBusy||!packet?.state.characterRules?.enabled||packet.state.plan&&packet.state.plan.source!=='rules'||packet.state.report)return;
+    if(conflicted||presenceBusy||acting||gameplayBusy||(!packet?.state.characterRules?.enabled&&packet?.state.controlMode!=='auto'&&packet?.state.plan?.source!=='rules')||packet.state.plan&&packet.state.plan.source!=='rules'||packet.state.report)return;
     await flush();if(presenceBusy||acting||gameplayBusy||conflicted)return;
-    const inputAt=lastInputAt,active=!document.hidden&&inputAt>lastReportedInputAt;
+    const inputAt=lastInputAt,active=packet.state.controlMode!=='auto'&&!document.hidden&&inputAt>lastReportedInputAt;
     presenceBusy=(async()=>{
       try{
         await action('presence',{active,idleForMs:Math.max(0,Math.min(AWAY_GRACE_MS,Date.now()-inputAt))});
@@ -136,6 +137,44 @@
       }
     })().finally(()=>{presenceBusy=null;if(pending||retryJob)drain();});
     return presenceBusy;
+  }
+  let controlBusy=false,presenceTimer=null;
+  function schedulePresence(delay=20000){
+    clearTimeout(presenceTimer);presenceTimer=setTimeout(async()=>{try{await pulse();}catch{}schedulePresence(packet?.state.plan?.activeHunt&&!document.hidden?250:packet?.state.plan?.source==='rules'?2000:20000);},delay);
+  }
+  function renderAutoPanel(state){
+    document.body.classList.toggle('auto-controlled',!!state.plan||!!state.report);
+    const info=autoStatus(state),panel=document.getElementById('autoPanel');panel.hidden=!info.visible;
+    const running=state.plan?.source==='rules';
+    document.getElementById('autoPlay').setAttribute('aria-pressed',String(!running));document.getElementById('autoStart').setAttribute('aria-pressed',String(!!running));
+    document.getElementById('autoStart').title='Start your saved rules now. Auto continues while you inspect the game or go offline.';
+    document.getElementById('autoStart').disabled=controlBusy||!!state.plan||!!state.report;
+    document.getElementById('autoPlay').disabled=controlBusy||!!state.plan&&state.plan.source!=='rules'||!!state.plan?.returnRequested;
+    if(!info.visible)return;
+    document.getElementById('autoModeLabel').textContent=info.mode;
+    document.getElementById('autoCurrent').textContent=info.current;
+    document.getElementById('autoWhere').textContent=info.location+' · Next: '+info.next;
+    document.getElementById('autoEarnings').textContent=info.earned;
+    document.getElementById('autoReason').textContent=info.reason;
+    document.getElementById('autoTakeControl').textContent=info.returning?'Finishing current fight…':info.running?'Take control':'Return to play';
+    document.getElementById('autoTakeControl').disabled=controlBusy||info.returning;
+    panel.dataset.running=String(info.running);
+  }
+  async function setControl(mode){
+    if(controlBusy||conflicted)return;
+    controlBusy=true;renderAutoPanel(packet.state);document.getElementById('autoControlError').textContent='';
+    try{
+      if(mode==='auto'){window.towerSaveNow?.();await flush();}
+      else if(presenceBusy)await presenceBusy;
+      await action('control',{mode});
+      if(mode==='play'&&packet.state.report?.source==='rules')await action('report/ack',{startedAt:packet.state.report.startedAt});
+      lastInputAt=Date.now();lastReportedInputAt=lastInputAt;
+      pending=retryJob=null;backup(null);
+      if(packet.state.plan||packet.state.report)window.towerMultiplayer?.disconnect();
+      window.towerApplyRoutineState?.(packet.state);showReport(packet.state);
+      if(!packet.state.plan&&!packet.state.report)window.towerJoinRoom?.();
+    }catch(error){document.getElementById('autoControlError').textContent=error.message;}
+    finally{controlBusy=false;renderAutoPanel(packet.state);schedulePresence(packet.state.plan?.source==='rules'?150:20000);}
   }
   function showQueueReport(state,plan,running){
     const caught=Object.values(plan.catches).reduce((a,b)=>a+b,0),total=plan.queue.steps.length*plan.queue.repeats;
@@ -155,7 +194,9 @@
     document.getElementById('offlineValue').textContent='Sales +'+plan.goldEarned+' gold · Bait −'+(plan.goldSpent-(plan.goalSpent??0))+' gold'+(plan.goalSpent?' · Upgrade −'+plan.goalSpent+' gold':'')+' · Net '+(net>=0?'+':'')+net+' gold · Wallet '+state.credits+' gold. Unsold supplies remain in Inventory.';
     document.getElementById('offlineReason').textContent=running?(plan.returnRequested?'Finishing the current fight, then returning home.':plan.activeHunt?'Hunting with your equipped weapon. Return to finish this fight and stop.':'Your saved queue is running. Return to stop it.'):({'goal-reached':'Goal reached · Choose your next upgrade or clear this goal in Rules to resume','queue-complete':'All cycles complete',returned:'Stopped when you returned','away-cap':'Eight-hour limit reached','spending-limit':'Stopped before exceeding your spending limit','gold-reserve':'Stopped to protect your gold reserve','beetle-trial-required':'Defeat a Stoneback Beetle yourself in the Ruins first','weapon-required':'Equip a usable weapon before hunting','hunt-escaped':'Escaped · Hunting stopped','hunt-defeat':'Defeated · Returned home to recover',requirements:'Required tool, skill or fishing location is missing','inventory-full':'Inventory is full','wallet-full':'Wallet is full'}[plan.reason]??plan.reason);
   }
-  function showReport(state){
+  function showReport(state,details=false){
+    renderAutoPanel(state);
+    if((state.plan??state.report)?.source==='rules'&&!details)return;
     const dialog=document.getElementById('offlineDialog'),plan=state.plan??state.report;
     if(!plan)return;
     dialog.dataset.queue=String(plan.kind==='queue');
@@ -185,9 +226,10 @@
     document.getElementById('offlineValue').textContent=rest?'No items purchased, sold or consumed.':'Supplies in Inventory · '+saleValue+' gold if sold at the Trading Post. No gold has been added yet.';
     }
     const button=document.getElementById('offlineContinue');
-    button.disabled=running&&!!plan.returnRequested;
-    button.textContent=running&&plan.returnRequested?'Finishing current fight…':running?(plan.source==='rules'?'I’m back · Stop routine':'Stop work and return home'):'Return to game';
+    button.disabled=plan.source!=='rules'&&running&&!!plan.returnRequested;
+    button.textContent=plan.source==='rules'?'Close details':running&&plan.returnRequested?'Finishing current fight…':running?(plan.source==='rules'?'I’m back · Stop routine':'Stop work and return home'):'Return to game';
     button.onclick=async()=>{
+      if(plan.source==='rules'){dialog.close();return;}
       button.disabled=true;
       try{
         lastInputAt=Date.now();
@@ -200,10 +242,15 @@
       }catch(error){document.getElementById('offlineError').textContent=error.message;}
       finally{button.disabled=!!packet.state.plan?.returnRequested;}
     };
-    dialog.oncancel=event=>event.preventDefault();
+    dialog.oncancel=event=>{if(plan.source!=='rules')event.preventDefault();};
     if(!dialog.open)dialog.showModal();
   }
   function attach(){
+    document.getElementById('autoStart').onclick=()=>setControl('auto');
+    document.getElementById('autoPlay').onclick=()=>setControl('play');
+    document.getElementById('autoTakeControl').onclick=()=>setControl('play');
+    document.getElementById('autoDetails').onclick=()=>showReport(packet.state,true);
+    document.getElementById('autoRules').onclick=()=>window.towerOpenAutoRules?.();
     const button=document.getElementById('startOfflineFishing');
     button.onclick=async()=>{
       button.disabled=true;
@@ -232,6 +279,7 @@
     };
     document.getElementById('planBait').max=packet.state.fishingGear.bait;
     document.getElementById('planBait').value=Math.min(10,packet.state.fishingGear.bait);
+    if(packet.state.plan?.source==='rules'||packet.state.report?.source==='rules')window.towerApplyRoutineState?.(packet.state);
     showReport(packet.state);
     if(packet.state.plan&&packet.state.plan.source!=='rules'){
       const poll=async()=>{
@@ -244,12 +292,11 @@
       setTimeout(poll,15000);
     }
     window.addEventListener('online',()=>drain());
-    const tick=async()=>{try{await pulse();}catch{}setTimeout(tick,packet?.state.plan?.activeHunt?2000:20000);};
-    setTimeout(tick,20000);
+    schedulePresence(packet.state.plan?.source==='rules'?150:20000);
     document.addEventListener('visibilitychange',()=>{
       if(document.hidden)return;
       lastInputAt=Date.now();
-      if(packet.state.characterRules?.enabled){pulse().catch(()=>{});return;}
+      if(packet.state.characterRules?.enabled||packet.state.controlMode==='auto'||packet.state.plan?.source==='rules'){pulse().catch(()=>{});return;}
       if(pending||retryJob||sending||packet.state.plan)return;
       const revision=packet.revision;
       request('state').then(latest=>{
@@ -288,7 +335,7 @@
           return;
         }
       }
-      if(packet.state.characterRules?.enabled&&(!packet.state.plan||packet.state.plan.source==='rules')&&!packet.state.report){await action('presence',{active:true});lastReportedInputAt=lastInputAt;}
+      if((packet.state.characterRules?.enabled||packet.state.controlMode==='auto'||packet.state.plan?.source==='rules')&&(!packet.state.plan||packet.state.plan.source==='rules')&&!packet.state.report){await action('presence',{active:true});lastReportedInputAt=lastInputAt;}
       const {moonwood}=await import('./moonwood.js');
       window.moonwood=moonwood;
       const rules=await import('./fishing.js');

@@ -715,7 +715,8 @@ function resetCombatArt(){
   for(const key of Object.keys(combatArt))combatArt[key]=key==='bursts'?[]:-Infinity;
 }
 
-const unavailable=()=>serverActionBusy||activityBusy||player.inCombat||hunting.recoveryUntil>0;
+const routineControlled=()=>!!window.playerCloud?.initial?.plan||!!window.playerCloud?.initial?.report;
+const unavailable=()=>routineControlled()||serverActionBusy||activityBusy||player.inCombat||hunting.recoveryUntil>0;
 function combatRecapAction(report){
   if(hunting.recoveryUntil)return null;
   if(depthsRun&&depthsStageIndex(currentRoom)>=0){
@@ -1056,6 +1057,7 @@ function startMonsterEncounter(enemy){
   note('Press Space just before the '+enemyAttack(hunting.encounter,enemy).name+' lands. F flees.');
 }
 function combatAction(action){
+  if(routineControlled()){note('Use Take control to stop your routine.');return;}
   combatAudio.enable(combatSoundEnabled);
   if(!player.inCombat||!['flee','dodge'].includes(action))return;
   if(window.playerCloud?.gameplay){sendServerCombat(action);return;}
@@ -1239,6 +1241,7 @@ function updateCombatPanel(){
   }
 }
 function updateCombatMoment(time){
+  if(routineControlled()){if(time-lastCombatUi>100){lastCombatUi=time;updateCombatPanel();}return;}
   if(window.playerCloud?.gameplay){
     const tactic=nextCombatTactic({hunting,health,stats:playerStats,combatGear,magic:magicState,characterRules});
     const due=hunting.encounter?Math.min(hunting.encounter.nextPlayerAt,hunting.encounter.nextBoarAt,hunting.encounter.burn?.nextAt??Infinity,tactic?.at??Infinity):Infinity;
@@ -2344,11 +2347,12 @@ function draw(time){
     const cycle=step?(player.stride%2)+Math.min(1,(time-step.started)/STEP_MS):0;
     const wave=player.waveStarted===null?null:(time-player.waveStarted)/WAVE_MS;
     const pose=playerCombatPose({time,now:combatNow(),encounter:player.inCombat?hunting.encounter:null,events:combatArt,reduced:reducedMotion.matches});
-    const swingPhase=woodSession?((time-woodSession.started)%700)/700:0;
-    const spritePose=woodSession?{...pose,chop:swingPhase}:pose;
+    const autoPlan=window.playerCloud?.initial?.plan,autoTask=autoPlan?.source==='rules'?(autoPlan.kind==='queue'?autoPlan.queue?.steps?.[autoPlan.stepIndex]?.type:autoPlan.kind??'fishing'):null,autoChop=autoTask==='woodcutting'&&currentRoom==='logging',autoFish=autoTask==='fishing'&&currentRoom==='pond';
+    const swingPhase=autoChop?(time%1000)/1000:woodSession?((time-woodSession.started)%700)/700:0;
+    const spritePose=woodSession||autoChop?{...pose,chop:swingPhase}:pose;
     const [enemyX,enemyY]=point(6.5,5.5);
     const thrust=enemy?pose.lunge-pose.recoil:0;
-    sprite(ctx,x+Math.sign(enemyX-x)*thrust-pose.dodge,y+Math.sign(enemyY-y)*thrust+pose.dodge*.4,avatar,{direction:player.direction,back:player.back,cycle,seated:!!seat,wave,weapon:!!woodSession||pose.armed&&!!combatGear.equippedWeapon,sheathed:!woodSession&&!pose.armed&&Object.hasOwn(socialRooms,currentRoom)&&!!combatGear.equippedWeapon,weaponTier:woodSession?'basicAxe':combatGear.equippedWeapon,pose:spritePose,vest:combatGear.stonebackVestEquipped,fishing:fishingSession?fishingMoments.phase(fishingSession,time):null,fishingAge:fishingSession?time-fishingSession.started:0,time});
+    sprite(ctx,x+Math.sign(enemyX-x)*thrust-pose.dodge,y+Math.sign(enemyY-y)*thrust+pose.dodge*.4,avatar,{direction:player.direction,back:player.back,cycle,seated:!!seat,wave,weapon:autoChop||!!woodSession||pose.armed&&!!combatGear.equippedWeapon,sheathed:!autoChop&&!woodSession&&!pose.armed&&Object.hasOwn(socialRooms,currentRoom)&&!!combatGear.equippedWeapon,weaponTier:woodSession||autoChop?'basicAxe':combatGear.equippedWeapon,pose:spritePose,vest:combatGear.stonebackVestEquipped,fishing:fishingSession?fishingMoments.phase(fishingSession,time):autoFish?'waiting':null,fishingAge:fishingSession?time-fishingSession.started:0,time});
     if(fishingSession)drawFishingMoment(x,y,time);
     drawCatchReveal(x,y,time);
     if(player.inCombat){
@@ -2489,6 +2493,7 @@ function setHint(){
 }
 function startPosition(){return step?.to??{x:player.cx,y:player.cy};}
 function walkTo(tile){
+  if(routineControlled()){note('Your routine is running. Use Take control to move.');return;}
   if(unavailable()){note(player.inCombat?"Combat is live. Use Flee to escape.":"Rest until your hearts recover.");return;}
   if(blocked(tile.x,tile.y)){note('That tile is occupied.');return;}
   const path=findPath(startPosition(),tile);
@@ -2500,6 +2505,7 @@ function walkTo(tile){
 }
 function doorAvailable(door,room=currentRoom){return (room!=='hub'||lobbyRoutesOpen())&&moonwood.open(door,adventure);}
 function travelDoor(door){
+  if(routineControlled()){note('Use Take control before travelling.');return;}
   if(unavailable()){note(player.inCombat?"Use Flee to leave combat.":"Your hearts are recovering.");return;}
   if(!doorAvailable(door))return;
   if(currentRoom==='creek'&&door.to==='ruins'&&!adventure.bridge){
@@ -3306,8 +3312,8 @@ function renderBag(){
   $('bagDetailCategory').textContent=selected?(selected.equipped?'EQUIPPED':selected.category==='clothing'?'CLOTHING':selected.category==='gear'?'EQUIPMENT':selected.category==='furniture'?'HOME FURNITURE':'LOOT & SUPPLIES'):'';
   $('bagDetailName').textContent=selected?.name??'Your bag is empty';$('bagDetailText').textContent=selected?.description??'Find something on your next adventure.';
   $('bagDetailStats').textContent=selected?.stats??'';$('bagDetailNote').textContent=selected?.note??'';
-  const action=$('bagAction');action.hidden=!selected?.action;action.textContent=selected?.action??'';action.disabled=!!selected?.disabled;
-  action.onclick=()=>{if(!selected?.run||selected.disabled)return;selected.run();if($('inventoryDialog').open)updateInventory();};
+  const action=$('bagAction');action.hidden=!selected?.action;action.textContent=selected?.action??'';action.disabled=!!selected?.disabled||routineControlled();
+  action.onclick=()=>{if(!selected?.run||selected.disabled||routineControlled())return;selected.run();if($('inventoryDialog').open)updateInventory();};
   updateBedGuide();
 }
 function openMerchant(){
@@ -4245,7 +4251,7 @@ function updateAdventurePanel(){
   $('adventureStatus').textContent=fieldNotes[currentRoom]??roomDetails[currentRoom].description;
   $('fishingStats').hidden=currentRoom!=='pond';
   $('offlinePlanPanel').hidden=currentRoom!=='pond';
-  $('startOfflineFishing').disabled=fishingGear.bait<1||!!fishingSession;
+  $('startOfflineFishing').disabled=routineControlled()||fishingGear.bait<1||!!fishingSession;
   $('planBait').max=fishingGear.bait;
   $('planPace').textContent='One catch about every '+Math.round(60*fishingCatalog.rods[fishingGear.equippedRod].duration/4500)+' seconds with your '+fishingCatalog.rods[fishingGear.equippedRod].name+'. Each catch uses one bait and earns 10 Patience XP.';
   updatePlayerStats();
@@ -4652,15 +4658,15 @@ function updateCharacterRulesPreview(){
     $('rulesCombatPreview').textContent=rules.combat.enabled
       ?'Tactics run online and offline in encounters you enter. '+(rules.combat.fleeBelow?'Attempt to flee at '+rules.combat.fleeBelow+' HP or lower.':'Keep fighting until the encounter ends.')
       :'Combat is under your manual control.';
-    let detail='Your saved routine begins after three minutes without input, including while the game is open. It runs for up to eight hours.';
+    let detail='Choose Auto to start now. Your saved routine also begins after three minutes without input, including while the game is open. It runs for up to eight hours.';
     if(rules.enabled&&!rules.queue?.enabled&&activity!=='rest'){
       const bait=Math.min(1000,Math.max(0,fishingGear.bait-rules.keepBait));
       const preview=jobPreview(jobState(),activity,8,bait);
       detail=activity==='woodcutting'&&woodcutting.timber>=rules.timberTarget?'Your timber target is already met. Your character will rest.':activity==='fishing'&&bait===0?'Your bait reserve is already reached. Your character will rest.':preview.allowed?'Ready with your current equipment. Supplies stay in Inventory until you sell or use them.':'Will rest with current equipment: '+preview.reason;
     }
-    if(rules.queue?.enabled)detail='The queue starts after three minutes idle. It stops when you return, a limit is reached, or all cycles finish. Unsold supplies stay in Inventory. Hunting uses your equipped weapon and flee threshold. Returning during a fight finishes that fight before stopping.';
+    if(rules.queue?.enabled)detail='Choose Auto to start now, or enable away rules to start after three minutes idle. It stops when you return, a limit is reached, or all cycles finish. Unsold supplies stay in Inventory. Hunting uses your equipped weapon and flee threshold. Returning during a fight finishes that fight before stopping.';
     $('rulesRequirements').textContent=depthsRun?'Away routines pause while you’re in Moonwell Depths. '+detail:detail;
-    $('rulesSave').disabled=savingRules||!window.playerCloud;
+    $('rulesSave').disabled=savingRules||!window.playerCloud||routineControlled();if(routineControlled())$('rulesStatus').textContent='Take control before changing saved rules. You can inspect them while Auto runs.';
   }catch(error){$('rulesPreview').textContent=error.message;$('rulesSave').disabled=true;}
 }
 function openCharacterRules(){
@@ -4868,6 +4874,7 @@ for(const [group,key,colors,names] of [
 }
 
 function applyWornOutfit(){
+  if(routineControlled())return;
   avatar=outfitAppearance(wardrobe,avatar);save('avatar',avatar);updateName();savePlayerState();
 }
 function openClothingInventory(id){
@@ -4882,10 +4889,10 @@ function renderWardrobe(){
     const active=outfit.id===wardrobe.active;card.className='saved-outfit'+(active?' is-worn':'');card.dataset.outfit=outfit.id;
     picture.width=56;picture.height=62;picture.setAttribute('aria-hidden','true');sprite(picture.getContext('2d'),28,54,outfitAppearance(wardrobe,avatar,outfit.id),{time:performance.now()});
     name.textContent=outfit.name;items.textContent=clothingSlots.map(slot=>clothingCatalog[outfit[slot]].name).join(' · ');
-    wear.type='button';wear.textContent=active?'Wearing':'Wear outfit';wear.disabled=active;wear.onclick=()=>{wearSavedOutfit(wardrobe,outfit.id);applyWornOutfit();draft=outfitAppearance(wardrobe,draft);renderWardrobe();updateAvatarPreview();$('wardrobeStatus').textContent='Now wearing '+outfit.name+'.';};
+    wear.type='button';wear.textContent=active?'Wearing':'Wear outfit';wear.disabled=active||routineControlled();wear.onclick=()=>{wearSavedOutfit(wardrobe,outfit.id);applyWornOutfit();draft=outfitAppearance(wardrobe,draft);renderWardrobe();updateAvatarPreview();$('wardrobeStatus').textContent='Now wearing '+outfit.name+'.';};
     edit.type='button';edit.textContent='Edit clothing';edit.onclick=()=>openClothingInventory(outfit.id);actions.className='outfit-actions';actions.append(wear,edit);card.append(picture,name,items,actions);list.append(card);
   }
-  $('outfitCapacity').textContent=wardrobe.outfits.length+' / 6 saved outfits. Clothing can be reused.';$('createOutfit').disabled=wardrobe.outfits.length>=6;
+  $('outfitCapacity').textContent=wardrobe.outfits.length+' / 6 saved outfits. Clothing can be reused.';$('createOutfit').disabled=wardrobe.outfits.length>=6||routineControlled();$('saveAvatar').disabled=routineControlled();
 }
 
 function openAvatar(){
@@ -5027,8 +5034,11 @@ window.towerApplyRoutineState=state=>{
   trainingController?.close();
   fishingSession=null;fishingStarted=null;woodSession=null;treeFall=null;catchReveal=null;patienceTween=null;
   $('catchReveal').hidden=true;route=[];step=null;interaction=null;target=null;
-  setPlayerCombat(false);applyServerGameplay(state);
-  enterRoom(state.location,state.position,{automatic:true});updateInventory();updateAdventurePanel();
+  applyServerGameplay(state);
+  if(currentRoom!==state.location)enterRoom(state.location,state.position,{automatic:true});else if(state.position)movePlayerToSpawn(state.position);
+  setPlayerCombat(!!state.plan?.activeHunt&&!!hunting.encounter);
+  if(state.combatReceipt&&state.combatReceipt.id!==lastCombatReceipt){lastCombatReceipt=state.combatReceipt.id;for(const event of state.combatReceipt.events??[])if((window.playerCloud?.serverTime??Date.now())-(event.at??0)<2500)recordCombatFx(combatArt,event,performance.now());}
+  updateInventory();updateAdventurePanel();updateCombatPanel();
 };
 function openTrainingCourtyard(){
   if(currentRoom!=='outside'){navigateHud('outside');return;}
@@ -5055,3 +5065,5 @@ requestAnimationFrame(animation);
 
 $('vaultVictoryContinue').onclick=()=>closeVaultVictory();
 $('vaultVictoryDialog').addEventListener('cancel',event=>{event.preventDefault();closeVaultVictory();});
+
+window.towerOpenAutoRules=()=>openCharacterRules();

@@ -3,6 +3,7 @@ import {boarRules} from '../public/hunting.js';
 // Shared completion path for live-idle and offline rule-driven plans.
 export function finishRoutineReport(state,now){
   const report=state.report;if(report?.source!=='rules')return;
+  state.controlMode='play';
   if(report.kind==='woodcutting'&&state.woodcutting.timber>=report.timberTarget)report.reason='target-reached';
   else if(report.kind!=='queue'&&report.kind!=='rest'&&report.kind!=='woodcutting'&&state.fishingGear.bait<=report.keepBait)report.reason='bait-reserve';
   else if(report.kind!=='queue'&&report.endedAt>=report.routineCapAt)report.reason='away-cap';

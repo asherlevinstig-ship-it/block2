@@ -5,8 +5,9 @@ import {startPlan,settlePlan} from './player-state.mjs';
 import {jobPreview} from '../public/jobs.js';
 import {depthsStageIndex} from '../public/depths.js';
 import {boarRules} from '../public/hunting.js';
-export function touchPresence(state,now,{active=true,activityAt=now,random=Math.random}={}){
+export function touchPresence(state,now,{active=true,activityAt=now,random=Math.random,forceStart=false}={}){
   const last=state.routineLastSeen;
+  if(state.controlMode==='auto')active=false;
   if(active)now=Math.max(Number.isFinite(last)?last:0,Math.min(now,activityAt));
   // Heartbeats without player input must not move the inactivity deadline.
   if(active||!Number.isFinite(last))state.routineLastSeen=now;
@@ -15,12 +16,12 @@ export function touchPresence(state,now,{active=true,activityAt=now,random=Math.
     settlePlan(state,now,{stop:active,random});return;
   }
   if(upgradeGoalProgress(state)?.receipt)return;
-  if(depthsStageIndex(state.location)>=0||!rules.enabled||!Number.isFinite(last)||now-last<AWAY_GRACE_MS||state.plan||state.report)return;
+  if(depthsStageIndex(state.location)>=0||(!forceStart&&(!rules.enabled||!Number.isFinite(last)||now-last<AWAY_GRACE_MS))||state.plan||state.report)return;
   const finished=state.combatReceipt?.events?.findLast(event=>['victory','escaped','defeat'].includes(event.outcome));
   const availableAt=finished?(finished.at??0)+(finished.outcome==='defeat'?boarRules.recovery:0):0;
-  const startedAt=Math.max(last+AWAY_GRACE_MS,availableAt),until=Math.min(now,startedAt+AWAY_CAP_MS);
+  const startedAt=forceStart?now:Math.max(last+AWAY_GRACE_MS,availableAt),until=Math.min(now,startedAt+AWAY_CAP_MS);
   if(startedAt>now)return;
-  const routineId='away:'+last,summary=describeCharacterRules(rules);
+  const routineId=(forceStart?'auto:':'away:')+(forceStart?now:last),summary=describeCharacterRules(forceStart?{...rules,enabled:true}:rules);
   if(state.hunting?.encounter||state.hunting?.recoveryUntil||state.health===0||state.gambling?.round?.status==='playing'){
     const entry={id:routineId,startedAt,endedAt:until,kind:rules.activity,summary:'Away work paused: finish combat, recovery or your table round first.',reason:'combat',count:0,xp:0};
     state.activityLog=[...(state.activityLog??[]).filter(item=>item.id!==routineId),entry].slice(-10);return;

@@ -17,5 +17,5 @@ test('reloading during an automated hunt does not enable manual combat polling',
  state.plan={kind:'queue',source:'rules',activeHunt:{id:'hunt'}};
  state.hunting.encounter={enemy:'boar',health:70,nextPlayerAt:2000,nextBoarAt:3000,nextFleeAt:0};
  const g=boot(state);assert.equal(g.read('player.inCombat'),false);
- g.context.towerApplyRoutineState(state);assert.equal(g.read('player.inCombat'),false);assert.equal(g.read('currentRoom'),'clearing');
+ g.context.towerApplyRoutineState(state);assert.equal(g.read('player.inCombat'),true);g.context.playerCloud.gameplay=()=>{throw new Error('Manual polling must stay off');};g.run('updateCombatMoment(10000)');assert.equal(g.read('currentRoom'),'clearing');
 });

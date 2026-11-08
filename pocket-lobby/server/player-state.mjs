@@ -49,6 +49,7 @@ function normalizeFirstUpgrade(input){
 }
 export function normalizeState(input={}){
   if(!input||typeof input!=="object"||Array.isArray(input))throw new Error("Invalid character.");
+  if(input.controlMode!==undefined&&!['play','auto'].includes(input.controlMode))throw new Error('Invalid control mode.');
   const credits=input.credits??100;
   if(!Number.isSafeInteger(credits)||credits<0||credits>100000000)throw new Error("Invalid balance.");
   const goldEarned=input.goldEarned??0;
@@ -78,6 +79,7 @@ export function normalizeState(input={}){
   const depthsRun=normalizeDepthsRun(input.depthsRun,input.location,hunting.encounter);
   const position=input.position;
   const state={
+    controlMode:input.controlMode??'play',
     ...(input.upgradeGoal?{upgradeGoal:normalizeUpgradeReceipt(input.upgradeGoal)}:{}),dungeonLoot:normalizeDungeonLoot(input.dungeonLoot),progressionVersion,goldEarned,firstUpgrade:normalizeFirstUpgrade(input.firstUpgrade),tradingPostGuideComplete:input.tradingPostGuideComplete===true,bedLessonComplete:input.bedLessonComplete===true||(Array.isArray(input.homeFurniture)&&input.homeFurniture.some(item=>item?.type==='bed')),welcomeSeen:input.welcomeSeen!==false,characterCreated:input.characterCreated!==false,characterRules:normalizeCharacterRules(input.characterRules),credits,health:Math.min(health,maxHealth),stats:{strengthXp:stats.strengthXp,agilityXp:stats.agilityXp,vitalityXp:stats.vitalityXp,patienceXp:stats.patienceXp,luckXp:stats.luckXp},fishingGear:{ownedRods,equippedRod:gear.equippedRod,bait:gear.bait},
     woodcutting:normalizeWoodcutting(input.woodcutting),history:normalizeHistory(input),quest:normalizeQuest(input.quest),combatGear,hunting,fishStock,huntingLoot:counts(input.huntingLoot),adventure,
     wardrobe,avatar:outfitAppearance(wardrobe,{name:avatar.name.trim()||"Guest",hair:avatar.hair}),
