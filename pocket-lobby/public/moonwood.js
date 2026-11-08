@@ -7,6 +7,9 @@ export const moonwood=(()=>{
     depthsGate:{number:'D1',name:'Flooded Gate',description:'An old sluice feeds a rushing channel. Look for the lever by the entrance.',badge:'MOONWELL DEPTHS',floor:'Chamber 1',center:[4,5],palette:['#31454e','#405961','#7a8a89'],landmark:['wildboar',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['wildrock',2,7],['wildrock',9,7],['sluiceLever',3,4],['gateSupply',10,4]]},
     depthsGallery:{number:'D2',name:'Shell Gallery',description:'Green light spills from the fungi. A shell hangs from a weathered chime stand.',badge:'MOONWELL DEPTHS',floor:'Chamber 2',center:[4,5],palette:['#344b45','#4a6054','#84947b'],landmark:['stonebackBeetle',6,5,5,5],authored:[['pillar',2,3],['pillar',8,3],['wildrock',3,7],['wildrock',7,7],['glowFungus',4,2],['glowFungus',9,3],['glowFungus',5,8],['shellChime',3,3],['galleryCache',9,6],['cachePassage',10,4]]},
     depthsCache:{number:'D2+',name:'The Sealed Alcove',description:'An elite Cache Guardian protects 50 gold and an Awakening Stone. Watch for Runic Slam, then strike its open shell.',badge:'MOONWELL DEPTHS',floor:'Optional cache chamber',center:[4,5],palette:['#3b3956','#504664','#927fa5'],landmark:['stonebackBeetle',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['pillar',8,7],['vaultCrystal',9,3],['glowFungus',3,7],['cachePassage',2,5],['essenceCache',9,5]]},
+    depthsTreasury:{number:'D2·T',name:'The Guarded Treasury',description:'Gold glints beneath a Treasury Guardian. Defeat it to add 60 gold and two Shell Fragments to your unbanked haul.',badge:'OPTIONAL · TREASURE',floor:'Treasury branch',center:[4,5],palette:['#4b4447','#625654','#b49b77'],landmark:['stonebackBeetle',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['vaultCrystal',9,2],['vaultCrystal',8,7],['cachePassage',2,5],['sideTreasure',9,5]]},
+    depthsRest:{number:'D2·R',name:'The Quiet Shrine',description:'A peaceful spring offers 30 HP for 15 gold from your unbanked haul. One blessing per expedition.',badge:'OPTIONAL · REST',floor:'Shrine branch',center:[4,5],palette:['#344f52','#4c6a68','#99b6aa'],authored:[['pillar',3,2],['pillar',8,2],['glowFungus',3,7],['glowFungus',9,3],['cachePassage',2,5],['restAltar',6,4]]},
+    depthsTrial:{number:'D2·S',name:'The Sealed Chamber',description:'A Rune Sentinel guards an Awakening Seal. Win the challenge, then claim your guaranteed stone.',badge:'OPTIONAL · CHALLENGE',floor:'Sealed branch',center:[4,5],palette:['#39394f','#514c6b','#afa2c7'],landmark:['stonebackBeetle',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['vaultCrystal',8,7],['glowFungus',3,7],['cachePassage',2,5],['sideSeal',9,5]]},
     depthsVault:{number:'D3',name:'The Sunken Vault',description:'The vault glitters beneath the waterline. Read the relief before facing its Guardian.',badge:'MOONWELL DEPTHS',floor:'Chamber 3',center:[4,5],palette:['#453c50','#5d4962','#a48b8e'],landmark:['stonebackBeetle',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['pillar',3,8],['pillar',8,8],['wildrock',9,4],['vaultCrystal',9,2],['vaultCrystal',8,7],['vaultRelief',3,3]]},
     logging:{number:'15',name:'Timber Hollow',description:'Meet the woodcutter, collect your first axe, and gather timber for the Tower.',badge:'WOODCUTTING',floor:'Woodland worksite',center:[5,5],palette:['#3b5050','#4e665c','#92917d'],landmark:['timberTree',6,5,5,5],authored:[['woodcutter',4,3],['workbench',5,3],['wildtree',1,1],['wildtree',10,1],['wildtree',9,7],['wildtree',2,8],['wildrock',8,3],['wildbloom',4,7]]},
     clearing:{number:'13',name:'Bramble Clearing',description:'A wild boar guards a moonlit clearing. Approach carefully, and flee if your hearts run low.',badge:'HUNTING GROUNDS',floor:'Boar territory',center:[5,5],palette:['#3c5050','#50645b','#918b7e'],landmark:['wildboar',6,5,5,5],authored:[['wildtree',1,1],['wildtree',9,1],['wildtree',10,7],['wildtree',2,8],['wildrock',8,7],['wildbloom',4,2],['wildbloom',8,3]]},
@@ -18,7 +21,7 @@ export const moonwood=(()=>{
     roots:{number:'09',name:'Root Passage',description:'A living tunnel winds beneath Moonwood, linking the ruins back to Lantern Trail.',badge:'MOONWOOD',floor:'Forest shortcut',center:[6,5],palette:['#363847','#4b4357','#766274'],authored:[['wildtree',1,2],['wildtree',3,6],['wildtree',6,2],['wildtree',8,7],['wildtree',10,2],['wildbloom',4,3],['wildbloom',8,6]]},
     pond:{number:'10',name:'Silverfin Pond',description:'Cast a line from the old jetty and watch the moonlight ripple over the water.',badge:'MOONWOOD',floor:'Fishing pond',center:[3,5],palette:['#334f59','#486570','#8b9296'],landmark:['fishingPost',5,5,4,5],authored:[['wildtree',1,1],['wildtree',3,1],['wildtree',1,8],['wildtree',4,8],['wildrock',4,2],['wildbloom',3,7],['wildbloom',4,3]]}
   };
-  const heights={cachePassage:30,essenceCache:24,sluiceLever:20,gateSupply:12,shellChime:27,galleryCache:13,vaultRelief:28,glowFungus:20,vaultCrystal:30,campfire:24,timberTree:51,wildboar:22,stonebackBeetle:28,wildtree:51,wildrock:13,wildbloom:22,pillar:28,lanternStand:31,mothAltar:24,moonwell:35,moonbloom:29,fishingPost:26};
+  const heights={sideSeal:24,sideTreasure:18,restAltar:28,cachePassage:30,essenceCache:24,sluiceLever:20,gateSupply:12,shellChime:27,galleryCache:13,vaultRelief:28,glowFungus:20,vaultCrystal:30,campfire:24,timberTree:51,wildboar:22,stonebackBeetle:28,wildtree:51,wildrock:13,wildbloom:22,pillar:28,lanternStand:31,mothAltar:24,moonwell:35,moonbloom:29,fishingPost:26};
   const doors=Object.fromEntries(Object.keys(areas).map(id=>[id,[]]));
   const coordinate=([x,y])=>({x,y});
   function connect(a,b,from,to,gate){
@@ -103,7 +106,7 @@ export const moonwood=(()=>{
         }
       }
     }
-    if(landmarkType)scenery.push({id:'landmark',type:landmarkType,x:lx,y:ly,rot:0,...(id==='depthsCache'?{cacheGuardian:true}:{})});
+    if(landmarkType)scenery.push({id:'landmark',type:landmarkType,x:lx,y:ly,rot:0,...(id==='depthsCache'||id==='depthsTrial'?{cacheGuardian:true}:{})});
     if(id==='trail')scenery.push({id:'campfire',type:'campfire',x:3,y:4,rot:0});
     return {path:id==='grove'?visiblePath:path,scenery,hiddenTrail};
   }
@@ -177,6 +180,11 @@ export const moonwood=(()=>{
     const stone=['#9a9ab2','#50536c','#71738d'];
     const aqua=['#91bdbb','#3e6271','#568b93'];
     surface(x+.08,y+.1,.86,.82,.14,'#16293776');
+    if(type==='restAltar'){
+      part(.12,.12,.76,.76,0,7,stone);part(.22,.22,.56,.56,7,12,['#a3cfc0','#486b70','#71968c']);
+      surface(x+.25,y+.25,.5,.5,19,'#86e5cd');rect(px-2,py-28,4,17,'#b9ffe0');rect(px-7,py-23,14,4,'#b9ffe0');
+      ctx.save();ctx.globalAlpha=reduced?.15:.2+Math.sin(time/500)*.06;surface(x-.3,y-.3,1.6,1.6,.3,'#b9ffe0');ctx.restore();return;
+    }
     if(type==='cachePassage'){
       part(.1,.1,.2,.8,0,27,stone);part(.7,.1,.2,.8,0,27,stone);
       part(.1,.1,.8,.8,27,4,['#c3ad77','#6c5d7a','#8d7b94']);
@@ -184,8 +192,8 @@ export const moonwood=(()=>{
       rect(px-2,py-22,4,13,'#c5a0ee');rect(px-1,py-20,2,9,'#ffe9b7');
       return;
     }
-    if(type==='essenceCache'){
-      const found=depthsRun?.finds?.includes(type),unsealed=depthsRun?.cacheGuardDefeated;
+    if(type==='essenceCache'||type==='sideSeal'){
+      const found=depthsRun?.finds?.includes(type),unsealed=type==='sideSeal'?depthsRun?.sideWins?.includes('trial'):depthsRun?.cacheGuardDefeated;
       const glow=found?'#81768b':unsealed?'#ffde92':'#ab9ddc';
       if(!found){
         ctx.save();ctx.globalAlpha=reduced ? .18 : .2+Math.sin(time/450)*.06;
@@ -206,7 +214,7 @@ export const moonwood=(()=>{
       }
       return;
     }
-    if(['sluiceLever','gateSupply','shellChime','galleryCache','vaultRelief','glowFungus','vaultCrystal'].includes(type)){
+    if(['sluiceLever','gateSupply','shellChime','galleryCache','sideTreasure','vaultRelief','glowFungus','vaultCrystal'].includes(type)){
       const found=depthsRun?.finds?.includes(type);
       const color=type==='vaultCrystal'||type==='vaultRelief'?'#c5b0f4':type==='glowFungus'||type==='shellChime'?'#9be2ba':'#f8cd81';
       const flicker=reduced?0:Math.sin(time/320+x*.7+y);
@@ -220,7 +228,7 @@ export const moonwood=(()=>{
         part(.36,.4,.24,.25,6,5,['#8a7b63','#455460','#686967']);
         polygon([[px-2,py-10],[px+1,py-10],[px+(found?8:-8),py-21],[px+(found?5:-11),py-21]],'#dba765');
         rect(px+(found?4:-12),py-22,8,3,color);
-      }else if(type==='gateSupply'||type==='galleryCache'){
+      }else if(type==='gateSupply'||type==='galleryCache'||type==='sideTreasure'){
         part(.12,.22,.76,.59,0,8,['#9d7854','#56454b','#73564d']);
         part(.11,.20,.78,.63,8,found?2:4,found?['#6d6656','#474447','#595252']:['#c39462','#755343','#996c50']);
         rect(px-2,py-9,4,4,found?'#879094':color);

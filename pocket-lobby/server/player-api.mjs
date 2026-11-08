@@ -188,7 +188,7 @@ export async function handlePlayerApi(request,env){
     return json(packet(updated));
   }catch(error){
     if(error instanceof SyntaxError)return json({error:"Invalid request."},400);
-    if(/Invalid|Choose|Travel|Your hearts are already full|Awaken|Patience|already|Read your|Unknown|Defeat the Cache Guardian|Clear Shell Gallery|Make room/.test(error.message))return json({error:error.message},400);
+    if(/Invalid|Choose|Travel|Your hearts are already full|Awaken|Patience|already|Read your|Unknown|Defeat the Cache Guardian|Defeat the Treasury Guardian|Defeat the Rune Sentinel|Clear Shell Gallery|Make room/.test(error.message))return json({error:error.message},400);
     console.error("Tower player service error",error.name);
     return json({error:"Your save could not be completed. Please retry."},503);
   }

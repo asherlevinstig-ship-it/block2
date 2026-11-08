@@ -22,6 +22,9 @@ const rooms={
   depthsGate:{mist:[[8.4,2.1,33],[8.4,7.4,38]]},
   depthsGallery:{fireflies:{color:['#b5f3be','#74dabc'],count:8,area:[2,2,10,8]},lights:[[4.5,2.5,30,'#a1e8ba'],[9.5,3.5,30,'#8ee0a8']]},
   depthsCache:{dust:{color:gold,count:10,area:[3,2,10,8]},lights:[[9.5,5.5,40,'#e8c994'],[9.5,3.5,30,'#bda4ef']]},
+  depthsTreasury:{dust:{color:gold,count:10,area:[2,2,10,8]},lights:[[9.5,5.5,30,'#f0cf80']]},
+  depthsRest:{fireflies:{color:aqua,count:9,area:[3,2,9,7]},lights:[[6.5,4.5,30,'#9bf2ce']]},
+  depthsTrial:{dust:{color:violet,count:10,area:[2,2,10,8]},lights:[[9.5,5.5,35,'#c0a4f5']]},
   depthsVault:{dust:{color:violet,count:10,area:[2,2,10,8]},lights:[[9.5,2.5,36,'#b19cf1'],[8.5,7.5,32,'#bea4ff']]}
 };
 

@@ -5,7 +5,7 @@ import {awardBattleStone,awardEssenceMastery} from '../public/essences.js';
 import {moonwood} from '../public/moonwood.js';
 import {isTimberTree,timberTreeState,cutTimberTree,choppingDuration,grantBasicAxe} from '../public/woodcutting.js';
 import {huntEnemyForRoom,huntEnemy,huntRespawnAt,canUseWeapon,createHunt,advanceHunt,huntingTurn,boarRules,normalizeCombatSummary} from '../public/hunting.js';
-import {depthsStages,depthsStageIndex,clearDepthsStage,inspectDepthsFind,depthsCacheRoom,depthsEnemyAvailable,chooseDepthsPassage,canEnterDepthsCache,depthsCacheReturn,canVisitDepthsRoom,depthsSpoils} from '../public/depths.js';
+import {depthsStages,depthsStageIndex,clearDepthsStage,inspectDepthsFind,depthsCacheRoom,depthsEnemyAvailable,chooseDepthsPassage,canEnterDepthsCache,depthsCacheReturn,canVisitDepthsRoom,depthsSpoils,depthsSideForRoom,visitDepthsSide,useDepthsRest} from '../public/depths.js';
 import {recordQuest} from '../public/quests.js';
 
 const adjacent=(state,item)=>state.position&&Math.abs(state.position.x-item.x)+Math.abs(state.position.y-item.y)===1;
@@ -42,7 +42,7 @@ function result(state,event,now){
   state.hunting.encounter=event.encounter;state.health=event.health;
   if(event.outcome==='victory'){
     if(state.combatId)event.mastery=awardEssenceMastery(state.magic,[...(encounter.usedEssences??[]),event.masteryGem],enemy.masteryXp??10);
-    if(state.location!==depthsCacheRoom&&state.combatId&&state.magic?.picks.length)event.stone=awardBattleStone(state.magic,enemy.id==='depthsGuardian');
+    if(state.location!==depthsCacheRoom&&state.location!=='depthsTrial'&&state.combatId&&state.magic?.picks.length)event.stone=awardBattleStone(state.magic,enemy.id==='depthsGuardian');
     rewards.xp={};
     for(const [i,key] of ['strengthXp','agilityXp','vitalityXp'].entries()){
       const before=state.stats[key];state.stats[key]=Math.min(MAX_SKILL_XP,before+enemy.xp[i]);rewards.xp[key]=state.stats[key]-before;
@@ -67,9 +67,10 @@ function result(state,event,now){
     state.depthsRun=null;state.hunting.recoveryUntil=now+boarRules.recovery;move(state,'hub',{x:8,y:12});
   }else if(event.outcome==='escaped'){
     if(state.depthsRun){
-      const previous=depthsStages[state.depthsRun.cleared-1];
+      if(depthsSideForRoom(state.location)){move(state,'depthsGallery',{x:4,y:5});}
+      else{const previous=depthsStages[state.depthsRun.cleared-1];
       if(previous)move(state,previous.room,{x:4,y:5});
-      else{state.depthsRun=null;move(state,'ruins');}
+      else{state.depthsRun=null;move(state,'ruins');}}
     }else if(enemy.id==='beetle')move(state,'creek',{x:10,y:4});
     else move(state,'trail',{x:7,y:1});
   }
@@ -178,6 +179,8 @@ export function activityAction(state,action,body,now,random){
     }else settleActivities(state,now,random);
     return true;
   }
+  if(action==='depthsSide'){idle(state);delete state.timberCut;visitDepthsSide(state,body.id);return true;}
+  if(action==='depthsShrine'){idle(state);useDepthsRest(state);return true;}
   if(action==='depthsInspect'){
     idle(state);
     const item=moonwood.layouts[state.location]?.scenery.find(prop=>prop.type===body.id);
@@ -202,7 +205,7 @@ export function activityAction(state,action,body,now,random){
       state.depthsRun={cleared:0,routeChoice:'pending'};move(state,depthsStages[0].room,{x:4,y:5});
     }else if(action==='depthsNext'){
       const index=depthsStageIndex(state.location),next=depthsStages[index+1];
-      if(state.location===depthsCacheRoom||index<0||!next||state.depthsRun?.cleared!==index+1)throw new Error('Invalid expedition. Clear this chamber first.');
+      if(depthsSideForRoom(state.location)||state.location===depthsCacheRoom||index<0||!next||state.depthsRun?.cleared!==index+1)throw new Error('Invalid expedition. Clear this chamber first.');
       if(index===0&&state.depthsRun.routeChoice==='pending')throw new Error('Choose the safe or dangerous passage before continuing.');
       if(index===0&&state.depthsRun.routeChoice==='dangerous'&&!state.depthsRun.cacheGuardDefeated)throw new Error('Choose the dangerous passage to face its guardian, or bank your spoils.');
       move(state,next.room,{x:4,y:5});

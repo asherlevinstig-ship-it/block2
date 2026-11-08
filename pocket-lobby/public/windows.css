@@ -459,3 +459,22 @@
 .training-comparison th { color:#e8c67e; }.training-comparison td { color:#c6d5e5; }
 .training-destination { margin:10px 0; width:100%; }
 @media(max-width:560px) { .game-window.training-window { padding:14px; }.training-window .modal-head h2 { font-size:21px; }.training-steps { grid-template-columns:1fr 1fr; }.training-controls { grid-template-columns:1fr 1fr; }.training-controls label { grid-column:1/-1; }.training-coach h3 { font-size:15px; }.training-telegraph { font-size:10px; padding:5px 8px; bottom:5px; } }
+.game-window.side-room-window { width:min(900px,calc(100vw - 24px)); }
+.side-room-window .modal-head h2 { font-size:25px; }
+#sideRoomHealth { padding:12px; background:#152b40; border:1px solid #627b93; border-radius:8px; font-size:12px; color:#e6d3a9; }
+.side-room-cards { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin:16px 0; }
+.side-room-cards article { display:flex; flex-direction:column; padding:17px; border:1px solid #a48a67; border-radius:11px; background:linear-gradient(140deg,#373143,#212b40); }
+.side-room-cards article[data-kind=rest] { border-color:#73a593; background:linear-gradient(140deg,#254139,#1e2e40); }
+.side-room-cards article[data-kind=trial] { border-color:#aa8fc8; background:linear-gradient(140deg,#3b3153,#212b40); }
+.side-room-cards article>span { font:700 10px system-ui; color:#bca990; letter-spacing:.1em; }
+.side-room-cards h3 { margin:8px 0 12px; color:#f1d79f; font-size:18px; }
+.side-room-cards b { color:#f2d69e; font-size:13px; line-height:1.5; }
+.side-room-cards p { color:#c0cde0; font-size:12px; line-height:1.6; }
+.side-room-cards button { margin-top:auto; padding:11px; border-color:#a18b6b; background:#3c3c3d; color:#f5dfb2; font-size:12px; }
+.side-room-cards article[data-kind=rest] button { background:#2b4c40; }
+.side-room-cards article[data-kind=trial] button { background:#493c61; }
+.side-room-advice { color:#b7c8dd; font-size:11px; line-height:1.6; }
+#depthsSideOptions { border-color:#a48a67; color:#f2d29a; }
+#depthsShrineUse { border-color:#73a593; color:#b9eed0; }
+#depthsSideClaim { border-color:#aa8fc8; color:#ddc4ff; }
+@media(max-width:650px) { .side-room-cards { grid-template-columns:1fr; }.side-room-cards article { padding:14px; }.side-room-cards h3 { font-size:17px; } }

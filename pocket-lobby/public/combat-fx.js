@@ -299,7 +299,7 @@ export function drawCombatOverlayFx({ctx,width,height,time,now,events,encounter,
     ctx.font='bold 10px monospace';ctx.textAlign='center';
     ctx.fillText(victory?victoryTitle:warning?warningTitle:stunned?'STAGGERED!':weak?'WEAK SPOT · +25%':counter?(perfect?'PERFECT DODGE!':'COUNTER READY · +50%'):'WEAK SPOT EXPOSED',x,y+13);
     ctx.font='7px monospace';ctx.fillStyle='#e2d7c4';
-    if(victory)ctx.fillText((enemy?.elite?'Essence Cache unlocked':(enemy?.lootName??'Boar Meat')+' +1')+' · Combat XP +'+(enemy?.xp.reduce((sum,xp)=>sum+xp,0)??40),x,y+27);
+    if(victory)ctx.fillText((enemy?.id==='sealGuardian'?'Awakening Seal unlocked':enemy?.elite?'Essence Cache unlocked':enemy?.victoryLoot??(enemy?.lootName??'Boar Meat')+' +1')+' · Combat XP +'+(enemy?.xp.reduce((sum,xp)=>sum+xp,0)??40),x,y+27);
     else if(!warning&&(stunned||weak)){ctx.fillText('Weapon hits +25% · '+((encounter.staggerWeakUntil-now)/1000).toFixed(1)+'s',x,y+27);}
     else if(counter&&!warning){ctx.fillText('Next strike +50% · '+((encounter.counterUntil-now)/1000).toFixed(1)+'s',x,y+27);ctx.fillStyle='#dfbe72';ctx.fillRect(x-w/2+10,y+33,(w-20)*Math.max(0,Math.min(1,(encounter.counterUntil-now)/counterRules.duration)),2);}
     else if(warning){ctx.fillStyle='#b17e63';ctx.fillRect(x-w/2+10,y+19,(w-20)*(1-remaining/move.tell),2);}

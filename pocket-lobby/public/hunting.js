@@ -3,7 +3,7 @@ import {essenceEffects,essenceGems,essencePower} from './essences.js';
 
 export function staggerProfile(enemy){
  const boss=enemy.elite||enemy.id==='depthsGuardian';
- return {limit:boss?160:enemy.id.startsWith('depths')?140:80,stun:boss?900:1800,opening:boss?1800:2400,recovery:boss?5000:3500};
+ return {limit:boss?160:enemy.room.startsWith('depths')?140:80,stun:boss?900:1800,opening:boss?1800:2400,recovery:boss?5000:3500};
 }
 export function weaponStagger(weapon,upgrade,counter=false){
  const profile=weaponProfile(weapon,upgrade);const base=!profile?0:profile.interval>=1400?36:profile.interval>=1000?18:8;
@@ -21,6 +21,8 @@ export const huntEnemies={
   depthsBoar:{...boar,id:'depthsBoar',room:'depthsGate',name:'Gate Boar',health:100,damage:12,xp:[30,20,30],masteryXp:20},
   depthsBeetle:{...beetle,id:'depthsBeetle',room:'depthsGallery',name:'Gallery Beetle',health:150,damage:20,xp:[45,35,45],masteryXp:30},
   cacheGuardian:{...beetle,id:'cacheGuardian',room:'depthsCache',name:'Cache Guardian',elite:true,move:'sentinelStrike',health:180,firstAttack:2600,interval:4200,damage:18,shellArmor:6,exposureMs:2400,xp:[55,40,55],masteryXp:40},
+  treasuryGuardian:{...beetle,id:'treasuryGuardian',room:'depthsTreasury',name:'Treasury Guardian',victoryLoot:'60 gold + 2 shells held',health:175,damage:22,shellArmor:7,xp:[50,35,50],masteryXp:30},
+  sealGuardian:{...beetle,id:'sealGuardian',room:'depthsTrial',name:'Rune Sentinel',elite:true,move:'sentinelStrike',health:210,firstAttack:2600,interval:4000,damage:24,shellArmor:8,xp:[60,45,60],masteryXp:40},
   depthsGuardian:{...beetle,id:'depthsGuardian',room:'depthsVault',name:'Vault Guardian',health:240,damage:27,shellArmor:9,xp:[75,55,75],masteryXp:50}
 };
 const enemiesByRoom=Object.fromEntries(Object.values(huntEnemies).map(enemy=>[enemy.room,enemy]));
@@ -41,13 +43,13 @@ const enemyMoves={
 };
 export function enemyAttack(encounter,enemy=huntEnemy(encounter)){
   const move=Object.hasOwn(enemyMoves,encounter?.enemyMove)?enemyMoves[encounter.enemyMove]:null;
-  const allowed=enemy.id==='cacheGuardian'?['runicSlam','crush']:enemy.id==='depthsGuardian'?['quake','aftershock']:enemy.shellArmor?['crush']:['sweep','wildCharge'];
+  const allowed=enemy.elite?['runicSlam','crush']:enemy.id==='depthsGuardian'?['quake','aftershock']:enemy.shellArmor?['crush']:['sweep','wildCharge'];
   return allowed.includes(move?.id)?move:enemyMoves[enemy.move];
 }
 function scheduleEnemyResponse(next,enemy,move,timedDodge,now){
   delete next.enemyMove;
   let response;
-  if(enemy.id==='cacheGuardian'){
+  if(enemy.elite){
     if(move.id===enemy.move)response=enemyMoves.runicSlam;
     else next.exposedUntil=Math.max(next.exposedUntil??0,now+enemy.exposureMs);
   }else if(move.id==='quake')response=enemyMoves.aftershock;

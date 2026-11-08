@@ -751,6 +751,32 @@ async function chooseDungeonPassage(choice){
     updatePlayerStats();updateDepthsPanel();
   }catch(error){$('depthsBankError').textContent=error.message;$('depthsBankError').hidden=false;}
 }
+let visitingDungeonSide=false;
+function openDungeonSideChoices(){
+  if(unavailable()||currentRoom!=='depthsGallery'||depthsRun?.cleared!==2)return;
+  $('sideRoomHealth').textContent=health+' / 100 HP · At risk: '+formatDepthsSpoils(depthsSpoils(depthsRun));
+  for(const [id,side] of Object.entries(depthsSideRooms)){
+    const button=$('sideVisit'+id[0].toUpperCase()+id.slice(1)),done=id==='rest'?depthsRun.shrineUsed:depthsRun.sideWins?.includes(id);
+    const status=done?(id==='rest'?'Blessing used this expedition':id==='trial'&&!depthsRun.finds?.includes('sideSeal')?'Won · Stone waiting to claim':'Cleared · No repeat rewards'):side.danger;
+    $('sideStatus'+id[0].toUpperCase()+id.slice(1)).textContent=status;button.disabled=visitingDungeonSide;button.textContent=done?'Revisit room':'Enter '+side.name;
+  }
+  $('sideRoomError').textContent='';$('depthsSideDialog').showModal();
+}
+async function visitDungeonSide(id){
+  if(unavailable()||visitingDungeonSide)return;visitingDungeonSide=true;
+  try{
+    if(window.playerCloud?.gameplay){const packet=await serverGameplay('depthsSide',{id});$('depthsSideDialog').close();enterRoom(packet.state.location,packet.state.position);}
+    else{const state={location:currentRoom,depthsRun};visitDepthsSide(state,id);$('depthsSideDialog').close();enterRoom(state.location,state.position);savePlayerState();}
+  }catch(error){$('sideRoomError').textContent=error.message;note(error.message);}
+  finally{visitingDungeonSide=false;}
+}
+async function useDungeonShrine(){
+  if(unavailable())return;const before=health;
+  try{
+    if(window.playerCloud?.gameplay)await serverGameplay('depthsShrine');else{const state={location:currentRoom,depthsRun,health};useDepthsRest(state);health=state.health;savePlayerState();}
+    updatePlayerStats();updateDepthsPanel();showTransaction('Shrine blessing',[{icon:'♥',text:'Restored '+(health-before)+' HP'},{icon:'◈',text:'15 unbanked gold spent · Wallet unchanged'}]);
+  }catch(error){note(error.message);}
+}
 function visitDepthsCache(){
   if(unavailable()||!depthsRun)return;
   const entering=currentRoom!==depthsCacheRoom;
@@ -772,7 +798,7 @@ function revealEssenceCache(){
 }
 function advanceMoonwellDepths(){
   const index=depthsStageIndex(currentRoom);
-  if(unavailable()||currentRoom===depthsCacheRoom||!depthsRun||index<0||depthsRun.cleared!==index+1)return;
+  if(unavailable()||depthsSideForRoom(currentRoom)||currentRoom===depthsCacheRoom||!depthsRun||index<0||depthsRun.cleared!==index+1)return;
   if(index===0&&(depthsRun.routeChoice==='pending'||depthsRun.routeChoice==='dangerous'&&!depthsRun.cacheGuardDefeated))return;
   const next=depthsStages[index+1];
   if(next){if(window.playerCloud?.gameplay)serverTravel('depthsNext');else enterRoom(next.room);}
@@ -836,6 +862,10 @@ async function examineDepths(item){
       savePlayerState();
     }
     updateDepthsPanel();
+    if(item.type==='sideSeal'){
+      if(already){note('You have already claimed this expedition’s stone.');return;}
+      updatePlayerStats();updateEssenceHotbar();showTransaction('Challenge reward claimed',[{icon:'◆',text:'+1 '+stoneForms[depthsRun.sideStone].name+' Awakening Stone · Yours to keep'}]);return;
+    }
     if(item.type==='essenceCache'){
       if(already){note('The Essence Cache is empty. You’ve collected this run’s reward.');return;}
       updatePlayerStats();updateEssenceHotbar();
@@ -869,11 +899,19 @@ function updateDepthsPanel(){
     $('enterDepths').disabled=!weapon||health<=0;
   }
 
+  const sideId=depthsSideForRoom(currentRoom),side=sideId?depthsSideRooms[sideId]:null;
   const cacheRoom=currentRoom===depthsCacheRoom;
   const cleared=inDepths&&!depthsEnemyAvailable(depthsRun,currentRoom);
   const canVisitCache=canEnterDepthsCache(depthsRun,currentRoom);
   const choosingPassage=currentRoom==='depthsGate'&&depthsRun?.cleared===1&&depthsRun.routeChoice==='pending';
   const pendingGuardian=currentRoom==='depthsGate'&&depthsRun?.routeChoice==='dangerous'&&!depthsRun.cacheGuardDefeated;
+  $('depthsSideOptions').hidden=unavailable()||currentRoom!=='depthsGallery'||depthsRun?.cleared!==2;
+  $('depthsSideReturn').hidden=unavailable()||!side;
+  $('depthsShrineUse').hidden=unavailable()||sideId!=='rest';
+  $('depthsShrineUse').disabled=health>=100||!!depthsRun?.shrineUsed||depthsSpoils(depthsRun).gold<depthsSideRooms.rest.cost;
+  $('depthsShrineUse').textContent=depthsRun?.shrineUsed?'Blessing used this expedition':'Restore up to 30 HP · Spend 15 unbanked gold';
+  $('depthsSideClaim').hidden=unavailable()||sideId!=='trial'||!depthsRun?.sideWins?.includes('trial')||!!depthsRun?.finds?.includes('sideSeal');
+  $('depthsSideFieldReturn').hidden=!side||unavailable();
   $('depthsFork').hidden=!choosingPassage;
   $('depthsMainOptions').hidden=choosingPassage;
   $('depthsExplore').hidden=choosingPassage;
@@ -897,12 +935,12 @@ function updateDepthsPanel(){
   if(!inDepths)return;
 
   const stage=depthsStages[index];
-  const next=cacheRoom?null:depthsStages[index+1];
+  const next=cacheRoom||side?null:depthsStages[index+1];
   const spoils=depthsSpoils(depthsRun);
-  $('depthsTitle').textContent=cacheRoom?'The Sealed Alcove':stage.name;
-  $('depthsStatus').textContent=(cacheRoom?'Optional chamber':'Chamber '+(index+1)+' / '+depthsStages.length)+' · '+health+' / '+maxHealth()+' HP';
+  $('depthsTitle').textContent=side?side.name:cacheRoom?'The Sealed Alcove':stage.name;
+  $('depthsStatus').textContent=(side?'Optional side room':cacheRoom?'Optional chamber':'Chamber '+(index+1)+' / '+depthsStages.length)+' · '+health+' / '+maxHealth()+' HP';
   $('depthsSpoils').textContent=spoils.gold?formatDepthsSpoils(spoils):'No unbanked spoils yet.';
-  const preview=cacheRoom?'Return to Shell Gallery to continue the expedition.':next?'Next: '+huntEnemies[next.enemy].name+' ('+huntEnemies[next.enemy].health+' HP) · '+formatDepthsSpoils(depthsStageSpoils(next))+'.':'All three chambers cleared. Bank your spoils to leave the vault.';
+  const preview=side?'Return to Shell Gallery to choose another room, face the Vault, or bank your haul.':cacheRoom?'Return to Shell Gallery to continue the expedition.':next?'Next: '+huntEnemies[next.enemy].name+' ('+huntEnemies[next.enemy].health+' HP) · '+formatDepthsSpoils(depthsStageSpoils(next))+'.':'All three chambers cleared. Bank your spoils to leave the vault.';
   $('depthsPreview').textContent=cleared?preview:roomDetails[currentRoom].description;
   $('depthsRetreat').hidden=unavailable()||depthsRun.cleared!==0;
   $('depthsNext').hidden=!canDecide||!next||choosingPassage||pendingGuardian;
@@ -910,7 +948,7 @@ function updateDepthsPanel(){
   if(!canDecide)return;
 
   $('depthsDecisionStep').textContent='MOONWELL DEPTHS · '+depthsRun.cleared+' / '+depthsStages.length+' CLEARED';
-  $('depthsDecisionTitle').textContent=choosingPassage?'Choose your passage':cacheRoom?(depthsRun.finds?.includes('essenceCache')?'Essence Cache collected':'The seal is broken'):(next?stage.name+' cleared':'Expedition complete');
+  $('depthsDecisionTitle').textContent=side?(sideId==='rest'?'A moment to recover':sideId==='trial'?(depthsRun.finds?.includes('sideSeal')?'Challenge reward collected':'The Awakening Seal is open'):'Treasury secured'):choosingPassage?'Choose your passage':cacheRoom?(depthsRun.finds?.includes('essenceCache')?'Essence Cache collected':'The seal is broken'):(next?stage.name+' cleared':'Expedition complete');
   $('depthsBankNow').textContent=formatDepthsSpoils(spoils);
   $('depthsDecisionHealth').textContent=health+' / '+maxHealth()+' HP · Your health carries into the next fight.';
   if(!next)$('depthsDecisionHealth').textContent=health+' / '+maxHealth()+' HP remaining.';
@@ -988,7 +1026,7 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
     const masteryReceipt=(result.mastery??[]).map(award=>({icon:'◆',text:essenceGems[award.gem].name+' · +'+award.xp+' Mastery XP'}));
     if(depthsRun){
       if(authoritative)depthsRun=authoritative.depthsRun;else clearDepthsStage(depthsRun,currentRoom);
-      combatMessage=currentRoom===depthsCacheRoom?'The guardian’s seal is broken. Open the Essence Cache.':depthsRun.cleared===depthsStages.length?'Vault cleared. Bank your spoils.':'Chamber cleared. Bank your spoils or press deeper.';
+      combatMessage=depthsSideForRoom(currentRoom)?(currentRoom==='depthsTrial'?'Challenge won! Claim the Awakening Seal.':'Treasury secured. Your extra loot is unbanked.'):currentRoom===depthsCacheRoom?'The guardian’s seal is broken. Open the Essence Cache.':depthsRun.cleared===depthsStages.length?'Vault cleared. Bank your spoils.':'Chamber cleared. Bank your spoils or press deeper.';
       showTransaction(currentRoom===depthsCacheRoom?'Essence Cache unlocked':'Chamber cleared',[{icon:'✦',text:currentRoom===depthsCacheRoom?'Open the glowing cache to claim its gold and stone':'Spoils held until you bank them'},xpReceipt,...stoneReceipt,...masteryReceipt]);
     }else{
       if(!authoritative){hunting[enemy.id==='beetle'?'beetleRespawnAt':'respawnAt']=combatNow()+enemy.respawn;
@@ -1078,7 +1116,7 @@ function updateCombatPanel(){
     notice.dataset.cue=dodgeNow?'dodge':exposed?'exposed':'watch';
   }else if(enemy?.elite&&!encounter&&!chamberCleared){
     notice.hidden=false;notice.dataset.cue='watch';
-    notice.textContent='Elite guardian · Strike → Runic Slam → open shell. Reward '+essenceCacheGold+' gold + a stone.';
+    notice.textContent=enemy.id==='sealGuardian'?'Rune Sentinel · 210 HP · Win and claim 1 guaranteed Awakening Stone.':'Elite guardian · Strike → Runic Slam → open shell. Reward '+essenceCacheGold+' gold + a stone.';
   }else notice.dataset.cue='';
   if(!enemy||chamberCleared)return;
   const beetle=!!enemy.shellArmor,respawn=stage>=0?0:huntRespawnAt(hunting,enemy);
@@ -1086,7 +1124,8 @@ function updateCombatPanel(){
   $('combatChapter').textContent=enemy.elite?'ELITE · ESSENCE CACHE':stage>=0?'MOONWELL DEPTHS':beetle?'MOONWELL RUINS':'FIRST HUNT';
   const [strength,agility,vitality]=enemy.xp;
   $('combatReward').textContent=stage>=0?(magicState?.picks.length?'Combat XP and Awakening Stones are kept after a win. Bank your gold and loot.':'Combat XP is kept after a win. Gold and items are held until you bank them.'):'Victory: '+enemy.lootName+' ×1 · +'+strength+' Strength, +'+agility+' Agility, +'+vitality+' Vitality XP. Sell loot for '+enemy.sellPrice+' gold.';
-  if(enemy.elite)$('combatReward').textContent='Open the cache after victory for '+essenceCacheGold+' gold + an Awakening Stone. Your collected cache rewards are yours to keep.';
+  if(enemy.id==='sealGuardian')$('combatReward').textContent='Win, then claim 1 guaranteed Awakening Stone from the seal. Claimed stones and earned combat XP are yours to keep.';
+  else if(enemy.elite)$('combatReward').textContent='Open the cache after victory for '+essenceCacheGold+' gold + an Awakening Stone. Your collected cache rewards are yours to keep.';
   const approach=$('approachBeetle');
   approach.hidden=(!beetle&&stage<0)||!!encounter||now<respawn;
   approach.textContent='Approach '+enemy.name;
@@ -2150,6 +2189,9 @@ function updateWorldLabels(){
     const elite=huntEnemyForRoom(currentRoom);
     if(elite?.elite&&roomFurniture().some(item=>item.type===elite.prop))add('Elite Cache Guardian',...point(6.5,5.5,45),'npc',()=>use(roomFurniture().find(item=>item.type===elite.prop)));
     const passage=roomFurniture().find(item=>item.type==='cachePassage');
+    if(passage&&depthsSideForRoom(currentRoom))add('Shell Gallery ←',...point(passage.x+.5,passage.y+.5,38),'npc',()=>visitDungeonSide('return'));
+    if(currentRoom==='depthsGallery'&&depthsRun.cleared===2)add('Optional rooms',...point(4.5,2.5,35),'npc',openDungeonSideChoices,'Treasure · Rest · Challenge');
+    if(currentRoom==='depthsRest')add('Rest shrine',...point(6.5,4.5,40),'npc',useDungeonShrine,depthsRun.shrineUsed?'Blessing used':'30 HP · 15 unbanked gold');
     if(passage&&(currentRoom===depthsCacheRoom||canEnterDepthsCache(depthsRun,currentRoom)))add(currentRoom===depthsCacheRoom?(depthsCacheReturn(depthsRun)==='depthsGate'?'Flooded Gate ←':'Shell Gallery →'):'Essence Cache →',...point(passage.x+.5,passage.y+.5,38),'npc',()=>use(passage));
     for(const item of roomFurniture()){
       const find=Object.hasOwn(depthsFinds,item.type)?depthsFinds[item.type]:null;
@@ -2900,7 +2942,8 @@ function finishInteraction(){
   if(item.type==='trainingDummy'){
     openTrainingCourtyard();
   }else if(item.type==='cachePassage'){
-    visitDepthsCache();
+    if(depthsSideForRoom(currentRoom))visitDungeonSide('return');else visitDepthsCache();
+  }else if(item.type==='restAltar'){useDungeonShrine();
   }else if(Object.hasOwn(depthsFinds,item.type)){
     examineDepths(item);
   }else if(item.type==='campfire'){
@@ -3208,7 +3251,7 @@ function openMerchant(){
 function renderWorldMap(route=[]){
   const positions={home:[100,55],hub:[340,110],armory:[265,48],market:[465,48],lounge:[580,75],store:[118,133],
     outside:[340,205],trail:[340,315],logging:[107,288],clearing:[109,380],grove:[563,274],shrine:[563,354],
-    creek:[338,423],pond:[138,497],ruins:[340,549],roots:[549,493],depthsGate:[340,120],depthsGallery:[340,120],depthsCache:[340,120],depthsVault:[340,120]};
+    creek:[338,423],pond:[138,497],ruins:[340,549],roots:[549,493],depthsGate:[340,120],depthsGallery:[340,120],depthsCache:[340,120],depthsTreasury:[340,120],depthsRest:[340,120],depthsTrial:[340,120],depthsVault:[340,120]};
   const rooms=Object.keys(positions).filter(room=>roomDetails[room]&&(room===currentRoom||hudNextDoor(room)));
   let links='',nodes='';
   const linked=new Set();
@@ -4374,6 +4417,12 @@ $('depthsSafePassage').onclick=()=>chooseDungeonPassage('safe');
 $('depthsDangerPassage').onclick=()=>chooseDungeonPassage('dangerous');
 $('depthsForkBank').onclick=leaveMoonwellDepths;
 $('depthsCacheRoute').onclick=visitDepthsCache;
+$('depthsSideOptions').onclick=openDungeonSideChoices;
+$('depthsSideReturn').onclick=$('depthsSideFieldReturn').onclick=()=>visitDungeonSide('return');
+$('depthsShrineUse').onclick=useDungeonShrine;
+$('depthsSideClaim').onclick=()=>{depthsExploring=true;updateDepthsPanel();use(roomFurniture().find(item=>item.type==='sideSeal'));};
+for(const id of Object.keys(depthsSideRooms))$('sideVisit'+id[0].toUpperCase()+id.slice(1)).onclick=()=>visitDungeonSide(id);
+$('sideBank').onclick=()=>{$('depthsSideDialog').close();leaveMoonwellDepths();};
 $('depthsOpenCache').onclick=()=>{depthsExploring=true;updateDepthsPanel();use(roomFurniture().find(item=>item.type==='essenceCache'));};
 $('cacheRewardContinue').onclick=()=>$('cacheRewardDialog').close();
 $('cacheRewardAwaken').onclick=()=>{
