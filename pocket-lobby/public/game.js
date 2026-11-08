@@ -637,6 +637,7 @@ function questAction(){
   note('Quest complete! +75 gold and Warden’s Blade.');
 }
 
+function combatNow(){return window.playerCloud?.combatNow?.()??Date.now();}
 let combatMessage='',lastCombatUi=0;
 const combatArt={strikeAt:-Infinity,castAt:-Infinity,hurtAt:-Infinity,dodgeAt:-Infinity,boarAttackAt:-Infinity,boarHitAt:-Infinity,victoryAt:-Infinity,bursts:[]};
 function resetCombatArt(){
@@ -926,7 +927,7 @@ function startMonsterEncounter(enemy){
   if(combatGear.equippedWeapon&&!canUseWeapon(playerStats,combatGear.equippedWeapon)){note('Your stats do not meet this weapon’s requirements.');return;}
   if(!combatGear.equippedWeapon){note('Equip your Training Sword in Inventory before hunting.');return;}
   if(health<=0){note('Return to the Tower and rest to restore your hearts.');return;}
-  if(index<0&&Date.now()<huntRespawnAt(hunting,enemy)){note('The '+enemy.name+' will return shortly.');return;}
+  if(index<0&&combatNow()<huntRespawnAt(hunting,enemy)){note('The '+enemy.name+' will return shortly.');return;}
   stopForCombat();resetCombatArt();
   player.direction=(6-player.cx)-(5-player.cy)>=0?'right':'left';player.back=11<player.cx+player.cy;
   if(window.playerCloud?.gameplay){
@@ -936,7 +937,7 @@ function startMonsterEncounter(enemy){
       updateCombatPanel();note('Press Space just before the '+enemyAttack(hunting.encounter,enemy).name+' lands. F flees.');
     }).catch(error=>note(error.message));return;
   }
-  hunting.encounter=createHunt(Date.now(),enemy.health,enemy.id);
+  hunting.encounter=createHunt(combatNow(),enemy.health,enemy.id);
   setPlayerCombat(true);
   combatMessage='You engage the '+enemy.name+'. Dodge '+enemyAttack(hunting.encounter,enemy).name+' with Space, or Flee.';
   updateCombatPanel();savePlayerState();
@@ -945,9 +946,9 @@ function startMonsterEncounter(enemy){
 function combatAction(action){
   if(!player.inCombat||!['flee','dodge'].includes(action))return;
   if(window.playerCloud?.gameplay){sendServerCombat(action);return;}
-  const result=huntingTurn(hunting.encounter,health,playerStats,action,Date.now(),Math.random,combatGear.equippedWeapon,combatGear.activeSwordUpgrade,combatGear.stonebackVestEquipped,combatGear.moonwellCharmEquipped,combatGear.weaponEnchantments);
+  const result=huntingTurn(hunting.encounter,health,playerStats,action,combatNow(),Math.random,combatGear.equippedWeapon,combatGear.activeSwordUpgrade,combatGear.stonebackVestEquipped,combatGear.moonwellCharmEquipped,combatGear.weaponEnchantments);
   if(!result&&action==='dodge'){
-    combatMessage=combatStamina(hunting.encounter,playerStats,Date.now(),combatGear.moonwellCharmEquipped)<combatDodgeCost(combatGear.stonebackVestEquipped)?'Not enough stamina. Let it recover.':'Your dodge is recovering.';
+    combatMessage=combatStamina(hunting.encounter,playerStats,combatNow(),combatGear.moonwellCharmEquipped)<combatDodgeCost(combatGear.stonebackVestEquipped)?'Not enough stamina. Let it recover.':'Your dodge is recovering.';
     updateCombatPanel();return;
   }
   applyCombatResult(result);
@@ -983,7 +984,7 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
       combatMessage=currentRoom===depthsCacheRoom?'The guardian’s seal is broken. Open the Essence Cache.':depthsRun.cleared===depthsStages.length?'Vault cleared. Bank your spoils.':'Chamber cleared. Bank your spoils or press deeper.';
       showTransaction(currentRoom===depthsCacheRoom?'Essence Cache unlocked':'Chamber cleared',[{icon:'✦',text:currentRoom===depthsCacheRoom?'Open the glowing cache to claim its gold and stone':'Spoils held until you bank them'},xpReceipt,...stoneReceipt,...masteryReceipt]);
     }else{
-      if(!authoritative){hunting[enemy.id==='beetle'?'beetleRespawnAt':'respawnAt']=Date.now()+enemy.respawn;
+      if(!authoritative){hunting[enemy.id==='beetle'?'beetleRespawnAt':'respawnAt']=combatNow()+enemy.respawn;
       huntingLoot[enemy.loot]=(huntingLoot[enemy.loot]??0)+1;}
       if(enemy.id==='beetle'&&!depthsDiscovered){
         depthsDiscovered=true;
@@ -1018,7 +1019,7 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
   }else if(result.outcome==='defeat'){
     const lostSpoils=!!depthsRun?.cleared;
     depthsRun=null;
-    hunting.recoveryUntil=authoritative?authoritative.hunting.recoveryUntil:Date.now()+boarRules.recovery;
+    hunting.recoveryUntil=authoritative?authoritative.hunting.recoveryUntil:combatNow()+boarRules.recovery;
     combatMessage=lostSpoils?'The wardens bring you back. The unbanked spoils from this run were lost.':'The Tower wardens bring you home. Resting restores all five hearts.';
     enterRoom('hub');
   }
@@ -1029,12 +1030,12 @@ function restAtTower(){
   if(window.playerCloud?.gameplay){
     serverGameplay('rest').then(()=>{combatMessage='Resting at the Tower. Your hearts will be restored shortly.';updateCombatPanel();savePlayerState();}).catch(error=>note(error.message));return;
   }
-  stopForCombat();hunting.recoveryUntil=Date.now()+boarRules.recovery;
+  stopForCombat();hunting.recoveryUntil=combatNow()+boarRules.recovery;
   combatMessage='Resting at the Tower. Your hearts will be restored shortly.';
   updateCombatPanel();savePlayerState();
 }
 function updateCombatPanel(){
-  const now=Date.now(),encounter=hunting.encounter;
+  const now=combatNow(),encounter=hunting.encounter;
   const status=enemyStatusEffects(encounter,now).map(effect=>effect.name+' '+Math.ceil(effect.remaining/1000)+'s · '+effect.detail).join('  /  ');
   $('enemyEffects').hidden=!status;
   if($('enemyEffects').textContent!==status)$('enemyEffects').textContent=status;
@@ -1118,15 +1119,15 @@ function updateCombatMoment(time){
   if(window.playerCloud?.gameplay){
     const tactic=nextCombatTactic({hunting,health,stats:playerStats,combatGear,magic:magicState,characterRules});
     const due=hunting.encounter?Math.min(hunting.encounter.nextPlayerAt,hunting.encounter.nextBoarAt,hunting.encounter.burn?.nextAt??Infinity,tactic?.at??Infinity):Infinity;
-    if(player.inCombat&&Date.now()>=due&&time>=nextCombatPoll)sendServerCombat();
-    if(hunting.recoveryUntil&&Date.now()>=hunting.recoveryUntil&&!serverActionBusy&&!activityBusy){
+    if(player.inCombat&&combatNow()>=due&&time>=nextCombatPoll)sendServerCombat();
+    if(hunting.recoveryUntil&&combatNow()>=hunting.recoveryUntil&&!serverActionBusy&&!activityBusy){
       serverGameplay('recover').then(()=>{updatePlayerStats();updateCombatPanel();savePlayerState();}).catch(error=>note(error.message));
     }
     if(time-lastCombatUi>100){lastCombatUi=time;updateCombatPanel();}
     return;
   }
-  if(player.inCombat)applyCombatResult(advanceHunt(hunting.encounter,health,playerStats,Date.now(),Math.random,combatGear.equippedWeapon,combatGear.activeSwordUpgrade,combatGear.stonebackVestEquipped,combatGear.moonwellCharmEquipped,combatGear.weaponEnchantments));
-  if(hunting.recoveryUntil&&Date.now()>=hunting.recoveryUntil){
+  if(player.inCombat)applyCombatResult(advanceHunt(hunting.encounter,health,playerStats,combatNow(),Math.random,combatGear.equippedWeapon,combatGear.activeSwordUpgrade,combatGear.stonebackVestEquipped,combatGear.moonwellCharmEquipped,combatGear.weaponEnchantments));
+  if(hunting.recoveryUntil&&combatNow()>=hunting.recoveryUntil){
     hunting.recoveryUntil=0;health=100;
     combatMessage='All five hearts restored. You are ready to explore again.';
     updatePlayerStats();savePlayerState();note(combatMessage);
@@ -1179,7 +1180,7 @@ function roomFurniture(){
   if(moonwood.has(currentRoom)){
     const enemy=huntEnemyForRoom(currentRoom);
     const index=depthsStageIndex(currentRoom);
-    const available=index>=0?depthsEnemyAvailable(depthsRun,currentRoom):!enemy||Date.now()>=huntRespawnAt(hunting,enemy);
+    const available=index>=0?depthsEnemyAvailable(depthsRun,currentRoom):!enemy||combatNow()>=huntRespawnAt(hunting,enemy);
     return moonwood.layouts[currentRoom].scenery.filter(item=>{
       if(item.type===enemy?.prop)return available;
       if(item.type==='galleryCache')return !!depthsRun?.finds?.includes('shellChime');
@@ -1750,7 +1751,7 @@ function object(item,highlight=false,time=0) {
     if(isTimberTree(item)){
       drawTimberTree(item,time);
     }else if(type==='wildboar'||type==='stonebackBeetle'){
-      const pose=boarCombatPose({time,now:Date.now(),encounter:player.inCombat?hunting.encounter:null,events:combatArt,reduced:reducedMotion.matches,defeated:!!item.defeated});
+      const pose=boarCombatPose({time,now:combatNow(),encounter:player.inCombat?hunting.encounter:null,events:combatArt,reduced:reducedMotion.matches,defeated:!!item.defeated});
       const [bx,by]=point(x+.5,y+.5),[px,py]=point(player.x+.5,player.y+.5);
       const shift=(type==='wildboar'?pose.charge:0)-pose.recoil;
       ctx.save();ctx.globalAlpha*=pose.alpha;
@@ -2175,7 +2176,7 @@ function draw(time){
   drawEnvironmentFx({room:currentRoom,ctx,point,time,reduced:reducedMotion.matches,inCombat:player.inCombat,
     sluiceOpen:depthsRun?.finds?.includes('sluiceLever')});
   drawTradingGuide(time);
-  if(enemy)drawCombatGroundFx({ctx,point,time,now:Date.now(),encounter:hunting.encounter,player,reduced:reducedMotion.matches});
+  if(enemy)drawCombatGroundFx({ctx,point,time,now:combatNow(),encounter:hunting.encounter,player,reduced:reducedMotion.matches});
   if(target)surface(target.x+.1,target.y+.1,.8,.8,1,currentRoom==='home'?'#b7e9e220':'#fff3bc30',currentRoom==='home'?'#98cec9':'#ffcf8f');
   if(hover){
     const [w,d]=editing&&selection?dimensions(selection):[1,1];
@@ -2211,7 +2212,7 @@ function draw(time){
     }
     const cycle=step?(player.stride%2)+Math.min(1,(time-step.started)/STEP_MS):0;
     const wave=player.waveStarted===null?null:(time-player.waveStarted)/WAVE_MS;
-    const pose=playerCombatPose({time,now:Date.now(),encounter:player.inCombat?hunting.encounter:null,events:combatArt,reduced:reducedMotion.matches});
+    const pose=playerCombatPose({time,now:combatNow(),encounter:player.inCombat?hunting.encounter:null,events:combatArt,reduced:reducedMotion.matches});
     const swingPhase=woodSession?((time-woodSession.started)%700)/700:0;
     const spritePose=woodSession?{...pose,chop:swingPhase}:pose;
     const [enemyX,enemyY]=point(6.5,5.5);
@@ -2256,9 +2257,9 @@ function draw(time){
     hitboxes.push({item,shape});
   }
   if(!drawn)drawPlayer();
-  if(enemy)drawCombatWorldFx({ctx,point,time,now:Date.now(),events:combatArt,player,reduced:reducedMotion.matches,encounter:hunting.encounter});
+  if(enemy)drawCombatWorldFx({ctx,point,time,now:combatNow(),events:combatArt,player,reduced:reducedMotion.matches,encounter:hunting.encounter});
   drawWoodEffects(time);
-  if(enemy)drawCombatOverlayFx({ctx,width,height,time,now:Date.now(),events:combatArt,encounter:hunting.encounter,health,reduced:reducedMotion.matches,enemy});
+  if(enemy)drawCombatOverlayFx({ctx,width,height,time,now:combatNow(),events:combatArt,encounter:hunting.encounter,health,reduced:reducedMotion.matches,enemy});
   updateWorldLabels();
   drawHudMiniMap();
   updatePeerLabels(time);
@@ -4051,7 +4052,7 @@ function currentActivityPrompt(){
   if(currentRoom==='creek'&&!adventure.bridge)return {label:'CREEK CROSSING',title:'Continue to the ruins',text:'Use the stepping stones to cross Glass Creek.',action:'adventureLandmark'};
   if(currentRoom==='trail'&&!adventure.lantern)return {label:'EXPLORATION',title:'Take the waystone lantern',text:'Its light reveals hidden paths through Moonwood.',action:'adventureLandmark'};
   if(currentRoom==='ruins'&&!magicState?.picks.length)return {label:'MAGIC GEMS',title:'Choose your first Gems',text:'Visit the Moonwell to bond three Gems and get a free Awakening Stone.',action:'adventureLandmark'};
-  if(currentRoom==='clearing'&&Date.now()>=hunting.respawnAt){
+  if(currentRoom==='clearing'&&combatNow()>=hunting.respawnAt){
     if(!combatGear.equippedWeapon)return {label:'PREPARE TO HUNT',title:'Equip a weapon',text:'Open Inventory and equip a sword before approaching the boar.',action:'equipHunting'};
     return {label:'HUNTING',title:'Wild Boar ahead',text:'Approach when you’re ready. Dodge its charge and flee if your hearts run low.',action:'adventureLandmark'};
   }
@@ -4117,7 +4118,7 @@ function updateAdventurePanel(){
   $('adventureProgress').textContent=adventure.discovered.length+' of '+Object.keys(moonwood.areas).filter(room=>depthsStageIndex(room)<0).length+' places discovered';
   const landmark=$('adventureLandmark');
   const bite=!!fishingSession&&fishingMoments.phase(fishingSession,performance.now())==='bite';
-  const action={clearing:!player.inCombat&&Date.now()>=hunting.respawnAt?'Approach boar':'',trail:!adventure.lantern?'Take lantern':'',shrine:'Examine altar',creek:'Cross to the Ruins',ruins:'Visit the Moonwell',pond:bite?'Reel! +5 Patience XP':fishingSession?'Fishing…':'Cast a line'}[currentRoom];
+  const action={clearing:!player.inCombat&&combatNow()>=hunting.respawnAt?'Approach boar':'',trail:!adventure.lantern?'Take lantern':'',shrine:'Examine altar',creek:'Cross to the Ruins',ruins:'Visit the Moonwell',pond:bite?'Reel! +5 Patience XP':fishingSession?'Fishing…':'Cast a line'}[currentRoom];
   landmark.hidden=!action||player.inCombat;
   landmark.disabled=(!!fishingSession&&!bite)||(currentRoom==='pond'&&fishingGear.bait<1);
   landmark.classList.toggle('bite-ready',bite);

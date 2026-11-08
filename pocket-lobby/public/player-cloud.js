@@ -1,5 +1,6 @@
 'use strict';
 (async()=>{
+  const {createCombatClock}=await import('./combat-clock.js');const combatClock=createCombatClock();
   const {AWAY_GRACE_MS}=await import('./character-rules.js');
   const status=document.getElementById('saveStatus');
   const gate=document.getElementById('cloudGate');
@@ -18,13 +19,14 @@
   };
   const setStatus=text=>{status.textContent=text;};
   async function request(path,body){
+    const sentAt=performance.now();
     const response=await fetch('/api/player/'+path,{
       method:body?'POST':'GET',credentials:'same-origin',cache:'no-store',
       headers:body?{'Content-Type':'application/json'}:{},
       body:body?JSON.stringify({...body,...(packet?.characterKey?{characterKey:packet.characterKey}:{})}):undefined,keepalive:!!body,
       signal:AbortSignal.timeout(15000)
     });
-    const data=await response.json();
+    const data=await response.json();combatClock.sample(data.serverTime,sentAt);
     if(!response.ok){
       const error=new Error(data.error??'Your save is temporarily unavailable.');
       error.status=response.status;error.data=data;throw error;
@@ -322,7 +324,7 @@
       const multiplayer=await import('./multiplayer.js');
       Object.assign(window,{towerCharacterArt},rules,hunting,loungeUI,art,fx,environment,quests,historyRules,shopUI,clothing,progression,woodRules,crafting,cooking,characterRules,commissions,essences,depths,jobs,shared,multiplayer);
       window.towerInitialState=packet.state;
-      window.playerCloud={enqueue,flush,attach,gameplay:async(name,body={})=>{
+      window.playerCloud={enqueue,flush,attach,combatNow:()=>combatClock.now(),gameplay:async(name,body={})=>{
         if(gameplayBusy)throw new Error('Wait for your current action to finish.');
         await flush();
         gameplayBusy=true;
