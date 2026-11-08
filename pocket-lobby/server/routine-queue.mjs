@@ -1,3 +1,5 @@
+import {roomBoxes,validRoomTile} from '../public/shared-world.js';
+import {cookingQueueRecipes,mealRecipes,homeStove,cookingPlan,prepareMeal} from '../public/cooking.js';
 import {homeRestDuration} from '../public/bed-rest.js';
 import {autoStoreVault} from './vault.mjs';
 import {autoBankGold} from './banking.mjs';
@@ -15,7 +17,7 @@ export function startRoutineQueue(state,rules,startedAt,metadata){
   state.plan={kind:'queue',...metadata,startedAt,endAt:metadata.routineCapAt,queue:normalizeRoutineQueue(rules.queue),cycle:0,stepIndex:0,cursorAt:startedAt,nextAt:null,stepCount:0,entries:[],catches:{},timber:0,patienceXp:0,woodXp:0,goldEarned:0,goldSpent:0,baitBought:0};
 }
 function finish(state,plan,reason,endedAt){
-  state.report={...plan,reason,endedAt,xp:plan.patienceXp+plan.woodXp+Object.values(plan.hunts?.xp??{}).reduce((a,b)=>a+b,0)};delete state.plan;
+  state.report={...plan,reason,endedAt,xp:plan.patienceXp+plan.woodXp+(plan.cookingXp??0)+Object.values(plan.hunts?.xp??{}).reduce((a,b)=>a+b,0)};delete state.plan;
   state.location='home';state.position={x:5,y:7};return true;
 }
 function nextStep(plan,at,note){
@@ -76,7 +78,14 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
       if(p.cursorAt>until||p.cursorAt===until&&!p.adaptive)break;
       p.currentLabel=queueActions[type];
       let interval=QUEUE_ACTION_MS;
-      if(type==='fishing'){
+      if(Object.hasOwn(cookingQueueRecipes,type)){
+        const id=cookingQueueRecipes[type],stored=(state.meals[id]??0)+(state.bank?.vault?.items?.['meal:'+id]??0);
+        if(stored>=step.amount){nextStep(p,p.cursorAt,'Meal stock target reached');changed=true;continue;}
+        const stove=homeStove(state);if(!stove)return finish(state,p,'stove-required',p.cursorAt);
+        const result=cookingPlan(state,id,{automatic:true});if(result.reason)return finish(state,p,result.reason,p.cursorAt);
+        state.location='home';const adjacent=[[stove.x,stove.y+1],[stove.x+1,stove.y],[stove.x-1,stove.y],[stove.x,stove.y-1]].find(([x,y])=>validRoomTile('home',x,y,roomBoxes('home',state.homeFurniture)));
+        if(!adjacent)return finish(state,p,'stove-unreachable',p.cursorAt);state.position={x:adjacent[0],y:adjacent[1]};
+      }else if(type==='fishing'){
         const rod=fishingCatalog.rods[state.fishingGear.equippedRod];
         if(!rod||!state.fishingGear.ownedRods.includes(state.fishingGear.equippedRod)||skillLevel(state.stats.patienceXp)<rod.patience||!state.adventure.discovered.includes('pond')&&!state.history.fishCaught)return finish(state,p,'requirements',p.cursorAt);
         if(state.fishingGear.bait<=p.keepBait){nextStep(p,p.cursorAt,'Bait reserve reached');changed=true;continue;}
@@ -98,7 +107,11 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
     }
     if(p.nextAt>until)break;
     const at=p.nextAt;
-    if(Object.hasOwn(queueHuntEnemies,type)){
+    if(Object.hasOwn(cookingQueueRecipes,type)){
+      const id=cookingQueueRecipes[type],ready=cookingPlan(state,id,{automatic:true});if(ready.reason)return finish(state,p,ready.reason,at);
+      const result=prepareMeal(state,id,{automatic:true});p.cookingXp=(p.cookingXp??0)+result.xp;p.cookedMeals??={};p.cookedMeals[id]=(p.cookedMeals[id]??0)+1;p.stepCount++;autoStoreVault(state,p,at);
+      if((state.meals[id]??0)+(state.bank?.vault?.items?.['meal:'+id]??0)>=step.amount){nextStep(p,at,'Cooked '+p.stepCount+' '+mealRecipes[id].name+' · Stock target reached');changed=true;continue;}
+    }else if(Object.hasOwn(queueHuntEnemies,type)){
       if(state.health<(p.queue.minHealth??60)){nextStep(p,at,'Starting health is too low');changed=true;continue;}
       if(at+30000>p.endAt)return finish(state,p,'away-cap',at);
       if(!state.combatGear.equippedWeapon||!canUseWeapon(state.stats,state.combatGear.equippedWeapon))return finish(state,p,'weapon-required',at);
@@ -137,7 +150,7 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
       nextStep(p,at,'Bought '+p.stepCount+' bait for '+cost+' gold');changed=true;continue;
     }else if(type==='rest'){state.health=100;nextStep(p,at,'Rested at home');changed=true;continue;}
     p.cursorAt=at;p.nextAt=null;changed=true;
-    if(p.stepCount>=step.amount)nextStep(p,at,'Gathered '+p.stepCount);
+    if(!Object.hasOwn(cookingQueueRecipes,type)&&p.stepCount>=step.amount)nextStep(p,at,'Gathered '+p.stepCount);
   }
   if(now>=p.endAt)return finish(state,p,'away-cap',p.endAt);
   if(stop){if(p.stepCount)p.entries.push({cycle:p.cycle+1,type:p.queue.steps[p.stepIndex].type,count:p.stepCount,at:now,note:'Stopped on return'});return finish(state,p,'returned',now);}

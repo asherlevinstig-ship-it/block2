@@ -14,7 +14,7 @@ import {bankDepthsSpoils,moonwellShard} from '../public/depths.js';
 import {activityAction,settleActivities} from './activities.mjs';
 import {essenceAction} from './essences.mjs';
 import {gamblingAction} from './gambling.mjs';
-import {mealRecipes,cookingIngredient} from '../public/cooking.js';
+import {mealRecipes,prepareMeal,homeStove} from '../public/cooking.js';
 import {moonwood} from '../public/moonwood.js';
 
 const prices={boar:30,rabbit:12,deer:24,stonebackShell:45,timber:4,[moonwellShard.id]:moonwellShard.price};
@@ -64,16 +64,10 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
     if(action==='cook'){
       const campfire=moonwood.layouts.trail.scenery.find(item=>item.type==='campfire');
       const position=state.position;
-      if(state.location!=='trail'||!position||Math.abs(position.x-campfire.x)+Math.abs(position.y-campfire.y)!==1){
-        throw new Error('Travel beside the campfire on Lantern Trail.');
-      }
-      const ingredient=cookingIngredient(body.id,state.fishStock,state.huntingLoot);
-      if(!ingredient||state.woodcutting.timber<1)throw new Error('Invalid ingredients. Bring 1 '+recipe.ingredient+' and 1 timber.');
-      if(count>=1000000)throw new Error('Invalid meal inventory. Make room for another meal.');
-      const stock=body.id==='boarStew'?state.huntingLoot:state.fishStock;
-      stock[ingredient.id]--;
-      state.woodcutting.timber--;
-      meals[body.id]=count+1;
+      const stove=homeStove(state),atStove=state.location==='home'&&stove&&position&&Math.abs(position.x-stove.x)+Math.abs(position.y-stove.y)===1;
+      const atCamp=state.location==='trail'&&position&&Math.abs(position.x-campfire.x)+Math.abs(position.y-campfire.y)===1;
+      if(!atStove&&!atCamp)throw new Error('Travel beside the campfire on Lantern Trail or your placed home cooking stove.');
+      prepareMeal(state,body.id);
     }else{
       if(count<1)throw new Error('Choose a meal you have in Inventory.');
       if(state.health>=100)throw new Error('Invalid meal use. Your hearts are already full.');

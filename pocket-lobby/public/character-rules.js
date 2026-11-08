@@ -4,7 +4,7 @@ import {enemyAttack,combatStamina,queueHuntEnemies,huntEnemy,huntingAttributes,c
 import {essencePower,bondedEssences,essenceEffects} from './essences.js';
 
 export const AWAY_GRACE_MS=3*60000,AWAY_CAP_MS=8*3600000;
-export const queueActions={fishing:'Catch fish',woodcutting:'Gather timber',sellFish:'Sell fish',sellTimber:'Sell timber',buyBait:'Buy bait',huntBoars:'Hunt boars',huntBeetles:'Hunt Stoneback Beetles',sellShells:'Sell Shell Fragments',sellMeat:'Sell Boar Meat',rest:'Rest at home'};
+export const queueActions={cookFish:'Stock Grilled Silverfin',cookStew:'Stock Boar Stew',cookHeartyStew:'Stock Hearty Stew',cookFeast:'Stock Silverfin Feast',fishing:'Catch fish',woodcutting:'Gather timber',sellFish:'Sell fish',sellTimber:'Sell timber',buyBait:'Buy bait',huntBoars:'Hunt boars',huntBeetles:'Hunt Stoneback Beetles',sellShells:'Sell Shell Fragments',sellMeat:'Sell Boar Meat',rest:'Rest at home'};
 export function normalizeRoutineQueue(input){
   if(input===undefined)return undefined;
   if(!input||typeof input!=='object'||Array.isArray(input))throw new Error('Invalid activity queue.');
@@ -20,7 +20,7 @@ export function normalizeRoutineQueue(input){
 }
 export function describeRoutineQueue(queue){
   const q=normalizeRoutineQueue(queue);
-  return q.steps.map(step=>queueActions[step.type]+(step.type==='rest'?'':['sellFish','sellTimber','sellMeat','sellShells'].includes(step.type)?' (keep '+step.amount+')':step.type==='buyBait'?' (stock to '+step.amount+')':' ×'+step.amount)).join(' → ')+' · '+q.repeats+' cycle'+(q.repeats===1?'':'s')+' · spend at most '+q.budget+' gold, keep '+q.reserveGold+' gold.'+(q.steps.some(step=>Object.hasOwn(queueHuntEnemies,step.type))?' Start fights only at '+q.minHealth+' HP or above.':'');
+  return q.steps.map(step=>queueActions[step.type]+(step.type==='rest'?'':['sellFish','sellTimber','sellMeat','sellShells'].includes(step.type)?' (keep '+step.amount+')':(step.type==='buyBait'||step.type.startsWith('cook'))?' (stock to '+step.amount+')':' ×'+step.amount)).join(' → ')+' · '+q.repeats+' cycle'+(q.repeats===1?'':'s')+' · spend at most '+q.budget+' gold, keep '+q.reserveGold+' gold.'+(q.steps.some(step=>Object.hasOwn(queueHuntEnemies,step.type))?' Start fights only at '+q.minHealth+' HP or above.':'');
 }
 export function normalizeCharacterRules(input={}){
   if(!input||typeof input!=='object'||Array.isArray(input))throw new Error('Invalid character rules.');

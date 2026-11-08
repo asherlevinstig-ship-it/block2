@@ -16,7 +16,7 @@ const shades = {
   cream:['#ffe0a5','#bd8d71','#e8b182'], green:['#81b486','#365e58','#518366'],
   clay:['#d5896b','#8c4c59','#ab5f5b'], black:['#3d344c','#211f33','#302a43']
 };
-const types = {safe:'Home safe',woodStool:'Wooden Stool',woodTable:'Small Table',bookcase:'Bookshelf',bed:'Single bed',comfortBed:'Comfort bed',royalBed:'Royal bed', moonbloom:'Moonbloom', sofa:'Velvet sofa', stool:'Bar stool', plant:'Potted palm', table:'Coffee table', lamp:'Floor lamp', chair:'Club chair'};
+const types = {stove:'Cooking stove',safe:'Home safe',woodStool:'Wooden Stool',woodTable:'Small Table',bookcase:'Bookshelf',bed:'Single bed',comfortBed:'Comfort bed',royalBed:'Royal bed', moonbloom:'Moonbloom', sofa:'Velvet sofa', stool:'Bar stool', plant:'Potted palm', table:'Coffee table', lamp:'Floor lamp', chair:'Club chair'};
 const hairColors = ['#704832','#383848','#a15a39','#d6ac60','#7b638a'];
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const STEP_MS = 141, WAVE_MS = 1100;
@@ -2086,6 +2086,14 @@ function object(item,highlight=false,time=0) {
     part(1.68,.68,.09,.08,26,1,'cream');
     part(2.4,.27,.32,.42,23,7,'trim');
     part(2.39,.25,.34,.41,30,1,'blue');
+  } else if(type==='stove'){
+    part(.09,.09,.82,.82,0,3,'black');part(.06,.06,.88,.88,3,21,['#758a91','#35444f','#4b6067']);
+    part(.12,.91,.76,.035,6,14,'black');part(.19,.95,.62,.025,8,10,['#e0a568','#854e45','#b77751']);
+    part(.23,.978,.54,.02,10,6,'gold');
+    part(.04,.04,.92,.92,24,3,'black');
+    for(const u of [.24,.63])for(const v of [.24,.63]){part(u-.1,v-.1,.23,.23,27,.5,'gold');part(u-.06,v-.06,.15,.15,27.6,.4,'black');}
+    part(.27,.27,.38,.38,28,6,'trim');part(.24,.25,.45,.07,33,1,'gold');part(.30,.31,.30,.30,34,.5,'clay');
+    const [sx,sy]=point(x+.48,y+.48,38);ctx.save();ctx.globalAlpha=.38;ctx.fillStyle='#d8dfcc';const drift=reducedMotion.matches?0:(time%1800)/1800;ctx.fillRect(sx-2,sy-drift*10,2,3);ctx.fillRect(sx+3,sy-4-drift*13,2,3);ctx.restore();
   } else if(type==='safe'){
     for(const i of [.17,.72])for(const j of [.17,.72])part(i,j,.10,.10,0,3,'black');
     part(.08,.08,.84,.84,3,22,['#71849b','#29374e','#425570']);
@@ -2294,6 +2302,7 @@ function updateWorldLabels(){
     if(door.to===guidedDoor?.to)sign.dataset.guided='true';
   }
   if(currentRoom==='furnishings')add('Browse furniture',...point(4.5,1.5,39),'npc',()=>use(furnishingsFurniture.find(item=>item.type==='reception')),'Tower Furnishings');
+  if(currentRoom==='home'&&!homeBedRest&&!editing){const stove=homeFurniture.find(i=>i.type==='stove');if(stove)add('Cook',...point(stove.x+.5,stove.y+.5,36),'npc',()=>use(stove),'Home kitchen');}
   if(currentRoom==='home'&&!homeBedRest&&!editing){const item=bestHomeBed({homeFurniture,ownedFurniture});if(item)add('Rest',...point(item.x+.5,item.y+.5,29),'npc',()=>use(item),bedProfiles[item.type].rate+' HP / sec');}
   if(currentRoom==='home')for(const item of homeFurniture.filter(item=>item.type==='safe'))add('Home safe',...point(item.x+.5,item.y+.5,31),'npc',()=>use(item),'Gold & item storage');
   if(currentRoom==='home')add('YOUR HOME',...point(5,0,44),'sign',null,avatar.name);
@@ -2441,7 +2450,7 @@ function draw(time){
     object(item,treeHover||editing&&(selection?.id===item.id||hoverItem?.id===item.id)&&!fixed(item),time);
     ctx.globalAlpha=1;
     if(item.defeated||item===ghost||(fixed(item)&&!isGamingTable(item)))continue;
-    const [w,d]=dimensions(item), h=moonwood.heights[item.type]??{armoryCounter:32,weaponRack:37,anvil:19,brazier:25,workbench:23,woodStool:13,woodTable:18,bookcase:37,woodcutter:43,warden:43,enchanter:43,tradeCounter:32,harvestCrates:16,tackleCounter:32,rodRack:36,baitCrates:16,blackjack:19,roulette:22,reception:32,safe:25,bed:24,comfortBed:24,royalBed:28,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39,bench:22,streetlamp:55,fountain:37}[item.type];
+    const [w,d]=dimensions(item), h=moonwood.heights[item.type]??{armoryCounter:32,weaponRack:37,anvil:19,brazier:25,workbench:23,woodStool:13,woodTable:18,bookcase:37,woodcutter:43,warden:43,enchanter:43,tradeCounter:32,harvestCrates:16,tackleCounter:32,rodRack:36,baitCrates:16,blackjack:19,roulette:22,reception:32,stove:28,safe:25,bed:24,comfortBed:24,royalBed:28,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39,bench:22,streetlamp:55,fountain:37}[item.type];
     const height=isTimberTree(item)&&treeState(item).regrowsAt?6:h;
     const shape=[point(item.x,item.y+d),point(item.x+w,item.y+d),point(item.x+w,item.y),point(item.x+w,item.y,height),point(item.x,item.y,height),point(item.x,item.y+d,height)];
     hitboxes.push({item,shape});
@@ -3088,6 +3097,8 @@ function finishInteraction(){
   }else if(item.type==='restAltar'){useDungeonShrine();
   }else if(Object.hasOwn(depthsFinds,item.type)){
     examineDepths(item);
+  }else if(item.type==='stove'&&atHome()){
+    openCampfire();
   }else if(item.type==='campfire'){
     openCampfire();
   }else if(isGamingTable(item)&&currentRoom==='lounge'){
@@ -3243,7 +3254,7 @@ function windowItemArt(kind){
 function mealArt(id){
   const fish='<path d="M8 35 3 23l13 5q15-16 37-2l6 6-6 6Q32 50 16 36L3 41z" fill="#83b2c5" stroke="#d5e6dc" stroke-width="2"/><path d="m26 25 4 14m6-16 4 15" stroke="#416d7d" stroke-width="3"/><circle cx="49" cy="31" r="2" fill="#243443"/>';
   const stew='<path d="M9 29h46l-5 17q-18 13-36 0z" fill="#b57557" stroke="#edb787" stroke-width="2"/><ellipse cx="32" cy="29" rx="23" ry="8" fill="#835142" stroke="#edb787" stroke-width="2"/><path d="m21 29 5-3 4 4-5 2zm13-2 5-2 5 4-6 2z" fill="#e4ae62"/><path d="M25 17q-5-4 0-9m12 10q-5-4 0-10" fill="none" stroke="#e4dcc2" stroke-width="2"/>';
-  return '<svg viewBox="0 0 64 64" aria-hidden="true">'+(id==='boarStew'?stew:fish)+'</svg>';
+  return '<svg viewBox="0 0 64 64" aria-hidden="true">'+(id==='boarStew'||id==='heartyStew'?stew:fish)+'</svg>';
 }
 function openCampfire(){
   if(unavailable())return;
@@ -3253,36 +3264,28 @@ function openCampfire(){
   if(!dialog.open)dialog.showModal();
 }
 function renderCampfire(){
-  const cards=$('campfireRecipes');
-  cards.replaceChildren();
+  const state={stats:playerStats,fishStock,huntingLoot,woodcutting,meals},progress=skillProgress(playerStats.cookingXp??0);
+  $('campfireTitle').textContent=atHome()?'Your home kitchen':'Campfire cooking';$('cookingPlace').textContent=atHome()?'HOME · COOKING STOVE':'LANTERN TRAIL';
+  $('cookingSkill').textContent='Cooking '+progress.level;$('cookingXp').textContent=progress.progress+' / '+progress.target+' XP';$('cookingProgress').max=progress.target;$('cookingProgress').value=progress.progress;
+  $('cookingNext').textContent=progress.level<2?'Cooking 2 unlocks Hearty Stew · 60 HP':progress.level<4?'Cooking 4 unlocks Silverfin Feast · 80 HP':'All recipes unlocked · Keep preparing for your next adventure.';
+  const cards=$('campfireRecipes');cards.replaceChildren();
   for(const [id,recipe] of Object.entries(mealRecipes)){
-    const ingredient=cookingIngredient(id,fishStock,huntingLoot);
-    const card=document.createElement('article');
-    card.className='campfire-recipe';
-    const art=document.createElement('div');
-    art.className='campfire-meal-art';art.innerHTML=mealArt(id);
-    const content=document.createElement('div');
-    const title=document.createElement('h3');title.textContent=recipe.name;
-    const cost=document.createElement('p');
-    cost.textContent='1 '+(ingredient?.name??recipe.ingredient)+' + 1 timber';
-    const supply=document.createElement('small');
-    supply.textContent=!ingredient?'Bring '+recipe.ingredient+' to cook this.':woodcutting.timber<1?'Bring timber for the fire.':(meals[id]??0)+' in Inventory';
-    content.append(title,cost,supply);
-    const button=document.createElement('button');
-    button.type='button';button.textContent='Cook · '+recipe.healing+' HP';
-    button.setAttribute('aria-label','Cook '+recipe.name+' to restore up to '+recipe.healing+' HP');
-    button.disabled=!ingredient||woodcutting.timber<1||!window.playerCloud?.gameplay;
-    button.onclick=()=>cookMeal(id,button);
-    card.append(art,content,button);
-    cards.append(card);
+    const plan=cookingPlan(state,id),locked=progress.level<recipe.level,card=document.createElement('article');card.className='campfire-recipe';card.dataset.recipe=id;
+    const art=document.createElement('div');art.className='campfire-meal-art';art.innerHTML=mealArt(id);
+    const content=document.createElement('div'),title=document.createElement('h3'),cost=document.createElement('p'),supply=document.createElement('small');
+    title.textContent=recipe.name;cost.textContent=recipe.amount+' '+recipe.ingredient+' + '+recipe.timber+' timber';
+    supply.textContent=locked?'Unlock at Cooking '+recipe.level:plan.reason?plan.message:(meals[id]??0)+' in bag · +'+recipe.xp+' Cooking XP';content.append(title,cost,supply);
+    const button=document.createElement('button');button.type='button';button.textContent=locked?'Cooking '+recipe.level:'Cook · '+recipe.healing+' HP';button.setAttribute('aria-label','Cook '+recipe.name+' to restore up to '+recipe.healing+' HP');button.disabled=!!plan.reason||!window.playerCloud?.gameplay;button.onclick=()=>cookMeal(id,button);
+    card.append(art,content,button);cards.append(card);
   }
 }
 async function cookMeal(id,button){
   if(unavailable())return;
   button.disabled=true;
   try{
-    await serverGameplay('cook',{id});
-    $('campfireStatus').textContent=mealRecipes[id].name+' added to Inventory.';
+    const level=skillLevel(playerStats.cookingXp??0);await serverGameplay('cook',{id});
+    const after=skillLevel(playerStats.cookingXp??0);$('campfireStatus').textContent=mealRecipes[id].name+' added to Inventory.'+(after>level?' Cooking '+after+' reached!':'');
+    showTransaction(after>level?'Cooking '+after+'!':'Meal prepared',[{icon:'♨',text:'+1 '+mealRecipes[id].name},{icon:'✦',text:'+'+mealRecipes[id].xp+' Cooking XP'}]);
   }catch(error){$('campfireStatus').textContent=error.message;}
   finally{renderCampfire();}
 }
@@ -4703,7 +4706,7 @@ function renderRuleQueue(){
     number.textContent=index+1;number.className='queue-step-number';
     for(const [id,label] of Object.entries(queueActions)){const option=document.createElement('option');option.value=id;option.textContent=label;if(id==='huntBeetles'&&!beetleHuntUnlocked({...currentGoalState(),history,depthsDiscovered})){option.disabled=true;option.textContent+=' · Win a manual fight first';}type.append(option);}
     type.value=step.type;type.setAttribute('aria-label','Step '+(index+1)+' activity');
-    const keep=['sellFish','sellTimber','sellMeat','sellShells'].includes(step.type);field.textContent=keep?'Keep':step.type==='buyBait'?'Stock to':Object.hasOwn(queueHuntEnemies,step.type)?'Max fights':'Gather';
+    const keep=['sellFish','sellTimber','sellMeat','sellShells'].includes(step.type);field.textContent=keep?'Keep':(step.type==='buyBait'||step.type.startsWith('cook'))?'Stock to':Object.hasOwn(queueHuntEnemies,step.type)?'Max fights':'Gather';
     amount.type='number';amount.min=keep?'0':'1';amount.max=Object.hasOwn(queueHuntEnemies,step.type)?'20':'1000';amount.value=step.amount;amount.disabled=step.type==='rest';amount.setAttribute('aria-label','Step '+(index+1)+' '+field.textContent.toLowerCase()+' quantity');field.hidden=step.type==='rest';field.append(amount);
     amount.oninput=()=>{step.amount=Number(amount.value);updateCharacterRulesPreview();};
     type.onchange=()=>{step.type=type.value;if(Object.hasOwn(queueHuntEnemies,step.type))$('rulesHuntingDetails').open=true;step.amount=step.type==='rest'?0:Math.max(['sellFish','sellTimber','sellMeat','sellShells'].includes(step.type)?0:1,step.amount);if(Object.hasOwn(queueHuntEnemies,step.type))step.amount=Math.min(20,step.amount);renderRuleQueue();updateCharacterRulesPreview();};
@@ -4768,7 +4771,7 @@ function openCharacterRules(){
   for(const item of [...(state.activityLog??[])].reverse()){
     const row=document.createElement('li'),title=document.createElement('b'),detail=document.createElement('p');
     title.textContent=item.kind==='gambling'?'Auto gambling':item.kind==='queue'?'Activity queue':item.kind==='rest'?'Rest at home':item.kind==='fishing'?'Fishing':'Woodcutting';
-    detail.textContent=(item.kind==='rest'?'':item.count+' '+(item.kind==='gambling'?'rounds':item.kind==='queue'?'items gathered':item.kind==='fishing'?'fish':'timber')+' · +'+item.xp+' XP · ')+({'gamble-loss-limit':'Total-loss limit reached','gamble-profit-target':'Net profit target reached','gamble-round-limit':'Round limit reached','beetle-trial-required':'Win a Stoneback Beetle fight yourself first','goal-reached':'Upgrade goal reached','queue-complete':'All queue cycles complete','spending-limit':'Queue spending limit reached','gold-reserve':'Gold reserve protected','wallet-full':'Wallet is full','bait-reserve':'Bait reserve protected','target-reached':'Timber target reached','away-cap':'Eight-hour cap reached',returned:'Returned to game',combat:'Skipped during combat / recovery',requirements:item.summary,rest:'Rested at home'}[item.reason]??item.reason);
+    detail.textContent=(item.cookedMeals?'Cooked '+Object.entries(item.cookedMeals).map(([id,n])=>n+' × '+mealRecipes[id].name).join(', ')+' · ':'')+(item.kind==='rest'?'':item.count+' '+(item.kind==='gambling'?'rounds':item.kind==='queue'?'items gathered':item.kind==='fishing'?'fish':'timber')+' · +'+item.xp+' XP · ')+({'gamble-loss-limit':'Total-loss limit reached','gamble-profit-target':'Net profit target reached','gamble-round-limit':'Round limit reached','beetle-trial-required':'Win a Stoneback Beetle fight yourself first','goal-reached':'Upgrade goal reached','queue-complete':'All queue cycles complete','spending-limit':'Queue spending limit reached','gold-reserve':'Gold reserve protected','wallet-full':'Wallet is full','bait-reserve':'Bait reserve protected','target-reached':'Timber target reached','away-cap':'Eight-hour cap reached',returned:'Returned to game',combat:'Skipped during combat / recovery',requirements:item.summary,rest:'Rested at home'}[item.reason]??item.reason);
     if(item.storedItems)detail.textContent+=' · '+Object.values(item.storedItems).reduce((a,b)=>a+b,0)+' items stored in vault';
     if(item.bankedGold)detail.textContent+=' · Saved to bank '+item.bankedGold+' gold';
     if(item.gambling)detail.textContent+=' · Net '+(item.gambling.net>=0?'+':'')+item.gambling.net+' gold · Total losses '+item.gambling.totalLost+' gold';

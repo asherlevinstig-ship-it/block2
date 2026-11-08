@@ -13,6 +13,7 @@ export const furnitureCatalog={
  lamp:{name:'Floor lamp',category:'decor',price:65,size:[1,1],description:'A warm pool of light for your home, even when Moonwood turns dark.'},
  plant:{name:'Potted palm',category:'decor',price:35,size:[1,1],description:'Bring a little greenery indoors. No watering required.'},
  bookcase:{name:'Bookshelf',category:'storage',price:95,size:[2,1],description:'A tall shelf for stories and keepsakes. Decorative only; also craftable with timber.'},
+ stove:{name:'Cooking stove',category:'storage',price:200,size:[1,1],description:'Cook fish and hunted meat into healing meals at home. Uses timber as fuel. Unlock stronger recipes with Cooking XP; Auto can stock meals while you’re away.'},
  safe:{name:'Home safe',category:'storage',price:HOME_SAFE_PRICE,size:[1,1],limit:1,description:'Protect gold, supplies and spare gear. Place it at home and click to open. Auto can save into it while you’re away.'}
 };
 export function purchaseFurniture(state,id,quantity=1){

@@ -1,14 +1,37 @@
 import {fishProducts} from './fishing.js';
+import {skillLevel,MAX_SKILL_XP} from './skill-curve.js';
 
 export const mealRecipes={
-  grilledSilverfin:{name:'Grilled Silverfin',healing:20,ingredient:'Silverfin',description:'A silverfin cooked over the embers.'},
-  boarStew:{name:'Boar Stew',healing:40,ingredient:'Boar Meat',description:'A hearty bowl for the road ahead.'}
+  grilledSilverfin:{name:'Grilled Silverfin',healing:20,ingredient:'Silverfin',amount:1,timber:1,level:1,xp:10,description:'A silverfin cooked over the embers.'},
+  boarStew:{name:'Boar Stew',healing:40,ingredient:'Boar Meat',amount:1,timber:1,level:1,xp:10,description:'A hearty bowl for the road ahead.'},
+  heartyStew:{name:'Hearty Stew',healing:60,ingredient:'Boar Meat',amount:2,timber:2,level:2,xp:15,description:'A rich stew for a longer expedition.'},
+  silverfinFeast:{name:'Silverfin Feast',healing:80,ingredient:'Silverfin',amount:3,timber:2,level:4,xp:20,description:'A generous fish supper for a battle-worn adventurer.'}
 };
+export const cookingQueueRecipes={cookFish:'grilledSilverfin',cookStew:'boarStew',cookHeartyStew:'heartyStew',cookFeast:'silverfinFeast'};
+export const homeStove=state=>(state.ownedFurniture?.stove??0)>0?(state.homeFurniture??[]).find(item=>item.type==='stove')??null:null;
 const silverfinGrades=['silverfin','silverfin_fine','silverfin_rare'];
 
 export function cookingIngredient(id,fishStock,huntingLoot){
-  if(id==='boarStew')return huntingLoot.boar>0?{id:'boar',name:'Boar Meat'}:null;
-  if(id!=='grilledSilverfin')return null;
+  if(id==='boarStew'||id==='heartyStew')return huntingLoot.boar>0?{id:'boar',name:'Boar Meat'}:null;
+  if(id!=='grilledSilverfin'&&id!=='silverfinFeast')return null;
   const fish=silverfinGrades.find(grade=>fishStock[grade]>0);
   return fish?{id:fish,name:fishProducts[fish].name}:null;
+}
+export function cookingPlan(state,id,{automatic=false}={}){
+ if(!Object.hasOwn(mealRecipes,id))return {reason:'recipe',message:'Choose a known recipe.'};
+ const recipe=mealRecipes[id];if(skillLevel(state.stats?.cookingXp??0)<recipe.level)return {reason:'cooking-level',message:'Choose a recipe unlocked at your Cooking level. This needs Cooking '+recipe.level+'.'};
+ const keep=automatic?state.bank?.vault?.rules??{}:{};
+ if((state.woodcutting?.timber??0)-(keep.timber??0)<recipe.timber)return {reason:'cooking-supplies',message:'Invalid ingredients. Bring '+recipe.timber+' spare timber and '+recipe.amount+' '+recipe.ingredient+'.'};
+ const meat=id==='boarStew'||id==='heartyStew',stock=meat?state.huntingLoot:state.fishStock,ingredients=[];let remaining=recipe.amount;
+ for(const key of meat?['boar']:silverfinGrades){const amount=Math.min(remaining,Math.max(0,(stock?.[key]??0)-(keep[(meat?'loot:':'fish:')+key]??0)));if(amount){ingredients.push({id:key,amount,stock:meat?'huntingLoot':'fishStock'});remaining-=amount;}if(!remaining)break;}
+ if(remaining)return {reason:'cooking-supplies',message:'Invalid ingredients. Bring '+recipe.amount+' spare '+recipe.ingredient+' and '+recipe.timber+' timber. Auto keeps saved item reserves.'};
+ if((state.meals?.[id]??0)>=1000000)return {reason:'inventory-full',message:'Invalid meal inventory. Make room for another meal.'};
+ return {recipe,ingredients};
+}
+export function prepareMeal(state,id,options){
+ const plan=cookingPlan(state,id,options);if(plan.reason)throw new Error(plan.message);
+ for(const ingredient of plan.ingredients)state[ingredient.stock][ingredient.id]-=ingredient.amount;
+ state.woodcutting.timber-=plan.recipe.timber;state.meals??={};state.meals[id]=(state.meals[id]??0)+1;
+ const before=state.stats.cookingXp??0;state.stats.cookingXp=Math.min(MAX_SKILL_XP,before+plan.recipe.xp);
+ return {xp:state.stats.cookingXp-before,recipe:plan.recipe};
 }

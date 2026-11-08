@@ -49,16 +49,16 @@ test('concurrent cooking and eating spend once, and saves cannot forge meals or 
     return response.status;
   }
   const send=(path,body)=>call(path,{...body,revision:packet.revision,operation:crypto.randomUUID()});
-  await call('session',{legacy:{location:'trail',position:{x:3,y:5},health:90,huntingLoot:{boar:1},woodcutting:{timber:1},meals:{boarStew:50}}});
-  assert.deepEqual(packet.state.meals,{});
+  await call('session',{legacy:{location:'trail',position:{x:3,y:5},health:90,stats:{cookingXp:999},huntingLoot:{boar:1},woodcutting:{timber:1},meals:{boarStew:50}}});
+  assert.deepEqual(packet.state.meals,{});assert.equal(packet.state.stats.cookingXp,undefined);
   for(const action of ['cook','eat']){
     const results=await Promise.all([send('gameplay/'+action,{id:'boarStew'}),send('gameplay/'+action,{id:'boarStew'})]);
     assert.deepEqual(results.sort(),[200,409]);
     await call('state');
     if(action==='cook'){
-      assert.deepEqual(packet.state.meals,{boarStew:1});
-      await send('save',{state:{...packet.state,meals:{boarStew:500},health:1}});
-      assert.deepEqual(packet.state.meals,{boarStew:1});
+      assert.deepEqual(packet.state.meals,{boarStew:1});assert.equal(packet.state.stats.cookingXp,10);
+      await send('save',{state:{...packet.state,stats:{...packet.state.stats,cookingXp:999},meals:{boarStew:500},health:1}});
+      assert.deepEqual(packet.state.meals,{boarStew:1});assert.equal(packet.state.stats.cookingXp,10);
       assert.equal(packet.state.health,90);
     }
   }
