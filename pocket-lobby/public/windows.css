@@ -510,3 +510,5 @@
 
 .gold-policy{padding:18px;margin:16px 0;border:1px solid #aa915f;border-radius:12px;background:linear-gradient(145deg,#30413055,#13243a);}.gold-policy h3{color:#f4d28b;margin:6px 0;}.gold-policy p,.gold-policy small{color:#bdccdc;line-height:1.7;}.gold-policy input{width:100%;}.gold-policy small{display:block;margin-top:12px;}
 .auto-controlled #upgradeGuide,.auto-controlled #tradeGuide{visibility:hidden;}
+
+.auto-panel .auto-gamble-result{padding:8px 10px;border:1px solid #657794;border-radius:7px;font-weight:700;background:#0c1b30;}.auto-gamble-result[data-outcome="win"]{color:#b8f2b9;border-color:#76b387;}.auto-gamble-result[data-outcome="lose"]{color:#ffb9b2;border-color:#b47878;}.auto-gamble-result[data-outcome="push"]{color:#e8d5ac;}.gambling-policy select{width:100%;min-height:40px;}

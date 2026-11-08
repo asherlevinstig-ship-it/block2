@@ -1,3 +1,4 @@
+import {settleAutoGambling} from './auto-gambling.mjs';
 import {normalizeDungeonLoot} from '../public/dungeon-loot.js';
 import {normalizeUpgradeReceipt} from '../public/upgrade-goals.js';
 import {settleRoutineQueue} from './routine-queue.mjs';
@@ -133,6 +134,7 @@ function finishPlan(state,reason,endedAt){
 function settleWorkPlan(state,now,{stop=false,random=Math.random}={}){
   const plan=state.plan;
   if(!plan)return false;
+  if(plan.kind==='gambling')return settleAutoGambling(state,now,{stop,random});
   if(plan.kind==='queue')return settleRoutineQueue(state,now,{stop,random});
   if(plan.kind==='rest'){
     if(now>=plan.endAt||stop){

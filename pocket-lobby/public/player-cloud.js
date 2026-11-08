@@ -150,6 +150,7 @@
     document.getElementById('autoStart').title='Start your saved rules now. Auto continues while you inspect the game or go offline.';
     document.getElementById('autoStart').disabled=controlBusy||!!state.plan||!!state.report;
     document.getElementById('autoPlay').disabled=controlBusy||!!state.plan&&state.plan.source!=='rules'||!!state.plan?.returnRequested;
+    const result=document.getElementById('autoGambleResult');result.hidden=!info.gambleResult;result.textContent=info.gambleResult??'';result.dataset.outcome=info.outcome??'';
     if(!info.visible)return;
     document.getElementById('autoModeLabel').textContent=info.mode;
     document.getElementById('autoCurrent').textContent=info.current;
@@ -177,6 +178,17 @@
     }catch(error){document.getElementById('autoControlError').textContent=error.message;}
     finally{controlBusy=false;renderAutoPanel(packet.state);schedulePresence(packet.state.plan?.source==='rules'?150:20000);}
   }
+  function showGamblingReport(state,plan,running){
+    const info=autoStatus(state);document.getElementById('offlineTitle').textContent=running?'Auto table session':'Your table session ended';
+    document.getElementById('offlineDescription').textContent=plan.ruleSummary;
+    const list=document.getElementById('offlineCatches');list.replaceChildren();
+    for(const result of plan.recent){const row=document.createElement('li');row.textContent=(result.outcome==='win'?'Won':result.outcome==='lose'?'Lost':'Push')+' · Bet '+result.bet+' gold · Net '+(result.net>0?'+':'')+result.net+' gold';list.append(row);}
+    document.getElementById('offlineTotals').textContent=info.earned;
+    document.getElementById('offlineProgress').value=info.progress;
+    document.getElementById('offlineDuration').textContent=plan.rounds+' / '+plan.policy.maxRounds+' rounds · One every 30 seconds';
+    document.getElementById('offlineValue').textContent=info.decision;
+    document.getElementById('offlineReason').textContent=info.reason||'Fixed bets only. Take control to stop. Winnings never reset the loss allowance.';
+  }
   function showQueueReport(state,plan,running){
     const caught=Object.values(plan.catches).reduce((a,b)=>a+b,0),total=plan.queue.steps.length*plan.queue.repeats;
     document.getElementById('offlineTitle').textContent=running?(plan.adaptive?'Earning gold safely':'Following your activity queue'):plan.reason==='goal-reached'?'Upgrade goal reached!':plan.reason==='queue-complete'?'Queue complete':'Your queue has stopped';
@@ -202,7 +214,8 @@
     if(!plan)return;
     dialog.dataset.queue=String(plan.kind==='queue');
     const running=!!state.plan,wood=plan.kind==='woodcutting',rest=plan.kind==='rest';
-    if(plan.kind==='queue')showQueueReport(state,plan,running);
+    if(plan.kind==='gambling')showGamblingReport(state,plan,running);
+    else if(plan.kind==='queue')showQueueReport(state,plan,running);
     else{
     document.getElementById('offlineTitle').textContent=rest?(running?'Resting at home':'Your character rested.'):running?(wood?'Woodcutting at Timber Hollow':'Fishing at Silverfin Pond'):'Welcome back.';
     document.getElementById('offlineDescription').textContent=plan.source==='rules'?(running?'Following your saved rules. '+plan.ruleSummary:plan.ruleSummary):running

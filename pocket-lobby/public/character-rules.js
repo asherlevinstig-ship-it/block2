@@ -26,7 +26,10 @@ export function normalizeCharacterRules(input={}){
   if(!input||typeof input!=='object'||Array.isArray(input))throw new Error('Invalid character rules.');
   const {enabled=false,activity='rest',keepBait=5,timberTarget=100}=input;
   if(typeof enabled!=='boolean'||!['rest','fishing','woodcutting'].includes(activity)||!Number.isInteger(keepBait)||keepBait<0||keepBait>1000||!Number.isInteger(timberTarget)||timberTarget<1||timberTarget>1000000)throw new Error('Invalid character rules. Choose 0–1,000 bait to keep and a timber target from 1 to 1,000,000.');
-  const strategy=input.strategy??'routine';if(!['routine','earnGold'].includes(strategy))throw new Error('Choose a valid Auto goal.');
+  const strategy=input.strategy??'routine';if(!['routine','earnGold','gambling'].includes(strategy))throw new Error('Choose a valid Auto goal.');
+  const g=input.gambling??{};if(!g||typeof g!=='object'||Array.isArray(g))throw new Error('Choose valid automatic gambling limits.');
+  const gambling={game:g.game??'roulette',color:g.color??'red',bet:g.bet??5,lossLimit:g.lossLimit??25,reserveGold:g.reserveGold??100,profitTarget:g.profitTarget??25,maxRounds:g.maxRounds??20};
+  if(!['roulette','blackjack'].includes(gambling.game)||!['red','black'].includes(gambling.color)||![5,10,25].includes(gambling.bet)||!Number.isSafeInteger(gambling.lossLimit)||gambling.lossLimit<gambling.bet||gambling.lossLimit>100000||!Number.isSafeInteger(gambling.reserveGold)||gambling.reserveGold<0||gambling.reserveGold>100000000||!Number.isSafeInteger(gambling.profitTarget)||gambling.profitTarget<1||gambling.profitTarget>100000||!Number.isInteger(gambling.maxRounds)||gambling.maxRounds<1||gambling.maxRounds>1000)throw new Error('Choose a fixed bet, a loss limit covering at least one bet, a gold reserve, a positive profit target and 1–1,000 rounds.');
   const policy=input.goldPolicy??{};if(!policy||typeof policy!=='object'||Array.isArray(policy))throw new Error('Invalid gold goal limits.');
   const goldPolicy={budget:policy.budget??0,reserveGold:policy.reserveGold??100,keepFish:policy.keepFish??0,keepTimber:policy.keepTimber??10,keepMeat:policy.keepMeat??0,keepShells:policy.keepShells??0,minHealth:policy.minHealth??80};
   for(const [key,value] of Object.entries(goldPolicy))if(!Number.isSafeInteger(value)||value<0||value>(key==='budget'?100000:key==='reserveGold'?100000000: key==='minHealth'?100:1000000)||key==='minHealth'&&value<40)throw new Error('Choose valid gold goal reserves and at least 40 starting HP.');
@@ -35,12 +38,13 @@ export function normalizeCharacterRules(input={}){
   const {enabled:combatEnabled=false,q=true,e=true,fleeBelow=20,style='balanced',dodge=false}=combat;
   if(!Object.hasOwn(combatStyles,style)||typeof dodge!=='boolean'||typeof combatEnabled!=='boolean'||typeof q!=='boolean'||typeof e!=='boolean'||!Number.isInteger(fleeBelow)||fleeBelow<0||fleeBelow>80)throw new Error('Invalid combat tactics. Choose a flee threshold from 0 to 80 HP.');
   const queue=normalizeRoutineQueue(input.queue),goal=normalizeUpgradeGoal(input.goal);
-  if(strategy!=='earnGold'&&queue?.steps.some(step=>Object.hasOwn(queueHuntEnemies,step.type))&&fleeBelow>=queue.minHealth)throw new Error('The hunting start-health limit must be above the flee threshold.');
-  return {enabled,activity,keepBait,timberTarget,strategy,goldPolicy,...(queue?{queue}:{}),...(goal?{goal}:{}),combat:{enabled:combatEnabled,q,e,fleeBelow,style,dodge}};
+  if(strategy==='routine'&&queue?.steps.some(step=>Object.hasOwn(queueHuntEnemies,step.type))&&fleeBelow>=queue.minHealth)throw new Error('The hunting start-health limit must be above the flee threshold.');
+  return {enabled,activity,keepBait,timberTarget,strategy,goldPolicy,gambling,...(queue?{queue}:{}),...(goal?{goal}:{}),combat:{enabled:combatEnabled,q,e,fleeBelow,style,dodge}};
 }
 export function describeCharacterRules(input){
   const r=normalizeCharacterRules(input);
   if(!r.enabled)return 'Automatic away actions are off. Your character stays where you leave them.';
+  if(r.strategy==='gambling')return 'Auto '+r.gambling.game+' · Fixed '+r.gambling.bet+' gold bet · Stop before total losses exceed '+r.gambling.lossLimit+' gold, keep '+r.gambling.reserveGold+' gold, stop at +'+r.gambling.profitTarget+' net gold or '+r.gambling.maxRounds+' rounds. Winnings do not reset the loss limit.';
   if(r.strategy==='earnGold')return 'Earn gold safely: choose work from your gear and health, sell surplus, keep your item reserves, spend at most '+r.goldPolicy.budget+' gold and protect '+r.goldPolicy.reserveGold+' gold.';
   if(r.queue?.enabled)return 'While I’m away: '+describeRoutineQueue(r.queue);
   if(r.activity==='rest')return 'While I’m away, return home and rest.';

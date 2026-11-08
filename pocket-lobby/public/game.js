@@ -4642,17 +4642,17 @@ function renderRuleQueue(){
   });
   $('rulesQueueAdd').disabled=ruleQueueDraft.length>=8;
 }
-function draftCharacterRules(){return normalizeCharacterRules({enabled:$('rulesEnabled').checked,activity:$('rulesActivity').value,strategy:$('rulesStrategy').value,goldPolicy:{budget:Number($('goldBudget').value),reserveGold:Number($('goldReserve').value),keepFish:Number($('goldKeepFish').value),keepTimber:Number($('goldKeepTimber').value),keepMeat:Number($('goldKeepMeat').value),keepShells:Number($('goldKeepShells').value),minHealth:Number($('goldMinHealth').value)},keepBait:Number($('rulesKeepBait').value),timberTarget:Number($('rulesTimberTarget').value),queue:{enabled:$('rulesUseQueue').checked,steps:ruleQueueDraft.map(step=>({...step})),repeats:Number($('rulesQueueRepeats').value),budget:Number($('rulesQueueBudget').value),reserveGold:Number($('rulesQueueReserve').value),minHealth:Number($('rulesQueueHealth').value)},goal:{target:$('rulesGoalTarget').value||null,autoBuy:$('rulesGoalAutoBuy').checked},combat:{enabled:$('rulesCombatEnabled').checked,q:$('rulesAutoQ').checked,e:$('rulesAutoE').checked,fleeBelow:Number($('rulesCombatFlee').value),style:$('rulesCombatStyle').value,dodge:$('rulesAutoDodge').checked}});}
+function draftCharacterRules(){return normalizeCharacterRules({enabled:$('rulesEnabled').checked,activity:$('rulesActivity').value,strategy:$('rulesStrategy').value,gambling:{game:$('gambleAutoGame').value,color:$('gambleAutoColor').value,bet:Number($('gambleAutoBet').value),lossLimit:Number($('gambleAutoLoss').value),reserveGold:Number($('gambleAutoReserve').value),profitTarget:Number($('gambleAutoProfit').value),maxRounds:Number($('gambleAutoRounds').value)},goldPolicy:{budget:Number($('goldBudget').value),reserveGold:Number($('goldReserve').value),keepFish:Number($('goldKeepFish').value),keepTimber:Number($('goldKeepTimber').value),keepMeat:Number($('goldKeepMeat').value),keepShells:Number($('goldKeepShells').value),minHealth:Number($('goldMinHealth').value)},keepBait:Number($('rulesKeepBait').value),timberTarget:Number($('rulesTimberTarget').value),queue:{enabled:$('rulesUseQueue').checked,steps:ruleQueueDraft.map(step=>({...step})),repeats:Number($('rulesQueueRepeats').value),budget:Number($('rulesQueueBudget').value),reserveGold:Number($('rulesQueueReserve').value),minHealth:Number($('rulesQueueHealth').value)},goal:{target:$('rulesGoalTarget').value||null,autoBuy:$('rulesGoalAutoBuy').checked},combat:{enabled:$('rulesCombatEnabled').checked,q:$('rulesAutoQ').checked,e:$('rulesAutoE').checked,fleeBelow:Number($('rulesCombatFlee').value),style:$('rulesCombatStyle').value,dodge:$('rulesAutoDodge').checked}});}
 function updateCharacterRulesPreview(){
   const activity=$('rulesActivity').value;
   for(const name of ['rest','fishing','woodcutting'])$('routine'+name[0].toUpperCase()+name.slice(1)).setAttribute('aria-pressed',String(activity===name));
-  const adaptive=$('rulesStrategy').value==='earnGold',queued=$('rulesUseQueue').checked;
-  $('rulesGoldPolicy').hidden=!adaptive;
-  $('rulesExactQueue').hidden=adaptive;
-  $('rulesQueuePanel').hidden=!queued;$('rulesSingleActivities').hidden=queued||adaptive;
-  $('rulesBaitField').hidden=!adaptive&&activity!=='fishing'&&!(queued&&ruleQueueDraft.some(step=>step.type==='fishing'));$('rulesTimberField').hidden=!adaptive&&activity!=='woodcutting'&&!(queued&&ruleQueueDraft.some(step=>step.type==='woodcutting'));
+  const adaptive=$('rulesStrategy').value==='earnGold',gambling=$('rulesStrategy').value==='gambling',queued=$('rulesUseQueue').checked;
+  $('rulesGoldPolicy').hidden=!adaptive;$('rulesGamblingPolicy').hidden=!gambling;$('gambleAutoColorField').hidden=$('gambleAutoGame').value!=='roulette';
+  $('rulesExactQueue').hidden=adaptive||gambling;
+  $('rulesQueuePanel').hidden=!queued;$('rulesSingleActivities').hidden=queued||adaptive||gambling;
+  $('rulesBaitField').hidden=gambling||!adaptive&&activity!=='fishing'&&!(queued&&ruleQueueDraft.some(step=>step.type==='fishing'));$('rulesTimberField').hidden=gambling||!adaptive&&activity!=='woodcutting'&&!(queued&&ruleQueueDraft.some(step=>step.type==='woodcutting'));
   try{
-    const rules=draftCharacterRules();renderHuntingPreview();if(rules.strategy!=='earnGold'&&rules.queue?.enabled&&rules.queue.steps.some(step=>step.type==='huntBeetles')&&!beetleHuntUnlocked({...currentGoalState(),history,depthsDiscovered}))throw new Error('Win a manual Stoneback Beetle fight in the Ruins before scheduling idle hunts.');renderUpgradeGoalProgress(rules.goal);$('rulesPreview').textContent=describeCharacterRules(rules);
+    const rules=draftCharacterRules();renderHuntingPreview();if(rules.strategy==='routine'&&rules.queue?.enabled&&rules.queue.steps.some(step=>step.type==='huntBeetles')&&!beetleHuntUnlocked({...currentGoalState(),history,depthsDiscovered}))throw new Error('Win a manual Stoneback Beetle fight in the Ruins before scheduling idle hunts.');renderUpgradeGoalProgress(rules.goal);$('rulesPreview').textContent=describeCharacterRules(rules);
     $('rulesCombatEnabled').disabled=savingRules;
     $('rulesCombatFlee').disabled=savingRules||!rules.combat.enabled&&!ruleQueueDraft.some(step=>Object.hasOwn(queueHuntEnemies,step.type));
     $('rulesStyleDescription').textContent=combatStyles[rules.combat.style].description;
@@ -4674,6 +4674,7 @@ function updateCharacterRulesPreview(){
     }
     if(rules.queue?.enabled)detail='Choose Auto to start now, or enable away rules to start after three minutes idle. It stops when you return, a limit is reached, or all cycles finish. Unsold supplies stay in Inventory. Hunting uses your equipped weapon and flee threshold. Returning during a fight finishes that fight before stopping.';
     if(adaptive)detail='Auto starts now or after three minutes idle when enabled. It sells only surplus fish, timber, Boar Meat and Shell Fragments; buys bait only within your limits; and reassesses after each batch or fight. If gear or health makes hunting unsafe, it gathers or rests instead.';
+    if(gambling)detail='Auto starts your table session now; enabling away actions also starts it after three minutes idle. The session ends at the first loss, reserve, profit, round or eight-hour limit. It never switches to Earn gold safely or raises the bet.';
     $('rulesRequirements').textContent=depthsRun?'Away routines pause while you’re in Moonwell Depths. '+detail:detail;
     $('rulesSave').disabled=savingRules||!window.playerCloud||routineControlled();if(routineControlled())$('rulesStatus').textContent='Take control before changing saved rules. You can inspect them while Auto runs.';
   }catch(error){$('rulesPreview').textContent=error.message;$('rulesSave').disabled=true;}
@@ -4682,6 +4683,7 @@ function openCharacterRules(){
   if(player.inCombat){note('Finish combat before changing your character rules.');return;}
   window.towerPauseForAccount();
   const state=window.playerCloud?.initial??savedPlayerState??{},rules=normalizeCharacterRules(characterRules);
+  for(const [id,key] of [['gambleAutoGame','game'],['gambleAutoColor','color'],['gambleAutoBet','bet'],['gambleAutoLoss','lossLimit'],['gambleAutoReserve','reserveGold'],['gambleAutoProfit','profitTarget'],['gambleAutoRounds','maxRounds']])$(id).value=rules.gambling[key];
   $('rulesStrategy').value=rules.strategy;for(const [id,key] of [['goldBudget','budget'],['goldReserve','reserveGold'],['goldKeepFish','keepFish'],['goldKeepTimber','keepTimber'],['goldKeepMeat','keepMeat'],['goldKeepShells','keepShells'],['goldMinHealth','minHealth']])$(id).value=rules.goldPolicy[key];
   $('rulesEnabled').checked=rules.enabled;$('rulesActivity').value=rules.activity;$('rulesKeepBait').value=rules.keepBait;$('rulesTimberTarget').value=rules.timberTarget;$('rulesStatus').textContent='';
   $('rulesCombatStyle').value=rules.combat.style;$('rulesAutoDodge').checked=rules.combat.dodge;
@@ -4692,8 +4694,9 @@ function openCharacterRules(){
   const log=$('rulesActivityLog');log.replaceChildren();
   for(const item of [...(state.activityLog??[])].reverse()){
     const row=document.createElement('li'),title=document.createElement('b'),detail=document.createElement('p');
-    title.textContent=item.kind==='queue'?'Activity queue':item.kind==='rest'?'Rest at home':item.kind==='fishing'?'Fishing':'Woodcutting';
-    detail.textContent=(item.kind==='rest'?'':item.count+' '+(item.kind==='queue'?'items gathered':item.kind==='fishing'?'fish':'timber')+' · +'+item.xp+' XP · ')+({'beetle-trial-required':'Win a Stoneback Beetle fight yourself first','goal-reached':'Upgrade goal reached','queue-complete':'All queue cycles complete','spending-limit':'Queue spending limit reached','gold-reserve':'Gold reserve protected','wallet-full':'Wallet is full','bait-reserve':'Bait reserve protected','target-reached':'Timber target reached','away-cap':'Eight-hour cap reached',returned:'Returned to game',combat:'Skipped during combat / recovery',requirements:item.summary,rest:'Rested at home'}[item.reason]??item.reason);
+    title.textContent=item.kind==='gambling'?'Auto gambling':item.kind==='queue'?'Activity queue':item.kind==='rest'?'Rest at home':item.kind==='fishing'?'Fishing':'Woodcutting';
+    detail.textContent=(item.kind==='rest'?'':item.count+' '+(item.kind==='gambling'?'rounds':item.kind==='queue'?'items gathered':item.kind==='fishing'?'fish':'timber')+' · +'+item.xp+' XP · ')+({'gamble-loss-limit':'Total-loss limit reached','gamble-profit-target':'Net profit target reached','gamble-round-limit':'Round limit reached','beetle-trial-required':'Win a Stoneback Beetle fight yourself first','goal-reached':'Upgrade goal reached','queue-complete':'All queue cycles complete','spending-limit':'Queue spending limit reached','gold-reserve':'Gold reserve protected','wallet-full':'Wallet is full','bait-reserve':'Bait reserve protected','target-reached':'Timber target reached','away-cap':'Eight-hour cap reached',returned:'Returned to game',combat:'Skipped during combat / recovery',requirements:item.summary,rest:'Rested at home'}[item.reason]??item.reason);
+    if(item.gambling)detail.textContent+=' · Net '+(item.gambling.net>=0?'+':'')+item.gambling.net+' gold · Total losses '+item.gambling.totalLost+' gold';
     if(item.hunts)detail.textContent+=' · '+Object.entries(item.hunts).map(([id,record])=>huntEnemies[id].name+': '+record.wins+' wins, '+record.xp+' XP, '+(item.huntSales?.[id]??0)+' gold sold').join(' · ');
     row.append(title,detail);log.append(row);
   }
@@ -4702,7 +4705,7 @@ function openCharacterRules(){
 }
 $('openCharacterRules').onclick=openCharacterRules;$('upgradeGoalHud').onclick=openCharacterRules;
 $('rulesQueueAdd').onclick=()=>{if(ruleQueueDraft.length<8)ruleQueueDraft.push({type:'fishing',amount:5});renderRuleQueue();updateCharacterRulesPreview();};
-for(const id of ['rulesStrategy','goldBudget','goldReserve','goldKeepFish','goldKeepTimber','goldKeepMeat','goldKeepShells','goldMinHealth','rulesUseQueue','rulesQueueRepeats','rulesQueueBudget','rulesQueueReserve','rulesQueueHealth','rulesGoalTarget','rulesGoalAutoBuy','rulesEnabled','rulesActivity','rulesKeepBait','rulesTimberTarget','rulesCombatEnabled','rulesCombatStyle','rulesAutoDodge','rulesAutoQ','rulesAutoE','rulesCombatFlee'])$(id).oninput=updateCharacterRulesPreview;
+for(const id of ['gambleAutoGame','gambleAutoColor','gambleAutoBet','gambleAutoLoss','gambleAutoReserve','gambleAutoProfit','gambleAutoRounds','rulesStrategy','goldBudget','goldReserve','goldKeepFish','goldKeepTimber','goldKeepMeat','goldKeepShells','goldMinHealth','rulesUseQueue','rulesQueueRepeats','rulesQueueBudget','rulesQueueReserve','rulesQueueHealth','rulesGoalTarget','rulesGoalAutoBuy','rulesEnabled','rulesActivity','rulesKeepBait','rulesTimberTarget','rulesCombatEnabled','rulesCombatStyle','rulesAutoDodge','rulesAutoQ','rulesAutoE','rulesCombatFlee'])$(id).oninput=updateCharacterRulesPreview;
 $('characterRulesDialog').oncancel=event=>{if(savingRules)event.preventDefault();};
 $('characterRulesForm').onsubmit=async event=>{
   event.preventDefault();if(savingRules)return;
