@@ -24,3 +24,10 @@ test('an Oak Rod trial survives a save until the catch clears it',()=>{
  assert.equal(finished.firstUpgrade.oakTrialPending,undefined);
  assert.equal(normalizeState({firstUpgrade:{...firstUpgrade,choice:'combat'}}).firstUpgrade.oakTrialPending,undefined);
 });
+
+
+test('paused upgrade guidance survives saves and can be resumed without changing progress',()=>{
+ const firstUpgrade={unlocked:true,choice:'combat',complete:false,sale:null,deferred:true},s=normalizeState({firstUpgrade});assert.equal(s.firstUpgrade.deferred,true);assert.deepEqual(normalizeState(JSON.parse(JSON.stringify(s))).firstUpgrade,firstUpgrade);
+ assert.equal(normalizeState({firstUpgrade:{...firstUpgrade,deferred:false}}).firstUpgrade.deferred,undefined);
+ assert.throws(()=>normalizeState({firstUpgrade:{...firstUpgrade,deferred:'yes'}}),/Invalid first upgrade/);
+});

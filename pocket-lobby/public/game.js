@@ -32,7 +32,7 @@ const classicLounge = [
   ['bar',.05,.25],['shelf',.02,.48],['plant',.3,8.7],['plant',8.9,.2],
   ['sofa',5,1,0],['chair',8,3,1],['table',6,3,0],['lamp',8,1,0],
   ['stool',2,1],['stool',2,2],['stool',2,3],['chair',2,6,1],
-  ['table',3,7,1],['chair',4,8,0],['lamp',1,6],['plant',7,8],['plant',.3,4.9]
+  ['table',3,7,1],['chair',4,8,0],['lamp',1,6],['plant',7,8],['plant',.3,7.2]
 ].map(([type,x,y,rot=0],id)=>({id,type,x,y,rot}));
 const gamingTables=[
   {id:'blackjack',type:'blackjack',x:6,y:3,rot:0},
@@ -52,7 +52,7 @@ if(savedLounge)loungeFurniture=hasGamingLayout?savedLounge:installGamingTables(s
 let homeFurniture = savedPlayerState?.homeFurniture??[];
 const firstUpgrade={unlocked:false,choice:null,complete:false,sale:null,...savedPlayerState?.firstUpgrade};
 let tradingPostGuideComplete=savedPlayerState?.tradingPostGuideComplete===true||(savedPlayerState?.location==='market'&&savedPlayerState?.quest?.claimed===true);
-let tradeGuideRouteCache=null;
+let tradeGuideRouteCache=null,upgradeTrackedDestination=null;
 let bedLessonComplete=savedPlayerState?.bedLessonComplete===true||homeFurniture.some(item=>item.type==='bed');
 let serverActionBusy=false,activityBusy=false,pendingCombatInputs=[],nextCombatPoll=0;
 let serverCombatId=savedPlayerState?.combatId,lastCombatReceipt=null;
@@ -599,6 +599,7 @@ $('autoLessonStart').onclick=async()=>{
 };
 function updateQuestUI(){
   updateBedGuide();updateTradeGuide();updateUpgradeGuide();
+  $('resumeUpgradeGuide').hidden=!firstUpgrade.deferred||!(firstUpgrade.unlocked&&!firstUpgrade.complete||firstUpgrade.oakTrialPending||firstUpgrade.ironTrialPending);
   const stage=questStage(quest);
   $('questTracker').hidden=stage===5||currentRoom==='hub'||!$('bedGuide').hidden;
   const routesOpen=lobbyRoutesOpen();
@@ -2694,7 +2695,7 @@ function openUpgradeChoice(){
 }
 function chooseFirstUpgrade(path){
   const plan=upgradePlan(path);if(!firstUpgrade.unlocked||!plan||plan.owned)return;
-  firstUpgrade.choice=path;tradeGuideRouteCache=null;worldLabelKey='';
+  firstUpgrade.choice=path;delete firstUpgrade.deferred;tradeGuideRouteCache=null;worldLabelKey='';
   $('upgradeDialog').close();if($('merchantDialog').open)$('merchantDialog').close();
   savePlayerState();updateUpgradeGuide();
 }
@@ -2706,6 +2707,7 @@ function ironTrialDestination(){
   return combatGear.equippedWeapon==='ironSword'?'ruins':currentRoom;
 }
 function firstUpgradeDestination(){
+  if(firstUpgrade.deferred)return null;
   if(depthsRun||tradingGuideActive())return null;
   if(firstUpgrade.ironTrialPending){
     const destination=ironTrialDestination();
@@ -2722,7 +2724,7 @@ function updateUpgradeGuide(){
   const pendingTrial=firstUpgrade.oakTrialPending&&!fishingSession;
   const choosingUpgrade=firstUpgrade.unlocked&&!firstUpgrade.complete;
   const pendingHunt=firstUpgrade.ironTrialPending&&!hunting.recoveryUntil;
-  const active=(pendingTrial||pendingHunt||choosingUpgrade)&&!tradingGuideActive()&&!editing&&!depthsRun&&!player.inCombat;
+  const active=!firstUpgrade.deferred&&(pendingTrial||pendingHunt||choosingUpgrade)&&!tradingGuideActive()&&!editing&&!depthsRun&&!player.inCombat;
   if(!active&&!tradingGuideActive())$('scene').dataset.bedTutorial=String(!$('bedGuide').hidden);
   $('upgradeGuide').hidden=!active;
   if(!active)return;
@@ -2767,6 +2769,7 @@ function updateUpgradeGuide(){
   $('upgradeGuideAction').textContent=plan.needsBait&&currentRoom==='store'?'View bait supplies':currentRoom===plan.shop&&!plan.missingXp&&!plan.missingGold?'View '+plan.item.name:currentRoom===plan.destination?(plan.destination==='market'?'Open trading window':plan.fishing?'Go fishing':'Approach boar'):'Head to '+roomDetails[plan.destination].name;
 }
 function followFirstUpgrade(){
+  if(firstUpgrade.deferred){delete firstUpgrade.deferred;savePlayerState();}
   if(firstUpgrade.ironTrialPending){
     if(unavailable())return;
     if(combatGear.equippedWeapon!=='ironSword'){
@@ -2803,7 +2806,7 @@ function followFirstUpgrade(){
   }
   const plan=upgradePlan();if(!plan){openUpgradeChoice();return;}
   if(unavailable())return;
-  if(currentRoom!==plan.destination){const door=firstUpgradeDestination();if(door)followHudDoor(door);return;}
+  if(currentRoom!==plan.destination){const door=firstUpgradeDestination();if(door){upgradeTrackedDestination=plan.destination;setExplorationDestination(plan.destination);followHudDoor(door);}else note('No open route. You can pause this guide with Not now.');return;}
   if(['store','armory','market','furnishings'].includes(currentRoom)){
     openMerchant();const offer=$(plan.fishing?'rodOffers':'weaponOffers').querySelector('[data-item="'+plan.id+'"]');
     if(plan.needsBait){$('buyBait').focus();return;}
@@ -4745,6 +4748,12 @@ $('railDecorate').onclick=()=>$('edit').onclick();
 $('hudHomeDecor').onclick=()=>$('edit').onclick();
 $('upgradeFishing').onclick=()=>chooseFirstUpgrade('fishing');
 $('upgradeCombat').onclick=()=>chooseFirstUpgrade('combat');
+$('upgradeNotNow').onclick=()=>{
+  firstUpgrade.deferred=true;tradeGuideRouteCache=null;worldLabelKey='';
+  if(upgradeTrackedDestination&&trackedDestination===upgradeTrackedDestination)setExplorationDestination(null);
+  upgradeTrackedDestination=null;savePlayerState();updateQuestUI();updateActivityPrompt();note('Upgrade guide paused. Resume it from Quests whenever you’re ready.');
+};
+$('resumeUpgradeGuide').onclick=()=>{delete firstUpgrade.deferred;savePlayerState();$('questDialog').close();worldLabelKey='';updateUpgradeGuide();};
 $('upgradeChange').onclick=openUpgradeChoice;
 $('upgradeGuideAction').onclick=followFirstUpgrade;
 $('tradeGuideAction').onclick=()=>{const destination=tradingGuideDestination();if(!destination)return;if(destination.warden)use(hubFurniture.find(item=>item.type==='warden'));else followHudDoor(destination);};
