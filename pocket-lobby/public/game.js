@@ -1167,24 +1167,25 @@ function updateCombatPanel(){
     notice.dataset.cue=dodgeNow?'dodge':exposed?'exposed':'watch';
   }else if(enemy?.elite&&!encounter&&!chamberCleared){
     notice.hidden=false;notice.dataset.cue='watch';
-    notice.textContent=enemy.id==='sealGuardian'?'Rune Sentinel · 210 HP · Win and claim 1 guaranteed Awakening Stone.':'Elite guardian · Strike → Runic Slam → open shell. Reward '+essenceCacheGold+' gold + a stone.';
+    notice.textContent=enemy.tactic??(enemy.id==='sealGuardian'?'Rune Sentinel · 210 HP · Win and claim 1 guaranteed Awakening Stone.':'Elite guardian · Strike → Runic Slam → open shell. Reward '+essenceCacheGold+' gold + a stone.');
   }else notice.dataset.cue='';
+  if(enemy?.tactic&&!hunting.recoveryUntil&&!chamberCleared){notice.hidden=false;notice.textContent=enemy.tactic;}
   if(!enemy||chamberCleared)return;
   const beetle=!!enemy.shellArmor,respawn=stage>=0?0:huntRespawnAt(hunting,enemy);
   $('combatTitle').textContent=enemy.name;
-  $('combatChapter').textContent=enemy.elite?'ELITE · ESSENCE CACHE':stage>=0?'MOONWELL DEPTHS':beetle?'MOONWELL RUINS':'FIRST HUNT';
+  $('combatChapter').textContent=enemy.archetype?enemy.archetype.toUpperCase()+' · MOONWELL DEPTHS':enemy.elite?'ELITE · ESSENCE CACHE':stage>=0?'MOONWELL DEPTHS':beetle?'MOONWELL RUINS':'FIRST HUNT';
   const [strength,agility,vitality]=enemy.xp;
   $('combatReward').textContent=stage>=0?(magicState?.picks.length?'Combat XP and Awakening Stones are kept after a win. Bank your gold and loot.':'Combat XP is kept after a win. Gold and items are held until you bank them.'):'Victory: '+enemy.lootName+' ×1 · +'+strength+' Strength, +'+agility+' Agility, +'+vitality+' Vitality XP. Sell loot for '+enemy.sellPrice+' gold.';
   if(enemy.id==='sealGuardian')$('combatReward').textContent='Win, then claim 1 guaranteed Awakening Stone from the seal. Claimed stones and earned combat XP are yours to keep.';
   else if(enemy.elite)$('combatReward').textContent='Open the cache after victory for '+essenceCacheGold+' gold + an Awakening Stone. Your collected cache rewards are yours to keep.';
   const approach=$('approachBeetle');
-  approach.hidden=(!beetle&&stage<0)||!!encounter||now<respawn;
+  approach.hidden=(!beetle&&!enemy.archetype&&stage<0)||!!encounter||now<respawn;
   approach.textContent='Approach '+enemy.name;
   approach.disabled=health<=0||unavailable()||!combatGear.equippedWeapon;
   const shell=$('beetleShell');
-  shell.hidden=!beetle||now<respawn;
+  shell.hidden=(!beetle&&!enemy.archetype)||now<respawn;
   const opening=Math.max(0,((encounter?.exposedUntil??0)-now)/1000);
-  shell.textContent=opening?'Weak spot exposed · '+opening.toFixed(1)+'s':enemy.elite?'Armoured shell · Dodge Runic Slam, then attack during recovery. A Storm interrupt opens it early.':'Armored shell · Dodge the slam to expose its weak spot.';
+  shell.textContent=enemy.archetype==='caster'?'Cast pressure · '+(encounter?.castDeadline===encounter?.nextBoarAt?encounter?.castHits??0:0)+' / 3 hits · Strike during the purple warning':enemy.archetype==='duelist'?'Counter weakness · Perfect dodge → next weapon hit +25% extra':enemy.archetype==='armoured'&&!opening?'Heavy plating · Half damage until stagger breaks the shell':opening?'Weak spot exposed · '+opening.toFixed(1)+'s':enemy.elite?'Armoured shell · Dodge Runic Slam, then attack during recovery. A Storm interrupt opens it early.':'Armored shell · Dodge the slam to expose its weak spot.';
   shell.classList.toggle('exposed',opening>0);
   $('boarProgress').max=enemy.health;
   $('boarProgress').setAttribute('aria-label',enemy.name+' health');
@@ -1858,7 +1859,7 @@ function object(item,highlight=false,time=0) {
     }else if(type==='wildboar'||type==='stonebackBeetle'){
       const pose=boarCombatPose({time,now:combatNow(),encounter:player.inCombat?hunting.encounter:null,events:combatArt,reduced:reducedMotion.matches,defeated:!!item.defeated});
       const [bx,by]=point(x+.5,y+.5),[px,py]=point(player.x+.5,player.y+.5);
-      const shift=(type==='wildboar'?pose.charge:0)-pose.recoil;
+      const shift=(type==='wildboar'||huntEnemyForRoom(currentRoom)?.archetype==='duelist'?pose.charge:0)-pose.recoil;
       ctx.save();ctx.globalAlpha*=pose.alpha;
       ctx.translate(bx+Math.sign(px-bx)*shift,by+Math.sign(py-by)*shift+pose.fall);
       ctx.scale((px<bx?-1:1)*(1+(1-pose.squash)*.25),pose.squash);ctx.translate(-bx,-by);

@@ -20,9 +20,9 @@ export const huntEnemies={
   boar,beetle,
   depthsBoar:{...boar,id:'depthsBoar',room:'depthsGate',name:'Gate Boar',health:100,damage:12,xp:[30,20,30],masteryXp:20},
   depthsBeetle:{...beetle,id:'depthsBeetle',room:'depthsGallery',name:'Gallery Beetle',health:150,damage:20,xp:[45,35,45],masteryXp:30},
-  cacheGuardian:{...beetle,id:'cacheGuardian',room:'depthsCache',name:'Cache Guardian',elite:true,move:'sentinelStrike',health:180,firstAttack:2600,interval:4200,damage:18,shellArmor:6,exposureMs:2400,xp:[55,40,55],masteryXp:40},
-  treasuryGuardian:{...beetle,id:'treasuryGuardian',room:'depthsTreasury',name:'Treasury Guardian',victoryLoot:'60 gold + 2 shells held',health:175,damage:22,shellArmor:7,xp:[50,35,50],masteryXp:30},
-  sealGuardian:{...beetle,id:'sealGuardian',room:'depthsTrial',name:'Rune Sentinel',elite:true,move:'sentinelStrike',health:210,firstAttack:2600,interval:4000,damage:24,shellArmor:8,xp:[60,45,60],masteryXp:40},
+  cacheGuardian:{...beetle,id:'cacheGuardian',room:'depthsCache',name:'Cache Guardian',elite:true,archetype:'caster',tactic:'RUNE CASTER · Land 3 weapon hits during Rune Bolt to interrupt. Fast daggers excel; dodge if the cast completes.',move:'runeBolt',health:180,firstAttack:3000,interval:3600,damage:24,shellArmor:0,exposureMs:2400,xp:[55,40,55],masteryXp:40},
+  treasuryGuardian:{...beetle,id:'treasuryGuardian',room:'depthsTreasury',name:'Treasury Guardian',archetype:'armoured',tactic:'ARMOURED · Build stagger to crack its plating. Heavy weapons excel; dodging alone does not open this armour.',victoryLoot:'60 gold + 2 shells held',health:175,damage:22,shellArmor:7,xp:[50,35,50],masteryXp:30},
+  sealGuardian:{...beetle,id:'sealGuardian',room:'depthsTrial',name:'Rune Sentinel',elite:true,archetype:'duelist',tactic:'DUELIST · Dodge the final flash, then counter. Counters deal 25% extra damage; watch for the follow-up lunge.',move:'sentinelStrike',health:210,firstAttack:2600,interval:2600,damage:24,shellArmor:0,xp:[60,45,60],masteryXp:40},
   depthsGuardian:{...beetle,id:'depthsGuardian',room:'depthsVault',name:'Vault Guardian',health:240,damage:27,shellArmor:9,xp:[75,55,75],masteryXp:50}
 };
 const enemiesByRoom=Object.fromEntries(Object.values(huntEnemies).map(enemy=>[enemy.room,enemy]));
@@ -31,6 +31,8 @@ export const huntEnemy=encounter=>Object.hasOwn(huntEnemies,encounter?.enemy)?hu
 export const huntRespawnAt=(hunting,enemy)=>enemy===huntEnemies.beetle?hunting.beetleRespawnAt??0:hunting.respawnAt;
 
 const enemyMoves={
+  runeBolt:{id:'runeBolt',name:'Rune Bolt',tell:2200,damage:0,shape:'bolt',opensShell:false},
+  duelistLunge:{id:'duelistLunge',name:'Sentinel Lunge',tell:1100,delay:2300,damage:6,shape:'lane',opensShell:false},
   charge:{id:'charge',name:'Charge',tell:600,damage:0,shape:'lane',opensShell:false},
   slam:{id:'slam',name:'Slam',tell:600,damage:0,shape:'ring',opensShell:true},
   sweep:{id:'sweep',name:'Tusk Sweep',tell:780,delay:1350,damage:-6,shape:'arc',opensShell:false},
@@ -43,13 +45,17 @@ const enemyMoves={
 };
 export function enemyAttack(encounter,enemy=huntEnemy(encounter)){
   const move=Object.hasOwn(enemyMoves,encounter?.enemyMove)?enemyMoves[encounter.enemyMove]:null;
-  const allowed=enemy.elite?['runicSlam','crush']:enemy.id==='depthsGuardian'?['quake','aftershock']:enemy.shellArmor?['crush']:['sweep','wildCharge'];
+  const allowed=enemy.archetype==='caster'?['runicSlam','crush']:enemy.archetype==='duelist'?['duelistLunge','runicSlam','crush']:enemy.elite?['runicSlam','crush']:enemy.id==='depthsGuardian'?['quake','aftershock']:enemy.shellArmor?['crush']:['sweep','wildCharge'];
   return allowed.includes(move?.id)?move:enemyMoves[enemy.move];
 }
 function scheduleEnemyResponse(next,enemy,move,timedDodge,now){
   delete next.enemyMove;
   let response;
-  if(enemy.elite){
+  if(enemy.archetype==='caster'){
+    next.castHits=0;
+  }else if(enemy.archetype==='duelist'){
+    if(move.id===enemy.move)response=enemyMoves.duelistLunge;
+  }else if(enemy.elite){
     if(move.id===enemy.move)response=enemyMoves.runicSlam;
     else next.exposedUntil=Math.max(next.exposedUntil??0,now+enemy.exposureMs);
   }else if(move.id==='quake')response=enemyMoves.aftershock;
@@ -184,9 +190,10 @@ export function normalizeHunting(input={}){
       const nextAt=time(burn.nextAt),until=time(burn.until);
       if(nextAt>0&&nextAt<=until)result.encounter.burn={damage:burn.damage,nextAt,until};
     }
-    for(const key of ['chilledUntil','weakenedUntil','interruptResistUntil','tacticsAt','counterUntil','staggerUntil','staggerWeakUntil','staggerResistUntil']){
+    for(const key of ['chilledUntil','weakenedUntil','interruptResistUntil','tacticsAt','castDeadline','counterUntil','staggerUntil','staggerWeakUntil','staggerResistUntil']){
       if(input.encounter[key]!==undefined)result.encounter[key]=time(input.encounter[key]);
     }
+    if(input.encounter.castHits!==undefined){if(!Number.isInteger(input.encounter.castHits)||input.encounter.castHits<0||input.encounter.castHits>2)throw new Error('Invalid cast pressure.');result.encounter.castHits=input.encounter.castHits;}
     if(input.encounter.counterPercent!==undefined){if(![50,75].includes(input.encounter.counterPercent))throw new Error('Invalid counter bonus.');result.encounter.counterPercent=input.encounter.counterPercent;}
     if(input.encounter.stagger!==undefined){if(!Number.isInteger(input.encounter.stagger)||input.encounter.stagger<0||input.encounter.stagger>=staggerProfile(huntEnemy(input.encounter)).limit)throw new Error('Invalid stagger progress.');result.encounter.stagger=input.encounter.stagger;}
     if(Number.isFinite(input.encounter.weakenPercent)&&input.encounter.weakenPercent>=25&&input.encounter.weakenPercent<=35)result.encounter.weakenPercent=input.encounter.weakenPercent;
@@ -245,16 +252,21 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
     result.damage=attributes.damage+Math.floor(random()*5);
     if(enemy.shellArmor){
       const exposed=now<encounter.exposedUntil;
-      result.damage=exposed?result.damage+enemy.exposedBonus:Math.max(1,result.damage-enemy.shellArmor);
+      result.damage=exposed?result.damage+enemy.exposedBonus:Math.max(1,Math.floor((result.damage-enemy.shellArmor)*(enemy.archetype==='armoured'?.5:1)));
       result.shellGuarded=!exposed;
     }
     if(now<(encounter.counterUntil??0)){
       result.counter=true;result.counterBonus=Math.ceil(result.damage*(weaponProfile(weapon,upgrade)?.counterMultiplier??counterRules.bonus));result.damage+=result.counterBonus;delete result.encounter.counterUntil;delete result.encounter.counterPercent;
     }
+    if(result.counter&&enemy.archetype==='duelist'){result.duelistBonus=Math.ceil(result.damage*.25);result.damage+=result.duelistBonus;result.counterBonus+=result.duelistBonus;}
     if(now<(encounter.staggerWeakUntil??0)){
       result.weakSpot=true;result.staggerBonus=Math.ceil(result.damage*.25);result.damage+=result.staggerBonus;
     }
     result.encounter.health=Math.max(0,encounter.health-result.damage);
+    if(result.encounter.health>0&&enemy.archetype==='caster'&&enemyAttack(encounter,enemy).id==='runeBolt'&&now>=encounter.nextBoarAt-enemyMoves.runeBolt.tell&&now<encounter.nextBoarAt){
+      const hits=(encounter.castDeadline===encounter.nextBoarAt?encounter.castHits??0:0)+1;result.encounter.castDeadline=encounter.nextBoarAt;result.encounter.castHits=hits;
+      if(hits>=3){result.interrupted=true;result.castInterrupted=true;result.encounter.castHits=0;result.encounter.nextBoarAt=now+enemy.interval;}
+    }
     if(result.encounter.health>0&&now>=(encounter.staggerResistUntil??0)){
       const profile=staggerProfile(enemy),before=encounter.stagger??0;
       const armourFactor=result.shellGuarded?Math.max(.25,(attributes.damage-enemy.shellArmor)/Math.max(1,attributes.damage)):1;
@@ -264,7 +276,7 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
         result.staggered=true;result.encounter.stagger=0;
         result.encounter.staggerUntil=now+profile.stun;result.encounter.staggerWeakUntil=now+profile.opening;
         result.encounter.staggerResistUntil=now+profile.opening+profile.recovery;
-        delete result.encounter.enemyMove;
+        delete result.encounter.enemyMove;result.encounter.castHits=0;
         result.encounter.nextBoarAt=Math.max(result.encounter.nextBoarAt,result.encounter.staggerUntil+enemyAttack(result.encounter,enemy).tell);
         if(enemy.shellArmor)result.encounter.exposedUntil=Math.max(result.encounter.exposedUntil??0,result.encounter.staggerWeakUntil);
       }
@@ -278,7 +290,7 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
     result.timedDodge=encounter.dodgeUntil>0&&encounter.nextBoarAt<=encounter.dodgeUntil&&encounter.nextBoarAt>=encounter.dodgeUntil-boarRules.dodgeWindow;
     result.dodged=result.timedDodge||random()<attributes.dodge;
     if(result.timedDodge){result.perfectDodge=true;result.encounter.counterUntil=encounter.nextBoarAt+counterRules.duration;result.counterPercent=Math.round((weaponProfile(weapon,upgrade)?.counterMultiplier??counterRules.bonus)*100);result.encounter.counterPercent=result.counterPercent;}
-    if(move.opensShell&&result.timedDodge){
+    if(enemy.shellArmor&&enemy.archetype!=='armoured'&&move.opensShell&&result.timedDodge){
       result.encounter.exposedUntil=now+enemy.exposureMs+(move.id===enemy.move?0:400);
       result.shellExposed=true;
     }

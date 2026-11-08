@@ -6,10 +6,10 @@ export const moonwood=(()=>{
   const areas={
     depthsGate:{number:'D1',name:'Flooded Gate',description:'An old sluice feeds a rushing channel. Look for the lever by the entrance.',badge:'MOONWELL DEPTHS',floor:'Chamber 1',center:[4,5],palette:['#31454e','#405961','#7a8a89'],landmark:['wildboar',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['wildrock',2,7],['wildrock',9,7],['sluiceLever',3,4],['gateSupply',10,4]]},
     depthsGallery:{number:'D2',name:'Shell Gallery',description:'Green light spills from the fungi. A shell hangs from a weathered chime stand.',badge:'MOONWELL DEPTHS',floor:'Chamber 2',center:[4,5],palette:['#344b45','#4a6054','#84947b'],landmark:['stonebackBeetle',6,5,5,5],authored:[['pillar',2,3],['pillar',8,3],['wildrock',3,7],['wildrock',7,7],['glowFungus',4,2],['glowFungus',9,3],['glowFungus',5,8],['shellChime',3,3],['galleryCache',9,6],['cachePassage',10,4]]},
-    depthsCache:{number:'D2+',name:'The Sealed Alcove',description:'An elite Cache Guardian protects 50 gold and an Awakening Stone. Watch for Runic Slam, then strike its open shell.',badge:'MOONWELL DEPTHS',floor:'Optional cache chamber',center:[4,5],palette:['#3b3956','#504664','#927fa5'],landmark:['stonebackBeetle',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['pillar',8,7],['vaultCrystal',9,3],['glowFungus',3,7],['cachePassage',2,5],['essenceCache',9,5]]},
-    depthsTreasury:{number:'D2·T',name:'The Guarded Treasury',description:'Gold glints beneath a Treasury Guardian. Defeat it to add 60 gold and two Shell Fragments to your unbanked haul.',badge:'OPTIONAL · TREASURE',floor:'Treasury branch',center:[4,5],palette:['#4b4447','#625654','#b49b77'],landmark:['stonebackBeetle',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['vaultCrystal',9,2],['vaultCrystal',8,7],['cachePassage',2,5],['sideTreasure',9,5]]},
+    depthsCache:{number:'D2+',name:'The Sealed Alcove',description:'An elite Cache Guardian protects 50 gold and an Awakening Stone. Interrupt its Rune Bolt with three quick weapon hits, or dodge the completed spell.',badge:'MOONWELL DEPTHS',floor:'Optional cache chamber',center:[4,5],palette:['#3b3956','#504664','#927fa5'],landmark:['stonebackBeetle',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['pillar',8,7],['vaultCrystal',9,3],['glowFungus',3,7],['cachePassage',2,5],['essenceCache',9,5]]},
+    depthsTreasury:{number:'D2·T',name:'The Guarded Treasury',description:'Heavy plating shields the Treasury Guardian. Build stagger to crack its armour. Defeat it to add 60 gold and two Shell Fragments to your unbanked haul.',badge:'OPTIONAL · TREASURE',floor:'Treasury branch',center:[4,5],palette:['#4b4447','#625654','#b49b77'],landmark:['stonebackBeetle',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['vaultCrystal',9,2],['vaultCrystal',8,7],['cachePassage',2,5],['sideTreasure',9,5]]},
     depthsRest:{number:'D2·R',name:'The Quiet Shrine',description:'A peaceful spring offers 30 HP for 15 gold from your unbanked haul. One blessing per expedition.',badge:'OPTIONAL · REST',floor:'Shrine branch',center:[4,5],palette:['#344f52','#4c6a68','#99b6aa'],authored:[['pillar',3,2],['pillar',8,2],['glowFungus',3,7],['glowFungus',9,3],['cachePassage',2,5],['restAltar',6,4]]},
-    depthsTrial:{number:'D2·S',name:'The Sealed Chamber',description:'A Rune Sentinel guards an Awakening Seal. Win the challenge, then claim your guaranteed stone.',badge:'OPTIONAL · CHALLENGE',floor:'Sealed branch',center:[4,5],palette:['#39394f','#514c6b','#afa2c7'],landmark:['stonebackBeetle',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['vaultCrystal',8,7],['glowFungus',3,7],['cachePassage',2,5],['sideSeal',9,5]]},
+    depthsTrial:{number:'D2·S',name:'The Sealed Chamber',description:'A duelling Rune Sentinel guards an Awakening Seal. Time a dodge and punish it with a counter. Win the challenge, then claim your guaranteed stone.',badge:'OPTIONAL · CHALLENGE',floor:'Sealed branch',center:[4,5],palette:['#39394f','#514c6b','#afa2c7'],landmark:['stonebackBeetle',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['vaultCrystal',8,7],['glowFungus',3,7],['cachePassage',2,5],['sideSeal',9,5]]},
     depthsVault:{number:'D3',name:'The Sunken Vault',description:'The vault glitters beneath the waterline. Read the relief before facing its Guardian.',badge:'MOONWELL DEPTHS',floor:'Chamber 3',center:[4,5],palette:['#453c50','#5d4962','#a48b8e'],landmark:['stonebackBeetle',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['pillar',3,8],['pillar',8,8],['wildrock',9,4],['vaultCrystal',9,2],['vaultCrystal',8,7],['vaultRelief',3,3]]},
     logging:{number:'15',name:'Timber Hollow',description:'Meet the woodcutter, collect your first axe, and gather timber for the Tower.',badge:'WOODCUTTING',floor:'Woodland worksite',center:[5,5],palette:['#3b5050','#4e665c','#92917d'],landmark:['timberTree',6,5,5,5],authored:[['woodcutter',4,3],['workbench',5,3],['wildtree',1,1],['wildtree',10,1],['wildtree',9,7],['wildtree',2,8],['wildrock',8,3],['wildbloom',4,7]]},
     clearing:{number:'13',name:'Bramble Clearing',description:'A wild boar guards a moonlit clearing. Approach carefully, and flee if your hearts run low.',badge:'HUNTING GROUNDS',floor:'Boar territory',center:[5,5],palette:['#3c5050','#50645b','#918b7e'],landmark:['wildboar',6,5,5,5],authored:[['wildtree',1,1],['wildtree',9,1],['wildtree',10,7],['wildtree',2,8],['wildrock',8,7],['wildbloom',4,2],['wildbloom',8,3]]},
@@ -106,7 +106,7 @@ export const moonwood=(()=>{
         }
       }
     }
-    if(landmarkType)scenery.push({id:'landmark',type:landmarkType,x:lx,y:ly,rot:0,...(id==='depthsCache'||id==='depthsTrial'?{cacheGuardian:true}:{})});
+    if(landmarkType)scenery.push({id:'landmark',type:landmarkType,x:lx,y:ly,rot:0,archetype:id==='depthsCache'?'caster':id==='depthsTrial'?'duelist':id==='depthsTreasury'?'armoured':null,...(id==='depthsCache'||id==='depthsTrial'?{cacheGuardian:true}:{})});
     if(id==='trail')scenery.push({id:'campfire',type:'campfire',x:3,y:4,rot:0});
     return {path:id==='grove'?visiblePath:path,scenery,hiddenTrail};
   }
@@ -281,9 +281,29 @@ export const moonwood=(()=>{
         }
       }
     }else if(type==='stonebackBeetle'){
+      const archetype=item.archetype;
+      if(archetype==='caster'||archetype==='duelist'){
+        const casting=archetype==='caster'&&pose.windup>0, glow=casting?'#ebc4ff':'#aa8adc';
+        ctx.save();if(pose.defeated)ctx.globalAlpha*=.5;
+        surface(x+.17,y+.17,.65,.65,.3,'#10132188');
+        if(archetype==='caster'){
+          polygon([[px,py-37],[px+9,py-24],[px+12,py-3],[px-12,py-3],[px-8,py-24]],pose.hit?'#b29dcf':'#655184');
+          polygon([[px,py-34],[px+6,py-24],[px-6,py-24]],'#20233f');rect(px-3,py-28,2,2,glow);rect(px+2,py-28,2,2,glow);
+          rect(px-2,py-21,3,17,'#b99b71');rect(px+13,py-29,2,29,'#9d785f');
+          polygon([[px+14,py-38],[px+19,py-31],[px+14,py-25],[px+9,py-31]],glow);
+          if(casting){ctx.strokeStyle=glow;ctx.lineWidth=1;ctx.beginPath();ctx.ellipse(px,py-17,15,15,0,0,Math.PI*2);ctx.stroke();rect(px-18,py-19,3,3,glow);rect(px+16,py-19,3,3,glow);}
+        }else{
+          rect(px-7,py-9,5,8,'#263b51');rect(px+2,py-9,5,8,'#263b51');
+          polygon([[px-9,py-27],[px+8,py-27],[px+10,py-10],[px-10,py-10]],pose.hit?'#c8aaba':'#7c6077');
+          rect(px-5,py-38,11,11,'#c6c9d2');rect(px-7,py-37,15,3,'#e3bf83');rect(px-4,py-32,9,2,pose.windup>.2?'#ffbc83':'#43455c');
+          rect(px-1,py-25,3,13,'#d9b584');rect(px+12,py-29,3,24,'#b9d5ec');rect(px+9,py-10,9,2,'#d9b584');rect(px+12,py-6,3,7,'#715674');
+          if(pose.windup>.1){polygon([[px+12,py-34],[px+16,py-30],[px+14,py-25]],'#ffe6b0');}
+        }
+        ctx.restore();return;
+      }
       const flipped=pose.defeated||(combat?.exposedUntil??0)>Date.now();
       const rise=flipped||reduced?0:Math.round((pose.windup??0)*8-(pose.charge??0)*.45);
-      const gilded=item.cacheGuardian===true;
+      const gilded=item.cacheGuardian===true||item.archetype==='armoured';
       const shell=pose.hit?['#c1a692','#5c5366','#887b80']:gilded?['#d6b983','#65516c','#95806e']:['#8a9b9a','#3b4c59','#586a72'];
       for(const [u,v] of [[.13,.22],[.13,.48],[.13,.73],[.69,.22],[.69,.48],[.69,.73]]){
         part(u,v,.19,.10,flipped?6:0,flipped?5:4,['#687b77','#263948','#41545b']);

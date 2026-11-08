@@ -27,7 +27,7 @@ export function boarCombatPose({time,now,encounter,events,reduced=false,defeated
   const age=time-events.victoryAt;
   const death=defeated?clamp(age/430):0;
   const staggered=!!encounter&&now<encounter.staggerUntil;
-  const windup=encounter&&!staggered?clamp(1-(encounter.nextBoarAt-now)/Math.min(850,enemyAttack(encounter).tell)):0;
+  const windup=encounter&&!staggered?clamp(1-(encounter.nextBoarAt-now)/(enemyAttack(encounter).shape==='bolt'?enemyAttack(encounter).tell:Math.min(850,enemyAttack(encounter).tell))):0;
   return {
     windup,staggered,
     charge:staggered?0:reduced?0:pulse(time-events.boarAttackAt,340)*8,

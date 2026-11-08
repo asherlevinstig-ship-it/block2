@@ -15,10 +15,11 @@ export function drawCombatGroundFx({ctx,point,time,now,encounter,player,reduced}
   if(remaining<0||remaining>move.tell)return;
   const amount=1-remaining/move.tell,[bx,by]=point(6.5,5.5,1),[px,py]=point(player.x+.5,player.y+.5,1);
   const dx=px-bx,dy=py-by,length=Math.hypot(dx,dy)||1,nx=-dy/length*6,ny=dx/length*6;
-  const heavy=move.damage>0;
+  const heavy=move.damage>0,casting=move.shape==='bolt';
   ctx.save();ctx.fillStyle=heavy?'#ef785956':'#ef9a6540';ctx.strokeStyle=heavy?'#ff9f82':'#ffc38a';ctx.lineWidth=heavy?2:1;
+  if(casting){ctx.fillStyle='#b580ff40';ctx.strokeStyle='#d7adff';}
   ctx.beginPath();
-  if(move.shape==='ring')ctx.ellipse(bx,by,heavy?46:38,heavy?23:20,0,0,Math.PI*2);
+  if(move.shape==='ring'||casting)ctx.ellipse(bx,by,heavy?46:38,heavy?23:20,0,0,Math.PI*2);
   else if(move.shape==='arc'){
     const heading=Math.atan2(dy*1.7,dx);
     ctx.moveTo(bx,by);ctx.ellipse(bx,by,Math.max(25,length+7),Math.max(15,length*.6+4),0,heading-1.1,heading+1.1);ctx.closePath();
@@ -101,10 +102,13 @@ function drawMeleeImpact(ctx,{bx,by,px,py,aim},t,effect,reduced){
   ctx.restore();
 }
 function drawEnemyImpact(ctx,{bx,by,px,py,bgX,bgY,aim},t,effect,reduced){
-  const tint=effect.heavy?'#ffac80':'#e6b891';
+  const tint=effect.attackShape==='bolt'?'#d1a1ff':effect.heavy?'#ffac80':'#e6b891';
   const size=reduced?.48:t;
   ctx.save();ctx.globalAlpha=(1-t)*.85;ctx.strokeStyle=tint;ctx.lineWidth=effect.heavy?2:1;
-  if(effect.attackShape==='ring'){
+  if(effect.attackShape==='bolt'){
+    const travel=reduced?1:Math.min(1,t*3);const x=bx+(px-bx)*travel,y=by+(py-by)*travel;
+    line(ctx,bx,by,x,y);hex(ctx,x,y,5);
+  }else if(effect.attackShape==='ring'){
     const radius=12+size*(effect.heavy?42:28);
     ring(ctx,bgX,bgY,radius);
     if(effect.heavy)ring(ctx,bgX,bgY,Math.max(9,radius-8));
@@ -290,10 +294,11 @@ export function drawCombatOverlayFx({ctx,width,height,time,now,events,encounter,
   const stunned=encounter&&now<encounter.staggerUntil,weak=encounter&&now<encounter.staggerWeakUntil;
   const counterPercent=encounter?.counterPercent??50;
   const perfect=counter&&active(time,events.perfectDodgeAt,650);
+  const casting=warning&&move.shape==='bolt';
   if(warning||victory||exposed||counter||stunned||weak){
     const x=width/2,w=victory||!warning&&(counter||stunned||weak)?204:164,y=24;
     ctx.globalAlpha=victory?1-progress(time,events.victoryAt+1700,500):1;
-    ctx.fillStyle='#252538ed';ctx.fillRect(x-w/2,y,w,victory||!warning&&(counter||stunned||weak)?37:25);
+    ctx.fillStyle='#252538ed';ctx.fillRect(x-w/2,y,w,victory||casting||!warning&&(counter||stunned||weak)?37:25);
     ctx.fillStyle=victory?'#f2ce8a':warning?'#f2aa7c':counter?'#ffe5a1':'#bed88f';ctx.fillRect(x-w/2,y,w,1);
     const victoryTitle='✦ '+(enemy?.name??'Wild Boar').toUpperCase()+' DEFEATED ✦';
     const warningTitle=remaining<=boarRules.dodgeWindow?'DODGE · '+move.name.toUpperCase():move.name.toUpperCase()+' INCOMING';
@@ -301,6 +306,7 @@ export function drawCombatOverlayFx({ctx,width,height,time,now,events,encounter,
     ctx.fillText(victory?victoryTitle:warning?warningTitle:stunned?'STAGGERED!':weak?'WEAK SPOT · +25%':counter?(perfect?'PERFECT DODGE!':'COUNTER READY · +'+counterPercent+'%'):'WEAK SPOT EXPOSED',x,y+13);
     ctx.font='7px monospace';ctx.fillStyle='#e2d7c4';
     if(victory)ctx.fillText((enemy?.id==='sealGuardian'?'Awakening Seal unlocked':enemy?.elite?'Essence Cache unlocked':enemy?.victoryLoot??(enemy?.lootName??'Boar Meat')+' +1')+' · Combat XP +'+(enemy?.xp.reduce((sum,xp)=>sum+xp,0)??40),x,y+27);
+    else if(casting){ctx.fillText('3 quick hits interrupt · '+(encounter.castDeadline===encounter.nextBoarAt?encounter.castHits??0:0)+'/3',x,y+27);}
     else if(!warning&&(stunned||weak)){ctx.fillText('Weapon hits +25% · '+((encounter.staggerWeakUntil-now)/1000).toFixed(1)+'s',x,y+27);}
     else if(counter&&!warning){ctx.fillText('Next strike +'+counterPercent+'% · '+((encounter.counterUntil-now)/1000).toFixed(1)+'s',x,y+27);ctx.fillStyle='#dfbe72';ctx.fillRect(x-w/2+10,y+33,(w-20)*Math.max(0,Math.min(1,(encounter.counterUntil-now)/counterRules.duration)),2);}
     else if(warning){ctx.fillStyle='#b17e63';ctx.fillRect(x-w/2+10,y+19,(w-20)*(1-remaining/move.tell),2);}

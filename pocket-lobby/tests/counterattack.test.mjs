@@ -35,7 +35,7 @@ test('perfect dodges reward every enemy type and coexist with shell weak spots',
  for(const enemy of Object.values(huntEnemies)){
   const perfect=opening(enemy.id);assert.equal(perfect.perfectDodge,true,enemy.id);
   const plain={...perfect.encounter};delete plain.counterUntil;const baseline=turn(plain,'attack',enemy.firstAttack+1001);
-  const hit=turn(perfect.encounter,'attack',enemy.firstAttack+1001);assert.equal(hit.counter,true);assert.equal(hit.damage,baseline.damage+Math.ceil(baseline.damage*.5));
+  const hit=turn(perfect.encounter,'attack',enemy.firstAttack+1001);assert.equal(hit.counter,true);assert.equal(hit.damage,baseline.damage+Math.ceil(baseline.damage*.5)+(hit.duelistBonus??0));
   if(perfect.shellExposed)assert.equal(hit.shellGuarded,false);
  }
 });
