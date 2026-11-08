@@ -272,6 +272,7 @@
     if(!dialog.open)dialog.showModal();
   }
   function attach(){
+    window.towerRefreshAutoStatus=()=>renderAutoPanel(packet.state);
     window.towerFurnitureShop=initializeFurnitureShop(window.playerCloud,document,window);bankUI=initializeBankUI(window.playerCloud,document,window);window.towerRefreshBank=()=>{bankUI.render();window.towerFurnitureShop.render();};window.towerOpenSafe=()=>bankUI.open();
     document.getElementById('autoStart').onclick=()=>setControl('auto');
     document.getElementById('autoPlay').onclick=()=>setControl('play');

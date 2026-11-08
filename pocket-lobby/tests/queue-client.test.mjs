@@ -8,7 +8,8 @@ test('automated queue travel does not open equipment tutorials or merchant dialo
   const s=normalizeState({location:room,position:{x:4,y:5},quest:{accepted:true},adventure:{discovered:['pond']}});
   s.plan={kind:'queue',source:'rules'};g.context.playerCloud.initial=s;
   g.context.towerApplyRoutineState(s);
-  assert.equal(g.read('currentRoom'),room);assert.notEqual(g.nodes.get('inventoryDialog').open,true);assert.notEqual(g.nodes.get('merchantDialog').open,true);
+  for(let frame=0;frame<1200&&g.read('!!autoJourney');frame++)g.run('advanceAnimation('+(1000+frame*200)+')');
+  assert.equal(g.read('currentRoom'),room);assert.equal(g.read('autoJourney'),null);assert.notEqual(g.nodes.get('inventoryDialog').open,true);assert.notEqual(g.nodes.get('merchantDialog').open,true);
  }
 });
 

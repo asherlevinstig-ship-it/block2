@@ -58,6 +58,7 @@ let serverActionBusy=false,activityBusy=false,pendingCombatInputs=[],nextCombatP
 let serverCombatId=savedPlayerState?.combatId,lastCombatReceipt=null;
 let combatReports=savedPlayerState?.combatReports??[],activeCombatRecap=null,combatRecapBusy=false,combatRecapKey='';
 let credits = savedPlayerState?.credits??100;
+let autoJourney=null,autoJourneyState=null,autoJourneyTransition=false;
 let goldEarned=savedPlayerState?.goldEarned??0;
 function recordGoldEarned(amount){goldEarned=Math.min(Number.MAX_SAFE_INTEGER,goldEarned+amount);}
 let displayedCredits=credits,walletTween=null;
@@ -523,7 +524,7 @@ function updatePeerLabels(time){
 function connectRoom(){
   if(!multiplayer)return;
   const state=window.playerCloud?.initial;
-  if(state?.plan||state?.report){multiplayer.disconnect();$('networkStatus').textContent='Away · Work plan';return;}
+  if(autoJourney||state?.plan||state?.report){multiplayer.disconnect();$('networkStatus').textContent='Away · Work plan';return;}
   multiplayer.join(currentRoom);
 }
 function receiveRoomChat(message){
@@ -716,7 +717,7 @@ function resetCombatArt(){
   for(const key of Object.keys(combatArt))combatArt[key]=key==='bursts'?[]:-Infinity;
 }
 
-const routineControlled=()=>!!window.playerCloud?.initial?.plan||!!window.playerCloud?.initial?.report;
+const routineControlled=()=>!!autoJourney||!!window.playerCloud?.initial?.plan||!!window.playerCloud?.initial?.report;
 const unavailable=()=>routineControlled()||serverActionBusy||activityBusy||player.inCombat||hunting.recoveryUntil>0;
 function combatRecapAction(report){
   if(hunting.recoveryUntil)return null;
@@ -1362,7 +1363,7 @@ const hubDoors=[
 const towerEntrance={to:'hub',side:'left',tile:{x:0,y:5},start:4.58,end:6.42,height:54,label:'TOWER'};
 const moonwoodEntrance={to:'trail',side:'front',tile:{x:6,y:11},arrival:{x:1,y:5},start:5.03,end:7.62,label:'MOONWOOD'};
 const storeExit={to:'hub',side:'left',tile:{x:0,y:5},start:4.6,end:6.4,height:49,label:'LOBBY'};
-const roomDoors={furnishings:[storeExit],home:[homeExit],hub:hubDoors,lounge:[],store:[storeExit],market:[storeExit],armory:[{...storeExit,arrival:{x:3,y:1}}],outside:[towerEntrance,moonwoodEntrance],...moonwood.doors};
+const roomDoors={furnishings:[storeExit],home:[homeExit],hub:hubDoors,lounge:[storeExit],store:[storeExit],market:[storeExit],armory:[{...storeExit,arrival:{x:3,y:1}}],outside:[towerEntrance,moonwoodEntrance],...moonwood.doors};
 const roomDetails={
   furnishings:{number:'16',name:'Tower Furnishings',description:'Furniture, lighting and storage for your own corner of the Tower.',badge:'FURNITURE SHOP',floor:'Tower shops'},
   home:{number:'00',name:'Entry Room',description:'Your aim: become the richest and most powerful player in the game. Use the exit and meet the Tower Warden to get started.',badge:'ROOM NO. 00',floor:'Private room'},
@@ -2203,7 +2204,7 @@ const worldDrawing={point,polygon,surface,block,rect};
 const roomLayers={
   hub:makeRoomLayer(()=>drawGrandLobby(),hubView),
   hubIntro:makeRoomLayer(()=>drawGrandLobby(false),hubView),
-  lounge:makeRoomLayer(room),
+  lounge:makeRoomLayer(()=>{room();drawDoor(storeExit);}),
   outside:makeRoomLayer(drawCourtyard,courtyardView),
   store:makeRoomLayer(drawFishingStore),
   market:makeRoomLayer(()=>drawFishingStore(true)),
@@ -2411,7 +2412,7 @@ function draw(time){
     const cycle=step?(player.stride%2)+Math.min(1,(time-step.started)/STEP_MS):0;
     const wave=player.waveStarted===null?null:(time-player.waveStarted)/WAVE_MS;
     const pose=playerCombatPose({time,now:combatNow(),encounter:player.inCombat?hunting.encounter:null,events:combatArt,reduced:reducedMotion.matches});
-    const autoPlan=window.playerCloud?.initial?.plan,autoTask=autoPlan?.source==='rules'?(autoPlan.kind==='queue'?autoPlan.queue?.steps?.[autoPlan.stepIndex]?.type:autoPlan.kind??'fishing'):null,autoChop=autoTask==='woodcutting'&&currentRoom==='logging',autoFish=autoTask==='fishing'&&currentRoom==='pond';
+    const autoPlan=window.playerCloud?.initial?.plan,autoTask=autoPlan?.source==='rules'?(autoPlan.kind==='queue'?autoPlan.queue?.steps?.[autoPlan.stepIndex]?.type:autoPlan.kind??'fishing'):null,autoChop=!autoJourney&&autoTask==='woodcutting'&&currentRoom==='logging',autoFish=!autoJourney&&autoTask==='fishing'&&currentRoom==='pond';
     const swingPhase=autoChop?(time%1000)/1000:woodSession?((time-woodSession.started)%700)/700:0;
     const spritePose=woodSession||autoChop?{...pose,chop:swingPhase}:pose;
     const [enemyX,enemyY]=point(6.5,5.5);
@@ -2585,7 +2586,7 @@ function travelDoor(door){
   else walkTo(door.tile);
 }
 function hudRoomExits(room){
-  if(room==='lounge')return [{to:'hub',loungeExit:true}];
+  if(room==='lounge')return roomDoors.lounge;
   return (roomDoors[room]??[]).filter(door=>doorAvailable(door,room));
 }
 function upgradePlan(path=firstUpgrade.choice){
@@ -3217,6 +3218,7 @@ function advanceAnimation(time){
     $('credits').textContent=new Intl.NumberFormat().format(displayedCredits);
     if(progress===1)walletTween=null;
   }
+  advanceAutoJourney();
   if(!step&&route.length){
     const to=route.shift(),from={x:player.cx,y:player.cy};
     player.direction=(to.x-from.x)-(to.y-from.y)>0?'right':'left';
@@ -3229,7 +3231,7 @@ function advanceAnimation(time){
     if(progress===1){
       player.cx=to.x;player.cy=to.y;player.stride++;step=null;
       const door=roomDoors[currentRoom].find(portal=>portal.tile.x===to.x&&portal.tile.y===to.y&&doorAvailable(portal));
-      if(door)enterRoom(door.to,door.arrival);
+      if(door){if(autoJourney){const reverse=roomDoors[door.to]?.find(d=>d.to===currentRoom);autoJourneyTransition=true;enterRoom(door.to,door.arrival??reverse?.inside??reverse?.tile,{automatic:true});autoJourneyTransition=false;}else enterRoom(door.to,door.arrival);}
       else if(!route.length)savePlayerState();
     }
   }
@@ -3239,6 +3241,7 @@ function advanceAnimation(time){
   updateActivityPrompt();
   draw(time);
   if($('avatarDialog').open)drawAvatarPreview(time);
+  renderAutoJourneyHud();
 }
 
 var bagCategory='all',bagSelection=null,bagOutfitTarget=null;
@@ -4039,7 +4042,7 @@ function updateTradingPost(){
   }
 }
 function savePlayerState(){
-  if(activityBusy)return;
+  if(activityBusy||autoJourney||window.playerCloud?.initial?.plan||window.playerCloud?.initial?.report)return;
   const snapshot={safeVersion:1,progressionVersion,goldEarned,firstUpgrade,tradingPostGuideComplete,bedLessonComplete,credits,health,woodcutting,history,quest,combatGear,hunting,depthsRun,depthsDiscovered,ownedFurniture,furniture:[],homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats,fishingGear,huntingLoot,fishStock,avatar,wardrobe,location:currentRoom,position:{x:player.cx,y:player.cy}};
   save('player-state',snapshot);
   if(window.playerCloud)window.playerCloud.enqueue(JSON.parse(JSON.stringify(snapshot)));
@@ -5051,7 +5054,7 @@ function updateRoomLabel(){
   canvas.setAttribute('aria-label',roomDetails[currentRoom].name+'. Click a floor tile or use arrow keys to walk. '+(landmarks[currentRoom]??'Use the marked trails or the field journal to travel.'));
 }
 function enterRoom(next,arrival,{automatic=false}={}){
-  if(player.inCombat||(hunting.recoveryUntil&&next!=="hub"&&next!=="home")){note("Finish combat or recovery before travelling.");return;}
+  if(!autoJourneyTransition&&(player.inCombat||(hunting.recoveryUntil&&next!=="hub"&&next!=="home"))){note("Finish combat or recovery before travelling.");return;}
   const depthsIndex=depthsStageIndex(next);
   if(depthsRun?!canVisitDepthsRoom(depthsRun,next):depthsIndex>=0)return;
   cancelFishing();selectedTimber=null;resetCombatArt();
@@ -5157,16 +5160,67 @@ window.towerPauseForAccount=()=>{
 window.towerSaveNow=savePlayerState;
 window.towerJoinRoom=connectRoom;
 window.towerHasActiveCast=()=>!!fishingSession||!!woodSession;
+function autoRoomRoute(from,to){
+  const seen=new Set([from]),queue=[{room:from,path:[]}];if(from===to)return [];
+  for(const entry of queue)for(const door of roomDoors[entry.room]??[]){if(seen.has(door.to)||!doorAvailable(door,entry.room))continue;const path=[...entry.path,door];if(door.to===to)return path;seen.add(door.to);queue.push({room:door.to,path});}
+  return null;
+}
+function autoWorkTile(state){
+  const task=state.plan?.kind==='queue'?state.plan.queue?.steps?.[state.plan.stepIndex]?.type:state.plan?.kind;
+  const interactionType=task==='buyBait'?'tackleCounter':task?.startsWith('sell')?'tradeCounter':task?.startsWith('cook')?'stove':null;
+  const item=interactionType?roomFurniture().find(i=>i.type===interactionType):task==='woodcutting'?roomFurniture().filter(i=>isTimberTree(i)&&!treeState(i).regrowsAt).sort((a,b)=>Math.abs(a.x-player.cx)+Math.abs(a.y-player.cy)-Math.abs(b.x-player.cx)-Math.abs(b.y-player.cy))[0]:null;
+  const goal=state.position??{x:5,y:7},exits=new Set((roomDoors[currentRoom]??[]).map(d=>tileKey(d.tile.x,d.tile.y)));
+  const candidates=[];
+  for(let y=0;y<view.rows;y++)for(let x=0;x<view.cols;x++){
+    if(blocked(x,y)||exits.has(tileKey(x,y)))continue;
+    if(item&&!directions.some(([dx,dy])=>overlap(item,{x:x+dx,y:y+dy})))continue;
+    candidates.push({x,y,distance:Math.abs(x-goal.x)+Math.abs(y-goal.y),walk:Math.abs(x-player.cx)+Math.abs(y-player.cy)});
+  }
+  candidates.sort((a,b)=>item?a.walk-b.walk:a.distance-b.distance||a.walk-b.walk);
+  for(const tile of candidates){const path=walkingPath(startPosition(),tile);if(path)return {...tile,path,item};}return null;
+}
+function renderAutoJourneyHud(){
+  if(!autoJourney)return;
+  const state=window.playerCloud?.initial,active=state?.plan?.source==='rules';
+  $('autoPanel').hidden=false;$('autoModeLabel').textContent=active?'Auto · Walking':'Returning home';
+  $('autoCurrent').textContent=autoJourney.blocked?'Path blocked':'Walking to '+(roomDetails[autoJourney.room]?.name??autoJourney.room);
+  $('autoWhere').textContent=roomDetails[currentRoom].name+' · Following the room paths';
+  $('autoDecision').textContent=autoJourney.blocked?'There is no clear route. Clear the doorway or adjust your home layout.':'Your adventurer is walking through the doors to the next activity.';
+  if(!state?.plan&&!state?.report){$('autoTakeControl').disabled=true;$('autoTakeControl').textContent='Walking home…';}
+}
+function finishAutoJourney(){
+  const state=autoJourneyState;autoJourney=null;route=[];target=null;interaction=null;player.seat=null;
+  setPlayerCombat(!!state?.plan?.activeHunt&&!!hunting.encounter&&currentRoom===state.location);
+  updateInventory();updateAdventurePanel();updateCombatPanel();window.towerRefreshAutoStatus?.();
+  if(!state?.plan&&!state?.report){$('autoPanel').hidden=true;savePlayerState();connectRoom();}
+}
+function advanceAutoJourney(){
+  if(!autoJourney||step||route.length)return;
+  const state=autoJourneyState;
+  if(currentRoom!==autoJourney.room){
+    const path=autoRoomRoute(currentRoom,autoJourney.room),door=path?.[0];
+    if(!door){autoJourney.blocked=true;return;}
+    const tiles=walkingPath(startPosition(),door.tile);if(!tiles){autoJourney.blocked=true;return;}
+    if(!tiles.length){const reverse=roomDoors[door.to]?.find(d=>d.to===currentRoom);autoJourneyTransition=true;enterRoom(door.to,door.arrival??reverse?.inside??reverse?.tile,{automatic:true});autoJourneyTransition=false;return;}
+    route=tiles;target=door.tile;autoJourney.blocked=false;return;
+  }
+  const destination=autoWorkTile(state);if(!destination){autoJourney.blocked=true;return;}
+  if(!destination.path.length){if(destination.item){const [w,d]=dimensions(destination.item),dx=destination.item.x+w/2-player.cx,dy=destination.item.y+d/2-player.cy;player.direction=dx-dy>=0?'right':'left';player.back=dx+dy<0;}finishAutoJourney();return;}
+  route=destination.path;target={x:destination.x,y:destination.y};autoJourney.blocked=false;
+}
+window.towerAutoTravelStatus=()=>autoJourney?{destination:roomDetails[autoJourney.room]?.name??autoJourney.room,room:roomDetails[currentRoom]?.name??currentRoom,blocked:!!autoJourney.blocked}:null;
 window.towerApplyRoutineState=state=>{
   trainingController?.close();
   fishingSession=null;fishingStarted=null;woodSession=null;treeFall=null;catchReveal=null;patienceTween=null;
-  $('catchReveal').hidden=true;route=[];step=null;interaction=null;target=null;
+  $('catchReveal').hidden=true;interaction=null;player.seat=null;autoJourneyState=state;
   applyServerGameplay(state);
-  if(currentRoom!==state.location)enterRoom(state.location,state.position,{automatic:true});else if(state.position)movePlayerToSpawn(state.position);
-  setPlayerCombat(!!state.plan?.activeHunt&&!!hunting.encounter);
-  if(state.combatReceipt&&state.combatReceipt.id!==lastCombatReceipt){lastCombatReceipt=state.combatReceipt.id;for(const event of state.combatReceipt.events??[])if((window.playerCloud?.serverTime??Date.now())-(event.at??0)<2500)recordCombatFx(combatArt,event,performance.now());}
+  const alreadyThere=currentRoom===state.location&&!step&&!route.length&&Math.abs(player.cx-(state.position?.x??player.cx))+Math.abs(player.cy-(state.position?.y??player.cy))===0;
+  if(!alreadyThere||autoJourney){if(!autoJourney||autoJourney.room!==state.location){route=[];target=null;}autoJourney={room:state.location,blocked:false};setPlayerCombat(false);}
+  else setPlayerCombat(!!state.plan?.activeHunt&&!!hunting.encounter);
+  if(state.combatReceipt&&state.combatReceipt.id!==lastCombatReceipt){lastCombatReceipt=state.combatReceipt.id;if(!autoJourney)for(const event of state.combatReceipt.events??[])if((window.playerCloud?.serverTime??Date.now())-(event.at??0)<2500)recordCombatFx(combatArt,event,performance.now());}
   updateInventory();updateAdventurePanel();updateCombatPanel();
 };
+
 function openTrainingCourtyard(){
   if(currentRoom!=='outside'){navigateHud('outside');return;}
   if(unavailable()||window.playerCloud?.initial?.plan||window.playerCloud?.initial?.report){note('Finish your current activity before practising.');return;}
