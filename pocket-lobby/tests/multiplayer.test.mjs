@@ -31,3 +31,33 @@ test('room ownership comes from the cookie and never exposes private metadata',a
  const peer=publicPeer({...profiles[0],boxes:[{x:1}],sessionHash:'secret'});for(const field of ['playerId','sessionHash','expiresAt','boxes','room'])assert(!Object.hasOwn(peer,field));
  sql.close();
 });
+
+
+const connectionFixture=extra=>{const sockets=[],status=[],timers=[];let local={room:'home',x:5,y:7,profileKey:'x'};class Socket{constructor(url){this.url=url;this.readyState=1;sockets.push(this);}close(){this.readyState=3;}send(){}message(data){this.onmessage({data:JSON.stringify(data)});}}
+ const room=createRoomConnection({getLocal:()=>local,flush:async()=>{},onPeers:()=>{},onChat:()=>{},onHistory:()=>{},onStatus:s=>status.push(s),onCorrection:()=>{},onUnseat:()=>{},onSessionChanged:()=>{},WebSocketImpl:Socket,setTimeoutImpl:(fn,ms)=>{const timer={fn,ms};timers.push(timer);return timer;},clearTimeoutImpl:timer=>{if(timer)timer.cancelled=true;},...extra});return {room,sockets,status,timers,setLocal:value=>{local={...local,...value};}};};
+
+test('room changes during save and readiness checks never open a stale home socket',async()=>{
+ let resume;const pending=new Promise(resolve=>resume=resolve),g=connectionFixture({flush:()=>pending});
+ try{const joining=g.room.join('home');g.setLocal({room:'lounge'});resume();await joining;assert.equal(g.sockets.length,1);assert(g.sockets[0].url.includes('room=lounge'));}finally{g.room.disconnect();}
+ let finish;const check=new Promise(resolve=>finish=resolve),checked=[],h=connectionFixture({checkRoom:room=>{checked.push(room);return room==='home'?check:Promise.resolve();}});
+ try{const joining=h.room.join('home');await delay(0);h.setLocal({room:'lounge'});finish();await joining;assert.deepEqual(checked,['home','lounge']);assert.equal(h.sockets.length,1);assert(h.sockets[0].url.includes('room=lounge'));}finally{h.room.disconnect();}
+});
+test('failed connections retry the currently visible room and back off instead of hammering every three seconds',async()=>{
+ const g=connectionFixture();try{await g.room.join('home');g.sockets[0].onclose({code:1006});assert.equal(g.timers[0].ms,3000);g.setLocal({room:'lounge'});g.timers[0].fn();await delay(0);assert(g.sockets[1].url.includes('room=lounge'));g.sockets[1].onclose({code:1006});assert.equal(g.timers[1].ms,6000);g.timers[1].fn();await delay(0);g.sockets[2].message({type:'welcome',selfId:'me',players:[],chat:[]});g.sockets[2].onclose({code:1006});assert.equal(g.timers[2].ms,3000,'successful join resets backoff');}finally{g.room.disconnect();}
+});
+test('readiness rejections report the server reason without opening or retrying a doomed WebSocket',async()=>{
+ const error=Object.assign(new Error('Choose smart clothing in Wardrobe.'),{status:403}),g=connectionFixture({checkRoom:async()=>{throw error;}});
+ try{await g.room.join('lounge');assert.equal(g.sockets.length,0);assert.equal(g.timers.length,0);assert.equal(g.status.at(-1),error.message);}finally{g.room.disconnect();}
+});
+test('late readiness results and socket errors cannot overwrite a newer room connection',async()=>{
+ let resume;const pending=new Promise(resolve=>resume=resolve),g=connectionFixture({checkRoom:room=>room==='home'?pending:Promise.resolve()});
+ try{const old=g.room.join('home');await delay(0);g.setLocal({room:'lounge'});await g.room.join('lounge');resume();await old;assert.equal(g.sockets.length,1);assert(g.sockets[0].url.includes('room=lounge'));}finally{g.room.disconnect();}
+});
+test('same-origin readiness checks enforce identity, location and lounge clothing without starting a socket',async t=>{
+ const {normalizeState}=await import('../server/player-state.mjs'),{wearClothingSet}=await import('../public/wardrobe.js'),{db,sql}=testDatabase();t.after(()=>sql.close());let opened=0;
+ const env={TOWER_DB:db,SHARED_ROOMS:{idFromName:()=>{opened++;},get:()=>{throw new Error('Readiness must not open a socket');}}};const token='b'.repeat(64),id=await tokenHash(token),state=normalizeState({location:'lounge',position:{x:5,y:7}});
+ const write=()=>sql.prepare('INSERT OR REPLACE INTO tower_players VALUES (?, ?, 1, ?, ?)').run(id,JSON.stringify(state),'create',Date.now());write();
+ const request=(room,headers={})=>new Request('https://tower.test/api/world/connect?check=1&room='+room,{headers:{Cookie:GUEST_COOKIE+'='+token,'Sec-Fetch-Site':'same-origin',...headers}});
+ assert.equal((await handleWorldConnect(request('lounge'),env)).status,403);wearClothingSet(state.wardrobe,'tailoredSuit');write();const ready=await handleWorldConnect(request('lounge'),env);assert.equal(ready.status,200);assert.deepEqual(await ready.json(),{ready:true,room:'lounge'});assert.equal(opened,0);
+ assert.equal((await handleWorldConnect(request('home'),env)).status,409);assert.equal((await handleWorldConnect(request('lounge',{'Sec-Fetch-Site':'cross-site'}),env)).status,403);assert.equal((await handleWorldConnect(request('lounge',{Origin:'https://evil.test'}),env)).status,403);
+});

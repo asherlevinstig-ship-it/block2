@@ -6,9 +6,9 @@ import {socialRooms,roomBoxes,validRoomTile,reachableMove,roomSeats} from '../pu
 const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store'}});
 export function publicPeer(meta){return {id:meta.id,name:meta.name,outfit:meta.outfit,trousers:meta.trousers??0,boots:meta.boots??0,hair:meta.hair,weapon:meta.weapon,armour:meta.armour??null,x:meta.x,y:meta.y,direction:meta.direction,back:meta.back,seat:meta.seat??null,waveAt:meta.waveAt??0};}
 export async function handleWorldConnect(request,env){
-  const url=new URL(request.url),room=url.searchParams.get('room');
-  if(request.method!=='GET'||request.headers.get('Upgrade')?.toLowerCase()!=='websocket')return json({error:'A WebSocket connection is required.'},426);
-  if(request.headers.get('Origin')!==url.origin)return json({error:'Open the game to join a room.'},403);
+  const url=new URL(request.url),room=url.searchParams.get('room'),check=url.searchParams.get('check')==='1';
+  if(request.method!=='GET'||!check&&request.headers.get('Upgrade')?.toLowerCase()!=='websocket')return json({error:'A WebSocket connection is required.'},426);
+  if(request.headers.get('Origin')!==url.origin&&!(check&&!request.headers.has('Origin')&&request.headers.get('Sec-Fetch-Site')==='same-origin'))return json({error:'Open the game to join a room.'},403);
   if(!Object.hasOwn(socialRooms,room??''))return json({error:'This area is a personal adventure.'},400);
   const identity=await resolveIdentity(request,env);if(!identity?.playerId)return json({error:'Load your character first.'},401);
   const row=await env.TOWER_DB.prepare('SELECT state_json FROM tower_players WHERE player_id = ?').bind(identity.playerId).first();
@@ -18,6 +18,7 @@ export async function handleWorldConnect(request,env){
   if(state.location!==room||state.plan||state.report)return json({error:'Save your current location before joining.'},409);
   const boxes=roomBoxes(room,state.homeFurniture),position=state.position??{x:5,y:7};
   if(!validRoomTile(room,position.x,position.y,boxes))return json({error:'Move to an open tile and try again.'},409);
+  if(check)return json({ready:true,room});
   const profile={playerId:identity.playerId,id:(await tokenHash('public:'+identity.playerId)).slice(0,24),sessionHash:identity.sessionHash??null,expiresAt:identity.expiresAt,room,
     name:state.avatar?.name??'Guest',outfit:state.avatar?.outfit??0,trousers:state.avatar?.trousers??0,boots:state.avatar?.boots??0,hair:state.avatar?.hair??0,weapon:state.combatGear?.equippedWeapon??null,armour:armourSelection(state.combatGear),x:position.x,y:position.y,direction:'right',back:false};
   const namespace=room==='home'?'home:'+identity.playerId:'public:'+room;

@@ -5408,8 +5408,11 @@ function correctRoomPosition(position){
 }
 if(window.playerCloud&&typeof WebSocket!=='undefined'){
   multiplayer=createRoomConnection({
-    getLocal:()=>({room:currentRoom,x:player.cx,y:player.cy,direction:player.direction,back:player.back,seat:player.seat?{type:player.seat.type,x:player.seat.x,y:player.seat.y,rot:player.seat.rot}:null,profileKey:JSON.stringify([avatar,combatGear.equippedWeapon,homeFurniture])}),
-    flush:()=>window.playerCloud.flush(),onPeers:receivePeers,onChat:receiveRoomChat,
+    getLocal:()=>({room:currentRoom,x:player.cx,y:player.cy,direction:player.direction,back:player.back,seat:player.seat?{type:player.seat.type,x:player.seat.x,y:player.seat.y,rot:player.seat.rot}:null,profileKey:JSON.stringify([avatar,combatGear.equippedWeapon,armourSelection(combatGear),homeFurniture])}),
+    flush:()=>window.playerCloud.flush(),checkRoom:async room=>{
+      const response=await fetch('/api/world/connect?check=1&room='+encodeURIComponent(room),{credentials:'same-origin',cache:'no-store'});
+      if(!response.ok){const data=await response.json().catch(()=>({})),error=new Error(data.error??'Room unavailable');error.status=response.status;throw error;}
+    },onPeers:receivePeers,onChat:receiveRoomChat,
     onHistory:history=>{$('messages').replaceChildren();$('roomChatMessages').replaceChildren();for(const message of history)receiveRoomChat(message);},
     onStatus:text=>{$('networkStatus').textContent=text;$('roomChatStatus').textContent=text;$('openRoomChat').disabled=!Object.hasOwn(socialRooms,currentRoom);},
     onCorrection:correctRoomPosition,
