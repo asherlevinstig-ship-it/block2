@@ -292,3 +292,12 @@ export function advanceHunt(encounter,health,stats,now,random=Math.random,weapon
   const action=encounter.nextPlayerAt<=encounter.nextBoarAt?'attack':'enemy';
   return huntingTurn(encounter,health,stats,action,now,random,weapon,upgrade,vestEquipped,charmEquipped,enchantments);
 }
+
+// Only these overworld encounters can be scheduled; dungeon enemies stay manual.
+export const queueHuntEnemies={huntBoars:boar,huntBeetles:beetle};
+export function beetleHuntUnlocked(state){return state.history?.beetleDefeated===true||state.depthsDiscovered===true;}
+export function huntingTargetPreview(state,id){
+ const enemy=id==='beetle'?beetle:boar,weapon=weaponProfile(state.combatGear?.equippedWeapon,state.combatGear?.activeSwordUpgrade,state.combatGear?.weaponEnchantments);
+ const recommended=id!=='beetle'||!!weapon&&weapon.damage/weapon.interval>=weaponCatalog.ironSword.damage/weaponCatalog.ironSword.interval;
+ return {enemy,unlocked:id!=='beetle'||beetleHuntUnlocked(state),recommended,danger:id==='beetle'?(recommended?'Dangerous':'Very dangerous with this weapon'):'Starter hunt',recommendedHealth:id==='beetle'?80:60,xp:enemy.xp.reduce((a,b)=>a+b,0)};
+}

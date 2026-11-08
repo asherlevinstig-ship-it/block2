@@ -1,10 +1,10 @@
 import {normalizeUpgradeGoal} from './upgrade-goals.js';
 export {upgradeTargets,upgradeGoalProgress} from './upgrade-goals.js';
-import {enemyAttack,combatStamina} from './hunting.js';
+import {enemyAttack,combatStamina,queueHuntEnemies} from './hunting.js';
 import {essencePower,bondedEssences} from './essences.js';
 
 export const AWAY_GRACE_MS=3*60000,AWAY_CAP_MS=8*3600000;
-export const queueActions={fishing:'Catch fish',woodcutting:'Gather timber',sellFish:'Sell fish',sellTimber:'Sell timber',buyBait:'Buy bait',huntBoars:'Hunt boars',sellMeat:'Sell Boar Meat',rest:'Rest at home'};
+export const queueActions={fishing:'Catch fish',woodcutting:'Gather timber',sellFish:'Sell fish',sellTimber:'Sell timber',buyBait:'Buy bait',huntBoars:'Hunt boars',huntBeetles:'Hunt Stoneback Beetles',sellShells:'Sell Shell Fragments',sellMeat:'Sell Boar Meat',rest:'Rest at home'};
 export function normalizeRoutineQueue(input){
   if(input===undefined)return undefined;
   if(!input||typeof input!=='object'||Array.isArray(input))throw new Error('Invalid activity queue.');
@@ -13,14 +13,14 @@ export function normalizeRoutineQueue(input){
   return {enabled,repeats,budget,reserveGold,minHealth,steps:steps.map(step=>{
     if(!step||!Object.hasOwn(queueActions,step.type))throw new Error('Choose a valid queue action.');
     const amount=step.type==='rest'?0:step.amount;
-    const min=['sellFish','sellTimber','sellMeat'].includes(step.type)?0:1;
-    if(!Number.isInteger(amount)||amount<(step.type==='rest'?0:min)||amount>1000||step.type==='huntBoars'&&amount>20)throw new Error('Queue amounts must be whole numbers up to 1,000.');
+    const min=['sellFish','sellTimber','sellMeat','sellShells'].includes(step.type)?0:1;
+    if(!Number.isInteger(amount)||amount<(step.type==='rest'?0:min)||amount>1000||Object.hasOwn(queueHuntEnemies,step.type)&&amount>20)throw new Error('Queue amounts must be whole numbers: up to 20 fights or 1,000 items.');
     return {type:step.type,amount};
   })};
 }
 export function describeRoutineQueue(queue){
   const q=normalizeRoutineQueue(queue);
-  return q.steps.map(step=>queueActions[step.type]+(step.type==='rest'?'':['sellFish','sellTimber','sellMeat'].includes(step.type)?' (keep '+step.amount+')':step.type==='buyBait'?' (stock to '+step.amount+')':' ×'+step.amount)).join(' → ')+' · '+q.repeats+' cycle'+(q.repeats===1?'':'s')+' · spend at most '+q.budget+' gold, keep '+q.reserveGold+' gold.'+(q.steps.some(step=>step.type==='huntBoars')?' Start fights only at '+q.minHealth+' HP or above.':'');
+  return q.steps.map(step=>queueActions[step.type]+(step.type==='rest'?'':['sellFish','sellTimber','sellMeat','sellShells'].includes(step.type)?' (keep '+step.amount+')':step.type==='buyBait'?' (stock to '+step.amount+')':' ×'+step.amount)).join(' → ')+' · '+q.repeats+' cycle'+(q.repeats===1?'':'s')+' · spend at most '+q.budget+' gold, keep '+q.reserveGold+' gold.'+(q.steps.some(step=>Object.hasOwn(queueHuntEnemies,step.type))?' Start fights only at '+q.minHealth+' HP or above.':'');
 }
 export function normalizeCharacterRules(input={}){
   if(!input||typeof input!=='object'||Array.isArray(input))throw new Error('Invalid character rules.');
@@ -31,7 +31,7 @@ export function normalizeCharacterRules(input={}){
   const {enabled:combatEnabled=false,q=true,e=true,fleeBelow=20}=combat;
   if(typeof combatEnabled!=='boolean'||typeof q!=='boolean'||typeof e!=='boolean'||!Number.isInteger(fleeBelow)||fleeBelow<0||fleeBelow>80)throw new Error('Invalid combat tactics. Choose a flee threshold from 0 to 80 HP.');
   const queue=normalizeRoutineQueue(input.queue),goal=normalizeUpgradeGoal(input.goal);
-  if(queue?.steps.some(step=>step.type==='huntBoars')&&fleeBelow>=queue.minHealth)throw new Error('The hunting start-health limit must be above the flee threshold.');
+  if(queue?.steps.some(step=>Object.hasOwn(queueHuntEnemies,step.type))&&fleeBelow>=queue.minHealth)throw new Error('The hunting start-health limit must be above the flee threshold.');
   return {enabled,activity,keepBait,timberTarget,...(queue?{queue}:{}),...(goal?{goal}:{}),combat:{enabled:combatEnabled,q,e,fleeBelow}};
 }
 export function describeCharacterRules(input){

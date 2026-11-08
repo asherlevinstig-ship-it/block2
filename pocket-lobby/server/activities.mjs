@@ -56,7 +56,7 @@ function result(state,event,now){
       const before=state.huntingLoot[enemy.loot]??0;
       state.huntingLoot[enemy.loot]=Math.min(1000000,before+1);
       if(state.huntingLoot[enemy.loot]>before)rewards.loot={[enemy.loot]:state.huntingLoot[enemy.loot]-before};
-      if(enemy.id==='beetle')state.depthsDiscovered=true;
+      if(enemy.id==='beetle'){state.depthsDiscovered=true;if(!state.plan?.activeHunt)state.history.beetleDefeated=true;}
       if(enemy.id==='boar'){recordQuest(state.quest,'boar');state.history.boarDefeated=true;}
     }
   }else if(event.outcome==='defeat'){

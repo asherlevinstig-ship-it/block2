@@ -12,6 +12,6 @@ export function finishRoutineReport(state,now){
     if(now>=restedAt){state.health=100;state.hunting.recoveryUntil=0;}
     else state.hunting.recoveryUntil=restedAt;
   }
-  const entry={id:report.routineId,startedAt:report.startedAt,endedAt:report.endedAt,kind:report.kind??'fishing',summary:report.ruleSummary,reason:report.reason,count:report.kind==='queue'?Object.values(report.catches).reduce((a,b)=>a+b,0)+report.timber:report.kind==='woodcutting'?report.timber:report.baitUsed??0,xp:report.xp??0};
+  const entry={id:report.routineId,startedAt:report.startedAt,endedAt:report.endedAt,kind:report.kind??'fishing',summary:report.ruleSummary,reason:report.reason,count:report.kind==='queue'?Object.values(report.catches).reduce((a,b)=>a+b,0)+report.timber:report.kind==='woodcutting'?report.timber:report.baitUsed??0,xp:report.xp??0,...(report.hunts?.byEnemy?{hunts:report.hunts.byEnemy,huntSales:report.huntSales??{}}:{})};
   state.activityLog=[...(state.activityLog??[]).filter(item=>item.id!==entry.id),entry].slice(-10);
 }

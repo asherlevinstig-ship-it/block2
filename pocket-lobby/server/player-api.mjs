@@ -1,3 +1,4 @@
+import {beetleHuntUnlocked} from '../public/hunting.js';
 import {migrateProgression,progressionVersion} from '../public/skill-curve.js';
 import {normalizeMagic} from '../public/essences.js';
 import {applyGameplayAction,protectFishingState} from './gameplay.mjs';
@@ -163,6 +164,7 @@ export async function handlePlayerApi(request,env){
         if(state.hunting?.encounter)return json({error:"Finish combat before changing character rules.",...packet(row)},409);
         if(state.plan||state.report)return json({error:"Read your work report before changing rules.",...packet(row)},409);
         const rules=normalizeCharacterRules(body.rules);
+        if(rules.queue?.enabled&&rules.queue.steps.some(step=>step.type==='huntBeetles')&&!beetleHuntUnlocked(state))return json({error:'Defeat a Stoneback Beetle yourself in the Ruins before scheduling idle hunts.'},400);
         if(body.rules?.combat===undefined)rules.combat=normalizeCharacterRules(state.characterRules).combat;
         if(rules.goal?.target!==state.characterRules?.goal?.target||rules.goal?.autoBuy!==state.characterRules?.goal?.autoBuy)delete state.upgradeGoal;
         state.characterRules=rules;state.routineLastSeen=Date.now();

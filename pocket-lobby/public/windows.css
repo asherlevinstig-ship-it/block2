@@ -406,3 +406,13 @@
 .hud-character:has(#upgradeGoalHud:not([hidden])) .character-caption { display:none; }
 .hud-character #upgradeGoalHud { display:block; width:100%; max-width:100%; margin-top:4px; padding:3px 7px; text-align:left; }
 .hud-character #upgradeGoalHud[hidden] { display:none; }
+.hunting-preview { margin:16px 0; border:1px solid #526b85; border-radius:10px; padding:12px; background:#142438; }
+.hunting-preview summary { color:#efd198; font-weight:700; cursor:pointer; font-size:13px; }
+.hunting-preview-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px; }
+.hunting-preview-grid article { min-width:0; padding:13px; background:#1b3145; border:1px solid #4d6b80; border-radius:9px; }
+.hunting-preview-grid article[data-danger=beetle] { border-color:#bb8d65; background:#302d3c; }
+.hunting-preview-grid h4 { margin:0 0 8px; color:#f0dcad; font-size:14px; }
+.hunting-preview-grid b { color:#efbc82; font-size:11px; }
+.hunting-preview-grid p,.hunting-preview-grid small { display:block; font-size:11px; line-height:1.6; color:#bccedf; }
+.hunting-preview-grid button { margin-top:10px; width:100%; padding:8px; font-size:11px; }
+@media(max-width:600px) { .hunting-preview-grid { grid-template-columns:1fr; } }

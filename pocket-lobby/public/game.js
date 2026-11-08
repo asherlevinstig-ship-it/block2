@@ -4444,17 +4444,33 @@ function renderUpgradeGoalProgress(goal){
   const status=document.createElement('small');status.textContent=g.receipt?.status==='purchased'?'Purchased and equipped. Choose your next goal.':g.receipt||g.owned?'Goal reached. Choose your next goal or clear this one to resume.':g.ready?'Requirements met. Your next idle queue will stop for this upgrade.':'Earn gold and train the required stats through your queue. Sell your catches or hunting loot to turn them into gold.';list.append(status);
 }
 
+function renderHuntingPreview(){
+ const list=$('rulesHuntingPreview');list.replaceChildren();
+ const state={...currentGoalState(),history,depthsDiscovered};
+ for(const id of ['boar','beetle']){
+  const preview=huntingTargetPreview(state,id),enemy=preview.enemy,card=document.createElement('article');card.dataset.danger=id;
+  const title=document.createElement('h4'),danger=document.createElement('b'),reward=document.createElement('p'),advice=document.createElement('p'),unlock=document.createElement('small');
+  title.textContent=enemy.name;danger.textContent=preview.danger;reward.textContent=enemy.health+' HP · '+preview.xp+' combat XP · '+enemy.lootName+' worth '+enemy.sellPrice+' gold per victory';
+  advice.textContent=id==='beetle'?'Recommended: Iron Sword or similar damage per second, Strength 2+, Vitality 2+ and 80+ HP. Shell armour reduces your hits; spell tactics can help.':'Recommended: Training Sword and 60+ HP. A safer way to build combat skills.';
+  unlock.textContent=preview.unlocked?'Idle hunting unlocked · Health and flee rules still apply.':'Locked: defeat a Stoneback Beetle in the Ruins yourself first. Previous victories count.';
+  card.append(title,danger,reward,advice,unlock);
+  if(id==='beetle'){
+   const button=document.createElement('button');button.type='button';button.textContent='Show route to the Ruins';button.onclick=()=>{$('characterRulesDialog').close();setExplorationDestination('ruins');navigateHud('ruins');};card.append(button);
+  }
+  list.append(card);
+ }
+}
 function renderRuleQueue(){
   const list=$('rulesQueueSteps');list.replaceChildren();
   ruleQueueDraft.forEach((step,index)=>{
     const row=document.createElement('li'),number=document.createElement('b'),type=document.createElement('select'),amount=document.createElement('input'),field=document.createElement('label'),controls=document.createElement('div');
     number.textContent=index+1;number.className='queue-step-number';
-    for(const [id,label] of Object.entries(queueActions)){const option=document.createElement('option');option.value=id;option.textContent=label;type.append(option);}
+    for(const [id,label] of Object.entries(queueActions)){const option=document.createElement('option');option.value=id;option.textContent=label;if(id==='huntBeetles'&&!beetleHuntUnlocked({...currentGoalState(),history,depthsDiscovered})){option.disabled=true;option.textContent+=' · Win a manual fight first';}type.append(option);}
     type.value=step.type;type.setAttribute('aria-label','Step '+(index+1)+' activity');
-    const keep=['sellFish','sellTimber','sellMeat'].includes(step.type);field.textContent=keep?'Keep':step.type==='buyBait'?'Stock to':step.type==='huntBoars'?'Max fights':'Gather';
-    amount.type='number';amount.min=keep?'0':'1';amount.max=step.type==='huntBoars'?'20':'1000';amount.value=step.amount;amount.disabled=step.type==='rest';amount.setAttribute('aria-label','Step '+(index+1)+' '+field.textContent.toLowerCase()+' quantity');field.hidden=step.type==='rest';field.append(amount);
+    const keep=['sellFish','sellTimber','sellMeat','sellShells'].includes(step.type);field.textContent=keep?'Keep':step.type==='buyBait'?'Stock to':Object.hasOwn(queueHuntEnemies,step.type)?'Max fights':'Gather';
+    amount.type='number';amount.min=keep?'0':'1';amount.max=Object.hasOwn(queueHuntEnemies,step.type)?'20':'1000';amount.value=step.amount;amount.disabled=step.type==='rest';amount.setAttribute('aria-label','Step '+(index+1)+' '+field.textContent.toLowerCase()+' quantity');field.hidden=step.type==='rest';field.append(amount);
     amount.oninput=()=>{step.amount=Number(amount.value);updateCharacterRulesPreview();};
-    type.onchange=()=>{step.type=type.value;step.amount=step.type==='rest'?0:Math.max(['sellFish','sellTimber','sellMeat'].includes(step.type)?0:1,step.amount);if(step.type==='huntBoars')step.amount=Math.min(20,step.amount);renderRuleQueue();updateCharacterRulesPreview();};
+    type.onchange=()=>{step.type=type.value;if(Object.hasOwn(queueHuntEnemies,step.type))$('rulesHuntingDetails').open=true;step.amount=step.type==='rest'?0:Math.max(['sellFish','sellTimber','sellMeat','sellShells'].includes(step.type)?0:1,step.amount);if(Object.hasOwn(queueHuntEnemies,step.type))step.amount=Math.min(20,step.amount);renderRuleQueue();updateCharacterRulesPreview();};
     controls.className='queue-step-controls';
     for(const [label,title,run,disabled] of [['↑','Move step up',()=>{[ruleQueueDraft[index-1],ruleQueueDraft[index]]=[step,ruleQueueDraft[index-1]];},index===0],['↓','Move step down',()=>{[ruleQueueDraft[index+1],ruleQueueDraft[index]]=[step,ruleQueueDraft[index+1]];},index===ruleQueueDraft.length-1],['×','Remove step',()=>ruleQueueDraft.splice(index,1),false]]){
       const button=document.createElement('button');button.type='button';button.textContent=label;button.setAttribute('aria-label',title+' '+(index+1));button.disabled=disabled;button.onclick=()=>{run();renderRuleQueue();updateCharacterRulesPreview();};controls.append(button);
@@ -4471,9 +4487,9 @@ function updateCharacterRulesPreview(){
   $('rulesQueuePanel').hidden=!queued;$('rulesSingleActivities').hidden=queued;
   $('rulesBaitField').hidden=activity!=='fishing'&&!(queued&&ruleQueueDraft.some(step=>step.type==='fishing'));$('rulesTimberField').hidden=activity!=='woodcutting'&&!(queued&&ruleQueueDraft.some(step=>step.type==='woodcutting'));
   try{
-    const rules=draftCharacterRules();renderUpgradeGoalProgress(rules.goal);$('rulesPreview').textContent=describeCharacterRules(rules);
+    const rules=draftCharacterRules();renderHuntingPreview();if(rules.queue?.enabled&&rules.queue.steps.some(step=>step.type==='huntBeetles')&&!beetleHuntUnlocked({...currentGoalState(),history,depthsDiscovered}))throw new Error('Win a manual Stoneback Beetle fight in the Ruins before scheduling idle hunts.');renderUpgradeGoalProgress(rules.goal);$('rulesPreview').textContent=describeCharacterRules(rules);
     $('rulesCombatEnabled').disabled=savingRules;
-    $('rulesCombatFlee').disabled=savingRules||!rules.combat.enabled&&!ruleQueueDraft.some(step=>step.type==='huntBoars');
+    $('rulesCombatFlee').disabled=savingRules||!rules.combat.enabled&&!ruleQueueDraft.some(step=>Object.hasOwn(queueHuntEnemies,step.type));
     for(const slot of ['q','e']){
       const key=slot.toUpperCase(),power=essencePower(magicState?.slots?.[slot],playerStats,magicState);
       $('rulesAuto'+key).disabled=savingRules||!rules.combat.enabled||!power;
@@ -4507,11 +4523,12 @@ function openCharacterRules(){
   for(const item of [...(state.activityLog??[])].reverse()){
     const row=document.createElement('li'),title=document.createElement('b'),detail=document.createElement('p');
     title.textContent=item.kind==='queue'?'Activity queue':item.kind==='rest'?'Rest at home':item.kind==='fishing'?'Fishing':'Woodcutting';
-    detail.textContent=(item.kind==='rest'?'':item.count+' '+(item.kind==='queue'?'items gathered':item.kind==='fishing'?'fish':'timber')+' · +'+item.xp+' XP · ')+({'goal-reached':'Upgrade goal reached','queue-complete':'All queue cycles complete','spending-limit':'Queue spending limit reached','gold-reserve':'Gold reserve protected','wallet-full':'Wallet is full','bait-reserve':'Bait reserve protected','target-reached':'Timber target reached','away-cap':'Eight-hour cap reached',returned:'Returned to game',combat:'Skipped during combat / recovery',requirements:item.summary,rest:'Rested at home'}[item.reason]??item.reason);
+    detail.textContent=(item.kind==='rest'?'':item.count+' '+(item.kind==='queue'?'items gathered':item.kind==='fishing'?'fish':'timber')+' · +'+item.xp+' XP · ')+({'beetle-trial-required':'Win a Stoneback Beetle fight yourself first','goal-reached':'Upgrade goal reached','queue-complete':'All queue cycles complete','spending-limit':'Queue spending limit reached','gold-reserve':'Gold reserve protected','wallet-full':'Wallet is full','bait-reserve':'Bait reserve protected','target-reached':'Timber target reached','away-cap':'Eight-hour cap reached',returned:'Returned to game',combat:'Skipped during combat / recovery',requirements:item.summary,rest:'Rested at home'}[item.reason]??item.reason);
+    if(item.hunts)detail.textContent+=' · '+Object.entries(item.hunts).map(([id,record])=>huntEnemies[id].name+': '+record.wins+' wins, '+record.xp+' XP, '+(item.huntSales?.[id]??0)+' gold sold').join(' · ');
     row.append(title,detail);log.append(row);
   }
   if(!log.children.length){const row=document.createElement('li');row.textContent='Your next away routine will appear here.';log.append(row);}
-  updateCharacterRulesPreview();$('characterRulesDialog').showModal();
+  $('rulesHuntingDetails').open=ruleQueueDraft.some(step=>Object.hasOwn(queueHuntEnemies,step.type));updateCharacterRulesPreview();$('characterRulesDialog').showModal();
 }
 $('openCharacterRules').onclick=openCharacterRules;$('upgradeGoalHud').onclick=openCharacterRules;
 $('rulesQueueAdd').onclick=()=>{if(ruleQueueDraft.length<8)ruleQueueDraft.push({type:'fishing',amount:5});renderRuleQueue();updateCharacterRulesPreview();};
