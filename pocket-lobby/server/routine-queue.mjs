@@ -40,7 +40,7 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
       const report=p.lastHuntReport;
       if(!report)throw new Error('Missing hunting outcome.');
       delete p.lastHuntReport;delete p.activeHunt;delete p.enemyHealth;
-      p.huntHealth=state.health;p.hunts.recent=[...p.hunts.recent,{enemy:report.enemy,outcome:report.outcome,at:report.endedAt,health:report.endedHealth}].slice(-5);
+      p.huntHealth=state.health;p.hunts.recent=[...p.hunts.recent,{...(report.decision?{decision:report.decision}:{}),enemy:report.enemy,outcome:report.outcome,at:report.endedAt,health:report.endedHealth}].slice(-5);
       p.hunts.byEnemy??={};const record=p.hunts.byEnemy[report.enemy]??={started:1,wins:0,escapes:0,defeats:0,xp:0,loot:0,duration:0};
       record[report.outcome==='victory'?'wins':report.outcome==='escaped'?'escapes':'defeats']++;
       record.xp+=Object.values(report.rewards.xp??{}).reduce((a,b)=>a+b,0);record.loot+=Object.values(report.rewards.loot??{}).reduce((a,b)=>a+b,0);record.duration+=Math.max(0,report.endedAt-(report.summary?.startedAt??report.endedAt));

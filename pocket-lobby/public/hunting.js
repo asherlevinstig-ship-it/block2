@@ -191,7 +191,7 @@ export function normalizeCombatSummary(input){
   if(!input||!Number.isSafeInteger(input.startedAt)||input.startedAt<0)return null;
   const count=value=>Number.isSafeInteger(value)&&value>0?Math.min(value,1000000):0;
   const spells=Object.fromEntries(Object.entries(input.spells??{}).filter(([id,value])=>essencePower(id)&&count(value)>0).map(([id,value])=>[id,count(value)]));
-  return {startedAt:input.startedAt,partial:input.partial===true,spells,interrupts:count(input.interrupts),prevented:count(input.prevented),dodges:count(input.dodges),perfectDodges:count(input.perfectDodges),counters:count(input.counters),counterBonus:count(input.counterBonus),staggers:count(input.staggers),weakSpotHits:count(input.weakSpotHits),staggerBonus:count(input.staggerBonus),automaticCasts:count(input.automaticCasts),fleeAttempts:count(input.fleeAttempts),automaticFlees:count(input.automaticFlees)};
+  return {startedAt:input.startedAt,partial:input.partial===true,spells,interrupts:count(input.interrupts),prevented:count(input.prevented),dodges:count(input.dodges),automaticDodges:count(input.automaticDodges),perfectDodges:count(input.perfectDodges),counters:count(input.counters),counterBonus:count(input.counterBonus),staggers:count(input.staggers),weakSpotHits:count(input.weakSpotHits),staggerBonus:count(input.staggerBonus),automaticCasts:count(input.automaticCasts),fleeAttempts:count(input.fleeAttempts),automaticFlees:count(input.automaticFlees)};
 }
 export function normalizeHunting(input={}){
   if(!input||typeof input!=='object'||Array.isArray(input))throw new Error('Invalid hunting state.');
@@ -216,11 +216,12 @@ export function normalizeHunting(input={}){
       const nextAt=time(burn.nextAt),until=time(burn.until);
       if(nextAt>0&&nextAt<=until)result.encounter.burn={damage:burn.damage,nextAt,until};
     }
-    for(const key of ['chilledUntil','weakenedUntil','interruptResistUntil','tacticsAt','bossPhaseAt','castDeadline','counterUntil','staggerUntil','staggerWeakUntil','staggerResistUntil']){
+    for(const key of ['chilledUntil','weakenedUntil','interruptResistUntil','tacticsAt','autoDodgeUntil','bossPhaseAt','castDeadline','counterUntil','staggerUntil','staggerWeakUntil','staggerResistUntil']){
       if(input.encounter[key]!==undefined)result.encounter[key]=time(input.encounter[key]);
     }
     if(input.encounter.bossVersion!==undefined){if(input.encounter.bossVersion!==1||enemy!=='depthsGuardian')throw new Error('Invalid boss encounter.');result.encounter.bossVersion=1;}
     if(input.encounter.castHits!==undefined){if(!Number.isInteger(input.encounter.castHits)||input.encounter.castHits<0||input.encounter.castHits>2)throw new Error('Invalid cast pressure.');result.encounter.castHits=input.encounter.castHits;}
+    if(input.encounter.lastDecision!==undefined){const d=input.encounter.lastDecision;if(!d||!['cautious','balanced','aggressive'].includes(d.style)||!['dodge','essence','flee'].includes(d.action)||typeof d.reason!=='string'||d.reason.length>160)throw new Error('Invalid combat decision.');result.encounter.lastDecision={at:time(d.at),style:d.style,action:d.action,reason:d.reason};}
     if(input.encounter.counterPercent!==undefined){if(![50,75].includes(input.encounter.counterPercent))throw new Error('Invalid counter bonus.');result.encounter.counterPercent=input.encounter.counterPercent;}
     if(input.encounter.stagger!==undefined){if(!Number.isInteger(input.encounter.stagger)||input.encounter.stagger<0||input.encounter.stagger>=staggerProfile(huntEnemy(input.encounter)).limit)throw new Error('Invalid stagger progress.');result.encounter.stagger=input.encounter.stagger;}
     if(Number.isFinite(input.encounter.weakenPercent)&&input.encounter.weakenPercent>=25&&input.encounter.weakenPercent<=35)result.encounter.weakenPercent=input.encounter.weakenPercent;
@@ -265,6 +266,7 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
   const result={encounter:{...encounter,stamina,staminaAt:now},health,damage:0,taken:0,dodged:false,outcome:'fighting',action};
   if(now>=(encounter.counterUntil??0)){delete result.encounter.counterUntil;delete result.encounter.counterPercent;}
   if(action==='dodge'){
+    delete result.encounter.autoDodgeUntil;
     result.encounter.stamina-=dodgeCost;
     result.encounter.dodgeUntil=now+boarRules.dodgeWindow;
     result.encounter.nextDodgeAt=now+boarRules.dodgeCooldown;
@@ -317,7 +319,8 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
     result.heavy=move.damage>0;
     result.timedDodge=encounter.dodgeUntil>0&&encounter.nextBoarAt<=encounter.dodgeUntil&&encounter.nextBoarAt>=encounter.dodgeUntil-boarRules.dodgeWindow;
     result.dodged=result.timedDodge||random()<attributes.dodge;
-    if(result.timedDodge){result.perfectDodge=true;result.encounter.counterUntil=encounter.nextBoarAt+counterRules.duration;result.counterPercent=Math.round((weaponProfile(weapon,upgrade)?.counterMultiplier??counterRules.bonus)*100);result.encounter.counterPercent=result.counterPercent;}
+    result.automaticDodge=result.timedDodge&&encounter.autoDodgeUntil===encounter.dodgeUntil;
+    if(result.timedDodge&&!result.automaticDodge){result.perfectDodge=true;result.encounter.counterUntil=encounter.nextBoarAt+counterRules.duration;result.counterPercent=Math.round((weaponProfile(weapon,upgrade)?.counterMultiplier??counterRules.bonus)*100);result.encounter.counterPercent=result.counterPercent;}
     if(enemy.shellArmor&&enemy.archetype!=='armoured'&&move.opensShell&&result.timedDodge){
       result.encounter.exposedUntil=now+enemy.exposureMs+(move.id===enemy.move?0:400);
       result.shellExposed=true;

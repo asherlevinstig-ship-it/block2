@@ -32,6 +32,7 @@ function result(state,event,now,random=Math.random){
   if(event.action==='flee'){summary.fleeAttempts++;if(event.automatic)summary.automaticFlees++;}
   if(event.interrupted)summary.interrupts++;
   if(event.dodged)summary.dodges++;
+  if(event.automaticDodge)summary.automaticDodges++;
   if(event.perfectDodge)summary.perfectDodges++;
   if(event.counter){summary.counters++;summary.counterBonus+=event.counterBonus??0;}
   if(event.staggered)summary.staggers++;
@@ -77,7 +78,8 @@ function result(state,event,now,random=Math.random){
     else move(state,'trail',{x:7,y:1});
   }
   if(event.outcome!=='fighting'&&state.combatId){
-    const report={id:state.combatId,enemy:enemy.id,room,outcome:event.outcome,endedAt:now,endedHealth:event.health,summary,rewards};
+    const decision=event.decision??encounter.lastDecision;
+    const report={...(decision?{decision}:{}),id:state.combatId,enemy:enemy.id,room,outcome:event.outcome,endedAt:now,endedHealth:event.health,summary,rewards};
     if(event.outcome==='defeat'&&heldBefore)report.lostSpoils=heldBefore;
     if(state.plan?.kind==='queue'&&state.plan.activeHunt?.id===state.combatId)state.plan.lastHuntReport=report;
     else state.combatReports=[...(state.combatReports??[]).filter(item=>item.id!==report.id),report].slice(-10);
@@ -98,8 +100,8 @@ export function advanceServerCombat(state,now,random=Math.random){
     let event;
     if(automatic){
       if(tactic.action==='essence')event=castEssencePower(state,due,tactic.slot);
-      else event=huntingTurn(encounter,state.health,state.stats,'flee',due,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,state.combatGear.stonebackVestEquipped,state.combatGear.moonwellCharmEquipped,state.combatGear.weaponEnchantments);
-      if(event)event.automatic=true;
+      else event=huntingTurn(encounter,state.health,state.stats,tactic.action,due,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,state.combatGear.stonebackVestEquipped,state.combatGear.moonwellCharmEquipped,state.combatGear.weaponEnchantments);
+      if(event){event.automatic=true;event.decision={at:due,style:tactic.style,action:tactic.action,reason:tactic.reason};if(event.encounter){event.encounter.lastDecision=event.decision;if(tactic.action==='dodge')event.encounter.autoDodgeUntil=event.encounter.dodgeUntil;}}
     }else event=advanceHunt(encounter,state.health,state.stats,due,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,state.combatGear.stonebackVestEquipped,state.combatGear.moonwellCharmEquipped,state.combatGear.weaponEnchantments);
     if(!event)break;
     events.push(result(state,event,due,random));

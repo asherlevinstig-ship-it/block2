@@ -753,7 +753,7 @@ function renderCombatRecap(report){
   $('combatRecapInterrupts').textContent=summary.interrupts;
   $('combatRecapBlocked').textContent=summary.prevented;
   $('combatRecapDodges').textContent=summary.dodges;
-  $('combatRecapAutomatic').textContent=summary.staggers+' stagger breaks · '+summary.weakSpotHits+' weak-spot hits · '+summary.perfectDodges+' perfect dodges · '+summary.counters+' counterattacks · +'+summary.counterBonus+' counter bonus damage · '+summary.automaticCasts+' automatic spell casts · '+summary.fleeAttempts+' flee attempts ('+summary.automaticFlees+' automatic)';
+  $('combatRecapAutomatic').textContent=summary.staggers+' stagger breaks · '+summary.weakSpotHits+' weak-spot hits · '+summary.perfectDodges+' perfect dodges · '+summary.counters+' counterattacks · +'+summary.counterBonus+' counter bonus damage · '+summary.automaticDodges+' automatic dodges · '+summary.automaticCasts+' automatic spell casts · '+summary.fleeAttempts+' flee attempts ('+summary.automaticFlees+' automatic)';
   $('combatRecapDuration').textContent=summary.partial?'Recorded from the latest update.':'Encounter duration · '+Math.max(0,Math.round((report.endedAt-summary.startedAt)/1000))+'s';
   const action=combatRecapAction(report);
   $('combatRecapNext').hidden=!action;
@@ -1085,6 +1085,8 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
   if(result.weakSpot)combatMessage+=' Weak spot · +'+result.staggerBonus+' damage.';
   if(result.staggered){combatMessage+=' Stagger break! Enemy stunned · Weak spot open.';if(playEffects)combatAudio.play('stagger');}
   if(result.phaseChange)combatMessage='Phase '+result.phaseChange.index+' · '+result.phaseChange.name+'. '+result.phaseChange.hint;
+  if(result.automaticDodge)combatMessage='Auto dodge · Attack avoided.';
+  if(result.decision)combatMessage=result.decision.reason+' '+combatMessage;
   if(result.automatic)combatMessage='Tactic · '+combatMessage;
   if(result.nextMove&&result.outcome==='fighting')combatMessage+=(combatMessage?' ':'')+'Next: '+result.nextMove+'.';
   if(result.taken&&playEffects){
@@ -1231,6 +1233,8 @@ function updateCombatPanel(){
   $('combatLog').textContent=combatMessage||'The '+enemy.name+' waits. It attacks when you approach.';
   const weapon=weaponProfile(combatGear.equippedWeapon,combatGear.activeSwordUpgrade,combatGear.weaponEnchantments);
   const attributes=huntingAttributes(playerStats,combatGear.equippedWeapon,combatGear.activeSwordUpgrade,false,combatGear.weaponEnchantments);
+  $('combatIntelligence').hidden=!encounter||!characterRules.combat.enabled;
+  $('combatIntelligence').textContent=characterRules.combat.enabled?combatStyles[characterRules.combat.style].name+' · '+(encounter?.lastDecision?.reason??'Watching health and enemy warnings.') :'';
   $('combatGuide').textContent=(weapon?.name??'No weapon equipped')+(weapon?.upgradeName?' · '+weapon.upgradeName:'')+' · Attack '+attributes.damage+'–'+(attributes.damage+4)+' every '+attackSeconds(attributes.attackInterval)+' · Dodge '+Math.round(attributes.dodge*100)+'% · Escape '+Math.round(attributes.escape*100)+'% · Armor '+attributes.armor;
   if(stage>=0)$('adventureLandmark').hidden=true;
   else if(beetle)$('adventureLandmark').hidden=!!encounter;
@@ -4155,7 +4159,7 @@ function updateEssenceHotbar(now=Date.now()){
     button.dataset.equipped=String(!!power);
     button.disabled=player.inCombat&&!canCast;
     button.style.setProperty('--power-color',power?.color??'#b7a4ed');
-    button.title=power?powerDescription(power)+(automated?' '+describeCombatSpell(power):''):'Open Essences to equip a power';
+    button.title=power?powerDescription(power)+(automated?' '+describeCombatSpell(power,characterRules.combat.style):''):'Open Essences to equip a power';
     button.setAttribute('aria-label',power?(canCast?'Cast ':'')+power.name+' · '+status:'Equip a power in Essences');
     const name=$('essenceHotbarName'+suffix),label=$('essenceHotbarStatus'+suffix),symbol=$('essenceHotbarSymbol'+suffix);
     if(name.textContent!==(power?.name??'Equip a power'))name.textContent=power?.name??'Equip a power';
@@ -4638,7 +4642,7 @@ function renderRuleQueue(){
   });
   $('rulesQueueAdd').disabled=ruleQueueDraft.length>=8;
 }
-function draftCharacterRules(){return normalizeCharacterRules({enabled:$('rulesEnabled').checked,activity:$('rulesActivity').value,keepBait:Number($('rulesKeepBait').value),timberTarget:Number($('rulesTimberTarget').value),queue:{enabled:$('rulesUseQueue').checked,steps:ruleQueueDraft.map(step=>({...step})),repeats:Number($('rulesQueueRepeats').value),budget:Number($('rulesQueueBudget').value),reserveGold:Number($('rulesQueueReserve').value),minHealth:Number($('rulesQueueHealth').value)},goal:{target:$('rulesGoalTarget').value||null,autoBuy:$('rulesGoalAutoBuy').checked},combat:{enabled:$('rulesCombatEnabled').checked,q:$('rulesAutoQ').checked,e:$('rulesAutoE').checked,fleeBelow:Number($('rulesCombatFlee').value)}});}
+function draftCharacterRules(){return normalizeCharacterRules({enabled:$('rulesEnabled').checked,activity:$('rulesActivity').value,keepBait:Number($('rulesKeepBait').value),timberTarget:Number($('rulesTimberTarget').value),queue:{enabled:$('rulesUseQueue').checked,steps:ruleQueueDraft.map(step=>({...step})),repeats:Number($('rulesQueueRepeats').value),budget:Number($('rulesQueueBudget').value),reserveGold:Number($('rulesQueueReserve').value),minHealth:Number($('rulesQueueHealth').value)},goal:{target:$('rulesGoalTarget').value||null,autoBuy:$('rulesGoalAutoBuy').checked},combat:{enabled:$('rulesCombatEnabled').checked,q:$('rulesAutoQ').checked,e:$('rulesAutoE').checked,fleeBelow:Number($('rulesCombatFlee').value),style:$('rulesCombatStyle').value,dodge:$('rulesAutoDodge').checked}});}
 function updateCharacterRulesPreview(){
   const activity=$('rulesActivity').value;
   for(const name of ['rest','fishing','woodcutting'])$('routine'+name[0].toUpperCase()+name.slice(1)).setAttribute('aria-pressed',String(activity===name));
@@ -4649,14 +4653,16 @@ function updateCharacterRulesPreview(){
     const rules=draftCharacterRules();renderHuntingPreview();if(rules.queue?.enabled&&rules.queue.steps.some(step=>step.type==='huntBeetles')&&!beetleHuntUnlocked({...currentGoalState(),history,depthsDiscovered}))throw new Error('Win a manual Stoneback Beetle fight in the Ruins before scheduling idle hunts.');renderUpgradeGoalProgress(rules.goal);$('rulesPreview').textContent=describeCharacterRules(rules);
     $('rulesCombatEnabled').disabled=savingRules;
     $('rulesCombatFlee').disabled=savingRules||!rules.combat.enabled&&!ruleQueueDraft.some(step=>Object.hasOwn(queueHuntEnemies,step.type));
+    $('rulesStyleDescription').textContent=combatStyles[rules.combat.style].description;
+    $('rulesCombatStyle').disabled=$('rulesAutoDodge').disabled=savingRules||!rules.combat.enabled;
     for(const slot of ['q','e']){
       const key=slot.toUpperCase(),power=essencePower(magicState?.slots?.[slot],playerStats,magicState);
       $('rulesAuto'+key).disabled=savingRules||!rules.combat.enabled||!power;
       $('rules'+key+'Power').textContent=key+' · '+(power?.name??'Empty slot');
-      $('rules'+key+'Policy').textContent=describeCombatSpell(power);
+      $('rules'+key+'Policy').textContent=describeCombatSpell(power,rules.combat.style);
     }
     $('rulesCombatPreview').textContent=rules.combat.enabled
-      ?'Tactics run online and offline in encounters you enter. '+(rules.combat.fleeBelow?'Attempt to flee at '+rules.combat.fleeBelow+' HP or lower.':'Keep fighting until the encounter ends.')
+      ?combatStyles[rules.combat.style].name+' tactics run online and offline. '+(rules.combat.dodge?'Automatic dodging is enabled. ':'Automatic dodging is off. ')+(rules.combat.fleeBelow?'Attempt to flee at '+rules.combat.fleeBelow+' HP or lower.':'Keep fighting until the encounter ends.')
       :'Combat is under your manual control.';
     let detail='Choose Auto to start now. Your saved routine also begins after three minutes without input, including while the game is open. It runs for up to eight hours.';
     if(rules.enabled&&!rules.queue?.enabled&&activity!=='rest'){
@@ -4674,6 +4680,7 @@ function openCharacterRules(){
   window.towerPauseForAccount();
   const state=window.playerCloud?.initial??savedPlayerState??{},rules=normalizeCharacterRules(characterRules);
   $('rulesEnabled').checked=rules.enabled;$('rulesActivity').value=rules.activity;$('rulesKeepBait').value=rules.keepBait;$('rulesTimberTarget').value=rules.timberTarget;$('rulesStatus').textContent='';
+  $('rulesCombatStyle').value=rules.combat.style;$('rulesAutoDodge').checked=rules.combat.dodge;
   $('rulesCombatEnabled').checked=rules.combat.enabled;$('rulesAutoQ').checked=rules.combat.q;$('rulesAutoE').checked=rules.combat.e;$('rulesCombatFlee').value=rules.combat.fleeBelow;
   ruleQueueDraft=(rules.queue?.steps??[{type:'fishing',amount:5},{type:'sellFish',amount:0},{type:'rest',amount:0}]).map(step=>({...step}));
   $('rulesUseQueue').checked=rules.queue?.enabled===true;$('rulesQueueRepeats').value=rules.queue?.repeats??1;$('rulesQueueBudget').value=rules.queue?.budget??0;$('rulesQueueReserve').value=rules.queue?.reserveGold??100;$('rulesQueueHealth').value=rules.queue?.minHealth??60;renderRuleQueue();
@@ -4691,7 +4698,7 @@ function openCharacterRules(){
 }
 $('openCharacterRules').onclick=openCharacterRules;$('upgradeGoalHud').onclick=openCharacterRules;
 $('rulesQueueAdd').onclick=()=>{if(ruleQueueDraft.length<8)ruleQueueDraft.push({type:'fishing',amount:5});renderRuleQueue();updateCharacterRulesPreview();};
-for(const id of ['rulesUseQueue','rulesQueueRepeats','rulesQueueBudget','rulesQueueReserve','rulesQueueHealth','rulesGoalTarget','rulesGoalAutoBuy','rulesEnabled','rulesActivity','rulesKeepBait','rulesTimberTarget','rulesCombatEnabled','rulesAutoQ','rulesAutoE','rulesCombatFlee'])$(id).oninput=updateCharacterRulesPreview;
+for(const id of ['rulesUseQueue','rulesQueueRepeats','rulesQueueBudget','rulesQueueReserve','rulesQueueHealth','rulesGoalTarget','rulesGoalAutoBuy','rulesEnabled','rulesActivity','rulesKeepBait','rulesTimberTarget','rulesCombatEnabled','rulesCombatStyle','rulesAutoDodge','rulesAutoQ','rulesAutoE','rulesCombatFlee'])$(id).oninput=updateCharacterRulesPreview;
 $('characterRulesDialog').oncancel=event=>{if(savingRules)event.preventDefault();};
 $('characterRulesForm').onsubmit=async event=>{
   event.preventDefault();if(savingRules)return;

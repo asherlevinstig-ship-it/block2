@@ -37,7 +37,7 @@ const color={
 
 export function recordCombatFx(events,result,time){
   const {action,damage,taken,dodged,dodgeStarted,warded,absorbed,move,attackShape,heavy,
-    staggered,weakSpot,staggerBonus,staggerGained,perfectDodge,counter,counterBonus,shellGuarded,power,powerForm,powerColor,ward,healed,staminaRestored,interrupted,interruptResisted,weakened}=result;
+    staggered,weakSpot,staggerBonus,staggerGained,perfectDodge,automaticDodge,counter,counterBonus,shellGuarded,power,powerForm,powerColor,ward,healed,staminaRestored,interrupted,interruptResisted,weakened}=result;
   if(result.phaseChange){events.phaseAt=time;events.phaseChange=result.phaseChange;}
   if(result.outcome==='victory')events.vaultVictory=result.enemyId==='depthsGuardian';
   if(action==='attack'&&damage)events.strikeAt=time;
@@ -53,7 +53,7 @@ export function recordCombatFx(events,result,time){
   if(!power&&!damage&&!taken&&!dodged&&!warded&&!absorbed&&!weakened&&action!=='enemy')return;
   const live=(events.bursts??[]).filter(effect=>time-effect.time<feedbackLife);
   events.bursts=[...live,{time,action,damage,taken,dodged,warded,absorbed,move,attackShape,heavy,
-    staggered,weakSpot,staggerBonus,staggerGained,perfectDodge,counter,counterBonus,shellGuarded,power,powerForm,powerColor,ward,healed,staminaRestored,interrupted,interruptResisted,weakened}].slice(-6);
+    staggered,weakSpot,staggerBonus,staggerGained,perfectDodge,automaticDodge,counter,counterBonus,shellGuarded,power,powerForm,powerColor,ward,healed,staminaRestored,interrupted,interruptResisted,weakened}].slice(-6);
 }
 function line(ctx,x1,y1,x2,y2){
   ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
@@ -189,7 +189,7 @@ function drawCombatNumbers(ctx,effects,time,{bx,by,px,py},reduced){
     if(effect.staggered&&enemyRow<3)popup(ctx,'STAGGER BREAK!',bx,by-22-rise-enemyRow++*13,t,'#ffe49a',10);
     if((effect.interrupted||effect.interruptResisted)&&enemyRow<3)popup(ctx,effect.interrupted?'INTERRUPTED':'INTERRUPT RESISTED',bx,by-22-rise-enemyRow++*13,t,'#ffe49a',9);
     const blocks=(effect.warded??0)+(effect.absorbed??0);
-    const playerText=effect.taken?'−'+effect.taken:effect.perfectDodge?'PERFECT DODGE!':effect.dodged?'DODGE':effect.healed?'+'+effect.healed+' HP'
+    const playerText=effect.taken?'−'+effect.taken:effect.perfectDodge?'PERFECT DODGE!':effect.automaticDodge?'AUTO DODGE':effect.dodged?'DODGE':effect.healed?'+'+effect.healed+' HP'
       :effect.staminaRestored?'+'+effect.staminaRestored+' STAMINA':blocks?'BLOCK '+blocks:effect.ward?'WARD '+effect.ward:'';
     const tint=effect.taken?color.hurt:effect.healed?color.heal:effect.dodged?color.evade:effect.powerColor??color.ward;
     if(playerText&&playerRow<3)popup(ctx,playerText,px,py-34-rise-playerRow++*13,t,tint,effect.taken?13:10);

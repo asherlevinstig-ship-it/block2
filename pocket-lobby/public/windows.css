@@ -505,3 +505,5 @@
 @media(max-width:680px){.control-switch button{padding:6px;font-size:11px;}.auto-panel{bottom:8px;padding:10px 12px;}.auto-panel h3{font-size:15px;}.auto-panel p{font-size:11px;margin:3px 0;}.auto-panel-actions{margin-top:7px;}}
 
 .auto-controlled #offlinePlanPanel,.auto-controlled #startOfflineWoodcutting,.auto-controlled #adventureLandmark{display:none!important;}
+
+.combat-style-field{display:grid;gap:8px;margin:16px 0 8px;font-weight:700;color:#ebd49b;}.combat-style-field select{width:100%;min-height:44px;}.combat-style-description,.combat-intelligence{padding:10px 12px;border:1px solid #596e85;border-radius:8px;background:#102137;color:#bed6e9;font-size:12px;line-height:1.6;}.auto-panel .auto-decision{color:#b6e1d0;border-left:2px solid #8fbfa9;padding-left:8px;}.auto-panel .auto-decision:empty{display:none;}

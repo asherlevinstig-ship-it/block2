@@ -156,6 +156,7 @@
     document.getElementById('autoWhere').textContent=info.location+' · Next: '+info.next;
     document.getElementById('autoEarnings').textContent=info.earned;
     document.getElementById('autoReason').textContent=info.reason;
+    document.getElementById('autoDecision').textContent=info.decision;
     document.getElementById('autoTakeControl').textContent=info.returning?'Finishing current fight…':info.running?'Take control':'Return to play';
     document.getElementById('autoTakeControl').disabled=controlBusy||info.returning;
     panel.dataset.running=String(info.running);

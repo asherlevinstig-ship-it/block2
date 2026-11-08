@@ -18,7 +18,7 @@ function fighter(ids=['fire:sword','ice:shield'],picks=['fire','ice','shadow'],c
 const outcome=s=>({health:s.health,hunting:s.hunting,magic:s.magic,stats:s.stats,loot:s.huntingLoot,location:s.location,depthsRun:s.depthsRun});
 
 test('old rules default to manual combat and tactic inputs reject malformed controls',()=>{
- assert.deepEqual(normalizeCharacterRules().combat,{enabled:false,q:true,e:true,fleeBelow:20});
+ assert.deepEqual(normalizeCharacterRules().combat,{enabled:false,q:true,e:true,fleeBelow:20,style:'balanced',dodge:false});
  for(const combat of [null,[],true,{enabled:'yes'},{q:1},{e:'no'},{fleeBelow:-1},{fleeBelow:81},{fleeBelow:20.5}])assert.throws(()=>normalizeCharacterRules({combat}),/Invalid combat tactics/);
  const s=fighter();delete s.hunting.encounter.tacticsAt;assert.equal(nextCombatTactic(s),null);
  assert.throws(()=>normalizeHunting({encounter:{health:10,nextPlayerAt:2000,nextBoarAt:3000,tacticsAt:-1}}),/Invalid hunting time/);
@@ -66,9 +66,9 @@ test('Shadow waits for heavy warnings and Storm respects resistance while openin
  const s=fighter(['shadow:sword','storm:shield'],['fire','shadow','storm'],undefined,'depthsCache');
  s.hunting.encounter.nextPlayerAt=100000;s.hunting.encounter.enemyMove='runicSlam';s.hunting.encounter.nextBoarAt=3000;
  const first=advanceServerCombat(s,2500,()=>.5).filter(event=>event.automatic);
- assert.deepEqual(first.map(event=>[event.power,event.at]),[['Shadow Blade',1850],['Storm Aegis',2000]]);
- assert.equal(s.hunting.encounter.exposedUntil,4400);
- assert.equal(s.hunting.encounter.interruptResistUntil,8000);
+ assert.deepEqual(first.map(event=>[event.power,event.at]),[['Storm Aegis',1850]]);
+ assert.equal(s.hunting.encounter.exposedUntil,4250);
+ assert.equal(s.hunting.encounter.interruptResistUntil,7850);
  const storm=fighter(['storm:sword','storm:shield'],['fire','shadow','storm'],undefined,'depthsCache');
  storm.hunting.encounter.nextPlayerAt=100000;storm.hunting.encounter.enemyMove='runicSlam';storm.hunting.encounter.nextBoarAt=3000;
  const interrupts=advanceServerCombat(storm,10000,()=>.5).filter(event=>event.interrupted);

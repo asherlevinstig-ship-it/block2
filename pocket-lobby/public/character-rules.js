@@ -1,7 +1,7 @@
 import {normalizeUpgradeGoal} from './upgrade-goals.js';
 export {upgradeTargets,upgradeGoalProgress} from './upgrade-goals.js';
-import {enemyAttack,combatStamina,queueHuntEnemies} from './hunting.js';
-import {essencePower,bondedEssences} from './essences.js';
+import {enemyAttack,combatStamina,queueHuntEnemies,huntEnemy,huntingAttributes,combatDodgeCost,weaponProfile} from './hunting.js';
+import {essencePower,bondedEssences,essenceEffects} from './essences.js';
 
 export const AWAY_GRACE_MS=3*60000,AWAY_CAP_MS=8*3600000;
 export const queueActions={fishing:'Catch fish',woodcutting:'Gather timber',sellFish:'Sell fish',sellTimber:'Sell timber',buyBait:'Buy bait',huntBoars:'Hunt boars',huntBeetles:'Hunt Stoneback Beetles',sellShells:'Sell Shell Fragments',sellMeat:'Sell Boar Meat',rest:'Rest at home'};
@@ -28,11 +28,11 @@ export function normalizeCharacterRules(input={}){
   if(typeof enabled!=='boolean'||!['rest','fishing','woodcutting'].includes(activity)||!Number.isInteger(keepBait)||keepBait<0||keepBait>1000||!Number.isInteger(timberTarget)||timberTarget<1||timberTarget>1000000)throw new Error('Invalid character rules. Choose 0–1,000 bait to keep and a timber target from 1 to 1,000,000.');
   const combat=input.combat===undefined?{}:input.combat;
   if(!combat||typeof combat!=='object'||Array.isArray(combat))throw new Error('Invalid combat tactics.');
-  const {enabled:combatEnabled=false,q=true,e=true,fleeBelow=20}=combat;
-  if(typeof combatEnabled!=='boolean'||typeof q!=='boolean'||typeof e!=='boolean'||!Number.isInteger(fleeBelow)||fleeBelow<0||fleeBelow>80)throw new Error('Invalid combat tactics. Choose a flee threshold from 0 to 80 HP.');
+  const {enabled:combatEnabled=false,q=true,e=true,fleeBelow=20,style='balanced',dodge=false}=combat;
+  if(!Object.hasOwn(combatStyles,style)||typeof dodge!=='boolean'||typeof combatEnabled!=='boolean'||typeof q!=='boolean'||typeof e!=='boolean'||!Number.isInteger(fleeBelow)||fleeBelow<0||fleeBelow>80)throw new Error('Invalid combat tactics. Choose a flee threshold from 0 to 80 HP.');
   const queue=normalizeRoutineQueue(input.queue),goal=normalizeUpgradeGoal(input.goal);
   if(queue?.steps.some(step=>Object.hasOwn(queueHuntEnemies,step.type))&&fleeBelow>=queue.minHealth)throw new Error('The hunting start-health limit must be above the flee threshold.');
-  return {enabled,activity,keepBait,timberTarget,...(queue?{queue}:{}),...(goal?{goal}:{}),combat:{enabled:combatEnabled,q,e,fleeBelow}};
+  return {enabled,activity,keepBait,timberTarget,...(queue?{queue}:{}),...(goal?{goal}:{}),combat:{enabled:combatEnabled,q,e,fleeBelow,style,dodge}};
 }
 export function describeCharacterRules(input){
   const r=normalizeCharacterRules(input);
@@ -44,9 +44,11 @@ export function describeCharacterRules(input){
 
 
 export const COMBAT_REACTION_MS=150;
-export function describeCombatSpell(power){
+export function describeCombatSpell(power,style='balanced'){
   if(!power)return 'Equip a power in Essences to use this slot.';
-  const injured=power.form==='renewal'?' while you’re injured':'';
+  if(power.form==='renewal')return 'Heal at '+(combatStyles[style]?.healAt??80)+' HP or lower.';
+  if(power.form==='shield'&&power.gem==='fire')return 'Raise a ward during a warning and refresh the burn.';
+  const injured='';
   if(power.gem==='fire')return 'Refresh the burn when it expires'+injured+'.';
   if(power.gem==='ice')return 'Cast during an attack warning when Chill has expired'+injured+'.';
   if(power.gem==='shadow')return 'Weaken a heavy attack during its warning'+injured+'.';
@@ -57,38 +59,77 @@ export function describeCombatSpell(power){
   if(power.form==='focus')return 'Delay an attack during its warning.';
   return 'Heal when health is 80 HP or lower.';
 }
+export const combatStyles={
+ cautious:{name:'Cautious',healAt:90,dodgeLead:280,description:'Heal early, defend against all warnings, and retreat early if an unprotected hit would cross your safety line.'},
+ balanced:{name:'Balanced',healAt:80,dodgeLead:240,description:'Balance damage and survival. Save dodges for heavy attacks, charged spells and dangerous hits.'},
+ aggressive:{name:'Aggressive',healAt:50,dodgeLead:200,description:'Press the attack, heal later, and save defensive moves for lethal threats. Always respect your retreat HP.'}
+};
+export function incomingCombatDamage(state){
+ const e=state.hunting?.encounter;if(!e)return 0;
+ const enemy=huntEnemy(e),attack=enemyAttack(e),attributes=huntingAttributes(state.stats??{},state.combatGear?.equippedWeapon);
+ let damage=Math.max(4,enemy.damage+attack.damage+5-attributes.armor);
+ if(e.weakenedUntil>e.nextBoarAt)damage-=Math.floor(damage*(e.weakenPercent??25)/100);
+ if(state.combatGear?.stonebackVestEquipped)damage=Math.max(0,damage-4);
+ if(e.magicWardUntil>e.nextBoarAt)damage=Math.max(0,damage-(e.magicWard??0));
+ return damage;
+}
 export function nextCombatTactic(state){
-  const saved=state.characterRules?.combat,queued=state.plan?.kind==='queue'&&state.plan.activeHunt;
-  const rules=queued?{...saved,enabled:true,q:!!saved?.enabled&&saved.q,e:!!saved?.enabled&&saved.e}:saved,encounter=state.hunting?.encounter;
-  if(!rules?.enabled||!encounter||!Number.isSafeInteger(encounter.tacticsAt))return null;
-  const earliest=encounter.tacticsAt+COMBAT_REACTION_MS;
-  if(rules.fleeBelow>0&&state.health<=rules.fleeBelow)return {at:Math.max(earliest,encounter.nextFleeAt??0),action:'flee'};
-  const magic=state.magic,attack=enemyAttack(encounter),strike=encounter.nextBoarAt;
-  const warning=strike-attack.tell+COMBAT_REACTION_MS;
-  let next=null;
-  for(const slot of ['q','e']){
-    if(!rules[slot])continue;
-    const id=magic?.slots?.[slot],power=essencePower(id,state.stats,magic);
-    if(!power||!magic.unlocked?.includes(id)||!bondedEssences(magic.picks).includes(power.gem)||power.form==='renewal'&&state.health>=100)continue;
-    let at=Math.max(earliest,magic.cooldowns?.[id]??0),warned=false;
-    if(power.gem==='fire')at=Math.max(at,encounter.burn?.until??0);
-    else if(power.gem==='ice'){
-      at=Math.max(at,warning,encounter.chilledUntil??0);warned=true;
-    }
-    else if(power.gem==='shadow'){
-      if(attack.damage<=0)continue;
-      at=Math.max(at,warning,encounter.weakenedUntil??0);warned=true;
-    }else if(power.gem==='storm'){
-      at=Math.max(at,warning,encounter.interruptResistUntil??0);warned=true;
-    }else if(power.form==='shield'){
-      at=Math.max(at,warning,encounter.magicWardUntil??0);warned=true;
-    }else if(power.form==='focus'){
-      at=Math.max(at,warning);warned=true;
-    }else if(power.form==='speed'){
-      if(combatStamina(encounter,state.stats,at,state.combatGear?.moonwellCharmEquipped)>60)continue;
-    }else if(power.form==='renewal'&&state.health>80)continue;
-    if(warned&&at>=strike)continue;
-    if(!next||at<next.at)next={at,action:'essence',slot};
+ const saved=state.characterRules?.combat,queued=state.plan?.kind==='queue'&&state.plan.activeHunt;
+ const rules=queued?{...saved,enabled:true,q:!!saved?.enabled&&saved.q,e:!!saved?.enabled&&saved.e,dodge:!!saved?.enabled&&saved.dodge}:saved,e=state.hunting?.encounter;
+ if(!rules?.enabled||!e||!Number.isSafeInteger(e.tacticsAt))return null;
+ const style=Object.hasOwn(combatStyles,rules.style)?rules.style:'balanced',policy=combatStyles[style],earliest=e.tacticsAt+COMBAT_REACTION_MS;
+ const make=(at,action,reason,priority=0,slot)=>({at,action,reason,style,priority,...(slot?{slot}:{})});
+ if(rules.fleeBelow>0&&state.health<=rules.fleeBelow)return make(Math.max(earliest,e.nextFleeAt??0),'flee','Retreating: health reached your '+rules.fleeBelow+' HP safety line.',100);
+ const magic=state.magic,attack=enemyAttack(e),strike=e.nextBoarAt,warning=strike-attack.tell+COMBAT_REACTION_MS;
+ const incoming=incomingCombatDamage(state),lethal=incoming>=state.health;
+ const physicalInterrupt=attack.shape==='bolt'&&e.castDeadline===strike&&e.castHits===2&&e.nextPlayerAt<strike;
+ const alreadyDodging=e.dodgeUntil>=strike;
+ const weapon=weaponProfile(state.combatGear?.equippedWeapon,state.combatGear?.activeSwordUpgrade,state.combatGear?.weaponEnchantments),enemy=huntEnemy(e);
+ const attributes=huntingAttributes(state.stats??{},state.combatGear?.equippedWeapon,state.combatGear?.activeSwordUpgrade,false,state.combatGear?.weaponEnchantments);
+ const minimumHit=enemy.shellArmor&&!(e.exposedUntil>e.nextPlayerAt)?Math.max(1,Math.floor((attributes.damage-enemy.shellArmor)*(enemy.archetype==='armoured'?.5:1))):attributes.damage;
+ const burn=e.burn,burnTicks=burn?Math.max(0,Math.floor((Math.min(strike-1,burn.until)-burn.nextAt)/essenceEffects.fire.interval)+1):0;
+ const finishingHit=!!weapon&&e.nextPlayerAt<strike&&minimumHit>=e.health||burnTicks*(burn?.damage??0)>=e.health;
+ let next=null;
+ const offer=tactic=>{if(!next||tactic.at<next.at||tactic.at===next.at&&tactic.priority>next.priority)next=tactic;};
+ const wantsDefense=style==='cautious'||style==='balanced'&&(attack.damage>0||attack.shape==='bolt'||incoming>=state.health*.4)||lethal;
+ if(rules.dodge&&wantsDefense&&!physicalInterrupt&&!alreadyDodging&&!finishingHit){
+  const at=Math.max(earliest,e.nextDodgeAt??0,strike-policy.dodgeLead),cost=combatDodgeCost(state.combatGear?.stonebackVestEquipped);
+  if(at<strike&&combatStamina(e,state.stats??{},at,state.combatGear?.moonwellCharmEquipped)>=cost)offer(make(at,'dodge',lethal?'Dodging: this attack could be lethal.':attack.shape==='bolt'?'Dodging the charged spell.':attack.damage>0?'Dodging the heavy '+attack.name+'.':'Defending against '+attack.name+'.',85));
+ }
+ for(const slot of ['q','e']){
+  if(!rules[slot])continue;
+  const id=magic?.slots?.[slot],power=essencePower(id,state.stats,magic);
+  if(!power||!magic.unlocked?.includes(id)||!bondedEssences(magic.picks).includes(power.gem))continue;
+  if(power.form==='renewal'&&state.health>policy.healAt)continue;
+  if((power.form==='shield'||power.form==='focus')&&(alreadyDodging||physicalInterrupt||finishingHit||style==='aggressive'&&!lethal))continue;
+  let at=Math.max(earliest,magic.cooldowns?.[id]??0),warned=false,priority=40,reason='Attacking with '+power.name+'.';
+  if(power.form==='speed'&&combatStamina(e,state.stats??{},at,state.combatGear?.moonwellCharmEquipped)>60)continue;
+  if(power.form==='focus'){at=Math.max(at,warning);warned=true;priority=70;}
+  if(power.form==='renewal'){priority=95;reason='Healing: health is below the '+policy.name.toLowerCase()+' target.';}
+  if(power.form==='shield'){at=Math.max(at,warning,e.magicWardUntil??0);warned=true;priority=80;reason='Raising a ward before '+attack.name+'.';}
+  if(power.form==='renewal'){}
+  else if(power.gem==='fire'){if(power.form!=='shield')at=Math.max(at,e.burn?.until??0);if(power.form!=='renewal'&&power.form!=='shield')reason='Refreshing the fire burn.';}
+  else if(power.gem==='ice'){at=Math.max(at,warning,e.chilledUntil??0);warned=true;priority=Math.max(priority,75);if(power.form!=='renewal')reason='Delaying '+attack.name+' with Ice.';}
+  else if(power.gem==='shadow'){
+   if(attack.damage<=0&&power.form!=='renewal')continue;
+   at=Math.max(at,warning,e.weakenedUntil??0);warned=true;priority=Math.max(priority,70);if(power.form!=='renewal')reason='Weakening the heavy '+attack.name+'.';
+  }else if(power.gem==='storm'){
+   if(physicalInterrupt||alreadyDodging||finishingHit)continue;
+   at=Math.max(at,warning,e.interruptResistUntil??0);warned=true;priority=Math.max(priority,90);if(power.form!=='renewal')reason='Interrupting '+attack.name+' with Storm.';
+  }else if(power.form==='shield'){}
+  else if(power.form==='focus'){at=Math.max(at,warning);warned=true;priority=70;reason='Delaying the incoming '+attack.name+'.';}
+  else if(power.form==='speed'){
+   if(combatStamina(e,state.stats??{},at,state.combatGear?.moonwellCharmEquipped)>60)continue;
+   reason='Restoring stamina for the next defense.';priority=60;
   }
-  return next;
+  if(power.form==='speed'){reason='Restoring stamina for the next defense.';priority=Math.max(priority,60);}
+  if(warned&&at>=strike)continue;
+  offer(make(at,'essence',reason,priority,slot));
+ }
+ // Cautious builds avoid a hit that would cross their chosen retreat line when no defense can cover it.
+ const defenseReady=alreadyDodging||physicalInterrupt||finishingHit||next&&(next.action==='dodge'||next.action==='essence'&&['shield','renewal','focus'].includes(essencePower(magic?.slots?.[next.slot],state.stats,magic)?.form))&&next.at<strike;
+ if(saved?.enabled&&style==='cautious'&&rules.fleeBelow>0&&state.health-incoming<=rules.fleeBelow&&!defenseReady){
+  const at=Math.max(earliest,e.nextFleeAt??0,warning);if(at<strike)offer(make(at,'flee','Retreating early: the next hit could cross your safety line and no defense is ready.',100));
+ }
+ return next;
 }

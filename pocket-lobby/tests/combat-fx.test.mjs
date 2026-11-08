@@ -17,6 +17,11 @@ function canvas(){
 }
 const events={strikeAt:1000,boarHitAt:1000,hurtAt:2000,dodgeAt:3000,victoryAt:4000};
 const point=(x,y,z=0)=>[252+(x-y)*18,105+(x+y)*9-z];
+test('automatic dodges use distinct feedback and never display a manual perfect-dodge reward',()=>{
+ const events={};recordCombatFx(events,{action:'enemy',automaticDodge:true,dodged:true,timedDodge:true,taken:0},1000);
+ const c=canvas();drawCombatWorldFx({ctx:c.ctx,point,time:1100,now:1100,events,encounter:null,player:{x:5,y:5},reduced:true});
+ assert(c.calls.some(([method,label])=>method==='fillText'&&label==='AUTO DODGE'));assert(!c.calls.some(([method,label])=>method==='fillText'&&/PERFECT|COUNTER/.test(label)));c.balanced();
+});
 test('Vault phases retain readable health markers, transition effects and a distinct defeat in both motion modes',()=>{
  for(const reduced of [false,true])for(const health of [240,160,80]){
   const encounter={...createHunt(1000,health,'depthsGuardian'),bossPhaseAt:1100},c=canvas(),enemy=huntEnemy(encounter),events={};
