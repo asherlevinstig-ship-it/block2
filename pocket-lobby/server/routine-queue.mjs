@@ -1,3 +1,5 @@
+import {startCombatEncounter,advanceServerCombat} from './activities.mjs';
+import {huntEnemies,canUseWeapon} from '../public/hunting.js';
 import {normalizeRoutineQueue,queueActions} from '../public/character-rules.js';
 import {fishingCatalog,fishProducts,rollFishingCatch} from '../public/fishing.js';
 import {skillLevel,MAX_SKILL_XP} from '../public/skill-curve.js';
@@ -8,7 +10,7 @@ export function startRoutineQueue(state,rules,startedAt,metadata){
   state.plan={kind:'queue',...metadata,startedAt,endAt:metadata.routineCapAt,queue:normalizeRoutineQueue(rules.queue),cycle:0,stepIndex:0,cursorAt:startedAt,nextAt:null,stepCount:0,entries:[],catches:{},timber:0,patienceXp:0,woodXp:0,goldEarned:0,goldSpent:0,baitBought:0};
 }
 function finish(state,plan,reason,endedAt){
-  state.report={...plan,reason,endedAt,xp:plan.patienceXp+plan.woodXp};delete state.plan;
+  state.report={...plan,reason,endedAt,xp:plan.patienceXp+plan.woodXp+Object.values(plan.hunts?.xp??{}).reduce((a,b)=>a+b,0)};delete state.plan;
   state.location='home';state.position={x:5,y:7};return true;
 }
 function nextStep(plan,at,note){
@@ -22,9 +24,32 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
     const rod=fishingCatalog.rods[state.fishingGear.equippedRod];
     if(p.queue.steps.some(step=>step.type==='fishing')&&(!rod||!state.fishingGear.ownedRods.includes(state.fishingGear.equippedRod)||skillLevel(state.stats.patienceXp)<rod.patience||!state.adventure.discovered.includes('pond')&&!state.history.fishCaught))return finish(state,p,'requirements',p.startedAt);
     if(p.queue.steps.some(step=>step.type==='woodcutting')&&(!state.woodcutting.axeOwned||!state.woodcutting.equipped))return finish(state,p,'requirements',p.startedAt);
+    if(p.queue.steps.some(step=>step.type==='huntBoars')&&(!state.combatGear.equippedWeapon||!canUseWeapon(state.stats,state.combatGear.equippedWeapon)))return finish(state,p,'weapon-required',p.startedAt);
     p.preflightComplete=true;changed=true;
   }
   for(let guard=0;guard<10000;guard++){
+    if(p.activeHunt){
+      let events=advanceServerCombat(state,until,random);if(events.length)changed=true;
+      if(state.hunting.encounter&&(stop||now>=p.endAt)){p.returnRequested=true;p.stopReason=now>=p.endAt?'away-cap':'returned';changed=true;
+        if(now>until){events=advanceServerCombat(state,now,random);if(events.length)changed=true;}
+      }
+      if(state.hunting.encounter){p.huntHealth=state.health;p.enemyHealth=state.hunting.encounter.health;return changed;}
+      const report=p.lastHuntReport;
+      if(!report)throw new Error('Missing hunting outcome.');
+      delete p.lastHuntReport;delete p.activeHunt;delete p.enemyHealth;
+      p.huntHealth=state.health;p.hunts.recent=[...p.hunts.recent,{outcome:report.outcome,at:report.endedAt,health:report.endedHealth}].slice(-5);
+      p.hunts[report.outcome==='victory'?'wins':report.outcome==='escaped'?'escapes':'defeats']++;
+      for(const [key,value] of Object.entries(report.rewards.xp??{}))p.hunts.xp[key]=(p.hunts.xp[key]??0)+value;
+      for(const [key,value] of Object.entries(report.rewards.loot??{}))p.hunts.loot[key]=(p.hunts.loot[key]??0)+value;
+      for(const [key,value] of Object.entries(report.rewards.stones??{}))p.hunts.stones[key]=(p.hunts.stones[key]??0)+value;
+      for(const award of report.rewards.mastery??[])p.hunts.mastery[award.gem]=(p.hunts.mastery[award.gem]??0)+award.xp;
+      p.cursorAt=report.endedAt;p.nextAt=null;
+      if(report.outcome==='victory')p.stepCount++;
+      else return finish(state,p,report.outcome==='escaped'?'hunt-escaped':'hunt-defeat',report.endedAt);
+      if(p.returnRequested)return finish(state,p,p.stopReason,report.endedAt);
+      if(p.stepCount>=p.queue.steps[p.stepIndex].amount)nextStep(p,report.endedAt,'Won '+p.stepCount+' fights');
+      continue;
+    }
     if(p.cycle>=p.queue.repeats)return finish(state,p,'queue-complete',p.cursorAt);
     const step=p.queue.steps[p.stepIndex],type=step.type;
     if(p.nextAt===null){
@@ -40,13 +65,25 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
         if(!state.woodcutting.axeOwned||!state.woodcutting.equipped)return finish(state,p,'requirements',p.cursorAt);
         if(state.woodcutting.timber>=p.timberTarget){nextStep(p,p.cursorAt,'Timber target reached');changed=true;continue;}
         interval=woodRules.offlineInterval;state.location='logging';state.position={x:5,y:5};
+      }else if(type==='huntBoars'){
+        p.hunts??={started:0,wins:0,escapes:0,defeats:0,xp:{},loot:{},stones:{},mastery:{},recent:[]};
+        const minimum=p.queue.minHealth??60;
+        if(state.health<minimum){nextStep(p,p.cursorAt,'Hunting stopped at '+state.health+' HP · minimum '+minimum);changed=true;continue;}
+        interval=Math.max(QUEUE_ACTION_MS,(state.hunting.respawnAt??0)-p.cursorAt);
+        state.location='clearing';state.position={x:5,y:5};
       }else if(type==='rest'){state.location='home';state.position={x:5,y:7};}
       else{state.location=type==='buyBait'?'store':'market';state.position={x:5,y:5};}
       p.nextAt=p.cursorAt+interval;changed=true;
     }
     if(p.nextAt>until)break;
     const at=p.nextAt;
-    if(type==='fishing'){
+    if(type==='huntBoars'){
+      if(state.health<(p.queue.minHealth??60)){nextStep(p,at,'Starting health is too low');changed=true;continue;}
+      if(at+30000>p.endAt)return finish(state,p,'away-cap',at);
+      if(!state.combatGear.equippedWeapon||!canUseWeapon(state.stats,state.combatGear.equippedWeapon))return finish(state,p,'weapon-required',at);
+      p.activeHunt={id:null,startedAt:at};startCombatEncounter(state,huntEnemies.boar,at);p.activeHunt.id=state.combatId;p.hunts.started++;
+      p.currentLabel='Fighting a Wild Boar';changed=true;continue;
+    }else if(type==='fishing'){
       if(state.fishingGear.bait<=p.keepBait){nextStep(p,p.cursorAt,'Bait reserve reached');changed=true;continue;}
       const fish=rollFishingCatch(skillLevel(state.stats.patienceXp),state.fishingGear.equippedRod,random,state.stats.luckXp);
       if((state.fishStock[fish]??0)>=1000000)return finish(state,p,'inventory-full',at);
@@ -56,14 +93,14 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
     }else if(type==='woodcutting'){
       if(state.woodcutting.timber>=p.timberTarget){nextStep(p,p.cursorAt,'Timber target reached');changed=true;continue;}
       const before=state.woodcutting.xp;harvestTimber(state.woodcutting);p.woodXp+=state.woodcutting.xp-before;p.timber++;p.stepCount++;
-    }else if(type==='sellFish'||type==='sellTimber'){
-      const products=type==='sellTimber'?[['timber',state.woodcutting.timber,woodRules.price]]:Object.entries(state.fishStock).map(([id,count])=>[id,count,fishProducts[id].price]).sort((a,b)=>a[2]-b[2]||a[0].localeCompare(b[0]));
+    }else if(type==='sellFish'||type==='sellTimber'||type==='sellMeat'){
+      const products=type==='sellTimber'?[['timber',state.woodcutting.timber,woodRules.price]]:type==='sellMeat'?[['boar',state.huntingLoot.boar??0,huntEnemies.boar.sellPrice]]:Object.entries(state.fishStock).map(([id,count])=>[id,count,fishProducts[id].price]).sort((a,b)=>a[2]-b[2]||a[0].localeCompare(b[0]));
       let remaining=Math.max(0,products.reduce((sum,[,count])=>sum+count,0)-step.amount),gold=0;const sales=[];
       for(const [id,count,price] of products){const quantity=Math.min(remaining,count);if(quantity){sales.push([id,quantity]);gold+=quantity*price;remaining-=quantity;}}
       if(state.credits+gold>100000000)return finish(state,p,'wallet-full',at);
-      for(const [id,quantity] of sales){if(id==='timber')state.woodcutting.timber-=quantity;else state.fishStock[id]-=quantity;p.stepCount+=quantity;}
+      for(const [id,quantity] of sales){if(id==='timber')state.woodcutting.timber-=quantity;else if(type==='sellMeat')state.huntingLoot.boar-=quantity;else state.fishStock[id]-=quantity;p.stepCount+=quantity;}
       state.credits+=gold;state.goldEarned=Math.min(Number.MAX_SAFE_INTEGER,state.goldEarned+gold);p.goldEarned+=gold;
-      if(type==='sellFish'&&gold){recordQuest(state.quest,'marketSale');if(!state.firstUpgrade.unlocked&&!state.firstUpgrade.complete)Object.assign(state.firstUpgrade,{unlocked:true,sale:{name:'Fish',quantity:p.stepCount,gold}});}
+      if((type==='sellFish'||type==='sellMeat')&&gold){recordQuest(state.quest,'marketSale');if(!state.firstUpgrade.unlocked&&!state.firstUpgrade.complete)Object.assign(state.firstUpgrade,{unlocked:true,sale:{name:type==='sellMeat'?'Boar Meat':'Fish',quantity:p.stepCount,gold}});}
       nextStep(p,at,'Sold '+p.stepCount+' for '+gold+' gold');changed=true;continue;
     }else if(type==='buyBait'){
       const packs=Math.max(0,Math.ceil((step.amount-state.fishingGear.bait)/fishingCatalog.bait.quantity)),cost=packs*fishingCatalog.bait.price;

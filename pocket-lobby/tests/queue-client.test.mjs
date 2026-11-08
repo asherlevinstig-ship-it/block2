@@ -11,3 +11,11 @@ test('automated queue travel does not open equipment tutorials or merchant dialo
   assert.equal(g.read('currentRoom'),room);assert.notEqual(g.nodes.get('inventoryDialog').open,true);assert.notEqual(g.nodes.get('merchantDialog').open,true);
  }
 });
+
+test('reloading during an automated hunt does not enable manual combat polling',()=>{
+ const state=normalizeState({location:'clearing',position:{x:5,y:5}});
+ state.plan={kind:'queue',source:'rules',activeHunt:{id:'hunt'}};
+ state.hunting.encounter={enemy:'boar',health:70,nextPlayerAt:2000,nextBoarAt:3000,nextFleeAt:0};
+ const g=boot(state);assert.equal(g.read('player.inCombat'),false);
+ g.context.towerApplyRoutineState(state);assert.equal(g.read('player.inCombat'),false);assert.equal(g.read('currentRoom'),'clearing');
+});

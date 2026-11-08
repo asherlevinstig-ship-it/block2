@@ -13,6 +13,13 @@ function idle(state){
   if(state.plan||state.report||state.fishingCast||state.hunting.encounter||state.hunting.recoveryUntil||state.health<=0)throw new Error('Invalid activity while working, fishing, fighting or recovering.');
 }
 function move(state,room,position={x:5,y:7}){state.location=room;state.position=position;}
+export function startCombatEncounter(state,enemy,now){
+  delete state.timberCut;
+  state.combatId=crypto.randomUUID();state.combatReceipt={id:crypto.randomUUID(),events:[]};
+  state.hunting.encounter=createHunt(now,enemy.health,enemy.id);
+  state.hunting.encounter.summary=normalizeCombatSummary({startedAt:now});
+  if(state.characterRules?.combat?.enabled||state.plan?.activeHunt)state.hunting.encounter.tacticsAt=now;
+}
 function result(state,event,now){
   const encounter=state.hunting.encounter,enemy=huntEnemy(encounter);
   const room=state.location,heldBefore=state.depthsRun?depthsSpoils(state.depthsRun):null;
@@ -65,7 +72,8 @@ function result(state,event,now){
   if(event.outcome!=='fighting'&&state.combatId){
     const report={id:state.combatId,enemy:enemy.id,room,outcome:event.outcome,endedAt:now,endedHealth:event.health,summary,rewards};
     if(event.outcome==='defeat'&&heldBefore)report.lostSpoils=heldBefore;
-    state.combatReports=[...(state.combatReports??[]).filter(item=>item.id!==report.id),report].slice(-10);
+    if(state.plan?.kind==='queue'&&state.plan.activeHunt?.id===state.combatId)state.plan.lastHuntReport=report;
+    else state.combatReports=[...(state.combatReports??[]).filter(item=>item.id!==report.id),report].slice(-10);
   }
   return {...event,enemyId:enemy.id,at:now};
 }
@@ -94,7 +102,7 @@ export function advanceServerCombat(state,now,random=Math.random){
 }
 export function settleActivities(state,now,random=Math.random){
   let changed=false;
-  if(state.hunting?.encounter)changed=advanceServerCombat(state,now,random).length>0;
+  if(state.hunting?.encounter&&!(state.plan?.kind==='queue'&&state.plan.activeHunt))changed=advanceServerCombat(state,now,random).length>0;
   if(state.hunting?.recoveryUntil&&now>=state.hunting.recoveryUntil){state.hunting.recoveryUntil=0;state.health=100;changed=true;}
   return changed;
 }
@@ -135,14 +143,11 @@ export function activityAction(state,action,body,now,random){
     if(!enemy||!adjacent(state,{x:6,y:5}))throw new Error('Travel beside the creature before fighting.');
     if(!state.combatGear.equippedWeapon||!canUseWeapon(state.stats,state.combatGear.equippedWeapon))throw new Error('Choose a weapon you can use before fighting.');
     if(index>=0?!depthsEnemyAvailable(state.depthsRun,state.location):now<huntRespawnAt(state.hunting,enemy))throw new Error('Invalid encounter. Wait for the creature to return.');
-    delete state.timberCut;
-    state.combatId=crypto.randomUUID();state.combatReceipt={id:crypto.randomUUID(),events:[]};
-    state.hunting.encounter=createHunt(now,enemy.health,enemy.id);
-    state.hunting.encounter.summary=normalizeCombatSummary({startedAt:now});
-    if(state.characterRules?.combat?.enabled)state.hunting.encounter.tacticsAt=now;
+    startCombatEncounter(state,enemy,now);
     return true;
   }
   if(action==='combat'){
+    if(state.plan?.activeHunt)throw new Error('Your hunting queue is controlling this fight. Return to stop after the fight.');
     if(body.combatId!==state.combatId)throw new Error('Invalid encounter. Reload your character.');
     const events=advanceServerCombat(state,now,random);
     if(state.hunting.encounter&&['dodge','flee','essence'].includes(body.input)){

@@ -62,6 +62,7 @@ test('an unavailable tool stops cleanly and a full wallet never consumes sale in
 
 test('queue API locks its saved spending rules and settles concurrent purchases and retries once',async t=>{
  const {db,sql}=testDatabase();t.after(()=>sql.close());const original=Date.now;let now=1000;Date.now=()=>now;t.after(()=>{Date.now=original;});
+ const oldRandom=Math.random;Math.random=()=>.5;t.after(()=>{Math.random=oldRandom;});
  const origin='https://tower.test';let packet,cookie='';
  async function call(path,body){
   const response=await handlePlayerApi(new Request(origin+'/api/player/'+path,{method:body?'POST':'GET',headers:{Origin:origin,'Content-Type':'application/json',Cookie:cookie},body:body?JSON.stringify({...body,characterKey:packet?.characterKey}):undefined}),{TOWER_DB:db});

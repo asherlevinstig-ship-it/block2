@@ -4432,10 +4432,10 @@ function renderRuleQueue(){
     number.textContent=index+1;number.className='queue-step-number';
     for(const [id,label] of Object.entries(queueActions)){const option=document.createElement('option');option.value=id;option.textContent=label;type.append(option);}
     type.value=step.type;type.setAttribute('aria-label','Step '+(index+1)+' activity');
-    const keep=['sellFish','sellTimber'].includes(step.type);field.textContent=keep?'Keep':step.type==='buyBait'?'Stock to':'Gather';
-    amount.type='number';amount.min=keep?'0':'1';amount.max='1000';amount.value=step.amount;amount.disabled=step.type==='rest';amount.setAttribute('aria-label','Step '+(index+1)+' '+field.textContent.toLowerCase()+' quantity');field.hidden=step.type==='rest';field.append(amount);
+    const keep=['sellFish','sellTimber','sellMeat'].includes(step.type);field.textContent=keep?'Keep':step.type==='buyBait'?'Stock to':step.type==='huntBoars'?'Max fights':'Gather';
+    amount.type='number';amount.min=keep?'0':'1';amount.max=step.type==='huntBoars'?'20':'1000';amount.value=step.amount;amount.disabled=step.type==='rest';amount.setAttribute('aria-label','Step '+(index+1)+' '+field.textContent.toLowerCase()+' quantity');field.hidden=step.type==='rest';field.append(amount);
     amount.oninput=()=>{step.amount=Number(amount.value);updateCharacterRulesPreview();};
-    type.onchange=()=>{step.type=type.value;step.amount=step.type==='rest'?0:Math.max(['sellFish','sellTimber'].includes(step.type)?0:1,step.amount);renderRuleQueue();updateCharacterRulesPreview();};
+    type.onchange=()=>{step.type=type.value;step.amount=step.type==='rest'?0:Math.max(['sellFish','sellTimber','sellMeat'].includes(step.type)?0:1,step.amount);if(step.type==='huntBoars')step.amount=Math.min(20,step.amount);renderRuleQueue();updateCharacterRulesPreview();};
     controls.className='queue-step-controls';
     for(const [label,title,run,disabled] of [['↑','Move step up',()=>{[ruleQueueDraft[index-1],ruleQueueDraft[index]]=[step,ruleQueueDraft[index-1]];},index===0],['↓','Move step down',()=>{[ruleQueueDraft[index+1],ruleQueueDraft[index]]=[step,ruleQueueDraft[index+1]];},index===ruleQueueDraft.length-1],['×','Remove step',()=>ruleQueueDraft.splice(index,1),false]]){
       const button=document.createElement('button');button.type='button';button.textContent=label;button.setAttribute('aria-label',title+' '+(index+1));button.disabled=disabled;button.onclick=()=>{run();renderRuleQueue();updateCharacterRulesPreview();};controls.append(button);
@@ -4444,7 +4444,7 @@ function renderRuleQueue(){
   });
   $('rulesQueueAdd').disabled=ruleQueueDraft.length>=8;
 }
-function draftCharacterRules(){return normalizeCharacterRules({enabled:$('rulesEnabled').checked,activity:$('rulesActivity').value,keepBait:Number($('rulesKeepBait').value),timberTarget:Number($('rulesTimberTarget').value),queue:{enabled:$('rulesUseQueue').checked,steps:ruleQueueDraft.map(step=>({...step})),repeats:Number($('rulesQueueRepeats').value),budget:Number($('rulesQueueBudget').value),reserveGold:Number($('rulesQueueReserve').value)},combat:{enabled:$('rulesCombatEnabled').checked,q:$('rulesAutoQ').checked,e:$('rulesAutoE').checked,fleeBelow:Number($('rulesCombatFlee').value)}});}
+function draftCharacterRules(){return normalizeCharacterRules({enabled:$('rulesEnabled').checked,activity:$('rulesActivity').value,keepBait:Number($('rulesKeepBait').value),timberTarget:Number($('rulesTimberTarget').value),queue:{enabled:$('rulesUseQueue').checked,steps:ruleQueueDraft.map(step=>({...step})),repeats:Number($('rulesQueueRepeats').value),budget:Number($('rulesQueueBudget').value),reserveGold:Number($('rulesQueueReserve').value),minHealth:Number($('rulesQueueHealth').value)},combat:{enabled:$('rulesCombatEnabled').checked,q:$('rulesAutoQ').checked,e:$('rulesAutoE').checked,fleeBelow:Number($('rulesCombatFlee').value)}});}
 function updateCharacterRulesPreview(){
   const activity=$('rulesActivity').value;
   for(const name of ['rest','fishing','woodcutting'])$('routine'+name[0].toUpperCase()+name.slice(1)).setAttribute('aria-pressed',String(activity===name));
@@ -4470,7 +4470,7 @@ function updateCharacterRulesPreview(){
       const preview=jobPreview(jobState(),activity,8,bait);
       detail=activity==='woodcutting'&&woodcutting.timber>=rules.timberTarget?'Your timber target is already met. Your character will rest.':activity==='fishing'&&bait===0?'Your bait reserve is already reached. Your character will rest.':preview.allowed?'Ready with your current equipment. Supplies stay in Inventory until you sell or use them.':'Will rest with current equipment: '+preview.reason;
     }
-    if(rules.queue?.enabled)detail='The queue starts after three minutes idle. It stops when you return, a limit is reached, or all cycles finish. Unsold supplies stay in Inventory.';
+    if(rules.queue?.enabled)detail='The queue starts after three minutes idle. It stops when you return, a limit is reached, or all cycles finish. Unsold supplies stay in Inventory. Hunting uses your equipped weapon and flee threshold. Returning during a fight finishes that fight before stopping.';
     $('rulesRequirements').textContent=depthsRun?'Away routines pause while you’re in Moonwell Depths. '+detail:detail;
     $('rulesSave').disabled=savingRules||!window.playerCloud;
   }catch(error){$('rulesPreview').textContent=error.message;$('rulesSave').disabled=true;}
@@ -4482,7 +4482,7 @@ function openCharacterRules(){
   $('rulesEnabled').checked=rules.enabled;$('rulesActivity').value=rules.activity;$('rulesKeepBait').value=rules.keepBait;$('rulesTimberTarget').value=rules.timberTarget;$('rulesStatus').textContent='';
   $('rulesCombatEnabled').checked=rules.combat.enabled;$('rulesAutoQ').checked=rules.combat.q;$('rulesAutoE').checked=rules.combat.e;$('rulesCombatFlee').value=rules.combat.fleeBelow;
   ruleQueueDraft=(rules.queue?.steps??[{type:'fishing',amount:5},{type:'sellFish',amount:0},{type:'rest',amount:0}]).map(step=>({...step}));
-  $('rulesUseQueue').checked=rules.queue?.enabled===true;$('rulesQueueRepeats').value=rules.queue?.repeats??1;$('rulesQueueBudget').value=rules.queue?.budget??0;$('rulesQueueReserve').value=rules.queue?.reserveGold??100;renderRuleQueue();
+  $('rulesUseQueue').checked=rules.queue?.enabled===true;$('rulesQueueRepeats').value=rules.queue?.repeats??1;$('rulesQueueBudget').value=rules.queue?.budget??0;$('rulesQueueReserve').value=rules.queue?.reserveGold??100;$('rulesQueueHealth').value=rules.queue?.minHealth??60;renderRuleQueue();
   const log=$('rulesActivityLog');log.replaceChildren();
   for(const item of [...(state.activityLog??[])].reverse()){
     const row=document.createElement('li'),title=document.createElement('b'),detail=document.createElement('p');
@@ -4495,7 +4495,7 @@ function openCharacterRules(){
 }
 $('openCharacterRules').onclick=openCharacterRules;
 $('rulesQueueAdd').onclick=()=>{if(ruleQueueDraft.length<8)ruleQueueDraft.push({type:'fishing',amount:5});renderRuleQueue();updateCharacterRulesPreview();};
-for(const id of ['rulesUseQueue','rulesQueueRepeats','rulesQueueBudget','rulesQueueReserve','rulesEnabled','rulesActivity','rulesKeepBait','rulesTimberTarget','rulesCombatEnabled','rulesAutoQ','rulesAutoE','rulesCombatFlee'])$(id).oninput=updateCharacterRulesPreview;
+for(const id of ['rulesUseQueue','rulesQueueRepeats','rulesQueueBudget','rulesQueueReserve','rulesQueueHealth','rulesEnabled','rulesActivity','rulesKeepBait','rulesTimberTarget','rulesCombatEnabled','rulesAutoQ','rulesAutoE','rulesCombatFlee'])$(id).oninput=updateCharacterRulesPreview;
 $('characterRulesDialog').oncancel=event=>{if(savingRules)event.preventDefault();};
 $('characterRulesForm').onsubmit=async event=>{
   event.preventDefault();if(savingRules)return;
@@ -4813,7 +4813,7 @@ $('fishingSound').onclick=()=>{
 };
 movePlayerToSpawn();updateName();switchMode(false);
 if(savedPlayerState?.location&&roomDetails[savedPlayerState.location])enterRoom(savedPlayerState.location,savedPlayerState.position);
-if(hunting.encounter){
+if(hunting.encounter&&!savedPlayerState?.plan?.activeHunt){
   if(currentRoom===huntEnemy(hunting.encounter).room&&combatGear.equippedWeapon){
     if(!window.playerCloud?.gameplay)hunting.encounter=resumeHunt(hunting.encounter,Date.now(),playerStats,combatGear.moonwellCharmEquipped);
     setPlayerCombat(true);combatMessage='Combat resumes! Both fighters attack automatically. Flee if you need to escape.';
@@ -4836,7 +4836,7 @@ window.towerHasActiveCast=()=>!!fishingSession||!!woodSession;
 window.towerApplyRoutineState=state=>{
   fishingSession=null;fishingStarted=null;woodSession=null;treeFall=null;catchReveal=null;patienceTween=null;
   $('catchReveal').hidden=true;route=[];step=null;interaction=null;target=null;
-  applyServerGameplay(state);
+  setPlayerCombat(false);applyServerGameplay(state);
   enterRoom(state.location,state.position,{automatic:true});updateInventory();updateAdventurePanel();
 };
 if(window.playerCloud)window.playerCloud.attach();

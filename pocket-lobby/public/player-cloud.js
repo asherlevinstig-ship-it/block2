@@ -143,13 +143,14 @@
     if(running){const row=document.createElement('li');row.textContent='Cycle '+(plan.cycle+1)+' / '+plan.queue.repeats+' · Step '+(plan.stepIndex+1)+' / '+plan.queue.steps.length+' · '+(plan.currentLabel??'Getting ready');list.append(row);}
     for(const entry of plan.entries.slice(-8)){const row=document.createElement('li');row.textContent='Cycle '+entry.cycle+' · '+queueActions[entry.type]+' · '+entry.note;list.append(row);}
     if(plan.entries.length>8){const row=document.createElement('li');row.textContent='Showing the most recent 8 completed steps.';list.append(row);}
-    document.getElementById('offlineTotals').textContent='Gathered '+caught+' fish · '+plan.timber+' timber · +'+(plan.patienceXp+plan.woodXp)+' XP';
+    if(plan.hunts){const row=document.createElement('li');row.textContent='Hunting · '+plan.hunts.wins+' victories · '+plan.hunts.escapes+' escapes · '+plan.hunts.defeats+' defeats · '+(plan.hunts.loot.boar??0)+' Boar Meat · HP '+state.health+'/100'+(plan.activeHunt?' · Boar '+plan.enemyHealth+'/70 HP':'');list.append(row);for(const [label,values] of [['Combat XP',plan.hunts.xp],['Awakening Stones',plan.hunts.stones],['Essence mastery XP',plan.hunts.mastery]]){if(Object.keys(values).length){const detail=document.createElement('li');detail.textContent=label+' · '+Object.entries(values).map(([id,n])=>id.replace(/Xp$/,'')+' +'+n).join(' · ');list.append(detail);}}}
+    document.getElementById('offlineTotals').textContent='Gathered '+caught+' fish · '+plan.timber+' timber · +'+(plan.patienceXp+plan.woodXp+Object.values(plan.hunts?.xp??{}).reduce((a,b)=>a+b,0))+' XP';
     document.getElementById('offlineProgress').value=running?100*(plan.cycle*plan.queue.steps.length+plan.stepIndex)/total:100;
     const minutes=Math.max(0,Math.floor(((plan.endedAt??Date.now())-plan.startedAt)/60000));
     document.getElementById('offlineDuration').textContent='Time worked · '+Math.floor(minutes/60)+'h '+minutes%60+'m · Spending '+plan.goldSpent+' / '+plan.queue.budget+' gold';
     const net=plan.goldEarned-plan.goldSpent;
     document.getElementById('offlineValue').textContent='Sales +'+plan.goldEarned+' gold · Bait −'+plan.goldSpent+' gold · Net '+(net>=0?'+':'')+net+' gold · Wallet '+state.credits+' gold. Unsold supplies remain in Inventory.';
-    document.getElementById('offlineReason').textContent=running?'Your saved queue is running. Return to stop it.':({'queue-complete':'All cycles complete',returned:'Stopped when you returned','away-cap':'Eight-hour limit reached','spending-limit':'Stopped before exceeding your spending limit','gold-reserve':'Stopped to protect your gold reserve',requirements:'Required tool, skill or fishing location is missing','inventory-full':'Inventory is full','wallet-full':'Wallet is full'}[plan.reason]??plan.reason);
+    document.getElementById('offlineReason').textContent=running?(plan.returnRequested?'Finishing the current fight, then returning home.':plan.activeHunt?'Hunting with your equipped weapon. Return to finish this fight and stop.':'Your saved queue is running. Return to stop it.'):({'queue-complete':'All cycles complete',returned:'Stopped when you returned','away-cap':'Eight-hour limit reached','spending-limit':'Stopped before exceeding your spending limit','gold-reserve':'Stopped to protect your gold reserve','weapon-required':'Equip a usable weapon before hunting','hunt-escaped':'Escaped · Hunting stopped','hunt-defeat':'Defeated · Returned home to recover',requirements:'Required tool, skill or fishing location is missing','inventory-full':'Inventory is full','wallet-full':'Wallet is full'}[plan.reason]??plan.reason);
   }
   function showReport(state){
     const dialog=document.getElementById('offlineDialog'),plan=state.plan??state.report;
@@ -181,7 +182,8 @@
     document.getElementById('offlineValue').textContent=rest?'No items purchased, sold or consumed.':'Supplies in Inventory · '+saleValue+' gold if sold at the Trading Post. No gold has been added yet.';
     }
     const button=document.getElementById('offlineContinue');
-    button.textContent=running?(plan.source==='rules'?'I’m back · Stop routine':'Stop work and return home'):'Return to game';
+    button.disabled=running&&!!plan.returnRequested;
+    button.textContent=running&&plan.returnRequested?'Finishing current fight…':running?(plan.source==='rules'?'I’m back · Stop routine':'Stop work and return home'):'Return to game';
     button.onclick=async()=>{
       button.disabled=true;
       try{
@@ -193,7 +195,7 @@
         }else if(running){await action('plan/stop');location.reload();}
         else{await action('report/ack',{startedAt:plan.startedAt});dialog.close();window.towerApplyRoutineState?.(packet.state);setStatus('Server saved');window.towerJoinRoom?.();}
       }catch(error){document.getElementById('offlineError').textContent=error.message;}
-      finally{button.disabled=false;}
+      finally{button.disabled=!!packet.state.plan?.returnRequested;}
     };
     dialog.oncancel=event=>event.preventDefault();
     if(!dialog.open)dialog.showModal();
@@ -239,7 +241,7 @@
       setTimeout(poll,15000);
     }
     window.addEventListener('online',()=>drain());
-    const tick=async()=>{try{await pulse();}catch{}setTimeout(tick,20000);};
+    const tick=async()=>{try{await pulse();}catch{}setTimeout(tick,packet?.state.plan?.activeHunt?2000:20000);};
     setTimeout(tick,20000);
     document.addEventListener('visibilitychange',()=>{
       if(document.hidden)return;
