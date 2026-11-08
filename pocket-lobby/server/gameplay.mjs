@@ -1,5 +1,5 @@
 import {purchaseFurniture} from '../public/furniture-catalog.js';
-import {HOME_SAFE_PRICE,ownsHomeSafe,besideHomeSafe} from '../public/home-safe.js';
+import {besideHomeSafe} from '../public/home-safe.js';
 import {vaultTransfer} from './vault.mjs';
 import {normalizeVault} from '../public/vault.js';
 import {bankTransfer} from './banking.mjs';
@@ -37,13 +37,7 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
   if(activityAction(state,action,body,now,random)||essenceAction(state,action,body))return;
   if(gamblingAction(state,action,body,now,random===Math.random?undefined:random))return;
   if(action==='buyFurniture'){purchaseFurniture(state,body.id,body.quantity);return;}
-  if(action==='buySafe'){
-    location(state,['home']);
-    if(state.fishingCast||state.timberCut)throw new Error('Invalid activity. Finish your activity before buying a safe.');
-    if(ownsHomeSafe(state))throw new Error('You already own a home safe. Find it in Furniture.');
-    if(state.credits<HOME_SAFE_PRICE)throw new Error('Invalid balance. You need '+HOME_SAFE_PRICE+' gold in your wallet.');
-    state.credits-=HOME_SAFE_PRICE;state.ownedFurniture.safe=1;state.safeVersion=1;return;
-  }
+  if(action==='buySafe'){purchaseFurniture(state,'safe',1);return;}
   if(['goldBankTransfer','goldBankPolicy','vaultTransfer','vaultPolicy'].includes(action)){
     available(state);if(state.fishingCast||state.timberCut||state.gambling?.round?.status==='playing')throw new Error('Choose banking after finishing your current activity.');
     if(!besideHomeSafe(state))throw new Error('Travel home, place your safe and walk beside it to open storage.');

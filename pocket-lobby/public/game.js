@@ -1300,7 +1300,7 @@ const armoryFurniture=[
   {id:'forge',type:'brazier',x:1,y:1,rot:0},
   {id:'stool',type:'stool',x:4,y:4,rot:0}
 ];
-let currentRoom='home',pendingFurniturePlacement=null;
+let currentRoom='home',pendingFurniturePlacement=null,pendingFurnitureShopItem=null;
 const atHome=()=>currentRoom==='home';
 const canDecorate=()=>atHome();
 function roomFurniture(){
@@ -2264,7 +2264,7 @@ function updateWorldLabels(){
     const sign=add(label,...anchor,'door',()=>travelDoor(door),'',currentRoom!=='home'&&['left','right'].includes(door.side)?{side:door.side,width:(door.end-door.start+.08)*18,font:5.6}:null);
     if(door.to===guidedDoor?.to)sign.dataset.guided='true';
   }
-  if(currentRoom==='furnishings')add('Browse furniture',...point(4.5,1.5,39),'npc',()=>window.towerFurnitureShop?.open(),'Tower Furnishings');
+  if(currentRoom==='furnishings')add('Browse furniture',...point(4.5,1.5,39),'npc',()=>use(furnishingsFurniture.find(item=>item.type==='reception')),'Tower Furnishings');
   if(currentRoom==='home')for(const item of homeFurniture.filter(item=>item.type==='safe'))add('Home safe',...point(item.x+.5,item.y+.5,31),'npc',()=>use(item),'Gold & item storage');
   if(currentRoom==='home')add('YOUR HOME',...point(5,0,44),'sign',null,avatar.name);
   if(currentRoom==='hub'){
@@ -2516,11 +2516,15 @@ function setHint(){
   $('hint').textContent=needsBedLesson()?(editing?'Place your bed on a clear floor spot · R to rotate':'Step 1: open Inventory to place your free bed'):message;
 }
 function startPosition(){return step?.to??{x:player.cx,y:player.cy};}
+function walkingPath(start,goal){
+  const exits=new Set(roomDoors[currentRoom].filter(door=>doorAvailable(door)&&(door.tile.x!==goal.x||door.tile.y!==goal.y)).map(door=>tileKey(door.tile.x,door.tile.y)));
+  return findPath(start,goal,roomFurniture(),exits);
+}
 function walkTo(tile){
   if(routineControlled()){note('Your routine is running. Use Take control to move.');return;}
   if(unavailable()){note(player.inCombat?"Combat is live. Use Flee to escape.":"Rest until your hearts recover.");return;}
   if(blocked(tile.x,tile.y)){note('That tile is occupied.');return;}
-  const path=findPath(startPosition(),tile);
+  const path=walkingPath(startPosition(),tile);
   if(!path){note('There’s no clear path to that tile.');return;}
   cancelFishing();
   player.seat=null;player.waveStarted=null;
@@ -2731,7 +2735,7 @@ function drawTradingGuide(time){
   const goal=currentRoom==='creek'&&destination.to==='ruins'&&!adventure.bridge?{x:4,y:4}:destination.tile;
   const start=startPosition();
   const key=[currentRoom,start.x,start.y,goal.x,goal.y,roomFurniture().map(item=>[item.id,item.x,item.y,item.rot].join(':')).join(';')].join('|');
-  if(tradeGuideRouteCache?.key!==key)tradeGuideRouteCache={key,path:findPath(start,goal)??[]};
+  if(tradeGuideRouteCache?.key!==key)tradeGuideRouteCache={key,path:walkingPath(start,goal)??[]};
   const path=tradeGuideRouteCache.path;
   for(let i=0;i<path.length;i++){
     const tile=path[i],bright=reducedMotion.matches?true:Math.floor(time/160)%Math.max(1,path.length)===i;
@@ -3116,7 +3120,7 @@ function finishInteraction(){
   }else if(['tackleCounter','rodRack','baitCrates'].includes(item.type)){
     note('Welcome to Silverfin Outfitters. Choose supplies from the shop panel.');
   }else if(currentRoom==='furnishings'){
-    window.towerFurnitureShop?.open(Object.hasOwn(types,item.type)?item.type:null);
+    window.towerFurnitureShop?.open(Object.hasOwn(types,item.type)?item.type:pendingFurnitureShopItem);pendingFurnitureShopItem=null;
   }else if(item.type==='reception'){
     if(!lobbyRoutesOpen()){note('The Tower Warden is waiting to welcome you.');return;}
     $('receptionMessage').textContent='Welcome, '+avatar.name+'! Choose a shift at the job board, then return home with your earnings.';openJobBoard();
@@ -3346,7 +3350,7 @@ function renderBag(){
   updateBedGuide();
 }
 function openMerchant(){
-  if(currentRoom==='furnishings'){window.towerFurnitureShop?.open();return;}
+  if(currentRoom==='furnishings'){use(furnishingsFurniture.find(item=>item.type==='reception'));return;}
   if(!['store','armory','market','furnishings'].includes(currentRoom))return;
   updateFishingShop();updateArmoryShop();updateTradingPost();
   $('merchantTitle').textContent=roomDetails[currentRoom].name;
@@ -5032,7 +5036,7 @@ function enterRoom(next,arrival,{automatic=false}={}){
   connectRoom();
   if(!automatic){
     showFirstEquipment(next);
-    if(['store','armory','market','furnishings'].includes(next))openMerchant();
+    if(['store','armory','market'].includes(next))openMerchant();
   }
   if(atHome()&&pendingFurniturePlacement){const type=pendingFurniturePlacement;pendingFurniturePlacement=null;trackedDestination=null;if(availableFurniture(type)>0){switchMode(true);choose({type,id:null,rot:0});note('You’re home. Click a clear floor tile to place your '+types[type]+'.');}}
   if(focusRoom&&!$('inventoryDialog').open)canvas.focus();
@@ -5134,7 +5138,13 @@ window.towerFurnitureThumbnail=type=>{
   finally{ctx=previous;view=previousView;}return image;
 };
 window.towerFurnitureState=()=>({location:currentRoom,credits,ownedFurniture,homeFurniture,blocked:unavailable()||routineControlled()});
-window.towerFurnitureVisit=()=>{window.towerFurnitureShop?.close();navigateHud('furnishings');};
+window.towerFurnitureVisit=id=>{
+  window.towerFurnitureShop?.close();if(id)pendingFurnitureShopItem=id;
+  if(unavailable()||routineControlled()){note('Take control and finish your activity before visiting the furniture shop.');return;}
+  if(currentRoom==='furnishings'){use(furnishingsFurniture.find(item=>item.type==='reception'));return;}
+  if(!lobbyRoutesOpen()){note('Meet the Tower Warden in the lobby to open the shop doors.');navigateHud('hub');return;}
+  setExplorationDestination('furnishings');const next=hudNextDoor('furnishings');if(next){note('Follow the golden trail to Tower Furnishings.');followHudDoor(next);}
+};
 window.towerFurniturePlace=type=>{
   window.towerFurnitureShop?.close();
   if(!atHome()){pendingFurniturePlacement=type;note('Follow the home route to place your '+types[type]+'.');setExplorationDestination('home');const next=hudNextDoor('home');if(next)followHudDoor(next);return;}

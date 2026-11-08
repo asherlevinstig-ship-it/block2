@@ -8,19 +8,19 @@ import {handlePlayerApi} from '../server/player-api.mjs';
 import {testDatabase} from './db-helper.mjs';
 import {boot} from './helpers/game-client.mjs';
 const placed={id:1,type:'safe',x:2,y:2,rot:0};
-test('buying a safe costs wallet gold once and requires a free character at home',()=>{
- const s=normalizeState({credits:200,location:'home'});
- const busy=normalizeState({credits:200,location:'home'});busy.plan={source:'rules'};assert.throws(()=>applyGameplayAction(busy,'buySafe',{},1000),/activity/);
+test('buying a safe costs wallet gold once and requires a free character inside the showroom',()=>{
+ const s=normalizeState({credits:200,location:'furnishings'});
+ const busy=normalizeState({credits:200,location:'furnishings'});busy.plan={source:'rules'};assert.throws(()=>applyGameplayAction(busy,'buySafe',{},1000),/activity/);
  assert.equal(s.ownedFurniture.safe,undefined);
  applyGameplayAction(s,'buySafe',{},1000);assert.equal(s.credits,200-HOME_SAFE_PRICE);assert.equal(s.ownedFurniture.safe,1);assert.equal(s.goldEarned,0);
  assert.throws(()=>applyGameplayAction(s,'buySafe',{},1000),/already/);assert.equal(s.credits,50);
- for(const input of [{credits:149,location:'home'},{credits:200,location:'hub'}])assert.throws(()=>applyGameplayAction(normalizeState(input),'buySafe',{},1000),/balance|Travel|activity/);
+ for(const input of [{credits:149,location:'furnishings'},{credits:200,location:'hub'}])assert.throws(()=>applyGameplayAction(normalizeState(input),'buySafe',{},1000),/balance|Travel|activity/);
 });
 test('storage transfers and policy changes require the owned placed safe and an adjacent tile',()=>{
  const s=normalizeState({credits:200,location:'home',position:{x:2,y:3},woodcutting:{timber:10}});
  const actions=[['goldBankTransfer',{kind:'deposit',amount:10}],['vaultTransfer',{kind:'deposit',item:'timber',amount:2}],['goldBankPolicy',{autoDeposit:true,keepWallet:10}],['vaultPolicy',{rules:{timber:2}}]];
  for(const [action,body] of actions)assert.throws(()=>applyGameplayAction(s,action,body,1000),/Travel/);
- applyGameplayAction(s,'buySafe',{},1000);s.homeFurniture=[placed];assert(besideHomeSafe(s));
+ s.location='furnishings';applyGameplayAction(s,'buySafe',{},1000);s.location='home';s.homeFurniture=[placed];assert(besideHomeSafe(s));
  for(const [action,body] of actions)applyGameplayAction(s,action,body,1000);
  assert.equal(s.bank.gold,10);assert.equal(s.bank.vault.items.timber,2);
  for(const [location,position] of [['hub',{x:2,y:3}],['home',{x:3,y:3}],['home',{x:2,y:2}]]){s.location=location;s.position=position;assert.throws(()=>applyGameplayAction(s,'vaultTransfer',{kind:'withdraw',item:'timber',amount:1},1000),/Travel/);}
@@ -46,7 +46,7 @@ test('owned safe works for away storage even when picked up, and keeps contents 
 test('API protects purchased ownership, retries purchase once and migrates existing saved items',async t=>{
  const {db,sql}=testDatabase();t.after(()=>sql.close());let packet,cookie='';const base='https://tower.test';
  async function call(path,body){const response=await handlePlayerApi(new Request(base+'/api/player/'+path,{method:body?'POST':'GET',headers:{Origin:base,'Content-Type':'application/json',Cookie:cookie},body:body?JSON.stringify({...body,characterKey:packet?.characterKey}):undefined}),{TOWER_DB:db});cookie=response.headers.get('set-cookie')?.split(';')[0]??cookie;const data=await response.json();if(response.ok)packet=data;return {status:response.status,...data};}
- await call('session',{legacy:{credits:200,location:'home',ownedFurniture:{bed:1,safe:1},homeFurniture:[placed]}});assert.equal(packet.state.ownedFurniture.safe,0);assert.equal(packet.state.ownedFurniture.bed,1);assert.deepEqual(packet.state.homeFurniture,[]);
+ await call('session',{legacy:{credits:200,location:'furnishings',ownedFurniture:{bed:1,safe:1},homeFurniture:[placed]}});assert.equal(packet.state.ownedFurniture.safe,0);assert.equal(packet.state.ownedFurniture.bed,1);assert.deepEqual(packet.state.homeFurniture,[]);
  const body={revision:packet.revision,operation:crypto.randomUUID()};assert.equal((await call('gameplay/buySafe',body)).status,200);assert.equal((await call('gameplay/buySafe',body)).status,200);assert.equal(packet.state.credits,50);assert.equal(packet.state.ownedFurniture.safe,1);
  assert.equal((await call('gameplay/buySafe',{revision:packet.revision,operation:crypto.randomUUID()})).status,400);
  const legacy={...packet.state,bank:{gold:20,vault:{items:{timber:3}}},ownedFurniture:{bed:1}};delete legacy.safeVersion;sql.prepare('UPDATE tower_players SET state_json=? WHERE player_id=?').run(JSON.stringify(legacy),packet.characterKey);

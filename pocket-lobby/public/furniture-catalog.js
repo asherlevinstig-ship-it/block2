@@ -15,7 +15,7 @@ export const furnitureCatalog={
 };
 export function purchaseFurniture(state,id,quantity=1){
  if(!Object.hasOwn(furnitureCatalog,id)||!Number.isSafeInteger(quantity)||quantity<1||quantity>99)throw new Error('Choose a furniture item and a quantity from 1 to 99.');
- if(!['home','furnishings'].includes(state.location))throw new Error('Travel home or to Tower Furnishings to order furniture.');
+ if(state.location!=='furnishings')throw new Error('Travel to the physical Tower Furnishings shop to buy furniture.');
  if(state.plan||state.report||state.fishingCast||state.timberCut||state.hunting?.encounter||state.hunting?.recoveryUntil||state.health<=0||state.gambling?.round?.status==='playing')throw new Error('Invalid activity. Take control and finish your activity before shopping.');
  const item=furnitureCatalog[id],owned=state.ownedFurniture?.[id]??0,cost=item.price*quantity;
  if(!Number.isSafeInteger(owned)||owned<0||owned+quantity>(item.limit??1000000))throw new Error(item.limit?'You already own a home safe. Find it in Furniture.':'Invalid furniture quantity. Your inventory is full.');
