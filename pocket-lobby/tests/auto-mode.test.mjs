@@ -38,7 +38,7 @@ test('control API persists explicit Auto, retries safely, rejects unsafe starts 
  const start={mode:'auto',revision:packet.revision,operation:crypto.randomUUID()};assert.equal((await call('control',start)).status,200);assert.equal(packet.state.plan.startedAt,1000);assert.equal(packet.state.characterRules.enabled,false);assert.equal((await call('control',start)).status,200);assert.equal(packet.state.plan.startedAt,1000);
  now=61000;assert.equal((await act('presence',{active:true})).status,200);assert.equal(packet.state.controlMode,'auto');assert(packet.state.plan);assert.equal(packet.state.plan.baitUsed,1);
  await call('state');assert.equal(packet.state.controlMode,'auto');assert(packet.state.plan);
- assert.equal((await act('control',{mode:'play'})).status,200);assert.equal(packet.state.controlMode,'play');assert.equal(packet.state.report.reason,'returned');assert.equal(packet.state.report.baitUsed,1);
+ now=121000;assert.equal((await act('control',{mode:'play'})).status,200);assert.equal(packet.state.controlMode,'play');assert.equal(packet.state.report.reason,'returned');assert.equal(packet.state.report.baitUsed,2);
  assert.equal((await act('report/ack',{startedAt:1000})).status,200);assert.equal((await act('save',{state:{...packet.state,controlMode:'auto'}})).status,200);assert.equal(packet.state.controlMode,'play');
  const before=packet.revision;assert.equal((await act('control',{mode:'wrong'})).status,400);assert.equal(packet.revision,before);
  const dungeon=normalizeState({location:'depthsVault',depthsRun:{cleared:2},position:{x:5,y:5}});sql.prepare('UPDATE tower_players SET state_json=? WHERE player_id=?').run(JSON.stringify(dungeon),packet.characterKey);assert.equal((await act('control',{mode:'auto'})).status,400);
