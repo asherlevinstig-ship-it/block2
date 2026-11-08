@@ -37,7 +37,7 @@ export function touchPresence(state,now,{active=true,activityAt=now,random=Math.
   let reason='rest',ruleSummary=summary;
   if(rules.activity!=='rest'){
     const baitLimit=Math.min(1000,Math.max(0,state.fishingGear.bait-rules.keepBait));
-    const needed=Math.max(0,rules.timberTarget-state.woodcutting.timber);
+    const needed=Math.max(0,rules.timberTarget-state.woodcutting.timber-(state.bank?.vault?.items?.timber??0));
     if(rules.activity==='fishing'&&baitLimit===0)reason='bait-reserve';
     else if(rules.activity==='woodcutting'&&needed===0)reason='target-reached';
     else{

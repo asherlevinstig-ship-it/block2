@@ -158,8 +158,9 @@
     document.getElementById('autoCurrent').textContent=info.current;
     document.getElementById('autoWhere').textContent=info.location+' · Next: '+info.next;
     document.getElementById('autoEarnings').textContent=info.earned;
-    document.getElementById('autoBanked').hidden=!(state.plan??state.report)?.bankedGold;
-    document.getElementById('autoBanked').textContent='Saved to bank · '+((state.plan??state.report)?.bankedGold??0).toLocaleString()+' gold';
+    const activePlan=state.plan??state.report,storedCount=Object.values(activePlan?.storedItems??{}).reduce((a,b)=>a+b,0);
+    document.getElementById('autoBanked').hidden=!activePlan?.bankedGold&&!storedCount;
+    document.getElementById('autoBanked').textContent=(activePlan?.bankedGold?'Saved to bank · '+activePlan.bankedGold.toLocaleString()+' gold':'')+(storedCount?(activePlan?.bankedGold?' · ':'')+storedCount+' items stored in vault':'');
     document.getElementById('autoReason').textContent=info.reason;
     document.getElementById('autoDecision').textContent=info.decision;
     document.getElementById('autoTakeControl').textContent=info.returning?'Finishing current fight…':info.running?'Take control':'Return to play';

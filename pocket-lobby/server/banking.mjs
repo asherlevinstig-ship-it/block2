@@ -1,3 +1,4 @@
+import {autoStoreVault} from './vault.mjs';
 import {normalizeBank,GOLD_CAP} from '../public/bank.js';
 function record(bank,kind,amount,at){bank.transactions=[...bank.transactions,{kind,amount,at}].slice(-20);}
 export function bankTransfer(state,kind,amount,now){
@@ -15,6 +16,7 @@ export function bankTransfer(state,kind,amount,now){
  record(bank,kind,amount,now);return amount;
 }
 export function autoBankGold(state,plan,at){
+ autoStoreVault(state,plan,at);
  const bank=state.bank=normalizeBank(state.bank);
  if(!bank.autoDeposit||plan?.source!=='rules')return 0;
  const amount=Math.min(Math.max(0,state.credits-bank.keepWallet),GOLD_CAP-bank.gold);

@@ -22,13 +22,14 @@ export function chooseGoldTask(state,plan){
  const fish=Object.values(state.fishStock).reduce((a,b)=>a+b,0);
  if(state.credits>=100000000)return {stop:'wallet-full',reason:'Your wallet is full.'};
  for(const [count,keep,type,name] of [[fish,policy.keepFish,'sellFish','fish'],[state.woodcutting.timber,policy.keepTimber,'sellTimber','timber'],[state.huntingLoot.boar??0,policy.keepMeat,'sellMeat','boar meat'],[state.huntingLoot.stonebackShell??0,policy.keepShells,'sellShells','Shell Fragments']]){
-  if(count>keep)return choice(type,keep,'Selling surplus '+name+'; keeping your reserve of '+keep+'.');
+  const rules=state.bank?.vault?.rules??{},protectedBag=type==='sellFish'?Object.entries(state.fishStock).reduce((sum,[id,n])=>sum+Math.min(n,rules['fish:'+id]??0),0):Math.min(count,rules[type==='sellTimber'?'timber':type==='sellMeat'?'loot:boar':'loot:stonebackShell']??0);
+  if(count>Math.max(keep,protectedBag))return choice(type,keep,'Selling surplus '+name+'; keeping your reserve of '+keep+'.');
  }
  if(state.health<40)return choice('rest',0,'Resting: fewer than two hearts remain.');
  const candidates=[],rod=fishingCatalog.rods[state.fishingGear.equippedRod];
- const canFish=rod&&state.fishingGear.ownedRods.includes(state.fishingGear.equippedRod)&&skillLevel(state.stats.patienceXp)>=rod.patience&&(state.adventure.discovered.includes('pond')||state.history.fishCaught);
+ const canFish=(state.bank?.vault?.rules?.bait===undefined||state.bank.vault.rules.bait>plan.keepBait)&&rod&&state.fishingGear.ownedRods.includes(state.fishingGear.equippedRod)&&skillLevel(state.stats.patienceXp)>=rod.patience&&(state.adventure.discovered.includes('pond')||state.history.fishCaught);
  if(canFish&&state.fishingGear.bait>plan.keepBait)candidates.push({type:'fishing',amount:Math.min(5,state.fishingGear.bait-plan.keepBait),score:4/(rod.duration/4500),reason:'Fishing: your rod is ready and bait stays above your reserve.'});
- if(state.woodcutting.axeOwned&&state.woodcutting.equipped&&state.woodcutting.timber<plan.timberTarget)candidates.push({type:'woodcutting',amount:Math.min(5,plan.timberTarget-state.woodcutting.timber),score:3.8,reason:'Chopping timber: a steady income without combat or bait costs.'});
+ if(state.woodcutting.axeOwned&&state.woodcutting.equipped&&state.woodcutting.timber+(state.bank?.vault?.items?.timber??0)<plan.timberTarget)candidates.push({type:'woodcutting',amount:Math.min(5,plan.timberTarget-state.woodcutting.timber-(state.bank?.vault?.items?.timber??0)),score:3.8,reason:'Chopping timber: a steady income without combat or bait costs.'});
  for(const [id,type,unlocked] of [['boar','huntBoars',state.history.boarDefeated],['beetle','huntBeetles',beetleHuntUnlocked(state)]]){
   if(!unlocked)continue;
   const preview=safeHuntPreview(state,id,policy.minHealth);

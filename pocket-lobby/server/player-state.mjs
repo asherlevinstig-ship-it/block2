@@ -1,3 +1,5 @@
+import {validateVaultGear} from '../public/vault.js';
+import {autoStoreVault} from './vault.mjs';
 import {normalizeBank} from '../public/bank.js';
 import {settleAutoGambling} from './auto-gambling.mjs';
 import {normalizeDungeonLoot} from '../public/dungeon-loot.js';
@@ -96,7 +98,7 @@ export function normalizeState(input={}){
   if(depthsRun)state.depthsRun=depthsRun;
   if(input.depthsDiscovered===true||depthsRun)state.depthsDiscovered=true;
   if(input.loungeLayout==="gaming")state.loungeLayout="gaming";
-  return state;
+  validateVaultGear(state);return state;
 }
 export function startPlan(state,{hours,baitLimit,kind,source},now){
   if(state.fishingCast)throw new Error("Invalid work plan during an active cast.");
@@ -156,7 +158,7 @@ function settleWorkPlan(state,now,{stop=false,random=Math.random}={}){
     state.fishingGear.bait--;state.stats.patienceXp=Math.min(MAX_SKILL_XP,state.stats.patienceXp+10);
     plan.catches[fish]=(plan.catches[fish]??0)+1;
     plan.baitUsed++;plan.xp+=10;
-    const caughtAt=plan.nextCatchAt;
+    const caughtAt=plan.nextCatchAt;autoStoreVault(state,plan,caughtAt);
     plan.nextCatchAt+=plan.interval;changed=true;
     if(plan.baitUsed>=plan.baitLimit||state.fishingGear.bait===0){
       finishPlan(state,state.fishingGear.bait===0?"out-of-bait":"bait-limit",caughtAt);

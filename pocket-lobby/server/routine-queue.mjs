@@ -1,3 +1,4 @@
+import {autoStoreVault} from './vault.mjs';
 import {autoBankGold} from './banking.mjs';
 import {chooseGoldTask} from './gold-planner.mjs';
 import {resolveQueueGoal} from './upgrade-goals.mjs';
@@ -41,7 +42,7 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
         if(now>until){events=advanceServerCombat(state,now,random);if(events.length)changed=true;}
       }
       if(state.hunting.encounter){p.huntHealth=state.health;p.enemyHealth=state.hunting.encounter.health;return changed;}
-      const report=p.lastHuntReport;
+      const report=p.lastHuntReport;autoStoreVault(state,p,until);
       if(!report)throw new Error('Missing hunting outcome.');
       delete p.lastHuntReport;delete p.activeHunt;delete p.enemyHealth;
       p.huntHealth=state.health;p.hunts.recent=[...p.hunts.recent,{...(report.decision?{decision:report.decision}:{}),enemy:report.enemy,outcome:report.outcome,at:report.endedAt,health:report.endedHealth}].slice(-5);
@@ -81,7 +82,7 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
         interval=Math.round(60000*rod.duration/4500);state.location='pond';state.position={x:4,y:5};
       }else if(type==='woodcutting'){
         if(!state.woodcutting.axeOwned||!state.woodcutting.equipped)return finish(state,p,'requirements',p.cursorAt);
-        if(state.woodcutting.timber>=p.timberTarget){nextStep(p,p.cursorAt,'Timber target reached');changed=true;continue;}
+        if(state.woodcutting.timber+(state.bank?.vault?.items?.timber??0)>=p.timberTarget){nextStep(p,p.cursorAt,'Timber target reached');changed=true;continue;}
         interval=woodRules.offlineInterval;state.location='logging';state.position={x:5,y:5};
       }else if(Object.hasOwn(queueHuntEnemies,type)){
         p.hunts??={started:0,wins:0,escapes:0,defeats:0,xp:{},loot:{},stones:{},mastery:{},recent:[]};
@@ -111,14 +112,16 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
       if((state.fishStock[fish]??0)>=1000000)return finish(state,p,'inventory-full',at);
       state.fishStock[fish]=(state.fishStock[fish]??0)+1;state.fishingGear.bait--;
       const xp=Math.min(10,MAX_SKILL_XP-state.stats.patienceXp);state.stats.patienceXp+=xp;p.patienceXp+=xp;
-      state.history.fishCaught=true;recordQuest(state.quest,'fish');p.catches[fish]=(p.catches[fish]??0)+1;p.stepCount++;
+      state.history.fishCaught=true;recordQuest(state.quest,'fish');p.catches[fish]=(p.catches[fish]??0)+1;p.stepCount++;autoStoreVault(state,p,at);
     }else if(type==='woodcutting'){
-      if(state.woodcutting.timber>=p.timberTarget){nextStep(p,p.cursorAt,'Timber target reached');changed=true;continue;}
-      const before=state.woodcutting.xp;harvestTimber(state.woodcutting);p.woodXp+=state.woodcutting.xp-before;p.timber++;p.stepCount++;
+      if(state.woodcutting.timber+(state.bank?.vault?.items?.timber??0)>=p.timberTarget){nextStep(p,p.cursorAt,'Timber target reached');changed=true;continue;}
+      const before=state.woodcutting.xp;harvestTimber(state.woodcutting);p.woodXp+=state.woodcutting.xp-before;p.timber++;p.stepCount++;autoStoreVault(state,p,at);
     }else if(type==='sellFish'||type==='sellTimber'||type==='sellMeat'||type==='sellShells'){
       const products=type==='sellTimber'?[['timber',state.woodcutting.timber,woodRules.price]]:type==='sellMeat'?[['boar',state.huntingLoot.boar??0,huntEnemies.boar.sellPrice]]:type==='sellShells'?[['stonebackShell',state.huntingLoot.stonebackShell??0,huntEnemies.beetle.sellPrice]]:Object.entries(state.fishStock).map(([id,count])=>[id,count,fishProducts[id].price]).sort((a,b)=>a[2]-b[2]||a[0].localeCompare(b[0]));
-      let remaining=Math.max(0,products.reduce((sum,[,count])=>sum+count,0)-step.amount),gold=0;const sales=[];
-      for(const [id,count,price] of products){const quantity=Math.min(remaining,count);if(quantity){sales.push([id,quantity]);gold+=quantity*price;remaining-=quantity;}}
+      const protectedCount=id=>state.bank?.vault?.rules?.[id==='timber'?'timber':type==='sellFish'?'fish:'+id:'loot:'+id]??0;
+      const reserved=products.reduce((sum,[id,count])=>sum+Math.min(count,protectedCount(id)),0);
+      let remaining=Math.max(0,products.reduce((sum,[,count])=>sum+count,0)-Math.max(step.amount,reserved)),gold=0;const sales=[];
+      for(const [id,count,price] of products){const quantity=Math.min(remaining,Math.max(0,count-protectedCount(id)));if(quantity){sales.push([id,quantity]);gold+=quantity*price;remaining-=quantity;}}
       if(state.credits+gold>100000000)return finish(state,p,'wallet-full',at);
       for(const [id,quantity] of sales){if(id==='timber')state.woodcutting.timber-=quantity;else if(type==='sellMeat'||type==='sellShells')state.huntingLoot[id]-=quantity;else state.fishStock[id]-=quantity;p.stepCount+=quantity;}
       if(type==='sellMeat'||type==='sellShells'){p.huntSales??={};const enemy=type==='sellMeat'?'boar':'beetle';p.huntSales[enemy]=(p.huntSales[enemy]??0)+gold;}
@@ -129,7 +132,7 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
       const packs=Math.max(0,Math.ceil((step.amount-state.fishingGear.bait)/fishingCatalog.bait.quantity)),cost=packs*fishingCatalog.bait.price;
       if(p.goldSpent+cost>p.queue.budget)return finish(state,p,'spending-limit',at);
       if(cost&&(state.credits-cost<p.queue.reserveGold||state.credits<cost))return finish(state,p,'gold-reserve',at);
-      state.credits-=cost;state.fishingGear.bait+=packs*fishingCatalog.bait.quantity;p.goldSpent+=cost;p.baitBought+=packs*fishingCatalog.bait.quantity;p.stepCount=packs*fishingCatalog.bait.quantity;
+      state.credits-=cost;state.fishingGear.bait+=packs*fishingCatalog.bait.quantity;p.goldSpent+=cost;p.baitBought+=packs*fishingCatalog.bait.quantity;p.stepCount=packs*fishingCatalog.bait.quantity;autoStoreVault(state,p,at);
       nextStep(p,at,'Bought '+p.stepCount+' bait for '+cost+' gold');changed=true;continue;
     }else if(type==='rest'){state.health=100;nextStep(p,at,'Rested at home');changed=true;continue;}
     p.cursorAt=at;p.nextAt=null;changed=true;

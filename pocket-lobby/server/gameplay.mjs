@@ -1,3 +1,5 @@
+import {vaultTransfer} from './vault.mjs';
+import {normalizeVault} from '../public/vault.js';
 import {bankTransfer} from './banking.mjs';
 import {normalizeBank} from '../public/bank.js';
 import {normalizeDungeonLoot,dungeonRelics} from '../public/dungeon-loot.js';
@@ -32,8 +34,10 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
   if(action!=='combat')settleActivities(state,now,random);
   if(activityAction(state,action,body,now,random)||essenceAction(state,action,body))return;
   if(gamblingAction(state,action,body,now,random===Math.random?undefined:random))return;
-  if(action==='goldBankTransfer'||action==='goldBankPolicy'){
+  if(['goldBankTransfer','goldBankPolicy','vaultTransfer','vaultPolicy'].includes(action)){
     available(state);if(state.fishingCast||state.timberCut||state.gambling?.round?.status==='playing')throw new Error('Choose banking after finishing your current activity.');
+    if(action==='vaultTransfer'){vaultTransfer(state,body.kind,body.item,body.amount);return;}
+    if(action==='vaultPolicy'){const bank=normalizeBank(state.bank);state.bank={...bank,vault:normalizeVault({items:bank.vault?.items??{},rules:body.rules})};return;}
     if(action==='goldBankTransfer')bankTransfer(state,body.kind,body.amount,now);
     else{if(typeof body.autoDeposit!=='boolean'||!Number.isSafeInteger(body.keepWallet)||body.keepWallet<0||body.keepWallet>100000000)throw new Error('Choose a valid wallet amount and Auto deposit option.');state.bank={...normalizeBank(state.bank),autoDeposit:body.autoDeposit,keepWallet:body.keepWallet};}return;
   }
@@ -135,6 +139,7 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
     return;
   }
   if(action==='rod'){
+    if(state.bank?.vault?.items?.['rod:'+body.id])throw new Error('Choose a rod from your bag. Withdraw this rod from the vault first.');
     available(state);
     const rod=Object.hasOwn(fishingCatalog.rods,body.id)?fishingCatalog.rods[body.id]:null;
     if(!rod)throw new Error('Choose a valid fishing rod.');
@@ -181,9 +186,9 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
     state.tradeReceipt={id:body.id,quantity,gold};
     return;
   }
-  if(action==='enchant'){available(state);enchantWeapon(state,body.id,body.level);return;}
+  if(action==='enchant'){available(state);if(state.bank?.vault?.items?.['weapon:'+body.id])throw new Error('Choose a weapon from your bag. Withdraw it before enchanting.');enchantWeapon(state,body.id,body.level);return;}
   if(action==='weapon'){
-    available(state);purchaseWeapon(state,body.id);return;
+    available(state);if(state.bank?.vault?.items?.['weapon:'+body.id])throw new Error('Choose a weapon from your bag. Withdraw this weapon from the vault first.');purchaseWeapon(state,body.id);return;
   }
   if(action==='quest'){
     location(state,['hub']);

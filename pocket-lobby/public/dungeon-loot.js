@@ -27,5 +27,5 @@ export function awardDungeonWeapon(state,now,random=Math.random){
 export function compareDungeonWeapon(state,id){
  if(!dungeonRelics.includes(id))throw new Error('Choose a dungeon weapon.');
  const metrics=weapon=>{if(!Object.hasOwn(weaponCatalog,weapon))return {name:'No weapon',damage:0,interval:0,stagger:0,counter:0};const profile=weaponProfile(weapon,state.combatGear?.activeSwordUpgrade,state.combatGear?.weaponEnchantments),attributes=huntingAttributes(state.stats??{},weapon,state.combatGear?.activeSwordUpgrade,false,state.combatGear?.weaponEnchantments);return {name:profile?.name??'No weapon',damage:attributes.damage,interval:attributes.attackInterval,stagger:weaponStagger(weapon,state.combatGear?.activeSwordUpgrade),counter:Math.round((profile?.counterMultiplier??.5)*100)};};
- return {item:weaponCatalog[id],current:metrics(state.combatGear?.equippedWeapon),found:metrics(id),canEquip:canUseWeapon(state.stats??{},id),owned:state.combatGear?.ownedWeapons?.includes(id)??false};
+ return {item:weaponCatalog[id],current:metrics(state.combatGear?.equippedWeapon),found:metrics(id),canEquip:!state.bank?.vault?.items?.['weapon:'+id]&&canUseWeapon(state.stats??{},id),owned:state.combatGear?.ownedWeapons?.includes(id)??false};
 }
