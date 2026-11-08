@@ -1,3 +1,5 @@
+import {bankTransfer} from './banking.mjs';
+import {normalizeBank} from '../public/bank.js';
 import {normalizeDungeonLoot,dungeonRelics} from '../public/dungeon-loot.js';
 import {skillLevel,progressionVersion,MAX_SKILL_XP} from '../public/skill-curve.js';
 import {fishingCatalog,fishProducts,rollFishingCatch} from '../public/fishing.js';
@@ -30,6 +32,11 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
   if(action!=='combat')settleActivities(state,now,random);
   if(activityAction(state,action,body,now,random)||essenceAction(state,action,body))return;
   if(gamblingAction(state,action,body,now,random===Math.random?undefined:random))return;
+  if(action==='goldBankTransfer'||action==='goldBankPolicy'){
+    available(state);if(state.fishingCast||state.timberCut||state.gambling?.round?.status==='playing')throw new Error('Choose banking after finishing your current activity.');
+    if(action==='goldBankTransfer')bankTransfer(state,body.kind,body.amount,now);
+    else{if(typeof body.autoDeposit!=='boolean'||!Number.isSafeInteger(body.keepWallet)||body.keepWallet<0||body.keepWallet>100000000)throw new Error('Choose a valid wallet amount and Auto deposit option.');state.bank={...normalizeBank(state.bank),autoDeposit:body.autoDeposit,keepWallet:body.keepWallet};}return;
+  }
   if(action==='vaultVictoryAck'){available(state);if(state.depthsRun?.cleared!==3)throw new Error('Defeat the Vault Guardian first.');state.depthsRun.victorySeen=true;return;}
   if(action==='dungeonLootTarget'||action==='dungeonLootAck'){
     available(state);const loot=state.dungeonLoot=normalizeDungeonLoot(state.dungeonLoot);
@@ -204,6 +211,7 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
 // Snapshots retain movement, appearance and equipment choices. Progression,
 // rewards and active encounters can only change through server actions.
 export function protectFishingState(previous,next){
+  next.bank=previous.bank;
   next.controlMode=previous.controlMode??'play';
   next.dungeonLoot=previous.dungeonLoot;
   if(previous.upgradeGoal)next.upgradeGoal=previous.upgradeGoal;else delete next.upgradeGoal;

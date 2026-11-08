@@ -1,3 +1,4 @@
+import {ownedGold} from '../public/bank.js';
 import {migrateProgression} from '../public/skill-curve.js';
 import {normalizeState} from './player-state.mjs';
 import {playerPower} from '../public/progression.js';
@@ -17,7 +18,7 @@ export async function readRankings(db,playerId,account){
         id:row.player_id,
         name:state.avatar.name,
         username:row.username,
-        gold:state.credits,
+        gold:ownedGold(state),
         earned:state.goldEarned,
         power:power.total,
         breakdown:power.parts

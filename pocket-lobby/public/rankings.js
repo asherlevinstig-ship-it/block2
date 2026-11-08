@@ -29,7 +29,7 @@ export function initializeRankings(cloud,document=globalThis.document,window=glo
     const amount=document.createElement('b');
     amount.textContent=new Intl.NumberFormat().format(metric==='wealth'?player.gold:player.power);
     const label=document.createElement('small');
-    label.textContent=metric==='wealth'?'gold owned':'combat power';
+    label.textContent=metric==='wealth'?'gold owned · wallet + bank':'combat power';
     score.append(amount,label);
     row.append(rank,identity,score);
     if(metric==='wealth'){
@@ -58,7 +58,7 @@ export function initializeRankings(cloud,document=globalThis.document,window=glo
     const content=find('rankingsContent');
     content.replaceChildren();
     find('rankingsDescription').textContent=metric==='wealth'
-      ?'Ranked by gold currently owned. Equal scores share a rank.'
+      ?'Ranked by gold in your wallet and bank. Equal scores share a rank.'
       :'Ranked by combat power using the same breakdown as My progress. Equal scores share a rank.';
     find('rankingsWealth').setAttribute('aria-pressed',String(metric==='wealth'));
     find('rankingsPower').setAttribute('aria-pressed',String(metric==='power'));

@@ -1,3 +1,4 @@
+import {autoBankGold} from './banking.mjs';
 import {startAutoGambling} from './auto-gambling.mjs';
 import {upgradeGoalProgress} from '../public/upgrade-goals.js';
 import {startRoutineQueue} from './routine-queue.mjs';
@@ -30,9 +31,9 @@ export function touchPresence(state,now,{active=true,activityAt=now,random=Math.
   // Unfinished manual casts/cuts pay nothing. The saved routine starts cleanly.
   delete state.fishingCast;delete state.timberCut;
   const metadata={source:'rules',routineId,ruleSummary:summary,routineCapAt:startedAt+AWAY_CAP_MS,keepBait:rules.keepBait,timberTarget:rules.timberTarget};
-  if(rules.strategy==='gambling'){startAutoGambling(state,rules,startedAt,metadata);settlePlan(state,until,{stop:active,random});return;}
-  if(rules.strategy==='earnGold'){const queue={enabled:true,repeats:1,budget:rules.goldPolicy.budget,reserveGold:rules.goldPolicy.reserveGold,minHealth:Math.max(rules.goldPolicy.minHealth,rules.combat.fleeBelow+1),steps:[{type:'rest',amount:0}]};startRoutineQueue(state,{...rules,queue},startedAt,{...metadata,adaptive:true});settlePlan(state,until,{stop:active,random});return;}
-  if(rules.queue?.enabled){startRoutineQueue(state,rules,startedAt,metadata);settlePlan(state,until,{stop:active,random});return;}
+  if(rules.strategy==='gambling'){startAutoGambling(state,rules,startedAt,metadata);autoBankGold(state,state.plan,startedAt);settlePlan(state,until,{stop:active,random});return;}
+  if(rules.strategy==='earnGold'){const queue={enabled:true,repeats:1,budget:rules.goldPolicy.budget,reserveGold:rules.goldPolicy.reserveGold,minHealth:Math.max(rules.goldPolicy.minHealth,rules.combat.fleeBelow+1),steps:[{type:'rest',amount:0}]};startRoutineQueue(state,{...rules,queue},startedAt,{...metadata,adaptive:true});autoBankGold(state,state.plan,startedAt);settlePlan(state,until,{stop:active,random});return;}
+  if(rules.queue?.enabled){startRoutineQueue(state,rules,startedAt,metadata);autoBankGold(state,state.plan,startedAt);settlePlan(state,until,{stop:active,random});return;}
   let reason='rest',ruleSummary=summary;
   if(rules.activity!=='rest'){
     const baitLimit=Math.min(1000,Math.max(0,state.fishingGear.bait-rules.keepBait));
@@ -45,12 +46,12 @@ export function touchPresence(state,now,{active=true,activityAt=now,random=Math.
         state.location='hub';startPlan(state,{source:'board',kind:rules.activity,hours:8,baitLimit},startedAt);
         Object.assign(state.plan,metadata);
         if(rules.activity==='woodcutting')state.plan.endAt=Math.min(state.plan.endAt,startedAt+needed*state.plan.interval);
-        settlePlan(state,until,{stop:active,random});return;
+        autoBankGold(state,state.plan,startedAt);settlePlan(state,until,{stop:active,random});return;
       }
       reason='requirements';ruleSummary='Away work skipped: '+preview.reason;
     }
   }
   state.location='home';state.position={x:5,y:7};
   state.plan={...metadata,kind:'rest',startedAt,endAt:startedAt+(state.health<100?boarRules.recovery:0),xp:0,ruleSummary,restReason:reason};
-  settlePlan(state,until,{stop:active,random});
+  autoBankGold(state,state.plan,startedAt);settlePlan(state,until,{stop:active,random});
 }

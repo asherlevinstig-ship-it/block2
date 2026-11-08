@@ -1,6 +1,7 @@
 'use strict';
 (async()=>{
   const {createCombatClock}=await import('./combat-clock.js');const combatClock=createCombatClock();
+  const {initializeBankUI}=await import('./bank-ui.js');let bankUI=null;
   const {autoStatus}=await import('./auto-mode.js');
   const {AWAY_GRACE_MS}=await import('./character-rules.js');
   const status=document.getElementById('saveStatus');
@@ -143,6 +144,7 @@
     clearTimeout(presenceTimer);presenceTimer=setTimeout(async()=>{try{await pulse();}catch{}schedulePresence(packet?.state.plan?.activeHunt&&!document.hidden?250:packet?.state.plan?.source==='rules'?2000:20000);},delay);
   }
   function renderAutoPanel(state){
+    bankUI?.render();
     document.body.classList.toggle('auto-controlled',!!state.plan||!!state.report);
     const info=autoStatus(state),panel=document.getElementById('autoPanel');panel.hidden=!info.visible;
     const running=state.plan?.source==='rules';
@@ -156,6 +158,8 @@
     document.getElementById('autoCurrent').textContent=info.current;
     document.getElementById('autoWhere').textContent=info.location+' · Next: '+info.next;
     document.getElementById('autoEarnings').textContent=info.earned;
+    document.getElementById('autoBanked').hidden=!(state.plan??state.report)?.bankedGold;
+    document.getElementById('autoBanked').textContent='Saved to bank · '+((state.plan??state.report)?.bankedGold??0).toLocaleString()+' gold';
     document.getElementById('autoReason').textContent=info.reason;
     document.getElementById('autoDecision').textContent=info.decision;
     document.getElementById('autoTakeControl').textContent=info.returning?'Finishing current fight…':info.running?'Take control':'Return to play';
@@ -186,7 +190,7 @@
     document.getElementById('offlineTotals').textContent=info.earned;
     document.getElementById('offlineProgress').value=info.progress;
     document.getElementById('offlineDuration').textContent=plan.rounds+' / '+plan.policy.maxRounds+' rounds · One every 30 seconds';
-    document.getElementById('offlineValue').textContent=info.decision;
+    document.getElementById('offlineValue').textContent=info.decision+(plan.bankedGold?' · Saved to bank '+plan.bankedGold+' gold':'');
     document.getElementById('offlineReason').textContent=info.reason||'Fixed bets only. Take control to stop. Winnings never reset the loss allowance.';
   }
   function showQueueReport(state,plan,running){
@@ -204,7 +208,7 @@
     const minutes=Math.max(0,Math.floor(((plan.endedAt??Date.now())-plan.startedAt)/60000));
     document.getElementById('offlineDuration').textContent='Time worked · '+Math.floor(minutes/60)+'h '+minutes%60+'m · Spending '+plan.goldSpent+' / '+plan.queue.budget+' gold';
     const net=plan.goldEarned-plan.goldSpent;
-    document.getElementById('offlineValue').textContent='Sales +'+plan.goldEarned+' gold · Bait −'+(plan.goldSpent-(plan.goalSpent??0))+' gold'+(plan.goalSpent?' · Upgrade −'+plan.goalSpent+' gold':'')+' · Net '+(net>=0?'+':'')+net+' gold · Wallet '+state.credits+' gold. Unsold supplies remain in Inventory.';
+    document.getElementById('offlineValue').textContent='Sales +'+plan.goldEarned+' gold · Bait −'+(plan.goldSpent-(plan.goalSpent??0))+' gold'+(plan.goalSpent?' · Upgrade −'+plan.goalSpent+' gold':'')+' · Net '+(net>=0?'+':'')+net+' gold · Wallet '+state.credits+' gold. '+(plan.bankedGold?'Saved to bank '+plan.bankedGold+' gold. ':'')+'Unsold supplies remain in Inventory.';
     document.getElementById('offlineReason').textContent=running?(plan.returnRequested?'Finishing the current fight, then returning home.':plan.activeHunt?'Hunting with your equipped weapon. Return to finish this fight and stop.':'Your saved queue is running. Return to stop it.'):({'goal-reached':'Goal reached · Choose your next upgrade or clear this goal in Rules to resume','queue-complete':'All cycles complete',returned:'Stopped when you returned','away-cap':'Eight-hour limit reached','spending-limit':'Stopped before exceeding your spending limit','gold-reserve':'Stopped to protect your gold reserve','beetle-trial-required':'Defeat a Stoneback Beetle yourself in the Ruins first','weapon-required':'Equip a usable weapon before hunting','hunt-escaped':'Escaped · Hunting stopped','hunt-defeat':'Defeated · Returned home to recover',requirements:'Required tool, skill or fishing location is missing','inventory-full':'Inventory is full','wallet-full':'Wallet is full'}[plan.reason]??plan.reason);
   }
   function showReport(state,details=false){
@@ -260,6 +264,7 @@
     if(!dialog.open)dialog.showModal();
   }
   function attach(){
+    bankUI=initializeBankUI(window.playerCloud,document,window);window.towerRefreshBank=()=>bankUI.render();
     document.getElementById('autoStart').onclick=()=>setControl('auto');
     document.getElementById('autoPlay').onclick=()=>setControl('play');
     document.getElementById('autoTakeControl').onclick=()=>setControl('play');

@@ -1,3 +1,4 @@
+import {autoBankGold} from './banking.mjs';
 import {chooseGoldTask} from './gold-planner.mjs';
 import {resolveQueueGoal} from './upgrade-goals.mjs';
 import {startCombatEncounter,advanceServerCombat} from './activities.mjs';
@@ -121,7 +122,7 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
       if(state.credits+gold>100000000)return finish(state,p,'wallet-full',at);
       for(const [id,quantity] of sales){if(id==='timber')state.woodcutting.timber-=quantity;else if(type==='sellMeat'||type==='sellShells')state.huntingLoot[id]-=quantity;else state.fishStock[id]-=quantity;p.stepCount+=quantity;}
       if(type==='sellMeat'||type==='sellShells'){p.huntSales??={};const enemy=type==='sellMeat'?'boar':'beetle';p.huntSales[enemy]=(p.huntSales[enemy]??0)+gold;}
-      state.credits+=gold;state.goldEarned=Math.min(Number.MAX_SAFE_INTEGER,state.goldEarned+gold);p.goldEarned+=gold;
+      state.credits+=gold;state.goldEarned=Math.min(Number.MAX_SAFE_INTEGER,state.goldEarned+gold);p.goldEarned+=gold;autoBankGold(state,p,at);
       if((type==='sellFish'||type==='sellMeat')&&gold){recordQuest(state.quest,'marketSale');if(!state.firstUpgrade.unlocked&&!state.firstUpgrade.complete)Object.assign(state.firstUpgrade,{unlocked:true,sale:{name:type==='sellMeat'?'Boar Meat':'Fish',quantity:p.stepCount,gold}});}
       nextStep(p,at,'Sold '+p.stepCount+' for '+gold+' gold');changed=true;continue;
     }else if(type==='buyBait'){

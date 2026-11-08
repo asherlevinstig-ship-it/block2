@@ -1,3 +1,4 @@
+import {autoBankGold} from './banking.mjs';
 import {gamblingAction,handTotal} from './gambling.mjs';
 export const AUTO_GAMBLE_INTERVAL=30000;
 export function startAutoGambling(state,rules,now,metadata){
@@ -21,6 +22,7 @@ export function settleAutoGambling(state,now,{stop=false,random=Math.random}={})
   const net=round.payout-round.bet;p.rounds++;p[round.outcome==='win'?'wins':round.outcome==='push'?'pushes':'losses']++;
   p.goldSpent+=round.bet;p.goldEarned+=round.payout;p.totalLost+=Math.max(0,-net);p.xp+=(state.stats.luckXp??0)-before;
   p.recent=[...p.recent,{at,outcome:round.outcome,net,bet:round.bet,...(c.game==='roulette'?{number:round.number,color:round.resultColor}:{player:handTotal(round.player),dealer:handTotal(round.dealer)})}].slice(-8);
+  autoBankGold(state,p,at);
   p.nextRoundAt+=AUTO_GAMBLE_INTERVAL;changed=true;
   const reason=limit();if(reason)return finish(state,p,reason,at);
  }

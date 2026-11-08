@@ -4696,6 +4696,7 @@ function openCharacterRules(){
     const row=document.createElement('li'),title=document.createElement('b'),detail=document.createElement('p');
     title.textContent=item.kind==='gambling'?'Auto gambling':item.kind==='queue'?'Activity queue':item.kind==='rest'?'Rest at home':item.kind==='fishing'?'Fishing':'Woodcutting';
     detail.textContent=(item.kind==='rest'?'':item.count+' '+(item.kind==='gambling'?'rounds':item.kind==='queue'?'items gathered':item.kind==='fishing'?'fish':'timber')+' · +'+item.xp+' XP · ')+({'gamble-loss-limit':'Total-loss limit reached','gamble-profit-target':'Net profit target reached','gamble-round-limit':'Round limit reached','beetle-trial-required':'Win a Stoneback Beetle fight yourself first','goal-reached':'Upgrade goal reached','queue-complete':'All queue cycles complete','spending-limit':'Queue spending limit reached','gold-reserve':'Gold reserve protected','wallet-full':'Wallet is full','bait-reserve':'Bait reserve protected','target-reached':'Timber target reached','away-cap':'Eight-hour cap reached',returned:'Returned to game',combat:'Skipped during combat / recovery',requirements:item.summary,rest:'Rested at home'}[item.reason]??item.reason);
+    if(item.bankedGold)detail.textContent+=' · Saved to bank '+item.bankedGold+' gold';
     if(item.gambling)detail.textContent+=' · Net '+(item.gambling.net>=0?'+':'')+item.gambling.net+' gold · Total losses '+item.gambling.totalLost+' gold';
     if(item.hunts)detail.textContent+=' · '+Object.entries(item.hunts).map(([id,record])=>huntEnemies[id].name+': '+record.wins+' wins, '+record.xp+' XP, '+(item.huntSales?.[id]??0)+' gold sold').join(' · ');
     row.append(title,detail);log.append(row);
@@ -5081,3 +5082,6 @@ $('vaultVictoryContinue').onclick=()=>closeVaultVictory();
 $('vaultVictoryDialog').addEventListener('cancel',event=>{event.preventDefault();closeVaultVictory();});
 
 window.towerOpenAutoRules=()=>openCharacterRules();
+
+window.towerApplyBankState=state=>{applyServerGameplay(state);updateInventory();window.towerRefreshBank?.();};
+window.towerBankFeedback=message=>showTransaction('Tower Treasury',[{icon:'◈',text:message}]);
