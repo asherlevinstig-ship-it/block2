@@ -1,0 +1,98 @@
+/* Auto Mode: focused settings with a persistent plan summary. */
+.game-window#characterRulesDialog.auto-mode-window{width:min(1180px,calc(100vw - 32px));max-height:calc(100dvh - 36px);padding:0;border:1px solid #6b7c91;border-radius:18px;background:#101e31;overflow:hidden;box-shadow:0 24px 100px #020817cc,0 0 0 1px #b9c9da11}
+#characterRulesDialog.auto-mode-window .auto-mode-header{position:relative;top:auto;min-height:96px;margin:0;padding:20px 24px;box-shadow:none;border-bottom:1px solid #6a7d943b;background:linear-gradient(115deg,#253a50,#132237)}
+#characterRulesDialog .auto-mode-header .window-emblem{background:#e3bd6820;border:1px solid #c3a66a88;color:#f0cc81;font-size:36px;width:48px;height:48px;border-radius:12px;box-shadow:none}
+#characterRulesDialog .auto-mode-header h2{font-size:29px;letter-spacing:-1px;color:#ffedc5}
+#characterRulesDialog .auto-mode-header p{font-size:12px;margin:7px 0 0;color:#9fb3c9}
+.auto-mode-state{white-space:nowrap;font-size:10px;font-weight:700;letter-spacing:.02em;background:#16283b;color:#a8bfd1;border:1px solid #536b8255;border-radius:20px;padding:8px 12px}
+.auto-mode-state[data-active=true]{color:#b5dfc2;border-color:#6da68a66;background:#2c594533}
+#characterRulesDialog .auto-mode-layout{display:grid;grid-template-columns:174px minmax(0,1fr) 260px;grid-template-rows:minmax(0,1fr) auto;margin:0;padding:0;gap:0;border:0;max-height:calc(100dvh - 136px);height:min(690px,calc(100dvh - 136px));overflow:hidden;background:transparent}
+.auto-mode-tabs{padding:22px 12px;display:flex;flex-direction:column;gap:7px;border-right:1px solid #74879e26;background:#0d192b}
+#characterRulesDialog .auto-mode-tabs button{display:flex;align-items:center;gap:10px;padding:12px 10px;min-height:63px;text-align:left;border:1px solid transparent;border-radius:9px;background:transparent;color:#93a8c0;box-shadow:none}
+.auto-mode-tabs button>span:first-child{display:grid;place-items:center;width:23px;font-size:23px;color:#778fa9;flex:none}
+.auto-mode-tabs button>span:last-child{display:grid;gap:5px;min-width:0}.auto-mode-tabs button b{font-size:12px}.auto-mode-tabs button small{font-size:9px;line-height:1.4;color:#6f879f}
+#characterRulesDialog .auto-mode-tabs button:hover{background:#20354b;color:#e8d3a2}
+#characterRulesDialog .auto-mode-tabs button[aria-selected=true]{border-color:#d3b67466;background:linear-gradient(115deg,#ddbd6a20,#263444);color:#f0d99d}
+.auto-mode-tabs button[aria-selected=true]>span:first-child{color:#edce83}.auto-mode-tabs button[aria-selected=true] small{color:#b7ac8d}
+.auto-nav-note{margin-top:auto;padding:22px 9px 0;display:flex;gap:7px;align-items:flex-start;font-size:9px;line-height:1.9;color:#7892a9}.auto-nav-note i{height:5px;width:5px;border-radius:50%;background:#91ba9b;margin-top:6px;flex:none}
+.auto-mode-content{overflow:auto;min-width:0;min-height:0;padding:25px 25px 32px;scrollbar-width:thin;scrollbar-color:#4f6883 #142338}
+.auto-mode-page{min-width:0}.auto-section-heading{margin-bottom:23px}.auto-section-heading .eyebrow{font-size:8px!important;letter-spacing:1.6px!important;color:#ab9668!important}
+#characterRulesDialog .auto-section-heading h3{color:#eee6d4;font-size:23px;line-height:1.3;letter-spacing:-.6px;margin:9px 0}
+#characterRulesDialog .auto-section-heading p{font-size:12px;color:#8da5be;margin:0;line-height:1.7}
+.auto-strategies{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-bottom:22px}
+#characterRulesDialog .auto-strategies button{display:flex;flex-direction:column;gap:8px;align-items:flex-start;text-align:left;background:#192b40;border:1px solid #50668066;border-radius:10px;padding:15px 12px;min-height:135px;position:relative;color:#b6c6d8}
+.auto-strategies button>span{font-size:25px;color:#7e9bb2;margin-bottom:2px}.auto-strategies b{font-size:12px}.auto-strategies small{font-size:10px;line-height:1.5;color:#869eb6}
+#characterRulesDialog .auto-strategies button[aria-pressed=true]{border-color:#e7c77d;background:linear-gradient(145deg,#a2844726,#223b4c);box-shadow:inset 0 0 0 1px #e7c77d11}
+.auto-strategies button[aria-pressed=true]:after{content:'✓';position:absolute;right:10px;top:10px;color:#f0d58c;font-size:12px}.auto-strategies button[aria-pressed=true]>span,.auto-strategies button[aria-pressed=true] b{color:#f0d89d}
+#characterRulesDialog .auto-single-heading h4{margin:0 0 6px;color:#c8d4e3;font-size:13px}.auto-single-heading p{font-size:11px!important;color:#8199b2!important;margin:0 0 12px}
+#characterRulesDialog[data-strategy=earnGold] .auto-single-heading,#characterRulesDialog[data-strategy=gambling] .auto-single-heading{display:none}
+#characterRulesDialog .routine-choices{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:0 0 18px}
+#characterRulesDialog .routine-choices button{min-height:110px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:6px;border:1px solid #536c8466;border-radius:9px;background:#14273a;padding:12px 7px}
+#characterRulesDialog .routine-choices button[aria-pressed=true]{border-color:#779caf;background:#214153;box-shadow:inset 0 0 0 1px #7fa5b322;color:#d0e5e9}
+#characterRulesDialog .routine-choices .hud-icon{width:25px;height:25px;stroke:#a3bdcb}.routine-choices b{font-size:11px!important}.routine-choices small{font-size:9px!important;color:#91a9bb!important}
+.auto-resource-limits{display:grid;grid-template-columns:1fr 1fr;gap:12px}.auto-resource-limits>div:only-child{grid-column:1/-1}.auto-resource-limits label{display:block;font-size:10px;color:#a9bbcf;margin-bottom:7px}.auto-resource-limits input{width:100%}
+#characterRulesDialog :is(.routine-queue-config,.gold-policy,.combat-rules,.food-rules){background:transparent;border:0;border-radius:0;padding:0;margin:22px 0 0;box-shadow:none}
+#characterRulesDialog :is(.combat-rules,.food-rules){margin-top:0}
+#characterRulesDialog :is(.combat-rules,.food-rules)>h3{display:none}
+#characterRulesDialog .routine-queue-config{padding-top:20px;border-top:1px solid #6c819333}
+#characterRulesDialog .routine-queue-config>h3{font-size:13px;color:#c9d4e0;margin:0 0 12px}
+#characterRulesDialog .rules-toggle{display:flex;align-items:center;gap:11px;padding:13px 14px;border:1px solid #61789155;border-radius:10px;background:#1a3044;margin:0 0 14px;min-height:64px;cursor:pointer}
+#characterRulesDialog .rules-toggle input{width:17px;height:17px;min-width:17px;margin:0;accent-color:#dcbf7b}
+#characterRulesDialog .rules-toggle span{display:grid;gap:5px}.rules-toggle b{font-size:12px!important;color:#e0dfd0!important}.rules-toggle small{font-size:10px!important;color:#8fa9bd!important;line-height:1.5!important}
+#characterRulesDialog .food-rule-fields{gap:14px;margin:20px 0}
+#characterRulesDialog .food-rule-fields label{font-size:11px;color:#acbfd1}
+#characterRulesDialog :is(.food-rules,.combat-rules)>p{font-size:11px;line-height:1.75;color:#9db5c7}
+#characterRulesDialog .combat-style-field{font-size:11px;color:#abbdcf;gap:8px;margin-top:20px}
+#characterRulesDialog .combat-style-description{border:0;padding:0;background:none;color:#91aabf;font-size:11px}
+#characterRulesDialog .combat-tactic-slots{gap:10px}
+#characterRulesDialog .combat-tactic-slots label{background:#152b3e;border-color:#50678166;padding:12px}
+#characterRulesDialog .combat-flee-field{font-size:11px;color:#acc0d3}
+#characterRulesDialog .combat-flee-field small{font-size:10px;color:#7c95ad}
+#characterRulesDialog .gold-policy h3{font-size:17px;color:#e2d2a7;margin:7px 0 9px}
+#characterRulesDialog .gold-policy>p,#characterRulesDialog #rulesQueuePanel>p{font-size:11px;line-height:1.7;color:#8ca6be}
+#characterRulesDialog .routine-queue-limits{grid-template-columns:1fr 1fr;gap:13px;margin-top:20px}
+#characterRulesDialog .routine-queue-limits label{font-size:10px;color:#a8bed2;gap:8px}
+#characterRulesDialog .routine-queue-limits input,#characterRulesDialog .routine-queue-limits select{font-size:13px}
+#characterRulesDialog .routine-queue-steps li{border-color:#526b8455;border-radius:9px;background:#172d42;padding:10px;gap:7px;grid-template-columns:20px minmax(0,1fr) 68px auto}
+#characterRulesDialog .routine-queue-steps select{font-size:11px}
+#characterRulesDialog .queue-step-controls{display:flex;gap:2px}
+#characterRulesDialog .queue-step-controls button{min-height:27px;width:23px;font-size:12px;padding:0}
+#characterRulesDialog .queue-step-number{font-size:10px;color:#d8c38c;background:#dfc27a19;border-color:#bda36b33}
+#characterRulesDialog #rulesQueueAdd{width:100%;background:#102337;border:1px dashed #6a829a77;color:#b7cadb;font-size:11px;border-radius:8px}
+#characterRulesDialog .auto-extra{margin:14px 0;border:0;border-top:1px solid #68829b33;padding:0}
+#characterRulesDialog .auto-extra>summary{font-size:10px;color:#9db2c8;min-height:36px;padding:11px 0}
+#characterRulesDialog .auto-extra>p,#characterRulesDialog .auto-extra>small{display:block;font-size:10px;line-height:1.8;color:#829db7}
+#characterRulesDialog .upgrade-goal-config{padding:10px 0;background:none;border:0}.upgrade-goal-config h3{font-size:14px!important}
+.auto-plan-summary{min-width:0;padding:25px 20px;border-left:1px solid #74879e26;background:linear-gradient(170deg,#172b3b,#101f31);overflow:auto;scrollbar-width:thin;scrollbar-color:#4f6883 #142338}
+.auto-plan-summary>.eyebrow{font-size:8px!important;letter-spacing:1.5px!important;color:#b19b6a!important}
+.auto-summary-mark{display:grid;place-items:center;width:58px;height:58px;border:1px solid #b79d5f55;background:radial-gradient(circle,#d7bd7222,transparent 75%);border-radius:50%;color:#dfc27f;font-size:38px;margin:24px 0 17px}
+#characterRulesDialog .auto-plan-summary>h3{font-size:22px;line-height:1.3;margin:0 0 8px;color:#f4e2b6;letter-spacing:-.5px}
+#characterRulesDialog .auto-plan-summary>p{font-size:11px;line-height:1.75;color:#91aebf;margin:0 0 17px}
+.auto-plan-facts{display:grid;gap:15px;padding:18px 0;border-top:1px solid #788a9840;border-bottom:1px solid #788a9840;margin:20px 0}
+.auto-plan-facts>div{display:grid;gap:5px}.auto-plan-facts dt{font-size:8px;color:#778fa8;text-transform:uppercase;letter-spacing:1.2px}.auto-plan-facts dd{font-size:11px;color:#c2d3dc;margin:0;line-height:1.6}
+#characterRulesDialog .auto-plan-summary .rules-toggle{padding:11px 10px;background:#23403566;border-color:#5b856d55;gap:8px}
+#characterRulesDialog .auto-plan-summary .rules-toggle b{font-size:10px!important}
+#characterRulesDialog .auto-plan-summary .rules-toggle small{font-size:9px!important}
+#characterRulesDialog .auto-plan-summary .auto-readable-summary{font-size:10px;color:#7796ad;line-height:1.8}
+#characterRulesDialog .auto-safe-link{min-height:32px;background:none;border:0;padding:0;color:#b4a575;font-size:10px;text-align:left}
+.auto-mode-footer{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:18px;padding:16px 24px;border-top:1px solid #6b829a44;background:#102034}
+.auto-mode-footer>div{min-width:0}.auto-mode-footer span{font-size:11px;color:#91a8bf}
+#characterRulesDialog .auto-mode-footer #rulesStatus{font-size:11px;color:#c8dba9;margin:5px 0 0;line-height:1.5}
+#characterRulesDialog .auto-mode-footer #rulesSave{width:auto;min-width:180px;margin:0;padding:12px 23px;flex:none;font-size:13px;border-radius:8px}
+.auto-activity-log ul{list-style:none;margin:0;padding:0;display:grid;gap:12px}
+.auto-activity-log li{background:#192d42;border:1px solid #5b749155;border-radius:10px;padding:15px 16px}
+.auto-activity-log li b{color:#e1d1a7;font-size:12px}.auto-activity-log li p{font-size:11px!important;color:#91aac0!important;line-height:1.8}
+#characterRulesDialog .testing-tools{border:0;padding:12px 0;background:none}.testing-tools p{font-size:11px!important}
+@media(max-width:1050px){#characterRulesDialog .auto-mode-layout{grid-template-columns:145px minmax(0,1fr) 225px}.auto-mode-content{padding:22px 18px}.auto-plan-summary{padding:23px 16px}.auto-mode-tabs{padding-inline:8px}.auto-strategies{gap:6px}#characterRulesDialog .auto-strategies button{padding:13px 9px}.auto-strategies small{font-size:9px}.auto-mode-tabs button small{font-size:8px}.auto-mode-tabs button b{font-size:10px}#characterRulesDialog .routine-queue-steps li{grid-template-columns:17px minmax(0,1fr) 64px}#characterRulesDialog .queue-step-controls{grid-column:2/-1;justify-content:flex-end}}
+@media(max-width:800px){.game-window#characterRulesDialog.auto-mode-window{width:calc(100vw - 22px);max-height:calc(100dvh - 22px)}#characterRulesDialog .auto-mode-layout{height:min(760px,calc(100dvh - 124px));max-height:calc(100dvh - 124px);grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr) auto}.auto-plan-summary{display:none}.auto-mode-tabs{padding:9px 12px;display:grid;grid-template-columns:repeat(4,1fr);border:0;border-bottom:1px solid #6b829a44;gap:4px}#characterRulesDialog .auto-mode-tabs button{min-height:48px;padding:8px 5px;justify-content:center;gap:6px}.auto-mode-tabs button>span:first-child{font-size:20px;width:20px}.auto-mode-tabs button small,.auto-nav-note{display:none}.auto-mode-content{padding:22px}.auto-mode-footer{padding:13px 18px}.auto-mode-state{font-size:8px;padding:7px 9px}.auto-mode-header p{font-size:10px!important}#characterRulesDialog .auto-mode-header{padding:16px 18px;min-height:82px}#characterRulesDialog .auto-mode-header h2{font-size:25px}#characterRulesDialog .auto-mode-layout:has(#autoModePageActivity:not([hidden])) .auto-plan-summary{display:block;grid-row:3;padding:15px 22px;max-height:190px;border-left:0;border-top:1px solid #70889d33}.auto-mode-layout:has(#autoModePageActivity:not([hidden])) .auto-mode-footer{grid-row:4}#characterRulesDialog .auto-mode-layout:has(#autoModePageActivity:not([hidden])){grid-template-rows:auto minmax(0,1fr) auto auto}.auto-plan-summary>:not(.rules-toggle){display:none!important}#characterRulesDialog .auto-plan-summary .rules-toggle{margin:0;min-height:48px}.auto-plan-summary .rules-toggle span{gap:3px}#characterRulesDialog .auto-plan-summary .rules-toggle b{font-size:11px!important}}
+@media(max-width:480px){#characterRulesDialog .auto-mode-header .window-emblem{width:36px;height:36px;font-size:27px;border-radius:9px}#characterRulesDialog .auto-mode-header{gap:10px;padding:14px}#characterRulesDialog .auto-mode-header .close{height:32px;width:32px;font-size:21px}#characterRulesDialog .auto-mode-header h2{font-size:22px}.auto-mode-state{display:none}.auto-mode-header p{line-height:1.5!important;margin-top:5px!important}.auto-mode-tabs{padding:7px 8px}.auto-mode-tabs button>span:first-child{display:none}#characterRulesDialog .auto-mode-tabs button b{font-size:10px}#characterRulesDialog .auto-mode-tabs button{min-height:40px}.auto-mode-content{padding:19px 15px 24px}#characterRulesDialog .auto-section-heading h3{font-size:20px}.auto-section-heading p{font-size:11px!important}.auto-strategies{gap:6px}#characterRulesDialog .auto-strategies button{padding:12px 8px;min-height:121px}.auto-strategies b{font-size:10px}.auto-strategies button>span{font-size:21px}.auto-strategies small{font-size:9px}.auto-mode-footer{padding:11px 14px;gap:10px}.auto-mode-footer span{font-size:9px;line-height:1.5;display:block}#characterRulesDialog .auto-mode-footer #rulesSave{min-width:130px;font-size:11px;padding:10px 13px}.auto-resource-limits{grid-template-columns:1fr}#characterRulesDialog .routine-queue-limits{grid-template-columns:1fr 1fr}.auto-mode-footer #rulesStatus{font-size:9px!important}.auto-mode-tabs button b{white-space:normal}.auto-plan-summary .rules-toggle small{font-size:9px!important}}
+
+/* Reset inherited narrow chat-form buttons inside this settings form. */
+#characterRulesDialog .auto-mode-tabs button,#characterRulesDialog .auto-strategies button,#characterRulesDialog .routine-choices button{width:100%;min-width:0}
+#characterRulesDialog .auto-mode-layout>.auto-mode-content{display:block;gap:0}
+#characterRulesDialog .auto-mode-layout>.auto-mode-footer{display:flex;gap:18px}
+#characterRulesDialog .auto-mode-footer #rulesSave{width:auto}
+#characterRulesDialog .auto-strategies button small{max-width:100%;font-weight:400}
+#characterRulesDialog .auto-mode-tabs button small{font-weight:400}
+
+#characterRulesDialog .auto-safe-link{width:100%;min-width:0;text-align:left;white-space:normal}

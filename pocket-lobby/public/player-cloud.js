@@ -136,7 +136,7 @@
         }
       }catch(error){
         if(error.status===401)conflict('Sign in again to continue.');
-        else if(!conflicted)setStatus('Away rules waiting for connection');
+        else if(!conflicted)setStatus('Auto Mode waiting for connection');
       }
     })().finally(()=>{presenceBusy=null;if(pending||retryJob)drain();});
     return presenceBusy;
@@ -151,7 +151,7 @@
     const info=autoStatus(state),panel=document.getElementById('autoPanel');panel.hidden=!info.visible;
     const running=state.plan?.source==='rules';
     document.getElementById('autoPlay').setAttribute('aria-pressed',String(!running));document.getElementById('autoStart').setAttribute('aria-pressed',String(!!running));
-    document.getElementById('autoStart').title='Start your saved rules now. Auto continues while you inspect the game or go offline.';
+    document.getElementById('autoStart').title='Start your saved Auto Mode settings now. Auto continues while you inspect the game or go offline.';
     document.getElementById('autoStart').disabled=controlBusy||!!state.plan||!!state.report;
     document.getElementById('autoPlay').disabled=controlBusy||!!state.plan&&state.plan.source!=='rules'||!!state.plan?.returnRequested;
     const result=document.getElementById('autoGambleResult');result.hidden=!info.gambleResult;result.textContent=info.gambleResult??'';result.dataset.outcome=info.outcome??'';
@@ -215,7 +215,7 @@
     document.getElementById('offlineDuration').textContent='Time worked · '+Math.floor(minutes/60)+'h '+minutes%60+'m · Spending '+plan.goldSpent+' / '+plan.queue.budget+' gold';
     const net=plan.goldEarned-plan.goldSpent;
     document.getElementById('offlineValue').textContent='Sales +'+plan.goldEarned+' gold · Bait −'+(plan.goldSpent-(plan.goalSpent??0))+' gold'+(plan.goalSpent?' · Upgrade −'+plan.goalSpent+' gold':'')+' · Net '+(net>=0?'+':'')+net+' gold · Wallet '+state.credits+' gold. '+(plan.bankedGold?'Saved to bank '+plan.bankedGold+' gold. ':'')+'Unsold supplies remain in Inventory.';
-    document.getElementById('offlineReason').textContent=running?(plan.returnRequested?'Finishing the current fight, then returning home.':plan.activeHunt?'Hunting with your equipped weapon. Return to finish this fight and stop.':'Your saved queue is running. Return to stop it.'):({'goal-reached':'Goal reached · Choose your next upgrade or clear this goal in Rules to resume','queue-complete':'All cycles complete',returned:'Stopped when you returned','away-cap':'Eight-hour limit reached','spending-limit':'Stopped before exceeding your spending limit','gold-reserve':'Stopped to protect your gold reserve','beetle-trial-required':'Defeat a Stoneback Beetle yourself in the Ruins first','weapon-required':'Equip a usable weapon before hunting','hunt-escaped':'Escaped · Hunting stopped','hunt-defeat':'Defeated · Returned home to recover','food-reserve':'Returned home to recover · Usable food ran out or reached your meal reserve',requirements:'Required tool, skill or fishing location is missing','inventory-full':'Inventory is full','wallet-full':'Wallet is full'}[plan.reason]??plan.reason);
+    document.getElementById('offlineReason').textContent=running?(plan.returnRequested?'Finishing the current fight, then returning home.':plan.activeHunt?'Hunting with your equipped weapon. Return to finish this fight and stop.':'Your saved queue is running. Return to stop it.'):({'goal-reached':'Goal reached · Choose your next upgrade or clear this goal in Auto Mode to resume','queue-complete':'All cycles complete',returned:'Stopped when you returned','away-cap':'Eight-hour limit reached','spending-limit':'Stopped before exceeding your spending limit','gold-reserve':'Stopped to protect your gold reserve','beetle-trial-required':'Defeat a Stoneback Beetle yourself in the Ruins first','weapon-required':'Equip a usable weapon before hunting','hunt-escaped':'Escaped · Hunting stopped','hunt-defeat':'Defeated · Returned home to recover','food-reserve':'Returned home to recover · Usable food ran out or reached your meal reserve',requirements:'Required tool, skill or fishing location is missing','inventory-full':'Inventory is full','wallet-full':'Wallet is full'}[plan.reason]??plan.reason);
   }
   function showReport(state,details=false){
     renderAutoPanel(state);
@@ -228,7 +228,7 @@
     else if(plan.kind==='queue')showQueueReport(state,plan,running);
     else{
     document.getElementById('offlineTitle').textContent=rest?(running?'Resting at home':'Your character rested.'):running?(wood?'Woodcutting at Timber Hollow':'Fishing at Silverfin Pond'):'Welcome back.';
-    document.getElementById('offlineDescription').textContent=plan.source==='rules'?(running?'Following your saved rules. '+plan.ruleSummary:plan.ruleSummary):running
+    document.getElementById('offlineDescription').textContent=plan.source==='rules'?(running?'Following your saved Auto Mode settings. '+plan.ruleSummary:plan.ruleSummary):running
       ?(wood?'Your woodcutting shift is running. You can close the game and return later.':'Your server fishing plan is running. You can close the game and return later.')
       :'Your character returned home after the work plan.';
     const rows=document.getElementById('offlineCatches');rows.replaceChildren();
