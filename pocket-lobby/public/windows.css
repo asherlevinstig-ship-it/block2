@@ -425,3 +425,37 @@
 .enemy-stagger[data-state=stunned],.enemy-stagger[data-state=weak] { border-color:#f2cf86; background:#443b2b; }
 .enemy-stagger[data-state=recovering] { opacity:.65; }
 #combatSound { margin-top:8px; padding:5px 9px; font-size:10px; }
+.game-window.training-window { width:min(780px,calc(100vw - 24px)); padding:22px; }
+.training-window .modal-head h2 { font-size:25px; }
+#trainingClose { width:38px; height:38px; font-size:24px; background:#15243b; border-color:#5b718e; flex:none; }
+.training-coach { padding:12px 0 10px; }
+.training-coach>small { color:#e8c67e; font:700 10px/1.4 system-ui; letter-spacing:.1em; }
+.training-coach h3 { margin:6px 0 12px; font-size:17px; color:#f4e4bc; }
+.training-steps { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; list-style:none; padding:0; margin:0; }
+.training-steps li { font-size:11px; padding:8px 5px; text-align:center; background:#182d43; border:1px solid #526580; border-radius:6px; color:#b9cadd; }
+.training-steps li[data-done=true] { background:#25473f; color:#bde8c4; border-color:#6caa8a; }
+.training-arena { position:relative; border:1px solid #71819b; border-radius:12px; overflow:hidden; background:#101e33; }
+#trainingCanvas { width:100%; height:auto; display:block; touch-action:manipulation; }
+.training-telegraph { position:absolute; bottom:12px; left:50%; transform:translateX(-50%); width:max-content; max-width:94%; text-align:center; border:1px solid #6e87a1; border-radius:7px; padding:7px 12px; background:#101e33ed; color:#dce6ef; font-size:12px; pointer-events:none; }
+.training-telegraph[data-phase=warning] { border-color:#e9ad71; color:#f3cb9a; }
+.training-telegraph[data-phase=dodge] { border-color:#a7efd9; color:#bffbe2; background:#1e433c; }
+.training-telegraph[data-phase=stagger] { border-color:#e8c67e; color:#ffe4a6; }
+.training-controls { display:grid; grid-template-columns:1.5fr 1fr 1fr; gap:10px; align-items:end; margin-top:14px; }
+.training-controls label { font-size:10px; color:#b9cadd; display:grid; gap:5px; min-width:0; }
+#trainingWeapon { width:100%; min-width:0; padding:10px 7px; background:#13243c; color:#f1e4cc; border:1px solid #71819b; border-radius:7px; font:12px system-ui; }
+.training-controls button { min-height:40px; padding:8px; font-size:12px; }
+.game-window .training-controls .primary { margin:0; }
+.training-meter { margin-top:12px; display:grid; gap:5px; font-size:11px; color:#e8c67e; }
+.training-meter progress { width:100%; height:7px; accent-color:#e8c67e; }
+#trainingFeedback { margin:12px 0 6px; font-size:13px; color:#e9e0cd; }
+#trainingTiming { margin:0 0 8px; font-size:12px; color:#a9decf; }
+#trainingStats { color:#acbfd4; display:block; font-size:10px; }
+.training-comparison { border-top:1px solid #536580; margin-top:14px; padding-top:12px; }
+.training-comparison summary { cursor:pointer; color:#e8c67e; font-size:12px; font-weight:700; }
+.training-comparison p,.training-safe { font-size:10px; color:#aabed3; line-height:1.6; }
+.training-table-scroll { overflow-x:auto; }
+.training-comparison table { width:100%; border-collapse:collapse; font-size:11px; }
+.training-comparison th,.training-comparison td { text-align:left; padding:9px 7px; border-bottom:1px solid #425873; }
+.training-comparison th { color:#e8c67e; }.training-comparison td { color:#c6d5e5; }
+.training-destination { margin:10px 0; width:100%; }
+@media(max-width:560px) { .game-window.training-window { padding:14px; }.training-window .modal-head h2 { font-size:21px; }.training-steps { grid-template-columns:1fr 1fr; }.training-controls { grid-template-columns:1fr 1fr; }.training-controls label { grid-column:1/-1; }.training-coach h3 { font-size:15px; }.training-telegraph { font-size:10px; padding:5px 8px; bottom:5px; } }

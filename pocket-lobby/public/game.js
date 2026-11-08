@@ -2,6 +2,7 @@
 const $ = id => document.getElementById(id);
 const canvas = $('game');
 let ctx = canvas.getContext('2d');
+let trainingController=null;
 const standardView={width:480,height:310,cols:10,rows:10,originX:240,originY:94};
 const hubView={width:720,height:465,cols:18,rows:16,originX:342,originY:115};
 const courtyardView={width:600,height:388,cols:14,rows:12,originX:282,originY:108};
@@ -1152,8 +1153,9 @@ const hubFurniture=[
   ['sofa',13,8,2],['bench',13,10,2]
 ].map(([type,x,y,rot=0],id)=>({id,type,x,y,rot}));
 const courtyardFurniture=[
+  ['trainingDummy',9,4],
   ['fountain',6,5],['streetlamp',1,3],['streetlamp',1,8],['streetlamp',11,1],
-  ['streetlamp',11,10],['bench',3,8],['bench',10,3,1],['bench',9,9,2],
+  ['streetlamp',11,10],['bench',3,8],['bench',11,7,1],['bench',9,9,2],
   ['plant',0,1],['plant',0,10],['plant',13,1],['plant',13,10]
 ].map(([type,x,y,rot=0],id)=>({id,type,x,y,rot}));
 const storeFurniture=[
@@ -1223,7 +1225,7 @@ const roomDetails={
   store:{number:'11',name:'Silverfin Outfitters',description:'Stock up on bait, find a better rod, and sell your catch.',badge:'FISHING STORE',floor:'Tower shops'},
   armory:{number:'14',name:'The Tower Armory',description:'Trade your earnings for a weapon that suits your fighting style.',badge:'ARMORY',floor:'Tower shops'},
   market:{number:'12',name:'Moonwood Trading Post',description:'Bring your catch and hunting spoils to the tower’s traders.',badge:'TRADING POST',floor:'Tower market'},
-  outside:{number:'03',name:'The Courtyard',description:'Rest by the fountain, or follow the Moonwood steps into the forest.',badge:'OUTSIDE',floor:'Tower grounds'},
+  outside:{number:'03',name:'The Courtyard',description:'Practise combat at the training dummy, rest by the fountain, or explore Moonwood.',badge:'OUTSIDE',floor:'Tower grounds'},
   ...moonwood.areas
 };
 const defaultHint = 'Click a tile to walk · Click furniture to interact';
@@ -1739,6 +1741,9 @@ function object(item,highlight=false,time=0) {
   if(currentRoom==='hub'&&type==='plant'&&x===16&&y===1){
     drawLobbyCrystal(x,y,time);return;
   }
+  if(type==='trainingDummy'){
+    surface(x-.35,y-.35,1.7,1.7,.5,'#314762','#ad9565');const [dx,dy]=point(x+.5,y+.5);if(typeof drawTrainingDummy==='function')drawTrainingDummy(ctx,dx,dy,{time,reduced:reducedMotion.matches});return;
+  }
   if(type==='enchanter'){
     const [ex,ey]=point(x+.5,y+.5);
     sprite(ctx,ex,ey,{outfit:4,hair:1},{direction:'left',time});
@@ -2129,6 +2134,7 @@ function updateWorldLabels(){
     const symbol=questStage(quest)===0?'! ':questStage(quest)===4?'? ':'';
     add(symbol+'Tower Warden',...point(10.5,3.5,46),'npc',()=>use(hubFurniture.find(item=>item.type==='warden')),questStage(quest)===0?'Start here · Earn your first gold':'');
   }
+  if(currentRoom==='outside')add('Training courtyard',...point(9.5,4.5,66),'npc',()=>use(courtyardFurniture.find(item=>item.type==='trainingDummy')),'Safe combat practice');
   if(currentRoom==='trail'){
     const campfire=roomFurniture().find(item=>item.type==='campfire');
     add('Campfire',...point(campfire.x+.5,campfire.y+.5,32),'npc',()=>use(campfire));
@@ -2891,7 +2897,9 @@ function updateFishingMoment(time){
 }
 function finishInteraction(){
   const item=interaction;interaction=null;
-  if(item.type==='cachePassage'){
+  if(item.type==='trainingDummy'){
+    openTrainingCourtyard();
+  }else if(item.type==='cachePassage'){
     visitDepthsCache();
   }else if(Object.hasOwn(depthsFinds,item.type)){
     examineDepths(item);
@@ -4039,6 +4047,7 @@ function castEquippedEssence(slot='q'){
   if(equippedEssenceStatus(Date.now(),slot).canCast)sendServerCombat('essence',slot);
 }
 function currentActivityPrompt(){
+  if(currentRoom==='outside')return {label:'SAFE COMBAT PRACTICE',title:'Training courtyard',text:'Learn dodge, counter, stagger and weak spots. Try weapons without health loss or item use.',action:'courtyardPractice'};
   if(currentRoom==='hub'&&!lobbyRoutesOpen()){
     return {label:'YOUR NEXT STEP',title:'Meet the Tower Warden',text:'Speak to the Warden to begin your adventure.',action:'visitWarden'};
   }
@@ -4344,6 +4353,8 @@ $('adventureLandmark').onclick=()=>{
   if(landmark)use(landmark);
 };
 $('combatFlee').onclick=()=>combatAction('flee');
+$('courtyardPractice').onclick=openTrainingCourtyard;
+$('visitTraining').onclick=()=>{navigateHud('outside');note('Head outside and select the Training courtyard dummy.');};
 $('combatDodge').onclick=()=>combatAction('dodge');
 $('combatSound').setAttribute('aria-pressed',String(combatSoundEnabled));$('combatSound').textContent=combatSoundEnabled?'Combat sound on':'Combat sound off';
 $('combatSound').onclick=()=>{combatSoundEnabled=!combatSoundEnabled;save('combat-sound',combatSoundEnabled);combatAudio.enable(combatSoundEnabled);$('combatSound').setAttribute('aria-pressed',String(combatSoundEnabled));$('combatSound').textContent=combatSoundEnabled?'Combat sound on':'Combat sound off';};
@@ -4887,11 +4898,18 @@ window.towerSaveNow=savePlayerState;
 window.towerJoinRoom=connectRoom;
 window.towerHasActiveCast=()=>!!fishingSession||!!woodSession;
 window.towerApplyRoutineState=state=>{
+  trainingController?.close();
   fishingSession=null;fishingStarted=null;woodSession=null;treeFall=null;catchReveal=null;patienceTween=null;
   $('catchReveal').hidden=true;route=[];step=null;interaction=null;target=null;
   setPlayerCombat(false);applyServerGameplay(state);
   enterRoom(state.location,state.position,{automatic:true});updateInventory();updateAdventurePanel();
 };
+function openTrainingCourtyard(){
+  if(currentRoom!=='outside'){navigateHud('outside');return;}
+  if(unavailable()||window.playerCloud?.initial?.plan||window.playerCloud?.initial?.report){note('Finish your current activity before practising.');return;}
+  trainingController?.open();
+}
+if(typeof initializeTrainingCourtyard==='function')trainingController=initializeTrainingCourtyard({getState:()=>({...currentGoalState(),avatar,stats:playerStats,combatGear}),canOpen:()=>currentRoom==='outside'&&!unavailable()&&!window.playerCloud?.initial?.plan&&!window.playerCloud?.initial?.report,pause:()=>{cancelFishing();window.towerPauseForAccount();},onClose:()=>canvas.focus(),renderer:window.towerCharacterArt});
 if(window.playerCloud)window.playerCloud.attach();
 if(window.playerCloud&&typeof WebSocket!=='undefined'){
   multiplayer=createRoomConnection({
