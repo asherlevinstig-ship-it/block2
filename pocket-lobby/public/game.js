@@ -3256,12 +3256,14 @@ function mealArt(id){
   const stew='<path d="M9 29h46l-5 17q-18 13-36 0z" fill="#b57557" stroke="#edb787" stroke-width="2"/><ellipse cx="32" cy="29" rx="23" ry="8" fill="#835142" stroke="#edb787" stroke-width="2"/><path d="m21 29 5-3 4 4-5 2zm13-2 5-2 5 4-6 2z" fill="#e4ae62"/><path d="M25 17q-5-4 0-9m12 10q-5-4 0-10" fill="none" stroke="#e4dcc2" stroke-width="2"/>';
   return '<svg viewBox="0 0 64 64" aria-hidden="true">'+(id==='boarStew'||id==='heartyStew'?stew:fish)+'</svg>';
 }
+let pendingCookingId=null;
 function openCampfire(){
   if(unavailable())return;
   const dialog=$('campfireDialog');
   renderCampfire();
   $('campfireStatus').textContent='';
-  if(!dialog.open)dialog.showModal();
+  savePlayerState();if(!dialog.open)dialog.showModal();
+  if(pendingCookingId){const id=pendingCookingId;pendingCookingId=null;setTimeout(()=>cookMeal(id),0);}
 }
 function renderCampfire(){
   const state={stats:playerStats,fishStock,huntingLoot,woodcutting,meals},progress=skillProgress(playerStats.cookingXp??0);
@@ -3281,7 +3283,9 @@ function renderCampfire(){
 }
 async function cookMeal(id,button){
   if(unavailable())return;
-  button.disabled=true;
+  const station=atHome()?homeFurniture.find(i=>i.type==='stove'):moonwood.layouts.trail.scenery.find(i=>i.type==='campfire');
+  if(station&&Math.abs(player.cx-station.x)+Math.abs(player.cy-station.y)!==1){pendingCookingId=id;$('campfireDialog').close();use(station);note('Walking back to the stove to prepare your meal.');return;}
+  if(button)button.disabled=true;savePlayerState();
   try{
     const level=skillLevel(playerStats.cookingXp??0);await serverGameplay('cook',{id});
     const after=skillLevel(playerStats.cookingXp??0);$('campfireStatus').textContent=mealRecipes[id].name+' added to Inventory.'+(after>level?' Cooking '+after+' reached!':'');
