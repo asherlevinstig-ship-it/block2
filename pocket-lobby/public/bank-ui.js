@@ -1,3 +1,4 @@
+import {HOME_SAFE_PRICE,ownsHomeSafe} from './home-safe.js';
 import {vaultCatalog,vaultBagCount} from './vault.js';
 import {shopItemArt} from './shop-ui.js';
 import {normalizeBank,ownedGold,GOLD_CAP} from './bank.js';
@@ -8,7 +9,7 @@ export function initializeBankUI(cloud,document,window){
  function render(){
   const account=bank(),wallet=state().credits;
   get('goldBankWallet').textContent=wallet.toLocaleString();get('goldBankSaved').textContent=account.gold.toLocaleString();get('goldBankTotal').textContent=ownedGold(state()).toLocaleString();
-  get('bankInventoryOpen').textContent='Bank & Vault · '+account.gold.toLocaleString()+' gold saved';
+  get('bankInventoryOpen').textContent=ownsHomeSafe(state())?'Home safe · Visit to open':'Home safe · Buy for '+HOME_SAFE_PRICE+' gold';
   const blocked=busy||locked();for(const id of ['goldBankDeposit','goldBankWithdraw','goldBankDepositAll','goldBankWithdrawAll','goldBankPolicySave','goldBankAuto','goldBankKeep'])get(id).disabled=blocked;
   get('goldBankDepositAll').disabled=blocked||!wallet||account.gold===GOLD_CAP;get('goldBankWithdrawAll').disabled=blocked||!account.gold||wallet===GOLD_CAP;
   get('goldBankLock').hidden=!locked();get('goldBankLock').textContent='Take control and finish your current activity before moving gold or changing this rule. You can inspect your savings now.';
@@ -17,7 +18,7 @@ export function initializeBankUI(cloud,document,window){
   renderVault();
   if(!account.transactions.length){const row=document.createElement('li');row.textContent='Your first deposit starts your savings story.';list.append(row);}
  }
- function open(nextTab='gold'){tab=nextTab;selected=null;vaultKey='';render();loadRule();const account=bank();get('goldBankAuto').checked=account.autoDeposit;get('goldBankKeep').value=account.keepWallet;get('goldBankMessage').textContent='';if(!dialog.open)dialog.showModal();}
+ function open(nextTab='gold'){if(!window.towerSafeNearby?.()){window.towerVisitSafe?.();return;}tab=nextTab;selected=null;vaultKey='';render();loadRule();const account=bank();get('goldBankAuto').checked=account.autoDeposit;get('goldBankKeep').value=account.keepWallet;get('goldBankMessage').textContent='';if(!dialog.open)dialog.showModal();}
  async function act(name,body,message){
   if(busy||locked())return;busy=true;render();get('goldBankMessage').textContent='Saving…';get('vaultMessage').textContent='Saving…';
   try{window.towerPauseForAccount?.();const packet=await cloud.gameplay(name,body);window.towerApplyBankState?.(packet.state);render();get('goldBankMessage').textContent=message;get('vaultMessage').textContent=message;window.towerBankFeedback?.(message);}
@@ -56,7 +57,21 @@ export function initializeBankUI(cloud,document,window){
  get('goldBankDeposit').onclick=()=>transfer('deposit',Number(get('goldBankAmount').value));get('goldBankWithdraw').onclick=()=>transfer('withdraw',Number(get('goldBankAmount').value));
  get('goldBankDepositAll').onclick=()=>transfer('deposit',Math.min(state().credits,GOLD_CAP-bank().gold));get('goldBankWithdrawAll').onclick=()=>transfer('withdraw',Math.min(bank().gold,GOLD_CAP-state().credits));
  get('goldBankPolicySave').onclick=()=>act('goldBankPolicy',{autoDeposit:get('goldBankAuto').checked,keepWallet:Number(get('goldBankKeep').value)},'Auto banking rule saved. It applies when your next routine runs.');
- get('creditWallet').onclick=()=>open();get('creditWallet').onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();open();}};
- get('bankInventoryOpen').onclick=()=>{get('inventoryDialog').close();open('bag');};get('bankRulesOpen').onclick=()=>{get('characterRulesDialog').close();open();};get('goldBankClose').onclick=()=>dialog.close();
+ get('creditWallet').onclick=()=>window.towerVisitSafe?.();get('creditWallet').onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();window.towerVisitSafe?.();}};
+ get('bankInventoryOpen').onclick=()=>{get('inventoryDialog').close();window.towerVisitSafe?.();};get('bankRulesOpen').onclick=()=>{get('characterRulesDialog').close();window.towerVisitSafe?.();};get('goldBankClose').onclick=()=>dialog.close();
+ const shop=get('safeShopDialog');
+ window.towerShowSafeShop=()=>{
+   get('safeShopBalance').textContent=state().credits.toLocaleString()+' gold in your wallet';
+   get('safeBuy').disabled=busy||locked()||state().location!=='home'||state().credits<HOME_SAFE_PRICE||ownsHomeSafe(state());
+   get('safeShopMessage').textContent=state().credits<HOME_SAFE_PRICE?'Earn '+(HOME_SAFE_PRICE-state().credits)+' more gold to buy your safe.':'';
+   if(!shop.open)shop.showModal();
+ };
+ get('safeShopClose').onclick=()=>shop.close();
+ get('safeBuy').onclick=async()=>{
+   if(busy)return;busy=true;get('safeBuy').disabled=true;get('safeShopMessage').textContent='Buying your safe…';
+   try{window.towerPauseForAccount?.();const packet=await cloud.gameplay('buySafe',{});window.towerApplyBankState?.(packet.state);shop.close();window.towerBankFeedback?.('Home safe purchased · −'+HOME_SAFE_PRICE+' gold');window.towerVisitSafe?.();}
+   catch(error){get('safeShopMessage').textContent=error.message;}
+   finally{busy=false;render();get('safeBuy').disabled=ownsHomeSafe(state())||state().credits<HOME_SAFE_PRICE;}
+ };
  render();return {render,open};
 }

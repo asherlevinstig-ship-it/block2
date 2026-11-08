@@ -1,3 +1,4 @@
+import {ownsHomeSafe} from '../public/home-safe.js';
 import {normalizeBank} from '../public/bank.js';
 import {vaultCatalog,normalizeVault,vaultBagCount,VAULT_CAP} from '../public/vault.js';
 function changeBag(state,item,amount){
@@ -23,7 +24,7 @@ export function vaultTransfer(state,kind,key,amount){
  state.bank={...bank,vault};
 }
 export function autoStoreVault(state,plan,at){
- if(plan?.source!=='rules'||!state.bank?.vault)return 0;
+ if(!ownsHomeSafe(state)||plan?.source!=='rules'||!state.bank?.vault)return 0;
  let count=0;for(const [key,keep] of Object.entries(state.bank.vault.rules??{})){
   const amount=Math.min(Math.max(0,vaultBagCount(state,key)-keep),VAULT_CAP-(state.bank.vault.items[key]??0));
   if(amount){vaultTransfer(state,'deposit',key,amount);plan.storedItems??={};plan.storedItems[key]=(plan.storedItems[key]??0)+amount;count+=amount;}

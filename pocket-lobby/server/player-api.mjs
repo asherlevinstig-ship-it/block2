@@ -1,3 +1,4 @@
+import {migrateHomeSafe} from '../public/home-safe.js';
 import {beetleHuntUnlocked} from '../public/hunting.js';
 import {migrateProgression,progressionVersion} from '../public/skill-curve.js';
 import {normalizeMagic} from '../public/essences.js';
@@ -18,6 +19,7 @@ const json=(data,status=200,extra={})=>Response.json(data,{status,headers:{"Cach
 function readPlayerState(row){
   const state=JSON.parse(row.state_json);
   migrateProgression(state);
+  migrateHomeSafe(state);
   if(state.magic)state.magic=normalizeMagic(state.magic);
   // Existing shifts keep their scheduled pace until they finish.
   if(state.adventure)delete state.adventure.rootstone;
@@ -42,7 +44,8 @@ async function settled(db,id,activities=false){
     const now=Date.now();
     const planChanged=settlePlan(state,now);
     const activityChanged=activities&&settleActivities(state,now);
-    const migrated=JSON.parse(row.state_json).progressionVersion!==progressionVersion;
+    const before=JSON.parse(row.state_json);
+    const migrated=before.progressionVersion!==progressionVersion||before.safeVersion!==1;
     if(!planChanged&&!activityChanged&&!migrated)return row;
     const updated=await write(db,id,row.revision,state,"settle:"+crypto.randomUUID());
     if(updated)return updated;
@@ -78,7 +81,7 @@ export async function handlePlayerApi(request,env){
       const existing=id&&await settled(env.TOWER_DB,id,true);
       if(existing)return json(packet(existing));
       const body=await bodyOf(request),legacy={...body.legacy};migrateProgression(legacy);
-      const state=normalizeState({...legacy,bank:undefined,controlMode:'play',meals:{},magic:undefined,...(body.newCharacter===true?{characterCreated:false,welcomeSeen:false}:{})});
+      const state=normalizeState({...legacy,safeVersion:1,ownedFurniture:{...(legacy.ownedFurniture??{bed:1}),safe:0},homeFurniture:(legacy.homeFurniture??[]).filter(item=>item.type!=='safe'),bank:undefined,controlMode:'play',meals:{},magic:undefined,...(body.newCharacter===true?{characterCreated:false,welcomeSeen:false}:{})});
       state.stats.luckXp=0;
       delete state.combatGear.weaponEnchantments;
       if(state.hunting.encounter){

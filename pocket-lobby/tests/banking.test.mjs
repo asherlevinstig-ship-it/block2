@@ -5,14 +5,14 @@ test('bank defaults and strict balances reject malformed or unbounded account da
  for(const bank of [null,[],{gold:-1},{gold:1.5},{gold:GOLD_CAP+1},{autoDeposit:1},{keepWallet:-1},{transactions:[{kind:'mint',amount:1,at:1}]}])assert.throws(()=>normalizeBank(bank),/Invalid bank/);
 });
 test('deposits and withdrawals preserve owned wealth and lifetime earnings; boundaries cannot mint gold',()=>{
- const s=normalizeState({credits:200,goldEarned:80});applyGameplayAction(s,'goldBankTransfer',{kind:'deposit',amount:125},1000);assert.equal(s.credits,75);assert.equal(s.bank.gold,125);assert.equal(ownedGold(s),200);assert.equal(s.goldEarned,80);
+ const s=normalizeState({credits:200,goldEarned:80,ownedFurniture:{safe:1},homeFurniture:[{id:1,type:'safe',x:1,y:1,rot:0}],location:'home',position:{x:1,y:2}});applyGameplayAction(s,'goldBankTransfer',{kind:'deposit',amount:125},1000);assert.equal(s.credits,75);assert.equal(s.bank.gold,125);assert.equal(ownedGold(s),200);assert.equal(s.goldEarned,80);
  applyGameplayAction(s,'goldBankTransfer',{kind:'withdraw',amount:25},2000);assert.equal(s.credits,100);assert.equal(s.bank.gold,100);assert.equal(ownedGold(s),200);assert.equal(s.goldEarned,80);
  for(const amount of [0,-1,1.5,NaN,101])assert.throws(()=>bankTransfer(s,'deposit',amount,3000),/Choose/);assert.throws(()=>bankTransfer(s,'withdraw',101,3000),/Choose/);assert.equal(ownedGold(s),200);
  const full=normalizeState({credits:GOLD_CAP,bank:{gold:GOLD_CAP}});assert.throws(()=>bankTransfer(full,'deposit',1,0),/fits/);assert.throws(()=>bankTransfer(full,'withdraw',1,0),/fits/);
  for(let i=0;i<30;i++)bankTransfer(s,i%2?'withdraw':'deposit',1,4000+i);assert.equal(s.bank.transactions.length,20);
 });
 test('saved snapshots cannot forge the bank or its Auto deposit policy',()=>{
- const s=normalizeState({bank:{gold:50,autoDeposit:true,keepWallet:20}}),forged=protectFishingState(s,{...s,bank:{gold:999,autoDeposit:false,keepWallet:0}});assert.deepEqual(forged.bank,s.bank);
+ const s=normalizeState({bank:{gold:50,autoDeposit:true,keepWallet:20},homeFurniture:[{id:1,type:'safe',x:1,y:1,rot:0}],location:'home',position:{x:1,y:2}}),forged=protectFishingState(s,{...s,bank:{gold:999,autoDeposit:false,keepWallet:0}});assert.deepEqual(forged.bank,s.bank);
  applyGameplayAction(s,'goldBankPolicy',{autoDeposit:false,keepWallet:100},1000);assert.equal(s.bank.gold,50);assert.equal(s.bank.autoDeposit,false);assert.equal(s.bank.keepWallet,100);
  s.plan={source:'rules'};assert.throws(()=>applyGameplayAction(s,'goldBankTransfer',{kind:'deposit',amount:10},1001),/Invalid activity/);
 });
@@ -43,6 +43,7 @@ test('API retries and concurrent transfers cannot duplicate gold; session import
  const {db,sql}=testDatabase();t.after(()=>sql.close());const origin='https://tower.test';let packet,cookie='';
  async function call(path,body){const response=await handlePlayerApi(new Request(origin+'/api/player/'+path,{method:body?'POST':'GET',headers:{Origin:origin,'Content-Type':'application/json',Cookie:cookie},body:body?JSON.stringify({...body,characterKey:packet?.characterKey}):undefined}),{TOWER_DB:db});cookie=response.headers.get('set-cookie')?.split(';')[0]??cookie;const data=await response.json();if(response.ok)packet=data;return {status:response.status,...data};}
  await call('session',{legacy:{credits:200,bank:{gold:999999}}});assert.equal(packet.state.bank.gold,0);
+ packet.state.ownedFurniture.safe=1;packet.state.homeFurniture=[{id:1,type:'safe',x:1,y:1,rot:0}];packet.state.location='home';packet.state.position={x:1,y:2};sql.prepare('UPDATE tower_players SET state_json=? WHERE player_id=?').run(JSON.stringify(packet.state),packet.characterKey);
  const body={revision:packet.revision,operation:crypto.randomUUID(),kind:'deposit',amount:100};await call('gameplay/goldBankTransfer',body);await call('gameplay/goldBankTransfer',body);assert.equal(packet.state.credits,100);assert.equal(packet.state.bank.gold,100);
  const revision=packet.revision;const results=await Promise.all([1,2].map(()=>call('gameplay/goldBankTransfer',{revision,operation:crypto.randomUUID(),kind:'withdraw',amount:100})));assert.deepEqual(results.map(r=>r.status).sort(),[200,409]);
  await call('state');assert.equal(packet.state.credits,200);assert.equal(packet.state.bank.gold,0);assert.equal(ownedGold(packet.state),200);

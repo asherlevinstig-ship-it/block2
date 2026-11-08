@@ -265,7 +265,7 @@
     if(!dialog.open)dialog.showModal();
   }
   function attach(){
-    bankUI=initializeBankUI(window.playerCloud,document,window);window.towerRefreshBank=()=>bankUI.render();
+    bankUI=initializeBankUI(window.playerCloud,document,window);window.towerRefreshBank=()=>bankUI.render();window.towerOpenSafe=()=>bankUI.open();
     document.getElementById('autoStart').onclick=()=>setControl('auto');
     document.getElementById('autoPlay').onclick=()=>setControl('play');
     document.getElementById('autoTakeControl').onclick=()=>setControl('play');

@@ -1,3 +1,4 @@
+import {HOME_SAFE_PRICE,ownsHomeSafe,besideHomeSafe} from '../public/home-safe.js';
 import {vaultTransfer} from './vault.mjs';
 import {normalizeVault} from '../public/vault.js';
 import {bankTransfer} from './banking.mjs';
@@ -34,8 +35,16 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
   if(action!=='combat')settleActivities(state,now,random);
   if(activityAction(state,action,body,now,random)||essenceAction(state,action,body))return;
   if(gamblingAction(state,action,body,now,random===Math.random?undefined:random))return;
+  if(action==='buySafe'){
+    location(state,['home']);
+    if(state.fishingCast||state.timberCut)throw new Error('Invalid activity. Finish your activity before buying a safe.');
+    if(ownsHomeSafe(state))throw new Error('You already own a home safe. Find it in Furniture.');
+    if(state.credits<HOME_SAFE_PRICE)throw new Error('Invalid balance. You need '+HOME_SAFE_PRICE+' gold in your wallet.');
+    state.credits-=HOME_SAFE_PRICE;state.ownedFurniture.safe=1;state.safeVersion=1;return;
+  }
   if(['goldBankTransfer','goldBankPolicy','vaultTransfer','vaultPolicy'].includes(action)){
     available(state);if(state.fishingCast||state.timberCut||state.gambling?.round?.status==='playing')throw new Error('Choose banking after finishing your current activity.');
+    if(!besideHomeSafe(state))throw new Error('Travel home, place your safe and walk beside it to open storage.');
     if(action==='vaultTransfer'){vaultTransfer(state,body.kind,body.item,body.amount);return;}
     if(action==='vaultPolicy'){const bank=normalizeBank(state.bank);state.bank={...bank,vault:normalizeVault({items:bank.vault?.items??{},rules:body.rules})};return;}
     if(action==='goldBankTransfer')bankTransfer(state,body.kind,body.amount,now);
@@ -217,6 +226,8 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
 // rewards and active encounters can only change through server actions.
 export function protectFishingState(previous,next){
   next.bank=previous.bank;
+  next.safeVersion=1;
+  if(!(previous.ownedFurniture?.safe>0))next.homeFurniture=(next.homeFurniture??[]).filter(item=>item.type!=='safe');
   next.controlMode=previous.controlMode??'play';
   next.dungeonLoot=previous.dungeonLoot;
   if(previous.upgradeGoal)next.upgradeGoal=previous.upgradeGoal;else delete next.upgradeGoal;
