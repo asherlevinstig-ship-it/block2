@@ -1284,6 +1284,7 @@ const storeFurniture=[
   {id:'fern',type:'plant',x:1,y:1,rot:0},
   {id:'stool',type:'stool',x:4,y:4,rot:0}
 ];
+const furnishingsFurniture=[['reception',3,1],['bed',6,2],['lamp',8,2],['bookcase',1,1],['sofa',6,6],['table',6,8],['chair',8,8,2],['plant',1,8],['safe',8,1]].map(([type,x,y,rot=0],id)=>({id,type,x,y,rot}));
 const marketFurniture=[
   {id:'trader',type:'tradeCounter',x:3,y:2,rot:0},
   {id:'produce',type:'harvestCrates',x:7,y:3,rot:0},
@@ -1299,12 +1300,13 @@ const armoryFurniture=[
   {id:'forge',type:'brazier',x:1,y:1,rot:0},
   {id:'stool',type:'stool',x:4,y:4,rot:0}
 ];
-let currentRoom='home';
+let currentRoom='home',pendingFurniturePlacement=null;
 const atHome=()=>currentRoom==='home';
 const canDecorate=()=>atHome();
 function roomFurniture(){
   if(atHome())return homeFurniture;
   if(currentRoom==='lounge')return initial;
+  if(currentRoom==='furnishings')return furnishingsFurniture;
   if(currentRoom==='store')return storeFurniture;
   if(currentRoom==='market')return marketFurniture;
   if(currentRoom==='armory')return armoryFurniture;
@@ -1326,6 +1328,7 @@ function setRoomFurniture(items){
 }
 const homeExit={to:'hub',side:'left',tile:{x:0,y:5},start:4.88,end:6.12,height:49,label:'EXIT'};
 const hubDoors=[
+  {to:'furnishings',side:'right',tile:{x:9,y:0},start:8.1,end:10.2,height:51,label:'FURNITURE'},
   {to:'home',side:'left',tile:{x:0,y:6},start:5.72,end:7.28,height:51,label:'HOME'},
   {to:'armory',side:'right',tile:{x:3,y:0},start:2.35,end:4.65,height:51,label:'ARMORY'},
   {to:'lounge',side:'right',tile:{x:14,y:0},start:13.6,end:15.4,height:51,label:'LOUNGE'},
@@ -1336,8 +1339,9 @@ const hubDoors=[
 const towerEntrance={to:'hub',side:'left',tile:{x:0,y:5},start:4.58,end:6.42,height:54,label:'TOWER'};
 const moonwoodEntrance={to:'trail',side:'front',tile:{x:6,y:11},arrival:{x:1,y:5},start:5.03,end:7.62,label:'MOONWOOD'};
 const storeExit={to:'hub',side:'left',tile:{x:0,y:5},start:4.6,end:6.4,height:49,label:'LOBBY'};
-const roomDoors={home:[homeExit],hub:hubDoors,lounge:[],store:[storeExit],market:[storeExit],armory:[{...storeExit,arrival:{x:3,y:1}}],outside:[towerEntrance,moonwoodEntrance],...moonwood.doors};
+const roomDoors={furnishings:[storeExit],home:[homeExit],hub:hubDoors,lounge:[],store:[storeExit],market:[storeExit],armory:[{...storeExit,arrival:{x:3,y:1}}],outside:[towerEntrance,moonwoodEntrance],...moonwood.doors};
 const roomDetails={
+  furnishings:{number:'16',name:'Tower Furnishings',description:'Furniture, lighting and storage for your own corner of the Tower.',badge:'FURNITURE SHOP',floor:'Tower shops'},
   home:{number:'00',name:'Entry Room',description:'Your aim: become the richest and most powerful player in the game. Use the exit and meet the Tower Warden to get started.',badge:'ROOM NO. 00',floor:'Private room'},
   hub:{number:'01',name:'The Grand Lobby',description:'Visit the Warden, browse the shops, or head outside into Moonwood.',badge:'MAIN HUB',floor:'Ground floor'},
   lounge:{number:'02',name:'The Sunset Lounge',description:'Find blackjack and roulette on the gaming floor, or take a seat by the bar.',badge:'GAMING LOUNGE',floor:'Ground floor'},
@@ -1610,11 +1614,13 @@ function drawLobbyWindow(a,b){
   wall('right',a-.11,b+.11,26,29,'#bfad92');
 }
 const lobbyPortalColors={
+  furnishings:['#2d3e35','#e4e9a0','#c3cd83'],
   home:['#3d2c42','#ffc78a','#f6ae6b'],store:['#152d4c','#91dcff','#55baff'],
   market:['#432d34','#ffcd85','#edac61'],armory:['#422841','#ffae9e','#ff7769'],
   lounge:['#332752','#e8bdff','#c583ec'],outside:['#3a3048','#ffe0a1','#f2b06d']
 };
 const lobbyPortalIcons={
+  furnishings:['0111110','0100010','1100011','1100011','1111111','0100010','0100010'],
   home:['0001000','0011100','0111110','1111111','0101010','0110110','0110110'],
   store:['0000001','0110011','1111111','1011110','1111111','0110011','0000001'],
   market:['0011100','0111110','1111111','1010101','0111110','0100010','0111110'],
@@ -1729,7 +1735,8 @@ function drawGrandLobby(showDoors=true){
       wall(side,u-.04,u+.28,2,8,'#8d7769');
     }
   }
-  drawLobbyWindow(6.55,8.6);drawLobbyWindow(9.25,11.3);
+  if(showDoors){drawLobbyWindow(6.3,7.7);drawLobbyWindow(10.7,11.9);}
+  else{drawLobbyWindow(6.55,8.6);drawLobbyWindow(9.25,11.3);}
   drawLobbyBanner('left',4.9);drawLobbyBanner('right',1.05);drawLobbyBanner('right',16.25);
   wall('left',1,4.4,39,65,'#171f34');
   wall('left',1.08,4.32,40,64,'#bc9563');
@@ -2163,6 +2170,7 @@ const roomLayers={
   outside:makeRoomLayer(drawCourtyard,courtyardView),
   store:makeRoomLayer(drawFishingStore),
   market:makeRoomLayer(()=>drawFishingStore(true)),
+  furnishings:makeRoomLayer(()=>drawFishingStore('furnishings')),
   armory:makeRoomLayer(()=>drawFishingStore('armory'))
 };
 for(const id of Object.keys(moonwood.areas)){
@@ -2194,7 +2202,7 @@ function drawMoonwoodDetails(time){
   }
 }
 const explorationRegions={
-  'The Tower':['home','hub','outside','lounge','market','armory','store'],
+  'The Tower':['home','hub','outside','lounge','market','armory','store','furnishings'],
   Moonwood:['trail','logging','clearing','grove','shrine','creek','pond','ruins','roots']
 };
 let trackedDestination=null;
@@ -2256,6 +2264,7 @@ function updateWorldLabels(){
     const sign=add(label,...anchor,'door',()=>travelDoor(door),'',currentRoom!=='home'&&['left','right'].includes(door.side)?{side:door.side,width:(door.end-door.start+.08)*18,font:5.6}:null);
     if(door.to===guidedDoor?.to)sign.dataset.guided='true';
   }
+  if(currentRoom==='furnishings')add('Browse furniture',...point(4.5,1.5,39),'npc',()=>window.towerFurnitureShop?.open(),'Tower Furnishings');
   if(currentRoom==='home')for(const item of homeFurniture.filter(item=>item.type==='safe'))add('Home safe',...point(item.x+.5,item.y+.5,31),'npc',()=>use(item),'Gold & item storage');
   if(currentRoom==='home')add('YOUR HOME',...point(5,0,44),'sign',null,avatar.name);
   if(currentRoom==='hub'){
@@ -2299,8 +2308,8 @@ function updateWorldLabels(){
     add('Moonwell Depths',...point(7.4,3.4,19),'npc',reviewDepthsEntrance,'Review expedition');
   }
   if(currentRoom==='lounge')add('SUNSET LOUNGE',...point(0,2.3,51),'sign',null,'',{side:'left',width:48,font:5.2});
-  if(['store','market','armory'].includes(currentRoom)){
-    const names={store:['SILVERFIN','OUTFITTERS'],market:['MOONWOOD','TRADING POST'],armory:['TOWER','ARMORY']};
+  if(['store','market','armory','furnishings'].includes(currentRoom)){
+    const names={furnishings:['TOWER','FURNISHINGS'],store:['SILVERFIN','OUTFITTERS'],market:['MOONWOOD','TRADING POST'],armory:['TOWER','ARMORY']};
     add(names[currentRoom][0],...point(3.42,0,46),'sign',null,names[currentRoom][1],{side:'right',width:58,font:5.7});
   }
 }
@@ -2682,7 +2691,7 @@ function followFirstUpgrade(){
   const plan=upgradePlan();if(!plan){openUpgradeChoice();return;}
   if(unavailable())return;
   if(currentRoom!==plan.destination){const door=firstUpgradeDestination();if(door)followHudDoor(door);return;}
-  if(['store','armory','market'].includes(currentRoom)){
+  if(['store','armory','market','furnishings'].includes(currentRoom)){
     openMerchant();const offer=$(plan.fishing?'rodOffers':'weaponOffers').querySelector('[data-item="'+plan.id+'"]');
     if(plan.needsBait){$('buyBait').focus();return;}
     if(offer&&currentRoom===plan.shop&&!plan.missingXp&&!plan.missingGold){offer.classList.add('recommended-upgrade');offer.scrollIntoView({block:'center',behavior:reducedMotion.matches?'instant':'smooth'});offer.focus({preventScroll:true});}
@@ -2813,7 +2822,7 @@ function showHudMap(destination=null){
     routes.append(button);
   };
   if(shops&&lobbyRoutesOpen()){
-    for(const [room,label] of [['armory','Armory'],['store','Fishing supplies'],['market','Trading Post']])add(label,()=>navigateHud(room));
+    for(const [room,label] of [['armory','Armory'],['store','Fishing supplies'],['market','Trading Post'],['furnishings','Furniture shop']])add(label,()=>navigateHud(room));
   }else if(!shops){
     for(const door of hudRoomExits(currentRoom))add(roomDetails[door.to].name,()=>followHudDoor(door),door.to===next?.to);
   }
@@ -3106,6 +3115,8 @@ function finishInteraction(){
     note('The trader offers credits for fish and hunting spoils. Choose what to sell in the market panel.');
   }else if(['tackleCounter','rodRack','baitCrates'].includes(item.type)){
     note('Welcome to Silverfin Outfitters. Choose supplies from the shop panel.');
+  }else if(currentRoom==='furnishings'){
+    window.towerFurnitureShop?.open(Object.hasOwn(types,item.type)?item.type:null);
   }else if(item.type==='reception'){
     if(!lobbyRoutesOpen()){note('The Tower Warden is waiting to welcome you.');return;}
     $('receptionMessage').textContent='Welcome, '+avatar.name+'! Choose a shift at the job board, then return home with your earnings.';openJobBoard();
@@ -3335,7 +3346,8 @@ function renderBag(){
   updateBedGuide();
 }
 function openMerchant(){
-  if(!['store','armory','market'].includes(currentRoom))return;
+  if(currentRoom==='furnishings'){window.towerFurnitureShop?.open();return;}
+  if(!['store','armory','market','furnishings'].includes(currentRoom))return;
   updateFishingShop();updateArmoryShop();updateTradingPost();
   $('merchantTitle').textContent=roomDetails[currentRoom].name;
   if(!$('merchantDialog').open)$('merchantDialog').showModal();
@@ -3346,7 +3358,7 @@ function openMerchant(){
 }
 
 function renderWorldMap(route=[]){
-  const positions={home:[100,55],hub:[340,110],armory:[265,48],market:[465,48],lounge:[580,75],store:[118,133],
+  const positions={home:[100,55],hub:[340,110],armory:[265,48],market:[465,48],furnishings:[435,145],lounge:[580,75],store:[118,133],
     outside:[340,205],trail:[340,315],logging:[107,288],clearing:[109,380],grove:[563,274],shrine:[563,354],
     creek:[338,423],pond:[138,497],ruins:[340,549],roots:[549,493],depthsGate:[340,120],depthsGallery:[340,120],depthsCache:[340,120],depthsTreasury:[340,120],depthsRest:[340,120],depthsTrial:[340,120],depthsVault:[340,120]};
   const rooms=Object.keys(positions).filter(room=>roomDetails[room]&&(room===currentRoom||hudNextDoor(room)));
@@ -4011,12 +4023,14 @@ function switchMode(next){
   $('edit').classList.toggle('active',editing);$('walk').classList.toggle('active',!editing);
   $('edit').setAttribute('aria-pressed',String(editing));$('walk').setAttribute('aria-pressed',String(!editing));
   $('roomLayout').classList.toggle('decorating',editing);
-  $('roomLayout').classList.toggle('shopping',['store','armory'].includes(currentRoom));
+  $('roomLayout').classList.toggle('shopping',['store','armory','furnishings'].includes(currentRoom));
   $('questTracker').hidden=currentRoom==='hub'||quest.claimed;
-  $('roomSide').hidden=(atHome()&&!editing)||['outside','store','armory','market'].includes(currentRoom);
-  $('merchantEntry').hidden=!['store','armory','market'].includes(currentRoom);
-  $('merchantEntryTitle').textContent=currentRoom==='market'?'Sell your spoils':'Browse equipment';
+  $('roomSide').hidden=(atHome()&&!editing)||['outside','store','armory','market','furnishings'].includes(currentRoom);
+  $('merchantEntry').hidden=!['store','armory','market','furnishings'].includes(currentRoom);
+  $('merchantEntryTitle').textContent=currentRoom==='furnishings'?'Browse furniture':currentRoom==='market'?'Sell your spoils':'Browse equipment';
+  $('merchantEntry').querySelector('small').textContent=currentRoom==='furnishings'?'Preview, buy & decorate your home':'Equipment, prices & trading';
   $('hudHomeDecor').hidden=!atHome()||editing;
+  $('furnitureShopHome').hidden=!atHome()||editing;
   $('chatPanel').hidden=editing||currentRoom!=='lounge';
   if(currentRoom==='lounge'){
     for(const button of $('gamingGuide').querySelectorAll('[data-game-table]')){
@@ -4454,6 +4468,7 @@ $('wardrobeInventory').onclick=()=>openClothingInventory(wardrobe.active);
 $('createOutfitForm').onsubmit=event=>{event.preventDefault();try{const outfit=createSavedOutfit(wardrobe,$('newOutfitName').value);$('newOutfitName').value='';savePlayerState();renderWardrobe();$('wardrobeStatus').textContent=outfit.name+' saved. Choose Edit clothing to build this look.';}catch(error){$('wardrobeStatus').textContent=error.message;}};
 
 $('merchantEntry').onclick=openMerchant;
+for(const id of ['furnitureShopInventory','furnitureShopHome','furnitureShopEditor'])$(id).onclick=()=>{for(const modal of ['inventoryDialog','hudMapDialog'])if($(modal).open)$(modal).close();window.towerFurnitureShop?.open();};
 $('bagAppearance').onclick=()=>{$('inventoryDialog').close();openAvatar();};
 for(const category of ['all','gear','clothing','materials','furniture'])$('bagTab'+category[0].toUpperCase()+category.slice(1)).onclick=()=>{bagCategory=category;bagSelection=null;renderBag();};
 for(const name of ['Furniture','Weapons','Armour'])$('craftTab'+name).onclick=()=>{for(const page of ['Furniture','Weapons','Armour']){$('craftPage'+page).hidden=page!==name;$('craftTab'+page).setAttribute('aria-pressed',String(page===name));}};
@@ -4951,6 +4966,7 @@ function updateRoomLabel(){
   const landmarks={
     home:'The wall sign reads Your Home, '+avatar.name+'. Use the exit to reach the Grand Lobby.',
     hub:'Use a doorway, the Outside steps, or the Tower directory to travel.',
+    furnishings:'Browse the showroom or click a display to shop. Use the LOBBY exit to leave.',
     lounge:'Click furniture to interact. Use the Lobby button to go back.',
     outside:'Use the Moonwood steps to explore or the Tower door to return indoors.',
     store:'Buy bait and rods from Fishing supplies. Use Lobby to return.',
@@ -4978,6 +4994,7 @@ function enterRoom(next,arrival,{automatic=false}={}){
     setZoom(1);
   }
   if($('merchantDialog').open)$('merchantDialog').close();
+  window.towerFurnitureShop?.close();
   const {number,name,description,badge,floor}=roomDetails[next];
   $('roomLayout').classList.toggle('entry',atHome());
   $('roomLayout').classList.toggle('hub',next==='hub');
@@ -5015,8 +5032,9 @@ function enterRoom(next,arrival,{automatic=false}={}){
   connectRoom();
   if(!automatic){
     showFirstEquipment(next);
-    if(['store','armory','market'].includes(next))openMerchant();
+    if(['store','armory','market','furnishings'].includes(next))openMerchant();
   }
+  if(atHome()&&pendingFurniturePlacement){const type=pendingFurniturePlacement;pendingFurniturePlacement=null;trackedDestination=null;if(availableFurniture(type)>0){switchMode(true);choose({type,id:null,rot:0});note('You’re home. Click a clear floor tile to place your '+types[type]+'.');}}
   if(focusRoom&&!$('inventoryDialog').open)canvas.focus();
 }
 function movePlayerToSpawn(arrival){
@@ -5102,6 +5120,27 @@ $('vaultVictoryDialog').addEventListener('cancel',event=>{event.preventDefault()
 window.towerOpenAutoRules=()=>openCharacterRules();
 
 window.towerApplyBankState=state=>{applyServerGameplay(state);updateInventory();window.towerRefreshBank?.();};
+window.towerFurnitureFeedback=(name,quantity,cost)=>showTransaction('Furniture purchased',[{icon:'✦',text:'+'+quantity+' '+name+' · In inventory'}],-cost);
+window.towerFurniturePreview=(type,rot=0)=>{
+  const image=document.createElement('canvas');image.width=360;image.height=260;image.setAttribute('aria-hidden','true');
+  const previous=ctx,previousView=view;ctx=image.getContext('2d');view=standardView;
+  try{const item={type,x:0,y:0,rot},[w,d]=dimensions(item),[cx,cy]=point(w/2,d/2);ctx.imageSmoothingEnabled=false;ctx.translate(180,176);ctx.scale(3,3);ctx.translate(-cx,-cy);surface(-.3,-.3,w+.6,d+.6,-.2,'#26354b','#bba168');object(item);}
+  finally{ctx=previous;view=previousView;}return image;
+};
+window.towerFurnitureThumbnail=type=>{
+  const image=document.createElement('canvas');image.width=108;image.height=88;image.setAttribute('aria-hidden','true');
+  const previous=ctx,previousView=view;ctx=image.getContext('2d');view=standardView;
+  try{const item={type,x:0,y:0,rot:0},[w,d]=dimensions(item),[cx,cy]=point(w/2,d/2);ctx.translate(54,67);ctx.scale(1.3,1.3);ctx.translate(-cx,-cy);object(item);}
+  finally{ctx=previous;view=previousView;}return image;
+};
+window.towerFurnitureState=()=>({location:currentRoom,credits,ownedFurniture,homeFurniture,blocked:unavailable()||routineControlled()});
+window.towerFurnitureVisit=()=>{window.towerFurnitureShop?.close();navigateHud('furnishings');};
+window.towerFurniturePlace=type=>{
+  window.towerFurnitureShop?.close();
+  if(!atHome()){pendingFurniturePlacement=type;note('Follow the home route to place your '+types[type]+'.');setExplorationDestination('home');const next=hudNextDoor('home');if(next)followHudDoor(next);return;}
+  if(availableFurniture(type)<1)return;
+  switchMode(true);choose({type,id:null,rot:0});canvas.focus();
+};
 window.towerSafeNearby=()=>atHome()&&ownedFurniture.safe>0&&homeFurniture.some(item=>item.type==='safe'&&Math.abs(player.cx-item.x)+Math.abs(player.cy-item.y)===1);
 window.towerVisitSafe=()=>{
   if(!atHome()){note('Your safe is at home. Use Home, then click your safe.');return;}

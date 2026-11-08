@@ -3,6 +3,7 @@ const gold=['#ffe5a8','#efbb75'];
 const aqua=['#b7e7e7','#73c8d6'];
 const violet=['#e1c8ff','#aaa7e9'];
 const rooms={
+  furnishings:{dust:{color:gold,count:7,area:[2,2,8,7]},lights:[[8.5,2.5,30,'#f1bd78']]},
   home:{dust:{color:gold,count:7,area:[2,2,7,7]},lights:[[2,4.8,22,'#e2ad62']]},
   hub:{dust:{color:gold,count:13,area:[2,2,15,12]},lights:[[4.5,2.5,26,'#ffcc88'],[16.2,2.3,27,'#7dd5ff']]},
   lounge:{dust:{color:gold,count:9,area:[2,2,8,7]},lights:[[2.2,3.4,27,'#f5bd79'],[6,3.7,28,'#d99bc9']]},

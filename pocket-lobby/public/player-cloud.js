@@ -1,6 +1,7 @@
 'use strict';
 (async()=>{
   const {createCombatClock}=await import('./combat-clock.js');const combatClock=createCombatClock();
+  const {initializeFurnitureShop}=await import('./furniture-shop.js');
   const {initializeBankUI}=await import('./bank-ui.js');let bankUI=null;
   const {autoStatus}=await import('./auto-mode.js');
   const {AWAY_GRACE_MS}=await import('./character-rules.js');
@@ -265,7 +266,7 @@
     if(!dialog.open)dialog.showModal();
   }
   function attach(){
-    bankUI=initializeBankUI(window.playerCloud,document,window);window.towerRefreshBank=()=>bankUI.render();window.towerOpenSafe=()=>bankUI.open();
+    window.towerFurnitureShop=initializeFurnitureShop(window.playerCloud,document,window);bankUI=initializeBankUI(window.playerCloud,document,window);window.towerRefreshBank=()=>{bankUI.render();window.towerFurnitureShop.render();};window.towerOpenSafe=()=>bankUI.open();
     document.getElementById('autoStart').onclick=()=>setControl('auto');
     document.getElementById('autoPlay').onclick=()=>setControl('play');
     document.getElementById('autoTakeControl').onclick=()=>setControl('play');

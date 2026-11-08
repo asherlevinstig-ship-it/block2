@@ -41,7 +41,7 @@ function furniture(items){
     return {id:item.id,type:item.type,x:item.x,y:item.y,rot:item.rot};
   });
 }
-const locations=new Set(["home","hub","lounge","outside","store","market","trail","grove","creek","shrine","ruins","roots","pond","clearing","armory","logging",...depthsStages.map(stage=>stage.room),depthsCacheRoom,...Object.values(depthsSideRooms).map(side=>side.room)]);
+const locations=new Set(["home","furnishings","hub","lounge","outside","store","market","trail","grove","creek","shrine","ruins","roots","pond","clearing","armory","logging",...depthsStages.map(stage=>stage.room),depthsCacheRoom,...Object.values(depthsSideRooms).map(side=>side.room)]);
 function normalizeFirstUpgrade(input){
   if(input===undefined)return {unlocked:false,choice:null,complete:false,sale:null};
   if(!input||typeof input!=='object'||Array.isArray(input)||typeof input.unlocked!=='boolean'||typeof input.complete!=='boolean'||![null,'fishing','combat'].includes(input.choice))throw new Error('Invalid first upgrade.');

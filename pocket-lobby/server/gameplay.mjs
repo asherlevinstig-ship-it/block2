@@ -1,3 +1,4 @@
+import {purchaseFurniture} from '../public/furniture-catalog.js';
 import {HOME_SAFE_PRICE,ownsHomeSafe,besideHomeSafe} from '../public/home-safe.js';
 import {vaultTransfer} from './vault.mjs';
 import {normalizeVault} from '../public/vault.js';
@@ -35,6 +36,7 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
   if(action!=='combat')settleActivities(state,now,random);
   if(activityAction(state,action,body,now,random)||essenceAction(state,action,body))return;
   if(gamblingAction(state,action,body,now,random===Math.random?undefined:random))return;
+  if(action==='buyFurniture'){purchaseFurniture(state,body.id,body.quantity);return;}
   if(action==='buySafe'){
     location(state,['home']);
     if(state.fishingCast||state.timberCut)throw new Error('Invalid activity. Finish your activity before buying a safe.');
@@ -261,6 +263,7 @@ export function protectFishingState(previous,next){
   next.huntingLoot=previous.huntingLoot;
   next.woodcutting={...previous.woodcutting,equipped:previous.woodcutting.axeOwned&&next.woodcutting?.equipped===true};
   next.ownedFurniture=previous.ownedFurniture??{bed:1};
+  const placed={};for(const item of next.homeFurniture??[]){placed[item.type]=(placed[item.type]??0)+1;if(placed[item.type]>(next.ownedFurniture[item.type]??0))throw new Error('Invalid furniture ownership. Only place furniture you own.');}
   next.meals=previous.meals??{};
   next.magic=previous.magic;
   next.depthsRun=previous.depthsRun??null;
