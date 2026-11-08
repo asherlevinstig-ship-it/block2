@@ -1,7 +1,9 @@
 import {HOME_SAFE_PRICE} from './home-safe.js';
 export const furnitureCategories={all:'All furniture',comfort:'Comfort',tables:'Tables & seating',decor:'Lights & plants',storage:'Storage'};
 export const furnitureCatalog={
- bed:{name:'Single bed',category:'comfort',price:80,size:[2,1],description:'A cream pillow and a midnight-blue blanket. Your first bed is free; buy another for a guest.'},
+ bed:{name:'Single bed',category:'comfort',price:80,size:[2,1],description:'Restores 10 HP per second while resting at home. Your first bed is free.'},
+ comfortBed:{name:'Comfort bed',category:'comfort',price:300,size:[2,1],description:'A soft teal bed. Restores 15 HP per second, 50% faster than the starter bed. Auto uses it when placed at home.'},
+ royalBed:{name:'Royal bed',category:'comfort',price:850,size:[2,1],description:'Plush violet bedding and a gilded frame. Restores 20 HP per second, twice the starter rate. Place at home to benefit Auto rest too.'},
  sofa:{name:'Velvet sofa',category:'comfort',price:120,size:[2,1],description:'A deep blue sofa made for taking a break between adventures.'},
  chair:{name:'Club chair',category:'comfort',price:60,size:[1,1],description:'A comfortable little seat for your reading corner.'},
  woodStool:{name:'Wooden Stool',category:'tables',price:20,size:[1,1],description:'Simple, sturdy and easy to fit into a small room. You can also craft one with timber.'},

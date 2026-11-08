@@ -1,3 +1,4 @@
+import {normalizeBedRest} from './bed-rest.mjs';
 import {ownsHomeSafe,migrateHomeSafe} from '../public/home-safe.js';
 import {validateVaultGear} from '../public/vault.js';
 import {autoStoreVault} from './vault.mjs';
@@ -34,7 +35,7 @@ const counts=(input={})=>{
 function furniture(items){
   if(items===undefined)return undefined;
   if(!Array.isArray(items)||items.length>300)throw new Error("Invalid room.");
-  const allowed=new Set(["bar","shelf","plant","sofa","chair","table","lamp","stool","bed","moonbloom","blackjack","roulette","woodStool","woodTable","bookcase","safe"]);
+  const allowed=new Set(["bar","shelf","plant","sofa","chair","table","lamp","stool","bed","comfortBed","royalBed","moonbloom","blackjack","roulette","woodStool","woodTable","bookcase","safe"]);
   return items.map(item=>{
     if(!allowed.has(item.type)||!Number.isFinite(item.x)||!Number.isFinite(item.y)||item.x<0||item.y<0||item.x>=10||item.y>=10||!Number.isInteger(item.rot)||item.rot<0||item.rot>3)throw new Error("Invalid furniture.");
     if(!(Number.isSafeInteger(item.id)||typeof item.id==="string"&&item.id.length<=60))throw new Error("Invalid item ID.");
@@ -102,6 +103,7 @@ export function normalizeState(input={}){
   if(depthsRun)state.depthsRun=depthsRun;
   if(input.depthsDiscovered===true||depthsRun)state.depthsDiscovered=true;
   if(input.loungeLayout==="gaming")state.loungeLayout="gaming";
+  if(input.bedRest!==undefined)state.bedRest=normalizeBedRest(input.bedRest);
   validateVaultGear(state);return state;
 }
 export function startPlan(state,{hours,baitLimit,kind,source},now){

@@ -3,6 +3,7 @@
   const {createCombatClock}=await import('./combat-clock.js');const combatClock=createCombatClock();
   const {initializeFurnitureShop}=await import('./furniture-shop.js');
   const {initializeBankUI}=await import('./bank-ui.js');let bankUI=null;
+  const bedRules=await import('./bed-rest.js');Object.assign(window,bedRules);
   const {autoStatus}=await import('./auto-mode.js');
   const {AWAY_GRACE_MS}=await import('./character-rules.js');
   const status=document.getElementById('saveStatus');

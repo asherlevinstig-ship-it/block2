@@ -1,3 +1,4 @@
+import {startBedRest,settleBedRest,stopBedRest} from './bed-rest.mjs';
 import {awardDungeonWeapon} from '../public/dungeon-loot.js';
 import {MAX_SKILL_XP} from '../public/skill-curve.js';
 import {nextCombatTactic} from '../public/character-rules.js';
@@ -110,13 +111,15 @@ export function advanceServerCombat(state,now,random=Math.random){
   return events;
 }
 export function settleActivities(state,now,random=Math.random){
-  let changed=false;
+  let changed=settleBedRest(state,now);
   if(state.hunting?.encounter&&!(state.plan?.kind==='queue'&&state.plan.activeHunt))changed=advanceServerCombat(state,now,random).length>0;
   if(state.hunting?.recoveryUntil&&now>=state.hunting.recoveryUntil){state.hunting.recoveryUntil=0;state.health=100;changed=true;}
   return changed;
 }
 
 export function activityAction(state,action,body,now,random){
+  if(action==='bedRest'){startBedRest(state,body.id,now);return true;}
+  if(action==='bedRestStop'){stopBedRest(state,now);return true;}
   if(action==='combatReportAck'){
     if(typeof body.id!=='string')throw new Error('Choose a combat recap to dismiss.');
     state.combatReports=(state.combatReports??[]).filter(report=>report.id!==body.id);

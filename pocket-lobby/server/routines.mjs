@@ -1,3 +1,4 @@
+import {homeRestDuration} from '../public/bed-rest.js';
 import {autoBankGold} from './banking.mjs';
 import {startAutoGambling} from './auto-gambling.mjs';
 import {upgradeGoalProgress} from '../public/upgrade-goals.js';
@@ -52,6 +53,6 @@ export function touchPresence(state,now,{active=true,activityAt=now,random=Math.
     }
   }
   state.location='home';state.position={x:5,y:7};
-  state.plan={...metadata,kind:'rest',startedAt,endAt:startedAt+(state.health<100?boarRules.recovery:0),xp:0,ruleSummary,restReason:reason};
+  state.plan={...metadata,kind:'rest',startedAt,endAt:startedAt+(state.health<100?homeRestDuration(state,boarRules.recovery):0),xp:0,ruleSummary,restReason:reason};
   autoBankGold(state,state.plan,startedAt);settlePlan(state,until,{stop:active,random});
 }

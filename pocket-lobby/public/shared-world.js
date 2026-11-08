@@ -10,7 +10,7 @@ const layouts={
 };
 export function furnitureBox(item){
   const {type,x,y,rot=0}=item;
-  const wide=['bookcase','workbench','sofa','bed','bench','blackjack','roulette'].includes(type);
+  const wide=['bookcase','workbench','sofa','bed','comfortBed','royalBed','bench','blackjack','roulette'].includes(type);
   const [w,d]=wide?(rot%2?[1,2]:[2,1]):['reception','tackleCounter','tradeCounter','armoryCounter'].includes(type)?[3,1]:['rodRack','weaponRack'].includes(type)?[2,1]:type==='fountain'?[2,2]:type==='bar'?[1.5,4.1]:[1,1];
   return {x,y,w,d};
 }

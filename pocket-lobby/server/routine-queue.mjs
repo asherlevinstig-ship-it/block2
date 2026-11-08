@@ -1,3 +1,4 @@
+import {homeRestDuration} from '../public/bed-rest.js';
 import {autoStoreVault} from './vault.mjs';
 import {autoBankGold} from './banking.mjs';
 import {chooseGoldTask} from './gold-planner.mjs';
@@ -91,7 +92,7 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
         const enemy=queueHuntEnemies[type];
         interval=Math.max(QUEUE_ACTION_MS,(huntRespawnAt(state.hunting,enemy)??0)-p.cursorAt);
         state.location=enemy.room;state.position={x:5,y:5};
-      }else if(type==='rest'){state.location='home';state.position={x:5,y:7};}
+      }else if(type==='rest'){interval=state.health<100?homeRestDuration(state,QUEUE_ACTION_MS):QUEUE_ACTION_MS;state.location='home';state.position={x:5,y:7};}
       else{state.location=type==='buyBait'?'store':'market';state.position={x:5,y:5};}
       p.nextAt=p.cursorAt+interval;changed=true;
     }

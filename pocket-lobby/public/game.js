@@ -16,7 +16,7 @@ const shades = {
   cream:['#ffe0a5','#bd8d71','#e8b182'], green:['#81b486','#365e58','#518366'],
   clay:['#d5896b','#8c4c59','#ab5f5b'], black:['#3d344c','#211f33','#302a43']
 };
-const types = {safe:'Home safe',woodStool:'Wooden Stool',woodTable:'Small Table',bookcase:'Bookshelf',bed:'Single bed', moonbloom:'Moonbloom', sofa:'Velvet sofa', stool:'Bar stool', plant:'Potted palm', table:'Coffee table', lamp:'Floor lamp', chair:'Club chair'};
+const types = {safe:'Home safe',woodStool:'Wooden Stool',woodTable:'Small Table',bookcase:'Bookshelf',bed:'Single bed',comfortBed:'Comfort bed',royalBed:'Royal bed', moonbloom:'Moonbloom', sofa:'Velvet sofa', stool:'Bar stool', plant:'Potted palm', table:'Coffee table', lamp:'Floor lamp', chair:'Club chair'};
 const hairColors = ['#704832','#383848','#a15a39','#d6ac60','#7b638a'];
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const STEP_MS = 141, WAVE_MS = 1100;
@@ -79,6 +79,7 @@ const PATIENCE_XP_PER_CATCH=10;
 const patienceLevel=()=>skillLevel(playerStats.patienceXp);
 const maxHealth=()=>100;
 let health=Math.min(maxHealth(),Math.max(0,savedPlayerState?.health??maxHealth()));
+let homeBedRest=savedPlayerState?.bedRest??null,bedRestPolling=false,nextBedPoll=0;
 const fishingGear=normalizeFishingGear(savedPlayerState?.fishingGear);
 const fishStock={...savedPlayerState?.fishStock};
 if(!savedPlayerState?.fishStock&&adventure.silverfin>0)fishStock.silverfin=adventure.silverfin;
@@ -1145,8 +1146,30 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
   }
   updatePlayerStats();updateCombatPanel();savePlayerState();note(combatMessage);
 }
+function beginBedRest(item){
+  if(health>=100){note('Your hearts are already full. Come back after your next adventure.');return;}
+  if(!window.playerCloud?.gameplay){note('Connect to the server to rest in your bed.');return;}
+  player.seat=null;
+  serverGameplay('bedRest',{id:item.id}).then(()=>{nextBedPoll=performance.now()+700;note('Resting in your '+bedProfiles[item.type].name+'. Get up whenever you’re ready.');}).catch(error=>note(error.message));
+}
+function updateBedRestPanel(time){
+  const panel=$('bedRestPanel');panel.hidden=!homeBedRest;$('hint').classList.toggle('bed-rest-hidden',!!homeBedRest);
+  if(!homeBedRest)return;
+  for(const id of ['bedGuide','tradeGuide','upgradeGuide','contextGuide'])$(id).hidden=true;
+  const projected=bedRestHealth(homeBedRest,combatNow()),rate=bedProfiles[homeBedRest.type].rate;
+  $('bedRestTitle').textContent='Resting in your '+bedProfiles[homeBedRest.type].name;
+  $('bedRestHealth').textContent=projected+' / 100 HP';$('bedRestProgress').value=projected;
+  $('bedRestTime').textContent=projected>=100?'Finishing your rest…':Math.ceil((100-projected)/rate)+'s to full health · '+rate+' HP / sec';
+  for(let i=0;i<5;i++)$('bedRestHeart'+i).style.setProperty('--heart-fill',Math.max(0,Math.min(100,(projected-i*20)*5))+'%');
+  $('bedRestStop').disabled=serverActionBusy||bedRestPolling;
+  if(window.playerCloud?.gameplay&&!bedRestPolling&&!serverActionBusy&&!activityBusy&&time>=nextBedPoll){
+    nextBedPoll=time+1000;bedRestPolling=true;
+    serverGameplay('recover').catch(error=>note(error.message)).finally(()=>{bedRestPolling=false;nextBedPoll=performance.now()+700;});
+  }
+}
 function restAtTower(){
   if(!['hub','home'].includes(currentRoom)||unavailable()||health>=100)return;
+  if(atHome()){const bed=bestHomeBed({homeFurniture,ownedFurniture});if(bed){use(bed);return;}}
   if(window.playerCloud?.gameplay){
     serverGameplay('rest').then(()=>{combatMessage='Resting at the Tower. Your hearts will be restored shortly.';updateCombatPanel();savePlayerState();}).catch(error=>note(error.message));return;
   }
@@ -1172,11 +1195,11 @@ function updateCombatPanel(){
   $('wave').disabled=editing||!!fishingSession||!!woodSession||unavailable();
   $('combatPanel').hidden=!enemy||chamberCleared;
   $('scene').classList.toggle('in-combat',player.inCombat);
-  $('restAtTower').hidden=!['hub','home'].includes(currentRoom)||health>=100&&!hunting.recoveryUntil;
+  $('restAtTower').hidden=!!homeBedRest||!['hub','home'].includes(currentRoom)||health>=100&&!hunting.recoveryUntil;
   $('restAtTower').disabled=!!hunting.recoveryUntil;
   $('restAtTower').textContent=hunting.recoveryUntil?'Resting · '+Math.max(0,Math.ceil((hunting.recoveryUntil-now)/1000))+'s':'Rest · restore hearts';
   const notice=$('combatNotice');
-  notice.hidden=!hunting.recoveryUntil;
+  notice.hidden=!hunting.recoveryUntil||!!homeBedRest;
   if(hunting.recoveryUntil)notice.textContent='Recovering at the Tower · '+Math.max(0,Math.ceil((hunting.recoveryUntil-now)/1000))+'s · Five hearts restored after rest';
   const attack=enemyAttack(encounter,enemy);
   const ironTrialFight=firstUpgrade.ironTrialPending&&encounter?.enemy==='beetle'&&combatGear.equippedWeapon==='ironSword';
@@ -1250,7 +1273,7 @@ function updateCombatMoment(time){
     const tactic=nextCombatTactic({hunting,health,stats:playerStats,combatGear,magic:magicState,characterRules});
     const due=hunting.encounter?Math.min(hunting.encounter.nextPlayerAt,hunting.encounter.nextBoarAt,hunting.encounter.burn?.nextAt??Infinity,tactic?.at??Infinity):Infinity;
     if(player.inCombat&&combatNow()>=due&&time>=nextCombatPoll)sendServerCombat();
-    if(hunting.recoveryUntil&&combatNow()>=hunting.recoveryUntil&&!serverActionBusy&&!activityBusy){
+    if(!homeBedRest&&hunting.recoveryUntil&&combatNow()>=hunting.recoveryUntil&&!serverActionBusy&&!activityBusy){
       serverGameplay('recover').then(()=>{updatePlayerStats();updateCombatPanel();savePlayerState();}).catch(error=>note(error.message));
     }
     if(time-lastCombatUi>100){lastCombatUi=time;updateCombatPanel();}
@@ -1854,7 +1877,7 @@ function drawFishingStore(market=false){
   drawDoor(storeExit);
 }
 function dimensions(item) {
-  if(item.type==='bookcase'||item.type==='workbench'||item.type==='sofa'||item.type==='bed'||item.type==='bench'||isGamingTable(item))return item.rot%2?[1,2]:[2,1];
+  if(item.type==='bookcase'||item.type==='workbench'||item.type==='sofa'||isRestBed(item.type)||item.type==='bench'||isGamingTable(item))return item.rot%2?[1,2]:[2,1];
   if(item.type==='armoryCounter'||item.type==='reception'||item.type==='tackleCounter'||item.type==='tradeCounter')return [3,1];
   if(item.type==='rodRack'||item.type==='weaponRack')return [2,1];
   if(item.type==='fountain')return [2,2];
@@ -2073,16 +2096,22 @@ function object(item,highlight=false,time=0) {
     part(.43,.97,.16,.025,13,5,'gold');
     part(.49,.997,.045,.025,12,7,'cream');
     part(.40,.997,.23,.025,14,.8,'cream');
-  } else if(type==='bed'){
+  } else if(isRestBed(type)){
     for(const i of [.13,1.75])for(const j of [.12,.76])part(i,j,.12,.12,0,4,'black');
     part(.02,.02,1.95,.94,3,5,'wood');
     part(.13,.075,1.73,.83,8,4,'cream');
     part(.04,.045,.12,.9,7,16,'wood');
     part(.03,.028,.16,.94,23,1,'gold');
     part(.25,.19,.42,.6,12,3,['#ffebc9','#bc938e','#dec0a9']);
-    part(.76,.08,1.12,.83,12,2,'blue');
+    part(.76,.08,1.12,.83,12,2,type==='royalBed'?['#a18acb','#554371','#796190']:type==='comfortBed'?['#7cbeb5','#345e69','#518e92']:'blue');
+    if(type==='royalBed'){part(.03,.028,.16,.94,7,20,'gold');for(const v of [.14,.43,.72])part(.195,v,.025,.09,18,4,'gold');part(.76,.08,1.12,.055,14,.5,'gold');}
     part(.75,.08,.16,.83,14,1,'trim');
     part(1.55,.105,.04,.78,14,.3,'trim');
+    if(homeBedRest&&atHome()&&homeBedRest.bedId===item.id){
+      let u=.43,v=.5;if(rot%2)[u,v]=[v,u];if(rot>=2){u=w-u;v=d-v;}
+      const [hx,hy]=point(x+u,y+v,16);ctx.save();ctx.translate(hx,hy+17);ctx.scale(.65,.65);pixelHead(ctx,avatar,false,true);ctx.restore();
+      const drift=reducedMotion.matches?0:(time%1600)/1600;ctx.save();ctx.fillStyle='#b4e9d2';ctx.font='bold 7px monospace';ctx.fillText('z Z',hx+8,hy-8-drift*10);ctx.restore();
+    }
   } else if(type==='table'){
     for(const i of [.15,.7])for(const j of [.14,.72])part(i,j,.09,.09,0,10,'black');
     part(.065,.075,.86,.85,10,3,'wood');
@@ -2216,7 +2245,7 @@ let worldLabelKey='';
 function updateWorldLabels(){
   const p=canvasBounds(),doors=roomDoors[currentRoom].filter(door=>doorAvailable(door));
   const stump=currentRoom==='logging'&&!!treeState(timberTree()).regrowsAt;
-  const key=[currentRoom,stump,depthsRun?.finds?.join(','),doors.map(door=>door.to).join(','),avatar.name,questStage(quest),depthsDiscovered,player.inCombat,firstUpgrade.choice,firstUpgrade.complete,firstUpgrade.oakTrialPending,firstUpgrade.unlocked,firstUpgradeDestination()?.to,tradingPostGuideComplete,bedLessonComplete,trackedDestination,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
+  const key=[currentRoom,homeBedRest?.bedId,editing,currentRoom==='home'?homeFurniture.map(i=>[i.id,i.type,i.x,i.y,i.rot].join(':')).join(';'):'',stump,depthsRun?.finds?.join(','),doors.map(door=>door.to).join(','),avatar.name,questStage(quest),depthsDiscovered,player.inCombat,firstUpgrade.choice,firstUpgrade.complete,firstUpgrade.oakTrialPending,firstUpgrade.unlocked,firstUpgradeDestination()?.to,tradingPostGuideComplete,bedLessonComplete,trackedDestination,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
   if(key===worldLabelKey)return;
   worldLabelKey=key;
   const container=$('worldLabels');container.replaceChildren();container.dataset.room=currentRoom;
@@ -2230,7 +2259,7 @@ function updateWorldLabels(){
     container.append(label);
     const centerX=view.width/2,centerY=view.height/2-4;
     const screenX=p.x+((x-centerX)*zoom+centerX)*p.scale,screenY=p.y+((y-centerY)*zoom+centerY)*p.scale;
-    if(currentRoom==='home'){
+    if(currentRoom==='home'&&kind!=='npc'){
       const scale=p.scale*zoom;
       label.dataset.wall=kind==='sign'?'right':'left';
       const sign=kind==='sign';
@@ -2265,6 +2294,7 @@ function updateWorldLabels(){
     if(door.to===guidedDoor?.to)sign.dataset.guided='true';
   }
   if(currentRoom==='furnishings')add('Browse furniture',...point(4.5,1.5,39),'npc',()=>use(furnishingsFurniture.find(item=>item.type==='reception')),'Tower Furnishings');
+  if(currentRoom==='home'&&!homeBedRest&&!editing){const item=bestHomeBed({homeFurniture,ownedFurniture});if(item)add('Rest',...point(item.x+.5,item.y+.5,29),'npc',()=>use(item),bedProfiles[item.type].rate+' HP / sec');}
   if(currentRoom==='home')for(const item of homeFurniture.filter(item=>item.type==='safe'))add('Home safe',...point(item.x+.5,item.y+.5,31),'npc',()=>use(item),'Gold & item storage');
   if(currentRoom==='home')add('YOUR HOME',...point(5,0,44),'sign',null,avatar.name);
   if(currentRoom==='hub'){
@@ -2357,6 +2387,7 @@ function draw(time){
   }
   if(ghost)items.push(ghost);
   const drawPlayer = ()=>{
+    if(homeBedRest&&atHome())return;
     const seat=player.seat;
     const [x,y]=seat?seatAnchor(seat):point(player.x+.5,player.y+.5,0);
     if(moonwood.has(currentRoom)&&lanternLit){
@@ -2410,7 +2441,7 @@ function draw(time){
     object(item,treeHover||editing&&(selection?.id===item.id||hoverItem?.id===item.id)&&!fixed(item),time);
     ctx.globalAlpha=1;
     if(item.defeated||item===ghost||(fixed(item)&&!isGamingTable(item)))continue;
-    const [w,d]=dimensions(item), h=moonwood.heights[item.type]??{armoryCounter:32,weaponRack:37,anvil:19,brazier:25,workbench:23,woodStool:13,woodTable:18,bookcase:37,woodcutter:43,warden:43,enchanter:43,tradeCounter:32,harvestCrates:16,tackleCounter:32,rodRack:36,baitCrates:16,blackjack:19,roulette:22,reception:32,safe:25,bed:24,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39,bench:22,streetlamp:55,fountain:37}[item.type];
+    const [w,d]=dimensions(item), h=moonwood.heights[item.type]??{armoryCounter:32,weaponRack:37,anvil:19,brazier:25,workbench:23,woodStool:13,woodTable:18,bookcase:37,woodcutter:43,warden:43,enchanter:43,tradeCounter:32,harvestCrates:16,tackleCounter:32,rodRack:36,baitCrates:16,blackjack:19,roulette:22,reception:32,safe:25,bed:24,comfortBed:24,royalBed:28,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39,bench:22,streetlamp:55,fountain:37}[item.type];
     const height=isTimberTree(item)&&treeState(item).regrowsAt?6:h;
     const shape=[point(item.x,item.y+d),point(item.x+w,item.y+d),point(item.x+w,item.y),point(item.x+w,item.y,height),point(item.x,item.y,height),point(item.x,item.y+d,height)];
     hitboxes.push({item,shape});
@@ -3046,7 +3077,9 @@ function updateFishingMoment(time){
 }
 function finishInteraction(){
   const item=interaction;interaction=null;
-  if(item.type==='safe'&&atHome()){
+  if(isRestBed(item.type)&&atHome()){
+    beginBedRest(item);
+  }else if(item.type==='safe'&&atHome()){
     window.towerOpenSafe?.();
   }else if(item.type==='trainingDummy'){
     openTrainingCourtyard();
@@ -3152,6 +3185,7 @@ function animation(time){
   }
 }
 function advanceAnimation(time){
+  updateBedRestPanel(time);
   if(!showVaultVictory()){showPendingDungeonLoot();showPendingCombatRecap();}
   if(serverActionBusy){draw(time);return;}
   updateWoodMoment(time);
@@ -3518,7 +3552,9 @@ function applyServerGameplay(state){
   Object.assign(fishStock,state.fishStock);
   Object.assign(playerStats,state.stats);
   loungeRound=state.gambling?.round??null;
+  const previousRest=homeBedRest;homeBedRest=state.bedRest??null;
   health=state.health;
+  if(previousRest&&!homeBedRest&&health>=100){showTransaction('Rest complete',[{icon:'♥',text:'+'+(100-previousRest.startHealth)+' HP · All five hearts restored'}]);note('Fully rested. Ready for your next adventure.');}
   meals={...state.meals};
   magicState=state.magic?normalizeMagic(state.magic):null;
   Object.assign(hunting,state.hunting);
@@ -4623,6 +4659,7 @@ $('hudChatPrompt').onclick=()=>$('openRoomChat').onclick();
 $('questAction').onclick=questAction;
 $('visitWarden').onclick=()=>use(hubFurniture.find(item=>item.type==='warden'));
 $('restAtTower').onclick=restAtTower;
+$('bedRestStop').onclick=()=>{if(!homeBedRest||bedRestPolling||serverActionBusy)return;serverGameplay('bedRestStop').then(()=>{updateBedGuide();updateActivityPrompt();note('You got up with '+health+' / 100 HP.');}).catch(error=>note(error.message));};
 
 let savingRules=false,ruleQueueDraft=[];
 function currentGoalState(){return {...(window.playerCloud?.initial??savedPlayerState??{}),credits,stats:playerStats,combatGear,fishingGear,characterRules};}

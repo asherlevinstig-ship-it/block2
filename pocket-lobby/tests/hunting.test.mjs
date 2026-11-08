@@ -1,3 +1,4 @@
+import * as bedRules from '../public/bed-rest.js';
 import * as dungeonLootUI from '../public/dungeon-loot.js';
 import {normalizeCharacterRules} from '../public/character-rules.js';
 import {recordCombatFx} from '../public/combat-fx.js';
@@ -75,7 +76,7 @@ function gameHarness(){
   };
   const source=fs.readFileSync(new URL('../public/game.js',import.meta.url),'utf8');
   const context=vm.createContext({
-    ...dungeonLootUI,recordCombatFx,...questRules,...depthsRules,depthsRun:null,depthsExploring:false,depthsDiscovered:false,maxHealth:()=>100,normalizeHunting,normalizeCombatGear,weaponCatalog,weaponProfile,attackSeconds,staggerProfile,weaponStagger,boarRules,huntingAttributes,createHunt,resumeHunt,combatStamina,canUseWeapon,
+    ...bedRules,homeBedRest:null,homeFurniture:[],ownedFurniture:{bed:1},atHome:()=>context.currentRoom==='home',...dungeonLootUI,recordCombatFx,...questRules,...depthsRules,depthsRun:null,depthsExploring:false,depthsDiscovered:false,maxHealth:()=>100,normalizeHunting,normalizeCombatGear,weaponCatalog,weaponProfile,attackSeconds,staggerProfile,weaponStagger,boarRules,huntingAttributes,createHunt,resumeHunt,combatStamina,canUseWeapon,
     huntEnemies,huntEnemy,huntEnemyForRoom,huntRespawnAt,enemyAttack,enemyStatusEffects,combatDodgeCost,stonebackVest,moonwellCharm,
     advanceHunt:(e,h,s,n,_r,w,upgrade,vest)=>advanceHunt(e,h,s,n,()=>.5,w,upgrade,vest),
     huntingTurn:(e,h,s,a,n,_r,w,upgrade,vest)=>huntingTurn(e,h,s,a,n,()=>.5,w,upgrade,vest),
