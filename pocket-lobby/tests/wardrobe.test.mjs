@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {normalizeWardrobe,outfitAppearance,createSavedOutfit,addClothingToOutfit,wearSavedOutfit,clothingCatalog} from '../public/wardrobe.js';
+import {normalizeWardrobe,outfitAppearance,createSavedOutfit,addClothingToOutfit,wearSavedOutfit,clothingCatalog,clothingSets,formalClothingIds,wearClothingSet} from '../public/wardrobe.js';
 import {normalizeState} from '../server/player-state.mjs';
 import {publicPeer} from '../server/shared-room.mjs';
 
@@ -35,4 +35,28 @@ test('outfit creation is capped and copies the worn look without sharing mutable
   const wardrobe=normalizeWardrobe();for(let i=2;i<=6;i++)createSavedOutfit(wardrobe,'Look '+i);
   assert.throws(()=>createSavedOutfit(wardrobe,'One too many'));assert.throws(()=>createSavedOutfit(normalizeWardrobe(),'x'.repeat(25)));
   addClothingToOutfit(wardrobe,'outfit-2','roseJacket');assert.equal(wardrobe.outfits[0].jacket,'amberJacket');
+});
+
+
+test('older wardrobes gain formal clothing once while keeping their saved outfits and worn look',()=>{
+ const old=normalizeWardrobe(undefined,{outfit:3});delete old.catalogVersion;old.owned=old.owned.filter(id=>!formalClothingIds.includes(id));
+ const before=structuredClone(old.outfits),migrated=normalizeWardrobe(old);
+ assert.deepEqual(migrated.outfits,before);assert.equal(migrated.active,old.active);assert.equal(migrated.catalogVersion,2);
+ assert(formalClothingIds.every(id=>migrated.owned.includes(id)));assert.deepEqual(normalizeWardrobe(migrated),migrated);
+});
+test('formal sets create matching looks, equip them, reuse existing sets and survive server saves',()=>{
+ const w=normalizeWardrobe(),original=structuredClone(w.outfits[0]);
+ const suit=wearClothingSet(w,'tailoredSuit');assert.equal(suit.jacket,'tailoredJacket');assert.equal(suit.trousers,'suitTrousers');
+ assert.equal(outfitAppearance(w).outfit,5);assert.equal(outfitAppearance(w).trousers,3);assert.equal(outfitAppearance(w).boots,3);
+ assert.equal(wearClothingSet(w,'tailoredSuit').id,suit.id);assert.equal(w.outfits.length,2);
+ wearClothingSet(w,'moonlitDress');assert.equal(outfitAppearance(w).outfit,6);assert.equal(clothingCatalog.moonlitDress.dress,true);
+ assert.deepEqual(w.outfits[0],original);
+ const s=normalizeState({wardrobe:w,avatar:{name:'Formal',outfit:6,hair:0}});assert.equal(s.avatar.outfit,6);assert.equal(publicPeer({...s.avatar,id:'peer'}).outfit,6);
+ assert.deepEqual(normalizeState(JSON.parse(JSON.stringify(s))).wardrobe,w);
+});
+test('formal sets respect outfit capacity and never overwrite a saved look',()=>{
+ const w=normalizeWardrobe();for(let i=2;i<=6;i++)createSavedOutfit(w,'Look '+i);
+ const before=structuredClone(w);assert.throws(()=>wearClothingSet(w,'tailoredSuit'),/six/);assert.deepEqual(w,before);
+ assert.throws(()=>wearClothingSet(w,'unknown'),/Choose/);
+ const locked=normalizeWardrobe();locked.owned=locked.owned.filter(id=>id!=='polishedShoes');assert.throws(()=>wearClothingSet(locked,'tailoredSuit'),/need all/);
 });

@@ -3356,7 +3356,7 @@ function bagEntries(){
   if(combatGear.stonebackVestOwned)entries.push({key:'vest',name:'Stoneback Vest',category:'gear',art:windowItemArt('vest'),quantity:1,equipped:combatGear.stonebackVestEquipped,description:'Crafted from the Stoneback Beetle’s shell.',stats:'Absorbs 4 damage · Dodge costs 50 stamina',action:combatGear.stonebackVestEquipped?'Remove vest':'Equip vest',disabled:unavailable(),run:toggleStonebackVest});
   for(const id of wardrobe.owned){
     const item=clothingCatalog[id],included=outfit[item.slot]===id;
-    entries.push({key:'clothing:'+id,name:item.name,category:'clothing',art:clothingArt(id),quantity:1,equipped:wardrobe.outfits.find(look=>look.id===wardrobe.active)[item.slot]===id,description:'Starter clothing. Yours to keep and reuse in any outfit.',stats:item.slot[0].toUpperCase()+item.slot.slice(1)+' slot'+(!included?' · Replaces '+clothingCatalog[outfit[item.slot]].name:''),action:included?'In '+outfit.name:'Add to '+outfit.name,disabled:included,note:outfit.id===wardrobe.active?'You are wearing this outfit. Changes appear immediately.':'Wear this look from Wardrobe when you are ready.',run:()=>{addClothingToOutfit(wardrobe,outfit.id,id);applyWornOutfit();}});
+    entries.push({key:'clothing:'+id,name:item.name,category:'clothing',art:clothingArt(id),quantity:1,equipped:wardrobe.outfits.find(look=>look.id===wardrobe.active)[item.slot]===id,description:item.description??'Starter clothing. Yours to keep and reuse in any outfit.',stats:(item.dress?'Full dress · Covers trousers':item.slot==='jacket'?'Top slot':item.slot[0].toUpperCase()+item.slot.slice(1)+' slot')+(item.slot==='trousers'&&clothingCatalog[outfit.jacket].dress?' · Hidden under this dress':'')+(!included?' · Replaces '+clothingCatalog[outfit[item.slot]].name:''),action:included?'In '+outfit.name:'Add to '+outfit.name,disabled:included,note:outfit.id===wardrobe.active?'You are wearing this outfit. Changes appear immediately.':'Wear this look from Wardrobe when you are ready.',run:()=>{addClothingToOutfit(wardrobe,outfit.id,id);applyWornOutfit();}});
   }
   for(const [type,name] of Object.entries(types)){
     const quantity=availableFurniture(type);if(!quantity)continue;
@@ -5013,6 +5013,10 @@ $('chatForm').addEventListener('submit',e=>{e.preventDefault();sendRoomChat($('c
 $('roomChatForm').addEventListener('submit',e=>{e.preventDefault();sendRoomChat($('roomChatInput'));});
 $('openRoomChat').onclick=()=>{$('roomChatTitle').textContent=roomDetails[currentRoom].name;$('roomChatDialog').showModal();};
 function drawAvatarPreview(time){
+  for(const preview of $('formalSets').querySelectorAll('canvas')){
+    const set=clothingSets[preview.dataset.formalPreview],target=preview.getContext('2d');target.clearRect(0,0,preview.width,preview.height);target.save();target.scale(2,2);
+    sprite(target,25,61,{...draft,outfit:clothingCatalog[set.jacket].index,trousers:clothingCatalog[set.trousers].index,boots:clothingCatalog[set.boots].index},{time});target.restore();
+  }
   const preview=$('avatarPreview'), target=preview.getContext('2d');
   target.clearRect(0,0,preview.width,preview.height);
   target.fillStyle='#1717258f';target.fillRect(20,54,16,2);
@@ -5044,12 +5048,20 @@ function openClothingInventory(id){
 }
 function renderWardrobe(){
   $('wearingOutfitName').textContent=wardrobe.outfits.find(outfit=>outfit.id===wardrobe.active).name;
+  const sets=$('formalSets');sets.replaceChildren();
+  for(const [id,set] of Object.entries(clothingSets)){
+    const card=document.createElement('article'),preview=document.createElement('canvas'),name=document.createElement('b'),detail=document.createElement('p'),button=document.createElement('button');
+    card.className='formal-set';card.dataset.set=id;preview.width=100;preview.height=130;preview.setAttribute('aria-label',set.name+' character preview');preview.dataset.formalPreview=id;
+    name.textContent=set.name;detail.textContent=set.description;button.type='button';button.textContent='Save & wear';button.dataset.wearSet=id;button.disabled=routineControlled();
+    button.onclick=()=>{try{const outfit=wearClothingSet(wardrobe,id);applyWornOutfit();draft=outfitAppearance(wardrobe,draft);renderWardrobe();updateAvatarPreview();$('wardrobeStatus').textContent='Now wearing '+outfit.name+'. Edit individual pieces in Inventory.';}catch(error){$('wardrobeStatus').textContent=error.message;}};
+    card.append(preview,name,detail,button);sets.append(card);
+  }
   const list=$('wardrobeOutfits');list.replaceChildren();
   for(const outfit of wardrobe.outfits){
     const card=document.createElement('article'),picture=document.createElement('canvas'),name=document.createElement('b'),items=document.createElement('p'),wear=document.createElement('button'),edit=document.createElement('button'),actions=document.createElement('div');
     const active=outfit.id===wardrobe.active;card.className='saved-outfit'+(active?' is-worn':'');card.dataset.outfit=outfit.id;
     picture.width=56;picture.height=62;picture.setAttribute('aria-hidden','true');sprite(picture.getContext('2d'),28,54,outfitAppearance(wardrobe,avatar,outfit.id),{time:performance.now()});
-    name.textContent=outfit.name;items.textContent=clothingSlots.map(slot=>clothingCatalog[outfit[slot]].name).join(' · ');
+    name.textContent=outfit.name;items.textContent=clothingSlots.filter(slot=>slot!=='trousers'||!clothingCatalog[outfit.jacket].dress).map(slot=>clothingCatalog[outfit[slot]].name).join(' · ');
     wear.type='button';wear.textContent=active?'Wearing':'Wear outfit';wear.disabled=active||routineControlled();wear.onclick=()=>{wearSavedOutfit(wardrobe,outfit.id);applyWornOutfit();draft=outfitAppearance(wardrobe,draft);renderWardrobe();updateAvatarPreview();$('wardrobeStatus').textContent='Now wearing '+outfit.name+'.';};
     edit.type='button';edit.textContent='Edit clothing';edit.onclick=()=>openClothingInventory(outfit.id);actions.className='outfit-actions';actions.append(wear,edit);card.append(picture,name,items,actions);list.append(card);
   }

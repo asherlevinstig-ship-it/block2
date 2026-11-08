@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {towerCharacterPose,carriedTowerEquipment,tintTowerPixel,createTowerCharacterRenderer,loadTowerCharacter} from '../public/character-art.js';
+import {tailorTowerFrame,towerCharacterPose,carriedTowerEquipment,tintTowerPixel,createTowerCharacterRenderer,loadTowerCharacter} from '../public/character-art.js';
 const root=new URL('../public/art/',import.meta.url),meta=JSON.parse(fs.readFileSync(new URL('tower-adventurer.json',root),'utf8'));
 
 test('character atlases cover all actions and directions with valid attached hand positions',()=>{
@@ -59,4 +59,20 @@ test('sheathed equipment stays below the head and follows the torso in every dir
       const dagger=carriedTowerEquipment(meta,0,0,{...options,weaponTier:'quickDagger'});assert(dagger.y>carry.y);
     }
   }
+});
+
+
+test('formal tailoring adds actual tie and skirt pixels while protecting the face, hands and armour',()=>{
+ const width=80,height=100,raw=new Uint8ClampedArray(width*height*4),put=(x,y,c)=>raw.set(c,(y*width+x)*4),get=(p,x,y)=>[...p.slice((y*width+x)*4,(y*width+x)*4+4)];
+ for(let y=38;y<=58;y++)for(let x=30;x<=50;x++)put(x,y,[250,1,1,255]);
+ put(40,38,[35,63,80,255]);for(let y=59;y<=73;y++)for(let x=33;x<=47;x++)put(x,y,[250,2,1,255]);
+ const skin=[244,201,152,255];put(40,25,skin);put(55,66,skin);
+ const suit=raw.slice();tailorTowerFrame(suit,raw,width,height,{outfit:5},{row:1,state:'idle',frame:0});
+ assert.deepEqual(get(suit,40,46),[186,87,114,255]);assert.deepEqual(get(suit,40,25),skin);
+ const back=raw.slice();tailorTowerFrame(back,raw,width,height,{outfit:5},{row:2,state:'idle',frame:0});assert.notDeepEqual(get(back,40,46),[186,87,114,255]);
+ const dress=raw.slice();tailorTowerFrame(dress,raw,width,height,{outfit:6},{row:1,state:'walk',frame:2});
+ assert.equal(get(raw,27,72)[3],0);assert.equal(get(dress,27,72)[3],255,'skirt widens outside the trouser silhouette');
+ assert.deepEqual(get(dress,55,66),skin);assert.deepEqual(get(dress,40,25),skin);
+ const armoured=raw.slice();tailorTowerFrame(armoured,raw,width,height,{outfit:6},{row:1,state:'attack',frame:2},true);
+ assert.equal(get(armoured,27,72)[3],255,'armour keeps the dress skirt');assert.deepEqual(get(armoured,40,46),get(raw,40,46),'armour torso is not painted over');
 });

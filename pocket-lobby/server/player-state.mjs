@@ -76,7 +76,7 @@ export function normalizeState(input={}){
   for(const id of ["lantern","groveTrail","bridge","shrine","shortcut"])adventure[id]=a[id]===true;
   adventure.discovered=[...new Set((Array.isArray(a.discovered)?a.discovered:[]).filter(id=>["trail","grove","creek","shrine","ruins","roots","pond","clearing","logging"].includes(id)))];
   const avatar=input.avatar??{name:"Guest",outfit:0,hair:0};
-  if(typeof avatar.name!=="string"||avatar.name.length>20||!Number.isInteger(avatar.outfit)||avatar.outfit<0||avatar.outfit>4||!Number.isInteger(avatar.hair)||avatar.hair<0||avatar.hair>4)throw new Error("Invalid appearance.");
+  if(typeof avatar.name!=="string"||avatar.name.length>20||!Number.isInteger(avatar.outfit)||avatar.outfit<0||avatar.outfit>6||!Number.isInteger(avatar.hair)||avatar.hair<0||avatar.hair>4)throw new Error("Invalid appearance.");
   const wardrobe=normalizeWardrobe(input.wardrobe,avatar);
   const combatGear=normalizeCombatGear(input.combatGear);
   if(combatGear.equippedWeapon&&!canUseWeapon(stats,combatGear.equippedWeapon))throw new Error("Invalid weapon requirements.");
