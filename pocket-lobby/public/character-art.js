@@ -37,12 +37,12 @@ function drawTool(ctx,kind,angle,x,y){
   ctx.save();ctx.translate(x,y);ctx.rotate(angle);
   if(kind==='basicAxe'){
     p(-1,-17,2,22,'#3c3440');p(0,-17,1,21,'#bc8b59');p(-5,-18,10,6,'#334459');p(0,-18,6,6,'#a6c3cd');p(4,-17,2,4,'#e9e8d0');
-  }else if(kind==='huntingSpear'){
-    p(-1,-25,2,33,'#3b3441');p(0,-23,1,30,'#b38a5a');p(-2,-27,4,8,'#a7c7ce');p(0,-28,1,9,'#e4ecda');p(-3,-19,6,2,'#cbad70');
-  }else if(kind==='quickDagger'){
-    p(-2,-11,4,9,'#354252');p(-1,-11,2,9,'#dae6dc');p(-3,-3,6,2,'#8abbbb');p(-1,-1,2,5,'#83616a');
+  }else if(['huntingSpear','breakerSpear'].includes(kind)){
+    p(-1,-25,2,33,'#3b3441');p(0,-23,1,30,'#b38a5a');p(-2,-27,4,8,'#a7c7ce');p(0,-28,1,9,'#e4ecda');p(-3,-19,6,2,kind==='breakerSpear'?'#c7a7f5':'#cbad70');if(kind==='breakerSpear')p(-4,-25,8,2,'#d8b8ff');
+  }else if(['quickDagger','quickfang'].includes(kind)){
+    p(-2,-11,4,9,'#354252');p(-1,-11,2,9,'#dae6dc');p(-3,-3,6,2,kind==='quickfang'?'#c4a6ff':'#8abbbb');p(-1,-1,2,5,'#83616a');
   }else{
-    p(-2,-17,4,14,'#344155');p(-1,-17,2,13,kind==='wardenSword'?'#c9e0c8':'#b3cad3');p(-1,-17,1,11,'#f0f1dc');p(-3,-4,6,2,kind==='wardenSword'?'#f3d284':'#cbaa75');p(-1,-2,2,5,'#8e6652');p(-2,2,4,2,'#cbaa75');
+    p(-2,-17,4,14,'#344155');p(-1,-17,2,13,kind==='duelistBlade'?'#ddd0ff':kind==='wardenSword'?'#c9e0c8':'#b3cad3');p(-1,-17,1,11,'#f0f1dc');p(-3,-4,6,2,kind==='wardenSword'?'#f3d284':'#cbaa75');p(-1,-2,2,5,'#8e6652');p(-2,2,4,2,'#cbaa75');
   }
   ctx.restore();
 }
@@ -50,14 +50,14 @@ export function carriedTowerEquipment(metadata,x,y,options={}){
   const selection=towerCharacterPose(metadata,options),side=options.direction==='left'?1:-1;
   const native=selection.detail.carry??[metadata.pivot[0]+side*13,43];
   const anchor={x:x+(native[0]-metadata.pivot[0])*metadata.scale,y:y+(native[1]-metadata.pivot[1])*metadata.scale,angle:side*.42,side};
-  if(options.weaponTier==='quickDagger'){anchor.y+=11;anchor.x+=side;anchor.angle=side*.24;}
-  if(options.weaponTier==='huntingSpear'){anchor.y+=15;anchor.x+=side*4;anchor.angle=side*.12;}
+  if(['quickDagger','quickfang'].includes(options.weaponTier)){anchor.y+=11;anchor.x+=side;anchor.angle=side*.24;}
+  if(['huntingSpear','breakerSpear'].includes(options.weaponTier)){anchor.y+=15;anchor.x+=side*4;anchor.angle=side*.12;}
   return anchor;
 }
 function drawCarriedEquipment(ctx,kind,anchor){
-  if(kind==='huntingSpear'){drawTool(ctx,kind,anchor.angle,anchor.x,anchor.y);return;}
+  if(['huntingSpear','breakerSpear'].includes(kind)){drawTool(ctx,kind,anchor.angle,anchor.x,anchor.y);return;}
   const p=(x,y,w,h,color)=>{ctx.fillStyle=color;ctx.fillRect(x,y,w,h);};
-  const length=kind==='quickDagger'?8:14;
+  const length=['quickDagger','quickfang'].includes(kind)?8:14;
   ctx.save();ctx.translate(anchor.x,anchor.y);ctx.rotate(anchor.angle);
   // Grip at the shoulder, enclosed blade pointing down along the back.
   p(-1,-4,3,6,'#302d3b');p(0,-3,1,4,'#a77d55');p(-1,-5,3,1,'#d4b779');

@@ -1,3 +1,4 @@
+import {normalizeDungeonLoot,dungeonRelics} from '../public/dungeon-loot.js';
 import {skillLevel,progressionVersion,MAX_SKILL_XP} from '../public/skill-curve.js';
 import {fishingCatalog,fishProducts,rollFishingCatch} from '../public/fishing.js';
 import {recordQuest,claimFirstQuest} from '../public/quests.js';
@@ -29,6 +30,14 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
   if(action!=='combat')settleActivities(state,now,random);
   if(activityAction(state,action,body,now,random)||essenceAction(state,action,body))return;
   if(gamblingAction(state,action,body,now,random===Math.random?undefined:random))return;
+  if(action==='dungeonLootTarget'||action==='dungeonLootAck'){
+    available(state);const loot=state.dungeonLoot=normalizeDungeonLoot(state.dungeonLoot);
+    if(action==='dungeonLootTarget'){
+      if(!dungeonRelics.includes(body.id)||state.combatGear.ownedWeapons.includes(body.id))throw new Error('Choose an unowned dungeon weapon.');
+      loot.target=body.id;
+    }else{if(typeof body.id!=='string')throw new Error('Choose a weapon reward to dismiss.');loot.notices=loot.notices.filter(n=>n.id!==body.id);}
+    return;
+  }
   if(action==='cook'||action==='eat'){
     available(state);
     if(state.fishingCast||state.timberCut)throw new Error('Invalid activity. Finish fishing or chopping first.');
@@ -194,6 +203,7 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
 // Snapshots retain movement, appearance and equipment choices. Progression,
 // rewards and active encounters can only change through server actions.
 export function protectFishingState(previous,next){
+  next.dungeonLoot=previous.dungeonLoot;
   if(previous.upgradeGoal)next.upgradeGoal=previous.upgradeGoal;else delete next.upgradeGoal;
   next.progressionVersion=progressionVersion;
   next.credits=previous.credits;

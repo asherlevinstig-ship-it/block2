@@ -7,7 +7,7 @@ export function staggerProfile(enemy){
 }
 export function weaponStagger(weapon,upgrade,counter=false){
  const profile=weaponProfile(weapon,upgrade);const base=!profile?0:profile.interval>=1400?36:profile.interval>=1000?18:8;
- return base+(counter?40:0);
+ return base+(profile?.staggerBonus??0)+(counter?40:0);
 }
 export const counterRules={duration:1800,bonus:.5};
 export const boarRules={health:70,playerInterval:1100,boarInterval:1900,fleeCooldown:1800,respawn:30000,recovery:12000,dodgeCost:40,dodgeWindow:350,dodgeCooldown:700};
@@ -64,6 +64,9 @@ function scheduleEnemyResponse(next,enemy,move,timedDodge,now){
   return response;
 }
 export const weaponCatalog={
+  breakerSpear:{name:'Breaker Spear',rarity:'Rare',damage:28,interval:1750,strength:4,agility:2,staggerBonus:16,description:'Dungeon relic. +16 stagger per hit, with slower thrusts and less damage per hit than the Hunting Spear.'},
+  duelistBlade:{name:'Duelist’s Blade',rarity:'Rare',damage:19,interval:1150,strength:3,agility:4,counterMultiplier:.75,description:'Dungeon relic. Perfect-dodge counters gain +75% damage instead of +50%.'},
+  quickfang:{name:'Quickfang Dagger',rarity:'Rare',damage:11,interval:550,strength:2,agility:4,description:'Dungeon relic. Very fast strikes, but low damage per hit struggles against intact shells.'},
   trainingSword:{name:'Training Sword',damage:14,interval:1100,strength:1,agility:1,description:'A simple iron blade issued to new adventurers.'},
   wardenSword:{name:'Warden’s Blade',damage:18,interval:1100,strength:1,agility:1,description:'A gold-trimmed blade awarded for completing First Steps.'},
   ironSword:{name:'Iron Sword',damage:20,interval:1200,strength:2,agility:1,price:150,description:'A dependable blade with a steady rhythm.'},
@@ -184,6 +187,7 @@ export function normalizeHunting(input={}){
     for(const key of ['chilledUntil','weakenedUntil','interruptResistUntil','tacticsAt','counterUntil','staggerUntil','staggerWeakUntil','staggerResistUntil']){
       if(input.encounter[key]!==undefined)result.encounter[key]=time(input.encounter[key]);
     }
+    if(input.encounter.counterPercent!==undefined){if(![50,75].includes(input.encounter.counterPercent))throw new Error('Invalid counter bonus.');result.encounter.counterPercent=input.encounter.counterPercent;}
     if(input.encounter.stagger!==undefined){if(!Number.isInteger(input.encounter.stagger)||input.encounter.stagger<0||input.encounter.stagger>=staggerProfile(huntEnemy(input.encounter)).limit)throw new Error('Invalid stagger progress.');result.encounter.stagger=input.encounter.stagger;}
     if(Number.isFinite(input.encounter.weakenPercent)&&input.encounter.weakenPercent>=25&&input.encounter.weakenPercent<=35)result.encounter.weakenPercent=input.encounter.weakenPercent;
     const used=Array.isArray(input.encounter.usedEssences)?[...new Set(input.encounter.usedEssences.filter(gem=>Object.hasOwn(essenceGems,gem)))]:[];
@@ -224,7 +228,7 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
   const dodgeCost=combatDodgeCost(vestEquipped);
   if(action==='dodge'&&stamina<dodgeCost)return null;
   const result={encounter:{...encounter,stamina,staminaAt:now},health,damage:0,taken:0,dodged:false,outcome:'fighting',action};
-  if(now>=(encounter.counterUntil??0))delete result.encounter.counterUntil;
+  if(now>=(encounter.counterUntil??0)){delete result.encounter.counterUntil;delete result.encounter.counterPercent;}
   if(action==='dodge'){
     result.encounter.stamina-=dodgeCost;
     result.encounter.dodgeUntil=now+boarRules.dodgeWindow;
@@ -245,7 +249,7 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
       result.shellGuarded=!exposed;
     }
     if(now<(encounter.counterUntil??0)){
-      result.counter=true;result.counterBonus=Math.ceil(result.damage*counterRules.bonus);result.damage+=result.counterBonus;delete result.encounter.counterUntil;
+      result.counter=true;result.counterBonus=Math.ceil(result.damage*(weaponProfile(weapon,upgrade)?.counterMultiplier??counterRules.bonus));result.damage+=result.counterBonus;delete result.encounter.counterUntil;delete result.encounter.counterPercent;
     }
     if(now<(encounter.staggerWeakUntil??0)){
       result.weakSpot=true;result.staggerBonus=Math.ceil(result.damage*.25);result.damage+=result.staggerBonus;
@@ -273,7 +277,7 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
     result.heavy=move.damage>0;
     result.timedDodge=encounter.dodgeUntil>0&&encounter.nextBoarAt<=encounter.dodgeUntil&&encounter.nextBoarAt>=encounter.dodgeUntil-boarRules.dodgeWindow;
     result.dodged=result.timedDodge||random()<attributes.dodge;
-    if(result.timedDodge){result.perfectDodge=true;result.encounter.counterUntil=encounter.nextBoarAt+counterRules.duration;}
+    if(result.timedDodge){result.perfectDodge=true;result.encounter.counterUntil=encounter.nextBoarAt+counterRules.duration;result.counterPercent=Math.round((weaponProfile(weapon,upgrade)?.counterMultiplier??counterRules.bonus)*100);result.encounter.counterPercent=result.counterPercent;}
     if(move.opensShell&&result.timedDodge){
       result.encounter.exposedUntil=now+enemy.exposureMs+(move.id===enemy.move?0:400);
       result.shellExposed=true;

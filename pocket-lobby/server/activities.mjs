@@ -1,3 +1,4 @@
+import {awardDungeonWeapon} from '../public/dungeon-loot.js';
 import {MAX_SKILL_XP} from '../public/skill-curve.js';
 import {nextCombatTactic} from '../public/character-rules.js';
 import {castEssencePower} from './essences.mjs';
@@ -20,7 +21,7 @@ export function startCombatEncounter(state,enemy,now){
   state.hunting.encounter.summary=normalizeCombatSummary({startedAt:now});
   if(state.characterRules?.combat?.enabled||state.plan?.activeHunt)state.hunting.encounter.tacticsAt=now;
 }
-function result(state,event,now){
+function result(state,event,now,random=Math.random){
   const encounter=state.hunting.encounter,enemy=huntEnemy(encounter);
   const room=state.location,heldBefore=state.depthsRun?depthsSpoils(state.depthsRun):null;
   const summary=normalizeCombatSummary(encounter.summary)??normalizeCombatSummary({startedAt:now,partial:true});
@@ -50,7 +51,8 @@ function result(state,event,now){
     rewards.mastery=event.mastery??[];
     if(event.stone)rewards.stones={[event.stone]:1};
     if(state.depthsRun){
-      clearDepthsStage(state.depthsRun,state.location,!!state.combatId);
+      const cleared=clearDepthsStage(state.depthsRun,state.location,!!state.combatId);
+      if(cleared&&state.combatId&&enemy.id==='depthsGuardian'){const drop=awardDungeonWeapon(state,now,random);if(drop){event.weaponDrop=drop;rewards.weapon=drop.weapon;}}
       const held=depthsSpoils(state.depthsRun);
       rewards.held={gold:held.gold-heldBefore.gold,loot:Object.fromEntries(Object.entries(held.loot).map(([id,count])=>[id,count-(heldBefore.loot[id]??0)]).filter(([,count])=>count>0))};
       if(state.location===depthsCacheRoom)rewards.cacheUnlocked=true;
@@ -100,7 +102,7 @@ export function advanceServerCombat(state,now,random=Math.random){
       if(event)event.automatic=true;
     }else event=advanceHunt(encounter,state.health,state.stats,due,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,state.combatGear.stonebackVestEquipped,state.combatGear.moonwellCharmEquipped,state.combatGear.weaponEnchantments);
     if(!event)break;
-    events.push(result(state,event,due));
+    events.push(result(state,event,due,random));
   }
   if(events.length)state.combatReceipt={id:crypto.randomUUID(),events};
   return events;
@@ -158,10 +160,10 @@ export function activityAction(state,action,body,now,random){
     if(state.hunting.encounter&&['dodge','flee','essence'].includes(body.input)){
       if(body.input==='essence'){
         const event=castEssencePower(state,now,body.slot);
-        if(event)events.push(result(state,event,now));
+        if(event)events.push(result(state,event,now,random));
       }else{
         const event=huntingTurn(state.hunting.encounter,state.health,state.stats,body.input,now,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,state.combatGear.stonebackVestEquipped,state.combatGear.moonwellCharmEquipped,state.combatGear.weaponEnchantments);
-        if(event)events.push(result(state,event,now));
+        if(event)events.push(result(state,event,now,random));
       }
     }
     state.combatReceipt={id:crypto.randomUUID(),events};

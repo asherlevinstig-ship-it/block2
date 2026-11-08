@@ -640,6 +640,55 @@ function questAction(){
 
 function combatNow(){return window.playerCloud?.combatNow?.()??Date.now();}
 let combatMessage='',lastCombatUi=0;
+let dungeonLootState=normalizeDungeonLoot(savedPlayerState?.dungeonLoot),selectedDungeonRelic=null,activeDungeonDrop=null,dungeonLootBusy=false,lastDungeonLootUi='';
+function dungeonLootView(){return {stats:playerStats,combatGear,dungeonLoot:dungeonLootState};}
+function updateDungeonLootUi(){
+  const p=dungeonLootProgress(dungeonLootView()),text=p.complete?'Dungeon arsenal complete · All 3 relics collected':weaponCatalog[p.target].name+' · Guaranteed within '+p.remaining+' more Vault clear'+(p.remaining===1?'':'s');
+  $('dungeonRelicEntrance').textContent=text;$('dungeonRelicCamp').textContent=p.complete?'Review dungeon relics':'Relic hunt · '+p.remaining+' clears or fewer';
+  const key=JSON.stringify([p,combatGear,playerStats,selectedDungeonRelic,activeDungeonDrop?.id,dungeonLootBusy]);
+  if($('dungeonLootDialog').open&&key!==lastDungeonLootUi){lastDungeonLootUi=key;renderDungeonLoot();}
+}
+function renderDungeonLoot(){
+  const p=dungeonLootProgress(dungeonLootView()),id=selectedDungeonRelic??p.target??dungeonRelics[0],comparison=compareDungeonWeapon(dungeonLootView(),id);
+  $('dungeonLootTitle').textContent=activeDungeonDrop?'Rare weapon found!':'The dungeon arsenal';
+  $('dungeonLootProgress').textContent=p.complete?'All three relics are yours.':weaponCatalog[p.target].name+' · '+p.streak+' / 5 toward a guaranteed drop · At most '+p.remaining+' more Sunken Vault clears';
+  $('dungeonLootMeter').value=p.complete?5:p.streak;
+  $('dungeonLootInfo').textContent=activeDungeonDrop?(activeDungeonDrop.guaranteed?'Guaranteed drop earned. ':'Lucky drop! ')+'Already added to Inventory. Yours to keep; equipment stays unchanged until you choose.':'Every full Sunken Vault victory has a 15% chance to drop your chosen unowned relic. The fifth clear without a drop guarantees it. Progress carries across visits and target changes. No duplicate drops.';
+  const list=$('dungeonLootChoices');list.replaceChildren();for(const weapon of dungeonRelics){const button=document.createElement('button');button.type='button';button.className='relic-choice';button.setAttribute('aria-pressed',String(id===weapon));button.textContent=weaponCatalog[weapon].name+(combatGear.ownedWeapons.includes(weapon)?' · Owned':p.target===weapon?' · Hunting':'');button.onclick=()=>{selectedDungeonRelic=weapon;renderDungeonLoot();};list.append(button);}
+  $('dungeonLootArt').innerHTML=shopItemArt(id);$('dungeonLootName').textContent=comparison.item.name;$('dungeonLootTrait').textContent=comparison.item.description;
+  $('dungeonLootRequirements').textContent='Requires Strength '+comparison.item.strength+' · Agility '+comparison.item.agility+(comparison.canEquip?' · Requirements met':' · Train these stats to equip');
+  $('dungeonLootCurrent').textContent=comparison.current.name;
+  const rows=$('dungeonLootComparison');rows.replaceChildren();for(const [label,key,suffix,lower] of [['Damage / hit','damage','',false],['Attack interval','interval',' ms',true],['Stagger / hit','stagger','',false],['Counter bonus','counter','%',false]]){
+    const row=document.createElement('tr');for(const text of [label,comparison.current[key]+suffix,comparison.found[key]+suffix]){const cell=document.createElement('td');cell.textContent=text;row.append(cell);}rows.append(row);
+  }
+  $('dungeonLootTarget').hidden=comparison.owned;$('dungeonLootTarget').textContent=p.target===id?'Selected hunt target':'Hunt this relic';$('dungeonLootTarget').disabled=dungeonLootBusy||p.target===id;
+  $('dungeonLootEquip').hidden=!comparison.owned;$('dungeonLootEquip').textContent=combatGear.equippedWeapon===id?'Equipped':'Equip '+comparison.item.name;$('dungeonLootEquip').disabled=dungeonLootBusy||!comparison.canEquip||combatGear.equippedWeapon===id||unavailable();
+  $('dungeonLootKeep').textContent=activeDungeonDrop?'Keep current weapon & continue':'Close';
+}
+function openDungeonLoot(id=null,notice=null){
+  if(unavailable()||window.playerCloud?.initial?.plan||window.playerCloud?.initial?.report)return;
+  window.towerPauseForAccount();selectedDungeonRelic=id;activeDungeonDrop=notice;$('dungeonLootError').textContent='';renderDungeonLoot();$('dungeonLootDialog').showModal();
+}
+async function changeDungeonTarget(){
+  if(dungeonLootBusy||!selectedDungeonRelic)return;dungeonLootBusy=true;
+  try{await serverGameplay('dungeonLootTarget',{id:selectedDungeonRelic});updateDungeonLootUi();}
+  catch(error){$('dungeonLootError').textContent=error.message;}
+  finally{dungeonLootBusy=false;renderDungeonLoot();}
+}
+async function closeDungeonLoot(equip=false){
+  if(dungeonLootBusy)return;dungeonLootBusy=true;
+  try{
+    if(equip&&selectedDungeonRelic&&combatGear.ownedWeapons.includes(selectedDungeonRelic)&&canUseWeapon(playerStats,selectedDungeonRelic)){combatGear.equippedWeapon=selectedDungeonRelic;savePlayerState();await window.playerCloud?.flush();}
+    if(activeDungeonDrop)await serverGameplay('dungeonLootAck',{id:activeDungeonDrop.id});
+    activeDungeonDrop=null;$('dungeonLootDialog').close();updateWeaponInventory();updateCombatPanel();canvas.focus();
+  }catch(error){$('dungeonLootError').textContent=error.message;}
+  finally{dungeonLootBusy=false;if($('dungeonLootDialog').open)renderDungeonLoot();}
+}
+function showPendingDungeonLoot(){
+  if(document.hidden||unavailable()||window.playerCloud?.initial?.plan||window.playerCloud?.initial?.report||document.querySelector('dialog[open]'))return;
+  const notice=dungeonLootState.notices[0];if(notice)openDungeonLoot(notice.weapon,notice);
+}
+
 let combatSoundEnabled=typeof load==='function'?load('combat-sound',false)===true:false;
 const combatAudio=typeof createCombatSound==='function'?createCombatSound():{enable(){},play(){}};
 const combatArt={strikeAt:-Infinity,castAt:-Infinity,hurtAt:-Infinity,dodgeAt:-Infinity,boarAttackAt:-Infinity,boarHitAt:-Infinity,victoryAt:-Infinity,bursts:[]};
@@ -678,6 +727,7 @@ function renderCombatRecap(report){
   if(rewards.held&&(rewards.held.gold||Object.keys(rewards.held.loot).length))row('Unbanked · '+formatDepthsSpoils(rewards.held));
   if(rewards.cacheUnlocked)row('Essence Cache unlocked · '+essenceCacheGold+' gold + an Awakening Stone to collect');
   if(report.lostSpoils&&(report.lostSpoils.gold||Object.keys(report.lostSpoils.loot).length))row('Unbanked spoils lost · '+formatDepthsSpoils(report.lostSpoils));
+  if(rewards.weapon)row(weaponCatalog[rewards.weapon].name+' · Rare weapon added to Inventory');
   if(!list.children.length)row('Rewards · 0');
   $('combatRecapSpells').textContent=Object.entries(summary.spells).map(([id,count])=>essencePower(id).name+' ×'+count).join(' · ')||'Recorded spell casts · 0';
   $('combatRecapInterrupts').textContent=summary.interrupts;
@@ -881,6 +931,7 @@ async function examineDepths(item){
   }catch(error){note(error.message,6500);}
 }
 function updateDepthsPanel(){
+  updateDungeonLootUi();
   const index=depthsStageIndex(currentRoom);
   const inDepths=index>=0&&!!depthsRun;
   const showEntrance=currentRoom==='ruins'&&depthsDiscovered&&!unavailable();
@@ -1008,7 +1059,7 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
   if(result.warded)combatMessage+=(combatMessage?' ':'')+'Your ward blocked '+result.warded+' damage.';
   if(result.absorbed)combatMessage+=(combatMessage?' ':'')+'Your vest absorbed '+result.absorbed+' damage.';
   if(result.dodgeStarted)combatMessage='You sidestep. Time your dodge just before the '+enemy.move+' lands!';
-  if(result.timedDodge)combatMessage=result.shellExposed?'Perfect dodge! Shell open · Next strike +50% damage.':'Perfect dodge! Next strike +50% damage for 1.8 seconds.';
+  if(result.timedDodge)combatMessage='Perfect dodge! '+(result.shellExposed?'Shell open · ':'')+'Next strike +'+(result.counterPercent??50)+'% damage for 1.8 seconds.';
   if(result.counter)combatMessage='Counterattack! '+result.damage+' damage · +'+result.counterBonus+' bonus.';
   if(result.weakSpot)combatMessage+=' Weak spot · +'+result.staggerBonus+' damage.';
   if(result.staggered){combatMessage+=' Stagger break! Enemy stunned · Weak spot open.';if(playEffects)combatAudio.play('stagger');}
@@ -1142,12 +1193,12 @@ function updateCombatPanel(){
   $('boarProgress').value=encounter?.health??(now<respawn?0:enemy.health);
   const counterReady=!!encounter&&now<encounter.counterUntil;
   $('combatAttack').classList.toggle('counter-ready',counterReady);
-  $('combatAttack').textContent=counterReady?'Counter ready · +50%':encounter?(characterRules.combat.enabled?'Auto-attack · Tactics active':'Auto-attacking'):'Auto-attack';
+  $('combatAttack').textContent=counterReady?'Counter ready · +'+(encounter.counterPercent??50)+'%':encounter?(characterRules.combat.enabled?'Auto-attack · Tactics active':'Auto-attacking'):'Auto-attack';
   $('combatFlee').disabled=!encounter||remaining>0;
   const stamina=encounter?combatStamina(encounter,playerStats,now,combatGear.moonwellCharmEquipped):100;
   const dodgeCost=combatDodgeCost(combatGear.stonebackVestEquipped);
   $('combatStamina').value=stamina;$('combatStaminaValue').textContent=Math.floor(stamina)+' / 100';
-  $('combatDodgeHelp').textContent='Dodge costs '+dodgeCost+' stamina'+(combatGear.stonebackVestEquipped?' with the Stoneback Vest':'')+'. Dodge just before impact to empower your next strike by 50%.'+(combatGear.moonwellCharmEquipped?' Moonwell Charm: +'+moonwellCharm.staminaRegen+' stamina per second.':' Agility improves recovery.');
+  $('combatDodgeHelp').textContent='Dodge costs '+dodgeCost+' stamina'+(combatGear.stonebackVestEquipped?' with the Stoneback Vest':'')+'. Dodge just before impact to empower your next strike by '+Math.round((weaponProfile(combatGear.equippedWeapon)?.counterMultiplier??.5)*100)+'%.'+(combatGear.moonwellCharmEquipped?' Moonwell Charm: +'+moonwellCharm.staminaRegen+' stamina per second.':' Agility improves recovery.');
   $('combatDodge').disabled=!encounter||now<(encounter.nextDodgeAt??0)||stamina<dodgeCost;
   const timing=!!encounter&&encounter.nextBoarAt-now>=0&&encounter.nextBoarAt-now<=boarRules.dodgeWindow;
   $('combatDodge').classList.toggle('dodge-ready',timing&&!$('combatDodge').disabled);
@@ -3041,7 +3092,7 @@ function animation(time){
   }
 }
 function advanceAnimation(time){
-  showPendingCombatRecap();
+  showPendingDungeonLoot();showPendingCombatRecap();
   if(serverActionBusy){draw(time);return;}
   updateWoodMoment(time);
   updateCombatMoment(time);
@@ -3159,7 +3210,7 @@ function bagEntries(){
   const outfit=wardrobe.outfits.find(outfit=>outfit.id===bagOutfitTarget)??wardrobe.outfits.find(outfit=>outfit.id===wardrobe.active);
   for(const id of combatGear.ownedWeapons){
     const w=weaponProfile(id,combatGear.activeSwordUpgrade,combatGear.weaponEnchantments),equipped=combatGear.equippedWeapon===id;
-    entries.push({key:'weapon:'+id,name:w.name+(w.enchantmentLevel?' · Enchantment '+w.enchantmentLevel:''),category:'gear',art:shopItemArt(id),quantity:1,equipped,description:w.description,stats:w.damage+' base damage · '+attackSeconds(w.interval)+' per attack',action:equipped?'Unequip weapon':'Equip weapon',disabled:player.inCombat||!canUseWeapon(playerStats,id),note:player.inCombat?'Finish combat before changing equipment.':'Drawn automatically in combat.',run:()=>{$('weaponSelect').value=id;toggleWeapon();}});
+    entries.push({key:'weapon:'+id,name:w.name+(w.enchantmentLevel?' · Enchantment '+w.enchantmentLevel:''),category:'gear',art:shopItemArt(id),quantity:1,equipped,description:w.description,stats:w.damage+' base damage · '+attackSeconds(w.interval)+' per attack · '+weaponStagger(id,combatGear.activeSwordUpgrade)+' stagger/hit',action:equipped?'Unequip weapon':'Equip weapon',disabled:player.inCombat||!canUseWeapon(playerStats,id),note:player.inCombat?'Finish combat before changing equipment.':'Requires Strength '+w.strength+' · Agility '+w.agility+(w.rarity?' · Rare dungeon relic':''),run:()=>{$('weaponSelect').value=id;toggleWeapon();}});
   }
   for(const id of fishingGear.ownedRods){
     const rod=fishingCatalog.rods[id],equipped=fishingGear.equippedRod===id,odds=fishingChances(patienceLevel(),id,playerStats.luckXp);
@@ -3398,7 +3449,7 @@ function updatePlayerStats(){
 }
 function applyServerGameplay(state){
   credits=state.credits;goldEarned=state.goldEarned??0;Object.assign(firstUpgrade,state.firstUpgrade);
-  characterRules=normalizeCharacterRules(state.characterRules);
+  characterRules=normalizeCharacterRules(state.characterRules);dungeonLootState=normalizeDungeonLoot(state.dungeonLoot);
   combatReports=state.combatReports??[];
   Object.assign(fishingGear,state.fishingGear);
   for(const id of Object.keys(fishStock))delete fishStock[id];
@@ -4417,6 +4468,10 @@ $('depthsSafePassage').onclick=()=>chooseDungeonPassage('safe');
 $('depthsDangerPassage').onclick=()=>chooseDungeonPassage('dangerous');
 $('depthsForkBank').onclick=leaveMoonwellDepths;
 $('depthsCacheRoute').onclick=visitDepthsCache;
+$('dungeonRelicCamp').onclick=$('dungeonRelicEntrance').onclick=()=>openDungeonLoot();
+$('bagRelics').onclick=()=>{$('inventoryDialog').close();openDungeonLoot();};
+$('dungeonLootTarget').onclick=changeDungeonTarget;$('dungeonLootEquip').onclick=()=>closeDungeonLoot(true);$('dungeonLootKeep').onclick=$('dungeonLootClose').onclick=()=>closeDungeonLoot();
+$('dungeonLootDialog').oncancel=event=>{event.preventDefault();closeDungeonLoot();};
 $('depthsSideOptions').onclick=openDungeonSideChoices;
 $('depthsSideReturn').onclick=$('depthsSideFieldReturn').onclick=()=>visitDungeonSide('return');
 $('depthsShrineUse').onclick=useDungeonShrine;

@@ -1,4 +1,5 @@
 export function shopItemArt(id){
+  const relic=['breakerSpear','duelistBlade','quickfang'].includes(id);id={breakerSpear:'huntingSpear',duelistBlade:'ironSword',quickfang:'quickDagger'}[id]??id;
   const rod=['reed','oak','silver','moon'].includes(id);
   const metal=id==='wardenSword'?'#d9e5bd':'#d6e4df';
   const tint={reed:'#bd9d72',oak:'#dfa877',silver:'#a7d8d4',moon:'#c3a4e4'}[id]??'#e9c185';
@@ -9,7 +10,8 @@ export function shopItemArt(id){
       :id==='quickDagger'
         ?'<path d="M27 12l10 10-3 17h-7l-4-15z" fill="#d6e4df"/><path d="M27 12l3 26h-3l-4-14z" fill="#8cabb9"/><path d="M20 38h24v4H20z" fill="#91c9c6"/><path d="M29 42h6v14h-6z" fill="#8d6892"/><path d="M27 55h10v4H27z" fill="#ceb6ce"/>'
         :`<path d="M28 7l4-4 4 4v30h-8z" fill="${metal}"/><path d="M28 7l4-4v34h-4z" fill="#91aeb9"/><path d="M20 36h24v5H20z" fill="#e5be7b"/><path d="M29 41h6v14h-6z" fill="#977060"/><path d="M26 54h12v5H26z" fill="#e5be7b"/>`;
-  return `<svg viewBox="0 0 64 64" aria-hidden="true" shape-rendering="crispEdges"><ellipse cx="32" cy="58" rx="18" ry="3" fill="#0d172a55"/>${shape}<path d="M48 8h2v6h-2zM46 10h6v2h-6z" fill="${tint}" opacity=".7"/></svg>`;
+  const displayShape=relic?shape.replaceAll('#d6e4df','#e0ccff').replaceAll('#e5be7b','#ba98ea'):shape;
+  return `<svg viewBox="0 0 64 64" aria-hidden="true" shape-rendering="crispEdges"><ellipse cx="32" cy="58" rx="18" ry="3" fill="#0d172a55"/>${displayShape}<path d="M48 8h2v6h-2zM46 10h6v2h-6z" fill="${tint}" opacity=".7"/></svg>`;
 }
 export function renderShopCard({document:doc=globalThis.document,id,name,category,price,owned,equipped,stats,deltas,requirements,reason,action,disabled,onBuy}){
   const card=doc.createElement('article');card.className='shop-item'+(equipped?' is-equipped':'')+(disabled&&!owned?' is-locked':'');card.dataset.item=id;card.tabIndex=-1;

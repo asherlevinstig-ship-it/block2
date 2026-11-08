@@ -19,7 +19,7 @@ function accept(session,event){
   const used=session.lastDodgeAt!==null,offset=used?session.now-session.lastDodgeAt:null;
   session.lastTiming=event.perfectDodge?'Perfect · '+Math.round(offset)+' ms before impact':used?'Too early · '+Math.round(offset)+' ms before impact':'Missed · Dodge during the final 350 ms';
   session.lastDodgeAt=null;session.lastEnemyAt=session.now;
-  if(event.perfectDodge){session.completed.dodge=true;session.perfects++;session.feedback='Perfect dodge! Your next automatic strike gets +50% damage.';}
+  if(event.perfectDodge){session.completed.dodge=true;session.perfects++;session.feedback='Perfect dodge! Your next automatic strike gets +'+(event.counterPercent??50)+'% damage.';}
   else{session.misses++;session.feedback='No health lost. Try Space or Dodge in the final 350 ms of the warning.';}
  }
  if(event.counter){session.completed.counter=true;session.counters++;session.feedback='Counter landed! Keep striking to fill the stagger meter.';}

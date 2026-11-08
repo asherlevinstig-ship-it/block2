@@ -75,3 +75,11 @@ After clearing Shell Gallery, choose Explore optional rooms from the main-screen
 - Sealed Chamber: defeat the 210 HP Rune Sentinel, then approach and claim its Awakening Seal for one guaranteed Awakening Stone. No normal battle-stone roll is made for this fight. Claiming is once per run; a full stone inventory leaves the reward available. Claimed stones and earned XP survive a later defeat, while unbanked expedition spoils do not.
 
 Server actions validate entry, shrine usage, fights, discoveries and returning. Active combat blocks direct retreat; a successful flee returns to Shell Gallery with the surviving health and current haul. Revisiting a defeated guardian cannot respawn or repeat its reward. Save snapshots cannot forge optional victories, shrine payments or stones. Revision checks and idempotent retries protect healing, claiming and banking. Optional rooms use the normal combat, stagger, dodge and spell systems, remain outside idle hunting, and resume in their own rendered layouts after reload.
+
+## Rare Sunken Vault weapons
+
+A server-verified Sunken Vault guardian clear has a 15% chance to award the selected missing relic. Every fifth clear without a relic guarantees that target. Changing targets preserves progress; owned relics are skipped, so the collection has no duplicate drops. Inventory → Dungeon arsenal and the expedition entrance/options show the target, collection and visible guarantee progress. Optional rooms, training, idle hunts, defeats and repeated settlement do not count.
+
+Breaker Spear builds 16 extra stagger per hit, Duelist’s Blade raises timed-dodge counters from 50% to 75%, and Quickfang Dagger trades damage per hit for a 550 ms attack interval. Each has Strength/Agility requirements and distinct carried artwork. These weapons cannot be bought in shops.
+
+Drops enter permanent inventory immediately, independently of the unbanked expedition haul. A comparison window shows the current weapon beside the relic, its requirements and combat traits. Equipping is optional and validates ownership/stats; continuing keeps current equipment. Acknowledgments, progress and ownership survive reload, concurrent settlement and retried requests. Save snapshots cannot forge ownership, guarantee progress or notices.

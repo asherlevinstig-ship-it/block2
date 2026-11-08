@@ -478,3 +478,19 @@
 #depthsShrineUse { border-color:#73a593; color:#b9eed0; }
 #depthsSideClaim { border-color:#aa8fc8; color:#ddc4ff; }
 @media(max-width:650px) { .side-room-cards { grid-template-columns:1fr; }.side-room-cards article { padding:14px; }.side-room-cards h3 { font-size:17px; } }
+.game-window.dungeon-loot-window { width:min(720px,calc(100vw - 24px)); }
+.dungeon-loot-window .modal-head h2 { font-size:25px; }
+#dungeonLootClose { width:38px; height:38px; flex:none; font-size:24px; background:#15243b; border-color:#7b6b91; }
+.relic-progress { padding:14px; border:1px solid #8f78b1; background:linear-gradient(130deg,#342d4b,#1a2c40); border-radius:10px; margin:15px 0; }
+.relic-progress b { color:#e6d3ff; font-size:13px; }.relic-progress progress { width:100%; height:8px; margin:9px 0; accent-color:#c2a1e8; }
+.relic-progress p { color:#bfcee0; font-size:11px; line-height:1.6; margin:0; }
+.relic-choices { display:grid; grid-template-columns:repeat(3,1fr); gap:7px; }
+.relic-choice { padding:10px 7px; font-size:11px; background:#1b2e46; border-color:#697e9b; }
+.relic-choice[aria-pressed=true] { border-color:#c7a8f0; background:#423653; color:#f3dcff; }
+.relic-detail { display:grid; grid-template-columns:100px 1fr; align-items:center; gap:17px; margin:18px 0; padding:15px; border:1px solid #817398; background:#212b41; border-radius:11px; }
+.relic-art { width:90px; height:90px; background:radial-gradient(#7f5f9255,transparent); }.relic-art svg { width:100%; height:100%; }
+.relic-detail h3 { margin:7px 0; font-size:21px; color:#e9d5ff; }.relic-detail p { color:#d2ddec; font-size:12px; line-height:1.6; }.relic-detail small { color:#e5c998; font-size:11px; }
+.relic-table-scroll { overflow-x:auto; }.relic-comparison { width:100%; border-collapse:collapse; font-size:12px; }.relic-comparison th { color:#c5abdF; text-align:left; font-size:10px; }.relic-comparison th,.relic-comparison td { padding:10px 8px; border-bottom:1px solid #52657d; }.relic-comparison td { color:#d2deec; }
+.relic-actions { display:flex; flex-wrap:wrap; gap:9px; margin-top:17px; }.relic-actions button { flex:1; padding:11px; font-size:12px; }.game-window .relic-actions .primary { margin:0; }
+.relic-actions button[hidden] { display:none; }.dungeon-relic-link { margin:10px 0; padding:10px 12px; border:1px solid #9a7eb7; color:#e5d1ff; background:#302c43; border-radius:8px; font-size:12px; }
+@media(max-width:560px) { .relic-choices { grid-template-columns:1fr; }.relic-detail { grid-template-columns:65px 1fr; padding:10px; gap:12px; }.relic-art { width:65px; height:75px; }.relic-detail h3 { font-size:18px; }.relic-actions { flex-direction:column; }.relic-comparison { font-size:11px; } }
