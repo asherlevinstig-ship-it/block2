@@ -4783,7 +4783,7 @@ function updateCharacterRulesPreview(){
     $('rulesSave').disabled=savingRules||!window.playerCloud||routineControlled();if(routineControlled())$('rulesStatus').textContent='Take control before changing saved Auto Mode settings. You can inspect them while Auto runs.';
   }catch(error){$('rulesPreview').textContent=error.message;$('rulesSave').disabled=true;}
 }
-function openCharacterRules(){
+function openCharacterRules({focusGoal=false}={}){
   if(player.inCombat){note('Finish combat before changing your Auto Mode settings.');return;}
   window.towerPauseForAccount();
   const state=window.playerCloud?.initial??savedPlayerState??{},rules=normalizeCharacterRules(characterRules);
@@ -4809,9 +4809,10 @@ function openCharacterRules(){
     row.append(title,detail);log.append(row);
   }
   if(!log.children.length){const row=document.createElement('li');row.textContent='Your next away routine will appear here.';log.append(row);}
-  $('rulesHuntingDetails').open=false;selectAutoModePage('activity');updateCharacterRulesPreview();if(!$('characterRulesDialog').open)$('characterRulesDialog').showModal();
+  $('rulesHuntingDetails').open=false;selectAutoModePage('activity');updateCharacterRulesPreview();if(!$('characterRulesDialog').open)$('characterRulesDialog').showModal();if(focusGoal){$('autoUpgradeOptions').open=true;$('autoUpgradeOptions').scrollIntoView?.({block:'center'});$('rulesGoalTarget').focus({preventScroll:true});}
 }
 $('openCharacterRules').onclick=openCharacterRules;$('upgradeGoalHud').onclick=openCharacterRules;
+$('clearAutoUpgradeGoal').onclick=()=>{$('rulesGoalTarget').value='';$('rulesGoalAutoBuy').checked=false;updateCharacterRulesPreview();$('rulesStatus').textContent='Completed goal cleared. Save Auto Mode to use your routine again.';};
 $('rulesQueueAdd').onclick=()=>{if(ruleQueueDraft.length<8)ruleQueueDraft.push({type:'fishing',amount:5});renderRuleQueue();updateCharacterRulesPreview();};
 for(const id of ['rulesFoodEnabled','rulesFoodBelow','rulesFoodKeep','gambleAutoGame','gambleAutoColor','gambleAutoBet','gambleAutoLoss','gambleAutoReserve','gambleAutoProfit','gambleAutoRounds','rulesStrategy','goldBudget','goldReserve','goldKeepFish','goldKeepTimber','goldKeepMeat','goldKeepShells','goldMinHealth','rulesUseQueue','rulesQueueRepeats','rulesQueueBudget','rulesQueueReserve','rulesQueueHealth','rulesGoalTarget','rulesGoalAutoBuy','rulesEnabled','rulesActivity','rulesKeepBait','rulesTimberTarget','rulesCombatEnabled','rulesCombatStyle','rulesAutoDodge','rulesAutoQ','rulesAutoE','rulesCombatFlee'])$(id).oninput=updateCharacterRulesPreview;
 $('characterRulesForm').addEventListener('invalid',event=>{const panel=event.target.closest('[role=tabpanel]');if(panel){const page=panel.id.replace('autoModePage','').toLowerCase();selectAutoModePage(page);}},true);
@@ -5199,7 +5200,7 @@ requestAnimationFrame(animation);
 $('vaultVictoryContinue').onclick=()=>closeVaultVictory();
 $('vaultVictoryDialog').addEventListener('cancel',event=>{event.preventDefault();closeVaultVictory();});
 
-window.towerOpenAutoRules=()=>openCharacterRules();
+window.towerOpenAutoRules=options=>openCharacterRules(options);
 
 window.towerApplyBankState=state=>{applyServerGameplay(state);updateInventory();window.towerRefreshBank?.();};
 window.towerFurnitureFeedback=(name,quantity,cost)=>showTransaction('Furniture purchased',[{icon:'✦',text:'+'+quantity+' '+name+' · In inventory'}],-cost);

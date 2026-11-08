@@ -220,3 +220,5 @@ All existing input IDs and submit handling are retained. Tab buttons have access
 ## First Auto setup
 
 The top-bar Auto button opens Auto Mode setup when no plan has been chosen. It does not start the default rest action. Saving Auto Mode records an authoritative autoConfigured flag, including an explicitly selected Rest at home plan, and subsequent Auto clicks start the saved plan. Existing fishing, woodcutting, queue, Earn gold, table and enabled-idle settings remain recognized as configured. The flag survives snapshots/reloads and resets with a new character. Closing setup alone starts nothing.
+
+Completed upgrade goals also open Auto Mode setup instead of a floor-level error. The upgrade controls are available outside the optional queue and expand automatically for this case. Clear upgrade goal removes the selected goal from the draft; Save Auto Mode persists it. Both preflight and server-error fallback open the same window.

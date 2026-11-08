@@ -170,7 +170,7 @@ export async function handlePlayerApi(request,env){
         if(body.mode==='auto'){
           if(state.controlMode==='auto'&&state.plan?.source==='rules')break;
           if(state.characterCreated===false||state.plan||state.report||state.depthsRun||state.hunting?.encounter||state.hunting?.recoveryUntil||state.health<=0||state.gambling?.round?.status==='playing'||state.fishingCast||state.timberCut)throw new Error('Choose Auto after finishing your activity, reading your report and leaving the dungeon.');
-          if(state.characterRules?.strategy==='routine'&&upgradeGoalProgress(state)?.receipt)throw new Error('Choose a new upgrade goal in Rules before starting Auto.');
+          if(state.characterRules?.strategy==='routine'&&upgradeGoalProgress(state)?.receipt)throw new Error('Choose a new upgrade goal in Auto Mode before starting Auto.');
           state.controlMode='auto';state.routineLastSeen=now;touchPresence(state,now,{active:false,forceStart:true});
         }else{
           if(state.plan&&state.plan.source!=='rules')throw new Error('Choose Stop work to finish your job-board shift.');
