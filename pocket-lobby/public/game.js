@@ -59,6 +59,7 @@ let serverCombatId=savedPlayerState?.combatId,lastCombatReceipt=null;
 let combatReports=savedPlayerState?.combatReports??[],activeCombatRecap=null,combatRecapBusy=false,combatRecapKey='';
 let credits = savedPlayerState?.credits??100;
 let autoJourney=null,autoJourneyState=null,autoJourneyTransition=false;
+let autoArrivalKey=null,autoWorkAnimation=null;
 let goldEarned=savedPlayerState?.goldEarned??0;
 function recordGoldEarned(amount){goldEarned=Math.min(Number.MAX_SAFE_INTEGER,goldEarned+amount);}
 let displayedCredits=credits,walletTween=null;
@@ -219,11 +220,12 @@ function woodAction(){
   else if(focusedTimber())use(focusedTimber());
 }
 function drawWoodEffects(time){
-  if(!woodSession||reducedMotion.matches)return;
-  const phase=((time-woodSession.started)%700)/700;
+  const automatic=autoActivityAnimation(time),session=woodSession??(automatic?.task==='woodcutting'?automatic:null);
+  if(!session?.tree||reducedMotion.matches)return;
+  const phase=((time-session.started)%(session.automatic?1000:700))/(session.automatic?1000:700);
   if(phase<.55||phase>.9)return;
   const scatter=(phase-.55)/.35,side=player.direction==='right'?-1:1;
-  const tree=woodSession.tree,[x,y]=point(tree.x+.5,tree.y+.5,12);
+  const tree=session.tree,[x,y]=point(tree.x+.5,tree.y+.5,12);
   ctx.save();
   try{
     ctx.globalAlpha=1-scatter;ctx.fillStyle='#e3bb83';
@@ -2412,13 +2414,13 @@ function draw(time){
     const cycle=step?(player.stride%2)+Math.min(1,(time-step.started)/STEP_MS):0;
     const wave=player.waveStarted===null?null:(time-player.waveStarted)/WAVE_MS;
     const pose=playerCombatPose({time,now:combatNow(),encounter:player.inCombat?hunting.encounter:null,events:combatArt,reduced:reducedMotion.matches});
-    const autoPlan=window.playerCloud?.initial?.plan,autoTask=autoPlan?.source==='rules'?(autoPlan.kind==='queue'?autoPlan.queue?.steps?.[autoPlan.stepIndex]?.type:autoPlan.kind??'fishing'):null,autoChop=!autoJourney&&autoTask==='woodcutting'&&currentRoom==='logging',autoFish=!autoJourney&&autoTask==='fishing'&&currentRoom==='pond';
-    const swingPhase=autoChop?(time%1000)/1000:woodSession?((time-woodSession.started)%700)/700:0;
+    const automatic=autoActivityAnimation(time),autoChop=automatic?.task==='woodcutting',cast=fishingSession??(automatic?.task==='fishing'?automatic.cast:null);
+    const swingPhase=autoChop?((time-automatic.started)%1000)/1000:woodSession?((time-woodSession.started)%700)/700:0;
     const spritePose=woodSession||autoChop?{...pose,chop:swingPhase}:pose;
     const [enemyX,enemyY]=point(6.5,5.5);
     const thrust=enemy?pose.lunge-pose.recoil:0;
-    sprite(ctx,x+Math.sign(enemyX-x)*thrust-pose.dodge,y+Math.sign(enemyY-y)*thrust+pose.dodge*.4,avatar,{direction:player.direction,back:player.back,cycle,seated:!!seat,wave,weapon:autoChop||!!woodSession||pose.armed&&!!combatGear.equippedWeapon,sheathed:!autoChop&&!woodSession&&!pose.armed&&Object.hasOwn(socialRooms,currentRoom)&&!!combatGear.equippedWeapon,weaponTier:woodSession||autoChop?'basicAxe':combatGear.equippedWeapon,pose:spritePose,vest:combatGear.stonebackVestEquipped,fishing:fishingSession?fishingMoments.phase(fishingSession,time):autoFish?'waiting':null,fishingAge:fishingSession?time-fishingSession.started:0,time});
-    if(fishingSession)drawFishingMoment(x,y,time);
+    sprite(ctx,x+Math.sign(enemyX-x)*thrust-pose.dodge,y+Math.sign(enemyY-y)*thrust+pose.dodge*.4,avatar,{direction:player.direction,back:player.back,cycle,seated:!!seat,wave,weapon:autoChop||!!woodSession||pose.armed&&!!combatGear.equippedWeapon,sheathed:!autoChop&&!woodSession&&!pose.armed&&Object.hasOwn(socialRooms,currentRoom)&&!!combatGear.equippedWeapon,weaponTier:woodSession||autoChop?'basicAxe':combatGear.equippedWeapon,pose:spritePose,vest:combatGear.stonebackVestEquipped,fishing:cast?fishingMoments.phase(cast,time):null,fishingAge:cast?time-cast.started:0,time});
+    if(cast)drawFishingMoment(x,y,time,cast);
     drawCatchReveal(x,y,time);
     if(player.inCombat){
       const heartPixels=['0110110','1111111','1111111','0111110','0011100','0001000'];
@@ -2975,8 +2977,8 @@ function reelFish(){
   note('Well timed! Reeling in · +5 bonus Patience XP.');
   updateAdventurePanel();
 }
-function drawFishingMoment(x,y,time){
-  const session=fishingSession,phase=fishingMoments.phase(session,time);
+function drawFishingMoment(x,y,time,session=fishingSession){
+  const phase=fishingMoments.phase(session,time);
   const still=reducedMotion.matches;
   const [waterX,waterY]=point(7.4,5.45);
   let bx=waterX,by=waterY;
@@ -3000,7 +3002,7 @@ function drawFishingMoment(x,y,time){
     by=waterY+(y-21-waterY)*t-(still?0:Math.sin(t*Math.PI)*39);
     tipX=x+12;tipY=y-42;
     const fish=fishProducts[session.fishId];
-    fishingMoments.drawFish(ctx,bx,by,session.fishId,fish.quality);
+    if(fish)fishingMoments.drawFish(ctx,bx,by,session.fishId,fish.quality);
   }
   const [gripX,gripY]=window.towerCharacterArt.grip(x,y,{direction:player.direction,back:player.back,fishing:phase,fishingAge:time-session.started,time,reduced:still});
   ctx.beginPath();ctx.moveTo(gripX,gripY);
@@ -5160,6 +5162,30 @@ window.towerPauseForAccount=()=>{
 window.towerSaveNow=savePlayerState;
 window.towerJoinRoom=connectRoom;
 window.towerHasActiveCast=()=>!!fishingSession||!!woodSession;
+// Presentation only: server plans own all work, catches, rewards and combat decisions.
+function autoTaskFor(plan){return plan?(plan.kind==='queue'?plan.queue?.steps?.[plan.stepIndex]?.type:plan.kind??'fishing'):null;}
+function autoActivityKey(state){const p=state?.plan;return [state?.location,p?.routineId??p?.startedAt??'',p?.stepIndex??'',p?.cycle??'',autoTaskFor(p)].join(':');}
+function autoActivityAnimation(time){
+  const state=window.playerCloud?.initial,plan=state?.plan,task=autoTaskFor(plan);
+  if(!plan||autoJourney||step||route.length||currentRoom!==state.location){autoWorkAnimation=null;return null;}
+  const key=autoActivityKey(state);
+  if(autoWorkAnimation?.key!==key){
+    autoWorkAnimation={key,task,started:time,automatic:true,catches:{...plan.catches},cast:null};
+    if(task==='woodcutting')autoWorkAnimation.tree=autoWorkTile(state)?.item;
+  }
+  const work=autoWorkAnimation;
+  if(task==='fishing'&&currentRoom==='pond'){
+    const catches=plan.catches??{},caught=Object.keys(catches).find(id=>(catches[id]??0)>(work.catches[id]??0));
+    work.catches={...catches};
+    // A landed fish is shown only after a new server-confirmed catch, never on reconnect.
+    if(caught){work.cast={started:work.cast?.started??time,castEnds:time,biteAt:time,landAt:time+650,fishId:caught};work.recastAt=time+1550;}
+    else if(!work.cast||work.recastAt&&time>=work.recastAt){
+      const remaining=Math.max(900,(plan.nextCatchAt??plan.nextAt??0)-(window.playerCloud?.serverTime??Date.now()));
+      work.cast={started:time,castEnds:time+450,biteAt:time+remaining-650,landAt:Infinity,fishId:null};work.recastAt=null;
+    }
+  }
+  return work;
+}
 function autoRoomRoute(from,to){
   const seen=new Set([from]),queue=[{room:from,path:[]}];if(from===to)return [];
   for(const entry of queue)for(const door of roomDoors[entry.room]??[]){if(seen.has(door.to)||!doorAvailable(door,entry.room))continue;const path=[...entry.path,door];if(door.to===to)return path;seen.add(door.to);queue.push({room:door.to,path});}
@@ -5189,7 +5215,7 @@ function renderAutoJourneyHud(){
   if(!state?.plan&&!state?.report){$('autoTakeControl').disabled=true;$('autoTakeControl').textContent='Walking home…';}
 }
 function finishAutoJourney(){
-  const state=autoJourneyState;autoJourney=null;route=[];target=null;interaction=null;player.seat=null;
+  const state=autoJourneyState;autoArrivalKey=autoActivityKey(state);autoJourney=null;route=[];target=null;interaction=null;player.seat=null;
   setPlayerCombat(!!state?.plan?.activeHunt&&!!hunting.encounter&&currentRoom===state.location);
   updateInventory();updateAdventurePanel();updateCombatPanel();window.towerRefreshAutoStatus?.();
   if(!state?.plan&&!state?.report){$('autoPanel').hidden=true;savePlayerState();connectRoom();}
@@ -5214,9 +5240,9 @@ window.towerApplyRoutineState=state=>{
   fishingSession=null;fishingStarted=null;woodSession=null;treeFall=null;catchReveal=null;patienceTween=null;
   $('catchReveal').hidden=true;interaction=null;player.seat=null;autoJourneyState=state;
   applyServerGameplay(state);
-  const alreadyThere=currentRoom===state.location&&!step&&!route.length&&Math.abs(player.cx-(state.position?.x??player.cx))+Math.abs(player.cy-(state.position?.y??player.cy))===0;
+  const alreadyThere=currentRoom===state.location&&!step&&!route.length&&(autoArrivalKey===autoActivityKey(state)||Math.abs(player.cx-(state.position?.x??player.cx))+Math.abs(player.cy-(state.position?.y??player.cy))===0);
   if(!alreadyThere||autoJourney){if(!autoJourney||autoJourney.room!==state.location){route=[];target=null;}autoJourney={room:state.location,blocked:false};setPlayerCombat(false);}
-  else setPlayerCombat(!!state.plan?.activeHunt&&!!hunting.encounter);
+  else {autoArrivalKey=autoActivityKey(state);setPlayerCombat(!!state.plan?.activeHunt&&!!hunting.encounter);}
   if(state.combatReceipt&&state.combatReceipt.id!==lastCombatReceipt){lastCombatReceipt=state.combatReceipt.id;if(!autoJourney)for(const event of state.combatReceipt.events??[])if((window.playerCloud?.serverTime??Date.now())-(event.at??0)<2500)recordCombatFx(combatArt,event,performance.now());}
   updateInventory();updateAdventurePanel();updateCombatPanel();
 };
