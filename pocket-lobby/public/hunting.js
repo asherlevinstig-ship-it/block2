@@ -1,6 +1,14 @@
 import {skillLevel} from './skill-curve.js';
 import {essenceEffects,essenceGems,essencePower} from './essences.js';
 
+export function staggerProfile(enemy){
+ const boss=enemy.elite||enemy.id==='depthsGuardian';
+ return {limit:boss?160:enemy.id.startsWith('depths')?140:80,stun:boss?900:1800,opening:boss?1800:2400,recovery:boss?5000:3500};
+}
+export function weaponStagger(weapon,upgrade,counter=false){
+ const profile=weaponProfile(weapon,upgrade);const base=!profile?0:profile.interval>=1400?36:profile.interval>=1000?18:8;
+ return base+(counter?40:0);
+}
 export const counterRules={duration:1800,bonus:.5};
 export const boarRules={health:70,playerInterval:1100,boarInterval:1900,fleeCooldown:1800,respawn:30000,recovery:12000,dodgeCost:40,dodgeWindow:350,dodgeCooldown:700};
 export const stonebackVest={name:'Stoneback Vest',absorption:4,dodgeCost:50,timber:8,fragment:'stonebackShell'};
@@ -146,7 +154,7 @@ export function normalizeCombatSummary(input){
   if(!input||!Number.isSafeInteger(input.startedAt)||input.startedAt<0)return null;
   const count=value=>Number.isSafeInteger(value)&&value>0?Math.min(value,1000000):0;
   const spells=Object.fromEntries(Object.entries(input.spells??{}).filter(([id,value])=>essencePower(id)&&count(value)>0).map(([id,value])=>[id,count(value)]));
-  return {startedAt:input.startedAt,partial:input.partial===true,spells,interrupts:count(input.interrupts),prevented:count(input.prevented),dodges:count(input.dodges),perfectDodges:count(input.perfectDodges),counters:count(input.counters),counterBonus:count(input.counterBonus),automaticCasts:count(input.automaticCasts),fleeAttempts:count(input.fleeAttempts),automaticFlees:count(input.automaticFlees)};
+  return {startedAt:input.startedAt,partial:input.partial===true,spells,interrupts:count(input.interrupts),prevented:count(input.prevented),dodges:count(input.dodges),perfectDodges:count(input.perfectDodges),counters:count(input.counters),counterBonus:count(input.counterBonus),staggers:count(input.staggers),weakSpotHits:count(input.weakSpotHits),staggerBonus:count(input.staggerBonus),automaticCasts:count(input.automaticCasts),fleeAttempts:count(input.fleeAttempts),automaticFlees:count(input.automaticFlees)};
 }
 export function normalizeHunting(input={}){
   if(!input||typeof input!=='object'||Array.isArray(input))throw new Error('Invalid hunting state.');
@@ -171,9 +179,10 @@ export function normalizeHunting(input={}){
       const nextAt=time(burn.nextAt),until=time(burn.until);
       if(nextAt>0&&nextAt<=until)result.encounter.burn={damage:burn.damage,nextAt,until};
     }
-    for(const key of ['chilledUntil','weakenedUntil','interruptResistUntil','tacticsAt','counterUntil']){
+    for(const key of ['chilledUntil','weakenedUntil','interruptResistUntil','tacticsAt','counterUntil','staggerUntil','staggerWeakUntil','staggerResistUntil']){
       if(input.encounter[key]!==undefined)result.encounter[key]=time(input.encounter[key]);
     }
+    if(input.encounter.stagger!==undefined){if(!Number.isInteger(input.encounter.stagger)||input.encounter.stagger<0||input.encounter.stagger>=staggerProfile(huntEnemy(input.encounter)).limit)throw new Error('Invalid stagger progress.');result.encounter.stagger=input.encounter.stagger;}
     if(Number.isFinite(input.encounter.weakenPercent)&&input.encounter.weakenPercent>=25&&input.encounter.weakenPercent<=35)result.encounter.weakenPercent=input.encounter.weakenPercent;
     const used=Array.isArray(input.encounter.usedEssences)?[...new Set(input.encounter.usedEssences.filter(gem=>Object.hasOwn(essenceGems,gem)))]:[];
     if(used.length)result.encounter.usedEssences=used;
@@ -236,7 +245,24 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
     if(now<(encounter.counterUntil??0)){
       result.counter=true;result.counterBonus=Math.ceil(result.damage*counterRules.bonus);result.damage+=result.counterBonus;delete result.encounter.counterUntil;
     }
+    if(now<(encounter.staggerWeakUntil??0)){
+      result.weakSpot=true;result.staggerBonus=Math.ceil(result.damage*.25);result.damage+=result.staggerBonus;
+    }
     result.encounter.health=Math.max(0,encounter.health-result.damage);
+    if(result.encounter.health>0&&now>=(encounter.staggerResistUntil??0)){
+      const profile=staggerProfile(enemy),before=encounter.stagger??0;
+      const armourFactor=result.shellGuarded?Math.max(.25,(attributes.damage-enemy.shellArmor)/Math.max(1,attributes.damage)):1;
+      result.staggerGained=Math.min(profile.limit-before,Math.ceil(weaponStagger(weapon,upgrade,result.counter)*armourFactor));
+      result.encounter.stagger=before+result.staggerGained;
+      if(result.encounter.stagger>=profile.limit){
+        result.staggered=true;result.encounter.stagger=0;
+        result.encounter.staggerUntil=now+profile.stun;result.encounter.staggerWeakUntil=now+profile.opening;
+        result.encounter.staggerResistUntil=now+profile.opening+profile.recovery;
+        delete result.encounter.enemyMove;
+        result.encounter.nextBoarAt=Math.max(result.encounter.nextBoarAt,result.encounter.staggerUntil+enemyAttack(result.encounter,enemy).tell);
+        if(enemy.shellArmor)result.encounter.exposedUntil=Math.max(result.encounter.exposedUntil??0,result.encounter.staggerWeakUntil);
+      }
+    }
     if(!result.encounter.health){result.outcome='victory';result.encounter=null;}
   }else{
     const move=enemyAttack(encounter,enemy);

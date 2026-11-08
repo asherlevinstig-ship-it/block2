@@ -639,6 +639,8 @@ function questAction(){
 
 function combatNow(){return window.playerCloud?.combatNow?.()??Date.now();}
 let combatMessage='',lastCombatUi=0;
+let combatSoundEnabled=typeof load==='function'?load('combat-sound',false)===true:false;
+const combatAudio=typeof createCombatSound==='function'?createCombatSound():{enable(){},play(){}};
 const combatArt={strikeAt:-Infinity,castAt:-Infinity,hurtAt:-Infinity,dodgeAt:-Infinity,boarAttackAt:-Infinity,boarHitAt:-Infinity,victoryAt:-Infinity,bursts:[]};
 function resetCombatArt(){
   for(const key of Object.keys(combatArt))combatArt[key]=key==='bursts'?[]:-Infinity;
@@ -680,7 +682,7 @@ function renderCombatRecap(report){
   $('combatRecapInterrupts').textContent=summary.interrupts;
   $('combatRecapBlocked').textContent=summary.prevented;
   $('combatRecapDodges').textContent=summary.dodges;
-  $('combatRecapAutomatic').textContent=summary.perfectDodges+' perfect dodges · '+summary.counters+' counterattacks · +'+summary.counterBonus+' counter bonus damage · '+summary.automaticCasts+' automatic spell casts · '+summary.fleeAttempts+' flee attempts ('+summary.automaticFlees+' automatic)';
+  $('combatRecapAutomatic').textContent=summary.staggers+' stagger breaks · '+summary.weakSpotHits+' weak-spot hits · '+summary.perfectDodges+' perfect dodges · '+summary.counters+' counterattacks · +'+summary.counterBonus+' counter bonus damage · '+summary.automaticCasts+' automatic spell casts · '+summary.fleeAttempts+' flee attempts ('+summary.automaticFlees+' automatic)';
   $('combatRecapDuration').textContent=summary.partial?'Recorded from the latest update.':'Encounter duration · '+Math.max(0,Math.round((report.endedAt-summary.startedAt)/1000))+'s';
   const action=combatRecapAction(report);
   $('combatRecapNext').hidden=!action;
@@ -921,6 +923,7 @@ function updateDepthsPanel(){
   if(newlyCleared)$('depthsDecisionTitle').focus({preventScroll:true});
 }
 function startMonsterEncounter(enemy){
+  combatAudio.enable(combatSoundEnabled);
   if(currentRoom!==enemy.room||unavailable())return;
   const index=depthsStageIndex(currentRoom);
   if(index>=0&&!depthsEnemyAvailable(depthsRun,currentRoom))return;
@@ -944,6 +947,7 @@ function startMonsterEncounter(enemy){
   note('Press Space just before the '+enemyAttack(hunting.encounter,enemy).name+' lands. F flees.');
 }
 function combatAction(action){
+  combatAudio.enable(combatSoundEnabled);
   if(!player.inCombat||!['flee','dodge'].includes(action))return;
   if(window.playerCloud?.gameplay){sendServerCombat(action);return;}
   const result=huntingTurn(hunting.encounter,health,playerStats,action,combatNow(),Math.random,combatGear.equippedWeapon,combatGear.activeSwordUpgrade,combatGear.stonebackVestEquipped,combatGear.moonwellCharmEquipped,combatGear.weaponEnchantments);
@@ -967,6 +971,8 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
   if(result.dodgeStarted)combatMessage='You sidestep. Time your dodge just before the '+enemy.move+' lands!';
   if(result.timedDodge)combatMessage=result.shellExposed?'Perfect dodge! Shell open · Next strike +50% damage.':'Perfect dodge! Next strike +50% damage for 1.8 seconds.';
   if(result.counter)combatMessage='Counterattack! '+result.damage+' damage · +'+result.counterBonus+' bonus.';
+  if(result.weakSpot)combatMessage+=' Weak spot · +'+result.staggerBonus+' damage.';
+  if(result.staggered){combatMessage+=' Stagger break! Enemy stunned · Weak spot open.';if(playEffects)combatAudio.play('stagger');}
   if(result.automatic)combatMessage='Tactic · '+combatMessage;
   if(result.nextMove&&result.outcome==='fighting')combatMessage+=(combatMessage?' ':'')+'Next: '+result.nextMove+'.';
   if(result.taken&&playEffects){
@@ -1040,6 +1046,10 @@ function updateCombatPanel(){
   $('enemyEffects').hidden=!status;
   if($('enemyEffects').textContent!==status)$('enemyEffects').textContent=status;
   updateEssenceHotbar(now);
+  const staggerEnemy=huntEnemy(encounter),stagger=staggerProfile(staggerEnemy),stunned=!!encounter&&now<encounter.staggerUntil,weak=!!encounter&&now<encounter.staggerWeakUntil,recovering=!!encounter&&now<encounter.staggerResistUntil;
+  $('enemyStagger').hidden=!encounter;$('enemyStagger').dataset.state=stunned?'stunned':weak?'weak':recovering?'recovering':'building';
+  $('staggerLabel').textContent=stunned?'Staggered! · Weak spot open':weak?'Weak spot · Weapon damage +25%':recovering?'Stagger resistance · '+Math.ceil((encounter.staggerResistUntil-now)/1000)+'s':'Stagger · '+(encounter?.stagger??0)+' / '+stagger.limit;
+  $('staggerProgress').max=stagger.limit;$('staggerProgress').value=stunned||weak?stagger.limit:encounter?.stagger??0;$('staggerProgress').setAttribute('aria-valuetext',$('staggerLabel').textContent);
   const enemy=huntEnemyForRoom(currentRoom);
   const stage=depthsStageIndex(currentRoom),chamberCleared=stage>=0&&!depthsEnemyAvailable(depthsRun,currentRoom);
   updateDepthsPanel();
@@ -4335,6 +4345,8 @@ $('adventureLandmark').onclick=()=>{
 };
 $('combatFlee').onclick=()=>combatAction('flee');
 $('combatDodge').onclick=()=>combatAction('dodge');
+$('combatSound').setAttribute('aria-pressed',String(combatSoundEnabled));$('combatSound').textContent=combatSoundEnabled?'Combat sound on':'Combat sound off';
+$('combatSound').onclick=()=>{combatSoundEnabled=!combatSoundEnabled;save('combat-sound',combatSoundEnabled);combatAudio.enable(combatSoundEnabled);$('combatSound').setAttribute('aria-pressed',String(combatSoundEnabled));$('combatSound').textContent=combatSoundEnabled?'Combat sound on':'Combat sound off';};
 $('approachBeetle').onclick=()=>{
   const monster=roomFurniture().find(item=>item.type===huntEnemyForRoom(currentRoom)?.prop);
   if(monster)use(monster);

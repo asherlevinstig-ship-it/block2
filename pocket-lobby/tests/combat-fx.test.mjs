@@ -124,7 +124,7 @@ test('perfect dodge and counter hit have distinct feedback, expire and respect r
  for(const reduced of [false,true]){
   const c=canvas();drawCombatWorldFx({ctx:c.ctx,point,time:1200,now:1200,events,player:{x:5,y:5},reduced,encounter:{counterUntil:2800}});c.balanced();
   const text=c.calls.filter(([method])=>method==='fillText').map(([,text])=>text);assert(text.includes('PERFECT DODGE!'));assert(text.includes('−24 COUNTER'));
-  const expired=canvas();drawCombatWorldFx({ctx:expired.ctx,point,time:3000,now:3000,events,player:{x:5,y:5},reduced,encounter:{counterUntil:2800}});expired.balanced();assert.equal(expired.calls.length,0);
+  const expired=canvas();drawCombatWorldFx({ctx:expired.ctx,point,time:3000,now:3000,events,player:{x:5,y:5},reduced,encounter:{counterUntil:2800}});expired.balanced();assert(!expired.calls.some(([method,text])=>method==='fillText'&&/COUNTER|PERFECT/.test(text)));assert(expired.calls.some(([method,text])=>method==='fillText'&&text==='STAGGER 0/80'));
  }
 });
 test('counter opening overlay shows its deadline, clears on expiry and yields to attack warnings',()=>{
@@ -132,4 +132,12 @@ test('counter opening overlay shows its deadline, clears on expiry and yields to
   const c=canvas();drawCombatOverlayFx({ctx:c.ctx,width:540,height:349,time:now,now,events:{perfectDodgeAt:1000},encounter:{counterUntil:2800,nextBoarAt},health:100,reduced});c.balanced();assert(c.calls.some(([method,text])=>method==='fillText'&&text===expected));
  }
  const c=canvas();drawCombatOverlayFx({ctx:c.ctx,width:540,height:349,time:3000,now:3000,events:{},encounter:{counterUntil:2800,nextBoarAt:8000},health:100,reduced:true});assert(!c.calls.some(([method])=>method==='fillText'));
+});
+
+test('stagger meter, break feedback and boss recovery remain clear in both motion modes',()=>{
+ for(const reduced of [false,true])for(const [encounter,now,label] of [[{stagger:60,nextBoarAt:8000},1000,'STAGGER 60/80'],[{stagger:0,staggerUntil:2500,staggerWeakUntil:3100,staggerResistUntil:6000,nextBoarAt:4000},1500,'STAGGERED'],[{stagger:0,staggerUntil:1500,staggerWeakUntil:2000,staggerResistUntil:6000,nextBoarAt:8000},2500,'RECOVERING']]){
+  const c=canvas();drawCombatWorldFx({ctx:c.ctx,point,time:now,now,events:{},encounter,player:{x:5,y:5},reduced});c.balanced();assert(c.calls.some(([method,text])=>method==='fillText'&&text===label));
+ }
+ const record={};recordCombatFx(record,{action:'attack',damage:16,staggered:true,staggerGained:4},1000);const c=canvas();drawCombatWorldFx({ctx:c.ctx,point,time:1100,now:1100,events:record,player:{x:5,y:5},reduced:true});assert(c.calls.some(([method,text])=>method==='fillText'&&text==='STAGGER BREAK!'));c.balanced();
+ for(const [now,nextBoarAt,title] of [[1500,4000,'STAGGERED!'],[2500,8000,'WEAK SPOT · +25%'],[2500,2800,'DODGE · CHARGE']]){const overlay=canvas();drawCombatOverlayFx({ctx:overlay.ctx,width:540,height:349,time:now,now,events:{},encounter:{staggerUntil:2000,staggerWeakUntil:3000,nextBoarAt},health:100,reduced:true});overlay.balanced();assert(overlay.calls.some(([method,text])=>method==='fillText'&&text===title));}
 });

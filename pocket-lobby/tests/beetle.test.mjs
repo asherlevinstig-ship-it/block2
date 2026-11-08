@@ -15,8 +15,9 @@ test('shell favors heavy hits, and a timed dodge gives faster fittings more swin
   assert.equal(slam.taken,0);
   assert.equal(slam.shellExposed,true);
   assert.equal(slam.encounter.exposedUntil,4500);
+  // Isolate the timed-dodge shell window while the separate stagger system recovers.
   for(const [upgrade,count,damage] of [['balancedGrip',3,60],['weightedHilt',2,63]]){
-    let state={...slam.encounter,nextPlayerAt:2300},swings=0,total=0;
+    let state={...slam.encounter,nextPlayerAt:2300,staggerResistUntil:100000},swings=0,total=0;
     while(state.nextPlayerAt<state.exposedUntil){
       const hit=advanceHunt(state,100,{},state.nextPlayerAt,()=>0,'trainingSword',upgrade);
       assert.equal(hit.shellGuarded,false);

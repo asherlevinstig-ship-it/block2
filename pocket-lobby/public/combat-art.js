@@ -26,12 +26,13 @@ export function playerCombatPose({time,now,encounter,events,reduced=false}){
 export function boarCombatPose({time,now,encounter,events,reduced=false,defeated=false}){
   const age=time-events.victoryAt;
   const death=defeated?clamp(age/430):0;
-  const windup=encounter?clamp(1-(encounter.nextBoarAt-now)/Math.min(850,enemyAttack(encounter).tell)):0;
+  const staggered=!!encounter&&now<encounter.staggerUntil;
+  const windup=encounter&&!staggered?clamp(1-(encounter.nextBoarAt-now)/Math.min(850,enemyAttack(encounter).tell)):0;
   return {
-    windup,
-    charge:reduced?0:pulse(time-events.boarAttackAt,340)*8,
-    recoil:reduced?0:pulse(time-events.boarHitAt,260)*4,
-    squash:reduced?1:defeated?1-death*.6:1-windup*.1,
+    windup,staggered,
+    charge:staggered?0:reduced?0:pulse(time-events.boarAttackAt,340)*8,
+    recoil:reduced?0:staggered?Math.sin(time/90)*2:pulse(time-events.boarHitAt,260)*4,
+    squash:staggered?.82:reduced?1:defeated?1-death*.6:1-windup*.1,
     fall:reduced?0:defeated?death*5:0,
     alpha:defeated?1-clamp((age-750)/550):1,
     defeated,hit:time-events.boarHitAt>=0&&time-events.boarHitAt<200

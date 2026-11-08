@@ -72,5 +72,5 @@ test('concurrent reloads settle the earned counter and final loot once on the se
  now=2150;await call('state');assert.equal((await act('gameplay/combat',{combatId:packet.state.combatId,input:'dodge'})).status,200);
  now=2300;await call('state');assert.equal(packet.state.hunting.encounter.counterUntil,4100);assert.equal(packet.state.hunting.encounter.summary.perfectDodges,1);
  now=2550;const results=await Promise.all([call('state'),call('state')]);for(const r of results){assert.equal(r.status,200);assert.equal(r.state.hunting.encounter.health,30);assert.equal(r.state.hunting.encounter.summary.counters,1);assert.equal(r.state.hunting.encounter.summary.counterBonus,8);assert.equal(r.state.hunting.encounter.counterUntil,undefined);}
- now=10000;await Promise.all([call('state'),call('state')]);assert.equal(packet.state.huntingLoot.boar,1);assert.equal(packet.state.combatReports.length,1);assert.equal(packet.state.combatReports[0].summary.counters,1);
+ now=10000;await Promise.all([call('state'),call('state')]);assert.equal(packet.state.huntingLoot.boar,1);assert.equal(packet.state.combatReports.length,1);assert.equal(packet.state.combatReports[0].summary.counters,1);assert.equal(packet.state.combatReports[0].summary.staggers,1);assert.equal(packet.state.combatReports[0].summary.weakSpotHits,1);
 });

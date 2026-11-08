@@ -6,7 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-import {boarRules,huntingTurn,huntingAttributes,normalizeHunting,normalizeCombatGear,weaponCatalog,weaponProfile,attackSeconds,createHunt,resumeHunt,advanceHunt,combatStamina,combatDodgeCost,canUseWeapon,huntEnemies,huntEnemy,huntEnemyForRoom,huntRespawnAt,enemyAttack,enemyStatusEffects,stonebackVest,moonwellCharm} from '../public/hunting.js';
+import {staggerProfile,weaponStagger,boarRules,huntingTurn,huntingAttributes,normalizeHunting,normalizeCombatGear,weaponCatalog,weaponProfile,attackSeconds,createHunt,resumeHunt,advanceHunt,combatStamina,combatDodgeCost,canUseWeapon,huntEnemies,huntEnemy,huntEnemyForRoom,huntRespawnAt,enemyAttack,enemyStatusEffects,stonebackVest,moonwellCharm} from '../public/hunting.js';
 import {normalizeState,startPlan} from '../server/player-state.mjs';
 
 test('new and existing characters receive one equipped sword, while unequipped choices persist',()=>{
@@ -74,7 +74,7 @@ function gameHarness(){
   };
   const source=fs.readFileSync(new URL('../public/game.js',import.meta.url),'utf8');
   const context=vm.createContext({
-    recordCombatFx,...questRules,...depthsRules,depthsRun:null,depthsExploring:false,depthsDiscovered:false,maxHealth:()=>100,normalizeHunting,normalizeCombatGear,weaponCatalog,weaponProfile,attackSeconds,boarRules,huntingAttributes,createHunt,resumeHunt,combatStamina,canUseWeapon,
+    recordCombatFx,...questRules,...depthsRules,depthsRun:null,depthsExploring:false,depthsDiscovered:false,maxHealth:()=>100,normalizeHunting,normalizeCombatGear,weaponCatalog,weaponProfile,attackSeconds,staggerProfile,weaponStagger,boarRules,huntingAttributes,createHunt,resumeHunt,combatStamina,canUseWeapon,
     huntEnemies,huntEnemy,huntEnemyForRoom,huntRespawnAt,enemyAttack,enemyStatusEffects,combatDodgeCost,stonebackVest,moonwellCharm,
     advanceHunt:(e,h,s,n,_r,w,upgrade,vest)=>advanceHunt(e,h,s,n,()=>.5,w,upgrade,vest),
     huntingTurn:(e,h,s,a,n,_r,w,upgrade,vest)=>huntingTurn(e,h,s,a,n,()=>.5,w,upgrade,vest),

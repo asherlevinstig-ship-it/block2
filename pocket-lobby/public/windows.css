@@ -417,3 +417,11 @@
 .hunting-preview-grid button { margin-top:10px; width:100%; padding:8px; font-size:11px; }
 @media(max-width:600px) { .hunting-preview-grid { grid-template-columns:1fr; } }
 .combat-auto.counter-ready { color:#fff0b6; background:#534324; border:1px solid #e3bd6f; border-radius:7px; padding:7px 10px; box-shadow:0 0 12px #e3bd6f25; }
+.enemy-stagger { display:grid; gap:4px; margin:10px 0; padding:8px 10px; border:1px solid #63748b; border-radius:8px; background:#17283b; }
+.enemy-stagger[hidden] { display:none; }
+.enemy-stagger label { color:#e5c494; font-size:11px; font-weight:700; }
+.enemy-stagger progress { width:100%; height:6px; accent-color:#e0ad71; }
+.enemy-stagger small { color:#aabed3; font-size:10px; }
+.enemy-stagger[data-state=stunned],.enemy-stagger[data-state=weak] { border-color:#f2cf86; background:#443b2b; }
+.enemy-stagger[data-state=recovering] { opacity:.65; }
+#combatSound { margin-top:8px; padding:5px 9px; font-size:10px; }
