@@ -51,3 +51,10 @@ test('walking to each lobby shop or home never crosses another shop doorway',()=
  }
  assert.deepEqual(g.errors,[]);
 });
+
+test('a room connection correction preserves an active walking destination',()=>{
+ const g=boot(normalizeState({location:'hub',quest:{accepted:true}}));
+ g.run("walkTo(hubDoors.find(d=>d.to==='furnishings').tile);correctRoomPosition({x:8,y:12})");
+ assert.equal(g.read("target.x+','+target.y"),'9,0');assert(g.read('route.length>0'));assert.equal(g.read("route.at(-1).x+','+route.at(-1).y"),'9,0');
+ g.run('route=[];step=null;target=null;correctRoomPosition({x:8,y:12})');assert.equal(g.read('route.length'),0);assert.deepEqual(g.errors,[]);
+});

@@ -5102,13 +5102,20 @@ function openTrainingCourtyard(){
 }
 if(typeof initializeTrainingCourtyard==='function')trainingController=initializeTrainingCourtyard({getState:()=>({...currentGoalState(),avatar,stats:playerStats,combatGear}),canOpen:()=>currentRoom==='outside'&&!unavailable()&&!window.playerCloud?.initial?.plan&&!window.playerCloud?.initial?.report,pause:()=>{cancelFishing();window.towerPauseForAccount();},onClose:()=>canvas.focus(),renderer:window.towerCharacterArt});
 if(window.playerCloud)window.playerCloud.attach();
+function correctRoomPosition(position){
+  const goal=target??route.at(-1)??step?.to,item=interaction;
+  route=[];step=null;interaction=null;target=null;
+  player.x=player.cx=position.x;player.y=player.cy=position.y;player.seat=null;savePlayerState();
+  // Joining a new room may correct movement begun while its socket connected.
+  if(item)use(item);else if(goal&&(goal.x!==position.x||goal.y!==position.y))walkTo(goal);
+}
 if(window.playerCloud&&typeof WebSocket!=='undefined'){
   multiplayer=createRoomConnection({
     getLocal:()=>({room:currentRoom,x:player.cx,y:player.cy,direction:player.direction,back:player.back,seat:player.seat?{type:player.seat.type,x:player.seat.x,y:player.seat.y,rot:player.seat.rot}:null,profileKey:JSON.stringify([avatar,combatGear.equippedWeapon,homeFurniture])}),
     flush:()=>window.playerCloud.flush(),onPeers:receivePeers,onChat:receiveRoomChat,
     onHistory:history=>{$('messages').replaceChildren();$('roomChatMessages').replaceChildren();for(const message of history)receiveRoomChat(message);},
     onStatus:text=>{$('networkStatus').textContent=text;$('roomChatStatus').textContent=text;$('openRoomChat').disabled=!Object.hasOwn(socialRooms,currentRoom);},
-    onCorrection:position=>{route=[];step=null;player.x=player.cx=position.x;player.y=player.cy=position.y;player.seat=null;savePlayerState();},
+    onCorrection:correctRoomPosition,
     onUnseat:()=>{player.seat=null;},onSessionChanged:message=>window.playerCloud.invalidate?.(message)
   });
   window.towerMultiplayer=multiplayer;connectRoom();
