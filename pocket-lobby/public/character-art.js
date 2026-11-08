@@ -1,6 +1,6 @@
-const JACKETS=[['#8d5941','#b8784a','#edaa66'],['#345768','#4b8198','#83bfd1'],['#873f60','#b85e7f','#e99bb2'],['#476447','#6d9565','#a6c595'],['#5e477d','#896bac','#bea6df'],['#202b40','#36445d','#64738b'],['#513868','#976bb9','#c399dc']];
-const TROUSERS=[['#273249','#3b4565','#626c88'],['#1e354d','#254764','#4b7592'],['#2b4036','#3d5949','#6e8c66'],['#202b40','#36445d','#64738b']];
-const BOOTS=[['#6c5948','#c2a280','#e4c9a4'],['#493a32','#956341','#c29164'],['#272a38','#3a3c50','#6d718b'],['#151d2c','#272e40','#929aab']];
+const JACKETS=[['#8d5941','#b8784a','#edaa66'],['#345768','#4b8198','#83bfd1'],['#873f60','#b85e7f','#e99bb2'],['#476447','#6d9565','#a6c595'],['#5e477d','#896bac','#bea6df'],['#202b40','#36445d','#64738b'],['#513868','#976bb9','#c399dc'],['#3c5041','#71865b','#a9b785'],['#683a37','#b15c4a','#dc9975'],['#303d70','#5964af','#9dabe3'],['#4f294b','#8c3e60','#cc7991']];
+const TROUSERS=[['#273249','#3b4565','#626c88'],['#1e354d','#254764','#4b7592'],['#2b4036','#3d5949','#6e8c66'],['#202b40','#36445d','#64738b'],['#364434','#55634c','#77846b'],['#40372e','#69513d','#967950'],['#24273f','#35375c','#65688c'],['#211f32','#342d48','#695577']];
+const BOOTS=[['#6c5948','#c2a280','#e4c9a4'],['#493a32','#956341','#c29164'],['#272a38','#3a3c50','#6d718b'],['#151d2c','#272e40','#929aab'],['#28382f','#3d5145','#82917a'],['#493226','#714a33','#bb8b56'],['#2d2c49','#4c4873','#b2a0d3'],['#221d2b','#33283a','#d3b87b']];
 const HAIR=[['#463025','#704832','#b27d51'],['#242735','#383848','#696b7e'],['#642f24','#a15a39','#db9860'],['#9d713b','#d6ac60','#f4db95'],['#44364f','#7b638a','#b19abe']];
 const rgb=hex=>[1,3,5].map(index=>parseInt(hex.slice(index,index+2),16));
 const PALETTES=[null,JACKETS,TROUSERS,BOOTS,HAIR].map(group=>group?.map(ramp=>ramp.map(rgb)));
@@ -67,8 +67,8 @@ function drawCarriedEquipment(ctx,kind,anchor){
 }
 // Tailoring uses the authored material masks, so details stay attached to every action frame.
 export function tailorTowerFrame(pixels,source,width,height,appearance,selection,armour=false){
-  const suit=appearance.outfit===5,dress=appearance.outfit===6,shoes=appearance.boots===3;
-  if(!suit&&!dress&&!shoes)return;
+  const style=appearance.outfit,suit=style===5||style===10,dress=style===6||style===9,work=style===7||style===8,shoes=appearance.boots===3||appearance.boots===6||appearance.boots===7;
+  if(!suit&&!dress&&!work&&!shoes)return;
   const at=(x,y)=>(y*width+x)*4,material=(x,y)=>{const i=at(x,y);return source[i]===250&&source[i+1]<=4?source[i+1]:0;};
   const put=(x,y,color)=>{x=Math.round(x);y=Math.round(y);if(x>=0&&x<width&&y>=0&&y<height)pixels.set([...rgb(color),255],at(x,y));};
   const scarf=new Set(['35,63,80','121,182,190','52,101,118','141,197,199','41,83,97','131,189,195']);
@@ -82,15 +82,22 @@ export function tailorTowerFrame(pixels,source,width,height,appearance,selection
   if(shoes&&bootTop<height){
     for(let y=bootTop;y<Math.min(height,bootTop+5);y++)for(let x=0;x<width;x++)if(material(x,y)===3)put(x,y,dress?'#bda18a':(TROUSERS[appearance.trousers??0]??TROUSERS[0])[1]);
   }
-  if((!suit&&!dress)||!collar.length&&!legs.length)return;
+  if((!suit&&!dress&&!work)||!collar.length&&!legs.length)return;
   if(!collar.length){const top=Math.min(...legs.map(p=>p[1])),waist=legs.filter(p=>p[1]<top+3);collar=[[Math.round(waist.reduce((a,p)=>a+p[0],0)/waist.length),top-18]];}
   const cx=Math.round(collar.reduce((a,p)=>a+p[0],0)/collar.length),cy=Math.min(...collar.map(p=>p[1]));
-  const back=selection.row>=2,base=dress?'#976bb9':'#36445d';
+  const back=selection.row>=2,base=JACKETS[style]?.[1]??'#36445d';
   // Replace the adventurer scarf, belt and crest with clean formal cloth.
   for(let y=cy;y<Math.min(height,cy+24);y++)for(let x=0;x<width;x++){
     const i=at(x,y);if(!armour&&trim.has((source[i]+','+source[i+1]+','+source[i+2]))&&Math.abs(x-cx)<18)put(x,y,base);
   }
   const cloth=(x,y,color)=>{x=Math.round(x);y=Math.round(y);if(x<0||x>=width||y<0||y>=height)return;const i=at(x,y);if(material(x,y)===1||trim.has((source[i]+','+source[i+1]+','+source[i+2])))put(x,y,color);};
+  if(work&&!armour){
+    for(let y=cy+5;y<cy+21;y++)for(let x=cx-9;x<cx+10;x++){
+      if(style===8&&((y-cy)%6<2||(x-cx+12)%7<2))cloth(x,y,'#e1bc91');
+      if(style===7&&y>cy+9&&y<cy+16&&(Math.abs(x-cx-6)<3||Math.abs(x-cx+6)<3))cloth(x,y,'#3c5041');
+    }
+    if(!back&&style===7){cloth(cx+6,cy+10,'#dfc593');cloth(cx-6,cy+10,'#dfc593');}
+  }
   if(suit&&!armour){
     if(!back){
       for(let dy=1;dy<=15;dy++)for(let dx=-5;dx<=5;dx++){
@@ -103,6 +110,7 @@ export function tailorTowerFrame(pixels,source,width,height,appearance,selection
       cloth(cx+1,cy+20,'#c2b18c');
     }else for(let dy=5;dy<20;dy++)cloth(cx,cy+dy,'#26334a');
   }
+  if(style===10&&!armour){for(let dy=7;dy<22;dy+=3){cloth(cx-7,cy+dy,'#e5c679');cloth(cx+7,cy+dy,'#e5c679');}for(let dx=-8;dx<=8;dx++)cloth(cx+dx,cy+21,'#e5c679');}
   if(dress&&legs.length){
     const top=Math.min(...legs.map(p=>p[1])),bottom=Math.min(height-6,Math.max(...legs.map(p=>p[1]))+1);
     const waist=legs.filter(p=>p[1]<top+4),center=waist.reduce((a,p)=>a+p[0],0)/waist.length;
@@ -115,11 +123,11 @@ export function tailorTowerFrame(pixels,source,width,height,appearance,selection
         if(m===1||m===3||m===4||opaque&&m!==2&&Math.max(source[i],source[i+1],source[i+2])>110)continue;
         const edge=Math.abs(x-c)>half-1.5,hem=y>=bottom-1;
         const fold=Math.floor((x-c+half)/5)%3;
-        put(x,y,edge?'#35263f':hem?'#d7b979':fold===0?'#715084':fold===1?'#ae81c9':'#976bb9');
+        put(x,y,edge?(style===9?'#222c52':'#35263f'):hem?'#d7b979':fold===0?JACKETS[style][0]:fold===1?JACKETS[style][2]:base);
       }
     }
     if(!armour)for(let dx=-8;dx<=8;dx++){cloth(cx+dx,cy+19,'#ddbf82');cloth(cx+dx,cy+20,'#9f7d54');}
-    if(!back&&!armour){cloth(cx,cy+6,'#eed49a');cloth(cx,cy+7,'#eed49a');}
+    if(!back&&!armour){cloth(cx,cy+6,'#eed49a');cloth(cx,cy+7,'#eed49a');if(style===9){for(const [dx,dy] of [[4,10],[3,11],[4,12],[5,11],[4,14]])cloth(cx+dx,cy+dy,'#dcdda9');}}
   }
 }
 export function createTowerCharacterRenderer({metadata,atlases,createCanvas=(width,height)=>{const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;return canvas;}}){

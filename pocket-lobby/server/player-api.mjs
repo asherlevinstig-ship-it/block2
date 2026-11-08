@@ -1,4 +1,4 @@
-import {isSmartlyDressed,normalizeWardrobe} from '../public/wardrobe.js';
+import {isSmartlyDressed,normalizeWardrobe,clothingCatalog} from '../public/wardrobe.js';
 import {configureExplorerLesson} from './exploration-plan.mjs';
 import {migrateHomeSafe} from '../public/home-safe.js';
 import {beetleHuntUnlocked} from '../public/hunting.js';
@@ -21,6 +21,7 @@ function readPlayerState(row){
   const state=JSON.parse(row.state_json);
   migrateProgression(state);
   migrateHomeSafe(state);
+  state.wardrobe=normalizeWardrobe(state.wardrobe,state.avatar);
   if(state.magic)state.magic=normalizeMagic(state.magic);
   // Existing shifts keep their scheduled pace until they finish.
   if(state.adventure)delete state.adventure.rootstone;
@@ -83,6 +84,8 @@ export async function handlePlayerApi(request,env){
       if(existing)return json(packet(existing));
       const body=await bodyOf(request),legacy={...body.legacy};migrateProgression(legacy);
       const state=normalizeState({...legacy,autoConfigured:undefined,bedRest:undefined,safeVersion:1,ownedFurniture:{...(legacy.ownedFurniture??{bed:1}),safe:0},homeFurniture:(legacy.homeFurniture??[]).filter(item=>item.type!=='safe'),bank:undefined,controlMode:'play',meals:{},magic:undefined,...(body.newCharacter===true?{characterCreated:false,welcomeSeen:false,autoLesson:'required'}:{})});
+      if(state.wardrobe.outfits.some(look=>['jacket','trousers','boots'].some(slot=>clothingCatalog[look[slot]]?.price)))throw new Error('Choose free starter clothing for a new character.');
+      state.wardrobe.owned=state.wardrobe.owned.filter(id=>!clothingCatalog[id]?.price);
       state.stats.luckXp=0;delete state.stats.cookingXp;
       delete state.combatGear.weaponEnchantments;
       if(state.hunting.encounter){
@@ -145,7 +148,7 @@ export async function handlePlayerApi(request,env){
       case "/api/player/create":
         if(state.characterCreated!==false)return json({error:"Your character is already created."},400);
         if(typeof body.avatar?.name!=="string"||!body.avatar.name.trim()||body.avatar.name.trim().length>20)return json({error:"Choose a name using 1 to 20 characters."},400);
-        state=normalizeState({...state,avatar:body.avatar,wardrobe:body.wardrobe,characterCreated:true});
+        {const wardrobe=normalizeWardrobe(body.wardrobe,body.avatar);if(wardrobe.outfits.some(look=>['jacket','trousers','boots'].some(slot=>clothingCatalog[look[slot]]?.price)))throw new Error('Choose free starter clothing.');wardrobe.owned=wardrobe.owned.filter(id=>!clothingCatalog[id]?.price);state=normalizeState({...state,avatar:body.avatar,wardrobe,characterCreated:true});}
         break;
       case "/api/player/testing/reset":
         if(body.confirm!=="RESET"||body.testing!==true)return json({error:"Choose testing mode and confirm the reset."},400);

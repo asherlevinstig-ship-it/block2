@@ -1340,6 +1340,7 @@ const storeFurniture=[
   {id:'fern',type:'plant',x:1,y:1,rot:0},
   {id:'stool',type:'stool',x:4,y:4,rot:0}
 ];
+const tailorFurniture=[['reception',3,2],['sofa',7,6],['lamp',8,1],['plant',1,1],['plant',8,8]].map(([type,x,y,rot=0],id)=>({id,type,x,y,rot}));
 const furnishingsFurniture=[['reception',3,1],['bed',6,2],['lamp',8,2],['bookcase',1,1],['sofa',6,6],['table',6,8],['chair',8,8,2],['plant',1,8],['safe',8,1]].map(([type,x,y,rot=0],id)=>({id,type,x,y,rot}));
 const marketFurniture=[
   {id:'trader',type:'tradeCounter',x:3,y:2,rot:0},
@@ -1362,6 +1363,7 @@ const canDecorate=()=>atHome();
 function roomFurniture(){
   if(atHome())return homeFurniture;
   if(currentRoom==='lounge')return initial;
+  if(currentRoom==='tailor')return tailorFurniture;
   if(currentRoom==='furnishings')return furnishingsFurniture;
   if(currentRoom==='store')return storeFurniture;
   if(currentRoom==='market')return marketFurniture;
@@ -1384,6 +1386,7 @@ function setRoomFurniture(items){
 }
 const homeExit={to:'hub',side:'left',tile:{x:0,y:5},start:4.88,end:6.12,height:49,label:'EXIT'};
 const hubDoors=[
+  {to:'tailor',side:'left',tile:{x:0,y:2},start:1.2,end:3.2,height:51,label:'TAILOR'},
   {to:'furnishings',side:'right',tile:{x:9,y:0},start:8.1,end:10.2,height:51,label:'FURNITURE'},
   {to:'home',side:'left',tile:{x:0,y:6},start:5.72,end:7.28,height:51,label:'HOME'},
   {to:'armory',side:'right',tile:{x:3,y:0},start:2.35,end:4.65,height:51,label:'ARMORY'},
@@ -1395,8 +1398,9 @@ const hubDoors=[
 const towerEntrance={to:'hub',side:'left',tile:{x:0,y:5},start:4.58,end:6.42,height:54,label:'TOWER'};
 const moonwoodEntrance={to:'trail',side:'front',tile:{x:6,y:11},arrival:{x:1,y:5},start:5.03,end:7.62,label:'MOONWOOD'};
 const storeExit={to:'hub',side:'left',tile:{x:0,y:5},start:4.6,end:6.4,height:49,label:'LOBBY'};
-const roomDoors={furnishings:[storeExit],home:[homeExit],hub:hubDoors,lounge:[storeExit],store:[storeExit],market:[storeExit],armory:[{...storeExit,arrival:{x:3,y:1}}],outside:[towerEntrance,moonwoodEntrance],...moonwood.doors};
+const roomDoors={tailor:[storeExit],furnishings:[storeExit],home:[homeExit],hub:hubDoors,lounge:[storeExit],store:[storeExit],market:[storeExit],armory:[{...storeExit,arrival:{x:3,y:1}}],outside:[towerEntrance,moonwoodEntrance],...moonwood.doors};
 const roomDetails={
+  tailor:{number:'17',name:'The Gilded Thread',description:'Visit the tailor counter to preview and buy distinctive outfit sets and clothing pieces.',badge:'TAILOR',floor:'Tower shops'},
   furnishings:{number:'16',name:'Tower Furnishings',description:'Furniture, lighting and storage for your own corner of the Tower.',badge:'FURNITURE SHOP',floor:'Tower shops'},
   home:{number:'00',name:'Entry Room',description:'Your aim: become the richest and most powerful player in the game. Use the exit and meet the Tower Warden to get started.',badge:'ROOM NO. 00',floor:'Private room'},
   hub:{number:'01',name:'The Grand Lobby',description:'Visit the Warden, browse the shops, or head outside into Moonwood.',badge:'MAIN HUB',floor:'Ground floor'},
@@ -1670,12 +1674,14 @@ function drawLobbyWindow(a,b){
   wall('right',a-.11,b+.11,26,29,'#bfad92');
 }
 const lobbyPortalColors={
+  tailor:['#42304b','#ffd7ef','#d78fbd'],
   furnishings:['#2d3e35','#e4e9a0','#c3cd83'],
   home:['#3d2c42','#ffc78a','#f6ae6b'],store:['#152d4c','#91dcff','#55baff'],
   market:['#432d34','#ffcd85','#edac61'],armory:['#422841','#ffae9e','#ff7769'],
   lounge:['#332752','#e8bdff','#c583ec'],outside:['#3a3048','#ffe0a1','#f2b06d']
 };
 const lobbyPortalIcons={
+  tailor:['0100010','1111111','1101011','0101010','0101010','0111110','0111110'],
   furnishings:['0111110','0100010','1100011','1100011','1111111','0100010','0100010'],
   home:['0001000','0011100','0111110','1111111','0101010','0110110','0110110'],
   store:['0000001','0110011','1111111','1011110','1111111','0110011','0000001'],
@@ -2234,6 +2240,7 @@ function makeRoomLayer(drawLayer,layerView=standardView){
 }
 const worldDrawing={point,polygon,surface,block,rect};
 const roomLayers={
+  tailor:makeRoomLayer(()=>{drawFishingStore('tailor');for(const [x,y,index] of [[7.7,.7,7],[.7,2,8],[.7,8,9]]){const [px,py]=point(x,y,24);sprite(ctx,px,py,{outfit:index,trousers:index-3,boots:index-3,hair:1},{time:0});}surface(3.3,5,3.4,3,.5,'#603d62','#c4a078');}),
   hub:makeRoomLayer(()=>drawGrandLobby(),hubView),
   hubIntro:makeRoomLayer(()=>drawGrandLobby(false),hubView),
   lounge:makeRoomLayer(()=>{room();drawDoor(storeExit);}),
@@ -2272,7 +2279,7 @@ function drawMoonwoodDetails(time){
   }
 }
 const explorationRegions={
-  'The Tower':['home','hub','outside','lounge','market','armory','store','furnishings'],
+  'The Tower':['home','hub','outside','lounge','market','armory','store','furnishings','tailor'],
   Moonwood:['trail','logging','clearing','grove','shrine','creek','pond','ruins','roots']
 };
 let trackedDestination=null;
@@ -2334,6 +2341,7 @@ function updateWorldLabels(){
     const sign=add(label,...anchor,'door',()=>travelDoor(door),'',currentRoom!=='home'&&['left','right'].includes(door.side)?{side:door.side,width:(door.end-door.start+.08)*18,font:5.6}:null);
     if(door.to===guidedDoor?.to)sign.dataset.guided='true';
   }
+  if(currentRoom==='tailor')add('Tailor · Browse outfits',...point(4.5,2.5,39),'npc',()=>use(tailorFurniture[0]),'The Gilded Thread');
   if(currentRoom==='furnishings')add('Browse furniture',...point(4.5,1.5,39),'npc',()=>use(furnishingsFurniture.find(item=>item.type==='reception')),'Tower Furnishings');
   if(currentRoom==='home'&&!homeBedRest&&!editing){const stove=homeFurniture.find(i=>i.type==='stove');if(stove)add('Cook',...point(stove.x+.5,stove.y+.5,36),'npc',()=>use(stove),'Home kitchen');}
   if(currentRoom==='home'&&!homeBedRest&&!editing){const item=bestHomeBed({homeFurniture,ownedFurniture});if(item)add('Rest',...point(item.x+.5,item.y+.5,29),'npc',()=>use(item),bedProfiles[item.type].rate+' HP / sec');}
@@ -2927,7 +2935,7 @@ function showHudMap(destination=null){
     routes.append(button);
   };
   if(shops&&lobbyRoutesOpen()){
-    for(const [room,label] of [['armory','Armory'],['store','Fishing supplies'],['market','Trading Post'],['furnishings','Furniture shop']])add(label,()=>navigateHud(room));
+    for(const [room,label] of [['tailor','Tailor'],['armory','Armory'],['store','Fishing supplies'],['market','Trading Post'],['furnishings','Furniture shop']])add(label,()=>navigateHud(room));
   }else if(!shops){
     for(const door of hudRoomExits(currentRoom))add(roomDetails[door.to].name,()=>followHudDoor(door),door.to===next?.to);
   }
@@ -3224,6 +3232,8 @@ function finishInteraction(){
     note('The trader offers credits for fish and hunting spoils. Choose what to sell in the market panel.');
   }else if(['tackleCounter','rodRack','baitCrates'].includes(item.type)){
     note('Welcome to Silverfin Outfitters. Choose supplies from the shop panel.');
+  }else if(currentRoom==='tailor'){
+    openTailor();
   }else if(currentRoom==='furnishings'){
     window.towerFurnitureShop?.open(Object.hasOwn(types,item.type)?item.type:pendingFurnitureShopItem);pendingFurnitureShopItem=null;
   }else if(item.type==='reception'){
@@ -3301,6 +3311,7 @@ function advanceAnimation(time){
   updateActivityPrompt();
   draw(time);
   if($('avatarDialog').open)drawAvatarPreview(time);
+  if($('tailorDialog').open)drawTailorPreview(time);
   renderAutoJourneyHud();
 }
 
@@ -3466,7 +3477,7 @@ function openMerchant(){
 }
 
 function renderWorldMap(route=[]){
-  const positions={home:[100,55],hub:[340,110],armory:[265,48],market:[465,48],furnishings:[435,145],lounge:[580,75],store:[118,133],
+  const positions={home:[100,55],hub:[340,110],armory:[265,48],market:[465,48],tailor:[180,70],furnishings:[435,145],lounge:[580,75],store:[118,133],
     outside:[340,205],trail:[340,315],logging:[107,288],clearing:[109,380],grove:[563,274],shrine:[563,354],
     creek:[338,423],pond:[138,497],ruins:[340,549],roots:[549,493],depthsGate:[340,120],depthsGallery:[340,120],depthsCache:[340,120],depthsTreasury:[340,120],depthsRest:[340,120],depthsTrial:[340,120],depthsVault:[340,120]};
   const rooms=Object.keys(positions).filter(room=>roomDetails[room]&&(room===currentRoom||hudNextDoor(room)));
@@ -5076,10 +5087,55 @@ function openClothingInventory(id){
   if($('avatarDialog').open)$('avatarDialog').close();
   openInventory();bagCategory='clothing';bagSelection=null;bagOutfitTarget=id;renderBag();
 }
+let tailorSelection='fishing',tailorBusy=false,tailorFacing=0;
+function visitTailor(){
+  if(unavailable())return;
+  if(currentRoom==='tailor')use(tailorFurniture[0]);else navigateHud('tailor');
+}
+function openTailor(){
+  if(currentRoom!=='tailor')return;
+  if(unavailable())return;
+  tailorFacing=0;$('tailorStatus').textContent='Purchases go to Inventory → Clothing. No stat bonuses.';renderTailor();$('tailorDialog').showModal();
+}
+function renderTailor(){
+  const set=clothingSets[tailorSelection],quote=tailorQuote(wardrobe,tailorSelection),list=$('tailorSets');list.replaceChildren();
+  $('tailorGold').textContent=credits.toLocaleString()+' gold';
+  for(const [id,look] of Object.entries(clothingSets).filter(([,s])=>s.shop)){
+    const button=document.createElement('button');button.type='button';button.dataset.tailorSet=id;button.setAttribute('aria-pressed',String(id===tailorSelection));button.textContent=look.name+' · '+tailorQuote(wardrobe,id).price+' gold';button.disabled=tailorBusy;button.onclick=()=>{tailorSelection=id;renderTailor();};list.append(button);
+  }
+  $('tailorName').textContent=set.name;$('tailorDescription').textContent=set.description;
+  const pieces=$('tailorPieces');pieces.replaceChildren();
+  for(const slot of clothingSlots){
+    const id=set[slot],item=clothingCatalog[id],owned=wardrobe.owned.includes(id),row=document.createElement('div'),name=document.createElement('span'),button=document.createElement('button');
+    name.textContent=item.name;button.type='button';button.dataset.tailorPiece=id;button.textContent=owned?'Owned':'Buy · '+item.price+' gold';button.disabled=owned||tailorBusy||credits<item.price;button.onclick=()=>buyTailor(id,'piece');row.append(name,button);pieces.append(row);
+  }
+  $('tailorBuySet').textContent=quote.ids.length?'Buy missing pieces · '+quote.price+' gold':'Complete set owned';$('tailorBuySet').disabled=!quote.ids.length||tailorBusy||credits<quote.price;
+  $('tailorWear').hidden=quote.ids.length>0;$('tailorWear').disabled=tailorBusy;
+  $('tailorTurn').disabled=tailorBusy;
+}
+function drawTailorPreview(time){
+  const c=$('tailorPreview'),target=c.getContext('2d'),set=clothingSets[tailorSelection];target.clearRect(0,0,c.width,c.height);
+  target.fillStyle='#263750';target.beginPath();target.ellipse(120,232,52,11,0,0,Math.PI*2);target.fill();target.save();target.scale(4,4);
+  sprite(target,30,58,{...avatar,outfit:clothingCatalog[set.jacket].index,trousers:clothingCatalog[set.trousers].index,boots:clothingCatalog[set.boots].index},{direction:tailorFacing<2?'right':'left',back:tailorFacing%2===1,time});target.restore();
+}
+async function buyTailor(id,kind){
+  if(tailorBusy)return;
+  const quote=tailorQuote(wardrobe,id,kind);tailorBusy=true;$('tailorDialog').querySelector('.close').disabled=true;renderTailor();$('tailorStatus').textContent='Completing your purchase…';
+  try{const result=await serverGameplay('buyClothing',{id,kind});Object.assign(wardrobe,normalizeWardrobe(result.state.wardrobe));renderBag();
+    $('tailorStatus').textContent='Purchased! Find your new pieces in Inventory → Clothing, or wear the complete set here.';
+    showTransaction('New clothing',[...quote.ids.map(key=>({icon:'✦',text:clothingCatalog[key].name+' · Added to Inventory'}))],-quote.price);
+  }catch(error){$('tailorStatus').textContent=error.message;}
+  finally{tailorBusy=false;$('tailorDialog').querySelector('.close').disabled=false;renderTailor();}
+}
+$('tailorBuySet').onclick=()=>buyTailor(tailorSelection,'set');
+$('tailorTurn').onclick=()=>{tailorFacing=(tailorFacing+1)%4;};
+$('tailorWear').onclick=()=>{try{const outfit=wearClothingSet(wardrobe,tailorSelection);applyWornOutfit();$('tailorStatus').textContent='Now wearing '+outfit.name+'. Saved to Wardrobe.';}catch(error){$('tailorStatus').textContent=error.message;}};
+$('tailorDialog').oncancel=event=>{if(tailorBusy)event.preventDefault();};
 function renderWardrobe(){
   $('wearingOutfitName').textContent=wardrobe.outfits.find(outfit=>outfit.id===wardrobe.active).name;
+  $('wardrobeTailor').onclick=()=>{$('avatarDialog').close();visitTailor();};
   const sets=$('formalSets');sets.replaceChildren();
-  for(const [id,set] of Object.entries(clothingSets)){
+  for(const [id,set] of Object.entries(clothingSets).filter(([,set])=>!set.shop)){
     const card=document.createElement('article'),preview=document.createElement('canvas'),name=document.createElement('b'),detail=document.createElement('p'),button=document.createElement('button');
     card.className='formal-set';card.dataset.set=id;preview.width=100;preview.height=130;preview.setAttribute('aria-label',set.name+' character preview');preview.dataset.formalPreview=id;
     name.textContent=set.name;detail.textContent=set.description;button.type='button';const replaceWorn=loungeDressGuiding&&wardrobe.outfits.length>=6&&!wardrobe.outfits.some(outfit=>clothingSlots.every(slot=>outfit[slot]===set[slot]));button.textContent=replaceWorn?'Update worn look':'Save & wear';if(replaceWorn)detail.textContent+=' · All six slots used: updates your current outfit.';button.dataset.wearSet=id;button.disabled=routineControlled();
@@ -5169,7 +5225,7 @@ function enterRoom(next,arrival,{automatic=false}={}){
   $('footerRoom').textContent='ROOM '+number;
   $('gridSize').textContent=view.cols+' × '+view.rows;
   $('exitRoom').hidden=!atHome();
-  $('returnLobby').hidden=!['lounge','outside','store','market','armory'].includes(next);
+  $('returnLobby').hidden=!['tailor','lounge','outside','store','market','armory'].includes(next);
   $('enterMoonwood').hidden=next!=='outside';
   $('fishingSound').hidden=next!=='pond';
   $('railDecorate').hidden=$('edit').hidden=!canDecorate();

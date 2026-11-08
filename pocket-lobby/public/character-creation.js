@@ -7,7 +7,7 @@ export function createCharacter({renderer,initial={},save}){
   const name=find('creationName');name.value=initial.name==='Guest'?'':initial.name??'';
   const hairSelect=find('creationHair');['Chestnut','Midnight','Copper','Honey','Violet'].forEach((label,index)=>{const option=document.createElement('option');option.value=index;option.textContent=label;hairSelect.append(option);});hairSelect.value=hair;
   for(const [slot,id] of [['jacket','creationJacket'],['trousers','creationTrousers'],['boots','creationBoots']]){
-   const select=find(id);for(const [key,item] of Object.entries(clothingCatalog)){if(item.slot!==slot)continue;const option=document.createElement('option');option.value=key;option.textContent=item.name;select.append(option);}select.value=wardrobe.outfits[0][slot];select.onchange=()=>{wardrobe.outfits[0][slot]=select.value;find('creationTrousers').disabled=clothingCatalog[wardrobe.outfits[0].jacket].dress===true;};
+   const select=find(id);for(const [key,item] of Object.entries(clothingCatalog)){if(item.slot!==slot||!wardrobe.owned.includes(key))continue;const option=document.createElement('option');option.value=key;option.textContent=item.name;select.append(option);}select.value=wardrobe.outfits[0][slot];select.onchange=()=>{wardrobe.outfits[0][slot]=select.value;find('creationTrousers').disabled=clothingCatalog[wardrobe.outfits[0].jacket].dress===true;};
   }
   hairSelect.onchange=()=>{hair=Number(hairSelect.value);};find('creationTurn').onclick=()=>{view=(view+1)%4;};
   const canvas=dialog.querySelector('canvas'),ctx=canvas.getContext('2d'),reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;

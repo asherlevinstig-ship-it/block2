@@ -8,7 +8,7 @@ test('existing appearances migrate into an owned-clothing outfit without changin
   for(let index=0;index<5;index++){
     const state=normalizeState({avatar:{name:'Ash',outfit:index,hair:2}});
     assert.equal(state.avatar.outfit,index);assert.equal(state.avatar.hair,2);assert.equal(state.avatar.trousers,0);assert.equal(state.avatar.boots,0);
-    assert.equal(state.wardrobe.outfits[0].name,'Everyday');assert.equal(state.wardrobe.owned.length,Object.keys(clothingCatalog).length);
+    assert.equal(state.wardrobe.outfits[0].name,'Everyday');assert.equal(state.wardrobe.owned.length,Object.values(clothingCatalog).filter(item=>!item.price).length);
     assert.deepEqual(normalizeState(JSON.parse(JSON.stringify(state))).wardrobe,state.wardrobe);
   }
 });

@@ -1,3 +1,4 @@
+import {normalizeWardrobe,tailorQuote} from '../public/wardrobe.js';
 import {purchaseFurniture} from '../public/furniture-catalog.js';
 import {besideHomeSafe} from '../public/home-safe.js';
 import {vaultTransfer} from './vault.mjs';
@@ -36,6 +37,14 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
   if(action!=='combat')settleActivities(state,now,random);
   if(activityAction(state,action,body,now,random)||essenceAction(state,action,body))return;
   if(gamblingAction(state,action,body,now,random===Math.random?undefined:random))return;
+  if(action==='buyClothing'){
+    location(state,['tailor']);if(state.fishingCast||state.timberCut||state.gambling?.round?.status==='playing')throw new Error('Choose shopping after finishing your current activity.');
+    if(!state.position||Math.abs(state.position.y-2)+Math.max(3-state.position.x,0,state.position.x-5)!==1)throw new Error('Travel beside the tailor counter before buying clothes.');
+    const wardrobe=normalizeWardrobe(state.wardrobe,state.avatar),quote=tailorQuote(wardrobe,body.id,body.kind);
+    if(!quote.ids.length)throw new Error('Choose clothing you do not already own.');
+    if(state.credits<quote.price)throw new Error('Choose clothing within your gold balance.');
+    state.credits-=quote.price;wardrobe.owned.push(...quote.ids);state.wardrobe=wardrobe;return;
+  }
   if(action==='buyFurniture'){purchaseFurniture(state,body.id,body.quantity);return;}
   if(action==='buySafe'){purchaseFurniture(state,'safe',1);return;}
   if(['goldBankTransfer','goldBankPolicy','vaultTransfer','vaultPolicy'].includes(action)){
@@ -217,6 +226,8 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
 // rewards and active encounters can only change through server actions.
 export function protectFishingState(previous,next){
   next.bank=previous.bank;
+  const owned=normalizeWardrobe(previous.wardrobe,previous.avatar).owned;
+  next.wardrobe=normalizeWardrobe({...normalizeWardrobe(next.wardrobe??previous.wardrobe,next.avatar??previous.avatar),owned});
   if(previous.autoLesson)next.autoLesson=previous.autoLesson;else delete next.autoLesson;
   if(previous.autoConfigured===true)next.autoConfigured=true;else delete next.autoConfigured;
   if(previous.bedRest){next.bedRest=previous.bedRest;next.homeFurniture=previous.homeFurniture;}else delete next.bedRest;

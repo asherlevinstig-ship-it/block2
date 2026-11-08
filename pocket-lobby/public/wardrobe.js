@@ -1,4 +1,16 @@
 export const clothingCatalog=Object.freeze({
+  riverVest:{name:'River Angler Vest',slot:'jacket',index:7,price:70,color:'#71865b',shade:'#3c5041',light:'#3c5041'},
+  riverTrousers:{name:'River Waders',slot:'trousers',index:4,price:45,color:'#55634c',shade:'#77846b',light:'#77846b'},
+  riverBoots:{name:'River Boots',slot:'boots',index:4,price:35,color:'#3d5145',shade:'#82917a',light:'#82917a'},
+  lumberShirt:{name:'Woodcutter Check Shirt',slot:'jacket',index:8,price:90,color:'#b15c4a',shade:'#683a37',light:'#683a37'},
+  lumberTrousers:{name:'Woodcutter Work Trousers',slot:'trousers',index:5,price:55,color:'#69513d',shade:'#967950',light:'#967950'},
+  lumberBoots:{name:'Woodcutter Boots',slot:'boots',index:5,price:45,color:'#714a33',shade:'#bb8b56',light:'#bb8b56'},
+  arcaneRobe:{name:'Starlight Mage Robe',slot:'jacket',index:9,price:260,color:'#5964af',shade:'#303d70',light:'#303d70'},
+  arcaneTrousers:{name:'Mage Leggings',slot:'trousers',index:6,price:70,color:'#35375c',shade:'#65688c',light:'#65688c'},
+  arcaneBoots:{name:'Runestitched Shoes',slot:'boots',index:6,price:90,color:'#4c4873',shade:'#b2a0d3',light:'#b2a0d3'},
+  merchantCoat:{name:'Gilded Merchant Coat',slot:'jacket',index:10,price:650,color:'#8c3e60',shade:'#4f294b',light:'#4f294b'},
+  merchantTrousers:{name:'Merchant Tailored Trousers',slot:'trousers',index:7,price:180,color:'#342d48',shade:'#695577',light:'#695577'},
+  merchantBoots:{name:'Gold Buckle Shoes',slot:'boots',index:7,price:170,color:'#33283a',shade:'#d3b87b',light:'#d3b87b'},
   tailoredJacket:{name:'Tailored Jacket & Tie',slot:'jacket',index:5,color:'#36445d',shade:'#202b40',description:'A tailored navy jacket, ivory shirt, burgundy tie and sharp lapels.'},
   moonlitDress:{name:'Moonlit Dress',slot:'jacket',index:6,color:'#976bb9',shade:'#513868',dress:true,description:'A full-length plum dress with a fitted bodice, gold waist and flowing skirt. Covers the trouser slot.'},
   suitTrousers:{name:'Tailored Suit Trousers',slot:'trousers',index:3,color:'#36445d',light:'#64738b',description:'Pressed navy trousers with a crisp crease. Matches the Tailored Jacket & Tie.'},
@@ -16,13 +28,13 @@ export const clothingCatalog=Object.freeze({
   midnightBoots:{name:'Midnight Boots',slot:'boots',index:2,color:'#3a3c50',light:'#6d718b'}
 });
 export const formalClothingIds=['tailoredJacket','moonlitDress','suitTrousers','polishedShoes'];
-export const clothingSets={tailoredSuit:{name:'Tailored Suit',description:'Two-piece suit · Ivory shirt · Burgundy tie',jacket:'tailoredJacket',trousers:'suitTrousers',boots:'polishedShoes'},moonlitDress:{name:'Moonlit Dress',description:'Fitted bodice · Flared skirt · Gold waistband',jacket:'moonlitDress',trousers:'charcoalTrousers',boots:'polishedShoes'}};
+export const clothingSets={fishing:{name:'River Angler',description:'Pocketed vest · Waders · River boots',jacket:'riverVest',trousers:'riverTrousers',boots:'riverBoots',shop:true},woodcutting:{name:'Woodcutter',description:'Checked shirt · Work trousers · Heavy boots',jacket:'lumberShirt',trousers:'lumberTrousers',boots:'lumberBoots',shop:true},mage:{name:'Starlight Mage',description:'Long robe · Rune embroidery · Arcane shoes',jacket:'arcaneRobe',trousers:'arcaneTrousers',boots:'arcaneBoots',shop:true},merchant:{name:'Gilded Merchant',description:'Embroidered coat · Tailored trousers · Gold buckles',jacket:'merchantCoat',trousers:'merchantTrousers',boots:'merchantBoots',shop:true},tailoredSuit:{name:'Tailored Suit',description:'Two-piece suit · Ivory shirt · Burgundy tie',jacket:'tailoredJacket',trousers:'suitTrousers',boots:'polishedShoes'},moonlitDress:{name:'Moonlit Dress',description:'Fitted bodice · Flared skirt · Gold waistband',jacket:'moonlitDress',trousers:'charcoalTrousers',boots:'polishedShoes'}};
 export const clothingSlots=['jacket','trousers','boots'];
 const defaults={jacket:'amberJacket',trousers:'charcoalTrousers',boots:'canvasBoots'};
 export function normalizeWardrobe(input,appearance={}){
   if(input===undefined){
     const jacket=Object.keys(clothingCatalog).find(id=>clothingCatalog[id].slot==='jacket'&&clothingCatalog[id].index===appearance.outfit)??defaults.jacket;
-    return {catalogVersion:2,owned:Object.keys(clothingCatalog),active:'outfit-1',outfits:[{id:'outfit-1',name:'Everyday',...defaults,jacket}]};
+    return {catalogVersion:2,owned:Object.keys(clothingCatalog).filter(id=>!clothingCatalog[id].price),active:'outfit-1',outfits:[{id:'outfit-1',name:'Everyday',...defaults,jacket}]};
   }
   if(!input||typeof input!=='object'||Array.isArray(input)||!Array.isArray(input.owned)||input.owned.length>100||!Array.isArray(input.outfits)||input.outfits.length<1||input.outfits.length>6)throw new Error('Invalid wardrobe.');
   if(input.owned.some(id=>!Object.hasOwn(clothingCatalog,id)))throw new Error('Unknown clothing.');
@@ -73,4 +85,11 @@ export function isSmartlyDressed(wardrobe){
   if(!worn)return false;
   const owns=id=>wardrobe.owned?.includes(id);
   return worn.jacket==='moonlitDress'&&owns(worn.jacket)||worn.jacket==='tailoredJacket'&&worn.trousers==='suitTrousers'&&owns(worn.jacket)&&owns(worn.trousers);
+}
+
+export function tailorQuote(wardrobe,id,kind='set'){
+  const set=kind==='set'?clothingSets[id]:null;
+  if(kind!=='set'&&kind!=='piece'||kind==='set'&&!set?.shop||kind==='piece'&&!clothingCatalog[id]?.price)throw new Error('Choose a tailor outfit or clothing piece.');
+  const ids=kind==='set'?clothingSlots.map(slot=>set[slot]):[id],missing=ids.filter(key=>!wardrobe.owned.includes(key));
+  return {ids:missing,price:missing.reduce((total,key)=>total+clothingCatalog[key].price,0)};
 }
