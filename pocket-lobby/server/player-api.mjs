@@ -167,7 +167,7 @@ export async function handlePlayerApi(request,env){
         if(body.mode==='auto'){
           if(state.controlMode==='auto'&&state.plan?.source==='rules')break;
           if(state.characterCreated===false||state.plan||state.report||state.depthsRun||state.hunting?.encounter||state.hunting?.recoveryUntil||state.health<=0||state.gambling?.round?.status==='playing'||state.fishingCast||state.timberCut)throw new Error('Choose Auto after finishing your activity, reading your report and leaving the dungeon.');
-          if(upgradeGoalProgress(state)?.receipt)throw new Error('Choose a new upgrade goal in Rules before starting Auto.');
+          if(state.characterRules?.strategy!=='earnGold'&&upgradeGoalProgress(state)?.receipt)throw new Error('Choose a new upgrade goal in Rules before starting Auto.');
           state.controlMode='auto';state.routineLastSeen=now;touchPresence(state,now,{active:false,forceStart:true});
         }else{
           if(state.plan&&state.plan.source!=='rules')throw new Error('Choose Stop work to finish your job-board shift.');
@@ -180,7 +180,7 @@ export async function handlePlayerApi(request,env){
         if(state.hunting?.encounter)return json({error:"Finish combat before changing character rules.",...packet(row)},409);
         if(state.plan||state.report)return json({error:"Read your work report before changing rules.",...packet(row)},409);
         const rules=normalizeCharacterRules(body.rules);
-        if(rules.queue?.enabled&&rules.queue.steps.some(step=>step.type==='huntBeetles')&&!beetleHuntUnlocked(state))return json({error:'Defeat a Stoneback Beetle yourself in the Ruins before scheduling idle hunts.'},400);
+        if(rules.strategy!=='earnGold'&&rules.queue?.enabled&&rules.queue.steps.some(step=>step.type==='huntBeetles')&&!beetleHuntUnlocked(state))return json({error:'Defeat a Stoneback Beetle yourself in the Ruins before scheduling idle hunts.'},400);
         if(body.rules?.combat===undefined)rules.combat=normalizeCharacterRules(state.characterRules).combat;
         if(rules.goal?.target!==state.characterRules?.goal?.target||rules.goal?.autoBuy!==state.characterRules?.goal?.autoBuy)delete state.upgradeGoal;
         state.characterRules=rules;state.routineLastSeen=Date.now();

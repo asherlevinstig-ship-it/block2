@@ -179,10 +179,10 @@
   }
   function showQueueReport(state,plan,running){
     const caught=Object.values(plan.catches).reduce((a,b)=>a+b,0),total=plan.queue.steps.length*plan.queue.repeats;
-    document.getElementById('offlineTitle').textContent=running?'Following your activity queue':plan.reason==='goal-reached'?'Upgrade goal reached!':plan.reason==='queue-complete'?'Queue complete':'Your queue has stopped';
+    document.getElementById('offlineTitle').textContent=running?(plan.adaptive?'Earning gold safely':'Following your activity queue'):plan.reason==='goal-reached'?'Upgrade goal reached!':plan.reason==='queue-complete'?'Queue complete':'Your queue has stopped';
     document.getElementById('offlineDescription').textContent=plan.ruleSummary;
     const list=document.getElementById('offlineCatches');list.replaceChildren();
-    if(running){const row=document.createElement('li');row.textContent='Cycle '+(plan.cycle+1)+' / '+plan.queue.repeats+' · Step '+(plan.stepIndex+1)+' / '+plan.queue.steps.length+' · '+(plan.currentLabel??'Getting ready');list.append(row);}
+    if(running){const row=document.createElement('li');row.textContent=(plan.adaptive?'Auto choice '+(plan.cycle+1)+' · ':'Cycle '+(plan.cycle+1)+' / '+plan.queue.repeats+' · Step '+(plan.stepIndex+1)+' / '+plan.queue.steps.length+' · ')+(plan.currentLabel??'Getting ready');list.append(row);}
     for(const entry of plan.entries.slice(-8)){const row=document.createElement('li');row.textContent='Cycle '+entry.cycle+' · '+queueActions[entry.type]+' · '+entry.note;list.append(row);}
     if(plan.entries.length>8){const row=document.createElement('li');row.textContent='Showing the most recent 8 completed steps.';list.append(row);}
     if(plan.goalResult){const goal=plan.goalResult,row=document.createElement('li');row.textContent=goal.name+' · '+(goal.status==='purchased'?'Purchased and equipped for '+goal.spent+' gold':goal.status==='owned'?'Already in your Inventory':'Gold and stat requirements met · Ready to buy')+(goal.reason==='spending-limit'?' · Automatic purchase skipped: queue spending limit':goal.reason==='gold-reserve'?' · Automatic purchase skipped: gold reserve protected':'');list.append(row);}

@@ -507,3 +507,6 @@
 .auto-controlled #offlinePlanPanel,.auto-controlled #startOfflineWoodcutting,.auto-controlled #adventureLandmark{display:none!important;}
 
 .combat-style-field{display:grid;gap:8px;margin:16px 0 8px;font-weight:700;color:#ebd49b;}.combat-style-field select{width:100%;min-height:44px;}.combat-style-description,.combat-intelligence{padding:10px 12px;border:1px solid #596e85;border-radius:8px;background:#102137;color:#bed6e9;font-size:12px;line-height:1.6;}.auto-panel .auto-decision{color:#b6e1d0;border-left:2px solid #8fbfa9;padding-left:8px;}.auto-panel .auto-decision:empty{display:none;}
+
+.gold-policy{padding:18px;margin:16px 0;border:1px solid #aa915f;border-radius:12px;background:linear-gradient(145deg,#30413055,#13243a);}.gold-policy h3{color:#f4d28b;margin:6px 0;}.gold-policy p,.gold-policy small{color:#bdccdc;line-height:1.7;}.gold-policy input{width:100%;}.gold-policy small{display:block;margin-top:12px;}
+.auto-controlled #upgradeGuide,.auto-controlled #tradeGuide{visibility:hidden;}

@@ -1,3 +1,4 @@
+import {chooseGoldTask} from './gold-planner.mjs';
 import {resolveQueueGoal} from './upgrade-goals.mjs';
 import {startCombatEncounter,advanceServerCombat} from './activities.mjs';
 import {huntEnemies,canUseWeapon,queueHuntEnemies,huntRespawnAt,beetleHuntUnlocked} from '../public/hunting.js';
@@ -16,12 +17,14 @@ function finish(state,plan,reason,endedAt){
 }
 function nextStep(plan,at,note){
   plan.entries.push({cycle:plan.cycle+1,type:plan.queue.steps[plan.stepIndex].type,count:plan.stepCount,at,note});
+  if(plan.adaptive)plan.entries=plan.entries.slice(-64);
   plan.cursorAt=at;plan.nextAt=null;plan.stepCount=0;plan.stepIndex++;
   if(plan.stepIndex===plan.queue.steps.length){plan.stepIndex=0;plan.cycle++;}
 }
 export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={}){
   const p=state.plan,until=Math.min(now,p.endAt);let changed=false;
-  if(!p.activeHunt&&resolveQueueGoal(state,p,p.cursorAt))return finish(state,p,'goal-reached',p.cursorAt);
+  if(!p.adaptive&&!p.activeHunt&&resolveQueueGoal(state,p,p.cursorAt))return finish(state,p,'goal-reached',p.cursorAt);
+  if(p.adaptive)p.preflightComplete=true;
   if(!p.preflightComplete){
     const rod=fishingCatalog.rods[state.fishingGear.equippedRod];
     if(p.queue.steps.some(step=>step.type==='fishing')&&(!rod||!state.fishingGear.ownedRods.includes(state.fishingGear.equippedRod)||skillLevel(state.stats.patienceXp)<rod.patience||!state.adventure.discovered.includes('pond')&&!state.history.fishCaught))return finish(state,p,'requirements',p.startedAt);
@@ -52,16 +55,22 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
       p.cursorAt=report.endedAt;p.nextAt=null;
       if(report.outcome==='victory')p.stepCount++;
       else return finish(state,p,report.outcome==='escaped'?'hunt-escaped':'hunt-defeat',report.endedAt);
-      if(resolveQueueGoal(state,p,report.endedAt))return finish(state,p,'goal-reached',report.endedAt);
+      if(!p.adaptive&&resolveQueueGoal(state,p,report.endedAt))return finish(state,p,'goal-reached',report.endedAt);
       if(p.returnRequested)return finish(state,p,p.stopReason,report.endedAt);
       if(p.stepCount>=p.queue.steps[p.stepIndex].amount)nextStep(p,report.endedAt,'Won '+p.stepCount+' fights');
       continue;
     }
-    if(resolveQueueGoal(state,p,p.cursorAt))return finish(state,p,'goal-reached',p.cursorAt);
+    if(!p.adaptive&&resolveQueueGoal(state,p,p.cursorAt))return finish(state,p,'goal-reached',p.cursorAt);
+    if(p.adaptive&&p.nextAt===null&&p.stepCount===0){
+      if(stop)return finish(state,p,'returned',p.cursorAt);
+      const task=chooseGoldTask(state,p);p.plannerReason=task.reason;
+      if(task.stop)return finish(state,p,task.stop,p.cursorAt);
+      p.queue.steps=[task.step];p.stepIndex=0;p.queue.repeats=p.cycle+1;p.currentLabel=queueActions[task.step.type];
+    }
     if(p.cycle>=p.queue.repeats)return finish(state,p,'queue-complete',p.cursorAt);
     const step=p.queue.steps[p.stepIndex],type=step.type;
     if(p.nextAt===null){
-      if(p.cursorAt>=until)break;
+      if(p.cursorAt>until||p.cursorAt===until&&!p.adaptive)break;
       p.currentLabel=queueActions[type];
       let interval=QUEUE_ACTION_MS;
       if(type==='fishing'){
