@@ -4442,7 +4442,7 @@ function updateCharacterRulesPreview(){
     $('rulesCombatPreview').textContent=rules.combat.enabled
       ?'Tactics run online and offline in encounters you enter. '+(rules.combat.fleeBelow?'Attempt to flee at '+rules.combat.fleeBelow+' HP or lower.':'Keep fighting until the encounter ends.')
       :'Combat is under your manual control.';
-    let detail='Your saved routine begins after a minute without input, including while the game is open. It runs for up to eight hours.';
+    let detail='Your saved routine begins after three minutes without input, including while the game is open. It runs for up to eight hours.';
     if(rules.enabled&&activity!=='rest'){
       const bait=Math.min(1000,Math.max(0,fishingGear.bait-rules.keepBait));
       const preview=jobPreview(jobState(),activity,8,bait);

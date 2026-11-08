@@ -1,5 +1,6 @@
 'use strict';
 (async()=>{
+  const {AWAY_GRACE_MS}=await import('./character-rules.js');
   const status=document.getElementById('saveStatus');
   const gate=document.getElementById('cloudGate');
   const gateText=document.getElementById('cloudGateText');
@@ -119,7 +120,7 @@
     const inputAt=lastInputAt,active=!document.hidden&&inputAt>lastReportedInputAt;
     presenceBusy=(async()=>{
       try{
-        await action('presence',{active,idleForMs:Math.max(0,Math.min(60000,Date.now()-inputAt))});
+        await action('presence',{active,idleForMs:Math.max(0,Math.min(AWAY_GRACE_MS,Date.now()-inputAt))});
         if(active)lastReportedInputAt=inputAt;
         if(packet.state.plan?.source==='rules'||packet.state.report?.source==='rules'){
           pending=retryJob=null;backup(null);

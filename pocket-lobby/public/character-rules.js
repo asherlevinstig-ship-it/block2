@@ -1,7 +1,7 @@
 import {enemyAttack,combatStamina} from './hunting.js';
 import {essencePower,bondedEssences} from './essences.js';
 
-export const AWAY_GRACE_MS=60000,AWAY_CAP_MS=8*3600000;
+export const AWAY_GRACE_MS=3*60000,AWAY_CAP_MS=8*3600000;
 export function normalizeCharacterRules(input={}){
   if(!input||typeof input!=='object'||Array.isArray(input))throw new Error('Invalid character rules.');
   const {enabled=false,activity='rest',keepBait=5,timberTarget=100}=input;

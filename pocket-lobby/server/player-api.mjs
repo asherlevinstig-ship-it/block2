@@ -6,7 +6,7 @@ import {publicPlayerState} from './gambling.mjs';
 import {readRankings} from './rankings.mjs';
 import {touchPresence} from './routines.mjs';
 import {deliverCarpenterOrder} from '../public/commissions.js';
-import {normalizeCharacterRules} from '../public/character-rules.js';
+import {normalizeCharacterRules,AWAY_GRACE_MS} from '../public/character-rules.js';
 import { resolveIdentity } from "./identity.mjs";
 import { normalizeState, startPlan, settlePlan } from "./player-state.mjs";
 
@@ -153,7 +153,7 @@ export async function handlePlayerApi(request,env){
         deliverCarpenterOrder(state);
         break;
       case "/api/player/presence":
-        if(body.active!==undefined&&typeof body.active!=='boolean'||body.idleForMs!==undefined&&(!Number.isInteger(body.idleForMs)||body.idleForMs<0||body.idleForMs>60000))throw new Error('Invalid activity status.');
+        if(body.active!==undefined&&typeof body.active!=='boolean'||body.idleForMs!==undefined&&(!Number.isInteger(body.idleForMs)||body.idleForMs<0||body.idleForMs>AWAY_GRACE_MS))throw new Error('Invalid activity status.');
         if(!state.characterRules?.enabled||state.plan&&state.plan.source!=='rules'||state.report)return json(packet(row));
         settleActivities(state,Date.now());
         touchPresence(state,Date.now(),{active:body.active!==false,activityAt:Date.now()-(body.idleForMs??0)});

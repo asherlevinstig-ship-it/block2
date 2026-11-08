@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {AWAY_GRACE_MS as G} from '../public/character-rules.js';
 import assert from 'node:assert/strict';
 import {normalizeState} from '../server/player-state.mjs';
 import {touchPresence} from '../server/routines.mjs';
@@ -14,9 +15,9 @@ const character = activity => ({...normalizeState(initial(activity)), routineLas
 
 test('away work respects grace period, bait reserve, timber target and time cap', () => {
   const fish = character('fishing');
-  touchPresence(fish, 59999);
+  touchPresence(fish, G-1);
   assert.equal(fish.report, undefined);
-  touchPresence(fish, 59999 + 240000, {random: () => 0.5});
+  touchPresence(fish, G-1+G+180000, {random: () => 0.5});
   assert.equal(fish.fishingGear.bait, 7);
   assert.equal(fish.report.xp, 30);
   assert.equal(fish.report.reason, 'bait-reserve');
@@ -25,7 +26,7 @@ test('away work respects grace period, bait reserve, timber target and time cap'
   const wood = character('woodcutting');
   touchPresence(wood, 86400000);
   assert.equal(wood.woodcutting.timber, 100);
-  assert.equal(wood.report.endedAt, 180000);
+  assert.equal(wood.report.endedAt, G+120000);
   assert.equal(wood.report.reason, 'target-reached');
   const capped = character('woodcutting');
   capped.characterRules.timberTarget = 1000000;
@@ -74,13 +75,13 @@ test('rules persist and concurrent returns only award one routine', async t => {
   const played = await action('save', saved.revision, {state: {...saved.state, characterRules: {enabled:false}, routineLastSeen: 0, activityLog: ['forged']}});
   assert.equal(played.state.characterRules.enabled, true);
   assert.deepEqual(played.state.activityLog, []);
-  time += 180000;
+  time += G+120000;
   const returned = await Promise.all([action('presence', played.revision), action('presence', played.revision)]);
   assert.deepEqual(returned.map(r => r.status).sort(), [200,409]);
   const latest = await call('state');
   assert.equal(latest.state.woodcutting.timber, 100);
   assert.equal(latest.state.activityLog.length, 1);
-  time += 180000;
+  time += G+120000;
   const ack = await action('report/ack', latest.revision, {startedAt:latest.state.report.startedAt});
   assert.equal(ack.state.report, undefined);
   const pulse = await action('presence', ack.revision);
