@@ -170,7 +170,7 @@
     document.getElementById('autoTakeControl').disabled=controlBusy||info.returning;
     panel.dataset.running=String(info.running);
   }
-  function openAutoSetup(reason){document.getElementById('autoControlError').textContent='';window.towerOpenAutoRules?.({focusGoal:reason==='completed-goal'});document.getElementById('rulesStatus').textContent=reason==='completed-goal'?'Your upgrade goal is complete. Choose another goal or clear it, then save Auto Mode.':'Choose an activity and save your Auto Mode plan first.';}
+  function openAutoSetup(){document.getElementById('autoControlError').textContent='';window.towerOpenAutoRules?.();document.getElementById('rulesStatus').textContent='Choose an activity and save your Auto Mode plan first.';}
   async function setControl(mode){
     if(controlBusy||conflicted)return;
     if(mode==='auto'&&autoSetupReason(packet.state)){openAutoSetup(autoSetupReason(packet.state));return;}
@@ -185,7 +185,7 @@
       if(packet.state.plan||packet.state.report)window.towerMultiplayer?.disconnect();
       window.towerApplyRoutineState?.(packet.state);showReport(packet.state);
       if(!packet.state.plan&&!packet.state.report)window.towerJoinRoom?.();
-    }catch(error){if(mode==='auto'&&/upgrade goal/i.test(error.message))openAutoSetup('completed-goal');else document.getElementById('autoControlError').textContent=error.message;}
+    }catch(error){document.getElementById('autoControlError').textContent=error.message;}
     finally{controlBusy=false;renderAutoPanel(packet.state);schedulePresence(packet.state.plan?.source==='rules'?150:20000);}
   }
   function showGamblingReport(state,plan,running){

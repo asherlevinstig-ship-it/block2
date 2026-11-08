@@ -19,7 +19,7 @@ export function touchPresence(state,now,{active=true,activityAt=now,random=Math.
   if(state.plan?.source==='rules'){
     settlePlan(state,now,{stop:active,random});return;
   }
-  if(rules.strategy==='routine'&&upgradeGoalProgress(state)?.receipt)return;
+  if(!forceStart&&state.controlMode!=='auto'&&rules.strategy==='routine'&&upgradeGoalProgress(state)?.receipt)return;
   if(depthsStageIndex(state.location)>=0||(!forceStart&&(!rules.enabled||!Number.isFinite(last)||now-last<AWAY_GRACE_MS))||state.plan||state.report)return;
   const finished=state.combatReceipt?.events?.findLast(event=>['victory','escaped','defeat'].includes(event.outcome));
   const availableAt=finished?(finished.at??0)+(finished.outcome==='defeat'?boarRules.recovery:0):0;
