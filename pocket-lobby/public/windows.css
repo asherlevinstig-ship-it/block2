@@ -364,3 +364,30 @@
 .game-window#questDialog .quest-objectives li:before { content:"◇"; }
 .game-window#questDialog .quest-objectives li.done:before { content:"✓"; color:#b2e1c1; border-color:#6a9e85; }
 .game-window#questDialog .quest-objectives li.done { border-color:#5d9483; color:#aadac1; }
+.routine-queue-config { padding-top:16px; margin-top:8px; border-top:1px solid #536883; }
+.routine-queue-config h3 { color:#edd39d; font-size:16px; margin:0 0 12px; }
+#rulesQueuePanel[hidden],#rulesSingleActivities[hidden] { display:none!important; }
+#rulesQueuePanel>p { font-size:12px; }
+.routine-queue-steps { list-style:none; padding:0; display:grid; gap:10px; margin:14px 0; }
+.routine-queue-steps li { display:grid; grid-template-columns:25px minmax(0,1fr) 85px auto; align-items:center; gap:10px; padding:12px; border:1px solid #536b89; border-radius:9px; background:#11253a; }
+.queue-step-number { color:#edcc82; font-size:14px; text-align:center; }
+#characterRulesDialog .routine-queue-steps select { width:100%; min-width:0; font-size:12px; padding:9px 6px; }
+.routine-queue-steps label { display:grid; gap:4px; color:#aabfd6; font-size:10px; min-width:0; }
+#characterRulesDialog .routine-queue-steps input { width:100%; min-width:0; padding:8px; }
+.routine-queue-steps label[hidden] { display:none; }
+.queue-step-controls { display:flex; gap:4px; }
+.queue-step-controls button { width:30px; min-height:34px!important; background:#223b55; border-color:#536b89; color:#d8e1ed; }
+#rulesQueueAdd { width:100%; padding:10px; background:#1e3b4a; border:1px dashed #819c96; color:#d1e7d8; border-radius:8px; }
+.routine-queue-limits { display:grid; grid-template-columns:.7fr 1.3fr 1fr; gap:12px; margin:17px 0 12px; }
+.routine-queue-limits label { display:grid; gap:7px; font-size:11px; color:#c3d1e3; min-width:0; }
+#characterRulesDialog .routine-queue-limits input { width:100%; min-width:0; }
+#rulesQueuePanel>small { display:block; color:#a9bfd6; font-size:11px; line-height:1.6; }
+@media(max-width:560px) {
+ .routine-queue-steps li { grid-template-columns:20px minmax(0,1fr) 75px; gap:8px; }
+ .queue-step-controls { grid-column:2/-1; justify-content:flex-end; }
+ .routine-queue-limits { grid-template-columns:1fr; }
+}
+#offlineDialog[data-queue=true] #offlineCatches { display:grid; grid-template-columns:1fr; gap:6px; max-height:260px; overflow:auto; padding:0; border:0; list-style:none; }
+#offlineDialog[data-queue=true] #offlineCatches li { padding:8px 12px; font-size:12px; border:1px solid #506985; border-radius:7px; background:#142c40; line-height:1.5; }
+#offlineDialog[data-queue=true] #offlineTotals { font-size:18px; line-height:1.5; }
+#offlineDialog[data-queue=true] #offlineProgress { width:100%; height:7px; accent-color:#d9bc78; }

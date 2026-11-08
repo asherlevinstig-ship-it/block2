@@ -3331,7 +3331,7 @@ function updatePlayerStats(){
   $('fishingStats').textContent='Patience '+level+' · '+xp+'/'+target+' XP · Bait '+fishingGear.bait+' · Fish '+caughtFishCount()+'\nQuality chances · Common '+odds.common.toFixed(1)+'% · Fine '+odds.fine.toFixed(1)+'% · Rare '+odds.rare.toFixed(1)+'%'+(luck.rare?'\nLuck bonus · '+luckText:'');
 }
 function applyServerGameplay(state){
-  credits=state.credits;goldEarned=state.goldEarned??0;
+  credits=state.credits;goldEarned=state.goldEarned??0;Object.assign(firstUpgrade,state.firstUpgrade);
   characterRules=normalizeCharacterRules(state.characterRules);
   combatReports=state.combatReports??[];
   Object.assign(fishingGear,state.fishingGear);
@@ -4275,7 +4275,8 @@ function openInventory(equipmentRoom=null){
   }
 }
 function showFirstEquipment(room){
-  if(!needsEquipmentGuide(room,history)||hunting.encounter||hunting.recoveryUntil||savedPlayerState?.plan||savedPlayerState?.report)return;
+  const state=window.playerCloud?.initial??savedPlayerState;
+  if(!needsEquipmentGuide(room,history)||hunting.encounter||hunting.recoveryUntil||state?.plan||state?.report)return;
   openInventory(room);
 }
 
@@ -4423,12 +4424,33 @@ $('questAction').onclick=questAction;
 $('visitWarden').onclick=()=>use(hubFurniture.find(item=>item.type==='warden'));
 $('restAtTower').onclick=restAtTower;
 
-let savingRules=false;
-function draftCharacterRules(){return normalizeCharacterRules({enabled:$('rulesEnabled').checked,activity:$('rulesActivity').value,keepBait:Number($('rulesKeepBait').value),timberTarget:Number($('rulesTimberTarget').value),combat:{enabled:$('rulesCombatEnabled').checked,q:$('rulesAutoQ').checked,e:$('rulesAutoE').checked,fleeBelow:Number($('rulesCombatFlee').value)}});}
+let savingRules=false,ruleQueueDraft=[];
+function renderRuleQueue(){
+  const list=$('rulesQueueSteps');list.replaceChildren();
+  ruleQueueDraft.forEach((step,index)=>{
+    const row=document.createElement('li'),number=document.createElement('b'),type=document.createElement('select'),amount=document.createElement('input'),field=document.createElement('label'),controls=document.createElement('div');
+    number.textContent=index+1;number.className='queue-step-number';
+    for(const [id,label] of Object.entries(queueActions)){const option=document.createElement('option');option.value=id;option.textContent=label;type.append(option);}
+    type.value=step.type;type.setAttribute('aria-label','Step '+(index+1)+' activity');
+    const keep=['sellFish','sellTimber'].includes(step.type);field.textContent=keep?'Keep':step.type==='buyBait'?'Stock to':'Gather';
+    amount.type='number';amount.min=keep?'0':'1';amount.max='1000';amount.value=step.amount;amount.disabled=step.type==='rest';amount.setAttribute('aria-label','Step '+(index+1)+' '+field.textContent.toLowerCase()+' quantity');field.hidden=step.type==='rest';field.append(amount);
+    amount.oninput=()=>{step.amount=Number(amount.value);updateCharacterRulesPreview();};
+    type.onchange=()=>{step.type=type.value;step.amount=step.type==='rest'?0:Math.max(['sellFish','sellTimber'].includes(step.type)?0:1,step.amount);renderRuleQueue();updateCharacterRulesPreview();};
+    controls.className='queue-step-controls';
+    for(const [label,title,run,disabled] of [['↑','Move step up',()=>{[ruleQueueDraft[index-1],ruleQueueDraft[index]]=[step,ruleQueueDraft[index-1]];},index===0],['↓','Move step down',()=>{[ruleQueueDraft[index+1],ruleQueueDraft[index]]=[step,ruleQueueDraft[index+1]];},index===ruleQueueDraft.length-1],['×','Remove step',()=>ruleQueueDraft.splice(index,1),false]]){
+      const button=document.createElement('button');button.type='button';button.textContent=label;button.setAttribute('aria-label',title+' '+(index+1));button.disabled=disabled;button.onclick=()=>{run();renderRuleQueue();updateCharacterRulesPreview();};controls.append(button);
+    }
+    row.append(number,type,field,controls);list.append(row);
+  });
+  $('rulesQueueAdd').disabled=ruleQueueDraft.length>=8;
+}
+function draftCharacterRules(){return normalizeCharacterRules({enabled:$('rulesEnabled').checked,activity:$('rulesActivity').value,keepBait:Number($('rulesKeepBait').value),timberTarget:Number($('rulesTimberTarget').value),queue:{enabled:$('rulesUseQueue').checked,steps:ruleQueueDraft.map(step=>({...step})),repeats:Number($('rulesQueueRepeats').value),budget:Number($('rulesQueueBudget').value),reserveGold:Number($('rulesQueueReserve').value)},combat:{enabled:$('rulesCombatEnabled').checked,q:$('rulesAutoQ').checked,e:$('rulesAutoE').checked,fleeBelow:Number($('rulesCombatFlee').value)}});}
 function updateCharacterRulesPreview(){
   const activity=$('rulesActivity').value;
   for(const name of ['rest','fishing','woodcutting'])$('routine'+name[0].toUpperCase()+name.slice(1)).setAttribute('aria-pressed',String(activity===name));
-  $('rulesBaitField').hidden=activity!=='fishing';$('rulesTimberField').hidden=activity!=='woodcutting';
+  const queued=$('rulesUseQueue').checked;
+  $('rulesQueuePanel').hidden=!queued;$('rulesSingleActivities').hidden=queued;
+  $('rulesBaitField').hidden=activity!=='fishing'&&!(queued&&ruleQueueDraft.some(step=>step.type==='fishing'));$('rulesTimberField').hidden=activity!=='woodcutting'&&!(queued&&ruleQueueDraft.some(step=>step.type==='woodcutting'));
   try{
     const rules=draftCharacterRules();$('rulesPreview').textContent=describeCharacterRules(rules);
     $('rulesCombatEnabled').disabled=savingRules;
@@ -4443,11 +4465,12 @@ function updateCharacterRulesPreview(){
       ?'Tactics run online and offline in encounters you enter. '+(rules.combat.fleeBelow?'Attempt to flee at '+rules.combat.fleeBelow+' HP or lower.':'Keep fighting until the encounter ends.')
       :'Combat is under your manual control.';
     let detail='Your saved routine begins after three minutes without input, including while the game is open. It runs for up to eight hours.';
-    if(rules.enabled&&activity!=='rest'){
+    if(rules.enabled&&!rules.queue?.enabled&&activity!=='rest'){
       const bait=Math.min(1000,Math.max(0,fishingGear.bait-rules.keepBait));
       const preview=jobPreview(jobState(),activity,8,bait);
       detail=activity==='woodcutting'&&woodcutting.timber>=rules.timberTarget?'Your timber target is already met. Your character will rest.':activity==='fishing'&&bait===0?'Your bait reserve is already reached. Your character will rest.':preview.allowed?'Ready with your current equipment. Supplies stay in Inventory until you sell or use them.':'Will rest with current equipment: '+preview.reason;
     }
+    if(rules.queue?.enabled)detail='The queue starts after three minutes idle. It stops when you return, a limit is reached, or all cycles finish. Unsold supplies stay in Inventory.';
     $('rulesRequirements').textContent=depthsRun?'Away routines pause while you’re in Moonwell Depths. '+detail:detail;
     $('rulesSave').disabled=savingRules||!window.playerCloud;
   }catch(error){$('rulesPreview').textContent=error.message;$('rulesSave').disabled=true;}
@@ -4458,18 +4481,21 @@ function openCharacterRules(){
   const state=window.playerCloud?.initial??savedPlayerState??{},rules=normalizeCharacterRules(characterRules);
   $('rulesEnabled').checked=rules.enabled;$('rulesActivity').value=rules.activity;$('rulesKeepBait').value=rules.keepBait;$('rulesTimberTarget').value=rules.timberTarget;$('rulesStatus').textContent='';
   $('rulesCombatEnabled').checked=rules.combat.enabled;$('rulesAutoQ').checked=rules.combat.q;$('rulesAutoE').checked=rules.combat.e;$('rulesCombatFlee').value=rules.combat.fleeBelow;
+  ruleQueueDraft=(rules.queue?.steps??[{type:'fishing',amount:5},{type:'sellFish',amount:0},{type:'rest',amount:0}]).map(step=>({...step}));
+  $('rulesUseQueue').checked=rules.queue?.enabled===true;$('rulesQueueRepeats').value=rules.queue?.repeats??1;$('rulesQueueBudget').value=rules.queue?.budget??0;$('rulesQueueReserve').value=rules.queue?.reserveGold??100;renderRuleQueue();
   const log=$('rulesActivityLog');log.replaceChildren();
   for(const item of [...(state.activityLog??[])].reverse()){
     const row=document.createElement('li'),title=document.createElement('b'),detail=document.createElement('p');
-    title.textContent=item.kind==='rest'?'Rest at home':item.kind==='fishing'?'Fishing':'Woodcutting';
-    detail.textContent=(item.kind==='rest'?'':item.count+' '+(item.kind==='fishing'?'fish':'timber')+' · +'+item.xp+' XP · ')+({'bait-reserve':'Bait reserve protected','target-reached':'Timber target reached','away-cap':'Eight-hour cap reached',returned:'Returned to game',combat:'Skipped during combat / recovery',requirements:item.summary,rest:'Rested at home'}[item.reason]??item.reason);
+    title.textContent=item.kind==='queue'?'Activity queue':item.kind==='rest'?'Rest at home':item.kind==='fishing'?'Fishing':'Woodcutting';
+    detail.textContent=(item.kind==='rest'?'':item.count+' '+(item.kind==='queue'?'items gathered':item.kind==='fishing'?'fish':'timber')+' · +'+item.xp+' XP · ')+({'queue-complete':'All queue cycles complete','spending-limit':'Queue spending limit reached','gold-reserve':'Gold reserve protected','wallet-full':'Wallet is full','bait-reserve':'Bait reserve protected','target-reached':'Timber target reached','away-cap':'Eight-hour cap reached',returned:'Returned to game',combat:'Skipped during combat / recovery',requirements:item.summary,rest:'Rested at home'}[item.reason]??item.reason);
     row.append(title,detail);log.append(row);
   }
   if(!log.children.length){const row=document.createElement('li');row.textContent='Your next away routine will appear here.';log.append(row);}
   updateCharacterRulesPreview();$('characterRulesDialog').showModal();
 }
 $('openCharacterRules').onclick=openCharacterRules;
-for(const id of ['rulesEnabled','rulesActivity','rulesKeepBait','rulesTimberTarget','rulesCombatEnabled','rulesAutoQ','rulesAutoE','rulesCombatFlee'])$(id).oninput=updateCharacterRulesPreview;
+$('rulesQueueAdd').onclick=()=>{if(ruleQueueDraft.length<8)ruleQueueDraft.push({type:'fishing',amount:5});renderRuleQueue();updateCharacterRulesPreview();};
+for(const id of ['rulesUseQueue','rulesQueueRepeats','rulesQueueBudget','rulesQueueReserve','rulesEnabled','rulesActivity','rulesKeepBait','rulesTimberTarget','rulesCombatEnabled','rulesAutoQ','rulesAutoE','rulesCombatFlee'])$(id).oninput=updateCharacterRulesPreview;
 $('characterRulesDialog').oncancel=event=>{if(savingRules)event.preventDefault();};
 $('characterRulesForm').onsubmit=async event=>{
   event.preventDefault();if(savingRules)return;
@@ -4702,7 +4728,7 @@ function updateRoomLabel(){
   };
   canvas.setAttribute('aria-label',roomDetails[currentRoom].name+'. Click a floor tile or use arrow keys to walk. '+(landmarks[currentRoom]??'Use the marked trails or the field journal to travel.'));
 }
-function enterRoom(next,arrival){
+function enterRoom(next,arrival,{automatic=false}={}){
   if(player.inCombat||(hunting.recoveryUntil&&next!=="hub"&&next!=="home")){note("Finish combat or recovery before travelling.");return;}
   const depthsIndex=depthsStageIndex(next);
   if(depthsRun?!canVisitDepthsRoom(depthsRun,next):depthsIndex>=0)return;
@@ -4757,8 +4783,10 @@ function enterRoom(next,arrival){
   if(exploring)revealByLantern();
   bounds=null;worldLabelKey='';$('worldLabels').replaceChildren();
   connectRoom();
-  showFirstEquipment(next);
-  if(['store','armory','market'].includes(next))openMerchant();
+  if(!automatic){
+    showFirstEquipment(next);
+    if(['store','armory','market'].includes(next))openMerchant();
+  }
   if(focusRoom&&!$('inventoryDialog').open)canvas.focus();
 }
 function movePlayerToSpawn(arrival){
@@ -4809,7 +4837,7 @@ window.towerApplyRoutineState=state=>{
   fishingSession=null;fishingStarted=null;woodSession=null;treeFall=null;catchReveal=null;patienceTween=null;
   $('catchReveal').hidden=true;route=[];step=null;interaction=null;target=null;
   applyServerGameplay(state);
-  enterRoom(state.location,state.position);updateInventory();updateAdventurePanel();
+  enterRoom(state.location,state.position,{automatic:true});updateInventory();updateAdventurePanel();
 };
 if(window.playerCloud)window.playerCloud.attach();
 if(window.playerCloud&&typeof WebSocket!=='undefined'){

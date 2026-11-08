@@ -135,10 +135,29 @@
     })().finally(()=>{presenceBusy=null;if(pending||retryJob)drain();});
     return presenceBusy;
   }
+  function showQueueReport(state,plan,running){
+    const caught=Object.values(plan.catches).reduce((a,b)=>a+b,0),total=plan.queue.steps.length*plan.queue.repeats;
+    document.getElementById('offlineTitle').textContent=running?'Following your activity queue':plan.reason==='queue-complete'?'Queue complete':'Your queue has stopped';
+    document.getElementById('offlineDescription').textContent=plan.ruleSummary;
+    const list=document.getElementById('offlineCatches');list.replaceChildren();
+    if(running){const row=document.createElement('li');row.textContent='Cycle '+(plan.cycle+1)+' / '+plan.queue.repeats+' · Step '+(plan.stepIndex+1)+' / '+plan.queue.steps.length+' · '+(plan.currentLabel??'Getting ready');list.append(row);}
+    for(const entry of plan.entries.slice(-8)){const row=document.createElement('li');row.textContent='Cycle '+entry.cycle+' · '+queueActions[entry.type]+' · '+entry.note;list.append(row);}
+    if(plan.entries.length>8){const row=document.createElement('li');row.textContent='Showing the most recent 8 completed steps.';list.append(row);}
+    document.getElementById('offlineTotals').textContent='Gathered '+caught+' fish · '+plan.timber+' timber · +'+(plan.patienceXp+plan.woodXp)+' XP';
+    document.getElementById('offlineProgress').value=running?100*(plan.cycle*plan.queue.steps.length+plan.stepIndex)/total:100;
+    const minutes=Math.max(0,Math.floor(((plan.endedAt??Date.now())-plan.startedAt)/60000));
+    document.getElementById('offlineDuration').textContent='Time worked · '+Math.floor(minutes/60)+'h '+minutes%60+'m · Spending '+plan.goldSpent+' / '+plan.queue.budget+' gold';
+    const net=plan.goldEarned-plan.goldSpent;
+    document.getElementById('offlineValue').textContent='Sales +'+plan.goldEarned+' gold · Bait −'+plan.goldSpent+' gold · Net '+(net>=0?'+':'')+net+' gold · Wallet '+state.credits+' gold. Unsold supplies remain in Inventory.';
+    document.getElementById('offlineReason').textContent=running?'Your saved queue is running. Return to stop it.':({'queue-complete':'All cycles complete',returned:'Stopped when you returned','away-cap':'Eight-hour limit reached','spending-limit':'Stopped before exceeding your spending limit','gold-reserve':'Stopped to protect your gold reserve',requirements:'Required tool, skill or fishing location is missing','inventory-full':'Inventory is full','wallet-full':'Wallet is full'}[plan.reason]??plan.reason);
+  }
   function showReport(state){
     const dialog=document.getElementById('offlineDialog'),plan=state.plan??state.report;
     if(!plan)return;
+    dialog.dataset.queue=String(plan.kind==='queue');
     const running=!!state.plan,wood=plan.kind==='woodcutting',rest=plan.kind==='rest';
+    if(plan.kind==='queue')showQueueReport(state,plan,running);
+    else{
     document.getElementById('offlineTitle').textContent=rest?(running?'Resting at home':'Your character rested.'):running?(wood?'Woodcutting at Timber Hollow':'Fishing at Silverfin Pond'):'Welcome back.';
     document.getElementById('offlineDescription').textContent=plan.source==='rules'?(running?'Following your saved rules. '+plan.ruleSummary:plan.ruleSummary):running
       ?(wood?'Your woodcutting shift is running. You can close the game and return later.':'Your server fishing plan is running. You can close the game and return later.')
@@ -160,6 +179,7 @@
     document.getElementById('offlineDuration').textContent=(running?'Time worked: ':'Shift completed: ')+Math.floor(elapsed/60)+'h '+Math.floor(elapsed%60)+'m'+(running?' · Ends '+new Date(plan.endAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'');
     const saleValue=wood?(plan.timber??0)*4:Object.entries(plan.catches??{}).reduce((sum,[id,count])=>sum+(fishProducts[id]?.price??0)*count,0);
     document.getElementById('offlineValue').textContent=rest?'No items purchased, sold or consumed.':'Supplies in Inventory · '+saleValue+' gold if sold at the Trading Post. No gold has been added yet.';
+    }
     const button=document.getElementById('offlineContinue');
     button.textContent=running?(plan.source==='rules'?'I’m back · Stop routine':'Stop work and return home'):'Return to game';
     button.onclick=async()=>{

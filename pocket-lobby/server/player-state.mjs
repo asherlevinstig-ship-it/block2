@@ -1,3 +1,4 @@
+import {settleRoutineQueue} from './routine-queue.mjs';
 import {finishRoutineReport} from './routine-report.mjs';
 import {skillLevel,progressionVersion,MAX_SKILL_XP} from '../public/skill-curve.js';
 import {normalizeMagic} from '../public/essences.js';
@@ -128,6 +129,7 @@ function finishPlan(state,reason,endedAt){
 function settleWorkPlan(state,now,{stop=false,random=Math.random}={}){
   const plan=state.plan;
   if(!plan)return false;
+  if(plan.kind==='queue')return settleRoutineQueue(state,now,{stop,random});
   if(plan.kind==='rest'){
     if(now>=plan.endAt||stop){
       if(now>=plan.endAt)state.health=100;

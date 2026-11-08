@@ -1,3 +1,4 @@
+import {startRoutineQueue} from './routine-queue.mjs';
 import {normalizeCharacterRules,AWAY_GRACE_MS,AWAY_CAP_MS,describeCharacterRules} from '../public/character-rules.js';
 import {startPlan,settlePlan} from './player-state.mjs';
 import {jobPreview} from '../public/jobs.js';
@@ -25,6 +26,7 @@ export function touchPresence(state,now,{active=true,activityAt=now,random=Math.
   // Unfinished manual casts/cuts pay nothing. The saved routine starts cleanly.
   delete state.fishingCast;delete state.timberCut;
   const metadata={source:'rules',routineId,ruleSummary:summary,routineCapAt:startedAt+AWAY_CAP_MS,keepBait:rules.keepBait,timberTarget:rules.timberTarget};
+  if(rules.queue?.enabled){startRoutineQueue(state,rules,startedAt,metadata);settlePlan(state,until,{stop:active,random});return;}
   let reason='rest',ruleSummary=summary;
   if(rules.activity!=='rest'){
     const baitLimit=Math.min(1000,Math.max(0,state.fishingGear.bait-rules.keepBait));
