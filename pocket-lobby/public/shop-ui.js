@@ -3,7 +3,8 @@ export function shopItemArt(id){
   const rod=['reed','oak','silver','moon'].includes(id);
   const metal=id==='wardenSword'?'#d9e5bd':'#d6e4df';
   const tint={reed:'#bd9d72',oak:'#dfa877',silver:'#a7d8d4',moon:'#c3a4e4'}[id]??'#e9c185';
-  const shape=rod
+  const armour=['scoutLeather','towerPlate'].includes(id);
+  const shape=armour?`<path d="M22 8l10 6 10-6 16 15-8 9-7-5v29H21V27l-7 5-8-9z" fill="${id==='towerPlate'?'#9eb5c7':'#a27a51'}" stroke="#27364a" stroke-width="2"/><path d="M24 19h16v27H24z" fill="${id==='towerPlate'?'#526c8a':'#5c4338'}"/><path d="M24 24h16v3H24zM24 35h16v3H24zM16 16l6 6M42 22l6-6" stroke="#e3c88f" stroke-width="3"/><path d="M29 25h6v12h-6z" fill="#d0d9dc"/>`:rod
     ?`<path d="M18 54l21-43 3 1-21 43z" fill="${tint}"/><path d="M41 12l10 9v24" fill="none" stroke="#c4ddd2"/><path d="M49 44h5v5h-5z" fill="#edaa8b"/><path d="M17 48l5 2-3 8-5-2z" fill="#674f5c"/><path d="M25 37h7v5h-7z" fill="#cad8c4"/>`
     :id==='huntingSpear'
       ?'<path d="M30 15h4v44h-4z" fill="#b98c66"/><path d="M32 3l8 14-8 7-8-7z" fill="#d6e4df"/><path d="M32 3v18l-8-4z" fill="#93aeb9"/><path d="M26 23h12v3H26z" fill="#e3bf82"/>'

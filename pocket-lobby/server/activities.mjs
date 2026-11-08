@@ -1,3 +1,4 @@
+import {armourSelection} from '../public/hunting.js';
 import {startBedRest,settleBedRest,stopBedRest} from './bed-rest.mjs';
 import {awardDungeonWeapon} from '../public/dungeon-loot.js';
 import {MAX_SKILL_XP} from '../public/skill-curve.js';
@@ -101,9 +102,9 @@ export function advanceServerCombat(state,now,random=Math.random){
     let event;
     if(automatic){
       if(tactic.action==='essence')event=castEssencePower(state,due,tactic.slot);
-      else event=huntingTurn(encounter,state.health,state.stats,tactic.action,due,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,state.combatGear.stonebackVestEquipped,state.combatGear.moonwellCharmEquipped,state.combatGear.weaponEnchantments);
+      else event=huntingTurn(encounter,state.health,state.stats,tactic.action,due,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,armourSelection(state.combatGear),state.combatGear.moonwellCharmEquipped,state.combatGear.weaponEnchantments);
       if(event){event.automatic=true;event.decision={at:due,style:tactic.style,action:tactic.action,reason:tactic.reason};if(event.encounter){event.encounter.lastDecision=event.decision;if(tactic.action==='dodge')event.encounter.autoDodgeUntil=event.encounter.dodgeUntil;}}
-    }else event=advanceHunt(encounter,state.health,state.stats,due,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,state.combatGear.stonebackVestEquipped,state.combatGear.moonwellCharmEquipped,state.combatGear.weaponEnchantments);
+    }else event=advanceHunt(encounter,state.health,state.stats,due,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,armourSelection(state.combatGear),state.combatGear.moonwellCharmEquipped,state.combatGear.weaponEnchantments);
     if(!event)break;
     events.push(result(state,event,due,random));
   }
@@ -167,7 +168,7 @@ export function activityAction(state,action,body,now,random){
         const event=castEssencePower(state,now,body.slot);
         if(event)events.push(result(state,event,now,random));
       }else{
-        const event=huntingTurn(state.hunting.encounter,state.health,state.stats,body.input,now,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,state.combatGear.stonebackVestEquipped,state.combatGear.moonwellCharmEquipped,state.combatGear.weaponEnchantments);
+        const event=huntingTurn(state.hunting.encounter,state.health,state.stats,body.input,now,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,armourSelection(state.combatGear),state.combatGear.moonwellCharmEquipped,state.combatGear.weaponEnchantments);
         if(event)events.push(result(state,event,now,random));
       }
     }

@@ -1,3 +1,4 @@
+import {armourCatalog,canUseArmour} from '../public/hunting.js';
 import {normalizeWardrobe,tailorQuote} from '../public/wardrobe.js';
 import {purchaseFurniture} from '../public/furniture-catalog.js';
 import {besideHomeSafe} from '../public/home-safe.js';
@@ -37,6 +38,19 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
   if(action!=='combat')settleActivities(state,now,random);
   if(activityAction(state,action,body,now,random)||essenceAction(state,action,body))return;
   if(gamblingAction(state,action,body,now,random===Math.random?undefined:random))return;
+  if(action==='armour'){
+    available(state);if(state.fishingCast||state.timberCut||state.gambling?.round?.status==='playing')throw new Error('Choose equipment after finishing your current activity.');
+    const id=body.id;
+    if(id===null){if(state.combatGear.ownedArmour)state.combatGear.equippedArmour=null;else delete state.combatGear.equippedArmour;state.combatGear.stonebackVestEquipped=false;return;}
+    const item=armourCatalog[id];if(!item)throw new Error('Choose valid armour.');
+    if(!canUseArmour(state.stats,id))throw new Error('Choose armour within your Vitality level. Requires Vitality '+item.vitality+'.');
+    const owned=state.combatGear.ownedArmour??[];
+    if(!owned.includes(id)){
+      location(state,['armory']);if(state.credits<item.price)throw new Error('Choose armour within your gold balance.');
+      state.credits-=item.price;owned.push(id);
+    }
+    state.combatGear.ownedArmour=owned;state.combatGear.equippedArmour=id;state.combatGear.stonebackVestEquipped=false;return;
+  }
   if(action==='buyClothing'){
     location(state,['tailor']);if(state.fishingCast||state.timberCut||state.gambling?.round?.status==='playing')throw new Error('Choose shopping after finishing your current activity.');
     if(!state.position||Math.abs(state.position.y-2)+Math.max(3-state.position.x,0,state.position.x-5)!==1)throw new Error('Travel beside the tailor counter before buying clothes.');
@@ -254,6 +268,7 @@ export function protectFishingState(previous,next){
   if(previous.combatGear.weaponEnchantments)next.combatGear.weaponEnchantments=previous.combatGear.weaponEnchantments;
   else delete next.combatGear.weaponEnchantments;
   next.combatGear.swordUpgrades=previous.combatGear.swordUpgrades;
+  if(previous.combatGear.ownedArmour!==undefined){next.combatGear.ownedArmour=previous.combatGear.ownedArmour;next.combatGear.equippedArmour=previous.combatGear.equippedArmour??null;if(next.combatGear.stonebackVestEquipped)next.combatGear.equippedArmour=null;}else{delete next.combatGear.ownedArmour;delete next.combatGear.equippedArmour;}
   next.combatGear.stonebackVestOwned=previous.combatGear.stonebackVestOwned;
   next.combatGear.moonwellCharmOwned=previous.combatGear.moonwellCharmOwned;
   next.combatGear.moonwellCharmEquipped=previous.combatGear.moonwellCharmEquipped;

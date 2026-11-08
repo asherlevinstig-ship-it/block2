@@ -13,7 +13,11 @@ export const counterRules={duration:1800,bonus:.5};
 export const boarRules={health:70,playerInterval:1100,boarInterval:1900,fleeCooldown:1800,respawn:30000,recovery:12000,dodgeCost:40,dodgeWindow:350,dodgeCooldown:700};
 export const stonebackVest={name:'Stoneback Vest',absorption:4,dodgeCost:50,timber:8,fragment:'stonebackShell'};
 export const moonwellCharm={name:'Moonwell Charm',staminaRegen:3,timber:4,power:10};
-export const combatDodgeCost=vestEquipped=>vestEquipped?stonebackVest.dodgeCost:boarRules.dodgeCost;
+export const armourCatalog={scoutLeather:{name:'Scout Leather',price:180,vitality:1,absorption:2,dodgeCost:35,description:'Layered leather, cross-body straps and light shoulder guards. Less protection, easier dodging.'},towerPlate:{name:'Tower Sentinel Plate',price:650,vitality:3,absorption:7,dodgeCost:65,description:'Steel breastplate, broad pauldrons and a Tower crest. Strong protection, expensive dodges.'}};
+export const armourSelection=gear=>gear?.equippedArmour??(gear?.stonebackVestEquipped?'stonebackVest':null);
+export const armourProfile=id=>id===true||id==='stonebackVest'?stonebackVest:armourCatalog[id]??null;
+export const combatDodgeCost=equipped=>armourProfile(equipped)?.dodgeCost??boarRules.dodgeCost;
+export const canUseArmour=(stats,id)=>!!armourCatalog[id]&&skillLevel(stats.vitalityXp??0)>=armourCatalog[id].vitality;
 const boar={id:'boar',name:'Wild Boar',room:'clearing',prop:'wildboar',move:'charge',health:boarRules.health,firstAttack:1300,interval:boarRules.boarInterval,damage:12,respawn:boarRules.respawn,loot:'boar',lootName:'Boar Meat',sellPrice:30,xp:[15,10,15]};
 const beetle={id:'beetle',name:'Stoneback Beetle',room:'ruins',prop:'stonebackBeetle',move:'slam',health:96,firstAttack:2300,interval:3500,damage:22,respawn:45000,shellArmor:8,exposureMs:2200,exposedBonus:5,loot:'stonebackShell',lootName:'Shell Fragment',sellPrice:45,xp:[25,20,25],masteryXp:15};
 export const huntEnemies={
@@ -172,6 +176,12 @@ export function normalizeCombatGear(input){
     const {moonwellCharmOwned=false,moonwellCharmEquipped=false}=input;
     if(typeof moonwellCharmOwned!=='boolean'||typeof moonwellCharmEquipped!=='boolean'||moonwellCharmEquipped&&!moonwellCharmOwned)throw new Error('Invalid Moonwell Charm equipment.');
     Object.assign(gear,{moonwellCharmOwned,moonwellCharmEquipped});
+  }
+  if(input.ownedArmour!==undefined||input.equippedArmour!==undefined){
+    if(!Array.isArray(input.ownedArmour)||input.ownedArmour.some(id=>!Object.hasOwn(armourCatalog,id)))throw new Error('Invalid owned armour.');
+    const ownedArmour=[...new Set(input.ownedArmour)],equippedArmour=input.equippedArmour??null;
+    if(equippedArmour!==null&&!ownedArmour.includes(equippedArmour)||equippedArmour&&gear.stonebackVestEquipped)throw new Error('Invalid equipped armour.');
+    Object.assign(gear,{ownedArmour,equippedArmour});
   }
   return gear;
 }
@@ -333,7 +343,7 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
       delete result.encounter.weakenPercent;
     }
     if(vestEquipped&&result.taken){
-      result.absorbed=Math.min(stonebackVest.absorption,result.taken);
+      result.absorbed=Math.min(armourProfile(vestEquipped)?.absorption??0,result.taken);
       result.taken-=result.absorbed;
     }
     if(result.taken&&encounter.magicWardUntil>now){

@@ -1,3 +1,4 @@
+import {armourSelection} from '../public/hunting.js';
 import {fishingCatalog} from '../public/fishing.js';
 import {skillLevel} from '../public/skill-curve.js';
 import {huntEnemies,canUseWeapon,createHunt,advanceHunt,beetleHuntUnlocked} from '../public/hunting.js';
@@ -9,7 +10,7 @@ export function safeHuntPreview(state,id,minimum){
  let encounter=createHunt(0,undefined,id),health=state.health,at=0;
  for(let n=0;n<300&&encounter;n++){
   at=Math.min(encounter.nextPlayerAt,encounter.nextBoarAt);
-  const result=advanceHunt(encounter,health,state.stats,at,encounter.nextPlayerAt<=encounter.nextBoarAt?()=>0:()=>.999,gear.equippedWeapon,gear.activeSwordUpgrade,gear.stonebackVestEquipped,gear.moonwellCharmEquipped,gear.weaponEnchantments);
+  const result=advanceHunt(encounter,health,state.stats,at,encounter.nextPlayerAt<=encounter.nextBoarAt?()=>0:()=>.999,gear.equippedWeapon,gear.activeSwordUpgrade,armourSelection(gear),gear.moonwellCharmEquipped,gear.weaponEnchantments);
   if(!result)return null;encounter=result.encounter;health=result.health;
   if(result.outcome==='victory')return health>=Math.max(40,(state.characterRules.combat.fleeBelow??20)+10)?{health,duration:at}:null;
   if(result.outcome!=='fighting')return null;

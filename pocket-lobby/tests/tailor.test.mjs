@@ -22,7 +22,7 @@ test('snapshots cannot forge paid clothing or erase legitimately bought pieces',
  applyGameplayAction(s,'buyClothing',{id:'mage',kind:'set'},1000);const next=structuredClone(s);next.wardrobe.owned=next.wardrobe.owned.filter(id=>!clothingCatalog[id].price);assert(protectFishingState(s,next).wardrobe.owned.includes('arcaneRobe'));
 });
 test('tailor doorway is connected to lobby and the physical counter opens the shop',()=>{
- const g=boot(customer());assert.equal(g.read('currentRoom'),'tailor');g.run('openTailor()');assert.equal(g.nodes.get('tailorDialog').open,true);assert.equal(g.nodes.get('tailorSets').children.length,4);assert.match(g.nodes.get('tailorBuySet').textContent,/150 gold/);g.run('drawTailorPreview(1500)');assert.deepEqual(g.errors,[]);
+ const g=boot(customer());assert.equal(g.read('currentRoom'),'tailor');g.run('openTailor()');assert.equal(g.nodes.get('tailorDialog').open,true);assert.equal(g.nodes.get('tailorSets').children.length,Object.values(clothingSets).filter(set=>set.shop).length);assert.match(g.nodes.get('tailorBuySet').textContent,/150 gold/);g.run('drawTailorPreview(1500)');assert.deepEqual(g.errors,[]);
  assert.equal(g.read("autoRoomRoute('hub','tailor')[0].to"),'tailor');assert.equal(g.read("autoRoomRoute('tailor','hub')[0].to"),'hub');
 });
 

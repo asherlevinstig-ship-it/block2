@@ -60,3 +60,9 @@ test('formal sets respect outfit capacity and never overwrite a saved look',()=>
  assert.throws(()=>wearClothingSet(w,'unknown'),/Choose/);
  const locked=normalizeWardrobe();locked.owned=locked.owned.filter(id=>id!=='polishedShoes');assert.throws(()=>wearClothingSet(locked,'tailoredSuit'),/need all/);
 });
+
+
+test('ranger and rogue sets are earned clothing with independent hood, leg and boot slots',()=>{
+ const w=normalizeWardrobe();for(const id of ['ranger','rogue']){const set=clothingSets[id];assert.equal(set.shop,true);assert.throws(()=>wearClothingSet(w,id),/need all/);w.owned.push(...['jacket','trousers','boots'].map(slot=>set[slot]));const look=wearClothingSet(w,id);assert.equal(look.name,set.name);assert.equal(outfitAppearance(w).outfit,id==='ranger'?11:12);}
+ const s=normalizeState({avatar:{name:'Ranger',outfit:12,hair:0},wardrobe:w});assert.equal(s.avatar.outfit,12);assert.deepEqual(normalizeState(JSON.parse(JSON.stringify(s))).wardrobe,w);
+});

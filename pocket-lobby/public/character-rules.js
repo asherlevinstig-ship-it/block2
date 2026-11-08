@@ -1,3 +1,4 @@
+import {armourSelection,armourProfile} from './hunting.js';
 import {normalizeFoodPolicy} from './food-policy.js';
 import {normalizeUpgradeGoal} from './upgrade-goals.js';
 export {upgradeTargets,upgradeGoalProgress} from './upgrade-goals.js';
@@ -80,7 +81,7 @@ export function incomingCombatDamage(state){
  const enemy=huntEnemy(e),attack=enemyAttack(e),attributes=huntingAttributes(state.stats??{},state.combatGear?.equippedWeapon);
  let damage=Math.max(4,enemy.damage+attack.damage+5-attributes.armor);
  if(e.weakenedUntil>e.nextBoarAt)damage-=Math.floor(damage*(e.weakenPercent??25)/100);
- if(state.combatGear?.stonebackVestEquipped)damage=Math.max(0,damage-4);
+ damage=Math.max(0,damage-(armourProfile(armourSelection(state.combatGear))?.absorption??0));
  if(e.magicWardUntil>e.nextBoarAt)damage=Math.max(0,damage-(e.magicWard??0));
  return damage;
 }
@@ -104,7 +105,7 @@ export function nextCombatTactic(state){
  const offer=tactic=>{if(!next||tactic.at<next.at||tactic.at===next.at&&tactic.priority>next.priority)next=tactic;};
  const wantsDefense=style==='cautious'||style==='balanced'&&(attack.damage>0||attack.shape==='bolt'||incoming>=state.health*.4)||lethal;
  if(rules.dodge&&wantsDefense&&!physicalInterrupt&&!alreadyDodging&&!finishingHit){
-  const at=Math.max(earliest,e.nextDodgeAt??0,strike-policy.dodgeLead),cost=combatDodgeCost(state.combatGear?.stonebackVestEquipped);
+  const at=Math.max(earliest,e.nextDodgeAt??0,strike-policy.dodgeLead),cost=combatDodgeCost(armourSelection(state.combatGear));
   if(at<strike&&combatStamina(e,state.stats??{},at,state.combatGear?.moonwellCharmEquipped)>=cost)offer(make(at,'dodge',lethal?'Dodging: this attack could be lethal.':attack.shape==='bolt'?'Dodging the charged spell.':attack.damage>0?'Dodging the heavy '+attack.name+'.':'Defending against '+attack.name+'.',85));
  }
  for(const slot of ['q','e']){

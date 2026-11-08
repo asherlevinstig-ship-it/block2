@@ -86,6 +86,7 @@ export async function handlePlayerApi(request,env){
       const state=normalizeState({...legacy,autoConfigured:undefined,bedRest:undefined,safeVersion:1,ownedFurniture:{...(legacy.ownedFurniture??{bed:1}),safe:0},homeFurniture:(legacy.homeFurniture??[]).filter(item=>item.type!=='safe'),bank:undefined,controlMode:'play',meals:{},magic:undefined,...(body.newCharacter===true?{characterCreated:false,welcomeSeen:false,autoLesson:'required'}:{})});
       if(state.wardrobe.outfits.some(look=>['jacket','trousers','boots'].some(slot=>clothingCatalog[look[slot]]?.price)))throw new Error('Choose free starter clothing for a new character.');
       state.wardrobe.owned=state.wardrobe.owned.filter(id=>!clothingCatalog[id]?.price);
+      delete state.combatGear.ownedArmour;delete state.combatGear.equippedArmour;
       state.stats.luckXp=0;delete state.stats.cookingXp;
       delete state.combatGear.weaponEnchantments;
       if(state.hunting.encounter){
