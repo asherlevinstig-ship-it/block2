@@ -3298,6 +3298,7 @@ function renderProgress(){
   $('progressMilestonesEmpty').hidden=completed.children.length>0;
 }
 function updatePlayerStats(){
+  updateUpgradeGoalHud();
   health=Math.min(health,maxHealth());
   const totalHealth=maxHealth();
   const hearts=Array.from({length:5},(_,i)=>{
@@ -3351,7 +3352,7 @@ function applyServerGameplay(state){
   for(const key of Object.keys(ownedFurniture))ownedFurniture[key]=state.ownedFurniture?.[key]??0;
   for(const id of Object.keys(huntingLoot))delete huntingLoot[id];
   Object.assign(huntingLoot,state.huntingLoot);
-  updateEssenceHotbar();
+  updateEssenceHotbar();updateUpgradeGoalHud();
 }
 async function serverGameplay(name,body={}){
   if(serverActionBusy)throw new Error('Wait for the current action.');
@@ -4425,6 +4426,24 @@ $('visitWarden').onclick=()=>use(hubFurniture.find(item=>item.type==='warden'));
 $('restAtTower').onclick=restAtTower;
 
 let savingRules=false,ruleQueueDraft=[];
+function currentGoalState(){return {...(window.playerCloud?.initial??savedPlayerState??{}),credits,stats:playerStats,combatGear,fishingGear,characterRules};}
+function updateUpgradeGoalHud(){
+  const g=upgradeGoalProgress(currentGoalState()),button=$('upgradeGoalHud');button.hidden=!g;
+  if(!g)return;
+  button.textContent=(g.receipt?.status==='purchased'?'Equipped: ':g.receipt||g.owned?'Goal reached: ':'Goal: ')+g.item.name+(!g.receipt&&!g.owned?' · '+Math.min(g.goldPercent,...g.requirements.map(r=>r.percent))+'%':'');
+  button.title=g.item.name+' · '+g.gold+' / '+g.item.price+' gold · '+g.requirements.map(r=>r.label+' '+r.current+'/'+r.level).join(' · ');
+}
+function renderUpgradeGoalProgress(goal){
+  const list=$('rulesGoalProgress');list.replaceChildren();
+  const g=upgradeGoalProgress(currentGoalState(),goal);$('rulesGoalAutoBuy').disabled=!g||savingRules;
+  if(!g)return;
+  const heading=document.createElement('b');heading.textContent=g.item.name+' · '+g.item.price+' gold';list.append(heading);
+  for(const row of [{label:'Gold',current:g.gold,needed:g.item.price,percent:g.goldPercent},...g.requirements.map(r=>({label:r.label+' level',current:r.current,needed:r.level,percent:r.percent}))]){
+    const label=document.createElement('label'),bar=document.createElement('progress');label.textContent=row.label+' · '+row.current+' / '+row.needed;bar.max=100;bar.value=row.percent;bar.setAttribute('aria-label',label.textContent);label.append(bar);list.append(label);
+  }
+  const status=document.createElement('small');status.textContent=g.receipt?.status==='purchased'?'Purchased and equipped. Choose your next goal.':g.receipt||g.owned?'Goal reached. Choose your next goal or clear this one to resume.':g.ready?'Requirements met. Your next idle queue will stop for this upgrade.':'Earn gold and train the required stats through your queue. Sell your catches or hunting loot to turn them into gold.';list.append(status);
+}
+
 function renderRuleQueue(){
   const list=$('rulesQueueSteps');list.replaceChildren();
   ruleQueueDraft.forEach((step,index)=>{
@@ -4444,7 +4463,7 @@ function renderRuleQueue(){
   });
   $('rulesQueueAdd').disabled=ruleQueueDraft.length>=8;
 }
-function draftCharacterRules(){return normalizeCharacterRules({enabled:$('rulesEnabled').checked,activity:$('rulesActivity').value,keepBait:Number($('rulesKeepBait').value),timberTarget:Number($('rulesTimberTarget').value),queue:{enabled:$('rulesUseQueue').checked,steps:ruleQueueDraft.map(step=>({...step})),repeats:Number($('rulesQueueRepeats').value),budget:Number($('rulesQueueBudget').value),reserveGold:Number($('rulesQueueReserve').value),minHealth:Number($('rulesQueueHealth').value)},combat:{enabled:$('rulesCombatEnabled').checked,q:$('rulesAutoQ').checked,e:$('rulesAutoE').checked,fleeBelow:Number($('rulesCombatFlee').value)}});}
+function draftCharacterRules(){return normalizeCharacterRules({enabled:$('rulesEnabled').checked,activity:$('rulesActivity').value,keepBait:Number($('rulesKeepBait').value),timberTarget:Number($('rulesTimberTarget').value),queue:{enabled:$('rulesUseQueue').checked,steps:ruleQueueDraft.map(step=>({...step})),repeats:Number($('rulesQueueRepeats').value),budget:Number($('rulesQueueBudget').value),reserveGold:Number($('rulesQueueReserve').value),minHealth:Number($('rulesQueueHealth').value)},goal:{target:$('rulesGoalTarget').value||null,autoBuy:$('rulesGoalAutoBuy').checked},combat:{enabled:$('rulesCombatEnabled').checked,q:$('rulesAutoQ').checked,e:$('rulesAutoE').checked,fleeBelow:Number($('rulesCombatFlee').value)}});}
 function updateCharacterRulesPreview(){
   const activity=$('rulesActivity').value;
   for(const name of ['rest','fishing','woodcutting'])$('routine'+name[0].toUpperCase()+name.slice(1)).setAttribute('aria-pressed',String(activity===name));
@@ -4452,9 +4471,9 @@ function updateCharacterRulesPreview(){
   $('rulesQueuePanel').hidden=!queued;$('rulesSingleActivities').hidden=queued;
   $('rulesBaitField').hidden=activity!=='fishing'&&!(queued&&ruleQueueDraft.some(step=>step.type==='fishing'));$('rulesTimberField').hidden=activity!=='woodcutting'&&!(queued&&ruleQueueDraft.some(step=>step.type==='woodcutting'));
   try{
-    const rules=draftCharacterRules();$('rulesPreview').textContent=describeCharacterRules(rules);
+    const rules=draftCharacterRules();renderUpgradeGoalProgress(rules.goal);$('rulesPreview').textContent=describeCharacterRules(rules);
     $('rulesCombatEnabled').disabled=savingRules;
-    $('rulesCombatFlee').disabled=savingRules||!rules.combat.enabled;
+    $('rulesCombatFlee').disabled=savingRules||!rules.combat.enabled&&!ruleQueueDraft.some(step=>step.type==='huntBoars');
     for(const slot of ['q','e']){
       const key=slot.toUpperCase(),power=essencePower(magicState?.slots?.[slot],playerStats,magicState);
       $('rulesAuto'+key).disabled=savingRules||!rules.combat.enabled||!power;
@@ -4483,26 +4502,27 @@ function openCharacterRules(){
   $('rulesCombatEnabled').checked=rules.combat.enabled;$('rulesAutoQ').checked=rules.combat.q;$('rulesAutoE').checked=rules.combat.e;$('rulesCombatFlee').value=rules.combat.fleeBelow;
   ruleQueueDraft=(rules.queue?.steps??[{type:'fishing',amount:5},{type:'sellFish',amount:0},{type:'rest',amount:0}]).map(step=>({...step}));
   $('rulesUseQueue').checked=rules.queue?.enabled===true;$('rulesQueueRepeats').value=rules.queue?.repeats??1;$('rulesQueueBudget').value=rules.queue?.budget??0;$('rulesQueueReserve').value=rules.queue?.reserveGold??100;$('rulesQueueHealth').value=rules.queue?.minHealth??60;renderRuleQueue();
+  const target=$('rulesGoalTarget');target.replaceChildren();for(const [id,item] of [['',{name:'No upgrade goal'}],...Object.entries(upgradeTargets)]){const option=document.createElement('option');option.value=id;option.textContent=item.name+(item.price?' · '+item.price+' gold':'');target.append(option);}target.value=rules.goal?.target??'';$('rulesGoalAutoBuy').checked=rules.goal?.autoBuy===true;
   const log=$('rulesActivityLog');log.replaceChildren();
   for(const item of [...(state.activityLog??[])].reverse()){
     const row=document.createElement('li'),title=document.createElement('b'),detail=document.createElement('p');
     title.textContent=item.kind==='queue'?'Activity queue':item.kind==='rest'?'Rest at home':item.kind==='fishing'?'Fishing':'Woodcutting';
-    detail.textContent=(item.kind==='rest'?'':item.count+' '+(item.kind==='queue'?'items gathered':item.kind==='fishing'?'fish':'timber')+' · +'+item.xp+' XP · ')+({'queue-complete':'All queue cycles complete','spending-limit':'Queue spending limit reached','gold-reserve':'Gold reserve protected','wallet-full':'Wallet is full','bait-reserve':'Bait reserve protected','target-reached':'Timber target reached','away-cap':'Eight-hour cap reached',returned:'Returned to game',combat:'Skipped during combat / recovery',requirements:item.summary,rest:'Rested at home'}[item.reason]??item.reason);
+    detail.textContent=(item.kind==='rest'?'':item.count+' '+(item.kind==='queue'?'items gathered':item.kind==='fishing'?'fish':'timber')+' · +'+item.xp+' XP · ')+({'goal-reached':'Upgrade goal reached','queue-complete':'All queue cycles complete','spending-limit':'Queue spending limit reached','gold-reserve':'Gold reserve protected','wallet-full':'Wallet is full','bait-reserve':'Bait reserve protected','target-reached':'Timber target reached','away-cap':'Eight-hour cap reached',returned:'Returned to game',combat:'Skipped during combat / recovery',requirements:item.summary,rest:'Rested at home'}[item.reason]??item.reason);
     row.append(title,detail);log.append(row);
   }
   if(!log.children.length){const row=document.createElement('li');row.textContent='Your next away routine will appear here.';log.append(row);}
   updateCharacterRulesPreview();$('characterRulesDialog').showModal();
 }
-$('openCharacterRules').onclick=openCharacterRules;
+$('openCharacterRules').onclick=openCharacterRules;$('upgradeGoalHud').onclick=openCharacterRules;
 $('rulesQueueAdd').onclick=()=>{if(ruleQueueDraft.length<8)ruleQueueDraft.push({type:'fishing',amount:5});renderRuleQueue();updateCharacterRulesPreview();};
-for(const id of ['rulesUseQueue','rulesQueueRepeats','rulesQueueBudget','rulesQueueReserve','rulesQueueHealth','rulesEnabled','rulesActivity','rulesKeepBait','rulesTimberTarget','rulesCombatEnabled','rulesAutoQ','rulesAutoE','rulesCombatFlee'])$(id).oninput=updateCharacterRulesPreview;
+for(const id of ['rulesUseQueue','rulesQueueRepeats','rulesQueueBudget','rulesQueueReserve','rulesQueueHealth','rulesGoalTarget','rulesGoalAutoBuy','rulesEnabled','rulesActivity','rulesKeepBait','rulesTimberTarget','rulesCombatEnabled','rulesAutoQ','rulesAutoE','rulesCombatFlee'])$(id).oninput=updateCharacterRulesPreview;
 $('characterRulesDialog').oncancel=event=>{if(savingRules)event.preventDefault();};
 $('characterRulesForm').onsubmit=async event=>{
   event.preventDefault();if(savingRules)return;
   try{
     const rules=draftCharacterRules();savingRules=true;updateCharacterRulesPreview();$('characterRulesDialog').querySelector('.close').disabled=true;
     window.towerPauseForAccount();savePlayerState();const state=await window.playerCloud.saveRules(rules);
-    characterRules=normalizeCharacterRules(state?.characterRules??rules);
+    characterRules=normalizeCharacterRules(state?.characterRules??rules);updateUpgradeGoalHud();
     $('rulesStatus').textContent=rules.combat.enabled?'Rules saved. Combat tactics are ready for the next encounter.':'Character rules saved.';
   }catch(error){$('rulesStatus').textContent=error.message;}
   finally{savingRules=false;updateCharacterRulesPreview();$('characterRulesDialog').querySelector('.close').disabled=false;}

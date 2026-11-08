@@ -1,3 +1,5 @@
+import {normalizeUpgradeGoal} from './upgrade-goals.js';
+export {upgradeTargets,upgradeGoalProgress} from './upgrade-goals.js';
 import {enemyAttack,combatStamina} from './hunting.js';
 import {essencePower,bondedEssences} from './essences.js';
 
@@ -28,9 +30,9 @@ export function normalizeCharacterRules(input={}){
   if(!combat||typeof combat!=='object'||Array.isArray(combat))throw new Error('Invalid combat tactics.');
   const {enabled:combatEnabled=false,q=true,e=true,fleeBelow=20}=combat;
   if(typeof combatEnabled!=='boolean'||typeof q!=='boolean'||typeof e!=='boolean'||!Number.isInteger(fleeBelow)||fleeBelow<0||fleeBelow>80)throw new Error('Invalid combat tactics. Choose a flee threshold from 0 to 80 HP.');
-  const queue=normalizeRoutineQueue(input.queue);
+  const queue=normalizeRoutineQueue(input.queue),goal=normalizeUpgradeGoal(input.goal);
   if(queue?.steps.some(step=>step.type==='huntBoars')&&fleeBelow>=queue.minHealth)throw new Error('The hunting start-health limit must be above the flee threshold.');
-  return {enabled,activity,keepBait,timberTarget,...(queue?{queue}:{}),combat:{enabled:combatEnabled,q,e,fleeBelow}};
+  return {enabled,activity,keepBait,timberTarget,...(queue?{queue}:{}),...(goal?{goal}:{}),combat:{enabled:combatEnabled,q,e,fleeBelow}};
 }
 export function describeCharacterRules(input){
   const r=normalizeCharacterRules(input);

@@ -164,6 +164,7 @@ export async function handlePlayerApi(request,env){
         if(state.plan||state.report)return json({error:"Read your work report before changing rules.",...packet(row)},409);
         const rules=normalizeCharacterRules(body.rules);
         if(body.rules?.combat===undefined)rules.combat=normalizeCharacterRules(state.characterRules).combat;
+        if(rules.goal?.target!==state.characterRules?.goal?.target||rules.goal?.autoBuy!==state.characterRules?.goal?.autoBuy)delete state.upgradeGoal;
         state.characterRules=rules;state.routineLastSeen=Date.now();
         break;
       case "/api/player/plan/start":

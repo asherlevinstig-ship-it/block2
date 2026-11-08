@@ -1,3 +1,4 @@
+import {resolveQueueGoal} from './upgrade-goals.mjs';
 import {startCombatEncounter,advanceServerCombat} from './activities.mjs';
 import {huntEnemies,canUseWeapon} from '../public/hunting.js';
 import {normalizeRoutineQueue,queueActions} from '../public/character-rules.js';
@@ -20,6 +21,7 @@ function nextStep(plan,at,note){
 }
 export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={}){
   const p=state.plan,until=Math.min(now,p.endAt);let changed=false;
+  if(!p.activeHunt&&resolveQueueGoal(state,p,p.cursorAt))return finish(state,p,'goal-reached',p.cursorAt);
   if(!p.preflightComplete){
     const rod=fishingCatalog.rods[state.fishingGear.equippedRod];
     if(p.queue.steps.some(step=>step.type==='fishing')&&(!rod||!state.fishingGear.ownedRods.includes(state.fishingGear.equippedRod)||skillLevel(state.stats.patienceXp)<rod.patience||!state.adventure.discovered.includes('pond')&&!state.history.fishCaught))return finish(state,p,'requirements',p.startedAt);
@@ -46,10 +48,12 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
       p.cursorAt=report.endedAt;p.nextAt=null;
       if(report.outcome==='victory')p.stepCount++;
       else return finish(state,p,report.outcome==='escaped'?'hunt-escaped':'hunt-defeat',report.endedAt);
+      if(resolveQueueGoal(state,p,report.endedAt))return finish(state,p,'goal-reached',report.endedAt);
       if(p.returnRequested)return finish(state,p,p.stopReason,report.endedAt);
       if(p.stepCount>=p.queue.steps[p.stepIndex].amount)nextStep(p,report.endedAt,'Won '+p.stepCount+' fights');
       continue;
     }
+    if(resolveQueueGoal(state,p,p.cursorAt))return finish(state,p,'goal-reached',p.cursorAt);
     if(p.cycle>=p.queue.repeats)return finish(state,p,'queue-complete',p.cursorAt);
     const step=p.queue.steps[p.stepIndex],type=step.type;
     if(p.nextAt===null){

@@ -194,6 +194,7 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
 // Snapshots retain movement, appearance and equipment choices. Progression,
 // rewards and active encounters can only change through server actions.
 export function protectFishingState(previous,next){
+  if(previous.upgradeGoal)next.upgradeGoal=previous.upgradeGoal;else delete next.upgradeGoal;
   next.progressionVersion=progressionVersion;
   next.credits=previous.credits;
   next.goldEarned=previous.goldEarned??0;

@@ -1,3 +1,4 @@
+import {upgradeGoalProgress} from '../public/upgrade-goals.js';
 import {startRoutineQueue} from './routine-queue.mjs';
 import {normalizeCharacterRules,AWAY_GRACE_MS,AWAY_CAP_MS,describeCharacterRules} from '../public/character-rules.js';
 import {startPlan,settlePlan} from './player-state.mjs';
@@ -13,6 +14,7 @@ export function touchPresence(state,now,{active=true,activityAt=now,random=Math.
   if(state.plan?.source==='rules'){
     settlePlan(state,now,{stop:active,random});return;
   }
+  if(upgradeGoalProgress(state)?.receipt)return;
   if(depthsStageIndex(state.location)>=0||!rules.enabled||!Number.isFinite(last)||now-last<AWAY_GRACE_MS||state.plan||state.report)return;
   const finished=state.combatReceipt?.events?.findLast(event=>['victory','escaped','defeat'].includes(event.outcome));
   const availableAt=finished?(finished.at??0)+(finished.outcome==='defeat'?boarRules.recovery:0):0;

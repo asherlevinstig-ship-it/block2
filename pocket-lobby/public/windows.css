@@ -391,3 +391,18 @@
 #offlineDialog[data-queue=true] #offlineCatches li { padding:8px 12px; font-size:12px; border:1px solid #506985; border-radius:7px; background:#142c40; line-height:1.5; }
 #offlineDialog[data-queue=true] #offlineTotals { font-size:18px; line-height:1.5; }
 #offlineDialog[data-queue=true] #offlineProgress { width:100%; height:7px; accent-color:#d9bc78; }
+.upgrade-goal-config { margin:16px 0; padding:18px; background:linear-gradient(130deg,#25334a,#132338); border:1px solid #b29760; border-radius:12px; }
+.upgrade-goal-config h3 { margin:5px 0 14px; }
+.upgrade-goal-config>label:first-of-type { display:grid; gap:7px; font-size:12px; }
+#characterRulesDialog #rulesGoalTarget { width:100%; min-width:0; }
+.upgrade-goal-progress { display:grid; gap:11px; margin:14px 0; }
+.upgrade-goal-progress label { display:grid; gap:5px; font-size:12px; color:#ccd9e8; }
+.upgrade-goal-progress progress { width:100%; height:9px; accent-color:#e8bf6a; }
+.upgrade-goal-progress small,.upgrade-goal-config>p { color:#b9cbe0; font-size:11px; line-height:1.6; }
+#upgradeGoalHud { padding:4px 9px; border-color:#9d8350; background:#17283e; color:#f2d18e; font:600 11px/1.4 system-ui; letter-spacing:0; max-width:210px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#upgradeGoalHud[hidden] { display:none; }
+@media(max-width:560px) { #upgradeGoalHud { max-width:130px; font-size:10px; } .upgrade-goal-config { padding:12px; } }
+
+.hud-character:has(#upgradeGoalHud:not([hidden])) .character-caption { display:none; }
+.hud-character #upgradeGoalHud { display:block; width:100%; max-width:100%; margin-top:4px; padding:3px 7px; text-align:left; }
+.hud-character #upgradeGoalHud[hidden] { display:none; }

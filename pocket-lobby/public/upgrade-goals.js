@@ -1,0 +1,26 @@
+import {fishingCatalog} from './fishing.js';
+import {weaponCatalog} from './hunting.js';
+import {skillLevel,skillXpForLevel} from './skill-curve.js';
+export const upgradeTargets=Object.fromEntries([
+ ...Object.entries(weaponCatalog).filter(([,item])=>item.price).map(([id,item])=>['weapon:'+id,{...item,kind:'weapon',id,requirements:[['strengthXp','Strength',item.strength],['agilityXp','Agility',item.agility]]}]),
+ ...Object.entries(fishingCatalog.rods).filter(([,item])=>item.price).map(([id,item])=>['rod:'+id,{...item,kind:'rod',id,requirements:[['patienceXp','Patience',item.patience]]}])
+]);
+export function normalizeUpgradeGoal(input){
+ if(input===undefined)return undefined;
+ if(!input||typeof input!=='object'||Array.isArray(input))throw new Error('Choose a valid upgrade goal.');
+ const {target=null,autoBuy=false}=input;
+ if(target!==null&&!Object.hasOwn(upgradeTargets,target)||typeof autoBuy!=='boolean')throw new Error('Choose a shop upgrade and whether to buy it automatically.');
+ return {target,autoBuy:target!==null&&autoBuy};
+}
+export function upgradeGoalProgress(state,goal=state.characterRules?.goal){
+ const item=upgradeTargets[goal?.target];if(!item)return null;
+ const owned=(item.kind==='weapon'?state.combatGear?.ownedWeapons:state.fishingGear?.ownedRods)?.includes(item.id)??false;
+ const requirements=item.requirements.map(([key,label,level])=>{const xp=state.stats?.[key]??0,requiredXp=skillXpForLevel(level);return {key,label,level,current:skillLevel(xp),xp,requiredXp,percent:requiredXp?Math.min(100,Math.floor(xp/requiredXp*100)):100,met:xp>=requiredXp};});
+ const receipt=state.upgradeGoal?.target===goal.target&&state.upgradeGoal.autoBuy===goal.autoBuy?state.upgradeGoal:null;
+ return {item,target:goal.target,owned,requirements,receipt,gold:state.credits??0,goldPercent:Math.min(100,Math.floor((state.credits??0)/item.price*100)),ready:owned||((state.credits??0)>=item.price&&requirements.every(r=>r.met))};
+}
+export function normalizeUpgradeReceipt(input){
+ if(input===undefined)return undefined;
+ if(!input||!Object.hasOwn(upgradeTargets,input.target)||typeof input.autoBuy!=='boolean'||!['ready','owned','purchased'].includes(input.status)||!Number.isSafeInteger(input.at)||input.at<0||!Number.isSafeInteger(input.spent)||input.spent<0||input.spent>100000000||input.reason!==undefined&&!['spending-limit','gold-reserve'].includes(input.reason))throw new Error('Invalid upgrade goal progress.');
+ return {target:input.target,autoBuy:input.autoBuy,status:input.status,at:input.at,spent:input.spent,...(input.reason?{reason:input.reason}:{})};
+}
