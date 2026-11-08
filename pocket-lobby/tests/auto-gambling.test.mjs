@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {normalizeCharacterRules} from '../public/character-rules.js';import {normalizeState,settlePlan} from '../server/player-state.mjs';import {touchPresence} from '../server/routines.mjs';import {autoStatus} from '../public/auto-mode.js';import {boot} from './helpers/game-client.mjs';import {gamblingAction} from '../server/gambling.mjs';import {handlePlayerApi} from '../server/player-api.mjs';import {testDatabase} from './db-helper.mjs';
-function start(policy={},extra={}){const s=normalizeState({credits:200,location:'home',bedLessonComplete:true,characterRules:{strategy:'gambling',gambling:{reserveGold:100,...policy}},...extra});s.controlMode='auto';s.routineLastSeen=1000;touchPresence(s,1000,{forceStart:true,active:false,random:()=>0});return s;}
+function start(policy={},extra={}){const s=normalizeState({credits:200,avatar:{name:'Guest',outfit:6,hair:0},location:'home',bedLessonComplete:true,characterRules:{strategy:'gambling',gambling:{reserveGold:100,...policy}},...extra});s.controlMode='auto';s.routineLastSeen=1000;touchPresence(s,1000,{forceStart:true,active:false,random:()=>0});return s;}
 const sequence=values=>{let i=0;return ()=>values[i++%values.length];};
 test('automatic gambling is explicitly selected and every stake/limit is validated',()=>{
  assert.equal(normalizeCharacterRules().strategy,'routine');
@@ -41,12 +41,12 @@ test('concurrent API catch-up and retried stop requests settle one table round o
  const {db,sql}=testDatabase();t.after(()=>sql.close());const clock=Date.now;let now=1000;Date.now=()=>now;t.after(()=>Date.now=clock);const origin='https://tower.test';let packet,cookie='';
  async function call(path,body){const response=await handlePlayerApi(new Request(origin+'/api/player/'+path,{method:body?'POST':'GET',headers:{Origin:origin,'Content-Type':'application/json',Cookie:cookie},body:body?JSON.stringify({...body,characterKey:packet?.characterKey}):undefined}),{TOWER_DB:db});cookie=response.headers.get('set-cookie')?.split(';')[0]??cookie;const data=await response.json();if(response.ok)packet=data;return {status:response.status,...data};}
  const act=(path,body)=>call(path,{revision:packet.revision,operation:crypto.randomUUID(),...body});
- await call('session',{legacy:{credits:200,characterRules:{strategy:'gambling',gambling:{maxRounds:1,reserveGold:100}}}});assert.equal((await act('control',{mode:'auto'})).status,200);
+ await call('session',{legacy:{credits:200,avatar:{name:'Guest',outfit:6,hair:0},characterRules:{strategy:'gambling',gambling:{maxRounds:1,reserveGold:100}}}});assert.equal((await act('control',{mode:'auto'})).status,200);
  now=31000;const results=await Promise.all([call('state'),call('state')]);for(const r of results){assert.equal(r.status,200);assert.equal(r.state.report.rounds,1);assert.equal(r.state.gambling.round.status,'complete');assert.equal(r.state.stats.luckXp,2);}assert.equal(results[0].state.credits,results[1].state.credits);
  const credits=packet.state.credits,stop={mode:'play',revision:packet.revision,operation:crypto.randomUUID()};await call('control',stop);await call('control',stop);assert.equal(packet.state.credits,credits);assert.equal(packet.state.report.rounds,1);assert.equal(packet.state.characterRules.gambling.bet,5);
 });
 test('three-minute idle activation uses the selected table policy and never becomes a gold-earning goal',()=>{
- const s=normalizeState({credits:200,characterRules:{enabled:true,strategy:'gambling',gambling:{reserveGold:100,maxRounds:1}}});s.routineLastSeen=1000;
+ const s=normalizeState({credits:200,avatar:{name:'Guest',outfit:6,hair:0},characterRules:{enabled:true,strategy:'gambling',gambling:{reserveGold:100,maxRounds:1}}});s.routineLastSeen=1000;
  touchPresence(s,180999,{active:false,random:()=>0});assert.equal(s.plan,undefined);touchPresence(s,181000,{active:false,random:()=>0});assert.equal(s.plan.kind,'gambling');assert.equal(s.plan.rounds,0);
  touchPresence(s,211000,{active:false,random:()=>0});assert.equal(s.plan,undefined);assert.equal(s.report.rounds,1);assert.equal(s.report.reason,'gamble-round-limit');assert.equal(s.credits,195);
 });

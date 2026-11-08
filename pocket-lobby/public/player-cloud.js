@@ -173,6 +173,7 @@
   function openAutoSetup(){document.getElementById('autoControlError').textContent='';window.towerOpenAutoRules?.();document.getElementById('rulesStatus').textContent='Choose an activity and save your Auto Mode plan first.';}
   async function setControl(mode){
     if(controlBusy||conflicted)return;
+    if(mode==='auto'&&packet.state.characterRules?.strategy==='gambling'&&window.towerSmartLoungeReady?.()===false){window.towerRequireLoungeDress?.();return;}
     if(mode==='auto'&&autoSetupReason(packet.state)){openAutoSetup(autoSetupReason(packet.state));return;}
     controlBusy=true;renderAutoPanel(packet.state);document.getElementById('autoControlError').textContent='';
     try{

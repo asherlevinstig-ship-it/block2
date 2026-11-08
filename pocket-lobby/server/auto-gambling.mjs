@@ -1,14 +1,18 @@
+import {finishRoutineReport} from './routine-report.mjs';
+import {isSmartlyDressed} from '../public/wardrobe.js';
 import {autoBankGold} from './banking.mjs';
 import {gamblingAction,handTotal} from './gambling.mjs';
 export const AUTO_GAMBLE_INTERVAL=30000;
 export function startAutoGambling(state,rules,now,metadata){
  state.plan={...metadata,kind:'gambling',policy:{...rules.gambling},startedAt:now,endAt:metadata.routineCapAt,nextRoundAt:now+AUTO_GAMBLE_INTERVAL,rounds:0,wins:0,losses:0,pushes:0,totalLost:0,goldEarned:0,goldSpent:0,xp:0,recent:[]};
+ if(!isSmartlyDressed(state.wardrobe)){state.report={...state.plan,reason:'smart-clothing',endedAt:now};delete state.plan;state.location='home';state.position={x:5,y:7};finishRoutineReport(state,now);return;}
  state.location='lounge';state.position=rules.gambling.game==='blackjack'?{x:5,y:3}:{x:2,y:7};
 }
 function finish(state,p,reason,at){state.report={...p,reason,endedAt:at};delete state.plan;state.location='home';state.position={x:5,y:7};return true;}
 export function settleAutoGambling(state,now,{stop=false,random=Math.random}={}){
  const p=state.plan,c=p.policy,until=Math.min(now,p.endAt);let changed=false;
  const limit=()=>p.goldEarned-p.goldSpent>=c.profitTarget?'gamble-profit-target':p.totalLost+c.bet>c.lossLimit?'gamble-loss-limit':p.rounds>=c.maxRounds?'gamble-round-limit':state.credits-c.bet<c.reserveGold?'gold-reserve':state.credits>100000000-38?'wallet-full':null;
+ if(!isSmartlyDressed(state.wardrobe))return finish(state,p,'smart-clothing',now);
  const initial=limit();if(initial)return finish(state,p,initial,Math.min(now,p.nextRoundAt));
  while(p.nextRoundAt<=until){
   const at=p.nextRoundAt,before=state.stats.luckXp??0;

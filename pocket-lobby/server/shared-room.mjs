@@ -1,3 +1,4 @@
+import {isSmartlyDressed} from '../public/wardrobe.js';
 import {resolveIdentity,tokenHash} from './identity.mjs';
 import {socialRooms,roomBoxes,validRoomTile,reachableMove,roomSeats} from '../public/shared-world.js';
 
@@ -12,6 +13,7 @@ export async function handleWorldConnect(request,env){
   const row=await env.TOWER_DB.prepare('SELECT state_json FROM tower_players WHERE player_id = ?').bind(identity.playerId).first();
   if(!row)return json({error:'Character not found.'},401);
   const state=JSON.parse(row.state_json);
+  if(room==='lounge'&&!isSmartlyDressed(state.wardrobe))return json({error:'Choose a Tailored Suit or Moonlit Dress in Wardrobe before entering the lounge.'},403);
   if(state.location!==room||state.plan||state.report)return json({error:'Save your current location before joining.'},409);
   const boxes=roomBoxes(room,state.homeFurniture),position=state.position??{x:5,y:7};
   if(!validRoomTile(room,position.x,position.y,boxes))return json({error:'Move to an open tile and try again.'},409);

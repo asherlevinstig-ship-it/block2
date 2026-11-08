@@ -6,7 +6,7 @@ import {applyGameplayAction} from '../server/gameplay.mjs';
 import {normalizeState} from '../server/player-state.mjs';
 
 test('the same Luck XP is available from wins and losses at either table, with a shared cooldown',()=>{
-  const state=normalizeState({location:'lounge',position:{x:3,y:6},stats:{luckXp:48}});
+  const state=normalizeState({location:'lounge',avatar:{name:'Guest',outfit:6,hair:0},position:{x:3,y:6},stats:{luckXp:48}});
   const act=(name,body,now,random)=>applyGameplayAction(state,name,body,now,random);
   const spin=(bet,now)=>{
     act('gamble',{game:'roulette',bet,color:'red'},now);
@@ -47,7 +47,7 @@ test('saved rounds hide dealer cards, ignore forged Luck, and settle at most onc
     return {status:response.status,data};
   }
   const command=(path,body)=>call(path,{...body,revision:packet.revision,operation:crypto.randomUUID()});
-  await call('session',{legacy:{location:'lounge',position:{x:3,y:6},stats:{luckXp:500}}});
+  await call('session',{legacy:{location:'lounge',avatar:{name:'Guest',outfit:6,hair:0},position:{x:3,y:6},stats:{luckXp:500}}});
   assert.equal(packet.state.stats.luckXp,0);
   assert.equal((await command('gameplay/gamble',{game:'blackjack',bet:5})).status,400);
   await command('gameplay/gamble',{game:'roulette',bet:5,color:'black'});

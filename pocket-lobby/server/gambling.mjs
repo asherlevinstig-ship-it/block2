@@ -1,3 +1,4 @@
+import {isSmartlyDressed} from '../public/wardrobe.js';
 import {MAX_SKILL_XP} from '../public/skill-curve.js';
 import {roomBoxes} from '../public/shared-world.js';
 
@@ -43,6 +44,7 @@ export function gamblingAction(state,action,body,now,random=secureRandom){
   state.gambling??={lastXpAt:null,round:null};
   const gambling=state.gambling;
   if(action==='gamble'){
+    if(!isSmartlyDressed(state.wardrobe))throw new Error('Choose smart clothing in Wardrobe before playing: Tailored Suit or Moonlit Dress.');
     if(gambling.round?.status==='playing')throw new Error('Choose Hit or Stand, or reveal your spin, before starting another round.');
     if(!stakes.includes(body.bet)||state.credits<body.bet||state.credits>100000000-38)throw new Error('Invalid stake. Choose 5, 10 or 25 gold within your balance.');
     if(gambling.round&&now-gambling.round.startedAt<5000)throw new Error('Invalid round timing. Wait a moment before playing again.');

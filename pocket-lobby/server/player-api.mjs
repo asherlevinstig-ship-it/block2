@@ -1,3 +1,4 @@
+import {isSmartlyDressed,normalizeWardrobe} from '../public/wardrobe.js';
 import {configureExplorerLesson} from './exploration-plan.mjs';
 import {migrateHomeSafe} from '../public/home-safe.js';
 import {beetleHuntUnlocked} from '../public/hunting.js';
@@ -152,6 +153,7 @@ export async function handlePlayerApi(request,env){
         break;
       case "/api/player/save":
         if(state.plan)return json({error:"Stop the work plan before playing.",...packet(row)},409);
+        if(body.state?.location==='lounge'&&state.location!=='lounge'&&!isSmartlyDressed(normalizeWardrobe(body.state.wardrobe??state.wardrobe)))throw new Error('Choose smart clothing in Wardrobe before entering the Sunset Lounge: Tailored Suit or Moonlit Dress.');
         state={...protectFishingState(state,normalizeState(protectFishingState(state,{...body.state,wardrobe:body.state?.wardrobe??state.wardrobe}))),rankingJoined:state.rankingJoined===true,goldEarned:state.goldEarned??0,welcomeSeen:state.welcomeSeen!==false,characterCreated:state.characterCreated!==false,carpenterOrderComplete:state.carpenterOrderComplete===true,characterRules:state.characterRules??normalizeCharacterRules(),controlMode:state.controlMode??'play',routineLastSeen:state.routineLastSeen,activityLog:state.activityLog??[],...(state.report?{report:state.report}:{})};
         break;
       case "/api/player/commissions/carpenter":

@@ -23,12 +23,12 @@ test('Auto banks initial excess and sale proceeds with identical online/offline 
  settlePlan(online,362000,{stop:true});assert.equal(online.report.bankedGold,online.bank.gold);const before=online.bank.gold;settlePlan(online,999999);assert.equal(online.bank.gold,before);
 });
 test('Auto deposits never withdraw savings to fund bets or bait and respect bank capacity',()=>{
- const s=normalizeState({credits:100,bank:{gold:500,autoDeposit:true,keepWallet:100},characterRules:{strategy:'gambling',gambling:{reserveGold:100}}});s.controlMode='auto';s.routineLastSeen=1000;touchPresence(s,1000,{forceStart:true,active:false});assert.equal(s.report.reason,'gold-reserve');assert.equal(s.bank.gold,500);assert.equal(s.credits,100);
+ const s=normalizeState({credits:100,avatar:{name:'Guest',outfit:6,hair:0},bank:{gold:500,autoDeposit:true,keepWallet:100},characterRules:{strategy:'gambling',gambling:{reserveGold:100}}});s.controlMode='auto';s.routineLastSeen=1000;touchPresence(s,1000,{forceStart:true,active:false});assert.equal(s.report.reason,'gold-reserve');assert.equal(s.bank.gold,500);assert.equal(s.credits,100);
  const full=normalizeState({credits:120,bank:{gold:GOLD_CAP-5,autoDeposit:true,keepWallet:100}}),plan={source:'rules'};assert.equal(autoBankGold(full,plan,1000),5);assert.equal(full.credits,115);assert.equal(full.bank.gold,GOLD_CAP);assert.equal(autoBankGold(full,plan,2000),0);
  const manual=normalizeState({credits:120,bank:{autoDeposit:true,keepWallet:100}});assert.equal(autoBankGold(manual,{source:'board'},0),0);assert.equal(manual.credits,120);
 });
 test('Auto table winnings can be banked while subsequent losses remain wallet-only',()=>{
- const s=normalizeState({credits:100,bank:{gold:200,autoDeposit:true,keepWallet:100},characterRules:{strategy:'gambling',gambling:{reserveGold:50,lossLimit:5,profitTarget:100,maxRounds:10}}});s.controlMode='auto';s.routineLastSeen=1000;touchPresence(s,1000,{forceStart:true,active:false});
+ const s=normalizeState({credits:100,avatar:{name:'Guest',outfit:6,hair:0},bank:{gold:200,autoDeposit:true,keepWallet:100},characterRules:{strategy:'gambling',gambling:{reserveGold:50,lossLimit:5,profitTarget:100,maxRounds:10}}});s.controlMode='auto';s.routineLastSeen=1000;touchPresence(s,1000,{forceStart:true,active:false});
  settlePlan(s,31000,{random:()=>.03});assert.equal(s.credits,100);assert.equal(s.bank.gold,205);assert.equal(s.plan.bankedGold,5);assert.equal(s.plan.goldEarned-s.plan.goldSpent,5);
  settlePlan(s,61000,{random:()=>0});assert.equal(s.report.reason,'gamble-loss-limit');assert.equal(s.credits,95);assert.equal(s.bank.gold,205);assert.equal(s.report.bankedGold,5);assert.equal(ownedGold(s),300);
 });

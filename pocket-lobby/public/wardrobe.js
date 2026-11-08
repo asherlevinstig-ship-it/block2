@@ -67,3 +67,10 @@ export function clothingArt(id){
   const shape=id==='polishedShoes'?`<path d="M11 31h13l5 8 4 3v11H6V41zM39 31h13l5 8 4 3v11H34V41z" fill="#151d2c"/><path d="M12 34h11l5 8v6H9v-6zM40 34h11l5 8v6H37v-6z" fill="#39445a"/><path d="M13 40h9v3h-9zM41 40h9v3h-9z" fill="#929aab"/>`:id==='moonlitDress'?`<path d="M24 8l8 5 8-5 5 15-8 8 16 25H11l16-25-8-8z" fill="#513868"/><path d="M25 9l7 5 7-5 3 13-7 9 13 22H16l13-22-7-9z" fill="#976bb9"/><path d="M27 28h10v4H27zM17 50h30v3H17z" fill="#e4c482"/><path d="M30 35l-7 14h5l4-14 5 14h5l-8-14z" fill="#ba91d4"/>`:id==='tailoredJacket'?`<path d="M22 10l10 5 10-5 15 15-8 8-6-7v30H21V26l-6 7-8-8z" fill="#202b40"/><path d="M23 12l9 5 9-5 10 13-8-4v33H21V24l-6 6-5-5z" fill="#465775"/><path d="M26 13l6 3 6-3-6 24z" fill="#f4ead5"/><path d="M30 20h4l1 12-3 5-3-5z" fill="#b6526d"/><path d="M23 14l6 3-4 7 7 12-10-10 3-4zM41 14l-6 3 4 7-7 12 10-10-3-4z" fill="#7d8aa1"/><path d="M36 40h6v2h-6z" fill="#d8ddeb"/>`:item.slot==='jacket'?`<path d="M21 12l11 5 11-5 13 13-8 8-5-7v29H21V26l-5 7-8-8z" fill="${item.color}"/><path d="M21 13l11 5v37H21z" fill="${item.shade}"/><path d="M30 20h4v35h-4z" fill="#f2dfbb"/><path d="M22 42h7v4h-7zM36 42h7v4h-7z" fill="${item.shade}"/>`:item.slot==='trousers'?`<path d="M19 10h26l3 44H35l-3-30-3 30H16z" fill="${item.color}"/><path d="M21 12h10l-5 39h-6zM35 12h7l3 39h-6z" fill="${item.light}"/><path d="M19 10h26v5H19z" fill="#d3b07c"/>`:`<path d="M12 17h14v20l5 4v12H8V41l4-5zM38 17h14v20l5 4v12H34V41l4-5z" fill="${item.color}"/><path d="M13 20h10v5H13zM39 20h10v5H39zM9 42h19v6H9zM35 42h19v6H35z" fill="${item.light}"/>`;
   return `<svg viewBox="0 0 64 64" aria-hidden="true" shape-rendering="crispEdges"><ellipse cx="32" cy="58" rx="24" ry="3" fill="#07162b66"/>${shape}</svg>`;
 }
+
+export function isSmartlyDressed(wardrobe){
+  const worn=wardrobe?.outfits?.find(outfit=>outfit.id===wardrobe.active);
+  if(!worn)return false;
+  const owns=id=>wardrobe.owned?.includes(id);
+  return worn.jacket==='moonlitDress'&&owns(worn.jacket)||worn.jacket==='tailoredJacket'&&worn.trousers==='suitTrousers'&&owns(worn.jacket)&&owns(worn.trousers);
+}

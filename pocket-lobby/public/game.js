@@ -60,6 +60,7 @@ let combatReports=savedPlayerState?.combatReports??[],activeCombatRecap=null,com
 let credits = savedPlayerState?.credits??100;
 let autoJourney=null,autoJourneyState=null,autoJourneyTransition=false;
 let autoArrivalKey=null,autoWorkAnimation=null;
+let loungeDressGuiding=false;
 let goldEarned=savedPlayerState?.goldEarned??0;
 function recordGoldEarned(amount){goldEarned=Math.min(Number.MAX_SAFE_INTEGER,goldEarned+amount);}
 let displayedCredits=credits,walletTween=null;
@@ -570,7 +571,7 @@ function updateBedGuide(){
 }
 function needsAutoLesson(){return (window.playerCloud?.initial??savedPlayerState)?.autoLesson==='required';}
 function updateAutoLessonGuide(){
-  const visible=needsAutoLesson()&&quest.accepted&&!routineControlled()&&!player.inCombat&&!editing&&$('bedGuide').hidden&&!document.querySelector('dialog[open]');
+  const visible=needsAutoLesson()&&!loungeDressGuiding&&quest.accepted&&!routineControlled()&&!player.inCombat&&!editing&&$('bedGuide').hidden&&!document.querySelector('dialog[open]');
   $('autoLessonGuide').hidden=!visible;
   $('autoStart').classList.toggle('tutorial-focus',visible);
   if(visible){$('questTracker').hidden=true;$('contextGuide').hidden=true;}
@@ -2603,11 +2604,39 @@ function walkTo(tile){
   route=path;interaction=null;target=path.length?tile:null;
   if(currentRoom==='home'&&path.length&&!homeNavigationLearned){homeNavigationLearned=true;save('movement-learned',true);setHint();}
 }
+window.towerSmartLoungeReady=()=>isSmartlyDressed(wardrobe);
+window.towerRequireLoungeDress=()=>requestLoungeDress();
+function requestLoungeDress(){
+  route=[];target=null;interaction=null;loungeDressGuiding=true;
+  if(!$('loungeDressDialog').open)$('loungeDressDialog').showModal();
+}
+function openLoungeWardrobe(){
+  $('loungeDressDialog').close();openAvatar();
+  $('formalSets').scrollIntoView?.({block:'center'});
+}
+function continueToLounge(){
+  if(!isSmartlyDressed(wardrobe)){openLoungeWardrobe();return;}
+  $('avatarDialog').close();$('loungeDressDialog').close();
+  if(currentRoom==='lounge'){loungeDressGuiding=false;return;}
+  navigateHud('lounge');
+}
+function updateLoungeDressGuide(){
+  const smart=isSmartlyDressed(wardrobe),visible=loungeDressGuiding&&!routineControlled()&&!player.inCombat&&!document.querySelector('dialog[open]');
+  $('loungeDressGuide').hidden=!visible;
+  if(visible)for(const id of ['bedGuide','tradeGuide','upgradeGuide','autoLessonGuide','contextGuide'])$(id).hidden=true;
+  if(visible){$('loungeDressGuideTitle').textContent=smart?'Looking smart. You’re ready!':'Put on your smart outfit';$('loungeDressGuideText').textContent=smart?'Your lounge outfit is equipped. Head back to the lounge door.':'Open Wardrobe → Formal Collection → Save & wear the Tailored Suit or Moonlit Dress.';$('loungeDressGuideAction').textContent=smart?'Enter lounge':'Open Wardrobe';}
+  $('loungeWardrobeGuide').hidden=!loungeDressGuiding;
+  if(loungeDressGuiding){$('loungeWardrobeGuideTitle').textContent=smart?'✓ Dress code met':'LOUNGE ENTRY · CHOOSE A SMART LOOK';$('loungeWardrobeGuideText').textContent=smart?'Your smart outfit is on. You can enter the lounge now.':'Choose Save & wear on either formal look below. This equips it on your character.';$('loungeWardrobeContinue').hidden=!smart;}
+}
+$('loungeDressWardrobe').onclick=openLoungeWardrobe;
+$('loungeWardrobeContinue').onclick=continueToLounge;
+$('loungeDressGuideAction').onclick=()=>isSmartlyDressed(wardrobe)?continueToLounge():openLoungeWardrobe();
 function doorAvailable(door,room=currentRoom){return (room!=='hub'||lobbyRoutesOpen())&&moonwood.open(door,adventure);}
 function travelDoor(door){
   if(routineControlled()){note('Use Take control before travelling.');return;}
   if(unavailable()){note(player.inCombat?"Use Flee to leave combat.":"Your hearts are recovering.");return;}
   if(!doorAvailable(door))return;
+  if(door.to==='lounge'&&!isSmartlyDressed(wardrobe)){requestLoungeDress();return;}
   if(currentRoom==='creek'&&door.to==='ruins'&&!adventure.bridge){
     adventure.lantern=true;
     lanternLit=true;
@@ -3662,6 +3691,7 @@ let loungeTable='blackjack',loungeRound=savedPlayerState?.gambling?.round??null;
 let loungeBusy=false,loungeTimer=null,loungeClockOffset=0;
 const loungeNames={blackjack:'Blackjack',roulette:'Roulette'};
 function openLoungeGame(table){
+  if(!isSmartlyDressed(wardrobe)){requestLoungeDress();return;}
   if(unavailable())return;
   if(!window.playerCloud?.gameplay){note('Connect to the game server to play at the lounge.');return;}
   loungeTable=table;
@@ -4317,9 +4347,9 @@ function currentActivityPrompt(){
 }
 let activityPromptKey='';
 function updateActivityPrompt(){
-  updateAutoLessonGuide();
+  updateAutoLessonGuide();updateLoungeDressGuide();
   const blocked=editing||unavailable()||depthsRun||trackedDestination||step||route.length||interaction
-    ||!$('autoLessonGuide').hidden||!$('bedGuide').hidden||!$('tradeGuide').hidden||!$('upgradeGuide').hidden
+    ||!$('loungeDressGuide').hidden||!$('autoLessonGuide').hidden||!$('bedGuide').hidden||!$('tradeGuide').hidden||!$('upgradeGuide').hidden
     ||!$('depthsDecision').hidden||document.querySelector('dialog[open]');
   const prompt=blocked?null:currentActivityPrompt();
   const visible=!!prompt;
@@ -4814,7 +4844,7 @@ function updateCharacterRulesPreview(){
     if(activity==='exploring'&&!rules.queue?.enabled)detail='Explore five peaceful stops in about four minutes, then return home. No combat, equipment or supplies required. Starts after three minutes idle or offline when enabled.';
     if(rules.queue?.enabled)detail='Choose Auto to start now, or enable idle start to start after three minutes idle. It stops when you return, a limit is reached, or all cycles finish. Unsold supplies stay in Inventory. Hunting uses your equipped weapon and flee threshold. Returning during a fight finishes that fight before stopping.';
     if(adaptive)detail='Auto starts now or after three minutes idle when enabled. It sells only surplus fish, timber, Boar Meat and Shell Fragments; buys bait only within your limits; and reassesses after each batch or fight. If gear or health makes hunting unsafe, it gathers or rests instead.';
-    if(gambling)detail='Auto starts your table session now; enabling away actions also starts it after three minutes idle. The session ends at the first loss, reserve, profit, round or eight-hour limit. It never switches to Earn gold safely or raises the bet.';
+    if(gambling)detail=(isSmartlyDressed(wardrobe)?'Smart dress code met. ':'Equip a Tailored Suit or Moonlit Dress in Wardrobe before starting Auto gambling. ')+'Auto starts your table session now; enabling away actions also starts it after three minutes idle. The session ends at the first loss, reserve, profit, round or eight-hour limit. It never switches to Earn gold safely or raises the bet.';
     $('rulesRequirements').textContent=depthsRun?'Away routines pause while you’re in Moonwell Depths. '+detail:detail;
     $('rulesSave').disabled=savingRules||!window.playerCloud||routineControlled();if(routineControlled())$('rulesStatus').textContent='Take control before changing saved Auto Mode settings. You can inspect them while Auto runs.';
   }catch(error){$('rulesPreview').textContent=error.message;$('rulesSave').disabled=true;}
@@ -5052,10 +5082,11 @@ function renderWardrobe(){
   for(const [id,set] of Object.entries(clothingSets)){
     const card=document.createElement('article'),preview=document.createElement('canvas'),name=document.createElement('b'),detail=document.createElement('p'),button=document.createElement('button');
     card.className='formal-set';card.dataset.set=id;preview.width=100;preview.height=130;preview.setAttribute('aria-label',set.name+' character preview');preview.dataset.formalPreview=id;
-    name.textContent=set.name;detail.textContent=set.description;button.type='button';button.textContent='Save & wear';button.dataset.wearSet=id;button.disabled=routineControlled();
-    button.onclick=()=>{try{const outfit=wearClothingSet(wardrobe,id);applyWornOutfit();draft=outfitAppearance(wardrobe,draft);renderWardrobe();updateAvatarPreview();$('wardrobeStatus').textContent='Now wearing '+outfit.name+'. Edit individual pieces in Inventory.';}catch(error){$('wardrobeStatus').textContent=error.message;}};
+    name.textContent=set.name;detail.textContent=set.description;button.type='button';const replaceWorn=loungeDressGuiding&&wardrobe.outfits.length>=6&&!wardrobe.outfits.some(outfit=>clothingSlots.every(slot=>outfit[slot]===set[slot]));button.textContent=replaceWorn?'Update worn look':'Save & wear';if(replaceWorn)detail.textContent+=' · All six slots used: updates your current outfit.';button.dataset.wearSet=id;button.disabled=routineControlled();
+    button.onclick=()=>{try{let outfit;if(replaceWorn){outfit=wardrobe.outfits.find(o=>o.id===wardrobe.active);for(const slot of clothingSlots)addClothingToOutfit(wardrobe,outfit.id,set[slot]);}else outfit=wearClothingSet(wardrobe,id);applyWornOutfit();draft=outfitAppearance(wardrobe,draft);renderWardrobe();updateAvatarPreview();$('wardrobeStatus').textContent='Now wearing '+outfit.name+'. Edit individual pieces in Inventory.';}catch(error){$('wardrobeStatus').textContent=error.message;}};
     card.append(preview,name,detail,button);sets.append(card);
   }
+  updateLoungeDressGuide();
   const list=$('wardrobeOutfits');list.replaceChildren();
   for(const outfit of wardrobe.outfits){
     const card=document.createElement('article'),picture=document.createElement('canvas'),name=document.createElement('b'),items=document.createElement('p'),wear=document.createElement('button'),edit=document.createElement('button'),actions=document.createElement('div');
@@ -5100,6 +5131,8 @@ function updateRoomLabel(){
   canvas.setAttribute('aria-label',roomDetails[currentRoom].name+'. Click a floor tile or use arrow keys to walk. '+(landmarks[currentRoom]??'Use the marked trails or the field journal to travel.'));
 }
 function enterRoom(next,arrival,{automatic=false}={}){
+  if(next==='lounge'&&!isSmartlyDressed(wardrobe)&&!autoJourneyTransition){requestLoungeDress();return;}
+  if(next==='lounge'&&isSmartlyDressed(wardrobe))loungeDressGuiding=false;
   if(!autoJourneyTransition&&(player.inCombat||(hunting.recoveryUntil&&next!=="hub"&&next!=="home"))){note("Finish combat or recovery before travelling.");return;}
   const depthsIndex=depthsStageIndex(next);
   if(depthsRun?!canVisitDepthsRoom(depthsRun,next):depthsIndex>=0)return;
