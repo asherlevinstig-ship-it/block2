@@ -15,7 +15,7 @@ test('shell favors heavy hits, and a timed dodge gives faster fittings more swin
   assert.equal(slam.taken,0);
   assert.equal(slam.shellExposed,true);
   assert.equal(slam.encounter.exposedUntil,4500);
-  for(const [upgrade,count,damage] of [['balancedGrip',3,51],['weightedHilt',2,50]]){
+  for(const [upgrade,count,damage] of [['balancedGrip',3,60],['weightedHilt',2,63]]){
     let state={...slam.encounter,nextPlayerAt:2300},swings=0,total=0;
     while(state.nextPlayerAt<state.exposedUntil){
       const hit=advanceHunt(state,100,{},state.nextPlayerAt,()=>0,'trainingSword',upgrade);
@@ -24,6 +24,7 @@ test('shell favors heavy hits, and a timed dodge gives faster fittings more swin
       swings++;
       state=hit.encounter;
     }
+    // The first exposed hit now includes the perfect-dodge counter bonus.
     assert.equal(swings,count);
     assert.equal(total,damage);
     assert.equal(turn(state,'attack',state.nextPlayerAt,upgrade,0).shellGuarded,true);

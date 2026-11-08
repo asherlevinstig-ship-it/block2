@@ -117,3 +117,19 @@ test('Shadow reduction, Storm interrupts and resistance have distinct feedback i
     c.balanced();
   }
 });
+
+test('perfect dodge and counter hit have distinct feedback, expire and respect reduced motion',()=>{
+ const events={};recordCombatFx(events,{action:'enemy',dodged:true,timedDodge:true,perfectDodge:true},1000);recordCombatFx(events,{action:'attack',counter:true,counterBonus:8,damage:24},1100);
+ assert.equal(events.perfectDodgeAt,1000);assert.equal(events.counterAt,1100);
+ for(const reduced of [false,true]){
+  const c=canvas();drawCombatWorldFx({ctx:c.ctx,point,time:1200,now:1200,events,player:{x:5,y:5},reduced,encounter:{counterUntil:2800}});c.balanced();
+  const text=c.calls.filter(([method])=>method==='fillText').map(([,text])=>text);assert(text.includes('PERFECT DODGE!'));assert(text.includes('−24 COUNTER'));
+  const expired=canvas();drawCombatWorldFx({ctx:expired.ctx,point,time:3000,now:3000,events,player:{x:5,y:5},reduced,encounter:{counterUntil:2800}});expired.balanced();assert.equal(expired.calls.length,0);
+ }
+});
+test('counter opening overlay shows its deadline, clears on expiry and yields to attack warnings',()=>{
+ for(const reduced of [false,true])for(const [now,nextBoarAt,expected] of [[1200,8000,'PERFECT DODGE!'],[1800,8000,'COUNTER READY · +50%'],[1800,2000,'DODGE · CHARGE']]){
+  const c=canvas();drawCombatOverlayFx({ctx:c.ctx,width:540,height:349,time:now,now,events:{perfectDodgeAt:1000},encounter:{counterUntil:2800,nextBoarAt},health:100,reduced});c.balanced();assert(c.calls.some(([method,text])=>method==='fillText'&&text===expected));
+ }
+ const c=canvas();drawCombatOverlayFx({ctx:c.ctx,width:540,height:349,time:3000,now:3000,events:{},encounter:{counterUntil:2800,nextBoarAt:8000},health:100,reduced:true});assert(!c.calls.some(([method])=>method==='fillText'));
+});

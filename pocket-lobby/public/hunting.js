@@ -1,6 +1,7 @@
 import {skillLevel} from './skill-curve.js';
 import {essenceEffects,essenceGems,essencePower} from './essences.js';
 
+export const counterRules={duration:1800,bonus:.5};
 export const boarRules={health:70,playerInterval:1100,boarInterval:1900,fleeCooldown:1800,respawn:30000,recovery:12000,dodgeCost:40,dodgeWindow:350,dodgeCooldown:700};
 export const stonebackVest={name:'Stoneback Vest',absorption:4,dodgeCost:50,timber:8,fragment:'stonebackShell'};
 export const moonwellCharm={name:'Moonwell Charm',staminaRegen:3,timber:4,power:10};
@@ -145,7 +146,7 @@ export function normalizeCombatSummary(input){
   if(!input||!Number.isSafeInteger(input.startedAt)||input.startedAt<0)return null;
   const count=value=>Number.isSafeInteger(value)&&value>0?Math.min(value,1000000):0;
   const spells=Object.fromEntries(Object.entries(input.spells??{}).filter(([id,value])=>essencePower(id)&&count(value)>0).map(([id,value])=>[id,count(value)]));
-  return {startedAt:input.startedAt,partial:input.partial===true,spells,interrupts:count(input.interrupts),prevented:count(input.prevented),dodges:count(input.dodges),automaticCasts:count(input.automaticCasts),fleeAttempts:count(input.fleeAttempts),automaticFlees:count(input.automaticFlees)};
+  return {startedAt:input.startedAt,partial:input.partial===true,spells,interrupts:count(input.interrupts),prevented:count(input.prevented),dodges:count(input.dodges),perfectDodges:count(input.perfectDodges),counters:count(input.counters),counterBonus:count(input.counterBonus),automaticCasts:count(input.automaticCasts),fleeAttempts:count(input.fleeAttempts),automaticFlees:count(input.automaticFlees)};
 }
 export function normalizeHunting(input={}){
   if(!input||typeof input!=='object'||Array.isArray(input))throw new Error('Invalid hunting state.');
@@ -170,7 +171,7 @@ export function normalizeHunting(input={}){
       const nextAt=time(burn.nextAt),until=time(burn.until);
       if(nextAt>0&&nextAt<=until)result.encounter.burn={damage:burn.damage,nextAt,until};
     }
-    for(const key of ['chilledUntil','weakenedUntil','interruptResistUntil','tacticsAt']){
+    for(const key of ['chilledUntil','weakenedUntil','interruptResistUntil','tacticsAt','counterUntil']){
       if(input.encounter[key]!==undefined)result.encounter[key]=time(input.encounter[key]);
     }
     if(Number.isFinite(input.encounter.weakenPercent)&&input.encounter.weakenPercent>=25&&input.encounter.weakenPercent<=35)result.encounter.weakenPercent=input.encounter.weakenPercent;
@@ -212,6 +213,7 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
   const dodgeCost=combatDodgeCost(vestEquipped);
   if(action==='dodge'&&stamina<dodgeCost)return null;
   const result={encounter:{...encounter,stamina,staminaAt:now},health,damage:0,taken:0,dodged:false,outcome:'fighting',action};
+  if(now>=(encounter.counterUntil??0))delete result.encounter.counterUntil;
   if(action==='dodge'){
     result.encounter.stamina-=dodgeCost;
     result.encounter.dodgeUntil=now+boarRules.dodgeWindow;
@@ -231,6 +233,9 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
       result.damage=exposed?result.damage+enemy.exposedBonus:Math.max(1,result.damage-enemy.shellArmor);
       result.shellGuarded=!exposed;
     }
+    if(now<(encounter.counterUntil??0)){
+      result.counter=true;result.counterBonus=Math.ceil(result.damage*counterRules.bonus);result.damage+=result.counterBonus;delete result.encounter.counterUntil;
+    }
     result.encounter.health=Math.max(0,encounter.health-result.damage);
     if(!result.encounter.health){result.outcome='victory';result.encounter=null;}
   }else{
@@ -240,6 +245,7 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
     result.heavy=move.damage>0;
     result.timedDodge=encounter.dodgeUntil>0&&encounter.nextBoarAt<=encounter.dodgeUntil&&encounter.nextBoarAt>=encounter.dodgeUntil-boarRules.dodgeWindow;
     result.dodged=result.timedDodge||random()<attributes.dodge;
+    if(result.timedDodge){result.perfectDodge=true;result.encounter.counterUntil=encounter.nextBoarAt+counterRules.duration;}
     if(move.opensShell&&result.timedDodge){
       result.encounter.exposedUntil=now+enemy.exposureMs+(move.id===enemy.move?0:400);
       result.shellExposed=true;

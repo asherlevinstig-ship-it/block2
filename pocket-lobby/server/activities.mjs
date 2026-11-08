@@ -31,6 +31,8 @@ function result(state,event,now){
   if(event.action==='flee'){summary.fleeAttempts++;if(event.automatic)summary.automaticFlees++;}
   if(event.interrupted)summary.interrupts++;
   if(event.dodged)summary.dodges++;
+  if(event.perfectDodge)summary.perfectDodges++;
+  if(event.counter){summary.counters++;summary.counterBonus+=event.counterBonus??0;}
   summary.prevented+=(event.weakened??0)+(event.warded??0)+(event.absorbed??0);
   if(event.encounter)event.encounter.summary=summary;
   const rewards={};

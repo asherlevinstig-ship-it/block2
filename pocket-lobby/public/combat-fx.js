@@ -1,4 +1,4 @@
-import {enemyAttack,boarRules,enemyStatusEffects} from './hunting.js';
+import {enemyAttack,boarRules,enemyStatusEffects,counterRules} from './hunting.js';
 
 const progress=(time,start,duration)=>Math.max(0,Math.min(1,(time-start)/duration));
 const active=(time,start,duration)=>time>=start&&time<start+duration;
@@ -35,9 +35,11 @@ const color={
 
 export function recordCombatFx(events,result,time){
   const {action,damage,taken,dodged,dodgeStarted,warded,absorbed,move,attackShape,heavy,
-    shellGuarded,power,powerForm,powerColor,ward,healed,staminaRestored,interrupted,interruptResisted,weakened}=result;
+    perfectDodge,counter,counterBonus,shellGuarded,power,powerForm,powerColor,ward,healed,staminaRestored,interrupted,interruptResisted,weakened}=result;
   if(action==='attack'&&damage)events.strikeAt=time;
   if(damage)events.boarHitAt=time;
+  if(perfectDodge)events.perfectDodgeAt=time;
+  if(counter)events.counterAt=time;
   if(action==='enemy')events.boarAttackAt=time;
   if(taken)events.hurtAt=time;
   if(dodgeStarted||(dodged&&!result.timedDodge))events.dodgeAt=time;
@@ -46,7 +48,7 @@ export function recordCombatFx(events,result,time){
   if(!power&&!damage&&!taken&&!dodged&&!warded&&!absorbed&&!weakened&&action!=='enemy')return;
   const live=(events.bursts??[]).filter(effect=>time-effect.time<feedbackLife);
   events.bursts=[...live,{time,action,damage,taken,dodged,warded,absorbed,move,attackShape,heavy,
-    shellGuarded,power,powerForm,powerColor,ward,healed,staminaRestored,interrupted,interruptResisted,weakened}].slice(-6);
+    perfectDodge,counter,counterBonus,shellGuarded,power,powerForm,powerColor,ward,healed,staminaRestored,interrupted,interruptResisted,weakened}].slice(-6);
 }
 function line(ctx,x1,y1,x2,y2){
   ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
@@ -82,17 +84,18 @@ function hex(ctx,x,y,radius){
   ctx.closePath();ctx.stroke();
 }
 function drawMeleeImpact(ctx,{bx,by,px,py,aim},t,effect,reduced){
-  const tint=effect.shellGuarded?color.shell:effect.shellGuarded===false?color.exposed:color.sword;
+  const tint=effect.counter?'#fff1a8':effect.shellGuarded?color.shell:effect.shellGuarded===false?color.exposed:color.sword;
   ctx.save();
   if(!reduced&&t<.58){
     const swing=t/.58;
     ctx.globalAlpha=1-swing;
     const x=px+(bx-px)*(.28+swing*.58),y=py+(by-py)*(.28+swing*.58);
-    ctx.strokeStyle=tint;ctx.lineWidth=3;arc(ctx,x,y,aim-.65+swing,15+swing*4);
+    ctx.strokeStyle=tint;ctx.lineWidth=effect.counter?5:3;arc(ctx,x,y,aim-.65+swing,15+swing*4);
     ctx.strokeStyle='#fff3d7';ctx.lineWidth=1;arc(ctx,x,y,aim-.60+swing,19);
   }
   ctx.globalAlpha=1;
-  particles(ctx,bx,by,t,tint,reduced,effect.shellGuarded?12:21);
+  particles(ctx,bx,by,t,tint,reduced,effect.counter?32:effect.shellGuarded?12:21,effect.counter?12:7);
+  if(effect.counter){ctx.globalAlpha=1-t;ctx.strokeStyle='#ffdf81';ctx.lineWidth=2;ring(ctx,bx,by,reduced?13:8+t*24,.75);}
   ctx.restore();
 }
 function drawEnemyImpact(ctx,{bx,by,px,py,bgX,bgY,aim},t,effect,reduced){
@@ -171,13 +174,13 @@ function drawCombatNumbers(ctx,effects,time,{bx,by,px,py},reduced){
   for(const effect of effects.slice(-4).reverse()){
     const t=progress(time,effect.time,feedbackLife),rise=reduced?0:t*13;
     if(effect.damage&&enemyRow<3){
-      const suffix=effect.action==='burn'?' BURN':effect.shellGuarded?' SHELL':effect.shellGuarded===false?' EXPOSED':'';
+      const suffix=effect.counter?' COUNTER':effect.action==='burn'?' BURN':effect.shellGuarded?' SHELL':effect.shellGuarded===false?' EXPOSED':'';
       const tint=effect.powerColor??(effect.shellGuarded?color.shell:effect.shellGuarded===false?color.exposed:color.sword);
       popup(ctx,'−'+effect.damage+suffix,bx,by-22-rise-enemyRow++*13,t,tint,suffix?10:13);
     }
     if((effect.interrupted||effect.interruptResisted)&&enemyRow<3)popup(ctx,effect.interrupted?'INTERRUPTED':'INTERRUPT RESISTED',bx,by-22-rise-enemyRow++*13,t,'#ffe49a',9);
     const blocks=(effect.warded??0)+(effect.absorbed??0);
-    const playerText=effect.taken?'−'+effect.taken:effect.dodged?'DODGE':effect.healed?'+'+effect.healed+' HP'
+    const playerText=effect.taken?'−'+effect.taken:effect.perfectDodge?'PERFECT DODGE!':effect.dodged?'DODGE':effect.healed?'+'+effect.healed+' HP'
       :effect.staminaRestored?'+'+effect.staminaRestored+' STAMINA':blocks?'BLOCK '+blocks:effect.ward?'WARD '+effect.ward:'';
     const tint=effect.taken?color.hurt:effect.healed?color.heal:effect.dodged?color.evade:effect.powerColor??color.ward;
     if(playerText&&playerRow<3)popup(ctx,playerText,px,py-34-rise-playerRow++*13,t,tint,effect.taken?13:10);
@@ -194,6 +197,7 @@ export function drawCombatWorldFx({ctx,point,time,now,events,player,reduced,enco
   if(encounter?.magicWard>0&&now<encounter.magicWardUntil){
     ctx.save();ctx.globalAlpha=.48;ctx.strokeStyle=color.ward;ctx.lineWidth=1;hex(ctx,px,py,18);ctx.restore();
   }
+  if(encounter&&now<encounter.counterUntil){ctx.save();ctx.strokeStyle='#ffe5a1';ctx.lineWidth=2;ctx.globalAlpha=.7;ring(ctx,bgX,bgY,21);ctx.restore();}
   for(const effect of effects){
     const duration=effect.power?620:effect.heavy?470:350;
     if(!active(time,effect.time,duration))continue;
@@ -201,6 +205,7 @@ export function drawCombatWorldFx({ctx,point,time,now,events,player,reduced,enco
     if(effect.power)drawSpell(ctx,points,t,effect,reduced);
     else if(effect.action==='attack'&&effect.damage)drawMeleeImpact(ctx,points,t,effect,reduced);
     else if(effect.action==='enemy')drawEnemyImpact(ctx,points,t,effect,reduced);
+    if(effect.perfectDodge){ctx.save();ctx.strokeStyle=color.evade;ctx.lineWidth=2;ctx.globalAlpha=1-t;ring(ctx,pgX,pgY,reduced?15:10+t*18);ctx.restore();}
   }
   if(!reduced&&active(time,events.dodgeAt,290)){
     const t=progress(time,events.dodgeAt,290);
@@ -269,18 +274,20 @@ export function drawCombatOverlayFx({ctx,width,height,time,now,events,encounter,
   const remaining=(encounter?.nextBoarAt??0)-now;
   const warning=encounter&&remaining>=0&&remaining<=move.tell;
   const exposed=(encounter?.exposedUntil??0)>now;
-  const victory=active(time,events.victoryAt,2200);
-  if(warning||victory||exposed){
-    const x=width/2,w=victory?204:164,y=24;
+  const victory=active(time,events.victoryAt,2200),counter=encounter&&now<encounter.counterUntil;
+  const perfect=counter&&active(time,events.perfectDodgeAt,650);
+  if(warning||victory||exposed||counter){
+    const x=width/2,w=victory?204:counter&&!warning?204:164,y=24;
     ctx.globalAlpha=victory?1-progress(time,events.victoryAt+1700,500):1;
-    ctx.fillStyle='#252538ed';ctx.fillRect(x-w/2,y,w,victory?37:25);
-    ctx.fillStyle=victory?'#f2ce8a':warning?'#f2aa7c':'#bed88f';ctx.fillRect(x-w/2,y,w,1);
+    ctx.fillStyle='#252538ed';ctx.fillRect(x-w/2,y,w,victory||counter&&!warning?37:25);
+    ctx.fillStyle=victory?'#f2ce8a':warning?'#f2aa7c':counter?'#ffe5a1':'#bed88f';ctx.fillRect(x-w/2,y,w,1);
     const victoryTitle='✦ '+(enemy?.name??'Wild Boar').toUpperCase()+' DEFEATED ✦';
     const warningTitle=remaining<=boarRules.dodgeWindow?'DODGE · '+move.name.toUpperCase():move.name.toUpperCase()+' INCOMING';
     ctx.font='bold 10px monospace';ctx.textAlign='center';
-    ctx.fillText(victory?victoryTitle:warning?warningTitle:'WEAK SPOT EXPOSED',x,y+13);
+    ctx.fillText(victory?victoryTitle:warning?warningTitle:counter?(perfect?'PERFECT DODGE!':'COUNTER READY · +50%'):'WEAK SPOT EXPOSED',x,y+13);
     ctx.font='7px monospace';ctx.fillStyle='#e2d7c4';
     if(victory)ctx.fillText((enemy?.elite?'Essence Cache unlocked':(enemy?.lootName??'Boar Meat')+' +1')+' · Combat XP +'+(enemy?.xp.reduce((sum,xp)=>sum+xp,0)??40),x,y+27);
+    else if(counter&&!warning){ctx.fillText('Next strike +50% · '+((encounter.counterUntil-now)/1000).toFixed(1)+'s',x,y+27);ctx.fillStyle='#dfbe72';ctx.fillRect(x-w/2+10,y+33,(w-20)*Math.max(0,Math.min(1,(encounter.counterUntil-now)/counterRules.duration)),2);}
     else if(warning){ctx.fillStyle='#b17e63';ctx.fillRect(x-w/2+10,y+19,(w-20)*(1-remaining/move.tell),2);}
   }
   ctx.restore();

@@ -679,7 +679,7 @@ function renderCombatRecap(report){
   $('combatRecapInterrupts').textContent=summary.interrupts;
   $('combatRecapBlocked').textContent=summary.prevented;
   $('combatRecapDodges').textContent=summary.dodges;
-  $('combatRecapAutomatic').textContent=summary.automaticCasts+' automatic spell casts · '+summary.fleeAttempts+' flee attempts ('+summary.automaticFlees+' automatic)';
+  $('combatRecapAutomatic').textContent=summary.perfectDodges+' perfect dodges · '+summary.counters+' counterattacks · +'+summary.counterBonus+' counter bonus damage · '+summary.automaticCasts+' automatic spell casts · '+summary.fleeAttempts+' flee attempts ('+summary.automaticFlees+' automatic)';
   $('combatRecapDuration').textContent=summary.partial?'Recorded from the latest update.':'Encounter duration · '+Math.max(0,Math.round((report.endedAt-summary.startedAt)/1000))+'s';
   const action=combatRecapAction(report);
   $('combatRecapNext').hidden=!action;
@@ -964,7 +964,8 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
   if(result.warded)combatMessage+=(combatMessage?' ':'')+'Your ward blocked '+result.warded+' damage.';
   if(result.absorbed)combatMessage+=(combatMessage?' ':'')+'Your vest absorbed '+result.absorbed+' damage.';
   if(result.dodgeStarted)combatMessage='You sidestep. Time your dodge just before the '+enemy.move+' lands!';
-  if(result.timedDodge)combatMessage=result.shellExposed?'Perfect dodge! The shell flips open.':'Perfect dodge! You avoided '+(result.move??'the attack')+'.';
+  if(result.timedDodge)combatMessage=result.shellExposed?'Perfect dodge! Shell open · Next strike +50% damage.':'Perfect dodge! Next strike +50% damage for 1.8 seconds.';
+  if(result.counter)combatMessage='Counterattack! '+result.damage+' damage · +'+result.counterBonus+' bonus.';
   if(result.automatic)combatMessage='Tactic · '+combatMessage;
   if(result.nextMove&&result.outcome==='fighting')combatMessage+=(combatMessage?' ':'')+'Next: '+result.nextMove+'.';
   if(result.taken&&playEffects){
@@ -1088,12 +1089,14 @@ function updateCombatPanel(){
   const remaining=Math.max(0,(encounter?.nextFleeAt??0)-now);
   $('boarHealth').textContent=encounter?encounter.health+' / '+enemy.health+' HP':now<respawn?'Returns in '+Math.ceil((respawn-now)/1000)+'s':enemy.health+' / '+enemy.health+' HP';
   $('boarProgress').value=encounter?.health??(now<respawn?0:enemy.health);
-  $('combatAttack').textContent=encounter?(characterRules.combat.enabled?'Auto-attack · Tactics active':'Auto-attacking'):'Auto-attack';
+  const counterReady=!!encounter&&now<encounter.counterUntil;
+  $('combatAttack').classList.toggle('counter-ready',counterReady);
+  $('combatAttack').textContent=counterReady?'Counter ready · +50%':encounter?(characterRules.combat.enabled?'Auto-attack · Tactics active':'Auto-attacking'):'Auto-attack';
   $('combatFlee').disabled=!encounter||remaining>0;
   const stamina=encounter?combatStamina(encounter,playerStats,now,combatGear.moonwellCharmEquipped):100;
   const dodgeCost=combatDodgeCost(combatGear.stonebackVestEquipped);
   $('combatStamina').value=stamina;$('combatStaminaValue').textContent=Math.floor(stamina)+' / 100';
-  $('combatDodgeHelp').textContent='Dodge costs '+dodgeCost+' stamina'+(combatGear.stonebackVestEquipped?' with the Stoneback Vest':'')+'. Time it just before impact.'+(combatGear.moonwellCharmEquipped?' Moonwell Charm: +'+moonwellCharm.staminaRegen+' stamina per second.':' Agility improves recovery.');
+  $('combatDodgeHelp').textContent='Dodge costs '+dodgeCost+' stamina'+(combatGear.stonebackVestEquipped?' with the Stoneback Vest':'')+'. Dodge just before impact to empower your next strike by 50%.'+(combatGear.moonwellCharmEquipped?' Moonwell Charm: +'+moonwellCharm.staminaRegen+' stamina per second.':' Agility improves recovery.');
   $('combatDodge').disabled=!encounter||now<(encounter.nextDodgeAt??0)||stamina<dodgeCost;
   const timing=!!encounter&&encounter.nextBoarAt-now>=0&&encounter.nextBoarAt-now<=boarRules.dodgeWindow;
   $('combatDodge').classList.toggle('dodge-ready',timing&&!$('combatDodge').disabled);

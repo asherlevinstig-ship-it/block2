@@ -416,3 +416,4 @@
 .hunting-preview-grid p,.hunting-preview-grid small { display:block; font-size:11px; line-height:1.6; color:#bccedf; }
 .hunting-preview-grid button { margin-top:10px; width:100%; padding:8px; font-size:11px; }
 @media(max-width:600px) { .hunting-preview-grid { grid-template-columns:1fr; } }
+.combat-auto.counter-ready { color:#fff0b6; background:#534324; border:1px solid #e3bd6f; border-radius:7px; padding:7px 10px; box-shadow:0 0 12px #e3bd6f25; }
