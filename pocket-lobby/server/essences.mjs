@@ -1,5 +1,5 @@
 import {bondedEssences,confluence,essencePower,normalizeMagic,essenceEffects,essenceGems} from '../public/essences.js';
-import {combatStamina,huntEnemy,enemyAttack} from '../public/hunting.js';
+import {combatStamina,huntEnemy,enemyAttack,transitionVaultPhase} from '../public/hunting.js';
 
 export function essenceAction(state,action,body){
   if(!['bondEssences','awakenPower','equipPower'].includes(action))return false;
@@ -123,5 +123,5 @@ export function castEssencePower(state,now,slot='q'){
     if(event.encounter)next.usedEssences=[...new Set([...(encounter.usedEssences??[]),power.gem])];
   }
   magic.cooldowns[power.id]=now+power.cooldown;
-  return event;
+  return transitionVaultPhase(event,encounter,now);
 }

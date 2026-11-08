@@ -106,7 +106,7 @@ export const moonwood=(()=>{
         }
       }
     }
-    if(landmarkType)scenery.push({id:'landmark',type:landmarkType,x:lx,y:ly,rot:0,archetype:id==='depthsCache'?'caster':id==='depthsTrial'?'duelist':id==='depthsTreasury'?'armoured':null,...(id==='depthsCache'||id==='depthsTrial'?{cacheGuardian:true}:{})});
+    if(landmarkType)scenery.push({id:'landmark',type:landmarkType,x:lx,y:ly,rot:0,archetype:id==='depthsCache'?'caster':id==='depthsTrial'?'duelist':id==='depthsTreasury'?'armoured':id==='depthsVault'?'vaultBoss':null,...(id==='depthsCache'||id==='depthsTrial'?{cacheGuardian:true}:{})});
     if(id==='trail')scenery.push({id:'campfire',type:'campfire',x:3,y:4,rot:0});
     return {path:id==='grove'?visiblePath:path,scenery,hiddenTrail};
   }
@@ -282,6 +282,26 @@ export const moonwood=(()=>{
       }
     }else if(type==='stonebackBeetle'){
       const archetype=item.archetype;
+      if(archetype==='vaultBoss'){
+        const phase=combat?.bossVersion===1?(combat.health>160?1:combat.health>80?2:3):1;
+        const tint=phase===1?'#e2bd78':phase===2?'#f29f84':'#c7a1ff',body=pose.hit?'#c9b6be':phase===1?'#6d727e':phase===2?'#705266':'#52456f';
+        const lift=reduced||pose.defeated?0:phase===3?Math.sin(time/260)*2:0;
+        ctx.save();ctx.translate(0,-lift);surface(x-.15,y-.15,1.3,1.3,.4,'#17182e9c');
+        if(!pose.defeated){
+          for(const offset of [-12,7])rect(px+offset,py-14,7,13,'#303b51');
+          polygon([[px-15,py-36],[px+15,py-36],[px+12,py-10],[px-12,py-10]],body);
+          for(const offset of [-24,15]){rect(px+offset,py-34,9,19,body);rect(px+offset-1,py-36,11,4,tint);}
+          rect(px-9,py-48,18,13,body);rect(px-12,py-47,24,4,tint);rect(px-7,py-41,5,2,tint);rect(px+3,py-41,5,2,tint);
+          polygon([[px,py-33],[px+7,py-25],[px,py-17],[px-7,py-25]],tint);rect(px-1,py-29,3,9,'#fff3da');
+          if(phase===1){rect(px-15,py-33,9,19,'#a08d6c');rect(px+7,py-33,9,19,'#a08d6c');rect(px-18,py-31,4,20,tint);rect(px+15,py-31,4,20,tint);}
+          if(phase===2){for(const offset of [-24,22]){rect(px+offset,py-25,3,29,'#ecc6b0');rect(px+offset-3,py-4,9,3,tint);}rect(px-12,py-21,5,2,'#272c40');rect(px+9,py-30,5,2,'#272c40');}
+          if(phase===3){ctx.strokeStyle=tint;ctx.lineWidth=1;ctx.beginPath();ctx.ellipse(px,py-26,27,19,0,0,Math.PI*2);ctx.stroke();for(const offset of [-28,25])rect(px+offset,py-29,4,7,tint);}
+        }else{
+          for(const offset of [-22,-9,8,20])rect(px+offset,py-7+Math.abs(offset)%5,7,5,body);
+          polygon([[px,py-15],[px+6,py-8],[px,py-2],[px-6,py-8]],'#d6b2ff');
+        }
+        ctx.restore();return;
+      }
       if(archetype==='caster'||archetype==='duelist'){
         const casting=archetype==='caster'&&pose.windup>0, glow=casting?'#ebc4ff':'#aa8adc';
         ctx.save();if(pose.defeated)ctx.globalAlpha*=.5;

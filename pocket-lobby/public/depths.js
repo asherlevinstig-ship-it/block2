@@ -43,7 +43,7 @@ export const depthsFinds={
   gateSupply:{label:'Supply chest',title:'A dry supply chest',room:'depthsGate',requires:'sluiceLever',healing:15,text:'A sealed flask of spring water survived the flood.'},
   shellChime:{label:'Shell chime',title:'A chime in the dark',room:'depthsGallery',text:'The hollow shell rings. Green light traces a hidden cache across the gallery.'},
   galleryCache:{label:'Hidden cache',title:'The gallery’s hidden cache',room:'depthsGallery',requires:'shellChime',gold:18,text:'You found 18 gold. It is held with your expedition spoils until you bank them.'},
-  vaultRelief:{label:'Vault relief',title:'A warning carved in stone',room:'depthsVault',text:'When wounded, the Guardian can call a Vault Quake. Dodge as it lands, then watch for the Aftershock. Each hit has its own warning.'}
+  vaultRelief:{label:'Vault relief',title:'A warning carved in stone',room:'depthsVault',text:'Ironclad armour, unbound blades, then a runic heart. Stagger the plating, dodge and counter its swings, then interrupt the charged spell with three quick hits or dodge the blast.'}
 };
 
 export function inspectDepthsFind(state,item){
@@ -128,9 +128,11 @@ export function normalizeDepthsRun(input,room,encounter){
   if(encounter&&(!depthsEnemyAvailable(input,room)||encounter.enemy!==(side?depthsSideRooms[side].enemy:room===depthsCacheRoom?'cacheGuardian':depthsStages[index].enemy)))throw new Error('Invalid Moonwell Depths encounter.');
   if(input.sideWins!==undefined&&(!Array.isArray(input.sideWins)||input.sideWins.some(id=>!['treasure','trial'].includes(id))||input.cleared<2&&input.sideWins.length))throw new Error('Invalid optional room victories.');
   if(input.shrineUsed!==undefined&&(typeof input.shrineUsed!=='boolean'||input.shrineUsed&&input.cleared<2))throw new Error('Invalid shrine blessing.');
+  if(input.victorySeen!==undefined&&typeof input.victorySeen!=='boolean')throw new Error('Invalid victory acknowledgment.');
+  if(input.vaultWeapon!==undefined&&!['breakerSpear','duelistBlade','quickfang'].includes(input.vaultWeapon))throw new Error('Invalid vault reward.');
   const finds=[...new Set(Array.isArray(input.finds)?input.finds.filter(id=>Object.hasOwn(depthsFinds,id)):[])];
   if(finds.includes('sideSeal')&&!input.sideWins?.includes('trial')||finds.includes('sideTreasure')&&!input.sideWins?.includes('treasure'))throw new Error('Invalid optional room reward.');
-  return {cleared:input.cleared,...(input.sideWins?.length?{sideWins:[...new Set(input.sideWins)]}:{}),...(input.shrineUsed===true?{shrineUsed:true}:{}),...(finds.includes('sideSeal')&&Object.hasOwn(stoneForms,input.sideStone)?{sideStone:input.sideStone}:{}),...(input.routeChoice!==undefined?{routeChoice:input.routeChoice}:{}),...(input.cleared===depthsStages.length&&input.shardEarned===true?{shardEarned:true}:{}),...(finds.length?{finds}:{}),
+  return {cleared:input.cleared,...(input.cleared===3&&input.victorySeen===true?{victorySeen:true}:{}),...(input.cleared===3&&input.vaultWeapon?{vaultWeapon:input.vaultWeapon}:{}),...(input.sideWins?.length?{sideWins:[...new Set(input.sideWins)]}:{}),...(input.shrineUsed===true?{shrineUsed:true}:{}),...(finds.includes('sideSeal')&&Object.hasOwn(stoneForms,input.sideStone)?{sideStone:input.sideStone}:{}),...(input.routeChoice!==undefined?{routeChoice:input.routeChoice}:{}),...(input.cleared===depthsStages.length&&input.shardEarned===true?{shardEarned:true}:{}),...(finds.length?{finds}:{}),
     ...(input.cacheGuardDefeated===true?{cacheGuardDefeated:true}:{}),
     ...(finds.includes('essenceCache')&&Object.hasOwn(stoneForms,input.cacheStone)?{cacheStone:input.cacheStone}:{})};
 }

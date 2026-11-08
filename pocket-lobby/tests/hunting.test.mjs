@@ -206,7 +206,7 @@ test('beetles telegraph heavier slams and the Guardian queues one separately dod
   const crush=huntingTurn(dodge.encounter,100,{},'enemy',crushAt,roll);
   assert.equal(crush.shellExposed,true);
   assert(crush.encounter.exposedUntil-crushAt>huntEnemies.beetle.exposureMs);
-  const guardian=createHunt(0,60,'depthsGuardian');
+  const guardian=createHunt(0,60,'depthsGuardian');delete guardian.bossVersion; // Legacy fights finish their pending pattern.
   const opening=huntingTurn(guardian,100,{},'enemy',guardian.nextBoarAt,roll);
   assert.equal(enemyAttack(opening.encounter).name,'Vault Quake');
   const quakeAt=opening.encounter.nextBoarAt;

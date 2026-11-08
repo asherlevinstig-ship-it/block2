@@ -494,3 +494,8 @@
 .relic-actions { display:flex; flex-wrap:wrap; gap:9px; margin-top:17px; }.relic-actions button { flex:1; padding:11px; font-size:12px; }.game-window .relic-actions .primary { margin:0; }
 .relic-actions button[hidden] { display:none; }.dungeon-relic-link { margin:10px 0; padding:10px 12px; border:1px solid #9a7eb7; color:#e5d1ff; background:#302c43; border-radius:8px; font-size:12px; }
 @media(max-width:560px) { .relic-choices { grid-template-columns:1fr; }.relic-detail { grid-template-columns:65px 1fr; padding:10px; gap:12px; }.relic-art { width:65px; height:75px; }.relic-detail h3 { font-size:18px; }.relic-actions { flex-direction:column; }.relic-comparison { font-size:11px; } }
+
+.vault-victory-window{width:min(560px,calc(100vw - 28px));text-align:center;border-color:#d6b679;background:radial-gradient(ellipse at 50% 0,#65533445,transparent 55%),linear-gradient(150deg,#1a2942,#141c2e);}
+.vault-victory-crest{margin:4px auto 14px;display:grid;place-items:center;width:72px;height:72px;border:1px solid #caa566;border-radius:50%;font-size:44px;color:#ffdc8d;box-shadow:0 0 28px #dfb65b26;}
+.vault-victory-window h2{margin:8px 0;color:#ffdf9c;font-size:30px;}.vault-victory-window>p{color:#b9c7db;line-height:1.6;}
+.vault-haul,.vault-relic{margin:20px 0;padding:18px;border:1px solid #816f50;border-radius:12px;background:#0c182a88;text-align:left;}.vault-haul h3{font-size:28px;margin:10px 0;color:#ffdb8b;}.vault-haul p{color:#eee3c9;line-height:1.6;}.vault-haul small,.vault-relic small{display:block;color:#afbdd1;line-height:1.7;}.vault-relic{border-color:#806998;}.vault-relic b{color:#d9c2fb;}.vault-relic progress{display:block;width:100%;height:7px;margin:14px 0;accent-color:#c7a4ef;}.vault-victory-window .primary{width:100%;min-height:48px;}

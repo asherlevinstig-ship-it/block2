@@ -30,6 +30,7 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
   if(action!=='combat')settleActivities(state,now,random);
   if(activityAction(state,action,body,now,random)||essenceAction(state,action,body))return;
   if(gamblingAction(state,action,body,now,random===Math.random?undefined:random))return;
+  if(action==='vaultVictoryAck'){available(state);if(state.depthsRun?.cleared!==3)throw new Error('Defeat the Vault Guardian first.');state.depthsRun.victorySeen=true;return;}
   if(action==='dungeonLootTarget'||action==='dungeonLootAck'){
     available(state);const loot=state.dungeonLoot=normalizeDungeonLoot(state.dungeonLoot);
     if(action==='dungeonLootTarget'){

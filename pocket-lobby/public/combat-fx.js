@@ -1,5 +1,5 @@
 export {createCombatSound} from './combat-sound.js';
-import {huntEnemy,enemyAttack,boarRules,enemyStatusEffects,counterRules,staggerProfile} from './hunting.js';
+import {huntEnemy,enemyAttack,boarRules,enemyStatusEffects,counterRules,staggerProfile,vaultPhase} from './hunting.js';
 
 const progress=(time,start,duration)=>Math.max(0,Math.min(1,(time-start)/duration));
 const active=(time,start,duration)=>time>=start&&time<start+duration;
@@ -38,6 +38,8 @@ const color={
 export function recordCombatFx(events,result,time){
   const {action,damage,taken,dodged,dodgeStarted,warded,absorbed,move,attackShape,heavy,
     staggered,weakSpot,staggerBonus,staggerGained,perfectDodge,counter,counterBonus,shellGuarded,power,powerForm,powerColor,ward,healed,staminaRestored,interrupted,interruptResisted,weakened}=result;
+  if(result.phaseChange){events.phaseAt=time;events.phaseChange=result.phaseChange;}
+  if(result.outcome==='victory')events.vaultVictory=result.enemyId==='depthsGuardian';
   if(action==='attack'&&damage)events.strikeAt=time;
   if(damage)events.boarHitAt=time;
   if(perfectDodge)events.perfectDodgeAt=time;
@@ -200,6 +202,10 @@ export function drawCombatWorldFx({ctx,point,time,now,events,player,reduced,enco
   const [bx,by]=point(6.5,5.5,15),[px,py]=point(player.x+.5,player.y+.5,18);
   const [bgX,bgY]=point(6.5,5.5,1),[pgX,pgY]=point(player.x+.5,player.y+.5,1);
   const points={bx,by,px,py,bgX,bgY,pgX,pgY,aim:Math.atan2(by-py,bx-px)};
+  if(active(time,events.phaseAt,1200)||events.vaultVictory&&active(time,events.victoryAt,1500)){
+    const win=events.vaultVictory&&active(time,events.victoryAt,1500),t=progress(time,win?events.victoryAt:events.phaseAt,win?1500:1200);
+    ctx.save();ctx.globalAlpha=1-t;ctx.strokeStyle=win?'#ffe5a5':events.phaseChange.color;ctx.lineWidth=2;ring(ctx,bgX,bgY,reduced?28:15+t*65);particles(ctx,bx,by,t,ctx.strokeStyle,reduced,win?55:35,win?20:10);ctx.restore();
+  }
   const effects=(events.bursts??[]).filter(effect=>active(time,effect.time,feedbackLife));
   if(encounter){
     const profile=staggerProfile(huntEnemy(encounter)),stunned=now<encounter.staggerUntil,weak=now<encounter.staggerWeakUntil,recovering=now<encounter.staggerResistUntil;
@@ -285,6 +291,12 @@ export function drawCombatOverlayFx({ctx,width,height,time,now,events,encounter,
       ctx.beginPath();ctx.moveTo(x+dx,y);ctx.lineTo(x,y);ctx.lineTo(x,y+dy);ctx.stroke();
     }
     ctx.restore();
+  }
+  const boss=vaultPhase(encounter);
+  if(boss){
+    const x=width/2,w=Math.min(260,width-30),y=76;ctx.fillStyle='#142039ed';ctx.fillRect(x-w/2,y,w,33);ctx.strokeStyle=boss.color;ctx.strokeRect(x-w/2,y,w,33);ctx.fillStyle=boss.color;ctx.font='bold 9px monospace';ctx.textAlign='center';ctx.fillText('VAULT GUARDIAN · '+boss.index+'/3 · '+boss.name.toUpperCase(),x,y+12);ctx.fillStyle='#393346';ctx.fillRect(x-w/2+8,y+20,w-16,5);ctx.fillStyle=boss.color;ctx.fillRect(x-w/2+8,y+20,(w-16)*encounter.health/240,5);
+    for(const threshold of [1/3,2/3]){ctx.fillStyle='#111c2d';ctx.fillRect(x-w/2+8+(w-16)*threshold,y+19,2,7);}
+    if(now>=encounter.bossPhaseAt&&now<encounter.bossPhaseAt+1500){ctx.fillStyle=boss.color;ctx.font='bold 10px monospace';ctx.fillText('PHASE '+boss.index+' · '+boss.name.toUpperCase(),x,y+47);}
   }
   const move=enemyAttack(encounter,enemy);
   const remaining=(encounter?.nextBoarAt??0)-now;

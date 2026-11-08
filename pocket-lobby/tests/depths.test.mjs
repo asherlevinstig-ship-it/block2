@@ -45,7 +45,7 @@ test('every chamber enemy resumes in its own room and only a live chamber accept
     if(index>0){
       const dodge=huntingTurn(encounter,100,{},'dodge',encounter.nextBoarAt-200);
       const slam=huntingTurn(dodge.encounter,100,{},'enemy',encounter.nextBoarAt);
-      assert.equal(slam.shellExposed,true);
+      assert.equal(slam.shellExposed,index===2?undefined:true);
     }
   }
 });
@@ -164,7 +164,7 @@ test('cache capacity failures preserve the sealed reward, and claimed rewards su
   applyGameplayAction(state,'depthsNext',{},1000);
   state.position={x:5,y:5};state.health=1;
   applyGameplayAction(state,'fight',{},1000);
-  applyGameplayAction(state,'combat',{combatId:state.combatId},3500,()=>.5);
+  applyGameplayAction(state,'combat',{combatId:state.combatId},state.hunting.encounter.nextBoarAt,()=>.5);
   assert.equal(state.location,'hub');
   assert.equal(state.depthsRun,null);
   assert.equal(state.credits,100+essenceCacheGold);

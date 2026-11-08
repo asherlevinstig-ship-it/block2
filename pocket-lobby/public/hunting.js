@@ -27,10 +27,30 @@ export const huntEnemies={
 };
 const enemiesByRoom=Object.fromEntries(Object.values(huntEnemies).map(enemy=>[enemy.room,enemy]));
 export const huntEnemyForRoom=room=>enemiesByRoom[room];
-export const huntEnemy=encounter=>Object.hasOwn(huntEnemies,encounter?.enemy)?huntEnemies[encounter.enemy]:boar;
+export function vaultPhase(encounter){
+ if(encounter?.enemy!=='depthsGuardian'||encounter.bossVersion!==1)return null;
+ const index=encounter.health>160?1:encounter.health>80?2:3;
+ return index===1?{index,name:'Ironclad',archetype:'armoured',move:'vaultSmash',interval:3500,shellArmor:9,color:'#e6c080',hint:'Build stagger to crack the plating. Heavy hits help; dodge the smash.'}:index===2?{index,name:'Unbound',archetype:'duelist',move:'vaultCleave',interval:2600,shellArmor:0,color:'#ffab89',hint:'Dodge the heavy swings, then counter. Watch for the follow-up lunge.'}:{index,name:'Runic heart',archetype:'caster',move:'vaultBolt',interval:4200,shellArmor:0,color:'#c6a4ff',hint:'Land 3 quick hits during the charged spell to interrupt, or dodge the blast.'};
+}
+export function huntEnemy(encounter){
+ const enemy=Object.hasOwn(huntEnemies,encounter?.enemy)?huntEnemies[encounter.enemy]:boar,phase=vaultPhase(encounter);
+ return phase?{...enemy,...phase,phaseName:phase.name,name:enemy.name,tactic:'PHASE '+phase.index+' / 3 · '+phase.name.toUpperCase()+' · '+phase.hint}:enemy;
+}
+export function transitionVaultPhase(event,before,now){
+ const previous=vaultPhase(before),next=vaultPhase(event.encounter);
+ if(!previous||!next||previous.index===next.index)return event;
+ const encounter=event.encounter;encounter.bossPhaseAt=now;encounter.castHits=0;delete encounter.castDeadline;delete encounter.enemyMove;
+ encounter.nextBoarAt=Math.max(encounter.nextBoarAt,now+1500+enemyAttack(encounter).tell);
+ event.phaseChange={index:next.index,name:next.name,hint:next.hint,color:next.color};return event;
+}
 export const huntRespawnAt=(hunting,enemy)=>enemy===huntEnemies.beetle?hunting.beetleRespawnAt??0:hunting.respawnAt;
 
 const enemyMoves={
+  vaultSmash:{id:'vaultSmash',name:'Ironclad Smash',tell:1200,damage:0,shape:'ring',opensShell:false},
+  vaultCleave:{id:'vaultCleave',name:'Vault Cleave',tell:1000,damage:0,shape:'arc',opensShell:false},
+  vaultLunge:{id:'vaultLunge',name:'Vault Lunge',tell:1200,delay:2400,damage:4,shape:'lane',opensShell:false},
+  vaultBolt:{id:'vaultBolt',name:'Heart Bolt',tell:2400,damage:2,shape:'bolt',opensShell:false},
+  vaultBlast:{id:'vaultBlast',name:'Runic Blast',tell:1500,delay:2800,damage:6,shape:'ring',opensShell:false},
   runeBolt:{id:'runeBolt',name:'Rune Bolt',tell:2200,damage:0,shape:'bolt',opensShell:false},
   duelistLunge:{id:'duelistLunge',name:'Sentinel Lunge',tell:1100,delay:2300,damage:6,shape:'lane',opensShell:false},
   charge:{id:'charge',name:'Charge',tell:600,damage:0,shape:'lane',opensShell:false},
@@ -44,14 +64,20 @@ const enemyMoves={
   aftershock:{id:'aftershock',name:'Aftershock',tell:900,delay:1350,damage:-10,shape:'ring',opensShell:false}
 };
 export function enemyAttack(encounter,enemy=huntEnemy(encounter)){
+  if(vaultPhase(encounter))enemy=huntEnemy(encounter);
   const move=Object.hasOwn(enemyMoves,encounter?.enemyMove)?enemyMoves[encounter.enemyMove]:null;
-  const allowed=enemy.archetype==='caster'?['runicSlam','crush']:enemy.archetype==='duelist'?['duelistLunge','runicSlam','crush']:enemy.elite?['runicSlam','crush']:enemy.id==='depthsGuardian'?['quake','aftershock']:enemy.shellArmor?['crush']:['sweep','wildCharge'];
+  const phase=vaultPhase(encounter);
+  const allowed=phase?(phase.index===2?['vaultLunge']:phase.index===3?['vaultBlast']:[]):enemy.archetype==='caster'?['runicSlam','crush']:enemy.archetype==='duelist'?['duelistLunge','runicSlam','crush']:enemy.elite?['runicSlam','crush']:enemy.id==='depthsGuardian'?['quake','aftershock']:enemy.shellArmor?['crush']:['sweep','wildCharge'];
   return allowed.includes(move?.id)?move:enemyMoves[enemy.move];
 }
 function scheduleEnemyResponse(next,enemy,move,timedDodge,now){
   delete next.enemyMove;
   let response;
-  if(enemy.archetype==='caster'){
+  if(next.bossVersion===1){
+    if(enemy.index===2&&move.id==='vaultCleave')response=enemyMoves.vaultLunge;
+    if(enemy.index===3&&move.id==='vaultBolt')response=enemyMoves.vaultBlast;
+    next.castHits=0;
+  }else if(enemy.archetype==='caster'){
     next.castHits=0;
   }else if(enemy.archetype==='duelist'){
     if(move.id===enemy.move)response=enemyMoves.duelistLunge;
@@ -190,9 +216,10 @@ export function normalizeHunting(input={}){
       const nextAt=time(burn.nextAt),until=time(burn.until);
       if(nextAt>0&&nextAt<=until)result.encounter.burn={damage:burn.damage,nextAt,until};
     }
-    for(const key of ['chilledUntil','weakenedUntil','interruptResistUntil','tacticsAt','castDeadline','counterUntil','staggerUntil','staggerWeakUntil','staggerResistUntil']){
+    for(const key of ['chilledUntil','weakenedUntil','interruptResistUntil','tacticsAt','bossPhaseAt','castDeadline','counterUntil','staggerUntil','staggerWeakUntil','staggerResistUntil']){
       if(input.encounter[key]!==undefined)result.encounter[key]=time(input.encounter[key]);
     }
+    if(input.encounter.bossVersion!==undefined){if(input.encounter.bossVersion!==1||enemy!=='depthsGuardian')throw new Error('Invalid boss encounter.');result.encounter.bossVersion=1;}
     if(input.encounter.castHits!==undefined){if(!Number.isInteger(input.encounter.castHits)||input.encounter.castHits<0||input.encounter.castHits>2)throw new Error('Invalid cast pressure.');result.encounter.castHits=input.encounter.castHits;}
     if(input.encounter.counterPercent!==undefined){if(![50,75].includes(input.encounter.counterPercent))throw new Error('Invalid counter bonus.');result.encounter.counterPercent=input.encounter.counterPercent;}
     if(input.encounter.stagger!==undefined){if(!Number.isInteger(input.encounter.stagger)||input.encounter.stagger<0||input.encounter.stagger>=staggerProfile(huntEnemy(input.encounter)).limit)throw new Error('Invalid stagger progress.');result.encounter.stagger=input.encounter.stagger;}
@@ -214,6 +241,7 @@ export function createHunt(now,health,enemy='boar'){
   const profile=huntEnemy({enemy});
   const encounter={health:health??profile.health,stamina:100,staminaAt:now,dodgeUntil:0,nextDodgeAt:0,nextPlayerAt:now+450,nextBoarAt:now+profile.firstAttack,nextFleeAt:0};
   if(enemy!=='boar')encounter.enemy=enemy;
+  if(enemy==='depthsGuardian'){encounter.bossVersion=1;encounter.nextBoarAt=now+3500;}
   if(profile.shellArmor)encounter.exposedUntil=0;
   return encounter;
 }
@@ -263,7 +291,7 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
       result.weakSpot=true;result.staggerBonus=Math.ceil(result.damage*.25);result.damage+=result.staggerBonus;
     }
     result.encounter.health=Math.max(0,encounter.health-result.damage);
-    if(result.encounter.health>0&&enemy.archetype==='caster'&&enemyAttack(encounter,enemy).id==='runeBolt'&&now>=encounter.nextBoarAt-enemyMoves.runeBolt.tell&&now<encounter.nextBoarAt){
+    if(result.encounter.health>0&&enemy.archetype==='caster'&&enemyAttack(encounter,enemy).shape==='bolt'&&now>=encounter.nextBoarAt-enemyAttack(encounter,enemy).tell&&now<encounter.nextBoarAt){
       const hits=(encounter.castDeadline===encounter.nextBoarAt?encounter.castHits??0:0)+1;result.encounter.castDeadline=encounter.nextBoarAt;result.encounter.castHits=hits;
       if(hits>=3){result.interrupted=true;result.castInterrupted=true;result.encounter.castHits=0;result.encounter.nextBoarAt=now+enemy.interval;}
     }
@@ -316,7 +344,7 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
     result.health=Math.max(0,health-result.taken);
     if(!result.health){result.outcome='defeat';result.encounter=null;}
   }
-  return result;
+  return transitionVaultPhase(result,encounter,now);
 }
 export function enemyStatusEffects(encounter,now){
   if(!encounter)return [];
@@ -336,8 +364,8 @@ export function advanceHunt(encounter,health,stats,now,random=Math.random,weapon
     const next={...encounter,health:encounter.health-damage};
     if(burn.nextAt+essenceEffects.fire.interval<=burn.until)next.burn={...burn,nextAt:burn.nextAt+essenceEffects.fire.interval};
     else delete next.burn;
-    return {action:'burn',damage,taken:0,health,powerColor:essenceEffects.fire.color,
-      encounter:next.health?next:null,outcome:next.health?'fighting':'victory'};
+    return transitionVaultPhase({action:'burn',damage,taken:0,health,powerColor:essenceEffects.fire.color,
+      encounter:next.health?next:null,outcome:next.health?'fighting':'victory'},encounter,now);
   }
   const action=encounter.nextPlayerAt<=encounter.nextBoarAt?'attack':'enemy';
   return huntingTurn(encounter,health,stats,action,now,random,weapon,upgrade,vestEquipped,charmEquipped,enchantments);

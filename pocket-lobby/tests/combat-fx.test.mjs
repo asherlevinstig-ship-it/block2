@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {combatShake,recordCombatFx,drawCombatGroundFx,drawCombatWorldFx,drawCombatOverlayFx} from '../public/combat-fx.js';
+import {createHunt,huntEnemy} from '../public/hunting.js';import {moonwood} from '../public/moonwood.js';
 
 function canvas(){
   const calls=[];let depth=0;
@@ -16,6 +17,19 @@ function canvas(){
 }
 const events={strikeAt:1000,boarHitAt:1000,hurtAt:2000,dodgeAt:3000,victoryAt:4000};
 const point=(x,y,z=0)=>[252+(x-y)*18,105+(x+y)*9-z];
+test('Vault phases retain readable health markers, transition effects and a distinct defeat in both motion modes',()=>{
+ for(const reduced of [false,true])for(const health of [240,160,80]){
+  const encounter={...createHunt(1000,health,'depthsGuardian'),bossPhaseAt:1100},c=canvas(),enemy=huntEnemy(encounter),events={};
+  recordCombatFx(events,{action:'attack',damage:20,phaseChange:{index:enemy.index,name:enemy.phaseName,color:enemy.color}},1100);
+  drawCombatOverlayFx({ctx:c.ctx,width:540,height:349,time:1200,now:1200,events,encounter,enemy,health:100,reduced});
+  assert(c.calls.some(([method,label])=>method==='fillText'&&label.includes('VAULT GUARDIAN · '+enemy.index+'/3')));
+  drawCombatWorldFx({ctx:c.ctx,point,time:1200,now:1200,events,encounter,player:{x:5,y:5},reduced});
+  const item=moonwood.layouts.depthsVault.scenery.find(p=>p.type==='stonebackBeetle');
+  for(const defeated of [false,true])moonwood.drawProp(item,1200,{ctx:c.ctx,point,polygon:()=>{},surface:()=>{},block:()=>{},rect:()=>{},combat:encounter,reduced,pose:{defeated}});
+  recordCombatFx(events,{action:'attack',damage:20,enemyId:'depthsGuardian',outcome:'victory'},1300);
+  drawCombatWorldFx({ctx:c.ctx,point,time:1400,now:1400,events,encounter:null,player:{x:5,y:5},reduced});assert.equal(events.vaultVictory,true);c.balanced();
+ }
+});
 test('effects expire, preserve game data and balance canvas transforms',()=>{
   const encounter={nextBoarAt:1500},before=JSON.stringify({events,encounter});
   for(const reduced of [false,true])for(const time of [0,1000,1150,1499,2000,2150,3100,4000,4400,6100,9000]){

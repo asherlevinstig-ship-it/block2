@@ -236,7 +236,7 @@ test('Ice delays the guardian attack once per Chill and preserves its attack war
   act(s,'awakenPower',{id:'ice:sword'});act(s,'awakenPower',{id:'ice:shield'});
   s.location='depthsVault';s.depthsRun={cleared:2};s.position={x:5,y:5};act(s,'fight');
   s.hunting.encounter.nextPlayerAt=100000;
-  s.hunting.encounter.enemyMove='aftershock';
+  delete s.hunting.encounter.bossVersion;s.hunting.encounter.nextBoarAt=3300;s.hunting.encounter.enemyMove='aftershock';
   const before=s.hunting.encounter.nextBoarAt;
   act(s,'combat',{combatId:s.combatId,input:'essence',slot:'q'},1100);
   act(s,'combat',{combatId:s.combatId,input:'essence',slot:'e'},1200);
@@ -318,7 +318,7 @@ test('Storm cancels a warned guardian follow-up but cannot undo an attack that h
     const s=character();act(s,'bondEssences',{picks:['fire','shadow','storm']});
     s.magic.stones.shield=1;act(s,'awakenPower',{id:'storm:shield'});
     s.location='depthsVault';s.position={x:5,y:5};s.depthsRun={cleared:2};act(s,'fight');
-    s.hunting.encounter.nextPlayerAt=100000;s.hunting.encounter.enemyMove='aftershock';return s;
+    s.hunting.encounter.nextPlayerAt=100000;delete s.hunting.encounter.bossVersion;s.hunting.encounter.nextBoarAt=3300;s.hunting.encounter.enemyMove='aftershock';return s;
   };
   const s=setup();
   act(s,'combat',{combatId:s.combatId,input:'essence'},2600);

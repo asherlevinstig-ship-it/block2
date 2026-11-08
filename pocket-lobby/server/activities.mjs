@@ -52,7 +52,7 @@ function result(state,event,now,random=Math.random){
     if(event.stone)rewards.stones={[event.stone]:1};
     if(state.depthsRun){
       const cleared=clearDepthsStage(state.depthsRun,state.location,!!state.combatId);
-      if(cleared&&state.combatId&&enemy.id==='depthsGuardian'){const drop=awardDungeonWeapon(state,now,random);if(drop){event.weaponDrop=drop;rewards.weapon=drop.weapon;}}
+      if(cleared&&state.combatId&&enemy.id==='depthsGuardian'){const drop=awardDungeonWeapon(state,now,random);if(drop){event.weaponDrop=drop;rewards.weapon=drop.weapon;state.depthsRun.vaultWeapon=drop.weapon;}}
       const held=depthsSpoils(state.depthsRun);
       rewards.held={gold:held.gold-heldBefore.gold,loot:Object.fromEntries(Object.entries(held.loot).map(([id,count])=>[id,count-(heldBefore.loot[id]??0)]).filter(([,count])=>count>0))};
       if(state.location===depthsCacheRoom)rewards.cacheUnlocked=true;

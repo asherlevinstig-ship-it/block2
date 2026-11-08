@@ -684,6 +684,25 @@ async function closeDungeonLoot(equip=false){
   }catch(error){$('dungeonLootError').textContent=error.message;}
   finally{dungeonLootBusy=false;if($('dungeonLootDialog').open)renderDungeonLoot();}
 }
+let vaultVictoryBusy=false;
+function showVaultVictory(){
+ if(currentRoom!=='depthsVault'||depthsRun?.cleared!==3||!depthsRun.shardEarned||depthsRun.victorySeen)return false;
+ if(document.hidden||player.inCombat||activityBusy||serverActionBusy||document.querySelector('dialog[open]'))return true;
+ if(performance.now()-combatArt.victoryAt<1400)return true;
+ const haul=depthsSpoils(depthsRun),progress=dungeonLootProgress(dungeonLootView());
+ $('vaultVictoryGold').textContent=haul.gold+' gold';
+ $('vaultVictoryMaterials').textContent=Object.entries(haul.loot).map(([id,count])=>(tradeCatalog[id]?.name??id)+' ×'+count).join(' · ');
+ $('vaultVictoryRelic').textContent=depthsRun.vaultWeapon?'Rare weapon found · '+weaponCatalog[depthsRun.vaultWeapon].name:progress.complete?'All three relics collected':weaponCatalog[progress.target].name+' · '+progress.streak+' / 5 toward a guaranteed relic';
+ $('vaultVictoryProgress').value=depthsRun.vaultWeapon||progress.complete?5:progress.streak;
+ $('vaultVictoryHunt').textContent=depthsRun.vaultWeapon?(progress.complete?'Relic collection complete':'Relic earned · Next hunt: '+weaponCatalog[progress.target].name+' · 0 / 5'):progress.complete?'Relic collection complete':'Guaranteed within '+progress.remaining+' more Vault clears';
+ $('vaultVictoryDialog').showModal();return true;
+}
+async function closeVaultVictory(){
+ if(vaultVictoryBusy)return;vaultVictoryBusy=true;$('vaultVictoryContinue').disabled=true;
+ try{if(window.playerCloud?.gameplay)await serverGameplay('vaultVictoryAck');else{depthsRun.victorySeen=true;savePlayerState();}$('vaultVictoryDialog').close();}
+ catch(error){$('vaultVictoryError').textContent=error.message;}
+ finally{vaultVictoryBusy=false;$('vaultVictoryContinue').disabled=false;}
+}
 function showPendingDungeonLoot(){
   if(document.hidden||unavailable()||window.playerCloud?.initial?.plan||window.playerCloud?.initial?.report||document.querySelector('dialog[open]'))return;
   const notice=dungeonLootState.notices[0];if(notice)openDungeonLoot(notice.weapon,notice);
@@ -1063,6 +1082,7 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
   if(result.counter)combatMessage='Counterattack! '+result.damage+' damage · +'+result.counterBonus+' bonus.';
   if(result.weakSpot)combatMessage+=' Weak spot · +'+result.staggerBonus+' damage.';
   if(result.staggered){combatMessage+=' Stagger break! Enemy stunned · Weak spot open.';if(playEffects)combatAudio.play('stagger');}
+  if(result.phaseChange)combatMessage='Phase '+result.phaseChange.index+' · '+result.phaseChange.name+'. '+result.phaseChange.hint;
   if(result.automatic)combatMessage='Tactic · '+combatMessage;
   if(result.nextMove&&result.outcome==='fighting')combatMessage+=(combatMessage?' ':'')+'Next: '+result.nextMove+'.';
   if(result.taken&&playEffects){
@@ -1140,7 +1160,7 @@ function updateCombatPanel(){
   $('enemyStagger').hidden=!encounter;$('enemyStagger').dataset.state=stunned?'stunned':weak?'weak':recovering?'recovering':'building';
   $('staggerLabel').textContent=stunned?'Staggered! · Weak spot open':weak?'Weak spot · Weapon damage +25%':recovering?'Stagger resistance · '+Math.ceil((encounter.staggerResistUntil-now)/1000)+'s':'Stagger · '+(encounter?.stagger??0)+' / '+stagger.limit;
   $('staggerProgress').max=stagger.limit;$('staggerProgress').value=stunned||weak?stagger.limit:encounter?.stagger??0;$('staggerProgress').setAttribute('aria-valuetext',$('staggerLabel').textContent);
-  const enemy=huntEnemyForRoom(currentRoom);
+  const enemy=encounter?huntEnemy(encounter):huntEnemyForRoom(currentRoom);
   const stage=depthsStageIndex(currentRoom),chamberCleared=stage>=0&&!depthsEnemyAvailable(depthsRun,currentRoom);
   updateDepthsPanel();
   $('equipStonebackVest').disabled=unavailable();
@@ -1169,6 +1189,7 @@ function updateCombatPanel(){
     notice.hidden=false;notice.dataset.cue='watch';
     notice.textContent=enemy.tactic??(enemy.id==='sealGuardian'?'Rune Sentinel · 210 HP · Win and claim 1 guaranteed Awakening Stone.':'Elite guardian · Strike → Runic Slam → open shell. Reward '+essenceCacheGold+' gold + a stone.');
   }else notice.dataset.cue='';
+  if(enemy?.id==='depthsGuardian'&&!encounter&&!chamberCleared){notice.hidden=false;notice.textContent='VAULT GUARDIAN · 3 phases: stagger its armour, dodge and counter its blades, then interrupt or dodge its magic.';}
   if(enemy?.tactic&&!hunting.recoveryUntil&&!chamberCleared){notice.hidden=false;notice.textContent=enemy.tactic;}
   if(!enemy||chamberCleared)return;
   const beetle=!!enemy.shellArmor,respawn=stage>=0?0:huntRespawnAt(hunting,enemy);
@@ -3093,7 +3114,7 @@ function animation(time){
   }
 }
 function advanceAnimation(time){
-  showPendingDungeonLoot();showPendingCombatRecap();
+  if(!showVaultVictory()){showPendingDungeonLoot();showPendingCombatRecap();}
   if(serverActionBusy){draw(time);return;}
   updateWoodMoment(time);
   updateCombatMoment(time);
@@ -5031,3 +5052,6 @@ if(window.playerCloud?.initial?.fishingCast&&currentRoom==='pond'){
   restoreServerCast(window.playerCloud.initial.fishingCast,window.playerCloud.serverTime);
 }
 requestAnimationFrame(animation);
+
+$('vaultVictoryContinue').onclick=()=>closeVaultVictory();
+$('vaultVictoryDialog').addEventListener('cancel',event=>{event.preventDefault();closeVaultVictory();});
