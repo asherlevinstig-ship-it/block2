@@ -81,7 +81,7 @@ export async function handlePlayerApi(request,env){
       const existing=id&&await settled(env.TOWER_DB,id,true);
       if(existing)return json(packet(existing));
       const body=await bodyOf(request),legacy={...body.legacy};migrateProgression(legacy);
-      const state=normalizeState({...legacy,bedRest:undefined,safeVersion:1,ownedFurniture:{...(legacy.ownedFurniture??{bed:1}),safe:0},homeFurniture:(legacy.homeFurniture??[]).filter(item=>item.type!=='safe'),bank:undefined,controlMode:'play',meals:{},magic:undefined,...(body.newCharacter===true?{characterCreated:false,welcomeSeen:false}:{})});
+      const state=normalizeState({...legacy,autoConfigured:undefined,bedRest:undefined,safeVersion:1,ownedFurniture:{...(legacy.ownedFurniture??{bed:1}),safe:0},homeFurniture:(legacy.homeFurniture??[]).filter(item=>item.type!=='safe'),bank:undefined,controlMode:'play',meals:{},magic:undefined,...(body.newCharacter===true?{characterCreated:false,welcomeSeen:false}:{})});
       state.stats.luckXp=0;delete state.stats.cookingXp;
       delete state.combatGear.weaponEnchantments;
       if(state.hunting.encounter){
@@ -186,7 +186,7 @@ export async function handlePlayerApi(request,env){
         if(rules.strategy==='routine'&&rules.queue?.enabled&&rules.queue.steps.some(step=>step.type==='huntBeetles')&&!beetleHuntUnlocked(state))return json({error:'Defeat a Stoneback Beetle yourself in the Ruins before scheduling idle hunts.'},400);
         if(body.rules?.combat===undefined)rules.combat=normalizeCharacterRules(state.characterRules).combat;
         if(rules.goal?.target!==state.characterRules?.goal?.target||rules.goal?.autoBuy!==state.characterRules?.goal?.autoBuy)delete state.upgradeGoal;
-        state.characterRules=rules;state.routineLastSeen=Date.now();
+        state.characterRules=rules;state.autoConfigured=true;state.routineLastSeen=Date.now();
         break;
       case "/api/player/plan/start":
         startPlan(state,body,Date.now());

@@ -216,6 +216,7 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
 // rewards and active encounters can only change through server actions.
 export function protectFishingState(previous,next){
   next.bank=previous.bank;
+  if(previous.autoConfigured===true)next.autoConfigured=true;else delete next.autoConfigured;
   if(previous.bedRest){next.bedRest=previous.bedRest;next.homeFurniture=previous.homeFurniture;}else delete next.bedRest;
   next.safeVersion=1;
   if(!(previous.ownedFurniture?.safe>0))next.homeFurniture=(next.homeFurniture??[]).filter(item=>item.type!=='safe');

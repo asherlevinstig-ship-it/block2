@@ -4,7 +4,7 @@
   const {initializeFurnitureShop}=await import('./furniture-shop.js');
   const {initializeBankUI}=await import('./bank-ui.js');let bankUI=null;
   const bedRules=await import('./bed-rest.js');Object.assign(window,bedRules);
-  const {autoStatus}=await import('./auto-mode.js');
+  const {autoStatus,hasSavedAutoPlan}=await import('./auto-mode.js');
   const {AWAY_GRACE_MS}=await import('./character-rules.js');
   const status=document.getElementById('saveStatus');
   const gate=document.getElementById('cloudGate');
@@ -151,7 +151,7 @@
     const info=autoStatus(state),panel=document.getElementById('autoPanel');panel.hidden=!info.visible;
     const running=state.plan?.source==='rules';
     document.getElementById('autoPlay').setAttribute('aria-pressed',String(!running));document.getElementById('autoStart').setAttribute('aria-pressed',String(!!running));
-    document.getElementById('autoStart').title='Start your saved Auto Mode settings now. Auto continues while you inspect the game or go offline.';
+    document.getElementById('autoStart').title=hasSavedAutoPlan(state)?'Start your saved Auto Mode plan now.':'Set up your Auto Mode plan.';
     document.getElementById('autoStart').disabled=controlBusy||!!state.plan||!!state.report;
     document.getElementById('autoPlay').disabled=controlBusy||!!state.plan&&state.plan.source!=='rules'||!!state.plan?.returnRequested;
     const result=document.getElementById('autoGambleResult');result.hidden=!info.gambleResult;result.textContent=info.gambleResult??'';result.dataset.outcome=info.outcome??'';
@@ -172,6 +172,7 @@
   }
   async function setControl(mode){
     if(controlBusy||conflicted)return;
+    if(mode==='auto'&&!hasSavedAutoPlan(packet.state)){window.towerOpenAutoRules?.();document.getElementById('rulesStatus').textContent='Choose an activity and save your Auto Mode plan first.';return;}
     controlBusy=true;renderAutoPanel(packet.state);document.getElementById('autoControlError').textContent='';
     try{
       if(mode==='auto'){window.towerSaveNow?.();await flush();}
