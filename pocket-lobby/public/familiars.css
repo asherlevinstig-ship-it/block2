@@ -49,3 +49,8 @@
 
 .world-map .map-links .map-shared-trail{stroke:#cbbaff;stroke-dasharray:6 4;opacity:.95}
 #mapSharedTrails:not(:empty){margin:8px 0}
+
+.familiar-rarity{display:table;margin-top:4px;padding:1px 6px;border:1px solid currentColor;border-radius:5px;font:700 9px/1.5 system-ui;color:#cad5e2}
+.familiar-rarity[hidden]{display:none}
+.familiar-rarity[data-rarity=uncommon]{color:#a3e3b2}
+.familiar-rarity[data-rarity=rare]{color:#c4baff}

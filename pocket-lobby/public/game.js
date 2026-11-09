@@ -1433,7 +1433,10 @@ function renderFamiliars(renaming=null,focusRename=null){
   const customName=familiarState.names[id],name=customName??item.name;
   title.textContent=name;
   const status=equipped?'Equipped':owned?'Bonded':item.unlock;
-  tag.textContent=customName?item.name+' · '+status:status;copy.append(title,tag);header.append(art,copy);card.append(header);
+  tag.textContent=customName?item.name+' · '+status:status;
+  const tier=wildlifeHabitats[id].rarity,badge=document.createElement('span');
+  badge.className='familiar-rarity';badge.dataset.rarity=tier;badge.textContent=familiarRarities[tier].name;
+  copy.append(title,tag,badge);header.append(art,copy);card.append(header);
   for(const [name,detail] of [[item.passive,item.perk],[item.ability,item.detail]]){const p=document.createElement('p'),b=document.createElement('b');b.textContent=name;const description=document.createElement('span');description.textContent=detail;p.append(b,description);card.append(p);}
   const actions=document.createElement('div'),button=document.createElement('button');actions.className='familiar-actions';button.type='button';button.textContent=equipped?'Unequip':owned?'Equip':'Find in reserve';
   button.onclick=async()=>{if(!owned){guideToWildlife(id);return;}try{await serverGameplay('familiarEquip',{id:equipped?null:id});if(!equipped)familiarReaction={id,pose:'bond',at:performance.now()};$('familiarStatus').textContent=equipped?'Familiar unequipped.':name+' equipped.';renderFamiliars();}catch(error){$('familiarStatus').textContent=error.message;}};
@@ -1520,7 +1523,7 @@ function updateWildlifeGuide(){
  if(!animal){
   $('wildlifeEyebrow').textContent='WILDLIFE RESERVE';$('wildlifeTitle').textContent='Meet the wild animals';
   $('wildlifeHint').textContent='Choose an animal, offer its favorite food, and learn what earns its trust.';
-  action.hidden=gather.hidden=oddsLabel.hidden=calls.hidden=true;return;
+  action.hidden=gather.hidden=oddsLabel.hidden=calls.hidden=$('wildlifeRarity').hidden=true;return;
  }
  const species=familiars[animal.kind],bonded=familiarState.owned.includes(animal.kind);
  const {habitat,trust,stage,trial,waiting,food}=bondStep(familiarState,animal);
@@ -1535,6 +1538,8 @@ function updateWildlifeGuide(){
  if(canEcho)for(const id of ['owlCallTwo','owlCallLongShort','owlCallShortLong'])$(id).disabled=busy;
  const atForage=nearWildAnimal(position,habitat.forage),regrow=Math.max(0,Math.ceil(((familiarState.forage[animal.kind]?.readyAt??0)-now)/1000));
  $('wildlifeEyebrow').textContent=bonded?'BONDED · '+habitat.name:habitat.name.toUpperCase()+' · TRUST '+trust.step+' / '+habitat.steps.length;
+ const rarity=$('wildlifeRarity');rarity.hidden=false;
+ rarity.dataset.rarity=habitat.rarity;rarity.textContent=familiarRarities[habitat.rarity].name;
  $('wildlifeTitle').textContent=species.name;
  const feedback=wildlifeFeedback?.until>now?wildlifeFeedback.text:null;
  let hint='Let it see you before you reach out.';

@@ -2,10 +2,15 @@ import {skillLevel} from './skill-curve.js';
 
 export const wildlifeRoom='wildlifeReserve';
 export const wildlifeView={width:864,height:520,cols:24,rows:20,originX:396,originY:68};
+export const familiarRarities={
+ common:{name:'Common',base:78},
+ uncommon:{name:'Uncommon',base:68},
+ rare:{name:'Rare',base:58}
+};
 export const wildlifeHabitats={
- otter:{name:'Reed Pools',anchor:{x:6,y:10},forage:{x:4,y:8},food:'River Snack',steps:['observe','feed','pebble','bond']},
- fox:{name:'Amber Meadow',anchor:{x:17,y:17},forage:{x:13,y:16},food:'Amber Berry',steps:['observe','feed','tracks','trailEnd','bond']},
- owl:{name:'Moonpine Ridge',anchor:{x:16,y:2},forage:{x:16,y:2},food:'Moonpine Seed',steps:['observe','feed','listen','echo','perch','bond']}
+ otter:{name:'Reed Pools',rarity:'common',anchor:{x:6,y:10},forage:{x:4,y:8},food:'River Snack',steps:['observe','feed','pebble','bond']},
+ fox:{name:'Amber Meadow',rarity:'uncommon',anchor:{x:17,y:17},forage:{x:13,y:16},food:'Amber Berry',steps:['observe','feed','tracks','trailEnd','bond']},
+ owl:{name:'Moonpine Ridge',rarity:'rare',anchor:{x:16,y:2},forage:{x:16,y:2},food:'Moonpine Seed',steps:['observe','feed','listen','echo','perch','bond']}
 };
 export function reserveWater(x,y){return x>=2&&x<=7&&y>=11&&y<=16&&(x>=3||y>=12&&y<=15)&&(x<=6||y>=12&&y<=15);}
 export const wildlifeArea={
@@ -87,7 +92,8 @@ export function bondStep(state,animal){
 export function bondOdds(stats,kind,stage,misses=0){
  const level=Math.floor((skillLevel(stats?.strengthXp)+skillLevel(stats?.agilityXp)+skillLevel(stats?.vitalityXp))/3);
  const luck=skillLevel(stats?.luckXp),patience=skillLevel(stats?.patienceXp);
- const base=({otter:78,fox:68,owl:58}[kind]??58)-(stage==='bond'?8:stage==='perch'?5:0);
+ const rarity=Object.hasOwn(wildlifeHabitats,kind)?wildlifeHabitats[kind].rarity:'rare';
+ const base=familiarRarities[rarity].base-(stage==='bond'?8:stage==='perch'?5:0);
  const bonus={level:Math.min(18,(level-1)*3),luck:Math.min(15,(luck-1)*3),patience:Math.min(24,(patience-1)*4),retry:Math.min(3,Math.max(0,misses))*8};
  const percent=Math.min(97,base+bonus.level+bonus.luck+bonus.patience+bonus.retry);
  return {percent,base,level,luck,patience,bonus};
