@@ -1,6 +1,8 @@
 import {watchAreas,watchRooms,watchWater,willowmereAreas,willowmereRooms,riverWater,riverBridge} from './region-catalog.js';
 import {drawRiverGround,drawRiverWater,drawRiverProp,riverPropHeights} from './willowmere-art.js';
 import {drawWatchGround,drawWatchProp,drawWatchAtmosphere,watchPropHeights} from './watch-art.js';
+import {dungeonFloor,dungeonRooms,isDungeonMob} from './dungeon-arena.js';
+import {drawDungeonGround,drawDungeonProp,dungeonHeights} from './dungeon-art.js';
 'use strict';
 
 export const moonwood=(()=>{
@@ -8,13 +10,13 @@ export const moonwood=(()=>{
   const seed='moonwood-01';
   const areas={
     ...willowmereAreas,...watchAreas,
-    depthsGate:{number:'D1',name:'Flooded Gate',description:'An old sluice feeds a rushing channel. Look for the lever by the entrance.',badge:'MOONWELL DEPTHS',floor:'Chamber 1',center:[4,5],palette:['#31454e','#405961','#7a8a89'],landmark:['wildboar',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['wildrock',2,7],['wildrock',9,7],['sluiceLever',3,4],['gateSupply',10,4]]},
-    depthsGallery:{number:'D2',name:'Shell Gallery',description:'Green light spills from the fungi. A shell hangs from a weathered chime stand.',badge:'MOONWELL DEPTHS',floor:'Chamber 2',center:[4,5],palette:['#344b45','#4a6054','#84947b'],landmark:['stonebackBeetle',6,5,5,5],authored:[['pillar',2,3],['pillar',8,3],['wildrock',3,7],['wildrock',7,7],['glowFungus',4,2],['glowFungus',9,3],['glowFungus',5,8],['shellChime',3,3],['galleryCache',9,6],['cachePassage',10,4]]},
-    depthsCache:{number:'D2+',name:'The Sealed Alcove',description:'An elite Cache Guardian protects 50 gold and an Awakening Stone. Interrupt its Rune Bolt with three quick weapon hits, or dodge the completed spell.',badge:'MOONWELL DEPTHS',floor:'Optional cache chamber',center:[4,5],palette:['#3b3956','#504664','#927fa5'],landmark:['stonebackBeetle',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['pillar',8,7],['vaultCrystal',9,3],['glowFungus',3,7],['cachePassage',2,5],['essenceCache',9,5]]},
-    depthsTreasury:{number:'D2·T',name:'The Guarded Treasury',description:'Heavy plating shields the Treasury Guardian. Build stagger to crack its armour. Defeat it to add 60 gold and two Shell Fragments to your unbanked haul.',badge:'OPTIONAL · TREASURE',floor:'Treasury branch',center:[4,5],palette:['#4b4447','#625654','#b49b77'],landmark:['stonebackBeetle',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['vaultCrystal',9,2],['vaultCrystal',8,7],['cachePassage',2,5],['sideTreasure',9,5]]},
+    depthsGate:{number:'D1',name:'Flooded Gate',description:'Broken walkways surround a flooded gate. A Mire Skitter darts between the stones. Pull the sluice lever to reach the far passage.',badge:'MOONWELL DEPTHS',floor:'Chamber 1',center:[4,5],palette:['#31454e','#405961','#7a8a89'],landmark:['depthsSkitter',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['wildrock',2,7],['wildrock',9,7],['sluiceLever',3,4],['gateSupply',10,4]]},
+    depthsGallery:{number:'D2',name:'Shell Gallery',description:'Roots split this ancient hall. A stone Shell Warden guards the passage. Escape its slam, then strike its exposed core. A shell chime reveals a secret cache.',badge:'MOONWELL DEPTHS',floor:'Chamber 2',center:[4,5],palette:['#344b45','#4a6054','#84947b'],landmark:['depthsWarden',6,5,5,5],authored:[['pillar',2,3],['pillar',8,3],['wildrock',3,7],['wildrock',7,7],['glowFungus',4,2],['glowFungus',9,3],['glowFungus',5,8],['shellChime',3,3],['galleryCache',9,6],['cachePassage',10,4]]},
+    depthsCache:{number:'D2+',name:'The Sealed Alcove',description:'An elite Cache Guardian protects 50 gold and an Awakening Stone. Interrupt its Rune Bolt with three quick weapon hits, or dodge the completed spell.',badge:'MOONWELL DEPTHS',floor:'Optional cache chamber',center:[4,5],palette:['#3b3956','#504664','#927fa5'],landmark:['depthsSeer',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['pillar',8,7],['vaultCrystal',9,3],['glowFungus',3,7],['cachePassage',2,5],['essenceCache',9,5]]},
+    depthsTreasury:{number:'D2·T',name:'The Guarded Treasury',description:'Heavy plating shields the Treasury Guardian. Build stagger to crack its armour. Defeat it to add 60 gold and two Shell Fragments to your unbanked haul.',badge:'OPTIONAL · TREASURE',floor:'Treasury branch',center:[4,5],palette:['#4b4447','#625654','#b49b77'],landmark:['depthsWarden',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['vaultCrystal',9,2],['vaultCrystal',8,7],['cachePassage',2,5],['sideTreasure',9,5]]},
     depthsRest:{number:'D2·R',name:'The Quiet Shrine',description:'A peaceful spring offers 30 HP for 15 gold from your unbanked haul. One blessing per expedition.',badge:'OPTIONAL · REST',floor:'Shrine branch',center:[4,5],palette:['#344f52','#4c6a68','#99b6aa'],authored:[['pillar',3,2],['pillar',8,2],['glowFungus',3,7],['glowFungus',9,3],['cachePassage',2,5],['restAltar',6,4]]},
-    depthsTrial:{number:'D2·S',name:'The Sealed Chamber',description:'A duelling Rune Sentinel guards an Awakening Seal. Time a dodge and punish it with a counter. Win the challenge, then claim your guaranteed stone.',badge:'OPTIONAL · CHALLENGE',floor:'Sealed branch',center:[4,5],palette:['#39394f','#514c6b','#afa2c7'],landmark:['stonebackBeetle',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['vaultCrystal',8,7],['glowFungus',3,7],['cachePassage',2,5],['sideSeal',9,5]]},
-    depthsVault:{number:'D3',name:'The Sunken Vault',description:'The vault glitters beneath the waterline. Read the relief before facing its Guardian.',badge:'MOONWELL DEPTHS',floor:'Chamber 3',center:[4,5],palette:['#453c50','#5d4962','#a48b8e'],landmark:['stonebackBeetle',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['pillar',3,8],['pillar',8,8],['wildrock',9,4],['vaultCrystal',9,2],['vaultCrystal',8,7],['vaultRelief',3,3]]},
+    depthsTrial:{number:'D2·S',name:'The Sealed Chamber',description:'A duelling Rune Sentinel guards an Awakening Seal. Time a dodge and punish it with a counter. Win the challenge, then claim your guaranteed stone.',badge:'OPTIONAL · CHALLENGE',floor:'Sealed branch',center:[4,5],palette:['#39394f','#514c6b','#afa2c7'],landmark:['depthsSentinel',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['vaultCrystal',8,7],['glowFungus',3,7],['cachePassage',2,5],['sideSeal',9,5]]},
+    depthsVault:{number:'D3',name:'The Sunken Vault',description:'A chained colossus rises over the drowned vault. Study the relief, then face its armour, blades and runic heart.',badge:'MOONWELL DEPTHS',floor:'Chamber 3',center:[4,5],palette:['#453c50','#5d4962','#a48b8e'],landmark:['depthsColossus',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['pillar',3,8],['pillar',8,8],['wildrock',9,4],['vaultCrystal',9,2],['vaultCrystal',8,7],['vaultRelief',3,3]]},
     logging:{number:'15',name:'Timber Hollow',description:'Meet the woodcutter, collect your first axe, and gather timber for the Tower.',badge:'WOODCUTTING',floor:'Woodland worksite',center:[5,5],palette:['#3b5050','#4e665c','#92917d'],landmark:['timberTree',6,5,5,5],authored:[['woodcutter',4,3],['workbench',5,3],['wildtree',1,1],['wildtree',10,1],['wildtree',9,7],['wildtree',2,8],['wildrock',8,3],['wildbloom',4,7]]},
     clearing:{number:'13',name:'Bramble Clearing',description:'A wild boar guards a moonlit clearing. Approach carefully, and flee if your hearts run low.',badge:'HUNTING GROUNDS',floor:'Boar territory',center:[5,5],palette:['#3c5050','#50645b','#918b7e'],landmark:['wildboar',6,5,5,5],authored:[['wildtree',1,1],['wildtree',9,1],['wildtree',10,7],['wildtree',2,8],['wildrock',8,7],['wildbloom',4,2],['wildbloom',8,3]]},
     trail:{number:'04',name:'Lantern Trail',description:'Follow the old trail into Moonwood. A lantern waits at the first waystone.',badge:'MOONWOOD',floor:'Forest trail',center:[5,5],palette:['#324957','#3e5460','#788285'],landmark:['lanternStand',5,4,5,5]},
@@ -25,7 +27,7 @@ export const moonwood=(()=>{
     roots:{number:'09',name:'Root Passage',description:'A living tunnel winds beneath Moonwood, linking the ruins back to Lantern Trail.',badge:'MOONWOOD',floor:'Forest shortcut',center:[6,5],palette:['#363847','#4b4357','#766274'],authored:[['wildtree',1,2],['wildtree',3,6],['wildtree',6,2],['wildtree',8,7],['wildtree',10,2],['wildbloom',4,3],['wildbloom',8,6]]},
     pond:{number:'10',name:'Silverfin Pond',description:'Cast a line from the old jetty and watch the moonlight ripple over the water.',badge:'MOONWOOD',floor:'Fishing pond',center:[3,5],palette:['#334f59','#486570','#8b9296'],landmark:['fishingPost',5,5,4,5],authored:[['wildtree',1,1],['wildtree',3,1],['wildtree',1,8],['wildtree',4,8],['wildrock',4,2],['wildbloom',3,7],['wildbloom',4,3]]}
   };
-  const heights={...riverPropHeights,...watchPropHeights,sideSeal:24,sideTreasure:18,restAltar:28,cachePassage:30,essenceCache:24,sluiceLever:20,gateSupply:12,shellChime:27,galleryCache:13,vaultRelief:28,glowFungus:20,vaultCrystal:30,campfire:24,timberTree:51,wildboar:22,stonebackBeetle:28,wildtree:51,wildrock:13,wildbloom:22,pillar:28,lanternStand:31,mothAltar:24,moonwell:35,moonbloom:29,fishingPost:26};
+  const heights={...riverPropHeights,...watchPropHeights,...dungeonHeights,sideSeal:24,sideTreasure:18,restAltar:28,cachePassage:30,essenceCache:24,sluiceLever:20,gateSupply:12,shellChime:27,galleryCache:13,vaultRelief:28,glowFungus:20,vaultCrystal:30,campfire:24,timberTree:51,wildboar:22,stonebackBeetle:28,wildtree:51,wildrock:13,wildbloom:22,pillar:28,lanternStand:31,mothAltar:24,moonwell:35,moonbloom:29,fishingPost:26};
   const doors=Object.fromEntries(Object.keys(areas).map(id=>[id,[]]));
   const coordinate=([x,y])=>({x,y});
   function connect(a,b,from,to,gate){
@@ -56,7 +58,7 @@ export const moonwood=(()=>{
   const key=(x,y)=>x+','+y;
   const has=id=>Object.hasOwn(areas,id);
   const isWater=(id,x,y)=>watchRooms.includes(id)?watchWater(id,x,y):willowmereRooms.includes(id)?riverWater(id,x,y):id==='pond'?x>=6:id==='creek'?x===5:id==='depthsGate'&&x===8;
-  const blocked=(id,x,y,progress,depthsRun)=>isWater(id,x,y)&&!riverBridge(id,x,y)&&!(y===4&&(
+  const blocked=(id,x,y,progress,depthsRun)=>!dungeonFloor(id,x,y)||isWater(id,x,y)&&!riverBridge(id,x,y)&&!(y===4&&(
     id==='creek'&&progress.bridge||id==='depthsGate'&&depthsRun?.finds?.includes('sluiceLever')
   ));
   const open=(door,progress)=>!door.gate||Boolean(progress[door.gate]);
@@ -120,6 +122,7 @@ export const moonwood=(()=>{
       }
     }
     if(landmarkType)scenery.push({id:'landmark',type:landmarkType,x:lx,y:ly,rot:0,archetype:id==='depthsCache'?'caster':id==='depthsTrial'?'duelist':id==='depthsTreasury'?'armoured':id==='depthsVault'?'vaultBoss':null,...(id==='depthsCache'||id==='depthsTrial'?{cacheGuardian:true}:{})});
+    if(dungeonRooms.includes(id)){const main=['depthsGate','depthsGallery','depthsVault'].includes(id);for(const [type,x,y] of [['dungeonCover',4,3],['dungeonCover',3,6],...(main?[['dungeonArch',1,4],['dungeonExit',10,5]]:[]),['dungeonChain',10,2],['dungeonBones',2,6]])scenery.push({id:type+':'+x+','+y,type,x,y,rot:0});}
     if(id==='trail')scenery.push({id:'campfire',type:'campfire',x:3,y:4,rot:0});
     return {path:id==='grove'?visiblePath:path,scenery,hiddenTrail};
   }
@@ -128,6 +131,7 @@ export const moonwood=(()=>{
   function drawGround(id,{point,polygon,surface,block,rect}){
     const {cols,rows}=view, area=areas[id], path=layouts[id].path;
     const [ground,light,trail]=area.palette;
+    if(dungeonRooms.includes(id)){drawDungeonGround(id,{point,polygon,surface,block,rect});return;}
     polygon([point(-.25,-.3,-7),point(cols+.36,-.3,-8),point(cols+.37,rows+.42,-8),point(-.25,rows+.42,-8)],'#0c18268c');
     block(0,0,cols,rows,-9,9,[ground,'#273244','#202a3c']);
     if(watchRooms.includes(id)){drawWatchGround(id,{point,polygon,surface,block,rect,path});return;}
@@ -192,6 +196,7 @@ export const moonwood=(()=>{
 
   function drawProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,progress,combat,depthsRun,pose={}}){
     const {x,y,type}=item;
+    if(Object.hasOwn(dungeonHeights,type)){drawDungeonProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,pose,combat});return;}
     if(Object.hasOwn(watchPropHeights,type)){drawWatchProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,progress});return;}
     if(Object.hasOwn(riverPropHeights,type)){drawRiverProp(item,time,{point,polygon,surface,block,rect,ctx,reduced});return;}
     const [px,py]=point(x+.5,y+.5);

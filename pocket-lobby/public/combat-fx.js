@@ -1,4 +1,6 @@
 export {createCombatSound} from './combat-sound.js';
+import {arenaEnemy,arenaPlayer} from './dungeon-arena.js';
+import {drawArenaTelegraph} from './dungeon-art.js';
 import {huntEnemy,enemyAttack,boarRules,enemyStatusEffects,counterRules,staggerProfile,vaultPhase} from './hunting.js';
 
 const progress=(time,start,duration)=>Math.max(0,Math.min(1,(time-start)/duration));
@@ -11,9 +13,10 @@ export function combatShake(time,events,reduced=false){
 export function drawCombatGroundFx({ctx,point,time,now,encounter,player,reduced}){
   if(!encounter)return;
   const move=enemyAttack(encounter);
+  if(encounter.arenaVersion===1){drawArenaTelegraph({ctx,point,surface:(x,y,w,d,z,fill,line)=>{ctx.beginPath();for(const [i,[u,v]] of [[x,y],[x+w,y],[x+w,y+d],[x,y+d]].entries()){const [px,py]=point(u,v,z);if(i===0)ctx.moveTo(px,py);else ctx.lineTo(px,py);}ctx.closePath();ctx.fillStyle=fill;ctx.fill();if(line){ctx.strokeStyle=line;ctx.stroke();}},encounter,move,now,reduced});return;}
   const remaining=encounter.nextBoarAt-now;
   if(remaining<0||remaining>move.tell)return;
-  const amount=1-remaining/move.tell,[bx,by]=point(6.5,5.5,1),[px,py]=point(player.x+.5,player.y+.5,1);
+  const amount=1-remaining/move.tell,[bx,by]=point(arenaEnemy(encounter).x+.5,arenaEnemy(encounter).y+.5,1),[px,py]=point(player.x+.5,player.y+.5,1);
   const dx=px-bx,dy=py-by,length=Math.hypot(dx,dy)||1,nx=-dy/length*6,ny=dx/length*6;
   const heavy=move.damage>0,casting=move.shape==='bolt';
   ctx.save();ctx.fillStyle=heavy?'#ef785956':'#ef9a6540';ctx.strokeStyle=heavy?'#ff9f82':'#ffc38a';ctx.lineWidth=heavy?2:1;
@@ -38,6 +41,7 @@ const color={
 export function recordCombatFx(events,result,time){
   const {action,damage,taken,dodged,dodgeStarted,warded,absorbed,move,attackShape,heavy,
     staggered,weakSpot,staggerBonus,staggerGained,perfectDodge,automaticDodge,counter,counterBonus,shellGuarded,power,powerForm,powerColor,ward,healed,staminaRestored,interrupted,interruptResisted,weakened}=result;
+  if(result.enemyTile)events.enemyTile=result.enemyTile;
   if(result.phaseChange){events.phaseAt=time;events.phaseChange=result.phaseChange;}
   if(result.outcome==='victory')events.vaultVictory=result.enemyId==='depthsGuardian';
   if(action==='attack'&&damage)events.strikeAt=time;
@@ -52,7 +56,7 @@ export function recordCombatFx(events,result,time){
   if(result.outcome==='victory')events.victoryAt=time;
   if(!power&&!damage&&!taken&&!dodged&&!warded&&!absorbed&&!weakened&&action!=='enemy')return;
   const live=(events.bursts??[]).filter(effect=>time-effect.time<feedbackLife);
-  events.bursts=[...live,{time,action,damage,taken,dodged,warded,absorbed,move,attackShape,heavy,
+  events.bursts=[...live,{time,enemyTile:result.enemyTile,attackTile:result.attackTile,spatialAvoided:result.spatialAvoided,covered:result.covered,action,damage,taken,dodged,warded,absorbed,move,attackShape,heavy,
     staggered,weakSpot,staggerBonus,staggerGained,perfectDodge,automaticDodge,counter,counterBonus,shellGuarded,power,powerForm,powerColor,ward,healed,staminaRestored,interrupted,interruptResisted,weakened}].slice(-6);
 }
 function line(ctx,x1,y1,x2,y2){
@@ -189,7 +193,7 @@ function drawCombatNumbers(ctx,effects,time,{bx,by,px,py},reduced){
     if(effect.staggered&&enemyRow<3)popup(ctx,'STAGGER BREAK!',bx,by-22-rise-enemyRow++*13,t,'#ffe49a',10);
     if((effect.interrupted||effect.interruptResisted)&&enemyRow<3)popup(ctx,effect.interrupted?'INTERRUPTED':'INTERRUPT RESISTED',bx,by-22-rise-enemyRow++*13,t,'#ffe49a',9);
     const blocks=(effect.warded??0)+(effect.absorbed??0);
-    const playerText=effect.taken?'−'+effect.taken:effect.perfectDodge?'PERFECT DODGE!':effect.automaticDodge?'AUTO DODGE':effect.dodged?'DODGE':effect.healed?'+'+effect.healed+' HP'
+    const playerText=effect.taken?'−'+effect.taken:effect.perfectDodge?'PERFECT DODGE!':effect.automaticDodge?'AUTO DODGE':effect.spatialAvoided?(effect.covered?'COVER':'CLEAR'):effect.dodged?'DODGE':effect.healed?'+'+effect.healed+' HP'
       :effect.staminaRestored?'+'+effect.staminaRestored+' STAMINA':blocks?'BLOCK '+blocks:effect.ward?'WARD '+effect.ward:'';
     const tint=effect.taken?color.hurt:effect.healed?color.heal:effect.dodged?color.evade:effect.powerColor??color.ward;
     if(playerText&&playerRow<3)popup(ctx,playerText,px,py-34-rise-playerRow++*13,t,tint,effect.taken?13:10);
@@ -199,8 +203,8 @@ function drawCombatNumbers(ctx,effects,time,{bx,by,px,py},reduced){
   }
 }
 export function drawCombatWorldFx({ctx,point,time,now,events,player,reduced,encounter}){
-  const [bx,by]=point(6.5,5.5,15),[px,py]=point(player.x+.5,player.y+.5,18);
-  const [bgX,bgY]=point(6.5,5.5,1),[pgX,pgY]=point(player.x+.5,player.y+.5,1);
+  const [bx,by]=point(arenaEnemy(encounter).x+.5,arenaEnemy(encounter).y+.5,15),[px,py]=point(player.x+.5,player.y+.5,18);
+  const [bgX,bgY]=point(arenaEnemy(encounter).x+.5,arenaEnemy(encounter).y+.5,1),[pgX,pgY]=point(player.x+.5,player.y+.5,1);
   const points={bx,by,px,py,bgX,bgY,pgX,pgY,aim:Math.atan2(by-py,bx-px)};
   if(active(time,events.phaseAt,1200)||events.vaultVictory&&active(time,events.victoryAt,1500)){
     const win=events.vaultVictory&&active(time,events.victoryAt,1500),t=progress(time,win?events.victoryAt:events.phaseAt,win?1500:1200);
@@ -225,7 +229,7 @@ export function drawCombatWorldFx({ctx,point,time,now,events,player,reduced,enco
     const t=progress(time,effect.time,duration);
     if(effect.power)drawSpell(ctx,points,t,effect,reduced);
     else if(effect.action==='attack'&&effect.damage)drawMeleeImpact(ctx,points,t,effect,reduced);
-    else if(effect.action==='enemy')drawEnemyImpact(ctx,points,t,effect,reduced);
+    else if(effect.action==='enemy'){let impact=points;if(effect.attackTile){const [tx,ty]=point(effect.attackTile.x+.5,effect.attackTile.y+.5,18);impact={...points,px:tx,py:ty};}drawEnemyImpact(ctx,impact,t,effect,reduced);}
     if(effect.staggered)particles(ctx,bx,by,t,'#ffe49a',reduced,36,14);
     if(effect.perfectDodge){ctx.save();ctx.strokeStyle=color.evade;ctx.lineWidth=2;ctx.globalAlpha=1-t;ring(ctx,pgX,pgY,reduced?15:10+t*18);ctx.restore();}
   }
@@ -293,7 +297,7 @@ export function drawCombatOverlayFx({ctx,width,height,time,now,events,encounter,
     ctx.restore();
   }
   const boss=vaultPhase(encounter);
-  if(boss){
+  if(boss&&encounter?.arenaVersion!==1){
     const x=width/2,w=Math.min(260,width-30),y=76;ctx.fillStyle='#142039ed';ctx.fillRect(x-w/2,y,w,33);ctx.strokeStyle=boss.color;ctx.strokeRect(x-w/2,y,w,33);ctx.fillStyle=boss.color;ctx.font='bold 9px monospace';ctx.textAlign='center';ctx.fillText('VAULT GUARDIAN · '+boss.index+'/3 · '+boss.name.toUpperCase(),x,y+12);ctx.fillStyle='#393346';ctx.fillRect(x-w/2+8,y+20,w-16,5);ctx.fillStyle=boss.color;ctx.fillRect(x-w/2+8,y+20,(w-16)*encounter.health/240,5);
     for(const threshold of [1/3,2/3]){ctx.fillStyle='#111c2d';ctx.fillRect(x-w/2+8+(w-16)*threshold,y+19,2,7);}
     if(now>=encounter.bossPhaseAt&&now<encounter.bossPhaseAt+1500){ctx.fillStyle=boss.color;ctx.font='bold 10px monospace';ctx.fillText('PHASE '+boss.index+' · '+boss.name.toUpperCase(),x,y+47);}
@@ -307,13 +311,14 @@ export function drawCombatOverlayFx({ctx,width,height,time,now,events,encounter,
   const counterPercent=encounter?.counterPercent??50;
   const perfect=counter&&active(time,events.perfectDodgeAt,650);
   const casting=warning&&move.shape==='bolt';
+  if(encounter?.arenaVersion===1&&warning&&!victory){ctx.restore();return;}
   if(warning||victory||exposed||counter||stunned||weak){
     const x=width/2,w=victory||!warning&&(counter||stunned||weak)?204:164,y=24;
     ctx.globalAlpha=victory?1-progress(time,events.victoryAt+1700,500):1;
     ctx.fillStyle='#252538ed';ctx.fillRect(x-w/2,y,w,victory||casting||!warning&&(counter||stunned||weak)?37:25);
     ctx.fillStyle=victory?'#f2ce8a':warning?'#f2aa7c':counter?'#ffe5a1':'#bed88f';ctx.fillRect(x-w/2,y,w,1);
     const victoryTitle='✦ '+(enemy?.name??'Wild Boar').toUpperCase()+' DEFEATED ✦';
-    const warningTitle=remaining<=boarRules.dodgeWindow?'DODGE · '+move.name.toUpperCase():move.name.toUpperCase()+' INCOMING';
+    const warningTitle=remaining<=boarRules.dodgeWindow?(encounter.arenaVersion===1?'MOVE / DODGE · ':'DODGE · ')+move.name.toUpperCase():move.name.toUpperCase()+' INCOMING';
     ctx.font='bold 10px monospace';ctx.textAlign='center';
     ctx.fillText(victory?victoryTitle:warning?warningTitle:stunned?'STAGGERED!':weak?'WEAK SPOT · +25%':counter?(perfect?'PERFECT DODGE!':'COUNTER READY · +'+counterPercent+'%'):'WEAK SPOT EXPOSED',x,y+13);
     ctx.font='7px monospace';ctx.fillStyle='#e2d7c4';

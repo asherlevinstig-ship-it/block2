@@ -5,6 +5,7 @@ import {normalizeFoodPolicy} from './food-policy.js';
 import {normalizeUpgradeGoal} from './upgrade-goals.js';
 export {upgradeTargets,upgradeGoalProgress} from './upgrade-goals.js';
 import {enemyAttack,combatStamina,queueHuntEnemies,huntEnemy,huntingAttributes,combatDodgeCost,weaponProfile} from './hunting.js';
+import {arenaPlayer,arenaEnemy,arenaInDanger,arenaBehindCover,dungeonFloor} from './dungeon-arena.js';
 import {manaReadyAt} from './player-vitals.js';
 import {essencePower,bondedEssences,essenceEffects} from './essences.js';
 
@@ -109,6 +110,12 @@ export function nextCombatTactic(state){
  const finishingHit=!!weapon&&e.nextPlayerAt<strike&&minimumHit>=e.health||burnTicks*(burn?.damage??0)>=e.health;
  let next=null;
  const offer=tactic=>{if(!next||tactic.at<next.at||tactic.at===next.at&&tactic.priority>next.priority)next=tactic;};
+ if(e.arenaVersion===1&&rules.dodge&&e.arenaLockedFor===strike&&arenaInDanger(e,attack)&&!arenaBehindCover(e,attack)){
+  const at=Math.max(earliest,e.arenaStepAt??0,warning),p=arenaPlayer(e),foe=arenaEnemy(e);
+  const candidates=[[1,0],[-1,0],[0,1],[0,-1]].map(([x,y])=>({x:p.x+x,y:p.y+y})).filter(n=>dungeonFloor(e.arenaRoom,n.x,n.y)&&!(n.x===foe.x&&n.y===foe.y)&&!(e.arenaSolids??[]).some(s=>s.x===n.x&&s.y===n.y)&&!(e.arenaRoom==='depthsGate'&&n.x===8));
+  candidates.sort((a,b)=>Number(arenaInDanger(e,attack,a))-Number(arenaInDanger(e,attack,b))||Number(!arenaBehindCover(e,attack,a))-Number(!arenaBehindCover(e,attack,b)));
+  if(candidates[0]&&at<strike){offer({...make(at,'move','Moving out of the marked attack area.',90),tile:candidates[0]});}
+ }
  const wantsDefense=style==='cautious'||style==='balanced'&&(attack.damage>0||attack.shape==='bolt'||incoming>=state.health*.4)||lethal;
  if(rules.dodge&&wantsDefense&&!physicalInterrupt&&!alreadyDodging&&!finishingHit){
   const at=Math.max(earliest,e.nextDodgeAt??0,strike-policy.dodgeLead),cost=combatDodgeCost(armourSelection(state.combatGear));

@@ -29,7 +29,7 @@ test('Vault phases retain readable health markers, transition effects and a dist
   drawCombatOverlayFx({ctx:c.ctx,width:540,height:349,time:1200,now:1200,events,encounter,enemy,health:100,reduced});
   assert(c.calls.some(([method,label])=>method==='fillText'&&label.includes('VAULT GUARDIAN · '+enemy.index+'/3')));
   drawCombatWorldFx({ctx:c.ctx,point,time:1200,now:1200,events,encounter,player:{x:5,y:5},reduced});
-  const item=moonwood.layouts.depthsVault.scenery.find(p=>p.type==='stonebackBeetle');
+  const item=moonwood.layouts.depthsVault.scenery.find(p=>p.id==='landmark');
   for(const defeated of [false,true])moonwood.drawProp(item,1200,{ctx:c.ctx,point,polygon:()=>{},surface:()=>{},block:()=>{},rect:()=>{},combat:encounter,reduced,pose:{defeated}});
   recordCombatFx(events,{action:'attack',damage:20,enemyId:'depthsGuardian',outcome:'victory'},1300);
   drawCombatWorldFx({ctx:c.ctx,point,time:1400,now:1400,events,encounter:null,player:{x:5,y:5},reduced});assert.equal(events.vaultVictory,true);c.balanced();

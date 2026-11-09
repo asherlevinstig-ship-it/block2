@@ -1,3 +1,5 @@
+import {arenaEnemy,arenaWarningAt,lockArenaAttack,arenaMoveEvent,dungeonCover} from '../public/dungeon-arena.js';
+import {enemyAttack} from '../public/hunting.js';
 import {useHunger} from '../public/player-vitals.js';
 import {armourSelection} from '../public/hunting.js';
 import {startBedRest,settleBedRest,stopBedRest} from './bed-rest.mjs';
@@ -22,6 +24,7 @@ export function startCombatEncounter(state,enemy,now){
   state.combatId=crypto.randomUUID();state.combatReceipt={id:crypto.randomUUID(),events:[]};
   state.hunting.encounter=createHunt(now,enemy.health,enemy.id);
   state.hunting.encounter.summary=normalizeCombatSummary({startedAt:now});
+  if(enemy.room.startsWith('depths'))Object.assign(state.hunting.encounter,{arenaVersion:1,arenaRoom:enemy.room,arenaPlayer:{...(state.position??{x:5,y:5})},arenaEnemy:{x:6,y:5},arenaStepAt:now,arenaLockedFor:0,arenaSolids:(moonwood.layouts[enemy.room]?.scenery??[]).filter(p=>p.type!==enemy.prop).map(({x,y})=>({x,y}))});
   if(state.characterRules?.combat?.enabled||state.plan?.activeHunt)state.hunting.encounter.tacticsAt=now;
 }
 function result(state,event,now,random=Math.random){
@@ -90,7 +93,7 @@ function result(state,event,now,random=Math.random){
     if(state.plan?.kind==='queue'&&state.plan.activeHunt?.id===state.combatId)state.plan.lastHuntReport=report;
     else state.combatReports=[...(state.combatReports??[]).filter(item=>item.id!==report.id),report].slice(-10);
   }
-  return {...event,enemyId:enemy.id,at:now};
+  return {...event,...(encounter.arenaVersion===1?{enemyTile:arenaEnemy(encounter),attackTile:encounter.arenaTarget}:{}),enemyId:enemy.id,at:now};
 }
 
 // Replay each due strike at its scheduled time. Closing or slowing the client
@@ -101,11 +104,13 @@ export function advanceServerCombat(state,now,random=Math.random){
     const encounter=state.hunting.encounter;
     const coreDue=Math.min(encounter.nextPlayerAt,encounter.nextBoarAt,encounter.burn?.nextAt??Infinity);
     const tactic=nextCombatTactic(state),automatic=tactic&&tactic.at<coreDue;
-    const due=automatic?tactic.at:coreDue;
+    const due=automatic?tactic.at:coreDue,warningAt=arenaWarningAt(encounter,enemyAttack(encounter));
+    if(warningAt<=Math.min(due,now)){state.hunting.encounter=lockArenaAttack(encounter,enemyAttack(encounter),huntEnemy(encounter));continue;}
     if(due>now)break;
     let event;
     if(automatic){
-      if(tactic.action==='essence')event=castEssencePower(state,due,tactic.slot);
+      if(tactic.action==='move')event=arenaMoveEvent(state,tactic.tile,due,moonwood.layouts[state.location]?.scenery);
+      else if(tactic.action==='essence')event=castEssencePower(state,due,tactic.slot);
       else event=huntingTurn(encounter,state.health,state.stats,tactic.action,due,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,armourSelection(state.combatGear),state.combatGear.moonwellCharmEquipped,state.combatGear.weaponEnchantments);
       if(event){event.automatic=true;event.decision={at:due,style:tactic.style,action:tactic.action,reason:tactic.reason};if(event.encounter){event.encounter.lastDecision=event.decision;if(tactic.action==='dodge')event.encounter.autoDodgeUntil=event.encounter.dodgeUntil;}}
     }else event=advanceHunt(encounter,state.health,state.stats,due,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,armourSelection(state.combatGear),state.combatGear.moonwellCharmEquipped,state.combatGear.weaponEnchantments);
@@ -167,6 +172,10 @@ export function activityAction(state,action,body,now,random){
     if(state.plan?.activeHunt)throw new Error('Your hunting queue is controlling this fight. Return to stop after the fight.');
     if(body.combatId!==state.combatId)throw new Error('Invalid encounter. Reload your character.');
     const events=advanceServerCombat(state,now,random);
+    if(state.hunting.encounter&&body.input==='move'){
+      const e=arenaMoveEvent(state,body.tile,now,moonwood.layouts[state.location]?.scenery);
+      if(e)events.push(result(state,e,now,random));
+    }
     if(state.hunting.encounter&&['dodge','flee','essence'].includes(body.input)){
       if(body.input==='essence'){
         const event=castEssencePower(state,now,body.slot);

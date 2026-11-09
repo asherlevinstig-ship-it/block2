@@ -407,12 +407,13 @@
       const commissions=await import('./commissions.js');
       const essences=await import('./essences.js');
       const depths=await import('./depths.js');
+      const dungeonArena=await import('./dungeon-arena.js');
       const jobs=await import('./jobs.js');
       const shared=await import('./shared-world.js');
       const multiplayer=await import('./multiplayer.js');
       const training=await import('./training.js');
       const dungeonLoot=await import('./dungeon-loot.js');
-      Object.assign(window,{towerCharacterArt},rules,hunting,loungeUI,art,fx,environment,quests,historyRules,shopUI,clothing,progression,woodRules,crafting,cooking,regionCatalog,explorationFog,worldActivity,playerVitals,autoFeedback,characterRules,commissions,essences,depths,jobs,shared,multiplayer,training,dungeonLoot);
+      Object.assign(window,{towerCharacterArt},rules,hunting,loungeUI,art,fx,environment,quests,historyRules,shopUI,clothing,progression,woodRules,crafting,cooking,regionCatalog,explorationFog,worldActivity,playerVitals,autoFeedback,characterRules,commissions,essences,depths,dungeonArena,jobs,shared,multiplayer,training,dungeonLoot);
       window.towerInitialState=packet.state;
       window.playerCloud={enqueue,flush,attach,combatNow:()=>combatClock.now(),gameplay:async(name,body={})=>{
         if(gameplayBusy)throw new Error('Wait for your current action to finish.');

@@ -49,9 +49,9 @@ test('server catch-up matches fine polling for all three archetypes and protects
  }
 });
 
-test('optional guardians have distinct authored silhouettes without changing their room props',()=>{
+test('optional guardians have distinct authored silhouettes with individual creature props',()=>{
  for(const [room,role] of [['depthsCache','caster'],['depthsTrial','duelist'],['depthsTreasury','armoured']]){
-  const layout=moonwood.layouts[room],enemy=layout.scenery.find(p=>p.type==='stonebackBeetle');assert.equal(enemy.archetype,role);
+  const layout=moonwood.layouts[room],enemy=layout.scenery.find(p=>p.id==='landmark');assert.equal(enemy.archetype,role);
  }
 });
 
@@ -64,7 +64,7 @@ test('casting warnings, pressure, bolt effects and all three silhouettes render 
   drawCombatOverlayFx({ctx,width:540,height:349,time:2500,now:2500,events,encounter,health:100,reduced,enemy:huntEnemies.cacheGuardian});
   assert(calls.some(c=>c[0]==='fillText'&&c[1]==='RUNE BOLT INCOMING'));assert(calls.some(c=>c[0]==='fillText'&&c[1].includes('2/3')));
   for(const room of ['depthsCache','depthsTrial','depthsTreasury']){
-   const item=moonwood.layouts[room].scenery.find(p=>p.type==='stonebackBeetle');
+   const item=moonwood.layouts[room].scenery.find(p=>p.id==='landmark');
    moonwood.drawProp(item,2500,{ctx,point:(x,y,z=0)=>[x*10,y*10-z],polygon:()=>{},surface:()=>{},block:()=>{},rect:()=>{},reduced,pose:{windup:.7},combat:encounter});
   }
   assert.equal(depth,0);assert(boarCombatPose({time:2500,now:2500,encounter,events,reduced}).windup>0);

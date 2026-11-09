@@ -578,8 +578,9 @@ const player = {x:5,y:7,cx:5,cy:7,direction:'right',back:false,seat:null,stride:
 function setPlayerCombat(active){
   player.inCombat=active===true;
   $('healthHud').hidden=!player.inCombat;
+  if(!player.inCombat)combatMoveGoal=null;
 }
-let route=[],step=null,interaction=null,hover=null,hoverItem=null,target=null;
+let route=[],step=null,interaction=null,hover=null,hoverItem=null,target=null,combatMoveGoal=null;
 const combatGear=normalizeCombatGear(savedPlayerState?.combatGear);
 const hunting=normalizeHunting(savedPlayerState?.hunting);
 const quest=normalizeQuest(savedPlayerState?.quest);
@@ -1114,7 +1115,7 @@ function startMonsterEncounter(enemy){
   player.direction=(6-player.cx)-(5-player.cy)>=0?'right':'left';player.back=11<player.cx+player.cy;
   if(window.playerCloud?.gameplay){
     serverGameplay('fight').then(packet=>{
-      serverCombatId=packet.state.combatId;setPlayerCombat(true);nextCombatPoll=0;
+      serverCombatId=packet.state.combatId;setPlayerCombat(true);nextCombatPoll=0;canvas.focus({preventScroll:true});
       combatMessage='You engage the '+enemy.name+'. Dodge with Space, or Flee.';
       updateCombatPanel();note('Press Space just before the '+enemyAttack(hunting.encounter,enemy).name+' lands. F flees.');
     }).catch(error=>note(error.message));return;
@@ -1148,6 +1149,9 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
   if(result.weakened)combatMessage+=(combatMessage?' ':'')+'Shadow prevented '+result.weakened+' damage.';
   if(result.warded)combatMessage+=(combatMessage?' ':'')+'Your ward blocked '+result.warded+' damage.';
   if(result.absorbed)combatMessage+=(combatMessage?' ':'')+'Your armour absorbed '+result.absorbed+' damage.';
+  if(result.outOfRange)combatMessage='Move closer to strike. Your weapon reaches 2 tiles.';
+  if(result.spatialAvoided)combatMessage=result.covered?'Cover blocked the spell.':'You moved clear of the attack!';
+  if(result.action==='move')combatMessage='Repositioning · Keep clear of marked tiles.';
   if(result.dodgeStarted)combatMessage='You sidestep. Time your dodge just before the '+enemy.move+' lands!';
   if(result.timedDodge)combatMessage='Perfect dodge! '+(result.shellExposed?'Shell open · ':'')+'Next strike +'+(result.counterPercent??50)+'% damage for 1.8 seconds.';
   if(result.counter)combatMessage='Counterattack! '+result.damage+' damage · +'+result.counterBonus+' bonus.';
@@ -1349,11 +1353,40 @@ function updateCombatPanel(){
     $('adventureLandmark').disabled=health<=0||unavailable()||!combatGear.equippedWeapon;
   }
 }
+function updateDungeonArenaHud(){
+ const e=hunting.encounter,enemy=huntEnemyForRoom(currentRoom),panel=$('dungeonArenaHud');
+ panel.hidden=!depthsRun||!enemy||!depthsEnemyAvailable(depthsRun,currentRoom);if(panel.hidden)return;
+ $('dungeonEnemyName').textContent=enemy.name;
+ const phase=vaultPhase(e);$('dungeonPhase').hidden=!phase;$('dungeonPhase').textContent=phase?'Phase '+phase.index+' · '+phase.name:'';
+ $('dungeonStamina').hidden=!e;const stamina=e?combatStamina(e,playerStats,combatNow(),combatGear.moonwellCharmEquipped):100;$('dungeonStaminaBar').value=stamina;$('dungeonStaminaValue').textContent=Math.floor(stamina);
+ $('dungeonDodge').title='Costs '+combatDodgeCost(armourSelection(combatGear))+' stamina · Space';
+ $('dungeonEnemyHealth').textContent=(e?.health??enemy.health)+' / '+enemy.health;
+ $('dungeonEnemyBar').max=enemy.health;$('dungeonEnemyBar').value=e?.health??enemy.health;
+ $('dungeonEngage').hidden=!!e;$('dungeonDodge').hidden=!e;$('dungeonFlee').hidden=!e;
+ $('dungeonEngage').disabled=!combatGear.equippedWeapon||unavailable();
+ $('dungeonDodge').disabled=$('combatDodge').disabled;$('dungeonFlee').disabled=$('combatFlee').disabled;
+ let cue='Approach to fight · Click the floor to explore.';
+ if(e){const move=enemyAttack(e),warn=e.nextBoarAt-combatNow()<=move.tell;
+  cue=warn?(arenaInDanger(e,move)?'Move out of marked tiles!':'You are clear · Close in after the attack.'):'Click floor / arrows to move · Space to dodge';
+  if(Math.hypot(arenaPlayer(e).x-arenaEnemy(e).x,arenaPlayer(e).y-arenaEnemy(e).y)>2.5)cue='Move closer to strike · Watch the marked tiles';
+ }
+ $('dungeonArenaCue').textContent=cue;panel.dataset.danger=String(!!e&&e.nextBoarAt-combatNow()<=enemyAttack(e).tell&&arenaInDanger(e,enemyAttack(e)));
+}
+$('dungeonEngage').onclick=()=>{const enemy=huntEnemyForRoom(currentRoom),item=roomFurniture().find(i=>i.type===enemy?.prop);if(item)use(item);};
+$('dungeonDodge').onclick=()=>combatAction('dodge');
+$('dungeonFlee').onclick=()=>combatAction('flee');
+
 function updateCombatMoment(time){
+  updateDungeonArenaHud();
+  if(player.inCombat&&hunting.encounter?.arenaVersion===1&&combatMoveGoal&&!step&&!route.length&&!activityBusy&&!serverActionBusy&&combatNow()>=(hunting.encounter.arenaStepAt??0)){
+    const p=arenaPlayer(hunting.encounter);
+    if(p.x===combatMoveGoal.x&&p.y===combatMoveGoal.y)combatMoveGoal=null;
+    else{const path=walkingPath(p,combatMoveGoal);if(path?.length){sendServerCombat('move',path[0]);return;}else combatMoveGoal=null;}
+  }
   if(routineControlled()){if(time-lastCombatUi>100){lastCombatUi=time;updateCombatPanel();}return;}
   if(window.playerCloud?.gameplay){
     const tactic=nextCombatTactic({hunting,health,vitals:playerVitals,stats:playerStats,combatGear,magic:magicState,characterRules});
-    const due=hunting.encounter?Math.min(hunting.encounter.nextPlayerAt,hunting.encounter.nextBoarAt,hunting.encounter.burn?.nextAt??Infinity,tactic?.at??Infinity):Infinity;
+    const due=hunting.encounter?Math.min(hunting.encounter.nextPlayerAt,hunting.encounter.nextBoarAt,hunting.encounter.burn?.nextAt??Infinity,arenaWarningAt(hunting.encounter,enemyAttack(hunting.encounter)),tactic?.at??Infinity):Infinity;
     if(player.inCombat&&combatNow()>=due&&time>=nextCombatPoll)sendServerCombat();
     if(!homeBedRest&&hunting.recoveryUntil&&combatNow()>=hunting.recoveryUntil&&!serverActionBusy&&!activityBusy){
       serverGameplay('recover').then(()=>{updatePlayerStats();updateCombatPanel();savePlayerState();}).catch(error=>note(error.message));
@@ -1425,7 +1458,7 @@ function roomFurniture(){
       if(item.type===enemy?.prop)return available;
       if(item.type==='galleryCache')return !!depthsRun?.finds?.includes('shellChime');
       return true;
-    });
+    }).map(item=>item.type===enemy?.prop&&hunting.encounter?.arenaVersion===1?{...item,...arenaEnemy(hunting.encounter)}:item);
   }
   return currentRoom==='hub'?hubFurniture:courtyardFurniture;
 }
@@ -1964,6 +1997,16 @@ function drawFishingStore(market=false){
   for(let i=0;i<5;i++)surface(3.54,5.4+i*.54,2.9,.035,.45,'#779395');
   drawDoor(storeExit);
 }
+let dungeonMobMotion=null;
+function dungeonMobOffset(item,time){
+ if(reducedMotion.matches||!hunting.encounter)return [0,0];
+ const key=currentRoom+item.type,to={x:item.x,y:item.y};
+ if(!dungeonMobMotion||dungeonMobMotion.key!==key)dungeonMobMotion={key,from:to,to,at:time};
+ if(dungeonMobMotion.to.x!==to.x||dungeonMobMotion.to.y!==to.y)dungeonMobMotion={key,from:dungeonMobMotion.to,to,at:time};
+ const m=dungeonMobMotion,t=Math.max(0,Math.min(1,(time-m.at)/260)),[x,y]=point(m.from.x+(to.x-m.from.x)*t,m.from.y+(to.y-m.from.y)*t),[tx,ty]=point(to.x,to.y);
+ return [x-tx,y-ty];
+}
+
 function dimensions(item) {
   if(watchDimensions[item.type])return watchDimensions[item.type];
   if(riverDimensions[item.type])return riverDimensions[item.type];
@@ -2004,11 +2047,12 @@ function object(item,highlight=false,time=0) {
   if(Object.hasOwn(moonwood.heights,type)){
     if(isTimberTree(item)){
       drawTimberTree(item,time);
-    }else if(type==='wildboar'||type==='stonebackBeetle'){
+    }else if(type==='wildboar'||type==='stonebackBeetle'||isDungeonMob(type)){
       const pose=boarCombatPose({time,now:combatNow(),encounter:player.inCombat?hunting.encounter:null,events:combatArt,reduced:reducedMotion.matches,defeated:!!item.defeated});
       const [bx,by]=point(x+.5,y+.5),[px,py]=point(player.x+.5,player.y+.5);
       const shift=(type==='wildboar'||huntEnemyForRoom(currentRoom)?.archetype==='duelist'?pose.charge:0)-pose.recoil;
-      ctx.save();ctx.globalAlpha*=pose.alpha;
+      const [mx,my]=isDungeonMob(type)?dungeonMobOffset(item,time):[0,0];
+      ctx.save();ctx.translate(mx,my);ctx.globalAlpha*=pose.alpha;
       ctx.translate(bx+Math.sign(px-bx)*shift,by+Math.sign(py-by)*shift+pose.fall);
       ctx.scale((px<bx?-1:1)*(1+(1-pose.squash)*.25),pose.squash);ctx.translate(-bx,-by);
       moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,progress:adventure,combat:player.inCombat?hunting.encounter:null,pose});
@@ -2432,6 +2476,7 @@ function updateWorldLabels(){
     else add('Timber',...point(6.5,5.5,54),'npc',()=>use(timberTree()));
   }
   if(depthsRun&&!player.inCombat){
+    for(const item of roomFurniture().filter(i=>i.type==='dungeonArch'||i.type==='dungeonExit'))add(item.type==='dungeonExit'?(currentRoom==='depthsVault'?'Vault gate':'Deeper passage'):depthsRun?.cleared===0?'Return to the ruins':depthsSideForRoom(currentRoom)||currentRoom===depthsCacheRoom?'Return to the hall':'Return & bank spoils',...point(item.x+.5,item.y+.5,60),'npc',()=>use(item));
     const elite=huntEnemyForRoom(currentRoom);
     if(elite?.elite&&roomFurniture().some(item=>item.type===elite.prop))add('Elite Cache Guardian',...point(6.5,5.5,45),'npc',()=>use(roomFurniture().find(item=>item.type===elite.prop)));
     const passage=roomFurniture().find(item=>item.type==='cachePassage');
@@ -2521,7 +2566,7 @@ function draw(time){
     const automatic=autoActivityAnimation(time),autoChop=automatic?.task==='woodcutting',cast=fishingSession??(automatic?.task==='fishing'?automatic.cast:null);
     const swingPhase=autoChop?((time-automatic.started)%1000)/1000:woodSession?((time-woodSession.started)%700)/700:0;
     const spritePose=woodSession||autoChop?{...pose,chop:swingPhase}:pose;
-    const [enemyX,enemyY]=point(6.5,5.5);
+    const foe=arenaEnemy(hunting.encounter);const [enemyX,enemyY]=point(foe.x+.5,foe.y+.5);
     const thrust=enemy?pose.lunge-pose.recoil:0;
     sprite(ctx,x+Math.sign(enemyX-x)*thrust-pose.dodge,y+Math.sign(enemyY-y)*thrust+pose.dodge*.4,avatar,{direction:player.direction,back:player.back,cycle,seated:!!seat,wave,weapon:autoChop||!!woodSession||pose.armed&&!!combatGear.equippedWeapon,sheathed:!autoChop&&!woodSession&&!pose.armed&&Object.hasOwn(socialRooms,currentRoom)&&!!combatGear.equippedWeapon,weaponTier:woodSession||autoChop?'basicAxe':combatGear.equippedWeapon,pose:spritePose,vest:armourSelection(combatGear),fishing:cast?fishingMoments.phase(cast,time):null,fishingAge:cast?time-cast.started:0,time});
     if(cast)drawFishingMoment(x,y,time,cast);
@@ -2669,6 +2714,10 @@ function walkingPath(start,goal){
   return findPath(start,goal,roomFurniture(),exits);
 }
 function walkTo(tile){
+  if(player.inCombat&&hunting.encounter?.arenaVersion===1){
+    if(blocked(tile.x,tile.y)){note('Choose a clear floor tile.');return;}
+    combatMoveGoal={...tile};interaction=null;return;
+  }
   if(routineControlled()){note('Your routine is running. Use Take control to move.');return;}
   if(player.seat?.type==='riverBench'&&currentRoom==='millbrook'&&hunting.recoveryUntil){standFromRiverBench().then(ok=>{if(ok)walkTo(tile);});return;}
   if(unavailable()){note(player.inCombat?"Combat is live. Use Flee to escape.":"Rest until your hearts recover.");return;}
@@ -3260,7 +3309,15 @@ function openWatchLandmark(item){
 
 function finishInteraction(){
   const item=interaction;interaction=null;
-  if(['watchBeacon','watchCache','watchSign'].includes(item.type)){
+  if(item.type==='dungeonExit'||item.type==='dungeonArch'){
+    if(depthsSideForRoom(currentRoom))visitDungeonSide('return');
+    else if(currentRoom===depthsCacheRoom)visitDepthsCache();
+    else if(item.type==='dungeonArch')leaveMoonwellDepths();
+    else if(depthsEnemyAvailable(depthsRun,currentRoom))note('Defeat the guardian before using the deeper passage.');
+    else if(currentRoom==='depthsGate'){depthsExploring=false;updateDepthsPanel();}
+    else if(currentRoom==='depthsVault')leaveMoonwellDepths();
+    else advanceMoonwellDepths();
+  }else if(['watchBeacon','watchCache','watchSign'].includes(item.type)){
     openWatchLandmark(item);
   }else if(isRestBed(item.type)&&atHome()){
     beginBedRest(item);
@@ -3428,7 +3485,7 @@ function advanceAnimation(time){
       player.cx=to.x;player.cy=to.y;player.stride++;step=null;
       const door=roomDoors[currentRoom].find(portal=>portal.tile.x===to.x&&portal.tile.y===to.y&&doorAvailable(portal));
       if(door){if(autoJourney){const reverse=roomDoors[door.to]?.find(d=>d.to===currentRoom);autoJourneyTransition=true;enterRoom(door.to,door.arrival??reverse?.inside??reverse?.tile,{automatic:true});autoJourneyTransition=false;}else enterRoom(door.to,door.arrival);}
-      else if(!route.length)savePlayerState();
+      else if(!route.length&&!player.inCombat)savePlayerState();
     }
   }
   if(!step&&!route.length){target=null;if(interaction)finishInteraction();}
@@ -3775,6 +3832,7 @@ function applyServerGameplay(state){
   meals={...state.meals};
   magicState=state.magic?normalizeMagic(state.magic):null;
   Object.assign(hunting,state.hunting);
+  if(player.inCombat&&hunting.encounter?.arenaVersion===1&&!step&&!route.length){const p=arenaPlayer(hunting.encounter);if(p.x!==player.cx||p.y!==player.cy)route=walkingPath({x:player.cx,y:player.cy},p)??[];}
   depthsRun=state.depthsRun??null;depthsDiscovered=state.depthsDiscovered===true;
   Object.assign(quest,state.quest);Object.assign(history,state.history);Object.assign(adventure,state.adventure);
   Object.assign(combatGear,state.combatGear);
@@ -3813,7 +3871,7 @@ async function sendServerCombat(input,slot){
   if(serverActionBusy||!player.inCombat)return;
   activityBusy=true;
   try{
-    const packet=await window.playerCloud.gameplay('combat',{combatId:serverCombatId,input,slot,reviewing:!document.hidden});
+    const packet=await window.playerCloud.gameplay('combat',{combatId:serverCombatId,input,...(input==='move'?{tile:slot}:{slot}),reviewing:!document.hidden});
     const receipt=packet.state.combatReceipt;
     if(receipt&&receipt.id!==lastCombatReceipt){
       lastCombatReceipt=receipt.id;
@@ -5457,6 +5515,7 @@ function enterRoom(next,arrival,{automatic=false}={}){
   // Older saves can be standing beyond the new flooded channel.
   if(next==='depthsGate'&&arrival?.x>=8&&!depthsRun.finds?.includes('sluiceLever'))arrival={x:7,y:4};
   movePlayerToSpawn(arrival);
+  if(depthsIndex>=0)setZoom(1.35);
   if(exploring&&depthsIndex<0&&!adventure.discovered.includes(next)){
     adventure.discovered.push(next);
     showTransaction('New place discovered',[{icon:'✦',text:name+' · Map fog cleared'}]);

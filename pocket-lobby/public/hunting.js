@@ -1,3 +1,4 @@
+import {arenaEnemy,arenaPlayer,arenaInDanger,arenaBehindCover,dungeonFloor} from './dungeon-arena.js';
 import {skillLevel} from './skill-curve.js';
 import {essenceEffects,essenceGems,essencePower} from './essences.js';
 
@@ -23,12 +24,12 @@ const beetle={id:'beetle',name:'Stoneback Beetle',room:'ruins',prop:'stonebackBe
 export const huntEnemies={
   boar,beetle,
   thornBoar:{...boar,id:'thornBoar',name:'Thorn Boar',room:'thornwood',health:115,damage:17,firstAttack:1700,interval:2100,xp:[30,20,30],masteryXp:15,tactic:'OPTIONAL DANGER · Stronger than a Wild Boar. Dodge the charge. Victory breaks the grotto cache seal.'},
-  depthsBoar:{...boar,id:'depthsBoar',room:'depthsGate',name:'Gate Boar',health:100,damage:12,xp:[30,20,30],masteryXp:20},
-  depthsBeetle:{...beetle,id:'depthsBeetle',room:'depthsGallery',name:'Gallery Beetle',health:150,damage:20,xp:[45,35,45],masteryXp:30},
-  cacheGuardian:{...beetle,id:'cacheGuardian',room:'depthsCache',name:'Cache Guardian',elite:true,archetype:'caster',tactic:'RUNE CASTER · Land 3 weapon hits during Rune Bolt to interrupt. Fast daggers excel; dodge if the cast completes.',move:'runeBolt',health:180,firstAttack:3000,interval:3600,damage:24,shellArmor:0,exposureMs:2400,xp:[55,40,55],masteryXp:40},
-  treasuryGuardian:{...beetle,id:'treasuryGuardian',room:'depthsTreasury',name:'Treasury Guardian',archetype:'armoured',tactic:'ARMOURED · Build stagger to crack its plating. Heavy weapons excel; dodging alone does not open this armour.',victoryLoot:'60 gold + 2 shells held',health:175,damage:22,shellArmor:7,xp:[50,35,50],masteryXp:30},
-  sealGuardian:{...beetle,id:'sealGuardian',room:'depthsTrial',name:'Rune Sentinel',elite:true,archetype:'duelist',tactic:'DUELIST · Dodge the final flash, then counter. Counters deal 25% extra damage; watch for the follow-up lunge.',move:'sentinelStrike',health:210,firstAttack:2600,interval:2600,damage:24,shellArmor:0,xp:[60,45,60],masteryXp:40},
-  depthsGuardian:{...beetle,id:'depthsGuardian',room:'depthsVault',name:'Vault Guardian',health:240,damage:27,shellArmor:9,xp:[75,55,75],masteryXp:50}
+  depthsBoar:{...boar,id:'depthsBoar',room:'depthsGate',name:'Mire Skitter',prop:'depthsSkitter',move:'skitterPounce',tactic:'MIRE SKITTER · It darts before pouncing. Step out of the marked lane; close in to strike.',health:100,damage:12,xp:[30,20,30],masteryXp:20},
+  depthsBeetle:{...beetle,id:'depthsBeetle',room:'depthsGallery',name:'Shell Warden',prop:'depthsWarden',move:'wardenSlam',tactic:'SHELL WARDEN · Leave the marked slam area, then punish its open core.',health:150,damage:20,xp:[45,35,45],masteryXp:30},
+  cacheGuardian:{...beetle,id:'cacheGuardian',prop:'depthsSeer',room:'depthsCache',name:'Cache Guardian',elite:true,archetype:'caster',tactic:'RUNE CASTER · Land 3 weapon hits during Rune Bolt to interrupt. Fast daggers excel; dodge if the cast completes.',move:'runeBolt',health:180,firstAttack:3000,interval:3600,damage:24,shellArmor:0,exposureMs:2400,xp:[55,40,55],masteryXp:40},
+  treasuryGuardian:{...beetle,id:'treasuryGuardian',prop:'depthsWarden',room:'depthsTreasury',name:'Treasury Guardian',archetype:'armoured',tactic:'ARMOURED · Build stagger to crack its plating. Heavy weapons excel; dodging alone does not open this armour.',victoryLoot:'60 gold + 2 shells held',health:175,damage:22,shellArmor:7,xp:[50,35,50],masteryXp:30},
+  sealGuardian:{...beetle,id:'sealGuardian',prop:'depthsSentinel',room:'depthsTrial',name:'Rune Sentinel',elite:true,archetype:'duelist',tactic:'DUELIST · Dodge the final flash, then counter. Counters deal 25% extra damage; watch for the follow-up lunge.',move:'sentinelStrike',health:210,firstAttack:2600,interval:2600,damage:24,shellArmor:0,xp:[60,45,60],masteryXp:40},
+  depthsGuardian:{...beetle,id:'depthsGuardian',prop:'depthsColossus',room:'depthsVault',name:'Vault Guardian',health:240,damage:27,shellArmor:9,xp:[75,55,75],masteryXp:50}
 };
 const enemiesByRoom=Object.fromEntries(Object.values(huntEnemies).map(enemy=>[enemy.room,enemy]));
 export const huntEnemyForRoom=room=>enemiesByRoom[room];
@@ -51,6 +52,8 @@ export function transitionVaultPhase(event,before,now){
 export const huntRespawnAt=(hunting,enemy)=>enemy?.id==='thornBoar'?hunting.thornRespawnAt??0:enemy===huntEnemies.beetle?hunting.beetleRespawnAt??0:hunting.respawnAt;
 
 const enemyMoves={
+  skitterPounce:{id:'skitterPounce',name:'Skitter Pounce',tell:1000,damage:0,shape:'lane',opensShell:false},
+  wardenSlam:{id:'wardenSlam',name:'Warden Slam',tell:1400,damage:0,shape:'ring',opensShell:true},
   vaultSmash:{id:'vaultSmash',name:'Ironclad Smash',tell:1200,damage:0,shape:'ring',opensShell:false},
   vaultCleave:{id:'vaultCleave',name:'Vault Cleave',tell:1000,damage:0,shape:'arc',opensShell:false},
   vaultLunge:{id:'vaultLunge',name:'Vault Lunge',tell:1200,delay:2400,damage:4,shape:'lane',opensShell:false},
@@ -231,9 +234,14 @@ export function normalizeHunting(input={}){
     for(const key of ['chilledUntil','weakenedUntil','interruptResistUntil','tacticsAt','autoDodgeUntil','bossPhaseAt','castDeadline','counterUntil','staggerUntil','staggerWeakUntil','staggerResistUntil']){
       if(input.encounter[key]!==undefined)result.encounter[key]=time(input.encounter[key]);
     }
+    if(input.encounter.arenaVersion!==undefined){
+      const e=input.encounter,profile=huntEnemy(e),valid=p=>Number.isInteger(p?.x)&&Number.isInteger(p?.y)&&dungeonFloor(profile.room,p.x,p.y);
+      if(e.arenaVersion!==1||!profile.room.startsWith('depths')||e.arenaRoom!==profile.room||!valid(e.arenaPlayer)||!valid(e.arenaEnemy)||e.arenaTarget&&!valid(e.arenaTarget))throw new Error('Invalid dungeon arena.');
+      Object.assign(result.encounter,{arenaVersion:1,arenaRoom:profile.room,arenaPlayer:{...e.arenaPlayer},arenaEnemy:{...e.arenaEnemy},arenaStepAt:time(e.arenaStepAt),arenaLockedFor:time(e.arenaLockedFor),arenaCycle:time(e.arenaCycle),arenaSolids:(Array.isArray(e.arenaSolids)?e.arenaSolids:[]).filter(valid).slice(0,80).map(p=>({x:p.x,y:p.y})),...(e.arenaTarget?{arenaTarget:{...e.arenaTarget}}:{})});
+    }
     if(input.encounter.bossVersion!==undefined){if(input.encounter.bossVersion!==1||enemy!=='depthsGuardian')throw new Error('Invalid boss encounter.');result.encounter.bossVersion=1;}
     if(input.encounter.castHits!==undefined){if(!Number.isInteger(input.encounter.castHits)||input.encounter.castHits<0||input.encounter.castHits>2)throw new Error('Invalid cast pressure.');result.encounter.castHits=input.encounter.castHits;}
-    if(input.encounter.lastDecision!==undefined){const d=input.encounter.lastDecision;if(!d||!['cautious','balanced','aggressive'].includes(d.style)||!['dodge','essence','flee'].includes(d.action)||typeof d.reason!=='string'||d.reason.length>160)throw new Error('Invalid combat decision.');result.encounter.lastDecision={at:time(d.at),style:d.style,action:d.action,reason:d.reason};}
+    if(input.encounter.lastDecision!==undefined){const d=input.encounter.lastDecision;if(!d||!['cautious','balanced','aggressive'].includes(d.style)||!['dodge','essence','flee','move'].includes(d.action)||typeof d.reason!=='string'||d.reason.length>160)throw new Error('Invalid combat decision.');result.encounter.lastDecision={at:time(d.at),style:d.style,action:d.action,reason:d.reason};}
     if(input.encounter.counterPercent!==undefined){if(![50,75].includes(input.encounter.counterPercent))throw new Error('Invalid counter bonus.');result.encounter.counterPercent=input.encounter.counterPercent;}
     if(input.encounter.stagger!==undefined){if(!Number.isInteger(input.encounter.stagger)||input.encounter.stagger<0||input.encounter.stagger>=staggerProfile(huntEnemy(input.encounter)).limit)throw new Error('Invalid stagger progress.');result.encounter.stagger=input.encounter.stagger;}
     if(Number.isFinite(input.encounter.weakenPercent)&&input.encounter.weakenPercent>=25&&input.encounter.weakenPercent<=35)result.encounter.weakenPercent=input.encounter.weakenPercent;
@@ -291,6 +299,7 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
   }
   if(action==='attack'){
     result.encounter.nextPlayerAt=now+attributes.attackInterval;
+    if(encounter.arenaVersion===1&&Math.hypot(arenaPlayer(encounter).x-arenaEnemy(encounter).x,arenaPlayer(encounter).y-arenaEnemy(encounter).y)>2.5){result.outOfRange=true;return result;}
     result.damage=attributes.damage+Math.floor(random()*5);
     if(enemy.shellArmor){
       const exposed=now<encounter.exposedUntil;
@@ -330,10 +339,12 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
     result.attackShape=move.shape;
     result.heavy=move.damage>0;
     result.timedDodge=encounter.dodgeUntil>0&&encounter.nextBoarAt<=encounter.dodgeUntil&&encounter.nextBoarAt>=encounter.dodgeUntil-boarRules.dodgeWindow;
-    result.dodged=result.timedDodge||random()<attributes.dodge;
+    result.spatialAvoided=encounter.arenaVersion===1&&(!arenaInDanger(encounter,move)||arenaBehindCover(encounter,move));
+    result.covered=result.spatialAvoided&&arenaBehindCover(encounter,move);
+    result.dodged=result.spatialAvoided||result.timedDodge||random()<attributes.dodge;
     result.automaticDodge=result.timedDodge&&encounter.autoDodgeUntil===encounter.dodgeUntil;
     if(result.timedDodge&&!result.automaticDodge){result.perfectDodge=true;result.encounter.counterUntil=encounter.nextBoarAt+counterRules.duration;result.counterPercent=Math.round((weaponProfile(weapon,upgrade)?.counterMultiplier??counterRules.bonus)*100);result.encounter.counterPercent=result.counterPercent;}
-    if(enemy.shellArmor&&enemy.archetype!=='armoured'&&move.opensShell&&result.timedDodge){
+    if(enemy.shellArmor&&enemy.archetype!=='armoured'&&move.opensShell&&(result.timedDodge||result.spatialAvoided)){
       result.encounter.exposedUntil=now+enemy.exposureMs+(move.id===enemy.move?0:400);
       result.shellExposed=true;
     }
