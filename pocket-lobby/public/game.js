@@ -4915,8 +4915,12 @@ function openAdvancedCharacterRules({focusGoal=false}={}){
   if(!log.children.length){const row=document.createElement('li');row.textContent='Your next away routine will appear here.';log.append(row);}
   $('rulesHuntingDetails').open=false;selectAutoModePage('activity');updateCharacterRulesPreview();if(!$('characterRulesDialog').open)$('characterRulesDialog').showModal();if(focusGoal){$('autoUpgradeOptions').open=true;$('autoUpgradeOptions').scrollIntoView?.({block:'center'});$('rulesGoalTarget').focus({preventScroll:true});}
 }
-let simpleAutoChoice='fishing',simpleAutoBusy=false;
+let simpleAutoChoice='fishing',simpleAutoRisk='balanced',simpleAutoBusy=false;
 function renderSimpleAuto(){
+ const resting=simpleAutoChoice==='rest';
+ $('simpleAutoRiskDetail').textContent=simpleAutoRiskDetail(simpleAutoChoice,simpleAutoRisk);
+ $('simpleAutoRiskNote').textContent=resting?'Rest is always safe':'Choose how far to push your loop';
+ for(const button of document.querySelectorAll('[data-auto-risk]')){button.setAttribute('aria-pressed',String(button.dataset.autoRisk===(resting?'safe':simpleAutoRisk)));button.disabled=resting||simpleAutoBusy;}
  const info=simpleAutoModes[simpleAutoChoice];$('simpleAutoLoop').textContent=info.loop;$('simpleAutoDetail').textContent=info.detail;$('simpleAutoGamble').hidden=simpleAutoChoice!=='gambling';
  for(const button of $('simpleAutoChoices').children)button.setAttribute('aria-pressed',String(button.dataset.mode===simpleAutoChoice));
  $('simpleAutoStart').disabled=$('simpleAutoSave').disabled=simpleAutoBusy;$('simpleAutoStart').textContent=simpleAutoBusy?'Starting…':window.playerCloud?.initial?.plan?'Switch Auto':'Start Auto';
@@ -4926,6 +4930,7 @@ function openCharacterRules(options={}){
  if(needsAutoLesson()){openAutoLesson();return;}
  if(!routineControlled())window.towerPauseForAccount();
  const state=window.playerCloud?.initial??{},rules=normalizeCharacterRules(state.pendingCharacterRules??characterRules);
+ simpleAutoRisk=rules.simpleRisk??'balanced';
  simpleAutoChoice=rules.simpleMode??(['fishing','exploring','rest'].includes(rules.activity)?rules.activity:'random');
  $('simpleAutoIdle').checked=rules.enabled;$('simpleAutoReserve').value=rules.simpleMode?rules.goldPolicy.reserveGold:0;
  $('simpleAutoTable').value=rules.gambling.game;$('simpleAutoBet').value=rules.gambling.bet;$('simpleAutoLoss').value=rules.gambling.lossLimit;
@@ -4935,11 +4940,11 @@ function openCharacterRules(options={}){
  const button=document.createElement('button');button.type='button';button.dataset.mode=id;
  const icon=document.createElementNS('http://www.w3.org/2000/svg','svg');icon.setAttribute('class','hud-icon');icon.setAttribute('aria-hidden','true');
  const use=document.createElementNS('http://www.w3.org/2000/svg','use');use.setAttribute('href','#hud-i-'+mode.icon);icon.append(use);
- const label=document.createElement('b');label.textContent=mode.name;button.append(icon,label);button.onclick=()=>{simpleAutoChoice=id;$('simpleAutoStatus').textContent='';renderSimpleAuto();};list.append(button);
+ const label=document.createElement('b');label.textContent=mode.name;button.append(icon,label);button.onclick=()=>{simpleAutoChoice=id;if(id==='gambling'){$('simpleAutoBet').value=simpleAutoRisks[simpleAutoRisk].bet;$('simpleAutoLoss').value=simpleAutoRisks[simpleAutoRisk].lossLimit;}$('simpleAutoStatus').textContent='';renderSimpleAuto();};list.append(button);
  }
  renderSimpleAuto();$('simpleAutoDialog').showModal();
 }
-function simpleAutoOptions(){return {enabled:$('simpleAutoIdle').checked,reserveGold:Number($('simpleAutoReserve').value),game:$('simpleAutoTable').value,bet:Number($('simpleAutoBet').value),lossLimit:Number($('simpleAutoLoss').value)};}
+function simpleAutoOptions(){return {risk:simpleAutoChoice==='rest'?'safe':simpleAutoRisk,enabled:$('simpleAutoIdle').checked,reserveGold:Number($('simpleAutoReserve').value),game:$('simpleAutoTable').value,bet:Number($('simpleAutoBet').value),lossLimit:Number($('simpleAutoLoss').value)};}
 async function saveSimpleAuto(start){
  if(simpleAutoBusy||!$('simpleAutoForm').reportValidity())return;
  try{
@@ -4953,6 +4958,11 @@ async function saveSimpleAuto(start){
  }catch(error){$('simpleAutoStatus').textContent=error.message;}
  finally{simpleAutoBusy=false;renderSimpleAuto();}
 }
+for(const button of document.querySelectorAll('[data-auto-risk]'))button.onclick=()=>{
+ simpleAutoRisk=button.dataset.autoRisk;
+ $('simpleAutoBet').value=simpleAutoRisks[simpleAutoRisk].bet;$('simpleAutoLoss').value=simpleAutoRisks[simpleAutoRisk].lossLimit;
+ renderSimpleAuto();
+};
 $('simpleAutoForm').onsubmit=event=>{event.preventDefault();saveSimpleAuto(true);};
 $('simpleAutoSave').onclick=()=>saveSimpleAuto(false);
 $('simpleAutoAdvanced').onclick=()=>{$('simpleAutoDialog').close();openAdvancedCharacterRules();};

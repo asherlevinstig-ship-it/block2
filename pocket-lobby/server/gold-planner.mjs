@@ -4,7 +4,7 @@ import {skillLevel} from '../public/skill-curve.js';
 import {huntEnemies,canUseWeapon,createHunt,advanceHunt,beetleHuntUnlocked} from '../public/hunting.js';
 
 // Conservative preview: high enemy damage, no lucky evades, spells or automatic dodges assumed.
-export function safeHuntPreview(state,id,minimum){
+export function safeHuntPreview(state,id,minimum,remainingHealth=Math.max(40,(state.characterRules.combat.fleeBelow??20)+10)){
  const enemy=huntEnemies[id],gear=state.combatGear;
  if(state.health<minimum||!gear.equippedWeapon||!canUseWeapon(state.stats,gear.equippedWeapon))return null;
  let encounter=createHunt(0,undefined,id),health=state.health,at=0;
@@ -12,7 +12,7 @@ export function safeHuntPreview(state,id,minimum){
   at=Math.min(encounter.nextPlayerAt,encounter.nextBoarAt);
   const result=advanceHunt(encounter,health,state.stats,at,encounter.nextPlayerAt<=encounter.nextBoarAt?()=>0:()=>.999,gear.equippedWeapon,gear.activeSwordUpgrade,armourSelection(gear),gear.moonwellCharmEquipped,gear.weaponEnchantments);
   if(!result)return null;encounter=result.encounter;health=result.health;
-  if(result.outcome==='victory')return health>=Math.max(40,(state.characterRules.combat.fleeBelow??20)+10)?{health,duration:at}:null;
+  if(result.outcome==='victory')return health>=Math.max(remainingHealth,(state.characterRules.combat.fleeBelow??20)+1)?{health,duration:at}:null;
   if(result.outcome!=='fighting')return null;
  }
  return null;
