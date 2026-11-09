@@ -31,3 +31,9 @@
 .familiar-name-form{display:flex;flex-wrap:wrap;gap:6px;padding-top:4px}
 .familiar-name-form label{flex-basis:100%;font-size:11px;color:#b9c9df}
 .familiar-name-form input{width:100%;min-width:0;padding:7px 8px;background:#182943;color:#edf2fc;border:1px solid #647690;border-radius:7px;font-size:13px}
+
+.player-label{transform:translate(-50%,-100%);font-family:system-ui,sans-serif;font-weight:700;letter-spacing:.01em;background:#111e30ed;border-color:#667b976f;color:#e4edf7;border-radius:6px}
+.own-player-label{color:#ffe3ac;border-color:#c89f628f}
+.familiar-label{background:#172634ed;color:var(--pet-label-color,#c8e7cd);border-color:#78928291;font-size:9px;padding:2px 5px}
+.familiar-label::before{content:'';display:inline-block;width:4px;height:4px;margin-right:4px;vertical-align:2px;border-radius:50%;background:currentColor}
+@media(max-width:520px){.player-label{max-width:105px;padding:2px 4px;font-size:9px}.familiar-label{font-size:8px}}

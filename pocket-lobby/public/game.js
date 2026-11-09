@@ -75,6 +75,7 @@ const availableFurniture=type=>(ownedFurniture[type]??0)-countFurniture(homeFurn
 let familiarState=normalizeFamiliars(savedPlayerState?.familiars),selectedWildAnimal=null,wildlifeAffection=null,wildlifeFeedback=null;
 let familiarReaction=null;
 const familiarFollowers=new Map(),familiarPortraits=[];
+const renderedActors=[],actorNameplates=new Map();
 let lastFamiliarPortraitFrame=0;
 const adventure={lantern:false,groveTrail:false,bridge:false,shrine:false,shortcut:false,discovered:[],silverfin:0,...savedPlayerState?.adventure};
 let depthsRun=savedPlayerState?.depthsRun??null,depthsExploring=false;
@@ -532,10 +533,10 @@ function receivePeers(peers){
   for(const peer of peers.slice(0,20)){
     if(!peer.id||!Number.isFinite(peer.x)||!Number.isFinite(peer.y))continue;
     keep.add(peer.id);const old=remotePeers.get(peer.id);
-    if(old)Object.assign(old,peer);
-    else remotePeers.set(peer.id,{...peer,rx:peer.x,ry:peer.y,lastFrame:performance.now(),label:null});
+    if(old)Object.assign(old,peer,{familiar:peer.familiar,familiarName:peer.familiarName});
+    else remotePeers.set(peer.id,{...peer,rx:peer.x,ry:peer.y,lastFrame:performance.now()});
   }
-  for(const [id,peer] of remotePeers)if(!keep.has(id)){peer.label?.remove();remotePeers.delete(id);}
+  for(const id of remotePeers.keys())if(!keep.has(id))remotePeers.delete(id);
   const state=window.playerCloud?.initial;
   if(isFishingRoom(currentRoom)&&state?.plan?.source==='rules'&&autoTaskFor(state.plan)==='fishing'&&!autoJourney&&multiplayer?.selfId&&[...remotePeers.values()].some(peer=>peer.id<multiplayer.selfId&&peer.x===player.cx&&peer.y===player.cy)){
     const destination=autoWorkTile(state);if(destination?.path.length){autoJourneyState=state;autoJourney={room:currentRoom,blocked:false};route=destination.path;target={x:destination.x,y:destination.y};}
@@ -548,20 +549,43 @@ function drawRemote(peer,time){
   ctx.save();if((peer.hurtUntil??0)>time)ctx.globalAlpha=.55;
   sprite(ctx,x,y,{outfit:peer.outfit,trousers:peer.trousers,boots:peer.boots,hair:peer.hair},{direction:peer.direction,back:peer.back,cycle:moving?time/STEP_MS:0,seated:!!peer.seat,wave:waveAge>=0&&waveAge<WAVE_MS?waveAge/WAVE_MS:null,sheathed:!!peer.weapon,weaponTier:peer.weapon,vest:peer.armour,fishing:isFishingRoom(currentRoom)&&peer.activity==='fishing'&&!moving?'waiting':null,fishingAge:time,time});
   if(isFishingRoom(currentRoom)&&peer.activity==='fishing'&&!moving)drawFishingMoment(x,y,time,{started:time-2000,castEnds:time-1500,biteAt:Infinity,landAt:Infinity},{y:peer.ry,direction:peer.direction,back:peer.back});
-  drawFollowingFamiliar(peer.id,peer.familiar,peer.rx,peer.ry,peer.direction,time);
+  const familiar=drawFollowingFamiliar(peer.id,peer.familiar,peer.rx,peer.ry,peer.direction,time);
+  const activity=peer.activity==='combat'?Array.from({length:5},(_,i)=>peer.health>i*20?'♥':'♡').join(''):peer.activity==='fishing'?'Fishing':peer.activity==='gambling'?'Gambling':'';
+  renderedActors.push({id:peer.id,name:peer.name,activity,x,y:y-(peer.seat?30:43),familiar,familiarName:peer.familiarName});
   ctx.restore();
 }
-function updatePeerLabels(time){
-  const p=canvasBounds(),cx=view.width/2,cy=view.height/2-4;
-  for(const peer of remotePeers.values()){
-    if(!peer.label){peer.label=document.createElement('span');peer.label.className='player-label';$('playerLabels').append(peer.label);}
-    const caption=peer.name+'|'+peer.weapon+'|'+peer.activity+'|'+(peer.activity==='combat'?peer.health:'');
-    if(peer.caption!==caption){peer.caption=caption;peer.label.textContent=peer.name+(peer.activity==='combat'?' · '+Array.from({length:5},(_,i)=>peer.health>i*20?'♥':'♡').join(''):peer.activity==='fishing'?' · Fishing':peer.activity==='gambling'?' · Gambling':'');peer.label.title=peer.name+(peer.weapon?' · '+(weaponCatalog[peer.weapon]?.name??peer.weapon):'');peer.labelWidth=peer.label.offsetWidth||Math.min(120,peer.name.length*6+10);}
-    const [x,y]=peer.seat?seatAnchor(peer.seat):point(peer.rx+.5,peer.ry+.5);
-    peer.label.style.left=Math.round(p.x+((x-cx)*zoom+cx)*p.scale-(peer.labelWidth??60)/2)+'px';
-    peer.label.style.top=Math.round(p.y+((y-43-cy)*zoom+cy)*p.scale)+'px';
+function updateActorNameplates(){
+ const layer=$('playerLabels'),seen=new Set();
+ if(renderedActors.length){
+  const p=canvasBounds(),layerBox=layer.getBoundingClientRect(),cx=view.width/2,cy=view.height/2-4;
+  const toScreen=(x,y)=>({x:p.left-layerBox.left+p.x+((x-cx)*zoom+cx)*p.scale,y:p.top-layerBox.top+p.y+((y-cy)*zoom+cy)*p.scale});
+  const render=(key,name,detail,position,kind,color)=>{
+   seen.add(key);
+   let plate=actorNameplates.get(key);
+   if(!plate){
+    const node=document.createElement('span');node.className='player-label '+kind;node.dataset.actor=key;layer.append(node);
+    plate={node};actorNameplates.set(key,plate);
+   }
+   const caption=detail?name+' · '+detail:name;
+   if(plate.caption!==caption){plate.caption=caption;plate.node.textContent=caption;plate.node.title=caption;}
+   if(color&&plate.color!==color){plate.color=color;plate.node.style.setProperty('--pet-label-color',color);}
+   plate.node.style.left=Math.round(position.x)+'px';plate.node.style.top=Math.round(position.y)+'px';
+  };
+  for(const actor of renderedActors){
+   const owner=toScreen(actor.x,actor.y);
+   if(actor.familiar){
+    const {id,x,y}=actor.familiar,pet=toScreen(x,y),species=familiars[id];
+    const petName=actor.familiarName||species.name;
+    const ownerWidth=Math.min(130,((actor.name?.length??5)+(actor.activity?.length??0))*6+14),petWidth=Math.min(130,petName.length*6+19);
+    if(Math.abs(owner.x-pet.x)<(ownerWidth+petWidth)/2+3)owner.y=Math.min(owner.y,pet.y-21);
+    render(actor.id+':familiar',petName,'',pet,'familiar-label',species.color);
+   }
+   render(actor.id,actor.name||'Guest',actor.activity,owner,actor.id==='self'?'own-player-label':'remote-player-label');
   }
+ }
+ for(const [key,plate] of actorNameplates)if(!seen.has(key)){plate.node.remove();actorNameplates.delete(key);}
 }
+
 function connectRoom(){
   if(!multiplayer)return;
   const state=window.playerCloud?.initial;
@@ -1556,6 +1580,9 @@ function drawFollowingFamiliar(key,id,x,y,direction,time){
  follower.flight=(follower.flight??0)+(Number(airborne)-(follower.flight??0))*(1-Math.exp(-elapsed/165));
  const [px,py]=point(follower.x+.5,follower.y+.5);
  drawFamiliar(ctx,id,px,py+1,reacting?reaction:time,{scale:.88,flipped:follower.flipped,reduced:reducedMotion.matches,pose,flightBlend:follower.flight});
+ const flight=reducedMotion.matches?Number(airborne):follower.flight;
+ const height=id==='owl'?23+Math.round(flight*17):id==='fox'?21:17;
+ return {id,x:px,y:py-height-(reacting?3:0)};
 }
 
 function drawWildAnimal(animal,time){
@@ -2761,6 +2788,7 @@ function updateWorldLabels(){
   }
 }
 function draw(time){
+  renderedActors.length=0;
   const {width,height}=view,centerX=width/2,centerY=height/2-4;
   const enemy=huntEnemyForRoom(currentRoom);
   ctx.setTransform(1,0,0,1,0,0);
@@ -2835,7 +2863,8 @@ function draw(time){
     const foe=combatTargetTile(hunting.encounter);const [enemyX,enemyY]=point(foe.x+.5,foe.y+.5);
     const thrust=enemy?pose.lunge-pose.recoil:0;
     sprite(ctx,x+Math.sign(enemyX-x)*thrust-pose.dodge,y+Math.sign(enemyY-y)*thrust+pose.dodge*.4,avatar,{direction:player.direction,back:player.back,cycle,seated:!!seat,wave,weapon:autoChop||!!woodSession||pose.armed&&!!combatGear.equippedWeapon,sheathed:!autoChop&&!woodSession&&!pose.armed&&Object.hasOwn(socialRooms,currentRoom)&&!!combatGear.equippedWeapon,weaponTier:woodSession||autoChop?'basicAxe':combatGear.equippedWeapon,pose:spritePose,vest:armourSelection(combatGear),fishing:cast?fishingMoments.phase(cast,time):null,fishingAge:cast?time-cast.started:0,time});
-    drawFollowingFamiliar('self',familiarState.equipped,player.x,player.y,player.direction,time);
+    const familiar=drawFollowingFamiliar('self',familiarState.equipped,player.x,player.y,player.direction,time);
+    renderedActors.push({id:'self',name:avatar.name,x:x+Math.sign(enemyX-x)*thrust-pose.dodge,y:y-(seat?30:player.inCombat?49:43),familiar,familiarName:familiarState.names[familiarState.equipped]});
     if(cast)drawFishingMoment(x,y,time,cast);
     drawCatchReveal(x,y,time);
     if(player.inCombat){
@@ -2882,7 +2911,7 @@ function draw(time){
   if(enemy)drawCombatOverlayFx({ctx,width,height,time,now:combatNow(),events:combatArt,encounter:hunting.encounter,health,reduced:reducedMotion.matches,enemy});
   updateWorldLabels();
   drawHudMiniMap();
-  updatePeerLabels(time);
+  updateActorNameplates();
   updateWorldFloats(time);
   for(const key of familiarFollowers.keys())if(key!=='self'&&!remotePeers.has(key))familiarFollowers.delete(key);
 }
@@ -5998,7 +6027,7 @@ function correctRoomPosition(position){
 }
 if(window.playerCloud&&typeof WebSocket!=='undefined'){
   multiplayer=createRoomConnection({
-    getLocal:()=>({room:currentRoom,x:player.cx,y:player.cy,direction:player.direction,back:player.back,seat:player.seat?{type:player.seat.type,x:player.seat.x,y:player.seat.y,rot:player.seat.rot}:null,profileKey:JSON.stringify([avatar,combatGear.equippedWeapon,armourSelection(combatGear),homeFurniture,familiarState.equipped])}),
+    getLocal:()=>({room:currentRoom,x:player.cx,y:player.cy,direction:player.direction,back:player.back,seat:player.seat?{type:player.seat.type,x:player.seat.x,y:player.seat.y,rot:player.seat.rot}:null,profileKey:JSON.stringify([avatar,combatGear.equippedWeapon,armourSelection(combatGear),homeFurniture,familiarState.equipped,familiarState.names[familiarState.equipped]])}),
     flush:()=>window.playerCloud.flush(),checkRoom:async room=>{
       const response=await fetch('/api/world/connect?check=1&room='+encodeURIComponent(room),{credentials:'same-origin',cache:'no-store'});
       if(!response.ok){const data=await response.json().catch(()=>({})),error=new Error(data.error??'Room unavailable');error.status=response.status;throw error;}
