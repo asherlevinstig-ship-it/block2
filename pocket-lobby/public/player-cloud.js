@@ -401,7 +401,7 @@
       const regionCatalog=await import('./region-catalog.js');
       const explorationFog=await import('./exploration-fog.js');
       const worldActivity=await import('./world-activity.js');
-      const playerVitals=await import('./player-vitals.js');const familiars=await import('./familiars.js');
+      const playerVitals=await import('./player-vitals.js');const familiars=await import('./familiars.js');const wildlife=await import('./wildlife.js');
       const autoFeedback=await import('./auto-feedback.js');
       const characterRules=await import('./character-rules.js');
       const commissions=await import('./commissions.js');
@@ -413,7 +413,7 @@
       const multiplayer=await import('./multiplayer.js');
       const training=await import('./training.js');
       const dungeonLoot=await import('./dungeon-loot.js');
-      Object.assign(window,{towerCharacterArt},rules,hunting,loungeUI,art,fx,environment,quests,historyRules,shopUI,clothing,progression,woodRules,crafting,cooking,regionCatalog,explorationFog,worldActivity,playerVitals,familiars,autoFeedback,characterRules,commissions,essences,depths,dungeonArena,dungeonAdds,jobs,shared,multiplayer,training,dungeonLoot);
+      Object.assign(window,{towerCharacterArt},rules,hunting,loungeUI,art,fx,environment,quests,historyRules,shopUI,clothing,progression,woodRules,crafting,cooking,regionCatalog,explorationFog,worldActivity,playerVitals,familiars,wildlife,autoFeedback,characterRules,commissions,essences,depths,dungeonArena,dungeonAdds,jobs,shared,multiplayer,training,dungeonLoot);
       window.towerInitialState=packet.state;
       window.playerCloud={enqueue,flush,attach,combatNow:()=>combatClock.now(),gameplay:async(name,body={})=>{
         if(gameplayBusy)throw new Error('Wait for your current action to finish.');

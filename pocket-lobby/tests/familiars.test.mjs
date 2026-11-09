@@ -1,3 +1,6 @@
+import {wildlifeRoom,wildAnimal,wildlifeAnimals,nearWildAnimal,TAMING_PAUSE_MS} from '../public/wildlife.js';
+import {moonwood} from '../public/moonwood.js';
+import {validRoomTile,roomBoxes,reachableMove,socialRooms} from '../public/shared-world.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {normalizeState,startPlan} from '../server/player-state.mjs';
@@ -9,17 +12,48 @@ import {spawnAddWave} from '../public/dungeon-adds.js';
 import {huntingTurn} from '../public/hunting.js';
 
 const act=(s,action,body={},now=1000)=>applyGameplayAction(s,action,body,now,()=>.5);
-const bond=(s,id)=>{act(s,'familiarRecruit',{id});act(s,'familiarEquip',{id});};
+const bond=(s,id)=>{s.familiars=normalizeFamiliars({...s.familiars,owned:[...(s.familiars?.owned??[]),id]});act(s,'familiarEquip',{id});};
 
-test('recruitment requires a milestone, equips one familiar and protects ownership on snapshot saves',()=>{
+test('only taming a resting animal nearby forms a bond and the first bond equips automatically',()=>{
  const s=normalizeState({history:{fishCaught:true},adventure:{lantern:true}});
- assert.throws(()=>act(s,'familiarRecruit',{id:'fox'}),/unlock/);
+ assert.throws(()=>act(s,'familiarRecruit',{id:'otter'}),/Reserve/);
  assert.throws(()=>act(s,'familiarEquip',{id:'otter'}),/Befriend/);
- bond(s,'otter');bond(s,'owl');act(s,'familiarRecruit',{id:'owl'});
- assert.deepEqual(s.familiars.owned,['otter','owl']);assert.equal(s.familiars.equipped,'owl');
- const normalized=normalizeState(s);assert.deepEqual(normalized.familiars,s.familiars);
- assert.deepEqual(protectFishingState(s,{...s,familiars:{owned:['fox'],equipped:'fox'}}).familiars,s.familiars);
- assert.equal(publicPeer({familiar:s.familiars.equipped}).familiar,'owl');assert.equal(publicPeer({familiar:'unknown'}).familiar,undefined);
+ assert.throws(()=>act(s,'familiarTame',{id:'reed-otter',step:0}),/reserve/);
+ s.location=wildlifeRoom;s.position={x:1,y:9};
+ assert.throws(()=>act(s,'familiarTame',{id:'reed-otter',step:0}),/beside/);
+ s.position={x:4,y:9};act(s,'familiarTame',{id:'reed-otter',step:0});
+ assert.equal(s.familiars.trust['reed-otter'].step,1);
+ assert.throws(()=>act(s,'familiarTame',{id:'reed-otter',step:0},1001),/changed/);
+ assert.throws(()=>act(s,'familiarTame',{id:'reed-otter',step:1},1001),/settle/);
+ assert.throws(()=>act(s,'familiarTame',{id:'bank-otter',step:1},2800),/beside/);
+ act(s,'familiarTame',{id:'reed-otter',step:1},1000+TAMING_PAUSE_MS);
+ act(s,'familiarTame',{id:'reed-otter',step:2},1000+2*TAMING_PAUSE_MS);
+ assert.deepEqual(s.familiars.owned,['otter']);assert.equal(s.familiars.equipped,'otter');assert.deepEqual(s.familiars.trust,{});
+ assert.equal(publicPeer({familiar:s.familiars.equipped}).familiar,'otter');assert.equal(publicPeer({familiar:'unknown'}).familiar,undefined);
+});
+
+test('reserve routes stay on land with reachable habitats and enough room for players',()=>{
+ const entrance=moonwood.doors.trail.find(door=>door.to===wildlifeRoom),exit=moonwood.doors[wildlifeRoom].find(door=>door.to==='trail');
+ assert.deepEqual(entrance.arrival,exit.inside);assert.deepEqual(socialRooms[wildlifeRoom],[24,20]);
+ const boxes=roomBoxes(wildlifeRoom),resting=new Set();
+ for(let at=0;at<70000;at+=250)for(const animal of wildlifeAnimals(at)){
+  assert(validRoomTile(wildlifeRoom,Math.round(animal.x),Math.round(animal.y),boxes),`${animal.id} crosses blocked tile at ${animal.x},${animal.y}`);
+  if(!animal.resting)continue;
+  const key=`${animal.id}:${animal.x},${animal.y}`;if(resting.has(key))continue;resting.add(key);
+  assert(reachableMove(wildlifeRoom,entrance.arrival,{x:animal.x,y:animal.y},boxes,100));
+ }
+ assert(resting.size>=20);assert.notDeepEqual(wildAnimal('reed-otter',10000),wildAnimal('reed-otter',10600));
+ assert.equal(nearWildAnimal({x:4,y:9},wildAnimal('reed-otter',1000)),true);
+});
+
+test('partial trust is saved by animal, personal, and protected from snapshot edits',()=>{
+ const s=normalizeState({location:wildlifeRoom,position:{x:4,y:9}}),other=structuredClone(s);
+ act(s,'familiarTame',{id:'reed-otter',step:0});assert.equal(other.familiars,undefined);
+ const loaded=normalizeState(s);assert.deepEqual(loaded.familiars,s.familiars);
+ const forged={owned:['fox'],equipped:'fox',trust:{'reed-otter':{step:2,readyAt:0}}};
+ assert.deepEqual(protectFishingState(s,{...s,familiars:forged}).familiars,s.familiars);
+ const veteran=normalizeState({location:wildlifeRoom,position:{x:22,y:18},familiars:{owned:['owl'],equipped:'owl'}});
+ assert.deepEqual(veteran.position,{x:22,y:18});assert.deepEqual(veteran.familiars.owned,['owl']);assert.equal(veteran.familiars.equipped,'owl');
 });
 
 test('Otter speeds the server bite, recovers a missed bonus once and preserves the normal catch reward',()=>{

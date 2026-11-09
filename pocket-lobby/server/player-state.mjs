@@ -1,3 +1,4 @@
+import {wildlifeRoom,wildlifeView} from '../public/wildlife.js';
 import {normalizeVitals,useHunger} from '../public/player-vitals.js';
 import {watchRooms,watchFlags,willowmereRooms,isFishingRoom} from '../public/region-catalog.js';
 import {normalizeFamiliars,familiarFishingTime} from '../public/familiars.js';
@@ -47,7 +48,7 @@ function furniture(items){
     return {id:item.id,type:item.type,x:item.x,y:item.y,rot:item.rot};
   });
 }
-const locations=new Set([...watchRooms,...willowmereRooms,"home","tailor","furnishings","hub","lounge","outside","store","market","trail","grove","creek","shrine","ruins","roots","pond","clearing","armory","logging",...depthsStages.map(stage=>stage.room),depthsCacheRoom,...Object.values(depthsSideRooms).map(side=>side.room)]);
+const locations=new Set([wildlifeRoom,...watchRooms,...willowmereRooms,"home","tailor","furnishings","hub","lounge","outside","store","market","trail","grove","creek","shrine","ruins","roots","pond","clearing","armory","logging",...depthsStages.map(stage=>stage.room),depthsCacheRoom,...Object.values(depthsSideRooms).map(side=>side.room)]);
 function normalizeFirstUpgrade(input){
   if(input===undefined)return {unlocked:false,choice:null,complete:false,sale:null};
   if(!input||typeof input!=='object'||Array.isArray(input)||typeof input.unlocked!=='boolean'||typeof input.complete!=='boolean'||![null,'fishing','combat'].includes(input.choice))throw new Error('Invalid first upgrade.');
@@ -79,7 +80,7 @@ export function normalizeState(input={}){
   const a=input.adventure??{};
   const adventure={};
   for(const id of [...watchFlags,"lantern","groveTrail","bridge","shrine","shortcut"])adventure[id]=a[id]===true;
-  adventure.discovered=[...new Set((Array.isArray(a.discovered)?a.discovered:[]).filter(id=>[...watchRooms,...willowmereRooms,"trail","grove","creek","shrine","ruins","roots","pond","clearing","logging"].includes(id)))];
+  adventure.discovered=[...new Set((Array.isArray(a.discovered)?a.discovered:[]).filter(id=>[wildlifeRoom,...watchRooms,...willowmereRooms,"trail","grove","creek","shrine","ruins","roots","pond","clearing","logging"].includes(id)))];
   const avatar=input.avatar??{name:"Guest",outfit:0,hair:0};
   if(typeof avatar.name!=="string"||avatar.name.length>20||!Number.isInteger(avatar.outfit)||avatar.outfit<0||avatar.outfit>12||!Number.isInteger(avatar.hair)||avatar.hair<0||avatar.hair>4)throw new Error("Invalid appearance.");
   const wardrobe=normalizeWardrobe(input.wardrobe,avatar);
@@ -98,7 +99,7 @@ export function normalizeState(input={}){
     woodcutting:normalizeWoodcutting(input.woodcutting),history:normalizeHistory(input),quest:normalizeQuest(input.quest),combatGear,hunting,fishStock,huntingLoot:counts(input.huntingLoot),adventure,
     wardrobe,avatar:outfitAppearance(wardrobe,{name:avatar.name.trim()||"Guest",hair:avatar.hair}),
     location:locations.has(input.location)?input.location:"home",
-    position:position&&Number.isInteger(position.x)&&Number.isInteger(position.y)&&position.x>=0&&position.y>=0&&position.x<18&&position.y<16?{x:position.x,y:position.y}:null,
+    position:position&&Number.isInteger(position.x)&&Number.isInteger(position.y)&&position.x>=0&&position.y>=0&&position.x<(input.location===wildlifeRoom?wildlifeView.cols:18)&&position.y<(input.location===wildlifeRoom?wildlifeView.rows:16)?{x:position.x,y:position.y}:null,
     furniture:furniture(input.furniture),homeFurniture:furniture(input.homeFurniture??[])
   };
   state.ownedFurniture=counts(input.ownedFurniture??{bed:1});

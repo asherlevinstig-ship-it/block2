@@ -72,7 +72,7 @@ const ownedFurniture=Object.fromEntries(Object.keys(types).map(type=>{
   return [type,Math.max(previousStock[type]??(type==='bed'?1:0),placed+oldLounge)];
 }));
 const availableFurniture=type=>(ownedFurniture[type]??0)-countFurniture(homeFurniture,type);
-let familiarState=normalizeFamiliars(savedPlayerState?.familiars);
+let familiarState=normalizeFamiliars(savedPlayerState?.familiars),selectedWildAnimal=null,wildlifeAffection=null,wildlifeFeedback=null;
 const adventure={lantern:false,groveTrail:false,bridge:false,shrine:false,shortcut:false,discovered:[],silverfin:0,...savedPlayerState?.adventure};
 let depthsRun=savedPlayerState?.depthsRun??null,depthsExploring=false;
 let depthsDiscovered=savedPlayerState?.depthsDiscovered===true||!!depthsRun
@@ -1391,20 +1391,89 @@ function renderFamiliars(){
  const cards=$('familiarCards');cards.replaceChildren();
  for(const [id,item] of Object.entries(familiars)){
   const owned=familiarState.owned.includes(id),equipped=familiarState.equipped===id;
-  const unlocked=familiarUnlocked({history,adventure,depthsDiscovered},id);
   const card=document.createElement('article');card.className='familiar-card';card.dataset.equipped=String(equipped);card.style.setProperty('--familiar-color',item.color);
   const header=document.createElement('header'),art=document.createElement('canvas'),copy=document.createElement('div'),title=document.createElement('h3'),tag=document.createElement('small');
   art.width=48;art.height=46;art.setAttribute('aria-hidden','true');drawFamiliar(art.getContext('2d'),id,24,id==='owl'?46:36,0,{scale:3,reduced:true});
-  title.textContent=item.name;tag.textContent=equipped?'Equipped':owned?'Befriended':unlocked?'Ready to befriend':item.unlock;copy.append(title,tag);header.append(art,copy);card.append(header);
+  title.textContent=item.name;tag.textContent=equipped?'Equipped':owned?'Bonded':item.unlock;copy.append(title,tag);header.append(art,copy);card.append(header);
   for(const [name,detail] of [[item.passive,item.perk],[item.ability,item.detail]]){const p=document.createElement('p'),b=document.createElement('b');b.textContent=name;const description=document.createElement('span');description.textContent=detail;p.append(b,description);card.append(p);}
-  const actions=document.createElement('div'),button=document.createElement('button');actions.className='familiar-actions';button.type='button';button.textContent=equipped?'Unequip':owned?'Equip':unlocked?'Befriend':'Locked';button.disabled=!owned&&!unlocked;
-  button.onclick=async()=>{try{await serverGameplay(owned?'familiarEquip':'familiarRecruit',{id:equipped?null:id});$('familiarStatus').textContent=equipped?'Familiar unequipped.':item.name+(owned?' equipped.':' befriended. You can equip it now.');renderFamiliars();}catch(error){$('familiarStatus').textContent=error.message;}};
+  const actions=document.createElement('div'),button=document.createElement('button');actions.className='familiar-actions';button.type='button';button.textContent=equipped?'Unequip':owned?'Equip':'Find in reserve';
+  button.onclick=async()=>{if(!owned){guideToWildlife(id);return;}try{await serverGameplay('familiarEquip',{id:equipped?null:id});$('familiarStatus').textContent=equipped?'Familiar unequipped.':item.name+' equipped.';renderFamiliars();}catch(error){$('familiarStatus').textContent=error.message;}};
   actions.append(button);
   if(equipped){const use=document.createElement('button');use.type='button';use.textContent=item.ability;use.onclick=()=>useFamiliar();actions.append(use);}
   card.append(actions);cards.append(card);
  }
 }
 $('openFamiliars').onclick=()=>{$('familiarStatus').textContent='';renderFamiliars();if(!$('familiarsDialog').open)$('familiarsDialog').showModal();};
+
+function guideToWildlife(kind){
+ $('familiarsDialog').close();
+ if(currentRoom===wildlifeRoom){if(kind)seekWildSpecies(kind);return;}
+ const path=hudRoute(wildlifeRoom);
+ if(!path.length){note('Speak to the Tower Warden to open the outdoor routes.');return;}
+ setExplorationDestination(wildlifeRoom);note('Follow the marked route through Lantern Trail to the reserve.');
+}
+$('familiarReserveRoute').onclick=()=>guideToWildlife();
+for(const [id,kind] of [['wildlifeOtter','otter'],['wildlifeFox','fox'],['wildlifeOwl','owl']]){
+ $(id).onclick=()=>seekWildSpecies(kind);
+}
+function seekWildSpecies(kind){
+ const animals=wildlifeAnimals(combatNow()).filter(animal=>animal.kind===kind);
+ animals.sort((a,b)=>Math.hypot(a.x-player.cx,a.y-player.cy)-Math.hypot(b.x-player.cx,b.y-player.cy));
+ if(animals[0])selectWildAnimal(animals[0].id);
+}
+function selectWildAnimal(id){
+ const animal=wildAnimal(id,combatNow());if(currentRoom!==wildlifeRoom||!animal)return;
+ if(selectedWildAnimal!==id)wildlifeFeedback=null;
+ selectedWildAnimal=id;
+ if(nearWildAnimal(startPosition(),animal))return;
+ const candidates=directions.map(([dx,dy])=>({x:Math.round(animal.x)+dx,y:Math.round(animal.y)+dy}));
+ const paths=candidates.filter(tile=>!blocked(tile.x,tile.y)).map(tile=>({tile,path:walkingPath(startPosition(),tile)})).filter(p=>p.path);
+ paths.sort((a,b)=>a.path.length-b.path.length);if(paths[0])walkTo(paths[0].tile);
+}
+function updateWildlifeGuide(){
+ const guide=$('wildlifeGuide');guide.hidden=currentRoom!==wildlifeRoom;
+ if(guide.hidden)return;
+ const now=combatNow(),animal=wildAnimal(selectedWildAnimal,now),action=$('wildlifeAction');
+ if(!animal){$('wildlifeEyebrow').textContent='WILDLIFE RESERVE';$('wildlifeTitle').textContent='Meet the wild animals';$('wildlifeHint').textContent='Choose a habitat or click an animal. Walk up when it stops.';action.hidden=true;return;}
+ const species=familiars[animal.kind],habitat=wildlifeHabitats[animal.kind],bonded=familiarState.owned.includes(animal.kind),trust=familiarState.trust[animal.id]??{step:0,readyAt:0};
+ const near=!step&&!route.length&&nearWildAnimal({x:player.cx,y:player.cy},animal),waiting=now<trust.readyAt;
+ $('wildlifeEyebrow').textContent=bonded?'BONDED · '+habitat.name:habitat.name.toUpperCase()+' · TRUST '+trust.step+' / '+TAMING_STEPS;
+ $('wildlifeTitle').textContent=species.name;
+ const feedback=wildlifeFeedback?.until>now?wildlifeFeedback.text:null;
+ $('wildlifeHint').textContent=feedback??(bonded?'This species is in your Familiars collection.':!animal.resting?'It is roaming. Wait for it to settle.':!near?'Walk beside the animal when it stops.':waiting?'Stay still and let the animal get used to you.':trust.step===0?'Let it see you before you reach out.':trust.step===1?'Offer a free snack from the reserve.':'It trusts you. Reach out to form a bond.');
+ action.hidden=bonded;action.disabled=!animal.resting||!!step||route.length>0||near&&waiting||serverActionBusy||unavailable();
+ action.textContent=near?['Sit quietly',habitat.treat,'Form a bond'][trust.step]:'Walk closer';
+}
+$('wildlifeAction').onclick=async()=>{
+ const animal=wildAnimal(selectedWildAnimal,combatNow());if(!animal||$('wildlifeAction').disabled||!window.playerCloud?.gameplay)return;
+ if(!nearWildAnimal({x:player.cx,y:player.cy},animal)){selectWildAnimal(animal.id);return;}
+ const trustStep=familiarState.trust[animal.id]?.step??0;
+ try{
+  await serverGameplay('familiarTame',{id:animal.id,step:trustStep});
+  wildlifeFeedback=null;wildlifeAffection={id:animal.id,at:performance.now()};
+  if(familiarState.owned.includes(animal.kind))showTransaction('Familiar bonded',[{icon:'✦',text:familiars[animal.kind].name+(familiarState.equipped===animal.kind?' · Equipped':' · Find it in Familiars')}]);
+  updateWildlifeGuide();
+ }catch(error){wildlifeFeedback={text:error.message,until:combatNow()+3000};updateWildlifeGuide();}
+};
+function drawWildAnimal(animal,time){
+ const [x,y]=point(animal.x+.5,animal.y+.5);
+ const selected=selectedWildAnimal===animal.id,near=nearWildAnimal(player,animal),color=familiars[animal.kind].color;
+ if(selected||near)surface(animal.x+.08,animal.y+.08,.84,.84,.7,color+'24',color);
+ surface(animal.x+.22,animal.y+.23,.56,.54,.4,'#233f355b');
+ drawFamiliar(ctx,animal.kind,x,y+2,time,{scale:2,flipped:animal.flipped,reduced:reducedMotion.matches,walking:!animal.resting});
+ const height=animal.kind==='owl'?36:23;
+ const age=wildlifeAffection?.id===animal.id?time-wildlifeAffection.at:Infinity;
+ if(age>=0&&age<900){
+  const top=y-height-5-(reducedMotion.matches?0:age/65);
+  ctx.save();ctx.globalAlpha=1-age/900;
+  polygon([[x,top+5],[x-5,top],[x-3,top-4],[x,top-2],[x+3,top-4],[x+5,top]],'#fac7a3');ctx.restore();
+ }
+ if(selected||near){
+  const trust=familiarState.trust[animal.id]?.step??0;
+  for(let i=0;i<TAMING_STEPS;i++)rect(x-9+i*7,y-height,5,3,i<trust?color:'#243948');
+ }else if(animal.resting){rect(x-1,y-height,3,3,color);}
+ hitboxes.push({item:{type:'wildAnimal',animalId:animal.id},shape:[[x-14,y+5],[x+14,y+5],[x+14,y-height-4],[x-14,y-height-4]]});
+}
 
 function updateDungeonArenaHud(){
  const e=hunting.encounter,enemy=e?huntEnemy(e):dungeonEnemyPreview(huntEnemyForRoom(currentRoom)),panel=$('dungeonArenaHud');
@@ -2427,7 +2496,7 @@ const roomLayers={
   armory:makeRoomLayer(()=>drawFishingStore('armory'))
 };
 for(const id of Object.keys(moonwood.areas)){
-  roomLayers[id]=makeRoomLayer(()=>moonwood.drawGround(id,worldDrawing),moonwood.view);
+  roomLayers[id]=makeRoomLayer(()=>moonwood.drawGround(id,worldDrawing),id===wildlifeRoom?wildlifeView:moonwood.view);
 }
 function drawMoonwoodDetails(time){
   moonwood.drawWater(currentRoom,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,depthsRun,progress:adventure});
@@ -2458,10 +2527,11 @@ const explorationRegions={
   'The Tower':['home','hub','outside','lounge','market','armory','store','furnishings','tailor'],
   Willowmere:willowmereRooms,
   Beaconwatch:watchRooms,
-  Moonwood:['trail','logging','clearing','grove','shrine','creek','pond','ruins','roots']
+  Moonwood:['trail',wildlifeRoom,'logging','clearing','grove','shrine','creek','pond','ruins','roots']
 };
 let trackedDestination=null;
 function explorationName(room){
+  if(room===wildlifeRoom)return 'Wildlife Reserve';
   if(room==='starfall'&&!adventure.discovered.includes('starfall'))return 'Root crack · Explore';
   return {home:'Your Home',hub:'Grand Lobby',market:'Trading Post',store:'Silverfin Outfitters',outside:'Tower Courtyard'}[room]??roomDetails[room].name;
 }
@@ -2533,6 +2603,7 @@ function updateWorldLabels(){
     add(symbol+'Tower Warden',...point(10.5,3.5,46),'npc',()=>use(hubFurniture.find(item=>item.type==='warden')),questStage(quest)===0?'Start here · Earn your first gold':'');
   }
   if(currentRoom==='outside')add('Training courtyard',...point(9.5,4.5,66),'npc',()=>use(courtyardFurniture.find(item=>item.type==='trainingDummy')),'Safe combat practice');
+  if(currentRoom===wildlifeRoom)for(const habitat of Object.values(wildlifeHabitats))add(habitat.name,...point(habitat.anchor.x+.5,habitat.anchor.y+.5,19),'sign');
   if(currentRoom==='trail'){
     const campfire=roomFurniture().find(item=>item.type==='campfire');
     add('Campfire',...point(campfire.x+.5,campfire.y+.5,32),'npc',()=>use(campfire));
@@ -2622,7 +2693,8 @@ function draw(time){
     const amount=reducedMotion.matches?1:Math.min(1,Math.max(0,time-peer.lastFrame)/90);
     peer.rx+=(peer.x-peer.rx)*amount;peer.ry+=(peer.y-peer.ry)*amount;peer.lastFrame=time;
   }
-  const items=[...roomFurniture(),...[...remotePeers.values()].map(peer=>({type:'remotePlayer',x:peer.rx,y:peer.ry,peer}))];
+  const wild=currentRoom===wildlifeRoom?wildlifeAnimals(combatNow()).map(animal=>({...animal,type:'wildAnimal'})):[];
+  const items=[...roomFurniture(),...wild,...[...remotePeers.values()].map(peer=>({type:'remotePlayer',x:peer.rx,y:peer.ry,peer}))];
   if(enemy&&time-combatArt.victoryAt>=0&&time-combatArt.victoryAt<1300){
     const monster=moonwood.layouts[currentRoom].scenery.find(item=>item.type===enemy.prop);
     items.push({...monster,id:'defeated-'+enemy.id,defeated:true});
@@ -2678,6 +2750,7 @@ function draw(time){
   for(const item of items){
     if(!drawn&&playerDepth<depth(item)){drawPlayer();drawn=true;}
     if(item.type==='remotePlayer'){drawRemote(item.peer,time);continue;}
+    if(item.type==='wildAnimal'){drawWildAnimal(item,time);continue;}
     ctx.globalAlpha=item===ghost?.52:ghost&&selection?.id===item.id?.4:1;
 
     const treeHover=isTimberTree(item)&&item===hoverItem&&!treeState(item).regrowsAt;
@@ -3084,6 +3157,7 @@ function updateExplorationNav(){
   $('explorationRegion').textContent=watchRooms.includes(currentRoom)?'BEACONWATCH':willowmereRooms.includes(currentRoom)?'WILLOWMERE':explorationRegions.Moonwood.includes(currentRoom)?'MOONWOOD':'THE TOWER';
   $('explorationPlace').textContent=explorationName(currentRoom);
   let guidance=watchRooms.includes(currentRoom)?(currentRoom==='beaconwatch'&&adventure.watchBeacon?'Beacon restored. The Mill Bridge is now open.':currentRoom==='starfall'&&adventure.grottoCache?'Treasure recovered. Follow the root tunnel back to Thornwood.':watchGuidance[currentRoom]):currentRoom==='millbrook'?'Northern road → Beaconwatch expedition.':'Choose a destination on the map';
+  if(currentRoom===wildlifeRoom)guidance='Click an animal or choose a habitat to start taming.';
   if(next)guidance='Next: '+explorationName(next.to)+' · Heading to '+explorationName(trackedDestination);
   else if(trackedDestination===currentRoom)guidance='Arrived at '+explorationName(currentRoom);
   else if(trackedDestination)guidance='No open route to '+explorationName(trackedDestination)+' from here';
@@ -3114,7 +3188,7 @@ function navigateHud(destination){
 function worldMapVisibility(){
  return explorationVisibility({currentRoom,discovered:adventure.discovered,knownRooms:explorationRegions['The Tower'],rooms:Object.keys(roomDetails),exits:hudRoomExits,scout:familiarState.equipped==='owl'&&canScoutHere()});
 }
-function mapPlaceName(room){return worldMapVisibility().status(room)==='discovered'?explorationName(room):'Unexplored';}
+function mapPlaceName(room){if(room===wildlifeRoom)return explorationName(room);return worldMapVisibility().status(room)==='discovered'?explorationName(room):'Unexplored';}
 function mapRouteVisible(room){const fog=worldMapVisibility(),path=hudRoute(room);return fog.status(room)!=='hidden'&&path.every((door,i)=>fog.known.has(door.to)||i===path.length-1);}
 function previewMapRoute(){
   const destination=$('mapDestination').value;
@@ -3205,6 +3279,7 @@ function drawHudMiniMap(){
   ink.strokeStyle='#72583b';ink.stroke();
 }
 function use(item){
+  if(item.type==='wildAnimal'){selectWildAnimal(item.animalId);return;}
   if(player.inCombat&&hunting.encounter?.addsVersion===1&&(item.addId||item.type===huntEnemyForRoom(currentRoom)?.prop)){sendServerCombat('target',item.addId??'leader');return;}
   if(isTimberTree(item)){
     if(woodSession?.tree===item){note('Your chop is already in progress.');return;}
@@ -3539,7 +3614,7 @@ function advanceAnimation(time){
   if(!showVaultVictory()){showPendingDungeonLoot();showPendingCombatRecap();}
   if(serverActionBusy){draw(time);return;}
   updateWoodMoment(time);
-  updateCombatMoment(time);
+  updateCombatMoment(time);updateWildlifeGuide();
   updateFishingMoment(time);
   if(patienceTween){
     const t=reducedMotion.matches?1:Math.min(1,(time-patienceTween.started)/1000);
@@ -3748,7 +3823,7 @@ function openMerchant(){
 
 function renderWorldMap(route=[]){
   const positions={...watchMapPositions,...willowmereMapPositions,home:[100,55],hub:[340,110],armory:[265,48],market:[465,48],tailor:[180,70],furnishings:[435,145],lounge:[580,75],store:[118,133],
-    outside:[340,205],trail:[340,315],logging:[107,288],clearing:[109,380],grove:[563,274],shrine:[563,354],
+    outside:[340,205],trail:[340,315],logging:[107,288],clearing:[109,380],[wildlifeRoom]:[514,411],grove:[563,274],shrine:[563,354],
     creek:[338,423],pond:[138,497],ruins:[340,549],roots:[549,493],depthsGate:[340,120],depthsGallery:[340,120],depthsCache:[340,120],depthsTreasury:[340,120],depthsRest:[340,120],depthsTrial:[340,120],depthsVault:[340,120]};
   const rooms=Object.keys(positions).filter(room=>roomDetails[room]&&(room===currentRoom||hudNextDoor(room)));
   const fog=worldMapVisibility();
@@ -3763,7 +3838,7 @@ function renderWorldMap(route=[]){
       if(!rooms.includes(door.to)||fog.status(door.to)==='hidden'||status!=='discovered'&&!fog.known.has(door.to))continue;const key=[room,door.to].sort().join('|');if(linked.has(key))continue;linked.add(key);
       const [dx,dy]=positions[door.to];links+='<path class="'+(routeEdges.has(key)?'map-route-line':'')+'" d="M'+x+' '+y+'L'+dx+' '+dy+'"/>';
     }
-    const name=status==='frontier'?'Unexplored':explorationName(room);
+    const name=status==='frontier'&&room!==wildlifeRoom?'Unexplored':explorationName(room);
     nodes+='<g class="map-place'+(room===currentRoom?' map-current':'')+(status==='frontier'?' map-frontier':'')+'"><circle cx="'+x+'" cy="'+y+'" r="'+(room===currentRoom?13:8)+'"/>'+(status==='frontier'?'<text class="map-question" x="'+x+'" y="'+(y+4)+'" text-anchor="middle">?</text>':'')+'<text x="'+x+'" y="'+(y+29)+'" text-anchor="middle">'+name+'</text>'+(room===currentRoom?'<text class="map-you" x="'+x+'" y="'+(y-22)+'" text-anchor="middle">YOU ARE HERE</text>':'')+'</g>';
   }
   const ys=rooms.map(room=>positions[room][1]),bottom=Math.max(160,...ys)+48;
@@ -4621,6 +4696,7 @@ function castEquippedEssence(slot='q'){
   if(equippedEssenceStatus(Date.now(),slot).canCast)sendServerCombat('essence',slot);
 }
 function currentActivityPrompt(){
+  if(currentRoom===wildlifeRoom)return null;
   if(currentRoom==='outside')return {label:'SAFE COMBAT PRACTICE',title:'Training courtyard',text:'Learn dodge, counter, stagger and weak spots. Try weapons without health loss or item use.',action:'courtyardPractice'};
   if(currentRoom==='hub'&&!lobbyRoutesOpen()){
     return {label:'YOUR NEXT STEP',title:'Meet the Tower Warden',text:'Speak to the Warden to begin your adventure.',action:'visitWarden'};
@@ -5568,10 +5644,10 @@ function enterRoom(next,arrival,{automatic=false}={}){
   catchReveal=null;$('catchReveal').hidden=true;
   const focusRoom=!!document.activeElement.closest('[data-room-link]');
   if(next==='market'&&tradingGuideActive()){if(quest.claimed)tradingPostGuideComplete=true;tradeGuideRouteCache=null;}
-  currentRoom=next;$('gameShell').dataset.expedition=watchRooms.includes(next)?next:'';
+  currentRoom=next;selectedWildAnimal=null;wildlifeAffection=null;wildlifeFeedback=null;$('gameShell').dataset.expedition=watchRooms.includes(next)?next:'';
   depthsExploring=false;
   const exploring=moonwood.has(next);
-  const nextView=exploring?moonwood.view:next==='hub'?hubView:next==='outside'?courtyardView:standardView;
+  const nextView=next===wildlifeRoom?wildlifeView:exploring?moonwood.view:next==='hub'?hubView:next==='outside'?courtyardView:standardView;
   if(view!==nextView){
     view=nextView;
     canvas.width=view.width;
@@ -5586,6 +5662,7 @@ function enterRoom(next,arrival,{automatic=false}={}){
   $('roomLayout').classList.toggle('outside',next==='outside');
   $('roomLayout').classList.toggle('moonwood',exploring);
   $('roomLayout').dataset.depths=depthsIndex>=0?next:'';
+  $('roomLayout').dataset.wildlife=String(next===wildlifeRoom);
   $('roomNumber').textContent=number;
   $('roomName').textContent=name;
   $('roomDescription').textContent=description;

@@ -1,3 +1,5 @@
+import {drawReserveGround,drawReserveWater} from './wildlife-art.js';
+import {wildlifeRoom,wildlifeView,wildlifeArea,reserveWater} from './wildlife.js';
 import {watchAreas,watchRooms,watchWater,willowmereAreas,willowmereRooms,riverWater,riverBridge} from './region-catalog.js';
 import {drawRiverGround,drawRiverWater,drawRiverProp,riverPropHeights} from './willowmere-art.js';
 import {drawWatchGround,drawWatchProp,drawWatchAtmosphere,watchPropHeights} from './watch-art.js';
@@ -9,6 +11,7 @@ export const moonwood=(()=>{
   const view={width:540,height:349,cols:12,rows:10,originX:252,originY:105};
   const seed='moonwood-01';
   const areas={
+    [wildlifeRoom]:wildlifeArea,
     ...willowmereAreas,...watchAreas,
     depthsGate:{number:'D1',name:'Flooded Gate',description:'Broken walkways surround a flooded gate. A Mire Skitter darts between the stones. Pull the sluice lever to reach the far passage.',badge:'MOONWELL DEPTHS',floor:'Chamber 1',center:[4,5],palette:['#31454e','#405961','#7a8a89'],landmark:['depthsSkitter',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['wildrock',2,7],['wildrock',9,7],['sluiceLever',3,4],['gateSupply',10,4]]},
     depthsGallery:{number:'D2',name:'Shell Gallery',description:'Roots split this ancient hall. A stone Shell Warden guards the passage. Escape its slam, then strike its exposed core. A shell chime reveals a secret cache.',badge:'MOONWELL DEPTHS',floor:'Chamber 2',center:[4,5],palette:['#344b45','#4a6054','#84947b'],landmark:['depthsWarden',6,5,5,5],authored:[['pillar',2,3],['pillar',8,3],['wildrock',3,7],['wildrock',7,7],['glowFungus',4,2],['glowFungus',9,3],['glowFungus',5,8],['shellChime',3,3],['galleryCache',9,6],['cachePassage',10,4]]},
@@ -45,6 +48,7 @@ export const moonwood=(()=>{
   connect('creek','reedwater',[8,9,8,8,'CREEK'],[0,4,1,4,'VALLEY']);
   connect('reedwater','willowbank',[11,4,10,4,'CROSSING'],[0,5,1,5,'WILLOWBANK']);
   connect('willowbank','millbrook',[3,0,3,1,'WILLOWBANK'],[0,6,1,6,'MILLBROOK']);
+  connect('trail',wildlifeRoom,[10,0,10,1,'LANTERN TRAIL'],[0,9,1,9,'WILDLIFE RESERVE']);
   connect('trail','logging',[9,9,9,8,'TRAIL'],[0,5,1,5,'TIMBER']);
   connect('trail','clearing',[7,0,7,1,'TRAIL'],[0,5,1,5,'HUNT']);
   connect('trail','grove',[4,0,4,1,'TRAIL'],[0,5,1,5,'GROVE']);
@@ -57,7 +61,7 @@ export const moonwood=(()=>{
   doors.trail.unshift({to:'outside',side:'wild',tile:{x:0,y:5},inside:{x:1,y:5},arrival:{x:6,y:10},label:'TOWER'});
   const key=(x,y)=>x+','+y;
   const has=id=>Object.hasOwn(areas,id);
-  const isWater=(id,x,y)=>watchRooms.includes(id)?watchWater(id,x,y):willowmereRooms.includes(id)?riverWater(id,x,y):id==='pond'?x>=6:id==='creek'?x===5:id==='depthsGate'&&x===8;
+  const isWater=(id,x,y)=>id===wildlifeRoom?reserveWater(x,y):watchRooms.includes(id)?watchWater(id,x,y):willowmereRooms.includes(id)?riverWater(id,x,y):id==='pond'?x>=6:id==='creek'?x===5:id==='depthsGate'&&x===8;
   const blocked=(id,x,y,progress,depthsRun)=>!dungeonFloor(id,x,y)||isWater(id,x,y)&&!riverBridge(id,x,y)&&!(y===4&&(
     id==='creek'&&progress.bridge||id==='depthsGate'&&depthsRun?.finds?.includes('sluiceLever')
   ));
@@ -129,9 +133,10 @@ export const moonwood=(()=>{
   const layouts=Object.fromEntries(Object.keys(areas).map(id=>[id,generate(id)]));
 
   function drawGround(id,{point,polygon,surface,block,rect}){
-    const {cols,rows}=view, area=areas[id], path=layouts[id].path;
+    const {cols,rows}=id===wildlifeRoom?wildlifeView:view, area=areas[id], path=layouts[id].path;
     const [ground,light,trail]=area.palette;
     if(dungeonRooms.includes(id)){drawDungeonGround(id,{point,polygon,surface,block,rect});return;}
+    if(id===wildlifeRoom){drawReserveGround({point,polygon,surface,block,rect});return;}
     polygon([point(-.25,-.3,-7),point(cols+.36,-.3,-8),point(cols+.37,rows+.42,-8),point(-.25,rows+.42,-8)],'#0c18268c');
     block(0,0,cols,rows,-9,9,[ground,'#273244','#202a3c']);
     if(watchRooms.includes(id)){drawWatchGround(id,{point,polygon,surface,block,rect,path});return;}
@@ -167,6 +172,7 @@ export const moonwood=(()=>{
     }
   }
   function drawWater(id,time,{point,surface,block,ctx,reduced,depthsRun,progress={}}){
+    if(id===wildlifeRoom){drawReserveWater(time,{point,surface,reduced});return;}
     if(watchRooms.includes(id)){drawWatchAtmosphere(id,time,{point,surface,block,ctx,reduced,progress});return;}
     if(willowmereRooms.includes(id)){drawRiverWater(id,time,{point,surface,ctx,reduced});return;}
     if(!['creek','pond','depthsGate'].includes(id))return;

@@ -1,6 +1,7 @@
+import {wildlifeRoom,wildlifeView,wildlifeArea,reserveWater} from './wildlife.js';
 import {watchRooms,watchAreas,watchWater,watchDimensions,willowmereRooms,willowmereAreas,riverDimensions,riverWater,riverBridge} from './region-catalog.js';
-export const socialRooms={...Object.fromEntries([...willowmereRooms,...watchRooms].map(id=>[id,[12,10]])),grove:[12,10],shrine:[12,10],roots:[12,10],pond:[12,10],logging:[12,10],clearing:[12,10],ruins:[12,10],trail:[12,10],creek:[12,10],tailor:[10,10],furnishings:[10,10],hub:[18,16],lounge:[10,10],outside:[14,12],store:[10,10],market:[10,10],armory:[10,10],home:[10,10]};
-const layouts={...Object.fromEntries(watchRooms.map(id=>[id,watchAreas[id].authored])),...Object.fromEntries(willowmereRooms.map(id=>[id,willowmereAreas[id].authored])),
+export const socialRooms={[wildlifeRoom]:[wildlifeView.cols,wildlifeView.rows],...Object.fromEntries([...willowmereRooms,...watchRooms].map(id=>[id,[12,10]])),grove:[12,10],shrine:[12,10],roots:[12,10],pond:[12,10],logging:[12,10],clearing:[12,10],ruins:[12,10],trail:[12,10],creek:[12,10],tailor:[10,10],furnishings:[10,10],hub:[18,16],lounge:[10,10],outside:[14,12],store:[10,10],market:[10,10],armory:[10,10],home:[10,10]};
+const layouts={[wildlifeRoom]:wildlifeArea.authored,...Object.fromEntries(watchRooms.map(id=>[id,watchAreas[id].authored])),...Object.fromEntries(willowmereRooms.map(id=>[id,willowmereAreas[id].authored])),
   tailor:[['reception',3,2],['sofa',7,6],['lamp',8,1],['plant',1,1],['plant',8,8]],
   furnishings:[['reception',3,1],['bed',6,2],['lamp',8,2],['bookcase',1,1],['sofa',6,6],['table',6,8],['chair',8,8,2],['plant',1,8],['safe',8,1]],
   hub:[['reception',3,2],['warden',10,3],['plant',1,1],['plant',16,1],['sofa',2,10],['bench',2,12],['sofa',13,8,2],['bench',13,10,2]],
@@ -17,7 +18,7 @@ export function furnitureBox(item){
   return {x,y,w,d};
 }
 export function roomBoxes(room,homeFurniture=[]){return (room==='home'?homeFurniture:(layouts[room]??[]).map(([type,x,y,rot])=>({type,x,y,rot}))).filter(item=>item.type!=='shelf').map(furnitureBox);}
-export function validRoomTile(room,x,y,boxes=[]){const size=socialRooms[room];return !!size&&Number.isInteger(x)&&Number.isInteger(y)&&x>=0&&y>=0&&x<size[0]&&y<size[1]&&(!watchRooms.includes(room)||!watchWater(room,x,y))&&(!willowmereRooms.includes(room)||!riverWater(room,x,y)||riverBridge(room,x,y))&&!boxes.some(b=>x<b.x+b.w&&x+1>b.x&&y<b.y+b.d&&y+1>b.y);}
+export function validRoomTile(room,x,y,boxes=[]){const size=socialRooms[room];return !!size&&Number.isInteger(x)&&Number.isInteger(y)&&x>=0&&y>=0&&x<size[0]&&y<size[1]&&(room!==wildlifeRoom||!reserveWater(x,y))&&(!watchRooms.includes(room)||!watchWater(room,x,y))&&(!willowmereRooms.includes(room)||!riverWater(room,x,y)||riverBridge(room,x,y))&&!boxes.some(b=>x<b.x+b.w&&x+1>b.x&&y<b.y+b.d&&y+1>b.y);}
 export function reachableMove(room,from,to,boxes,maxSteps){
   if(!validRoomTile(room,to.x,to.y,boxes))return false;
   const queue=[{x:from.x,y:from.y,n:0}],seen=new Set();
