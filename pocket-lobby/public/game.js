@@ -2945,20 +2945,26 @@ function navigateHud(destination){
   if(next?.to===destination){followHudDoor(next);return;}
   showHudMap(destination);
 }
+function worldMapVisibility(){
+ return explorationVisibility({currentRoom,discovered:adventure.discovered,knownRooms:explorationRegions['The Tower'],rooms:Object.keys(roomDetails),exits:hudRoomExits});
+}
+function mapPlaceName(room){return worldMapVisibility().status(room)==='discovered'?explorationName(room):'Unexplored';}
+function mapRouteVisible(room){const fog=worldMapVisibility(),path=hudRoute(room);return fog.status(room)!=='hidden'&&path.every((door,i)=>fog.known.has(door.to)||i===path.length-1);}
 function previewMapRoute(){
   const destination=$('mapDestination').value;
-  const path=destination?hudRoute(destination):[];
+  const path=destination&&mapRouteVisible(destination)?hudRoute(destination):[];
   $('mapTrack').disabled=!path.length;
-  $('mapJourney').textContent=path.length?[currentRoom,...path.map(door=>door.to)].map(explorationName).join(' → '):'Select a place to preview the full route.';
+  $('mapJourney').textContent=path.length?[currentRoom,...path.map(door=>door.to)].map(mapPlaceName).join(' → '):'Select a place to preview the full route.';
   renderWorldMap(path);
 }
 function showHudMap(destination=null){
   const dialog=$('hudMapDialog'),routes=$('hudMapRoutes'),shops=destination==='shops';
+  if(destination&&destination!=='shops'&&!mapRouteVisible(destination))destination=null;
   const next=destination&&!shops?hudNextDoor(destination):null;
   $('hudMapTitle').textContent=shops?'Tower shops':'World map';
   $('hudMapIntro').textContent=shops
     ?'Choose a shop to see the way there.'
-    :next?'To reach '+roomDetails[destination].name+', start with '+roomDetails[next.to].name+'.'
+    :next?'To reach '+mapPlaceName(destination)+', start with '+mapPlaceName(next.to)+'.'
     :depthsRun?'Use the chamber controls to bank your spoils or go deeper.'
     :currentRoom==='hub'&&!lobbyRoutesOpen()?'Talk to the Tower Warden to open the lobby doors.'
     :destination?'There’s no open route to '+roomDetails[destination].name+' from here.':'Choose an open exit from this room.';
@@ -2974,7 +2980,7 @@ function showHudMap(destination=null){
   if(shops&&lobbyRoutesOpen()){
     for(const [room,label] of [['tailor','Tailor'],['armory','Armory'],['store','Fishing supplies'],['market','Trading Post'],['furnishings','Furniture shop']])add(label,()=>navigateHud(room));
   }else if(!shops){
-    for(const door of hudRoomExits(currentRoom))add(roomDetails[door.to].name,()=>followHudDoor(door),door.to===next?.to);
+    for(const door of hudRoomExits(currentRoom))add(mapPlaceName(door.to)+(worldMapVisibility().frontier.has(door.to)?' · Explore':''),()=>followHudDoor(door),door.to===next?.to);
   }
   const picker=$('mapDestination');
   picker.replaceChildren();
@@ -2985,15 +2991,15 @@ function showHudMap(destination=null){
   for(const [region,rooms] of Object.entries(explorationRegions)){
     const group=document.createElement('optgroup');group.label=region;
     for(const room of rooms){
-      if(!hudNextDoor(room))continue;
+      if(!hudNextDoor(room)||!mapRouteVisible(room))continue;
       const option=document.createElement('option');
-      option.value=room;option.textContent=explorationName(room);
+      option.value=room;option.textContent=mapPlaceName(room)+(worldMapVisibility().frontier.has(room)?' · Explore':'');
       group.append(option);
     }
     if(group.children.length)picker.append(group);
   }
   const preferred=destination&&!shops?destination:trackedDestination;
-  picker.value=preferred&&hudNextDoor(preferred)?preferred:'';
+  picker.value=preferred&&hudNextDoor(preferred)&&mapRouteVisible(preferred)?preferred:'';
   previewMapRoute();
   if(!dialog.open)dialog.showModal();
 }
@@ -3521,23 +3527,28 @@ function renderWorldMap(route=[]){
     outside:[340,205],trail:[340,315],logging:[107,288],clearing:[109,380],grove:[563,274],shrine:[563,354],
     creek:[338,423],pond:[138,497],ruins:[340,549],roots:[549,493],depthsGate:[340,120],depthsGallery:[340,120],depthsCache:[340,120],depthsTreasury:[340,120],depthsRest:[340,120],depthsTrial:[340,120],depthsVault:[340,120]};
   const rooms=Object.keys(positions).filter(room=>roomDetails[room]&&(room===currentRoom||hudNextDoor(room)));
-  let links='',nodes='';
+  const fog=worldMapVisibility();
+  let links='',nodes='',clearings='';
   const linked=new Set();
   const routeEdges=new Set(route.map((door,index)=>[index?route[index-1].to:currentRoom,door.to].sort().join('|')));
   for(const room of rooms){
-    const [x,y]=positions[room];
+    const [x,y]=positions[room],status=fog.status(room);
+    if(status==='hidden')continue;
+    clearings+='<ellipse cx="'+x+'" cy="'+y+'" rx="'+(status==='discovered'?105:54)+'" ry="'+(status==='discovered'?62:45)+'" fill="black"/>';
     for(const door of hudRoomExits(room)){
-      if(!rooms.includes(door.to))continue;const key=[room,door.to].sort().join('|');if(linked.has(key))continue;linked.add(key);
+      if(!rooms.includes(door.to)||fog.status(door.to)==='hidden'||status!=='discovered'&&!fog.known.has(door.to))continue;const key=[room,door.to].sort().join('|');if(linked.has(key))continue;linked.add(key);
       const [dx,dy]=positions[door.to];links+='<path class="'+(routeEdges.has(key)?'map-route-line':'')+'" d="M'+x+' '+y+'L'+dx+' '+dy+'"/>';
     }
-    const name=explorationName(room);
-    nodes+='<g class="map-place'+(room===currentRoom?' map-current':'')+'"><circle cx="'+x+'" cy="'+y+'" r="'+(room===currentRoom?13:8)+'"/><text x="'+x+'" y="'+(y+29)+'" text-anchor="middle">'+name+'</text>'+(room===currentRoom?'<text class="map-you" x="'+x+'" y="'+(y-22)+'" text-anchor="middle">YOU ARE HERE</text>':'')+'</g>';
+    const name=status==='frontier'?'Unexplored':explorationName(room);
+    nodes+='<g class="map-place'+(room===currentRoom?' map-current':'')+(status==='frontier'?' map-frontier':'')+'"><circle cx="'+x+'" cy="'+y+'" r="'+(room===currentRoom?13:8)+'"/>'+(status==='frontier'?'<text class="map-question" x="'+x+'" y="'+(y+4)+'" text-anchor="middle">?</text>':'')+'<text x="'+x+'" y="'+(y+29)+'" text-anchor="middle">'+name+'</text>'+(room===currentRoom?'<text class="map-you" x="'+x+'" y="'+(y-22)+'" text-anchor="middle">YOU ARE HERE</text>':'')+'</g>';
   }
   const ys=rooms.map(room=>positions[room][1]),bottom=Math.max(160,...ys)+48;
   const regions=rooms.some(room=>explorationRegions.Moonwood.includes(room))
     ?'<path class="map-region-divider" d="M30 251H610"/><text class="map-region-text" x="30" y="241">THE TOWER</text><text class="map-region-text" x="30" y="266">MOONWOOD</text>':'';
 
-  $('worldMap').innerHTML='<svg viewBox="0 0 640 '+bottom+'" role="img" aria-label="Open routes around the Tower. You are in '+roomDetails[currentRoom].name+'.">'+regions+'<g class="map-links">'+links+'</g>'+nodes+'</svg>';
+  const veil='<defs><filter id="map-fog-soft"><feGaussianBlur stdDeviation="12"/></filter><mask id="map-fog-mask"><rect width="640" height="'+bottom+'" fill="white"/><g filter="url(#map-fog-soft)">'+clearings+'</g></mask><pattern id="map-fog-texture" width="90" height="70" patternUnits="userSpaceOnUse"><path d="M0 40Q25 0 60 28T100 35M-20 60Q25 20 70 55" fill="none" stroke="#7994b0" stroke-opacity=".08" stroke-width="20"/></pattern></defs><g mask="url(#map-fog-mask)"><rect width="640" height="'+bottom+'" fill="#071323"/><rect width="640" height="'+bottom+'" fill="url(#map-fog-texture)"/></g>';
+  $('mapFogSummary').textContent=explorationRegions.Moonwood.filter(room=>fog.known.has(room)).length+' / '+explorationRegions.Moonwood.length+' Moonwood places discovered · Walk into an unexplored area to clear its fog.';
+  $('worldMap').innerHTML='<svg viewBox="0 0 640 '+bottom+'" role="img" aria-label="Exploration map. Fog hides undiscovered places. You are in '+roomDetails[currentRoom].name+'.">'+regions+'<g class="map-links">'+links+'</g>'+veil+nodes+'</svg>';
 }
 
 function updateWeaponInventory(){
@@ -3689,7 +3700,7 @@ function applyServerGameplay(state){
   for(const key of Object.keys(ownedFurniture))ownedFurniture[key]=state.ownedFurniture?.[key]??0;
   for(const id of Object.keys(huntingLoot))delete huntingLoot[id];
   Object.assign(huntingLoot,state.huntingLoot);
-  updateEssenceHotbar();updateUpgradeGoalHud();
+  updateEssenceHotbar();updateUpgradeGoalHud();if($('hudMapDialog').open)previewMapRoute();
 }
 async function serverGameplay(name,body={}){
   if(serverActionBusy)throw new Error('Wait for the current action.');
@@ -5355,6 +5366,7 @@ function enterRoom(next,arrival,{automatic=false}={}){
   movePlayerToSpawn(arrival);
   if(exploring&&depthsIndex<0&&!adventure.discovered.includes(next)){
     adventure.discovered.push(next);
+    showTransaction('New place discovered',[{icon:'✦',text:name+' · Map fog cleared'}]);
     savePlayerState();
   }
   switchMode(false);
