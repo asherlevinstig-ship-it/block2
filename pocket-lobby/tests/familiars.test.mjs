@@ -1,4 +1,4 @@
-import {wildlifeRoom,wildAnimal,wildlifeAnimals,nearWildAnimal,TAMING_PAUSE_MS} from '../public/wildlife.js';
+import {wildlifeRoom,wildAnimal,wildlifeAnimals,nearWildAnimal,wildlifeHabitats,FORAGE_COOLDOWN_MS} from '../public/wildlife.js';
 import {moonwood} from '../public/moonwood.js';
 import {validRoomTile,roomBoxes,reachableMove,socialRooms} from '../public/shared-world.js';
 import test from 'node:test';
@@ -24,10 +24,17 @@ test('only taming a resting animal nearby forms a bond and the first bond equips
  s.position={x:4,y:9};act(s,'familiarTame',{id:'reed-otter',step:0});
  assert.equal(s.familiars.trust['reed-otter'].step,1);
  assert.throws(()=>act(s,'familiarTame',{id:'reed-otter',step:0},1001),/changed/);
- assert.throws(()=>act(s,'familiarTame',{id:'reed-otter',step:1},1001),/settle/);
+ assert.throws(()=>act(s,'familiarTame',{id:'reed-otter',step:1},1001),/next rest/);
  assert.throws(()=>act(s,'familiarTame',{id:'bank-otter',step:1},2800),/beside/);
- act(s,'familiarTame',{id:'reed-otter',step:1},1000+TAMING_PAUSE_MS);
- act(s,'familiarTame',{id:'reed-otter',step:2},1000+2*TAMING_PAUSE_MS);
+ s.position={x:8,y:9};assert.throws(()=>act(s,'familiarTame',{id:'reed-otter',step:1},13000),/River Snack/);
+ s.position=wildlifeHabitats.otter.forage;act(s,'familiarForage',{id:'otter'},13000);
+ assert.throws(()=>act(s,'familiarForage',{id:'otter'},13001),/replenish/);
+ assert.throws(()=>act(s,'familiarForage',{id:'fox'},13001),/foraging spot/);
+ s.position={x:8,y:9};act(s,'familiarTame',{id:'reed-otter',step:1},14000);
+ assert.equal(s.familiars.forage.otter.count,0);
+ s.position=wildlifeHabitats.otter.forage;act(s,'familiarForage',{id:'otter'},13000+FORAGE_COOLDOWN_MS);
+ s.position={x:9,y:15};act(s,'familiarTame',{id:'reed-otter',step:2},26000);
+ s.position={x:8,y:9};act(s,'familiarTame',{id:'reed-otter',step:3},38000);
  assert.deepEqual(s.familiars.owned,['otter']);assert.equal(s.familiars.equipped,'otter');assert.deepEqual(s.familiars.trust,{});
  assert.equal(publicPeer({familiar:s.familiars.equipped}).familiar,'otter');assert.equal(publicPeer({familiar:'unknown'}).familiar,undefined);
 });
@@ -42,6 +49,7 @@ test('reserve routes stay on land with reachable habitats and enough room for pl
   const key=`${animal.id}:${animal.x},${animal.y}`;if(resting.has(key))continue;resting.add(key);
   assert(reachableMove(wildlifeRoom,entrance.arrival,{x:animal.x,y:animal.y},boxes,100));
  }
+ for(const {forage} of Object.values(wildlifeHabitats))assert(reachableMove(wildlifeRoom,entrance.arrival,forage,boxes,100));
  assert(resting.size>=20);assert.notDeepEqual(wildAnimal('reed-otter',10000),wildAnimal('reed-otter',10600));
  assert.equal(nearWildAnimal({x:4,y:9},wildAnimal('reed-otter',1000)),true);
 });
@@ -50,6 +58,7 @@ test('partial trust is saved by animal, personal, and protected from snapshot ed
  const s=normalizeState({location:wildlifeRoom,position:{x:4,y:9}}),other=structuredClone(s);
  act(s,'familiarTame',{id:'reed-otter',step:0});assert.equal(other.familiars,undefined);
  const loaded=normalizeState(s);assert.deepEqual(loaded.familiars,s.familiars);
+ assert.deepEqual(normalizeFamiliars({trust:{'reed-otter':{step:2,readyAt:9000}}}).trust['reed-otter'],{step:2,lastRest:null});
  const forged={owned:['fox'],equipped:'fox',trust:{'reed-otter':{step:2,readyAt:0}}};
  assert.deepEqual(protectFishingState(s,{...s,familiars:forged}).familiars,s.familiars);
  const veteran=normalizeState({location:wildlifeRoom,position:{x:22,y:18},familiars:{owned:['owl'],equipped:'owl'}});

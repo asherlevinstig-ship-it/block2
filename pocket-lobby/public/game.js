@@ -1421,7 +1421,7 @@ for(const [id,kind] of [['wildlifeOtter','otter'],['wildlifeFox','fox'],['wildli
 }
 function seekWildSpecies(kind){
  const animals=wildlifeAnimals(combatNow()).filter(animal=>animal.kind===kind);
- animals.sort((a,b)=>Math.hypot(a.x-player.cx,a.y-player.cy)-Math.hypot(b.x-player.cx,b.y-player.cy));
+ animals.sort((a,b)=>(familiarState.trust[b.id]?.step??0)-(familiarState.trust[a.id]?.step??0)||Math.hypot(a.x-player.cx,a.y-player.cy)-Math.hypot(b.x-player.cx,b.y-player.cy));
  if(animals[0])selectWildAnimal(animals[0].id);
 }
 function selectWildAnimal(id){
@@ -1436,17 +1436,46 @@ function selectWildAnimal(id){
 function updateWildlifeGuide(){
  const guide=$('wildlifeGuide');guide.hidden=currentRoom!==wildlifeRoom;
  if(guide.hidden)return;
- const now=combatNow(),animal=wildAnimal(selectedWildAnimal,now),action=$('wildlifeAction');
- if(!animal){$('wildlifeEyebrow').textContent='WILDLIFE RESERVE';$('wildlifeTitle').textContent='Meet the wild animals';$('wildlifeHint').textContent='Choose a habitat or click an animal. Walk up when it stops.';action.hidden=true;return;}
- const species=familiars[animal.kind],habitat=wildlifeHabitats[animal.kind],bonded=familiarState.owned.includes(animal.kind),trust=familiarState.trust[animal.id]??{step:0,readyAt:0};
- const near=!step&&!route.length&&nearWildAnimal({x:player.cx,y:player.cy},animal),waiting=now<trust.readyAt;
- $('wildlifeEyebrow').textContent=bonded?'BONDED · '+habitat.name:habitat.name.toUpperCase()+' · TRUST '+trust.step+' / '+TAMING_STEPS;
+ const now=combatNow(),animal=wildAnimal(selectedWildAnimal,now),action=$('wildlifeAction'),gather=$('wildlifeForage');
+ if(!animal){
+  $('wildlifeEyebrow').textContent='WILDLIFE RESERVE';$('wildlifeTitle').textContent='Meet the wild animals';
+  $('wildlifeHint').textContent='Choose an animal, gather its favorite food, and meet it at several resting stops.';
+  action.hidden=gather.hidden=true;return;
+ }
+ const species=familiars[animal.kind],bonded=familiarState.owned.includes(animal.kind);
+ const {habitat,trust,stage,waiting,food}=bondStep(familiarState,animal);
+ const position={x:player.cx,y:player.cy},moving=!!step||route.length>0,busy=moving||serverActionBusy||unavailable();
+ const near=nearWildAnimal(position,animal),missingFood=stage==='feed'&&food===0;
+ const atForage=nearWildAnimal(position,habitat.forage),regrow=Math.max(0,Math.ceil(((familiarState.forage[animal.kind]?.readyAt??0)-now)/1000));
+ $('wildlifeEyebrow').textContent=bonded?'BONDED · '+habitat.name:habitat.name.toUpperCase()+' · TRUST '+trust.step+' / '+habitat.steps.length;
  $('wildlifeTitle').textContent=species.name;
  const feedback=wildlifeFeedback?.until>now?wildlifeFeedback.text:null;
- $('wildlifeHint').textContent=feedback??(bonded?'This species is in your Familiars collection.':!animal.resting?'It is roaming. Wait for it to settle.':!near?'Walk beside the animal when it stops.':waiting?'Stay still and let the animal get used to you.':trust.step===0?'Let it see you before you reach out.':trust.step===1?'Offer a free snack from the reserve.':'It trusts you. Reach out to form a bond.');
- action.hidden=bonded;action.disabled=!animal.resting||!!step||route.length>0||near&&waiting||serverActionBusy||unavailable();
- action.textContent=near?['Sit quietly',habitat.treat,'Form a bond'][trust.step]:'Walk closer';
+ let hint='Let it see you before you reach out.';
+ if(bonded)hint='This species is in your Familiars collection.';
+ else if(missingFood)hint='Gather a '+habitat.food+' from the marked foraging spot.';
+ else if(!animal.resting)hint='It is roaming. Wait for its next stop.';
+ else if(waiting)hint='You earned trust at this stop. Follow the same animal to its next rest.';
+ else if(!near)hint='Walk beside the animal while it is resting.';
+ else if(stage==='feed')hint='Offer its favorite food to earn more trust.';
+ else if(stage==='perch')hint='Hold still and let the owl perch on your arm.';
+ else if(stage==='bond')hint='It trusts you. Reach out to form a bond.';
+ $('wildlifeHint').textContent=feedback??hint;
+ action.hidden=bonded;action.disabled=busy||!animal.resting||waiting||missingFood;
+ action.textContent=near?{observe:'Sit quietly',feed:'Offer '+habitat.food,perch:'Offer your arm',bond:'Form a bond'}[stage]:'Walk closer';
+ gather.hidden=bonded;gather.disabled=busy||food>=FORAGE_CAP||atForage&&regrow>0;
+ gather.textContent=(food>=FORAGE_CAP?habitat.food+' pouch full':atForage?(regrow?'Forage regrows in '+regrow+'s':'Gather '+habitat.food):'Find '+habitat.food)+' · '+food+'/'+FORAGE_CAP;
 }
+$('wildlifeForage').onclick=async()=>{
+ const animal=wildAnimal(selectedWildAnimal,combatNow());
+ if(!animal||$('wildlifeForage').disabled||!window.playerCloud?.gameplay)return;
+ const habitat=wildlifeHabitats[animal.kind];
+ if(!nearWildAnimal({x:player.cx,y:player.cy},habitat.forage)){walkTo(habitat.forage);return;}
+ try{
+  await serverGameplay('familiarForage',{id:animal.kind});
+  wildlifeFeedback={text:'Gathered a '+habitat.food+'.',until:combatNow()+2200};
+ }catch(error){wildlifeFeedback={text:error.message,until:combatNow()+3000};}
+ updateWildlifeGuide();
+};
 $('wildlifeAction').onclick=async()=>{
  const animal=wildAnimal(selectedWildAnimal,combatNow());if(!animal||$('wildlifeAction').disabled||!window.playerCloud?.gameplay)return;
  if(!nearWildAnimal({x:player.cx,y:player.cy},animal)){selectWildAnimal(animal.id);return;}
@@ -1507,7 +1536,8 @@ function drawWildAnimal(animal,time){
  }
  if(selected||near){
   const trust=familiarState.trust[animal.id]?.step??0;
-  for(let i=0;i<TAMING_STEPS;i++)rect(x-9+i*7,y-height,5,3,i<trust?color:'#243948');
+  const total=wildlifeHabitats[animal.kind].steps.length;
+  for(let i=0;i<total;i++)rect(x-total*3+i*6,y-height,4,3,i<trust?color:'#243948');
  }else if(animal.resting){rect(x-1,y-height,3,3,color);}
  hitboxes.push({item:{type:'wildAnimal',animalId:animal.id},shape:[[x-14,y+5],[x+14,y+5],[x+14,y-height-4],[x-14,y-height-4]]});
 }
@@ -2711,6 +2741,15 @@ function draw(time){
     ctx.restore();
   }
   if(moonwood.has(currentRoom))drawMoonwoodDetails(time);
+  if(currentRoom===wildlifeRoom){
+   const animal=wildAnimal(selectedWildAnimal,combatNow());
+   if(animal&&!familiarState.owned.includes(animal.kind)){
+    const {x,y}=wildlifeHabitats[animal.kind].forage,color=familiars[animal.kind].color;
+    surface(x+.13,y+.13,.74,.74,.6,color+'44',color);
+    const [px,py]=point(x+.5,y+.5,12);
+    polygon([[px,py-5],[px+5,py],[px,py+5],[px-5,py]],color,'#223f40');
+   }
+  }
   drawEnvironmentFx({room:currentRoom,ctx,point,time,reduced:reducedMotion.matches,inCombat:player.inCombat,
     sluiceOpen:depthsRun?.finds?.includes('sluiceLever')});
   drawTradingGuide(time);

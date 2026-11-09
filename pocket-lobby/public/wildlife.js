@@ -1,9 +1,9 @@
 export const wildlifeRoom='wildlifeReserve';
 export const wildlifeView={width:864,height:520,cols:24,rows:20,originX:396,originY:68};
 export const wildlifeHabitats={
- otter:{name:'Reed Pools',anchor:{x:6,y:10},treat:'Offer a river snack'},
- fox:{name:'Amber Meadow',anchor:{x:17,y:17},treat:'Offer a berry'},
- owl:{name:'Moonpine Ridge',anchor:{x:16,y:2},treat:'Offer a seed'}
+ otter:{name:'Reed Pools',anchor:{x:6,y:10},forage:{x:4,y:8},food:'River Snack',steps:['observe','feed','feed','bond']},
+ fox:{name:'Amber Meadow',anchor:{x:17,y:17},forage:{x:13,y:16},food:'Amber Berry',steps:['observe','feed','observe','feed','bond']},
+ owl:{name:'Moonpine Ridge',anchor:{x:16,y:2},forage:{x:16,y:2},food:'Moonpine Seed',steps:['observe','feed','feed','perch','feed','bond']}
 };
 export function reserveWater(x,y){return x>=2&&x<=7&&y>=11&&y<=16&&(x>=3||y>=12&&y<=15)&&(x<=6||y>=12&&y<=15);}
 export const wildlifeArea={
@@ -20,7 +20,7 @@ const routes={
  'pine-owl':{kind:'owl',offset:9600,stops:[[18,3],[20,3],[20,6],[18,6]]}
 };
 const REST_MS=10000, STEP_MS=570;
-export const TAMING_STEPS=3,TAMING_PAUSE_MS=1800;
+export const FORAGE_COOLDOWN_MS=12000, FORAGE_CAP=3;
 export function wildAnimal(id,now){
  if(!Object.hasOwn(routes,id))return null;
  const {kind,offset,stops}=routes[id];
@@ -29,9 +29,10 @@ export function wildAnimal(id,now){
   return {x,y,nx,ny,duration};
  });
  const total=legs.reduce((n,leg)=>n+REST_MS+leg.duration,0);
+ const cycle=Math.floor((now+offset)/total);
  let elapsed=(now+offset)%total;
- for(const {x,y,nx,ny,duration} of legs){
-  if(elapsed<REST_MS)return {id,kind,x,y,resting:true,flipped:(nx-x)-(ny-y)<0};
+ for(const [index,{x,y,nx,ny,duration}] of legs.entries()){
+  if(elapsed<REST_MS)return {id,kind,x,y,resting:true,rest:cycle*legs.length+index,flipped:(nx-x)-(ny-y)<0};
   elapsed-=REST_MS;
   if(elapsed<duration){const t=elapsed/duration;return {id,kind,x:x+(nx-x)*t,y:y+(ny-y)*t,resting:false,flipped:(nx-x)-(ny-y)<0};}
   elapsed-=duration;
@@ -44,7 +45,27 @@ export function normalizeTrust(input){
  const result={};
  for(const id of Object.keys(routes)){
   const entry=input?.[id];
-  if(Number.isInteger(entry?.step)&&entry.step>0&&entry.step<TAMING_STEPS&&Number.isSafeInteger(entry.readyAt)&&entry.readyAt>=0)result[id]={step:entry.step,readyAt:entry.readyAt};
+  if(Number.isInteger(entry?.step)&&entry.step>0&&entry.step<wildlifeHabitats[routes[id].kind].steps.length){
+   const lastRest=Number.isSafeInteger(entry.lastRest)&&entry.lastRest>=0?entry.lastRest:null;
+   result[id]={step:entry.step,lastRest};
+  }
  }
  return result;
+}
+
+export function normalizeForage(input){
+ const result={};
+ for(const kind of Object.keys(wildlifeHabitats)){
+  const entry=input?.[kind];
+  if(!entry)continue;
+  const count=Number.isInteger(entry.count)?Math.max(0,Math.min(FORAGE_CAP,entry.count)):0;
+  const readyAt=Number.isSafeInteger(entry.readyAt)&&entry.readyAt>=0?entry.readyAt:0;
+  if(count||readyAt)result[kind]={count,readyAt};
+ }
+ return result;
+}
+export function bondStep(state,animal){
+ const habitat=wildlifeHabitats[animal.kind];
+ const trust=state.trust[animal.id]??{step:0,lastRest:null};
+ return {habitat,trust,stage:habitat.steps[trust.step],waiting:trust.lastRest!==null&&!(animal.rest>trust.lastRest),food:state.forage[animal.kind]?.count??0};
 }

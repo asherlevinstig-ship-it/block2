@@ -22,3 +22,5 @@
 }
 
 @media(max-width:580px){.familiar-card canvas{width:64px;height:50px}}
+
+#wildlifeForage{margin:0 0 6px;color:#e6efb2;border-color:#849066;background:#364a39}

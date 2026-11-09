@@ -1,4 +1,4 @@
-import {wildlifeRoom,wildAnimal,nearWildAnimal,TAMING_STEPS,TAMING_PAUSE_MS} from '../public/wildlife.js';
+import {wildlifeRoom,wildAnimal,nearWildAnimal,wildlifeHabitats,bondStep,FORAGE_COOLDOWN_MS,FORAGE_CAP} from '../public/wildlife.js';
 import {roomBoxes,validRoomTile} from '../public/shared-world.js';
 import {familiars,normalizeFamiliars,MOON_SIGHT_MS} from '../public/familiars.js';
 import {activeAdd,addKinds} from '../public/dungeon-adds.js';
@@ -7,7 +7,7 @@ import {moonwood} from '../public/moonwood.js';
 import {dungeonRooms} from '../public/dungeon-arena.js';
 
 export function familiarAction(state,action,body,now){
- if(!['familiarRecruit','familiarTame','familiarEquip','familiarUse'].includes(action))return false;
+ if(!['familiarRecruit','familiarTame','familiarForage','familiarEquip','familiarUse'].includes(action))return false;
  const current=normalizeFamiliars(state.familiars),id=body.id;
  if(action==='familiarUse'){
   if(current.equipped==='fox')throw new Error('Select an add during combat to use Cinder Pounce.');
@@ -25,19 +25,34 @@ export function familiarAction(state,action,body,now){
  }else{
   if(state.plan||state.report||state.fishingCast||state.timberCut||state.hunting?.encounter||state.hunting?.recoveryUntil||state.health<=0||state.gambling?.round?.status==='playing')throw new Error('Finish your current activity before changing familiars.');
   if(action==='familiarRecruit')throw new Error('Visit the Moonwood Wildlife Reserve to tame a familiar.');
-  if(action==='familiarTame'){
-   const animal=typeof id==='string'?wildAnimal(id,now):null,position=state.position;
-   if(state.location!==wildlifeRoom||!animal||!validRoomTile(wildlifeRoom,position?.x,position?.y,roomBoxes(wildlifeRoom)))throw new Error('Meet a wild animal in the reserve first.');
+  if(action==='familiarTame'||action==='familiarForage'){
+   const position=state.position;
+   if(state.location!==wildlifeRoom||!validRoomTile(wildlifeRoom,position?.x,position?.y,roomBoxes(wildlifeRoom)))throw new Error('Visit the reserve first.');
+  }
+  if(action==='familiarForage'){
+   const habitat=Object.hasOwn(wildlifeHabitats,id)?wildlifeHabitats[id]:null;
+   if(!habitat||!nearWildAnimal(state.position,habitat.forage))throw new Error('Walk beside the foraging spot first.');
+   const supply=current.forage[id]??{count:0,readyAt:0};
+   if(supply.count>=FORAGE_CAP)throw new Error('Your treat pouch is full for this habitat.');
+   if(now<supply.readyAt)throw new Error('Give this foraging spot time to replenish.');
+   current.forage[id]={count:supply.count+1,readyAt:now+FORAGE_COOLDOWN_MS};
+  }else if(action==='familiarTame'){
+   const animal=typeof id==='string'?wildAnimal(id,now):null;
+   if(!animal)throw new Error('Choose a wild animal in the reserve.');
    if(current.owned.includes(animal.kind))return true;
-   if(!animal.resting||!nearWildAnimal(position,animal))throw new Error('Walk beside the animal while it is resting.');
-   const trust=current.trust[id]??{step:0,readyAt:0};
+   if(!animal.resting||!nearWildAnimal(state.position,animal))throw new Error('Walk beside the animal while it is resting.');
+   const {trust,stage,waiting,food,habitat}=bondStep(current,animal);
    if(body.step!==trust.step)throw new Error('The animal’s trust has changed. Try the next step.');
-   if(now<trust.readyAt)throw new Error('Give the animal a moment to settle.');
-   if(trust.step+1===TAMING_STEPS){
+   if(waiting)throw new Error('Let this animal move on, then meet it at its next rest.');
+   if(stage==='feed'){
+    if(!food)throw new Error('Gather a '+habitat.food+' at the foraging spot first.');
+    current.forage[animal.kind].count--;
+   }
+   if(stage==='bond'){
     current.owned.push(animal.kind);
     if(!current.equipped)current.equipped=animal.kind;
     for(const other of Object.keys(current.trust))if(wildAnimal(other,now)?.kind===animal.kind)delete current.trust[other];
-   }else current.trust[id]={step:trust.step+1,readyAt:now+TAMING_PAUSE_MS};
+   }else current.trust[id]={step:trust.step+1,lastRest:animal.rest};
   }else{
    if(id!==null&&!current.owned.includes(id))throw new Error('Befriend this familiar before equipping it.');
    current.equipped=id;
