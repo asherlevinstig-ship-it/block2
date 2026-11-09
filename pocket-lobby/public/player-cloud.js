@@ -121,7 +121,7 @@
     acting++;try{return await performAction(path,body);}finally{acting--;}
   }
   async function pulse(){
-    if(conflicted||presenceBusy||acting||gameplayBusy||(!packet?.state.characterRules?.enabled&&packet?.state.controlMode!=='auto'&&packet?.state.plan?.source!=='rules')||packet.state.plan&&packet.state.plan.source!=='rules'||packet.state.report)return;
+    if(conflicted||presenceBusy||acting||gameplayBusy||(!packet?.state.characterRules?.enabled&&packet?.state.controlMode!=='auto'&&packet?.state.plan?.source!=='rules')||packet.state.plan&&packet.state.plan.source!=='rules'||packet.state.report&&!packet.state.autoSwitch)return;
     await flush();if(presenceBusy||acting||gameplayBusy||conflicted)return;
     const inputAt=lastInputAt,active=packet.state.controlMode!=='auto'&&!document.hidden&&inputAt>lastReportedInputAt;
     presenceBusy=(async()=>{
@@ -152,7 +152,7 @@
     const running=state.plan?.source==='rules';
     document.getElementById('autoPlay').setAttribute('aria-pressed',String(!running));document.getElementById('autoStart').setAttribute('aria-pressed',String(!!running));
     document.getElementById('autoStart').title=hasSavedAutoPlan(state)?'Start your saved Auto Mode plan now.':'Set up your Auto Mode plan.';
-    document.getElementById('autoStart').disabled=controlBusy||!!state.plan||!!state.report;
+    document.getElementById('autoStart').disabled=controlBusy||!!state.plan||!!state.report&&state.report.source!=='rules';
     document.getElementById('autoPlay').disabled=controlBusy||!!state.plan&&state.plan.source!=='rules'||!!state.plan?.returnRequested;
     const result=document.getElementById('autoGambleResult');result.hidden=!info.gambleResult;result.textContent=info.gambleResult??'';result.dataset.outcome=info.outcome??'';
     if(!info.visible)return;
@@ -416,7 +416,7 @@
         gameplayBusy=true;
         try{return await action('gameplay/'+name,body);}
         finally{gameplayBusy=false;}
-      },setupExplorer:async()=>{await flush();await action('auto/explore/setup');pending=retryJob=null;backup(null);lastInputAt=Date.now();lastReportedInputAt=lastInputAt;window.towerMultiplayer?.disconnect();window.towerApplyRoutineState?.(packet.state);showReport(packet.state);schedulePresence(150);return packet.state;},get serverTime(){return packet.serverTime;},readRankings:async()=>{await flush();return request('rankings');},setRankingParticipation:async joined=>{await flush();return action('rankings/participation',{joined});},resetCharacter:async()=>{await flush();conflicted=true;window.towerMultiplayer?.disconnect();try{localStorage.setItem("pocket-lobby:before-testing-reset",JSON.stringify(packet.state));await action("testing/reset",{testing:true,confirm:"RESET"});localStorage.removeItem("pocket-lobby:player-state");localStorage.removeItem("pocket-lobby:movement-learned");localStorage.removeItem("pocket-lobby:cloud-pending");location.reload();}catch(error){conflicted=false;throw error;}},deliverCarpenter:async()=>{await flush();return (await action('commissions/carpenter')).state;},saveRules:async rules=>{await flush();return (await action('rules/save',{rules})).state;},startJob:async options=>{await flush();await action('plan/start',{...options,source:'board'});window.towerMultiplayer?.disconnect();location.reload();},invalidate:conflict,get initial(){return packet.state;}};
+      },setupExplorer:async()=>{await flush();await action('auto/explore/setup');pending=retryJob=null;backup(null);lastInputAt=Date.now();lastReportedInputAt=lastInputAt;window.towerMultiplayer?.disconnect();window.towerApplyRoutineState?.(packet.state);showReport(packet.state);schedulePresence(150);return packet.state;},get serverTime(){return packet.serverTime;},readRankings:async()=>{await flush();return request('rankings');},setRankingParticipation:async joined=>{await flush();return action('rankings/participation',{joined});},resetCharacter:async()=>{await flush();conflicted=true;window.towerMultiplayer?.disconnect();try{localStorage.setItem("pocket-lobby:before-testing-reset",JSON.stringify(packet.state));await action("testing/reset",{testing:true,confirm:"RESET"});localStorage.removeItem("pocket-lobby:player-state");localStorage.removeItem("pocket-lobby:movement-learned");localStorage.removeItem("pocket-lobby:cloud-pending");location.reload();}catch(error){conflicted=false;throw error;}},deliverCarpenter:async()=>{await flush();return (await action('commissions/carpenter')).state;},startSimpleAuto:async(mode,options)=>{await flush();await action('auto/simple',{mode,options});pending=retryJob=null;backup(null);window.towerMultiplayer?.disconnect();window.towerApplyRoutineState?.(packet.state);schedulePresence(150);return packet.state;},saveRules:async rules=>{await flush();return (await action('rules/save',{rules})).state;},startJob:async options=>{await flush();await action('plan/start',{...options,source:'board'});window.towerMultiplayer?.disconnect();location.reload();},invalidate:conflict,get initial(){return packet.state;}};
       const {initializeRankings}=await import('./rankings.js');
       initializeRankings(window.playerCloud,document,window);
       const script=document.createElement('script');script.src='game.js';

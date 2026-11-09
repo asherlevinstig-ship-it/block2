@@ -21,11 +21,11 @@ test('disabled hunting queues do not invalidate unrelated combat retreat choices
  assert.throws(()=>normalizeCharacterRules({combat:{enabled:true,fleeBelow:70},queue:{enabled:true,minHealth:60,steps:[{type:'huntBoars',amount:1}]}}),/start-health/);
 });
 test('Auto Mode keeps Save available during sessions and shows validation errors at the footer',()=>{
- const s=base(),g=boot(s);s.plan={source:'rules',kind:'fishing'};g.context.playerCloud.initial=s;g.run('openCharacterRules()');assert.equal(g.nodes.get('rulesSave').disabled,false);assert.equal(g.nodes.get('rulesSave').textContent,'Save for next session');
+ const s=base(),g=boot(s);s.plan={source:'rules',kind:'fishing'};g.context.playerCloud.initial=s;g.run('openAdvancedCharacterRules()');assert.equal(g.nodes.get('rulesSave').disabled,false);assert.equal(g.nodes.get('rulesSave').textContent,'Save for next session');
  g.run("$('rulesCombatEnabled').checked=true;$('rulesCombatFlee').value=70;$('rulesUseQueue').checked=false;ruleQueueDraft=[{type:'huntBoars',amount:1}];updateCharacterRulesPreview()");assert.equal(g.nodes.get('rulesSave').disabled,false);
  g.run("$('rulesUseQueue').checked=true;updateCharacterRulesPreview()");assert.equal(g.nodes.get('rulesSave').disabled,true);assert.match(g.nodes.get('rulesStatus').textContent,/start-health/);
  g.run("$('rulesCombatFlee').value=20;updateCharacterRulesPreview()");assert.equal(g.nodes.get('rulesSave').disabled,false);assert.equal(g.nodes.get('rulesStatus').textContent,'');
- s.pendingCharacterRules=normalizeCharacterRules(combatPlan());g.run('openCharacterRules()');assert.equal(g.nodes.get('rulesCombatEnabled').checked,true);assert.equal(g.nodes.get('rulesCombatStyle').value,'cautious');
+ s.pendingCharacterRules=normalizeCharacterRules(combatPlan());g.run('openAdvancedCharacterRules()');assert.equal(g.nodes.get('rulesCombatEnabled').checked,true);assert.equal(g.nodes.get('rulesCombatStyle').value,'cautious');
 });
 test('snapshot saves cannot forge or erase staged Auto settings',()=>{
  const s=base(),fake=structuredClone(s);fake.pendingCharacterRules=normalizeCharacterRules(combatPlan());assert.equal(protectFishingState(s,fake).pendingCharacterRules,undefined);

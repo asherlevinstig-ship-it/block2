@@ -1,3 +1,4 @@
+import {simpleAutoRules} from '../public/simple-auto.js';
 import {saveAutoSettings} from './auto-settings.mjs';
 import {isSmartlyDressed,normalizeWardrobe,clothingCatalog} from '../public/wardrobe.js';
 import {configureExplorerLesson} from './exploration-plan.mjs';
@@ -44,7 +45,7 @@ async function settled(db,id,activities=false){
     if(!row)return null;
     const state=readPlayerState(row);
     const now=Date.now();
-    const planChanged=settlePlan(state,now);
+    let planChanged=settlePlan(state,now);if(state.autoSwitch){touchPresence(state,now,{active:false});planChanged=true;}
     const activityChanged=activities&&settleActivities(state,now);
     const before=JSON.parse(row.state_json);
     const migrated=before.progressionVersion!==progressionVersion||before.safeVersion!==1;
@@ -83,7 +84,7 @@ export async function handlePlayerApi(request,env){
       const existing=id&&await settled(env.TOWER_DB,id,true);
       if(existing)return json(packet(existing));
       const body=await bodyOf(request),legacy={...body.legacy};migrateProgression(legacy);
-      const state=normalizeState({...legacy,autoConfigured:undefined,pendingCharacterRules:undefined,bedRest:undefined,safeVersion:1,ownedFurniture:{...(legacy.ownedFurniture??{bed:1}),safe:0},homeFurniture:(legacy.homeFurniture??[]).filter(item=>item.type!=='safe'),bank:undefined,controlMode:'play',meals:{},magic:undefined,...(body.newCharacter===true?{characterCreated:false,welcomeSeen:false,autoLesson:'required'}:{})});
+      const state=normalizeState({...legacy,autoConfigured:undefined,pendingCharacterRules:undefined,autoSwitch:undefined,bedRest:undefined,safeVersion:1,ownedFurniture:{...(legacy.ownedFurniture??{bed:1}),safe:0},homeFurniture:(legacy.homeFurniture??[]).filter(item=>item.type!=='safe'),bank:undefined,controlMode:'play',meals:{},magic:undefined,...(body.newCharacter===true?{characterCreated:false,welcomeSeen:false,autoLesson:'required'}:{})});
       if(state.wardrobe.outfits.some(look=>['jacket','trousers','boots'].some(slot=>clothingCatalog[look[slot]]?.price)))throw new Error('Choose free starter clothing for a new character.');
       state.wardrobe.owned=state.wardrobe.owned.filter(id=>!clothingCatalog[id]?.price);
       delete state.combatGear.ownedArmour;delete state.combatGear.equippedArmour;
@@ -165,7 +166,7 @@ export async function handlePlayerApi(request,env){
         break;
       case "/api/player/presence":
         if(body.active!==undefined&&typeof body.active!=='boolean'||body.idleForMs!==undefined&&(!Number.isInteger(body.idleForMs)||body.idleForMs<0||body.idleForMs>AWAY_GRACE_MS))throw new Error('Invalid activity status.');
-        if((!state.characterRules?.enabled&&state.controlMode!=='auto'&&!state.plan)||(state.plan&&state.plan.source!=='rules')||state.report)return json(packet(row));
+        if((!state.characterRules?.enabled&&state.controlMode!=='auto'&&!state.plan)||(state.plan&&state.plan.source!=='rules')||state.report&&!state.autoSwitch)return json(packet(row));
         settleActivities(state,Date.now());
         touchPresence(state,Date.now(),{active:body.active!==false,activityAt:Date.now()-(body.idleForMs??0)});
         settleActivities(state,Date.now());
@@ -176,11 +177,12 @@ export async function handlePlayerApi(request,env){
         if(body.mode==='auto'){
           if(state.autoLesson==='required')throw new Error('Choose your starter exploration job in the Auto quest first.');
           if(state.controlMode==='auto'&&state.plan?.source==='rules')break;
+          if(state.report?.source==='rules')delete state.report;
           if(state.characterCreated===false||state.plan||state.report||state.depthsRun||state.hunting?.encounter||state.hunting?.recoveryUntil||state.health<=0||state.gambling?.round?.status==='playing'||state.fishingCast||state.timberCut)throw new Error('Choose Auto after finishing your activity, reading your report and leaving the dungeon.');
           state.controlMode='auto';state.routineLastSeen=now;touchPresence(state,now,{active:false,forceStart:true});
         }else{
           if(state.plan&&state.plan.source!=='rules')throw new Error('Choose Stop work to finish your job-board shift.');
-          state.controlMode='play';state.routineLastSeen=now;
+          delete state.autoSwitch;state.controlMode='play';state.routineLastSeen=now;
           if(state.plan?.source==='rules')settlePlan(state,now,{stop:true});
         }
         break;
@@ -188,6 +190,16 @@ export async function handlePlayerApi(request,env){
       case "/api/player/auto/explore/setup":{
         const now=Date.now();configureExplorerLesson(state,now);
         state.controlMode='auto';touchPresence(state,now,{active:false,forceStart:true});break;
+      }
+      case "/api/player/auto/simple":{
+        const now=Date.now();
+        if(state.depthsRun||state.fishingCast||state.timberCut||state.gambling?.round?.status==='playing')throw new Error('Choose Auto after finishing your current activity and leaving the dungeon.');
+        const rules=simpleAutoRules(body.mode,body.options??{});
+        saveAutoSettings(state,rules,now);
+        if(state.plan?.source==='rules'){
+          state.autoSwitch=true;settlePlan(state,now,{stop:true});touchPresence(state,now,{active:false});
+        }else{delete state.report;state.controlMode='auto';touchPresence(state,now,{active:false,forceStart:true});}
+        break;
       }
       case "/api/player/rules/save":
         saveAutoSettings(state,body.rules,Date.now());

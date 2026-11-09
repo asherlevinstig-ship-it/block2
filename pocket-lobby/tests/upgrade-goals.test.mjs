@@ -42,7 +42,7 @@ test('client snapshots cannot forge or remove the server completion receipt',()=
  for(const input of [{target:'axe:fake'},[],{target:'rod:oak',autoBuy:1}])assert.throws(()=>normalizeUpgradeGoal(input),/upgrade|shop/i);
 });
 test('goal UI shows actual gold and skill requirements and saves the opt-in setting',()=>{
- const s=start(),g=boot(s);g.context.playerCloud.initial=s;g.run('openCharacterRules()');
+ const s=start(),g=boot(s);g.context.playerCloud.initial=s;g.run('openAdvancedCharacterRules()');
  assert.equal(g.nodes.get('rulesGoalTarget').value,'rod:oak');assert.equal(g.nodes.get('rulesGoalAutoBuy').checked,false);
  g.nodes.get('rulesGoalAutoBuy').checked=true;assert.equal(g.read('draftCharacterRules().goal.autoBuy'),true);
  assert.match(g.nodes.get('upgradeGoalHud').textContent,/Oak Rod/);assert.equal(g.nodes.get('upgradeGoalHud').hidden,false);

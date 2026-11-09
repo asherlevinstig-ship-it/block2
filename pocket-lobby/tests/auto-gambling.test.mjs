@@ -35,7 +35,7 @@ test('Take control before a round stakes nothing and manual table actions cannot
 });
 test('Auto and Rules show table choices, outcomes and loss totals without a blocking report',()=>{
  const s=start({lossLimit:10,profitTarget:100});settlePlan(s,31000,{random:()=>0});const info=autoStatus(s);assert.match(info.current,/Roulette/);assert.match(info.gambleResult,/Lost/);assert.equal(info.outcome,'lose');assert.match(info.decision,/5 \/ 10/);
- const g=boot(normalizeState({characterRules:{strategy:'gambling',gambling:{game:'blackjack',bet:10,lossLimit:20}}}));g.run('openCharacterRules()');assert.equal(g.nodes.get('rulesGamblingPolicy').hidden,false);assert.equal(g.nodes.get('gambleAutoBet').value,10);assert.equal(g.nodes.get('gambleAutoColorField').hidden,true);assert.deepEqual(g.errors,[]);
+ const g=boot(normalizeState({characterRules:{strategy:'gambling',gambling:{game:'blackjack',bet:10,lossLimit:20}}}));g.run('openAdvancedCharacterRules()');assert.equal(g.nodes.get('rulesGamblingPolicy').hidden,false);assert.equal(g.nodes.get('gambleAutoBet').value,10);assert.equal(g.nodes.get('gambleAutoColorField').hidden,true);assert.deepEqual(g.errors,[]);
 });
 test('concurrent API catch-up and retried stop requests settle one table round only',async t=>{
  const {db,sql}=testDatabase();t.after(()=>sql.close());const clock=Date.now;let now=1000;Date.now=()=>now;t.after(()=>Date.now=clock);const origin='https://tower.test';let packet,cookie='';

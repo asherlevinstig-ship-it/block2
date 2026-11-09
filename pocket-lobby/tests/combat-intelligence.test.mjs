@@ -60,6 +60,6 @@ test('online and offline intelligence settle identically without repeated reward
 });
 
 test('Rules exposes saved style and dodge choices and Auto displays its latest decision',()=>{
- const s=fighter('cautious');s.hunting.encounter=null;const g=boot(s);g.run('openCharacterRules()');assert.equal(g.nodes.get('rulesCombatStyle').value,'cautious');assert.equal(g.nodes.get('rulesAutoDodge').checked,true);assert.match(g.nodes.get('rulesStyleDescription').textContent,/Heal early/);
+ const s=fighter('cautious');s.hunting.encounter=null;const g=boot(s);g.run('openAdvancedCharacterRules()');assert.equal(g.nodes.get('rulesCombatStyle').value,'cautious');assert.equal(g.nodes.get('rulesAutoDodge').checked,true);assert.match(g.nodes.get('rulesStyleDescription').textContent,/Heal early/);
  const active=fighter('cautious');advanceServerCombat(active,2020,()=>.5);active.plan={source:'rules',kind:'queue',queue:{steps:[{type:'huntBoars',amount:1}],repeats:1},activeHunt:{},stepIndex:0,cycle:0};assert.match(autoStatus(active).decision,/Defending/);assert.deepEqual(g.errors,[]);
 });

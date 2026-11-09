@@ -35,7 +35,7 @@ test('continuous adaptive planning matches fine polling, preserves reserves, and
 });
 test('manual handoff and visible goal explanation use the shared Auto flow',()=>{
  const s=start(character());assert.match(autoStatus(s).decision,/Fishing/);assert.match(autoStatus(s).next,/Reassess/);settlePlan(s,62000,{stop:true,random:()=>.5});assert.equal(s.report.reason,'returned');assert.equal(Object.values(s.report.catches).reduce((a,b)=>a+b,0),1);
- const g=boot(character());g.run('openCharacterRules()');assert.equal(g.nodes.get('rulesStrategy').value,'earnGold');assert.equal(g.nodes.get('rulesGoldPolicy').hidden,false);assert.equal(g.nodes.get('rulesExactQueue').hidden,true);assert.deepEqual(g.errors,[]);
+ const g=boot(character());g.run('openAdvancedCharacterRules()');assert.equal(g.nodes.get('rulesStrategy').value,'earnGold');assert.equal(g.nodes.get('rulesGoldPolicy').hidden,false);assert.equal(g.nodes.get('rulesExactQueue').hidden,true);assert.deepEqual(g.errors,[]);
 });
 test('gold goal never spends on a previously saved equipment upgrade',()=>{
  const s=start(character({credits:1000,characterRules:{strategy:'earnGold',goldPolicy:{budget:1000,reserveGold:0},goal:{target:'weapon:ironSword',autoBuy:true}}}));settlePlan(s,320000,{random:()=>.5});assert.equal(s.combatGear.ownedWeapons.includes('ironSword'),false);assert.equal(s.plan.goalResult,undefined);assert.equal(s.plan.goldSpent,0);

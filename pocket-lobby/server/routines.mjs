@@ -11,6 +11,11 @@ import {jobPreview} from '../public/jobs.js';
 import {depthsStageIndex} from '../public/depths.js';
 import {boarRules} from '../public/hunting.js';
 export function touchPresence(state,now,{active=true,activityAt=now,random=Math.random,forceStart=false}={}){
+  if(state.autoSwitch&&!state.plan){
+    const restartAt=state.report?.endedAt??now;delete state.autoSwitch;delete state.report;
+    state.controlMode='auto';touchPresence(state,restartAt,{active:false,forceStart:true,random});
+    if(state.plan)settlePlan(state,now,{random});return;
+  }
   const last=state.routineLastSeen;
   if(state.controlMode==='auto')active=false;
   if(active)now=Math.max(Number.isFinite(last)?last:0,Math.min(now,activityAt));
@@ -18,7 +23,7 @@ export function touchPresence(state,now,{active=true,activityAt=now,random=Math.
   if(active||!Number.isFinite(last))state.routineLastSeen=now;
   const rules=normalizeCharacterRules(state.characterRules);
   if(state.plan?.source==='rules'){
-    settlePlan(state,now,{stop:active,random});return;
+    settlePlan(state,now,{stop:active,random});if(state.autoSwitch&&!state.plan)touchPresence(state,now,{active:false,random});return;
   }
   if(!forceStart&&state.controlMode!=='auto'&&rules.strategy==='routine'&&upgradeGoalProgress(state)?.receipt)return;
   if(depthsStageIndex(state.location)>=0||(!forceStart&&(!rules.enabled||!Number.isFinite(last)||now-last<AWAY_GRACE_MS))||state.plan||state.report)return;
@@ -34,6 +39,7 @@ export function touchPresence(state,now,{active=true,activityAt=now,random=Math.
   // Unfinished manual casts/cuts pay nothing. The saved routine starts cleanly.
   delete state.fishingCast;delete state.timberCut;
   const metadata={source:'rules',routineId,ruleSummary:summary,routineCapAt:startedAt+AWAY_CAP_MS,keepBait:rules.keepBait,timberTarget:rules.timberTarget,...(rules.food?{foodPolicy:rules.food}:{})};
+  if(rules.simpleMode&&rules.simpleMode!=='gambling'){const queue={enabled:true,repeats:1,budget:100000,reserveGold:rules.goldPolicy.reserveGold,minHealth:80,steps:[{type:'rest',amount:0}]};startRoutineQueue(state,{...rules,queue},startedAt,{...metadata,adaptive:true,simpleMode:rules.simpleMode});settlePlan(state,until,{stop:active,random});return;}
   if(rules.strategy==='routine'&&!rules.queue?.enabled&&rules.activity==='exploring'){if(!state.quest.accepted)return;startExplorationPlan(state,startedAt,metadata);settlePlan(state,until,{stop:active,random});return;}
   const wantsRest=rules.strategy==='routine'&&!rules.queue?.enabled&&rules.activity==='rest';
   if(!wantsRest){autoBankGold(state,metadata,startedAt);const food=applyAutoFood(state,metadata,startedAt);if(food.returnHome){state.location='home';state.position={x:5,y:7};state.plan={...metadata,kind:'rest',startedAt,endAt:startedAt+homeRestDuration(state,boarRules.recovery),xp:0,restReason:'food-reserve',ruleSummary:summary};settlePlan(state,until,{stop:active,random});return;}}

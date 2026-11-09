@@ -248,6 +248,7 @@ export function protectFishingState(previous,next){
   if(previous.bedRest){next.bedRest=previous.bedRest;next.homeFurniture=previous.homeFurniture;}else delete next.bedRest;
   next.safeVersion=1;
   if(!(previous.ownedFurniture?.safe>0))next.homeFurniture=(next.homeFurniture??[]).filter(item=>item.type!=='safe');
+  if(previous.autoSwitch)next.autoSwitch=true;else delete next.autoSwitch;
   next.controlMode=previous.controlMode??'play';
   next.dungeonLoot=previous.dungeonLoot;
   if(previous.upgradeGoal)next.upgradeGoal=previous.upgradeGoal;else delete next.upgradeGoal;

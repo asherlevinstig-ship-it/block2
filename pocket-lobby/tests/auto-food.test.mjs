@@ -33,7 +33,7 @@ test('disabled policy and deliberate rest leave meals untouched; online/offline 
  const s=setup(),saved=protectFishingState(s,{...structuredClone(s),meals:{silverfinFeast:999},health:100});assert.deepEqual(saved.meals,s.meals);assert.equal(saved.health,25);
 });
 test('food policy UI persists an explicit choice and exposes threshold and reserve',()=>{
- const g=boot(setup({characterRules:normalizeCharacterRules({food})}));g.run('openCharacterRules()');assert.equal(g.nodes.get('rulesFoodEnabled').checked,true);assert.equal(g.nodes.get('rulesFoodBelow').value,50);assert.equal(g.nodes.get('rulesFoodKeep').value,2);assert.deepEqual(JSON.parse(g.read('JSON.stringify(draftCharacterRules().food)')),food);assert.match(g.nodes.get('rulesFoodPreview').textContent,/Return home/);assert.deepEqual(g.errors,[]);
+ const g=boot(setup({characterRules:normalizeCharacterRules({food})}));g.run('openAdvancedCharacterRules()');assert.equal(g.nodes.get('rulesFoodEnabled').checked,true);assert.equal(g.nodes.get('rulesFoodBelow').value,50);assert.equal(g.nodes.get('rulesFoodKeep').value,2);assert.deepEqual(JSON.parse(g.read('JSON.stringify(draftCharacterRules().food)')),food);assert.match(g.nodes.get('rulesFoodPreview').textContent,/Return home/);assert.deepEqual(g.errors,[]);
 });
 
 test('food is used between real queued fights with identical online and offline outcomes',()=>{

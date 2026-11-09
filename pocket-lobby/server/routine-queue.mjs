@@ -1,3 +1,5 @@
+import {chooseSimpleTask} from './simple-planner.mjs';
+import {explorationStops,EXPLORE_STOP_MS} from './exploration-plan.mjs';
 import {applyAutoFood} from './auto-food.mjs';
 import {roomBoxes,validRoomTile} from '../public/shared-world.js';
 import {cookingQueueRecipes,mealRecipes,homeStove,cookingPlan,prepareMeal} from '../public/cooking.js';
@@ -23,6 +25,7 @@ function finish(state,plan,reason,endedAt){
 }
 function nextStep(plan,at,note){
   plan.entries.push({cycle:plan.cycle+1,type:plan.queue.steps[plan.stepIndex].type,count:plan.stepCount,at,note});
+  if(plan.simpleMode){plan.simpleTasks?.shift();if(!plan.simpleTasks?.length){plan.lastSimpleJob=plan.simpleJob;plan.jobsCompleted=(plan.jobsCompleted??0)+1;}}
   if(plan.adaptive)plan.entries=plan.entries.slice(-64);
   plan.cursorAt=at;plan.nextAt=null;plan.stepCount=0;plan.stepIndex++;
   if(plan.stepIndex===plan.queue.steps.length){plan.stepIndex=0;plan.cycle++;}
@@ -72,7 +75,7 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
     if(!p.adaptive&&resolveQueueGoal(state,p,p.cursorAt))return finish(state,p,'goal-reached',p.cursorAt);
     if(p.adaptive&&p.nextAt===null&&p.stepCount===0){
       if(stop)return finish(state,p,'returned',p.cursorAt);
-      const task=chooseGoldTask(state,p);p.plannerReason=task.reason;
+      const task=p.simpleMode?chooseSimpleTask(state,p,random):chooseGoldTask(state,p);p.plannerReason=task.reason;
       if(task.stop)return finish(state,p,task.stop,p.cursorAt);
       p.queue.steps=[task.step];p.stepIndex=0;p.queue.repeats=p.cycle+1;p.currentLabel=queueActions[task.step.type];
     }
@@ -105,7 +108,8 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
         const enemy=queueHuntEnemies[type];
         interval=Math.max(QUEUE_ACTION_MS,(huntRespawnAt(state.hunting,enemy)??0)-p.cursorAt);
         state.location=enemy.room;state.position={x:5,y:5};
-      }else if(type==='rest'){interval=state.health<100?homeRestDuration(state,QUEUE_ACTION_MS):QUEUE_ACTION_MS;state.location='home';state.position={x:5,y:7};}
+      }else if(type==='explore'){const stop=explorationStops[(p.exploreIndex??0)%explorationStops.length];interval=EXPLORE_STOP_MS;state.location=stop.room;state.position={x:stop.x,y:stop.y};}
+      else if(type==='rest'){interval=state.health<100?homeRestDuration(state,QUEUE_ACTION_MS):p.simpleMode?60000:QUEUE_ACTION_MS;state.location='home';state.position={x:5,y:7};}
       else{state.location=type==='buyBait'?'store':'market';state.position={x:5,y:5};}
       p.nextAt=p.cursorAt+interval;changed=true;
     }
@@ -152,6 +156,7 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
       if(cost&&(state.credits-cost<p.queue.reserveGold||state.credits<cost))return finish(state,p,'gold-reserve',at);
       state.credits-=cost;state.fishingGear.bait+=packs*fishingCatalog.bait.quantity;p.goldSpent+=cost;p.baitBought+=packs*fishingCatalog.bait.quantity;p.stepCount=packs*fishingCatalog.bait.quantity;autoStoreVault(state,p,at);
       nextStep(p,at,'Bought '+p.stepCount+' bait for '+cost+' gold');changed=true;continue;
+    }else if(type==='explore'){const room=state.location;if(room!=='outside'&&!state.adventure.discovered.includes(room))state.adventure.discovered.push(room);p.exploreIndex=(p.exploreIndex??0)+1;p.explored=(p.explored??0)+1;nextStep(p,at,'Explored '+room);changed=true;continue;
     }else if(type==='rest'){state.health=100;nextStep(p,at,'Rested at home');changed=true;continue;}
     p.cursorAt=at;p.nextAt=null;changed=true;
     if(!Object.hasOwn(cookingQueueRecipes,type)&&p.stepCount>=step.amount)nextStep(p,at,'Gathered '+p.stepCount);

@@ -4886,7 +4886,7 @@ function updateCharacterRulesPreview(){
   }catch(error){$('rulesPreview').textContent=error.message;$('rulesStatus').textContent=error.message;$('rulesStatus').dataset.validation='true';$('rulesSave').disabled=true;}
 
 }
-function openCharacterRules({focusGoal=false}={}){
+function openAdvancedCharacterRules({focusGoal=false}={}){
   if(needsAutoLesson()){openAutoLesson();return;}
   if(player.inCombat&&window.playerCloud?.initial?.plan?.source!=='rules'){note('Finish combat before changing your Auto Mode settings.');return;}
   if(!routineControlled())window.towerPauseForAccount();
@@ -4915,6 +4915,48 @@ function openCharacterRules({focusGoal=false}={}){
   if(!log.children.length){const row=document.createElement('li');row.textContent='Your next away routine will appear here.';log.append(row);}
   $('rulesHuntingDetails').open=false;selectAutoModePage('activity');updateCharacterRulesPreview();if(!$('characterRulesDialog').open)$('characterRulesDialog').showModal();if(focusGoal){$('autoUpgradeOptions').open=true;$('autoUpgradeOptions').scrollIntoView?.({block:'center'});$('rulesGoalTarget').focus({preventScroll:true});}
 }
+let simpleAutoChoice='fishing',simpleAutoBusy=false;
+function renderSimpleAuto(){
+ const info=simpleAutoModes[simpleAutoChoice];$('simpleAutoLoop').textContent=info.loop;$('simpleAutoDetail').textContent=info.detail;$('simpleAutoGamble').hidden=simpleAutoChoice!=='gambling';
+ for(const button of $('simpleAutoChoices').children)button.setAttribute('aria-pressed',String(button.dataset.mode===simpleAutoChoice));
+ $('simpleAutoStart').disabled=$('simpleAutoSave').disabled=simpleAutoBusy;$('simpleAutoStart').textContent=simpleAutoBusy?'Starting…':window.playerCloud?.initial?.plan?'Switch Auto':'Start Auto';
+}
+function openCharacterRules(options={}){
+ if(options.focusGoal||options.advanced){openAdvancedCharacterRules(options);return;}
+ if(needsAutoLesson()){openAutoLesson();return;}
+ if(!routineControlled())window.towerPauseForAccount();
+ const state=window.playerCloud?.initial??{},rules=normalizeCharacterRules(state.pendingCharacterRules??characterRules);
+ simpleAutoChoice=rules.simpleMode??(['fishing','exploring','rest'].includes(rules.activity)?rules.activity:'random');
+ $('simpleAutoIdle').checked=rules.enabled;$('simpleAutoReserve').value=rules.simpleMode?rules.goldPolicy.reserveGold:0;
+ $('simpleAutoTable').value=rules.gambling.game;$('simpleAutoBet').value=rules.gambling.bet;$('simpleAutoLoss').value=rules.gambling.lossLimit;
+ $('simpleAutoStatus').textContent=rules.simpleMode?'':state.autoConfigured?'Choose a loop to replace your existing custom plan.':'';
+ const list=$('simpleAutoChoices');list.replaceChildren();
+ for(const [id,mode] of Object.entries(simpleAutoModes)){
+ const button=document.createElement('button');button.type='button';button.dataset.mode=id;
+ const icon=document.createElementNS('http://www.w3.org/2000/svg','svg');icon.setAttribute('class','hud-icon');icon.setAttribute('aria-hidden','true');
+ const use=document.createElementNS('http://www.w3.org/2000/svg','use');use.setAttribute('href','#hud-i-'+mode.icon);icon.append(use);
+ const label=document.createElement('b');label.textContent=mode.name;button.append(icon,label);button.onclick=()=>{simpleAutoChoice=id;$('simpleAutoStatus').textContent='';renderSimpleAuto();};list.append(button);
+ }
+ renderSimpleAuto();$('simpleAutoDialog').showModal();
+}
+function simpleAutoOptions(){return {enabled:$('simpleAutoIdle').checked,reserveGold:Number($('simpleAutoReserve').value),game:$('simpleAutoTable').value,bet:Number($('simpleAutoBet').value),lossLimit:Number($('simpleAutoLoss').value)};}
+async function saveSimpleAuto(start){
+ if(simpleAutoBusy||!$('simpleAutoForm').reportValidity())return;
+ try{
+ simpleAutoBusy=true;renderSimpleAuto();$('simpleAutoStatus').textContent='';
+ const options=simpleAutoOptions(),rules=normalizeCharacterRules(simpleAutoRules(simpleAutoChoice,options));
+ if(!routineControlled())savePlayerState();
+ const state=start?await window.playerCloud.startSimpleAuto(simpleAutoChoice,options):await window.playerCloud.saveRules(rules);
+ characterRules=normalizeCharacterRules(state.characterRules);updateUpgradeGoalHud();
+ if(start){$('simpleAutoDialog').close();note(state.autoSwitch?'Finishing this fight, then switching Auto.':simpleAutoModes[simpleAutoChoice].name+' started.');}
+ else $('simpleAutoStatus').textContent=state.pendingCharacterRules?'Saved. Your new loop starts next session.':'Saved. Choose Auto whenever you are ready.';
+ }catch(error){$('simpleAutoStatus').textContent=error.message;}
+ finally{simpleAutoBusy=false;renderSimpleAuto();}
+}
+$('simpleAutoForm').onsubmit=event=>{event.preventDefault();saveSimpleAuto(true);};
+$('simpleAutoSave').onclick=()=>saveSimpleAuto(false);
+$('simpleAutoAdvanced').onclick=()=>{$('simpleAutoDialog').close();openAdvancedCharacterRules();};
+$('simpleAutoDialog').oncancel=event=>{if(simpleAutoBusy)event.preventDefault();};
 $('openCharacterRules').onclick=openCharacterRules;$('upgradeGoalHud').onclick=openCharacterRules;
 $('clearAutoUpgradeGoal').onclick=()=>{$('rulesGoalTarget').value='';$('rulesGoalAutoBuy').checked=false;updateCharacterRulesPreview();$('rulesStatus').textContent='Completed goal cleared. Save Auto Mode to use your routine again.';};
 $('rulesQueueAdd').onclick=()=>{if(ruleQueueDraft.length<8)ruleQueueDraft.push({type:'fishing',amount:5});renderRuleQueue();updateCharacterRulesPreview();};

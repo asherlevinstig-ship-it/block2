@@ -54,7 +54,7 @@ test('beetle escape and defeat stop the queue and do not run later trading',()=>
 test('hunting preview communicates danger, exact loot and XP and the equipment improvement',()=>{
  const novice=huntingTargetPreview(normalizeState({}),'beetle'),veteran=huntingTargetPreview(initial(),'beetle');
  assert.equal(novice.unlocked,false);assert.equal(novice.recommended,false);assert.match(novice.danger,/Very dangerous/);assert.equal(veteran.unlocked,true);assert.equal(veteran.recommended,true);assert.equal(veteran.xp,70);assert.equal(veteran.enemy.sellPrice,45);
- const g=boot(initial());g.context.playerCloud.initial=initial();g.run('openCharacterRules()');assert.equal(g.read('draftCharacterRules().queue.steps[0].type'),'huntBeetles');
+ const g=boot(initial());g.context.playerCloud.initial=initial();g.run('openAdvancedCharacterRules()');assert.equal(g.read('draftCharacterRules().queue.steps[0].type'),'huntBeetles');
 });
 
 import {handlePlayerApi} from '../server/player-api.mjs';
