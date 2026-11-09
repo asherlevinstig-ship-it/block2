@@ -73,6 +73,9 @@ const ownedFurniture=Object.fromEntries(Object.keys(types).map(type=>{
 }));
 const availableFurniture=type=>(ownedFurniture[type]??0)-countFurniture(homeFurniture,type);
 let familiarState=normalizeFamiliars(savedPlayerState?.familiars),selectedWildAnimal=null,wildlifeAffection=null,wildlifeFeedback=null;
+let familiarReaction=null;
+const familiarFollowers=new Map(),familiarPortraits=[];
+let lastFamiliarPortraitFrame=0;
 const adventure={lantern:false,groveTrail:false,bridge:false,shrine:false,shortcut:false,discovered:[],silverfin:0,...savedPlayerState?.adventure};
 let depthsRun=savedPlayerState?.depthsRun??null,depthsExploring=false;
 let depthsDiscovered=savedPlayerState?.depthsDiscovered===true||!!depthsRun
@@ -545,7 +548,7 @@ function drawRemote(peer,time){
   ctx.save();if((peer.hurtUntil??0)>time)ctx.globalAlpha=.55;
   sprite(ctx,x,y,{outfit:peer.outfit,trousers:peer.trousers,boots:peer.boots,hair:peer.hair},{direction:peer.direction,back:peer.back,cycle:moving?time/STEP_MS:0,seated:!!peer.seat,wave:waveAge>=0&&waveAge<WAVE_MS?waveAge/WAVE_MS:null,sheathed:!!peer.weapon,weaponTier:peer.weapon,vest:peer.armour,fishing:isFishingRoom(currentRoom)&&peer.activity==='fishing'&&!moving?'waiting':null,fishingAge:time,time});
   if(isFishingRoom(currentRoom)&&peer.activity==='fishing'&&!moving)drawFishingMoment(x,y,time,{started:time-2000,castEnds:time-1500,biteAt:Infinity,landAt:Infinity},{y:peer.ry,direction:peer.direction,back:peer.back});
-  drawFamiliar(ctx,peer.familiar,x+(peer.direction==='left'?13:-13),y+4,time,{flipped:peer.direction==='left',reduced:reducedMotion.matches});
+  drawFollowingFamiliar(peer.id,peer.familiar,peer.rx,peer.ry,peer.direction,time);
   ctx.restore();
 }
 function updatePeerLabels(time){
@@ -1374,8 +1377,8 @@ async function useFamiliar(){
  const session=fishingSession;
  try{
   const packet=await serverGameplay('familiarUse',{castId:session?.serverCastId});
-  if(id==='otter'&&session&&fishingSession===session&&packet.state.fishingCast){session.bonus=packet.state.fishingCast.bonus;note('Second Chance · +5 bonus Patience XP');}
-  if(id==='owl'){if($('familiarsDialog').open)$('familiarsDialog').close();if($('hudMapDialog').open)$('hudMapDialog').close();note('Moon Sight · Follow the silver marks.');}
+  if(id==='otter'&&session&&fishingSession===session&&packet.state.fishingCast){familiarReaction={id,pose:'cast',at:performance.now()};session.bonus=packet.state.fishingCast.bonus;note('Second Chance · +5 bonus Patience XP');}
+  if(id==='owl'){familiarReaction={id,pose:'cast',at:performance.now()};if($('familiarsDialog').open)$('familiarsDialog').close();if($('hudMapDialog').open)$('hudMapDialog').close();note('Moon Sight · Follow the silver marks.');}
  }catch(error){if($('familiarsDialog').open)$('familiarStatus').textContent=error.message;else note(error.message);}
 }
 function drawMoonSight(time){
@@ -1388,16 +1391,16 @@ function drawMoonSight(time){
  }
 }
 function renderFamiliars(){
- const cards=$('familiarCards');cards.replaceChildren();
+ const cards=$('familiarCards');cards.replaceChildren();familiarPortraits.length=0;
  for(const [id,item] of Object.entries(familiars)){
   const owned=familiarState.owned.includes(id),equipped=familiarState.equipped===id;
   const card=document.createElement('article');card.className='familiar-card';card.dataset.equipped=String(equipped);card.style.setProperty('--familiar-color',item.color);
   const header=document.createElement('header'),art=document.createElement('canvas'),copy=document.createElement('div'),title=document.createElement('h3'),tag=document.createElement('small');
-  art.width=48;art.height=46;art.setAttribute('aria-hidden','true');drawFamiliar(art.getContext('2d'),id,24,id==='owl'?46:36,0,{scale:3,reduced:true});
+  art.width=84;art.height=66;art.setAttribute('aria-hidden','true');familiarPortraits.push({id,ctx:art.getContext('2d')});drawFamiliarPortrait(familiarPortraits.at(-1),performance.now());
   title.textContent=item.name;tag.textContent=equipped?'Equipped':owned?'Bonded':item.unlock;copy.append(title,tag);header.append(art,copy);card.append(header);
   for(const [name,detail] of [[item.passive,item.perk],[item.ability,item.detail]]){const p=document.createElement('p'),b=document.createElement('b');b.textContent=name;const description=document.createElement('span');description.textContent=detail;p.append(b,description);card.append(p);}
   const actions=document.createElement('div'),button=document.createElement('button');actions.className='familiar-actions';button.type='button';button.textContent=equipped?'Unequip':owned?'Equip':'Find in reserve';
-  button.onclick=async()=>{if(!owned){guideToWildlife(id);return;}try{await serverGameplay('familiarEquip',{id:equipped?null:id});$('familiarStatus').textContent=equipped?'Familiar unequipped.':item.name+' equipped.';renderFamiliars();}catch(error){$('familiarStatus').textContent=error.message;}};
+  button.onclick=async()=>{if(!owned){guideToWildlife(id);return;}try{await serverGameplay('familiarEquip',{id:equipped?null:id});if(!equipped)familiarReaction={id,pose:'bond',at:performance.now()};$('familiarStatus').textContent=equipped?'Familiar unequipped.':item.name+' equipped.';renderFamiliars();}catch(error){$('familiarStatus').textContent=error.message;}};
   actions.append(button);
   if(equipped){const use=document.createElement('button');use.type='button';use.textContent=item.ability;use.onclick=()=>useFamiliar();actions.append(use);}
   card.append(actions);cards.append(card);
@@ -1451,18 +1454,52 @@ $('wildlifeAction').onclick=async()=>{
  try{
   await serverGameplay('familiarTame',{id:animal.id,step:trustStep});
   wildlifeFeedback=null;wildlifeAffection={id:animal.id,at:performance.now()};
+  if(familiarState.owned.includes(animal.kind))familiarReaction={id:animal.kind,pose:'bond',at:performance.now()};
   if(familiarState.owned.includes(animal.kind))showTransaction('Familiar bonded',[{icon:'✦',text:familiars[animal.kind].name+(familiarState.equipped===animal.kind?' · Equipped':' · Find it in Familiars')}]);
   updateWildlifeGuide();
  }catch(error){wildlifeFeedback={text:error.message,until:combatNow()+3000};updateWildlifeGuide();}
 };
+function drawFamiliarPortrait(portrait,time){
+ const {id,ctx:target}=portrait;
+ target.clearRect(0,0,84,66);
+ drawFamiliar(target,id,id==='fox'?45:42,57,time,{scale:2,reduced:reducedMotion.matches});
+}
+function drawFollowingFamiliar(key,id,x,y,direction,time){
+ if(!isFamiliar(id)){familiarFollowers.delete(key);return;}
+ const side=direction==='left'?1:-1;
+ const owner={x,y};
+ let follower=familiarFollowers.get(key);
+ if(!follower||follower.id!==id||Math.hypot(x-follower.owner.x,y-follower.owner.y)>2){
+  follower={id,x:x+side*.64,y:y+.45,owner,dx:-side,dy:0,flipped:side===1,time};
+  familiarFollowers.set(key,follower);
+ }
+ const dx=x-follower.owner.x,dy=y-follower.owner.y,moving=Math.hypot(dx,dy)>.006;
+ if(moving){const length=Math.hypot(dx,dy);follower.dx=dx/length;follower.dy=dy/length;}
+ // Keep the companion behind and slightly off the path so it clears the player's feet.
+ const desiredX=x-follower.dx*.87-follower.dy*.48;
+ const desiredY=y-follower.dy*.87+follower.dx*.48;
+ const tx=Math.max(-.3,Math.min(view.cols-.6,desiredX)),ty=Math.max(-.3,Math.min(view.rows-.6,desiredY));
+ const followX=tx-follower.x,followY=ty-follower.y,distance=Math.hypot(followX,followY);
+ const elapsed=Math.min(65,Math.max(0,time-follower.time)),amount=reducedMotion.matches?1:1-Math.exp(-elapsed/115);
+ follower.x+=followX*amount;follower.y+=followY*amount;follower.owner=owner;follower.time=time;
+ if(distance>.18&&Math.abs(followX-followY)>.09)follower.flipped=followX-followY<0;
+ const reaction=key==='self'&&familiarReaction?.id===id?time-familiarReaction.at:Infinity;
+ const reacting=reaction>=0&&reaction<950,active=moving||distance>.22;
+ const pose=reacting?familiarReaction.pose:active?(id==='owl'?'fly':'walk'):'idle';
+ const airborne=id==='owl'&&(active||reacting);
+ follower.flight=(follower.flight??0)+(Number(airborne)-(follower.flight??0))*(1-Math.exp(-elapsed/165));
+ const [px,py]=point(follower.x+.5,follower.y+.5);
+ drawFamiliar(ctx,id,px,py+1,reacting?reaction:time,{scale:.88,flipped:follower.flipped,reduced:reducedMotion.matches,pose,flightBlend:follower.flight});
+}
+
 function drawWildAnimal(animal,time){
  const [x,y]=point(animal.x+.5,animal.y+.5);
  const selected=selectedWildAnimal===animal.id,near=nearWildAnimal(player,animal),color=familiars[animal.kind].color;
  if(selected||near)surface(animal.x+.08,animal.y+.08,.84,.84,.7,color+'24',color);
- surface(animal.x+.22,animal.y+.23,.56,.54,.4,'#233f355b');
- drawFamiliar(ctx,animal.kind,x,y+2,time,{scale:2,flipped:animal.flipped,reduced:reducedMotion.matches,walking:!animal.resting});
- const height=animal.kind==='owl'?36:23;
  const age=wildlifeAffection?.id===animal.id?time-wildlifeAffection.at:Infinity;
+ const reacting=age>=0&&age<900,pose=reacting?'bond':animal.resting?'idle':animal.kind==='owl'?'fly':'walk';
+ drawFamiliar(ctx,animal.kind,x,y+1,reacting?age:time,{scale:1.15,flipped:animal.flipped,reduced:reducedMotion.matches,pose});
+ const height=animal.kind==='owl'&&pose!=='idle'?47:32;
  if(age>=0&&age<900){
   const top=y-height-5-(reducedMotion.matches?0:age/65);
   ctx.save();ctx.globalAlpha=1-age/900;
@@ -2722,7 +2759,7 @@ function draw(time){
     const foe=combatTargetTile(hunting.encounter);const [enemyX,enemyY]=point(foe.x+.5,foe.y+.5);
     const thrust=enemy?pose.lunge-pose.recoil:0;
     sprite(ctx,x+Math.sign(enemyX-x)*thrust-pose.dodge,y+Math.sign(enemyY-y)*thrust+pose.dodge*.4,avatar,{direction:player.direction,back:player.back,cycle,seated:!!seat,wave,weapon:autoChop||!!woodSession||pose.armed&&!!combatGear.equippedWeapon,sheathed:!autoChop&&!woodSession&&!pose.armed&&Object.hasOwn(socialRooms,currentRoom)&&!!combatGear.equippedWeapon,weaponTier:woodSession||autoChop?'basicAxe':combatGear.equippedWeapon,pose:spritePose,vest:armourSelection(combatGear),fishing:cast?fishingMoments.phase(cast,time):null,fishingAge:cast?time-cast.started:0,time});
-    drawFamiliar(ctx,familiarState.equipped,x+(player.direction==='left'?13:-13),y+4,time,{flipped:player.direction==='left',reduced:reducedMotion.matches});
+    drawFollowingFamiliar('self',familiarState.equipped,player.x,player.y,player.direction,time);
     if(cast)drawFishingMoment(x,y,time,cast);
     drawCatchReveal(x,y,time);
     if(player.inCombat){
@@ -2771,6 +2808,7 @@ function draw(time){
   drawHudMiniMap();
   updatePeerLabels(time);
   updateWorldFloats(time);
+  for(const key of familiarFollowers.keys())if(key!=='self'&&!remotePeers.has(key))familiarFollowers.delete(key);
 }
 
 
@@ -3615,6 +3653,9 @@ function advanceAnimation(time){
   if(serverActionBusy){draw(time);return;}
   updateWoodMoment(time);
   updateCombatMoment(time);updateWildlifeGuide();
+  if($('familiarsDialog').open&&!reducedMotion.matches&&time-lastFamiliarPortraitFrame>=95){
+   lastFamiliarPortraitFrame=time;for(const portrait of familiarPortraits)drawFamiliarPortrait(portrait,time);
+  }
   updateFishingMoment(time);
   if(patienceTween){
     const t=reducedMotion.matches?1:Math.min(1,(time-patienceTween.started)/1000);
@@ -5644,7 +5685,7 @@ function enterRoom(next,arrival,{automatic=false}={}){
   catchReveal=null;$('catchReveal').hidden=true;
   const focusRoom=!!document.activeElement.closest('[data-room-link]');
   if(next==='market'&&tradingGuideActive()){if(quest.claimed)tradingPostGuideComplete=true;tradeGuideRouteCache=null;}
-  currentRoom=next;selectedWildAnimal=null;wildlifeAffection=null;wildlifeFeedback=null;$('gameShell').dataset.expedition=watchRooms.includes(next)?next:'';
+  currentRoom=next;selectedWildAnimal=null;wildlifeAffection=null;wildlifeFeedback=null;familiarFollowers.clear();familiarReaction=null;$('gameShell').dataset.expedition=watchRooms.includes(next)?next:'';
   depthsExploring=false;
   const exploring=moonwood.has(next);
   const nextView=next===wildlifeRoom?wildlifeView:exploring?moonwood.view:next==='hub'?hubView:next==='outside'?courtyardView:standardView;

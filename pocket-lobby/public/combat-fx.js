@@ -151,7 +151,7 @@ function drawSpell(ctx,{bx,by,px,py,aim,pgX,pgY},t,effect,reduced){
     }
     case 'familiar': {
       const travel=reduced?1:Math.min(1,t*2.6),x=px+(bx-px)*travel,y=py+(by-py)*travel;
-      if(travel<1)drawFamiliar(ctx,'fox',x,y-7*Math.sin(travel*Math.PI),t*600,{flipped:bx<px,reduced});
+      if(travel<1)drawFamiliar(ctx,'fox',x,y-7*Math.sin(travel*Math.PI),t*600,{flipped:bx<px,reduced,pose:'dash',groundShadow:false});
       else{arc(ctx,bx,by,aim,14+t*8);particles(ctx,bx,by,t,tint,reduced,23,8);}
       break;
     }
