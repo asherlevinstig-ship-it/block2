@@ -26,3 +26,8 @@
 #wildlifeForage{margin:0 0 6px;color:#e6efb2;border-color:#849066;background:#364a39}
 
 .wildlife-odds{display:block;margin:0 0 7px;color:#c4dfa8;font-size:10px;font-variant-numeric:tabular-nums}.wildlife-odds[hidden]{display:none}
+
+.familiar-card h3{overflow-wrap:anywhere}
+.familiar-name-form{display:flex;flex-wrap:wrap;gap:6px;padding-top:4px}
+.familiar-name-form label{flex-basis:100%;font-size:11px;color:#b9c9df}
+.familiar-name-form input{width:100%;min-width:0;padding:7px 8px;background:#182943;color:#edf2fc;border:1px solid #647690;border-radius:7px;font-size:13px}

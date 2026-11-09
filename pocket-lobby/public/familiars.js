@@ -6,13 +6,21 @@ export const familiars={
 };
 export const OTTER_WAIT=.85, FOX_STAGGER=8, MOON_SIGHT_MS=15000;
 export const isFamiliar=id=>typeof id==='string'&&Object.hasOwn(familiars,id);
+export const FAMILIAR_NAME_MAX=20;
+export function normalizeFamiliarName(value){
+ if(typeof value!=='string'||/[\p{Cc}\u202a-\u202e\u2066-\u2069]/u.test(value))return null;
+ const name=value.trim().replace(/\s+/gu,' ');
+ return name.length<=FAMILIAR_NAME_MAX?name:null;
+}
 const clock=value=>Number.isSafeInteger(value)&&value>=0?value:0;
 export function normalizeFamiliars(input){
  const owned=[...new Set((Array.isArray(input?.owned)?input.owned:[]).filter(isFamiliar))];
  const equipped=owned.includes(input?.equipped)?input.equipped:null;
  const readyAt=Object.fromEntries(owned.filter(id=>clock(input?.readyAt?.[id])).map(id=>[id,clock(input.readyAt[id])]));
  const sight=input?.sight?.room&&owned.includes('owl')&&clock(input.sight.until)?{room:input.sight.room,until:input.sight.until}:null;
- return {owned,equipped,readyAt,sight,trust:normalizeTrust(input?.trust),forage:normalizeForage(input?.forage)};
+ const names={};
+ for(const id of owned){const name=normalizeFamiliarName(input?.names?.[id]);if(name)names[id]=name;}
+ return {owned,equipped,readyAt,sight,names,trust:normalizeTrust(input?.trust),forage:normalizeForage(input?.forage)};
 }
 export const familiarFishingTime=(state,duration)=>Math.round(duration*(state.familiars?.equipped==='otter'?OTTER_WAIT:1));
 export const moonSightActive=(state,room,now)=>state.equipped==='owl'&&state.sight?.room===room&&state.sight.until>now;

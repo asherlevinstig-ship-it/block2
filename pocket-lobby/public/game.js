@@ -1390,21 +1390,50 @@ function drawMoonSight(time){
   polygon([[px,py-5],[px+4,py],[px,py+5],[px-4,py]],'#e3e5ff','#909ad6');
  }
 }
-function renderFamiliars(){
+function renderFamiliars(renaming=null,focusRename=null){
  const cards=$('familiarCards');cards.replaceChildren();familiarPortraits.length=0;
  for(const [id,item] of Object.entries(familiars)){
   const owned=familiarState.owned.includes(id),equipped=familiarState.equipped===id;
   const card=document.createElement('article');card.className='familiar-card';card.dataset.equipped=String(equipped);card.style.setProperty('--familiar-color',item.color);
   const header=document.createElement('header'),art=document.createElement('canvas'),copy=document.createElement('div'),title=document.createElement('h3'),tag=document.createElement('small');
   art.width=84;art.height=66;art.setAttribute('aria-hidden','true');familiarPortraits.push({id,ctx:art.getContext('2d')});drawFamiliarPortrait(familiarPortraits.at(-1),performance.now());
-  title.textContent=item.name;tag.textContent=equipped?'Equipped':owned?'Bonded':item.unlock;copy.append(title,tag);header.append(art,copy);card.append(header);
+  const customName=familiarState.names[id],name=customName??item.name;
+  title.textContent=name;
+  const status=equipped?'Equipped':owned?'Bonded':item.unlock;
+  tag.textContent=customName?item.name+' · '+status:status;copy.append(title,tag);header.append(art,copy);card.append(header);
   for(const [name,detail] of [[item.passive,item.perk],[item.ability,item.detail]]){const p=document.createElement('p'),b=document.createElement('b');b.textContent=name;const description=document.createElement('span');description.textContent=detail;p.append(b,description);card.append(p);}
   const actions=document.createElement('div'),button=document.createElement('button');actions.className='familiar-actions';button.type='button';button.textContent=equipped?'Unequip':owned?'Equip':'Find in reserve';
-  button.onclick=async()=>{if(!owned){guideToWildlife(id);return;}try{await serverGameplay('familiarEquip',{id:equipped?null:id});if(!equipped)familiarReaction={id,pose:'bond',at:performance.now()};$('familiarStatus').textContent=equipped?'Familiar unequipped.':item.name+' equipped.';renderFamiliars();}catch(error){$('familiarStatus').textContent=error.message;}};
+  button.onclick=async()=>{if(!owned){guideToWildlife(id);return;}try{await serverGameplay('familiarEquip',{id:equipped?null:id});if(!equipped)familiarReaction={id,pose:'bond',at:performance.now()};$('familiarStatus').textContent=equipped?'Familiar unequipped.':name+' equipped.';renderFamiliars();}catch(error){$('familiarStatus').textContent=error.message;}};
   actions.append(button);
+  if(owned&&renaming!==id){
+   const rename=document.createElement('button');rename.type='button';rename.textContent='Rename';
+   rename.setAttribute('aria-label','Rename '+name);rename.onclick=()=>{$('familiarStatus').textContent='';renderFamiliars(id);};actions.append(rename);
+   if(focusRename===id)queueMicrotask(()=>rename.focus());
+  }
   if(equipped){const use=document.createElement('button');use.type='button';use.textContent=item.ability;use.onclick=()=>useFamiliar();actions.append(use);}
-  card.append(actions);cards.append(card);
+  card.append(actions);
+  if(renaming===id&&owned)card.append(familiarNameForm(id,customName,item.name));
+  cards.append(card);
  }
+}
+function familiarNameForm(id,name,species){
+ const form=document.createElement('form'),label=document.createElement('label'),input=document.createElement('input'),save=document.createElement('button'),cancel=document.createElement('button');
+ form.className='familiar-name-form';
+ input.id='familiarName-'+id;input.maxLength=FAMILIAR_NAME_MAX;input.value=name??'';input.placeholder=species;input.autocomplete='off';
+ label.htmlFor=input.id;label.textContent='Name (blank uses species name)';
+ save.type='submit';save.textContent='Save name';cancel.type='button';cancel.textContent='Cancel';cancel.onclick=()=>{$('familiarStatus').textContent='';renderFamiliars(null,id);};
+ form.append(label,input,save,cancel);
+ form.onsubmit=async event=>{
+  event.preventDefault();
+  save.disabled=cancel.disabled=true;
+  try{
+   await serverGameplay('familiarRename',{id,name:input.value});
+   $('familiarStatus').textContent='Name saved as '+(familiarState.names[id]??species)+'.';
+   renderFamiliars(null,id);
+  }catch(error){$('familiarStatus').textContent=error.message;save.disabled=cancel.disabled=false;input.focus();}
+ };
+ queueMicrotask(()=>{input.focus();input.select();});
+ return form;
 }
 $('openFamiliars').onclick=()=>{$('familiarStatus').textContent='';renderFamiliars();if(!$('familiarsDialog').open)$('familiarsDialog').showModal();};
 

@@ -1,13 +1,13 @@
 import {wildlifeRoom,wildAnimal,nearWildAnimal,wildlifeHabitats,bondStep,bondOdds,FORAGE_COOLDOWN_MS,FORAGE_CAP} from '../public/wildlife.js';
 import {roomBoxes,validRoomTile} from '../public/shared-world.js';
-import {familiars,normalizeFamiliars,MOON_SIGHT_MS} from '../public/familiars.js';
+import {familiars,normalizeFamiliars,normalizeFamiliarName,FAMILIAR_NAME_MAX,MOON_SIGHT_MS} from '../public/familiars.js';
 import {activeAdd,addKinds} from '../public/dungeon-adds.js';
 import {isFishingRoom} from '../public/region-catalog.js';
 import {moonwood} from '../public/moonwood.js';
 import {dungeonRooms} from '../public/dungeon-arena.js';
 
 export function familiarAction(state,action,body,now,random=Math.random){
- if(!['familiarRecruit','familiarTame','familiarForage','familiarEquip','familiarUse'].includes(action))return false;
+ if(!['familiarRecruit','familiarTame','familiarForage','familiarRename','familiarEquip','familiarUse'].includes(action))return false;
  const current=normalizeFamiliars(state.familiars),id=body.id;
  if(action==='familiarUse'){
   if(current.equipped==='fox')throw new Error('Select an add during combat to use Cinder Pounce.');
@@ -58,6 +58,11 @@ export function familiarAction(state,action,body,now,random=Math.random){
     if(!current.equipped)current.equipped=animal.kind;
     for(const other of Object.keys(current.trust))if(wildAnimal(other,now)?.kind===animal.kind)delete current.trust[other];
    }else current.trust[id]={step:trust.step+1,lastRest:animal.rest};
+  }else if(action==='familiarRename'){
+   if(!current.owned.includes(id))throw new Error('Befriend this familiar before naming it.');
+   const name=normalizeFamiliarName(body.name);
+   if(name===null)throw new Error('Choose a name with up to '+FAMILIAR_NAME_MAX+' characters.');
+   if(name)current.names[id]=name;else delete current.names[id];
   }else{
    if(id!==null&&!current.owned.includes(id))throw new Error('Befriend this familiar before equipping it.');
    current.equipped=id;
