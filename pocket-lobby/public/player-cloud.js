@@ -399,6 +399,7 @@
       const woodRules=await import('./woodcutting.js');
       const crafting=await import('./crafting.js');
       const cooking=await import('./cooking.js');
+      const autoFeedback=await import('./auto-feedback.js');
       const characterRules=await import('./character-rules.js');
       const commissions=await import('./commissions.js');
       const essences=await import('./essences.js');
@@ -408,7 +409,7 @@
       const multiplayer=await import('./multiplayer.js');
       const training=await import('./training.js');
       const dungeonLoot=await import('./dungeon-loot.js');
-      Object.assign(window,{towerCharacterArt},rules,hunting,loungeUI,art,fx,environment,quests,historyRules,shopUI,clothing,progression,woodRules,crafting,cooking,characterRules,commissions,essences,depths,jobs,shared,multiplayer,training,dungeonLoot);
+      Object.assign(window,{towerCharacterArt},rules,hunting,loungeUI,art,fx,environment,quests,historyRules,shopUI,clothing,progression,woodRules,crafting,cooking,autoFeedback,characterRules,commissions,essences,depths,jobs,shared,multiplayer,training,dungeonLoot);
       window.towerInitialState=packet.state;
       window.playerCloud={enqueue,flush,attach,combatNow:()=>combatClock.now(),gameplay:async(name,body={})=>{
         if(gameplayBusy)throw new Error('Wait for your current action to finish.');

@@ -3312,6 +3312,7 @@ function advanceAnimation(time){
   if(player.waveStarted!==null&&time>=player.waveStarted+WAVE_MS)player.waveStarted=null;
   if(noticeUntil&&time>noticeUntil){noticeUntil=0;setHint();}
   updateActivityPrompt();
+  renderAutoTable(time);
   draw(time);
   if($('avatarDialog').open)drawAvatarPreview(time);
   if($('tailorDialog').open)drawTailorPreview(time);
@@ -3955,7 +3956,7 @@ function buyFishingRod(id){
   $('shopStatus').textContent=rod.name+' purchased and equipped.'+(upgraded?' Next, try it at Silverfin Pond.':'')+(includedBait?' One Riverworm included for your first cast.':'');
   showTransaction(upgraded?'First upgrade complete!':'Rod purchased',[{text:'+1 '+rod.name,icon:'♓'},{text:upgraded?'3.8s per catch · Better-quality fish chances':'Equipped and ready',icon:'✓'},...(includedBait?[{text:'1 Riverworm for your first cast',icon:'≋'}]:[])],-rod.price);
 }
-function showTransaction(title,items,creditChange=0){
+function showTransaction(title,items,creditChange=0,options={}){
   const card=document.createElement('div'),heading=document.createElement('b');
   card.className='transaction-card';
   heading.textContent=title;card.append(heading);
@@ -3969,7 +3970,7 @@ function showTransaction(title,items,creditChange=0){
     const gain=creditChange>0;
     const delta=document.createElement('div');
     delta.className='transaction-credits '+(gain?'credit-gain':'credit-spend');
-    delta.textContent=(gain?'+':'−')+new Intl.NumberFormat().format(Math.abs(creditChange))+' credits';
+    delta.textContent=(gain?'+':'−')+new Intl.NumberFormat().format(Math.abs(creditChange))+(options.auto?' gold':' credits');
     const balance=document.createElement('small');
     balance.textContent='Balance '+new Intl.NumberFormat().format(credits);
     delta.append(balance);card.append(delta);
@@ -3981,13 +3982,15 @@ function showTransaction(title,items,creditChange=0){
     $('credits').textContent=new Intl.NumberFormat().format(displayedCredits);
     for(const previous of $('creditWallet').querySelectorAll('.wallet-delta'))previous.remove();
     const burst=document.createElement('span');
-    burst.className='wallet-delta '+(gain?'credit-gain':'credit-spend');
-    burst.textContent=(gain?'+':'−')+Math.abs(creditChange);
+    const walletChange=options.walletDelta??creditChange;
+    burst.className='wallet-delta '+(walletChange>0?'credit-gain':'credit-spend');
+    burst.textContent=walletChange?(walletChange>0?'+':'−')+Math.abs(walletChange):'';
     burst.setAttribute('aria-hidden','true');
     $('creditWallet').append(burst);
     setTimeout(()=>burst.remove(),1400);
   }
-  const notices=$('enchantDialog').open?$('enchantTransactions'):$('merchantDialog').open?$('merchantTransactions'):$('craftDialog').open?$('craftTransactions'):$('transactions');
+  if(options.auto){card.dataset.auto='true';card.dataset.outcome=options.outcome??'progress';}
+  const notices=options.auto?$('transactions'):$('enchantDialog').open?$('enchantTransactions'):$('merchantDialog').open?$('merchantTransactions'):$('craftDialog').open?$('craftTransactions'):$('transactions');
   while(notices.children.length>=4)notices.children[0].remove();
   notices.append(card);
   setTimeout(()=>card.remove(),5200);
@@ -5446,11 +5449,31 @@ function advanceAutoJourney(){
   route=destination.path;target={x:destination.x,y:destination.y};autoJourney.blocked=false;
 }
 window.towerAutoTravelStatus=()=>autoJourney?{destination:roomDetails[autoJourney.room]?.name??autoJourney.room,room:roomDetails[currentRoom]?.name??currentRoom,blocked:!!autoJourney.blocked}:null;
+const autoFeedbackTracker=typeof createAutoFeedbackTracker==='function'?createAutoFeedbackTracker(savedPlayerState):null;
+let autoTableState=null,autoTableServerAt=0,autoTableLocalAt=0,autoTableKey='';
+function renderAutoTable(time){
+ if(typeof autoTableView!=='function')return;
+ const view=autoTableView(autoTableState,autoTableServerAt+Math.max(0,time-autoTableLocalAt));
+ const board=$('autoTable');board.hidden=!view;
+ if(!view)return;
+ const key=[view.phase,view.remaining,view.rounds,view.game,view.outcome].join(':');if(key===autoTableKey)return;autoTableKey=key;
+ board.dataset.game=view.game;board.dataset.phase=view.phase;board.dataset.outcome=view.outcome;
+ $('autoTableTitle').textContent=view.title;$('autoTableDetail').textContent=view.detail;$('autoTableAmount').textContent=view.amount;$('autoTableNumber').textContent=view.phase==='result'?view.number:'✦';
+ const hands=$('autoTableHands');hands.replaceChildren();
+ if(view.game==='blackjack')for(const [label,cards] of [['You',view.cards?.player],['Dealer',view.cards?.dealer]]){
+  const row=document.createElement('div'),name=document.createElement('small');name.textContent=label;row.append(name);
+  for(const card of cards??[null,null]){const tile=document.createElement('span');tile.className='auto-playing-card';tile.textContent=card?(card.rank===1?'A':card.rank===11?'J':card.rank===12?'Q':card.rank===13?'K':card.rank)+(typeof card.suit==='string'?card.suit:['♠','♥','♦','♣'][card.suit]??''):'◆';row.append(tile);}hands.append(row);
+ }
+}
 window.towerApplyRoutineState=state=>{
   trainingController?.close();
   fishingSession=null;fishingStarted=null;woodSession=null;treeFall=null;catchReveal=null;patienceTween=null;
   $('catchReveal').hidden=true;interaction=null;player.seat=null;autoJourneyState=state;
+  const serverNow=window.playerCloud?.serverTime??Date.now();
+  const feedback=autoFeedbackTracker?.update(state,{now:serverNow,visible:!document.hidden})??[];
   applyServerGameplay(state);
+  autoTableState=state;autoTableServerAt=serverNow;autoTableLocalAt=performance.now();autoTableKey='';renderAutoTable(autoTableLocalAt);
+  for(const event of feedback)showTransaction(event.title,[{icon:event.outcome==='win'?'✦':event.outcome==='lose'?'♠':'↻',text:event.detail},...(event.banked?[{icon:'◈',text:event.banked+' gold saved to your safe'}]:[])],event.gold,{auto:true,outcome:event.outcome,walletDelta:event.walletDelta});
   const alreadyThere=currentRoom===state.location&&!step&&!route.length&&(autoArrivalKey===autoActivityKey(state)||Math.abs(player.cx-(state.position?.x??player.cx))+Math.abs(player.cy-(state.position?.y??player.cy))===0);
   if(!alreadyThere||autoJourney){if(!autoJourney||autoJourney.room!==state.location){route=[];target=null;}autoJourney={room:state.location,blocked:false};setPlayerCombat(false);}
   else {autoArrivalKey=autoActivityKey(state);setPlayerCombat(!!state.plan?.activeHunt&&!!hunting.encounter);}

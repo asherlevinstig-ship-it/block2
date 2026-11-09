@@ -1,3 +1,4 @@
+import * as autoFeedback from '../../public/auto-feedback.js';
 import * as cookingRules from '../../public/cooking.js';
 import * as bedRules from '../../public/bed-rest.js';
 import * as dungeonLootUI from '../../public/dungeon-loot.js';
@@ -56,7 +57,7 @@ export function boot(saved){
   const html=fs.readFileSync(new URL('index.html',root),'utf8');
   for(const [,id] of html.matchAll(/id="([^"]+)"/g))nodes.set(id,new Node());
   nodes.get('profile').children=[new Node(),new Node()];
-  const context=vm.createContext({...cookingRules,...bedRules,...dungeonLootUI,drawEnvironmentFx,...loungeUI,...essenceUI,...progressionUI,...fishing,...hunting,...art,...fx,...quests,...historyRules,...shopUI,...clothes,...woodUI,...craftingUI,...sharedWorld,...jobs,...rulesUI,...commissions,...depthsUI,
+  const context=vm.createContext({...autoFeedback,...cookingRules,...bedRules,...dungeonLootUI,drawEnvironmentFx,...loungeUI,...essenceUI,...progressionUI,...fishing,...hunting,...art,...fx,...quests,...historyRules,...shopUI,...clothes,...woodUI,...craftingUI,...sharedWorld,...jobs,...rulesUI,...commissions,...depthsUI,
     document:{getElementById:id=>{assert(nodes.has(id),'Missing HTML element '+id);return nodes.get(id);},createElement:()=>new Node(),querySelectorAll:()=>[],querySelector:()=>null,addEventListener:noop,activeElement:new Node()},
     localStorage:{getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,v)},
     matchMedia:()=>({matches:false}),requestAnimationFrame:fn=>frames.push(fn),performance:{now:()=>1000},setTimeout:noop,clearTimeout:noop,
