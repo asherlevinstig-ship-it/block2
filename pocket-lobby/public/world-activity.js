@@ -12,7 +12,7 @@ export function worldActivityEvents(before,after,now=Date.now()){
   if(r?.status==='complete'&&(r.id!==old?.id||old?.status!=='complete')){const net=r.payout-r.bet;add('gamble:'+r.id,net<0?'loss':net>0?'gold':'push',(net<0?'−'+Math.abs(net):net>0?'+'+net:'±0')+' gold',net,now,'lounge');}
  }
  const receipt=after.fishingReceipt;
- if(receipt?.castId&&receipt.castId!==before.fishingReceipt?.castId)add('catch:'+receipt.castId,'catch','+1 '+(fishProducts[receipt.fish]?.name??'fish'),1,now,'pond');
+ if(receipt?.castId&&receipt.castId!==before.fishingReceipt?.castId)add('catch:'+receipt.castId,'catch','+1 '+(fishProducts[receipt.fish]?.name??'fish'),1,now,receipt.room??after.location);
  if(same){const caught=sum(p.catches)-sum(b.catches);if(caught>0){const names=Object.keys(p.catches??{}).filter(id=>(p.catches[id]??0)>(b.catches?.[id]??0));add('catch:'+p.startedAt+':'+sum(p.catches),'catch','+'+caught+' '+(caught===1?fishProducts[names[0]]?.name??'fish':'fish'),caught,p.cursorAt??(Number.isFinite(p.nextCatchAt-p.interval)?p.nextCatchAt-p.interval:now),'pond');}}
  if(after.combatReceipt?.id!==before.combatReceipt?.id)for(const e of after.combatReceipt?.events??[]){
   const key='combat:'+after.combatId+':'+e.at+':'+e.action,eventRoom=before.hunting?.encounter?before.location:room;

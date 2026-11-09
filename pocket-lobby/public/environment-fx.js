@@ -3,6 +3,9 @@ const gold=['#ffe5a8','#efbb75'];
 const aqua=['#b7e7e7','#73c8d6'];
 const violet=['#e1c8ff','#aaa7e9'];
 const rooms={
+  reedwater:{leaves:{color:['#e3d9a1','#b1cc93'],count:8,area:[1,1,11,9]},mist:[[5.5,1.5,40],[6.5,8,38]],fireflies:{color:aqua,count:6,area:[4,1,8,9]}},
+  willowbank:{leaves:{color:['#c7dca4','#a2c291'],count:12,area:[1,1,7,9]},fireflies:{color:['#e6edb4','#b9e7d0'],count:10,area:[5,1,11,9]},mist:[[10,6,40]]},
+  millbrook:{dust:{color:gold,count:10,area:[2,2,9,8]},lights:[[3.5,4.5,22,'#ffe1a3'],[6.5,3.5,30,'#ffdb9e'],[6.5,8.5,28,'#ffcf8b']]},
   furnishings:{dust:{color:gold,count:7,area:[2,2,8,7]},lights:[[8.5,2.5,30,'#f1bd78']]},
   home:{dust:{color:gold,count:7,area:[2,2,7,7]},lights:[[2,4.8,22,'#e2ad62']]},
   hub:{dust:{color:gold,count:13,area:[2,2,15,12]},lights:[[4.5,2.5,26,'#ffcc88'],[16.2,2.3,27,'#7dd5ff']]},

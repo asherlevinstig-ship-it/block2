@@ -1,7 +1,7 @@
 # Wider world: the lands around the Tower
 
 Design proposal and implementation brief, 9 November 2026.
-This is a proposed expansion, not a list of live features. Existing saves and the current world remain intact.
+The first three-area river slice has been implemented; the later stages below remain proposals. Existing saves and old routes are preserved.
 
 ## Player experience
 
@@ -138,3 +138,11 @@ Add tests for bidirectional connectivity, unreachable tiles, new/old save compat
 ## Explicitly deferred
 
 New continents, mining implementation, player robbery/PvP, guild territory, shared bosses, unlimited procedural terrain, full-screen survival meters, new quest chains and economy-wide rarity inflation. These can build on a convincing first region later.
+
+## First delivery — 9 November 2026
+
+Implemented Reedwater Crossing, Willowbank and Millbrook Hamlet, connected from the south-eastern exit of Glass Creek. The crossing uses a walkable stone bridge. Willowbank provides three fishing stations with the existing rods, bait, fish and catch odds; no new species or balance multipliers are introduced yet. The Millbrook trader buys owned fish at existing prices, and the rest bench recovers health after 15 seconds. Public presence, catch feedback, saved discoveries and fog cover all three areas.
+
+Each area uses authored geometry and scenery. Water ripples, reeds, trailing willows, chimney smoke, lamps and a turning waterwheel supply visual variation. Shared region metadata supplies the new IDs, map positions, fishing sites and large prop dimensions; old room IDs remain unchanged.
+
+Site selection for Auto fishing, unique valley fish, new recipes, the dangerous branches and the watchtower expedition remain later stages. Existing Auto fishing still uses Silverfin Pond.

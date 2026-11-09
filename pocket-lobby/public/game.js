@@ -532,8 +532,8 @@ function receivePeers(peers){
   }
   for(const [id,peer] of remotePeers)if(!keep.has(id)){peer.label?.remove();remotePeers.delete(id);}
   const state=window.playerCloud?.initial;
-  if(currentRoom==='pond'&&state?.plan?.source==='rules'&&autoTaskFor(state.plan)==='fishing'&&!autoJourney&&multiplayer?.selfId&&[...remotePeers.values()].some(peer=>peer.id<multiplayer.selfId&&peer.x===player.cx&&peer.y===player.cy)){
-    const destination=autoWorkTile(state);if(destination?.path.length){autoJourneyState=state;autoJourney={room:'pond',blocked:false};route=destination.path;target={x:destination.x,y:destination.y};}
+  if(isFishingRoom(currentRoom)&&state?.plan?.source==='rules'&&autoTaskFor(state.plan)==='fishing'&&!autoJourney&&multiplayer?.selfId&&[...remotePeers.values()].some(peer=>peer.id<multiplayer.selfId&&peer.x===player.cx&&peer.y===player.cy)){
+    const destination=autoWorkTile(state);if(destination?.path.length){autoJourneyState=state;autoJourney={room:currentRoom,blocked:false};route=destination.path;target={x:destination.x,y:destination.y};}
   }
 }
 function drawRemote(peer,time){
@@ -541,8 +541,8 @@ function drawRemote(peer,time){
   surface(peer.rx+.2,peer.ry+.25,.6,.55,.2,'#43324452');
   const moving=Math.hypot(peer.x-peer.rx,peer.y-peer.ry)>.03,waveAge=Date.now()-(peer.waveAt??0);
   ctx.save();if((peer.hurtUntil??0)>time)ctx.globalAlpha=.55;
-  sprite(ctx,x,y,{outfit:peer.outfit,trousers:peer.trousers,boots:peer.boots,hair:peer.hair},{direction:peer.direction,back:peer.back,cycle:moving?time/STEP_MS:0,seated:!!peer.seat,wave:waveAge>=0&&waveAge<WAVE_MS?waveAge/WAVE_MS:null,sheathed:!!peer.weapon,weaponTier:peer.weapon,vest:peer.armour,fishing:currentRoom==='pond'&&peer.activity==='fishing'&&!moving?'waiting':null,fishingAge:time,time});
-  if(currentRoom==='pond'&&peer.activity==='fishing'&&!moving)drawFishingMoment(x,y,time,{started:time-2000,castEnds:time-1500,biteAt:Infinity,landAt:Infinity},{y:peer.ry,direction:peer.direction,back:peer.back});
+  sprite(ctx,x,y,{outfit:peer.outfit,trousers:peer.trousers,boots:peer.boots,hair:peer.hair},{direction:peer.direction,back:peer.back,cycle:moving?time/STEP_MS:0,seated:!!peer.seat,wave:waveAge>=0&&waveAge<WAVE_MS?waveAge/WAVE_MS:null,sheathed:!!peer.weapon,weaponTier:peer.weapon,vest:peer.armour,fishing:isFishingRoom(currentRoom)&&peer.activity==='fishing'&&!moving?'waiting':null,fishingAge:time,time});
+  if(isFishingRoom(currentRoom)&&peer.activity==='fishing'&&!moving)drawFishingMoment(x,y,time,{started:time-2000,castEnds:time-1500,biteAt:Infinity,landAt:Infinity},{y:peer.ry,direction:peer.direction,back:peer.back});
   ctx.restore();
 }
 function updatePeerLabels(time){
@@ -1950,6 +1950,7 @@ function drawFishingStore(market=false){
   drawDoor(storeExit);
 }
 function dimensions(item) {
+  if(riverDimensions[item.type])return riverDimensions[item.type];
   if(item.type==='bookcase'||item.type==='workbench'||item.type==='sofa'||isRestBed(item.type)||item.type==='bench'||isGamingTable(item))return item.rot%2?[1,2]:[2,1];
   if(item.type==='armoryCounter'||item.type==='reception'||item.type==='tackleCounter'||item.type==='tradeCounter')return [3,1];
   if(item.type==='rodRack'||item.type==='weaponRack')return [2,1];
@@ -2314,6 +2315,7 @@ function drawMoonwoodDetails(time){
 }
 const explorationRegions={
   'The Tower':['home','hub','outside','lounge','market','armory','store','furnishings','tailor'],
+  Willowmere:willowmereRooms,
   Moonwood:['trail','logging','clearing','grove','shrine','creek','pond','ruins','roots']
 };
 let trackedDestination=null;
@@ -2393,6 +2395,9 @@ function updateWorldLabels(){
     add('Campfire',...point(campfire.x+.5,campfire.y+.5,32),'npc',()=>use(campfire));
   }
   if(currentRoom==='armory')add('Enchanter',...point(6.5,5.5,45),'npc',()=>use(roomFurniture().find(item=>item.type==='enchanter')));
+  if(willowmereRooms.includes(currentRoom)){
+    for(const item of roomFurniture())if(['riverTrader','riverBench','fishingPost'].includes(item.type))add(item.type==='riverTrader'?'River trader':item.type==='riverBench'?(currentRoom==='millbrook'?'Rest by the mill':'Riverside bench'):'Fishing station',...point(item.x+.5,item.y+.5,item.type==='riverTrader'?42:25),'npc',()=>use(item));
+  }
   if(currentRoom==='logging'){
     add('Workbench',...point(6,3.5,26),'npc',()=>use(roomFurniture().find(item=>item.type==='workbench')));
     add('Woodcutter',...point(4.5,3.5,43),'npc',()=>use(roomFurniture().find(item=>item.type==='woodcutter')));
@@ -2791,7 +2796,7 @@ function updateUpgradeGuide(){
       $('upgradeGuideAction').textContent=currentRoom==='store'?'View bait supplies':'Head to Silverfin Outfitters';
     }else{
       $('upgradeGuideText').textContent='Catch a fish with your Oak Rod at Silverfin Pond to see what your upgrade does.';
-      $('upgradeGuideAction').textContent=currentRoom==='pond'?'Cast with Oak Rod':'Head to Silverfin Pond';
+      $('upgradeGuideAction').textContent=isFishingRoom(currentRoom)?'Cast with Oak Rod':'Head to Silverfin Pond';
     }
     return;
   }
@@ -2911,11 +2916,11 @@ function hudNextDoor(destination){return hudRoute(destination)[0]??null;}
 function updateExplorationNav(){
   bounds=null;
   const next=nextExplorationDoor();
-  const outside=explorationRegions.Moonwood.includes(currentRoom)||currentRoom==='outside';
+  const outside=explorationRegions.Moonwood.includes(currentRoom)||willowmereRooms.includes(currentRoom)||currentRoom==='outside';
   const nav=$('explorationNav');
   nav.hidden=!!depthsRun||(!outside&&!trackedDestination);
   if(nav.hidden)return;
-  $('explorationRegion').textContent=explorationRegions.Moonwood.includes(currentRoom)?'MOONWOOD':'THE TOWER';
+  $('explorationRegion').textContent=willowmereRooms.includes(currentRoom)?'WILLOWMERE':explorationRegions.Moonwood.includes(currentRoom)?'MOONWOOD':'THE TOWER';
   $('explorationPlace').textContent=explorationName(currentRoom);
   let guidance='Choose a destination on the map';
   if(next)guidance='Next: '+explorationName(next.to)+' · Heading to '+explorationName(trackedDestination);
@@ -3090,7 +3095,7 @@ function reelFish(){
 function drawFishingMoment(x,y,time,session=fishingSession,spot={y:player.y}){
   const phase=fishingMoments.phase(session,time);
   const still=reducedMotion.matches;
-  const [waterX,waterY]=point(7.4,Math.max(.7,Math.min(9.3,spot.y+.45)));
+  const [waterX,waterY]=point(fishingSites[currentRoom]?.waterX??7.4,Math.max(.7,Math.min(9.3,spot.y+.45)));
   let bx=waterX,by=waterY;
   let tipX=x+19,tipY=y-33;
   if(phase==='casting'&&!still){
@@ -3159,7 +3164,7 @@ function finishFishing(time){
   const earned=receipt?.xp??PATIENCE_XP_PER_CATCH+session.bonus;
   if(!receipt)playerStats.patienceXp+=earned;
   patienceTween={from:before,to:playerStats.patienceXp,started:time};
-  const oakTrial=firstUpgrade.oakTrialPending&&castProfile?.rod==='oak'&&currentRoom==='pond';
+  const oakTrial=firstUpgrade.oakTrialPending&&castProfile?.rod==='oak'&&isFishingRoom(currentRoom);
   if(oakTrial)firstUpgrade.oakTrialPending=false;
   recordAdventure('Caught '+fish.name+'! +'+earned+' Patience XP.');
   const levelUp=patienceLevel()>oldLevel;
@@ -3233,6 +3238,13 @@ function finishInteraction(){
     openQuest();
   }else if(item.type===huntEnemyForRoom(currentRoom)?.prop){
     startMonsterEncounter(huntEnemyForRoom(currentRoom));
+  }else if(item.type==='riverTrader'){
+    if(!caughtFishCount()){note('The river trader buys fish. Catch some at Willowbank, then return here.');return;}
+    serverGameplay('sell',{id:'allFish'}).then(packet=>{const r=packet.state.tradeReceipt;savePlayerState();showTransaction('Fish sold at Millbrook',[{icon:'⋈',text:r.quantity+' fish sold'}],r.gold);note('Your catch has been sold.');}).catch(error=>note(error.message));
+  }else if(item.type==='riverBench'){
+    if(currentRoom!=='millbrook'){note('A quiet place to watch the river. Rest at Millbrook to recover your hearts.');return;}
+    if(health>=100){note('You rest by the river. All five hearts are full.');return;}
+    serverGameplay('riverRest').then(()=>{updateCombatPanel();note('Resting by the mill · Your hearts recover in 15 seconds.');}).catch(error=>note(error.message));
   }else if(item.type==='fishingPost'){
     if(window.playerCloud?.gameplay){startServerCast();return;}
     if(fishingGear.bait<1){note('You need bait. Visit Silverfin Outfitters in the tower.');return;}
@@ -3523,7 +3535,7 @@ function openMerchant(){
 }
 
 function renderWorldMap(route=[]){
-  const positions={home:[100,55],hub:[340,110],armory:[265,48],market:[465,48],tailor:[180,70],furnishings:[435,145],lounge:[580,75],store:[118,133],
+  const positions={...willowmereMapPositions,home:[100,55],hub:[340,110],armory:[265,48],market:[465,48],tailor:[180,70],furnishings:[435,145],lounge:[580,75],store:[118,133],
     outside:[340,205],trail:[340,315],logging:[107,288],clearing:[109,380],grove:[563,274],shrine:[563,354],
     creek:[338,423],pond:[138,497],ruins:[340,549],roots:[549,493],depthsGate:[340,120],depthsGallery:[340,120],depthsCache:[340,120],depthsTreasury:[340,120],depthsRest:[340,120],depthsTrial:[340,120],depthsVault:[340,120]};
   const rooms=Object.keys(positions).filter(room=>roomDetails[room]&&(room===currentRoom||hudNextDoor(room)));
@@ -3547,8 +3559,9 @@ function renderWorldMap(route=[]){
     ?'<path class="map-region-divider" d="M30 251H610"/><text class="map-region-text" x="30" y="241">THE TOWER</text><text class="map-region-text" x="30" y="266">MOONWOOD</text>':'';
 
   const veil='<defs><filter id="map-fog-soft"><feGaussianBlur stdDeviation="12"/></filter><mask id="map-fog-mask"><rect width="640" height="'+bottom+'" fill="white"/><g filter="url(#map-fog-soft)">'+clearings+'</g></mask><pattern id="map-fog-texture" width="90" height="70" patternUnits="userSpaceOnUse"><path d="M0 40Q25 0 60 28T100 35M-20 60Q25 20 70 55" fill="none" stroke="#7994b0" stroke-opacity=".08" stroke-width="20"/></pattern></defs><g mask="url(#map-fog-mask)"><rect width="640" height="'+bottom+'" fill="#071323"/><rect width="640" height="'+bottom+'" fill="url(#map-fog-texture)"/></g>';
-  $('mapFogSummary').textContent=explorationRegions.Moonwood.filter(room=>fog.known.has(room)).length+' / '+explorationRegions.Moonwood.length+' Moonwood places discovered · Walk into an unexplored area to clear its fog.';
-  $('worldMap').innerHTML='<svg viewBox="0 0 640 '+bottom+'" role="img" aria-label="Exploration map. Fog hides undiscovered places. You are in '+roomDetails[currentRoom].name+'.">'+regions+'<g class="map-links">'+links+'</g>'+veil+nodes+'</svg>';
+  $('mapFogSummary').textContent=explorationRegions.Moonwood.filter(room=>fog.known.has(room)).length+' / '+explorationRegions.Moonwood.length+' Moonwood places discovered · '+willowmereRooms.filter(room=>fog.known.has(room)).length+' / 3 Willowmere · Explore to clear fog.';
+  const valley=rooms.some(room=>willowmereRooms.includes(room)&&fog.status(room)!=='hidden')?'<path class="map-region-divider" d="M30 594H610"/><text class="map-region-text" x="30" y="614">WILLOWMERE VALLEY</text>':'';
+  $('worldMap').innerHTML='<svg viewBox="0 0 640 '+bottom+'" role="img" aria-label="Exploration map. Fog hides undiscovered places. You are in '+roomDetails[currentRoom].name+'.">'+regions+valley+'<g class="map-links">'+links+'</g>'+veil+nodes+'</svg>';
 }
 
 function updateWeaponInventory(){
@@ -4404,7 +4417,7 @@ function currentActivityPrompt(){
     if(tree&&treeState(tree).regrowsAt)return {label:'TREE FELLED',title:'Choose another tree',text:'Click another tree to keep gathering while this stump regrows.'};
     return {label:'WOODCUTTING',title:'Gather some timber',text:'Three cuts fell a tree. Your timber can be sold or used for crafting.',action:'woodAction'};
   }
-  if(currentRoom==='pond'){
+  if(isFishingRoom(currentRoom)){
     if(fishingSession){
       const phase=fishingMoments.phase(fishingSession,performance.now());
       if(phase==='bite')return {label:'FISH ON!',title:'Reel now',text:'Reel in time for bonus Patience XP.',action:'adventureLandmark'};
@@ -4461,6 +4474,9 @@ function updateAdventurePanel(){
   lantern.classList.toggle('active',lanternLit);
   if(!exploring)return;
   const fieldNotes={
+    reedwater:'Follow the stone bridge across the river. Willowbank lies beyond the eastern path.',
+    willowbank:'Choose any free station along the river. Your bait, catches and Patience are your own. Millbrook lies to the north.',
+    millbrook:'The river trader buys fish. Rest on the bench to restore your hearts, or return along the riverside path.',
     logging:!woodcutting.axeOwned?'Meet the woodcutter for a free basic axe. Then chop the marked tree, or set a timed offline shift.':'Chop timber to gain Woodcutting XP. Each timber sells for 4 gold at the Trading Post.',
     clearing:'A Wild Boar guards this clearing. Approach to hunt. Rest in the Tower to refill your hearts.',
     trail:adventure.lantern?'Your lantern reveals hidden trails and crossings.':'Take the lantern from the waystone before heading deeper.',
@@ -4473,7 +4489,7 @@ function updateAdventurePanel(){
   };
   const depthsIndex=depthsStageIndex(currentRoom);
   $('adventureStatus').textContent=fieldNotes[currentRoom]??roomDetails[currentRoom].description;
-  $('fishingStats').hidden=currentRoom!=='pond';
+  $('fishingStats').hidden=!isFishingRoom(currentRoom);
   $('offlinePlanPanel').hidden=currentRoom!=='pond';
   $('startOfflineFishing').disabled=routineControlled()||fishingGear.bait<1||!!fishingSession;
   $('planBait').max=fishingGear.bait;
@@ -4483,9 +4499,9 @@ function updateAdventurePanel(){
   $('adventureProgress').textContent=adventure.discovered.length+' of '+Object.keys(moonwood.areas).filter(room=>depthsStageIndex(room)<0).length+' places discovered';
   const landmark=$('adventureLandmark');
   const bite=!!fishingSession&&fishingMoments.phase(fishingSession,performance.now())==='bite';
-  const action={clearing:!player.inCombat&&combatNow()>=hunting.respawnAt?'Approach boar':'',trail:!adventure.lantern?'Take lantern':'',shrine:'Examine altar',creek:'Cross to the Ruins',ruins:'Visit the Moonwell',pond:bite?'Reel! +5 Patience XP':fishingSession?'Fishing…':'Cast a line'}[currentRoom];
+  const action=currentRoom==='willowbank'?(bite?'Reel! +5 Patience XP':fishingSession?'Fishing…':'Choose a fishing station'):{clearing:!player.inCombat&&combatNow()>=hunting.respawnAt?'Approach boar':'',trail:!adventure.lantern?'Take lantern':'',shrine:'Examine altar',creek:'Cross to the Ruins',ruins:'Visit the Moonwell',pond:bite?'Reel! +5 Patience XP':fishingSession?'Fishing…':'Cast a line'}[currentRoom];
   landmark.hidden=!action||player.inCombat;
-  landmark.disabled=(!!fishingSession&&!bite)||(currentRoom==='pond'&&fishingGear.bait<1);
+  landmark.disabled=(!!fishingSession&&!bite)||(isFishingRoom(currentRoom)&&fishingGear.bait<1);
   landmark.classList.toggle('bite-ready',bite);
   landmark.classList.toggle('cross-creek',currentRoom==='creek');
   landmark.textContent=action??'';
@@ -4696,7 +4712,7 @@ $('adventureLandmark').onclick=()=>{
   }
   if(fishingSound)fishingMoments.enable(true);
   if(fishingSession){reelFish();return;}
-  const landmark=roomFurniture().find(item=>item.id==='landmark');
+  const landmark=isFishingRoom(currentRoom)?roomFurniture().filter(item=>item.type==='fishingPost').sort((a,b)=>Math.abs(a.x-player.cx)+Math.abs(a.y-player.cy)-Math.abs(b.x-player.cx)-Math.abs(b.y-player.cy))[0]:roomFurniture().find(item=>item.id==='landmark');
   if(landmark)use(landmark);
 };
 $('combatFlee').onclick=()=>combatAction('flee');
@@ -5356,7 +5372,7 @@ function enterRoom(next,arrival,{automatic=false}={}){
   $('exitRoom').hidden=!atHome();
   $('returnLobby').hidden=!['tailor','lounge','outside','store','market','armory'].includes(next);
   $('enterMoonwood').hidden=next!=='outside';
-  $('fishingSound').hidden=next!=='pond';
+  $('fishingSound').hidden=!isFishingRoom(next);
   $('railDecorate').hidden=$('edit').hidden=!canDecorate();
   $('bubble').hidden=true;
   updateRoomLabel();
@@ -5416,7 +5432,7 @@ if(savedPlayerState?.timberCut){
   const tree=moonwood.layouts[currentRoom]?.scenery.find(item=>timberKey(item)===cut.key);
   if(tree)restoreServerTimber(cut,window.playerCloud?.serverTime??Date.now(),tree);
 }
-if(hunting.recoveryUntil&&!['hub','home'].includes(currentRoom))enterRoom('hub');
+if(hunting.recoveryUntil&&!['hub','home','millbrook'].includes(currentRoom))enterRoom('hub');
 updateCombatPanel();
 window.towerPauseForAccount=()=>{
   if(player.inCombat)throw new Error('Finish combat before changing accounts.');
@@ -5437,7 +5453,7 @@ function autoActivityAnimation(time){
     if(task==='woodcutting')autoWorkAnimation.tree=autoWorkTile(state)?.item;
   }
   const work=autoWorkAnimation;
-  if(task==='fishing'&&currentRoom==='pond'){
+  if(task==='fishing'&&isFishingRoom(currentRoom)){
     const catches=plan.catches??{},caught=Object.keys(catches).find(id=>(catches[id]??0)>(work.catches[id]??0));
     work.catches={...catches};
     // A landed fish is shown only after a new server-confirmed catch, never on reconnect.
@@ -5463,7 +5479,7 @@ function autoWorkTile(state){
   for(let y=0;y<view.rows;y++)for(let x=0;x<view.cols;x++){
     if(blocked(x,y)||exits.has(tileKey(x,y)))continue;
     if(task==='fishing'&&[...remotePeers.values()].some(peer=>peer.x===x&&peer.y===y))continue;
-    if(task==='fishing'&&Math.abs(x-5)+Math.abs(y-5)>1)continue;
+    if(task==='fishing'&&!besideFishingStation(currentRoom,{x,y}))continue;
     if(item&&!directions.some(([dx,dy])=>overlap(item,{x:x+dx,y:y+dy})))continue;
     candidates.push({x,y,distance:Math.abs(x-goal.x)+Math.abs(y-goal.y),walk:Math.abs(x-player.cx)+Math.abs(y-player.cy)});
   }
@@ -5481,7 +5497,7 @@ function renderAutoJourneyHud(){
 }
 function finishAutoJourney(){
   const state=autoJourneyState;autoArrivalKey=autoActivityKey(state);autoJourney=null;route=[];target=null;interaction=null;player.seat=null;
-  if(currentRoom==='pond'&&autoTaskFor(state?.plan)==='fishing'){player.direction='right';player.back=false;}
+  if(isFishingRoom(currentRoom)&&autoTaskFor(state?.plan)==='fishing'){player.direction='right';player.back=false;}
   setPlayerCombat(!!state?.plan?.activeHunt&&!!hunting.encounter&&currentRoom===state.location);
   updateInventory();updateAdventurePanel();updateCombatPanel();window.towerRefreshAutoStatus?.();if(state?.plan?.source==='rules')connectRoom();
   if(!state?.plan&&!state?.report){$('autoPanel').hidden=true;savePlayerState();connectRoom();}
@@ -5572,7 +5588,7 @@ if(window.playerCloud&&typeof WebSocket!=='undefined'){
   });
   window.towerMultiplayer=multiplayer;connectRoom();
 }else $('networkStatus').textContent='Local preview';
-if(window.playerCloud?.initial?.fishingCast&&currentRoom==='pond'){
+if(window.playerCloud?.initial?.fishingCast&&isFishingRoom(currentRoom)){
   restoreServerCast(window.playerCloud.initial.fishingCast,window.playerCloud.serverTime);
 }
 requestAnimationFrame(animation);

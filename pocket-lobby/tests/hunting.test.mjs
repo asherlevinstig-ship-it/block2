@@ -1,3 +1,4 @@
+import {moonwood} from '../public/moonwood.js';
 import * as bedRules from '../public/bed-rest.js';
 import * as dungeonLootUI from '../public/dungeon-loot.js';
 import {normalizeCharacterRules} from '../public/character-rules.js';
@@ -131,9 +132,7 @@ test('successful escape preserves wounds, gives no loot, and hides combat hearts
 });
 
 test('clearing has a reachable boar and a reciprocal trail exit',()=>{
-  const c=vm.createContext({});
-  vm.runInContext(fs.readFileSync(new URL('../public/moonwood.js',import.meta.url),'utf8').replace('export const moonwood','const moonwood')+'\nglobalThis.world=moonwood;',c);
-  const {world}=c;
+  const world=moonwood;
   assert(world.doors.trail.some(d=>d.to==='clearing'));
   const exit=world.doors.clearing.find(d=>d.to==='trail');assert(exit);
   const items=world.layouts.clearing.scenery;

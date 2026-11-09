@@ -1,3 +1,4 @@
+import {isFishingRoom,besideFishingStation} from '../public/region-catalog.js';
 import {armourCatalog,canUseArmour} from '../public/hunting.js';
 import {normalizeWardrobe,tailorQuote} from '../public/wardrobe.js';
 import {purchaseFurniture} from '../public/furniture-catalog.js';
@@ -19,6 +20,7 @@ import {gamblingAction} from './gambling.mjs';
 import {mealRecipes,prepareMeal} from '../public/cooking.js';
 import {moonwood} from '../public/moonwood.js';
 
+const besideRiverTrader=state=>state.position&&Math.abs(state.position.x-3)+Math.abs(state.position.y-4)===1;
 const prices={boar:30,rabbit:12,deer:24,stonebackShell:45,timber:4,[moonwellShard.id]:moonwellShard.price};
 const earn=(state,gold)=>{
   if(state.credits+gold>100000000)throw new Error('Invalid balance. Make room in your wallet.');
@@ -117,12 +119,13 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
     return;
   }
   if(action==='cast'){
-    location(state,['pond']);
+    location(state,['pond','willowbank']);
     if(state.fishingCast)return;
     const position=state.position;
-    if(!position||Math.abs(position.x-5)+Math.abs(position.y-5)>1)throw new Error('Travel to the fishing post before casting.');
+    if(!besideFishingStation(state.location,position))throw new Error('Travel to the fishing post before casting.');
     const rod=state.fishingGear.equippedRod;
     const profile=fishingCatalog.rods[rod];
+    if(!profile||!state.fishingGear.ownedRods.includes(rod))throw new Error('Choose an equipped fishing rod first.');
     if(state.fishingGear.bait<1)throw new Error('Choose bait before casting.');
     if(skillLevel(state.stats.patienceXp)<profile.patience)throw new Error('Patience is too low for this rod.');
     const biteAt=now+450+Math.round(profile.duration*(.85+random()*.30));
@@ -134,7 +137,7 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
     return;
   }
   if(action==='reel'||action==='catch'){
-    location(state,['pond']);
+    location(state,['pond','willowbank']);
     const cast=state.fishingCast;
     if(!cast||cast.id!==body.castId){
       if(action==='catch'&&state.fishingReceipt?.castId===body.castId)return;
@@ -156,7 +159,7 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
     state.stats.patienceXp=Math.min(MAX_SKILL_XP,before+10+cast.bonus);
     state.history.fishCaught=true;
     recordQuest(state.quest,'fish');
-    state.fishingReceipt={castId:cast.id,fish,rod:cast.rod,before,xp:state.stats.patienceXp-before,bonus:cast.bonus};
+    state.fishingReceipt={room:state.location,castId:cast.id,fish,rod:cast.rod,before,xp:state.stats.patienceXp-before,bonus:cast.bonus};
     delete state.fishingCast;
     return;
   }
@@ -185,8 +188,10 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
     state.credits-=bait.price;state.fishingGear.bait+=bait.quantity;
     return;
   }
+  if(action==='riverRest'){available(state);if(state.fishingCast||state.timberCut||state.location!=='millbrook'||!state.position||![[3,7],[4,6],[5,6],[6,7],[4,8],[5,8]].some(([x,y])=>state.position.x===x&&state.position.y===y))throw new Error('Travel beside the Millbrook rest bench first.');if(state.health>=100)throw new Error('Your hearts are already full.');state.hunting.recoveryUntil=now+15000;return;}
   if(action==='sell'){
-    location(state,['store','market']);
+    location(state,['store','market','millbrook']);
+    if(state.location==='millbrook'&&!besideRiverTrader(state))throw new Error('Travel beside the river trader to sell your fish.');
     const products=body.id==='allFish'?Object.entries(state.fishStock).filter(([,n])=>n>0).map(([id,quantity])=>({id,quantity})):[{id:body.id,quantity:body.quantity}];
     if(!products.length)throw new Error('Invalid sale. There are no fish to sell.');
     let gold=0,quantity=0;
@@ -298,7 +303,7 @@ export function protectFishingState(previous,next){
   const cut=previous.timberCut;
   if(cut&&next.location===previous.location&&next.position?.x===previous.position?.x&&next.position?.y===previous.position?.y&&next.woodcutting.equipped)next.timberCut=cut;
   else delete next.timberCut;
-  if(previous.fishingCast&&next.location==='pond')next.fishingCast=previous.fishingCast;
+  if(previous.fishingCast&&next.location===previous.location&&isFishingRoom(next.location))next.fishingCast=previous.fishingCast;
   if(previous.fishingReceipt)next.fishingReceipt=previous.fishingReceipt;
   if(previous.tradeReceipt)next.tradeReceipt=previous.tradeReceipt;
   return next;

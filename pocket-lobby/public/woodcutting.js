@@ -2,10 +2,10 @@ import {skillLevel,MAX_SKILL_XP} from './skill-curve.js';
 export const woodRules={price:4,xp:10,offlineInterval:60000};
 export const timberTreeRules={cuts:3,regrowMs:30000,fallMs:1050};
 const firstTreeKey='logging:6,5';
-const treeKeyPattern=/^(logging|clearing|trail|grove|creek|shrine|ruins|roots|pond):(?:[0-9]|1[01]),[0-9]$/;
+const treeKeyPattern=/^(reedwater|willowbank|millbrook|logging|clearing|trail|grove|creek|shrine|ruins|roots|pond):(?:[0-9]|1[01]),[0-9]$/;
 
 export function isTimberTree(item){
-  return item?.type==='wildtree'||item?.type==='timberTree';
+  return ['wildtree','timberTree','riverWillow','riverCypress'].includes(item?.type);
 }
 
 export function timberTreeState(wood,now=Date.now(),key=firstTreeKey){

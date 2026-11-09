@@ -1,9 +1,12 @@
+import {willowmereAreas,willowmereRooms,riverWater,riverBridge} from './region-catalog.js';
+import {drawRiverGround,drawRiverWater,drawRiverProp,riverPropHeights} from './willowmere-art.js';
 'use strict';
 
 export const moonwood=(()=>{
   const view={width:540,height:349,cols:12,rows:10,originX:252,originY:105};
   const seed='moonwood-01';
   const areas={
+    ...willowmereAreas,
     depthsGate:{number:'D1',name:'Flooded Gate',description:'An old sluice feeds a rushing channel. Look for the lever by the entrance.',badge:'MOONWELL DEPTHS',floor:'Chamber 1',center:[4,5],palette:['#31454e','#405961','#7a8a89'],landmark:['wildboar',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['wildrock',2,7],['wildrock',9,7],['sluiceLever',3,4],['gateSupply',10,4]]},
     depthsGallery:{number:'D2',name:'Shell Gallery',description:'Green light spills from the fungi. A shell hangs from a weathered chime stand.',badge:'MOONWELL DEPTHS',floor:'Chamber 2',center:[4,5],palette:['#344b45','#4a6054','#84947b'],landmark:['stonebackBeetle',6,5,5,5],authored:[['pillar',2,3],['pillar',8,3],['wildrock',3,7],['wildrock',7,7],['glowFungus',4,2],['glowFungus',9,3],['glowFungus',5,8],['shellChime',3,3],['galleryCache',9,6],['cachePassage',10,4]]},
     depthsCache:{number:'D2+',name:'The Sealed Alcove',description:'An elite Cache Guardian protects 50 gold and an Awakening Stone. Interrupt its Rune Bolt with three quick weapon hits, or dodge the completed spell.',badge:'MOONWELL DEPTHS',floor:'Optional cache chamber',center:[4,5],palette:['#3b3956','#504664','#927fa5'],landmark:['stonebackBeetle',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['pillar',8,7],['vaultCrystal',9,3],['glowFungus',3,7],['cachePassage',2,5],['essenceCache',9,5]]},
@@ -21,7 +24,7 @@ export const moonwood=(()=>{
     roots:{number:'09',name:'Root Passage',description:'A living tunnel winds beneath Moonwood, linking the ruins back to Lantern Trail.',badge:'MOONWOOD',floor:'Forest shortcut',center:[6,5],palette:['#363847','#4b4357','#766274'],authored:[['wildtree',1,2],['wildtree',3,6],['wildtree',6,2],['wildtree',8,7],['wildtree',10,2],['wildbloom',4,3],['wildbloom',8,6]]},
     pond:{number:'10',name:'Silverfin Pond',description:'Cast a line from the old jetty and watch the moonlight ripple over the water.',badge:'MOONWOOD',floor:'Fishing pond',center:[3,5],palette:['#334f59','#486570','#8b9296'],landmark:['fishingPost',5,5,4,5],authored:[['wildtree',1,1],['wildtree',3,1],['wildtree',1,8],['wildtree',4,8],['wildrock',4,2],['wildbloom',3,7],['wildbloom',4,3]]}
   };
-  const heights={sideSeal:24,sideTreasure:18,restAltar:28,cachePassage:30,essenceCache:24,sluiceLever:20,gateSupply:12,shellChime:27,galleryCache:13,vaultRelief:28,glowFungus:20,vaultCrystal:30,campfire:24,timberTree:51,wildboar:22,stonebackBeetle:28,wildtree:51,wildrock:13,wildbloom:22,pillar:28,lanternStand:31,mothAltar:24,moonwell:35,moonbloom:29,fishingPost:26};
+  const heights={...riverPropHeights,sideSeal:24,sideTreasure:18,restAltar:28,cachePassage:30,essenceCache:24,sluiceLever:20,gateSupply:12,shellChime:27,galleryCache:13,vaultRelief:28,glowFungus:20,vaultCrystal:30,campfire:24,timberTree:51,wildboar:22,stonebackBeetle:28,wildtree:51,wildrock:13,wildbloom:22,pillar:28,lanternStand:31,mothAltar:24,moonwell:35,moonbloom:29,fishingPost:26};
   const doors=Object.fromEntries(Object.keys(areas).map(id=>[id,[]]));
   const coordinate=([x,y])=>({x,y});
   function connect(a,b,from,to,gate){
@@ -30,6 +33,9 @@ export const moonwood=(()=>{
     doors[a].push({to:b,side:'wild',tile:{x:ax,y:ay},inside:{x:inx,y:iny},arrival:{x:outx,y:outy},label,gate});
     doors[b].push({to:a,side:'wild',tile:{x:bx,y:by},inside:{x:outx,y:outy},arrival:{x:inx,y:iny},label:backLabel,gate});
   }
+  connect('creek','reedwater',[8,9,8,8,'CREEK'],[0,4,1,4,'VALLEY']);
+  connect('reedwater','willowbank',[11,4,10,4,'CROSSING'],[0,5,1,5,'WILLOWBANK']);
+  connect('willowbank','millbrook',[3,0,3,1,'WILLOWBANK'],[0,6,1,6,'MILLBROOK']);
   connect('trail','logging',[9,9,9,8,'TRAIL'],[0,5,1,5,'TIMBER']);
   connect('trail','clearing',[7,0,7,1,'TRAIL'],[0,5,1,5,'HUNT']);
   connect('trail','grove',[4,0,4,1,'TRAIL'],[0,5,1,5,'GROVE']);
@@ -42,8 +48,8 @@ export const moonwood=(()=>{
   doors.trail.unshift({to:'outside',side:'wild',tile:{x:0,y:5},inside:{x:1,y:5},arrival:{x:6,y:10},label:'TOWER'});
   const key=(x,y)=>x+','+y;
   const has=id=>Object.hasOwn(areas,id);
-  const isWater=(id,x)=>id==='pond'?x>=6:id==='creek'?x===5:id==='depthsGate'&&x===8;
-  const blocked=(id,x,y,progress,depthsRun)=>isWater(id,x)&&!(y===4&&(
+  const isWater=(id,x,y)=>willowmereRooms.includes(id)?riverWater(id,x,y):id==='pond'?x>=6:id==='creek'?x===5:id==='depthsGate'&&x===8;
+  const blocked=(id,x,y,progress,depthsRun)=>isWater(id,x,y)&&!riverBridge(id,x,y)&&!(y===4&&(
     id==='creek'&&progress.bridge||id==='depthsGate'&&depthsRun?.finds?.includes('sluiceLever')
   ));
   const open=(door,progress)=>!door.gate||Boolean(progress[door.gate]);
@@ -117,6 +123,7 @@ export const moonwood=(()=>{
     const [ground,light,trail]=area.palette;
     polygon([point(-.25,-.3,-7),point(cols+.36,-.3,-8),point(cols+.37,rows+.42,-8),point(-.25,rows+.42,-8)],'#0c18268c');
     block(0,0,cols,rows,-9,9,[ground,'#273244','#202a3c']);
+    if(willowmereRooms.includes(id)){drawRiverGround(id,{point,polygon,surface,block,rect});return;}
     for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){
       const onTrail=path.has(key(x,y));
       const water=isWater(id,x);
@@ -148,6 +155,7 @@ export const moonwood=(()=>{
     }
   }
   function drawWater(id,time,{point,surface,ctx,reduced,depthsRun}){
+    if(willowmereRooms.includes(id)){drawRiverWater(id,time,{point,surface,ctx,reduced});return;}
     if(!['creek','pond','depthsGate'].includes(id))return;
     const drained=id==='depthsGate'&&depthsRun?.finds?.includes('sluiceLever');
     const phase=reduced?0:time/1700;
@@ -175,6 +183,7 @@ export const moonwood=(()=>{
 
   function drawProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,progress,combat,depthsRun,pose={}}){
     const {x,y,type}=item;
+    if(Object.hasOwn(riverPropHeights,type)){drawRiverProp(item,time,{point,polygon,surface,block,rect,ctx,reduced});return;}
     const [px,py]=point(x+.5,y+.5);
     const part=(u,v,w,d,z,h,c)=>block(x+u,y+v,w,d,z,h,c);
     const stone=['#9a9ab2','#50536c','#71738d'];
