@@ -39,3 +39,10 @@
 @media(max-width:520px){.player-label{max-width:105px;padding:2px 4px;font-size:9px}.familiar-label{font-size:8px}}
 
 .wildlife-calls{margin:0 0 7px}.wildlife-calls[hidden]{display:none}.wildlife-calls button{background:#293a58;border-color:#8190b6;color:#dce3ff}
+
+.familiar-bond{display:grid;gap:5px;padding:9px;border:1px solid #405772;border-radius:8px;background:#172840}
+.familiar-bond>b{color:var(--familiar-color);font-size:12px}
+.familiar-bond progress{width:100%;height:6px;accent-color:var(--familiar-color)}
+.familiar-bond ul{display:grid;gap:4px;margin:2px 0 0;padding:0;list-style:none;color:#aebfd6;font-size:10px;line-height:1.4}
+.familiar-bond li[data-unlocked=true]{color:#d6ebc6}
+.map-scouted circle{stroke:#ccbcff!important}.map-scouted text{fill:#ddd1ff!important}

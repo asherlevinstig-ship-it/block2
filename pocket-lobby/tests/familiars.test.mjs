@@ -8,7 +8,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {normalizeState,startPlan} from '../server/player-state.mjs';
 import {applyGameplayAction,protectFishingState} from '../server/gameplay.mjs';
-import {familiars,normalizeFamiliars} from '../public/familiars.js';
+import {familiars,normalizeFamiliars,familiarBond,familiarFishingTime} from '../public/familiars.js';
 import {explorationVisibility} from '../public/exploration-fog.js';
 import {publicPeer} from '../server/shared-room.mjs';
 import {spawnAddWave} from '../public/dungeon-adds.js';
@@ -167,7 +167,12 @@ test('Fox adds stagger only on adds and its pounce cancels a committed attack wi
  act(s,'combat',{combatId:s.combatId,input:'familiar'},3500);
  const after=s.hunting.encounter,add=after.adds.find(x=>x.id===a.id);assert.equal(after.health,e.health);assert.equal(after.nextBoarAt,10000);assert.equal(add.lockedFor,0);assert(add.attackAt>4000);
  assert(s.combatReceipt.events.some(event=>event.targetId===a.id&&event.interrupted));
+ assert.equal(s.familiars.bondXp.fox,6);assert.equal(normalizeState(s).hunting.encounter.adds.find(x=>x.id===a.id).pounceBonded,true);
  assert.throws(()=>act(s,'combat',{combatId:s.combatId,input:'familiar'},3501),/recovering/);
+ s.familiars.bondXp.fox=90;s.familiars.readyAt.fox=0;
+ add.lockedFor=add.attackAt=4200;add.thinkAt=4300;
+ act(s,'combat',{combatId:s.combatId,input:'familiar'},3800);
+ assert.equal(s.familiars.readyAt.fox,23800);assert.equal(s.hunting.encounter.adds.find(x=>x.id===a.id).staggerWeakUntil,6800);
 });
 
 test('Owl scouts only the local frontier and Moon Sight has a room, duration and cooldown',()=>{
@@ -176,4 +181,28 @@ test('Owl scouts only the local frontier and Moon Sight has a room, duration and
  s.location='hub';assert.throws(()=>act(s,'familiarUse',{},37000),/outdoors/);
  const options={currentRoom:'a',rooms:['a','b','c','d'],exits:room=>({a:[{to:'b'}],b:[{to:'c'}],c:[{to:'d'}],d:[]})[room]};
  assert.equal(explorationVisibility(options).status('c'),'hidden');const scouted=explorationVisibility({...options,scout:true});assert.equal(scouted.status('c'),'frontier');assert.equal(scouted.status('d'),'hidden');assert.equal(normalizeFamiliars(s.familiars).equipped,'owl');
+});
+
+
+test('Otter earns bond XP on a landed catch once and Kindred Second Chance saves bait',()=>{
+ const s=normalizeState({location:'pond',position:{x:4,y:5},fishingGear:{ownedRods:['reed'],equippedRod:'reed',bait:3}});
+ bond(s,'otter');s.familiars.bondXp={otter:28};act(s,'cast');
+ const a=s.fishingCast;act(s,'catch',{castId:a.id},a.landAt+900);
+ assert.equal(familiarBond(s.familiars,'otter').rank,2);assert.equal(familiarFishingTime(s,1000),800);
+ act(s,'catch',{castId:a.id},a.landAt+950);assert.equal(familiarBond(s.familiars,'otter').xp,30);
+ s.familiars.bondXp.otter=90;act(s,'cast',{},10000);
+ const b=s.fishingCast;act(s,'familiarUse',{castId:b.id},b.biteAt);act(s,'catch',{castId:b.id},b.landAt+900);
+ assert.equal(s.fishingGear.bait,2);assert.equal(s.fishingReceipt.baitSaved,true);
+ assert.equal(normalizeState(s).familiars.bondXp.otter,90);
+ assert.deepEqual(protectFishingState(s,{...s,familiars:{...s.familiars,bondXp:{otter:900}}}).familiars,s.familiars);
+});
+
+test('Owl earns XP only on the first scout of each area and Kindred extends Moon Sight',()=>{
+ const s=normalizeState({location:'trail'});bond(s,'owl');act(s,'familiarUse');
+ assert.equal(s.familiars.bondXp.owl,10);act(s,'familiarUse',{},40000);assert.equal(s.familiars.bondXp.owl,10);
+ s.location='grove';s.familiars.bondXp.owl=90;act(s,'familiarUse',{},80000);
+ assert.deepEqual(s.familiars.sight,{room:'grove',until:102000});assert.deepEqual(s.familiars.scouted,['trail','grove']);
+ const edges={a:['b'],b:['a','c'],c:['d'],d:['e'],e:[]};
+ const map=explorationVisibility({currentRoom:'a',rooms:Object.keys(edges),exits:room=>edges[room].map(to=>({to})),scout:3});
+ assert.equal(map.status('d'),'frontier');assert(map.scouted.has('d'));assert(!map.known.has('d'));assert.equal(map.status('e'),'hidden');
 });

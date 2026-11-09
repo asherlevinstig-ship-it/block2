@@ -1,3 +1,4 @@
+import {awardFamiliarBond} from './familiar-progression.mjs';
 import {wildlifeRoom,wildlifeView} from '../public/wildlife.js';
 import {normalizeVitals,useHunger} from '../public/player-vitals.js';
 import {watchRooms,watchFlags,willowmereRooms,isFishingRoom} from '../public/region-catalog.js';
@@ -174,7 +175,7 @@ function settleWorkPlan(state,now,{stop=false,random=Math.random}={}){
     state.quest=normalizeQuest(state.quest);recordQuest(state.quest,"fish");
     state.fishingGear.bait--;state.stats.patienceXp=Math.min(MAX_SKILL_XP,state.stats.patienceXp+10);
     plan.catches[fish]=(plan.catches[fish]??0)+1;
-    plan.baitUsed++;plan.xp+=10;
+    plan.baitUsed++;plan.xp+=10;awardFamiliarBond(state,'otter',1);
     const caughtAt=plan.nextCatchAt;autoStoreVault(state,plan,caughtAt);
     plan.nextCatchAt+=plan.interval;changed=true;
     if(plan.baitUsed>=plan.baitLimit||state.fishingGear.bait===0){

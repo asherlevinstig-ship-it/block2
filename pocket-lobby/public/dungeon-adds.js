@@ -79,7 +79,7 @@ export function normalizeAdds(e){
  const ids=new Set(),tile=p=>p&&Number.isInteger(p.x)&&Number.isInteger(p.y)&&dungeonFloor(e.arenaRoom,p.x,p.y);
  const adds=e.adds.map(a=>{
   if(!Object.hasOwn(addKinds,a.kind)||typeof a.id!=='string'||!/^wave[12]-(skitter|wisp)-[0-2]$/.test(a.id)||ids.has(a.id)||!tile(a)||!Number.isInteger(a.health)||a.health<1||a.health>addKinds[a.kind].health)throw new Error('Invalid dungeon add.');ids.add(a.id);
-  const out={id:a.id,kind:a.kind,health:a.health,x:a.x,y:a.y};for(const key of ['spawnAt','thinkAt','attackAt','lockedFor'])out[key]=time(a[key]);
+  const out={id:a.id,kind:a.kind,health:a.health,x:a.x,y:a.y,...(a.pounceBonded===true?{pounceBonded:true}:{})};for(const key of ['spawnAt','thinkAt','attackAt','lockedFor'])out[key]=time(a[key]);
   for(const key of ['origin','target'])if(a[key]){if(!tile(a[key]))throw new Error('Invalid add target.');out[key]={...a[key]};}
   for(const key of effects)if(a[key]!==undefined){if(key==='burn'){const b=a.burn;if(!Number.isInteger(b?.damage)||b.damage<1||b.damage>12||time(b.nextAt)>time(b.until))throw new Error('Invalid add burn.');out.burn={damage:b.damage,nextAt:b.nextAt,until:b.until};}else out[key]=time(a[key]);}
   return out;

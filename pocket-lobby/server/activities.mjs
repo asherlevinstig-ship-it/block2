@@ -1,3 +1,4 @@
+import {awardFamiliarBond} from './familiar-progression.mjs';
 import {cinderPounce} from './familiars.mjs';
 import {initializeAdds,addDueAt,spawnAddWave,addKinds,addEncounter,mergeAddEvent,advanceAddPosition,queueBossAdds,chooseAutoAddTarget} from '../public/dungeon-adds.js';
 import {initializeBrain,brainThinkEvent} from '../public/enemy-brain.js';
@@ -42,6 +43,7 @@ function result(state,event,now,random=Math.random){
   }
   if(event.action==='flee'){summary.fleeAttempts++;if(event.automatic)summary.automaticFlees++;}
   if(event.interrupted)summary.interrupts++;
+  if(event.addKill)awardFamiliarBond(state,'fox',5);
   if(event.dodged)summary.dodges++;
   if(event.automaticDodge)summary.automaticDodges++;
   if(event.perfectDodge)summary.perfectDodges++;

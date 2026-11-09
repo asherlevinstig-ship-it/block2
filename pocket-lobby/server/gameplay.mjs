@@ -1,5 +1,6 @@
+import {awardFamiliarBond} from './familiar-progression.mjs';
 import {familiarAction} from './familiars.mjs';
-import {familiarFishingTime} from '../public/familiars.js';
+import {familiarFishingTime,familiarBond} from '../public/familiars.js';
 import {watchAction} from './watch-expedition.mjs';
 import {watchFlags} from '../public/region-catalog.js';
 import {normalizeVitals,useHunger,feedPlayer} from '../public/player-vitals.js';
@@ -160,12 +161,15 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
     const before=state.stats.patienceXp;
     const fish=rollFishingCatch(skillLevel(before),cast.rod,random,state.stats.luckXp);
     if((state.fishStock[fish]??0)>=1000000)throw new Error('Invalid inventory. Sell some fish first.');
-    state.fishingGear.bait--;
+    const otterHelp=cast.otterHelp===true&&state.familiars?.equipped==='otter';
+    const baitSaved=otterHelp&&familiarBond(state.familiars,'otter').rank>=3;
+    if(!baitSaved)state.fishingGear.bait--;
+    const bondXp=awardFamiliarBond(state,'otter',otterHelp?6:2);
     state.fishStock[fish]=(state.fishStock[fish]??0)+1;useHunger(state);
     state.stats.patienceXp=Math.min(MAX_SKILL_XP,before+10+cast.bonus);
     state.history.fishCaught=true;
     recordQuest(state.quest,'fish');
-    state.fishingReceipt={room:state.location,castId:cast.id,fish,rod:cast.rod,before,xp:state.stats.patienceXp-before,bonus:cast.bonus};
+    state.fishingReceipt={room:state.location,castId:cast.id,fish,rod:cast.rod,before,xp:state.stats.patienceXp-before,bonus:cast.bonus,...(baitSaved?{baitSaved:true}:{}),...(bondXp?{bondXp}:{})};
     delete state.fishingCast;
     return;
   }

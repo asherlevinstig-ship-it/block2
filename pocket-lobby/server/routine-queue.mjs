@@ -1,3 +1,4 @@
+import {awardFamiliarBond} from './familiar-progression.mjs';
 import {familiarFishingTime} from '../public/familiars.js';
 import {useHunger} from '../public/player-vitals.js';
 import {chooseSimpleTask} from './simple-planner.mjs';
@@ -136,7 +137,7 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
       if((state.fishStock[fish]??0)>=1000000)return finish(state,p,'inventory-full',at);
       state.fishStock[fish]=(state.fishStock[fish]??0)+1;useHunger(state);state.fishingGear.bait--;
       const xp=Math.min(10,MAX_SKILL_XP-state.stats.patienceXp);state.stats.patienceXp+=xp;p.patienceXp+=xp;
-      state.history.fishCaught=true;recordQuest(state.quest,'fish');p.catches[fish]=(p.catches[fish]??0)+1;p.stepCount++;autoStoreVault(state,p,at);
+      state.history.fishCaught=true;recordQuest(state.quest,'fish');p.catches[fish]=(p.catches[fish]??0)+1;p.stepCount++;awardFamiliarBond(state,'otter',1);autoStoreVault(state,p,at);
     }else if(type==='woodcutting'){
       if(state.woodcutting.timber+(state.bank?.vault?.items?.timber??0)>=p.timberTarget){nextStep(p,p.cursorAt,'Timber target reached');changed=true;continue;}
       const before=state.woodcutting.xp;harvestTimber(state.woodcutting);useHunger(state);p.woodXp+=state.woodcutting.xp-before;p.timber++;p.stepCount++;autoStoreVault(state,p,at);

@@ -1,6 +1,7 @@
+import {awardFamiliarBond,recordOwlScout} from './familiar-progression.mjs';
 import {wildlifeRoom,wildAnimal,nearWildAnimal,wildlifeHabitats,bondStep,bondOdds,owlCallFor,FORAGE_COOLDOWN_MS,FORAGE_CAP} from '../public/wildlife.js';
 import {roomBoxes,validRoomTile} from '../public/shared-world.js';
-import {familiars,normalizeFamiliars,normalizeFamiliarName,FAMILIAR_NAME_MAX,MOON_SIGHT_MS,secondChanceBlock} from '../public/familiars.js';
+import {familiars,normalizeFamiliars,normalizeFamiliarName,FAMILIAR_NAME_MAX,MOON_SIGHT_MS,secondChanceBlock,familiarBond,familiarCooldown} from '../public/familiars.js';
 import {activeAdd,addKinds} from '../public/dungeon-adds.js';
 import {isFishingRoom} from '../public/region-catalog.js';
 import {moonwood} from '../public/moonwood.js';
@@ -21,12 +22,13 @@ export function familiarAction(state,action,body,now,random=Math.random){
    // Allow a click sent during landing to arrive after the client animation ends.
    const blocked=secondChanceBlock(isFishingRoom(state.location)?cast:null,now,600);
    if(blocked)throw invalidUse(blocked);
-   cast.bonus=5;
+   cast.bonus=5;cast.otterHelp=true;
   }else{
    if(!moonwood.has(state.location)||dungeonRooms.includes(state.location)||state.hunting?.encounter)throw new Error('Use Moon Sight while exploring outdoors.');
-   current.sight={room:state.location,until:now+MOON_SIGHT_MS};
+   current.sight={room:state.location,until:now+(familiarBond(current,'owl').rank>=2?22000:MOON_SIGHT_MS)};
   }
-  current.readyAt[current.equipped]=now+familiars[current.equipped].cooldown;
+  current.readyAt[current.equipped]=now+familiarCooldown(current,current.equipped);
+  if(current.equipped==='owl'){state.familiars=current;recordOwlScout(state,state.location);return true;}
  }else{
   if(state.plan||state.report||state.fishingCast||state.timberCut||state.hunting?.encounter||state.hunting?.recoveryUntil||state.health<=0||state.gambling?.round?.status==='playing')throw new Error('Finish your current activity before changing familiars.');
   if(action==='familiarRecruit')throw new Error('Visit the Moonwood Wildlife Reserve to tame a familiar.');
@@ -97,8 +99,11 @@ export function cinderPounce(state,now){
  if(now<(familiar.readyAt.fox??0))throw new Error('Cinder Pounce is still recovering.');
  if(!add||add.spawnAt>now||add.attackAt<=now||add.lockedFor!==add.attackAt)throw new Error('Select an add that is winding up an attack.');
  const {name,move}=addKinds[add.kind],attackAt=now+move.tell+1650;
- const actor={...add,attackAt,thinkAt:now+950,lockedFor:0,staggerUntil:now+950,castHits:0};
+ const kindred=familiarBond(familiar,'fox').rank>=3;
+ const actor={...add,attackAt,thinkAt:now+950,lockedFor:0,staggerUntil:now+950,castHits:0,pounceBonded:true};
+ if(kindred)actor.staggerWeakUntil=Math.max(add.staggerWeakUntil??0,now+3000);
  delete actor.target;delete actor.origin;
- familiar.readyAt.fox=now+familiars.fox.cooldown;state.familiars=familiar;
- return {action:'familiar',power:'Cinder Pounce',powerForm:'familiar',powerColor:familiars.fox.color,interrupted:true,effect:'interrupted '+name,encounter:{...e,adds:e.adds.map(other=>other.id===add.id?actor:other)},health:state.health,damage:0,taken:0,outcome:'fighting',targetId:add.id,enemyId:addKinds[add.kind].id,enemyTile:{x:add.x,y:add.y}};
+ familiar.readyAt.fox=now+familiarCooldown(familiar,'fox');state.familiars=familiar;
+ if(!add.pounceBonded)awardFamiliarBond(state,'fox',6);
+ return {action:'familiar',power:'Cinder Pounce',powerForm:'familiar',powerColor:familiars.fox.color,interrupted:true,effect:'interrupted '+name+(kindred?' and exposed a weak spot':''),encounter:{...e,adds:e.adds.map(other=>other.id===add.id?actor:other)},health:state.health,damage:0,taken:0,outcome:'fighting',targetId:add.id,enemyId:addKinds[add.kind].id,enemyTile:{x:add.x,y:add.y}};
 }
