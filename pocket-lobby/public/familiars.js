@@ -25,4 +25,12 @@ export function normalizeFamiliars(input){
 export const familiarFishingTime=(state,duration)=>Math.round(duration*(state.familiars?.equipped==='otter'?OTTER_WAIT:1));
 export const moonSightActive=(state,room,now)=>state.equipped==='owl'&&state.sight?.room===room&&state.sight.until>now;
 
+export function secondChanceBlock(cast,now,graceMs=0){
+ if(!cast)return 'Cast a line first. Second Chance becomes available when a fish bites.';
+ if(cast.bonus)return 'You already earned the timing bonus on this cast.';
+ if(now<cast.biteAt)return 'Wait for a bite to use Second Chance.';
+ if(now>=cast.landAt+900+graceMs)return 'That fish has landed. Use Second Chance on your next bite.';
+ return '';
+}
+
 export {drawFamiliar} from './familiar-art.js';

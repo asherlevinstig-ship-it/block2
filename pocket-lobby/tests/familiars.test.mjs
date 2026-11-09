@@ -1,3 +1,5 @@
+import {handlePlayerApi} from '../server/player-api.mjs';
+import {testDatabase} from './db-helper.mjs';
 import {skillXpForLevel} from '../public/skill-curve.js';
 import {wildlifeRoom,wildAnimal,wildlifeAnimals,nearWildAnimal,wildlifeHabitats,FORAGE_COOLDOWN_MS,bondOdds} from '../public/wildlife.js';
 import {moonwood} from '../public/moonwood.js';
@@ -105,6 +107,27 @@ test('Otter speeds the server bite, recovers a missed bonus once and preserves t
  assert.throws(()=>act(withOtter,'familiarUse',{castId:cast.id},cast.landAt+100),/recovering/);
  act(withOtter,'catch',{castId:cast.id},cast.landAt+900);
  assert.equal(withOtter.fishingReceipt.xp,15);assert.equal(withOtter.fishingGear.bait,2);assert.equal(withOtter.fishingCast,undefined);
+});
+
+test('Second Chance API returns a player-facing timing error and accepts a delayed landing click',async t=>{
+ const {db,sql}=testDatabase();t.after(()=>sql.close());
+ const origin='https://tower.test';let cookie='',saved;
+ async function call(path,body){
+  const response=await handlePlayerApi(new Request(origin+'/api/player/'+path,{method:'POST',headers:{Origin:origin,Cookie:cookie,'Content-Type':'application/json'},body:JSON.stringify(body)}),{TOWER_DB:db});
+  cookie=response.headers.get('set-cookie')?.split(';')[0]??cookie;
+  return {status:response.status,...await response.json()};
+ }
+ saved=await call('session',{legacy:{location:'pond',position:{x:4,y:5},fishingGear:{ownedRods:['reed'],equippedRod:'reed',bait:3}}});
+ assert.equal(saved.status,200);
+ const state=saved.state;bond(state,'otter');
+ const write=()=>sql.prepare('UPDATE tower_players SET state_json=? WHERE player_id=?').run(JSON.stringify(state),saved.characterKey);
+ const action=(name,body={})=>call('gameplay/'+name,{...body,operation:crypto.randomUUID(),revision:saved.revision,characterKey:saved.characterKey});
+ write();
+ const inactive=await action('familiarUse');assert.equal(inactive.status,400);assert.match(inactive.error,/Cast a line first/);
+ const now=Date.now();state.fishingCast={id:'cast',rod:'reed',started:now-3000,castEnds:now-2500,biteAt:now-2300,landAt:now-1000,bonus:0};write();
+ saved=await action('familiarUse',{castId:'cast'});assert.equal(saved.status,200);assert.equal(saved.state.fishingCast.bonus,5);
+ const repeat=await action('familiarUse',{castId:'cast'});assert.equal(repeat.status,400);assert.match(repeat.error,/recovering/);
+ saved=await action('catch',{castId:'cast'});assert.equal(saved.status,200);assert.equal(saved.state.fishingReceipt.xp,15);
 });
 
 test('the Otter also speeds away fishing without giving offline timing bonuses',()=>{

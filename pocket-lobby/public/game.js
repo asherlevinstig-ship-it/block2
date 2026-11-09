@@ -1390,20 +1390,29 @@ function canScoutHere(){return moonwood.has(currentRoom)&&!dungeonRooms.includes
 function foxTargetReady(e=hunting.encounter){
  const add=activeAdd(e),now=combatNow();return !!add&&add.spawnAt<=now&&add.lockedFor===add.attackAt&&add.attackAt>now;
 }
+function familiarFeedback(message){
+ if($('familiarsDialog').open)$('familiarStatus').textContent=message;else note(message);
+}
+function otterAbilityBlock(session=fishingSession){
+ if(familiarState.equipped!=='otter')return 'Equip the Reed Otter first.';
+ if(session?.completing)return 'That fish is landing. Try Second Chance on your next bite.';
+ return secondChanceBlock(isFishingRoom(currentRoom)&&session?.serverCastId?session:null,performance.now());
+}
 async function useFamiliar(){
  const id=familiarState.equipped;if(!id||!window.playerCloud?.gameplay)return;
- if(familiarSeconds()){note(familiars[id].ability+' is still recovering.');return;}
+ if(familiarSeconds()){familiarFeedback(familiars[id].ability+' is ready in '+familiarSeconds()+'s.');return;}
  if(id==='fox'){
   if(!player.inCombat||!foxTargetReady()){note('Select a dungeon add during its attack warning.');return;}
   if($('familiarsDialog').open)$('familiarsDialog').close();
   sendServerCombat('familiar');return;
  }
  const session=fishingSession;
+ if(id==='otter'){const blocked=otterAbilityBlock(session);if(blocked){familiarFeedback(blocked);return;}}
  try{
   const packet=await serverGameplay('familiarUse',{castId:session?.serverCastId});
-  if(id==='otter'&&session&&fishingSession===session&&packet.state.fishingCast){familiarReaction={id,pose:'cast',at:performance.now()};session.bonus=packet.state.fishingCast.bonus;note('Second Chance · +5 bonus Patience XP');}
+  if(id==='otter'&&session&&fishingSession===session&&packet.state.fishingCast){familiarReaction={id,pose:'cast',at:performance.now()};session.bonus=packet.state.fishingCast.bonus;familiarFeedback('Second Chance · +5 bonus Patience XP');}
   if(id==='owl'){familiarReaction={id,pose:'cast',at:performance.now()};if($('familiarsDialog').open)$('familiarsDialog').close();if($('hudMapDialog').open)$('hudMapDialog').close();note('Moon Sight · Follow the silver marks.');}
- }catch(error){if($('familiarsDialog').open)$('familiarStatus').textContent=error.message;else note(error.message);}
+ }catch(error){familiarFeedback(error.message);}
 }
 function drawMoonSight(time){
  const clues=new Set(['lanternStand','moonwell','mothAltar','watchBeacon','meadowCache','grottoCache','watchCache','riverBridge']);
@@ -4858,8 +4867,9 @@ function currentActivityPrompt(){
   if(isFishingRoom(currentRoom)){
     if(fishingSession){
       const phase=fishingMoments.phase(fishingSession,performance.now());
-      if(phase==='landing'&&familiarState.equipped==='otter'&&!fishingSession.bonus&&!familiarSeconds()&&!fishingSession.completing)return {label:'REED OTTER',title:'Second Chance',text:'Recover the missed +5 Patience XP bonus.',action:'familiarAction',button:'Second Chance · G'};
-      if(phase==='bite')return {label:'FISH ON!',title:'Reel now',text:'Reel in time for bonus Patience XP.',action:'adventureLandmark'};
+      const otterReady=!otterAbilityBlock(fishingSession)&&!familiarSeconds();
+      if(phase==='landing'&&otterReady)return {label:'REED OTTER',title:'Second Chance',text:'Recover the missed +5 Patience XP bonus.',action:'familiarAction',button:'Second Chance · G'};
+      if(phase==='bite')return {label:'FISH ON!',title:'Reel now',text:'Reel in time for bonus Patience XP.',action:'adventureLandmark',secondChance:otterReady};
       return null;
     }
     if(fishingGear.bait<1)return {label:'FISHING SUPPLIES',title:'You need bait',text:'Riverworms are sold at Silverfin Outfitters in the Tower.',action:'baitRoute'};
@@ -4886,7 +4896,9 @@ function updateActivityPrompt(){
   $('contextGuide').hidden=!visible;
   $('roomLayout').dataset.contextual=String(visible);
   const proxyControl=prompt?.action&&!['baitRoute','equipHunting','familiarAction'].includes(prompt.action)?$(prompt.action):null;
-  $('contextGuideAction').disabled=proxyControl?.disabled===true;
+  $('contextGuideAction').disabled=proxyControl?.disabled===true||prompt?.action==='familiarAction'&&serverActionBusy;
+  $('contextGuideSecondChance').hidden=!prompt?.secondChance;
+  $('contextGuideSecondChance').disabled=serverActionBusy;
   const key=prompt?JSON.stringify(prompt):'';
   if(key===activityPromptKey)return;
   activityPromptKey=key;
@@ -5213,6 +5225,7 @@ for(const slot of ['q','e'])$('essenceHotbarPower'+(slot==='q'?'':'E')).onclick=
 };
 $('openEssences').onclick=()=>openEssences();
 $('essenceBond').onclick=()=>changeEssences('bondEssences',{picks:[...gemDraft]});
+$('contextGuideSecondChance').onclick=()=>useFamiliar();
 $('contextGuideAction').onclick=()=>{
   const prompt=currentActivityPrompt();
   if(!prompt?.action||unavailable())return;

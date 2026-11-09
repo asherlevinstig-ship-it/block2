@@ -1,21 +1,26 @@
 import {wildlifeRoom,wildAnimal,nearWildAnimal,wildlifeHabitats,bondStep,bondOdds,FORAGE_COOLDOWN_MS,FORAGE_CAP} from '../public/wildlife.js';
 import {roomBoxes,validRoomTile} from '../public/shared-world.js';
-import {familiars,normalizeFamiliars,normalizeFamiliarName,FAMILIAR_NAME_MAX,MOON_SIGHT_MS} from '../public/familiars.js';
+import {familiars,normalizeFamiliars,normalizeFamiliarName,FAMILIAR_NAME_MAX,MOON_SIGHT_MS,secondChanceBlock} from '../public/familiars.js';
 import {activeAdd,addKinds} from '../public/dungeon-adds.js';
 import {isFishingRoom} from '../public/region-catalog.js';
 import {moonwood} from '../public/moonwood.js';
 import {dungeonRooms} from '../public/dungeon-arena.js';
+
+const invalidUse=message=>Object.assign(new Error(message),{status:400});
 
 export function familiarAction(state,action,body,now,random=Math.random){
  if(!['familiarRecruit','familiarTame','familiarForage','familiarRename','familiarEquip','familiarUse'].includes(action))return false;
  const current=normalizeFamiliars(state.familiars),id=body.id;
  if(action==='familiarUse'){
   if(current.equipped==='fox')throw new Error('Select an add during combat to use Cinder Pounce.');
-  if(!current.equipped||state.plan||state.report||state.health<=0||state.hunting?.recoveryUntil)throw new Error('Your familiar is unavailable right now.');
-  if(now<(current.readyAt[current.equipped]??0))throw new Error('Your familiar is still recovering.');
+  if(!current.equipped||state.plan||state.report||state.health<=0||state.hunting?.recoveryUntil)throw invalidUse('Your familiar is unavailable right now.');
+  if(now<(current.readyAt[current.equipped]??0))throw invalidUse('Your familiar is still recovering.');
   if(current.equipped==='otter'){
    const cast=state.fishingCast;
-   if(!isFishingRoom(state.location)||!cast||cast.id!==body.castId||cast.bonus||now<cast.biteAt||now>=cast.landAt+900)throw new Error('Use Second Chance during the bite or just as the fish lands.');
+   if(cast&&cast.id!==body.castId)throw invalidUse('That cast has changed. Wait for your next bite.');
+   // Allow a click sent during landing to arrive after the client animation ends.
+   const blocked=secondChanceBlock(isFishingRoom(state.location)?cast:null,now,600);
+   if(blocked)throw invalidUse(blocked);
    cast.bonus=5;
   }else{
    if(!moonwood.has(state.location)||dungeonRooms.includes(state.location)||state.hunting?.encounter)throw new Error('Use Moon Sight while exploring outdoors.');
