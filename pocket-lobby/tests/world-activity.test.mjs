@@ -1,4 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';
+import {applyGameplayAction} from '../server/gameplay.mjs';
 import {worldActivityEvents,createWorldActivityTracker} from '../public/world-activity.js';import {publishWorldActivity} from '../server/world-activity.mjs';import {SharedRoom,publicPeer,handleWorldConnect} from '../server/shared-room.mjs';import {normalizeState,settlePlan} from '../server/player-state.mjs';import {touchPresence} from '../server/routines.mjs';import {simpleAutoRules} from '../public/simple-auto.js';import {tokenHash,GUEST_COOKIE} from '../server/identity.mjs';import {testDatabase} from './db-helper.mjs';import {boot} from './helpers/game-client.mjs';
 test('manual and Auto gambling generate confirmed net floats without replay or fake wallet deltas',()=>{
  const before={location:'lounge',credits:100,gambling:{round:{id:'round',status:'playing',bet:5}}},after={...before,credits:105,gambling:{round:{id:'round',status:'complete',bet:5,payout:10}}};const tracker=createWorldActivityTracker(before);assert.equal(tracker.update(after,1000)[0].label,'+5 gold');assert.deepEqual(tracker.update(after,1001),[]);assert.deepEqual(worldActivityEvents(before,{...before,credits:99999},1000),[]);
@@ -31,4 +32,20 @@ test('floating labels attach to peers, reject duplicates and expire without chan
 test('ordinary movement does not wake the room relay, and the last hit survives a peer leaving',async()=>{
  let called=0;const env={SHARED_ROOMS:{idFromName:()=>{called++;},get:()=>{throw new Error('Not needed');}}};await publishWorldActivity(env,'player',{location:'pond',health:100,position:{x:2,y:5}},{location:'pond',health:100,position:{x:3,y:5}},2);assert.equal(called,0);
  const g=boot(normalizeState({location:'pond'}));g.context.peers=[{id:'other',name:'Other',x:4,y:5}];g.run('receivePeers(peers)');g.context.event={id:'hit',kind:'damage',label:'−20 HP',room:'pond'};g.run("receiveWorldActivity('other',[event]);receivePeers([]);updateWorldFloats(1300)");assert.equal(g.nodes.get('worldFloats').children.length,1);g.run('updateWorldFloats(3000)');assert.equal(g.nodes.get('worldFloats').children.length,0);
+});
+
+test('Auto fishing chooses an available legal dock position instead of stacking with peers',()=>{
+ const state=normalizeState({location:'pond',position:{x:4,y:5},characterRules:simpleAutoRules('fishing')});state.plan={source:'rules',kind:'queue',queue:{steps:[{type:'fishing',amount:5}]},stepIndex:0};
+ const g=boot(state);g.context.playerCloud.initial=state;g.context.peers=[{id:'other',name:'Other',x:4,y:5,activity:'fishing'}];g.run('receivePeers(peers)');const goal=g.read('autoWorkTile(playerCloud.initial)');assert(goal);assert.notDeepEqual({x:goal.x,y:goal.y},{x:4,y:5});assert.equal(Math.abs(goal.x-5)+Math.abs(goal.y-5),1);assert.deepEqual(g.errors,[]);
+});
+
+test('other fishers render their rods and lines without inventing catches',()=>{
+ const g=boot(normalizeState({location:'pond'}));g.context.peers=[{id:'fisher',name:'Fisher',x:5,y:4,rx:5,ry:4,activity:'fishing',direction:'right',back:false,outfit:0,hair:0}];g.run('receivePeers(peers);drawRemote(remotePeers.get("fisher"),1500)');assert.equal(g.nodes.get('worldFloats').children.length,0);assert.deepEqual(g.errors,[]);
+});
+
+test('two simultaneous fishers keep independent casts, bait, catches and XP',()=>{
+ const make=position=>normalizeState({location:'pond',position,fishingGear:{ownedRods:['reed'],equippedRod:'reed',bait:20}}),a=make({x:4,y:5}),b=make({x:5,y:4});
+ applyGameplayAction(a,'cast',{},1000,()=>.5);applyGameplayAction(b,'cast',{},1000,()=>.5);assert.notEqual(a.fishingCast.id,b.fishingCast.id);const castA=a.fishingCast,castB=b.fishingCast;
+ applyGameplayAction(a,'catch',{castId:castA.id},castA.landAt+901,()=>.5);assert.equal(a.fishingGear.bait,19);assert.equal(b.fishingGear.bait,20);assert.equal(b.stats.patienceXp,0);assert.deepEqual(b.fishStock,{});
+ applyGameplayAction(b,'catch',{castId:castB.id},castB.landAt+901,()=>.5);assert.equal(b.fishingGear.bait,19);assert.equal(a.stats.patienceXp,10);assert.equal(b.stats.patienceXp,10);assert.equal(Object.values(a.fishStock).reduce((n,x)=>n+x,0),1);assert.equal(Object.values(b.fishStock).reduce((n,x)=>n+x,0),1);
 });

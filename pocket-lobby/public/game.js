@@ -531,13 +531,19 @@ function receivePeers(peers){
     else remotePeers.set(peer.id,{...peer,rx:peer.x,ry:peer.y,lastFrame:performance.now(),label:null});
   }
   for(const [id,peer] of remotePeers)if(!keep.has(id)){peer.label?.remove();remotePeers.delete(id);}
+  const state=window.playerCloud?.initial;
+  if(currentRoom==='pond'&&state?.plan?.source==='rules'&&autoTaskFor(state.plan)==='fishing'&&!autoJourney&&multiplayer?.selfId&&[...remotePeers.values()].some(peer=>peer.id<multiplayer.selfId&&peer.x===player.cx&&peer.y===player.cy)){
+    const destination=autoWorkTile(state);if(destination?.path.length){autoJourneyState=state;autoJourney={room:'pond',blocked:false};route=destination.path;target={x:destination.x,y:destination.y};}
+  }
 }
 function drawRemote(peer,time){
   const [x,y]=peer.seat?seatAnchor(peer.seat):point(peer.rx+.5,peer.ry+.5);
   surface(peer.rx+.2,peer.ry+.25,.6,.55,.2,'#43324452');
   const moving=Math.hypot(peer.x-peer.rx,peer.y-peer.ry)>.03,waveAge=Date.now()-(peer.waveAt??0);
   ctx.save();if((peer.hurtUntil??0)>time)ctx.globalAlpha=.55;
-  sprite(ctx,x,y,{outfit:peer.outfit,trousers:peer.trousers,boots:peer.boots,hair:peer.hair},{direction:peer.direction,back:peer.back,cycle:moving?time/STEP_MS:0,seated:!!peer.seat,wave:waveAge>=0&&waveAge<WAVE_MS?waveAge/WAVE_MS:null,sheathed:!!peer.weapon,weaponTier:peer.weapon,vest:peer.armour,time});ctx.restore();
+  sprite(ctx,x,y,{outfit:peer.outfit,trousers:peer.trousers,boots:peer.boots,hair:peer.hair},{direction:peer.direction,back:peer.back,cycle:moving?time/STEP_MS:0,seated:!!peer.seat,wave:waveAge>=0&&waveAge<WAVE_MS?waveAge/WAVE_MS:null,sheathed:!!peer.weapon,weaponTier:peer.weapon,vest:peer.armour,fishing:currentRoom==='pond'&&peer.activity==='fishing'&&!moving?'waiting':null,fishingAge:time,time});
+  if(currentRoom==='pond'&&peer.activity==='fishing'&&!moving)drawFishingMoment(x,y,time,{started:time-2000,castEnds:time-1500,biteAt:Infinity,landAt:Infinity},{y:peer.ry,direction:peer.direction,back:peer.back});
+  ctx.restore();
 }
 function updatePeerLabels(time){
   const p=canvasBounds(),cx=view.width/2,cy=view.height/2-4;
@@ -3040,6 +3046,7 @@ function use(item){
   let shortest=null;
   for(let y=Math.floor(item.y)-1;y<=Math.ceil(item.y+d);y++){
     for(let x=Math.floor(item.x)-1;x<=Math.ceil(item.x+w);x++){
+      if(item.type==='fishingPost'&&[...remotePeers.values()].some(peer=>peer.x===x&&peer.y===y))continue;
       if(exits.has(tileKey(x,y))||blocked(x,y,items)||!directions.some(([dx,dy])=>overlap(item,{x:x+dx,y:y+dy})))continue;
       const path=findPath(start,{x,y},items,exits);
       if(path&&(!shortest||path.length<shortest.length))shortest=path;
@@ -3074,10 +3081,10 @@ function reelFish(){
   note('Well timed! Reeling in · +5 bonus Patience XP.');
   updateAdventurePanel();
 }
-function drawFishingMoment(x,y,time,session=fishingSession){
+function drawFishingMoment(x,y,time,session=fishingSession,spot={y:player.y}){
   const phase=fishingMoments.phase(session,time);
   const still=reducedMotion.matches;
-  const [waterX,waterY]=point(7.4,5.45);
+  const [waterX,waterY]=point(7.4,Math.max(.7,Math.min(9.3,spot.y+.45)));
   let bx=waterX,by=waterY;
   let tipX=x+19,tipY=y-33;
   if(phase==='casting'&&!still){
@@ -3101,7 +3108,7 @@ function drawFishingMoment(x,y,time,session=fishingSession){
     const fish=fishProducts[session.fishId];
     if(fish)fishingMoments.drawFish(ctx,bx,by,session.fishId,fish.quality);
   }
-  const [gripX,gripY]=window.towerCharacterArt.grip(x,y,{direction:player.direction,back:player.back,fishing:phase,fishingAge:time-session.started,time,reduced:still});
+  const [gripX,gripY]=window.towerCharacterArt.grip(x,y,{direction:spot.direction??player.direction,back:spot.back??player.back,fishing:phase,fishingAge:time-session.started,time,reduced:still});
   ctx.beginPath();ctx.moveTo(gripX,gripY);
   ctx.quadraticCurveTo((gripX+tipX)/2+3,(gripY+tipY)/2,tipX,tipY);
   ctx.strokeStyle='#c8a77e';ctx.lineWidth=2;ctx.stroke();
@@ -5443,6 +5450,8 @@ function autoWorkTile(state){
   const candidates=[];
   for(let y=0;y<view.rows;y++)for(let x=0;x<view.cols;x++){
     if(blocked(x,y)||exits.has(tileKey(x,y)))continue;
+    if(task==='fishing'&&[...remotePeers.values()].some(peer=>peer.x===x&&peer.y===y))continue;
+    if(task==='fishing'&&Math.abs(x-5)+Math.abs(y-5)>1)continue;
     if(item&&!directions.some(([dx,dy])=>overlap(item,{x:x+dx,y:y+dy})))continue;
     candidates.push({x,y,distance:Math.abs(x-goal.x)+Math.abs(y-goal.y),walk:Math.abs(x-player.cx)+Math.abs(y-player.cy)});
   }
@@ -5460,6 +5469,7 @@ function renderAutoJourneyHud(){
 }
 function finishAutoJourney(){
   const state=autoJourneyState;autoArrivalKey=autoActivityKey(state);autoJourney=null;route=[];target=null;interaction=null;player.seat=null;
+  if(currentRoom==='pond'&&autoTaskFor(state?.plan)==='fishing'){player.direction='right';player.back=false;}
   setPlayerCombat(!!state?.plan?.activeHunt&&!!hunting.encounter&&currentRoom===state.location);
   updateInventory();updateAdventurePanel();updateCombatPanel();window.towerRefreshAutoStatus?.();if(state?.plan?.source==='rules')connectRoom();
   if(!state?.plan&&!state?.report){$('autoPanel').hidden=true;savePlayerState();connectRoom();}

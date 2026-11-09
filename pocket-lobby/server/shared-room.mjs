@@ -46,7 +46,8 @@ export class SharedRoom{
     if(fresh.length)for(const peer of this.sessions.keys())this.send(peer,{type:'activity',player:meta.id,events:fresh});
     if(state.location!==meta.room||state.report||state.plan&&state.plan.source!=='rules'){ws.close(1000,'Changed area');this.sessions.delete(ws);this.snapshot();return json({ok:true});}
     meta.health=Math.max(0,Math.min(100,state.health??100));meta.activity=sharedActivity(state);meta.auto=state.plan?.source==='rules';
-    if(meta.auto){meta.x=state.position?.x??meta.x;meta.y=state.position?.y??meta.y;meta.seat=null;}
+    // Connected avatars report bounded visual movement; activity rewards use the saved server position.
+    if(meta.auto)meta.seat=null;
     ws.serializeAttachment(meta);this.snapshot();return json({ok:true});
   }
   async join(request){
@@ -78,7 +79,6 @@ export class SharedRoom{
     let message;try{message=JSON.parse(raw);}catch{return;}
     if(message?.type==='ping'){this.send(ws,{type:'pong'});return;}
     if(message?.type==='move'){
-      if(meta.auto)return;
       const steps=Math.min(4,Math.max(0,Math.floor((now-meta.lastMoveAt)/110)));
       if(!reachableMove(meta.room,meta,message,meta.boxes,steps)){this.send(ws,{type:'correction',x:meta.x,y:meta.y});return;}
       if(meta.x!==message.x||meta.y!==message.y)meta.seat=null;const moved=meta.x!==message.x||meta.y!==message.y;meta.x=message.x;meta.y=message.y;meta.direction=message.direction==='left'?'left':'right';meta.back=message.back===true;if(moved)meta.lastMoveAt=now;
