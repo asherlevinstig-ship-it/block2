@@ -27,3 +27,8 @@ test('Auto players can join fishing areas while private dungeons and job-board p
 test('floating labels attach to peers, reject duplicates and expire without changing state',()=>{
  const g=boot(normalizeState({location:'lounge',avatar:{name:'Guest',outfit:6,hair:0}}));g.context.peers=[{id:'other',name:'Other',x:4,y:5,outfit:0,hair:0,health:80}];g.run('receivePeers(peers)');g.context.event={id:'won',kind:'gold',label:'+5 gold',room:'lounge'};g.run("receiveWorldActivity('other',[event]);receiveWorldActivity('other',[event]);updateWorldFloats(1200)");assert.equal(g.nodes.get('worldFloats').children.length,1);assert.equal(g.nodes.get('worldFloats').children[0].textContent,'+5 gold');g.run('updateWorldFloats(3000)');assert.equal(g.nodes.get('worldFloats').children.length,0);assert.equal(g.read('credits'),100);assert.deepEqual(g.errors,[]);
 });
+
+test('ordinary movement does not wake the room relay, and the last hit survives a peer leaving',async()=>{
+ let called=0;const env={SHARED_ROOMS:{idFromName:()=>{called++;},get:()=>{throw new Error('Not needed');}}};await publishWorldActivity(env,'player',{location:'pond',health:100,position:{x:2,y:5}},{location:'pond',health:100,position:{x:3,y:5}},2);assert.equal(called,0);
+ const g=boot(normalizeState({location:'pond'}));g.context.peers=[{id:'other',name:'Other',x:4,y:5}];g.run('receivePeers(peers)');g.context.event={id:'hit',kind:'damage',label:'−20 HP',room:'pond'};g.run("receiveWorldActivity('other',[event]);receivePeers([]);updateWorldFloats(1300)");assert.equal(g.nodes.get('worldFloats').children.length,1);g.run('updateWorldFloats(3000)');assert.equal(g.nodes.get('worldFloats').children.length,0);
+});

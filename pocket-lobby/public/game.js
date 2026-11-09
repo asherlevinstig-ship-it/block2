@@ -506,14 +506,15 @@ function addWorldFloat(actor,event){
  const existing=worldFloats.filter(f=>f.actor===actor);if(existing.length>=4){existing[0].node.remove();worldFloats.splice(worldFloats.indexOf(existing[0]),1);}
  if(worldFloats.length>=80){worldFloats.shift().node.remove();}
  const node=document.createElement('span');node.className='world-float';node.dataset.kind=event.kind;node.textContent=event.label;$('worldFloats').append(node);
- worldFloats.push({actor,room:currentRoom,node,started:performance.now(),lane:existing.length%4});
+ const peer=remotePeers.get(actor);
+ worldFloats.push({actor,room:currentRoom,node,started:performance.now(),lane:existing.length%4,anchor:peer?{rx:peer.rx,ry:peer.ry,seat:peer.seat}:null});
  if(event.kind==='damage'&&remotePeers.has(actor))remotePeers.get(actor).hurtUntil=performance.now()+250;
 }
 function receiveWorldActivity(actor,events){for(const event of events.slice(-16))addWorldFloat(actor,event);}
 function updateWorldFloats(time){
  const bounds=canvasBounds(),cx=view.width/2,cy=view.height/2-4;
  for(let i=worldFloats.length-1;i>=0;i--){
-  const f=worldFloats[i],age=time-f.started,peer=f.actor==='self'?player:remotePeers.get(f.actor);
+  const f=worldFloats[i],age=time-f.started,peer=f.actor==='self'?player:remotePeers.get(f.actor)??f.anchor;
   if(age>1800||f.room!==currentRoom||!peer){f.node.remove();worldFloats.splice(i,1);continue;}
   const [x,y]=peer.seat?seatAnchor(peer.seat):point((f.actor==='self'?player.x:peer.rx)+.5,(f.actor==='self'?player.y:peer.ry)+.5);
   f.node.style.left=Math.round(bounds.x+((x-cx)*zoom+cx)*bounds.scale+(f.lane%2?12:-12))+'px';

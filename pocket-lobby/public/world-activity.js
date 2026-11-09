@@ -23,4 +23,4 @@ export function worldActivityEvents(before,after,now=Date.now()){
  return events.slice(-16);
 }
 export function createWorldActivityTracker(initial){let previous=initial?structuredClone(initial):null;return {update(state,now){const events=worldActivityEvents(previous,state,now);previous=structuredClone(state);return events;}};}
-export function sharedActivity(state){return state.hunting?.encounter?'combat':state.fishingCast?'fishing':state.plan?.kind==='gambling'?'gambling':state.plan?.kind==='queue'?state.plan.queue?.steps?.[state.plan.stepIndex]?.type??'auto':state.plan?.kind??null;}
+export function sharedActivity(state){return state.hunting?.encounter?'combat':state.fishingCast?'fishing':state.gambling?.round?.status==='playing'?'gambling':state.plan?.kind==='gambling'?'gambling':state.plan?.kind==='queue'?state.plan.queue?.steps?.[state.plan.stepIndex]?.type??'auto':state.plan?.kind??null;}
