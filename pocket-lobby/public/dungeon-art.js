@@ -55,7 +55,7 @@ export function drawDungeonProp(item,time,{ctx,point,polygon,surface,block,rect,
   polygon([[px-15,py-43],[px-19,py-12],[px-4,py-16],[px+4,py-8],[px+8,py-40]],'#674d83');ink(-5,-42,12,4,'#23384f');ink(-3,-41,8,1,'#f7d599');
   const blade=wind*12;polygon([[px+17,py-19],[px+20+blade,py-57],[px+24+blade,py-20]],'#c1e0e9');ink(13,-18,15,3,'#d9bc80');ink(18,-16,3,11,'#82736d');
  }else{
-  const boss=type==='depthsColossus',scale=boss?1.35:1,phase=boss?(!combat||combat.health>160?1:combat.health>80?2:3):0;
+  const boss=type==='depthsColossus',scale=boss?1.35:1,phase=boss?(!combat||combat.health>(combat.brainMaxHealth??240)*2/3?1:combat.health>(combat.brainMaxHealth??240)/3?2:3):0;
   const metal=hit?['#f3ccb6','#7d627b','#bb8f9d']:boss?['#b4a6a5','#49425c','#7a6e88']:['#a2b2a6','#384f61','#6a8590'];
   for(const u of [.08,.64]){part(u,.2,.28,.42,0,15,metal);part(u-.05,.12,.38,.55,0,5,metal);}
   part(.04,.12,.96,.8,15,25,metal);part(.15,.18,.75,.6,40,5,metal);part(.22,.25,.55,.48,45,13,metal);

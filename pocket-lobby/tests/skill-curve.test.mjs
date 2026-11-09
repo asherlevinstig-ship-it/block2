@@ -1,3 +1,4 @@
+import {prepareDungeonBuild} from './helpers/combat-fixtures.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {skillLevel,skillProgress,skillLevelCost,skillXpForLevel,migrateProgression,MAX_SKILL_XP} from '../public/skill-curve.js';
@@ -71,7 +72,7 @@ test('harder enemies give higher mastery and XP through real server victories',(
 
 function simulate(room,level,weapon,vest){
  const s=normalizeState({location:room,position:{x:5,y:5},stats:{strengthXp:skillXpForLevel(level),agilityXp:skillXpForLevel(level),vitalityXp:skillXpForLevel(level)},combatGear:{ownedWeapons:['trainingSword',weapon],equippedWeapon:weapon,stonebackVestOwned:vest,stonebackVestEquipped:vest},depthsRun:{cleared:room==='depthsGate'?0:room==='depthsVault'?2:1}});
- applyGameplayAction(s,'fight',{},1000,()=>.5);advanceServerCombat(s,120000,()=>.5);return s.combatReports[0];
+ if(vest)prepareDungeonBuild(s);applyGameplayAction(s,'fight',{},1000,()=>.5);advanceServerCombat(s,120000,()=>.5);return s.combatReports[0];
 }
 test('dungeon combat rewards preparation while older areas become easier',()=>{
  assert.equal(simulate('depthsGallery',1,'trainingSword',false).outcome,'defeat');
@@ -102,7 +103,7 @@ test('persisted legacy saves migrate once before actions and preserve earned equ
 
 test('a level-five prepared expedition can bank its Vault shard using gathered meals',()=>{
  const s=normalizeState({location:'ruins',position:{x:5,y:5},depthsDiscovered:true,stats:{strengthXp:skillXpForLevel(5),agilityXp:skillXpForLevel(5),vitalityXp:skillXpForLevel(5)},combatGear:{ownedWeapons:['trainingSword','ironSword'],equippedWeapon:'ironSword',stonebackVestOwned:true,stonebackVestEquipped:true},meals:{boarStew:3}});
- let now=1000;const act=(name,body={})=>applyGameplayAction(s,name,body,now,()=>.5);
+ prepareDungeonBuild(s);let now=1000;const act=(name,body={})=>applyGameplayAction(s,name,body,now,()=>.5);
  act('depthsEnter');
  for(let stage=0;stage<3;stage++){
   while(s.health<100&&s.meals.boarStew)act('eat',{id:'boarStew'});

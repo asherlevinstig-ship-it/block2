@@ -1,10 +1,11 @@
+import {prepareDungeonBuild} from './helpers/combat-fixtures.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {createHunt,huntingTurn,advanceHunt,normalizeHunting,huntEnemy,enemyAttack,vaultPhase,transitionVaultPhase} from '../public/hunting.js';
 import {normalizeState} from '../server/player-state.mjs';import {applyGameplayAction,protectFishingState} from '../server/gameplay.mjs';import {advanceServerCombat} from '../server/activities.mjs';import {castEssencePower} from '../server/essences.mjs';import {normalizeMagic} from '../public/essences.js';import {depthsSpoils} from '../public/depths.js';import {skillXpForLevel} from '../public/skill-curve.js';import {boot} from './helpers/game-client.mjs';
 import {handlePlayerApi} from '../server/player-api.mjs';import {testDatabase} from './db-helper.mjs';
 const stats={strengthXp:skillXpForLevel(10),agilityXp:skillXpForLevel(10),vitalityXp:skillXpForLevel(10)};
 const turn=(e,action,at,weapon='ironSword')=>huntingTurn(e,100,stats,action,at,()=>.5,weapon);
-const veteran=()=>normalizeState({location:'depthsVault',position:{x:5,y:5},depthsRun:{cleared:2},stats,combatGear:{ownedWeapons:['ironSword'],equippedWeapon:'ironSword',stonebackVestOwned:true,stonebackVestEquipped:true},dungeonLoot:{clears:4,streak:4,target:'breakerSpear'}});
+const veteran=()=>prepareDungeonBuild(normalizeState({location:'depthsVault',position:{x:5,y:5},depthsRun:{cleared:2},stats,combatGear:{ownedWeapons:['ironSword'],equippedWeapon:'ironSword',stonebackVestOwned:true,stonebackVestEquipped:true},dungeonLoot:{clears:4,streak:4,target:'breakerSpear'}}));
 
 test('new boss phases use health thresholds while saved legacy fights retain their old attacks',()=>{
  const e=createHunt(1000,undefined,'depthsGuardian');assert.equal(vaultPhase(e).index,1);assert.equal(enemyAttack(e).name,'Ironclad Smash');assert.equal(e.nextBoarAt,4500);

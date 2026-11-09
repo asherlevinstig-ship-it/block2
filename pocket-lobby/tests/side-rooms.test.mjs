@@ -6,7 +6,7 @@ import {depthsSideRooms,depthsSideForRoom,depthsEnemyAvailable,depthsSpoils,norm
 import {skillXpForLevel} from '../public/skill-curve.js';import {touchPresence} from '../server/routines.mjs';import {boot} from './helpers/game-client.mjs';import {moonwood} from '../public/moonwood.js';
 const initial=(extra={})=>normalizeState({location:'depthsGallery',position:{x:4,y:5},depthsRun:{cleared:2,routeChoice:'safe'},health:70,stats:{strengthXp:skillXpForLevel(10),agilityXp:skillXpForLevel(10),vitalityXp:skillXpForLevel(10)},combatGear:{ownedWeapons:['ironSword'],equippedWeapon:'ironSword',stonebackVestOwned:true,stonebackVestEquipped:true},...extra});
 const act=(s,name,body={},now=1000)=>applyGameplayAction(s,name,body,now,()=>.5);
-function win(s,id,now=1000){act(s,'depthsSide',{id},now);s.position={x:5,y:5};act(s,'fight',{},now);advanceServerCombat(s,now+120000,()=>.5);assert.equal(s.combatReports.at(-1).outcome,'victory');return s;}
+function win(s,id,now=1000){act(s,'depthsSide',{id},now);s.position={x:5,y:5};act(s,'fight',{},now);s.hunting.encounter.health=1;advanceServerCombat(s,now+120000,()=>.5);assert.equal(s.combatReports.at(-1).outcome,'victory');return s;}
 test('all three optional rooms require a cleared gallery and return without advancing the main route',()=>{
  const s=initial();assert.equal(canEnterDepthsSide(s.depthsRun,s.location,'trial'),true);
  for(const id of Object.keys(depthsSideRooms)){act(s,'depthsSide',{id});assert.equal(s.location,depthsSideRooms[id].room);assert.equal(s.depthsRun.cleared,2);assert.equal(normalizeState(s).location,s.location);assert.equal(depthsEnemyAvailable(s.depthsRun,s.location),id!=='rest');assert.throws(()=>act(s,'depthsNext'),/Invalid/);act(s,'depthsSide',{id:'return'});assert.equal(s.location,'depthsGallery');}
@@ -25,7 +25,7 @@ test('rest shrine spends unbanked gold once, preserves wallet and never charges 
 });
 test('sealed challenge grants its guaranteed stone only on claiming, once per run, including after reload',()=>{
  const s=initial({health:100});act(s,'depthsSide',{id:'trial'});s.position={x:8,y:5};assert.throws(()=>act(s,'depthsInspect',{id:'sideSeal'}),/Defeat the Rune Sentinel/);
- s.position={x:5,y:5};act(s,'fight');advanceServerCombat(s,121000,()=>.5);assert.equal(s.combatReports.at(-1).outcome,'victory');assert.equal(s.magic?.stones?.sword??0,0);assert.equal(s.combatReports.at(-1).rewards.stones,undefined);
+ s.position={x:5,y:5};act(s,'fight');s.hunting.encounter.health=1;advanceServerCombat(s,121000,()=>.5);assert.equal(s.combatReports.at(-1).outcome,'victory');assert.equal(s.magic?.stones?.sword??0,0);assert.equal(s.combatReports.at(-1).rewards.stones,undefined);
  Object.assign(s,normalizeState(s));s.position={x:8,y:5};act(s,'depthsInspect',{id:'sideSeal'},130000);const stone=s.depthsRun.sideStone;assert.equal(s.magic.stones[stone],1);assert.equal(s.credits,100);assert.equal(depthsSpoils(s.depthsRun).gold,36);
  act(s,'depthsInspect',{id:'sideSeal'},130000);assert.equal(s.magic.stones[stone],1);assert.equal(normalizeState(s).depthsRun.sideStone,stone);
 });
@@ -41,7 +41,7 @@ test('optional state is protected, validates encounters and away rules never pul
 });
 test('new rooms have rendered discoveries and the client shows risk previews, shrine choices and safe returns',()=>{
  for(const side of Object.values(depthsSideRooms)){assert(moonwood.layouts[side.room]);assert(moonwood.layouts[side.room].scenery.some(item=>item.type==='cachePassage'));const g=boot(initial({location:side.room}));assert.equal(g.read('currentRoom'),side.room);assert.equal(g.nodes.get('depthsSideFieldReturn').hidden,false);assert.deepEqual(g.errors,[]);}
- const g=boot(initial());g.run('openDungeonSideChoices()');assert.equal(g.nodes.get('depthsSideDialog').open,true);assert.match(g.nodes.get('sideRoomHealth').textContent,/70 \/ 100 HP.*36 gold/);assert.match(g.nodes.get('sideStatusTrial').textContent,/210 HP/);
+ const g=boot(initial());g.run('openDungeonSideChoices()');assert.equal(g.nodes.get('depthsSideDialog').open,true);assert.match(g.nodes.get('sideRoomHealth').textContent,/70 \/ 100 HP.*36 gold/);assert.match(g.nodes.get('sideStatusTrial').textContent,/368 HP/);
 });
 
 import {handlePlayerApi} from '../server/player-api.mjs';import {testDatabase} from './db-helper.mjs';
@@ -52,7 +52,7 @@ test('concurrent shrine and stone requests settle once, retries preserve the res
  await call('session',{legacy:initial({health:50})});assert.equal((await act('gameplay/depthsSide',{id:'rest'})).status,200);
  async function concurrent(path,body={}){const revision=packet.revision,a=crypto.randomUUID(),b=crypto.randomUUID(),send=operation=>call(path,{...body,revision,operation});const results=await Promise.all([send(a),send(b)]);assert.deepEqual(results.map(r=>r.status).sort(),[200,409]);await send(results[0].status===200?a:b);}
  await concurrent('gameplay/depthsShrine');assert.equal(packet.state.health,80);assert.equal(depthsSpoils(packet.state.depthsRun).gold,21);assert.equal(packet.state.credits,100);
- await act('gameplay/depthsSide',{id:'return'});await act('gameplay/depthsSide',{id:'trial'});await act('save',{state:{...packet.state,position:{x:5,y:5}}});await act('gameplay/fight');now=121000;await call('state');assert.equal(packet.state.depthsRun.sideWins.includes('trial'),true);
+ await act('gameplay/depthsSide',{id:'return'});await act('gameplay/depthsSide',{id:'trial'});await act('save',{state:{...packet.state,position:{x:5,y:5}}});await act('gameplay/fight');const controlled=structuredClone(packet.state);controlled.hunting.encounter.health=1;sql.prepare('UPDATE tower_players SET state_json=? WHERE player_id=?').run(JSON.stringify(controlled),packet.characterKey);now=121000;await call('state');assert.equal(packet.state.depthsRun.sideWins.includes('trial'),true);
  await act('save',{state:{...packet.state,position:{x:8,y:5}}});await concurrent('gameplay/depthsInspect',{id:'sideSeal'});const stone=packet.state.depthsRun.sideStone;assert.equal(packet.state.magic.stones[stone],1);
  await act('save',{state:{...packet.state,depthsRun:{...packet.state.depthsRun,sideWins:['treasure','trial'],shrineUsed:false},magic:{...packet.state.magic,stones:{...packet.state.magic.stones,[stone]:99}}}});assert.equal(packet.state.magic.stones[stone],1);assert.equal(packet.state.depthsRun.sideWins.includes('treasure'),false);assert.equal(packet.state.depthsRun.shrineUsed,true);
  await act('gameplay/depthsSide',{id:'return'});await concurrent('gameplay/bank');assert.equal(packet.state.credits,121);assert.equal(packet.state.huntingLoot.stonebackShell,1);assert.equal(packet.state.depthsRun,null);assert.equal(packet.state.magic.stones[stone],1);

@@ -56,7 +56,7 @@ export function recordCombatFx(events,result,time){
   if(result.outcome==='victory')events.victoryAt=time;
   if(!power&&!damage&&!taken&&!dodged&&!warded&&!absorbed&&!weakened&&action!=='enemy')return;
   const live=(events.bursts??[]).filter(effect=>time-effect.time<feedbackLife);
-  events.bursts=[...live,{time,enemyTile:result.enemyTile,attackTile:result.attackTile,spatialAvoided:result.spatialAvoided,covered:result.covered,action,damage,taken,dodged,warded,absorbed,move,attackShape,heavy,
+  events.bursts=[...live,{time,enemyTile:result.enemyTile,attackTile:result.attackTile,attackCenter:result.attackCenter,attackFan:result.attackFan,attackReach:result.attackReach,spatialAvoided:result.spatialAvoided,covered:result.covered,action,damage,taken,dodged,warded,absorbed,move,attackShape,heavy,
     staggered,weakSpot,staggerBonus,staggerGained,perfectDodge,automaticDodge,counter,counterBonus,shellGuarded,power,powerForm,powerColor,ward,healed,staminaRestored,interrupted,interruptResisted,weakened}].slice(-6);
 }
 function line(ctx,x1,y1,x2,y2){
@@ -229,7 +229,15 @@ export function drawCombatWorldFx({ctx,point,time,now,events,player,reduced,enco
     const t=progress(time,effect.time,duration);
     if(effect.power)drawSpell(ctx,points,t,effect,reduced);
     else if(effect.action==='attack'&&effect.damage)drawMeleeImpact(ctx,points,t,effect,reduced);
-    else if(effect.action==='enemy'){let impact=points;if(effect.attackTile){const [tx,ty]=point(effect.attackTile.x+.5,effect.attackTile.y+.5,18);impact={...points,px:tx,py:ty};}drawEnemyImpact(ctx,impact,t,effect,reduced);}
+    else if(effect.action==='enemy'){
+      let impact=points;
+      if(effect.enemyTile){const [ex,ey]=point(effect.enemyTile.x+.5,effect.enemyTile.y+.5,15),[gx,gy]=point(effect.enemyTile.x+.5,effect.enemyTile.y+.5,1);impact={...impact,bx:ex,by:ey,bgX:gx,bgY:gy};}
+      if(effect.attackTile){const [tx,ty]=point(effect.attackTile.x+.5,effect.attackTile.y+.5,18);impact={...impact,px:tx,py:ty};if(effect.attackCenter==='target'){const [gx,gy]=point(effect.attackTile.x+.5,effect.attackTile.y+.5,1);impact={...impact,bx:tx,by:ty,bgX:gx,bgY:gy};}}
+      if(effect.attackFan&&effect.enemyTile&&effect.attackTile){
+        const a=effect.enemyTile,b=effect.attackTile,angle=Math.atan2(b.y-a.y,b.x-a.x);
+        for(const turn of effect.attackFan){const [tx,ty]=point(a.x+.5+Math.cos(angle+turn)*effect.attackReach,a.y+.5+Math.sin(angle+turn)*effect.attackReach,18);drawEnemyImpact(ctx,{...impact,px:tx,py:ty},t,{...effect,taken:0},reduced);}
+      }else drawEnemyImpact(ctx,impact,t,effect,reduced);
+    }
     if(effect.staggered)particles(ctx,bx,by,t,'#ffe49a',reduced,36,14);
     if(effect.perfectDodge){ctx.save();ctx.strokeStyle=color.evade;ctx.lineWidth=2;ctx.globalAlpha=1-t;ring(ctx,pgX,pgY,reduced?15:10+t*18);ctx.restore();}
   }

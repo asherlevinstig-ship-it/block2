@@ -1,3 +1,4 @@
+import {legacyDungeonEncounter} from './helpers/combat-fixtures.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {normalizeState} from '../server/player-state.mjs';import {applyGameplayAction,protectFishingState} from '../server/gameplay.mjs';import {advanceServerCombat} from '../server/activities.mjs';import {normalizeCharacterRules,nextCombatTactic,incomingCombatDamage} from '../public/character-rules.js';import {normalizeMagic} from '../public/essences.js';import {normalizeHunting} from '../public/hunting.js';import {autoStatus} from '../public/auto-mode.js';import {boot} from './helpers/game-client.mjs';
 function fighter(style='balanced',extra={}){
@@ -48,7 +49,7 @@ test('Cautious retreats before an unprotected hit crosses its safety line; all s
 });
 
 test('the next guaranteed physical cast interrupt avoids wasting Storm or a dodge',()=>{
- const s=fighter('cautious',{location:'depthsCache',depthsRun:{cleared:2}});s.hunting.encounter.castHits=2;s.hunting.encounter.castDeadline=s.hunting.encounter.nextBoarAt;s.hunting.encounter.nextPlayerAt=3500;
+ const s=legacyDungeonEncounter(fighter('cautious',{location:'depthsCache',depthsRun:{cleared:2}}));s.hunting.encounter.castHits=2;s.hunting.encounter.castDeadline=s.hunting.encounter.nextBoarAt;s.hunting.encounter.nextPlayerAt=3500;
  s.magic=normalizeMagic({picks:['fire','ice','storm'],unlocked:['storm:sword'],slots:{q:'storm:sword',e:null}});s.characterRules.combat.q=true;assert.equal(nextCombatTactic(s),null);
  s.hunting.encounter.castHits=1;assert.equal(nextCombatTactic(s).action,'essence');assert.match(nextCombatTactic(s).reason,/Interrupting/);
 });

@@ -17,8 +17,18 @@ export function dungeonWalkable(room,tile,scenery=[]){
 export const arenaEnemy=encounter=>encounter?.arenaEnemy??{x:6,y:5};
 export const arenaPlayer=encounter=>encounter?.arenaPlayer??{x:5,y:5};
 export function arenaWarningAt(e,move){return e?.arenaVersion===1&&e.arenaLockedFor!==e.nextBoarAt?Math.max(0,e.nextBoarAt-move.tell):Infinity;}
+export const ARENA_STEP_COST=12;
 export function lockArenaAttack(e,move,enemy){
  const next={...e,arenaLockedFor:e.nextBoarAt,arenaTarget:{...arenaPlayer(e)}};
+ if(e.brainVersion===2){
+  next.brainOrigin={...arenaEnemy(e)};
+  const h=e.brainPlayerHistory??[],last=h.at(-1),previous=h.at(-2);
+  if(move.center==='target'&&last&&previous&&last.dx===previous.dx&&last.dy===previous.dy){
+   const p={x:next.arenaTarget.x+last.dx,y:next.arenaTarget.y+last.dy};
+   if(p.x>=1&&p.x<=10&&p.y>=1&&p.y<=8&&dungeonFloor(e.arenaRoom,p.x,p.y)&&!(e.arenaSolids??[]).some(s=>s.x===p.x&&s.y===p.y))next.arenaTarget=p;
+  }
+  return next;
+ }
  if(enemy.id==='depthsBoar'){
   const tiles=[{x:6,y:5},{x:6,y:4},{x:7,y:5},{x:6,y:6}];
   next.arenaCycle=(e.arenaCycle??0)+1;next.arenaEnemy=tiles.slice(next.arenaCycle%tiles.length).concat(tiles).find(p=>p.x!==arenaPlayer(e).x||p.y!==arenaPlayer(e).y);
@@ -35,23 +45,31 @@ export function lockArenaAttack(e,move,enemy){
 }
 function lineDistance(p,a,b){const dx=b.x-a.x,dy=b.y-a.y,d=dx*dx+dy*dy,t=d?Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.y-a.y)*dy)/d)):0;return Math.hypot(p.x-a.x-t*dx,p.y-a.y-t*dy);}
 export function arenaInDanger(e,move,tile=arenaPlayer(e)){
- const enemy=arenaEnemy(e),target=e.arenaTarget??arenaPlayer(e);
+ const enemy=e.brainVersion===2?(e.brainOrigin??arenaEnemy(e)):arenaEnemy(e),target=e.arenaTarget??arenaPlayer(e);
+ if(e.brainVersion===2){
+  const dx=tile.x-enemy.x,dy=tile.y-enemy.y,distance=Math.hypot(dx,dy),heading=Math.atan2(target.y-enemy.y,target.x-enemy.x);
+  if(move.shape==='ring'){const center=move.center==='target'?target:enemy;return Math.hypot(tile.x-center.x,tile.y-center.y)<=move.radius;}
+  if(move.shape==='arc'){const angle=Math.atan2(dy,dx),delta=Math.atan2(Math.sin(angle-heading),Math.cos(angle-heading));return distance<=(move.reach??1.8)&&Math.abs(delta)<=(move.angle??1.2);}
+  return (move.fan??[0]).some(a=>{const end={x:enemy.x+Math.cos(heading+a)*(move.reach??6),y:enemy.y+Math.sin(heading+a)*(move.reach??6)};return lineDistance(tile,enemy,end)<=(move.width??.6);});
+ }
  if(move.shape==='ring')return Math.hypot(tile.x-enemy.x,tile.y-enemy.y)<=1.65;
  if(move.shape==='bolt')return Math.hypot(tile.x-target.x,tile.y-target.y)<.75;
  if(move.shape==='arc')return Math.hypot(tile.x-enemy.x,tile.y-enemy.y)<=1.8;
  return lineDistance(tile,enemy,target)<.6&&Math.hypot(tile.x-enemy.x,tile.y-enemy.y)<=Math.hypot(target.x-enemy.x,target.y-enemy.y)+.7;
 }
 export function arenaBehindCover(e,move,tile=arenaPlayer(e)){
- if(move.shape!=='bolt')return false;
- const enemy=arenaEnemy(e),distance=Math.hypot(tile.x-enemy.x,tile.y-enemy.y);
+ if(move.shape!=='bolt'||e.brainVersion===2&&!move.blockable)return false;
+ const enemy=e.brainVersion===2?(e.brainOrigin??arenaEnemy(e)):arenaEnemy(e),distance=Math.hypot(tile.x-enemy.x,tile.y-enemy.y);
  return dungeonCover.some(p=>lineDistance(p,enemy,tile)<.65&&Math.hypot(p.x-enemy.x,p.y-enemy.y)<distance-.4);
 }
-export function arenaMoveEvent(state,tile,now,scenery=[]){
+export function arenaMoveEvent(state,tile,now,scenery=[],stamina=state.hunting?.encounter?.stamina??100){
  const e=state.hunting?.encounter,from=e&&arenaPlayer(e);
  if(e?.arenaVersion!==1||!tile||now<(e.arenaStepAt??0)||Math.abs(tile.x-from.x)+Math.abs(tile.y-from.y)!==1||!dungeonWalkable(state.location,tile,scenery))return null;
  if(state.location==='depthsGate'&&tile.x===8&&!(tile.y===4&&state.depthsRun?.finds?.includes('sluiceLever')))return null;
  const foe=arenaEnemy(e);if(tile.x===foe.x&&tile.y===foe.y)return null;
+ if(e.brainVersion===2&&stamina<ARENA_STEP_COST)return null;
  const next={...e,arenaPlayer:{x:tile.x,y:tile.y},arenaStepAt:now+240};
+ if(e.brainVersion===2){Object.assign(next,{stamina:stamina-ARENA_STEP_COST,staminaAt:now,brainStepsSinceAttack:(e.brainStepsSinceAttack??0)+1,brainPlayerHistory:[...(e.brainPlayerHistory??[]),{dx:tile.x-from.x,dy:tile.y-from.y,at:now}].slice(-4)});}
  state.position={...next.arenaPlayer};
  return {action:'move',encounter:next,health:state.health,damage:0,taken:0,outcome:'fighting',tile:next.arenaPlayer};
 }

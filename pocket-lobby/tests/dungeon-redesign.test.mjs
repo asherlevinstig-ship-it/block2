@@ -1,9 +1,11 @@
+import {legacyDungeonEncounter} from './helpers/combat-fixtures.mjs';
+// Replay compatibility for the positional v1 encounters saved before smart combat.
 import test from 'node:test';import assert from 'node:assert/strict';
 import {normalizeState} from '../server/player-state.mjs';import {applyGameplayAction,protectFishingState} from '../server/gameplay.mjs';import {advanceServerCombat} from '../server/activities.mjs';
 import {arenaPlayer,arenaEnemy,arenaInDanger,arenaBehindCover,arenaMoveEvent,dungeonFloor,dungeonRooms} from '../public/dungeon-arena.js';
 import {huntEnemies,enemyAttack,normalizeHunting} from '../public/hunting.js';import {moonwood} from '../public/moonwood.js';import {boot} from './helpers/game-client.mjs';
 const act=(s,name,body={},now=1000)=>applyGameplayAction(s,name,body,now,()=>.99);
-function fighter(room='depthsGate',combat={}){const run=room==='depthsGate'?{cleared:0,routeChoice:'pending'}:room==='depthsGallery'?{cleared:1,routeChoice:'safe'}:room==='depthsCache'?{cleared:1,routeChoice:'dangerous'}:{cleared:2,routeChoice:'safe'};const s=normalizeState({location:room,position:{x:5,y:5},depthsRun:run,combatGear:{ownedWeapons:['trainingSword'],equippedWeapon:'trainingSword'},characterRules:{combat}});act(s,'fight');return s;}
+function fighter(room='depthsGate',combat={}){const run=room==='depthsGate'?{cleared:0,routeChoice:'pending'}:room==='depthsGallery'?{cleared:1,routeChoice:'safe'}:room==='depthsCache'?{cleared:1,routeChoice:'dangerous'}:{cleared:2,routeChoice:'safe'};const s=normalizeState({location:room,position:{x:5,y:5},depthsRun:run,combatGear:{ownedWeapons:['trainingSword'],equippedWeapon:'trainingSword'},characterRules:{combat}});act(s,'fight');legacyDungeonEncounter(s);return s;}
 function input(s,kind,now,tile){act(s,'combat',{combatId:s.combatId,input:kind,tile},now);return s.combatReceipt.events;}
 
 test('dungeon enemies have five authored silhouettes and irregular walkable chambers',()=>{
@@ -52,7 +54,7 @@ test('arena reloads preserve positions, warnings and movement cooldown, and snap
  assert.throws(()=>normalizeHunting({encounter:{...s.hunting.encounter,arenaPlayer:{x:0,y:0}}}),/arena/);
 });
 test('new rooms and creatures render without invalid coordinates and expose main-screen combat controls',()=>{
- for(const room of ['depthsGate','depthsGallery','depthsCache','depthsTrial','depthsVault']){const s=fighter(room);s.hunting.encounter.nextPlayerAt=Date.now()+2000;s.hunting.encounter.nextBoarAt=Date.now()+3000;const g=boot(s);g.run('draw(2200);updateDungeonArenaHud()');assert.deepEqual(g.errors,[]);assert.equal(g.nodes.get('dungeonArenaHud').hidden,false);assert.equal(g.nodes.get('dungeonEnemyName').textContent,huntEnemies[s.hunting.encounter.enemy].name);g.run('walkTo({x:4,y:5})');assert.equal(g.read('combatMoveGoal.x'),4);}
+ for(const room of ['depthsGate','depthsGallery','depthsCache','depthsTrial','depthsVault']){const s=fighter(room);s.hunting.encounter.nextPlayerAt=Date.now()+2000;s.hunting.encounter.nextBoarAt=Date.now()+3000;const g=boot(s);g.run('draw(2200);updateDungeonArenaHud()');assert.deepEqual(g.errors,[]);assert.equal(g.nodes.get('dungeonArenaHud').hidden,false);assert(g.nodes.get('dungeonEnemyName').textContent.endsWith(huntEnemies[s.hunting.encounter.enemy].name));g.run('walkTo({x:4,y:5})');assert.equal(g.read('combatMoveGoal.x'),4);}
 });
 
 test('each discovery and physical passage has a reachable side on the new chamber floors',()=>{

@@ -1,3 +1,4 @@
+import {legacyDungeonEncounter} from './helpers/combat-fixtures.mjs';
 import test from 'node:test';
 import {skillXpForLevel,masteryThresholds} from '../public/skill-curve.js';
 import assert from 'node:assert/strict';
@@ -234,7 +235,7 @@ test('burn settles on its scheduled clock and grants a single victory when the p
 test('Ice delays the guardian attack once per Chill and preserves its attack warning and move',()=>{
   const s=character();act(s,'bondEssences',{picks:gems});s.magic.stones.shield=1;
   act(s,'awakenPower',{id:'ice:sword'});act(s,'awakenPower',{id:'ice:shield'});
-  s.location='depthsVault';s.depthsRun={cleared:2};s.position={x:5,y:5};act(s,'fight');
+  s.location='depthsVault';s.depthsRun={cleared:2};s.position={x:5,y:5};act(s,'fight');legacyDungeonEncounter(s);
   s.hunting.encounter.nextPlayerAt=100000;
   delete s.hunting.encounter.bossVersion;s.hunting.encounter.nextBoarAt=3300;s.hunting.encounter.enemyMove='aftershock';
   const before=s.hunting.encounter.nextBoarAt;
@@ -317,7 +318,7 @@ test('Storm cancels a warned guardian follow-up but cannot undo an attack that h
   const setup=()=>{
     const s=character();act(s,'bondEssences',{picks:['fire','shadow','storm']});
     s.magic.stones.shield=1;act(s,'awakenPower',{id:'storm:shield'});
-    s.location='depthsVault';s.position={x:5,y:5};s.depthsRun={cleared:2};act(s,'fight');
+    s.location='depthsVault';s.position={x:5,y:5};s.depthsRun={cleared:2};act(s,'fight');legacyDungeonEncounter(s);
     s.hunting.encounter.nextPlayerAt=100000;delete s.hunting.encounter.bossVersion;s.hunting.encounter.nextBoarAt=3300;s.hunting.encounter.enemyMove='aftershock';return s;
   };
   const s=setup();
@@ -341,7 +342,7 @@ test('each base element has a useful response to the rune caster',()=>{
   const setup=(id)=>{
     const s=character();act(s,'bondEssences',{picks:id.startsWith('storm')?['fire','shadow','storm']:gems});
     s.magic.stones.shield=1;act(s,'awakenPower',{id});
-    s.location='depthsCache';s.depthsRun={cleared:2};s.position={x:5,y:5};act(s,'fight');
+    s.location='depthsCache';s.depthsRun={cleared:2};s.position={x:5,y:5};act(s,'fight');legacyDungeonEncounter(s);
     s.hunting.encounter.nextPlayerAt=100000;return s;
   };
   const fire=setup('fire:sword');

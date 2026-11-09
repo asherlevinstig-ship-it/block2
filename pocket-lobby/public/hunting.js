@@ -1,3 +1,4 @@
+import {smartAttacks,smartProfile,planBrainAttack,normalizeBrain} from './enemy-brain.js';
 import {arenaEnemy,arenaPlayer,arenaInDanger,arenaBehindCover,dungeonFloor} from './dungeon-arena.js';
 import {skillLevel} from './skill-curve.js';
 import {essenceEffects,essenceGems,essencePower} from './essences.js';
@@ -35,18 +36,20 @@ const enemiesByRoom=Object.fromEntries(Object.values(huntEnemies).map(enemy=>[en
 export const huntEnemyForRoom=room=>enemiesByRoom[room];
 export function vaultPhase(encounter){
  if(encounter?.enemy!=='depthsGuardian'||encounter.bossVersion!==1)return null;
- const index=encounter.health>160?1:encounter.health>80?2:3;
+ const maximum=encounter.brainVersion===2?encounter.brainMaxHealth:240;
+ const index=encounter.health>maximum*2/3?1:encounter.health>maximum/3?2:3;
  return index===1?{index,name:'Ironclad',archetype:'armoured',move:'vaultSmash',interval:3500,shellArmor:9,color:'#e6c080',hint:'Build stagger to crack the plating. Heavy hits help; dodge the smash.'}:index===2?{index,name:'Unbound',archetype:'duelist',move:'vaultCleave',interval:2600,shellArmor:0,color:'#ffab89',hint:'Dodge the heavy swings, then counter. Watch for the follow-up lunge.'}:{index,name:'Runic heart',archetype:'caster',move:'vaultBolt',interval:4200,shellArmor:0,color:'#c6a4ff',hint:'Land 3 quick hits during the charged spell to interrupt, or dodge the blast.'};
 }
 export function huntEnemy(encounter){
- const enemy=Object.hasOwn(huntEnemies,encounter?.enemy)?huntEnemies[encounter.enemy]:boar,phase=vaultPhase(encounter);
+ const base=Object.hasOwn(huntEnemies,encounter?.enemy)?huntEnemies[encounter.enemy]:boar,enemy=encounter?.brainVersion===2?smartProfile(base):base,phase=vaultPhase(encounter);
  return phase?{...enemy,...phase,phaseName:phase.name,name:enemy.name,tactic:'PHASE '+phase.index+' / 3 · '+phase.name.toUpperCase()+' · '+phase.hint}:enemy;
 }
 export function transitionVaultPhase(event,before,now){
  const previous=vaultPhase(before),next=vaultPhase(event.encounter);
  if(!previous||!next||previous.index===next.index)return event;
  const encounter=event.encounter;encounter.bossPhaseAt=now;encounter.castHits=0;delete encounter.castDeadline;delete encounter.enemyMove;
- encounter.nextBoarAt=Math.max(encounter.nextBoarAt,now+1500+enemyAttack(encounter).tell);
+ if(encounter.brainVersion===2)Object.assign(encounter,planBrainAttack(encounter,huntEnemy(encounter),now));
+  encounter.nextBoarAt=Math.max(encounter.nextBoarAt,now+1500+enemyAttack(encounter).tell);
  event.phaseChange={index:next.index,name:next.name,hint:next.hint,color:next.color};return event;
 }
 export const huntRespawnAt=(hunting,enemy)=>enemy?.id==='thornBoar'?hunting.thornRespawnAt??0:enemy===huntEnemies.beetle?hunting.beetleRespawnAt??0:hunting.respawnAt;
@@ -71,7 +74,10 @@ const enemyMoves={
   runicSlam:{id:'runicSlam',name:'Runic Slam',tell:1300,delay:2800,damage:8,shape:'ring',opensShell:true},
   aftershock:{id:'aftershock',name:'Aftershock',tell:900,delay:1350,damage:-10,shape:'ring',opensShell:false}
 };
+export const dungeonEnemyPreview=enemy=>enemy?.room.startsWith('depths')?smartProfile(enemy):enemy;
+export const playerMeleeReach=weapon=>['huntingSpear','breakerSpear'].includes(weapon)?2:['quickDagger','quickfang'].includes(weapon)?1.25:1.45;
 export function enemyAttack(encounter,enemy=huntEnemy(encounter)){
+  if(encounter?.brainVersion===2&&Object.hasOwn(smartAttacks,encounter.brainMove))return smartAttacks[encounter.brainMove];
   if(vaultPhase(encounter))enemy=huntEnemy(encounter);
   const move=Object.hasOwn(enemyMoves,encounter?.enemyMove)?enemyMoves[encounter.enemyMove]:null;
   const phase=vaultPhase(encounter);
@@ -79,6 +85,11 @@ export function enemyAttack(encounter,enemy=huntEnemy(encounter)){
   return allowed.includes(move?.id)?move:enemyMoves[enemy.move];
 }
 function scheduleEnemyResponse(next,enemy,move,timedDodge,now){
+  if(next.brainVersion===2){
+    next.brainAttackCount=(next.brainAttackCount??0)+1;
+    Object.assign(next,planBrainAttack(next,enemy,now,move));next.brainStepsSinceAttack=0;
+    return smartAttacks[next.brainMove];
+  }
   delete next.enemyMove;
   let response;
   if(next.bossVersion===1){
@@ -239,6 +250,7 @@ export function normalizeHunting(input={}){
       if(e.arenaVersion!==1||!profile.room.startsWith('depths')||e.arenaRoom!==profile.room||!valid(e.arenaPlayer)||!valid(e.arenaEnemy)||e.arenaTarget&&!valid(e.arenaTarget))throw new Error('Invalid dungeon arena.');
       Object.assign(result.encounter,{arenaVersion:1,arenaRoom:profile.room,arenaPlayer:{...e.arenaPlayer},arenaEnemy:{...e.arenaEnemy},arenaStepAt:time(e.arenaStepAt),arenaLockedFor:time(e.arenaLockedFor),arenaCycle:time(e.arenaCycle),arenaSolids:(Array.isArray(e.arenaSolids)?e.arenaSolids:[]).filter(valid).slice(0,80).map(p=>({x:p.x,y:p.y})),...(e.arenaTarget?{arenaTarget:{...e.arenaTarget}}:{})});
     }
+    Object.assign(result.encounter,normalizeBrain(input.encounter,huntEnemies[enemy]??boar));
     if(input.encounter.bossVersion!==undefined){if(input.encounter.bossVersion!==1||enemy!=='depthsGuardian')throw new Error('Invalid boss encounter.');result.encounter.bossVersion=1;}
     if(input.encounter.castHits!==undefined){if(!Number.isInteger(input.encounter.castHits)||input.encounter.castHits<0||input.encounter.castHits>2)throw new Error('Invalid cast pressure.');result.encounter.castHits=input.encounter.castHits;}
     if(input.encounter.lastDecision!==undefined){const d=input.encounter.lastDecision;if(!d||!['cautious','balanced','aggressive'].includes(d.style)||!['dodge','essence','flee','move'].includes(d.action)||typeof d.reason!=='string'||d.reason.length>160)throw new Error('Invalid combat decision.');result.encounter.lastDecision={at:time(d.at),style:d.style,action:d.action,reason:d.reason};}
@@ -267,7 +279,7 @@ export function createHunt(now,health,enemy='boar'){
   return encounter;
 }
 export function combatStamina(encounter,stats,now,charmEquipped=false){
-  return Math.min(100,(encounter.stamina??100)+Math.max(0,now-(encounter.staminaAt??now))/1000*huntingAttributes(stats,undefined,null,charmEquipped).staminaRegen);
+  return Math.min(100,(encounter.stamina??100)+Math.max(0,now-(encounter.staminaAt??now))/1000*huntingAttributes(stats,undefined,null,charmEquipped).staminaRegen*(encounter.brainVersion===2?.5:1));
 }
 export function resumeHunt(encounter,now,stats={},charmEquipped=false){
   const nextBoarAt=now+Math.max(huntEnemy(encounter).firstAttack,enemyAttack(encounter).tell);
@@ -299,7 +311,7 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
   }
   if(action==='attack'){
     result.encounter.nextPlayerAt=now+attributes.attackInterval;
-    if(encounter.arenaVersion===1&&Math.hypot(arenaPlayer(encounter).x-arenaEnemy(encounter).x,arenaPlayer(encounter).y-arenaEnemy(encounter).y)>2.5){result.outOfRange=true;return result;}
+    if(encounter.arenaVersion===1&&Math.hypot(arenaPlayer(encounter).x-arenaEnemy(encounter).x,arenaPlayer(encounter).y-arenaEnemy(encounter).y)>(encounter.brainVersion===2?playerMeleeReach(weapon):2.5)){result.outOfRange=true;if(encounter.brainVersion===2)result.encounter.nextPlayerAt=now+350;return result;}
     result.damage=attributes.damage+Math.floor(random()*5);
     if(enemy.shellArmor){
       const exposed=now<encounter.exposedUntil;
@@ -365,6 +377,7 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
       delete result.encounter.magicWard;
       delete result.encounter.magicWardUntil;
     }
+    if(encounter.brainVersion===2){result.encounter.brainMisses=result.spatialAvoided?(encounter.brainMisses??0)+1:0;result.encounter.brainBlockedCount=result.covered?(encounter.brainBlockedCount??0)+1:0;}
     const response=scheduleEnemyResponse(result.encounter,enemy,move,result.timedDodge,now);
     if(response)result.nextMove=response.name;
     result.health=Math.max(0,health-result.taken);

@@ -1,11 +1,12 @@
+import {advanceOnEnemy} from './enemy-brain.js';
 import {simpleAutoModes,simpleAutoRisks} from './simple-auto.js';
 export {simpleAutoModes,simpleAutoRules,simpleAutoRisks,simpleAutoRiskDetail} from './simple-auto.js';
 import {armourSelection,armourProfile} from './hunting.js';
 import {normalizeFoodPolicy} from './food-policy.js';
 import {normalizeUpgradeGoal} from './upgrade-goals.js';
 export {upgradeTargets,upgradeGoalProgress} from './upgrade-goals.js';
-import {enemyAttack,combatStamina,queueHuntEnemies,huntEnemy,huntingAttributes,combatDodgeCost,weaponProfile} from './hunting.js';
-import {arenaPlayer,arenaEnemy,arenaInDanger,arenaBehindCover,dungeonFloor} from './dungeon-arena.js';
+import {enemyAttack,combatStamina,queueHuntEnemies,huntEnemy,huntingAttributes,combatDodgeCost,weaponProfile,playerMeleeReach} from './hunting.js';
+import {arenaPlayer,arenaEnemy,arenaInDanger,arenaBehindCover,dungeonFloor,ARENA_STEP_COST} from './dungeon-arena.js';
 import {manaReadyAt} from './player-vitals.js';
 import {essencePower,bondedEssences,essenceEffects} from './essences.js';
 
@@ -111,10 +112,16 @@ export function nextCombatTactic(state){
  let next=null;
  const offer=tactic=>{if(!next||tactic.at<next.at||tactic.at===next.at&&tactic.priority>next.priority)next=tactic;};
  if(e.arenaVersion===1&&rules.dodge&&e.arenaLockedFor===strike&&arenaInDanger(e,attack)&&!arenaBehindCover(e,attack)){
-  const at=Math.max(earliest,e.arenaStepAt??0,warning),p=arenaPlayer(e),foe=arenaEnemy(e);
+  const at=Math.max(earliest,e.arenaStepAt??0,warning+(e.brainVersion===2?400:0),e.brainAutoStepAt??0),p=arenaPlayer(e),foe=arenaEnemy(e);
   const candidates=[[1,0],[-1,0],[0,1],[0,-1]].map(([x,y])=>({x:p.x+x,y:p.y+y})).filter(n=>dungeonFloor(e.arenaRoom,n.x,n.y)&&!(n.x===foe.x&&n.y===foe.y)&&!(e.arenaSolids??[]).some(s=>s.x===n.x&&s.y===n.y)&&!(e.arenaRoom==='depthsGate'&&n.x===8));
   candidates.sort((a,b)=>Number(arenaInDanger(e,attack,a))-Number(arenaInDanger(e,attack,b))||Number(!arenaBehindCover(e,attack,a))-Number(!arenaBehindCover(e,attack,b)));
-  if(candidates[0]&&at<strike){offer({...make(at,'move','Moving out of the marked attack area.',90),tile:candidates[0]});}
+  if(candidates[0]&&at<strike&&(e.brainVersion!==2||!arenaInDanger(e,attack,candidates[0])&&combatStamina(e,state.stats??{},at,state.combatGear?.moonwellCharmEquipped)>=ARENA_STEP_COST)){offer({...make(at,'move','Moving out of the marked attack area.',90),tile:candidates[0]});}
+ }
+ if(e.brainVersion===2){
+  const at=Math.max(earliest,e.arenaStepAt??0,e.brainAutoStepAt??0),p=arenaPlayer(e),foe=arenaEnemy(e),reach=playerMeleeReach(state.combatGear?.equippedWeapon);
+  if(Math.hypot(p.x-foe.x,p.y-foe.y)>reach&&at<strike-attack.tell&&combatStamina(e,state.stats??{},at,state.combatGear?.moonwellCharmEquipped)>=ARENA_STEP_COST){
+   const tile=advanceOnEnemy(e,reach);if(tile)offer({...make(at,'move','Closing to weapon range during the opening.',20),tile});
+  }
  }
  const wantsDefense=style==='cautious'||style==='balanced'&&(attack.damage>0||attack.shape==='bolt'||incoming>=state.health*.4)||lethal;
  if(rules.dodge&&wantsDefense&&!physicalInterrupt&&!alreadyDodging&&!finishingHit){

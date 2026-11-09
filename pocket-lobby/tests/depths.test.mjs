@@ -1,3 +1,4 @@
+import {prepareDungeonBuild} from './helpers/combat-fixtures.mjs';
 import test from 'node:test';
 import {skillXpForLevel} from '../public/skill-curve.js';
 import assert from 'node:assert/strict';
@@ -107,7 +108,7 @@ test('the optional cache needs its own guardian victory, pays once, and preserve
   const state=normalizeState({location:'depthsGate',depthsRun:{cleared:0},stats:{strengthXp:skillXpForLevel(21),vitalityXp:skillXpForLevel(21)}});
   let now=1000;
   const act=(name,body={})=>applyGameplayAction(state,name,body,now,()=>.5);
-  const win=()=>{state.position={x:5,y:5};act('fight');now+=60000;act('combat',{combatId:state.combatId});};
+  const win=()=>{state.position={x:5,y:5};act('fight');state.hunting.encounter.health=1;now+=60000;act('combat',{combatId:state.combatId});};
   assert.throws(()=>act('depthsCacheEnter'),/Clear Shell Gallery/);
   win();act('depthsNext');
   assert.throws(()=>act('depthsCacheEnter'),/Clear Shell Gallery/);
@@ -208,13 +209,13 @@ test('elite cache guardian rewards a prepared build across low and high combat r
   assert.equal(essenceCacheGold,50);
   for(const roll of [0,.1,.5,.99]){
     const s=normalizeState({location:depthsCacheRoom,depthsRun:{cleared:2},position:{x:5,y:5},stats:{strengthXp:skillXpForLevel(5),agilityXp:skillXpForLevel(5),vitalityXp:skillXpForLevel(5)},combatGear:{ownedWeapons:['trainingSword','ironSword'],equippedWeapon:'ironSword',stonebackVestOwned:true,stonebackVestEquipped:true}});
-    applyGameplayAction(s,'fight',{},1000,()=>roll);
+    prepareDungeonBuild(s);applyGameplayAction(s,'fight',{},1000,()=>roll);
     applyGameplayAction(s,'combat',{combatId:s.combatId},30000,()=>roll);
     assert.equal(s.hunting.encounter,null);
     assert.equal(s.depthsRun?.cacheGuardDefeated,true);
     assert(s.health>0);
     assert.equal(s.combatGear.equippedWeapon,'ironSword');
-    assert.equal(s.magic,undefined);
+    assert(s.magic.picks.length===3);
     assert.equal(s.credits,100);
     s.position={x:8,y:5};applyGameplayAction(s,'depthsInspect',{id:'essenceCache'},30000,()=>roll);
     assert.equal(s.credits,150);
@@ -258,7 +259,7 @@ test('dangerous passage survives fleeing, requires the elite and rejoins the sam
   const forged=protectFishingState(s,{...s,depthsRun:{cleared:1,routeChoice:'safe',cacheGuardDefeated:true}});
   assert.equal(forged.depthsRun.routeChoice,'dangerous');assert.equal(forged.depthsRun.cacheGuardDefeated,undefined);
   passageAction(s,'depthsCacheEnter');
-  s.position={x:5,y:5};passageAction(s,'fight',{},3000);
+  s.position={x:5,y:5};passageAction(s,'fight',{},3000);s.hunting.encounter.health=1;
   passageAction(s,'combat',{combatId:s.combatId},23000);
   assert.equal(s.depthsRun.cacheGuardDefeated,true);assert.equal(s.depthsRun.cleared,1);
   s.position={x:8,y:5};passageAction(s,'depthsInspect',{id:'essenceCache'},23000);
@@ -269,7 +270,7 @@ test('dangerous passage survives fleeing, requires the elite and rejoins the sam
   passageAction(s,'depthsCacheEnter');
   assert.equal(s.depthsRun.cacheGuardDefeated,true);
   passageAction(s,'depthsCacheLeave');
-  s.position={x:5,y:5};passageAction(s,'fight',{},24000);
+  s.position={x:5,y:5};passageAction(s,'fight',{},24000);s.hunting.encounter.health=1;
   passageAction(s,'combat',{combatId:s.combatId},44000);
   passageAction(s,'depthsNext');assert.equal(s.location,'depthsVault');
 });

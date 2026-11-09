@@ -1,3 +1,4 @@
+import {legacyDungeonEncounter} from './helpers/combat-fixtures.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {normalizeState} from '../server/player-state.mjs';
@@ -13,7 +14,7 @@ function fighter(ids=['fire:sword','ice:shield'],picks=['fire','ice','shadow'],c
  act(s,'bondEssences',{picks});
  for(const id of ids){s.magic.stones[id.split(':')[1]]=1;act(s,'awakenPower',{id});}
  s.location=room;s.position={x:5,y:5};if(room==='depthsCache')s.depthsRun={cleared:2};
- act(s,'fight');return s;
+ act(s,'fight');if(room==='depthsCache')legacyDungeonEncounter(s);return s;
 }
 const outcome=s=>({health:s.health,hunting:s.hunting,magic:s.magic,stats:s.stats,loot:s.huntingLoot,location:s.location,depthsRun:s.depthsRun});
 

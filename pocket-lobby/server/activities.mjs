@@ -1,3 +1,5 @@
+import {initializeBrain,brainThinkEvent} from '../public/enemy-brain.js';
+import {combatStamina} from '../public/hunting.js';
 import {arenaEnemy,arenaWarningAt,lockArenaAttack,arenaMoveEvent,dungeonCover} from '../public/dungeon-arena.js';
 import {enemyAttack} from '../public/hunting.js';
 import {useHunger} from '../public/player-vitals.js';
@@ -25,6 +27,7 @@ export function startCombatEncounter(state,enemy,now){
   state.hunting.encounter=createHunt(now,enemy.health,enemy.id);
   state.hunting.encounter.summary=normalizeCombatSummary({startedAt:now});
   if(enemy.room.startsWith('depths'))Object.assign(state.hunting.encounter,{arenaVersion:1,arenaRoom:enemy.room,arenaPlayer:{...(state.position??{x:5,y:5})},arenaEnemy:{x:6,y:5},arenaStepAt:now,arenaLockedFor:0,arenaSolids:(moonwood.layouts[enemy.room]?.scenery??[]).filter(p=>p.type!==enemy.prop).map(({x,y})=>({x,y}))});
+  if(enemy.room.startsWith('depths'))state.hunting.encounter=initializeBrain(state.hunting.encounter,enemy,now);
   if(state.characterRules?.combat?.enabled||state.plan?.activeHunt)state.hunting.encounter.tacticsAt=now;
 }
 function result(state,event,now,random=Math.random){
@@ -93,7 +96,7 @@ function result(state,event,now,random=Math.random){
     if(state.plan?.kind==='queue'&&state.plan.activeHunt?.id===state.combatId)state.plan.lastHuntReport=report;
     else state.combatReports=[...(state.combatReports??[]).filter(item=>item.id!==report.id),report].slice(-10);
   }
-  return {...event,...(encounter.arenaVersion===1?{enemyTile:arenaEnemy(encounter),attackTile:encounter.arenaTarget}:{}),enemyId:enemy.id,at:now};
+  return {...event,...(encounter.arenaVersion===1?{enemyTile:arenaEnemy(encounter),attackTile:encounter.arenaTarget,attackCenter:enemyAttack(encounter).center,attackFan:enemyAttack(encounter).fan,attackReach:enemyAttack(encounter).reach}:{}),enemyId:enemy.id,at:now};
 }
 
 // Replay each due strike at its scheduled time. Closing or slowing the client
@@ -102,18 +105,19 @@ export function advanceServerCombat(state,now,random=Math.random){
   const events=[];
   for(let i=0;state.hunting.encounter&&i<2048;i++){
     const encounter=state.hunting.encounter;
-    const coreDue=Math.min(encounter.nextPlayerAt,encounter.nextBoarAt,encounter.burn?.nextAt??Infinity);
+    const coreDue=Math.min(encounter.nextPlayerAt,encounter.nextBoarAt,encounter.burn?.nextAt??Infinity,encounter.brainVersion===2?encounter.brainNextThinkAt:Infinity);
     const tactic=nextCombatTactic(state),automatic=tactic&&tactic.at<coreDue;
     const due=automatic?tactic.at:coreDue,warningAt=arenaWarningAt(encounter,enemyAttack(encounter));
     if(warningAt<=Math.min(due,now)){state.hunting.encounter=lockArenaAttack(encounter,enemyAttack(encounter),huntEnemy(encounter));continue;}
     if(due>now)break;
     let event;
     if(automatic){
-      if(tactic.action==='move')event=arenaMoveEvent(state,tactic.tile,due,moonwood.layouts[state.location]?.scenery);
+      if(tactic.action==='move')event=arenaMoveEvent(state,tactic.tile,due,moonwood.layouts[state.location]?.scenery,combatStamina(encounter,state.stats,due,state.combatGear.moonwellCharmEquipped));
       else if(tactic.action==='essence')event=castEssencePower(state,due,tactic.slot);
       else event=huntingTurn(encounter,state.health,state.stats,tactic.action,due,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,armourSelection(state.combatGear),state.combatGear.moonwellCharmEquipped,state.combatGear.weaponEnchantments);
-      if(event){event.automatic=true;event.decision={at:due,style:tactic.style,action:tactic.action,reason:tactic.reason};if(event.encounter){event.encounter.lastDecision=event.decision;if(tactic.action==='dodge')event.encounter.autoDodgeUntil=event.encounter.dodgeUntil;}}
-    }else event=advanceHunt(encounter,state.health,state.stats,due,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,armourSelection(state.combatGear),state.combatGear.moonwellCharmEquipped,state.combatGear.weaponEnchantments);
+      if(event){event.automatic=true;if(tactic.action==='move'&&event.encounter?.brainVersion===2)event.encounter.brainAutoStepAt=due+900;event.decision={at:due,style:tactic.style,action:tactic.action,reason:tactic.reason};if(event.encounter){event.encounter.lastDecision=event.decision;if(tactic.action==='dodge')event.encounter.autoDodgeUntil=event.encounter.dodgeUntil;}}
+    }else if(encounter.brainVersion===2&&due===encounter.brainNextThinkAt)event=brainThinkEvent(state,huntEnemy(encounter),enemyAttack(encounter),due);
+    else event=advanceHunt(encounter,state.health,state.stats,due,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,armourSelection(state.combatGear),state.combatGear.moonwellCharmEquipped,state.combatGear.weaponEnchantments);
     if(!event)break;
     events.push(result(state,event,due,random));
   }
@@ -173,7 +177,7 @@ export function activityAction(state,action,body,now,random){
     if(body.combatId!==state.combatId)throw new Error('Invalid encounter. Reload your character.');
     const events=advanceServerCombat(state,now,random);
     if(state.hunting.encounter&&body.input==='move'){
-      const e=arenaMoveEvent(state,body.tile,now,moonwood.layouts[state.location]?.scenery);
+      const e=arenaMoveEvent(state,body.tile,now,moonwood.layouts[state.location]?.scenery,combatStamina(state.hunting.encounter,state.stats,now,state.combatGear.moonwellCharmEquipped));
       if(e)events.push(result(state,e,now,random));
     }
     if(state.hunting.encounter&&['dodge','flee','essence'].includes(body.input)){

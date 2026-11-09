@@ -1036,7 +1036,7 @@ function updateDepthsPanel(){
     $('depthsShardChoice').textContent='Vault treasure · Sell the Moonwell Shard for '+moonwellShard.price+' gold, or craft a Moonwell Charm with '+moonwellCharm.timber+' timber for +'+moonwellCharm.staminaRegen+' dodge stamina per second.';
     $('depthsEntryAdvice').textContent=!weapon?'Equip a weapon in Inventory to enter.':health<maxHealth()
       ?'Your current health carries in. You can rest at the Tower before entering.'
-      :'Health carries between fights. Defeat costs the spoils you haven’t banked.';
+      :'Elite foes chain attacks. Equip powers, save stamina, and punish recovery openings. Defeat costs unbanked spoils.';
     $('enterDepths').disabled=!weapon||health<=0;
   }
 
@@ -1058,7 +1058,7 @@ function updateDepthsPanel(){
   $('depthsExplore').hidden=choosingPassage;
   $('depthsSafeReward').textContent='+'+Math.min(depthsSafePassage.healing,maxHealth()-health)+' HP · +'+depthsSafePassage.gold+' gold';
   $('depthsDangerReward').textContent=essenceCacheGold+' gold + Awakening Stone';
-  $('depthsDangerEnemy').textContent='Cache Guardian · '+huntEnemies.cacheGuardian.health+' HP · Elite';
+  $('depthsDangerEnemy').textContent='Cache Guardian · '+dungeonEnemyPreview(huntEnemies.cacheGuardian).health+' HP · Elite';
   $('depthsForkSpoils').textContent='Unbanked · '+formatDepthsSpoils(depthsSpoils(depthsRun));
   $('depthsForkBank').textContent='Bank spoils & leave';
   $('depthsSafePassage').disabled=$('depthsDangerPassage').disabled=unavailable();
@@ -1081,7 +1081,7 @@ function updateDepthsPanel(){
   $('depthsTitle').textContent=side?side.name:cacheRoom?'The Sealed Alcove':stage.name;
   $('depthsStatus').textContent=(side?'Optional side room':cacheRoom?'Optional chamber':'Chamber '+(index+1)+' / '+depthsStages.length)+' · '+health+' / '+maxHealth()+' HP';
   $('depthsSpoils').textContent=spoils.gold?formatDepthsSpoils(spoils):'No unbanked spoils yet.';
-  const preview=side?'Return to Shell Gallery to choose another room, face the Vault, or bank your haul.':cacheRoom?'Return to Shell Gallery to continue the expedition.':next?'Next: '+huntEnemies[next.enemy].name+' ('+huntEnemies[next.enemy].health+' HP) · '+formatDepthsSpoils(depthsStageSpoils(next))+'.':'All three chambers cleared. Bank your spoils to leave the vault.';
+  const preview=side?'Return to Shell Gallery to choose another room, face the Vault, or bank your haul.':cacheRoom?'Return to Shell Gallery to continue the expedition.':next?'Next: '+huntEnemies[next.enemy].name+' ('+dungeonEnemyPreview(huntEnemies[next.enemy]).health+' HP) · '+formatDepthsSpoils(depthsStageSpoils(next))+'.':'All three chambers cleared. Bank your spoils to leave the vault.';
   $('depthsPreview').textContent=cleared?preview:roomDetails[currentRoom].description;
   $('depthsRetreat').hidden=unavailable()||depthsRun.cleared!==0;
   $('depthsNext').hidden=!canDecide||!next||choosingPassage||pendingGuardian;
@@ -1097,7 +1097,7 @@ function updateDepthsPanel(){
   $('depthsMeal').hidden=!next||health>=maxHealth()||!Object.values(meals).some(count=>count>0);
   if(next){
     $('depthsNextReward').textContent='Earn '+formatDepthsSpoils(depthsStageSpoils(next));
-    $('depthsNextEnemy').textContent=next.name+' · '+huntEnemies[next.enemy].name+' · '+huntEnemies[next.enemy].health+' HP';
+    $('depthsNextEnemy').textContent=next.name+' · '+huntEnemies[next.enemy].name+' · '+dungeonEnemyPreview(huntEnemies[next.enemy]).health+' HP';
     $('depthsRiskText').textContent='If you fall, you lose the unbanked spoils above. A successful flee returns you to this chamber.';
   }
   if(newlyCleared)$('depthsDecisionTitle').focus({preventScroll:true});
@@ -1151,6 +1151,7 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
   if(result.absorbed)combatMessage+=(combatMessage?' ':'')+'Your armour absorbed '+result.absorbed+' damage.';
   if(result.outOfRange)combatMessage='Move closer to strike. Your weapon reaches 2 tiles.';
   if(result.spatialAvoided)combatMessage=result.covered?'Cover blocked the spell.':'You moved clear of the attack!';
+  if(result.behaviour)combatMessage=result.behaviour;
   if(result.action==='move')combatMessage='Repositioning · Keep clear of marked tiles.';
   if(result.dodgeStarted)combatMessage='You sidestep. Time your dodge just before the '+enemy.move+' lands!';
   if(result.timedDodge)combatMessage='Perfect dodge! '+(result.shellExposed?'Shell open · ':'')+'Next strike +'+(result.counterPercent??50)+'% damage for 1.8 seconds.';
@@ -1273,7 +1274,7 @@ function updateCombatPanel(){
   $('enemyStagger').hidden=!encounter;$('enemyStagger').dataset.state=stunned?'stunned':weak?'weak':recovering?'recovering':'building';
   $('staggerLabel').textContent=stunned?'Staggered! · Weak spot open':weak?'Weak spot · Weapon damage +25%':recovering?'Stagger resistance · '+Math.ceil((encounter.staggerResistUntil-now)/1000)+'s':'Stagger · '+(encounter?.stagger??0)+' / '+stagger.limit;
   $('staggerProgress').max=stagger.limit;$('staggerProgress').value=stunned||weak?stagger.limit:encounter?.stagger??0;$('staggerProgress').setAttribute('aria-valuetext',$('staggerLabel').textContent);
-  const enemy=encounter?huntEnemy(encounter):huntEnemyForRoom(currentRoom);
+  const enemy=encounter?huntEnemy(encounter):dungeonEnemyPreview(huntEnemyForRoom(currentRoom));
   const stage=depthsStageIndex(currentRoom),chamberCleared=stage>=0&&!depthsEnemyAvailable(depthsRun,currentRoom);
   updateDepthsPanel();
   $('equipStonebackVest').disabled=unavailable();
@@ -1354,12 +1355,12 @@ function updateCombatPanel(){
   }
 }
 function updateDungeonArenaHud(){
- const e=hunting.encounter,enemy=huntEnemyForRoom(currentRoom),panel=$('dungeonArenaHud');
+ const e=hunting.encounter,enemy=e?huntEnemy(e):dungeonEnemyPreview(huntEnemyForRoom(currentRoom)),panel=$('dungeonArenaHud');
  panel.hidden=!depthsRun||!enemy||!depthsEnemyAvailable(depthsRun,currentRoom);if(panel.hidden)return;
- $('dungeonEnemyName').textContent=enemy.name;
+ $('dungeonEnemyName').textContent=(enemy.elite?'Elite · ':'')+enemy.name;
  const phase=vaultPhase(e);$('dungeonPhase').hidden=!phase;$('dungeonPhase').textContent=phase?'Phase '+phase.index+' · '+phase.name:'';
  $('dungeonStamina').hidden=!e;const stamina=e?combatStamina(e,playerStats,combatNow(),combatGear.moonwellCharmEquipped):100;$('dungeonStaminaBar').value=stamina;$('dungeonStaminaValue').textContent=Math.floor(stamina);
- $('dungeonDodge').title='Costs '+combatDodgeCost(armourSelection(combatGear))+' stamina · Space';
+ $('dungeonDodge').title='Costs '+combatDodgeCost(armourSelection(combatGear))+' stamina · Space'+(e?.brainVersion===2?' · Each step costs '+ARENA_STEP_COST:'');
  $('dungeonEnemyHealth').textContent=(e?.health??enemy.health)+' / '+enemy.health;
  $('dungeonEnemyBar').max=enemy.health;$('dungeonEnemyBar').value=e?.health??enemy.health;
  $('dungeonEngage').hidden=!!e;$('dungeonDodge').hidden=!e;$('dungeonFlee').hidden=!e;
@@ -1368,9 +1369,15 @@ function updateDungeonArenaHud(){
  let cue='Approach to fight · Click the floor to explore.';
  if(e){const move=enemyAttack(e),warn=e.nextBoarAt-combatNow()<=move.tell;
   cue=warn?(arenaInDanger(e,move)?'Move out of marked tiles!':'You are clear · Close in after the attack.'):'Click floor / arrows to move · Space to dodge';
-  if(Math.hypot(arenaPlayer(e).x-arenaEnemy(e).x,arenaPlayer(e).y-arenaEnemy(e).y)>2.5)cue='Move closer to strike · Watch the marked tiles';
+  if(Math.hypot(arenaPlayer(e).x-arenaEnemy(e).x,arenaPlayer(e).y-arenaEnemy(e).y)>(e.brainVersion===2?playerMeleeReach(combatGear.equippedWeapon):2.5))cue='Move closer to strike · Watch the marked tiles';
+  if(e.brainVersion===2){
+   const left=Math.max(0,(e.nextBoarAt-combatNow())/1000);
+   if(combatNow()<e.brainRecoveryUntil)cue='Enemy recovering · Close in and punish the opening';
+   else if(warn)cue=move.name+' · '+left.toFixed(1)+'s · '+(arenaBehindCover(e,move)?'Cover blocks this spell':arenaInDanger(e,move)?'Move or dodge!':'Clear of this attack');
+   else cue=(e.brainCombo?'Follow-up coming · ':'')+'Step '+ARENA_STEP_COST+' stamina · Space: dodge';
+  }
  }
- $('dungeonArenaCue').textContent=cue;panel.dataset.danger=String(!!e&&e.nextBoarAt-combatNow()<=enemyAttack(e).tell&&arenaInDanger(e,enemyAttack(e)));
+ $('dungeonArenaCue').textContent=cue;panel.dataset.danger=String(!!e&&e.nextBoarAt-combatNow()<=enemyAttack(e).tell&&arenaInDanger(e,enemyAttack(e))&&!arenaBehindCover(e,enemyAttack(e)));
 }
 $('dungeonEngage').onclick=()=>{const enemy=huntEnemyForRoom(currentRoom),item=roomFurniture().find(i=>i.type===enemy?.prop);if(item)use(item);};
 $('dungeonDodge').onclick=()=>combatAction('dodge');
@@ -1378,7 +1385,7 @@ $('dungeonFlee').onclick=()=>combatAction('flee');
 
 function updateCombatMoment(time){
   updateDungeonArenaHud();
-  if(player.inCombat&&hunting.encounter?.arenaVersion===1&&combatMoveGoal&&!step&&!route.length&&!activityBusy&&!serverActionBusy&&combatNow()>=(hunting.encounter.arenaStepAt??0)){
+  if(player.inCombat&&hunting.encounter?.arenaVersion===1&&combatMoveGoal&&!step&&!route.length&&!activityBusy&&!serverActionBusy&&combatNow()>=(hunting.encounter.arenaStepAt??0)&&(hunting.encounter.brainVersion!==2||combatStamina(hunting.encounter,playerStats,combatNow(),combatGear.moonwellCharmEquipped)>=ARENA_STEP_COST)){
     const p=arenaPlayer(hunting.encounter);
     if(p.x===combatMoveGoal.x&&p.y===combatMoveGoal.y)combatMoveGoal=null;
     else{const path=walkingPath(p,combatMoveGoal);if(path?.length){sendServerCombat('move',path[0]);return;}else combatMoveGoal=null;}
@@ -1386,7 +1393,7 @@ function updateCombatMoment(time){
   if(routineControlled()){if(time-lastCombatUi>100){lastCombatUi=time;updateCombatPanel();}return;}
   if(window.playerCloud?.gameplay){
     const tactic=nextCombatTactic({hunting,health,vitals:playerVitals,stats:playerStats,combatGear,magic:magicState,characterRules});
-    const due=hunting.encounter?Math.min(hunting.encounter.nextPlayerAt,hunting.encounter.nextBoarAt,hunting.encounter.burn?.nextAt??Infinity,arenaWarningAt(hunting.encounter,enemyAttack(hunting.encounter)),tactic?.at??Infinity):Infinity;
+    const due=hunting.encounter?Math.min(hunting.encounter.nextPlayerAt,hunting.encounter.nextBoarAt,hunting.encounter.burn?.nextAt??Infinity,hunting.encounter.brainVersion===2?hunting.encounter.brainNextThinkAt:Infinity,arenaWarningAt(hunting.encounter,enemyAttack(hunting.encounter)),tactic?.at??Infinity):Infinity;
     if(player.inCombat&&combatNow()>=due&&time>=nextCombatPoll)sendServerCombat();
     if(!homeBedRest&&hunting.recoveryUntil&&combatNow()>=hunting.recoveryUntil&&!serverActionBusy&&!activityBusy){
       serverGameplay('recover').then(()=>{updatePlayerStats();updateCombatPanel();savePlayerState();}).catch(error=>note(error.message));

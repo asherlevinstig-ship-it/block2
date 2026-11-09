@@ -45,7 +45,7 @@ test('flee attempts and defeat retain their outcome and final health through rec
  assert.equal(escaped.combatReports[0].summary.fleeAttempts,1);assert.equal(escaped.combatReports[0].summary.automaticFlees,1);
  const lost=normalizeState({location:'depthsGallery',position:{x:5,y:5},health:1,credits:150,depthsRun:{cleared:1}});
  act(lost,'fight');lost.hunting.encounter.nextPlayerAt=100000;
- advanceServerCombat(lost,3300,()=>.5);
+ advanceServerCombat(lost,lost.hunting.encounter.nextBoarAt,()=>.5);
  const report=lost.combatReports[0];assert.equal(report.outcome,'defeat');assert.equal(report.endedHealth,0);
  assert.deepEqual(report.lostSpoils,{gold:12,loot:{boar:1}});assert.equal(lost.credits,150);
  settleActivities(lost,20000,()=>.5);assert.equal(lost.health,100);assert.equal(report.endedHealth,0);
@@ -54,7 +54,7 @@ test('flee attempts and defeat retain their outcome and final health through rec
 test('dungeon spoils are reported as unbanked and cache unlocks do not claim their contents',()=>{
  for(const [room,cleared] of [['depthsGate',0],['depthsVault',2],['depthsCache',2]]){
   const s=normalizeState({location:room,position:{x:5,y:5},depthsRun:{cleared},stats:{strengthXp:skillXpForLevel(21),vitalityXp:skillXpForLevel(21)}});
-  act(s,'fight');advanceServerCombat(s,20000,()=>.5);
+  act(s,'fight');s.hunting.encounter.health=1;advanceServerCombat(s,20000,()=>.5);
   const report=s.combatReports[0];assert.equal(s.credits,100);
   assert.equal(report.rewards.loot,undefined);
   if(room==='depthsGate')assert.deepEqual(report.rewards.held,{gold:12,loot:{boar:1}});

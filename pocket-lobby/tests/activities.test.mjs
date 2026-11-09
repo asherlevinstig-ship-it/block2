@@ -81,7 +81,7 @@ test('dungeon progress and banking require server victories; crafting consumes r
   assert.throws(()=>action(s,'bank'),/Clear/);
   let now=2000;
   for(let i=0;i<3;i++){
-    s.position={x:5,y:5};action(s,'fight',{},now);
+    s.position={x:5,y:5};action(s,'fight',{},now);s.hunting.encounter.health=1;
     now+=60000;action(s,'combat',{combatId:s.combatId},now);
     assert.equal(s.depthsRun.cleared,i+1);
     if(i===0)action(s,'depthsPassage',{choice:'safe'},now);
