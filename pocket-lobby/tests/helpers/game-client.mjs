@@ -41,7 +41,7 @@ const root=new URL('../../public/',import.meta.url);
 const towerMeta=JSON.parse(fs.readFileSync(new URL('art/tower-adventurer.json',root),'utf8'));
 const towerAtlasData={data:new Uint8ClampedArray(towerMeta.width*towerMeta.height*4)};
 const noop=()=>{};
-const drawing=new Proxy({createRadialGradient:()=>({addColorStop:noop})},{get:(o,k)=>o[k]??((...args)=>{for(const a of args)if(typeof a==='number')assert(Number.isFinite(a),'Invalid draw coordinate: '+String(k));})});
+const drawing=new Proxy({getTransform:()=>({a:1,d:1,e:0,f:0}),createRadialGradient:()=>({addColorStop:noop})},{get:(o,k)=>o[k]??((...args)=>{for(const a of args)if(typeof a==='number')assert(Number.isFinite(a),'Invalid draw coordinate: '+String(k));})});
 class Node {
   constructor(){this.children=[];this.style={setProperty:noop};this.dataset={};this.hidden=true;this.value='';this.classList={toggle:noop,add:noop,remove:noop};this.firstChild={textContent:''};this.selectors=new Map();}
   append(...items){for(const item of items){if(typeof item==='object')item.parent=this;this.children.push(item);}}

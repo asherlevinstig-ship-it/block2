@@ -1632,7 +1632,7 @@ function drawFollowingFamiliar(key,id,x,y,direction,time){
  const airborne=id==='owl'&&(active||reacting);
  follower.flight=(follower.flight??0)+(Number(airborne)-(follower.flight??0))*(1-Math.exp(-elapsed/165));
  const [px,py]=point(follower.x+.5,follower.y+.5);
- drawFamiliar(ctx,id,px,py+1,reacting?reaction:time,{scale:.88,flipped:follower.flipped,reduced:reducedMotion.matches,pose,flightBlend:follower.flight});
+ drawFamiliar(ctx,id,px,py+1,reacting?reaction:time,{flipped:follower.flipped,reduced:reducedMotion.matches,pose,flightBlend:follower.flight});
  const flight=reducedMotion.matches?Number(airborne):follower.flight;
  const height=id==='owl'?23+Math.round(flight*17):id==='fox'?21:17;
  return {id,x:px,y:py-height-(reacting?3:0)};
@@ -1644,7 +1644,7 @@ function drawWildAnimal(animal,time){
  if(selected||near)surface(animal.x+.08,animal.y+.08,.84,.84,.7,color+'24',color);
  const age=wildlifeAffection?.id===animal.id?time-wildlifeAffection.at:Infinity;
  const reacting=age>=0&&age<900,pose=reacting?'bond':animal.resting?'idle':animal.kind==='owl'?'fly':'walk';
- drawFamiliar(ctx,animal.kind,x,y+1,reacting?age:time,{scale:1.15,flipped:animal.flipped,reduced:reducedMotion.matches,pose});
+ drawFamiliar(ctx,animal.kind,x,y+1,reacting?age:time,{flipped:animal.flipped,reduced:reducedMotion.matches,pose});
  const height=animal.kind==='owl'&&pose!=='idle'?47:32;
  if(age>=0&&age<900){
   const top=y-height-5-(reducedMotion.matches?0:age/65);
