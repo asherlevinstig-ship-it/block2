@@ -1173,7 +1173,7 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
       combatMessage=depthsSideForRoom(currentRoom)?(currentRoom==='depthsTrial'?'Challenge won! Claim the Awakening Seal.':'Treasury secured. Your extra loot is unbanked.'):currentRoom===depthsCacheRoom?'The guardian’s seal is broken. Open the Essence Cache.':depthsRun.cleared===depthsStages.length?'Vault cleared. Bank your spoils.':'Chamber cleared. Bank your spoils or press deeper.';
       showTransaction(currentRoom===depthsCacheRoom?'Essence Cache unlocked':'Chamber cleared',[{icon:'✦',text:currentRoom===depthsCacheRoom?'Open the glowing cache to claim its gold and stone':'Spoils held until you bank them'},xpReceipt,...stoneReceipt,...masteryReceipt]);
     }else{
-      if(!authoritative){hunting[enemy.id==='beetle'?'beetleRespawnAt':'respawnAt']=combatNow()+enemy.respawn;
+      if(!authoritative){hunting[enemy.id==='thornBoar'?'thornRespawnAt':enemy.id==='beetle'?'beetleRespawnAt':'respawnAt']=combatNow()+enemy.respawn;
       huntingLoot[enemy.loot]=(huntingLoot[enemy.loot]??0)+1;}
       if(enemy.id==='beetle'&&!depthsDiscovered){
         depthsDiscovered=true;
@@ -1965,6 +1965,7 @@ function drawFishingStore(market=false){
   drawDoor(storeExit);
 }
 function dimensions(item) {
+  if(watchDimensions[item.type])return watchDimensions[item.type];
   if(riverDimensions[item.type])return riverDimensions[item.type];
   if(item.type==='bookcase'||item.type==='workbench'||item.type==='sofa'||isRestBed(item.type)||item.type==='bench'||isGamingTable(item))return item.rot%2?[1,2]:[2,1];
   if(item.type==='armoryCounter'||item.type==='reception'||item.type==='tackleCounter'||item.type==='tradeCounter')return [3,1];
@@ -2304,7 +2305,7 @@ for(const id of Object.keys(moonwood.areas)){
   roomLayers[id]=makeRoomLayer(()=>moonwood.drawGround(id,worldDrawing),moonwood.view);
 }
 function drawMoonwoodDetails(time){
-  moonwood.drawWater(currentRoom,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,depthsRun});
+  moonwood.drawWater(currentRoom,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,depthsRun,progress:adventure});
   if(currentRoom==='grove'&&adventure.groveTrail){
     for(const [x,y] of moonwood.layouts.grove.hiddenTrail){
       surface(x+.06,y+.06,.88,.88,.25,'#6d8195','#8fb6b9');
@@ -2331,10 +2332,12 @@ function drawMoonwoodDetails(time){
 const explorationRegions={
   'The Tower':['home','hub','outside','lounge','market','armory','store','furnishings','tailor'],
   Willowmere:willowmereRooms,
+  Beaconwatch:watchRooms,
   Moonwood:['trail','logging','clearing','grove','shrine','creek','pond','ruins','roots']
 };
 let trackedDestination=null;
 function explorationName(room){
+  if(room==='starfall'&&!adventure.discovered.includes('starfall'))return 'Root crack · Explore';
   return {home:'Your Home',hub:'Grand Lobby',market:'Trading Post',store:'Silverfin Outfitters',outside:'Tower Courtyard'}[room]??roomDetails[room].name;
 }
 function nextExplorationDoor(){
@@ -2344,7 +2347,7 @@ let worldLabelKey='';
 function updateWorldLabels(){
   const p=canvasBounds(),doors=roomDoors[currentRoom].filter(door=>doorAvailable(door));
   const stump=currentRoom==='logging'&&!!treeState(timberTree()).regrowsAt;
-  const key=[currentRoom,player.seat?.type,homeBedRest?.bedId,editing,currentRoom==='home'?homeFurniture.map(i=>[i.id,i.type,i.x,i.y,i.rot].join(':')).join(';'):'',stump,depthsRun?.finds?.join(','),doors.map(door=>door.to).join(','),avatar.name,questStage(quest),depthsDiscovered,player.inCombat,firstUpgrade.choice,firstUpgrade.complete,firstUpgrade.oakTrialPending,firstUpgrade.unlocked,firstUpgradeDestination()?.to,tradingPostGuideComplete,bedLessonComplete,trackedDestination,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
+  const key=[currentRoom,watchFlags.map(k=>adventure[k]).join(','),player.seat?.type,homeBedRest?.bedId,editing,currentRoom==='home'?homeFurniture.map(i=>[i.id,i.type,i.x,i.y,i.rot].join(':')).join(';'):'',stump,depthsRun?.finds?.join(','),doors.map(door=>door.to).join(','),avatar.name,questStage(quest),depthsDiscovered,player.inCombat,firstUpgrade.choice,firstUpgrade.complete,firstUpgrade.oakTrialPending,firstUpgrade.unlocked,firstUpgradeDestination()?.to,tradingPostGuideComplete,bedLessonComplete,trackedDestination,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
   if(key===worldLabelKey)return;
   worldLabelKey=key;
   const container=$('worldLabels');container.replaceChildren();container.dataset.room=currentRoom;
@@ -2412,6 +2415,15 @@ function updateWorldLabels(){
   if(currentRoom==='armory')add('Enchanter',...point(6.5,5.5,45),'npc',()=>use(roomFurniture().find(item=>item.type==='enchanter')));
   if(willowmereRooms.includes(currentRoom)){
     for(const item of roomFurniture())if(['riverTrader','riverBench','fishingPost'].includes(item.type)&&!(item.type==='riverBench'&&player.seat===item))add(item.type==='riverTrader'?'River trader':item.type==='riverBench'?(currentRoom==='millbrook'?'Rest by the mill':'Riverside bench'):'Fishing station',...point(item.x+.5,item.y+.5,item.type==='riverTrader'?42:25),'npc',()=>use(item));
+  }
+  if(watchRooms.includes(currentRoom)){
+    for(const item of roomFurniture()){
+      const label=watchInteractLabel(currentRoom,item.type,adventure);
+      if(label)add(label,...point(item.x+.5,item.y+.5,moonwood.heights[item.type]+9),'npc',()=>use(item));
+      if(item.type==='fishingPost')add('Hidden fishing pool',...point(item.x+.5,item.y+.5,31),'npc',()=>use(item));
+    }
+    const enemy=huntEnemyForRoom(currentRoom);
+    if(enemy&&!player.inCombat&&combatNow()>=huntRespawnAt(hunting,enemy))add(enemy.name,...point(6.5,5.5,40),'npc',()=>use(roomFurniture().find(i=>i.type===enemy.prop)),'Optional · Stronger than a Wild Boar');
   }
   if(currentRoom==='logging'){
     add('Workbench',...point(6,3.5,26),'npc',()=>use(roomFurniture().find(item=>item.type==='workbench')));
@@ -2933,13 +2945,13 @@ function hudNextDoor(destination){return hudRoute(destination)[0]??null;}
 function updateExplorationNav(){
   bounds=null;
   const next=nextExplorationDoor();
-  const outside=explorationRegions.Moonwood.includes(currentRoom)||willowmereRooms.includes(currentRoom)||currentRoom==='outside';
+  const outside=explorationRegions.Moonwood.includes(currentRoom)||willowmereRooms.includes(currentRoom)||watchRooms.includes(currentRoom)||currentRoom==='outside';
   const nav=$('explorationNav');
   nav.hidden=!!depthsRun||(!outside&&!trackedDestination);
   if(nav.hidden)return;
-  $('explorationRegion').textContent=willowmereRooms.includes(currentRoom)?'WILLOWMERE':explorationRegions.Moonwood.includes(currentRoom)?'MOONWOOD':'THE TOWER';
+  $('explorationRegion').textContent=watchRooms.includes(currentRoom)?'BEACONWATCH':willowmereRooms.includes(currentRoom)?'WILLOWMERE':explorationRegions.Moonwood.includes(currentRoom)?'MOONWOOD':'THE TOWER';
   $('explorationPlace').textContent=explorationName(currentRoom);
-  let guidance='Choose a destination on the map';
+  let guidance=watchRooms.includes(currentRoom)?(currentRoom==='beaconwatch'&&adventure.watchBeacon?'Beacon restored. The Mill Bridge is now open.':watchGuidance[currentRoom]):currentRoom==='millbrook'?'Northern road → Beaconwatch expedition.':'Choose a destination on the map';
   if(next)guidance='Next: '+explorationName(next.to)+' · Heading to '+explorationName(trackedDestination);
   else if(trackedDestination===currentRoom)guidance='Arrived at '+explorationName(currentRoom);
   else if(trackedDestination)guidance='No open route to '+explorationName(trackedDestination)+' from here';
@@ -3219,9 +3231,38 @@ function updateFishingMoment(time){
     updateAdventurePanel();
   }
 }
+let thornwoodConfirmed=false,watchDialogAction=null;
+function openWatchDialog(title,text,action=null,run=null){
+ $('watchDialogTitle').textContent=title;$('watchDialogText').textContent=text;$('watchDialogError').textContent='';
+ $('watchDialogAction').hidden=!action;$('watchDialogAction').textContent=action??'';$('watchDialogAction').disabled=false;
+ $('watchDialogCancel').textContent=action?'Not now':'Close';watchDialogAction=run;
+ if(!$('watchDialog').open)$('watchDialog').showModal();
+}
+$('watchDialogCancel').onclick=()=>{$('watchDialog').close();watchDialogAction=null;};
+$('watchDialogAction').onclick=async()=>{
+ if(!watchDialogAction)return;const action=watchDialogAction;$('watchDialogAction').disabled=true;
+ try{await action();if(watchDialogAction===action){$('watchDialog').close();watchDialogAction=null;}}
+ catch(error){$('watchDialogError').textContent=error.message;}
+ finally{$('watchDialogAction').disabled=false;}
+};
+function openWatchLandmark(item){
+ if(item.type==='watchSign'){
+  openWatchDialog(currentRoom==='ambermead'?'Two roads. One watchtower.':'Thornwood trail notes',currentRoom==='ambermead'?'Cream road: safe passage to Beaconwatch. Red trail: dangerous Thornwood, double timber and a hidden grotto. Follow the eastern reeds to a peaceful fishing pool.':'Mature trees yield 2 timber per cut. The Thorn Boar guards a seal: defeat it to unlock the grotto cache. The root crack lies on the eastern edge.');return;
+ }
+ const beacon=item.type==='watchBeacon',cave=currentRoom==='starfall',flag=beacon?'watchBeacon':cave?'grottoCache':'meadowCache';
+ if(adventure[flag]){openWatchDialog(beacon?'The beacon is burning.':'You already opened this cache.',beacon?'The Mill Bridge is open permanently. Use the western bridge to walk straight back to Millbrook.':'This discovery stays recorded. Explore the other paths for more discoveries.');return;}
+ if(cave&&!adventure.watchBoar){openWatchDialog('The cache is sealed.','Defeat the Thorn Boar in the thicket to break this seal. Inside: 35 gold and a Sword Awakening Stone.');return;}
+ openWatchDialog(beacon?'Bring Beaconwatch back to life.':cave?'A treasure beneath the roots.':'A forgotten roadside cache.',beacon?'Light the beacon and lower the old Mill Bridge. You can then walk directly between Beaconwatch and Millbrook.':cave?'Claim 35 gold and 1 Sword Awakening Stone. Your discovery is saved permanently.':'Claim 15 gold. This is a one-time discovery reward.',beacon?'Light beacon':'Open cache',async()=>{
+  const before=credits;await serverGameplay('watchFind',{id:item.type});worldLabelKey='';updateExplorationNav();savePlayerState();
+  showTransaction(beacon?'Beacon restored':cave?'Starfall treasure found':'Roadside cache opened',[{icon:beacon?'✦':'◆',text:beacon?'Mill Bridge unlocked · Walk back to Millbrook':cave?'+1 Sword Awakening Stone':'A discovery worth exploring for'}],credits-before);
+ });
+}
+
 function finishInteraction(){
   const item=interaction;interaction=null;
-  if(isRestBed(item.type)&&atHome()){
+  if(['watchBeacon','watchCache','watchSign'].includes(item.type)){
+    openWatchLandmark(item);
+  }else if(isRestBed(item.type)&&atHome()){
     beginBedRest(item);
   }else if(item.type==='safe'&&atHome()){
     window.towerOpenSafe?.();
@@ -3564,7 +3605,7 @@ function openMerchant(){
 }
 
 function renderWorldMap(route=[]){
-  const positions={...willowmereMapPositions,home:[100,55],hub:[340,110],armory:[265,48],market:[465,48],tailor:[180,70],furnishings:[435,145],lounge:[580,75],store:[118,133],
+  const positions={...watchMapPositions,...willowmereMapPositions,home:[100,55],hub:[340,110],armory:[265,48],market:[465,48],tailor:[180,70],furnishings:[435,145],lounge:[580,75],store:[118,133],
     outside:[340,205],trail:[340,315],logging:[107,288],clearing:[109,380],grove:[563,274],shrine:[563,354],
     creek:[338,423],pond:[138,497],ruins:[340,549],roots:[549,493],depthsGate:[340,120],depthsGallery:[340,120],depthsCache:[340,120],depthsTreasury:[340,120],depthsRest:[340,120],depthsTrial:[340,120],depthsVault:[340,120]};
   const rooms=Object.keys(positions).filter(room=>roomDetails[room]&&(room===currentRoom||hudNextDoor(room)));
@@ -3588,9 +3629,9 @@ function renderWorldMap(route=[]){
     ?'<path class="map-region-divider" d="M30 251H610"/><text class="map-region-text" x="30" y="241">THE TOWER</text><text class="map-region-text" x="30" y="266">MOONWOOD</text>':'';
 
   const veil='<defs><filter id="map-fog-soft"><feGaussianBlur stdDeviation="12"/></filter><mask id="map-fog-mask"><rect width="640" height="'+bottom+'" fill="white"/><g filter="url(#map-fog-soft)">'+clearings+'</g></mask><pattern id="map-fog-texture" width="90" height="70" patternUnits="userSpaceOnUse"><path d="M0 40Q25 0 60 28T100 35M-20 60Q25 20 70 55" fill="none" stroke="#7994b0" stroke-opacity=".08" stroke-width="20"/></pattern></defs><g mask="url(#map-fog-mask)"><rect width="640" height="'+bottom+'" fill="#071323"/><rect width="640" height="'+bottom+'" fill="url(#map-fog-texture)"/></g>';
-  $('mapFogSummary').textContent=explorationRegions.Moonwood.filter(room=>fog.known.has(room)).length+' / '+explorationRegions.Moonwood.length+' Moonwood places discovered · '+willowmereRooms.filter(room=>fog.known.has(room)).length+' / 3 Willowmere · Explore to clear fog.';
+  $('mapFogSummary').textContent=explorationRegions.Moonwood.filter(room=>fog.known.has(room)).length+' / '+explorationRegions.Moonwood.length+' Moonwood places discovered · '+willowmereRooms.filter(room=>fog.known.has(room)).length+' / 3 Willowmere · '+watchRooms.filter(room=>fog.known.has(room)).length+' / 4 Beaconwatch · Explore to clear fog.';
   const valley=rooms.some(room=>willowmereRooms.includes(room)&&fog.status(room)!=='hidden')?'<path class="map-region-divider" d="M30 594H610"/><text class="map-region-text" x="30" y="614">WILLOWMERE VALLEY</text>':'';
-  $('worldMap').innerHTML='<svg viewBox="0 0 640 '+bottom+'" role="img" aria-label="Exploration map. Fog hides undiscovered places. You are in '+roomDetails[currentRoom].name+'.">'+regions+valley+'<g class="map-links">'+links+'</g>'+veil+nodes+'</svg>';
+  $('worldMap').innerHTML='<svg viewBox="0 0 640 '+bottom+'" role="img" aria-label="Exploration map. Fog hides undiscovered places. You are in '+roomDetails[currentRoom].name+'.">'+regions+valley+(rooms.some(room=>watchRooms.includes(room)&&fog.status(room)!=='hidden')?'<path class="map-region-divider" d="M30 861H610"/><text class="map-region-text" x="30" y="883">BEACONWATCH REACH</text>':'')+'<g class="map-links">'+links+'</g>'+veil+nodes+'</svg>';
 }
 
 function updateWeaponInventory(){
@@ -4457,6 +4498,7 @@ function currentActivityPrompt(){
     if(fishingGear.bait<1)return {label:'FISHING SUPPLIES',title:'You need bait',text:'Riverworms are sold at Silverfin Outfitters in the Tower.',action:'baitRoute'};
     return {label:'FISHING',title:'Cast a line',text:'Watch the float. Reel when you see a bite for bonus Patience XP.',action:'adventureLandmark'};
   }
+  if(currentRoom==='beaconwatch'&&!adventure.watchBeacon)return {label:'BEACONWATCH EXPEDITION',title:'Light the watchtower beacon',text:'Restore the beacon to open a permanent bridge back to Millbrook.',action:'watchBeaconGuide'};
   if(currentRoom==='creek'&&!adventure.bridge)return {label:'CREEK CROSSING',title:'Continue to the ruins',text:'Use the stepping stones to cross Glass Creek.',action:'adventureLandmark'};
   if(currentRoom==='trail'&&!adventure.lantern)return {label:'EXPLORATION',title:'Take the waystone lantern',text:'Its light reveals hidden paths through Moonwood.',action:'adventureLandmark'};
   if(currentRoom==='ruins'&&!magicState?.picks.length)return {label:'MAGIC GEMS',title:'Choose your first Gems',text:'Visit the Moonwell to bond three Gems and get a free Awakening Stone.',action:'adventureLandmark'};
@@ -4530,7 +4572,7 @@ function updateAdventurePanel(){
   $('adventureProgress').textContent=adventure.discovered.length+' of '+Object.keys(moonwood.areas).filter(room=>depthsStageIndex(room)<0).length+' places discovered';
   const landmark=$('adventureLandmark');
   const bite=!!fishingSession&&fishingMoments.phase(fishingSession,performance.now())==='bite';
-  const action=currentRoom==='willowbank'?(bite?'Reel! +5 Patience XP':fishingSession?'Fishing…':'Choose a fishing station'):{clearing:!player.inCombat&&combatNow()>=hunting.respawnAt?'Approach boar':'',trail:!adventure.lantern?'Take lantern':'',shrine:'Examine altar',creek:'Cross to the Ruins',ruins:'Visit the Moonwell',pond:bite?'Reel! +5 Patience XP':fishingSession?'Fishing…':'Cast a line'}[currentRoom];
+  const action=(currentRoom==='willowbank'||currentRoom==='ambermead')?(bite?'Reel! +5 Patience XP':fishingSession?'Fishing…':'Choose a fishing station'):{clearing:!player.inCombat&&combatNow()>=hunting.respawnAt?'Approach boar':'',trail:!adventure.lantern?'Take lantern':'',shrine:'Examine altar',creek:'Cross to the Ruins',ruins:'Visit the Moonwell',pond:bite?'Reel! +5 Patience XP':fishingSession?'Fishing…':'Cast a line'}[currentRoom];
   landmark.hidden=!action||player.inCombat;
   landmark.disabled=(!!fishingSession&&!bite)||(isFishingRoom(currentRoom)&&fishingGear.bait<1);
   landmark.classList.toggle('bite-ready',bite);
@@ -4544,7 +4586,7 @@ function updateAdventurePanel(){
     button.type='button';
     button.className='adventure-route';
     button.dataset.roomLink=door.to;
-    button.textContent=roomDetails[door.to].name;
+    button.textContent=explorationName(door.to);
     button.setAttribute('aria-label',button.textContent);
     button.onclick=()=>travelDoor(door);
     links.append(button);
@@ -5342,6 +5384,7 @@ function updateName(){
   portrait.clearRect(0,0,24,24);
   portrait.save();portrait.translate(12,39);pixelHead(portrait,avatar,false,false);portrait.restore();
 }
+$('watchBeaconGuide').onclick=()=>{const beacon=roomFurniture().find(i=>i.type==='watchBeacon');if(beacon)use(beacon);};
 $('profile').onclick=openAvatar;$('looks').onclick=openAvatar;
 $('attributes').onclick=()=>{const ink=$('statsAvatar').getContext('2d');ink.clearRect(0,0,56,62);sprite(ink,28,54,avatar,{time:performance.now(),vest:armourSelection(combatGear)});updatePlayerStats();renderProgress();$('attributesDialog').showModal();};
 $('help').onclick=()=>$('helpDialog').showModal();
@@ -5363,6 +5406,9 @@ function updateRoomLabel(){
   canvas.setAttribute('aria-label',roomDetails[currentRoom].name+'. Click a floor tile or use arrow keys to walk. '+(landmarks[currentRoom]??'Use the marked trails or the field journal to travel.'));
 }
 function enterRoom(next,arrival,{automatic=false}={}){
+  if(next==='thornwood'&&!adventure.discovered.includes('thornwood')&&!thornwoodConfirmed&&savedPlayerState?.location!=='thornwood'){
+    openWatchDialog('The trail turns dangerous.','Thornwood is optional. A Thorn Boar has 115 HP and hits harder than the Wild Boar. Bring a weapon and meals. The cream road reaches Beaconwatch safely.','Enter Thornwood',()=>{thornwoodConfirmed=true;enterRoom(next,arrival,{automatic});});return;
+  }
   if(next==='lounge'&&!isSmartlyDressed(wardrobe)&&!autoJourneyTransition){requestLoungeDress();return;}
   if(next==='lounge'&&isSmartlyDressed(wardrobe))loungeDressGuiding=false;
   if(!autoJourneyTransition&&(player.inCombat||(hunting.recoveryUntil&&next!=="hub"&&next!=="home"))){note("Finish combat or recovery before travelling.");return;}
@@ -5373,7 +5419,7 @@ function enterRoom(next,arrival,{automatic=false}={}){
   catchReveal=null;$('catchReveal').hidden=true;
   const focusRoom=!!document.activeElement.closest('[data-room-link]');
   if(next==='market'&&tradingGuideActive()){if(quest.claimed)tradingPostGuideComplete=true;tradeGuideRouteCache=null;}
-  currentRoom=next;
+  currentRoom=next;$('gameShell').dataset.expedition=watchRooms.includes(next)?next:'';
   depthsExploring=false;
   const exploring=moonwood.has(next);
   const nextView=exploring?moonwood.view:next==='hub'?hubView:next==='outside'?courtyardView:standardView;

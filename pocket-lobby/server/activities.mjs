@@ -7,7 +7,7 @@ import {nextCombatTactic} from '../public/character-rules.js';
 import {castEssencePower} from './essences.mjs';
 import {awardBattleStone,awardEssenceMastery} from '../public/essences.js';
 import {moonwood} from '../public/moonwood.js';
-import {isTimberTree,timberTreeState,cutTimberTree,choppingDuration,grantBasicAxe} from '../public/woodcutting.js';
+import {isTimberTree,timberTreeState,cutTimberTree,harvestTimber,choppingDuration,grantBasicAxe} from '../public/woodcutting.js';
 import {huntEnemyForRoom,huntEnemy,huntRespawnAt,canUseWeapon,createHunt,advanceHunt,huntingTurn,boarRules,normalizeCombatSummary} from '../public/hunting.js';
 import {depthsStages,depthsStageIndex,clearDepthsStage,inspectDepthsFind,depthsCacheRoom,depthsEnemyAvailable,chooseDepthsPassage,canEnterDepthsCache,depthsCacheReturn,canVisitDepthsRoom,depthsSpoils,depthsSideForRoom,visitDepthsSide,useDepthsRest} from '../public/depths.js';
 import {recordQuest} from '../public/quests.js';
@@ -63,11 +63,12 @@ function result(state,event,now,random=Math.random){
       if(state.location===depthsCacheRoom)rewards.cacheUnlocked=true;
     }
     else{
-      state.hunting[enemy.id==='beetle'?'beetleRespawnAt':'respawnAt']=now+enemy.respawn;
+      state.hunting[enemy.id==='thornBoar'?'thornRespawnAt':enemy.id==='beetle'?'beetleRespawnAt':'respawnAt']=now+enemy.respawn;
       const before=state.huntingLoot[enemy.loot]??0;
       state.huntingLoot[enemy.loot]=Math.min(1000000,before+1);
       if(state.huntingLoot[enemy.loot]>before)rewards.loot={[enemy.loot]:state.huntingLoot[enemy.loot]-before};
       if(enemy.id==='beetle'){state.depthsDiscovered=true;if(!state.plan?.activeHunt)state.history.beetleDefeated=true;}
+      if(enemy.id==='thornBoar'&&state.combatId)state.adventure.watchBoar=true;
       if(enemy.id==='boar'){recordQuest(state.quest,'boar');state.history.boarDefeated=true;}
     }
   }else if(event.outcome==='defeat'){
@@ -78,7 +79,8 @@ function result(state,event,now,random=Math.random){
       else{const previous=depthsStages[state.depthsRun.cleared-1];
       if(previous)move(state,previous.room,{x:4,y:5});
       else{state.depthsRun=null;move(state,'ruins');}}
-    }else if(enemy.id==='beetle')move(state,'creek',{x:10,y:4});
+    }else if(enemy.id==='thornBoar')move(state,'ambermead',{x:10,y:2});
+    else if(enemy.id==='beetle')move(state,'creek',{x:10,y:4});
     else move(state,'trail',{x:7,y:1});
   }
   if(event.outcome!=='fighting'&&state.combatId){
@@ -145,7 +147,7 @@ export function activityAction(state,action,body,now,random){
     if(action==='cut'){
       const cut=state.timberCut;
       if(!cut||cut.id!==body.cutId||cut.key!==key||now<cut.endsAt)throw new Error('Invalid cut timing. Finish chopping this tree first.');
-      const amount=cutTimberTree(wood,now,key);useHunger(state);
+      let amount=cutTimberTree(wood,now,key);if(amount&&state.location==='thornwood')amount+=harvestTimber(wood);useHunger(state);
       state.timberReceipt={id:cut.id,key,amount};delete state.timberCut;
       if(timberTreeState(wood,now,key).regrowsAt)return true;
     }

@@ -1,5 +1,5 @@
 import {normalizeVitals,useHunger} from '../public/player-vitals.js';
-import {willowmereRooms,isFishingRoom} from '../public/region-catalog.js';
+import {watchRooms,watchFlags,willowmereRooms,isFishingRoom} from '../public/region-catalog.js';
 import {canUseArmour} from '../public/hunting.js';
 import {settleExplorationPlan} from './exploration-plan.mjs';
 import {normalizeBedRest} from './bed-rest.mjs';
@@ -46,7 +46,7 @@ function furniture(items){
     return {id:item.id,type:item.type,x:item.x,y:item.y,rot:item.rot};
   });
 }
-const locations=new Set([...willowmereRooms,"home","tailor","furnishings","hub","lounge","outside","store","market","trail","grove","creek","shrine","ruins","roots","pond","clearing","armory","logging",...depthsStages.map(stage=>stage.room),depthsCacheRoom,...Object.values(depthsSideRooms).map(side=>side.room)]);
+const locations=new Set([...watchRooms,...willowmereRooms,"home","tailor","furnishings","hub","lounge","outside","store","market","trail","grove","creek","shrine","ruins","roots","pond","clearing","armory","logging",...depthsStages.map(stage=>stage.room),depthsCacheRoom,...Object.values(depthsSideRooms).map(side=>side.room)]);
 function normalizeFirstUpgrade(input){
   if(input===undefined)return {unlocked:false,choice:null,complete:false,sale:null};
   if(!input||typeof input!=='object'||Array.isArray(input)||typeof input.unlocked!=='boolean'||typeof input.complete!=='boolean'||![null,'fishing','combat'].includes(input.choice))throw new Error('Invalid first upgrade.');
@@ -77,8 +77,8 @@ export function normalizeState(input={}){
   if(Object.keys(fishStock).some(id=>!fishProducts[id]))throw new Error("Unknown fish.");
   const a=input.adventure??{};
   const adventure={};
-  for(const id of ["lantern","groveTrail","bridge","shrine","shortcut"])adventure[id]=a[id]===true;
-  adventure.discovered=[...new Set((Array.isArray(a.discovered)?a.discovered:[]).filter(id=>[...willowmereRooms,"trail","grove","creek","shrine","ruins","roots","pond","clearing","logging"].includes(id)))];
+  for(const id of [...watchFlags,"lantern","groveTrail","bridge","shrine","shortcut"])adventure[id]=a[id]===true;
+  adventure.discovered=[...new Set((Array.isArray(a.discovered)?a.discovered:[]).filter(id=>[...watchRooms,...willowmereRooms,"trail","grove","creek","shrine","ruins","roots","pond","clearing","logging"].includes(id)))];
   const avatar=input.avatar??{name:"Guest",outfit:0,hair:0};
   if(typeof avatar.name!=="string"||avatar.name.length>20||!Number.isInteger(avatar.outfit)||avatar.outfit<0||avatar.outfit>12||!Number.isInteger(avatar.hair)||avatar.hair<0||avatar.hair>4)throw new Error("Invalid appearance.");
   const wardrobe=normalizeWardrobe(input.wardrobe,avatar);

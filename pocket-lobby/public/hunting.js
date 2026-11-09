@@ -22,6 +22,7 @@ const boar={id:'boar',name:'Wild Boar',room:'clearing',prop:'wildboar',move:'cha
 const beetle={id:'beetle',name:'Stoneback Beetle',room:'ruins',prop:'stonebackBeetle',move:'slam',health:96,firstAttack:2300,interval:3500,damage:22,respawn:45000,shellArmor:8,exposureMs:2200,exposedBonus:5,loot:'stonebackShell',lootName:'Shell Fragment',sellPrice:45,xp:[25,20,25],masteryXp:15};
 export const huntEnemies={
   boar,beetle,
+  thornBoar:{...boar,id:'thornBoar',name:'Thorn Boar',room:'thornwood',health:115,damage:17,firstAttack:1700,interval:2100,xp:[30,20,30],masteryXp:15,tactic:'OPTIONAL DANGER · Stronger than a Wild Boar. Dodge the charge. Victory breaks the grotto cache seal.'},
   depthsBoar:{...boar,id:'depthsBoar',room:'depthsGate',name:'Gate Boar',health:100,damage:12,xp:[30,20,30],masteryXp:20},
   depthsBeetle:{...beetle,id:'depthsBeetle',room:'depthsGallery',name:'Gallery Beetle',health:150,damage:20,xp:[45,35,45],masteryXp:30},
   cacheGuardian:{...beetle,id:'cacheGuardian',room:'depthsCache',name:'Cache Guardian',elite:true,archetype:'caster',tactic:'RUNE CASTER · Land 3 weapon hits during Rune Bolt to interrupt. Fast daggers excel; dodge if the cast completes.',move:'runeBolt',health:180,firstAttack:3000,interval:3600,damage:24,shellArmor:0,exposureMs:2400,xp:[55,40,55],masteryXp:40},
@@ -47,7 +48,7 @@ export function transitionVaultPhase(event,before,now){
  encounter.nextBoarAt=Math.max(encounter.nextBoarAt,now+1500+enemyAttack(encounter).tell);
  event.phaseChange={index:next.index,name:next.name,hint:next.hint,color:next.color};return event;
 }
-export const huntRespawnAt=(hunting,enemy)=>enemy===huntEnemies.beetle?hunting.beetleRespawnAt??0:hunting.respawnAt;
+export const huntRespawnAt=(hunting,enemy)=>enemy?.id==='thornBoar'?hunting.thornRespawnAt??0:enemy===huntEnemies.beetle?hunting.beetleRespawnAt??0:hunting.respawnAt;
 
 const enemyMoves={
   vaultSmash:{id:'vaultSmash',name:'Ironclad Smash',tell:1200,damage:0,shape:'ring',opensShell:false},
@@ -207,6 +208,7 @@ export function normalizeHunting(input={}){
   if(!input||typeof input!=='object'||Array.isArray(input))throw new Error('Invalid hunting state.');
   const time=value=>{if(value===undefined)return 0;if(!Number.isSafeInteger(value)||value<0)throw new Error('Invalid hunting time.');return value;};
   const result={respawnAt:time(input.respawnAt),recoveryUntil:time(input.recoveryUntil),encounter:null};
+  if(input.thornRespawnAt!==undefined)result.thornRespawnAt=time(input.thornRespawnAt);
   if(input.beetleRespawnAt!==undefined)result.beetleRespawnAt=time(input.beetleRespawnAt);
   if(input.encounter){
     const enemy=input.encounter.enemy;

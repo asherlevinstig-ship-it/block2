@@ -1,3 +1,5 @@
+import {watchAction} from './watch-expedition.mjs';
+import {watchFlags} from '../public/region-catalog.js';
 import {normalizeVitals,useHunger,feedPlayer} from '../public/player-vitals.js';
 import {isFishingRoom,besideFishingStation} from '../public/region-catalog.js';
 import {armourCatalog,canUseArmour} from '../public/hunting.js';
@@ -39,6 +41,7 @@ function location(state,rooms){
 export function applyGameplayAction(state,action,body,now=Date.now(),random=Math.random){
   // Combat requests advance their own clocks so their receipt includes all events.
   if(action!=='combat')settleActivities(state,now,random);
+  if(watchAction(state,action,body))return;
   if(activityAction(state,action,body,now,random)||essenceAction(state,action,body))return;
   if(gamblingAction(state,action,body,now,random===Math.random?undefined:random))return;
   if(action==='armour'){
@@ -120,7 +123,7 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
     return;
   }
   if(action==='cast'){
-    location(state,['pond','willowbank']);
+    location(state,['pond','willowbank','ambermead']);
     if(state.fishingCast)return;
     const position=state.position;
     if(!besideFishingStation(state.location,position))throw new Error('Travel to the fishing post before casting.');
@@ -138,7 +141,7 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
     return;
   }
   if(action==='reel'||action==='catch'){
-    location(state,['pond','willowbank']);
+    location(state,['pond','willowbank','ambermead']);
     const cast=state.fishingCast;
     if(!cast||cast.id!==body.castId){
       if(action==='catch'&&state.fishingReceipt?.castId===body.castId)return;
@@ -247,6 +250,7 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
 // rewards and active encounters can only change through server actions.
 export function protectFishingState(previous,next){
   next.bank=previous.bank;
+  next.adventure={...next.adventure};for(const key of watchFlags)next.adventure[key]=previous.adventure?.[key]===true;
   if(previous.pendingCharacterRules)next.pendingCharacterRules=previous.pendingCharacterRules;else delete next.pendingCharacterRules;
   const owned=normalizeWardrobe(previous.wardrobe,previous.avatar).owned;
   next.wardrobe=normalizeWardrobe({...normalizeWardrobe(next.wardrobe??previous.wardrobe,next.avatar??previous.avatar),owned});
