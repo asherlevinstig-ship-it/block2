@@ -1,4 +1,4 @@
-import {wildlifeRoom,wildAnimal,nearWildAnimal,wildlifeHabitats,bondStep,FORAGE_COOLDOWN_MS,FORAGE_CAP} from '../public/wildlife.js';
+import {wildlifeRoom,wildAnimal,nearWildAnimal,wildlifeHabitats,bondStep,bondOdds,FORAGE_COOLDOWN_MS,FORAGE_CAP} from '../public/wildlife.js';
 import {roomBoxes,validRoomTile} from '../public/shared-world.js';
 import {familiars,normalizeFamiliars,MOON_SIGHT_MS} from '../public/familiars.js';
 import {activeAdd,addKinds} from '../public/dungeon-adds.js';
@@ -6,7 +6,7 @@ import {isFishingRoom} from '../public/region-catalog.js';
 import {moonwood} from '../public/moonwood.js';
 import {dungeonRooms} from '../public/dungeon-arena.js';
 
-export function familiarAction(state,action,body,now){
+export function familiarAction(state,action,body,now,random=Math.random){
  if(!['familiarRecruit','familiarTame','familiarForage','familiarEquip','familiarUse'].includes(action))return false;
  const current=normalizeFamiliars(state.familiars),id=body.id;
  if(action==='familiarUse'){
@@ -44,10 +44,15 @@ export function familiarAction(state,action,body,now){
    const {trust,stage,waiting,food,habitat}=bondStep(current,animal);
    if(body.step!==trust.step)throw new Error('The animal’s trust has changed. Try the next step.');
    if(waiting)throw new Error('Let this animal move on, then meet it at its next rest.');
-   if(stage==='feed'){
-    if(!food)throw new Error('Gather a '+habitat.food+' at the foraging spot first.');
-    current.forage[animal.kind].count--;
+   if(stage==='feed'&&!food)throw new Error('Gather a '+habitat.food+' at the foraging spot first.');
+   const misses=trust.misses??0;
+   const {percent}=bondOdds(state.stats,animal.kind,stage,misses);
+   if(random()*100>=percent){
+    current.trust[id]={step:trust.step,lastRest:animal.rest,misses:Math.min(3,misses+1)};
+    state.familiars=current;
+    return true;
    }
+   if(stage==='feed')current.forage[animal.kind].count--;
    if(stage==='bond'){
     current.owned.push(animal.kind);
     if(!current.equipped)current.equipped=animal.kind;

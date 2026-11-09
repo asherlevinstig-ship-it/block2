@@ -1,3 +1,5 @@
+import {skillLevel} from './skill-curve.js';
+
 export const wildlifeRoom='wildlifeReserve';
 export const wildlifeView={width:864,height:520,cols:24,rows:20,originX:396,originY:68};
 export const wildlifeHabitats={
@@ -45,10 +47,11 @@ export function normalizeTrust(input){
  const result={};
  for(const id of Object.keys(routes)){
   const entry=input?.[id];
-  if(Number.isInteger(entry?.step)&&entry.step>0&&entry.step<wildlifeHabitats[routes[id].kind].steps.length){
-   const lastRest=Number.isSafeInteger(entry.lastRest)&&entry.lastRest>=0?entry.lastRest:null;
-   result[id]={step:entry.step,lastRest};
-  }
+  if(!Number.isInteger(entry?.step)||entry.step<0||entry.step>=wildlifeHabitats[routes[id].kind].steps.length)continue;
+  const lastRest=Number.isSafeInteger(entry.lastRest)&&entry.lastRest>=0?entry.lastRest:null;
+  if(entry.step===0&&lastRest===null)continue;
+  const misses=Number.isInteger(entry.misses)?Math.max(0,Math.min(3,entry.misses)):0;
+  result[id]={step:entry.step,lastRest,...(misses?{misses}:{})};
  }
  return result;
 }
@@ -68,4 +71,15 @@ export function bondStep(state,animal){
  const habitat=wildlifeHabitats[animal.kind];
  const trust=state.trust[animal.id]??{step:0,lastRest:null};
  return {habitat,trust,stage:habitat.steps[trust.step],waiting:trust.lastRest!==null&&!(animal.rest>trust.lastRest),food:state.forage[animal.kind]?.count??0};
+}
+
+// The game tracks skill levels rather than a separate character XP bar.
+// Use the same combat attributes shown in Progress for the adventurer level here.
+export function bondOdds(stats,kind,stage,misses=0){
+ const level=Math.floor((skillLevel(stats?.strengthXp)+skillLevel(stats?.agilityXp)+skillLevel(stats?.vitalityXp))/3);
+ const luck=skillLevel(stats?.luckXp),patience=skillLevel(stats?.patienceXp);
+ const base=({otter:78,fox:68,owl:58}[kind]??58)-(stage==='bond'?8:stage==='perch'?5:0);
+ const bonus={level:Math.min(18,(level-1)*3),luck:Math.min(15,(luck-1)*3),patience:Math.min(24,(patience-1)*4),retry:Math.min(3,Math.max(0,misses))*8};
+ const percent=Math.min(97,base+bonus.level+bonus.luck+bonus.patience+bonus.retry);
+ return {percent,base,level,luck,patience,bonus};
 }

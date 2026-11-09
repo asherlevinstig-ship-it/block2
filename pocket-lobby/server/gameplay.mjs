@@ -43,7 +43,7 @@ function location(state,rooms){
 export function applyGameplayAction(state,action,body,now=Date.now(),random=Math.random){
   // Combat requests advance their own clocks so their receipt includes all events.
   if(action!=='combat')settleActivities(state,now,random);
-  if(watchAction(state,action,body)||familiarAction(state,action,body,now))return;
+  if(watchAction(state,action,body)||familiarAction(state,action,body,now,random))return;
   if(activityAction(state,action,body,now,random)||essenceAction(state,action,body))return;
   if(gamblingAction(state,action,body,now,random===Math.random?undefined:random))return;
   if(action==='armour'){

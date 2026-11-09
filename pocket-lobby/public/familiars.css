@@ -24,3 +24,5 @@
 @media(max-width:580px){.familiar-card canvas{width:64px;height:50px}}
 
 #wildlifeForage{margin:0 0 6px;color:#e6efb2;border-color:#849066;background:#364a39}
+
+.wildlife-odds{display:block;margin:0 0 7px;color:#c4dfa8;font-size:10px;font-variant-numeric:tabular-nums}.wildlife-odds[hidden]{display:none}

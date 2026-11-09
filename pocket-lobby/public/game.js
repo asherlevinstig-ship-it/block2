@@ -1436,14 +1436,18 @@ function selectWildAnimal(id){
 function updateWildlifeGuide(){
  const guide=$('wildlifeGuide');guide.hidden=currentRoom!==wildlifeRoom;
  if(guide.hidden)return;
- const now=combatNow(),animal=wildAnimal(selectedWildAnimal,now),action=$('wildlifeAction'),gather=$('wildlifeForage');
+ const now=combatNow(),animal=wildAnimal(selectedWildAnimal,now),action=$('wildlifeAction'),gather=$('wildlifeForage'),oddsLabel=$('wildlifeOdds');
  if(!animal){
   $('wildlifeEyebrow').textContent='WILDLIFE RESERVE';$('wildlifeTitle').textContent='Meet the wild animals';
   $('wildlifeHint').textContent='Choose an animal, gather its favorite food, and meet it at several resting stops.';
-  action.hidden=gather.hidden=true;return;
+  action.hidden=gather.hidden=oddsLabel.hidden=true;return;
  }
  const species=familiars[animal.kind],bonded=familiarState.owned.includes(animal.kind);
  const {habitat,trust,stage,waiting,food}=bondStep(familiarState,animal);
+ const odds=bondOdds(playerStats,animal.kind,stage,trust.misses);
+ oddsLabel.hidden=bonded;
+ oddsLabel.textContent=odds.percent+'% success · Lv. '+odds.level+' · Luck '+odds.luck+' · Patience '+odds.patience+(odds.bonus.retry?' · Retry +'+odds.bonus.retry+'%':'');
+ oddsLabel.title='Level averages Strength, Agility and Vitality. This attempt: base '+odds.base+'%, level +'+odds.bonus.level+'%, Luck +'+odds.bonus.luck+'%, Patience +'+odds.bonus.patience+'%, retry +'+odds.bonus.retry+'%. Max 97%.';
  const position={x:player.cx,y:player.cy},moving=!!step||route.length>0,busy=moving||serverActionBusy||unavailable();
  const near=nearWildAnimal(position,animal),missingFood=stage==='feed'&&food===0;
  const atForage=nearWildAnimal(position,habitat.forage),regrow=Math.max(0,Math.ceil(((familiarState.forage[animal.kind]?.readyAt??0)-now)/1000));
@@ -1482,6 +1486,10 @@ $('wildlifeAction').onclick=async()=>{
  const trustStep=familiarState.trust[animal.id]?.step??0;
  try{
   await serverGameplay('familiarTame',{id:animal.id,step:trustStep});
+  if(!familiarState.owned.includes(animal.kind)&&familiarState.trust[animal.id]?.step===trustStep){
+   wildlifeFeedback={text:'It stayed wary. Your trust and treats are safe. Try again at its next rest.',until:combatNow()+5000};
+   updateWildlifeGuide();return;
+  }
   wildlifeFeedback=null;wildlifeAffection={id:animal.id,at:performance.now()};
   if(familiarState.owned.includes(animal.kind))familiarReaction={id:animal.kind,pose:'bond',at:performance.now()};
   if(familiarState.owned.includes(animal.kind))showTransaction('Familiar bonded',[{icon:'✦',text:familiars[animal.kind].name+(familiarState.equipped===animal.kind?' · Equipped':' · Find it in Familiars')}]);

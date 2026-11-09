@@ -1,4 +1,5 @@
-import {wildlifeRoom,wildAnimal,wildlifeAnimals,nearWildAnimal,wildlifeHabitats,FORAGE_COOLDOWN_MS} from '../public/wildlife.js';
+import {skillXpForLevel} from '../public/skill-curve.js';
+import {wildlifeRoom,wildAnimal,wildlifeAnimals,nearWildAnimal,wildlifeHabitats,FORAGE_COOLDOWN_MS,bondOdds} from '../public/wildlife.js';
 import {moonwood} from '../public/moonwood.js';
 import {validRoomTile,roomBoxes,reachableMove,socialRooms} from '../public/shared-world.js';
 import test from 'node:test';
@@ -37,6 +38,35 @@ test('only taming a resting animal nearby forms a bond and the first bond equips
  s.position={x:8,y:9};act(s,'familiarTame',{id:'reed-otter',step:3},38000);
  assert.deepEqual(s.familiars.owned,['otter']);assert.equal(s.familiars.equipped,'otter');assert.deepEqual(s.familiars.trust,{});
  assert.equal(publicPeer({familiar:s.familiars.equipped}).familiar,'otter');assert.equal(publicPeer({familiar:'unknown'}).familiar,undefined);
+});
+
+test('adventurer level, Luck and Patience each improve the displayed bonding chance',()=>{
+ const xp=skillXpForLevel(4),base=bondOdds({},'owl','bond');
+ assert.equal(base.percent,50);
+ assert.equal(bondOdds({strengthXp:xp,agilityXp:xp,vitalityXp:xp},'owl','bond').percent,59);
+ assert.equal(bondOdds({luckXp:xp},'owl','bond').percent,59);
+ assert.equal(bondOdds({patienceXp:xp},'owl','bond').percent,62);
+ assert(bondOdds({},'otter','observe').percent>bondOdds({},'fox','observe').percent);
+ assert.equal(bondOdds({luckXp:xp,patienceXp:xp},'otter','observe',3).percent,97);
+});
+
+test('failed rolls preserve food and trust, lock that rest and improve the next attempt',()=>{
+ const s=normalizeState({location:wildlifeRoom,position:{x:4,y:9}});
+ const attempt=(step,now,roll)=>applyGameplayAction(s,'familiarTame',{id:'reed-otter',step},now,()=>roll);
+ attempt(0,1000,.95);
+ assert.deepEqual(normalizeState(s).familiars.trust['reed-otter'],{step:0,lastRest:0,misses:1});
+ assert.throws(()=>attempt(0,1001,0),/next rest/);
+ s.position=wildlifeHabitats.otter.forage;act(s,'familiarForage',{id:'otter'},11000);
+ s.position={x:8,y:9};attempt(0,13000,.82); // Retry brings 78% to 86%.
+ assert.equal(s.familiars.trust['reed-otter'].step,1);
+ assert.equal(s.familiars.trust['reed-otter'].misses,undefined);
+ s.position={x:9,y:15};attempt(1,26000,.97);
+ assert.equal(s.familiars.trust['reed-otter'].step,1);
+ assert.equal(s.familiars.forage.otter.count,1);
+ s.stats.patienceXp=skillXpForLevel(4);
+ s.position={x:8,y:9};attempt(1,38000,.94); // Patience and retry bring 78% to the cap.
+ assert.equal(s.familiars.trust['reed-otter'].step,2);
+ assert.equal(s.familiars.forage.otter.count,0);
 });
 
 test('reserve routes stay on land with reachable habitats and enough room for players',()=>{
