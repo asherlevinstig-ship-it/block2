@@ -13,6 +13,7 @@
 #myFaction ul{display:grid;gap:6px;list-style:none;padding:0}
 .faction-create{padding:10px 0;border-top:1px solid #495d78}
 .faction-create summary{cursor:pointer;color:#f4da9f}
-#factionCreate{display:grid;gap:7px;margin-top:10px}
+#factionLeadershipProgress{width:100%;accent-color:#e3bc65}
+#factionCreate:not([hidden]){display:grid;gap:7px;margin-top:10px}
 #factionCreate button{justify-self:start}
 .faction-confirm{display:flex;gap:8px;margin-top:8px}

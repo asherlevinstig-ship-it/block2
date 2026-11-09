@@ -9,6 +9,7 @@ import {useHunger} from '../public/player-vitals.js';
 import {armourSelection} from '../public/hunting.js';
 import {startBedRest,settleBedRest,stopBedRest} from './bed-rest.mjs';
 import {awardDungeonWeapon} from '../public/dungeon-loot.js';
+import {awardLeadership} from '../public/leadership.js';
 import {MAX_SKILL_XP} from '../public/skill-curve.js';
 import {nextCombatTactic} from '../public/character-rules.js';
 import {castEssencePower} from './essences.mjs';
@@ -67,7 +68,11 @@ function result(state,event,now,random=Math.random){
     if(event.stone)rewards.stones={[event.stone]:1};
     if(state.depthsRun){
       const cleared=clearDepthsStage(state.depthsRun,state.location,!!state.combatId);
-      if(cleared&&state.combatId&&enemy.id==='depthsGuardian'){const drop=awardDungeonWeapon(state,now,random);if(drop){event.weaponDrop=drop;rewards.weapon=drop.weapon;state.depthsRun.vaultWeapon=drop.weapon;}}
+      if(cleared&&state.combatId&&enemy.id==='depthsGuardian'){
+        rewards.xp.leadershipXp=awardLeadership(state,'vaultClear');
+        const drop=awardDungeonWeapon(state,now,random);
+        if(drop){event.weaponDrop=drop;rewards.weapon=drop.weapon;state.depthsRun.vaultWeapon=drop.weapon;}
+      }
       const held=depthsSpoils(state.depthsRun);
       rewards.held={gold:held.gold-heldBefore.gold,loot:Object.fromEntries(Object.entries(held.loot).map(([id,count])=>[id,count-(heldBefore.loot[id]??0)]).filter(([,count])=>count>0))};
       if(state.location===depthsCacheRoom)rewards.cacheUnlocked=true;

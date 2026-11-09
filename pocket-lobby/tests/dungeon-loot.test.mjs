@@ -6,7 +6,7 @@ function vaultWin(s,now){s.location='depthsVault';s.position={x:5,y:5};s.depthsR
 test('each Vault win advances the guarantee; fifth unsuccessful clear grants the selected weapon once',()=>{
  const s=veteran();for(let i=1;i<=4;i++){vaultWin(s,i*10000);assert.equal(s.dungeonLoot.streak,i);assert.equal(s.dungeonLoot.clears,i);assert.equal(s.combatGear.ownedWeapons.includes('breakerSpear'),false);}
  vaultWin(s,50000);assert.equal(s.dungeonLoot.streak,0);assert.equal(s.dungeonLoot.clears,5);assert.equal(s.combatGear.ownedWeapons.filter(id=>id==='breakerSpear').length,1);assert.equal(s.combatGear.equippedWeapon,'trainingSword');assert.equal(s.dungeonLoot.notices[0].guaranteed,true);assert.equal(s.combatReports.at(-1).rewards.weapon,'breakerSpear');assert.equal(s.credits,100);assert.equal(s.depthsRun.cleared,3);
- advanceServerCombat(s,90000,()=>0);assert.equal(s.dungeonLoot.clears,5);assert.equal(s.dungeonLoot.notices.length,1);
+ advanceServerCombat(s,90000,()=>0);assert.equal(s.dungeonLoot.clears,5);assert.equal(s.dungeonLoot.notices.length,1);assert.equal(s.stats.leadershipXp,250);
 });
 test('lucky drops arrive early, skip duplicates and stop after the arsenal is complete',()=>{
  const s=veteran();for(let i=0;i<3;i++){const drop=awardDungeonWeapon(s,1000+i,()=>0);assert.equal(drop.weapon,dungeonRelics[i]);assert.equal(drop.guaranteed,false);assert.equal(s.dungeonLoot.streak,0);}

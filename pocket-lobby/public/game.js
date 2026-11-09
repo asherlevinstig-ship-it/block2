@@ -718,9 +718,11 @@ function questAction(){
     return;
   }
   if(window.playerCloud?.gameplay){
+    const previousLeadership=playerStats.leadershipXp??0;
     serverGameplay('quest').then(()=>{
       savePlayerState();$('questDialog').close();
-      showTransaction('First Steps complete!',[{icon:'⚔',text:'Warden’s Blade · Equipped'}],firstQuestReward.gold);
+      const gained=(playerStats.leadershipXp??0)-previousLeadership;
+      showTransaction('First Steps complete!',[{icon:'⚔',text:'Warden’s Blade · Equipped'},...(gained>0?[{icon:'⚑',text:'+'+gained+' Leadership XP'}]:[])],firstQuestReward.gold);
     }).catch(error=>note(error.message));
     return;
   }
@@ -839,7 +841,7 @@ function renderCombatRecap(report){
   const list=$('combatRecapRewards');list.replaceChildren();
   const row=text=>{const item=document.createElement('li');item.textContent=text;list.append(item);};
   for(const [id,count] of Object.entries(rewards.loot??{}))row('Inventory · '+(tradeCatalog[id]?.name??id)+' ×'+count);
-  const xp=Object.entries(rewards.xp??{}).filter(([,value])=>value>0).map(([key,value])=>'+'+value+' '+({strengthXp:'Strength',agilityXp:'Agility',vitalityXp:'Vitality'}[key]??key));
+  const xp=Object.entries(rewards.xp??{}).filter(([,value])=>value>0).map(([key,value])=>'+'+value+' '+({strengthXp:'Strength',agilityXp:'Agility',vitalityXp:'Vitality',leadershipXp:'Leadership'}[key]??key));
   if(xp.length)row('Combat XP · '+xp.join(' · '));
   for(const [form,count] of Object.entries(rewards.stones??{}))row('Inventory · '+stoneForms[form].name+' Awakening Stone ×'+count);
   for(const award of rewards.mastery??[])row(essenceGems[award.gem].name+' Mastery · +'+award.xp+' XP'+(award.leveled?' · Level '+award.level+'!':''));
@@ -4238,7 +4240,7 @@ function updatePlayerStats(){
     $(id).setAttribute('aria-label','Health '+health+' of '+totalHealth+'. Five hearts, 20 HP each.');
     $(id).title=health+' / '+totalHealth+' HP - 20 HP per heart';
   }
-  for(const [id,name] of [['strength','Strength'],['agility','Agility'],['vitality','Vitality'],['patience','Patience'],['luck','Luck']]){
+  for(const [id,name] of [['strength','Strength'],['agility','Agility'],['vitality','Vitality'],['patience','Patience'],['luck','Luck'],['leadership','Leadership']]){
     const {level:rank,progress:towardNext,target}=skillProgress(playerStats[id+'Xp']);
     $('attribute-'+id+'-level').textContent=rank;
     $('attribute-'+id+'-xp').textContent=towardNext+' / '+target+' XP';

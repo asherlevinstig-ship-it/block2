@@ -66,5 +66,5 @@ test('real hunting, market sale and catches complete First Steps in that order',
  assert.equal(questStage(s.quest),4);
  s.location='hub';s.position={x:10,y:4};act('quest',{},now);
  assert.equal(s.credits,205);assert.equal(s.combatGear.equippedWeapon,'wardenSword');assert.equal(s.quest.claimed,true);
- assert.throws(()=>act('quest',{},now),/quest reward/);assert.equal(s.credits,205);
+ assert.throws(()=>act('quest',{},now),/quest reward/);assert.equal(s.credits,205);assert.equal(s.stats.leadershipXp,75);
 });

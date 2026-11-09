@@ -17,6 +17,7 @@ import {normalizeDungeonLoot,dungeonRelics} from '../public/dungeon-loot.js';
 import {skillLevel,progressionVersion,MAX_SKILL_XP} from '../public/skill-curve.js';
 import {fishingCatalog,fishProducts,rollFishingCatch} from '../public/fishing.js';
 import {recordQuest,claimFirstQuest} from '../public/quests.js';
+import {awardLeadership} from '../public/leadership.js';
 import {purchaseWeapon} from '../public/hunting.js';
 import {fitSwordUpgrade,craftFurniture,craftStonebackVest,craftMoonwellCharm,enchantWeapon} from '../public/crafting.js';
 import {bankDepthsSpoils,moonwellShard} from '../public/depths.js';
@@ -236,6 +237,7 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
     const reward=claimFirstQuest(state.quest);
     if(!reward)throw new Error('Invalid quest reward.');
     earn(state,reward.gold);
+    awardLeadership(state,'firstSteps');
     if(!state.combatGear.ownedWeapons.includes(reward.weapon))state.combatGear.ownedWeapons.push(reward.weapon);
     state.combatGear.equippedWeapon=reward.weapon;
     return;

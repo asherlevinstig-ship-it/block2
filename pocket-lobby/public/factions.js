@@ -12,7 +12,15 @@ export function initializeFactions(api,document=globalThis.document){
     const row=make('div','');row.className='faction-confirm';row.append(confirm,cancel);
     container.querySelector('.faction-confirm')?.remove();container.append(row);confirm.focus();
   }
-  function render({membership,factions,capacity}){
+  function render({membership,factions,capacity,leadership}){
+    const eligible=leadership.xp>=leadership.requiredXp;
+    find('factionCreate').hidden=!eligible;
+    find('factionLeadership').textContent=eligible
+      ? 'Leadership level '+leadership.level+' · Founding unlocked'
+      : 'Leadership level '+leadership.level+' · '+leadership.xp+' / '+leadership.requiredXp+' XP to level '+leadership.requiredLevel+'. Claim the Warden’s First Steps reward (+'+leadership.awards.firstSteps+' XP) or clear the Sunken Vault (+'+leadership.awards.vaultClear+' XP each).';
+    const meter=find('factionLeadershipProgress');
+    meter.hidden=eligible;meter.max=leadership.requiredXp;meter.value=Math.min(leadership.xp,leadership.requiredXp);
+
     mine.hidden=!membership;directory.hidden=!!membership;
     mine.replaceChildren();find('factionResults').replaceChildren();
     if(membership){

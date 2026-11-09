@@ -18,10 +18,17 @@ test('players create, join, transfer and leave a shared faction without changing
   };
  }
  const first=await player(),second=await player();
- const saved=await first('session',{legacy:{avatar:{name:'Cedar',outfit:0,hair:0}}});
+ const saved=await first('session',{legacy:{avatar:{name:'Cedar',outfit:0,hair:0},stats:{leadershipXp:999}}});
+ assert.equal(saved.state.stats.leadershipXp,0);
+ assert.equal((await first('factions')).leadership.level,1);
+ assert.match((await first('factions',{action:'create',name:'Moon Guard'})).error,/Leadership level 3/);
+ const setXp=xp=>sql.prepare("UPDATE tower_players SET state_json=json_set(state_json,'$.stats.leadershipXp',?) WHERE player_id=?").run(xp,saved.characterKey);
+ setXp(124);
+ assert.equal((await first('factions',{action:'create',name:'Moon Guard'})).status,400);
+ setXp(125);
  await second('session',{legacy:{avatar:{name:'Rowan',outfit:0,hair:0}}});
  const created=await first('factions',{action:'create',name:'Moon Guard',description:'Explore together'});
- assert.equal(created.status,200);assert.equal(created.membership.leader,1);
+ assert.equal(created.status,200);assert.equal(created.membership.leader,1);assert.equal(created.leadership.level,3);
  assert.equal((await second('factions',{action:'create',name:'moon guard'})).status,400);
  const directory=await second('factions?q=moon');assert.equal(directory.factions.length,1);
  const {id}=directory.factions[0];
