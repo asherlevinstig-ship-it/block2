@@ -1,3 +1,4 @@
+import {readFactions,changeFaction} from './factions.mjs';
 import {watchFlags} from '../public/region-catalog.js';
 import {normalizeVitals} from '../public/player-vitals.js';
 import {publishWorldActivity} from './world-activity.mjs';
@@ -120,6 +121,12 @@ export async function handlePlayerApi(request,env){
       return json({state,characterKey:id,revision:1,serverTime:Date.now()},200,{"Set-Cookie":COOKIE+"="+token+"; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age="+COOKIE_AGE});
     }
     if(!id)return json({error:"Load your character first."},401);
+    if(path==="/api/player/factions"){
+      if(request.method==="GET")return json(await readFactions(env.TOWER_DB,id,new URL(request.url).searchParams.get('q')));
+      const body=await bodyOf(request);
+      if(body.characterKey!==id)return json({error:"This tab belongs to a different character. Reload to continue."},409);
+      return json(await changeFaction(env.TOWER_DB,id,body));
+    }
     if(path==="/api/player/state"&&request.method==="GET"){
       const row=await settled(env,id,true);
       return row?json(packet(row)):json({error:"Character not found."},401);

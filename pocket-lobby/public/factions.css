@@ -1,0 +1,18 @@
+#factionsDialog{width:min(640px,calc(100vw - 24px));max-height:90dvh}
+.faction-window h3,.faction-window h4{margin:12px 0 6px}
+.faction-window p,.faction-window small{color:#c0cee1;overflow-wrap:anywhere}
+#factionStatus{min-height:1.2em;color:#f3d595;font-size:13px}
+.faction-window form button,.faction-window section button,#factionResults button{padding:7px 11px}
+.faction-window input,.faction-window textarea{min-width:0;padding:8px;background:#14243b;color:#eff4ff;border:1px solid #647a96;border-radius:7px;font:inherit}
+.faction-search{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px}
+.faction-search label{grid-column:1/-1}
+#factionResults{display:grid;gap:7px;margin:12px 0}
+#factionResults article,#myFaction li{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 12px;border:1px solid #495d78;border-radius:8px;background:#182a41}
+#factionResults article p{margin:3px 0;font-size:12px}
+#factionResults article b,#myFaction span,#myFaction h3{overflow-wrap:anywhere}
+#myFaction ul{display:grid;gap:6px;list-style:none;padding:0}
+.faction-create{padding:10px 0;border-top:1px solid #495d78}
+.faction-create summary{cursor:pointer;color:#f4da9f}
+#factionCreate{display:grid;gap:7px;margin-top:10px}
+#factionCreate button{justify-self:start}
+.faction-confirm{display:flex;gap:8px;margin-top:8px}
