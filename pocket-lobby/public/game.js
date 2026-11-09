@@ -497,6 +497,30 @@ let draft;
 let messages = [];
 let multiplayer=null;
 const remotePeers=new Map();
+const worldActivityTracker=typeof createWorldActivityTracker==='function'?createWorldActivityTracker(savedPlayerState):null;
+const worldFloats=[],worldFloatSeen=new Set();
+function addWorldFloat(actor,event){
+ if(!event||event.room!==currentRoom||!['gold','loss','push','catch','damage','heal','dodge'].includes(event.kind)||typeof event.id!=='string'||typeof event.label!=='string'||event.label.length>100)return;
+ if(actor!=='self'&&!remotePeers.has(actor))return;
+ const key=actor+':'+event.id;if(worldFloatSeen.has(key))return;worldFloatSeen.add(key);if(worldFloatSeen.size>500)worldFloatSeen.delete(worldFloatSeen.values().next().value);
+ const existing=worldFloats.filter(f=>f.actor===actor);if(existing.length>=4){existing[0].node.remove();worldFloats.splice(worldFloats.indexOf(existing[0]),1);}
+ if(worldFloats.length>=80){worldFloats.shift().node.remove();}
+ const node=document.createElement('span');node.className='world-float';node.dataset.kind=event.kind;node.textContent=event.label;$('worldFloats').append(node);
+ worldFloats.push({actor,room:currentRoom,node,started:performance.now(),lane:existing.length%4});
+ if(event.kind==='damage'&&remotePeers.has(actor))remotePeers.get(actor).hurtUntil=performance.now()+250;
+}
+function receiveWorldActivity(actor,events){for(const event of events.slice(-16))addWorldFloat(actor,event);}
+function updateWorldFloats(time){
+ const bounds=canvasBounds(),cx=view.width/2,cy=view.height/2-4;
+ for(let i=worldFloats.length-1;i>=0;i--){
+  const f=worldFloats[i],age=time-f.started,peer=f.actor==='self'?player:remotePeers.get(f.actor);
+  if(age>1800||f.room!==currentRoom||!peer){f.node.remove();worldFloats.splice(i,1);continue;}
+  const [x,y]=peer.seat?seatAnchor(peer.seat):point((f.actor==='self'?player.x:peer.rx)+.5,(f.actor==='self'?player.y:peer.ry)+.5);
+  f.node.style.left=Math.round(bounds.x+((x-cx)*zoom+cx)*bounds.scale+(f.lane%2?12:-12))+'px';
+  f.node.style.top=Math.round(bounds.y+((y-52-cy)*zoom+cy)*bounds.scale-f.lane*18-(reducedMotion.matches?0:age/55))+'px';
+  f.node.style.opacity=String(Math.min(1,(1800-age)/500));
+ }
+}
 function receivePeers(peers){
   const keep=new Set();
   for(const peer of peers.slice(0,20)){
@@ -511,14 +535,15 @@ function drawRemote(peer,time){
   const [x,y]=peer.seat?seatAnchor(peer.seat):point(peer.rx+.5,peer.ry+.5);
   surface(peer.rx+.2,peer.ry+.25,.6,.55,.2,'#43324452');
   const moving=Math.hypot(peer.x-peer.rx,peer.y-peer.ry)>.03,waveAge=Date.now()-(peer.waveAt??0);
-  sprite(ctx,x,y,{outfit:peer.outfit,trousers:peer.trousers,boots:peer.boots,hair:peer.hair},{direction:peer.direction,back:peer.back,cycle:moving?time/STEP_MS:0,seated:!!peer.seat,wave:waveAge>=0&&waveAge<WAVE_MS?waveAge/WAVE_MS:null,sheathed:!!peer.weapon,weaponTier:peer.weapon,vest:peer.armour,time});
+  ctx.save();if((peer.hurtUntil??0)>time)ctx.globalAlpha=.55;
+  sprite(ctx,x,y,{outfit:peer.outfit,trousers:peer.trousers,boots:peer.boots,hair:peer.hair},{direction:peer.direction,back:peer.back,cycle:moving?time/STEP_MS:0,seated:!!peer.seat,wave:waveAge>=0&&waveAge<WAVE_MS?waveAge/WAVE_MS:null,sheathed:!!peer.weapon,weaponTier:peer.weapon,vest:peer.armour,time});ctx.restore();
 }
 function updatePeerLabels(time){
   const p=canvasBounds(),cx=view.width/2,cy=view.height/2-4;
   for(const peer of remotePeers.values()){
     if(!peer.label){peer.label=document.createElement('span');peer.label.className='player-label';$('playerLabels').append(peer.label);}
-    const caption=peer.name+'|'+peer.weapon;
-    if(peer.caption!==caption){peer.caption=caption;peer.label.textContent=peer.name;peer.label.title=peer.name+(peer.weapon?' · '+(weaponCatalog[peer.weapon]?.name??peer.weapon):'');peer.labelWidth=peer.label.offsetWidth||Math.min(120,peer.name.length*6+10);}
+    const caption=peer.name+'|'+peer.weapon+'|'+peer.activity+'|'+(peer.activity==='combat'?peer.health:'');
+    if(peer.caption!==caption){peer.caption=caption;peer.label.textContent=peer.name+(peer.activity==='combat'?' · '+Array.from({length:5},(_,i)=>peer.health>i*20?'♥':'♡').join(''):peer.activity==='fishing'?' · Fishing':peer.activity==='gambling'?' · Gambling':'');peer.label.title=peer.name+(peer.weapon?' · '+(weaponCatalog[peer.weapon]?.name??peer.weapon):'');peer.labelWidth=peer.label.offsetWidth||Math.min(120,peer.name.length*6+10);}
     const [x,y]=peer.seat?seatAnchor(peer.seat):point(peer.rx+.5,peer.ry+.5);
     peer.label.style.left=Math.round(p.x+((x-cx)*zoom+cx)*p.scale-(peer.labelWidth??60)/2)+'px';
     peer.label.style.top=Math.round(p.y+((y-43-cy)*zoom+cy)*p.scale)+'px';
@@ -527,7 +552,8 @@ function updatePeerLabels(time){
 function connectRoom(){
   if(!multiplayer)return;
   const state=window.playerCloud?.initial;
-  if(autoJourney||state?.plan||state?.report){multiplayer.disconnect();$('networkStatus').textContent='Away · Work plan';return;}
+  if(autoJourney||state?.plan&&state.plan.source!=='rules'||state?.report){multiplayer.disconnect();$('networkStatus').textContent='Travelling · Auto Mode';return;}
+  if(multiplayer.room===currentRoom&&(multiplayer.connected||multiplayer.connecting))return;
   multiplayer.join(currentRoom);
 }
 function receiveRoomChat(message){
@@ -2504,6 +2530,7 @@ function draw(time){
   updateWorldLabels();
   drawHudMiniMap();
   updatePeerLabels(time);
+  updateWorldFloats(time);
 }
 
 
@@ -3630,6 +3657,8 @@ function updatePlayerStats(){
   $('fishingStats').textContent='Patience '+level+' · '+xp+'/'+target+' XP · Bait '+fishingGear.bait+' · Fish '+caughtFishCount()+'\nQuality chances · Common '+odds.common.toFixed(1)+'% · Fine '+odds.fine.toFixed(1)+'% · Rare '+odds.rare.toFixed(1)+'%'+(luck.rare?'\nLuck bonus · '+luckText:'');
 }
 function applyServerGameplay(state){
+  const floats=worldActivityTracker?.update(state,window.playerCloud?.serverTime??Date.now())??[];
+  if(!document.hidden)for(const event of floats)if(!['damage','heal','dodge'].includes(event.kind))addWorldFloat('self',event);
   credits=state.credits;goldEarned=state.goldEarned??0;Object.assign(firstUpgrade,state.firstUpgrade);
   characterRules=normalizeCharacterRules(state.characterRules);dungeonLootState=normalizeDungeonLoot(state.dungeonLoot);
   combatReports=state.combatReports??[];
@@ -5431,7 +5460,7 @@ function renderAutoJourneyHud(){
 function finishAutoJourney(){
   const state=autoJourneyState;autoArrivalKey=autoActivityKey(state);autoJourney=null;route=[];target=null;interaction=null;player.seat=null;
   setPlayerCombat(!!state?.plan?.activeHunt&&!!hunting.encounter&&currentRoom===state.location);
-  updateInventory();updateAdventurePanel();updateCombatPanel();window.towerRefreshAutoStatus?.();
+  updateInventory();updateAdventurePanel();updateCombatPanel();window.towerRefreshAutoStatus?.();if(state?.plan?.source==='rules')connectRoom();
   if(!state?.plan&&!state?.report){$('autoPanel').hidden=true;savePlayerState();connectRoom();}
 }
 function advanceAutoJourney(){
@@ -5478,7 +5507,7 @@ window.towerApplyRoutineState=state=>{
   if(!alreadyThere||autoJourney){if(!autoJourney||autoJourney.room!==state.location){route=[];target=null;}autoJourney={room:state.location,blocked:false};setPlayerCombat(false);}
   else {autoArrivalKey=autoActivityKey(state);setPlayerCombat(!!state.plan?.activeHunt&&!!hunting.encounter);}
   if(state.combatReceipt&&state.combatReceipt.id!==lastCombatReceipt){lastCombatReceipt=state.combatReceipt.id;if(!autoJourney)for(const event of state.combatReceipt.events??[])if((window.playerCloud?.serverTime??Date.now())-(event.at??0)<2500)recordCombatFx(combatArt,event,performance.now());}
-  updateInventory();updateAdventurePanel();updateCombatPanel();
+  updateInventory();updateAdventurePanel();updateCombatPanel();if(!autoJourney)connectRoom();
 };
 
 function openTrainingCourtyard(){
@@ -5501,7 +5530,7 @@ if(window.playerCloud&&typeof WebSocket!=='undefined'){
     flush:()=>window.playerCloud.flush(),checkRoom:async room=>{
       const response=await fetch('/api/world/connect?check=1&room='+encodeURIComponent(room),{credentials:'same-origin',cache:'no-store'});
       if(!response.ok){const data=await response.json().catch(()=>({})),error=new Error(data.error??'Room unavailable');error.status=response.status;throw error;}
-    },onPeers:receivePeers,onChat:receiveRoomChat,
+    },onPeers:receivePeers,onActivity:receiveWorldActivity,onChat:receiveRoomChat,
     onHistory:history=>{$('messages').replaceChildren();$('roomChatMessages').replaceChildren();for(const message of history)receiveRoomChat(message);},
     onStatus:text=>{$('networkStatus').textContent=text;$('roomChatStatus').textContent=text;$('openRoomChat').disabled=!Object.hasOwn(socialRooms,currentRoom);},
     onCorrection:correctRoomPosition,

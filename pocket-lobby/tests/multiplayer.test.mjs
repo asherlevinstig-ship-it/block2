@@ -15,7 +15,7 @@ test('room client filters itself, sends movement/chat and cancels stale joins',a
   local.x=6;await delay(145);assert(ws.sent.some(m=>m.type==='move'&&m.x===6));
   assert(room.sendChat('Hello'));assert.deepEqual(ws.sent.at(-1),{type:'chat',text:'Hello'});room.wave();assert.equal(ws.sent.at(-1).type,'wave');
   ws.message({type:'chat',message:{text:'Hi',name:'Other'}});assert.equal(chat[0].text,'Hi');
-  await room.join('pond');assert.equal(status,'Personal adventure');assert.equal(ws.readyState,3);assert.equal(room.connected,false);assert.deepEqual(peers,[]);
+  await room.join('depthsGate');assert.equal(status,'Personal adventure');assert.equal(ws.readyState,3);assert.equal(room.connected,false);assert.deepEqual(peers,[]);
  }finally{room.disconnect();}
  let resume;const pending=new Promise(resolve=>resume=resolve);
  const stale=createRoomConnection({getLocal:()=>local,flush:()=>pending,onPeers:()=>{},onChat:()=>{},onHistory:()=>{},onStatus:()=>{},onCorrection:()=>{},onUnseat:()=>{},onSessionChanged:()=>{},WebSocketImpl:Socket});
@@ -27,7 +27,7 @@ test('room ownership comes from the cookie and never exposes private metadata',a
  const token='a'.repeat(64),id=await tokenHash(token),state={location:'home',position:{x:5,y:7},avatar:{name:'Éowyn ✦',outfit:2,hair:3},homeFurniture:[]};
  sql.prepare('INSERT INTO tower_players VALUES (?, ?, 1, ?, ?)').run(id,JSON.stringify(state),'create',Date.now());
  const connect=(room,origin='https://tower.test')=>handleWorldConnect(new Request('https://tower.test/api/world/connect?room='+room+'&owner=someone-else',{headers:{Upgrade:'websocket',Origin:origin,Cookie:GUEST_COOKIE+'='+token}}),env);
- assert.equal((await connect('home')).status,200);assert.deepEqual(names,['home:'+id]);assert.equal(profiles[0].name,'Éowyn ✦');assert.equal((await connect('hub')).status,409);assert.equal((await connect('home','https://evil.test')).status,403);assert.equal((await connect('pond')).status,400);
+ assert.equal((await connect('home')).status,200);assert.deepEqual(names,['home:'+id]);assert.equal(profiles[0].name,'Éowyn ✦');assert.equal((await connect('hub')).status,409);assert.equal((await connect('home','https://evil.test')).status,403);assert.equal((await connect('depthsGate')).status,400);
  const peer=publicPeer({...profiles[0],boxes:[{x:1}],sessionHash:'secret'});for(const field of ['playerId','sessionHash','expiresAt','boxes','room'])assert(!Object.hasOwn(peer,field));
  sql.close();
 });
@@ -60,4 +60,8 @@ test('same-origin readiness checks enforce identity, location and lounge clothin
  const request=(room,headers={})=>new Request('https://tower.test/api/world/connect?check=1&room='+room,{headers:{Cookie:GUEST_COOKIE+'='+token,'Sec-Fetch-Site':'same-origin',...headers}});
  assert.equal((await handleWorldConnect(request('lounge'),env)).status,403);wearClothingSet(state.wardrobe,'tailoredSuit');write();const ready=await handleWorldConnect(request('lounge'),env);assert.equal(ready.status,200);assert.deepEqual(await ready.json(),{ready:true,room:'lounge'});assert.equal(opened,0);
  assert.equal((await handleWorldConnect(request('home'),env)).status,409);assert.equal((await handleWorldConnect(request('lounge',{'Sec-Fetch-Site':'cross-site'}),env)).status,403);assert.equal((await handleWorldConnect(request('lounge',{Origin:'https://evil.test'}),env)).status,403);
+});
+
+test('room activity messages reach observers, filter self and never become client-authored packets',async()=>{
+ const received=[],g=connectionFixture({onActivity:(id,events)=>received.push({id,events})});try{await g.room.join('home');const socket=g.sockets[0];socket.message({type:'welcome',selfId:'me',players:[],chat:[]});socket.message({type:'activity',player:'me',events:[{id:'self'}]});socket.message({type:'activity',player:'other',events:[{id:'win',label:'+5 gold'}]});assert.equal(received.length,1);assert.equal(received[0].id,'other');assert.equal(received[0].events[0].label,'+5 gold');}finally{g.room.disconnect();}
 });

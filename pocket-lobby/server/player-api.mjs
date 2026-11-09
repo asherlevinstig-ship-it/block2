@@ -1,3 +1,4 @@
+import {publishWorldActivity} from './world-activity.mjs';
 import {simpleAutoRules} from '../public/simple-auto.js';
 import {saveAutoSettings} from './auto-settings.mjs';
 import {isSmartlyDressed,normalizeWardrobe,clothingCatalog} from '../public/wardrobe.js';
@@ -33,13 +34,14 @@ function readPlayerState(row){
 }
 const packet=row=>({state:publicPlayerState(readPlayerState(row)),characterKey:row.player_id,revision:row.revision,lastOperation:row.last_request,serverTime:Date.now()});
 async function read(db,id){
-  return db.prepare("SELECT player_id, state_json, revision, last_request FROM tower_players WHERE player_id = ?").bind(id).first();
+  return db.prepare("SELECT player_id, state_json, revision, last_request, updated_at FROM tower_players WHERE player_id = ?").bind(id).first();
 }
 async function write(db,id,revision,state,operation){
   return db.prepare("UPDATE tower_players SET state_json = ?, revision = revision + 1, last_request = ?, updated_at = ? WHERE player_id = ? AND revision = ? RETURNING player_id, state_json, revision, last_request")
     .bind(JSON.stringify(state),operation,Date.now(),id,revision).first();
 }
-async function settled(db,id,activities=false){
+async function settled(env,id,activities=false){
+  const db=env.TOWER_DB;
   for(let attempt=0;attempt<5;attempt++){
     const row=await read(db,id);
     if(!row)return null;
@@ -51,7 +53,7 @@ async function settled(db,id,activities=false){
     const migrated=before.progressionVersion!==progressionVersion||before.safeVersion!==1;
     if(!planChanged&&!activityChanged&&!migrated)return row;
     const updated=await write(db,id,row.revision,state,"settle:"+crypto.randomUUID());
-    if(updated)return updated;
+    if(updated){await publishWorldActivity(env,id,JSON.parse(row.state_json),state,updated.revision,{fresh:now-(row.updated_at??0)<10000});return updated;}
   }
   throw new Error("Your character is busy. Please retry.");
 }
@@ -81,7 +83,7 @@ export async function handlePlayerApi(request,env){
     if(identity?.expired)return json({error:"Your account session expired. Sign in to continue.",reauthenticate:true},401);
     let id=identity?.playerId;
     if(path==="/api/player/session"&&request.method==="POST"){
-      const existing=id&&await settled(env.TOWER_DB,id,true);
+      const existing=id&&await settled(env,id,true);
       if(existing)return json(packet(existing));
       const body=await bodyOf(request),legacy={...body.legacy};migrateProgression(legacy);
       const state=normalizeState({...legacy,autoConfigured:undefined,pendingCharacterRules:undefined,autoSwitch:undefined,bedRest:undefined,safeVersion:1,ownedFurniture:{...(legacy.ownedFurniture??{bed:1}),safe:0},homeFurniture:(legacy.homeFurniture??[]).filter(item=>item.type!=='safe'),bank:undefined,controlMode:'play',meals:{},magic:undefined,...(body.newCharacter===true?{characterCreated:false,welcomeSeen:false,autoLesson:'required'}:{})});
@@ -116,11 +118,11 @@ export async function handlePlayerApi(request,env){
     }
     if(!id)return json({error:"Load your character first."},401);
     if(path==="/api/player/state"&&request.method==="GET"){
-      const row=await settled(env.TOWER_DB,id,true);
+      const row=await settled(env,id,true);
       return row?json(packet(row)):json({error:"Character not found."},401);
     }
     if(path==="/api/player/rankings"&&request.method==="GET"){
-      const row=await settled(env.TOWER_DB,id);
+      const row=await settled(env,id);
       if(!row)return json({error:"Character not found."},401);
       return json(await readRankings(env.TOWER_DB,id,identity.account));
     }
@@ -128,7 +130,7 @@ export async function handlePlayerApi(request,env){
     const body=await bodyOf(request);
     if((body.characterKey!==undefined||identity.account)&&body.characterKey!==id)return json({error:"This tab belongs to a different character. Reload to continue."},409);
     if(typeof body.operation!=="string"||body.operation.length>80||!Number.isInteger(body.revision))return json({error:"Missing save revision."},400);
-    const row=["/api/player/presence","/api/player/control"].includes(path)?await read(env.TOWER_DB,id):await settled(env.TOWER_DB,id);
+    const row=["/api/player/presence","/api/player/control"].includes(path)?await read(env.TOWER_DB,id):await settled(env,id);
     if(!row)return json({error:"Character not found."},401);
     if(row.last_request===body.operation)return json(packet(row));
     if(row.revision!==body.revision)return json({error:"Your character changed in another tab or completed an offline action.",...packet(row)},409);
@@ -220,6 +222,7 @@ export async function handlePlayerApi(request,env){
     }
     const updated=await write(env.TOWER_DB,id,row.revision,state,body.operation);
     if(!updated)return json({error:"Another tab saved first. Reload your character."},409);
+    await publishWorldActivity(env,id,JSON.parse(row.state_json),state,updated.revision,{fresh:Date.now()-(row.updated_at??0)<10000});
     return json(packet(updated));
   }catch(error){
     if(error.status===409)return json({error:error.message},409);

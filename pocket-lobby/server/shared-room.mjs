@@ -1,10 +1,11 @@
+import {sharedActivity} from '../public/world-activity.js';
 import {armourSelection} from '../public/hunting.js';
 import {isSmartlyDressed} from '../public/wardrobe.js';
 import {resolveIdentity,tokenHash} from './identity.mjs';
 import {socialRooms,roomBoxes,validRoomTile,reachableMove,roomSeats} from '../public/shared-world.js';
 
 const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store'}});
-export function publicPeer(meta){return {id:meta.id,name:meta.name,outfit:meta.outfit,trousers:meta.trousers??0,boots:meta.boots??0,hair:meta.hair,weapon:meta.weapon,armour:meta.armour??null,x:meta.x,y:meta.y,direction:meta.direction,back:meta.back,seat:meta.seat??null,waveAt:meta.waveAt??0};}
+export function publicPeer(meta){return {id:meta.id,name:meta.name,outfit:meta.outfit,trousers:meta.trousers??0,boots:meta.boots??0,hair:meta.hair,weapon:meta.weapon,armour:meta.armour??null,x:meta.x,y:meta.y,direction:meta.direction,back:meta.back,seat:meta.seat??null,waveAt:meta.waveAt??0,health:meta.health??100,activity:meta.activity??null,auto:meta.auto===true};}
 export async function handleWorldConnect(request,env){
   const url=new URL(request.url),room=url.searchParams.get('room'),check=url.searchParams.get('check')==='1';
   if(request.method!=='GET'||!check&&request.headers.get('Upgrade')?.toLowerCase()!=='websocket')return json({error:'A WebSocket connection is required.'},426);
@@ -15,12 +16,12 @@ export async function handleWorldConnect(request,env){
   if(!row)return json({error:'Character not found.'},401);
   const state=JSON.parse(row.state_json);
   if(room==='lounge'&&!isSmartlyDressed(state.wardrobe))return json({error:'Choose a Tailored Suit or Moonlit Dress in Wardrobe before entering the lounge.'},403);
-  if(state.location!==room||state.plan||state.report)return json({error:'Save your current location before joining.'},409);
+  if(state.location!==room||state.plan&&state.plan.source!=='rules'||state.report)return json({error:'Save your current location before joining.'},409);
   const boxes=roomBoxes(room,state.homeFurniture),position=state.position??{x:5,y:7};
   if(!validRoomTile(room,position.x,position.y,boxes))return json({error:'Move to an open tile and try again.'},409);
   if(check)return json({ready:true,room});
   const profile={playerId:identity.playerId,id:(await tokenHash('public:'+identity.playerId)).slice(0,24),sessionHash:identity.sessionHash??null,expiresAt:identity.expiresAt,room,
-    name:state.avatar?.name??'Guest',outfit:state.avatar?.outfit??0,trousers:state.avatar?.trousers??0,boots:state.avatar?.boots??0,hair:state.avatar?.hair??0,weapon:state.combatGear?.equippedWeapon??null,armour:armourSelection(state.combatGear),x:position.x,y:position.y,direction:'right',back:false};
+    name:state.avatar?.name??'Guest',outfit:state.avatar?.outfit??0,trousers:state.avatar?.trousers??0,boots:state.avatar?.boots??0,hair:state.avatar?.hair??0,weapon:state.combatGear?.equippedWeapon??null,armour:armourSelection(state.combatGear),x:position.x,y:position.y,direction:'right',back:false,health:state.health??100,activity:sharedActivity(state),auto:state.plan?.source==='rules'};
   const namespace=room==='home'?'home:'+identity.playerId:'public:'+room;
   const stub=env.SHARED_ROOMS.get(env.SHARED_ROOMS.idFromName(namespace));
   return stub.fetch(new Request('https://room.internal/connect',{headers:{Upgrade:'websocket','X-Tower-Profile':encodeURIComponent(JSON.stringify(profile))}}));
@@ -34,7 +35,20 @@ export class SharedRoom{
   peers(){return [...this.sessions.values()].map(publicPeer);}
   send(ws,data){try{ws.send(JSON.stringify(data));}catch{this.sessions.delete(ws);}}
   snapshot(){const data={type:'snapshot',players:this.peers()};for(const ws of this.sessions.keys())this.send(ws,data);}
-  fetch(request){return this.ctx.blockConcurrencyWhile(()=>this.join(request));}
+  fetch(request){return this.ctx.blockConcurrencyWhile(()=>new URL(request.url).pathname==='/activity'&&request.method==='POST'?this.activity(request):this.join(request));}
+  async activity(request){
+    const {playerId,revision,events=[]}=await request.json();
+    const entry=[...this.sessions.entries()].find(([,meta])=>meta.playerId===playerId);if(!entry)return json({ok:true});
+    const [ws,meta]=entry;if(!Number.isInteger(revision)||revision<=(meta.activityRevision??0))return json({ok:true});
+    const row=await this.env.TOWER_DB.prepare('SELECT state_json FROM tower_players WHERE player_id = ?').bind(playerId).first();if(!row)return json({ok:true});const state=JSON.parse(row.state_json);
+    meta.activityRevision=revision;
+    const fresh=events.filter(e=>e&&typeof e.id==='string'&&e.id.length<200&&['gold','loss','push','catch','damage','heal','dodge'].includes(e.kind)&&typeof e.label==='string'&&e.label.length<=100&&Number.isFinite(e.at)&&Date.now()-e.at>=0&&Date.now()-e.at<5000).slice(-16);
+    if(fresh.length)for(const peer of this.sessions.keys())this.send(peer,{type:'activity',player:meta.id,events:fresh});
+    if(state.location!==meta.room||state.report||state.plan&&state.plan.source!=='rules'){ws.close(1000,'Changed area');this.sessions.delete(ws);this.snapshot();return json({ok:true});}
+    meta.health=Math.max(0,Math.min(100,state.health??100));meta.activity=sharedActivity(state);meta.auto=state.plan?.source==='rules';
+    if(meta.auto){meta.x=state.position?.x??meta.x;meta.y=state.position?.y??meta.y;meta.seat=null;}
+    ws.serializeAttachment(meta);this.snapshot();return json({ok:true});
+  }
   async join(request){
     let profile;try{profile=JSON.parse(decodeURIComponent(request.headers.get('X-Tower-Profile')));}catch{return json({error:'Invalid room identity.'},403);}
     if(!profile?.playerId||!profile.id||!Object.hasOwn(socialRooms,profile.room))return json({error:'Invalid room identity.'},403);
@@ -53,7 +67,7 @@ export class SharedRoom{
     if(meta.sessionHash){const session=await this.env.TOWER_DB.prepare('SELECT a.player_id FROM tower_sessions s JOIN tower_accounts a ON a.account_id = s.account_id WHERE s.session_hash = ? AND s.expires_at > ?').bind(meta.sessionHash,Date.now()).first();if(session?.player_id!==meta.playerId)return false;}
     else if((await this.env.TOWER_DB.prepare('SELECT account_id FROM tower_accounts WHERE player_id = ?').bind(meta.playerId).first())?.account_id)return false;
     const row=await this.env.TOWER_DB.prepare('SELECT state_json FROM tower_players WHERE player_id = ?').bind(meta.playerId).first();
-    if(!row)return false;const state=JSON.parse(row.state_json);return !state.plan&&state.location===meta.room;
+    if(!row)return false;const state=JSON.parse(row.state_json);return (!state.plan||state.plan.source==='rules')&&!state.report&&state.location===meta.room;
   }
   async webSocketMessage(ws,raw){
     const meta=this.sessions.get(ws);if(!meta)return;
@@ -64,6 +78,7 @@ export class SharedRoom{
     let message;try{message=JSON.parse(raw);}catch{return;}
     if(message?.type==='ping'){this.send(ws,{type:'pong'});return;}
     if(message?.type==='move'){
+      if(meta.auto)return;
       const steps=Math.min(4,Math.max(0,Math.floor((now-meta.lastMoveAt)/110)));
       if(!reachableMove(meta.room,meta,message,meta.boxes,steps)){this.send(ws,{type:'correction',x:meta.x,y:meta.y});return;}
       if(meta.x!==message.x||meta.y!==message.y)meta.seat=null;const moved=meta.x!==message.x||meta.y!==message.y;meta.x=message.x;meta.y=message.y;meta.direction=message.direction==='left'?'left':'right';meta.back=message.back===true;if(moved)meta.lastMoveAt=now;

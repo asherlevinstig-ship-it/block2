@@ -1,4 +1,4 @@
-export const socialRooms={tailor:[10,10],furnishings:[10,10],hub:[18,16],lounge:[10,10],outside:[14,12],store:[10,10],market:[10,10],armory:[10,10],home:[10,10]};
+export const socialRooms={grove:[12,10],shrine:[12,10],roots:[12,10],pond:[12,10],logging:[12,10],clearing:[12,10],ruins:[12,10],trail:[12,10],creek:[12,10],tailor:[10,10],furnishings:[10,10],hub:[18,16],lounge:[10,10],outside:[14,12],store:[10,10],market:[10,10],armory:[10,10],home:[10,10]};
 const layouts={
   tailor:[['reception',3,2],['sofa',7,6],['lamp',8,1],['plant',1,1],['plant',8,8]],
   furnishings:[['reception',3,1],['bed',6,2],['lamp',8,2],['bookcase',1,1],['sofa',6,6],['table',6,8],['chair',8,8,2],['plant',1,8],['safe',8,1]],
