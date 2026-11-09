@@ -8,9 +8,9 @@ export const addKinds={
 };
 const effects=['burn','chilledUntil','weakenedUntil','weakenPercent','interruptResistUntil','castHits','castDeadline','stagger','staggerUntil','staggerWeakUntil','staggerResistUntil','exposedUntil'];
 const heroFields=['stamina','staminaAt','dodgeUntil','nextDodgeAt','nextPlayerAt','nextFleeAt','magicWard','magicWardUntil','usedEssences','counterUntil','counterPercent','autoDodgeUntil'];
-export function initializeAdds(e,now){
+export function initializeAdds(e,now,foxBond=false){
  if(e.brainVersion!==2||e.arenaRoom==='depthsGate')return e;
- return {...e,addsVersion:1,adds:[],addWaves:[],addKills:0,manualTarget:false,addWaveAt:e.enemy==='depthsGuardian'?0:now+3500,combatTarget:'leader'};
+ return {...e,addsVersion:1,...(foxBond?{foxBond:true}:{}),adds:[],addWaves:[],addKills:0,manualTarget:false,addWaveAt:e.enemy==='depthsGuardian'?0:now+3500,combatTarget:'leader'};
 }
 export function activeAdd(e){return e?.adds?.find(a=>a.id===e.combatTarget&&a.health>0);}
 export function combatTargetTile(e){const a=activeAdd(e);return a?{x:a.x,y:a.y}:arenaEnemy(e);}
@@ -85,5 +85,5 @@ export function normalizeAdds(e){
   return out;
  });
  const target=e.combatTarget??'leader';if(target!=='leader'&&!ids.has(target))throw new Error('Invalid combat target.');
- return {addsVersion:1,adds,addWaves:[...e.addWaves],addWaveAt:time(e.addWaveAt),addKills:time(e.addKills??0),manualTarget:e.manualTarget===true,combatTarget:target};
+ return {addsVersion:1,...(e.foxBond===true?{foxBond:true}:{}),adds,addWaves:[...e.addWaves],addWaveAt:time(e.addWaveAt),addKills:time(e.addKills??0),manualTarget:e.manualTarget===true,combatTarget:target};
 }

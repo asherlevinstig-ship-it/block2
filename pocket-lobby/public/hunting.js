@@ -1,3 +1,4 @@
+import {FOX_STAGGER} from './familiars.js';
 import {addKinds,activeAdd,addEncounter,mergeAddEvent,normalizeAdds} from './dungeon-adds.js';
 import {smartAttacks,smartProfile,planBrainAttack,normalizeBrain} from './enemy-brain.js';
 import {arenaEnemy,arenaPlayer,arenaInDanger,arenaBehindCover,dungeonFloor} from './dungeon-arena.js';
@@ -338,7 +339,7 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
     if(result.encounter.health>0&&now>=(encounter.staggerResistUntil??0)){
       const profile=staggerProfile(enemy),before=encounter.stagger??0;
       const armourFactor=result.shellGuarded?Math.max(.25,(attributes.damage-enemy.shellArmor)/Math.max(1,attributes.damage)):1;
-      result.staggerGained=Math.min(profile.limit-before,Math.ceil(weaponStagger(weapon,upgrade,result.counter)*armourFactor));
+      result.staggerGained=Math.min(profile.limit-before,Math.ceil(weaponStagger(weapon,upgrade,result.counter)*armourFactor)+(encounter.addActor&&encounter.foxBond?FOX_STAGGER:0));
       result.encounter.stagger=before+result.staggerGained;
       if(result.encounter.stagger>=profile.limit){
         result.staggered=true;result.encounter.stagger=0;

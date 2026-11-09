@@ -1,6 +1,7 @@
 import {moonwood} from '../../public/moonwood.js';
 import * as regionCatalog from '../../public/region-catalog.js';
 import * as explorationFog from '../../public/exploration-fog.js';
+import * as familiarRules from '../../public/familiars.js';
 import * as playerVitals from '../../public/player-vitals.js';
 import * as dungeonAdds from '../../public/dungeon-adds.js';
 import * as dungeonArena from '../../public/dungeon-arena.js';
@@ -64,7 +65,7 @@ export function boot(saved){
   const html=fs.readFileSync(new URL('index.html',root),'utf8');
   for(const [,id] of html.matchAll(/id="([^"]+)"/g))nodes.set(id,new Node());
   nodes.get('profile').children=[new Node(),new Node()];
-  const context=vm.createContext({moonwood,...regionCatalog,...dungeonArena,...dungeonAdds,...explorationFog,...worldActivity,...playerVitals,...autoFeedback,...cookingRules,...bedRules,...dungeonLootUI,drawEnvironmentFx,...loungeUI,...essenceUI,...progressionUI,...fishing,...hunting,...art,...fx,...quests,...historyRules,...shopUI,...clothes,...woodUI,...craftingUI,...sharedWorld,...jobs,...rulesUI,...commissions,...depthsUI,
+  const context=vm.createContext({moonwood,...regionCatalog,...dungeonArena,...dungeonAdds,...explorationFog,...worldActivity,...playerVitals,...familiarRules,...autoFeedback,...cookingRules,...bedRules,...dungeonLootUI,drawEnvironmentFx,...loungeUI,...essenceUI,...progressionUI,...fishing,...hunting,...art,...fx,...quests,...historyRules,...shopUI,...clothes,...woodUI,...craftingUI,...sharedWorld,...jobs,...rulesUI,...commissions,...depthsUI,
     document:{getElementById:id=>{assert(nodes.has(id),'Missing HTML element '+id);return nodes.get(id);},createElement:()=>new Node(),querySelectorAll:()=>[],querySelector:()=>null,addEventListener:noop,activeElement:new Node()},
     localStorage:{getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,v)},
     matchMedia:()=>({matches:false}),requestAnimationFrame:fn=>frames.push(fn),performance:{now:()=>1000},setTimeout:noop,clearTimeout:noop,

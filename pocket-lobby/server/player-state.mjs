@@ -1,5 +1,6 @@
 import {normalizeVitals,useHunger} from '../public/player-vitals.js';
 import {watchRooms,watchFlags,willowmereRooms,isFishingRoom} from '../public/region-catalog.js';
+import {normalizeFamiliars,familiarFishingTime} from '../public/familiars.js';
 import {canUseArmour} from '../public/hunting.js';
 import {settleExplorationPlan} from './exploration-plan.mjs';
 import {normalizeBedRest} from './bed-rest.mjs';
@@ -104,6 +105,7 @@ export function normalizeState(input={}){
   state.safeVersion=input.safeVersion;migrateHomeSafe(state);
   if((state.ownedFurniture.safe??0)>1)throw new Error('Invalid home safe count.');
   if((state.homeFurniture??[]).filter(item=>item.type==='safe').length>1||(state.homeFurniture??[]).some(item=>item.type==='safe'&&(!ownsHomeSafe(state)||!Number.isInteger(item.x)||!Number.isInteger(item.y))))throw new Error('Invalid home safe placement.');
+  if(input.familiars!==undefined)state.familiars=normalizeFamiliars(input.familiars);
   if(input.magic!==undefined)state.magic=normalizeMagic(input.magic);
   state.meals=counts(input.meals);
   if(Object.keys(state.meals).some(id=>!Object.hasOwn(mealRecipes,id)))throw new Error('Invalid meal inventory.');
@@ -132,7 +134,7 @@ export function startPlan(state,{hours,baitLimit,kind,source},now){
   const rod=fishingCatalog.rods[state.fishingGear.equippedRod];
   if(skillLevel(state.stats.patienceXp)<rod.patience)throw new Error("Your Patience is too low for this rod.");
   // Offline casts take longer than direct fishing and never receive the Reel bonus.
-  const interval=Math.round(60000*rod.duration/4500);
+  const interval=familiarFishingTime(state,60000*rod.duration/4500);
   state.plan={
     startedAt:now,endAt:now+hours*3600000,nextCatchAt:now+interval,interval,
     baitLimit,rod:state.fishingGear.equippedRod,catches:{},baitUsed:0,xp:0,

@@ -72,6 +72,7 @@ const ownedFurniture=Object.fromEntries(Object.keys(types).map(type=>{
   return [type,Math.max(previousStock[type]??(type==='bed'?1:0),placed+oldLounge)];
 }));
 const availableFurniture=type=>(ownedFurniture[type]??0)-countFurniture(homeFurniture,type);
+let familiarState=normalizeFamiliars(savedPlayerState?.familiars);
 const adventure={lantern:false,groveTrail:false,bridge:false,shrine:false,shortcut:false,discovered:[],silverfin:0,...savedPlayerState?.adventure};
 let depthsRun=savedPlayerState?.depthsRun??null,depthsExploring=false;
 let depthsDiscovered=savedPlayerState?.depthsDiscovered===true||!!depthsRun
@@ -160,7 +161,7 @@ function restoreServerTimber(cut,serverTime,tree){
   updateWoodPanel();
 }
 async function completeServerTimber(session,time){
-  if(session.completing)return;
+  if(session.completing||serverActionBusy)return;
   session.completing=true;
   const oldLevel=woodcuttingLevel(woodcutting),key=timberKey(session.tree);
   try{
@@ -544,6 +545,7 @@ function drawRemote(peer,time){
   ctx.save();if((peer.hurtUntil??0)>time)ctx.globalAlpha=.55;
   sprite(ctx,x,y,{outfit:peer.outfit,trousers:peer.trousers,boots:peer.boots,hair:peer.hair},{direction:peer.direction,back:peer.back,cycle:moving?time/STEP_MS:0,seated:!!peer.seat,wave:waveAge>=0&&waveAge<WAVE_MS?waveAge/WAVE_MS:null,sheathed:!!peer.weapon,weaponTier:peer.weapon,vest:peer.armour,fishing:isFishingRoom(currentRoom)&&peer.activity==='fishing'&&!moving?'waiting':null,fishingAge:time,time});
   if(isFishingRoom(currentRoom)&&peer.activity==='fishing'&&!moving)drawFishingMoment(x,y,time,{started:time-2000,castEnds:time-1500,biteAt:Infinity,landAt:Infinity},{y:peer.ry,direction:peer.direction,back:peer.back});
+  drawFamiliar(ctx,peer.familiar,x+(peer.direction==='left'?13:-13),y+4,time,{flipped:peer.direction==='left',reduced:reducedMotion.matches});
   ctx.restore();
 }
 function updatePeerLabels(time){
@@ -1356,12 +1358,62 @@ function updateCombatPanel(){
     $('adventureLandmark').disabled=health<=0||unavailable()||!combatGear.equippedWeapon;
   }
 }
+function familiarSeconds(){return Math.max(0,Math.ceil(((familiarState.readyAt[familiarState.equipped]??0)-combatNow())/1000));}
+function canScoutHere(){return moonwood.has(currentRoom)&&!dungeonRooms.includes(currentRoom);}
+function foxTargetReady(e=hunting.encounter){
+ const add=activeAdd(e),now=combatNow();return !!add&&add.spawnAt<=now&&add.lockedFor===add.attackAt&&add.attackAt>now;
+}
+async function useFamiliar(){
+ const id=familiarState.equipped;if(!id||!window.playerCloud?.gameplay)return;
+ if(familiarSeconds()){note(familiars[id].ability+' is still recovering.');return;}
+ if(id==='fox'){
+  if(!player.inCombat||!foxTargetReady()){note('Select a dungeon add during its attack warning.');return;}
+  if($('familiarsDialog').open)$('familiarsDialog').close();
+  sendServerCombat('familiar');return;
+ }
+ const session=fishingSession;
+ try{
+  const packet=await serverGameplay('familiarUse',{castId:session?.serverCastId});
+  if(id==='otter'&&session&&fishingSession===session&&packet.state.fishingCast){session.bonus=packet.state.fishingCast.bonus;note('Second Chance · +5 bonus Patience XP');}
+  if(id==='owl'){if($('familiarsDialog').open)$('familiarsDialog').close();if($('hudMapDialog').open)$('hudMapDialog').close();note('Moon Sight · Follow the silver marks.');}
+ }catch(error){if($('familiarsDialog').open)$('familiarStatus').textContent=error.message;else note(error.message);}
+}
+function drawMoonSight(time){
+ const clues=new Set(['lanternStand','moonwell','mothAltar','watchBeacon','meadowCache','grottoCache','watchCache','riverBridge']);
+ const markers=[...roomDoors[currentRoom].filter(doorAvailable).map(door=>door.tile),...roomFurniture().filter(item=>clues.has(item.type))];
+ for(const {x,y} of markers){
+  surface(x+.12,y+.12,.76,.76,1,'#b2baff44','#d6dbff');
+  const [px,py]=point(x+.5,y+.5,14+(reducedMotion.matches?0:Math.sin(time/250)*3));
+  polygon([[px,py-5],[px+4,py],[px,py+5],[px-4,py]],'#e3e5ff','#909ad6');
+ }
+}
+function renderFamiliars(){
+ const cards=$('familiarCards');cards.replaceChildren();
+ for(const [id,item] of Object.entries(familiars)){
+  const owned=familiarState.owned.includes(id),equipped=familiarState.equipped===id;
+  const unlocked=familiarUnlocked({history,adventure,depthsDiscovered},id);
+  const card=document.createElement('article');card.className='familiar-card';card.dataset.equipped=String(equipped);card.style.setProperty('--familiar-color',item.color);
+  const header=document.createElement('header'),art=document.createElement('canvas'),copy=document.createElement('div'),title=document.createElement('h3'),tag=document.createElement('small');
+  art.width=48;art.height=46;art.setAttribute('aria-hidden','true');drawFamiliar(art.getContext('2d'),id,24,id==='owl'?46:36,0,{scale:3,reduced:true});
+  title.textContent=item.name;tag.textContent=equipped?'Equipped':owned?'Befriended':unlocked?'Ready to befriend':item.unlock;copy.append(title,tag);header.append(art,copy);card.append(header);
+  for(const [name,detail] of [[item.passive,item.perk],[item.ability,item.detail]]){const p=document.createElement('p'),b=document.createElement('b');b.textContent=name;const description=document.createElement('span');description.textContent=detail;p.append(b,description);card.append(p);}
+  const actions=document.createElement('div'),button=document.createElement('button');actions.className='familiar-actions';button.type='button';button.textContent=equipped?'Unequip':owned?'Equip':unlocked?'Befriend':'Locked';button.disabled=!owned&&!unlocked;
+  button.onclick=async()=>{try{await serverGameplay(owned?'familiarEquip':'familiarRecruit',{id:equipped?null:id});$('familiarStatus').textContent=equipped?'Familiar unequipped.':item.name+(owned?' equipped.':' befriended. You can equip it now.');renderFamiliars();}catch(error){$('familiarStatus').textContent=error.message;}};
+  actions.append(button);
+  if(equipped){const use=document.createElement('button');use.type='button';use.textContent=item.ability;use.onclick=()=>useFamiliar();actions.append(use);}
+  card.append(actions);cards.append(card);
+ }
+}
+$('openFamiliars').onclick=()=>{$('familiarStatus').textContent='';renderFamiliars();if(!$('familiarsDialog').open)$('familiarsDialog').showModal();};
+
 function updateDungeonArenaHud(){
  const e=hunting.encounter,enemy=e?huntEnemy(e):dungeonEnemyPreview(huntEnemyForRoom(currentRoom)),panel=$('dungeonArenaHud');
  panel.hidden=!depthsRun||!enemy||!depthsEnemyAvailable(depthsRun,currentRoom);if(panel.hidden)return;
  panel.dataset.adds=String(e?.addsVersion===1);
  const selected=e&&activeAdd(e),targetEnemy=selected?addKinds[selected.kind]:enemy;
  $('dungeonEnemyName').textContent=(selected?'Target · ':enemy.elite?'Elite · ':'')+targetEnemy.name;
+ const ability=$('dungeonFamiliar'),fox=!!e&&familiarState.equipped==='fox',cooldown=fox?familiarSeconds():0;
+ ability.hidden=!fox;ability.disabled=!fox||!!cooldown||!foxTargetReady(e);ability.textContent=cooldown?'Pounce · '+cooldown+'s':'Cinder Pounce';ability.title='Select an add during its attack warning · G';
  const phase=vaultPhase(e);$('dungeonPhase').hidden=!phase;$('dungeonPhase').textContent=phase?'Phase '+phase.index+' · '+phase.name:'';
  $('dungeonStamina').hidden=!e;const stamina=e?combatStamina(e,playerStats,combatNow(),combatGear.moonwellCharmEquipped):100;$('dungeonStaminaBar').value=stamina;$('dungeonStaminaValue').textContent=Math.floor(stamina);
  $('dungeonDodge').title='Costs '+combatDodgeCost(armourSelection(combatGear))+' stamina · Space'+(e?.brainVersion===2?' · Each step costs '+ARENA_STEP_COST:'');
@@ -1393,6 +1445,7 @@ function updateDungeonArenaHud(){
 }
 $('dungeonEngage').onclick=()=>{const enemy=huntEnemyForRoom(currentRoom),item=roomFurniture().find(i=>i.type===enemy?.prop);if(item)use(item);};
 $('dungeonDodge').onclick=()=>combatAction('dodge');
+$('dungeonFamiliar').onclick=()=>useFamiliar();
 $('dungeonFlee').onclick=()=>combatAction('flee');
 
 function updateCombatMoment(time){
@@ -2597,6 +2650,7 @@ function draw(time){
     const foe=combatTargetTile(hunting.encounter);const [enemyX,enemyY]=point(foe.x+.5,foe.y+.5);
     const thrust=enemy?pose.lunge-pose.recoil:0;
     sprite(ctx,x+Math.sign(enemyX-x)*thrust-pose.dodge,y+Math.sign(enemyY-y)*thrust+pose.dodge*.4,avatar,{direction:player.direction,back:player.back,cycle,seated:!!seat,wave,weapon:autoChop||!!woodSession||pose.armed&&!!combatGear.equippedWeapon,sheathed:!autoChop&&!woodSession&&!pose.armed&&Object.hasOwn(socialRooms,currentRoom)&&!!combatGear.equippedWeapon,weaponTier:woodSession||autoChop?'basicAxe':combatGear.equippedWeapon,pose:spritePose,vest:armourSelection(combatGear),fishing:cast?fishingMoments.phase(cast,time):null,fishingAge:cast?time-cast.started:0,time});
+    drawFamiliar(ctx,familiarState.equipped,x+(player.direction==='left'?13:-13),y+4,time,{flipped:player.direction==='left',reduced:reducedMotion.matches});
     if(cast)drawFishingMoment(x,y,time,cast);
     drawCatchReveal(x,y,time);
     if(player.inCombat){
@@ -2636,6 +2690,7 @@ function draw(time){
     hitboxes.push({item,shape});
   }
   if(!drawn)drawPlayer();
+  if(moonSightActive(familiarState,currentRoom,combatNow()))drawMoonSight(time);
   if(enemy)drawCombatWorldFx({ctx,point,time,now:combatNow(),events:combatArt,player,reduced:reducedMotion.matches,encounter:hunting.encounter});
   drawWoodEffects(time);
   if(enemy)drawCombatOverlayFx({ctx,width,height,time,now:combatNow(),events:combatArt,encounter:hunting.encounter,health,reduced:reducedMotion.matches,enemy});
@@ -3057,7 +3112,7 @@ function navigateHud(destination){
   showHudMap(destination);
 }
 function worldMapVisibility(){
- return explorationVisibility({currentRoom,discovered:adventure.discovered,knownRooms:explorationRegions['The Tower'],rooms:Object.keys(roomDetails),exits:hudRoomExits});
+ return explorationVisibility({currentRoom,discovered:adventure.discovered,knownRooms:explorationRegions['The Tower'],rooms:Object.keys(roomDetails),exits:hudRoomExits,scout:familiarState.equipped==='owl'&&canScoutHere()});
 }
 function mapPlaceName(room){return worldMapVisibility().status(room)==='discovered'?explorationName(room):'Unexplored';}
 function mapRouteVisible(room){const fog=worldMapVisibility(),path=hudRoute(room);return fog.status(room)!=='hidden'&&path.every((door,i)=>fog.known.has(door.to)||i===path.length-1);}
@@ -3073,6 +3128,7 @@ function showHudMap(destination=null){
   if(destination&&destination!=='shops'&&!mapRouteVisible(destination))destination=null;
   const next=destination&&!shops?hudNextDoor(destination):null;
   $('hudMapTitle').textContent=shops?'Tower shops':'World map';
+  const moonButton=$('mapMoonSight');moonButton.hidden=shops||familiarState.equipped!=='owl'||!canScoutHere();moonButton.disabled=!!familiarSeconds()||unavailable();moonButton.textContent=familiarSeconds()?'Moon Sight · '+familiarSeconds()+'s':'Moon Sight';
   $('hudMapIntro').textContent=shops
     ?'Choose a shop to see the way there.'
     :next?'To reach '+mapPlaceName(destination)+', start with '+mapPlaceName(next.to)+'.'
@@ -3859,6 +3915,7 @@ function applyServerGameplay(state){
   health=state.health;playerVitals=normalizeVitals(state.vitals);updateVitalsHud();
   if(previousRest&&!homeBedRest&&health>=100){showTransaction('Rest complete',[{icon:'♥',text:'+'+(100-previousRest.startHealth)+' HP · All five hearts restored'}]);note('Fully rested. Ready for your next adventure.');}
   meals={...state.meals};
+  familiarState=normalizeFamiliars(state.familiars);
   magicState=state.magic?normalizeMagic(state.magic):null;
   Object.assign(hunting,state.hunting);
   if(player.inCombat&&hunting.encounter?.arenaVersion===1&&!step&&!route.length){const p=arenaPlayer(hunting.encounter);if(p.x!==player.cx||p.y!==player.cy)route=walkingPath({x:player.cx,y:player.cy},p)??[];}
@@ -4351,7 +4408,7 @@ function updateTradingPost(){
 }
 function savePlayerState(){
   if(activityBusy||autoJourney||window.playerCloud?.initial?.plan||window.playerCloud?.initial?.report)return;
-  const snapshot={safeVersion:1,progressionVersion,goldEarned,firstUpgrade,tradingPostGuideComplete,bedLessonComplete,credits,health,vitals:playerVitals,woodcutting,history,quest,combatGear,hunting,depthsRun,depthsDiscovered,ownedFurniture,furniture:[],homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats,fishingGear,huntingLoot,fishStock,avatar,wardrobe,location:currentRoom,position:{x:player.cx,y:player.cy}};
+  const snapshot={safeVersion:1,progressionVersion,goldEarned,firstUpgrade,tradingPostGuideComplete,bedLessonComplete,credits,health,vitals:playerVitals,familiars:familiarState,woodcutting,history,quest,combatGear,hunting,depthsRun,depthsDiscovered,ownedFurniture,furniture:[],homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats,fishingGear,huntingLoot,fishStock,avatar,wardrobe,location:currentRoom,position:{x:player.cx,y:player.cy}};
   save('player-state',snapshot);
   if(window.playerCloud)window.playerCloud.enqueue(JSON.parse(JSON.stringify(snapshot)));
   updateInventory();
@@ -4579,6 +4636,7 @@ function currentActivityPrompt(){
   if(isFishingRoom(currentRoom)){
     if(fishingSession){
       const phase=fishingMoments.phase(fishingSession,performance.now());
+      if(phase==='landing'&&familiarState.equipped==='otter'&&!fishingSession.bonus&&!familiarSeconds()&&!fishingSession.completing)return {label:'REED OTTER',title:'Second Chance',text:'Recover the missed +5 Patience XP bonus.',action:'familiarAction',button:'Second Chance · G'};
       if(phase==='bite')return {label:'FISH ON!',title:'Reel now',text:'Reel in time for bonus Patience XP.',action:'adventureLandmark'};
       return null;
     }
@@ -4605,7 +4663,7 @@ function updateActivityPrompt(){
   const visible=!!prompt;
   $('contextGuide').hidden=!visible;
   $('roomLayout').dataset.contextual=String(visible);
-  const proxyControl=prompt?.action&&!['baitRoute','equipHunting'].includes(prompt.action)?$(prompt.action):null;
+  const proxyControl=prompt?.action&&!['baitRoute','equipHunting','familiarAction'].includes(prompt.action)?$(prompt.action):null;
   $('contextGuideAction').disabled=proxyControl?.disabled===true;
   const key=prompt?JSON.stringify(prompt):'';
   if(key===activityPromptKey)return;
@@ -4617,7 +4675,8 @@ function updateActivityPrompt(){
   const button=$('contextGuideAction');
   button.hidden=!prompt.action;
   if(!prompt.action)return;
-  if(prompt.action==='baitRoute')button.textContent='Show route to bait shop';
+  if(prompt.action==='familiarAction')button.textContent=prompt.button;
+  else if(prompt.action==='baitRoute')button.textContent='Show route to bait shop';
   else if(prompt.action==='equipHunting')button.textContent='Open Inventory';
   else if(prompt.action==='visitWarden')button.textContent='Speak to the Warden';
   else button.textContent=$(prompt.action).textContent||prompt.title;
@@ -4935,7 +4994,8 @@ $('essenceBond').onclick=()=>changeEssences('bondEssences',{picks:[...gemDraft]}
 $('contextGuideAction').onclick=()=>{
   const prompt=currentActivityPrompt();
   if(!prompt?.action||unavailable())return;
-  if(prompt.action==='baitRoute')setExplorationDestination('store');
+  if(prompt.action==='familiarAction')useFamiliar();
+  else if(prompt.action==='baitRoute')setExplorationDestination('store');
   else if(prompt.action==='equipHunting')openInventory('clearing');
   else if(!$(prompt.action).disabled)$(prompt.action).onclick();
   updateActivityPrompt();
@@ -4954,6 +5014,7 @@ $('hudQuests').onclick=openQuest;
 $('hudHome').onclick=()=>navigateHud('home');
 $('hudLobby').onclick=()=>navigateHud('hub');
 $('mapDestination').onchange=previewMapRoute;
+$('mapMoonSight').onclick=()=>useFamiliar();
 $('mapTrack').onclick=()=>{
   const destination=$('mapDestination').value;
   if(!destination||!hudRoute(destination).length)return;
@@ -5212,7 +5273,7 @@ $('characterRulesForm').onsubmit=async event=>{
 };
 
 let selectedJob='fishing',startingJob=false;
-function jobState(){return {location:currentRoom,health,hunting,woodcutting,fishingGear,stats:playerStats,adventure,history,...(window.playerCloud?.initial?.plan?{plan:window.playerCloud.initial.plan}:{}),...(window.playerCloud?.initial?.report?{report:window.playerCloud.initial.report}:{})};}
+function jobState(){return {familiars:familiarState,location:currentRoom,health,hunting,woodcutting,fishingGear,stats:playerStats,adventure,history,...(window.playerCloud?.initial?.plan?{plan:window.playerCloud.initial.plan}:{}),...(window.playerCloud?.initial?.report?{report:window.playerCloud.initial.report}:{})};}
 function updateJobBoard(){
   for(const id of ['jobFishing','jobWoodcutting','jobHours','jobBait'])$(id).disabled=startingJob;
   $('jobBoardDialog').querySelector('.close').disabled=startingJob;
@@ -5323,6 +5384,7 @@ canvas.addEventListener('keydown',e=>{
   }
 });
 document.addEventListener('keydown',e=>{
+  if(e.code==='KeyG'&&familiarState.equipped&&!e.target.matches('input,textarea,select,[contenteditable]')&&!document.querySelector('dialog[open]')){e.preventDefault();if(!e.repeat)useFamiliar();return;}
   if(player.inCombat&&['Space','KeyF','KeyQ','KeyE'].includes(e.code)&&!e.target.matches('input,textarea,select')&&!document.querySelector('dialog[open]')){
     if(['KeyQ','KeyE'].includes(e.code)){e.preventDefault();if(!e.repeat)castEquippedEssence(e.code==='KeyQ'?'q':'e');return;}
     if(e.code==='Space'&&e.target.matches('button'))return;
@@ -5742,7 +5804,7 @@ function correctRoomPosition(position){
 }
 if(window.playerCloud&&typeof WebSocket!=='undefined'){
   multiplayer=createRoomConnection({
-    getLocal:()=>({room:currentRoom,x:player.cx,y:player.cy,direction:player.direction,back:player.back,seat:player.seat?{type:player.seat.type,x:player.seat.x,y:player.seat.y,rot:player.seat.rot}:null,profileKey:JSON.stringify([avatar,combatGear.equippedWeapon,armourSelection(combatGear),homeFurniture])}),
+    getLocal:()=>({room:currentRoom,x:player.cx,y:player.cy,direction:player.direction,back:player.back,seat:player.seat?{type:player.seat.type,x:player.seat.x,y:player.seat.y,rot:player.seat.rot}:null,profileKey:JSON.stringify([avatar,combatGear.equippedWeapon,armourSelection(combatGear),homeFurniture,familiarState.equipped])}),
     flush:()=>window.playerCloud.flush(),checkRoom:async room=>{
       const response=await fetch('/api/world/connect?check=1&room='+encodeURIComponent(room),{credentials:'same-origin',cache:'no-store'});
       if(!response.ok){const data=await response.json().catch(()=>({})),error=new Error(data.error??'Room unavailable');error.status=response.status;throw error;}

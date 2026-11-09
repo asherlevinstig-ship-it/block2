@@ -1,3 +1,4 @@
+import {familiarFishingTime} from '../public/familiars.js';
 import {useHunger} from '../public/player-vitals.js';
 import {chooseSimpleTask} from './simple-planner.mjs';
 import {explorationStops,EXPLORE_STOP_MS} from './exploration-plan.mjs';
@@ -97,7 +98,7 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
         const rod=fishingCatalog.rods[state.fishingGear.equippedRod];
         if(!rod||!state.fishingGear.ownedRods.includes(state.fishingGear.equippedRod)||skillLevel(state.stats.patienceXp)<rod.patience||!state.adventure.discovered.includes('pond')&&!state.history.fishCaught)return finish(state,p,'requirements',p.cursorAt);
         if(state.fishingGear.bait<=p.keepBait){nextStep(p,p.cursorAt,'Bait reserve reached');changed=true;continue;}
-        interval=Math.round(60000*rod.duration/4500);state.location='pond';state.position={x:4,y:5};
+        interval=familiarFishingTime(state,60000*rod.duration/4500);state.location='pond';state.position={x:4,y:5};
       }else if(type==='woodcutting'){
         if(!state.woodcutting.axeOwned||!state.woodcutting.equipped)return finish(state,p,'requirements',p.cursorAt);
         if(state.woodcutting.timber+(state.bank?.vault?.items?.timber??0)>=p.timberTarget){nextStep(p,p.cursorAt,'Timber target reached');changed=true;continue;}

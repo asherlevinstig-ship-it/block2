@@ -1,3 +1,4 @@
+import {drawFamiliar} from './familiars.js';
 import {addEncounter,addKinds} from './dungeon-adds.js';
 export {createCombatSound} from './combat-sound.js';
 import {arenaEnemy,arenaPlayer} from './dungeon-arena.js';
@@ -146,6 +147,12 @@ function drawSpell(ctx,{bx,by,px,py,aim,pgX,pgY},t,effect,reduced){
       if(!reduced)line(ctx,x-(bx-px)*.28,y-(by-py)*.28,x,y);
       arc(ctx,x,y,aim,14+motion*7);
       if(travel===1)particles(ctx,bx,by,t,tint,reduced,24);
+      break;
+    }
+    case 'familiar': {
+      const travel=reduced?1:Math.min(1,t*2.6),x=px+(bx-px)*travel,y=py+(by-py)*travel;
+      if(travel<1)drawFamiliar(ctx,'fox',x,y-7*Math.sin(travel*Math.PI),t*600,{flipped:bx<px,reduced});
+      else{arc(ctx,bx,by,aim,14+t*8);particles(ctx,bx,by,t,tint,reduced,23,8);}
       break;
     }
     case 'shield':

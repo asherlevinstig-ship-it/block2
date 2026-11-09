@@ -1,3 +1,4 @@
+import {cinderPounce} from './familiars.mjs';
 import {initializeAdds,addDueAt,spawnAddWave,addKinds,addEncounter,mergeAddEvent,advanceAddPosition,queueBossAdds,chooseAutoAddTarget} from '../public/dungeon-adds.js';
 import {initializeBrain,brainThinkEvent} from '../public/enemy-brain.js';
 import {combatStamina} from '../public/hunting.js';
@@ -28,7 +29,7 @@ export function startCombatEncounter(state,enemy,now){
   state.hunting.encounter=createHunt(now,enemy.health,enemy.id);
   state.hunting.encounter.summary=normalizeCombatSummary({startedAt:now});
   if(enemy.room.startsWith('depths'))Object.assign(state.hunting.encounter,{arenaVersion:1,arenaRoom:enemy.room,arenaPlayer:{...(state.position??{x:5,y:5})},arenaEnemy:{x:6,y:5},arenaStepAt:now,arenaLockedFor:0,arenaSolids:(moonwood.layouts[enemy.room]?.scenery??[]).filter(p=>p.type!==enemy.prop).map(({x,y})=>({x,y}))});
-  if(enemy.room.startsWith('depths'))state.hunting.encounter=initializeAdds(initializeBrain(state.hunting.encounter,enemy,now),now);
+  if(enemy.room.startsWith('depths'))state.hunting.encounter=initializeAdds(initializeBrain(state.hunting.encounter,enemy,now),now,state.familiars?.equipped==='fox');
   if(state.characterRules?.combat?.enabled||state.plan?.activeHunt)state.hunting.encounter.tacticsAt=now;
 }
 function result(state,event,now,random=Math.random){
@@ -185,6 +186,7 @@ export function activityAction(state,action,body,now,random){
       if(id!=='leader'&&!e.adds.some(a=>a.id===id&&a.spawnAt<=now))throw new Error('Choose an active enemy.');
       e.combatTarget=id;e.manualTarget=true;state.combatReceipt={id:crypto.randomUUID(),events};return true;
     }
+    if(state.hunting.encounter&&body.input==='familiar')events.push(result(state,cinderPounce(state,now),now,random));
     if(state.hunting.encounter&&body.input==='move'){
       const e=arenaMoveEvent(state,body.tile,now,moonwood.layouts[state.location]?.scenery,combatStamina(state.hunting.encounter,state.stats,now,state.combatGear.moonwellCharmEquipped));
       if(e)events.push(result(state,e,now,random));

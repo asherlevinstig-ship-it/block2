@@ -1,3 +1,5 @@
+import {familiarAction} from './familiars.mjs';
+import {familiarFishingTime} from '../public/familiars.js';
 import {watchAction} from './watch-expedition.mjs';
 import {watchFlags} from '../public/region-catalog.js';
 import {normalizeVitals,useHunger,feedPlayer} from '../public/player-vitals.js';
@@ -41,7 +43,7 @@ function location(state,rooms){
 export function applyGameplayAction(state,action,body,now=Date.now(),random=Math.random){
   // Combat requests advance their own clocks so their receipt includes all events.
   if(action!=='combat')settleActivities(state,now,random);
-  if(watchAction(state,action,body))return;
+  if(watchAction(state,action,body)||familiarAction(state,action,body,now))return;
   if(activityAction(state,action,body,now,random)||essenceAction(state,action,body))return;
   if(gamblingAction(state,action,body,now,random===Math.random?undefined:random))return;
   if(action==='armour'){
@@ -132,7 +134,7 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
     if(!profile||!state.fishingGear.ownedRods.includes(rod))throw new Error('Choose an equipped fishing rod first.');
     if(state.fishingGear.bait<1)throw new Error('Choose bait before casting.');
     if(skillLevel(state.stats.patienceXp)<profile.patience)throw new Error('Patience is too low for this rod.');
-    const biteAt=now+450+Math.round(profile.duration*(.85+random()*.30));
+    const biteAt=now+450+familiarFishingTime(state,profile.duration*(.85+random()*.30));
     state.fishingCast={id:crypto.randomUUID(),rod,started:now,castEnds:now+450,biteAt,landAt:biteAt+1800,bonus:0};
     return;
   }
@@ -250,6 +252,7 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
 // rewards and active encounters can only change through server actions.
 export function protectFishingState(previous,next){
   next.bank=previous.bank;
+  next.familiars=previous.familiars;
   next.adventure={...next.adventure};for(const key of watchFlags)next.adventure[key]=previous.adventure?.[key]===true;
   if(previous.pendingCharacterRules)next.pendingCharacterRules=previous.pendingCharacterRules;else delete next.pendingCharacterRules;
   const owned=normalizeWardrobe(previous.wardrobe,previous.avatar).owned;
