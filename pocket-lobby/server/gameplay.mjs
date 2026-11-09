@@ -188,6 +188,7 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
     state.credits-=bait.price;state.fishingGear.bait+=bait.quantity;
     return;
   }
+  if(action==='riverRestStop'){if(state.location!=='millbrook'||state.plan||state.report||state.hunting.encounter||state.health<=0)throw new Error('Choose Get up at the Millbrook bench.');state.hunting.recoveryUntil=0;return;}
   if(action==='riverRest'){available(state);if(state.fishingCast||state.timberCut||state.location!=='millbrook'||!state.position||![[3,7],[4,6],[5,6],[6,7],[4,8],[5,8]].some(([x,y])=>state.position.x===x&&state.position.y===y))throw new Error('Travel beside the Millbrook rest bench first.');if(state.health>=100)throw new Error('Your hearts are already full.');state.hunting.recoveryUntil=now+15000;return;}
   if(action==='sell'){
     location(state,['store','market','millbrook']);

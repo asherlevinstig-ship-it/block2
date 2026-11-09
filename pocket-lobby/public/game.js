@@ -1219,6 +1219,19 @@ function beginBedRest(item){
   player.seat=null;
   serverGameplay('bedRest',{id:item.id}).then(()=>{nextBedPoll=performance.now()+700;note('Resting in your '+bedProfiles[item.type].name+'. Get up whenever you’re ready.');}).catch(error=>note(error.message));
 }
+function updateRiverBenchRest(){
+ const seated=currentRoom==='millbrook'&&player.seat?.type==='riverBench';$('riverBenchRestPanel').hidden=!seated;
+ if(!seated)return;
+ const seconds=Math.max(0,Math.ceil((hunting.recoveryUntil-combatNow())/1000));
+ $('riverBenchRestStatus').textContent=seconds?'Recovering · '+seconds+'s · '+health+' / 100 HP':'Fully rested · Enjoy the river';
+ $('riverBenchGetUp').disabled=serverActionBusy||activityBusy;
+}
+async function standFromRiverBench(){
+ if(serverActionBusy||activityBusy)return false;
+ try{if(currentRoom==='millbrook'&&hunting.recoveryUntil)await serverGameplay('riverRestStop');player.seat=null;updateRiverBenchRest();updateCombatPanel();savePlayerState();return true;}
+ catch(error){note(error.message);return false;}
+}
+$('riverBenchGetUp').onclick=()=>standFromRiverBench();
 function updateBedRestPanel(time){
   const panel=$('bedRestPanel');panel.hidden=!homeBedRest;$('hint').classList.toggle('bed-rest-hidden',!!homeBedRest);
   if(!homeBedRest)return;
@@ -1245,6 +1258,7 @@ function restAtTower(){
   updateCombatPanel();savePlayerState();
 }
 function updateCombatPanel(){
+  updateRiverBenchRest();
   const now=combatNow(),encounter=hunting.encounter;
   const status=enemyStatusEffects(encounter,now).map(effect=>effect.name+' '+Math.ceil(effect.remaining/1000)+'s · '+effect.detail).join('  /  ');
   $('enemyEffects').hidden=!status;
@@ -1266,8 +1280,8 @@ function updateCombatPanel(){
   $('restAtTower').disabled=!!hunting.recoveryUntil;
   $('restAtTower').textContent=hunting.recoveryUntil?'Resting · '+Math.max(0,Math.ceil((hunting.recoveryUntil-now)/1000))+'s':'Rest · restore hearts';
   const notice=$('combatNotice');
-  notice.hidden=!hunting.recoveryUntil||!!homeBedRest;
-  if(hunting.recoveryUntil)notice.textContent='Recovering at the Tower · '+Math.max(0,Math.ceil((hunting.recoveryUntil-now)/1000))+'s · Five hearts restored after rest';
+  notice.hidden=!hunting.recoveryUntil||!!homeBedRest||player.seat?.type==='riverBench';
+  if(hunting.recoveryUntil)notice.textContent=(currentRoom==='millbrook'?'Resting by the mill · ':'Recovering at the Tower · ')+Math.max(0,Math.ceil((hunting.recoveryUntil-now)/1000))+'s · Five hearts restored after rest';
   const attack=enemyAttack(encounter,enemy);
   const ironTrialFight=firstUpgrade.ironTrialPending&&encounter?.enemy==='beetle'&&combatGear.equippedWeapon==='ironSword';
   if(ironTrialFight){
@@ -2329,7 +2343,7 @@ let worldLabelKey='';
 function updateWorldLabels(){
   const p=canvasBounds(),doors=roomDoors[currentRoom].filter(door=>doorAvailable(door));
   const stump=currentRoom==='logging'&&!!treeState(timberTree()).regrowsAt;
-  const key=[currentRoom,homeBedRest?.bedId,editing,currentRoom==='home'?homeFurniture.map(i=>[i.id,i.type,i.x,i.y,i.rot].join(':')).join(';'):'',stump,depthsRun?.finds?.join(','),doors.map(door=>door.to).join(','),avatar.name,questStage(quest),depthsDiscovered,player.inCombat,firstUpgrade.choice,firstUpgrade.complete,firstUpgrade.oakTrialPending,firstUpgrade.unlocked,firstUpgradeDestination()?.to,tradingPostGuideComplete,bedLessonComplete,trackedDestination,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
+  const key=[currentRoom,player.seat?.type,homeBedRest?.bedId,editing,currentRoom==='home'?homeFurniture.map(i=>[i.id,i.type,i.x,i.y,i.rot].join(':')).join(';'):'',stump,depthsRun?.finds?.join(','),doors.map(door=>door.to).join(','),avatar.name,questStage(quest),depthsDiscovered,player.inCombat,firstUpgrade.choice,firstUpgrade.complete,firstUpgrade.oakTrialPending,firstUpgrade.unlocked,firstUpgradeDestination()?.to,tradingPostGuideComplete,bedLessonComplete,trackedDestination,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
   if(key===worldLabelKey)return;
   worldLabelKey=key;
   const container=$('worldLabels');container.replaceChildren();container.dataset.room=currentRoom;
@@ -2396,7 +2410,7 @@ function updateWorldLabels(){
   }
   if(currentRoom==='armory')add('Enchanter',...point(6.5,5.5,45),'npc',()=>use(roomFurniture().find(item=>item.type==='enchanter')));
   if(willowmereRooms.includes(currentRoom)){
-    for(const item of roomFurniture())if(['riverTrader','riverBench','fishingPost'].includes(item.type))add(item.type==='riverTrader'?'River trader':item.type==='riverBench'?(currentRoom==='millbrook'?'Rest by the mill':'Riverside bench'):'Fishing station',...point(item.x+.5,item.y+.5,item.type==='riverTrader'?42:25),'npc',()=>use(item));
+    for(const item of roomFurniture())if(['riverTrader','riverBench','fishingPost'].includes(item.type)&&!(item.type==='riverBench'&&player.seat===item))add(item.type==='riverTrader'?'River trader':item.type==='riverBench'?(currentRoom==='millbrook'?'Rest by the mill':'Riverside bench'):'Fishing station',...point(item.x+.5,item.y+.5,item.type==='riverTrader'?42:25),'npc',()=>use(item));
   }
   if(currentRoom==='logging'){
     add('Workbench',...point(6,3.5,26),'npc',()=>use(roomFurniture().find(item=>item.type==='workbench')));
@@ -2643,6 +2657,7 @@ function walkingPath(start,goal){
 }
 function walkTo(tile){
   if(routineControlled()){note('Your routine is running. Use Take control to move.');return;}
+  if(player.seat?.type==='riverBench'&&currentRoom==='millbrook'&&hunting.recoveryUntil){standFromRiverBench().then(ok=>{if(ok)walkTo(tile);});return;}
   if(unavailable()){note(player.inCombat?"Combat is live. Use Flee to escape.":"Rest until your hearts recover.");return;}
   if(blocked(tile.x,tile.y)){note('That tile is occupied.');return;}
   const path=walkingPath(startPosition(),tile);
@@ -2682,6 +2697,7 @@ $('loungeDressGuideAction').onclick=()=>isSmartlyDressed(wardrobe)?continueToLou
 function doorAvailable(door,room=currentRoom){return (room!=='hub'||lobbyRoutesOpen())&&moonwood.open(door,adventure);}
 function travelDoor(door){
   if(routineControlled()){note('Use Take control before travelling.');return;}
+  if(player.seat?.type==='riverBench'&&currentRoom==='millbrook'&&hunting.recoveryUntil){standFromRiverBench().then(ok=>{if(ok)walkTo(tile);});return;}
   if(unavailable()){note(player.inCombat?"Use Flee to leave combat.":"Your hearts are recovering.");return;}
   if(!doorAvailable(door))return;
   if(door.to==='lounge'&&!isSmartlyDressed(wardrobe)){requestLoungeDress();return;}
@@ -3070,7 +3086,7 @@ function seatAnchor(item){
   const [w,d]=dimensions(item);
   const offsets=[[w/2,.63],[.63,d/2],[w/2,.37],[.37,d/2]];
   const [x,y]=offsets[item.rot];
-  return point(item.x+x,item.y+y,item.type==='woodStool'?12:item.type==='stool'?17:13);
+  return point(item.x+x,item.y+y,item.type==='woodStool'?12:item.type==='stool'?17:item.type==='riverBench'?11:13);
 }
 function reelFish(){
   if(fishingSession?.serverCastId){
@@ -3243,8 +3259,10 @@ function finishInteraction(){
     serverGameplay('sell',{id:'allFish'}).then(packet=>{const r=packet.state.tradeReceipt;savePlayerState();showTransaction('Fish sold at Millbrook',[{icon:'⋈',text:r.quantity+' fish sold'}],r.gold);note('Your catch has been sold.');}).catch(error=>note(error.message));
   }else if(item.type==='riverBench'){
     if(currentRoom!=='millbrook'){note('A quiet place to watch the river. Rest at Millbrook to recover your hearts.');return;}
-    if(health>=100){note('You rest by the river. All five hearts are full.');return;}
-    serverGameplay('riverRest').then(()=>{updateCombatPanel();note('Resting by the mill · Your hearts recover in 15 seconds.');}).catch(error=>note(error.message));
+    if([...remotePeers.values()].some(peer=>peer.seat?.type==='riverBench'&&peer.seat.x===item.x&&peer.seat.y===item.y)){note('Someone is already sitting here. Try the bench again when it is free.');return;}
+    const sit=()=>{player.seat=item;player.back=false;player.direction='right';updateRiverBenchRest();note(health>=100?'You sit by the waterwheel. Choose Get up or click a tile to stand.':'Resting on the bench · Your hearts recover in 15 seconds.');};
+    if(health>=100){sit();return;}
+    serverGameplay('riverRest').then(()=>{sit();updateCombatPanel();}).catch(error=>note(error.message));
   }else if(item.type==='fishingPost'){
     if(window.playerCloud?.gameplay){startServerCast();return;}
     if(fishingGear.bait<1){note('You need bait. Visit Silverfin Outfitters in the tower.');return;}
@@ -5432,6 +5450,7 @@ if(savedPlayerState?.timberCut){
   const tree=moonwood.layouts[currentRoom]?.scenery.find(item=>timberKey(item)===cut.key);
   if(tree)restoreServerTimber(cut,window.playerCloud?.serverTime??Date.now(),tree);
 }
+if(currentRoom==='millbrook'&&hunting.recoveryUntil){player.seat=roomFurniture().find(item=>item.type==='riverBench');player.direction='right';player.back=false;}
 if(hunting.recoveryUntil&&!['hub','home','millbrook'].includes(currentRoom))enterRoom('hub');
 updateCombatPanel();
 window.towerPauseForAccount=()=>{
@@ -5584,7 +5603,7 @@ if(window.playerCloud&&typeof WebSocket!=='undefined'){
     onHistory:history=>{$('messages').replaceChildren();$('roomChatMessages').replaceChildren();for(const message of history)receiveRoomChat(message);},
     onStatus:text=>{$('networkStatus').textContent=text;$('roomChatStatus').textContent=text;$('openRoomChat').disabled=!Object.hasOwn(socialRooms,currentRoom);},
     onCorrection:correctRoomPosition,
-    onUnseat:()=>{player.seat=null;},onSessionChanged:message=>window.playerCloud.invalidate?.(message)
+    onUnseat:()=>{if(player.seat?.type==='riverBench'&&hunting.recoveryUntil)standFromRiverBench();else player.seat=null;},onSessionChanged:message=>window.playerCloud.invalidate?.(message)
   });
   window.towerMultiplayer=multiplayer;connectRoom();
 }else $('networkStatus').textContent='Local preview';

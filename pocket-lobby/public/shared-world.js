@@ -25,4 +25,4 @@ export function reachableMove(room,from,to,boxes,maxSteps){
   return false;
 }
 
-export function roomSeats(room,homeFurniture=[]){return (room==='home'?homeFurniture:(layouts[room]??[]).map(([type,x,y,rot=0])=>({type,x,y,rot}))).filter(item=>['sofa','chair','stool','woodStool','bench'].includes(item.type));}
+export function roomSeats(room,homeFurniture=[]){return (room==='home'?homeFurniture:(layouts[room]??[]).map(([type,x,y,rot=0])=>({type,x,y,rot}))).filter(item=>['sofa','chair','stool','woodStool','bench','riverBench'].includes(item.type));}
