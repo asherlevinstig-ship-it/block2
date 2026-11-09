@@ -1,6 +1,6 @@
 import {testDatabase} from './db-helper.mjs';import {handlePlayerApi} from '../server/player-api.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
-import {moonwood} from '../public/moonwood.js';import {watchRooms,watchFlags} from '../public/region-catalog.js';
+import {moonwood} from '../public/moonwood.js';import {watchRooms,watchFlags,watchInteractLabel} from '../public/region-catalog.js';
 import {roomBoxes,validRoomTile,socialRooms} from '../public/shared-world.js';
 import {normalizeState} from '../server/player-state.mjs';import {applyGameplayAction,protectFishingState} from '../server/gameplay.mjs';
 import {huntEnemies,huntEnemyForRoom} from '../public/hunting.js';import {boot} from './helpers/game-client.mjs';
@@ -24,7 +24,7 @@ test('watch beacon unlocks reciprocal shortcut permanently only after an adjacen
 test('caches pay once, cave seal needs the actual boar victory, and busy players cannot claim',()=>{
  const s=normalizeState({location:'ambermead',position:{x:2,y:6}});act(s,'watchCache');assert.equal(s.credits,115);act(s,'watchCache');assert.equal(s.credits,115);assert.equal(s.goldEarned,15);
  s.location='starfall';s.position={x:6,y:5};assert.throws(()=>act(s,'watchCache'),/Defeat the Thorn Boar/);assert.equal(s.credits,115);
- s.adventure.watchBoar=true;act(s,'watchCache');assert.equal(s.credits,150);assert.equal(s.magic.stones.sword,1);act(s,'watchCache');assert.equal(s.magic.stones.sword,1);assert.equal(s.goldEarned,50);
+ s.adventure.watchBoar=true;assert.equal(watchInteractLabel('starfall','watchCache',s.adventure),'Open starfall cache');act(s,'watchCache');assert.equal(s.credits,150);assert.equal(s.magic.stones.sword,1);act(s,'watchCache');assert.equal(s.magic.stones.sword,1);assert.equal(s.goldEarned,50);
  s.location='beaconwatch';s.position={x:5,y:4};s.fishingCast={id:'busy'};assert.throws(()=>act(s,'watchBeacon'),/finishing/);
 });
 test('thorn boar has a real harder battle and victory breaks the seal; fleeing returns to the safe road',()=>{

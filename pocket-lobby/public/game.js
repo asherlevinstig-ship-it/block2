@@ -2951,7 +2951,7 @@ function updateExplorationNav(){
   if(nav.hidden)return;
   $('explorationRegion').textContent=watchRooms.includes(currentRoom)?'BEACONWATCH':willowmereRooms.includes(currentRoom)?'WILLOWMERE':explorationRegions.Moonwood.includes(currentRoom)?'MOONWOOD':'THE TOWER';
   $('explorationPlace').textContent=explorationName(currentRoom);
-  let guidance=watchRooms.includes(currentRoom)?(currentRoom==='beaconwatch'&&adventure.watchBeacon?'Beacon restored. The Mill Bridge is now open.':watchGuidance[currentRoom]):currentRoom==='millbrook'?'Northern road → Beaconwatch expedition.':'Choose a destination on the map';
+  let guidance=watchRooms.includes(currentRoom)?(currentRoom==='beaconwatch'&&adventure.watchBeacon?'Beacon restored. The Mill Bridge is now open.':currentRoom==='starfall'&&adventure.grottoCache?'Treasure recovered. Follow the root tunnel back to Thornwood.':watchGuidance[currentRoom]):currentRoom==='millbrook'?'Northern road → Beaconwatch expedition.':'Choose a destination on the map';
   if(next)guidance='Next: '+explorationName(next.to)+' · Heading to '+explorationName(trackedDestination);
   else if(trackedDestination===currentRoom)guidance='Arrived at '+explorationName(currentRoom);
   else if(trackedDestination)guidance='No open route to '+explorationName(trackedDestination)+' from here';

@@ -13,6 +13,6 @@ export const watchGuidance={ambermead:'Cream road → Beaconwatch. Red trail →
 export const watchWater=(room,x,y)=>room==='ambermead'&&x>=9&&y>=3||room==='starfall'&&x>=9&&y>=8;
 export function watchInteractLabel(room,type,progress={}){
  if(type==='watchBeacon')return progress.watchBeacon?'Beacon lit · Bridge open':'Light beacon · Open bridge';
- if(type==='watchCache')return progress[room==='starfall'?'grottoCache':'meadowCache']?'Empty cache':room==='starfall'?'Sealed starfall cache':'Forgotten roadside cache';
+ if(type==='watchCache')return progress[room==='starfall'?'grottoCache':'meadowCache']?'Empty cache':room==='starfall'?(progress.watchBoar?'Open starfall cache':'Sealed starfall cache'):'Forgotten roadside cache';
  return type==='watchSign'?'Read trail sign':null;
 }
