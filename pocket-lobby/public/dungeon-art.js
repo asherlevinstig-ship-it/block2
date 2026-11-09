@@ -31,6 +31,16 @@ export function drawDungeonProp(item,time,{ctx,point,polygon,surface,block,rect,
  const wind=pose.windup??0,hit=pose.hit,beat=reduced?0:Math.sin(time/230),float=reduced?0:Math.sin(time/600)*2,defeat=pose.defeated;
  surface(x-.18,y-.13,1.36,1.1,.4,'#09102177');
  const ink=(dx,dy,w,h,c)=>rect(Math.round(px+dx),Math.round(py+dy),w,h,c);
+ if(item.add?.kind==='wisp'){
+  const z=18+float*2+wind*4,core=hit?'#fff2d2':'#e9d2ff';
+  for(const side of [-1,1]){
+   polygon([[px+side*3,py-z+2],[px+side*(13+wind*4),py-z-9],[px+side*11,py-z+1],[px+side*5,py-z+7]],'#8063ba','#c0a2ff');
+   ink(side*(10+wind*4)-1,-z+8+beat*2,2,2,'#c6abf7');
+  }
+  polygon([[px,py-z-14],[px+8,py-z-4],[px+5,py-z+6],[px,py-z+11],[px-5,py-z+6],[px-8,py-z-4]],'#9a78df','#d4b9fb');
+  polygon([[px,py-z-10],[px+4,py-z-3],[px,py-z+5],[px-4,py-z-3]],core);
+  ink(-1,-z-7,2,6,'#fff8ec');return;
+ }
  if(type==='depthsSkitter'){
   const flesh=hit?'#f2c1b2':'#67b9a3',shade=hit?'#a86d87':'#285b66',eye=wind>.35?'#ffcf78':'#e2ffb8';
   for(const side of [-1,1])for(let i=0;i<3;i++){

@@ -78,7 +78,7 @@ export function brainThinkEvent(state,enemy,move,now){
  const warning=e.nextBoarAt-move.tell;
  if(now<(e.staggerUntil??0)||now<(e.brainRecoveryUntil??0)||now>=warning){next.brainNextThinkAt=now<Math.max(e.staggerUntil??0,e.brainRecoveryUntil??0)?Math.max(e.staggerUntil??0,e.brainRecoveryUntil??0):e.nextBoarAt+1;return {action:'enemyThink',encounter:next,health:state.health,damage:0,taken:0,outcome:'fighting'};}
  const caster=enemy.archetype==='caster',distance=Math.hypot(p.x-from.x,p.y-from.y);
- const valid=q=>q.x>=1&&q.x<=10&&q.y>=1&&q.y<=8&&dungeonFloor(state.location,q.x,q.y)&&!(q.x===p.x&&q.y===p.y)&&!(e.arenaSolids??[]).some(s=>s.x===q.x&&s.y===q.y)&&!(state.location==='depthsGate'&&q.x===8);
+ const valid=q=>!(e.adds??[]).some(a=>a.x===q.x&&a.y===q.y)&&q.x>=1&&q.x<=10&&q.y>=1&&q.y<=8&&dungeonFloor(state.location,q.x,q.y)&&!(q.x===p.x&&q.y===p.y)&&!(e.arenaSolids??[]).some(s=>s.x===q.x&&s.y===q.y)&&!(state.location==='depthsGate'&&q.x===8);
  const goals=[];for(let y=1;y<=8;y++)for(let x=1;x<=10;x++){const q={x,y},d=Math.hypot(x-p.x,y-p.y);if(valid(q)&&(caster?d>=2.5&&d<=4&&!coverBetween(q,p):d>=1&&d<=1.45))goals.push(q);}
  const queue=[{...from,first:null}],seen=new Set(),goal=new Set(goals.map(p=>p.x+','+p.y));let step=null;
  for(const q of queue){const k=q.x+','+q.y;if(seen.has(k))continue;seen.add(k);if(goal.has(k)){step=q.first;break;}for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){const n={x:q.x+dx,y:q.y+dy};if(valid(n)&&!seen.has(n.x+','+n.y))queue.push({...n,first:q.first??n});}}
@@ -104,7 +104,7 @@ export function normalizeBrain(e,base){
 export function advanceOnEnemy(e,reach){
  const hero=arenaPlayer(e),foe=arenaEnemy(e),queue=[{...hero,first:null}],seen=new Set();
  for(const p of queue){const key=p.x+','+p.y;if(seen.has(key))continue;seen.add(key);if(Math.hypot(p.x-foe.x,p.y-foe.y)<=reach)return p.first;
-  for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){const n={x:p.x+dx,y:p.y+dy};if(n.x>=1&&n.x<=10&&n.y>=1&&n.y<=8&&dungeonFloor(e.arenaRoom,n.x,n.y)&&!(n.x===foe.x&&n.y===foe.y)&&!(e.arenaSolids??[]).some(s=>s.x===n.x&&s.y===n.y)&&!(e.arenaRoom==='depthsGate'&&n.x===8)&&!seen.has(n.x+','+n.y))queue.push({...n,first:p.first??n});}
+  for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){const n={x:p.x+dx,y:p.y+dy};if(!(e.adds??[]).some(a=>a.x===n.x&&a.y===n.y)&&n.x>=1&&n.x<=10&&n.y>=1&&n.y<=8&&dungeonFloor(e.arenaRoom,n.x,n.y)&&!(n.x===foe.x&&n.y===foe.y)&&!(e.arenaSolids??[]).some(s=>s.x===n.x&&s.y===n.y)&&!(e.arenaRoom==='depthsGate'&&n.x===8)&&!seen.has(n.x+','+n.y))queue.push({...n,first:p.first??n});}
  }
  return null;
 }

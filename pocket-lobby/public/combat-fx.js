@@ -1,3 +1,4 @@
+import {addEncounter,addKinds} from './dungeon-adds.js';
 export {createCombatSound} from './combat-sound.js';
 import {arenaEnemy,arenaPlayer} from './dungeon-arena.js';
 import {drawArenaTelegraph} from './dungeon-art.js';
@@ -13,7 +14,7 @@ export function combatShake(time,events,reduced=false){
 export function drawCombatGroundFx({ctx,point,time,now,encounter,player,reduced}){
   if(!encounter)return;
   const move=enemyAttack(encounter);
-  if(encounter.arenaVersion===1){drawArenaTelegraph({ctx,point,surface:(x,y,w,d,z,fill,line)=>{ctx.beginPath();for(const [i,[u,v]] of [[x,y],[x+w,y],[x+w,y+d],[x,y+d]].entries()){const [px,py]=point(u,v,z);if(i===0)ctx.moveTo(px,py);else ctx.lineTo(px,py);}ctx.closePath();ctx.fillStyle=fill;ctx.fill();if(line){ctx.strokeStyle=line;ctx.stroke();}},encounter,move,now,reduced});return;}
+  if(encounter.arenaVersion===1){const drawMark=(view,attack)=>drawArenaTelegraph({ctx,point,surface:(x,y,w,d,z,fill,line)=>{ctx.beginPath();for(const [i,[u,v]] of [[x,y],[x+w,y],[x+w,y+d],[x,y+d]].entries()){const [px,py]=point(u,v,z);if(i===0)ctx.moveTo(px,py);else ctx.lineTo(px,py);}ctx.closePath();ctx.fillStyle=fill;ctx.fill();if(line){ctx.strokeStyle=line;ctx.stroke();}},encounter:view,move:attack,now,reduced});drawMark(encounter,move);for(const a of encounter.adds??[]){if(a.spawnAt>now){const [x,y]=point(a.x+.5,a.y+.5,1);ctx.save();ctx.strokeStyle='#bda2f4';ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(x,y,13,6.5,0,0,Math.PI*2);ctx.stroke();ctx.restore();}else drawMark(addEncounter(encounter,a),addKinds[a.kind].move);}return;}
   const remaining=encounter.nextBoarAt-now;
   if(remaining<0||remaining>move.tell)return;
   const amount=1-remaining/move.tell,[bx,by]=point(arenaEnemy(encounter).x+.5,arenaEnemy(encounter).y+.5,1),[px,py]=point(player.x+.5,player.y+.5,1);
@@ -45,18 +46,18 @@ export function recordCombatFx(events,result,time){
   if(result.phaseChange){events.phaseAt=time;events.phaseChange=result.phaseChange;}
   if(result.outcome==='victory')events.vaultVictory=result.enemyId==='depthsGuardian';
   if(action==='attack'&&damage)events.strikeAt=time;
-  if(damage)events.boarHitAt=time;
+  if(damage&&!result.targetId)events.boarHitAt=time;
   if(perfectDodge)events.perfectDodgeAt=time;
   if(counter)events.counterAt=time;
   if(staggered)events.staggerAt=time;
-  if(action==='enemy')events.boarAttackAt=time;
+  if(action==='enemy'&&!result.targetId)events.boarAttackAt=time;
   if(taken)events.hurtAt=time;
   if(dodgeStarted||(dodged&&!result.timedDodge))events.dodgeAt=time;
   if(power)events.castAt=time;
   if(result.outcome==='victory')events.victoryAt=time;
   if(!power&&!damage&&!taken&&!dodged&&!warded&&!absorbed&&!weakened&&action!=='enemy')return;
   const live=(events.bursts??[]).filter(effect=>time-effect.time<feedbackLife);
-  events.bursts=[...live,{time,enemyTile:result.enemyTile,attackTile:result.attackTile,attackCenter:result.attackCenter,attackFan:result.attackFan,attackReach:result.attackReach,spatialAvoided:result.spatialAvoided,covered:result.covered,action,damage,taken,dodged,warded,absorbed,move,attackShape,heavy,
+  events.bursts=[...live,{time,targetId:result.targetId,addKill:result.addKill,enemyTile:result.enemyTile,attackTile:result.attackTile,attackCenter:result.attackCenter,attackFan:result.attackFan,attackReach:result.attackReach,spatialAvoided:result.spatialAvoided,covered:result.covered,action,damage,taken,dodged,warded,absorbed,move,attackShape,heavy,
     staggered,weakSpot,staggerBonus,staggerGained,perfectDodge,automaticDodge,counter,counterBonus,shellGuarded,power,powerForm,powerColor,ward,healed,staminaRestored,interrupted,interruptResisted,weakened}].slice(-6);
 }
 function line(ctx,x1,y1,x2,y2){
@@ -181,17 +182,18 @@ function popup(ctx,text,x,y,t,tint,size=12){
   ctx.strokeStyle='#101528';ctx.strokeText(text,x,y);
   ctx.fillStyle=tint;ctx.fillText(text,x,y);ctx.restore();
 }
-function drawCombatNumbers(ctx,effects,time,{bx,by,px,py},reduced){
+function drawCombatNumbers(ctx,effects,time,{bx,by,px,py},reduced,point){
   let enemyRow=0,playerRow=0;
   for(const effect of effects.slice(-4).reverse()){
     const t=progress(time,effect.time,feedbackLife),rise=reduced?0:t*13;
+    const [ex,ey]=effect.targetId&&effect.enemyTile?point(effect.enemyTile.x+.5,effect.enemyTile.y+.5,15):[bx,by];
     if(effect.damage&&enemyRow<3){
       const suffix=effect.counter?' COUNTER':effect.weakSpot?' WEAK SPOT':effect.action==='burn'?' BURN':effect.shellGuarded?' SHELL':effect.shellGuarded===false?' EXPOSED':'';
       const tint=effect.powerColor??(effect.shellGuarded?color.shell:effect.shellGuarded===false?color.exposed:color.sword);
-      popup(ctx,'−'+effect.damage+suffix,bx,by-22-rise-enemyRow++*13,t,tint,suffix?10:13);
+      popup(ctx,'−'+effect.damage+suffix,ex,ey-22-rise-enemyRow++*13,t,tint,suffix?10:13);
     }
-    if(effect.staggered&&enemyRow<3)popup(ctx,'STAGGER BREAK!',bx,by-22-rise-enemyRow++*13,t,'#ffe49a',10);
-    if((effect.interrupted||effect.interruptResisted)&&enemyRow<3)popup(ctx,effect.interrupted?'INTERRUPTED':'INTERRUPT RESISTED',bx,by-22-rise-enemyRow++*13,t,'#ffe49a',9);
+    if(effect.staggered&&enemyRow<3)popup(ctx,'STAGGER BREAK!',ex,ey-22-rise-enemyRow++*13,t,'#ffe49a',10);
+    if((effect.interrupted||effect.interruptResisted)&&enemyRow<3)popup(ctx,effect.interrupted?'INTERRUPTED':'INTERRUPT RESISTED',ex,ey-22-rise-enemyRow++*13,t,'#ffe49a',9);
     const blocks=(effect.warded??0)+(effect.absorbed??0);
     const playerText=effect.taken?'−'+effect.taken:effect.perfectDodge?'PERFECT DODGE!':effect.automaticDodge?'AUTO DODGE':effect.spatialAvoided?(effect.covered?'COVER':'CLEAR'):effect.dodged?'DODGE':effect.healed?'+'+effect.healed+' HP'
       :effect.staminaRestored?'+'+effect.staminaRestored+' STAMINA':blocks?'BLOCK '+blocks:effect.ward?'WARD '+effect.ward:'';
@@ -227,8 +229,11 @@ export function drawCombatWorldFx({ctx,point,time,now,events,player,reduced,enco
     const duration=effect.power?620:effect.heavy?470:350;
     if(!active(time,effect.time,duration))continue;
     const t=progress(time,effect.time,duration);
-    if(effect.power)drawSpell(ctx,points,t,effect,reduced);
-    else if(effect.action==='attack'&&effect.damage)drawMeleeImpact(ctx,points,t,effect,reduced);
+    const [ex,ey]=effect.targetId&&effect.enemyTile?point(effect.enemyTile.x+.5,effect.enemyTile.y+.5,15):[bx,by];
+    const target={...points,bx:ex,by:ey,aim:Math.atan2(ey-py,ex-px)};
+    if(effect.power)drawSpell(ctx,target,t,effect,reduced);
+    else if(effect.action==='attack'&&effect.damage)drawMeleeImpact(ctx,target,t,effect,reduced);
+    if(effect.addKill)particles(ctx,ex,ey,t,'#ddcbfa',reduced,22,9);
     else if(effect.action==='enemy'){
       let impact=points;
       if(effect.enemyTile){const [ex,ey]=point(effect.enemyTile.x+.5,effect.enemyTile.y+.5,15),[gx,gy]=point(effect.enemyTile.x+.5,effect.enemyTile.y+.5,1);impact={...impact,bx:ex,by:ey,bgX:gx,bgY:gy};}
@@ -250,7 +255,7 @@ export function drawCombatWorldFx({ctx,point,time,now,events,player,reduced,enco
   if(!reduced&&active(time,events.victoryAt,1200)){
     particles(ctx,bx,by,Math.sqrt(progress(time,events.victoryAt,1200)),color.sword,false,34,14);
   }
-  drawCombatNumbers(ctx,effects,time,points,reduced);
+  drawCombatNumbers(ctx,effects,time,points,reduced,point);
   const statuses=enemyStatusEffects(encounter,now);
   for(const [index,effect] of statuses.entries()){
     const x=statuses.length>1?bx-74+index%2*76:bx-36,y=by-87+Math.floor(index/2)*13;

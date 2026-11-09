@@ -1,3 +1,4 @@
+import {activeAdd,addEncounter,mergeAddEvent} from '../public/dungeon-adds.js';
 import {bondedEssences,confluence,essencePower,normalizeMagic,essenceEffects,essenceGems} from '../public/essences.js';
 import {spendMana} from '../public/player-vitals.js';
 import {combatStamina,huntEnemy,enemyAttack,transitionVaultPhase} from '../public/hunting.js';
@@ -54,6 +55,12 @@ export function castEssencePower(state,now,slot='q'){
   if(!power||!bondedEssences(magic.picks).includes(power.gem))return null;
   const {form,value}=power,masteryBonus=power.masteryLevel-1;
   if(form==='renewal'&&state.health>=100)return null;
+  const target=!encounter?.addActor&&activeAdd(encounter);
+  if(target&&now>=target.spawnAt&&form==='sword'){
+    const proxy={...state,hunting:{...state.hunting,encounter:addEncounter(encounter,target)}};
+    const event=castEssencePower(proxy,now,slot);state.vitals=proxy.vitals;
+    return mergeAddEvent(encounter,target,event);
+  }
   if(!spendMana(state,now))return null;
   const next={...encounter};
   const event={action:'essence',powerId:power.id,power:power.name,powerColor:power.color,powerForm:form,encounter:next,health:state.health,damage:0,taken:0,outcome:'fighting'};
@@ -62,7 +69,7 @@ export function castEssencePower(state,now,slot='q'){
     const armor=now<(encounter.exposedUntil??0)?0:enemy.shellArmor??0;
     event.damage=Math.min(next.health,Math.max(1,value-armor));
     next.health-=event.damage;
-    if(next.health===0){event.encounter=null;event.outcome='victory';}
+    if(next.health===0){if(encounter.addActor)event.killedEncounter=next;event.encounter=null;event.outcome='victory';}
     event.effect='dealt '+event.damage+' damage';
   }else if(form==='shield'){
     next.magicWard=value;next.magicWardUntil=now+5000;

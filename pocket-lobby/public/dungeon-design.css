@@ -8,3 +8,15 @@ body:has(.layout[data-depths]:not([data-depths=""])){background:#081426 url('./d
 .layout[data-depths]:not([data-depths=""]) #combatPanel{display:none}
 .dungeon-enemy-heading small{font-size:10px;color:#e6c48e;margin-left:auto}.dungeon-stamina{display:grid;grid-template-columns:auto 1fr 23px;align-items:center;gap:8px;margin:0 0 8px;font-size:8px;letter-spacing:.08em;color:#aacbbb}.dungeon-stamina progress{margin:0;height:4px;accent-color:#9bd6ba}.dungeon-stamina b{text-align:right;font-size:9px;font-variant-numeric:tabular-nums}
 @media(max-width:520px){.dungeon-enemy-heading{flex-wrap:wrap;gap:5px}.dungeon-enemy-heading small{order:3;flex-basis:100%}.dungeon-enemy-heading>span{margin-left:auto}}
+
+.dungeon-targets{display:flex;gap:5px;flex-wrap:wrap;margin:6px 0 10px}.dungeon-targets button{font-size:10px;padding:5px 8px;min-height:28px;border:1px solid #576a83;border-radius:6px;background:#192d45;color:#d3dfed}.dungeon-targets button[aria-pressed="true"]{border-color:#e7c584;background:#4a4033;color:#ffe4aa}.dungeon-targets button:disabled{opacity:.65}
+
+.dungeon-targets[hidden]{display:none}
+@media(max-width:520px){
+ .dungeon-targets{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;margin:5px 0 7px}
+ .dungeon-targets[hidden]{display:none}
+ .dungeon-targets button{min-width:0;padding:4px;font-size:9px;line-height:1.2}
+ .dungeon-arena-hud:has(.dungeon-targets:not([hidden])) .dungeon-arena-controls button{flex:0 0 auto;min-height:32px;padding:5px 8px}
+ .dungeon-arena-hud:has(.dungeon-targets:not([hidden])) .dungeon-arena-controls>span{flex:1 1 0}
+ .shell .scene:has(.dungeon-arena-hud[data-adds=true]:not([hidden])) #game{translate:0 66px}
+}

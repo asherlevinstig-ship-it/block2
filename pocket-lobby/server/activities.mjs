@@ -1,3 +1,4 @@
+import {initializeAdds,addDueAt,spawnAddWave,addKinds,addEncounter,mergeAddEvent,advanceAddPosition,queueBossAdds,chooseAutoAddTarget} from '../public/dungeon-adds.js';
 import {initializeBrain,brainThinkEvent} from '../public/enemy-brain.js';
 import {combatStamina} from '../public/hunting.js';
 import {arenaEnemy,arenaWarningAt,lockArenaAttack,arenaMoveEvent,dungeonCover} from '../public/dungeon-arena.js';
@@ -27,7 +28,7 @@ export function startCombatEncounter(state,enemy,now){
   state.hunting.encounter=createHunt(now,enemy.health,enemy.id);
   state.hunting.encounter.summary=normalizeCombatSummary({startedAt:now});
   if(enemy.room.startsWith('depths'))Object.assign(state.hunting.encounter,{arenaVersion:1,arenaRoom:enemy.room,arenaPlayer:{...(state.position??{x:5,y:5})},arenaEnemy:{x:6,y:5},arenaStepAt:now,arenaLockedFor:0,arenaSolids:(moonwood.layouts[enemy.room]?.scenery??[]).filter(p=>p.type!==enemy.prop).map(({x,y})=>({x,y}))});
-  if(enemy.room.startsWith('depths'))state.hunting.encounter=initializeBrain(state.hunting.encounter,enemy,now);
+  if(enemy.room.startsWith('depths'))state.hunting.encounter=initializeAdds(initializeBrain(state.hunting.encounter,enemy,now),now);
   if(state.characterRules?.combat?.enabled||state.plan?.activeHunt)state.hunting.encounter.tacticsAt=now;
 }
 function result(state,event,now,random=Math.random){
@@ -50,7 +51,7 @@ function result(state,event,now,random=Math.random){
   if(event.encounter)event.encounter.summary=summary;
   const rewards={};
   if(event.encounter&&Number.isSafeInteger(encounter.tacticsAt))event.encounter.tacticsAt=now;
-  state.hunting.encounter=event.encounter;state.health=event.health;
+  state.hunting.encounter=queueBossAdds(event.encounter,now);event.encounter=state.hunting.encounter;state.health=event.health;
   if(event.outcome==='victory'){
     useHunger(state,2);
     if(state.combatId)event.mastery=awardEssenceMastery(state.magic,[...(encounter.usedEssences??[]),event.masteryGem],enemy.masteryXp??10);
@@ -96,7 +97,7 @@ function result(state,event,now,random=Math.random){
     if(state.plan?.kind==='queue'&&state.plan.activeHunt?.id===state.combatId)state.plan.lastHuntReport=report;
     else state.combatReports=[...(state.combatReports??[]).filter(item=>item.id!==report.id),report].slice(-10);
   }
-  return {...event,...(encounter.arenaVersion===1?{enemyTile:arenaEnemy(encounter),attackTile:encounter.arenaTarget,attackCenter:enemyAttack(encounter).center,attackFan:enemyAttack(encounter).fan,attackReach:enemyAttack(encounter).reach}:{}),enemyId:enemy.id,at:now};
+  return {...event,...(encounter.arenaVersion===1?{enemyTile:event.enemyTile??arenaEnemy(encounter),attackTile:event.attackTile??encounter.arenaTarget,attackCenter:event.attackCenter??enemyAttack(encounter).center,attackFan:event.attackFan??enemyAttack(encounter).fan,attackReach:event.attackReach??enemyAttack(encounter).reach}:{}),enemyId:event.enemyId??enemy.id,at:now};
 }
 
 // Replay each due strike at its scheduled time. Closing or slowing the client
@@ -105,7 +106,9 @@ export function advanceServerCombat(state,now,random=Math.random){
   const events=[];
   for(let i=0;state.hunting.encounter&&i<2048;i++){
     const encounter=state.hunting.encounter;
-    const coreDue=Math.min(encounter.nextPlayerAt,encounter.nextBoarAt,encounter.burn?.nextAt??Infinity,encounter.brainVersion===2?encounter.brainNextThinkAt:Infinity);
+    if(encounter.addsVersion===1&&!encounter.manualTarget&&state.characterRules?.combat?.enabled)encounter.combatTarget=chooseAutoAddTarget(encounter,encounter.tacticsAt??0);
+    const addsDue=addDueAt(encounter);
+    const coreDue=Math.min(addsDue,encounter.nextPlayerAt,encounter.nextBoarAt,encounter.burn?.nextAt??Infinity,encounter.brainVersion===2?encounter.brainNextThinkAt:Infinity);
     const tactic=nextCombatTactic(state),automatic=tactic&&tactic.at<coreDue;
     const due=automatic?tactic.at:coreDue,warningAt=arenaWarningAt(encounter,enemyAttack(encounter));
     if(warningAt<=Math.min(due,now)){state.hunting.encounter=lockArenaAttack(encounter,enemyAttack(encounter),huntEnemy(encounter));continue;}
@@ -116,7 +119,8 @@ export function advanceServerCombat(state,now,random=Math.random){
       else if(tactic.action==='essence')event=castEssencePower(state,due,tactic.slot);
       else event=huntingTurn(encounter,state.health,state.stats,tactic.action,due,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,armourSelection(state.combatGear),state.combatGear.moonwellCharmEquipped,state.combatGear.weaponEnchantments);
       if(event){event.automatic=true;if(tactic.action==='move'&&event.encounter?.brainVersion===2)event.encounter.brainAutoStepAt=due+900;event.decision={at:due,style:tactic.style,action:tactic.action,reason:tactic.reason};if(event.encounter){event.encounter.lastDecision=event.decision;if(tactic.action==='dodge')event.encounter.autoDodgeUntil=event.encounter.dodgeUntil;}}
-    }else if(encounter.brainVersion===2&&due===encounter.brainNextThinkAt)event=brainThinkEvent(state,huntEnemy(encounter),enemyAttack(encounter),due);
+    }else if(due===addsDue)event=advanceDungeonAdds(state,due,random);
+    else if(encounter.brainVersion===2&&due===encounter.brainNextThinkAt)event=brainThinkEvent(state,huntEnemy(encounter),enemyAttack(encounter),due);
     else event=advanceHunt(encounter,state.health,state.stats,due,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,armourSelection(state.combatGear),state.combatGear.moonwellCharmEquipped,state.combatGear.weaponEnchantments);
     if(!event)break;
     events.push(result(state,event,due,random));
@@ -176,6 +180,11 @@ export function activityAction(state,action,body,now,random){
     if(state.plan?.activeHunt)throw new Error('Your hunting queue is controlling this fight. Return to stop after the fight.');
     if(body.combatId!==state.combatId)throw new Error('Invalid encounter. Reload your character.');
     const events=advanceServerCombat(state,now,random);
+    if(state.hunting.encounter?.addsVersion===1&&body.input==='target'){
+      const e=state.hunting.encounter,id=body.slot;
+      if(id!=='leader'&&!e.adds.some(a=>a.id===id&&a.spawnAt<=now))throw new Error('Choose an active enemy.');
+      e.combatTarget=id;e.manualTarget=true;state.combatReceipt={id:crypto.randomUUID(),events};return true;
+    }
     if(state.hunting.encounter&&body.input==='move'){
       const e=arenaMoveEvent(state,body.tile,now,moonwood.layouts[state.location]?.scenery,combatStamina(state.hunting.encounter,state.stats,now,state.combatGear.moonwellCharmEquipped));
       if(e)events.push(result(state,e,now,random));
@@ -241,4 +250,27 @@ export function activityAction(state,action,body,now,random){
     return true;
   }
   return false;
+}
+
+function advanceDungeonAdds(state,now,random){
+ const e=state.hunting.encounter;
+ if(e.addWaveAt&&now===e.addWaveAt)return {...spawnAddWave(e,now),health:state.health};
+ const a=e.adds.find(a=>Math.min(a.thinkAt,a.attackAt,a.lockedFor===a.attackAt?Infinity:a.attackAt-addKinds[a.kind].move.tell,a.burn?.nextAt??Infinity)===now);
+ if(!a)return null;
+ const move=addKinds[a.kind].move,view=addEncounter(e,a);
+ const change=actor=>({action:'addThink',encounter:{...e,adds:e.adds.map(b=>b.id===a.id?actor:b)},health:state.health,damage:0,taken:0,outcome:'fighting'});
+ if(a.burn?.nextAt===now){
+  const damage=Math.min(a.health,a.burn.damage),next={...view,health:a.health-damage};
+  if(a.burn.nextAt+1000<=a.burn.until)next.burn={...a.burn,nextAt:now+1000};else delete next.burn;
+  return mergeAddEvent(e,a,{action:'burn',damage,taken:0,health:state.health,powerColor:'#ffac78',encounter:next.health?next:null,outcome:next.health?'fighting':'victory'});
+ }
+ if(a.lockedFor!==a.attackAt&&now===a.attackAt-move.tell)return change({...a,lockedFor:a.attackAt,target:{...e.arenaPlayer},origin:{x:a.x,y:a.y}});
+ if(now===a.attackAt){
+  const event=huntingTurn(view,state.health,state.stats,'enemy',now,random,state.combatGear.equippedWeapon,state.combatGear.activeSwordUpgrade,armourSelection(state.combatGear),state.combatGear.moonwellCharmEquipped,state.combatGear.weaponEnchantments);
+  if(event?.encounter){event.encounter.nextBoarAt=now+addKinds[a.kind].interval;event.nextMove=move.name;}
+  const merged=mergeAddEvent(e,a,event);
+  if(merged?.encounter)merged.encounter.adds=merged.encounter.adds.map(b=>b.id===a.id?{...b,thinkAt:now+move.recovery}:b);
+  return merged;
+ }
+ return change(now<a.spawnAt||now>=(a.staggerUntil??0)&&now>=a.attackAt-move.tell?{...a,thinkAt:a.attackAt+1}:now<(a.staggerUntil??0)?{...a,thinkAt:a.staggerUntil}:advanceAddPosition(e,a,now));
 }

@@ -1,3 +1,4 @@
+import {addKinds,activeAdd,addEncounter,mergeAddEvent,normalizeAdds} from './dungeon-adds.js';
 import {smartAttacks,smartProfile,planBrainAttack,normalizeBrain} from './enemy-brain.js';
 import {arenaEnemy,arenaPlayer,arenaInDanger,arenaBehindCover,dungeonFloor} from './dungeon-arena.js';
 import {skillLevel} from './skill-curve.js';
@@ -35,12 +36,13 @@ export const huntEnemies={
 const enemiesByRoom=Object.fromEntries(Object.values(huntEnemies).map(enemy=>[enemy.room,enemy]));
 export const huntEnemyForRoom=room=>enemiesByRoom[room];
 export function vaultPhase(encounter){
- if(encounter?.enemy!=='depthsGuardian'||encounter.bossVersion!==1)return null;
+ if(encounter?.addActor||encounter?.enemy!=='depthsGuardian'||encounter.bossVersion!==1)return null;
  const maximum=encounter.brainVersion===2?encounter.brainMaxHealth:240;
  const index=encounter.health>maximum*2/3?1:encounter.health>maximum/3?2:3;
  return index===1?{index,name:'Ironclad',archetype:'armoured',move:'vaultSmash',interval:3500,shellArmor:9,color:'#e6c080',hint:'Build stagger to crack the plating. Heavy hits help; dodge the smash.'}:index===2?{index,name:'Unbound',archetype:'duelist',move:'vaultCleave',interval:2600,shellArmor:0,color:'#ffab89',hint:'Dodge the heavy swings, then counter. Watch for the follow-up lunge.'}:{index,name:'Runic heart',archetype:'caster',move:'vaultBolt',interval:4200,shellArmor:0,color:'#c6a4ff',hint:'Land 3 quick hits during the charged spell to interrupt, or dodge the blast.'};
 }
 export function huntEnemy(encounter){
+ if(encounter?.addActor)return {...addKinds[encounter.addActor],room:encounter.arenaRoom,xp:[0,0,0]};
  const base=Object.hasOwn(huntEnemies,encounter?.enemy)?huntEnemies[encounter.enemy]:boar,enemy=encounter?.brainVersion===2?smartProfile(base):base,phase=vaultPhase(encounter);
  return phase?{...enemy,...phase,phaseName:phase.name,name:enemy.name,tactic:'PHASE '+phase.index+' / 3 · '+phase.name.toUpperCase()+' · '+phase.hint}:enemy;
 }
@@ -77,6 +79,7 @@ const enemyMoves={
 export const dungeonEnemyPreview=enemy=>enemy?.room.startsWith('depths')?smartProfile(enemy):enemy;
 export const playerMeleeReach=weapon=>['huntingSpear','breakerSpear'].includes(weapon)?2:['quickDagger','quickfang'].includes(weapon)?1.25:1.45;
 export function enemyAttack(encounter,enemy=huntEnemy(encounter)){
+  if(encounter?.addActor)return addKinds[encounter.addActor].move;
   if(encounter?.brainVersion===2&&Object.hasOwn(smartAttacks,encounter.brainMove))return smartAttacks[encounter.brainMove];
   if(vaultPhase(encounter))enemy=huntEnemy(encounter);
   const move=Object.hasOwn(enemyMoves,encounter?.enemyMove)?enemyMoves[encounter.enemyMove]:null;
@@ -250,7 +253,7 @@ export function normalizeHunting(input={}){
       if(e.arenaVersion!==1||!profile.room.startsWith('depths')||e.arenaRoom!==profile.room||!valid(e.arenaPlayer)||!valid(e.arenaEnemy)||e.arenaTarget&&!valid(e.arenaTarget))throw new Error('Invalid dungeon arena.');
       Object.assign(result.encounter,{arenaVersion:1,arenaRoom:profile.room,arenaPlayer:{...e.arenaPlayer},arenaEnemy:{...e.arenaEnemy},arenaStepAt:time(e.arenaStepAt),arenaLockedFor:time(e.arenaLockedFor),arenaCycle:time(e.arenaCycle),arenaSolids:(Array.isArray(e.arenaSolids)?e.arenaSolids:[]).filter(valid).slice(0,80).map(p=>({x:p.x,y:p.y})),...(e.arenaTarget?{arenaTarget:{...e.arenaTarget}}:{})});
     }
-    Object.assign(result.encounter,normalizeBrain(input.encounter,huntEnemies[enemy]??boar));
+    Object.assign(result.encounter,normalizeBrain(input.encounter,huntEnemies[enemy]??boar),normalizeAdds(input.encounter));
     if(input.encounter.bossVersion!==undefined){if(input.encounter.bossVersion!==1||enemy!=='depthsGuardian')throw new Error('Invalid boss encounter.');result.encounter.bossVersion=1;}
     if(input.encounter.castHits!==undefined){if(!Number.isInteger(input.encounter.castHits)||input.encounter.castHits<0||input.encounter.castHits>2)throw new Error('Invalid cast pressure.');result.encounter.castHits=input.encounter.castHits;}
     if(input.encounter.lastDecision!==undefined){const d=input.encounter.lastDecision;if(!d||!['cautious','balanced','aggressive'].includes(d.style)||!['dodge','essence','flee','move'].includes(d.action)||typeof d.reason!=='string'||d.reason.length>160)throw new Error('Invalid combat decision.');result.encounter.lastDecision={at:time(d.at),style:d.style,action:d.action,reason:d.reason};}
@@ -286,6 +289,8 @@ export function resumeHunt(encounter,now,stats={},charmEquipped=false){
   return {...encounter,stamina:combatStamina(encounter,stats,now,charmEquipped),staminaAt:now,dodgeUntil:0,nextDodgeAt:Math.min(encounter.nextDodgeAt??0,now+boarRules.dodgeCooldown),nextPlayerAt:now+450,nextBoarAt,nextFleeAt:Math.min(encounter.nextFleeAt,now+boarRules.fleeCooldown)};
 }
 export function huntingTurn(encounter,health,stats,action,now,random=Math.random,weapon='trainingSword',upgrade=null,vestEquipped=false,charmEquipped=false,enchantments={}){
+  const target=action==='attack'&&!encounter?.addActor&&activeAdd(encounter);
+  if(target&&now>=target.spawnAt)return mergeAddEvent(encounter,target,huntingTurn(addEncounter(encounter,target),health,stats,action,now,random,weapon,upgrade,vestEquipped,charmEquipped,enchantments));
   if(!['attack','enemy','flee','dodge'].includes(action))throw new Error('Invalid combat action.');
   if(!encounter||health<=0)throw new Error('No active encounter.');
   const clock=action==='attack'?'nextPlayerAt':action==='enemy'?'nextBoarAt':action==='dodge'?'nextDodgeAt':'nextFleeAt';
@@ -344,7 +349,7 @@ export function huntingTurn(encounter,health,stats,action,now,random=Math.random
         if(enemy.shellArmor)result.encounter.exposedUntil=Math.max(result.encounter.exposedUntil??0,result.encounter.staggerWeakUntil);
       }
     }
-    if(!result.encounter.health){result.outcome='victory';result.encounter=null;}
+    if(!result.encounter.health){result.outcome='victory';if(encounter.addActor)result.killedEncounter=result.encounter;result.encounter=null;}
   }else{
     const move=enemyAttack(encounter,enemy);
     result.move=move.name;

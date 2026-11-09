@@ -1140,7 +1140,7 @@ function combatAction(action){
 }
 function applyCombatResult(result,authoritative=null,playEffects=true){
   if(!result)return;
-  const action=result.action,enemy=result.enemyId?huntEnemies[result.enemyId]:huntEnemy(hunting.encounter);
+  const action=result.action,enemy=huntEnemies[result.enemyId]??(result.targetId?Object.values(addKinds).find(a=>a.id===result.enemyId):null)??huntEnemy(hunting.encounter);
   if(playEffects)recordCombatFx(combatArt,result,performance.now());
   hunting.encounter=result.encounter;health=result.health;
   combatMessage=(result.damage?'You hit for '+result.damage+(result.shellGuarded?' through the shell.':'. '):action==='flee'&&result.outcome!=='escaped'?'Your escape was blocked. ':'')+(result.dodged?'You dodge the attack.':result.taken?(result.move??enemy.name)+' hits for '+result.taken+'.':'');
@@ -1152,6 +1152,8 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
   if(result.outOfRange)combatMessage='Move closer to strike. Your weapon reaches 2 tiles.';
   if(result.spatialAvoided)combatMessage=result.covered?'Cover blocked the spell.':'You moved clear of the attack!';
   if(result.behaviour)combatMessage=result.behaviour;
+  if(result.action==='reinforcements'&&result.spawned)combatMessage='Reinforcements are summoning!';
+  if(result.addKill)combatMessage=enemy.name+' defeated.';
   if(result.action==='move')combatMessage='Repositioning · Keep clear of marked tiles.';
   if(result.dodgeStarted)combatMessage='You sidestep. Time your dodge just before the '+enemy.move+' lands!';
   if(result.timedDodge)combatMessage='Perfect dodge! '+(result.shellExposed?'Shell open · ':'')+'Next strike +'+(result.counterPercent??50)+'% damage for 1.8 seconds.';
@@ -1357,12 +1359,19 @@ function updateCombatPanel(){
 function updateDungeonArenaHud(){
  const e=hunting.encounter,enemy=e?huntEnemy(e):dungeonEnemyPreview(huntEnemyForRoom(currentRoom)),panel=$('dungeonArenaHud');
  panel.hidden=!depthsRun||!enemy||!depthsEnemyAvailable(depthsRun,currentRoom);if(panel.hidden)return;
- $('dungeonEnemyName').textContent=(enemy.elite?'Elite · ':'')+enemy.name;
+ panel.dataset.adds=String(e?.addsVersion===1);
+ const selected=e&&activeAdd(e),targetEnemy=selected?addKinds[selected.kind]:enemy;
+ $('dungeonEnemyName').textContent=(selected?'Target · ':enemy.elite?'Elite · ':'')+targetEnemy.name;
  const phase=vaultPhase(e);$('dungeonPhase').hidden=!phase;$('dungeonPhase').textContent=phase?'Phase '+phase.index+' · '+phase.name:'';
  $('dungeonStamina').hidden=!e;const stamina=e?combatStamina(e,playerStats,combatNow(),combatGear.moonwellCharmEquipped):100;$('dungeonStaminaBar').value=stamina;$('dungeonStaminaValue').textContent=Math.floor(stamina);
  $('dungeonDodge').title='Costs '+combatDodgeCost(armourSelection(combatGear))+' stamina · Space'+(e?.brainVersion===2?' · Each step costs '+ARENA_STEP_COST:'');
- $('dungeonEnemyHealth').textContent=(e?.health??enemy.health)+' / '+enemy.health;
- $('dungeonEnemyBar').max=enemy.health;$('dungeonEnemyBar').value=e?.health??enemy.health;
+ $('dungeonEnemyHealth').textContent=(selected?.health??e?.health??enemy.health)+' / '+targetEnemy.health;
+ $('dungeonEnemyBar').max=targetEnemy.health;$('dungeonEnemyBar').value=selected?.health??e?.health??enemy.health;
+ const targets=$('dungeonTargets');targets.hidden=!e?.adds?.length;
+ const targetKey=e?.adds?.length?JSON.stringify([e.combatTarget,e.health,e.adds.map(a=>[a.id,a.health,a.spawnAt<=combatNow()])]):'';
+ if(targets.dataset.key!==targetKey){targets.dataset.key=targetKey;const focused=document.activeElement?.dataset.target;targets.replaceChildren();
+  if(e?.adds?.length){for(const t of [{id:'leader',name:enemy.name,health:e.health,ready:true},...e.adds.map(a=>({id:a.id,name:addKinds[a.kind].name,health:a.health,ready:a.spawnAt<=combatNow()}))]){const b=document.createElement('button');b.type='button';b.dataset.target=t.id;b.textContent=t.ready?t.name+' · '+t.health:t.name+' · Summoning';b.disabled=!t.ready;b.setAttribute('aria-pressed',String((e.combatTarget??'leader')===t.id));b.onclick=()=>sendServerCombat('target',t.id);targets.append(b);if(focused===t.id)b.focus({preventScroll:true});}}
+ }
  $('dungeonEngage').hidden=!!e;$('dungeonDodge').hidden=!e;$('dungeonFlee').hidden=!e;
  $('dungeonEngage').disabled=!combatGear.equippedWeapon||unavailable();
  $('dungeonDodge').disabled=$('combatDodge').disabled;$('dungeonFlee').disabled=$('combatFlee').disabled;
@@ -1377,7 +1386,10 @@ function updateDungeonArenaHud(){
    else cue=(e.brainCombo?'Follow-up coming · ':'')+'Step '+ARENA_STEP_COST+' stamina · Space: dodge';
   }
  }
- $('dungeonArenaCue').textContent=cue;panel.dataset.danger=String(!!e&&e.nextBoarAt-combatNow()<=enemyAttack(e).tell&&arenaInDanger(e,enemyAttack(e))&&!arenaBehindCover(e,enemyAttack(e)));
+ const summoning=e?.adds?.some(a=>a.spawnAt>combatNow()),incoming=e&&addThreats(e,combatNow()).sort((a,b)=>a.actor.attackAt-b.actor.attackAt)[0];
+ if(summoning)cue='Reinforcements! · Click an enemy to change target';
+ else if(incoming&&incoming.actor.attackAt<e.nextBoarAt)cue=incoming.move.name+' · '+Math.max(0,(incoming.actor.attackAt-combatNow())/1000).toFixed(1)+'s · '+(arenaBehindCover(incoming.encounter,incoming.move)?'Cover blocks this spell':arenaInDanger(incoming.encounter,incoming.move)?'Move or dodge!':'Stay clear of the marked tiles');
+ $('dungeonArenaCue').textContent=cue;panel.dataset.danger=String(!!incoming&&arenaInDanger(incoming.encounter,incoming.move)&&!arenaBehindCover(incoming.encounter,incoming.move)||!!e&&e.nextBoarAt-combatNow()<=enemyAttack(e).tell&&arenaInDanger(e,enemyAttack(e))&&!arenaBehindCover(e,enemyAttack(e)));
 }
 $('dungeonEngage').onclick=()=>{const enemy=huntEnemyForRoom(currentRoom),item=roomFurniture().find(i=>i.type===enemy?.prop);if(item)use(item);};
 $('dungeonDodge').onclick=()=>combatAction('dodge');
@@ -1393,7 +1405,7 @@ function updateCombatMoment(time){
   if(routineControlled()){if(time-lastCombatUi>100){lastCombatUi=time;updateCombatPanel();}return;}
   if(window.playerCloud?.gameplay){
     const tactic=nextCombatTactic({hunting,health,vitals:playerVitals,stats:playerStats,combatGear,magic:magicState,characterRules});
-    const due=hunting.encounter?Math.min(hunting.encounter.nextPlayerAt,hunting.encounter.nextBoarAt,hunting.encounter.burn?.nextAt??Infinity,hunting.encounter.brainVersion===2?hunting.encounter.brainNextThinkAt:Infinity,arenaWarningAt(hunting.encounter,enemyAttack(hunting.encounter)),tactic?.at??Infinity):Infinity;
+    const due=hunting.encounter?Math.min(addDueAt(hunting.encounter),hunting.encounter.nextPlayerAt,hunting.encounter.nextBoarAt,hunting.encounter.burn?.nextAt??Infinity,hunting.encounter.brainVersion===2?hunting.encounter.brainNextThinkAt:Infinity,arenaWarningAt(hunting.encounter,enemyAttack(hunting.encounter)),tactic?.at??Infinity):Infinity;
     if(player.inCombat&&combatNow()>=due&&time>=nextCombatPoll)sendServerCombat();
     if(!homeBedRest&&hunting.recoveryUntil&&combatNow()>=hunting.recoveryUntil&&!serverActionBusy&&!activityBusy){
       serverGameplay('recover').then(()=>{updatePlayerStats();updateCombatPanel();savePlayerState();}).catch(error=>note(error.message));
@@ -1461,11 +1473,11 @@ function roomFurniture(){
     const enemy=huntEnemyForRoom(currentRoom);
     const index=depthsStageIndex(currentRoom);
     const available=index>=0?depthsEnemyAvailable(depthsRun,currentRoom):!enemy||combatNow()>=huntRespawnAt(hunting,enemy);
-    return moonwood.layouts[currentRoom].scenery.filter(item=>{
+    return [...moonwood.layouts[currentRoom].scenery.filter(item=>{
       if(item.type===enemy?.prop)return available;
       if(item.type==='galleryCache')return !!depthsRun?.finds?.includes('shellChime');
       return true;
-    }).map(item=>item.type===enemy?.prop&&hunting.encounter?.arenaVersion===1?{...item,...arenaEnemy(hunting.encounter)}:item);
+    }).map(item=>item.type===enemy?.prop&&hunting.encounter?.arenaVersion===1?{...item,...arenaEnemy(hunting.encounter)}:item),...(hunting.encounter?.adds??[]).map(a=>({type:addKinds[a.kind].prop,x:a.x,y:a.y,addId:a.id,add:a}))];
   }
   return currentRoom==='hub'?hubFurniture:courtyardFurniture;
 }
@@ -2004,13 +2016,16 @@ function drawFishingStore(market=false){
   for(let i=0;i<5;i++)surface(3.54,5.4+i*.54,2.9,.035,.45,'#779395');
   drawDoor(storeExit);
 }
-let dungeonMobMotion=null;
+const dungeonMobMotion=new Map();
 function dungeonMobOffset(item,time){
- if(reducedMotion.matches||!hunting.encounter)return [0,0];
- const key=currentRoom+item.type,to={x:item.x,y:item.y};
- if(!dungeonMobMotion||dungeonMobMotion.key!==key)dungeonMobMotion={key,from:to,to,at:time};
- if(dungeonMobMotion.to.x!==to.x||dungeonMobMotion.to.y!==to.y)dungeonMobMotion={key,from:dungeonMobMotion.to,to,at:time};
- const m=dungeonMobMotion,t=Math.max(0,Math.min(1,(time-m.at)/260)),[x,y]=point(m.from.x+(to.x-m.from.x)*t,m.from.y+(to.y-m.from.y)*t),[tx,ty]=point(to.x,to.y);
+ if(!hunting.encounter){dungeonMobMotion.clear();return [0,0];}
+ if(reducedMotion.matches)return [0,0];
+ const key=serverCombatId+':'+(item.addId??'leader'),to={x:item.x,y:item.y};
+ for(const [id,motion] of dungeonMobMotion)if(time-motion.seen>1000)dungeonMobMotion.delete(id);
+ let motion=dungeonMobMotion.get(key)??{from:to,to,at:time};
+ if(motion.to.x!==to.x||motion.to.y!==to.y)motion={from:motion.to,to,at:time};
+ motion.seen=time;dungeonMobMotion.set(key,motion);
+ const t=Math.max(0,Math.min(1,(time-motion.at)/260)),[x,y]=point(motion.from.x+(to.x-motion.from.x)*t,motion.from.y+(to.y-motion.from.y)*t),[tx,ty]=point(to.x,to.y);
  return [x-tx,y-ty];
 }
 
@@ -2055,15 +2070,21 @@ function object(item,highlight=false,time=0) {
     if(isTimberTree(item)){
       drawTimberTree(item,time);
     }else if(type==='wildboar'||type==='stonebackBeetle'||isDungeonMob(type)){
-      const pose=boarCombatPose({time,now:combatNow(),encounter:player.inCombat?hunting.encounter:null,events:combatArt,reduced:reducedMotion.matches,defeated:!!item.defeated});
+      const actorEncounter=item.add?addEncounter(hunting.encounter,item.add):hunting.encounter;
+      const addEffects=item.add?(combatArt.bursts??[]).filter(fx=>fx.targetId===item.addId):[];
+      const pose=boarCombatPose({time,now:combatNow(),encounter:player.inCombat?actorEncounter:null,events:item.add?{boarAttackAt:addEffects.findLast(fx=>fx.action==='enemy')?.time,boarHitAt:addEffects.findLast(fx=>fx.damage)?.time}:combatArt,reduced:reducedMotion.matches,defeated:!!item.defeated});
       const [bx,by]=point(x+.5,y+.5),[px,py]=point(player.x+.5,player.y+.5);
       const shift=(type==='wildboar'||huntEnemyForRoom(currentRoom)?.archetype==='duelist'?pose.charge:0)-pose.recoil;
       const [mx,my]=isDungeonMob(type)?dungeonMobOffset(item,time):[0,0];
       ctx.save();ctx.translate(mx,my);ctx.globalAlpha*=pose.alpha;
       ctx.translate(bx+Math.sign(px-bx)*shift,by+Math.sign(py-by)*shift+pose.fall);
-      ctx.scale((px<bx?-1:1)*(1+(1-pose.squash)*.25),pose.squash);ctx.translate(-bx,-by);
+      ctx.scale((px<bx?-1:1)*(1+(1-pose.squash)*.25)*(item.add?.kind==='skitter'?.65:1),pose.squash*(item.add?.kind==='skitter'?.65:1));if(item.add&&combatNow()<item.add.spawnAt)ctx.globalAlpha*=.25;ctx.translate(-bx,-by);
       moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,progress:adventure,combat:player.inCombat?hunting.encounter:null,pose});
       ctx.restore();
+      if(item.add){
+       rect(bx-13,by-42,26,4,'#17253b');rect(bx-12,by-41,24*item.add.health/addKinds[item.add.kind].health,2,'#e8ac91');
+       if(hunting.encounter.combatTarget===item.addId){ctx.strokeStyle='#ffe3a0';ctx.lineWidth=1.5;ctx.beginPath();ctx.ellipse(bx,by,14,7,0,0,Math.PI*2);ctx.stroke();}
+      }
     }else moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,progress:adventure,depthsRun});
     return;
   }
@@ -2573,7 +2594,7 @@ function draw(time){
     const automatic=autoActivityAnimation(time),autoChop=automatic?.task==='woodcutting',cast=fishingSession??(automatic?.task==='fishing'?automatic.cast:null);
     const swingPhase=autoChop?((time-automatic.started)%1000)/1000:woodSession?((time-woodSession.started)%700)/700:0;
     const spritePose=woodSession||autoChop?{...pose,chop:swingPhase}:pose;
-    const foe=arenaEnemy(hunting.encounter);const [enemyX,enemyY]=point(foe.x+.5,foe.y+.5);
+    const foe=combatTargetTile(hunting.encounter);const [enemyX,enemyY]=point(foe.x+.5,foe.y+.5);
     const thrust=enemy?pose.lunge-pose.recoil:0;
     sprite(ctx,x+Math.sign(enemyX-x)*thrust-pose.dodge,y+Math.sign(enemyY-y)*thrust+pose.dodge*.4,avatar,{direction:player.direction,back:player.back,cycle,seated:!!seat,wave,weapon:autoChop||!!woodSession||pose.armed&&!!combatGear.equippedWeapon,sheathed:!autoChop&&!woodSession&&!pose.armed&&Object.hasOwn(socialRooms,currentRoom)&&!!combatGear.equippedWeapon,weaponTier:woodSession||autoChop?'basicAxe':combatGear.equippedWeapon,pose:spritePose,vest:armourSelection(combatGear),fishing:cast?fishingMoments.phase(cast,time):null,fishingAge:cast?time-cast.started:0,time});
     if(cast)drawFishingMoment(x,y,time,cast);
@@ -3128,6 +3149,7 @@ function drawHudMiniMap(){
   ink.strokeStyle='#72583b';ink.stroke();
 }
 function use(item){
+  if(player.inCombat&&hunting.encounter?.addsVersion===1&&(item.addId||item.type===huntEnemyForRoom(currentRoom)?.prop)){sendServerCombat('target',item.addId??'leader');return;}
   if(isTimberTree(item)){
     if(woodSession?.tree===item){note('Your chop is already in progress.');return;}
     if(treeState(item).regrowsAt){note('The tree is regrowing. Try again shortly.');return;}
@@ -5270,7 +5292,7 @@ canvas.addEventListener('pointerleave',()=>{hover=null;hoverItem=null;});
 canvas.addEventListener('click',e=>{
   if(fishingSound)fishingMoments.enable(true);
   const {tile,item,door}=pointer(e);
-  if(!editing){if(door)travelDoor(door);else if(item)use(item);else if(tile)walkTo(tile);return;}
+  if(!editing){if(item?.addId||player.inCombat&&item?.type===huntEnemyForRoom(currentRoom)?.prop)use(item);else if(door)travelDoor(door);else if(item)use(item);else if(tile)walkTo(tile);return;}
   if(item&&!fixed(item)&&selection?.id!==null&&item.id!==selection?.id){choose(item);return;}
   if(selection&&tile)place(tile);
 });
