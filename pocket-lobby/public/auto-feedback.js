@@ -44,3 +44,16 @@ export function autoTableView(state,now){
  detail:phase==='result'&&r?(p.policy.game==='roulette'?r.number+' '+r.color:'Your '+r.player+' · Dealer '+r.dealer):p.policy.game==='roulette'?'Roulette · Fixed bet '+p.policy.bet+' gold':'Blackjack · Hit below 17, then stand',
  amount:phase==='result'?amount:'Bet '+p.policy.bet+' gold',number:r?.number??'',cards:phase==='result'?state.gambling?.round:null};
 }
+
+export function autoFishingProgress(state,now){
+ const p=active(state);if(!state?.plan||p!==state.plan)return null;
+ const step=p.kind==='queue'?p.queue?.steps?.[p.stepIndex]:null;
+ if(p.kind==='queue'?step?.type!=='fishing':p.kind&&p.kind!=='fishing')return null;
+ const due=p.nextAt??p.nextCatchAt,interval=p.interval??(Number.isFinite(p.cursorAt)?due-p.cursorAt:60000);
+ if(!Number.isFinite(due)||!Number.isFinite(interval)||interval<=0)return null;
+ const left=Math.max(0,due-now),late=now-due;
+ return {seconds:Math.ceil(left/1000),progress:Math.max(0,Math.min(100,100*(1-left/interval))),intervalSeconds:Math.round(interval/1000),
+ label:left>0?'Next catch':late<15000?'Landing catch…':'Waiting for server update',
+ detail:late>=15000?'Catches will appear when the server responds.':(p.stepCount??p.baitUsed??0)+' / '+(step?.amount??p.baitLimit??'?')+' fish this batch · '+total(p.catches)+' caught this session',
+ waiting:late>=15000};
+}

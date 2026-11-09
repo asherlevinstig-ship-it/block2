@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {createAutoFeedbackTracker,autoTableView} from '../public/auto-feedback.js';import {normalizeState,settlePlan} from '../server/player-state.mjs';import {touchPresence} from '../server/routines.mjs';import {simpleAutoRules} from '../public/simple-auto.js';import {boot} from './helpers/game-client.mjs';
+import {createAutoFeedbackTracker,autoTableView,autoFishingProgress} from '../public/auto-feedback.js';import {normalizeState,settlePlan} from '../server/player-state.mjs';import {touchPresence} from '../server/routines.mjs';import {simpleAutoRules} from '../public/simple-auto.js';import {boot} from './helpers/game-client.mjs';
 function gambling(game='roulette'){const s=normalizeState({credits:200,avatar:{name:'Guest',outfit:6,hair:0},characterRules:simpleAutoRules('gambling',{risk:'safe',game})});s.controlMode='auto';touchPresence(s,1000,{active:false,forceStart:true});return s;}
 test('confirmed Auto wins and losses emit once with correct net gold and wallet changes',()=>{
  const s=gambling(),tracker=createAutoFeedbackTracker(s);tracker.update(s,{now:29000});settlePlan(s,31000,{random:()=>.03});const original=structuredClone(s),[win]=tracker.update(s,{now:31000});assert.match(win.title,/won/);assert.equal(win.gold,5);assert.equal(win.walletDelta,5);assert.match(win.detail,/Bet 5 gold/);assert.deepEqual(s,original);assert.deepEqual(tracker.update(s,{now:32000}),[]);
@@ -26,4 +26,12 @@ test('bank deposits are distinguished from earnings in Auto feedback',()=>{
 });
 test('game applies Auto feedback without repeated transaction cards or changes to the character',()=>{
  const s=gambling(),g=boot(s);g.context.updateState=structuredClone(s);g.run('towerApplyRoutineState(updateState)');assert.equal(g.nodes.get('autoTable').hidden,false);settlePlan(s,31000,{random:()=>.03});g.context.updateState=structuredClone(s);g.run('towerApplyRoutineState(updateState)');assert.equal(g.nodes.get('transactions').children.length,1);g.run('towerApplyRoutineState(updateState)');assert.equal(g.nodes.get('transactions').children.length,1);assert.equal(g.read('credits'),205);assert.deepEqual(g.errors,[]);
+});
+
+test('Auto fishing shows real countdown, batch progress and a clear overdue update state',()=>{
+ const state={plan:{source:'rules',kind:'queue',queue:{steps:[{type:'fishing',amount:5}]},stepIndex:0,stepCount:2,catches:{silverfin:2},cursorAt:1000,nextAt:61000}};
+ let view=autoFishingProgress(state,31000);assert.equal(view.seconds,30);assert.equal(view.progress,50);assert.match(view.detail,/2 \/ 5/);assert.equal(view.intervalSeconds,60);
+ assert.equal(autoFishingProgress(state,62000).label,'Landing catch…');assert.equal(autoFishingProgress(state,78000).waiting,true);assert.match(autoFishingProgress(state,78000).label,/server update/);
+ state.plan.stepCount=3;state.plan.catches.silverfin=3;state.plan.cursorAt=61000;state.plan.nextAt=121000;view=autoFishingProgress(state,62000);assert.equal(view.seconds,59);assert.match(view.detail,/3 \/ 5/);
+ state.plan.queue.steps[0].type='sellFish';assert.equal(autoFishingProgress(state,62000),null);assert.equal(autoFishingProgress({report:state.plan},62000),null);
 });

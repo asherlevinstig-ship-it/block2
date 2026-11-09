@@ -5480,8 +5480,19 @@ function advanceAutoJourney(){
 }
 window.towerAutoTravelStatus=()=>autoJourney?{destination:roomDetails[autoJourney.room]?.name??autoJourney.room,room:roomDetails[currentRoom]?.name??currentRoom,blocked:!!autoJourney.blocked}:null;
 const autoFeedbackTracker=typeof createAutoFeedbackTracker==='function'?createAutoFeedbackTracker(savedPlayerState):null;
-let autoTableState=null,autoTableServerAt=0,autoTableLocalAt=0,autoTableKey='';
+let autoTableState=null,autoTableServerAt=0,autoTableLocalAt=0,autoTableKey='',autoFishingKey='';
 function renderAutoTable(time){
+ const fishing=typeof autoFishingProgress==='function'?autoFishingProgress(autoTableState,autoTableServerAt+Math.max(0,time-autoTableLocalAt)):null;
+ $('autoWorkProgress').hidden=!fishing;
+ const fishingKey=fishing?[fishing.label,fishing.seconds,fishing.detail,fishing.intervalSeconds].join(':'):'';
+ if(!fishing)autoFishingKey='';
+ if(fishing&&fishingKey!==autoFishingKey){
+  autoFishingKey=fishingKey;
+  $('autoWorkLabel').textContent=fishing.label;$('autoWorkCountdown').textContent=fishing.seconds>0?fishing.seconds+'s':'';
+  $('autoCastProgress').value=fishing.progress;$('autoCastProgress').setAttribute('aria-valuetext',fishing.seconds>0?fishing.seconds+' seconds until the next catch':fishing.label);
+  $('autoCatchCount').textContent=fishing.detail;$('autoCastSpeed').textContent='Auto catch · About '+fishing.intervalSeconds+' seconds per fish';
+  $('autoWorkProgress').dataset.waiting=String(fishing.waiting);
+ }
  if(typeof autoTableView!=='function')return;
  const view=autoTableView(autoTableState,autoTableServerAt+Math.max(0,time-autoTableLocalAt));
  const board=$('autoTable');board.hidden=!view;
