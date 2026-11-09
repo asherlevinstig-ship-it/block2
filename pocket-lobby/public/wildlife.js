@@ -3,9 +3,9 @@ import {skillLevel} from './skill-curve.js';
 export const wildlifeRoom='wildlifeReserve';
 export const wildlifeView={width:864,height:520,cols:24,rows:20,originX:396,originY:68};
 export const wildlifeHabitats={
- otter:{name:'Reed Pools',anchor:{x:6,y:10},forage:{x:4,y:8},food:'River Snack',steps:['observe','feed','feed','bond']},
- fox:{name:'Amber Meadow',anchor:{x:17,y:17},forage:{x:13,y:16},food:'Amber Berry',steps:['observe','feed','observe','feed','bond']},
- owl:{name:'Moonpine Ridge',anchor:{x:16,y:2},forage:{x:16,y:2},food:'Moonpine Seed',steps:['observe','feed','feed','perch','feed','bond']}
+ otter:{name:'Reed Pools',anchor:{x:6,y:10},forage:{x:4,y:8},food:'River Snack',steps:['observe','feed','pebble','bond']},
+ fox:{name:'Amber Meadow',anchor:{x:17,y:17},forage:{x:13,y:16},food:'Amber Berry',steps:['observe','feed','tracks','trailEnd','bond']},
+ owl:{name:'Moonpine Ridge',anchor:{x:16,y:2},forage:{x:16,y:2},food:'Moonpine Seed',steps:['observe','feed','listen','echo','perch','bond']}
 };
 export function reserveWater(x,y){return x>=2&&x<=7&&y>=11&&y<=16&&(x>=3||y>=12&&y<=15)&&(x<=6||y>=12&&y<=15);}
 export const wildlifeArea={
@@ -67,10 +67,19 @@ export function normalizeForage(input){
  }
  return result;
 }
+export const wildlifeTrials={
+ pebble:{tile:{x:3,y:10},action:'Skip a pebble',hint:'Skip a pebble at the marked bank. The otter likes watching the ripples.'},
+ tracks:{tile:{x:13,y:14},action:'Inspect pawprints',hint:'Find the first set of pawprints at the edge of Amber Meadow.'},
+ trailEnd:{tile:{x:19,y:17},action:'Read the last tracks',hint:'Follow the prints toward the far edge of the meadow.'},
+ listen:{tile:{x:15,y:3},action:'Listen from the ridge',hint:'Go to the marked listening spot to hear the owl’s call.'}
+};
+export const owlCalls={two:'Hoo · Hoo',longShort:'Hoo-oo · Hoo',shortLong:'Hoo · Hoo-oo'};
+export const owlCallFor=id=>id==='pine-owl'?'shortLong':'longShort';
 export function bondStep(state,animal){
  const habitat=wildlifeHabitats[animal.kind];
  const trust=state.trust[animal.id]??{step:0,lastRest:null};
- return {habitat,trust,stage:habitat.steps[trust.step],waiting:trust.lastRest!==null&&!(animal.rest>trust.lastRest),food:state.forage[animal.kind]?.count??0};
+ const stage=habitat.steps[trust.step],trial=wildlifeTrials[stage]??null;
+ return {habitat,trust,stage,trial,waiting:!trial&&trust.lastRest!==null&&!(animal.rest>trust.lastRest),food:state.forage[animal.kind]?.count??0};
 }
 
 // The game tracks skill levels rather than a separate character XP bar.

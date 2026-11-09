@@ -72,7 +72,7 @@ const ownedFurniture=Object.fromEntries(Object.keys(types).map(type=>{
   return [type,Math.max(previousStock[type]??(type==='bed'?1:0),placed+oldLounge)];
 }));
 const availableFurniture=type=>(ownedFurniture[type]??0)-countFurniture(homeFurniture,type);
-let familiarState=normalizeFamiliars(savedPlayerState?.familiars),selectedWildAnimal=null,wildlifeAffection=null,wildlifeFeedback=null;
+let familiarState=normalizeFamiliars(savedPlayerState?.familiars),selectedWildAnimal=null,wildlifeAffection=null,wildlifeFeedback=null,wildlifeTrialEffect=null;
 let familiarReaction=null;
 const familiarFollowers=new Map(),familiarPortraits=[];
 const renderedActors=[],actorNameplates=new Map();
@@ -1490,6 +1490,8 @@ function selectWildAnimal(id){
  const animal=wildAnimal(id,combatNow());if(currentRoom!==wildlifeRoom||!animal)return;
  if(selectedWildAnimal!==id)wildlifeFeedback=null;
  selectedWildAnimal=id;
+ const {trial}=bondStep(familiarState,animal);
+ if(trial){if(!nearWildAnimal(startPosition(),trial.tile))walkTo(trial.tile);return;}
  if(nearWildAnimal(startPosition(),animal))return;
  const candidates=directions.map(([dx,dy])=>({x:Math.round(animal.x)+dx,y:Math.round(animal.y)+dy}));
  const paths=candidates.filter(tile=>!blocked(tile.x,tile.y)).map(tile=>({tile,path:walkingPath(startPosition(),tile)})).filter(p=>p.path);
@@ -1498,37 +1500,42 @@ function selectWildAnimal(id){
 function updateWildlifeGuide(){
  const guide=$('wildlifeGuide');guide.hidden=currentRoom!==wildlifeRoom;
  if(guide.hidden)return;
- const now=combatNow(),animal=wildAnimal(selectedWildAnimal,now),action=$('wildlifeAction'),gather=$('wildlifeForage'),oddsLabel=$('wildlifeOdds');
+ const now=combatNow(),animal=wildAnimal(selectedWildAnimal,now),action=$('wildlifeAction'),gather=$('wildlifeForage'),oddsLabel=$('wildlifeOdds'),calls=$('wildlifeCalls');
  if(!animal){
   $('wildlifeEyebrow').textContent='WILDLIFE RESERVE';$('wildlifeTitle').textContent='Meet the wild animals';
-  $('wildlifeHint').textContent='Choose an animal, gather its favorite food, and meet it at several resting stops.';
-  action.hidden=gather.hidden=oddsLabel.hidden=true;return;
+  $('wildlifeHint').textContent='Choose an animal, offer its favorite food, and learn what earns its trust.';
+  action.hidden=gather.hidden=oddsLabel.hidden=calls.hidden=true;return;
  }
  const species=familiars[animal.kind],bonded=familiarState.owned.includes(animal.kind);
- const {habitat,trust,stage,waiting,food}=bondStep(familiarState,animal);
+ const {habitat,trust,stage,trial,waiting,food}=bondStep(familiarState,animal);
  const odds=bondOdds(playerStats,animal.kind,stage,trust.misses);
- oddsLabel.hidden=bonded;
+ oddsLabel.hidden=bonded||!!trial||stage==='echo';
  oddsLabel.textContent=odds.percent+'% success · Lv. '+odds.level+' · Luck '+odds.luck+' · Patience '+odds.patience+(odds.bonus.retry?' · Retry +'+odds.bonus.retry+'%':'');
  oddsLabel.title='Level averages Strength, Agility and Vitality. This attempt: base '+odds.base+'%, level +'+odds.bonus.level+'%, Luck +'+odds.bonus.luck+'%, Patience +'+odds.bonus.patience+'%, retry +'+odds.bonus.retry+'%. Max 97%.';
  const position={x:player.cx,y:player.cy},moving=!!step||route.length>0,busy=moving||serverActionBusy||unavailable();
  const near=nearWildAnimal(position,animal),missingFood=stage==='feed'&&food===0;
+ const canEcho=stage==='echo'&&near&&animal.resting&&!waiting&&!bonded;
+ calls.hidden=!canEcho;
+ if(canEcho)for(const id of ['owlCallTwo','owlCallLongShort','owlCallShortLong'])$(id).disabled=busy;
  const atForage=nearWildAnimal(position,habitat.forage),regrow=Math.max(0,Math.ceil(((familiarState.forage[animal.kind]?.readyAt??0)-now)/1000));
  $('wildlifeEyebrow').textContent=bonded?'BONDED · '+habitat.name:habitat.name.toUpperCase()+' · TRUST '+trust.step+' / '+habitat.steps.length;
  $('wildlifeTitle').textContent=species.name;
  const feedback=wildlifeFeedback?.until>now?wildlifeFeedback.text:null;
  let hint='Let it see you before you reach out.';
  if(bonded)hint='This species is in your Familiars collection.';
+ else if(trial)hint=trial.hint;
  else if(missingFood)hint='Gather a '+habitat.food+' from the marked foraging spot.';
  else if(!animal.resting)hint='It is roaming. Wait for its next stop.';
  else if(waiting)hint='You earned trust at this stop. Follow the same animal to its next rest.';
  else if(!near)hint='Walk beside the animal while it is resting.';
  else if(stage==='feed')hint='Offer its favorite food to earn more trust.';
+ else if(stage==='echo')hint='The owl calls: '+owlCalls[owlCallFor(animal.id)]+'. Echo that rhythm.';
  else if(stage==='perch')hint='Hold still and let the owl perch on your arm.';
  else if(stage==='bond')hint='It trusts you. Reach out to form a bond.';
  $('wildlifeHint').textContent=feedback??hint;
- action.hidden=bonded;action.disabled=busy||!animal.resting||waiting||missingFood;
- action.textContent=near?{observe:'Sit quietly',feed:'Offer '+habitat.food,perch:'Offer your arm',bond:'Form a bond'}[stage]:'Walk closer';
- gather.hidden=bonded;gather.disabled=busy||food>=FORAGE_CAP||atForage&&regrow>0;
+ action.hidden=bonded||canEcho;action.disabled=busy||!trial&&(!animal.resting||waiting||missingFood);
+ action.textContent=trial?(nearWildAnimal(position,trial.tile)?trial.action:'Walk to marked spot'):near?{observe:'Sit quietly',feed:'Offer '+habitat.food,echo:'Echo the owl',perch:'Offer your arm',bond:'Form a bond'}[stage]:'Walk closer';
+ gather.hidden=bonded||trust.step>1;gather.disabled=busy||food>=FORAGE_CAP||atForage&&regrow>0;
  gather.textContent=(food>=FORAGE_CAP?habitat.food+' pouch full':atForage?(regrow?'Forage regrows in '+regrow+'s':'Gather '+habitat.food):'Find '+habitat.food)+' · '+food+'/'+FORAGE_CAP;
 }
 $('wildlifeForage').onclick=async()=>{
@@ -1542,22 +1549,36 @@ $('wildlifeForage').onclick=async()=>{
  }catch(error){wildlifeFeedback={text:error.message,until:combatNow()+3000};}
  updateWildlifeGuide();
 };
-$('wildlifeAction').onclick=async()=>{
- const animal=wildAnimal(selectedWildAnimal,combatNow());if(!animal||$('wildlifeAction').disabled||!window.playerCloud?.gameplay)return;
- if(!nearWildAnimal({x:player.cx,y:player.cy},animal)){selectWildAnimal(animal.id);return;}
- const trustStep=familiarState.trust[animal.id]?.step??0;
+$('wildlifeAction').onclick=()=>attemptWildlifeTrust();
+for(const [button,reply] of [['owlCallTwo','two'],['owlCallLongShort','longShort'],['owlCallShortLong','shortLong']]){
+ $(button).onclick=()=>attemptWildlifeTrust(reply);
+}
+async function attemptWildlifeTrust(reply){
+ const animal=wildAnimal(selectedWildAnimal,combatNow());
+ if(!animal||serverActionBusy||unavailable()||!window.playerCloud?.gameplay)return;
+ const {trust,stage,trial}=bondStep(familiarState,animal),position={x:player.cx,y:player.cy};
+ if(reply?$('wildlifeCalls').hidden||step||route.length:$('wildlifeAction').disabled)return;
+ if(trial&&!nearWildAnimal(position,trial.tile)){walkTo(trial.tile);return;}
+ if(!trial&&!nearWildAnimal(position,animal)){selectWildAnimal(animal.id);return;}
  try{
-  await serverGameplay('familiarTame',{id:animal.id,step:trustStep});
-  if(!familiarState.owned.includes(animal.kind)&&familiarState.trust[animal.id]?.step===trustStep){
+  await serverGameplay('familiarTame',{id:animal.id,step:trust.step,reply});
+  if(!familiarState.owned.includes(animal.kind)&&familiarState.trust[animal.id]?.step===trust.step){
    wildlifeFeedback={text:'It stayed wary. Your trust and treats are safe. Try again at its next rest.',until:combatNow()+5000};
    updateWildlifeGuide();return;
   }
-  wildlifeFeedback=null;wildlifeAffection={id:animal.id,at:performance.now()};
-  if(familiarState.owned.includes(animal.kind))familiarReaction={id:animal.kind,pose:'bond',at:performance.now()};
-  if(familiarState.owned.includes(animal.kind))showTransaction('Familiar bonded',[{icon:'✦',text:familiars[animal.kind].name+(familiarState.equipped===animal.kind?' · Equipped':' · Find it in Familiars')}]);
+  wildlifeFeedback=null;
+  if(trial){
+   const message={pebble:'The otter perks up at the ripples. Go back when it rests.',tracks:'The prints turn toward the far edge of the meadow.',trailEnd:'You found where the fox has been playing. Meet it at a rest.',listen:'You heard '+owlCalls[owlCallFor(animal.id)]+'. Go back to the owl and echo it.'}[stage];
+   wildlifeFeedback={text:message,until:combatNow()+4500};
+   if(stage==='pebble')wildlifeTrialEffect={at:performance.now(),tile:trial.tile};
+  }else wildlifeAffection={id:animal.id,at:performance.now()};
+  if(familiarState.owned.includes(animal.kind)){
+   familiarReaction={id:animal.kind,pose:'bond',at:performance.now()};
+   showTransaction('Familiar bonded',[{icon:'✦',text:familiars[animal.kind].name+(familiarState.equipped===animal.kind?' · Equipped':' · Find it in Familiars')}]);
+  }
   updateWildlifeGuide();
  }catch(error){wildlifeFeedback={text:error.message,until:combatNow()+3000};updateWildlifeGuide();}
-};
+}
 function drawFamiliarPortrait(portrait,time){
  const {id,ctx:target}=portrait;
  target.clearRect(0,0,84,66);
@@ -2818,10 +2839,20 @@ function draw(time){
   if(currentRoom===wildlifeRoom){
    const animal=wildAnimal(selectedWildAnimal,combatNow());
    if(animal&&!familiarState.owned.includes(animal.kind)){
-    const {x,y}=wildlifeHabitats[animal.kind].forage,color=familiars[animal.kind].color;
-    surface(x+.13,y+.13,.74,.74,.6,color+'44',color);
-    const [px,py]=point(x+.5,y+.5,12);
-    polygon([[px,py-5],[px+5,py],[px,py+5],[px-5,py]],color,'#223f40');
+    const {trial,stage,habitat,trust}=bondStep(familiarState,animal),color=familiars[animal.kind].color;
+    const spot=trial?.tile??(trust.step<=1?habitat.forage:null);
+    if(spot){
+     const {x,y}=spot;surface(x+.13,y+.13,.74,.74,.6,color+'44',color);
+     const [px,py]=point(x+.5,y+.5,12);
+     polygon([[px,py-5],[px+5,py],[px,py+5],[px-5,py]],color,'#223f40');
+     if(stage==='tracks'||stage==='trailEnd'){rect(px-4,py+4,2,2,color);rect(px+2,py+7,2,2,color);}
+    }
+   }
+   const age=time-(wildlifeTrialEffect?.at??-Infinity);
+   if(age>=0&&age<950){
+    const {x,y}=wildlifeTrialEffect.tile,[px,py]=point(x+.7,y+1.7,1);
+    const span=reducedMotion.matches?12:5+age/45;
+    ctx.save();ctx.globalAlpha=1-age/950;ctx.strokeStyle='#c8f0e6';ctx.beginPath();ctx.ellipse(px,py,span,span*.45,0,0,Math.PI*2);ctx.stroke();ctx.restore();
    }
   }
   drawEnvironmentFx({room:currentRoom,ctx,point,time,reduced:reducedMotion.matches,inCombat:player.inCombat,
@@ -5803,7 +5834,7 @@ function enterRoom(next,arrival,{automatic=false}={}){
   catchReveal=null;$('catchReveal').hidden=true;
   const focusRoom=!!document.activeElement.closest('[data-room-link]');
   if(next==='market'&&tradingGuideActive()){if(quest.claimed)tradingPostGuideComplete=true;tradeGuideRouteCache=null;}
-  currentRoom=next;selectedWildAnimal=null;wildlifeAffection=null;wildlifeFeedback=null;familiarFollowers.clear();familiarReaction=null;$('gameShell').dataset.expedition=watchRooms.includes(next)?next:'';
+  currentRoom=next;selectedWildAnimal=null;wildlifeAffection=null;wildlifeFeedback=null;wildlifeTrialEffect=null;familiarFollowers.clear();familiarReaction=null;$('gameShell').dataset.expedition=watchRooms.includes(next)?next:'';
   depthsExploring=false;
   const exploring=moonwood.has(next);
   const nextView=next===wildlifeRoom?wildlifeView:exploring?moonwood.view:next==='hub'?hubView:next==='outside'?courtyardView:standardView;

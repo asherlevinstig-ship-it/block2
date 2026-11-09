@@ -1,4 +1,4 @@
-import {wildlifeRoom,wildAnimal,nearWildAnimal,wildlifeHabitats,bondStep,bondOdds,FORAGE_COOLDOWN_MS,FORAGE_CAP} from '../public/wildlife.js';
+import {wildlifeRoom,wildAnimal,nearWildAnimal,wildlifeHabitats,bondStep,bondOdds,owlCallFor,FORAGE_COOLDOWN_MS,FORAGE_CAP} from '../public/wildlife.js';
 import {roomBoxes,validRoomTile} from '../public/shared-world.js';
 import {familiars,normalizeFamiliars,normalizeFamiliarName,FAMILIAR_NAME_MAX,MOON_SIGHT_MS,secondChanceBlock} from '../public/familiars.js';
 import {activeAdd,addKinds} from '../public/dungeon-adds.js';
@@ -45,11 +45,24 @@ export function familiarAction(state,action,body,now,random=Math.random){
    const animal=typeof id==='string'?wildAnimal(id,now):null;
    if(!animal)throw new Error('Choose a wild animal in the reserve.');
    if(current.owned.includes(animal.kind))return true;
-   if(!animal.resting||!nearWildAnimal(state.position,animal))throw new Error('Walk beside the animal while it is resting.');
-   const {trust,stage,waiting,food,habitat}=bondStep(current,animal);
-   if(body.step!==trust.step)throw new Error('The animal’s trust has changed. Try the next step.');
-   if(waiting)throw new Error('Let this animal move on, then meet it at its next rest.');
-   if(stage==='feed'&&!food)throw new Error('Gather a '+habitat.food+' at the foraging spot first.');
+   const {trust,stage,trial,waiting,food,habitat}=bondStep(current,animal);
+   if(trial){
+    if(body.step!==trust.step)throw invalidUse('The animal’s trust has changed. Try the next step.');
+    if(!nearWildAnimal(state.position,trial.tile))throw invalidUse('Walk to the marked spot first.');
+    current.trust[id]={...trust,step:trust.step+1};
+    state.familiars=current;
+    return true;
+   }
+   if(!animal.resting||!nearWildAnimal(state.position,animal))throw invalidUse('Walk beside the animal while it is resting.');
+   if(body.step!==trust.step)throw invalidUse('The animal’s trust has changed. Try the next step.');
+   if(waiting)throw invalidUse('Let this animal move on, then meet it at its next rest.');
+   if(stage==='echo'){
+    if(body.reply!==owlCallFor(id))throw invalidUse('The owl listens. Try echoing its call again.');
+    current.trust[id]={step:trust.step+1,lastRest:trust.lastRest};
+    state.familiars=current;
+    return true;
+   }
+   if(stage==='feed'&&!food)throw invalidUse('Gather a '+habitat.food+' at the foraging spot first.');
    const misses=trust.misses??0;
    const {percent}=bondOdds(state.stats,animal.kind,stage,misses);
    if(random()*100>=percent){

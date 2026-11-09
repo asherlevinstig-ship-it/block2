@@ -1,7 +1,7 @@
 import {handlePlayerApi} from '../server/player-api.mjs';
 import {testDatabase} from './db-helper.mjs';
 import {skillXpForLevel} from '../public/skill-curve.js';
-import {wildlifeRoom,wildAnimal,wildlifeAnimals,nearWildAnimal,wildlifeHabitats,FORAGE_COOLDOWN_MS,bondOdds} from '../public/wildlife.js';
+import {wildlifeRoom,wildAnimal,wildlifeAnimals,nearWildAnimal,wildlifeHabitats,bondOdds,wildlifeTrials,owlCallFor} from '../public/wildlife.js';
 import {moonwood} from '../public/moonwood.js';
 import {validRoomTile,roomBoxes,reachableMove,socialRooms} from '../public/shared-world.js';
 import test from 'node:test';
@@ -35,11 +35,29 @@ test('only taming a resting animal nearby forms a bond and the first bond equips
  assert.throws(()=>act(s,'familiarForage',{id:'fox'},13001),/foraging spot/);
  s.position={x:8,y:9};act(s,'familiarTame',{id:'reed-otter',step:1},14000);
  assert.equal(s.familiars.forage.otter.count,0);
- s.position=wildlifeHabitats.otter.forage;act(s,'familiarForage',{id:'otter'},13000+FORAGE_COOLDOWN_MS);
- s.position={x:9,y:15};act(s,'familiarTame',{id:'reed-otter',step:2},26000);
+ assert.throws(()=>act(s,'familiarTame',{id:'reed-otter',step:2},14001),/marked spot/);
+ s.position=wildlifeTrials.pebble.tile;act(s,'familiarTame',{id:'reed-otter',step:2},14100);
+ assert.equal(s.familiars.trust['reed-otter'].lastRest,1);
+ assert.equal(s.familiars.forage.otter.count,0);
  s.position={x:8,y:9};act(s,'familiarTame',{id:'reed-otter',step:3},38000);
  assert.deepEqual(s.familiars.owned,['otter']);assert.equal(s.familiars.equipped,'otter');assert.deepEqual(s.familiars.trust,{});
  assert.equal(publicPeer({familiar:s.familiars.equipped}).familiar,'otter');assert.equal(publicPeer({familiar:'unknown'}).familiar,undefined);
+});
+
+test('fox tracks and the owl call advance only when the habitat activity is completed',()=>{
+ const s=normalizeState({location:wildlifeRoom,position:{x:13,y:14},familiars:{trust:{'meadow-fox':{step:2,lastRest:0},'ridge-owl':{step:2,lastRest:0}}}});
+ act(s,'familiarTame',{id:'meadow-fox',step:2});
+ assert.equal(s.familiars.trust['meadow-fox'].step,3);
+ assert.throws(()=>act(s,'familiarTame',{id:'meadow-fox',step:3}),/marked spot/);
+ s.position=wildlifeTrials.trailEnd.tile;act(s,'familiarTame',{id:'meadow-fox',step:3});
+ assert.equal(s.familiars.trust['meadow-fox'].step,4);
+ s.position=wildlifeTrials.listen.tile;act(s,'familiarTame',{id:'ridge-owl',step:2});
+ const now=15000,owl=wildAnimal('ridge-owl',now);assert(owl.resting);s.position={x:owl.x,y:owl.y+1};
+ assert.throws(()=>act(s,'familiarTame',{id:'ridge-owl',step:3,reply:'two'},now),/echoing/);
+ assert.equal(s.familiars.trust['ridge-owl'].step,3);
+ act(s,'familiarTame',{id:'ridge-owl',step:3,reply:owlCallFor('ridge-owl')},now);
+ act(s,'familiarTame',{id:'ridge-owl',step:4},now+100);
+ assert.equal(s.familiars.trust['ridge-owl'].step,5);
 });
 
 test('adventurer level, Luck and Patience each improve the displayed bonding chance',()=>{
@@ -82,6 +100,7 @@ test('reserve routes stay on land with reachable habitats and enough room for pl
   assert(reachableMove(wildlifeRoom,entrance.arrival,{x:animal.x,y:animal.y},boxes,100));
  }
  for(const {forage} of Object.values(wildlifeHabitats))assert(reachableMove(wildlifeRoom,entrance.arrival,forage,boxes,100));
+ for(const {tile} of Object.values(wildlifeTrials))assert(reachableMove(wildlifeRoom,entrance.arrival,tile,boxes,100));
  assert(resting.size>=20);assert.notDeepEqual(wildAnimal('reed-otter',10000),wildAnimal('reed-otter',10600));
  assert.equal(nearWildAnimal({x:4,y:9},wildAnimal('reed-otter',1000)),true);
 });
