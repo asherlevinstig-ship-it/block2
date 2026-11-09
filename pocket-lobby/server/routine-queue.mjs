@@ -1,3 +1,4 @@
+import {useHunger} from '../public/player-vitals.js';
 import {chooseSimpleTask} from './simple-planner.mjs';
 import {explorationStops,EXPLORE_STOP_MS} from './exploration-plan.mjs';
 import {applyAutoFood} from './auto-food.mjs';
@@ -132,12 +133,12 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
       if(state.fishingGear.bait<=p.keepBait){nextStep(p,p.cursorAt,'Bait reserve reached');changed=true;continue;}
       const fish=rollFishingCatch(skillLevel(state.stats.patienceXp),state.fishingGear.equippedRod,random,state.stats.luckXp);
       if((state.fishStock[fish]??0)>=1000000)return finish(state,p,'inventory-full',at);
-      state.fishStock[fish]=(state.fishStock[fish]??0)+1;state.fishingGear.bait--;
+      state.fishStock[fish]=(state.fishStock[fish]??0)+1;useHunger(state);state.fishingGear.bait--;
       const xp=Math.min(10,MAX_SKILL_XP-state.stats.patienceXp);state.stats.patienceXp+=xp;p.patienceXp+=xp;
       state.history.fishCaught=true;recordQuest(state.quest,'fish');p.catches[fish]=(p.catches[fish]??0)+1;p.stepCount++;autoStoreVault(state,p,at);
     }else if(type==='woodcutting'){
       if(state.woodcutting.timber+(state.bank?.vault?.items?.timber??0)>=p.timberTarget){nextStep(p,p.cursorAt,'Timber target reached');changed=true;continue;}
-      const before=state.woodcutting.xp;harvestTimber(state.woodcutting);p.woodXp+=state.woodcutting.xp-before;p.timber++;p.stepCount++;autoStoreVault(state,p,at);
+      const before=state.woodcutting.xp;harvestTimber(state.woodcutting);useHunger(state);p.woodXp+=state.woodcutting.xp-before;p.timber++;p.stepCount++;autoStoreVault(state,p,at);
     }else if(type==='sellFish'||type==='sellTimber'||type==='sellMeat'||type==='sellShells'){
       const products=type==='sellTimber'?[['timber',state.woodcutting.timber,woodRules.price]]:type==='sellMeat'?[['boar',state.huntingLoot.boar??0,huntEnemies.boar.sellPrice]]:type==='sellShells'?[['stonebackShell',state.huntingLoot.stonebackShell??0,huntEnemies.beetle.sellPrice]]:Object.entries(state.fishStock).map(([id,count])=>[id,count,fishProducts[id].price]).sort((a,b)=>a[2]-b[2]||a[0].localeCompare(b[0]));
       const protectedCount=id=>state.bank?.vault?.rules?.[id==='timber'?'timber':type==='sellFish'?'fish:'+id:'loot:'+id]??0;

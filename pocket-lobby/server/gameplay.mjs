@@ -1,3 +1,4 @@
+import {normalizeVitals,useHunger,feedPlayer} from '../public/player-vitals.js';
 import {isFishingRoom,besideFishingStation} from '../public/region-catalog.js';
 import {armourCatalog,canUseArmour} from '../public/hunting.js';
 import {normalizeWardrobe,tailorQuote} from '../public/wardrobe.js';
@@ -95,10 +96,10 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
       prepareMeal(state,body.id);
     }else{
       if(count<1)throw new Error('Choose a meal you have in Inventory.');
-      if(state.health>=100)throw new Error('Invalid meal use. Your hearts are already full.');
+      if(state.health>=100&&normalizeVitals(state.vitals).hunger>=100)throw new Error('Invalid meal use. Your health and hunger are already full.');
       if(count===1)delete meals[body.id];
       else meals[body.id]=count-1;
-      state.health=Math.min(100,state.health+recipe.healing);
+      state.health=Math.min(100,state.health+recipe.healing);feedPlayer(state,recipe.healing);
     }
     return;
   }
@@ -155,7 +156,7 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
     const fish=rollFishingCatch(skillLevel(before),cast.rod,random,state.stats.luckXp);
     if((state.fishStock[fish]??0)>=1000000)throw new Error('Invalid inventory. Sell some fish first.');
     state.fishingGear.bait--;
-    state.fishStock[fish]=(state.fishStock[fish]??0)+1;
+    state.fishStock[fish]=(state.fishStock[fish]??0)+1;useHunger(state);
     state.stats.patienceXp=Math.min(MAX_SKILL_XP,before+10+cast.bonus);
     state.history.fishCaught=true;
     recordQuest(state.quest,'fish');
@@ -282,7 +283,7 @@ export function protectFishingState(previous,next){
   next.combatGear.moonwellCharmEquipped=previous.combatGear.moonwellCharmEquipped;
   if(!previous.combatGear.stonebackVestOwned)next.combatGear.stonebackVestEquipped=false;
   if(!next.combatGear.swordUpgrades?.includes(next.combatGear.activeSwordUpgrade))delete next.combatGear.activeSwordUpgrade;
-  next.health=previous.health;
+  next.health=previous.health;next.vitals=normalizeVitals(previous.vitals);
   if(previous.combatReports?.length)next.combatReports=previous.combatReports;
   else delete next.combatReports;
   next.hunting=previous.hunting;

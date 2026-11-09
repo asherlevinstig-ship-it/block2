@@ -1,3 +1,4 @@
+import {normalizeVitals} from '../public/player-vitals.js';
 import {publishWorldActivity} from './world-activity.mjs';
 import {simpleAutoRules} from '../public/simple-auto.js';
 import {saveAutoSettings} from './auto-settings.mjs';
@@ -23,6 +24,7 @@ function readPlayerState(row){
   const state=JSON.parse(row.state_json);
   migrateProgression(state);
   migrateHomeSafe(state);
+  state.vitals=normalizeVitals(state.vitals);
   state.wardrobe=normalizeWardrobe(state.wardrobe,state.avatar);
   if(state.magic)state.magic=normalizeMagic(state.magic);
   // Existing shifts keep their scheduled pace until they finish.
@@ -86,7 +88,7 @@ export async function handlePlayerApi(request,env){
       const existing=id&&await settled(env,id,true);
       if(existing)return json(packet(existing));
       const body=await bodyOf(request),legacy={...body.legacy};migrateProgression(legacy);
-      const state=normalizeState({...legacy,autoConfigured:undefined,pendingCharacterRules:undefined,autoSwitch:undefined,bedRest:undefined,safeVersion:1,ownedFurniture:{...(legacy.ownedFurniture??{bed:1}),safe:0},homeFurniture:(legacy.homeFurniture??[]).filter(item=>item.type!=='safe'),bank:undefined,controlMode:'play',meals:{},magic:undefined,...(body.newCharacter===true?{characterCreated:false,welcomeSeen:false,autoLesson:'required'}:{})});
+      const state=normalizeState({...legacy,vitals:undefined,autoConfigured:undefined,pendingCharacterRules:undefined,autoSwitch:undefined,bedRest:undefined,safeVersion:1,ownedFurniture:{...(legacy.ownedFurniture??{bed:1}),safe:0},homeFurniture:(legacy.homeFurniture??[]).filter(item=>item.type!=='safe'),bank:undefined,controlMode:'play',meals:{},magic:undefined,...(body.newCharacter===true?{characterCreated:false,welcomeSeen:false,autoLesson:'required'}:{})});
       if(state.wardrobe.outfits.some(look=>['jacket','trousers','boots'].some(slot=>clothingCatalog[look[slot]]?.price)))throw new Error('Choose free starter clothing for a new character.');
       state.wardrobe.owned=state.wardrobe.owned.filter(id=>!clothingCatalog[id]?.price);
       delete state.combatGear.ownedArmour;delete state.combatGear.equippedArmour;

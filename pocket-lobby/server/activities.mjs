@@ -1,3 +1,4 @@
+import {useHunger} from '../public/player-vitals.js';
 import {armourSelection} from '../public/hunting.js';
 import {startBedRest,settleBedRest,stopBedRest} from './bed-rest.mjs';
 import {awardDungeonWeapon} from '../public/dungeon-loot.js';
@@ -45,6 +46,7 @@ function result(state,event,now,random=Math.random){
   if(event.encounter&&Number.isSafeInteger(encounter.tacticsAt))event.encounter.tacticsAt=now;
   state.hunting.encounter=event.encounter;state.health=event.health;
   if(event.outcome==='victory'){
+    useHunger(state,2);
     if(state.combatId)event.mastery=awardEssenceMastery(state.magic,[...(encounter.usedEssences??[]),event.masteryGem],enemy.masteryXp??10);
     if(state.location!==depthsCacheRoom&&state.location!=='depthsTrial'&&state.combatId&&state.magic?.picks.length)event.stone=awardBattleStone(state.magic,enemy.id==='depthsGuardian');
     rewards.xp={};
@@ -143,7 +145,7 @@ export function activityAction(state,action,body,now,random){
     if(action==='cut'){
       const cut=state.timberCut;
       if(!cut||cut.id!==body.cutId||cut.key!==key||now<cut.endsAt)throw new Error('Invalid cut timing. Finish chopping this tree first.');
-      const amount=cutTimberTree(wood,now,key);
+      const amount=cutTimberTree(wood,now,key);useHunger(state);
       state.timberReceipt={id:cut.id,key,amount};delete state.timberCut;
       if(timberTreeState(wood,now,key).regrowsAt)return true;
     }

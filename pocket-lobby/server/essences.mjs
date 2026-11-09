@@ -1,4 +1,5 @@
 import {bondedEssences,confluence,essencePower,normalizeMagic,essenceEffects,essenceGems} from '../public/essences.js';
+import {spendMana} from '../public/player-vitals.js';
 import {combatStamina,huntEnemy,enemyAttack,transitionVaultPhase} from '../public/hunting.js';
 
 export function essenceAction(state,action,body){
@@ -53,6 +54,7 @@ export function castEssencePower(state,now,slot='q'){
   if(!power||!bondedEssences(magic.picks).includes(power.gem))return null;
   const {form,value}=power,masteryBonus=power.masteryLevel-1;
   if(form==='renewal'&&state.health>=100)return null;
+  if(!spendMana(state,now))return null;
   const next={...encounter};
   const event={action:'essence',powerId:power.id,power:power.name,powerColor:power.color,powerForm:form,encounter:next,health:state.health,damage:0,taken:0,outcome:'fighting'};
   if(form==='sword'){

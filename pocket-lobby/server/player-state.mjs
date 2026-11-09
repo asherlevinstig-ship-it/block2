@@ -1,3 +1,4 @@
+import {normalizeVitals,useHunger} from '../public/player-vitals.js';
 import {willowmereRooms,isFishingRoom} from '../public/region-catalog.js';
 import {canUseArmour} from '../public/hunting.js';
 import {settleExplorationPlan} from './exploration-plan.mjs';
@@ -92,7 +93,7 @@ export function normalizeState(input={}){
   if(stats.cookingXp!==undefined&&(!Number.isSafeInteger(stats.cookingXp)||stats.cookingXp<0||stats.cookingXp>MAX_SKILL_XP))throw new Error('Invalid Cooking XP.');
   const state={
     controlMode:input.controlMode??'play',...(input.autoSwitch===true?{autoSwitch:true}:{}),...(['required','complete'].includes(input.autoLesson)?{autoLesson:input.autoLesson}:{}),...(input.autoConfigured===true?{autoConfigured:true}:{}),...(input.pendingCharacterRules?{pendingCharacterRules:normalizeCharacterRules(input.pendingCharacterRules)}:{}),bank:normalizeBank(input.bank),
-    ...(input.upgradeGoal?{upgradeGoal:normalizeUpgradeReceipt(input.upgradeGoal)}:{}),dungeonLoot:normalizeDungeonLoot(input.dungeonLoot),progressionVersion,goldEarned,firstUpgrade:normalizeFirstUpgrade(input.firstUpgrade),tradingPostGuideComplete:input.tradingPostGuideComplete===true,bedLessonComplete:input.bedLessonComplete===true||(Array.isArray(input.homeFurniture)&&input.homeFurniture.some(item=>item?.type==='bed')),welcomeSeen:input.welcomeSeen!==false,characterCreated:input.characterCreated!==false,characterRules:normalizeCharacterRules(input.characterRules),credits,health:Math.min(health,maxHealth),stats:{...(stats.cookingXp!==undefined?{cookingXp:stats.cookingXp}:{}),strengthXp:stats.strengthXp,agilityXp:stats.agilityXp,vitalityXp:stats.vitalityXp,patienceXp:stats.patienceXp,luckXp:stats.luckXp},fishingGear:{ownedRods,equippedRod:gear.equippedRod,bait:gear.bait},
+    ...(input.upgradeGoal?{upgradeGoal:normalizeUpgradeReceipt(input.upgradeGoal)}:{}),dungeonLoot:normalizeDungeonLoot(input.dungeonLoot),progressionVersion,goldEarned,firstUpgrade:normalizeFirstUpgrade(input.firstUpgrade),tradingPostGuideComplete:input.tradingPostGuideComplete===true,bedLessonComplete:input.bedLessonComplete===true||(Array.isArray(input.homeFurniture)&&input.homeFurniture.some(item=>item?.type==='bed')),welcomeSeen:input.welcomeSeen!==false,characterCreated:input.characterCreated!==false,characterRules:normalizeCharacterRules(input.characterRules),credits,vitals:normalizeVitals(input.vitals),health:Math.min(health,maxHealth),stats:{...(stats.cookingXp!==undefined?{cookingXp:stats.cookingXp}:{}),strengthXp:stats.strengthXp,agilityXp:stats.agilityXp,vitalityXp:stats.vitalityXp,patienceXp:stats.patienceXp,luckXp:stats.luckXp},fishingGear:{ownedRods,equippedRod:gear.equippedRod,bait:gear.bait},
     woodcutting:normalizeWoodcutting(input.woodcutting),history:normalizeHistory(input),quest:normalizeQuest(input.quest),combatGear,hunting,fishStock,huntingLoot:counts(input.huntingLoot),adventure,
     wardrobe,avatar:outfitAppearance(wardrobe,{name:avatar.name.trim()||"Guest",hair:avatar.hair}),
     location:locations.has(input.location)?input.location:"home",
@@ -165,7 +166,7 @@ function settleWorkPlan(state,now,{stop=false,random=Math.random}={}){
   while(plan.nextCatchAt<=Math.min(now,plan.endAt)&&plan.baitUsed<plan.baitLimit&&state.fishingGear.bait>0){
     const level=skillLevel(state.stats.patienceXp);
     const fish=rollFishingCatch(level,plan.rod,random,state.stats.luckXp);
-    state.fishStock[fish]=(state.fishStock[fish]??0)+1;
+    state.fishStock[fish]=(state.fishStock[fish]??0)+1;useHunger(state);
     state.history=normalizeHistory(state);state.history.fishCaught=true;
     state.quest=normalizeQuest(state.quest);recordQuest(state.quest,"fish");
     state.fishingGear.bait--;state.stats.patienceXp=Math.min(MAX_SKILL_XP,state.stats.patienceXp+10);

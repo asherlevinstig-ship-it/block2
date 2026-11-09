@@ -82,6 +82,7 @@ const PATIENCE_XP_PER_CATCH=10;
 const patienceLevel=()=>skillLevel(playerStats.patienceXp);
 const maxHealth=()=>100;
 let health=Math.min(maxHealth(),Math.max(0,savedPlayerState?.health??maxHealth()));
+let playerVitals=normalizeVitals(savedPlayerState?.vitals);
 let homeBedRest=savedPlayerState?.bedRest??null,bedRestPolling=false,nextBedPoll=0;
 const fishingGear=normalizeFishingGear(savedPlayerState?.fishingGear);
 const fishStock={...savedPlayerState?.fishStock};
@@ -1351,7 +1352,7 @@ function updateCombatPanel(){
 function updateCombatMoment(time){
   if(routineControlled()){if(time-lastCombatUi>100){lastCombatUi=time;updateCombatPanel();}return;}
   if(window.playerCloud?.gameplay){
-    const tactic=nextCombatTactic({hunting,health,stats:playerStats,combatGear,magic:magicState,characterRules});
+    const tactic=nextCombatTactic({hunting,health,vitals:playerVitals,stats:playerStats,combatGear,magic:magicState,characterRules});
     const due=hunting.encounter?Math.min(hunting.encounter.nextPlayerAt,hunting.encounter.nextBoarAt,hunting.encounter.burn?.nextAt??Infinity,tactic?.at??Infinity):Infinity;
     if(player.inCombat&&combatNow()>=due&&time>=nextCombatPoll)sendServerCombat();
     if(!homeBedRest&&hunting.recoveryUntil&&combatNow()>=hunting.recoveryUntil&&!serverActionBusy&&!activityBusy){
@@ -3340,7 +3341,17 @@ function animation(time){
     }
   }
 }
+let lastVitalsPaint=-Infinity;
+function updateVitalsHud(){
+ const values={health:Math.ceil(homeBedRest?bedRestHealth(homeBedRest,combatNow()):health),hunger:playerVitals.hunger,mana:manaAvailable(playerVitals,combatNow())};
+ for(const [id,value] of Object.entries(values)){
+  const meter=$('vital'+id),number=$('vital'+id+'Value');
+  meter.value=value;meter.setAttribute('aria-label',id[0].toUpperCase()+id.slice(1)+' '+value+' of 100');
+  number.textContent=value+' / 100';$('vital'+id+'Row').dataset.low=String(value<=20);
+ }
+}
 function advanceAnimation(time){
+  if(time-lastVitalsPaint>=250){updateVitalsHud();lastVitalsPaint=time;}
   updateBedRestPanel(time);
   if(!showVaultVictory()){showPendingDungeonLoot();showPendingCombatRecap();}
   if(serverActionBusy){draw(time);return;}
@@ -3443,14 +3454,14 @@ async function cookMeal(id,button){
   finally{renderCampfire();}
 }
 async function eatMeal(id){
-  if(unavailable()||health>=100)return;
+  if(unavailable()||health>=100&&playerVitals.hunger>=100)return;
   const status=$('bagMealStatus');
-  const before=health;
+  const before=health,beforeHunger=playerVitals.hunger;
   status.hidden=false;
   try{
     await serverGameplay('eat',{id});
     updateDepthsPanel();
-    const message=mealRecipes[id].name+' restored '+(health-before)+' HP. '+health+' / 100 HP.';
+    const message=mealRecipes[id].name+' restored '+(health-before)+' HP and '+(playerVitals.hunger-beforeHunger)+' hunger.';
     status.textContent=message;
     note(message);
   }catch(error){status.textContent=error.message;}
@@ -3499,9 +3510,9 @@ function bagEntries(){
     if(!quantity||!recipe)continue;
     const busy=unavailable()||!!woodSession||!!fishingSession;
     entries.push({key:'meal:'+id,name:recipe.name,category:'materials',quantity,art:mealArt(id),
-      description:recipe.description,stats:'Restores up to '+recipe.healing+' HP · '+health+' / 100 HP now',
+      description:recipe.description,stats:'Restores up to '+recipe.healing+' HP and hunger · Hunger '+playerVitals.hunger+' / 100',
       note:busy?'Finish your current activity before eating.':'Eat between fights.',
-      action:health>=100?'Hearts are full':'Eat meal',disabled:busy||health>=100||!window.playerCloud?.gameplay,run:()=>eatMeal(id)});
+      action:health>=100&&playerVitals.hunger>=100?'Already full':'Eat meal',disabled:busy||health>=100&&playerVitals.hunger>=100||!window.playerCloud?.gameplay,run:()=>eatMeal(id)});
   }
   for(const [id,quantity] of Object.entries(huntingLoot))if(quantity&&tradeCatalog[id])entries.push({key:'loot:'+id,name:tradeCatalog[id].name,category:'materials',art:windowItemArt(id===moonwellShard.id?'shard':'loot'),quantity,description:'Spoils from your adventures.',stats:tradeCatalog[id].price+' gold each',note:id===moonwellShard.id?'Enchant weapons at the Tower Armory, sell for '+moonwellShard.price+' gold, or craft a Moonwell Charm with '+moonwellCharm.timber+' timber.':id===stonebackVest.fragment?'Sell at the Trading Post, or combine with '+stonebackVest.timber+' timber at the Timber Hollow workbench to craft a Stoneback Vest.':'Sell at the Trading Post. Some loot is used in crafting.'});
   return entries;
@@ -3718,7 +3729,7 @@ function applyServerGameplay(state){
   Object.assign(playerStats,state.stats);
   loungeRound=state.gambling?.round??null;
   const previousRest=homeBedRest;homeBedRest=state.bedRest??null;
-  health=state.health;
+  health=state.health;playerVitals=normalizeVitals(state.vitals);updateVitalsHud();
   if(previousRest&&!homeBedRest&&health>=100){showTransaction('Rest complete',[{icon:'♥',text:'+'+(100-previousRest.startHealth)+' HP · All five hearts restored'}]);note('Fully rested. Ready for your next adventure.');}
   meals={...state.meals};
   magicState=state.magic?normalizeMagic(state.magic):null;
@@ -4212,7 +4223,7 @@ function updateTradingPost(){
 }
 function savePlayerState(){
   if(activityBusy||autoJourney||window.playerCloud?.initial?.plan||window.playerCloud?.initial?.report)return;
-  const snapshot={safeVersion:1,progressionVersion,goldEarned,firstUpgrade,tradingPostGuideComplete,bedLessonComplete,credits,health,woodcutting,history,quest,combatGear,hunting,depthsRun,depthsDiscovered,ownedFurniture,furniture:[],homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats,fishingGear,huntingLoot,fishStock,avatar,wardrobe,location:currentRoom,position:{x:player.cx,y:player.cy}};
+  const snapshot={safeVersion:1,progressionVersion,goldEarned,firstUpgrade,tradingPostGuideComplete,bedLessonComplete,credits,health,vitals:playerVitals,woodcutting,history,quest,combatGear,hunting,depthsRun,depthsDiscovered,ownedFurniture,furniture:[],homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats,fishingGear,huntingLoot,fishStock,avatar,wardrobe,location:currentRoom,position:{x:player.cx,y:player.cy}};
   save('player-state',snapshot);
   if(window.playerCloud)window.playerCloud.enqueue(JSON.parse(JSON.stringify(snapshot)));
   updateInventory();
@@ -4373,7 +4384,8 @@ function equippedEssenceStatus(now,slot='q'){
   const power=essencePower(magicState?.slots[slot],playerStats,magicState);
   const remaining=Math.max(0,(magicState?.cooldowns[power?.id]??0)-now);
   const fullHealth=power?.form==='renewal'&&health>=maxHealth();
-  return {power,remaining,fullHealth,canCast:!!power&&player.inCombat&&!!hunting.encounter&&!remaining&&!fullHealth};
+  const lowMana=manaAvailable(playerVitals,combatNow())<MANA_COST;
+  return {power,remaining,fullHealth,lowMana,canCast:!!power&&player.inCombat&&!!hunting.encounter&&!remaining&&!fullHealth&&!lowMana};
 }
 function updateEssenceHotbar(now=Date.now()){
   const bar=$('essenceHotbar');
@@ -4397,19 +4409,20 @@ function updateEssenceHotbar(now=Date.now()){
   }
   for(const slot of ['q','e']){
     const suffix=slot==='q'?'':'E';
-    const {power,remaining,fullHealth,canCast}=equippedEssenceStatus(now,slot);
+    const {power,remaining,fullHealth,lowMana,canCast}=equippedEssenceStatus(now,slot);
     const button=$('essenceHotbarPower'+suffix);
     let status=!power?(player.inCombat?'Equip between fights':'Open Essences'):remaining?'Recharging · '+Math.ceil(remaining/1000)+'s'
       :!player.inCombat?allEssences[power.gem].name+' · Cast in combat'
-      :fullHealth?'Hearts are full':power.gem==='storm'?(now<(hunting.encounter?.interruptResistUntil??0)?'Enemy resists interrupts':'Ready · Interrupt during warning'):allEssences[power.gem].name+' · Ready';
+      :lowMana?'Needs '+MANA_COST+' mana':fullHealth?'Hearts are full':power.gem==='storm'?(now<(hunting.encounter?.interruptResistUntil??0)?'Enemy resists interrupts':'Ready · Interrupt during warning'):allEssences[power.gem].name+' · Ready';
     const automated=characterRules.combat.enabled&&characterRules.combat[slot];
-    if(automated&&player.inCombat&&power&&!remaining&&!fullHealth)status='Auto · Waiting for tactic';
+    if(automated&&player.inCombat&&power&&!remaining&&!fullHealth&&!lowMana)status='Auto · Waiting for tactic';
     button.dataset.automatic=String(automated);
     button.dataset.ready=String(canCast);
     button.dataset.equipped=String(!!power);
     button.disabled=player.inCombat&&!canCast;
     button.style.setProperty('--power-color',power?.color??'#b7a4ed');
-    button.title=power?powerDescription(power)+(automated?' '+describeCombatSpell(power,characterRules.combat.style):''):'Open Essences to equip a power';
+    if(power)status+=' · '+MANA_COST+' MP';
+    button.title=power?powerDescription(power)+' · Costs '+MANA_COST+' mana · Regenerates '+MANA_REGEN+'/sec'+(automated?' '+describeCombatSpell(power,characterRules.combat.style):''):'Open Essences to equip a power';
     button.setAttribute('aria-label',power?(canCast?'Cast ':'')+power.name+' · '+status:'Equip a power in Essences');
     const name=$('essenceHotbarName'+suffix),label=$('essenceHotbarStatus'+suffix),symbol=$('essenceHotbarSymbol'+suffix);
     if(name.textContent!==(power?.name??'Equip a power'))name.textContent=power?.name??'Equip a power';

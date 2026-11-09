@@ -5,6 +5,7 @@ import {normalizeFoodPolicy} from './food-policy.js';
 import {normalizeUpgradeGoal} from './upgrade-goals.js';
 export {upgradeTargets,upgradeGoalProgress} from './upgrade-goals.js';
 import {enemyAttack,combatStamina,queueHuntEnemies,huntEnemy,huntingAttributes,combatDodgeCost,weaponProfile} from './hunting.js';
+import {manaReadyAt} from './player-vitals.js';
 import {essencePower,bondedEssences,essenceEffects} from './essences.js';
 
 export const AWAY_GRACE_MS=3*60000,AWAY_CAP_MS=8*3600000;
@@ -119,7 +120,7 @@ export function nextCombatTactic(state){
   if(!power||!magic.unlocked?.includes(id)||!bondedEssences(magic.picks).includes(power.gem))continue;
   if(power.form==='renewal'&&state.health>policy.healAt)continue;
   if((power.form==='shield'||power.form==='focus')&&(alreadyDodging||physicalInterrupt||finishingHit||style==='aggressive'&&!lethal))continue;
-  let at=Math.max(earliest,magic.cooldowns?.[id]??0),warned=false,priority=40,reason='Attacking with '+power.name+'.';
+  let at=manaReadyAt(state.vitals,Math.max(earliest,magic.cooldowns?.[id]??0)),warned=false,priority=40,reason='Attacking with '+power.name+'.';
   if(power.form==='speed'&&combatStamina(e,state.stats??{},at,state.combatGear?.moonwellCharmEquipped)>60)continue;
   if(power.form==='focus'){at=Math.max(at,warning);warned=true;priority=70;}
   if(power.form==='renewal'){priority=95;reason='Healing: health is below the '+policy.name.toLowerCase()+' target.';}

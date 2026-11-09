@@ -1,0 +1,58 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {normalizeVitals,manaAvailable,manaReadyAt,spendMana,useHunger} from '../public/player-vitals.js';
+import {normalizeState,startPlan,settlePlan} from '../server/player-state.mjs';
+import {applyGameplayAction,protectFishingState} from '../server/gameplay.mjs';
+import {castEssencePower} from '../server/essences.mjs';
+import {normalizeMagic} from '../public/essences.js';
+import {applyAutoFood} from '../server/auto-food.mjs';
+import {boot} from './helpers/game-client.mjs';
+
+test('old characters start full and client snapshots cannot refill server vitals',()=>{
+ const state=normalizeState();assert.deepEqual(state.vitals,{hunger:100,mana:100,manaAt:0});
+ useHunger(state,7);spendMana(state,1000);
+ const next=protectFishingState(state,{...state,vitals:{hunger:100,mana:100,manaAt:0}});
+ assert.deepEqual(next.vitals,state.vitals);assert.equal(state.vitals.hunger,93);
+ assert.deepEqual(normalizeVitals({hunger:-10,mana:Infinity,manaAt:-1}),{hunger:0,mana:100,manaAt:0});
+});
+test('mana spends only on a valid cast and regenerates by chronological event time',()=>{
+ const s=normalizeState({location:'clearing',position:{x:5,y:5},vitals:{hunger:90,mana:10,manaAt:1000}});
+ s.magic=normalizeMagic({picks:['fire','ice','shadow'],unlocked:['fire:sword','ice:shield'],slots:{q:'fire:sword',e:'ice:shield'}});
+ applyGameplayAction(s,'fight',{},1000,()=>.5);
+ assert(castEssencePower(s,1000));assert.equal(s.vitals.mana,0);
+ assert.equal(castEssencePower(s,1000,'e'),null);
+ assert.equal(manaAvailable(s.vitals,1999),0);assert.equal(manaAvailable(s.vitals,2000),5);
+ assert.equal(manaReadyAt(s.vitals,1500),3000);
+ assert(castEssencePower(s,3000,'e'));assert.equal(s.vitals.mana,0);
+ assert.equal(castEssencePower(s,4000,'e'),null);assert.equal(s.vitals.manaAt,3000);
+ assert.equal(manaAvailable(s.vitals,23000),100);assert.equal(manaAvailable(s.vitals,2000),0);
+});
+test('catch consumes hunger once and meals can refill hunger at full health',()=>{
+ const s=normalizeState({location:'pond',position:{x:4,y:5}});
+ applyGameplayAction(s,'cast',{},1000,()=>.5);const id=s.fishingCast.id;
+ applyGameplayAction(s,'catch',{castId:id},s.fishingCast.landAt+900,()=>.5);
+ assert.equal(s.vitals.hunger,99);
+ applyGameplayAction(s,'catch',{castId:id},10000);assert.equal(s.vitals.hunger,99);
+ s.vitals.hunger=30;s.meals={grilledSilverfin:2};
+ applyGameplayAction(s,'eat',{id:'grilledSilverfin'},11000);assert.equal(s.health,100);assert.equal(s.vitals.hunger,50);assert.equal(s.meals.grilledSilverfin,1);
+ s.vitals.hunger=100;assert.throws(()=>applyGameplayAction(s,'eat',{id:'grilledSilverfin'},12000),/already full/);
+});
+test('Auto food restores hunger alongside health without using extra protected meals',()=>{
+ const s=normalizeState({health:50,vitals:{hunger:30},meals:{boarStew:3}});
+ const p={source:'rules',foodPolicy:{enabled:true,eatBelow:70,keepMeals:2}};
+ applyAutoFood(s,p,1000);assert.equal(s.health,90);assert.equal(s.vitals.hunger,70);assert.equal(s.meals.boarStew,2);
+});
+test('HUD shows real health, fullness and regenerated mana when the server updates',()=>{
+ const s=normalizeState({health:60,vitals:{hunger:35,mana:20,manaAt:Date.now()+10000}});
+ const game=boot(s);assert.deepEqual(game.errors,[]);
+ assert.equal(game.nodes.get('vitalhealth').value,60);assert.equal(game.nodes.get('vitalhunger').value,35);assert.equal(game.nodes.get('vitalmana').value,20);
+ game.context.serverVitalsUpdate={...s,health:40,vitals:{hunger:15,mana:10,manaAt:Date.now()+10000}};
+ game.run('applyServerGameplay(serverVitalsUpdate)');assert.equal(game.nodes.get('vitalhealth').value,40);assert.equal(game.nodes.get('vitalhungerValue').textContent,'15 / 100');assert.equal(game.nodes.get('vitalhungerRow').dataset.low,'true');
+});
+
+test('offline woodcutting spends hunger once and zero hunger never hurts or blocks work',()=>{
+ const s=normalizeState({location:'logging',woodcutting:{axeOwned:true,equipped:true},vitals:{hunger:2}});
+ startPlan(s,{kind:'woodcutting',hours:1},1000);settlePlan(s,181000);
+ assert(s.woodcutting.timber>=2);assert.equal(s.vitals.hunger,0);assert.equal(s.health,100);
+ const wood=s.woodcutting.timber;settlePlan(s,181000);assert.equal(s.woodcutting.timber,wood);assert.equal(s.vitals.hunger,0);
+});

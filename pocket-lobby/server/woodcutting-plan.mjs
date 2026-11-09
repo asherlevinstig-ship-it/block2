@@ -1,3 +1,4 @@
+import {useHunger} from '../public/player-vitals.js';
 import {autoStoreVault} from './vault.mjs';
 import {normalizeWoodcutting,harvestTimber,woodcuttingLevel,woodRules} from '../public/woodcutting.js';
 export function startWoodcuttingPlan(state,{hours,fromBoard=false},now){
@@ -18,7 +19,7 @@ export function settleWoodcuttingPlan(state,now,{stop=false}={}){
   const until=Math.min(now,plan.endAt),due=Math.max(0,Math.floor((until-plan.nextCutAt)/plan.interval)+1);
   let changed=false;
   if(due){
-    let amount=0;if(plan.source==='rules'&&state.bank?.vault?.rules?.timber!==undefined){for(let i=0;i<due;i++){amount+=harvestTimber(wood,1);autoStoreVault(state,plan,plan.nextCutAt+i*plan.interval);}}else amount=harvestTimber(wood,due);plan.timber+=amount;plan.xp+=amount*woodRules.xp;plan.nextCutAt+=due*plan.interval;changed=true;
+    let amount=0;if(plan.source==='rules'&&state.bank?.vault?.rules?.timber!==undefined){for(let i=0;i<due;i++){amount+=harvestTimber(wood,1);autoStoreVault(state,plan,plan.nextCutAt+i*plan.interval);}}else amount=harvestTimber(wood,due);useHunger(state,amount);plan.timber+=amount;plan.xp+=amount*woodRules.xp;plan.nextCutAt+=due*plan.interval;changed=true;
   }
   if(now>=plan.endAt||stop||wood.timber>=1000000){
     state.report={...plan,reason:wood.timber>=1000000?'inventory-full':stop?'stopped':'time-limit',endedAt:Math.min(now,plan.endAt),levelAfter:woodcuttingLevel(wood)};
