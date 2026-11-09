@@ -1,8 +1,8 @@
 import {socialRooms} from './shared-world.js';
-export function createRoomConnection({getLocal,flush,checkRoom=async()=>{},setTimeoutImpl=globalThis.setTimeout,clearTimeoutImpl=globalThis.clearTimeout,onPeers,onActivity=()=>{},onChat,onHistory,onStatus,onCorrection,onUnseat,onSessionChanged,WebSocketImpl=globalThis.WebSocket,origin=globalThis.location?.href??'https://tower.test/'}){
+export function createRoomConnection({getLocal,flush,checkRoom=async()=>{},setTimeoutImpl=globalThis.setTimeout,clearTimeoutImpl=globalThis.clearTimeout,onPeers,onTrails=()=>{},onTrailNotice=()=>{},onActivity=()=>{},onChat,onHistory,onStatus,onCorrection,onUnseat,onSessionChanged,WebSocketImpl=globalThis.WebSocket,origin=globalThis.location?.href??'https://tower.test/'}){
   let socket=null,generation=0,retry=null,tick=null,ping=null,room=null,stopped=false,selfId=null,profileKey='',lastPosition='',lastSeat='',profiling=false,failures=0;
   const send=data=>{if(socket?.readyState===1){socket.send(JSON.stringify(data));return true;}return false;};
-  function disconnect(){generation++;clearTimeoutImpl(retry);clearInterval(tick);clearInterval(ping);retry=tick=ping=null;const old=socket;socket=null;if(old)old.close(1000,'Leaving room');onPeers([]);}
+  function disconnect(){generation++;clearTimeoutImpl(retry);clearInterval(tick);clearInterval(ping);retry=tick=ping=null;const old=socket;socket=null;if(old)old.close(1000,'Leaving room');onPeers([]);onTrails([]);}
   async function join(next){
     disconnect();next=getLocal().room??next;room=next;stopped=false;const current=generation;
     if(!Object.hasOwn(socialRooms,next)){onStatus('Personal adventure');return;}
@@ -28,6 +28,8 @@ export function createRoomConnection({getLocal,flush,checkRoom=async()=>{},setTi
           const players=Array.isArray(data.players)?data.players:[];
           onPeers(players.filter(peer=>peer.id!==selfId));onStatus(next==='home'?'Private home':players.length+' / 20 in room');
         }
+        if(data.type==='snapshot')onTrails(Array.isArray(data.trails)?data.trails:[]);
+        if(data.type==='trailNotice')onTrailNotice(data.text);
         if(data.type==='activity'&&data.player!==selfId&&Array.isArray(data.events))onActivity(data.player,data.events);
         if(data.type==='chat')onChat(data.message);
         if(data.type==='correction')onCorrection(data);
@@ -35,7 +37,7 @@ export function createRoomConnection({getLocal,flush,checkRoom=async()=>{},setTi
         if(data.type==='notice')onStatus(data.text);
       };
       ws.onclose=event=>{
-        if(current!==generation)return;socket=null;clearInterval(tick);clearInterval(ping);onPeers([]);
+        if(current!==generation)return;socket=null;clearInterval(tick);clearInterval(ping);onPeers([]);onTrails([]);
         if(event.code===4001){stopped=true;onStatus('Open in another window');onSessionChanged('This character opened in another window.');return;}
         if(event.code===4003){stopped=true;onStatus('Session changed');onSessionChanged('Your character session changed.');return;}
         scheduleRetry(current,'Room connection lost');
@@ -60,5 +62,5 @@ export function createRoomConnection({getLocal,flush,checkRoom=async()=>{},setTi
       flush().then(()=>{if(current===generation){send({type:'profile'});profileKey=local.profileKey;}}).catch(()=>{}).finally(()=>{profiling=false;});
     }
   }
-  return {join,disconnect,reconnect:()=>{if(room)join(room);},sendChat:text=>send({type:'chat',text}),wave:()=>send({type:'wave'}),get selfId(){return selfId;},get room(){return room;},get connecting(){return !!retry||socket?.readyState===0;},get connected(){return socket?.readyState===1;}};
+  return {join,disconnect,reconnect:()=>{if(room)join(room);},shareTrail:route=>send({type:'shareTrail',route}),sendChat:text=>send({type:'chat',text}),wave:()=>send({type:'wave'}),get selfId(){return selfId;},get room(){return room;},get connecting(){return !!retry||socket?.readyState===0;},get connected(){return socket?.readyState===1;}};
 }

@@ -1,3 +1,4 @@
+import {sharedMoonTrail} from '../server/shared-room.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createRoomConnection} from '../public/multiplayer.js';
@@ -64,4 +65,14 @@ test('same-origin readiness checks enforce identity, location and lounge clothin
 
 test('room activity messages reach observers, filter self and never become client-authored packets',async()=>{
  const received=[],g=connectionFixture({onActivity:(id,events)=>received.push({id,events})});try{await g.room.join('home');const socket=g.sockets[0];socket.message({type:'welcome',selfId:'me',players:[],chat:[]});socket.message({type:'activity',player:'me',events:[{id:'self'}]});socket.message({type:'activity',player:'other',events:[{id:'win',label:'+5 gold'}]});assert.equal(received.length,1);assert.equal(received[0].id,'other');assert.equal(received[0].events[0].label,'+5 gold');}finally{g.room.disconnect();}
+});
+
+test('Moon Sight shares only open nearby routes until the saved effect expires',()=>{
+ const state={location:'trail',adventure:{},familiars:{equipped:'owl',sight:{room:'trail',until:2000}}};
+ assert.deepEqual(sharedMoonTrail(state,'trail',['creek','pond'],1000),{route:['creek','pond'],until:2000});
+ assert.equal(sharedMoonTrail(state,'trail',['grove','shrine'],1000),null);
+ assert.equal(sharedMoonTrail(state,'trail',['creek','ruins','roots'],1000),null);
+ assert.equal(sharedMoonTrail(state,'trail',['pond'],1000),null);
+ assert.equal(sharedMoonTrail(state,'trail',['creek'],2000),null);
+ state.familiars.equipped='fox';assert.equal(sharedMoonTrail(state,'trail',['creek'],1000),null);
 });

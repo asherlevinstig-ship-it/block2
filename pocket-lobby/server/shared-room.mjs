@@ -1,4 +1,5 @@
-import {isFamiliar,normalizeFamiliarName} from '../public/familiars.js';
+import {moonwood} from '../public/moonwood.js';
+import {isFamiliar,normalizeFamiliarName,moonSightActive,familiarBond} from '../public/familiars.js';
 import {sharedActivity} from '../public/world-activity.js';
 import {armourSelection} from '../public/hunting.js';
 import {isSmartlyDressed} from '../public/wardrobe.js';
@@ -31,6 +32,20 @@ export async function handleWorldConnect(request,env){
   const stub=env.SHARED_ROOMS.get(env.SHARED_ROOMS.idFromName(namespace));
   return stub.fetch(new Request('https://room.internal/connect',{headers:{Upgrade:'websocket','X-Tower-Profile':encodeURIComponent(JSON.stringify(profile))}}));
 }
+export function sharedMoonTrail(state,room,route,now){
+  const familiar=state?.familiars;
+  if(state?.location!==room||state.plan||state.report||!familiar||!moonwood.has(room)||!Object.hasOwn(socialRooms,room)||!moonSightActive(familiar,room,now))return null;
+  const max=familiarBond(familiar,'owl').rank>=3?3:2;
+  if(!Array.isArray(route)||!route.length||route.length>max)return null;
+  const visited=new Set([room]);
+  let from=room;
+  for(const to of route){
+    if(typeof to!=='string'||visited.has(to)||!moonwood.has(to)||!Object.hasOwn(socialRooms,to))return null;
+    if(!moonwood.doors[from].some(door=>door.to===to&&moonwood.open(door,state.adventure??{})))return null;
+    visited.add(to);from=to;
+  }
+  return {route,until:familiar.sight.until};
+}
 export class SharedRoom{
   constructor(ctx,env){
     this.ctx=ctx;this.env=env;this.sessions=new Map();this.history=[];
@@ -39,7 +54,9 @@ export class SharedRoom{
   }
   peers(){return [...this.sessions.values()].map(publicPeer);}
   send(ws,data){try{ws.send(JSON.stringify(data));}catch{this.sessions.delete(ws);}}
-  snapshot(){const data={type:'snapshot',players:this.peers()};for(const ws of this.sessions.keys())this.send(ws,data);}
+  snapshot(){
+    const now=Date.now(),trails=[...this.sessions.values()].filter(meta=>meta.trail?.until>now).map(meta=>({...meta.trail,player:meta.id,name:meta.name}));
+    const data={type:'snapshot',players:this.peers(),trails};for(const ws of this.sessions.keys())this.send(ws,data);}
   fetch(request){return this.ctx.blockConcurrencyWhile(()=>new URL(request.url).pathname==='/activity'&&request.method==='POST'?this.activity(request):this.join(request));}
   async activity(request){
     const {playerId,revision,events=[]}=await request.json();
@@ -83,6 +100,17 @@ export class SharedRoom{
     if(now-meta.windowAt>1000){meta.windowAt=now;meta.packets=0;}if(++meta.packets>30){ws.close(1008,'Too many messages');return;}
     let message;try{message=JSON.parse(raw);}catch{return;}
     if(message?.type==='ping'){this.send(ws,{type:'pong'});return;}
+    if(message?.type==='shareTrail'){
+      if(meta.lastTrailAt&&now-meta.lastTrailAt<2000)return;
+      meta.lastTrailAt=now;
+      if(!await this.authorized(meta))return;
+      const row=await this.env.TOWER_DB.prepare('SELECT state_json FROM tower_players WHERE player_id = ?').bind(meta.playerId).first();
+      if(this.sessions.get(ws)!==meta)return;
+      const trail=sharedMoonTrail(row&&JSON.parse(row.state_json),meta.room,message.route,Date.now());
+      if(!trail){this.send(ws,{type:'trailNotice',text:'Cast Moon Sight and choose an open route nearby.'});return;}
+      meta.trail=trail;ws.serializeAttachment(meta);this.snapshot();
+      this.send(ws,{type:'trailNotice',text:'Trail shared with this room.'});return;
+    }
     if(message?.type==='move'){
       const steps=Math.min(4,Math.max(0,Math.floor((now-meta.lastMoveAt)/110)));
       if(!reachableMove(meta.room,meta,message,meta.boxes,steps)){this.send(ws,{type:'correction',x:meta.x,y:meta.y});return;}

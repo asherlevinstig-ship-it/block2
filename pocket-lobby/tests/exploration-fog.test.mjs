@@ -12,3 +12,17 @@ test('discoveries persist through normalization and reveal names without resetti
 test('Auto exploring clears fog through the same recorded discoveries',()=>{
  const s=normalizeState({quest:{accepted:true},characterRules:simpleAutoRules('exploring',{risk:'safe'})});s.controlMode='auto';touchPresence(s,1000,{forceStart:true,active:false});settlePlan(s,250000);const g=boot(s);g.run('showHudMap()');assert.equal(g.read('worldMapVisibility().status("pond")'),'discovered');assert.match(g.nodes.get('worldMap').innerHTML,/Silverfin Pond/);assert.deepEqual(g.errors,[]);
 });
+
+
+test('shared trails reveal the marked route temporarily without discovering its destination',()=>{
+ const g=boot(normalizeState({location:'trail',quest:{accepted:true},adventure:{discovered:['trail']}}));
+ g.run("showHudMap();receiveMoonTrails([{player:'guide',name:'Guide',route:['creek','pond'],until:combatNow()+10000}])");
+ assert.match(g.nodes.get('worldMap').innerHTML,/map-shared-trail/);
+ assert.match(g.nodes.get('worldMap').innerHTML,/Silverfin Pond/);
+ assert.equal(g.read("worldMapVisibility().known.has('pond')"),false);
+ g.nodes.get('mapSharedTrails').children[0].onclick();
+ assert.equal(g.read('nextExplorationDoor().to'),'creek');
+ g.run("trackedMoonTrail.until=0;showHudMap();updateSharedTrailList()");
+ assert.equal(g.read('nextExplorationDoor()'),null);
+ assert.doesNotMatch(g.nodes.get('worldMap').innerHTML,/map-shared-trail/);
+});

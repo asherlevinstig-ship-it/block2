@@ -2706,13 +2706,52 @@ const explorationRegions={
   Beaconwatch:watchRooms,
   Moonwood:['trail',wildlifeRoom,'logging','clearing','grove','shrine','creek','pond','ruins','roots']
 };
-let trackedDestination=null;
+let trackedDestination=null,trackedMoonTrail=null,roomMoonTrails=[],trailListKey='';
+function openMoonTrail(trail){
+  if(trail.until<=combatNow())return false;
+  const index=[trail.room,...trail.route].indexOf(currentRoom);
+  if(index<0)return false;
+  let from=currentRoom;
+  for(const to of trail.route.slice(index)){
+    if(!hudRoomExits(from).some(door=>door.to===to))return false;
+    from=to;
+  }
+  return true;
+}
+function updateSharedTrailList(){
+  if(!$('hudMapDialog').open)return;
+  const trails=$('hudMapTitle').textContent==='Tower shops'?[]:roomMoonTrails.filter(openMoonTrail);
+  const key=JSON.stringify(trails);
+  if(key===trailListKey)return;
+  trailListKey=key;
+  const list=$('mapSharedTrails');list.replaceChildren();
+  for(const trail of trails){
+    const button=document.createElement('button');button.type='button';
+    button.textContent='✧ Follow '+explorationName(trail.route.at(-1))+' · '+trail.name;
+    button.onclick=()=>{
+      if(!openMoonTrail(trail)){updateSharedTrailList();return;}
+      setExplorationDestination(trail.route.at(-1));trackedMoonTrail=trail;
+      updateExplorationNav();$('hudMapDialog').close();canvas.focus();
+    };
+    list.append(button);
+  }
+  previewMapRoute();
+}
+function receiveMoonTrails(trails){
+  roomMoonTrails=trails.filter(trail=>trail&&trail.player!==multiplayer?.selfId&&Array.isArray(trail.route)&&trail.route.length&&trail.route.length<=3&&trail.route.every(room=>Object.hasOwn(roomDetails,room))).map(trail=>({...trail,room:currentRoom}));
+  updateSharedTrailList();
+}
 function explorationName(room){
   if(room===wildlifeRoom)return 'Wildlife Reserve';
   if(room==='starfall'&&!adventure.discovered.includes('starfall'))return 'Root crack · Explore';
   return {home:'Your Home',hub:'Grand Lobby',market:'Trading Post',store:'Silverfin Outfitters',outside:'Tower Courtyard'}[room]??roomDetails[room].name;
 }
 function nextExplorationDoor(){
+  if(trackedMoonTrail){
+    if(!openMoonTrail(trackedMoonTrail))return null;
+    const index=[trackedMoonTrail.room,...trackedMoonTrail.route].indexOf(currentRoom);
+    return hudRoomExits(currentRoom).find(door=>door.to===trackedMoonTrail.route[index])??null;
+  }
   return trackedDestination&&!depthsRun?hudNextDoor(trackedDestination):null;
 }
 let worldLabelKey='';
@@ -2852,6 +2891,12 @@ function draw(time){
     ctx.restore();
   }
   if(moonwood.has(currentRoom))drawMoonwoodDetails(time);
+  if(roomMoonTrails.length||trackedMoonTrail)for(const door of hudRoomExits(currentRoom)){
+    if(!door.tile)continue;
+    const marked=roomMoonTrails.some(trail=>trail.until>combatNow()&&trail.route[0]===door.to)
+      ||trackedMoonTrail&&nextExplorationDoor()?.to===door.to;
+    if(marked)surface(door.tile.x+.08,door.tile.y+.08,.84,.84,1,'#b8adff55','#ded6ff');
+  }
   if(currentRoom===wildlifeRoom){
    const animal=wildAnimal(selectedWildAnimal,combatNow());
    if(animal&&!familiarState.owned.includes(animal.kind)){
@@ -3368,7 +3413,7 @@ function updateExplorationNav(){
 }
 function setExplorationDestination(destination){
   if(destination&&!hudRoute(destination).length)return;
-  trackedDestination=destination;
+  trackedMoonTrail=null;trackedDestination=destination;
   worldLabelKey='';
   updateExplorationNav();
 }
@@ -3397,10 +3442,16 @@ function mapRouteVisible(room){
  const fog=worldMapVisibility(),path=hudRoute(room),scouting=moonTrailActive();
  return fog.status(room)!=='hidden'&&path.every((door,i)=>fog.known.has(door.to)||scouting&&fog.scouted.has(door.to)||i===path.length-1);
 }
+function moonRouteToShare(destination){
+  if(!multiplayer?.connected||!moonSightActive(familiarState,currentRoom,combatNow())||!canScoutHere())return [];
+  const path=hudRoute(destination),limit=familiarBond(familiarState,'owl').rank>=3?3:2;
+  return path.length<=limit&&path.every(door=>moonwood.has(door.to)&&Object.hasOwn(socialRooms,door.to))?path.map(door=>door.to):[];
+}
 function previewMapRoute(){
   const destination=$('mapDestination').value;
   const path=destination&&mapRouteVisible(destination)?hudRoute(destination):[];
   $('mapTrack').disabled=!path.length;
+  $('mapShareTrail').hidden=!moonRouteToShare(destination).length;
   $('mapJourney').textContent=path.length?[currentRoom,...path.map(door=>door.to)].map(mapPlaceName).join(' → '):'Select a place to preview the full route.';
   renderWorldMap(path);
 }
@@ -3409,6 +3460,7 @@ function showHudMap(destination=null){
   if(destination&&destination!=='shops'&&!mapRouteVisible(destination))destination=null;
   const next=destination&&!shops?hudNextDoor(destination):null;
   $('hudMapTitle').textContent=shops?'Tower shops':'World map';
+  $('mapTrailStatus').textContent='';
   const moonButton=$('mapMoonSight');moonButton.hidden=shops||familiarState.equipped!=='owl'||!canScoutHere();moonButton.disabled=!!familiarSeconds()||unavailable();moonButton.textContent=familiarSeconds()?'Moon Sight · '+familiarSeconds()+'s':'Moon Sight';
   $('hudMapIntro').textContent=shops
     ?'Choose a shop to see the way there.'
@@ -3439,9 +3491,9 @@ function showHudMap(destination=null){
   for(const [region,rooms] of Object.entries(explorationRegions)){
     const group=document.createElement('optgroup');group.label=region;
     for(const room of rooms){
-      if(!hudNextDoor(room)||!mapRouteVisible(room))continue;
+      if(!hudNextDoor(room)||!mapRouteVisible(room)&&!moonRouteToShare(room).length)continue;
       const option=document.createElement('option');
-      option.value=room;option.textContent=mapPlaceName(room)+(worldMapVisibility().frontier.has(room)?' · Explore':'');
+      option.value=room;option.textContent=(moonRouteToShare(room).length?explorationName(room):mapPlaceName(room))+(worldMapVisibility().frontier.has(room)?' · Explore':'');
       group.append(option);
     }
     if(group.children.length)picker.append(group);
@@ -3450,6 +3502,7 @@ function showHudMap(destination=null){
   picker.value=preferred&&hudNextDoor(preferred)&&mapRouteVisible(preferred)?preferred:'';
   previewMapRoute();
   if(!dialog.open)dialog.showModal();
+  updateSharedTrailList();
 }
 let hudMapKey='';
 function drawHudMiniMap(){
@@ -3822,6 +3875,11 @@ function advanceAnimation(time){
   if(serverActionBusy){draw(time);return;}
   updateWoodMoment(time);
   updateCombatMoment(time);updateWildlifeGuide();
+  if(trackedMoonTrail&&!openMoonTrail(trackedMoonTrail))setExplorationDestination(null);
+  if($('hudMapDialog').open){
+    updateSharedTrailList();
+    if(!moonSightActive(familiarState,currentRoom,combatNow()))$('mapShareTrail').hidden=true;
+  }
   if($('familiarsDialog').open&&!reducedMotion.matches&&time-lastFamiliarPortraitFrame>=95){
    lastFamiliarPortraitFrame=time;for(const portrait of familiarPortraits)drawFamiliarPortrait(portrait,time);
   }
@@ -4037,18 +4095,27 @@ function renderWorldMap(route=[]){
     creek:[338,423],pond:[138,497],ruins:[340,549],roots:[549,493],depthsGate:[340,120],depthsGallery:[340,120],depthsCache:[340,120],depthsTreasury:[340,120],depthsRest:[340,120],depthsTrial:[340,120],depthsVault:[340,120]};
   const rooms=Object.keys(positions).filter(room=>roomDetails[room]&&(room===currentRoom||hudNextDoor(room)));
   const fog=worldMapVisibility(),scouting=moonTrailActive();
+  const sharedEdges=new Set(),sharedPlaces=new Set();
+  for(const trail of roomMoonTrails.filter(openMoonTrail)){
+    let from=trail.room;
+    for(const to of trail.route){
+      sharedPlaces.add(to);sharedEdges.add([from,to].sort().join('|'));from=to;
+    }
+  }
   let links='',nodes='',clearings='';
   const linked=new Set();
   const routeEdges=new Set(route.map((door,index)=>[index?route[index-1].to:currentRoom,door.to].sort().join('|')));
   for(const room of rooms){
-    const [x,y]=positions[room],status=fog.status(room);
+    const [x,y]=positions[room],status=sharedPlaces.has(room)&&!fog.known.has(room)?'frontier':fog.status(room);
     if(status==='hidden')continue;
     clearings+='<ellipse cx="'+x+'" cy="'+y+'" rx="'+(status==='discovered'?105:54)+'" ry="'+(status==='discovered'?62:45)+'" fill="black"/>';
     for(const door of hudRoomExits(room)){
-      if(!rooms.includes(door.to)||fog.status(door.to)==='hidden'||status!=='discovered'&&!fog.known.has(door.to)&&!(scouting&&fog.scouted.has(room)&&fog.scouted.has(door.to)))continue;const key=[room,door.to].sort().join('|');if(linked.has(key))continue;linked.add(key);
-      const [dx,dy]=positions[door.to];links+='<path class="'+(routeEdges.has(key)?'map-route-line':'')+'" d="M'+x+' '+y+'L'+dx+' '+dy+'"/>';
+      const key=[room,door.to].sort().join('|'),shared=sharedEdges.has(key);
+      if(!rooms.includes(door.to)||!shared&&(fog.status(door.to)==='hidden'||status!=='discovered'&&!fog.known.has(door.to)&&!(scouting&&fog.scouted.has(room)&&fog.scouted.has(door.to))))continue;
+      if(linked.has(key))continue;linked.add(key);
+      const [dx,dy]=positions[door.to];links+='<path class="'+(routeEdges.has(key)?'map-route-line':shared?'map-shared-trail':'')+'" d="M'+x+' '+y+'L'+dx+' '+dy+'"/>';
     }
-    const scouted=scouting&&fog.scouted.has(room);
+    const scouted=sharedPlaces.has(room)||scouting&&fog.scouted.has(room);
     const name=status==='frontier'&&room!==wildlifeRoom&&!scouted?'Unexplored':explorationName(room);
     nodes+='<g class="map-place'+(room===currentRoom?' map-current':'')+(status==='frontier'?' map-frontier':'')+(scouted?' map-scouted':'')+'"><circle cx="'+x+'" cy="'+y+'" r="'+(room===currentRoom?13:8)+'"/>'+(status==='frontier'?'<text class="map-question" x="'+x+'" y="'+(y+4)+'" text-anchor="middle">'+(scouted?'✧':'?')+'</text>':'')+'<text x="'+x+'" y="'+(y+29)+'" text-anchor="middle">'+name+'</text>'+(room===currentRoom?'<text class="map-you" x="'+x+'" y="'+(y-22)+'" text-anchor="middle">YOU ARE HERE</text>':'')+'</g>';
   }
@@ -5311,6 +5378,10 @@ $('hudHome').onclick=()=>navigateHud('home');
 $('hudLobby').onclick=()=>navigateHud('hub');
 $('mapDestination').onchange=previewMapRoute;
 $('mapMoonSight').onclick=()=>useFamiliar();
+$('mapShareTrail').onclick=()=>{
+  const route=moonRouteToShare($('mapDestination').value);
+  if(route.length&&multiplayer.shareTrail(route))$('mapTrailStatus').textContent='Sharing trail…';
+};
 $('mapTrack').onclick=()=>{
   const destination=$('mapDestination').value;
   if(!destination||!hudRoute(destination).length)return;
@@ -6105,7 +6176,7 @@ if(window.playerCloud&&typeof WebSocket!=='undefined'){
     flush:()=>window.playerCloud.flush(),checkRoom:async room=>{
       const response=await fetch('/api/world/connect?check=1&room='+encodeURIComponent(room),{credentials:'same-origin',cache:'no-store'});
       if(!response.ok){const data=await response.json().catch(()=>({})),error=new Error(data.error??'Room unavailable');error.status=response.status;throw error;}
-    },onPeers:receivePeers,onActivity:receiveWorldActivity,onChat:receiveRoomChat,
+    },onPeers:receivePeers,onTrails:receiveMoonTrails,onTrailNotice:message=>{$('mapTrailStatus').textContent=message;},onActivity:receiveWorldActivity,onChat:receiveRoomChat,
     onHistory:history=>{$('messages').replaceChildren();$('roomChatMessages').replaceChildren();for(const message of history)receiveRoomChat(message);},
     onStatus:text=>{$('networkStatus').textContent=text;$('roomChatStatus').textContent=text;$('openRoomChat').disabled=!Object.hasOwn(socialRooms,currentRoom);},
     onCorrection:correctRoomPosition,

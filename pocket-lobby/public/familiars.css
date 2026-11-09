@@ -46,3 +46,6 @@
 .familiar-bond ul{display:grid;gap:4px;margin:2px 0 0;padding:0;list-style:none;color:#aebfd6;font-size:10px;line-height:1.4}
 .familiar-bond li[data-unlocked=true]{color:#d6ebc6}
 .map-scouted circle{stroke:#ccbcff!important}.map-scouted text{fill:#ddd1ff!important}
+
+.world-map .map-links .map-shared-trail{stroke:#cbbaff;stroke-dasharray:6 4;opacity:.95}
+#mapSharedTrails:not(:empty){margin:8px 0}
