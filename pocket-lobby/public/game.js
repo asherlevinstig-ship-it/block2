@@ -4828,13 +4828,13 @@ function selectAutoModePage(page){
 }
 function renderAutoModeSummary(rules){
   const running=routineControlled(),queued=rules.strategy==='routine'&&rules.queue?.enabled;
-  $('autoModeState').textContent=running?'Session in progress':rules.enabled?'Idle start enabled':'Manual start';$('autoModeState').dataset.active=String(rules.enabled);
+  $('autoModeState').textContent=window.playerCloud?.initial?.pendingCharacterRules?'Changes saved for next session':running?'Session in progress':rules.enabled?'Idle start enabled':'Manual start';$('autoModeState').dataset.active=String(rules.enabled);
   $('autoPlanName').textContent=rules.strategy==='earnGold'?'Earn gold':rules.strategy==='gambling'?'Table session':queued?'Your activity queue':rules.activity==='exploring'?'Explore the map':rules.activity==='fishing'?'Go fishing':rules.activity==='woodcutting'?'Chop timber':'Rest at home';
   $('autoPlanAction').textContent=rules.strategy==='earnGold'?'Choose safe work, sell surplus and protect your reserves.':rules.strategy==='gambling'?(rules.gambling.game==='roulette'?'Roulette':'Blackjack')+' · '+rules.gambling.bet+' gold per round':queued?rules.queue.steps.length+' steps · '+rules.queue.repeats+' cycle'+(rules.queue.repeats===1?'':'s'):rules.activity==='exploring'?'Walk peaceful trails and return home. No gold or gear needed.':rules.activity==='fishing'?'Keep '+rules.keepBait+' bait, then return home.':rules.activity==='woodcutting'?'Gather up to '+rules.timberTarget.toLocaleString()+' timber.':'Return home and recover your hearts.';
   $('autoPlanFood').textContent=rules.food?.enabled?'Eat below '+rules.food.eatBelow+' HP · Keep '+rules.food.keepMeals:'Use meals manually';
   $('autoPlanCombat').textContent=rules.combat.enabled?combatStyles[rules.combat.style].name+(rules.combat.dodge?' · Auto dodge':''): 'Manual tactics';
   $('autoPlanStart').textContent=rules.enabled?'After 3 minutes idle or offline':'When you choose Auto';
-  $('autoSaveHint').textContent=running?'Take control to change your Auto Mode settings.':'Save your plan, then choose Auto whenever you’re ready.';
+  $('autoSaveHint').textContent=window.playerCloud?.initial?.plan?.source==='rules'?'Save changes for your next session. The current session keeps its existing plan.':'Save your plan, then choose Auto whenever you’re ready.';
   $('rulesPreview').textContent=rules.strategy==='gambling'?'Stop at +'+rules.gambling.profitTarget+' gold, '+rules.gambling.maxRounds+' rounds, or your loss limit.':queued?rules.queue.steps.map(step=>queueActions[step.type]).join(' → '):'Up to 8 hours per session. Take control whenever you return.';
   for(const button of $('characterRulesDialog').querySelectorAll('[data-auto-strategy]'))button.setAttribute('aria-pressed',String(button.dataset.autoStrategy===rules.strategy));
   $('characterRulesDialog').dataset.strategy=rules.strategy;
@@ -4878,14 +4878,19 @@ function updateCharacterRulesPreview(){
     if(adaptive)detail='Auto starts now or after three minutes idle when enabled. It sells only surplus fish, timber, Boar Meat and Shell Fragments; buys bait only within your limits; and reassesses after each batch or fight. If gear or health makes hunting unsafe, it gathers or rests instead.';
     if(gambling)detail=(isSmartlyDressed(wardrobe)?'Smart dress code met. ':'Equip a Tailored Suit or Moonlit Dress in Wardrobe before starting Auto gambling. ')+'Auto starts your table session now; enabling away actions also starts it after three minutes idle. The session ends at the first loss, reserve, profit, round or eight-hour limit. It never switches to Earn gold safely or raises the bet.';
     $('rulesRequirements').textContent=depthsRun?'Away routines pause while you’re in Moonwell Depths. '+detail:detail;
-    $('rulesSave').disabled=savingRules||!window.playerCloud||routineControlled();if(routineControlled())$('rulesStatus').textContent='Take control before changing saved Auto Mode settings. You can inspect them while Auto runs.';
-  }catch(error){$('rulesPreview').textContent=error.message;$('rulesSave').disabled=true;}
+    const state=window.playerCloud?.initial,board=state?.plan&&state.plan.source!=='rules'||state?.report&&state.report.source!=='rules';
+    $('rulesSave').disabled=savingRules||!window.playerCloud||!!board;
+    $('rulesSave').textContent=savingRules?'Saving…':state?.plan?.source==='rules'?'Save for next session':'Save Auto Mode';
+    if(board)$('rulesStatus').textContent='Finish your job-board shift and read its report before saving Auto Mode.';
+    else if($('rulesStatus').dataset.validation==='true'){$('rulesStatus').textContent='';$('rulesStatus').dataset.validation='false';}
+  }catch(error){$('rulesPreview').textContent=error.message;$('rulesStatus').textContent=error.message;$('rulesStatus').dataset.validation='true';$('rulesSave').disabled=true;}
+
 }
 function openCharacterRules({focusGoal=false}={}){
   if(needsAutoLesson()){openAutoLesson();return;}
-  if(player.inCombat){note('Finish combat before changing your Auto Mode settings.');return;}
-  window.towerPauseForAccount();
-  const state=window.playerCloud?.initial??savedPlayerState??{},rules=normalizeCharacterRules(characterRules);
+  if(player.inCombat&&window.playerCloud?.initial?.plan?.source!=='rules'){note('Finish combat before changing your Auto Mode settings.');return;}
+  if(!routineControlled())window.towerPauseForAccount();
+  const state=window.playerCloud?.initial??savedPlayerState??{},rules=normalizeCharacterRules(state.pendingCharacterRules??characterRules);
   for(const [id,key] of [['gambleAutoGame','game'],['gambleAutoColor','color'],['gambleAutoBet','bet'],['gambleAutoLoss','lossLimit'],['gambleAutoReserve','reserveGold'],['gambleAutoProfit','profitTarget'],['gambleAutoRounds','maxRounds']])$(id).value=rules.gambling[key];
   $('rulesStrategy').value=rules.strategy;for(const [id,key] of [['goldBudget','budget'],['goldReserve','reserveGold'],['goldKeepFish','keepFish'],['goldKeepTimber','keepTimber'],['goldKeepMeat','keepMeat'],['goldKeepShells','keepShells'],['goldMinHealth','minHealth']])$(id).value=rules.goldPolicy[key];
   $('rulesEnabled').checked=rules.enabled;$('rulesActivity').value=rules.activity;$('rulesKeepBait').value=rules.keepBait;$('rulesTimberTarget').value=rules.timberTarget;$('rulesStatus').textContent='';
@@ -4920,9 +4925,9 @@ $('characterRulesForm').onsubmit=async event=>{
   event.preventDefault();if(savingRules)return;
   try{
     const rules=draftCharacterRules();savingRules=true;updateCharacterRulesPreview();$('characterRulesDialog').querySelector('.close').disabled=true;
-    window.towerPauseForAccount();savePlayerState();const state=await window.playerCloud.saveRules(rules);
+    if(!routineControlled()){window.towerPauseForAccount();savePlayerState();}const state=await window.playerCloud.saveRules(rules);
     characterRules=normalizeCharacterRules(state?.characterRules??rules);updateUpgradeGoalHud();
-    $('rulesStatus').textContent=rules.combat.enabled?'Auto Mode saved. Combat tactics are ready for your next encounter.':'Auto Mode saved.';
+    $('rulesStatus').dataset.validation='false';$('rulesStatus').textContent=state?.pendingCharacterRules?'Saved for your next Auto session. Your current session keeps its existing plan.':rules.combat.enabled?'Auto Mode saved. Combat tactics are ready for your next encounter.':'Auto Mode saved.';
   }catch(error){$('rulesStatus').textContent=error.message;}
   finally{savingRules=false;updateCharacterRulesPreview();$('characterRulesDialog').querySelector('.close').disabled=false;}
 };

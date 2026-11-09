@@ -73,15 +73,15 @@ test('queue API locks its saved spending rules and settles concurrent purchases 
  const saved={enabled:true,activity:'rest',keepBait:0,timberTarget:100,queue:queue([{type:'fishing',amount:1},{type:'sellFish',amount:0},{type:'buyBait',amount:10}],{budget:10,reserveGold:0})};
  assert.equal((await act('rules/save',{rules:saved})).status,200);
  now=G+1000;await act('presence',{active:false});assert.equal(packet.state.plan.kind,'queue');
- const locked=await act('rules/save',{rules:{...saved,queue:{...saved.queue,budget:100000}}});assert.equal(locked.status,409);
+ const updated=await act('rules/save',{rules:{...saved,queue:{...saved.queue,budget:100000}}});assert.equal(updated.status,200);assert.equal(packet.state.pendingCharacterRules.queue.budget,100000);assert.equal(packet.state.plan.queue.budget,10);assert.equal(packet.state.characterRules.queue.budget,10);
  assert.equal((await act('save',{state:{...packet.state,plan:null}})).status,409);
  now=G+76000;await act('presence',{active:false});assert.equal(packet.state.quest.fish,1);assert.equal(packet.state.quest.sold,true);assert.equal(packet.state.credits,105);
  now=G+91000;const revision=packet.revision,a=crypto.randomUUID(),b=crypto.randomUUID();
  const buy=operation=>call('presence',{revision,operation,active:false});const results=await Promise.all([buy(a),buy(b)]);
  assert.deepEqual(results.map(r=>r.status).sort(),[200,409]);await buy(results[0].status===200?a:b);
  assert.equal(packet.state.report.kind,'queue');assert.equal(packet.state.report.goldSpent,10);assert.equal(packet.state.credits,95);assert.equal(packet.state.fishingGear.bait,19);assert.equal(packet.state.activityLog.length,1);
- await act('save',{state:{...packet.state,characterRules:{...saved,queue:{...saved.queue,budget:100000}}}});
- assert.equal(packet.state.characterRules.queue.budget,10);assert.equal(packet.state.credits,95);
+ await act('save',{state:{...packet.state,characterRules:{...saved,queue:{...saved.queue,budget:99999}}}});
+ assert.equal(packet.state.characterRules.queue.budget,100000);assert.equal(packet.state.pendingCharacterRules,undefined);assert.equal(packet.state.credits,95);
 });
 
 

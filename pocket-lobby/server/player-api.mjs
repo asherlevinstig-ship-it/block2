@@ -1,7 +1,7 @@
+import {saveAutoSettings} from './auto-settings.mjs';
 import {isSmartlyDressed,normalizeWardrobe,clothingCatalog} from '../public/wardrobe.js';
 import {configureExplorerLesson} from './exploration-plan.mjs';
 import {migrateHomeSafe} from '../public/home-safe.js';
-import {beetleHuntUnlocked} from '../public/hunting.js';
 import {migrateProgression,progressionVersion} from '../public/skill-curve.js';
 import {normalizeMagic} from '../public/essences.js';
 import {applyGameplayAction,protectFishingState} from './gameplay.mjs';
@@ -83,7 +83,7 @@ export async function handlePlayerApi(request,env){
       const existing=id&&await settled(env.TOWER_DB,id,true);
       if(existing)return json(packet(existing));
       const body=await bodyOf(request),legacy={...body.legacy};migrateProgression(legacy);
-      const state=normalizeState({...legacy,autoConfigured:undefined,bedRest:undefined,safeVersion:1,ownedFurniture:{...(legacy.ownedFurniture??{bed:1}),safe:0},homeFurniture:(legacy.homeFurniture??[]).filter(item=>item.type!=='safe'),bank:undefined,controlMode:'play',meals:{},magic:undefined,...(body.newCharacter===true?{characterCreated:false,welcomeSeen:false,autoLesson:'required'}:{})});
+      const state=normalizeState({...legacy,autoConfigured:undefined,pendingCharacterRules:undefined,bedRest:undefined,safeVersion:1,ownedFurniture:{...(legacy.ownedFurniture??{bed:1}),safe:0},homeFurniture:(legacy.homeFurniture??[]).filter(item=>item.type!=='safe'),bank:undefined,controlMode:'play',meals:{},magic:undefined,...(body.newCharacter===true?{characterCreated:false,welcomeSeen:false,autoLesson:'required'}:{})});
       if(state.wardrobe.outfits.some(look=>['jacket','trousers','boots'].some(slot=>clothingCatalog[look[slot]]?.price)))throw new Error('Choose free starter clothing for a new character.');
       state.wardrobe.owned=state.wardrobe.owned.filter(id=>!clothingCatalog[id]?.price);
       delete state.combatGear.ownedArmour;delete state.combatGear.equippedArmour;
@@ -190,15 +190,7 @@ export async function handlePlayerApi(request,env){
         state.controlMode='auto';touchPresence(state,now,{active:false,forceStart:true});break;
       }
       case "/api/player/rules/save":
-        if(state.autoLesson==='required')throw new Error('Choose your starter exploration job in the Auto quest first.');
-        if(state.hunting?.encounter)return json({error:"Finish combat before changing character rules.",...packet(row)},409);
-        if(state.plan||state.report)return json({error:"Read your work report before changing rules.",...packet(row)},409);
-        const rules=normalizeCharacterRules(body.rules);
-        if(rules.activity==='exploring'&&!state.quest.accepted)throw new Error('Travel to the Tower Warden before exploring on Auto.');
-        if(rules.strategy==='routine'&&rules.queue?.enabled&&rules.queue.steps.some(step=>step.type==='huntBeetles')&&!beetleHuntUnlocked(state))return json({error:'Defeat a Stoneback Beetle yourself in the Ruins before scheduling idle hunts.'},400);
-        if(body.rules?.combat===undefined)rules.combat=normalizeCharacterRules(state.characterRules).combat;
-        if(rules.goal?.target!==state.characterRules?.goal?.target||rules.goal?.autoBuy!==state.characterRules?.goal?.autoBuy)delete state.upgradeGoal;
-        state.characterRules=rules;state.autoConfigured=true;state.routineLastSeen=Date.now();
+        saveAutoSettings(state,body.rules,Date.now());
         break;
       case "/api/player/plan/start":
         startPlan(state,body,Date.now());
@@ -218,6 +210,7 @@ export async function handlePlayerApi(request,env){
     if(!updated)return json({error:"Another tab saved first. Reload your character."},409);
     return json(packet(updated));
   }catch(error){
+    if(error.status===409)return json({error:error.message},409);
     if(error instanceof SyntaxError)return json({error:"Invalid request."},400);
     if(/Invalid|Choose|Travel|Your hearts are already full|Awaken|Patience|already|Read your|Unknown|Defeat the Cache Guardian|Defeat the Treasury Guardian|Defeat the Rune Sentinel|Clear Shell Gallery|Make room/.test(error.message))return json({error:error.message},400);
     console.error("Tower player service error",error.name);

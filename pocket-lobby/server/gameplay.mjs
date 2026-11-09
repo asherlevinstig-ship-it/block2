@@ -240,6 +240,7 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
 // rewards and active encounters can only change through server actions.
 export function protectFishingState(previous,next){
   next.bank=previous.bank;
+  if(previous.pendingCharacterRules)next.pendingCharacterRules=previous.pendingCharacterRules;else delete next.pendingCharacterRules;
   const owned=normalizeWardrobe(previous.wardrobe,previous.avatar).owned;
   next.wardrobe=normalizeWardrobe({...normalizeWardrobe(next.wardrobe??previous.wardrobe,next.avatar??previous.avatar),owned});
   if(previous.autoLesson)next.autoLesson=previous.autoLesson;else delete next.autoLesson;

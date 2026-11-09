@@ -40,7 +40,7 @@ export function normalizeCharacterRules(input={}){
   const {enabled:combatEnabled=false,q=true,e=true,fleeBelow=20,style='balanced',dodge=false}=combat;
   if(!Object.hasOwn(combatStyles,style)||typeof dodge!=='boolean'||typeof combatEnabled!=='boolean'||typeof q!=='boolean'||typeof e!=='boolean'||!Number.isInteger(fleeBelow)||fleeBelow<0||fleeBelow>80)throw new Error('Invalid combat tactics. Choose a flee threshold from 0 to 80 HP.');
   const queue=normalizeRoutineQueue(input.queue),goal=normalizeUpgradeGoal(input.goal);
-  if(strategy==='routine'&&queue?.steps.some(step=>Object.hasOwn(queueHuntEnemies,step.type))&&fleeBelow>=queue.minHealth)throw new Error('The hunting start-health limit must be above the flee threshold.');
+  if(strategy==='routine'&&queue?.enabled&&queue.steps.some(step=>Object.hasOwn(queueHuntEnemies,step.type))&&fleeBelow>=queue.minHealth)throw new Error('The hunting start-health limit must be above the flee threshold.');
   return {enabled,activity,keepBait,timberTarget,strategy,goldPolicy,gambling,...(input.food!==undefined?{food:normalizeFoodPolicy(input.food)}:{}),...(queue?{queue}:{}),...(goal?{goal}:{}),combat:{enabled:combatEnabled,q,e,fleeBelow,style,dodge}};
 }
 export function describeCharacterRules(input){

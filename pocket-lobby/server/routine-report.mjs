@@ -1,3 +1,4 @@
+import {applyAutoSettings} from './auto-settings.mjs';
 import {homeRestDuration} from '../public/bed-rest.js';
 import {autoBankGold} from './banking.mjs';
 import {boarRules} from '../public/hunting.js';
@@ -18,4 +19,5 @@ export function finishRoutineReport(state,now){
   }
   const entry={id:report.routineId,startedAt:report.startedAt,endedAt:report.endedAt,kind:report.kind??'fishing',summary:report.ruleSummary,reason:report.reason,bankedGold:report.bankedGold??0,...(report.storedItems?{storedItems:report.storedItems}:{}),...(report.foodUsed?{foodUsed:report.foodUsed,foodHealed:report.foodHealed}:{}),...(report.cookedMeals?{cookedMeals:report.cookedMeals,cookingXp:report.cookingXp}:{}),...(report.kind==='gambling'?{gambling:{rounds:report.rounds,wins:report.wins,losses:report.losses,totalLost:report.totalLost,net:report.goldEarned-report.goldSpent}}:{}),count:report.kind==='exploring'?report.visited.length:report.kind==='gambling'?report.rounds:report.kind==='queue'?Object.values(report.catches).reduce((a,b)=>a+b,0)+report.timber+Object.values(report.cookedMeals??{}).reduce((a,b)=>a+b,0):report.kind==='woodcutting'?report.timber:report.baitUsed??0,xp:report.xp??0,...(report.hunts?.byEnemy?{hunts:report.hunts.byEnemy,huntSales:report.huntSales??{}}:{})};
   state.activityLog=[...(state.activityLog??[]).filter(item=>item.id!==entry.id),entry].slice(-10);
+  if(state.pendingCharacterRules)applyAutoSettings(state,state.pendingCharacterRules);
 }
