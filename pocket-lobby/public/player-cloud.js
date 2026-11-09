@@ -425,7 +425,20 @@
       const {initializeRankings}=await import('./rankings.js');
       initializeRankings(window.playerCloud,document,window);
       const {initializeFactions}=await import('./factions.js');
-      initializeFactions({read:query=>request('factions?q='+encodeURIComponent(query)),change:body=>request('factions',body)});
+      window.towerOpenFactionRegistrar=initializeFactions({
+        read:query=>request('factions?q='+encodeURIComponent(query)),
+        change:async body=>{
+          if(body.action!=='create')return request('factions',body);
+          await flush();
+          gameplayBusy=true;
+          try{
+            const result=await action('factions',body);
+            window.towerApplyFactionPurchase?.(result.state,result.founding.fee);
+            return result;
+          }finally{gameplayBusy=false;}
+        },
+        visitRegistrar:()=>window.towerFindFactionRegistrar?.()
+      });
       const script=document.createElement('script');script.src='game.js';
       script.onload=()=>{
         if(!(pending||retryJob||sending))setStatus('Server saved');

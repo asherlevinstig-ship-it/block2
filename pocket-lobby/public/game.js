@@ -1729,7 +1729,7 @@ function updateCombatMoment(time){
 }
 let editing=false,selection=null,zoom=1,hitboxes=[],bounds=null,bubbleUntil=0,noticeUntil=0;
 const hubFurniture=[
-  ['reception',3,2],['warden',10,3],
+  ['reception',3,2],['warden',10,3],['factionRegistrar',factionRegistrar.x,factionRegistrar.y],
   ['plant',1,1],['plant',16,1],
   ['sofa',2,10],['bench',2,12],
   ['sofa',13,8,2],['bench',13,10,2]
@@ -2365,6 +2365,13 @@ function object(item,highlight=false,time=0) {
     const [wx,wy]=point(x+.5,y+.5);
     sprite(ctx,wx,wy,{outfit:3,hair:2},{direction:'right',time,weapon:true,weaponTier:'basicAxe',pose:{angle:-.4}});return;
   }
+  if(type==='factionRegistrar'){
+    const [rx,ry]=point(x+.5,y+.5);
+    surface(x+.14,y+.14,.72,.72,.3,'#c79d503c');
+    sprite(ctx,rx,ry,{outfit:4,hair:2},{direction:'left',time});
+    rect(rx+8,ry-17,8,9,'#543b46');rect(rx+9,ry-17,6,7,'#ebcf9e');rect(rx+10,ry-15,4,1,'#aa7b59');
+    return;
+  }
   if(type==='warden'){
     const [wx,wy]=point(x+.5,y+.5);
     surface(x+.14,y+.14,.72,.72,.3,'#9ab7a73c');
@@ -2820,6 +2827,8 @@ function updateWorldLabels(){
   if(currentRoom==='home')for(const item of homeFurniture.filter(item=>item.type==='safe'))add('Home safe',...point(item.x+.5,item.y+.5,31),'npc',()=>use(item),'Gold & item storage');
   if(currentRoom==='home')add('YOUR HOME',...point(5,0,44),'sign',null,avatar.name);
   if(currentRoom==='hub'){
+    const registrar=hubFurniture.find(item=>item.type==='factionRegistrar');
+    add(factionRegistrar.name,...point(registrar.x+.5,registrar.y+.5,45),'npc',()=>use(registrar),'Faction registry');
     if(lobbyRoutesOpen())add('Job board',...point(4.5,2,39),'npc',openJobBoard);
     add('TOWER OF',...point(0,2.7,52),'sign',null,'BEGINNINGS',{side:'left',width:51,font:6});
     const symbol=questStage(quest)===0?'! ':questStage(quest)===4?'? ':'';
@@ -3007,7 +3016,7 @@ function draw(time){
     object(item,treeHover||editing&&(selection?.id===item.id||hoverItem?.id===item.id)&&!fixed(item),time);
     ctx.globalAlpha=1;
     if(item.defeated||item===ghost||(fixed(item)&&!isGamingTable(item)))continue;
-    const [w,d]=dimensions(item), h=moonwood.heights[item.type]??{armoryCounter:32,weaponRack:37,anvil:19,brazier:25,workbench:23,woodStool:13,woodTable:18,bookcase:37,woodcutter:43,warden:43,enchanter:43,tradeCounter:32,harvestCrates:16,tackleCounter:32,rodRack:36,baitCrates:16,blackjack:19,roulette:22,reception:32,stove:28,safe:25,bed:24,comfortBed:24,royalBed:28,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39,bench:22,streetlamp:55,fountain:37}[item.type];
+    const [w,d]=dimensions(item), h=moonwood.heights[item.type]??{armoryCounter:32,weaponRack:37,anvil:19,brazier:25,workbench:23,woodStool:13,woodTable:18,bookcase:37,woodcutter:43,factionRegistrar:43,warden:43,enchanter:43,tradeCounter:32,harvestCrates:16,tackleCounter:32,rodRack:36,baitCrates:16,blackjack:19,roulette:22,reception:32,stove:28,safe:25,bed:24,comfortBed:24,royalBed:28,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39,bench:22,streetlamp:55,fountain:37}[item.type];
     const height=isTimberTree(item)&&treeState(item).regrowsAt?6:h;
     const shape=[point(item.x,item.y+d),point(item.x+w,item.y+d),point(item.x+w,item.y),point(item.x+w,item.y,height),point(item.x,item.y,height),point(item.x,item.y+d,height)];
     hitboxes.push({item,shape});
@@ -3436,6 +3445,14 @@ function navigateHud(destination){
   if(next?.to===destination){followHudDoor(next);return;}
   showHudMap(destination);
 }
+window.towerFindFactionRegistrar=()=>{
+  if(currentRoom===factionRegistrar.room)use(hubFurniture.find(item=>item.type==='factionRegistrar'));
+  else navigateHud(factionRegistrar.room);
+};
+window.towerApplyFactionPurchase=(state,fee)=>{
+  applyServerGameplay(state);updateInventory();
+  showTransaction('Faction registered',[{icon:'⚑',text:'You are the founding leader'}],-fee,{auto:true});
+};
 function moonTrailActive(){return familiarBond(familiarState,'owl').rank>=3&&moonSightActive(familiarState,currentRoom,combatNow());}
 function worldMapVisibility(){
  const scout=familiarState.equipped==='owl'&&canScoutHere()?(moonTrailActive()?3:2):false;
@@ -3776,6 +3793,8 @@ function finishInteraction(){
     }else note('You already have your basic axe. Equip it in Inventory to gather timber.');
   }else if(isTimberTree(item)){
     beginChopping(item);
+  }else if(item.type==='factionRegistrar'){
+    window.towerOpenFactionRegistrar?.();
   }else if(item.type==='warden'){
     openQuest();
   }else if(item.type===huntEnemyForRoom(currentRoom)?.prop){

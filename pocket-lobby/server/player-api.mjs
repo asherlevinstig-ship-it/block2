@@ -125,7 +125,8 @@ export async function handlePlayerApi(request,env){
       if(request.method==="GET")return json(await readFactions(env.TOWER_DB,id,new URL(request.url).searchParams.get('q')));
       const body=await bodyOf(request);
       if(body.characterKey!==id)return json({error:"This tab belongs to a different character. Reload to continue."},409);
-      return json(await changeFaction(env.TOWER_DB,id,body));
+      const result=await changeFaction(env.TOWER_DB,id,body);
+      return json(body.action==='create'?{...result,...packet(await read(env.TOWER_DB,id))}:result);
     }
     if(path==="/api/player/state"&&request.method==="GET"){
       const row=await settled(env,id,true);
