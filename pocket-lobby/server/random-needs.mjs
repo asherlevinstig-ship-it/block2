@@ -3,10 +3,9 @@ import {normalizeFoodPolicy} from '../public/food-policy.js';
 import {towerBread} from '../public/cooking.js';
 import {LOW_HUNGER} from '../public/player-vitals.js';
 import {simpleAutoRisks} from '../public/simple-auto.js';
-import {fishProducts} from '../public/fishing.js';
+import {fishProducts,fishingCatalog} from '../public/fishing.js';
 import {woodRules} from '../public/woodcutting.js';
 import {huntEnemies} from '../public/hunting.js';
-import {fishingCatalog} from '../public/fishing.js';
 import {skillLevel} from '../public/skill-curve.js';
 
 export function randomSurplusSale(state){
@@ -26,8 +25,9 @@ export function randomSurplusSale(state){
 // Reassess only between actions; never interrupt an in-progress attack or cast.
 export function randomNeed(state,p,at){
  const food=normalizeFoodPolicy(p.foodPolicy??state.characterRules.food),profile=simpleAutoRisks[p.simpleRisk??'balanced'];
+ if(p.careDecisionAt!==at)delete p.careDecision;
  const eaten=applyAutoFood(state,p,at);
- if(eaten.used)p.careDecision='Ate carried food before choosing the next activity.';
+ if(eaten.used){p.careDecision='Ate carried food before choosing the next activity.';p.careDecisionAt=at;}
  const hunger=state.vitals?.hunger??100,reserve=state.characterRules.goldPolicy.reserveGold;
  const choose=(type,amount,reason)=>({step:{type,amount},reason});
  if(hunger<=LOW_HUNGER){

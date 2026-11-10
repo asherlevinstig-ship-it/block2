@@ -168,7 +168,7 @@
     document.getElementById('autoBanked').textContent=(activePlan?.bankedGold?'Saved to bank · '+activePlan.bankedGold.toLocaleString()+' gold':'')+(storedCount?(activePlan?.bankedGold?' · ':'')+storedCount+' items stored in vault':'');
     document.getElementById('autoReason').textContent=info.reason;
     const eaten=Object.values(activePlan?.foodUsed??{}).reduce((a,b)=>a+b,0);
-    document.getElementById('autoDecision').textContent=(eaten?'Ate '+eaten+' meal'+(eaten===1?'':'s')+' · Restored '+activePlan.foodHealed+' HP. ':'')+info.decision;
+    document.getElementById('autoDecision').textContent=(eaten?'Ate '+eaten+' meal'+(eaten===1?'':'s')+(activePlan.foodHealed>0?' · Restored '+activePlan.foodHealed+' HP':'')+'. ':'')+info.decision;
     document.getElementById('autoTakeControl').textContent=info.returning?'Finishing current fight…':info.running?'Take control':'Return to play';
     document.getElementById('autoTakeControl').disabled=controlBusy||info.returning;
     panel.dataset.running=String(info.running);

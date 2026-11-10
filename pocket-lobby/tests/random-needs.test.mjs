@@ -4,7 +4,6 @@ import {normalizeState,settlePlan} from '../server/player-state.mjs';
 import {touchPresence} from '../server/routines.mjs';
 import {simpleAutoRules} from '../public/simple-auto.js';
 import {chooseSimpleTask} from '../server/simple-planner.mjs';
-import {randomNeed} from '../server/random-needs.mjs';
 import {skillXpForLevel} from '../public/skill-curve.js';
 import {autoStatus} from '../public/auto-mode.js';
 import {createAutoFeedbackTracker} from '../public/auto-feedback.js';
