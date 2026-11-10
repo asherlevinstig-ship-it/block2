@@ -30,7 +30,7 @@ export const moonwood=(()=>{
     roots:{number:'09',name:'Root Passage',description:'A living tunnel winds beneath Moonwood, linking the ruins back to Lantern Trail.',badge:'MOONWOOD',floor:'Forest shortcut',center:[6,5],palette:['#363847','#4b4357','#766274'],authored:[['wildtree',1,2],['wildtree',3,6],['wildtree',6,2],['wildtree',8,7],['wildtree',10,2],['wildbloom',4,3],['wildbloom',8,6]]},
     pond:{number:'10',name:'Silverfin Pond',description:'Cast a line from the old jetty and watch the moonlight ripple over the water.',badge:'MOONWOOD',floor:'Fishing pond',center:[3,5],palette:['#334f59','#486570','#8b9296'],landmark:['fishingPost',5,5,4,5],authored:[['wildtree',1,1],['wildtree',3,1],['wildtree',1,8],['wildtree',4,8],['wildrock',4,2],['wildbloom',3,7],['wildbloom',4,3]]}
   };
-  const heights={...riverPropHeights,...watchPropHeights,...dungeonHeights,sideSeal:24,sideTreasure:18,restAltar:28,cachePassage:30,essenceCache:24,sluiceLever:20,gateSupply:12,shellChime:27,galleryCache:13,vaultRelief:28,glowFungus:20,vaultCrystal:30,campfire:24,timberTree:51,wildboar:22,stonebackBeetle:28,wildtree:51,wildrock:13,wildbloom:22,pillar:28,lanternStand:31,mothAltar:24,moonwell:35,moonbloom:29,fishingPost:26};
+  const heights={...riverPropHeights,...watchPropHeights,...dungeonHeights,sideSeal:24,sideTreasure:18,restAltar:28,cachePassage:30,essenceCache:24,sluiceLever:20,gateSupply:12,shellChime:27,galleryCache:13,vaultRelief:28,glowFungus:20,vaultCrystal:30,campfire:24,timberTree:51,wildboar:22,stonebackBeetle:28,moonbackStag:43,wildtree:51,wildrock:13,wildbloom:22,pillar:28,lanternStand:31,mothAltar:24,moonwell:35,moonbloom:29,fishingPost:26};
   const doors=Object.fromEntries(Object.keys(areas).map(id=>[id,[]]));
   const coordinate=([x,y])=>({x,y});
   function connect(a,b,from,to,gate){
@@ -210,6 +210,26 @@ export const moonwood=(()=>{
     const stone=['#9a9ab2','#50536c','#71738d'];
     const aqua=['#91bdbb','#3e6271','#568b93'];
     surface(x+.08,y+.1,.86,.82,.14,'#16293776');
+    if(type==='moonbackStag'){
+      // Draw the silhouette in screen space so the antlers stay distinct at game scale.
+      const idle=reduced?0:Math.round(Math.sin(time/470)*1.2),ink='#243144',fur='#82958e',light='#b5c3aa',horn='#e6e0b6';
+      const poly=(points,color)=>polygon(points.map(([u,v])=>[px+u,py+v+idle]),color);
+      for(const [leg,ground] of [[-11,-1],[-5,-3],[7,0],[12,-2]]){
+        poly([[leg-2,-17],[leg+2,-17],[leg+1,ground-3],[leg+3,ground],[leg-1,ground],[leg-2,ground-5]],ink);
+        rect(px+leg-1,py+ground-2+idle,3,2,'#51696d');
+      }
+      poly([[-18,-20],[-13,-26],[0,-25],[9,-22],[15,-26],[18,-17],[10,-11],[-10,-12],[-16,-15]],ink);
+      poly([[-16,-20],[-12,-24],[2,-23],[12,-19],[9,-14],[-9,-14],[-14,-17]],fur);
+      poly([[-14,-22],[-10,-24],[2,-23],[9,-20],[-3,-18]],light);
+      poly([[7,-21],[11,-33],[17,-37],[22,-32],[26,-31],[24,-27],[17,-28],[14,-17],[10,-15]],ink);
+      poly([[10,-22],[13,-32],[17,-35],[21,-31],[25,-30],[23,-28],[17,-29],[14,-20]],fur);
+      poly([[13,-32],[10,-37],[15,-36],[17,-34]],light);
+      poly([[16,-34],[14,-42],[9,-47],[7,-45],[10,-43],[8,-41],[10,-40],[12,-41],[14,-34]],horn);
+      poly([[19,-34],[20,-42],[24,-47],[26,-46],[23,-43],[26,-43],[26,-41],[22,-40],[21,-34]],horn);
+      rect(px+20,py-32+idle,2,2,'#e5f9b7');
+      rect(px-5,py-22+idle,2,2,'#d2efc4');rect(px-1,py-21+idle,1,1,'#e2f1d0');
+      return;
+    }
     if(type==='restAltar'){
       part(.12,.12,.76,.76,0,7,stone);part(.22,.22,.56,.56,7,12,['#a3cfc0','#486b70','#71968c']);
       surface(x+.25,y+.25,.5,.5,19,'#86e5cd');rect(px-2,py-28,4,17,'#b9ffe0');rect(px-7,py-23,14,4,'#b9ffe0');

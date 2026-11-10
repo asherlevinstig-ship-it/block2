@@ -4,6 +4,8 @@ import {smartAttacks,smartProfile,planBrainAttack,normalizeBrain} from './enemy-
 import {arenaEnemy,arenaPlayer,arenaInDanger,arenaBehindCover,dungeonFloor} from './dungeon-arena.js';
 import {skillLevel} from './skill-curve.js';
 import {essenceEffects,essenceGems,essencePower} from './essences.js';
+import {moonbackSite} from './moonback.js';
+export {moonbackRules,moonbackSite,moonbackSighting,nextMoonbackAt} from './moonback.js';
 
 export function staggerProfile(enemy){
  const boss=enemy.elite||enemy.id==='depthsGuardian';
@@ -26,6 +28,7 @@ const boar={id:'boar',name:'Wild Boar',room:'clearing',prop:'wildboar',move:'cha
 const beetle={id:'beetle',name:'Stoneback Beetle',room:'ruins',prop:'stonebackBeetle',move:'slam',health:96,firstAttack:2300,interval:3500,damage:22,respawn:45000,shellArmor:8,exposureMs:2200,exposedBonus:5,loot:'stonebackShell',lootName:'Shell Fragment',sellPrice:45,xp:[25,20,25],masteryXp:15};
 export const huntEnemies={
   boar,beetle,
+  moonbackStag:{id:'moonbackStag',name:'Moonback Stag',room:'grove',prop:'moonbackStag',move:'moonrush',health:132,firstAttack:2700,interval:3100,damage:17,loot:'deer',lootName:'Forest deer',sellPrice:24,xp:[35,30,35],masteryXp:20,tactic:'MOONRUSH · Watch the bright lane. Dodge just before the charge lands, then counter.'},
   thornBoar:{...boar,id:'thornBoar',name:'Thorn Boar',room:'thornwood',health:115,damage:17,firstAttack:1700,interval:2100,xp:[30,20,30],masteryXp:15,tactic:'OPTIONAL DANGER · Stronger than a Wild Boar. Dodge the charge. Victory breaks the grotto cache seal.'},
   depthsBoar:{...boar,id:'depthsBoar',room:'depthsGate',name:'Mire Skitter',prop:'depthsSkitter',move:'skitterPounce',tactic:'MIRE SKITTER · It darts before pouncing. Step out of the marked lane; close in to strike.',health:100,damage:12,xp:[30,20,30],masteryXp:20},
   depthsBeetle:{...beetle,id:'depthsBeetle',room:'depthsGallery',name:'Shell Warden',prop:'depthsWarden',move:'wardenSlam',tactic:'SHELL WARDEN · Leave the marked slam area, then punish its open core.',health:150,damage:20,xp:[45,35,45],masteryXp:30},
@@ -34,7 +37,7 @@ export const huntEnemies={
   sealGuardian:{...beetle,id:'sealGuardian',prop:'depthsSentinel',room:'depthsTrial',name:'Rune Sentinel',elite:true,archetype:'duelist',tactic:'DUELIST · Dodge the final flash, then counter. Counters deal 25% extra damage; watch for the follow-up lunge.',move:'sentinelStrike',health:210,firstAttack:2600,interval:2600,damage:24,shellArmor:0,xp:[60,45,60],masteryXp:40},
   depthsGuardian:{...beetle,id:'depthsGuardian',prop:'depthsColossus',room:'depthsVault',name:'Vault Guardian',health:240,damage:27,shellArmor:9,xp:[75,55,75],masteryXp:50}
 };
-const enemiesByRoom=Object.fromEntries(Object.values(huntEnemies).map(enemy=>[enemy.room,enemy]));
+const enemiesByRoom=Object.fromEntries(Object.values(huntEnemies).filter(enemy=>enemy.id!=='moonbackStag').map(enemy=>[enemy.room,enemy]));
 export const huntEnemyForRoom=room=>enemiesByRoom[room];
 export function vaultPhase(encounter){
  if(encounter?.addActor||encounter?.enemy!=='depthsGuardian'||encounter.bossVersion!==1)return null;
@@ -44,6 +47,7 @@ export function vaultPhase(encounter){
 }
 export function huntEnemy(encounter){
  if(encounter?.addActor)return {...addKinds[encounter.addActor],room:encounter.arenaRoom,xp:[0,0,0]};
+ if(encounter?.enemy==='moonbackStag'&&moonbackSite(encounter.moonbackRoom))return {...huntEnemies.moonbackStag,room:encounter.moonbackRoom};
  const base=Object.hasOwn(huntEnemies,encounter?.enemy)?huntEnemies[encounter.enemy]:boar,enemy=encounter?.brainVersion===2?smartProfile(base):base,phase=vaultPhase(encounter);
  return phase?{...enemy,...phase,phaseName:phase.name,name:enemy.name,tactic:'PHASE '+phase.index+' / 3 · '+phase.name.toUpperCase()+' · '+phase.hint}:enemy;
 }
@@ -58,6 +62,7 @@ export function transitionVaultPhase(event,before,now){
 export const huntRespawnAt=(hunting,enemy)=>enemy?.id==='thornBoar'?hunting.thornRespawnAt??0:enemy===huntEnemies.beetle?hunting.beetleRespawnAt??0:hunting.respawnAt;
 
 const enemyMoves={
+  moonrush:{id:'moonrush',name:'Moonrush',tell:1550,damage:4,shape:'lane',opensShell:false},
   skitterPounce:{id:'skitterPounce',name:'Skitter Pounce',tell:1000,damage:0,shape:'lane',opensShell:false},
   wardenSlam:{id:'wardenSlam',name:'Warden Slam',tell:1400,damage:0,shape:'ring',opensShell:true},
   vaultSmash:{id:'vaultSmash',name:'Ironclad Smash',tell:1200,damage:0,shape:'ring',opensShell:false},
@@ -108,7 +113,7 @@ function scheduleEnemyResponse(next,enemy,move,timedDodge,now){
     if(move.id===enemy.move)response=enemyMoves.runicSlam;
     else next.exposedUntil=Math.max(next.exposedUntil??0,now+enemy.exposureMs);
   }else if(move.id==='quake')response=enemyMoves.aftershock;
-  else if(!next.desperateUsed&&next.health<=enemy.health*.55&&move.id===enemy.move){
+  else if(enemy.id!=='moonbackStag'&&!next.desperateUsed&&next.health<=enemy.health*.55&&move.id===enemy.move){
     response=enemyMoves[enemy.id==='depthsGuardian'?'quake':enemy.shellArmor?'crush':'wildCharge'];
     next.desperateUsed=true;
   }else if(move.id==='charge'&&timedDodge)response=enemyMoves.sweep;
@@ -228,6 +233,7 @@ export function normalizeHunting(input={}){
   const result={respawnAt:time(input.respawnAt),recoveryUntil:time(input.recoveryUntil),encounter:null};
   if(input.thornRespawnAt!==undefined)result.thornRespawnAt=time(input.thornRespawnAt);
   if(input.beetleRespawnAt!==undefined)result.beetleRespawnAt=time(input.beetleRespawnAt);
+  if(input.moonbackSighting!==undefined)result.moonbackSighting=time(input.moonbackSighting);
   if(input.encounter){
     const enemy=input.encounter.enemy;
     if(enemy!==undefined&&(typeof enemy!=='string'||!Object.hasOwn(huntEnemies,enemy)))throw new Error('Invalid encounter enemy.');
@@ -268,6 +274,10 @@ export function normalizeHunting(input={}){
     const summary=normalizeCombatSummary(input.encounter.summary);
     if(summary)result.encounter.summary=summary;
     if(enemy&&enemy!=='boar')result.encounter.enemy=enemy;
+    if(enemy==='moonbackStag'){
+      if(!moonbackSite(input.encounter.moonbackRoom)||!Number.isSafeInteger(input.encounter.moonbackId)||input.encounter.moonbackId<0)throw new Error('Invalid Moonback sighting.');
+      Object.assign(result.encounter,{moonbackRoom:input.encounter.moonbackRoom,moonbackId:input.encounter.moonbackId});
+    }
     const move=enemyAttack(input.encounter);
     if(move.id===input.encounter.enemyMove)result.encounter.enemyMove=move.id;
     if(input.encounter.desperateUsed===true)result.encounter.desperateUsed=true;

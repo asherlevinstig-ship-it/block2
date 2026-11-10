@@ -346,3 +346,13 @@ body{background:#071329 url('./hud-night.svg') center top/cover fixed no-repeat;
   cursor:pointer;
 }
 .world-labels[data-room=pond] .world-label-shoal:hover { background:#23545a;border-color:#fff0b7; }
+.world-labels .world-label-tracks {
+  pointer-events:auto;
+  cursor:pointer;
+  padding:5px 8px;
+  border:1px solid #b2c997;
+  border-radius:7px;
+  background:#253b3af2;
+  color:#e7f3cd;
+}
+.world-labels .world-label-tracks:hover { background:#3b544b;border-color:#f1ecc3; }

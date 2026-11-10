@@ -2,7 +2,7 @@ export const veilCloakId='veilweaverCloak';
 export const windstepBootsId='windstepBoots';
 export const hearthguardLeggingsId='hearthguardLeggings';
 export const clothingCatalog=Object.freeze({
-  [veilCloakId]:{name:'Veilweaver Cloak',slot:'jacket',index:13,loot:true,power:'Veilstep',color:'#4b6686',shade:'#252e48',description:'Rare Moonwell Depths loot. Wear it to unlock Veilstep: vanish for 10 seconds, or escape an active fight. Two-minute cooldown.'},
+  [veilCloakId]:{name:'Veilweaver Cloak',slot:'jacket',index:13,loot:true,power:'Veilstep',color:'#4b6686',shade:'#252e48',description:'Rare loot from Moonwell Depths or the Moonback Stag. Wear it to unlock Veilstep: vanish for 10 seconds, or escape an active fight. Two-minute cooldown.'},
   [windstepBootsId]:{name:'Windstep Boots',slot:'boots',index:10,loot:true,power:'Second Wind',color:'#457286',light:'#abebe9',description:'Defeat the Rune Sentinel, then bank a full Vault clear. Second Wind restores up to 45 dodge stamina in combat. 50-second cooldown.'},
   [hearthguardLeggingsId]:{name:'Hearthguard Leggings',slot:'trousers',index:10,loot:true,power:'Ember Mend',color:'#71504a',light:'#e6a574',description:'Defeat the Treasury Guardian, then bank a full Vault clear. Ember Mend restores up to 30 HP between fights. 90-second cooldown.'},
   rangerMantle:{name:'Moonwood Ranger Mantle',slot:'jacket',index:11,price:320,color:'#4c6a53',shade:'#283e36',description:'A deep green hood, split travelling cape, leather fastening and leaf-shaped clasp.'},

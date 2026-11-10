@@ -1,3 +1,5 @@
+import {moonbackSite} from './moonback.js';
+
 // Shared geometry and attack footprints. Rendering and server damage use the same cells.
 export const dungeonRooms=['depthsGate','depthsGallery','depthsCache','depthsTreasury','depthsRest','depthsTrial','depthsVault'];
 export const dungeonMobTypes=['depthsSkitter','depthsWarden','depthsSeer','depthsSentinel','depthsColossus'];
@@ -14,7 +16,7 @@ export function dungeonFloor(room,x,y){
 export function dungeonWalkable(room,tile,scenery=[]){
  return Number.isInteger(tile?.x)&&Number.isInteger(tile?.y)&&dungeonFloor(room,tile.x,tile.y)&&!scenery.some(p=>!isDungeonMob(p.type)&&p.x===tile.x&&p.y===tile.y);
 }
-export const arenaEnemy=encounter=>encounter?.arenaEnemy??{x:6,y:5};
+export const arenaEnemy=encounter=>encounter?.arenaEnemy??moonbackSite(encounter?.moonbackRoom)??{x:6,y:5};
 export const arenaPlayer=encounter=>encounter?.arenaPlayer??{x:5,y:5};
 export function arenaWarningAt(e,move){return e?.arenaVersion===1&&e.arenaLockedFor!==e.nextBoarAt?Math.max(0,e.nextBoarAt-move.tell):Infinity;}
 export const ARENA_STEP_COST=12;

@@ -17,9 +17,11 @@ import {castEssencePower} from './essences.mjs';
 import {awardBattleStone,awardEssenceMastery} from '../public/essences.js';
 import {moonwood} from '../public/moonwood.js';
 import {isTimberTree,timberTreeState,cutTimberTree,harvestTimber,choppingDuration,grantBasicAxe} from '../public/woodcutting.js';
-import {huntEnemyForRoom,huntEnemy,huntRespawnAt,canUseWeapon,createHunt,advanceHunt,huntingTurn,boarRules,normalizeCombatSummary} from '../public/hunting.js';
+import {huntEnemies,huntEnemyForRoom,huntEnemy,huntRespawnAt,canUseWeapon,createHunt,advanceHunt,huntingTurn,boarRules,normalizeCombatSummary} from '../public/hunting.js';
 import {depthsStages,depthsStageIndex,clearDepthsStage,inspectDepthsFind,depthsCacheRoom,depthsEnemyAvailable,chooseDepthsPassage,canEnterDepthsCache,depthsCacheReturn,canVisitDepthsRoom,depthsSpoils,depthsSideForRoom,visitDepthsSide,useDepthsRest} from '../public/depths.js';
 import {recordQuest} from '../public/quests.js';
+import {moonbackRules,moonbackSighting} from '../public/moonback.js';
+import {veilCloakId} from '../public/wardrobe.js';
 
 const adjacent=(state,item)=>state.position&&Math.abs(state.position.x-item.x)+Math.abs(state.position.y-item.y)===1;
 function idle(state){
@@ -80,7 +82,13 @@ function result(state,event,now,random=Math.random){
       if(state.location===depthsCacheRoom)rewards.cacheUnlocked=true;
     }
     else{
-      state.hunting[enemy.id==='thornBoar'?'thornRespawnAt':enemy.id==='beetle'?'beetleRespawnAt':'respawnAt']=now+enemy.respawn;
+      if(enemy.id==='moonbackStag'){
+        state.hunting.moonbackSighting=encounter.moonbackId;
+        if(!state.wardrobe.owned.includes(veilCloakId)&&random()<moonbackRules.cloakChance){
+          state.wardrobe.owned.push(veilCloakId);
+          event.clothingDrop=rewards.clothing=veilCloakId;
+        }
+      }else state.hunting[enemy.id==='thornBoar'?'thornRespawnAt':enemy.id==='beetle'?'beetleRespawnAt':'respawnAt']=now+enemy.respawn;
       const before=state.huntingLoot[enemy.loot]??0;
       state.huntingLoot[enemy.loot]=Math.min(1000000,before+1);
       if(state.huntingLoot[enemy.loot]>before)rewards.loot={[enemy.loot]:state.huntingLoot[enemy.loot]-before};
@@ -107,7 +115,7 @@ function result(state,event,now,random=Math.random){
     if(state.plan?.kind==='queue'&&state.plan.activeHunt?.id===state.combatId)state.plan.lastHuntReport=report;
     else state.combatReports=[...(state.combatReports??[]).filter(item=>item.id!==report.id),report].slice(-10);
   }
-  return {...event,...(encounter.arenaVersion===1?{enemyTile:event.enemyTile??arenaEnemy(encounter),attackTile:event.attackTile??encounter.arenaTarget,attackCenter:event.attackCenter??enemyAttack(encounter).center,attackFan:event.attackFan??enemyAttack(encounter).fan,attackReach:event.attackReach??enemyAttack(encounter).reach}:{}),enemyId:event.enemyId??enemy.id,at:now};
+  return {...event,...(enemy.id==='moonbackStag'?{enemyTile:arenaEnemy(encounter)}:{}),...(encounter.arenaVersion===1?{enemyTile:event.enemyTile??arenaEnemy(encounter),attackTile:event.attackTile??encounter.arenaTarget,attackCenter:event.attackCenter??enemyAttack(encounter).center,attackFan:event.attackFan??enemyAttack(encounter).fan,attackReach:event.attackReach??enemyAttack(encounter).reach}:{}),enemyId:event.enemyId??enemy.id,at:now};
 }
 
 // Replay each due strike at its scheduled time. Closing or slowing the client
@@ -182,11 +190,19 @@ export function activityAction(state,action,body,now,random){
   if(action==='fight'){
     idle(state);
     if(outfitVeilUntil(state)>now)throw new Error('Choose End Veilstep before starting a fight.');
-    const enemy=huntEnemyForRoom(state.location),index=depthsStageIndex(state.location);
-    if(!enemy||!adjacent(state,{x:6,y:5}))throw new Error('Travel beside the creature before fighting.');
+    let sighting=null,enemy=huntEnemyForRoom(state.location);
+    const index=depthsStageIndex(state.location);
+    if(body.moonbackId!==undefined){
+      sighting=moonbackSighting(now);
+      if(!sighting||sighting.id!==body.moonbackId||sighting.room!==state.location)throw new Error('The Moonback Stag moved. Follow its fresh tracks.');
+      if(state.hunting.moonbackSighting===sighting.id)throw new Error('You already won this sighting. Follow the next trail when it returns.');
+      enemy={...huntEnemies.moonbackStag,room:state.location};
+    }
+    if(!enemy||!adjacent(state,sighting??{x:6,y:5}))throw new Error('Travel beside the creature before fighting.');
     if(!state.combatGear.equippedWeapon||!canUseWeapon(state.stats,state.combatGear.equippedWeapon))throw new Error('Choose a weapon you can use before fighting.');
-    if(index>=0?!depthsEnemyAvailable(state.depthsRun,state.location):now<huntRespawnAt(state.hunting,enemy))throw new Error('Invalid encounter. Wait for the creature to return.');
+    if(!sighting&&(index>=0?!depthsEnemyAvailable(state.depthsRun,state.location):now<huntRespawnAt(state.hunting,enemy)))throw new Error('Invalid encounter. Wait for the creature to return.');
     startCombatEncounter(state,enemy,now);
+    if(sighting)Object.assign(state.hunting.encounter,{moonbackRoom:sighting.room,moonbackId:sighting.id});
     if(body.standGround===true&&index>=0)state.hunting.encounter.autoRetreatDisabled=true;
     const firstTactic=index>=0?nextCombatTactic(state):null;
     if(firstTactic?.action==='flee'){

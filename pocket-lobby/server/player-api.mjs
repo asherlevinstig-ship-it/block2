@@ -138,6 +138,7 @@ export async function handlePlayerApi(request,env){
       const existing=id&&await settled(env,id,true);
       if(existing)return json(packet(existing));
       const body=await bodyOf(request),legacy={...body.legacy};migrateProgression(legacy);
+      if(legacy.hunting?.encounter?.enemy==='moonbackStag')legacy.hunting={...legacy.hunting,encounter:null};
       const state=normalizeState({...legacy,outfitMagic:undefined,...(legacy.location===factionHall?{location:'hub',position:{x:8,y:12}}:{}),stats:{...legacy.stats,leadershipXp:0},adventure:{...legacy.adventure,...Object.fromEntries(watchFlags.map(key=>[key,false]))},vitals:undefined,familiars:undefined,autoConfigured:undefined,pendingCharacterRules:undefined,autoSwitch:undefined,bedRest:undefined,safeVersion:1,ownedFurniture:{...(legacy.ownedFurniture??{bed:1}),safe:0},homeFurniture:(legacy.homeFurniture??[]).filter(item=>item.type!=='safe'),bank:undefined,controlMode:'play',meals:{},magic:undefined,...(body.newCharacter===true?{characterCreated:false,welcomeSeen:false,autoLesson:'required'}:{})});
       if(state.wardrobe.outfits.some(look=>['jacket','trousers','boots'].some(slot=>!isFreeClothing(look[slot]))))throw new Error('Choose free starter clothing for a new character.');
       state.wardrobe.owned=state.wardrobe.owned.filter(isFreeClothing);

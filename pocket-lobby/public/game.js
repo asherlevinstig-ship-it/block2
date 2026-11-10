@@ -854,7 +854,7 @@ function renderDungeonLoot(){
   const cloakOwned=wardrobe.owned.includes(veilCloakId);
   $('challengeClothingSources').textContent=Object.values(outfitPowers).map(power=>clothingCatalog[power.item].name+' · '+(wardrobe.owned.includes(power.item)?'Owned':'Defeat the '+power.guardian+' and bank a full Vault clear')).join(' • ');
   $('veilCloakSource').textContent=cloakOwned?'Veilweaver Cloak owned · Add it to an outfit in Inventory.'
-    :'Rare clothing · Bank a full Vault clear after defeating the Cache Guardian on the dangerous passage. Veilweaver Cloak has an 8% drop chance and is guaranteed within '+(veilRules.guarantee-outfitMagic.cloakMisses)+' eligible clears.';
+    :'Rare clothing · The Moonback Stag can drop the cloak. A full Vault clear via the dangerous passage has an 8% chance and guarantees it within '+(veilRules.guarantee-outfitMagic.cloakMisses)+' eligible clears.';
   $('dungeonLootInfo').textContent=activeDungeonDrop?(activeDungeonDrop.guaranteed?'Guaranteed drop earned. ':'Lucky drop! ')+'Already added to Inventory. Yours to keep; equipment stays unchanged until you choose.':'Every full Sunken Vault victory has a 15% chance to drop your chosen unowned relic. The fifth clear without a drop guarantees it. Progress carries across visits and target changes. No duplicate drops.';
   const list=$('dungeonLootChoices');list.replaceChildren();for(const weapon of dungeonRelics){const button=document.createElement('button');button.type='button';button.className='relic-choice';button.setAttribute('aria-pressed',String(id===weapon));button.textContent=weaponCatalog[weapon].name+(combatGear.ownedWeapons.includes(weapon)?' · Owned':p.target===weapon?' · Hunting':'');button.onclick=()=>{selectedDungeonRelic=weapon;renderDungeonLoot();};list.append(button);}
   $('dungeonLootArt').innerHTML=shopItemArt(id);$('dungeonLootName').textContent=comparison.item.name;$('dungeonLootTrait').textContent=comparison.item.description;
@@ -950,6 +950,7 @@ function renderCombatRecap(report){
   if(rewards.cacheUnlocked)row('Essence Cache unlocked · '+essenceCacheGold+' gold + an Awakening Stone to collect');
   if(report.lostSpoils&&(report.lostSpoils.gold||Object.keys(report.lostSpoils.loot).length))row('Unbanked spoils lost · '+formatDepthsSpoils(report.lostSpoils));
   if(rewards.weapon)row(weaponCatalog[rewards.weapon].name+' · Rare weapon added to Inventory');
+  if(rewards.clothing)row(clothingCatalog[rewards.clothing].name+' · Rare clothing added to Inventory');
   if(!list.children.length)row('Rewards · 0');
   $('combatRecapSpells').textContent=Object.entries(summary.spells).map(([id,count])=>essencePower(id).name+' ×'+count).join(' · ')||'Recorded spell casts · 0';
   $('combatRecapInterrupts').textContent=summary.interrupts;
@@ -1250,11 +1251,13 @@ function startMonsterEncounter(enemy,standGround=false){
   if(combatGear.equippedWeapon&&!canUseWeapon(playerStats,combatGear.equippedWeapon)){note('Your stats do not meet this weapon’s requirements.');return;}
   if(!combatGear.equippedWeapon){note('Equip your Training Sword in Inventory before hunting.');return;}
   if(health<=0){note('Return to the Tower and rest to restore your hearts.');return;}
-  if(index<0&&combatNow()<huntRespawnAt(hunting,enemy)){note('The '+enemy.name+' will return shortly.');return;}
+  if(index<0&&enemy.moonbackId===undefined&&combatNow()<huntRespawnAt(hunting,enemy)){note('The '+enemy.name+' will return shortly.');return;}
   stopForCombat();resetCombatArt();
-  player.direction=(6-player.cx)-(5-player.cy)>=0?'right':'left';player.back=11<player.cx+player.cy;
+  const site=enemy.moonbackId===undefined?{x:6,y:5}:moonbackSite(currentRoom);
+  player.direction=(site.x-player.cx)-(site.y-player.cy)>=0?'right':'left';player.back=site.x+site.y<player.cx+player.cy;
   if(window.playerCloud?.gameplay){
-    serverGameplay('fight',standGround?{standGround:true}:{}).then(packet=>{
+    const body=enemy.moonbackId!==undefined?{moonbackId:enemy.moonbackId}:standGround?{standGround:true}:{};
+    serverGameplay('fight',body).then(packet=>{
       serverCombatId=packet.state.combatId;setPlayerCombat(true);nextCombatPoll=0;canvas.focus({preventScroll:true});
       combatMessage='You engage the '+enemy.name+'. Dodge with Space, or Flee.';
       updateCombatPanel();note(standGround?'Standing your ground · Auto retreat is off for this fight. Press F to flee.':'Press Space just before the '+enemyAttack(hunting.encounter,enemy).name+' lands. F flees.');
@@ -1341,6 +1344,7 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
         combatMessage='Iron Sword trial complete! Sell the Shell Fragment for '+enemy.sellPrice+' gold or save it for a Stoneback Vest.';
         receipt.push({icon:'⬡',text:'Or keep it for a Stoneback Vest · add '+stonebackVest.timber+' timber at the Timber Hollow workbench'});
       }
+      if(result.clothingDrop)receipt.unshift({icon:'✦',text:clothingCatalog[result.clothingDrop].name+' · Rare drop · Added to Inventory'});
       showTransaction(ironTrial?'Iron Sword trial complete!':enemy.name+' defeated',receipt);
     }
     for(const award of (result.mastery??[]).filter(item=>item.leveled))showTransaction(essenceGems[award.gem].name+' Mastery · Level '+award.level+'!',[{icon:'◆',text:masteryBenefit(award.gem,award.level)}]);
@@ -1422,7 +1426,7 @@ function updateCombatPanel(){
   $('enemyStagger').hidden=!encounter;$('enemyStagger').dataset.state=stunned?'stunned':weak?'weak':recovering?'recovering':'building';
   $('staggerLabel').textContent=stunned?'Staggered! · Weak spot open':weak?'Weak spot · Weapon damage +25%':recovering?'Stagger resistance · '+Math.ceil((encounter.staggerResistUntil-now)/1000)+'s':'Stagger · '+(encounter?.stagger??0)+' / '+stagger.limit;
   $('staggerProgress').max=stagger.limit;$('staggerProgress').value=stunned||weak?stagger.limit:encounter?.stagger??0;$('staggerProgress').setAttribute('aria-valuetext',$('staggerLabel').textContent);
-  const enemy=encounter?huntEnemy(encounter):dungeonEnemyPreview(huntEnemyForRoom(currentRoom));
+  const enemy=encounter?huntEnemy(encounter):dungeonEnemyPreview(roomEnemy());
   const stage=depthsStageIndex(currentRoom),chamberCleared=stage>=0&&!depthsEnemyAvailable(depthsRun,currentRoom);
   updateDepthsPanel();
   $('equipStonebackVest').disabled=unavailable();
@@ -1452,17 +1456,18 @@ function updateCombatPanel(){
     notice.textContent=enemy.tactic??(enemy.id==='sealGuardian'?'Rune Sentinel · 210 HP · Win and claim 1 guaranteed Awakening Stone.':'Elite guardian · Strike → Runic Slam → open shell. Reward '+essenceCacheGold+' gold + a stone.');
   }else notice.dataset.cue='';
   if(enemy?.id==='depthsGuardian'&&!encounter&&!chamberCleared){notice.hidden=false;notice.textContent='VAULT GUARDIAN · 3 phases: stagger its armour, dodge and counter its blades, then interrupt or dodge its magic.';}
-  if(enemy?.tactic&&!hunting.recoveryUntil&&!chamberCleared){notice.hidden=false;notice.textContent=enemy.tactic;}
+  if(enemy?.tactic&&!hunting.recoveryUntil&&!chamberCleared&&!(enemy.id==='moonbackStag'&&encounter)){notice.hidden=false;notice.textContent=enemy.tactic;}
   if(!enemy||chamberCleared)return;
-  const beetle=!!enemy.shellArmor,respawn=stage>=0?0:huntRespawnAt(hunting,enemy);
+  const beetle=!!enemy.shellArmor,stag=enemy.id==='moonbackStag',respawn=stage>=0||stag?0:huntRespawnAt(hunting,enemy);
   $('combatTitle').textContent=enemy.name;
-  $('combatChapter').textContent=enemy.archetype?enemy.archetype.toUpperCase()+' · MOONWELL DEPTHS':enemy.elite?'ELITE · ESSENCE CACHE':stage>=0?'MOONWELL DEPTHS':beetle?'MOONWELL RUINS':'FIRST HUNT';
+  $('combatChapter').textContent=stag?'RARE · MOONWOOD':enemy.archetype?enemy.archetype.toUpperCase()+' · MOONWELL DEPTHS':enemy.elite?'ELITE · ESSENCE CACHE':stage>=0?'MOONWELL DEPTHS':beetle?'MOONWELL RUINS':'FIRST HUNT';
   const [strength,agility,vitality]=enemy.xp;
   $('combatReward').textContent=stage>=0?(magicState?.picks.length?'Combat XP and Awakening Stones are kept after a win. Bank your gold and loot.':'Combat XP is kept after a win. Gold and items are held until you bank them.'):'Victory: '+enemy.lootName+' ×1 · +'+strength+' Strength, +'+agility+' Agility, +'+vitality+' Vitality XP. Sell loot for '+enemy.sellPrice+' gold.';
   if(enemy.id==='sealGuardian')$('combatReward').textContent='Win, then claim 1 guaranteed Awakening Stone from the seal. Claimed stones and earned combat XP are yours to keep.';
+  else if(stag)$('combatReward').textContent='Victory · Forest deer +1 and combat XP. A 10% chance at the Veilweaver Cloak. One victory per sighting.';
   else if(enemy.elite)$('combatReward').textContent='Open the cache after victory for '+essenceCacheGold+' gold + an Awakening Stone. Your collected cache rewards are yours to keep.';
   const approach=$('approachBeetle');
-  approach.hidden=(!beetle&&!enemy.archetype&&stage<0)||!!encounter||now<respawn;
+  approach.hidden=(!beetle&&!stag&&!enemy.archetype&&stage<0)||!!encounter||now<respawn;
   approach.textContent='Approach '+enemy.name;
   approach.disabled=health<=0||unavailable()||!combatGear.equippedWeapon;
   const shell=$('beetleShell');
@@ -1498,7 +1503,7 @@ function updateCombatPanel(){
   else if(beetle)$('adventureLandmark').hidden=!!encounter;
   else{
     $('adventureLandmark').hidden=!!encounter||now<respawn;
-    $('adventureLandmark').textContent='Approach boar';
+    $('adventureLandmark').textContent='Approach '+enemy.name;
     $('adventureLandmark').disabled=health<=0||unavailable()||!combatGear.equippedWeapon;
   }
 }
@@ -1894,6 +1899,31 @@ const armoryFurniture=[
 let currentRoom='home',pendingFurniturePlacement=null,pendingFurnitureShopItem=null;
 const atHome=()=>currentRoom==='home';
 const canDecorate=()=>atHome();
+function moonbackHere(){
+  const encounter=hunting.encounter;
+  if(encounter?.enemy==='moonbackStag'&&encounter.moonbackRoom===currentRoom){
+    return {...moonbackSite(currentRoom),id:encounter.moonbackId};
+  }
+  if(!moonbackSite(currentRoom)||!window.playerCloud?.gameplay)return null;
+  const sighting=moonbackSighting(combatNow());
+  return sighting?.room===currentRoom&&sighting.id!==hunting.moonbackSighting?sighting:null;
+}
+function roomEnemy(){
+  const stag=moonbackHere();
+  return stag?{...huntEnemies.moonbackStag,room:stag.room,moonbackId:stag.id}:huntEnemyForRoom(currentRoom);
+}
+function moonbackClue(){
+  if(!['trail','grove','logging','creek'].includes(currentRoom)||!window.playerCloud?.gameplay||routineControlled()||player.inCombat)return null;
+  const sighting=moonbackSighting(combatNow());
+  if(!sighting||sighting.id===hunting.moonbackSighting||sighting.room===currentRoom)return null;
+  const door=hudNextDoor(sighting.room);
+  return door?{door,sighting}:null;
+}
+function followMoonbackTracks(){
+  const clue=moonbackClue();
+  if(clue)travelDoor(clue.door);
+  else note('The trail has gone quiet. Look for fresh tracks.');
+}
 function roomFurniture(){
   if(atHome())return homeFurniture;
   if(currentRoom==='lounge')return initial;
@@ -1906,13 +1936,14 @@ function roomFurniture(){
   if(currentRoom==='armory')return armoryFurniture;
   if(moonwood.has(currentRoom)){
     const enemy=huntEnemyForRoom(currentRoom);
+    const stag=moonbackHere();
     const index=depthsStageIndex(currentRoom);
     const available=index>=0?depthsEnemyAvailable(depthsRun,currentRoom):!enemy||combatNow()>=huntRespawnAt(hunting,enemy);
     return [...moonwood.layouts[currentRoom].scenery.filter(item=>{
       if(item.type===enemy?.prop)return available;
       if(item.type==='galleryCache')return !!depthsRun?.finds?.includes('shellChime');
       return true;
-    }).map(item=>item.type===enemy?.prop&&hunting.encounter?.arenaVersion===1?{...item,...arenaEnemy(hunting.encounter)}:item),...(hunting.encounter?.adds??[]).map(a=>({type:addKinds[a.kind].prop,x:a.x,y:a.y,addId:a.id,add:a}))];
+    }).map(item=>item.type===enemy?.prop&&hunting.encounter?.arenaVersion===1?{...item,...arenaEnemy(hunting.encounter)}:item),...(stag?[{id:'moonback',type:'moonbackStag',x:stag.x,y:stag.y,moonbackId:stag.id,rot:0}]:[]),...(hunting.encounter?.adds??[]).map(a=>({type:addKinds[a.kind].prop,x:a.x,y:a.y,addId:a.id,add:a}))];
   }
   return currentRoom==='hub'?hubFurniture:courtyardFurniture;
 }
@@ -2575,12 +2606,12 @@ function object(item,highlight=false,time=0) {
   if(Object.hasOwn(moonwood.heights,type)){
     if(isTimberTree(item)){
       drawTimberTree(item,time);
-    }else if(type==='wildboar'||type==='stonebackBeetle'||isDungeonMob(type)){
+    }else if(type==='wildboar'||type==='stonebackBeetle'||type==='moonbackStag'||isDungeonMob(type)){
       const actorEncounter=item.add?addEncounter(hunting.encounter,item.add):hunting.encounter;
       const addEffects=item.add?(combatArt.bursts??[]).filter(fx=>fx.targetId===item.addId):[];
       const pose=boarCombatPose({time,now:combatNow(),encounter:player.inCombat?actorEncounter:null,events:item.add?{boarAttackAt:addEffects.findLast(fx=>fx.action==='enemy')?.time,boarHitAt:addEffects.findLast(fx=>fx.damage)?.time}:combatArt,reduced:reducedMotion.matches,defeated:!!item.defeated});
       const [bx,by]=point(x+.5,y+.5),[px,py]=point(player.x+.5,player.y+.5);
-      const shift=(type==='wildboar'||huntEnemyForRoom(currentRoom)?.archetype==='duelist'?pose.charge:0)-pose.recoil;
+      const shift=(type==='wildboar'||type==='moonbackStag'||huntEnemyForRoom(currentRoom)?.archetype==='duelist'?pose.charge:0)-pose.recoil;
       const [mx,my]=isDungeonMob(type)?dungeonMobOffset(item,time):[0,0];
       ctx.save();ctx.translate(mx,my);ctx.globalAlpha*=pose.alpha;
       ctx.translate(bx+Math.sign(px-bx)*shift,by+Math.sign(py-by)*shift+pose.fall);
@@ -2588,11 +2619,11 @@ function object(item,highlight=false,time=0) {
       moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,progress:adventure,combat:player.inCombat?hunting.encounter:null,pose});
       ctx.restore();
       if(!item.defeated){
-        const enemy=item.add?addKinds[item.add.kind]:huntEnemyForRoom(currentRoom);
+        const enemy=item.add?addKinds[item.add.kind]:roomEnemy();
         if(enemy){
           const summoning=item.add&&combatNow()<item.add.spawnAt;
           const key=item.addId??'leader',selected=player.inCombat&&hunting.encounter?.combatTarget===key;
-          renderedActors.push({id:'enemy:'+key,enemy:true,name:enemy.name,detail:summoning?'Summoning':selected?'Target':'',
+          renderedActors.push({id:'enemy:'+key,enemy:true,name:enemy.name,detail:summoning?'Summoning':selected?'Target':type==='moonbackStag'&&!player.inCombat?'Rare sighting':'',
             x:bx+Math.sign(px-bx)*shift+mx,y:by+Math.sign(py-by)*shift+my+pose.fall-(item.add?46:(moonwood.heights[type]??34)+8),
             action:summoning||player.inCombat&&hunting.encounter?.addsVersion!==1?null:()=>use(item)});
         }
@@ -2993,6 +3024,16 @@ for(const id of Object.keys(moonwood.areas)){
 }
 function drawMoonwoodDetails(time){
   moonwood.drawWater(currentRoom,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,depthsRun,progress:adventure});
+  const clue=moonbackClue();
+  if(clue){
+    const {tile,inside}=clue.door,dx=inside.x-tile.x,dy=inside.y-tile.y;
+    for(let i=0;i<5;i++){
+      const x=tile.x+.46+dx*(.42+i*.29),y=tile.y+.46+dy*(.42+i*.29);
+      const spread=i%2?.12:-.12;
+      surface(x-dy*spread,y+dx*spread,.13,.10,.7,'#b6e6b7');
+      surface(x-dy*spread+.12,y+dx*spread+.04,.075,.10,.7,'#e7f1c5');
+    }
+  }
   if(currentRoom==='pond'){
     const shoal=pondShoalAt(combatNow());
     fishingMoments.drawShoal(ctx,...point(shoal.water.x,shoal.water.y,.5),time,reducedMotion.matches);
@@ -3081,10 +3122,12 @@ let worldLabelKey='';
 function updateWorldLabels(){
   const p=canvasBounds(),doors=roomDoors[currentRoom].filter(door=>doorAvailable(door));
   const stump=currentRoom==='logging'&&!!treeState(timberTree()).regrowsAt;
+  const clue=moonbackClue();
   const shoal=currentRoom==='pond'&&window.playerCloud?.gameplay&&!fishingSession&&!routineControlled()?pondShoalAt(combatNow()):null;
   const key=[currentRoom,shoal?.id,watchFlags.map(k=>adventure[k]).join(','),player.seat?.type,homeBedRest?.bedId,editing,currentRoom==='home'?homeFurniture.map(i=>[i.id,i.type,i.x,i.y,i.rot].join(':')).join(';'):'',stump,depthsRun?.finds?.join(','),depthsRun?.cleared,depthsRun?.routeChoice,depthsRun?.cacheGuardDefeated,doors.map(door=>door.to).join(','),avatar.name,questStage(quest),depthsDiscovered,player.inCombat,firstUpgrade.choice,firstUpgrade.complete,firstUpgrade.oakTrialPending,firstUpgrade.unlocked,firstUpgradeDestination()?.to,tradingPostGuideComplete,bedLessonComplete,trackedDestination,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
-  if(key===worldLabelKey)return;
-  worldLabelKey=key;
+  const labelKey=key+'|'+(clue?.door.to??'');
+  if(labelKey===worldLabelKey)return;
+  worldLabelKey=labelKey;
   const container=$('worldLabels');container.replaceChildren();container.dataset.room=currentRoom;
   const add=(text,x,y,kind='door',action=null,subtitle='',mount=null)=>{
     const label=document.createElement(action?'button':'div');label.className='world-label world-label-'+kind;
@@ -3159,6 +3202,10 @@ function updateWorldLabels(){
   }
   if(currentRoom==='armory')add('Enchanter',...point(6.5,5.5,45),'npc',()=>use(roomFurniture().find(item=>item.type==='enchanter')));
   if(shoal)add('Fish the shoal',...point(shoal.water.x,shoal.water.y,21),'shoal',usePondShoal,shoal.name);
+  if(clue){
+    const {inside,tile,to}=clue.door,x=inside.x+.5+(inside.x-tile.x)*.75,y=inside.y+.5+(inside.y-tile.y)*.75;
+    add('Fresh stag tracks',...point(x,y,13),'tracks',followMoonbackTracks,explorationName(to));
+  }
   if(willowmereRooms.includes(currentRoom)){
     for(const item of roomFurniture())if(['riverTrader','riverBench','fishingPost'].includes(item.type)&&!(item.type==='riverBench'&&player.seat===item))add(item.type==='riverTrader'?'River trader':item.type==='riverBench'?(currentRoom==='millbrook'?'Rest by the mill':'Riverside bench'):'Fishing station',...point(item.x+.5,item.y+.5,item.type==='riverTrader'?42:25),'npc',()=>use(item));
   }
@@ -3213,7 +3260,9 @@ function updateWorldLabels(){
 function draw(time){
   renderedActors.length=0;
   const {width,height}=view,centerX=width/2,centerY=height/2-4;
-  const enemy=huntEnemyForRoom(currentRoom);
+  const victory=time-combatArt.victoryAt>=0&&time-combatArt.victoryAt<1300;
+  const stagVictory=victory&&combatReports.at(-1)?.enemy==='moonbackStag'&&combatReports.at(-1)?.room===currentRoom;
+  const enemy=roomEnemy()??(stagVictory?huntEnemies.moonbackStag:null);
   ctx.setTransform(1,0,0,1,0,0);
   ctx.clearRect(0,0,width,height);
   const [shakeX,shakeY]=enemy?combatShake(time,combatArt,reducedMotion.matches):[0,0];
@@ -3281,9 +3330,9 @@ function draw(time){
   }
   const wild=currentRoom===wildlifeRoom?wildlifeAnimals(combatNow()).map(animal=>({...animal,type:'wildAnimal'})):[];
   const items=[...roomFurniture(),...wild,...[...remotePeers.values()].map(peer=>({type:'remotePlayer',x:peer.rx,y:peer.ry,peer}))];
-  if(enemy&&time-combatArt.victoryAt>=0&&time-combatArt.victoryAt<1300){
-    const monster=moonwood.layouts[currentRoom].scenery.find(item=>item.type===enemy.prop);
-    items.push({...monster,id:'defeated-'+enemy.id,defeated:true});
+  if(enemy&&victory){
+    const monster=stagVictory?{...moonbackSite(currentRoom),type:'moonbackStag'}:moonwood.layouts[currentRoom].scenery.find(item=>item.type===enemy.prop);
+    if(monster)items.push({...monster,id:'defeated-'+enemy.id,defeated:true});
   }
   if(ghost)items.push(ghost);
   const drawPlayer = ()=>{
@@ -4171,6 +4220,10 @@ function finishInteraction(){
     window.towerOpenFactionRegistrar?.();
   }else if(item.type==='warden'){
     openQuest();
+  }else if(item.type==='moonbackStag'){
+    const enemy=roomEnemy();
+    if(enemy&&enemy.moonbackId===item.moonbackId)startMonsterEncounter(enemy);
+    else note('The Moonback Stag moved. Follow the fresh tracks.');
   }else if(item.type===huntEnemyForRoom(currentRoom)?.prop){
     startMonsterEncounter(huntEnemyForRoom(currentRoom));
   }else if(item.type==='riverTrader'){
@@ -5433,6 +5486,9 @@ function currentActivityPrompt(){
   if(currentRoom==='hub'&&!lobbyRoutesOpen()){
     return {label:'YOUR NEXT STEP',title:'Meet the Tower Warden',text:'Speak to the Warden to begin your adventure.',action:'visitWarden'};
   }
+  if(moonbackHere()&&!player.inCombat)return {label:'RARE SIGHTING',title:'Moonback Stag',text:'Approach the stag to fight. Watch the warning lane and dodge just before Moonrush lands.',action:'engageMoonback'};
+  const clue=moonbackClue();
+  if(clue)return {label:'MOONBACK TRAIL',title:'Follow the fresh tracks',text:'The trail leads toward '+explorationName(clue.door.to)+'. The stag moves quickly.',action:'moonbackTracks'};
   if(currentRoom==='logging'){
     const tree=focusedTimber();
     if(woodSession)return {label:'WOODCUTTING',title:'Chopping timber',text:'Walk away to stop. Each cut earns timber and Woodcutting XP.'};
@@ -5473,7 +5529,7 @@ function updateActivityPrompt(){
   const visible=!!prompt;
   $('contextGuide').hidden=!visible;
   $('roomLayout').dataset.contextual=String(visible);
-  const proxyControl=prompt?.action&&!['baitRoute','equipHunting','familiarAction','rationBag','pondShoal'].includes(prompt.action)?$(prompt.action):null;
+  const proxyControl=prompt?.action&&!['baitRoute','equipHunting','familiarAction','rationBag','pondShoal','engageMoonback','moonbackTracks'].includes(prompt.action)?$(prompt.action):null;
   $('contextGuideAction').disabled=proxyControl?.disabled===true||prompt?.action==='familiarAction'&&serverActionBusy;
   $('contextGuideSecondChance').hidden=!prompt?.secondChance;
   $('contextGuideSecondChance').disabled=serverActionBusy;
@@ -5493,6 +5549,8 @@ function updateActivityPrompt(){
   else if(prompt.action==='equipHunting')button.textContent='Open Inventory';
   else if(prompt.action==='visitWarden')button.textContent='Speak to the Warden';
   else if(prompt.action==='pondShoal')button.textContent='Fish the shoal';
+  else if(prompt.action==='engageMoonback')button.textContent='Approach the stag';
+  else if(prompt.action==='moonbackTracks')button.textContent='Follow tracks';
   else button.textContent=$(prompt.action).textContent||prompt.title;
 }
 function updateAdventurePanel(){
@@ -5755,7 +5813,7 @@ $('combatDodge').onclick=()=>combatAction('dodge');
 $('combatSound').setAttribute('aria-pressed',String(combatSoundEnabled));$('combatSound').textContent=combatSoundEnabled?'Combat sound on':'Combat sound off';
 $('combatSound').onclick=()=>{combatSoundEnabled=!combatSoundEnabled;save('combat-sound',combatSoundEnabled);combatAudio.enable(combatSoundEnabled);$('combatSound').setAttribute('aria-pressed',String(combatSoundEnabled));$('combatSound').textContent=combatSoundEnabled?'Combat sound on':'Combat sound off';};
 $('approachBeetle').onclick=()=>{
-  const monster=roomFurniture().find(item=>item.type===huntEnemyForRoom(currentRoom)?.prop);
+  const monster=roomFurniture().find(item=>item.type===roomEnemy()?.prop);
   if(monster)use(monster);
 };
 $('enterDepths').onclick=enterMoonwellDepths;
@@ -5818,6 +5876,8 @@ $('contextGuideAction').onclick=()=>{
   else if(prompt.action==='baitRoute')setExplorationDestination('store');
   else if(prompt.action==='equipHunting')openInventory('clearing');
   else if(prompt.action==='pondShoal')usePondShoal();
+  else if(prompt.action==='engageMoonback'){const stag=roomFurniture().find(item=>item.type==='moonbackStag');if(stag)use(stag);}
+  else if(prompt.action==='moonbackTracks')followMoonbackTracks();
   else if(!$(prompt.action).disabled)$(prompt.action).onclick();
   updateActivityPrompt();
 };
