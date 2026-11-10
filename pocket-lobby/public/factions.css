@@ -26,3 +26,6 @@
 .faction-project-row progress{flex:1 1 85px;min-width:65px;accent-color:#e6bc62}
 .faction-project-row input{width:68px}.faction-project-row select{max-width:100%}
 .faction-project details{margin:10px 0}.faction-project>button:last-child{margin-top:8px}
+.faction-feast{border-color:#b28c48;background:linear-gradient(135deg,#252436,#111e30);margin-top:18px}
+.faction-feast>h4{color:#f3d595;font-size:19px}.faction-feast>.faction-project-row{margin-top:14px;padding-bottom:12px;border-bottom:1px solid #ffffff12}
+.faction-feast>small{display:block;font-size:12px}.faction-feast>button{margin-top:12px}

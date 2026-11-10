@@ -11,3 +11,5 @@ export const hallProjects=[
  {name:'Build the faction hall',reward:'A private hall with room to meet and rest.',targets:{gold:500,timber:100,meal:20}},
  {name:'Build the field kitchen',reward:'A shared stove for cooking before an expedition.',targets:{gold:800,timber:160,meal:32}}
 ];
+
+export const guildFeast={targets:{gold:100,timber:20,fish:10},hunger:50};

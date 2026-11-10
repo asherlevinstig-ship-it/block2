@@ -1,3 +1,4 @@
+import {readGuildFeast,changeGuildFeast} from './guild-feast.mjs';
 import {factionLeadershipLevel,factionLeadershipXp,leadershipStatus} from '../public/leadership.js';
 
 import {factionFoundingFee,factionRegistrar} from '../public/faction-registry.js';
@@ -33,6 +34,7 @@ export async function readFactions(db,playerId,search=''){
   ).bind(query).all();
   const player=await readApplicant(db,playerId);
   const hall=membership?await readFactionProject(db,playerId,membership.id):null;
+  if(hall?.open)hall.feast=await readGuildFeast(db,playerId,membership.id);
   return {founding:{fee:factionFoundingFee,wallet:player?.gold??0,registrar:factionRegistrar.name},leadership:leadershipStatus(player?.xp),capacity:CAPACITY,factions:directory.results,membership:membership?{...membership,roster:roster.results,hall}:null};
 }
 
@@ -51,6 +53,8 @@ export async function changeFaction(db,playerId,body,now=Date.now()){
       checkFounding(await readApplicant(db,playerId));
       throw invalid('That name is taken or you already belong to a faction.');
     }
+  }else if(['feastDonate','feastClaim'].includes(body.action)){
+    await changeGuildFeast(db,playerId,body,now);
   }else if(body.action==='donate'){
     await donateFactionProject(db,playerId,body,now);
   }else if(body.action==='join'){

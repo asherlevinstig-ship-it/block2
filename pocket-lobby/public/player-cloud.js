@@ -479,7 +479,7 @@
         read:query=>request('factions?q='+encodeURIComponent(query)),
         change:async body=>{
           await flush();
-          if(!['create','donate'].includes(body.action))return request('factions',body);
+          if(!['create','donate','feastDonate','feastClaim'].includes(body.action))return request('factions',body);
           gameplayBusy=true;
           try{
             const result=await action('factions',body);

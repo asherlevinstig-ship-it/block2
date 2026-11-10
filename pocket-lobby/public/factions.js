@@ -12,6 +12,37 @@ export function initializeFactions(api,document=globalThis.document){
     const row=make('div','');row.className='faction-confirm';row.append(confirm,cancel);
     container.querySelector('.faction-confirm')?.remove();container.append(row);confirm.focus();
   }
+  function feastBoard(id,feast){
+    const section=make('section','');section.className='faction-project faction-feast';
+    section.append(make('h4','Guild Feast'),make('p','Supply a meal together · Restore 50 hunger per member · Once daily'));
+    section.append(make('small','Resets daily at 00:00 UTC. Unused supplies and meals expire.'));
+    if(!feast.inHall)section.append(make('p','Visit the faction hall to contribute or eat.'));
+    for(const [resource,target] of Object.entries(feast.targets)){
+      const value=feast.totals[resource],label={gold:'Gold',timber:'Timber',fish:'Fish'}[resource];
+      const row=make('div','');row.className='faction-project-row';
+      const meter=make('progress','');meter.max=target;meter.value=value;meter.setAttribute('aria-label','Feast '+label+' progress');
+      row.append(make('b',label+' · '+value+' / '+target),meter);
+      if(value<target&&feast.inHall){
+        const selector=make('select','');selector.setAttribute('aria-label','Fish to contribute');
+        for(const fish of feast.fish){const option=make('option',fish.name+' × '+fish.stock);option.value=fish.id;selector.append(option);}
+        const amount=make('input','');amount.type='number';amount.min=1;amount.setAttribute('aria-label','Feast '+label+' quantity');
+        const donate=button('Contribute',()=>{
+          const quantity=Number(amount.value);if(!Number.isSafeInteger(quantity)||quantity<1||quantity>Number(amount.max)){amount.reportValidity();return;}
+          confirmAction(section,'Give '+quantity+' '+label.toLowerCase(),()=>change({action:'feastDonate',id,resource,fish:resource==='fish'?selector.value:undefined,quantity},'Feast supplies contributed.'));
+        });
+        const update=()=>{const stock=resource==='fish'?(feast.fish.find(item=>item.id===selector.value)?.stock??0):feast.stock[resource];const max=Math.min(target-value,stock);amount.max=max;amount.value=max?1:'';amount.disabled=donate.disabled=max<1;};
+        selector.onchange=update;update();if(resource==='fish')row.append(selector);row.append(amount,donate);
+      }
+      section.append(row);
+    }
+    if(feast.ready){
+      section.append(make('p',feast.claimed?'You enjoyed today’s feast.':'The feast is ready for every member!'));
+      const eat=button(feast.claimed?'Meal claimed':feast.hunger>=100?'Already full':'Enjoy feast · +50 hunger',()=>change({action:'feastClaim',id},'You enjoyed the Guild Feast · +50 hunger.'));
+      eat.disabled=feast.claimed||!feast.inHall||feast.hunger>=100;section.append(eat);
+    }
+    if(feast.contributors.length){const list=make('ul','');for(const row of feast.contributors)list.append(make('li',row.name+(row.self?' · You':'')+' · '+row.quantity+' '+row.resource));const details=make('details','');details.append(make('summary','Feast contributors'),list);section.append(details);}
+    return section;
+  }
   function projectBoard({id,hall}){
     const section=make('section','');section.className='faction-project';
     section.append(make('h4',hall.project?.name??'Faction hall complete'));
@@ -54,6 +85,7 @@ export function initializeFactions(api,document=globalThis.document){
       for(const row of hall.contributors)list.append(make('li',row.name+(row.self?' · You':'')+' · '+row.gold+' gold · '+row.timber+' timber · '+row.meal+' meals'));
       details.append(list);section.append(details);
     }
+    if(hall.feast)section.append(feastBoard(id,hall.feast));
     section.append(button('Refresh board',load));
     return section;
   }

@@ -175,7 +175,7 @@ export async function handlePlayerApi(request,env){
       const body=await bodyOf(request);
       if(body.characterKey!==id)return json({error:"This tab belongs to a different character. Reload to continue."},409);
       const result=await changeFaction(env.TOWER_DB,id,body);
-      return json(['create','donate'].includes(body.action)?{...result,...packet(await read(env.TOWER_DB,id))}:result);
+      return json(['create','donate','feastDonate','feastClaim'].includes(body.action)?{...result,...packet(await read(env.TOWER_DB,id))}:result);
     }
     if(path==="/api/player/state"&&request.method==="GET"){
       const row=await settled(env,id,true);
