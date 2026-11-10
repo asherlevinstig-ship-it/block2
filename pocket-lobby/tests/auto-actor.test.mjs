@@ -101,6 +101,6 @@ test('server recovery enrolls dormant Auto and idle players in fair pages withou
 test('Auto recovery continues after one unavailable actor and is woken independently of player sessions',async t=>{
  const {db,sql}=testDatabase();t.after(()=>sql.close());for(const id of ['a','b']){const s=normalizeState({});s.plan={source:'rules'};sql.prepare('INSERT INTO tower_players VALUES (?, ?, 1, ?, ?)').run(id,JSON.stringify(s),'old',1);}
  const seen=[],ctx=context(),director=new AutoDirector(ctx,{TOWER_DB:db,AUTO_ACTORS:{idFromName:n=>n,get:n=>({fetch:async()=>{seen.push(n);return Response.json({}, {status:n==='a'?503:200});}})}});
- await director.alarm();assert.deepEqual(seen,['a','b']);assert(await ctx.storage.getAlarm());
+ await director.alarm();assert.deepEqual(seen,['a','b']);assert.equal(await ctx.storage.getAlarm(),null,'the periodic Worker schedule starts the next scan');
  let woken=0;await wakeAutoDirector({AUTO_DIRECTOR:{idFromName:n=>n,get:n=>({fetch:async()=>{assert.equal(n,'world-auto-recovery');woken++;return Response.json({ok:true});}})}});assert.equal(woken,1);
 });

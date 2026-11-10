@@ -5,7 +5,7 @@ workers_dev = true
 main = "../worker/index.js"
 
 [triggers]
-crons = ["* * * * *"]
+crons = ["*/5 * * * *"]
 
 [assets]
 directory = "./public"

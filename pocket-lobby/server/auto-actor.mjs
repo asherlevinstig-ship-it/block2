@@ -80,8 +80,9 @@ export class AutoDirector{
     if(outcomes.some(r=>r.status==='rejected'))console.warn('Auto recovery will retry unavailable actors');
    }
    await this.ctx.storage.put('cursor',results.length===50?results.at(-1).player_id:'');
-   await this.ctx.storage.setAlarm(Date.now()+(results.length===50?1000:60000));
-  }catch(error){console.warn('Auto recovery retry',error.message);await this.ctx.storage.setAlarm(Date.now()+15000);}
+   if(results.length===50)await this.ctx.storage.setAlarm(Date.now()+1000);
+   else await this.ctx.storage.deleteAlarm();
+  }catch(error){console.warn('Auto recovery retry on next scheduled scan',error.message);await this.ctx.storage.deleteAlarm();}
  });}
 }
 

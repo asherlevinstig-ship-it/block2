@@ -31,11 +31,11 @@ export function isAllowedGameRequest(request) {
 
 export default {
   async scheduled(controller,env,ctx){ctx.waitUntil(wakeAutoDirector(env));},
-  async fetch(request, env, ctx) {
+  async fetch(request, env) {
     const url = new URL(request.url);
     if(url.pathname.startsWith("/api/account/"))return handleAccountApi(request,env);
     if(url.pathname==="/api/world/connect")return handleWorldConnect(request,env);
-    if(url.pathname.startsWith("/api/player/")){ctx?.waitUntil(wakeAutoDirector(env));return syncAutoActor(env,await handlePlayerApi(request,env));}
+    if(url.pathname.startsWith("/api/player/"))return syncAutoActor(env,await handlePlayerApi(request,env));
     const currentAsset = LEGACY_ASSET_REDIRECTS.get(url.pathname);
     if (currentAsset) {
       url.pathname = currentAsset;

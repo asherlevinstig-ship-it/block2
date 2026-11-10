@@ -60,7 +60,7 @@ test('presence API runs and stops live idle work atomically, including retries a
  assert.equal(packet.state.plan.source,'rules');assert.equal(packet.state.plan.startedAt,G+1000);
  now=G+61000;const body={revision:packet.revision,operation:crypto.randomUUID(),active:false};await call('presence',body);await call('presence',body);assert.equal(packet.state.woodcutting.timber,1);
  now=G+62000;const revision=packet.revision;
- const results=await Promise.all([call('presence',{revision,operation:crypto.randomUUID(),active:false}),call('presence',{revision,operation:crypto.randomUUID(),active:false})]);assert.deepEqual(results.map(r=>r.status).sort(),[200,409]);
+ const results=await Promise.all([call('presence',{revision,operation:crypto.randomUUID(),active:false}),call('presence',{revision,operation:crypto.randomUUID(),active:false})]);assert.deepEqual(results.map(r=>r.status),[200,200]);assert.equal(packet.revision,revision,'concurrent polls between rewards do not rewrite the save');
  const stopped=await act('presence',{active:true});assert.equal(stopped.status,200);assert.equal(stopped.state.report.reason,'returned');assert.equal(stopped.state.activityLog.length,1);assert.equal(stopped.state.woodcutting.timber,1);
  await act('report/ack',{startedAt:stopped.state.report.startedAt});assert.equal(packet.state.report,undefined);
  await act('presence',{active:false});assert.equal(packet.state.plan,undefined);assert.equal(packet.state.woodcutting.timber,1);

@@ -4,7 +4,7 @@
   const {initializeFurnitureShop}=await import('./furniture-shop.js');
   const {initializeBankUI}=await import('./bank-ui.js');let bankUI=null;
   const bedRules=await import('./bed-rest.js');Object.assign(window,bedRules);
-  const {autoStatus,hasSavedAutoPlan,autoSetupReason}=await import('./auto-mode.js');
+  const {autoStatus,hasSavedAutoPlan,autoSetupReason,autoPresenceDelay}=await import('./auto-mode.js');
   const {AWAY_GRACE_MS}=await import('./character-rules.js');
   const status=document.getElementById('saveStatus');
   const gate=document.getElementById('cloudGate');
@@ -125,6 +125,7 @@
     acting++;try{return await performAction(path,body);}finally{acting--;}
   }
   async function pulse(){
+    if(document.hidden)return;
     if(conflicted||presenceBusy||acting||gameplayBusy||(!packet?.state.characterRules?.enabled&&packet?.state.controlMode!=='auto'&&packet?.state.plan?.source!=='rules')||packet.state.plan&&packet.state.plan.source!=='rules'||packet.state.report&&!packet.state.autoSwitch)return;
     await flush();if(presenceBusy||acting||gameplayBusy||conflicted)return;
     const inputAt=lastInputAt,active=packet.state.controlMode!=='auto'&&!document.hidden&&inputAt>lastReportedInputAt;
@@ -132,7 +133,7 @@
       try{
         await action('presence',{active,idleForMs:Math.max(0,Math.min(AWAY_GRACE_MS,Date.now()-inputAt))});
         if(active)lastReportedInputAt=inputAt;
-        if(packet.state.plan?.source==='rules'||packet.state.report?.source==='rules'){
+        if(!document.hidden&&(packet.state.plan?.source==='rules'||packet.state.report?.source==='rules')){
           pending=retryJob=null;backup(null);
           window.towerApplyRoutineState?.(packet.state,{reconcile:resumeAutoView});resumeAutoView=false;
           showReport(packet.state);
@@ -145,8 +146,15 @@
     return presenceBusy;
   }
   let controlBusy=false,presenceTimer=null;
-  function schedulePresence(delay=20000){
-    clearTimeout(presenceTimer);presenceTimer=setTimeout(async()=>{try{await pulse();}catch{}schedulePresence(packet?.state.plan?.activeHunt&&!document.hidden?250:packet?.state.plan?.source==='rules'?2000:20000);},delay);
+  function schedulePresence(delay){
+    clearTimeout(presenceTimer);presenceTimer=null;
+    const cadence=autoPresenceDelay(packet?.state,combatClock.now(),document.hidden);
+    if(cadence===null||conflicted)return;
+    presenceTimer=setTimeout(async()=>{
+      presenceTimer=null;
+      try{await pulse();}catch{}
+      if(presenceTimer===null)schedulePresence();
+    },delay??cadence);
   }
   function renderAutoPanel(state){
     bankUI?.render();
@@ -322,22 +330,30 @@
     document.getElementById('planBait').value=Math.min(10,packet.state.fishingGear.bait);
     if(packet.state.plan?.source==='rules'||packet.state.report?.source==='rules')window.towerApplyRoutineState?.(packet.state);
     showReport(packet.state);
-    if(packet.state.plan&&packet.state.plan.source!=='rules'){
+    let shiftTimer=null,shiftPolling=false;
+    const scheduleShift=(delay=15000)=>{
+      clearTimeout(shiftTimer);
+      if(document.hidden||!packet.state.plan||packet.state.plan.source==='rules')return;
       const poll=async()=>{
+        if(document.hidden||shiftPolling)return;
+        shiftPolling=true;
         try{
           packet=await request('state');showReport(packet.state);
           if(!packet.state.plan){location.reload();return;}
         }catch(error){document.getElementById('offlineError').textContent='Connection interrupted. The plan will be checked again.';}
-        setTimeout(poll,15000);
+        finally{shiftPolling=false;scheduleShift();}
       };
-      setTimeout(poll,15000);
-    }
+      shiftTimer=setTimeout(poll,delay);
+    };
+    scheduleShift();
     window.addEventListener('online',()=>drain());
     schedulePresence(packet.state.plan?.source==='rules'?150:20000);
     document.addEventListener('visibilitychange',()=>{
-      if(document.hidden){resumeAutoView=true;return;}
+      if(document.hidden){resumeAutoView=true;schedulePresence();scheduleShift();return;}
       lastInputAt=Date.now();
-      if(packet.state.characterRules?.enabled||packet.state.controlMode==='auto'||packet.state.plan?.source==='rules'){pulse().catch(()=>{});return;}
+      schedulePresence();
+      if(packet.state.plan&&packet.state.plan.source!=='rules'){scheduleShift(0);return;}
+      if(packet.state.characterRules?.enabled||packet.state.controlMode==='auto'||packet.state.plan?.source==='rules'){schedulePresence(0);return;}
       if(pending||retryJob||sending||packet.state.plan)return;
       const revision=packet.revision;
       request('state').then(latest=>{
@@ -346,7 +362,7 @@
     });
     for(const event of ['focus','pageshow'])window.addEventListener(event,()=>{
       if(document.hidden||packet?.state.plan?.source!=='rules')return;
-      resumeAutoView=true;pulse().catch(()=>{});
+      resumeAutoView=true;schedulePresence(0);
     });
   }
   async function initialize(){

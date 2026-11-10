@@ -228,11 +228,13 @@ export async function handlePlayerApi(request,env){
       case "/api/player/presence":{
         if(body.active!==undefined&&typeof body.active!=='boolean'||body.idleForMs!==undefined&&(!Number.isInteger(body.idleForMs)||body.idleForMs<0||body.idleForMs>AWAY_GRACE_MS))throw new Error('Invalid activity status.');
         if((!state.characterRules?.enabled&&state.controlMode!=='auto'&&!state.plan)||(state.plan&&state.plan.source!=='rules')||state.report&&!state.autoSwitch)return json(packet(row));
+        const before=body.active===false?JSON.stringify(state):null;
         settleActivities(state,Date.now());
         const resume=state.plan?.source==='rules'&&state.controlMode!=='auto'&&body.active!==false?await actorMotion(env,id):null;
         touchPresence(state,Date.now(),{active:body.active!==false,activityAt:Date.now()-(body.idleForMs??0)},env);
         if(resume&&!state.plan){state.location=resume.room;state.position={x:resume.x,y:resume.y};}
         settleActivities(state,Date.now());
+        if(before!==null&&JSON.stringify(state)===before)return json(packet(row));
         break;
       }
       case "/api/player/control":{

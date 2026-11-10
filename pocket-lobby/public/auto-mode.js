@@ -23,3 +23,20 @@ export function autoStatus(state){
  return {decision,visible:true,mode:running?(plan.returnRequested?'Returning':plan.simpleMode?simpleAutoModes[plan.simpleMode].name+' · '+simpleAutoRisks[plan.simpleRisk??'safe'].name:state.controlMode==='auto'?'Auto':'Idle routine'):'Play',running,returning:running&&!!plan.returnRequested,current,next,location:places[state.location]??state.location,earned:'Net '+(gold-spent>=0?'+':'')+(gold-spent)+' gold · '+catches+' fish · '+timber+' timber'+(plan.hunts?' · '+(plan.hunts.loot?.boar??0)+' meat · '+(plan.hunts.loot?.stonebackShell??0)+' shells':'')+(plan.cookedMeals?' · '+Object.values(plan.cookedMeals).reduce((a,b)=>a+b,0)+' meals':'')+' · +'+xp+' XP',reason:running?'':(plan.simpleMode&&plan.plannerReason&&['requirements','no-safe-work','protected-supplies','gold-reserve','food-budget','food-funds'].includes(plan.reason)?plan.plannerReason:reason)+(plan.reason==='queue-complete'&&skipped?' '+skipped.note+'.':''),progress:queued?Math.min(100,100*((plan.cycle??0)*plan.queue.steps.length+(plan.stepIndex??0))/(plan.queue.repeats*plan.queue.steps.length)):running?0:100};
 }
 
+// Poll for visible decisions. Long activities carry server timestamps so their
+// countdowns can keep moving between reads.
+export function autoPresenceDelay(state,now,hidden){
+ if(hidden||!state)return null;
+ const plan=state.plan;
+ if(plan?.source==='rules'){
+  if(plan.activeHunt)return 250;
+  const motion=state.autoPresence;
+  if(!motion||motion.moving||motion.room!==state.location)return 2000;
+  const cast=plan.fishingWork?.cast;
+  const due=[cast&&cast.landAt+900,plan.treeWork?.cut?.endsAt,plan.fishingWork?.readyAt,
+    plan.treeWork?.readyAt,plan.nextCatchAt,plan.nextCutAt,plan.nextRoundAt,plan.nextAt,
+    plan.kind==='rest'?plan.endAt:null].filter(at=>Number.isFinite(at)&&at>now);
+  return due.length?Math.max(2000,Math.min(20000,Math.min(...due)-now+250)):2000;
+ }
+ return 20000;
+}
