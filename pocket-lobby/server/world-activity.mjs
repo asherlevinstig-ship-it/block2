@@ -6,9 +6,9 @@ import {socialRooms} from '../public/shared-world.js';
 import {choppingPose} from '../public/woodcutting.js';
 import {publicRoomNamespace} from './shared-trees.mjs';
 import {sharedFishingPose} from '../public/fishing.js';
-export async function publishWorldActivity(env,playerId,before,after,revision,{fresh=true,usage=null}={}){
+export async function publishWorldActivity(env,playerId,before,after,revision,{fresh=true,usage=null,extraEvents=[]}={}){
  if(!env?.SHARED_ROOMS)return;
- const events=fresh?worldActivityEvents(before,after,Date.now()):[];
+ const events=fresh?[...worldActivityEvents(before,after,Date.now()),...extraEvents]:[];
  const auto=after.plan?.source==='rules';
  const treesChanged=after.timberReceipt?.id!==before.timberReceipt?.id&&!!after.timberReceipt;
  const fishingChanged=JSON.stringify(sharedFishingPose(before))!==JSON.stringify(sharedFishingPose(after));

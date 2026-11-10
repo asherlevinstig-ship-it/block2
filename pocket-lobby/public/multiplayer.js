@@ -1,5 +1,5 @@
 import {socialRooms} from './shared-world.js';
-export function createRoomConnection({getLocal,flush,checkRoom=async()=>{},setTimeoutImpl=globalThis.setTimeout,clearTimeoutImpl=globalThis.clearTimeout,onPeers,onTrees=()=>{},onTrails=()=>{},onTrailNotice=()=>{},onActivity=()=>{},onChat,onHistory,onStatus,onCorrection,onUnseat,onSessionChanged,WebSocketImpl=globalThis.WebSocket,origin=globalThis.location?.href??'https://tower.test/'}){
+export function createRoomConnection({getLocal,flush,checkRoom=async()=>{},setTimeoutImpl=globalThis.setTimeout,clearTimeoutImpl=globalThis.clearTimeout,onPeers,onTrees=()=>{},onRaid=()=>{},onTrails=()=>{},onTrailNotice=()=>{},onActivity=()=>{},onChat,onHistory,onStatus,onCorrection,onUnseat,onSessionChanged,WebSocketImpl=globalThis.WebSocket,origin=globalThis.location?.href??'https://tower.test/'}){
   let socket=null,generation=0,retry=null,tick=null,ping=null,room=null,stopped=false,selfId=null,profileKey='',lastPosition='',lastSeat='',profiling=false,failures=0;
   const send=data=>{if(socket?.readyState===1){socket.send(JSON.stringify(data));return true;}return false;};
   function disconnect(){generation++;clearTimeoutImpl(retry);clearInterval(tick);clearInterval(ping);retry=tick=ping=null;const old=socket;socket=null;if(old)old.close(1000,'Leaving room');onPeers([]);onTrails([]);}
@@ -30,6 +30,7 @@ export function createRoomConnection({getLocal,flush,checkRoom=async()=>{},setTi
           if(data.trees)onTrees(data.trees);
         }
         if(data.type==='snapshot')onTrails(Array.isArray(data.trails)?data.trails:[]);
+        if(data.type==='millRaid')onRaid(data.raid,data.cue);
         if(data.type==='trailNotice')onTrailNotice(data.text);
         if(data.type==='activity'&&data.player!==selfId&&Array.isArray(data.events))onActivity(data.player,data.events);
         if(data.type==='chat')onChat(data.message);

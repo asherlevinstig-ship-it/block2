@@ -82,7 +82,7 @@ export class SharedRoom{
     if(expiries.length)await this.ctx.storage.setAlarm(Math.min(...expiries));
   }
   async alarm(){let changed=false;for(const [id,peer] of this.autoPeers)if(peer.until<=Date.now()){this.autoPeers.delete(id);changed=true;}if(changed)await this.ctx.storage.put('autoPeers',[...this.autoPeers]);if(this.room)await this.loadTrees(this.room);this.snapshot();await this.scheduleVeilExpiry();}
-  fetch(request){return this.ctx.blockConcurrencyWhile(()=>{const path=new URL(request.url).pathname;return path==='/fishing-spot'&&request.method==='POST'?this.reserveFishingSpot(request):path==='/auto'&&request.method==='POST'?this.autoPresence(request):path==='/activity'&&request.method==='POST'?this.activity(request):this.join(request);});}
+  fetch(request){return this.ctx.blockConcurrencyWhile(async()=>{const path=new URL(request.url).pathname;if(path==='/raid'&&request.method==='POST'){const {raid,playerId,receipt,cast}=await request.json();const peer=[...this.sessions.values()].find(m=>m.playerId===playerId);const cue=peer?{player:peer.id,hit:receipt?.hit??0,cast}:null;for(const ws of this.sessions.keys())this.send(ws,{type:'millRaid',raid,cue});return json({ok:true});}return path==='/fishing-spot'&&request.method==='POST'?this.reserveFishingSpot(request):path==='/auto'&&request.method==='POST'?this.autoPresence(request):path==='/activity'&&request.method==='POST'?this.activity(request):this.join(request);});}
   async reserveFishingSpot(request){
     const {playerId,room,spots}=await request.json(),now=Date.now();
     for(const [id,spot] of this.fishingSpots)if(spot.until<=now)this.fishingSpots.delete(id);

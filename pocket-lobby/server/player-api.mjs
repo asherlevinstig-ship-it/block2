@@ -1,10 +1,11 @@
 import {readFactions,changeFaction} from './factions.mjs';
+import {readMillRaid,publicMillRaid,writeMillRaid} from './mill-raid.mjs';
 import {factionHallAccess} from './faction-projects.mjs';
 import {factionHall,factionHallSpawn} from '../public/faction-hall.js';
 import {watchFlags} from '../public/region-catalog.js';
 import {normalizeVitals} from '../public/player-vitals.js';
 import {publishWorldActivity} from './world-activity.mjs';
-import {prepareManualTree,describeTreeCut,writeTreePlayer} from './shared-trees.mjs';
+import {prepareManualTree,describeTreeCut,writeTreePlayer,publicRoomNamespace} from './shared-trees.mjs';
 import {enablePhysicalTimber,advanceTreeWork} from './tree-work.mjs';
 import {advanceFishingWork,settleFishingBatch} from './fishing-work.mjs';
 import {finishRoutineReport} from './routine-report.mjs';
@@ -170,6 +171,7 @@ export async function handlePlayerApi(request,env){
       return json({state,characterKey:id,revision:1,serverTime:Date.now()},200,{"Set-Cookie":COOKIE+"="+token+"; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age="+COOKIE_AGE});
     }
     if(!id)return json({error:"Load your character first."},401);
+    if(path==='/api/player/mill-raid'&&request.method==='GET')return json({raid:publicMillRaid(await readMillRaid(env.TOWER_DB),id)});
     if(path==="/api/player/factions"){
       if(request.method==="GET")return json(await readFactions(env.TOWER_DB,id,new URL(request.url).searchParams.get('q')));
       const body=await bodyOf(request);
@@ -194,6 +196,18 @@ export async function handlePlayerApi(request,env){
     if(!row)return json({error:"Character not found."},401);
     if(row.last_request===body.operation)return json(packet(row));
     if(row.revision!==body.revision)return json({error:"Your character changed in another tab or completed an offline action.",...packet(row)},409);
+    if(path==='/api/player/mill-raid'){
+      const result=await writeMillRaid(env.TOWER_DB,row,body);
+      if(!result)return json({error:'Your character changed. Refresh the mill event.',...packet(await read(env.TOWER_DB,id))},409);
+      const before=JSON.parse(row.state_json),after=JSON.parse(result.updated.state_json),at=Date.now(),extraEvents=[];
+      for(const [kind,amount,label] of [['damage',Math.max(0,before.health-after.health),'HP'],['heal',Math.max(0,after.health-before.health),'HP'],['gold',Math.max(0,after.credits-before.credits),'gold'],['loss',Math.max(0,before.credits-after.credits),'gold']])if(amount)extraEvents.push({id:'raid:'+body.operation+':'+kind,kind,amount,label:(['damage','loss'].includes(kind)?'-':'+')+amount+' '+label,at,room:'millbrook'});
+      await publishWorldActivity(env,id,before,after,result.updated.revision,{fresh:true,extraEvents});
+      if(env.SHARED_ROOMS){
+        const stub=env.SHARED_ROOMS.get(env.SHARED_ROOMS.idFromName(publicRoomNamespace('millbrook')));
+        await stub.fetch(new Request('https://room.internal/raid',{method:'POST',body:JSON.stringify({raid:{...result.raid,self:undefined},playerId:id,receipt:result.receipt,cast:['heal','power'].includes(body.kind)})})).catch(()=>{});
+      }
+      return json({...packet(result.updated),raid:result.raid,receipt:result.receipt});
+    }
     let state=readPlayerState(row),factionId=null,treeMutation=null;
     enablePhysicalWork(state,env);
     if(path.startsWith('/api/player/gameplay/')){

@@ -640,7 +640,8 @@ function drawRemote(peer,time){
   const fishingPhase=cast?fishingMoments.phase(cast,time):null;
   const chopping=!moving&&cut?.room===currentRoom&&now>=cut.started&&now<cut.endsAt+400&&!(sharedTimber.get(cut.key)?.regrowsAt>now)&&Math.abs(peer.x-cut.x)+Math.abs(peer.y-cut.y)===1;
   const facing=chopping?timberFacing({cx:peer.x,cy:peer.y},cut):cast?{direction:'right',back:false}:peer;
-  sprite(ctx,x,y,{outfit:peer.outfit,trousers:peer.trousers,boots:peer.boots,hair:peer.hair},{direction:facing.direction,back:facing.back,cycle:moving?time/STEP_MS:0,seated:!!peer.seat,wave:waveAge>=0&&waveAge<WAVE_MS?waveAge/WAVE_MS:null,weapon:chopping,sheathed:!chopping&&!cast&&!!peer.weapon,weaponTier:chopping?'basicAxe':peer.weapon,pose:chopping?{chop:choppingPhase(cut,now)}:undefined,vest:peer.armour,fishing:fishingPhase,fishingAge:cast?time-cast.started:0,time});
+  const raidPose=currentRoom==='millbrook'&&time-(peer.raidStrikeAt??-10000)<400?playerCombatPose({time,now,encounter:{nextPlayerAt:0},events:{strikeAt:peer.raidStrikeAt,castAt:peer.raidCastAt??-10000,hurtAt:-10000,dodgeAt:-10000,victoryAt:-10000},reduced:reducedMotion.matches}):null;
+  sprite(ctx,x,y,{outfit:peer.outfit,trousers:peer.trousers,boots:peer.boots,hair:peer.hair},{direction:facing.direction,back:facing.back,cycle:moving?time/STEP_MS:0,seated:!!peer.seat,wave:waveAge>=0&&waveAge<WAVE_MS?waveAge/WAVE_MS:null,weapon:chopping||!!raidPose,sheathed:!chopping&&!raidPose&&!cast&&!!peer.weapon,weaponTier:chopping?'basicAxe':peer.weapon,pose:chopping?{chop:choppingPhase(cut,now)}:raidPose??undefined,vest:peer.armour,fishing:fishingPhase,fishingAge:cast?time-cast.started:0,time});
   if(cast)drawFishingMoment(x,y,time,cast,{y:peer.ry,...facing});
   const familiar=drawFollowingFamiliar(peer.id,peer.familiar,peer.rx,peer.ry,peer.direction,time);
   const activity=chopping?'Chopping':peer.activity==='combat'?Array.from({length:5},(_,i)=>peer.health>i*20?'♥':'♡').join(''):peer.activity==='fishing'?'Fishing':peer.activity==='gambling'?'Gambling':'';
@@ -3314,6 +3315,7 @@ function draw(time){
     const homeHover=currentRoom==='home'&&!editing;
     surface(hover.x+.035,hover.y+.035,w-.07,d-.07,1,valid?(homeHover?'#c8e5e81c':'#fff3bc34'):'#eb6c7144',valid?(homeHover?'#acd2d8':'#ffe0a3'):'#e58b87');
   }
+  window.millRaidClient?.drawFloor({...worldDrawing,ctx,time,reduced:reducedMotion.matches});
   let ghost;
   if(editing&&selection&&hover&&canPlace({...selection,...hover})){
     ghost={...selection,...hover,id:-1};
@@ -3329,7 +3331,7 @@ function draw(time){
     peer.rx+=(peer.x-peer.rx)*amount;peer.ry+=(peer.y-peer.ry)*amount;peer.lastFrame=time;
   }
   const wild=currentRoom===wildlifeRoom?wildlifeAnimals(combatNow()).map(animal=>({...animal,type:'wildAnimal'})):[];
-  const items=[...roomFurniture(),...wild,...[...remotePeers.values()].map(peer=>({type:'remotePlayer',x:peer.rx,y:peer.ry,peer}))];
+  const items=[...roomFurniture(),...(window.millRaidClient?.items()??[]),...wild,...[...remotePeers.values()].map(peer=>({type:'remotePlayer',x:peer.rx,y:peer.ry,peer}))];
   if(enemy&&victory){
     const monster=stagVictory?{...moonbackSite(currentRoom),type:'moonbackStag'}:moonwood.layouts[currentRoom].scenery.find(item=>item.type===enemy.prop);
     if(monster)items.push({...monster,id:'defeated-'+enemy.id,defeated:true});
@@ -3354,6 +3356,7 @@ function draw(time){
     const automatic=autoActivityAnimation(time),autoChop=automatic?.task==='woodcutting'&&!!automatic.tree,cast=fishingSession??(automatic?.task==='fishing'?automatic.cast:null);
     const chopping=woodSession??(autoChop?automatic:null);
     const swingPhase=chopping?choppingPhase({started:chopping.started,endsAt:chopping.started+(chopping.duration??5000)},time):0;
+    if(window.millRaidClient?.striking)Object.assign(pose,playerCombatPose({time,now:combatNow(),encounter:{nextPlayerAt:0},events:{...combatArt,...window.millRaidClient.pose},reduced:reducedMotion.matches}));
     const spritePose=woodSession||autoChop?{...pose,chop:swingPhase}:pose;
     const foe=combatTargetTile(hunting.encounter);const [enemyX,enemyY]=point(foe.x+.5,foe.y+.5);
     const thrust=enemy?pose.lunge-pose.recoil:0;
@@ -3369,7 +3372,7 @@ function draw(time){
     }
     if(cast)drawFishingMoment(x,y,time,cast);
     drawCatchReveal(x,y,time);
-    if(player.inCombat){
+    if(player.inCombat||window.millRaidClient?.active){
       const heartPixels=['0110110','1111111','1111111','0111110','0011100','0001000'];
       for(let heart=0;heart<5;heart++){
         const filled=Math.max(0,Math.min(1,(health-heart*20)/20));
@@ -3398,11 +3401,12 @@ function draw(time){
     ctx.globalAlpha=item===ghost?.52:ghost&&selection?.id===item.id?.4:1;
 
     const treeHover=isTimberTree(item)&&item===hoverItem&&!treeState(item).regrowsAt;
-    object(item,treeHover||editing&&(selection?.id===item.id||hoverItem?.id===item.id)&&!fixed(item),time);
+    if(['millRaidMob','millRaidMerchant'].includes(item.type))window.millRaidClient?.drawMob(item,{ctx,point,time,reduced:reducedMotion.matches,actors:renderedActors});
+    else object(item,treeHover||editing&&(selection?.id===item.id||hoverItem?.id===item.id)&&!fixed(item),time);
     ctx.globalAlpha=1;
     if(item.defeated||item===ghost||(fixed(item)&&!isGamingTable(item)))continue;
     const [w,d]=dimensions(item), h=moonwood.heights[item.type]??{armoryCounter:32,weaponRack:37,anvil:19,brazier:25,workbench:23,woodStool:13,woodTable:18,bookcase:37,woodcutter:43,amberLantern:26,moonCrystal:43,jadeBonsai:43,explorersGlobe:31,wardenStatue:54,silverfinTank:30,silkScreen:38,hallBoard:27,bakeryOven:33,breadRack:30,foodStall:43,factionRegistrar:43,warden:43,enchanter:43,tradeCounter:32,harvestCrates:16,tackleCounter:32,rodRack:36,baitCrates:16,blackjack:19,roulette:22,reception:32,stove:28,safe:25,bed:24,comfortBed:24,royalBed:28,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39,bench:22,streetlamp:55,fountain:37}[item.type];
-    const height=isTimberTree(item)&&treeState(item).regrowsAt?6:h;
+    const height=['millRaidMob','millRaidMerchant'].includes(item.type)?55:isTimberTree(item)&&treeState(item).regrowsAt?6:h;
     const shape=[point(item.x,item.y+d),point(item.x+w,item.y+d),point(item.x+w,item.y),point(item.x+w,item.y,height),point(item.x,item.y,height),point(item.x,item.y+d,height)];
     hitboxes.push({item,shape});
   }
@@ -3414,6 +3418,7 @@ function draw(time){
   updateWorldLabels();
   drawHudMiniMap();
   updateActorNameplates();
+  if(window.millRaidClient)$('healthHud').hidden=!(player.inCombat||window.millRaidClient.active);
   updateWorldFloats(time);
   for(const key of familiarFollowers.keys())if(key!=='self'&&!remotePeers.has(key))familiarFollowers.delete(key);
 }
@@ -4160,7 +4165,11 @@ function openWatchLandmark(item){
 
 function finishInteraction(){
   const item=interaction;interaction=null;
-  if(item.type==='pondShoal'){
+  if(item.type==='millRaidMerchant'){
+    window.millRaidClient?.merchant();
+  }else if(item.type==='millRaidMob'){
+    window.millRaidClient?.select(item);
+  }else if(item.type==='pondShoal'){
     if(pondShoalAt(combatNow()).id===item.shoalId)startServerCast(item.shoalId);
     else usePondShoal();
   }else if(item.type==='dungeonExit'||item.type==='dungeonArch'){
@@ -4608,7 +4617,9 @@ function renderWorldMap(route=[]){
       const [dx,dy]=positions[door.to];links+='<path class="'+(routeEdges.has(key)?'map-route-line':shared?'map-shared-trail':'')+'" d="M'+x+' '+y+'L'+dx+' '+dy+'"/>';
     }
     const scouted=sharedPlaces.has(room)||scouting&&fog.scouted.has(room);
-    const name=status==='frontier'&&room!==wildlifeRoom&&!scouted?'Unexplored':explorationName(room);
+    const raidClock=window.millRaidClient?.phase;
+    const raidMarker=room==='millbrook'&&['warning','battle'].includes(raidClock)?' [RAID]':'';
+    const name=(status==='frontier'&&room!==wildlifeRoom&&!scouted?'Unexplored':explorationName(room))+raidMarker;
     nodes+='<g class="map-place'+(room===currentRoom?' map-current':'')+(status==='frontier'?' map-frontier':'')+(scouted?' map-scouted':'')+'"><circle cx="'+x+'" cy="'+y+'" r="'+(room===currentRoom?13:8)+'"/>'+(status==='frontier'?'<text class="map-question" x="'+x+'" y="'+(y+4)+'" text-anchor="middle">'+(scouted?'✧':'?')+'</text>':'')+'<text x="'+x+'" y="'+(y+29)+'" text-anchor="middle">'+name+'</text>'+(room===currentRoom?'<text class="map-you" x="'+x+'" y="'+(y-22)+'" text-anchor="middle">YOU ARE HERE</text>':'')+'</g>';
   }
   const ys=rooms.map(room=>positions[room][1]),bottom=Math.max(160,...ys)+48;
@@ -5428,7 +5439,7 @@ function equippedEssenceStatus(now,slot='q'){
   const remaining=Math.max(0,(magicState?.cooldowns[power?.id]??0)-now);
   const fullHealth=power?.form==='renewal'&&health>=maxHealth();
   const lowMana=manaAvailable(playerVitals,combatNow())<MANA_COST;
-  return {power,remaining,fullHealth,lowMana,canCast:!!power&&player.inCombat&&!!hunting.encounter&&!remaining&&!fullHealth&&!lowMana};
+  return {power,remaining,fullHealth,lowMana,canCast:!!power&&(player.inCombat&&!!hunting.encounter||window.millRaidClient?.active)&&!remaining&&!fullHealth&&!lowMana};
 }
 function updateEssenceHotbar(now=Date.now()){
   const bar=$('essenceHotbar');
@@ -5455,7 +5466,7 @@ function updateEssenceHotbar(now=Date.now()){
     const {power,remaining,fullHealth,lowMana,canCast}=equippedEssenceStatus(now,slot);
     const button=$('essenceHotbarPower'+suffix);
     let status=!power?(player.inCombat?'Equip between fights':'Open Essences'):remaining?'Recharging · '+Math.ceil(remaining/1000)+'s'
-      :!player.inCombat?allEssences[power.gem].name+' · Cast in combat'
+      :!(player.inCombat||window.millRaidClient?.active)?allEssences[power.gem].name+' · Cast in combat'
       :lowMana?'Needs '+MANA_COST+' mana':fullHealth?'Hearts are full':power.gem==='storm'?(now<(hunting.encounter?.interruptResistUntil??0)?'Enemy resists interrupts':'Ready · Interrupt during warning'):allEssences[power.gem].name+' · Ready';
     const automated=characterRules.combat.enabled&&characterRules.combat[slot];
     if(automated&&player.inCombat&&power&&!remaining&&!fullHealth&&!lowMana)status='Auto · Waiting for tactic';
@@ -5476,6 +5487,7 @@ function updateEssenceHotbar(now=Date.now()){
   }
 }
 function castEquippedEssence(slot='q'){
+  if(window.millRaidClient?.active){window.millRaidClient.power(slot);return;}
   if(equippedEssenceStatus(Date.now(),slot).canCast)sendServerCombat('essence',slot);
 }
 function currentActivityPrompt(){
@@ -5523,7 +5535,7 @@ let activityPromptKey='';
 function updateActivityPrompt(){
   updateAutoLessonGuide();updateLoungeDressGuide();
   const blocked=editing||unavailable()||depthsRun||trackedDestination||step||route.length||interaction
-    ||!$('loungeDressGuide').hidden||!$('autoLessonGuide').hidden||!$('bedGuide').hidden||!$('tradeGuide').hidden||!$('upgradeGuide').hidden
+    ||window.millRaidClient?.visible||!$('loungeDressGuide').hidden||!$('autoLessonGuide').hidden||!$('bedGuide').hidden||!$('tradeGuide').hidden||!$('upgradeGuide').hidden
     ||!$('depthsDecision').hidden||document.querySelector('dialog[open]');
   const prompt=blocked?null:currentActivityPrompt();
   const visible=!!prompt;
@@ -6753,7 +6765,7 @@ if(window.playerCloud&&typeof WebSocket!=='undefined'){
     flush:()=>window.playerCloud.flush(),checkRoom:async room=>{
       const response=await fetch('/api/world/connect?check=1&room='+encodeURIComponent(room),{credentials:'same-origin',cache:'no-store'});
       if(!response.ok){const data=await response.json().catch(()=>({})),error=new Error(data.error??'Room unavailable');error.status=response.status;throw error;}
-    },onPeers:receivePeers,onTrees:receiveTrees,onTrails:receiveMoonTrails,onTrailNotice:message=>{$('mapTrailStatus').textContent=message;},onActivity:receiveWorldActivity,onChat:receiveRoomChat,
+    },onPeers:receivePeers,onTrees:receiveTrees,onRaid:(raid,cue)=>window.millRaidClient?.receive(raid,false,cue),onTrails:receiveMoonTrails,onTrailNotice:message=>{$('mapTrailStatus').textContent=message;},onActivity:receiveWorldActivity,onChat:receiveRoomChat,
     onHistory:history=>{$('messages').replaceChildren();$('roomChatMessages').replaceChildren();for(const message of history)receiveRoomChat(message);},
     onStatus:text=>{$('networkStatus').textContent=text;$('roomChatStatus').textContent=text;$('openRoomChat').disabled=!Object.hasOwn(socialRooms,currentRoom);},
     onCorrection:correctRoomPosition,
@@ -6809,3 +6821,11 @@ window.towerVisitSafe=()=>{
   use(safe);
 };
 window.towerBankFeedback=message=>showTransaction('Home safe',[{icon:'◈',text:message}]);
+
+window.towerMillRaidHooks={
+ now:()=>combatNow(),room:()=>currentRoom,position:()=>({x:player.cx,y:player.cy}),discovered:()=>adventure.discovered.includes('millbrook'),
+ read:()=>window.playerCloud.readMillRaid(),change:body=>window.playerCloud.millRaid(body),apply:state=>{applyServerGameplay(state);updateInventory();},
+ cue:cue=>{const peer=remotePeers.get(cue.player);if(peer){if(cue.hit)peer.raidStrikeAt=performance.now();if(cue.cast){peer.raidCastAt=performance.now();peer.raidStrikeAt=performance.now();}}},
+ approach:item=>use({...item,type:item.type??'millRaidMob',rot:0}),route:room=>navigateHud(room),
+ float:(kind,text,mob)=>{if(mob){note(text);return;}addWorldFloat('self',{kind:kind==='gold'&&text.startsWith('-')?'loss':kind,label:text,room:currentRoom,at:combatNow(),id:'raid-local:'+performance.now()});}
+};

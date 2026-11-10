@@ -102,7 +102,7 @@
         // Durable Auto alarms can commit between our last packet and this request.
         // Retry only server settlement revisions; another window still triggers conflict handling.
         if(['presence','control'].includes(path)&&error.status===409&&error.data?.lastOperation?.startsWith('settle:')&&error.data.characterKey===packet.characterKey){packet=error.data;continue;}
-        if(path.startsWith('gameplay/')||path==='control'){
+        if(path.startsWith('gameplay/')||path==='control'||path==='mill-raid'){
           if(error.status===undefined&&attempt<2)continue;
           if(error.status===409&&error.data?.lastOperation===operation){packet=error.data;return packet;}
           if(error.status===409||error.status===401||error.status===undefined)conflict('Reload to confirm the result of your action.');
@@ -465,7 +465,7 @@
       Object.assign(window,{towerCharacterArt},rules,hunting,loungeUI,art,fx,environment,quests,historyRules,shopUI,clothing,progression,woodRules,crafting,cooking,regionCatalog,explorationFog,worldActivity,playerVitals,familiars,wildlife,autoFeedback,characterRules,commissions,essences,depths,dungeonArena,dungeonAdds,jobs,shared,multiplayer,training,dungeonLoot);
       window.towerInitialState=packet.state;
       window.autoWalkPosition=autoWalkPosition;
-      window.playerCloud={enqueue,flush,attach,combatNow:()=>combatClock.now(),gameplay:async(name,body={})=>{
+      window.playerCloud={enqueue,flush,attach,readMillRaid:()=>request('mill-raid'),millRaid:async body=>{if(gameplayBusy)throw new Error('Wait for your current action.');await flush();gameplayBusy=true;try{return await action('mill-raid',body);}finally{gameplayBusy=false;}},combatNow:()=>combatClock.now(),gameplay:async(name,body={})=>{
         if(gameplayBusy)throw new Error('Wait for your current action to finish.');
         await flush();
         gameplayBusy=true;
@@ -494,7 +494,10 @@
       });
       window.towerReadFactionProject=async()=>{await flush();return (await request('factions')).membership?.hall;};
       const script=document.createElement('script');script.src='game.js';
-      script.onload=()=>{
+      script.onload=async()=>{
+        const {initializeMillRaid}=await import('./mill-raid-ui.js');
+        window.millRaidClient=initializeMillRaid(window.towerMillRaidHooks);
+
         if(!(pending||retryJob||sending))setStatus('Server saved');
         gate.close();
         recap?.resume({initial:true});
