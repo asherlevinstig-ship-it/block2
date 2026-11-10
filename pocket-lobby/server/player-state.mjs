@@ -1,6 +1,7 @@
 import {awardFamiliarBond} from './familiar-progression.mjs';
 import {wildlifeRoom,wildlifeView} from '../public/wildlife.js';
-import {normalizeVitals,useHunger} from '../public/player-vitals.js';
+import {normalizeVitals,useHunger,exertionDuration} from '../public/player-vitals.js';
+import {applyAutoFood} from './auto-food.mjs';
 import {watchRooms,watchFlags,willowmereRooms,isFishingRoom} from '../public/region-catalog.js';
 import {normalizeFamiliars,familiarFishingTime} from '../public/familiars.js';
 import {canUseArmour} from '../public/hunting.js';
@@ -138,7 +139,7 @@ export function startPlan(state,{hours,baitLimit,kind,source},now){
   // Offline casts take longer than direct fishing and never receive the Reel bonus.
   const interval=familiarFishingTime(state,60000*rod.duration/4500);
   state.plan={
-    startedAt:now,endAt:now+hours*3600000,nextCatchAt:now+interval,interval,
+    startedAt:now,endAt:now+hours*3600000,nextCatchAt:now+exertionDuration(interval,state.vitals),interval,
     baitLimit,rod:state.fishingGear.equippedRod,catches:{},baitUsed:0,xp:0,
     patienceBefore:skillLevel(state.stats.patienceXp)
   };
@@ -159,7 +160,7 @@ function settleWorkPlan(state,now,{stop=false,random=Math.random}={}){
   if(plan.kind==='queue')return settleRoutineQueue(state,now,{stop,random});
   if(plan.kind==='rest'){
     if(now>=plan.endAt||stop){
-      if(now>=plan.endAt)state.health=100;
+      if(now>=plan.endAt&&plan.restReason!=='out-of-food')state.health=100;
       state.report={...plan,endedAt:Math.min(now,plan.endAt),reason:now>=plan.endAt?(plan.restReason??'rest'):'returned'};
       delete state.plan;state.location='home';state.position={x:5,y:7};return true;
     }
@@ -177,7 +178,10 @@ function settleWorkPlan(state,now,{stop=false,random=Math.random}={}){
     plan.catches[fish]=(plan.catches[fish]??0)+1;
     plan.baitUsed++;plan.xp+=10;awardFamiliarBond(state,'otter',1);
     const caughtAt=plan.nextCatchAt;autoStoreVault(state,plan,caughtAt);
-    plan.nextCatchAt+=plan.interval;changed=true;
+    changed=true;
+    const food=applyAutoFood(state,plan,caughtAt);
+    if(food?.returnHome){finishPlan(state,food.reason??'food-reserve',caughtAt);return true;}
+    plan.nextCatchAt+=exertionDuration(plan.interval,state.vitals);
     if(plan.baitUsed>=plan.baitLimit||state.fishingGear.bait===0){
       finishPlan(state,state.fishingGear.bait===0?"out-of-bait":"bait-limit",caughtAt);
       return true;

@@ -5,7 +5,7 @@ import {initializeBrain,brainThinkEvent} from '../public/enemy-brain.js';
 import {combatStamina} from '../public/hunting.js';
 import {arenaEnemy,arenaWarningAt,lockArenaAttack,arenaMoveEvent,dungeonCover} from '../public/dungeon-arena.js';
 import {enemyAttack} from '../public/hunting.js';
-import {useHunger} from '../public/player-vitals.js';
+import {useHunger,exertionDuration,isExhausted} from '../public/player-vitals.js';
 import {armourSelection} from '../public/hunting.js';
 import {startBedRest,settleBedRest,stopBedRest} from './bed-rest.mjs';
 import {awardDungeonWeapon} from '../public/dungeon-loot.js';
@@ -28,7 +28,7 @@ function move(state,room,position={x:5,y:7}){state.location=room;state.position=
 export function startCombatEncounter(state,enemy,now){
   delete state.timberCut;
   state.combatId=crypto.randomUUID();state.combatReceipt={id:crypto.randomUUID(),events:[]};
-  state.hunting.encounter=createHunt(now,enemy.health,enemy.id);
+  state.hunting.encounter=createHunt(now,enemy.health,enemy.id,isExhausted(state.vitals));
   state.hunting.encounter.summary=normalizeCombatSummary({startedAt:now});
   if(enemy.room.startsWith('depths'))Object.assign(state.hunting.encounter,{arenaVersion:1,arenaRoom:enemy.room,arenaPlayer:{...(state.position??{x:5,y:5})},arenaEnemy:{x:6,y:5},arenaStepAt:now,arenaLockedFor:0,arenaSolids:(moonwood.layouts[enemy.room]?.scenery??[]).filter(p=>p.type!==enemy.prop).map(({x,y})=>({x,y}))});
   if(enemy.room.startsWith('depths'))state.hunting.encounter=initializeAdds(initializeBrain(state.hunting.encounter,enemy,now),now,state.familiars?.equipped==='fox');
@@ -172,7 +172,7 @@ export function activityAction(state,action,body,now,random){
       state.timberReceipt={id:cut.id,key,amount};delete state.timberCut;
       if(timberTreeState(wood,now,key).regrowsAt)return true;
     }
-    if(state.timberCut?.key!==key)state.timberCut={id:crypto.randomUUID(),key,started:now,endsAt:now+choppingDuration(wood)};
+    if(state.timberCut?.key!==key)state.timberCut={id:crypto.randomUUID(),key,started:now,endsAt:now+exertionDuration(choppingDuration(wood),state.vitals)};
     return true;
   }
   if(action==='fight'){

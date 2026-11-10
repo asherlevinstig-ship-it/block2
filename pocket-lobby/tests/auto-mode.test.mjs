@@ -15,7 +15,7 @@ test('stop reasons and the compact status distinguish work, next step, net gold 
  const forged=protectFishingState(s,{...s,controlMode:'auto'});assert.equal(forged.controlMode,'play');
 });
 test('explicit Auto respects the offline cap even with automatic idle activation disabled',()=>{
- const s=normalizeState({location:'home',woodcutting:{axeOwned:true,equipped:true,timber:0,xp:0},characterRules:{enabled:false,activity:'woodcutting',timberTarget:1000000}});s.controlMode='auto';s.routineLastSeen=1000;
+ const s=normalizeState({location:'home',woodcutting:{axeOwned:true,equipped:true,timber:0,xp:0},meals:{silverfinFeast:10},characterRules:{enabled:false,activity:'woodcutting',timberTarget:1000000}});s.controlMode='auto';s.routineLastSeen=1000;
  touchPresence(s,1000,{forceStart:true,active:false});touchPresence(s,24*3600000,{active:true});assert.equal(s.plan,undefined);assert.equal(s.report.reason,'away-cap');assert.equal(s.woodcutting.timber,480);assert.equal(s.controlMode,'play');assert.match(autoStatus(s).reason,/eight-hour/);
  const before=s.woodcutting.timber;touchPresence(s,48*3600000,{active:false});assert.equal(s.woodcutting.timber,before);
 });

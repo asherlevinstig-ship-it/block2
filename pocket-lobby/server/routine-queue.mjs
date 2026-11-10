@@ -72,8 +72,8 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
       if(p.stepCount>=p.queue.steps[p.stepIndex].amount)nextStep(p,report.endedAt,'Won '+p.stepCount+' fights');
       continue;
     }
-    if(!stop&&p.cursorAt<=until&&p.cursorAt<p.endAt&&(p.adaptive||p.cycle<p.queue.repeats)&&p.queue.steps[p.stepIndex]?.type!=='rest'){
-      const food=applyAutoFood(state,p,p.cursorAt);if(food.used)changed=true;if(food.returnHome)return finish(state,p,'food-reserve',p.cursorAt);
+    if(!stop&&p.nextAt===null&&p.cursorAt<=until&&p.cursorAt<p.endAt&&(p.adaptive||p.cycle<p.queue.repeats)&&p.queue.steps[p.stepIndex]?.type!=='rest'){
+      const food=applyAutoFood(state,p,p.cursorAt);if(food.used)changed=true;if(food.returnHome&&!food.reason)return finish(state,p,'food-reserve',p.cursorAt);
     }
     if(!p.adaptive&&resolveQueueGoal(state,p,p.cursorAt))return finish(state,p,'goal-reached',p.cursorAt);
     if(p.adaptive&&p.nextAt===null&&p.stepCount===0){
@@ -86,6 +86,11 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
     const step=p.queue.steps[p.stepIndex],type=step.type;
     if(p.nextAt===null){
       if(p.cursorAt>until||p.cursorAt===until&&!p.adaptive)break;
+      if(type==='fishing'||type==='woodcutting'||Object.hasOwn(queueHuntEnemies,type)){
+        const food=applyAutoFood(state,p,p.cursorAt);
+        if(food.used)changed=true;
+        if(food.returnHome)return finish(state,p,food.reason??'food-reserve',p.cursorAt);
+      }
       p.currentLabel=queueActions[type];
       let interval=QUEUE_ACTION_MS;
       if(Object.hasOwn(cookingQueueRecipes,type)){

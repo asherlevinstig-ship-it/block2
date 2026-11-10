@@ -3888,6 +3888,12 @@ function animation(time){
 let lastVitalsPaint=-Infinity;
 function updateVitalsHud(){
  const values={health:Math.ceil(homeBedRest?bedRestHealth(homeBedRest,combatNow()):health),hunger:playerVitals.hunger,mana:manaAvailable(playerVitals,combatNow())};
+ const hungerStatus=$('hungerStatus');
+ const condition=values.hunger===0?'Exhausted':values.hunger<=LOW_HUNGER?'Hungry':'';
+ if(hungerStatus.textContent!==condition){
+  hungerStatus.hidden=!condition;
+  hungerStatus.textContent=condition;
+ }
  for(const [id,value] of Object.entries(values)){
   const meter=$('vital'+id),number=$('vital'+id+'Value');
   meter.value=value;meter.setAttribute('aria-label',id[0].toUpperCase()+id.slice(1)+' '+value+' of 100');
@@ -5533,8 +5539,9 @@ function updateCharacterRulesPreview(){
   try{
     const rules=draftCharacterRules();renderHuntingPreview();if(rules.strategy==='routine'&&rules.queue?.enabled&&rules.queue.steps.some(step=>step.type==='huntBeetles')&&!beetleHuntUnlocked({...currentGoalState(),history,depthsDiscovered}))throw new Error('Win a manual Stoneback Beetle fight in the Ruins before scheduling idle hunts.');renderUpgradeGoalProgress(rules.goal);renderAutoModeSummary(rules);
     $('rulesFoodEnabled').disabled=savingRules;
-    $('rulesFoodBelow').disabled=$('rulesFoodKeep').disabled=savingRules||!rules.food.enabled;
-    $('rulesFoodPreview').textContent=rules.food.enabled?'Between actions and fights, eat below '+rules.food.eatBelow+' HP, keep '+rules.food.keepMeals+' meals in your bag, and protect per-item reserves. Return home to recover if usable food runs out.':'Auto food use is off. Meals stay in your bag until you use them.';
+    $('rulesFoodBelow').disabled=savingRules||!rules.food.enabled;
+    $('rulesFoodKeep').disabled=savingRules;
+    $('rulesFoodPreview').textContent='Eat at 20 hunger or less'+(rules.food.enabled?' or below '+rules.food.eatBelow+' HP':'')+'. Keep '+rules.food.keepMeals+' meals in your bag and protect per-item reserves.'+(rules.food.enabled?' Return home to recover if you fall below your health threshold without usable food.':'');
     $('rulesCombatEnabled').disabled=savingRules;
     $('rulesCombatFlee').disabled=savingRules||!rules.combat.enabled&&!ruleQueueDraft.some(step=>Object.hasOwn(queueHuntEnemies,step.type));
     $('rulesStyleDescription').textContent=combatStyles[rules.combat.style].description;

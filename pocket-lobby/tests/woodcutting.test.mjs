@@ -58,10 +58,10 @@ test('offline shifts settle once, preserve other inventories, cap at eight hours
   settlePlan(state,60000);assert.equal(state.woodcutting.timber,1);
   assert.equal(settlePlan(state,60000),false);assert.equal(state.woodcutting.timber,1);
   settlePlan(state,100000000);
-  assert.equal(state.woodcutting.timber,480);assert.equal(state.woodcutting.xp,4800);
+  assert.equal(state.woodcutting.timber,404);assert.equal(state.woodcutting.xp,4040);
   assert.equal(state.fishingGear.bait,bait);assert.equal(state.stats.patienceXp,0);assert.equal(state.location,'home');
-  assert.equal(state.report.kind,'woodcutting');assert.equal(state.report.timber,480);assert.equal(state.report.reason,'time-limit');
-  assert.equal(settlePlan(state,100000001),false);assert.equal(state.woodcutting.timber,480);
+  assert.equal(state.report.kind,'woodcutting');assert.equal(state.report.timber,404);assert.equal(state.report.reason,'time-limit');
+  assert.equal(settlePlan(state,100000001),false);assert.equal(state.woodcutting.timber,404);
   assert.deepEqual(normalizeState(state).woodcutting,state.woodcutting);
 });
 test('early stop gives only completed cuts and work plans reject missing tools or overlapping jobs',()=>{

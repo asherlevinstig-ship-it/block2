@@ -46,7 +46,7 @@ test('returning between steps stops before a future sale or purchase can happen'
  assert.equal(s.report.goldSpent,0);assert.equal(s.report.goldEarned,0);
 });
 test('queues respect the eight-hour limit and cap all iterations and material production',()=>{
- const s=initial([{type:'woodcutting',amount:1000}],{repeats:10});pulse(s,G+86400000,true);
+ const s=initial([{type:'woodcutting',amount:1000}],{repeats:10});s.meals.silverfinFeast=10;pulse(s,G+86400000,true);
  assert.equal(s.report.reason,'away-cap');assert.equal(s.woodcutting.timber,480);assert.equal(s.report.endedAt,G+AWAY_CAP_MS);
 });
 test('invalid queue configuration is rejected while old rules remain compatible',()=>{

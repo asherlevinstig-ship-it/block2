@@ -8,12 +8,13 @@ export function finishRoutineReport(state,now){
   const report=state.report;if(report?.source!=='rules')return;
   autoBankGold(state,report,report.endedAt);
   state.controlMode='play';
-  if(report.kind==='woodcutting'&&state.woodcutting.timber+(state.bank?.vault?.items?.timber??0)>=report.timberTarget)report.reason='target-reached';
-  else if(report.kind!=='exploring'&&report.kind!=='gambling'&&report.kind!=='queue'&&report.kind!=='rest'&&report.kind!=='woodcutting'&&state.fishingGear.bait<=report.keepBait)report.reason='bait-reserve';
-  else if(report.kind!=='exploring'&&report.kind!=='gambling'&&report.kind!=='queue'&&report.endedAt>=report.routineCapAt)report.reason='away-cap';
+  const foodStop=['out-of-food','food-reserve'].includes(report.reason);
+  if(!foodStop&&report.kind==='woodcutting'&&state.woodcutting.timber+(state.bank?.vault?.items?.timber??0)>=report.timberTarget)report.reason='target-reached';
+  else if(!foodStop&&report.kind!=='exploring'&&report.kind!=='gambling'&&report.kind!=='queue'&&report.kind!=='rest'&&report.kind!=='woodcutting'&&state.fishingGear.bait<=report.keepBait)report.reason='bait-reserve';
+  else if(!foodStop&&report.kind!=='exploring'&&report.kind!=='gambling'&&report.kind!=='queue'&&report.endedAt>=report.routineCapAt)report.reason='away-cap';
   else if(report.reason==='stopped')report.reason='returned';
   if(state.health<100){
-    const restedAt=report.kind==='rest'?report.endAt:report.endedAt+(report.reason==='food-reserve'?homeRestDuration(state,boarRules.recovery):boarRules.recovery);
+    const restedAt=report.kind==='rest'&&report.reason!=='out-of-food'?report.endAt:report.endedAt+(report.reason==='food-reserve'?homeRestDuration(state,boarRules.recovery):boarRules.recovery);
     if(now>=restedAt){state.health=100;state.hunting.recoveryUntil=0;}
     else state.hunting.recoveryUntil=restedAt;
   }

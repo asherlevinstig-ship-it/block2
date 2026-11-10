@@ -1,4 +1,5 @@
 import {mealRecipes} from './cooking.js';
+import {LOW_HUNGER} from './player-vitals.js';
 export function normalizeFoodPolicy(input={}){
  if(!input||typeof input!=='object'||Array.isArray(input))throw new Error('Choose valid Auto food rules.');
  const {enabled=false,eatBelow=50,keepMeals=2}=input;
@@ -6,9 +7,13 @@ export function normalizeFoodPolicy(input={}){
  return {enabled,eatBelow,keepMeals};
 }
 export function chooseAutoMeal(state,policy){
- if(!policy?.enabled||state.health<=0||state.health>=policy.eatBelow)return null;
+ if(!policy||state.health<=0)return null;
+ const healthNeeded=policy.enabled?policy.eatBelow-state.health:0;
+ const hungerNeeded=LOW_HUNGER+1-(state.vitals?.hunger??100);
+ const needed=Math.max(healthNeeded,hungerNeeded);
+ if(needed<=0)return null;
  const meals=state.meals??{},total=Object.values(meals).reduce((sum,n)=>sum+n,0);
  if(total<=policy.keepMeals)return null;
  const eligible=Object.entries(mealRecipes).filter(([id])=>(meals[id]??0)>(state.bank?.vault?.rules?.['meal:'+id]??0)).sort((a,b)=>a[1].healing-b[1].healing||a[0].localeCompare(b[0]));
- return (eligible.find(([,recipe])=>state.health+recipe.healing>=policy.eatBelow)??eligible.at(-1))?.[0]??null;
+ return (eligible.find(([,recipe])=>recipe.healing>=needed)??eligible.at(-1))?.[0]??null;
 }

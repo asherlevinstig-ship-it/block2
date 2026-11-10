@@ -12,3 +12,5 @@
 @media(prefers-reduced-motion:reduce){.vital-row progress::-webkit-progress-value{transition:none}}
 
 .vital-symbol svg{width:14px;height:14px;display:block}
+
+#hungerStatus:not([hidden]){grid-column:1/-1;color:#ffda87;font-size:10px;font-weight:800;letter-spacing:.04em}

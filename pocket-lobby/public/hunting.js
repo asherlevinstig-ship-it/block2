@@ -237,6 +237,7 @@ export function normalizeHunting(input={}){
     const stamina=input.encounter.stamina??100;
     if(!Number.isFinite(stamina)||stamina<0||stamina>100)throw new Error('Invalid stamina.');
     result.encounter={stamina,staminaAt:time(input.encounter.staminaAt),dodgeUntil:time(input.encounter.dodgeUntil),nextDodgeAt:time(input.encounter.nextDodgeAt),health:hp,nextPlayerAt:time(input.encounter.nextPlayerAt??input.encounter.nextActionAt),nextBoarAt:time(input.encounter.nextBoarAt??input.encounter.nextActionAt),nextFleeAt:time(input.encounter.nextFleeAt)};
+    if(input.encounter.exhausted===true)result.encounter.exhausted=true;
     if(Number.isSafeInteger(input.encounter.magicWard)&&input.encounter.magicWard>0){
       result.encounter.magicWard=Math.min(100,input.encounter.magicWard);
       result.encounter.magicWardUntil=time(input.encounter.magicWardUntil);
@@ -274,16 +275,16 @@ export function normalizeHunting(input={}){
   return result;
 }
 // Each fighter has its own clock. Fleeing never postpones either attack.
-export function createHunt(now,health,enemy='boar'){
+export function createHunt(now,health,enemy='boar',exhausted=false){
   const profile=huntEnemy({enemy});
-  const encounter={health:health??profile.health,stamina:100,staminaAt:now,dodgeUntil:0,nextDodgeAt:0,nextPlayerAt:now+450,nextBoarAt:now+profile.firstAttack,nextFleeAt:0};
+  const encounter={...(exhausted?{exhausted:true}:{}),health:health??profile.health,stamina:100,staminaAt:now,dodgeUntil:0,nextDodgeAt:0,nextPlayerAt:now+450,nextBoarAt:now+profile.firstAttack,nextFleeAt:0};
   if(enemy!=='boar')encounter.enemy=enemy;
   if(enemy==='depthsGuardian'){encounter.bossVersion=1;encounter.nextBoarAt=now+3500;}
   if(profile.shellArmor)encounter.exposedUntil=0;
   return encounter;
 }
 export function combatStamina(encounter,stats,now,charmEquipped=false){
-  return Math.min(100,(encounter.stamina??100)+Math.max(0,now-(encounter.staminaAt??now))/1000*huntingAttributes(stats,undefined,null,charmEquipped).staminaRegen*(encounter.brainVersion===2?.5:1));
+  return Math.min(100,(encounter.stamina??100)+Math.max(0,now-(encounter.staminaAt??now))/1000*huntingAttributes(stats,undefined,null,charmEquipped).staminaRegen*(encounter.brainVersion===2?.5:1)*(encounter.exhausted ? .75 : 1));
 }
 export function resumeHunt(encounter,now,stats={},charmEquipped=false){
   const nextBoarAt=now+Math.max(huntEnemy(encounter).firstAttack,enemyAttack(encounter).tell);

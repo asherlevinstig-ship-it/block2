@@ -1,5 +1,8 @@
 export const MANA_COST=10;
 export const MANA_REGEN=5;
+export const LOW_HUNGER=20;
+export const isExhausted=vitals=>vitals?.hunger===0;
+export const exertionDuration=(duration,vitals)=>isExhausted(vitals)?Math.ceil(duration*1.25):duration;
 const bounded=(value,fallback)=>Number.isFinite(value)?Math.max(0,Math.min(100,Math.floor(value))):fallback;
 export function normalizeVitals(input){
  return {hunger:bounded(input?.hunger,100),mana:bounded(input?.mana,100),manaAt:Number.isSafeInteger(input?.manaAt)&&input.manaAt>=0?input.manaAt:0};

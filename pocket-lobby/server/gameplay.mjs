@@ -3,7 +3,7 @@ import {familiarAction} from './familiars.mjs';
 import {familiarFishingTime,familiarBond} from '../public/familiars.js';
 import {watchAction} from './watch-expedition.mjs';
 import {watchFlags} from '../public/region-catalog.js';
-import {normalizeVitals,useHunger,feedPlayer} from '../public/player-vitals.js';
+import {normalizeVitals,useHunger,feedPlayer,exertionDuration} from '../public/player-vitals.js';
 import {isFishingRoom,besideFishingStation} from '../public/region-catalog.js';
 import {armourCatalog,canUseArmour} from '../public/hunting.js';
 import {normalizeWardrobe,tailorQuote} from '../public/wardrobe.js';
@@ -136,7 +136,9 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
     if(!profile||!state.fishingGear.ownedRods.includes(rod))throw new Error('Choose an equipped fishing rod first.');
     if(state.fishingGear.bait<1)throw new Error('Choose bait before casting.');
     if(skillLevel(state.stats.patienceXp)<profile.patience)throw new Error('Patience is too low for this rod.');
-    const biteAt=now+450+familiarFishingTime(state,profile.duration*(.85+random()*.30));
+    const wait=familiarFishingTime(state,profile.duration*(.85+random()*.30));
+    // Keep the reel window and landing animation timing identical.
+    const biteAt=now+exertionDuration(3150+wait,state.vitals)-2700;
     state.fishingCast={id:crypto.randomUUID(),rod,started:now,castEnds:now+450,biteAt,landAt:biteAt+1800,bonus:0};
     return;
   }

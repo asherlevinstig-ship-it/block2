@@ -28,7 +28,7 @@ test('hunt selection requires unlocked grounds and conservative survival with eq
  const fresh=character({stats,combatGear:{ownedWeapons:['ironSword'],equippedWeapon:'ironSword'}});fresh.history.boarDefeated=false;const unseen=start(fresh);assert.equal(unseen.plan.queue.steps[0].type,'fishing');
 });
 test('continuous adaptive planning matches fine polling, preserves reserves, and stops at the offline cap',()=>{
- const setup=()=>start(character({woodcutting:{axeOwned:true,equipped:true,timber:0,xp:0},fishingGear:{ownedRods:['reed'],equippedRod:'reed',bait:5}}));
+ const setup=()=>start(character({meals:{silverfinFeast:10},woodcutting:{axeOwned:true,equipped:true,timber:0,xp:0},fishingGear:{ownedRods:['reed'],equippedRod:'reed',bait:5}}));
  const online=setup(),offline=setup();for(let at=1000;at<=3601000;at+=1000)settlePlan(online,at,{random:()=>.5});settlePlan(offline,3601000,{random:()=>.5});
  for(const key of ['credits','woodcutting','stats'])assert.deepEqual(online[key],offline[key]);assert.equal(online.plan.goldEarned,offline.plan.goldEarned);assert(online.woodcutting.timber>=10);assert(online.plan.entries.length<=64);
  settlePlan(offline,24*3600000,{random:()=>.5});assert.equal(offline.report.reason,'away-cap');assert.equal(offline.controlMode,'play');const gold=offline.credits;settlePlan(offline,48*3600000,{random:()=>.5});assert.equal(offline.credits,gold);
