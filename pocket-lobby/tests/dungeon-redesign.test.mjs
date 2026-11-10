@@ -112,3 +112,17 @@ test('returning from every optional room keeps the gallery floor and onward pass
   assert.deepEqual(g.errors,[]);
  }
 });
+
+test('manual dungeon engagement asks before an immediate Auto retreat and stand-ground stays in the room',()=>{
+ const make=()=>normalizeState({location:'depthsGate',position:{x:5,y:5},health:20,depthsRun:{cleared:0,routeChoice:'pending'},characterRules:{combat:{enabled:true,fleeBelow:40}}});
+ const s=make();
+ assert.throws(()=>applyGameplayAction(s,'fight',{},1000,()=>0),/Auto retreat would immediately/);
+ assert.equal(s.location,'depthsGate');assert.equal(s.hunting.encounter,null);
+ applyGameplayAction(s,'fight',{standGround:true},1000,()=>0);
+ assert.equal(normalizeState(s).hunting.encounter.autoRetreatDisabled,true);
+ applyGameplayAction(s,'combat',{combatId:s.combatId},1400,()=>0);
+ assert.equal(s.location,'depthsGate');assert(s.hunting.encounter);
+ assert(!s.combatReceipt.events.some(event=>event.action==='flee'));
+ applyGameplayAction(s,'combat',{combatId:s.combatId,input:'flee'},1500,()=>0);
+ assert.equal(s.location,'ruins');assert.equal(s.hunting.encounter,null);
+});

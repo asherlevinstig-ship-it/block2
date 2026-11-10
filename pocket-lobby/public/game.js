@@ -1200,7 +1200,7 @@ function updateDepthsPanel(){
   }
   if(newlyCleared)$('depthsDecisionTitle').focus({preventScroll:true});
 }
-function startMonsterEncounter(enemy){
+function startMonsterEncounter(enemy,standGround=false){
   combatAudio.enable(combatSoundEnabled);
   if(currentRoom!==enemy.room||unavailable())return;
   const index=depthsStageIndex(currentRoom);
@@ -1212,11 +1212,17 @@ function startMonsterEncounter(enemy){
   stopForCombat();resetCombatArt();
   player.direction=(6-player.cx)-(5-player.cy)>=0?'right':'left';player.back=11<player.cx+player.cy;
   if(window.playerCloud?.gameplay){
-    serverGameplay('fight').then(packet=>{
+    serverGameplay('fight',standGround?{standGround:true}:{}).then(packet=>{
       serverCombatId=packet.state.combatId;setPlayerCombat(true);nextCombatPoll=0;canvas.focus({preventScroll:true});
       combatMessage='You engage the '+enemy.name+'. Dodge with Space, or Flee.';
-      updateCombatPanel();note('Press Space just before the '+enemyAttack(hunting.encounter,enemy).name+' lands. F flees.');
-    }).catch(error=>note(error.message));return;
+      updateCombatPanel();note(standGround?'Standing your ground · Auto retreat is off for this fight. Press F to flee.':'Press Space just before the '+enemyAttack(hunting.encounter,enemy).name+' lands. F flees.');
+    }).catch(error=>{
+      if(error.message.startsWith('Choose whether to fight:')){
+        openWatchDialog('Auto would retreat immediately',
+          error.message.replace('Choose whether to fight: ','')+' Fight anyway turns off automatic retreat for this encounter. You can still press F to flee.',
+          'Fight anyway',()=>startMonsterEncounter(enemy,true));
+      }else note(error.message);
+    });return;
   }
   hunting.encounter=createHunt(combatNow(),enemy.health,enemy.id);
   setPlayerCombat(true);
@@ -1298,7 +1304,7 @@ function applyCombatResult(result,authoritative=null,playEffects=true){
     for(const award of (result.mastery??[]).filter(item=>item.leveled))showTransaction(essenceGems[award.gem].name+' Mastery · Level '+award.level+'!',[{icon:'◆',text:masteryBenefit(award.gem,award.level)}]);
     updateInventory();
   }else if(result.outcome==='escaped'){
-    if(authoritative){depthsRun=authoritative.depthsRun??null;enterRoom(authoritative.location,authoritative.position);combatMessage=result.power==='Veilstep'?'Veilstep broke pursuit. You escaped and are briefly hidden.':'You escaped with your remaining hearts.';}
+    if(authoritative){depthsRun=authoritative.depthsRun??null;enterRoom(authoritative.location,authoritative.position);combatMessage=result.power==='Veilstep'?'Veilstep broke pursuit. You escaped and are briefly hidden.':result.automatic?'Auto retreat · '+(result.decision?.reason??'Your combat safety rule triggered.'):'You escaped with your remaining hearts.';}
     else if(depthsRun){
       const previous=depthsStages[depthsRun.cleared-1];
       if(previous)enterRoom(previous.room);

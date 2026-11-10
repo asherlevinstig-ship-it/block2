@@ -185,6 +185,12 @@ export function activityAction(state,action,body,now,random){
     if(!state.combatGear.equippedWeapon||!canUseWeapon(state.stats,state.combatGear.equippedWeapon))throw new Error('Choose a weapon you can use before fighting.');
     if(index>=0?!depthsEnemyAvailable(state.depthsRun,state.location):now<huntRespawnAt(state.hunting,enemy))throw new Error('Invalid encounter. Wait for the creature to return.');
     startCombatEncounter(state,enemy,now);
+    if(body.standGround===true&&index>=0)state.hunting.encounter.autoRetreatDisabled=true;
+    const firstTactic=index>=0?nextCombatTactic(state):null;
+    if(firstTactic?.action==='flee'){
+      state.hunting.encounter=null;delete state.combatId;delete state.combatReceipt;
+      throw new Error('Choose whether to fight: Auto retreat would immediately withdraw you. '+firstTactic.reason);
+    }
     return true;
   }
   if(action==='combat'){

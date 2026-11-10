@@ -238,6 +238,7 @@ export function normalizeHunting(input={}){
     if(!Number.isFinite(stamina)||stamina<0||stamina>100)throw new Error('Invalid stamina.');
     result.encounter={stamina,staminaAt:time(input.encounter.staminaAt),dodgeUntil:time(input.encounter.dodgeUntil),nextDodgeAt:time(input.encounter.nextDodgeAt),health:hp,nextPlayerAt:time(input.encounter.nextPlayerAt??input.encounter.nextActionAt),nextBoarAt:time(input.encounter.nextBoarAt??input.encounter.nextActionAt),nextFleeAt:time(input.encounter.nextFleeAt)};
     if(input.encounter.exhausted===true)result.encounter.exhausted=true;
+    if(input.encounter.autoRetreatDisabled===true)result.encounter.autoRetreatDisabled=true;
     if(Number.isSafeInteger(input.encounter.magicWard)&&input.encounter.magicWard>0){
       result.encounter.magicWard=Math.min(100,input.encounter.magicWard);
       result.encounter.magicWardUntil=time(input.encounter.magicWardUntil);

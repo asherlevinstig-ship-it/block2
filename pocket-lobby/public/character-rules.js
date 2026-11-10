@@ -100,7 +100,7 @@ export function nextCombatTactic(state){
  if(!rules?.enabled||!e||!Number.isSafeInteger(e.tacticsAt))return null;
  const style=Object.hasOwn(combatStyles,rules.style)?rules.style:'balanced',policy=combatStyles[style],earliest=e.tacticsAt+COMBAT_REACTION_MS;
  const make=(at,action,reason,priority=0,slot)=>({at,action,reason,style,priority,...(slot?{slot}:{})});
- if(rules.fleeBelow>0&&state.health<=rules.fleeBelow)return make(Math.max(earliest,e.nextFleeAt??0),'flee','Retreating: health reached your '+rules.fleeBelow+' HP safety line.',100);
+ if(!e.autoRetreatDisabled&&rules.fleeBelow>0&&state.health<=rules.fleeBelow)return make(Math.max(earliest,e.nextFleeAt??0),'flee','Retreating: health reached your '+rules.fleeBelow+' HP safety line.',100);
  const dangerTime=e.tacticsAt??0,threats=addThreats(e,dangerTime);
  const defense=[{encounter:e,move:enemyAttack(e)},...threats].filter(t=>t.encounter.nextBoarAt>=dangerTime).sort((a,b)=>a.encounter.nextBoarAt-b.encounter.nextBoarAt)[0]??{encounter:e,move:enemyAttack(e)};
  const incomingEncounter=defense.encounter;
@@ -165,7 +165,7 @@ export function nextCombatTactic(state){
  }
  // Cautious builds avoid a hit that would cross their chosen retreat line when no defense can cover it.
  const defenseReady=alreadyDodging||physicalInterrupt||finishingHit||next&&(next.action==='dodge'||next.action==='essence'&&['shield','renewal','focus'].includes(essencePower(magic?.slots?.[next.slot],state.stats,magic)?.form))&&next.at<strike;
- if(saved?.enabled&&style==='cautious'&&rules.fleeBelow>0&&state.health-incoming<=rules.fleeBelow&&!defenseReady){
+ if(!e.autoRetreatDisabled&&saved?.enabled&&style==='cautious'&&rules.fleeBelow>0&&state.health-incoming<=rules.fleeBelow&&!defenseReady){
   const at=Math.max(earliest,e.nextFleeAt??0,warning);if(at<strike)offer(make(at,'flee','Retreating early: the next hit could cross your safety line and no defense is ready.',100));
  }
  return next;
