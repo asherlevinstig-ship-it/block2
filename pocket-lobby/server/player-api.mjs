@@ -69,7 +69,7 @@ async function settleBeforeLeavingFishing(env,id,state,now,motion){
   await settleFishingBatch(env,id,state,now,motion??await actorMotion(env,id),{stopping:true});
   if(!state.plan)finishRoutineReport(state,now);
 }
-export async function settled(env,id,activities=false,{idle=false,motion=null,observed=false}={}){
+export async function settled(env,id,activities=false,{idle=false,motion=null,observed=false,usage=null}={}){
   const db=env.TOWER_DB;
   for(let attempt=0;attempt<5;attempt++){
     const row=await read(db,id);
@@ -87,7 +87,7 @@ export async function settled(env,id,activities=false,{idle=false,motion=null,ob
     enablePhysicalWork(state,env);
     const treeMutation=idle?await advanceTreeWork(env,state,now,motion):null;
     if(idle&&state.plan?.physicalFishing){
-      await advanceFishingWork(env,id,state,now,motion);
+      await advanceFishingWork(env,id,state,now,motion,Math.random,usage);
       if(!state.plan)finishRoutineReport(state,now);
     }
     planChanged=planChanged||initial!==JSON.stringify(state);
@@ -96,7 +96,11 @@ export async function settled(env,id,activities=false,{idle=false,motion=null,ob
     const migrated=before.progressionVersion!==progressionVersion||before.safeVersion!==1;
     if(!planChanged&&!activityChanged&&!migrated)return row;
     const updated=await write(db,id,row.revision,state,"settle:"+crypto.randomUUID(),null,treeMutation);
-    if(updated){await publishWorldActivity(env,id,before,JSON.parse(updated.state_json),updated.revision,{fresh:idle||before.plan?.source==='rules'||now-(row.updated_at??0)<10000});return updated;}
+    if(updated){
+      if(usage)usage.saves++;
+      await publishWorldActivity(env,id,before,JSON.parse(updated.state_json),updated.revision,{usage,fresh:idle||before.plan?.source==='rules'||now-(row.updated_at??0)<10000});
+      return updated;
+    }
   }
   throw new Error("Your character is busy. Please retry.");
 }

@@ -16,6 +16,11 @@ binding = "TOWER_DB"
 database_name = "tower-beginnings-players"
 database_id = "394c79bf-90af-4e76-8e62-b6261e6911b5"
 migrations_dir = "migrations"
+
+[observability.logs]
+enabled = true
+invocation_logs = false
+
 [[durable_objects.bindings]]
 name = "SHARED_ROOMS"
 class_name = "SharedRoom"

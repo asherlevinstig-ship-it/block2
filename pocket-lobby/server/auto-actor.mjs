@@ -9,6 +9,7 @@ import {AWAY_GRACE_MS} from '../public/character-rules.js';
 import {choppingPose} from '../public/woodcutting.js';
 import {sharedFishingPose} from '../public/fishing.js';
 import {roomTreeSnapshot,forestTrees,publicRoomNamespace} from './shared-trees.mjs';
+import {autoUsage,autoUsagePhase,recordAutoUsage} from './auto-usage.mjs';
 
 export class AutoActor{
  constructor(ctx,env){this.ctx=ctx;this.env=env;ctx.blockConcurrencyWhile(async()=>{this.actor=await ctx.storage.get('actor')??{};});}
@@ -25,7 +26,7 @@ export class AutoActor{
   return Response.json({motion:this.actor.active?this.actor.motion:null,latest});
  });}
  alarm(){return this.ctx.blockConcurrencyWhile(async()=>{try{await this.tick(true);}catch(error){console.warn('Auto actor retry',error.message);await this.ctx.storage.setAlarm(Date.now()+5000);}});}
- async relay(room,remove=false,state=null){
+ async relay(room,remove=false,state=null,usage=null){
   if(!Object.hasOwn(socialRooms,room??''))return;
   const name=room==='home'?'home:'+this.actor.playerId:publicRoomNamespace(room);
   const stub=this.env.SHARED_ROOMS.get(this.env.SHARED_ROOMS.idFromName(name));
@@ -40,26 +41,35 @@ export class AutoActor{
   const now=Date.now(),signature=JSON.stringify(peer);
   if(!remove&&this.actor.publishedRoom===room&&this.actor.peerSignature===signature&&now-this.actor.lastRelayAt<60000)return;
   const until=Math.max(now+90000,(peer?.fishingBatch??0)+15000);
+  if(usage)usage.presence++;
   const response=await stub.fetch(new Request('https://room.internal/auto',{method:'POST',body:JSON.stringify({playerId:this.actor.playerId,remove,peer,until})}));
   if(!response.ok)throw new Error('Could not update the shared room');
+  if(!remove){
+   const {observed}=await response.json();
+   this.actor.audience=observed===true?'observed':observed===false?'empty':'unknown';
+  }
   this.actor.peerSignature=signature;this.actor.lastRelayAt=now;
  }
  async tick(advance,observed=false){
   const id=this.actor.playerId;if(!id)return;
-  const row=advance?await settled(this.env,id,true,{idle:true,motion:this.actor.motion,observed}):await this.env.TOWER_DB.prepare('SELECT state_json FROM tower_players WHERE player_id = ?').bind(id).first();
+  const started=Date.now(),previousUsage=this.actor.usage;
+  const usage=autoUsage(this.env,previousUsage,observed?'observe':advance?'alarm':'sync',started);
+  const row=advance?await settled(this.env,id,true,{idle:true,motion:this.actor.motion,observed,usage}):await this.env.TOWER_DB.prepare('SELECT state_json FROM tower_players WHERE player_id = ?').bind(id).first();
   const state=row&&JSON.parse(row.state_json),active=state?.plan?.source==='rules',now=Date.now(),previous=this.actor.publishedRoom;
   if(active){
    if(!this.actor.motion)this.actor.motion={room:state.location,...state.position,direction:'right',back:false};
    // HTTP heartbeats never speed up walking. Only the durable alarm advances a tile.
    if(advance||!this.actor.active)this.actor.motion=advanceAutoMotion(this.actor.motion,state);
    this.actor.motion.chopping=this.actor.motion.moving?null:choppingPose(state);
-   if(previous&&previous!==this.actor.motion.room)await this.relay(previous,true);
-   await this.relay(this.actor.motion.room,false,state);this.actor.publishedRoom=this.actor.motion.room;
+   if(previous!==this.actor.motion.room)delete this.actor.audience;
+   if(previous&&previous!==this.actor.motion.room)await this.relay(previous,true,null,usage);
+   await this.relay(this.actor.motion.room,false,state,usage);this.actor.publishedRoom=this.actor.motion.room;
   }else{
-   if(previous)await this.relay(previous,true);delete this.actor.publishedRoom;
+   if(previous)await this.relay(previous,true,null,usage);delete this.actor.publishedRoom;
+   delete this.actor.audience;
    this.actor.motion=state?{room:state.location,...(state.position??{x:5,y:7}),direction:'right',back:false}:null;
   }
-  this.actor.active=active;await this.ctx.storage.put('actor',this.actor);
+  this.actor.active=!!active;
   const existing=await this.ctx.storage.getAlarm();
   let next=null;
   const plan=state?.plan,fishing=plan?.fishingWork;
@@ -69,8 +79,16 @@ export class AutoActor{
   const wait=plan?.activeHunt?500:due>now?Math.min(due-now,60000):2000;
   if(active)next=fishing?.batchUntil??Math.min(plan.endAt??Infinity,now+(this.actor.motion.moving?200:this.actor.motion.blocked?5000:Math.max(100,wait)));
   else if(state?.characterRules?.enabled&&!state.report&&!state.plan)next=Math.max(now+(advance?30000:1000),(state.routineLastSeen??now)+AWAY_GRACE_MS);
+  if(active){
+   const audience=this.actor.audience??'unknown';
+   const phase=autoUsagePhase(state,this.actor.motion,sharedActivity(state));
+   this.actor.usage={at:started,until:plan.endAt??next,phase,audience};
+   if(usage&&!previousUsage){usage.phase=phase;usage.audience=audience;}
+  }else delete this.actor.usage;
+  await this.ctx.storage.put('actor',this.actor);
   if(next!==null){if(advance||existing===null||next<existing)await this.ctx.storage.setAlarm(next);}
   else if(existing!==null)await this.ctx.storage.deleteAlarm();
+  if(active||previousUsage)recordAutoUsage(usage);
   return row;
  }
 }

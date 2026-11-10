@@ -104,7 +104,7 @@ export class SharedRoom{
     }
     await this.ctx.storage.put('autoPeers',[...this.autoPeers]);this.snapshot();await this.scheduleVeilExpiry();
     if(peer?.fishingBatch)this.wakeObservedFishing([peer]);
-    return json({ok:true});
+    return json({ok:true,observed:this.sessions.size>0});
   }
   wakeObservedFishing(peers){
     const binding=this.env.AUTO_ACTORS;

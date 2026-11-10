@@ -21,9 +21,10 @@ export function fishingPositions(room,state,origin){
    .sort((a,b)=>a.path.length-b.path.length).map(entry=>entry.spot);
 }
 
-async function claimSpot(env,playerId,room,spots){
+async function claimSpot(env,playerId,room,spots,usage){
  const namespace=env.SHARED_ROOMS;
  const stub=namespace.get(namespace.idFromName(publicRoomNamespace(room)));
+ if(usage)usage.spot++;
  const response=await stub.fetch(new Request('https://room.internal/fishing-spot',{method:'POST',body:JSON.stringify({playerId,room,spots})}));
  if(!response.ok)throw new Error('Could not reserve a fishing spot');
  return response.json();
@@ -40,7 +41,7 @@ function remainingCasts(state,plan){
  return Math.min(target,state.fishingGear.bait-(plan.keepBait??0));
 }
 
-export async function advanceFishingWork(env,id,state,now,motion,random=Math.random){
+export async function advanceFishingWork(env,id,state,now,motion,random=Math.random,usage=null){
  const plan=state.plan;
  if(!isFishingPlan(plan)||plan.fishingLandingUntil>now)return;
  const work=plan.fishingWork??={};
@@ -82,7 +83,7 @@ export async function advanceFishingWork(env,id,state,now,motion,random=Math.ran
  state.location=room;
  if(motion?.room!==room){state.position={x:4,y:5};return;}
  const spots=fishingPositions(room,state,motion);
- const {spot,observed,leaseUntil}=await claimSpot(env,id,room,spots);
+ const {spot,observed,leaseUntil}=await claimSpot(env,id,room,spots,usage);
  if(!spot){
    work.readyAt=now+2000;
    plan.currentLabel='Waiting for a free fishing spot';

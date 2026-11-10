@@ -6,7 +6,7 @@ import {socialRooms} from '../public/shared-world.js';
 import {choppingPose} from '../public/woodcutting.js';
 import {publicRoomNamespace} from './shared-trees.mjs';
 import {sharedFishingPose} from '../public/fishing.js';
-export async function publishWorldActivity(env,playerId,before,after,revision,{fresh=true}={}){
+export async function publishWorldActivity(env,playerId,before,after,revision,{fresh=true,usage=null}={}){
  if(!env?.SHARED_ROOMS)return;
  const events=fresh?worldActivityEvents(before,after,Date.now()):[];
  const auto=after.plan?.source==='rules';
@@ -14,5 +14,14 @@ export async function publishWorldActivity(env,playerId,before,after,revision,{f
  const fishingChanged=JSON.stringify(sharedFishingPose(before))!==JSON.stringify(sharedFishingPose(after));
  if(!treesChanged&&!events.length&&!fishingChanged&&JSON.stringify(choppingPose(before))===JSON.stringify(choppingPose(after))&&outfitVeilUntil(before)===outfitVeilUntil(after)&&before.location===after.location&&before.health===after.health&&sharedActivity(before)===sharedActivity(after)&&(before.plan?.source==='rules')===auto&&(!auto||before.position?.x===after.position?.x&&before.position?.y===after.position?.y))return;
  const rooms=new Set([before.location,after.location].filter(room=>Object.hasOwn(socialRooms,room)));
- await Promise.all([...rooms].map(async room=>{try{const access=room===factionHall?await factionHallAccess(env.TOWER_DB,playerId):null;if(room===factionHall&&!access)return;const name=access?'faction:'+access.id:room==='home'?'home:'+playerId:publicRoomNamespace(room),stub=env.SHARED_ROOMS.get(env.SHARED_ROOMS.idFromName(name));await stub.fetch(new Request('https://room.internal/activity',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({playerId,revision,room,treesChanged:treesChanged&&(after.timberReceipt.room??after.location)===room,events:events.filter(e=>e.room===room)})}));}catch{console.warn('Room activity delivery deferred');}}));
+ await Promise.all([...rooms].map(async room=>{
+  try{
+   const access=room===factionHall?await factionHallAccess(env.TOWER_DB,playerId):null;
+   if(room===factionHall&&!access)return;
+   const name=access?'faction:'+access.id:room==='home'?'home:'+playerId:publicRoomNamespace(room);
+   const stub=env.SHARED_ROOMS.get(env.SHARED_ROOMS.idFromName(name));
+   if(usage)usage.activity++;
+   await stub.fetch(new Request('https://room.internal/activity',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({playerId,revision,room,treesChanged:treesChanged&&(after.timberReceipt.room??after.location)===room,events:events.filter(e=>e.room===room)})}));
+  }catch{console.warn('Room activity delivery deferred');}
+ }));
 }
