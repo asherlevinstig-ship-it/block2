@@ -20,3 +20,5 @@ body:has(.layout[data-depths]:not([data-depths=""])){background:#081426 url('./d
  .dungeon-arena-hud:has(.dungeon-targets:not([hidden])) .dungeon-arena-controls>span{flex:1 1 0}
  .shell .scene:has(.dungeon-arena-hud[data-adds=true]:not([hidden])) #game{translate:0 66px}
 }
+
+.dungeon-enemy-count{position:absolute;z-index:7;top:27px;left:50%;transform:translateX(-50%);padding:5px 12px;border:1px solid #67818e;border-radius:20px;background:#102236ee;color:#f3ddaf;font:700 11px/1.4 system-ui;white-space:nowrap;pointer-events:none}@media(max-width:900px){.dungeon-enemy-count{top:175px;font-size:10px}}

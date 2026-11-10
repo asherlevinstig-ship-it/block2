@@ -1726,6 +1726,16 @@ function drawWildAnimal(animal,time){
 }
 
 function updateDungeonArenaHud(){
+ const floorCount=$('dungeonEnemyCount');
+ floorCount.hidden=!depthsRun||depthsStageIndex(currentRoom)<0;
+ if(!floorCount.hidden){
+  const encounter=hunting.encounter,adds=(encounter?.adds??[]).filter(add=>add.health>0);
+  const alive=(encounter?Number(encounter.health>0):Number(depthsEnemyAvailable(depthsRun,currentRoom)))+adds.length;
+  const summoning=adds.filter(add=>add.spawnAt>combatNow()).length;
+  floorCount.textContent='Enemies on this floor · '+alive+(summoning?' · '+summoning+' summoning':'');
+  floorCount.title='Counts living enemies in this zone, including reinforcements being summoned. More may arrive during combat.';
+ }
+
  const e=hunting.encounter,enemy=e?huntEnemy(e):dungeonEnemyPreview(huntEnemyForRoom(currentRoom)),panel=$('dungeonArenaHud');
  panel.hidden=!depthsRun||!enemy||!depthsEnemyAvailable(depthsRun,currentRoom);if(panel.hidden)return;
  panel.dataset.adds=String(e?.addsVersion===1);
