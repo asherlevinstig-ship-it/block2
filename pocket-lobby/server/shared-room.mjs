@@ -97,7 +97,7 @@ export class SharedRoom{
     if(peer?.room&&this.room!==peer.room)await this.loadTrees(peer.room);
     if(remove){this.autoPeers.delete(playerId);for(const [ws,meta] of this.sessions)if(meta.playerId===playerId&&meta.serverAuto){ws.close(1000,'Server character changed area');this.sessions.delete(ws);}}
     else if(peer?.playerId===playerId&&Object.hasOwn(socialRooms,peer.room)&&Number.isFinite(peer.x)&&Number.isFinite(peer.y)){
-      this.autoPeers.set(playerId,{...peer,activityRevision:this.autoPeers.get(playerId)?.activityRevision??0,until:Math.min(until,Date.now()+30000)});
+      this.autoPeers.set(playerId,{...peer,activityRevision:this.autoPeers.get(playerId)?.activityRevision??0,until:Math.min(until,Date.now()+90000)});
       for(const [ws,meta] of this.sessions)if(meta.playerId===playerId){meta.serverAuto=true;ws.serializeAttachment?.(meta);}
     }
     await this.ctx.storage.put('autoPeers',[...this.autoPeers]);this.snapshot();await this.scheduleVeilExpiry();

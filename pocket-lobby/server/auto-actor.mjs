@@ -25,7 +25,11 @@ export class AutoActor{
    peer.fishing=motion.moving?null:sharedFishingPose(state);
    if(state.plan?.physicalFishing&&peer.activity==='fishing'&&!peer.fishing)peer.activity='waiting-to-fish';
   }
-  await stub.fetch(new Request('https://room.internal/auto',{method:'POST',body:JSON.stringify({playerId:this.actor.playerId,remove,peer,until:Date.now()+30000})}));
+  const now=Date.now(),signature=JSON.stringify(peer);
+  if(!remove&&this.actor.publishedRoom===room&&this.actor.peerSignature===signature&&now-this.actor.lastRelayAt<60000)return;
+  const response=await stub.fetch(new Request('https://room.internal/auto',{method:'POST',body:JSON.stringify({playerId:this.actor.playerId,remove,peer,until:now+90000})}));
+  if(!response.ok)throw new Error('Could not update the shared room');
+  this.actor.peerSignature=signature;this.actor.lastRelayAt=now;
  }
  async tick(advance){
   const id=this.actor.playerId;if(!id)return;
@@ -45,9 +49,12 @@ export class AutoActor{
   this.actor.active=active;await this.ctx.storage.put('actor',this.actor);
   const existing=await this.ctx.storage.getAlarm();
   let next=null;
-  const fishing=state?.plan?.fishingWork;
-  const due=fishing?.cast?fishing.cast.landAt+900:fishing?.readyAt??state?.plan?.treeWork?.cut?.endsAt??now+2000;
-  if(active)next=now+(this.actor.motion.moving?200:this.actor.motion.blocked?5000:Math.max(100,Math.min(2000,due-now)));
+  const plan=state?.plan,fishing=plan?.fishingWork;
+  const due=fishing?.cast?fishing.cast.landAt+900:fishing?.readyAt??plan?.fishingLandingUntil??plan?.treeWork?.cut?.endsAt??plan?.treeWork?.readyAt??plan?.nextAt??plan?.nextRoundAt??plan?.nextCutAt??plan?.nextCatchAt;
+  // During long waits, the client renders the timestamped animation locally.
+  // Wake for the next action or lease renewal instead of polling every two seconds.
+  const wait=plan?.activeHunt?500:due>now?Math.min(due-now,60000):2000;
+  if(active)next=Math.min(plan.endAt??Infinity,now+(this.actor.motion.moving?200:this.actor.motion.blocked?5000:Math.max(100,wait)));
   else if(state?.characterRules?.enabled&&!state.report&&!state.plan)next=Math.max(now+(advance?30000:1000),(state.routineLastSeen??now)+AWAY_GRACE_MS);
   if(next!==null){if(advance||existing===null||next<existing)await this.ctx.storage.setAlarm(next);}
   else if(existing!==null)await this.ctx.storage.deleteAlarm();
