@@ -3,6 +3,9 @@ import {isTimberTree,timberTreeRules,timberFacing} from '../public/woodcutting.j
 
 export const treeKey=(room,tree)=>room+':'+tree.x+','+tree.y;
 export const forestTrees=room=>(moonwood.layouts[room]?.scenery??[]).filter(isTimberTree);
+// Forest sessions must agree on the shared-tree protocol. A fresh namespace
+// keeps them separate from sockets still attached to pre-tree room instances.
+export const publicRoomNamespace=room=>(forestTrees(room).length?'forest-v1:':'public:')+room;
 export function logicalTree(row,now=Date.now()){
  const regrowing=(row?.regrows_at??row?.regrowsAt??0)>now;
  return {cuts:regrowing?3:(row?.regrows_at??row?.regrowsAt)?0:row?.cuts??0,regrowsAt:regrowing?(row.regrows_at??row.regrowsAt):0,generation:row?.generation??0,version:row?.version??0,hitAt:row?.hit_at??row?.hitAt??0,fallDirection:row?.fall_direction??row?.fallDirection??1};

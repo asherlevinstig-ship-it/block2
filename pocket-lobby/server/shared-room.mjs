@@ -8,7 +8,7 @@ import {armourSelection} from '../public/hunting.js';
 import {isSmartlyDressed} from '../public/wardrobe.js';
 import {resolveIdentity,tokenHash} from './identity.mjs';
 import {socialRooms,roomBoxes,validRoomTile,reachableMove,roomSeats} from '../public/shared-world.js';
-import {roomTreeSnapshot,forestTrees} from './shared-trees.mjs';
+import {roomTreeSnapshot,forestTrees,publicRoomNamespace} from './shared-trees.mjs';
 import {choppingPose} from '../public/woodcutting.js';
 
 function familiarProfile(state){
@@ -35,7 +35,7 @@ export async function handleWorldConnect(request,env){
   if(check)return json({ready:true,room});
   const profile={playerId:identity.playerId,id:(await tokenHash('public:'+identity.playerId)).slice(0,24),sessionHash:identity.sessionHash??null,expiresAt:identity.expiresAt,room,...(access?{factionId:access.id}:{}),
     name:state.avatar?.name??'Guest',outfit:state.avatar?.outfit??0,trousers:state.avatar?.trousers??0,boots:state.avatar?.boots??0,hair:state.avatar?.hair??0,weapon:state.combatGear?.equippedWeapon??null,armour:armourSelection(state.combatGear),x:position.x,y:position.y,direction:'right',back:false,health:state.health??100,...familiarProfile(state),activity:sharedActivity(state),chopping:choppingPose(state),auto:state.plan?.source==='rules'};
-  const namespace=access?'faction:'+access.id:room==='home'?'home:'+identity.playerId:'public:'+room;
+  const namespace=access?'faction:'+access.id:room==='home'?'home:'+identity.playerId:publicRoomNamespace(room);
   const stub=env.SHARED_ROOMS.get(env.SHARED_ROOMS.idFromName(namespace));
   return stub.fetch(new Request('https://room.internal/connect',{headers:{Upgrade:'websocket','X-Tower-Profile':encodeURIComponent(JSON.stringify(profile))}}));
 }

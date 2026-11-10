@@ -7,7 +7,7 @@ import {socialRooms} from '../public/shared-world.js';
 import {outfitVeilUntil} from '../public/outfit-magic.js';
 import {AWAY_GRACE_MS} from '../public/character-rules.js';
 import {choppingPose} from '../public/woodcutting.js';
-import {roomTreeSnapshot,forestTrees} from './shared-trees.mjs';
+import {roomTreeSnapshot,forestTrees,publicRoomNamespace} from './shared-trees.mjs';
 
 export class AutoActor{
  constructor(ctx,env){this.ctx=ctx;this.env=env;ctx.blockConcurrencyWhile(async()=>{this.actor=await ctx.storage.get('actor')??{};});}
@@ -15,7 +15,7 @@ export class AutoActor{
  alarm(){return this.ctx.blockConcurrencyWhile(async()=>{try{await this.tick(true);}catch(error){console.warn('Auto actor retry',error.message);await this.ctx.storage.setAlarm(Date.now()+5000);}});}
  async relay(room,remove=false,state=null){
   if(!Object.hasOwn(socialRooms,room??''))return;
-  const name=room==='home'?'home:'+this.actor.playerId:'public:'+room;
+  const name=room==='home'?'home:'+this.actor.playerId:publicRoomNamespace(room);
   const stub=this.env.SHARED_ROOMS.get(this.env.SHARED_ROOMS.idFromName(name));
   const motion=this.actor.motion;
   const peer=state?{playerId:this.actor.playerId,id:(await tokenHash('public:'+this.actor.playerId)).slice(0,24),room,name:state.avatar?.name??'Guest',...state.avatar,weapon:state.combatGear?.equippedWeapon??null,armour:armourSelection(state.combatGear),health:state.health??100,familiar:state.familiars?.equipped,familiarName:state.familiars?.names?.[state.familiars?.equipped],...motion,chopping:motion.moving?null:choppingPose(state),auto:true,activity:motion.moving?'walking':sharedActivity(state),veilUntil:outfitVeilUntil(state)}:null;
