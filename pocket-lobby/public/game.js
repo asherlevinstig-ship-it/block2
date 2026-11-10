@@ -1457,14 +1457,15 @@ function updateCombatPanel(){
     notice.textContent=enemy.tactic??(enemy.id==='sealGuardian'?'Rune Sentinel · 210 HP · Win and claim 1 guaranteed Awakening Stone.':'Elite guardian · Strike → Runic Slam → open shell. Reward '+essenceCacheGold+' gold + a stone.');
   }else notice.dataset.cue='';
   if(enemy?.id==='depthsGuardian'&&!encounter&&!chamberCleared){notice.hidden=false;notice.textContent='VAULT GUARDIAN · 3 phases: stagger its armour, dodge and counter its blades, then interrupt or dodge its magic.';}
-  if(enemy?.tactic&&!hunting.recoveryUntil&&!chamberCleared&&!(enemy.id==='moonbackStag'&&encounter)){notice.hidden=false;notice.textContent=enemy.tactic;}
+  if(enemy?.tactic&&(currentRoom!=='millCellar'||!!encounter)&&!hunting.recoveryUntil&&!chamberCleared&&!(enemy.id==='moonbackStag'&&encounter)){notice.hidden=false;notice.textContent=enemy.tactic;}
   if(!enemy||chamberCleared)return;
   const beetle=!!enemy.shellArmor,stag=enemy.id==='moonbackStag',respawn=stage>=0||stag?0:huntRespawnAt(hunting,enemy);
   $('combatTitle').textContent=enemy.name;
-  $('combatChapter').textContent=stag?'RARE · MOONWOOD':enemy.archetype?enemy.archetype.toUpperCase()+' · MOONWELL DEPTHS':enemy.elite?'ELITE · ESSENCE CACHE':stage>=0?'MOONWELL DEPTHS':beetle?'MOONWELL RUINS':'FIRST HUNT';
+  $('combatChapter').textContent=currentRoom==='millCellar'?'GUARDIAN · FORGOTTEN CELLAR':stag?'RARE · MOONWOOD':enemy.archetype?enemy.archetype.toUpperCase()+' · MOONWELL DEPTHS':enemy.elite?'ELITE · ESSENCE CACHE':stage>=0?'MOONWELL DEPTHS':beetle?'MOONWELL RUINS':'FIRST HUNT';
   const [strength,agility,vitality]=enemy.xp;
   $('combatReward').textContent=stage>=0?(magicState?.picks.length?'Combat XP and Awakening Stones are kept after a win. Bank your gold and loot.':'Combat XP is kept after a win. Gold and items are held until you bank them.'):'Victory: '+enemy.lootName+' ×1 · +'+strength+' Strength, +'+agility+' Agility, +'+vitality+' Vitality XP. Sell loot for '+enemy.sellPrice+' gold.';
-  if(enemy.id==='sealGuardian')$('combatReward').textContent='Win, then claim 1 guaranteed Awakening Stone from the seal. Claimed stones and earned combat XP are yours to keep.';
+  if(enemy.id==='millCustodian')$('combatReward').textContent='Defeat the custodian to unseal the millkeeper’s chest: 125 gold and 1 Shield Awakening Stone. Combat XP and salvaged plating are kept on victory.';
+  else if(enemy.id==='sealGuardian')$('combatReward').textContent='Win, then claim 1 guaranteed Awakening Stone from the seal. Claimed stones and earned combat XP are yours to keep.';
   else if(stag)$('combatReward').textContent='Victory · Forest deer +1 and combat XP. A 10% chance at the Veilweaver Cloak. One victory per sighting.';
   else if(enemy.elite)$('combatReward').textContent='Open the cache after victory for '+essenceCacheGold+' gold + an Awakening Stone. Your collected cache rewards are yours to keep.';
   const approach=$('approachBeetle');
@@ -1910,6 +1911,7 @@ function moonbackHere(){
   return sighting?.room===currentRoom&&sighting.id!==hunting.moonbackSighting?sighting:null;
 }
 function roomEnemy(){
+  if(currentRoom==='millCellar'&&adventure.millCellarCleared)return undefined;
   const stag=moonbackHere();
   return stag?{...huntEnemies.moonbackStag,room:stag.room,moonbackId:stag.id}:huntEnemyForRoom(currentRoom);
 }
@@ -1939,7 +1941,7 @@ function roomFurniture(){
     const enemy=huntEnemyForRoom(currentRoom);
     const stag=moonbackHere();
     const index=depthsStageIndex(currentRoom);
-    const available=index>=0?depthsEnemyAvailable(depthsRun,currentRoom):!enemy||combatNow()>=huntRespawnAt(hunting,enemy);
+    const available=currentRoom==='millCellar'? !adventure.millCellarCleared:index>=0?depthsEnemyAvailable(depthsRun,currentRoom):!enemy||combatNow()>=huntRespawnAt(hunting,enemy);
     return [...moonwood.layouts[currentRoom].scenery.filter(item=>{
       if(item.type===enemy?.prop)return available;
       if(item.type==='galleryCache')return !!depthsRun?.finds?.includes('shellChime');
@@ -2607,7 +2609,7 @@ function object(item,highlight=false,time=0) {
   if(Object.hasOwn(moonwood.heights,type)){
     if(isTimberTree(item)){
       drawTimberTree(item,time);
-    }else if(type==='wildboar'||type==='stonebackBeetle'||type==='moonbackStag'||isDungeonMob(type)){
+    }else if(type==='cellarCustodian'||type==='wildboar'||type==='stonebackBeetle'||type==='moonbackStag'||isDungeonMob(type)){
       const actorEncounter=item.add?addEncounter(hunting.encounter,item.add):hunting.encounter;
       const addEffects=item.add?(combatArt.bursts??[]).filter(fx=>fx.targetId===item.addId):[];
       const pose=boarCombatPose({time,now:combatNow(),encounter:player.inCombat?actorEncounter:null,events:item.add?{boarAttackAt:addEffects.findLast(fx=>fx.action==='enemy')?.time,boarHitAt:addEffects.findLast(fx=>fx.damage)?.time}:combatArt,reduced:reducedMotion.matches,defeated:!!item.defeated});
@@ -3055,7 +3057,7 @@ function drawMoonwoodDetails(time){
     }
   }
   for(const door of roomDoors[currentRoom]){
-    if(!moonwood.open(door,adventure))continue;
+    if(!moonwood.open(door,adventure)||currentRoom==='millCellar'||door.to==='millCellar')continue;
     const {x,y}=door.tile;
     surface(x+.09,y+.09,.82,.82,.55,'#638c9a','#a5c7c7');
     const [px,py]=point(x+.5,y+.5);
@@ -3067,7 +3069,7 @@ function drawMoonwoodDetails(time){
 }
 const explorationRegions={
   'The Tower':['home','hub','outside','lounge','market','bakery','armory','store','furnishings','tailor'],
-  Willowmere:willowmereRooms,
+  Willowmere:[...willowmereRooms,'millCellar'],
   Beaconwatch:watchRooms,
   Moonwood:['trail',wildlifeRoom,'logging','clearing','grove','shrine','creek','pond','ruins','roots']
 };
@@ -3125,7 +3127,8 @@ function updateWorldLabels(){
   const stump=currentRoom==='logging'&&!!treeState(timberTree()).regrowsAt;
   const clue=moonbackClue();
   const shoal=currentRoom==='pond'&&window.playerCloud?.gameplay&&!fishingSession&&!routineControlled()?pondShoalAt(combatNow()):null;
-  const key=[currentRoom,shoal?.id,watchFlags.map(k=>adventure[k]).join(','),player.seat?.type,homeBedRest?.bedId,editing,currentRoom==='home'?homeFurniture.map(i=>[i.id,i.type,i.x,i.y,i.rot].join(':')).join(';'):'',stump,depthsRun?.finds?.join(','),depthsRun?.cleared,depthsRun?.routeChoice,depthsRun?.cacheGuardDefeated,doors.map(door=>door.to).join(','),avatar.name,questStage(quest),depthsDiscovered,player.inCombat,firstUpgrade.choice,firstUpgrade.complete,firstUpgrade.oakTrialPending,firstUpgrade.unlocked,firstUpgradeDestination()?.to,tradingPostGuideComplete,bedLessonComplete,trackedDestination,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
+  const cellarNear=currentRoom==='millbrook'&&Math.hypot(player.x-7,player.y-2)<3;
+  const key=[currentRoom,cellarNear,adventure.millCellarFound,adventure.millCellarCleared,adventure.millCellarClaimed,shoal?.id,watchFlags.map(k=>adventure[k]).join(','),player.seat?.type,homeBedRest?.bedId,editing,currentRoom==='home'?homeFurniture.map(i=>[i.id,i.type,i.x,i.y,i.rot].join(':')).join(';'):'',stump,depthsRun?.finds?.join(','),depthsRun?.cleared,depthsRun?.routeChoice,depthsRun?.cacheGuardDefeated,doors.map(door=>door.to).join(','),avatar.name,questStage(quest),depthsDiscovered,player.inCombat,firstUpgrade.choice,firstUpgrade.complete,firstUpgrade.oakTrialPending,firstUpgrade.unlocked,firstUpgradeDestination()?.to,tradingPostGuideComplete,bedLessonComplete,trackedDestination,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
   const labelKey=key+'|'+(clue?.door.to??'');
   if(labelKey===worldLabelKey)return;
   worldLabelKey=labelKey;
@@ -3167,6 +3170,7 @@ function updateWorldLabels(){
   const guidedDoor=nextExplorationDoor()??(tradingGuideActive()?tradingGuideDestination():firstUpgradeDestination());
   for(const door of doors){
     let anchor;
+    if(currentRoom==='millCellar'&&door.to==='millbrook'||door.to==='millCellar')continue;
     if(door.side==='wild'){anchor=point(door.tile.x+.5,door.tile.y+.5,18);}
     else if(door.side==='front'){anchor=point((door.start+door.end)/2,view.rows-.45,12);}
     else anchor=door.side==='right'?point((door.start+door.end)/2,0,door.height+9):point(0,(door.start+door.end)/2,door.height+9);
@@ -3207,6 +3211,8 @@ function updateWorldLabels(){
     const {inside,tile,to}=clue.door,x=inside.x+.5+(inside.x-tile.x)*.75,y=inside.y+.5+(inside.y-tile.y)*.75;
     add('Fresh stag tracks',...point(x,y,13),'tracks',followMoonbackTracks,explorationName(to));
   }
+  if(currentRoom==='millbrook'){const crack=roomFurniture().find(item=>item.type==='cellarCrack');if(crack&&(adventure.millCellarFound||Math.hypot(player.x-crack.x,player.y-crack.y)<3))add(adventure.millCellarFound?'Mill cellar':'Loose bricks',...point(crack.x+.5,crack.y+.5,35),'npc',()=>use(crack));}
+  if(currentRoom==='millCellar')for(const item of roomFurniture()){const label={cellarStairs:'Back to Millbrook',cellarChest:adventure.millCellarClaimed?'Opened chest':adventure.millCellarCleared?'Millkeeper’s chest':'Sealed chest',cellarJournal:'Millkeeper’s journal'}[item.type];if(label)add(label,...point(item.x+.5,item.y+.5,(moonwood.heights[item.type]??20)+9),'npc',()=>use(item));}
   if(willowmereRooms.includes(currentRoom)){
     for(const item of roomFurniture())if(['riverTrader','riverBench','fishingPost'].includes(item.type)&&!(item.type==='riverBench'&&player.seat===item))add(item.type==='riverTrader'?'River trader':item.type==='riverBench'?(currentRoom==='millbrook'?'Rest by the mill':'Riverside bench'):'Fishing station',...point(item.x+.5,item.y+.5,item.type==='riverTrader'?42:25),'npc',()=>use(item));
   }
@@ -3805,11 +3811,11 @@ function hudNextDoor(destination){return hudRoute(destination)[0]??null;}
 function updateExplorationNav(){
   bounds=null;
   const next=nextExplorationDoor();
-  const outside=explorationRegions.Moonwood.includes(currentRoom)||willowmereRooms.includes(currentRoom)||watchRooms.includes(currentRoom)||currentRoom==='outside';
+  const outside=explorationRegions.Moonwood.includes(currentRoom)||currentRoom==='millCellar'||willowmereRooms.includes(currentRoom)||watchRooms.includes(currentRoom)||currentRoom==='outside';
   const nav=$('explorationNav');
   nav.hidden=!!depthsRun||(!outside&&!trackedDestination);
   if(nav.hidden)return;
-  $('explorationRegion').textContent=watchRooms.includes(currentRoom)?'BEACONWATCH':willowmereRooms.includes(currentRoom)?'WILLOWMERE':explorationRegions.Moonwood.includes(currentRoom)?'MOONWOOD':'THE TOWER';
+  $('explorationRegion').textContent=watchRooms.includes(currentRoom)?'BEACONWATCH':(currentRoom==='millCellar'||willowmereRooms.includes(currentRoom))?'WILLOWMERE':explorationRegions.Moonwood.includes(currentRoom)?'MOONWOOD':'THE TOWER';
   $('explorationPlace').textContent=explorationName(currentRoom);
   let guidance=watchRooms.includes(currentRoom)?(currentRoom==='beaconwatch'&&adventure.watchBeacon?'Beacon restored. The Mill Bridge is now open.':currentRoom==='starfall'&&adventure.grottoCache?'Treasure recovered. Follow the root tunnel back to Thornwood.':watchGuidance[currentRoom]):currentRoom==='millbrook'?'Northern road → Beaconwatch expedition.':'Choose a destination on the map';
   if(currentRoom===wildlifeRoom)guidance='Click an animal or choose a habitat to start taming.';
@@ -4165,6 +4171,10 @@ function openWatchLandmark(item){
 
 function finishInteraction(){
   const item=interaction;interaction=null;
+  if(item.type==='cellarCrack'){visitMillCellar('millCellarEnter');return;}
+  if(item.type==='cellarStairs'){visitMillCellar('millCellarLeave');return;}
+  if(item.type==='cellarChest'){openMillCellarChest();return;}
+  if(item.type==='cellarJournal'){note('Millkeeper’s journal: The custodian guards our emergency gold and a Shield Awakening Stone. Hide behind the stone pillars when it throws a cog.');return;}
   if(item.type==='millRaidMerchant'){
     window.millRaidClient?.merchant();
   }else if(item.type==='millRaidMob'){
@@ -4591,7 +4601,7 @@ function openMerchant(){
 }
 
 function renderWorldMap(route=[]){
-  const positions={...watchMapPositions,...willowmereMapPositions,home:[100,55],hub:[340,110],armory:[265,48],market:[465,48],bakery:[550,129],tailor:[180,70],furnishings:[435,145],lounge:[580,75],store:[118,133],
+  const positions={...watchMapPositions,...willowmereMapPositions,millCellar:[590,806],home:[100,55],hub:[340,110],armory:[265,48],market:[465,48],bakery:[550,129],tailor:[180,70],furnishings:[435,145],lounge:[580,75],store:[118,133],
     outside:[340,205],trail:[340,315],logging:[107,288],clearing:[109,380],[wildlifeRoom]:[514,411],grove:[563,274],shrine:[563,354],
     creek:[338,423],pond:[138,497],ruins:[340,549],roots:[549,493],depthsGate:[340,120],depthsGallery:[340,120],depthsCache:[340,120],depthsTreasury:[340,120],depthsRest:[340,120],depthsTrial:[340,120],depthsVault:[340,120]};
   const rooms=Object.keys(positions).filter(room=>roomDetails[room]&&(room===currentRoom||hudNextDoor(room)));
@@ -5493,6 +5503,11 @@ function castEquippedEssence(slot='q'){
 function currentActivityPrompt(){
   if(playerVitals.hunger<=LOW_HUNGER&&(meals[towerBread.id]??0)>0&&!fishingSession&&!woodSession&&!player.inCombat)
     return {label:'FOOD FOR THE ROAD',title:playerVitals.hunger===0?'You’re exhausted':'You’re hungry',text:'Tower Bread restores 25 hunger. Open your bag to eat a ration.',action:'rationBag'};
+  if(currentRoom==='millCellar'&&!player.inCombat){
+    if(!adventure.millCellarCleared)return {label:'HIDDEN DISCOVERY',title:'The millkeeper’s sealed chest',text:'A Clockwork Custodian protects the supplies. Watch its floor warnings; the stone pillars block thrown cogs. The stairs stay open before combat.',action:'cellarGuardian'};
+    if(!adventure.millCellarClaimed)return {label:'SECRET UNCOVERED',title:'The chest’s seal is broken',text:'Collect 125 gold and a Shield Awakening Stone. Your reward is saved when you open the chest.',action:'cellarChest'};
+    return null;
+  }
   if(currentRoom===wildlifeRoom)return null;
   if(currentRoom==='outside')return {label:'SAFE COMBAT PRACTICE',title:'Training courtyard',text:'Learn dodge, counter, stagger and weak spots. Try weapons without health loss or item use.',action:'courtyardPractice'};
   if(currentRoom==='hub'&&!lobbyRoutesOpen()){
@@ -5541,7 +5556,7 @@ function updateActivityPrompt(){
   const visible=!!prompt;
   $('contextGuide').hidden=!visible;
   $('roomLayout').dataset.contextual=String(visible);
-  const proxyControl=prompt?.action&&!['baitRoute','equipHunting','familiarAction','rationBag','pondShoal','engageMoonback','moonbackTracks'].includes(prompt.action)?$(prompt.action):null;
+  const proxyControl=prompt?.action&&!['baitRoute','equipHunting','familiarAction','rationBag','pondShoal','engageMoonback','moonbackTracks','cellarGuardian','cellarChest'].includes(prompt.action)?$(prompt.action):null;
   $('contextGuideAction').disabled=proxyControl?.disabled===true||prompt?.action==='familiarAction'&&serverActionBusy;
   $('contextGuideSecondChance').hidden=!prompt?.secondChance;
   $('contextGuideSecondChance').disabled=serverActionBusy;
@@ -5561,6 +5576,8 @@ function updateActivityPrompt(){
   else if(prompt.action==='equipHunting')button.textContent='Open Inventory';
   else if(prompt.action==='visitWarden')button.textContent='Speak to the Warden';
   else if(prompt.action==='pondShoal')button.textContent='Fish the shoal';
+  else if(prompt.action==='cellarGuardian')button.textContent='Approach the custodian';
+  else if(prompt.action==='cellarChest')button.textContent='Open the chest';
   else if(prompt.action==='engageMoonback')button.textContent='Approach the stag';
   else if(prompt.action==='moonbackTracks')button.textContent='Follow tracks';
   else button.textContent=$(prompt.action).textContent||prompt.title;
@@ -5579,7 +5596,8 @@ function updateAdventurePanel(){
   const fieldNotes={
     reedwater:'Follow the stone bridge across the river. Willowbank lies beyond the eastern path.',
     willowbank:'Choose any free station along the river. Your bait, catches and Patience are your own. Millbrook lies to the north.',
-    millbrook:'The river trader buys fish. Rest on the bench to restore your hearts, or return along the riverside path.',
+    millbrook:'The river trader buys fish. Rest on the bench to restore your hearts, or return along the riverside path.'+(adventure.millCellarFound?' Discovery recorded: the forgotten cellar lies behind the mill’s loose bricks. '+(adventure.millCellarClaimed?'Millkeeper’s supplies recovered.':adventure.millCellarCleared?'The custodian is defeated; its chest is unsealed.':'The old custodian still guards its sealed chest.') :''),
+    millCellar:adventure.millCellarClaimed?'Discovery complete: the millkeeper’s emergency supplies have been recovered. Take the western stairs back to Millbrook.':adventure.millCellarCleared?'The custodian is quiet. Open the millkeeper’s chest for 125 gold and a Shield Awakening Stone.':'Discovery: a forgotten storeroom beneath the watermill. The custodian guards an emergency supply chest. The western stairs return to Millbrook.',
     logging:!woodcutting.axeOwned?'Meet the woodcutter for a free basic axe. Then chop the marked tree, or set a timed offline shift.':'Chop timber to gain Woodcutting XP. Each timber sells for 4 gold at the Trading Post.',
     clearing:'A Wild Boar guards this clearing. Approach to hunt. Rest in the Tower to refill your hearts.',
     trail:adventure.lantern?'Your lantern reveals hidden trails and crossings.':'Take the lantern from the waystone before heading deeper.',
@@ -5889,6 +5907,8 @@ $('contextGuideAction').onclick=()=>{
   else if(prompt.action==='equipHunting')openInventory('clearing');
   else if(prompt.action==='pondShoal')usePondShoal();
   else if(prompt.action==='engageMoonback'){const stag=roomFurniture().find(item=>item.type==='moonbackStag');if(stag)use(stag);}
+  else if(prompt.action==='cellarGuardian'){const item=roomFurniture().find(p=>p.type==='cellarCustodian');if(item)use(item);}
+  else if(prompt.action==='cellarChest'){const item=roomFurniture().find(p=>p.type==='cellarChest');if(item)use(item);}
   else if(prompt.action==='moonbackTracks')followMoonbackTracks();
   else if(!$(prompt.action).disabled)$(prompt.action).onclick();
   updateActivityPrompt();
@@ -6464,6 +6484,12 @@ function updateRoomLabel(){
   canvas.setAttribute('aria-label',roomDetails[currentRoom].name+'. Click a floor tile or use arrow keys to walk. '+(landmarks[currentRoom]??'Use the marked trails or the field journal to travel.'));
 }
 function enterRoom(next,arrival,{automatic=false,explore=false}={}){
+  if(window.playerCloud?.gameplay&&next!==currentRoom&&(next==='millCellar'||currentRoom==='millCellar')&&window.playerCloud.initial.location!==next){
+    if(next==='millCellar')visitMillCellar('millCellarEnter');
+    else if(next==='millbrook')visitMillCellar('millCellarLeave');
+    else note('Use the cellar stairs to return to Millbrook.');
+    return;
+  }
   if(next==='thornwood'&&!autoJourneyTransition&&!adventure.discovered.includes('thornwood')&&!thornwoodConfirmed&&savedPlayerState?.location!=='thornwood'){
     openWatchDialog('The trail turns dangerous.','Thornwood is optional. A Thorn Boar has 115 HP and hits harder than the Wild Boar. Bring a weapon and meals. The cream road reaches Beaconwatch safely.','Enter Thornwood',()=>{thornwoodConfirmed=true;enterRoom(next,arrival,{automatic});});return;
   }
@@ -6829,3 +6855,16 @@ window.towerMillRaidHooks={
  approach:item=>use({...item,type:item.type??'millRaidMob',rot:0}),route:room=>navigateHud(room),
  float:(kind,text,mob)=>{if(mob){note(text);return;}addWorldFloat('self',{kind:kind==='gold'&&text.startsWith('-')?'loss':kind,label:text,room:currentRoom,at:combatNow(),id:'raid-local:'+performance.now()});}
 };
+
+async function visitMillCellar(action){
+ if(serverActionBusy||unavailable())return;
+ const first=!adventure.millCellarFound;
+ try{const packet=await serverGameplay(action);enterRoom(packet.state.location,packet.state.position);updateAdventurePanel();
+  if(action==='millCellarEnter'&&first)showTransaction('Hidden place discovered',[{icon:'✦',text:'The Forgotten Mill Cellar · Recorded in your field journal'}]);
+ }catch(error){note(error.message);}
+}
+async function openMillCellarChest(){
+ if(adventure.millCellarClaimed){note('You have recovered the millkeeper’s supplies. This chest stays open.');return;}
+ try{await serverGameplay('millCellarChest');updateAdventurePanel();showTransaction('Millkeeper’s supplies',[{icon:'◆',text:'+1 Shield Awakening Stone · Use in Essences'}],125);}
+ catch(error){note(error.message);}
+}

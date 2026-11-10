@@ -5,12 +5,15 @@ import {drawRiverGround,drawRiverWater,drawRiverProp,riverPropHeights} from './w
 import {drawWatchGround,drawWatchProp,drawWatchAtmosphere,watchPropHeights} from './watch-art.js';
 import {dungeonFloor,dungeonRooms,isDungeonMob} from './dungeon-arena.js';
 import {drawDungeonGround,drawDungeonProp,dungeonHeights} from './dungeon-art.js';
+import {cellarArea} from './mill-cellar.js';
+import {cellarHeights,drawCellarGround,drawCellarProp,drawCellarAtmosphere} from './mill-cellar-art.js';
 'use strict';
 
 export const moonwood=(()=>{
   const view={width:540,height:349,cols:12,rows:10,originX:252,originY:105};
   const seed='moonwood-01';
   const areas={
+    millCellar:cellarArea,
     [wildlifeRoom]:wildlifeArea,
     ...willowmereAreas,...watchAreas,
     depthsGate:{number:'D1',name:'Flooded Gate',description:'Broken walkways surround a flooded gate. A Mire Skitter darts between the stones. Pull the sluice lever to reach the far passage.',badge:'MOONWELL DEPTHS',floor:'Chamber 1',center:[4,5],palette:['#31454e','#405961','#7a8a89'],landmark:['depthsSkitter',6,5,5,5],authored:[['pillar',3,2],['pillar',8,2],['wildrock',2,7],['wildrock',9,7],['sluiceLever',3,4],['gateSupply',10,4]]},
@@ -31,6 +34,7 @@ export const moonwood=(()=>{
     pond:{number:'10',name:'Silverfin Pond',description:'Cast a line from the old jetty and watch the moonlight ripple over the water.',badge:'MOONWOOD',floor:'Fishing pond',center:[3,5],palette:['#334f59','#486570','#8b9296'],landmark:['fishingPost',5,5,4,5],authored:[['wildtree',1,1],['wildtree',3,1],['wildtree',1,8],['wildtree',4,8],['wildrock',4,2],['wildbloom',3,7],['wildbloom',4,3]]}
   };
   const heights={...riverPropHeights,...watchPropHeights,...dungeonHeights,sideSeal:24,sideTreasure:18,restAltar:28,cachePassage:30,essenceCache:24,sluiceLever:20,gateSupply:12,shellChime:27,galleryCache:13,vaultRelief:28,glowFungus:20,vaultCrystal:30,campfire:24,timberTree:51,wildboar:22,stonebackBeetle:28,moonbackStag:43,wildtree:51,wildrock:13,wildbloom:22,pillar:28,lanternStand:31,mothAltar:24,moonwell:35,moonbloom:29,fishingPost:26};
+  Object.assign(heights,cellarHeights);
   const doors=Object.fromEntries(Object.keys(areas).map(id=>[id,[]]));
   const coordinate=([x,y])=>({x,y});
   function connect(a,b,from,to,gate){
@@ -40,6 +44,7 @@ export const moonwood=(()=>{
     doors[b].push({to:a,side:'wild',tile:{x:bx,y:by},inside:{x:outx,y:outy},arrival:{x:inx,y:iny},label:backLabel,gate});
   }
   connect('millbrook','ambermead',[6,0,6,1,'MILLBROOK'],[0,5,1,5,'AMBER ROAD']);
+  connect('millbrook','millCellar',[6,2,6,2,'MILLBROOK'],[0,6,1,6,'CELLAR'],'millCellarFound');
   connect('ambermead','beaconwatch',[5,0,5,1,'AMBER ROAD'],[0,5,1,5,'WATCHTOWER']);
   connect('ambermead','thornwood',[11,2,10,2,'AMBER ROAD'],[0,5,1,5,'THORNWOOD !']);
   connect('thornwood','beaconwatch',[5,0,5,1,'THORNWOOD'],[6,9,6,8,'WATCHTOWER']);
@@ -133,6 +138,7 @@ export const moonwood=(()=>{
   const layouts=Object.fromEntries(Object.keys(areas).map(id=>[id,generate(id)]));
 
   function drawGround(id,{point,polygon,surface,block,rect}){
+    if(id==='millCellar'){drawCellarGround({point,polygon,surface,block,rect});return;}
     const {cols,rows}=id===wildlifeRoom?wildlifeView:view, area=areas[id], path=layouts[id].path;
     const [ground,light,trail]=area.palette;
     if(dungeonRooms.includes(id)){drawDungeonGround(id,{point,polygon,surface,block,rect});return;}
@@ -172,6 +178,7 @@ export const moonwood=(()=>{
     }
   }
   function drawWater(id,time,{point,surface,block,ctx,reduced,depthsRun,progress={}}){
+    if(id==='millCellar'){drawCellarAtmosphere(time,{point,ctx,reduced});return;}
     if(id===wildlifeRoom){drawReserveWater(time,{point,surface,reduced});return;}
     if(watchRooms.includes(id)){drawWatchAtmosphere(id,time,{point,surface,block,ctx,reduced,progress});return;}
     if(willowmereRooms.includes(id)){drawRiverWater(id,time,{point,surface,ctx,reduced});return;}
@@ -202,6 +209,7 @@ export const moonwood=(()=>{
 
   function drawProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,progress,combat,depthsRun,pose={}}){
     const {x,y,type}=item;
+    if(Object.hasOwn(cellarHeights,type)){drawCellarProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,progress,pose});return;}
     if(Object.hasOwn(dungeonHeights,type)){drawDungeonProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,pose,combat});return;}
     if(Object.hasOwn(watchPropHeights,type)){drawWatchProp(item,time,{point,polygon,surface,block,rect,ctx,reduced,progress});return;}
     if(Object.hasOwn(riverPropHeights,type)){drawRiverProp(item,time,{point,polygon,surface,block,rect,ctx,reduced});return;}

@@ -34,7 +34,8 @@ export function startCombatEncounter(state,enemy,now){
   state.combatId=crypto.randomUUID();state.combatReceipt={id:crypto.randomUUID(),events:[]};
   state.hunting.encounter=createHunt(now,enemy.health,enemy.id,isExhausted(state.vitals));
   state.hunting.encounter.summary=normalizeCombatSummary({startedAt:now});
-  if(enemy.room.startsWith('depths'))Object.assign(state.hunting.encounter,{arenaVersion:1,arenaRoom:enemy.room,arenaPlayer:{...(state.position??{x:5,y:5})},arenaEnemy:{x:6,y:5},arenaStepAt:now,arenaLockedFor:0,arenaSolids:(moonwood.layouts[enemy.room]?.scenery??[]).filter(p=>p.type!==enemy.prop).map(({x,y})=>({x,y}))});
+  if(enemy.room.startsWith('depths')||enemy.room==='millCellar')Object.assign(state.hunting.encounter,{arenaVersion:1,arenaRoom:enemy.room,arenaPlayer:{...(state.position??{x:5,y:5})},arenaEnemy:{x:6,y:5},arenaStepAt:now,arenaLockedFor:0,arenaSolids:(moonwood.layouts[enemy.room]?.scenery??[]).filter(p=>p.type!==enemy.prop).map(({x,y})=>({x,y}))});
+  if(enemy.room==='millCellar')state.hunting.encounter=initializeBrain(state.hunting.encounter,enemy,now);
   if(enemy.room.startsWith('depths'))state.hunting.encounter=initializeAdds(initializeBrain(state.hunting.encounter,enemy,now),now,state.familiars?.equipped==='fox');
   if(state.characterRules?.combat?.enabled||state.plan?.activeHunt)state.hunting.encounter.tacticsAt=now;
 }
@@ -88,7 +89,8 @@ function result(state,event,now,random=Math.random){
           state.wardrobe.owned.push(veilCloakId);
           event.clothingDrop=rewards.clothing=veilCloakId;
         }
-      }else state.hunting[enemy.id==='thornBoar'?'thornRespawnAt':enemy.id==='beetle'?'beetleRespawnAt':'respawnAt']=now+enemy.respawn;
+      }else if(enemy.id==='millCustodian'&&state.combatId)state.adventure.millCellarCleared=true;
+      else state.hunting[enemy.id==='thornBoar'?'thornRespawnAt':enemy.id==='beetle'?'beetleRespawnAt':'respawnAt']=now+enemy.respawn;
       const before=state.huntingLoot[enemy.loot]??0;
       state.huntingLoot[enemy.loot]=Math.min(1000000,before+1);
       if(state.huntingLoot[enemy.loot]>before)rewards.loot={[enemy.loot]:state.huntingLoot[enemy.loot]-before};
@@ -104,7 +106,8 @@ function result(state,event,now,random=Math.random){
       else{const previous=depthsStages[state.depthsRun.cleared-1];
       if(previous)move(state,previous.room,{x:4,y:5});
       else{state.depthsRun=null;move(state,'ruins');}}
-    }else if(enemy.id==='thornBoar')move(state,'ambermead',{x:10,y:2});
+    }else if(enemy.id==='millCustodian')move(state,'millbrook',{x:6,y:2});
+    else if(enemy.id==='thornBoar')move(state,'ambermead',{x:10,y:2});
     else if(enemy.id==='beetle')move(state,'creek',{x:10,y:4});
     else move(state,'trail',{x:7,y:1});
   }
@@ -198,6 +201,7 @@ export function activityAction(state,action,body,now,random){
       if(state.hunting.moonbackSighting===sighting.id)throw new Error('You already won this sighting. Follow the next trail when it returns.');
       enemy={...huntEnemies.moonbackStag,room:state.location};
     }
+    if(enemy?.id==='millCustodian'&&(!state.adventure.millCellarFound||state.adventure.millCellarCleared))throw new Error('Choose another challenge. The cellar custodian has already been defeated.');
     if(!enemy||!adjacent(state,sighting??{x:6,y:5}))throw new Error('Travel beside the creature before fighting.');
     if(!state.combatGear.equippedWeapon||!canUseWeapon(state.stats,state.combatGear.equippedWeapon))throw new Error('Choose a weapon you can use before fighting.');
     if(!sighting&&(index>=0?!depthsEnemyAvailable(state.depthsRun,state.location):now<huntRespawnAt(state.hunting,enemy)))throw new Error('Invalid encounter. Wait for the creature to return.');

@@ -5,6 +5,7 @@ import {factionHall,factionHallLayout} from './faction-hall.js';
 import {furnitureCatalog,catalogFurnitureSize} from './furniture-catalog.js';
 export * from './outfit-magic.js';
 import {bakeryLayout} from './cooking.js';
+import {cellarFloor} from './mill-cellar.js';
 export {factionRegistrar,factionHall,factionHallLayout,furnitureCatalog,catalogFurnitureSize};
 export const socialRooms={[wildlifeRoom]:[wildlifeView.cols,wildlifeView.rows],...Object.fromEntries([...willowmereRooms,...watchRooms].map(id=>[id,[12,10]])),grove:[12,10],shrine:[12,10],roots:[12,10],pond:[12,10],logging:[12,10],clearing:[12,10],ruins:[12,10],trail:[12,10],creek:[12,10],tailor:[10,10],furnishings:[10,10],hub:[18,16],lounge:[10,10],outside:[14,12],store:[10,10],market:[10,10],bakery:[10,10],[factionHall]:[10,10],armory:[10,10],home:[10,10]};
 const layouts={[wildlifeRoom]:wildlifeArea.authored,...Object.fromEntries(watchRooms.map(id=>[id,watchAreas[id].authored])),...Object.fromEntries(willowmereRooms.map(id=>[id,willowmereAreas[id].authored])),
@@ -26,7 +27,7 @@ export function furnitureBox(item){
   return {x,y,w,d};
 }
 export function roomBoxes(room,homeFurniture=[]){return (room==='home'?homeFurniture:(layouts[room]??[]).map(([type,x,y,rot])=>({type,x,y,rot}))).filter(item=>item.type!=='shelf').map(furnitureBox);}
-export function validRoomTile(room,x,y,boxes=[]){const size=socialRooms[room];return !!size&&Number.isInteger(x)&&Number.isInteger(y)&&x>=0&&y>=0&&x<size[0]&&y<size[1]&&(room!==wildlifeRoom||!reserveWater(x,y))&&(!watchRooms.includes(room)||!watchWater(room,x,y))&&(!willowmereRooms.includes(room)||!riverWater(room,x,y)||riverBridge(room,x,y))&&!boxes.some(b=>x<b.x+b.w&&x+1>b.x&&y<b.y+b.d&&y+1>b.y);}
+export function validRoomTile(room,x,y,boxes=[]){const size=socialRooms[room]??(room==='millCellar'?[12,10]:null);return !!size&&Number.isInteger(x)&&Number.isInteger(y)&&x>=0&&y>=0&&x<size[0]&&y<size[1]&&(room!=='millCellar'||cellarFloor(x,y))&&(room!==wildlifeRoom||!reserveWater(x,y))&&(!watchRooms.includes(room)||!watchWater(room,x,y))&&(!willowmereRooms.includes(room)||!riverWater(room,x,y)||riverBridge(room,x,y))&&!boxes.some(b=>x<b.x+b.w&&x+1>b.x&&y<b.y+b.d&&y+1>b.y);}
 export function reachableMove(room,from,to,boxes,maxSteps){
   if(!validRoomTile(room,to.x,to.y,boxes))return false;
   const queue=[{x:from.x,y:from.y,n:0}],seen=new Set();

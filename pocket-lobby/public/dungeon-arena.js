@@ -1,11 +1,14 @@
+import {cellarFloor} from './mill-cellar.js';
 import {moonbackSite} from './moonback.js';
 
 // Shared geometry and attack footprints. Rendering and server damage use the same cells.
 export const dungeonRooms=['depthsGate','depthsGallery','depthsCache','depthsTreasury','depthsRest','depthsTrial','depthsVault'];
+export const isCombatArena=room=>dungeonRooms.includes(room)||room==='millCellar';
 export const dungeonMobTypes=['depthsSkitter','depthsWarden','depthsSeer','depthsSentinel','depthsColossus'];
 export const isDungeonMob=type=>dungeonMobTypes.includes(type);
 export const dungeonCover=[{x:4,y:3},{x:3,y:6}];
 export function dungeonFloor(room,x,y){
+ if(room==='millCellar')return cellarFloor(x,y);
  if(!dungeonRooms.includes(room))return true;
  if(x<1||x>10||y<1||y>8)return false;
  if(room==='depthsGate')return x<=7?(x>=2&&y>=2||y>=4&&y<=6):x===8?y>=2&&y<=7:x>=9&&y>=2&&y<=7;

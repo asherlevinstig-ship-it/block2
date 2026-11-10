@@ -24,7 +24,7 @@ export function autoTilePath(room,from,to,state){
 }
 export function planAutoWalk(motion,state,now,canCross=true){
  const destination=state.location,goal=state.position??{x:5,y:7};
- if(!motion||!socialRooms[motion.room])motion={room:destination,x:goal.x,y:goal.y,direction:'right',back:false};
+ if(!motion||!socialRooms[motion.room]&&motion.room!=='millCellar')motion={room:destination,x:goal.x,y:goal.y,direction:'right',back:false};
  const door=motion.room!==destination?autoRoomPath(motion.room,destination,state)?.[0]:null;
  if(motion.room!==destination&&!door)return {motion:{...motion,moving:false,blocked:true},walk:null};
  const target=door?.tile??goal,path=autoTilePath(motion.room,motion,target,state);

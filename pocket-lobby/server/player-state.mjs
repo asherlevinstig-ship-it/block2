@@ -1,3 +1,4 @@
+import {cellarFlags} from '../public/mill-cellar.js';
 import {awardFamiliarBond} from './familiar-progression.mjs';
 import {wildlifeRoom,wildlifeView} from '../public/wildlife.js';
 import {normalizeVitals,useHunger,exertionDuration} from '../public/player-vitals.js';
@@ -52,7 +53,7 @@ function furniture(items){
     return {id:item.id,type:item.type,x:item.x,y:item.y,rot:item.rot};
   });
 }
-const locations=new Set([wildlifeRoom,...watchRooms,...willowmereRooms,"home","tailor","furnishings","hub","lounge","outside","store","market","bakery","factionHall","trail","grove","creek","shrine","ruins","roots","pond","clearing","armory","logging",...depthsStages.map(stage=>stage.room),depthsCacheRoom,...Object.values(depthsSideRooms).map(side=>side.room)]);
+const locations=new Set(["millCellar",wildlifeRoom,...watchRooms,...willowmereRooms,"home","tailor","furnishings","hub","lounge","outside","store","market","bakery","factionHall","trail","grove","creek","shrine","ruins","roots","pond","clearing","armory","logging",...depthsStages.map(stage=>stage.room),depthsCacheRoom,...Object.values(depthsSideRooms).map(side=>side.room)]);
 function normalizeFirstUpgrade(input){
   if(input===undefined)return {unlocked:false,choice:null,complete:false,sale:null};
   if(!input||typeof input!=='object'||Array.isArray(input)||typeof input.unlocked!=='boolean'||typeof input.complete!=='boolean'||![null,'fishing','combat'].includes(input.choice))throw new Error('Invalid first upgrade.');
@@ -83,8 +84,12 @@ export function normalizeState(input={}){
   if(Object.keys(fishStock).some(id=>!fishProducts[id]))throw new Error("Unknown fish.");
   const a=input.adventure??{};
   const adventure={};
-  for(const id of [...watchFlags,"lantern","groveTrail","bridge","shrine","shortcut"])adventure[id]=a[id]===true;
-  adventure.discovered=[...new Set((Array.isArray(a.discovered)?a.discovered:[]).filter(id=>[wildlifeRoom,...watchRooms,...willowmereRooms,"trail","grove","creek","shrine","ruins","roots","pond","clearing","logging"].includes(id)))];
+  for(const id of [...watchFlags,...cellarFlags,"lantern","groveTrail","bridge","shrine","shortcut"])adventure[id]=a[id]===true;
+  if(input.location==='millCellar'&&!adventure.millCellarFound)throw new Error('Invalid undiscovered cellar location.');
+  adventure.discovered=[...new Set((Array.isArray(a.discovered)?a.discovered:[]).filter(id=>["millCellar",wildlifeRoom,...watchRooms,...willowmereRooms,"trail","grove","creek","shrine","ruins","roots","pond","clearing","logging"].includes(id)))];
+  if(!adventure.millCellarFound)adventure.discovered=adventure.discovered.filter(id=>id!=='millCellar');
+  adventure.millCellarCleared=adventure.millCellarFound&&adventure.millCellarCleared;
+  adventure.millCellarClaimed=adventure.millCellarCleared&&adventure.millCellarClaimed;
   const avatar=input.avatar??{name:"Guest",outfit:0,hair:0};
   if(typeof avatar.name!=="string"||avatar.name.length>20||!Number.isInteger(avatar.outfit)||avatar.outfit<0||avatar.outfit>13||!Number.isInteger(avatar.hair)||avatar.hair<0||avatar.hair>4)throw new Error("Invalid appearance.");
   const wardrobe=normalizeWardrobe(input.wardrobe,avatar);

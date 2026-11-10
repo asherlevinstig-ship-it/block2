@@ -1,3 +1,5 @@
+import {cellarAction} from './mill-cellar.mjs';
+import {cellarFlags} from '../public/mill-cellar.js';
 import {awardFamiliarBond} from './familiar-progression.mjs';
 import {familiarAction} from './familiars.mjs';
 import {familiarFishingTime,familiarBond} from '../public/familiars.js';
@@ -47,6 +49,7 @@ function location(state,rooms){
 export function applyGameplayAction(state,action,body,now=Date.now(),random=Math.random){
   // Combat requests advance their own clocks so their receipt includes all events.
   if(action!=='combat')settleActivities(state,now,random);
+  if(cellarAction(state,action))return;
   if(watchAction(state,action,body)||familiarAction(state,action,body,now,random))return;
   if(activityAction(state,action,body,now,random)||essenceAction(state,action,body))return;
   if(gamblingAction(state,action,body,now,random===Math.random?undefined:random))return;
@@ -305,7 +308,8 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
 export function protectFishingState(previous,next){
   next.bank=previous.bank;
   next.familiars=previous.familiars;
-  next.adventure={...next.adventure};for(const key of watchFlags)next.adventure[key]=previous.adventure?.[key]===true;
+  next.adventure={...next.adventure};for(const key of [...watchFlags,...cellarFlags])next.adventure[key]=previous.adventure?.[key]===true;
+  if(!previous.adventure?.millCellarFound)next.adventure.discovered=(next.adventure.discovered??[]).filter(id=>id!=='millCellar');
   if(previous.pendingCharacterRules)next.pendingCharacterRules=previous.pendingCharacterRules;else delete next.pendingCharacterRules;
   const owned=normalizeWardrobe(previous.wardrobe,previous.avatar).owned;
   next.outfitMagic=normalizeOutfitMagic(previous.outfitMagic);
