@@ -1,12 +1,12 @@
 import {fishProducts,fishingCatalog} from './fishing.js';
 import {weaponCatalog} from './hunting.js';
-import {mealRecipes} from './cooking.js';
+import {foodItems} from './cooking.js';
 export const VAULT_CAP=1000000;
 export const vaultCatalog=Object.fromEntries([
  ...Object.entries(fishProducts).map(([id,item])=>['fish:'+id,{name:item.name,kind:'fish',id,stackable:true}]),
  ['timber',{name:'Timber',kind:'timber',stackable:true}],['bait',{name:'Riverworms',kind:'bait',stackable:true}],
  ...Object.entries({boar:'Boar Meat',rabbit:'Rabbit',deer:'Deer',stonebackShell:'Shell Fragment',moonwellShard:'Moonwell Shard'}).map(([id,name])=>['loot:'+id,{name,kind:'loot',id,stackable:true}]),
- ...Object.entries(mealRecipes).map(([id,item])=>['meal:'+id,{name:item.name,kind:'meal',id,stackable:true}]),
+ ...Object.entries(foodItems).map(([id,item])=>['meal:'+id,{name:item.name,kind:'meal',id,stackable:true}]),
  ...Object.entries(weaponCatalog).filter(([id])=>id!=='trainingSword').map(([id,item])=>['weapon:'+id,{name:item.name,kind:'weapon',id,stackable:false}]),
  ...Object.entries(fishingCatalog.rods).filter(([id])=>id!=='reed').map(([id,item])=>['rod:'+id,{name:item.name,kind:'rod',id,stackable:false}])
 ]);

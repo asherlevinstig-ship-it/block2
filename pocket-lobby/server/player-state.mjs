@@ -18,7 +18,7 @@ import {settleRoutineQueue} from './routine-queue.mjs';
 import {finishRoutineReport} from './routine-report.mjs';
 import {skillLevel,progressionVersion,MAX_SKILL_XP} from '../public/skill-curve.js';
 import {normalizeMagic} from '../public/essences.js';
-import {mealRecipes} from '../public/cooking.js';
+import {foodItems} from '../public/cooking.js';
 import {normalizeWardrobe,outfitAppearance} from '../public/wardrobe.js';
 import {normalizeCharacterRules} from '../public/character-rules.js';
 import {depthsStages,depthsCacheRoom,depthsSideRooms,normalizeDepthsRun} from '../public/depths.js';
@@ -111,7 +111,7 @@ export function normalizeState(input={}){
   if(input.familiars!==undefined)state.familiars=normalizeFamiliars(input.familiars);
   if(input.magic!==undefined)state.magic=normalizeMagic(input.magic);
   state.meals=counts(input.meals);
-  if(Object.keys(state.meals).some(id=>!Object.hasOwn(mealRecipes,id)))throw new Error('Invalid meal inventory.');
+  if(Object.keys(state.meals).some(id=>!Object.hasOwn(foodItems,id)))throw new Error('Invalid meal inventory.');
   if(depthsRun)state.depthsRun=depthsRun;
   if(input.depthsDiscovered===true||depthsRun)state.depthsDiscovered=true;
   if(input.loungeLayout==="gaming")state.loungeLayout="gaming";

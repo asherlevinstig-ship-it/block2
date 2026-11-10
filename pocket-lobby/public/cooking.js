@@ -7,6 +7,10 @@ export const mealRecipes={
   heartyStew:{name:'Hearty Stew',healing:60,ingredient:'Boar Meat',amount:2,timber:2,level:2,xp:15,description:'A rich stew for a longer expedition.'},
   silverfinFeast:{name:'Silverfin Feast',healing:80,ingredient:'Silverfin',amount:3,timber:2,level:4,xp:20,description:'A generous fish supper for a battle-worn adventurer.'}
 };
+export const towerBread={id:'towerBread',name:'Tower Bread',price:3,healing:0,hunger:25,description:'A cheap ration for the road.'};
+export const foodStall={x:6,y:5};
+export const foodItems={...mealRecipes,[towerBread.id]:towerBread};
+export const foodFullness=item=>item.hunger??item.healing;
 export const cookingQueueRecipes={cookFish:'grilledSilverfin',cookStew:'boarStew',cookHeartyStew:'heartyStew',cookFeast:'silverfinFeast'};
 export const homeStove=state=>(state.ownedFurniture?.stove??0)>0?(state.homeFurniture??[]).find(item=>item.type==='stove')??null:null;
 const silverfinGrades=['silverfin','silverfin_fine','silverfin_rare'];

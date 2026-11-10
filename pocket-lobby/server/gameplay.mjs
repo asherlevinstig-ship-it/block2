@@ -24,7 +24,7 @@ import {bankDepthsSpoils,moonwellShard} from '../public/depths.js';
 import {activityAction,settleActivities} from './activities.mjs';
 import {essenceAction} from './essences.mjs';
 import {gamblingAction} from './gambling.mjs';
-import {mealRecipes,prepareMeal} from '../public/cooking.js';
+import {foodItems,foodFullness,foodStall,mealRecipes,prepareMeal,towerBread} from '../public/cooking.js';
 import {moonwood} from '../public/moonwood.js';
 
 const besideRiverTrader=state=>state.position&&Math.abs(state.position.x-3)+Math.abs(state.position.y-4)===1;
@@ -88,11 +88,19 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
     }else{if(typeof body.id!=='string')throw new Error('Choose a weapon reward to dismiss.');loot.notices=loot.notices.filter(n=>n.id!==body.id);}
     return;
   }
+  if(action==='buyBread'){
+    available(state);location(state,['hub']);
+    const position=state.position;
+    if(!position||Math.abs(position.x-foodStall.x)+Math.abs(position.y-foodStall.y)!==1)throw new Error('Travel to the Tower food stall first.');
+    const quantity=body.quantity,cost=quantity*towerBread.price,count=state.meals[towerBread.id]??0;
+    if(!Number.isInteger(quantity)||quantity<1||quantity>10||cost>state.credits||count+quantity>1000000)throw new Error('Choose up to 10 rations within your wallet and inventory limits.');
+    state.credits-=cost;state.meals[towerBread.id]=count+quantity;return;
+  }
   if(action==='cook'||action==='eat'){
     available(state);
     if(state.fishingCast||state.timberCut)throw new Error('Invalid activity. Finish fishing or chopping first.');
-    if(!Object.hasOwn(mealRecipes,body.id))throw new Error('Choose a meal from the recipe list.');
-    const recipe=mealRecipes[body.id],meals=state.meals??={};
+    if(!Object.hasOwn(action==='cook'?mealRecipes:foodItems,body.id))throw new Error('Choose a meal from the recipe list.');
+    const recipe=foodItems[body.id],meals=state.meals??={};
     const count=meals[body.id]??0;
     if(action==='cook'){
       const campfire=moonwood.layouts.trail.scenery.find(item=>item.type==='campfire');
@@ -103,10 +111,10 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
       prepareMeal(state,body.id);
     }else{
       if(count<1)throw new Error('Choose a meal you have in Inventory.');
-      if(state.health>=100&&normalizeVitals(state.vitals).hunger>=100)throw new Error('Invalid meal use. Your health and hunger are already full.');
+      if((state.health>=100||!recipe.healing)&&normalizeVitals(state.vitals).hunger>=100)throw new Error('Invalid meal use. Your health and hunger are already full.');
       if(count===1)delete meals[body.id];
       else meals[body.id]=count-1;
-      state.health=Math.min(100,state.health+recipe.healing);feedPlayer(state,recipe.healing);
+      state.health=Math.min(100,state.health+recipe.healing);feedPlayer(state,foodFullness(recipe));
     }
     return;
   }

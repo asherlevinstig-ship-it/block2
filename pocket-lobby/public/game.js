@@ -1729,7 +1729,7 @@ function updateCombatMoment(time){
 }
 let editing=false,selection=null,zoom=1,hitboxes=[],bounds=null,bubbleUntil=0,noticeUntil=0;
 const hubFurniture=[
-  ['reception',3,2],['warden',10,3],['factionRegistrar',factionRegistrar.x,factionRegistrar.y],
+  ['reception',3,2],['warden',10,3],['foodStall',foodStall.x,foodStall.y],['factionRegistrar',factionRegistrar.x,factionRegistrar.y],
   ['plant',1,1],['plant',16,1],
   ['sofa',2,10],['bench',2,12],
   ['sofa',13,8,2],['bench',13,10,2]
@@ -2365,6 +2365,13 @@ function object(item,highlight=false,time=0) {
     const [wx,wy]=point(x+.5,y+.5);
     sprite(ctx,wx,wy,{outfit:3,hair:2},{direction:'right',time,weapon:true,weaponTier:'basicAxe',pose:{angle:-.4}});return;
   }
+  if(type==='foodStall'){
+    const [fx,fy]=point(x+.5,y+.5);
+    sprite(ctx,fx,fy,{outfit:3,hair:2},{direction:'right',time});
+    surface(x+.08,y+.63,.84,.30,10,'#9d653e','#e8b26b');
+    surface(x+.22,y+.69,.26,.17,11,'#e2a050');
+    surface(x+.55,y+.68,.26,.18,11,'#f7c477');return;
+  }
   if(type==='factionRegistrar'){
     const [rx,ry]=point(x+.5,y+.5);
     surface(x+.14,y+.14,.72,.72,.3,'#c79d503c');
@@ -2827,6 +2834,8 @@ function updateWorldLabels(){
   if(currentRoom==='home')for(const item of homeFurniture.filter(item=>item.type==='safe'))add('Home safe',...point(item.x+.5,item.y+.5,31),'npc',()=>use(item),'Gold & item storage');
   if(currentRoom==='home')add('YOUR HOME',...point(5,0,44),'sign',null,avatar.name);
   if(currentRoom==='hub'){
+    const stall=hubFurniture.find(item=>item.type==='foodStall');
+    add('Food stall',...point(stall.x+.5,stall.y+.5,44),'npc',()=>use(stall),'Tower Bread');
     const registrar=hubFurniture.find(item=>item.type==='factionRegistrar');
     add(factionRegistrar.name,...point(registrar.x+.5,registrar.y+.5,45),'npc',()=>use(registrar),'Faction registry');
     if(lobbyRoutesOpen())add('Job board',...point(4.5,2,39),'npc',openJobBoard);
@@ -3016,7 +3025,7 @@ function draw(time){
     object(item,treeHover||editing&&(selection?.id===item.id||hoverItem?.id===item.id)&&!fixed(item),time);
     ctx.globalAlpha=1;
     if(item.defeated||item===ghost||(fixed(item)&&!isGamingTable(item)))continue;
-    const [w,d]=dimensions(item), h=moonwood.heights[item.type]??{armoryCounter:32,weaponRack:37,anvil:19,brazier:25,workbench:23,woodStool:13,woodTable:18,bookcase:37,woodcutter:43,factionRegistrar:43,warden:43,enchanter:43,tradeCounter:32,harvestCrates:16,tackleCounter:32,rodRack:36,baitCrates:16,blackjack:19,roulette:22,reception:32,stove:28,safe:25,bed:24,comfortBed:24,royalBed:28,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39,bench:22,streetlamp:55,fountain:37}[item.type];
+    const [w,d]=dimensions(item), h=moonwood.heights[item.type]??{armoryCounter:32,weaponRack:37,anvil:19,brazier:25,workbench:23,woodStool:13,woodTable:18,bookcase:37,woodcutter:43,foodStall:43,factionRegistrar:43,warden:43,enchanter:43,tradeCounter:32,harvestCrates:16,tackleCounter:32,rodRack:36,baitCrates:16,blackjack:19,roulette:22,reception:32,stove:28,safe:25,bed:24,comfortBed:24,royalBed:28,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39,bench:22,streetlamp:55,fountain:37}[item.type];
     const height=isTimberTree(item)&&treeState(item).regrowsAt?6:h;
     const shape=[point(item.x,item.y+d),point(item.x+w,item.y+d),point(item.x+w,item.y),point(item.x+w,item.y,height),point(item.x,item.y,height),point(item.x,item.y+d,height)];
     hitboxes.push({item,shape});
@@ -3793,6 +3802,8 @@ function finishInteraction(){
     }else note('You already have your basic axe. Equip it in Inventory to gather timber.');
   }else if(isTimberTree(item)){
     beginChopping(item);
+  }else if(item.type==='foodStall'){
+    openFoodStall();
   }else if(item.type==='factionRegistrar'){
     window.towerOpenFactionRegistrar?.();
   }else if(item.type==='warden'){
@@ -3970,9 +3981,37 @@ function windowItemArt(kind){
   return '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M18 18h28l7 32-21 8-21-8z" fill="#a78050" stroke="#edca87" stroke-width="2"/><path d="M24 18V9h16v9M12 34h40" fill="none" stroke="#edca87" stroke-width="3"/></svg>';
 }
 function mealArt(id){
+  if(id===towerBread.id)return '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M8 38c-3-13 7-24 20-24h14c11 0 17 10 14 20-2 9-8 14-17 14H17c-5 0-8-4-9-10z" fill="#d69043" stroke="#ffcf83" stroke-width="2"/><path d="m20 21 5 8m7-11 5 8m7-7 5 7" stroke="#fff0be" stroke-width="3" stroke-linecap="round"/></svg>';
+
   const fish='<path d="M8 35 3 23l13 5q15-16 37-2l6 6-6 6Q32 50 16 36L3 41z" fill="#83b2c5" stroke="#d5e6dc" stroke-width="2"/><path d="m26 25 4 14m6-16 4 15" stroke="#416d7d" stroke-width="3"/><circle cx="49" cy="31" r="2" fill="#243443"/>';
   const stew='<path d="M9 29h46l-5 17q-18 13-36 0z" fill="#b57557" stroke="#edb787" stroke-width="2"/><ellipse cx="32" cy="29" rx="23" ry="8" fill="#835142" stroke="#edb787" stroke-width="2"/><path d="m21 29 5-3 4 4-5 2zm13-2 5-2 5 4-6 2z" fill="#e4ae62"/><path d="M25 17q-5-4 0-9m12 10q-5-4 0-10" fill="none" stroke="#e4dcc2" stroke-width="2"/>';
   return '<svg viewBox="0 0 64 64" aria-hidden="true">'+(id==='boarStew'||id==='heartyStew'?stew:fish)+'</svg>';
+}
+let buyingBread=false;
+function renderFoodStall(){
+  $('foodStallStock').textContent=(meals[towerBread.id]??0)+' in bag · '+credits+' gold in wallet';
+  for(const button of $('foodStallDialog').querySelectorAll('[data-bread-quantity]')){
+    const quantity=Number(button.dataset.breadQuantity);
+    button.textContent='Buy '+quantity+' · '+quantity*towerBread.price+' gold';
+    button.disabled=buyingBread||credits<quantity*towerBread.price||!window.playerCloud?.gameplay;
+  }
+}
+function openFoodStall(){
+  $('foodStallArt').innerHTML=mealArt(towerBread.id);
+  $('foodStallStatus').textContent='';renderFoodStall();$('foodStallDialog').showModal();
+}
+for(const button of $('foodStallDialog').querySelectorAll('[data-bread-quantity]')){
+  button.onclick=async()=>{
+    if(buyingBread)return;
+    buyingBread=true;renderFoodStall();
+    const quantity=Number(button.dataset.breadQuantity);
+    try{
+      await serverGameplay('buyBread',{quantity});
+      $('foodStallStatus').textContent=quantity+' Tower Bread added to Inventory.';
+      showTransaction('Rations purchased',[{icon:'♨',text:'+'+quantity+' Tower Bread'}],-quantity*towerBread.price,{auto:true});
+    }catch(error){$('foodStallStatus').textContent=error.message;}
+    finally{buyingBread=false;renderFoodStall();}
+  };
 }
 let pendingCookingId=null;
 function openCampfire(){
@@ -4019,7 +4058,7 @@ async function eatMeal(id){
   try{
     await serverGameplay('eat',{id});
     updateDepthsPanel();
-    const message=mealRecipes[id].name+' restored '+(health-before)+' HP and '+(playerVitals.hunger-beforeHunger)+' hunger.';
+    const message=foodItems[id].name+' restored '+(foodItems[id].healing?(health-before)+' HP and ':'')+(playerVitals.hunger-beforeHunger)+' hunger.';
     status.textContent=message;
     note(message);
   }catch(error){status.textContent=error.message;}
@@ -4064,13 +4103,13 @@ function bagEntries(){
       action:'Open Essences',disabled:unavailable(),run:openEssences});
   }
   for(const [id,quantity] of Object.entries(meals)){
-    const recipe=mealRecipes[id];
+    const recipe=foodItems[id];
     if(!quantity||!recipe)continue;
     const busy=unavailable()||!!woodSession||!!fishingSession;
     entries.push({key:'meal:'+id,name:recipe.name,category:'materials',quantity,art:mealArt(id),
-      description:recipe.description,stats:'Restores up to '+recipe.healing+' HP and hunger · Hunger '+playerVitals.hunger+' / 100',
+      description:recipe.description,stats:'Restores '+foodFullness(recipe)+' hunger'+(recipe.healing?' and up to '+recipe.healing+' HP':'')+' · Hunger '+playerVitals.hunger+' / 100',
       note:busy?'Finish your current activity before eating.':'Eat between fights.',
-      action:health>=100&&playerVitals.hunger>=100?'Already full':'Eat meal',disabled:busy||health>=100&&playerVitals.hunger>=100||!window.playerCloud?.gameplay,run:()=>eatMeal(id)});
+      action:(health>=100||!recipe.healing)&&playerVitals.hunger>=100?'Already full':id===towerBread.id?'Eat bread':'Eat meal',disabled:busy||(health>=100||!recipe.healing)&&playerVitals.hunger>=100||!window.playerCloud?.gameplay,run:()=>eatMeal(id)});
   }
   for(const [id,quantity] of Object.entries(huntingLoot))if(quantity&&tradeCatalog[id])entries.push({key:'loot:'+id,name:tradeCatalog[id].name,category:'materials',art:windowItemArt(id===moonwellShard.id?'shard':'loot'),quantity,description:'Spoils from your adventures.',stats:tradeCatalog[id].price+' gold each',note:id===moonwellShard.id?'Enchant weapons at the Tower Armory, sell for '+moonwellShard.price+' gold, or craft a Moonwell Charm with '+moonwellCharm.timber+' timber.':id===stonebackVest.fragment?'Sell at the Trading Post, or combine with '+stonebackVest.timber+' timber at the Timber Hollow workbench to craft a Stoneback Vest.':'Sell at the Trading Post. Some loot is used in crafting.'});
   return entries;
@@ -5011,6 +5050,8 @@ function castEquippedEssence(slot='q'){
   if(equippedEssenceStatus(Date.now(),slot).canCast)sendServerCombat('essence',slot);
 }
 function currentActivityPrompt(){
+  if(playerVitals.hunger<=LOW_HUNGER&&(meals[towerBread.id]??0)>0&&!fishingSession&&!woodSession&&!player.inCombat)
+    return {label:'FOOD FOR THE ROAD',title:playerVitals.hunger===0?'You’re exhausted':'You’re hungry',text:'Tower Bread restores 25 hunger. Open your bag to eat a ration.',action:'rationBag'};
   if(currentRoom===wildlifeRoom)return null;
   if(currentRoom==='outside')return {label:'SAFE COMBAT PRACTICE',title:'Training courtyard',text:'Learn dodge, counter, stagger and weak spots. Try weapons without health loss or item use.',action:'courtyardPractice'};
   if(currentRoom==='hub'&&!lobbyRoutesOpen()){
@@ -5055,7 +5096,7 @@ function updateActivityPrompt(){
   const visible=!!prompt;
   $('contextGuide').hidden=!visible;
   $('roomLayout').dataset.contextual=String(visible);
-  const proxyControl=prompt?.action&&!['baitRoute','equipHunting','familiarAction'].includes(prompt.action)?$(prompt.action):null;
+  const proxyControl=prompt?.action&&!['baitRoute','equipHunting','familiarAction','rationBag'].includes(prompt.action)?$(prompt.action):null;
   $('contextGuideAction').disabled=proxyControl?.disabled===true||prompt?.action==='familiarAction'&&serverActionBusy;
   $('contextGuideSecondChance').hidden=!prompt?.secondChance;
   $('contextGuideSecondChance').disabled=serverActionBusy;
@@ -5070,6 +5111,7 @@ function updateActivityPrompt(){
   button.hidden=!prompt.action;
   if(!prompt.action)return;
   if(prompt.action==='familiarAction')button.textContent=prompt.button;
+  else if(prompt.action==='rationBag')button.textContent='Open food in Inventory';
   else if(prompt.action==='baitRoute')button.textContent='Show route to bait shop';
   else if(prompt.action==='equipHunting')button.textContent='Open Inventory';
   else if(prompt.action==='visitWarden')button.textContent='Speak to the Warden';
@@ -5390,6 +5432,7 @@ $('contextGuideAction').onclick=()=>{
   const prompt=currentActivityPrompt();
   if(!prompt?.action||unavailable())return;
   if(prompt.action==='familiarAction')useFamiliar();
+  else if(prompt.action==='rationBag'){openInventory();bagCategory='materials';bagSelection='meal:'+towerBread.id;renderBag();$('bagAction').focus({preventScroll:true});}
   else if(prompt.action==='baitRoute')setExplorationDestination('store');
   else if(prompt.action==='equipHunting')openInventory('clearing');
   else if(!$(prompt.action).disabled)$(prompt.action).onclick();
@@ -5506,7 +5549,7 @@ function renderRuleQueue(){
   });
   $('rulesQueueAdd').disabled=ruleQueueDraft.length>=8;
 }
-function draftCharacterRules(){return normalizeCharacterRules({food:{enabled:$('rulesFoodEnabled').checked,eatBelow:Number($('rulesFoodBelow').value),keepMeals:Number($('rulesFoodKeep').value)},enabled:$('rulesEnabled').checked,activity:$('rulesActivity').value,strategy:$('rulesStrategy').value,gambling:{game:$('gambleAutoGame').value,color:$('gambleAutoColor').value,bet:Number($('gambleAutoBet').value),lossLimit:Number($('gambleAutoLoss').value),reserveGold:Number($('gambleAutoReserve').value),profitTarget:Number($('gambleAutoProfit').value),maxRounds:Number($('gambleAutoRounds').value)},goldPolicy:{budget:Number($('goldBudget').value),reserveGold:Number($('goldReserve').value),keepFish:Number($('goldKeepFish').value),keepTimber:Number($('goldKeepTimber').value),keepMeat:Number($('goldKeepMeat').value),keepShells:Number($('goldKeepShells').value),minHealth:Number($('goldMinHealth').value)},keepBait:Number($('rulesKeepBait').value),timberTarget:Number($('rulesTimberTarget').value),queue:{enabled:$('rulesUseQueue').checked,steps:ruleQueueDraft.map(step=>({...step})),repeats:Number($('rulesQueueRepeats').value),budget:Number($('rulesQueueBudget').value),reserveGold:Number($('rulesQueueReserve').value),minHealth:Number($('rulesQueueHealth').value)},goal:{target:$('rulesGoalTarget').value||null,autoBuy:$('rulesGoalAutoBuy').checked},combat:{enabled:$('rulesCombatEnabled').checked,q:$('rulesAutoQ').checked,e:$('rulesAutoE').checked,fleeBelow:Number($('rulesCombatFlee').value),style:$('rulesCombatStyle').value,dodge:$('rulesAutoDodge').checked}});}
+function draftCharacterRules(){return normalizeCharacterRules({food:{breadBudget:Number($('rulesBreadBudget').value),enabled:$('rulesFoodEnabled').checked,eatBelow:Number($('rulesFoodBelow').value),keepMeals:Number($('rulesFoodKeep').value)},enabled:$('rulesEnabled').checked,activity:$('rulesActivity').value,strategy:$('rulesStrategy').value,gambling:{game:$('gambleAutoGame').value,color:$('gambleAutoColor').value,bet:Number($('gambleAutoBet').value),lossLimit:Number($('gambleAutoLoss').value),reserveGold:Number($('gambleAutoReserve').value),profitTarget:Number($('gambleAutoProfit').value),maxRounds:Number($('gambleAutoRounds').value)},goldPolicy:{budget:Number($('goldBudget').value),reserveGold:Number($('goldReserve').value),keepFish:Number($('goldKeepFish').value),keepTimber:Number($('goldKeepTimber').value),keepMeat:Number($('goldKeepMeat').value),keepShells:Number($('goldKeepShells').value),minHealth:Number($('goldMinHealth').value)},keepBait:Number($('rulesKeepBait').value),timberTarget:Number($('rulesTimberTarget').value),queue:{enabled:$('rulesUseQueue').checked,steps:ruleQueueDraft.map(step=>({...step})),repeats:Number($('rulesQueueRepeats').value),budget:Number($('rulesQueueBudget').value),reserveGold:Number($('rulesQueueReserve').value),minHealth:Number($('rulesQueueHealth').value)},goal:{target:$('rulesGoalTarget').value||null,autoBuy:$('rulesGoalAutoBuy').checked},combat:{enabled:$('rulesCombatEnabled').checked,q:$('rulesAutoQ').checked,e:$('rulesAutoE').checked,fleeBelow:Number($('rulesCombatFlee').value),style:$('rulesCombatStyle').value,dodge:$('rulesAutoDodge').checked}});}
 let autoModePage='activity';
 function selectAutoModePage(page){
   autoModePage=page;
@@ -5582,7 +5625,7 @@ function openAdvancedCharacterRules({focusGoal=false}={}){
   for(const [id,key] of [['gambleAutoGame','game'],['gambleAutoColor','color'],['gambleAutoBet','bet'],['gambleAutoLoss','lossLimit'],['gambleAutoReserve','reserveGold'],['gambleAutoProfit','profitTarget'],['gambleAutoRounds','maxRounds']])$(id).value=rules.gambling[key];
   $('rulesStrategy').value=rules.strategy;for(const [id,key] of [['goldBudget','budget'],['goldReserve','reserveGold'],['goldKeepFish','keepFish'],['goldKeepTimber','keepTimber'],['goldKeepMeat','keepMeat'],['goldKeepShells','keepShells'],['goldMinHealth','minHealth']])$(id).value=rules.goldPolicy[key];
   $('rulesEnabled').checked=rules.enabled;$('rulesActivity').value=rules.activity;$('rulesKeepBait').value=rules.keepBait;$('rulesTimberTarget').value=rules.timberTarget;$('rulesStatus').textContent='';
-  const food=rules.food??{enabled:false,eatBelow:50,keepMeals:2};$('rulesFoodEnabled').checked=food.enabled;$('rulesFoodBelow').value=food.eatBelow;$('rulesFoodKeep').value=food.keepMeals;
+  const food=rules.food??{enabled:false,eatBelow:50,keepMeals:2};$('rulesFoodEnabled').checked=food.enabled;$('rulesFoodBelow').value=food.eatBelow;$('rulesFoodKeep').value=food.keepMeals;$('rulesBreadBudget').value=food.breadBudget??0;
   $('rulesCombatStyle').value=rules.combat.style;$('rulesAutoDodge').checked=rules.combat.dodge;
   $('rulesCombatEnabled').checked=rules.combat.enabled;$('rulesAutoQ').checked=rules.combat.q;$('rulesAutoE').checked=rules.combat.e;$('rulesCombatFlee').value=rules.combat.fleeBelow;
   ruleQueueDraft=(rules.queue?.steps??[{type:'fishing',amount:5},{type:'sellFish',amount:0},{type:'rest',amount:0}]).map(step=>({...step}));
@@ -5620,6 +5663,7 @@ function openCharacterRules(options={}){
  const state=window.playerCloud?.initial??{},rules=normalizeCharacterRules(state.pendingCharacterRules??characterRules);
  simpleAutoRisk=rules.simpleRisk??'balanced';
  simpleAutoChoice=rules.simpleMode??(['fishing','exploring','rest'].includes(rules.activity)?rules.activity:'random');
+ $('simpleAutoBreadBudget').value=rules.food?.breadBudget??0;
  $('simpleAutoIdle').checked=rules.enabled;$('simpleAutoReserve').value=rules.simpleMode?rules.goldPolicy.reserveGold:0;
  $('simpleAutoTable').value=rules.gambling.game;$('simpleAutoBet').value=rules.gambling.bet;$('simpleAutoLoss').value=rules.gambling.lossLimit;
  $('simpleAutoStatus').textContent=rules.simpleMode?'':state.autoConfigured?'Choose a loop to replace your existing custom plan.':'';
@@ -5632,7 +5676,7 @@ function openCharacterRules(options={}){
  }
  renderSimpleAuto();$('simpleAutoDialog').showModal();
 }
-function simpleAutoOptions(){return {risk:simpleAutoChoice==='rest'?'safe':simpleAutoRisk,enabled:$('simpleAutoIdle').checked,reserveGold:Number($('simpleAutoReserve').value),game:$('simpleAutoTable').value,bet:Number($('simpleAutoBet').value),lossLimit:Number($('simpleAutoLoss').value)};}
+function simpleAutoOptions(){return {food:characterRules.food,breadBudget:Number($('simpleAutoBreadBudget').value),risk:simpleAutoChoice==='rest'?'safe':simpleAutoRisk,enabled:$('simpleAutoIdle').checked,reserveGold:Number($('simpleAutoReserve').value),game:$('simpleAutoTable').value,bet:Number($('simpleAutoBet').value),lossLimit:Number($('simpleAutoLoss').value)};}
 async function saveSimpleAuto(start){
  if(simpleAutoBusy||!$('simpleAutoForm').reportValidity())return;
  try{
@@ -5658,7 +5702,7 @@ $('simpleAutoDialog').oncancel=event=>{if(simpleAutoBusy)event.preventDefault();
 $('openCharacterRules').onclick=openCharacterRules;$('upgradeGoalHud').onclick=openCharacterRules;
 $('clearAutoUpgradeGoal').onclick=()=>{$('rulesGoalTarget').value='';$('rulesGoalAutoBuy').checked=false;updateCharacterRulesPreview();$('rulesStatus').textContent='Completed goal cleared. Save Auto Mode to use your routine again.';};
 $('rulesQueueAdd').onclick=()=>{if(ruleQueueDraft.length<8)ruleQueueDraft.push({type:'fishing',amount:5});renderRuleQueue();updateCharacterRulesPreview();};
-for(const id of ['rulesFoodEnabled','rulesFoodBelow','rulesFoodKeep','gambleAutoGame','gambleAutoColor','gambleAutoBet','gambleAutoLoss','gambleAutoReserve','gambleAutoProfit','gambleAutoRounds','rulesStrategy','goldBudget','goldReserve','goldKeepFish','goldKeepTimber','goldKeepMeat','goldKeepShells','goldMinHealth','rulesUseQueue','rulesQueueRepeats','rulesQueueBudget','rulesQueueReserve','rulesQueueHealth','rulesGoalTarget','rulesGoalAutoBuy','rulesEnabled','rulesActivity','rulesKeepBait','rulesTimberTarget','rulesCombatEnabled','rulesCombatStyle','rulesAutoDodge','rulesAutoQ','rulesAutoE','rulesCombatFlee'])$(id).oninput=updateCharacterRulesPreview;
+for(const id of ['rulesFoodEnabled','rulesFoodBelow','rulesFoodKeep','rulesBreadBudget','gambleAutoGame','gambleAutoColor','gambleAutoBet','gambleAutoLoss','gambleAutoReserve','gambleAutoProfit','gambleAutoRounds','rulesStrategy','goldBudget','goldReserve','goldKeepFish','goldKeepTimber','goldKeepMeat','goldKeepShells','goldMinHealth','rulesUseQueue','rulesQueueRepeats','rulesQueueBudget','rulesQueueReserve','rulesQueueHealth','rulesGoalTarget','rulesGoalAutoBuy','rulesEnabled','rulesActivity','rulesKeepBait','rulesTimberTarget','rulesCombatEnabled','rulesCombatStyle','rulesAutoDodge','rulesAutoQ','rulesAutoE','rulesCombatFlee'])$(id).oninput=updateCharacterRulesPreview;
 $('characterRulesForm').addEventListener('invalid',event=>{const panel=event.target.closest('[role=tabpanel]');if(panel){const page=panel.id.replace('autoModePage','').toLowerCase();selectAutoModePage(page);}},true);
 $('characterRulesDialog').oncancel=event=>{if(savingRules)event.preventDefault();};
 $('characterRulesForm').onsubmit=async event=>{

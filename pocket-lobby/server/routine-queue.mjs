@@ -20,7 +20,7 @@ import {harvestTimber,woodRules} from '../public/woodcutting.js';
 import {recordQuest} from '../public/quests.js';
 export const QUEUE_ACTION_MS=15000;
 export function startRoutineQueue(state,rules,startedAt,metadata){
-  state.plan={kind:'queue',...metadata,startedAt,endAt:metadata.routineCapAt,queue:normalizeRoutineQueue(rules.queue),cycle:0,stepIndex:0,cursorAt:startedAt,nextAt:null,stepCount:0,entries:[],catches:{},timber:0,patienceXp:0,woodXp:0,goldEarned:0,goldSpent:0,baitBought:0};
+  state.plan={kind:'queue',...metadata,startedAt,endAt:metadata.routineCapAt,queue:normalizeRoutineQueue(rules.queue),cycle:0,stepIndex:0,cursorAt:startedAt,nextAt:null,stepCount:0,entries:[],catches:{},timber:0,patienceXp:0,woodXp:0,goldEarned:0,goldSpent:metadata.rationGoldSpent??0,baitBought:0};
 }
 function finish(state,plan,reason,endedAt){
   state.report={...plan,reason,endedAt,xp:plan.patienceXp+plan.woodXp+(plan.cookingXp??0)+Object.values(plan.hunts?.xp??{}).reduce((a,b)=>a+b,0)};delete state.plan;

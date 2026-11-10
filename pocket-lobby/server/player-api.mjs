@@ -2,6 +2,7 @@ import {readFactions,changeFaction} from './factions.mjs';
 import {watchFlags} from '../public/region-catalog.js';
 import {normalizeVitals} from '../public/player-vitals.js';
 import {publishWorldActivity} from './world-activity.mjs';
+import {towerBread} from '../public/cooking.js';
 import {simpleAutoRules} from '../public/simple-auto.js';
 import {saveAutoSettings} from './auto-settings.mjs';
 import {isSmartlyDressed,normalizeWardrobe,clothingCatalog} from '../public/wardrobe.js';
@@ -163,7 +164,7 @@ export async function handlePlayerApi(request,env){
       case "/api/player/create":
         if(state.characterCreated!==false)return json({error:"Your character is already created."},400);
         if(typeof body.avatar?.name!=="string"||!body.avatar.name.trim()||body.avatar.name.trim().length>20)return json({error:"Choose a name using 1 to 20 characters."},400);
-        {const wardrobe=normalizeWardrobe(body.wardrobe,body.avatar);if(wardrobe.outfits.some(look=>['jacket','trousers','boots'].some(slot=>clothingCatalog[look[slot]]?.price)))throw new Error('Choose free starter clothing.');wardrobe.owned=wardrobe.owned.filter(id=>!clothingCatalog[id]?.price);state=normalizeState({...state,avatar:body.avatar,wardrobe,characterCreated:true});}
+        {const wardrobe=normalizeWardrobe(body.wardrobe,body.avatar);if(wardrobe.outfits.some(look=>['jacket','trousers','boots'].some(slot=>clothingCatalog[look[slot]]?.price)))throw new Error('Choose free starter clothing.');wardrobe.owned=wardrobe.owned.filter(id=>!clothingCatalog[id]?.price);state=normalizeState({...state,avatar:body.avatar,wardrobe,characterCreated:true,meals:{...state.meals,[towerBread.id]:1}});}
         break;
       case "/api/player/testing/reset":
         if(body.confirm!=="RESET"||body.testing!==true)return json({error:"Choose testing mode and confirm the reset."},400);

@@ -5,7 +5,7 @@ import {normalizeState,startPlan,settlePlan} from '../server/player-state.mjs';
 import {applyGameplayAction,protectFishingState} from '../server/gameplay.mjs';
 import {castEssencePower} from '../server/essences.mjs';
 import {normalizeMagic} from '../public/essences.js';
-import {applyAutoFood} from '../server/auto-food.mjs';
+import {applyAutoFood,restockAutoBread} from '../server/auto-food.mjs';
 import {boot} from './helpers/game-client.mjs';
 import {combatStamina,createHunt} from '../public/hunting.js';
 import {touchPresence} from '../server/routines.mjs';
@@ -94,4 +94,26 @@ test('Auto feeds at full health, respects reserve and stops after the last affor
  assert.equal(offline.report.endedAt,online.report.endedAt);
  assert.equal(Object.values(offline.report.catches).reduce((a,b)=>a+b,0),1);
  assert.equal(offline.vitals.hunger,0);assert.equal(offline.health,100);
+});
+
+test('Tower Bread is bought at the stall and refills hunger without healing',()=>{
+ const s=normalizeState({location:'hub',position:{x:5,y:5},credits:10,health:60,vitals:{hunger:20}});
+ assert.throws(()=>applyGameplayAction(s,'buyBread',{quantity:10},1000),/wallet/);
+ assert.equal(s.credits,10);
+ applyGameplayAction(s,'buyBread',{quantity:3},1000);
+ assert.equal(s.credits,1);assert.equal(s.meals.towerBread,3);
+ applyGameplayAction(s,'eat',{id:'towerBread'},1000);
+ assert.equal(s.vitals.hunger,45);assert.equal(s.health,60);
+ s.position={x:1,y:1};
+ assert.throws(()=>applyGameplayAction(s,'buyBread',{quantity:1},1000),/food stall/);
+ const game=boot(normalizeState({location:'hub',meals:{towerBread:1},vitals:{hunger:20}}));
+ assert.equal(game.read('currentActivityPrompt().action'),'rationBag');assert.deepEqual(game.errors,[]);
+});
+test('Auto restocks within both the configured budget and wallet reserve',()=>{
+ const s=normalizeState({credits:20,vitals:{hunger:0}});
+ const plan={source:'rules',foodPolicy:{breadBudget:9,keepMeals:0}};
+ restockAutoBread(s,plan,6,15);
+ assert.equal(s.credits,17);assert.equal(s.meals.towerBread,1);
+ assert.equal(plan.rationGoldSpent,3);
+ assert.equal(applyAutoFood(s,plan,1000).used,1);assert.equal(s.vitals.hunger,25);
 });
