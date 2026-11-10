@@ -96,8 +96,8 @@ test('Auto feeds at full health, respects reserve and stops after the last affor
  assert.equal(offline.vitals.hunger,0);assert.equal(offline.health,100);
 });
 
-test('Tower Bread is bought at the stall and refills hunger without healing',()=>{
- const s=normalizeState({location:'hub',position:{x:5,y:5},credits:10,health:60,vitals:{hunger:20}});
+test('Tower Bread is bought at the bakery and refills hunger without healing',()=>{
+ const s=normalizeState({location:'bakery',position:{x:5,y:4},credits:10,health:60,vitals:{hunger:20}});
  assert.throws(()=>applyGameplayAction(s,'buyBread',{quantity:10},1000),/wallet/);
  assert.equal(s.credits,10);
  applyGameplayAction(s,'buyBread',{quantity:3},1000);
@@ -105,8 +105,11 @@ test('Tower Bread is bought at the stall and refills hunger without healing',()=
  applyGameplayAction(s,'eat',{id:'towerBread'},1000);
  assert.equal(s.vitals.hunger,45);assert.equal(s.health,60);
  s.position={x:1,y:1};
- assert.throws(()=>applyGameplayAction(s,'buyBread',{quantity:1},1000),/food stall/);
- const game=boot(normalizeState({location:'hub',meals:{towerBread:1},vitals:{hunger:20}}));
+ assert.throws(()=>applyGameplayAction(s,'buyBread',{quantity:1},1000),/Bakery counter/);
+ const game=boot(normalizeState({location:'hub',quest:{accepted:true},meals:{towerBread:1},vitals:{hunger:20}}));
+ assert.equal(game.read("hudRoute('bakery').map(door=>door.to).join(',')"),'market,bakery');
+ assert.equal(game.read("roomDoors.bakery[0].to"),'market');
+ assert.equal(game.read("hubFurniture.some(item=>item.type==='foodStall')"),false);
  assert.equal(game.read('currentActivityPrompt().action'),'rationBag');assert.deepEqual(game.errors,[]);
 });
 test('Auto restocks within both the configured budget and wallet reserve',()=>{

@@ -89,9 +89,9 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
     return;
   }
   if(action==='buyBread'){
-    available(state);location(state,['hub']);
+    available(state);location(state,[foodStall.room]);
     const position=state.position;
-    if(!position||Math.abs(position.x-foodStall.x)+Math.abs(position.y-foodStall.y)!==1)throw new Error('Travel to the Tower food stall first.');
+    if(!position||Math.abs(position.x-foodStall.x)+Math.abs(position.y-foodStall.y)!==1)throw new Error('Travel to the Tower Bakery counter first.');
     const quantity=body.quantity,cost=quantity*towerBread.price,count=state.meals[towerBread.id]??0;
     if(!Number.isInteger(quantity)||quantity<1||quantity>10||cost>state.credits||count+quantity>1000000)throw new Error('Choose up to 10 rations within your wallet and inventory limits.');
     state.credits-=cost;state.meals[towerBread.id]=count+quantity;return;

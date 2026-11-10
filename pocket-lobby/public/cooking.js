@@ -8,7 +8,8 @@ export const mealRecipes={
   silverfinFeast:{name:'Silverfin Feast',healing:80,ingredient:'Silverfin',amount:3,timber:2,level:4,xp:20,description:'A generous fish supper for a battle-worn adventurer.'}
 };
 export const towerBread={id:'towerBread',name:'Tower Bread',price:3,healing:0,hunger:25,description:'A cheap ration for the road.'};
-export const foodStall={x:6,y:5};
+export const foodStall={room:'bakery',x:5,y:3};
+export const bakeryLayout=[['foodStall',foodStall.x,foodStall.y],['bakeryOven',7,1],['breadRack',3,1],['table',7,6],['stool',7,7],['plant',1,2]];
 export const foodItems={...mealRecipes,[towerBread.id]:towerBread};
 export const foodFullness=item=>item.hunger??item.healing;
 export const cookingQueueRecipes={cookFish:'grilledSilverfin',cookStew:'boarStew',cookHeartyStew:'heartyStew',cookFeast:'silverfinFeast'};

@@ -1729,10 +1729,10 @@ function updateCombatMoment(time){
 }
 let editing=false,selection=null,zoom=1,hitboxes=[],bounds=null,bubbleUntil=0,noticeUntil=0;
 const hubFurniture=[
-  ['reception',3,2],['warden',10,3],['foodStall',foodStall.x,foodStall.y],['factionRegistrar',factionRegistrar.x,factionRegistrar.y],
+  ['reception',3,2],['warden',10,3],['factionRegistrar',factionRegistrar.x,factionRegistrar.y],
   ['plant',1,1],['plant',16,1],
   ['sofa',2,10],['bench',2,12],
-  ['sofa',13,8,2],['bench',13,10,2]
+  ['sofa',13,8,2]
 ].map(([type,x,y,rot=0],id)=>({id,type,x,y,rot}));
 const courtyardFurniture=[
   ['trainingDummy',9,4],
@@ -1748,6 +1748,7 @@ const storeFurniture=[
   {id:'stool',type:'stool',x:4,y:4,rot:0}
 ];
 const tailorFurniture=[['reception',3,2],['sofa',7,6],['lamp',8,1],['plant',1,1],['plant',8,8]].map(([type,x,y,rot=0],id)=>({id,type,x,y,rot}));
+const bakeryFurniture=bakeryLayout.map(([type,x,y,rot=0],id)=>({id,type,x,y,rot}));
 const furnishingsFurniture=[['reception',3,1],['bed',6,2],['lamp',8,2],['bookcase',1,1],['sofa',6,6],['table',6,8],['chair',8,8,2],['plant',1,8],['safe',8,1]].map(([type,x,y,rot=0],id)=>({id,type,x,y,rot}));
 const marketFurniture=[
   {id:'trader',type:'tradeCounter',x:3,y:2,rot:0},
@@ -1772,6 +1773,7 @@ function roomFurniture(){
   if(currentRoom==='lounge')return initial;
   if(currentRoom==='tailor')return tailorFurniture;
   if(currentRoom==='furnishings')return furnishingsFurniture;
+  if(currentRoom==='bakery')return bakeryFurniture;
   if(currentRoom==='store')return storeFurniture;
   if(currentRoom==='market')return marketFurniture;
   if(currentRoom==='armory')return armoryFurniture;
@@ -1805,7 +1807,9 @@ const hubDoors=[
 const towerEntrance={to:'hub',side:'left',tile:{x:0,y:5},start:4.58,end:6.42,height:54,label:'TOWER'};
 const moonwoodEntrance={to:'trail',side:'front',tile:{x:6,y:11},arrival:{x:1,y:5},start:5.03,end:7.62,label:'MOONWOOD'};
 const storeExit={to:'hub',side:'left',tile:{x:0,y:5},start:4.6,end:6.4,height:49,label:'LOBBY'};
-const roomDoors={tailor:[storeExit],furnishings:[storeExit],home:[homeExit],hub:hubDoors,lounge:[storeExit],store:[storeExit],market:[storeExit],armory:[{...storeExit,arrival:{x:3,y:1}}],outside:[towerEntrance,moonwoodEntrance],...moonwood.doors};
+const bakeryDoor={to:'bakery',side:'right',tile:{x:7,y:0},start:6.55,end:8.45,height:49,label:'BAKERY',arrival:{x:1,y:5}};
+const bakeryExit={...storeExit,to:'market',label:'MARKET',arrival:{x:7,y:1}};
+const roomDoors={bakery:[bakeryExit],tailor:[storeExit],furnishings:[storeExit],home:[homeExit],hub:hubDoors,lounge:[storeExit],store:[storeExit],market:[storeExit,bakeryDoor],armory:[{...storeExit,arrival:{x:3,y:1}}],outside:[towerEntrance,moonwoodEntrance],...moonwood.doors};
 const roomDetails={
   tailor:{number:'17',name:'The Gilded Thread',description:'Visit the tailor counter to preview and buy distinctive outfit sets and clothing pieces.',badge:'TAILOR',floor:'Tower shops'},
   furnishings:{number:'16',name:'Tower Furnishings',description:'Furniture, lighting and storage for your own corner of the Tower.',badge:'FURNITURE SHOP',floor:'Tower shops'},
@@ -1814,6 +1818,7 @@ const roomDetails={
   lounge:{number:'02',name:'The Sunset Lounge',description:'Find blackjack and roulette on the gaming floor, or take a seat by the bar.',badge:'GAMING LOUNGE',floor:'Ground floor'},
   store:{number:'11',name:'Silverfin Outfitters',description:'Stock up on bait, find a better rod, and sell your catch.',badge:'FISHING STORE',floor:'Tower shops'},
   armory:{number:'14',name:'The Tower Armory',description:'Trade your earnings for a weapon that suits your fighting style.',badge:'ARMORY',floor:'Tower shops'},
+  bakery:{number:'17',name:'Tower Bakery',description:'Fresh bread from the oven. Pick up rations before your next trip.',badge:'BAKERY',floor:'Tower shops'},
   market:{number:'12',name:'Moonwood Trading Post',description:'Bring your catch and hunting spoils to the tower’s traders.',badge:'TRADING POST',floor:'Tower market'},
   outside:{number:'03',name:'The Courtyard',description:'Practise combat at the training dummy, rest by the fountain, or explore Moonwood.',badge:'OUTSIDE',floor:'Tower grounds'},
   ...moonwood.areas
@@ -2207,9 +2212,11 @@ function drawGrandLobby(showDoors=true){
   if(showDoors){drawLobbyWindow(6.3,7.7);drawLobbyWindow(10.7,11.9);}
   else{drawLobbyWindow(6.55,8.6);drawLobbyWindow(9.25,11.3);}
   drawLobbyBanner('left',4.9);drawLobbyBanner('right',1.05);drawLobbyBanner('right',16.25);
-  wall('left',1,4.4,39,65,'#171f34');
-  wall('left',1.08,4.32,40,64,'#bc9563');
-  wall('left',1.16,4.24,41,63,'#232d48');
+  if(!showDoors){
+    wall('left',1,4.4,39,65,'#171f34');
+    wall('left',1.08,4.32,40,64,'#bc9563');
+    wall('left',1.16,4.24,41,63,'#232d48');
+  }
   if(showDoors)hubDoors.forEach(drawLobbyPortal);
   for(const u of [5.27,8.72,12.53])drawLobbySconce('left',u);
   for(const u of [2.12,5.92,12.8,17.05])drawLobbySconce('right',u);
@@ -2322,6 +2329,23 @@ function drawFishingStore(market=false){
   for(let i=0;i<5;i++)surface(3.54,5.4+i*.54,2.9,.035,.45,'#779395');
   drawDoor(storeExit);
 }
+function drawBakery(){
+  block(0,0,10,10,-8,8,['#ae815f','#5b3e42','#49353e']);
+  for(let y=0;y<10;y++)for(let x=0;x<10;x++){
+    surface(x,y,1,1,0,(x+y)%2?'#b68c6e':'#ad8061','#8e634f');
+    surface(x+.12,y+.66,.74,.025,.1,'#c39573');
+  }
+  for(const side of ['left','right']){
+    wall(side,0,10,0,65,side==='left'?'#815b51':'#9e7059');
+    wall(side,0,10,0,16,'#5d4142');
+    wall(side,0,10,15,17,'#d6a46c');
+    wall(side,0,10,62,66,'#e1b581');
+    for(const i of [2.6,5.2,8.1])wall(side,i,i+.11,18,62,'#73514b');
+  }
+  surface(3.2,5.4,3.1,2.6,.2,'#693944','#e5ad71');
+  surface(3.38,5.57,2.74,2.25,.3,'#a3514c','#cf8866');
+  drawDoor(bakeryExit);
+}
 const dungeonMobMotion=new Map();
 function dungeonMobOffset(item,time){
  if(!hunting.encounter){dungeonMobMotion.clear();return [0,0];}
@@ -2364,6 +2388,20 @@ function object(item,highlight=false,time=0) {
   if(type==='woodcutter'){
     const [wx,wy]=point(x+.5,y+.5);
     sprite(ctx,wx,wy,{outfit:3,hair:2},{direction:'right',time,weapon:true,weaponTier:'basicAxe',pose:{angle:-.4}});return;
+  }
+  if(type==='bakeryOven'){
+    block(x+.05,y+.05,.9,.9,0,33,['#c28868','#7c554f','#9e6555']);
+    const [ox,oy]=point(x+.52,y+.91,19);
+    polygon([[ox-9,oy+4],[ox-9,oy-4],[ox-5,oy-11],[ox+5,oy-6],[ox+9,oy+1],[ox+9,oy+12]],'#402d34');
+    rect(ox-5,oy+1,10,5,'#e8904f');rect(ox-2,oy-1,5,6,'#ffd285');return;
+  }
+  if(type==='breadRack'){
+    block(x+.1,y+.1,.8,.8,0,29,['#c59164','#63403d','#815244']);
+    for(const z of [9,18,29]){
+      surface(x+.1,y+.5,.83,.45,z,'#b37b54');
+      for(const shift of [.18,.47])surface(x+shift,y+.63,.24,.21,z+.5,'#ecb46b');
+    }
+    return;
   }
   if(type==='foodStall'){
     const [fx,fy]=point(x+.5,y+.5);
@@ -2689,7 +2727,8 @@ const roomLayers={
   lounge:makeRoomLayer(()=>{room();drawDoor(storeExit);}),
   outside:makeRoomLayer(drawCourtyard,courtyardView),
   store:makeRoomLayer(drawFishingStore),
-  market:makeRoomLayer(()=>drawFishingStore(true)),
+  market:makeRoomLayer(()=>{drawFishingStore(true);drawDoor(bakeryDoor);}),
+  bakery:makeRoomLayer(drawBakery),
   furnishings:makeRoomLayer(()=>drawFishingStore('furnishings')),
   armory:makeRoomLayer(()=>drawFishingStore('armory'))
 };
@@ -2722,7 +2761,7 @@ function drawMoonwoodDetails(time){
   }
 }
 const explorationRegions={
-  'The Tower':['home','hub','outside','lounge','market','armory','store','furnishings','tailor'],
+  'The Tower':['home','hub','outside','lounge','market','bakery','armory','store','furnishings','tailor'],
   Willowmere:willowmereRooms,
   Beaconwatch:watchRooms,
   Moonwood:['trail',wildlifeRoom,'logging','clearing','grove','shrine','creek','pond','ruins','roots']
@@ -2833,13 +2872,12 @@ function updateWorldLabels(){
   if(currentRoom==='home'&&!homeBedRest&&!editing){const item=bestHomeBed({homeFurniture,ownedFurniture});if(item)add('Rest',...point(item.x+.5,item.y+.5,29),'npc',()=>use(item),bedProfiles[item.type].rate+' HP / sec');}
   if(currentRoom==='home')for(const item of homeFurniture.filter(item=>item.type==='safe'))add('Home safe',...point(item.x+.5,item.y+.5,31),'npc',()=>use(item),'Gold & item storage');
   if(currentRoom==='home')add('YOUR HOME',...point(5,0,44),'sign',null,avatar.name);
+  if(currentRoom==='bakery')add('Baker',...point(foodStall.x+.5,foodStall.y+.5,47),'npc',()=>use(bakeryFurniture[0]),'Buy Tower Bread');
   if(currentRoom==='hub'){
-    const stall=hubFurniture.find(item=>item.type==='foodStall');
-    add('Food stall',...point(stall.x+.5,stall.y+.5,44),'npc',()=>use(stall),'Tower Bread');
     const registrar=hubFurniture.find(item=>item.type==='factionRegistrar');
-    add(factionRegistrar.name,...point(registrar.x+.5,registrar.y+.5,45),'npc',()=>use(registrar),'Faction registry');
+    add(factionRegistrar.name,...point(registrar.x+.5,registrar.y+.5,45),'npc',()=>use(registrar));
     if(lobbyRoutesOpen())add('Job board',...point(4.5,2,39),'npc',openJobBoard);
-    add('TOWER OF',...point(0,2.7,52),'sign',null,'BEGINNINGS',{side:'left',width:51,font:6});
+    if(!lobbyRoutesOpen())add('TOWER OF',...point(0,2.7,52),'sign',null,'BEGINNINGS',{side:'left',width:51,font:6});
     const symbol=questStage(quest)===0?'! ':questStage(quest)===4?'? ':'';
     add(symbol+'Tower Warden',...point(10.5,3.5,46),'npc',()=>use(hubFurniture.find(item=>item.type==='warden')),questStage(quest)===0?'Start here · Earn your first gold':'');
   }
@@ -3025,7 +3063,7 @@ function draw(time){
     object(item,treeHover||editing&&(selection?.id===item.id||hoverItem?.id===item.id)&&!fixed(item),time);
     ctx.globalAlpha=1;
     if(item.defeated||item===ghost||(fixed(item)&&!isGamingTable(item)))continue;
-    const [w,d]=dimensions(item), h=moonwood.heights[item.type]??{armoryCounter:32,weaponRack:37,anvil:19,brazier:25,workbench:23,woodStool:13,woodTable:18,bookcase:37,woodcutter:43,foodStall:43,factionRegistrar:43,warden:43,enchanter:43,tradeCounter:32,harvestCrates:16,tackleCounter:32,rodRack:36,baitCrates:16,blackjack:19,roulette:22,reception:32,stove:28,safe:25,bed:24,comfortBed:24,royalBed:28,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39,bench:22,streetlamp:55,fountain:37}[item.type];
+    const [w,d]=dimensions(item), h=moonwood.heights[item.type]??{armoryCounter:32,weaponRack:37,anvil:19,brazier:25,workbench:23,woodStool:13,woodTable:18,bookcase:37,woodcutter:43,bakeryOven:33,breadRack:30,foodStall:43,factionRegistrar:43,warden:43,enchanter:43,tradeCounter:32,harvestCrates:16,tackleCounter:32,rodRack:36,baitCrates:16,blackjack:19,roulette:22,reception:32,stove:28,safe:25,bed:24,comfortBed:24,royalBed:28,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39,bench:22,streetlamp:55,fountain:37}[item.type];
     const height=isTimberTree(item)&&treeState(item).regrowsAt?6:h;
     const shape=[point(item.x,item.y+d),point(item.x+w,item.y+d),point(item.x+w,item.y),point(item.x+w,item.y,height),point(item.x,item.y,height),point(item.x,item.y+d,height)];
     hitboxes.push({item,shape});
@@ -3128,7 +3166,7 @@ function note(message,duration=3000){
   noticeUntil=performance.now()+duration;
 }
 function setHint(){
-  const guide={home:homeNavigationLearned?'Next: select EXIT to visit the Grand Lobby':'Click the floor to move your character',hub:'Click a doorway or the Outside steps to travel',lounge:defaultHint,outside:'Click the Moonwood steps to explore · Tower returns indoors',store:'Buy supplies at the counter · Use Lobby to leave',armory:'Compare damage, attack speed and requirements · Buy & equip from the Armory panel',market:'Sell fish and hunting loot at the counter · Use Lobby to leave',creek:'Tap Cross to the Ruins to walk across the creek.'};
+  const guide={home:homeNavigationLearned?'Next: select EXIT to visit the Grand Lobby':'Click the floor to move your character',hub:'Click a doorway or the Outside steps to travel',lounge:defaultHint,outside:'Click the Moonwood steps to explore · Tower returns indoors',store:'Buy supplies at the counter · Use Lobby to leave',armory:'Compare damage, attack speed and requirements · Buy & equip from the Armory panel',market:'Trade your spoils or visit the Bakery',bakery:'Speak to the baker · Use Market to leave',creek:'Tap Cross to the Ruins to walk across the creek.'};
   const message=editing?'Choose furniture to place or select a piece in the room':currentRoom==='hub'&&!lobbyRoutesOpen()?'Talk to the Tower Warden to open the lobby doors.':guide[currentRoom]??'Follow marked trails · Use the field journal for routes';
   $('hint').dataset.kind=currentRoom==='home'&&!editing?'movement':'guide';
   $('hint').textContent=needsBedLesson()?(editing?'Place your bed on a clear floor spot · R to rotate':'Step 1: open Inventory to place your free bed'):message;
@@ -3511,7 +3549,7 @@ function showHudMap(destination=null){
     routes.append(button);
   };
   if(shops&&lobbyRoutesOpen()){
-    for(const [room,label] of [['tailor','Tailor'],['armory','Armory'],['store','Fishing supplies'],['market','Trading Post'],['furnishings','Furniture shop']])add(label,()=>navigateHud(room));
+    for(const [room,label] of [['tailor','Tailor'],['armory','Armory'],['store','Fishing supplies'],['market','Trading Post'],['bakery','Bakery'],['furnishings','Furniture shop']])add(label,()=>navigateHud(room));
   }else if(!shops){
     for(const door of hudRoomExits(currentRoom))add(mapPlaceName(door.to)+(worldMapVisibility().frontier.has(door.to)?' · Explore':''),()=>followHudDoor(door),door.to===next?.to);
   }
@@ -4161,7 +4199,7 @@ function openMerchant(){
 }
 
 function renderWorldMap(route=[]){
-  const positions={...watchMapPositions,...willowmereMapPositions,home:[100,55],hub:[340,110],armory:[265,48],market:[465,48],tailor:[180,70],furnishings:[435,145],lounge:[580,75],store:[118,133],
+  const positions={...watchMapPositions,...willowmereMapPositions,home:[100,55],hub:[340,110],armory:[265,48],market:[465,48],bakery:[550,129],tailor:[180,70],furnishings:[435,145],lounge:[580,75],store:[118,133],
     outside:[340,205],trail:[340,315],logging:[107,288],clearing:[109,380],[wildlifeRoom]:[514,411],grove:[563,274],shrine:[563,354],
     creek:[338,423],pond:[138,497],ruins:[340,549],roots:[549,493],depthsGate:[340,120],depthsGallery:[340,120],depthsCache:[340,120],depthsTreasury:[340,120],depthsRest:[340,120],depthsTrial:[340,120],depthsVault:[340,120]};
   const rooms=Object.keys(positions).filter(room=>roomDetails[room]&&(room===currentRoom||hudNextDoor(room)));
@@ -5994,7 +6032,8 @@ function updateRoomLabel(){
     lounge:'Click furniture to interact. Use the Lobby button to go back.',
     outside:'Use the Moonwood steps to explore or the Tower door to return indoors.',
     store:'Buy bait and rods from Fishing supplies. Use Lobby to return.',
-    market:'Sell fish and hunting loot using Trade your spoils. Use Lobby to return.'
+    market:'Trade your spoils or walk through the Bakery door for rations.',
+    bakery:'Speak to the baker to buy rations. Use the Market door to return.'
   };
   canvas.setAttribute('aria-label',roomDetails[currentRoom].name+'. Click a floor tile or use arrow keys to walk. '+(landmarks[currentRoom]??'Use the marked trails or the field journal to travel.'));
 }
