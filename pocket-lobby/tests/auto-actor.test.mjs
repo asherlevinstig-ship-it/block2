@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {AutoActor,AutoDirector,wakeAutoDirector} from '../server/auto-actor.mjs';
-import {advanceAutoMotion,autoTilePath} from '../server/auto-motion.mjs';
+import {planAutoWalk,autoTilePath} from '../server/auto-motion.mjs';
+import {autoWalkPosition} from '../public/auto-walk.js';
 import {SharedRoom} from '../server/shared-room.mjs';
 import {normalizeState} from '../server/player-state.mjs';
 import {simpleAutoRules} from '../public/simple-auto.js';
@@ -18,14 +19,30 @@ test('server walking follows every doorway to Auto destinations without jumping 
  let p={room:'home',x:5,y:7};
  for(const [room,x,y] of [['store',5,5],['pond',4,5],['market',5,5],['logging',5,5],['lounge',5,5],['home',5,7]]){
   s.location=room;s.position={x,y};let arrived=false;
-  for(let i=0;i<400;i++){const prev=p;p=advanceAutoMotion(p,s);assert(!p.blocked,JSON.stringify({room,p}));if(prev.room===p.room)assert(Math.abs(prev.x-p.x)+Math.abs(prev.y-p.y)<=1);if(!p.moving){arrived=true;break;}}
+  for(let i=0;i<20;i++){
+   const {motion,walk}=planAutoWalk(p,s,1000);p=motion;
+   assert(!p.blocked,JSON.stringify({room,p}));
+   if(!walk){arrived=true;break;}
+   for(let j=1;j<walk.tiles.length;j++){
+    const a=walk.tiles[j-1],b=walk.tiles[j];
+    assert.equal(Math.abs(a.x-b.x)+Math.abs(a.y-b.y),1);
+   }
+   p={...p,...walk.tiles.at(-1)};
+  }
   assert(arrived,'arrives at '+room);assert.equal(p.room,room);
  }
  assert.equal(autoTilePath('hub',{x:1,y:2},{x:3,y:2},s),null,'cannot walk into the counter');
 });
 
+test('a timed route interpolates the current step and holds at the last tile',()=>{
+ const walk={startedAt:1000,tiles:[{x:5,y:7},{x:5,y:6},{x:4,y:6}]};
+ assert.deepEqual(autoWalkPosition(walk,1300),{x:5,y:6,rx:4.5,ry:6,direction:'left',back:true,moving:true});
+ assert.deepEqual(autoWalkPosition(walk,1800),{x:4,y:6,rx:4,ry:6,direction:'left',back:true,moving:false});
+});
+
 test('offline actor persists, walks, catches fish and stops when Auto ends',async t=>{
  const {db,sql}=testDatabase();t.after(()=>sql.close());const id='offline-fisher',now=Date.now();
+ let clock=now;t.mock.method(Date,'now',()=>clock);
  let s=normalizeState({location:'home',position:{x:5,y:7},credits:1000,fishingGear:{ownedRods:['reed'],equippedRod:'reed',bait:30},characterRules:simpleAutoRules('fishing')});
  s.adventure.discovered.push('pond');
  const put=()=>sql.prepare('INSERT OR REPLACE INTO tower_players VALUES (?, ?, 1, ?, ?)').run(id,JSON.stringify(s),'test',Date.now()-120000);put();
@@ -35,11 +52,17 @@ test('offline actor persists, walks, catches fish and stops when Auto ends',asyn
  assert.equal(actor.actor.motion.room,'home','starts at last manual position');
  const first=structuredClone(actor.actor.motion);await actor.fetch(sync(id));assert.deepEqual(actor.actor.motion,first,'heartbeats cannot speed up walking');
  // No owner HTTP requests or browser WebSocket from here onwards.
- for(let i=0;i<250&&actor.actor.motion.moving;i++)await actor.alarm();
+ const walk=actor.actor.walk,position=new Request('https://actor.internal/position',{method:'POST',body:JSON.stringify({playerId:id})});
+ clock=walk.startedAt+250;
+ const sampled=(await (await actor.fetch(position)).json()).motion;
+ assert.deepEqual({x:sampled.x,y:sampled.y},walk.tiles[1],'control reads the current tile mid-leg');
+ assert.equal(actor.actor.motion.room,'home');
+ assert.equal(calls.filter(c=>c.peer?.walk).length,1,'no per-tile room request');
+ for(let i=0;i<10&&actor.actor.motion.moving;i++){clock=await ctx.storage.getAlarm();await actor.alarm();}
  assert.equal(actor.actor.motion.room,s.location);assert(!actor.actor.motion.blocked);assert(calls.some(c=>c.room==='public:hub'&&c.peer?.activity==='walking'));
  const restored=new AutoActor(context(ctx.stored),env);await restored.ctx.ready();assert.deepEqual(restored.actor.motion,actor.actor.motion,'survives actor eviction');
  s=JSON.parse(sql.prepare('SELECT state_json FROM tower_players WHERE player_id=?').get(id).state_json);
- assert.equal(s.plan.kind,'queue');s.plan.cursorAt-=120000;s.plan.nextAt-=120000;put();
+ assert.equal(s.plan.kind,'queue');clock=Math.max(clock,s.plan.nextAt+50);
  await restored.alarm();s=JSON.parse(sql.prepare('SELECT state_json FROM tower_players WHERE player_id=?').get(id).state_json);
  assert(Object.values(s.fishStock).reduce((a,b)=>a+b,0)>0,'offline alarm awards catches');
  assert(calls.some(c=>c.events?.some(e=>e.kind==='catch')),'quiet periods between saves must not suppress a fresh offline catch');

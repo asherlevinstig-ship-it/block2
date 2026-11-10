@@ -12,7 +12,11 @@
   const retry=document.getElementById('cloudRetry');
   let packet=null,pending=null,retryJob=null,sending=null,timer=null,conflicted=false;
   let presenceBusy=null,acting=0,gameplayBusy=false,lastInputAt=Date.now(),lastReportedInputAt=0,resumeAutoView=false;
-  const recordInput=event=>{if(event.isTrusted)lastInputAt=Date.now();};
+  const recordInput=event=>{
+    if(!event.isTrusted)return;
+    lastInputAt=Date.now();
+    if(packet?.state.plan?.source==='rules'&&packet.state.controlMode!=='auto'&&!presenceBusy)schedulePresence(0);
+  };
   for(const name of ['pointerdown','keydown','touchstart','wheel'])document.addEventListener(name,recordInput,{capture:true,passive:true});
   const ownOperations=[];
   const readLocal=(key,fallback)=>{
@@ -129,13 +133,14 @@
     if(conflicted||presenceBusy||acting||gameplayBusy||(!packet?.state.characterRules?.enabled&&packet?.state.controlMode!=='auto'&&packet?.state.plan?.source!=='rules')||packet.state.plan&&packet.state.plan.source!=='rules'||packet.state.report&&!packet.state.autoSwitch)return;
     await flush();if(presenceBusy||acting||gameplayBusy||conflicted)return;
     const inputAt=lastInputAt,active=packet.state.controlMode!=='auto'&&!document.hidden&&inputAt>lastReportedInputAt;
+    const hadRoutine=packet.state.plan?.source==='rules';
     presenceBusy=(async()=>{
       try{
         await action('presence',{active,idleForMs:Math.max(0,Math.min(AWAY_GRACE_MS,Date.now()-inputAt))});
         if(active)lastReportedInputAt=inputAt;
-        if(!document.hidden&&(packet.state.plan?.source==='rules'||packet.state.report?.source==='rules')){
+        if(!document.hidden&&(packet.state.plan?.source==='rules'||packet.state.report?.source==='rules'||hadRoutine&&!packet.state.plan)){
           pending=retryJob=null;backup(null);
-          window.towerApplyRoutineState?.(packet.state,{reconcile:resumeAutoView});resumeAutoView=false;
+          window.towerApplyRoutineState?.(packet.state,{reconcile:resumeAutoView,handoff:active&&!packet.state.plan});resumeAutoView=false;
           showReport(packet.state);
         }
       }catch(error){
@@ -195,7 +200,7 @@
       lastInputAt=Date.now();lastReportedInputAt=lastInputAt;
       pending=retryJob=null;backup(null);
       if(packet.state.report||packet.state.plan&&packet.state.plan.source!=='rules')window.towerMultiplayer?.disconnect();
-      window.towerApplyRoutineState?.(packet.state);showReport(packet.state);
+      window.towerApplyRoutineState?.(packet.state,{handoff:mode==='play'&&!packet.state.plan});showReport(packet.state);
       if(!packet.state.plan&&!packet.state.report)window.towerJoinRoom?.();
     }catch(error){document.getElementById('autoControlError').textContent=error.message;}
     finally{controlBusy=false;renderAutoPanel(packet.state);schedulePresence(packet.state.plan?.source==='rules'?150:20000);}
@@ -426,6 +431,7 @@
       const regionCatalog=await import('./region-catalog.js');
       const explorationFog=await import('./exploration-fog.js');
       const worldActivity=await import('./world-activity.js');
+      const {autoWalkPosition}=await import('./auto-walk.js');
       const playerVitals=await import('./player-vitals.js');const familiars=await import('./familiars.js');const wildlife=await import('./wildlife.js');
       const autoFeedback=await import('./auto-feedback.js');
       const characterRules=await import('./character-rules.js');
@@ -440,6 +446,7 @@
       const dungeonLoot=await import('./dungeon-loot.js');
       Object.assign(window,{towerCharacterArt},rules,hunting,loungeUI,art,fx,environment,quests,historyRules,shopUI,clothing,progression,woodRules,crafting,cooking,regionCatalog,explorationFog,worldActivity,playerVitals,familiars,wildlife,autoFeedback,characterRules,commissions,essences,depths,dungeonArena,dungeonAdds,jobs,shared,multiplayer,training,dungeonLoot);
       window.towerInitialState=packet.state;
+      window.autoWalkPosition=autoWalkPosition;
       window.playerCloud={enqueue,flush,attach,combatNow:()=>combatClock.now(),gameplay:async(name,body={})=>{
         if(gameplayBusy)throw new Error('Wait for your current action to finish.');
         await flush();

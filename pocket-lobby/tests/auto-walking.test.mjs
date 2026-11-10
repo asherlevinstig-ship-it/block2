@@ -1,7 +1,30 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {boot} from './helpers/game-client.mjs';import {normalizeState} from '../server/player-state.mjs';
+import {autoWalkPosition} from '../public/auto-walk.js';
 const origin=()=>normalizeState({location:'home',position:{x:5,y:7},quest:{accepted:true},adventure:{discovered:['pond','logging']}});
 function packet(room,position={x:4,y:5},task='fishing'){const s=normalizeState({...origin(),location:room,position,woodcutting:{axeOwned:true,equipped:true}});s.plan={source:'rules',kind:'queue',stepIndex:0,queue:{steps:[{type:task}]}};return s;}
 function drive(g,start=1000){const visited=[],positions=[];for(let frame=0;frame<1500&&g.read('!!autoJourney');frame++){const before=JSON.parse(g.read('JSON.stringify({room:currentRoom,x:player.cx,y:player.cy})'));g.run('advanceAnimation('+(start+frame*200)+')');const after=JSON.parse(g.read('JSON.stringify({room:currentRoom,x:player.cx,y:player.cy})'));if(after.room===before.room)assert(Math.abs(after.x-before.x)+Math.abs(after.y-before.y)<=1,'non-adjacent movement');if(visited.at(-1)!==after.room)visited.push(after.room);positions.push(after);}assert.equal(g.read('autoJourney'),null,'journey did not finish');assert.deepEqual(g.errors,[]);return {visited,positions};}
+test('the owner follows the timed room leg and waits at the exit for the server',()=>{
+ const g=boot(origin()),state=packet('pond');
+ let now=1100;
+ Object.assign(g.context,{autoWalkPosition});
+ g.context.playerCloud.combatNow=()=>now;
+ state.autoPresence={room:'home',x:1,y:5,moving:true,walk:{startedAt:1000,endsAt:1200,tiles:[{x:1,y:5},{x:0,y:5}]}};
+ g.context.playerCloud.initial=state;g.context.towerApplyRoutineState(state);
+ assert.equal(g.read('player.x'),0.5);
+ now=1300;g.run('advanceAnimation(1300)');
+ assert.equal(g.read('player.cx'),0);
+ assert.equal(g.read('currentRoom'),'home');
+ state.autoPresence={room:'hub',x:1,y:6,moving:true,walk:{startedAt:1300,endsAt:1500,tiles:[{x:1,y:6},{x:2,y:6}]}};
+ g.context.towerApplyRoutineState(state);
+ assert.equal(g.read('currentRoom'),'hub');
+ now=1400;g.run('advanceAnimation(1400)');
+ assert.equal(g.read('player.x'),1.5);
+ const stopped=normalizeState({...origin(),location:'hub',position:{x:1,y:6}});
+ g.context.playerCloud.initial=stopped;g.context.towerApplyRoutineState(stopped,{handoff:true});
+ assert.equal(g.read('player.x'),1);
+ assert.equal(g.read('autoServerMotion'),null);
+ assert.deepEqual(g.errors,[]);
+});
 test('Auto starts at the visible character and walks every connected room to the fishing spot',()=>{
  const g=boot(origin()),state=packet('pond');g.context.playerCloud.initial=state;g.context.towerApplyRoutineState(state);assert.equal(g.read('currentRoom'),'home');assert.equal(g.read('player.cx'),5);assert.equal(g.read('player.cy'),7);const {visited}=drive(g);assert.deepEqual(visited,['home','hub','outside','trail','creek','pond']);assert.equal(g.read('player.cx'),4);assert.equal(g.read('player.cy'),5);assert.notEqual(g.nodes.get('merchantDialog').open,true);
 });

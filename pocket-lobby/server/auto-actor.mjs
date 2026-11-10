@@ -1,5 +1,6 @@
 import {settled,packet} from './player-api.mjs';
-import {advanceAutoMotion} from './auto-motion.mjs';
+import {planAutoWalk} from './auto-motion.mjs';
+import {autoWalkPosition} from '../public/auto-walk.js';
 import {tokenHash} from './identity.mjs';
 import {sharedActivity} from '../public/world-activity.js';
 import {armourSelection} from '../public/hunting.js';
@@ -23,8 +24,14 @@ export class AutoActor{
    const row=await this.tick(observed,observed);
    if(observed&&row)latest=packet(row);
   }
-  return Response.json({motion:this.actor.active?this.actor.motion:null,latest});
+  return Response.json({motion:this.actor.active?{...this.positionAt(Date.now()),walk:this.actor.walk??null}:null,latest});
  });}
+ positionAt(now){
+  const {motion,walk}=this.actor;
+  if(!walk)return motion;
+  const {x,y,direction,back}=autoWalkPosition(walk,now);
+  return {...motion,x,y,direction,back};
+ }
  alarm(){return this.ctx.blockConcurrencyWhile(async()=>{try{await this.tick(true);}catch(error){console.warn('Auto actor retry',error.message);await this.ctx.storage.setAlarm(Date.now()+5000);}});}
  async relay(room,remove=false,state=null,usage=null){
   if(!Object.hasOwn(socialRooms,room??''))return;
@@ -33,6 +40,7 @@ export class AutoActor{
   const motion=this.actor.motion;
   const peer=state?{playerId:this.actor.playerId,id:(await tokenHash('public:'+this.actor.playerId)).slice(0,24),room,name:state.avatar?.name??'Guest',...state.avatar,weapon:state.combatGear?.equippedWeapon??null,armour:armourSelection(state.combatGear),health:state.health??100,familiar:state.familiars?.equipped,familiarName:state.familiars?.names?.[state.familiars?.equipped],...motion,chopping:motion.moving?null:choppingPose(state),auto:true,activity:motion.moving?'walking':sharedActivity(state),veilUntil:outfitVeilUntil(state)}:null;
   if(peer){
+   peer.walk=this.actor.walk??null;
    peer.fishingSpot=!!state.plan?.fishingWork?.spot;
    peer.fishingBatch=state.plan?.fishingWork?.batchUntil??null;
    peer.fishing=motion.moving?null:sharedFishingPose(state);
@@ -54,12 +62,16 @@ export class AutoActor{
   const id=this.actor.playerId;if(!id)return;
   const started=Date.now(),previousUsage=this.actor.usage;
   const usage=autoUsage(this.env,previousUsage,observed?'observe':advance?'alarm':'sync',started);
-  const row=advance?await settled(this.env,id,true,{idle:true,motion:this.actor.motion,observed,usage}):await this.env.TOWER_DB.prepare('SELECT state_json FROM tower_players WHERE player_id = ?').bind(id).first();
+  const row=advance?await settled(this.env,id,true,{idle:true,motion:this.positionAt(started),observed,usage}):await this.env.TOWER_DB.prepare('SELECT state_json FROM tower_players WHERE player_id = ?').bind(id).first();
   const state=row&&JSON.parse(row.state_json),active=state?.plan?.source==='rules',now=Date.now(),previous=this.actor.publishedRoom;
   if(active){
    if(!this.actor.motion)this.actor.motion={room:state.location,...state.position,direction:'right',back:false};
-   // HTTP heartbeats never speed up walking. Only the durable alarm advances a tile.
-   if(advance||!this.actor.active)this.actor.motion=advanceAutoMotion(this.actor.motion,state);
+   const destination=[state.location,state.position?.x,state.position?.y].join(':');
+   // Sync reads can replace a changed destination. A door crossing requires an alarm.
+   if(!this.actor.active||this.actor.destination!==destination||advance&&(!this.actor.walk||now>=this.actor.walk.endsAt)){
+    const {motion,walk}=planAutoWalk(this.positionAt(now),state,now,advance);
+    Object.assign(this.actor,{motion,walk,destination});
+   }
    this.actor.motion.chopping=this.actor.motion.moving?null:choppingPose(state);
    if(previous!==this.actor.motion.room)delete this.actor.audience;
    if(previous&&previous!==this.actor.motion.room)await this.relay(previous,true,null,usage);
@@ -67,6 +79,7 @@ export class AutoActor{
   }else{
    if(previous)await this.relay(previous,true,null,usage);delete this.actor.publishedRoom;
    delete this.actor.audience;
+   delete this.actor.walk;delete this.actor.destination;
    this.actor.motion=state?{room:state.location,...(state.position??{x:5,y:7}),direction:'right',back:false}:null;
   }
   this.actor.active=!!active;
@@ -77,7 +90,12 @@ export class AutoActor{
   // During long waits, the client renders the timestamped animation locally.
   // Wake for the next action or lease renewal instead of polling every two seconds.
   const wait=plan?.activeHunt?500:due>now?Math.min(due-now,60000):2000;
-  if(active)next=fishing?.batchUntil??Math.min(plan.endAt??Infinity,now+(this.actor.motion.moving?200:this.actor.motion.blocked?5000:Math.max(100,wait)));
+  if(active){
+   const walk=this.actor.walk;
+   const boundary=walk?Math.max(now+50,walk.endsAt):now+(this.actor.motion.blocked?5000:Math.max(100,wait));
+   const workDue=walk&&(plan.activeHunt||due>now)?now+Math.max(100,wait):Infinity;
+   next=fishing?.batchUntil??Math.min(plan.endAt??Infinity,boundary,workDue);
+  }
   else if(state?.characterRules?.enabled&&!state.report&&!state.plan)next=Math.max(now+(advance?30000:1000),(state.routineLastSeen??now)+AWAY_GRACE_MS);
   if(active){
    const audience=this.actor.audience??'unknown';

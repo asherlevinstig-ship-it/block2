@@ -59,6 +59,7 @@ let serverCombatId=savedPlayerState?.combatId,lastCombatReceipt=null;
 let combatReports=savedPlayerState?.combatReports??[],activeCombatRecap=null,combatRecapBusy=false,combatRecapKey='';
 let credits = savedPlayerState?.credits??100;
 let autoJourney=null,autoJourneyState=null,autoJourneyTransition=false;
+let autoServerMotion=null,autoServerWalking=false;
 let autoArrivalKey=null,autoWorkAnimation=null;
 let loungeDressGuiding=false;
 let goldEarned=savedPlayerState?.goldEarned??0;
@@ -620,7 +621,7 @@ function receivePeers(peers){
   for(const peer of peers.slice(0,20)){
     if(!peer.id||!Number.isFinite(peer.x)||!Number.isFinite(peer.y))continue;
     keep.add(peer.id);const old=remotePeers.get(peer.id);
-    if(old)Object.assign(old,peer,{familiar:peer.familiar,familiarName:peer.familiarName});
+    if(old)Object.assign(old,peer,{walk:peer.walk??null,familiar:peer.familiar,familiarName:peer.familiarName});
     else remotePeers.set(peer.id,{...peer,rx:peer.x,ry:peer.y,lastFrame:performance.now()});
   }
   for(const id of remotePeers.keys())if(!keep.has(id))remotePeers.delete(id);
@@ -632,7 +633,7 @@ function receivePeers(peers){
 function drawRemote(peer,time){
   const [x,y]=peer.seat?seatAnchor(peer.seat):point(peer.rx+.5,peer.ry+.5);
   surface(peer.rx+.2,peer.ry+.25,.6,.55,.2,'#43324452');
-  const moving=Math.hypot(peer.x-peer.rx,peer.y-peer.ry)>.03,waveAge=Date.now()-(peer.waveAt??0);
+  const moving=peer.walk?peer.walking:Math.hypot(peer.x-peer.rx,peer.y-peer.ry)>.03,waveAge=Date.now()-(peer.waveAt??0);
   ctx.save();if((peer.hurtUntil??0)>time)ctx.globalAlpha=.55;
   const now=combatNow(),cut=peer.chopping;
   const cast=!moving&&(fishingView(peer.fishingLanding,currentRoom,now,time)??fishingView(peer.fishing,currentRoom,now,time));
@@ -3260,6 +3261,12 @@ function draw(time){
     ghost={...selection,...hover,id:-1};
   }
   for(const peer of remotePeers.values()){
+    if(peer.walk){
+      const {moving,...position}=window.autoWalkPosition(peer.walk,combatNow());
+      Object.assign(peer,position,{walking:moving,lastFrame:time});
+      if(reducedMotion.matches){peer.rx=peer.x;peer.ry=peer.y;}
+      continue;
+    }
     const amount=reducedMotion.matches?1:Math.min(1,Math.max(0,time-peer.lastFrame)/90);
     peer.rx+=(peer.x-peer.rx)*amount;peer.ry+=(peer.y-peer.ry)*amount;peer.lastFrame=time;
   }
@@ -3283,7 +3290,7 @@ function draw(time){
       surface(player.x+.17,player.y+.23,.71,.61,.2,'#43324452');
       surface(player.x+.27,player.y+.34,.50,.38,.3,'#43324462');
     }
-    const cycle=step?(player.stride%2)+Math.min(1,(time-step.started)/STEP_MS):0;
+    const cycle=autoServerWalking?time/STEP_MS:step?(player.stride%2)+Math.min(1,(time-step.started)/STEP_MS):0;
     const wave=player.waveStarted===null?null:(time-player.waveStarted)/WAVE_MS;
     const pose=playerCombatPose({time,now:combatNow(),encounter:player.inCombat?hunting.encounter:null,events:combatArt,reduced:reducedMotion.matches});
     const automatic=autoActivityAnimation(time),autoChop=automatic?.task==='woodcutting'&&!!automatic.tree,cast=fishingSession??(automatic?.task==='fishing'?automatic.cast:null);
@@ -4269,6 +4276,11 @@ function advanceAnimation(time){
     $('credits').textContent=new Intl.NumberFormat().format(displayedCredits);
     if(progress===1)walletTween=null;
   }
+  if(autoServerMotion?.walk&&autoServerMotion.room===currentRoom){
+    const position=window.autoWalkPosition(autoServerMotion.walk,combatNow());
+    autoServerWalking=position.moving;
+    Object.assign(player,{x:reducedMotion.matches?position.x:position.rx,y:reducedMotion.matches?position.y:position.ry,cx:position.x,cy:position.y,direction:position.direction,back:position.back});
+  }
   advanceAutoJourney();
   if(!step&&route.length){
     const to=route.shift(),from={x:player.cx,y:player.cy};
@@ -5166,7 +5178,7 @@ function updateTradingPost(){
   }
 }
 function savePlayerState(){
-  if(activityBusy||autoJourney||window.playerCloud?.initial?.plan||window.playerCloud?.initial?.report)return;
+  if(activityBusy||autoJourney||autoJourneyTransition||window.playerCloud?.initial?.plan||window.playerCloud?.initial?.report)return;
   const snapshot={safeVersion:1,progressionVersion,goldEarned,firstUpgrade,tradingPostGuideComplete,bedLessonComplete,credits,health,vitals:playerVitals,familiars:familiarState,woodcutting,history,quest,combatGear,hunting,depthsRun,depthsDiscovered,ownedFurniture,furniture:[],homeFurniture,loungeLayout:'gaming',adventure,stats:playerStats,fishingGear,huntingLoot,fishStock,avatar,wardrobe,location:currentRoom,position:{x:player.cx,y:player.cy}};
   save('player-state',snapshot);
   if(window.playerCloud)window.playerCloud.enqueue(JSON.parse(JSON.stringify(snapshot)));
@@ -6341,7 +6353,7 @@ function updateRoomLabel(){
   canvas.setAttribute('aria-label',roomDetails[currentRoom].name+'. Click a floor tile or use arrow keys to walk. '+(landmarks[currentRoom]??'Use the marked trails or the field journal to travel.'));
 }
 function enterRoom(next,arrival,{automatic=false,explore=false}={}){
-  if(next==='thornwood'&&!adventure.discovered.includes('thornwood')&&!thornwoodConfirmed&&savedPlayerState?.location!=='thornwood'){
+  if(next==='thornwood'&&!autoJourneyTransition&&!adventure.discovered.includes('thornwood')&&!thornwoodConfirmed&&savedPlayerState?.location!=='thornwood'){
     openWatchDialog('The trail turns dangerous.','Thornwood is optional. A Thorn Boar has 115 HP and hits harder than the Wild Boar. Bring a weapon and meals. The cream road reaches Beaconwatch safely.','Enter Thornwood',()=>{thornwoodConfirmed=true;enterRoom(next,arrival,{automatic});});return;
   }
   if(next==='lounge'&&!isSmartlyDressed(wardrobe)&&!autoJourneyTransition){requestLoungeDress();return;}
@@ -6461,7 +6473,7 @@ function autoTaskFor(plan){return plan?(plan.kind==='queue'?plan.queue?.steps?.[
 function autoActivityKey(state){const p=state?.plan;return [state?.location,p?.routineId??p?.startedAt??'',p?.stepIndex??'',p?.cycle??'',autoTaskFor(p)].join(':');}
 function autoActivityAnimation(time){
   const state=window.playerCloud?.initial,plan=state?.plan,task=autoTaskFor(plan);
-  if(!plan||autoJourney||step||route.length||currentRoom!==state.location){autoWorkAnimation=null;return null;}
+  if(!plan||autoJourney||autoServerMotion?.moving||step||route.length||currentRoom!==state.location){autoWorkAnimation=null;return null;}
   if(plan.physicalFishing&&(task==='fishing'||plan.fishingLandingUntil>combatNow())){
     const now=combatNow(),pose=sharedFishingPose(state,now),cast=fishingView(pose,currentRoom,now,time);
     if(!cast||cast.spot?.x!==player.cx||cast.spot?.y!==player.cy)return null;
@@ -6515,12 +6527,13 @@ function autoWorkTile(state){
   for(const tile of candidates){const path=walkingPath(startPosition(),tile);if(path)return {...tile,path,item};}return null;
 }
 function renderAutoJourneyHud(){
-  if(!autoJourney)return;
+  const travel=autoTravel();
+  if(!travel)return;
   const state=window.playerCloud?.initial,active=state?.plan?.source==='rules';
   $('autoPanel').hidden=false;$('autoModeLabel').textContent=active?'Auto · Walking':'Returning home';
-  $('autoCurrent').textContent=autoJourney.blocked?'Path blocked':'Walking to '+(roomDetails[autoJourney.room]?.name??autoJourney.room);
+  $('autoCurrent').textContent=travel.blocked?'Path blocked':'Walking to '+travel.destination;
   $('autoWhere').textContent=roomDetails[currentRoom].name+' · Following the room paths';
-  $('autoDecision').textContent=autoJourney.blocked?'There is no clear route. Clear the doorway or adjust your home layout.':(state?.plan?.plannerReason?state.plan.plannerReason+' ':'')+'Your adventurer is walking through the doors to the next activity.';
+  $('autoDecision').textContent=travel.blocked?'There is no clear route. Clear the doorway or adjust your home layout.':(state?.plan?.plannerReason?state.plan.plannerReason+' ':'')+'Your adventurer is walking through the doors to the next activity.';
   if(!state?.plan&&!state?.report){$('autoTakeControl').disabled=true;$('autoTakeControl').textContent='Walking home…';}
 }
 function finishAutoJourney(){
@@ -6544,7 +6557,12 @@ function advanceAutoJourney(){
   if(!destination.path.length){if(destination.item){const [w,d]=dimensions(destination.item),dx=destination.item.x+w/2-player.cx,dy=destination.item.y+d/2-player.cy;player.direction=dx-dy>=0?'right':'left';player.back=dx+dy<0;}finishAutoJourney();return;}
   route=destination.path;target={x:destination.x,y:destination.y};autoJourney.blocked=false;
 }
-window.towerAutoTravelStatus=()=>autoJourney?{destination:roomDetails[autoJourney.room]?.name??autoJourney.room,room:roomDetails[currentRoom]?.name??currentRoom,blocked:!!autoJourney.blocked}:null;
+function autoTravel(){
+ const motion=autoServerMotion;
+ const destination=autoJourney?.room??(motion?.moving||motion?.blocked?window.playerCloud?.initial?.location:null);
+ return destination?{destination:roomDetails[destination]?.name??destination,room:roomDetails[currentRoom]?.name??currentRoom,blocked:!!(autoJourney?.blocked||motion?.blocked)}:null;
+}
+window.towerAutoTravelStatus=autoTravel;
 const autoFeedbackTracker=typeof createAutoFeedbackTracker==='function'?createAutoFeedbackTracker(savedPlayerState):null;
 let autoTableState=null,autoTableServerAt=0,autoTableLocalAt=0,autoTableKey='',autoFishingKey='';
 function renderAutoTable(time){
@@ -6580,7 +6598,10 @@ function renderAutoTable(time){
   for(const card of cards??[null,null]){const tile=document.createElement('span');tile.className='auto-playing-card';tile.textContent=card?(card.rank===1?'A':card.rank===11?'J':card.rank===12?'Q':card.rank===13?'K':card.rank)+(typeof card.suit==='string'?card.suit:['♠','♥','♦','♣'][card.suit]??''):'◆';row.append(tile);}hands.append(row);
  }
 }
-window.towerApplyRoutineState=(state,{reconcile=false}={})=>{
+window.towerApplyRoutineState=(state,{reconcile=false,handoff=false}={})=>{
+  const motion=state.plan?.source==='rules'?state.autoPresence:null;
+  autoServerMotion=motion&&Object.hasOwn(motion,'walk')?motion:null;
+  autoServerWalking=false;
   if(state.autoPresence&&state.plan?.source==='rules')state={...state,location:state.autoPresence.room,position:{x:state.autoPresence.x,y:state.autoPresence.y}};
   trainingController?.close();
   fishingSession=null;fishingStarted=null;woodSession=null;treeFall=null;catchReveal=null;patienceTween=null;
@@ -6588,24 +6609,27 @@ window.towerApplyRoutineState=(state,{reconcile=false}={})=>{
   const serverNow=window.playerCloud?.serverTime??Date.now();
   const feedback=autoFeedbackTracker?.update(state,{now:serverNow,visible:!document.hidden})??[];
   applyServerGameplay(state);
-  if(reconcile&&(state.autoPresence||state.report?.source==='rules')){
+  const placeFromServer=!!autoServerMotion||handoff||reconcile&&(state.autoPresence||state.report?.source==='rules');
+  if(placeFromServer){
     // The server walked while this view was suspended. Restore its current
     // position once, instead of replaying a route that already happened offline.
     route=[];step=null;target=null;interaction=null;autoJourney=null;
     autoJourneyTransition=true;
     try{if(currentRoom!==state.location)enterRoom(state.location,state.position,{automatic:true});}
     finally{autoJourneyTransition=false;}
-    const position=state.position??{x:5,y:7};
-    Object.assign(player,{x:position.x,y:position.y,cx:position.x,cy:position.y,direction:state.autoPresence?.direction??player.direction,back:state.autoPresence?.back??player.back});
+    const sampled=autoServerMotion?.walk?window.autoWalkPosition(autoServerMotion.walk,combatNow()):null;
+    const position=sampled??state.position??{x:5,y:7};
+    autoServerWalking=sampled?.moving??false;
+    Object.assign(player,{x:sampled&&!reducedMotion.matches?sampled.rx:position.x,y:sampled&&!reducedMotion.matches?sampled.ry:position.y,cx:position.x,cy:position.y,direction:sampled?.direction??motion?.direction??player.direction,back:sampled?.back??motion?.back??player.back});
     autoArrivalKey=autoActivityKey(state);
   }
   autoTableState=state;autoTableServerAt=serverNow;autoTableLocalAt=performance.now();autoTableKey='';renderAutoTable(autoTableLocalAt);
   for(const event of feedback)showTransaction(event.title,[{icon:event.outcome==='win'?'✦':event.outcome==='lose'?'♠':'↻',text:event.detail},...(event.banked?[{icon:'◈',text:event.banked+' gold saved to your safe'}]:[])],event.gold,{auto:true,outcome:event.outcome,walletDelta:event.walletDelta});
   const matchesTile=Math.abs(player.cx-(state.position?.x??player.cx))+Math.abs(player.cy-(state.position?.y??player.cy))===0;
   const alreadyThere=currentRoom===state.location&&!step&&!route.length&&(matchesTile||!state.plan?.treeWork&&!state.plan?.fishingWork&&autoArrivalKey===autoActivityKey(state));
-  if(!alreadyThere||autoJourney){if(!autoJourney||autoJourney.room!==state.location){route=[];target=null;}autoJourney={room:state.location,blocked:false};setPlayerCombat(false);}
-  else {autoArrivalKey=autoActivityKey(state);setPlayerCombat(!!state.plan?.activeHunt&&!!hunting.encounter);}
-  if(state.combatReceipt&&state.combatReceipt.id!==lastCombatReceipt){lastCombatReceipt=state.combatReceipt.id;if(!autoJourney)for(const event of state.combatReceipt.events??[])if((window.playerCloud?.serverTime??Date.now())-(event.at??0)<2500)recordCombatFx(combatArt,event,performance.now());}
+  if(!placeFromServer&&(!alreadyThere||autoJourney)){if(!autoJourney||autoJourney.room!==state.location){route=[];target=null;}autoJourney={room:state.location,blocked:false};setPlayerCombat(false);}
+  else {autoArrivalKey=autoActivityKey(state);setPlayerCombat(!autoServerMotion?.moving&&!!state.plan?.activeHunt&&!!hunting.encounter);}
+  if(state.combatReceipt&&state.combatReceipt.id!==lastCombatReceipt){lastCombatReceipt=state.combatReceipt.id;if(!autoJourney&&!autoServerMotion?.moving)for(const event of state.combatReceipt.events??[])if((window.playerCloud?.serverTime??Date.now())-(event.at??0)<2500)recordCombatFx(combatArt,event,performance.now());}
   updateInventory();updateAdventurePanel();updateCombatPanel();if(!autoJourney)connectRoom();
 };
 

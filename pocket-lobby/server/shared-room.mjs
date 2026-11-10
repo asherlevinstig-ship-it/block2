@@ -12,13 +12,17 @@ import {roomTreeSnapshot,forestTrees,publicRoomNamespace} from './shared-trees.m
 import {choppingPose} from '../public/woodcutting.js';
 import {besideFishingStation} from '../public/region-catalog.js';
 import {sharedFishingPose} from '../public/fishing.js';
+import {autoWalkPosition} from '../public/auto-walk.js';
 
 function familiarProfile(state){
  const familiar=state.familiars?.equipped;
  return {familiar,familiarName:normalizeFamiliarName(state.familiars?.names?.[familiar])||undefined};
 }
 const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store'}});
-export function publicPeer(meta){return {id:meta.id,name:meta.name,outfit:meta.outfit,trousers:meta.trousers??0,boots:meta.boots??0,hair:meta.hair,weapon:meta.weapon,armour:meta.armour??null,x:meta.x,y:meta.y,direction:meta.direction,back:meta.back,seat:meta.seat??null,waveAt:meta.waveAt??0,health:meta.health??100,activity:meta.activity??null,chopping:meta.chopping??null,fishing:meta.fishing??null,auto:meta.auto===true,...(isFamiliar(meta.familiar)?{familiar:meta.familiar,familiarName:normalizeFamiliarName(meta.familiarName)||null}:{})};}
+export function publicPeer(meta,now=Date.now()){
+  const {x,y,direction,back}=meta.walk?autoWalkPosition(meta.walk,now):meta;
+  return {id:meta.id,name:meta.name,outfit:meta.outfit,trousers:meta.trousers??0,boots:meta.boots??0,hair:meta.hair,weapon:meta.weapon,armour:meta.armour??null,x,y,direction,back,seat:meta.seat??null,waveAt:meta.waveAt??0,health:meta.health??100,activity:meta.activity??null,chopping:meta.chopping??null,fishing:meta.fishing??null,walk:meta.walk??null,auto:meta.auto===true,...(isFamiliar(meta.familiar)?{familiar:meta.familiar,familiarName:normalizeFamiliarName(meta.familiarName)||null}:{})};
+}
 export async function handleWorldConnect(request,env){
   const url=new URL(request.url),room=url.searchParams.get('room'),check=url.searchParams.get('check')==='1';
   if(request.method!=='GET'||!check&&request.headers.get('Upgrade')?.toLowerCase()!=='websocket')return json({error:'A WebSocket connection is required.'},426);
@@ -64,7 +68,7 @@ export class SharedRoom{
   peers(now=Date.now()){
     const peers=new Map([...this.sessions.values()].filter(meta=>!meta.serverAuto).map(meta=>[meta.playerId??meta.id,meta]));
     for(const [id,peer] of this.autoPeers)if(peer.until>now)peers.set(id,peer);
-    return [...peers.values()].filter(meta=>!(meta.veilUntil>now)).map(publicPeer);
+    return [...peers.values()].filter(meta=>!(meta.veilUntil>now)).map(meta=>publicPeer(meta,now));
   }
   send(ws,data){try{ws.send(JSON.stringify(data));}catch{this.sessions.delete(ws);}}
   async loadTrees(room){if(!this.env.TOWER_DB||!forestTrees(room).length)return;this.room=room;this.treeSnapshot=await roomTreeSnapshot(this.env.TOWER_DB,room);}
@@ -83,7 +87,8 @@ export class SharedRoom{
     const {playerId,room,spots}=await request.json(),now=Date.now();
     for(const [id,spot] of this.fishingSpots)if(spot.until<=now)this.fishingSpots.delete(id);
     const own=this.fishingSpots.get(playerId);
-    const occupied=[...this.sessions.values(),...this.autoPeers.values(),...[...this.fishingSpots].map(([id,spot])=>({...spot,playerId:id}))];
+    const movingPeers=[...this.autoPeers.values()].filter(peer=>peer.until>now).map(peer=>peer.walk?{...peer,...autoWalkPosition(peer.walk,now)}:peer);
+    const occupied=[...this.sessions.values(),...movingPeers,...[...this.fishingSpots].map(([id,spot])=>({...spot,playerId:id}))];
     const free=spot=>besideFishingStation(room,spot)&&!occupied.some(other=>other.playerId!==playerId&&other.x===spot.x&&other.y===spot.y);
     const spot=spots.find(s=>s.x===own?.x&&s.y===own?.y&&free(s))??spots.find(free);
     if(!spot)return json({spot:null});

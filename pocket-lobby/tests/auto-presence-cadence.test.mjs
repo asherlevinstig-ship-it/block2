@@ -11,6 +11,10 @@ test('hidden tabs pause polling while visible Auto polls near the next timed eve
  assert.equal(autoPresenceDelay(state,now+61000,false),2000);
  state.autoPresence.moving=true;
  assert.equal(autoPresenceDelay(state,now,false),2000);
+ state.autoPresence.walk={endsAt:now+3400};
+ assert.equal(autoPresenceDelay(state,now,false),3550);
+ assert.equal(autoPresenceDelay(state,now+3400,false),250);
+ delete state.autoPresence.walk;
  state.plan.activeHunt={};
  assert.equal(autoPresenceDelay(state,now,false),250);
  assert.equal(autoPresenceDelay(state,now,true),null);

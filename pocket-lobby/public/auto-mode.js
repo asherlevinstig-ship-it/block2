@@ -29,8 +29,9 @@ export function autoPresenceDelay(state,now,hidden){
  if(hidden||!state)return null;
  const plan=state.plan;
  if(plan?.source==='rules'){
-  if(plan.activeHunt)return 250;
   const motion=state.autoPresence;
+  if(motion?.walk)return Math.max(250,Math.min(20000,motion.walk.endsAt-now+150));
+  if(plan.activeHunt)return 250;
   if(!motion||motion.moving||motion.room!==state.location)return 2000;
   const cast=plan.fishingWork?.cast;
   const due=[cast&&cast.landAt+900,plan.treeWork?.cut?.endsAt,plan.fishingWork?.readyAt,
