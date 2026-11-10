@@ -1,3 +1,4 @@
+import {drawWoodlandTree,drawWoodlandRock} from './woodland-art.js';
 import {drawReserveGround,drawReserveWater} from './wildlife-art.js';
 import {wildlifeRoom,wildlifeView,wildlifeArea,reserveWater} from './wildlife.js';
 import {watchAreas,watchRooms,watchWater,willowmereAreas,willowmereRooms,riverWater,riverBridge} from './region-catalog.js';
@@ -150,9 +151,10 @@ export const moonwood=(()=>{
     for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){
       const onTrail=path.has(key(x,y));
       const water=isWater(id,x);
-      const color=water?['#356579','#3c7585','#417385'][y%3]:onTrail?trail:(x*7+y*11)%4===0?light:ground;
-      surface(x,y,1,1,0,color,water?'#3c697c':onTrail?'#514e66':'#344055');
+      const color=water?(id==='pond'?['#386b71','#336671','#2c5b6b','#295568','#285468','#254f66'][x-6]:['#356579','#3c7585','#417385'][y%3]):onTrail?trail:(x*7+y*11)%4===0?light:ground;
+      surface(x,y,1,1,0,color,water?(id==='pond'?undefined:'#3c697c'):onTrail?'#514e66':'#344055');
       if(water){
+        if(id==='pond'){if(x===6)surface(x+.045,y+.07,.09,.83,.1,'#8dbbaa67');if((x+y*3)%5===0)surface(x+.45,y+.35,.28,.03,.11,'#99d1c25c');continue;}
         surface(x+.13,y+.2,.35,.045,.16,'#81bbc0');
         surface(x+.44,y+.66,.33,.031,.16,'#6ca4b3');
       }else{
@@ -431,18 +433,9 @@ export const moonwood=(()=>{
       for(let i=0;i<5;i++)rect(px-9+i*2,py-17-bob-(i%2),2,3,'#443744');
       rect(px-14,py-10-bob,4,1,'#89676c');rect(px-15,py-13-bob,1,4,'#89676c');rect(px-14,py-14-bob,3,1,'#b18a80');
     }else if(type==='wildtree'||type==='timberTree'){
-      const tint=(x*3+y)%3;
-      const foliage=[['#3f777a','#2e5d6a','#274c5d'],['#50778c','#355d76','#294d69'],['#5c748b','#435b76','#344862']][tint];
-      part(.39,.43,.22,.22,0,24,['#796071','#493e57','#5e4a61']);
-      polygon([[px-19,py-22],[px-14,py-34],[px-7,py-41],[px-3,py-50],[px+4,py-51],[px+14,py-38],[px+19,py-24],[px+13,py-18],[px-10,py-17]],foliage[2]);
-      polygon([[px-15,py-25],[px-10,py-38],[px-2,py-48],[px+4,py-48],[px+11,py-37],[px+13,py-30],[px+4,py-24]],foliage[1]);
-      polygon([[px-10,py-34],[px-4,py-45],[px+2,py-47],[px+8,py-38],[px+3,py-35]],foliage[0]);
-      rect(px-9,py-29,4,1,'#8da2a0');
-      rect(px+7,py-29,2,1,'#7c969b');
+      drawWoodlandTree(x,y,{point,polygon,surface,block,rect});
     }else if(type==='wildrock'){
-      part(.20,.22,.59,.53,0,7,stone);
-      part(.25,.24,.44,.36,7,4,stone);
-      part(.35,.28,.20,.16,11,.4,aqua);
+      drawWoodlandRock(x,y,{point,polygon,surface});
     }else if(type==='fishingPost'){
       part(.30,.34,.19,.19,0,16,['#c1a385','#65566a','#927984']);
       part(.19,.27,.54,.34,16,3,['#d9c2a1','#85778a','#a59c9e']);

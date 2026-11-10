@@ -705,6 +705,7 @@ const player = {x:5,y:7,cx:5,cy:7,direction:'right',back:false,seat:null,stride:
 function setPlayerCombat(active){
   player.inCombat=active===true;
   $('healthHud').hidden=!player.inCombat;
+  updateFieldJournal();
   if(!player.inCombat)combatMoveGoal=null;
 }
 let route=[],step=null,interaction=null,hover=null,hoverItem=null,target=null,combatMoveGoal=null;
@@ -1493,6 +1494,10 @@ function updateCombatPanel(){
   $('combatDodge').disabled=!encounter||now<(encounter.nextDodgeAt??0)||stamina<dodgeCost;
   const timing=!!encounter&&encounter.nextBoarAt-now>=0&&encounter.nextBoarAt-now<=boarRules.dodgeWindow;
   $('combatDodge').classList.toggle('dodge-ready',timing&&!$('combatDodge').disabled);
+  $('quickDodge').disabled=$('combatDodge').disabled;$('quickFlee').disabled=$('combatFlee').disabled;
+  $('quickDodge').textContent=timing&&!$('quickDodge').disabled?'Dodge now!':'Dodge';
+  $('quickDodge').classList.toggle('dodge-ready',timing&&!$('quickDodge').disabled);
+  $('quickDodge').title='Dodge · Space · '+Math.floor(stamina)+' stamina';
   $('combatDodge').textContent=encounter&&stamina<dodgeCost?'Dodge · Low stamina':encounter&&now<(encounter.nextDodgeAt??0)?'Dodge · Recovering':timing?'Dodge now! · Space':'Dodge · Space';
   $('combatCooldown').textContent=encounter?'Next strike '+Math.max(0,(encounter.nextPlayerAt-now)/1000).toFixed(1)+'s · '+attack.name+' '+Math.max(0,(encounter.nextBoarAt-now)/1000).toFixed(1)+'s'+(remaining?' · Flee '+(remaining/1000).toFixed(1)+'s':' · F: Flee'):'Click the '+enemy.name+' to engage. Combat runs in real time.';
   $('combatLog').textContent=combatMessage||'The '+enemy.name+' waits. It attacks when you approach.';
@@ -2312,12 +2317,13 @@ function drawGrandLobby(showDoors=true){
   block(0,0,cols,rows,-13,13,['#9f9ca1','#555568','#363e55']);
   block(0,rows-.07,cols,.08,-10,2,['#9a785d','#b79265','#72584d']);
   block(cols-.07,0,.08,rows,-10,2,['#9a785d','#846750','#a4805c']);
-  const stone=['#b0a69c','#aaa195','#ada499','#a69d94'];
+  const stone=['#aaa297','#a39a8e','#afa79b','#9f968a'];
   for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){
     const border=x===0||y===0||x===cols-1||y===rows-1;
     surface(x,y,1,1,0,border?'#646779':stone[(x*7+y*3)%stone.length],border?'#55596c':'#948c89');
     surface(x+.04,y+.05,.92,.033,.08,'#d1c8c32e');
-    if((x*3+y*7)%6===0)surface(x+.34,y+.54,.28,.025,.1,'#d4ccca64');
+    if((x*3+y*7)%6===0){surface(x+.34,y+.54,.28,.025,.1,'#e2d8ca80');surface(x+.17,y+.7,.31,.025,.1,'#756b622f');}
+    if(!border&&(x*7+y*3)%11===0)surface(x+.06,y+.93,.88,.035,.11,'#ede0c23c');
   }
   for(const edge of [.32,cols-.37])surface(edge,.32,.055,rows-.64,.17,'#d5b080');
   for(const edge of [.32,rows-.37])surface(.32,edge,cols-.64,.055,.17,'#d5b080');
@@ -2342,8 +2348,9 @@ function drawGrandLobby(showDoors=true){
     surface(x+.12,y+.12,3.36,3.46,.18,'#9696a0');
   }
   for(const [x,y] of [[2.3,2.9],[4.4,4.1],[12.9,8.5],[6.7,14.2]]){
-    lobbyLight(...point(x,y),63,'#ffd39a60',.47);
+    lobbyLight(...point(x,y),68,'#ffd39a7a',.47);
   }
+  for(const [x,y] of [[2,10],[2,12],[13,8],[3,2]]){surface(x+.2,y+.1,2,.86,.12,'#34374633');surface(x+.35,y+.3,1.62,.67,.15,'#30344738');}
   if(showDoors)for(const door of hubDoors){
     const middle=(door.start+door.end)/2;
     const spot=door.side==='front'?point(middle,rows-.8):door.side==='left'?point(.86,middle):point(middle,.86);
@@ -2759,8 +2766,12 @@ function object(item,highlight=false,time=0) {
     part(.025,.24,.14,.66,9,7,cloth);
     part(length-.165,.24,.14,.66,9,7,cloth);
     part(.18,.26,length-.36,.65,9,4,cloth);
+    part(.20,.83,length-.40,.045,12.6,.7,cloth);
+    part(.07,.15,length-.14,.035,21,.8,'trim');
+    part(.03,.28,.1,.57,16,.7,cloth);part(length-.13,.28,.1,.57,16,.7,cloth);
     if(type==='sofa'){
       part(.22,.35,.32,.24,13,5,'gold');
+      part(.25,.39,.22,.035,18,.6,'cream');
       part(1.43,.32,.33,.27,13,5,'cream');
       part(.99,.33,.035,.55,13,.3,'trim');
     }else part(.24,.34,.25,.2,13,5,'cream');
@@ -2769,7 +2780,7 @@ function object(item,highlight=false,time=0) {
       part(i,.18,.14,.62,0,7,'black');
       part(i,.19,.11,.14,6,14,'black');
     }
-    for(const y of [.30,.46,.62])part(.09,y,1.82,.13,7,2,'wood');
+    for(const y of [.30,.46,.62]){part(.09,y,1.82,.13,7,2,'wood');part(.16,y+.02,1.48,.025,9,.35,'trim');}
     for(const z of [12,16,20])part(.10,.15,1.8,.12,z,2,'wood');
     part(.08,.27,.13,.45,11,2,'black');
     part(1.79,.27,.13,.45,11,2,'black');
@@ -3823,6 +3834,7 @@ function updateExplorationNav(){
   else if(trackedDestination===currentRoom)guidance='Arrived at '+explorationName(currentRoom);
   else if(trackedDestination)guidance='No open route to '+explorationName(trackedDestination)+' from here';
   $('explorationNext').textContent=guidance;
+  nav.dataset.routing=String(!!trackedDestination);
   $('explorationReturn').hidden=!outside||!!next||!hudNextDoor('hub');
   $('explorationFollow').hidden=!next;
   $('explorationFollow').textContent=next?'Walk to '+explorationName(next.to):'';
@@ -5308,6 +5320,23 @@ function choose(item){
   updateBedGuide();
 }
 function cancelSelection(){selection=null;editStatus('Select a piece to get started.');}
+var fieldJournalOpen=false;
+function updateFieldJournal(){
+  const required=editing;
+  const quickCombat=player.inCombat&&depthsStageIndex(currentRoom)<0;
+  $('quickDodge').hidden=$('quickFlee').hidden=!quickCombat;
+  $('roomLayout').dataset.quickCombat=String(quickCombat);
+  const open=fieldJournalOpen||required;
+  if($('roomLayout').dataset.journal!==String(open)){
+    $('roomLayout').dataset.journal=String(open);bounds=null;
+  }
+  $('fieldJournalToggle').setAttribute('aria-expanded',String(open));
+  $('fieldJournalToggle').disabled=required;
+  $('fieldJournalClose').hidden=required;
+}
+$('fieldJournalToggle').onclick=()=>{fieldJournalOpen=!fieldJournalOpen;updateFieldJournal();};
+$('fieldJournalClose').onclick=()=>{fieldJournalOpen=false;updateFieldJournal();$('fieldJournalToggle').focus();};
+if(typeof ResizeObserver==='function')new ResizeObserver(()=>{bounds=null;}).observe(canvas);
 function switchMode(next){
   cancelFishing();
   editing=next&&canDecorate();
@@ -5317,6 +5346,7 @@ function switchMode(next){
   $('edit').classList.toggle('active',editing);$('walk').classList.toggle('active',!editing);
   $('edit').setAttribute('aria-pressed',String(editing));$('walk').setAttribute('aria-pressed',String(!editing));
   $('roomLayout').classList.toggle('decorating',editing);
+  updateFieldJournal();
   $('roomLayout').classList.toggle('shopping',['store','armory','furnishings'].includes(currentRoom));
   $('questTracker').hidden=currentRoom==='hub'||quest.claimed;
   $('roomSide').hidden=(atHome()&&!editing)||['outside','store','armory','market','furnishings'].includes(currentRoom);
@@ -5840,6 +5870,8 @@ $('combatFlee').onclick=()=>combatAction('flee');
 $('courtyardPractice').onclick=openTrainingCourtyard;
 $('visitTraining').onclick=()=>{navigateHud('outside');note('Head outside and select the Training courtyard dummy.');};
 $('combatDodge').onclick=()=>combatAction('dodge');
+$('quickDodge').onclick=$('combatDodge').onclick;
+$('quickFlee').onclick=$('combatFlee').onclick;
 $('combatSound').setAttribute('aria-pressed',String(combatSoundEnabled));$('combatSound').textContent=combatSoundEnabled?'Combat sound on':'Combat sound off';
 $('combatSound').onclick=()=>{combatSoundEnabled=!combatSoundEnabled;save('combat-sound',combatSoundEnabled);combatAudio.enable(combatSoundEnabled);$('combatSound').setAttribute('aria-pressed',String(combatSoundEnabled));$('combatSound').textContent=combatSoundEnabled?'Combat sound on':'Combat sound off';};
 $('approachBeetle').onclick=()=>{
@@ -6324,13 +6356,14 @@ document.addEventListener('keydown',e=>{
     canvas.focus({preventScroll:true});
   }
 });
+function defaultRoomZoom(room){return depthsStageIndex(room)>=0?1.27:['pond','millCellar','logging','clearing'].includes(room)?1.10:1;}
 function setZoom(value){
   zoom=Math.max(.75,Math.min(1.5,value));hover=null;hoverItem=null;
   $('plus').disabled=zoom===1.5;$('minus').disabled=zoom===.75;
 }
 $('plus').onclick=()=>setZoom(zoom+.125);
 $('minus').onclick=()=>setZoom(zoom-.125);
-$('resetView').onclick=()=>setZoom(1);
+$('resetView').onclick=()=>setZoom(defaultRoomZoom(currentRoom));
 window.addEventListener('resize',()=>{bounds=null;});
 document.addEventListener('visibilitychange',()=>{
   if(!document.hidden&&player.inCombat&&window.playerCloud?.initial?.plan?.source!=='rules'){if(window.playerCloud?.gameplay)sendServerCombat();else hunting.encounter=resumeHunt(hunting.encounter,Date.now(),playerStats,combatGear.moonwellCharmEquipped);}
@@ -6503,6 +6536,7 @@ function enterRoom(next,arrival,{automatic=false,explore=false}={}){
   catchReveal=null;$('catchReveal').hidden=true;
   const focusRoom=!!document.activeElement.closest('[data-room-link]');
   if(next==='market'&&tradingGuideActive()){if(quest.claimed)tradingPostGuideComplete=true;tradeGuideRouteCache=null;}
+  if(currentRoom!==next)fieldJournalOpen=false;
   currentRoom=next;selectedWildAnimal=null;wildlifeAffection=null;wildlifeFeedback=null;wildlifeTrialEffect=null;familiarFollowers.clear();familiarReaction=null;$('gameShell').dataset.expedition=watchRooms.includes(next)?next:'';
   depthsExploring=explore;
   const exploring=moonwood.has(next);
@@ -6542,7 +6576,7 @@ function enterRoom(next,arrival,{automatic=false,explore=false}={}){
   // Older saves can be standing beyond the new flooded channel.
   if(next==='depthsGate'&&arrival?.x>=8&&!depthsRun.finds?.includes('sluiceLever'))arrival={x:7,y:4};
   movePlayerToSpawn(arrival);
-  if(depthsIndex>=0)setZoom(1.35);
+  setZoom(defaultRoomZoom(next));
   if(exploring&&depthsIndex<0&&!adventure.discovered.includes(next)){
     adventure.discovered.push(next);
     showTransaction('New place discovered',[{icon:'✦',text:name+' · Map fog cleared'}]);

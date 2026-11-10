@@ -1,0 +1,74 @@
+/* The stage owns the middle of the screen; details open when requested. */
+#roomLayout{grid-template-columns:76px minmax(0,1fr);gap:14px;padding-bottom:104px}
+#roomLayout[data-journal=true]{grid-template-columns:76px minmax(0,1fr) 286px}
+#fieldJournal{display:none;padding:12px 11px 10px;background:linear-gradient(155deg,#14243bf5,#0b172bec);border:1px solid #566e8e55;border-radius:12px;gap:12px}
+#roomLayout[data-journal=true] #fieldJournal{display:flex}
+.field-journal-head{display:flex;align-items:center;justify-content:space-between;gap:8px;color:#f0d9a4;font-size:13px;padding:0 2px 8px;border-bottom:1px solid #566e8e55}
+.field-journal-head button{width:29px;height:29px;font-size:18px;padding:0;background:#21314a}
+#fieldJournal .titlebar h1{font-size:18px;line-height:1.2}
+#fieldJournal .titlebar{gap:6px}
+#fieldJournal .side{margin-top:0}
+#fieldJournalToggle .hud-icon{stroke:#e7c880;fill:#9d77454a}
+#fieldJournalToggle[aria-expanded=true]{border-color:#a6844e;background:#463b32;color:#f8dfa2}
+#fieldJournalToggle:disabled{opacity:1}
+.hud-left .hud-character{width:204px;padding:8px;background:linear-gradient(145deg,#13223ce8,#0c172be8);border-radius:11px}
+.hud-character .profile{font-size:16px;min-height:44px;gap:9px}
+.hud-character .portrait{width:44px;height:44px}
+.hud-character .player-vitals{gap:5px;padding:6px 3px 1px;margin-top:6px}
+#roomLayout .hud-left{padding-top:165px;gap:9px}
+.hud-rail .tool{min-height:49px;gap:3px;padding:5px 2px}
+.hud-rail .tool .hud-icon{width:24px;height:24px}
+.hud-rail .tool .dock-label{font-size:10px}
+#railHome,.hud-bottom #inventory,.hud-bottom #looks,.hud-bottom #edit,#hudChatPrompt{display:none}
+.hud-bottom{grid-template-columns:minmax(0,1fr) auto auto;gap:10px}
+.hud-bottom .hud-quickbar{grid-column:2}
+.hud-bottom .hud-actionbar{grid-column:3}
+.hud-bottom .tool{min-width:48px;min-height:48px;padding:4px 6px;gap:4px}
+.hud-bottom .tool .hud-icon{height:23px;width:23px}
+.hud-bottom .quick-combat{background:#273c51;border-color:#66859a;color:#f5e5bf;font-weight:750;font-size:12px;min-width:61px}
+.hud-bottom .quick-combat.dodge-ready{background:#436049;border-color:#b8d7a1}
+.shell:has(#roomLayout[data-journal=true]) .quick-combat,.shell:has(#roomLayout[data-quick-combat=true]:not([data-journal=true])) .hud-bottom :is(#wave,#openRoomChat){display:none}
+.shell .play>.exploration-nav{width:min(500px,calc(100% - 150px));margin-right:34px}
+.exploration-nav:not([data-routing=true]) #explorationNext{display:none}
+.scene.in-combat .mill-raid-badge,#roomLayout[data-depths]:not([data-depths=""]) .mill-raid-badge{display:none}
+.scene .mill-raid-badge{top:12px;left:auto;right:50px;transform:none;max-width:calc(100% - 76px)}
+.bag-shortcuts{margin:0 0 14px;padding:8px 0;border-bottom:1px solid #42557566;color:#b9cbe3;font-size:12px}
+.bag-shortcuts summary{cursor:pointer;width:max-content;max-width:100%}
+.bag-shortcuts div{display:flex;flex-wrap:wrap;gap:7px;margin-top:9px}
+.bag-shortcuts button{padding:7px 10px;min-width:0;white-space:normal;font-size:12px}
+#inventoryDialog .bag-slot>span{font-size:12px;line-height:1.25;min-height:30px}
+#inventoryDialog .bag-slot>small,#inventoryDialog .bag-tabs button{font-size:11px}
+#inventoryDialog .bag-topline{margin:0 0 12px}
+@media(max-width:900px){
+ #roomLayout,#roomLayout[data-journal=true]{grid-template-columns:62px minmax(0,1fr);gap:7px}
+ #fieldJournal{position:absolute;z-index:14;top:12px;right:10px;bottom:auto;width:min(286px,calc(100% - 84px));max-height:calc(100dvh - 190px);min-height:0;overflow:auto;padding:10px;grid-column:auto;grid-row:auto}
+ .field-journal-head{position:sticky;top:-10px;z-index:2;background:#13243b;padding-top:6px}
+ #fieldJournal .titlebar{display:flex}
+ .shell .play>.exploration-nav{width:100%;margin-right:0}
+ .hud-bottom{grid-template-columns:minmax(0,1fr) auto auto;gap:5px}
+ .hud-bottom .tool{min-width:39px;min-height:45px;padding:4px}
+}
+@media(max-width:520px){
+ #roomLayout,#roomLayout[data-journal=true]{grid-template-columns:54px minmax(0,1fr);gap:4px}
+ #roomLayout .hud-left{padding-top:89px}
+ .hud-left .hud-character{width:calc(100vw - 14px);display:grid;grid-template-columns:minmax(85px,1fr) minmax(135px,1.45fr);align-items:center;gap:10px;padding:6px 8px}
+ .hud-character .player-vitals{margin:0;padding:0 0 0 7px;border-top:0;border-left:1px solid #7286aa30;gap:4px}
+ .shell .play>.exploration-nav{margin-top:86px;display:flex;gap:5px}
+ .shell .play>.exploration-nav[hidden]{display:none}
+ .exploration-nav>div{min-width:0;flex:1}
+ .exploration-nav #explorationPlace{font-size:12px}
+ .exploration-nav button{padding:5px 6px;font-size:10px}
+ .shell .play:not(:has(>.exploration-nav:not([hidden]))){padding-top:82px}
+ .scene .mill-raid-badge{top:34px;right:12px;padding:6px 9px;font-size:10px;max-width:calc(100% - 24px)}
+ #roomLayout[data-contextual=true] #game{height:calc(100% - 142px)}
+ .scene #contextGuide{bottom:8px;width:calc(100% - 12px);max-width:none;padding:10px 12px}
+ .scene #contextGuide h2{font-size:16px}
+ .scene #contextGuide p{font-size:11px;line-height:1.4;margin-bottom:7px}
+ .scene #contextGuide button{min-height:35px;padding:6px 10px}
+ .dungeon-arena-hud{top:60px}
+ #fieldJournal{top:88px;max-height:calc(100dvh - 255px)}
+ .hud-rail .tool .dock-label{font-size:8px}
+ .hud-rail .tool .hud-icon{width:21px;height:21px}
+ .hud-rail .tool{min-height:43px}
+ #inventoryDialog .bag-slot>span{font-size:11px}
+}
