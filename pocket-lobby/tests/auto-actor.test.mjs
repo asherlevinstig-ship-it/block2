@@ -7,6 +7,8 @@ import {normalizeState} from '../server/player-state.mjs';
 import {simpleAutoRules} from '../public/simple-auto.js';
 import {touchPresence} from '../server/routines.mjs';
 import {testDatabase} from './db-helper.mjs';
+import {handlePlayerApi} from '../server/player-api.mjs';
+import {tokenHash,GUEST_COOKIE} from '../server/identity.mjs';
 
 function context(storage=new Map(),sockets=[]){let ready=Promise.resolve(),alarm=null;return {storage:{get:async k=>storage.get(k),put:async(k,v)=>{storage.set(k,structuredClone(v));},getAlarm:async()=>alarm,setAlarm:async at=>{alarm=at;},deleteAlarm:async()=>{alarm=null;}},getWebSockets:()=>sockets,blockConcurrencyWhile(fn){const result=ready.then(fn);ready=result.catch(()=>{});return result;},ready:()=>ready,stored:storage};}
 const sync=id=>new Request('https://actor.internal/sync',{method:'POST',body:JSON.stringify({playerId:id})});
@@ -62,4 +64,15 @@ test('room shows an offline Auto peer once, relays catches, and expires abandone
  const event={id:'catch1',kind:'catch',label:'+1 Silverfin',room:'pond',at:Date.now()};
  const request=()=>new Request('https://room.internal/activity',{method:'POST',body:JSON.stringify({playerId:'owner',revision:2,events:[event]})});await room.fetch(request());await room.fetch(request());assert.equal(messages.filter(m=>m.type==='activity').length,1);
  room.autoPeers.get('owner').until=Date.now()-1;await room.alarm();assert(!room.peers().some(p=>p.id==='owner-public'));
+});
+
+test('taking control and returning from idle both keep the server walking position',async t=>{
+ const {db,sql}=testDatabase();t.after(()=>sql.close());const token='b'.repeat(64),id=await tokenHash(token),motion={room:'hub',x:8,y:9};
+ const env={TOWER_DB:db,AUTO_ACTORS:{idFromName:n=>n,get:()=>({fetch:async()=>Response.json({motion})})}};
+ for(const path of ['control','presence']){
+  const s=normalizeState({location:'home',characterRules:simpleAutoRules('exploring',{risk:'safe'})});s.quest.accepted=true;s.routineLastSeen=Date.now()-240000;touchPresence(s,Date.now(),{active:false,forceStart:true});if(path==='control')s.controlMode='auto';
+  sql.prepare('INSERT OR REPLACE INTO tower_players VALUES (?, ?, 1, ?, ?)').run(id,JSON.stringify(s),'test',Date.now());
+  const response=await handlePlayerApi(new Request('https://tower.test/api/player/'+path,{method:'POST',headers:{Origin:'https://tower.test','Content-Type':'application/json',Cookie:GUEST_COOKIE+'='+token},body:JSON.stringify({revision:1,operation:path,characterKey:id,...(path==='control'?{mode:'play'}:{active:true})})}),env);
+  assert.equal(response.status,200);const {state}=await response.json();assert.equal(state.location,'hub');assert.deepEqual(state.position,{x:8,y:9});assert(!state.plan);
+ }
 });

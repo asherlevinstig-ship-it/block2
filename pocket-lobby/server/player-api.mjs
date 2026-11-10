@@ -47,6 +47,12 @@ async function write(db,id,revision,state,operation,factionId=null){
   return db.prepare("UPDATE tower_players SET state_json = ?, revision = revision + 1, last_request = ?, updated_at = ? WHERE player_id = ? AND revision = ? AND (? IS NULL OR EXISTS (SELECT 1 FROM tower_faction_members WHERE player_id=tower_players.player_id AND faction_id=?)) RETURNING player_id, state_json, revision, last_request")
     .bind(JSON.stringify(state),operation,Date.now(),id,revision,factionId,factionId).first();
 }
+async function actorMotion(env,id){
+  if(!env.AUTO_ACTORS)return null;
+  const stub=env.AUTO_ACTORS.get(env.AUTO_ACTORS.idFromName(id));
+  const response=await stub.fetch(new Request('https://actor.internal/position',{method:'POST',body:JSON.stringify({playerId:id})}));
+  return (await response.json()).motion;
+}
 export async function settled(env,id,activities=false,{idle=false}={}){
   const db=env.TOWER_DB;
   for(let attempt=0;attempt<5;attempt++){
@@ -196,13 +202,16 @@ export async function handlePlayerApi(request,env){
       case "/api/player/commissions/carpenter":
         deliverCarpenterOrder(state);
         break;
-      case "/api/player/presence":
+      case "/api/player/presence":{
         if(body.active!==undefined&&typeof body.active!=='boolean'||body.idleForMs!==undefined&&(!Number.isInteger(body.idleForMs)||body.idleForMs<0||body.idleForMs>AWAY_GRACE_MS))throw new Error('Invalid activity status.');
         if((!state.characterRules?.enabled&&state.controlMode!=='auto'&&!state.plan)||(state.plan&&state.plan.source!=='rules')||state.report&&!state.autoSwitch)return json(packet(row));
         settleActivities(state,Date.now());
+        const resume=state.plan?.source==='rules'&&state.controlMode!=='auto'&&body.active!==false?await actorMotion(env,id):null;
         touchPresence(state,Date.now(),{active:body.active!==false,activityAt:Date.now()-(body.idleForMs??0)});
+        if(resume&&!state.plan){state.location=resume.room;state.position={x:resume.x,y:resume.y};}
         settleActivities(state,Date.now());
         break;
+      }
       case "/api/player/control":{
         if(!['play','auto'].includes(body.mode))throw new Error('Choose Play or Auto.');
         const now=Date.now();settlePlan(state,now);
@@ -214,8 +223,7 @@ export async function handlePlayerApi(request,env){
           state.controlMode='auto';state.routineLastSeen=now;touchPresence(state,now,{active:false,forceStart:true});
         }else{
           if(state.plan&&state.plan.source!=='rules')throw new Error('Choose Stop work to finish your job-board shift.');
-          let motion=null;
-          if(env.AUTO_ACTORS){const stub=env.AUTO_ACTORS.get(env.AUTO_ACTORS.idFromName(id));const response=await stub.fetch(new Request('https://actor.internal/position',{method:'POST',body:JSON.stringify({playerId:id})}));motion=(await response.json()).motion;}
+          const motion=await actorMotion(env,id);
           delete state.autoSwitch;state.controlMode='play';state.routineLastSeen=now;
           if(state.plan?.source==='rules')settlePlan(state,now,{stop:true});
           if(motion){state.location=motion.room;state.position={x:motion.x,y:motion.y};}

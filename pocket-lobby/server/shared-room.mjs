@@ -58,7 +58,7 @@ export class SharedRoom{
     ctx.blockConcurrencyWhile(async()=>{this.history=await ctx.storage.get('chat')??[];const saved=await ctx.storage.get('autoPeers');if(Array.isArray(saved))this.autoPeers=new Map(saved.filter(([,peer])=>peer?.until>Date.now()));});
   }
   peers(now=Date.now()){
-    const peers=new Map([...this.sessions.values()].map(meta=>[meta.playerId??meta.id,meta]));
+    const peers=new Map([...this.sessions.values()].filter(meta=>!meta.serverAuto).map(meta=>[meta.playerId??meta.id,meta]));
     for(const [id,peer] of this.autoPeers)if(peer.until>now)peers.set(id,peer);
     return [...peers.values()].filter(meta=>!(meta.veilUntil>now)).map(publicPeer);
   }
@@ -75,8 +75,11 @@ export class SharedRoom{
   fetch(request){return this.ctx.blockConcurrencyWhile(()=>{const path=new URL(request.url).pathname;return path==='/auto'&&request.method==='POST'?this.autoPresence(request):path==='/activity'&&request.method==='POST'?this.activity(request):this.join(request);});}
   async autoPresence(request){
     const {playerId,peer,until,remove}=await request.json();
-    if(remove)this.autoPeers.delete(playerId);
-    else if(peer?.playerId===playerId&&Object.hasOwn(socialRooms,peer.room)&&Number.isFinite(peer.x)&&Number.isFinite(peer.y))this.autoPeers.set(playerId,{...peer,until:Math.min(until,Date.now()+30000)});
+    if(remove){this.autoPeers.delete(playerId);for(const [ws,meta] of this.sessions)if(meta.playerId===playerId&&meta.serverAuto){ws.close(1000,'Server character changed area');this.sessions.delete(ws);}}
+    else if(peer?.playerId===playerId&&Object.hasOwn(socialRooms,peer.room)&&Number.isFinite(peer.x)&&Number.isFinite(peer.y)){
+      this.autoPeers.set(playerId,{...peer,activityRevision:this.autoPeers.get(playerId)?.activityRevision??0,until:Math.min(until,Date.now()+30000)});
+      for(const [ws,meta] of this.sessions)if(meta.playerId===playerId){meta.serverAuto=true;ws.serializeAttachment?.(meta);}
+    }
     await this.ctx.storage.put('autoPeers',[...this.autoPeers]);this.snapshot();await this.scheduleVeilExpiry();
     return json({ok:true});
   }
@@ -114,6 +117,7 @@ export class SharedRoom{
     const row=await this.env.TOWER_DB.prepare('SELECT state_json FROM tower_players WHERE player_id = ?').bind(profile.playerId).first();
     const state=row?JSON.parse(row.state_json):null;if(!state)return json({error:'Character not found.'},401);
     const meta={...profile,veilUntil:outfitVeilUntil(state),seats:roomSeats(profile.room,state.homeFurniture),boxes:roomBoxes(profile.room,state.homeFurniture),lastMoveAt:now,lastAuthAt:now,windowAt:now,packets:0,chatAt:now,chatCount:0};
+    if(this.autoPeers.has(profile.playerId))meta.serverAuto=true;
     this.ctx.acceptWebSocket(server);server.serializeAttachment(meta);this.sessions.set(server,meta);
     this.send(server,{type:'welcome',selfId:meta.id,room:meta.room,players:this.peers(),chat:this.history});this.snapshot();
     if(meta.veilUntil>now)await this.scheduleVeilExpiry();
@@ -148,7 +152,7 @@ export class SharedRoom{
       this.send(ws,{type:'trailNotice',text:'Trail shared with this room.'});return;
     }
     if(message?.type==='move'){
-      if(this.autoPeers.has(meta.playerId))return;
+      if(meta.serverAuto||this.autoPeers.has(meta.playerId))return;
       const steps=Math.min(4,Math.max(0,Math.floor((now-meta.lastMoveAt)/110)));
       if(!reachableMove(meta.room,meta,message,meta.boxes,steps)){this.send(ws,{type:'correction',x:meta.x,y:meta.y});return;}
       if(meta.x!==message.x||meta.y!==message.y)meta.seat=null;const moved=meta.x!==message.x||meta.y!==message.y;meta.x=message.x;meta.y=message.y;meta.direction=message.direction==='left'?'left':'right';meta.back=message.back===true;if(moved)meta.lastMoveAt=now;
