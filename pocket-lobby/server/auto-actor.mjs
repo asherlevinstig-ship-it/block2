@@ -37,10 +37,40 @@ export class AutoActor{
   const existing=await this.ctx.storage.getAlarm();
   let next=null;
   if(active)next=now+(this.actor.motion.moving?200:this.actor.motion.blocked?5000:2000);
-  else if(state?.characterRules?.enabled&&!state.report&&!state.plan)next=Math.max(now+30000,(state.routineLastSeen??now)+AWAY_GRACE_MS);
+  else if(state?.characterRules?.enabled&&!state.report&&!state.plan)next=Math.max(now+(advance?30000:1000),(state.routineLastSeen??now)+AWAY_GRACE_MS);
   if(next!==null){if(advance||existing===null||next<existing)await this.ctx.storage.setAlarm(next);}
   else if(existing!==null)await this.ctx.storage.deleteAlarm();
  }
+}
+
+// Recovers players created before server actors existed, and repairs missing
+// alarms independently of requests from their own browsers.
+export class AutoDirector{
+ constructor(ctx,env){this.ctx=ctx;this.env=env;}
+ fetch(){return this.ctx.blockConcurrencyWhile(async()=>{if(await this.ctx.storage.getAlarm()===null)await this.ctx.storage.setAlarm(Date.now()+1000);return Response.json({ok:true});});}
+ alarm(){return this.ctx.blockConcurrencyWhile(async()=>{
+  try{
+   const cursor=await this.ctx.storage.get('cursor')??'';
+   const {results}=await this.env.TOWER_DB.prepare("SELECT player_id FROM tower_players WHERE player_id > ? AND (json_extract(state_json,'$.plan.source') = 'rules' OR (json_extract(state_json,'$.characterRules.enabled') = 1 AND json_extract(state_json,'$.plan') IS NULL AND json_extract(state_json,'$.report') IS NULL)) ORDER BY player_id LIMIT 50").bind(cursor).all();
+   // A failed registration is retried on the next scan; other players still wake.
+   for(let offset=0;offset<results.length;offset+=5){
+    const outcomes=await Promise.allSettled(results.slice(offset,offset+5).map(async({player_id:playerId})=>{
+     const stub=this.env.AUTO_ACTORS.get(this.env.AUTO_ACTORS.idFromName(playerId));
+     const response=await stub.fetch(new Request('https://actor.internal/sync',{method:'POST',body:JSON.stringify({playerId})}));
+     if(!response.ok)throw new Error('Auto actor registration failed');
+    }));
+    if(outcomes.some(r=>r.status==='rejected'))console.warn('Auto recovery will retry unavailable actors');
+   }
+   await this.ctx.storage.put('cursor',results.length===50?results.at(-1).player_id:'');
+   await this.ctx.storage.setAlarm(Date.now()+(results.length===50?1000:60000));
+  }catch(error){console.warn('Auto recovery retry',error.message);await this.ctx.storage.setAlarm(Date.now()+15000);}
+ });}
+}
+
+export async function wakeAutoDirector(env){
+ if(!env.AUTO_DIRECTOR)return;
+ const stub=env.AUTO_DIRECTOR.get(env.AUTO_DIRECTOR.idFromName('world-auto-recovery'));
+ await stub.fetch(new Request('https://director.internal/wake',{method:'POST'}));
 }
 
 // Register from authenticated player responses; visitors cannot schedule somebody else's actor.

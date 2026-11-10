@@ -8,6 +8,17 @@ test('Auto starts at the visible character and walks every connected room to the
 test('state refreshes retain the current walking step instead of restarting or snapping',()=>{
  const g=boot(origin()),state=packet('logging',{x:5,y:5},'woodcutting');g.context.playerCloud.initial=state;g.context.towerApplyRoutineState(state);g.run('advanceAnimation(1000)');const before=g.read('JSON.stringify({step,route,x:player.x,y:player.y,room:currentRoom})');g.context.towerApplyRoutineState({...state});assert.equal(g.read('JSON.stringify({step,route,x:player.x,y:player.y,room:currentRoom})'),before);const {visited}=drive(g,1200);assert(visited.includes('trail'));assert.equal(g.read('currentRoom'),'logging');
 });
+
+test('returning from a suspended tab restores the server actor without replaying missed rooms',()=>{
+ const g=boot(origin()),s=packet('pond');s.autoPresence={room:'creek',x:2,y:8,direction:'left',back:true,moving:true};
+ g.context.playerCloud.initial=s;g.context.towerApplyRoutineState(s);g.run('advanceAnimation(1000)');assert(g.read('!!step'));
+ g.context.towerApplyRoutineState(s,{reconcile:true});assert.equal(g.read('currentRoom'),'creek');assert.equal(g.read('player.cx'),2);assert.equal(g.read('player.cy'),8);assert.equal(g.read('player.direction'),'left');assert.equal(g.read('step'),null);assert.equal(g.read('route.length'),0);assert.equal(g.read('autoJourney'),null);assert.deepEqual(g.errors,[]);
+});
+
+test('returning after an offline routine finished restores its final saved room',()=>{
+ const g=boot({...origin(),location:'pond',position:{x:4,y:5}}),s=origin();s.report={source:'rules'};g.context.playerCloud.initial=s;
+ g.context.towerApplyRoutineState(s,{reconcile:true});assert.equal(g.read('currentRoom'),'home');assert.equal(g.read('player.cx'),5);assert.equal(g.read('player.cy'),7);assert.equal(g.read('autoJourney'),null);assert.deepEqual(g.errors,[]);
+});
 test('routine completion walks home, enters beside the door and never opens a tutorial',()=>{
  const g=boot({...origin(),history:{fishCaught:true},location:'pond',position:{x:4,y:5}}),s=normalizeState({...origin(),location:'home',position:{x:5,y:7}});s.report={source:'rules'};g.context.playerCloud.initial=s;g.context.towerApplyRoutineState(s);assert.equal(g.read('currentRoom'),'pond');const {visited}=drive(g);assert.deepEqual(visited,['pond','creek','trail','outside','hub','home']);assert.equal(g.read('player.cx'),5);assert.equal(g.read('player.cy'),7);assert.notEqual(g.nodes.get('inventoryDialog').open,true);
 });

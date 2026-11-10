@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {AutoActor} from '../server/auto-actor.mjs';
+import {AutoActor,AutoDirector,wakeAutoDirector} from '../server/auto-actor.mjs';
 import {advanceAutoMotion,autoTilePath} from '../server/auto-motion.mjs';
 import {SharedRoom} from '../server/shared-room.mjs';
 import {normalizeState} from '../server/player-state.mjs';
@@ -85,4 +85,22 @@ test('Auto work changing destination does not invalidate its current room login'
  const meta={id:'public-transit',playerId,room:'bakery',serverAuto:true,expiresAt:Date.now()+100000};
  room.autoPeers.set(playerId,{...meta,until:Date.now()+30000});assert(await room.authorized(meta));
  meta.expiresAt=Date.now()-1;assert.equal(await room.authorized(meta),false,'expired login still rejected');
+});
+
+test('server recovery enrolls dormant Auto and idle players in fair pages without waking manual players',async t=>{
+ const {db,sql}=testDatabase();t.after(()=>sql.close());
+ for(let n=0;n<51;n++){const s=normalizeState({location:'home'});s.plan={source:'rules',kind:'queue'};sql.prepare('INSERT INTO tower_players VALUES (?, ?, 1, ?, ?)').run('p'+String(n).padStart(3,'0'),JSON.stringify(s),'before-server-actors',1);}
+ const idle=normalizeState({characterRules:simpleAutoRules('exploring')});idle.routineLastSeen=1;sql.prepare('INSERT INTO tower_players VALUES (?, ?, 1, ?, ?)').run('z-idle',JSON.stringify(idle),'old-save',1);
+ sql.prepare('INSERT INTO tower_players VALUES (?, ?, 1, ?, ?)').run('manual',JSON.stringify(normalizeState({})),'manual',1);
+ const registered=[],ctx=context(),env={TOWER_DB:db,AUTO_ACTORS:{idFromName:n=>n,get:n=>({fetch:async()=>{registered.push(n);return Response.json({ok:true});}})}},director=new AutoDirector(ctx,env);
+ await director.fetch();assert(await ctx.storage.getAlarm());await director.alarm();assert.equal(registered.length,50);assert.equal(ctx.stored.get('cursor'),'p049');
+ await director.alarm();assert.equal(registered.length,52);assert(registered.includes('z-idle'));assert(!registered.includes('manual'));assert.equal(new Set(registered).size,52);assert.equal(ctx.stored.get('cursor'),'');
+ await director.alarm();assert.equal(registered.length,102,'subsequent rounds can repair actors that lost their alarm');
+});
+
+test('Auto recovery continues after one unavailable actor and is woken independently of player sessions',async t=>{
+ const {db,sql}=testDatabase();t.after(()=>sql.close());for(const id of ['a','b']){const s=normalizeState({});s.plan={source:'rules'};sql.prepare('INSERT INTO tower_players VALUES (?, ?, 1, ?, ?)').run(id,JSON.stringify(s),'old',1);}
+ const seen=[],ctx=context(),director=new AutoDirector(ctx,{TOWER_DB:db,AUTO_ACTORS:{idFromName:n=>n,get:n=>({fetch:async()=>{seen.push(n);return Response.json({}, {status:n==='a'?503:200});}})}});
+ await director.alarm();assert.deepEqual(seen,['a','b']);assert(await ctx.storage.getAlarm());
+ let woken=0;await wakeAutoDirector({AUTO_DIRECTOR:{idFromName:n=>n,get:n=>({fetch:async()=>{assert.equal(n,'world-auto-recovery');woken++;return Response.json({ok:true});}})}});assert.equal(woken,1);
 });

@@ -4,6 +4,9 @@ compatibility_flags = ["nodejs_compat"]
 workers_dev = true
 main = "../worker/index.js"
 
+[triggers]
+crons = ["* * * * *"]
+
 [assets]
 directory = "./public"
 binding = "ASSETS"
@@ -28,3 +31,11 @@ class_name = "AutoActor"
 [[migrations]]
 tag = "tower-auto-actors-v1"
 new_sqlite_classes = ["AutoActor"]
+
+[[durable_objects.bindings]]
+name = "AUTO_DIRECTOR"
+class_name = "AutoDirector"
+
+[[migrations]]
+tag = "tower-auto-recovery-v1"
+new_sqlite_classes = ["AutoDirector"]

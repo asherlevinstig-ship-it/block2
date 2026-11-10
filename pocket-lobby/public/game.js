@@ -6147,7 +6147,7 @@ $('minus').onclick=()=>setZoom(zoom-.125);
 $('resetView').onclick=()=>setZoom(1);
 window.addEventListener('resize',()=>{bounds=null;});
 document.addEventListener('visibilitychange',()=>{
-  if(!document.hidden&&player.inCombat){if(window.playerCloud?.gameplay)sendServerCombat();else hunting.encounter=resumeHunt(hunting.encounter,Date.now(),playerStats,combatGear.moonwellCharmEquipped);}
+  if(!document.hidden&&player.inCombat&&window.playerCloud?.initial?.plan?.source!=='rules'){if(window.playerCloud?.gameplay)sendServerCombat();else hunting.encounter=resumeHunt(hunting.encounter,Date.now(),playerStats,combatGear.moonwellCharmEquipped);}
 });
 function showMessage(msg,targetId='messages'){
   const row=document.createElement('div');row.className='message';
@@ -6517,7 +6517,7 @@ function renderAutoTable(time){
   for(const card of cards??[null,null]){const tile=document.createElement('span');tile.className='auto-playing-card';tile.textContent=card?(card.rank===1?'A':card.rank===11?'J':card.rank===12?'Q':card.rank===13?'K':card.rank)+(typeof card.suit==='string'?card.suit:['♠','♥','♦','♣'][card.suit]??''):'◆';row.append(tile);}hands.append(row);
  }
 }
-window.towerApplyRoutineState=state=>{
+window.towerApplyRoutineState=(state,{reconcile=false}={})=>{
   if(state.autoPresence&&state.plan?.source==='rules')state={...state,location:state.autoPresence.room,position:{x:state.autoPresence.x,y:state.autoPresence.y}};
   trainingController?.close();
   fishingSession=null;fishingStarted=null;woodSession=null;treeFall=null;catchReveal=null;patienceTween=null;
@@ -6525,6 +6525,17 @@ window.towerApplyRoutineState=state=>{
   const serverNow=window.playerCloud?.serverTime??Date.now();
   const feedback=autoFeedbackTracker?.update(state,{now:serverNow,visible:!document.hidden})??[];
   applyServerGameplay(state);
+  if(reconcile&&(state.autoPresence||state.report?.source==='rules')){
+    // The server walked while this view was suspended. Restore its current
+    // position once, instead of replaying a route that already happened offline.
+    route=[];step=null;target=null;interaction=null;autoJourney=null;
+    autoJourneyTransition=true;
+    try{if(currentRoom!==state.location)enterRoom(state.location,state.position,{automatic:true});}
+    finally{autoJourneyTransition=false;}
+    const position=state.position??{x:5,y:7};
+    Object.assign(player,{x:position.x,y:position.y,cx:position.x,cy:position.y,direction:state.autoPresence?.direction??player.direction,back:state.autoPresence?.back??player.back});
+    autoArrivalKey=autoActivityKey(state);
+  }
   autoTableState=state;autoTableServerAt=serverNow;autoTableLocalAt=performance.now();autoTableKey='';renderAutoTable(autoTableLocalAt);
   for(const event of feedback)showTransaction(event.title,[{icon:event.outcome==='win'?'✦':event.outcome==='lose'?'♠':'↻',text:event.detail},...(event.banked?[{icon:'◈',text:event.banked+' gold saved to your safe'}]:[])],event.gold,{auto:true,outcome:event.outcome,walletDelta:event.walletDelta});
   const alreadyThere=currentRoom===state.location&&!step&&!route.length&&(autoArrivalKey===autoActivityKey(state)||Math.abs(player.cx-(state.position?.x??player.cx))+Math.abs(player.cy-(state.position?.y??player.cy))===0);

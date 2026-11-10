@@ -11,7 +11,7 @@
   const gateText=document.getElementById('cloudGateText');
   const retry=document.getElementById('cloudRetry');
   let packet=null,pending=null,retryJob=null,sending=null,timer=null,conflicted=false;
-  let presenceBusy=null,acting=0,gameplayBusy=false,lastInputAt=Date.now(),lastReportedInputAt=0;
+  let presenceBusy=null,acting=0,gameplayBusy=false,lastInputAt=Date.now(),lastReportedInputAt=0,resumeAutoView=false;
   const recordInput=event=>{if(event.isTrusted)lastInputAt=Date.now();};
   for(const name of ['pointerdown','keydown','touchstart','wheel'])document.addEventListener(name,recordInput,{capture:true,passive:true});
   const ownOperations=[];
@@ -134,7 +134,7 @@
         if(active)lastReportedInputAt=inputAt;
         if(packet.state.plan?.source==='rules'||packet.state.report?.source==='rules'){
           pending=retryJob=null;backup(null);
-          window.towerApplyRoutineState?.(packet.state);
+          window.towerApplyRoutineState?.(packet.state,{reconcile:resumeAutoView});resumeAutoView=false;
           showReport(packet.state);
         }
       }catch(error){
@@ -335,7 +335,7 @@
     window.addEventListener('online',()=>drain());
     schedulePresence(packet.state.plan?.source==='rules'?150:20000);
     document.addEventListener('visibilitychange',()=>{
-      if(document.hidden)return;
+      if(document.hidden){resumeAutoView=true;return;}
       lastInputAt=Date.now();
       if(packet.state.characterRules?.enabled||packet.state.controlMode==='auto'||packet.state.plan?.source==='rules'){pulse().catch(()=>{});return;}
       if(pending||retryJob||sending||packet.state.plan)return;
@@ -343,6 +343,10 @@
       request('state').then(latest=>{
         if(packet.revision===revision&&latest.revision!==revision)conflict('Your server character changed while this tab was away.');
       }).catch(()=>setStatus('Checking connection…'));
+    });
+    for(const event of ['focus','pageshow'])window.addEventListener(event,()=>{
+      if(document.hidden||packet?.state.plan?.source!=='rules')return;
+      resumeAutoView=true;pulse().catch(()=>{});
     });
   }
   async function initialize(){

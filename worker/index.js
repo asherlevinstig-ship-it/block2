@@ -1,8 +1,8 @@
 import { handleAccountApi } from "../pocket-lobby/server/accounts.mjs";
 import { handleWorldConnect, SharedRoom } from "../pocket-lobby/server/shared-room.mjs";
 export { SharedRoom };
-import {AutoActor,syncAutoActor} from '../pocket-lobby/server/auto-actor.mjs';
-export {AutoActor};
+import {AutoActor,AutoDirector,syncAutoActor,wakeAutoDirector} from '../pocket-lobby/server/auto-actor.mjs';
+export {AutoActor,AutoDirector};
 import { handlePlayerApi } from "../pocket-lobby/server/player-api.mjs";
 
 const GAME_PREFIX = "/game";
@@ -30,11 +30,12 @@ export function isAllowedGameRequest(request) {
 }
 
 export default {
-  async fetch(request, env) {
+  async scheduled(controller,env,ctx){ctx.waitUntil(wakeAutoDirector(env));},
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if(url.pathname.startsWith("/api/account/"))return handleAccountApi(request,env);
     if(url.pathname==="/api/world/connect")return handleWorldConnect(request,env);
-    if(url.pathname.startsWith("/api/player/"))return syncAutoActor(env,await handlePlayerApi(request,env));
+    if(url.pathname.startsWith("/api/player/")){ctx?.waitUntil(wakeAutoDirector(env));return syncAutoActor(env,await handlePlayerApi(request,env));}
     const currentAsset = LEGACY_ASSET_REDIRECTS.get(url.pathname);
     if (currentAsset) {
       url.pathname = currentAsset;
