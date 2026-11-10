@@ -216,6 +216,11 @@
     document.getElementById('offlineValue').textContent=info.decision+(plan.bankedGold?' · Saved to bank '+plan.bankedGold+' gold':'');
     document.getElementById('offlineReason').textContent=info.reason||'Fixed bets only. Take control to stop. Winnings never reset the loss allowance.';
   }
+  function appendFoodReport(list,plan){
+    if(plan.rationsBought){const row=document.createElement('li');row.textContent='Bought '+plan.rationsBought+' Tower Bread · '+plan.rationGoldSpent+' gold';list.append(row);}
+    if(plan.foodUsed){const row=document.createElement('li');row.textContent='Food used · '+Object.entries(plan.foodUsed).map(([id,n])=>n+' × '+id.replace(/([A-Z])/g,' $1')).join(', ')+' · Restored '+plan.foodHealed+' HP';list.append(row);}
+  }
+  const foodStop=reason=>['out-of-food','food-budget','food-funds','food-reserve'].includes(reason);
   function showQueueReport(state,plan,running){
     const caught=Object.values(plan.catches).reduce((a,b)=>a+b,0),total=plan.queue.steps.length*plan.queue.repeats;
     document.getElementById('offlineTitle').textContent=running?(plan.adaptive?'Earning gold safely':'Following your activity queue'):plan.reason==='goal-reached'?'Upgrade goal reached!':plan.reason==='queue-complete'?'Queue complete':'Your queue has stopped';
@@ -225,8 +230,7 @@
     for(const entry of plan.entries.slice(-8)){const row=document.createElement('li');row.textContent='Cycle '+entry.cycle+' · '+queueActions[entry.type]+' · '+entry.note;list.append(row);}
     if(plan.entries.length>8){const row=document.createElement('li');row.textContent='Showing the most recent 8 completed steps.';list.append(row);}
     if(plan.goalResult){const goal=plan.goalResult,row=document.createElement('li');row.textContent=goal.name+' · '+(goal.status==='purchased'?'Purchased and equipped for '+goal.spent+' gold':goal.status==='owned'?'Already in your Inventory':'Gold and stat requirements met · Ready to buy')+(goal.reason==='spending-limit'?' · Automatic purchase skipped: queue spending limit':goal.reason==='gold-reserve'?' · Automatic purchase skipped: gold reserve protected':'');list.append(row);}
-    if(plan.rationsBought){const row=document.createElement('li');row.textContent='Bought '+plan.rationsBought+' Tower Bread · '+plan.rationGoldSpent+' gold';list.append(row);}
-    if(plan.foodUsed){const row=document.createElement('li');row.textContent='Food used · '+Object.entries(plan.foodUsed).map(([id,n])=>n+' × '+id.replace(/([A-Z])/g,' $1')).join(', ')+' · Restored '+plan.foodHealed+' HP';list.append(row);}
+    appendFoodReport(list,plan);
     if(plan.cookedMeals){const row=document.createElement('li');row.textContent='Cooked '+Object.entries(plan.cookedMeals).map(([id,n])=>n+' × '+id.replace(/([A-Z])/g,' $1')).join(', ')+' · +'+plan.cookingXp+' Cooking XP';list.append(row);}
     if(plan.hunts){const row=document.createElement('li');row.textContent='Hunting · '+plan.hunts.wins+' victories · '+plan.hunts.escapes+' escapes · '+plan.hunts.defeats+' defeats · '+(plan.hunts.loot.boar??0)+' Boar Meat · '+(plan.hunts.loot.stonebackShell??0)+' Shell Fragments · HP '+state.health+'/100'+(plan.activeHunt?' · '+huntEnemies[plan.activeHunt.enemy??'boar'].name+' '+plan.enemyHealth+'/'+huntEnemies[plan.activeHunt.enemy??'boar'].health+' HP':'');list.append(row);for(const [id,record] of Object.entries(plan.hunts.byEnemy??{})){const enemy=huntEnemies[id],detail=document.createElement('li');detail.textContent=enemy.name+' · '+record.wins+' victories / '+record.started+' fights · '+record.escapes+' escapes · '+record.defeats+' defeats · '+record.xp+' XP · Loot value '+record.loot*enemy.sellPrice+' gold · Sales '+(plan.huntSales?.[id]??0)+' gold';list.append(detail);}for(const [label,values] of [['Combat XP',plan.hunts.xp],['Awakening Stones',plan.hunts.stones],['Essence mastery XP',plan.hunts.mastery]]){if(Object.keys(values).length){const detail=document.createElement('li');detail.textContent=label+' · '+Object.entries(values).map(([id,n])=>id.replace(/Xp$/,'')+' +'+n).join(' · ');list.append(detail);}}}
     document.getElementById('offlineTotals').textContent='Gathered '+caught+' fish · '+plan.timber+' timber · +'+(plan.patienceXp+plan.woodXp+(plan.cookingXp??0)+Object.values(plan.hunts?.xp??{}).reduce((a,b)=>a+b,0))+' XP';
@@ -234,8 +238,9 @@
     const minutes=Math.max(0,Math.floor(((plan.endedAt??Date.now())-plan.startedAt)/60000));
     document.getElementById('offlineDuration').textContent='Time worked · '+Math.floor(minutes/60)+'h '+minutes%60+'m · Spending '+plan.goldSpent+' / '+plan.queue.budget+' gold';
     const net=plan.goldEarned-plan.goldSpent;
-    document.getElementById('offlineValue').textContent='Sales +'+plan.goldEarned+' gold · Bait −'+(plan.goldSpent-(plan.goalSpent??0))+' gold'+(plan.goalSpent?' · Upgrade −'+plan.goalSpent+' gold':'')+' · Net '+(net>=0?'+':'')+net+' gold · Wallet '+state.credits+' gold. '+(plan.bankedGold?'Saved to bank '+plan.bankedGold+' gold. ':'')+'Unsold supplies remain in Inventory.';
+    document.getElementById('offlineValue').textContent='Sales +'+plan.goldEarned+' gold · Supplies −'+(plan.goldSpent-(plan.goalSpent??0))+' gold'+(plan.goalSpent?' · Upgrade −'+plan.goalSpent+' gold':'')+' · Net '+(net>=0?'+':'')+net+' gold · Wallet '+state.credits+' gold. '+(plan.bankedGold?'Saved to bank '+plan.bankedGold+' gold. ':'')+'Unsold supplies remain in Inventory.';
     document.getElementById('offlineReason').textContent=running?(plan.returnRequested?'Finishing the current fight, then returning home.':plan.activeHunt?'Hunting with your equipped weapon. Return to finish this fight and stop.':'Your saved queue is running. Return to stop it.'):({'goal-reached':'Goal reached · Choose your next upgrade or clear this goal in Auto Mode to resume','queue-complete':'All cycles complete',returned:'Stopped when you returned','away-cap':'Eight-hour limit reached','spending-limit':'Stopped before exceeding your spending limit','gold-reserve':'Stopped to protect your gold reserve','beetle-trial-required':'Defeat a Stoneback Beetle yourself in the Ruins first','weapon-required':'Equip a usable weapon before hunting','hunt-escaped':'Escaped · Hunting stopped','hunt-defeat':'Defeated · Returned home to recover','out-of-food':'Out of food · Eat a meal or refill your bag before restarting.','food-reserve':'Returned home to recover · Usable food ran out or reached your meal reserve',requirements:'Required tool, skill or fishing location is missing','inventory-full':'Inventory is full','wallet-full':'Wallet is full'}[plan.reason]??plan.reason);
+    if(plan.foodTrip||foodStop(plan.reason)){const info=autoStatus(state);document.getElementById('offlineReason').textContent=info.reason||info.decision;}
   }
   function showReport(state,details=false){
     renderAutoPanel(state);
@@ -265,11 +270,13 @@
       const row=document.createElement('li');row.textContent=fishProducts[id].name+' ×'+count;rows.append(row);
     }
     if(!rows.children.length){const row=document.createElement('li');row.textContent=rest?'Rested at home · No supplies used.':'No catches yet.';rows.append(row);}
+    appendFoodReport(rows,plan);
     document.getElementById('offlineTotals').textContent=rest?'Rest · No gold spent':wood?'+'+plan.xp+' Woodcutting XP':plan.baitUsed+' bait used · +'+plan.xp+' Patience XP';
     const reason={'bait-reserve':'Bait reserve protected','target-reached':'Timber target reached','away-cap':'Eight-hour away cap reached',returned:'Returned to the game',rest:'Rested at home',requirements:'Work requirements not met · Rested at home','out-of-bait':'All bait used','bait-limit':'Bait limit reached','time-limit':'Time limit reached',stopped:'Plan stopped','inventory-full':'Timber inventory full'};
     document.getElementById('offlineReason').textContent=rest?(reason[plan.reason]??'Rested at home'):wood
       ?(running?'Basic Axe · One timber per minute · Ends '+new Date(plan.endAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):(reason[plan.reason]??'Shift finished')+' · Woodcutting '+plan.levelBefore+' → '+plan.levelAfter)
       :running?'Rod: '+fishingCatalog.rods[plan.rod].name+' · Up to '+plan.baitLimit+' bait · Ends '+new Date(plan.endAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):(reason[plan.reason]??'Plan finished')+' · Patience '+plan.patienceBefore+' → '+plan.patienceAfter;
+    if(plan.foodTrip||foodStop(plan.reason)){const info=autoStatus(state);document.getElementById('offlineReason').textContent=info.reason||info.decision;}
     const expectedEnd=wood||rest?plan.endAt:Math.min(plan.endAt,plan.startedAt+plan.baitLimit*plan.interval);
     const progress=document.getElementById('offlineProgress');progress.value=running?Math.max(0,Math.min(100,(Date.now()-plan.startedAt)/Math.max(1,expectedEnd-plan.startedAt)*100)):100;
     const elapsed=Math.max(0,(Math.min(Date.now(),plan.endedAt??Date.now())-plan.startedAt)/60000);

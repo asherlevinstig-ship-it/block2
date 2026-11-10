@@ -6,7 +6,7 @@ import {simpleAutoRisks} from '../public/simple-auto.js';
 import {randomNeed} from './random-needs.mjs';
 import {normalizeFoodPolicy} from '../public/food-policy.js';
 import {explorationStops,EXPLORE_STOP_MS} from './exploration-plan.mjs';
-import {applyAutoFood} from './auto-food.mjs';
+import {applyAutoFood,checkAutoWorkFood} from './auto-food.mjs';
 import {roomBoxes,validRoomTile} from '../public/shared-world.js';
 import {towerBread,cookingQueueRecipes,mealRecipes,homeStove,cookingPlan,prepareMeal} from '../public/cooking.js';
 import {homeRestDuration} from '../public/bed-rest.js';
@@ -23,10 +23,12 @@ import {harvestTimber,woodRules} from '../public/woodcutting.js';
 import {recordQuest} from '../public/quests.js';
 export const QUEUE_ACTION_MS=15000;
 const huntTimeBuffer=30000;
+const needsWorkFood=type=>type==='fishing'||type==='buyBait'||type==='woodcutting'||Object.hasOwn(queueHuntEnemies,type);
 export function startRoutineQueue(state,rules,startedAt,metadata){
   state.plan={kind:'queue',...metadata,startedAt,endAt:metadata.routineCapAt,queue:normalizeRoutineQueue(rules.queue),cycle:0,stepIndex:0,cursorAt:startedAt,nextAt:null,stepCount:0,entries:[],catches:{},timber:0,patienceXp:0,woodXp:0,goldEarned:0,goldSpent:metadata.rationGoldSpent??0,baitBought:0};
 }
 export function finishRoutineQueue(state,plan,reason,endedAt){
+  delete plan.foodTrip;
   state.report={...plan,reason,endedAt,xp:plan.patienceXp+plan.woodXp+(plan.cookingXp??0)+Object.values(plan.hunts?.xp??{}).reduce((a,b)=>a+b,0)};delete state.plan;
   state.location='home';state.position={x:5,y:7};return true;
 }
@@ -95,7 +97,8 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
       if(need?.stop){p.plannerReason=need.reason;return finish(state,p,need.stop,p.cursorAt);}
       if(need){p.simpleTasks=[need.step];p.simpleJob='care';p.simpleDecision=need.reason;p.queue.steps=[need.step];p.stepIndex=0;p.stepCount=0;p.queue.repeats=p.cycle+1;p.plannerReason=need.reason;}
     }
-    if(!stop&&p.simpleMode!=='random'&&p.nextAt===null&&p.cursorAt<=until&&p.cursorAt<p.endAt&&(p.adaptive||p.cycle<p.queue.repeats)&&p.queue.steps[p.stepIndex]?.type!=='rest'){
+    const currentType=p.queue.steps[p.stepIndex]?.type;
+    if(!stop&&p.simpleMode!=='random'&&p.nextAt===null&&p.cursorAt<=until&&p.cursorAt<p.endAt&&(p.adaptive||p.cycle<p.queue.repeats)&&currentType!=='rest'&&!needsWorkFood(currentType)){
       const food=applyAutoFood(state,p,p.cursorAt);if(food.used)changed=true;if(food.returnHome&&!food.reason)return finish(state,p,'food-reserve',p.cursorAt);
     }
     if(!p.adaptive&&resolveQueueGoal(state,p,p.cursorAt))return finish(state,p,'goal-reached',p.cursorAt);
@@ -107,6 +110,12 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
     }
     if(p.cycle>=p.queue.repeats)return finish(state,p,'queue-complete',p.cursorAt);
     const step=p.queue.steps[p.stepIndex],type=step.type;
+    if(!stop&&p.simpleMode!=='random'&&p.nextAt===null&&p.cursorAt<=until&&p.cursorAt<p.endAt&&needsWorkFood(type)){
+      const food=checkAutoWorkFood(state,p,p.cursorAt);
+      if(food.reason)return finish(state,p,food.reason,p.cursorAt);
+      if(food.paused)return now>=p.endAt?finish(state,p,'away-cap',p.endAt):true;
+      if(food.used)changed=true;
+    }
     if(type!=='fishing')delete p.fishingWork;
     if(p.physicalFishing&&type==='fishing'){
       if(stop||now>=p.endAt)return finish(state,p,stop?'returned':'away-cap',until);
@@ -114,8 +123,10 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
       if(!rod||!state.fishingGear.ownedRods.includes(state.fishingGear.equippedRod)||skillLevel(state.stats.patienceXp)<rod.patience||!state.adventure.discovered.includes('pond')&&!state.history.fishCaught)return finish(state,p,'requirements',p.cursorAt);
       if(state.fishingGear.bait<=p.keepBait){delete p.fishingWork;nextStep(p,p.cursorAt,'Bait reserve reached');changed=true;continue;}
       if(!p.fishingWork){
-        const food=applyAutoFood(state,p,p.cursorAt);
-        if(food.returnHome)return finish(state,p,food.reason??'food-reserve',p.cursorAt);
+        if(p.simpleMode==='random'){
+          const food=applyAutoFood(state,p,p.cursorAt);
+          if(food.returnHome)return finish(state,p,food.reason??'food-reserve',p.cursorAt);
+        }
         p.fishingWork={};state.location='pond';state.position={x:4,y:5};changed=true;
       }
       p.nextAt=null;
@@ -133,11 +144,6 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
     }
     if(p.nextAt===null){
       if(p.cursorAt>until||p.cursorAt===until&&!p.adaptive)break;
-      if(p.simpleMode!=='random'&&(type==='fishing'||type==='woodcutting'||Object.hasOwn(queueHuntEnemies,type))){
-        const food=applyAutoFood(state,p,p.cursorAt);
-        if(food.used)changed=true;
-        if(food.returnHome)return finish(state,p,food.reason??'food-reserve',p.cursorAt);
-      }
       p.currentLabel=queueActions[type];
       let interval=QUEUE_ACTION_MS;
       if(type==='buyBread')interval=60000;

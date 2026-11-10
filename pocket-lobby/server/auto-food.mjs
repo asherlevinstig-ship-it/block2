@@ -1,15 +1,54 @@
 import {chooseAutoMeal,normalizeFoodPolicy} from '../public/food-policy.js';
-import {feedPlayer,isExhausted} from '../public/player-vitals.js';
-import {foodItems,foodFullness,towerBread} from '../public/cooking.js';
-export function restockAutoBread(state,plan,budget,reserveGold){
- const rules=normalizeFoodPolicy(plan.foodPolicy??{});
- const inBag=Object.values(state.meals).reduce((total,n)=>total+n,0);
- const target=Math.max(0,rules.keepMeals+3-inBag);
- const quantity=Math.min(target,Math.floor(Math.min(rules.breadBudget??0,budget,Math.max(0,state.credits-reserveGold))/towerBread.price));
- if(!quantity)return;
- const cost=quantity*towerBread.price;
- state.meals[towerBread.id]=(state.meals[towerBread.id]??0)+quantity;
- state.credits-=cost;plan.rationsBought=quantity;plan.rationGoldSpent=cost;
+import {feedPlayer,isExhausted,LOW_HUNGER} from '../public/player-vitals.js';
+import {foodItems,foodFullness,foodStall,towerBread} from '../public/cooking.js';
+
+function breadOrder(state,plan){
+ const policy=normalizeFoodPolicy(plan.foodPolicy??state.characterRules?.food);
+ const total=Object.values(state.meals).reduce((sum,count)=>sum+count,0);
+ const bread=state.meals[towerBread.id]??0,protectedBread=state.bank?.vault?.rules?.['meal:'+towerBread.id]??0;
+ const minimum=Math.max(1,policy.keepMeals+1-total,protectedBread+1-bread);
+ const budget=Math.min((policy.breadBudget??0)-(plan.rationGoldSpent??0),(plan.queue?.budget??Infinity)-(plan.goldSpent??0));
+ const reserve=Math.max(plan.queue?.reserveGold??0,state.characterRules?.goldPolicy?.reserveGold??0);
+ const price=towerBread.price;
+ if(!policy.breadBudget)return {reason:'out-of-food'};
+ if(budget<minimum*price||bread+minimum>1000)return {reason:'food-budget'};
+ const gold=state.credits-reserve;
+ if(gold<minimum*price)return {reason:'food-funds'};
+ return {quantity:Math.min(Math.max(minimum,policy.keepMeals+3-total),Math.floor(Math.min(gold,budget)/price),1000-bread)};
+}
+
+export function checkAutoWorkFood(state,plan,at,{stopping=false}={}){
+ const {used,returnHome,reason}=applyAutoFood(state,plan,at);
+ if(returnHome&&!reason)return {used,reason:'food-reserve'};
+ if((state.vitals?.hunger??100)>LOW_HUNGER)return {used};
+ if(stopping)return {used,reason:'out-of-food'};
+ const order=breadOrder(state,plan);
+ if(order.reason)return {used,reason:order.reason};
+ plan.foodTrip={startedAt:at,room:state.location,position:{...state.position}};
+ if(plan.fishingWork)delete plan.fishingWork.spot;
+ state.location=foodStall.room;state.position={x:foodStall.x,y:foodStall.y+1};
+ return {used,paused:true};
+}
+
+export function buyAutoWorkBread(state,plan,now,motion){
+ const trip=plan.foodTrip;
+ if(!trip||now>=plan.endAt||motion?.room!==foodStall.room||Math.abs(motion.x-foodStall.x)+Math.abs(motion.y-foodStall.y)!==1)return null;
+ const order=breadOrder(state,plan);
+ if(order.reason)return order;
+ const cost=order.quantity*towerBread.price;
+ state.meals[towerBread.id]=(state.meals[towerBread.id]??0)+order.quantity;
+ state.credits-=cost;
+ plan.goldSpent=(plan.goldSpent??0)+cost;
+ plan.rationsBought=(plan.rationsBought??0)+order.quantity;
+ plan.rationGoldSpent=(plan.rationGoldSpent??0)+cost;
+ applyAutoFood(state,plan,now);
+ for(const key of ['nextCatchAt','nextCutAt']){
+  if(Number.isFinite(plan[key]))plan[key]=now+Math.max(0,plan[key]-trip.startedAt);
+ }
+ if(Number.isFinite(plan.cursorAt))plan.cursorAt=now;
+ state.location=trip.room;state.position=trip.position;
+ delete plan.foodTrip;
+ return {bought:order.quantity};
 }
 export function applyAutoFood(state,plan,at){
  const policy=plan.foodPolicy??state.characterRules?.food;

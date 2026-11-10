@@ -5,7 +5,7 @@ import {normalizeState,startPlan,settlePlan} from '../server/player-state.mjs';
 import {applyGameplayAction,protectFishingState} from '../server/gameplay.mjs';
 import {castEssencePower} from '../server/essences.mjs';
 import {normalizeMagic} from '../public/essences.js';
-import {applyAutoFood,restockAutoBread} from '../server/auto-food.mjs';
+import {applyAutoFood,buyAutoWorkBread,checkAutoWorkFood} from '../server/auto-food.mjs';
 import {boot} from './helpers/game-client.mjs';
 import {combatStamina,createHunt} from '../public/hunting.js';
 import {touchPresence} from '../server/routines.mjs';
@@ -92,8 +92,8 @@ test('Auto feeds at full health, respects reserve and stops after the last affor
  settlePlan(offline,1000000,{random:()=>.5});
  assert.equal(offline.report.reason,'out-of-food');
  assert.equal(offline.report.endedAt,online.report.endedAt);
- assert.equal(Object.values(offline.report.catches).reduce((a,b)=>a+b,0),1);
- assert.equal(offline.vitals.hunger,0);assert.equal(offline.health,100);
+ assert.equal(Object.values(offline.report.catches).reduce((a,b)=>a+b,0),0);
+ assert.equal(offline.vitals.hunger,1);assert.equal(offline.health,100);
 });
 
 test('Tower Bread is bought at the bakery and refills hunger without healing',()=>{
@@ -114,9 +114,19 @@ test('Tower Bread is bought at the bakery and refills hunger without healing',()
 });
 test('Auto restocks within both the configured budget and wallet reserve',()=>{
  const s=normalizeState({credits:20,vitals:{hunger:0}});
- const plan={source:'rules',foodPolicy:{breadBudget:9,keepMeals:0}};
- restockAutoBread(s,plan,6,15);
- assert.equal(s.credits,17);assert.equal(s.meals.towerBread,1);
+ s.characterRules.goldPolicy.reserveGold=15;
+ const plan={source:'rules',endAt:10000,foodPolicy:{breadBudget:9,keepMeals:0},queue:{budget:6,reserveGold:12}};
+ assert.equal(checkAutoWorkFood(s,plan,1000).paused,true);
+ assert.equal(s.credits,20);
+ assert.equal(buyAutoWorkBread(s,plan,2000,{room:'bakery',x:1,y:1}),null);
+ assert.equal(buyAutoWorkBread(s,plan,2000,{room:'bakery',x:5,y:4}).bought,1);
+ assert.equal(s.credits,17);assert.equal(s.meals.towerBread,undefined);
  assert.equal(plan.rationGoldSpent,3);
- assert.equal(applyAutoFood(s,plan,1000).used,1);assert.equal(s.vitals.hunger,25);
+ assert.equal(s.vitals.hunger,25);
+ s.credits=100;s.vitals.hunger=20;
+ assert.equal(checkAutoWorkFood(s,plan,3000).paused,true);
+ assert.equal(buyAutoWorkBread(s,plan,4000,{room:'bakery',x:5,y:4}).bought,1);
+ s.vitals.hunger=20;
+ assert.equal(checkAutoWorkFood(s,plan,5000).reason,'food-budget');
+ assert.equal(plan.rationGoldSpent,6);
 });

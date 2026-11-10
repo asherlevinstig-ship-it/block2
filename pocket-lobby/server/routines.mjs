@@ -1,6 +1,6 @@
 import {simpleAutoRisks} from '../public/simple-auto.js';
 import {startExplorationPlan} from './exploration-plan.mjs';
-import {applyAutoFood,restockAutoBread} from './auto-food.mjs';
+import {applyAutoFood} from './auto-food.mjs';
 import {homeRestDuration} from '../public/bed-rest.js';
 import {autoBankGold} from './banking.mjs';
 import {startAutoGambling} from './auto-gambling.mjs';
@@ -40,18 +40,21 @@ export function touchPresence(state,now,{active=true,activityAt=now,random=Math.
   // Unfinished manual casts/cuts pay nothing. The saved routine starts cleanly.
   delete state.fishingCast;delete state.timberCut;
   const metadata={source:'rules',routineId,ruleSummary:summary,routineCapAt:startedAt+AWAY_CAP_MS,keepBait:rules.keepBait,timberTarget:rules.timberTarget,...(rules.simpleMode?{simpleMode:rules.simpleMode,simpleRisk:rules.simpleRisk??'balanced'}:{}),...(rules.food?{foodPolicy:rules.food}:{})};
-  const activeWork=rules.simpleMode?['fishing','hunting','battle','random'].includes(rules.simpleMode)
-    :rules.strategy==='earnGold'||rules.strategy==='routine'&&(rules.queue?.enabled||['fishing','woodcutting'].includes(rules.activity));
-  if(activeWork&&rules.simpleMode!=='random'){
-    const queue=rules.strategy==='routine'&&!rules.simpleMode&&rules.queue?.enabled?rules.queue:null;
-    restockAutoBread(state,metadata,queue?.budget??(rules.strategy==='earnGold'?rules.goldPolicy.budget:Infinity),Math.max(queue?.reserveGold??0,rules.goldPolicy.reserveGold));
-  }
   if(physicalTimber)metadata.physicalTimber=true;
   if(physicalFishing)metadata.physicalFishing=true;
   if(rules.simpleMode&&rules.simpleMode!=='gambling'){const queue={enabled:true,repeats:1,budget:100000,reserveGold:rules.goldPolicy.reserveGold,minHealth:simpleAutoRisks[rules.simpleRisk??'balanced'].minHealth,steps:[{type:'rest',amount:0}]};startRoutineQueue(state,{...rules,queue},startedAt,{...metadata,adaptive:true,simpleMode:rules.simpleMode,simpleRisk:rules.simpleRisk??'balanced'});settlePlan(state,until,{stop:active,random});return;}
   if(rules.strategy==='routine'&&!rules.queue?.enabled&&rules.activity==='exploring'){if(!state.quest.accepted)return;startExplorationPlan(state,startedAt,metadata);settlePlan(state,until,{stop:active,random});return;}
   const wantsRest=rules.strategy==='routine'&&!rules.queue?.enabled&&rules.activity==='rest';
-  if(!wantsRest){autoBankGold(state,metadata,startedAt);const food=applyAutoFood(state,metadata,startedAt);if(food.returnHome&&(!food.reason||!rules.queue?.enabled&&rules.strategy==='routine')){state.location='home';state.position={x:5,y:7};state.plan={...metadata,kind:'rest',startedAt,endAt:startedAt+(food.reason?0:homeRestDuration(state,boarRules.recovery)),xp:0,restReason:food.reason??'food-reserve',ruleSummary:summary};settlePlan(state,until,{stop:active,random});return;}}
+  const soloWork=rules.strategy==='routine'&&!rules.queue?.enabled&&['fishing','woodcutting'].includes(rules.activity);
+  if(!wantsRest)autoBankGold(state,metadata,startedAt);
+  if(!wantsRest&&!soloWork){
+    const food=applyAutoFood(state,metadata,startedAt);
+    if(food.returnHome&&!food.reason){
+      state.location='home';state.position={x:5,y:7};
+      state.plan={...metadata,kind:'rest',startedAt,endAt:startedAt+homeRestDuration(state,boarRules.recovery),xp:0,restReason:'food-reserve',ruleSummary:summary};
+      settlePlan(state,until,{stop:active,random});return;
+    }
+  }
   if(rules.strategy==='gambling'){startAutoGambling(state,rules,startedAt,metadata);autoBankGold(state,state.plan,startedAt);settlePlan(state,until,{stop:active,random});return;}
   if(rules.strategy==='earnGold'){const queue={enabled:true,repeats:1,budget:rules.goldPolicy.budget,reserveGold:rules.goldPolicy.reserveGold,minHealth:Math.max(rules.goldPolicy.minHealth,rules.combat.fleeBelow+1),steps:[{type:'rest',amount:0}]};startRoutineQueue(state,{...rules,queue},startedAt,{...metadata,adaptive:true});autoBankGold(state,state.plan,startedAt);settlePlan(state,until,{stop:active,random});return;}
   if(rules.queue?.enabled){startRoutineQueue(state,rules,startedAt,metadata);autoBankGold(state,state.plan,startedAt);settlePlan(state,until,{stop:active,random});return;}

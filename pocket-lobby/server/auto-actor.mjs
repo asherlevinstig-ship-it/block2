@@ -41,7 +41,7 @@ export class AutoActor{
   const peer=state?{playerId:this.actor.playerId,id:(await tokenHash('public:'+this.actor.playerId)).slice(0,24),room,name:state.avatar?.name??'Guest',...state.avatar,weapon:state.combatGear?.equippedWeapon??null,armour:armourSelection(state.combatGear),health:state.health??100,familiar:state.familiars?.equipped,familiarName:state.familiars?.names?.[state.familiars?.equipped],...motion,chopping:motion.moving?null:choppingPose(state),auto:true,activity:motion.moving?'walking':sharedActivity(state),veilUntil:outfitVeilUntil(state)}:null;
   if(peer){
    peer.walk=this.actor.walk??null;
-   peer.fishingSpot=!!state.plan?.fishingWork?.spot;
+   peer.fishingSpot=!!state.plan?.fishingWork?.spot&&!state.plan?.foodTrip;
    peer.fishingBatch=state.plan?.fishingWork?.batchUntil??null;
    peer.fishing=motion.moving?null:sharedFishingPose(state);
    if(state.plan?.physicalFishing&&peer.activity==='fishing'&&!peer.fishing)peer.activity='waiting-to-fish';

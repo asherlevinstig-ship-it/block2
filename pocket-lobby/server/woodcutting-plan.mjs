@@ -1,5 +1,5 @@
 import {useHunger,exertionDuration} from '../public/player-vitals.js';
-import {applyAutoFood} from './auto-food.mjs';
+import {checkAutoWorkFood} from './auto-food.mjs';
 import {autoStoreVault} from './vault.mjs';
 import {normalizeWoodcutting,harvestTimber,woodcuttingLevel,woodRules} from '../public/woodcutting.js';
 export function startWoodcuttingPlan(state,{hours,fromBoard=false},now){
@@ -18,22 +18,30 @@ export function settleWoodcuttingPlan(state,now,{stop=false}={}){
   const plan=state.plan;if(!plan||plan.kind!=='woodcutting')return false;
   const wood=state.woodcutting=normalizeWoodcutting(state.woodcutting);
   const until=Math.min(now,plan.endAt);
+  let changed=false,foodStop=null;
+  const checkFood=at=>{
+    if(plan.source!=='rules')return false;
+    const food=checkAutoWorkFood(state,plan,at,{stopping:stop||now>=plan.endAt});
+    changed=changed||!!food.used;
+    if(food.reason)foodStop={reason:food.reason,at};
+    return food.paused===true;
+  };
   if(plan.physicalTimber){
     const reached=wood.timber+(state.bank?.vault?.items?.timber??0)>=(plan.timberTarget??Infinity);
-    if(stop||now>=plan.endAt||wood.timber>=1000000||reached){state.report={...plan,endedAt:until,reason:wood.timber>=1000000?'inventory-full':stop?'stopped':reached?'target-reached':'time-limit',levelAfter:woodcuttingLevel(wood)};delete state.plan;state.location='home';state.position={x:5,y:7};return true;}
-    if(!plan.treeWork){plan.treeWork={phase:'choose'};return true;}return false;
+    if(!stop&&now<plan.endAt&&!reached&&wood.timber<1000000&&!plan.treeWork?.cut&&checkFood(now))return true;
+    if(foodStop||stop||now>=plan.endAt||wood.timber>=1000000||reached){state.report={...plan,endedAt:until,reason:foodStop?.reason??(wood.timber>=1000000?'inventory-full':stop?'stopped':reached?'target-reached':'time-limit'),levelAfter:woodcuttingLevel(wood)};delete state.plan;state.location='home';state.position={x:5,y:7};return true;}
+    if(!plan.treeWork){plan.treeWork={phase:'choose'};return true;}return changed;
   }
-  let changed=false,foodStop=null;
-  while(plan.nextCutAt<=until&&wood.timber<1000000){
+  if(!stop&&now<plan.endAt&&checkFood(now))return true;
+  while(!foodStop&&plan.nextCutAt<=until&&wood.timber<1000000){
     const at=plan.nextCutAt,amount=harvestTimber(wood,1);
     useHunger(state,amount);plan.timber+=amount;plan.xp+=amount*woodRules.xp;changed=true;
     if(plan.source==='rules'&&state.bank?.vault?.rules?.timber!==undefined)autoStoreVault(state,plan,at);
-    const food=applyAutoFood(state,plan,at);
-    if(food?.returnHome){foodStop=food.reason??'food-reserve';break;}
     plan.nextCutAt+=exertionDuration(plan.interval,state.vitals);
+    if(checkFood(at))return true;
   }
   if(foodStop||now>=plan.endAt||stop||wood.timber>=1000000){
-    state.report={...plan,reason:foodStop??(wood.timber>=1000000?'inventory-full':stop?'stopped':'time-limit'),endedAt:foodStop?plan.nextCutAt:until,levelAfter:woodcuttingLevel(wood)};
+    state.report={...plan,reason:foodStop?.reason??(wood.timber>=1000000?'inventory-full':stop?'stopped':'time-limit'),endedAt:foodStop?.at??until,levelAfter:woodcuttingLevel(wood)};
     delete state.plan;state.location='home';state.position={x:5,y:7};return true;
   }
   return changed;

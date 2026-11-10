@@ -30,7 +30,7 @@ test('away work respects grace period, bait reserve, timber target and time cap'
   assert.equal(wood.report.reason, 'target-reached');
   const capped = character('woodcutting');
   capped.characterRules.timberTarget = 1000000;
-  capped.meals.silverfinFeast = 10;
+  capped.meals.silverfinFeast = 20;
   touchPresence(capped, 86400000);
   assert.equal(capped.report.timber, 480);
   assert.equal(capped.report.reason, 'away-cap');

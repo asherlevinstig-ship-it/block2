@@ -8,6 +8,7 @@ import {prepareManualTree,describeTreeCut,writeTreePlayer} from './shared-trees.
 import {enablePhysicalTimber,advanceTreeWork} from './tree-work.mjs';
 import {advanceFishingWork,settleFishingBatch} from './fishing-work.mjs';
 import {finishRoutineReport} from './routine-report.mjs';
+import {buyAutoWorkBread} from './auto-food.mjs';
 import {towerBread} from '../public/cooking.js';
 import {simpleAutoRules} from '../public/simple-auto.js';
 import {saveAutoSettings} from './auto-settings.mjs';
@@ -24,7 +25,7 @@ import {touchPresence as updatePresence} from './routines.mjs';
 import {deliverCarpenterOrder} from '../public/commissions.js';
 import {normalizeCharacterRules,AWAY_GRACE_MS} from '../public/character-rules.js';
 import { resolveIdentity } from "./identity.mjs";
-import { normalizeState, startPlan, settlePlan } from "./player-state.mjs";
+import { finishAutoFoodWork, normalizeState, startPlan, settlePlan } from "./player-state.mjs";
 
 const COOKIE="__Host-tower-character";
 const physicalFishing=env=>!!(env.SHARED_ROOMS&&env.AUTO_ACTORS);
@@ -81,6 +82,10 @@ export async function settled(env,id,activities=false,{idle=false,motion=null,ob
     if(idle&&state.plan?.fishingWork?.batchUntil){
       await settleFishingBatch(env,id,state,now,motion,{observed});
       if(!state.plan)finishRoutineReport(state,now);
+    }
+    if(idle&&state.plan?.foodTrip){
+      const purchase=buyAutoWorkBread(state,state.plan,now,motion);
+      if(purchase?.reason){finishAutoFoodWork(state,purchase.reason,now);finishRoutineReport(state,now);}
     }
     let planChanged=settlePlan(state,now);if(state.autoSwitch){touchPresence(state,now,{active:false},env);planChanged=true;}
     if(idle){const previous=JSON.stringify(state);touchPresence(state,now,{active:false},env);planChanged=planChanged||previous!==JSON.stringify(state);}

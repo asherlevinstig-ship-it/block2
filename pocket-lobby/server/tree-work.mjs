@@ -1,7 +1,7 @@
 import {forestTrees,roomTreeSnapshot,readSharedTree,treeKey,describeTreeCut} from './shared-trees.mjs';
 import {autoTilePath} from './auto-motion.mjs';
 import {cutTimberTree,choppingDuration,timberFacing,timberTreeRules} from '../public/woodcutting.js';
-import {useHunger,exertionDuration} from '../public/player-vitals.js';
+import {useHunger,exertionDuration,LOW_HUNGER} from '../public/player-vitals.js';
 import {chooseAutoMeal,normalizeFoodPolicy} from '../public/food-policy.js';
 import {completeRoutineTimber} from './routine-queue.mjs';
 import {autoStoreVault} from './vault.mjs';
@@ -21,6 +21,7 @@ function canContinueTree(state,plan,work,mutation,now){
  if(mutation.cuts>=timberTreeRules.cuts||plan.treeWork!==work||!isWood(plan)||plan.simpleMode==='random'||state.characterRules?.goal)return false;
  const timber=state.woodcutting.timber;
  if(timber>=1000000||timber+(state.bank?.vault?.items?.timber??0)>=(plan.timberTarget??Infinity))return false;
+ if((state.vitals?.hunger??100)<=LOW_HUNGER)return false;
  // Leave legacy shift deadlines and between-cut food decisions to normal settlement.
  if(plan.kind==='woodcutting')return !(plan.nextCutAt>now);
  const food=normalizeFoodPolicy(plan.foodPolicy??state.characterRules?.food);
@@ -28,7 +29,7 @@ function canContinueTree(state,plan,work,mutation,now){
 }
 
 export async function advanceTreeWork(env,state,now,motion){
- const p=state.plan;if(!p?.physicalTimber||!isWood(p))return null;
+ const p=state.plan;if(!p?.physicalTimber||p.foodTrip||!isWood(p))return null;
  const work=p.treeWork??={phase:'choose'};
  if(work.cut){
   if(now<work.cut.endsAt)return null;

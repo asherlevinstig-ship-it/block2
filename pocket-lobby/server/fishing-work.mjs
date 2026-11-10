@@ -1,9 +1,9 @@
 import {autoTilePath} from './auto-motion.mjs';
 import {publicRoomNamespace} from './shared-trees.mjs';
 import {completeRoutineFish,finishRoutineQueue} from './routine-queue.mjs';
-import {finishPlan} from './player-state.mjs';
+import {finishAutoFoodWork,finishPlan} from './player-state.mjs';
 import {autoStoreVault} from './vault.mjs';
-import {applyAutoFood} from './auto-food.mjs';
+import {checkAutoWorkFood} from './auto-food.mjs';
 import {fishingCatalog,rollFishingCatch} from '../public/fishing.js';
 import {familiarFishingTime} from '../public/familiars.js';
 import {awardFamiliarBond} from './familiar-progression.mjs';
@@ -43,11 +43,10 @@ function remainingCasts(state,plan){
 
 export async function advanceFishingWork(env,id,state,now,motion,random=Math.random,usage=null){
  const plan=state.plan;
- if(!isFishingPlan(plan)||plan.fishingLandingUntil>now)return;
+ if(plan.foodTrip||!isFishingPlan(plan)||plan.fishingLandingUntil>now)return;
  const work=plan.fishingWork??={};
  if(work.batchUntil)return; // The batch is settled separately, even after a delayed alarm.
  if(work.readyAt>now)return;
- if(work.stopReason){finishPlan(state,work.stopReason,now);return;}
  const room='pond';
  const rod=plan.rod??state.fishingGear.equippedRod,profile=fishingCatalog.rods[rod];
  if(!profile||state.fishingGear.bait<=(plan.keepBait??0)||plan.baitUsed>=plan.baitLimit){
@@ -74,10 +73,6 @@ export async function advanceFishingWork(env,id,state,now,motion,random=Math.ran
    if(plan.kind==='queue')completeRoutineFish(state,fish,xp,now);
    else{plan.catches[fish]=(plan.catches[fish]??0)+1;plan.baitUsed++;plan.xp+=xp;}
    autoStoreVault(state,plan,now);
-   if(plan.kind!=='queue'){
-     const food=applyAutoFood(state,plan,now);
-     if(food.returnHome)work.stopReason=food.reason??'food-reserve';
-   }
    return;
  }
  state.location=room;
@@ -91,10 +86,6 @@ export async function advanceFishingWork(env,id,state,now,motion,random=Math.ran
  }
  work.spot=spot;state.position={...spot};
  if(!sameTile(motion,spot)){plan.currentLabel='Walking to the fishing spot';return;}
- if(plan.kind==='queue'&&plan.simpleMode!=='random'){
-   const food=applyAutoFood(state,plan,now);
-   if(food.returnHome){finishRoutineQueue(state,plan,food.reason??'food-reserve',now);return;}
- }
  work.cast=castAt(state,rod,room,spot,now);
  const count=Math.min(BATCH_CASTS,remainingCasts(state,plan));
  if(observed===false&&count>1&&(!plan.simpleMode||plan.simpleMode==='fishing')){
@@ -122,11 +113,10 @@ export async function settleFishingBatch(env,id,state,now,motion,{observed=false
    const step=plan.stepIndex,cycle=plan.cycle;
    await advanceFishingWork(env,id,state,landedAt,motion,random);
    if(state.fishingReceipt?.castId===castId)state.fishingReceipt.batched=true;
-   if(state.plan!==plan||plan.fishingWork!==work||work.stopReason||step!==plan.stepIndex||cycle!==plan.cycle||remainingCasts(state,plan)<=0)break;
-   if(plan.kind==='queue'){
-     const food=applyAutoFood(state,plan,landedAt);
-     if(food.returnHome){finishRoutineQueue(state,plan,food.reason??'food-reserve',landedAt);break;}
-   }
+   if(state.plan!==plan||plan.fishingWork!==work||step!==plan.stepIndex||cycle!==plan.cycle||remainingCasts(state,plan)<=0)break;
+   const food=checkAutoWorkFood(state,plan,landedAt,{stopping});
+   if(food.reason){if(!stopping)finishAutoFoodWork(state,food.reason,landedAt);break;}
+   if(food.paused)break;
    if(count+1===BATCH_CASTS||landedAt+1100>=batchDeadline||landedAt+1100>=plan.endAt)break;
    const next=castAt(state,rod,'pond',work.spot,landedAt+1100);
    if(stopping&&next.landAt+900>until)break;

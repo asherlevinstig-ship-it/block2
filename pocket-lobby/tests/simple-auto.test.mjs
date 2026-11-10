@@ -47,7 +47,7 @@ test('Auto Battle sells early when the next fight is unsafe, the bag fills, or t
 });
 
 test('Auto Battle checks hunger between fights and sells a full bag before starting',()=>{
- const hungry=start(battleCharacter({vitals:{hunger:2}}));
+ const hungry=start(battleCharacter({vitals:{hunger:22}}));
  for(let now=1500;now<40000&&hungry.plan;now+=500)battleTick(hungry,now);
  assert.equal(hungry.report.reason,'out-of-food');
  assert.equal(hungry.report.hunts.started,1);

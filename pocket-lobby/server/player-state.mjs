@@ -1,7 +1,7 @@
 import {awardFamiliarBond} from './familiar-progression.mjs';
 import {wildlifeRoom,wildlifeView} from '../public/wildlife.js';
 import {normalizeVitals,useHunger,exertionDuration} from '../public/player-vitals.js';
-import {applyAutoFood} from './auto-food.mjs';
+import {checkAutoWorkFood} from './auto-food.mjs';
 import {watchRooms,watchFlags,willowmereRooms,isFishingRoom} from '../public/region-catalog.js';
 import {normalizeFamiliars,familiarFishingTime} from '../public/familiars.js';
 import {canUseArmour} from '../public/hunting.js';
@@ -14,7 +14,7 @@ import {normalizeBank} from '../public/bank.js';
 import {settleAutoGambling} from './auto-gambling.mjs';
 import {normalizeDungeonLoot} from '../public/dungeon-loot.js';
 import {normalizeUpgradeReceipt} from '../public/upgrade-goals.js';
-import {settleRoutineQueue} from './routine-queue.mjs';
+import {finishRoutineQueue,settleRoutineQueue} from './routine-queue.mjs';
 import {finishRoutineReport} from './routine-report.mjs';
 import {skillLevel,progressionVersion,MAX_SKILL_XP} from '../public/skill-curve.js';
 import {normalizeMagic} from '../public/essences.js';
@@ -25,7 +25,7 @@ import {normalizeWardrobe,outfitAppearance} from '../public/wardrobe.js';
 import {normalizeCharacterRules} from '../public/character-rules.js';
 import {depthsStages,depthsCacheRoom,depthsSideRooms,normalizeDepthsRun} from '../public/depths.js';
 import {jobPreview} from '../public/jobs.js';
-import { normalizeWoodcutting } from "../public/woodcutting.js";
+import { normalizeWoodcutting,woodcuttingLevel } from "../public/woodcutting.js";
 import { startWoodcuttingPlan,settleWoodcuttingPlan } from "./woodcutting-plan.mjs";
 import { normalizeHistory } from "../public/first-visit.js";
 import { normalizeQuest,recordQuest } from "../public/quests.js";
@@ -150,13 +150,20 @@ export function startPlan(state,{hours,baitLimit,kind,source},now){
 }
 export function finishPlan(state,reason,endedAt){
   const plan=state.plan;
-  state.report={...plan,reason,endedAt,patienceAfter:skillLevel(state.stats.patienceXp)};
+  delete plan.foodTrip;
+  state.report={...plan,reason,endedAt,...(plan.kind==='woodcutting'?{levelAfter:woodcuttingLevel(state.woodcutting)}:{patienceAfter:skillLevel(state.stats.patienceXp)})};
   delete state.plan;
   state.location="home";state.position={x:5,y:7};
+}
+export function finishAutoFoodWork(state,reason,at){
+  if(state.plan.kind==='queue')finishRoutineQueue(state,state.plan,reason,at);
+  else finishPlan(state,reason,at);
+  return true;
 }
 function settleWorkPlan(state,now,{stop=false,random=Math.random}={}){
   const plan=state.plan;
   if(!plan)return false;
+  if(plan.foodTrip)return (stop||now>=plan.endAt)&&finishAutoFoodWork(state,stop?'returned':'away-cap',Math.min(now,plan.endAt));
   if(plan.kind==='exploring')return settleExplorationPlan(state,now,{stop});
   if(plan.kind==='gambling')return settleAutoGambling(state,now,{stop,random});
   if(plan.kind==='queue')return settleRoutineQueue(state,now,{stop,random});
@@ -169,11 +176,17 @@ function settleWorkPlan(state,now,{stop=false,random=Math.random}={}){
     return false;
   }
   if(plan.kind==='woodcutting')return settleWoodcuttingPlan(state,now,{stop});
+  let changed=false;
+  if(plan.source==='rules'&&!stop&&now<plan.endAt&&!plan.fishingWork?.cast&&!(plan.fishingLandingUntil>now)){
+    const food=checkAutoWorkFood(state,plan,now);
+    if(food.reason)return finishAutoFoodWork(state,food.reason,now);
+    if(food.paused)return true;
+    changed=!!food.used;
+  }
   if(plan.physicalFishing){
     if(now>=plan.endAt||stop){finishPlan(state,stop?'stopped':'time-limit',Math.min(now,plan.endAt));return true;}
-    return false;
+    return changed;
   }
-  let changed=false;
   while(plan.nextCatchAt<=Math.min(now,plan.endAt)&&plan.baitUsed<plan.baitLimit&&state.fishingGear.bait>0){
     const level=skillLevel(state.stats.patienceXp);
     const fish=rollFishingCatch(level,plan.rod,random,state.stats.luckXp);
@@ -185,12 +198,15 @@ function settleWorkPlan(state,now,{stop=false,random=Math.random}={}){
     plan.baitUsed++;plan.xp+=10;awardFamiliarBond(state,'otter',1);
     const caughtAt=plan.nextCatchAt;autoStoreVault(state,plan,caughtAt);
     changed=true;
-    const food=applyAutoFood(state,plan,caughtAt);
-    if(food?.returnHome){finishPlan(state,food.reason??'food-reserve',caughtAt);return true;}
     plan.nextCatchAt+=exertionDuration(plan.interval,state.vitals);
     if(plan.baitUsed>=plan.baitLimit||state.fishingGear.bait===0){
       finishPlan(state,state.fishingGear.bait===0?"out-of-bait":"bait-limit",caughtAt);
       return true;
+    }
+    if(plan.source==='rules'){
+      const food=checkAutoWorkFood(state,plan,caughtAt,{stopping:stop||now>=plan.endAt});
+      if(food.reason)return finishAutoFoodWork(state,food.reason,caughtAt);
+      if(food.paused)return true;
     }
   }
   if(now>=plan.endAt||stop){
