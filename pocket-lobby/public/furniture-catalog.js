@@ -1,5 +1,5 @@
 import {HOME_SAFE_PRICE} from './home-safe.js';
-export const furnitureCategories={all:'All furniture',comfort:'Comfort',tables:'Tables & seating',decor:'Lights & plants',storage:'Storage'};
+export const furnitureCategories={all:'All furniture',comfort:'Comfort',tables:'Tables & seating',decor:'Lights & plants',showpieces:'Showpieces',storage:'Storage'};
 export const furnitureCatalog={
  bed:{name:'Single bed',category:'comfort',price:80,size:[2,1],description:'Restores 10 HP per second while resting at home. Your first bed is free.'},
  comfortBed:{name:'Comfort bed',category:'comfort',price:300,size:[2,1],description:'A soft teal bed. Restores 15 HP per second, 50% faster than the starter bed. Auto uses it when placed at home.'},
@@ -12,10 +12,21 @@ export const furnitureCatalog={
  table:{name:'Coffee table',category:'tables',price:55,size:[1,1],description:'A low wooden table, with a book and a cup already waiting.'},
  lamp:{name:'Floor lamp',category:'decor',price:65,size:[1,1],description:'A warm pool of light for your home, even when Moonwood turns dark.'},
  plant:{name:'Potted palm',category:'decor',price:35,size:[1,1],description:'Bring a little greenery indoors. No watering required.'},
+ amberLantern:{name:'Amber Lantern',category:'decor',price:45,size:[1,1],description:'A low brass lantern that casts a warm pool of light.'},
+ moonCrystal:{name:'Moon Crystal',category:'decor',price:180,size:[1,1],description:'A luminous blue crystal on a carved stone stand.'},
+ jadeBonsai:{name:'Jade Bonsai',category:'decor',price:85,size:[1,1],description:'A small sculpted tree in a glazed jade pot.'},
+ explorersGlobe:{name:'Explorer’s Globe',category:'showpieces',price:125,size:[1,1],description:'A painted globe mounted in a brass ring.'},
+ wardenStatue:{name:'Warden Statue',category:'showpieces',price:220,size:[1,1],description:'A small stone guardian on a gilded plinth.'},
+ silverfinTank:{name:'Silverfin Aquarium',category:'showpieces',price:260,size:[2,1],description:'A glass tank with a pair of swimming silverfin.'},
+ silkScreen:{name:'Moonwood Screen',category:'showpieces',price:140,size:[2,1],description:'A folding screen painted with the peaks of Moonwood.'},
  bookcase:{name:'Bookshelf',category:'storage',price:95,size:[2,1],description:'A tall shelf for stories and keepsakes. Decorative only; also craftable with timber.'},
  stove:{name:'Cooking stove',category:'storage',price:200,size:[1,1],description:'Cook fish and hunted meat into healing meals at home. Uses timber as fuel. Unlock stronger recipes with Cooking XP; Auto can stock meals while you’re away.'},
  safe:{name:'Home safe',category:'storage',price:HOME_SAFE_PRICE,size:[1,1],limit:1,description:'Protect gold, supplies and spare gear. Place it at home and click to open. Auto can save into it while you’re away.'}
 };
+export function catalogFurnitureSize({type,rot=0}){
+ const size=Object.hasOwn(furnitureCatalog,type)?furnitureCatalog[type].size:null;
+ return size&&rot%2?[size[1],size[0]]:size;
+}
 export function purchaseFurniture(state,id,quantity=1){
  if(!Object.hasOwn(furnitureCatalog,id)||!Number.isSafeInteger(quantity)||quantity<1||quantity>99)throw new Error('Choose a furniture item and a quantity from 1 to 99.');
  if(state.location!=='furnishings')throw new Error('Travel to the physical Tower Furnishings shop to buy furniture.');

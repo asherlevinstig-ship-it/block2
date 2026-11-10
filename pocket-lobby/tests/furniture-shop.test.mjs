@@ -8,6 +8,11 @@ test('all furniture purchases charge the catalogue price and preserve existing p
   const s=normalizeState({credits:10000,location:'furnishings'}),before=s.ownedFurniture[id]??0,q=id==='safe'?1:2;
   applyGameplayAction(s,'buyFurniture',{id,quantity:q,price:0},1000);assert.equal(s.credits,10000-item.price*q);assert.equal(s.ownedFurniture[id],before+q);assert.equal(s.ownedFurniture.bed,id==='bed'?3:1);assert.deepEqual(s.homeFurniture,[]);assert.equal(s.goldEarned,0);
   assert.deepEqual(normalizeState(s).ownedFurniture,s.ownedFurniture);
+  const placed={id:1,type:id,x:4,y:4,rot:1};
+  const home=normalizeState(protectFishingState(s,{...structuredClone(s),location:'home',homeFurniture:[placed]}));
+  assert.deepEqual(home.homeFurniture,[placed]);
+  const [w,d]=item.size;
+  assert.deepEqual(roomBoxes('home',home.homeFurniture),[{x:4,y:4,w:d,d:w}]);
  }
 });
 test('invalid orders, low wallet balances, bank-only wealth and activity locks leave the character unchanged',()=>{

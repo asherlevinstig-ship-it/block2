@@ -16,7 +16,7 @@ const shades = {
   cream:['#ffe0a5','#bd8d71','#e8b182'], green:['#81b486','#365e58','#518366'],
   clay:['#d5896b','#8c4c59','#ab5f5b'], black:['#3d344c','#211f33','#302a43']
 };
-const types = {stove:'Cooking stove',safe:'Home safe',woodStool:'Wooden Stool',woodTable:'Small Table',bookcase:'Bookshelf',bed:'Single bed',comfortBed:'Comfort bed',royalBed:'Royal bed', moonbloom:'Moonbloom', sofa:'Velvet sofa', stool:'Bar stool', plant:'Potted palm', table:'Coffee table', lamp:'Floor lamp', chair:'Club chair'};
+const types = {...Object.fromEntries(Object.entries(furnitureCatalog).map(([id,item])=>[id,item.name])),moonbloom:'Moonbloom'};
 const hairColors = ['#704832','#383848','#a15a39','#d6ac60','#7b638a'];
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const STEP_MS = 141, WAVE_MS = 1100;
@@ -1750,7 +1750,7 @@ const storeFurniture=[
 const tailorFurniture=[['reception',3,2],['sofa',7,6],['lamp',8,1],['plant',1,1],['plant',8,8]].map(([type,x,y,rot=0],id)=>({id,type,x,y,rot}));
 const factionHallFurniture=factionHallLayout.map(([type,x,y,rot=0],id)=>({id,type,x,y,rot}));
 const bakeryFurniture=bakeryLayout.map(([type,x,y,rot=0],id)=>({id,type,x,y,rot}));
-const furnishingsFurniture=[['reception',3,1],['bed',6,2],['lamp',8,2],['bookcase',1,1],['sofa',6,6],['table',6,8],['chair',8,8,2],['plant',1,8],['safe',8,1]].map(([type,x,y,rot=0],id)=>({id,type,x,y,rot}));
+const furnishingsFurniture=[['reception',3,1],['bed',6,2],['lamp',8,2],['bookcase',1,1],['sofa',6,6],['table',6,8],['chair',8,8,2],['plant',1,8],['safe',8,1],['silverfinTank',2,7],['moonCrystal',7,3]].map(([type,x,y,rot=0],id)=>({id,type,x,y,rot}));
 const marketFurniture=[
   {id:'trader',type:'tradeCounter',x:3,y:2,rot:0},
   {id:'produce',type:'harvestCrates',x:7,y:3,rot:0},
@@ -2377,7 +2377,9 @@ function dungeonMobOffset(item,time){
 function dimensions(item) {
   if(watchDimensions[item.type])return watchDimensions[item.type];
   if(riverDimensions[item.type])return riverDimensions[item.type];
-  if(item.type==='bookcase'||item.type==='workbench'||item.type==='sofa'||isRestBed(item.type)||item.type==='bench'||isGamingTable(item))return item.rot%2?[1,2]:[2,1];
+  const catalogSize=catalogFurnitureSize(item);
+  if(catalogSize)return catalogSize;
+  if(item.type==='workbench'||item.type==='bench'||isGamingTable(item))return item.rot%2?[1,2]:[2,1];
   if(item.type==='armoryCounter'||item.type==='reception'||item.type==='tackleCounter'||item.type==='tradeCounter')return [3,1];
   if(item.type==='rodRack'||item.type==='weaponRack')return [2,1];
   if(item.type==='fountain')return [2,2];
@@ -2477,6 +2479,54 @@ function object(item,highlight=false,time=0) {
     for(const u of [.12,1.72])for(const v of [.13,.74])part(u,v,.13,.13,0,15,'wood');
     part(.03,.05,1.94,.90,15,4,'wood');part(.09,.10,1.82,.78,19,.6,['#d1ad7b','#88635c','#ab835f']);
     part(.18,.18,.44,.22,20,1,'cream');part(1.3,.37,.38,.09,20,1,'black');part(1.52,.29,.1,.27,20,2,'trim');
+  }else if(type==='amberLantern'){
+    const [lx,ly]=point(x+.5,y+.5,10);
+    const glow=ctx.createRadialGradient(lx,ly,1,lx,ly,18);
+    glow.addColorStop(0,'#ffb65c60');glow.addColorStop(1,'#ffb65c00');
+    ctx.fillStyle=glow;ctx.fillRect(lx-18,ly-18,36,36);
+    part(.24,.24,.52,.52,0,3,'black');part(.32,.32,.36,.36,3,9,'gold');
+    part(.42,.67,.15,.02,5,5,'cream');part(.67,.42,.02,.15,5,5,'cream');
+    part(.29,.29,.42,.42,12,2,'black');part(.44,.42,.12,.16,14,3,'gold');
+  }else if(type==='moonCrystal'){
+    drawLobbyCrystal(x,y,time);
+  }else if(type==='jadeBonsai'){
+    part(.16,.25,.68,.5,0,5,'green');part(.12,.22,.76,.56,5,2,'green');
+    part(.21,.29,.58,.42,7,.5,'black');
+    const [tx,ty]=point(x+.5,y+.5,7);
+    polygon([[tx-2,ty],[tx+2,ty],[tx+1,ty-8],[tx-3,ty-15],[tx-5,ty-14],[tx-1,ty-7]],'#ac7955');
+    for(const [u,v,c] of [[-7,-15,'#396c5d'],[3,-18,'#498365'],[-4,-22,'#70a675']]){
+      polygon([[tx+u-7,ty+v],[tx+u-3,ty+v-4],[tx+u+4,ty+v-4],[tx+u+8,ty+v],[tx+u+4,ty+v+3],[tx+u-5,ty+v+3]],c);
+    }
+  }else if(type==='explorersGlobe'){
+    part(.28,.27,.44,.46,0,3,'wood');part(.45,.44,.10,.12,3,9,'gold');
+    const [gx,gy]=point(x+.5,y+.5,19);
+    ctx.beginPath();ctx.ellipse(gx,gy,10,12,-.35,0,2*Math.PI);ctx.fillStyle='#c99b55';ctx.fill();
+    ctx.beginPath();ctx.ellipse(gx,gy,8,8,0,0,2*Math.PI);ctx.fillStyle='#4c92a3';ctx.fill();
+    polygon([[gx-6,gy-4],[gx-1,gy-6],[gx+3,gy-3],[gx+1,gy],[gx-2,gy+2],[gx-4,gy+5],[gx-5,gy+1]],'#adc58b');
+    polygon([[gx+4,gy+1],[gx+7,gy],[gx+7,gy+3],[gx+4,gy+6],[gx+2,gy+4]],'#c1cd98');
+  }else if(type==='wardenStatue'){
+    part(.16,.15,.68,.7,0,6,['#9395a5','#4c5168','#6b7284']);part(.13,.12,.74,.76,6,2,'gold');
+    for(const u of [.33,.55])part(u,.44,.14,.21,8,6,'trim');
+    part(.27,.34,.46,.34,14,11,['#c0c6cb','#586678','#83929d']);
+    part(.36,.38,.29,.28,25,7,'trim');part(.32,.34,.37,.36,31,2,'trim');
+    part(.69,.51,.07,.07,11,18,'gold');part(.60,.49,.25,.09,18,2,'cream');
+    part(.24,.69,.30,.07,14,7,'blue');part(.32,.76,.12,.02,17,2,'gold');
+  }else if(type==='silverfinTank'){
+    part(.04,.12,1.92,.76,0,8,'wood');part(.04,.12,1.92,.76,8,2,'gold');
+    part(.10,.16,1.80,.68,10,14,['#5da8b1','#2d657d','#417f94']);
+    part(.12,.17,1.76,.66,24,1,['#9ad2cc','#417f94','#568f9a']);
+    for(const u of [.24,1.55]){part(u,.32,.12,.16,11,5,'green');part(u+.10,.36,.08,.12,11,8,'green');}
+    const drift=reducedMotion.matches?0:Math.sin(time/500)*.24;
+    for(const [u,v,z] of [[.65+drift,.58,17],[1.19-drift,.53,20]]){
+      part(u,v,.22,.09,z,2,'cream');part(u-.065,v+.015,.065,.05,z+.25,1,'gold');
+    }
+    part(.05,.13,1.9,.75,25,1,'black');
+  }else if(type==='silkScreen'){
+    for(const u of [.10,.73,1.36]){
+      part(u,.47,.53,.11,2,33,'wood');part(u+.05,.59,.43,.035,6,26,['#d8b697','#79516b','#a07a83']);
+      part(u+.11,.63,.12,.02,11,11,'blue');part(u+.23,.63,.13,.02,11,16,'blue');
+      part(u+.23,.65,.13,.015,25,2,'cream');part(u,.46,.08,.25,0,5,'gold');
+    }
   }else if(type==='woodStool'){
     for(const u of [.17,.70])for(const v of [.16,.70])part(u,v,.12,.12,0,10,'wood');
     part(.09,.10,.82,.80,10,3,['#d0a36d','#7d5854','#a97d59']);
@@ -3091,7 +3141,7 @@ function draw(time){
     object(item,treeHover||editing&&(selection?.id===item.id||hoverItem?.id===item.id)&&!fixed(item),time);
     ctx.globalAlpha=1;
     if(item.defeated||item===ghost||(fixed(item)&&!isGamingTable(item)))continue;
-    const [w,d]=dimensions(item), h=moonwood.heights[item.type]??{armoryCounter:32,weaponRack:37,anvil:19,brazier:25,workbench:23,woodStool:13,woodTable:18,bookcase:37,woodcutter:43,hallBoard:27,bakeryOven:33,breadRack:30,foodStall:43,factionRegistrar:43,warden:43,enchanter:43,tradeCounter:32,harvestCrates:16,tackleCounter:32,rodRack:36,baitCrates:16,blackjack:19,roulette:22,reception:32,stove:28,safe:25,bed:24,comfortBed:24,royalBed:28,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39,bench:22,streetlamp:55,fountain:37}[item.type];
+    const [w,d]=dimensions(item), h=moonwood.heights[item.type]??{armoryCounter:32,weaponRack:37,anvil:19,brazier:25,workbench:23,woodStool:13,woodTable:18,bookcase:37,woodcutter:43,amberLantern:17,moonCrystal:43,jadeBonsai:34,explorersGlobe:31,wardenStatue:33,silverfinTank:26,silkScreen:35,hallBoard:27,bakeryOven:33,breadRack:30,foodStall:43,factionRegistrar:43,warden:43,enchanter:43,tradeCounter:32,harvestCrates:16,tackleCounter:32,rodRack:36,baitCrates:16,blackjack:19,roulette:22,reception:32,stove:28,safe:25,bed:24,comfortBed:24,royalBed:28,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39,bench:22,streetlamp:55,fountain:37}[item.type];
     const height=isTimberTree(item)&&treeState(item).regrowsAt?6:h;
     const shape=[point(item.x,item.y+d),point(item.x+w,item.y+d),point(item.x+w,item.y),point(item.x+w,item.y,height),point(item.x,item.y,height),point(item.x,item.y+d,height)];
     hitboxes.push({item,shape});

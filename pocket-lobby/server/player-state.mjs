@@ -18,6 +18,7 @@ import {settleRoutineQueue} from './routine-queue.mjs';
 import {finishRoutineReport} from './routine-report.mjs';
 import {skillLevel,progressionVersion,MAX_SKILL_XP} from '../public/skill-curve.js';
 import {normalizeMagic} from '../public/essences.js';
+import {furnitureCatalog} from '../public/furniture-catalog.js';
 import {foodItems} from '../public/cooking.js';
 import {normalizeWardrobe,outfitAppearance} from '../public/wardrobe.js';
 import {normalizeCharacterRules} from '../public/character-rules.js';
@@ -43,7 +44,7 @@ const counts=(input={})=>{
 function furniture(items){
   if(items===undefined)return undefined;
   if(!Array.isArray(items)||items.length>300)throw new Error("Invalid room.");
-  const allowed=new Set(["bar","shelf","plant","sofa","chair","table","lamp","stool","bed","comfortBed","royalBed","stove","moonbloom","blackjack","roulette","woodStool","woodTable","bookcase","safe"]);
+  const allowed=new Set(["bar","shelf","moonbloom","blackjack","roulette",...Object.keys(furnitureCatalog)]);
   return items.map(item=>{
     if(!allowed.has(item.type)||!Number.isFinite(item.x)||!Number.isFinite(item.y)||item.x<0||item.y<0||item.x>=10||item.y>=10||!Number.isInteger(item.rot)||item.rot<0||item.rot>3)throw new Error("Invalid furniture.");
     if(!(Number.isSafeInteger(item.id)||typeof item.id==="string"&&item.id.length<=60))throw new Error("Invalid item ID.");
