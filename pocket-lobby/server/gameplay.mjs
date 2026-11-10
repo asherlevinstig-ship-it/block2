@@ -24,6 +24,7 @@ import {bankDepthsSpoils,moonwellShard} from '../public/depths.js';
 import {activityAction,settleActivities} from './activities.mjs';
 import {essenceAction} from './essences.mjs';
 import {gamblingAction} from './gambling.mjs';
+import {factionHall,factionHallRest,factionHallStove} from '../public/faction-hall.js';
 import {foodItems,foodFullness,foodStall,mealRecipes,prepareMeal,towerBread} from '../public/cooking.js';
 import {moonwood} from '../public/moonwood.js';
 
@@ -88,6 +89,13 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
     }else{if(typeof body.id!=='string')throw new Error('Choose a weapon reward to dismiss.');loot.notices=loot.notices.filter(n=>n.id!==body.id);}
     return;
   }
+  if(action==='factionRest'){
+    available(state);location(state,[factionHall]);
+    const position=state.position;
+    if(!position||Math.min(...[0,1].map(dx=>Math.abs(position.x-factionHallRest.x-dx)+Math.abs(position.y-factionHallRest.y)))!==1)throw new Error('Travel beside the hall bench first.');
+    if(state.health<100)state.hunting.recoveryUntil=now+15000;
+    return;
+  }
   if(action==='buyBread'){
     available(state);location(state,[foodStall.room]);
     const position=state.position;
@@ -107,7 +115,8 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
       const position=state.position;
       const atStove=state.location==='home'&&state.ownedFurniture?.stove>0&&position&&(state.homeFurniture??[]).some(stove=>stove.type==='stove'&&Math.abs(position.x-stove.x)+Math.abs(position.y-stove.y)===1);
       const atCamp=state.location==='trail'&&position&&Math.abs(position.x-campfire.x)+Math.abs(position.y-campfire.y)===1;
-      if(!atStove&&!atCamp)throw new Error('Travel beside the campfire on Lantern Trail or your placed home cooking stove.');
+      const atHall=state.location===factionHall&&position&&Math.abs(position.x-factionHallStove.x)+Math.abs(position.y-factionHallStove.y)===1;
+      if(!atStove&&!atCamp&&!atHall)throw new Error('Travel beside the campfire on Lantern Trail or your placed home cooking stove.');
       prepareMeal(state,body.id);
     }else{
       if(count<1)throw new Error('Choose a meal you have in Inventory.');

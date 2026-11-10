@@ -1,3 +1,5 @@
+import {factionHallAccess} from './faction-projects.mjs';
+import {factionHall} from '../public/faction-hall.js';
 import {moonwood} from '../public/moonwood.js';
 import {isFamiliar,normalizeFamiliarName,moonSightActive,familiarBond} from '../public/familiars.js';
 import {sharedActivity} from '../public/world-activity.js';
@@ -23,12 +25,14 @@ export async function handleWorldConnect(request,env){
   const state=JSON.parse(row.state_json);
   if(room==='lounge'&&!isSmartlyDressed(state.wardrobe))return json({error:'Choose a Tailored Suit or Moonlit Dress in Wardrobe before entering the lounge.'},403);
   if(state.location!==room||state.plan&&state.plan.source!=='rules'||state.report)return json({error:'Save your current location before joining.'},409);
+  const access=room===factionHall?await factionHallAccess(env.TOWER_DB,identity.playerId):null;
+  if(room===factionHall&&!access)return json({error:'Your faction hall access has ended.'},403);
   const boxes=roomBoxes(room,state.homeFurniture),position=state.position??{x:5,y:7};
   if(!validRoomTile(room,position.x,position.y,boxes))return json({error:'Move to an open tile and try again.'},409);
   if(check)return json({ready:true,room});
-  const profile={playerId:identity.playerId,id:(await tokenHash('public:'+identity.playerId)).slice(0,24),sessionHash:identity.sessionHash??null,expiresAt:identity.expiresAt,room,
+  const profile={playerId:identity.playerId,id:(await tokenHash('public:'+identity.playerId)).slice(0,24),sessionHash:identity.sessionHash??null,expiresAt:identity.expiresAt,room,...(access?{factionId:access.id}:{}),
     name:state.avatar?.name??'Guest',outfit:state.avatar?.outfit??0,trousers:state.avatar?.trousers??0,boots:state.avatar?.boots??0,hair:state.avatar?.hair??0,weapon:state.combatGear?.equippedWeapon??null,armour:armourSelection(state.combatGear),x:position.x,y:position.y,direction:'right',back:false,health:state.health??100,...familiarProfile(state),activity:sharedActivity(state),auto:state.plan?.source==='rules'};
-  const namespace=room==='home'?'home:'+identity.playerId:'public:'+room;
+  const namespace=access?'faction:'+access.id:room==='home'?'home:'+identity.playerId:'public:'+room;
   const stub=env.SHARED_ROOMS.get(env.SHARED_ROOMS.idFromName(namespace));
   return stub.fetch(new Request('https://room.internal/connect',{headers:{Upgrade:'websocket','X-Tower-Profile':encodeURIComponent(JSON.stringify(profile))}}));
 }
@@ -90,7 +94,9 @@ export class SharedRoom{
     if(meta.sessionHash){const session=await this.env.TOWER_DB.prepare('SELECT a.player_id FROM tower_sessions s JOIN tower_accounts a ON a.account_id = s.account_id WHERE s.session_hash = ? AND s.expires_at > ?').bind(meta.sessionHash,Date.now()).first();if(session?.player_id!==meta.playerId)return false;}
     else if((await this.env.TOWER_DB.prepare('SELECT account_id FROM tower_accounts WHERE player_id = ?').bind(meta.playerId).first())?.account_id)return false;
     const row=await this.env.TOWER_DB.prepare('SELECT state_json FROM tower_players WHERE player_id = ?').bind(meta.playerId).first();
-    if(!row)return false;const state=JSON.parse(row.state_json);return (!state.plan||state.plan.source==='rules')&&!state.report&&state.location===meta.room;
+    if(!row)return false;
+    if(meta.room===factionHall&&(await factionHallAccess(this.env.TOWER_DB,meta.playerId))?.id!==meta.factionId)return false;
+    const state=JSON.parse(row.state_json);return (!state.plan||state.plan.source==='rules')&&!state.report&&state.location===meta.room;
   }
   async webSocketMessage(ws,raw){
     const meta=this.sessions.get(ws);if(!meta)return;

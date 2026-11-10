@@ -100,6 +100,7 @@
           if(error.status===409||error.status===401||error.status===undefined)conflict('Reload to confirm the result of your action.');
           throw error;
         }
+        if(path==='factions'&&body.action==='donate'&&error.status===undefined&&attempt<2)continue;
         if(path==='testing/reset'){if(error.status===undefined&&attempt<2)continue;conflict('Reload to confirm whether your character reset.');throw error;}
         if(path==='commissions/carpenter'){
           if(error.status===undefined&&attempt<2)continue;
@@ -429,17 +430,21 @@
       window.towerOpenFactionRegistrar=initializeFactions({
         read:query=>request('factions?q='+encodeURIComponent(query)),
         change:async body=>{
-          if(body.action!=='create')return request('factions',body);
           await flush();
+          if(!['create','donate'].includes(body.action))return request('factions',body);
           gameplayBusy=true;
           try{
             const result=await action('factions',body);
-            window.towerApplyFactionPurchase?.(result.state,result.founding.fee);
+            if(body.action==='create')window.towerApplyFactionPurchase?.(result.state,result.founding.fee);
+            else window.towerApplyBankState?.(result.state);
             return result;
           }finally{gameplayBusy=false;}
         },
-        visitRegistrar:()=>window.towerFindFactionRegistrar?.()
+        visitRegistrar:()=>window.towerFindFactionRegistrar?.(),
+        visitHall:()=>window.towerVisitFactionHall?.(),
+        inHall:()=>packet.state.location==='factionHall'
       });
+      window.towerReadFactionProject=async()=>{await flush();return (await request('factions')).membership?.hall;};
       const script=document.createElement('script');script.src='game.js';
       script.onload=()=>{
         if(!(pending||retryJob||sending))setStatus('Server saved');

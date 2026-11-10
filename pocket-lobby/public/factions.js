@@ -12,6 +12,51 @@ export function initializeFactions(api,document=globalThis.document){
     const row=make('div','');row.className='faction-confirm';row.append(confirm,cancel);
     container.querySelector('.faction-confirm')?.remove();container.append(row);confirm.focus();
   }
+  function projectBoard({id,hall}){
+    const section=make('section','');section.className='faction-project';
+    section.append(make('h4',hall.project?.name??'Faction hall complete'));
+    section.append(make('p',hall.project?.reward??'The hall and field kitchen are open to all members.'));
+    if(hall.open&&!api.inHall())section.append(button('Visit faction hall',()=>{dialog.close();api.visitHall();}));
+    if(hall.project){
+      const controls=make('div','');controls.className='faction-project-controls';
+      for(const [resource,{value,target}] of Object.entries(hall.project.progress)){
+        const row=make('div','');row.className='faction-project-row';
+        const label={gold:'Gold',timber:'Timber',meal:'Cooked meals'}[resource];
+        const meter=make('progress','');meter.max=target;meter.value=value;meter.setAttribute('aria-label',label+' project progress');
+        row.append(make('b',label+' · '+value+' / '+target),meter);
+        if(value<target){
+          const meals=hall.meals.filter(item=>item.stock>0),selector=make('select','');
+          selector.setAttribute('aria-label','Cooked meal to donate');
+          for(const item of meals){const option=make('option',item.name+' × '+item.stock);option.value=item.id;selector.append(option);}
+          const amount=make('input','');amount.type='number';amount.min=1;amount.required=true;amount.setAttribute('aria-label',label+' donation quantity');
+          const donate=button('Donate',()=>{
+            const quantity=Number(amount.value);
+            if(!Number.isSafeInteger(quantity)||quantity<1||quantity>Number(amount.max)){amount.reportValidity();return;}
+            const meal=resource==='meal'?selector.value:undefined;
+            confirmAction(section,'Confirm '+quantity+' '+(resource==='meal'?meals.find(item=>item.id===meal).name:label.toLowerCase()),()=>change({action:'donate',id,resource,meal,quantity},'Contribution added.'));
+          });
+          function updateLimit(){
+            const stock=resource==='meal'?(meals.find(item=>item.id===selector.value)?.stock??0):hall.stock[resource];
+            const max=Math.min(target-value,stock);amount.max=max;amount.value=max?1:'';
+            amount.disabled=donate.disabled=max<1;
+          }
+          selector.onchange=updateLimit;updateLimit();
+          if(resource==='meal'&&meals.length)row.append(selector);
+          row.append(amount,donate);
+        }
+        controls.append(row);
+      }
+      section.append(controls,make('small','Donations come from your wallet or bag and cannot be withdrawn.'));
+    }
+    if(hall.contributors.length){
+      const details=make('details',''),list=make('ul','');
+      details.append(make('summary','Contributions · '+hall.contributors.length));
+      for(const row of hall.contributors)list.append(make('li',row.name+(row.self?' · You':'')+' · '+row.gold+' gold · '+row.timber+' timber · '+row.meal+' meals'));
+      details.append(list);section.append(details);
+    }
+    section.append(button('Refresh board',load));
+    return section;
+  }
   function render({membership,factions,capacity,leadership,founding}){
     const eligible=leadership.xp>=leadership.requiredXp;
     find('factionCreate').hidden=!eligible||!atRegistrar;
@@ -30,7 +75,7 @@ export function initializeFactions(api,document=globalThis.document){
     mine.replaceChildren();find('factionResults').replaceChildren();
     if(membership){
       const {name,description,roster,leader}=membership;
-      mine.append(make('h3',name),make('p',description),make('h4','Roster · '+roster.length+' / '+capacity));
+      mine.append(make('h3',name),make('p',description),projectBoard(membership),make('h4','Roster · '+roster.length+' / '+capacity));
       const list=make('ul','');
       for(const member of roster){
         const row=make('li','');
@@ -39,7 +84,8 @@ export function initializeFactions(api,document=globalThis.document){
         list.append(row);
       }
       mine.append(list);
-      if(!leader)mine.append(button('Leave faction',()=>confirmAction(mine,'Confirm leave',()=>change({action:'leave'},'You left the faction.'))));
+      if(api.inHall())mine.append(make('p','Use the Lobby door before leaving or disbanding your faction.'));
+      else if(!leader)mine.append(button('Leave faction',()=>confirmAction(mine,'Confirm leave',()=>change({action:'leave'},'You left the faction.'))));
       else if(roster.length===1)mine.append(button('Disband faction',()=>confirmAction(mine,'Confirm disband',()=>change({action:'disband'},'Faction disbanded.'))));
       else mine.append(make('p','Transfer leadership to another member before leaving.'));
       return;

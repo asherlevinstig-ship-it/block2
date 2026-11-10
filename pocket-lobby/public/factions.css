@@ -17,3 +17,12 @@
 #factionCreate:not([hidden]){display:grid;gap:7px;margin-top:10px}
 #factionCreate button{justify-self:start}
 .faction-confirm{display:flex;gap:8px;margin-top:8px}
+
+.faction-project{margin:12px 0;padding:12px;background:#101e32;border:1px solid #516680;border-radius:9px}
+.faction-project h4{margin:0 0 5px}.faction-project p{margin:0 0 8px}
+.faction-project-controls{display:grid;gap:8px;margin:10px 0}
+.faction-project-row{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.faction-project-row b{flex:1 0 100%;font-size:13px}
+.faction-project-row progress{flex:1 1 85px;min-width:65px;accent-color:#e6bc62}
+.faction-project-row input{width:68px}.faction-project-row select{max-width:100%}
+.faction-project details{margin:10px 0}.faction-project>button:last-child{margin-top:8px}

@@ -1,4 +1,6 @@
 import {readFactions,changeFaction} from './factions.mjs';
+import {factionHallAccess} from './faction-projects.mjs';
+import {factionHall,factionHallSpawn} from '../public/faction-hall.js';
 import {watchFlags} from '../public/region-catalog.js';
 import {normalizeVitals} from '../public/player-vitals.js';
 import {publishWorldActivity} from './world-activity.mjs';
@@ -41,9 +43,9 @@ const packet=row=>({state:publicPlayerState(readPlayerState(row)),characterKey:r
 async function read(db,id){
   return db.prepare("SELECT player_id, state_json, revision, last_request, updated_at FROM tower_players WHERE player_id = ?").bind(id).first();
 }
-async function write(db,id,revision,state,operation){
-  return db.prepare("UPDATE tower_players SET state_json = ?, revision = revision + 1, last_request = ?, updated_at = ? WHERE player_id = ? AND revision = ? RETURNING player_id, state_json, revision, last_request")
-    .bind(JSON.stringify(state),operation,Date.now(),id,revision).first();
+async function write(db,id,revision,state,operation,factionId=null){
+  return db.prepare("UPDATE tower_players SET state_json = ?, revision = revision + 1, last_request = ?, updated_at = ? WHERE player_id = ? AND revision = ? AND (? IS NULL OR EXISTS (SELECT 1 FROM tower_faction_members WHERE player_id=tower_players.player_id AND faction_id=?)) RETURNING player_id, state_json, revision, last_request")
+    .bind(JSON.stringify(state),operation,Date.now(),id,revision,factionId,factionId).first();
 }
 async function settled(env,id,activities=false){
   const db=env.TOWER_DB;
@@ -91,7 +93,7 @@ export async function handlePlayerApi(request,env){
       const existing=id&&await settled(env,id,true);
       if(existing)return json(packet(existing));
       const body=await bodyOf(request),legacy={...body.legacy};migrateProgression(legacy);
-      const state=normalizeState({...legacy,stats:{...legacy.stats,leadershipXp:0},adventure:{...legacy.adventure,...Object.fromEntries(watchFlags.map(key=>[key,false]))},vitals:undefined,familiars:undefined,autoConfigured:undefined,pendingCharacterRules:undefined,autoSwitch:undefined,bedRest:undefined,safeVersion:1,ownedFurniture:{...(legacy.ownedFurniture??{bed:1}),safe:0},homeFurniture:(legacy.homeFurniture??[]).filter(item=>item.type!=='safe'),bank:undefined,controlMode:'play',meals:{},magic:undefined,...(body.newCharacter===true?{characterCreated:false,welcomeSeen:false,autoLesson:'required'}:{})});
+      const state=normalizeState({...legacy,...(legacy.location===factionHall?{location:'hub',position:{x:8,y:12}}:{}),stats:{...legacy.stats,leadershipXp:0},adventure:{...legacy.adventure,...Object.fromEntries(watchFlags.map(key=>[key,false]))},vitals:undefined,familiars:undefined,autoConfigured:undefined,pendingCharacterRules:undefined,autoSwitch:undefined,bedRest:undefined,safeVersion:1,ownedFurniture:{...(legacy.ownedFurniture??{bed:1}),safe:0},homeFurniture:(legacy.homeFurniture??[]).filter(item=>item.type!=='safe'),bank:undefined,controlMode:'play',meals:{},magic:undefined,...(body.newCharacter===true?{characterCreated:false,welcomeSeen:false,autoLesson:'required'}:{})});
       if(state.wardrobe.outfits.some(look=>['jacket','trousers','boots'].some(slot=>clothingCatalog[look[slot]]?.price)))throw new Error('Choose free starter clothing for a new character.');
       state.wardrobe.owned=state.wardrobe.owned.filter(id=>!clothingCatalog[id]?.price);
       delete state.combatGear.ownedArmour;delete state.combatGear.equippedArmour;
@@ -127,7 +129,7 @@ export async function handlePlayerApi(request,env){
       const body=await bodyOf(request);
       if(body.characterKey!==id)return json({error:"This tab belongs to a different character. Reload to continue."},409);
       const result=await changeFaction(env.TOWER_DB,id,body);
-      return json(body.action==='create'?{...result,...packet(await read(env.TOWER_DB,id))}:result);
+      return json(['create','donate'].includes(body.action)?{...result,...packet(await read(env.TOWER_DB,id))}:result);
     }
     if(path==="/api/player/state"&&request.method==="GET"){
       const row=await settled(env,id,true);
@@ -146,11 +148,25 @@ export async function handlePlayerApi(request,env){
     if(!row)return json({error:"Character not found."},401);
     if(row.last_request===body.operation)return json(packet(row));
     if(row.revision!==body.revision)return json({error:"Your character changed in another tab or completed an offline action.",...packet(row)},409);
-    let state=readPlayerState(row);
+    let state=readPlayerState(row),factionId=null;
     if(path.startsWith('/api/player/gameplay/')){
       if(state.characterCreated===false)return json({error:'Finish creating your character first.'},400);
       Object.assign(state,normalizeState(state));
-      applyGameplayAction(state,path.slice('/api/player/gameplay/'.length),body);
+      const gameplay=path.slice('/api/player/gameplay/'.length);
+      if(gameplay==='factionHall'){
+        if(state.location!=='hub'||state.plan||state.report||state.hunting.encounter||state.hunting.recoveryUntil||state.health<=0)throw new Error('Travel to the Grand Lobby and finish your current activity first.');
+        const access=await factionHallAccess(env.TOWER_DB,id);
+        if(!access)return json({error:'Complete your faction’s hall project to enter.'},403);
+        factionId=access.id;
+        state.location=factionHall;state.position=factionHallSpawn;
+      }else{
+        if(state.location===factionHall){
+          const access=await factionHallAccess(env.TOWER_DB,id);
+          if(!access)return json({error:'Your faction hall access has ended.'},403);
+          if(gameplay==='cook'&&!access.kitchen)return json({error:'Complete the field kitchen project to use this stove.'},403);
+        }
+        applyGameplayAction(state,gameplay,body);
+      }
     }else switch(path){
       case "/api/player/rankings/participation":
         if(!identity.account)return json({error:"Create an account to join the rankings."},400);
@@ -171,6 +187,7 @@ export async function handlePlayerApi(request,env){
         state=normalizeState({avatar:{name:state.avatar.name,outfit:0,hair:state.avatar.hair},furniture:[],ownedFurniture:{bed:1},characterCreated:false,welcomeSeen:false,autoLesson:'required'});
         break;
       case "/api/player/save":
+        if(body.state?.location===factionHall&&(state.location!==factionHall||!await factionHallAccess(env.TOWER_DB,id)))return json({error:"Enter the hall through your faction board."},403);
         if(state.plan)return json({error:"Stop the work plan before playing.",...packet(row)},409);
         if(body.state?.location==='lounge'&&state.location!=='lounge'&&!isSmartlyDressed(normalizeWardrobe(body.state.wardrobe??state.wardrobe)))throw new Error('Choose smart clothing in Wardrobe before entering the Sunset Lounge: Tailored Suit or Moonlit Dress.');
         state={...protectFishingState(state,normalizeState(protectFishingState(state,{...body.state,wardrobe:body.state?.wardrobe??state.wardrobe}))),rankingJoined:state.rankingJoined===true,goldEarned:state.goldEarned??0,welcomeSeen:state.welcomeSeen!==false,characterCreated:state.characterCreated!==false,carpenterOrderComplete:state.carpenterOrderComplete===true,characterRules:state.characterRules??normalizeCharacterRules(),controlMode:state.controlMode??'play',routineLastSeen:state.routineLastSeen,activityLog:state.activityLog??[],...(state.report?{report:state.report}:{})};
@@ -232,7 +249,7 @@ export async function handlePlayerApi(request,env){
         break;
       default:return json({error:"Not found."},404);
     }
-    const updated=await write(env.TOWER_DB,id,row.revision,state,body.operation);
+    const updated=await write(env.TOWER_DB,id,row.revision,state,body.operation,factionId);
     if(!updated)return json({error:"Another tab saved first. Reload your character."},409);
     await publishWorldActivity(env,id,JSON.parse(row.state_json),state,updated.revision,{fresh:Date.now()-(row.updated_at??0)<10000});
     return json(packet(updated));

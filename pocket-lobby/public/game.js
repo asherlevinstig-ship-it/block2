@@ -1748,6 +1748,7 @@ const storeFurniture=[
   {id:'stool',type:'stool',x:4,y:4,rot:0}
 ];
 const tailorFurniture=[['reception',3,2],['sofa',7,6],['lamp',8,1],['plant',1,1],['plant',8,8]].map(([type,x,y,rot=0],id)=>({id,type,x,y,rot}));
+const factionHallFurniture=factionHallLayout.map(([type,x,y,rot=0],id)=>({id,type,x,y,rot}));
 const bakeryFurniture=bakeryLayout.map(([type,x,y,rot=0],id)=>({id,type,x,y,rot}));
 const furnishingsFurniture=[['reception',3,1],['bed',6,2],['lamp',8,2],['bookcase',1,1],['sofa',6,6],['table',6,8],['chair',8,8,2],['plant',1,8],['safe',8,1]].map(([type,x,y,rot=0],id)=>({id,type,x,y,rot}));
 const marketFurniture=[
@@ -1774,6 +1775,7 @@ function roomFurniture(){
   if(currentRoom==='tailor')return tailorFurniture;
   if(currentRoom==='furnishings')return furnishingsFurniture;
   if(currentRoom==='bakery')return bakeryFurniture;
+  if(currentRoom===factionHall)return factionHallFurniture;
   if(currentRoom==='store')return storeFurniture;
   if(currentRoom==='market')return marketFurniture;
   if(currentRoom==='armory')return armoryFurniture;
@@ -1809,7 +1811,7 @@ const moonwoodEntrance={to:'trail',side:'front',tile:{x:6,y:11},arrival:{x:1,y:5
 const storeExit={to:'hub',side:'left',tile:{x:0,y:5},start:4.6,end:6.4,height:49,label:'LOBBY'};
 const bakeryDoor={to:'bakery',side:'right',tile:{x:7,y:0},start:6.55,end:8.45,height:49,label:'BAKERY',arrival:{x:1,y:5}};
 const bakeryExit={...storeExit,to:'market',label:'MARKET',arrival:{x:7,y:1}};
-const roomDoors={bakery:[bakeryExit],tailor:[storeExit],furnishings:[storeExit],home:[homeExit],hub:hubDoors,lounge:[storeExit],store:[storeExit],market:[storeExit,bakeryDoor],armory:[{...storeExit,arrival:{x:3,y:1}}],outside:[towerEntrance,moonwoodEntrance],...moonwood.doors};
+const roomDoors={[factionHall]:[storeExit],bakery:[bakeryExit],tailor:[storeExit],furnishings:[storeExit],home:[homeExit],hub:hubDoors,lounge:[storeExit],store:[storeExit],market:[storeExit,bakeryDoor],armory:[{...storeExit,arrival:{x:3,y:1}}],outside:[towerEntrance,moonwoodEntrance],...moonwood.doors};
 const roomDetails={
   tailor:{number:'17',name:'The Gilded Thread',description:'Visit the tailor counter to preview and buy distinctive outfit sets and clothing pieces.',badge:'TAILOR',floor:'Tower shops'},
   furnishings:{number:'16',name:'Tower Furnishings',description:'Furniture, lighting and storage for your own corner of the Tower.',badge:'FURNITURE SHOP',floor:'Tower shops'},
@@ -1818,6 +1820,7 @@ const roomDetails={
   lounge:{number:'02',name:'The Sunset Lounge',description:'Find blackjack and roulette on the gaming floor, or take a seat by the bar.',badge:'GAMING LOUNGE',floor:'Ground floor'},
   store:{number:'11',name:'Silverfin Outfitters',description:'Stock up on bait, find a better rod, and sell your catch.',badge:'FISHING STORE',floor:'Tower shops'},
   armory:{number:'14',name:'The Tower Armory',description:'Trade your earnings for a weapon that suits your fighting style.',badge:'ARMORY',floor:'Tower shops'},
+  [factionHall]:{number:'18',name:'Faction Hall',description:'A private gathering place built by your faction. Review projects, rest, and prepare together.',badge:'MEMBERS ONLY',floor:'Faction headquarters'},
   bakery:{number:'17',name:'Tower Bakery',description:'Fresh bread from the oven. Pick up rations before your next trip.',badge:'BAKERY',floor:'Tower shops'},
   market:{number:'12',name:'Moonwood Trading Post',description:'Bring your catch and hunting spoils to the tower’s traders.',badge:'TRADING POST',floor:'Tower market'},
   outside:{number:'03',name:'The Courtyard',description:'Practise combat at the training dummy, rest by the fountain, or explore Moonwood.',badge:'OUTSIDE',floor:'Tower grounds'},
@@ -2329,6 +2332,18 @@ function drawFishingStore(market=false){
   for(let i=0;i<5;i++)surface(3.54,5.4+i*.54,2.9,.035,.45,'#779395');
   drawDoor(storeExit);
 }
+function drawFactionHall(){
+  block(0,0,10,10,-8,8,['#8b897e','#414452','#303545']);
+  for(let y=0;y<10;y++)for(let x=0;x<10;x++)surface(x,y,1,1,0,(x+y)%2?'#8b8b87':'#828783','#5b646a');
+  for(const side of ['left','right']){
+    wall(side,0,10,0,65,side==='left'?'#485c61':'#53696d');
+    wall(side,0,10,0,12,'#314449');wall(side,0,10,63,67,'#b6a17a');
+  }
+  drawLobbyBanner('right',5.2);
+  surface(3,3.25,3.9,4.8,.2,'#63445e','#dfb875');
+  surface(3.2,3.46,3.5,4.37,.3,'#7a4f68','#bb8a65');
+  drawDoor(storeExit);
+}
 function drawBakery(){
   block(0,0,10,10,-8,8,['#ae815f','#5b3e42','#49353e']);
   for(let y=0;y<10;y++)for(let x=0;x<10;x++){
@@ -2388,6 +2403,12 @@ function object(item,highlight=false,time=0) {
   if(type==='woodcutter'){
     const [wx,wy]=point(x+.5,y+.5);
     sprite(ctx,wx,wy,{outfit:3,hair:2},{direction:'right',time,weapon:true,weaponTier:'basicAxe',pose:{angle:-.4}});return;
+  }
+  if(type==='hallBoard'){
+    block(x+.17,y+.22,.66,.38,0,24,['#c2a078','#523948','#795460']);
+    const [bx,by]=point(x+.52,y+.58,22);
+    rect(bx-9,by-7,17,13,'#402b38');rect(bx-6,by-4,11,7,'#e8c99b');
+    rect(bx-4,by-2,7,1,'#9f7356');rect(bx-4,by+1,5,1,'#9f7356');return;
   }
   if(type==='bakeryOven'){
     block(x+.05,y+.05,.9,.9,0,33,['#c28868','#7c554f','#9e6555']);
@@ -2729,6 +2750,7 @@ const roomLayers={
   store:makeRoomLayer(drawFishingStore),
   market:makeRoomLayer(()=>{drawFishingStore(true);drawDoor(bakeryDoor);}),
   bakery:makeRoomLayer(drawBakery),
+  [factionHall]:makeRoomLayer(drawFactionHall),
   furnishings:makeRoomLayer(()=>drawFishingStore('furnishings')),
   armory:makeRoomLayer(()=>drawFishingStore('armory'))
 };
@@ -2872,6 +2894,12 @@ function updateWorldLabels(){
   if(currentRoom==='home'&&!homeBedRest&&!editing){const item=bestHomeBed({homeFurniture,ownedFurniture});if(item)add('Rest',...point(item.x+.5,item.y+.5,29),'npc',()=>use(item),bedProfiles[item.type].rate+' HP / sec');}
   if(currentRoom==='home')for(const item of homeFurniture.filter(item=>item.type==='safe'))add('Home safe',...point(item.x+.5,item.y+.5,31),'npc',()=>use(item),'Gold & item storage');
   if(currentRoom==='home')add('YOUR HOME',...point(5,0,44),'sign',null,avatar.name);
+  if(currentRoom===factionHall){
+    for(const [type,label,height] of [['hallBoard','Project board',37],['bench','Rest',27],['stove','Field kitchen',35]]){
+      const item=factionHallFurniture.find(entry=>entry.type===type);
+      add(label,...point(item.x+.5,item.y+.5,height),'npc',()=>use(item));
+    }
+  }
   if(currentRoom==='bakery')add('Baker',...point(foodStall.x+.5,foodStall.y+.5,47),'npc',()=>use(bakeryFurniture[0]),'Buy Tower Bread');
   if(currentRoom==='hub'){
     const registrar=hubFurniture.find(item=>item.type==='factionRegistrar');
@@ -3063,7 +3091,7 @@ function draw(time){
     object(item,treeHover||editing&&(selection?.id===item.id||hoverItem?.id===item.id)&&!fixed(item),time);
     ctx.globalAlpha=1;
     if(item.defeated||item===ghost||(fixed(item)&&!isGamingTable(item)))continue;
-    const [w,d]=dimensions(item), h=moonwood.heights[item.type]??{armoryCounter:32,weaponRack:37,anvil:19,brazier:25,workbench:23,woodStool:13,woodTable:18,bookcase:37,woodcutter:43,bakeryOven:33,breadRack:30,foodStall:43,factionRegistrar:43,warden:43,enchanter:43,tradeCounter:32,harvestCrates:16,tackleCounter:32,rodRack:36,baitCrates:16,blackjack:19,roulette:22,reception:32,stove:28,safe:25,bed:24,comfortBed:24,royalBed:28,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39,bench:22,streetlamp:55,fountain:37}[item.type];
+    const [w,d]=dimensions(item), h=moonwood.heights[item.type]??{armoryCounter:32,weaponRack:37,anvil:19,brazier:25,workbench:23,woodStool:13,woodTable:18,bookcase:37,woodcutter:43,hallBoard:27,bakeryOven:33,breadRack:30,foodStall:43,factionRegistrar:43,warden:43,enchanter:43,tradeCounter:32,harvestCrates:16,tackleCounter:32,rodRack:36,baitCrates:16,blackjack:19,roulette:22,reception:32,stove:28,safe:25,bed:24,comfortBed:24,royalBed:28,sofa:24,chair:24,table:17,plant:40,stool:18,lamp:39,bench:22,streetlamp:55,fountain:37}[item.type];
     const height=isTimberTree(item)&&treeState(item).regrowsAt?6:h;
     const shape=[point(item.x,item.y+d),point(item.x+w,item.y+d),point(item.x+w,item.y),point(item.x+w,item.y,height),point(item.x,item.y,height),point(item.x,item.y+d,height)];
     hitboxes.push({item,shape});
@@ -3492,6 +3520,11 @@ function navigateHud(destination){
   if(next?.to===destination){followHudDoor(next);return;}
   showHudMap(destination);
 }
+window.towerVisitFactionHall=()=>{
+  if(currentRoom===factionHall)return;
+  if(currentRoom!=='hub'){navigateHud('hub');note('Visit the Grand Lobby, then open Factions to enter your hall.');return;}
+  if(!unavailable())serverTravel('factionHall');
+};
 window.towerFindFactionRegistrar=()=>{
   if(currentRoom===factionRegistrar.room)use(hubFurniture.find(item=>item.type==='factionRegistrar'));
   else navigateHud(factionRegistrar.room);
@@ -3821,6 +3854,14 @@ function finishInteraction(){
   }else if(item.type==='restAltar'){useDungeonShrine();
   }else if(Object.hasOwn(depthsFinds,item.type)){
     examineDepths(item);
+  }else if(item.type==='hallBoard'){
+    $('openFactions').onclick?.();
+  }else if(currentRoom===factionHall&&item.type==='bench'){
+    const sit=()=>{player.seat=item;player.back=false;player.direction='left';note(health<100?'Resting · Hearts recover in 15 seconds.':'You sit down in the faction hall.');};
+    if(health>=100)sit();
+    else serverGameplay('factionRest').then(sit).catch(error=>note(error.message));
+  }else if(currentRoom===factionHall&&item.type==='stove'){
+    window.towerReadFactionProject?.().then(hall=>{if(currentRoom!==factionHall)return;if(hall?.kitchen)openCampfire();else note('Complete the field kitchen upgrade to use the stove.');}).catch(error=>note(error.message));
   }else if(item.type==='stove'&&atHome()){
     openCampfire();
   }else if(item.type==='campfire'){
@@ -4062,7 +4103,7 @@ function openCampfire(){
 }
 function renderCampfire(){
   const state={stats:playerStats,fishStock,huntingLoot,woodcutting,meals},progress=skillProgress(playerStats.cookingXp??0);
-  $('campfireTitle').textContent=atHome()?'Your home kitchen':'Campfire cooking';$('cookingPlace').textContent=atHome()?'HOME · COOKING STOVE':'LANTERN TRAIL';
+  $('campfireTitle').textContent=atHome()?'Your home kitchen':currentRoom===factionHall?'Field kitchen':'Campfire cooking';$('cookingPlace').textContent=atHome()?'HOME · COOKING STOVE':currentRoom===factionHall?'FACTION HALL':'LANTERN TRAIL';
   $('cookingSkill').textContent='Cooking '+progress.level;$('cookingXp').textContent=progress.progress+' / '+progress.target+' XP';$('cookingProgress').max=progress.target;$('cookingProgress').value=progress.progress;
   $('cookingNext').textContent=progress.level<2?'Cooking 2 unlocks Hearty Stew · 60 HP':progress.level<4?'Cooking 4 unlocks Silverfin Feast · 80 HP':'All recipes unlocked · Keep preparing for your next adventure.';
   const cards=$('campfireRecipes');cards.replaceChildren();
@@ -4078,7 +4119,7 @@ function renderCampfire(){
 }
 async function cookMeal(id,button){
   if(unavailable())return;
-  const station=atHome()?(homeFurniture.find(i=>i.type==='stove'&&Math.abs(player.cx-i.x)+Math.abs(player.cy-i.y)===1)??homeFurniture.find(i=>i.type==='stove')):moonwood.layouts.trail.scenery.find(i=>i.type==='campfire');
+  const station=atHome()?(homeFurniture.find(i=>i.type==='stove'&&Math.abs(player.cx-i.x)+Math.abs(player.cy-i.y)===1)??homeFurniture.find(i=>i.type==='stove')):currentRoom===factionHall?factionHallFurniture.find(i=>i.type==='stove'):moonwood.layouts.trail.scenery.find(i=>i.type==='campfire');
   if(station&&Math.abs(player.cx-station.x)+Math.abs(player.cy-station.y)!==1){pendingCookingId=id;$('campfireDialog').close();use(station);note('Walking back to the stove to prepare your meal.');return;}
   if(button)button.disabled=true;savePlayerState();
   try{
