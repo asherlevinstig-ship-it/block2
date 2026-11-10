@@ -995,8 +995,8 @@ function openDungeonSideChoices(){
 async function visitDungeonSide(id){
   if(unavailable()||visitingDungeonSide)return;visitingDungeonSide=true;
   try{
-    if(window.playerCloud?.gameplay){const packet=await serverGameplay('depthsSide',{id});$('depthsSideDialog').close();enterRoom(packet.state.location,packet.state.position);}
-    else{const state={location:currentRoom,depthsRun};visitDepthsSide(state,id);$('depthsSideDialog').close();enterRoom(state.location,state.position);savePlayerState();}
+    if(window.playerCloud?.gameplay){const packet=await serverGameplay('depthsSide',{id});$('depthsSideDialog').close();enterRoom(packet.state.location,packet.state.position,{explore:id==='return'});}
+    else{const state={location:currentRoom,depthsRun};visitDepthsSide(state,id);$('depthsSideDialog').close();enterRoom(state.location,state.position,{explore:id==='return'});savePlayerState();}
   }catch(error){$('sideRoomError').textContent=error.message;note(error.message);}
   finally{visitingDungeonSide=false;}
 }
@@ -1012,8 +1012,9 @@ function visitDepthsCache(){
   const entering=currentRoom!==depthsCacheRoom;
   if(entering&&!canEnterDepthsCache(depthsRun,currentRoom))return;
   const destination=entering?depthsCacheRoom:depthsCacheReturn(depthsRun);
-  if(window.playerCloud?.gameplay)serverTravel(entering?'depthsCacheEnter':'depthsCacheLeave');
-  else enterRoom(destination,entering?{x:3,y:5}:destination==='depthsGate'?{x:4,y:5}:{x:9,y:5});
+  if(window.playerCloud?.gameplay){
+    serverGameplay(entering?'depthsCacheEnter':'depthsCacheLeave').then(packet=>enterRoom(packet.state.location,packet.state.position,{explore:!entering})).catch(error=>note(error.message));
+  }else enterRoom(destination,entering?{x:3,y:5}:destination==='depthsGate'?{x:4,y:5}:{x:9,y:5},{explore:!entering});
 }
 function revealEssenceCache(){
   const stone=depthsRun?.cacheStone;
@@ -6290,7 +6291,7 @@ function updateRoomLabel(){
   };
   canvas.setAttribute('aria-label',roomDetails[currentRoom].name+'. Click a floor tile or use arrow keys to walk. '+(landmarks[currentRoom]??'Use the marked trails or the field journal to travel.'));
 }
-function enterRoom(next,arrival,{automatic=false}={}){
+function enterRoom(next,arrival,{automatic=false,explore=false}={}){
   if(next==='thornwood'&&!adventure.discovered.includes('thornwood')&&!thornwoodConfirmed&&savedPlayerState?.location!=='thornwood'){
     openWatchDialog('The trail turns dangerous.','Thornwood is optional. A Thorn Boar has 115 HP and hits harder than the Wild Boar. Bring a weapon and meals. The cream road reaches Beaconwatch safely.','Enter Thornwood',()=>{thornwoodConfirmed=true;enterRoom(next,arrival,{automatic});});return;
   }
@@ -6305,7 +6306,7 @@ function enterRoom(next,arrival,{automatic=false}={}){
   const focusRoom=!!document.activeElement.closest('[data-room-link]');
   if(next==='market'&&tradingGuideActive()){if(quest.claimed)tradingPostGuideComplete=true;tradeGuideRouteCache=null;}
   currentRoom=next;selectedWildAnimal=null;wildlifeAffection=null;wildlifeFeedback=null;wildlifeTrialEffect=null;familiarFollowers.clear();familiarReaction=null;$('gameShell').dataset.expedition=watchRooms.includes(next)?next:'';
-  depthsExploring=false;
+  depthsExploring=explore;
   const exploring=moonwood.has(next);
   const nextView=next===wildlifeRoom?wildlifeView:exploring?moonwood.view:next==='hub'?hubView:next==='outside'?courtyardView:standardView;
   if(view!==nextView){

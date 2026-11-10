@@ -97,3 +97,18 @@ test('a dangerous expedition can visit and leave every zone without losing its c
  assert.equal(s.huntingLoot.moonwellShard,1);
  assert.throws(()=>go('bank'),/Clear this chamber/);
 });
+
+test('returning from every optional room keeps the gallery floor and onward passage accessible',async()=>{
+ for(const room of ['depthsTreasury','depthsRest','depthsTrial']){
+  const s=normalizeState({location:room,position:{x:4,y:5},depthsRun:{cleared:2,routeChoice:'safe'}});
+  const g=boot(s);
+  await g.run("visitDungeonSide('return')");
+  assert.equal(g.read('currentRoom'),'depthsGallery');
+  assert.equal(g.read('depthsExploring'),true);
+  assert.equal(g.nodes.get('depthsDecision').hidden,true);
+  assert.equal(g.nodes.get('depthsCampRibbon').hidden,false);
+  g.run("interaction=roomFurniture().find(item=>item.type==='dungeonExit');finishInteraction()");
+  assert.equal(g.read('currentRoom'),'depthsVault');
+  assert.deepEqual(g.errors,[]);
+ }
+});
