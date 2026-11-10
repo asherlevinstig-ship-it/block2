@@ -5,6 +5,7 @@
   const {initializeBankUI}=await import('./bank-ui.js');let bankUI=null;
   const bedRules=await import('./bed-rest.js');Object.assign(window,bedRules);
   const {autoStatus,hasSavedAutoPlan,autoSetupReason,autoPresenceDelay}=await import('./auto-mode.js');
+  const {initializeAutoRecap}=await import('./auto-recap.js');let recap=null;
   const {AWAY_GRACE_MS}=await import('./character-rules.js');
   const status=document.getElementById('saveStatus');
   const gate=document.getElementById('cloudGate');
@@ -138,9 +139,10 @@
       try{
         await action('presence',{active,idleForMs:Math.max(0,Math.min(AWAY_GRACE_MS,Date.now()-inputAt))});
         if(active)lastReportedInputAt=inputAt;
+        const showRecap=recap?.resume();
         if(!document.hidden&&(packet.state.plan?.source==='rules'||packet.state.report?.source==='rules'||hadRoutine&&!packet.state.plan)){
           pending=retryJob=null;backup(null);
-          window.towerApplyRoutineState?.(packet.state,{reconcile:resumeAutoView,handoff:active&&!packet.state.plan});resumeAutoView=false;
+          window.towerApplyRoutineState?.(packet.state,{reconcile:resumeAutoView,handoff:active&&!packet.state.plan,showRecap});resumeAutoView=false;
           showReport(packet.state);
         }
       }catch(error){
@@ -187,11 +189,11 @@
     panel.dataset.running=String(info.running);
   }
   function openAutoSetup(){document.getElementById('autoControlError').textContent='';window.towerOpenAutoRules?.();document.getElementById('rulesStatus').textContent='Choose an activity and save your Auto Mode plan first.';}
-  async function setControl(mode){
+  async function setControl(mode,errorTarget=document.getElementById('autoControlError')){
     if(controlBusy||conflicted)return;
     if(mode==='auto'&&packet.state.characterRules?.strategy==='gambling'&&window.towerSmartLoungeReady?.()===false){window.towerRequireLoungeDress?.();return;}
     if(mode==='auto'&&autoSetupReason(packet.state)){openAutoSetup(autoSetupReason(packet.state));return;}
-    controlBusy=true;renderAutoPanel(packet.state);document.getElementById('autoControlError').textContent='';
+    controlBusy=true;renderAutoPanel(packet.state);errorTarget.textContent='';
     try{
       if(mode==='auto'){window.towerSaveNow?.();await flush();if(autoSetupReason(packet.state)){openAutoSetup(autoSetupReason(packet.state));return;}}
       else if(presenceBusy)await presenceBusy;
@@ -202,7 +204,8 @@
       if(packet.state.report||packet.state.plan&&packet.state.plan.source!=='rules')window.towerMultiplayer?.disconnect();
       window.towerApplyRoutineState?.(packet.state,{handoff:mode==='play'&&!packet.state.plan});showReport(packet.state);
       if(!packet.state.plan&&!packet.state.report)window.towerJoinRoom?.();
-    }catch(error){document.getElementById('autoControlError').textContent=error.message;}
+      return true;
+    }catch(error){errorTarget.textContent=error.message;return false;}
     finally{controlBusy=false;renderAutoPanel(packet.state);schedulePresence(packet.state.plan?.source==='rules'?150:20000);}
   }
   function showGamblingReport(state,plan,running){
@@ -306,11 +309,17 @@
   }
   function attach(){
     window.towerRefreshAutoStatus=()=>renderAutoPanel(packet.state);
+    recap=initializeAutoRecap({
+      doc:document,getPacket:()=>packet,storage:localStorage,roomName:room=>window.towerRoomName?.(room),
+      takeControl:error=>setControl('play',error),
+      openFood:()=>window.towerOpenAutoRules?.({focusFood:true,advanced:!(packet.state.pendingCharacterRules??packet.state.characterRules)?.simpleMode}),
+      openDetails:()=>showReport(packet.state,true),
+    });
     window.towerFurnitureShop=initializeFurnitureShop(window.playerCloud,document,window);bankUI=initializeBankUI(window.playerCloud,document,window);window.towerRefreshBank=()=>{bankUI.render();window.towerFurnitureShop.render();};window.towerOpenSafe=()=>bankUI.open();
     document.getElementById('autoStart').onclick=()=>setControl('auto');
     document.getElementById('autoPlay').onclick=()=>setControl('play');
     document.getElementById('autoTakeControl').onclick=()=>setControl('play');
-    document.getElementById('autoDetails').onclick=()=>showReport(packet.state,true);
+    document.getElementById('autoDetails').onclick=()=>{if(!recap.resume({manual:true}))showReport(packet.state,true);};
     document.getElementById('autoRules').onclick=()=>window.towerOpenAutoRules?.();
     const button=document.getElementById('startOfflineFishing');
     button.onclick=async()=>{
@@ -361,8 +370,9 @@
     window.addEventListener('online',()=>drain());
     schedulePresence(packet.state.plan?.source==='rules'?150:20000);
     document.addEventListener('visibilitychange',()=>{
-      if(document.hidden){resumeAutoView=true;schedulePresence();scheduleShift();return;}
+      if(document.hidden){recap.leave();resumeAutoView=true;schedulePresence();scheduleShift();return;}
       lastInputAt=Date.now();
+      if(packet.state.report?.source==='rules')recap.resume();
       schedulePresence();
       if(packet.state.plan&&packet.state.plan.source!=='rules'){scheduleShift(0);return;}
       if(packet.state.characterRules?.enabled||packet.state.controlMode==='auto'||packet.state.plan?.source==='rules'){schedulePresence(0);return;}
@@ -372,6 +382,7 @@
         if(packet.revision===revision&&latest.revision!==revision)conflict('Your server character changed while this tab was away.');
       }).catch(()=>setStatus('Checking connection…'));
     });
+    window.addEventListener('pagehide',()=>recap.leave());
     for(const event of ['focus','pageshow'])window.addEventListener(event,()=>{
       if(document.hidden||packet?.state.plan?.source!=='rules')return;
       resumeAutoView=true;schedulePresence(0);
@@ -486,6 +497,7 @@
       script.onload=()=>{
         if(!(pending||retryJob||sending))setStatus('Server saved');
         gate.close();
+        recap?.resume({initial:true});
       };
       script.onerror=()=>{
         gateText.textContent='The game could not load. Reload to retry.';

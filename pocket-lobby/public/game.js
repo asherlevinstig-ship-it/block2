@@ -5963,7 +5963,7 @@ function updateCharacterRulesPreview(){
   }catch(error){$('rulesPreview').textContent=error.message;$('rulesStatus').textContent=error.message;$('rulesStatus').dataset.validation='true';$('rulesSave').disabled=true;}
 
 }
-function openAdvancedCharacterRules({focusGoal=false}={}){
+function openAdvancedCharacterRules({focusGoal=false,focusFood=false}={}){
   if(needsAutoLesson()){openAutoLesson();return;}
   if(player.inCombat&&window.playerCloud?.initial?.plan?.source!=='rules'){note('Finish combat before changing your Auto Mode settings.');return;}
   if(!routineControlled())window.towerPauseForAccount();
@@ -5990,7 +5990,8 @@ function openAdvancedCharacterRules({focusGoal=false}={}){
     row.append(title,detail);log.append(row);
   }
   if(!log.children.length){const row=document.createElement('li');row.textContent='Your next away routine will appear here.';log.append(row);}
-  $('rulesHuntingDetails').open=false;selectAutoModePage('activity');updateCharacterRulesPreview();if(!$('characterRulesDialog').open)$('characterRulesDialog').showModal();if(focusGoal){$('autoUpgradeOptions').open=true;$('autoUpgradeOptions').scrollIntoView?.({block:'center'});$('rulesGoalTarget').focus({preventScroll:true});}
+  $('rulesHuntingDetails').open=false;selectAutoModePage(focusFood?'food':'activity');updateCharacterRulesPreview();if(!$('characterRulesDialog').open)$('characterRulesDialog').showModal();if(focusGoal){$('autoUpgradeOptions').open=true;$('autoUpgradeOptions').scrollIntoView?.({block:'center'});$('rulesGoalTarget').focus({preventScroll:true});}
+  if(focusFood)$('rulesBreadBudget').focus();
 }
 let simpleAutoChoice='fishing',simpleAutoRisk='balanced',simpleAutoBusy=false;
 function renderSimpleAuto(){
@@ -6021,6 +6022,7 @@ function openCharacterRules(options={}){
  const label=document.createElement('b');label.textContent=mode.name;button.append(icon,label);button.onclick=()=>{if(id==='random'&&simpleAutoChoice!=='random'&&rules.simpleMode!=='random'&&Number($('simpleAutoBreadBudget').value)===0)$('simpleAutoBreadBudget').value=30;simpleAutoChoice=id;if(id==='gambling'){$('simpleAutoBet').value=simpleAutoRisks[simpleAutoRisk].bet;$('simpleAutoLoss').value=simpleAutoRisks[simpleAutoRisk].lossLimit;}$('simpleAutoStatus').textContent='';renderSimpleAuto();};list.append(button);
  }
  renderSimpleAuto();$('simpleAutoDialog').showModal();
+ if(options.focusFood)$('simpleAutoBreadBudget').focus();
 }
 function simpleAutoOptions(){return {food:characterRules.food,breadBudget:Number($('simpleAutoBreadBudget').value),risk:simpleAutoChoice==='rest'?'safe':simpleAutoRisk,enabled:$('simpleAutoIdle').checked,reserveGold:Number($('simpleAutoReserve').value),game:$('simpleAutoTable').value,bet:Number($('simpleAutoBet').value),lossLimit:Number($('simpleAutoLoss').value)};}
 async function saveSimpleAuto(start){
@@ -6598,7 +6600,7 @@ function renderAutoTable(time){
   for(const card of cards??[null,null]){const tile=document.createElement('span');tile.className='auto-playing-card';tile.textContent=card?(card.rank===1?'A':card.rank===11?'J':card.rank===12?'Q':card.rank===13?'K':card.rank)+(typeof card.suit==='string'?card.suit:['♠','♥','♦','♣'][card.suit]??''):'◆';row.append(tile);}hands.append(row);
  }
 }
-window.towerApplyRoutineState=(state,{reconcile=false,handoff=false}={})=>{
+window.towerApplyRoutineState=(state,{reconcile=false,handoff=false,showRecap=false}={})=>{
   const motion=state.plan?.source==='rules'?state.autoPresence:null;
   autoServerMotion=motion&&Object.hasOwn(motion,'walk')?motion:null;
   autoServerWalking=false;
@@ -6607,7 +6609,7 @@ window.towerApplyRoutineState=(state,{reconcile=false,handoff=false}={})=>{
   fishingSession=null;fishingStarted=null;woodSession=null;treeFall=null;catchReveal=null;patienceTween=null;
   $('catchReveal').hidden=true;interaction=null;player.seat=null;autoJourneyState=state;
   const serverNow=window.playerCloud?.serverTime??Date.now();
-  const feedback=autoFeedbackTracker?.update(state,{now:serverNow,visible:!document.hidden})??[];
+  const feedback=autoFeedbackTracker?.update(state,{now:serverNow,visible:!document.hidden&&!showRecap})??[];
   applyServerGameplay(state);
   const placeFromServer=!!autoServerMotion||handoff||reconcile&&(state.autoPresence||state.report?.source==='rules');
   if(placeFromServer){
@@ -6671,6 +6673,7 @@ $('vaultVictoryContinue').onclick=()=>closeVaultVictory();
 $('vaultVictoryDialog').addEventListener('cancel',event=>{event.preventDefault();closeVaultVictory();});
 
 window.towerOpenAutoRules=options=>openCharacterRules(options);
+window.towerRoomName=room=>room==='home'?'Your Home':roomDetails[room]?.name;
 
 window.towerApplyBankState=state=>{applyServerGameplay(state);updateInventory();window.towerRefreshBank?.();};
 window.towerFurnitureFeedback=(name,quantity,cost)=>showTransaction('Furniture purchased',[{icon:'✦',text:'+'+quantity+' '+name+' · In inventory'}],-cost);
