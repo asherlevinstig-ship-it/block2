@@ -33,6 +33,24 @@ const fishingMoments=(()=>{
     }
     ctx.restore();
   }
+  function drawShoal(ctx,x,y,time,reduced){
+    ctx.save();
+    ctx.beginPath();ctx.ellipse(x,y,15,6,0,0,Math.PI*2);
+    ctx.fillStyle='#55e5d32e';ctx.fill();
+    ctx.strokeStyle='#96eee7';ctx.lineWidth=1.2;ctx.stroke();
+    for(let i=0;i<3;i++){
+      const wave=reduced?(i+1)/4:(time/1900+i/3)%1;
+      ctx.globalAlpha=.75*(1-wave);
+      ctx.beginPath();ctx.ellipse(x,y,13+wave*17,5+wave*8,0,0,Math.PI*2);
+      ctx.strokeStyle=i===0?'#ffdf97':'#91f3e7';ctx.stroke();
+    }
+    const leap=reduced?.45:time%2600/650;
+    if(leap<1){
+      ctx.globalAlpha=1;
+      drawFish(ctx,x-9+leap*18,y-Math.sin(leap*Math.PI)*13-2,'silverfin','fine',.7);
+    }
+    ctx.restore();
+  }
   let audio=null,enabled=false;
   function enable(value){
     enabled=value;
@@ -71,5 +89,5 @@ const fishingMoments=(()=>{
       });
     }catch{}
   }
-  return {create,phase,reel,drawFish,enable,sound,CAST_MS,BITE_MS,LAND_MS};
+  return {create,phase,reel,drawFish,drawShoal,enable,sound,CAST_MS,BITE_MS,LAND_MS};
 })();

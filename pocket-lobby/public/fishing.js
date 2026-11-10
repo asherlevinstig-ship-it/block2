@@ -38,11 +38,25 @@ function fishingChances(level,rodId,luckXp=0){
   const rare=3+Math.min(5,practice*.25+bonus*.35)+luck.rare;
   return {common:100-fine-rare,fine,rare};
 }
-function rollFishingCatch(level,rodId,random=Math.random,luckXp=0){
+export const shoalFineBonus=12;
+export const shoalStayMs=45000;
+const shoalBanks=[
+  {name:'North bank',y:2,tiles:[1,2]},
+  {name:'Middle bank',y:4,tiles:[4,6]},
+  {name:'South bank',y:8,tiles:[8,9]},
+];
+export function pondShoalAt(now){
+  const id=Math.floor(now/shoalStayMs);
+  const bank=shoalBanks[id%shoalBanks.length];
+  return {id,name:bank.name,spots:bank.tiles.map(y=>({x:5,y})),water:{x:7.4,y:bank.y+.45},until:(id+1)*shoalStayMs};
+}
+
+function rollFishingCatch(level,rodId,random=Math.random,luckXp=0,shoalReeled=false){
   const speciesRoll=random()*100,qualityRoll=random()*100;
   const species=speciesRoll<65?'silverfin':speciesRoll<95?'perch':'trout';
   const chances=fishingChances(level,rodId,luckXp);
-  const quality=qualityRoll<chances.rare?'rare':qualityRoll<chances.rare+chances.fine?'fine':'common';
+  const fine=chances.fine+(shoalReeled?shoalFineBonus:0);
+  const quality=qualityRoll<chances.rare?'rare':qualityRoll<chances.rare+fine?'fine':'common';
   return quality==='common'?species:species+'_'+quality;
 }
 
@@ -65,8 +79,8 @@ export function sharedFishingPose(state,now=Date.now()){
  }
  const cast=state.plan?.fishingWork?.cast??state.fishingCast;
  if(!cast||now>=cast.landAt+1100)return null;
- const {id,started,castEnds,biteAt,landAt}=cast;
- return {id,started,castEnds,biteAt,landAt,room:cast.room??state.location,spot:cast.spot??state.position};
+ const {id,started,castEnds,biteAt,landAt,water}=cast;
+ return {id,started,castEnds,biteAt,landAt,room:cast.room??state.location,spot:cast.spot??state.position,...(water?{water}:{})};
 }
 
 export function fishingView(pose,room,now,time){

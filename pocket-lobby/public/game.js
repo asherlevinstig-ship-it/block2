@@ -2993,6 +2993,13 @@ for(const id of Object.keys(moonwood.areas)){
 }
 function drawMoonwoodDetails(time){
   moonwood.drawWater(currentRoom,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,depthsRun,progress:adventure});
+  if(currentRoom==='pond'){
+    const shoal=pondShoalAt(combatNow());
+    fishingMoments.drawShoal(ctx,...point(shoal.water.x,shoal.water.y,.5),time,reducedMotion.matches);
+    if(!fishingSession&&!routineControlled()){
+      for(const {x,y} of shoal.spots)surface(x+.09,y+.09,.82,.82,.4,'#9ceada19','#abebd9a0');
+    }
+  }
   if(currentRoom==='grove'&&adventure.groveTrail){
     for(const [x,y] of moonwood.layouts.grove.hiddenTrail){
       surface(x+.06,y+.06,.88,.88,.25,'#6d8195','#8fb6b9');
@@ -3074,7 +3081,8 @@ let worldLabelKey='';
 function updateWorldLabels(){
   const p=canvasBounds(),doors=roomDoors[currentRoom].filter(door=>doorAvailable(door));
   const stump=currentRoom==='logging'&&!!treeState(timberTree()).regrowsAt;
-  const key=[currentRoom,watchFlags.map(k=>adventure[k]).join(','),player.seat?.type,homeBedRest?.bedId,editing,currentRoom==='home'?homeFurniture.map(i=>[i.id,i.type,i.x,i.y,i.rot].join(':')).join(';'):'',stump,depthsRun?.finds?.join(','),depthsRun?.cleared,depthsRun?.routeChoice,depthsRun?.cacheGuardDefeated,doors.map(door=>door.to).join(','),avatar.name,questStage(quest),depthsDiscovered,player.inCombat,firstUpgrade.choice,firstUpgrade.complete,firstUpgrade.oakTrialPending,firstUpgrade.unlocked,firstUpgradeDestination()?.to,tradingPostGuideComplete,bedLessonComplete,trackedDestination,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
+  const shoal=currentRoom==='pond'&&window.playerCloud?.gameplay&&!fishingSession&&!routineControlled()?pondShoalAt(combatNow()):null;
+  const key=[currentRoom,shoal?.id,watchFlags.map(k=>adventure[k]).join(','),player.seat?.type,homeBedRest?.bedId,editing,currentRoom==='home'?homeFurniture.map(i=>[i.id,i.type,i.x,i.y,i.rot].join(':')).join(';'):'',stump,depthsRun?.finds?.join(','),depthsRun?.cleared,depthsRun?.routeChoice,depthsRun?.cacheGuardDefeated,doors.map(door=>door.to).join(','),avatar.name,questStage(quest),depthsDiscovered,player.inCombat,firstUpgrade.choice,firstUpgrade.complete,firstUpgrade.oakTrialPending,firstUpgrade.unlocked,firstUpgradeDestination()?.to,tradingPostGuideComplete,bedLessonComplete,trackedDestination,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
   if(key===worldLabelKey)return;
   worldLabelKey=key;
   const container=$('worldLabels');container.replaceChildren();container.dataset.room=currentRoom;
@@ -3150,6 +3158,7 @@ function updateWorldLabels(){
     add('Campfire',...point(campfire.x+.5,campfire.y+.5,32),'npc',()=>use(campfire));
   }
   if(currentRoom==='armory')add('Enchanter',...point(6.5,5.5,45),'npc',()=>use(roomFurniture().find(item=>item.type==='enchanter')));
+  if(shoal)add('Fish the shoal',...point(shoal.water.x,shoal.water.y,21),'shoal',usePondShoal,shoal.name);
   if(willowmereRooms.includes(currentRoom)){
     for(const item of roomFurniture())if(['riverTrader','riverBench','fishingPost'].includes(item.type)&&!(item.type==='riverBench'&&player.seat===item))add(item.type==='riverTrader'?'River trader':item.type==='riverBench'?(currentRoom==='millbrook'?'Rest by the mill':'Riverside bench'):'Fishing station',...point(item.x+.5,item.y+.5,item.type==='riverTrader'?42:25),'npc',()=>use(item));
   }
@@ -3437,7 +3446,12 @@ function pointer(e){
   const gx=Math.floor(((x-view.originX)/18+(y-view.originY)/9)/2);
   const gy=Math.floor(((y-view.originY)/9-(x-view.originX)/18)/2);
   const door=roomDoors[currentRoom].find(portal=>doorAvailable(portal)&&hitDoor(x,y,portal));
-  return {tile:door?.tile??(inRoom(gx,gy)?{x:gx,y:gy}:null),door,item:hitboxes.findLast(h=>inShape(x,y,h.shape))?.item??null};
+  let shoalHit=false;
+  if(currentRoom==='pond'&&window.playerCloud?.gameplay&&!fishingSession&&!routineControlled()){
+    const {water}=pondShoalAt(combatNow()),[sx,sy]=point(water.x,water.y,.5);
+    shoalHit=((x-sx)/26)**2+((y-sy)/12)**2<=1;
+  }
+  return {tile:door?.tile??(inRoom(gx,gy)?{x:gx,y:gy}:null),door,item:hitboxes.findLast(h=>inShape(x,y,h.shape))?.item??null,shoalHit};
 }
 let homeNavigationLearned=load('movement-learned',false);
 function note(message,duration=3000){
@@ -3920,6 +3934,18 @@ function use(item){
   if(!shortest){note('There’s no clear path to that furniture.');return;}
   player.seat=null;player.waveStarted=null;route=shortest;interaction=item;target=route.at(-1)??null;
 }
+function usePondShoal(){
+  if(currentRoom!=='pond'||!window.playerCloud?.gameplay||unavailable())return;
+  if(fishingSession){reelFish();return;}
+  if(fishingGear.bait<1){note('Bring bait from Silverfin Outfitters before fishing.');return;}
+  const shoal=pondShoalAt(combatNow()),start=startPosition();
+  const paths=shoal.spots.filter(spot=>![...remotePeers.values()].some(peer=>peer.x===spot.x&&peer.y===spot.y))
+    .map(spot=>walkingPath(start,spot)).filter(Boolean).sort((a,b)=>a.length-b.length);
+  if(!paths.length){note('The shoal bank is busy. Try the fishing post or wait for the shoal to move.');return;}
+  if(fishingSound)fishingMoments.enable(true);
+  player.seat=null;player.waveStarted=null;
+  route=paths[0];target=route.at(-1)??null;interaction={type:'pondShoal',shoalId:shoal.id};
+}
 function seatAnchor(item){
   const [w,d]=dimensions(item);
   const offsets=[[w/2,.63],[.63,d/2],[w/2,.37],[.37,d/2]];
@@ -3936,7 +3962,7 @@ function reelFish(){
       if(!cast)return;
       const offset=performance.now()-result.serverTime;
       session.landAt=cast.landAt+offset;session.bonus=cast.bonus;
-      if(cast.bonus){fishingMoments.sound('reel');note('Well timed! +5 bonus Patience XP.');}
+      if(cast.bonus){fishingMoments.sound('reel');note(cast.shoalReeled?'Well timed! Shoal bonus active · Better odds of a fine catch.':'Well timed! +5 bonus Patience XP.');}
       updateAdventurePanel();
     }).catch(error=>note(error.message));
     return;
@@ -3949,7 +3975,7 @@ function reelFish(){
 function drawFishingMoment(x,y,time,session=fishingSession,spot={y:player.y}){
   const phase=fishingMoments.phase(session,time);
   const still=reducedMotion.matches;
-  const [waterX,waterY]=point(fishingSites[currentRoom]?.waterX??7.4,Math.max(.7,Math.min(9.3,spot.y+.45)));
+  const [waterX,waterY]=point(session.water?.x??fishingSites[currentRoom]?.waterX??7.4,session.water?.y??Math.max(.7,Math.min(9.3,spot.y+.45)));
   let bx=waterX,by=waterY;
   let tipX=x+19,tipY=y-33;
   if(phase==='casting'&&!still){
@@ -4024,7 +4050,7 @@ function finishFishing(time){
   const levelUp=patienceLevel()>oldLevel;
   $('catchTier').textContent=fishingCatalog.qualities[fish.quality].name+' catch';
   $('catchName').textContent=fish.name;
-  $('catchReward').textContent='+1 fish · +'+earned+' Patience XP'+(receipt?.baitSaved?' · Bait saved':session.bonus?' · Well timed!':'')+(receipt?.bondXp?' · +'+receipt.bondXp+' Bond XP':'');
+  $('catchReward').textContent='+1 fish · +'+earned+' Patience XP'+(receipt?.shoalReeled?' · Shoal bonus':receipt?.baitSaved?' · Bait saved':session.bonus?' · Well timed!':'')+(receipt?.bondXp?' · +'+receipt.bondXp+' Bond XP':'');
   $('catchLevel').textContent='Patience increased to '+patienceLevel();
   $('catchLevel').hidden=!levelUp;
   const reveal=$('catchReveal');
@@ -4033,10 +4059,10 @@ function finishFishing(time){
   pictureContext.clearRect(0,0,picture.width,picture.height);
   fishingMoments.drawFish(pictureContext,30,15,fishId,fish.quality,2);
   const oakBiteSavings=((fishingCatalog.rods.reed.duration-fishingCatalog.rods.oak.duration)/1000).toFixed(1);
-  if(oakTrial)$('catchReward').textContent=oakBiteSavings+'s shorter average bite wait · Sells for '+fish.price+' gold';
+  if(oakTrial)$('catchReward').textContent=oakBiteSavings+'s shorter average bite wait · Sells for '+fish.price+' gold'+(receipt?.shoalReeled?' · Shoal bonus':'');
   catchReveal={until:time+(oakTrial?6500:4000)};
   fishingMoments.sound(levelUp?'level':fish.quality==='rare'?'rare':'catch');
-  showTransaction(oakTrial?'First Oak Rod catch!':levelUp?'Patience level '+patienceLevel()+'!':'Catch landed',[
+  showTransaction(oakTrial?'First Oak Rod catch!':levelUp?'Patience level '+patienceLevel()+'!':receipt?.shoalReeled?'Shoal catch landed':'Catch landed',[
     {text:'+1 '+fish.name,icon:'⋈'},{text:'+'+earned+' Patience XP'+(session.bonus?' · Reel bonus':''),icon:'✦'},
     ...(oakTrial?[{text:oakBiteSavings+'s shorter average bite wait than Reed Rod',icon:'♓'},{text:'Sells for '+fish.price+' gold at the Trading Post',icon:'◈'}]:[])
   ]);
@@ -4051,7 +4077,7 @@ function updateFishingMoment(time){
   if(phase!==session.stage){
     session.stage=phase;
     if(phase==='waiting')fishingMoments.sound('splash');
-    if(phase==='bite'){fishingMoments.sound('bite');note('Bite! Reel now for +5 Patience XP, or let your character reel automatically.');}
+    if(phase==='bite'){fishingMoments.sound('bite');note(session.shoalId!==undefined?'Bite! Reel now to boost your chance of a fine catch.':'Bite! Reel now for +5 Patience XP, or let your character reel automatically.');}
     if(phase==='landing')fishingMoments.sound('reel');
     updateAdventurePanel();
   }
@@ -4085,7 +4111,10 @@ function openWatchLandmark(item){
 
 function finishInteraction(){
   const item=interaction;interaction=null;
-  if(item.type==='dungeonExit'||item.type==='dungeonArch'){
+  if(item.type==='pondShoal'){
+    if(pondShoalAt(combatNow()).id===item.shoalId)startServerCast(item.shoalId);
+    else usePondShoal();
+  }else if(item.type==='dungeonExit'||item.type==='dungeonArch'){
     if(depthsSideForRoom(currentRoom))visitDungeonSide('return');
     else if(currentRoom===depthsCacheRoom)visitDepthsCache();
     else if(item.type==='dungeonArch')leaveMoonwellDepths();
@@ -4875,6 +4904,7 @@ async function playLoungeRound(move){
   finally{loungeBusy=false;renderLoungeGame(errorText);if(!errorText)celebrateLoungeRound(loungeRound);}
 }
 function restoreServerCast(cast,serverTime){
+  if(cast.shoalId!==undefined){player.direction='right';player.back=false;}
   const offset=performance.now()-serverTime;
   fishingSession={...cast,serverCastId:cast.id,started:cast.started+offset,castEnds:cast.castEnds+offset,
     biteAt:cast.biteAt+offset,landAt:cast.landAt+offset,stage:'casting',fishId:null};
@@ -4882,12 +4912,16 @@ function restoreServerCast(cast,serverTime){
   fishingDuration=fishingCatalog.rods[cast.rod].duration;
   castProfile={rod:cast.rod,level:patienceLevel()};
 }
-async function startServerCast(){
+async function startServerCast(shoalId){
   try{
-    const result=await serverGameplay('cast');
+    const result=await serverGameplay('cast',shoalId===undefined?{}:{shoalId});
     restoreServerCast(result.state.fishingCast,result.serverTime);
     fishingMoments.sound('cast');
     catchReveal=null;$('catchReveal').hidden=true;
+    if(shoalId!==undefined){
+      canvas.focus({preventScroll:true});
+      note('Line cast into the shoal. Reel at the bite or press Space.');
+    }
     updateAdventurePanel();updateUpgradeGuide();
   }catch(error){note(error.message);}
 }
@@ -5412,10 +5446,11 @@ function currentActivityPrompt(){
       const phase=fishingMoments.phase(fishingSession,performance.now());
       const otterReady=!otterAbilityBlock(fishingSession)&&!familiarSeconds();
       if(phase==='landing'&&otterReady)return {label:'REED OTTER',title:'Second Chance',text:'Recover the missed +5 Patience XP bonus.',action:'familiarAction',button:'Second Chance · G'};
-      if(phase==='bite')return {label:'FISH ON!',title:'Reel now',text:'Reel in time for bonus Patience XP.',action:'adventureLandmark',secondChance:otterReady};
+      if(phase==='bite')return {label:'FISH ON!',title:'Reel now',text:fishingSession.shoalId!==undefined?'Reel in time for better odds of a fine catch and +5 Patience XP.':'Reel in time for bonus Patience XP.',action:'adventureLandmark',secondChance:otterReady};
       return null;
     }
     if(fishingGear.bait<1)return {label:'FISHING SUPPLIES',title:'You need bait',text:'Riverworms are sold at Silverfin Outfitters in the Tower.',action:'baitRoute'};
+    if(currentRoom==='pond'&&window.playerCloud?.gameplay)return {label:'SILVERFIN SHOAL',title:'Fish the shoal',text:'Follow the bright ripples. Reel at the bite for a better chance of a fine fish.',action:'pondShoal'};
     return {label:'FISHING',title:'Cast a line',text:'Watch the float. Reel when you see a bite for bonus Patience XP.',action:'adventureLandmark'};
   }
   if(currentRoom==='beaconwatch'&&!adventure.watchBeacon)return {label:'BEACONWATCH EXPEDITION',title:'Light the watchtower beacon',text:'Restore the beacon to open a permanent bridge back to Millbrook.',action:'watchBeaconGuide'};
@@ -5438,7 +5473,7 @@ function updateActivityPrompt(){
   const visible=!!prompt;
   $('contextGuide').hidden=!visible;
   $('roomLayout').dataset.contextual=String(visible);
-  const proxyControl=prompt?.action&&!['baitRoute','equipHunting','familiarAction','rationBag'].includes(prompt.action)?$(prompt.action):null;
+  const proxyControl=prompt?.action&&!['baitRoute','equipHunting','familiarAction','rationBag','pondShoal'].includes(prompt.action)?$(prompt.action):null;
   $('contextGuideAction').disabled=proxyControl?.disabled===true||prompt?.action==='familiarAction'&&serverActionBusy;
   $('contextGuideSecondChance').hidden=!prompt?.secondChance;
   $('contextGuideSecondChance').disabled=serverActionBusy;
@@ -5457,6 +5492,7 @@ function updateActivityPrompt(){
   else if(prompt.action==='baitRoute')button.textContent='Show route to bait shop';
   else if(prompt.action==='equipHunting')button.textContent='Open Inventory';
   else if(prompt.action==='visitWarden')button.textContent='Speak to the Warden';
+  else if(prompt.action==='pondShoal')button.textContent='Fish the shoal';
   else button.textContent=$(prompt.action).textContent||prompt.title;
 }
 function updateAdventurePanel(){
@@ -5781,6 +5817,7 @@ $('contextGuideAction').onclick=()=>{
   else if(prompt.action==='rationBag'){openInventory();bagCategory='materials';bagSelection='meal:'+towerBread.id;renderBag();$('bagAction').focus({preventScroll:true});}
   else if(prompt.action==='baitRoute')setExplorationDestination('store');
   else if(prompt.action==='equipHunting')openInventory('clearing');
+  else if(prompt.action==='pondShoal')usePondShoal();
   else if(!$(prompt.action).disabled)$(prompt.action).onclick();
   updateActivityPrompt();
 };
@@ -6139,13 +6176,13 @@ $('resetRoom').onclick=()=>{
 };
 canvas.addEventListener('pointermove',e=>{
   const p=pointer(e);hover=p.tile;hoverItem=p.item;
-  canvas.style.cursor=p.item||p.door?'pointer':'crosshair';
+  canvas.style.cursor=p.item||p.door||p.shoalHit?'pointer':'crosshair';
 });
 canvas.addEventListener('pointerleave',()=>{hover=null;hoverItem=null;});
 canvas.addEventListener('click',e=>{
   if(fishingSound)fishingMoments.enable(true);
-  const {tile,item,door}=pointer(e);
-  if(!editing){if(item?.addId||player.inCombat&&item?.type===huntEnemyForRoom(currentRoom)?.prop)use(item);else if(door)travelDoor(door);else if(item)use(item);else if(tile)walkTo(tile);return;}
+  const {tile,item,door,shoalHit}=pointer(e);
+  if(!editing){if(item?.addId||player.inCombat&&item?.type===huntEnemyForRoom(currentRoom)?.prop)use(item);else if(door)travelDoor(door);else if(shoalHit)usePondShoal();else if(item)use(item);else if(tile)walkTo(tile);return;}
   if(item&&!fixed(item)&&selection?.id!==null&&item.id!==selection?.id){choose(item);return;}
   if(selection&&tile)place(tile);
 });

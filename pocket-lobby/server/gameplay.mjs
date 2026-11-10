@@ -16,7 +16,7 @@ import {bankTransfer} from './banking.mjs';
 import {normalizeBank} from '../public/bank.js';
 import {normalizeDungeonLoot,dungeonRelics} from '../public/dungeon-loot.js';
 import {skillLevel,progressionVersion,MAX_SKILL_XP} from '../public/skill-curve.js';
-import {fishingCatalog,fishProducts,rollFishingCatch} from '../public/fishing.js';
+import {fishingCatalog,fishProducts,pondShoalAt,rollFishingCatch} from '../public/fishing.js';
 import {recordQuest,claimFirstQuest} from '../public/quests.js';
 import {awardLeadership} from '../public/leadership.js';
 import {purchaseWeapon} from '../public/hunting.js';
@@ -162,7 +162,13 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
     location(state,['pond','willowbank','ambermead']);
     if(state.fishingCast)return;
     const position=state.position;
-    if(!besideFishingStation(state.location,position))throw new Error('Travel to the fishing post before casting.');
+    let shoal;
+    if(body.shoalId!==undefined){
+      const active=pondShoalAt(now);
+      if(state.location!=='pond'||body.shoalId!==active.id)throw new Error('The shoal moved. Follow the bright ripples to cast again.');
+      if(!active.spots.some(spot=>spot.x===position?.x&&spot.y===position?.y))throw new Error('Walk to the bank beside the shoal before casting.');
+      shoal=active;
+    }else if(!besideFishingStation(state.location,position))throw new Error('Travel to the fishing post before casting.');
     const rod=state.fishingGear.equippedRod;
     const profile=fishingCatalog.rods[rod];
     if(!profile||!state.fishingGear.ownedRods.includes(rod))throw new Error('Choose an equipped fishing rod first.');
@@ -171,7 +177,7 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
     const wait=familiarFishingTime(state,profile.duration*(.85+random()*.30));
     // Keep the reel window and landing animation timing identical.
     const biteAt=now+exertionDuration(3150+wait,state.vitals)-2700;
-    state.fishingCast={id:crypto.randomUUID(),rod,started:now,castEnds:now+450,biteAt,landAt:biteAt+1800,bonus:0};
+    state.fishingCast={id:crypto.randomUUID(),rod,started:now,castEnds:now+450,biteAt,landAt:biteAt+1800,bonus:0,...(shoal?{shoalId:shoal.id,water:shoal.water}:{})};
     return;
   }
   if(action==='cancel'){
@@ -188,13 +194,15 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
     if(action==='reel'){
       if(now>=cast.biteAt&&now<cast.landAt&&!cast.bonus){
         cast.bonus=5;cast.landAt=now;
+        if(cast.shoalId!==undefined)cast.shoalReeled=true;
       }
       return;
     }
     if(now<cast.landAt+900)throw new Error('Invalid catch timing. Wait for the fish to land.');
     if(state.fishingGear.bait<1)throw new Error('Choose bait before casting.');
     const before=state.stats.patienceXp;
-    const fish=rollFishingCatch(skillLevel(before),cast.rod,random,state.stats.luckXp);
+    const shoalReeled=cast.shoalId!==undefined&&cast.shoalReeled===true;
+    const fish=rollFishingCatch(skillLevel(before),cast.rod,random,state.stats.luckXp,shoalReeled);
     if((state.fishStock[fish]??0)>=1000000)throw new Error('Invalid inventory. Sell some fish first.');
     const otterHelp=cast.otterHelp===true&&state.familiars?.equipped==='otter';
     const baitSaved=otterHelp&&familiarBond(state.familiars,'otter').rank>=3;
@@ -204,8 +212,8 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
     state.stats.patienceXp=Math.min(MAX_SKILL_XP,before+10+cast.bonus);
     state.history.fishCaught=true;
     recordQuest(state.quest,'fish');
-    const {id,started,castEnds,biteAt,landAt}=cast;
-    state.fishingReceipt={room:state.location,castId:cast.id,fish,rod:cast.rod,before,xp:state.stats.patienceXp-before,bonus:cast.bonus,at:now,cast:{id,started,castEnds,biteAt,landAt},spot:state.position,...(baitSaved?{baitSaved:true}:{}),...(bondXp?{bondXp}:{})};
+    const {id,started,castEnds,biteAt,landAt,water}=cast;
+    state.fishingReceipt={room:state.location,castId:cast.id,fish,rod:cast.rod,before,xp:state.stats.patienceXp-before,bonus:cast.bonus,at:now,cast:{id,started,castEnds,biteAt,landAt,...(water?{water}:{})},spot:state.position,...(shoalReeled?{shoalReeled:true}:{}),...(baitSaved?{baitSaved:true}:{}),...(bondXp?{bondXp}:{})};
     delete state.fishingCast;
     return;
   }
