@@ -6103,7 +6103,7 @@ function enterRoom(next,arrival,{automatic=false}={}){
   connectRoom();
   if(!automatic){
     showFirstEquipment(next);
-    if(['store','armory','market'].includes(next))openMerchant();
+    if(['store','armory'].includes(next))openMerchant();
   }
   if(atHome()&&pendingFurniturePlacement){const type=pendingFurniturePlacement;pendingFurniturePlacement=null;trackedDestination=null;if(availableFurniture(type)>0){switchMode(true);choose({type,id:null,rot:0});note('You’re home. Click a clear floor tile to place your '+types[type]+'.');}}
   if(focusRoom&&!$('inventoryDialog').open)canvas.focus();
