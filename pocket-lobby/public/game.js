@@ -610,20 +610,24 @@ function updateActorNameplates(){
  if(renderedActors.length){
   const p=canvasBounds(),layerBox=layer.getBoundingClientRect(),cx=view.width/2,cy=view.height/2-4;
   const toScreen=(x,y)=>({x:p.left-layerBox.left+p.x+((x-cx)*zoom+cx)*p.scale,y:p.top-layerBox.top+p.y+((y-cy)*zoom+cy)*p.scale});
-  const render=(key,name,detail,position,kind,color)=>{
+  const render=(key,name,detail,position,kind,color,action)=>{
    seen.add(key);
    let plate=actorNameplates.get(key);
    if(!plate){
-    const node=document.createElement('span');node.className='player-label '+kind;node.dataset.actor=key;layer.append(node);
+    const node=document.createElement(kind==='enemy-label'?'button':'span');
+    if(kind==='enemy-label')node.type='button';
+    node.className='player-label '+kind;node.dataset.actor=key;layer.append(node);
     plate={node};actorNameplates.set(key,plate);
    }
    const caption=detail?name+' · '+detail:name;
    if(plate.caption!==caption){plate.caption=caption;plate.node.textContent=caption;plate.node.title=caption;}
    if(color&&plate.color!==color){plate.color=color;plate.node.style.setProperty('--pet-label-color',color);}
+   if(kind==='enemy-label'){plate.node.onclick=action;plate.node.disabled=!action;plate.node.dataset.target=String(detail==='Target');}
    plate.node.style.left=Math.round(position.x)+'px';plate.node.style.top=Math.round(position.y)+'px';
   };
   for(const actor of renderedActors){
    const owner=toScreen(actor.x,actor.y);
+   if(actor.enemy){render(actor.id,actor.name,actor.detail,owner,'enemy-label',null,actor.action);continue;}
    if(actor.familiar){
     const {id,x,y}=actor.familiar,pet=toScreen(x,y),species=familiars[id];
     const petName=actor.familiarName||species.name;
@@ -1090,6 +1094,7 @@ async function examineDepths(item){
       }
       savePlayerState();
     }
+    if(item.type==='sluiceLever'&&depthsRun.cleared===1&&depthsRun.routeChoice==='pending')depthsExploring=false;
     updateDepthsPanel();
     if(item.type==='sideSeal'){
       if(already){note('You have already claimed this expedition’s stone.');return;}
@@ -1133,7 +1138,9 @@ function updateDepthsPanel(){
   const cacheRoom=currentRoom===depthsCacheRoom;
   const cleared=inDepths&&!depthsEnemyAvailable(depthsRun,currentRoom);
   const canVisitCache=canEnterDepthsCache(depthsRun,currentRoom);
-  const choosingPassage=currentRoom==='depthsGate'&&depthsRun?.cleared===1&&depthsRun.routeChoice==='pending';
+  const atFork=currentRoom==='depthsGate'&&depthsRun?.cleared===1&&depthsRun.routeChoice==='pending';
+  const choosingPassage=atFork&&floodgateOpen(depthsRun);
+  const needsSluice=atFork&&!choosingPassage;
   const pendingGuardian=currentRoom==='depthsGate'&&depthsRun?.routeChoice==='dangerous'&&!depthsRun.cacheGuardDefeated;
   $('depthsSideOptions').hidden=unavailable()||currentRoom!=='depthsGallery'||depthsRun?.cleared!==2;
   $('depthsSideReturn').hidden=unavailable()||!side;
@@ -1143,6 +1150,7 @@ function updateDepthsPanel(){
   $('depthsSideClaim').hidden=unavailable()||sideId!=='trial'||!depthsRun?.sideWins?.includes('trial')||!!depthsRun?.finds?.includes('sideSeal');
   $('depthsSideFieldReturn').hidden=!side||unavailable();
   $('depthsFork').hidden=!choosingPassage;
+  $('depthsGateLever').hidden=!needsSluice;
   $('depthsMainOptions').hidden=choosingPassage;
   $('depthsExplore').hidden=choosingPassage;
   $('depthsSafeReward').textContent='+'+Math.min(depthsSafePassage.healing,maxHealth()-health)+' HP · +'+depthsSafePassage.gold+' gold';
@@ -1173,12 +1181,12 @@ function updateDepthsPanel(){
   const preview=side?'Return to Shell Gallery to choose another room, face the Vault, or bank your haul.':cacheRoom?'Return to Shell Gallery to continue the expedition.':next?'Next: '+huntEnemies[next.enemy].name+' ('+dungeonEnemyPreview(huntEnemies[next.enemy]).health+' HP) · '+formatDepthsSpoils(depthsStageSpoils(next))+'.':'All three chambers cleared. Bank your spoils to leave the vault.';
   $('depthsPreview').textContent=cleared?preview:roomDetails[currentRoom].description;
   $('depthsRetreat').hidden=unavailable()||depthsRun.cleared!==0;
-  $('depthsNext').hidden=!canDecide||!next||choosingPassage||pendingGuardian;
+  $('depthsNext').hidden=!canDecide||!next||atFork||pendingGuardian;
   $('depthsLeave').hidden=!canDecide;
   if(!canDecide)return;
 
   $('depthsDecisionStep').textContent='MOONWELL DEPTHS · '+depthsRun.cleared+' / '+depthsStages.length+' CLEARED';
-  $('depthsDecisionTitle').textContent=side?(sideId==='rest'?'A moment to recover':sideId==='trial'?(depthsRun.finds?.includes('sideSeal')?'Challenge reward collected':'The Awakening Seal is open'):'Treasury secured'):choosingPassage?'Choose your passage':cacheRoom?(depthsRun.finds?.includes('essenceCache')?'Essence Cache collected':'The seal is broken'):(next?stage.name+' cleared':'Expedition complete');
+  $('depthsDecisionTitle').textContent=side?(sideId==='rest'?'A moment to recover':sideId==='trial'?(depthsRun.finds?.includes('sideSeal')?'Challenge reward collected':'The Awakening Seal is open'):'Treasury secured'):choosingPassage?'Choose your passage':cacheRoom?(depthsRun.finds?.includes('essenceCache')?'Essence Cache collected':'The seal is broken'):needsSluice?'Drain the flooded crossing':(next?stage.name+' cleared':'Expedition complete');
   $('depthsBankNow').textContent=formatDepthsSpoils(spoils);
   $('depthsDecisionHealth').textContent=health+' / '+maxHealth()+' HP · Your health carries into the next fight.';
   if(!next)$('depthsDecisionHealth').textContent=health+' / '+maxHealth()+' HP remaining.';
@@ -2520,6 +2528,16 @@ function object(item,highlight=false,time=0) {
       ctx.scale((px<bx?-1:1)*(1+(1-pose.squash)*.25)*(item.add?.kind==='skitter'?.65:1),pose.squash*(item.add?.kind==='skitter'?.65:1));if(item.add&&combatNow()<item.add.spawnAt)ctx.globalAlpha*=.25;ctx.translate(-bx,-by);
       moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,progress:adventure,combat:player.inCombat?hunting.encounter:null,pose});
       ctx.restore();
+      if(!item.defeated){
+        const enemy=item.add?addKinds[item.add.kind]:huntEnemyForRoom(currentRoom);
+        if(enemy){
+          const summoning=item.add&&combatNow()<item.add.spawnAt;
+          const key=item.addId??'leader',selected=player.inCombat&&hunting.encounter?.combatTarget===key;
+          renderedActors.push({id:'enemy:'+key,enemy:true,name:enemy.name,detail:summoning?'Summoning':selected?'Target':'',
+            x:bx+Math.sign(px-bx)*shift+mx,y:by+Math.sign(py-by)*shift+my+pose.fall-(item.add?46:(moonwood.heights[type]??34)+8),
+            action:summoning||player.inCombat&&hunting.encounter?.addsVersion!==1?null:()=>use(item)});
+        }
+      }
       if(item.add){
        rect(bx-13,by-42,26,4,'#17253b');rect(bx-12,by-41,24*item.add.health/addKinds[item.add.kind].health,2,'#e8ac91');
        if(hunting.encounter.combatTarget===item.addId){ctx.strokeStyle='#ffe3a0';ctx.lineWidth=1.5;ctx.beginPath();ctx.ellipse(bx,by,14,7,0,0,Math.PI*2);ctx.stroke();}
@@ -2997,7 +3015,7 @@ let worldLabelKey='';
 function updateWorldLabels(){
   const p=canvasBounds(),doors=roomDoors[currentRoom].filter(door=>doorAvailable(door));
   const stump=currentRoom==='logging'&&!!treeState(timberTree()).regrowsAt;
-  const key=[currentRoom,watchFlags.map(k=>adventure[k]).join(','),player.seat?.type,homeBedRest?.bedId,editing,currentRoom==='home'?homeFurniture.map(i=>[i.id,i.type,i.x,i.y,i.rot].join(':')).join(';'):'',stump,depthsRun?.finds?.join(','),doors.map(door=>door.to).join(','),avatar.name,questStage(quest),depthsDiscovered,player.inCombat,firstUpgrade.choice,firstUpgrade.complete,firstUpgrade.oakTrialPending,firstUpgrade.unlocked,firstUpgradeDestination()?.to,tradingPostGuideComplete,bedLessonComplete,trackedDestination,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
+  const key=[currentRoom,watchFlags.map(k=>adventure[k]).join(','),player.seat?.type,homeBedRest?.bedId,editing,currentRoom==='home'?homeFurniture.map(i=>[i.id,i.type,i.x,i.y,i.rot].join(':')).join(';'):'',stump,depthsRun?.finds?.join(','),depthsRun?.cleared,depthsRun?.routeChoice,depthsRun?.cacheGuardDefeated,doors.map(door=>door.to).join(','),avatar.name,questStage(quest),depthsDiscovered,player.inCombat,firstUpgrade.choice,firstUpgrade.complete,firstUpgrade.oakTrialPending,firstUpgrade.unlocked,firstUpgradeDestination()?.to,tradingPostGuideComplete,bedLessonComplete,trackedDestination,zoom,p.scale,p.x,p.y,canvas.clientWidth,canvas.clientHeight].join('|');
   if(key===worldLabelKey)return;
   worldLabelKey=key;
   const container=$('worldLabels');container.replaceChildren();container.dataset.room=currentRoom;
@@ -3082,8 +3100,6 @@ function updateWorldLabels(){
       if(label)add(label,...point(item.x+.5,item.y+.5,moonwood.heights[item.type]+9),'npc',()=>use(item));
       if(item.type==='fishingPost')add('Hidden fishing pool',...point(item.x+.5,item.y+.5,31),'npc',()=>use(item));
     }
-    const enemy=huntEnemyForRoom(currentRoom);
-    if(enemy&&!player.inCombat&&combatNow()>=huntRespawnAt(hunting,enemy))add(enemy.name,...point(6.5,5.5,40),'npc',()=>use(roomFurniture().find(i=>i.type===enemy.prop)),'Optional · Stronger than a Wild Boar');
   }
   if(currentRoom==='logging'){
     add('Workbench',...point(6,3.5,26),'npc',()=>use(roomFurniture().find(item=>item.type==='workbench')));
@@ -3092,9 +3108,15 @@ function updateWorldLabels(){
     else add('Timber',...point(6.5,5.5,54),'npc',()=>use(timberTree()));
   }
   if(depthsRun&&!player.inCombat){
-    for(const item of roomFurniture().filter(i=>i.type==='dungeonArch'||i.type==='dungeonExit'))add(item.type==='dungeonExit'?(currentRoom==='depthsVault'?'Vault gate':'Deeper passage'):depthsRun?.cleared===0?'Return to the ruins':depthsSideForRoom(currentRoom)||currentRoom===depthsCacheRoom?'Return to the hall':'Return & bank spoils',...point(item.x+.5,item.y+.5,60),'npc',()=>use(item));
-    const elite=huntEnemyForRoom(currentRoom);
-    if(elite?.elite&&roomFurniture().some(item=>item.type===elite.prop))add('Elite Cache Guardian',...point(6.5,5.5,45),'npc',()=>use(roomFurniture().find(item=>item.type===elite.prop)));
+    for(const item of roomFurniture().filter(i=>i.type==='dungeonArch'||i.type==='dungeonExit')){
+      const name=item.type==='dungeonArch'?(depthsRun.cleared?'Bank spoils & leave':'Return to the ruins')
+        :depthsEnemyAvailable(depthsRun,currentRoom)?'Passage locked'
+        :currentRoom==='depthsVault'?'Bank spoils & leave'
+        :currentRoom==='depthsGallery'?'To the Sunken Vault'
+        :depthsRun.routeChoice==='pending'?'Choose a passage'
+        :depthsRun.routeChoice==='dangerous'&&!depthsRun.cacheGuardDefeated?'To the Sealed Alcove':'To Shell Gallery';
+      add(name,...point(item.x+.5,item.y+.5,60),'npc',()=>use(item));
+    }
     const passage=roomFurniture().find(item=>item.type==='cachePassage');
     if(passage&&depthsSideForRoom(currentRoom))add('Shell Gallery ←',...point(passage.x+.5,passage.y+.5,38),'npc',()=>visitDungeonSide('return'));
     if(currentRoom==='depthsGallery'&&depthsRun.cleared===2)add('Optional rooms',...point(4.5,2.5,35),'npc',openDungeonSideChoices,'Treasure · Rest · Challenge');
@@ -4002,7 +4024,10 @@ function finishInteraction(){
     else if(currentRoom===depthsCacheRoom)visitDepthsCache();
     else if(item.type==='dungeonArch')leaveMoonwellDepths();
     else if(depthsEnemyAvailable(depthsRun,currentRoom))note('Defeat the guardian before using the deeper passage.');
-    else if(currentRoom==='depthsGate'){depthsExploring=false;updateDepthsPanel();}
+    else if(currentRoom==='depthsGate'&&depthsRun.routeChoice==='pending'){
+      if(!floodgateOpen(depthsRun))note('Pull the sluice lever to open the crossing.');
+      depthsExploring=false;updateDepthsPanel();
+    }else if(currentRoom==='depthsGate'&&depthsRun.routeChoice==='dangerous'&&!depthsRun.cacheGuardDefeated)visitDepthsCache();
     else if(currentRoom==='depthsVault')leaveMoonwellDepths();
     else advanceMoonwellDepths();
   }else if(['watchBeacon','watchCache','watchSign'].includes(item.type)){
@@ -5653,6 +5678,10 @@ $('cacheRewardAwaken').onclick=()=>{
   const stone=depthsRun?.cacheStone;
   $('cacheRewardDialog').close();openEssences();
   if(stone)$('essenceStatus').textContent='Choose a bonded Gem, then awaken its '+stoneForms[stone].name+' power with your new stone.';
+};
+$('depthsGateLever').onclick=()=>{
+  const lever=roomFurniture().find(item=>item.type==='sluiceLever');
+  if(lever){depthsExploring=true;updateDepthsPanel();use(lever);}
 };
 $('depthsNext').onclick=advanceMoonwellDepths;
 $('depthsExplore').onclick=()=>{

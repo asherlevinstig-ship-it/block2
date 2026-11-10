@@ -84,7 +84,7 @@ test('dungeon progress and banking require server victories; crafting consumes r
     s.position={x:5,y:5};action(s,'fight',{},now);s.hunting.encounter.health=1;
     now+=60000;action(s,'combat',{combatId:s.combatId},now);
     assert.equal(s.depthsRun.cleared,i+1);
-    if(i===0)action(s,'depthsPassage',{choice:'safe'},now);
+    if(i===0){s.position={x:3,y:5};action(s,'depthsInspect',{id:'sluiceLever'},now);action(s,'depthsPassage',{choice:'safe'},now);}
     else if(i<2)action(s,'depthsNext',{},now);
   }
   assert.equal(s.huntingLoot.moonwellShard,undefined);

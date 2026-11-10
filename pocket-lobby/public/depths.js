@@ -80,10 +80,13 @@ export function inspectDepthsFind(state,item){
   depthsRun.finds=[...found,item.type];
 }
 
+export const floodgateOpen=run=>run?.finds?.includes('sluiceLever')===true;
+
 export function chooseDepthsPassage(state,choice){
   const run=state.depthsRun;
   if(state.location!=='depthsGate'||run?.cleared!==1||run.routeChoice!=='pending'||!['safe','dangerous'].includes(choice))throw new Error('Choose an available passage after clearing Flooded Gate.');
-  if(choice==='safe'){
+  if(!floodgateOpen(run))throw new Error('Choose a passage after opening the sluice lever.');
+ if(choice==='safe'){
     if(state.credits+depthsSafePassage.gold>100000000)throw new Error('Make room in your wallet before taking the safe passage.');
     state.health=Math.min(100,state.health+depthsSafePassage.healing);
     state.credits+=depthsSafePassage.gold;
@@ -172,7 +175,7 @@ export function depthsSpoils(run){
 export function bankDepthsSpoils(state){
   const {depthsRun,location,health,hunting,credits,huntingLoot}=state;
   const index=depthsStageIndex(location);
-  if(!canVisitDepthsRoom(depthsRun,location)||(location!==depthsCacheRoom&&!depthsSideForRoom(location)&&index>=depthsRun.cleared)||(!!depthsSideForRoom(location)&&depthsEnemyAvailable(depthsRun,location))||health<=0||hunting?.encounter)throw new Error('Clear this chamber before banking its spoils.');
+  if(!canVisitDepthsRoom(depthsRun,location)||(location!==depthsCacheRoom&&!depthsSideForRoom(location)&&index>=depthsRun.cleared)||depthsEnemyAvailable(depthsRun,location)||health<=0||hunting?.encounter)throw new Error('Clear this chamber before banking its spoils.');
   const spoils=depthsSpoils(depthsRun);
   if(credits+spoils.gold>100000000||Object.entries(spoils.loot).some(([id,count])=>(huntingLoot[id]??0)+count>1000000))throw new Error('Make room before banking your spoils.');
   for(const [id,count] of Object.entries(spoils.loot))huntingLoot[id]=(huntingLoot[id]??0)+count;

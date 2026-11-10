@@ -109,7 +109,7 @@ test('a level-five prepared expedition can bank its Vault shard using gathered m
   while(s.health<100&&s.meals.boarStew)act('eat',{id:'boarStew'});
   s.position={x:5,y:5};act('fight');now+=60000;act('combat',{combatId:s.combatId});
   assert.equal(s.depthsRun?.cleared,stage+1);
-  if(stage===0)act('depthsPassage',{choice:'safe'});else if(stage===1)act('depthsNext');
+  if(stage===0){s.position={x:3,y:5};act('depthsInspect',{id:'sluiceLever'});act('depthsPassage',{choice:'safe'});}else if(stage===1)act('depthsNext');
  }
  act('bank');assert.equal(s.huntingLoot.moonwellShard,1);assert.equal(s.credits,191);
 });

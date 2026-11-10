@@ -223,7 +223,7 @@ test('elite cache guardian rewards a prepared build across low and high combat r
 });
 
 
-const forkReady=()=>normalizeState({location:'depthsGate',depthsRun:{cleared:1,routeChoice:'pending'},health:65,position:{x:4,y:5},stats:{strengthXp:skillXpForLevel(21),vitalityXp:skillXpForLevel(21)}});
+const forkReady=()=>normalizeState({location:'depthsGate',depthsRun:{cleared:1,routeChoice:'pending',finds:['sluiceLever']},health:65,position:{x:4,y:5},stats:{strengthXp:skillXpForLevel(21),vitalityXp:skillXpForLevel(21)}});
 const passageAction=(state,name,body={},now=1000)=>applyGameplayAction(state,name,body,now,()=>.5);
 
 test('the safe passage heals and pays once, rejoins the gallery and locks out the elite route',()=>{
@@ -293,7 +293,14 @@ test('concurrent passage choices and retries commit only one route and one rewar
   const {db,sql}=testDatabase();t.after(()=>sql.close());
   const origin='https://tower.test';
   const session=await handlePlayerApi(new Request(origin+'/api/player/session',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({legacy:{location:'depthsGate',health:95,depthsRun:{cleared:1,routeChoice:'pending'}}})}),{TOWER_DB:db});
-  const packet=await session.json(),cookie=session.headers.get('set-cookie').split(';')[0];
+  const initial=await session.json(),cookie=session.headers.get('set-cookie').split(';')[0];
+  sql.prepare("UPDATE tower_players SET state_json=json_set(state_json,'$.position',json_object('x',3,'y',5)) WHERE player_id=?").run(initial.characterKey);
+  const lever=await handlePlayerApi(new Request(origin+'/api/player/gameplay/depthsInspect',{
+    method:'POST',headers:{Cookie:cookie,Origin:origin,'Content-Type':'application/json'},
+    body:JSON.stringify({id:'sluiceLever',characterKey:initial.characterKey,revision:initial.revision,operation:crypto.randomUUID()})
+  }),{TOWER_DB:db});
+  assert.equal(lever.status,200);
+  const packet=await lever.json();
   const safeOperation=crypto.randomUUID(),dangerOperation=crypto.randomUUID();
   const choose=(choice,operation)=>handlePlayerApi(new Request(origin+'/api/player/gameplay/depthsPassage',{
     method:'POST',headers:{Cookie:cookie,Origin:origin,'Content-Type':'application/json'},

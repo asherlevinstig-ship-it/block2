@@ -40,7 +40,7 @@ test('players pay once to register at Mira, then join, transfer and leave a shar
  assert.match((await first('factions',{action:'create',name:'Moon Guard'})).error,/250 gold/);
  setup.run(400,saved.characterKey);
  setup.run(400,secondSaved.characterKey);
- const creations=await Promise.all([first('factions',{action:'create',name:'Moon Guard',description:'Explore together'}),first('factions',{action:'create',name:'Second Company'})]);
+ const creations=await Promise.all([first('factions',{action:'create',name:'Moon Guard',description:'Explore together'}),first('factions',{action:'create',name:'Moon Guard',description:'Explore together'})]);
  assert.deepEqual(creations.map(result=>result.status).sort(),[200,400]);
  const created=creations.find(result=>result.status===200);
  assert.equal(created.state.credits,150);

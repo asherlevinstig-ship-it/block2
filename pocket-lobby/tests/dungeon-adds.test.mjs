@@ -62,3 +62,17 @@ test('target changes settle due damage first and reject unknown or still-spawnin
 test('the HUD renders selectable adds, summoning feedback and their own health',()=>{
  const s=fighter(),e=wave(s,Date.now()-2000);e.combatTarget=e.adds[0].id;const g=boot(s);g.run('updateDungeonArenaHud();draw(2200)');assert.deepEqual(g.errors,[]);assert.equal(g.nodes.get('dungeonTargets').hidden,false);assert.equal(g.nodes.get('dungeonTargets').children.length,3);assert.match(g.nodes.get('dungeonEnemyName').textContent,/Mire Hatchling/);assert.equal(g.nodes.get('dungeonEnemyBar').max,32);assert.equal(g.read('roomFurniture().filter(i=>i.addId).length'),2);
 });
+
+test('nameplates distinguish the guardian and reinforcements, then clear defeated targets',()=>{
+ const s=fighter('depthsTrial'),encounter=wave(s);
+ const target=encounter.adds[0];
+ encounter.combatTarget=target.id;
+ const g=boot(s);
+ g.run('draw(2200)');
+ assert.equal(g.read("actorNameplates.get('enemy:leader').node.textContent"),'Rune Sentinel');
+ assert.match(g.read("actorNameplates.get('enemy:'+hunting.encounter.combatTarget).node.textContent"),/Mire Hatchling · Target/);
+ g.run("hunting.encounter.adds=[];hunting.encounter.combatTarget='leader';draw(2400)");
+ assert.equal(g.read("Array.from(actorNameplates.keys()).filter(k=>k.startsWith('enemy:')).join(',')"),'enemy:leader');
+ assert.match(g.read("actorNameplates.get('enemy:leader').node.textContent"),/Rune Sentinel · Target/);
+ assert.deepEqual(g.errors,[]);
+});

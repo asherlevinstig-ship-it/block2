@@ -63,3 +63,37 @@ test('each discovery and physical passage has a reachable side on the new chambe
   for(const item of props.filter(p=>['sluiceLever','gateSupply','shellChime','galleryCache','vaultRelief','essenceCache','sideSeal','sideTreasure','restAltar','dungeonArch','dungeonExit'].includes(p.type)))assert([[1,0],[-1,0],[0,1],[0,-1]].some(([x,y])=>seen.has((item.x+x)+','+(item.y+y))),room+' blocked '+item.type);
  }
 });
+
+test('a dangerous expedition can visit and leave every zone without losing its checkpoint',()=>{
+ const s=normalizeState({location:'ruins',depthsDiscovered:true,health:70});
+ let now=1000;
+ const go=(name,body={})=>{now+=100;act(s,name,body,now);assert.doesNotThrow(()=>normalizeState(s));};
+ const win=()=>{
+  s.position={x:5,y:5};go('fight');s.hunting.encounter.health=1;
+  now+=450;go('combat',{combatId:s.combatId});assert.equal(s.hunting.encounter,null);
+ };
+ go('depthsEnter');assert.equal(s.location,'depthsGate');
+ win();assert.throws(()=>go('depthsPassage',{choice:'dangerous'}),/sluice lever/);
+ const gate=boot(s);
+ assert.equal(gate.nodes.get('depthsGateLever').hidden,false);
+ assert.equal(gate.nodes.get('depthsFork').hidden,true);
+ s.position={x:3,y:5};go('depthsInspect',{id:'sluiceLever'});
+ go('depthsPassage',{choice:'dangerous'});assert.equal(s.location,'depthsCache');
+ assert.throws(()=>go('bank'),/Clear this chamber/);
+ go('depthsCacheLeave');assert.equal(s.location,'depthsGate');
+ go('depthsCacheEnter');win();go('depthsCacheLeave');assert.equal(s.location,'depthsGallery');
+ win();assert.equal(s.depthsRun.cleared,2);
+ for(const [id,room] of [['treasure','depthsTreasury'],['rest','depthsRest'],['trial','depthsTrial']]){
+  go('depthsSide',{id});assert.equal(s.location,room);
+  if(id==='rest'){
+   s.health=55;go('depthsShrine');assert.equal(s.health,85);
+   assert.throws(()=>go('depthsShrine'),/already been used/);
+  }else win();
+  go('depthsSide',{id:'return'});assert.equal(s.location,'depthsGallery');assert.equal(s.depthsRun.cleared,2);
+ }
+ assert.deepEqual(s.depthsRun.sideWins,['treasure','trial']);
+ go('depthsNext');assert.equal(s.location,'depthsVault');
+ win();go('bank');assert.equal(s.location,'ruins');assert.equal(s.depthsRun,null);
+ assert.equal(s.huntingLoot.moonwellShard,1);
+ assert.throws(()=>go('bank'),/Clear this chamber/);
+});
