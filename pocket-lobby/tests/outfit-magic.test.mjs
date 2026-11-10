@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {veilCloakId,addClothingToOutfit,normalizeWardrobe,tailorQuote} from '../public/wardrobe.js';
-import {veilRules,outfitVeilUntil} from '../public/outfit-magic.js';
+import {veilCloakId,windstepBootsId,hearthguardLeggingsId,addClothingToOutfit,normalizeWardrobe,tailorQuote} from '../public/wardrobe.js';
+import {veilRules,outfitVeilUntil,outfitPowers} from '../public/outfit-magic.js';
 import {normalizeState} from '../server/player-state.mjs';
 import {applyGameplayAction,protectFishingState} from '../server/gameplay.mjs';
 import {SharedRoom} from '../server/shared-room.mjs';
@@ -64,4 +64,40 @@ test('room snapshots hide the cloaked avatar, familiar and trail until the expir
  hidden.veilUntil=Date.now()-1;await room.alarm();
  assert.deepEqual(packets.at(-1).players.map(peer=>peer.id),['observer','hidden']);
  assert.equal(packets.at(-1).players[1].familiar,'fox');
+});
+
+test('each optional guardian grants its own rare piece after a banked Vault clear',()=>{
+ const s=normalizeState();
+ function bank(run){
+  s.location='depthsVault';s.depthsRun={...run};applyGameplayAction(s,'bank',{},1000,()=>.99);
+ }
+ bank({...bankable,shardEarned:false,sideWins:['trial','treasure']});
+ assert(!s.wardrobe.owned.includes(windstepBootsId));assert(!s.wardrobe.owned.includes(hearthguardLeggingsId));
+ bank({...bankable,sideWins:['trial']});
+ assert(s.wardrobe.owned.includes(windstepBootsId));assert(!s.wardrobe.owned.includes(hearthguardLeggingsId));
+ bank({...bankable,sideWins:['trial','treasure']});
+ assert.equal(s.wardrobe.owned.filter(id=>id===windstepBootsId).length,1);
+ assert(s.wardrobe.owned.includes(hearthguardLeggingsId));
+ assert.throws(()=>tailorQuote(s.wardrobe,windstepBootsId,'piece'),/tailor/);
+});
+
+test('wearing both pieces gives separate cooldowns, capped recovery and combat rules',()=>{
+ const s=dressed({location:'clearing',position:{x:5,y:5},health:58});
+ s.wardrobe.owned.push(windstepBootsId,hearthguardLeggingsId);
+ assert.throws(()=>applyGameplayAction(s,'emberMend',{},1000),/outfit/);
+ for(const id of [windstepBootsId,hearthguardLeggingsId])addClothingToOutfit(s.wardrobe,s.wardrobe.active,id);
+ applyGameplayAction(s,'emberMend',{},1000);assert.equal(s.health,88);
+ assert.equal(s.outfitMagic.readyAt.emberMend,1000+outfitPowers.emberMend.cooldown);
+ assert.throws(()=>applyGameplayAction(s,'emberMend',{},1001),/cooldown/);
+ applyGameplayAction(s,'fight',{},2000);
+ s.hunting.encounter.stamina=32;s.hunting.encounter.staminaAt=2000;
+ applyGameplayAction(s,'combat',{combatId:s.combatId,input:'secondWind'},2000);
+ assert.equal(s.hunting.encounter.stamina,77);
+ assert.equal(s.combatReceipt.events.at(-1).staminaRestored,45);
+ assert.equal(s.outfitMagic.readyAt.secondWind,2000+outfitPowers.secondWind.cooldown);
+ assert.throws(()=>applyGameplayAction(s,'combat',{combatId:s.combatId,input:'secondWind'},2001),/cooldown/);
+ assert.throws(()=>applyGameplayAction(s,'emberMend',{},2001),/fighting/);
+ const booted=boot(normalizeState(s));
+ for(const id of ['veilstep','emberMend','secondWind'])assert.equal(booted.nodes.get(id).hidden,false);
+ assert.deepEqual(booted.errors,[]);
 });

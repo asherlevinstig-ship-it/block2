@@ -537,3 +537,6 @@
 #foodStallStatus{min-height:1.2em;margin-bottom:0}
 
 #veilstep:not([hidden]){color:#aee5e7}#veilstep[data-active=true]{border-color:#aee5e7;background:#18364a}#veilstep>span:first-child{font-size:20px;line-height:1}
+
+#secondWind:not([hidden]){color:#a4e9e8}#emberMend:not([hidden]){color:#ffc291}#secondWind>span:first-child,#emberMend>span:first-child{font-size:19px;line-height:1}
+.hud-actionbar .dock-primary{flex-wrap:wrap;justify-content:flex-end}

@@ -6,7 +6,7 @@ import {watchFlags} from '../public/region-catalog.js';
 import {normalizeVitals,useHunger,feedPlayer,exertionDuration} from '../public/player-vitals.js';
 import {isFishingRoom,besideFishingStation} from '../public/region-catalog.js';
 import {armourCatalog,canUseArmour} from '../public/hunting.js';
-import {activateVeil,awardVeilCloak,normalizeOutfitMagic,wearsVeilCloak} from '../public/outfit-magic.js';
+import {activateVeil,awardVeilCloak,awardChallengeClothing,readyOutfitPower,normalizeOutfitMagic,wearsVeilCloak} from '../public/outfit-magic.js';
 import {normalizeWardrobe,tailorQuote} from '../public/wardrobe.js';
 import {purchaseFurniture} from '../public/furniture-catalog.js';
 import {besideHomeSafe} from '../public/home-safe.js';
@@ -50,6 +50,15 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
   if(watchAction(state,action,body)||familiarAction(state,action,body,now,random))return;
   if(activityAction(state,action,body,now,random)||essenceAction(state,action,body))return;
   if(gamblingAction(state,action,body,now,random===Math.random?undefined:random))return;
+  if(action==='emberMend'){
+    available(state);
+    if(state.fishingCast||state.timberCut||state.bedRest||state.gambling?.round?.status==='playing')throw new Error('Choose Ember Mend after finishing your current activity.');
+    const power=readyOutfitPower(state,'emberMend',now);
+    if(state.health>=100)throw new Error('Your hearts are already full.');
+    state.health=Math.min(100,state.health+power.amount);
+    state.outfitMagic.readyAt.emberMend=now+power.cooldown;
+    return;
+  }
   if(action==='veil'){
     available(state);
     if(state.fishingCast||state.timberCut||state.gambling?.round?.status==='playing')throw new Error('Choose Veilstep after finishing your current activity.');
@@ -275,6 +284,7 @@ export function applyGameplayAction(state,action,body,now=Date.now(),random=Math
     const run=state.depthsRun;
     const reward=bankDepthsSpoils(state);
     awardVeilCloak(state,run,random);
+    awardChallengeClothing(state,run);
     state.goldEarned=Math.min(Number.MAX_SAFE_INTEGER,(state.goldEarned??0)+reward.gold);
     return;
   }

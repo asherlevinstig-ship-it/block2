@@ -499,7 +499,32 @@ let nextId = Math.max(0,...[...loungeFurniture,...homeFurniture].map(item=>item.
 let avatar = {...defaultAvatar,...(savedPlayerState?.avatar??load('avatar',defaultAvatar))};
 const wardrobe=normalizeWardrobe(savedPlayerState?.wardrobe,avatar);
 let outfitMagic=normalizeOutfitMagic(savedPlayerState?.outfitMagic);
-let veilBusy=false;
+let veilBusy=false,outfitPowerBusy=false;
+function updateOutfitPowersHud(now=combatNow()){
+ for(const [id,power] of Object.entries(outfitPowers)){
+  const button=$(id),worn=wearsClothing(wardrobe,power.item);
+  button.hidden=!worn;
+  if(!worn)continue;
+  const cooldown=Math.ceil((outfitMagic.readyAt[id]-now)/1000);
+  const context=power.combat&&!player.inCombat?'In combat':!power.combat&&player.inCombat?'After combat':null;
+  const full=!power.combat&&health>=100;
+  button.querySelector('.dock-label').textContent=cooldown>0?'Ready in '+cooldown+'s':context??power.name;
+  button.disabled=outfitPowerBusy||serverActionBusy||routineControlled()||cooldown>0||!!context||full;
+  button.title=power.name+' ('+power.key+') · '+(power.combat?'Restore dodge stamina in combat':'Restore health between fights');
+  button.setAttribute('aria-label',button.title);
+ }
+}
+async function useOutfitPower(id){
+ if($(id).disabled||outfitPowerBusy||!window.playerCloud?.gameplay)return;
+ outfitPowerBusy=true;updateOutfitPowersHud();
+ try{
+  if(outfitPowers[id].combat){await sendServerCombat(id);return;}
+  const before=health;
+  await serverGameplay(id);
+  showTransaction(outfitPowers[id].name,[{icon:'♥',text:'+'+(health-before)+' HP'}]);
+ }catch(error){note(error.message);}
+ finally{outfitPowerBusy=false;updateOutfitPowersHud();}
+}
 function updateVeilHud(now=combatNow()){
  const button=$('veilstep'),wearing=wearsVeilCloak(wardrobe);
  button.hidden=!wearing;
@@ -781,6 +806,7 @@ function renderDungeonLoot(){
   $('dungeonLootProgress').textContent=p.complete?'All three relics are yours.':weaponCatalog[p.target].name+' · '+p.streak+' / 5 toward a guaranteed drop · At most '+p.remaining+' more Sunken Vault clears';
   $('dungeonLootMeter').value=p.complete?5:p.streak;
   const cloakOwned=wardrobe.owned.includes(veilCloakId);
+  $('challengeClothingSources').textContent=Object.values(outfitPowers).map(power=>clothingCatalog[power.item].name+' · '+(wardrobe.owned.includes(power.item)?'Owned':'Defeat the '+power.guardian+' and bank a full Vault clear')).join(' • ');
   $('veilCloakSource').textContent=cloakOwned?'Veilweaver Cloak owned · Add it to an outfit in Inventory.'
     :'Rare clothing · Bank a full Vault clear after defeating the Cache Guardian on the dangerous passage. Veilweaver Cloak has an 8% drop chance and is guaranteed within '+(veilRules.guarantee-outfitMagic.cloakMisses)+' eligible clears.';
   $('dungeonLootInfo').textContent=activeDungeonDrop?(activeDungeonDrop.guaranteed?'Guaranteed drop earned. ':'Lucky drop! ')+'Already added to Inventory. Yours to keep; equipment stays unchanged until you choose.':'Every full Sunken Vault victory has a 15% chance to drop your chosen unowned relic. The fifth clear without a drop guarantees it. Progress carries across visits and target changes. No duplicate drops.';
@@ -1013,15 +1039,14 @@ function leaveMoonwellDepths(){
     return;
   }
   if(window.playerCloud?.gameplay){
-    const reward=depthsSpoils(depthsRun),ownedCloak=wardrobe.owned.includes(veilCloakId);
+    const reward=depthsSpoils(depthsRun),previousClothing=new Set(wardrobe.owned);
     serverGameplay('bank').then(result=>{
       depthsRun=null;
       enterRoom(result.state.location,result.state.position);
       const loot=Object.entries(reward.loot).map(([id,count])=>({icon:'✦',text:tradeCatalog[id].name+' ×'+count}));
-      if(!ownedCloak&&wardrobe.owned.includes(veilCloakId)){
-        loot.push({icon:'◆',text:'Rare loot · Veilweaver Cloak · Add it to an outfit in Inventory'});
-        showTransaction('Veilweaver Cloak found!',loot,reward.gold);
-      }else showTransaction('Moonwell Depths spoils banked',loot,reward.gold);
+      const rare=wardrobe.owned.filter(id=>clothingCatalog[id].loot&&!previousClothing.has(id));
+      for(const id of rare)loot.push({icon:'◆',text:clothingCatalog[id].name+' · Add it to an outfit in Inventory'});
+      showTransaction(rare.length===1?clothingCatalog[rare[0]].name+' found!':rare.length?'Rare clothing found!':'Moonwell Depths spoils banked',loot,reward.gold);
     }).catch(error=>{
       $('depthsBankError').textContent=error.message;
       $('depthsBankError').hidden=false;
@@ -4130,7 +4155,7 @@ function updateVitalsHud(){
  }
 }
 function advanceAnimation(time){
-  if(time-lastVitalsPaint>=250){updateVitalsHud();updateVeilHud();lastVitalsPaint=time;}
+  if(time-lastVitalsPaint>=250){updateVitalsHud();updateVeilHud();updateOutfitPowersHud();lastVitalsPaint=time;}
   updateBedRestPanel(time);
   if(!showVaultVictory()){showPendingDungeonLoot();showPendingCombatRecap();}
   if(serverActionBusy){draw(time);return;}
@@ -4298,7 +4323,7 @@ function bagEntries(){
   if(combatGear.stonebackVestOwned)entries.push({key:'vest',name:'Stoneback Vest',category:'gear',art:windowItemArt('vest'),quantity:1,equipped:combatGear.stonebackVestEquipped,description:'Crafted from the Stoneback Beetle’s shell.',stats:'Absorbs 4 damage · Dodge costs 50 stamina',action:combatGear.stonebackVestEquipped?'Remove vest':'Equip vest',disabled:unavailable(),run:toggleStonebackVest});
   for(const id of wardrobe.owned){
     const item=clothingCatalog[id],included=outfit[item.slot]===id;
-    entries.push({key:'clothing:'+id,name:item.name,category:'clothing',art:clothingArt(id),quantity:1,equipped:wardrobe.outfits.find(look=>look.id===wardrobe.active)[item.slot]===id,description:item.description??'Starter clothing. Yours to keep and reuse in any outfit.',stats:(item.loot?'Rare loot · Grants Veilstep':item.dress?'Full dress · Covers trousers':item.slot==='jacket'?'Top slot':item.slot[0].toUpperCase()+item.slot.slice(1)+' slot')+(item.slot==='trousers'&&clothingCatalog[outfit.jacket].dress?' · Hidden under this dress':'')+(!included?' · Replaces '+clothingCatalog[outfit[item.slot]].name:''),action:included?'In '+outfit.name:'Add to '+outfit.name,disabled:included,note:outfit.id===wardrobe.active?'You are wearing this outfit. Changes appear immediately.':'Wear this look from Wardrobe when you are ready.',run:()=>{addClothingToOutfit(wardrobe,outfit.id,id);applyWornOutfit();}});
+    entries.push({key:'clothing:'+id,name:item.name,category:'clothing',art:clothingArt(id),quantity:1,equipped:wardrobe.outfits.find(look=>look.id===wardrobe.active)[item.slot]===id,description:item.description??'Starter clothing. Yours to keep and reuse in any outfit.',stats:(item.loot?'Rare loot · Grants '+item.power:item.dress?'Full dress · Covers trousers':item.slot==='jacket'?'Top slot':item.slot[0].toUpperCase()+item.slot.slice(1)+' slot')+(item.slot==='trousers'&&clothingCatalog[outfit.jacket].dress?' · Hidden under this dress':'')+(!included?' · Replaces '+clothingCatalog[outfit[item.slot]].name:''),action:included?'In '+outfit.name:'Add to '+outfit.name,disabled:included,note:outfit.id===wardrobe.active?'You are wearing this outfit. Changes appear immediately.':'Wear this look from Wardrobe when you are ready.',run:()=>{addClothingToOutfit(wardrobe,outfit.id,id);applyWornOutfit();}});
   }
   for(const [type,name] of Object.entries(types)){
     const quantity=availableFurniture(type);if(!quantity)continue;
@@ -6048,7 +6073,10 @@ canvas.addEventListener('keydown',e=>{
   }
 });
 $('veilstep').onclick=useVeilstep;
+for(const id of Object.keys(outfitPowers))$(id).onclick=()=>useOutfitPower(id);
 document.addEventListener('keydown',e=>{
+  const outfitPower=Object.keys(outfitPowers).find(id=>e.code==='Key'+outfitPowers[id].key&&wearsClothing(wardrobe,outfitPowers[id].item));
+  if(outfitPower&&!e.target.matches('input,textarea,select,[contenteditable]')&&!document.querySelector('dialog[open]')){e.preventDefault();if(!e.repeat)useOutfitPower(outfitPower);return;}
   if(e.code==='KeyV'&&wearsVeilCloak(wardrobe)&&!e.target.matches('input,textarea,select,[contenteditable]')&&!document.querySelector('dialog[open]')){e.preventDefault();if(!e.repeat)useVeilstep();return;}
   if(e.code==='KeyG'&&familiarState.equipped&&!e.target.matches('input,textarea,select,[contenteditable]')&&!document.querySelector('dialog[open]')){e.preventDefault();if(!e.repeat)useFamiliar();return;}
   if(player.inCombat&&['Space','KeyF','KeyQ','KeyE'].includes(e.code)&&!e.target.matches('input,textarea,select')&&!document.querySelector('dialog[open]')){
@@ -6116,7 +6144,7 @@ function applyWornOutfit(){
   if(routineControlled())return;
   avatar=outfitAppearance(wardrobe,avatar);
   if(!wearsVeilCloak(wardrobe))outfitMagic.veilUntil=0;
-  updateVeilHud();save('avatar',avatar);updateName();savePlayerState();
+  updateVeilHud();updateOutfitPowersHud();save('avatar',avatar);updateName();savePlayerState();
 }
 function openClothingInventory(id){
   if($('avatarDialog').open)$('avatarDialog').close();

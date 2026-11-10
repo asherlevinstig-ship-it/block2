@@ -2,7 +2,7 @@ import {awardFamiliarBond} from './familiar-progression.mjs';
 import {cinderPounce} from './familiars.mjs';
 import {initializeAdds,addDueAt,spawnAddWave,addKinds,addEncounter,mergeAddEvent,advanceAddPosition,queueBossAdds,chooseAutoAddTarget} from '../public/dungeon-adds.js';
 import {initializeBrain,brainThinkEvent} from '../public/enemy-brain.js';
-import {activateVeil,outfitVeilUntil} from '../public/outfit-magic.js';
+import {activateVeil,outfitVeilUntil,readyOutfitPower} from '../public/outfit-magic.js';
 import {combatStamina} from '../public/hunting.js';
 import {arenaEnemy,arenaWarningAt,lockArenaAttack,arenaMoveEvent,dungeonCover} from '../public/dungeon-arena.js';
 import {enemyAttack} from '../public/hunting.js';
@@ -195,6 +195,16 @@ export function activityAction(state,action,body,now,random){
       const e=state.hunting.encounter,id=body.slot;
       if(id!=='leader'&&!e.adds.some(a=>a.id===id&&a.spawnAt<=now))throw new Error('Choose an active enemy.');
       e.combatTarget=id;e.manualTarget=true;state.combatReceipt={id:crypto.randomUUID(),events};return true;
+    }
+    if(state.hunting.encounter&&body.input==='secondWind'){
+      const power=readyOutfitPower(state,'secondWind',now),encounter=state.hunting.encounter;
+      const stamina=combatStamina(encounter,state.stats,now,state.combatGear.moonwellCharmEquipped);
+      if(stamina>=100)throw new Error('Your dodge stamina is already full.');
+      const restored=Math.min(power.amount,100-stamina);
+      state.outfitMagic.readyAt.secondWind=now+power.cooldown;
+      events.push(result(state,{action:'outfitPower',outcome:'fighting',health:state.health,damage:0,taken:0,
+        encounter:{...encounter,stamina:stamina+restored,staminaAt:now},power:power.name,powerColor:power.color,powerForm:'speed',
+        staminaRestored:Math.ceil(restored),effect:'restored '+Math.ceil(restored)+' dodge stamina'},now,random));
     }
     if(state.hunting.encounter&&body.input==='veil'){
       activateVeil(state,now);
