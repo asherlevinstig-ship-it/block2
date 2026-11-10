@@ -28,7 +28,7 @@ test('offline actor persists, walks, catches fish and stops when Auto ends',asyn
  const {db,sql}=testDatabase();t.after(()=>sql.close());const id='offline-fisher',now=Date.now();
  let s=normalizeState({location:'home',position:{x:5,y:7},credits:1000,fishingGear:{ownedRods:['reed'],equippedRod:'reed',bait:30},characterRules:simpleAutoRules('fishing')});
  s.adventure.discovered.push('pond');
- const put=()=>sql.prepare('INSERT OR REPLACE INTO tower_players VALUES (?, ?, 1, ?, ?)').run(id,JSON.stringify(s),'test',Date.now());put();
+ const put=()=>sql.prepare('INSERT OR REPLACE INTO tower_players VALUES (?, ?, 1, ?, ?)').run(id,JSON.stringify(s),'test',Date.now()-120000);put();
  const calls=[],env={TOWER_DB:db,SHARED_ROOMS:{idFromName:n=>n,get:n=>({fetch:async r=>{calls.push({room:n,...await r.json()});return Response.json({ok:true});}})}};
  const ctx=context(),actor=new AutoActor(ctx,env);await actor.fetch(sync(id));
  s.controlMode='auto';touchPresence(s,now,{active:false,forceStart:true});put();await actor.fetch(sync(id));
@@ -42,6 +42,7 @@ test('offline actor persists, walks, catches fish and stops when Auto ends',asyn
  assert.equal(s.plan.kind,'queue');s.plan.cursorAt-=120000;s.plan.nextAt-=120000;put();
  await restored.alarm();s=JSON.parse(sql.prepare('SELECT state_json FROM tower_players WHERE player_id=?').get(id).state_json);
  assert(Object.values(s.fishStock).reduce((a,b)=>a+b,0)>0,'offline alarm awards catches');
+ assert(calls.some(c=>c.events?.some(e=>e.kind==='catch')),'quiet periods between saves must not suppress a fresh offline catch');
  delete s.plan;s.controlMode='play';s.characterRules.enabled=false;put();await restored.fetch(sync(id));
  assert(!restored.actor.active);assert(calls.some(c=>c.remove));assert.equal(await restored.ctx.storage.getAlarm(),null);
 });
