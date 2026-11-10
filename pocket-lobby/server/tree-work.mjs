@@ -1,7 +1,8 @@
 import {forestTrees,roomTreeSnapshot,readSharedTree,treeKey,describeTreeCut} from './shared-trees.mjs';
 import {autoTilePath} from './auto-motion.mjs';
-import {cutTimberTree,choppingDuration,timberFacing} from '../public/woodcutting.js';
+import {cutTimberTree,choppingDuration,timberFacing,timberTreeRules} from '../public/woodcutting.js';
 import {useHunger,exertionDuration} from '../public/player-vitals.js';
+import {chooseAutoMeal,normalizeFoodPolicy} from '../public/food-policy.js';
 import {completeRoutineTimber} from './routine-queue.mjs';
 import {autoStoreVault} from './vault.mjs';
 
@@ -9,6 +10,23 @@ export function enablePhysicalTimber(state,env){
  if(env.SHARED_ROOMS&&env.TOWER_DB.batch&&state.plan?.source==='rules')state.plan.physicalTimber=true;
 }
 const isWood=p=>p?.kind==='woodcutting'||p?.kind==='queue'&&p.queue.steps[p.stepIndex]?.type==='woodcutting';
+const swingDuration=state=>exertionDuration(choppingDuration(state.woodcutting),state.vitals);
+function scheduleSwing(plan,work,tree,started,duration){
+ const {x,y}=work.tree;
+ work.cut={id:crypto.randomUUID(),key:tree.key,room:'logging',x,y,started,endsAt:started+duration,treeGeneration:tree.generation};
+ work.phase='chopping';plan.currentLabel='Chopping a tree';plan.plannerReason='Facing a real tree. Each completed cut grants timber; the third cut fells the shared tree.';
+}
+
+function canContinueTree(state,plan,work,mutation,now){
+ if(mutation.cuts>=timberTreeRules.cuts||plan.treeWork!==work||!isWood(plan)||plan.simpleMode==='random'||state.characterRules?.goal)return false;
+ const timber=state.woodcutting.timber;
+ if(timber>=1000000||timber+(state.bank?.vault?.items?.timber??0)>=(plan.timberTarget??Infinity))return false;
+ // Leave legacy shift deadlines and between-cut food decisions to normal settlement.
+ if(plan.kind==='woodcutting')return !(plan.nextCutAt>now);
+ const food=normalizeFoodPolicy(plan.foodPolicy??state.characterRules?.food);
+ return !(food.enabled&&state.health<food.eatBelow)&&!chooseAutoMeal(state,food);
+}
+
 export async function advanceTreeWork(env,state,now,motion){
  const p=state.plan;if(!p?.physicalTimber||!isWood(p))return null;
  const work=p.treeWork??={phase:'choose'};
@@ -22,9 +40,13 @@ export async function advanceTreeWork(env,state,now,motion){
   if(!amount)return null;
   useHunger(state);state.timberReceipt={id:cut.id,key:shared.key,amount,xp:state.woodcutting.xp-xp,at:now,room:'logging',tree:{x:work.tree.x,y:work.tree.y}};
   const mutation=describeTreeCut(state,{...shared,room:'logging',tree:work.tree,at:now,fallDirection:timberFacing({cx:motion.x,cy:motion.y},work.tree).direction==='right'?1:-1},cut.id);
-  delete work.cut;work.phase=mutation.cuts===3?'choose':'walking';
+  delete work.cut;work.phase=mutation.cuts===timberTreeRules.cuts?'choose':'walking';
   if(p.kind==='queue')completeRoutineTimber(state,amount,state.woodcutting.xp-xp,now);
   else{p.timber+=amount;p.xp+=state.woodcutting.xp-xp;autoStoreVault(state,p,now);}
+  // Record the next swing with this cut while keeping the normal pause.
+  // The next award still checks the shared tree and commits atomically.
+  const started=now+2000,duration=swingDuration(state);
+  if(started+duration<p.endAt&&canContinueTree(state,p,work,mutation,now))scheduleSwing(p,work,shared,started,duration);
   return mutation;
  }
  if(work.phase==='waiting'&&now<work.readyAt)return null;
@@ -46,8 +68,7 @@ export async function advanceTreeWork(env,state,now,motion){
   if(!motion||motion.room!=='logging'||motion.x!==work.stand.x||motion.y!==work.stand.y)return null;
   const shared=await readSharedTree(env.TOWER_DB,'logging',work.tree,now);
   if(shared.regrowsAt){work.phase='choose';return null;}
-  work.cut={id:crypto.randomUUID(),key:shared.key,room:'logging',x:work.tree.x,y:work.tree.y,started:now,endsAt:now+exertionDuration(choppingDuration(state.woodcutting),state.vitals),treeGeneration:shared.generation};
-  work.phase='chopping';p.currentLabel='Chopping a tree';p.plannerReason='Facing a real tree. Each completed cut grants timber; the third cut fells the shared tree.';
+  scheduleSwing(p,work,shared,now,swingDuration(state));
  }
  return null;
 }

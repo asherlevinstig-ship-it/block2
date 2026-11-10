@@ -638,7 +638,7 @@ function drawRemote(peer,time){
   const now=combatNow(),cut=peer.chopping;
   const cast=!moving&&(fishingView(peer.fishingLanding,currentRoom,now,time)??fishingView(peer.fishing,currentRoom,now,time));
   const fishingPhase=cast?fishingMoments.phase(cast,time):null;
-  const chopping=!moving&&cut?.room===currentRoom&&now<cut.endsAt+400&&Math.abs(peer.x-cut.x)+Math.abs(peer.y-cut.y)===1;
+  const chopping=!moving&&cut?.room===currentRoom&&now>=cut.started&&now<cut.endsAt+400&&!(sharedTimber.get(cut.key)?.regrowsAt>now)&&Math.abs(peer.x-cut.x)+Math.abs(peer.y-cut.y)===1;
   const facing=chopping?timberFacing({cx:peer.x,cy:peer.y},cut):cast?{direction:'right',back:false}:peer;
   sprite(ctx,x,y,{outfit:peer.outfit,trousers:peer.trousers,boots:peer.boots,hair:peer.hair},{direction:facing.direction,back:facing.back,cycle:moving?time/STEP_MS:0,seated:!!peer.seat,wave:waveAge>=0&&waveAge<WAVE_MS?waveAge/WAVE_MS:null,weapon:chopping,sheathed:!chopping&&!cast&&!!peer.weapon,weaponTier:chopping?'basicAxe':peer.weapon,pose:chopping?{chop:choppingPhase(cut,now)}:undefined,vest:peer.armour,fishing:fishingPhase,fishingAge:cast?time-cast.started:0,time});
   if(cast)drawFishingMoment(x,y,time,cast,{y:peer.ry,...facing});
@@ -6481,10 +6481,10 @@ function autoActivityAnimation(time){
     return {task:'fishing',cast};
   }
   if(task==='woodcutting'&&plan.physicalTimber){
-    const cut=plan.treeWork?.cut,tree=cut&&roomFurniture().find(item=>isTimberTree(item)&&item.x===cut.x&&item.y===cut.y);
-    if(!tree||Math.abs(player.cx-tree.x)+Math.abs(player.cy-tree.y)!==1||treeState(tree).regrowsAt||combatNow()>cut.endsAt+400)return null;
+    const now=combatNow(),cut=plan.treeWork?.cut,tree=cut&&roomFurniture().find(item=>isTimberTree(item)&&item.x===cut.x&&item.y===cut.y);
+    if(!tree||now<cut.started||now>cut.endsAt+400||Math.abs(player.cx-tree.x)+Math.abs(player.cy-tree.y)!==1||treeState(tree).regrowsAt)return null;
     Object.assign(player,timberFacing(player,tree));
-    return {task,tree,automatic:true,started:time+cut.started-combatNow(),duration:cut.endsAt-cut.started};
+    return {task,tree,automatic:true,started:time+cut.started-now,duration:cut.endsAt-cut.started};
   }
   const key=autoActivityKey(state);
   if(autoWorkAnimation?.key!==key){

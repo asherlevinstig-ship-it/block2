@@ -46,6 +46,9 @@ export async function writeTreePlayer(db,id,revision,state,operation,mutation){
   if(mutation.cuts===3)mutation.regrowsAt=now+timberTreeRules.regrowMs;
   state.woodcutting.trees??={};state.woodcutting.trees[mutation.key]={cuts:mutation.cuts,regrowsAt:mutation.regrowsAt};
   if(mutation.cuts===3&&state.timberCut?.key===mutation.key)delete state.timberCut;
+  // A retry can turn a standing-tree hit into the final cut.
+  const work=state.plan?.treeWork;
+  if(mutation.cuts===3&&work?.cut?.key===mutation.key){delete work.cut;work.phase='choose';}
   if(state.timberReceipt?.id===mutation.cutId)Object.assign(state.timberReceipt,{at:now,felled:mutation.cuts===3,room:mutation.room,tree:{x:mutation.tree.x,y:mutation.tree.y}});
   const result=await db.batch([
    db.prepare('UPDATE tower_trees SET cuts=?,regrows_at=?,generation=?,version=version+1,hit_at=?,fall_direction=?,last_cut_id=?,last_player_id=? WHERE tree_key=? AND version=? AND generation=? AND (regrows_at=0 OR regrows_at<=?) AND EXISTS (SELECT 1 FROM tower_players WHERE player_id=? AND revision=?)').bind(mutation.cuts,mutation.regrowsAt,generation,now,mutation.fallDirection,mutation.cutId,id,mutation.key,mutation.version,mutation.generation,now,id,revision),
