@@ -35,6 +35,10 @@ function nextStep(plan,at,note){
   plan.cursorAt=at;plan.nextAt=null;plan.stepCount=0;plan.stepIndex++;
   if(plan.stepIndex===plan.queue.steps.length){plan.stepIndex=0;plan.cycle++;}
 }
+export function completeRoutineTimber(state,amount,xp,at){
+ const p=state.plan;p.woodXp+=xp;p.timber+=amount;p.stepCount+=amount;p.cursorAt=at;p.nextAt=null;autoStoreVault(state,p,at);
+ if(p.stepCount>=p.queue.steps[p.stepIndex].amount){delete p.treeWork;nextStep(p,at,'Gathered '+p.stepCount+' timber from real trees');}
+}
 export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={}){
   const p=state.plan,until=Math.min(now,p.endAt);let changed=false;
   if(!p.adaptive&&!p.activeHunt&&resolveQueueGoal(state,p,p.cursorAt))return finish(state,p,'goal-reached',p.cursorAt);
@@ -48,6 +52,7 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
     p.preflightComplete=true;changed=true;
   }
   for(let guard=0;guard<10000;guard++){
+    if(p.physicalTimber&&p.treeWork?.cut&&!stop&&now<p.endAt)return changed;
     if(p.activeHunt){
       let events=advanceServerCombat(state,until,random);if(events.length)changed=true;
       if(state.hunting.encounter&&(stop||now>=p.endAt)){p.returnRequested=true;p.stopReason=now>=p.endAt?'away-cap':'returned';changed=true;
@@ -91,6 +96,16 @@ export function settleRoutineQueue(state,now,{stop=false,random=Math.random}={})
     }
     if(p.cycle>=p.queue.repeats)return finish(state,p,'queue-complete',p.cursorAt);
     const step=p.queue.steps[p.stepIndex],type=step.type;
+    if(type!=='woodcutting')delete p.treeWork;
+    if(p.physicalTimber&&type==='woodcutting'&&(stop||now>=p.endAt))return finish(state,p,stop?'returned':'away-cap',until);
+    if(p.physicalTimber&&type==='woodcutting'&&!stop&&now<p.endAt){
+      if(!state.woodcutting.axeOwned||!state.woodcutting.equipped)return finish(state,p,'requirements',p.cursorAt);
+      if(state.woodcutting.timber>=1000000)return finish(state,p,'inventory-full',p.cursorAt);
+      if(state.woodcutting.timber+(state.bank?.vault?.items?.timber??0)>=p.timberTarget){delete p.treeWork;nextStep(p,p.cursorAt,'Timber target reached');changed=true;continue;}
+      if(!p.treeWork){p.treeWork={phase:'choose'};state.location='logging';state.position={x:5,y:5};changed=true;}
+      p.nextAt=null;
+      return changed;
+    }
     if(p.nextAt===null){
       if(p.cursorAt>until||p.cursorAt===until&&!p.adaptive)break;
       if(p.simpleMode!=='random'&&(type==='fishing'||type==='woodcutting'||Object.hasOwn(queueHuntEnemies,type))){

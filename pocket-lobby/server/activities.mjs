@@ -170,9 +170,11 @@ export function activityAction(state,action,body,now,random){
     if(action==='cut'){
       const cut=state.timberCut;
       if(!cut||cut.id!==body.cutId||cut.key!==key||now<cut.endsAt)throw new Error('Invalid cut timing. Finish chopping this tree first.');
+      const xp=wood.xp;
       let amount=cutTimberTree(wood,now,key);if(amount&&state.location==='thornwood')amount+=harvestTimber(wood);useHunger(state);
-      state.timberReceipt={id:cut.id,key,amount};delete state.timberCut;
-      if(timberTreeState(wood,now,key).regrowsAt)return true;
+      const felled=!!timberTreeState(wood,now,key).regrowsAt;
+      state.timberReceipt={id:cut.id,key,amount,xp:wood.xp-xp,at:now,room:state.location,felled};delete state.timberCut;
+      if(felled||wood.timber>=1000000)return true;
     }
     if(state.timberCut?.key!==key)state.timberCut={id:crypto.randomUUID(),key,started:now,endsAt:now+exertionDuration(choppingDuration(wood),state.vitals)};
     return true;

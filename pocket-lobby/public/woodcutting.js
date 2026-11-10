@@ -32,6 +32,17 @@ export function timberFacing(player,tree){
   const dx=tree.x-player.cx,dy=tree.y-player.cy;
   return {direction:dx-dy>=0?'right':'left',back:dx+dy<0};
 }
+export function choppingPose(state){
+ const cut=state.plan?.treeWork?.cut??state.timberCut;if(!cut)return null;
+ const [room,coordinate]=cut.key.split(':'),[x,y]=coordinate.split(',').map(Number);
+ return {id:cut.id,key:cut.key,room,x,y,started:cut.started,endsAt:cut.endsAt};
+}
+export function choppingPhase(cut,now){
+ const duration=Math.max(1,cut.endsAt-cut.started),cycles=Math.max(1,Math.ceil(duration/900)),elapsed=Math.max(0,now-cut.started);
+ // Light preparatory swings finish with the damaging contact at the server deadline.
+ if(elapsed>=duration)return Math.min(.999,.65+(elapsed-duration)/350);
+ return (elapsed/duration*(cycles-1+.65))%1;
+}
 
 export function normalizeWoodcutting(input={}){
   if(!input||typeof input!=='object'||Array.isArray(input))throw new Error('Invalid woodcutting state.');

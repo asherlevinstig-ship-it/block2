@@ -18,6 +18,11 @@ export function settleWoodcuttingPlan(state,now,{stop=false}={}){
   const plan=state.plan;if(!plan||plan.kind!=='woodcutting')return false;
   const wood=state.woodcutting=normalizeWoodcutting(state.woodcutting);
   const until=Math.min(now,plan.endAt);
+  if(plan.physicalTimber){
+    const reached=wood.timber+(state.bank?.vault?.items?.timber??0)>=(plan.timberTarget??Infinity);
+    if(stop||now>=plan.endAt||wood.timber>=1000000||reached){state.report={...plan,endedAt:until,reason:wood.timber>=1000000?'inventory-full':stop?'stopped':reached?'target-reached':'time-limit',levelAfter:woodcuttingLevel(wood)};delete state.plan;state.location='home';state.position={x:5,y:7};return true;}
+    if(!plan.treeWork){plan.treeWork={phase:'choose'};return true;}return false;
+  }
   let changed=false,foodStop=null;
   while(plan.nextCutAt<=until&&wood.timber<1000000){
     const at=plan.nextCutAt,amount=harvestTimber(wood,1);

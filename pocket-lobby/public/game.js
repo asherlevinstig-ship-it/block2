@@ -115,9 +115,26 @@ let fishingStarted=null;
 let fishingSession=null,catchReveal=null,patienceTween=null;
 const woodcutting=normalizeWoodcutting(savedPlayerState?.woodcutting);
 let woodSession=null,treeFall=null,lastTreeCountdown=-1,selectedTimber=null;
+const sharedTimber=new Map();
+function receiveTrees(snapshot){
+  if(!snapshot||snapshot.room!==currentRoom)return;
+  const time=performance.now();
+  for(const [key,tree] of Object.entries(snapshot.trees)){
+    const previous=sharedTimber.get(key);
+    if(previous&&(previous.version>tree.version||previous.version===tree.version&&previous.serverTime>=snapshot.serverTime))continue;
+    const age=snapshot.serverTime-tree.hitAt;
+    const impactAt=tree.version===previous?.version?previous.impactAt:tree.hitAt&&age>=0&&age<timberTreeRules.fallMs?time-age:-Infinity;
+    sharedTimber.set(key,{...tree,impactAt,serverTime:snapshot.serverTime,localTime:time});
+  }
+  updateWoodPanel();
+}
 function timberTree(){return moonwood.layouts.logging.scenery.find(item=>item.type==='timberTree');}
 const timberKey=item=>currentRoom+':'+item.x+','+item.y;
-const treeState=item=>timberTreeState(woodcutting,Date.now(),timberKey(item));
+const treeState=item=>{
+  const key=timberKey(item),shared=sharedTimber.get(key);
+  if(!shared)return timberTreeState(woodcutting,Date.now(),key);
+  return timberTreeState({trees:{[key]:shared}},shared.serverTime+performance.now()-shared.localTime,key);
+};
 const focusedTimber=()=>selectedTimber??(currentRoom==='logging'?timberTree():null);
 const treeCountdown=item=>item?Math.max(0,Math.ceil((treeState(item).regrowsAt-Date.now())/1000)):0;
 function updateTreeStatus(){
@@ -171,13 +188,14 @@ async function completeServerTimber(session,time){
   try{
     const packet=await serverGameplay('cut',{cutId:session.cutId,x:session.tree.x,y:session.tree.y});
     if(woodSession!==session)return;
-    const amount=packet.state.timberReceipt.amount,felled=!!treeState(session.tree).regrowsAt;
+    const receipt=packet.state.timberReceipt,amount=receipt.amount,felled=receipt.felled??!!treeState(session.tree).regrowsAt;
     woodSession=null;
-    if(felled)treeFall={key,started:performance.now(),direction:player.direction==='right'?1:-1};
+    if(felled){if(!sharedTimber.has(key))treeFall={key,started:performance.now(),direction:player.direction==='right'?1:-1};}
     else restoreServerTimber(packet.state.timberCut,packet.serverTime,session.tree);
+    const xp=receipt.xp??woodRules.xp*amount;
     showTransaction(felled?'Timber! Tree felled':woodcuttingLevel(woodcutting)>oldLevel?'Woodcutting level '+woodcuttingLevel(woodcutting)+'!':'Timber gathered',[
-      {icon:'▤',text:'Timber +'+amount},{icon:'✦',text:'+'+woodRules.xp*amount+' Woodcutting XP'}]);
-    note(felled?'Timber! The tree will regrow in 30 seconds.':'Timber +'+amount+' · +'+woodRules.xp*amount+' Woodcutting XP.');
+      {icon:'▤',text:'Timber +'+amount},{icon:'✦',text:'+'+xp+' Woodcutting XP'}]);
+    note(felled?'Timber! The tree will regrow in 30 seconds.':'Timber +'+amount+' · +'+xp+' Woodcutting XP.');
     savePlayerState();
   }catch(error){woodSession=null;updateWoodPanel();note(error.message);}
 }
@@ -229,7 +247,8 @@ function woodAction(){
 function drawWoodEffects(time){
   const automatic=autoActivityAnimation(time),session=woodSession??(automatic?.task==='woodcutting'?automatic:null);
   if(!session?.tree||reducedMotion.matches)return;
-  const phase=((time-session.started)%(session.automatic?1000:700))/(session.automatic?1000:700);
+  if(sharedTimber.has(timberKey(session.tree)))return; // Shared hits draw their chips on the tree.
+  const phase=choppingPhase({started:session.started,endsAt:session.started+(session.duration??5000)},time);
   if(phase<.55||phase>.9)return;
   const scatter=(phase-.55)/.35,side=player.direction==='right'?-1:1;
   const tree=session.tree,[x,y]=point(tree.x+.5,tree.y+.5,12);
@@ -242,15 +261,17 @@ function drawWoodEffects(time){
 
 function drawTimberTree(item,time){
   const tree=treeState(item);
+  const shared=sharedTimber.get(timberKey(item)),hitAge=time-(shared?.impactAt??-Infinity);
   const [x,y]=point(item.x+.5,item.y+.5);
   const drawTree=()=>moonwood.drawProp(item,time,{...worldDrawing,ctx,reduced:reducedMotion.matches,progress:adventure});
   if(tree.regrowsAt){
-    const fall=treeFall?.key===timberKey(item)?Math.min(1,Math.max(0,(time-treeFall.started)/timberTreeRules.fallMs)):1;
+    const falling=shared?{started:shared.impactAt,direction:shared.fallDirection}:treeFall?.key===timberKey(item)?treeFall:null;
+    const fall=falling?Math.min(1,Math.max(0,(time-falling.started)/timberTreeRules.fallMs)):1;
     if(fall<1&&!reducedMotion.matches){
       ctx.save();
       try{
         ctx.translate(x,y-5);
-        ctx.rotate(treeFall.direction*Math.PI/2*fall*fall);
+        ctx.rotate(falling.direction*Math.PI/2*fall*fall);
         ctx.translate(-x,-y+5);
         ctx.globalAlpha=1-Math.max(0,(fall-.7)/.3);
         drawTree();
@@ -258,10 +279,11 @@ function drawTimberTree(item,time){
     }
     block(item.x+.30,item.y+.31,.40,.38,0,6,['#ddba84','#785741','#9d7252']);
     rect(x-3,y-7,6,1,'#aa7a50');
+    drawTimberImpact(x,y,hitAge,shared?.fallDirection);
     return;
   }
-  const phase=woodSession?.tree===item?((time-woodSession.started)%700)/700:0;
-  const impact=phase>=.55&&phase<.72&&!reducedMotion.matches;
+  const phase=woodSession?.tree===item?choppingPhase({started:woodSession.started,endsAt:woodSession.started+woodSession.duration},time):0;
+  const impact=(shared?hitAge>=0&&hitAge<140:phase>=.55&&phase<.72)&&!reducedMotion.matches;
   ctx.save();
   try{
     if(impact)ctx.translate(player.direction==='right'?1:-1,0);
@@ -272,6 +294,14 @@ function drawTimberTree(item,time){
       rect(x-Math.floor(width/2),y-10,width,1,'#734d42');
     }
   }finally{ctx.restore();}
+  drawTimberImpact(x,y,hitAge,shared?.fallDirection);
+}
+function drawTimberImpact(x,y,age,direction=1){
+  if(reducedMotion.matches||age<0||age>=480)return;
+  const progress=age/480;
+  ctx.save();ctx.globalAlpha=1-progress;
+  for(let i=0;i<7;i++)rect(x-direction*(4+progress*(8+i*3)),y-14-i+progress*progress*(12+i*2)-Math.sin(progress*Math.PI)*7,i%2?2:3,2,i%2?'#eac38b':'#a86b41');
+  ctx.restore();
 }
 
 
@@ -557,7 +587,7 @@ const remotePeers=new Map();
 const worldActivityTracker=typeof createWorldActivityTracker==='function'?createWorldActivityTracker(savedPlayerState):null;
 const worldFloats=[],worldFloatSeen=new Set();
 function addWorldFloat(actor,event){
- if(!event||event.room!==currentRoom||!['gold','loss','push','catch','damage','heal','dodge'].includes(event.kind)||typeof event.id!=='string'||typeof event.label!=='string'||event.label.length>100)return;
+ if(!event||event.room!==currentRoom||!['gold','loss','push','catch','timber','damage','heal','dodge'].includes(event.kind)||typeof event.id!=='string'||typeof event.label!=='string'||event.label.length>100)return;
  if(actor!=='self'&&!remotePeers.has(actor))return;
  const key=actor+':'+event.id;if(worldFloatSeen.has(key))return;worldFloatSeen.add(key);if(worldFloatSeen.size>500)worldFloatSeen.delete(worldFloatSeen.values().next().value);
  const existing=worldFloats.filter(f=>f.actor===actor);if(existing.length>=4){existing[0].node.remove();worldFloats.splice(worldFloats.indexOf(existing[0]),1);}
@@ -598,10 +628,13 @@ function drawRemote(peer,time){
   surface(peer.rx+.2,peer.ry+.25,.6,.55,.2,'#43324452');
   const moving=Math.hypot(peer.x-peer.rx,peer.y-peer.ry)>.03,waveAge=Date.now()-(peer.waveAt??0);
   ctx.save();if((peer.hurtUntil??0)>time)ctx.globalAlpha=.55;
-  sprite(ctx,x,y,{outfit:peer.outfit,trousers:peer.trousers,boots:peer.boots,hair:peer.hair},{direction:peer.direction,back:peer.back,cycle:moving?time/STEP_MS:0,seated:!!peer.seat,wave:waveAge>=0&&waveAge<WAVE_MS?waveAge/WAVE_MS:null,sheathed:!!peer.weapon,weaponTier:peer.weapon,vest:peer.armour,fishing:isFishingRoom(currentRoom)&&peer.activity==='fishing'&&!moving?'waiting':null,fishingAge:time,time});
+  const now=combatNow(),cut=peer.chopping;
+  const chopping=!moving&&cut?.room===currentRoom&&now<cut.endsAt+400&&Math.abs(peer.x-cut.x)+Math.abs(peer.y-cut.y)===1;
+  const facing=chopping?timberFacing({cx:peer.x,cy:peer.y},cut):peer;
+  sprite(ctx,x,y,{outfit:peer.outfit,trousers:peer.trousers,boots:peer.boots,hair:peer.hair},{direction:facing.direction,back:facing.back,cycle:moving?time/STEP_MS:0,seated:!!peer.seat,wave:waveAge>=0&&waveAge<WAVE_MS?waveAge/WAVE_MS:null,weapon:chopping,sheathed:!chopping&&!!peer.weapon,weaponTier:chopping?'basicAxe':peer.weapon,pose:chopping?{chop:choppingPhase(cut,now)}:undefined,vest:peer.armour,fishing:isFishingRoom(currentRoom)&&peer.activity==='fishing'&&!moving?'waiting':null,fishingAge:time,time});
   if(isFishingRoom(currentRoom)&&peer.activity==='fishing'&&!moving)drawFishingMoment(x,y,time,{started:time-2000,castEnds:time-1500,biteAt:Infinity,landAt:Infinity},{y:peer.ry,direction:peer.direction,back:peer.back});
   const familiar=drawFollowingFamiliar(peer.id,peer.familiar,peer.rx,peer.ry,peer.direction,time);
-  const activity=peer.activity==='combat'?Array.from({length:5},(_,i)=>peer.health>i*20?'♥':'♡').join(''):peer.activity==='fishing'?'Fishing':peer.activity==='gambling'?'Gambling':'';
+  const activity=chopping?'Chopping':peer.activity==='combat'?Array.from({length:5},(_,i)=>peer.health>i*20?'♥':'♡').join(''):peer.activity==='fishing'?'Fishing':peer.activity==='gambling'?'Gambling':'';
   renderedActors.push({id:peer.id,name:peer.name,activity,x,y:y-(peer.seat?30:43),familiar,familiarName:peer.familiarName});
   ctx.restore();
 }
@@ -3245,8 +3278,9 @@ function draw(time){
     const cycle=step?(player.stride%2)+Math.min(1,(time-step.started)/STEP_MS):0;
     const wave=player.waveStarted===null?null:(time-player.waveStarted)/WAVE_MS;
     const pose=playerCombatPose({time,now:combatNow(),encounter:player.inCombat?hunting.encounter:null,events:combatArt,reduced:reducedMotion.matches});
-    const automatic=autoActivityAnimation(time),autoChop=automatic?.task==='woodcutting',cast=fishingSession??(automatic?.task==='fishing'?automatic.cast:null);
-    const swingPhase=autoChop?((time-automatic.started)%1000)/1000:woodSession?((time-woodSession.started)%700)/700:0;
+    const automatic=autoActivityAnimation(time),autoChop=automatic?.task==='woodcutting'&&!!automatic.tree,cast=fishingSession??(automatic?.task==='fishing'?automatic.cast:null);
+    const chopping=woodSession??(autoChop?automatic:null);
+    const swingPhase=chopping?choppingPhase({started:chopping.started,endsAt:chopping.started+(chopping.duration??5000)},time):0;
     const spritePose=woodSession||autoChop?{...pose,chop:swingPhase}:pose;
     const foe=combatTargetTile(hunting.encounter);const [enemyX,enemyY]=point(foe.x+.5,foe.y+.5);
     const thrust=enemy?pose.lunge-pose.recoil:0;
@@ -4610,6 +4644,7 @@ function updatePlayerStats(){
   $('fishingStats').textContent='Patience '+level+' · '+xp+'/'+target+' XP · Bait '+fishingGear.bait+' · Fish '+caughtFishCount()+'\nQuality chances · Common '+odds.common.toFixed(1)+'% · Fine '+odds.fine.toFixed(1)+'% · Rare '+odds.rare.toFixed(1)+'%'+(luck.rare?'\nLuck bonus · '+luckText:'');
 }
 function applyServerGameplay(state){
+  receiveTrees(state.sharedTrees);
   const floats=worldActivityTracker?.update(state,window.playerCloud?.serverTime??Date.now())??[];
   if(!document.hidden)for(const event of floats)if(!['damage','heal','dodge'].includes(event.kind))addWorldFloat('self',event);
   credits=state.credits;goldEarned=state.goldEarned??0;Object.assign(firstUpgrade,state.firstUpgrade);
@@ -6419,6 +6454,12 @@ function autoActivityKey(state){const p=state?.plan;return [state?.location,p?.r
 function autoActivityAnimation(time){
   const state=window.playerCloud?.initial,plan=state?.plan,task=autoTaskFor(plan);
   if(!plan||autoJourney||step||route.length||currentRoom!==state.location){autoWorkAnimation=null;return null;}
+  if(task==='woodcutting'&&plan.physicalTimber){
+    const cut=plan.treeWork?.cut,tree=cut&&roomFurniture().find(item=>isTimberTree(item)&&item.x===cut.x&&item.y===cut.y);
+    if(!tree||Math.abs(player.cx-tree.x)+Math.abs(player.cy-tree.y)!==1||treeState(tree).regrowsAt||combatNow()>cut.endsAt+400)return null;
+    Object.assign(player,timberFacing(player,tree));
+    return {task,tree,automatic:true,started:time+cut.started-combatNow(),duration:cut.endsAt-cut.started};
+  }
   const key=autoActivityKey(state);
   if(autoWorkAnimation?.key!==key){
     autoWorkAnimation={key,task,started:time,automatic:true,catches:{...plan.catches},cast:null};
@@ -6443,7 +6484,7 @@ function autoRoomRoute(from,to){
   return null;
 }
 function autoWorkTile(state){
-  if(state.autoPresence?.moving){const goal=state.position,path=walkingPath(startPosition(),goal);return path?{...goal,path}:null;}
+  if(state.autoPresence?.moving||state.plan?.physicalTimber&&state.plan.treeWork){const goal=state.position,path=walkingPath(startPosition(),goal);return path?{...goal,path}:null;}
   const task=state.plan?.kind==='queue'?state.plan.queue?.steps?.[state.plan.stepIndex]?.type:state.plan?.kind;
   const interactionType=task==='buyBread'?'foodStall':task==='buyBait'?'tackleCounter':task?.startsWith('sell')?'tradeCounter':task?.startsWith('cook')?'stove':null;
   const item=interactionType?roomFurniture().find(i=>i.type===interactionType):task==='woodcutting'?roomFurniture().filter(i=>isTimberTree(i)&&!treeState(i).regrowsAt).sort((a,b)=>Math.abs(a.x-player.cx)+Math.abs(a.y-player.cy)-Math.abs(b.x-player.cx)-Math.abs(b.y-player.cy))[0]:null;
@@ -6493,15 +6534,23 @@ window.towerAutoTravelStatus=()=>autoJourney?{destination:roomDetails[autoJourne
 const autoFeedbackTracker=typeof createAutoFeedbackTracker==='function'?createAutoFeedbackTracker(savedPlayerState):null;
 let autoTableState=null,autoTableServerAt=0,autoTableLocalAt=0,autoTableKey='',autoFishingKey='';
 function renderAutoTable(time){
- const fishing=typeof autoFishingProgress==='function'?autoFishingProgress(autoTableState,autoTableServerAt+Math.max(0,time-autoTableLocalAt)):null;
+ const now=autoTableServerAt+Math.max(0,time-autoTableLocalAt);
+ const cut=autoTableState?.plan?.treeWork?.cut,tree=cut&&sharedTimber.get(cut.key);
+ const wood=cut&&currentRoom===cut.room&&!autoJourney?{
+   label:'Next cut',seconds:Math.max(0,Math.ceil((cut.endsAt-now)/1000)),
+   progress:Math.max(0,Math.min(100,100*(now-cut.started)/Math.max(1,cut.endsAt-cut.started))),
+   detail:(timberTreeRules.cuts-(tree?.cuts??0))+' cuts left · '+(autoTableState.plan.timber??0)+' timber gathered',
+   intervalSeconds:Math.round((cut.endsAt-cut.started)/1000),waiting:now>=cut.endsAt
+ }:null;
+ const fishing=wood??(typeof autoFishingProgress==='function'?autoFishingProgress(autoTableState,now):null);
  $('autoWorkProgress').hidden=!fishing;
  const fishingKey=fishing?[fishing.label,fishing.seconds,fishing.detail,fishing.intervalSeconds].join(':'):'';
  if(!fishing)autoFishingKey='';
  if(fishing&&fishingKey!==autoFishingKey){
   autoFishingKey=fishingKey;
   $('autoWorkLabel').textContent=fishing.label;$('autoWorkCountdown').textContent=fishing.seconds>0?fishing.seconds+'s':'';
-  $('autoCastProgress').value=fishing.progress;$('autoCastProgress').setAttribute('aria-valuetext',fishing.seconds>0?fishing.seconds+' seconds until the next catch':fishing.label);
-  $('autoCatchCount').textContent=fishing.detail;$('autoCastSpeed').textContent='Auto catch · About '+fishing.intervalSeconds+' seconds per fish';
+  $('autoCastProgress').value=fishing.progress;$('autoCastProgress').setAttribute('aria-valuetext',fishing.seconds>0?fishing.seconds+' seconds until the next '+(wood?'cut':'catch'):fishing.label);
+  $('autoCatchCount').textContent=fishing.detail;$('autoCastSpeed').textContent=wood?'Auto chopping · About '+fishing.intervalSeconds+' seconds per cut':'Auto catch · About '+fishing.intervalSeconds+' seconds per fish';
   $('autoWorkProgress').dataset.waiting=String(fishing.waiting);
  }
  if(typeof autoTableView!=='function')return;
@@ -6538,7 +6587,8 @@ window.towerApplyRoutineState=(state,{reconcile=false}={})=>{
   }
   autoTableState=state;autoTableServerAt=serverNow;autoTableLocalAt=performance.now();autoTableKey='';renderAutoTable(autoTableLocalAt);
   for(const event of feedback)showTransaction(event.title,[{icon:event.outcome==='win'?'✦':event.outcome==='lose'?'♠':'↻',text:event.detail},...(event.banked?[{icon:'◈',text:event.banked+' gold saved to your safe'}]:[])],event.gold,{auto:true,outcome:event.outcome,walletDelta:event.walletDelta});
-  const alreadyThere=currentRoom===state.location&&!step&&!route.length&&(autoArrivalKey===autoActivityKey(state)||Math.abs(player.cx-(state.position?.x??player.cx))+Math.abs(player.cy-(state.position?.y??player.cy))===0);
+  const matchesTile=Math.abs(player.cx-(state.position?.x??player.cx))+Math.abs(player.cy-(state.position?.y??player.cy))===0;
+  const alreadyThere=currentRoom===state.location&&!step&&!route.length&&(matchesTile||!state.plan?.treeWork&&autoArrivalKey===autoActivityKey(state));
   if(!alreadyThere||autoJourney){if(!autoJourney||autoJourney.room!==state.location){route=[];target=null;}autoJourney={room:state.location,blocked:false};setPlayerCombat(false);}
   else {autoArrivalKey=autoActivityKey(state);setPlayerCombat(!!state.plan?.activeHunt&&!!hunting.encounter);}
   if(state.combatReceipt&&state.combatReceipt.id!==lastCombatReceipt){lastCombatReceipt=state.combatReceipt.id;if(!autoJourney)for(const event of state.combatReceipt.events??[])if((window.playerCloud?.serverTime??Date.now())-(event.at??0)<2500)recordCombatFx(combatArt,event,performance.now());}
@@ -6552,6 +6602,7 @@ function openTrainingCourtyard(){
 }
 if(typeof initializeTrainingCourtyard==='function')trainingController=initializeTrainingCourtyard({getState:()=>({...currentGoalState(),avatar,stats:playerStats,combatGear}),canOpen:()=>currentRoom==='outside'&&!unavailable()&&!window.playerCloud?.initial?.plan&&!window.playerCloud?.initial?.report,pause:()=>{cancelFishing();window.towerPauseForAccount();},onClose:()=>canvas.focus(),renderer:window.towerCharacterArt});
 if(window.playerCloud)window.playerCloud.attach();
+receiveTrees(savedPlayerState?.sharedTrees);
 function correctRoomPosition(position){
   const goal=target??route.at(-1)??step?.to,item=interaction;
   route=[];step=null;interaction=null;target=null;
@@ -6565,7 +6616,7 @@ if(window.playerCloud&&typeof WebSocket!=='undefined'){
     flush:()=>window.playerCloud.flush(),checkRoom:async room=>{
       const response=await fetch('/api/world/connect?check=1&room='+encodeURIComponent(room),{credentials:'same-origin',cache:'no-store'});
       if(!response.ok){const data=await response.json().catch(()=>({})),error=new Error(data.error??'Room unavailable');error.status=response.status;throw error;}
-    },onPeers:receivePeers,onTrails:receiveMoonTrails,onTrailNotice:message=>{$('mapTrailStatus').textContent=message;},onActivity:receiveWorldActivity,onChat:receiveRoomChat,
+    },onPeers:receivePeers,onTrees:receiveTrees,onTrails:receiveMoonTrails,onTrailNotice:message=>{$('mapTrailStatus').textContent=message;},onActivity:receiveWorldActivity,onChat:receiveRoomChat,
     onHistory:history=>{$('messages').replaceChildren();$('roomChatMessages').replaceChildren();for(const message of history)receiveRoomChat(message);},
     onStatus:text=>{$('networkStatus').textContent=text;$('roomChatStatus').textContent=text;$('openRoomChat').disabled=!Object.hasOwn(socialRooms,currentRoom);},
     onCorrection:correctRoomPosition,

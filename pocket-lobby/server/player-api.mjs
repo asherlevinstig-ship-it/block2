@@ -4,6 +4,8 @@ import {factionHall,factionHallSpawn} from '../public/faction-hall.js';
 import {watchFlags} from '../public/region-catalog.js';
 import {normalizeVitals} from '../public/player-vitals.js';
 import {publishWorldActivity} from './world-activity.mjs';
+import {prepareManualTree,describeTreeCut,writeTreePlayer} from './shared-trees.mjs';
+import {enablePhysicalTimber,advanceTreeWork} from './tree-work.mjs';
 import {towerBread} from '../public/cooking.js';
 import {simpleAutoRules} from '../public/simple-auto.js';
 import {saveAutoSettings} from './auto-settings.mjs';
@@ -16,13 +18,14 @@ import {applyGameplayAction,protectFishingState} from './gameplay.mjs';
 import {settleActivities} from './activities.mjs';
 import {publicPlayerState} from './gambling.mjs';
 import {readRankings} from './rankings.mjs';
-import {touchPresence} from './routines.mjs';
+import {touchPresence as updatePresence} from './routines.mjs';
 import {deliverCarpenterOrder} from '../public/commissions.js';
 import {normalizeCharacterRules,AWAY_GRACE_MS} from '../public/character-rules.js';
 import { resolveIdentity } from "./identity.mjs";
 import { normalizeState, startPlan, settlePlan } from "./player-state.mjs";
 
 const COOKIE="__Host-tower-character";
+const touchPresence=(state,now,options,env)=>updatePresence(state,now,{...options,physicalTimber:!!(env.SHARED_ROOMS&&env.TOWER_DB.batch)});
 const COOKIE_AGE=31536000;
 const json=(data,status=200,extra={})=>Response.json(data,{status,headers:{"Cache-Control":"no-store","X-Content-Type-Options":"nosniff",...extra}});
 function readPlayerState(row){
@@ -43,7 +46,8 @@ const packet=row=>({state:publicPlayerState(readPlayerState(row)),characterKey:r
 async function read(db,id){
   return db.prepare("SELECT player_id, state_json, revision, last_request, updated_at FROM tower_players WHERE player_id = ?").bind(id).first();
 }
-async function write(db,id,revision,state,operation,factionId=null){
+async function write(db,id,revision,state,operation,factionId=null,treeMutation=null){
+  if(treeMutation)return writeTreePlayer(db,id,revision,state,operation,treeMutation);
   return db.prepare("UPDATE tower_players SET state_json = ?, revision = revision + 1, last_request = ?, updated_at = ? WHERE player_id = ? AND revision = ? AND (? IS NULL OR EXISTS (SELECT 1 FROM tower_faction_members WHERE player_id=tower_players.player_id AND faction_id=?)) RETURNING player_id, state_json, revision, last_request")
     .bind(JSON.stringify(state),operation,Date.now(),id,revision,factionId,factionId).first();
 }
@@ -53,21 +57,25 @@ async function actorMotion(env,id){
   const response=await stub.fetch(new Request('https://actor.internal/position',{method:'POST',body:JSON.stringify({playerId:id})}));
   return (await response.json()).motion;
 }
-export async function settled(env,id,activities=false,{idle=false}={}){
+export async function settled(env,id,activities=false,{idle=false,motion=null}={}){
   const db=env.TOWER_DB;
   for(let attempt=0;attempt<5;attempt++){
     const row=await read(db,id);
     if(!row)return null;
     const state=readPlayerState(row);
     const now=Date.now();
-    let planChanged=settlePlan(state,now);if(state.autoSwitch){touchPresence(state,now,{active:false});planChanged=true;}
-    if(idle){const previous=JSON.stringify(state);touchPresence(state,now,{active:false});planChanged=planChanged||previous!==JSON.stringify(state);}
+    const initial=JSON.stringify(state);enablePhysicalTimber(state,env);
+    let planChanged=settlePlan(state,now);if(state.autoSwitch){touchPresence(state,now,{active:false},env);planChanged=true;}
+    if(idle){const previous=JSON.stringify(state);touchPresence(state,now,{active:false},env);planChanged=planChanged||previous!==JSON.stringify(state);}
+    enablePhysicalTimber(state,env);
+    const treeMutation=idle?await advanceTreeWork(env,state,now,motion):null;
+    planChanged=planChanged||initial!==JSON.stringify(state);
     const activityChanged=activities&&settleActivities(state,now);
     const before=JSON.parse(row.state_json);
     const migrated=before.progressionVersion!==progressionVersion||before.safeVersion!==1;
     if(!planChanged&&!activityChanged&&!migrated)return row;
-    const updated=await write(db,id,row.revision,state,"settle:"+crypto.randomUUID());
-    if(updated){await publishWorldActivity(env,id,before,state,updated.revision,{fresh:idle||before.plan?.source==='rules'||now-(row.updated_at??0)<10000});return updated;}
+    const updated=await write(db,id,row.revision,state,"settle:"+crypto.randomUUID(),null,treeMutation);
+    if(updated){await publishWorldActivity(env,id,before,JSON.parse(updated.state_json),updated.revision,{fresh:idle||before.plan?.source==='rules'||now-(row.updated_at??0)<10000});return updated;}
   }
   throw new Error("Your character is busy. Please retry.");
 }
@@ -155,7 +163,7 @@ export async function handlePlayerApi(request,env){
     if(!row)return json({error:"Character not found."},401);
     if(row.last_request===body.operation)return json(packet(row));
     if(row.revision!==body.revision)return json({error:"Your character changed in another tab or completed an offline action.",...packet(row)},409);
-    let state=readPlayerState(row),factionId=null;
+    let state=readPlayerState(row),factionId=null,treeMutation=null;
     if(path.startsWith('/api/player/gameplay/')){
       if(state.characterCreated===false)return json({error:'Finish creating your character first.'},400);
       Object.assign(state,normalizeState(state));
@@ -172,7 +180,10 @@ export async function handlePlayerApi(request,env){
           if(!access)return json({error:'Your faction hall access has ended.'},403);
           if(gameplay==='cook'&&!access.kitchen)return json({error:'Complete the field kitchen project to use this stove.'},403);
         }
+        const shared=['chop','cut'].includes(gameplay)?await prepareManualTree(env,state,gameplay,body):null;
         applyGameplayAction(state,gameplay,body);
+        if(shared&&state.timberCut)state.timberCut.treeGeneration=shared.generation;
+        if(shared&&gameplay==='cut')treeMutation=describeTreeCut(state,shared,body.cutId);
       }
     }else switch(path){
       case "/api/player/rankings/participation":
@@ -207,7 +218,8 @@ export async function handlePlayerApi(request,env){
         if((!state.characterRules?.enabled&&state.controlMode!=='auto'&&!state.plan)||(state.plan&&state.plan.source!=='rules')||state.report&&!state.autoSwitch)return json(packet(row));
         settleActivities(state,Date.now());
         const resume=state.plan?.source==='rules'&&state.controlMode!=='auto'&&body.active!==false?await actorMotion(env,id):null;
-        touchPresence(state,Date.now(),{active:body.active!==false,activityAt:Date.now()-(body.idleForMs??0)});
+        enablePhysicalTimber(state,env);
+        touchPresence(state,Date.now(),{active:body.active!==false,activityAt:Date.now()-(body.idleForMs??0)},env);
         if(resume&&!state.plan){state.location=resume.room;state.position={x:resume.x,y:resume.y};}
         settleActivities(state,Date.now());
         break;
@@ -220,7 +232,7 @@ export async function handlePlayerApi(request,env){
           if(state.controlMode==='auto'&&state.plan?.source==='rules')break;
           if(state.report?.source==='rules')delete state.report;
           if(state.characterCreated===false||state.plan||state.report||state.depthsRun||state.hunting?.encounter||state.hunting?.recoveryUntil||state.health<=0||state.gambling?.round?.status==='playing'||state.fishingCast||state.timberCut)throw new Error('Choose Auto after finishing your activity, reading your report and leaving the dungeon.');
-          state.controlMode='auto';state.routineLastSeen=now;touchPresence(state,now,{active:false,forceStart:true});
+          state.controlMode='auto';state.routineLastSeen=now;touchPresence(state,now,{active:false,forceStart:true},env);
         }else{
           if(state.plan&&state.plan.source!=='rules')throw new Error('Choose Stop work to finish your job-board shift.');
           const motion=await actorMotion(env,id);
@@ -232,7 +244,7 @@ export async function handlePlayerApi(request,env){
       }
       case "/api/player/auto/explore/setup":{
         const now=Date.now();configureExplorerLesson(state,now);
-        state.controlMode='auto';touchPresence(state,now,{active:false,forceStart:true});break;
+        state.controlMode='auto';touchPresence(state,now,{active:false,forceStart:true},env);break;
       }
       case "/api/player/auto/simple":{
         const now=Date.now();
@@ -240,8 +252,8 @@ export async function handlePlayerApi(request,env){
         const rules=simpleAutoRules(body.mode,body.options??{});
         saveAutoSettings(state,rules,now);
         if(state.plan?.source==='rules'){
-          state.autoSwitch=true;settlePlan(state,now,{stop:true});touchPresence(state,now,{active:false});
-        }else{delete state.report;state.controlMode='auto';touchPresence(state,now,{active:false,forceStart:true});}
+          state.autoSwitch=true;settlePlan(state,now,{stop:true});touchPresence(state,now,{active:false},env);
+        }else{delete state.report;state.controlMode='auto';touchPresence(state,now,{active:false,forceStart:true},env);}
         break;
       }
       case "/api/player/rules/save":
@@ -261,9 +273,11 @@ export async function handlePlayerApi(request,env){
         break;
       default:return json({error:"Not found."},404);
     }
-    const updated=await write(env.TOWER_DB,id,row.revision,state,body.operation,factionId);
+    enablePhysicalTimber(state,env);
+    const updated=await write(env.TOWER_DB,id,row.revision,state,body.operation,factionId,treeMutation);
+    if(!updated&&treeMutation){const latest=await read(env.TOWER_DB,id);if(latest?.revision===row.revision)return json({error:'Invalid cut: another player felled this tree. Choose a standing tree.'},400);}
     if(!updated)return json({error:"Another tab saved first. Reload your character."},409);
-    await publishWorldActivity(env,id,JSON.parse(row.state_json),state,updated.revision,{fresh:Date.now()-(row.updated_at??0)<10000});
+    await publishWorldActivity(env,id,JSON.parse(row.state_json),JSON.parse(updated.state_json),updated.revision,{fresh:!!treeMutation||Date.now()-(row.updated_at??0)<10000});
     return json(packet(updated));
   }catch(error){
     if(error.status===400||error.status===409)return json({error:error.message},error.status);

@@ -8,13 +8,15 @@ import {armourSelection} from '../public/hunting.js';
 import {isSmartlyDressed} from '../public/wardrobe.js';
 import {resolveIdentity,tokenHash} from './identity.mjs';
 import {socialRooms,roomBoxes,validRoomTile,reachableMove,roomSeats} from '../public/shared-world.js';
+import {roomTreeSnapshot,forestTrees} from './shared-trees.mjs';
+import {choppingPose} from '../public/woodcutting.js';
 
 function familiarProfile(state){
  const familiar=state.familiars?.equipped;
  return {familiar,familiarName:normalizeFamiliarName(state.familiars?.names?.[familiar])||undefined};
 }
 const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store'}});
-export function publicPeer(meta){return {id:meta.id,name:meta.name,outfit:meta.outfit,trousers:meta.trousers??0,boots:meta.boots??0,hair:meta.hair,weapon:meta.weapon,armour:meta.armour??null,x:meta.x,y:meta.y,direction:meta.direction,back:meta.back,seat:meta.seat??null,waveAt:meta.waveAt??0,health:meta.health??100,activity:meta.activity??null,auto:meta.auto===true,...(isFamiliar(meta.familiar)?{familiar:meta.familiar,familiarName:normalizeFamiliarName(meta.familiarName)||null}:{})};}
+export function publicPeer(meta){return {id:meta.id,name:meta.name,outfit:meta.outfit,trousers:meta.trousers??0,boots:meta.boots??0,hair:meta.hair,weapon:meta.weapon,armour:meta.armour??null,x:meta.x,y:meta.y,direction:meta.direction,back:meta.back,seat:meta.seat??null,waveAt:meta.waveAt??0,health:meta.health??100,activity:meta.activity??null,chopping:meta.chopping??null,auto:meta.auto===true,...(isFamiliar(meta.familiar)?{familiar:meta.familiar,familiarName:normalizeFamiliarName(meta.familiarName)||null}:{})};}
 export async function handleWorldConnect(request,env){
   const url=new URL(request.url),room=url.searchParams.get('room'),check=url.searchParams.get('check')==='1';
   if(request.method!=='GET'||!check&&request.headers.get('Upgrade')?.toLowerCase()!=='websocket')return json({error:'A WebSocket connection is required.'},426);
@@ -32,7 +34,7 @@ export async function handleWorldConnect(request,env){
   if(!validRoomTile(room,position.x,position.y,boxes))return json({error:'Move to an open tile and try again.'},409);
   if(check)return json({ready:true,room});
   const profile={playerId:identity.playerId,id:(await tokenHash('public:'+identity.playerId)).slice(0,24),sessionHash:identity.sessionHash??null,expiresAt:identity.expiresAt,room,...(access?{factionId:access.id}:{}),
-    name:state.avatar?.name??'Guest',outfit:state.avatar?.outfit??0,trousers:state.avatar?.trousers??0,boots:state.avatar?.boots??0,hair:state.avatar?.hair??0,weapon:state.combatGear?.equippedWeapon??null,armour:armourSelection(state.combatGear),x:position.x,y:position.y,direction:'right',back:false,health:state.health??100,...familiarProfile(state),activity:sharedActivity(state),auto:state.plan?.source==='rules'};
+    name:state.avatar?.name??'Guest',outfit:state.avatar?.outfit??0,trousers:state.avatar?.trousers??0,boots:state.avatar?.boots??0,hair:state.avatar?.hair??0,weapon:state.combatGear?.equippedWeapon??null,armour:armourSelection(state.combatGear),x:position.x,y:position.y,direction:'right',back:false,health:state.health??100,...familiarProfile(state),activity:sharedActivity(state),chopping:choppingPose(state),auto:state.plan?.source==='rules'};
   const namespace=access?'faction:'+access.id:room==='home'?'home:'+identity.playerId:'public:'+room;
   const stub=env.SHARED_ROOMS.get(env.SHARED_ROOMS.idFromName(namespace));
   return stub.fetch(new Request('https://room.internal/connect',{headers:{Upgrade:'websocket','X-Tower-Profile':encodeURIComponent(JSON.stringify(profile))}}));
@@ -53,9 +55,9 @@ export function sharedMoonTrail(state,room,route,now){
 }
 export class SharedRoom{
   constructor(ctx,env){
-    this.ctx=ctx;this.env=env;this.sessions=new Map();this.history=[];this.autoPeers=new Map();
+    this.ctx=ctx;this.env=env;this.sessions=new Map();this.history=[];this.autoPeers=new Map();this.treeSnapshot=null;this.room=null;
     for(const ws of ctx.getWebSockets()){const meta=ws.deserializeAttachment();if(meta&&ws.readyState===1)this.sessions.set(ws,meta);}
-    ctx.blockConcurrencyWhile(async()=>{this.history=await ctx.storage.get('chat')??[];const saved=await ctx.storage.get('autoPeers');if(Array.isArray(saved))this.autoPeers=new Map(saved.filter(([,peer])=>peer?.until>Date.now()));});
+    ctx.blockConcurrencyWhile(async()=>{this.history=await ctx.storage.get('chat')??[];const saved=await ctx.storage.get('autoPeers');if(Array.isArray(saved))this.autoPeers=new Map(saved.filter(([,peer])=>peer?.until>Date.now()));await this.loadTrees(this.sessions.values().next().value?.room??this.autoPeers.values().next().value?.room);});
   }
   peers(now=Date.now()){
     const peers=new Map([...this.sessions.values()].filter(meta=>!meta.serverAuto).map(meta=>[meta.playerId??meta.id,meta]));
@@ -63,18 +65,21 @@ export class SharedRoom{
     return [...peers.values()].filter(meta=>!(meta.veilUntil>now)).map(publicPeer);
   }
   send(ws,data){try{ws.send(JSON.stringify(data));}catch{this.sessions.delete(ws);}}
+  async loadTrees(room){if(!this.env.TOWER_DB||!forestTrees(room).length)return;this.room=room;this.treeSnapshot=await roomTreeSnapshot(this.env.TOWER_DB,room);}
   snapshot(){
     const now=Date.now(),trails=[...this.sessions.values()].filter(meta=>!(meta.veilUntil>now)&&meta.trail?.until>now).map(meta=>({...meta.trail,player:meta.id,name:meta.name}));
-    const data={type:'snapshot',players:this.peers(),trails};for(const ws of this.sessions.keys())this.send(ws,data);}
+    const data={type:'snapshot',players:this.peers(),trails,trees:this.treeSnapshot};for(const ws of this.sessions.keys())this.send(ws,data);}
   async scheduleVeilExpiry(){
     const now=Date.now(),expiries=[...this.sessions.values()].map(meta=>meta.veilUntil??0).filter(at=>at>now);
     for(const peer of this.autoPeers.values()){if(peer.until>now)expiries.push(peer.until);if(peer.veilUntil>now)expiries.push(peer.veilUntil);}
+    for(const tree of Object.values(this.treeSnapshot?.trees??{}))if(tree.regrowsAt>now)expiries.push(tree.regrowsAt);
     if(expiries.length)await this.ctx.storage.setAlarm(Math.min(...expiries));
   }
-  async alarm(){let changed=false;for(const [id,peer] of this.autoPeers)if(peer.until<=Date.now()){this.autoPeers.delete(id);changed=true;}if(changed)await this.ctx.storage.put('autoPeers',[...this.autoPeers]);this.snapshot();await this.scheduleVeilExpiry();}
+  async alarm(){let changed=false;for(const [id,peer] of this.autoPeers)if(peer.until<=Date.now()){this.autoPeers.delete(id);changed=true;}if(changed)await this.ctx.storage.put('autoPeers',[...this.autoPeers]);if(this.room)await this.loadTrees(this.room);this.snapshot();await this.scheduleVeilExpiry();}
   fetch(request){return this.ctx.blockConcurrencyWhile(()=>{const path=new URL(request.url).pathname;return path==='/auto'&&request.method==='POST'?this.autoPresence(request):path==='/activity'&&request.method==='POST'?this.activity(request):this.join(request);});}
   async autoPresence(request){
     const {playerId,peer,until,remove}=await request.json();
+    if(peer?.room&&this.room!==peer.room)await this.loadTrees(peer.room);
     if(remove){this.autoPeers.delete(playerId);for(const [ws,meta] of this.sessions)if(meta.playerId===playerId&&meta.serverAuto){ws.close(1000,'Server character changed area');this.sessions.delete(ws);}}
     else if(peer?.playerId===playerId&&Object.hasOwn(socialRooms,peer.room)&&Number.isFinite(peer.x)&&Number.isFinite(peer.y)){
       this.autoPeers.set(playerId,{...peer,activityRevision:this.autoPeers.get(playerId)?.activityRevision??0,until:Math.min(until,Date.now()+30000)});
@@ -84,7 +89,8 @@ export class SharedRoom{
     return json({ok:true});
   }
   async activity(request){
-    const {playerId,revision,events=[]}=await request.json();
+    const {playerId,revision,events=[],room,treesChanged}=await request.json();
+    if(treesChanged){await this.loadTrees(room);this.snapshot();await this.scheduleVeilExpiry();}
     const entry=[...this.sessions.entries()].find(([,meta])=>meta.playerId===playerId);
     const actor=this.autoPeers.get(playerId);
     if(actor&&Number.isInteger(revision)&&revision>(actor.activityRevision??0)){
@@ -98,10 +104,10 @@ export class SharedRoom{
     const row=await this.env.TOWER_DB.prepare('SELECT state_json FROM tower_players WHERE player_id = ?').bind(playerId).first();if(!row)return json({ok:true});const state=JSON.parse(row.state_json);
     meta.activityRevision=revision;
     const previousVeil=meta.veilUntil;meta.veilUntil=outfitVeilUntil(state);
-    const fresh=events.filter(e=>e&&typeof e.id==='string'&&e.id.length<200&&['gold','loss','push','catch','damage','heal','dodge'].includes(e.kind)&&typeof e.label==='string'&&e.label.length<=100&&Number.isFinite(e.at)&&Date.now()-e.at>=0&&Date.now()-e.at<5000).slice(-16);
+    const fresh=events.filter(e=>e&&typeof e.id==='string'&&e.id.length<200&&['gold','loss','push','catch','timber','damage','heal','dodge'].includes(e.kind)&&typeof e.label==='string'&&e.label.length<=100&&Number.isFinite(e.at)&&Date.now()-e.at>=0&&Date.now()-e.at<5000).slice(-16);
     if(fresh.length&&!(meta.veilUntil>Date.now()))for(const peer of this.sessions.keys())this.send(peer,{type:'activity',player:meta.id,events:fresh});
     if(state.location!==meta.room||state.report||state.plan&&state.plan.source!=='rules'){ws.close(1000,'Changed area');this.sessions.delete(ws);this.snapshot();return json({ok:true});}
-    meta.health=Math.max(0,Math.min(100,state.health??100));meta.activity=sharedActivity(state);meta.auto=state.plan?.source==='rules';
+    meta.health=Math.max(0,Math.min(100,state.health??100));meta.activity=sharedActivity(state);meta.chopping=choppingPose(state);meta.auto=state.plan?.source==='rules';
     // Connected avatars report bounded visual movement; activity rewards use the saved server position.
     if(meta.auto)meta.seat=null;
     ws.serializeAttachment(meta);this.snapshot();
@@ -116,11 +122,12 @@ export class SharedRoom{
     const [client,server]=Object.values(new WebSocketPair()),now=Date.now();
     const row=await this.env.TOWER_DB.prepare('SELECT state_json FROM tower_players WHERE player_id = ?').bind(profile.playerId).first();
     const state=row?JSON.parse(row.state_json):null;if(!state)return json({error:'Character not found.'},401);
+    await this.loadTrees(profile.room);
     const meta={...profile,veilUntil:outfitVeilUntil(state),seats:roomSeats(profile.room,state.homeFurniture),boxes:roomBoxes(profile.room,state.homeFurniture),lastMoveAt:now,lastAuthAt:now,windowAt:now,packets:0,chatAt:now,chatCount:0};
     if(this.autoPeers.has(profile.playerId))meta.serverAuto=true;
     this.ctx.acceptWebSocket(server);server.serializeAttachment(meta);this.sessions.set(server,meta);
-    this.send(server,{type:'welcome',selfId:meta.id,room:meta.room,players:this.peers(),chat:this.history});this.snapshot();
-    if(meta.veilUntil>now)await this.scheduleVeilExpiry();
+    this.send(server,{type:'welcome',selfId:meta.id,room:meta.room,players:this.peers(),chat:this.history,trees:this.treeSnapshot});this.snapshot();
+    if(meta.veilUntil>now||this.treeSnapshot)await this.scheduleVeilExpiry();
     return new Response(null,{status:101,webSocket:client});
   }
   async authorized(meta){
